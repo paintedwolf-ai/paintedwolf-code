@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"path/filepath"
 	"testing"
-	"time"
 
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/webindex"
@@ -29,7 +28,6 @@ func TestWarmQueryUnderfilledSearchSeedSkipsWithoutModel(t *testing.T) {
 		directParticipated: true,
 	})
 	index.Flush()
-	time.Sleep(20 * time.Millisecond)
 
 	acts, err := index.RecentActivity(context.Background(), 10)
 	testutil.FailErr(t, "activity", err)
@@ -70,7 +68,6 @@ func TestWarmQueryFilledSearchDoesNotSeed(t *testing.T) {
 		directParticipated: true,
 	})
 	index.Flush()
-	time.Sleep(20 * time.Millisecond)
 
 	acts, err := index.RecentActivity(context.Background(), 10)
 	testutil.FailErr(t, "activity", err)
@@ -107,7 +104,6 @@ func TestSearchSeedSuccessMarksQueryRewarmed(t *testing.T) {
 	}
 	index.MarkQueryRewarmed(t.Context(), query, "")
 	index.Flush()
-	time.Sleep(20 * time.Millisecond)
 
 	starved, err := index.StarvedQueries(context.Background(), 5)
 	testutil.FailErr(t, "starved", err)

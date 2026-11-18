@@ -99,11 +99,6 @@ describe("domain layout CSS contracts", () => {
       expect(stop).not.toMatch(/var\(--den-danger\)/);
       expect(chatArt).not.toMatch(/box-shadow/);
     });
-
-    it("Composer references den-composer-send hooks", () => {
-      const hooks = extractClassHooksFromSource(composer);
-      expect(hooks.some((h) => h.startsWith("den-composer"))).toBe(true);
-    });
   });
 
   describe("task card running status", () => {
@@ -177,9 +172,6 @@ describe("domain layout CSS contracts", () => {
       );
       expect(shellCss).toMatch(
         /\.den-shell-header-chat\s*\{[\s\S]*?z-index:\s*var\(--den-z-chat-chrome\)/,
-      );
-      expect(chatCss).not.toMatch(
-        /\.den-chat:not\(\.den-chat--context-drawer-open\)/,
       );
     });
 

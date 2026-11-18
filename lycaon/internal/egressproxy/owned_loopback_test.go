@@ -39,7 +39,6 @@ func TestDerivedLoopbackRechecksResourceBeforeRequestBytes(t *testing.T) {
 			return
 		}
 		defer func() { _ = conn.Close() }()
-		_ = conn.SetReadDeadline(time.Now().Add(testutil.Timeout(time.Minute)))
 		bytes, _ := io.ReadAll(conn)
 		received <- bytes
 	}()

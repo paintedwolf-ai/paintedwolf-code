@@ -102,8 +102,9 @@ func TestAdvanceToolMatchesHTTPGateShape(t *testing.T) {
 		testutil.FailErr(t, "unmarshal JSON document", err)
 	}
 	run, err := mgr.Store.Runs.ActiveBySession(ctx, "sess-1")
-	if err != nil || run == nil {
-		t.Fatal(err)
+	testutil.FailErr(t, "read the session's active run", err)
+	if run == nil {
+		t.Fatal("session has no active run")
 	}
 	_, httpErr := mgr.Phases.Advance(ctx, run.ID)
 	gateErr, ok := runstate.IsPhaseGateUnmet(httpErr)

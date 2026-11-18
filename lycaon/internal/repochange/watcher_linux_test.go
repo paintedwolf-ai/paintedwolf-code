@@ -47,7 +47,7 @@ func newInotifyRoot(t *testing.T, maxDirs int) *inotifyRoot {
 
 func (f *inotifyRoot) waitFor(path string, kind WorktreeChangeKind) {
 	f.t.Helper()
-	testutil.WaitFor(f.t, func() bool {
+	testutil.WaitFor(f.t, "the change is reported", func() bool {
 		ResetDebouncerForTest(f.t.Context())
 		f.mu.Lock()
 		defer f.mu.Unlock()
@@ -106,11 +106,11 @@ func TestInotifyBurstKeepsCoverageComplete(t *testing.T) {
 	// The marker's own event may fall into a dropped window; the resync that
 	// closes the window is then what tells observers to look again.
 	testutil.FailErr(t, "write marker", os.WriteFile(filepath.Join(fixture.root, "after-burst.txt"), []byte("x"), 0o644))
-	testutil.WaitFor(t, func() bool {
+	testutil.WaitFor(t, "the post-burst change is reported", func() bool {
 		ResetDebouncerForTest(t.Context())
 		return fixture.seen("after-burst.txt") || fixture.seen(".")
 	})
-	testutil.WaitFor(t, func() bool { return fixture.registry.Coverage(fixture.root).Complete })
+	testutil.WaitFor(t, "coverage is complete", func() bool { return fixture.registry.Coverage(fixture.root).Complete })
 	coverage := fixture.registry.Coverage(fixture.root)
 	t.Logf("burst of %d writes: overflows=%d watched=%d complete=%t marker=%t resync=%t", files, coverage.Overflows, coverage.Watched, coverage.Complete, fixture.seen("after-burst.txt"), fixture.seen("."))
 	if coverage.Faulted || coverage.Truncated != 0 {

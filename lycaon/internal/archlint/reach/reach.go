@@ -11,6 +11,7 @@ import (
 	"go/token"
 	"go/types"
 	"os"
+	"path"
 	"path/filepath"
 	"regexp"
 	"slices"
@@ -48,6 +49,14 @@ type Config struct {
 	Skip   []*regexp.Regexp
 	// Schema is the complete fresh schema; empty skips table liveness.
 	Schema string
+	// Product names the main packages that ship to users; what only other
+	// roots reach does not count as the product emitting or reading anything.
+	Product []string
+	// Emitters judges declared codes, facts and anchors against what the
+	// product reaches; nil skips them.
+	Emitters *Emitters
+	// ConfigFields reports YAML keys the product decodes but never reads.
+	ConfigFields bool
 }
 
 // pass is one GOOS load: what it compiles and what its roots reach.
@@ -57,6 +66,8 @@ type pass struct {
 	reads     map[string]bool // tables a reachable function names in a read
 	keysSet   map[string]bool
 	keysRead  map[string]archlint.Finding
+	product   productFlow
+	config    configFlow
 }
 
 // Run loads each GOOS and combines the passes.
@@ -79,6 +90,15 @@ func Run(cfg Config) ([]archlint.Finding, error) {
 	}
 	out := deadFuncs(passes)
 	out = append(out, unsetKeys(passes)...)
+	if (cfg.Emitters != nil || cfg.ConfigFields) && len(cfg.Product) == 0 {
+		return nil, fmt.Errorf("reach: product checks need product roots")
+	}
+	if cfg.Emitters != nil {
+		out = append(out, cfg.Emitters.findings(passes)...)
+	}
+	if cfg.ConfigFields {
+		out = append(out, unreadConfigFields(passes)...)
+	}
 	if cfg.Schema != "" {
 		tables, err := ParseSchema(cfg.Schema)
 		if err != nil {
@@ -170,6 +190,11 @@ func load(cfg Config, goos string) (*pass, error) {
 			}
 		}
 		for _, file := range p.Syntax {
+			// A generated file is judged through its generator, which is itself
+			// a command reach checks.
+			if ast.IsGenerated(file) {
+				continue
+			}
 			for _, decl := range file.Decls {
 				if fd, ok := decl.(*ast.FuncDecl); ok {
 					fn := prog.FuncValue(p.TypesInfo.Defs[fd.Name].(*types.Func))
@@ -187,6 +212,17 @@ func load(cfg Config, goos string) (*pass, error) {
 		reads:     map[string]bool{},
 		keysSet:   map[string]bool{},
 		keysRead:  map[string]archlint.Finding{},
+	}
+	if len(cfg.Product) > 0 {
+		productRoots, err := productMains(lc, pkgs, cfg.Product)
+		if err != nil {
+			return nil, err
+		}
+		productRes := rta.Analyze(productRoots, false)
+		p.product = scanProduct(prog, productRes, cfg)
+		if cfg.ConfigFields {
+			p.config = scanConfig(prog, productRes, cfg)
+		}
 	}
 	reachablePos := map[token.Position]bool{}
 	for fn := range res.Reachable {
@@ -237,25 +273,42 @@ func mainPaths(lc *packages.Config, patterns []string) (map[string]bool, error) 
 }
 
 // deadFuncs reports a function dead when no GOOS that compiles it reaches it.
+// Platform variants share a key, so each of their declarations is reported,
+// keyed by its file.
 func deadFuncs(passes []*pass) []archlint.Finding {
-	dead := map[string]archlint.Finding{}
+	dead := map[string]map[string]archlint.Finding{}
 	live := map[string]bool{}
 	for _, p := range passes {
 		for key, f := range p.compiled {
 			if p.reachable[key] {
 				live[key] = true
-			} else if _, seen := dead[key]; !seen {
-				dead[key] = f
+				continue
 			}
+			if dead[key] == nil {
+				dead[key] = map[string]archlint.Finding{}
+			}
+			dead[key][declFile(f.Pos)] = f
 		}
 	}
 	var out []archlint.Finding
-	for key, f := range dead {
-		if !live[key] {
+	for key, decls := range dead {
+		if live[key] {
+			continue
+		}
+		for file, f := range decls {
+			if len(decls) > 1 {
+				f.Key = key + "@" + path.Base(file)
+			}
 			out = append(out, f)
 		}
 	}
 	return out
+}
+
+// declFile is the file part of a "file:line:column" position.
+func declFile(pos string) string {
+	file, _, _ := strings.Cut(pos, ":")
+	return file
 }
 
 func prettyName(fn *ssa.Function) string {

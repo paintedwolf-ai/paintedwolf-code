@@ -8,7 +8,7 @@ import { workerOverlayOpen } from "../../chat/worker/worker-branch-model.ts";
 import { taskWorkerMatchesForTranscript } from "../../chat/worker/workers-model.ts";
 import { setLycaonClientForTest } from "../../platform/connection/app-connection.ts";
 import { createAppStore } from "../../store/app-state.ts";
-import { createShellWorkerDrawer } from "../shell/shell-worker-drawer.ts";
+import { createShellSessionDrawer } from "../shell/shell-session-drawer.ts";
 import { TranscriptItemRow } from "../transcript/TranscriptItemRow.tsx";
 import { WorkerEvidenceSection } from "./WorkerEvidenceSection.tsx";
 import { WorkersTab } from "./WorkersTab.tsx";
@@ -269,7 +269,7 @@ describe("persistent worker collaboration UI", () => {
       },
     ]);
     const [activeChat] = createSignal({ projectId: "proj-1", sessionId: "sess-1" });
-    const drawer = createShellWorkerDrawer({
+    const drawer = createShellSessionDrawer({
       appStore,
       recents: { state: { recents: [] } } as never,
       activeChat,
@@ -308,7 +308,7 @@ describe("persistent worker collaboration UI", () => {
 
     stream.scrollTop = 0;
     noticeBtn.blur();
-    drawer.closeWorkers();
+    drawer.closeDrawer();
     await waitFor(() => {
       expect(drawer.workersOpen()).toBe(false);
       expect(stream.scrollTop).toBe(640);

@@ -35,7 +35,8 @@ func TestDelegateImplementerPromptContainsPersona(t *testing.T) {
 	)
 	testutil.FailErr(t, "task tool failed", err)
 
-	testutil.WaitFor(t, func() bool {
+	testutil.WaitFor(t, "the worker job completes and its outcome is delivered", func() bool {
+		wiring.FailOnEndedWorker(t, h, ctx, parent.ProjectID)
 		jobs, err := h.Workers.Queue.ListBySession(ctx, parent.ProjectID, parent.ID, api.WorkerStatusComplete)
 		if err != nil || len(jobs) != 1 {
 			return false
@@ -83,7 +84,7 @@ func TestDelegatePlanReviewerDistinctFromImplementer(t *testing.T) {
 	)
 	testutil.FailErr(t, "task tool failed", err)
 
-	testutil.WaitFor(t, func() bool {
+	testutil.WaitFor(t, "the worker job completes and its outcome is delivered", func() bool {
 		jobs, err := h.Workers.Queue.ListBySession(ctx, parent.ProjectID, parent.ID, api.WorkerStatusComplete)
 		if err != nil || len(jobs) != 1 {
 			return false

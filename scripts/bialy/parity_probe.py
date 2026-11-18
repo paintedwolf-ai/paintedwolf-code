@@ -2,7 +2,9 @@
 """Compare trainer and native-engine predictions on identical turn inputs.
 
 The head must record the encoding settings it trained with, and they must be the
-ones the engine serves at. Exit 0 when they match and the engine agrees within
+ones the engine serves at. The trainer's side encodes the tools question as the
+corpus declares it, each option on its own row for an independent head, the way
+the head was trained and the engine asks it. Exit 0 when they match and the engine agrees within
 --tolerance, 1 on a mismatch or a larger gap, 2 when the head records no settings
 or nothing was compared (no --engine, or no complete turns).
 
@@ -26,20 +28,32 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import headfile  # noqa: E402
 import rows as rowfile  # noqa: E402
 from corpus import Corpus, decide_dir  # noqa: E402
-from train import forward_head, multi_item, precompute, state_text  # noqa: E402
+from train import forward_head, independent_items, multi_item, precompute, state_text  # noqa: E402
+
+
+def probe_items(tok, corpus, ex, context, head_max_len):
+    """The tools question of one turn as the trainer encodes it, and the option names each
+    item answers: one item per option for an independent head, one item for a joint one."""
+    tools_q = corpus.tools_question(ex["offered"]["loadable"])
+    unlabelled = {k: 0 for k in tools_q["options"]}
+    if tools_q.get("independent"):
+        return [[name] for name in tools_q["options"]], independent_items(
+            tok, state_text(ex["state"]), tools_q, unlabelled, context, head_max_len, "tools", ex["host"])
+    item = multi_item(tok, state_text(ex["state"]), tools_q, unlabelled, context, head_max_len, "tools")
+    return [list(tools_q["options"].keys())[: len(item["markers"])]], [item]
 
 
 def torch_probs(agent, model, corpus, ex, device):
     context = int(agent.cfg.get("max_len", 512))
     head_max_len = min(int(corpus.state_spec.get("head_tokens", 512)), context - 64)
-    tools_q = corpus.tools_question(ex["offered"]["loadable"])
-    item = multi_item(agent.tok, state_text(ex["state"]), tools_q, {k: 0 for k in tools_q["options"]}, context, head_max_len, "tools")
-    names = list(tools_q["options"].keys())[: len(item["markers"])]
-    f = precompute(agent, [item], device)[0]
-    with torch.no_grad():
-        logits = forward_head(model, f["h"][None].to(device), f["att"][None].to(device), f["marker_pos"][None].to(device),
-                              f["marker_mask"][None].to(device), torch.tensor([item["qtype"]], device=device))[0].cpu()
-    return dict(zip(names, torch.sigmoid(logits[: len(names)]).tolist()))
+    rows, items = probe_items(agent.tok, corpus, ex, context, head_max_len)
+    probabilities = {}
+    for names, item, f in zip(rows, items, precompute(agent, items, device)):
+        with torch.no_grad():
+            logits = forward_head(model, f["h"][None].to(device), f["att"][None].to(device), f["marker_pos"][None].to(device),
+                                  f["marker_mask"][None].to(device), torch.tensor([item["qtype"]], device=device))[0].cpu()
+        probabilities.update(zip(names, torch.sigmoid(logits[: len(names)]).tolist()))
+    return probabilities
 
 
 def engine_probs(proc, corpus, ex):

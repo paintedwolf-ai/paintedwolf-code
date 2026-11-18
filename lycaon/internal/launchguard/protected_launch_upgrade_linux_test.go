@@ -76,11 +76,7 @@ func (l *runningLaunch) vaultWorkflow(t *testing.T, socket, op, dir string) test
 
 func startVaultIdentityServer(t *testing.T, f launchFixture) string {
 	t.Helper()
-	build := t.TempDir()
-	vaultBin := filepath.Join(build, "pw-vault-identity")
-	goBuild(t, vaultBin, "github.com/lycaon/lycaon/cmd/pw-vault-identity", "")
-	testutil.FailErr(t, "chmod vault binary", os.Chmod(vaultBin, 0o755))
-	testutil.FailErr(t, "chmod vault build dir", os.Chmod(build, 0o755))
+	vaultBin := fixtureBinary(t, "pw-vault-identity")
 	args := []string{
 		"-n", "env",
 		fixtureModeEnv + "=vault-server",

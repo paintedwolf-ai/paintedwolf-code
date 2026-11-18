@@ -2,11 +2,12 @@ package persistence
 
 import (
 	"github.com/lycaon/lycaon/internal/db"
+	"github.com/lycaon/lycaon/internal/worker/jobstate"
 	"github.com/lycaon/lycaon/internal/workflow/runstate"
 )
 
 func New(database db.Handle) *runstate.Repository {
-	tx := &Transactions{db: database, queries: db.New(database)}
+	tx := &Transactions{db: database, queries: db.New(database), jobs: jobstate.NewReader(db.DataDir(database))}
 	runs := &Runs{transactions: tx}
 	state := &State{transactions: tx}
 	starts := &Starts{transactions: tx}

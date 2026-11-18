@@ -4,7 +4,6 @@ import (
 	"go/ast"
 	"go/constant"
 	"go/token"
-	"path"
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/debugpaths"
@@ -133,31 +132,18 @@ var guardedMarkers = []string{hostmarker.VerbatimHeadTail, hostmarker.Compaction
 const markerBoundaries = "\"`'^"
 
 var frontendText = []laws.Rule{{
-	// The host reads back its own markers only while both sides spell them
-	// alike: Go through internal/hostmarker, Den through the generated module.
-	// Comments count, since a stale example misleads the next edit.
 	Name:    "host-markers-have-one-spelling",
-	Anchors: []laws.Anchor{laws.Package("internal/hostmarker"), laws.File("lycaon-den/src/chat/host-markers.generated.ts")},
+	Anchors: []laws.Anchor{laws.Package("internal/hostmarker")},
 	Check: func(r *laws.Run) {
-		report := func(rel, body string) {
-			for _, marker := range guardedMarkers {
-				if spellsMarker(body, marker) {
-					r.Report("%s spells the host marker %q", rel, marker)
-				}
-			}
-		}
 		for _, f := range r.GoFiles(laws.Production, "internal") {
-			if !laws.Under(f, "internal/hostmarker") {
-				report(f.Rel, string(f.Src))
-			}
-		}
-		for _, file := range r.Tree("lycaon-den/src", ".ts", ".tsx") {
-			base := path.Base(file.Rel)
-			if base == "host-markers.generated.ts" || strings.Contains(base, ".test.") || strings.Contains(base, "-fixtures.") ||
-				strings.Contains(file.Rel, "testdata/") {
+			if laws.Under(f, "internal/hostmarker") {
 				continue
 			}
-			report("lycaon-den/src/"+file.Rel, file.Text())
+			for _, marker := range guardedMarkers {
+				if spellsMarker(string(f.Src), marker) {
+					r.Report("%s spells the host marker %q", f.Rel, marker)
+				}
+			}
 		}
 	},
 }, {

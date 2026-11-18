@@ -1,30 +1,29 @@
+// @vitest-environment jsdom
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { describe, expect, it } from "vitest";
+import { OverlayScrollbars } from "overlayscrollbars";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { DEN_SCROLL_DIRECTION_ATTR } from "./themed-scrollbars.ts";
 
 const denRoot = join(import.meta.dirname, "..", "..", "..");
 const patchPath = "patches/overlayscrollbars@2.16.0.patch";
 
 describe("OverlayScrollbars direction patch", () => {
-  it("uses only the direction published before initialization", () => {
-    const packageJson = JSON.parse(
-      readFileSync(join(denRoot, "package.json"), "utf8"),
-    ) as { patchedDependencies?: Record<string, string> };
-    const patch = readFileSync(join(denRoot, patchPath), "utf8");
-    const additions = patch
-      .split("\n")
-      .filter((line) => line.startsWith("+") && !line.startsWith("+++"))
-      .join("\n");
+  afterEach(() => document.body.replaceChildren());
 
-    expect(
-      packageJson.patchedDependencies?.["overlayscrollbars@2.16.0"],
-    ).toBe(patchPath);
-    expect(
-      additions.match(
-        /getDirectionIsRTL = t => getAttr\(t, staticDirectionAttr\) === "rtl"/g,
-      ),
-    ).toHaveLength(4);
-    expect(additions.match(/"rows", staticDirectionAttr/g)).toHaveLength(4);
+  it("takes direction from the published attribute, at init and when it changes", async () => {
+    const host = document.body.appendChild(document.createElement("div"));
+    // A computed-style read would see this and answer left-to-right.
+    host.style.direction = "ltr";
+    host.setAttribute(DEN_SCROLL_DIRECTION_ATTR, "rtl");
+    const scrollbars = OverlayScrollbars(host, {});
+    try {
+      expect(scrollbars.state().directionRTL).toBe(true);
+      host.setAttribute(DEN_SCROLL_DIRECTION_ATTR, "ltr");
+      await vi.waitFor(() => expect(scrollbars.state().directionRTL).toBe(false));
+    } finally {
+      scrollbars.destroy();
+    }
   });
 
   it("leaves scroll-driven handle offsets to the host's measure phase", () => {

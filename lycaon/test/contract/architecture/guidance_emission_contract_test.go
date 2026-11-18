@@ -1,6 +1,7 @@
 package contract
 
 import (
+	"path/filepath"
 	"sort"
 	"strings"
 	"testing"
@@ -8,6 +9,7 @@ import (
 	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/prompts"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
+	"github.com/lycaon/lycaon/test/contract/internal/guidancescan"
 )
 
 func TestRecoverableHintCodesRenderFullRejectBlock(t *testing.T) {
@@ -51,29 +53,34 @@ func TestRecoverableHintCodesRenderFullRejectBlock(t *testing.T) {
 	}
 }
 
-func TestPreventiveRejectEmittersBackedByLiveHints(t *testing.T) {
+// Every code an emission site names is registered. Whether every registered
+// code is emitted is judged by arch-lint against what the product reaches.
+func TestEmissionSitesNameRegisteredCodes(t *testing.T) {
 	t.Parallel()
+	root := contractcheck.RepoRoot(t)
+	lycaonRoot := filepath.Join(root, "lycaon")
 	cfg, err := guidance.LoadHintConfigStock()
 	contractcheck.FailErr(t, "load hint registry", err)
+	registered := make(map[string]bool, len(cfg.HintCodes))
+	for code := range cfg.HintCodes {
+		registered[code] = true
+	}
+	scan, err := guidancescan.ScanGuidanceEmission(lycaonRoot)
+	contractcheck.FailErr(t, "scan guidance emission sites in internal/", err)
 
-	live := make(map[string]bool)
-	for _, entry := range cfg.HintCodes {
-		if strings.TrimSpace(entry.Category) == "recoverable" {
-			live[strings.TrimSpace(entry.Emit)] = true
+	var emittedNotRegistered []string
+	for code := range scan.FormatCalls {
+		if !registered[code] {
+			emittedNotRegistered = append(emittedNotRegistered, code)
 		}
 	}
-
-	var orphaned []string
-	for _, emit := range prompts.PreventiveRejectEmitters() {
-		if !live[emit] {
-			orphaned = append(orphaned, emit)
+	for code := range scan.HintCodeRefs {
+		if !registered[code] {
+			emittedNotRegistered = append(emittedNotRegistered, code)
 		}
 	}
-	sort.Strings(orphaned)
-	if len(orphaned) > 0 {
-		t.Fatalf(`preventiveRejectEmitters names guards with no live recoverable hint: %v
-
-The prompt tool-surface table filters on emit; a rename or removal here silently drops codes from the table.
-Fix: update prompts.preventiveRejectEmitters to match the guard's current emit, or remove the stale entry.`, orphaned)
+	sort.Strings(emittedNotRegistered)
+	if len(emittedNotRegistered) > 0 {
+		t.Fatalf("emit sites reference codes missing from hint registry: %v", emittedNotRegistered)
 	}
 }

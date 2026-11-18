@@ -15,7 +15,6 @@ import (
 	"time"
 
 	"github.com/lycaon/lycaon/internal/fseffect"
-	"github.com/lycaon/lycaon/internal/runnerbudget"
 	"github.com/lycaon/lycaon/internal/scan/opengrep"
 )
 
@@ -137,7 +136,7 @@ func evaluateProjects(binary, path, candidateRules string, options projectEvalua
 	if err != nil {
 		return err
 	}
-	budget, err := resolveProjectBudget(options.Timeout, runnerbudget.TimeoutScale())
+	budget, err := resolveProjectBudget(options.Timeout)
 	if err != nil {
 		return err
 	}
@@ -227,10 +226,8 @@ func writeEvaluationIdentity(encoder *json.Encoder, binary string, bundle []byte
 	return encoder.Encode(map[string]string{
 		"type": "evaluation_identity", "engine_sha256": fmt.Sprintf("%x", hash.Sum(nil)), "engine_artifact_format": format,
 		"rules_sha256": fmt.Sprintf("%x", sha256.Sum256(bundle)), "corpus_sha256": fmt.Sprintf("%x", sha256.Sum256(fixtures)),
-		"test_timeout_scale": fmt.Sprint(budget.Scale),
-		"test_base_deadline": budget.Base.String(),
-		"test_deadline":      budget.Effective.String(),
-		"scanner_jobs":       "1", "scanner_rule_timeout": "0",
+		"project_deadline": time.Duration(budget).String(),
+		"scanner_jobs":     "1", "scanner_rule_timeout": "0",
 		"cache_policy":         "Fresh scanner process and working directory per run; OS and executable extraction caches are uncontrolled",
 		"resource_measurement": "Launcher process-state CPU; aggregate worker RSS sampled every 20 ms; shared pages may be counted per process",
 	})

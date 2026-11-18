@@ -9,7 +9,7 @@ import (
 	"github.com/lycaon/lycaon/pkg/api"
 	"sync/atomic"
 	"testing"
-	"time"
+	"testing/synctest"
 )
 
 func TestWorkerCycleReadFailureDoesNotStallTheLoop(t *testing.T) {
@@ -39,34 +39,36 @@ func TestWorkerCycleReadFailureDoesNotStallTheLoop(t *testing.T) {
 	engine.Cycles.OnWorkerCycleTerminal(context.Background(), "s1", "")
 	engine.Nudges.DrainPending(context.Background(), "s1")
 
-	testutil.WaitFor(t, func() bool { return prompts.Load() >= 1 })
+	testutil.WaitFor(t, "the loop runs a prompt after the read failure", func() bool { return prompts.Load() >= 1 })
 }
 
 func TestWorkerCycleGenuinelyBusyStillDefers(t *testing.T) {
-	workspaceDir := t.TempDir()
-	engine := NewLoopEngine()
-	var prompts atomic.Int32
-	deps := loopDepsForTest()
-	deps.GetSession = func(context.Context, string) (*api.Session, error) {
-		return &api.Session{ID: "s1", Status: api.SessionStatusIdle, WorkspacePath: workspaceDir}, nil
-	}
-	deps.WorkflowSource = workflowFixturePorts(StubLoopWF{
-		run: &api.WorkflowRun{ID: "run-1", Status: api.WorkflowRunStatusRunning, CurrentPhase: "work"},
+	synctest.Test(t, func(t *testing.T) {
+		workspaceDir := t.TempDir()
+		engine := NewLoopEngine()
+		var prompts atomic.Int32
+		deps := loopDepsForTest()
+		deps.GetSession = func(context.Context, string) (*api.Session, error) {
+			return &api.Session{ID: "s1", Status: api.SessionStatusIdle, WorkspacePath: workspaceDir}, nil
+		}
+		deps.WorkflowSource = workflowFixturePorts(StubLoopWF{
+			run: &api.WorkflowRun{ID: "run-1", Status: api.WorkflowRunStatusRunning, CurrentPhase: "work"},
+		})
+		deps.WorkerCycleIdle = func(context.Context, *api.Session, string) (bool, error) {
+			return false, nil
+		}
+		deps.RunPrompt = func(context.Context, string) (*promptresult.Result, error) {
+			prompts.Add(1)
+			return &promptresult.Result{}, nil
+		}
+		engine.SetDeps(deps)
+
+		engine.Nudges.Nudge(context.Background(), "s1", anchor.PhaseAdvanced, anchor.PhaseAdvanced, "", anchor.Envelope{})
+		engine.Nudges.DrainPending(context.Background(), "s1")
+		synctest.Wait()
+
+		if got := prompts.Load(); got != 0 {
+			t.Fatalf("prompts = %d want 0 while workers are genuinely in flight", got)
+		}
 	})
-	deps.WorkerCycleIdle = func(context.Context, *api.Session, string) (bool, error) {
-		return false, nil
-	}
-	deps.RunPrompt = func(context.Context, string) (*promptresult.Result, error) {
-		prompts.Add(1)
-		return &promptresult.Result{}, nil
-	}
-	engine.SetDeps(deps)
-
-	engine.Nudges.Nudge(context.Background(), "s1", anchor.PhaseAdvanced, anchor.PhaseAdvanced, "", anchor.Envelope{})
-	engine.Nudges.DrainPending(context.Background(), "s1")
-	time.Sleep(100 * time.Millisecond)
-
-	if got := prompts.Load(); got != 0 {
-		t.Fatalf("prompts = %d want 0 while workers are genuinely in flight", got)
-	}
 }

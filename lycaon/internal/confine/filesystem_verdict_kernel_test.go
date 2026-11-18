@@ -3,6 +3,7 @@ package confine_test
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/confine"
@@ -24,30 +25,59 @@ func TestKernelAgreesWithFilesystemVerdict(t *testing.T) {
 		}
 	}
 	boundary := confine.BoundaryOf(&c)
-	for _, probe := range probes {
+	permitted := kernelPermits(t, helper, c, probes)
+	for i, probe := range probes {
 		t.Run(probe.name, func(t *testing.T) {
 			verdict := boundary.Filesystem.Verdict(probe.access, probe.path)
-			kernelAllowed := kernelPermits(t, helper, c, probe)
-			if kernelAllowed != verdict.Allowed {
-				t.Fatalf("kernel allowed=%v, verdict=%+v for %s %s", kernelAllowed, verdict, probe.access, probe.path)
+			if permitted[i] != verdict.Allowed {
+				t.Fatalf("kernel allowed=%v, verdict=%+v for %s %s", permitted[i], verdict, probe.access, probe.path)
 			}
 		})
 	}
 }
 
-func kernelPermits(t *testing.T, helper string, c confine.Confinement, probe boundaryProbe) bool {
+// kernelProbeScript answers each (access, path) argument pair with 1 when the
+// kernel permits it and 0 when it does not, one line per pair.
+const kernelProbeScript = `while [ "$#" -gt 1 ]; do
+	case "$1" in
+	read) /bin/cat -- "$2" >/dev/null 2>&1 ;;
+	device) (exec 3>>"$2") 2>/dev/null ;;
+	*) (: >>"$2") 2>/dev/null ;;
+	esac && echo 1 || echo 0
+	shift 2
+done`
+
+// kernelPermits asks the kernel about every probe from one confined launch.
+// Opening a device for write proves the rule without writing a byte, and the
+// paths are distinct, so a file one probe creates cannot answer another.
+func kernelPermits(t *testing.T, helper string, c confine.Confinement, probes []boundaryProbe) []bool {
 	t.Helper()
-	if probe.access == confine.AccessRead {
-		return confinedExit(t, helper, c, "/bin/cat", probe.path) == 0
+	args := []string{"-c", kernelProbeScript, "sh"}
+	absent := map[string]bool{}
+	for _, probe := range probes {
+		kind := "write"
+		switch {
+		case probe.access == confine.AccessRead:
+			kind = "read"
+		case probe.path == "/dev/disk0":
+			kind = "device"
+		}
+		if _, err := os.Lstat(probe.path); os.IsNotExist(err) {
+			absent[probe.path] = true
+		}
+		args = append(args, kind, probe.path)
 	}
-	if probe.path == "/dev/disk0" {
-		// Opening the device for write proves the rule without writing a byte.
-		return confinedExit(t, helper, c, "/bin/sh", "-c", `exec 3>>"$1"`, "sh", probe.path) == 0
+	code, out, stderr := confinedStdout(t, helper, c, "/bin/sh", args...)
+	for path := range absent {
+		_ = os.Remove(path)
 	}
-	_, statErr := os.Lstat(probe.path)
-	code := confinedExit(t, helper, c, "/bin/sh", "-c", `: >> "$1"`, "sh", probe.path)
-	if code == 0 && os.IsNotExist(statErr) {
-		_ = os.Remove(probe.path)
+	answers := strings.Fields(out)
+	if code != 0 || len(answers) != len(probes) {
+		t.Fatalf("kernel probe: exit=%d, %d answers for %d probes\nstdout:\n%s\nstderr:\n%s", code, len(answers), len(probes), out, stderr)
 	}
-	return code == 0
+	permitted := make([]bool, len(probes))
+	for i, answer := range answers {
+		permitted[i] = answer == "1"
+	}
+	return permitted
 }

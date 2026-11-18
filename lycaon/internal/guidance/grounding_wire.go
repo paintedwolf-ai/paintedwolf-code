@@ -1,10 +1,11 @@
 package guidance
 
 import (
-	"github.com/lycaon/lycaon/internal/evidence"
-	"github.com/lycaon/lycaon/pkg/api"
 	"slices"
 	"strings"
+
+	"github.com/lycaon/lycaon/internal/evidence"
+	"github.com/lycaon/lycaon/pkg/api"
 )
 
 const maxWireEvidenceRecords = 24

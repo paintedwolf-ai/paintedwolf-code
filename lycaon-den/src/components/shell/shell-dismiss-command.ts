@@ -1,4 +1,3 @@
-import { chatTabRailBindings } from "../../chat/composer/chat-tab-rail-bindings.ts";
 import { contributionCommandAvailable, nativeCommandId } from "../../contributions/dispatch.ts";
 import { tryConsumeEscapeLadder } from "../../find/escape-ladder.ts";
 import { currentSplitFocusRegion } from "../../shell/workspace-layout.ts";
@@ -8,21 +7,25 @@ import { tryDismissOnboardingWelcome } from "../onboarding/onboarding-welcome-di
 import type { ShellNavigation } from "./shell-navigation-state.ts";
 import type { ShellScope } from "./shell-scope.ts";
 import type { ShellSearchState } from "./shell-search-state.ts";
-import type { ShellWorkerDrawer } from "./shell-worker-drawer.ts";
+import type { StageTabRail } from "../../shell/stage-tab-rail.ts";
+import type { TabId } from "../chatview/tabs.ts";
+import type { ShellSessionDrawer } from "./shell-session-drawer.ts";
 
 type Dependencies = Pick<ShellScope,
   "recentSwitcher" | "peerViewSwitcher" | "helpOpen" | "setHelpOpen" | "launcherOpen" | "setLauncherOpen" | "splitLive" |
   "activeProjectId">
   & Pick<ShellSearchState, "crossbarOpen" | "closeCrossbar" | "searchOpen" | "closeSearch">
   & Pick<ShellNavigation, "dockTray" | "closeLayoutTray" | "isSettingsNav" | "closeSettingsNav">
-  & Pick<ShellWorkerDrawer, "workersOpen" | "closeWorkers"> & {
+  & Pick<ShellSessionDrawer, "drawerContent" | "closeDrawer">
+  & {
+  stageTabs: Pick<StageTabRail<TabId>, "openTab" | "selectTab">;
   layoutTrigger: () => HTMLElement | undefined;
 };
 
 export function registerShellDismissCommand({
   recentSwitcher, peerViewSwitcher, helpOpen, setHelpOpen, crossbarOpen, closeCrossbar,
   searchOpen, closeSearch, launcherOpen, setLauncherOpen, dockTray, closeLayoutTray,
-  layoutTrigger, workersOpen, closeWorkers, isSettingsNav, splitLive, closeSettingsNav, activeProjectId,
+  layoutTrigger, drawerContent, closeDrawer, stageTabs, isSettingsNav, splitLive, closeSettingsNav, activeProjectId,
 }: Dependencies) {
   return registerCommandHandler("overlay.dismiss", () => {
     if (tryConsumeEscapeLadder()) return;
@@ -58,13 +61,12 @@ export function registerShellDismissCommand({
       queueMicrotask(() => layoutTrigger()?.focus());
       return;
     }
-    const rail = chatTabRailBindings();
-    if (rail?.worklogOpen()) {
-      rail.onCloseWorklog();
+    if (drawerContent() != null) {
+      closeDrawer();
       return;
     }
-    if (workersOpen()) {
-      closeWorkers();
+    if (stageTabs.openTab() != null) {
+      stageTabs.selectTab(null);
       return;
     }
     if (isSettingsNav()) {

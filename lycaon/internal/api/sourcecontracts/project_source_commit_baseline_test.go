@@ -219,10 +219,19 @@ func TestRestoreGitCausedVersionRefusesDriftedGitBytes(t *testing.T) {
 	}
 }
 
-// mergedHistoryFixture spans commit-only and retained history.
-
-func TestSourceVersionsMergedListingJoinsGitLineage(t *testing.T) {
+// The reads of merged history share one fixture: none changes the project,
+// and the one that stubs the git lane restores it. The git-lane failures run
+// first, before a listing has cached the lane's answer.
+func TestSourceVersionsMergedHistoryReads(t *testing.T) {
 	f := contractfixture.NewMergedHistoryFixture(t)
+	t.Run("git lane names why it could not answer", func(t *testing.T) { gitLaneNamesWhyItCouldNotAnswer(t, f) })
+	t.Run("listing joins git lineage", func(t *testing.T) { mergedListingJoinsGitLineage(t, f) })
+	t.Run("one lane", func(t *testing.T) { versionsCanReturnOneLane(t, f) })
+	t.Run("unasked file is not tracked", func(t *testing.T) { gitLaneReportsAnUnaskedFileAsNotTracked(t, f) })
+	t.Run("restore refuses another commit's blob", func(t *testing.T) { commitRestoreRefusesAnotherCommitsBlob(t, f) })
+}
+
+func mergedListingJoinsGitLineage(t *testing.T, f contractfixture.MergedHistoryFixture) {
 	out := f.Listing(t)
 
 	if out.GitHistoryState != wire.SourceGitHistoryStateAvailable || out.TrackedAt == nil || out.NextCursor != "" {
@@ -260,8 +269,7 @@ func TestSourceVersionsMergedListingJoinsGitLineage(t *testing.T) {
 	}
 }
 
-func TestSourceVersionsCanReturnOneLane(t *testing.T) {
-	f := contractfixture.NewMergedHistoryFixture(t)
+func versionsCanReturnOneLane(t *testing.T, f contractfixture.MergedHistoryFixture) {
 	t.Run("retained", func(t *testing.T) {
 		req := contractfixture.NewAuthedRequest(http.MethodGet,
 			"/v1/projects/"+f.ProjectID+"/source/versions?file_id="+f.FileID+"&lane=retained", nil)
@@ -347,8 +355,7 @@ func TestCommitStatePreviewsAndRestoresFromTheObjectStore(t *testing.T) {
 	}
 }
 
-func TestCommitRestoreRefusesAnotherCommitsBlob(t *testing.T) {
-	f := contractfixture.NewMergedHistoryFixture(t)
+func commitRestoreRefusesAnotherCommitsBlob(t *testing.T, f contractfixture.MergedHistoryFixture) {
 	rowB := contractfixture.CommitsByHash(f.Listing(t).Commits)[f.CommitB]
 	if rowB.BlobOid == nil {
 		t.Fatalf("commit B carries no blob: %+v", rowB)

@@ -198,8 +198,9 @@ class RepositoryToolsInputsTest(unittest.TestCase):
         self.assertEqual([call["argv"][-1] for call in calls[:1]], ["update"])
         install = calls[1]["argv"]
         self.assertIn("--no-install-recommends", install)
-        self.assertEqual(set(install[install.index("--") + 1:]), {"apt-utils", "createrepo-c", "gnupg", "libarchive-tools",
-                                                                  "makepkg", "minisign", "pacman-package-manager", "rpm"})
+        self.assertEqual(set(install[install.index("--") + 1:]), {"apt-utils", "aspell-en", "createrepo-c", "gnupg",
+                                                                  "libarchive-tools", "lintian", "makepkg", "minisign",
+                                                                  "pacman-package-manager", "rpm", "rpmlint"})
 
     def test_macos_prepares_the_signer_without_an_unrelated_homebrew_update(self):
         result, calls = self.run_profile("Darwin")
