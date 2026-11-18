@@ -71,14 +71,15 @@ for (const scale of [1, 53 / 17]) {
     const second = stage.locator(`[data-msg-id="${next}"] .bubble--user`);
     const prose = stage.locator(`[data-msg-id="${reply}"] .bubble--assistant`);
     const grounded = stage.getByTestId("citation-evidence-chicklet");
+    const created = stage.getByTestId("progress-strip-created");
     const delta = stage.getByTestId("progress-strip-completed");
     const diff = stage.getByTestId("diff-group");
     const activity = diff.locator("xpath=ancestor::*[@data-index][1]/preceding-sibling::*[@data-index][1]/*[1]");
     const footer = stage.getByTestId("turn-tail").first();
     const label = (link: Locator) => link.locator(".den-transcript-disclosure-header > :first-child");
     const distances: [Locator, Locator, number][] = [
-      [user, stage.getByTestId("progress-strip-created"), gaps.afterActions],
-      [stage.getByTestId("progress-strip-created"), activity, gaps.item],
+      [user, created, gaps.afterActions],
+      [created, activity, gaps.item],
       [activity, label(diff), gaps.item],
       [label(diff), delta.getByTestId("progress-strip-rest"), gaps.item],
       [delta.getByTestId("progress-strip-rest"), prose, gaps.message],
@@ -101,7 +102,7 @@ for (const scale of [1, 53 / 17]) {
           button.contains(document.elementFromPoint(rect.left + rect.width / 2, y)));
       })).toBe(true);
     }
-    for (const [message, lastEdge, following] of [[user, user, distances[0][1]], [prose, label(grounded), review]]) {
+    for (const [message, lastEdge, following] of [[user, user, created], [prose, label(grounded), review]] as const) {
       const actions = message.locator("xpath=ancestor::*[contains(@class,'transcript-viewport-row')][1]").locator(".den-msg-actions");
       await actions.locator("button").first().focus();
       await expect(actions).toHaveCSS("opacity", "1");
