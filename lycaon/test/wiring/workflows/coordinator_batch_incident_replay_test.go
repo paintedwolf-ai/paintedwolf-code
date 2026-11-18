@@ -6,6 +6,8 @@ import (
 	"slices"
 	"testing"
 
+	"github.com/lycaon/lycaon/internal/coordinator/guard"
+
 	"github.com/lycaon/lycaon/internal/coordinator/anchor"
 	"github.com/lycaon/lycaon/internal/coordinator/batch"
 	"github.com/lycaon/lycaon/internal/guidance"

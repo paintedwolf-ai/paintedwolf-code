@@ -1,6 +1,6 @@
 //go:build darwin || linux
 
-package wiring
+package commands
 
 import (
 	"encoding/json"

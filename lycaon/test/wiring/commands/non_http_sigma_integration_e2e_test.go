@@ -1,6 +1,6 @@
 //go:build darwin || linux
 
-package wiring
+package commands
 
 import (
 	"os"
@@ -22,7 +22,7 @@ const (
 // rule and republishes the matcher.
 func sigmaWiringInstallDetections(t *testing.T, s *commandProgramSession) {
 	t.Helper()
-	dir := filepath.Join(detectionpack.DevicePacksDir(filepath.Dir(s.h.dbPath)), "wiring-fixture")
+	dir := filepath.Join(detectionpack.DevicePacksDir(filepath.Dir(s.h.DatabasePath())), "wiring-fixture")
 	testutil.FailErr(t, "create detection pack", os.MkdirAll(filepath.Join(dir, "rules"), 0o700))
 	files := map[string]string{
 		"pack.yaml": "id: wiring-fixture\nlabel: Wiring fixture\ndescription: Fixture rules for wiring tests.\n",
