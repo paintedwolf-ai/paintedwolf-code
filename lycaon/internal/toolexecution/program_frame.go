@@ -174,6 +174,6 @@ func freshProgramOwnerContext(name string, contract toolcontract.Contract, execu
 	tc.Effects.Out = nil
 	tc.Effects.CanonicalArgs = nil
 	tc.Effects.RequestedArgs = nil
-	tc.Invocation = tools.Invocation{ID: executionID, ProjectID: projectID, SessionID: sessionID, MessageID: tc.Identity.MessageID, ToolCallID: tc.Identity.ToolCallID, ToolName: name, ContractDigest: contract.Digest(), Contract: contract}
+	tc.Invocation = tools.Invocation{ID: executionID, ProjectID: projectID, SessionID: sessionID, MessageID: tc.Identity.MessageID, ToolCallID: tc.Identity.ToolCallID, ToolName: name, EntryTool: tc.Invocation.EntryTool, ContractDigest: contract.Digest(), Contract: contract}
 	return tc
 }
