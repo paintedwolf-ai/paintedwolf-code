@@ -1,4 +1,4 @@
-import { fireEvent, render, waitFor } from "@solidjs/testing-library";
+import { cleanup, fireEvent, render, waitFor } from "@solidjs/testing-library";
 import { createSignal } from "solid-js";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { BackgroundProcessOutput, ChatContentPage as ContentPage, ChatContentReference } from "../../api/types.ts";
@@ -8,7 +8,7 @@ import { resetEditorPrefsForTests, saveEditorLineLayout } from "../../settings/e
 import { stubClient } from "../../test/client-fixture.ts";
 import { ChatContentPage } from "./ChatContentPage.tsx";
 
-afterEach(() => { resetBackgroundProcessStoreForTests(); resetEditorPrefsForTests(); });
+afterEach(() => { cleanup(); resetBackgroundProcessStoreForTests(); resetEditorPrefsForTests(); });
 
 const processDoc = (handle: string): ChatContentDocument => ({
   kind: "tool", sessionId: "s", messageId: "m", toolCallId: handle, pane: "output", title: "Output",
@@ -28,6 +28,7 @@ describe("process snapshot readiness", () => {
     const client = stubClient({ getSessionBackgroundProcessOutput: () => new Promise<BackgroundProcessOutput>(resolve => { finish = resolve; }) });
     const view = render(() => <ChatContentPage projectId="p" document={processDoc("a")} client={client} />);
     if (!initial) fireEvent.click(view.getByTestId("files-editor-layout-pretty"));
+    await waitFor(() => expect(finish).toBeTypeOf("function"));
     finish(output("a", "first"));
     const body = () => view.container.querySelector(".cm-content")?.textContent;
     await waitFor(() => expect(body()).toBe("first"));
@@ -43,7 +44,9 @@ describe("process snapshot readiness", () => {
     const client = stubClient({ getSessionBackgroundProcessOutput: (_session: string, handle: string) => new Promise<BackgroundProcessOutput>(resolve => pending.set(handle, resolve)) });
     const [doc, setDoc] = createSignal(processDoc("a"));
     const view = render(() => <ChatContentPage projectId="p" document={doc()} client={client} />);
+    await waitFor(() => expect(pending.has("a")).toBe(true));
     setDoc(processDoc("b"));
+    await waitFor(() => expect(pending.has("b")).toBe(true));
     event("b", "current");
     pending.get("a")!(output("a", "wrong handle"));
     pending.get("b")!(output("b", "overtaken"));
