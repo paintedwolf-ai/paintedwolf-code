@@ -148,8 +148,15 @@ func newCapabilityReviewFixture(t *testing.T, approve bool) *capabilityReviewFix
 		if !f.onlyRead && (len(request.SocketGrants) != 1 || !request.LocalListen || !request.LoopbackConnect) {
 			return "", fmt.Errorf("execution missed reviewed authority: %+v", request)
 		}
-		if f.wantPaths && (!slices.Equal(slices.Sorted(slices.Values(request.ProtectedReadGrants)), f.readPaths) || (!f.onlyRead && !slices.Contains(request.GrantedWriteRoots, write))) {
-			return "", fmt.Errorf("execution missed reviewed paths: %+v", request)
+		if f.wantPaths {
+			approvedReads := make([]string, 0, len(request.ProtectedReadGrants))
+			for _, grant := range request.ProtectedReadGrants {
+				approvedReads = append(approvedReads, grant.ApprovedPath)
+			}
+			slices.Sort(approvedReads)
+			if !slices.Equal(approvedReads, f.readPaths) || (!f.onlyRead && !slices.Contains(request.GrantedWriteRoots, write)) {
+				return "", fmt.Errorf("execution missed reviewed paths: %+v", request)
+			}
 		}
 		return "verified", nil
 	}))
