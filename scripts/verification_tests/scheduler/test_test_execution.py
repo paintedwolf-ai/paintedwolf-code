@@ -174,6 +174,16 @@ class TaskAdmissionTests(unittest.TestCase):
                 self.assertEqual(resources.demand({"workers": "shared"}, 64), workers)
                 self.assertEqual(resources.demand({"workers": 1}, 64), 1)
 
+    def test_configured_capacity_replaces_the_derived_budget(self):
+        with patch.object(os, "cpu_count", return_value=16), \
+                patch.dict(os.environ, {"PW_TEST_HOST": "shared", "PW_TEST_CAPACITY": "14"}):
+            self.assertEqual(execution.worker_budget({}), 14)
+            self.assertEqual(resources.demand({"workers": "shared"}, 64), 7)
+        for bad in ("0", "-2", "many"):
+            with self.subTest(bad=bad), patch.dict(os.environ, {"PW_TEST_CAPACITY": bad}), \
+                    self.assertRaises(ValueError):
+                execution.worker_budget({})
+
     def test_memory_bounds_the_budget(self):
         for memory, workers in ((1, 1), (7, 7), (15, 12)):
             with self.subTest(memory=memory), patch.object(os, "cpu_count", return_value=16), \

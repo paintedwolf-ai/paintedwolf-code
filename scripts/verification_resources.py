@@ -32,9 +32,18 @@ def memory_workers():
     return max(1, total // (2 << 30))
 
 
-def worker_budget(environment):
+def host_capacity():
+    configured = os.environ.get("PW_TEST_CAPACITY")
+    if configured is not None:
+        if not configured.isdigit() or int(configured) < 1:
+            raise ValueError("PW_TEST_CAPACITY must be a positive integer")
+        return int(configured)
     cpus = os.cpu_count() or 1
-    limit = max(1, min(cpus if dedicated_host() else cpus * 3 // 4, memory_workers()))
+    return max(1, min(cpus if dedicated_host() else cpus * 3 // 4, memory_workers()))
+
+
+def worker_budget(environment):
+    limit = host_capacity()
     requested = int(environment.get("PW_TEST_WORKERS", limit))
     if not 1 <= requested <= limit:
         raise ValueError(f"PW_TEST_WORKERS must be between 1 and {limit} (the shared worker capacity)")

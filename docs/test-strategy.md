@@ -741,7 +741,8 @@ engine staging acquire a separate exclusive reservation through
 harness tests and canaries remain queued for their whole execution.
 
 The default worker budget is three quarters of the available CPUs, rounded down,
-at least one, and at most one worker per 2 GiB of memory. `PW_TEST_WORKERS` selects a per-invocation
+at least one, and at most one worker per 2 GiB of memory. `PW_TEST_CAPACITY`
+set on a host replaces that derived budget for every checkout on it. `PW_TEST_WORKERS` selects a per-invocation
 ceiling between one and that budget; shared execution also obeys the global
 capacity. The catalog's `resources` declarations reserve half that capacity for
 a parallel Go, Rust, or Vitest operation, and one slot for frontend lint or
