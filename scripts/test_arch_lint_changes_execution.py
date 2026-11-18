@@ -151,6 +151,55 @@ class ArchLintChangesTest(unittest.TestCase):
         self.assertTrue((base_den / "node_modules").is_symlink())
         self.assertTrue((base_den / "knip.json").exists())
 
+    def test_populated_cache_tracks_analysis_inputs(self):
+        policy = json.loads(json.dumps(POLICY))
+        args = (self.repo, self.base, self.binary, policy, self.cache)
+        with mock.patch.object(arch_lint_changes, "checks", return_value={}) as checks:
+            arch_lint_changes.base_checks(*args)
+            arch_lint_changes.base_checks(*args)
+            self.assertEqual(checks.call_count, 1)
+            policy["test_support"].append("fixtures$")
+            arch_lint_changes.base_checks(*args)
+            self.assertEqual(checks.call_count, 2)
+            self.binary.write_text(FAKE_ARCH_LINT + "# revised analyzer\n")
+            arch_lint_changes.base_checks(*args)
+            self.assertEqual(checks.call_count, 3)
+            with mock.patch.dict(os.environ, {"GOARCH": "review-fixture"}):
+                arch_lint_changes.base_checks(*args)
+            self.assertEqual(checks.call_count, 4)
+
+    def test_populated_den_cache_tracks_config_and_dependencies(self):
+        args = (self.repo, self.base, None, POLICY, self.cache)
+        opts = {"go": False, "den": True, "refs": False}
+        with mock.patch.object(arch_lint_changes, "checks", return_value={}) as checks:
+            arch_lint_changes.base_checks(*args, **opts)
+            arch_lint_changes.base_checks(*args, **opts)
+            self.assertEqual(checks.call_count, 1)
+            paths = ("knip.json", "package.json", "bun.lock", "bun.lockb", "node_modules/knip/package.json")
+            for i, name in enumerate(paths, 2):
+                path = self.repo / "lycaon-den" / name
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text('{"version": "changed"}')
+                arch_lint_changes.base_checks(*args, **opts)
+                self.assertEqual(checks.call_count, i)
+            (self.repo / "lycaon-den" / "knip.json").unlink()
+            arch_lint_changes.base_checks(*args, **opts)
+            self.assertEqual(checks.call_count, 7)
+
+    def test_removed_knip_config_does_not_survive_in_base_tree(self):
+        (self.repo / "lycaon-den" / "knip.json").write_text("{}")
+        self.git("add", "-A")
+        self.git("-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "config")
+        base = self.git("rev-parse", "HEAD").strip()
+        opts = {"go": False, "den": True, "refs": False}
+        with mock.patch.object(arch_lint_changes, "ROOT", self.repo):
+            arch_lint_changes.base_checks(self.repo, base, None, POLICY, self.cache, **opts)
+            config = self.cache / "base-tree" / "lycaon-den" / "knip.json"
+            self.assertTrue(config.exists())
+            (self.repo / "lycaon-den" / "knip.json").unlink()
+            arch_lint_changes.base_checks(self.repo, base, None, POLICY, self.cache, **opts)
+            self.assertFalse(config.exists())
+
     def test_reuses_the_base_tree_for_a_new_base(self):
         arch_lint_changes.base_checks(self.repo, self.base, self.binary, POLICY, self.cache)
         self.write_findings({})
