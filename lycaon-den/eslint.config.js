@@ -1,7 +1,7 @@
 import solid from "eslint-plugin-solid/configs/typescript";
 import tailwind from "eslint-plugin-tailwindcss";
 import tseslint from "typescript-eslint";
-import laws from "./eslint/laws/index.js";
+import invariants from "./eslint/invariants/index.js";
 import den from "./eslint/plugin.js";
 
 export default tseslint.config(
@@ -20,7 +20,7 @@ export default tseslint.config(
     extends: [...tseslint.configs.recommended, solid],
   },
   {
-    // Specs are held to the source laws only.
+    // Specs are held to the source invariants only.
     files: ["e2e/**/*.ts"],
     languageOptions: { parser: tseslint.parser },
   },
@@ -113,7 +113,7 @@ export default tseslint.config(
     files: ["src/**/*.{ts,tsx}", "shared/**/*.ts", "e2e/**/*.ts"],
     plugins: { den },
     rules: {
-      "den/source-laws": ["error", laws],
+      "den/invariants": ["error", invariants],
     },
   },
   {

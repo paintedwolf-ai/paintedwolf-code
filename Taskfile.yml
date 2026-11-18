@@ -591,7 +591,7 @@ tasks:
       - bash {{.SCRIPTS_DIR}}/repo-snapshot-lock.sh read -- bun run typecheck
 
   den:lint:
-    desc: 'Frontend ESLint (errors only) and its canary: typescript-eslint, eslint-plugin-solid, Den source laws'
+    desc: 'Frontend ESLint (errors only) and its canary: typescript-eslint, eslint-plugin-solid, Den source invariants'
     dir: lycaon-den
     sources:
       - 'src/**/*.{ts,tsx}'
