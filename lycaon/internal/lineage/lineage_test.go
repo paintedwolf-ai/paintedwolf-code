@@ -32,9 +32,7 @@ func sleeper(t *testing.T, l *lineage.Lineage, setsid bool) *exec.Cmd {
 }
 
 func TestLineageObservesDescendants(t *testing.T) {
-	if !lineage.Supported() {
-		t.Skip("descendant observation requires a supported platform")
-	}
+	testutil.RequireLineage(t, lineage.Supported())
 	l, err := lineage.Open("test", "")
 	if err != nil {
 		t.Fatalf("open lineage: %v", err)
@@ -62,9 +60,7 @@ func TestLineageObservesDescendants(t *testing.T) {
 
 // A descendant that leaves the process group is still attributable.
 func TestLineageSurvivesSetsid(t *testing.T) {
-	if !lineage.Supported() {
-		t.Skip("descendant observation requires a supported platform")
-	}
+	testutil.RequireLineage(t, lineage.Supported())
 	l, err := lineage.Open("test", "")
 	if err != nil {
 		t.Fatalf("open lineage: %v", err)
@@ -84,9 +80,7 @@ func TestLineageSurvivesSetsid(t *testing.T) {
 }
 
 func TestLineageEndsWithItsDescendants(t *testing.T) {
-	if !lineage.Supported() {
-		t.Skip("descendant observation requires a supported platform")
-	}
+	testutil.RequireLineage(t, lineage.Supported())
 	l, err := lineage.Open("test", "")
 	if err != nil {
 		t.Fatalf("open lineage: %v", err)
@@ -113,9 +107,7 @@ func TestLineageEndsWithItsDescendants(t *testing.T) {
 // A survivor stays nameable after its action ends, so a later refusal can say
 // which action left it behind, and a server it runs still belongs to its session.
 func TestRetiredLineageStillNamesItsSurvivors(t *testing.T) {
-	if !lineage.Supported() {
-		t.Skip("descendant observation requires a supported platform")
-	}
+	testutil.RequireLineage(t, lineage.Supported())
 	l, err := lineage.Open("command:call_1", "session-1")
 	if err != nil {
 		t.Fatalf("open lineage: %v", err)
@@ -145,9 +137,7 @@ func TestRetiredLineageStillNamesItsSurvivors(t *testing.T) {
 }
 
 func TestReleasedLineageResolvesNothing(t *testing.T) {
-	if !lineage.Supported() {
-		t.Skip("descendant observation requires a supported platform")
-	}
+	testutil.RequireLineage(t, lineage.Supported())
 	l, err := lineage.Open("test", "")
 	if err != nil {
 		t.Fatalf("open lineage: %v", err)
@@ -171,9 +161,7 @@ func TestReleasedLineageResolvesNothing(t *testing.T) {
 // A retired lineage gives back its descriptor once its last descendant exits,
 // rather than waiting to be evicted.
 func TestRetiredLineageIsReclaimedWhenItsSurvivorsExit(t *testing.T) {
-	if !lineage.Supported() {
-		t.Skip("descendant observation requires a supported platform")
-	}
+	testutil.RequireLineage(t, lineage.Supported())
 	l, err := lineage.Open("command:call_1", "")
 	if err != nil {
 		t.Fatalf("open lineage: %v", err)

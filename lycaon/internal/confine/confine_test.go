@@ -870,9 +870,7 @@ func TestDefaultConfinementEnabledForDraftScratchRoot(t *testing.T) {
 
 	scratch, err := project.DraftWorkspaceDir("draft-project-1")
 	testutil.FailErr(t, "project.DraftWorkspaceDir failed", err)
-	if !confine.Available() {
-		t.Skip("confinement unavailable on this platform")
-	}
+	testutil.RequireConfinement(t, confine.Available())
 	c, on := confine.DefaultConfinement(confine.Request{Roots: []string{scratch}})
 	if !on || c == nil {
 		t.Fatalf("draft scratch root should confine when available: on=%v c=%v", on, c)

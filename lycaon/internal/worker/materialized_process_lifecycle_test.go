@@ -1,9 +1,7 @@
 package worker
 
 import (
-	"encoding/json"
 	"errors"
-	"fmt"
 	"io/fs"
 	"os"
 	osexec "os/exec"
@@ -52,8 +50,15 @@ func TestSmallMountedLifecyclePreservesSourceConflict(t *testing.T) {
 // Process restart does not establish power-loss durability.
 func runWorkerLifecycleAcrossProcessRestart(t *testing.T, mounted, sourceConflict bool) {
 	t.Helper()
-	if phase := os.Getenv("PW_M14_LIFECYCLE_PHASE"); phase != "" {
-		runWorkerLifecyclePhase(t, os.Getenv("PW_M14_LIFECYCLE_ROOT"), phase, mounted, sourceConflict)
+	runWorkerLifecycleOnSource(t, mounted, sourceConflict, func(root string) string { return filepath.Join(root, "source") })
+}
+
+// runWorkerLifecycleOnSource runs the lifecycle phases as helper processes of
+// this test; source names the source directory and runs only in this process.
+func runWorkerLifecycleOnSource(t *testing.T, mounted, sourceConflict bool, source func(root string) string) {
+	t.Helper()
+	if phase := os.Getenv(envLifecyclePhase); phase != "" {
+		runWorkerLifecyclePhase(t, os.Getenv(envLifecycleRoot), phase, mounted, sourceConflict)
 		if phase == "prepare" && !t.Failed() {
 			// End the process with its published view still live; recovery must repair it.
 			os.Exit(0)
@@ -61,30 +66,32 @@ func runWorkerLifecycleAcrossProcessRestart(t *testing.T, mounted, sourceConflic
 		return
 	}
 	root := t.TempDir()
-	source := filepath.Join(root, "source")
-	if prepared := os.Getenv("PW_M14_LIFECYCLE_PREPARED_SOURCE"); prepared != "" {
-		source = prepared
-	} else if parent := os.Getenv("PW_M14_LIFECYCLE_SOURCE_PARENT"); parent != "" {
-		var err error
-		source, err = os.MkdirTemp(parent, "m14-lifecycle-source-") //nolint:usetesting // The source must sit on the external volume the run names.
-		testutil.FailErr(t, "create isolated external source", err)
-		t.Cleanup(func() { testutil.FailErr(t, "remove isolated external source", os.RemoveAll(source)) })
-	}
+	sourceDir := source(root)
 	executable, err := os.Executable()
 	testutil.FailErr(t, "test executable", err)
 	for _, phase := range []string{"prepare", "recover-promote"} {
 		if phase == "recover-promote" && sourceConflict {
-			testutil.FailErr(t, "external source edit after worker exit", os.WriteFile(filepath.Join(source, "main.go"), []byte("package external\n"), 0o644))
+			testutil.FailErr(t, "external source edit after worker exit", os.WriteFile(filepath.Join(sourceDir, "main.go"), []byte("package external\n"), 0o644))
 		}
 		// The child runs inside this test; a hang in it is this test's hang.
 		cmd := osexec.CommandContext(t.Context(), executable, "-test.run=^"+t.Name()+"$", "-test.timeout=0", "-test.v=true")
-		cmd.Env = append(os.Environ(), "PW_M14_LIFECYCLE_PHASE="+phase, "PW_M14_LIFECYCLE_ROOT="+root, "PW_M14_LIFECYCLE_SOURCE="+source)
+		cmd.Env = append(os.Environ(), envLifecyclePhase+"="+phase, envLifecycleRoot+"="+root, envLifecycleSource+"="+sourceDir)
 		output, err := cmd.CombinedOutput()
 		if err != nil {
 			t.Fatalf("%s process failed: %v\n%s", phase, err, output)
 		}
 	}
 }
+
+// The lifecycle's helper processes learn their phase, root and source from these.
+const (
+	envLifecyclePhase  = "PW_WORKER_LIFECYCLE_PHASE"
+	envLifecycleRoot   = "PW_WORKER_LIFECYCLE_ROOT"
+	envLifecycleSource = "PW_WORKER_LIFECYCLE_SOURCE"
+)
+
+// sourceOutageRetry runs between recovery and promotion; outage tests replace it.
+var sourceOutageRetry = func(*testing.T, *MergeService, *api.WorkerTask, string) {}
 
 func runWorkerLifecyclePhase(t *testing.T, root, phase string, mounted, sourceConflict bool) {
 	t.Helper()
@@ -95,7 +102,7 @@ func runWorkerLifecyclePhase(t *testing.T, root, phase string, mounted, sourceCo
 		t.Fatal("missing isolated lifecycle root")
 	}
 	database := testdbfixture.OpenPath(t, filepath.Join(root, "store.db"))
-	source := os.Getenv("PW_M14_LIFECYCLE_SOURCE")
+	source := os.Getenv(envLifecycleSource)
 	if source == "" {
 		t.Fatal("missing lifecycle source path")
 	}
@@ -194,11 +201,9 @@ func runWorkerLifecyclePhase(t *testing.T, root, phase string, mounted, sourceCo
 		assertRecoveredSourceConflict(t, service, task, source, manifest.CheckpointID, fields[1])
 	}
 	trace("source-outage-start")
-	assertWorkerSourceOutageRetry(t, service, task, source)
+	sourceOutageRetry(t, service, task, source)
 	trace("source-ready-promotion-start")
-	stopObserver := startDiagnosticPromoteObserver(promoteTransactionDir(service.DataDir, task.ID), filepath.Join(recoveryRoot, "checkpoints", "promotions"), trace)
 	result, err := service.PromoteOverlay(t.Context(), "", task.ID, api.PromoteOverlayInput{})
-	stopObserver()
 	trace("promotion-returned")
 	testutil.FailErr(t, "promote recovered checkpoint", err)
 	if result.Status != api.WorkerMergeStatusMerged {
@@ -252,72 +257,9 @@ func runPrepareLifecyclePhase(t *testing.T, fixture *layeredWorkerFixture, root 
 	testutil.FailErr(t, "persist phase receipt", os.WriteFile(filepath.Join(root, "phase.txt"), []byte(task.ID+"\n"+commit+"\n"), 0o600))
 }
 
-func startDiagnosticPromoteObserver(txDir, promotionsDir string, trace func(string)) func() {
-	if os.Getenv("PW_M14_DIAGNOSTIC_COMPLETION_10M") != "1" {
-		return func() {}
-	}
-	stop := make(chan struct{})
-	done := make(chan struct{})
-	go func() {
-		defer close(done)
-		last := ""
-		sample := func() {
-			state := observeLocalPromoteState(txDir, promotionsDir)
-			if state != last {
-				last = state
-				trace("local-journal:" + state)
-			}
-		}
-		sample()
-		ticker := time.NewTicker(25 * time.Millisecond)
-		defer ticker.Stop()
-		for {
-			select {
-			case <-stop:
-				sample()
-				return
-			case <-ticker.C:
-				sample()
-			}
-		}
-	}()
-	return func() {
-		close(stop)
-		<-done
-	}
-}
-
-func observeLocalPromoteState(txDir, promotionsDir string) string {
-	var parsed struct {
-		Phase      string          `json:"phase"`
-		Roots      map[string]any  `json:"roots"`
-		Checkpoint json.RawMessage `json:"checkpoint"`
-		Records    []string        `json:"records"`
-		Targets    []any           `json:"targets"`
-		Refs       []any           `json:"refs"`
-	}
-	txSummary := "tx=absent"
-	if raw, err := os.ReadFile(filepath.Join(txDir, "transaction.json")); err == nil {
-		if json.Unmarshal(raw, &parsed) == nil {
-			postEntries, _ := os.ReadDir(filepath.Join(txDir, "postimages"))
-			cpSet := len(parsed.Checkpoint) > 0 && string(parsed.Checkpoint) != "null"
-			txSummary = fmt.Sprintf("tx=%s/roots=%d/targets=%d/refs=%d/rec=%d/cp=%t/post=%d",
-				parsed.Phase, len(parsed.Roots), len(parsed.Targets), len(parsed.Refs), len(parsed.Records), cpSet, len(postEntries))
-		}
-	}
-	promoEntries, _ := os.ReadDir(promotionsDir)
-	return fmt.Sprintf("%s/promo_files=%d", txSummary, len(promoEntries))
-}
-
-// prepareLifecycleSource seeds the source repository, or checks the one a run prepared beforehand.
+// prepareLifecycleSource seeds the source repository.
 func prepareLifecycleSource(t *testing.T, source string) {
 	t.Helper()
-	if os.Getenv("PW_M14_LIFECYCLE_PREPARED_SOURCE") != "" {
-		assertFileHolds(t, filepath.Join(source, "main.go"), "package main\n")
-		_, err := os.Stat(filepath.Join(source, ".git"))
-		testutil.FailErr(t, "prepared source Git fixture", err)
-		return
-	}
 	testutil.FailErr(t, "source directory", os.MkdirAll(source, 0o755))
 	testutil.FailErr(t, "seed source", os.WriteFile(filepath.Join(source, "main.go"), []byte("package main\n"), 0o644))
 	gittest.InitCommit(t, source, "initial")

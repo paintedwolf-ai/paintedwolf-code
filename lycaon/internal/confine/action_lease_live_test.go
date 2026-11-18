@@ -20,9 +20,7 @@ import (
 // liveBroker starts the host's real front door for one test.
 func liveBroker(t *testing.T) egressproxy.Addrs {
 	t.Helper()
-	if !lineage.Supported() {
-		t.Skip("descendant observation requires a supported platform")
-	}
+	testutil.RequireLineage(t, lineage.Supported())
 	addrs, err := confine.StartEgressBroker(t.TempDir())
 	testutil.FailErr(t, "start egress broker", err)
 	t.Cleanup(func() { _ = confine.StopEgressBroker() })

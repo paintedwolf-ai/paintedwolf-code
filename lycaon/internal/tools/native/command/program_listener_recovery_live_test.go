@@ -19,9 +19,10 @@ import (
 // routes to host execution. Where the platform's reports can be dropped, an
 // unreported bind is allowed; a misrouted one never is.
 func TestWithheldListenerRoutesToLocalListen(t *testing.T) {
-	if testing.Short() || !confine.Available() {
-		t.Skip("applied confinement required")
+	if testing.Short() {
+		t.Skip("applied confinement is slow to set up")
 	}
+	testutil.RequireConfinement(t, confine.Available())
 	python, err := exec.LookPath("python3")
 	if err != nil {
 		t.Skip("python3 is required to open a TCP listener")

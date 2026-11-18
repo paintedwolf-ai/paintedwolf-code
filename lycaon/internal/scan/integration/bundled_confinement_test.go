@@ -6,12 +6,11 @@ import (
 
 	"github.com/lycaon/lycaon/internal/confine"
 	"github.com/lycaon/lycaon/internal/scan"
+	"github.com/lycaon/lycaon/internal/testutil"
 )
 
 func TestBundledScannerConfinementDeniesNetwork(t *testing.T) {
-	if !confine.Available() {
-		t.Skip("OS confinement unavailable")
-	}
+	testutil.RequireConfinement(t, confine.Available())
 	confine.TestingSetAutoConfine(t)
 	t.Setenv("LYCAON_BYPASS_APPROVALS", "")
 	t.Setenv("LYCAON_SANDBOX", "")

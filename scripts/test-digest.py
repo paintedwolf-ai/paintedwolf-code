@@ -88,6 +88,15 @@ def _test_timings(timings, cached):
     return ((f"{pkg} {test}", elapsed) for (pkg, _), (test, elapsed) in families.items())
 
 
+def skip_reason(lines: list[str]) -> str:
+    """The message a test logged before it skipped, without go test's own SKIP line."""
+    for line in reversed(lines):
+        stripped = line.strip()
+        if stripped and not stripped.startswith("--- SKIP"):
+            return stripped
+    return ""
+
+
 def main(argv: list[str]) -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--name", default="go test", help="label for this run in the digest header")
@@ -118,6 +127,7 @@ def main(argv: list[str]) -> int:
     timings: dict[tuple[str, str], float] = {}
     cached: set[str] = set()
     test_results = {action: 0 for action in ("pass", "fail", "skip")}
+    skipped: list[tuple[str, str, str]] = []
     packages_with_tests: set[str] = set()
 
     for line in sys.stdin:
@@ -149,6 +159,8 @@ def main(argv: list[str]) -> int:
             packages_with_tests.add(pkg)
             if action in {"pass", "fail", "skip"}:
                 test_results[action] += 1
+            if action == "skip":
+                skipped.append((pkg, test, skip_reason(output.get(key, []))))
         elapsed = seconds(ev.get("Elapsed"))
         if action in {"pass", "fail"} and pkg and elapsed is not None:
             timings[key] = max(timings.get(key, 0), elapsed)
@@ -199,6 +211,10 @@ def main(argv: list[str]) -> int:
         empty = len(packages_finished - packages_with_tests)
         out.write(f"    {empty} package{'s' if empty != 1 else ''} with no captured test results\n")
 
+    def write_skipped():
+        for pkg, test, reason in sorted(skipped):
+            out.write(f"      skipped {pkg} {test}{': ' + reason if reason else ''}\n")
+
     def write_timings():
         write_slowest(out, "packages", ((pkg, elapsed) for (pkg, test), elapsed in timings.items()
                                        if not test and pkg not in cached))
@@ -209,6 +225,7 @@ def main(argv: list[str]) -> int:
         label = f"{n} package{'s' if n != 1 else ''}" if n else "no packages"
         out.write(f"\n  ✓ {args.name} — {label}, no failures\n")
         write_coverage()
+        write_skipped()
         write_timings()
         if last_run_dir:
             failed_path = os.path.join(last_run_dir, "failed-go-pkgs.txt")
@@ -247,6 +264,7 @@ def main(argv: list[str]) -> int:
     out.write("    re-run failures: ./task test:failed\n")
 
     _write_failed_pkgs(last_run_dir, all_failed_pkgs)
+    write_skipped()
     write_timings()
     return 1
 

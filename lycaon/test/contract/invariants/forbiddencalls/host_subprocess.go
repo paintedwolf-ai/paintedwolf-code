@@ -109,6 +109,7 @@ var approvedHostLaunches = []invariants.Exemption{
 	{Key: "ssh_agent_socket_lookup", Reason: "retrieves SSH_AUTH_SOCK from launchd environment on headless macOS launches"},
 	{Key: "test volume", Reason: "attaches disk images for placement tests on macOS; test support, never in the product"},
 	{Key: "test volume namespace", Reason: "re-runs a placement test in a private mount namespace on Linux; test support, never in the product"},
+	{Key: "source outage volume", Reason: "mounts and detaches the loopback NFS volume of source-outage tests on macOS; test support, never in the product"},
 	{Key: "git", Reason: "executes Git CLI for worktree isolation, staging, signing, and repository management"},
 	{Key: "git_config_query", Reason: "reads global and system git configuration cascade"},
 	{Key: "git_identity_query", Reason: "queries author identity configured in host git"},

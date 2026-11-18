@@ -11,9 +11,7 @@ import (
 )
 
 func TestNativeSocketObservationIdentifiesExactAddressAndLifetime(t *testing.T) {
-	if !lineage.Supported() {
-		t.Skip("native observation is unavailable")
-	}
+	testutil.RequireLineage(t, lineage.Supported())
 	listener, err := net.ListenTCP("tcp4", &net.TCPAddr{IP: net.IPv4(127, 0, 0, 1)})
 	if err != nil {
 		testutil.FailErr(t, "listen for process-incarnation observation", err)
@@ -68,9 +66,7 @@ func TestNativeSocketObservationIdentifiesExactAddressAndLifetime(t *testing.T) 
 }
 
 func TestNativeConnectedSocketObservationCarriesExactFourTuple(t *testing.T) {
-	if !lineage.Supported() {
-		t.Skip("native observation is unavailable")
-	}
+	testutil.RequireLineage(t, lineage.Supported())
 	listener, err := net.ListenTCP("tcp4", net.TCPAddrFromAddrPort(netip.MustParseAddrPort("127.0.0.1:0")))
 	if err != nil {
 		testutil.FailErr(t, "listen for connected socket fixture", err)

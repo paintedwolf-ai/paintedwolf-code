@@ -15,9 +15,7 @@ import (
 // boundary to every agent subprocess.
 func enforceConfinement(t *testing.T) {
 	t.Helper()
-	if !confine.Available() {
-		t.Skip("this host applies no command confinement")
-	}
+	testutil.RequireConfinement(t, confine.Available())
 	t.Setenv("LYCAON_SANDBOX", "")
 	t.Setenv("LYCAON_BYPASS_APPROVALS", "")
 	confine.TestingSetAutoConfine(t)

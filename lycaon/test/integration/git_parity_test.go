@@ -152,6 +152,9 @@ func resolveLFSForFixtures(t *testing.T) string {
 	if p, err := osexec.LookPath("git-lfs"); err == nil {
 		return p
 	}
+	if parityRequired() {
+		t.Fatal("git-lfs required to build the parity fixtures (run ./task gitengine:fetch)")
+	}
 	t.Skip("git-lfs not available for fixture construction")
 	return ""
 }

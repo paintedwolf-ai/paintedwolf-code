@@ -31,7 +31,7 @@ func TestHostileRepoGitJourney(t *testing.T) {
 	}
 	gittestsetup.Enable()
 	if _, err := gitengine.BinaryPath(); err != nil {
-		t.Skipf("bundled git missing — run ./task gitengine:fetch: %v", err)
+		t.Fatalf("bundled git missing (./task gitengine:fetch): %v", err)
 	}
 	t.Setenv("LYCAON_CONFIG_DIR", t.TempDir())
 	t.Setenv("HOME", t.TempDir())
@@ -194,7 +194,7 @@ func TestHostileRepoDeclaredFilterIsRefused(t *testing.T) {
 	}
 	gittestsetup.Enable()
 	if _, err := gitengine.BinaryPath(); err != nil {
-		t.Skipf("bundled git missing — run ./task gitengine:fetch: %v", err)
+		t.Fatalf("bundled git missing (./task gitengine:fetch): %v", err)
 	}
 	t.Setenv("LYCAON_CONFIG_DIR", t.TempDir())
 	t.Setenv("HOME", t.TempDir())
@@ -237,7 +237,7 @@ func TestHostileRepoFilterIsRefusedFromASubdirectoryRoot(t *testing.T) {
 	}
 	gittestsetup.Enable()
 	if _, err := gitengine.BinaryPath(); err != nil {
-		t.Skipf("bundled git missing — run ./task gitengine:fetch: %v", err)
+		t.Fatalf("bundled git missing (./task gitengine:fetch): %v", err)
 	}
 	t.Setenv("LYCAON_CONFIG_DIR", t.TempDir())
 	t.Setenv("HOME", t.TempDir())

@@ -203,9 +203,7 @@ level_map:
 }
 
 func TestExternalScannerWritesProjectTree(t *testing.T) {
-	if !confine.Available() {
-		t.Skip("OS confinement unavailable")
-	}
+	testutil.RequireConfinement(t, confine.Available())
 	confine.TestingSetAutoConfine(t)
 	t.Setenv("LYCAON_BYPASS_APPROVALS", "")
 	t.Setenv("LYCAON_SANDBOX", "")
