@@ -64,8 +64,10 @@ func TestMCPEnableThenCheck(t *testing.T) {
 func TestMCPDisabledToolsUnavailable(t *testing.T) {
 	h := wiring.BuildForTest(t)
 	srv := h.Server
-	if _, ok := h.ToolRegistry.Meta("mcp_svca_do"); ok {
-		t.Fatal("disabled provider tool is present in dispatch")
+	for _, meta := range h.ToolRegistry.List() {
+		if meta.IsMCP() {
+			t.Fatalf("disabled provider tool %q is present in dispatch", meta.Name)
+		}
 	}
 	req := authedRequest(t, http.MethodGet, "/v1/mcp/providers", nil)
 	w := httptest.NewRecorder()
@@ -81,7 +83,9 @@ func TestMCPDisabledToolsUnavailable(t *testing.T) {
 	if index < 0 {
 		t.Fatal("list omitted the installed provider")
 	}
-	if listed.Providers[index].Enabled {
-		t.Fatal("installed provider is enabled by default")
+	for _, provider := range listed.Providers {
+		if provider.Enabled {
+			t.Fatalf("provider %q is enabled by default", provider.ID)
+		}
 	}
 }
