@@ -136,11 +136,8 @@ components:
       x-go-generate: true
       type: object
       additionalProperties: false
-      required: [client_id]
-      description: Address a project file by root and path, or an outside file by its recorded file ID.
-      anyOf:
-        - required: [root_id, path]
-        - required: [file_id]
+      required: [path, root_id, client_id]
+      description: A document opens at its current address when a file ID is supplied.
       properties:
         file_id:
           type: string

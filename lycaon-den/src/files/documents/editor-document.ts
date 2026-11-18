@@ -247,8 +247,9 @@ async function openReplica(projectId: string, buffer: EditorDraft, connection: C
   await prepareClientIdentity();
   const decodeAs = buffer.encoding === "utf-16le" || buffer.encoding === "utf-16be" ? buffer.encoding : undefined;
   const document = buffer.documentId ? await client.createEditorDocumentSnapshot(projectId, buffer.documentId, { client_id: clientIdentity() }) : await client.openEditorDocument(projectId, {
-    ...(buffer.fileId && isOutsideRoot(projectId, buffer.rootId) ? { file_id: buffer.fileId } : { path: buffer.path, root_id: buffer.rootId }),
-        client_id: clientIdentity(), ...(decodeAs ? { decode_as: decodeAs } : {}),
+    path: buffer.path, root_id: buffer.rootId,
+    ...(buffer.fileId && isOutsideRoot(projectId, buffer.rootId) ? { file_id: buffer.fileId } : {}),
+    client_id: clientIdentity(), ...(decodeAs ? { decode_as: decodeAs } : {}),
   }, sessionId);
   if (workspaceId && document.workspace_id !== workspaceId) {
     if (!document.workspace_id) throw new Error("The backend did not identify this file's workspace. Update and restart the backend, then retry editing.");

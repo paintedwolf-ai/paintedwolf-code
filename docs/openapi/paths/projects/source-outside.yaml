@@ -28,7 +28,7 @@ paths:
           $ref: ../../components/responses.yaml#/components/responses/Unauthorized
         '403':
           $ref: ../../components/responses.yaml#/components/responses/Forbidden
-        '409': {description: 'The project has no outside namespace on this platform', content: {application/json: {schema: {$ref:
+        '409': {description: This project is changing, content: {application/json: {schema: {$ref:
                   ../../components/schemas/common.yaml#/components/schemas/Error}}}}
         '413': {description: 'The request or the chosen file is too large', content: {application/json: {schema: {$ref:
                   ../../components/schemas/common.yaml#/components/schemas/Error}}}}
@@ -100,6 +100,8 @@ paths:
         '404': {description: 'Project, location, or file not found', content: {application/json: {schema: {$ref:
                   ../../components/schemas/common.yaml#/components/schemas/Error}}}}
         '413': {description: The request or file is too large, content: {application/json: {schema: {$ref:
+                  ../../components/schemas/common.yaml#/components/schemas/Error}}}}
+        '409': {description: This project is changing, content: {application/json: {schema: {$ref:
                   ../../components/schemas/common.yaml#/components/schemas/Error}}}}
         '415':
           $ref: ../../components/responses.yaml#/components/responses/UnsupportedMediaType

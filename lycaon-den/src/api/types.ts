@@ -13585,7 +13585,7 @@ export interface components {
             state_vector: string;
             base_sha256: string;
         };
-        /** @description Address a project file by root and path, or an outside file by its recorded file ID. */
+        /** @description A document opens at its current address when a file ID is supplied. */
         OpenEditorDocumentRequest: {
             /**
              * Format: uuid
@@ -13593,12 +13593,12 @@ export interface components {
              */
             file_id?: string;
             /** @description Root-relative, slash-separated file path. */
-            path?: string;
+            path: string;
             /**
              * Format: uuid
              * @description Attached root that contains the file.
              */
-            root_id?: string;
+            root_id: string;
             /** @description Stable id for the client view opening the document. */
             client_id: string;
             /**
@@ -13607,7 +13607,7 @@ export interface components {
              */
             decode_as?: "utf-16le" | "utf-16be";
             replica?: components["schemas"]["RetainedReplica"];
-        } | unknown | unknown;
+        };
         /** @description Exact text transition of an explicit editor command, replayable independently of later shared edits. */
         EditorCommandHistory: {
             /** Format: uuid */
@@ -21544,7 +21544,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description The project has no outside namespace on this platform */
+            /** @description This project is changing */
             409: {
                 headers: {
                     [name: string]: unknown;
@@ -21648,6 +21648,15 @@ export interface operations {
             403: components["responses"]["Forbidden"];
             /** @description Project, location, or file not found */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description This project is changing */
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };
