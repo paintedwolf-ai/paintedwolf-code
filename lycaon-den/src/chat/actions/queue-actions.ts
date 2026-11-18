@@ -1,3 +1,4 @@
+import { sessionModeView } from "../session/session-mode-state.ts";
 import type { LycaonClient } from "../../api/client.ts";
 import type { QueueDraft, QueueMutateRequest } from "../../api/types.ts";
 import type { AppStore } from "../../store/app-state-model.ts";
@@ -28,9 +29,12 @@ async function mutateQueue(
   if (!sessionId.trim()) return;
   const epoch = appStore.state.sessionViewEpoch;
   const expectedRevision = appStore.state.queueDraft?.revision ?? 0;
+  const upgrading = (body.op === "send" || body.op === "fire_now") &&
+    sessionModeView(appStore, sessionId).upgrade !== undefined;
   try {
     const draft = await client.updateSessionQueue(sessionId, {
       ...body,
+      ...(upgrading && { mode: "agent" }),
       expected_revision: expectedRevision,
     });
     appStore.actions.setQueueDraft(sessionId, epoch, draft);

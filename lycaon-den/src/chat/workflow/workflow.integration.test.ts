@@ -11,6 +11,9 @@ describe("workflow integration", () => {
   it("refreshWorkflowState updates active run and catalog", async () => {
     const appStore = createAppStore();
     appStore.actions.setCurrentSession({
+      mode: "agent" as const,
+      started: true,
+      root_session_id: "sess",
       id: "sess",
       owner_person_id: "00000000-0000-4000-8000-000000000002",
       project_id: "proj-1",

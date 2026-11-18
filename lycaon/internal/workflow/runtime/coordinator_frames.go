@@ -53,7 +53,7 @@ func (l *CoordinatorFrames) BuildCoordinatorTurnFrame(
 	out := api.CoordinatorRunContext{}
 	var records []workflowdrafts.Record
 
-	if l.SessionStore != nil {
+	if l.SessionStore != nil && (sess == nil || sess.Mode != api.SessionModeAsk) {
 		loaded, err := l.SessionStore.ListBySession(ctx, sessionID)
 		if err != nil {
 			return inject.CoordinatorTurnFrame{RunContext: out}, err
@@ -73,7 +73,7 @@ func (l *CoordinatorFrames) BuildCoordinatorTurnFrame(
 	if err != nil {
 		return inject.CoordinatorTurnFrame{RunContext: out}, err
 	}
-	if active == nil {
+	if active == nil || sess != nil && sess.Mode == api.SessionModeAsk && runstate.IsAmbientRun(active) {
 		out.AllowedAgents = spawn.AmbientAllowedAgents()
 		return inject.CoordinatorTurnFrame{RunContext: out}, nil
 	}

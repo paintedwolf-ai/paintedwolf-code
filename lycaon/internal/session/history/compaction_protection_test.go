@@ -24,9 +24,10 @@ func TestWorkerCharterSurvivesBackgroundAndForcedCompaction(t *testing.T) {
 			cfg.ChunkStrategyDefault = "truncate"
 			cfg.TargetTokens = 100
 			mgr, st := newCompactionManager(t, cfg)
-			sess, err := st.Create(t.Context(), api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
+			parent, err := st.Create(t.Context(), api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
+			testutil.FailErr(t, "create coordinator", err)
+			sess, err := st.CreateChild(t.Context(), parent, api.SpawnChildRequest{AgentType: "repo-researcher"})
 			testutil.FailErr(t, "create worker", err)
-			testutil.FailErr(t, "set worker identity", st.UpdateSession(t.Context(), sess.ID, func(s *api.Session) { s.ParentSessionID = "parent" }))
 			preamble := guidance.MarkerWorkerTaskPreamble + strings.Repeat("Assigned worker role.\n", 500)
 			charter := guidance.MarkerWorkerTaskAssignment + strings.Repeat("Preserve the assigned scope.\n", 500)
 			testutil.FailErr(t, "append worker history", st.AppendMessages(t.Context(), sess.ID,

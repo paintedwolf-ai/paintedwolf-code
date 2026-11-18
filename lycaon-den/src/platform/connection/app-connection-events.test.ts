@@ -27,6 +27,9 @@ describe("app connection events", () => {
     createLycaonClient.mockReturnValue(client);
     await mod.connectAppBackend(appStore);
     appStore.actions.setCurrentSession({
+      mode: "agent" as const,
+      started: true,
+      root_session_id: "session-kept",
       id: "session-kept", project_id: "project-kept", workspace_path: "/tmp/p",
       owner_person_id: "00000000-0000-4000-8000-000000000002", posture: "build",
       status: "idle", created_at: "t", activity_at: "t", updated_at: "t",
@@ -126,6 +129,9 @@ describe("app connection events", () => {
     });
     const appStore = createFixtureApp();
     appStore.actions.setCurrentSession({
+      mode: "agent" as const,
+      started: true,
+      root_session_id: "session-a",
       id: "session-a",
       owner_person_id: "00000000-0000-4000-8000-000000000002",
       project_id: "proj-1",
@@ -150,6 +156,9 @@ describe("app connection events", () => {
   it("applies project source changes from a background session", async () => {
     const appStore = createFixtureApp();
     appStore.actions.setCurrentSession({
+      mode: "agent" as const,
+      started: true,
+      root_session_id: "session-a",
       id: "session-a",
       owner_person_id: "00000000-0000-4000-8000-000000000002",
       project_id: "proj-1",
@@ -231,6 +240,9 @@ describe("app connection events", () => {
     await mod.connectAppBackend(appStore);
     mod.subscribeProjectEvents(appStore, "proj-1");
     appStore.actions.setCurrentSession({
+      mode: "agent" as const,
+      started: true,
+      root_session_id: "sess-1",
       id: "sess-1",
       owner_person_id: "00000000-0000-4000-8000-000000000002",
       project_id: "00000000-0000-4000-8000-000000000001",
@@ -264,6 +276,9 @@ describe("app connection events", () => {
 
     const appStore = createFixtureApp();
     appStore.actions.setCurrentSession({
+      mode: "agent" as const,
+      started: true,
+      root_session_id: "gone",
       id: "gone",
       owner_person_id: "00000000-0000-4000-8000-000000000002",
       project_id: "00000000-0000-4000-8000-000000000001",

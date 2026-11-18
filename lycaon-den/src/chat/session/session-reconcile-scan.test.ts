@@ -7,7 +7,7 @@ import { LycaonApiError } from "../../api/http.ts";
 describe("refreshCodeScanCache", () => {
   it("clears cached scan when the row no longer exists", async () => {
     const store = createAppStore();
-    store.actions.setCurrentSession({ id: "session", owner_person_id: "owner", activity_at: "2026-09-28T00:00:00Z", project_id: "project", posture: "build", status: "idle", created_at: "2026-09-28T00:00:00Z", updated_at: "2026-09-28T00:00:00Z" });
+    store.actions.setCurrentSession({ mode: "agent" as const, started: true, root_session_id: "session", id: "session", owner_person_id: "owner", activity_at: "2026-09-28T00:00:00Z", project_id: "project", posture: "build", status: "idle", created_at: "2026-09-28T00:00:00Z", updated_at: "2026-09-28T00:00:00Z" });
     store.actions.addCodeScan({
       scan_id: "scan-old",
       status: "complete",
@@ -28,7 +28,7 @@ describe("refreshCodeScanCache", () => {
 
   it("keeps cached scan when the row still exists", async () => {
     const store = createAppStore();
-    store.actions.setCurrentSession({ id: "session", owner_person_id: "owner", activity_at: "2026-09-28T00:00:00Z", project_id: "project", posture: "build", status: "idle", created_at: "2026-09-28T00:00:00Z", updated_at: "2026-09-28T00:00:00Z" });
+    store.actions.setCurrentSession({ mode: "agent" as const, started: true, root_session_id: "session", id: "session", owner_person_id: "owner", activity_at: "2026-09-28T00:00:00Z", project_id: "project", posture: "build", status: "idle", created_at: "2026-09-28T00:00:00Z", updated_at: "2026-09-28T00:00:00Z" });
     store.actions.addCodeScan({
       scan_id: "scan-live",
       status: "complete",

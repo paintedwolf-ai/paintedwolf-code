@@ -101,8 +101,8 @@ func (m *Admission) start(ctx context.Context, sessionID string, req api.StartWo
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
-	humanStart := hostctx.HumanWorkflowStart(ctx) || strings.TrimSpace(slashText) != ""
 	ambientStart := hostctx.AmbientAttach(ctx)
+	humanStart := !ambientStart && (hostctx.HumanWorkflowStart(ctx) || strings.TrimSpace(slashText) != "")
 	if !humanStart && !ambientStart {
 		return nil, runstate.ErrWorkflowStartRequiresHumanApproval
 	}
@@ -138,7 +138,6 @@ func (m *Admission) startAdmitted(ctx context.Context, sessionID string, req api
 	if strings.TrimSpace(req.OperationID) == "" {
 		req.OperationID = uuid.NewString()
 	}
-	explicitReplacement := strings.TrimSpace(req.ReplaceRunID) != ""
 	startDigest, err := runstate.StartDigest(sessionID, req)
 	if err != nil {
 		return nil, err
@@ -146,63 +145,29 @@ func (m *Admission) startAdmitted(ctx context.Context, sessionID string, req api
 	if replayed, found, replayErr := m.Starts.ReplayStart(ctx, req.OperationID, sessionID, startDigest); replayErr != nil || found {
 		return &workflowStartResult{Run: replayed}, replayErr
 	}
-	workflowID := strings.TrimSpace(req.WorkflowID)
-	version := strings.TrimSpace(req.WorkflowVersion)
-	presetID := strings.TrimSpace(req.PresetID)
-	if workflowID == "" || version == "" {
-		return nil, workflowdef.ErrUnknownWorkflow
+	var committed *committedWorkflowStart
+	err = m.withinModeAdmission(ctx, sessionID, func(admissionCtx context.Context) error {
+		var commitErr error
+		committed, commitErr = m.commitStart(admissionCtx, sessionID, req, slashText, startDigest, humanStart, ambientStart)
+		return commitErr
+	})
+	if err != nil || committed == nil {
+		return &workflowStartResult{}, err
 	}
-	sess, err := m.Sessions.Get(ctx, sessionID)
-	if err != nil {
-		return nil, err
+	return m.settleStartedRun(ctx, committed, humanStart)
+}
+
+func (m *Admission) settleStartedRun(ctx context.Context, committed *committedWorkflowStart, humanStart bool) (*workflowStartResult, error) {
+	for i := range committed.Replaced {
+		m.Controls.AfterCanceled(ctx, &committed.Replaced[i], runstate.ExitReasonSupersededByWorkflowStart)
 	}
-	active, err := m.Runs.ActiveBySession(ctx, sessionID)
-	if err != nil {
-		return nil, err
-	}
-	if ambientStart && active != nil {
-		return nil, runstate.ErrActiveRunExists
-	}
-	automaticReplacement, _ := ctx.Value(automaticHumanReplacementKey{}).(bool)
-	if automaticReplacement && strings.TrimSpace(req.ReplaceRunID) == "" && req.ExpectedRevision == 0 && active != nil {
-		req.ReplaceRunID = active.ID
-		req.ExpectedRevision = active.Revision
-	}
-	manifest, err := m.Resolver.ForSession(ctx, sess.WorkspacePath, sessionID, workflowID, version)
-	if err != nil {
-		return nil, err
-	}
-	if manifest.Retired {
-		return nil, workflowdef.ErrUnknownWorkflow
-	}
-	if err := m.validateActiveRunForStart(active, runstate.IsAmbientRun(active), manifest, humanStart); err != nil {
-		return nil, err
-	}
-	replacementTarget, err := m.reviewedReplacementTarget(ctx, sessionID, active, req, humanStart)
-	if err != nil {
-		return nil, err
-	}
-	initialized, err := m.initializeWorkflowStart(ctx, sess, active, manifest, req, slashText, presetID, workflowID, version, ambientStart)
-	if err != nil {
-		return nil, err
-	}
-	run, vars := initialized.Run, initialized.Vars
-	initialized.Mutation.AllowReplacementRebase = replacementTarget != nil && !explicitReplacement
-	if replacementTarget != nil {
-		initialized.Mutation.ReplacementTeardowns, err = m.Cleanup.ForSession(ctx, sessionID, runstate.ExitReasonSupersededByWorkflowStart)
-		if err != nil {
-			return nil, err
-		}
-	}
-	if err := m.activateStartedRun(ctx, replacementTarget, run, initialized.Mutation, req.OperationID, startDigest); err != nil {
-		return nil, err
-	}
+	sess, run, vars, manifest := committed.Session, committed.Run, committed.Vars, committed.Manifest
 	m.Feedback.NotifyPending(ctx, run.SessionID, vars)
 	if runstate.RequestPending(vars) {
 		m.Publication.Publish(ctx, sess, run)
 		return &workflowStartResult{Run: run}, nil
 	}
-	run, err = m.Phases.ActivateInitial(ctx, run, manifest, sess.WorkspacePath, humanStart)
+	run, err := m.Phases.ActivateInitial(ctx, run, manifest, sess.WorkspacePath, humanStart)
 	if err != nil {
 		return nil, err
 	}
@@ -308,22 +273,6 @@ func (m *Admission) initializeWorkflowStart(
 	mutation := runstate.StartMutation{ProjectDir: sess.WorkspacePath, Vars: vars, Messages: messages,
 		Posture: runstate.MutationPosture(run, vars, workflowdef.StartPosture(manifest, run.CurrentPhase))}
 	return &initializedWorkflowStart{Run: run, Vars: vars, Mutation: mutation}, nil
-}
-
-func (m *Admission) activateStartedRun(
-	ctx context.Context,
-	replacementTarget, run *api.WorkflowRun,
-	mutation runstate.StartMutation,
-	operationID, inputDigest string,
-) error {
-	replacedRuns, err := m.Starts.ActivateStart(ctx, operationID, inputDigest, replacementTarget, run, mutation)
-	if err != nil {
-		return err
-	}
-	for i := range replacedRuns {
-		m.Controls.AfterCanceled(ctx, &replacedRuns[i], runstate.ExitReasonSupersededByWorkflowStart)
-	}
-	return nil
 }
 
 func (m *Admission) reviewedReplacementTarget(ctx context.Context, sessionID string, active *api.WorkflowRun, req api.StartWorkflowRunRequest, humanStart bool) (*api.WorkflowRun, error) {

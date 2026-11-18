@@ -120,3 +120,13 @@ describe("workflow-arm", () => {
     expect(synthesizeArmedSlashLine(armed, "  ship it  ")).toBe("/plan ship it");
   });
 });
+
+
+it("holds an armed mutating workflow and its explicit slash in Ask", () => {
+  const agentOnly = catalog.map((workflow) => ({ ...workflow, requires_agent: true }));
+  const armed = armedWorkflowFromPickerRow(agentOnly[0]!)!;
+  expect(resolveComposerWorkflowStart({ catalog: agentOnly, armed, text: "Implement this", askMode: true }))
+    .toEqual({ kind: "needs_agent" });
+  expect(resolveComposerWorkflowStart({ catalog: agentOnly, armed: null, text: armed.trigger + " now", askMode: true }))
+    .toEqual({ kind: "needs_agent" });
+});

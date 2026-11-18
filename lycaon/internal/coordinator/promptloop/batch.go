@@ -137,6 +137,11 @@ func (l *toolBatch) toolContextForCall(ctx context.Context, sess *api.Session, b
 	refreshed.Turn.TurnOfferedToolNames = slices.Clone(base.Turn.TurnOfferedToolNames)
 	refreshed.Turn.TurnOfferedToolSchemas = base.Turn.TurnOfferedToolSchemas
 	refreshed.Source.ModelSourceContext = base.Source.ModelSourceContext
+	refreshed.Source.AskMode = base.Source.AskMode
+	refreshed.Source.ReadOnly = refreshed.Source.ReadOnly || base.Source.ReadOnly
+	if base.Identity.RootSessionID != "" {
+		refreshed.Identity.RootSessionID = base.Identity.RootSessionID
+	}
 	refreshed.Source.EditorReadBases = base.Source.EditorReadBases
 	refreshed.Turn.TurnWritePinRootID = base.Turn.TurnWritePinRootID
 	refreshed.Turn.TurnWritePinGlobs = append([]string(nil), base.Turn.TurnWritePinGlobs...)

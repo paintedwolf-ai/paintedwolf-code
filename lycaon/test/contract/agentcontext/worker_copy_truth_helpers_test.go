@@ -212,8 +212,8 @@ func newAdmissionService(t *testing.T) (*db.Store, *workerrecords.Store, *worker
 	sqlDB := testdbfixture.Open(t, "copy_admission.db")
 	testdbseed.InsertSession(t, sqlDB, "coord", testdbseed.DefaultProjectID)
 	ts := timelayout.Format(time.Now().UTC())
-	_, err := sqlDB.ExecContext(t.Context(), `INSERT INTO sessions (id, project_id, owner_person_id, posture, status, parent_session_id, agent_type, created_at, activity_at, updated_at)
-		VALUES ('child', ?, (SELECT id FROM people WHERE role = 'owner'), 'build', 'idle', 'coord', 'implementer', ?, ?, ?)`, testdbseed.DefaultProjectID, ts, ts, ts)
+	_, err := sqlDB.ExecContext(t.Context(), `INSERT INTO sessions (id, project_id, owner_person_id, posture, status, parent_session_id, agent_type, created_at, activity_at, updated_at, root_session_id, mode)
+		VALUES ('child', ?, (SELECT id FROM people WHERE role = 'owner'), 'build', 'idle', 'coord', 'implementer', ?, ?, ?, 'coord', NULL)`, testdbseed.DefaultProjectID, ts, ts, ts)
 	contractcheck.FailErr(t, "insert child session", err)
 	records := workerrecords.New(sqlDB)
 	jobs := admissionJobMap{}

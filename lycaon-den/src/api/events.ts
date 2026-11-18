@@ -1,3 +1,5 @@
+import { applyCachedSessionMode } from "../chat/session/session-chat-cache.ts";
+import { rebaseSessionModeIntents } from "../chat/session/session-mode-state.ts";
 import { deliverSourceOperationCompletion } from "./source-operation-completion.ts";
 import { traceSourceViewDelivery } from "./source-view-event-trace.ts";
 import {
@@ -36,6 +38,7 @@ import { forgetSessionRevisions, sessionRevisionWatermarks } from "./session-eve
 /** Starts a new backend connection generation for this store. */
 export function resetSessionEventRevisions(storeActions: AppStoreActions): void {
   forgetSessionRevisions(storeActions);
+  rebaseSessionModeIntents(storeActions);
   resetSessionSnapshotReads(storeActions);
 }
 
@@ -229,6 +232,7 @@ function dispatchTopic(
     case "session": {
       const session = envelope.data;
       if (session.action === "deleted") break;
+      if (session.mode !== undefined || session.started !== undefined) applyCachedSessionMode(session.id, session);
       storeActions.mergeSession(session);
       if (!session.host_error && session.idle_disposition === "completed") {
         // Completed turns clear their session-scoped host errors.

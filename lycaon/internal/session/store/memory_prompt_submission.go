@@ -9,7 +9,10 @@ import (
 	"github.com/google/uuid"
 )
 
-func (sub *memorySubmissions) PutPromptSubmission(_ context.Context, in PromptSubmission) (*PromptSubmission, bool, error) {
+func (sub *memorySubmissions) PutPromptSubmission(ctx context.Context, in PromptSubmission) (*PromptSubmission, bool, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, false, err
+	}
 	s := sub.core
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -23,6 +26,10 @@ func (sub *memorySubmissions) PutPromptSubmission(_ context.Context, in PromptSu
 		copy := current
 		return &copy, false, nil
 	}
+	if err := admitModeLocked(s, in.SessionID, in.Mode); err != nil {
+		return nil, false, err
+	}
+	in.Mode = nil
 	if in.CreatedAt.IsZero() {
 		in.CreatedAt = time.Now().UTC()
 	}

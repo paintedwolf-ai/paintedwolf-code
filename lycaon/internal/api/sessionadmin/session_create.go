@@ -290,6 +290,8 @@ func (s *Lifecycle) PublishSessionCreated(ctx context.Context, sess *wire.Sessio
 		Action:    wire.SessionEventActionCreated,
 		Title:     sess.Title,
 		Status:    sess.Status,
+		Mode:      sess.Mode,
+		Started:   &sess.Started,
 	})
 }
 
@@ -299,6 +301,8 @@ func sessionMutationEventsOutboxed(store session.Store) bool {
 
 func (s *Lifecycle) WriteSessionCreationError(w http.ResponseWriter, r *http.Request, err error) {
 	switch {
+	case requestscope.WriteSessionModeError(s.responses, w, err):
+		return
 	case errors.Is(err, project.ErrNotFound):
 		s.responses.Fail(w, wire.ApiErrorCodeProjectNotFound, "project not found")
 	case errors.Is(err, sessionstore.ErrWorkspaceRootNotFound):

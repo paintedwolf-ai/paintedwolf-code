@@ -29,6 +29,7 @@ type Surface struct {
 	ModeRef        string                            `yaml:"mode_ref"`
 	Card           Card                              `yaml:"card"`
 	Exit           string                            `yaml:"exit"`
+	RequiresAgent  bool                              `yaml:"requires_agent"`
 	// ProseFinish lets a turn on this surface end with grounded prose to the person.
 	ProseFinish bool `yaml:"prose_finish"`
 	// PublishesMidTurnText publishes valid text accompanying tool calls as a note.

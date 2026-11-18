@@ -117,23 +117,32 @@ func (r *ToolCalls) CallTool(ctx context.Context, scope CallScope, providerID, t
 	ctx, cancel := safecmd.MCPCaps().WithTimeout(ctx)
 	defer cancel()
 	// Pin the approved definition immediately before invocation.
-	if err := r.Tools.acceptToolDefinition(providerID, toolName); err != nil {
-		return "", &toolrejection.ToolReject{
-			Code: MCPConsentStateUnavailableCode,
-			Data: map[string]any{"provider": providerID, "tool": toolName},
+	if !scope.AskMode {
+		if err := r.Tools.acceptToolDefinition(providerID, toolName); err != nil {
+			return "", mcpDefinitionUnavailable(providerID, toolName)
 		}
 	}
 
-	// A refused handoff is the host's decision, not a provider failure, so it
-	// stays outside the breaker.
+	var verified ProviderSession
+	if scope.AskMode {
+		verified, err = r.verifyAskDefinition(ctx, scope, entry, toolName)
+		if err != nil {
+			return "", err
+		}
+	}
+	// Keep host handoff refusals outside the breaker.
 	if err := secretcap.ResolutionFrom(ctx).HandOff(ctx, mcpOutboundArgument); err != nil {
 		return "", toolrejection.HeldHandOffReject("mcp", err)
 	}
 	br := r.breakerFor(providerID)
 	raw, err := br.Execute(func() (any, error) {
-		sess, err := r.Connections.ensureSession(ctx, scope, entry)
-		if err != nil {
-			return "", err
+		sess := verified
+		if sess == nil {
+			var err error
+			sess, err = r.Connections.ensureSession(ctx, scope, entry)
+			if err != nil {
+				return "", err
+			}
 		}
 		res, err := sess.CallTool(ctx, toolName, args)
 		if err != nil {

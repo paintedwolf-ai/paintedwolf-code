@@ -137,14 +137,18 @@ func seedSummarySession(t *testing.T, sqlDB db.Handle, memory *Memory, sess api.
 	_, err := sqlDB.ExecContext(t.Context(), `
 		INSERT INTO sessions (
 			id, project_id, owner_person_id, title, posture, status, parent_session_id,
-			archived_at, pin_rank, created_at, activity_at, updated_at
-		) VALUES (?, ?, (SELECT id FROM people WHERE role = 'owner'), ?, ?, ?, ?, ?, ?, ?, ?, ?)
+			archived_at, pin_rank, created_at, activity_at, updated_at, root_session_id, mode
+		) VALUES (?, ?, (SELECT id FROM people WHERE role = 'owner'), ?, ?, ?, ?, ?, ?, ?, ?, ?, COALESCE(?6, ?1), CASE WHEN ?6 IS NULL THEN 'agent' END)
 	`, sess.ID, sess.ProjectID, sess.Title, sess.Posture, sess.Status, parent,
 		nullableSummaryTime(sess.ArchivedAt), sess.PinRank, timelayout.Format(sess.CreatedAt),
 		timelayout.Format(sess.ActivityAt), timelayout.Format(sess.UpdatedAt))
 	testutil.FailErr(t, "insert session summary fixture", err)
-	copy := sess
-	memory.sessions[sess.ID] = &copy
+	if parent == nil {
+		sess.RootSessionID, sess.Mode = sess.ID, api.SessionModeAgent
+	} else {
+		sess.RootSessionID = memory.sessions[sess.ParentSessionID].RootSessionID
+	}
+	memory.sessions[sess.ID] = &sess
 }
 
 func nullableSummaryTime(value *time.Time) any {

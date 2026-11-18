@@ -19,8 +19,14 @@ func seedStoreRows(t *testing.T, sessionID string, rows []IndexRow) db.Handle {
 	t.Helper()
 	dir := t.TempDir()
 	sqlDB := testdbfixture.OpenPath(t, filepath.Join(dir, "store.db"))
-	ctx := context.Background()
 	testdbseed.InsertSessionWithRoot(t, sqlDB, sessionID, testdbseed.DefaultProjectID, dir)
+	indexStoreRows(t, sqlDB, sessionID, rows)
+	return sqlDB
+}
+
+func indexStoreRows(t *testing.T, sqlDB db.Handle, sessionID string, rows []IndexRow) {
+	t.Helper()
+	ctx := context.Background()
 	tx, err := sqlDB.BeginTx(ctx, nil)
 	testutil.FailErr(t, "BeginTx", err)
 	for i := range rows {
@@ -32,7 +38,6 @@ func seedStoreRows(t *testing.T, sessionID string, rows []IndexRow) db.Handle {
 	}
 	testutil.FailErr(t, "upsert rows", NewStore().UpsertRows(ctx, tx, rows))
 	testutil.FailErr(t, "Commit", tx.Commit())
-	return sqlDB
 }
 
 func runStoreQuery(t *testing.T, sqlDB db.Handle, query string, flags MatchFlags) []Hit {
@@ -471,14 +476,15 @@ func TestStoreExecutorNegatedFreeTextExcludesRows(t *testing.T) {
 }
 
 func TestStoreExecutorFiltersAndProjectsWorkerName(t *testing.T) {
-	sqlDB := seedStoreRows(t, "child-surveyor", []IndexRow{
+	dir := t.TempDir()
+	sqlDB := testdbfixture.OpenPath(t, filepath.Join(dir, "store.db"))
+	testdbseed.InsertSessionWithRoot(t, sqlDB, "coord-w", testdbseed.DefaultProjectID, dir)
+	testdbseed.InsertChildSession(t, sqlDB, "child-surveyor", "coord-w")
+	indexStoreRows(t, sqlDB, "child-surveyor", []IndexRow{
 		{ID: "ev-w1", Source: SourceTool, HitKind: HitKindEvidence, Snippet: "parser token boundary"},
 	})
-	testdbseed.InsertSession(t, sqlDB, "coord-w", testdbseed.DefaultProjectID)
-	_, err := sqlDB.ExecContext(t.Context(), `UPDATE sessions SET parent_session_id = 'coord-w' WHERE id = 'child-surveyor'`)
-	testutil.FailErr(t, "parent child-surveyor", err)
 	now := time.Now().UTC().Format(time.RFC3339)
-	_, err = sqlDB.ExecContext(t.Context(), `INSERT INTO workers (
+	_, err := sqlDB.ExecContext(t.Context(), `INSERT INTO workers (
 		id, project_id, session_id, name, agent_type, scope_mode, brief, child_session_id, operation_id, created_at, updated_at
 	) VALUES ('w-1', ?, 'coord-w', 'surveyor', 'repo-researcher', 'read', 'survey', 'child-surveyor', 'op-w1', ?, ?)`,
 		testdbseed.DefaultProjectID, now, now)

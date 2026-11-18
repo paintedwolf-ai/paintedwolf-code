@@ -35,6 +35,8 @@ type ContextDeps struct {
 	Limits                func(context.Context, *api.Session) settings.SessionLimits
 	Tools                 tools.ToolRegistry
 	RootSessionID         func(ctx context.Context, sessionID string) string
+	ResolveEffectiveMode  func(ctx context.Context, sessionID string) (store.RootAuthority, error)
+	ActivateAgentWorkflow func(ctx context.Context, sessionID string) error
 	Policy                toolpolicy.Engine
 	BuildMessages         func(ctx context.Context, sess *api.Session, history []api.Message, frame *inject.CoordinatorTurnFrame) ([]api.Message, error)
 	ImplementSessionState func(ctx context.Context, sess *api.Session) surface.ImplementSessionState

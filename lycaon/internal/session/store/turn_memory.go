@@ -43,8 +43,8 @@ func beginTurnMemory(ctx context.Context, s *memoryCore, in TurnStart) (TurnExec
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if _, ok := s.sessions[in.SessionID]; !ok {
-		return TurnExecution{}, ErrSessionNotFound
+	if _, err := resolveEffectiveModeLocked(s, in.SessionID); err != nil {
+		return TurnExecution{}, err
 	}
 	if workerJobID := strings.TrimSpace(in.WorkerJobID); workerJobID != "" {
 		turnIDs := s.workerTurns[workerJobID]
@@ -65,6 +65,9 @@ func beginTurnMemory(ctx context.Context, s *memoryCore, in TurnStart) (TurnExec
 	if _, exists := s.turns[in.ID]; exists {
 		return TurnExecution{}, fmt.Errorf("turn already exists: %s", in.ID)
 	}
+	if err := admitModeLocked(s, in.SessionID, nil); err != nil {
+		return TurnExecution{}, err
+	}
 	s.turns[in.ID] = execution.Turn
 	s.turnHeads[in.SessionID] = in.ID
 	s.turnAttempts[in.ID] = []TurnAttempt{execution.Attempt}
@@ -84,6 +87,9 @@ func resumeTurnLocked(s *memoryCore, turnID string, in TurnStart, attempt TurnAt
 	turn := s.turns[turnID]
 	if turn.SessionID != in.SessionID || turn.ProjectID != in.ProjectID {
 		return TurnExecution{}, fmt.Errorf("recovering turn identity mismatch: %s", turnID)
+	}
+	if err := admitModeLocked(s, in.SessionID, nil); err != nil {
+		return TurnExecution{}, err
 	}
 	attempt.TurnID = turnID
 	attempt.Attempt = len(s.turnAttempts[turnID]) + 1

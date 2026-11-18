@@ -40,11 +40,11 @@ func (s *sqlSessions) CreateChild(ctx context.Context, parent *api.Session, req 
 	if req.AgentType == "" {
 		return nil, fmt.Errorf("agent_type is required")
 	}
-	mode := ChildSessionPosture(parent.Posture, req.AgentType)
+	posture := ChildSessionPosture(parent.Posture, req.AgentType)
 	childReq := api.CreateSessionRequest{
 		ProjectID:       parent.ProjectID,
 		WorkspaceRootID: parent.WorkspaceRootID,
-		Posture:         mode,
+		Posture:         posture,
 	}
 	sess, err := createSession(ctx, s.core, parent.OwnerPersonID, childReq, parent.ProjectID, parent.ID, req.AgentType, api.SessionStatusIdle)
 	if err != nil {
@@ -112,6 +112,11 @@ func createSession(ctx context.Context, s *sqlCore, ownerPersonID string, req ap
 		ActivityAt:      now,
 		UpdatedAt:       now,
 	}
+
+	mode, err := initialSessionMode(req.Mode)
+	if err != nil {
+		return nil, err
+	}
 	rootNull := sql.NullString{}
 	if rootID != "" {
 		rootNull = sql.NullString{String: rootID, Valid: true}
@@ -122,6 +127,13 @@ func createSession(ctx context.Context, s *sqlCore, ownerPersonID string, req ap
 	}
 	defer func() { _ = tx.Rollback() }()
 	qtx := s.queries.WithTx(tx)
+	if err := assignNewSessionMode(ctx, qtx, sess, mode); err != nil {
+		return nil, err
+	}
+	modeColumn := sql.NullString{}
+	if parentID == "" {
+		modeColumn = db.NullString(string(mode))
+	}
 	if err := qtx.InsertSession(ctx, db.InsertSessionParams{
 		ID:              sess.ID,
 		ProjectID:       projectID,
@@ -134,6 +146,8 @@ func createSession(ctx context.Context, s *sqlCore, ownerPersonID string, req ap
 		ProviderID:      db.NullString(sess.ProviderID),
 		Model:           db.NullString(sess.Model),
 		ParentSessionID: db.NullString(sess.ParentSessionID),
+		RootSessionID:   sess.RootSessionID,
+		Mode:            modeColumn,
 		Title:           db.NullString(sess.Title),
 		Status:          string(sess.Status),
 		CreatedAt:       timelayout.Format(sess.CreatedAt),
@@ -151,6 +165,19 @@ func createSession(ctx context.Context, s *sqlCore, ownerPersonID string, req ap
 	s.outbox.Notify()
 	reconcileProjectSpills(ctx, s, sess.ProjectID)
 	return sess, nil
+}
+
+func assignNewSessionMode(ctx context.Context, q *db.Queries, sess *api.Session, mode api.SessionMode) error {
+	if sess.ParentSessionID == "" {
+		sess.RootSessionID, sess.Mode = sess.ID, mode
+		return nil
+	}
+	root, err := resolveEffectiveModeSQL(ctx, q, sess.ParentSessionID)
+	if err != nil {
+		return err
+	}
+	sess.RootSessionID, sess.Mode, sess.Started = root.RootSessionID, root.Mode, root.Started
+	return nil
 }
 
 // Get returns a session by ID (messages loaded separately via GetMessages).

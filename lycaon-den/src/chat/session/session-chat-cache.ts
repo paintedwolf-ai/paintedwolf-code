@@ -1,3 +1,4 @@
+import { mergeSessionMode, sessionReceivesMode, type SessionModeProjection } from "./session-mode-projection.ts";
 import { unwrap } from "solid-js/store";
 import type { WorkerTranscript } from "../worker/worker-transcript.ts";
 import type { AppStore } from "../../store/app-state-model.ts";
@@ -48,6 +49,14 @@ export function putSessionChatCache(snapshot: SessionChatSnapshot): void {
   const key = scopeKey(snapshot.scope);
   cache.set(key, { ...snapshot, touchedAt: snapshot.touchedAt });
   evictPastCap();
+}
+
+export function applyCachedSessionMode(sessionId: string, projection: SessionModeProjection): void {
+  for (const [key, snapshot] of cache) {
+    if (!sessionReceivesMode(snapshot.session, sessionId)) continue;
+    const session = mergeSessionMode(snapshot.session, projection);
+    if (session !== snapshot.session) cache.set(key, { ...snapshot, session });
+  }
 }
 
 export function getSessionChatCache(

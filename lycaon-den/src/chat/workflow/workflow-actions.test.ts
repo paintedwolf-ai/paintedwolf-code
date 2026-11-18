@@ -9,6 +9,7 @@ import { createProjectsStore } from "../../store/projects-store.ts";
 import type { Message, WorkflowRun } from "../../api/types.ts";
 import { mergeWorkflowRunsFromMessages, refreshWorkflowState, startWorkflowForSession, exitActiveWorkflow } from "./workflow-actions.ts";
 import { emptyProjects } from "../../test/projects-fixture.ts";
+import { setDraftSessionMode } from "../session/session-mode-state.ts";
 import { applySessionTranscriptSnapshot } from "../session/session-transcript-hydrate.ts";
 
 const terminalRun: WorkflowRun = {
@@ -23,6 +24,30 @@ const terminalRun: WorkflowRun = {
   created_at: "t",
   updated_at: "t",
 };
+
+it("binds the current draft mode when starting a workflow by request", async () => {
+  const store = createAppStore();
+  store.actions.setCurrentSession({
+    id: "s1", root_session_id: "s1", owner_person_id: "person", project_id: "p1",
+    posture: "build", mode: "agent", started: false, status: "idle",
+    created_at: "t", activity_at: "t", updated_at: "t",
+  });
+  setDraftSessionMode(store, "s1", "ask");
+  const startWorkflowRun = vi.fn().mockResolvedValue(terminalRun);
+  const client = stubClient({
+    startWorkflowRun,
+    getActiveWorkflowRun: async () => undefined,
+    listSessionWorkflowRuns: async () => ({ runs: [] }),
+    listWorkflows: async () => [],
+  });
+  await startWorkflowForSession(store, client, "s1", "/project", [], {
+    operation_id: "read-workflow", workflow_id: "inspect", workflow_version: "1",
+  });
+  expect(startWorkflowRun).toHaveBeenCalledWith("s1", {
+    mode: "ask", operation_id: "read-workflow", workflow_id: "inspect", workflow_version: "1",
+  });
+  expect(store.state.currentSession).toMatchObject({ mode: "ask", started: true });
+});
 
 describe("mergeWorkflowRunsFromMessages", () => {
   it("returns list unchanged when leaf already resolves", async () => {
@@ -75,7 +100,7 @@ describe("mergeWorkflowRunsFromMessages", () => {
 describe("refreshWorkflowState", () => {
   it("does not let a background follow-up supersede the foreground refresh", async () => {
     const store = createAppStore();
-    store.actions.setCurrentSession({ id: "b", owner_person_id: "00000000-0000-4000-8000-000000000002", project_id: "p1", posture: "build", status: "idle", created_at: "t", activity_at: "t", updated_at: "t" });
+    store.actions.setCurrentSession({ mode: "agent" as const, started: true, root_session_id: "b", id: "b", owner_person_id: "00000000-0000-4000-8000-000000000002", project_id: "p1", posture: "build", status: "idle", created_at: "t", activity_at: "t", updated_at: "t" });
     let finish!: (run: WorkflowRun) => void;
     const active = new Promise<WorkflowRun>((resolve) => { finish = resolve; });
     const options = { catalog: false, history: false, blueprints: false };
@@ -88,7 +113,7 @@ describe("refreshWorkflowState", () => {
 
   it("keeps streamed run state while a transcript baseline hydrates", async () => {
     const store = createAppStore();
-    store.actions.setCurrentSession({ id: "s1", owner_person_id: "00000000-0000-4000-8000-000000000002", project_id: "p1", posture: "build", status: "idle", created_at: "t", activity_at: "t", updated_at: "t" });
+    store.actions.setCurrentSession({ mode: "agent" as const, started: true, root_session_id: "s1", id: "s1", owner_person_id: "00000000-0000-4000-8000-000000000002", project_id: "p1", posture: "build", status: "idle", created_at: "t", activity_at: "t", updated_at: "t" });
     const oldRun: WorkflowRun = { ...terminalRun, status: "running" };
     store.actions.setWorkflowState("s1", store.state.sessionViewEpoch, {
       activeWorkflowRun: oldRun, workflowRuns: [oldRun], workflowCatalog: [], blueprints: [],
@@ -110,6 +135,9 @@ describe("refreshWorkflowState", () => {
   it("keeps a newer streamed run when an earlier refresh completes", async () => {
     const store = createAppStore();
     store.actions.setCurrentSession({
+      mode: "agent" as const,
+      started: true,
+      root_session_id: "s1",
       id: "s1", owner_person_id: "00000000-0000-4000-8000-000000000002", project_id: "p1", posture: "build", status: "idle", created_at: "t", activity_at: "t", updated_at: "t",
     });
     const oldRun: WorkflowRun = { ...terminalRun, status: "running" };
@@ -131,6 +159,9 @@ describe("refreshWorkflowState", () => {
   it("loads active run without catalog prefetch", async () => {
     const appStore = createAppStore();
     appStore.actions.setCurrentSession({
+      mode: "agent" as const,
+      started: true,
+      root_session_id: "sess-1",
       id: "sess-1",
       owner_person_id: "00000000-0000-4000-8000-000000000002",
       project_id: "proj-1",
@@ -182,7 +213,7 @@ describe("startWorkflowForSession", () => {
       status: "running" as const,
       revision: 4,
     };
-    appStore.actions.setCurrentSession({ id: "s1", owner_person_id: "00000000-0000-4000-8000-000000000002", project_id: "p1", posture: "build", status: "idle", created_at: "t", activity_at: "t", updated_at: "t" });
+    appStore.actions.setCurrentSession({ mode: "agent" as const, started: true, root_session_id: "s1", id: "s1", owner_person_id: "00000000-0000-4000-8000-000000000002", project_id: "p1", posture: "build", status: "idle", created_at: "t", activity_at: "t", updated_at: "t" });
     appStore.actions.setWorkflowState("s1", appStore.state.sessionViewEpoch, {
       activeWorkflowRun: active,
       workflowRuns: [active],
@@ -217,7 +248,7 @@ describe("startWorkflowForSession", () => {
 describe("workflow mutation backend changes", () => {
   it.each(["start", "exit"] as const)("does not refresh a replacement backend after %s settles", async (action) => {
     const store = createAppStore();
-    store.actions.setCurrentSession({ id: "s1", owner_person_id: "00000000-0000-4000-8000-000000000002", project_id: "p1", posture: "build", status: "idle", created_at: "t", activity_at: "t", updated_at: "t" });
+    store.actions.setCurrentSession({ mode: "agent" as const, started: true, root_session_id: "s1", id: "s1", owner_person_id: "00000000-0000-4000-8000-000000000002", project_id: "p1", posture: "build", status: "idle", created_at: "t", activity_at: "t", updated_at: "t" });
     let finish!: (run: WorkflowRun) => void;
     const mutation = new Promise<WorkflowRun>((resolve) => { finish = resolve; });
     const client = stubClient({

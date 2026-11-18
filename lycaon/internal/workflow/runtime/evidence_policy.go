@@ -15,7 +15,7 @@ func (m *SessionPolicy) ActivePhaseRequiresEvidence(ctx context.Context, session
 	if m == nil || strings.TrimSpace(sessionID) == "" || strings.TrimSpace(evidenceType) == "" {
 		return false
 	}
-	active, err := m.Runs.ActiveBySession(ctx, sessionID)
+	active, err := m.activeRunForPolicy(ctx, sessionID)
 	if err != nil || active == nil {
 		return false
 	}

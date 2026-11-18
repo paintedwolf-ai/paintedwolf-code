@@ -48,6 +48,9 @@ describe("session-prefetch", () => {
     const client = stubClient({
       getSessionBootstrap: vi.fn(async () => ({
         session: {
+          mode: "agent" as const,
+          started: true,
+          root_session_id: "warmed",
           id: "warmed",
           owner_person_id: "00000000-0000-4000-8000-000000000002",
           project_id: "p1",

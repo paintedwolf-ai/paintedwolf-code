@@ -25,6 +25,7 @@ type EvalContext struct {
 	Ctx                 context.Context
 	SessionID           string
 	SessionPosture      api.SessionPosture
+	SessionMode         api.SessionMode
 	ProjectDir          string
 	ProjectID           string
 	ProjectRootCount    int
@@ -260,6 +261,7 @@ func EvalContextFromRun(ctx context.Context, sess *api.Session, run *api.Workflo
 	if sess != nil {
 		ec.SessionID = sess.ID
 		ec.SessionPosture = sess.Posture
+		ec.SessionMode = sess.Mode
 		ec.ProjectID = sess.ProjectID
 		ec.ProjectDir = sess.WorkspacePath
 	}

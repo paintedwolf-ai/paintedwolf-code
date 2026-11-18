@@ -11,6 +11,9 @@ import {
 function sessionStore() {
   const appStore = createAppStore();
   appStore.actions.setCurrentSession({
+    mode: "agent" as const,
+    started: true,
+    root_session_id: "s1",
     id: "s1",
     owner_person_id: "00000000-0000-4000-8000-000000000002",
     project_id: "00000000-0000-4000-8000-000000000001",

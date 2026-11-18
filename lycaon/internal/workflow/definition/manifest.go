@@ -206,6 +206,7 @@ func (m Manifest) Summary() api.WorkflowSummary {
 		Icon:               strings.TrimSpace(m.Icon),
 		Featured:           manifestBool(m.Featured),
 		RequiresRepo:       manifestBool(m.RequiresRepo),
+		RequiresAgent:      m.EntryRequiresAgent(),
 		SupportsBlueprints: SupportsBlueprints(m),
 		ReportEnabled:      m.ReportEnabled(),
 		Phases:             append([]string(nil), m.Phases...),

@@ -18,6 +18,9 @@ describe("createAppStore", () => {
   it("clearChatForSessionSwitch clears transcript and side state", () => {
     const store = createAppStore();
     store.actions.setCurrentSession({
+      mode: "agent" as const,
+      started: true,
+      root_session_id: "sess-old",
       id: "sess-old",
       owner_person_id: "00000000-0000-4000-8000-000000000002",
       project_id: "00000000-0000-4000-8000-000000000001",
@@ -380,6 +383,9 @@ describe("createAppStore", () => {
   it("buffers parent message events during hydrate and replays on completion", () => {
     const store = createAppStore();
     store.actions.setCurrentSession({
+      mode: "agent" as const,
+      started: true,
+      root_session_id: "sess-1",
       id: "sess-1",
       owner_person_id: "00000000-0000-4000-8000-000000000002",
       project_id: "00000000-0000-4000-8000-000000000001",

@@ -1153,6 +1153,8 @@ components:
       $ref: components/schemas/session/context.yaml#/components/schemas/SessionContextResponse
     SessionPosture:
       $ref: components/schemas/session/identity.yaml#/components/schemas/SessionPosture
+    SessionMode:
+      $ref: components/schemas/session/identity.yaml#/components/schemas/SessionMode
     SessionStatus:
       $ref: components/schemas/session/identity.yaml#/components/schemas/SessionStatus
     SessionListSort:

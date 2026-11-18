@@ -147,6 +147,11 @@ host_facts:
    type: bool
  - name: paintedwolf.worker_spawn_blocked
    type: bool
+ - name: paintedwolf.session_mode
+   type: string
+   observation: The root session's capability mode.
+ - name: paintedwolf.ask_worker_writes
+   type: bool
  - name: paintedwolf.active_worker_count
    type: int
  - name: paintedwolf.pending_overlay_promote

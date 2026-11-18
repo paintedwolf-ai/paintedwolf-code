@@ -20,6 +20,12 @@ func factsToContext(facts map[string]any) *GuardContext {
 	if v, ok := facts["session_posture"].(string); ok {
 		gc.Session.SessionPosture = v
 	}
+	if v, ok := facts["session_mode"].(string); ok {
+		gc.Session.SessionMode = v
+	}
+	if v, ok := facts["ask_worker_writes"].(bool); ok {
+		gc.Workers.AskWorkerWrites = v
+	}
 	if v, ok := facts["tool_profile"].(string); ok {
 		gc.Session.PermissionProfile = v
 	}

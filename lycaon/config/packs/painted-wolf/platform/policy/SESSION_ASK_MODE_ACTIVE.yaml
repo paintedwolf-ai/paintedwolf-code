@@ -1,0 +1,21 @@
+spec_version: "1.0"
+id: SESSION_ASK_MODE_ACTIVE
+kind: policy
+on: session.pre_invoke
+selector:
+  tools: [task, instruct_worker]
+requires_facts: [paintedwolf.session_mode, paintedwolf.ask_worker_writes]
+when: paintedwolf.session_mode == "ask" && paintedwolf.ask_worker_writes
+effect: block
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:coordinator
+message: This operation requires Agent mode
+what: This operation is unavailable in Ask mode.
+cause: Ask mode limits actions to read-only tools and worker scopes.
+fix: Use read-only tools or let the user know that this work requires Agent mode.
+x-paintedwolf-scenarios:
+  - id: write_worker
+    vars:
+      session_mode: ask
+      ask_worker_writes: true
+      tool: task

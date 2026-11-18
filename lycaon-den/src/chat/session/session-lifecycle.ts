@@ -1,7 +1,7 @@
 import type { LycaonClient } from "../../api/client.ts";
 import { beginSessionSnapshotRead, refreshSessionSnapshot } from "../../api/session-snapshot-refresh.ts";
 import { appliedSessionRevision } from "../../api/session-event-revisions.ts";
-import type { Message, Project, Session } from "../../api/types.ts";
+import type { Message, Project, Session, SessionMode } from "../../api/types.ts";
 import { isEnterableSessionStatus } from "../../api/session-status.generated.ts";
 import {
   noticeReporterFor,
@@ -32,6 +32,7 @@ import {
   installSessionBootstrapChrome,
 } from "./session-chrome.ts";
 import { cancelPromptSubmissions, reservePromptSubmission } from "../send/prompt-submission-order.ts";
+import { beginSessionModeAdmission, confirmSessionModeAdmission } from "./session-mode-state.ts";
 import { pendingPromptKind } from "../send/pending-sends.ts";
 
 /** Large snapshots yield a frame before hydration. */
@@ -87,8 +88,10 @@ export async function recordCreatedSessionInRecents(
 export async function createSessionForProject(
   client: LycaonClient,
   projectId: string,
+  mode?: SessionMode,
 ): Promise<Session> {
   return client.createSession({
+    ...(mode && { mode }),
     posture: "build",
     project_id: projectId,
   });
@@ -336,6 +339,7 @@ export async function resumeChatSession(
 }
 
 type SendChatPromptOpts = {
+  mode?: SessionMode;
   recovery?: import("../../api/types.ts").PromptRecovery;
   /** Fires after the pending submission is visible, before any network wait. */
   onPendingSend?: (destination: "transcript" | "queue") => void;
@@ -402,6 +406,7 @@ export async function sendChatPrompt(
 
   // The host echoes the operation id as the user message id.
   const operationId = crypto.randomUUID();
+  const admission = beginSessionModeAdmission(appStore, sessionId, opts?.mode);
   const kind = pendingPromptKind(appStore, sessionId);
   appStore.actions.addPendingSend(sessionId, {
     kind,
@@ -441,6 +446,7 @@ export async function sendChatPrompt(
 
     const accepted = await client.sendPrompt(sessionId, {
       operation_id: operationId,
+      ...(admission.mode && { mode: admission.mode }),
       recovery: opts?.recovery,
       text: trimmed,
       attachments: attachmentParts.length > 0 ? attachmentParts : undefined,
@@ -465,6 +471,7 @@ export async function sendChatPrompt(
       };
       throw new Error(retryHint[accepted.status]);
     }
+    confirmSessionModeAdmission(appStore, sessionId, admission.mode);
     // Completed receipts require no admission hold.
     if (accepted.status === "complete") {
       appStore.actions.releasePromptSubmission(sessionId, operationId);
@@ -500,6 +507,7 @@ export async function sendChatPrompt(
     }
     backendRead?.finish();
     submission.finish();
+    admission.finish();
   }
 }
 

@@ -3,6 +3,7 @@
 @import "./styling/chat/attachments-utilities.css";
 @import "./styling/chat/suggestions-utilities.css";
 @import "./styling/chat/launcher-utilities.css";
+@import "./styling/chat/session-mode.css";
 @import "./styling/chat/composer-activity-utilities.css";
 @import "./styling/chat/notices-utilities.css";
 @import "./styling/chat/workflow-boundary-utilities.css";

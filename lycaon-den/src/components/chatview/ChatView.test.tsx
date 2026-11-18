@@ -81,6 +81,9 @@ function mountChat(options: { client?: ClientStubs; session?: Partial<Session>; 
   const appStore = createAppStore();
   appStore.actions.setSidecarStatus("connected");
   appStore.actions.setCurrentSession({
+    mode: "agent" as const,
+    started: true,
+    root_session_id: SESSION,
     id: SESSION,
     owner_person_id: "00000000-0000-4000-8000-000000000002",
     project_id: PROJECT,

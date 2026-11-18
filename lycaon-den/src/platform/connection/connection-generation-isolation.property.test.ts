@@ -103,6 +103,9 @@ function snapshotPurityState(stores: TestStores): string {
 
 function createSessionFixture(id: string, projectId: string): Session {
   return {
+    mode: "agent" as const,
+    started: true,
+    root_session_id: id,
     id,
     project_id: projectId,
     workspace_path: `/tmp/${projectId}`,

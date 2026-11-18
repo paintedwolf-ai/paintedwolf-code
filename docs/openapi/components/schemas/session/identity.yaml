@@ -13,6 +13,10 @@ components:
         model:
         - provider_id
       properties:
+        mode:
+          x-go-pointer: true
+          $ref: '#/components/schemas/SessionMode'
+          description: Initial session mode. Defaults to Agent.
         project_id:
           type: string
           format: uuid
@@ -38,9 +42,13 @@ components:
       additionalProperties: false
       description: >
         One session lifecycle command. Exactly one of title, archived, pinned,
-        or pin_position is required; compound commands are rejected without
+        pin_position, or mode is required; compound commands are rejected without
         changing the session.
       properties:
+        mode:
+          x-go-pointer: true
+          $ref: '#/components/schemas/SessionMode'
+          description: Changes the root chat mode. A started chat can only move from Ask to Agent.
         title:
           x-go-pointer: true
           type: string
@@ -69,19 +77,34 @@ components:
             pinned chats are renumbered 1…n.
     Session:
       x-go-generate: true
-      x-go-field-order: ["id", "title", "project_id", "owner_person_id", "workspace_root_id", "workspace_path", "posture", "agent_type", "provider_id", "model", "status", "parent_session_id", "compaction_generation", "untrusted_content", "current_turn", "prompt_pending", "ui", "archived_at", "pin_rank", "seen_at", "created_at", "activity_at", "updated_at"]
+      x-go-field-order: ["id", "title", "project_id", "owner_person_id", "workspace_root_id", "workspace_path", "posture", "mode", "started", "root_session_id", "agent_type", "provider_id", "model", "status", "parent_session_id", "compaction_generation", "untrusted_content", "current_turn", "prompt_pending", "ui", "archived_at", "pin_rank", "seen_at", "created_at", "activity_at", "updated_at"]
       type: object
       required:
       - id
       - project_id
       - owner_person_id
       - posture
+      - mode
+      - started
+      - root_session_id
       - status
       - created_at
       - activity_at
       - updated_at
       additionalProperties: false
       properties:
+        mode:
+          $ref: '#/components/schemas/SessionMode'
+          description: Effective mode of the root chat. Read-only.
+        started:
+          type: boolean
+          readOnly: true
+          description: True once the root chat has admitted a prompt or workflow. Rewind preserves this fact.
+        root_session_id:
+          type: string
+          format: uuid
+          readOnly: true
+          description: The root chat that owns the mode and started state.
         id:
           type: string
           format: uuid
@@ -243,6 +266,8 @@ components:
       - project_id
       - owner_person_id
       - posture
+      - mode
+      - started
       - status
       - message_count
       - created_at
@@ -250,6 +275,13 @@ components:
       additionalProperties: false
       description: Metadata-only chat list row; worker child sessions are never listed
       properties:
+        mode:
+          $ref: '#/components/schemas/SessionMode'
+          description: Effective mode of the root chat. Read-only.
+        started:
+          type: boolean
+          readOnly: true
+          description: True once the root chat has admitted a prompt or workflow. Rewind preserves this fact.
         id:
           type: string
           format: uuid
@@ -392,3 +424,5 @@ components:
       - vet
     SessionStatus:
       $ref: ../session-status.generated.yaml#/components/schemas/SessionStatus
+    SessionMode:
+      $ref: ../session-mode.generated.yaml#/components/schemas/SessionMode

@@ -121,9 +121,9 @@ export async function reconcileActiveScope(
 ): Promise<string | undefined> {
   const session = appStore.state.currentSession;
   const sessionId = session?.id?.trim();
-  const projectDir = session?.workspace_path?.trim();
+  const projectDir = session?.workspace_path?.trim() ?? "";
   const projectId = session?.project_id?.trim();
-  if (!sessionId || !projectDir) return;
+  if (!sessionId) return;
 
   let epoch = appStore.state.sessionViewEpoch;
   const matchesView = () =>
@@ -176,7 +176,7 @@ export async function reconcileActiveScope(
       completeChatHydrationAndReplay(appStore);
     }
     rememberSessionChatFromStore(appStore);
-    void refreshBoard(appStore, client, projectDir, projects, sessionId, {
+    if (projectDir) void refreshBoard(appStore, client, projectDir, projects, sessionId, {
       includeGit: true,
     }).catch(() => undefined);
     void refreshCodeScanCache(appStore, client);

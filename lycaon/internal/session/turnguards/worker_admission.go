@@ -52,6 +52,26 @@ func (m *Service) SetTaskIdentityResolver(resolver workeradmission.TaskIdentityR
 	m.taskIdentities = resolver
 }
 
+func (m *Service) SetAskInstructionCheck(check func(context.Context, string, map[string]any) error) {
+	m.checkAskInstruction = check
+}
+
+func (m *Service) askWorkerWrites(ctx context.Context, sess *api.Session, tool string, args map[string]any, identity workeradmission.TaskIdentity) bool {
+	if sess == nil || sess.Mode != api.SessionModeAsk {
+		return false
+	}
+	switch tool {
+	case "task":
+		return workeradmission.RequireAskReadScope(tool, identity.MutationCapable, true, identity.Scope) != nil
+	case "instruct_worker":
+		if m.checkAskInstruction != nil {
+			reject := toolrejection.AsToolReject(m.checkAskInstruction(ctx, sess.ID, args))
+			return reject != nil && reject.Code == "SESSION_ASK_MODE_ACTIVE"
+		}
+	}
+	return false
+}
+
 func (m *Service) resolveTaskIdentity(ctx context.Context, sess *api.Session, args map[string]any) (workeradmission.TaskIdentity, error) {
 	identity, err := m.taskIdentities.Resolve(ctx, sess.ID, args)
 	reject := toolrejection.AsToolReject(err)

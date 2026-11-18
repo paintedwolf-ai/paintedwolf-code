@@ -14,6 +14,9 @@ import { testProjectsStore } from "./session-lifecycle-test-fixture.ts";
 
 describe("stopChatActivity", () => {
   const idleSession = (id: string, projectDir: string) => ({
+    mode: "agent" as const,
+    started: true,
+    root_session_id: id,
     id,
     owner_person_id: "00000000-0000-4000-8000-000000000002",
     project_id: "proj-1",

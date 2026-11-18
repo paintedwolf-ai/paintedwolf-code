@@ -14,6 +14,9 @@ import { toolApprovalFixture } from "../../chat/checkpoint/approval-test-fixture
 const CARD_HEIGHT_PX = 240;
 
 const session = {
+  mode: "agent" as const,
+  started: true,
+  root_session_id: "parent-1",
   id: "parent-1",
   owner_person_id: "00000000-0000-4000-8000-000000000002",
   project_id: "00000000-0000-4000-8000-000000000001",

@@ -64,9 +64,9 @@ func TestChildCheckpointAttention(t *testing.T) {
 		t.Run(parentStatus, func(t *testing.T) {
 			database, mgr, parent := newTestManager(t)
 			insertSession(t, database, parent)
-			testdbseed.InsertSession(t, database, "child", testdbseed.DefaultProjectID)
-			_, err := database.ExecContext(testdbseed.OwnerCaller(t, t.Context(), database), "UPDATE sessions SET parent_session_id = ?, status = 'busy' WHERE id = 'child'", parent)
-			testutil.FailErr(t, "bind child", err)
+			testdbseed.InsertChildSession(t, database, "child", parent)
+			_, err := database.ExecContext(testdbseed.OwnerCaller(t, t.Context(), database), "UPDATE sessions SET status = 'busy' WHERE id = 'child'")
+			testutil.FailErr(t, "set child state", err)
 			_, err = database.ExecContext(testdbseed.OwnerCaller(t, t.Context(), database), "UPDATE sessions SET status = ? WHERE id = ?", parentStatus, parent)
 			testutil.FailErr(t, "set parent state", err)
 			testutil.FailErr(t, "insert worker job", worker.NewSQLStore(database).InsertTask(testdbseed.OwnerCaller(t, t.Context(), database), api.WorkerTask{

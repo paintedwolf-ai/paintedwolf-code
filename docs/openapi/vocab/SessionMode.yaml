@@ -1,0 +1,7 @@
+name: SessionMode
+description: Capability ceiling for a root chat and its workers.
+go_const_prefix: SessionMode
+go_file: session_mode.generated.go
+values:
+  - id: agent
+  - id: ask

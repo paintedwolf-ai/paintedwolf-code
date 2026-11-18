@@ -266,6 +266,9 @@ components:
         - worker_owner_unsettled
         - worker_workspace_unavailable
         - session_archived
+        - session_mode_locked
+        - session_mode_unavailable
+        - session_ask_mode_workflow_requires_agent
         - session_not_found
         - session_not_pinned
         - session_preparation_failed

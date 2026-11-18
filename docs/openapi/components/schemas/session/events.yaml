@@ -39,7 +39,7 @@ components:
       description: Durable session lifecycle transition represented by an event.
     SessionEvent:
       x-go-generate: true
-      x-go-field-order: ["id", "project_id", "action", "title", "status", "last_message", "untrusted_content", "current_turn", "ui", "host_error", "idle_disposition", "prompt_pending"]
+      x-go-field-order: ["id", "project_id", "action", "title", "status", "last_message", "untrusted_content", "current_turn", "ui", "host_error", "idle_disposition", "prompt_pending", "mode", "started"]
       type: object
       required:
       - id
@@ -48,6 +48,12 @@ components:
       - status
       additionalProperties: false
       properties:
+        mode:
+          $ref: 'identity.yaml#/components/schemas/SessionMode'
+        started:
+          x-go-pointer: true
+          type: boolean
+          description: Root chat started state. Omitted when the event carries no update.
         id:
           type: string
           format: uuid

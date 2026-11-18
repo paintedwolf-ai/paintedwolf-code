@@ -91,6 +91,8 @@ func bareActivation(gc *GuardContext) map[string]any {
 		"last_assistant":                      gc.Session.LastAssistant,
 		"turn_tools":                          strList(gc.Session.TurnTools),
 		"session_posture":                     gc.Session.SessionPosture,
+		"session_mode":                        gc.Session.SessionMode,
+		"ask_worker_writes":                   gc.Workers.AskWorkerWrites,
 		"surface":                             gc.Session.Surface,
 		"session_role":                        gc.Session.Role,
 		"workers_idle":                        gc.Workers.WorkersIdle,

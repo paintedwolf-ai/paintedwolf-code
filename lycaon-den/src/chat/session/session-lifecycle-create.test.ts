@@ -30,6 +30,9 @@ vi.mock("../../platform/connection/app-connection.ts", async (importOriginal) =>
 
 function preparingSession(id = "sess-1"): Session {
   return {
+    mode: "agent" as const,
+    started: false,
+    root_session_id: id,
     id,
     owner_person_id: "00000000-0000-4000-8000-000000000002",
     project_id: "proj-1",

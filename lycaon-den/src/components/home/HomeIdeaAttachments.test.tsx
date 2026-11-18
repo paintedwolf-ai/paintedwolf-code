@@ -152,6 +152,17 @@ describe("Home idea drop intake", () => {
     });
   });
 
+  it("binds the local Ask selection when immediately submitting the Home idea", () => {
+    const onSubmitIdea = vi.fn<(draft: HomeIdeaDraft) => boolean>().mockReturnValue(true);
+    renderHome({ onSubmitIdea });
+    fireEvent.click(screen.getByRole("radio", { name: "Ask" }));
+    const input = screen.getByTestId("home-idea-input") as HTMLTextAreaElement;
+    expect(input.placeholder).toBe("Ask a question…");
+    fireEvent.input(input, { target: { value: "How do I get started?" } });
+    fireEvent.keyDown(input, { key: "Enter" });
+    expect(onSubmitIdea).toHaveBeenCalledWith({ text: "How do I get started?", mode: "ask", attachments: [] });
+  });
+
   it("allows an attachment-only submission", async () => {
     const onSubmitIdea = vi.fn<(draft: HomeIdeaDraft) => boolean>().mockReturnValue(true);
     renderHome({ onSubmitIdea });

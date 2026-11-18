@@ -9,7 +9,7 @@ func (m *SessionPolicy) ScaffoldVarsForSession(ctx context.Context, sessionID st
 	if m == nil {
 		return nil, nil
 	}
-	active, err := m.Runs.ActiveBySession(ctx, sessionID)
+	active, err := m.activeRunForPolicy(ctx, sessionID)
 	if err != nil || active == nil {
 		return nil, err
 	}

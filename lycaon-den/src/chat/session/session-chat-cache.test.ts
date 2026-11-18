@@ -18,6 +18,9 @@ import { advanceTranscriptAnnouncement } from "../transcript/presentation/transc
 import type { SessionChatSnapshot } from "./session-chat-snapshot.ts";
 
 const demoSession: Session = {
+  mode: "agent" as const,
+  started: true,
+  root_session_id: "sess-a",
   id: "sess-a",
   owner_person_id: "00000000-0000-4000-8000-000000000002",
   project_id: "proj-1",

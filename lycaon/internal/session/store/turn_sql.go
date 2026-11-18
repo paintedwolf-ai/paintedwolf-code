@@ -34,6 +34,11 @@ func beginTurnSQL(ctx context.Context, s *sqlCore, in TurnStart) (TurnExecution,
 	if in.SessionID == "" || in.ProjectID == "" || !validTurnOrigin(in.Origin) {
 		return TurnExecution{}, fmt.Errorf("turn session, project, and origin are required")
 	}
+	unlock, err := lockModeAdmission(ctx, s, in.SessionID)
+	if err != nil {
+		return TurnExecution{}, err
+	}
+	defer unlock()
 	now := time.Now().UTC()
 	attemptID := uuid.NewString()
 	tx, err := s.db.BeginTx(ctx, nil)
@@ -41,6 +46,9 @@ func beginTurnSQL(ctx context.Context, s *sqlCore, in TurnStart) (TurnExecution,
 		return TurnExecution{}, fmt.Errorf("begin turn: %w", err)
 	}
 	defer func() { _ = tx.Rollback() }()
+	if err := admitModeSQL(ctx, s, tx, in.SessionID, nil, nil); err != nil {
+		return TurnExecution{}, err
+	}
 	q := s.queries.WithTx(tx)
 	if workerJobID := strings.TrimSpace(in.WorkerJobID); workerJobID != "" {
 		recoveredID, recoverErr := q.FindRecoverableTurnByWorkerJob(ctx, db.FindRecoverableTurnByWorkerJobParams{
@@ -107,6 +115,7 @@ func beginTurnSQL(ctx context.Context, s *sqlCore, in TurnStart) (TurnExecution,
 	if err := tx.Commit(); err != nil {
 		return TurnExecution{}, fmt.Errorf("commit turn: %w", err)
 	}
+	s.outbox.Notify()
 	return TurnExecution{
 		Turn: Turn{
 			ID: in.ID, SessionID: in.SessionID, ProjectID: in.ProjectID,
@@ -176,6 +185,7 @@ func resumeTurnTx(
 	if err := tx.Commit(); err != nil {
 		return TurnExecution{}, err
 	}
+	s.outbox.Notify()
 	return TurnExecution{Turn: turn, Attempt: attempt}, nil
 }
 

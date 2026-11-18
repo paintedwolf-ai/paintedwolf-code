@@ -443,6 +443,9 @@ describe("ProjectFilesView stage chrome", () => {
   });
 
   const sessionRecord = (id: string, title: string) => ({
+    mode: "agent" as const,
+    started: true,
+    root_session_id: id,
     id,
     owner_person_id: "00000000-0000-4000-8000-000000000002",
     project_id: PROJECT,
@@ -612,6 +615,9 @@ describe("ProjectFilesView stage chrome", () => {
     const appStore = createAppStore();
     appStore.actions.setSidecarStatus("connected");
     appStore.actions.setCurrentSession({
+      mode: "agent" as const,
+      started: true,
+      root_session_id: "sess-idle",
       id: "sess-idle",
       owner_person_id: "00000000-0000-4000-8000-000000000002",
       project_id: PROJECT,
@@ -648,6 +654,9 @@ describe("ProjectFilesView stage chrome", () => {
     const appStore = createAppStore();
     appStore.actions.setSidecarStatus("connected");
     appStore.actions.setCurrentSession({
+      mode: "agent" as const,
+      started: true,
+      root_session_id: "sess-a",
       id: "sess-a",
       owner_person_id: "00000000-0000-4000-8000-000000000002",
       project_id: PROJECT,
@@ -683,6 +692,9 @@ describe("ProjectFilesView stage chrome", () => {
     expect(callsAfterBoot).toBe(1);
 
     appStore.actions.setCurrentSession({
+      mode: "agent" as const,
+      started: true,
+      root_session_id: "sess-a",
       id: "sess-a",
       owner_person_id: "00000000-0000-4000-8000-000000000002",
       project_id: PROJECT,
@@ -698,6 +710,9 @@ describe("ProjectFilesView stage chrome", () => {
     expect(getSourceWorkspace).toHaveBeenCalledTimes(callsAfterBoot);
 
     appStore.actions.setCurrentSession({
+      mode: "agent" as const,
+      started: true,
+      root_session_id: "sess-b",
       id: "sess-b",
       owner_person_id: "00000000-0000-4000-8000-000000000002",
       project_id: PROJECT,

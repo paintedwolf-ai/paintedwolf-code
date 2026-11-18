@@ -1,6 +1,6 @@
 import { beginSessionSnapshotRead } from "../../api/session-snapshot-refresh.ts";
 import { batch } from "solid-js";
-import type { WorkflowSummary } from "../../api/types.ts";
+import type { SessionMode, WorkflowSummary } from "../../api/types.ts";
 import {
   revokeComposerAttachment,
   type ComposerPendingAttachment,
@@ -96,6 +96,7 @@ export function createSessionCreation(options: {
     target: DraftTarget,
     opts?: {
       prompt?: string;
+      mode?: SessionMode;
       /** Home idea buffer; staged once the draft project exists. */
       ideaAttachments?: readonly HomeIdeaAttachment[];
       armWorkflow?: WorkflowSummary;
@@ -207,7 +208,7 @@ export function createSessionCreation(options: {
         },
         hasClient: true,
         create: async ({ shouldApply }) => {
-          const session = await createSessionForProject(activeClient, projectId);
+          const session = await createSessionForProject(activeClient, projectId, opts?.mode);
           if (!shouldApply()) {
             return {
               projectId: session.project_id?.trim() || projectId,
@@ -314,6 +315,7 @@ export function createSessionCreation(options: {
             parts.references,
             undefined,
             {
+              mode: opts?.mode,
               attachmentLabels: attachmentLabels.length > 0 ? attachmentLabels : undefined,
               shouldSend: (client) => created.shouldApply() && getLycaonClient() === client && sendBackend.isSameBackend(),
             },

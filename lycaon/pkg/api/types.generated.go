@@ -2696,7 +2696,9 @@ type CreateProviderRequest struct {
 
 // CreateSessionRequest
 type CreateSessionRequest struct {
-	ProjectID string `json:"project_id"`
+	// Initial session mode. Defaults to Agent.
+	Mode      *SessionMode `json:"mode,omitempty"`
+	ProjectID string       `json:"project_id"`
 	// Active root for this session; defaults to primary when omitted
 	WorkspaceRootID string         `json:"workspace_root_id,omitempty"`
 	Posture         SessionPosture `json:"posture"`
@@ -5501,6 +5503,8 @@ type PromptRecovery struct {
 
 // PromptRequest
 type PromptRequest struct {
+	// Bind or upgrade the session mode at admission.
+	Mode *SessionMode `json:"mode,omitempty"`
 	// Stable client mutation identity. An exact retry replays the original submission; reusing this id with different input is rejected with 409 idempotency_conflict.
 	OperationID string `json:"operation_id"`
 	// User prose; may be empty when attachments or references are present, or when the active workflow accepts an empty request
@@ -5729,7 +5733,9 @@ type QueueItem struct {
 
 // QueueMutateRequest
 type QueueMutateRequest struct {
-	Op string `json:"op,omitempty"`
+	// Upgrade the session to Agent when sending queued prompts.
+	Mode *SessionMode `json:"mode,omitempty"`
+	Op   string       `json:"op,omitempty"`
 	// Queue revision the mutation was authored against; stale mutations are rejected atomically.
 	ExpectedRevision uint64   `json:"expected_revision"`
 	OperationID      string   `json:"operation_id,omitempty"`
@@ -6733,14 +6739,20 @@ type Session struct {
 	// Active root for this session; omitted when no roots
 	WorkspaceRootID string `json:"workspace_root_id,omitempty"`
 	// Computed on read from workspace_root_id or primary root; omitted when project has no roots
-	WorkspacePath        string         `json:"workspace_path,omitempty"`
-	Posture              SessionPosture `json:"posture"`
-	AgentType            string         `json:"agent_type,omitempty"`
-	ProviderID           string         `json:"provider_id,omitempty"`
-	Model                string         `json:"model,omitempty"`
-	Status               SessionStatus  `json:"status"`
-	ParentSessionID      string         `json:"parent_session_id,omitempty"`
-	CompactionGeneration int            `json:"compaction_generation,omitempty"`
+	WorkspacePath string         `json:"workspace_path,omitempty"`
+	Posture       SessionPosture `json:"posture"`
+	// Effective mode of the root chat. Read-only.
+	Mode SessionMode `json:"mode"`
+	// True once the root chat has admitted a prompt or workflow. Rewind preserves this fact.
+	Started bool `json:"started"`
+	// The root chat that owns the mode and started state.
+	RootSessionID        string        `json:"root_session_id"`
+	AgentType            string        `json:"agent_type,omitempty"`
+	ProviderID           string        `json:"provider_id,omitempty"`
+	Model                string        `json:"model,omitempty"`
+	Status               SessionStatus `json:"status"`
+	ParentSessionID      string        `json:"parent_session_id,omitempty"`
+	CompactionGeneration int           `json:"compaction_generation,omitempty"`
 	// Server-derived: true once this session has ingested untrusted external content (web tools, MCP, or web-researcher worker summary). Read-only; ignored on input.
 	UntrustedContent bool `json:"untrusted_content,omitempty"`
 	// Server-derived 1-based ordinal of the session's newest user turn, and the same number the source ledger stamps on writes made during it. A client addressing a turn (source `baseline=turn:{session_id},{n}`) cites this value rather than counting transcript messages itself; `baseline=turn:{session_id}` lets the host resolve it. 0 means no user turn has started. Read-only; ignored on input.
@@ -6845,7 +6857,10 @@ type SessionEvent struct {
 	HostError       *SessionHostError      `json:"host_error,omitempty"`
 	IdleDisposition SessionIdleDisposition `json:"idle_disposition,omitempty"`
 	// Session.prompt_pending as of this event, omitted when false. Every session event states it, so a client applying the newest event by revision never shows a session at rest while an admitted prompt waits to start.
-	PromptPending bool `json:"prompt_pending,omitempty"`
+	PromptPending bool        `json:"prompt_pending,omitempty"`
+	Mode          SessionMode `json:"mode,omitempty"`
+	// Root chat started state. Omitted when the event carries no update.
+	Started *bool `json:"started,omitempty"`
 }
 
 // SessionHostError
@@ -6889,6 +6904,10 @@ type SessionProtectionState struct {
 
 // SessionSummary Metadata-only chat list row; worker child sessions are never listed
 type SessionSummary struct {
+	// Effective mode of the root chat. Read-only.
+	Mode SessionMode `json:"mode"`
+	// True once the root chat has admitted a prompt or workflow. Rewind preserves this fact.
+	Started   bool   `json:"started"`
 	ID        string `json:"id"`
 	ProjectID string `json:"project_id"`
 	// Person who started the session.
@@ -8454,6 +8473,8 @@ type SourceWorkspaceRoot struct {
 
 // StartWorkflowRunRequest
 type StartWorkflowRunRequest struct {
+	// Bind or upgrade the session mode at admission.
+	Mode *SessionMode `json:"mode,omitempty"`
 	// Stable client mutation identity. An exact retry returns the original run; reusing this id with different input is rejected with 409 idempotency_conflict.
 	OperationID     string `json:"operation_id"`
 	WorkflowID      string `json:"workflow_id"`
@@ -9075,8 +9096,10 @@ type UpdateSecurityScannersSettingsRequest struct {
 	SourceVerify      SourceVerify      `json:"source_verify,omitempty"`
 }
 
-// UpdateSessionRequest One session lifecycle command. Exactly one of title, archived, pinned, or pin_position is required; compound commands are rejected without changing the session.
+// UpdateSessionRequest One session lifecycle command. Exactly one of title, archived, pinned, pin_position, or mode is required; compound commands are rejected without changing the session.
 type UpdateSessionRequest struct {
+	// Changes the root chat mode. A started chat can only move from Ask to Agent.
+	Mode *SessionMode `json:"mode,omitempty"`
 	// User-set display title; empty after trim is rejected
 	Title *string `json:"title,omitempty"`
 	// true moves the session out of the working set (sidebar, attention, default list); false restores it. History and search are untouched.
@@ -9849,6 +9872,8 @@ type WorkflowRunUi struct {
 
 // WorkflowSummary
 type WorkflowSummary struct {
+	// The workflow entry phase requires Agent mode.
+	RequiresAgent  bool                 `json:"requires_agent,omitempty"`
 	ID             string               `json:"id"`
 	Version        string               `json:"version"`
 	Name           string               `json:"name"`

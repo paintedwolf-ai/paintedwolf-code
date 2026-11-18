@@ -40,8 +40,8 @@ func newMultiWorkerMessagingFixture(t *testing.T) *multiWorkerMessagingFixture {
 	testdbseed.InsertSession(t, sqlDB, "coord", testdbseed.DefaultProjectID)
 	now := timelayout.Format(time.Now().UTC())
 	for _, id := range []string{"child-alpha", "child-beta"} {
-		_, err := sqlDB.ExecContext(t.Context(), `INSERT INTO sessions (id, project_id, owner_person_id, posture, status, parent_session_id, agent_type, created_at, activity_at, updated_at)
-			VALUES (?, ?, (SELECT id FROM people WHERE role = 'owner'), 'build', 'idle', 'coord', 'implementer', ?, ?, ?)`, id, testdbseed.DefaultProjectID, now, now, now)
+		_, err := sqlDB.ExecContext(t.Context(), `INSERT INTO sessions (id, project_id, owner_person_id, posture, status, parent_session_id, agent_type, created_at, activity_at, updated_at, root_session_id, mode)
+			VALUES (?, ?, (SELECT id FROM people WHERE role = 'owner'), 'build', 'idle', 'coord', 'implementer', ?, ?, ?, 'coord', NULL)`, id, testdbseed.DefaultProjectID, now, now, now)
 		testutil.FailErr(t, "insert child "+id, err)
 	}
 	records := workerrecords.New(sqlDB)

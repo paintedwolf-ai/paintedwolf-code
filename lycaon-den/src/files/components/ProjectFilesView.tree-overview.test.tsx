@@ -146,6 +146,9 @@ describe("ProjectFilesView stage chrome", () => {
     const appStore = createAppStore();
     appStore.actions.setSidecarStatus("connected");
     appStore.actions.setCurrentSession({
+      mode: "agent" as const,
+      started: true,
+      root_session_id: "session-worktree",
       id: "session-worktree",
       owner_person_id: "00000000-0000-4000-8000-000000000002",
       project_id: PROJECT,

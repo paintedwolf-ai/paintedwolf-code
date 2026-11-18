@@ -10,6 +10,7 @@ type Props = {
   dockRef?: (el: HTMLDivElement) => void;
   /** Absolute overlay outside slot layout. */
   queue: JSX.Element;
+  mode?: SlotContent & { onFocusExit: () => void };
   launcher: SlotContent;
   arm: SlotContent;
   checkpoint: SlotContent;
@@ -26,6 +27,13 @@ export function ComposerChromeStack(props: Props) {
     >
       {props.queue}
       <Show when={props.active}>
+        <Show when={props.mode}>
+          {(mode) => (
+            <ComposerChromeSlot slot="mode" motion="fade" present={mode().present()} onFocusExit={mode().onFocusExit}>
+              {mode().children()}
+            </ComposerChromeSlot>
+          )}
+        </Show>
         {/* The mounted launcher only animates its exit. */}
         <ComposerChromeSlot
           slot="launcher"

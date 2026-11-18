@@ -49,8 +49,8 @@ func insertSession(t *testing.T, sqlDB *db.Store, id, parent string) {
 		parentID = parent
 	}
 	_, err := sqlDB.ExecContext(t.Context(), `INSERT INTO sessions (
-			id, project_id, owner_person_id, posture, status, parent_session_id, created_at, activity_at, updated_at
-		) VALUES (?, ?, (SELECT id FROM people WHERE role = 'owner'), 'build', 'idle', ?, ?, ?, ?)`,
+			id, project_id, owner_person_id, posture, status, parent_session_id, created_at, activity_at, updated_at, root_session_id, mode
+		) VALUES (?, ?, (SELECT id FROM people WHERE role = 'owner'), 'build', 'idle', ?, ?, ?, ?, COALESCE(?3, ?1), CASE WHEN ?3 IS NULL THEN 'agent' END)`,
 		id, testdbseed.DefaultProjectID, parentID, now, now, now)
 	testutil.FailErr(t, "insert session "+id, err)
 }

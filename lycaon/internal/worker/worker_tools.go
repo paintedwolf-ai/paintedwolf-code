@@ -76,7 +76,8 @@ func instructWorkerHandler(deps WorkerToolDeps) tools.ToolHandler {
 			return "", err
 		}
 		in := workerops.Instruction{
-			Worker: strings.TrimSpace(stringArg(args["worker"])), Instructions: strings.TrimSpace(stringArg(args["instructions"])),
+			AskMode: tctx.Source.AskMode,
+			Worker:  strings.TrimSpace(stringArg(args["worker"])), Instructions: strings.TrimSpace(stringArg(args["instructions"])),
 			Brief: strings.TrimSpace(stringArg(args["brief"])), AgentType: strings.TrimSpace(stringArg(args["agent_type"])),
 		}
 		if in.Worker == "" || in.Instructions == "" {

@@ -141,7 +141,7 @@ func listProjectSummariesSQL(ctx context.Context, s *sqlCore, q SummaryQuery) (S
 
 	// #nosec G202 -- query fragments come from closed package constants.
 	listSQL := `
-SELECT s.id, s.project_id, s.owner_person_id, s.title, s.posture, s.status, s.archived_at, s.pin_rank,
+SELECT s.id, s.project_id, s.owner_person_id, s.title, s.posture, s.mode, s.started, s.status, s.archived_at, s.pin_rank,
        s.created_at, s.activity_at,
        (SELECT COUNT(*) FROM messages m WHERE m.session_id = s.id) AS message_count
 FROM sessions s
@@ -179,7 +179,7 @@ func scanProjectSummaryRows(rows *sql.Rows) ([]api.SessionSummary, error) {
 			createdAt, activityAt string
 			posture, status       string
 		)
-		if err := rows.Scan(&row.ID, &row.ProjectID, &row.OwnerPersonID, &title, &posture, &status,
+		if err := rows.Scan(&row.ID, &row.ProjectID, &row.OwnerPersonID, &title, &posture, &row.Mode, &row.Started, &status,
 			&arch, &pin, &createdAt, &activityAt, &row.MessageCount); err != nil {
 			return nil, fmt.Errorf("scan session summary: %w", err)
 		}
@@ -278,6 +278,8 @@ func filterMemoryProjectSummaries(s *memoryCore, q SummaryQuery) []api.SessionSu
 			OwnerPersonID: sess.OwnerPersonID,
 			Title:         sess.Title,
 			Posture:       sess.Posture,
+			Mode:          sess.Mode,
+			Started:       sess.Started,
 			Status:        sess.Status,
 			ArchivedAt:    sess.ArchivedAt,
 			PinRank:       sess.PinRank,

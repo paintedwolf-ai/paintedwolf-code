@@ -2,9 +2,10 @@ import { ThemeIcon } from "../primitives/ThemeIcon.tsx";
 import { noticeReporterFor } from "../../platform/connection/app-connection.ts";
 import { APP_SCOPE } from "../../notices/notice-scope.ts";
 import { For, Show, createEffect, createMemo, createSignal, onCleanup, onMount } from "solid-js";
+import { SessionModeSwitch } from "../chatview/SessionModeSwitch.tsx";
 import { PreflightNudge } from "./PreflightNudge.tsx";
 import { AttentionBand } from "./AttentionBand.tsx";
-import type { AttentionRow } from "../../api/types.ts";
+import type { AttentionRow, SessionMode } from "../../api/types.ts";
 import type { ProjectSummary } from "../../project/project-summary.ts";
 import {
   ALL_PROJECTS_PAGE_SIZE,
@@ -112,6 +113,8 @@ function sortGlyph(active: boolean, direction: ProjectListSortDir): string {
 
 export function HomeView(props: Props) {
   const [idea, setIdea] = createSignal("");
+  const [mode, setMode] = createSignal<SessionMode>("agent");
+  const ideaHint = () => mode() === "ask" ? "Ask a question…" : IDEA_HINT;
   const [ideaAttachments, setIdeaAttachments] = createSignal<HomeIdeaAttachment[]>([]);
   const [dragActive, setDragActive] = createSignal(false);
   const residentPresence = useResidentPresence();
@@ -243,10 +246,11 @@ export function HomeView(props: Props) {
     const text = idea();
     const attachments = ideaAttachments();
     try {
-      const accepted = await props.onSubmitIdea({ text: text.trim(), attachments });
+      const accepted = await props.onSubmitIdea({ text: text.trim(), attachments, mode: mode() });
       if (!accepted) return;
       // Preserve edits made while submission was pending.
       if (idea() === text) setIdea("");
+      setMode("agent");
       if (ideaAttachments() === attachments) clearIdeaAttachments();
     } catch (cause) {
       noticeReporterFor(APP_SCOPE).reportError(cause);
@@ -356,6 +360,7 @@ export function HomeView(props: Props) {
           onOpen={(row) => props.onOpenAttention?.(row)}
         />
         <div class="home-view__idea">
+          <SessionModeSwitch mode={mode()} disabled={props.submitting} onSelect={setMode} />
           <div class="home-view__idea-row">
             <span class="home-view__idea-icon" aria-hidden="true">
               <ThemeIcon slot="sparkle" size={17} />
@@ -363,15 +368,15 @@ export function HomeView(props: Props) {
             <Scrollport class="home-view__idea-scroll" eager>
               {/* The WebKitGTK AT-SPI workaround draws the hint instead of a placeholder. */}
               <Show when={webkitAtspiWorkaroundActive() && !idea()}>
-                <span class="home-view__idea-hint" aria-hidden="true">{IDEA_HINT}</span>
+                <span class="home-view__idea-hint" aria-hidden="true">{ideaHint()}</span>
               </Show>
               <textarea
                 ref={ideaRef}
                 class="home-view__idea-input"
                 data-testid="home-idea-input"
                 rows={1}
-                placeholder={webkitAtspiWorkaroundActive() ? undefined : IDEA_HINT}
-                aria-label={webkitAtspiWorkaroundActive() ? "Describe your idea" : undefined}
+                placeholder={webkitAtspiWorkaroundActive() ? undefined : ideaHint()}
+                aria-label={webkitAtspiWorkaroundActive() ? (mode() === "ask" ? "Ask a question" : "Describe your idea") : undefined}
                 value={idea()}
                 disabled={props.submitting}
                 onInput={(e) => {

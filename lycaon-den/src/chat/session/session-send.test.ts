@@ -6,6 +6,8 @@ import { describe, expect, it, vi } from "vitest";
 import { createAppStore } from "../../store/app-state.ts";
 import { createNoticeStore } from "../../notices/notice-store.ts";
 import { selectSessionNotices } from "../../notices/notice-select.ts";
+import { setDraftSessionMode, sessionModeView } from "./session-mode-state.ts";
+import { upgradeSessionMode } from "./session-mode-upgrade.ts";
 import { sendChatPrompt } from "./session-lifecycle.ts";
 import type { LycaonClient } from "../../api/client.ts";
 import type { Session } from "../../api/types.ts";
@@ -14,6 +16,9 @@ import { deferred, stalledRecents } from "./session-lifecycle-test-fixture.ts";
 
 describe("sendChatPrompt", () => {
   const idle = {
+    mode: "agent" as const,
+    started: true,
+    root_session_id: "sess-1",
     id: "sess-1",
     owner_person_id: "00000000-0000-4000-8000-000000000002",
     project_id: "proj-1",
@@ -36,6 +41,39 @@ describe("sendChatPrompt", () => {
       ...overrides,
     });
   }
+
+  it("includes the selected Ask mode even while first-send preparation is pending", async () => {
+    const appStore = createAppStore();
+    appStore.actions.setCurrentSession({ ...idle, started: false });
+    const client = promptClient({ getSession: async () => ({ ...idle, mode: "ask", started: true }) });
+    const prepared = deferred<LycaonClient>();
+    setDraftSessionMode(appStore, "sess-1", "ask");
+    const sending = sendChatPrompt(appStore, stalledRecents(), () => prepared.promise,
+      "sess-1", "proj-1", "/tmp/p", emptyProjects, "How does this work?");
+    setDraftSessionMode(appStore, "sess-1", "agent");
+    expect(sessionModeView(appStore, "sess-1").admissionPending).toBe(true);
+    prepared.resolve(client);
+    await sending;
+    expect(client.sendPrompt).toHaveBeenCalledWith("sess-1", expect.objectContaining({ mode: "ask" }));
+    expect(appStore.state.currentSession).toMatchObject({ mode: "ask", started: true });
+  });
+
+  it("carries the Agent upgrade with a retry before PATCH returns", async () => {
+    const appStore = createAppStore();
+    appStore.actions.setCurrentSession({ ...idle, mode: "ask" });
+    const patch = deferred<Session>();
+    const client = promptClient({ updateSession: () => patch.promise });
+    const upgrade = upgradeSessionMode(appStore, client, "sess-1");
+    await sendChatPrompt(appStore, stalledRecents(), async () => client,
+      "sess-1", "proj-1", "/tmp/p", emptyProjects, "Try again", undefined, undefined, undefined,
+      { recovery: { action: "continue", after_message_id: "last-progress" } });
+    expect(client.sendPrompt).toHaveBeenCalledWith("sess-1", expect.objectContaining({
+      mode: "agent", recovery: { action: "continue", after_message_id: "last-progress" },
+    }));
+    expect(sessionModeView(appStore, "sess-1").show).toBe(false);
+    patch.resolve(idle);
+    await upgrade;
+  });
 
   it("delivers external references through the session send boundary", async () => {
     const appStore = createAppStore();

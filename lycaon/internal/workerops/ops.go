@@ -65,6 +65,7 @@ const (
 type Instruction struct {
 	Worker       string
 	Instructions string
+	AskMode      bool
 	// Brief replaces the standing brief when the goal changes.
 	Brief string
 	// AgentType changes the agent between rounds; scope mode follows its lane.
@@ -170,6 +171,11 @@ func (s *Service) Instruct(ctx context.Context, actor workerrecords.Actor, op wo
 		return prior, err
 	}
 	w, view := snap.Worker, snap.View
+	if in.AskMode {
+		if err := s.checkAskInstruction(w, in.AgentType); err != nil {
+			return Receipt{}, err
+		}
+	}
 	if !view.Admits(workerstate.OpInstruct) {
 		return Receipt{}, refusal(snap, workerstate.OpInstruct)
 	}

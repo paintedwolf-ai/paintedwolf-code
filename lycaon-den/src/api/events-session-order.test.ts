@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import { captureSessionChatFromStore, dropSessionChatCache, getSessionChatCache, putSessionChatCache } from "../chat/session/session-chat-cache.ts";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createAppStore } from "../store/app-state.ts";
 import { type AppStore } from "../store/app-state-model.ts";
@@ -31,6 +32,9 @@ afterEach(() => {
 function setup() {
   const store = createAppStore();
   store.actions.setCurrentSession({
+    mode: "agent" as const,
+    started: true,
+    root_session_id: sessionId,
     id: sessionId, owner_person_id: "00000000-0000-4000-8000-000000000002", project_id: projectId, status: "busy", posture: "build",
     workspace_path: "/project", created_at: "t", activity_at: "t", updated_at: "t",
   });
@@ -90,6 +94,29 @@ async function deliver(
 }
 
 describe("session event revision ordering", () => {
+  it("projects ordered root mode updates onto an open and cached descendant", async () => {
+    const { store } = setup();
+    const child = { ...store.state.currentSession!, id: "worker-child", parent_session_id: "worker-parent", mode: "ask" as const };
+    const scope = { projectId, sessionId: child.id };
+    store.actions.setCurrentSession(child);
+    store.actions.installTranscriptBaseline(child.id, [], 0);
+    const cache = captureSessionChatFromStore(store, scope);
+    expect(cache).not.toBeNull();
+    putSessionChatCache(cache!);
+    try {
+      await deliver(store, [
+        { revision: 5, data: { status: "busy", mode: "agent", started: true } },
+        { revision: 4, data: { status: "idle", mode: "ask", started: false } },
+        { revision: 6, data: { status: "busy" } },
+      ]);
+      expect(store.state.currentSession).toMatchObject({ id: child.id, status: child.status, mode: "agent", started: true });
+      expect(getSessionChatCache(scope)?.session).toMatchObject({ mode: "agent", started: true });
+      expect(appliedSessionRevision(store.actions, sessionId)).toBe(6);
+    } finally {
+      dropSessionChatCache(scope);
+    }
+  });
+
   it("holds a sent prompt through stale events and ends the hold at the first event after admission", async () => {
     const { store } = setup();
     store.actions.holdPromptSubmission(sessionId, "sent");

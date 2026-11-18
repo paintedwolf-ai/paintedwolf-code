@@ -115,6 +115,9 @@ func (l *promptContext) coordinatorToolsForTurn(
 	}
 	if profileID != prompts.CoordinatorProfileID {
 		plan := l.compileWorkerToolPlan(ctx, sess, all, activated)
+		if sess != nil && sess.Mode == api.SessionModeAsk {
+			plan = clampAskMode(plan, all)
+		}
 		filtered := make([]tools.ToolMeta, 0, len(all))
 		for _, meta := range all {
 			if plan.Immediate(meta.Name) {
@@ -138,6 +141,11 @@ func (l *promptContext) coordinatorToolsForTurn(
 		return nil, toolsurface.Plan{}, surfaceID, fmt.Errorf("compile coordinator tool surface %q: %w", surfaceID, err)
 	}
 	taskAllowlist := taskSpawnAllowlistForTurn(frame)
+	ask := sess != nil && sess.Mode == api.SessionModeAsk
+	if ask {
+		taskAllowlist = readOnlySpawnAllowlist(taskAllowlist)
+		plan = addAskWorkflowTools(plan, frame.RunContext, rootCount)
+	}
 	openWorld := plan.Immediate("request_tools")
 	if openWorld {
 		all = appendMissingMetas(all, l.liveMCPMetas())
@@ -145,6 +153,9 @@ func (l *promptContext) coordinatorToolsForTurn(
 	mcpPlan := l.mcpToolPlan(ctx, sess, all, activated)
 	plan = l.compileRuntimeToolPlan(plan, frame.RunContext, all, activated, mcpPlan, openWorld, sess)
 	plan = filterToolPlanForRootCount(plan, rootCount)
+	if ask {
+		plan = clampAskMode(plan, all)
+	}
 	return trimCoordinatorToolMetasForPlan(plan, all, taskAllowlist, phaseVerdictSchema(frame)), plan, surfaceID, nil
 }
 

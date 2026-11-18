@@ -11,6 +11,7 @@ import {
   armedWorkflowFromPickerRow,
   type ArmedWorkflow,
 } from "../../chat/workflow/workflow-arm.ts";
+import { sessionModeView } from "../../chat/session/session-mode-state.ts";
 import { clearPendingArmWorkflow } from "../../chat/workflow/pending-arm.ts";
 import { getLycaonClient } from "../../platform/connection/app-connection.ts";
 import {
@@ -135,6 +136,10 @@ export function createChatWorkflowState(
     });
 
   const armWorkflow = (wf: CatalogPickerRow) => {
+    if (wf.requires_agent && sessionModeView(deps.appStore, deps.sessionId()).workflowNeedsAgent) {
+      setError("This workflow requires Agent mode.");
+      return;
+    }
     const next = armedWorkflowFromPickerRow(wf);
     if (!next) {
       setError(`Workflow ${wf.id} has no slash trigger to arm.`);
@@ -165,6 +170,10 @@ export function createChatWorkflowState(
       );
       if (!entry) {
         setError(`Workflow ${proposal.workflow_id} is not in the catalog.`);
+        return;
+      }
+      if (entry.requires_agent && sessionModeView(deps.appStore, deps.sessionId()).workflowNeedsAgent) {
+        setError("This workflow requires Agent mode.");
         return;
       }
       setArmed(null);

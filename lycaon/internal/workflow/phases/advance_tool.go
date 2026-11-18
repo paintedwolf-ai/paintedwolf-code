@@ -98,8 +98,8 @@ func RegisterAdvanceTool(reg *tools.DefaultRegistry, runs *Service) error {
 			}
 		}
 		commandCtx := runstate.WithCommandOperation(runstate.WithExpectedRevision(ctx, active.Revision), tctx.Identity.ToolCallID)
-		run, err := runs.Advance(commandCtx, active.ID)
-		return marshalAdvanceToolOutcome(tctx.Effects.Out, run, err)
+		run, err := runs.Advance(withAskRound(commandCtx, tctx.Source.AskMode), active.ID)
+		return marshalAdvanceToolOutcome(tctx.Effects.Out, run, askWorkflowToolError(err, "workflow_advance"))
 	}); err != nil {
 		return err
 	}

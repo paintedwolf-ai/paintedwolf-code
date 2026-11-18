@@ -18,6 +18,7 @@ var (
 		"handoff_reserve",
 		"held_result",
 		"held_stop",
+		"inspect_source",
 		"message_coordinator",
 		"pack_board",
 		"parse_evaluation",

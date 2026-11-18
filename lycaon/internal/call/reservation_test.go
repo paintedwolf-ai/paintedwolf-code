@@ -22,8 +22,8 @@ func openCallTestDB(t *testing.T) *db.Store {
 	now := time.Now().UTC().Format(time.RFC3339Nano)
 	for _, sid := range []string{"sess-a", "sess-b"} {
 		_, err := sqlDB.ExecContext(t.Context(), `
-			INSERT INTO sessions (id, project_id, owner_person_id, workspace_root_id, posture, status, created_at, activity_at, updated_at)
-			VALUES (?, ?, (SELECT id FROM people WHERE role = 'owner'), ?, 'build', 'idle', ?, ?, ?)
+			INSERT INTO sessions (id, project_id, owner_person_id, workspace_root_id, posture, status, created_at, activity_at, updated_at, root_session_id, mode)
+			VALUES (?, ?, (SELECT id FROM people WHERE role = 'owner'), ?, 'build', 'idle', ?, ?, ?, ?1, 'agent')
 		`, sid, testdbseed.DefaultProjectID, rootID, now, now, now)
 		testutil.FailErr(t, "insert session", err)
 	}

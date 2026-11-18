@@ -32,6 +32,9 @@ describe("resumeChatSession hydration", () => {
     ];
     const client = withBootstrap({
       getSession: vi.fn().mockResolvedValue({
+        mode: "agent" as const,
+        started: true,
+        root_session_id: "sess-1",
         id: "sess-1",
       owner_person_id: "00000000-0000-4000-8000-000000000002",
       project_id: "00000000-0000-4000-8000-000000000001",
@@ -92,6 +95,9 @@ describe("resumeChatSession hydration", () => {
     const callOrder: string[] = [];
     const client = withBootstrap({
       getSession: vi.fn().mockResolvedValue({
+        mode: "agent" as const,
+        started: true,
+        root_session_id: "sess-1",
         id: "sess-1",
       owner_person_id: "00000000-0000-4000-8000-000000000002",
       project_id: "00000000-0000-4000-8000-000000000001",
@@ -154,6 +160,9 @@ describe("resumeChatSession hydration", () => {
     ];
     const client = withBootstrap({
       getSession: vi.fn().mockResolvedValue({
+        mode: "agent" as const,
+        started: true,
+        root_session_id: "sess-1",
         id: "sess-1",
       owner_person_id: "00000000-0000-4000-8000-000000000002",
       project_id: "00000000-0000-4000-8000-000000000001",
@@ -192,6 +201,9 @@ describe("resumeChatSession recents and cancellation", () => {
     const recents = stalledRecents();
     const client = withBootstrap({
       getSession: vi.fn().mockResolvedValue({
+        mode: "agent" as const,
+        started: true,
+        root_session_id: "sess-1",
         id: "sess-1",
         title: "Named chat",
         owner_person_id: "00000000-0000-4000-8000-000000000002",

@@ -82,6 +82,20 @@ describe("SessionWorkflowLauncher", () => {
     expect(onSelect).not.toHaveBeenCalled();
   });
 
+  it("marks workflows that need Agent while leaving read-only tiles available", () => {
+    const onSelect = vi.fn();
+    const tiles = sessionLauncherTiles(
+      catalog.map((workflow) => ({ ...workflow, requires_agent: workflow.id === "plan" })),
+      { hasRepo: true },
+    );
+    render(() => <SessionWorkflowLauncher tiles={tiles} busy={false} askMode onSelect={onSelect} />);
+    const blocked = screen.getByRole("button", { name: "Plan — requires Agent mode" }) as HTMLButtonElement;
+    expect(blocked.disabled).toBe(true);
+    expect(screen.getByText("Needs Agent")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Recon" }));
+    expect(onSelect).toHaveBeenCalledWith(expect.objectContaining({ id: "recon-pack" }));
+  });
+
   it("opens the full catalog from the More tile", () => {
     const onBrowseAll = vi.fn();
     render(() => (

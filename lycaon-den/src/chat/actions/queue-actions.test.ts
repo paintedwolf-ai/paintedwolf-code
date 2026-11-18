@@ -2,15 +2,20 @@ import { stubClient } from "../../test/client-fixture.ts";
 import { describe, expect, it, vi } from "vitest";
 import { LycaonApiError } from "../../api/http.ts";
 import type { QueueDraft, Session, SessionBootstrap } from "../../api/types.ts";
+import { setSessionModeUpgrade } from "../session/session-mode-state.ts";
 import { createAppStore } from "../../store/app-state.ts";
 import {
   cancelQueueSend,
+  fireQueueItemNow,
   refreshQueue,
   removeQueueItems,
   sendQueue,
 } from "./queue-actions.ts";
 
 const session = (id: string): Session => ({
+  mode: "agent" as const,
+  started: true,
+  root_session_id: id,
   id,
   owner_person_id: "00000000-0000-4000-8000-000000000002",
   project_id: "project-1",
@@ -39,6 +44,20 @@ const bootstrap = (queue: QueueDraft): SessionBootstrap => ({
 });
 
 describe("queue actions", () => {
+  it.each(["send", "fire_now"] as const)("carries a pending Agent upgrade with queue %s", async (op) => {
+    const store = createAppStore();
+    store.actions.setCurrentSession({ ...session("a"), mode: "ask" });
+    store.actions.setQueueDraft("a", store.state.sessionViewEpoch, draft(1));
+    setSessionModeUpgrade(store, "a", "sending");
+    const updateSessionQueue = vi.fn().mockResolvedValue(draft(2));
+    const client = stubClient({ updateSessionQueue });
+    if (op === "send") await sendQueue(store, client, "a");
+    else await fireQueueItemNow(store, client, "a", "item-1");
+    expect(updateSessionQueue).toHaveBeenCalledWith("a", expect.objectContaining({
+      mode: "agent", expected_revision: 1, op,
+    }));
+  });
+
   it("a stale bootstrap installs and reconciles against the newest remembered draft", () => {
     const store = createAppStore();
     store.actions.installSessionBootstrap(bootstrap({ ...draft(2), sending: true }));

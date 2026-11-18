@@ -6,6 +6,7 @@ native:
   meta:
     - summarize
     - survey_repo
+    - inspect_source
     - request_tools
     - verify
     - skills_read
@@ -45,6 +46,7 @@ grant_target_scope:
 # Codegen: ./task codegen:native-tool-contracts
 multi_root:
   path:
+    - inspect_source
     - code_rewrite
     - restore_version
     - scan_pack
@@ -439,6 +441,7 @@ approval_reversibility:
   workflow_transition: reversible
   workflow_user_feedback: reversible
   code_rewrite: reversible
+  inspect_source: reversible
   summarize: reversible
   survey_repo: reversible
 
@@ -522,6 +525,7 @@ owner:
   workflow_transition: workflows
   workflow_user_feedback: workflows
   code_rewrite: filesystem
+  inspect_source: source_ledger
   summarize: summarization
   survey_repo: survey
 
@@ -605,6 +609,7 @@ batch_policy:
   workflow_transition: serial
   workflow_user_feedback: serial
   code_rewrite: serial
+  inspect_source: shared
   summarize: same_tool
   survey_repo: shared
 
@@ -710,8 +715,52 @@ lifecycle:
   workflow_transition: db_transaction
   workflow_user_feedback: read_only
   code_rewrite: effect_attempt
+  inspect_source: read_only
   summarize: read_only
   survey_repo: read_only
+
+# Calls allowed in Ask. Worker and workflow calls check their resolved targets.
+ask_allowed:
+  - answer_decision
+  - ask_user
+  - complete_leg
+  - fanout_plan
+  - fetch_url
+  - held_result
+  - held_stop
+  - inspect_source
+  - instruct_worker
+  - message_coordinator
+  - pack_board
+  - parse_evaluation
+  - parse_extract_json
+  - parse_validate
+  - read_findings
+  - read_review
+  - recall
+  - record_finding
+  - request_decision
+  - request_tools
+  - scan_compare
+  - scan_list
+  - scan_query
+  - scan_summary
+  - secret_list
+  - skills_read
+  - source_history
+  - state_query
+  - summarize
+  - survey_repo
+  - task
+  - update_progress
+  - wait
+  - web_search
+  - worker_cancel
+  - worker_history
+  - workflow_advance
+  - workflow_catalog_summaries
+  - workflow_transition
+  - workflow_user_feedback
 
 chunkable_payload:
   - code_rewrite

@@ -22,6 +22,7 @@ import (
 	"github.com/lycaon/lycaon/internal/session/processcontrol"
 	"github.com/lycaon/lycaon/internal/session/profiles"
 	sessionscope "github.com/lycaon/lycaon/internal/session/scope"
+	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/session/toolcontext"
 	sessiontree "github.com/lycaon/lycaon/internal/session/tree"
 	"github.com/lycaon/lycaon/internal/session/turnguards"
@@ -37,33 +38,37 @@ import (
 
 type ContextRepository interface {
 	Get(ctx context.Context, id string) (*api.Session, error)
+	ResolveEffectiveMode(context.Context, string) (store.RootAuthority, error)
 }
 type Context struct {
-	PolicyIndex *policyindex.Service
-	Frame       inject.CoordinatorTurnFrameSource
-	Guards      *turnguards.Service
-	Limits      *sessionlimits.Service
-	Loading     *loading.Service
-	Pages       *pagesession.Registry
-	Policy      *policyfacts.Service
-	Processes   *processcontrol.Service
-	Profiles    *profiles.Service
-	Prompts     prompts.PromptTemplateEngine
-	Runtime     *coordinator.Runtime
-	Sessions    ContextRepository
-	ToolContext *toolcontext.Service
-	Tools       tools.ToolRegistry
-	WebResearch *webresearch.ConfigStore
-	WorkerState *workeroutcomes.State
-	Workspace   *sessionscope.Service
-	Workspaces  *workerworkspace.Service
+	ActivateAgentWorkflow func(context.Context, string) error
+	PolicyIndex           *policyindex.Service
+	Frame                 inject.CoordinatorTurnFrameSource
+	Guards                *turnguards.Service
+	Limits                *sessionlimits.Service
+	Loading               *loading.Service
+	Pages                 *pagesession.Registry
+	Policy                *policyfacts.Service
+	Processes             *processcontrol.Service
+	Profiles              *profiles.Service
+	Prompts               prompts.PromptTemplateEngine
+	Runtime               *coordinator.Runtime
+	Sessions              ContextRepository
+	ToolContext           *toolcontext.Service
+	Tools                 tools.ToolRegistry
+	WebResearch           *webresearch.ConfigStore
+	WorkerState           *workeroutcomes.State
+	Workspace             *sessionscope.Service
+	Workspaces            *workerworkspace.Service
 }
 
 func (m *Context) Build() promptloop.ContextDeps {
 	rt := m.Runtime
 	deps := promptloop.ContextDeps{
-		Limits: m.Limits.Effective,
-		Tools:  m.Tools,
+		Limits:                m.Limits.Effective,
+		Tools:                 m.Tools,
+		ResolveEffectiveMode:  m.Sessions.ResolveEffectiveMode,
+		ActivateAgentWorkflow: m.ActivateAgentWorkflow,
 		RootSessionID: func(ctx context.Context, sessionID string) string {
 			return sessiontree.RootID(ctx, m.Sessions, sessionID)
 		},

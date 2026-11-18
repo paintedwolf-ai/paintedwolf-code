@@ -21,6 +21,8 @@ export type SessionStatePatch = Pick<SessionEvent, "id" | "status"> &
       | "current_turn"
       | "ui"
       | "prompt_pending"
+      | "mode"
+      | "started"
     >
   >;
 
@@ -280,6 +282,7 @@ export type AppStoreActions = {
   setCoordinatorRunContext: (sessionId: string, epoch: number, ctx?: CoordinatorRunContext) => void;
   setSessionTitle: (sessionId: string, title: string) => void;
   markSessionArchived: (sessionId: string, archived: boolean) => void;
+  applySessionMode: (sessionId: string, projection: import("../chat/session/session-mode-projection.ts").SessionModeProjection) => void;
   mergeSession: (event: SessionStatePatch) => void;
   updateWorker: (event: WorkerEvent) => void;
   addCodeScan: (event: CodeScanEvent) => void;

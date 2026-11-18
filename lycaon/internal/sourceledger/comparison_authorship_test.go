@@ -8,7 +8,7 @@ import (
 
 func TestContributionLabelsAllowUnnamedChats(t *testing.T) {
 	store, ctx := openLedger(t)
-	_, err := store.sqlDB.ExecContext(ctx, `INSERT INTO sessions (id,project_id, owner_person_id,posture,created_at,activity_at,updated_at) VALUES ('unnamed','p1', (SELECT id FROM people WHERE role = 'owner'),'build','2026-09-13T00:00:00Z','2026-09-13T00:00:00Z','2026-09-13T00:00:00Z')`)
+	_, err := store.sqlDB.ExecContext(ctx, `INSERT INTO sessions (id,project_id, owner_person_id,posture,created_at,activity_at,updated_at, root_session_id, mode) VALUES ('unnamed','p1', (SELECT id FROM people WHERE role = 'owner'),'build','2026-09-13T00:00:00Z','2026-09-13T00:00:00Z','2026-09-13T00:00:00Z', 'unnamed', 'agent')`)
 	testutil.FailErr(t, "create unnamed chat", err)
 	labels, err := store.Comparisons.contributionLabels(ctx, []TextContribution{{SessionID: "unnamed"}})
 	testutil.FailErr(t, "resolve unnamed chat", err)

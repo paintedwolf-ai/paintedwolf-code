@@ -4,6 +4,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/lycaon/lycaon/internal/session/store"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 	"github.com/lycaon/lycaon/internal/workflow/runstate"
 	"github.com/lycaon/lycaon/pkg/api"
@@ -32,6 +33,7 @@ type TeardownRepository interface {
 }
 
 type Sessions interface {
+	ResolveEffectiveMode(context.Context, string) (store.RootAuthority, error)
 	Get(context.Context, string) (*api.Session, error)
 	LatestTurnProgress(context.Context, string) (time.Time, error)
 }

@@ -4,22 +4,39 @@
 INSERT INTO sessions (
     id, project_id, owner_person_id, workspace_root_id, posture, workflow_id, workflow_version,
     agent_type, provider_id, model, parent_session_id, compaction_generation,
-    title, status, created_at, activity_at, updated_at
-) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?);
+    title, status, created_at, activity_at, updated_at, root_session_id, mode
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?, ?);
 
 -- name: GetSession :one
-SELECT id, title, project_id, owner_person_id, workspace_root_id, posture, workflow_id, workflow_version,
-       agent_type, provider_id, model, parent_session_id, compaction_generation, status, created_at, activity_at,
-       updated_at, archived_at, pin_rank, seen_at
-FROM sessions
-WHERE id = ?;
+SELECT s.id, s.title, s.project_id, s.owner_person_id, s.workspace_root_id, s.posture,
+       s.workflow_id, s.workflow_version, s.agent_type, s.provider_id, s.model, s.parent_session_id,
+       s.compaction_generation, s.status, s.created_at, s.activity_at, s.updated_at, s.archived_at,
+       s.pin_rank, s.seen_at, s.root_session_id,
+       CAST(COALESCE(root.mode, '') AS TEXT) AS effective_mode,
+       CAST(COALESCE(root.started, 0) AS INTEGER) AS effective_started
+FROM sessions s
+JOIN session_mode_authority root ON root.session_id = s.id
+WHERE s.id = ?;
 
 -- name: ListSessions :many
-SELECT id, title, project_id, owner_person_id, workspace_root_id, posture, workflow_id, workflow_version,
-       agent_type, provider_id, model, parent_session_id, compaction_generation, status, created_at, activity_at,
-       updated_at, archived_at, pin_rank, seen_at
-FROM sessions
-ORDER BY created_at;
+SELECT s.id, s.title, s.project_id, s.owner_person_id, s.workspace_root_id, s.posture,
+       s.workflow_id, s.workflow_version, s.agent_type, s.provider_id, s.model, s.parent_session_id,
+       s.compaction_generation, s.status, s.created_at, s.activity_at, s.updated_at, s.archived_at,
+       s.pin_rank, s.seen_at, s.root_session_id,
+       CAST(COALESCE(root.mode, '') AS TEXT) AS effective_mode,
+       CAST(COALESCE(root.started, 0) AS INTEGER) AS effective_started
+FROM sessions s
+JOIN session_mode_authority root ON root.session_id = s.id
+ORDER BY s.created_at;
+
+-- name: GetSessionModeAuthority :one
+SELECT root_session_id, mode, started
+FROM session_mode_authority WHERE session_id = ? AND mode IS NOT NULL;
+
+-- name: SetRootSessionMode :exec
+UPDATE sessions
+SET mode = sqlc.arg(mode), started = sqlc.arg(started), updated_at = sqlc.arg(updated_at)
+WHERE id = sqlc.arg(id) AND parent_session_id IS NULL;
 
 -- Startup recovery reads ids without hydrating session projections. Each id
 -- leaves the filter once settled, so the order only needs to be stable.

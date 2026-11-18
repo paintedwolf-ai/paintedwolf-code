@@ -153,15 +153,15 @@ func TestSQLDeleteRemovesSessionTreeAndPreservesReviewHistory(t *testing.T) {
 		testutil.FailErr(t, label, seedErr)
 	}
 	seed("sessions", `
-		INSERT INTO sessions (id, project_id, owner_person_id, workspace_root_id, posture, status, created_at, activity_at, updated_at)
+		INSERT INTO sessions (id, project_id, owner_person_id, workspace_root_id, posture, status, created_at, activity_at, updated_at, root_session_id, mode)
 		VALUES
-			('parent', ?, (SELECT id FROM people WHERE role = 'owner'), ?, 'build', 'idle', ?, ?, ?),
-			('survivor', ?, (SELECT id FROM people WHERE role = 'owner'), ?, 'build', 'idle', ?, ?, ?)
+			('parent', ?, (SELECT id FROM people WHERE role = 'owner'), ?, 'build', 'idle', ?, ?, ?, 'parent', 'agent'),
+			('survivor', ?, (SELECT id FROM people WHERE role = 'owner'), ?, 'build', 'idle', ?, ?, ?, 'survivor', 'agent')
 	`, testdbseed.DefaultProjectID, rootID, now, now, now,
 		testdbseed.DefaultProjectID, rootID, now, now, now)
 	seed("child session", `
-		INSERT INTO sessions (id, project_id, owner_person_id, workspace_root_id, posture, status, parent_session_id, created_at, activity_at, updated_at)
-		VALUES ('child', ?, (SELECT id FROM people WHERE role = 'owner'), ?, 'build', 'idle', 'parent', ?, ?, ?)
+		INSERT INTO sessions (id, project_id, owner_person_id, workspace_root_id, posture, status, parent_session_id, created_at, activity_at, updated_at, root_session_id, mode)
+		VALUES ('child', ?, (SELECT id FROM people WHERE role = 'owner'), ?, 'build', 'idle', 'parent', ?, ?, ?, 'parent', NULL)
 	`, testdbseed.DefaultProjectID, rootID, now, now, now)
 	seed("child session entry", `
 		INSERT INTO session_entries (id, session_id, ord, resource_kind, resource_id, created_at)
@@ -266,13 +266,13 @@ func TestSQLDeleteRevokesBlueprintGrantsSealedByTheSessionTree(t *testing.T) {
 		testutil.FailErr(t, label, seedErr)
 	}
 	seed("sessions", `
-		INSERT INTO sessions (id, project_id, owner_person_id, workspace_root_id, posture, status, created_at, activity_at, updated_at)
-		VALUES ('parent', ?, (SELECT id FROM people WHERE role = 'owner'), ?, 'build', 'idle', ?, ?, ?), ('survivor', ?, (SELECT id FROM people WHERE role = 'owner'), ?, 'build', 'idle', ?, ?, ?)
+		INSERT INTO sessions (id, project_id, owner_person_id, workspace_root_id, posture, status, created_at, activity_at, updated_at, root_session_id, mode)
+		VALUES ('parent', ?, (SELECT id FROM people WHERE role = 'owner'), ?, 'build', 'idle', ?, ?, ?, 'parent', 'agent'), ('survivor', ?, (SELECT id FROM people WHERE role = 'owner'), ?, 'build', 'idle', ?, ?, ?, 'survivor', 'agent')
 	`, testdbseed.DefaultProjectID, rootID, now, now, now,
 		testdbseed.DefaultProjectID, rootID, now, now, now)
 	seed("child session", `
-		INSERT INTO sessions (id, project_id, owner_person_id, workspace_root_id, posture, status, parent_session_id, created_at, activity_at, updated_at)
-		VALUES ('child', ?, (SELECT id FROM people WHERE role = 'owner'), ?, 'build', 'idle', 'parent', ?, ?, ?)
+		INSERT INTO sessions (id, project_id, owner_person_id, workspace_root_id, posture, status, parent_session_id, created_at, activity_at, updated_at, root_session_id, mode)
+		VALUES ('child', ?, (SELECT id FROM people WHERE role = 'owner'), ?, 'build', 'idle', 'parent', ?, ?, ?, 'parent', NULL)
 	`, testdbseed.DefaultProjectID, rootID, now, now, now)
 	seed("child run", `
 		INSERT INTO workflow_runs (id, session_id, project_id, workflow_id, workflow_version, status, current_phase, created_at, updated_at)

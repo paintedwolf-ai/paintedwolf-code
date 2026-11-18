@@ -40,8 +40,8 @@ func TestSessionOwnershipIsSharedByChildrenAndImmutable(t *testing.T) {
 	testdbseed.InsertProject(t, sqlDB, testdbseed.DefaultProjectID)
 	testdbseed.InsertSession(t, sqlDB, "parent", testdbseed.DefaultProjectID)
 	_, err = sqlDB.ExecContext(t.Context(), `
-		INSERT INTO sessions (id, project_id, owner_person_id, posture, status, parent_session_id, created_at, activity_at, updated_at)
-		VALUES ('child', ?, 'someone-else', 'build', 'idle', 'parent', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z')`,
+		INSERT INTO sessions (id, project_id, owner_person_id, posture, status, parent_session_id, created_at, activity_at, updated_at, root_session_id, mode)
+		VALUES ('child', ?, 'someone-else', 'build', 'idle', 'parent', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z', 'parent', NULL)`,
 		testdbseed.DefaultProjectID)
 	assertConstraintContains(t, err, "a child session shares its parent's owner")
 	_, err = sqlDB.ExecContext(t.Context(), `UPDATE sessions SET owner_person_id = owner_person_id WHERE id = 'parent'`)

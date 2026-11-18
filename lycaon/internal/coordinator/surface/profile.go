@@ -237,6 +237,9 @@ func ResolveTurnProfile(
 		panic(fmt.Sprintf("coordinator flow evaluate: %v", err))
 	}
 	posture := sessionPosture(sess)
+	if facts.Mode == api.SessionModeAsk {
+		return ResolveTurnProfileForSurface(ev.SurfaceID, runCtx, sess)
+	}
 	overlay := ResolveRunStateOverlay(runCtx)
 	base, err := resolveBaseModeRef(ev.SurfaceID, runCtx)
 	if err != nil {
@@ -260,6 +263,13 @@ func ResolveTurnProfileForSurface(
 	sess *api.Session,
 ) TurnProfile {
 	posture := sessionPosture(sess)
+	if sess != nil && sess.Mode == api.SessionModeAsk && surfaceID == "observe_investigate" {
+		modeRef, err := CoordinatorSurfaceModeRef(surfaceID)
+		if err != nil {
+			panic(fmt.Sprintf("coordinator surface mode: %v", err))
+		}
+		return TurnProfile{SurfaceID: surfaceID, SurfaceTemplate: "agents/coordinator-surface-ask.md", ModeRefs: []string{modeRef}}
+	}
 	overlay := ResolveRunStateOverlay(runCtx)
 	base, err := resolveBaseModeRef(surfaceID, runCtx)
 	if err != nil {

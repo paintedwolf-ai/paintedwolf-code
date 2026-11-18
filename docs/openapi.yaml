@@ -20466,6 +20466,10 @@ components:
         model:
           - provider_id
       properties:
+        mode:
+          x-go-pointer: true
+          $ref: '#/components/schemas/SessionMode'
+          description: Initial session mode. Defaults to Agent.
         project_id:
           type: string
           format: uuid
@@ -20705,6 +20709,10 @@ components:
         - text
       additionalProperties: false
       properties:
+        mode:
+          x-go-pointer: true
+          $ref: '#/components/schemas/SessionMode'
+          description: Bind or upgrade the session mode at admission.
         operation_id:
           type: string
           format: uuid
@@ -20950,6 +20958,8 @@ components:
         - host_error
         - idle_disposition
         - prompt_pending
+        - mode
+        - started
       type: object
       required:
         - id
@@ -20958,6 +20968,12 @@ components:
         - status
       additionalProperties: false
       properties:
+        mode:
+          $ref: '#/components/schemas/SessionMode'
+        started:
+          x-go-pointer: true
+          type: boolean
+          description: Root chat started state. Omitted when the event carries no update.
         id:
           type: string
           format: uuid
@@ -21004,6 +21020,9 @@ components:
         - workspace_root_id
         - workspace_path
         - posture
+        - mode
+        - started
+        - root_session_id
         - agent_type
         - provider_id
         - model
@@ -21026,12 +21045,27 @@ components:
         - project_id
         - owner_person_id
         - posture
+        - mode
+        - started
+        - root_session_id
         - status
         - created_at
         - activity_at
         - updated_at
       additionalProperties: false
       properties:
+        mode:
+          $ref: '#/components/schemas/SessionMode'
+          description: Effective mode of the root chat. Read-only.
+        started:
+          type: boolean
+          readOnly: true
+          description: True once the root chat has admitted a prompt or workflow. Rewind preserves this fact.
+        root_session_id:
+          type: string
+          format: uuid
+          readOnly: true
+          description: The root chat that owns the mode and started state.
         id:
           type: string
           format: uuid
@@ -21355,6 +21389,12 @@ components:
         - build
         - orchestrate
         - vet
+    SessionMode:
+      type: string
+      description: Capability ceiling for a root chat and its workers.
+      enum:
+        - agent
+        - ask
     SessionStatus:
       type: string
       description: Session lifecycle state.
@@ -21385,6 +21425,8 @@ components:
         - project_id
         - owner_person_id
         - posture
+        - mode
+        - started
         - status
         - message_count
         - created_at
@@ -21392,6 +21434,13 @@ components:
       additionalProperties: false
       description: Metadata-only chat list row; worker child sessions are never listed
       properties:
+        mode:
+          $ref: '#/components/schemas/SessionMode'
+          description: Effective mode of the root chat. Read-only.
+        started:
+          type: boolean
+          readOnly: true
+          description: True once the root chat has admitted a prompt or workflow. Rewind preserves this fact.
         id:
           type: string
           format: uuid
@@ -23153,6 +23202,10 @@ components:
       required:
         - expected_revision
       properties:
+        mode:
+          x-go-pointer: true
+          $ref: '#/components/schemas/SessionMode'
+          description: Upgrade the session to Agent when sending queued prompts.
         op:
           type: string
           enum:
@@ -27005,6 +27058,10 @@ components:
         - workflow_id
         - workflow_version
       properties:
+        mode:
+          x-go-pointer: true
+          $ref: '#/components/schemas/SessionMode'
+          description: Bind or upgrade the session mode at admission.
         operation_id:
           type: string
           format: uuid
@@ -27221,6 +27278,9 @@ components:
         - name
       additionalProperties: false
       properties:
+        requires_agent:
+          type: boolean
+          description: The workflow entry phase requires Agent mode.
         id:
           type: string
           pattern: ^[a-z0-9_-]+$
@@ -27559,6 +27619,9 @@ components:
         - worker_owner_unsettled
         - worker_workspace_unavailable
         - session_archived
+        - session_mode_locked
+        - session_mode_unavailable
+        - session_ask_mode_workflow_requires_agent
         - session_not_found
         - session_not_pinned
         - session_preparation_failed
@@ -28047,8 +28110,12 @@ components:
       maxProperties: 1
       additionalProperties: false
       description: |
-        One session lifecycle command. Exactly one of title, archived, pinned, or pin_position is required; compound commands are rejected without changing the session.
+        One session lifecycle command. Exactly one of title, archived, pinned, pin_position, or mode is required; compound commands are rejected without changing the session.
       properties:
+        mode:
+          x-go-pointer: true
+          $ref: '#/components/schemas/SessionMode'
+          description: Changes the root chat mode. A started chat can only move from Ask to Agent.
         title:
           x-go-pointer: true
           type: string

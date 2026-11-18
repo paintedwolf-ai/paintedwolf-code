@@ -148,6 +148,7 @@ func (m *Host) SetWorkflowDomains(v *WorkflowDomains) {
 
 	m.Coordinator.Control.Workflow = nil
 	m.Coordinator.Control.WorkerCycles = nil
+	m.Coordinator.Context.ActivateAgentWorkflow = nil
 	m.Coordinator.Projection.Workflow = nil
 	m.Coordinator.Projection.Reviews = nil
 	m.Coordinator.Assembly.Workflow = promptsource.AssemblyWorkflow{}
@@ -155,6 +156,14 @@ func (m *Host) SetWorkflowDomains(v *WorkflowDomains) {
 	if v != nil {
 		m.Coordinator.Control.Workflow = v.Policy
 		m.Coordinator.Control.WorkerCycles = v.Fanout
+		if ambient, ok := v.Ambient.(interface {
+			EnsureSessionWorkflow(context.Context, string) (*api.WorkflowRun, error)
+		}); ok {
+			m.Coordinator.Context.ActivateAgentWorkflow = func(ctx context.Context, id string) error {
+				_, err := ambient.EnsureSessionWorkflow(ctx, id)
+				return err
+			}
+		}
 		m.Coordinator.Projection.Workflow = v.Asks
 		m.Coordinator.Projection.Reviews = v.Reviews
 		var manifests assembly.WorkflowManifestSource

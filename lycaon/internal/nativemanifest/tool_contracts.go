@@ -2,6 +2,7 @@ package nativemanifest
 
 import (
 	"fmt"
+	"slices"
 	"sort"
 	"strings"
 )
@@ -114,9 +115,33 @@ func (c Config) ValidateToolContracts() error {
 	if err := c.ValidateFamilies(); err != nil {
 		faults = append(faults, err.Error())
 	}
+	if err := c.validateAskAllowed(); err != nil {
+		faults = append(faults, err.Error())
+	}
 	if len(faults) > 0 {
 		sort.Strings(faults)
 		return fmt.Errorf("invalid tool contracts: %s", strings.Join(faults, "; "))
+	}
+	return nil
+}
+
+func (c Config) validateAskAllowed() error {
+	if err := validateToolList("ask_allowed", c.AskAllowed, func(tool string) bool {
+		_, known := c.Reversibility(tool)
+		return known && !c.HasOperation(tool)
+	}); err != nil {
+		return err
+	}
+	for _, tool := range c.AskAllowed {
+		if c.Lifecycle[tool] == LifecycleJournaledMutation || slices.Contains(c.SpawnsProcess, tool) {
+			return fmt.Errorf("ask_allowed: %s has a protected effect", tool)
+		}
+		for _, capability := range c.ExecutionCapabilities[tool] {
+			switch capability {
+			case "file_change", "write_root", "process_control", "credential_store", "host_execution":
+				return fmt.Errorf("ask_allowed: %s has protected capability %s", tool, capability)
+			}
+		}
 	}
 	return nil
 }
@@ -153,6 +178,7 @@ func (c Config) ToolContractRows() []ToolContractRow {
 			BatchSerialWhenArg:    strings.TrimSpace(c.BatchSerialWhenArg[tool]),
 			TurnOrder:             c.TurnOrder[tool],
 			Lifecycle:             c.Lifecycle[tool],
+			AskAllowed:            slices.Contains(c.AskAllowed, tool),
 			Capabilities:          append([]string(nil), c.ExecutionCapabilities[tool]...),
 
 			ChunkablePayload:  chunkable[tool],
@@ -183,6 +209,7 @@ type ToolContractRow struct {
 	BatchSerialWhenArg string
 	TurnOrder          string
 	Lifecycle          string
+	AskAllowed         bool
 	Capabilities       []string
 	// ChunkablePayload marks a tool whose arguments can be split across calls.
 	ChunkablePayload bool

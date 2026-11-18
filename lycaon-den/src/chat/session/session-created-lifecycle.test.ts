@@ -11,6 +11,9 @@ describe("session-lifecycle", () => {
   it("refreshCreatedSessionBoard refreshes project and board without repeating bootstrap workflow reads", async () => {
     const appStore = createAppStore();
     appStore.actions.setCurrentSession({
+      mode: "agent" as const,
+      started: true,
+      root_session_id: "sess-new",
       id: "sess-new", owner_person_id: "00000000-0000-4000-8000-000000000002", project_id: "proj-1", workspace_path: "/tmp/p",
       posture: "build", status: "idle", created_at: "t", activity_at: "t", updated_at: "t",
     });

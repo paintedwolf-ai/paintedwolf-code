@@ -21,8 +21,8 @@ func TestRunRetentionPreservesProjectAndSessionHistory(t *testing.T) {
 	insertTestSession(t, database, "parent")
 	old := timelayout.Format(time.Now().UTC().Add(-400 * 24 * time.Hour))
 	_, err := database.ExecContext(ctx, `
-INSERT INTO sessions(id, project_id, owner_person_id, posture, status, parent_session_id, created_at, activity_at, updated_at)
-VALUES ('child', ?, (SELECT id FROM people WHERE role = 'owner'), 'build', 'idle', 'parent', ?, ?, ?);
+INSERT INTO sessions(id, project_id, owner_person_id, posture, status, parent_session_id, created_at, activity_at, updated_at, root_session_id, mode)
+VALUES ('child', ?, (SELECT id FROM people WHERE role = 'owner'), 'build', 'idle', 'parent', ?, ?, ?, 'parent', NULL);
 INSERT INTO worker_jobs(id, project_id, workspace_path, agent_type, status, prompt, brief, child_session_id, created_at, completed_at)
 VALUES ('job', ?, '/tmp/project', 'implementer', 'complete', 'fixture', 'fixture', 'child', ?, ?);
 INSERT INTO code_scans(id, canonical_path, categories_json, status, created_at, completed_at, trigger, reuse_key)

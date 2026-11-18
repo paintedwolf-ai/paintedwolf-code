@@ -16,7 +16,7 @@ func (m *SessionPolicy) ActiveCloseoutGateState(ctx context.Context, sessionID s
 	if m == nil || m.Runs == nil {
 		return state, fmt.Errorf("workflow closeout state unavailable")
 	}
-	active, err := m.Runs.ActiveBySession(ctx, sessionID)
+	active, err := m.activeRunForPolicy(ctx, sessionID)
 	if err != nil || active == nil || active.Status != api.WorkflowRunStatusRunning {
 		return state, err
 	}

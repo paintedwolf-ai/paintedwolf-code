@@ -514,11 +514,15 @@ func (q *Queries) GetRootSessionID(ctx context.Context, id string) (string, erro
 }
 
 const getSession = `-- name: GetSession :one
-SELECT id, title, project_id, owner_person_id, workspace_root_id, posture, workflow_id, workflow_version,
-       agent_type, provider_id, model, parent_session_id, compaction_generation, status, created_at, activity_at,
-       updated_at, archived_at, pin_rank, seen_at
-FROM sessions
-WHERE id = ?
+SELECT s.id, s.title, s.project_id, s.owner_person_id, s.workspace_root_id, s.posture,
+       s.workflow_id, s.workflow_version, s.agent_type, s.provider_id, s.model, s.parent_session_id,
+       s.compaction_generation, s.status, s.created_at, s.activity_at, s.updated_at, s.archived_at,
+       s.pin_rank, s.seen_at, s.root_session_id,
+       CAST(COALESCE(root.mode, '') AS TEXT) AS effective_mode,
+       CAST(COALESCE(root.started, 0) AS INTEGER) AS effective_started
+FROM sessions s
+JOIN session_mode_authority root ON root.session_id = s.id
+WHERE s.id = ?
 `
 
 type GetSessionRow struct {
@@ -542,6 +546,9 @@ type GetSessionRow struct {
 	ArchivedAt           sql.NullString `json:"archived_at"`
 	PinRank              sql.NullInt64  `json:"pin_rank"`
 	SeenAt               sql.NullString `json:"seen_at"`
+	RootSessionID        string         `json:"root_session_id"`
+	EffectiveMode        string         `json:"effective_mode"`
+	EffectiveStarted     int64          `json:"effective_started"`
 }
 
 func (q *Queries) GetSession(ctx context.Context, id string) (GetSessionRow, error) {
@@ -568,6 +575,9 @@ func (q *Queries) GetSession(ctx context.Context, id string) (GetSessionRow, err
 		&i.ArchivedAt,
 		&i.PinRank,
 		&i.SeenAt,
+		&i.RootSessionID,
+		&i.EffectiveMode,
+		&i.EffectiveStarted,
 	)
 	return i, err
 }
@@ -605,6 +615,24 @@ func (q *Queries) GetSessionMessageOrdBounds(ctx context.Context, sessionID stri
 	row := q.db.QueryRowContext(ctx, getSessionMessageOrdBounds, sessionID)
 	var i GetSessionMessageOrdBoundsRow
 	err := row.Scan(&i.MinOrd, &i.MaxOrd)
+	return i, err
+}
+
+const getSessionModeAuthority = `-- name: GetSessionModeAuthority :one
+SELECT root_session_id, mode, started
+FROM session_mode_authority WHERE session_id = ? AND mode IS NOT NULL
+`
+
+type GetSessionModeAuthorityRow struct {
+	RootSessionID sql.NullString `json:"root_session_id"`
+	Mode          sql.NullString `json:"mode"`
+	Started       sql.NullInt64  `json:"started"`
+}
+
+func (q *Queries) GetSessionModeAuthority(ctx context.Context, sessionID string) (GetSessionModeAuthorityRow, error) {
+	row := q.db.QueryRowContext(ctx, getSessionModeAuthority, sessionID)
+	var i GetSessionModeAuthorityRow
+	err := row.Scan(&i.RootSessionID, &i.Mode, &i.Started)
 	return i, err
 }
 
@@ -946,8 +974,8 @@ const insertSession = `-- name: InsertSession :exec
 INSERT INTO sessions (
     id, project_id, owner_person_id, workspace_root_id, posture, workflow_id, workflow_version,
     agent_type, provider_id, model, parent_session_id, compaction_generation,
-    title, status, created_at, activity_at, updated_at
-) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?)
+    title, status, created_at, activity_at, updated_at, root_session_id, mode
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?, ?)
 `
 
 type InsertSessionParams struct {
@@ -967,6 +995,8 @@ type InsertSessionParams struct {
 	CreatedAt       string         `json:"created_at"`
 	ActivityAt      string         `json:"activity_at"`
 	UpdatedAt       string         `json:"updated_at"`
+	RootSessionID   string         `json:"root_session_id"`
+	Mode            sql.NullString `json:"mode"`
 }
 
 // Sessions, their transcript messages, and the compaction view sidecar.
@@ -988,6 +1018,8 @@ func (q *Queries) InsertSession(ctx context.Context, arg InsertSessionParams) er
 		arg.CreatedAt,
 		arg.ActivityAt,
 		arg.UpdatedAt,
+		arg.RootSessionID,
+		arg.Mode,
 	)
 	return err
 }
@@ -2376,11 +2408,15 @@ func (q *Queries) ListSessionTreeSpillRefs(ctx context.Context, rootSessionID st
 }
 
 const listSessions = `-- name: ListSessions :many
-SELECT id, title, project_id, owner_person_id, workspace_root_id, posture, workflow_id, workflow_version,
-       agent_type, provider_id, model, parent_session_id, compaction_generation, status, created_at, activity_at,
-       updated_at, archived_at, pin_rank, seen_at
-FROM sessions
-ORDER BY created_at
+SELECT s.id, s.title, s.project_id, s.owner_person_id, s.workspace_root_id, s.posture,
+       s.workflow_id, s.workflow_version, s.agent_type, s.provider_id, s.model, s.parent_session_id,
+       s.compaction_generation, s.status, s.created_at, s.activity_at, s.updated_at, s.archived_at,
+       s.pin_rank, s.seen_at, s.root_session_id,
+       CAST(COALESCE(root.mode, '') AS TEXT) AS effective_mode,
+       CAST(COALESCE(root.started, 0) AS INTEGER) AS effective_started
+FROM sessions s
+JOIN session_mode_authority root ON root.session_id = s.id
+ORDER BY s.created_at
 `
 
 type ListSessionsRow struct {
@@ -2404,6 +2440,9 @@ type ListSessionsRow struct {
 	ArchivedAt           sql.NullString `json:"archived_at"`
 	PinRank              sql.NullInt64  `json:"pin_rank"`
 	SeenAt               sql.NullString `json:"seen_at"`
+	RootSessionID        string         `json:"root_session_id"`
+	EffectiveMode        string         `json:"effective_mode"`
+	EffectiveStarted     int64          `json:"effective_started"`
 }
 
 func (q *Queries) ListSessions(ctx context.Context) ([]ListSessionsRow, error) {
@@ -2436,6 +2475,9 @@ func (q *Queries) ListSessions(ctx context.Context) ([]ListSessionsRow, error) {
 			&i.ArchivedAt,
 			&i.PinRank,
 			&i.SeenAt,
+			&i.RootSessionID,
+			&i.EffectiveMode,
+			&i.EffectiveStarted,
 		); err != nil {
 			return nil, err
 		}
@@ -3236,6 +3278,29 @@ func (q *Queries) SetRewindOperationPhase(ctx context.Context, arg SetRewindOper
 		return 0, err
 	}
 	return result.RowsAffected()
+}
+
+const setRootSessionMode = `-- name: SetRootSessionMode :exec
+UPDATE sessions
+SET mode = ?1, started = ?2, updated_at = ?3
+WHERE id = ?4 AND parent_session_id IS NULL
+`
+
+type SetRootSessionModeParams struct {
+	Mode      sql.NullString `json:"mode"`
+	Started   int64          `json:"started"`
+	UpdatedAt string         `json:"updated_at"`
+	ID        string         `json:"id"`
+}
+
+func (q *Queries) SetRootSessionMode(ctx context.Context, arg SetRootSessionModeParams) error {
+	_, err := q.db.ExecContext(ctx, setRootSessionMode,
+		arg.Mode,
+		arg.Started,
+		arg.UpdatedAt,
+		arg.ID,
+	)
+	return err
 }
 
 const setSessionPinRank = `-- name: SetSessionPinRank :exec

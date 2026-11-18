@@ -26,8 +26,8 @@ func TestSearchMessageFTSTriggerOnInsert(t *testing.T) {
 	`)
 	testutil.FailErr(t, "insert project", err)
 	_, err = sqlDB.ExecContext(ctx, `
-		INSERT INTO sessions (id, project_id, owner_person_id, posture, status, created_at, activity_at, updated_at)
-		VALUES ('s1', 'p1', (SELECT id FROM people WHERE role = 'owner'), 'build', 'idle', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z')
+		INSERT INTO sessions (id, project_id, owner_person_id, posture, status, created_at, activity_at, updated_at, root_session_id, mode)
+		VALUES ('s1', 'p1', (SELECT id FROM people WHERE role = 'owner'), 'build', 'idle', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z', 's1', 'agent')
 	`)
 	testutil.FailErr(t, "insert session", err)
 	testdbseed.InsertSessionEntry(t, sqlDB, "e1", "s1", "utterance", "m1", 1)
@@ -129,8 +129,8 @@ func TestSearchSyncMessageWriteThroughUsesTriggers(t *testing.T) {
 	`)
 	testutil.FailErr(t, "insert project", err)
 	_, err = sqlDB.ExecContext(ctx, `
-		INSERT INTO sessions (id, project_id, owner_person_id, posture, status, created_at, activity_at, updated_at)
-		VALUES ('s1', 'p1', (SELECT id FROM people WHERE role = 'owner'), 'build', 'idle', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z')
+		INSERT INTO sessions (id, project_id, owner_person_id, posture, status, created_at, activity_at, updated_at, root_session_id, mode)
+		VALUES ('s1', 'p1', (SELECT id FROM people WHERE role = 'owner'), 'build', 'idle', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z', 's1', 'agent')
 	`)
 	testutil.FailErr(t, "insert session", err)
 

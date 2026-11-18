@@ -9,7 +9,7 @@ import { emptyProjects } from "../../test/projects-fixture.ts";
 describe("applySessionTranscriptSnapshot", () => {
   it("sets workflow runs before messages so transcript render is safe", async () => {
     const appStore = createAppStore();
-    appStore.actions.setCurrentSession({ id: "sess-1", owner_person_id: "00000000-0000-4000-8000-000000000002", project_id: "proj-1", posture: "build", status: "idle", created_at: "t", activity_at: "t", updated_at: "t" });
+    appStore.actions.setCurrentSession({ mode: "agent" as const, started: true, root_session_id: "sess-1", id: "sess-1", owner_person_id: "00000000-0000-4000-8000-000000000002", project_id: "proj-1", posture: "build", status: "idle", created_at: "t", activity_at: "t", updated_at: "t" });
     const ambientRun = {
       id: "run-1",
       session_id: "sess-1",
@@ -79,7 +79,7 @@ describe("applySessionTranscriptSnapshot", () => {
 
   it("prefers the fresh workflow fetch over the older transcript page on id collision", async () => {
     const appStore = createAppStore();
-    appStore.actions.setCurrentSession({ id: "sess-1", owner_person_id: "00000000-0000-4000-8000-000000000002", project_id: "proj-1", posture: "build", status: "idle", created_at: "t", activity_at: "t", updated_at: "t" });
+    appStore.actions.setCurrentSession({ mode: "agent" as const, started: true, root_session_id: "sess-1", id: "sess-1", owner_person_id: "00000000-0000-4000-8000-000000000002", project_id: "proj-1", posture: "build", status: "idle", created_at: "t", activity_at: "t", updated_at: "t" });
     const staleRun = {
       id: "run-1",
       session_id: "sess-1",
@@ -121,7 +121,7 @@ describe("applySessionTranscriptSnapshot", () => {
 
   it("seeds worker roster rows from task tool results in the snapshot", async () => {
     const appStore = createAppStore();
-    appStore.actions.setCurrentSession({ id: "sess-1", owner_person_id: "00000000-0000-4000-8000-000000000002", project_id: "proj-1", posture: "build", status: "idle", created_at: "t", activity_at: "t", updated_at: "t" });
+    appStore.actions.setCurrentSession({ mode: "agent" as const, started: true, root_session_id: "sess-1", id: "sess-1", owner_person_id: "00000000-0000-4000-8000-000000000002", project_id: "proj-1", posture: "build", status: "idle", created_at: "t", activity_at: "t", updated_at: "t" });
     const ambientRun = {
       id: "run-1",
       session_id: "sess-1",

@@ -4,6 +4,7 @@ import (
 	"errors"
 	"net/http"
 
+	"github.com/lycaon/lycaon/internal/api/requestscope"
 	"github.com/lycaon/lycaon/internal/session/lifecycle"
 	"github.com/lycaon/lycaon/internal/session/store"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
@@ -19,6 +20,7 @@ type workflowFailure struct {
 }
 
 var workflowFailures = []workflowFailure{
+	{runstate.ErrAskWorkflowRequiresAgent, wire.ApiErrorCodeSessionAskModeWorkflowRequiresAgent, "Switch to Agent mode to use this workflow phase."},
 	{store.ErrSessionNotFound, wire.ApiErrorCodeSessionNotFound, "chat not found"},
 	{runstate.ErrNotFound, wire.ApiErrorCodeWorkflowRunNotFound, "workflow run not found"},
 	{workflowdef.ErrUnknownWorkflow, wire.ApiErrorCodeWorkflowNotFound, "workflow not found"},
@@ -55,6 +57,9 @@ func (s *RunControl) writeRunLookupError(w http.ResponseWriter, r *http.Request,
 }
 
 func (s *RunControl) WriteWorkflowError(w http.ResponseWriter, r *http.Request, err error) {
+	if requestscope.WriteSessionModeError(s.responses, w, err) {
+		return
+	}
 	// A run's missing pinned version is more specific than an unknown workflow.
 	var unavailable *runstate.WorkflowVersionUnavailableError
 	if errors.As(err, &unavailable) {

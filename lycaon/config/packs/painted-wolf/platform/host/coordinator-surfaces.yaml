@@ -27,6 +27,7 @@ implement_routing:
   loadable: [command_output, command_stop]
 
 implement_dispatch:
+  requires_agent: true
   command_effects: [read_only]
   activity_label: Starting workers
   mode_ref: implement-dispatch
@@ -69,6 +70,7 @@ recon_reconcile:
 
 # Pending overlays block new overlapping writes.
 implement_overlay_promote:
+  requires_agent: true
   command_effects: [read_only, mutation, external_exec, network_egress]
   activity_label: Combining results
   mode_ref: implement-overlay-promote
@@ -167,6 +169,7 @@ implement_park:
   floor: [recall, task, pack_board, read_findings, wait, worker_cancel, answer_decision, instruct_worker, worker_history, update_progress, ask_user]
 
 workflow_compose:
+  requires_agent: true
   command_effects: [read_only]
   activity_label: Setting up the workflow
   mode_ref: compose
@@ -178,6 +181,7 @@ workflow_compose:
   floor: [recall, workflow_compose, workflow_compose_from_template, workflow_catalog_summaries, workflow_persist, state_start, ask_user]
 
 plan_stub:
+  requires_agent: true
   command_effects: [read_only, mutation]
   activity_label: Writing the plan
   mode_ref: plan-stub
@@ -187,6 +191,7 @@ plan_stub:
 
 # Research tracks worker and checklist progress.
 plan_research:
+  requires_agent: true
   command_effects: [read_only, mutation]
   activity_label: Researching the project
   mode_ref: plan-research
@@ -196,6 +201,7 @@ plan_research:
 
 # workflow_transition enters critique.
 plan_approve:
+  requires_agent: true
   command_effects: [read_only, mutation]
   activity_label: Getting the plan ready
   mode_ref: workflow-orchestrate
@@ -205,6 +211,7 @@ plan_approve:
 
 # submit_verdict leaves review; ask_user parks it.
 plan_review:
+  requires_agent: true
   command_effects: [read_only, mutation]
   activity_label: Reviewing the plan
   mode_ref: review-adjudicate
@@ -232,6 +239,7 @@ review_adjudicate:
 
 # Decision review may write its blueprint.
 decision_adjudicate:
+  requires_agent: true
   command_effects: [read_only, mutation]
   activity_label: Recording the decision
   mode_ref: review-adjudicate
@@ -264,6 +272,7 @@ await_host:
   floor: [recall, command, command_output, command_stop, scan_query, scan_summary, scan_list, scan_compare, pack_board, read_findings, answer_decision, worker_history, ask_user]
 
 plan_execute:
+  requires_agent: true
   command_effects: [read_only, mutation]
   activity_label: Building the changes
   mode_ref: plan-execute
@@ -286,6 +295,7 @@ observe_investigate:
   prose_finish: true
   publishes_mid_turn_text: true
   floor:
+    - inspect_source
     - summarize
     - survey_repo
     - recall

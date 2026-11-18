@@ -23,9 +23,13 @@ Workers inherit the root chat's ceiling and keep their own scopes when the chat
 switches to Agent. Existing permission, confinement, and workflow rules still
 apply. An active Ask turn can use the new authority from its next model round.
 
-## Why every session has a workflow
+## Workflow policy for chat turns
 
-There is no policy-free chat mode beside workflow mode. A newly created build session attaches the ambient `implement@` workflow, and an explicitly selected recipe uses the same run engine. This gives every turn one answer to the questions that otherwise drift apart: which phase is active, which tools and agents are available, what evidence is required, which human controls are armed, what must happen before the work may close, and what recovery should restore.
+A newly created Agent chat in build posture attaches the ambient `implement@`
+workflow. Explicit recipes use the same engine to declare the phase, tools,
+worker roster, evidence requirements, human controls, and closeout conditions.
+A standalone Ask chat investigates without activating the ambient workflow.
+An explicit read workflow retains its own gates and obligations.
 
 The manifest declares phases, gates, transitions, agents, and tool surfaces. The host evaluates those declarations from machine state. The coordinator may choose a declared recipe or call a declared transition; it does not decide that an undeclared proof has passed.
 
@@ -55,11 +59,11 @@ Transcript rows carry the run that produced them, so Den can render a row before
 
 | Trigger | Result |
 |---------|--------|
-| Session creation | Attach ambient `implement@` |
+| Build chat preparation in Agent mode | Attach ambient `implement@` |
 | Human starts a catalog recipe | Cancel the active lineage and create the selected root run |
 | A phase invokes a child | Pause the parent and create the child in one transaction |
 | Child completes or exits | Resume the parent |
-| Root catalog exits | Finish it and attach a fresh ambient run |
+| Root catalog exits | Finish it and, in Agent mode, attach a fresh ambient run |
 
 Human commands carry the run revision they displayed. A stale action changes nothing and asks the client to rehydrate, so an approval, transition, or exit cannot apply to a newer phase the human did not review.
 

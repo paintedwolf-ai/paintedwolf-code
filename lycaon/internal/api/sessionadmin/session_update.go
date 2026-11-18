@@ -7,6 +7,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/lycaon/lycaon/internal/api/httpio"
+	"github.com/lycaon/lycaon/internal/api/requestscope"
 	"github.com/lycaon/lycaon/internal/session/chats"
 	"github.com/lycaon/lycaon/internal/session/naming"
 	"github.com/lycaon/lycaon/internal/session/store"
@@ -37,8 +38,11 @@ func (s *Lifecycle) HandleUpdateSession(w http.ResponseWriter, r *http.Request) 
 	if req.PinPosition != nil {
 		fields++
 	}
+	if req.Mode != nil {
+		fields++
+	}
 	if fields != 1 {
-		s.responses.Fail(w, wire.ApiErrorCodeInvalidRequest, "patch requires exactly one of title, archived, pinned, or pin_position")
+		s.responses.Fail(w, wire.ApiErrorCodeInvalidRequest, "patch requires exactly one of title, archived, pinned, pin_position, or mode")
 		return
 	}
 	if req.PinPosition != nil && *req.PinPosition < 1 {
@@ -46,6 +50,8 @@ func (s *Lifecycle) HandleUpdateSession(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	switch {
+	case req.Mode != nil:
+		sess, err = s.Sessions.Chats.SetMode(r.Context(), id, *req.Mode)
 	case req.Title != nil:
 		sess, err = s.Sessions.Chats.Naming.SetTitle(r.Context(), id, *req.Title)
 	case req.Archived != nil:
@@ -74,6 +80,9 @@ func (s *Lifecycle) HandleDeleteSession(w http.ResponseWriter, r *http.Request) 
 }
 
 func (s *Lifecycle) writeSessionLifecycleError(w http.ResponseWriter, r *http.Request, err error) {
+	if requestscope.WriteSessionModeError(s.responses, w, err) {
+		return
+	}
 	switch {
 	case errors.Is(err, naming.ErrInvalidDisplayTitle):
 		s.responses.Fail(w, wire.ApiErrorCodeInvalidRequest, "title must be 1–80 characters without control characters")

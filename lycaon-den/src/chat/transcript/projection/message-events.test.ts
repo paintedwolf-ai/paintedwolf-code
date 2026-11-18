@@ -11,6 +11,9 @@ function seedMessages(store: ReturnType<typeof createAppStore>, rows: Message[])
 
 function activeLlmTurn(store: ReturnType<typeof createAppStore>, sessionId: string) {
   store.actions.setCurrentSession({
+    mode: "agent" as const,
+    started: true,
+    root_session_id: sessionId,
     id: sessionId,
     owner_person_id: "00000000-0000-4000-8000-000000000002",
     project_id: "00000000-0000-4000-8000-000000000001",
@@ -35,6 +38,9 @@ describe("applyMessageEvent", () => {
   it("appends parent session rows from SSE", () => {
     const store = createAppStore();
     store.actions.setCurrentSession({
+      mode: "agent" as const,
+      started: true,
+      root_session_id: "parent-1",
       id: "parent-1",
       owner_person_id: "00000000-0000-4000-8000-000000000002",
       project_id: "00000000-0000-4000-8000-000000000001",
@@ -68,6 +74,9 @@ describe("applyMessageEvent", () => {
   it("resolves the pending-send bubble when its echo row lands", () => {
     const store = createAppStore();
     store.actions.setCurrentSession({
+      mode: "agent" as const,
+      started: true,
+      root_session_id: "parent-1",
       id: "parent-1",
       owner_person_id: "00000000-0000-4000-8000-000000000002",
       project_id: "00000000-0000-4000-8000-000000000001",
@@ -118,6 +127,9 @@ describe("applyMessageEvent", () => {
   it("patches an existing row by id", () => {
     const store = createAppStore();
     store.actions.setCurrentSession({
+      mode: "agent" as const,
+      started: true,
+      root_session_id: "parent-1",
       id: "parent-1",
       owner_person_id: "00000000-0000-4000-8000-000000000002",
       project_id: "00000000-0000-4000-8000-000000000001",
@@ -144,6 +156,9 @@ describe("applyMessageEvent", () => {
   it("skips no-op patches", () => {
     const store = createAppStore();
     store.actions.setCurrentSession({
+      mode: "agent" as const,
+      started: true,
+      root_session_id: "parent-1",
       id: "parent-1",
       owner_person_id: "00000000-0000-4000-8000-000000000002",
       project_id: "00000000-0000-4000-8000-000000000001",
@@ -169,6 +184,9 @@ describe("applyMessageEvent", () => {
   it("adopts patch events as full-row snapshots — absent fields clear", () => {
     const store = createAppStore();
     store.actions.setCurrentSession({
+      mode: "agent" as const,
+      started: true,
+      root_session_id: "0a4c8296-291e-42e4-8daf-af798b03c5e0",
       id: "0a4c8296-291e-42e4-8daf-af798b03c5e0",
       owner_person_id: "00000000-0000-4000-8000-000000000002",
       project_id: "00000000-0000-4000-8000-000000000001",
@@ -212,6 +230,9 @@ describe("applyMessageEvent", () => {
   it("clears llm turn chrome when authoritative assistant patch arrives after llm idle", () => {
     const store = createAppStore();
     store.actions.setCurrentSession({
+      mode: "agent" as const,
+      started: true,
+      root_session_id: "parent-1",
       id: "parent-1",
       owner_person_id: "00000000-0000-4000-8000-000000000002",
       project_id: "00000000-0000-4000-8000-000000000001",
@@ -267,6 +288,9 @@ describe("applyMessageEvent", () => {
   it("clears llm turn chrome when authoritative assistant patch includes tool_calls", () => {
     const store = createAppStore();
     store.actions.setCurrentSession({
+      mode: "agent" as const,
+      started: true,
+      root_session_id: "parent-1",
       id: "parent-1",
       owner_person_id: "00000000-0000-4000-8000-000000000002",
       project_id: "00000000-0000-4000-8000-000000000001",
@@ -305,6 +329,9 @@ describe("applyMessageEvent", () => {
   it("ignores events for unrelated sessions", () => {
     const store = createAppStore();
     store.actions.setCurrentSession({
+      mode: "agent" as const,
+      started: true,
+      root_session_id: "parent-1",
       id: "parent-1",
       owner_person_id: "00000000-0000-4000-8000-000000000002",
       project_id: "00000000-0000-4000-8000-000000000001",
@@ -375,6 +402,9 @@ describe("applyMessageEvent", () => {
   it("syncs worker roster when parent task tool result arrives over SSE", () => {
     const store = createAppStore();
     store.actions.setCurrentSession({
+      mode: "agent" as const,
+      started: true,
+      root_session_id: "parent-1",
       id: "parent-1",
       owner_person_id: "00000000-0000-4000-8000-000000000002",
       project_id: "00000000-0000-4000-8000-000000000001",
@@ -491,6 +521,9 @@ describe("applyMessageEvent", () => {
   it("buffers parent events under the hydration lock and replays them on completion", () => {
     const store = createAppStore();
     store.actions.setCurrentSession({
+      mode: "agent" as const,
+      started: true,
+      root_session_id: "parent-1",
       id: "parent-1",
       owner_person_id: "00000000-0000-4000-8000-000000000002",
       project_id: "00000000-0000-4000-8000-000000000001",

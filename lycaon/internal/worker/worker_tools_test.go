@@ -46,8 +46,8 @@ func newWorkerToolsFixture(t *testing.T) *workerToolsFixture {
 	database := testdbfixture.Open(t, "store.db")
 	testdbseed.InsertSession(t, database, "coord", testdbseed.DefaultProjectID)
 	now := timelayout.Format(time.Now().UTC())
-	_, err := database.ExecContext(t.Context(), `INSERT INTO sessions (id, project_id, owner_person_id, posture, status, parent_session_id, agent_type, created_at, activity_at, updated_at)
-		VALUES ('child', ?, (SELECT id FROM people WHERE role = 'owner'), 'build', 'idle', 'coord', 'repo-researcher', ?, ?, ?)`, testdbseed.DefaultProjectID, now, now, now)
+	_, err := database.ExecContext(t.Context(), `INSERT INTO sessions (id, project_id, owner_person_id, posture, status, parent_session_id, agent_type, created_at, activity_at, updated_at, root_session_id, mode)
+		VALUES ('child', ?, (SELECT id FROM people WHERE role = 'owner'), 'build', 'idle', 'coord', 'repo-researcher', ?, ?, ?, 'coord', NULL)`, testdbseed.DefaultProjectID, now, now, now)
 	testutil.FailErr(t, "insert child", err)
 	f := &workerToolsFixture{
 		db: database, queue: NewSQLQueue(database, 1), records: workerrecords.New(database),
@@ -412,8 +412,8 @@ func TestTaskStartsANamedWorker(t *testing.T) {
 	}
 
 	now := timelayout.Format(time.Now().UTC())
-	_, err = f.db.ExecContext(t.Context(), `INSERT INTO sessions (id, project_id, owner_person_id, posture, status, parent_session_id, agent_type, created_at, activity_at, updated_at)
-		VALUES ('scout-child', ?, (SELECT id FROM people WHERE role = 'owner'), 'build', 'idle', 'coord', 'repo-researcher', ?, ?, ?)`, testdbseed.DefaultProjectID, now, now, now)
+	_, err = f.db.ExecContext(t.Context(), `INSERT INTO sessions (id, project_id, owner_person_id, posture, status, parent_session_id, agent_type, created_at, activity_at, updated_at, root_session_id, mode)
+		VALUES ('scout-child', ?, (SELECT id FROM people WHERE role = 'owner'), 'build', 'idle', 'coord', 'repo-researcher', ?, ?, ?, 'coord', NULL)`, testdbseed.DefaultProjectID, now, now, now)
 	testutil.FailErr(t, "insert child", err)
 	testutil.FailErr(t, "spawn child", f.queue.store.SetChildSessionID(t.Context(), started.JobID, "scout-child"))
 	w, err = f.records.Resolve(t.Context(), f.coord, "scout")
@@ -608,8 +608,8 @@ func TestTaskStartsAReviewerOnASealedResult(t *testing.T) {
 
 	// The reviewer's next round reads the same result; its agent is sealed.
 	now := timelayout.Format(time.Now().UTC())
-	_, err = f.db.ExecContext(t.Context(), `INSERT INTO sessions (id, project_id, owner_person_id, posture, status, parent_session_id, agent_type, created_at, activity_at, updated_at)
-		VALUES ('checker-child', ?, (SELECT id FROM people WHERE role = 'owner'), 'build', 'idle', 'coord', 'repo-researcher', ?, ?, ?)`, testdbseed.DefaultProjectID, now, now, now)
+	_, err = f.db.ExecContext(t.Context(), `INSERT INTO sessions (id, project_id, owner_person_id, posture, status, parent_session_id, agent_type, created_at, activity_at, updated_at, root_session_id, mode)
+		VALUES ('checker-child', ?, (SELECT id FROM people WHERE role = 'owner'), 'build', 'idle', 'coord', 'repo-researcher', ?, ?, ?, 'coord', NULL)`, testdbseed.DefaultProjectID, now, now, now)
 	testutil.FailErr(t, "insert reviewer child", err)
 	testutil.FailErr(t, "spawn reviewer child", f.queue.store.SetChildSessionID(t.Context(), rounds[0].JobID, "checker-child"))
 	f.settleRound(t, reviewer.ID, rounds[0].JobID)

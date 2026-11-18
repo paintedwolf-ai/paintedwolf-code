@@ -46,6 +46,11 @@ func RegisterFanoutPlanTool(reg *tools.DefaultRegistry, runs *Fanout) error {
 			}
 			return marshalFanoutPlanResult(FanoutPlanToolResult{Error: "invalid_plan", Message: err.Error()})
 		}
+		if tctx.Source.AskMode {
+			if err := checkAskFanoutPlan(plan); err != nil {
+				return "", err
+			}
+		}
 		result := FanoutPlanToolResult{
 			OK: true, Legs: len(plan.Legs),
 			Message: fmt.Sprintf("fanout plan stamped (%d leg(s)); no workers were dispatched — call workflow_advance when ready to execute", len(plan.Legs)),

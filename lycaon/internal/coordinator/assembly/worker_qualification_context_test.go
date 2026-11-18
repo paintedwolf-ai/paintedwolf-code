@@ -43,8 +43,8 @@ func newContextQualEnv(t *testing.T) *contextQualEnv {
 	sqlDB := testdbfixture.Open(t, "assembly-qual.db")
 	testdbseed.InsertSession(t, sqlDB, "coord", testdbseed.DefaultProjectID)
 	now := timelayout.Format(time.Now().UTC())
-	_, err := sqlDB.ExecContext(t.Context(), `INSERT INTO sessions (id, project_id, owner_person_id, posture, status, parent_session_id, agent_type, created_at, activity_at, updated_at)
-		VALUES ('child-worker', ?, (SELECT id FROM people WHERE role = 'owner'), 'build', 'idle', 'coord', 'repo-researcher', ?, ?, ?)`, testdbseed.DefaultProjectID, now, now, now)
+	_, err := sqlDB.ExecContext(t.Context(), `INSERT INTO sessions (id, project_id, owner_person_id, posture, status, parent_session_id, agent_type, created_at, activity_at, updated_at, root_session_id, mode)
+		VALUES ('child-worker', ?, (SELECT id FROM people WHERE role = 'owner'), 'build', 'idle', 'coord', 'repo-researcher', ?, ?, ?, 'coord', NULL)`, testdbseed.DefaultProjectID, now, now, now)
 	testutil.FailErr(t, "insert child session", err)
 
 	records := workerrecords.New(sqlDB)

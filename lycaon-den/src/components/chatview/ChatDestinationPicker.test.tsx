@@ -89,6 +89,9 @@ describe("ChatDestinationPicker", () => {
     const open = vi.fn(() => opening);
     const unregister = registerChatDestinationOpenSink(open);
     createSessionForProject.mockResolvedValue({
+      mode: "agent" as const,
+      started: true,
+      root_session_id: "session-new",
       id: "session-new",
       owner_person_id: "00000000-0000-4000-8000-000000000002",
       project_id: "project-1",

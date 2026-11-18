@@ -11,6 +11,7 @@ import (
 	"github.com/lycaon/lycaon/internal/conditions"
 	"github.com/lycaon/lycaon/internal/extpacks"
 	"github.com/lycaon/lycaon/internal/sandbox"
+	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/spawn"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 	"github.com/lycaon/lycaon/internal/workflow/runstate"
@@ -30,7 +31,7 @@ func (m *SessionPolicy) AgentToolAccess(ctx context.Context, sessionID, agentTyp
 	if m == nil || sessionID == "" || strings.TrimSpace(agentType) == "" {
 		return sandbox.ToolAccessProfile
 	}
-	active, err := m.Runs.ActiveBySession(ctx, sessionID)
+	active, err := m.activeRunForPolicy(ctx, sessionID)
 	if err != nil || active == nil {
 		return sandbox.ToolAccessProfile
 	}
@@ -44,12 +45,12 @@ func (m *SessionPolicy) AgentToolAccess(ctx context.Context, sessionID, agentTyp
 	return sandbox.ToolAccessProfile
 }
 
-// AssertSessionRunnable requires a running workflow for coordinator execution.
+// AssertSessionRunnable checks the workflow governing this session.
 func (m *SessionPolicy) AssertSessionRunnable(ctx context.Context, sessionID string) error {
 	if m == nil || sessionID == "" {
 		return nil
 	}
-	active, err := m.Runs.ActiveBySession(ctx, sessionID)
+	active, err := m.activeRunForPolicy(ctx, sessionID)
 	if err != nil {
 		return err
 	}
@@ -61,6 +62,10 @@ func (m *SessionPolicy) AssertSessionRunnable(ctx context.Context, sessionID str
 		if sess != nil && sess.IsWorkerChild() {
 			return nil
 		}
+		mode, err := m.sessionMode(ctx, sessionID)
+		if err != nil || mode == api.SessionModeAsk {
+			return err
+		}
 		return runstate.ErrNoActiveRun
 	}
 	return m.AssertRunnable(ctx, active.ID)
@@ -71,7 +76,7 @@ func (m *SessionPolicy) AllowedAgents(ctx context.Context, sessionID string) []s
 	if m == nil || sessionID == "" {
 		return nil
 	}
-	active, err := m.Runs.ActiveBySession(ctx, sessionID)
+	active, err := m.activeRunForPolicy(ctx, sessionID)
 	if err != nil || active == nil {
 		return spawn.AmbientAllowedAgents()
 	}
@@ -96,7 +101,7 @@ func (m *SessionPolicy) CurrentPhase(ctx context.Context, sessionID string) stri
 	if m == nil || sessionID == "" {
 		return ""
 	}
-	active, err := m.Runs.ActiveBySession(ctx, sessionID)
+	active, err := m.activeRunForPolicy(ctx, sessionID)
 	if err != nil || active == nil {
 		return ""
 	}
@@ -108,7 +113,7 @@ func (m *SessionPolicy) ActivePhaseHasReviewLoop(ctx context.Context, sessionID 
 	if m == nil || sessionID == "" {
 		return false
 	}
-	active, err := m.Runs.ActiveBySession(ctx, sessionID)
+	active, err := m.activeRunForPolicy(ctx, sessionID)
 	if err != nil || active == nil {
 		return false
 	}
@@ -129,7 +134,7 @@ func (m *SessionPolicy) ActivePhaseGuardState(ctx context.Context, sessionID str
 	if m == nil || strings.TrimSpace(sessionID) == "" {
 		return state
 	}
-	active, err := m.Runs.ActiveBySession(ctx, sessionID)
+	active, err := m.activeRunForPolicy(ctx, sessionID)
 	if err != nil || active == nil {
 		return state
 	}
@@ -189,7 +194,7 @@ func (m *SessionPolicy) ActiveReviewVerdictPending(ctx context.Context, sessionI
 	if m == nil || sessionID == "" {
 		return false
 	}
-	active, err := m.Runs.ActiveBySession(ctx, sessionID)
+	active, err := m.activeRunForPolicy(ctx, sessionID)
 	if err != nil || active == nil || active.Status != api.WorkflowRunStatusRunning {
 		return false
 	}
@@ -217,7 +222,7 @@ func (m *SessionPolicy) ActiveManifest(ctx context.Context, sessionID string) (w
 	if m == nil || sessionID == "" {
 		return workflowfacts.ActiveWorkflowManifest{}, false
 	}
-	active, err := m.Runs.ActiveBySession(ctx, sessionID)
+	active, err := m.activeRunForPolicy(ctx, sessionID)
 	if err != nil || active == nil {
 		return workflowfacts.ActiveWorkflowManifest{}, false
 	}
@@ -281,13 +286,14 @@ type PolicyBlueprints interface {
 }
 
 type SessionPolicy struct {
-	Blueprints PolicyBlueprints
-	Runs       runstate.RunsRepository
-	Resolver   *workflowcatalog.Resolver
-	Sessions   Sessions
-	Registry   *conditions.ConditionRegistry
-	Gates      workflowgates.GateEvaluator
-	Approvals  ApprovalState
+	ResolveEffectiveMode func(context.Context, string) (store.RootAuthority, error)
+	Blueprints           PolicyBlueprints
+	Runs                 runstate.RunsRepository
+	Resolver             *workflowcatalog.Resolver
+	Sessions             Sessions
+	Registry             *conditions.ConditionRegistry
+	Gates                workflowgates.GateEvaluator
+	Approvals            ApprovalState
 }
 
 func (m *SessionPolicy) gateEvaluator() workflowgates.GateEvaluator {
@@ -300,7 +306,7 @@ func (m *SessionPolicy) HumanApprovalAwaiting(ctx context.Context, sessionID str
 	if m == nil || m.Runs == nil {
 		return false, nil
 	}
-	run, err := m.Runs.ActiveBySession(ctx, sessionID)
+	run, err := m.activeRunForPolicy(ctx, sessionID)
 	if err != nil || run == nil {
 		return false, err
 	}

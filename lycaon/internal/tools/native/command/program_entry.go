@@ -488,6 +488,9 @@ func (r *ProgramRuntime) bindProgramSurface(ctx context.Context, run *programRun
 	}
 
 	run.surface = surface
+	if tc.Source.AskMode {
+		run.surface = surface.ReadOnly()
+	}
 	complete = true
 	return dispatcher, publication, releaseSurface, nil
 }

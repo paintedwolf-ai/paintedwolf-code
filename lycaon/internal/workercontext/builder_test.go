@@ -47,8 +47,8 @@ func TestCompositeWorkerContextBuildsFromWorkerRecordAndWorkflowRun(t *testing.T
 	testdbseed.InsertWorkflowRun(t, sqlDB, "run-1", "parent-1", testdbseed.DefaultProjectID)
 	now := timelayout.Format(time.Now().UTC())
 	_, err := sqlDB.ExecContext(t.Context(), `
-		INSERT INTO sessions (id, project_id, owner_person_id, posture, status, parent_session_id, created_at, activity_at, updated_at)
-		VALUES ('child-1', ?, (SELECT id FROM people WHERE role = 'owner'), 'build', 'idle', 'parent-1', ?, ?, ?)
+		INSERT INTO sessions (id, project_id, owner_person_id, posture, status, parent_session_id, created_at, activity_at, updated_at, root_session_id, mode)
+		VALUES ('child-1', ?, (SELECT id FROM people WHERE role = 'owner'), 'build', 'idle', 'parent-1', ?, ?, ?, 'parent-1', NULL)
 	`, testdbseed.DefaultProjectID, now, now, now)
 	testutil.FailErr(t, "insert child session", err)
 

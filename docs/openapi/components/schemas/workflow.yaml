@@ -494,6 +494,10 @@ components:
       - workflow_id
       - workflow_version
       properties:
+        mode:
+          x-go-pointer: true
+          $ref: 'session/identity.yaml#/components/schemas/SessionMode'
+          description: Bind or upgrade the session mode at admission.
         operation_id:
           type: string
           format: uuid
@@ -910,6 +914,9 @@ components:
       - name
       additionalProperties: false
       properties:
+        requires_agent:
+          type: boolean
+          description: The workflow entry phase requires Agent mode.
         id:
           type: string
           pattern: '^[a-z0-9_-]+$'

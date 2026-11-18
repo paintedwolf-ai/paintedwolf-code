@@ -29,6 +29,9 @@ describe("chat integration", () => {
   it("keeps optimistic sends outside host transcript state and reconciles on SSE", async () => {
     const appStore = createAppStore();
     appStore.actions.setCurrentSession({
+      mode: "agent" as const,
+      started: true,
+      root_session_id: "sess-1",
       id: "sess-1",
       owner_person_id: "00000000-0000-4000-8000-000000000002",
       project_id: "00000000-0000-4000-8000-000000000001",
@@ -73,6 +76,9 @@ describe("chat integration", () => {
         return { status: "queued" as const, submission_id: "sub-1", session_revision: 7 };
       }),
       getSession: vi.fn().mockResolvedValue({
+        mode: "agent" as const,
+        started: true,
+        root_session_id: "sess-1",
         id: "sess-1",
       owner_person_id: "00000000-0000-4000-8000-000000000002",
       project_id: "00000000-0000-4000-8000-000000000001",
@@ -131,6 +137,9 @@ describe("chat integration", () => {
   it("sendChatPrompt commits the pending send before any network wait", async () => {
     const appStore = createAppStore();
     appStore.actions.setCurrentSession({
+      mode: "agent" as const,
+      started: true,
+      root_session_id: "sess-1",
       id: "sess-1",
       owner_person_id: "00000000-0000-4000-8000-000000000002",
       project_id: "00000000-0000-4000-8000-000000000001",
@@ -147,6 +156,9 @@ describe("chat integration", () => {
         .fn()
         .mockResolvedValue({ status: "queued" as const, submission_id: "sub-1", session_revision: 7 }),
       getSession: vi.fn().mockResolvedValue({
+        mode: "agent" as const,
+        started: true,
+        root_session_id: "sess-1",
         id: "sess-1",
         owner_person_id: "00000000-0000-4000-8000-000000000002",
         project_id: "00000000-0000-4000-8000-000000000001",
@@ -208,6 +220,9 @@ describe("chat integration", () => {
   it("a prompt sent while a turn runs enters the queue before admission", async () => {
     const appStore = createAppStore();
     appStore.actions.setCurrentSession({
+      mode: "agent" as const,
+      started: true,
+      root_session_id: "sess-1",
       id: "sess-1",
       owner_person_id: "00000000-0000-4000-8000-000000000002",
       project_id: "00000000-0000-4000-8000-000000000001",
@@ -226,6 +241,9 @@ describe("chat integration", () => {
         return { status: "queued" as const, submission_id: "sub-1", session_revision: 7 };
       }),
       getSession: vi.fn().mockResolvedValue({
+        mode: "agent" as const,
+        started: true,
+        root_session_id: "sess-1",
         id: "sess-1",
         owner_person_id: "00000000-0000-4000-8000-000000000002",
         project_id: "00000000-0000-4000-8000-000000000001",
@@ -273,6 +291,9 @@ describe("chat integration", () => {
   it("sendChatPrompt holds the submission in flight during POST", async () => {
     const appStore = createAppStore();
     appStore.actions.setCurrentSession({
+      mode: "agent" as const,
+      started: true,
+      root_session_id: "sess-1",
       id: "sess-1",
       owner_person_id: "00000000-0000-4000-8000-000000000002",
       project_id: "00000000-0000-4000-8000-000000000001",
@@ -293,6 +314,9 @@ describe("chat integration", () => {
         return { status: "queued" as const, submission_id: "sub-1", session_revision: 7 };
       }),
       getSession: vi.fn().mockResolvedValue({
+        mode: "agent" as const,
+        started: true,
+        root_session_id: "sess-1",
         id: "sess-1",
       owner_person_id: "00000000-0000-4000-8000-000000000002",
       project_id: "00000000-0000-4000-8000-000000000001",
@@ -328,6 +352,9 @@ describe("chat integration", () => {
   it("sendChatPrompt keeps the submission in flight while the session is busy", async () => {
     const appStore = createAppStore();
     appStore.actions.setCurrentSession({
+      mode: "agent" as const,
+      started: true,
+      root_session_id: "sess-1",
       id: "sess-1",
       owner_person_id: "00000000-0000-4000-8000-000000000002",
       project_id: "00000000-0000-4000-8000-000000000001",
@@ -342,6 +369,9 @@ describe("chat integration", () => {
     const client = stubClient({
       sendPrompt: vi.fn().mockResolvedValue({ status: "queued" as const, submission_id: "sub-1", session_revision: 7 }),
       getSession: vi.fn().mockResolvedValue({
+        mode: "agent" as const,
+        started: true,
+        root_session_id: "sess-1",
         id: "sess-1",
         owner_person_id: "00000000-0000-4000-8000-000000000002",
         project_id: "00000000-0000-4000-8000-000000000001",
@@ -379,6 +409,9 @@ describe("chat integration", () => {
   it("surfaces async prompt host errors from session SSE", async () => {
     const appStore = createAppStore();
     appStore.actions.setCurrentSession({
+      mode: "agent" as const,
+      started: true,
+      root_session_id: "sess-1",
       id: "sess-1",
       owner_person_id: "00000000-0000-4000-8000-000000000002",
       project_id: "00000000-0000-4000-8000-000000000001",
@@ -393,6 +426,9 @@ describe("chat integration", () => {
     const client = stubClient({
       sendPrompt: vi.fn().mockResolvedValue({ status: "queued" as const, submission_id: "sub-1", session_revision: 7 }),
       getSession: vi.fn().mockResolvedValue({
+        mode: "agent" as const,
+        started: true,
+        root_session_id: "sess-1",
         id: "sess-1",
         owner_person_id: "00000000-0000-4000-8000-000000000002",
         project_id: "00000000-0000-4000-8000-000000000001",
@@ -431,6 +467,9 @@ describe("chat integration", () => {
   it("releases the submission when accept POST fails", async () => {
     const appStore = createAppStore();
     appStore.actions.setCurrentSession({
+      mode: "agent" as const,
+      started: true,
+      root_session_id: "sess-1",
       id: "sess-1",
       owner_person_id: "00000000-0000-4000-8000-000000000002",
       project_id: "00000000-0000-4000-8000-000000000001",
@@ -445,6 +484,9 @@ describe("chat integration", () => {
     const client = stubClient({
       sendPrompt: vi.fn().mockRejectedValue(new Error("invalid_request")),
       getSession: vi.fn().mockResolvedValue({
+        mode: "agent" as const,
+        started: true,
+        root_session_id: "sess-1",
         id: "sess-1",
         owner_person_id: "00000000-0000-4000-8000-000000000002",
         project_id: "00000000-0000-4000-8000-000000000001",
@@ -473,6 +515,9 @@ describe("chat integration", () => {
     // A terminal receipt remains terminal when replayed.
     const appStore = createAppStore();
     appStore.actions.setCurrentSession({
+      mode: "agent" as const,
+      started: true,
+      root_session_id: "sess-1",
       id: "sess-1",
       owner_person_id: "00000000-0000-4000-8000-000000000002",
       project_id: "00000000-0000-4000-8000-000000000001",
@@ -491,6 +536,9 @@ describe("chat integration", () => {
         session_revision: 7,
       }),
       getSession: vi.fn().mockResolvedValue({
+        mode: "agent" as const,
+        started: true,
+        root_session_id: "sess-1",
         id: "sess-1",
         owner_person_id: "00000000-0000-4000-8000-000000000002",
         project_id: "00000000-0000-4000-8000-000000000001",
@@ -557,6 +605,9 @@ describe("chat integration", () => {
     const appStore = createAppStore();
     const projectDir = "/Users/me/proj";
     appStore.actions.setCurrentSession({
+      mode: "agent" as const,
+      started: true,
+      root_session_id: "sess-new",
       id: "sess-new",
       owner_person_id: "00000000-0000-4000-8000-000000000002",
       project_id: "proj-uuid",

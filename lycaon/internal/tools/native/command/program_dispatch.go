@@ -283,6 +283,10 @@ func (d *ProgramDispatcher) invokeBuiltin(ctx context.Context, spec toolcontract
 // executor's existing approval, detection-pack and policy evaluation, over
 // the literal argv and directory it will run with, then launches it once.
 func (d *ProgramDispatcher) invokeExternal(ctx context.Context, request commandprogram.OperationRequest, streams commandprogram.Streams) (toolcontract.ProducerResult, error) {
+	if d.run.tc.Source.AskMode {
+		reject := tools.AskModeReject("command")
+		return refusedResult(reject.Code), reject
+	}
 	spec := d.run.commands["external"]
 	argv := externalArgv(request.Argv.Values())
 	if len(argv) == 0 {

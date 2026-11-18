@@ -15,6 +15,7 @@ import (
 
 // QueryStore reads session state.
 type QueryStore interface {
+	ResolveEffectiveMode(ctx context.Context, id string) (store.RootAuthority, error)
 	// HostOwner returns the person holding the host's device credential.
 	HostOwner(ctx context.Context) (people.Person, error)
 	ReadExecutionState(ctx context.Context, rootSessionID string) (store.ExecutionState, error)
@@ -84,6 +85,7 @@ type QueryStore interface {
 
 // CommandStore writes session state.
 type CommandStore interface {
+	SetMode(ctx context.Context, id string, mode api.SessionMode) (*api.Session, error)
 	Create(ctx context.Context, req api.CreateSessionRequest, projectID string) (*api.Session, error)
 	CreateWithStatus(ctx context.Context, req api.CreateSessionRequest, projectID string, status api.SessionStatus) (*api.Session, error)
 	CreateChild(ctx context.Context, parent *api.Session, req api.SpawnChildRequest) (*api.Session, error)

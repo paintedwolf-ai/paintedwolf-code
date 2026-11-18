@@ -10,6 +10,8 @@ import {
 
 function summary(overrides: Partial<SessionSummary> = {}): SessionSummary {
   return {
+    mode: "agent" as const,
+    started: true,
     id: "s1",
     owner_person_id: "00000000-0000-4000-8000-000000000002",
     project_id: "p1",

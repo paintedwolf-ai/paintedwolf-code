@@ -4,7 +4,7 @@ import { valueOf } from "./load-state.ts";
 
 function fixture() {
   const store = createAppStore();
-  store.actions.setCurrentSession({ id: "s1", owner_person_id: "00000000-0000-4000-8000-000000000002", project_id: "p1", posture: "build", status: "idle", created_at: "t", activity_at: "t", updated_at: "t" });
+  store.actions.setCurrentSession({ mode: "agent" as const, started: true, root_session_id: "s1", id: "s1", owner_person_id: "00000000-0000-4000-8000-000000000002", project_id: "p1", posture: "build", status: "idle", created_at: "t", activity_at: "t", updated_at: "t" });
   return store;
 }
 
@@ -53,11 +53,11 @@ describe("session view snapshot ordering", () => {
     store.actions.setQueueDraft("s1", store.state.sessionViewEpoch, queue);
     expect(store.state.queueDraft?.queue_items[0]?.text).toBe("first");
 
-    store.actions.setCurrentSession({ id: "s2", owner_person_id: "00000000-0000-4000-8000-000000000002", project_id: "p2", posture: "build", status: "idle", created_at: "t", activity_at: "t", updated_at: "t" });
+    store.actions.setCurrentSession({ mode: "agent" as const, started: true, root_session_id: "s2", id: "s2", owner_person_id: "00000000-0000-4000-8000-000000000002", project_id: "p2", posture: "build", status: "idle", created_at: "t", activity_at: "t", updated_at: "t" });
     expect(store.state.queueDraft).toBeUndefined();
     store.actions.invalidateSessionViewRequests();
 
-    store.actions.setCurrentSession({ id: "s1", owner_person_id: "00000000-0000-4000-8000-000000000002", project_id: "p1", posture: "build", status: "idle", created_at: "t", activity_at: "t", updated_at: "t" });
+    store.actions.setCurrentSession({ mode: "agent" as const, started: true, root_session_id: "s1", id: "s1", owner_person_id: "00000000-0000-4000-8000-000000000002", project_id: "p1", posture: "build", status: "idle", created_at: "t", activity_at: "t", updated_at: "t" });
     expect(store.state.queueDraft?.queue_items[0]?.text).toBe("first");
   });
   it("rejects stale queue replies after reconnect even when their revision is higher", () => {

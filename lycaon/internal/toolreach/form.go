@@ -10,9 +10,10 @@ func FormCommand(tool string, args map[string]any) (string, bool) {
 }
 
 var formArgv = map[string]func(map[string]any) []string{
-	"summarize":    SummarizeArgv,
-	"survey_repo":  SurveyRepoArgv,
-	"code_rewrite": CodeRewriteArgv,
+	"summarize":      SummarizeArgv,
+	"survey_repo":    SurveyRepoArgv,
+	"code_rewrite":   CodeRewriteArgv,
+	"inspect_source": InspectSourceArgv,
 }
 
 func stringArg(args map[string]any, key string) string {

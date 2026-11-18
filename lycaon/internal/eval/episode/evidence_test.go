@@ -20,11 +20,8 @@ func TestEvidenceUsesApplicationRepositoriesAndSessionIdentity(t *testing.T) {
 	capture := t.TempDir()
 	database := testdbfixture.OpenPath(t, filepath.Join(capture, "store.db"))
 	testdbseed.InsertWorkflowRun(t, database, "flow", "root", "project")
-	for _, id := range []string{"child", "other"} {
-		testdbseed.InsertSession(t, database, id, "project")
-	}
-	_, err := database.ExecContext(t.Context(), `UPDATE sessions SET parent_session_id='root' WHERE id='child'`)
-	testutil.FailErr(t, "bind child", err)
+	testdbseed.InsertChildSession(t, database, "child", "root")
+	testdbseed.InsertSession(t, database, "other", "project")
 	sessions := store.NewSQL(database)
 	testutil.FailErr(t, "append observed progress", sessions.AppendMessages(t.Context(), "root", api.Message{
 		ID: "progress", WorkflowRunID: "flow", Role: api.MessageRoleUser, Origin: api.MessageOriginHost, Kind: api.MessageKindProgressComplete,
@@ -37,7 +34,7 @@ func TestEvidenceUsesApplicationRepositoriesAndSessionIdentity(t *testing.T) {
 		Prompt: "Apply mapping", Brief: "Apply mapping", ExecutionTarget: api.ExecutionTargetLocal,
 		Scope: &api.TaskScope{Mode: api.TaskScopeModeWrite, Paths: []string{"report.py"}},
 	}))
-	_, err = database.ExecContext(t.Context(), `PRAGMA wal_checkpoint(TRUNCATE)`)
+	_, err := database.ExecContext(t.Context(), `PRAGMA wal_checkpoint(TRUNCATE)`)
 	testutil.FailErr(t, "checkpoint capture", err)
 	facts, err := Read(t.Context(), capture, "root")
 	testutil.FailErr(t, "read typed episode", err)

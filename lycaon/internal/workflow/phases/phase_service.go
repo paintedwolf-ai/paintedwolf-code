@@ -4,6 +4,7 @@ import (
 	"context"
 	"github.com/lycaon/lycaon/internal/conditions"
 	"github.com/lycaon/lycaon/internal/observability"
+	"github.com/lycaon/lycaon/internal/session/store"
 	workflowcatalog "github.com/lycaon/lycaon/internal/workflow/catalog"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 	workflowgates "github.com/lycaon/lycaon/internal/workflow/gates"
@@ -29,22 +30,23 @@ type PhaseSettlement interface {
 
 // Phases owns phase progression, gate admission, and committed entry effects.
 type Service struct {
-	Runs              runstate.RunsRepository
-	Vars              *runstate.Variables
-	Journal           *runstate.Journal
-	Resolver          *workflowcatalog.Resolver
-	Sessions          toolguard.Sessions
-	Gates             workflowgates.GateEvaluator
-	Registry          *conditions.ConditionRegistry
-	Publication       *publication.Runs
-	Plans             PhasePlans
-	Approvals         PhaseApprovals
-	Feedback          PhaseFeedback
-	Settlement        PhaseSettlement
-	Entries           *Entries
-	ReviewSpawnFilter func(context.Context, string, string, []string) []string
-	PhaseEnterHook    PhaseEnterHook
-	PhaseReenterHook  PhaseReenterHook
+	Runs                 runstate.RunsRepository
+	Vars                 *runstate.Variables
+	Journal              *runstate.Journal
+	Resolver             *workflowcatalog.Resolver
+	Sessions             toolguard.Sessions
+	ResolveEffectiveMode func(context.Context, string) (store.RootAuthority, error)
+	Gates                workflowgates.GateEvaluator
+	Registry             *conditions.ConditionRegistry
+	Publication          *publication.Runs
+	Plans                PhasePlans
+	Approvals            PhaseApprovals
+	Feedback             PhaseFeedback
+	Settlement           PhaseSettlement
+	Entries              *Entries
+	ReviewSpawnFilter    func(context.Context, string, string, []string) []string
+	PhaseEnterHook       PhaseEnterHook
+	PhaseReenterHook     PhaseReenterHook
 }
 
 var workflowStartLog = observability.LazyComponent("workflow_start")
