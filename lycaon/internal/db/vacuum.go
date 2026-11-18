@@ -107,7 +107,8 @@ const VacuumPassPageLimit = vacuumSlicePages * vacuumSlicesPerPass
 // free pages, plus the pointer-map pages, of usable/5 entries each, that
 // stop being needed when those pages go.
 func VacuumPassShrinkLimit(pageSize int64) int64 {
-	return VacuumPassPageLimit + VacuumPassPageLimit/max(pageSize/5, 1) + 1
+	entries := max(pageSize/5, 1)
+	return VacuumPassPageLimit + (VacuumPassPageLimit+entries-1)/entries + 1
 }
 
 // VacuumPassPages is what a full pass frees from a freelist this long. Slices

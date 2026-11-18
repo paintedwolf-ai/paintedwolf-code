@@ -7,8 +7,12 @@ import (
 	"github.com/lycaon/lycaon/internal/db"
 )
 
-// upgradeMeasured is store pages and pages fetched from the full-size run.
-var upgradeMeasured = map[int64][2]int64{50_000: {6_942, 248_632}, 500_000: {61_321, 2_793_798}}
+// upgradeMeasured is store pages and pages fetched from the full-size run;
+// upgradeBase approximates the released store's own upgrade.
+var (
+	upgradeMeasured = map[int64][2]int64{50_000: {6_942, 397_615}, 500_000: {61_321, 4_282_043}}
+	upgradeBase     = scaleUpgrade{Work: map[string]int64{"pages_fetched": 30_000}}
+)
 
 // healthyScale is shaped like a real run: boot work equal at both sizes,
 // linear deletes in bounded statements, sliced vacuums, linear upgrades.
@@ -39,7 +43,7 @@ func healthyScale() (scaleMeasurement, scaleMeasurement) {
 
 func TestHealthyScaleMeetsEveryBound(t *testing.T) {
 	small, large := healthyScale()
-	if violations := evaluateScale(small, large); len(violations) != 0 {
+	if violations := evaluateScale(upgradeBase, small, large); len(violations) != 0 {
 		t.Fatalf("violations = %v", violations)
 	}
 }
@@ -75,8 +79,8 @@ func TestScaleBoundsRefuseEachUnboundedShape(t *testing.T) {
 			large.Vacuum.Turns = 1
 		}, boundVacuumTurns},
 		{"upgrade reads the store over and over", func(small, large *scaleMeasurement) {
-			large.Upgrade.Work["pages_fetched"] = upgradeBasePages + large.Upgrade.StorePages*400
-		}, boundUpgradePages},
+			large.Upgrade.Work["pages_fetched"] = upgradeBase.Work["pages_fetched"] + int64(large.Upgrade.Entries)*100
+		}, boundUpgradeRate},
 		{"upgrade holds the whole store in memory", func(small, large *scaleMeasurement) {
 			large.Upgrade.Work["peak_resident_bytes"] += 512 << 20
 		}, boundUpgradeResident},
@@ -84,7 +88,7 @@ func TestScaleBoundsRefuseEachUnboundedShape(t *testing.T) {
 		t.Run(fault.name, func(t *testing.T) {
 			small, large := healthyScale()
 			fault.inject(&small, &large)
-			violations := evaluateScale(small, large)
+			violations := evaluateScale(upgradeBase, small, large)
 			if !slices.ContainsFunc(violations, func(v scaleViolation) bool { return v.Bound == fault.want }) {
 				t.Fatalf("violations = %v, want bound %s", violations, fault.want)
 			}

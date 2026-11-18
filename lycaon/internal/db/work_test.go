@@ -76,8 +76,8 @@ func TestVacuumPassPagesNeverExceedsThePassLimit(t *testing.T) {
 	if VacuumPassPages(1_000_000, 4096) > VacuumPassPages(100_000, 4096) {
 		t.Fatal("a longer freelist gave a larger pass")
 	}
-	// A 4 KiB page's pointer map covers 819 pages, so a full pass may also drop three.
-	if got := VacuumPassShrinkLimit(4096); got != VacuumPassPageLimit+3 {
+	// A 4 KiB page's pointer map covers 819 pages, so a full pass spans at most four.
+	if got := VacuumPassShrinkLimit(4096); got != VacuumPassPageLimit+4 {
 		t.Fatalf("VacuumPassShrinkLimit(4096) = %d", got)
 	}
 }

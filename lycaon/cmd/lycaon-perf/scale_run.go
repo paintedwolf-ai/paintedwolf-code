@@ -174,29 +174,36 @@ func (f *scaleFixtureRun) deleteProject(ctx context.Context) (err error) {
 	return err
 }
 
-// upgrade opens the newest released store, holding one inventory of this
-// size in its layout, with the engine under test.
 func (f *scaleFixtureRun) upgrade(ctx context.Context) (err error) {
-	configDir := filepath.Join(f.dir, "upgrade")
-	if err := materializeCorpus(f.cfg.corpus, configDir); err != nil {
-		return err
+	f.measured.Upgrade, err = measureUpgrade(ctx, f.cfg, filepath.Join(f.dir, "upgrade"), f.size.Files)
+	return err
+}
+
+// measureUpgrade opens the newest released store, holding one inventory of
+// entries files in its layout, with the engine under test.
+func measureUpgrade(ctx context.Context, cfg scaleConfig, dir string, entries int) (_ scaleUpgrade, err error) {
+	configDir := filepath.Join(dir, "config")
+	if err := materializeCorpus(cfg.corpus, configDir); err != nil {
+		return scaleUpgrade{}, err
 	}
 	store := filepath.Join(configDir, "store.db")
-	if err := seedReleasedInventory(ctx, store, f.size.Files); err != nil {
-		return err
+	if entries > 0 {
+		if err := seedReleasedInventory(ctx, store, entries); err != nil {
+			return scaleUpgrade{}, err
+		}
 	}
 	shape, err := readStoreShape(ctx, store)
 	if err != nil {
-		return err
+		return scaleUpgrade{}, err
 	}
-	f.measured.Upgrade.Entries, f.measured.Upgrade.StorePages = f.size.Files, shape.pages
-	engine, err := startScaleEngine(ctx, f.cfg.binary, configDir, filepath.Join(f.dir, "upgrade-run"))
+	measured := scaleUpgrade{Entries: entries, StorePages: shape.pages}
+	engine, err := startScaleEngine(ctx, cfg.binary, configDir, filepath.Join(dir, "run"))
 	if err != nil {
-		return err
+		return scaleUpgrade{}, err
 	}
 	defer func() { err = joinStop(err, engine) }()
-	f.measured.Upgrade.Work, err = engine.capture.work(ctx, engine, "store.upgrade")
-	return err
+	measured.Work, err = engine.capture.work(ctx, engine, "store.upgrade")
+	return measured, err
 }
 
 func pause(ctx context.Context, interval time.Duration) error {

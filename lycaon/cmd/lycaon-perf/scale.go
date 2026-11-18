@@ -31,11 +31,13 @@ type scaleConfig struct {
 }
 
 type scaleReport struct {
-	Version    int                `json:"version"`
-	StartedAt  time.Time          `json:"started_at"`
-	Sizes      []scaleMeasurement `json:"sizes"`
-	Bounds     map[string]float64 `json:"bounds"`
-	Violations []scaleViolation   `json:"violations"`
+	Version   int       `json:"version"`
+	StartedAt time.Time `json:"started_at"`
+	// UpgradeBase is the released store's upgrade with no inventory added.
+	UpgradeBase scaleUpgrade       `json:"upgrade_base"`
+	Sizes       []scaleMeasurement `json:"sizes"`
+	Bounds      map[string]float64 `json:"bounds"`
+	Violations  []scaleViolation   `json:"violations"`
 }
 
 type scaleMeasurement struct {
@@ -128,6 +130,17 @@ func scaleMain(args []string, stdout io.Writer) int {
 
 func runScale(ctx context.Context, cfg scaleConfig) (scaleReport, error) {
 	report := scaleReport{Version: 1, StartedAt: time.Now().UTC(), Bounds: scaleBounds()}
+	base, err := os.MkdirTemp(cfg.work, "painted-wolf-scale-base-*")
+	if err != nil {
+		return report, err
+	}
+	report.UpgradeBase, err = measureUpgrade(ctx, cfg, base, 0)
+	if removeErr := os.RemoveAll(base); err == nil {
+		err = removeErr
+	}
+	if err != nil {
+		return report, fmt.Errorf("upgrade base: %w", err)
+	}
 	for _, size := range scaleSizes {
 		size.Files /= cfg.divisor
 		size.FreePages /= int64(cfg.divisor)
@@ -137,7 +150,7 @@ func runScale(ctx context.Context, cfg scaleConfig) (scaleReport, error) {
 		}
 		report.Sizes = append(report.Sizes, measured)
 	}
-	report.Violations = evaluateScale(report.Sizes[0], report.Sizes[1])
+	report.Violations = evaluateScale(report.UpgradeBase, report.Sizes[0], report.Sizes[1])
 	return report, nil
 }
 

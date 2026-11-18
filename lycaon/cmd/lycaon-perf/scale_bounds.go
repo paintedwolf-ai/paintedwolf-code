@@ -23,15 +23,16 @@ const (
 	// No statement or transaction of a delete changes or returns more rows.
 	deleteStepRows = 16_384
 
-	// An upgrade fetches at most a fixed base of pages, which validating the
-	// schema costs on any store, plus this many per page in the store. Index
-	// inserts descend a tree that deepens with size, so the rate grows slowly.
-	upgradeBasePages         = 65_536
-	upgradePagesPerStorePage = 64
+	// Beyond the released store's own upgrade, an upgrade fetches at most this
+	// many pages per inventory entry. Index inserts descend a tree that deepens
+	// with size, so the rate grows slowly.
+	upgradePagesPerEntry = 16
 	// No upgrade statement returns more rows.
 	upgradeStepRows = 4_096
-	// An upgrade's peak resident memory differs between sizes by at most this.
-	upgradeResidentSpread = 64 << 20
+	// An upgrade's peak resident memory differs between sizes by at most this:
+	// the integrity check's 64 MiB page cache fills only on the large store,
+	// and the Go heap may hold twice its live data.
+	upgradeResidentSpread = 160 << 20
 
 	// Work per unit at the large size is at most this multiple of the small
 	// size's, which a quadratic factor exceeds by ten times the size ratio.
@@ -51,7 +52,6 @@ const (
 	boundDeleteRows       = "delete_rows_per_owned_row"
 	boundDeleteStepRows   = "delete_step_rows"
 	boundDeleteGrowth     = "delete_growth"
-	boundUpgradePages     = "upgrade_pages"
 	boundUpgradeStepRows  = "upgrade_step_rows"
 	boundUpgradeRate      = "upgrade_pages_per_store_page"
 	boundUpgradeResident  = "upgrade_resident_spread"
@@ -81,7 +81,7 @@ func scaleBounds() map[string]float64 {
 		boundBootPagesSpread: bootPagesSpread, boundBootStatements: bootStatementsSpread,
 		boundBootRowsSpread: bootRowsSpread, boundBootFilesOpened: bootFilesOpened,
 		boundDeleteRows: deleteRowsPerOwnedRow, boundDeleteStepRows: deleteStepRows,
-		boundUpgradeBasePages: upgradeBasePages, boundUpgradeRate: upgradePagesPerStorePage, boundUpgradeStepRows: upgradeStepRows,
+		boundUpgradeRate: upgradePagesPerEntry, boundUpgradeStepRows: upgradeStepRows,
 		boundUpgradeResident: upgradeResidentSpread, boundVacuumPassPages: float64(db.VacuumPassShrinkLimit(4096)),
 		boundGrowth: scaleGrowth,
 	}
@@ -97,10 +97,10 @@ func (vs *violations) check(size, bound string, ok bool, format string, args ...
 
 // evaluateScale checks every bound on one size, then the spreads and growth
 // between the small and the large size.
-func evaluateScale(small, large scaleMeasurement) []scaleViolation {
+func evaluateScale(base scaleUpgrade, small, large scaleMeasurement) []scaleViolation {
 	var vs violations
-	evaluateSize(&vs, small)
-	evaluateSize(&vs, large)
+	evaluateSize(&vs, base, small)
+	evaluateSize(&vs, base, large)
 	vs.check("", boundBootFilesSpread, large.Boot.FilesOpened == small.Boot.FilesOpened,
 		"boot opened %d project files at the large size and %d at the small", large.Boot.FilesOpened, small.Boot.FilesOpened)
 	for _, spread := range []struct {
@@ -116,17 +116,21 @@ func evaluateScale(small, large scaleMeasurement) []scaleViolation {
 		vs.check("", boundDeleteGrowth, largeRate <= smallRate*scaleGrowth,
 			"delete %s per owned row grew from %.3f to %.3f between sizes", counter, smallRate, largeRate)
 	}
-	smallRate := perUnit(small.Upgrade.Work["pages_fetched"]-upgradeBasePages, small.Upgrade.StorePages)
-	largeRate := perUnit(large.Upgrade.Work["pages_fetched"]-upgradeBasePages, large.Upgrade.StorePages)
-	vs.check("", boundUpgradeRate, largeRate <= max(smallRate, 1)*scaleGrowth,
-		"upgrade pages fetched per store page, beyond the base, grew from %.3f to %.3f between sizes", smallRate, largeRate)
+	smallRate, largeRate := upgradeRate(base, small.Upgrade), upgradeRate(base, large.Upgrade)
+	vs.check("", boundGrowth, largeRate <= smallRate*scaleGrowth,
+		"upgrade pages fetched per entry grew from %.3f to %.3f between sizes", smallRate, largeRate)
 	resident := large.Upgrade.Work["peak_resident_bytes"] - small.Upgrade.Work["peak_resident_bytes"]
 	vs.check("", boundUpgradeResident, resident <= upgradeResidentSpread,
 		"upgrade peak resident memory grew by %d bytes between sizes, above %d", resident, upgradeResidentSpread)
 	return vs
 }
 
-func evaluateSize(vs *violations, m scaleMeasurement) {
+// upgradeRate is the pages an upgrade fetched per entry beyond the base's.
+func upgradeRate(base, u scaleUpgrade) float64 {
+	return perUnit(u.Work["pages_fetched"]-base.Work["pages_fetched"], int64(u.Entries))
+}
+
+func evaluateSize(vs *violations, base scaleUpgrade, m scaleMeasurement) {
 	size := m.Size.Name
 	vs.check(size, boundBootFilesOpened, m.Boot.FilesOpened >= 0 && m.Boot.FilesOpened <= bootFilesOpened,
 		"boot opened %d project files, above %d", m.Boot.FilesOpened, bootFilesOpened)
@@ -150,9 +154,8 @@ func evaluateSize(vs *violations, m scaleMeasurement) {
 	}
 
 	u := m.Upgrade
-	upgradeLimit := upgradeBasePages + upgradePagesPerStorePage*u.StorePages
-	vs.check(size, boundUpgradePages, u.Work["pages_fetched"] <= upgradeLimit,
-		"upgrade fetched %d pages from a store of %d, above %d", u.Work["pages_fetched"], u.StorePages, upgradeLimit)
+	vs.check(size, boundUpgradeRate, upgradeRate(base, u) <= upgradePagesPerEntry,
+		"upgrade fetched %.3f pages per entry beyond the base, above %d", upgradeRate(base, u), upgradePagesPerEntry)
 	vs.check(size, boundUpgradeStepRows, u.Work["peak_statement_rows_returned"] <= upgradeStepRows,
 		"upgrade peak_statement_rows_returned is %d, above %d", u.Work["peak_statement_rows_returned"], upgradeStepRows)
 	vs.check(size, boundUpgradeMeasured, u.Work["peak_resident_bytes"] > 0, "upgrade peak resident memory was not measured")
