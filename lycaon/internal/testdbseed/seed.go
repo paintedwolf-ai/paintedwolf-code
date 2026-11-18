@@ -3,6 +3,7 @@ package testdbseed
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"os"
 	"strings"
 	"testing"
@@ -10,7 +11,6 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/lycaon/lycaon/internal/configdir"
-	"github.com/lycaon/lycaon/internal/db"
 	"github.com/lycaon/lycaon/internal/enginepaths"
 	"github.com/lycaon/lycaon/internal/people"
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -88,11 +88,8 @@ func draftScratchPath(projectID string) (string, error) {
 }
 
 // BindSessionWorkspace attaches a root and binds the session to it.
-func BindSessionWorkspace(t *testing.T, sessionStore interface {
-	DB() db.Handle
-}, sessionID, path string) {
+func BindSessionWorkspace(t *testing.T, database store, sessionID, path string) {
 	t.Helper()
-	database := sessionStore.DB()
 	var projectID string
 	err := database.QueryRowContext(t.Context(), `SELECT project_id FROM sessions WHERE id = ?`, sessionID).Scan(&projectID)
 	testutil.FailErr(t, "read session project", err)
@@ -108,12 +105,10 @@ func BindSessionWorkspace(t *testing.T, sessionStore interface {
 }
 
 // OrchestrationWorkspace binds a temporary session root.
-func OrchestrationWorkspace(t *testing.T, store interface {
-	DB() db.Handle
-}, sess *api.Session) string {
+func OrchestrationWorkspace(t *testing.T, database store, sessionID string) string {
 	t.Helper()
 	dir := t.TempDir()
-	BindSessionWorkspace(t, store, sess.ID, dir)
+	BindSessionWorkspace(t, database, sessionID, dir)
 	return dir
 }
 
