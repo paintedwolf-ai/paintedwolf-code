@@ -61,92 +61,11 @@ func (l *toolBatch) enrichToolRow(
 	return nil
 }
 
-// enrichCommittedToolRow tags a parallel result after it was published as its
-// call finished, in call order so handles number by call.
-func (l *toolBatch) enrichCommittedToolRow(
-	ctx context.Context,
-	sessionID string,
-	sess *api.Session,
-	history []api.Message,
-	toolName string,
-	args map[string]any,
-	messageID string,
-	handleEligible bool,
-	st *promptLoopTurnState,
-) ([]api.Message, error) {
-	idx := messageIndexByID(history, messageID)
-	if idx < 0 {
-		return history, nil
-	}
-	stored := history[idx]
-	var raw *api.Message
-	if overlay, ok := st.lookupSecretStorage(messageID); ok {
-		stored = overlay.stored
-		transient := overlay.transient
-		raw = &transient
-	}
-	before := stored.Content
-	if stored.ToolResult != nil {
-		before = stored.ToolResult.Content
-	}
-	beforeHandles := append([]string(nil), stored.EvidenceHandles...)
-	if err := l.enrichToolRow(ctx, sessionID, sess, toolName, args, &stored, handleEligible, st); err != nil {
-		return history, err
-	}
-	if !toolRowNeedsEnrichmentPatch(before, beforeHandles, stored) {
-		return history, nil
-	}
-	if l.Projection.Deps.UpdateMessage != nil {
-		if err := l.Projection.Deps.UpdateMessage(ctx, sessionID, messageID, stored); err != nil {
-			return history, err
-		}
-	}
-	if raw != nil {
-		st.rememberSecretStorageOverlay(stored, *raw)
-		history[idx] = transientMessageFromStored(stored, raw)
-		return history, nil
-	}
-	history[idx] = stored
-	return history, nil
-}
-
 func toolArgsForEnrich(msg api.Message, args map[string]any) map[string]any {
 	if msg.ToolResult != nil && msg.ToolResult.ToolArgs != nil {
 		return msg.ToolResult.ToolArgs
 	}
 	return args
-}
-
-func toolRowNeedsEnrichmentPatch(beforeContent string, beforeHandles []string, after api.Message) bool {
-	afterContent := after.Content
-	if after.ToolResult != nil {
-		afterContent = after.ToolResult.Content
-	}
-	if beforeContent != afterContent {
-		return true
-	}
-	if len(beforeHandles) != len(after.EvidenceHandles) {
-		return true
-	}
-	for i := range beforeHandles {
-		if beforeHandles[i] != after.EvidenceHandles[i] {
-			return true
-		}
-	}
-	return after.CompactedChunk != nil
-}
-
-func messageIndexByID(history []api.Message, id string) int {
-	id = strings.TrimSpace(id)
-	if id == "" {
-		return -1
-	}
-	for i := range history {
-		if history[i].ID == id {
-			return i
-		}
-	}
-	return -1
 }
 
 type parallelBatchCommit struct {
@@ -224,13 +143,18 @@ func (l *toolBatch) appendParallelOutcomeLocked(
 	}
 	bindReviewResult(&out.toolMsg, commit.st)
 	stored, transient := l.Projection.storageSafeMessage(ctx, out.toolMsg)
+	// Handles mint as calls finish, so a parallel batch numbers them in
+	// completion order; the result is never stored untagged.
+	commit.st.noteDeliveryCoverage(out.deliveries)
+	if err := l.enrichToolRow(ctx, commit.sessionID, commit.sess, out.toolName, out.toolArgs, &stored, out.handleEligible, commit.st); err != nil {
+		return err
+	}
 	rows, transients := []api.Message{stored}, []*api.Message{transient}
 	if err := l.Projection.persistStorageSafeMessages(ctx, commit.sessionID, rows); err != nil {
 		return err
 	}
 	l.Projection.touchProgress(ctx, commit.st)
 	out.committed = true
-	out.storedID = stored.ID
 	out.persistedStored = rows
 	out.persistedTransient = transients
 	commit.turnTools = l.settleToolRow(ctx, commit.sess, commit.sessionID, out.toolName, commit.turnTools, commit.st)
@@ -262,19 +186,12 @@ func (l *toolBatch) finishParallelToolOutcomes(
 			}
 		}
 		commit.history = foldStorageSafeMessages(commit.history, out.persistedStored, out.persistedTransient, commit.st)
-		commit.st.noteDeliveryCoverage(out.deliveries)
-		var err error
-		commit.history, err = l.enrichCommittedToolRow(
-			ctx, commit.sessionID, commit.sess, commit.history, out.toolName, out.toolArgs, out.storedID, out.handleEligible, commit.st,
-		)
-		if err != nil {
-			return err
-		}
 	}
 	return nil
 }
 
-// stampCommitOrderTS assigns monotonically increasing timestamps in call order.
+// stampCommitOrderTS assigns monotonically increasing timestamps in call order;
+// parallel results are stored, and take handles, as they finish.
 func stampCommitOrderTS(msg *api.Message, last *time.Time) {
 	now := time.Now().UTC()
 	if !now.After(*last) {
