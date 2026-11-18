@@ -155,6 +155,13 @@ function mapCheck(check: CitationGroundingCheck): CitationGroundingCheckView {
   };
 }
 
+/** True when the answer's citations count as grounded: traced, or assembled by the host. */
+export function citationGroundingIsGrounded(
+  view: Pick<CitationGroundingView, "outcome" | "hostAssembled">,
+): boolean {
+  return view.outcome === "traced" || view.hostAssembled;
+}
+
 export function buildCitationGroundingView(
   grounding: CitationGrounding,
 ): CitationGroundingView {

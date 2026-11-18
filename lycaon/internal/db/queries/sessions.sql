@@ -3,20 +3,20 @@
 -- name: InsertSession :exec
 INSERT INTO sessions (
     id, project_id, owner_person_id, workspace_root_id, posture, workflow_id, workflow_version,
-    agent_type, provider_id, model, parent_session_id, max_tool_loops, compaction_generation,
+    agent_type, provider_id, model, parent_session_id, compaction_generation,
     title, status, created_at, activity_at, updated_at
-) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?);
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?);
 
 -- name: GetSession :one
 SELECT id, title, project_id, owner_person_id, workspace_root_id, posture, workflow_id, workflow_version,
-       agent_type, provider_id, model, parent_session_id, max_tool_loops, compaction_generation, status, created_at, activity_at,
+       agent_type, provider_id, model, parent_session_id, compaction_generation, status, created_at, activity_at,
        updated_at, archived_at, pin_rank, seen_at
 FROM sessions
 WHERE id = ?;
 
 -- name: ListSessions :many
 SELECT id, title, project_id, owner_person_id, workspace_root_id, posture, workflow_id, workflow_version,
-       agent_type, provider_id, model, parent_session_id, max_tool_loops, compaction_generation, status, created_at, activity_at,
+       agent_type, provider_id, model, parent_session_id, compaction_generation, status, created_at, activity_at,
        updated_at, archived_at, pin_rank, seen_at
 FROM sessions
 ORDER BY created_at;
@@ -56,7 +56,7 @@ UPDATE sessions SET activity_at = sqlc.arg(at), updated_at = sqlc.arg(at) WHERE 
 -- name: UpdateSession :exec
 UPDATE sessions SET
     project_id = sqlc.arg(project_id), posture = sqlc.arg(posture), agent_type = sqlc.arg(agent_type),
-    provider_id = sqlc.arg(provider_id), model = sqlc.arg(model), max_tool_loops = sqlc.arg(max_tool_loops),
+    provider_id = sqlc.arg(provider_id), model = sqlc.arg(model),
     title = sqlc.arg(title), status = sqlc.arg(status), compaction_generation = sqlc.arg(compaction_generation),
     archived_at = sqlc.narg(archived_at), seen_at = sqlc.narg(seen_at), updated_at = sqlc.arg(updated_at),
     status_changed_at = CASE

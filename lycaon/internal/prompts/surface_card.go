@@ -5,7 +5,7 @@ import "strings"
 // Sticky members enable inline capabilities; deferred members require activation.
 var (
 	surfaceCardEditTools     = []string{"restore_version"}
-	surfaceCardDispatchTools = []string{"task", "delegate_dispatch"}
+	surfaceCardDispatchTools = []string{"task", "instruct_worker"}
 )
 
 const surfaceCardMaxEnumerated = 8

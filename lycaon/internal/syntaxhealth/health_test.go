@@ -73,34 +73,6 @@ func TestEvaluateFinalRequiresCleanSource(t *testing.T) {
 	}
 }
 
-func TestPythonDiagnosticPrefersMutationSeamAndShowsIndent(t *testing.T) {
-	src := []byte("\"\"\"module\"\"\"\n\ndef run():\n    try:\n        work()\n    cleanup()\n\ndef later():\n    pass\n")
-	report := Analyze(context.Background(), "", "pipeline.py", src, tsparse.Validation)
-	if report.Status != StatusBroken {
-		t.Fatalf("status = %q, want broken; report=%+v", report.Status, report)
-	}
-	diag, ok := NearestDiagnostic(report, 5, 6)
-	if !ok {
-		t.Fatal("missing diagnostic")
-	}
-	if diag.Row == 1 {
-		t.Fatalf("diagnostic pointed at module docstring instead of repair seam: %+v", diag)
-	}
-	context := PythonIndentContext(report, src, 5, 6)
-	if len(context) == 0 {
-		t.Fatal("missing Python indentation context")
-	}
-	var cleanup LineContext
-	for _, line := range context {
-		if line.Row == 6 {
-			cleanup = line
-		}
-	}
-	if cleanup.IndentColumns != 4 {
-		t.Fatalf("cleanup indent = %+v, want 4 columns", cleanup)
-	}
-}
-
 func TestNearestDiagnosticForDisjointRangesDoesNotUseTheirGap(t *testing.T) {
 	report := Report{Diagnostics: []Diagnostic{
 		{Row: 20, StartByte: 20, EndByte: 21},

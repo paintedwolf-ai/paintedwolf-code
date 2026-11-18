@@ -29,7 +29,7 @@ func (s *Handler) HandleGetApprovals(w http.ResponseWriter, r *http.Request) {
 func (s *Handler) approvalConfigResponse(ctx context.Context, scope llm.SettingsScope, ref settings.ProjectRef, cfg settings.ApprovalConfig) wire.ApprovalConfigResponse {
 	projectDir := ref.Dir
 	resp := settings.ApprovalConfigToDTO(
-		settings.WireScope(string(scope)),
+		wire.SettingsScope(string(scope)),
 		cfg,
 		s.Service.Approvals.MergedFrom(scope, projectDir),
 	)
@@ -86,6 +86,17 @@ func ProjectApprovalsWriteError(responses *httpio.Responder, w http.ResponseWrit
 	}
 	responses.Fail(w, wire.ApiErrorCodeProjectApprovalsNeedRepair,
 		"this project's approvals.yaml has parts that were not applied; fix the file before saving")
+	return true
+}
+
+// ProjectSettingsWriteError answers a refused write over a project limits,
+// verify, or review file the host could not read. Reports whether it handled err.
+func ProjectSettingsWriteError(responses *httpio.Responder, w http.ResponseWriter, err error) bool {
+	if !errors.Is(err, settings.ErrProjectSettingsNeedRepair) {
+		return false
+	}
+	responses.Fail(w, wire.ApiErrorCodeProjectSettingsNeedRepair,
+		"this project's settings file could not be read; fix the file before saving")
 	return true
 }
 

@@ -71,12 +71,12 @@ func TestCoordinatorWaitDeliverySurvivesOptionalWakeGates(t *testing.T) {
 					loop.Nudges.NudgeProcessFinished(t.Context(), id, "server", anchor.Envelope{})
 				}
 			}
-			testutil.WaitFor(t, func() bool { _, ready := loop.Deliveries.waitWinner(id); return ready })
+			testutil.WaitFor(t, "the wait has a winner", func() bool { _, ready := loop.Deliveries.waitWinner(id); return ready })
 			if deliveries.Load() != 0 {
 				t.Fatal("wait delivery overlapped active execution")
 			}
 			finish()
-			testutil.WaitFor(t, func() bool { return deliveries.Load() == 1 })
+			testutil.WaitFor(t, "the wait is delivered once", func() bool { return deliveries.Load() == 1 })
 			loop.Turns.WaitForAsyncTurns(t.Context())
 			pending, err := store.PendingAgentResumes(t.Context())
 			testutil.FailErr(t, "read pending waits", err)
@@ -112,7 +112,7 @@ func TestWaitDeliveryRetriesMissingAcknowledgement(t *testing.T) {
 		t.Fatal("undelivered result did not keep the turn open")
 	}
 	loop.Nudges.Nudge(t.Context(), id, anchor.WaitTimerFired, anchor.WaitTimerFired, "", anchor.Envelope{})
-	testutil.WaitFor(t, func() bool { return attempts.Load() == 2 && !loop.Nudges.HasPendingLoopWakes(id) })
+	testutil.WaitFor(t, "the delivery is retried and acknowledged", func() bool { return attempts.Load() == 2 && !loop.Nudges.HasPendingLoopWakes(id) })
 	loop.Turns.WaitForAsyncTurns(t.Context())
 	if attempts.Load() != 2 {
 		t.Fatalf("admission attempts = %d", attempts.Load())

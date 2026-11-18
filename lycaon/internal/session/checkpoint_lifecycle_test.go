@@ -3,10 +3,11 @@ package session
 import (
 	"context"
 	"errors"
-	"github.com/lycaon/lycaon/internal/toolreach"
-	"github.com/lycaon/lycaon/internal/toolsurface"
 	"strings"
 	"testing"
+
+	"github.com/lycaon/lycaon/internal/toolreach"
+	"github.com/lycaon/lycaon/internal/toolsurface"
 
 	"github.com/lycaon/lycaon/internal/coordinator/batch"
 	"github.com/lycaon/lycaon/internal/coordinator/guard"
@@ -145,7 +146,7 @@ func TestSessionContextUsesCorrectedEstimate(t *testing.T) {
 	if err := store.AppendMessages(ctx, sess.ID,
 		api.Message{ID: "u1", Role: api.MessageRoleUser, Content: block},
 	); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "store.AppendMessages failed", err)
 	}
 	transcript := compaction.EstimateMessagesTokens(compaction.ContextMessagesFromAPI([]api.Message{{Content: block}}))
 	mgr.Runner.History.ObserveTokens(sess.ID, sess.ProviderID, sess.Model, transcript+15000, transcript)
@@ -180,7 +181,7 @@ func TestCompactionFitThenReplace(t *testing.T) {
 		api.Message{ID: "log", Role: api.MessageRoleUser, Content: log},
 		api.Message{ID: "ack", Role: api.MessageRoleAssistant, Content: "seen"},
 	); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "store.AppendMessages failed", err)
 	}
 	transcript := compaction.EstimateMessagesTokens(compaction.ContextMessagesFromAPI([]api.Message{{Content: log}, {Content: "seen"}}))
 	mgr.Runner.History.ObserveTokens(sess.ID, sess.ProviderID, sess.Model, transcript+25000, transcript)
@@ -243,7 +244,7 @@ func TestQueueCoordinatorGuidanceNudgeUsesAdvisoryDisposition(t *testing.T) {
 	mgr, _ := newTestManager(t)
 	mgr.SetRejectFormatter(guidance.NewStaticRejectFormatter(hints))
 	mgr.Coordinator.Guidance.Queue(t.Context(), "sess-nudge", "COORDINATOR_HOST_TURN_REQUIRES_WAIT", nil, nil)
-	if id := mgr.Coordinator.Runtime.Kicks().TakePendingKickID("sess-nudge"); id != "guidance:COORDINATOR_HOST_TURN_REQUIRES_WAIT:session:sess-nudge" {
+	if id := mgr.Coordinator.Runtime.Kicks().TakePendingKickIDUnless("sess-nudge", nil); id != "guidance:COORDINATOR_HOST_TURN_REQUIRES_WAIT:session:sess-nudge" {
 		t.Fatalf("kick id = %q", id)
 	}
 	text, _, ok, _ := mgr.Coordinator.Runtime.Kicks().RenderPendingNudge(t.Context(), "sess-nudge", kick.CoordinatorKickRenderContext{})

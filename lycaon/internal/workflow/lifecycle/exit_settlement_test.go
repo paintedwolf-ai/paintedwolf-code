@@ -32,7 +32,7 @@ func TestRootWorkflowExitReleasesVisibleTurn(t *testing.T) {
 				case "plan":
 					run, err = startRun(ctx, mgr, "sess-1", workflowID, "1.0.1")
 				default:
-					run, err = startRun(ctx, mgr, "sess-1", workflowID, "1.0.0")
+					run, err = startRun(ctx, mgr, "sess-1", workflowID, "1.0.1")
 				}
 				testutil.FailErr(t, "start workflow", err)
 				if paused {

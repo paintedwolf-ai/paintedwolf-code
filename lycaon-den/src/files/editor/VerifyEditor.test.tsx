@@ -88,4 +88,23 @@ describe("VerifyEditor", () => {
     ));
     expect(await screen.findByTestId("verify-editor-disabled")).toBeTruthy();
   });
+
+  it("shows an unreadable verify.yaml and refuses edits until it is fixed", async () => {
+    getVerifySettings.mockResolvedValue({
+      scope: "project",
+      test: "",
+      verify_path: ".paintedwolf/verify.yaml",
+      backend_configured: true,
+      rejected: [{ code: "project_unreadable", detail: ".paintedwolf/verify.yaml: unknown field tests" }],
+    } satisfies VerifySettingsResponse);
+    const appStore = createAppStore();
+    appStore.actions.setSidecarStatus("connected");
+    render(() => (
+      <VerifyEditor client={verifyClient} appStore={appStore} projectId="proj-1" />
+    ));
+    const alert = await screen.findByTestId("verify-editor-rejected");
+    expect(alert.textContent).toContain("unknown field tests");
+    expect((screen.getByTestId("verify-editor-command") as HTMLInputElement).disabled).toBe(true);
+    expect((screen.getByTestId("verify-editor-save") as HTMLButtonElement).disabled).toBe(true);
+  });
 });

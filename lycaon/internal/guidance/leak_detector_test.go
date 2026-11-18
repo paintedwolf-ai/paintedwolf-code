@@ -2,8 +2,9 @@ package guidance_test
 
 import (
 	"fmt"
-	"github.com/lycaon/lycaon/internal/evidence"
 	"testing"
+
+	"github.com/lycaon/lycaon/internal/evidence"
 
 	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/guidance/ledgertest"

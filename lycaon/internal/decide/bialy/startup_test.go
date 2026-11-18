@@ -25,7 +25,7 @@ func TestBialyStartupHoldsAdmissionUntilHelloOrReap(t *testing.T) {
 	t.Cleanup(func() { _ = client.Close() })
 	finished := make(chan error, 1)
 	go func() { finished <- client.Warm(t.Context()) }()
-	testutil.WaitFor(t, func() bool { _, err := os.Stat(marker); return err == nil })
+	testutil.WaitFor(t, "the engine start marker appears", func() bool { _, err := os.Stat(marker); return err == nil })
 	if got := device.Snapshot(); got.Active == nil || got.Active.Owner != "bialy" {
 		t.Fatalf("model loading lacks admission: %+v", got)
 	}
@@ -105,7 +105,7 @@ func TestBialyCloseCancelsQueuedStartupWithoutLaunching(t *testing.T) {
 	t.Cleanup(func() { _ = client.Close() })
 	finished := make(chan error, 1)
 	go func() { finished <- client.Warm(t.Context()) }()
-	testutil.WaitFor(t, func() bool { return cfg.Resources.HostMemory.Snapshot().ReservedBytes != 0 })
+	testutil.WaitFor(t, "host memory is reserved", func() bool { return cfg.Resources.HostMemory.Snapshot().ReservedBytes != 0 })
 	testutil.FailErr(t, "close queued startup", client.Close())
 	if err := <-finished; err == nil {
 		t.Fatal("closed startup succeeded")

@@ -19,8 +19,8 @@ func (m *Manager) CreateWorkerWorkspace(ctx context.Context, primaryDir, jobID s
 	if err != nil {
 		return nil, err
 	}
-	roots := []projectroot.RootRef{{ID: "primary", Label: filepath.Base(primary), Path: primary, IsPrimary: true}}
-	binding, _, err := m.CreateWorkerBranch(ctx, roots, "primary", jobID)
+	roots := []projectroot.RootRef{{ID: projectroot.SingleRootID, Label: filepath.Base(primary), Path: primary, IsPrimary: true}}
+	binding, _, err := m.CreateWorkerBranch(ctx, roots, projectroot.SingleRootID, jobID)
 	return binding, err
 }
 

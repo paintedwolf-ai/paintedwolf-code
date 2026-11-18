@@ -11,7 +11,7 @@ vi.mock("../../chat/transcript/presentation/transcript-reveal.ts", () => ({ reve
 describe("shell go-to routing", () => {
   it("retains routed return behavior across settings, stages, projects, and sessions", async () => {
     const calls = { closeSearch: vi.fn(), closeLauncher: vi.fn(), showProjects: vi.fn(), openProject: vi.fn(),
-      resumeSession: vi.fn(async () => undefined), openWorkers: vi.fn(), setNav: vi.fn(), selectSettingsSection: vi.fn(),
+      resumeSession: vi.fn(async () => undefined), openWorkers: vi.fn(), openWorklog: vi.fn(), setNav: vi.fn(), selectSettingsSection: vi.fn(),
       openSettings: vi.fn(), openStageWithPlacement: vi.fn(), openConfiguration: vi.fn(), goHome: vi.fn() };
     const routeToStage = vi.fn((_stage: string, open: () => void) => open());
     const navigation = createRoot((dispose) => {

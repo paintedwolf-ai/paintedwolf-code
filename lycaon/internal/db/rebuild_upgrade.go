@@ -102,7 +102,7 @@ func upgradeRetained(ctx context.Context, path string, source *sql.DB, plan migr
 }
 
 func captureRetainedRecovery(ctx context.Context, replacement string, plan migrations.Plan, hooks UpgradeHooks, staged bool, prepared retainedCopyResult) (err error) {
-	reader, err := openReader(ctx, replacement)
+	reader, err := OpenReadOnly(ctx, replacement)
 	if err != nil {
 		return err
 	}

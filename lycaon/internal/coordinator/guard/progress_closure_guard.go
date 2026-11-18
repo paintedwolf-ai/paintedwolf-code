@@ -15,8 +15,19 @@ const ProgressReconciliationRequiredCode = "PROGRESS_RECONCILIATION_REQUIRED"
 type ProgressClosureBaseline struct {
 	Revision string
 	JobIDs   []string
-	// Settled names worker finishes for rejection details.
+	// Settled[i] names the finish of JobIDs[i] for the coordinator, by worker.
 	Settled []string
+}
+
+// SettledWork lists the named finishes.
+func (b ProgressClosureBaseline) SettledWork() []string {
+	out := make([]string, 0, len(b.Settled))
+	for _, entry := range b.Settled {
+		if entry != "" {
+			out = append(out, entry)
+		}
+	}
+	return out
 }
 
 // ObserveProgressReconciliationBeforeDispatch publishes progress-closure facts.
@@ -42,6 +53,6 @@ func ObserveProgressReconciliationBeforeDispatch(
 	gc.PutRejectData(ProgressReconciliationRequiredCode, map[string]any{
 		"tool":         strings.TrimSpace(tool),
 		"pending":      pending,
-		"settled_work": append([]string(nil), baseline.Settled...),
+		"settled_work": baseline.SettledWork(),
 	})
 }

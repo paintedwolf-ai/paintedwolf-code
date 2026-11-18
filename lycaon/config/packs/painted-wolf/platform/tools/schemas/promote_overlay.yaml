@@ -1,11 +1,11 @@
 description: >-
-  Atomically promote all observed worker changes (overlay_id=job_id). Conflicts return a menu without writes; resolve all via resolutions/drop.
+  Atomically land the changes a worker result holds, addressed by its result handle. Conflicts return a menu without writes; resolve all via resolutions/drop.
 schema:
   type: object
   properties:
     overlay_id:
       type: string
-      description: Worker job_id from task() or pack_board
+      description: The result handle from the worker's result notice or the roster.
     resolutions:
       type: array
       description: One object per conflicting path; put action, content or hunks beside path

@@ -24,11 +24,3 @@ func TestParseExtractJSONFromFence(t *testing.T) {
 		t.Fatal("expected extracted JSON")
 	}
 }
-
-func TestParseDelegationPlanRequiresTask(t *testing.T) {
-	svc := NewDefaultService()
-	_, err := svc.ValidateDelegationPlan(context.Background(), `{"legs":[{"title":"x"}]}`)
-	if err == nil {
-		t.Fatal("expected error for missing task")
-	}
-}

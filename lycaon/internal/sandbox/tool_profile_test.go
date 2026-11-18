@@ -201,3 +201,22 @@ tools:
 		t.Fatal("sticky read must not be deferred")
 	}
 }
+
+// A profile that can start background commands and wait can wait on its own
+// processes finishing.
+func TestShippedProfilesWithCommandAndWaitAdmitProcessDone(t *testing.T) {
+	profiles, err := LoadToolProfiles()
+	testutil.FailErr(t, "load shipped profiles", err)
+	for _, p := range profiles {
+		if !p.ToolAllowed("command") || !p.ToolAllowed("wait") {
+			continue
+		}
+		found := false
+		for _, c := range p.WaitConditions {
+			found = found || c == "process_done"
+		}
+		if !found {
+			t.Errorf("profile %s offers command and wait but not process_done: %v", p.ID, p.WaitConditions)
+		}
+	}
+}

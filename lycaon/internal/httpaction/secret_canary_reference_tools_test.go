@@ -12,6 +12,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/lycaon/lycaon/internal/nativemanifest"
+
 	"github.com/lycaon/lycaon/config"
 	"github.com/lycaon/lycaon/config/configtest"
 	"github.com/lycaon/lycaon/internal/bgprocess"
@@ -222,7 +224,16 @@ func TestSecretCanaryNeverEchoedByAnyReferenceTool(t *testing.T) {
 		return wire[len(wire)-1]
 	}, mcpReceived)
 
-	declared := toolcontract.SecretReferenceTools()
+	manifest, err := nativemanifest.Load()
+	if err != nil {
+		t.Fatalf("load native manifest: %v", err)
+	}
+	var declared []string
+	for _, row := range manifest.ToolContractRows() {
+		if contract, ok := toolcontract.Lookup(row.Tool); ok && contract.AcceptsSecretReferences() {
+			declared = append(declared, row.Tool)
+		}
+	}
 	for _, name := range []string{mcp.QualifiedToolName("canary", "echo"), mcp.QualifiedToolName("canary", "reject")} {
 		definition, ok := registry.Definition(name)
 		if !ok || !definition.Contract.AcceptsSecretReferences() {

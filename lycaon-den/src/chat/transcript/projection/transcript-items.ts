@@ -56,6 +56,8 @@ function appendRunningToolsForAssistant(
   opts: TranscriptToolBuildOpts,
 ): void {
   if (!msg.tool_calls?.length) return;
+  // Calls show once the host commits their row, after its note is settled.
+  if (msg.visibility === "internal") return;
   // Withdrawn calls have no result.
   if (msg.draft_status === "withdrawn") return;
   for (let callIndex = 0; callIndex < msg.tool_calls.length; callIndex++) {
@@ -129,6 +131,7 @@ function appendToolResultRow(
       kind: "checkpoint",
       key: `checkpoint:${decision.checkpoint_id}`,
       parentMessageId: assistantMessageId,
+      call: { tool: toolName, index: Math.max(callIndex, 0), resultMessageId: msg.id },
       meta: enrichCheckpointDecision(decision, call, msg.tool_result),
     });
   }
@@ -155,7 +158,7 @@ export function finalizeTranscriptItems(
   opts?: TranscriptBuildOptions,
 ): DisplayTranscriptItem[] {
   const visible = applyVerboseTranscriptVisibility(items, opts ?? {});
-  return projectActivitySpans(visible, { layout: opts?.layout });
+  return projectActivitySpans(visible, { layout: opts?.layout, verboseMode: opts?.verboseMode });
 }
 
 /** Pair tool results with assistant calls by durable parent and call identity. */
@@ -373,5 +376,3 @@ export function messagesToTranscriptItems(
 
   return items;
 }
-
-/** Maps message ids to creation order. */

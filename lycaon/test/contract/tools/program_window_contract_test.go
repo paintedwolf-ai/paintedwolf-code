@@ -170,7 +170,7 @@ func TestGitBisectRunHoldsTheWindowWhileItsCheckRuns(t *testing.T) {
 git bisect reset`, tc)
 		done <- err
 	}()
-	testutil.WaitFor(t, func() bool {
+	testutil.WaitFor(t, "the bisect check starts", func() bool {
 		_, err := os.Stat(filepath.Join(dir, "started"))
 		return err == nil
 	})

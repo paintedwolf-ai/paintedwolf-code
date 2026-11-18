@@ -41,6 +41,7 @@ func (m *Service) BeforeTool(
 	progressState := m.progressPrerequisites(ctx, sess)
 	root, currentProgress, reviewLoopActive := progressState.RootSessionID, progressState.Content, progressState.ReviewLoopActive
 	closureBaseline, closureArmed := m.ProgressClosure.Baseline(root)
+	closureArmed = closureArmed && !m.accountsLatchedResult(ctx, sess, tool, args, closureBaseline)
 	guardDeps := m.WorkerAdmission()
 	declaredVerify := ""
 	if tool == "verify" {
@@ -142,6 +143,9 @@ func (m *Service) BeforeFinish(
 		return reject, true
 	}
 	if reject, block := m.SourceEvidence(ctx, sess, history, draft.Verification, surfaceID, invokeAllowed); block {
+		return reject, true
+	}
+	if reject, block := m.PlanCloseout(ctx, sess, workersIdle, invokeAllowed); block {
 		return reject, true
 	}
 	if reject, block := m.OpenGates(ctx, sess, workersIdle, invokeAllowed); block {

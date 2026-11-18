@@ -138,7 +138,7 @@ func OpenWithOptions(ctx context.Context, dbPath string, hooks UpgradeHooks, opt
 		_ = os.Chmod(dbPath, defaultDBFileMode) // #nosec G703 -- local SQLite store path
 	}
 
-	reader, err := openReader(ctx, dbPath)
+	reader, err := OpenReadOnly(ctx, dbPath)
 	if err != nil {
 		_ = writer.Close()
 		return nil, ClassifyStoreFailure(err)
@@ -172,10 +172,6 @@ func emptyStoreHasRecoveryArtifacts(dbPath string) bool {
 
 // OpenReadOnly opens an existing store without schema preparation or write access.
 func OpenReadOnly(ctx context.Context, dbPath string) (*sql.DB, error) {
-	return openReader(ctx, dbPath)
-}
-
-func openReader(ctx context.Context, dbPath string) (*sql.DB, error) {
 	dsn := fileDSN(dbPath, readerDSNQuery)
 	sqlDB, err := openCounted(dsn)
 	if err != nil {

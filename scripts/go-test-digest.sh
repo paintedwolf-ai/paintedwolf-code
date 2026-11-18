@@ -22,7 +22,6 @@ DIGEST="${ROOT}/scripts/test-digest.py"
 MANIFEST_TOOL="${ROOT}/scripts/test-run-manifest.py"
 LOCK_SH="${ROOT}/scripts/digest-run-lock.sh"
 ISOLATION_SH="${ROOT}/scripts/test-run-isolation.sh"
-CAPACITY_SH="${ROOT}/scripts/test-host-capacity.sh"
 # shellcheck source=artifact-paths.sh
 source "${ROOT}/scripts/artifact-paths.sh"
 ARTIFACT_ROOT="${PW_ARTIFACT_ROOT}"
@@ -33,8 +32,6 @@ mkdir -p "${LOGDIR}"
 source "${LOCK_SH}"
 # shellcheck source=test-run-isolation.sh
 source "${ISOLATION_SH}"
-# shellcheck source=test-host-capacity.sh
-source "${CAPACITY_SH}"
 
 NAME="go-test"
 SHORT_FLAG=(-short)
@@ -43,7 +40,6 @@ BUILD_TAGS=""
 EXCLUDE_PKG=""
 RAW="${LOGDIR}/go-test.json"
 GO_TEST_TIMEOUT_SECONDS="${PW_GO_TEST_TIMEOUT_SECONDS:-}"
-PACKAGE_TIMEOUT="30m"
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -67,11 +63,6 @@ while [[ $# -gt 0 ]]; do
     --race)
       RACE_FLAG=(-race)
       shift
-      ;;
-    --timeout)
-      # Per-package wall-clock budget.
-      PACKAGE_TIMEOUT="$2"
-      shift 2
       ;;
     --raw)
       RAW="$2"
@@ -169,7 +160,6 @@ if [[ -n "${REPLAY_MANIFEST}" ]]; then
   while IFS= read -r -d '' arg; do
     TEST_ARGS+=("${arg}")
   done <"${REPLAY_GO_ARGV_FILE}"
-  TEST_TIMEOUT_SCALE="${PW_TEST_TIMEOUT_SCALE:?replay manifest has no timeout scale}"
   P_PKGS="${GO_TEST_P:?replay manifest has no package concurrency}"
   P_INTRA="${GO_TEST_PARALLEL:?replay manifest has no test concurrency}"
   GO_TEST_TIMEOUT_SECONDS="${PW_GO_TEST_TIMEOUT_SECONDS:?replay manifest has no watchdog timeout}"
@@ -187,24 +177,15 @@ else
     PKGS=("${FILTERED[@]}")
   fi
 
-  NCPU="$(test_host_cpu_count)"
-  HOST_LOAD="$(test_host_load_one)"
-  EXPLICIT_TIMEOUT_SCALE="${PW_TEST_TIMEOUT_SCALE:-}"
-  TEST_TIMEOUT_SCALE="$(test_host_timeout_scale "${NCPU}" "${HOST_LOAD}")"
-  # The race detector slows instrumented code several-fold whatever the host load.
-  if ((${#RACE_FLAG[@]})) && [[ -z "${EXPLICIT_TIMEOUT_SCALE}" ]] && ((TEST_TIMEOUT_SCALE < 3)); then
-    TEST_TIMEOUT_SCALE=3
-  fi
-  export PW_TEST_TIMEOUT_SCALE="${TEST_TIMEOUT_SCALE}"
   # The exec wrapper scales each package's memory ceiling for the detector's overhead.
   if ((${#RACE_FLAG[@]})); then export PW_TEST_RACE=1; else unset PW_TEST_RACE; fi
   P_PKGS="${GO_TEST_P:?verification admission must set GO_TEST_P}"
   P_INTRA="${GO_TEST_PARALLEL:?verification admission must set GO_TEST_PARALLEL}"
-  PACKAGE_TIMEOUT="$(test_scale_go_duration "${PACKAGE_TIMEOUT}" "${TEST_TIMEOUT_SCALE}")"
   if [[ -z "${GO_TEST_TIMEOUT_SECONDS}" ]]; then
-    GO_TEST_TIMEOUT_SECONDS="$(test_scale_integer 2700 "${TEST_TIMEOUT_SCALE}")"
+    GO_TEST_TIMEOUT_SECONDS="$(python3 "${ROOT}/scripts/test-execution.py" backstop --name "${NAME}")"
   fi
-  TEST_ARGS=(-json -p "${P_PKGS}" -parallel "${P_INTRA}" -timeout "${PACKAGE_TIMEOUT}")
+  # No package fails on elapsed time; the watchdog below is the run's one limit.
+  TEST_ARGS=(-json -p "${P_PKGS}" -parallel "${P_INTRA}" -timeout 0)
   if ((${#SHORT_FLAG[@]})); then
     TEST_ARGS+=("${SHORT_FLAG[@]}")
   else
@@ -226,13 +207,9 @@ P_PKGS="${BOUNDED_GO[0]}"
 P_INTRA="${BOUNDED_GO[1]}"
 EFFECTIVE_GOMAXPROCS="${BOUNDED_GO[2]}"
 TEST_ARGS=("${BOUNDED_GO[@]:3}")
-if [[ -z "${REPLAY_MANIFEST}" ]] && ((TEST_TIMEOUT_SCALE > 1)); then
-  printf 'go-test-digest: host load %s on %s CPUs; package limit=%s, parallel test limit=%s, GOMAXPROCS=%s, timeout scale=%sx\n' \
-    "${HOST_LOAD}" "${NCPU}" "${P_PKGS}" "${P_INTRA}" "${EFFECTIVE_GOMAXPROCS}" "${TEST_TIMEOUT_SCALE}" >&2
-fi
 if [[ -n "${REPLAY_MANIFEST}" ]]; then
-  printf 'go-test-digest: replaying with package limit=%s, parallel test limit=%s, GOMAXPROCS=%s, timeout scale=%sx\n' \
-    "${P_PKGS}" "${P_INTRA}" "${EFFECTIVE_GOMAXPROCS}" "${TEST_TIMEOUT_SCALE}" >&2
+  printf 'go-test-digest: replaying with package limit=%s, parallel test limit=%s, GOMAXPROCS=%s\n' \
+    "${P_PKGS}" "${P_INTRA}" "${EFFECTIVE_GOMAXPROCS}" >&2
 fi
 printf '%s\0' "${TEST_ARGS[@]}" >"${GO_ARGV_FILE}"
 RUN_ID="$(date +%Y%m%dT%H%M%S)-$$-${RANDOM:-0}"
@@ -248,7 +225,6 @@ python3 "${MANIFEST_TOOL}" create \
   --source-root "${ROOT}" \
   --runner-argv "${RUNNER_ARGV_FILE}" \
   --go-argv "${GO_ARGV_FILE}" \
-  --env "PW_TEST_TIMEOUT_SCALE=${TEST_TIMEOUT_SCALE}" \
   --env "GO_TEST_P=${P_PKGS}" \
   --env "GO_TEST_PARALLEL=${P_INTRA}" \
   --env "PW_GO_TEST_TIMEOUT_SECONDS=${GO_TEST_TIMEOUT_SECONDS}" \

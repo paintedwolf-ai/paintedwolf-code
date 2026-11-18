@@ -3,6 +3,7 @@ package scan
 import (
 	"context"
 	"encoding/json"
+	"github.com/lycaon/lycaon/internal/timelayout"
 	"time"
 
 	"github.com/lycaon/lycaon/internal/db"
@@ -96,7 +97,7 @@ func formatCadenceTime(t time.Time) string {
 	if t.IsZero() {
 		return ""
 	}
-	return db.FormatTime(t.UTC())
+	return timelayout.Format(t.UTC())
 }
 
 func seriesPathsJSON(paths []string) string {
@@ -227,7 +228,7 @@ func (s *sqlRunStore) OldestDispatchHeartbeat(ctx context.Context) (time.Time, e
 	return parseCadenceTime(raw), err
 }
 func (s *sqlRunStore) FindingChangesSince(ctx context.Context, canonical string, since time.Time) (int, int, error) {
-	counts, err := s.queries.CountScanFindingEventsSince(ctx, db.CountScanFindingEventsSinceParams{CanonicalPath: canonical, ObservedAt: db.FormatTime(since)})
+	counts, err := s.queries.CountScanFindingEventsSince(ctx, db.CountScanFindingEventsSinceParams{CanonicalPath: canonical, ObservedAt: timelayout.Format(since)})
 	if err != nil {
 		return 0, 0, err
 	}

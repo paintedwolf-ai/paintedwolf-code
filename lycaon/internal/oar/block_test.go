@@ -65,12 +65,27 @@ func TestEvaluateBlockRejectDataBeforeEval(t *testing.T) {
 	}
 }
 
-func TestEvaluateBlockDisabledIsNoop(t *testing.T) {
-	p := NewGuardPipeline(NewRuleSet(nil), nil, nil)
-	res, err := p.EvaluateBlock(context.Background(), AnchorToolHandler, NewGuardContext())
-	testutil.FailErr(t, "eval", err)
-	if res.Enforced {
-		t.Fatal("disabled anchor must not enforce")
+// EvaluateBlock stays dormant on an anchor until EnableAnchor, even when a
+// selected rule would fire there.
+func TestEvaluateBlockDormantUntilAnchorEnabled(t *testing.T) {
+	ensureCatalog(t)
+	l, err := NewLoader(schemaDir(t))
+	testutil.FailErr(t, "loader", err)
+	r := &Rule{
+		ID: "ALWAYS", Kind: KindPolicy, Anchor: AnchorToolPreInvoke,
+		Effect: EffectWarn, Enforcement: "enforce",
+	}
+	p := NewGuardPipeline(NewRuleSet([]*Rule{r}), l, NewCounterStore())
+	res, err := p.EvaluateBlock(context.Background(), AnchorToolPreInvoke, NewGuardContext())
+	testutil.FailErr(t, "eval dormant", err)
+	if res.Enforced || res.Decision != nil {
+		t.Fatalf("dormant anchor decided: %#v", res)
+	}
+	p.EnableAnchor(AnchorToolPreInvoke)
+	res, err = p.EvaluateBlock(context.Background(), AnchorToolPreInvoke, NewGuardContext())
+	testutil.FailErr(t, "eval enabled", err)
+	if res.Decision == nil || res.Decision.Code != "ALWAYS" {
+		t.Fatalf("enabled anchor did not decide: %#v", res)
 	}
 }
 

@@ -37,6 +37,10 @@ components:
           type: object
           additionalProperties: true
           description: Provider-specific tool-call metadata required on replay.
+        action:
+          x-go-pointer: true
+          $ref: actions.yaml#/components/schemas/ActionDescriptor
+          description: Card for the call before its result arrives; projected on read, never stored.
     ToolResult:
       x-go-generate: true
       type: object
@@ -104,6 +108,19 @@ components:
             content.
           items:
             $ref: "#/components/schemas/ToolFeedback"
+        action:
+          x-go-pointer: true
+          $ref: actions.yaml#/components/schemas/ActionDescriptor
+          description: Card for a settled call that is not a command program; projected on read, never stored.
+        card_facts:
+          type: array
+          maxItems: 4
+          items:
+            $ref: actions.yaml#/components/schemas/ActionFact
+          description: >-
+            Facts the tool's handler stated for its action card, such as what
+            it found or the HTTP status it got. Stored with the result; never
+            part of the model's tool result.
         ui_visibility:
           x-go-name: "UiVisibility"
           $ref: "#/components/schemas/ToolResultUiVisibility"

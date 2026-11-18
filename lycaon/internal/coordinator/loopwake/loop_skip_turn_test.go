@@ -131,5 +131,5 @@ func TestLoopSkipTurnDoesNotApplyToDispatchWake(t *testing.T) {
 		"",
 		anchor.Envelope{},
 	)
-	testutil.WaitFor(t, func() bool { return prompts.Load() >= 1 })
+	testutil.WaitFor(t, "the dispatch wake runs a prompt", func() bool { return prompts.Load() >= 1 })
 }

@@ -97,10 +97,26 @@ func runScanSummary(ctx context.Context, args map[string]any, tctx tools.ToolCon
 			Data: map[string]any{"scan_id": scanID},
 		}, rejectFmt)
 	}
+	stateFindings(tctx, *rec)
 	if trimmed := scanbase.ApplyScanView(rec, view); trimmed != nil {
 		rec = trimmed
 	}
 	return marshalDrilldownJSON(rec)
+}
+
+// stateFindings puts a completed scan's findings by severity on the call's
+// action card. Critical findings count as high.
+func stateFindings(tctx tools.ToolContext, scan api.CodeScan) {
+	if scan.Status != api.CodeScanStatusComplete {
+		return
+	}
+	levels := scan.FindingsByLevel
+	tctx.Effects.Out.StateCardFact(api.ActionFact{
+		Kind: api.ActionFactFound, Count: scan.FindingsCount, Noun: "findings",
+		High:   levels[string(api.FindingLevelCritical)] + levels[string(api.FindingLevelHigh)],
+		Medium: levels[string(api.FindingLevelMedium)],
+		Low:    levels[string(api.FindingLevelLow)],
+	})
 }
 
 // SummarizeFullPass reads a full pass by id, including members that have not started.

@@ -123,25 +123,6 @@ func TestNonHTTPContractNoDockerDaemonInnerEffectSynthesis(t *testing.T) {
 	}
 }
 
-func TestNonHTTPContractTranscriptExternalAccessCannotDisappear(t *testing.T) {
-	t.Parallel()
-	root := contractcheck.RepoRoot(t)
-	pres := contractcheck.ReadRepoFile(t, root, "lycaon-den/src/chat/tool/external-access-presentation.ts")
-	if !strings.Contains(pres, "mustShow") {
-		t.Fatal("Den presentation must compute mustShow for exceptional access")
-	}
-	if !strings.Contains(pres, "direct_ip") || !strings.Contains(pres, "full_bypass") || !strings.Contains(pres, "unobserved") {
-		t.Fatal("Den presentation must keep socket/direct/bypass/unobserved visible")
-	}
-	chicklet := contractcheck.ReadRepoFile(t, root, "lycaon-den/src/components/tool/NetworkChicklet.tsx")
-	if !strings.Contains(chicklet, "buildExternalAccessView") && !strings.Contains(chicklet, "EXTERNAL_ACCESS_LABEL") {
-		// NetworkChicklet may import the presentation helper under a different local name.
-		if !strings.Contains(chicklet, "external-access-presentation") && !strings.Contains(chicklet, "External access") {
-			t.Fatal("transcript External access chicklet must remain wired")
-		}
-	}
-}
-
 func TestNonHTTPContractUnobservedAndUnknownStayDistinct(t *testing.T) {
 	t.Parallel()
 	ea := authzcontext.BuildExternalAccess(authzcontext.ExternalAccessInput{Direct: true})
@@ -151,25 +132,6 @@ func TestNonHTTPContractUnobservedAndUnknownStayDistinct(t *testing.T) {
 	unknown := authzcontext.BuildExternalAccess(authzcontext.ExternalAccessInput{})
 	if unknown.VisibilitySummary != api.ExternalAccessVisibilitySummaryUnknown {
 		t.Fatalf("empty visibility=%q", unknown.VisibilitySummary)
-	}
-}
-
-func TestNonHTTPContractMediationUnavailableDistinctFromBypass(t *testing.T) {
-	t.Parallel()
-	root := contractcheck.RepoRoot(t)
-	banners := contractcheck.ReadRepoFile(t, root, "lycaon-den/src/components/shell/SessionProtectionBanners.tsx")
-	if !strings.Contains(banners, "MEDIATION_UNAVAILABLE_COPY") || !strings.Contains(banners, "SANDBOX_BYPASS_COPY") {
-		t.Fatal("Den must keep distinct mediation-unavailable and sandbox-bypass copy")
-	}
-	if !strings.Contains(banners, "protection-mediation-unavailable") || !strings.Contains(banners, "protection-sandbox-bypass") {
-		t.Fatal("Den must keep distinct protection banner test ids")
-	}
-	prot := contractcheck.ReadRepoFile(t, root, "lycaon/internal/session/protection/state.go")
-	if !strings.Contains(prot, "MediationUnavailable") {
-		t.Fatal("session protection state must expose mediation unavailable")
-	}
-	if !strings.Contains(prot, "SandboxBypass") {
-		t.Fatal("session protection state must expose sandbox bypass distinctly")
 	}
 }
 

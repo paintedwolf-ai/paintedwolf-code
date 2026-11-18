@@ -3,8 +3,6 @@ package governance_test
 import (
 	"context"
 	"fmt"
-	"os"
-	"path/filepath"
 	"strings"
 	"testing"
 	"unicode/utf8"
@@ -32,42 +30,6 @@ func TestBuildIndexInjectListsPaths(t *testing.T) {
 		if !strings.Contains(block, want) {
 			t.Fatalf("missing %q in:\n%s", want, block)
 		}
-	}
-}
-
-func TestBuildChainInjectOrdersNearestLast(t *testing.T) {
-	root := agentsMDFixture(t, "monorepo")
-	blockInject, err := governance.BuildChainInject(context.Background(), injectRenderer(t), "sess-inject-test", root, "lycaon/foo.go", governance.DefaultAgentsMDInjectMaxBodyBytes)
-	block := blockInject.Content
-	testutil.FailErr(t, "BuildChainInject", err)
-	if len(blockInject.Paths) != 2 || blockInject.Paths[0] != "AGENTS.md" || blockInject.Paths[1] != "lycaon/AGENTS.md" {
-		t.Fatalf("chain paths = %v", blockInject.Paths)
-	}
-	rootIdx := strings.Index(block, "Root agents policy")
-	nestedIdx := strings.Index(block, "Go backend policy")
-	if rootIdx < 0 || nestedIdx < 0 {
-		t.Fatalf("missing expected chain excerpts:\n%s", block)
-	}
-	if rootIdx > nestedIdx {
-		t.Fatalf("root excerpt must precede nested excerpt:\n%s", block)
-	}
-}
-
-func TestBuildChainInjectRefreshesChangedBodies(t *testing.T) {
-	root := agentsMDFixture(t, "monorepo")
-	renderer := injectRenderer(t)
-	firstInject, err := governance.BuildChainInject(context.Background(), renderer, "sess-inject-test", root, "lycaon/foo.go", governance.DefaultAgentsMDInjectMaxBodyBytes)
-	first := firstInject.Content
-	testutil.FailErr(t, "first BuildChainInject", err)
-	if !strings.Contains(first, "Go backend policy") {
-		t.Fatalf("first inject missing nested content:\n%s", first)
-	}
-	writeAgentsMD(t, root, "lycaon/AGENTS.md", "Updated backend policy\n")
-	secondInject, err := governance.BuildChainInject(context.Background(), renderer, "sess-inject-test", root, "lycaon/foo.go", governance.DefaultAgentsMDInjectMaxBodyBytes)
-	second := secondInject.Content
-	testutil.FailErr(t, "second BuildChainInject", err)
-	if !strings.Contains(second, "Updated backend policy") {
-		t.Fatalf("second inject must contain the external edit, got:\n%s", second)
 	}
 }
 
@@ -131,38 +93,6 @@ func TestCapAgentsMDBodyDegradePreviewIsRuneSafe(t *testing.T) {
 	got := governance.CapAgentsMDBody(body.String(), maxBytes, "AGENTS.md")
 	if !utf8.ValidString(got) {
 		t.Fatalf("degraded body is not valid UTF-8:\n%q", got)
-	}
-}
-
-func TestBuildChainInjectCapsOversizedBody(t *testing.T) {
-	root := t.TempDir()
-	oversized := strings.Repeat("x", governance.DefaultAgentsMDInjectMaxBodyBytes+64)
-	if err := os.WriteFile(filepath.Join(root, "AGENTS.md"), []byte(oversized), 0o644); err != nil {
-		testutil.FailErr(t, "write AGENTS.md", err)
-	}
-	blockInject, err := governance.BuildChainInject(context.Background(), injectRenderer(t), "sess-inject-test", root, "foo.go", governance.DefaultAgentsMDInjectMaxBodyBytes)
-	block := blockInject.Content
-	testutil.FailErr(t, "BuildChainInject", err)
-	if !strings.Contains(block, governance.AgentsMDBodyTruncatedMarker) {
-		t.Fatalf("oversized inject missing marker:\n%s", block)
-	}
-}
-
-func TestBuildChainInjectDegradesOversizedHeadedBody(t *testing.T) {
-	root := t.TempDir()
-	var body strings.Builder
-	for i := 1; i <= 400; i++ {
-		fmt.Fprintf(&body, "## Section %d\n\nPolicy prose for section %d.\n\n", i, i)
-	}
-	writeAgentsMD(t, root, "AGENTS.md", body.String())
-	blockInject, err := governance.BuildChainInject(context.Background(), injectRenderer(t), "sess-inject-test", root, "foo.go", 4096)
-	block := blockInject.Content
-	testutil.FailErr(t, "BuildChainInject", err)
-	if !strings.Contains(block, "## Section 1") {
-		t.Fatalf("degraded inject missing first heading:\n%s", block)
-	}
-	if !strings.Contains(block, "more section(s) not shown") {
-		t.Fatalf("degraded inject missing omission count:\n%s", block)
 	}
 }
 

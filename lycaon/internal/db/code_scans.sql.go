@@ -361,6 +361,69 @@ func (q *Queries) FindInFlightScanForDelegationSnapshot(ctx context.Context, arg
 	return i, err
 }
 
+const findInFlightScanForSessionSnapshot = `-- name: FindInFlightScanForSessionSnapshot :one
+SELECT scan.id, scan.canonical_path, scan.categories_json, scan.scanner_id, scan.claimed_by, scan.claim_token, scan.attempt, scan.heartbeat_at, scan.lease_expires_at, scan.status, scan.result_json, scan.created_at,
+       scan.delegation_id, scan.head_sha, scan.source_snapshot_id, scan.replacement_scan_id, scan.trigger, scan.completed_at, scan.paths_json, scan.reuse_key, scan.error,
+       scan.guidance_json, scan.ingest_json, scan.runtime_json, scan.progress_json, scan.delta_json, scan.started_at, scan.long_running_at
+FROM code_scans AS scan
+JOIN session_scan_bindings AS binding ON binding.scan_id = scan.id
+WHERE binding.session_id = ?1
+  AND scan.categories_json = ?2
+  AND scan.status IN ('pending', 'running')
+  AND scan.source_snapshot_id = ?3
+  AND scan.paths_json = ?4
+ORDER BY scan.created_at DESC, scan.rowid DESC
+LIMIT 1
+`
+
+type FindInFlightScanForSessionSnapshotParams struct {
+	SessionID        string `json:"session_id"`
+	CategoriesJson   string `json:"categories_json"`
+	SourceSnapshotID string `json:"source_snapshot_id"`
+	PathsJson        string `json:"paths_json"`
+}
+
+func (q *Queries) FindInFlightScanForSessionSnapshot(ctx context.Context, arg FindInFlightScanForSessionSnapshotParams) (CodeScans, error) {
+	row := q.db.QueryRowContext(ctx, findInFlightScanForSessionSnapshot,
+		arg.SessionID,
+		arg.CategoriesJson,
+		arg.SourceSnapshotID,
+		arg.PathsJson,
+	)
+	var i CodeScans
+	err := row.Scan(
+		&i.ID,
+		&i.CanonicalPath,
+		&i.CategoriesJson,
+		&i.ScannerID,
+		&i.ClaimedBy,
+		&i.ClaimToken,
+		&i.Attempt,
+		&i.HeartbeatAt,
+		&i.LeaseExpiresAt,
+		&i.Status,
+		&i.ResultJson,
+		&i.CreatedAt,
+		&i.DelegationID,
+		&i.HeadSha,
+		&i.SourceSnapshotID,
+		&i.ReplacementScanID,
+		&i.Trigger,
+		&i.CompletedAt,
+		&i.PathsJson,
+		&i.ReuseKey,
+		&i.Error,
+		&i.GuidanceJson,
+		&i.IngestJson,
+		&i.RuntimeJson,
+		&i.ProgressJson,
+		&i.DeltaJson,
+		&i.StartedAt,
+		&i.LongRunningAt,
+	)
+	return i, err
+}
+
 const findReusableScanByPathScanner = `-- name: FindReusableScanByPathScanner :one
 SELECT id, canonical_path, categories_json, scanner_id, claimed_by, claim_token, attempt, heartbeat_at, lease_expires_at, status, result_json, created_at,
        delegation_id, head_sha, source_snapshot_id, replacement_scan_id, trigger, completed_at, paths_json, reuse_key, error,
@@ -886,6 +949,62 @@ func (q *Queries) LatestCompleteScanForDelegationSnapshot(ctx context.Context, a
 	return i, err
 }
 
+const latestCompleteScanForSessionSnapshot = `-- name: LatestCompleteScanForSessionSnapshot :one
+SELECT scan.id, scan.canonical_path, scan.categories_json, scan.scanner_id, scan.claimed_by, scan.claim_token, scan.attempt, scan.heartbeat_at, scan.lease_expires_at, scan.status, scan.result_json, scan.created_at,
+       scan.delegation_id, scan.head_sha, scan.source_snapshot_id, scan.replacement_scan_id, scan.trigger, scan.completed_at, scan.paths_json, scan.reuse_key, scan.error,
+       scan.guidance_json, scan.ingest_json, scan.runtime_json, scan.progress_json, scan.delta_json, scan.started_at, scan.long_running_at
+FROM code_scans AS scan
+JOIN session_scan_bindings AS binding ON binding.scan_id = scan.id
+WHERE binding.session_id = ?1
+  AND scan.categories_json = ?2
+  AND scan.status = 'complete'
+  AND scan.source_snapshot_id = ?3
+ORDER BY scan.created_at DESC, scan.rowid DESC
+LIMIT 1
+`
+
+type LatestCompleteScanForSessionSnapshotParams struct {
+	SessionID        string `json:"session_id"`
+	CategoriesJson   string `json:"categories_json"`
+	SourceSnapshotID string `json:"source_snapshot_id"`
+}
+
+func (q *Queries) LatestCompleteScanForSessionSnapshot(ctx context.Context, arg LatestCompleteScanForSessionSnapshotParams) (CodeScans, error) {
+	row := q.db.QueryRowContext(ctx, latestCompleteScanForSessionSnapshot, arg.SessionID, arg.CategoriesJson, arg.SourceSnapshotID)
+	var i CodeScans
+	err := row.Scan(
+		&i.ID,
+		&i.CanonicalPath,
+		&i.CategoriesJson,
+		&i.ScannerID,
+		&i.ClaimedBy,
+		&i.ClaimToken,
+		&i.Attempt,
+		&i.HeartbeatAt,
+		&i.LeaseExpiresAt,
+		&i.Status,
+		&i.ResultJson,
+		&i.CreatedAt,
+		&i.DelegationID,
+		&i.HeadSha,
+		&i.SourceSnapshotID,
+		&i.ReplacementScanID,
+		&i.Trigger,
+		&i.CompletedAt,
+		&i.PathsJson,
+		&i.ReuseKey,
+		&i.Error,
+		&i.GuidanceJson,
+		&i.IngestJson,
+		&i.RuntimeJson,
+		&i.ProgressJson,
+		&i.DeltaJson,
+		&i.StartedAt,
+		&i.LongRunningAt,
+	)
+	return i, err
+}
+
 const latestCoveringFindingSetBase = `-- name: LatestCoveringFindingSetBase :one
 SELECT fs.id
 FROM scan_finding_sets fs
@@ -920,17 +1039,18 @@ func (q *Queries) LatestCoveringFindingSetBase(ctx context.Context, arg LatestCo
 	return id, err
 }
 
-const latestRequiredLandedChangeForDelegation = `-- name: LatestRequiredLandedChangeForDelegation :one
-SELECT id, worker_job_id, canonical_path, delegation_id, workflow_run_id,
-       changed_paths_json, deleted_paths_json, scan_required, scan_id, created_at
-FROM landed_changes
-WHERE delegation_id = ? AND scan_required = 1
-ORDER BY rowid DESC
+const latestRequiredLandedChangeForSession = `-- name: LatestRequiredLandedChangeForSession :one
+SELECT lc.id, lc.worker_job_id, lc.canonical_path, lc.delegation_id, lc.workflow_run_id,
+       lc.changed_paths_json, lc.deleted_paths_json, lc.scan_required, lc.scan_id, lc.created_at
+FROM landed_changes lc
+JOIN worker_jobs wj ON wj.id = lc.worker_job_id
+WHERE wj.parent_session_id = ? AND lc.scan_required = 1
+ORDER BY lc.rowid DESC
 LIMIT 1
 `
 
-func (q *Queries) LatestRequiredLandedChangeForDelegation(ctx context.Context, delegationID string) (LandedChanges, error) {
-	row := q.db.QueryRowContext(ctx, latestRequiredLandedChangeForDelegation, delegationID)
+func (q *Queries) LatestRequiredLandedChangeForSession(ctx context.Context, parentSessionID sql.NullString) (LandedChanges, error) {
+	row := q.db.QueryRowContext(ctx, latestRequiredLandedChangeForSession, parentSessionID)
 	var i LandedChanges
 	err := row.Scan(
 		&i.ID,
@@ -943,57 +1063,6 @@ func (q *Queries) LatestRequiredLandedChangeForDelegation(ctx context.Context, d
 		&i.ScanRequired,
 		&i.ScanID,
 		&i.CreatedAt,
-	)
-	return i, err
-}
-
-const latestScanForDelegation = `-- name: LatestScanForDelegation :one
-SELECT id, canonical_path, categories_json, scanner_id, claimed_by, claim_token, attempt, heartbeat_at, lease_expires_at, status, result_json, created_at,
-       delegation_id, head_sha, source_snapshot_id, replacement_scan_id, trigger, completed_at, paths_json, reuse_key, error,
-       guidance_json, ingest_json, runtime_json, progress_json, delta_json, started_at, long_running_at
-FROM code_scans
-WHERE delegation_id = ? AND categories_json = ?
-ORDER BY created_at DESC, rowid DESC
-LIMIT 1
-`
-
-type LatestScanForDelegationParams struct {
-	DelegationID   string `json:"delegation_id"`
-	CategoriesJson string `json:"categories_json"`
-}
-
-func (q *Queries) LatestScanForDelegation(ctx context.Context, arg LatestScanForDelegationParams) (CodeScans, error) {
-	row := q.db.QueryRowContext(ctx, latestScanForDelegation, arg.DelegationID, arg.CategoriesJson)
-	var i CodeScans
-	err := row.Scan(
-		&i.ID,
-		&i.CanonicalPath,
-		&i.CategoriesJson,
-		&i.ScannerID,
-		&i.ClaimedBy,
-		&i.ClaimToken,
-		&i.Attempt,
-		&i.HeartbeatAt,
-		&i.LeaseExpiresAt,
-		&i.Status,
-		&i.ResultJson,
-		&i.CreatedAt,
-		&i.DelegationID,
-		&i.HeadSha,
-		&i.SourceSnapshotID,
-		&i.ReplacementScanID,
-		&i.Trigger,
-		&i.CompletedAt,
-		&i.PathsJson,
-		&i.ReuseKey,
-		&i.Error,
-		&i.GuidanceJson,
-		&i.IngestJson,
-		&i.RuntimeJson,
-		&i.ProgressJson,
-		&i.DeltaJson,
-		&i.StartedAt,
-		&i.LongRunningAt,
 	)
 	return i, err
 }

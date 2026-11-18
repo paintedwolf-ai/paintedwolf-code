@@ -37,17 +37,23 @@ func feedbackForFacts(facts ToolResultFacts) []api.ToolFeedback {
 	return out
 }
 
+// StartsWorkerRound reports a tool whose result can start a worker round: a
+// task dispatch, or an instruction that admits a new round. That result is
+// where the round's completion lands.
+func StartsWorkerRound(toolName string) bool {
+	switch strings.TrimSpace(strings.ToLower(toolName)) {
+	case "task", "delegate_dispatch", "instruct_worker":
+		return true
+	}
+	return false
+}
+
 // ApplyTaskDispatchMetadata stamps producer-stated worker identity.
 func ApplyTaskDispatchMetadata(toolName string, tr *api.ToolResult, dispatch *api.WorkerDispatch) {
-	if tr == nil {
+	if tr == nil || !StartsWorkerRound(toolName) {
 		return
 	}
 	normalizedTool := strings.TrimSpace(strings.ToLower(toolName))
-	switch normalizedTool {
-	case "task", "delegate_dispatch":
-	default:
-		return
-	}
 	tr.Tool = normalizedTool
 	if dispatch == nil || strings.TrimSpace(dispatch.WorkerID) == "" {
 		return
@@ -80,8 +86,6 @@ func uiVisibilityForEntry(entry HintEntry) api.ToolResultUiVisibility {
 	emit := strings.ToLower(strings.TrimSpace(entry.Emit))
 
 	switch {
-	case category == "worker_dispatch":
-		return api.ToolResultUiVisibilityNormal
 	case category == "informational" || category == "advisory" || category == "expected_behavior":
 		return api.ToolResultUiVisibilityBenign
 	case severity == "info" || severity == "warning":

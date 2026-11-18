@@ -3,17 +3,16 @@ package sourceview
 import (
 	"errors"
 	"fmt"
-	"github.com/lycaon/lycaon/internal/toolrejection"
 	"os"
 	"path/filepath"
 	"strings"
 
+	"github.com/lycaon/lycaon/internal/toolrejection"
+
 	"github.com/lycaon/lycaon/internal/filekind"
 	"github.com/lycaon/lycaon/internal/structrewrite"
-	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/tools/safecmd"
 	"github.com/lycaon/lycaon/internal/tsparse"
-	"github.com/lycaon/lycaon/pkg/api"
 )
 
 // DirectoryReject reports an attempt to read or mutate a directory where a file is required.
@@ -79,19 +78,4 @@ func ParseReject(path, phase string, err error) *toolrejection.ToolReject {
 		code = "SOURCE_PARSE_INCOMPLETE"
 	}
 	return &toolrejection.ToolReject{Code: code, Data: data}
-}
-
-func ReportParseFailures(tctx tools.ToolContext, failures []tsparse.FileFailure, total int) {
-	if tctx.Effects.Out == nil || len(failures) == 0 {
-		return
-	}
-	first := failures[0]
-	data := first.Failure.Facts(first.Phase)
-	data["path"], data["parse_failure_count"] = first.Path, total
-	paths := make([]string, len(failures))
-	for i, failure := range failures {
-		paths[i] = failure.Path
-	}
-	data["parse_paths"] = paths
-	tctx.Effects.Out.Facts = tctx.Effects.Out.Facts.WithFeedback(toolrejection.SourceAnalysisUnavailableCode, data, &api.FeedbackSubject{Kind: "path", ID: first.Path})
 }

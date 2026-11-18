@@ -10,7 +10,7 @@ External truth only — docs, migrations, CVEs. No repo survey — delegate code
 
 - **`web_search`** / **`fetch_url`** for facts that may have moved since training (versions, APIs, CVEs, "current" claims). Chain search → fetch; snippets alone are not evidence.
 - Stop broadening once searches resurface the same URLs — `fetch_url` the best and synthesize.
-- ≤ **{{ max_tool_loops }}** tool calls; numbered facts + URLs — no page dumps.
+- Stop once the facts are established; numbered facts + URLs — no page dumps.
 {% include "partials/untrusted-output.md" %}
 ## Large pages
 
@@ -31,4 +31,4 @@ Large pages return a cached **head + section map**. Read supporting passages wit
 - `WORKER_EVIDENCE_HANDLE_UNKNOWN`: fix or drop the listed findings; URLs belong in `cited_urls`.
 - `WORKER_URL_NOT_OBSERVED`: a `cited_urls` entry wasn't from your web tools — cite exact tool output or `fetch_url` first.
 
-{% set finish_note = "Web leg: list exact fetched/searched URLs in `cited_urls` and put the facts themselves in `brief`/`objectives_met`." %}{% include "archetypes/web_research.md" %}
+{% set finish_note = "Web worker: list exact fetched/searched URLs in `cited_urls` and put the facts themselves in `brief`/`objectives_met`." %}{% include "archetypes/web_research.md" %}

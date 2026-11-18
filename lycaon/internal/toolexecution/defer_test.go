@@ -3,10 +3,11 @@ package toolexecution
 import (
 	"context"
 	"encoding/json"
-	"github.com/lycaon/lycaon/internal/tools"
 	"reflect"
 	"strings"
 	"testing"
+
+	"github.com/lycaon/lycaon/internal/tools"
 
 	"github.com/lycaon/lycaon/internal/coordinator/turnload"
 	"github.com/lycaon/lycaon/internal/sandbox"
@@ -44,23 +45,6 @@ func TestHideSkillsReadWhenEmpty(t *testing.T) {
 	}
 	if len(names) != 2 || names[0] != "read" || names[1] != "grep" {
 		t.Fatalf("empty catalog tools = %v", names)
-	}
-}
-
-func TestFilterDeferredMetas(t *testing.T) {
-	metas := []tools.ToolMeta{
-		{Name: "read"},
-		{Name: "wc", Deferred: true},
-		{Name: "chmod", Deferred: true},
-	}
-	got := tools.FilterDeferredMetas(metas, map[string]bool{"chmod": true})
-	var names []string
-	for _, m := range got {
-		names = append(names, m.Name)
-	}
-	want := []string{"read", "chmod"}
-	if !reflect.DeepEqual(names, want) {
-		t.Fatalf("filtered = %v want %v", names, want)
 	}
 }
 

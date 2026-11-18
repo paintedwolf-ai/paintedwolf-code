@@ -10,7 +10,7 @@ import (
 )
 
 // Worker jobs are project records, so they outlive the deleted chat with the
-// link cleared; delegations belong to the chat and go with it.
+// link cleared; workers belong to the chat and go with it.
 func TestDeleteSessionTreeClosesSessionReferences(t *testing.T) {
 	ctx := context.Background()
 	sqlDB := openTestDB(t)
@@ -31,11 +31,11 @@ func TestDeleteSessionTreeClosesSessionReferences(t *testing.T) {
 	testutil.FailErr(t, "insert worker job", err)
 
 	_, err = sqlDB.ExecContext(ctx, `
-		INSERT INTO delegations (
-			id, project_id, workspace_path, coordinator_session_id, task, strategy, status, created_at
-		) VALUES ('dep-1', ?, '/tmp/project', 'coordinator', 'ship it', 'file-based', 'active', '2026-01-01T00:00:00Z')
+		INSERT INTO workers (
+			id, project_id, session_id, name, agent_type, scope_mode, child_session_id, operation_id, created_at, updated_at
+		) VALUES ('w-del-1', ?, 'coordinator', 'implementer-1', 'implementer', 'write', 'worker-child', 'op-del-1', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z')
 	`, testdbseed.DefaultProjectID)
-	testutil.FailErr(t, "insert delegation", err)
+	testutil.FailErr(t, "insert worker", err)
 
 	tx, err := sqlDB.BeginTx(ctx, nil)
 	testutil.FailErr(t, "begin tx", err)
@@ -60,11 +60,11 @@ func TestDeleteSessionTreeClosesSessionReferences(t *testing.T) {
 		t.Fatalf("worker job kept dangling session ids: parent=%v child=%v", parent, child)
 	}
 
-	var delegations int
-	testutil.FailErr(t, "count delegations", sqlDB.QueryRowContext(ctx,
-		`SELECT COUNT(*) FROM delegations WHERE id = 'dep-1'`).Scan(&delegations))
-	if delegations != 0 {
-		t.Fatal("delegation outlived its coordinator session")
+	var workers int
+	testutil.FailErr(t, "count workers", sqlDB.QueryRowContext(ctx,
+		`SELECT COUNT(*) FROM workers WHERE id = 'w-del-1'`).Scan(&workers))
+	if workers != 0 {
+		t.Fatal("worker outlived its coordinator session")
 	}
 }
 
@@ -101,6 +101,74 @@ func TestDeleteSessionTreeSweepsWorkflowRunMessages(t *testing.T) {
 		`SELECT COUNT(*) FROM messages WHERE id = 'msg-1'`).Scan(&msgs))
 	if runs != 0 || msgs != 0 {
 		t.Fatalf("run/message sweep left rows: runs=%d messages=%d", runs, msgs)
+	}
+}
+
+// A worker bound to a workflow phase survives its run's removal ahead of the session sweep.
+func TestDeleteSessionTreeRemovesWorkflowBoundWorkers(t *testing.T) {
+	ctx := context.Background()
+	sqlDB := openTestDB(t)
+
+	insertTestSession(t, sqlDB, "sess-wf")
+	_, err := sqlDB.ExecContext(ctx, `
+		INSERT INTO workflow_runs (
+			id, session_id, project_id, workflow_id, workflow_version, status, current_phase, created_at, updated_at, completed_at
+		) VALUES ('run-wf', 'sess-wf', ?, 'implement', '1.0.0', 'complete', 'build', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z')
+	`, testdbseed.DefaultProjectID)
+	testutil.FailErr(t, "insert workflow run", err)
+	_, err = sqlDB.ExecContext(ctx, `
+		INSERT INTO workers (
+			id, project_id, session_id, name, agent_type, scope_mode, workflow_run_id, workflow_phase, workflow_work_id,
+			operation_id, created_at, updated_at
+		) VALUES ('w-1', ?, 'sess-wf', 'builder', 'implementer', 'write', 'run-wf', 'build', 'item-1',
+			'op-1', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z')
+	`, testdbseed.DefaultProjectID)
+	testutil.FailErr(t, "insert worker", err)
+
+	tx, err := sqlDB.BeginTx(ctx, nil)
+	testutil.FailErr(t, "begin tx", err)
+	_, err = DeleteSessionTree(ctx, tx, "sess-wf")
+	testutil.FailErr(t, "DeleteSessionTree", err)
+	testutil.FailErr(t, "commit", tx.Commit())
+
+	var workers int
+	testutil.FailErr(t, "count workers", sqlDB.QueryRowContext(ctx,
+		`SELECT COUNT(*) FROM workers WHERE id = 'w-1'`).Scan(&workers))
+	if workers != 0 {
+		t.Fatalf("worker survived its session: %d", workers)
+	}
+}
+
+// A run removed on its own unbinds its workers without breaking their phase check.
+func TestWorkflowRunDeleteUnbindsWorkers(t *testing.T) {
+	ctx := context.Background()
+	sqlDB := openTestDB(t)
+
+	insertTestSession(t, sqlDB, "sess-wf")
+	_, err := sqlDB.ExecContext(ctx, `
+		INSERT INTO workflow_runs (
+			id, session_id, project_id, workflow_id, workflow_version, status, current_phase, created_at, updated_at, completed_at
+		) VALUES ('run-wf', 'sess-wf', ?, 'implement', '1.0.0', 'complete', 'build', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z')
+	`, testdbseed.DefaultProjectID)
+	testutil.FailErr(t, "insert workflow run", err)
+	_, err = sqlDB.ExecContext(ctx, `
+		INSERT INTO workers (
+			id, project_id, session_id, name, agent_type, scope_mode, workflow_run_id, workflow_phase, workflow_work_id,
+			operation_id, created_at, updated_at
+		) VALUES ('w-1', ?, 'sess-wf', 'builder', 'implementer', 'write', 'run-wf', 'build', 'item-1',
+			'op-1', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z')
+	`, testdbseed.DefaultProjectID)
+	testutil.FailErr(t, "insert worker", err)
+
+	_, err = sqlDB.ExecContext(ctx, `DELETE FROM workflow_runs WHERE id = 'run-wf'`)
+	testutil.FailErr(t, "delete run", err)
+
+	var run sql.NullString
+	var phase, work string
+	testutil.FailErr(t, "read worker", sqlDB.QueryRowContext(ctx,
+		`SELECT workflow_run_id, workflow_phase, workflow_work_id FROM workers WHERE id = 'w-1'`).Scan(&run, &phase, &work))
+	if run.Valid || phase != "" || work != "" {
+		t.Fatalf("worker still bound: run=%v phase=%q work=%q", run, phase, work)
 	}
 }
 

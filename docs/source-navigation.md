@@ -185,7 +185,7 @@ Settings reports these rebuildable files under source catalog data and can clear
 
 The file picker and code search read bounded pages from the same structural record and enrich them in a separate SQLite database. Their VCS exclusions apply before metadata reads and never remove structural entries. When initial discovery is active, enrichment publishes its first partial response before yielding until structure is complete. File metadata, search indexes, and consumer admission do not advance structural generations. A consumer's walk budget limits its own admission without removing human-visible structural facts.
 
-File-picker discovery and disk use are proportional to the materialized checkout and paid once for the picker and code search together. `BenchmarkIndexRepository` in `internal/sourcecatalog` (`PW_INDEX_BENCH_ROOT`) reports time to first answer alongside time to whole coverage; `BenchmarkRecursivePreparation` in `internal/sourcetree` (`PW_TREE_BENCH_ROOT`) measures cold recursive expansion through its first complete viewport. Both run through `./task test:digest`.
+File-picker discovery and disk use are proportional to the materialized checkout and paid once for the picker and code search together. `BenchmarkIndexRepository` in `internal/sourcecatalog` reports time to first answer alongside time to whole coverage; `BenchmarkRecursivePreparation` in `internal/sourcetree` measures cold recursive expansion through its first complete viewport. `./task perf:bench` runs both over the 500,000-file scale fixture tree (`PW_BENCH_ROOT`); without it they use a small tree of the same shape.
 
 ## Local file destinations
 

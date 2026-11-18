@@ -35,7 +35,11 @@ type Cancellations struct {
 	graceful  GracefulFinish
 	cards     ParentCards
 	grounding GroundingReset
+	names     workercompletion.WorkerNames
 }
+
+// SetWorkerNames names the worker a cancelled job's round belongs to.
+func (m *Cancellations) SetWorkerNames(names workercompletion.WorkerNames) { m.names = names }
 
 type CancellationPorts struct {
 	Sessions  CancellationSessions
@@ -96,13 +100,9 @@ func (m *Cancellations) Append(ctx context.Context, parentID string, in Cancella
 		SurveyTools:    append([]string(nil), in.Report.SurveyTools...),
 		ReceiptCount:   in.Report.ReceiptCount,
 	}
-	report := workercompletion.WorkerCompletionReport{
-		LegStatus:     "partial",
-		FilesModified: append([]string(nil), proof.ChangedPaths...),
-		ObjectivesMet: []string{"Worker leg canceled"},
-		RemainingRisk: []string{strings.TrimSpace(in.Reason)},
-		Brief:         strings.TrimSpace(in.Result.Summary),
-	}
+	// Only a report the worker delivered on its stop turn is shown; without
+	// one the round failed as stopped and the host writes none for it.
+	var report workercompletion.WorkerCompletionReport
 	if agentReport := in.CompletionReport; strings.TrimSpace(agentReport.Brief) != "" || len(agentReport.ObjectivesMet) > 0 {
 		report = agentReport
 		if report.DeclaredLegStatus == "" {
@@ -128,6 +128,7 @@ func (m *Cancellations) Append(ctx context.Context, parentID string, in Cancella
 		summary = strings.TrimSpace(summary + "\n\n" + rendered)
 	}
 	envelope := workercompletion.FormatWorkerCompletionEnvelope(workercompletion.WorkerCompletionEnvelope{
+		Worker:         m.names.Name(ctx, in.JobID),
 		JobID:          in.JobID,
 		ChildSessionID: in.ChildSessionID,
 		AgentType:      in.AgentType,

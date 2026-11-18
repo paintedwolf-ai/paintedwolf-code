@@ -94,7 +94,7 @@ func TestDefaultPipelineActiveWorkflowInjectVisible(t *testing.T) {
 	if _, err := wfMgr.Starts.StartHuman(ctx, sess.ID, wire.StartWorkflowRunRequest{
 		WorkflowID: "bugbash", WorkflowVersion: "1.1.0",
 	}); err != nil {
-		t.Fatal(err)
+		contractcheck.FailErr(t, "wfMgr.Starts.StartHuman failed", err)
 	}
 	run, err := wfMgr.Store.Runs.ActiveBySession(ctx, sess.ID)
 	if err != nil || run == nil {

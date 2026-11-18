@@ -17,9 +17,6 @@ const sampleLimits = (): SettingsLimitsResponse => ({
   coordinator_host_turn_timeout_ms: 10800000,
   coordinator_max_sleep_ms: 10800000,
   await_parent_workers_timeout_ms: 10800000,
-  worker_tool_budget_default: 20,
-  worker_tool_budget_min: 2,
-  worker_tool_budget_max: 120,
   session_spend_ceiling_nano_usd: 5 * NANO_PER_USD,
   spend_warning_ratio: 0.8,
   spend_ceiling_enabled: false,
@@ -75,6 +72,23 @@ describe("BudgetsEditor", () => {
   });
 
 
+  it("shows an unreadable limits.yaml and locks the limits until it is fixed", async () => {
+    const settingsStore = createSettingsStore({
+      providers: [],
+      limits: { ...sampleLimits(), rejected: [{ code: "project_unreadable", detail: ".paintedwolf/limits.yaml: unknown field max_iteration" }] },
+    });
+    const updateLimitsSettings = vi.fn();
+    render(() => <BudgetsEditor client={{ updateLimitsSettings } as never} settingsStore={settingsStore} />);
+    const alert = screen.getByTestId("budgets-rejected");
+    expect(alert.getAttribute("role")).toBe("alert");
+    expect(alert.textContent).toContain("unknown field max_iteration");
+    const toggle = await screen.findByTestId("spend-ceiling-enabled");
+    expect(toggle.closest("fieldset")?.disabled).toBe(true);
+    fireEvent.click(toggle);
+    await Promise.resolve();
+    expect(updateLimitsSettings).not.toHaveBeenCalled();
+  });
+
   it("saves edits made while an earlier field update is in flight", async () => {
     let finishFirst!: (limits: SettingsLimitsResponse) => void;
     const updateLimitsSettings = vi.fn()
@@ -86,7 +100,7 @@ describe("BudgetsEditor", () => {
     fireEvent.input(input, { target: { value: "600" } });
     await waitFor(() => expect(updateLimitsSettings).toHaveBeenCalledWith({ max_iterations: 600 }));
     fireEvent.input(input, { target: { value: "500" } });
-    finishFirst({ ...sampleLimits(), max_iterations: 600, worker_tool_budget_default: 30 });
+    finishFirst({ ...sampleLimits(), max_iterations: 600, max_tool_result_bytes: 65536 });
     await waitFor(() => expect(updateLimitsSettings).toHaveBeenNthCalledWith(2, { max_iterations: 500 }));
     expect(input).toHaveProperty("value", "500");
   });

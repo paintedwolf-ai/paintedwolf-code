@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/timelayout"
 	"github.com/lycaon/lycaon/internal/worker/jobstate"
 	"strings"
 	"time"
@@ -21,6 +22,7 @@ import (
 type Transactions struct {
 	db       db.Handle
 	queries  *db.Queries
+	jobs     jobstate.Reader
 	outbox   *eventoutbox.Outbox
 	sessions runstate.SessionMutations
 	authz    authzledger.TransactionalRecorder
@@ -100,8 +102,8 @@ func (s *Transactions) createState(ctx context.Context, queries *db.Queries, run
 		FailureJson:     failureJSON,
 		StartMessageID:  db.NullString(run.StartMessageID),
 		EndMessageID:    db.NullString(run.EndMessageID),
-		CreatedAt:       db.FormatTime(run.CreatedAt),
-		UpdatedAt:       db.FormatTime(run.UpdatedAt),
+		CreatedAt:       timelayout.Format(run.CreatedAt),
+		UpdatedAt:       timelayout.Format(run.UpdatedAt),
 		PausedAt:        db.NullTimePtr(run.PausedAt),
 		CompletedAt:     db.NullTimePtr(run.CompletedAt),
 	})
@@ -194,11 +196,11 @@ func (s *Transactions) insertTreeTeardownTx(ctx context.Context, tx *sql.Tx, run
 	}
 	if op.CancelScope == runstate.WorkerCancelAll {
 		if err := db.New(tx).RequestWorkflowWorkerCancellation(ctx, db.RequestWorkflowWorkerCancellationParams{
-			RequestedAt: db.NullString(db.FormatTime(time.Now().UTC())), WorkflowRunID: db.NullString(run.ID),
+			RequestedAt: db.NullString(timelayout.Format(time.Now().UTC())), WorkflowRunID: db.NullString(run.ID),
 		}); err != nil {
 			return err
 		}
-		if err := jobstate.EnqueueRunJobEventsTx(ctx, tx, s.outbox, run.ID); err != nil {
+		if err := s.jobs.EnqueueRunJobEventsTx(ctx, tx, s.outbox, run.ID); err != nil {
 			return err
 		}
 	}

@@ -17,7 +17,7 @@ import (
 
 // revokeGrantByID removes every authority projection sharing the reviewed ID.
 func (s *Grants) revokeGrantByID(ctx context.Context, id string) (bool, error) {
-	stored, err := s.revokeStoredGrant(id)
+	stored, err := s.Gate.RevokeGrant(id)
 	if err != nil {
 		return false, err
 	}
@@ -67,10 +67,6 @@ func (s *Grants) revokeRuntimeGrant(ctx context.Context, id string) bool {
 	}
 
 	return revoked
-}
-
-func (s *Grants) revokeStoredGrant(id string) (bool, error) {
-	return s.Gate.RevokeGrant(id)
 }
 
 // maxBulkRevokeIDs bounds one bulk revoke request; the panel never holds more

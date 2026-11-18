@@ -87,8 +87,7 @@ func captureAgentView(t *testing.T, h *Harness, sess *wire.Session) agentView {
 	view.ActivePath, err = manager.Workspace.ActivePath(ctx, current)
 	testutil.FailErr(t, "active path", err)
 	view.PromptRows, view.PromptRootCount, view.PromptActivePath, _ = manager.Workspace.PromptRootRows(ctx, current)
-	view.Scope, err = project.ScopeForSession(ctx, current, h.Server.Sources.Workspace.ProjectRegistry)
-	testutil.FailErr(t, "session scope", err)
+	view.Scope = project.ScopeFromToolContext(current.ProjectID, tctx.Source.ActiveRootID, tctx.Source.Roots, view.ActivePath)
 	overlay, err := project.ResolveProjectOverlay(p, current.WorkspaceRootID)
 	testutil.FailErr(t, "resolve overlay", err)
 	view.OverlayPaths = overlay.Paths

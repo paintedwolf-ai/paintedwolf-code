@@ -22,6 +22,8 @@ def order(rows, lanes, timings=None):
 
 def summarize(matrix, timings=None):
     rows = matrix["include"]
+    if not rows:
+        return "### Verification schedule\n\nNo lanes: the static job verifies this change.\n"
     measured = (timings or {}).get("lanes", {})
     missing = [row["timing_row"] for row in rows
                if not valid_seconds(measured.get(row["timing_row"]))]

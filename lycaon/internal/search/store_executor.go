@@ -88,7 +88,7 @@ type storeRow struct {
 	sessionID, sourceRef, snippet, ts               sql.NullString
 	path, url, legID, handle, tool, trust, hintCode sql.NullString
 	messageID, messageContent                       sql.NullString
-	agentType, kind                                 string
+	agentType, workerName, kind                     string
 	tombstoned, untrusted                           sql.NullInt64
 	verified                                        sql.NullInt64
 	line                                            sql.NullInt64
@@ -104,7 +104,7 @@ func scanStoreRow(rows *sql.Rows, post *StorePostFilter) (*storeRow, error) {
 	dest := []any{
 		&row.id, &row.projectID, &row.hitKind, &row.source, &row.sessionID, &row.sourceRef, &row.snippet, &row.ts,
 		&row.path, &row.url, &row.legID, &row.handle, &row.tool, &row.trust, &row.verified, &row.hintCode, &row.line,
-		&row.agentType, &row.tombstoned, &row.untrusted, &row.kind,
+		&row.agentType, &row.workerName, &row.tombstoned, &row.untrusted, &row.kind,
 		&row.messageID, &row.messageContent, &row.score,
 	}
 	for i := range row.probes {
@@ -160,6 +160,7 @@ func (r *storeRow) toHit() Hit {
 		HintCode:  strings.TrimSpace(r.hintCode.String),
 
 		AgentType:  strings.TrimSpace(r.agentType),
+		WorkerName: strings.TrimSpace(r.workerName),
 		Tombstoned: r.tombstoned.Valid && r.tombstoned.Int64 != 0,
 		Untrusted:  r.untrusted.Valid && r.untrusted.Int64 != 0,
 		Kind:       strings.TrimSpace(r.kind),

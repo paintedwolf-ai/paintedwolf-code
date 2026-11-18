@@ -52,6 +52,7 @@ func (s *TriggerService) PrepareOverlayPromotion(ctx context.Context, task api.W
 		ID:            uuid.NewString(),
 		WorkerJobID:   task.ID,
 		CanonicalPath: canonical,
+		SessionID:     task.ParentSessionID,
 		DelegationID:  task.DelegationID,
 		WorkflowRunID: task.WorkflowRunID,
 		ChangedPaths:  changed,

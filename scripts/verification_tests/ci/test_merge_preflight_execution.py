@@ -17,20 +17,33 @@ class MergePreflightTests(unittest.TestCase):
         scope.start()
         self.addCleanup(scope.stop)
 
-    def test_landing_frontend_and_script_assertions_run_without_changed_statements(self):
+    def test_landing_frontend_assertions_run_without_changed_statements(self):
         import coverage_changes as coverage
         for paths in (['docs/README.md'], ['lycaon/internal/example.go'], ['scripts/example.sh'],
                       ['lycaon-den/src/model.test.ts', 'lycaon-den/src/style.css']):
-            with self.subTest(paths=paths), patch.object(coverage.subprocess, 'call', return_value=0) as call, \
-                    patch.object(coverage.python_coverage, 'run', return_value=[]) as suites, \
-                    patch.object(coverage.python_coverage, 'measure') as measure:
+            with self.subTest(paths=paths), patch.object(coverage.subprocess, 'call', return_value=0) as call:
                 scope = SimpleNamespace(paths=paths)
                 self.assertEqual(coverage.run_den(scope), ([], False, 'complete frontend tests; no changed source to measure'))
-                self.assertEqual(coverage.run_python(scope), ([], False, 'the runner suite; no changed source to measure'))
                 self.assertEqual(call.call_count, 1)
-                measure.assert_not_called()
                 self.assertNotIn('--changed', call.call_args_list[0].args[0])
+
+    def test_script_suites_run_only_for_a_change_to_what_they_read(self):
+        import coverage_changes as coverage
+        for paths in (['scripts/example.sh'], ['.github/workflows/nightly.yml'], ['packaging/nix/flake.nix'],
+                      ['Taskfile.yml'], ['task'], ['lycaon/internal/example.go', 'scripts/verification-plan.json']):
+            with self.subTest(paths=paths), patch.object(coverage.python_coverage, 'run', return_value=[]) as suites, \
+                    patch.object(coverage.python_coverage, 'measure') as measure:
+                self.assertEqual(coverage.run_python(SimpleNamespace(paths=paths)),
+                                 ([], False, 'the runner suite; no changed source to measure'))
+                measure.assert_not_called()
                 self.assertEqual(list(suites.call_args.args[1]), ['test:runner'])
+        for paths in (['docs/README.md'], ['lycaon/internal/example.go'], ['lycaon-den/src/model.ts']):
+            with self.subTest(paths=paths), patch.object(coverage.python_coverage, 'run') as suites, \
+                    patch.object(coverage.python_coverage, 'measure') as measure:
+                self.assertEqual(coverage.run_python(SimpleNamespace(paths=paths)),
+                                 ([], False, 'no change to scripts, workflows, packaging or the task runner'))
+                suites.assert_not_called()
+                measure.assert_not_called()
 
     def test_a_commit_with_no_change_runs_every_declared_script_suite(self):
         import coverage_changes as coverage
@@ -55,7 +68,7 @@ class MergePreflightTests(unittest.TestCase):
         with patch.object(coverage.subprocess, 'call', return_value=1), \
                 patch.object(coverage.python_coverage.python_tools, 'provision', side_effect=lambda requirements: requirements):
             for run in (coverage.run_den, coverage.run_python):
-                findings, failed, _ = run(SimpleNamespace(paths=['docs/README.md']))
+                findings, failed, _ = run(SimpleNamespace(paths=['lycaon-den/src/app.ts', '.github/workflows/nightly.yml']))
                 self.assertTrue(failed)
                 self.assertEqual(findings[0].level, 'error')
 
@@ -104,7 +117,7 @@ class MergePreflightTests(unittest.TestCase):
         lane = hosted_plan.lanes()["lint"]
         commands = preflight.commands(lane, lane["targets"])
         self.assertEqual(commands[0], ["./task", "comments:check", "test:fail-messages:check"])
-        self.assertEqual(commands[1], ["./task", "lint:full"])
+        self.assertEqual(commands[1], ["./task", "lint:full", "arch-lint:changes"])
         self.assertEqual(sorted([target for command in commands for target in command[1:]]), sorted(lane["targets"]))
         with patch.object(preflight, "package_phases", return_value=[["contract"], ["behavior"]]):
             self.assertEqual(preflight.commands(hosted_plan.lanes()["behavior"], ["test:full"]),
@@ -207,3 +220,34 @@ class MergePreflightTests(unittest.TestCase):
                 os.chdir(before)
         self.assertEqual((report["runs_observed"], report["throughput"]["decided_groups"], report["job_costs"]["totals"]["runner_seconds"]), (2, 2, 600))
         self.assertEqual(sum("/jobs?filter=all" in path for path in calls), 2)
+
+    def test_queue_health_reads_only_bounded_receipts_of_the_run_attempt(self):
+        from ci_policy import health
+        def archive(files):
+            buffer = io.BytesIO()
+            with zipfile.ZipFile(buffer, "w") as handle:
+                for name, value in files.items():
+                    handle.writestr(name, value)
+            return buffer.getvalue()
+        record = {"lane": "behavior", "classification": "runner_oom"}
+        payloads = {
+            1: archive({"ci/run.json": json.dumps(record), "ci/failures.json": json.dumps([{"stage": "go"}]),
+                        "ci/other.json": "{}", "big/ci/run.json": json.dumps({"x": "y" * health.MAX_MEMBER_BYTES})}),
+            2: archive({"ci/run.json": json.dumps([record]), "ci/failures.json": json.dumps({"stage": "go"})}),
+        }
+        artifact = lambda number, name, **extra: {"id": number, "name": name, "expired": False,
+                                                  "size_in_bytes": 10, **extra}
+        artifacts = [artifact(1, "receipt-behavior-2"), artifact(2, "receipt-native-2"),
+                     artifact(3, "receipt-behavior-1"), artifact(4, "logs-behavior-2"),
+                     artifact(5, "receipt-expired-2", expired=True),
+                     artifact(6, "receipt-large-2", size_in_bytes=health.MAX_ARTIFACT_BYTES + 1)]
+        downloads = []
+        def download(command):
+            number = int(command[-1].split("/")[-2])
+            downloads.append(number)
+            return payloads[number]
+        with patch.object(health, "pages", return_value=iter(artifacts)), \
+                patch.object(health, "repository", return_value="repos/o/r"), \
+                patch.object(health.subprocess, "check_output", side_effect=download):
+            records, failures = health.evidence({"id": 9, "run_attempt": 2})
+        self.assertEqual((records, failures, downloads), ([record], [{"stage": "go"}], [1, 2]))

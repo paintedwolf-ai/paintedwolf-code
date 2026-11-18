@@ -13,11 +13,11 @@ x-paintedwolf-emit: rule:spec
 message: Delegation/implement tools are forbidden until the plan workflow is complete
 what: Delegation/implement tools are forbidden until the plan workflow is complete
 cause: Delegation/implement tools are forbidden until the plan workflow is complete
-why: Complete plan phases before delegate_dispatch or delegate_init
-fix: Complete plan phases before delegate_dispatch or delegate_init
+why: Complete plan phases before task or instruct_worker
+fix: Complete plan phases before task or instruct_worker
 instead: Finish plan workflow before delegation tools
 x-paintedwolf-scenarios:
   - id: spec_posture_delegation_smoke
-    tool: delegate_dispatch
+    tool: task
     vars:
-      tool: delegate_dispatch
+      tool: task

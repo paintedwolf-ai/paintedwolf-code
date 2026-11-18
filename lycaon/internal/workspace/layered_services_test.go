@@ -3,6 +3,7 @@ package workspace_test
 import (
 	"context"
 	"errors"
+	"github.com/lycaon/lycaon/internal/layeredfs/adapter/platform"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -35,7 +36,7 @@ func fixtureMountedManager(t *testing.T, unmount func(context.Context, string, s
 	branches := t.TempDir()
 	privateGit, err := workspace.OpenPrivateGit(branches)
 	testutil.FailErr(t, "open private Git", err)
-	return workspace.NewManager(branches).WithSelector(selector).WithPrivateGit(privateGit)
+	return workspace.NewManager(branches, selector).WithPrivateGit(privateGit)
 }
 
 func singleRoot(t *testing.T) []projectroot.RootRef {
@@ -118,7 +119,7 @@ func TestMaterializedRootsAreManagedGitViewsForThePrimaryWorker(t *testing.T) {
 	branches := t.TempDir()
 	privateGit, err := workspace.OpenPrivateGit(branches)
 	testutil.FailErr(t, "open private Git", err)
-	manager := workspace.NewManager(branches).WithPrivateGit(privateGit)
+	manager := workspace.NewManager(branches, platform.NewSelector(platform.Config{})).WithPrivateGit(privateGit)
 	binding, _, err := manager.CreateWorkerWorkspaceFromSources(t.Context(), roots, roots, "p", "job-roots")
 	testutil.FailErr(t, "create workspace", err)
 	t.Cleanup(func() { _ = manager.DestroyWorkerWorkspace(t.Context(), binding) })
@@ -158,7 +159,7 @@ func TestDestroyKeepsTheBranchWhenAViewDoesNotRelease(t *testing.T) {
 			testutil.FailErr(t, "mkdir branch", os.MkdirAll(root, 0o750))
 			keep := filepath.Join(root, "result.txt")
 			testutil.FailErr(t, "write result", os.WriteFile(keep, []byte("result\n"), 0o644))
-			manager := workspace.NewManager(branches)
+			manager := workspace.NewManager(branches, platform.NewSelector(platform.Config{}))
 			binding := &workspace.Binding{ID: "job-kept", Root: root, Adapter: adp, View: &adapter.PreparedView{ViewID: "view-kept"}}
 
 			if err := manager.DestroyWorkerWorkspace(t.Context(), binding); err == nil {
@@ -178,7 +179,7 @@ func TestDestroyTreatsAViewTheAdapterNoLongerHoldsAsReleased(t *testing.T) {
 	binding := &workspace.Binding{ID: "job-gone", Root: root, Adapter: refusingAdapter{
 		err: &adapter.AdapterError{AdapterID: adapter.AdapterEagerCopy, Op: "release", ReasonCode: adapter.ReasonViewNotFound},
 	}, View: &adapter.PreparedView{ViewID: "view-gone"}}
-	testutil.FailErr(t, "destroy", workspace.NewManager(branches).DestroyWorkerWorkspace(t.Context(), binding))
+	testutil.FailErr(t, "destroy", workspace.NewManager(branches, platform.NewSelector(platform.Config{})).DestroyWorkerWorkspace(t.Context(), binding))
 	if _, err := os.Stat(root); !errors.Is(err, fs.ErrNotExist) {
 		t.Fatalf("branch remains: %v", err)
 	}

@@ -27,21 +27,22 @@ func TestCommentsKeepExecutableNeighbors(t *testing.T) {
 			context, err := ParseNonCode(t.Context(), tc.language, []byte(tc.source))
 			testutil.FailErr(t, "parse comments", err)
 			for _, line := range tc.commentLines {
-				if !context.Contains(line, 2) {
+				if !context.CoversSpan(line, 2, line, 3) {
 					t.Errorf("comment line %d not recognized", line)
 				}
 			}
-			if context.Contains(tc.codeLine, 2) {
+			if context.CoversSpan(tc.codeLine, 2, tc.codeLine, 3) {
 				t.Fatal("comment swallowed executable neighbor")
 			}
-			if context.Contains(999, 1) {
+			if context.CoversSpan(999, 1, 999, 2) {
 				t.Fatal("out-of-bounds location treated as comment")
 			}
 		})
 	}
 	context, err := ParseNonCode(t.Context(), "powershell", []byte("Write-Output '# text'\n"))
 	testutil.FailErr(t, "quoted hash", err)
-	if !context.Contains(1, strings.Index("Write-Output '# text'", "#")+1) {
+	column := strings.Index("Write-Output '# text'", "#") + 1
+	if !context.CoversSpan(1, column, 1, column+1) {
 		t.Fatal("literal string was treated as executable code")
 	}
 }
@@ -64,7 +65,7 @@ func TestReadNonCodeRecognizesPerlCGIShebang(t *testing.T) {
 	testutil.FailErr(t, "write CGI fixture", os.WriteFile(path, []byte(source), 0o600))
 	comments, err := ReadNonCode(t.Context(), project, path)
 	testutil.FailErr(t, "read CGI comments", err)
-	if !comments.Contains(2, 3) || comments.Contains(3, 1) {
+	if !comments.CoversSpan(2, 3, 2, 4) || comments.CoversSpan(3, 1, 3, 2) {
 		t.Fatal("CGI shebang did not preserve comment and code boundaries")
 	}
 }
@@ -84,7 +85,8 @@ func TestLiteralTextAndExecutableInterpolation(t *testing.T) {
 		t.Run(tc.language+tc.source, func(t *testing.T) {
 			context, err := ParseNonCode(t.Context(), tc.language, []byte(tc.source))
 			testutil.FailErr(t, "parse source context", err)
-			if got := context.Contains(1, strings.Index(tc.source, tc.needle)+1); got != tc.nonCode {
+			column := strings.Index(tc.source, tc.needle) + 1
+			if got := context.CoversSpan(1, column, 1, column+1); got != tc.nonCode {
 				t.Fatalf("non-code=%v, want %v for %q", got, tc.nonCode, tc.source)
 			}
 		})

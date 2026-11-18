@@ -26,7 +26,7 @@ func TestCoordinatorPromptInjectWithoutToolCall(t *testing.T) {
 	if _, err := h.Workflows.Manager.Starts.StartHuman(ctx, sess.ID, api.StartWorkflowRunRequest{
 		WorkflowID: "plan", WorkflowVersion: "1.0.1",
 	}); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "h.Workflows.Manager.Starts.StartHuman failed", err)
 	}
 	if _, err := mgr.Submissions.Prompt(ctx, sess.ID, "coordinate"); err != nil {
 		testutil.FailErr(t, "mgr.Submissions.Prompt failed", err)

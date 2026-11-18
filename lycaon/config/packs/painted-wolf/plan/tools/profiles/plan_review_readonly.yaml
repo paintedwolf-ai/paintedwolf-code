@@ -10,8 +10,10 @@ tools:
   recall: sticky
   record_finding: sticky
   pack_board: sticky
+  read_findings: sticky
+  read_review: sticky
   request_decision: sticky
-  request_budget: sticky
+  message_coordinator: sticky
   source_history: sticky
   skills_read: sticky
   wait: sticky
@@ -32,7 +34,7 @@ deny_tools:
   - git_merge
   - git_stash
   - secret_*
-  - delegate_*
+  - plan_from_blueprint
   - state_*
   - handoff_*
-wait_conditions: [http_ready, port_ready]
+wait_conditions: [process_done, http_ready, port_ready]

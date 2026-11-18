@@ -9,7 +9,7 @@ import (
 	"github.com/lycaon/lycaon/test/wiring"
 )
 
-func TestSpecCoordinatorPromptOmitsDelegateDispatch(t *testing.T) {
+func TestSpecCoordinatorPromptOmitsPlanFromBlueprint(t *testing.T) {
 	h := wiring.BuildForTest(t, wiring.WithRecordingLLM())
 	srv := h.Server
 	rec := h.Recording
@@ -18,8 +18,8 @@ func TestSpecCoordinatorPromptOmitsDelegateDispatch(t *testing.T) {
 
 	postPromptAndWaitIdle(t, srv, sess.ID, "review plan scope")
 	for _, tool := range rec.LastRequest().Tools {
-		if tool.Name == "delegate_dispatch" {
-			t.Fatalf("spec coordinator prompt must omit delegate_dispatch, got %d tools", len(rec.LastRequest().Tools))
+		if tool.Name == "plan_from_blueprint" {
+			t.Fatalf("spec coordinator prompt must omit plan_from_blueprint, got %d tools", len(rec.LastRequest().Tools))
 		}
 	}
 }
@@ -34,7 +34,7 @@ func TestInvokeStillDeniesWhenToolNotListed(t *testing.T) {
 	ctx := context.Background()
 	sessionRec, err := store.Get(ctx, sess.ID)
 	testutil.FailErr(t, "store.Get failed", err)
-	if err := mgr.Coordinator.Guards.Policy().EvaluateInvoke(ctx, sessionRec, "delegate_dispatch", nil); err == nil {
-		t.Fatal("invoke-time rules must still deny delegate_dispatch in spec posture")
+	if err := mgr.Coordinator.Guards.Policy().EvaluateInvoke(ctx, sessionRec, "plan_from_blueprint", nil); err == nil {
+		t.Fatal("invoke-time rules must still deny plan_from_blueprint in spec posture")
 	}
 }

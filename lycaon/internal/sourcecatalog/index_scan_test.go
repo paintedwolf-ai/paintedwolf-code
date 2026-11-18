@@ -39,22 +39,25 @@ func writeIndexFile(t *testing.T, root, rel, body string) {
 // waitIndex waits for discovery to settle.
 func waitIndex(t *testing.T, c *Catalog, root Root) *IndexReader {
 	t.Helper()
-	for t.Context().Err() == nil {
+	var covered *IndexReader
+	testutil.WaitFor(t, "index discovery finishes", func() bool {
 		reader, status, err := c.Trees.OpenIndex(t.Context(), "p", root, 250*time.Millisecond)
 		testutil.FailErr(t, "open file index", err)
 		if status.State == StateFailed {
 			t.Fatalf("index failed: %s", status.Error)
 		}
-		if reader != nil {
-			if status.Complete && !status.Refreshing {
-				t.Cleanup(func() { _ = reader.Close() })
-				return reader
-			}
-			_ = reader.Close()
+		if reader == nil {
+			return false
 		}
-	}
-	t.Fatal("index discovery did not finish")
-	return nil
+		if !status.Complete || status.Refreshing {
+			_ = reader.Close()
+			return false
+		}
+		covered = reader
+		return true
+	})
+	t.Cleanup(func() { _ = covered.Close() })
+	return covered
 }
 
 func indexedPaths(t *testing.T, r *IndexReader, scope FileScope) []string {

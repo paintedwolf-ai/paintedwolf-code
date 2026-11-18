@@ -17,6 +17,9 @@ func leakIgnores() []goleak.Option {
 		goleak.IgnoreAnyFunction("net/http.(*persistConn).readLoop"),
 		goleak.IgnoreAnyFunction("net/http.(*persistConn).writeLoop"),
 		goleak.IgnoreAnyFunction("net/http.(*http2ClientConn).readLoop"),
+
+		// The pending-wait reporter answers the runner's signal for the life of the process.
+		goleak.IgnoreTopFunction("github.com/lycaon/lycaon/internal/testutil.reportPendingWaits"),
 	}
 }
 

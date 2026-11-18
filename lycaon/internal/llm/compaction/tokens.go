@@ -116,19 +116,6 @@ func ResolveColdStartOverhead(toolsJSON string) int {
 	return cold
 }
 
-// FitMaxTokens returns the message-fit budget in transcript-estimate units,
-// never below TargetTokens or 1.
-func FitMaxTokens(cfg CompactionConfig, cal PromptTokenCalibration, coldStartOverhead int) int {
-	max := cal.EstimateBudget(cfg.HardCeilingTokens, coldStartOverhead)
-	if max < cfg.TargetTokens {
-		max = cfg.TargetTokens
-	}
-	if max < 1 {
-		max = 1
-	}
-	return max
-}
-
 // EstimateMessagesTokens sums message contents and tool-call args; edit and
 // write args carry whole file bodies.
 func EstimateMessagesTokens(messages []ContextMessage) int {

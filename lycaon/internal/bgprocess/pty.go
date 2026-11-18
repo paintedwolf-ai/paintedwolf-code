@@ -5,9 +5,11 @@ import (
 	"errors"
 	"fmt"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
+
 	"github.com/lycaon/lycaon/internal/confine"
 	lycexec "github.com/lycaon/lycaon/internal/exec"
 	"github.com/lycaon/lycaon/internal/hostcmd"
@@ -82,7 +84,7 @@ func (r *Terminal) startPTY(
 	if r == nil {
 		return "", fmt.Errorf("background registry not configured")
 	}
-	sessionID = trim(sessionID)
+	sessionID = strings.TrimSpace(sessionID)
 	if sessionID == "" {
 		return "", fmt.Errorf("session id required")
 	}
@@ -95,7 +97,7 @@ func (r *Terminal) startPTY(
 	if err := runner.ValidateStages(ctx, req.Stages); err != nil {
 		return "", err
 	}
-	if trim(req.ProjectDir) == "" {
+	if strings.TrimSpace(req.ProjectDir) == "" {
 		return "", fmt.Errorf("project dir is required")
 	}
 	projectDir, err := filepath.Abs(req.ProjectDir)
@@ -121,8 +123,8 @@ func (r *Terminal) startPTY(
 	proc := &Process{
 		Handle:        handle,
 		SessionID:     sessionID,
-		ProjectID:     trim(projectID),
-		RootSessionID: trim(rootSessionID),
+		ProjectID:     strings.TrimSpace(projectID),
+		RootSessionID: strings.TrimSpace(rootSessionID),
 		kind:          processKindPTY,
 		mode:          mode,
 		running:       true,

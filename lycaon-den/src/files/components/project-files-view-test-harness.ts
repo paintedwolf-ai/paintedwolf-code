@@ -1,5 +1,5 @@
 import "../../test/document-outbox-fixture.ts";
-import { filesBufferText } from "../documents/project-files-buffers.ts";
+import { filesBufferText } from "../documents/files-buffer-state.ts";
 import { normalizeEolForEditor } from "../../components/source/editor/eol.ts";
 import { resetEditorDocumentsForTests } from "../documents/editor-document.ts";
 import type { SyncEditorDocumentRequest, SubmitEditorDocumentUpdateRequest } from "../../api/types.ts";
@@ -12,7 +12,8 @@ import { resetServedSourcesForTests, servedSource, stubFilesClient } from "../..
 import { overlayRel } from "../../platform/files/overlay-dir.ts";
 import { resetEditorPrefsForTests } from "../../settings/editor/editor-prefs.ts";
 import { resetScrollMeasureQuietForTests } from "../../platform/scrolling/themed-scrollbars.ts";
-import { applyFilesBufferLoad, openFilesBuffer, resetProjectFilesForTests } from "../documents/project-files-buffers.ts";
+import { applyFilesBufferLoad } from "../documents/project-files-buffer-io.ts";
+import { openFilesBuffer, resetProjectFilesForTests } from "../documents/project-files-buffer-lifecycle.ts";
 import { projectFilesState } from "../documents/files-buffer-state.ts";
 import { sharedBufferLoadRequests } from "../documents/files-buffer-request-tracking.ts";
 import { resetFilesEditorHostForTests } from "../editor/files-editor-host.ts";

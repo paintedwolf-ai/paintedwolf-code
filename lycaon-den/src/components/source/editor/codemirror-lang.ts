@@ -578,10 +578,6 @@ export function prettyLayoutForPath(path: string): PrettyLayout {
   return catalogEntryForPath(path)?.pretty ?? NO_LAYOUT;
 }
 
-export function prettyLayoutForBuffer(path: string, detectedLanguage?: string): PrettyLayout {
-  return catalogEntryForBuffer(path, detectedLanguage)?.pretty ?? NO_LAYOUT;
-}
-
 /** Formatters whose configuration can set the file's line width, in priority order. */
 export function formattersForPath(path: string): readonly FormatTool[] {
   return catalogEntryForPath(path)?.formatters ?? NO_FORMATTERS;

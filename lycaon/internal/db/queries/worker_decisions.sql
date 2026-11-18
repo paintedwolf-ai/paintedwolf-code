@@ -19,3 +19,7 @@ WHERE job_id = ?;
 -- name: DeleteWorkerDecision :exec
 DELETE FROM worker_decisions
 WHERE child_session_id = ?;
+
+-- name: DeleteWorkerDecisionByJob :exec
+DELETE FROM worker_decisions
+WHERE job_id = ?;

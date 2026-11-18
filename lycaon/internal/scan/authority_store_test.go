@@ -4,6 +4,7 @@ import (
 	"errors"
 	"strings"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	scancatalog "github.com/lycaon/lycaon/internal/scan/catalog"
@@ -116,45 +117,48 @@ func TestBoundedAdmissionReportsBoundedCoverageAndStillBasesIncrements(t *testin
 }
 
 func TestAssessmentViewKeepsCurrentWhenLatestAttemptFails(t *testing.T) {
-	store := authorityTestStore(t)
-	root := t.TempDir()
-	insertAssessment := func(id, snapshot string) {
-		t.Helper()
-		_, err := store.EnsureAssessment(t.Context(), AssessmentDraft{
-			ID: id, CanonicalPath: root, SourceSnapshotID: snapshot,
-			RequiredScanners: []string{"sast", "secrets"},
-			Target:           TargetSelection{Kind: api.ScanTargetFull}, Trigger: api.ScanTriggerManual,
-		})
-		testutil.FailErr(t, "ensureAssessment", err)
-		for _, scannerID := range []string{"sast", "secrets"} {
-			scan := authorityScan(id+"-"+scannerID, id, root, snapshot, scannerID, api.ScanTargetFull, nil)
-			testutil.FailErr(t, "insert assessment member", store.Insert(t.Context(), scan, nil, ""))
+	synctest.Test(t, func(t *testing.T) {
+		store := authorityTestStore(t)
+		root := t.TempDir()
+		insertAssessment := func(id, snapshot string) {
+			t.Helper()
+			_, err := store.EnsureAssessment(t.Context(), AssessmentDraft{
+				ID: id, CanonicalPath: root, SourceSnapshotID: snapshot,
+				RequiredScanners: []string{"sast", "secrets"},
+				Target:           TargetSelection{Kind: api.ScanTargetFull}, Trigger: api.ScanTriggerManual,
+			})
+			testutil.FailErr(t, "ensureAssessment", err)
+			for _, scannerID := range []string{"sast", "secrets"} {
+				scan := authorityScan(id+"-"+scannerID, id, root, snapshot, scannerID, api.ScanTargetFull, nil)
+				testutil.FailErr(t, "insert assessment member", store.Insert(t.Context(), scan, nil, ""))
+			}
 		}
-	}
 
-	insertAssessment("assessment-good", "snapshot-1")
-	completeNextScan(t, store)
-	completeNextScan(t, store)
-	time.Sleep(time.Millisecond)
-	insertAssessment("assessment-bad", "snapshot-2")
-	failed, err := store.ClaimNext(t.Context())
-	testutil.FailErr(t, "claim failed member", err)
-	won, err := store.FinalizeFailure(t.Context(), failed, api.CodeScanStatusFailed, "SCAN_ENGINE_FAILED", "engine failed")
-	testutil.FailErr(t, "FinalizeFailure", err)
-	if !won {
-		t.Fatal("failed member lost claim")
-	}
-	completeNextScan(t, store)
+		insertAssessment("assessment-good", "snapshot-1")
+		completeNextScan(t, store)
+		completeNextScan(t, store)
+		time.Sleep(time.Millisecond)
+		synctest.Wait()
+		insertAssessment("assessment-bad", "snapshot-2")
+		failed, err := store.ClaimNext(t.Context())
+		testutil.FailErr(t, "claim failed member", err)
+		won, err := store.FinalizeFailure(t.Context(), failed, api.CodeScanStatusFailed, "SCAN_ENGINE_FAILED", "engine failed")
+		testutil.FailErr(t, "FinalizeFailure", err)
+		if !won {
+			t.Fatal("failed member lost claim")
+		}
+		completeNextScan(t, store)
 
-	view, err := store.AssessmentView(t.Context(), []string{root})
-	testutil.FailErr(t, "AssessmentView", err)
-	if view.CurrentID != "assessment-good" || view.LatestAttemptID != "assessment-bad" {
-		t.Fatalf("assessment view = %+v", view)
-	}
-	latest := BuildAssessmentSummary(view.LatestAttemptID, view.LatestAttempt)
-	if latest == nil || latest.Status != api.CodeScanStatusFailed || latest.CoverageStatus != api.ScanCoverageUnavailable {
-		t.Fatalf("latest attempt summary = %+v", latest)
-	}
+		view, err := store.AssessmentView(t.Context(), []string{root})
+		testutil.FailErr(t, "AssessmentView", err)
+		if view.CurrentID != "assessment-good" || view.LatestAttemptID != "assessment-bad" {
+			t.Fatalf("assessment view = %+v", view)
+		}
+		latest := BuildAssessmentSummary(view.LatestAttemptID, view.LatestAttempt)
+		if latest == nil || latest.Status != api.CodeScanStatusFailed || latest.CoverageStatus != api.ScanCoverageUnavailable {
+			t.Fatalf("latest attempt summary = %+v", latest)
+		}
+	})
 }
 
 func TestCompareRejectsIncompatibleAuthorities(t *testing.T) {

@@ -1,0 +1,266 @@
+package workerrecords_test
+
+import (
+	"errors"
+	"slices"
+	"strconv"
+	"testing"
+
+	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/workerrecords"
+)
+
+// More messages than a page: the page replays until a successful response
+// commits it, reading history acknowledges nothing, and each direction is
+// delivered on its own.
+func TestDeliveryPagesReplayUntilCommitted(t *testing.T) {
+	f := newFixture(t)
+	w, child := f.workerWithRound(t, "fixer", "child-1", "job-1")
+	total := workerrecords.MaxPageMessages + 6
+	for i := range total {
+		_, err := f.store.AppendMessage(t.Context(), f.coord, op("in-"+strconv.Itoa(i)), w.WorkerID, workerrecords.MessageSpec{Body: "instruction " + strconv.Itoa(i)})
+		testutil.FailErr(t, "append instruction", err)
+	}
+	_, err := f.store.AppendMessage(t.Context(), child, op("out-1"), w.WorkerID, workerrecords.MessageSpec{Body: "question", NeedsReply: true})
+	testutil.FailErr(t, "append worker message", err)
+
+	first, err := f.store.OpenPageBounded(t.Context(), child, w.WorkerID, 0, workerrecords.MaxPageMessages, workerrecords.MaxHistoryPageBytes)
+	testutil.FailErr(t, "open page", err)
+	if len(first.Messages) != workerrecords.MaxPageMessages || first.Messages[0].Seq != 1 {
+		t.Fatalf("first page = %d messages from seq %d", len(first.Messages), first.Messages[0].Seq)
+	}
+	for _, m := range first.Messages {
+		if m.RecipientRole != workerrecords.RoleWorker || m.SenderRole != workerrecords.RoleCoordinator {
+			t.Fatalf("worker page carries %+v", m)
+		}
+	}
+	// The provider request failed: the same page comes back.
+	replay, err := f.store.OpenPageBounded(t.Context(), child, w.WorkerID, 0, workerrecords.MaxPageMessages, workerrecords.MaxHistoryPageBytes)
+	testutil.FailErr(t, "reopen page", err)
+	if replay.ID != first.ID || len(replay.Messages) != len(first.Messages) {
+		t.Fatalf("replayed page %s (%d) != %s (%d)", replay.ID, len(replay.Messages), first.ID, len(first.Messages))
+	}
+	_, err = f.store.History(t.Context(), child, w.WorkerID, 0, 10)
+	testutil.FailErr(t, "history", err)
+	err = f.store.CommitPage(t.Context(), child, w.WorkerID, 0, "not-the-page")
+	wantErr(t, "stale commit", err, workerrecords.ErrPageStale)
+	testutil.FailErr(t, "commit", f.store.CommitPage(t.Context(), child, w.WorkerID, 0, first.ID))
+	testutil.FailErr(t, "commit again", f.store.CommitPage(t.Context(), child, w.WorkerID, 0, first.ID))
+
+	second, err := f.store.OpenPageBounded(t.Context(), child, w.WorkerID, 0, workerrecords.MaxPageMessages, workerrecords.MaxHistoryPageBytes)
+	testutil.FailErr(t, "second page", err)
+	if len(second.Messages) != 6 || second.ID == first.ID {
+		t.Fatalf("second page = %d messages, id %s", len(second.Messages), second.ID)
+	}
+	// A new session generation is shown everything again.
+	fresh, err := f.store.OpenPageBounded(t.Context(), child, w.WorkerID, 1, workerrecords.MaxPageMessages, workerrecords.MaxHistoryPageBytes)
+	testutil.FailErr(t, "next generation", err)
+	if len(fresh.Messages) != workerrecords.MaxPageMessages || fresh.Messages[0].Seq != 1 {
+		t.Fatalf("generation 1 page = %d from %d", len(fresh.Messages), fresh.Messages[0].Seq)
+	}
+
+	coordPage, err := f.store.OpenPageBounded(t.Context(), f.coord, w.WorkerID, 0, workerrecords.MaxPageMessages, workerrecords.MaxHistoryPageBytes)
+	testutil.FailErr(t, "coordinator page", err)
+	if len(coordPage.Messages) != 1 || !coordPage.Messages[0].NeedsReply || coordPage.Messages[0].RoundOrdinal != 1 || coordPage.Messages[0].SenderID != "child-1" {
+		t.Fatalf("coordinator page = %+v", coordPage.Messages)
+	}
+	// A coordinator's compaction does not replay what it was already shown.
+	testutil.FailErr(t, "commit coordinator page", f.store.CommitPage(t.Context(), f.coord, w.WorkerID, 0, coordPage.ID))
+	compacted, err := f.store.OpenPageBounded(t.Context(), f.coord, w.WorkerID, 1, workerrecords.MaxPageMessages, workerrecords.MaxHistoryPageBytes)
+	testutil.FailErr(t, "coordinator after compaction", err)
+	if len(compacted.Messages) != 0 {
+		t.Fatalf("compaction replayed %d messages to the coordinator", len(compacted.Messages))
+	}
+	// A page honors the room the request has left.
+	limited, err := f.store.OpenPageBounded(t.Context(), child, w.WorkerID, 2, 3, workerrecords.MaxHistoryPageBytes)
+	testutil.FailErr(t, "limited page", err)
+	if len(limited.Messages) != 3 {
+		t.Fatalf("limited page = %d messages", len(limited.Messages))
+	}
+	_, err = f.db.ExecContext(t.Context(), `UPDATE worker_messages SET body = 'edited' WHERE seq = 1`)
+	if err == nil {
+		t.Fatal("message edited in place")
+	}
+	_, err = f.store.AppendMessage(t.Context(), f.coord, op("reply-bad"), w.WorkerID, workerrecords.MessageSpec{Body: "reply", ReplyToSeq: 999})
+	wantErr(t, "reply to nothing", err, workerrecords.ErrReplyUnknown)
+	_, err = f.store.AppendMessage(t.Context(), f.coord, op("reply"), w.WorkerID, workerrecords.MessageSpec{Body: "reply", ReplyToSeq: int64(total + 1)})
+	testutil.FailErr(t, "reply", err)
+}
+
+func TestDispositionsSeparateAccountingFromChanges(t *testing.T) {
+	f := newFixture(t)
+	w, _ := f.workerWithRound(t, "fixer", "child-1", "job-1")
+	f.insertResult(t, "result-1", "job-1")
+	f.insertJob(t, "job-other", coordSession, "", "complete")
+	f.insertLanded(t, "landed-other", "job-other")
+	f.insertLanded(t, "landed-1", "job-1")
+
+	ref, err := f.store.Result(t.Context(), f.coord, "result-1")
+	testutil.FailErr(t, "resolve result", err)
+	if ref.WorkerID != w.WorkerID || ref.JobID != "job-1" || ref.LandedChangeID != "landed-1" {
+		t.Fatalf("result ref = %+v", ref)
+	}
+	_, err = f.store.Result(t.Context(), f.other, "result-1")
+	wantErr(t, "another session's result", err, workerrecords.ErrResultNotFound)
+
+	d, err := f.store.AccountResult(t.Context(), f.coord, op("account"), "result-1")
+	testutil.FailErr(t, "account", err)
+	if d.AccountedAt == "" || d.ChangeState != "" || d.WorkerID != w.WorkerID {
+		t.Fatalf("accounting landed something: %+v", d)
+	}
+	_, err = f.store.AccountResult(t.Context(), f.coord, op("account-2"), "result-1")
+	wantErr(t, "second accounting", err, workerrecords.ErrAlreadyAccounted)
+
+	d, err = f.store.SetChange(t.Context(), f.coord, op("shelve"), "result-1", workerrecords.Change{State: workerrecords.ChangeShelved, ShelveReason: "waiting on a deploy"})
+	testutil.FailErr(t, "shelve", err)
+	if d.AccountedAt == "" || d.ChangeState != workerrecords.ChangeShelved {
+		t.Fatalf("shelving changed accounting: %+v", d)
+	}
+	_, err = f.store.SetChange(t.Context(), f.coord, op("land-wrong"), "result-1", workerrecords.Change{State: workerrecords.ChangeLanded, LandedChangeID: "landed-other"})
+	wantErr(t, "another job's receipt", err, workerrecords.ErrInvalidDisposition)
+	d, err = f.store.SetChange(t.Context(), f.coord, op("land"), "result-1", workerrecords.Change{State: workerrecords.ChangeLanded, LandedChangeID: "landed-1"})
+	testutil.FailErr(t, "land shelved changes", err)
+	if d.ChangeState != workerrecords.ChangeLanded || d.LandedChangeID != "landed-1" || d.ShelveReason != "" {
+		t.Fatalf("landed = %+v", d)
+	}
+	listed, err := f.store.Dispositions(t.Context(), f.coord, w.WorkerID)
+	testutil.FailErr(t, "list dispositions", err)
+	if len(listed) != 1 || listed[0].ResultID != "result-1" || listed[0].ChangeState != workerrecords.ChangeLanded || listed[0].LandedChangeID != "landed-1" {
+		t.Fatalf("dispositions = %+v", listed)
+	}
+	_, err = f.store.Dispositions(t.Context(), f.other, w.WorkerID)
+	wantErr(t, "another session's dispositions", err, workerrecords.ErrWorkerNotFound)
+	_, err = f.store.SetChange(t.Context(), f.coord, op("reject"), "result-1", workerrecords.Change{State: workerrecords.ChangeRejected})
+	wantErr(t, "reject after landing", err, workerrecords.ErrDispositionFinal)
+	_, err = f.db.ExecContext(t.Context(), `UPDATE worker_result_dispositions SET change_state = 'rejected', landed_change_id = NULL WHERE result_id = 'result-1'`)
+	if err == nil {
+		t.Fatal("landed disposition rewritten")
+	}
+	_, err = f.store.SetChange(t.Context(), f.coord, op("bad"), "result-1", workerrecords.Change{State: workerrecords.ChangeShelved})
+	wantErr(t, "shelving without a reason", err, workerrecords.ErrInvalidDisposition)
+}
+
+// A planned worker's prerequisites resolve by name in its session; the worker
+// itself, a missing name and a cycle are refused.
+func TestPlannedPrerequisitesResolveAndRefuse(t *testing.T) {
+	f := newFixture(t)
+	producer, _ := f.workerWithRound(t, "producer", "child-p", "job-p")
+	consumer := f.createWorker(t, "create-consumer", workerrecords.WorkerSpec{Name: "consumer"})
+	third := f.createWorker(t, "create-third", workerrecords.WorkerSpec{Name: "third"})
+	spec := func(name string) workerrecords.WorkerSpec {
+		return workerrecords.WorkerSpec{Name: name, AgentType: "implementer", ScopeMode: "write"}
+	}
+
+	_, err := f.store.UpdatePlanned(t.Context(), f.coord, op("plan-1"), consumer.WorkerID, spec("consumer"), []string{"producer", " producer "})
+	testutil.FailErr(t, "plan after producer", err)
+	deps, err := f.store.Dependencies(t.Context(), f.coord, consumer.WorkerID)
+	testutil.FailErr(t, "list dependencies", err)
+	if len(deps) != 1 || deps[0].ProducerWorkerID != producer.WorkerID {
+		t.Fatalf("dependencies = %+v", deps)
+	}
+	_, err = f.store.Dependencies(t.Context(), f.other, consumer.WorkerID)
+	wantErr(t, "another session's dependencies", err, workerrecords.ErrWorkerNotFound)
+	_, err = f.store.UpdatePlanned(t.Context(), f.coord, op("plan-self"), consumer.WorkerID, spec("consumer"), []string{"consumer"})
+	wantErr(t, "self", err, workerrecords.ErrPrerequisiteSelf)
+	_, err = f.store.UpdatePlanned(t.Context(), f.coord, op("plan-missing"), consumer.WorkerID, spec("consumer"), []string{"nobody"})
+	wantErr(t, "missing", err, workerrecords.ErrPrerequisiteUnknown)
+	_, err = f.store.UpdatePlanned(t.Context(), f.coord, op("plan-chain"), third.WorkerID, spec("third"), []string{"consumer"})
+	testutil.FailErr(t, "chain", err)
+	_, err = f.store.UpdatePlanned(t.Context(), f.coord, op("plan-cycle"), consumer.WorkerID, spec("consumer"), []string{"third"})
+	wantErr(t, "cycle", err, workerrecords.ErrPrerequisiteCycle)
+}
+
+func TestPreparationsAppendInOrder(t *testing.T) {
+	f := newFixture(t)
+	w, _ := f.workerWithRound(t, "fixer", "child-1", "job-1")
+	f.insertResult(t, "result-1", "job-1")
+	p1, err := f.store.RecordPreparation(t.Context(), f.coord, op("prep-1"), w.WorkerID, workerrecords.Preparation{SourceResultID: "result-1", PreparationRef: "prep-1", BindingGeneration: 2})
+	testutil.FailErr(t, "record", err)
+	p2, err := f.store.RecordPreparation(t.Context(), f.coord, op("prep-2"), w.WorkerID, workerrecords.Preparation{PreparationRef: "prep-2", BindingGeneration: 3})
+	testutil.FailErr(t, "record second", err)
+	if p1.Generation != 1 || p2.Generation != 2 {
+		t.Fatalf("generations = %d, %d", p1.Generation, p2.Generation)
+	}
+	_, err = f.store.RecordPreparation(t.Context(), f.coord, op("prep-3"), w.WorkerID, workerrecords.Preparation{BindingGeneration: 1})
+	wantErr(t, "binding going back", err, workerrecords.ErrInvalidPreparation)
+	latest, ok, err := f.store.LatestPreparation(t.Context(), f.coord, w.WorkerID)
+	testutil.FailErr(t, "latest", err)
+	if !ok || latest.Generation != 2 || latest.PreparationRef != "prep-2" || latest.BindingGeneration != 3 {
+		t.Fatalf("latest = %+v ok=%v", latest, ok)
+	}
+	_, _, err = f.store.LatestPreparation(t.Context(), f.other, w.WorkerID)
+	wantErr(t, "another session", err, workerrecords.ErrWorkerNotFound)
+}
+
+func TestClosedWorkerKeepsHistoryAndRefusesWork(t *testing.T) {
+	f := newFixture(t)
+	w, _ := f.workerWithRound(t, "fixer", "child-1", "job-1")
+	f.settle(t, "job-1", "")
+	_, err := f.store.Close(t.Context(), f.coord, op("close"), w.WorkerID, "withdrawn")
+	testutil.FailErr(t, "close", err)
+	got, err := f.store.Worker(t.Context(), f.coord, w.WorkerID)
+	testutil.FailErr(t, "read closed", err)
+	if got.ClosedReason != "withdrawn" {
+		t.Fatalf("closed worker = %+v", got)
+	}
+	rounds, err := f.store.Rounds(t.Context(), f.coord, w.WorkerID)
+	testutil.FailErr(t, "rounds", err)
+	if len(rounds) != 1 || rounds[0].SettledAt == "" || rounds[0].ResultID != "" {
+		t.Fatalf("rounds = %+v", rounds)
+	}
+	f.insertJob(t, "job-2", coordSession, "child-1", "pending")
+	_, err = f.store.AdmitRound(t.Context(), f.coord, op("admit-closed"), w.WorkerID, workerrecords.RoundSpec{JobID: "job-2", ExecutionTarget: "local"})
+	if !errors.Is(err, workerrecords.ErrWorkerClosed) {
+		t.Fatalf("admission on a closed worker = %v", err)
+	}
+}
+
+func TestWorkersListInCreationOrder(t *testing.T) {
+	f := newFixture(t)
+	first := f.createWorker(t, "create-first", workerrecords.WorkerSpec{Name: "first"})
+	second := f.createWorker(t, "create-second", workerrecords.WorkerSpec{Name: "second"})
+
+	workers, err := f.store.Workers(t.Context(), f.coord)
+	testutil.FailErr(t, "list workers", err)
+	if len(workers) != 2 || workers[0].ID != first.WorkerID || workers[1].ID != second.WorkerID {
+		t.Fatalf("workers = %+v", workers)
+	}
+}
+
+// Open lane roots are each open worker's current lane; earlier generations
+// and closed workers' lanes are not listed.
+func TestOpenLaneRootsListCurrentLanesOfOpenWorkers(t *testing.T) {
+	f := newFixture(t)
+	open, _ := f.workerWithRound(t, "open", "child-1", "job-1")
+	closed, _ := f.workerWithRound(t, "closed", "child-2", "job-2")
+	f.settle(t, "job-2", "")
+	for i, ref := range []string{"/lanes/open.1", "/lanes/open.2"} {
+		_, err := f.store.RecordPreparation(t.Context(), f.coord, op("prep-open-"+strconv.Itoa(i)), open.WorkerID, workerrecords.Preparation{PreparationRef: ref, BindingGeneration: int64(i + 1)})
+		testutil.FailErr(t, "record open lane", err)
+	}
+	_, err := f.store.RecordPreparation(t.Context(), f.coord, op("prep-closed"), closed.WorkerID, workerrecords.Preparation{PreparationRef: "/lanes/closed.1", BindingGeneration: 1})
+	testutil.FailErr(t, "record closed lane", err)
+	_, err = f.store.Close(t.Context(), f.coord, op("close"), closed.WorkerID, "withdrawn")
+	testutil.FailErr(t, "close", err)
+
+	roots, err := f.store.OpenLaneRoots(t.Context())
+	testutil.FailErr(t, "open lane roots", err)
+	if !slices.Equal(roots, []string{"/lanes/open.2"}) {
+		t.Fatalf("open lane roots = %v", roots)
+	}
+}
+
+// A worker whose start failed before any round is discarded with its create
+// receipt, freeing its name; a worker that ran a round cannot be discarded.
+func TestDiscardRemovesOnlyARoundlessWorker(t *testing.T) {
+	f := newFixture(t)
+	created := f.createWorker(t, "create-scout", workerrecords.WorkerSpec{Name: "scout"})
+	testutil.FailErr(t, "discard", f.store.Discard(t.Context(), f.coord, op("create-scout"), created.WorkerID))
+	again := f.createWorker(t, "create-scout", workerrecords.WorkerSpec{Name: "scout"})
+	if again.WorkerID == created.WorkerID {
+		t.Fatal("the create receipt survived the discard")
+	}
+	ran, _ := f.workerWithRound(t, "fixer", "child-1", "job-1")
+	err := f.store.Discard(t.Context(), f.coord, op("create-fixer"), ran.WorkerID)
+	wantErr(t, "discard a worker that ran", err, workerrecords.ErrRoundUnsettled)
+}

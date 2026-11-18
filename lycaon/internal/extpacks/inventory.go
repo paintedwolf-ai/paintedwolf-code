@@ -10,6 +10,7 @@ import (
 	"sync"
 
 	"github.com/lycaon/lycaon/config"
+	"github.com/lycaon/lycaon/internal/oardraft"
 )
 
 // NextStepsKindRoot holds the host catalog of reachable steps, one file per rule.
@@ -84,20 +85,6 @@ const (
 	ScopeDeviceOnly
 )
 
-// String returns the stable wire / docs token for a project-scope class.
-func (c ProjectScopeClass) String() string {
-	switch c {
-	case ScopeShared:
-		return "shared"
-	case ScopeAdditive:
-		return "additive"
-	case ScopeDeviceOnly:
-		return "device_only"
-	default:
-		return ""
-	}
-}
-
 // Every inventory root has one project-scope class.
 var projectScopeByKind = map[string]ProjectScopeClass{
 	"workflows": ScopeShared,
@@ -141,8 +128,8 @@ func ProjectDisableAllowed(kindRoot string, deviceResolved bool) bool {
 	return class == ScopeShared || (class == ScopeAdditive && !deviceResolved)
 }
 
-// kindRootForRel returns the longest matching inventory root.
-func kindRootForRel(rel string) string {
+// KindRootForUnitID returns the matching inventory root, or empty for unknown roots.
+func KindRootForUnitID(rel string) string {
 	rel = strings.TrimPrefix(filepath.ToSlash(strings.TrimSpace(rel)), "/")
 	best := ""
 	for _, root := range inventoryKindRoots {
@@ -156,21 +143,13 @@ func kindRootForRel(rel string) string {
 	return best
 }
 
-// KindRootForUnitID returns the matching inventory root, or empty for unknown roots.
-func KindRootForUnitID(unitID string) string { return kindRootForRel(unitID) }
-
-// UnitKindRoots returns the inventoried pack roots.
-func UnitKindRoots() []string {
-	return append([]string(nil), inventoryKindRoots...)
-}
-
 // Inventory roots distinguish unit ids from pack ids in disable lists.
 func isUnitID(id string) bool {
 	id = strings.TrimSpace(id)
 	if !strings.Contains(id, "/") {
 		return false
 	}
-	return kindRootForRel(id) != ""
+	return KindRootForUnitID(id) != ""
 }
 
 // InventoryPack assigns stable unit ids across a pack tree.
@@ -233,6 +212,15 @@ func InventoryPack(p Pack, man Manifest) (PackContent, error) {
 				return fmt.Errorf("read %s: %w", at, err)
 			}
 			if kind == "policy" {
+				upgraded, _, err := oardraft.Upgrade(data)
+				if err != nil {
+					diags = append(diags, Diagnostic{
+						Code: DiagPolicyCandidateRefused, UnitID: id, PackID: p.ID,
+						Message: fmt.Sprintf("%s: %v; run `pw rules upgrade` and finish the rule by hand", at, err),
+					})
+					return nil
+				}
+				data = upgraded
 				identity, _, oar, err := PolicyDocumentIdentity(data)
 				if err != nil {
 					return fmt.Errorf("%s: %w", at, err)
@@ -321,6 +309,10 @@ func validateUniqueUnitIDs(packID string, units []InventoriedUnit) error {
 // DiagUnitNotRegular identifies non-regular files excluded from publication.
 const DiagUnitNotRegular = "unit_not_regular"
 
+// DiagPolicyCandidateRefused identifies an OAR 1.0 candidate rule with no OAR
+// 1.0 equivalent; the rest of its pack loads.
+const DiagPolicyCandidateRefused = "policy_candidate_refused"
+
 // UnitIDFor maps a pack-relative path to its public unit id.
 // Provider-scoped kinds return empty when packID is missing.
 func UnitIDFor(packID, rel string) string {
@@ -329,7 +321,7 @@ func UnitIDFor(packID, rel string) string {
 		return ""
 	}
 	parts := strings.Split(rel, "/")
-	kindRoot := kindRootForRel(rel)
+	kindRoot := KindRootForUnitID(rel)
 	if ProviderScoped(kindRoot) && strings.TrimSpace(packID) == "" {
 		return ""
 	}

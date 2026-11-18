@@ -18,7 +18,7 @@ func TestPreparedMutationClassesRefuseStalePolicyWithoutEffects(t *testing.T) {
 			return chmodAgentPath(ctx, tc, testMutationTarget(filepath.Join(root, "source.txt")), 0o600)
 		},
 		"rename": func(ctx context.Context, tc tools.ToolContext, root string) error {
-			return renameAgentPath(ctx, tc, testMutationTarget(filepath.Join(root, "source.txt")), testMutationTarget(filepath.Join(root, "destination")), nil)
+			return renameAgentEntry(ctx, tc, testMutationTarget(filepath.Join(root, "source.txt")), testMutationTarget(filepath.Join(root, "destination")), 0, nil, nil)
 		},
 		"directory create": func(ctx context.Context, tc tools.ToolContext, root string) error {
 			_, err := mkdirAgentPath(ctx, tc, testMutationTarget(filepath.Join(root, "destination")), 0o755)
@@ -86,7 +86,7 @@ func TestDirectoryReplacementRechecksPolicyBeforeDisplacingDestination(t *testin
 		change()
 		return nil
 	}
-	err := renameAgentPath(ctx, tc, testMutationTarget(filepath.Join(root, "tree")), testMutationTarget(destination), nil)
+	err := renameAgentEntry(ctx, tc, testMutationTarget(filepath.Join(root, "tree")), testMutationTarget(destination), 0, nil, nil)
 	if !errors.Is(err, stale) {
 		t.Fatalf("directory replacement = %v, want stale policy", err)
 	}

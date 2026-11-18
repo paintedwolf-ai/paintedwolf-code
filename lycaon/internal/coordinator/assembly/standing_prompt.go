@@ -22,17 +22,16 @@ type standingProfileInputs struct {
 }
 
 type standingPromptInputs struct {
-	PromptRevision    string                 `json:"prompt_revision"`
-	Profile           standingProfileInputs  `json:"profile"`
-	Vars              map[string]any         `json:"vars,omitempty"`
-	RootCount         int                    `json:"root_count"`
-	EffectiveAgents   []string               `json:"effective_agents,omitempty"`
-	WebSearchEnabled  bool                   `json:"web_search_enabled"`
-	LoadedTools       []string               `json:"loaded_tools,omitempty"`
-	ExecutionMode     string                 `json:"execution_mode,omitempty"`
-	VerifyCommand     string                 `json:"verify_command,omitempty"`
-	WorkerToolBudget  spawn.WorkerToolBudget `json:"worker_tool_budget"`
-	ReaderFingerprint string                 `json:"reader_fingerprint"`
+	PromptRevision    string                `json:"prompt_revision"`
+	Profile           standingProfileInputs `json:"profile"`
+	Vars              map[string]any        `json:"vars,omitempty"`
+	RootCount         int                   `json:"root_count"`
+	EffectiveAgents   []string              `json:"effective_agents,omitempty"`
+	WebSearchEnabled  bool                  `json:"web_search_enabled"`
+	LoadedTools       []string              `json:"loaded_tools,omitempty"`
+	ExecutionMode     string                `json:"execution_mode,omitempty"`
+	VerifyCommand     string                `json:"verify_command,omitempty"`
+	ReaderFingerprint string                `json:"reader_fingerprint"`
 
 	reader prompts.Reader
 }
@@ -72,7 +71,7 @@ func renderStandingPrompt(ctx context.Context, pe prompts.PromptTemplateEngine, 
 		return "", fmt.Errorf("surface prompt vars: %w", err)
 	}
 
-	policyVars := spawn.PolicyTemplateVars(in.WorkerToolBudget)
+	policyVars := spawn.PolicyTemplateVars()
 	keys := make([]string, 0, len(policyVars))
 	for k := range policyVars {
 		keys = append(keys, k)

@@ -104,6 +104,6 @@ func TestWorkflowRunParentRunIDWireSync(t *testing.T) {
 		OpenAPISchema: "WorkflowRun",
 		TSInterface:   "WorkflowRun",
 	}); err != nil {
-		t.Fatal(err)
+		contractcheck.FailErr(t, "wirespec.SyncDTOFields failed", err)
 	}
 }

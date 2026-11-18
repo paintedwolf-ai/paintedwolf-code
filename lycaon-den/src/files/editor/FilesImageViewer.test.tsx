@@ -1,7 +1,7 @@
 import { stubClient } from "../../test/client-fixture.ts";
 import { cleanup, render, screen, waitFor } from "@solidjs/testing-library";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { applyFilesBufferLoad } from "../documents/project-files-buffers.ts";
+import { applyFilesBufferLoad } from "../documents/project-files-buffer-io.ts";
 import { FilesImageViewer } from "./FilesImageViewer.tsx";
 import { createSignal } from "solid-js";
 import { ResidentPresenceProvider } from "../../ui/resident-presence-context.tsx";

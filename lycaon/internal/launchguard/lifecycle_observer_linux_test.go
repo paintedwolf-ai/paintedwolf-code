@@ -125,17 +125,13 @@ func observeFixtureLifecycle(t *testing.T, fixture launchFixture, launch running
 			t.Errorf("request pre-close lifecycle checkpoint: %v", err)
 			return
 		}
-		select {
-		case line := <-lines:
-			var result lifecycleObservation
-			if err := json.Unmarshal(line, &result); err != nil {
-				t.Errorf("pre-close lifecycle checkpoint unavailable: %s (%v)", line, err)
-			} else {
-				t.Logf("pre-close exact-role lifecycle checkpoint: %s", line)
-				finalConsumed = !result.Checkpoint
-			}
-		case <-time.After(testutil.Timeout(time.Minute)):
-			t.Error("pre-close lifecycle checkpoint did not arrive within observation lifetime")
+		line := testutil.Receive(t, "the pre-close lifecycle checkpoint arrives", lines)
+		var result lifecycleObservation
+		if err := json.Unmarshal(line, &result); err != nil {
+			t.Errorf("pre-close lifecycle checkpoint unavailable: %s (%v)", line, err)
+		} else {
+			t.Logf("pre-close exact-role lifecycle checkpoint: %s", line)
+			finalConsumed = !result.Checkpoint
 		}
 	}
 	return finish, checkpoint

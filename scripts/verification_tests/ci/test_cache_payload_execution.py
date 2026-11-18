@@ -109,7 +109,7 @@ class CachePayloadTests(unittest.TestCase):
         import yaml
         root = Path(__file__).resolve().parents[3]
         setup = yaml.safe_load((root / ".github/actions/setup-verification/action.yml").read_text())
-        metadata = {"paths", "go", "analysis", "document", "rust", "decide", "generation", "opengrep", "notices", "bun"}
+        metadata = {"paths", "go", "modules", "analysis", "document", "rust", "decide", "generation", "opengrep", "notices", "bun"}
         for step in setup["runs"]["steps"]:
             if step.get("id") not in metadata:
                 self.assertIn("inputs.lookup-only != 'true'", step.get("if", ""), step)

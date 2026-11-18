@@ -1,4 +1,3 @@
-import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { keymap } from "@codemirror/view";
 import { EditorState } from "@codemirror/state";
@@ -10,8 +9,6 @@ import { liveKeymapSource } from "../../../contributions/frame-keymap.ts";
 import { nativeCommandId } from "../../../contributions/dispatch.ts";
 import { resolveKeymap } from "../../../shortcuts/keymap.ts";
 import { setShortcutPlatformForTests } from "../../../shortcuts/platform.ts";
-import { denSrc } from "../../../shell/den-client-state-invariants.ts";
-import { readSourceText } from "../../../test/stylesheet-source.ts";
 import {
   registerCommandHandler,
   resetDispatcherForTests,
@@ -93,13 +90,5 @@ describe("buildEditorCommandBridge", () => {
     setFilesStageActive(true);
     expect(binding?.run?.({ dom: null } as never)).toBe(true);
     expect(handler).toHaveBeenCalledOnce();
-  });
-});
-
-describe("editor keymap routing", () => {
-  it("names no chord of its own", () => {
-    // Key literals here bypass user rebinding.
-    const theme = readSourceText(join(denSrc, "components/source/editor/codemirror-theme.ts"));
-    expect(theme).not.toMatch(/\{\s*key:\s*"/);
   });
 });

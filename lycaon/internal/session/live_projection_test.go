@@ -204,14 +204,11 @@ func collectMessageOps(t *testing.T, ch <-chan api.EventEnvelope) map[api.Messag
 
 func waitOutboxEmpty(t *testing.T, database db.Handle) {
 	t.Helper()
-	for t.Context().Err() == nil {
+	testutil.WaitFor(t, "the event outbox drains", func() bool {
 		var count int
-		if err := database.QueryRowContext(t.Context(), "SELECT COUNT(*) FROM event_outbox").Scan(&count); err == nil && count == 0 {
-			return
-		}
-		time.Sleep(5 * time.Millisecond)
-	}
-	t.Fatal("event outbox did not drain")
+		err := database.QueryRowContext(t.Context(), "SELECT COUNT(*) FROM event_outbox").Scan(&count)
+		return err == nil && count == 0
+	})
 }
 
 func TestAttachSkillReadRootsPrefersMachine(t *testing.T) {
@@ -357,7 +354,7 @@ func TestPhaseGuidanceIsDeliveredOnTheNextModelCall(t *testing.T) {
 	kicks := mgr.Coordinator.Runtime.Kicks()
 	staged := anchor.InformRender(anchor.ComposeDone)
 	kicks.QueueDeferred(sess.ID, staged)
-	if got := kicks.TakePendingKickID(sess.ID); got != staged {
+	if got := kicks.TakePendingKickIDUnless(sess.ID, nil); got != staged {
 		t.Fatalf("staged = %q", got)
 	}
 	kicks.QueueDeferredLatest(sess.ID, anchor.PhaseEntered.String(), "coordinator-security-claims")

@@ -1,0 +1,9 @@
+description: "Seed or reconcile planned workers in this session from an approved Blueprint's lycaon:tasks block."
+schema:
+  type: object
+  required: [blueprint_path]
+  properties:
+    blueprint_path:
+      type: string
+      description: Relative path to the approved Blueprint file (for example plans/auth.md).
+  additionalProperties: false

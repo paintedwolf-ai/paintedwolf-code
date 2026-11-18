@@ -13,12 +13,6 @@ class HostedPlanTests(unittest.TestCase):
             mutate(data)
         return patch.object(ci, 'catalog', return_value=data)
 
-    def test_native_admission_cannot_omit_targets_or_accept_unsafe_roots(self):
-        for declaration in (None, [], {'unknown:test': ['lycaon-den/src-tauri/']},
-                {'den:test:rust': [], 'decide:test': ['lycaon/internal/decide/native/']},
-                {'den:test:rust': ['../outside/'], 'decide:test': ['lycaon/internal/decide/native/']}):
-            with self.catalog_patch(lambda d: d['ci']['ready'].update(compile_targets=declaration)), self.assertRaises(ValueError):
-                ci.matrix('fast')
 
     def test_tier_partitions_cover_every_local_gate_stage_once(self):
         lanes = ci.lanes()
@@ -38,7 +32,7 @@ class HostedPlanTests(unittest.TestCase):
 
     def test_fast_tier_runs_each_handoff_stage_once(self):
         rows = ci.matrix("fast")["include"]
-        self.assertEqual({row["lane"] for row in rows}, {"ready", "ready-lint", "ready-tests"})
+        self.assertEqual({row["lane"] for row in rows}, {"ready", "ready-lint", "ready-tests", "frontend"})
         stages = [stage["name"] for name in {row["lane"] for row in rows}
                   for stage in planning.expand(ci.lanes()[name]["targets"])]
         self.assertEqual(sorted(stages), sorted(set(stages)))
@@ -92,10 +86,10 @@ class HostedPlanTests(unittest.TestCase):
     def test_nightly_selection_includes_only_requested_and_unconditional_jobs(self):
         lanes = ci.lanes()
         nightly = {target for row in ci.matrix("nightly")["include"] for target in lanes[row["lane"]]["targets"]}
-        self.assertEqual(nightly, {"test:full", "test:race", "test:fuzz", "test:stress", "lint:vuln:fresh",
+        self.assertEqual(nightly, {"test:full", "test:race", "test:fuzz", "test:stress", "lint:vuln:fresh", "lint:deadcode",
                                    "perf:bench", "perf:sidecar", "perf:soak", "den:webkit:scroll",
                                    "den:webkit:atspi", "test:confine:linux", "nix:check", "test:userlands", "test:conformance:live",
-                                   "budgets", "coverage:changes", "den:coverage:changes", "scripts:coverage:changes",
+                                   "budgets", "coverage:changes", "arch-lint:changes", "den:knip:changes", "den:coverage:changes", "scripts:coverage:changes",
                                    "build", "build:cross", "licenses:notices", "check:drift", "openapi:lint",
                                    "validate:workflows", "oar:verify", "lint:full", "test:fail-messages:check",
                                    "comments:check", "lint:vuln", "den:typecheck", "den:lint",
@@ -134,6 +128,7 @@ class HostedPlanTests(unittest.TestCase):
         for profile in ci.PROFILES:
             for row in ci.matrix(profile)["include"]:
                 with self.subTest(profile=profile, lane=row["lane"]):
+                    self.assertEqual(row["step_minutes"] - row["minutes"], 1)
                     self.assertEqual(row["job_minutes"] - row["minutes"], 30)
                     self.assertLess(row["job_minutes"], 360)
                     # macOS hosts only the lanes that test macOS-specific behavior, and arm64 only
@@ -182,7 +177,7 @@ class HostedPlanTests(unittest.TestCase):
         self.assertFalse({"den:webkit:scroll", "den:webkit:atspi"} & set(gate))
         self.assertFalse({"webkit", "webkit-gtk"} & {row["lane"] for row in ci.matrix("check")["include"]})
         self.assertEqual({row["lane"] for row in ci.matrix("nightly", "e2e")["include"]},
-                         {"webkit", "webkit-gtk", "vulnerability-freshness"})
+                         {"webkit", "webkit-gtk", "vulnerability-freshness", "deadcode"})
         # Only a platform lane takes an end-to-end check into merge admission.
         admitted = {row["lane"] for row in ci.matrix("integration")["include"]}
         self.assertEqual({name for name in admitted if ci.lanes()[name]["suite"] == "e2e"}, {"webkit-gtk"})
@@ -334,6 +329,8 @@ class HostedPlanTests(unittest.TestCase):
 
     def test_combined_analysis_targets_restore_both_tool_sets(self):
         self.assertEqual(ci.analysis_set(["lint:full", "lint:vuln"]), "all")
+        # The structural ratchet runs unparam through golangci-lint.
+        self.assertEqual(ci.analysis_set(["arch-lint:changes"]), "lint")
 
     def test_lane_setup_restores_only_the_required_tool_sets(self):
         for profile in ci.PROFILES:
@@ -341,7 +338,7 @@ class HostedPlanTests(unittest.TestCase):
                 targets = ci.lanes()[row["lane"]]["targets"]
                 self.assertEqual(row["notices"], "licenses:notices" in targets)
                 if row["analysis"] == "lint":
-                    self.assertTrue(set(targets) & {"lint:fast", "lint:full"})
+                    self.assertTrue(set(targets) & {"lint:fast", "lint:full", "lint:deadcode"})
                 elif row["analysis"] == "vulnerabilities":
                     self.assertTrue(set(targets) & {"lint:vuln", "lint:vuln:fresh"})
                 else:

@@ -94,6 +94,17 @@ webE2e("walk keeps the selected chat item visible after virtual rows settle", as
     const command = activity.locator(`[data-tool-call-id="call-${index}"].den-walk-step-mark`);
     await expect(command).toHaveCount(1);
     await expect(command).toBeInViewport({ ratio: 1 });
+    // The marked card is ringed and tinted; its unmarked sibling is neither.
+    const idle = activity.locator(`[data-tool-call-id="call-${index}-next"]`);
+    const paint = (element: Element) => {
+      const style = getComputedStyle(element);
+      return [style.boxShadow, style.backgroundColor];
+    };
+    const [ring, tint] = await command.evaluate(paint);
+    const [idleRing, idleTint] = await idle.evaluate(paint);
+    expect(ring).toMatch(/0px 0px 0px 2px$/);
+    expect(idleRing).not.toMatch(/0px 0px 0px 2px$/);
+    expect(tint).not.toBe(idleTint);
     await expect(activity).not.toHaveClass(/den-walk-step-mark/);
     await page.evaluate(async (at) => {
       const url = "/src/files/walk/walk-store.ts";

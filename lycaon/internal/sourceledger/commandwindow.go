@@ -196,7 +196,7 @@ func (s *Commands) anchorStart(ctx context.Context, projectID string, roots []Ro
 	}
 	// A save that just landed moves the change token only once its event arrives.
 	for _, root := range roots {
-		repochange.WaitQuiet(ctx, root.Path, windowStartQuietGrace, windowStartQuietWait)
+		repochange.WaitQuiet(ctx, root.Path, s.startQuietGrace, s.startQuietWait)
 	}
 	req.Force = !sourcesnapshot.ChangeTokenTrusted(snapshotRoots(roots))
 	req.Wait = true
@@ -676,6 +676,13 @@ func (s *Commands) SetWindowSettleForTest(period time.Duration) {
 	s.windowSettle = func() <-chan time.Time { return time.After(period) }
 }
 
+// SetWindowStartQuietForTest replaces how long a window's start waits for
+// watcher events already on their way; a zero wait does not wait. Call it
+// before the first window opens.
+func (s *Commands) SetWindowStartQuietForTest(grace, maxWait time.Duration) {
+	s.startQuietGrace, s.startQuietWait = grace, maxWait
+}
+
 // SetWindowSettleGateForTest makes every settle period last until gate delivers
 // or closes, so a test decides when a window's grace or close moves on.
 func (s *Commands) SetWindowSettleGateForTest(gate <-chan time.Time) {
@@ -702,10 +709,13 @@ type Commands struct {
 	recordMu      *sync.Mutex
 	retention     *startRetention
 	// slowPasses remembers, per scope, the last pass that outlasted the budget.
-	slowPasses       map[string]slowPass
-	sqlDB            db.Handle
-	windowRecoveryMu sync.Mutex
-	windowsRecovered bool
+	slowPasses map[string]slowPass
+	// startQuietGrace and startQuietWait bound a window start's wait for
+	// watcher events already on their way.
+	startQuietGrace, startQuietWait time.Duration
+	sqlDB                           db.Handle
+	windowRecoveryMu                sync.Mutex
+	windowsRecovered                bool
 	// windowSettle starts one settle period. Guarded by windowsMu.
 	windowSettle func() <-chan time.Time
 	windowsMu    sync.Mutex

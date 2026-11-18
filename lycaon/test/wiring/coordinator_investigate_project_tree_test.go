@@ -117,7 +117,7 @@ func TestInvestigateCoordinatorWriteLandsOnProjectTree(t *testing.T) {
 	var checkpointID string
 	var promptErr error
 	promptFinished := false
-	testutil.WaitFor(t, func() bool {
+	testutil.WaitFor(t, "the prompt ends, answering its approvals", func() bool {
 		select {
 		case promptErr = <-done:
 			promptFinished = true
@@ -146,7 +146,7 @@ func TestInvestigateCoordinatorWriteLandsOnProjectTree(t *testing.T) {
 	}
 	testutil.FailErr(t, "Prompt", promptErr)
 	var data []byte
-	testutil.WaitFor(t, func() bool {
+	testutil.WaitFor(t, "the project file holds the write", func() bool {
 		var readErr error
 		data, readErr = os.ReadFile(targetPath)
 		return readErr == nil && strings.Contains(string(data), "investigate project write")
@@ -160,7 +160,7 @@ func TestInvestigateCoordinatorWriteLandsOnProjectTree(t *testing.T) {
 		t.Fatal("merge reconcile must not open investigate product path without promote conflict")
 	}
 
-	jobs, err := h.Delegations.Queue.List(ctx, testdbseed.DefaultProjectID, api.WorkerStatusPending, api.WorkerStatusRunning)
+	jobs, err := h.Workers.Queue.List(ctx, testdbseed.DefaultProjectID, api.WorkerStatusPending, api.WorkerStatusRunning)
 	testutil.FailErr(t, "WorkerQueue.List", err)
 	if len(jobs) != 0 {
 		t.Fatalf("investigate coordinator write must not enqueue worker jobs: %+v", jobs)

@@ -208,7 +208,7 @@ func TestVerifyToDTOSuggestionState(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			got := VerifyToDTO(proj, dir, tc.cfg, tc.detect, tc.hasDet)
+			got := VerifyToDTO(proj, dir, tc.cfg, tc.detect, tc.hasDet, nil)
 			if got.SuggestionState != tc.want {
 				t.Fatalf("suggestion_state = %q want %q", got.SuggestionState, tc.want)
 			}
@@ -219,7 +219,7 @@ func TestVerifyToDTOSuggestionState(t *testing.T) {
 	}
 
 	// Global scope carries no suggestion semantics.
-	if got := VerifyToDTO(wire.SettingsScopeGlobal, "", VerifyConfig{}, VerifyDetectCandidate{}, false); got.SuggestionState != "" {
+	if got := VerifyToDTO(wire.SettingsScopeGlobal, "", VerifyConfig{}, VerifyDetectCandidate{}, false, nil); got.SuggestionState != "" {
 		t.Fatalf("global suggestion_state = %q want empty", got.SuggestionState)
 	}
 }

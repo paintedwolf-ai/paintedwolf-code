@@ -861,7 +861,16 @@ A reject recommends only actions the receiving profile can perform: a worker wit
 
 On Linux, each command runs beneath a dedicated child subreaper. A completed or cancelled command settles its original leader status and tears down every descendant, including double-forked processes that start another session. Background execution retains the tree while its leader runs; disposal or engine exit tears it down. Descendants are attributed through the supervisor's own parent-child tree, never by comparing launch times between concurrent commands. Stable process descriptors prevent a recycled PID from naming another process. Linux command launches require kernel support for child subreapers and pidfds.
 
-Tool execution and transcript presentation are separate concerns. `tool-presentation.yaml` declares titles, activity headlines and salience, long-running behavior, and which result fields form concise context. A long-running call may appear on the live assistant row while unsettled; ordinary calls appear after settlement. Den reads typed invocation and process fields rather than parsing tool output for “running” or “failed.”
+Tool execution and transcript presentation are separate concerns. `tool-presentation.yaml` declares each tool's action card label, titles, activity headlines and salience, long-running behavior, and which result fields form concise context. Every tool except the worker tools needs a label. A long-running call may appear on the live assistant row while unsettled; ordinary calls appear after settlement. Den reads typed invocation and process fields rather than parsing tool output for “running” or “failed.”
+
+The host builds each call's action card in [`internal/actioncard`](../lycaon/internal/actioncard/actioncard.go) when it projects the call. Facts come from four sources, in this order, and the first fact of each kind wins, at most four:
+
+1. **The family's presenter**, when there is one: commands, terminal sessions, page sessions.
+2. **Facts the handler stated**: a handler records facts the result carries in no other typed field, such as counts, HTTP status, or how a tool or skill was resolved, with `ToolInvocationOut.StateCardFact`. They are stored as `card_facts` and never reach the model.
+3. **Typed result fields**: file edits, captures, external access, processes and listeners, dispatches, approvals, verdicts.
+4. **The call's status**: refused or failed with the host's code, or completed.
+
+No card reads output text. A new tool gets a correct card from its label; a richer one needs only a stated fact in its handler.
 
 Tool owners retain a readable `display_subject` with each result: the original command, worker brief, delegation task, or scan identity. Durable secret screening covers that subject before the host formats `display_title`. Den prefers the result title over the call's provisional argument title, so completed cards remain readable across pagination, reload, and resource retirement.
 
@@ -885,7 +894,7 @@ Discovery `path` values are literal filesystem names; scope options such as `max
 
 Ignored directories and generated files remain searchable by default; `grep` and `find` prune them whole when a call passes `include_ignored: false`, except for a walk root named inside an ignored tree. A search that exhausts its deadline reports how many files it searched and which top-level subtree took most of them. `grep` and pattern-mode `summarize` accelerate literal searches of three or more characters by probing the catalog's per-file 3-gram Bloom filters before opening files. The literals a pattern requires include one from each branch of an alternation such as `foo|bar`, so a file the filters show holds none of them stays closed; unsaved editor text, uncached or modified files, and queries without such literals are read directly. `list_dir` and `stat` answer directory listings and child counts from the catalog snapshot without disk walks. `grep` applies its path filter before opening files, rejects binary prefixes before full reads, streams files to a bounded worker pool while applying results in walk order, and bounds concurrent reads across searches; a 60-second execution deadline returns `GREP_DEADLINE_EXCEEDED`, never a successful empty result.
 
-Results count searched text files, binary skips, unreadable files, byte-capped files, and structural parse gaps. Absence applies only to searched text; any unreadable or capped file leaves coverage incomplete. `./task perf:bench` runs the grep engine benchmarks (`grep_engine_bench_test.go`); `PW_GREP_BENCH_ROOT` points it at an existing working tree, read-only.
+Results count searched text files, binary skips, unreadable files, byte-capped files, and structural parse gaps. Absence applies only to searched text; any unreadable or capped file leaves coverage incomplete. `./task perf:bench` runs the grep engine benchmarks (`grep_engine_bench_test.go`) over the scale fixture tree that `PW_BENCH_ROOT` names, read-only.
 
 ---
 
@@ -989,34 +998,34 @@ The mutation boundary is monotonic. A new supported file must be clean, and an e
 
 ## Worker scope coordination
 
-The `task` tool creates a durable child assignment rather than an in-process callback. It validates agent eligibility, project attachment, read/write mode, budgets, and any base-overlay dependency before enqueue.
+The `task` tool creates a named persistent worker and starts its first round rather than running an in-process callback; `instruct_worker` sends follow-up instructions (and optional between-round agent or scope changes) to an existing worker, `plan_from_blueprint` seeds planned legs from an approved Blueprint, `shelve_overlay` holds an open write result out of integration without discarding it, `worker_history` reads a worker's full round and message history, `read_findings` pages sibling findings, and `read_review` inspects workflow review subjects. `task` validates agent eligibility, project attachment, read/write mode, reviewer targets (`review_of`), and any `base_overlay_id` or `after_workers` prerequisite before enqueue.
 
 ### Task assignment
 
 | Field | Purpose |
 |-------|---------|
-| Agent/role | Select an admitted worker capability profile |
-| Brief | Give a cold child the problem and relevant context |
-| Completion criteria | Define the bounded result expected by the parent |
+| Name | Address the persistent worker across rounds, waits, and cancellations |
+| Agent/role | Select an admitted worker capability profile (or read-only reviewer over `review_of`) |
+| Brief | Give the worker its standing goal and completion conditions |
 | Scope mode | Declare read-only or write intent |
 | Paths/root | Optionally name the assignment focus |
-| Dependency | Name an overlay or upstream result that must exist first |
+| Dependency | Name `base_overlay_id` or `after_workers` prerequisites that must land first |
 
-The brief is bounded because a worker should reacquire source through tools rather than inherit an unreviewable transcript dump. Task paths are guidance only: they do not grant, restrict, or filter reads, searches, mutations, verification, or promotion, and never widen the underlying boundaries.
+The brief is bounded because a worker should reacquire source through tools rather than inherit an unreviewable transcript dump; workers share progress mid-round with `message_coordinator` and ask blocking questions with `request_decision`. Task paths are guidance only: they do not grant, restrict, or filter reads, searches, mutations, verification, or promotion, and never widen the underlying boundaries.
 
 ### Worker workspace provisioning
 
-A read worker uses an isolated session view of the project. A write worker receives a snapshot-backed private tree and host-only metadata; the child never receives the absolute engine path as product context. Subprocess confinement also denies reads from the primary source roots while a write worker is attached to its branch, so an absolute import path, copied editable environment, or tool cache cannot silently execute primary-checkout source.
+A read worker uses an isolated session view of the project (or a pinned read-only view of a write result when spawned with `review_of`). A write worker receives a snapshot-backed private lane that persists across its rounds and refreshes when its result is promoted or resets when its result is rejected; the child never receives the absolute engine path as product context. Subprocess confinement also denies reads from the primary source roots while a write worker is attached to its branch, so an absolute import path, copied editable environment, or tool cache cannot silently execute primary-checkout source.
 
-Provisioning failure settles the job without starting a child. A partially created workspace is reconciled by the worker-workspace subsystem owner, not left for the model to clean up.
+Provisioning failure settles the round without starting a child. A partially created workspace is reconciled by the worker-workspace subsystem owner, not left for the model to clean up.
 
 ### Promotion
 
-Promotion validates current evidence, observed changes, target generation, conflicts, and final syntax health before applying bytes to the integration tree. Syntax is re-evaluated over the prepared target bytes, including command-authored files and caller conflict resolutions. Applying the overlay advances the source generation and records the landed change. A failed preview or promotion preserves the overlay for repair; rejection closes it intentionally. See [Coordination](coordination.md#worker-workspace-and-promotion).
+Promotion validates current evidence, observed changes, target generation, conflicts, and final syntax health before applying bytes to the integration tree. Syntax is re-evaluated over the prepared target bytes, including command-authored files and caller conflict resolutions. Applying the overlay advances the source generation, records the landed change, and schedules an idle workspace refresh for the worker's next round. A failed preview or promotion preserves the overlay for repair; `shelve_overlay` retains it unlanded with a reason, and `reject_overlay` discards it and resets the worker's lane. See [Coordination](coordination.md#worker-workspace-refresh-and-dispositions).
 
 ### Caps
 
-Worker count, loop count, tool bytes, assignment size, path count, and overlay size are host budgets whose exact values live in catalogs and code. Overlay capture enforces explicit ceilings (10,000 changed files, 100 MiB total modified bytes). When an overlay exceeds these budgets, the worker branch is left unsealed on disk for review rather than discarding changes or retrying unbounded captures. The invariant is that every dimension is bounded and truncation is stated. Budget exhaustion produces a structured partial or blocked result and leaves a resumable child when repair is possible; it never converts incomplete work into success.
+Worker count, tool bytes, assignment size, path count, and overlay size are host bounds whose exact values live in catalogs and code. Overlay capture enforces explicit ceilings (10,000 changed files, 100 MiB total modified bytes). When an overlay exceeds these budgets, the worker branch is left unsealed on disk for review rather than discarding changes or retrying unbounded captures. The invariant is that every resource dimension is bounded and truncation is stated. Worker rounds run without an artificial loop ceiling; consumption and quiet notices inform the coordinator, and an armed spend ceiling fences the round with reason `limit` while keeping its work under a result handle.
 
 ---
 
@@ -1194,7 +1203,7 @@ OAR policies select the actual operation and typed rejection facts. A host refus
 
 ## Portable command cutover inventory
 
-[`tool-audit.csv`](../tool-audit.csv) enumerates the 118 tool declarations in the [command disposition catalog](../lycaon/config/packs/painted-wolf/platform/tools/command-language-v1/dispositions.json). Its `runtime_authority` column names the subsystem that governs each operation; `surface_disposition` says how the tool is presented. The catalog has one primary `command` entry, 78 retained domain tools, 15 structured tools also available as command forms, and 24 command-only operation contracts. Host process controls, Git mutations and conversational document edits retain useful structured surfaces beside command forms.
+[`tool-audit.csv`](../tool-audit.csv) and the [command disposition catalog](../lycaon/config/packs/painted-wolf/platform/tools/command-language-v1/dispositions.json) enumerate the live tool and operation declarations. Its `runtime_authority` column names the subsystem that governs each operation; `surface_disposition` says how the tool is presented. The catalog has one primary `command` entry, 76 retained domain tools, 3 structured tools also available as command forms, and 36 command-only operation contracts. Host process controls, Git mutations and conversational document edits retain useful structured surfaces beside command forms.
 
 The current command entry parses and admits ordinary bash programs, dispatches cataloged utilities natively, and launches other programs through confinement. It returns child output and status, effects, a program receipt, and typed host refusals. Utility errors retain bounded stdout and stderr diagnostics with the utility's exit status. A withheld redirect records `output_withheld` without claiming the write owner ran. Verification verdicts apply to the submitted program; bounded `nonzero_executions` preserve earlier child statuses even when a later statement succeeds. OAR renders host decisions from typed facts; it does not classify a command by reading its output. The stopped statement's shell-voice stderr accompanies the structured refusal, and earlier child results remain available. The [feedback contract](agent-tool-feedback.md) and [command language](../lycaon/config/packs/painted-wolf/platform/tools/command-language-v1/) define those surfaces.
 

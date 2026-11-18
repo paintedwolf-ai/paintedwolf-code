@@ -108,7 +108,7 @@ func (p *preparedHeldEdit) CommitTx(ctx context.Context, tx *sql.Tx) (string, er
 		RootID: in.RootID, Path: in.Path, EntryKind: EntryKindFile, State: "content",
 		SHA256: in.SHA256, Object: p.object, Size: in.Size,
 		CaptureQuality: "exact", Landing: LandingEditorDocument, TS: in.TS,
-	})
+	}, nil)
 }
 
 func normalizeHeldEdit(in HeldEdit) HeldEdit {

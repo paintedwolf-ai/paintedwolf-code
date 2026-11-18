@@ -27,6 +27,8 @@ type enrichmentJobs struct {
 func (j *enrichmentJobs) Get(id string) (*api.WorkerTask, bool) {
 	return j.task, j.task != nil && id == j.task.ID
 }
+func (j *enrichmentJobs) ReviewsWorker(context.Context, *api.WorkerTask) bool { return false }
+
 func (j *enrichmentJobs) ClaimWorkerBranch(context.Context, string) (*api.WorkerTask, error) {
 	j.claims++
 	return j.claimTask, j.claimErr

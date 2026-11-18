@@ -1,21 +1,30 @@
 import { For, Show, createSignal, onCleanup } from "solid-js";
 import type { Accessor } from "solid-js";
-import type { WorkerTask } from "../../api/types.ts";
+import type { BoardView, WorkerTask } from "../../api/types.ts";
 import type { PendingCheckpoint } from "../../chat/checkpoint/checkpoint-model.ts";
 import {
   canCancelWorker,
+  findSessionWorker,
   sessionWorkerRows,
   workerAgentLabel,
   workerDependencyLabel,
   workerRowTitleDisambiguated,
 } from "../../chat/worker/workers-model.ts";
 import { pendingWorkerApprovalByJob } from "../../chat/worker/worker-approval-model.ts";
-import { WorkerBudgetChip } from "./WorkerBudgetChip.tsx";
+import {
+  workerDispositionPresentation,
+  workerFactActivityLine,
+  workerStateBadgeLabel,
+  workerUnreadPresentation,
+} from "../../chat/worker/worker-state-presentation.ts";
+import { boardWorkerForTask } from "../../store/workers-board-sync.ts";
+import { WorkerTurnsChip } from "./WorkerTurnsChip.tsx";
 import { WorkerToolCallsChip } from "./WorkerToolCallsChip.tsx";
 import { Scrollport } from "../primitives/Scrollport.tsx";
 
 type Props = {
   workers: WorkerTask[];
+  board?: BoardView;
   selectedId: string | null;
   onSelect: (id: string) => void;
   onCancel: (id: string) => void;
@@ -34,6 +43,8 @@ export function WorkersTab(props: Props) {
   const pendingApprovals = () =>
     pendingWorkerApprovalByJob(props.workers, props.pendingCheckpoints ?? []);
   const busyWorkerId = () => props.busyWorkerId?.() ?? null;
+  const resolvedSelectedId = () =>
+    findSessionWorker(props.workers, props.selectedId)?.id ?? props.selectedId;
   const [ackId, setAckId] = createSignal<string | null>(null);
   let ackTimer: ReturnType<typeof setTimeout> | undefined;
 
@@ -55,6 +66,21 @@ export function WorkersTab(props: Props) {
   const liveRow = (row: WorkerTask) =>
     props.workers.find((candidate) => candidate.id === row.id) ?? row;
 
+  const rowStateDetail = (live: WorkerTask) => {
+    const bw = boardWorkerForTask(props.board, live);
+    if (!bw && !live.parked_reason) return undefined;
+    if (
+      bw?.state === "asking" ||
+      bw?.reason === "parked" ||
+      Boolean(live.parked_reason) ||
+      bw?.state === "recovering" ||
+      bw?.state === "failed"
+    ) {
+      return workerFactActivityLine(live, bw) ?? workerStateBadgeLabel(live, bw);
+    }
+    return undefined;
+  };
+
   return (
     <div class="den-workers-tab" data-testid="workers-tab">
       <Show
@@ -67,56 +93,99 @@ export function WorkersTab(props: Props) {
       >
         <Scrollport class="den-workers-tab-list" contentAs="ul" contentClass="den-workers-tab-list__content">
           <For each={rows()}>
-            {(worker) => (
-              <li
-                class="den-workers-tab-row"
-                classList={{
-                  "den-workers-tab-row--ack": ackId() === worker.id,
-                  "den-workers-tab-row--approval": pendingApprovals().has(worker.id),
-                }}
-                data-testid="workers-tab-row"
-              >
-                <button
-                  type="button"
-                  class="den-workers-tab-select"
-                  aria-pressed={props.selectedId === worker.id}
-                  onClick={() => selectWorker(worker.id)}
+            {(worker) => {
+              const live = () => liveRow(worker);
+              const bw = () => boardWorkerForTask(props.board, live());
+              const disposition = () => workerDispositionPresentation(live(), bw());
+              const unread = () => workerUnreadPresentation(bw());
+              return (
+                <li
+                  class="den-workers-tab-row"
+                  classList={{
+                    "den-workers-tab-row--ack": ackId() === worker.id,
+                    "den-workers-tab-row--approval": pendingApprovals().has(worker.id),
+                  }}
+                  data-testid="workers-tab-row"
                 >
-                  <span class="den-workers-tab-agent">{workerAgentLabel(worker)}</span>
-                  <span class="den-workers-tab-title">
-                    {workerRowTitleDisambiguated(worker, props.workers)}
-                  </span>
-                  <Show when={pendingApprovals().has(worker.id)}>
-                    <span
-                      class="den-workers-tab-approval"
-                      data-testid="workers-tab-approval"
-                    >
-                      Waiting for your approval
-                    </span>
-                  </Show>
-                  <Show when={workerDependencyLabel(liveRow(worker))}>
-                    {(label) => <span class="den-workers-tab-approval">{label()}</span>}
-                  </Show>
-                  <WorkerBudgetChip worker={() => liveRow(worker)} />
-                  <WorkerToolCallsChip worker={() => liveRow(worker)} />
-                </button>
-                <Show when={canCancelWorker(worker)}>
                   <button
                     type="button"
-                    class="den-workers-tab-cancel"
-                    classList={{
-                      "den-workers-tab-cancel--busy": busyWorkerId() === worker.id,
-                    }}
-                    disabled={busyWorkerId() === worker.id}
-                    aria-label={`Cancel ${workerAgentLabel(worker)} worker`}
-                    data-testid={`workers-tab-cancel-${worker.id}`}
-                    onClick={() => props.onCancel(worker.id)}
+                    class="den-workers-tab-select"
+                    aria-pressed={resolvedSelectedId() === worker.id}
+                    onClick={() => selectWorker(worker.id)}
                   >
-                    {busyWorkerId() === worker.id ? "Cancelling…" : "Cancel"}
+                    <span class="den-workers-tab-agent">
+                      {live().worker_name?.trim() &&
+                      live().worker_name?.trim() !== workerAgentLabel(worker)
+                        ? `${live().worker_name?.trim()} · ${workerAgentLabel(worker)}`
+                        : workerAgentLabel(worker)}
+                    </span>
+                    <span class="den-workers-tab-title">
+                      {workerRowTitleDisambiguated(worker, props.workers)}
+                    </span>
+                    <Show when={pendingApprovals().has(worker.id)}>
+                      <span
+                        class="den-workers-tab-approval"
+                        data-testid="workers-tab-approval"
+                      >
+                        Waiting for your approval
+                      </span>
+                    </Show>
+                    <Show when={workerDependencyLabel(live())}>
+                      {(label) => <span class="den-workers-tab-approval">{label()}</span>}
+                    </Show>
+                    <Show when={!pendingApprovals().has(worker.id) && rowStateDetail(live())}>
+                      {(detail) => (
+                        <span
+                          class="den-workers-tab-approval"
+                          data-testid="workers-tab-state-detail"
+                        >
+                          {detail()}
+                        </span>
+                      )}
+                    </Show>
+                    <Show when={disposition()} keyed>
+                      {(disp) => (
+                        <span
+                          class="den-worker-fact-badge"
+                          data-testid="worker-disposition-badge"
+                          data-disposition={disp.disposition}
+                        >
+                          {disp.label}
+                        </span>
+                      )}
+                    </Show>
+                    <Show when={unread()} keyed>
+                      {(u) => (
+                        <span
+                          class="den-worker-fact-badge"
+                          data-testid="worker-unread-badge"
+                          data-unread-count={u.count}
+                        >
+                          {u.label}
+                        </span>
+                      )}
+                    </Show>
+                    <WorkerTurnsChip worker={live} />
+                    <WorkerToolCallsChip worker={live} />
                   </button>
-                </Show>
-              </li>
-            )}
+                  <Show when={canCancelWorker(worker)}>
+                    <button
+                      type="button"
+                      class="den-workers-tab-cancel"
+                      classList={{
+                        "den-workers-tab-cancel--busy": busyWorkerId() === worker.id,
+                      }}
+                      disabled={busyWorkerId() === worker.id}
+                      aria-label={`Cancel ${workerAgentLabel(worker)} worker`}
+                      data-testid={`workers-tab-cancel-${worker.id}`}
+                      onClick={() => props.onCancel(worker.id)}
+                    >
+                      {busyWorkerId() === worker.id ? "Cancelling…" : "Cancel"}
+                    </button>
+                  </Show>
+                </li>
+              );
+            }}
           </For>
         </Scrollport>
       </Show>

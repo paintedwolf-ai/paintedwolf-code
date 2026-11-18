@@ -9,7 +9,6 @@ vi.mock("@tauri-apps/api/core", () => ({ invoke }));
 vi.mock("./runtime.ts", () => ({ isTauriRuntime }));
 
 import {
-  readVaultLockStatus,
   resolveCheckpointWithPresence,
   revealManagedSecret,
 } from "./presence.ts";
@@ -101,24 +100,3 @@ describe("resolveCheckpointWithPresence", () => {
   });
 });
 
-describe("readVaultLockStatus", () => {
-  beforeEach(() => {
-    invoke.mockReset();
-    isTauriRuntime.mockReturnValue(true);
-  });
-
-  it("reads the native step-away observer status", async () => {
-    invoke.mockResolvedValue({ system_connected: true, sleeping: false });
-    await expect(readVaultLockStatus()).resolves.toEqual({
-      system_connected: true,
-      sleeping: false,
-    });
-    expect(invoke).toHaveBeenCalledWith("vault_lock_status");
-  });
-
-  it("returns null outside the installed app", async () => {
-    isTauriRuntime.mockReturnValue(false);
-    await expect(readVaultLockStatus()).resolves.toBeNull();
-    expect(invoke).not.toHaveBeenCalled();
-  });
-});

@@ -5,6 +5,6 @@ triggers:
   topology_patterns: ["pipeline", "default-pipeline", "*"]
   phase_ids: ["implement"]
 checklist:
-  - "Run tests and the leg's external-state commands via command"
+  - "Run tests and the worker's external-state commands via command"
   - "Stay within sandbox paths when requires_isolation is true"
   - "With sibling workers: record_finding before shared-path edits and registry/dispatch contracts"

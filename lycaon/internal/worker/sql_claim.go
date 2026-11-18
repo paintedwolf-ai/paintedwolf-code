@@ -4,11 +4,11 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"github.com/lycaon/lycaon/internal/timelayout"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/lycaon/lycaon/internal/db"
-	"github.com/lycaon/lycaon/internal/worker/jobstate"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -69,11 +69,11 @@ func (s *SQLStore) claimJob(ctx context.Context, id string, req ClaimRequest, ma
 	claimErr := s.inTx(ctx, func(q *db.Queries, tx *sql.Tx) error {
 		claimed, err := q.ClaimWorkerJob(ctx, db.ClaimWorkerJobParams{
 			ID: id, MaxRunning: int64(maxRunning),
-			StartedAt:      db.NullString(db.FormatTime(now)),
+			StartedAt:      db.NullString(timelayout.Format(now)),
 			ClaimedBy:      db.NullString(req.ClaimedBy),
 			ClaimToken:     db.NullString(claimToken),
-			HeartbeatAt:    db.NullString(db.FormatTime(now)),
-			LeaseExpiresAt: db.NullString(db.FormatTime(now.Add(workerClaimLease))),
+			HeartbeatAt:    db.NullString(timelayout.Format(now)),
+			LeaseExpiresAt: db.NullString(timelayout.Format(now.Add(workerClaimLease))),
 		})
 		if err != nil {
 			return err
@@ -81,7 +81,7 @@ func (s *SQLStore) claimJob(ctx context.Context, id string, req ClaimRequest, ma
 		if err := q.InsertWorkerAttempt(ctx, db.InsertWorkerAttemptParams{
 			ID:          uuid.NewString(),
 			ClaimToken:  claimToken,
-			StartedAt:   db.FormatTime(now),
+			StartedAt:   timelayout.Format(now),
 			WorkerJobID: claimed,
 		}); err != nil {
 			return err
@@ -93,7 +93,7 @@ func (s *SQLStore) claimJob(ctx context.Context, id string, req ClaimRequest, ma
 		if err != nil {
 			return err
 		}
-		task, err = jobstate.FromRow(ctx, tx, row)
+		task, err = s.jobs.FromRow(ctx, tx, row)
 		return err
 	})
 	if db.IsNoRows(claimErr) {

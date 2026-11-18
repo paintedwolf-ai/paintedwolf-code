@@ -181,8 +181,10 @@ func TestSQLStoreListOpen(t *testing.T) {
 	}
 }
 
-func TestSQLStoreLatestForDelegationTieBreaksByInsertOrder(t *testing.T) {
+func TestSQLStoreListBySessionIDTieBreaksByInsertOrder(t *testing.T) {
 	sqlDB := testdbfixture.Open(t, "store.db")
+	testdbseed.InsertProject(t, sqlDB, testdbseed.DefaultProjectID)
+	testdbseed.InsertSession(t, sqlDB, "sess-1", testdbseed.DefaultProjectID)
 
 	store := NewSQLStore(sqlDB)
 	ctx := context.Background()
@@ -194,7 +196,7 @@ func TestSQLStoreLatestForDelegationTieBreaksByInsertOrder(t *testing.T) {
 		Categories:    categories,
 		Status:        api.CodeScanStatusPending,
 		CreatedAt:     stamp,
-		DelegationID:  "dep-1",
+		SessionID:     "sess-1",
 		HeadSHA:       "old",
 		Trigger:       api.ScanTriggerManual,
 	}
@@ -204,16 +206,74 @@ func TestSQLStoreLatestForDelegationTieBreaksByInsertOrder(t *testing.T) {
 		Categories:    categories,
 		Status:        api.CodeScanStatusPending,
 		CreatedAt:     stamp,
-		DelegationID:  "dep-1",
+		SessionID:     "sess-1",
 		HeadSHA:       "new",
 		Trigger:       api.ScanTriggerManual,
 	}
 	testutil.FailErr(t, "Insert older", store.Insert(ctx, older, nil, ""))
 	testutil.FailErr(t, "Insert newer", store.Insert(ctx, newer, nil, ""))
 
-	got, err := store.LatestForDelegation(ctx, "dep-1", categories)
-	testutil.FailErr(t, "LatestForDelegation", err)
-	if got.ID != newer.ID {
-		t.Fatalf("latest = %s want %s (same created_at must tie-break by insert order)", got.ID, newer.ID)
+	got, err := store.ListBySessionID(ctx, "sess-1")
+	testutil.FailErr(t, "ListBySessionID", err)
+	if len(got) < 2 || got[0].ID != newer.ID {
+		t.Fatalf("latest = %+v want first %s (same created_at must tie-break by insert order)", got, newer.ID)
+	}
+}
+
+func TestSQLStoreSessionSnapshotQueries(t *testing.T) {
+	sqlDB := testdbfixture.Open(t, "store.db")
+	testdbseed.InsertProject(t, sqlDB, testdbseed.DefaultProjectID)
+	testdbseed.InsertSession(t, sqlDB, "sess-snap", testdbseed.DefaultProjectID)
+
+	store := NewSQLStore(sqlDB)
+	ctx := t.Context()
+	cats := []api.ScanCategory{api.ScanCategorySAST}
+
+	if _, err := store.LatestCompleteForSessionSnapshot(ctx, "", "snap-1", cats); err == nil {
+		t.Fatal("expected error on empty session_id")
+	}
+	none, err := store.LatestCompleteForSessionSnapshot(ctx, "sess-snap", "snap-1", cats)
+	testutil.FailErr(t, "missing LatestCompleteForSessionSnapshot", err)
+	if none != nil {
+		t.Fatalf("missing complete scan = %+v, want nil", none)
+	}
+
+	inFlightEmpty, err := store.FindInFlightForSessionSnapshot(ctx, "", "snap-1", cats, nil)
+	testutil.FailErr(t, "empty FindInFlightForSessionSnapshot", err)
+	if inFlightEmpty != nil {
+		t.Fatalf("empty session in-flight = %+v, want nil", inFlightEmpty)
+	}
+	inFlightMiss, err := store.FindInFlightForSessionSnapshot(ctx, "sess-snap", "snap-1", cats, []string{"pkg/a.go"})
+	testutil.FailErr(t, "missing FindInFlightForSessionSnapshot", err)
+	if inFlightMiss != nil {
+		t.Fatalf("missing in-flight = %+v, want nil", inFlightMiss)
+	}
+
+	testutil.FailErr(t, "insert pending session scan", store.Insert(ctx, api.CodeScan{
+		ID:               "scan-inflight",
+		CanonicalPath:    "/tmp/p",
+		Categories:       cats,
+		Status:           api.CodeScanStatusPending,
+		SessionID:        "sess-snap",
+		SourceSnapshotID: "snap-1",
+	}, []string{"pkg/a.go"}, ""))
+	inFlightHit, err := store.FindInFlightForSessionSnapshot(ctx, "sess-snap", "snap-1", cats, []string{"pkg/a.go"})
+	testutil.FailErr(t, "hit FindInFlightForSessionSnapshot", err)
+	if inFlightHit == nil || inFlightHit.ID != "scan-inflight" || inFlightHit.SessionID != "sess-snap" {
+		t.Fatalf("inFlightHit = %+v", inFlightHit)
+	}
+
+	testutil.FailErr(t, "insert complete session scan", store.Insert(ctx, api.CodeScan{
+		ID:               "scan-complete",
+		CanonicalPath:    "/tmp/p",
+		Categories:       cats,
+		Status:           api.CodeScanStatusComplete,
+		SessionID:        "sess-snap",
+		SourceSnapshotID: "snap-1",
+	}, nil, ""))
+	completeHit, err := store.LatestCompleteForSessionSnapshot(ctx, "sess-snap", "snap-1", cats)
+	testutil.FailErr(t, "hit LatestCompleteForSessionSnapshot", err)
+	if completeHit == nil || completeHit.ID != "scan-complete" || completeHit.SessionID != "sess-snap" {
+		t.Fatalf("completeHit = %+v", completeHit)
 	}
 }

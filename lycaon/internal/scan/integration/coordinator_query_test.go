@@ -13,13 +13,13 @@ import (
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
-func seedScanWithGuidance(t *testing.T, store *scan.SQLStore, delegationID string, guidance []api.ScanGuidanceSummary) string {
+func seedScanWithGuidance(t *testing.T, store *scan.SQLStore, sessionID string, guidance []api.ScanGuidanceSummary) string {
 	t.Helper()
 	coord := newTestCoordinator(t, store, nil)
 	created, err := coord.Enqueue(context.Background(), scan.EnqueueRequest{
-		ProjectDir:   t.TempDir(),
-		Categories:   []api.ScanCategory{api.ScanCategorySecurity, api.ScanCategorySecret},
-		DelegationID: delegationID,
+		ProjectDir: t.TempDir(),
+		Categories: []api.ScanCategory{api.ScanCategorySecurity, api.ScanCategorySecret},
+		SessionID:  sessionID,
 	})
 	testutil.FailErr(t, "coord.Enqueue failed", err)
 	claimed := claimScan(t, store, created.ID)

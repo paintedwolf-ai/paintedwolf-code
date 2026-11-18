@@ -62,57 +62,75 @@ func activity(phase, state string, steps ...string) wire.CommandActivity {
 	return out
 }
 
-func generated(request briefing.Request) (calls int, lookups int) {
+func sectionModes(request briefing.Request) map[string]briefing.SectionMode {
+	modes := map[string]briefing.SectionMode{}
 	for _, section := range request.Sections {
-		switch section.Mode {
-		case briefing.Generated:
-			calls++
-		case briefing.Lookup:
-			lookups++
-		case briefing.Deterministic:
-		}
+		modes[section.ID] = section.Mode
 	}
-	return calls, lookups
+	return modes
 }
 
-// Each policy row asks the model for at most the sections the policy names.
+// Every opened activity gets a generated purpose; a settled one also gets a
+// change, which is generated unless the host refused the activity outright.
 func TestGenerationPolicyMatrix(t *testing.T) {
 	read := briefing.CausalRead{Found: true, Call: briefing.CallExcerpt{Name: "command", Args: `{"command":"go test ./..."}`}}
+	const none = briefing.SectionMode(-1)
 	cases := []struct {
 		name     string
 		activity wire.CommandActivity
-		calls    int
-		lookups  int
+		change   briefing.SectionMode
 	}{
-		{"execute settled", activity("execute", "completed", "completed"), 2, 0},
-		{"execute running", activity("execute", "running", "running"), 1, 0},
-		{"failed inspect", activity("inspect", "failed", "failed"), 2, 0},
-		{"interrupted mutate", activity("mutate", "interrupted", "interrupted"), 2, 0},
-		{"steps differ", activity("inspect", "completed", "completed", "failed"), 2, 0},
-		{"inspect completed", activity("inspect", "completed", "completed", "completed"), 0, 1},
-		{"mutate running", activity("mutate", "running", "running"), 0, 1},
-		{"refused", activity("execute", "refused", "refused"), 0, 1},
+		{"execute settled", activity("execute", "completed", "completed"), briefing.Generated},
+		{"execute running", activity("execute", "running", "running"), none},
+		{"failed inspect", activity("inspect", "failed", "failed"), briefing.Generated},
+		{"interrupted mutate", activity("mutate", "interrupted", "interrupted"), briefing.Generated},
+		{"steps differ", activity("inspect", "completed", "completed", "failed"), briefing.Generated},
+		{"inspect completed", activity("inspect", "completed", "completed", "completed"), briefing.Generated},
+		{"mutate completed", activity("mutate", "completed", "completed"), briefing.Generated},
+		{"inspect running", activity("inspect", "running", "running"), none},
+		{"refused", activity("execute", "refused", "refused"), briefing.Deterministic},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
 			profile := New(sessions{projectID: project}, &programs{activity: c.activity}, cause{read: read})
 			request, err := profile.Resolve(t.Context(), commandTarget())
 			testutil.FailErr(t, "resolve", err)
-			if calls, lookups := generated(request); calls != c.calls || lookups != c.lookups {
-				t.Fatalf("calls %d lookups %d; want %d %d", calls, lookups, c.calls, c.lookups)
+			modes := sectionModes(request)
+			if modes["purpose"] != briefing.Generated {
+				t.Fatalf("purpose mode %v", modes["purpose"])
 			}
-			if last := request.Sections[len(request.Sections)-1]; last.ID != "outcome" || last.Mode != briefing.Deterministic {
-				t.Fatalf("outcome missing: %+v", last)
+			change, ok := modes["change"]
+			if !ok {
+				change = none
+			}
+			if change != c.change {
+				t.Fatalf("change mode %v; want %v", change, c.change)
+			}
+			if modes["outcome"] != briefing.Deterministic {
+				t.Fatalf("outcome mode %v", modes["outcome"])
+			}
+			for _, section := range request.Sections {
+				if section.Mode == briefing.Lookup {
+					t.Fatalf("section %s only looks up a stored result", section.ID)
+				}
+				if section.ID == "change" && section.Mode == briefing.Deterministic && section.Text != nothingRanText {
+					t.Fatalf("refused change text %q", section.Text)
+				}
 			}
 		})
 	}
-	tool := New(sessions{projectID: project}, &programs{}, cause{read: briefing.CausalRead{Found: true, Call: briefing.CallExcerpt{Name: "read",
-		Result: &briefing.ResultExcerpt{Tool: "read", Outcome: "success", Content: "214 lines", Ref: "message:r"}}}})
-	raw, _ := json.Marshal(wire.ToolActivityBriefingTarget{SessionID: "s", ToolCallIds: []string{"call"}})
-	request, err := tool.Resolve(t.Context(), briefing.Target{ProjectID: project, Ref: raw})
-	testutil.FailErr(t, "resolve tool", err)
-	if calls, _ := generated(request); calls != 2 {
-		t.Fatalf("settled tool activity asked for %d sections", calls)
+	for name, result := range map[string]*briefing.ResultExcerpt{
+		"settled tool": {Tool: "read", Outcome: "success", Content: "214 lines", Ref: "message:r"},
+		"running tool": nil,
+	} {
+		tool := New(sessions{projectID: project}, &programs{}, cause{read: briefing.CausalRead{Found: true, Call: briefing.CallExcerpt{Name: "read", Result: result}}})
+		raw, _ := json.Marshal(wire.ToolActivityBriefingTarget{SessionID: "s", ToolCallIds: []string{"call"}})
+		request, err := tool.Resolve(t.Context(), briefing.Target{ProjectID: project, Ref: raw})
+		testutil.FailErr(t, name, err)
+		_, hasChange := sectionModes(request)["change"]
+		if hasChange != (result != nil) {
+			t.Fatalf("%s: change section present = %v", name, hasChange)
+		}
 	}
 }
 
