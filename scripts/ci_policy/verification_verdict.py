@@ -34,14 +34,19 @@ def qualified_run(repository, sha):
         if not qualification_receipt.aggregate_passed(repository, run):
             return False
         receipt = qualification_receipt.from_run(repository, run)
-        return receipt is not None and qualification_receipt.matches(receipt, repository, sha, run)
+        if not qualification_receipt.matches(receipt, repository, sha, run):
+            return None
+        return receipt
 
     query = urlencode({"event": "workflow_dispatch", "branch": "main", "status": "success",
                        "created": ">=" + retained_since})
     path = f"repos/{repository}/actions/workflows/qualification.yml/runs?{query}"
     for run in pages(path, "workflow_runs"):
-        if run.get("display_title") == f"Qualification {sha}" and accepts(run):
-            return run
+        if run.get("display_title") != f"Qualification {sha}":
+            continue
+        receipt = accepts(run)
+        if receipt:
+            return run | {"receipt": receipt}
     return None
 
 

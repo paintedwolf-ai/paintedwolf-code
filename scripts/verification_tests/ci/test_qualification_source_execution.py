@@ -16,7 +16,7 @@ CONTROLLER = "b" * 40
 TREE = "c" * 40
 ENVIRONMENT = dict(GITHUB_REPOSITORY="owner/repo", GITHUB_EVENT_NAME="workflow_dispatch",
                    GITHUB_REF="refs/heads/main", GITHUB_WORKFLOW_SHA=CONTROLLER, GITHUB_SHA=CONTROLLER,
-                   GITHUB_RUN_ID="42", GITHUB_RUN_ATTEMPT="2", QUALIFICATION_SOURCE=SOURCE)
+                   GITHUB_RUN_ID="42", GITHUB_RUN_ATTEMPT="2", QUALIFICATION_SOURCE=SOURCE, PREPARATION_RUN_ID="77")
 
 
 def selection():
@@ -99,6 +99,8 @@ class QualificationReceiptTests(unittest.TestCase):
         completed = receipt.complete(selection(), results, ENVIRONMENT)
         self.assertEqual(completed["source_sha"], SOURCE)
         self.assertEqual(completed["controller_sha"], CONTROLLER)
+        self.assertEqual(completed["preparation_run_id"], 77)
+        self.assertEqual(completed["nightly_run_id"], 42)
         for changed in ({"event": "push"}, {"run_attempt": 3}, {"source_sha": "main"},
                         {"controller_sha": SOURCE}, {"repository": "foreign/repo"}, {"version": True}):
             with self.subTest(changed=changed), self.assertRaises(ValueError):
@@ -110,6 +112,18 @@ class QualificationReceiptTests(unittest.TestCase):
         for malformed in ({}, {**results, "other": {"result": "success"}}):
             with self.assertRaises(ValueError):
                 receipt.complete(selection(), malformed, ENVIRONMENT)
+
+    def test_reused_nightly_requires_an_intentional_skip_with_a_distinct_run(self):
+        results = dict.fromkeys(receipt.CHECKS, {"result": "success"})
+        reused = {**ENVIRONMENT, "NIGHTLY_RUN_ID": "99"}
+        with self.assertRaises(ValueError):
+            receipt.complete(selection(), results, reused)
+        skipped = {**results, "verification": {"result": "skipped"}}
+        with self.assertRaises(ValueError):
+            receipt.complete(selection(), skipped, ENVIRONMENT)
+        complete = receipt.complete(selection(), skipped, reused)
+        self.assertEqual(complete["nightly_run_id"], 99)
+        self.assertEqual(complete["checks"]["verification"], "skipped")
 
     def test_failed_job_rerun_binds_retained_selection_to_the_completed_attempt(self):
         results = {name: {"result": "success"} for name in receipt.CHECKS}

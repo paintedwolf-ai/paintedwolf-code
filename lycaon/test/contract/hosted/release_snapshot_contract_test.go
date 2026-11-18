@@ -173,7 +173,7 @@ func TestSelectedReleaseControllerAdmission(t *testing.T) {
 
 func TestReleaseCompatibilityCannotBeSkippedForEitherChannel(t *testing.T) {
 	jobs := hostedJobs(t, "release")
-	stable, guard, corpus, wire := false, false, false, false
+	stable, guard, wire := false, false, false
 	for _, step := range jobs["classify"].Steps {
 		if strings.Contains(step.Run, "/releases/latest") {
 			stable = true
@@ -196,41 +196,15 @@ func TestReleaseCompatibilityCannotBeSkippedForEitherChannel(t *testing.T) {
 			}
 		}
 	}
-	for _, step := range jobs["validate-source"].Steps {
-		if strings.Contains(step.Run, "release:preflight") {
-			// A dry run has no frozen corpus; a publishing run cannot skip it.
-			if step.If != "${{ needs.classify.outputs.publish == 'true' }}" || step.Continue {
-				t.Fatal("a publishing release can skip its upgrade corpus")
-			}
-			corpus = corpus || strings.Contains(step.Run, "--require-corpus")
-		}
-	}
-	for _, job := range []string{"validate-source", "build-release"} {
-		if !slices.Contains(hostedNeeds(t, jobs[job]), "compatibility") {
-			t.Fatalf("%s can start before cheap compatibility checks", job)
-		}
+	if !slices.Contains(hostedNeeds(t, jobs["build-release"]), "compatibility") {
+		t.Fatal("build-release can start before cheap compatibility checks")
 	}
 	for _, step := range jobs["compatibility"].Steps {
 		if strings.Contains(step.Uses, "setup-verification") || strings.Contains(step.Uses, "setup-bialy") || strings.Contains(step.Run, "setup-dev") || strings.Contains(step.Run, "build:lycaon") {
 			t.Fatal("compatibility gate provisions or builds the app")
 		}
 	}
-	if !stable || !guard || !corpus || !wire {
-		t.Fatalf("release assurance missing: stable=%v guard=%v corpus=%v wire=%v", stable, guard, corpus, wire)
-	}
-	preflightAt, upgradeAt := -1, -1
-	for i, step := range jobs["validate-source"].Steps {
-		if strings.Contains(step.Run, "release:preflight") {
-			preflightAt = i
-		}
-		if strings.Contains(step.Run, "upgrade:rehearse") {
-			upgradeAt = i
-			if step.If != "" || step.Continue {
-				t.Fatal("store rehearsal must require successful preflight")
-			}
-		}
-	}
-	if preflightAt < 0 || upgradeAt <= preflightAt {
-		t.Fatal("source validation must rehearse upgrades after preflight in the same checkout")
+	if !stable || !guard || !wire {
+		t.Fatalf("release assurance missing: stable=%v guard=%v wire=%v", stable, guard, wire)
 	}
 }

@@ -5,6 +5,7 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
+from ci_policy import nightly_evidence as evidence
 from ci_policy import nightly_source as source
 
 SOURCE = "a" * 40
@@ -48,6 +49,34 @@ class NightlySourceTests(unittest.TestCase):
                     self.assertEqual(source.main(), 1)
                 self.assertIn("::error title=Nightly source::", said.call_args.args[0])
             self.assertEqual(len(output.read_text().splitlines()), 2)
+
+
+class NightlyEvidenceTests(unittest.TestCase):
+    def test_only_a_full_nightly_on_the_exact_source_and_tree_is_reused(self):
+        qualification = {"repository": "owner/repo", "source_sha": SOURCE, "source_tree": TREE}
+        run = dict(id=43, run_attempt=2, head_sha=CONTROLLER, head_branch="main",
+                   display_title=f"Nightly {SOURCE}", event="schedule", conclusion="success")
+        exact = evidence.identity("owner/repo", SOURCE, TREE, 43, 2, CONTROLLER)
+        cases = (
+            ("exact", run, exact, 43),
+            ("manual", {**run, "event": "workflow_dispatch"}, exact, 43),
+            ("partial", run, None, None),
+            ("wrong commit", run, {**exact, "source_sha": CONTROLLER}, None),
+            ("wrong tree", run, {**exact, "source_tree": CONTROLLER}, None),
+            ("wrong controller", run, {**exact, "controller_sha": SOURCE}, None),
+            ("old attempt", run, {**exact, "run_attempt": 1}, None),
+            ("branch", {**run, "head_branch": "topic"}, exact, None),
+            ("red", {**run, "conclusion": "failure"}, exact, None),
+        )
+        for label, offered, record, expected in cases:
+            with self.subTest(label=label), patch.object(evidence, "pages", return_value=[offered]), \
+                    patch.object(evidence, "from_run", return_value=record):
+                self.assertEqual(evidence.matching_run(qualification), expected)
+
+    def test_nightly_receipt_refuses_a_checkout_other_than_the_selected_source(self):
+        with patch.object(evidence.subprocess, "check_output", side_effect=[CONTROLLER, TREE]), \
+                self.assertRaisesRegex(ValueError, "checkout differs"):
+            evidence.write({"SOURCE_SHA": SOURCE, "SOURCE_TREE": TREE})
 
 
 if __name__ == "__main__":
