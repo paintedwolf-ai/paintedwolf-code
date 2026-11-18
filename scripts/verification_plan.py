@@ -90,8 +90,15 @@ def backstop_seconds(name):
 def catalog():
     value = json.loads(CATALOG.read_text())
     if set(value) != {"groups", "go", "tasks", "private", "selection", "resources", "environment", "ci",
-                      "capacity", "fuzz"}:
+                      "capacity", "fuzz", "provisions"}:
         raise ValueError("invalid verification catalog")
+    for name, provision in value["provisions"].items():
+        targets, packages = provision.get("targets"), provision.get("packages", [])
+        if (set(provision) - {"targets", "packages"} or not isinstance(targets, dict) or not targets and not packages
+                or not all(isinstance(legs, list) and all(isinstance(leg, str) and leg for leg in legs)
+                           for legs in targets.values())
+                or not isinstance(packages, list) or not all(isinstance(p, str) and p.startswith("./") for p in packages)):
+            raise ValueError(f"provision {name} needs targets mapped to the arguments that need them, or packages")
     names = set()
     for section in ("groups", "go", "tasks"):
         if not isinstance(value[section], dict) or names.intersection(value[section]):

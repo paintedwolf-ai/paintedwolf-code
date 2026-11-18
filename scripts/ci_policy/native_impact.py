@@ -2,10 +2,11 @@
 from pathlib import PurePosixPath
 
 # Manifests, fixtures, generated inputs, and build scripts keep the full gate.
+# `area` is the change area lanes declare in `changes` of the verification plan.
 DEPENDENCIES = {
-    "lycaon-den/src-tauri/src/": {"lanes": {"native", "frontend", "webkit-gtk"}, "go": ()},
-    "lycaon/internal/decide/native/src/": {"lanes": {"native"}, "go": ()},
-    "lycaon/internal/documentcore/native/src/": {"lanes": {"frontend"}, "go": ("lycaon/internal/documentcore",)},
+    "lycaon-den/src-tauri/src/": {"area": "shell-native", "go": ()},
+    "lycaon/internal/decide/native/src/": {"area": "decide-native", "go": ()},
+    "lycaon/internal/documentcore/native/src/": {"area": "documentcore-native", "go": ("lycaon/internal/documentcore",)},
 }
 
 

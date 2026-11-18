@@ -14,8 +14,13 @@ from ci_policy import github
 ARTIFACT = "nightly-timings"
 FILE = "timings.json"
 MAX_BYTES = 4 * 1024 * 1024
-PACKAGE_LANES = ("behavior",)
 SLOWEST_TESTS = 50
+
+
+def package_lanes():
+    """Lanes that run the Go packages a change affects, so they measure each package."""
+    from verification_plan import catalog
+    return {name for name, lane in catalog()["ci"].items() if lane.get("phases") == "affected-packages"}
 
 
 def row_key(lane, shard):
@@ -84,7 +89,7 @@ def merge(paths):
         if (measured.get("basis") == "setup-and-execution" and measured.get("finished") is True
                 and valid_seconds(measured["seconds"])):
             lanes[row_key(measured["lane"], measured["shard"])] = measured["seconds"]
-        if measured.get("lane") in PACKAGE_LANES:
+        if measured.get("lane") in package_lanes():
             packages.update({name: seconds for name, seconds in measured["packages"].items()
                              if valid_seconds(seconds, allow_zero=True)})
         for row in measured.get("tests", []):

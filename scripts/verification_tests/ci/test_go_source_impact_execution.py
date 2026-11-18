@@ -8,15 +8,13 @@ from ci_policy import hosted_plan, impact
 
 class GoSourceImpactTests(unittest.TestCase):
     def test_go_source_roots_keep_the_backend_lanes(self):
-        expected = {"build", "behavior", "lint", "vulnerabilities", "command-scale"}
         for path in ["lycaon/internal/a/a.go", "lycaon/cmd/engine/main.go",
                      "lycaon/test/contract/release/corpus_test.go", "lycaon/test/wiring/host_test.go",
                      "lycaon/test/security/scan_test.go", "lycaon/test/contract/snapshot_test.go"]:
             with self.subTest(path=path):
                 full, reasons = impact.broad_scope([path])
                 self.assertEqual((full, reasons), (False, []))
-                rows = hosted_plan.matrix("integration", scope=dict(full=full, paths=[path]))["include"]
-                self.assertEqual({row["lane"] for row in rows}, expected)
+                self.assertEqual(impact.change_areas(dict(full=full, paths=[path])), {"always", "go"})
 
     def test_public_packages_and_unknown_roots_still_run_the_whole_gate(self):
         for path in ["lycaon/test/fixtures/go.mod", "lycaon/pkg/api/types.go", "lycaon/new/code.go",
@@ -33,38 +31,43 @@ class GoSourceImpactTests(unittest.TestCase):
                 self.assertEqual(impact.broad_scope([path]), (True, [path]))
 
     def test_ci_tooling_adds_only_its_own_lane(self):
-        lanes = hosted_plan.lanes()
-        baseline = impact.selected_lanes(dict(full=False, paths=["docs/git.md"]), lanes)
+        self.assertEqual(impact.change_areas(dict(full=False, paths=["docs/git.md"])), {"always"})
         for path in ["scripts/verification_tests/ci/test_plan.py", "scripts/ci_policy/health.py",
                      ".github/workflows/nightly.yml"]:
             with self.subTest(path=path):
                 self.assertEqual(impact.broad_scope([path]), (False, []))
-                self.assertEqual(impact.selected_lanes(dict(full=False, paths=[path]), lanes), baseline | {"runner"})
+                self.assertEqual(impact.change_areas(dict(full=False, paths=[path])), {"always", "scripts"})
 
     def test_a_broad_change_runs_the_script_suites_only_when_it_touches_what_they_read(self):
         lanes = hosted_plan.lanes()
+        scripts_only = {name for name, lane in lanes.items() if lane.get("changes") == ["scripts"]}
+        self.assertTrue(scripts_only)
         for paths in (["lycaon/config/prompt.md"], ["lycaon/pkg/api/types.go", "docs/openapi/paths.yaml"]):
             with self.subTest(paths=paths):
-                self.assertEqual(impact.selected_lanes(dict(full=True, paths=paths), lanes), set(lanes) - {"runner"})
+                self.assertEqual(impact.change_areas(dict(full=True, paths=paths)), hosted_plan.AREAS - {"scripts"})
                 rows = hosted_plan.matrix("integration", scope=dict(full=True, paths=paths))["include"]
-                self.assertNotIn("runner", {row["lane"] for row in rows})
+                self.assertFalse(scripts_only & {row["lane"] for row in rows})
         for paths in ([], ["scripts/verification-plan.json"], ["packaging/nix/flake.nix", "lycaon/config/prompt.md"],
                       ["Taskfile.yml"], ["task"]):
             with self.subTest(paths=paths):
-                self.assertEqual(impact.selected_lanes(dict(full=True, paths=paths), lanes), set(lanes))
+                self.assertEqual(impact.change_areas(dict(full=True, paths=paths)), hosted_plan.AREAS)
 
     def test_a_pull_request_runs_the_den_suite_only_when_its_inputs_change(self):
         def fast(paths, full=False):
             return {row["lane"] for row in hosted_plan.matrix("fast", scope=dict(full=full, paths=paths))["include"]}
-        go = {"ready", "ready-lint", "ready-tests"}
+        fast_lanes = {name: lane for name, lane in hosted_plan.lanes().items() if "fast" in lane["profiles"]}
+        every = set(fast_lanes)
+        # A lane selected only for Den changes waits for them.
+        go = {name for name, lane in fast_lanes.items() if "always" in lane["changes"] or "den" not in lane["changes"]}
         for paths in (["lycaon-den/src/components/card.tsx"], ["docs/openapi/paths.yaml"], ["CHANGELOG.md"],
                       [".bun-version"], ["lycaon/internal/a/a.go", "lycaon-den/package.json"]):
             with self.subTest(paths=paths):
-                self.assertEqual(fast(paths, impact.broad_scope(paths)[0]), go | {"frontend"})
+                self.assertEqual(fast(paths, impact.broad_scope(paths)[0]), every)
         for paths in (["lycaon/internal/a/a.go"], ["scripts/ci_policy/health.py"], ["lycaon/config/prompt.md"]):
             with self.subTest(paths=paths):
                 self.assertEqual(fast(paths, impact.broad_scope(paths)[0]), go)
-        self.assertEqual(fast([], full=True), go | {"frontend"})
+        self.assertEqual(fast([], full=True), every)
+        self.assertLess(go, every)
 
     def test_a_pull_request_of_prose_alone_leaves_the_static_job_as_its_only_check(self):
         for paths in (["docs/git.md"], ["README.md", "lycaon/AGENTS.md", "docs/operations/release.md"]):
@@ -115,5 +118,4 @@ class GoSourceImpactTests(unittest.TestCase):
         paths = ["lycaon/test/contract/release/corpus_test.go", "lycaon-den/src/app.tsx",
                  "lycaon/internal/decide/native/src/main.rs"]
         self.assertEqual(impact.broad_scope(paths), (False, []))
-        selected = impact.selected_lanes(dict(full=False, paths=paths), hosted_plan.lanes())
-        self.assertLessEqual({"behavior", "native", "frontend", "webkit-gtk", "lint", "vulnerabilities", "command-scale"}, selected)
+        self.assertEqual(impact.change_areas(dict(full=False, paths=paths)), {"always", "go", "den", "decide-native"})

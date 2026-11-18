@@ -29,27 +29,21 @@ class AdmissionTests(unittest.TestCase):
         self.assertFalse(impact.broad_scope(['lycaon/internal/a/a.go'])[0])
 
     def test_frontend_change_preserves_contracts_and_build(self):
-        scope = dict(full=False, paths=['lycaon-den/src/a.ts'])
-        lanes = {row['lane'] for row in ci.matrix('integration', scope=scope)['include']}
-        # Any Den source can change the DOM a screen reader queries.
-        self.assertEqual(lanes, {'build', 'frontend', 'behavior', 'webkit-gtk'})
+        self.assertEqual(impact.change_areas(dict(full=False, paths=['lycaon-den/src/a.ts'])), {'always', 'den'})
         full = {row['lane'] for row in ci.matrix('integration', scope=dict(full=True))['include']}
-        self.assertIn('behavior', full)
-        self.assertIn('runner', full)
-        self.assertIn('native', full)
+        self.assertEqual(full, {name for name, lane in ci.lanes().items() if 'integration' in lane['profiles']})
 
     def test_broad_changes_run_the_whole_gate_and_every_platform_lane(self):
         full = {row['lane'] for row in ci.matrix('integration', scope=dict(full=True))['include']}
         self.assertEqual(full, {row['lane'] for row in ci.matrix('check')['include']}
-                         | {'webkit-gtk', 'confinement-arm64', 'reference-userlands', 'command-scale'})
+                         | {name for name, lane in ci.lanes().items() if ci.supplemental(lane) and 'integration' in lane['profiles']})
         # The check itself, its probe, and the harness fixtures widen the scope.
         for path in ['scripts/den-webkit-atspi.sh', 'scripts/harness/webkit_atspi_text_attributes.py',
                      'scripts/harness/webkit-atspi/2.54.Containerfile', 'lycaon/test/fixtures/e2e/minimal-go-project/go.mod',
                      'lycaon/test/fixtures/e2e/minimal-go-project/internal/app/app.go',
                      'lycaon-den/src/assets/icon.svg']:
             self.assertTrue(impact.broad_scope([path])[0], path)
-        backend = dict(full=False, paths=['lycaon/internal/a/a.go'])
-        self.assertNotIn('webkit-gtk', {row['lane'] for row in ci.matrix('integration', scope=backend)['include']})
+        self.assertEqual(impact.change_areas(dict(full=False, paths=['lycaon/internal/a/a.go'])), {'always', 'go'})
 
     def test_command_language_changes_run_the_live_differential(self):
         for path in ['lycaon/config/packs/painted-wolf/platform/tools/command-language-v1/sed.json',
@@ -57,27 +51,23 @@ class AdmissionTests(unittest.TestCase):
                      'lycaon/internal/tools/native/search/grep.go', 'lycaon/test/commandconformance/corpus_live.go',
                      'lycaon/test/wiring/conformance/differential_test.go']:
             with self.subTest(path=path):
-                lanes = {row['lane'] for row in ci.matrix('integration', scope=dict(full=False, paths=[path]))['include']}
-                self.assertIn('reference-userlands', lanes)
+                self.assertIn('command-language', impact.change_areas(dict(full=False, paths=[path])))
         for path in ['lycaon/internal/commandsurfaces/a.go', 'lycaon/internal/tools/web/a.go', 'lycaon/internal/commandline/a.go']:
             with self.subTest(path=path):
-                lanes = {row['lane'] for row in ci.matrix('integration', scope=dict(full=False, paths=[path]))['include']}
-                self.assertNotIn('reference-userlands', lanes)
+                self.assertNotIn('command-language', impact.change_areas(dict(full=False, paths=[path])))
 
     def test_prose_runs_only_the_scope_every_change_runs(self):
         paths = ['docs/test-strategy.md', 'docs/operations/runbook.md', 'AGENTS.md', 'lycaon/AGENTS.md',
                  'lycaon-den/AGENTS.md', 'README.md']
         self.assertEqual(impact.broad_scope(paths), (False, []))
         scope = dict(full=False, paths=paths)
-        lanes = {row['lane'] for row in ci.matrix('integration', scope=scope)['include']}
-        self.assertEqual(lanes, {'build', 'behavior'})
+        self.assertEqual(impact.change_areas(scope), {'always'})
         with patch.object(impact.subprocess, 'run') as run:
             run.return_value = impact.subprocess.CompletedProcess([], 0, stdout=json.dumps({
                 'ImportPath': 'github.com/lycaon/lycaon/test/smoke', 'Dir': str(impact.ROOT / 'lycaon/test/smoke')}))
             self.assertEqual(impact.go_scope(scope), ['./test/smoke'])
         # Prose beside code adds nothing to the code's own scope.
-        mixed = dict(full=False, paths=['docs/git.md', 'lycaon/internal/a/a.go'])
-        self.assertNotIn('frontend', {row['lane'] for row in ci.matrix('integration', scope=mixed)['include']})
+        self.assertEqual(impact.change_areas(dict(full=False, paths=['docs/git.md', 'lycaon/internal/a/a.go'])), {'always', 'go'})
         # Documentation that a build or contract parses still widens the gate.
         for path in ['CHANGELOG.md', 'docs/openapi/vocab/README.md', 'docs/openapi.yaml',
                      'lycaon/config/README.md']:
@@ -87,15 +77,12 @@ class AdmissionTests(unittest.TestCase):
         for path in ['lycaon/internal/confine/boundary_linux.go', 'lycaon/internal/confine/linuxsandbox/seccomp_linux_arm64.go',
                      'lycaon/internal/confine/helper_main.go', 'lycaon/internal/exec/supervisor_tree_linux.go',
                      'lycaon/internal/exec/nice_linux.go', 'lycaon/internal/exec/supervisor_other.go']:
-            lanes = {row['lane'] for row in ci.matrix('integration', scope=dict(full=False, paths=[path]))['include']}
-            self.assertIn('confinement-arm64', lanes, path)
+            self.assertIn('confinement', impact.change_areas(dict(full=False, paths=[path])), path)
         for path in ['lycaon/internal/exec/runner.go', 'lycaon/internal/exec/sub/supervisor.go',
                      'lycaon/internal/execution/supervisor_linux.go', 'lycaon-den/src/a.ts']:
-            lanes = {row['lane'] for row in ci.matrix('integration', scope=dict(full=False, paths=[path]))['include']}
-            self.assertNotIn('confinement-arm64', lanes, path)
-        lanes = {row['lane'] for row in ci.matrix('integration', scope=dict(
-            full=False, paths=['lycaon/internal/confine/testdata/fixture.json']))['include']}
-        self.assertIn('confinement-arm64', lanes)
+            self.assertNotIn('confinement', impact.change_areas(dict(full=False, paths=[path])), path)
+        fixture = dict(full=False, paths=['lycaon/internal/confine/testdata/fixture.json'])
+        self.assertIn('confinement', impact.change_areas(fixture))
         # The lane and its target run every platform lane.
         for path in ['scripts/test-confine-linux.sh', 'scripts/verification-plan.json']:
             self.assertTrue(impact.broad_scope([path])[0], path)

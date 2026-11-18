@@ -39,7 +39,7 @@ class BatchFixture(unittest.TestCase):
                      "digest-run-lock.sh", "repo-snapshot-lock.sh", "snapshot-publish.sh",
                      "artifact-paths.sh", "artifact_paths.py", "checkout-cache-dir.sh", "sha256.sh"]:
             shutil.copy2(SCRIPT.with_name(name), self.scripts / name)
-        self.catalog = {"resources": {}, "private": [], "capacity": {},
+        self.catalog = {"resources": {}, "private": [], "capacity": {}, "provisions": {},
             "fuzz": {"tags": [], "smoke_seconds": 1, "targets": {"./good": {"FuzzFixture": 1}}},
             "ci": {"fixture": {"targets": ["test:digest"], "minutes": 30}},
             "environment": {"names": ["PATH", "HOME", "TMPDIR", "USER", "LANG"],
