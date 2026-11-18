@@ -182,10 +182,15 @@ webE2e.describe("spend safety ceiling den", () => {
           session_spend_ceiling_usd: 5,
           spend_ceiling_enabled: true,
         });
+        // The host keeps a project ceiling only when it is tighter than the device's.
         await updateSpendCeiling(request!, {
-          session_spend_ceiling_usd: 5,
+          session_spend_ceiling_usd: 4,
           spend_ceiling_enabled: true,
         }, project.id);
+        const projectBefore = await apiJson<SettingsLimitsResponse>(
+          request!, "GET", `/v1/settings/limits?project_id=${encodeURIComponent(project.id)}`,
+        );
+        expect(projectBefore.session_spend_ceiling_nano_usd).toBe(4 * 1_000_000_000);
         const costChip = page.getByTestId("status-chip-cost");
         // The ratio is capped at 1 once spend passes the ceiling.
         await expect(costChip).toHaveAttribute("data-ceiling-ratio", "1.00", { timeout: 30_000 });
@@ -204,7 +209,7 @@ webE2e.describe("spend safety ceiling den", () => {
                 code: "session_spend_ceiling_reached",
                 title: "Spend ceiling reached",
                 message:
-                  "This session stopped at its spend ceiling ($5.00). It has spent about $5.12.",
+                  "This session stopped at its spend ceiling ($4.00). It has spent about $5.12.",
               },
               { kind: "session", projectId, sessionId },
             );
