@@ -1518,7 +1518,7 @@ budgets for the whole selected matrix. Runner caps do not depend on timing data.
 | Cache warming | `build-caches.yml` | `build-caches` | 1 (1): Linux, then macOS including release compilation |
 | Nightly | `nightly.yml` | `nightly` | 12 (4): six verification runners, two platform jobs, two browser shards, the desktop journey, and the upgrade rehearsal |
 | Releases | publishing runs of `release.yml`, `release-halt.yml` | `release-static-update` | 2 (2): source validation beside one signed build, then desktop rehearsal or protected fixture preparation beside Linux packaging |
-| DCO certification | `dco.yml` | `dco-certification` | 1 |
+| DCO certification | `dco.yml` | one queue per pull request or merge group | 1 per pull request or group |
 | Maintainability tracking | `maintainability-issues.yml` | `maintainability-issues` | 1 |
 | Queue batching | `queue-batching.yml` | `queue-batching` | 1 |
 | Release rehearsals | release dry runs and replays, the weekly release-system live test, a dispatched release secrets check | one group per dry run or replay; `release-system-live-test`; none for the read-only secrets check | a dry run as a release; 1 otherwise |

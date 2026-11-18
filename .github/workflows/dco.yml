@@ -26,8 +26,9 @@ permissions:
   actions: read
   checks: write
   statuses: write
+# Per pull request or merge group, so many open PRs cannot overflow one shared queue.
 concurrency:
-  group: dco-certification
+  group: dco-${{ github.event.pull_request.head.ref || github.event.workflow_run.head_branch || github.event.merge_group.head_ref || inputs.queue_ref || inputs.pull_request || github.run_id }}
   queue: max
   cancel-in-progress: false
 jobs:
