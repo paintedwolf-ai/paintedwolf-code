@@ -296,7 +296,7 @@ func RegisterCatalogToolsForContract(t *testing.T) *tools.DefaultRegistry {
 	return reg
 }
 
-func wireContractProgramServices(t *testing.T, rt *toolhost.Runtime, sqlDB db.Handle) {
+func wireContractProgramServices(t *testing.T, rt *toolhost.Runtime, sqlDB db.ReadHandle) {
 	t.Helper()
 	repositories := store.NewSQL(sqlDB)
 	if err := rt.Commands.SetProgramServices(toolhost.ProgramServices{
