@@ -237,9 +237,9 @@ func TestDetectionPackGeneratedCloudPacksPreserveReviewedPolicy(t *testing.T) {
 // TestDetectionPackLogSourceFieldSetsClosed: no field outside closed set; egress never in Match.
 func TestDetectionPackLogSourceFieldSetsClosed(t *testing.T) {
 	t.Parallel()
-	// The closed sets are the matcher's own, not a copy.
-	toolExecFields := fieldSet(detectionpack.SupportedFields(detectionpack.SourceToolExec))
-	egressFields := fieldSet(detectionpack.SupportedFields(detectionpack.SourceEgressObserved))
+	fields := detectionSchemaFields(t)
+	toolExecFields := fieldSet(fields[string(detectionpack.SourceToolExec)])
+	egressFields := fieldSet(fields[string(detectionpack.SourceEgressObserved)])
 	cat := loadBundledDetectionCatalog(t)
 	for _, p := range cat.Packs {
 		for _, r := range p.Rules {
