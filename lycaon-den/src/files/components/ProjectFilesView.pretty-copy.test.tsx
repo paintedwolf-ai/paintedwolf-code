@@ -1,3 +1,5 @@
+import { loadedBuffer, PROJECT, ROOTS, resetProjectFilesViewTest } from "./project-files-view-test-harness.ts";
+import { getLycaonClient } from "../../platform/connection/app-connection.ts";
 import { getIndentUnit } from "@codemirror/language";
 import { EditorView } from "@codemirror/view";
 import { fireEvent, render, screen, waitFor } from "@solidjs/testing-library";
@@ -6,7 +8,6 @@ import { saveEditorLineLayout } from "../../settings/editor/editor-prefs.ts";
 import { createAppStore } from "../../store/app-state.ts";
 import { writeClipboardText } from "../../utils/clipboard.ts";
 import { ProjectFilesView } from "./ProjectFilesView.tsx";
-import { loadedBuffer, PROJECT, ROOTS, resetProjectFilesViewTest } from "./project-files-view-test-harness.ts";
 
 vi.mock("../../utils/clipboard.ts", async original => ({
   ...await original<typeof import("../../utils/clipboard.ts")>(),
@@ -22,7 +23,7 @@ async function open(path: string, content: string) {
   const appStore = createAppStore();
   appStore.actions.setSidecarStatus("connected");
   loadedBuffer({ path, content });
-  render(() => <ProjectFilesView projectId={PROJECT} appStore={appStore} roots={ROOTS} client={null} />);
+  render(() => <ProjectFilesView projectId={PROJECT} appStore={appStore} roots={ROOTS} client={getLycaonClient()} />);
   const host = await screen.findByTestId("files-editor-host");
   await waitFor(() => expect(host.querySelector(".cm-content")).toBeTruthy());
   return EditorView.findFromDOM(host)!;
