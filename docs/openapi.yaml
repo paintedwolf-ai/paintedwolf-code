@@ -22022,6 +22022,12 @@ components:
           description: 'source_observation: gaps in a command''s before-and-after comparison.'
           items:
             $ref: '#/components/schemas/CommandFolderCoverage'
+        source_windows:
+          type: array
+          description: 'source_observation: windows still settling when the result was published.'
+          items:
+            type: string
+            format: uuid
         outcome:
           type: string
           description: 'result: how the action ended.'

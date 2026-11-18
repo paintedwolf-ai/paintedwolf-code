@@ -33,6 +33,8 @@ type ActionFact struct {
 	Kind ActionFactKind `json:"kind"`
 	// source_observation: gaps in a command's before-and-after comparison.
 	SourceCoverage []CommandFolderCoverage `json:"source_coverage,omitempty"`
+	// source_observation: windows still settling when the result was published.
+	SourceWindows []string `json:"source_windows,omitempty"`
 	// result: how the action ended.
 	Outcome string `json:"outcome,omitempty"`
 	// result: process exit status.

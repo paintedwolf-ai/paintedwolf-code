@@ -8403,6 +8403,8 @@ export interface components {
             kind: components["schemas"]["ActionFactKind"];
             /** @description source_observation: gaps in a command's before-and-after comparison. */
             source_coverage?: components["schemas"]["CommandFolderCoverage"][];
+            /** @description source_observation: windows still settling when the result was published. */
+            source_windows?: string[];
             /**
              * @description result: how the action ended.
              * @enum {string}
