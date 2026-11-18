@@ -22,21 +22,7 @@ DEADCODE_VERSION="v0.33.0"
 DEADCODE_PACKAGES=(./cmd/... ./internal/... ./pkg/... ./test/contract/... ./test/security/... ./test/wiring/... ./test/openapi/... ./test/integration/...)
 export GOTOOLCHAIN="go$(grep '^go ' "${GO_DIR}/go.mod" | awk '{print $2}')"
 export GOMEMLIMIT="${GOMEMLIMIT:-10GiB}"
-CACHE_DIR="$(bash "${ROOT}/scripts/checkout-cache-dir.sh")"
-PASS_CACHE="${CACHE_DIR}/deadcode-pass"
-mkdir -p "${BIN_DIR}" "${CACHE_DIR}"
-
-deadcode_key=""
-if [[ -z "$(git -C "${ROOT}" status --porcelain --untracked-files=all -- lycaon scripts/deadcode-check.sh 2>/dev/null || true)" ]]; then
-  tree_hash="$(git -C "${ROOT}" rev-parse HEAD:lycaon 2>/dev/null || true)"
-  script_hash="$(git -C "${ROOT}" rev-parse HEAD:scripts/deadcode-check.sh 2>/dev/null || true)"
-  if [[ -n "${tree_hash}" && -n "${script_hash}" ]]; then
-    deadcode_key="${GOTOOLCHAIN}:${DEADCODE_VERSION}:${script_hash}:${tree_hash}"
-    if [[ -f "${PASS_CACHE}" && "$(cat "${PASS_CACHE}")" == "${deadcode_key}" ]]; then
-      exit 0
-    fi
-  fi
-fi
+mkdir -p "${BIN_DIR}"
 
 python3 "${ROOT}/scripts/analysis_tools.py" ensure deadcode
 
@@ -71,8 +57,4 @@ if ((${#violations[@]} > 0)); then
   printf '%s\n' "${violations[@]}" >&2
   echo "deadcode: unreachable functions (add to ${EXCLUDE_FILE} only for interface false positives)" >&2
   exit 1
-fi
-
-if [[ -n "${deadcode_key}" ]]; then
-  printf '%s\n' "${deadcode_key}" >"${PASS_CACHE}"
 fi

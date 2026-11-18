@@ -47,7 +47,7 @@ def lanes():
         if not re.fullmatch(r"[a-z][a-z0-9-]*", name):
             raise ValueError(f"invalid CI lane: {name}")
         if set(lane) - {"targets", "minutes", "profiles", "suite", "setup", "runner", "workers", "shards", "priority",
-                        "platform", "arguments", "early_targets", "contract_first", "admission_checks", "runtime_engines"}:
+                        "platform", "arguments", "admission_checks", "runtime_engines"}:
             raise ValueError(f"unknown CI lane fields: {name}")
         if "arguments" in lane and (len(lane["targets"]) != 1 or not lane["arguments"]
                                     or not all(isinstance(value, str) and value for value in lane["arguments"])):
@@ -64,12 +64,6 @@ def lanes():
                 or not isinstance(admission, list)
                 or admission not in ([], [['test:confine:linux', '--', 'supervisor']])):
             raise ValueError(f'CI lane {name} has invalid early native checks')
-        early = lane.get("early_targets", [])
-        if (not isinstance(early, list) or len(set(early)) != len(early)
-                or not set(early).issubset(lane["targets"])):
-            raise ValueError(f"CI lane {name} early targets must partition its declared targets")
-        if "contract_first" in lane and (lane["contract_first"] is not True or lane["targets"] != ["test:full"]):
-            raise ValueError(f"CI lane {name} contract ordering requires the complete Go recipe")
 
         if lane.get("priority", "normal") not in PRIORITIES:
             raise ValueError(f"CI lane {name} has an invalid scheduling priority")

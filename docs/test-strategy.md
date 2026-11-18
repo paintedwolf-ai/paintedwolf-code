@@ -694,8 +694,8 @@ the package while the stage is still running, and the receipt links that
 package's output. A Go recipe declaring `report_all_failures` (`test:short` and
 `test:contract`) instead finishes its packages before answering, so its receipt
 names every failing package; a known failure stays failed even if the stage is
-later interrupted. A request submitted with `PW_TEST_KEEP_GOING=1`, as the hosted
-`ready` lane does, runs all of its stages before answering. Neither changes
+later interrupted. A request submitted with `PW_TEST_KEEP_GOING=1`, as every hosted
+lane does, runs all of its stages before answering. Neither changes
 admission, resource limits, or the exit status, and cancellation still stops the
 work. A package may pass despite an unrelated package failure only
 when its terminal Go event and the completed digest establish that result.

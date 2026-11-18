@@ -65,8 +65,8 @@ class ArchLintChangesTest(unittest.TestCase):
         self.base = self.git("rev-parse", "HEAD").strip()
         self.binary = self.executable("arch-lint", FAKE_ARCH_LINT)
         self.linter = self.executable("golangci-lint", FAKE_LINTER)
-        self.cache = self.tmp / "cache"
-        self.cache.mkdir()
+        self.work = self.tmp / "work"
+        self.work.mkdir()
 
     def git(self, *args):
         return subprocess.run(["git", "-C", str(self.repo), *args], check=True, capture_output=True, text=True).stdout
@@ -87,7 +87,7 @@ class ArchLintChangesTest(unittest.TestCase):
         })
         scope = change_report.Scope(self.base, "test base", ["findings.json", "lycaon/internal/store/store.go"])
         header, findings, failed = arch_lint_changes.changes(
-            self.repo, scope, POLICY, self.cache, self.binary, self.linter)
+            self.repo, scope, POLICY, self.work, self.binary, self.linter)
         self.assertTrue(failed)
         self.assertIn("3 finding(s) at the working tree, 1 at the base", header)
         self.assertEqual([(f.area, f.path, f.line) for f in findings], [
@@ -95,9 +95,7 @@ class ArchLintChangesTest(unittest.TestCase):
             ("unreferenced-script", "scripts/old.sh", None),
             ("unparam", "lycaon/internal/store/save.go", 7),
         ])
-        # The base result is cached by commit and binary.
-        self.assertEqual(len(list(self.cache.glob("base-*.json"))), 1)
-        again = arch_lint_changes.base_checks(self.repo, self.base, self.binary, POLICY, self.cache)
+        again = arch_lint_changes.base_checks(self.repo, self.base, self.binary, POLICY, self.work)
         self.assertEqual(list(again), [("dead-func", "x/store.Old")])
 
     def test_a_change_without_go_runs_only_cross_language_checks(self):
@@ -106,10 +104,9 @@ class ArchLintChangesTest(unittest.TestCase):
             "refs": [finding("unreferenced-script", "scripts/old.sh", "scripts/old.sh")],
         })
         scope = change_report.Scope(self.base, "test base", ["findings.json", "scripts/old.sh"])
-        _, findings, failed = arch_lint_changes.changes(self.repo, scope, POLICY, self.cache, self.binary, self.linter)
+        _, findings, failed = arch_lint_changes.changes(self.repo, scope, POLICY, self.work, self.binary, self.linter)
         self.assertTrue(failed)
         self.assertEqual([f.area for f in findings], ["unreferenced-script"])
-        self.assertTrue(list(self.cache.glob("base-*-nogo.json")))
 
     def test_changed_go_packages_skip_tests_testdata_and_removed_packages(self):
         self.assertEqual(arch_lint_changes.changed_go_packages(self.repo, [
@@ -138,8 +135,8 @@ class ArchLintChangesTest(unittest.TestCase):
         (self.repo / "lycaon-den" / "knip.json").write_text("{}")
         scope = change_report.Scope(base, "test base", ["knip.json", "lycaon-den/src/a.ts"])
         with mock.patch.object(arch_lint_changes, "ROOT", self.repo):
-            _, findings, failed = arch_lint_changes.den_changes(self.repo, scope, POLICY, self.cache)
-            _, go_findings, _ = arch_lint_changes.changes(self.repo, scope, POLICY, self.cache, self.binary, self.linter)
+            _, findings, failed = arch_lint_changes.den_changes(self.repo, scope, POLICY, self.work)
+            _, go_findings, _ = arch_lint_changes.changes(self.repo, scope, POLICY, self.work, self.binary, self.linter)
         self.assertTrue(failed)
         self.assertFalse(any(f.area.startswith("unused-") for f in go_findings))
         self.assertEqual(sorted((f.area, f.path, f.line) for f in findings), [
@@ -147,25 +144,16 @@ class ArchLintChangesTest(unittest.TestCase):
             ("unused-file", "lycaon-den/src/new.ts", None),
             ("unused-type", "lycaon-den/src/a.ts", 0),
         ])
-        base_den = self.cache / "base-tree" / "lycaon-den"
-        self.assertTrue((base_den / "node_modules").is_symlink())
-        self.assertTrue((base_den / "knip.json").exists())
 
-    def test_reuses_the_base_tree_for_a_new_base(self):
-        arch_lint_changes.base_checks(self.repo, self.base, self.binary, POLICY, self.cache)
+    def test_each_base_is_judged_in_a_private_tree_that_is_removed(self):
+        arch_lint_changes.base_checks(self.repo, self.base, self.binary, POLICY, self.work)
         self.write_findings({})
         self.git("add", "-A")
         self.git("-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "next")
         later = self.git("rev-parse", "HEAD").strip()
-        self.assertEqual(arch_lint_changes.base_checks(self.repo, later, self.binary, POLICY, self.cache), {})
-
-    def test_a_changed_policy_judges_the_base_again(self):
-        arch_lint_changes.base_checks(self.repo, self.base, self.binary, POLICY, self.cache)
-        widened = {**POLICY, "reach": {**POLICY["reach"], "roots": ["./cmd/...", "./internal/..."]}}
-        arch_lint_changes.base_checks(self.repo, self.base, self.binary, widened, self.cache)
-        arguments = json.loads((self.cache / "base-tree" / "args-reach.json").read_text())
-        self.assertEqual(arguments[-2:], ["./cmd/...", "./internal/..."])
-        self.assertEqual(len(list(self.cache.glob("base-*.json"))), 2)
+        self.assertEqual(arch_lint_changes.base_checks(self.repo, later, self.binary, POLICY, self.work), {})
+        self.assertNotIn(str((self.work / "base").resolve()), self.git("worktree", "list"))
+        self.assertFalse((self.work / "base").exists())
 
     def test_reach_receives_the_product_checks_the_policy_names(self):
         product = {**POLICY["reach"], "product": ["./cmd/app"]}
@@ -211,7 +199,7 @@ class ArchLintChangesTest(unittest.TestCase):
 
     def test_den_check_passes_a_change_outside_den(self):
         scope = change_report.Scope(self.base, "test base", ["lycaon/internal/store/store.go"])
-        header, findings, failed = arch_lint_changes.den_changes(self.repo, scope, POLICY, self.cache)
+        header, findings, failed = arch_lint_changes.den_changes(self.repo, scope, POLICY, self.work)
         self.assertEqual((findings, failed), ([], False))
         self.assertIn("no Den change", header)
 

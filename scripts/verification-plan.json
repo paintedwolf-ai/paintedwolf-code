@@ -1145,10 +1145,6 @@
           "--",
           "supervisor"
         ]
-      ],
-      "early_targets": [
-        "budgets",
-        "coverage:changes"
       ]
     },
     "ready-tests": {
@@ -1186,10 +1182,6 @@
       ],
       "suite": "all",
       "setup": "verification",
-      "early_targets": [
-        "budgets",
-        "coverage:changes"
-      ],
       "priority": "reject"
     },
     "lint": {
@@ -1207,11 +1199,7 @@
       ],
       "suite": "all",
       "setup": "analysis",
-      "priority": "reject",
-      "early_targets": [
-        "comments:check",
-        "test:fail-messages:check"
-      ]
+      "priority": "reject"
     },
     "deadcode": {
       "targets": [
@@ -1268,7 +1256,6 @@
       "setup": "verification",
       "workers": 2,
       "shards": 2,
-      "contract_first": true,
       "priority": "critical"
     },
     "frontend": {
