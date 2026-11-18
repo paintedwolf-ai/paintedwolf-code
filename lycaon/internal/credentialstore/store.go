@@ -170,9 +170,7 @@ func DescribeSlot(slot Slot) (string, error) {
 	return backend.Describe(), nil
 }
 
-// VerifyDurable re-reads the encrypted vault from disk and reloads its identity
-// from the platform identity provider (bypassing in-memory sharedVault identity
-// and provider caches) to confirm that id == want is durably persisted.
+// VerifyDurable bypasses vault and identity caches to confirm durable storage.
 func VerifyDurable(slot Slot, id, want string) error {
 	path := strings.TrimSpace(slot.Path)
 	namespace := strings.TrimSpace(slot.Namespace)

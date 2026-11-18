@@ -122,9 +122,7 @@ func TestCallbackListenerStopsAfterFirstRedirect(t *testing.T) {
 	})
 }
 
-// A redirect that does not carry the state this authorization issued is not this
-// authorization, and must not redeem a code. The loopback port is reachable by anything
-// on the machine, so this check lives at the handler, not only in Complete.
+// The loopback handler validates state before redeeming a code.
 func TestCallbackListenerRejectsStateMismatch(t *testing.T) {
 	store, err := OpenOAuthTokenStore(credentialstore.Slot{Path: t.TempDir() + "/oauth.yaml", Namespace: credentialstore.NamespaceMCPOAuth, Context: oauthRecordContext})
 	testutil.FailErr(t, "open OAuth credentials", err)
@@ -153,8 +151,7 @@ func TestCallbackListenerRejectsStateMismatch(t *testing.T) {
 	}
 }
 
-// A pending authorization's PKCE verifier and state expire, so an abandoned sign-in
-// does not stay redeemable.
+// Expired authorizations cannot redeem their PKCE verifier.
 func TestPendingOAuthExpires(t *testing.T) {
 	store, err := OpenOAuthTokenStore(credentialstore.Slot{Path: t.TempDir() + "/oauth.yaml", Namespace: credentialstore.NamespaceMCPOAuth, Context: oauthRecordContext})
 	testutil.FailErr(t, "open OAuth credentials", err)
