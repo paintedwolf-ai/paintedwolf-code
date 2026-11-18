@@ -1,5 +1,5 @@
-"""The cancellation scenario stops one real daemon build and proves its builder and output are gone."""
-import json
+"""Nix cancellation requires the client stopped and the daemon builder gone; the scenario stops one
+real daemon build and proves its builder and output are gone."""
 from pathlib import Path
 import shlex
 import unittest
@@ -7,6 +7,7 @@ from unittest.mock import MagicMock, patch
 
 from linux_release.installed_cases import nix_cancellation
 from linux_release.installed_cases.records import CaseUnavailable
+from scripts.linux_release.installed_cases.nix_cancellation import stopped
 
 BINDING = {'binding': True}
 SESSION = '11111111-1111-4111-8111-111111111111'
@@ -161,6 +162,17 @@ class CancellationScenarioTests(unittest.TestCase):
         changed['client']['path'] = CLIENT + '-other'
         with Scenario(fixtures=[fixture(), changed]), self.assertRaises(ValueError):
             nix_cancellation.scenario(BINDING)
+
+
+class InstalledNixCancellationTests(unittest.TestCase):
+    def test_successful_invocation_or_client_exit_does_not_qualify_builder_cancellation(self):
+        before = {'owned': [{'pid': 42, 'start_ticks': '99'}]}
+        process = {'running': False, 'exit_code': -15}
+        self.assertTrue(stopped(process, before, {'live': []}))
+        for changed in [{'running': True}, {'exit_code': 0}, {'exit_code': None}]:
+            self.assertFalse(stopped({**process, **changed}, before, {'live': []}))
+        self.assertFalse(stopped(process, {'owned': []}, {'live': []}))
+        self.assertFalse(stopped(process, before, {'live': before['owned']}))
 
 
 if __name__ == '__main__':

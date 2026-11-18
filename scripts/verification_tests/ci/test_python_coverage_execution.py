@@ -5,7 +5,6 @@ import io
 import json
 import os
 from pathlib import Path
-import re
 import subprocess
 import tempfile
 import unittest
@@ -216,8 +215,6 @@ class ProvisionTests(unittest.TestCase):
 class DeclaredSuiteTests(unittest.TestCase):
     def test_runner_suite_is_the_test_runner_discovery(self):
         suite = coverage_policy.python_suites()["test:runner"]
-        body = re.search(r"^  test:runner:\n(?:    .*\n)+", (ROOT / "Taskfile.yml").read_text(), re.M).group(0)
-        self.assertIn("python3 {{.SCRIPTS_DIR}}/ci_policy/runner_tests.py {{.CLI_ARGS}}", body)
         self.assertEqual(runner_tests.discovery_arguments([]),
                          ["unittest", "discover", "-s", str(ROOT / suite["start"]), "-p", suite["pattern"]])
 

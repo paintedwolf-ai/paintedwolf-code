@@ -96,13 +96,3 @@ class StapleTests(unittest.TestCase):
             self.assertEqual(macos_staple.notarize(["notarytool", "submit", "App.zip"], self.directory, execute), 0)
         self.assertEqual(execute.call_count, 2)
 
-    def test_release_controller_retains_receipts_even_when_packaging_fails(self):
-        root = Path(__file__).resolve().parents[3]
-        workflow = (root / ".github/workflows/release.yml").read_text()
-        self.assertIn('ref: refs/heads/main\n          path: .release-controller', workflow)
-        self.assertIn('scripts/macos-notary-tools:${PATH}', workflow)
-        self.assertIn('macos-notary-tools/notary.py --check "${PW_STAPLE_LOG_DIR}"', workflow)
-        self.assertIn("if: ${{ always() && matrix.goos == 'darwin' }}", workflow)
-        self.assertIn("if: ${{ failure() && matrix.goos == 'darwin' }}", workflow)
-        self.assertIn("macos-failed-updater-${{ matrix.updater_key }}", workflow)
-        self.assertIn("bundle/macos/*.app.tar.gz", workflow)

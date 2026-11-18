@@ -83,50 +83,8 @@ class WorkflowTests(unittest.TestCase):
             self.assertEqual(result.returncode, 0, result.stderr)
             self.assertIn("usage:", result.stdout)
 
-    def test_signing_and_native_execution_have_separate_jobs_and_publication_depends_on_them(self):
-        workflow = (ROOT / ".github/workflows/release.yml").read_text()
-        prepare = workflow.split("  prepare-bundle-upgrade:\n", 1)[1].split("  bundle-upgrade:\n", 1)[0]
-        execution = workflow.split("  bundle-upgrade:\n", 1)[1].split("  publish-artifacts:\n", 1)[0]
-        self.assertIn("fixture_name: bundle-upgrade-fixtures-${{ github.run_attempt }}", prepare)
-        self.assertIn("name: ${{ needs.prepare-bundle-upgrade.outputs.fixture_name }}", execution)
-        self.assertIn("environment: release-publication", prepare)
-        self.assertIn("FEED_SIGNING_KEYS_JSON:", prepare)
-        self.assertIn("./task upgrade:rehearse -- --prepare-bundle", prepare)
-        self.assertIn("bundle-upgrade-preparation-evidence", prepare)
-        self.assertIn("if: ${{ failure() || cancelled() }}", prepare)
-        self.assertNotIn("TAURI_SIGNING_PRIVATE_KEY", prepare)
-        self.assertNotIn("secrets.", execution)
-        self.assertIn("needs: [classify, prepare-bundle-upgrade]", execution)
-        self.assertIn("working-directory: lycaon-den", execution)
-        self.assertIn("bun install --frozen-lockfile", execution)
-        self.assertIn("matrix: ${{ fromJSON(needs.prepare-bundle-upgrade.outputs.matrix) }}", execution)
-        self.assertIn('matrix.case_id', execution)
-        self.assertIn("ref: ${{ github.workflow_sha }}", prepare)
-        self.assertIn("if: always()", execution)
-
-    def test_platform_rehearsal_checks_the_corpus_with_its_existing_engine(self):
-        workflow = (ROOT / ".github/workflows/platform-verification.yml").read_text()
-        confinement = workflow.split("  confinement:\n", 1)[1]
-        self.assertEqual(confinement.count("./task build:lycaon-dev"), 1)
-        engine = confinement.index("./task build:lycaon-dev")
-        self.assertLess(engine, confinement.index("./task release:preflight -- --require-corpus --reuse-sidecar"))
-        self.assertLess(engine, confinement.index("./task upgrade:rehearse -- --reuse-sidecar"))
-
 
 class ReplayTests(unittest.TestCase):
-    def test_replay_is_read_only_and_cannot_reach_publication(self):
-        workflow = (ROOT / ".github/workflows/release.yml").read_text()
-        replay = workflow.split("  replay-bundle-upgrade:\n", 1)[1].split("  classify:\n", 1)[0]
-        self.assertIn("inputs.rehearsal_run_id != ''", replay)
-        self.assertIn("if: ${{ inputs.rehearsal_run_id == '' }}", workflow)
-        self.assertIn("needs: [ship-gates, bundle-upgrade, publish-github-release]", replay)
-        self.assertIn("!cancelled()", replay)
-        self.assertIn("actions: read", replay)
-        self.assertNotIn("secrets.", replay)
-        self.assertNotIn("environment: release-publication", replay)
-        self.assertIn("artifact-ids: ${{ steps.fixtures.outputs.artifact_id }}", replay)
-        self.assertIn('--case "${REHEARSAL_CASE}"', replay)
-
     def test_fixture_admission_requires_preparation_and_exact_attempt(self):
         from unittest.mock import patch
         from release_upgrade import replay

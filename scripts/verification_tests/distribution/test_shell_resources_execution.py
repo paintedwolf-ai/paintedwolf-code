@@ -88,10 +88,28 @@ class ShellResourcesTests(unittest.TestCase):
             self.assertEqual(result.returncode, 0, result.stderr)
             self.assertEqual((root / "arguments").read_text(), "--tools")
 
-    def test_tools_mode_stops_before_generation(self):
-        script = (Path(__file__).resolve().parents[2] / "licenses-notices.sh").read_text()
-        installed = max(script.index("install_go_licenses\nfi"), script.index("install_cargo_about\nfi"))
-        tools = script.index('if [[ "${1:-}" == "--tools" ]]; then\n  exit 0\nfi')
-        self.assertLess(installed, tools)
-        self.assertLess(tools, script.index("bun "))
+    def test_tools_mode_installs_both_tools_and_stops_before_generation(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            scripts, tools, bin_dir = root / "scripts", root / "tools", root / "bin"
+            scripts.mkdir()
+            tools.mkdir()
+            shutil.copyfile(Path(__file__).resolve().parents[2] / "licenses-notices.sh", scripts / "licenses-notices.sh")
+            (scripts / "artifact-paths.sh").write_text(f'PW_BIN_DIR="{bin_dir}"\n')
+            (root / "lycaon").mkdir()
+            (root / "lycaon/go.mod").write_text("module fixture\n\ngo 1.26.0\n")
+            calls = root / "calls"
+            for name, body in {
+                "go": 'if [[ "$1" == env ]]; then echo /goroot; else touch "$GOBIN/go-licenses"; chmod +x "$GOBIN/go-licenses"; fi',
+                "cargo": 'mkdir -p "${@: -1}/bin"; touch "${@: -1}/bin/cargo-about"; chmod +x "${@: -1}/bin/cargo-about"',
+                "bun": "exit 97",
+            }.items():
+                (tools / name).write_text(f'#!/bin/bash\necho "{name} $*" >> "{calls}"\n{body}\n')
+                (tools / name).chmod(0o755)
+            result = subprocess.run(["bash", str(scripts / "licenses-notices.sh"), "--tools"], text=True,
+                                    capture_output=True, env={**os.environ, "PATH": f"{tools}{os.pathsep}{os.environ['PATH']}"})
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertTrue(os.access(bin_dir / "go-licenses", os.X_OK))
+            self.assertTrue(os.access(bin_dir / "cargo-about", os.X_OK))
+            self.assertEqual([line.split()[0] for line in calls.read_text().splitlines()], ["go", "go", "cargo"])
 

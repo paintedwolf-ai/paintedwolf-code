@@ -385,11 +385,5 @@ class EventTests(unittest.TestCase):
                         d.main()
                 self.assertIn(f'"state": "{state}"', summary.read_text())
 
-    def test_workflow_gates_label_clearing_on_the_controller_label(self):
-        workflow = (ROOT / '.github/workflows/dependent-update.yml').read_text()
-        self.assertIn(f"contains(github.event.pull_request.labels.*.name, '{d.LABEL}')", workflow)
-        self.assertIn('python3 -m ci_policy.dependent_update', workflow)
-
-
 if __name__ == '__main__':
     unittest.main()

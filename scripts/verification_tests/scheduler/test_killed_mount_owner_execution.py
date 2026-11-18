@@ -2,6 +2,7 @@
 
 import fcntl
 import importlib.util
+import io
 import json
 import os
 from pathlib import Path
@@ -233,8 +234,13 @@ class StrandedConnectionFactTests(unittest.TestCase):
             table.assert_not_called()
 
     def test_collection_failure_is_reported_not_raised(self):
-        with mock.patch.object(run_lease, "prune", side_effect=OSError("unreadable")):
-            run_lease.collect_runs()
+        killed = frozenset({123})
+        with mock.patch.object(run_lease, "prune", side_effect=OSError("unreadable")) as prune, \
+                mock.patch.object(run_lease, "RUN_ROOT", Path("/fixture-runs")), \
+                mock.patch("sys.stderr", new_callable=io.StringIO) as stderr:
+            run_lease.collect_runs(killed)
+        prune.assert_called_once_with(Path("/fixture-runs"), killed=killed)
+        self.assertTrue(stderr.getvalue())
 
 
 if __name__ == "__main__":
