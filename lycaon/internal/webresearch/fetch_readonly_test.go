@@ -48,7 +48,7 @@ func TestMapFetchToolErrOversizeIsStructured(t *testing.T) {
 
 func TestFetchURLBlocksLoopbackMapsToRejectViaTool(t *testing.T) {
 	reg := tools.NewDefaultRegistry()
-	if err := RegisterToolsWithFactory(reg, ToolDeps{FetchBudget: NewFetchBudget(DefaultFetchURLLimits())}, nil); err != nil {
+	if err := RegisterToolsWithFactory(reg, ToolDeps{Discovery: NewDiscovery(), FetchBudget: NewFetchBudget(DefaultFetchURLLimits())}, nil); err != nil {
 		testutil.FailErr(t, "RegisterToolsWithFactory failed", err)
 	}
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {

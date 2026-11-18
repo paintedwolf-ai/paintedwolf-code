@@ -11,7 +11,6 @@ import (
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/webindex"
 	"strings"
-	"sync"
 	"time"
 )
 
@@ -24,9 +23,6 @@ const (
 	seenMemoryMaxScopes   = 32
 	seenMemoryMaxPerScope = 400
 )
-
-// seedPlanCache reuses successful plans for identical query context.
-var seedPlanCache = newTTLCache[seedPlan](seedPlanCacheTTL, seedPlanCacheMax)
 
 func normalizeQueryKey(query string) string {
 	return strings.Join(strings.Fields(strings.ToLower(query)), " ")
@@ -43,21 +39,13 @@ func normalizeSeedPlanCacheKey(query string, period Period, taskHint string) str
 	return q + "\x00" + h
 }
 
-func cachedSeedPlan(query string, period Period, taskHint string) (seedPlan, bool) {
-	return seedPlanCache.get(normalizeSeedPlanCacheKey(query, period, taskHint))
+func (d *Discovery) cachedSeedPlan(query string, period Period, taskHint string) (seedPlan, bool) {
+	return d.plans.get(normalizeSeedPlanCacheKey(query, period, taskHint))
 }
 
-func storeSeedPlan(query string, period Period, taskHint string, plan seedPlan) {
-	seedPlanCache.put(normalizeSeedPlanCacheKey(query, period, taskHint), plan)
+func (d *Discovery) storeSeedPlan(query string, period Period, taskHint string, plan seedPlan) {
+	d.plans.put(normalizeSeedPlanCacheKey(query, period, taskHint), plan)
 }
-
-// searchMemory tracks URLs already returned to a session so later queries in
-// the same burst prefer pages the agent hasn't seen. It is a rank penalty,
-// never a filter — a repeat that is genuinely the best answer still wins.
-var searchMemory = struct {
-	sync.Mutex
-	scopes map[string]*seenScope
-}{scopes: make(map[string]*seenScope)}
 
 type seenScope struct {
 	urls    map[string]time.Time
@@ -65,10 +53,10 @@ type seenScope struct {
 }
 
 // seenURLs returns the canonical URLs already returned to scope.
-func seenURLs(scope string) map[string]struct{} {
-	searchMemory.Lock()
-	defer searchMemory.Unlock()
-	entry, ok := searchMemory.scopes[scope]
+func (d *Discovery) seenURLs(scope string) map[string]struct{} {
+	d.memoryMu.Lock()
+	defer d.memoryMu.Unlock()
+	entry, ok := d.seen[scope]
 	if !ok {
 		return nil
 	}
@@ -83,25 +71,25 @@ func seenURLs(scope string) map[string]struct{} {
 	return out
 }
 
-func recordSeen(scope string, hits []WebHit) {
+func (d *Discovery) recordSeen(scope string, hits []WebHit) {
 	if len(hits) == 0 {
 		return
 	}
-	searchMemory.Lock()
-	defer searchMemory.Unlock()
-	entry, ok := searchMemory.scopes[scope]
+	d.memoryMu.Lock()
+	defer d.memoryMu.Unlock()
+	entry, ok := d.seen[scope]
 	if !ok {
-		if len(searchMemory.scopes) >= seenMemoryMaxScopes {
+		if len(d.seen) >= seenMemoryMaxScopes {
 			oldestKey, oldestAt := "", time.Time{}
-			for k, e := range searchMemory.scopes {
+			for k, e := range d.seen {
 				if oldestKey == "" || e.touched.Before(oldestAt) {
 					oldestKey, oldestAt = k, e.touched
 				}
 			}
-			delete(searchMemory.scopes, oldestKey)
+			delete(d.seen, oldestKey)
 		}
 		entry = &seenScope{urls: make(map[string]time.Time)}
-		searchMemory.scopes[scope] = entry
+		d.seen[scope] = entry
 	}
 	entry.touched = time.Now()
 	for _, h := range hits {
@@ -110,13 +98,6 @@ func recordSeen(scope string, hits []WebHit) {
 		}
 		entry.urls[canonicalURL(h.URL)] = entry.touched
 	}
-}
-
-func resetDirectMemory() {
-	seedPlanCache.reset()
-	searchMemory.Lock()
-	searchMemory.scopes = make(map[string]*seenScope)
-	searchMemory.Unlock()
 }
 
 // memoryWireProviderID labels hits served from the persistent web index.
@@ -133,7 +114,7 @@ const fetchDescriptionLen = 300
 // searchIndexMemory serves the persistent web index as a search channel: FTS
 // candidates are live-verified before they appear, and URLs that probe dead are
 // evicted. It carries the whole result when every configured provider fails.
-func searchIndexMemory(ctx context.Context, index *webindex.Store, rerank decide.Reranker, query string, period Period, maxResults int) providerOutcome {
+func (d *Discovery) searchIndexMemory(ctx context.Context, index *webindex.Store, rerank decide.Reranker, query string, period Period, maxResults int) providerOutcome {
 	outcome := providerOutcome{providerID: memoryWireProviderID}
 	if index == nil {
 		outcome.reason = "not_configured"
@@ -166,11 +147,12 @@ func searchIndexMemory(ctx context.Context, index *webindex.Store, rerank decide
 		outcome.reason = "no_results"
 		return outcome
 	}
-	if err := acquireDirectSlot(ctx); err != nil {
+	release, err := d.acquire(ctx)
+	if err != nil {
 		outcome.reason = "timeout"
 		return outcome
 	}
-	defer releaseDirectSlot()
+	defer release()
 	hits, _, dead := verifyHits(ctx, ranked, scorer, maxResults, maxHitsPerHost)
 	for _, url := range dead {
 		index.QueueDelete(ctx, url)
@@ -271,6 +253,7 @@ type DirectDiscovererFactory func(ctx context.Context, tctx tools.ToolContext) D
 type FactoryGetter func() DirectDiscovererFactory
 
 type directDiscoverer struct {
+	discovery  *Discovery
 	summarizer compaction.Summarizer
 	// index is the persistent personal web index; nil disables memory reads
 	// and ingestion.
@@ -281,7 +264,7 @@ type directDiscoverer struct {
 	// seedOrigin gates provider seed channels: warm skips third-party APIs.
 	seedOrigin searchOrigin
 	// memoryScope keys the session's seen-URL memory; empty scopes share one
-	// global bucket.
+	// runtime bucket.
 	memoryScope string
 	// taskHint is the coordinator's active user turn — anchors seed picking when
 	// web_search queries drift to adjacent products.
@@ -302,6 +285,7 @@ type directDiscoverer struct {
 // Direct Search (memory + provider seeds). index may be nil (no persistent
 // memory). Summarizer is not required — warmSeed performs background model seeding.
 func NewDirectDiscovererFactory(
+	discovery *Discovery,
 	index *webindex.Store,
 	wrRegistry *Registry,
 	creds *CredentialStore,
@@ -314,6 +298,7 @@ func NewDirectDiscovererFactory(
 			return nil
 		}
 		return &directDiscoverer{
+			discovery:   discovery,
 			index:       index,
 			memoryScope: tctx.Identity.SessionID,
 			taskHint:    curationctx.TaskHint(ctx),

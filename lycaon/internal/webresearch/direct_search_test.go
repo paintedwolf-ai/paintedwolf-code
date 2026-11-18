@@ -39,9 +39,11 @@ func TestSearchDirectMultipleHits(t *testing.T) {
 }
 
 func TestDirectSearchWithoutPersistentIndexDoesNotPanic(t *testing.T) {
+	discovery := NewDiscovery()
+
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
-	d := &directDiscoverer{seedOrigin: searchOriginUser}
+	d := &directDiscoverer{discovery: discovery, seedOrigin: searchOriginUser}
 	_, err := d.Search(ctx, DirectRequest{Query: "react hooks", MaxResults: 1})
 	if err == nil {
 		t.Fatal("expected canceled search to fail")
@@ -49,8 +51,11 @@ func TestDirectSearchWithoutPersistentIndexDoesNotPanic(t *testing.T) {
 }
 
 func TestDirectIndexFirstFastPath(t *testing.T) {
+	discovery := NewDiscovery()
+
 	allowLoopbackFetch(t)
-	resetDirectState(1)
+	discovery.slots = make(chan struct{}, 1)
+	resetCrawlState()
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/llms.txt" {
 			fmt.Fprintf(w, "- [Hooks](%s/hooks.md): useEffect runs after render in React\n- [Memo](%s/memo.md): memoizes child renders in React\n", srvURL(r), srvURL(r))
@@ -71,8 +76,11 @@ func TestDirectIndexFirstFastPath(t *testing.T) {
 }
 
 func TestDirectFrontierProbesIndexCandidatesWithoutExtraModelCall(t *testing.T) {
+	discovery := NewDiscovery()
+
 	allowLoopbackFetch(t)
-	resetDirectState(1)
+	discovery.slots = make(chan struct{}, 1)
+	resetCrawlState()
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/llms.txt" {
 			fmt.Fprintf(w, "- [Ref](%s/ref.md): useEffect guide for react hooks\n", srvURL(r))
@@ -96,8 +104,11 @@ func TestDirectFrontierProbesIndexCandidatesWithoutExtraModelCall(t *testing.T) 
 // page is in no site index and was never named by the model — the frontier
 // reaches it through an anchor on a page the crawl did find.
 func TestDirectFrontierFollowsAnchors(t *testing.T) {
+	discovery := NewDiscovery()
+
 	allowLoopbackFetch(t)
-	resetDirectState(1)
+	discovery.slots = make(chan struct{}, 1)
+	resetCrawlState()
 	mux := http.NewServeMux()
 	srv := httptest.NewServer(mux)
 	t.Cleanup(srv.Close)
@@ -133,8 +144,11 @@ func TestDirectFrontierFollowsAnchors(t *testing.T) {
 }
 
 func TestDirectDirectSeedURLFastPath(t *testing.T) {
+	discovery := NewDiscovery()
+
 	allowLoopbackFetch(t)
-	resetDirectState(1)
+	discovery.slots = make(chan struct{}, 1)
+	resetCrawlState()
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	}))
@@ -338,7 +352,7 @@ func TestRobotsDisallow(t *testing.T) {
 
 func TestSearchFanOutDirectWhenNoKeys(t *testing.T) {
 	d := &FakeDirectDiscoverer{Hits: []WebHit{{Title: "Doc", URL: "https://example.com/doc", Snippet: "guide", Provider: "direct"}}}
-	result := Search(context.Background(), SearchOptions{
+	result := Search(context.Background(), SearchOptions{Discovery: NewDiscovery(),
 		Query:      "useEffect react",
 		Settings:   Settings{EnabledProviders: []string{"direct"}},
 		Discoverer: d,
@@ -350,7 +364,7 @@ func TestSearchFanOutDirectWhenNoKeys(t *testing.T) {
 
 func TestSearchDirectRunsEvenWhenBraveKeyPresent(t *testing.T) {
 	d := &FakeDirectDiscoverer{Hits: []WebHit{{URL: "https://example.com", Provider: "direct"}}}
-	result := Search(context.Background(), SearchOptions{
+	result := Search(context.Background(), SearchOptions{Discovery: NewDiscovery(),
 		Query: "test",
 		Settings: Settings{
 			EnabledProviders: []string{"direct"},
@@ -637,8 +651,11 @@ func TestProbeUsesReadabilityContentNotChrome(t *testing.T) {
 }
 
 func TestDirectSitePinnedQueryUsesMemoryOnlyChannels(t *testing.T) {
+	discovery := NewDiscovery()
+
 	allowLoopbackFetch(t)
-	resetDirectState(1)
+	discovery.slots = make(chan struct{}, 1)
+	resetCrawlState()
 
 	var llms strings.Builder
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -654,7 +671,7 @@ func TestDirectSitePinnedQueryUsesMemoryOnlyChannels(t *testing.T) {
 		fmt.Fprintf(&llms, "- [Guide %d](%s/guide%d.md): widget guide part %d\n", i, srv.URL, i, i)
 	}
 
-	d := &directDiscoverer{summarizer: &failIfCalledSummarizer{}}
+	d := &directDiscoverer{discovery: discovery, summarizer: &failIfCalledSummarizer{}}
 	hits, err := d.Search(context.Background(), DirectRequest{Query: fmt.Sprintf("site:%s widget guide", srv.URL), MaxResults: 5})
 	if err != nil {
 		t.Fatalf("Search: %v", err)
@@ -666,8 +683,11 @@ func TestDirectSitePinnedQueryUsesMemoryOnlyChannels(t *testing.T) {
 }
 
 func TestDirectLinkExpansionReachesUnseededHost(t *testing.T) {
+	discovery := NewDiscovery()
+
 	allowLoopbackFetch(t)
-	resetDirectState(1)
+	discovery.slots = make(chan struct{}, 1)
+	resetCrawlState()
 
 	review := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "text/html")
@@ -711,10 +731,13 @@ widget frobnicator review coverage.
 }
 
 func TestSeedPlanCacheSkipsRepeatLLMCalls(t *testing.T) {
-	resetDirectState(1)
+	discovery := NewDiscovery()
+
+	discovery.slots = make(chan struct{}, 1)
+	resetCrawlState()
 
 	first := &scriptedSummarizer{responses: []string{`{"seeds":["https://example.com"]}`}}
-	d := &directDiscoverer{summarizer: first, seedSharedProvider: true}
+	d := &directDiscoverer{discovery: discovery, summarizer: first, seedSharedProvider: true}
 	plan, err := d.pickSeedsCached(context.Background(), "useEffect hooks cache", CurrentPeriod(), 8, nil, nil)
 	if err != nil {
 		t.Fatalf("first pickSeedsCached: %v", err)
@@ -729,7 +752,7 @@ func TestSeedPlanCacheSkipsRepeatLLMCalls(t *testing.T) {
 	// Same query modulo case/whitespace, fresh discoverer with nothing
 	// scripted: only the plan cache can produce seeds.
 	second := &scriptedSummarizer{}
-	d2 := &directDiscoverer{summarizer: second, seedSharedProvider: true}
+	d2 := &directDiscoverer{discovery: discovery, summarizer: second, seedSharedProvider: true}
 	plan2, err := d2.pickSeedsCached(context.Background(), "useEffect Hooks   cache", CurrentPeriod(), 8, nil, nil)
 	if err != nil {
 		t.Fatalf("second pickSeedsCached: %v", err)
@@ -743,11 +766,12 @@ func TestSeedPlanCacheSkipsRepeatLLMCalls(t *testing.T) {
 }
 
 func TestSeenMemoryPenalizesRepeats(t *testing.T) {
-	resetDirectMemory()
-	recordSeen("scope-a", []WebHit{{URL: "https://ex.com/seen"}})
+	discovery := NewDiscovery()
+
+	discovery.recordSeen("scope-a", []WebHit{{URL: "https://ex.com/seen"}})
 
 	scorer := newQueryScorer("widget guide", nil, false, CurrentPeriod())
-	scorer.markSeen(seenURLs("scope-a"))
+	scorer.markSeen(discovery.seenURLs("scope-a"))
 	ranked := rankCandidates([]indexCandidate{
 		{Title: "Widget guide", URL: "https://ex.com/seen"},
 		{Title: "Widget guide", URL: "https://ex.com/fresh"},
@@ -756,14 +780,17 @@ func TestSeenMemoryPenalizesRepeats(t *testing.T) {
 		t.Fatalf("ranked = %+v want the unseen page first", ranked)
 	}
 	// Other scopes are unaffected.
-	if urls := seenURLs("scope-b"); len(urls) != 0 {
+	if urls := discovery.seenURLs("scope-b"); len(urls) != 0 {
 		t.Fatalf("scope-b seen = %+v want empty", urls)
 	}
 }
 
 func TestSiteIndexCacheReusedAcrossQueries(t *testing.T) {
+	discovery := NewDiscovery()
+
 	allowLoopbackFetch(t)
-	resetDirectState(1)
+	discovery.slots = make(chan struct{}, 1)
+	resetCrawlState()
 
 	llmsFetches := 0
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -792,8 +819,11 @@ func TestSiteIndexCacheReusedAcrossQueries(t *testing.T) {
 // ends with fewer content-bearing hits than asked records its outcome, which
 // queues the query for the scheduled starved re-warm.
 func TestDirectSearchRecordsOutcomeForStarvedQuery(t *testing.T) {
+	discovery := NewDiscovery()
+
 	allowLoopbackFetch(t)
-	resetDirectState(1)
+	discovery.slots = make(chan struct{}, 1)
+	resetCrawlState()
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/llms.txt" {
 			fmt.Fprintf(w, "- [Hooks](%s/hooks.md): useEffect runs after render in React\n", srvURL(r))

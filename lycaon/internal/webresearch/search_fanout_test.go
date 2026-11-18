@@ -65,7 +65,7 @@ func braveStubRegistry(t *testing.T, hitURL string) *Registry {
 }
 
 func TestSearchDirectRouterUnavailable(t *testing.T) {
-	result := Search(context.Background(), SearchOptions{
+	result := Search(context.Background(), SearchOptions{Discovery: NewDiscovery(),
 		Query:    "router unavailable probe",
 		Settings: Settings{MaxResultsDefault: 10, EnabledProviders: []string{"direct"}},
 	})
@@ -82,7 +82,7 @@ func TestSearchDirectRouterUnavailable(t *testing.T) {
 
 func TestSearchExplicitProviderBypassesEnabledSet(t *testing.T) {
 	d := &FakeDirectDiscoverer{Hits: []WebHit{{URL: "https://example.com/direct", Provider: "direct"}}}
-	result := Search(context.Background(), SearchOptions{
+	result := Search(context.Background(), SearchOptions{Discovery: NewDiscovery(),
 		Query:      "explicit direct probe",
 		Provider:   "direct",
 		Settings:   Settings{EnabledProviders: []string{}},
@@ -98,7 +98,7 @@ func TestSearchExplicitProviderBypassesEnabledSet(t *testing.T) {
 }
 
 func TestSearchExplicitUnconfiguredProviderSkips(t *testing.T) {
-	result := Search(context.Background(), SearchOptions{
+	result := Search(context.Background(), SearchOptions{Discovery: NewDiscovery(),
 		Query:    "explicit brave probe",
 		Provider: "brave",
 		Settings: Settings{EnabledProviders: []string{"direct"}},
@@ -114,7 +114,7 @@ func TestSearchExplicitUnconfiguredProviderSkips(t *testing.T) {
 
 func TestSearchFanOutDirectOnlyIgnoresDisabledProviders(t *testing.T) {
 	d := &FakeDirectDiscoverer{Hits: []WebHit{{URL: "https://example.com/direct", Provider: "direct"}}}
-	result := Search(context.Background(), SearchOptions{
+	result := Search(context.Background(), SearchOptions{Discovery: NewDiscovery(),
 		Query: "direct only probe",
 		Settings: Settings{
 			EnabledProviders: []string{"direct"},
@@ -133,7 +133,7 @@ func TestSearchFanOutDirectOnlyIgnoresDisabledProviders(t *testing.T) {
 
 func TestSearchNoProvidersEnabledSoftSkip(t *testing.T) {
 	d := &FakeDirectDiscoverer{Hits: []WebHit{{URL: "https://example.com"}}}
-	result := Search(context.Background(), SearchOptions{
+	result := Search(context.Background(), SearchOptions{Discovery: NewDiscovery(),
 		Query:      "no providers probe",
 		Settings:   Settings{EnabledProviders: []string{}},
 		Discoverer: d,
@@ -153,7 +153,7 @@ func TestSearchNoProvidersEnabledSoftSkip(t *testing.T) {
 func TestSearchFanOutProviderOnlyWithoutDirect(t *testing.T) {
 	reg := braveStubRegistry(t, "https://example.com/brave")
 	d := &FakeDirectDiscoverer{Hits: []WebHit{{URL: "https://example.com/direct", Provider: "direct"}}}
-	result := Search(context.Background(), SearchOptions{
+	result := Search(context.Background(), SearchOptions{Discovery: NewDiscovery(),
 		Query: "brave only probe",
 		Settings: Settings{
 			Keys:             map[string]string{"brave": "brave-key"},
@@ -173,7 +173,7 @@ func TestSearchFanOutProviderOnlyWithoutDirect(t *testing.T) {
 func TestSearchFanOutDirectBesideProvider(t *testing.T) {
 	reg := braveStubRegistry(t, "https://example.com/brave")
 	d := &FakeDirectDiscoverer{Hits: []WebHit{{URL: "https://example.com/direct", Title: "Direct hit", Provider: "direct"}}}
-	result := Search(context.Background(), SearchOptions{
+	result := Search(context.Background(), SearchOptions{Discovery: NewDiscovery(),
 		Query: "mixed fanout probe",
 		Settings: Settings{
 			Keys:             map[string]string{"brave": "brave-key"},
@@ -194,7 +194,7 @@ func TestSearchFanOutDirectBesideProvider(t *testing.T) {
 
 func TestSearchFanOutSkipsUnconfiguredEnabledProvider(t *testing.T) {
 	d := &FakeDirectDiscoverer{Hits: []WebHit{{URL: "https://example.com/direct", Provider: "direct"}}}
-	result := Search(context.Background(), SearchOptions{
+	result := Search(context.Background(), SearchOptions{Discovery: NewDiscovery(),
 		Query: "skip unconfigured probe",
 		Settings: Settings{
 			EnabledProviders: []string{"direct", "brave"},

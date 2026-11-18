@@ -172,6 +172,12 @@ func Fill(t *testing.T, d *Deps) {
 func fillWebResearch(t *testing.T, d *Deps) {
 	t.Helper()
 	dir := t.TempDir()
+	if d.WebResearch.Discovery == nil {
+		d.WebResearch.Discovery = webresearch.NewDiscovery()
+	}
+	if d.WebResearch.FetchBudget == nil {
+		d.WebResearch.FetchBudget = webresearch.NewFetchBudget(webresearch.DefaultFetchURLLimits())
+	}
 	if d.WebResearch.Catalog == nil {
 		catalog, err := webresearch.LoadCatalog()
 		testutil.FailErr(t, "web research catalog", err)
@@ -194,7 +200,7 @@ func fillWebResearch(t *testing.T, d *Deps) {
 	}
 	if d.WebDiscoverer == nil {
 		rt := d.WebResearch
-		d.WebDiscoverer = webresearch.NewDirectDiscovererFactory(nil, rt.Registry, rt.Creds, rt.Config, rt.Catalog, decide.Reranker{})
+		d.WebDiscoverer = webresearch.NewDirectDiscovererFactory(rt.Discovery, nil, rt.Registry, rt.Creds, rt.Config, rt.Catalog, decide.Reranker{})
 	}
 }
 

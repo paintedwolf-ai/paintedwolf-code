@@ -70,8 +70,11 @@ func TestRankSiteLinksKeepsDocumentOrderOnFullTies(t *testing.T) {
 }
 
 func TestHostCrawlerDrainsEveryHost(t *testing.T) {
+	discovery := NewDiscovery()
+
 	allowLoopbackFetch(t)
-	resetDirectState(2)
+	discovery.slots = make(chan struct{}, 2)
+	resetCrawlState()
 	sitemap := func(host string, n int) http.HandlerFunc {
 		return func(w http.ResponseWriter, r *http.Request) {
 			fmt.Fprint(w, `<?xml version="1.0"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">`)
@@ -90,7 +93,7 @@ func TestHostCrawlerDrainsEveryHost(t *testing.T) {
 		return srv.URL
 	}
 	seeds := []string{newSite(), newSite(), newSite()}
-	crawler := newHostCrawler(context.Background())
+	crawler := newHostCrawler(context.Background(), discovery)
 	defer crawler.releaseSlot()
 	for _, seed := range seeds {
 		crawler.launch(seed, []string{"widget docs"})

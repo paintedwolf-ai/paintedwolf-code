@@ -120,8 +120,11 @@ func TestRobotsCrawlDelayParsedAndCapped(t *testing.T) {
 }
 
 func TestProbeHonorsRobotsDisallow(t *testing.T) {
+	discovery := NewDiscovery()
+
 	allowLoopbackFetch(t)
-	resetDirectState(1)
+	discovery.slots = make(chan struct{}, 1)
+	resetCrawlState()
 	var blockedHits int64
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
@@ -146,8 +149,11 @@ func TestProbeHonorsRobotsDisallow(t *testing.T) {
 }
 
 func TestProbeHonorsRobotsOnRedirectTarget(t *testing.T) {
+	discovery := NewDiscovery()
+
 	allowLoopbackFetch(t)
-	resetDirectState(1)
+	discovery.slots = make(chan struct{}, 1)
+	resetCrawlState()
 	var blockedHits int64
 	target := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
@@ -196,8 +202,11 @@ func TestDiscoverFeedURLsFromDeclaration(t *testing.T) {
 
 // TestDiscoverSiteIndexesNoBlindFeedProbes limits crawls to declared and well-known paths.
 func TestDiscoverSiteIndexesNoBlindFeedProbes(t *testing.T) {
+	discovery := NewDiscovery()
+
 	allowLoopbackFetch(t)
-	resetDirectState(1)
+	discovery.slots = make(chan struct{}, 1)
+	resetCrawlState()
 	var mu sync.Mutex
 	paths := map[string]int{}
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

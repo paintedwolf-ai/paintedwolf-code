@@ -77,7 +77,7 @@ func (k known) origin(sessionID, rawURL string) confine.AddressOrigin {
 func fetchKnowing(t *testing.T, evidence known, tctx tools.ToolContext, rawURL string) error {
 	t.Helper()
 	reg := tools.NewDefaultRegistry()
-	testutil.FailErr(t, "RegisterToolsWithFactory", RegisterToolsWithFactory(reg, ToolDeps{FetchBudget: NewFetchBudget(DefaultFetchURLLimits()), AddressOrigin: evidence.origin}, nil))
+	testutil.FailErr(t, "RegisterToolsWithFactory", RegisterToolsWithFactory(reg, ToolDeps{Discovery: NewDiscovery(), FetchBudget: NewFetchBudget(DefaultFetchURLLimits()), AddressOrigin: evidence.origin}, nil))
 	_, err := reg.Run(context.Background(), "fetch_url", map[string]any{"url": rawURL}, tctx)
 	return err
 }
@@ -139,7 +139,7 @@ func TestFetchURLWithoutEvidenceReaderIsAuthored(t *testing.T) {
 	page, _ := provenanceSite(t)
 	gate := recordGate(t, true)
 	reg := tools.NewDefaultRegistry()
-	testutil.FailErr(t, "RegisterToolsWithFactory", RegisterToolsWithFactory(reg, ToolDeps{FetchBudget: NewFetchBudget(DefaultFetchURLLimits())}, nil))
+	testutil.FailErr(t, "RegisterToolsWithFactory", RegisterToolsWithFactory(reg, ToolDeps{Discovery: NewDiscovery(), FetchBudget: NewFetchBudget(DefaultFetchURLLimits())}, nil))
 	_, err := reg.Run(context.Background(), "fetch_url", map[string]any{"url": page.URL + "/unwired"},
 		tools.ToolContext{Identity: tools.InvocationIdentity{SessionID: "chat", ToolCallID: "call"}})
 	testutil.FailErr(t, "fetch_url", err)

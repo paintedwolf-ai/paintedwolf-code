@@ -37,7 +37,9 @@ func warmTestSite(t *testing.T) *httptest.Server {
 }
 
 func TestWarmCancelSessionJoinsWorkAndSuppressesCompletion(t *testing.T) {
-	w := NewWarmer(nil, nil, nil, nil)
+	discovery := NewDiscovery()
+
+	w := NewWarmer(discovery, nil, nil, nil, nil)
 	t.Cleanup(w.Close)
 	started := make(chan struct{})
 	finished := make(chan struct{})
@@ -90,8 +92,11 @@ func warmSearchDone(t *testing.T, w *Warmer, query, projectDir string, hitURLs, 
 }
 
 func TestWarmSearchAsyncIngestsFromHitHosts(t *testing.T) {
+	discovery := NewDiscovery()
+
 	allowLoopbackFetch(t)
-	resetDirectState(2)
+	discovery.slots = make(chan struct{}, 2)
+	resetCrawlState()
 	srv := warmTestSite(t)
 	index := testIndex(t)
 
@@ -99,7 +104,7 @@ func TestWarmSearchAsyncIngestsFromHitHosts(t *testing.T) {
 	testutil.FailErr(t, "open web research store", openErr)
 	warming, guess := true, false
 	testutil.FailErr(t, "prefs", cfg.ApplyPrefs(&warming, &guess, nil, nil))
-	w := NewWarmer(index, nil, nil, cfg)
+	w := NewWarmer(discovery, index, nil, nil, cfg)
 	meta := warmSearchDone(t, w, "widget frobnicator guide", "", []string{srv.URL + "/guide.md"}, nil)
 	if meta == nil {
 		t.Fatal("want onDone for post-search warm")
@@ -128,8 +133,11 @@ func TestWarmSearchAsyncIngestsFromHitHosts(t *testing.T) {
 }
 
 func TestWarmDeclaredURLCrawlIngestsWithWarmedOrigin(t *testing.T) {
+	discovery := NewDiscovery()
+
 	allowLoopbackFetch(t)
-	resetDirectState(2)
+	discovery.slots = make(chan struct{}, 2)
+	resetCrawlState()
 	srv := warmTestSite(t)
 	index := testIndex(t)
 	// Seed the index with an earned page for this host.
@@ -140,7 +148,7 @@ func TestWarmDeclaredURLCrawlIngestsWithWarmedOrigin(t *testing.T) {
 	testutil.FailErr(t, "open web research store", openErr)
 	warming, guess := true, false
 	testutil.FailErr(t, "prefs", cfg.ApplyPrefs(&warming, &guess, nil, nil))
-	w := NewWarmer(index, nil, nil, cfg) // crawl tier only
+	w := NewWarmer(discovery, index, nil, nil, cfg) // crawl tier only
 	meta := warmDone(t, w, "read "+srv.URL+"/guide.md", "")
 	if meta == nil {
 		t.Fatal("want onDone for a warm that ingested pages")
@@ -160,12 +168,14 @@ func TestWarmDeclaredURLCrawlIngestsWithWarmedOrigin(t *testing.T) {
 }
 
 func TestCollectWarmCrawlBasesDedupesHitAndIndex(t *testing.T) {
+	discovery := NewDiscovery()
+
 	index := testIndex(t)
 	srv := "http://127.0.0.1:8080"
 	index.QueuePage(t.Context(), webindex.Page{URL: srv + "/old", Title: "widget frobnicator archive", Verified: true})
 	index.Flush()
 
-	w := NewWarmer(index, nil, nil, warmTestCfg(t))
+	w := NewWarmer(discovery, index, nil, nil, warmTestCfg(t))
 	bases, hosts := w.collectWarmCrawlBases(context.Background(), "widget frobnicator", []string{srv + "/guide.md"}, 4)
 	if len(hosts) != 1 || len(bases) != 1 {
 		t.Fatalf("bases=%v hosts=%v want one host when hit matches index", bases, hosts)
@@ -173,17 +183,21 @@ func TestCollectWarmCrawlBasesDedupesHitAndIndex(t *testing.T) {
 }
 
 func TestWarmSkipsWhenDiscoveryBusy(t *testing.T) {
-	resetDirectState(1)
+	discovery := NewDiscovery()
+
+	discovery.slots = make(chan struct{}, 1)
+	resetCrawlState()
 	index := testIndex(t)
 	index.QueuePage(t.Context(), webindex.Page{URL: "https://a.example/p", Title: "widget frobnicator"})
 	index.Flush()
 	// The test holds the only discovery slot.
-	if err := acquireDirectSlot(context.Background()); err != nil {
+	release, err := discovery.acquire(context.Background())
+	if err != nil {
 		testutil.FailErr(t, "acquireDirectSlot failed", err)
 	}
-	defer releaseDirectSlot()
+	defer release()
 
-	w := NewWarmer(index, nil, nil, warmTestCfg(t))
+	w := NewWarmer(discovery, index, nil, nil, warmTestCfg(t))
 	if meta := warmDone(t, w, "read https://a.example/p", ""); meta != nil {
 		t.Fatalf("meta = %+v want no card for a pure skip", meta)
 	}
@@ -196,7 +210,10 @@ func TestWarmSkipsWhenDiscoveryBusy(t *testing.T) {
 }
 
 func TestWarmSeedTierRespectsHourCap(t *testing.T) {
-	resetDirectState(2)
+	discovery := NewDiscovery()
+
+	discovery.slots = make(chan struct{}, 2)
+	resetCrawlState()
 	index := testIndex(t)
 	ctx := context.Background()
 	for i := 0; i < defaultWarmCaps().SeedWarmsPerHour; i++ {
@@ -207,15 +224,16 @@ func TestWarmSeedTierRespectsHourCap(t *testing.T) {
 		}
 	}
 
-	w := NewWarmer(index, nil, nil, warmTestCfg(t))
-	d := &directDiscoverer{
+	w := NewWarmer(discovery, index, nil, nil, warmTestCfg(t))
+	d := &directDiscoverer{discovery: discovery,
 		index:      index,
 		summarizer: &scriptedSummarizer{responses: []string{`{"seeds":[]}`}},
 	}
-	if !tryAcquireDirectSlot() {
+	release, acquired := discovery.tryAcquire()
+	if !acquired {
 		t.Fatal("slot")
 	}
-	defer releaseDirectSlot()
+	defer release()
 	caps := defaultWarmCaps()
 	_, _, skip := w.warmSeed(ctx, d, "widget frobnicator guide", "", "", caps, caps.SeedProbes)
 	if skip != warmSkipHourCap {
@@ -224,21 +242,25 @@ func TestWarmSeedTierRespectsHourCap(t *testing.T) {
 }
 
 func TestWarmSeedTierStreamsAndIngests(t *testing.T) {
+	discovery := NewDiscovery()
+
 	allowLoopbackFetch(t)
-	resetDirectState(2)
+	discovery.slots = make(chan struct{}, 2)
+	resetCrawlState()
 	srv := warmTestSite(t)
 	index := testIndex(t)
 
-	w := NewWarmer(index, nil, nil, warmTestCfg(t))
-	d := &directDiscoverer{
+	w := NewWarmer(discovery, index, nil, nil, warmTestCfg(t))
+	d := &directDiscoverer{discovery: discovery,
 		summarizer: &scriptedSummarizer{responses: []string{fmt.Sprintf(`{"seeds":[%q]}`, srv.URL)}},
 		index:      index,
 		origin:     webindex.OriginWarmed,
 	}
-	if !tryAcquireDirectSlot() {
+	release, acquired := discovery.tryAcquire()
+	if !acquired {
 		t.Fatal("slot")
 	}
-	defer releaseDirectSlot()
+	defer release()
 	caps := defaultWarmCaps()
 	hosts, result, skip := w.warmSeed(context.Background(), d, "widget frobnicator guide", "", "", caps, caps.SeedProbes)
 	if skip != "" || result.pages == 0 || len(hosts) == 0 {
@@ -263,32 +285,40 @@ func anyWarmedDoc(t *testing.T, index *webindex.Store, query string) bool {
 }
 
 func TestPreSlottedCrawlerNeverDoubleAcquires(t *testing.T) {
-	resetDirectState(1)
-	if !tryAcquireDirectSlot() {
+	discovery := NewDiscovery()
+
+	discovery.slots = make(chan struct{}, 1)
+	resetCrawlState()
+	release, acquired := discovery.tryAcquire()
+	if !acquired {
 		t.Fatal("slot")
 	}
-	defer releaseDirectSlot()
-	crawler := newHostCrawlerPreSlotted(context.Background())
+	defer release()
+	crawler := newHostCrawlerPreSlotted(context.Background(), discovery)
 	// The pre-slotted crawler does not acquire the slot.
 	crawler.ensureSlot()
-	if crawler.slotHeld {
+	if crawler.release != nil {
 		t.Fatal("pre-slotted crawler must not own the slot")
 	}
 	// The pre-slotted crawler does not release the caller's slot.
 	crawler.releaseSlot()
-	if tryAcquireDirectSlot() {
+	if extraRelease, acquired := discovery.tryAcquire(); acquired {
+		extraRelease()
 		t.Fatal("caller's slot was stolen by pre-slotted release")
 	}
 }
 
 func TestWarmOffModeIsInert(t *testing.T) {
-	resetDirectState(2)
+	discovery := NewDiscovery()
+
+	discovery.slots = make(chan struct{}, 2)
+	resetCrawlState()
 	index := testIndex(t)
 	cfg, openErr := OpenConfigStore(filepath.Join(t.TempDir(), "cfg.yaml"))
 	testutil.FailErr(t, "open web research store", openErr)
 	warming := false
 	testutil.FailErr(t, "prefs", cfg.ApplyPrefs(&warming, nil, nil, nil))
-	w := NewWarmer(index, nil, nil, cfg)
+	w := NewWarmer(discovery, index, nil, nil, cfg)
 	var fired atomic.Bool
 	w.WarmDeclaredURLsAsync("https://docs.example/widget", "", "", "", func(api.IndexWarmingMeta) { fired.Store(true) })
 	w.Close()
@@ -337,8 +367,10 @@ func TestWarmPageURLsExtractsAndCaps(t *testing.T) {
 }
 
 func TestWarmDeclaredURLsIgnoresPromptWithoutURL(t *testing.T) {
+	discovery := NewDiscovery()
+
 	index := testIndex(t)
-	w := NewWarmer(index, nil, nil, warmTestCfg(t))
+	w := NewWarmer(discovery, index, nil, nil, warmTestCfg(t))
 	var fired atomic.Bool
 	w.WarmDeclaredURLsAsync("Secrets Tool Testing Across Real-World C", "", "", "session", func(api.IndexWarmingMeta) {
 		fired.Store(true)
@@ -353,8 +385,11 @@ func TestWarmDeclaredURLsIgnoresPromptWithoutURL(t *testing.T) {
 }
 
 func TestWarmDeclaredURLCrawlsItsHost(t *testing.T) {
+	discovery := NewDiscovery()
+
 	allowLoopbackFetch(t)
-	resetDirectState(2)
+	discovery.slots = make(chan struct{}, 2)
+	resetCrawlState()
 	srv := warmTestSite(t)
 	index := testIndex(t)
 
@@ -362,7 +397,7 @@ func TestWarmDeclaredURLCrawlsItsHost(t *testing.T) {
 	testutil.FailErr(t, "open web research store", openErr)
 	warming, guess := true, false
 	testutil.FailErr(t, "prefs", cfg.ApplyPrefs(&warming, &guess, nil, nil))
-	w := NewWarmer(index, nil, nil, cfg)
+	w := NewWarmer(discovery, index, nil, nil, cfg)
 	meta := warmDone(t, w, "summarize the widget frobnicator guide at "+srv.URL+"/guide.md", "")
 	if meta == nil || meta.Pages == 0 {
 		t.Fatalf("meta = %+v want pages from pasted-URL host crawl", meta)
@@ -374,8 +409,11 @@ func TestWarmDeclaredURLCrawlsItsHost(t *testing.T) {
 }
 
 func TestWarmSearchResidualPagesProbed(t *testing.T) {
+	discovery := NewDiscovery()
+
 	allowLoopbackFetch(t)
-	resetDirectState(2)
+	discovery.slots = make(chan struct{}, 2)
+	resetCrawlState()
 	srv := warmTestSite(t)
 	index := testIndex(t)
 
@@ -383,7 +421,7 @@ func TestWarmSearchResidualPagesProbed(t *testing.T) {
 	testutil.FailErr(t, "open web research store", openErr)
 	warming, guess := true, false
 	testutil.FailErr(t, "prefs", cfg.ApplyPrefs(&warming, &guess, nil, nil))
-	w := NewWarmer(index, nil, nil, cfg)
+	w := NewWarmer(discovery, index, nil, nil, cfg)
 	meta := warmSearchDone(t, w, "widget frobnicator guide", "", nil, []string{srv.URL + "/guide.md"})
 	if meta == nil || meta.Pages == 0 {
 		t.Fatalf("meta = %+v want residual pages probed", meta)
@@ -395,12 +433,15 @@ func TestWarmSearchResidualPagesProbed(t *testing.T) {
 }
 
 func TestWarmFetchAsyncCrawlsFetchedHost(t *testing.T) {
+	discovery := NewDiscovery()
+
 	allowLoopbackFetch(t)
-	resetDirectState(2)
+	discovery.slots = make(chan struct{}, 2)
+	resetCrawlState()
 	srv := warmTestSite(t)
 	index := testIndex(t)
 
-	w := NewWarmer(index, nil, nil, warmTestCfg(t)) // full mode: fetch still must not seed
+	w := NewWarmer(discovery, index, nil, nil, warmTestCfg(t)) // full mode: fetch still must not seed
 	done := make(chan api.IndexWarmingMeta, 1)
 	w.WarmFetchAsync(srv.URL+"/guide.md", "Widget frobnicator guide", "", "", "sess-fetch", "call-fetch", func(meta api.IndexWarmingMeta) { done <- meta })
 	w.wg.Wait()

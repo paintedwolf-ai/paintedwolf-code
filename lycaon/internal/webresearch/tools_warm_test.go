@@ -19,7 +19,7 @@ func TestWebSearchFiresSearchWarmHook(t *testing.T) {
 	reg := tools.NewDefaultRegistry()
 	var fired atomic.Bool
 	var gotQuery, gotSession string
-	deps := ToolDeps{FetchBudget: NewFetchBudget(DefaultFetchURLLimits()),
+	deps := ToolDeps{Discovery: NewDiscovery(), FetchBudget: NewFetchBudget(DefaultFetchURLLimits()),
 		SearchWarmHook: func(_ context.Context, sessionID, _, query, _ string, hitURLs, _ []string, _, _ int, _ bool) {
 			fired.Store(true)
 			gotSession = sessionID
@@ -58,7 +58,7 @@ func TestWebSearchDisabledWhenSettingsOff(t *testing.T) {
 	testutil.FailErr(t, "open web research store", openErr)
 	disabled := false
 	testutil.FailErr(t, "ApplyPrefs", cfg.ApplyPrefs(nil, nil, &disabled, nil))
-	deps := ToolDeps{FetchBudget: NewFetchBudget(DefaultFetchURLLimits()), Config: cfg}
+	deps := ToolDeps{Discovery: NewDiscovery(), FetchBudget: NewFetchBudget(DefaultFetchURLLimits()), Config: cfg}
 	if err := RegisterToolsWithFactory(reg, deps, nil); err != nil {
 		testutil.FailErr(t, "RegisterToolsWithFactory failed", err)
 	}
@@ -77,7 +77,7 @@ func TestWebSearchFiresWarmHookOnEmptyDirectResults(t *testing.T) {
 	var fired atomic.Bool
 	var gotStrong, gotMax int
 	var gotDirect bool
-	deps := ToolDeps{FetchBudget: NewFetchBudget(DefaultFetchURLLimits()),
+	deps := ToolDeps{Discovery: NewDiscovery(), FetchBudget: NewFetchBudget(DefaultFetchURLLimits()),
 		SearchWarmHook: func(_ context.Context, _, _, _, _ string, _, _ []string, strongHits, maxResults int, directParticipated bool) {
 			fired.Store(true)
 			gotStrong = strongHits
@@ -104,7 +104,7 @@ func TestWebSearchFiresWarmHookOnEmptyDirectResults(t *testing.T) {
 func TestWebSearchRejectsInvalidQueryWithoutWarmHook(t *testing.T) {
 	reg := tools.NewDefaultRegistry()
 	var fired atomic.Bool
-	deps := ToolDeps{FetchBudget: NewFetchBudget(DefaultFetchURLLimits()),
+	deps := ToolDeps{Discovery: NewDiscovery(), FetchBudget: NewFetchBudget(DefaultFetchURLLimits()),
 		SearchWarmHook: func(context.Context, string, string, string, string, []string, []string, int, int, bool) {
 			fired.Store(true)
 		},
@@ -128,7 +128,7 @@ func TestWebSearchRejectsInvalidQueryWithoutWarmHook(t *testing.T) {
 func TestWebSearchRejectsWhenEveryProviderFails(t *testing.T) {
 	reg := tools.NewDefaultRegistry()
 	var fired atomic.Bool
-	deps := ToolDeps{FetchBudget: NewFetchBudget(DefaultFetchURLLimits()),
+	deps := ToolDeps{Discovery: NewDiscovery(), FetchBudget: NewFetchBudget(DefaultFetchURLLimits()),
 		SearchWarmHook: func(context.Context, string, string, string, string, []string, []string, int, int, bool) {
 			fired.Store(true)
 		},
@@ -168,7 +168,7 @@ func TestFetchURLFiresFetchWarmHookOnFreshFetchOnly(t *testing.T) {
 	reg := tools.NewDefaultRegistry()
 	var calls atomic.Int64
 	var gotURL, gotTitle string
-	deps := ToolDeps{FetchBudget: NewFetchBudget(DefaultFetchURLLimits()),
+	deps := ToolDeps{Discovery: NewDiscovery(), FetchBudget: NewFetchBudget(DefaultFetchURLLimits()),
 		FetchWarmHook: func(_ context.Context, _, _, pageURL, title, _ string) {
 			calls.Add(1)
 			gotURL = pageURL

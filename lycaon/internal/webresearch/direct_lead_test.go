@@ -111,12 +111,15 @@ func (s *failThenRespondSummarizer) Summarize(_ context.Context, _, user string,
 }
 
 func TestPickSeedsSlimRetryAfterTimeout(t *testing.T) {
+	discovery := NewDiscovery()
+
 	testutil.SkipIfShort(t, "seed pick slim retry after timeout")
-	resetDirectState(1)
+	discovery.slots = make(chan struct{}, 1)
+	resetCrawlState()
 	sum := &failThenRespondSummarizer{
 		response: `{"seeds":["https://docs.example.com"],"fresh":false,"expand":["widget install"],"leads":[{"title":"Widget install guide","host":"docs.example.com"}]}`,
 	}
-	d := &directDiscoverer{summarizer: sum, seedSharedProvider: true}
+	d := &directDiscoverer{discovery: discovery, summarizer: sum, seedSharedProvider: true}
 	plan, err := d.pickSeedsCached(context.Background(), "widget install guide", CurrentPeriod(), 8, nil, nil)
 	if err != nil {
 		t.Fatalf("pickSeedsCached: %v", err)
@@ -135,9 +138,12 @@ func TestPickSeedsSlimRetryAfterTimeout(t *testing.T) {
 }
 
 func TestPickSeedsNoRetryWhenCallerContextDone(t *testing.T) {
-	resetDirectState(1)
+	discovery := NewDiscovery()
+
+	discovery.slots = make(chan struct{}, 1)
+	resetCrawlState()
 	sum := &failThenRespondSummarizer{response: `{"seeds":["https://docs.example.com"]}`}
-	d := &directDiscoverer{summarizer: sum}
+	d := &directDiscoverer{discovery: discovery, summarizer: sum}
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 	if _, err := d.pickSeedsCached(ctx, "widget install guide", CurrentPeriod(), 8, nil, nil); err == nil {

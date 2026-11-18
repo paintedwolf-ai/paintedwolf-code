@@ -48,8 +48,10 @@ func testSeedSettings(enabled ...string) Settings {
 }
 
 func TestWarmOriginSkipsProviderChannels(t *testing.T) {
+	discovery := NewDiscovery()
+
 	reg := testRegistry(t, nil)
-	d := &directDiscoverer{
+	d := &directDiscoverer{discovery: discovery,
 		registry:   reg,
 		settings:   testSeedSettings("hn", "wikipedia"),
 		seedOrigin: searchOriginWarm,
@@ -66,8 +68,10 @@ func TestWarmOriginSkipsProviderChannels(t *testing.T) {
 }
 
 func TestUserOriginConstructsProviderChannels(t *testing.T) {
+	discovery := NewDiscovery()
+
 	reg := testRegistry(t, nil)
-	d := &directDiscoverer{
+	d := &directDiscoverer{discovery: discovery,
 		registry:   reg,
 		settings:   testSeedSettings("hn"),
 		seedOrigin: searchOriginUser,
@@ -99,8 +103,11 @@ func channelIDs(chs []seedChannel) []string {
 }
 
 func TestProviderBackedSearchWithoutModel(t *testing.T) {
+	discovery := NewDiscovery()
+
 	allowLoopbackFetch(t)
-	resetDirectState(1)
+	discovery.slots = make(chan struct{}, 1)
+	resetCrawlState()
 
 	srv := widgetReviewSite(t)
 	d := providerBackedDiscoverer(t, "hn", "Widget frobnicator review", srv.URL+"/guide")
@@ -117,8 +124,11 @@ func TestProviderBackedSearchWithoutModel(t *testing.T) {
 }
 
 func TestProviderSeedChannelDedupesURL(t *testing.T) {
+	discovery := NewDiscovery()
+
 	allowLoopbackFetch(t)
-	resetDirectState(1)
+	discovery.slots = make(chan struct{}, 1)
+	resetCrawlState()
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/html")
@@ -145,7 +155,7 @@ func TestProviderSeedChannelDedupesURL(t *testing.T) {
 	store.QueuePage(t.Context(), webindex.Page{URL: pageURL + "/", Title: "Widget frobnicator review", Verified: true})
 	store.Flush()
 
-	d := &directDiscoverer{
+	d := &directDiscoverer{discovery: discovery,
 		summarizer: &failIfCalledSummarizer{},
 		index:      store,
 		registry:   reg,
@@ -222,8 +232,11 @@ func TestAPISnippetFallbackRejects404WithoutRobots(t *testing.T) {
 }
 
 func TestProviderHitIngestedToIndex(t *testing.T) {
+	discovery := NewDiscovery()
+
 	allowLoopbackFetch(t)
-	resetDirectState(1)
+	discovery.slots = make(chan struct{}, 1)
+	resetCrawlState()
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/html")
@@ -247,7 +260,7 @@ func TestProviderHitIngestedToIndex(t *testing.T) {
 	testutil.FailErr(t, "open index", err)
 	t.Cleanup(func() { _ = store.Close() })
 
-	d := &directDiscoverer{
+	d := &directDiscoverer{discovery: discovery,
 		index:      store,
 		registry:   reg,
 		settings:   testSeedSettings("hn"),

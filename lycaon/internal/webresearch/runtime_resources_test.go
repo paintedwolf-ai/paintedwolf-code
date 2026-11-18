@@ -51,3 +51,84 @@ func TestRuntimeFetchBudgetsStayLocal(t *testing.T) {
 		t.Fatal("new runtime reset another runtime's session cap")
 	}
 }
+
+func TestDiscoveryAdmissionUsesExactReservation(t *testing.T) {
+	discovery := NewDiscovery()
+	discovery.slots = make(chan struct{}, 1)
+	release, ok := discovery.tryAcquire()
+	if !ok {
+		t.Fatal("first reservation rejected")
+	}
+	if _, ok := discovery.tryAcquire(); ok {
+		t.Fatal("admitted above capacity")
+	}
+	independent := NewDiscovery()
+	other, ok := independent.tryAcquire()
+	if !ok {
+		t.Fatal("another runtime consumed independent capacity")
+	}
+	other()
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+	if _, err := discovery.acquire(ctx); err != context.Canceled {
+		t.Fatalf("canceled acquire = %v", err)
+	}
+	release()
+	next, ok := discovery.tryAcquire()
+	if !ok {
+		t.Fatal("released capacity unavailable")
+	}
+	release()
+	if _, ok := discovery.tryAcquire(); ok {
+		t.Fatal("duplicate release consumed a later reservation")
+	}
+	next()
+}
+
+func TestDiscoveryMemoryStaysLocal(t *testing.T) {
+	left, right := NewDiscovery(), NewDiscovery()
+	left.recordSeen("session", []WebHit{{URL: "https://example.com/hit"}})
+	if len(left.seenURLs("session")) != 1 {
+		t.Fatal("recorded hit missing")
+	}
+	if len(right.seenURLs("session")) != 0 {
+		t.Fatal("independent runtime inherited session memory")
+	}
+	left.storeSeedPlan("query", Period{}, "task", seedPlan{})
+	if _, ok := left.cachedSeedPlan("query", Period{}, "task"); !ok {
+		t.Fatal("stored plan missing")
+	}
+	if _, ok := right.cachedSeedPlan("query", Period{}, "task"); ok {
+		t.Fatal("independent runtime inherited seed plan")
+	}
+}
+
+func TestDiscoverySeedAdmissionUsesExactReservation(t *testing.T) {
+	discovery := NewDiscovery()
+	releases := make([]func(), seedCallMaxParallelShared)
+	for i := range releases {
+		release, err := discovery.acquireSeed(t.Context(), "provider", true)
+		testutil.FailErr(t, "reserve seed call", err)
+		releases[i] = release
+	}
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+	if _, err := discovery.acquireSeed(ctx, "provider", true); err != context.Canceled {
+		t.Fatalf("canceled seed acquire = %v", err)
+	}
+	independent := NewDiscovery()
+	other, err := independent.acquireSeed(t.Context(), "provider", true)
+	testutil.FailErr(t, "reserve independent seed call", err)
+	other()
+	releases[0]()
+	next, err := discovery.acquireSeed(t.Context(), "provider", true)
+	testutil.FailErr(t, "reserve released seed call", err)
+	releases[0]()
+	if _, err := discovery.acquireSeed(ctx, "provider", true); err != context.Canceled {
+		t.Fatalf("duplicate release freed a later seed call: %v", err)
+	}
+	next()
+	for _, release := range releases {
+		release()
+	}
+}

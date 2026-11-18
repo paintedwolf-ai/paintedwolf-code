@@ -37,7 +37,7 @@ func TestFetchURLImageWithoutDest(t *testing.T) {
 
 	tempDir := t.TempDir()
 	reg := tools.NewDefaultRegistry()
-	deps := ToolDeps{FetchBudget: NewFetchBudget(DefaultFetchURLLimits()),
+	deps := ToolDeps{Discovery: NewDiscovery(), FetchBudget: NewFetchBudget(DefaultFetchURLLimits()),
 		AddressOrigin: sourceAlways,
 		VisualScreen:  visualscreen.NewGate(visualscreen.NewScanner(nil), nil, nil),
 	}
@@ -108,7 +108,7 @@ func TestFetchURLTextModeImageKeepsRawBytes(t *testing.T) {
 	defer srv.Close()
 
 	reg := tools.NewDefaultRegistry()
-	testutil.FailErr(t, "RegisterToolsWithFactory", RegisterToolsWithFactory(reg, ToolDeps{FetchBudget: NewFetchBudget(DefaultFetchURLLimits()), AddressOrigin: sourceAlways}, nil))
+	testutil.FailErr(t, "RegisterToolsWithFactory", RegisterToolsWithFactory(reg, ToolDeps{Discovery: NewDiscovery(), FetchBudget: NewFetchBudget(DefaultFetchURLLimits()), AddressOrigin: sourceAlways}, nil))
 	tctx := tools.ToolContext{
 		Identity: tools.InvocationIdentity{SessionID: "s1",
 			ToolCallID: "call1"},
@@ -153,7 +153,7 @@ func TestFetchURLNonImageBinaryUnsupported(t *testing.T) {
 
 	tempDir := t.TempDir()
 	reg := tools.NewDefaultRegistry()
-	deps := ToolDeps{FetchBudget: NewFetchBudget(DefaultFetchURLLimits()), AddressOrigin: sourceAlways}
+	deps := ToolDeps{Discovery: NewDiscovery(), FetchBudget: NewFetchBudget(DefaultFetchURLLimits()), AddressOrigin: sourceAlways}
 	testutil.FailErr(t, "RegisterToolsWithFactory", RegisterToolsWithFactory(reg, deps, nil))
 
 	tctx := tools.ToolContext{
@@ -198,7 +198,7 @@ func TestFetchURLImageSecretScreeningWithheld(t *testing.T) {
 		return secretmatch.Resolution{Decision: secretmatch.Withhold}, nil
 	})
 
-	deps := ToolDeps{FetchBudget: NewFetchBudget(DefaultFetchURLLimits()),
+	deps := ToolDeps{Discovery: NewDiscovery(), FetchBudget: NewFetchBudget(DefaultFetchURLLimits()),
 		AddressOrigin: sourceAlways,
 		VisualScreen:  gate,
 	}

@@ -25,6 +25,8 @@ func testHTTPServer(t *testing.T, contentType, body string) string {
 // channel admits the given URLs (site roots or page URLs). Summarizer is
 // failIfCalled — Search must not invoke the model.
 func discovererSeedingURLs(t *testing.T, seedURLs ...string) *directDiscoverer {
+	discovery := NewDiscovery()
+
 	t.Helper()
 	const id = "hn"
 	hits := make([]WebHit, 0, len(seedURLs))
@@ -45,7 +47,7 @@ func discovererSeedingURLs(t *testing.T, seedURLs ...string) *directDiscoverer {
 	}
 	reg := NewRegistry(testCatalog(t), nil)
 	reg.Register(&stubSeedProvider{id: id, hits: hits})
-	return &directDiscoverer{
+	return &directDiscoverer{discovery: discovery,
 		summarizer: &failIfCalledSummarizer{},
 		registry:   reg,
 		settings:   testSeedSettings(id),
@@ -84,6 +86,8 @@ func discovererSeedingURLsWithIndex(t *testing.T, index *webindex.Store, seedURL
 // providerBackedDiscoverer returns a user-origin discoverer that admits one
 // titled hit at liveURL. Summarizer is failIfCalled.
 func providerBackedDiscoverer(t *testing.T, providerID, queryTitle, liveURL string) *directDiscoverer {
+	discovery := NewDiscovery()
+
 	t.Helper()
 	reg := NewRegistry(testCatalog(t), nil)
 	reg.Register(&stubSeedProvider{
@@ -95,7 +99,7 @@ func providerBackedDiscoverer(t *testing.T, providerID, queryTitle, liveURL stri
 			Provider: providerID,
 		}},
 	})
-	return &directDiscoverer{
+	return &directDiscoverer{discovery: discovery,
 		summarizer: &failIfCalledSummarizer{},
 		registry:   reg,
 		settings:   testSeedSettings(providerID),

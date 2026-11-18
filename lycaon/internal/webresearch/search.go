@@ -17,7 +17,8 @@ import (
 
 // SearchOptions configures a web_search invocation.
 type SearchOptions struct {
-	Query string
+	Discovery *Discovery
+	Query     string
 	// Rerank blends the decision engine into verified memory hits.
 	Rerank decide.Reranker
 	// Period is the declared time window. The zero value is the current window;
@@ -42,6 +43,9 @@ type SearchOptions struct {
 // beside catalog providers — and RRF-fuses their results.
 func Search(ctx context.Context, opts SearchOptions) WebSearchResult {
 	q := strings.TrimSpace(opts.Query)
+	if opts.Index != nil && opts.Discovery == nil {
+		return WebSearchResult{Error: "discovery required for index memory"}
+	}
 	if q == "" {
 		return WebSearchResult{
 			OK:     false,
@@ -360,7 +364,7 @@ func buildFanOut(ctx context.Context, query string, maxResults int, opts SearchO
 		index := opts.Index
 		tasks = append(tasks, fanTask{
 			run: func() providerOutcome {
-				return searchIndexMemory(ctx, index, opts.Rerank, query, opts.Period, maxResults)
+				return opts.Discovery.searchIndexMemory(ctx, index, opts.Rerank, query, opts.Period, maxResults)
 			},
 		})
 	}

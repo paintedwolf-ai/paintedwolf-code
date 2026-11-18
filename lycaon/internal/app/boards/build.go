@@ -140,12 +140,12 @@ func (r *Runtime) WireBoardAndResearch(ctx context.Context) error {
 	r.WebCreds = r.WebRuntime.Creds
 	webCat, webCfg, webReg := r.WebRuntime.Catalog, r.WebRuntime.Config, r.WebRuntime.Registry
 	llmReg, llmPol := r.deps.Providers.RegistryPolicy()
-	r.WebDiscoverer = webresearch.NewDirectDiscovererFactory(r.deps.Storage.WebIndex, webReg, r.WebCreds, webCfg, webCat, r.deps.Decisions.Rerank)
+	r.WebDiscoverer = webresearch.NewDirectDiscovererFactory(r.WebRuntime.Discovery, r.deps.Storage.WebIndex, webReg, r.WebCreds, webCfg, webCat, r.deps.Decisions.Rerank)
 	r.deps.Execution.Host.Web.SetDirectDiscovererFactory(r.WebDiscoverer)
 
 	if r.deps.Storage.WebIndex != nil {
 		webReg.AttachQuotaStore(r.deps.Storage.WebIndex)
-		r.WebWarmer = webresearch.NewWarmer(r.deps.Storage.WebIndex, llmReg, llmPol, webCfg)
+		r.WebWarmer = webresearch.NewWarmer(r.WebRuntime.Discovery, r.deps.Storage.WebIndex, llmReg, llmPol, webCfg)
 		warmer := r.WebWarmer
 		r.deps.Resources.Track("web-warmer", 90, func(context.Context) error { warmer.Close(); return nil })
 		r.WebWarmer.Cost = r.deps.Providers.Costs
@@ -160,6 +160,7 @@ func (r *Runtime) WireBoardAndResearch(ctx context.Context) error {
 	}
 
 	deps := webresearch.ToolDeps{
+		Discovery:   r.WebRuntime.Discovery,
 		FetchBudget: r.WebRuntime.FetchBudget,
 		Creds:       r.WebCreds,
 		Config:      webCfg,

@@ -21,6 +21,8 @@ type liveQueryCase struct {
 // Run with LYCAON_LIVE_DIRECT_FETCH=1:
 // ./task test:digest -- ./internal/webresearch -run LiveSearchQuality -count=1 -timeout=5m
 func TestDirectLiveSearchQuality(t *testing.T) {
+	discovery := NewDiscovery()
+
 	skipUnlessLiveDirectFetch(t)
 
 	cases := []liveQueryCase{
@@ -60,7 +62,8 @@ func TestDirectLiveSearchQuality(t *testing.T) {
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			resetDirectState(2)
+			discovery.slots = make(chan struct{}, 2)
+			resetCrawlState()
 			plan, err := parseSeedsJSON(tc.seedJSON)
 			if err != nil {
 				t.Fatalf("parseSeedsJSON: %v", err)
@@ -97,8 +100,11 @@ func TestDirectLiveSearchQuality(t *testing.T) {
 }
 
 func TestDirectLiveIndexFindsReviewFromHostLeads(t *testing.T) {
+	discovery := NewDiscovery()
+
 	skipUnlessLiveDirectFetch(t)
-	resetDirectState(1)
+	discovery.slots = make(chan struct{}, 1)
+	resetCrawlState()
 	seedJSON := `{"seeds":["https://www.theverge.com"],"fresh":true,"expand":["Steam Machine review"],"leads":[{"title":"The Steam Machine review","host":"www.theverge.com"}]}`
 	plan, err := parseSeedsJSON(seedJSON)
 	if err != nil {

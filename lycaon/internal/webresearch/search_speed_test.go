@@ -9,11 +9,12 @@ import (
 )
 
 func TestWholeSearchResultCacheReplay(t *testing.T) {
-	resetDirectMemory()
+	discovery := NewDiscovery()
+
 	fake := &FakeDirectDiscoverer{
 		Hits: []WebHit{{URL: "https://a.example/widget", Title: "Widget guide", Snippet: "widget guide content"}},
 	}
-	opts := SearchOptions{
+	opts := SearchOptions{Discovery: discovery, Registry: NewRegistry(testCatalog(t), nil),
 		Query:      "widget frobnicator guide",
 		Limit:      2,
 		Settings:   DefaultSettings(nil, nil, nil),
@@ -36,11 +37,12 @@ func TestWholeSearchResultCacheReplay(t *testing.T) {
 }
 
 func TestWholeSearchResultCacheCanBeBypassedForProviderTests(t *testing.T) {
-	resetDirectMemory()
+	discovery := NewDiscovery()
+
 	fake := &FakeDirectDiscoverer{
 		Hits: []WebHit{{URL: "https://a.example/widget", Title: "Widget guide", Snippet: "widget guide content"}},
 	}
-	opts := SearchOptions{
+	opts := SearchOptions{Discovery: discovery, Registry: NewRegistry(testCatalog(t), nil),
 		Query:      "widget provider health probe",
 		Limit:      2,
 		Settings:   DefaultSettings(nil, nil, nil),
@@ -132,7 +134,10 @@ func TestFrontierPlateauAfterZeroGainRound(t *testing.T) {
 }
 
 func TestPickSeedsHedgeWinsBeforeSlowPrimary(t *testing.T) {
-	resetDirectState(1)
+	discovery := NewDiscovery()
+
+	discovery.slots = make(chan struct{}, 1)
+	resetCrawlState()
 	prevDelay := seedHedgeDelay
 	seedHedgeDelay = 20 * time.Millisecond
 	t.Cleanup(func() { seedHedgeDelay = prevDelay })
@@ -140,7 +145,7 @@ func TestPickSeedsHedgeWinsBeforeSlowPrimary(t *testing.T) {
 	sum := &hedgeRaceSummarizer{
 		slimResponse: `{"seeds":["https://fast.example.com"],"fresh":false,"expand":["widget"],"leads":[]}`,
 	}
-	d := &directDiscoverer{summarizer: sum, seedSharedProvider: true}
+	d := &directDiscoverer{discovery: discovery, summarizer: sum, seedSharedProvider: true}
 	stats := newSearchStats("t-hedge")
 	ctx := withSearchStats(context.Background(), stats)
 	plan, err := d.pickSeedsCached(ctx, "widget install guide", CurrentPeriod(), 8, nil, nil)
@@ -156,12 +161,15 @@ func TestPickSeedsHedgeWinsBeforeSlowPrimary(t *testing.T) {
 }
 
 func TestPickSeedsHedgedSkipsRaceWhenDedicated(t *testing.T) {
-	resetDirectState(1)
+	discovery := NewDiscovery()
+
+	discovery.slots = make(chan struct{}, 1)
+	resetCrawlState()
 
 	sum := &scriptedSummarizer{responses: []string{
 		`{"seeds":["https://fast.example.com"],"fresh":false,"expand":["widget"],"leads":[]}`,
 	}}
-	d := &directDiscoverer{
+	d := &directDiscoverer{discovery: discovery,
 		summarizer:         sum,
 		seedSharedProvider: false,
 	}

@@ -29,8 +29,11 @@ func seedCutTestSite(t *testing.T) *httptest.Server {
 
 // Slow provider probes are canceled once another channel supplies crawl work.
 func TestProviderSeedChannelsCutWhenFastContributorLands(t *testing.T) {
+	discovery := NewDiscovery()
+
 	allowLoopbackFetch(t)
-	resetDirectState(1)
+	discovery.slots = make(chan struct{}, 1)
+	resetCrawlState()
 
 	prevGrace := providerSeedGraceTimeout
 	providerSeedGraceTimeout = 200 * time.Millisecond
@@ -68,7 +71,7 @@ providers:
 	})
 	reg.Register(&slowSleepStubProvider{id: "slow_seed", delay: 30 * time.Second})
 
-	d := &directDiscoverer{
+	d := &directDiscoverer{discovery: discovery,
 		summarizer: &failIfCalledSummarizer{},
 		registry:   reg,
 		settings:   Settings{},

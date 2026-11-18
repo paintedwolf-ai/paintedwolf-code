@@ -28,8 +28,11 @@ func docSiteHandler(llmsBody string, pathStatus map[string]int) http.HandlerFunc
 }
 
 func TestDirectScenarioMultiSiteMixedSeeds(t *testing.T) {
+	discovery := NewDiscovery()
+
 	allowLoopbackFetch(t)
-	resetDirectState(1)
+	discovery.slots = make(chan struct{}, 1)
+	resetCrawlState()
 
 	alpine := httptest.NewServer(docSiteHandler("", nil))
 	t.Cleanup(alpine.Close)
@@ -57,8 +60,11 @@ func TestDirectScenarioMultiSiteMixedSeeds(t *testing.T) {
 }
 
 func TestDirectScenarioIrrelevantPageSeedRanksBelowIndexMatch(t *testing.T) {
+	discovery := NewDiscovery()
+
 	allowLoopbackFetch(t)
-	resetDirectState(1)
+	discovery.slots = make(chan struct{}, 1)
+	resetCrawlState()
 
 	srv := httptest.NewServer(docSiteHandler("", nil))
 	t.Cleanup(srv.Close)
@@ -81,8 +87,11 @@ func TestDirectScenarioIrrelevantPageSeedRanksBelowIndexMatch(t *testing.T) {
 // nothing in any live index carries a rank signal for the query, the search
 // errors instead of guessing URLs or surfacing zero-signal pages.
 func TestDirectScenarioNoMatchQueryErrors(t *testing.T) {
+	discovery := NewDiscovery()
+
 	allowLoopbackFetch(t)
-	resetDirectState(1)
+	discovery.slots = make(chan struct{}, 1)
+	resetCrawlState()
 
 	srv := httptest.NewServer(docSiteHandler("", nil))
 	t.Cleanup(srv.Close)
@@ -96,8 +105,11 @@ func TestDirectScenarioNoMatchQueryErrors(t *testing.T) {
 }
 
 func TestDirectScenarioEightSeeds(t *testing.T) {
+	discovery := NewDiscovery()
+
 	allowLoopbackFetch(t)
-	resetDirectState(1)
+	discovery.slots = make(chan struct{}, 1)
+	resetCrawlState()
 
 	seedURLs := make([]string, 8)
 	for i := range seedURLs {
@@ -119,8 +131,11 @@ func TestDirectScenarioEightSeeds(t *testing.T) {
 }
 
 func TestDirectScenarioParallelSearches(t *testing.T) {
+	discovery := NewDiscovery()
+
 	allowLoopbackFetch(t)
-	resetDirectState(2)
+	discovery.slots = make(chan struct{}, 2)
+	resetCrawlState()
 
 	srv := httptest.NewServer(docSiteHandler("", nil))
 	t.Cleanup(srv.Close)
@@ -151,8 +166,11 @@ func TestDirectScenarioParallelSearches(t *testing.T) {
 }
 
 func TestDirectScenarioEndToEndSearchFanOut(t *testing.T) {
+	discovery := NewDiscovery()
+
 	allowLoopbackFetch(t)
-	resetDirectState(1)
+	discovery.slots = make(chan struct{}, 1)
+	resetCrawlState()
 
 	srv := httptest.NewServer(docSiteHandler("", nil))
 	t.Cleanup(srv.Close)
@@ -160,7 +178,7 @@ func TestDirectScenarioEndToEndSearchFanOut(t *testing.T) {
 	srv.Config.Handler = docSiteHandler(llms, nil)
 
 	d := discovererSeedingURLs(t, srv.URL)
-	result := Search(context.Background(), SearchOptions{
+	result := Search(context.Background(), SearchOptions{Discovery: discovery,
 		Query:      "useEffect useMemo react hooks",
 		Settings:   Settings{EnabledProviders: []string{"direct"}},
 		Discoverer: d,
@@ -174,8 +192,11 @@ func TestDirectScenarioEndToEndSearchFanOut(t *testing.T) {
 }
 
 func TestDirectScenarioFetchFailureDropsHit(t *testing.T) {
+	discovery := NewDiscovery()
+
 	allowLoopbackFetch(t)
-	resetDirectState(1)
+	discovery.slots = make(chan struct{}, 1)
+	resetCrawlState()
 
 	deadPath := "/dead-page.md"
 	srv := httptest.NewServer(docSiteHandler("", nil))
@@ -192,8 +213,11 @@ func TestDirectScenarioFetchFailureDropsHit(t *testing.T) {
 
 // Sparse sites use their live root as the final probe candidate.
 func TestDirectScenarioSparseSiteFallsBackToRoot(t *testing.T) {
+	discovery := NewDiscovery()
+
 	allowLoopbackFetch(t)
-	resetDirectState(1)
+	discovery.slots = make(chan struct{}, 1)
+	resetCrawlState()
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/" || r.URL.Path == "" {
@@ -254,8 +278,11 @@ func TestRankSiteLinksPrefersQueryPhrases(t *testing.T) {
 }
 
 func TestDirectScenarioSeedPageLinkHarvest(t *testing.T) {
+	discovery := NewDiscovery()
+
 	allowLoopbackFetch(t)
-	resetDirectState(1)
+	discovery.slots = make(chan struct{}, 1)
+	resetCrawlState()
 
 	review := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/html")
@@ -329,8 +356,11 @@ func TestSelectVerifyHitsBreadthFirst(t *testing.T) {
 }
 
 func TestDirectScenarioRobotsDisallowBlocksIndex(t *testing.T) {
+	discovery := NewDiscovery()
+
 	allowLoopbackFetch(t)
-	resetDirectState(1)
+	discovery.slots = make(chan struct{}, 1)
+	resetCrawlState()
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/robots.txt" {
@@ -359,8 +389,11 @@ func TestDirectScenarioRobotsDisallowBlocksIndex(t *testing.T) {
 }
 
 func TestDirectScenarioHubFallbackForIndexlessSite(t *testing.T) {
+	discovery := NewDiscovery()
+
 	allowLoopbackFetch(t)
-	resetDirectState(1)
+	discovery.slots = make(chan struct{}, 1)
+	resetCrawlState()
 
 	// No llms.txt, no sitemap, no feeds — but the homepage links its docs.
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -392,8 +425,11 @@ func TestDirectScenarioHubFallbackForIndexlessSite(t *testing.T) {
 }
 
 func TestDirectScenarioFreshQueryPrefersRecentFeedItems(t *testing.T) {
+	discovery := NewDiscovery()
+
 	allowLoopbackFetch(t)
-	resetDirectState(1)
+	discovery.slots = make(chan struct{}, 1)
+	resetCrawlState()
 
 	recent := time.Now().Add(-10 * 24 * time.Hour).Format(time.RFC1123Z)
 	old := time.Now().Add(-2 * 365 * 24 * time.Hour).Format(time.RFC1123Z)

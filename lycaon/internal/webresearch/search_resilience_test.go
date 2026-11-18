@@ -57,7 +57,7 @@ func TestFanOutCutsSlowProviderWhenBudgetMet(t *testing.T) {
 		health: reg.ensureHealthGate("slow"),
 	})
 
-	result := Search(context.Background(), SearchOptions{
+	result := Search(context.Background(), SearchOptions{Discovery: NewDiscovery(),
 		Query: "widget probe",
 		Limit: 1,
 		Settings: Settings{
@@ -92,7 +92,7 @@ func TestFanOutGraceCutsStragglersWithPartialHits(t *testing.T) {
 		health: reg.ensureHealthGate("slow"),
 	})
 
-	result := Search(context.Background(), SearchOptions{
+	result := Search(context.Background(), SearchOptions{Discovery: NewDiscovery(),
 		Query: "widget probe",
 		Limit: 5,
 		Settings: Settings{

@@ -35,10 +35,11 @@ type FetchWarmHook func(ctx context.Context, sessionID, toolCallID, pageURL, tit
 
 // ToolDeps wires catalog-backed search into native tools.
 type ToolDeps struct {
-	Creds    *CredentialStore
-	Config   *ConfigStore
-	Catalog  *Catalog
-	Registry *Registry
+	Discovery *Discovery
+	Creds     *CredentialStore
+	Config    *ConfigStore
+	Catalog   *Catalog
+	Registry  *Registry
 	// Index is the persistent web index; nil disables ingestion and memory.
 	Index *webindex.Store
 	// Rerank blends the decision engine into verified page order.
@@ -74,6 +75,9 @@ const (
 func RegisterToolsWithFactory(reg *tools.DefaultRegistry, deps ToolDeps, getFactory FactoryGetter) error {
 	if reg == nil {
 		return fmt.Errorf("registry required")
+	}
+	if deps.Discovery == nil {
+		return fmt.Errorf("discovery required")
 	}
 	if deps.FetchBudget == nil {
 		return fmt.Errorf("fetch budget required")
@@ -117,6 +121,7 @@ func RegisterToolsWithFactory(reg *tools.DefaultRegistry, deps ToolDeps, getFact
 		// The host owns provider selection and parallel scheduling.
 		rerankLedger := decide.NewRerankLedger()
 		result := Search(ctx, SearchOptions{
+			Discovery:  deps.Discovery,
 			Query:      query,
 			Period:     period,
 			Limit:      limit,
@@ -283,7 +288,7 @@ func WireRuntime(ctx context.Context, exchange Exchange) (Runtime, error) {
 	if err != nil {
 		return Runtime{}, fmt.Errorf("fetch_url limits: %w", err)
 	}
-	return Runtime{Creds: creds, Config: cfg, Catalog: cat, Registry: reg, FetchBudget: NewFetchBudget(limits)}, nil
+	return Runtime{Discovery: NewDiscovery(), Creds: creds, Config: cfg, Catalog: cat, Registry: reg, FetchBudget: NewFetchBudget(limits)}, nil
 }
 
 func projectDirFrom(tctx tools.ToolContext) string {

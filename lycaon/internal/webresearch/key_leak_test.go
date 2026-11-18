@@ -102,7 +102,7 @@ func TestWebResearchKeyLeakInvariant(t *testing.T) {
 					// 2. High-level Search
 					settings := DefaultSettings(creds, cfg, cat)
 					settings.Keys[entry.ID] = sentinelKeySecret
-					searchRes := Search(t.Context(), SearchOptions{
+					searchRes := Search(t.Context(), SearchOptions{Discovery: NewDiscovery(),
 						Query:           "test query",
 						Limit:           5,
 						Provider:        entry.ID,

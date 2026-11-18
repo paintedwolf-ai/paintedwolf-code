@@ -354,6 +354,7 @@ func (d *directDiscoverer) indexMemoryCandidates(ctx context.Context, query stri
 
 // hostCrawler delivers each completed host crawl without waiting for other hosts.
 type hostCrawler struct {
+	discovery *Discovery
 	ctx       context.Context
 	mu        sync.Mutex
 	launched  map[string]struct{}
@@ -369,11 +370,12 @@ type hostCrawler struct {
 
 	// The discovery slot spans the first crawl through frontier completion.
 	slotOnce sync.Once
-	slotHeld bool
+	release  func()
 }
 
-func newHostCrawler(ctx context.Context) *hostCrawler {
+func newHostCrawler(ctx context.Context, discovery *Discovery) *hostCrawler {
 	return &hostCrawler{
+		discovery: discovery,
 		ctx:       ctx,
 		launched:  make(map[string]struct{}),
 		results:   make(map[string][]indexCandidate),
@@ -384,8 +386,8 @@ func newHostCrawler(ctx context.Context) *hostCrawler {
 }
 
 // newHostCrawlerPreSlotted returns a crawler with a pre-acquired discovery slot.
-func newHostCrawlerPreSlotted(ctx context.Context) *hostCrawler {
-	h := newHostCrawler(ctx)
+func newHostCrawlerPreSlotted(ctx context.Context, discovery *Discovery) *hostCrawler {
+	h := newHostCrawler(ctx, discovery)
 	h.slotOnce.Do(func() {})
 	return h
 }
@@ -484,25 +486,23 @@ func (h *hostCrawler) undrained() bool {
 	return len(h.drained) < len(h.completed)
 }
 
-// ensureSlot acquires the global discovery slot exactly once for this search.
+// ensureSlot reserves discovery capacity for this search.
 func (h *hostCrawler) ensureSlot() {
 	h.slotOnce.Do(func() {
-		if acquireDirectSlot(h.ctx) == nil {
-			h.slotHeld = true
-		}
+		h.release, _ = h.discovery.acquire(h.ctx)
 	})
 }
 
 func (h *hostCrawler) slotAcquired() bool {
 	h.ensureSlot()
-	return h.slotHeld
+	return h.release != nil
 }
 
 // releaseSlot frees the discovery slot if this search acquired it.
 func (h *hostCrawler) releaseSlot() {
 	h.slotOnce.Do(func() {})
-	if h.slotHeld {
-		releaseDirectSlot()
-		h.slotHeld = false
+	if h.release != nil {
+		h.release()
+		h.release = nil
 	}
 }
