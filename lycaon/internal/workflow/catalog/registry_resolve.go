@@ -76,22 +76,10 @@ func mergeManifestTiers(ctx context.Context, projectDir, sessionID string, sessi
 	if catalogFor != nil {
 		catalog = catalogFor(ctx, projectDir, sessionID)
 	}
-	bundled, _, err := workflowdef.LoadPackManifestsForCatalog(catalog)
+	includeProject := strings.TrimSpace(projectDir) != "" && projectTierApplies != nil && projectTierApplies(ctx, projectDir)
+	candidates, excluded, err := loadProjectCandidates(catalog, projectDir, includeProject, "")
 	if err != nil {
 		return nil, nil, nil, err
-	}
-	if _, err := workflowdef.ResolveAllManifests(bundled); err != nil {
-		return nil, nil, nil, err
-	}
-	candidates := manifestCandidates{}
-	for _, m := range bundled {
-		candidates.add(manifestCandidate{manifest: m, scope: string(api.WorkflowScopeBundled)})
-	}
-	var excluded []api.ExcludedWorkflow
-	if strings.TrimSpace(projectDir) != "" && projectTierApplies != nil && projectTierApplies(ctx, projectDir) {
-		if err := collectProjectManifests(projectDir, candidates, &excluded); err != nil {
-			return nil, nil, nil, err
-		}
 	}
 	sessionID = strings.TrimSpace(sessionID)
 	if sessionID != "" && sessionStore != nil {

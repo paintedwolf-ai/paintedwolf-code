@@ -18,17 +18,17 @@ func TestPublishAuthoredWorkflowAndReopen(t *testing.T) {
 	for _, tc := range []struct {
 		name, leaf string
 		reject     bool
-	}{{"inherit", "phase_is:build", false}, {"bundled override", "gate_satisfied:plan_stub_valid", true}} {
+	}{{"inherit", "phase_is:build", false}, {"bundled override", "gate_satisfied:worker_cycle_ready", true}} {
 		t.Run(tc.name, func(t *testing.T) {
 			ctx := t.Context()
 			project := t.TempDir()
 			p, store := testPersister(t)
 			c := testComposer(t)
 			c.SessionStore = store
-			c.Policy = nil
+			c.Policy = &workflowcomposition.ComposePolicy{MaxPhases: 8}
 			p.Policy = nil
 			const id = "custom-source"
-			source := "id: " + id + "\nversion: 1.0.0\nextends: plan@1.0.0\nphases:\n  - id: research\n    activity_label: Researching\n    next: build\n    complete_when: " + tc.leaf + "\n"
+			source := "id: " + id + "\nversion: 1.0.0\nextends: plan@1.0.0\nphases:\n  - id: research\n    activity_label: Researching\n    complete_when: " + tc.leaf + "\n"
 			_, err := c.Compose(ctx, workflowcomposition.ComposeRequest{SessionID: "s", ManifestYAML: []byte(source), CreatedBy: workflowdrafts.Coordinator})
 			testutil.FailErr(t, "compose workflow", err)
 			draft, err := store.Get(ctx, "s", id, "1.0.0")
@@ -57,7 +57,10 @@ func TestPublishAuthoredWorkflowAndReopen(t *testing.T) {
 			}
 			resolver := workflowcatalog.Resolver{ProjectTierApplies: func(context.Context, string) bool { return true }}
 			m, err := resolver.ForSession(ctx, project, "", id, "1.0.0")
-			testutil.FailErr(t, "reopen project workflow", err)
+			if err != nil {
+				_, _, excluded, resolveErr := resolver.ResolveWithExcluded(ctx, project, "")
+				t.Fatalf("reopen: %v, excluded: %+v, resolve: %v", err, excluded, resolveErr)
+			}
 			research, ok := m.PhaseByID("research")
 			if !ok || research.CompleteWhen != tc.leaf || len(m.Phases) < 2 || m.Trigger != "/custom-source" {
 				t.Fatalf("resolved workflow = %+v", m)

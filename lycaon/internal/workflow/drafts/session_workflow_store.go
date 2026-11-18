@@ -52,6 +52,7 @@ type Composition struct {
 type Store interface {
 	Upsert(ctx context.Context, sessionID string, manifestYAML []byte, createdBy Actor, composition *Composition) error
 	Delete(ctx context.Context, sessionID, workflowID, version string) error
+	DeletePublished(ctx context.Context, draft Record) error
 	ListBySession(ctx context.Context, sessionID string) ([]Record, error)
 	Get(ctx context.Context, sessionID, workflowID, version string) (*Record, error)
 }

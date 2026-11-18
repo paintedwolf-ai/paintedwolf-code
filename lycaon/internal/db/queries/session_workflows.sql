@@ -41,3 +41,8 @@ INSERT INTO workflow_run_manifests (run_id, manifest_yaml) VALUES (?, ?);
 
 -- name: GetRunManifest :one
 SELECT manifest_yaml FROM workflow_run_manifests WHERE run_id = ?;
+
+-- name: DeletePublishedWorkflowDraft :exec
+DELETE FROM session_workflows
+WHERE session_id = ? AND workflow_id = ? AND version = ?
+  AND manifest_yaml = ? AND authored_yaml = ? AND created_at = ?;

@@ -1,11 +1,9 @@
 package composition
 
 import (
-	"fmt"
 	"strconv"
 
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
-	workflowvalidation "github.com/lycaon/lycaon/internal/workflow/validation"
 	"gopkg.in/yaml.v3"
 )
 
@@ -26,12 +24,6 @@ func projectManifestYAML(authored, trigger string, effective workflowdef.Manifes
 	data, err := yaml.Marshal(&doc)
 	if err != nil {
 		return "", err
-	}
-	if _, err := workflowdef.ParseManifestYAML(data); err != nil {
-		if ds := workflowvalidation.PredicateLoadErrors(err, ""); len(ds) > 0 {
-			return "", &ComposeValidationFailed{Errors: ds}
-		}
-		return "", fmt.Errorf("validate project manifest: %w", err)
 	}
 	return string(data), nil
 }

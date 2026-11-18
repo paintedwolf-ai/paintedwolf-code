@@ -10,6 +10,33 @@ import (
 	"database/sql"
 )
 
+const deletePublishedWorkflowDraft = `-- name: DeletePublishedWorkflowDraft :exec
+DELETE FROM session_workflows
+WHERE session_id = ? AND workflow_id = ? AND version = ?
+  AND manifest_yaml = ? AND authored_yaml = ? AND created_at = ?
+`
+
+type DeletePublishedWorkflowDraftParams struct {
+	SessionID    string `json:"session_id"`
+	WorkflowID   string `json:"workflow_id"`
+	Version      string `json:"version"`
+	ManifestYaml string `json:"manifest_yaml"`
+	AuthoredYaml string `json:"authored_yaml"`
+	CreatedAt    string `json:"created_at"`
+}
+
+func (q *Queries) DeletePublishedWorkflowDraft(ctx context.Context, arg DeletePublishedWorkflowDraftParams) error {
+	_, err := q.db.ExecContext(ctx, deletePublishedWorkflowDraft,
+		arg.SessionID,
+		arg.WorkflowID,
+		arg.Version,
+		arg.ManifestYaml,
+		arg.AuthoredYaml,
+		arg.CreatedAt,
+	)
+	return err
+}
+
 const deleteSessionWorkflow = `-- name: DeleteSessionWorkflow :execrows
 DELETE FROM session_workflows
 WHERE session_id = ? AND workflow_id = ? AND version = ?
