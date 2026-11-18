@@ -640,6 +640,8 @@ print('fixture '+name, flush=True)'''))
     def test_a_hosted_runner_snapshot_keeps_the_checkouts_rust_target(self):
         """A hosted runner verifies only its job's source, so its restored compiler caches stay in use."""
         self.env["GITHUB_ACTIONS"] = "true"
+        self.catalog["environment"]["prefixes"].append("GITHUB_")
+        self.save_catalog()
         self.queue.resume()
         self.collect(self.start("build"))
         record = self.records()[0]
