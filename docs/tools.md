@@ -1172,6 +1172,8 @@ Requesting `command` does not automatically load `http_request`; `curl` in a pro
 
 Direct search uses a catalogued set of keyless sources with declared roles, pacing, and normalization; user-configured providers join the effective set according to settings. Provider ids, endpoints, and enablement live in the generated catalog (`lycaon/config/packs/painted-wolf/web-research/host/web-research-providers.yaml`), not this page.
 
+Web research opens its preferences and credential namespace from explicit storage resources. Missing preferences use defaults; unreadable or malformed preferences fail opening without replacing the file. Credential opening loads existing encrypted values and reports vault errors. Runtime composition selects platform paths; isolated tests use temporary resources through the same constructors.
+
 Search results are untrusted inbound content. Provider text is normalized at one fan-in, provenance is retained, and fetched bodies are marked as data before entering model context. Outbound destination and secret policy still apply. Caching and pacing are explicit and bounded: a cached result states that it is a repeat, and provider cooldown does not turn one failure into a permanent absence. Privacy behavior and the outbound inventory are in [Privacy](privacy.md).
 
 ### Shared operation invocation contracts
