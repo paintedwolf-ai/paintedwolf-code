@@ -11,6 +11,7 @@ import (
 	"sync"
 
 	"github.com/getkin/kin-openapi/openapi3"
+	"github.com/google/uuid"
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -67,17 +68,25 @@ func (s *conformanceSweep) checkIdempotent(ctx context.Context, first conformanc
 	} else if !maps.Equal(before, after) {
 		s.findings.add(ruleKeyedOperationsAreIdempotent, op.ID, "replay", "replays changed the rows naming the key: %v, then %v", before, after)
 	}
-	changed, ok := changedBody(op.JSONBody, first.req.body)
-	if !ok {
+	changed := changedBodies(op.JSONBody, first.req.body)
+	if len(changed) == 0 {
 		// A body of nothing but its key cannot be sent changed.
 		s.findings.note("%s: changed body: the body carries only its key", op.ID)
 		return
 	}
-	conflict := first.req
-	conflict.probe, conflict.body = "changed body", changed
-	if ex := s.send(ctx, conflict); ex.status != http.StatusConflict || ex.code() != string(wire.ApiErrorCodeIdempotencyConflict) {
-		s.findings.add(ruleKeyedOperationsAreIdempotent, op.ID, conflict.probe, "answered %s, want 409 %s", ex.outcome(), wire.ApiErrorCodeIdempotencyConflict)
+	// Some properties are preconditions a retry may refresh; the key must
+	// still guard the operation's input, so some change must be refused.
+	var answers []string
+	for _, name := range slices.Sorted(maps.Keys(changed)) {
+		conflict := first.req
+		conflict.probe, conflict.body = "changed body", changed[name]
+		ex := s.send(ctx, conflict)
+		if ex.status == http.StatusConflict && ex.code() == string(wire.ApiErrorCodeIdempotencyConflict) {
+			return
+		}
+		answers = append(answers, name+": "+ex.outcome())
 	}
+	s.findings.add(ruleKeyedOperationsAreIdempotent, op.ID, "changed body", "no change answered 409 %s (%s)", wire.ApiErrorCodeIdempotencyConflict, strings.Join(answers, ", "))
 }
 
 func (s *conformanceSweep) compareReplay(first, replay conformanceExchange) {
@@ -124,39 +133,43 @@ func bodyKey(body []byte) string {
 	return key
 }
 
-// changedBody alters one property of body that its schema leaves free: a
-// plain string, then a boolean, then a number.
-func changedBody(schema *openapi3.Schema, body []byte) ([]byte, bool) {
+// changedBodies alters body one property at a time, for each property its
+// schema leaves free: a plain string, a UUID, a boolean or a number.
+func changedBodies(schema *openapi3.Schema, body []byte) map[string][]byte {
 	var fields map[string]any
 	if json.Unmarshal(body, &fields) != nil {
-		return nil, false
+		return nil
 	}
-	names := slices.Sorted(maps.Keys(fields))
-	for _, kind := range []string{openapi3.TypeString, openapi3.TypeBoolean, openapi3.TypeInteger, openapi3.TypeNumber} {
-		for _, name := range names {
-			prop := refValue(schema.Properties[name])
-			if name == idempotencyKey || prop == nil || schemaType(prop) != kind || len(prop.Enum) > 0 || prop.Const != nil {
-				continue
+	out := map[string][]byte{}
+	for name, value := range fields {
+		prop := refValue(schema.Properties[name])
+		if name == idempotencyKey || prop == nil || len(prop.Enum) > 0 || prop.Const != nil {
+			continue
+		}
+		var changed any
+		switch v := value.(type) {
+		case string:
+			switch {
+			case prop.Format == "uuid":
+				changed = uuid.NewString()
+			case prop.Format == "" && prop.Pattern == "":
+				changed = v + "-changed"
 			}
-			switch value := fields[name].(type) {
-			case string:
-				if prop.Format != "" || prop.Pattern != "" {
-					continue
-				}
-				fields[name] = value + "-changed"
-			case bool:
-				fields[name] = !value
-			case float64:
-				if prop.Max != nil && value+1 > *prop.Max {
-					continue
-				}
-				fields[name] = value + 1
-			default:
-				continue
+		case bool:
+			changed = !v
+		case float64:
+			if prop.Max == nil || v+1 <= *prop.Max {
+				changed = v + 1
 			}
-			raw, err := json.Marshal(fields)
-			return raw, err == nil
+		}
+		if changed == nil {
+			continue
+		}
+		copied := maps.Clone(fields)
+		copied[name] = changed
+		if raw, err := json.Marshal(copied); err == nil {
+			out[name] = raw
 		}
 	}
-	return nil, false
+	return out
 }

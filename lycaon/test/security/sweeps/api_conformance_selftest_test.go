@@ -77,7 +77,7 @@ func TestConformanceSweepDetectsEachBrokenInvariant(t *testing.T) {
 		{"replay stores a second row", widgetFaults{rowPerReplay: true}, ruleKeyedOperationsAreIdempotent,
 			"renameWidget: replay: replays changed the rows naming the key: map[renames:1], then map[renames:11]"},
 		{"reused key applies a different body", widgetFaults{acceptsReuse: true}, ruleKeyedOperationsAreIdempotent,
-			"renameWidget: changed body: answered 200, want 409 idempotency_conflict"},
+			"renameWidget: changed body: no change answered 409 idempotency_conflict (label: 200)"},
 		{"limit ignored", widgetFaults{ignoresLimit: true}, rulePagination,
 			"listWidgets: walk: limit 1 answered 2 rows"},
 		{"mutation never succeeds", widgetFaults{refusesCreate: true}, ruleOperationsSucceed,

@@ -753,7 +753,7 @@ func sessionPrepareQueueUpdate(ctx context.Context, s *conformanceSweep, _ *conf
 		return successInputs{}, err
 	}
 	return sessionJSON(map[string]string{"id": chat}, map[string]any{
-		"op": "hold", "hold": false, "expected_revision": sessionInt(queue, "revision"), "operation_id": uuid.NewString(),
+		"op": "hold", "hold": false, "expected_revision": sessionInt(queue, "revision"),
 	}), nil
 }
 
