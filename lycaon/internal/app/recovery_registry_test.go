@@ -20,7 +20,6 @@ var requiredServePhaseRecovery = map[string]string{
 // recovery in the serve phase. Running both phases again on the settled store
 // reports every entry.
 func TestBuiltRecoveryRegistryShape(t *testing.T) {
-	testutil.SkipIfShort(t, "assembles the full app graph with shipped config")
 	t.Setenv("LYCAON_LLM_MOCK", "1")
 	t.Setenv("LYCAON_API_TOKEN", "test-token")
 	app, err := Build(t.Context(), testBuildConfig(t, configlayout.FindModuleRoot()))
