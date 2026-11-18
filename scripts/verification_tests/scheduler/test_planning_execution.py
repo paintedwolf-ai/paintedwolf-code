@@ -76,7 +76,7 @@ class PlanningTests(unittest.TestCase):
                 planning.validate_selection(["den:test:rust"], arguments)
 
     def test_harness_filters_use_bounded_resources_and_reject_unsupported_flags(self):
-        args = ["den:harness:test", "--", "recording-encoding-measurement.spec.ts", "--grep", "capture",
+        args = ["den:harness:test", "--", "boot.spec.ts", "--grep", "sidecar",
                 "--retries=0"]
         plan = planning.request(args, {})
         self.assertEqual(plan["stages"][0]["arguments"], args)

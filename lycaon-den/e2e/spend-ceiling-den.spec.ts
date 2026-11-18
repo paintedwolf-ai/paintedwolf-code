@@ -1,8 +1,9 @@
 import { expect, type Page } from "@playwright/test";
-import type { CostSummary, Error as WireError, SettingsLimitsPatch } from "../src/api/types.ts";
+import type { CostSummary, Error as WireError, SettingsLimitsResponse } from "../src/api/types.ts";
 import type { NoticeScope } from "../src/notices/notice-scope.ts";
 import {
   apiConfig,
+  apiJson,
   bootstrapChatSession,
   liveChatStage,
   settledChatSessionId,
@@ -164,6 +165,14 @@ webE2e.describe("spend safety ceiling den", () => {
     webE2e(
       `reached card raises the ceiling and continues after ${failureStage} failure`,
       async ({ page, request }) => {
+        // The chip reads the cost summary once at boot; later reads follow only a cost invalidation.
+        await page.route("**/v1/cost/summary**", async (route) => {
+          await route.fulfill({
+            status: 200,
+            contentType: "application/json",
+            json: costSummaryFixture({ estimated_usd: 5.12, priced: true }),
+          });
+        });
         await enableCostTracking(request!);
         const project = await bootstrapChatSession(page, request);
         const sessionId = await settledChatSessionId(page);
@@ -173,18 +182,18 @@ webE2e.describe("spend safety ceiling den", () => {
           session_spend_ceiling_usd: 5,
           spend_ceiling_enabled: true,
         });
+        // The host keeps a project ceiling only when it is tighter than the device's.
         await updateSpendCeiling(request!, {
-          session_spend_ceiling_usd: 5,
+          session_spend_ceiling_usd: 4,
           spend_ceiling_enabled: true,
         }, project.id);
-
-        await page.route("**/v1/cost/summary**", async (route) => {
-          await route.fulfill({
-            status: 200,
-            contentType: "application/json",
-            json: costSummaryFixture({ estimated_usd: 5.12, priced: true }),
-          });
-        });
+        const projectBefore = await apiJson<SettingsLimitsResponse>(
+          request!, "GET", `/v1/settings/limits?project_id=${encodeURIComponent(project.id)}`,
+        );
+        expect(projectBefore.session_spend_ceiling_nano_usd).toBe(4 * 1_000_000_000);
+        const costChip = page.getByTestId("status-chip-cost");
+        // The ratio is capped at 1 once spend passes the ceiling.
+        await expect(costChip).toHaveAttribute("data-ceiling-ratio", "1.00", { timeout: 30_000 });
 
         await page.waitForFunction(
           () =>
@@ -200,7 +209,7 @@ webE2e.describe("spend safety ceiling den", () => {
                 code: "session_spend_ceiling_reached",
                 title: "Spend ceiling reached",
                 message:
-                  "This session stopped at its spend ceiling ($5.00). It has spent about $5.12.",
+                  "This session stopped at its spend ceiling ($4.00). It has spent about $5.12.",
               },
               { kind: "session", projectId, sessionId },
             );
@@ -238,15 +247,6 @@ webE2e.describe("spend safety ceiling den", () => {
           await route.continue();
         });
 
-        const resumeWait = page.waitForRequest(
-          (req) => req.method() === "POST" && req.url().endsWith(`/v1/sessions/${sessionId}/prompts`),
-        );
-        const updateWait = page.waitForRequest(
-          (req) =>
-            req.method() === "PATCH" &&
-            req.url().includes("/v1/settings/limits") &&
-            !new URL(req.url()).searchParams.has("project_id"),
-        );
         await page.getByTestId("system-nudge-primary").click();
         let writesBeforeRetry: number | undefined;
         if (failureStage !== "none") {
@@ -258,15 +258,22 @@ webE2e.describe("spend safety ceiling den", () => {
           else expect(continuationRequests).toBe(0);
           await nudge.getByTestId("system-nudge-primary").click();
         }
-        const updateReq = await updateWait;
-        const updateBody = updateReq.postDataJSON() as SettingsLimitsPatch;
-        expect(updateBody.spend_ceiling_enabled).toBe(true);
-        expect(updateBody.session_spend_ceiling_nano_usd).toBeGreaterThan(5 * 1_000_000_000);
-
-        const resumed = (await resumeWait).postDataJSON() as { text: string };
-        expect(resumed.text).toBe("The spending ceiling has been raised. Continue the current work from where it stopped, preserving completed work.");
-        await expect(page.getByTestId("status-chip-cost")).toHaveAttribute(
-          "data-ceiling-ratio", (5.12 / ((updateBody.session_spend_ceiling_nano_usd ?? 0) / 1_000_000_000)).toFixed(2),
+        let raisedNano = 0;
+        for (const path of ["/v1/settings/limits", `/v1/settings/limits?project_id=${encodeURIComponent(project.id)}`]) {
+          await expect
+            .poll(async () => {
+              const limits = await apiJson<SettingsLimitsResponse>(request!, "GET", path);
+              raisedNano = limits.session_spend_ceiling_nano_usd ?? 0;
+              return limits.spend_ceiling_enabled === true && raisedNano > 5 * 1_000_000_000;
+            }, { timeout: 30_000 })
+            .toBe(true);
+        }
+        await expect(
+          liveChatStage(page).getByTestId("transcript-article-user").filter({ hasText: "The spending ceiling has been raised." }).first(),
+        ).toBeVisible({ timeout: 30_000 });
+        // The last read is the project-scoped ceiling, which the chip divides by.
+        await expect(costChip).toHaveAttribute(
+          "data-ceiling-ratio", (5.12 / (raisedNano / 1_000_000_000)).toFixed(2),
         );
         await expect(nudge).toHaveCount(0, { timeout: 15_000 });
         expect(continuationRequests).toBe(failureStage === "resume" ? 2 : 1);

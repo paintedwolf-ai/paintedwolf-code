@@ -17,6 +17,7 @@ webE2e.describe("checkpoint tool approval parity", () => {
     await bootstrapChatSession(page);
     await expect(page.getByTestId("tool-approval-card")).toHaveCount(0);
     await expect(page.getByTestId("approval-approve-primary")).toHaveCount(0);
+    await expect(page.getByTestId("content-apply-card")).toHaveCount(0);
   });
 
   webE2e(
@@ -52,7 +53,8 @@ webE2e.describe("checkpoint tool approval parity", () => {
       expect(inject.ok(), await inject.text()).toBeTruthy();
 
       const slot = stage.getByTestId("composer-chrome-slot-checkpoint");
-      await expect(slot.getByTestId("tool-approval-card")).toBeVisible({
+      const standard = slot.getByTestId("tool-approval-card");
+      await expect(standard).toBeVisible({
         timeout: 30_000,
       });
       await expect(
@@ -60,6 +62,38 @@ webE2e.describe("checkpoint tool approval parity", () => {
           .getByTestId("chat-stream")
           .getByTestId("tool-approval-card"),
       ).toHaveCount(0);
+      await expect(standard).toHaveAttribute("data-consequence-band", "standard");
+      await expect(standard.getByTestId("approval-high-risk-label")).toHaveCount(0);
+      await expect(standard.getByTestId("approval-no")).toBeVisible();
+      await expect(page.getByTestId("system-nudge")).toHaveCount(0);
+
+      const highRiskSession = await openNewChatSession(page);
+      expect(highRiskSession).not.toBe(sessionId);
+      const injectHigh = await request.post(
+        `${apiUrl}/harness/checkpoints/tool_approval`,
+        {
+          headers: { ...auth, "Content-Type": "application/json" },
+          data: {
+            session_id: highRiskSession,
+            command: "install helper",
+            consequence_band: "high_risk",
+            consequence_code: "write_root",
+          },
+        },
+      );
+      expect(injectHigh.ok(), await injectHigh.text()).toBeTruthy();
+
+      const high = stage.locator(
+        '[data-testid="tool-approval-card"][data-consequence-band="high_risk"]',
+      );
+      await expect(high.getByTestId("approval-approve-primary")).toBeVisible({
+        timeout: 60_000,
+      });
+      await expect(high.getByTestId("approval-high-risk-label")).toBeVisible();
+      await expect(high.getByTestId("approval-high-risk-consequence")).toBeVisible();
+      await expect(high.getByTestId("approval-no")).toBeVisible();
+      await expect(page.getByTestId("system-nudge")).toHaveCount(0);
+      await expect(stage.getByTestId("tool-approval-card")).toHaveCount(1);
     },
   );
 

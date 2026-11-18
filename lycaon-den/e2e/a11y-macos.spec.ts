@@ -61,10 +61,24 @@ webE2e.describe("macOS accessibility", () => {
     // The root font size carries the scale, so every rem follows it.
     expect(await page.evaluate(() => parseFloat(getComputedStyle(document.documentElement).fontSize)))
       .toBeCloseTo(14 * 53 / 17, 1);
+    expect(Number(await page.evaluate(
+      () => document.documentElement.style.getPropertyValue("--den-text-scale").trim(),
+    ))).toBeCloseTo(53 / 17, 3);
+    await expect(liveChatStage(page).getByTestId("composer-send")).toBeVisible();
+    expect(await page.evaluate(() => {
+      const root = document.documentElement;
+      return root.scrollWidth > root.clientWidth + 1;
+    })).toBe(false);
 
     const sendBox = await liveChatStage(page).getByTestId("composer-send").boundingBox();
     expect(sendBox!.width).toBeGreaterThanOrEqual(24);
     expect(sendBox!.height).toBeGreaterThanOrEqual(24);
+
+    await page.getByTestId("composer-attach").focus();
+    expect(await page.evaluate(() => {
+      const r = document.querySelector('[data-testid="composer-attach"]')!.getBoundingClientRect();
+      return r.top >= 0 && r.bottom <= window.innerHeight && r.height >= 24;
+    })).toBe(true);
 
     const sessionId = await page.evaluate(() => {
       return (

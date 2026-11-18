@@ -316,6 +316,27 @@ describe("ExtensionsSettingsPanel", () => {
     await waitFor(() => expect(screen.queryByTestId("extensions-panel-model")?.closest("[data-resident]")?.getAttribute("data-resident")).not.toBe("active"));
   });
 
+  it("links each mounted panel's tabs to its own tab panels", async () => {
+    const client = mockClient();
+    const { container, getByTestId } = render(() => (
+      <>
+        <ExtensionsSettingsPanel client={client as never} surface="project" projectId="proj-1" />
+        <ExtensionsSettingsPanel client={client as never} surface="settings" />
+      </>
+    ));
+
+    await waitFor(() => getByTestId(unitTid("workflows/plan")));
+    const ids = [...container.querySelectorAll("[id]")].map((el) => el.id);
+    expect(new Set(ids).size).toBe(ids.length);
+    for (const testId of ["project-extensions-panel", "extensions-settings-panel"]) {
+      const instance = getByTestId(testId);
+      const tab = instance.querySelector<HTMLElement>('[role="tab"][aria-selected="true"]');
+      const controlled = document.getElementById(tab!.getAttribute("aria-controls")!);
+      expect(instance.contains(controlled), testId).toBe(true);
+      expect(controlled!.getAttribute("aria-labelledby")).toBe(tab!.id);
+    }
+  });
+
   it("settings surface loads stock packs and shows device scope only", async () => {
     const client = mockClient();
     const { getByTestId, queryByTestId } = render(() => (
