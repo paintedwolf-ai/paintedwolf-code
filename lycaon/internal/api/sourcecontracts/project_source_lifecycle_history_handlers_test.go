@@ -15,7 +15,6 @@ import (
 	"github.com/lycaon/lycaon/internal/editordoc"
 	"github.com/lycaon/lycaon/internal/project"
 	sessionstore "github.com/lycaon/lycaon/internal/session/store"
-	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
@@ -28,7 +27,6 @@ func TestProjectSourceLifecycleHistoryRoutes(t *testing.T) {
 	root := t.TempDir()
 	p, err := project.CreateWithRoot(t.Context(), srv.Sources.Workspace.ProjectRegistry, root)
 	testutil.FailErr(t, "create project", err)
-	testdbseed.InsertProjectRootWithID(t, database, p.ID, p.Roots[0].ID, root)
 	testutil.FailErr(t, "write source", os.WriteFile(filepath.Join(root, "note.txt"), []byte("kept"), 0o640))
 
 	renameID := uuid.NewString()

@@ -12,10 +12,9 @@ import (
 )
 
 func TestSourceWalkResolvesTheChatsCurrentTurn(t *testing.T) {
-	ledger, ledgerDB, withLedger := contractfixture.TestSourceLedger(t)
+	ledger, _, withLedger := contractfixture.TestSourceLedger(t)
 	srv := contractfixture.NewTestServer(t, withLedger)
 	p := contractfixture.CreateProjectForTest(t, srv, t.TempDir())
-	contractfixture.MirrorLedgerProject(t, ledgerDB, p)
 	sess, err := srv.Admin.SessionAdmin.Lifecycle.SessionStore.Create(t.Context(), wire.CreateSessionRequest{ProjectID: p.ID, Posture: wire.SessionPostureBuild}, p.ID)
 	testutil.FailErr(t, "create session", err)
 	idle, err := srv.Admin.SessionAdmin.Lifecycle.SessionStore.Create(t.Context(), wire.CreateSessionRequest{ProjectID: p.ID, Posture: wire.SessionPostureBuild}, p.ID)
@@ -59,10 +58,9 @@ func TestSourceWalkResolvesTheChatsCurrentTurn(t *testing.T) {
 // A chat baseline reads that chat's workspace, so another chat cannot supply it.
 
 func TestSourceWalkRejectsAChatBaselineReadThroughAnotherChat(t *testing.T) {
-	_, ledgerDB, withLedger := contractfixture.TestSourceLedger(t)
+	_, _, withLedger := contractfixture.TestSourceLedger(t)
 	srv := contractfixture.NewTestServer(t, withLedger)
 	p := contractfixture.CreateProjectForTest(t, srv, t.TempDir())
-	contractfixture.MirrorLedgerProject(t, ledgerDB, p)
 	owner, err := srv.Admin.SessionAdmin.Lifecycle.SessionStore.Create(t.Context(), wire.CreateSessionRequest{ProjectID: p.ID, Posture: wire.SessionPostureBuild}, p.ID)
 	testutil.FailErr(t, "create owner", err)
 	other, err := srv.Admin.SessionAdmin.Lifecycle.SessionStore.Create(t.Context(), wire.CreateSessionRequest{ProjectID: p.ID, Posture: wire.SessionPostureBuild}, p.ID)

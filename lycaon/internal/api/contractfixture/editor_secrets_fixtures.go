@@ -27,7 +27,6 @@ import (
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/sourceledger"
 	"github.com/lycaon/lycaon/internal/testdbfixture"
-	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -102,7 +101,6 @@ func NewSecretSpanFixture(t *testing.T) SecretSpanFixture {
 		os.WriteFile(filepath.Join(dir, "staging.ts"), []byte(FileWithSecret), 0o600))
 	p, err := project.CreateWithRoot(t.Context(), srv.Sources.Workspace.ProjectRegistry, dir)
 	testutil.FailErr(t, "create project", err)
-	testdbseed.InsertProjectRootWithID(t, database, p.ID, p.Roots[0].ID, dir)
 	eventCh, unsubscribe, err := hub.Subscribe(t.Context(), events.Subscription{Project: p.ID, Viewer: testutil.HostOwner()})
 	testutil.FailErr(t, "subscribe to editor events", err)
 	t.Cleanup(unsubscribe)

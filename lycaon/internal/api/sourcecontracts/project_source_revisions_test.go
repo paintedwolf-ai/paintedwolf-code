@@ -59,11 +59,10 @@ func TestSourceRevisionsResolveTypedSpecsPerRoot(t *testing.T) {
 }
 
 func TestSourceRevisionReviewPagesRootScopedFilesAndComparesEachSide(t *testing.T) {
-	_, database, withLedger := contractfixture.TestSourceLedger(t)
+	_, _, withLedger := contractfixture.TestSourceLedger(t)
 	srv := contractfixture.NewTestServer(t, contractfixture.WithTestGitManager, withLedger)
 	repo, root := contractfixture.NestedRootRepo(t)
 	p := contractfixture.CreateProjectForTest(t, srv, root)
-	contractfixture.MirrorLedgerProject(t, database, p)
 	rootID := p.Roots[0].ID
 	base := strings.TrimSpace(gittest.Run(t, repo, "rev-parse", "HEAD"))
 	testutil.FailErr(t, "write added", os.WriteFile(filepath.Join(root, "new.txt"), []byte("new\n"), 0o644))

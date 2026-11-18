@@ -6,7 +6,6 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"testing"
-	"time"
 
 	hostapi "github.com/lycaon/lycaon/internal/api"
 	"github.com/lycaon/lycaon/internal/db"
@@ -15,9 +14,7 @@ import (
 	sessionstore "github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/sourceledger"
 	"github.com/lycaon/lycaon/internal/testdbfixture"
-	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
-	"github.com/lycaon/lycaon/internal/timelayout"
 	"github.com/lycaon/lycaon/internal/worker"
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
@@ -47,22 +44,6 @@ func GetSourceWalk(t *testing.T, srv *hostapi.Server, projectID string, query ur
 
 // `turn:{session}` reads the chat's current turn and names the ordinal it read.
 
-func MirrorLedgerProject(t *testing.T, sqlDB db.Handle, p wire.Project) {
-	t.Helper()
-	testdbseed.InsertProject(t, sqlDB, p.ID)
-	for _, root := range p.Roots {
-		isPrimary := 0
-		if root.IsPrimary {
-			isPrimary = 1
-		}
-		_, err := sqlDB.ExecContext(t.Context(), `
-			INSERT INTO project_roots (id, project_id, path, label, is_primary, added_at)
-			VALUES (?, ?, ?, ?, ?, ?)
-		`, root.ID, p.ID, root.Path, root.Label, isPrimary, timelayout.Format(time.Now().UTC()))
-		testutil.FailErr(t, "mirror ledger project root", err)
-	}
-}
-
 func PrepareLedgerInventory(t *testing.T, srv *hostapi.Server, ledger *sourceledger.Store, p wire.Project) {
 	t.Helper()
 	DrainBackground(t, srv)
@@ -80,6 +61,7 @@ func TestSourceLedger(t *testing.T) (*sourceledger.Store, *db.Store, TestDeps) {
 	sqlDB := testdbfixture.Open(t, "store.db")
 	st := sourceledger.New(sqlDB, t.TempDir())
 	return st, sqlDB, func(d *hostapi.Dependencies) {
+		WithSessionStore(sessionstore.NewSQL(sqlDB))(d)
 		d.Source.SourceLedger, d.Source.SourceInventory = st, st.Inventory
 		d.Source.SourceMutations = projectsource.NewSourceMutationService(sqlDB, st)
 	}
