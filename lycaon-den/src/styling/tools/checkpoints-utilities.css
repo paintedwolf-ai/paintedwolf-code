@@ -111,18 +111,6 @@ display: flex;
   padding: 0 var(--den-transcript-card-inset-x);
   border-bottom: 1px solid transparent;
   cursor: pointer;
-  position: relative;
-  /* A toggle beside other controls covers the rest of its header row. */
-  & > .den-transcript-disclosure-toggle::after {
-    content: "";
-    position: absolute;
-    inset: 0;
-  }
-  & > .den-transcript-disclosure-toggle > *,
-  & > .den-checkpoint-decision-chicklet__revoke {
-    position: relative;
-    z-index: 1;
-  }
   &:has(> .den-transcript-disclosure-toggle:focus-visible) {
     box-shadow: 0 0 0 2px color-mix(in srgb, var(--den-accent-text) 85%, var(--den-background));
     border-radius: var(--den-radius-sm);

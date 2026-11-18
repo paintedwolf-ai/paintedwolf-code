@@ -128,10 +128,10 @@ describe("FileEditDiff", () => {
       .getByTestId("file-edit-diff")
       .querySelector(".den-file-edit-diff-header")!;
     const fill = header.querySelector(".den-file-edit-diff-fill")!;
-    const link = header.querySelector('[data-testid="source-path-link"]')!;
+    const path = header.querySelector(".den-source-path-plain")!;
     expect(fill).toBeTruthy();
     expect(
-      link.compareDocumentPosition(fill) & Node.DOCUMENT_POSITION_FOLLOWING,
+      path.compareDocumentPosition(fill) & Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy();
   });
 
