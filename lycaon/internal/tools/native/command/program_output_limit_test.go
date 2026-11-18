@@ -2,7 +2,10 @@ package command
 
 import (
 	"bytes"
+	"errors"
+	"fmt"
 	"io"
+	"slices"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/blobstore"
@@ -12,6 +15,7 @@ import (
 	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/toolcontract"
+	"github.com/lycaon/lycaon/pkg/api"
 )
 
 func TestRetentionQuotaKeepsTypedScreenedPrefix(t *testing.T) {
@@ -46,5 +50,34 @@ func TestRetentionQuotaKeepsTypedScreenedPrefix(t *testing.T) {
 	testutil.FailErr(t, "release raw stage", stream.Close())
 	if account.spill != 0 {
 		t.Fatalf("spill quota leaked %d", account.spill)
+	}
+}
+
+func TestRejectOutputScreenLimitPreservesExitAndAvailableOutput(t *testing.T) {
+	exit := 0
+	paths := []api.CommandProgramOutputWindow{{OutputPath: "@output/program.stdout"}, {}}
+	for _, cause := range []error{
+		&captureprojection.LimitError{Resource: "screen_work_units", Maximum: 8, Observed: 9},
+		&secretmatch.StreamLimitError{Resource: "screen_work_units", Maximum: 8, Observed: 9},
+	} {
+		t.Run(fmt.Sprintf("%T", cause), func(t *testing.T) {
+			reject := rejectOutputScreenLimit(fmt.Errorf("deliver output: %w", cause), &exit, paths)
+			if reject == nil || reject.Code != "COMMAND_OUTPUT_SCREEN_LIMIT" {
+				t.Fatalf("limit classified as %+v", reject)
+			}
+			details := reject.Data
+			if details["resource"] != "screen_work_units" || details["maximum"] != int64(8) || details["observed"] != int64(9) ||
+				details["command_exit_recorded"] != true || details["command_exit_status"] != 0 ||
+				!slices.Equal(details["saved_output_paths"].([]string), []string{"@output/program.stdout"}) {
+				t.Fatalf("limit facts = %+v", details)
+			}
+			reject = rejectOutputScreenLimit(cause, nil, nil)
+			if reject.Data["command_exit_recorded"] != nil || reject.Data["saved_output_paths"] != nil {
+				t.Fatalf("unobserved exit or path reported: %+v", reject.Data)
+			}
+		})
+	}
+	if reject := rejectOutputScreenLimit(errors.New("other fault"), nil, nil); reject != nil {
+		t.Fatalf("non-limit classified as %+v", reject)
 	}
 }

@@ -1198,6 +1198,12 @@ host_facts:
    type: string
  - name: paintedwolf.resource
    type: string
+ - name: paintedwolf.command_exit_recorded
+   type: bool
+ - name: paintedwolf.command_exit_status
+   type: int
+ - name: paintedwolf.saved_output_paths
+   type: list<string>
  - name: paintedwolf.receipt_token
    type: string
  - name: paintedwolf.settled_work

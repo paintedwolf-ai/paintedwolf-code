@@ -234,6 +234,7 @@ func (l *toolBatch) settleRejectedToolCall(
 	}
 	if out.toolMsg.ToolResult != nil {
 		out.toolMsg.ToolResult.Invocation = run.receipt
+		out.toolMsg.ToolResult.CommandProgram = run.captures.commandProgram
 	}
 	return out
 }

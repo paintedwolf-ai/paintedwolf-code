@@ -25,6 +25,7 @@ type safeProjection struct {
 	Screened bool
 	// Empty is true when the buffer holds nothing to project.
 	Empty bool
+	Limit *captureprojection.LimitError
 }
 
 // projectWindow screens retained bytes together and drops masked tails.
@@ -65,6 +66,7 @@ func (r *Output) projectWindow(ctx context.Context, proc *Process, cursor int64)
 	text, mappings, release, err := r.screenWindow(ctx, proc, projector, raw)
 	defer release()
 	if err != nil {
+		out.Limit = captureprojection.ScreeningLimit(err)
 		return out
 	}
 	copyCharge := int64(len(text))*2 + int64(len(chunks))*128

@@ -518,6 +518,11 @@
       "emit": "guard:tool",
       "summary": "The host could not complete a verified output read for {{ paintedwolf.path }} in this chat."
     },
+    "COMMAND_OUTPUT_SCREEN_LIMIT": {
+      "category": "recoverable",
+      "emit": "guard:command_composition_redirect",
+      "summary": "Command output was withheld at the {{ paintedwolf.resource }} limit of {{ paintedwolf.maximum }}."
+    },
     "COMMAND_PLATFORM_UNAVAILABLE": {
       "category": "recoverable",
       "emit": "guard:command_composition_redirect",
@@ -1216,6 +1221,11 @@
       "category": "recoverable",
       "emit": "guard:http_request",
       "summary": "The HTTP request did not complete.{% if paintedwolf.http_requests_started %} The host started {{ paintedwolf.http_requests_started }} exchange attempts for {{ paintedwolf.http_method }}.{% endif %}{% if paintedwolf.http_responses_received %} It received {{ paintedwolf.http_responses_received }} responses; the last status was {{ paintedwolf.http_last_status }}.{% endif %}"
+    },
+    "HTTP_REQUEST_HEADER_CONTROLLED": {
+      "category": "recoverable",
+      "emit": "guard:tool_args",
+      "summary": "The host controls the `{{ paintedwolf.controlled_header }}` request header."
     },
     "HTTP_REQUEST_HOST_DENIED": {
       "branch_instruction": "Do not bypass the boundary through another network client",
@@ -1945,7 +1955,7 @@
       "branch_instruction": "Repeating the same pending checklist does not resolve this rejection. Do not close unfinished rows to clear it. For a concrete blocker or authorized scope change, mark only the work you will not pursue `- [~]` and report the limitation.",
       "category": "recoverable",
       "emit": "guard:coordinator",
-      "summary": "This tool-free response would end the turn with {{ paintedwolf.progress_open_items }} progress steps still pending."
+      "summary": "This tool-free response would end the turn with {{ paintedwolf.progress_open_items }} progress {% if paintedwolf.progress_has_one_open_item %}step{% else %}steps{% endif %} still pending."
     },
     "PROGRESS_PENDING_AFTER_OPTIONAL": {
       "branch_instruction": "Branch on Code; reorder so optional `- [\u003e]` lines are last and retry update_progress",

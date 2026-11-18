@@ -1,0 +1,29 @@
+spec_version: "1.0"
+id: COMMAND_OUTPUT_SCREEN_LIMIT
+kind: policy
+on: tool.rejected
+selector:
+  tools: [command, verify, command_output]
+requires_facts: [paintedwolf.command_exit_recorded, paintedwolf.command_exit_status, paintedwolf.maximum, paintedwolf.rejection_code, paintedwolf.resource, paintedwolf.saved_output_paths]
+when: paintedwolf.rejection_code == "COMMAND_OUTPUT_SCREEN_LIMIT"
+effect: block
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:command_composition_redirect
+message: Command output exceeded a screening limit
+what: Command output was withheld at the {{ paintedwolf.resource }} limit of {{ paintedwolf.maximum }}.
+cause: '{% if paintedwolf.command_exit_recorded %}The command exited with status {{ paintedwolf.command_exit_status }}.{% endif %}'
+fix: '{% if paintedwolf.saved_output_paths %}Read the retained output in bounded slices from {{ paintedwolf.saved_output_paths }}.{% endif %}'
+x-paintedwolf-scenarios:
+  - id: withheld
+    vars:
+      tool: command_output
+      resource: screen_work_units
+      maximum: 1024
+  - id: retained
+    vars:
+      tool: command
+      resource: screen_work_units
+      maximum: 1024
+      command_exit_recorded: true
+      command_exit_status: 0
+      saved_output_paths: ["@output/program.stderr"]

@@ -41,6 +41,9 @@ func (t *CommandOutputTool) Run(ctx context.Context, args map[string]any, tctx t
 		if errors.Is(err, bgprocess.ErrProcessNotFound) {
 			return "", missingCommandHandleReject(t.Registry, tctx.Identity.SessionID, handle)
 		}
+		if reject := rejectOutputScreenLimit(err, snapshot.Output.ExitCode, nil); reject != nil {
+			return "", reject
+		}
 		return "", err
 	}
 	t.Registry.Observe(tctx.Identity.SessionID, handle)

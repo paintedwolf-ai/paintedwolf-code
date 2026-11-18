@@ -101,7 +101,10 @@ func (r *ProgramRuntime) outcome(ctx context.Context, run *programRun, outputs *
 		}
 		delivered, window, err := r.deliverProgramStream(ctx, run, outputs, stream, name, budget, scope)
 		if err != nil {
-			return ProgramOutcome{}, err
+			if run.tc.Effects.Out != nil && run.tc.Effects.Out.CommandProgram != nil {
+				run.tc.Effects.Out.CommandProgram.Outputs = append([]api.CommandProgramOutputWindow(nil), out.Outputs...)
+			}
+			return out, err
 		}
 		if i == 0 {
 			out.Stdout, out.StdoutRef = delivered, window.Ref

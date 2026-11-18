@@ -101,6 +101,8 @@ type capabilityReviewFixture struct {
 	args        map[string]any
 	invocations int
 	wantPaths   bool
+	onlyRead    bool
+	readPaths   []string
 }
 
 func newCapabilityReviewFixture(t *testing.T, approve bool) *capabilityReviewFixture {
@@ -124,7 +126,7 @@ func newCapabilityReviewFixture(t *testing.T, approve bool) *capabilityReviewFix
 		listen: approvalstate.NewSandboxPortGrantRuntime(), loopback: approvalstate.NewSandboxPortGrantRuntime(),
 	}
 	broker := &WriteRootCheckpointBroker{Checkpoints: c, Runtime: c.write, ReadRuntime: c.read, Authority: authority}
-	f := &capabilityReviewFixture{checkpoints: c, wantPaths: true, context: tools.ToolContext{
+	f := &capabilityReviewFixture{checkpoints: c, wantPaths: true, readPaths: []string{read}, context: tools.ToolContext{
 		Identity: tools.InvocationIdentity{SessionID: "cap-session",
 			ProjectID:  "cap-project",
 			ToolCallID: "cap-call",
@@ -143,10 +145,10 @@ func newCapabilityReviewFixture(t *testing.T, approve bool) *capabilityReviewFix
 		if reject != nil {
 			return "", reject
 		}
-		if len(request.SocketGrants) != 1 || !request.LocalListen || !request.LoopbackConnect {
+		if !f.onlyRead && (len(request.SocketGrants) != 1 || !request.LocalListen || !request.LoopbackConnect) {
 			return "", fmt.Errorf("execution missed reviewed authority: %+v", request)
 		}
-		if f.wantPaths && (len(request.ProtectedReadGrants) != 1 || !slices.Contains(request.GrantedWriteRoots, write)) {
+		if f.wantPaths && (!slices.Equal(slices.Sorted(slices.Values(request.ProtectedReadGrants)), f.readPaths) || (!f.onlyRead && !slices.Contains(request.GrantedWriteRoots, write))) {
 			return "", fmt.Errorf("execution missed reviewed paths: %+v", request)
 		}
 		return "verified", nil
@@ -161,7 +163,7 @@ func newCapabilityReviewFixture(t *testing.T, approve bool) *capabilityReviewFix
 		return result.Authorized, result.Denied, result.UserGuidance, err
 	})
 	f.executor.Boundary.SetReadPathPreflight(func(ctx context.Context, tool string, _ map[string]any, tc tools.ToolContext, path string) (bool, bool, string, error) {
-		result, err := broker.AuthorizeRead(ctx, command.SandboxReadPathAsk{SessionID: tc.Identity.SessionID, ProjectID: tc.Identity.ProjectID, ToolCallID: tc.Identity.ToolCallID, ProjectDir: tc.ActiveRootPath(), ToolName: tool, ProposedReadPath: path, ReadDenyPaths: []string{read}})
+		result, err := broker.AuthorizeRead(ctx, command.SandboxReadPathAsk{SessionID: tc.Identity.SessionID, ProjectID: tc.Identity.ProjectID, ToolCallID: tc.Identity.ToolCallID, ProjectDir: tc.ActiveRootPath(), ToolName: tool, ProposedReadPath: path, ReadDenyPaths: f.readPaths})
 		return result.Authorized, result.Denied, result.UserGuidance, err
 	})
 	f.executor.Boundary.SetSessionListenGrant(func(_ context.Context, session, _ string) (bool, []uint16) {
@@ -316,5 +318,28 @@ func TestInvocationCapabilityOnceKeepsSecretReviewStable(t *testing.T) {
 	}
 	if !slices.ContainsFunc(f.checkpoints.requests[0].ApprovalPlan.Subject.Targets, func(target hitl.ApprovalTarget) bool { return target.Kind == "secret" }) {
 		t.Fatal("combined review omitted disclosure")
+	}
+}
+
+func TestProtectedReadSetSharesOneReview(t *testing.T) {
+	f := newCapabilityReviewFixture(t, true)
+	f.onlyRead = true
+	dir := filepath.Dir(f.readPaths[0])
+	f.readPaths = []string{filepath.Join(dir, "a"), filepath.Join(dir, "b"), filepath.Join(dir, "c")}
+	f.args["capability_request"] = map[string]any{"read_path": []any{f.readPaths[2], f.readPaths[0], f.readPaths[1]}}
+	_, err := f.executor.Invoke(t.Context(), "command", f.args, f.context)
+	testutil.FailErr(t, "invoke with exact protected reads", err)
+	if len(f.checkpoints.requests) != 1 || f.invocations != 1 {
+		t.Fatalf("reviews = %d, command calls = %d", len(f.checkpoints.requests), f.invocations)
+	}
+	var reviewed []string
+	for _, target := range f.checkpoints.requests[0].ApprovalPlan.Subject.Targets {
+		if target.Kind == "read_path" {
+			reviewed = append(reviewed, target.Label)
+		}
+	}
+	slices.Sort(reviewed)
+	if !slices.Equal(reviewed, f.readPaths) {
+		t.Fatalf("approved paths = %v, want %v", reviewed, f.readPaths)
 	}
 }

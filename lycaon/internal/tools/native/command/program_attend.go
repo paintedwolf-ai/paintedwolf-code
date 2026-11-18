@@ -309,6 +309,13 @@ func (r *ProgramRuntime) finish(e *programEvaluation) (string, error) {
 	// start another program operation.
 	outcome, err := r.outcome(context.WithoutCancel(ctx), run, e.outputs, result, e.stdout, e.stderr, e.scope)
 	if err != nil {
+		var exit *int
+		if settledNow && outcome.State == "completed" {
+			exit = &outcome.Status
+		}
+		if reject := rejectOutputScreenLimit(err, exit, outcome.Outputs); reject != nil {
+			return "", reject
+		}
 		return "", err
 	}
 	outcome.Stderr = e.documents.appendNotes(outcome.Stderr)
