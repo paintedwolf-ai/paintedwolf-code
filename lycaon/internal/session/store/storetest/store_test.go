@@ -18,11 +18,13 @@ func TestFixturesPersistSessionsInIsolatedDatabases(t *testing.T) {
 	if session.WorkspaceRootID == "" || session.WorkspacePath == "" {
 		t.Fatal("fixture has no attached workspace")
 	}
-	reloaded, err := store.NewSQL(first.DB()).Get(t.Context(), session.ID)
-	testutil.FailErr(t, "reopen session repository", err)
-	if reloaded.WorkspaceRootID != session.WorkspaceRootID {
+	var rootID string
+	err = first.DB().QueryRowContext(t.Context(), `SELECT workspace_root_id FROM sessions WHERE id = ?`, session.ID).Scan(&rootID)
+	testutil.FailErr(t, "read persisted session", err)
+	if rootID != session.WorkspaceRootID {
 		t.Fatal("workspace binding was not persisted")
 	}
+
 	if _, err := second.Get(t.Context(), session.ID); !errors.Is(err, store.ErrSessionNotFound) {
 		t.Fatalf("other fixture read session: %v", err)
 	}

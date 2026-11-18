@@ -39,7 +39,7 @@ func TestPreparedReductionPublicationRequiresItsCapturedState(t *testing.T) {
 				newer.Generation = 1
 				err = mem.PutCompactionView(t.Context(), sess.ID, newer)
 			case "model":
-				err = mem.UpdateSession(t.Context(), sess.ID, func(s *api.Session) { s.Model = "different-model" })
+				err = mem.UpdateSession(t.Context(), sess.ID, func(s *api.Session) { s.ProviderID = "test-provider"; s.Model = "different-model" })
 			case "cancellation":
 				cancel()
 			}

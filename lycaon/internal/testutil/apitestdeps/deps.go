@@ -137,7 +137,11 @@ func Fill(t *testing.T, d *Deps) {
 		d.Database = testdbfixture.Open(t, "api-deps.db")
 	}
 	if d.Store == nil {
-		d.Store = sessionstore.NewSQL(d.Database)
+		database, ok := d.Database.(db.ReadHandle)
+		if !ok {
+			t.Fatal("session fixtures require a database with consistent read snapshots")
+		}
+		d.Store = sessionstore.NewSQL(database)
 	}
 	if d.Projects == nil {
 		// Source ledger rows reference the project table in the same database.

@@ -18,7 +18,6 @@ import (
 	"github.com/lycaon/lycaon/internal/session/approvalstate"
 	sessioncheckpoint "github.com/lycaon/lycaon/internal/session/checkpoint"
 	"github.com/lycaon/lycaon/internal/session/checkpointcontrol"
-	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/sourceledger"

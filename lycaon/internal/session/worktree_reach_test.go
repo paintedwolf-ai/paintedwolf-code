@@ -54,7 +54,7 @@ func initReachRepo(t *testing.T) string {
 type reachFixture struct {
 	mgr     *Host
 	mem     *store.SQL
-	reg     *project.MemoryRegistry
+	reg     *project.SQLRegistry
 	project *project.Project
 	sess    *api.Session
 	repoDir string

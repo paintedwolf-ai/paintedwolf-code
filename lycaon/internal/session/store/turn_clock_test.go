@@ -48,7 +48,7 @@ func TestTurnClockRecordsOnlyOnceItsOpeningMessageExists(t *testing.T) {
 		t.Fatalf("latest clock = %+v, want the running second turn with work capped at active", latest)
 	}
 
-	rewindFrom(t, st.(rewindStore), sess.ID, second)
+	rewindFrom(t, st, sess.ID, second)
 	latest, ok, err = st.LatestTurnClock(ctx, sess.ID)
 	testutil.FailErr(t, "latest clock after rewind", err)
 	if !ok || latest.OpeningMessageID != first {

@@ -327,10 +327,14 @@ func TestEvaluateVerdictGroundingHostAssemblesMissingCitations(t *testing.T) {
 	st := storetest.New(t, "project-1")
 	parent, err := st.Create(ctx, api.CreateSessionRequest{}, "project-1")
 	testutil.FailErr(t, "create parent", err)
+	_, err = st.DB().ExecContext(ctx, `INSERT INTO worker_jobs (id, project_id, parent_session_id, agent_type, prompt, brief, created_at) VALUES ('job-1', ?, ?, 'skeptic', 'challenge the claims', '', ?)`, parent.ProjectID, parent.ID, time.Now().UTC().Format(time.RFC3339Nano))
+	testutil.FailErr(t, "record worker dispatch", err)
 	child, err := st.CreateChild(ctx, parent, api.SpawnChildRequest{
 		AgentType: "skeptic", Prompt: "challenge the claims", WorkerJobID: "job-1",
 	})
 	testutil.FailErr(t, "create child", err)
+	_, err = st.DB().ExecContext(ctx, `UPDATE worker_jobs SET child_session_id = ? WHERE id = 'job-1'`, child.ID)
+	testutil.FailErr(t, "bind worker session", err)
 	testutil.FailErr(t, "record reviewer evidence", st.UpsertEvidenceRecord(ctx, child.ID, evidence.Record{
 		Handle: "read#1", Kind: "read", Shape: evidence.ShapeFileRegion, Path: "auth/session.go",
 	}))
