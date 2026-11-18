@@ -2,15 +2,16 @@ package workspace_test
 
 import (
 	"context"
-	"github.com/lycaon/lycaon/internal/enginepaths"
-	"github.com/lycaon/lycaon/internal/layeredfs/adapter/platform"
 	"os"
 	"path/filepath"
 	"runtime"
 	"sync"
 	"testing"
 
+	"github.com/lycaon/lycaon/internal/enginepaths"
 	"github.com/lycaon/lycaon/internal/layeredfs/adapter"
+	"github.com/lycaon/lycaon/internal/layeredfs/adapter/adaptertest"
+	"github.com/lycaon/lycaon/internal/layeredfs/adapter/platform"
 	"github.com/lycaon/lycaon/internal/layeredfs/claim"
 	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -129,7 +130,7 @@ func TestCreateWorkerWorkspaceFromSourcesMountedClaimZeroLowerWalksAndFormatV2Me
 		{ID: "s", Label: "secondary", Path: secondary, IsPrimary: false},
 	}
 
-	mountedAdp := adapter.NewMountedAdapter(adapter.MountedAdapterConfig{
+	mountedAdp := adaptertest.NewMounted(adaptertest.MountedConfig{
 		AdapterID: adapter.AdapterNFSDarwin,
 		TargetOS:  runtime.GOOS,
 		MountProbeFn: func(_ context.Context, _, _ string) (adapter.ReasonCode, string, error) {
@@ -137,7 +138,7 @@ func TestCreateWorkerWorkspaceFromSourcesMountedClaimZeroLowerWalksAndFormatV2Me
 		},
 	})
 	sel := adapter.NewSelector(runtime.GOOS, mountedAdp, mountedAdp, adapter.NewEagerCopyAdapter())
-	sel.BudgetFor = adapter.ZeroBudget
+	sel.BudgetFor = adaptertest.ZeroBudget
 	sel.Confinement = fixtureConfinement{}
 	mgr := workspace.NewManager(filepath.Join(base, "branches"), sel)
 

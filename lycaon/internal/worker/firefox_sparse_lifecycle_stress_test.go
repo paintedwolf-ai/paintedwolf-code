@@ -13,6 +13,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/confine"
 	"github.com/lycaon/lycaon/internal/layeredfs/adapter"
+	"github.com/lycaon/lycaon/internal/layeredfs/adapter/adaptertest"
 	"github.com/lycaon/lycaon/internal/session"
 	"github.com/lycaon/lycaon/internal/sourceledger"
 	"github.com/lycaon/lycaon/internal/testbaseline"
@@ -118,7 +119,7 @@ func newFirefoxWorkerFixture(t *testing.T, source string) *layeredWorkerFixture 
 	git, err := workspace.OpenPrivateGit(branches)
 	testutil.FailErr(t, "scale private Git", err)
 	selector := workspace.HostSelector()
-	selector.BudgetFor = adapter.ZeroBudget
+	selector.BudgetFor = adaptertest.ZeroBudget
 	manager := workspace.NewManager(branches, selector).WithPrivateGit(git)
 	queue := NewSQLQueue(database, 4)
 	queue.SetBaselineStore(sourceledger.New(database, filepath.Join(testbaseline.DataDir(t, database), "source-content")).Baselines)

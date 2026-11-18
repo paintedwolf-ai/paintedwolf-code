@@ -1,4 +1,4 @@
-package adapter
+package adapter_test
 
 import (
 	"context"
@@ -9,14 +9,16 @@ import (
 	"sync/atomic"
 	"testing"
 
+	"github.com/lycaon/lycaon/internal/layeredfs/adapter"
+	"github.com/lycaon/lycaon/internal/layeredfs/adapter/adaptertest"
 	"github.com/lycaon/lycaon/internal/testutil"
 )
 
 // Costs here: an entry weighs 1000 bytes and the budget is 100000, so 3 entries cost 6000 and 60
 // entries cost 120000; a 60000-byte file costs 120000 when it cannot be cloned and nothing when it can.
-var ruleBudget = BudgetFact{Limit: 100_000, EntryCost: 1000, Provisional: true}
+var ruleBudget = adapter.BudgetFact{Limit: 100_000, EntryCost: 1000, Provisional: true}
 
-func ruleBudgetFor(class BudgetClass) BudgetFact {
+func ruleBudgetFor(class adapter.BudgetClass) adapter.BudgetFact {
 	fact := ruleBudget
 	fact.Class = class
 	return fact
@@ -37,20 +39,20 @@ func writeSizedTree(t *testing.T, entries int, bytes int) string {
 
 type mountOutcome struct {
 	name   string
-	reason ReasonCode
+	reason adapter.ReasonCode
 	absent bool
 }
 
-func ruleMount(outcome mountOutcome, calls *atomic.Int32) Adapter {
+func ruleMount(outcome mountOutcome, calls *atomic.Int32) adapter.Adapter {
 	if outcome.absent {
 		return nil
 	}
-	return NewMountedAdapter(MountedAdapterConfig{
-		AdapterID: AdapterFUSELinux, TargetOS: "linux",
-		MountProbeFn: func(context.Context, string, string) (ReasonCode, string, error) {
+	return adaptertest.NewMounted(adaptertest.MountedConfig{
+		AdapterID: adapter.AdapterFUSELinux, TargetOS: "linux",
+		MountProbeFn: func(context.Context, string, string) (adapter.ReasonCode, string, error) {
 			calls.Add(1)
-			if outcome.reason == ReasonNone {
-				return ReasonNone, "", nil
+			if outcome.reason == adapter.ReasonNone {
+				return adapter.ReasonNone, "", nil
 			}
 			return outcome.reason, "fixture", errors.New("fixture")
 		},
@@ -60,9 +62,9 @@ func ruleMount(outcome mountOutcome, calls *atomic.Int32) Adapter {
 func TestSelectionTableEveryCombination(t *testing.T) {
 	mounts := []mountOutcome{
 		{name: "mount-works"},
-		{name: "mount-lasting-denial", reason: ReasonMountDenied},
-		{name: "mount-confinement-unavailable", reason: ReasonConfinementUnavailable},
-		{name: "mount-transient", reason: ReasonTransientStartupFailure},
+		{name: "mount-lasting-denial", reason: adapter.ReasonMountDenied},
+		{name: "mount-confinement-unavailable", reason: adapter.ReasonConfinementUnavailable},
+		{name: "mount-transient", reason: adapter.ReasonTransientStartupFailure},
 		{name: "no-mount-here", absent: true},
 	}
 	for _, entries := range []int{3, 60} {
@@ -82,45 +84,45 @@ func TestSelectionTableEveryCombination(t *testing.T) {
 func assertSelectionRow(t *testing.T, entries, fileBytes int, clonable bool, mount mountOutcome) {
 	t.Helper()
 	var calls atomic.Int32
-	sel := NewSelector("linux", ruleMount(mount, &calls), nil, NewEagerCopyAdapter())
+	sel := adapter.NewSelector("linux", ruleMount(mount, &calls), nil, adapter.NewEagerCopyAdapter())
 	sel.BudgetFor = ruleBudgetFor
 	source := writeSizedTree(t, entries, fileBytes)
-	choice, err := sel.Choose(t.Context(), ChooseRequest{
-		Probe:          ProbeConfig{RuntimeDir: t.TempDir()},
-		Grants:         []RootGrant{{RootID: "r", SourcePath: source, IsPrimary: true}},
-		CloneAvailable: func(context.Context, RootGrant) (bool, error) { return clonable, nil },
+	choice, err := sel.Choose(t.Context(), adapter.ChooseRequest{
+		Probe:          adapter.ProbeConfig{RuntimeDir: t.TempDir()},
+		Grants:         []adapter.RootGrant{{RootID: "r", SourcePath: source, IsPrimary: true}},
+		CloneAvailable: func(context.Context, adapter.RootGrant) (bool, error) { return clonable, nil },
 	})
 
 	overBudget := entries == 60 || (fileBytes == 60_000 && !clonable)
 	switch {
 	case !overBudget:
 		testutil.FailErr(t, "Choose", err)
-		if choice.Adapter.ID() != AdapterEagerCopy || choice.Facts.Reason != SelectionUnderBudget || choice.CopyBudget == nil {
+		if choice.Adapter.ID() != adapter.AdapterEagerCopy || choice.Facts.Reason != adapter.SelectionUnderBudget || choice.CopyBudget == nil {
 			t.Fatalf("under budget must materialize with the budget enforced: %+v", choice)
 		}
 		if calls.Load() != 0 {
 			t.Fatalf("under budget probed the mount %d times", calls.Load())
 		}
-	case mount.absent || IsLastingMountReason(mount.reason):
+	case mount.absent || adapter.IsLastingMountReason(mount.reason):
 		wantReason := mount.reason
 		if mount.absent {
-			wantReason = ReasonUnsupportedPlatform
+			wantReason = adapter.ReasonUnsupportedPlatform
 		}
-		var aErr *AdapterError
+		var aErr *adapter.AdapterError
 		if !errors.As(err, &aErr) || aErr.ReasonCode != wantReason || choice.Adapter != nil {
 			t.Fatalf("an unavailable mount must refuse over-limit work: choice=%+v err=%v", choice, err)
 		}
 		if !choice.Facts.DeclaredCost.Partial {
 			t.Fatalf("bounded survey must not be replaced by a full fallback scan: %+v", choice.Facts.DeclaredCost)
 		}
-	case mount.reason == ReasonNone:
+	case mount.reason == adapter.ReasonNone:
 		testutil.FailErr(t, "Choose", err)
-		if choice.Adapter.ID() != AdapterFUSELinux || choice.Facts.Reason != SelectionOverBudgetMounted || choice.CopyBudget != nil {
+		if choice.Adapter.ID() != adapter.AdapterFUSELinux || choice.Facts.Reason != adapter.SelectionOverBudgetMounted || choice.CopyBudget != nil {
 			t.Fatalf("over budget with a working mount must mount: %+v", choice)
 		}
 	default:
-		var aErr *AdapterError
-		if !errors.As(err, &aErr) || aErr.ReasonCode != ReasonTransientStartupFailure || choice.Adapter != nil {
+		var aErr *adapter.AdapterError
+		if !errors.As(err, &aErr) || aErr.ReasonCode != adapter.ReasonTransientStartupFailure || choice.Adapter != nil {
 			t.Fatalf("a transient failure must start no copy: choice=%+v err=%v", choice, err)
 		}
 		if calls.Load() != 2 {
@@ -131,29 +133,29 @@ func assertSelectionRow(t *testing.T, entries, fileBytes int, clonable bool, mou
 
 func TestSelectionFromIndexFactsSurveysNothing(t *testing.T) {
 	var calls atomic.Int32
-	sel := NewSelector("linux", ruleMount(mountOutcome{}, &calls), nil, NewEagerCopyAdapter())
+	sel := adapter.NewSelector("linux", ruleMount(mountOutcome{}, &calls), nil, adapter.NewEagerCopyAdapter())
 	sel.BudgetFor = ruleBudgetFor
 	missing := filepath.Join(t.TempDir(), "never-walked")
-	choice, err := sel.Choose(t.Context(), ChooseRequest{
-		Probe:          ProbeConfig{RuntimeDir: t.TempDir()},
-		Grants:         []RootGrant{{RootID: "r", SourcePath: missing, IsPrimary: true, Estimate: &SourceIndexEstimate{EstimatedEntries: 100}}},
-		CloneAvailable: func(context.Context, RootGrant) (bool, error) { return true, nil },
+	choice, err := sel.Choose(t.Context(), adapter.ChooseRequest{
+		Probe:          adapter.ProbeConfig{RuntimeDir: t.TempDir()},
+		Grants:         []adapter.RootGrant{{RootID: "r", SourcePath: missing, IsPrimary: true, Estimate: &adapter.SourceIndexEstimate{EstimatedEntries: 100}}},
+		CloneAvailable: func(context.Context, adapter.RootGrant) (bool, error) { return true, nil },
 	})
 	testutil.FailErr(t, "Choose", err)
-	if choice.Facts.DeclaredCost.Source != CostFromIndex || choice.Adapter.ID() != AdapterFUSELinux {
+	if choice.Facts.DeclaredCost.Source != adapter.CostFromIndex || choice.Adapter.ID() != adapter.AdapterFUSELinux {
 		t.Fatalf("index facts must decide without a survey: %+v", choice.Facts)
 	}
 }
 
 func TestSurveyStopsAtTheBudget(t *testing.T) {
 	var calls atomic.Int32
-	sel := NewSelector("linux", ruleMount(mountOutcome{}, &calls), nil, NewEagerCopyAdapter())
+	sel := adapter.NewSelector("linux", ruleMount(mountOutcome{}, &calls), nil, adapter.NewEagerCopyAdapter())
 	sel.BudgetFor = ruleBudgetFor
 	source := writeSizedTree(t, 200, 1)
-	choice, err := sel.Choose(t.Context(), ChooseRequest{
-		Probe:          ProbeConfig{RuntimeDir: t.TempDir()},
-		Grants:         []RootGrant{{RootID: "r", SourcePath: source, IsPrimary: true}},
-		CloneAvailable: func(context.Context, RootGrant) (bool, error) { return true, nil },
+	choice, err := sel.Choose(t.Context(), adapter.ChooseRequest{
+		Probe:          adapter.ProbeConfig{RuntimeDir: t.TempDir()},
+		Grants:         []adapter.RootGrant{{RootID: "r", SourcePath: source, IsPrimary: true}},
+		CloneAvailable: func(context.Context, adapter.RootGrant) (bool, error) { return true, nil },
 	})
 	testutil.FailErr(t, "Choose", err)
 	// 51 entries cost 102000, the first count past 100000.
@@ -164,16 +166,18 @@ func TestSurveyStopsAtTheBudget(t *testing.T) {
 
 func TestDiskThatCannotHoldTheResultRefusesWithTheNumber(t *testing.T) {
 	var calls atomic.Int32
-	sel := NewSelector("linux", ruleMount(mountOutcome{reason: ReasonMountDenied}, &calls), nil, NewEagerCopyAdapter())
+	sel := adapter.NewSelector("linux", ruleMount(mountOutcome{reason: adapter.ReasonMountDenied}, &calls), nil, adapter.NewEagerCopyAdapter())
 	sel.BudgetFor = ruleBudgetFor
 	source := writeSizedTree(t, 3, 100)
 	testutil.FailErr(t, "subdir", os.Mkdir(filepath.Join(source, "sub"), 0o755))
-	_, err := sel.Choose(t.Context(), ChooseRequest{
-		Probe:  ProbeConfig{RuntimeDir: t.TempDir()},
-		Grants: []RootGrant{{RootID: "r", SourcePath: source, IsPrimary: true}},
-		Disk:   func() (DiskSpace, error) { return DiskSpace{Path: "/data", Available: 1000, Known: true}, nil },
+	_, err := sel.Choose(t.Context(), adapter.ChooseRequest{
+		Probe:  adapter.ProbeConfig{RuntimeDir: t.TempDir()},
+		Grants: []adapter.RootGrant{{RootID: "r", SourcePath: source, IsPrimary: true}},
+		Disk: func() (adapter.DiskSpace, error) {
+			return adapter.DiskSpace{Path: "/data", Available: 1000, Known: true}, nil
+		},
 	})
-	var capErr *WorkspaceCapacityError
+	var capErr *adapter.WorkspaceCapacityError
 	if !errors.As(err, &capErr) || capErr.Available != 1000 || capErr.Required <= capErr.Available {
 		t.Fatalf("expected a refusal naming both numbers, got %+v (%v)", capErr, err)
 	}
@@ -184,27 +188,33 @@ func TestDiskThatCannotHoldTheResultRefusesWithTheNumber(t *testing.T) {
 
 func TestAStaleEstimateOverrunsAndMovesOnToTheMount(t *testing.T) {
 	var calls atomic.Int32
-	sel := NewSelector("linux", ruleMount(mountOutcome{}, &calls), nil, NewEagerCopyAdapter())
+	sel := adapter.NewSelector("linux", ruleMount(mountOutcome{}, &calls), nil, adapter.NewEagerCopyAdapter())
 	sel.BudgetFor = ruleBudgetFor
 	source := writeSizedTree(t, 60, 1)
-	grants := []RootGrant{{RootID: "r", SourcePath: source, IsPrimary: true, Estimate: &SourceIndexEstimate{EstimatedEntries: 1}}}
-	first, err := sel.Choose(t.Context(), ChooseRequest{Probe: ProbeConfig{RuntimeDir: t.TempDir()}, Grants: grants})
+	grants := []adapter.RootGrant{{RootID: "r", SourcePath: source, IsPrimary: true, Estimate: &adapter.SourceIndexEstimate{EstimatedEntries: 1}}}
+	first, err := sel.Choose(t.Context(), adapter.ChooseRequest{Probe: adapter.ProbeConfig{RuntimeDir: t.TempDir()}, Grants: grants})
 	testutil.FailErr(t, "first Choose", err)
-	if first.Adapter.ID() != AdapterEagerCopy {
+	if first.Adapter.ID() != adapter.AdapterEagerCopy {
 		t.Fatalf("the estimate says under budget: %+v", first.Facts)
 	}
 
 	runtimeDir, target := t.TempDir(), filepath.Join(t.TempDir(), "target")
-	sibling := NewEagerCopyAdapter()
-	kept, err := sibling.Prepare(t.Context(), PrepareRequest{
-		ViewID: "kept-view", RuntimeDir: runtimeDir, Grants: []RootGrant{{RootID: "s", SourcePath: writeSizedTree(t, 1, 1), IsPrimary: true}},
+	sibling := adapter.NewEagerCopyAdapter()
+	kept, err := sibling.Prepare(t.Context(), adapter.PrepareRequest{
+		ViewID: "kept-view", RuntimeDir: runtimeDir, Grants: []adapter.RootGrant{{RootID: "s", SourcePath: writeSizedTree(t, 1, 1), IsPrimary: true}},
 	})
 	testutil.FailErr(t, "sibling Prepare", err)
-	_, err = first.Adapter.Prepare(t.Context(), PrepareRequest{
+	_, err = first.Adapter.Prepare(t.Context(), adapter.PrepareRequest{
 		ViewID: "overrun-view", RuntimeDir: runtimeDir, Grants: grants, CopyBudget: first.CopyBudget,
-		TargetRootDirs: map[string]string{"r": target}, CloneFile: copyingClone,
+		TargetRootDirs: map[string]string{"r": target}, CloneFile: func(src, dst string) (bool, error) {
+			raw, err := os.ReadFile(src)
+			if err != nil {
+				return false, err
+			}
+			return true, os.WriteFile(dst, raw, 0o600)
+		},
 	})
-	var overrun *BudgetOverrunError
+	var overrun *adapter.BudgetOverrunError
 	if !errors.As(err, &overrun) || overrun.Entries != 51 {
 		t.Fatalf("expected the copy to stop at the budget, got %+v (%v)", overrun, err)
 	}
@@ -215,9 +225,9 @@ func TestAStaleEstimateOverrunsAndMovesOnToTheMount(t *testing.T) {
 		t.Fatalf("an overrun touched another view: %v", statErr)
 	}
 
-	second, err := sel.Choose(t.Context(), ChooseRequest{Probe: ProbeConfig{RuntimeDir: t.TempDir()}, Grants: grants, Overrun: overrun})
+	second, err := sel.Choose(t.Context(), adapter.ChooseRequest{Probe: adapter.ProbeConfig{RuntimeDir: t.TempDir()}, Grants: grants, Overrun: overrun})
 	testutil.FailErr(t, "second Choose", err)
-	if second.Adapter.ID() != AdapterFUSELinux || !second.Facts.CopyPassedBudget {
+	if second.Adapter.ID() != adapter.AdapterFUSELinux || !second.Facts.CopyPassedBudget {
 		t.Fatalf("selection must move on to the mount: %+v", second.Facts)
 	}
 }
@@ -225,9 +235,9 @@ func TestAStaleEstimateOverrunsAndMovesOnToTheMount(t *testing.T) {
 // Every class has one fact. Only measured classes drop the provisional mark: APFS clones so far.
 func TestRecordedBudgetsAreOneFactPerClass(t *testing.T) {
 	for _, platform := range []string{"darwin", "linux", "elsewhere"} {
-		for _, fs := range []FilesystemClass{FilesystemClonable, FilesystemCopyOnly} {
-			fact := RecordedBudget(BudgetClass{Platform: platform, Filesystem: fs})
-			measured := platform == "darwin" && fs == FilesystemClonable
+		for _, fs := range []adapter.FilesystemClass{adapter.FilesystemClonable, adapter.FilesystemCopyOnly} {
+			fact := adapter.RecordedBudget(adapter.BudgetClass{Platform: platform, Filesystem: fs})
+			measured := platform == "darwin" && fs == adapter.FilesystemClonable
 			if fact.Limit <= 0 || fact.EntryCost <= 0 || fact.Provisional == measured {
 				t.Fatalf("%s/%s: %+v", platform, fs, fact)
 			}
@@ -238,20 +248,20 @@ func TestRecordedBudgetsAreOneFactPerClass(t *testing.T) {
 // A worker created mounted keeps its mount when it is rebuilt, even under the preparation limit, and
 // follows the rule when the mount is unavailable.
 func TestRebuildKeepsAMountedWorkerMounted(t *testing.T) {
-	for _, mount := range []mountOutcome{{reason: ReasonNone}, {reason: ReasonFUSEDeviceUnavailable}} {
+	for _, mount := range []mountOutcome{{reason: adapter.ReasonNone}, {reason: adapter.ReasonFUSEDeviceUnavailable}} {
 		var calls atomic.Int32
-		sel := NewSelector("linux", ruleMount(mount, &calls), nil, NewEagerCopyAdapter())
+		sel := adapter.NewSelector("linux", ruleMount(mount, &calls), nil, adapter.NewEagerCopyAdapter())
 		sel.BudgetFor = ruleBudgetFor
-		choice, err := sel.Choose(t.Context(), ChooseRequest{
-			Probe:          ProbeConfig{RuntimeDir: t.TempDir()},
-			Grants:         []RootGrant{{RootID: "r", SourcePath: writeSizedTree(t, 2, 10), IsPrimary: true}},
-			CloneAvailable: func(context.Context, RootGrant) (bool, error) { return true, nil },
+		choice, err := sel.Choose(t.Context(), adapter.ChooseRequest{
+			Probe:          adapter.ProbeConfig{RuntimeDir: t.TempDir()},
+			Grants:         []adapter.RootGrant{{RootID: "r", SourcePath: writeSizedTree(t, 2, 10), IsPrimary: true}},
+			CloneAvailable: func(context.Context, adapter.RootGrant) (bool, error) { return true, nil },
 			KeepMounted:    true,
 		})
 		testutil.FailErr(t, "Choose", err)
-		want, reason := AdapterFUSELinux, SelectionKeptMounted
-		if mount.reason != ReasonNone {
-			want, reason = AdapterEagerCopy, SelectionUnderBudget
+		want, reason := adapter.AdapterFUSELinux, adapter.SelectionKeptMounted
+		if mount.reason != adapter.ReasonNone {
+			want, reason = adapter.AdapterEagerCopy, adapter.SelectionUnderBudget
 		}
 		if choice.Adapter.ID() != want || choice.Facts.Reason != reason {
 			t.Fatalf("mount %q: chose %s for %s", mount.reason, choice.Adapter.ID(), choice.Facts.Reason)

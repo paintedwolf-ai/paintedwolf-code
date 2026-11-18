@@ -10,9 +10,10 @@ import (
 	"syscall"
 	"testing"
 
+	"golang.org/x/sys/unix"
+
 	"github.com/lycaon/lycaon/internal/layeredfs"
 	"github.com/lycaon/lycaon/internal/testutil"
-	"golang.org/x/sys/unix"
 )
 
 func TestUnderLimitMaterializedWorkerPrivateGitAndCheckpointSuite(t *testing.T) {
@@ -20,15 +21,7 @@ func TestUnderLimitMaterializedWorkerPrivateGitAndCheckpointSuite(t *testing.T) 
 	tmp := t.TempDir()
 	srcRoot := createFixtureRepoWithSubmodule(t, filepath.Join(tmp, "source"))
 
-	forcedFailPrimary := NewMountedAdapter(MountedAdapterConfig{
-		AdapterID: AdapterNFSDarwin,
-		TargetOS:  "darwin",
-		MountProbeFn: func(ctx context.Context, probeDir, backingDir string) (ReasonCode, string, error) {
-			return ReasonMountDenied, "forced sandbox mount denial", errors.New("EPERM")
-		},
-	})
-	sel := NewSelector("darwin", nil, forcedFailPrimary, NewEagerCopyAdapter())
-	sel.BudgetFor = ruleBudgetFor
+	sel := NewSelector("darwin", nil, nil, NewEagerCopyAdapter())
 
 	grants := []RootGrant{{RootID: "repo", Label: "repo", SourcePath: srcRoot, IsPrimary: true}}
 	choice, err := sel.Choose(ctx, ChooseRequest{Probe: ProbeConfig{RuntimeDir: tmp}, Grants: grants})

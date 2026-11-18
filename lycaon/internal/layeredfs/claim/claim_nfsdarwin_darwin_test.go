@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/layeredfs/adapter"
+	"github.com/lycaon/lycaon/internal/layeredfs/adapter/adaptertest"
 	"github.com/lycaon/lycaon/internal/layeredfs/adapter/nfsdarwin"
 	"github.com/lycaon/lycaon/internal/testutil"
 )
@@ -30,7 +31,7 @@ func TestRealNFSDarwinMountedClaimZeroLowerDirReads(t *testing.T) {
 		ConfinementCheckFn: func(context.Context, adapter.ProbeConfig) error { return nil },
 	})
 	sel := adapter.NewSelector("darwin", nil, nfsAdp, adapter.NewEagerCopyAdapter())
-	sel.BudgetFor = adapter.ZeroBudget
+	sel.BudgetFor = adaptertest.ZeroBudget
 	coord := NewCoordinator(sel)
 	ret := newTestRetentionRegistrar()
 

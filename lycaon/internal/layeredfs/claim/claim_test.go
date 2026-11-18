@@ -13,6 +13,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/layeredfs"
 	"github.com/lycaon/lycaon/internal/layeredfs/adapter"
+	"github.com/lycaon/lycaon/internal/layeredfs/adapter/adaptertest"
 	"github.com/lycaon/lycaon/internal/layeredfs/privategit"
 	gittestsetup "github.com/lycaon/lycaon/internal/testsetup/git"
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -85,7 +86,7 @@ func newMockMountedSelector(targetOS string) *adapter.Selector {
 	if targetOS == "darwin" {
 		adpID = adapter.AdapterNFSDarwin
 	}
-	mounted := adapter.NewMountedAdapter(adapter.MountedAdapterConfig{
+	mounted := adaptertest.NewMounted(adaptertest.MountedConfig{
 		AdapterID: adpID,
 		TargetOS:  targetOS,
 		MountProbeFn: func(_ context.Context, _, _ string) (adapter.ReasonCode, string, error) {
@@ -107,7 +108,7 @@ func newMockMountedSelector(targetOS string) *adapter.Selector {
 		},
 	})
 	selector := adapter.NewSelector(targetOS, mounted, mounted, adapter.NewEagerCopyAdapter())
-	selector.BudgetFor = adapter.ZeroBudget
+	selector.BudgetFor = adaptertest.ZeroBudget
 	return selector
 }
 
@@ -272,7 +273,7 @@ func TestFailedSettlementKeepsCustodyUntilARetrySettles(t *testing.T) {
 	testutil.FailErr(t, "mkdir source", os.MkdirAll(source, 0o755))
 	unmountErr := errors.New("mount still busy")
 	failUnmount := true
-	mounted := adapter.NewMountedAdapter(adapter.MountedAdapterConfig{
+	mounted := adaptertest.NewMounted(adaptertest.MountedConfig{
 		AdapterID: adapter.AdapterNFSDarwin,
 		TargetOS:  runtime.GOOS,
 		MountProbeFn: func(context.Context, string, string) (adapter.ReasonCode, string, error) {
@@ -286,7 +287,7 @@ func TestFailedSettlementKeepsCustodyUntilARetrySettles(t *testing.T) {
 		},
 	})
 	selector := adapter.NewSelector(runtime.GOOS, mounted, mounted, adapter.NewEagerCopyAdapter())
-	selector.BudgetFor = adapter.ZeroBudget
+	selector.BudgetFor = adaptertest.ZeroBudget
 	coord := NewCoordinator(selector)
 	retention := newTestRetentionRegistrar()
 	metaPath := filepath.Join(tmp, "view-meta.json")
