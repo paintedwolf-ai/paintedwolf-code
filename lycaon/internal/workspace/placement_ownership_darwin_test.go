@@ -23,7 +23,7 @@ func TestVolumeIgnoringOwnershipIsNotClonable(t *testing.T) {
 	project := volume.Dir(t, "project")
 	writeTree(t, project, projectFiles)
 	volume.RemountIgnoringOwnership(t)
-	fixture := newPlacementFixture(t)
+	fixture := newPlacementFixture(t, nil)
 	binding, err := fixture.mgr.CreateWorkerWorkspace(t.Context(), project, "job")
 	testutil.FailErr(t, "create", err)
 	if binding.Preparation.Clonable || binding.Preparation.NotClonableReason != workerplacement.ReasonVolumeIgnoresOwnership {

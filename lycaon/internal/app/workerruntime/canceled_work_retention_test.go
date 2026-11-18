@@ -343,7 +343,7 @@ func TestCancelWithoutARecoveryCoordinatorStaysUnresolved(t *testing.T) {
 	f := newEngineFixture(t)
 	task := f.claimMaterializedWorker()
 	writeTreeFile(t, task.WorkspaceRoot, "app.txt", "unpromoted edit\n")
-	unrecorded := workspace.NewManager(f.engine.BranchRoot, platform.NewSelector(platform.Config{}))
+	unrecorded := workspace.NewManager(f.engine.BranchRoot, platform.NewSelector(platform.Config{}), nil)
 	f.engine.Queue.Branches.SetWorkerWorkspaceManager(unrecorded)
 
 	err := f.engine.Queue.Cancel(t.Context(), task.ID, nil)

@@ -57,7 +57,7 @@ func (m *Manager) probeSourcesClone(ctx context.Context, sample, dir string) (bo
 	if sample == "" {
 		return fileclone.SupportedAt(dir)
 	}
-	return fileclone.SupportedFromUsing(ctx, sample, dir, m.fileCloner())
+	return fileclone.SupportedFromUsing(ctx, sample, dir, m.cloneFile)
 }
 
 // placedBranchClonability re-derives a placed branch's clone answer when its view is rebuilt: the
@@ -67,10 +67,6 @@ func (m *Manager) placedBranchClonability(ctx context.Context, branchRoot string
 	parent, err := existingBranchAncestor(branchRoot)
 	if err != nil {
 		return workerplacement.Decision{}, err
-	}
-	if m.cloneProbe != nil {
-		clonable, err := m.cloneProbe(ctx, parent)
-		return workerplacement.Decision{Clonable: clonable}, err
 	}
 	for _, source := range sources {
 		sample, err := firstRegularFile(ctx, source.Path, m.sourceAdmit(source.Path))
@@ -102,9 +98,6 @@ func (m *Manager) decidePlacement(ctx context.Context, roots, sources []projectr
 		AttachedRoots: placementRoots(roots, sources),
 		SourceRoots:   sourcePaths,
 		Probe: func(ctx context.Context, dir string) (bool, error) {
-			if m.cloneProbe != nil {
-				return m.cloneProbe(ctx, dir)
-			}
 			var sample string
 			for _, source := range sources {
 				found, err := firstRegularFile(ctx, source.Path, m.sourceAdmit(source.Path))

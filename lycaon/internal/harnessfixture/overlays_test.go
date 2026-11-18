@@ -30,7 +30,7 @@ func TestPreparedOverlaysUseRealQueueAndConflict(t *testing.T) {
 	parent, err := sessions.Create(t.Context(), api.CreateSessionRequest{WorkspaceRootID: project.Roots[0].ID}, project.ID)
 	testutil.FailErr(t, "create parent", err)
 	queue := &fixtureQueue{SQLQueue: worker.NewSQLServices(database, 2).Queue}
-	manager := workspace.NewManager(filepath.Join(testbaseline.DataDir(t, database), "worker-branches"), platform.NewSelector(platform.Config{}))
+	manager := workspace.NewManager(filepath.Join(testbaseline.DataDir(t, database), "worker-branches"), platform.NewSelector(platform.Config{}), nil)
 	ledger := sourceledger.New(database, filepath.Join(testbaseline.DataDir(t, database), "source-content"))
 	queue.Branches.SetBaselineStore(ledger.Baselines)
 	queue.Branches.SetProjectStore(projects)

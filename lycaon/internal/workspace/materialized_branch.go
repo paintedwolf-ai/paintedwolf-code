@@ -115,7 +115,7 @@ func (m *Manager) prepareMaterializedWorkspaceView(ctx context.Context, binding 
 			StatManifestPath: enginepaths.StatManifestForBranchRoot(binding.Root),
 			CopyBudget:       choice.CopyBudget,
 			GitObjectStore:   services.privateGit.Store(),
-			CloneFile:        m.fileCloner(),
+			CloneFile:        m.cloneFile,
 			Progress: func(p adapter.MaterializeProgress) {
 				progress := base
 				progress.Files, progress.Bytes = p.Entries, p.LogicalBytes

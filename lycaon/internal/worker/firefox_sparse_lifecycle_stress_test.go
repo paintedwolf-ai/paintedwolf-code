@@ -119,7 +119,7 @@ func newFirefoxWorkerFixture(t *testing.T, source string) *layeredWorkerFixture 
 	testutil.FailErr(t, "scale private Git", err)
 	selector := workspace.HostSelector()
 	selector.BudgetFor = adapter.ZeroBudget
-	manager := workspace.NewManager(branches, selector).WithPrivateGit(git)
+	manager := workspace.NewManager(branches, selector, nil).WithPrivateGit(git)
 	services := NewSQLServices(database, 4)
 	queue := services.Queue
 	queue.Branches.SetBaselineStore(sourceledger.New(database, filepath.Join(testbaseline.DataDir(t, database), "source-content")).Baselines)
