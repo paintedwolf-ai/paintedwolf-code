@@ -67,7 +67,13 @@ webE2e("Review shows an outside edit and its retained versions in the chat that 
     expect(comparison.after?.content).toBe("Updated notes\n");
     const editor = page.locator(".cm-content").filter({ hasText: "Updated notes" }).filter({ visible: true });
     await expect(editor).toBeVisible();
-    await expect(editor).not.toBeEditable();
+    await page.getByTestId("file-version-trigger").click();
+    const history = page.getByRole("menu", { name: "File history" });
+    await expect.poll(() => history.getByRole("menuitemradio").count()).toBeGreaterThan(1);
+    await history.getByRole("menuitemradio").last().click();
+    const retained = page.getByTestId("file-version-file").locator(".cm-content").filter({ hasText: "Original notes" });
+    await expect(retained).toBeVisible();
+    await expect(retained).not.toBeEditable();
 
     await page.getByRole("button", { name: "Back to chat", exact: true }).click();
     await openNewChatSession(page);
