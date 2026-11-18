@@ -63,7 +63,10 @@ export function ledgerAddress(projectId: string, outsideRootId: string | undefin
 /** The tree row for a source-history address; outside paths no location covers have none. */
 export function treeAddress(projectId: string, outsideRootId: string | undefined, rootId: string, path: string): { rootId: string; path: string } | undefined {
   if (!outsideRootId || rootId !== outsideRootId) return { rootId, path };
-  for (const location of chatLocations(projectId)) {
+  const locations = chatLocations(projectId);
+  const exact = locations.find(location => location.kind === "file" && location.anchor === path);
+  if (exact) return { rootId: exact.id, path: baseName(exact.anchor) };
+  for (const location of locations) {
     const row = locationRowPath(location, path);
     if (row !== undefined) return { rootId: location.id, path: row };
   }

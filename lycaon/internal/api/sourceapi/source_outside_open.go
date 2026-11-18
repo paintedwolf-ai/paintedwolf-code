@@ -14,6 +14,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/lycaon/lycaon/internal/api/httpio"
 	"github.com/lycaon/lycaon/internal/api/requestscope"
+	"github.com/lycaon/lycaon/internal/confine"
 	"github.com/lycaon/lycaon/internal/fseffect"
 	"github.com/lycaon/lycaon/internal/fspath"
 	"github.com/lycaon/lycaon/internal/project"
@@ -97,8 +98,7 @@ func (s *Workspace) trackOpenedOutsideFile(w http.ResponseWriter, r *http.Reques
 	httpio.WriteJSON(w, http.StatusOK, wire.OpenedOutsideFile{RootID: p.Outside.ID, Path: rel, FileID: tracked.FileID, Location: chatLocationDTO(p, covering)})
 }
 
-// observeOutsideFile hashes a picked file, keeping its bytes only when the
-// ledger retains content of that size.
+// Large files contribute a hash without retained bytes.
 func observeOutsideFile(f *os.File) (sourceledger.TrackInput, error) {
 	info, err := f.Stat()
 	if err != nil {
@@ -202,7 +202,11 @@ func (s *Workspace) HandleOpenChatLocationFile(w http.ResponseWriter, r *http.Re
 }
 
 func openChatLocationFile(location sourceledger.ChatLocation, path string) (*os.File, error) {
-	if location.Kind == sourceledger.ChatLocationFile && filepath.Base(location.Anchor) != path {
+	if location.Kind == sourceledger.ChatLocationFile {
+		if filepath.Base(location.Anchor) != path {
+			return nil, projectsource.ErrSourcePathDenied
+		}
+	} else if confine.ClassifyBlockedWrite(filepath.Join(location.Directory(), path)).Kind != confine.WriteSubjectOrdinary {
 		return nil, projectsource.ErrSourcePathDenied
 	}
 	root, err := fseffect.OpenReadRoot(location.Directory())

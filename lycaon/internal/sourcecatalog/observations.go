@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/lycaon/lycaon/internal/backgroundwork"
+	"github.com/lycaon/lycaon/internal/confine"
 	"github.com/lycaon/lycaon/internal/fspath"
 	"github.com/lycaon/lycaon/internal/pagedview"
 	"github.com/lycaon/lycaon/internal/repochange"
@@ -173,7 +174,9 @@ func validateObservationDirectory(root Root, dir string) error {
 	if filepath.IsAbs(dir) || sandbox.HasParentTraversal(dir) {
 		return os.ErrPermission
 	}
-	if repochange.IsPrivatePath(filepath.Join(root.Path, filepath.FromSlash(dir))) {
+	absolute := filepath.Join(root.Path, filepath.FromSlash(dir))
+	if repochange.IsPrivatePath(absolute) ||
+		root.DirectoryIdentity != "" && root.Only == "" && confine.ClassifyBlockedWrite(absolute).Kind != confine.WriteSubjectOrdinary {
 		return os.ErrPermission
 	}
 	return nil

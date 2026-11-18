@@ -92,13 +92,14 @@ func chatLocationFromRow(row db.SourceChatLocations) ChatLocation {
 // placeChatLocation makes the location covering rel visible for the chat,
 // adding one when none covers it.
 func placeChatLocation(ctx context.Context, q *db.Queries, chat, rel string, ts time.Time) error {
+	anchor, kind := locationAnchor(rel)
 	rows, err := q.ListSourceChatLocations(ctx, chat)
 	if err != nil {
 		return err
 	}
 	for _, row := range rows {
 		location := chatLocationFromRow(row)
-		if !location.Covers(rel) {
+		if !location.Covers(rel) || kind == ChatLocationFile && location.Kind != ChatLocationFile {
 			continue
 		}
 		if !location.Available() {
@@ -109,7 +110,6 @@ func placeChatLocation(ctx context.Context, q *db.Queries, chat, rel string, ts 
 		}
 		return nil
 	}
-	anchor, kind := locationAnchor(rel)
 	location := ChatLocation{Anchor: anchor, Kind: kind}
 	identity, _ := projectroot.OutsideDirectoryIdentity(location.Directory())
 	return q.InsertSourceChatLocation(ctx, db.InsertSourceChatLocationParams{
@@ -137,9 +137,13 @@ func (s *Store) ChatLocations(ctx context.Context, sessionID string) ([]ChatLoca
 	}
 	locations := make([]ChatLocation, 0, len(all))
 	for _, location := range all {
+		if location.Kind == ChatLocationFile {
+			locations = append(locations, location)
+			continue
+		}
 		covered := false
 		for _, outer := range all {
-			if outer.ID != location.ID && !outer.Hidden && outer.Kind != ChatLocationFile && outer.Covers(location.Anchor) {
+			if outer.ID != location.ID && !outer.Hidden && outer.Kind != ChatLocationFile && outer.Covers(location.Anchor) && outer.Available() {
 				covered = true
 				break
 			}
@@ -156,6 +160,11 @@ func (s *Store) ChatLocationCovering(ctx context.Context, sessionID, rel string)
 	locations, err := s.ChatLocations(ctx, sessionID)
 	if err != nil {
 		return ChatLocation{}, false, err
+	}
+	for _, location := range locations {
+		if location.Kind == ChatLocationFile && location.Covers(rel) {
+			return location, true, nil
+		}
 	}
 	for _, location := range locations {
 		if location.Covers(rel) {
