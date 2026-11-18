@@ -1020,6 +1020,13 @@ starts first and the shards finish together. A selection smaller than the split
 repeats packages rather than leave a shard empty. Without measurements, such as
 for a token that cannot read Actions, shards deal the sorted selection in turn.
 
+Browser specs follow the same rule. Each `e2e:den` stack reduces Playwright's
+JSON report to seconds per spec file in `ci/e2e-specs-<shard>.json`, and the
+nightly merge publishes them as `specs` beside the lanes. One job of
+`e2e-verification.yml` reads them once and hands the same map to every web job,
+so their deals agree. Groups of specs that share a helper module go longest
+first to the least loaded stack; a spec with no measurement weighs the median.
+
 The planner in [`scripts/ci_policy/impact.py`](../scripts/ci_policy/impact.py)
 uses the pull request merge base or the merge group's explicit `base_sha`, not
 the moving `origin/main` tip. That same base reaches changed coverage and budget

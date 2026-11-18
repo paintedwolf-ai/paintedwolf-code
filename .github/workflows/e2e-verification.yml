@@ -19,8 +19,26 @@ env:
   DEVELOPER_DIR: /Applications/Xcode_26.3.app/Contents/Developer
 
 jobs:
+  # Read once so both web jobs deal the same spec durations, even if a nightly publishes between them.
+  spec-timings:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      specs: ${{ steps.measured.outputs.specs }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.source-sha || github.sha }}
+      - name: Read main's measured spec durations
+        id: measured
+        env:
+          # Without actions read access the deal weighs every spec alike.
+          GH_TOKEN: ${{ github.token }}
+        run: echo "specs=$(python3 scripts/ci_verification.py timings | jq -c '.specs // {}')" >> "$GITHUB_OUTPUT"
+
   playwright-web:
     name: playwright-web (${{ matrix.shard }}/2)
+    needs: spec-timings
     runs-on: ubuntu-latest
     timeout-minutes: 80
     strategy:
@@ -88,6 +106,7 @@ jobs:
           LYCAON_E2E_KEEP_ARTIFACTS: "1"
           LYCAON_E2E_JOB_SHARD: ${{ matrix.shard }}/2
           LYCAON_E2E_PLAYWRIGHT_READY: "1"
+          LYCAON_E2E_SPEC_TIMINGS: ${{ needs.spec-timings.outputs.specs }}
         run: ./task e2e:den
 
       - uses: ./.github/actions/verification-evidence
