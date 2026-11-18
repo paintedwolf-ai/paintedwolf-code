@@ -13,7 +13,11 @@ import (
 	"github.com/lycaon/lycaon/internal/systemproxy"
 )
 
-var systemConfiguration = systemproxy.CurrentContext
+type resolver struct {
+	system func(context.Context) (systemproxy.Configuration, error)
+}
+
+var hostResolver = resolver{system: systemproxy.CurrentContext}
 
 // Configuration is the proxy policy every host client applies: loopback
 // is always direct, NO_PROXY exempts destinations, an explicit environment
@@ -46,8 +50,12 @@ func environmentConfiguration() Configuration {
 
 // Current reads both sources when exporting policy for multiple schemes.
 func Current() Configuration {
+	return hostResolver.configuration(context.Background())
+}
+
+func (r resolver) configuration(ctx context.Context) Configuration {
 	config := environmentConfiguration()
-	config.System, config.SystemErr = systemConfiguration(context.Background())
+	config.System, config.SystemErr = r.system(ctx)
 	return config
 }
 
@@ -125,6 +133,10 @@ func Resolve(target *url.URL) (*url.URL, error) {
 
 // ResolveContext reads desktop state only when environment policy needs it.
 func ResolveContext(ctx context.Context, target *url.URL) (*url.URL, error) {
+	return hostResolver.resolve(ctx, target)
+}
+
+func (r resolver) resolve(ctx context.Context, target *url.URL) (*url.URL, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
@@ -135,7 +147,7 @@ func ResolveContext(ctx context.Context, target *url.URL) (*url.URL, error) {
 	if proxy, decided, err := config.explicit(target); decided {
 		return proxy, err
 	}
-	config.System, config.SystemErr = systemConfiguration(ctx)
+	config.System, config.SystemErr = r.system(ctx)
 	return config.ProxyFor(target)
 }
 

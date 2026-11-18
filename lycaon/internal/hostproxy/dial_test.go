@@ -18,20 +18,18 @@ import (
 	"github.com/lycaon/lycaon/internal/testutil"
 )
 
-func directDesktop(t *testing.T) {
+func directDesktop(t *testing.T) resolver {
 	t.Helper()
-	previous := systemConfiguration
-	systemConfiguration = func(context.Context) (systemproxy.Configuration, error) {
-		return systemproxy.Configuration{Mode: systemproxy.ModeNone}, nil
-	}
-	t.Cleanup(func() { systemConfiguration = previous })
 	clearProxyEnvironment(t)
+	return resolver{system: func(context.Context) (systemproxy.Configuration, error) {
+		return systemproxy.Configuration{Mode: systemproxy.ModeNone}, nil
+	}}
 }
 
 func TestConnectPinsNumericDestinationAndContainsCredentialsInProxyHeader(t *testing.T) {
 	for _, desktop := range []bool{false, true} {
 		t.Run(map[bool]string{false: "environment", true: "desktop"}[desktop], func(t *testing.T) {
-			directDesktop(t)
+			policy := directDesktop(t)
 			address := netip.MustParseAddrPort("[2001:db8::123]:443")
 			observed := make(chan string, 1)
 			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -52,12 +50,12 @@ func TestConnectPinsNumericDestinationAndContainsCredentialsInProxyHeader(t *tes
 			testutil.FailErr(t, "parse proxy fixture", err)
 			endpoint.User = url.UserPassword("alice", "proxy-secret")
 			if desktop {
-				useSystemProxy(t, endpoint.String())
+				policy = testSystemProxy(t, endpoint.String())
 			} else {
 				t.Setenv("HTTPS_PROXY", endpoint.String())
 			}
 			target := mustURL(t, "https://origin-user:origin-secret@approval.invalid/private?token=origin-secret")
-			connection, err := DialPinned(t.Context(), target, "tcp", address)
+			connection, err := policy.dialPinned(t.Context(), target, "tcp", address)
 			testutil.FailErr(t, "connect through pinned proxy", err)
 			defer func() { _ = connection.Close() }()
 			raw, err := io.ReadAll(connection)
@@ -78,7 +76,7 @@ func TestProxyRefusalMalformedReplyAndCancellationNeverDialDirect(t *testing.T) 
 		"HTTP/1.1 302 Found\r\nLocation: http://other.invalid/\r\n\r\n",
 		"not-http\r\n\r\n", "HTTP/1.1 200 OK\r\nX-Large: " + strings.Repeat("s", 17000) + "\r\n\r\n",
 	} {
-		directDesktop(t)
+		policy := directDesktop(t)
 		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 			connection, _, err := w.(http.Hijacker).Hijack()
 			if err != nil {
@@ -92,13 +90,13 @@ func TestProxyRefusalMalformedReplyAndCancellationNeverDialDirect(t *testing.T) 
 		testutil.FailErr(t, "parse refusal fixture", err)
 		endpoint.User = url.UserPassword("alice", "private-secret")
 		t.Setenv("HTTPS_PROXY", endpoint.String())
-		connection, err := DialPinned(t.Context(), mustURL(t, "https://never-resolve.invalid/"), "tcp", netip.MustParseAddrPort("192.0.2.1:443"))
+		connection, err := policy.dialPinned(t.Context(), mustURL(t, "https://never-resolve.invalid/"), "tcp", netip.MustParseAddrPort("192.0.2.1:443"))
 		if connection != nil || err == nil || strings.Contains(err.Error(), "private-secret") {
 			t.Fatalf("proxy refusal = %v, %v", connection, err)
 		}
 		server.Close()
 	}
-	directDesktop(t)
+	policy := directDesktop(t)
 	listener, err := net.Listen("tcp", "127.0.0.1:0")
 	testutil.FailErr(t, "listen for cancellation", err)
 	defer func() { _ = listener.Close() }()
@@ -114,7 +112,7 @@ func TestProxyRefusalMalformedReplyAndCancellationNeverDialDirect(t *testing.T) 
 	t.Setenv("HTTPS_PROXY", "http://"+listener.Addr().String())
 	ctx, cancel := context.WithTimeout(t.Context(), 30*time.Millisecond)
 	defer cancel()
-	_, err = DialPinned(ctx, mustURL(t, "https://approval.invalid/"), "tcp", netip.MustParseAddrPort("192.0.2.1:443"))
+	_, err = policy.dialPinned(ctx, mustURL(t, "https://approval.invalid/"), "tcp", netip.MustParseAddrPort("192.0.2.1:443"))
 	if err == nil {
 		t.Fatal("overdue proxy became a direct connection")
 	}
@@ -122,8 +120,8 @@ func TestProxyRefusalMalformedReplyAndCancellationNeverDialDirect(t *testing.T) 
 }
 
 func TestNoProxyUsesOriginalDestinationAndExplicitPolicyDoesNotReadDesktop(t *testing.T) {
-	directDesktop(t)
-	systemConfiguration = func(context.Context) (systemproxy.Configuration, error) {
+	policy := directDesktop(t)
+	policy.system = func(context.Context) (systemproxy.Configuration, error) {
 		t.Error("explicit policy read desktop state")
 		return systemproxy.Configuration{}, errors.New("unavailable")
 	}
@@ -140,7 +138,7 @@ func TestNoProxyUsesOriginalDestinationAndExplicitPolicyDoesNotReadDesktop(t *te
 		}
 	}()
 	address := netip.MustParseAddrPort(listener.Addr().String())
-	connection, err := DialPinned(t.Context(), mustURL(t, "https://approval.invalid/"), "tcp", address)
+	connection, err := policy.dialPinned(t.Context(), mustURL(t, "https://approval.invalid/"), "tcp", address)
 	testutil.FailErr(t, "dial explicit exception", err)
 	defer func() { _ = connection.Close() }()
 	line, err := bufio.NewReader(connection).ReadString('\n')
@@ -153,11 +151,11 @@ func TestNoProxyUsesOriginalDestinationAndExplicitPolicyDoesNotReadDesktop(t *te
 }
 
 func TestHTTPSProxyRequiresItsOwnValidCertificate(t *testing.T) {
-	directDesktop(t)
+	policy := directDesktop(t)
 	server := httptest.NewTLSServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) { t.Error("untrusted HTTPS proxy reached CONNECT") }))
 	defer server.Close()
 	t.Setenv("HTTPS_PROXY", server.URL)
-	_, err := DialPinned(t.Context(), mustURL(t, "https://approval.invalid/"), "tcp", netip.MustParseAddrPort("192.0.2.1:443"))
+	_, err := policy.dialPinned(t.Context(), mustURL(t, "https://approval.invalid/"), "tcp", netip.MustParseAddrPort("192.0.2.1:443"))
 	if !errors.Is(err, ProxyTLS) {
 		t.Fatalf("HTTPS proxy trust failure = %v", err)
 	}

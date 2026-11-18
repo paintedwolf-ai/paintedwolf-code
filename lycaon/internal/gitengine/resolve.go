@@ -14,9 +14,6 @@ import (
 	execpkg "github.com/lycaon/lycaon/internal/exec"
 )
 
-// versionOfFn isolates version probes in tests.
-var versionOfFn = versionOf
-
 func resolve() (bin string, lfs string, err error) {
 	if path := strings.TrimSpace(os.Getenv(EnvGitBinary)); path != "" && testEnvArmed() {
 		if isExecutable(path) {
@@ -78,7 +75,7 @@ func assertPinnedVersion(bin string) error {
 	if err != nil {
 		return err
 	}
-	found, err := versionOfFn(bin)
+	found, err := versionOf(bin)
 	if err != nil {
 		return &UnavailableError{Reason: "missing", Expected: expected}
 	}
