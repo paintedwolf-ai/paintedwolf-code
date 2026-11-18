@@ -373,7 +373,7 @@ while True: time.sleep(.1)
         task = self.root / "fixture-task"
         task.write_text('#!/usr/bin/env bash\nset -eu\nshift 2\n'
                         'if [[ "${1:-}" == "--dry" ]]; then echo "task: [den:harness] fixture $*" >&2; exit 0; fi\n'
-                        '[[ "$1" == "--force" ]]\nshift\n'
+                        'if [[ "${1:-}" == "--force" ]]; then shift; fi\n'
                         'if [[ "${1:-}" == "--concurrency" ]]; then shift 2; fi\n'
                         '[[ "$1" == "den:harness" ]]\nshift\n'
                         'if [[ "${1:-}" == "--" ]]; then shift; else set -- --supervised; fi\n'
