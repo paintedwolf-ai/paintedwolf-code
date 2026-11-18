@@ -151,3 +151,41 @@ func TestFormatOpenAIProviderError_FlatTopLevelErrorBody(t *testing.T) {
 		t.Fatalf("ModelRefusalEvidenceFor = %q, want %q", got, RefusalEvidenceModelIdentity)
 	}
 }
+
+func TestStreamErrorReadsEveryMemberForm(t *testing.T) {
+	for _, test := range []struct {
+		name, member string
+		want         *ProviderStreamError
+	}{
+		{"absent", ``, nil},
+		{"null", `null`, nil},
+		{"object", `{"message":"quota exhausted","type":"insufficient_quota","code":"insufficient_quota","param":"model"}`,
+			&ProviderStreamError{Code: "insufficient_quota", Param: "model", Type: "insufficient_quota", Message: "quota exhausted"}},
+		{"numeric code", `{"code":502}`, &ProviderStreamError{Code: "502"}},
+		{"string", `" upstream closed "`, &ProviderStreamError{Message: "upstream closed"}},
+		{"empty object", `{}`, &ProviderStreamError{Message: "{}"}},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			got := StreamError(json.RawMessage(test.member))
+			if (got == nil) != (test.want == nil) || (got != nil && *got != *test.want) {
+				t.Fatalf("StreamError(%s) = %+v, want %+v", test.member, got, test.want)
+			}
+		})
+	}
+}
+
+func TestProviderStreamErrorNamesItsMostSpecificField(t *testing.T) {
+	for _, test := range []struct {
+		err  ProviderStreamError
+		want string
+	}{
+		{ProviderStreamError{Message: "m", Code: "c", Type: "t"}, "provider stream error: m"},
+		{ProviderStreamError{Code: "c", Type: "t"}, "provider stream error: c"},
+		{ProviderStreamError{Type: "t"}, "provider stream error: t"},
+		{ProviderStreamError{}, "provider stream error"},
+	} {
+		if got := test.err.Error(); got != test.want {
+			t.Fatalf("Error() = %q, want %q", got, test.want)
+		}
+	}
+}

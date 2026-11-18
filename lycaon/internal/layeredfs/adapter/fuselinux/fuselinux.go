@@ -22,6 +22,7 @@ import (
 	"github.com/lycaon/lycaon/internal/layeredfs"
 	"github.com/lycaon/lycaon/internal/layeredfs/adapter"
 	"github.com/lycaon/lycaon/internal/layeredfs/privategit"
+	"github.com/lycaon/lycaon/internal/projectroot"
 )
 
 const (
@@ -246,7 +247,7 @@ func (a *Adapter) Probe(ctx context.Context, probeCfg adapter.ProbeConfig) (adap
 	probeViewID := fmt.Sprintf("probe-fuselinux-%d", time.Now().UnixNano())
 	prep, pErr := a.Prepare(ctx, adapter.PrepareRequest{
 		ViewID: probeViewID, BackingDir: backingDir, RuntimeDir: runtimeDir,
-		Grants: []adapter.RootGrant{{RootID: "primary", Label: "primary", SourcePath: trunkDir, IsPrimary: true}},
+		Grants: []adapter.RootGrant{{RootID: projectroot.SingleRootID, Label: projectroot.SingleRootID, SourcePath: trunkDir, IsPrimary: true}},
 	})
 	if pErr != nil {
 		res.ReasonCode, res.Diagnostic = classifyProbeError(pErr), pErr.Error()

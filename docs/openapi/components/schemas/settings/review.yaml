@@ -40,6 +40,14 @@ components:
           type: array
           items:
             type: string
+        rejected:
+          type: array
+          items:
+            $ref: preferences.yaml#/components/schemas/ProjectSettingsRejectedRow
+          description: >
+            Present on project scope when the project's review.yaml could not be
+            applied. Every edit asks for review until it is fixed, and the
+            project's review settings cannot be saved until then.
     UpdateReviewSettingsRequest:
       x-go-generate: true
       type: object

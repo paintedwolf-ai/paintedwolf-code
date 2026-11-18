@@ -1,17 +1,21 @@
 // @vitest-environment jsdom
 import { EditorView, GutterMarker, gutter, drawSelection, RectangleMarker } from "@codemirror/view";
 import { EditorSelection, type Extension } from "@codemirror/state";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 type Range = { from: number; to: number };
 type ViewportInternals = {
   measure(): void;
+  measureScheduled: number;
+  observer: { intersecting: boolean; onScrollChanged(event: { target: EventTarget }): void };
   viewState: {
     pixelViewport: { left: number; right: number; top: number; bottom: number };
+    printing: boolean;
     scrollDelta: number;
     scrollJump: boolean;
     scrollSettled: boolean;
     getViewport(bias: number, scrollTarget: null): Range;
+    viewportIsAppropriate(viewport: Range, bias: number): boolean;
     viewportRests(viewport: Range): boolean;
     restingViewport(base: Range): Range;
   };
@@ -69,6 +73,28 @@ describe("CodeMirror viewport margin", () => {
     expect(fling).toBeGreaterThan(jump * 3);
     // A small scrollbar step still glides.
     expect(renderedLines(view, 100, true)).toBe(renderedLines(view, 100, false));
+    // The lead leans toward the motion.
+    const { viewState } = view as unknown as ViewportInternals;
+    viewState.scrollDelta = 450;
+    viewState.scrollJump = false;
+    const leaning = viewState.getViewport(0, null);
+    expect(view.lineBlockAt(leaning.to).bottom - 20_600).toBeGreaterThan(20_000 - view.lineBlockAt(leaning.from).top);
+  });
+
+  it("swaps while the rendered lead still covers three frames of travel", () => {
+    view = mount(Array.from({ length: 5_000 }, (_, i) => `line ${i}`).join("\n"), []);
+    const { viewState } = view as unknown as ViewportInternals;
+    viewState.pixelViewport = { left: 0, right: 800, top: 20_000, bottom: 20_600 };
+    // The rendered range ends between the unpatched cover cap (250px) and the patched one (600px).
+    const lineEndingBelow = (height: number) => {
+      let block = view!.lineBlockAt(0);
+      while (block.bottom < height) block = view!.lineBlockAt(block.to + 1);
+      return block;
+    };
+    const viewport = { from: lineEndingBelow(19_500).from, to: lineEndingBelow(21_000).to };
+    expect(view.lineBlockAt(viewport.to).bottom).toBeLessThan(21_200);
+    expect(viewState.viewportIsAppropriate(viewport, 250)).toBe(true);
+    expect(viewState.viewportIsAppropriate(viewport, 900)).toBe(false);
   });
 
   it("rests with the base margin on both sides, keeping a lead the motion left", () => {
@@ -118,6 +144,68 @@ describe("CodeMirror viewport margin", () => {
     expect(viewState.scrollJump).toBe(true);
     internals.measure();
     expect(viewState.scrollJump).toBe(false);
+  });
+});
+
+describe("CodeMirror scroll measurement", () => {
+  function scrolled(target: EditorView, timings: number[]) {
+    const internals = target as unknown as ViewportInternals;
+    internals.observer.intersecting = true;
+    let top = 0;
+    Object.defineProperty(target.scrollDOM, "scrollTop", { get: () => top, configurable: true });
+    return {
+      internals,
+      scrollTo(next: number) {
+        top = next;
+        internals.observer.onScrollChanged({ target: target.scrollDOM });
+        return timings.length;
+      },
+    };
+  }
+
+  /** jsdom lays nothing out; give the content a page-sized box so a measure has geometry to read. */
+  function layOut(target: EditorView): void {
+    const page = { x: 0, y: 0, left: 0, top: 0, right: 800, bottom: 40_000, width: 800, height: 40_000, toJSON: () => ({}) };
+    target.contentDOM.getBoundingClientRect = () => page;
+  }
+
+  it("measures once per scroll offset", () => {
+    const timings: number[] = [];
+    view = mount("one\ntwo", [EditorView.measureTiming.of((ms) => timings.push(ms))]);
+    const { scrollTo } = scrolled(view, timings);
+    const first = scrollTo(0);
+    expect(first).toBeGreaterThan(0);
+    // The native scroll event after a pre-paint notification has nothing new to measure.
+    expect(scrollTo(0)).toBe(first);
+  });
+
+  it("measures synchronously at most once per animation frame", () => {
+    const frames: FrameRequestCallback[] = [];
+    const raf = vi.spyOn(window, "requestAnimationFrame").mockImplementation((callback) => frames.push(callback));
+    try {
+      const timings: number[] = [];
+      view = mount("one\ntwo", [EditorView.measureTiming.of((ms) => timings.push(ms))]);
+      const { internals, scrollTo } = scrolled(view, timings);
+      const first = scrollTo(10);
+      // A later scroll in the same frame shares the next frame's measurement.
+      expect(scrollTo(20)).toBe(first);
+      expect(internals.measureScheduled).toBeGreaterThan(-1);
+      frames.splice(0).forEach((frame) => frame(0));
+      expect(scrollTo(30)).toBeGreaterThan(first);
+    } finally {
+      raf.mockRestore();
+    }
+  });
+
+  it("reads the whole document only while printing", () => {
+    view = mount("one\ntwo", []);
+    const internals = view as unknown as ViewportInternals;
+    layOut(view);
+    internals.measure();
+    expect(internals.viewState.pixelViewport.bottom).toBeLessThanOrEqual(window.innerHeight);
+    internals.viewState.printing = true;
+    internals.measure();
+    expect(internals.viewState.pixelViewport.bottom).toBeGreaterThan(39_000);
   });
 });
 

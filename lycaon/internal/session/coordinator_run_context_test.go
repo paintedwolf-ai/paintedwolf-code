@@ -151,7 +151,7 @@ func TestAppendWorkerSummaryFinalizesEnqueuedTaskTool(t *testing.T) {
 			},
 		},
 	); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "store.AppendMessages failed", err)
 	}
 	_, err = mgr.Workers.Summaries.Append(ctx, parent.ID, workeroutcomes.SummaryInput{
 		Summary:        "done",

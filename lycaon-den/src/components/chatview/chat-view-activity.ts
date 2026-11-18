@@ -11,7 +11,6 @@ import { buildChatTranscriptBlocks } from "../../chat/workflow/workflow-spans.ts
 import { catalogWorkflowRun } from "../../workflow/workflow-run-stack.ts";
 import { verboseModePref } from "../../settings/system/debug-prefs.ts";
 import { projectIdForPath } from "../../store/app-state.ts";
-import { boardWithWorkerApprovalState } from "../../chat/worker/worker-approval-model.ts";
 import { sessionLauncherTiles, shouldShowSessionLauncher } from "../../workflow/session-launcher-model.ts";
 import { contiguousWindowRows } from "../../chat/transcript/layout/transcript-window.ts";
 import type { ChatViewProps } from "./chat-view-props.ts";
@@ -68,12 +67,6 @@ export function createChatViewActivity(props: ChatViewProps) {
     ).some((activity) => activity.status === "active" && activity.kind === "running_tool" && activity.progress !== undefined),
   });
 
-  const board = () =>
-    boardWithWorkerApprovalState(
-      props.appStore.state.board,
-      workers(),
-      props.appStore.state.pendingCheckpoints,
-    );
   const activeRun = () => props.appStore.state.activeWorkflowRun;
   const catalogRun = () =>
     catalogWorkflowRun(
@@ -139,5 +132,5 @@ export function createChatViewActivity(props: ChatViewProps) {
       props.appStore.state.currentSession?.untrusted_content === true,
   );
 
-  return { offline, workers, chatLive, stopping, thinkingLabel, board, activeRun, catalogRun, presentedMessages, spanBlocks, pauseHint, currentProject, launcherTiles, showSessionLauncher, sessionHoldsExternalContent };
+  return { offline, workers, chatLive, stopping, thinkingLabel, activeRun, catalogRun, presentedMessages, spanBlocks, pauseHint, currentProject, launcherTiles, showSessionLauncher, sessionHoldsExternalContent };
 }

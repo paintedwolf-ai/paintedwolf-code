@@ -62,10 +62,6 @@ func stopResolution(ctx context.Context) Resolution {
 	return Resolution{By: authzledger.ResolvedByHostStop}
 }
 
-func policyResolution(policy authzledger.PolicyIdentity) Resolution {
-	return Resolution{By: authzledger.ResolvedByPolicy, Policy: &policy}
-}
-
 func gateOutcome(status DecisionStatus) string {
 	if status == DecisionStatusApproved {
 		return authzledger.OutcomeAllowed

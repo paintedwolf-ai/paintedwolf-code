@@ -42,8 +42,7 @@ describe("ProjectFilesView stage chrome", () => {
     await waitFor(() => expect(editorReplica(current().documentId)).toBeDefined());
     setPresence("idle");
     expect(await suspendFileDocument(PROJECT, buffer.rootId, buffer.path, current().documentId ?? undefined)).toBe(true);
-    await new Promise(resolve => setTimeout(resolve, 20));
-    expect(current().content.state).toBe("suspended");
+    await waitFor(() => expect(current().content.state).toBe("suspended"));
     expect(current().loading).toBe(false);
     expect(editorReplica(current().documentId)).toBeUndefined();
     setPresence("active");
@@ -64,8 +63,7 @@ describe("ProjectFilesView stage chrome", () => {
     });
     await waitForFilesStageReady();
     expect(await suspendFileDocument(PROJECT, first.rootId, first.path, current(first.path).documentId ?? undefined)).toBe(true);
-    await new Promise(resolve => setTimeout(resolve, 20));
-    expect(current(first.path)).toMatchObject({ content: { state: "suspended" }, loading: false });
+    await waitFor(() => expect(current(first.path)).toMatchObject({ content: { state: "suspended" }, loading: false }));
     setFilesActiveBuffer(PROJECT, current(first.path).key);
     await waitFor(() => expect(current(first.path).content.state).toBe("document"));
   });

@@ -27,7 +27,7 @@ func publishManyChanges(t *testing.T, primary string, count int) (*Store, *Promo
 	testutil.FailErr(t, "publisher", err)
 	_, err = publisher.Publish(t.Context(), PublishRequest{CheckpointID: "cp-scale", Trigger: TriggerWorkerCompletion})
 	testutil.FailErr(t, "publish", err)
-	promoter, err := NewPromoter(PromoterConfig{Store: store, TargetRoots: map[string]string{"primary": primary}})
+	promoter, err := NewPromoter(PromoterConfig{Store: store, TargetRoots: map[string]string{"primary": primary}, PrimaryRoot: "primary"})
 	testutil.FailErr(t, "promoter", err)
 	preview, err := promoter.Preview(t.Context(), PreviewRequest{CheckpointID: "cp-scale"})
 	testutil.FailErr(t, "preview", err)

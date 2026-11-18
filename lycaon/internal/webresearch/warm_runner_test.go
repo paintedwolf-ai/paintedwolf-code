@@ -359,18 +359,12 @@ func TestWarmRunnerRunsFirstCycleImmediately(t *testing.T) {
 		_ = runner.Run(ctx)
 		close(done)
 	}()
-	for t.Context().Err() == nil {
+	testutil.WaitFor(t, "the immediate first cycle records activity", func() bool {
 		index.Flush()
-		acts, err := index.RecentActivity(context.Background(), 5)
+		acts, err := index.RecentActivity(t.Context(), 5)
 		testutil.FailErr(t, "activity", err)
-		if len(acts) > 0 {
-			break
-		}
-		time.Sleep(20 * time.Millisecond)
-	}
-	if t.Context().Err() != nil {
-		t.Fatal("no activity from immediate first cycle")
-	}
+		return len(acts) > 0
+	})
 	cancel()
 	<-done
 }

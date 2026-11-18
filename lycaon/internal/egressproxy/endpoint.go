@@ -143,13 +143,17 @@ func normalizeHost(host string) (string, error) {
 		}
 		inner := strings.TrimSuffix(strings.TrimPrefix(host, "["), "]")
 		addr, err := netip.ParseAddr(inner)
-		if err != nil || !addr.Is6() {
+		if err != nil || !addr.Is6() || addr.Zone() != "" {
 			return "", fmt.Errorf("invalid host")
 		}
 		// An IPv4-mapped address is the IPv4 host, for rules and decisions alike.
 		return addr.Unmap().String(), nil
 	}
 	if addr, err := netip.ParseAddr(host); err == nil {
+		// A zone names an interface on this host, never a destination.
+		if addr.Zone() != "" {
+			return "", fmt.Errorf("invalid host")
+		}
 		return addr.Unmap().String(), nil
 	}
 	host = strings.TrimSuffix(host, ".")
@@ -161,10 +165,24 @@ func normalizeHost(host string) (string, error) {
 		return "", fmt.Errorf("invalid host")
 	}
 	ascii = strings.ToLower(ascii)
-	if ascii == "" || strings.Contains(ascii, "/") {
+	if !dnsName(ascii) || strings.Contains(ascii, "/") {
 		return "", fmt.Errorf("invalid host")
 	}
 	return ascii, nil
+}
+
+// dnsName holds DNS's own limits: 1 to 63 bytes a label, 253 in all. One
+// trailing dot, which roots a name, is removed before this check.
+func dnsName(ascii string) bool {
+	if ascii == "" || len(ascii) > 253 {
+		return false
+	}
+	for _, label := range strings.Split(ascii, ".") {
+		if label == "" || len(label) > 63 {
+			return false
+		}
+	}
+	return true
 }
 
 func parsePort(raw string) (uint16, error) {

@@ -45,19 +45,22 @@ func testCatalog(t *testing.T) *sourcecatalog.Catalog {
 // indexOf returns a reader over root's index once no rescan is pending.
 func indexOf(t *testing.T, c *sourcecatalog.Catalog, root string) *sourcecatalog.IndexReader {
 	t.Helper()
-	for t.Context().Err() == nil {
+	var covered *sourcecatalog.IndexReader
+	testutil.WaitFor(t, "the index covers the tree", func() bool {
 		reader, status, err := c.Trees.OpenIndex(t.Context(), "p", sourcecatalog.Root{ID: "r", Path: root}, time.Second)
 		testutil.FailErr(t, "open index", err)
-		if reader != nil {
-			if status.Complete && !status.Refreshing {
-				t.Cleanup(func() { _ = reader.Close() })
-				return reader
-			}
-			_ = reader.Close()
+		if reader == nil {
+			return false
 		}
-	}
-	t.Fatal("index did not cover the tree")
-	return nil
+		if !status.Complete || status.Refreshing {
+			_ = reader.Close()
+			return false
+		}
+		covered = reader
+		return true
+	})
+	t.Cleanup(func() { _ = covered.Close() })
+	return covered
 }
 
 // Extensionless files reuse content classification until their metadata changes.

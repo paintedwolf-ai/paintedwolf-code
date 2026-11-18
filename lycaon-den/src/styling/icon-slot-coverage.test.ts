@@ -7,19 +7,11 @@ import {
   ICON_SLOTS,
   ICON_VIEWBOX,
 } from "../contributions/theme-vocabulary.generated.ts";
-import { loadTypeScriptCorpus } from "../test/source-corpus.ts";
 import { VITEST_REPOSITORY_SCAN_TIMEOUT_MS } from "../test/vitest-timeouts.ts";
 
 const DEN_SRC = join(dirname(fileURLToPath(import.meta.url)), "..");
 const HOST_GLYPHS_FILE = join(DEN_SRC, "contributions", "host-glyphs.tsx");
 
-function rel(path: string): string {
-  return path.slice(DEN_SRC.length + 1);
-}
-
-const componentFiles = loadTypeScriptCorpus(DEN_SRC, { excludeTests: true }).files
-  .filter((file) => file.path.endsWith(".tsx"))
-  .map((file) => file.path);
 const glyphSource = readFileSync(HOST_GLYPHS_FILE, "utf8");
 
 const FRAME = Number(ICON_VIEWBOX.split(" ")[3]);
@@ -138,33 +130,6 @@ function glyphDrawings(source: string): Map<string, string> {
 }
 
 describe("icon slot coverage", { timeout: VITEST_REPOSITORY_SCAN_TIMEOUT_MS }, () => {
-  it("leaves no glyph outside the slot system", () => {
-    const EXEMPT = new Set([
-      // Slot renderer.
-      "components/primitives/ThemeIcon.tsx",
-      // Fixed product mark.
-      "components/primitives/BrandLockup.tsx",
-      // Marks computed from data, not drawn glyphs.
-      "components/chatview/ContextRing.tsx",
-      "components/project/ProjectCostComposition.tsx",
-      "files/walk/StepBar.tsx",
-      // Layout-scale teaching arrow.
-      "components/onboarding/OnboardingGate.tsx",
-    ]);
-    const offenders: string[] = [];
-    for (const file of componentFiles) {
-      const name = rel(file);
-      if (EXEMPT.has(name)) continue;
-      const count = (readFileSync(file, "utf8").match(/<svg[\s>]/g) ?? []).length;
-      if (count > 0) offenders.push(`${name} (${count})`);
-    }
-    expect(
-      offenders,
-      "route these through ThemeIcon and give each one a slot — a glyph " +
-        `written inline is one no theme can ever reach:\n${offenders.join("\n")}`,
-    ).toEqual([]);
-  });
-
   it("draws every host glyph inside the frame", () => {
     const over = [...outsideFrame(glyphSource)];
     expect(

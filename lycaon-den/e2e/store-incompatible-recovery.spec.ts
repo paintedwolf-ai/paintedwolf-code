@@ -25,6 +25,8 @@ mockedBackendE2e.describe("store incompatible recovery", () => {
     await seedAppState(page, { onboarding: { firstRunSetupCompleted: true } });
     await page.goto("/");
     await expect(page.getByTestId("critical-stop")).toHaveAttribute("data-code", "store_incompatible", { timeout: 30_000 });
+    // The stop replaces the whole app, not one stage of it.
+    await expect(page.getByTestId("shell")).toHaveCount(0);
     // Observe a retry interval: a reachable 503 must not recursively start another read.
     await page.waitForTimeout(2_000);
     expect(unavailableRequests).toBeLessThanOrEqual(12);

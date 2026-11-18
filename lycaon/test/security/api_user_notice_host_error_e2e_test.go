@@ -47,7 +47,7 @@ func TestPromptWithoutProviderPublishesRenderedHostError(t *testing.T) {
 
 func waitForSessionHostError(t *testing.T, hub *projectHub) wire.EventEnvelope {
 	t.Helper()
-	for t.Context().Err() == nil {
+	for {
 		env := hub.waitFor(t, wire.EventTopicSession)
 		var raw map[string]any
 		if err := json.Unmarshal(env.Data, &raw); err != nil {
@@ -57,13 +57,11 @@ func waitForSessionHostError(t *testing.T, hub *projectHub) wire.EventEnvelope {
 			return env
 		}
 	}
-	t.Fatal("timeout waiting for session envelope with host_error")
-	return wire.EventEnvelope{}
 }
 
 func waitPromptIdleHTTP(t *testing.T, base, sessionID string) {
 	t.Helper()
-	testutil.WaitFor(t, func() bool {
+	testutil.WaitFor(t, "the session is idle", func() bool {
 		sess := openAPIGetJSON[wire.Session](t, base, "/v1/sessions/{id}",
 			map[string]string{"id": sessionID}, http.StatusOK)
 		return sess.Status == wire.SessionStatusIdle

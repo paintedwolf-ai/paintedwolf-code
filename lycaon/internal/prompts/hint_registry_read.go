@@ -2,6 +2,7 @@ package prompts
 
 import (
 	"fmt"
+
 	"github.com/lycaon/lycaon/internal/oarcore"
 
 	"github.com/lycaon/lycaon/internal/hintregistry"
@@ -50,15 +51,6 @@ func (r *hintCodeRow) UnmarshalYAML(node *yaml.Node) error {
 		r.Tools = oarcore.ConjunctValues(r.When, "paintedwolf.operation")
 	}
 	return nil
-}
-
-// LoadHintCodeRows loads effective policy rows.
-func LoadHintCodeRows() (map[string]hintCodeRow, error) {
-	entries, err := hintregistry.ListEffective()
-	if err != nil {
-		return nil, err
-	}
-	return LoadHintCodeRowsFromEntries(entries)
 }
 
 // LoadHintCodeRowsFromEntries projects policy entries into hint code rows.

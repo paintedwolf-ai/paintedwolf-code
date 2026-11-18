@@ -1,6 +1,8 @@
-import { Show, onCleanup, type JSX } from "solid-js";
+import { For, Show, onCleanup, type JSX } from "solid-js";
 import type { SplitPane } from "../../../shared/app-state-types.ts";
 import { LAYOUT_BAND_SCALES, bindLayoutBand } from "../../layout/layout-bands.ts";
+import { WindowControls } from "./WindowControls.tsx";
+import { windowEdgeAttributes, type WindowEdgeClaim } from "./window-edges.ts";
 
 export type StageSplitHostProps = {
   splitLive: boolean;
@@ -32,6 +34,10 @@ export type StageSplitHostProps = {
   stageColumn: JSX.Element;
   chatColumn: JSX.Element;
   divider: JSX.Element;
+  /** The session drawer; the stylesheet lays it over the column on screen. */
+  drawer: JSX.Element;
+  /** The window edge an open drawer holds. */
+  drawerEdges: readonly WindowEdgeClaim[];
 };
 
 /** Split host with stable stage and chat columns. */
@@ -145,6 +151,10 @@ export function StageSplitHost(props: StageSplitHostProps) {
       {stageCol()}
       <Show when={props.splitLive}>{props.divider}</Show>
       {chatCol()}
+      <div class="den-session-drawer-layer" {...windowEdgeAttributes(props.drawerEdges[0])}>
+        {props.drawer}
+        <For each={props.drawerEdges}>{(claim) => <WindowControls {...claim} />}</For>
+      </div>
     </div>
   );
 }
