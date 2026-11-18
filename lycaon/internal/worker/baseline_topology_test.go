@@ -20,7 +20,7 @@ func TestCompletionRetainsBranchUntilBaselineTopologyCanBeLoaded(t *testing.T) {
 	database := testdbfixture.Open(t, "store.db")
 	primary := t.TempDir()
 	testdbseed.InsertSessionWithRoot(t, database, "parent", testdbseed.DefaultProjectID, primary)
-	queue := NewSQLQueue(database, 1)
+	queue := NewSQLServices(database, 1).Queue
 	data := testbaseline.DataDir(t, database)
 	queue.SetBaselineStore(workspacebaseline.New(database, sourceblob.New(filepath.Join(data, "source-content")), filepath.Join(data, "worker-baselines")))
 	queue.SetEventOutbox(eventoutbox.New(database, nil))

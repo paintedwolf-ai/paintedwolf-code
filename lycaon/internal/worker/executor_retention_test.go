@@ -81,7 +81,7 @@ func TestExecuteRetainsChildSessionForDenTranscript(t *testing.T) {
 	parent, err := store.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session in store", err)
 
-	queue := NewSQLQueue(store.DB(), 1)
+	queue := NewSQLServices(store.DB().Queue, 1)
 	jobID, err := queue.EnqueueWithProjectID(ctx, parent.ProjectID, api.WorkerTask{
 		ParentSessionID: parent.ID,
 		Prompt:          "do work",
