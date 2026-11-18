@@ -13,7 +13,7 @@ type FolderFact = {
 /** The host folder that stands for everything beyond the project. */
 const OUTSIDE_EVERYTHING = "/";
 
-function folderCoverage(output: string | undefined): FolderFact[] {
+function folderCoverage(output: ToolPartView["output"]): FolderFact[] {
   const text = output?.trim();
   if (!text?.startsWith("{")) return [];
   try {
@@ -31,12 +31,14 @@ function folderLabel(folder: unknown): string {
 }
 
 function boundaryList(entry: FolderFact): string {
-  const boundaries = Array.isArray(entry.boundaries) ? entry.boundaries as { path?: unknown; reason?: unknown }[] : [];
-  const parts = boundaries.map((boundary) => {
-    const reason = BOUNDARY_REASONS[boundary.reason as keyof typeof BOUNDARY_REASONS];
-    const path = typeof boundary.path === "string" ? boundary.path : "";
-    return reason ? `${path} (${reason})` : path;
-  }).filter(Boolean);
+  const boundaries = Array.isArray(entry.boundaries) ? entry.boundaries : [];
+  const parts = boundaries.flatMap((boundary: unknown) => {
+    if (!boundary || typeof boundary !== "object") return [];
+    const { path, reason } = boundary as { path?: unknown; reason?: unknown };
+    if (typeof path !== "string" || !path) return [];
+    const label = Object.hasOwn(BOUNDARY_REASONS, String(reason)) ? BOUNDARY_REASONS[reason as keyof typeof BOUNDARY_REASONS] : undefined;
+    return [label ? `${path} (${label})` : path];
+  });
   const more = typeof entry.omitted_boundaries === "number" && entry.omitted_boundaries > 0 ? entry.omitted_boundaries : 0;
   if (more) parts.push(`${more.toLocaleString()} more`);
   return parts.join(", ");
