@@ -6,7 +6,6 @@ import (
 
 	"github.com/lycaon/lycaon/internal/curationctx"
 	"github.com/lycaon/lycaon/internal/evidence"
-	"github.com/lycaon/lycaon/internal/llm/modelcall"
 )
 
 // GlossLine is a capped navigation hint with no handle and no groundable claim.
@@ -51,23 +50,6 @@ const (
 	maxGlossLabelRunes    = 80
 	curatorMaxRetries     = 1
 )
-
-// NewTestRegistrySummarizer wires a stub lite provider for contract and integration tests.
-func NewTestRegistrySummarizer(provider modelcall.Provider) (*RegistrySummarizer, error) {
-	policy := NewInMemoryPolicyStore(ModelPolicy{
-		Lite: ModelRef{ProviderID: provider.ID(), Model: "lite"},
-	})
-	reg := newEmptyRegistry()
-	reg.SetOutboundSecretScreen(NewModelSecretScreen(nil, nil))
-	if err := reg.Register(provider); err != nil {
-		return nil, err
-	}
-	return &RegistrySummarizer{
-		Registry: reg,
-		Policy:   policy,
-		Scope:    SettingsScopeGlobal,
-	}, nil
-}
 
 // CurationFocus orients the lite curator model. CacheKey excludes Task so identical
 // snapshots reuse curation; PromptFocus includes Task when present.

@@ -10,7 +10,7 @@ import (
 )
 
 func TestRuntimePolicyDefaultsReachWorkersWithoutPersistence(t *testing.T) {
-	store := NewInMemoryPolicyStore(ModelPolicy{})
+	store := newPolicyFixture(t, ModelPolicy{})
 	available := true
 	router := NewStaticModelRouter(store).WithLocalDefault(func(context.Context) bool { return available })
 	for _, view := range []*StaticModelRouter{router, router.WithScope(SettingsScopeProject, t.TempDir())} {

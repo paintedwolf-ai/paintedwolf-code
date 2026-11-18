@@ -17,7 +17,7 @@ func TestSummaryUsesInvocationPolicyWithoutChangingSharedBinding(t *testing.T) {
 	provider := &captureProvider{id: "selected"}
 	registry := newTestRegistry()
 	testutil.FailErr(t, "register provider", registry.Register(provider))
-	policy := NewInMemoryPolicyStore(ModelPolicy{Lite: ModelRef{ProviderID: "selected", Model: "global"}})
+	policy := newPolicyFixture(t, ModelPolicy{Lite: ModelRef{ProviderID: "selected", Model: "global"}})
 	primary, active, other := t.TempDir(), t.TempDir(), t.TempDir()
 	testutil.FailErr(t, "set primary", policy.PutProject(primary, ModelPolicy{Lite: ModelRef{ProviderID: "selected", Model: "primary"}}))
 	testutil.FailErr(t, "set active", policy.PutProject(active, ModelPolicy{Lite: ModelRef{ProviderID: "selected", Model: "active"}}))
@@ -60,7 +60,7 @@ func TestCompactionRoutingAndRevisionFollowProjectPolicy(t *testing.T) {
 	provider := &captureProvider{id: "selected", response: body}
 	registry := newTestRegistry()
 	testutil.FailErr(t, "register provider", registry.Register(provider))
-	policy := NewInMemoryPolicyStore(ModelPolicy{Lite: ModelRef{ProviderID: "missing-global", Model: "unavailable"}})
+	policy := newPolicyFixture(t, ModelPolicy{Lite: ModelRef{ProviderID: "missing-global", Model: "unavailable"}})
 	root := t.TempDir()
 	testutil.FailErr(t, "set project", policy.PutProject(root, ModelPolicy{Lite: ModelRef{ProviderID: "selected", Model: "first"}}))
 	summarizer := &RegistrySummarizer{Registry: registry, Policy: policy, Purpose: "compaction"}

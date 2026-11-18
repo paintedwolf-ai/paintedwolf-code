@@ -118,7 +118,7 @@ func (s *namedStubProvider) Profile() providerprofile.Profile { return providerp
 
 func newFallbackTestSummarizer(t *testing.T, lite, coord modelcall.Provider) *RegistrySummarizer {
 	t.Helper()
-	policy := NewInMemoryPolicyStore(ModelPolicy{
+	policy := newPolicyFixture(t, ModelPolicy{
 		Coordinator: ModelRef{ProviderID: coord.ID(), Model: coord.ID() + "-model"},
 		Lite:        ModelRef{ProviderID: lite.ID(), Model: lite.ID() + "-model"},
 	})

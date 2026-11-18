@@ -112,6 +112,7 @@ type ProviderCatalog struct {
 func NewProviderCatalogAt(localPath string) (*ProviderCatalog, error) {
 	c := &ProviderCatalog{
 		localPath: localPath,
+		included:  PlatformsSupportedHere(IncludedProviderEntry().Platforms),
 	}
 	if err := c.Reload(); err != nil {
 		return nil, err
@@ -125,11 +126,7 @@ func NewProviderCatalog() (*ProviderCatalog, error) {
 	if err != nil {
 		return nil, err
 	}
-	c := &ProviderCatalog{localPath: localPath, included: PlatformsSupportedHere(IncludedProviderEntry().Platforms)}
-	if err := c.Reload(); err != nil {
-		return nil, err
-	}
-	return c, nil
+	return NewProviderCatalogAt(localPath)
 }
 
 // Reload reads templates and local instances.

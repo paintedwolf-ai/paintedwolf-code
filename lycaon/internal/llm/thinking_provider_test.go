@@ -82,7 +82,7 @@ func TestRegistryThinkingBoundaryCompleteStreamAndApplication(t *testing.T) {
 	})
 	reg.snapshot.Store(snapshot)
 	policy := ModelPolicy{ThinkingOverrides: []modelcall.ThinkingOverride{{ProviderID: "p", Model: "m", Mode: "fixed", Effort: "high"}}}
-	reg.thinkingPolicy.Store(NewInMemoryPolicyStore(policy))
+	reg.thinkingPolicy.Store(newPolicyFixture(t, policy))
 	provider := reg.decorateProvider(snapshot, capture)
 	_, err := provider.Complete(t.Context(), modelcall.CompletionRequest{Model: "m", Think: modelcall.ThinkOff, Composition: modelcall.CompositionHostUtility})
 	testutil.FailErr(t, "complete with device override", err)
@@ -156,7 +156,7 @@ func TestOfflineRenderUsesServingThinkingPolicy(t *testing.T) {
 	// A teacher's prepared native override must not cross the serving boundary.
 	req := modelcall.CompletionRequest{Think: modelcall.ThinkHigh, ThinkingOverride: &modelcall.ThinkingOverride{Mode: "fixed", Effort: "high"}}
 	student := modelcall.ThinkingOverride{ProviderID: "student", Model: "e4b", Mode: "fixed", Effort: "low"}
-	registry.thinkingPolicy.Store(NewInMemoryPolicyStore(ModelPolicy{ThinkingOverrides: []modelcall.ThinkingOverride{student}}))
+	registry.thinkingPolicy.Store(newPolicyFixture(t, ModelPolicy{ThinkingOverrides: []modelcall.ThinkingOverride{student}}))
 	_, body, err := registry.RenderRequest(t.Context(), "student", "e4b", req)
 	testutil.FailErr(t, "render student policy without contacting server", err)
 	var wire map[string]any

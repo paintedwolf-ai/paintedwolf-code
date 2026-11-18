@@ -1,6 +1,7 @@
 package webresearch
 
 import (
+	"github.com/lycaon/lycaon/internal/llm/policytest"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/llm"
@@ -9,7 +10,7 @@ import (
 // The warmer only seeds off the coordinator's provider when the lite role
 // shares it; a dedicated lite provider means the summarizer is its own budget.
 func TestWarmSummarizerSharesCoordinatorFromPolicy(t *testing.T) {
-	dedicated := llm.NewInMemoryPolicyStore(llm.ModelPolicy{
+	dedicated := policytest.New(t, llm.ModelPolicy{
 		Coordinator: llm.ModelRef{ProviderID: "openai", Model: "gpt-4o"},
 		Lite:        llm.ModelRef{ProviderID: "ollama", Model: "llama3.1"},
 	})
@@ -18,7 +19,7 @@ func TestWarmSummarizerSharesCoordinatorFromPolicy(t *testing.T) {
 		t.Fatal("want dedicated lite provider")
 	}
 
-	shared := llm.NewInMemoryPolicyStore(llm.ModelPolicy{
+	shared := policytest.New(t, llm.ModelPolicy{
 		Coordinator: llm.ModelRef{ProviderID: "openai", Model: "gpt-4o"},
 		Lite:        llm.ModelRef{ProviderID: "openai", Model: "gpt-4o-mini"},
 	})
