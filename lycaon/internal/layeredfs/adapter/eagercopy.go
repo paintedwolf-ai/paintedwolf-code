@@ -19,6 +19,9 @@ type eagerViewState struct {
 	view            *PreparedView
 	capture         *statCapture
 	syncMu          sync.Mutex
+	releaseMu       sync.Mutex
+	releasing       atomic.Bool
+	settled         bool
 	denySourcePaths []string
 	gitStore        *privategit.RetainedObjectStore
 	gitLeases       []string
@@ -30,8 +33,6 @@ type eagerViewState struct {
 // EagerCopyAdapter materializes a working tree and a pristine tree as its exact base.
 type EagerCopyAdapter struct {
 	facts     AdapterFacts
-	mu        sync.RWMutex
-	views     map[string]*eagerViewState
 	gitStores *gitStoreRegistry
 }
 
@@ -64,7 +65,6 @@ func NewEagerCopyAdapter() *EagerCopyAdapter {
 			BarrierHoldBound:          layeredfs.DefaultBarrierHoldBound,
 			OtherUserAccess:           OtherUserAccessFileModes,
 		},
-		views:     make(map[string]*eagerViewState),
 		gitStores: newGitStoreRegistry(),
 	}
 }
@@ -217,9 +217,6 @@ func (a *EagerCopyAdapter) Prepare(ctx context.Context, req PrepareRequest) (*Pr
 }
 
 func (a *EagerCopyAdapter) adopt(view *PreparedView, st *eagerViewState) {
-	a.mu.Lock()
-	a.views[view.ViewID] = st
-	a.mu.Unlock()
 	sharedEagerViews.Store(view.ViewID, st)
 }
 
@@ -321,6 +318,9 @@ func (a *EagerCopyAdapter) ChangedPaths(ctx context.Context, viewID string) ([]l
 	}
 	st.syncMu.Lock()
 	defer st.syncMu.Unlock()
+	if err := st.checkAdmission("changed_paths"); err != nil {
+		return nil, CaptureStats{}, err
+	}
 	paths, err := st.capture.changedPaths(ctx, st.view.Roots)
 	st.view.Core.ParkBacking()
 	return paths, st.capture.stats, err
@@ -350,12 +350,6 @@ func (a *EagerCopyAdapter) LastCaptureStats(viewID string) (CaptureStats, bool) 
 }
 
 func (a *EagerCopyAdapter) lookupViewState(viewID string) (*eagerViewState, bool) {
-	a.mu.RLock()
-	st, ok := a.views[viewID]
-	a.mu.RUnlock()
-	if ok {
-		return st, true
-	}
 	if v, ok := sharedEagerViews.Load(viewID); ok {
 		return v.(*eagerViewState), true
 	}
@@ -367,6 +361,9 @@ func (a *EagerCopyAdapter) CommandAccess(viewID string) (CommandAccessSpec, erro
 	st, ok := a.lookupViewState(viewID)
 	if !ok {
 		return CommandAccessSpec{}, &AdapterError{AdapterID: AdapterEagerCopy, Op: "command_access", ReasonCode: ReasonViewNotFound, Diagnostic: viewID}
+	}
+	if err := st.checkAdmission("command_access"); err != nil {
+		return CommandAccessSpec{}, err
 	}
 	count := st.accessCount.Add(1)
 	rootPaths := make(map[string]string, len(st.view.Roots))
@@ -392,6 +389,9 @@ func (a *EagerCopyAdapter) CheckpointBarrier(ctx context.Context, viewID string)
 	if !ok {
 		return BarrierReceipt{}, nil, &AdapterError{AdapterID: AdapterEagerCopy, Op: "checkpoint_barrier", ReasonCode: ReasonViewNotFound, Diagnostic: viewID}
 	}
+	if err := st.checkAdmission("checkpoint_barrier"); err != nil {
+		return BarrierReceipt{}, nil, err
+	}
 	quiesceAndSync := func(cCtx context.Context, id string) error {
 		if st.quiesceHook != nil {
 			if err := st.quiesceHook(cCtx, id); err != nil {
@@ -400,6 +400,9 @@ func (a *EagerCopyAdapter) CheckpointBarrier(ctx context.Context, viewID string)
 		}
 		st.syncMu.Lock()
 		defer st.syncMu.Unlock()
+		if err := st.checkAdmission("checkpoint_barrier"); err != nil {
+			return err
+		}
 		return st.capture.capture(cCtx, st.view)
 	}
 	receipt, release, err := executeCheckpointBarrier(ctx, AdapterEagerCopy, st.view.Core, quiesceAndSync, st.flushHook)
@@ -411,27 +414,4 @@ func (a *EagerCopyAdapter) CheckpointBarrier(ctx context.Context, viewID string)
 		st.view.Core.ParkBacking()
 		return err
 	}, nil
-}
-
-// Release retires handles and cleans up the materialized view's runtime resources.
-func (a *EagerCopyAdapter) Release(ctx context.Context, viewID string) (ReleaseReceipt, error) {
-	a.mu.Lock()
-	st, ok := a.views[viewID]
-	if ok {
-		delete(a.views, viewID)
-	}
-	a.mu.Unlock()
-	if !ok {
-		if v, loaded := sharedEagerViews.LoadAndDelete(viewID); loaded {
-			st, ok = v.(*eagerViewState), true
-		}
-	} else {
-		sharedEagerViews.Delete(viewID)
-	}
-	if !ok {
-		return ReleaseReceipt{ViewID: viewID, AdapterID: AdapterEagerCopy, Settled: false, ReasonCode: ReasonViewNotFound},
-			&AdapterError{AdapterID: AdapterEagerCopy, Op: "release", ReasonCode: ReasonViewNotFound, Diagnostic: viewID}
-	}
-	releaseGitLeases(st.gitStore, st.gitLeases)
-	return settleViewRelease(ctx, AdapterEagerCopy, st.view, nil)
 }

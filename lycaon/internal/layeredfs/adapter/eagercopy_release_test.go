@@ -119,7 +119,7 @@ func TestMaterializedReleaseRetainsFailedGitLeaseCleanupForRetry(t *testing.T) {
 	}
 }
 
-func TestMaterializedReleaseSerializesConcurrentAdapterRetries(t *testing.T) {
+func TestMaterializedReleaseKeepsInFlightStateAcrossAdapters(t *testing.T) {
 	adp, view, _ := releaseFixture(t)
 	token, err := view.Core.BeginCheckpointBarrier(t.Context())
 	testutil.FailErr(t, "hold Core barrier", err)
@@ -131,15 +131,29 @@ func TestMaterializedReleaseSerializesConcurrentAdapterRetries(t *testing.T) {
 	}
 	first, second := make(chan result, 1), make(chan result, 1)
 	go func() { r, e := adp.Release(t.Context(), view.ViewID); first <- result{r, e} }()
+	awaitFirst := sync.OnceValue(func() result { return testutil.Receive(t, "first release", first) })
+	t.Cleanup(func() { end(); _ = awaitFirst() })
 	testutil.WaitFor(t, "release closes command admission", func() bool { _, err := adp.CommandAccess(view.ViewID); return err != nil })
-	go func() { r, e := NewEagerCopyAdapter().Release(t.Context(), view.ViewID); second <- result{r, e} }()
+	replacement := NewEagerCopyAdapter()
+	if retained, ok := replacement.LoadedView(view.ViewID); !ok || retained != view {
+		t.Fatal("in-flight release discarded shared retry state")
+	}
+	go func() { r, e := replacement.Release(t.Context(), view.ViewID); second <- result{r, e} }()
 	end()
-	for _, ch := range []chan result{first, second} {
-		got := testutil.Receive(t, "concurrent release", ch)
-		testutil.FailErr(t, "concurrent release", got.err)
-		if !got.receipt.Settled {
-			t.Fatalf("concurrent release did not settle: %+v", got.receipt)
-		}
+	firstResult := awaitFirst()
+	testutil.FailErr(t, "first release", firstResult.err)
+	if !firstResult.receipt.Settled {
+		t.Fatalf("first release did not settle: %+v", firstResult.receipt)
+	}
+	secondResult := testutil.Receive(t, "second release", second)
+	if secondResult.err != nil && secondResult.receipt.ReasonCode != ReasonViewNotFound {
+		testutil.FailErr(t, "second release", secondResult.err)
+	}
+	if secondResult.err == nil && !secondResult.receipt.Settled {
+		t.Fatalf("second release did not settle: %+v", secondResult.receipt)
+	}
+	if _, ok := replacement.LoadedView(view.ViewID); ok {
+		t.Fatal("settled view remains in the process registry")
 	}
 }
 
@@ -151,8 +165,12 @@ func obstructReleaseFile(t *testing.T, filename string) func() {
 	testutil.FailErr(t, "obstruct record publication", os.Mkdir(filename, 0o700))
 	testutil.FailErr(t, "keep obstruction nonempty", os.WriteFile(filepath.Join(filename, "block"), []byte("blocked"), 0o600))
 	restore := sync.OnceFunc(func() {
-		testutil.FailErr(t, "remove record obstruction", os.RemoveAll(filename))
-		testutil.FailErr(t, "restore durable record", os.Rename(saved, filename))
+		if err := os.RemoveAll(filename); err != nil {
+			t.Errorf("remove record obstruction: %v", err)
+		}
+		if err := os.Rename(saved, filename); err != nil {
+			t.Errorf("restore durable record: %v", err)
+		}
 	})
 	t.Cleanup(restore)
 	return restore
