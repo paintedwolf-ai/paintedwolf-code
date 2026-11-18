@@ -93,7 +93,7 @@ func TestImplementDefaultParitySmoke(t *testing.T) {
 		t.Fatalf("expected ambient implement run, got %+v", run)
 	}
 
-	req := authedRequest(t, http.MethodGet, "/v1/sessions/"+sess.ID+"/workflow-runs/active", nil)
+	req := AuthedRequest(t, http.MethodGet, "/v1/sessions/"+sess.ID+"/workflow-runs/active", nil)
 	w := httptest.NewRecorder()
 	h.Server.ServeHTTP(w, req)
 	if w.Code != http.StatusOK {

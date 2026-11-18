@@ -16,7 +16,7 @@ func TestHumanPlanStartLoopWakesCoordinator(t *testing.T) {
 	srv := h.Server
 	sess := createSessionHTTP(t, srv, t.TempDir())
 
-	req := authedRequest(t, http.MethodPost, "/v1/sessions/"+sess.ID+"/workflow-runs", strings.NewReader(planStartBody))
+	req := AuthedRequest(t, http.MethodPost, "/v1/sessions/"+sess.ID+"/workflow-runs", strings.NewReader(planStartBody))
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
 	srv.ServeHTTP(w, req)

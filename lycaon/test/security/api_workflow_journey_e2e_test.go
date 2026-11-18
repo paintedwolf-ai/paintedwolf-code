@@ -3,13 +3,10 @@ package security
 import (
 	"context"
 	"encoding/json"
-	"io"
 	"net/http"
 	"net/http/httptest"
-	"strings"
 	"testing"
 
-	"github.com/lycaon/lycaon/internal/api"
 	"github.com/lycaon/lycaon/internal/conditions"
 	"github.com/lycaon/lycaon/internal/settingsoverlay"
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -23,11 +20,11 @@ func TestWorkflowJourneyE2E(t *testing.T) {
 	t.Cleanup(httpSrv.Close)
 	base := httpSrv.URL
 	projectDir := t.TempDir()
-	project := createAPIProjectAtPath(t, base, projectDir)
-	sess := openAPIPostJSON[wire.Session](t, base, "/v1/sessions", nil,
+	project := CreateAPIProjectAtPath(t, base, projectDir)
+	sess := OpenAPIPostJSON[wire.Session](t, base, "/v1/sessions", nil,
 		`{"project_id":"`+project.ID+`","posture":"spec"}`, http.StatusAccepted)
 
-	run := openAPIPostJSON[wire.WorkflowRun](t, base,
+	run := OpenAPIPostJSON[wire.WorkflowRun](t, base,
 		"/v1/sessions/{id}/workflow-runs", map[string]string{"id": sess.ID},
 		planStartBody, http.StatusCreated)
 	if run.BlueprintPath == "" {
@@ -59,21 +56,21 @@ func TestWorkflowJourneyE2E(t *testing.T) {
 
 func advancePlanWorkflow(t *testing.T, h *wiring.Harness, base string, run *wire.WorkflowRun) wire.WorkflowRun {
 	t.Helper()
-	*run = journeyPostJSON[wire.WorkflowRun](t, base,
-		"/v1/workflow-runs/"+run.ID+"/advance", workflowCommandJSON(t, base, run.ID, nil), http.StatusOK)
+	*run = JourneyPostJSON[wire.WorkflowRun](t, base,
+		"/v1/workflow-runs/"+run.ID+"/advance", WorkflowCommandJSON(t, base, run.ID, nil), http.StatusOK)
 	if run.CurrentPhase != "expand" {
 		t.Fatalf("current_phase = %q want expand before stub gate test", run.CurrentPhase)
 	}
 
-	status, body := journeyPost(t, base, "/v1/workflow-runs/"+run.ID+"/advance", workflowCommandJSON(t, base, run.ID, nil))
+	status, body := journeyPost(t, base, "/v1/workflow-runs/"+run.ID+"/advance", WorkflowCommandJSON(t, base, run.ID, nil))
 	if status != http.StatusConflict {
 		t.Fatalf("advance-with-empty-plan status = %d, want 409; body = %s", status, body)
 	}
 	assertPhaseGateError(t, body, "expand", "plan_stub_valid")
 
-	seedPlanStub(t, h.Workflows.Blueprints, run.ProjectID, run.BlueprintPath)
-	advanced := journeyPostJSON[wire.WorkflowRun](t, base,
-		"/v1/workflow-runs/"+run.ID+"/advance", workflowCommandJSON(t, base, run.ID, nil), http.StatusOK)
+	SeedPlanStub(t, h.Workflows.Blueprints, run.ProjectID, run.BlueprintPath)
+	advanced := JourneyPostJSON[wire.WorkflowRun](t, base,
+		"/v1/workflow-runs/"+run.ID+"/advance", WorkflowCommandJSON(t, base, run.ID, nil), http.StatusOK)
 	if advanced.CurrentPhase != "approve" {
 		t.Fatalf("after advance current_phase = %q, want approve", advanced.CurrentPhase)
 	}
@@ -124,23 +121,23 @@ func finishPlanWorkflow(
 ) {
 	t.Helper()
 	ctx := context.Background()
-	paused := journeyPostJSON[wire.WorkflowRun](t, base,
-		"/v1/workflow-runs/"+run.ID+"/pause", workflowCommandJSON(t, base, run.ID, nil), http.StatusOK)
+	paused := JourneyPostJSON[wire.WorkflowRun](t, base,
+		"/v1/workflow-runs/"+run.ID+"/pause", WorkflowCommandJSON(t, base, run.ID, nil), http.StatusOK)
 	if paused.Status != wire.WorkflowRunStatusPaused {
 		t.Fatalf("pause status = %q", paused.Status)
 	}
 	if !paused.UpdatedAt.After(advanced.UpdatedAt) {
 		t.Fatalf("pause did not bump updated_at: advanced=%s paused=%s", advanced.UpdatedAt, paused.UpdatedAt)
 	}
-	fetchedPaused := openAPIGetJSON[wire.WorkflowRun](t, base,
+	fetchedPaused := OpenAPIGetJSON[wire.WorkflowRun](t, base,
 		"/v1/workflow-runs/{id}", map[string]string{"id": run.ID}, http.StatusOK)
 	if !fetchedPaused.UpdatedAt.Equal(paused.UpdatedAt) {
 		t.Fatalf("pause response updated_at lags persisted value: response=%s persisted=%s",
 			paused.UpdatedAt, fetchedPaused.UpdatedAt)
 	}
 
-	resumed := journeyPostJSON[wire.WorkflowRun](t, base,
-		"/v1/workflow-runs/"+run.ID+"/resume", workflowCommandJSON(t, base, run.ID, nil), http.StatusOK)
+	resumed := JourneyPostJSON[wire.WorkflowRun](t, base,
+		"/v1/workflow-runs/"+run.ID+"/resume", WorkflowCommandJSON(t, base, run.ID, nil), http.StatusOK)
 	if resumed.Status != wire.WorkflowRunStatusRunning {
 		t.Fatalf("resume status = %q", resumed.Status)
 	}
@@ -148,8 +145,8 @@ func finishPlanWorkflow(
 		t.Fatalf("resume did not bump updated_at: paused=%s resumed=%s", paused.UpdatedAt, resumed.UpdatedAt)
 	}
 
-	superseded := journeyPostJSON[wire.WorkflowRun](t, base,
-		"/v1/sessions/"+sessionID+"/workflow-runs", workflowStartJSON(t, base, sessionID, map[string]any{"workflow_id": "plan", "workflow_version": "1.0.1"}), http.StatusCreated)
+	superseded := JourneyPostJSON[wire.WorkflowRun](t, base,
+		"/v1/sessions/"+sessionID+"/workflow-runs", WorkflowStartJSON(t, base, sessionID, map[string]any{"workflow_id": "plan", "workflow_version": "1.0.1"}), http.StatusCreated)
 	if superseded.ID == run.ID {
 		t.Fatal("expected a new run id after human supersede")
 	}
@@ -159,8 +156,8 @@ func finishPlanWorkflow(
 		t.Fatalf("prior status = %q want canceled after supersede", prior.Status)
 	}
 
-	exitPath, exitBody := workflowExitCall(t, base, sessionID, "e2e_exit")
-	exited := journeyPostJSON[wire.WorkflowRun](t, base, exitPath, exitBody, http.StatusOK)
+	exitPath, exitBody := WorkflowExitCall(t, base, sessionID, "e2e_exit")
+	exited := JourneyPostJSON[wire.WorkflowRun](t, base, exitPath, exitBody, http.StatusOK)
 	if exited.ID != superseded.ID {
 		t.Fatalf("exit run id = %q want superseding run %q", exited.ID, superseded.ID)
 	}
@@ -196,8 +193,8 @@ func finishPlanWorkflow(
 		t.Fatal("active after exit must be a fresh ambient run, not the exited catalog run")
 	}
 
-	again := journeyPostJSON[wire.WorkflowRun](t, base,
-		"/v1/workflow-runs/"+exited.ID+"/cancel", workflowCommandJSON(t, base, exited.ID, nil), http.StatusOK)
+	again := JourneyPostJSON[wire.WorkflowRun](t, base,
+		"/v1/workflow-runs/"+exited.ID+"/cancel", WorkflowCommandJSON(t, base, exited.ID, nil), http.StatusOK)
 	if !again.UpdatedAt.Equal(exited.UpdatedAt) {
 		t.Fatalf("idempotent cancel bumped updated_at: was %s now %s",
 			exited.UpdatedAt, again.UpdatedAt)
@@ -207,7 +204,7 @@ func finishPlanWorkflow(
 			exited.CompletedAt, again.CompletedAt)
 	}
 
-	finalMsgs := journeyGetJSON[wire.SessionTranscriptPage](t, base,
+	finalMsgs := JourneyGetJSON[wire.SessionTranscriptPage](t, base,
 		"/v1/sessions/"+sessionID+"/messages", http.StatusOK).Messages
 	endBoundary := findBoundary(t, finalMsgs, exited.ID, "exited")
 	if endBoundary.WorkflowBoundary.Phase == "" {
@@ -238,60 +235,4 @@ func findBoundary(t *testing.T, msgs []wire.Message, runID, event string) wire.M
 	}
 	t.Fatalf("no boundary message found with run=%s event=%s; messages=%+v", runID, event, msgs)
 	return wire.Message{}
-}
-
-func journeyPost(t *testing.T, base, path, body string) (status int, out []byte) {
-	t.Helper()
-	body = string(mutationRequestBody(t, http.MethodPost, path, body))
-	req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, base+path, strings.NewReader(body))
-	testutil.FailErr(t, "http.NewRequest failed", err)
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", api.TestAuthHeader())
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatalf("POST %s: %v", path, err)
-	}
-	defer func() { _ = resp.Body.Close() }()
-	out, _ = io.ReadAll(resp.Body)
-	return resp.StatusCode, out
-}
-
-func journeyPostJSON[T any](t *testing.T, base, path, body string, wantStatus int) T {
-	t.Helper()
-	status, out := journeyPost(t, base, path, body)
-	if status != wantStatus {
-		t.Fatalf("POST %s status = %d, want %d; body = %s", path, status, wantStatus, out)
-	}
-	var v T
-	if err := json.Unmarshal(out, &v); err != nil {
-		t.Fatalf("decode POST %s: %v body=%s", path, err, out)
-	}
-	return v
-}
-
-func journeyGet(t *testing.T, base, path string) (status int, out []byte) {
-	t.Helper()
-	req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, base+path, nil)
-	testutil.FailErr(t, "http.NewRequest failed", err)
-	req.Header.Set("Authorization", api.TestAuthHeader())
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatalf("GET %s: %v", path, err)
-	}
-	defer func() { _ = resp.Body.Close() }()
-	out, _ = io.ReadAll(resp.Body)
-	return resp.StatusCode, out
-}
-
-func journeyGetJSON[T any](t *testing.T, base, path string, wantStatus int) T {
-	t.Helper()
-	status, out := journeyGet(t, base, path)
-	if status != wantStatus {
-		t.Fatalf("GET %s status = %d, want %d; body = %s", path, status, wantStatus, out)
-	}
-	var v T
-	if err := json.Unmarshal(out, &v); err != nil {
-		t.Fatalf("decode GET %s: %v body=%s", path, err, out)
-	}
-	return v
 }

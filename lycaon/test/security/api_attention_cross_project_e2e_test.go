@@ -33,7 +33,7 @@ func TestAttentionCrossProjectE2E(t *testing.T) {
 		t.Fatalf("project_id = %q, want %q", row.ProjectID, h.sess.ProjectID)
 	}
 
-	req := authedRequest(t, http.MethodPost,
+	req := AuthedRequest(t, http.MethodPost,
 		"/v1/sessions/"+h.sess.ID+"/checkpoints/"+decisionID,
 		strings.NewReader(`{"kind":"tool_approval","action":"approve","option_id":"approve_current_action"}`))
 	req.Header.Set("Content-Type", "application/json")
@@ -119,11 +119,11 @@ func TestAttentionSnapshotEndpointE2E(t *testing.T) {
 	t.Cleanup(httpSrv.Close)
 	base := httpSrv.URL
 
-	project := createAPIProjectAtPath(t, base, t.TempDir())
-	idle := openAPIPostJSON[wire.Session](t, base, "/v1/sessions", nil,
+	project := CreateAPIProjectAtPath(t, base, t.TempDir())
+	idle := OpenAPIPostJSON[wire.Session](t, base, "/v1/sessions", nil,
 		`{"project_id":"`+project.ID+`","posture":"build"}`, http.StatusAccepted)
 
-	view := openAPIGetJSON[wire.AttentionView](t, base, "/v1/attention", nil, http.StatusOK)
+	view := OpenAPIGetJSON[wire.AttentionView](t, base, "/v1/attention", nil, http.StatusOK)
 	for _, row := range view.Rows {
 		if row.SessionID == idle.ID {
 			t.Fatalf("a session that has done nothing must not be asking for attention: %+v", row)

@@ -22,13 +22,13 @@ func TestBoardRepoBriefPopulated(t *testing.T) {
 		testutil.FailErr(t, "write file", err)
 	}
 
-	p := createProjectHTTP(t, srv, projectDir)
-	sess := createSessionForProjectHTTP(t, srv, p.ID, wire.SessionPostureBuild)
+	p := CreateProjectHTTP(t, srv, projectDir)
+	sess := CreateSessionForProjectHTTP(t, srv, p.ID, wire.SessionPostureBuild)
 
 	var board wire.BoardView
 	var boardBody string
 	testutil.WaitFor(t, "the board carries the repository brief", func() bool {
-		req := authedRequest(t, http.MethodGet, "/v1/projects/"+p.ID+"/board?session_id="+sess.ID, nil)
+		req := AuthedRequest(t, http.MethodGet, "/v1/projects/"+p.ID+"/board?session_id="+sess.ID, nil)
 		w := httptest.NewRecorder()
 		srv.ServeHTTP(w, req)
 		if w.Code != http.StatusOK {

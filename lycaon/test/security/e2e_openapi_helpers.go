@@ -15,10 +15,10 @@ import (
 
 func createAPIProject(t *testing.T, base, body string) wire.Project {
 	t.Helper()
-	return openAPIPostJSON[wire.Project](t, base, "/v1/projects", nil, body, http.StatusCreated)
+	return OpenAPIPostJSON[wire.Project](t, base, "/v1/projects", nil, body, http.StatusCreated)
 }
 
-func createAPIProjectAtPath(t *testing.T, base, dir string) wire.Project {
+func CreateAPIProjectAtPath(t *testing.T, base, dir string) wire.Project {
 	t.Helper()
 	return createAPIProject(t, base, `{"roots":[{"path":"`+dir+`"}]}`)
 }
@@ -39,7 +39,7 @@ type httpCallResult struct {
 	Body       []byte
 }
 
-func validatedRequest(t *testing.T, base, method, pathTemplate string, pathParams map[string]string, body string) httpCallResult {
+func ValidatedRequest(t *testing.T, base, method, pathTemplate string, pathParams map[string]string, body string) httpCallResult {
 	t.Helper()
 	url := base + interpolatePath(pathTemplate, pathParams)
 	var rdr io.Reader
@@ -68,9 +68,9 @@ func validatedRequest(t *testing.T, base, method, pathTemplate string, pathParam
 	}
 }
 
-func openAPIDo(t *testing.T, base, method, pathTemplate string, pathParams map[string]string, body string, wantStatus int) []byte {
+func OpenAPIDo(t *testing.T, base, method, pathTemplate string, pathParams map[string]string, body string, wantStatus int) []byte {
 	t.Helper()
-	res := validatedRequest(t, base, method, pathTemplate, pathParams, body)
+	res := ValidatedRequest(t, base, method, pathTemplate, pathParams, body)
 	if res.StatusCode != wantStatus {
 		t.Fatalf("%s %s status = %d, want %d; body = %s", method, pathTemplate, res.StatusCode, wantStatus, res.Body)
 	}
@@ -78,20 +78,20 @@ func openAPIDo(t *testing.T, base, method, pathTemplate string, pathParams map[s
 	return res.Body
 }
 
-func openAPIGetJSON[T any](t *testing.T, base, pathTemplate string, pathParams map[string]string, wantStatus int) T {
+func OpenAPIGetJSON[T any](t *testing.T, base, pathTemplate string, pathParams map[string]string, wantStatus int) T {
 	t.Helper()
-	respBody := openAPIDo(t, base, http.MethodGet, pathTemplate, pathParams, "", wantStatus)
-	return decodeOpenAPI[T](t, http.MethodGet, pathTemplate, respBody)
+	respBody := OpenAPIDo(t, base, http.MethodGet, pathTemplate, pathParams, "", wantStatus)
+	return DecodeOpenAPI[T](t, http.MethodGet, pathTemplate, respBody)
 }
 
 func listMessagesOpenAPI(t *testing.T, base string, pathParams map[string]string, wantStatus int) []wire.Message {
 	t.Helper()
-	return openAPIGetJSON[wire.SessionTranscriptPage](t, base, "/v1/sessions/{id}/messages", pathParams, wantStatus).Messages
+	return OpenAPIGetJSON[wire.SessionTranscriptPage](t, base, "/v1/sessions/{id}/messages", pathParams, wantStatus).Messages
 }
 
-func openAPIPostJSON[T any](t *testing.T, base, pathTemplate string, pathParams map[string]string, body string, wantStatus int) T {
+func OpenAPIPostJSON[T any](t *testing.T, base, pathTemplate string, pathParams map[string]string, body string, wantStatus int) T {
 	t.Helper()
-	respBody := openAPIDo(t, base, http.MethodPost, pathTemplate, pathParams, body, wantStatus)
+	respBody := OpenAPIDo(t, base, http.MethodPost, pathTemplate, pathParams, body, wantStatus)
 	if pathTemplate == "/v1/sessions" {
 		var sess wire.Session
 		if err := json.Unmarshal(respBody, &sess); err != nil {
@@ -99,13 +99,13 @@ func openAPIPostJSON[T any](t *testing.T, base, pathTemplate string, pathParams 
 		}
 		waitSessionPreparedOpenAPI(t, base, sess.ID)
 	}
-	return decodeOpenAPI[T](t, http.MethodPost, pathTemplate, respBody)
+	return DecodeOpenAPI[T](t, http.MethodPost, pathTemplate, respBody)
 }
 
 func waitSessionPreparedOpenAPI(t *testing.T, base, sessionID string) {
 	t.Helper()
 	for t.Context().Err() == nil {
-		sess := openAPIGetJSON[wire.Session](t, base, "/v1/sessions/{id}", map[string]string{"id": sessionID}, http.StatusOK)
+		sess := OpenAPIGetJSON[wire.Session](t, base, "/v1/sessions/{id}", map[string]string{"id": sessionID}, http.StatusOK)
 		if sess.Status != wire.SessionStatusPreparing {
 			return
 		}
@@ -114,19 +114,19 @@ func waitSessionPreparedOpenAPI(t *testing.T, base, sessionID string) {
 	t.Fatal("session preparation did not complete")
 }
 
-func openAPIPutJSON[T any](t *testing.T, base, pathTemplate string, pathParams map[string]string, body string, wantStatus int) T {
+func OpenAPIPutJSON[T any](t *testing.T, base, pathTemplate string, pathParams map[string]string, body string, wantStatus int) T {
 	t.Helper()
-	respBody := openAPIDo(t, base, http.MethodPut, pathTemplate, pathParams, body, wantStatus)
-	return decodeOpenAPI[T](t, http.MethodPut, pathTemplate, respBody)
+	respBody := OpenAPIDo(t, base, http.MethodPut, pathTemplate, pathParams, body, wantStatus)
+	return DecodeOpenAPI[T](t, http.MethodPut, pathTemplate, respBody)
 }
 
 func openAPIPatchJSON[T any](t *testing.T, base, pathTemplate string, pathParams map[string]string, body string, wantStatus int) T {
 	t.Helper()
-	respBody := openAPIDo(t, base, http.MethodPatch, pathTemplate, pathParams, body, wantStatus)
-	return decodeOpenAPI[T](t, http.MethodPatch, pathTemplate, respBody)
+	respBody := OpenAPIDo(t, base, http.MethodPatch, pathTemplate, pathParams, body, wantStatus)
+	return DecodeOpenAPI[T](t, http.MethodPatch, pathTemplate, respBody)
 }
 
-func decodeOpenAPI[T any](t *testing.T, method, pathTemplate string, respBody []byte) T {
+func DecodeOpenAPI[T any](t *testing.T, method, pathTemplate string, respBody []byte) T {
 	t.Helper()
 	var v T
 	if err := json.Unmarshal(respBody, &v); err != nil {
@@ -137,13 +137,13 @@ func decodeOpenAPI[T any](t *testing.T, method, pathTemplate string, respBody []
 
 func acceptPromptOpenAPI(t *testing.T, base, sessionID, body string) {
 	t.Helper()
-	accepted := openAPIPostJSON[wire.PromptAcceptedResponse](t, base, "/v1/sessions/{id}/prompts",
+	accepted := OpenAPIPostJSON[wire.PromptAcceptedResponse](t, base, "/v1/sessions/{id}/prompts",
 		map[string]string{"id": sessionID}, body, http.StatusAccepted)
 	testutil.WaitFor(t, "the prompt is accepted and visible", func() bool {
 		params := map[string]string{"id": sessionID}
-		before := openAPIGetJSON[wire.Session](t, base, "/v1/sessions/{id}", params, http.StatusOK)
+		before := OpenAPIGetJSON[wire.Session](t, base, "/v1/sessions/{id}", params, http.StatusOK)
 		messages := listMessagesOpenAPI(t, base, params, http.StatusOK)
-		after := openAPIGetJSON[wire.Session](t, base, "/v1/sessions/{id}", params, http.StatusOK)
+		after := OpenAPIGetJSON[wire.Session](t, base, "/v1/sessions/{id}", params, http.StatusOK)
 		if before.Status != wire.SessionStatusIdle || after.Status != wire.SessionStatusIdle {
 			return false
 		}
@@ -165,7 +165,7 @@ func waitPromptTurnOpenAPI(t *testing.T, base, sessionID string, baseline int, a
 	t.Helper()
 	sawBusy := false
 	for t.Context().Err() == nil {
-		sess := openAPIGetJSON[wire.Session](t, base, "/v1/sessions/{id}",
+		sess := OpenAPIGetJSON[wire.Session](t, base, "/v1/sessions/{id}",
 			map[string]string{"id": sessionID}, http.StatusOK)
 		if sess.Status == wire.SessionStatusBusy {
 			sawBusy = true

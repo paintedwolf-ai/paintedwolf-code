@@ -46,9 +46,9 @@ func TestNothingCitedReplyInAReportPhaseStillEndsInAReport(t *testing.T) {
 				},
 			})
 			reply := func(modelcall.CompletionRequest) string { return tc.reply }
-			script := &citableScriptLLM{}
+			script := &CitableScriptLLM{}
 			for range 8 {
-				script.steps = append(script.steps, citableStep{text: reply})
+				script.Steps = append(script.Steps, CitableStep{Text: reply})
 			}
 			h := BuildForTest(t, WithLLMClient(script), WithManifestRegistry(map[string]workflowdef.Manifest{manifest.ID + "@" + manifest.Version: manifest}))
 			ctx := h.OwnerCtx(t, t.Context())
@@ -118,9 +118,9 @@ func TestHostAssembledReportLeavesNoFeedbackForTheNextRequest(t *testing.T) {
 		}
 		return "Nothing to report."
 	}
-	script := &citableScriptLLM{}
+	script := &CitableScriptLLM{}
 	for range 8 {
-		script.steps = append(script.steps, citableStep{text: reply})
+		script.Steps = append(script.Steps, CitableStep{Text: reply})
 	}
 	h := BuildForTest(t, WithLLMClient(script), WithManifestRegistry(map[string]workflowdef.Manifest{manifest.ID + "@" + manifest.Version: manifest}))
 	ctx := h.OwnerCtx(t, t.Context())

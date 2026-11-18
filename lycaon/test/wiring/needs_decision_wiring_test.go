@@ -6,12 +6,10 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/project"
-	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/session/workercompletion"
 	"github.com/lycaon/lycaon/internal/session/workeroutcomes"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
-	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/worker"
 	"github.com/lycaon/lycaon/internal/workerrecords"
 	wire "github.com/lycaon/lycaon/pkg/api"
@@ -57,7 +55,7 @@ func TestNeedsDecisionRoundTrip(t *testing.T) {
 	if _, err := h.ToolRegistry.Run(ctx, "request_decision", map[string]any{
 		"question": "Use the existing parser or write a new one?",
 		"options":  []any{"reuse internal/parse", "write a new parser"},
-	}, wiringToolContext(child.ID, dir, jobID)); err != nil {
+	}, WiringToolContext(child.ID, dir, jobID)); err != nil {
 		testutil.FailErr(t, "request_decision", err)
 	}
 
@@ -81,7 +79,7 @@ func TestNeedsDecisionRoundTrip(t *testing.T) {
 	}
 	parentMsgs, err := h.Store.GetMessages(ctx, sess.ID)
 	testutil.FailErr(t, "parent messages", err)
-	if !anyMessageContains(parentMsgs, "decision_request_json") {
+	if !AnyMessageContains(parentMsgs, "decision_request_json") {
 		t.Fatal("parent envelope missing structured decision")
 	}
 	var envelope string
@@ -107,7 +105,7 @@ func TestNeedsDecisionRoundTrip(t *testing.T) {
 	testutil.FailErr(t, "render the roster", err)
 	out, err := h.ToolRegistry.Run(ctx, "answer_decision", map[string]any{
 		"worker": "parser", "answer": "2",
-	}, wiringToolContext(sess.ID, dir))
+	}, WiringToolContext(sess.ID, dir))
 	testutil.FailErr(t, "answer_decision", err)
 	if !strings.Contains(out, "resumed") {
 		t.Fatalf("answer_decision out = %q", out)
@@ -115,7 +113,7 @@ func TestNeedsDecisionRoundTrip(t *testing.T) {
 
 	childMsgs, err := h.Store.GetMessages(ctx, child.ID)
 	testutil.FailErr(t, "child messages", err)
-	if !anyMessageContains(childMsgs, "write a new parser") {
+	if !AnyMessageContains(childMsgs, "write a new parser") {
 		t.Fatalf("child did not receive the decision")
 	}
 	if _, ok, err := h.Sessions.Manager.Decisions.Get(ctx, child.ID); err != nil || ok {
@@ -133,27 +131,4 @@ func TestNeedsDecisionRoundTrip(t *testing.T) {
 	if !resume {
 		t.Fatalf("worker %s not requeued on child %s: %+v", jobID, child.ID, pending)
 	}
-}
-
-func anyMessageContains(msgs []wire.Message, sub string) bool {
-	for _, m := range msgs {
-		if strings.Contains(m.Content, sub) || (m.WorkerSummary != nil && strings.Contains(m.WorkerSummary.Envelope, sub)) {
-			return true
-		}
-	}
-	return false
-}
-
-func wiringToolContext(sessionID, dir string, workerJobID ...string) tools.ToolContext {
-	roots := []projectroot.RootRef{{ID: "r1", Label: "root", Path: dir, IsPrimary: true}}
-	tctx := tools.ToolContext{
-		Identity: tools.InvocationIdentity{SessionID: sessionID},
-		Source: tools.InvocationSource{Roots: roots,
-			ActiveRootID: "r1"},
-	}
-	if len(workerJobID) > 0 {
-		tctx.Identity.WorkerJobID = workerJobID[0]
-		tctx.Identity.ParentSessionID = "parent"
-	}
-	return tctx
 }

@@ -52,7 +52,7 @@ func TestBuildForTestBackgroundWorkersCompleteJob(t *testing.T) {
 		ctx,
 		"task",
 		TaskToolArgs(orchestration.ProfileRepoResearcher, "inspect feature"),
-		coordToolCtx(t, h, ctx, sess, dir),
+		h.CoordinatorToolContext(t, ctx, sess, dir),
 	)
 	testutil.FailErr(t, "task tool failed", err)
 

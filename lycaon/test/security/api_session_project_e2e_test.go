@@ -34,7 +34,7 @@ func TestNoFolderSessionCreateAndAutoName(t *testing.T) {
 	defer hubCancel()
 	hubEvents := subscribeProjectEvents(t, hubCtx, base, project.ID)
 
-	sess := openAPIPostJSON[wire.Session](t, base, "/v1/sessions", nil,
+	sess := OpenAPIPostJSON[wire.Session](t, base, "/v1/sessions", nil,
 		`{"project_id":"`+project.ID+`","posture":"build"}`, http.StatusAccepted)
 	if sess.WorkspacePath != scratchRoot.Path {
 		t.Fatalf("session workspace_path = %q want the draft scratch root %q", sess.WorkspacePath, scratchRoot.Path)
@@ -45,13 +45,13 @@ func TestNoFolderSessionCreateAndAutoName(t *testing.T) {
 
 	waitForNamingEvents(t, hubEvents, project.ID, sess.ID)
 
-	named := openAPIGetJSON[wire.Project](t, base, "/v1/projects/{id}",
+	named := OpenAPIGetJSON[wire.Project](t, base, "/v1/projects/{id}",
 		map[string]string{"id": project.ID}, http.StatusOK)
 	if named.Name == nil || strings.TrimSpace(*named.Name) == "" {
 		t.Fatal("expected draft project name from first user prompt")
 	}
 
-	updatedSession := openAPIGetJSON[wire.Session](t, base, "/v1/sessions/{id}",
+	updatedSession := OpenAPIGetJSON[wire.Session](t, base, "/v1/sessions/{id}",
 		map[string]string{"id": sess.ID}, http.StatusOK)
 	if strings.TrimSpace(updatedSession.Title) == "" {
 		t.Fatal("expected session title from first user prompt")
