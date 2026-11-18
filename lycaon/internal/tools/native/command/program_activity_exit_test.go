@@ -31,7 +31,7 @@ func TestProgramActivitiesUseSettledExitSemantics(t *testing.T) {
 		closed      map[int]int
 	}{
 		{"comparison pipeline", "printf 'needle\\n' | grep absent", 1, true, true, 0, map[int]int{1: 2}, map[int]int{}},
-		{"external and native closure", "yes | grep y | head -1; external -- /bin/sh -c 'exit 1'", 1, true, true, 1, map[int]int{1: 1, 2: 1, 141: 1}, map[int]int{2: 1, 141: 1}},
+		{"external and native closure", "external -- /usr/bin/yes y | grep y | head -1; external -- /bin/sh -c 'exit 1'", 1, true, true, 1, map[int]int{1: 1, 2: 1, 141: 1}, map[int]int{2: 1, 141: 1}},
 		{"unhandled pipeline", "external -- /bin/sh -c 'exit 4' | true", 4, true, false, 1, map[int]int{4: 2}, map[int]int{}},
 		{"conditional recovery", "external -- /bin/sh -c 'exit 1' || true", 0, false, false, 0, map[int]int{1: 1}, map[int]int{}},
 		{"sequence recovery", "external -- /bin/sh -c 'exit 1'; true", 0, false, false, 0, map[int]int{1: 1}, map[int]int{}},
