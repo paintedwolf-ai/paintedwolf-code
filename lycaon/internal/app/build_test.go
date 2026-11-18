@@ -217,7 +217,7 @@ func closeBuiltHostWithArmedWait(t *testing.T) weak.Pointer[session.Host] {
 	testutil.FailErr(t, "build with armed wait", err)
 	projectDir := t.TempDir()
 	testdbseed.InsertProjectRoot(t, app.DB, testdbseed.DefaultProjectID, projectDir)
-	sess, err := store.NewSQL(app.DB).Sessions.Create(t.Context(), wire.CreateSessionRequest{ProjectID: testdbseed.DefaultProjectID, Posture: wire.SessionPostureBuild}, testdbseed.DefaultProjectID)
+	sess, err := sessionstore.NewSQL(app.DB).Sessions.Create(t.Context(), wire.CreateSessionRequest{ProjectID: testdbseed.DefaultProjectID, Posture: wire.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create waiting session", err)
 	host := app.Sessions.Manager
 	waits := host.Coordinator.Runtime.CoordinatorLoop().Waits
@@ -314,7 +314,7 @@ func TestQuietRoundsReadsQueueProgressAndPendingApprovals(t *testing.T) {
 	}
 	projectDir := t.TempDir()
 	testdbseed.InsertProjectRoot(t, store, testdbseed.DefaultProjectID, projectDir)
-	child, err := store.NewSQL(app.DB).Sessions.Create(t.Context(), wire.CreateSessionRequest{
+	child, err := sessionstore.NewSQL(app.DB).Sessions.Create(t.Context(), wire.CreateSessionRequest{
 		ProjectID: testdbseed.DefaultProjectID, Posture: wire.SessionPostureBuild,
 	}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create child session", err)
@@ -371,11 +371,11 @@ func TestQuietRoundsReadsQueueProgressAndPendingApprovals(t *testing.T) {
 		t.Fatal("expected no pending approval on fresh session")
 	}
 
-	parentSess, err := store.NewSQL(app.DB).Sessions.Create(t.Context(), wire.CreateSessionRequest{
+	parentSess, err := sessionstore.NewSQL(app.DB).Sessions.Create(t.Context(), wire.CreateSessionRequest{
 		ProjectID: testdbseed.DefaultProjectID, Posture: wire.SessionPostureBuild,
 	}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create parent session", err)
-	workerChild, err := store.NewSQL(app.DB).Sessions.Create(t.Context(), wire.CreateSessionRequest{
+	workerChild, err := sessionstore.NewSQL(app.DB).Sessions.Create(t.Context(), wire.CreateSessionRequest{
 		ProjectID: testdbseed.DefaultProjectID, Posture: wire.SessionPostureBuild,
 	}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create worker child", err)

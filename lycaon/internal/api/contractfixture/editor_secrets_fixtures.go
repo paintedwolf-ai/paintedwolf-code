@@ -64,13 +64,6 @@ func AssertProjectSecretScreen(t *testing.T, f SecretSpanFixture, state api.Secr
 
 var FileWithSecret = "export const staging = {\n  relay: \"" + RelayToken + "\",\n};\n"
 
-func FixtureOwner(t *testing.T, f SecretSpanFixture) string {
-	t.Helper()
-	owner, err := f.Srv.Sources.Workspace.SessionStore.People.HostOwner(t.Context())
-	testutil.FailErr(t, "read host owner", err)
-	return owner.ID
-}
-
 func NewSecretSpanFixture(t *testing.T) SecretSpanFixture {
 	t.Helper()
 	hub := events.NewMemoryHub()
@@ -89,7 +82,10 @@ func NewSecretSpanFixture(t *testing.T) SecretSpanFixture {
 	)
 	approvals, err := settings.NewApprovalStoreAt(filepath.Join(t.TempDir(), "approvals.yaml"))
 	testutil.FailErr(t, "approval store", err)
-	srv := NewTestServer(t, WithSessionStore(store.NewSQL(database)), func(d *hostapi.Dependencies) {
+	repositories := store.NewSQL(database)
+	owner, err := repositories.People.HostOwner(t.Context())
+	testutil.FailErr(t, "read fixture person", err)
+	srv := NewTestServer(t, WithSessionStore(repositories), func(d *hostapi.Dependencies) {
 		d.Host.Events = hub
 		sourceHistory16 := sourceledger.New(database, "")
 		d.Source.EditorDocuments = editordoc.New(editordoc.NewStore(database), sourceHistory16, sourceHistory16.History, d.Core.Projects)
@@ -124,7 +120,7 @@ func NewSecretSpanFixture(t *testing.T) SecretSpanFixture {
 	}
 	var document api.EditorDocument
 	testutil.FailErr(t, "decode document", json.Unmarshal(w.Body.Bytes(), &document))
-	return SecretSpanFixture{Srv: srv, Project: p, FixtureDocument: &document, Events: eventCh}
+	return SecretSpanFixture{PersonID: owner.ID, Srv: srv, Project: p, FixtureDocument: &document, Events: eventCh}
 }
 
 // runeRange locates the relay token as the client would: by rune offsets.
@@ -135,6 +131,7 @@ const RelayToken = "pw-relay-7QK4-2ZB9-XM31" //nolint:gosec // G101: synthetic c
 // The marked value matches no catalog rule.
 
 type SecretSpanFixture struct {
+	PersonID        string
 	Srv             *hostapi.Server
 	Project         *project.Project
 	FixtureDocument *api.EditorDocument

@@ -19,6 +19,11 @@ type RepositoryChanges interface{ Changed(context.Context, string) }
 
 func Bind(publisher *events.Publisher, sessions *store.Repositories, progressStore progress.RunScopedStore, runs runstate.RunsRepository, repository RepositoryChanges, service *llm.Service) func(context.Context) error {
 	var work workscope.Group
+	var queries SessionReader
+	var transcript TranscriptWriter
+	if sessions != nil {
+		queries, transcript = sessions.Sessions, sessions.Transcript
+	}
 	if service != nil {
 		service.Lifecycle = utilityLanePublisher{pub: publisher}
 		if service.Utility != nil {
@@ -37,14 +42,14 @@ func Bind(publisher *events.Publisher, sessions *store.Repositories, progressSto
 		}
 	}))
 	activeRun := activeRunIDFromWorkflow(runs)
-	coalescer := progress.NewCoalescer(progress.DefaultCoalesceWindow, newProgressChangeEmitter(sessions.Sessions, sessions.Transcript, publisher, activeRun, progressStore))
+	coalescer := progress.NewCoalescer(progress.DefaultCoalesceWindow, newProgressChangeEmitter(queries, transcript, publisher, activeRun, progressStore))
 	releaseProgress := progress.RegisterWriteObserver(scopedObserver(&work, func(ctx context.Context, ev progress.WriteEvent) {
 		if strings.TrimSpace(ev.SessionID) == "" {
 			return
 		}
 		publisher.PublishProgress(ctx, ev.SessionID, progress.BumpRevision(ev.SessionID))
 		coalescer.Record(ev.SessionID, ev.Before, ev.After)
-		emitProgressCompletionFromContent(ctx, sessions.Sessions, sessions.Transcript, publisher, progressStore, activeRun, ev.SessionID, ev.After.Content)
+		emitProgressCompletionFromContent(ctx, queries, transcript, publisher, progressStore, activeRun, ev.SessionID, ev.After.Content)
 	}))
 	return func(ctx context.Context) error {
 		work.Stop()
