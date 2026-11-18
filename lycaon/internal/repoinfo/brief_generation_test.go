@@ -2,6 +2,7 @@ package repoinfo_test
 
 import (
 	"context"
+	repotest "github.com/lycaon/lycaon/internal/testsetup/repoinfo"
 	"os"
 	"path/filepath"
 	"testing"
@@ -24,7 +25,7 @@ func TestBriefRevokesEmptyClaimWhenIndexGenerationAdvances(t *testing.T) {
 	t.Cleanup(func() { testutil.FailErr(t, "close provider", provider.Close()) })
 	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
 	defer cancel()
-	initial, err := repoinfo.AwaitBrief(ctx, provider, root)
+	initial, err := repotest.AwaitBrief(ctx, provider, root)
 	testutil.FailErr(t, "measure empty repository", err)
 	if !repoinfo.Current(initial) || initial.FileCount != 0 {
 		t.Fatalf("initial brief: %+v", initial)

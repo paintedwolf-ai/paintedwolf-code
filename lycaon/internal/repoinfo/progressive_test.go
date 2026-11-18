@@ -81,8 +81,9 @@ func TestProgressiveBriefReturnsBeforeSlowAnalyze(t *testing.T) {
 	}
 	close(release)
 	ctx := t.Context()
-	got, err := AwaitBrief(ctx, p, dir)
-	testutil.FailErr(t, "AwaitBrief", err)
+	testutil.FailErr(t, "settle analysis", p.Wait(ctx))
+	got, err := p.Brief(ctx, dir)
+	testutil.FailErr(t, "read materialized brief", err)
 	if !got.Materialized {
 		t.Fatal("want materialized after Analyze")
 	}
@@ -122,8 +123,7 @@ func TestProgressiveBriefSingleflightConcurrent(t *testing.T) {
 	close(block)
 
 	ctx := t.Context()
-	_, err := AwaitBrief(ctx, p, dir)
-	testutil.FailErr(t, "AwaitBrief", err)
+	testutil.FailErr(t, "settle analysis", p.Wait(ctx))
 	if calls.Load() != 1 {
 		t.Fatalf("analyze calls = %d want 1 (singleflight)", calls.Load())
 	}
@@ -150,7 +150,9 @@ func TestProgressiveBriefServesMaterializedResultDuringRefresh(t *testing.T) {
 	defer func() { _ = p.Close() }()
 
 	ctx := t.Context()
-	first, err := AwaitBrief(ctx, p, dir)
+	p.Warm(dir)
+	testutil.FailErr(t, "settle initial analysis", p.Wait(ctx))
+	first, err := p.Brief(ctx, dir)
 	testutil.FailErr(t, "materialize first brief", err)
 	if first.FileCount != 1 {
 		t.Fatalf("first file count = %d, want 1", first.FileCount)
