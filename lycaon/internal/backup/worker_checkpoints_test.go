@@ -201,10 +201,7 @@ func TestBackupRejectsIncompleteOrCorruptCheckpointGitClosures(t *testing.T) {
 		gittest.Run(t, otherRepo, "prune-packed")
 		copyGitObjectsDir(t, filepath.Join(otherRepo, ".git", "objects"), retainedObjectsDir)
 
-		opts := backup.CreateOpts{ConfigDir: fx.root, DBPath: filepath.Join(fx.root, "store.db"), SQLDB: fx.database, AppVersion: "test", SchemaUserVersion: db.SchemaVersion}
-		if _, err := backup.Create(t.Context(), opts, filepath.Join(t.TempDir(), "unrelated-pack.zip")); !errors.Is(err, backup.ErrInvalid) {
-			t.Fatalf("Create with unrelated valid pack+idx err = %v, want ErrInvalid", err)
-		}
+		requireInvalidCheckpointBackup(t, fx, "unrelated-pack.zip", "unrelated valid pack+idx")
 	})
 
 	t.Run("mismatched_pack_and_index_basenames", func(t *testing.T) {
@@ -215,10 +212,7 @@ func TestBackupRejectsIncompleteOrCorruptCheckpointGitClosures(t *testing.T) {
 		testutil.FailErr(t, "write orphan pack", os.WriteFile(filepath.Join(packDir, "pack-"+strings.Repeat("1", 40)+".pack"), []byte("PACK"), 0o444))
 		testutil.FailErr(t, "write orphan idx", os.WriteFile(filepath.Join(packDir, "pack-"+strings.Repeat("2", 40)+".idx"), []byte("IDX"), 0o444))
 
-		opts := backup.CreateOpts{ConfigDir: fx.root, DBPath: filepath.Join(fx.root, "store.db"), SQLDB: fx.database, AppVersion: "test", SchemaUserVersion: db.SchemaVersion}
-		if _, err := backup.Create(t.Context(), opts, filepath.Join(t.TempDir(), "mismatched-names.zip")); !errors.Is(err, backup.ErrInvalid) {
-			t.Fatalf("Create with mismatched pack/idx basenames err = %v, want ErrInvalid", err)
-		}
+		requireInvalidCheckpointBackup(t, fx, "mismatched-names.zip", "mismatched pack/idx basenames")
 	})
 
 	t.Run("mismatched_pack_and_index_contents", func(t *testing.T) {
@@ -248,10 +242,7 @@ func TestBackupRejectsIncompleteOrCorruptCheckpointGitClosures(t *testing.T) {
 		testutil.FailErr(t, "write packA", os.WriteFile(filepath.Join(dstPackDir, packA+".pack"), rawPackA, 0o444))
 		testutil.FailErr(t, "write mismatched idxB as packA.idx", os.WriteFile(filepath.Join(dstPackDir, packA+".idx"), rawIdxB, 0o444))
 
-		opts := backup.CreateOpts{ConfigDir: fx.root, DBPath: filepath.Join(fx.root, "store.db"), SQLDB: fx.database, AppVersion: "test", SchemaUserVersion: db.SchemaVersion}
-		if _, err := backup.Create(t.Context(), opts, filepath.Join(t.TempDir(), "mismatched-content.zip")); !errors.Is(err, backup.ErrInvalid) {
-			t.Fatalf("Create with mismatched pack/idx content err = %v, want ErrInvalid", err)
-		}
+		requireInvalidCheckpointBackup(t, fx, "mismatched-content.zip", "mismatched pack/idx content")
 	})
 
 	t.Run("corrupt_loose_object", func(t *testing.T) {
@@ -261,10 +252,7 @@ func TestBackupRejectsIncompleteOrCorruptCheckpointGitClosures(t *testing.T) {
 		testutil.FailErr(t, "chmod loose blob", os.Chmod(looseBlob, 0o600))
 		testutil.FailErr(t, "corrupt loose blob", os.WriteFile(looseBlob, []byte("corrupt-git-loose-object-bytes"), 0o444))
 
-		opts := backup.CreateOpts{ConfigDir: fx.root, DBPath: filepath.Join(fx.root, "store.db"), SQLDB: fx.database, AppVersion: "test", SchemaUserVersion: db.SchemaVersion}
-		if _, err := backup.Create(t.Context(), opts, filepath.Join(t.TempDir(), "corrupt-loose.zip")); !errors.Is(err, backup.ErrInvalid) {
-			t.Fatalf("Create with corrupt loose object err = %v, want ErrInvalid", err)
-		}
+		requireInvalidCheckpointBackup(t, fx, "corrupt-loose.zip", "corrupt loose object")
 	})
 
 	t.Run("missing_reachable_blob", func(t *testing.T) {
@@ -280,10 +268,7 @@ func TestBackupRejectsIncompleteOrCorruptCheckpointGitClosures(t *testing.T) {
 		testutil.FailErr(t, "chmod loose blob", os.Chmod(looseBlob, 0o600))
 		testutil.FailErr(t, "remove loose blob", os.Remove(looseBlob))
 
-		opts := backup.CreateOpts{ConfigDir: fx.root, DBPath: filepath.Join(fx.root, "store.db"), SQLDB: fx.database, AppVersion: "test", SchemaUserVersion: db.SchemaVersion}
-		if _, err := backup.Create(t.Context(), opts, filepath.Join(t.TempDir(), "missing-blob.zip")); !errors.Is(err, backup.ErrInvalid) {
-			t.Fatalf("Create with missing reachable blob err = %v, want ErrInvalid", err)
-		}
+		requireInvalidCheckpointBackup(t, fx, "missing-blob.zip", "missing reachable blob")
 	})
 
 	t.Run("missing_packed_delta_base", func(t *testing.T) {
@@ -330,10 +315,7 @@ func TestBackupRejectsIncompleteOrCorruptCheckpointGitClosures(t *testing.T) {
 			RetainedObjects: []string{deltaCommit},
 		})
 
-		opts := backup.CreateOpts{ConfigDir: fx.root, DBPath: filepath.Join(fx.root, "store.db"), SQLDB: fx.database, AppVersion: "test", SchemaUserVersion: db.SchemaVersion}
-		if _, err := backup.Create(t.Context(), opts, filepath.Join(t.TempDir(), "thin-pack.zip")); !errors.Is(err, backup.ErrInvalid) {
-			t.Fatalf("Create with missing packed delta base err = %v, want ErrInvalid", err)
-		}
+		requireInvalidCheckpointBackup(t, fx, "thin-pack.zip", "missing packed delta base")
 	})
 
 	t.Run("invalid_oid_in_private_git_manifest", func(t *testing.T) {
@@ -344,20 +326,23 @@ func TestBackupRejectsIncompleteOrCorruptCheckpointGitClosures(t *testing.T) {
 			Refs:            map[string]string{"refs/heads/main": "not-a-valid-git-oid"},
 			RetainedObjects: []string{fx.commitOID},
 		})
-		opts := backup.CreateOpts{ConfigDir: fx.root, DBPath: filepath.Join(fx.root, "store.db"), SQLDB: fx.database, AppVersion: "test", SchemaUserVersion: db.SchemaVersion}
-		if _, err := backup.Create(t.Context(), opts, filepath.Join(t.TempDir(), "invalid-ref-oid.zip")); !errors.Is(err, backup.ErrInvalid) {
-			t.Fatalf("Create with invalid ref OID err = %v, want ErrInvalid", err)
-		}
+		requireInvalidCheckpointBackup(t, fx, "invalid-ref-oid.zip", "invalid ref OID")
 
 		writeCheckpointManifestAndMeta(t, fx, checkpoint.PrivateGitSnapshot{
 			HeadRef:         "refs/heads/main",
 			Refs:            map[string]string{"refs/heads/main": fx.commitOID},
 			RetainedObjects: []string{fx.commitOID, "pack:../evil"},
 		})
-		if _, err := backup.Create(t.Context(), opts, filepath.Join(t.TempDir(), "invalid-pack-ref.zip")); !errors.Is(err, backup.ErrInvalid) {
-			t.Fatalf("Create with invalid retained pack entry err = %v, want ErrInvalid", err)
-		}
+		requireInvalidCheckpointBackup(t, fx, "invalid-pack-ref.zip", "invalid retained pack entry")
 	})
+}
+
+func requireInvalidCheckpointBackup(t *testing.T, fx seededCheckpointFixture, archive, what string) {
+	t.Helper()
+	opts := backup.CreateOpts{ConfigDir: fx.root, DBPath: filepath.Join(fx.root, "store.db"), SQLDB: fx.database, AppVersion: "test", SchemaUserVersion: db.SchemaVersion}
+	if _, err := backup.Create(t.Context(), opts, filepath.Join(t.TempDir(), archive)); !errors.Is(err, backup.ErrInvalid) {
+		t.Fatalf("Create with %s err = %v, want ErrInvalid", what, err)
+	}
 }
 
 func TestBackupPackedWorkerGitHistoryRestoresWithoutOriginalTrunkOrStore(t *testing.T) {
