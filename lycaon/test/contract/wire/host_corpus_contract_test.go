@@ -10,8 +10,8 @@ import (
 )
 
 // TestHostCorpusMatchesTheContract keeps the corpus Den replays true to the
-// current contract: every recorded answer validates against the operation it
-// answered, every recorded event against its topic's schema, and every
+// current contract: every answer recorded whole validates against the
+// operation it answered, every recorded event against its topic's schema, and every
 // operation has a recorded success. A contract change that the recording
 // predates fails here, before the slower sweep that rewrites it runs.
 func TestHostCorpusMatchesTheContract(t *testing.T) {
@@ -38,7 +38,10 @@ func TestHostCorpusMatchesTheContract(t *testing.T) {
 		if ex.Text != "" {
 			body = []byte(ex.Text)
 		}
-		if err := validator.ValidateResponse(t.Context(), ex.Method, ex.Path, ex.Params, ex.Status, header, body); err != nil {
+		// An answer kept as its shape was validated whole by the sweep.
+		if ex.BodyShape != nil {
+			body = nil
+		} else if err := validator.ValidateResponse(t.Context(), ex.Method, ex.Path, ex.Params, ex.Status, header, body); err != nil {
 			line, _, _ := strings.Cut(err.Error(), "\n")
 			t.Errorf("%s %d no longer matches the contract: %s", ex.Operation, ex.Status, line)
 		}
