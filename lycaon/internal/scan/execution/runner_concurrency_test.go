@@ -2,6 +2,7 @@ package execution_test
 
 import (
 	"context"
+	"github.com/lycaon/lycaon/internal/scan"
 	"github.com/lycaon/lycaon/internal/scan/scantest"
 	"path/filepath"
 	"testing"
