@@ -81,7 +81,7 @@ func TestWorkerChildDelegationProjectDirInvariantContract(t *testing.T) {
 	parent, err := store.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	contractcheck.FailErr(t, "create parent", err)
 
-	q := workertest.NewQueue(t, 4, testdbseed.DefaultProjectID)
+	q := workertest.NewQueue(t, 4, testdbseed.DefaultProjectID, parent.ID)
 	task := api.WorkerTask{
 		Prompt: "fixture", Brief: "fixture",
 		ID: "job-write", ParentSessionID: parent.ID, ProjectID: testdbseed.DefaultProjectID, WorkspacePath: dir,

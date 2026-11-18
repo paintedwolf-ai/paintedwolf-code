@@ -93,7 +93,7 @@ func TestEnsureWorkerBranchFailsWriteScopeWithoutWorkspace(t *testing.T) {
 func TestWorkerReadToolsIgnoreSuggestedPaths(t *testing.T) {
 	ctx := context.Background()
 	mgr := session.NewHost(sessionstore.NewMemory(), session.Models{Client: nil, Provider: nil, Limits: settings.SessionLimits{}, Cost: nil}, nil)
-	queue := workertest.NewQueue(t, 8, testdbseed.DefaultProjectID, "parent")
+	queue := workertest.NewQueue(t, 8, testdbseed.DefaultProjectID, "parent", "child-read-discovery")
 	mgr.SetWorkerQueue(queue)
 	scope := api.TaskScope{Mode: api.TaskScopeModeRead, Paths: []string{"docs/README.md"}}
 	child := api.Session{ID: "child-read-discovery", ParentSessionID: "parent"}

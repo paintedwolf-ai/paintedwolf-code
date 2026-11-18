@@ -100,7 +100,7 @@ func TestParentSessionWorkerCycleWaitsForTerminalOutcomeDelivery(t *testing.T) {
 
 func TestObserveCoordinatorTaskInFlightParallelCap(t *testing.T) {
 	ctx := context.Background()
-	q := workertest.NewQueue(t, 8, testdbseed.DefaultProjectID)
+	q := workertest.NewQueue(t, 8, testdbseed.DefaultProjectID, "parent-1")
 	dir := t.TempDir()
 	sess := &api.Session{
 		ID:            "parent-1",
@@ -147,7 +147,7 @@ func TestObserveCoordinatorTaskInFlightParallelCap(t *testing.T) {
 
 func TestObserveCoordinatorTaskInFlight(t *testing.T) {
 	ctx := context.Background()
-	q := workertest.NewQueue(t, 8, testdbseed.DefaultProjectID)
+	q := workertest.NewQueue(t, 8, testdbseed.DefaultProjectID, "parent-1")
 	dir := t.TempDir()
 	sess := &api.Session{
 		ID:            "parent-1",
@@ -204,7 +204,7 @@ func TestObserveCoordinatorTaskInFlight(t *testing.T) {
 
 func TestObserveCoordinatorTaskInFlightAllowsUnderCap(t *testing.T) {
 	ctx := context.Background()
-	q := workertest.NewQueue(t, 8, testdbseed.DefaultProjectID)
+	q := workertest.NewQueue(t, 8, testdbseed.DefaultProjectID, "parent-1")
 	dir := t.TempDir()
 	sess := &api.Session{
 		ID:            "parent-1",
@@ -331,7 +331,7 @@ func TestBuildImplementSessionStateLedgerOverridesStaleEnvelope(t *testing.T) {
 	parent, err := store.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "Create parent", err)
 
-	q := workertest.NewQueue(t, 4, testdbseed.DefaultProjectID)
+	q := workertest.NewQueue(t, 4, testdbseed.DefaultProjectID, parent.ID)
 	_, err = q.Enqueue(ctx, api.WorkerTask{
 		ParentSessionID: parent.ID,
 		ProjectID:       testdbseed.DefaultProjectID, WorkspacePath: dir,

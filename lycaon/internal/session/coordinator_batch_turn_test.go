@@ -150,7 +150,7 @@ func TestExecutionObservationUsesApplicationOwners(t *testing.T) {
 					t.Fatalf("stale failure projection: %+v", observation.Failures)
 				}
 			}
-			q := workertest.NewQueue(t, 1, testdbseed.DefaultProjectID)
+			q := workertest.NewQueue(t, 1, testdbseed.DefaultProjectID, parent.ID)
 			manager.SetWorkerQueue(q)
 			jobID, err := q.Enqueue(t.Context(), api.WorkerTask{ParentSessionID: parent.ID, ProjectID: parent.ProjectID, Prompt: "work", Brief: "work", ExecutionTarget: api.ExecutionTargetLocal})
 			testutil.FailErr(t, "enqueue worker", err)

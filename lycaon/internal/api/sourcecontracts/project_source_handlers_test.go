@@ -4,7 +4,9 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/testdbseed"
+	"github.com/lycaon/lycaon/internal/worker"
 	"github.com/lycaon/lycaon/internal/worker/workertest"
 	"net/http"
 	"net/http/httptest"
@@ -97,7 +99,10 @@ func TestWorkerBranchRoot(t *testing.T) {
 	branch := t.TempDir()
 
 	contractfixture.CompleteBranchMeta(t, branch)
-	q := workertest.NewQueue(t, 1, testdbseed.DefaultProjectID)
+	database := testdbfixture.Open(t, "workers.db")
+	testdbseed.InsertProject(t, database, projectID)
+	testdbseed.InsertProject(t, database, "22222222-2222-4222-8222-222222222222")
+	q := worker.NewSQLQueue(database, 1)
 	workerID := contractfixture.EnqueueBranchJob(t, q, projectID, branch)
 	otherJobID := contractfixture.EnqueueBranchJob(t, q, "22222222-2222-4222-8222-222222222222", t.TempDir())
 
@@ -133,7 +138,7 @@ func TestWorkerBranchRootEmptyAfterPromoteReleasesOverlay(t *testing.T) {
 	t.Parallel()
 	const projectID = "44444444-4444-4444-8444-444444444444"
 
-	q := workertest.NewQueue(t, 1, testdbseed.DefaultProjectID)
+	q := workertest.NewQueue(t, 1, projectID)
 	workerID := contractfixture.EnqueueBranchJob(t, q, projectID, "")
 
 	sources := contractfixture.NewTestSources(t, q)

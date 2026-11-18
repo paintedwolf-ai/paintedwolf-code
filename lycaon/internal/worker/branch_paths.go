@@ -11,7 +11,6 @@ import (
 	"github.com/lycaon/lycaon/internal/fssync"
 	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/sandbox"
-	"github.com/lycaon/lycaon/internal/textfile"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -69,23 +68,6 @@ func (p PromoteRoots) ReadPairBytesAt(task *api.WorkerTask, rootID, scopeRel str
 		return nil, nil, false, branchErr
 	}
 	return primaryData, branchData, branchPresent, nil
-}
-
-func readPromotePairBytes(primaryDir, workspaceRoot, rel string) (primary, branch []byte, branchPresent bool, err error) {
-	rel = filepath.ToSlash(filepath.Clean(strings.TrimSpace(rel)))
-	primary, err = readPromoteFile(filepath.Join(primaryDir, filepath.FromSlash(rel)))
-	if err != nil && !os.IsNotExist(err) {
-		return nil, nil, false, err
-	}
-	branch, err = readPromoteFile(filepath.Join(workspaceRoot, filepath.FromSlash(rel)))
-	switch {
-	case err == nil:
-		return primary, branch, true, nil
-	case os.IsNotExist(err):
-		return primary, nil, false, nil
-	default:
-		return nil, nil, false, err
-	}
 }
 
 // promoteIdentity is the structured location of one promote path: the root it
@@ -179,19 +161,6 @@ func (p PromoteRoots) fileAbs(task *api.WorkerTask, qualifiedPath string) (prima
 		return "", "", err
 	}
 	return id.Primary, id.Branch, nil
-}
-
-// WritePrimaryBytes writes exact content to the correct source root.
-func (p PromoteRoots) WritePrimaryBytes(task *api.WorkerTask, qualifiedPath string, content []byte) error {
-	qualifiedPath = filepath.ToSlash(filepath.Clean(strings.TrimSpace(qualifiedPath)))
-	if qualifiedPath == "" || qualifiedPath == "." || sandbox.HasParentTraversal(qualifiedPath) {
-		return nil
-	}
-	id, err := p.locateIdentity(task, qualifiedPath)
-	if err != nil {
-		return err
-	}
-	return p.writePrimaryBytesAt(task, id.RootID, id.ScopeRel, content, nil, nil)
 }
 
 func (p PromoteRoots) writePrimaryBytes(task *api.WorkerTask, qualifiedPath string, content []byte, restoreMode *os.FileMode, verify func(fseffect.Target) error) error {
@@ -295,16 +264,6 @@ func syncPromoteDirectoryTree(root, leaf string) error {
 		}
 		current = filepath.Dir(current)
 	}
-}
-
-// WritePrimaryText encodes validated text in an explicitly selected representation.
-func (p PromoteRoots) WritePrimaryText(task *api.WorkerTask, qualifiedPath, content, encoding string) error {
-	raw, err := textfile.EncodeBounded(content, encoding,
-		textfile.LimitsForRaw(promoteConflictMaxFileBytes))
-	if err != nil {
-		return err
-	}
-	return p.WritePrimaryBytes(task, qualifiedPath, raw)
 }
 
 func (p PromoteRoots) dropPrimary(task *api.WorkerTask, qualifiedPath string, verify func(fseffect.Target) error) error {

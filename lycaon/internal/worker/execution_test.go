@@ -49,11 +49,11 @@ func wireExecutionCloseoutPolicy(t *testing.T, manager *session.Host) {
 
 func newExecutionStack(t *testing.T) (*session.Host, *SQLQueue, *LocalWorkerExecutor, *LocalWorkerPoller) {
 	t.Helper()
-	store := store.NewMemory()
+	queue := newTestQueue(t, DefaultWorkersConfig().Poller.MaxConcurrency, testdbseed.DefaultProjectID)
+	store := store.NewSQL(queue.db)
 	mgr := session.NewHost(store, session.Models{Client: llm.NewMockProvider(testMockConfig(t)), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
 	wireExecutionCloseoutPolicy(t, mgr)
 	cfg := DefaultWorkersConfig()
-	queue := newTestQueue(t, cfg.Poller.MaxConcurrency, testdbseed.DefaultProjectID)
 	queue.SetWorkersConfig(cfg)
 	exec := NewLocalWorkerExecutor(mgr.Workers, queue, mgr.Workspace, mgr.Submissions, mgr.Runner.Transcript, mgr.Runner.Execution, mgr.Workers.Cancel, mgr.Workers.Cancellations)
 	exec.SetPromptInjects(promptstest.InjectRenderer(t))

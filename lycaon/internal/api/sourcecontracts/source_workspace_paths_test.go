@@ -2,8 +2,9 @@ package sourcecontracts
 
 import (
 	"encoding/json"
-	"github.com/lycaon/lycaon/internal/testdbseed"
-	"github.com/lycaon/lycaon/internal/worker/workertest"
+	hostapi "github.com/lycaon/lycaon/internal/api"
+	"github.com/lycaon/lycaon/internal/testdbfixture"
+	"github.com/lycaon/lycaon/internal/worker"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -34,8 +35,12 @@ func TestSourceWorkspaceNamesBranchPerRoot(t *testing.T) {
 }
 
 func TestWorkerSourceReadsUseRecordedRootLayout(t *testing.T) {
-	queue := workertest.NewQueue(t, 1, testdbseed.DefaultProjectID)
-	srv := contractfixture.NewTestServer(t, contractfixture.WithWorkers(queue), contractfixture.WithSQLProjects(t))
+	database := testdbfixture.Open(t, "workers.db")
+	queue := worker.NewSQLQueue(database, 1)
+	srv := contractfixture.NewTestServer(t, contractfixture.WithWorkers(queue), func(d *hostapi.Dependencies) {
+		d.Core.Database = database
+		d.Core.Projects = project.NewSQLRegistry(database)
+	})
 	primary, branchRoot := t.TempDir(), t.TempDir()
 	p := contractfixture.CreateProjectForTest(t, srv, primary)
 	rootID := p.Roots[0].ID

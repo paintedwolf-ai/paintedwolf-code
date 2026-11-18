@@ -2,7 +2,6 @@ package api
 
 import (
 	"encoding/json"
-	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/worker/workertest"
 	"net/http"
 	"net/http/httptest"
@@ -59,7 +58,7 @@ func TestWorkersBoardAndCancelHandlers(t *testing.T) {
 	coord, err := sessStore.Create(ctx, wire.CreateSessionRequest{ProjectID: proj.ID, Posture: wire.SessionPostureBuild}, proj.ID)
 	testutil.FailErr(t, "create session", err)
 
-	queue := workertest.NewQueue(t, 2, testdbseed.DefaultProjectID)
+	queue := workertest.NewQueue(t, 2, proj.ID, coord.ID, coord.ID)
 	_, err = queue.Enqueue(ctx, wire.WorkerTask{
 		ID:              "job-pending",
 		ParentSessionID: coord.ID,

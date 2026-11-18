@@ -74,9 +74,9 @@ func TestCoordinatorTaskScopeDispatchReadFanOutParallelWriteAllowed(t *testing.T
 	testutil.FailErr(t, "LoadHintConfig", err)
 	guidance.SetGuidanceRenderer(prompts.NewGuidanceRenderer(prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{})))
 	deps := workeradmission.WorkerCycleGuardDeps{
-		Workers: workertest.NewQueue(t, 8, testdbseed.DefaultProjectID),
+		Workers: workertest.NewQueue(t, 8, testdbseed.DefaultProjectID, sess.ID),
 	}
-	q2 := workertest.NewQueue(t, 8, testdbseed.DefaultProjectID)
+	q2 := workertest.NewQueue(t, 8, testdbseed.DefaultProjectID, sess.ID)
 	deps.Workers = q2
 	writeScope := api.TaskScope{Mode: api.TaskScopeModeWrite, Paths: []string{"internal/auth/**"}}
 	_, err = q2.Enqueue(ctx, api.WorkerTask{
