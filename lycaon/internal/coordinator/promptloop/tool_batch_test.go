@@ -4,6 +4,7 @@ import (
 	"github.com/lycaon/lycaon/internal/toolcontract"
 
 	"context"
+	"slices"
 	"sort"
 	"strings"
 	"sync"
@@ -151,9 +152,9 @@ func TestLoopCoordinatorReadsGetHandlesAcrossSurfaces(t *testing.T) {
 					got[path] = m.Content[:nl]
 				}
 			}
-			want := map[string]string{"a.go": "[command#1]", "b.go": "[command#2]"}
-			if got["a.go"] != want["a.go"] || got["b.go"] != want["b.go"] {
-				t.Fatalf("coordinator reads tagged %v, want %v", got, want)
+			// Parallel calls take handles as they finish.
+			if handles := []string{got["a.go"], got["b.go"]}; !slices.Contains(handles, "[command#1]") || !slices.Contains(handles, "[command#2]") {
+				t.Fatalf("coordinator reads tagged %v, want command#1 and command#2", got)
 			}
 		})
 	}
@@ -200,6 +201,7 @@ func TestLoopParallelWorkerReadsCommitInCallOrder(t *testing.T) {
 		testutil.FailErr(t, "get messages", err)
 		type toolRow struct {
 			ts     time.Time
+			ord    int64
 			handle string
 			path   string
 		}
@@ -212,19 +214,23 @@ func TestLoopParallelWorkerReadsCommitInCallOrder(t *testing.T) {
 			if nl <= 0 || !strings.HasPrefix(m.Content, "[read#") {
 				continue
 			}
-			rows = append(rows, toolRow{ts: m.CreatedAt, handle: m.Content[:nl], path: strings.TrimPrefix(m.Content[nl+1:], "contents of ")})
+			rows = append(rows, toolRow{ts: m.CreatedAt, ord: m.Ord, handle: m.Content[:nl], path: strings.TrimPrefix(m.Content[nl+1:], "contents of ")})
 		}
-		// Simulate the production store's ORDER BY ts retrieval.
-		sort.SliceStable(rows, func(i, j int) bool { return rows[i].ts.Before(rows[j].ts) })
-		wantPaths := []string{"a.go", "b.go", "c.go"}
-		wantHandles := []string{"[read#1]", "[read#2]", "[read#3]"}
 		if len(rows) != 3 {
 			t.Fatalf("tagged read rows = %d want 3 (%v)", len(rows), rows)
 		}
-		for i, r := range rows {
-			if r.path != wantPaths[i] || r.handle != wantHandles[i] {
-				t.Fatalf("ts-ordered read %d = (%s, %s) want (%s, %s) — batch scrambled by completion-order ts",
-					i, r.handle, r.path, wantHandles[i], wantPaths[i])
+		// Timestamps keep call order.
+		sort.SliceStable(rows, func(i, j int) bool { return rows[i].ts.Before(rows[j].ts) })
+		for i, want := range []string{"a.go", "b.go", "c.go"} {
+			if rows[i].path != want {
+				t.Fatalf("ts-ordered read %d = %s want %s — batch scrambled by completion-order ts", i, rows[i].path, want)
+			}
+		}
+		// Handles are minted as each result is stored, so they follow the stored order.
+		sort.SliceStable(rows, func(i, j int) bool { return rows[i].ord < rows[j].ord })
+		for i, want := range []string{"[read#1]", "[read#2]", "[read#3]"} {
+			if rows[i].handle != want {
+				t.Fatalf("read stored %d carries %s want %s", i, rows[i].handle, want)
 			}
 		}
 	})
@@ -355,7 +361,9 @@ func TestLoopDropsEmptyArgPhantomTaskBeforeExecution(t *testing.T) {
 	}
 }
 
-func TestLoopPublishesClassifiedResultBeforeEvidence(t *testing.T) {
+// A result is stored once, already carrying its evidence handle, so no crash
+// can leave it stored without one.
+func TestLoopStoresClassifiedResultWithItsEvidence(t *testing.T) {
 	var order []string
 	var orderMu sync.Mutex
 	note := func(step string) {
@@ -382,7 +390,7 @@ func TestLoopPublishesClassifiedResultBeforeEvidence(t *testing.T) {
 	deps.Projection.AppendMessages = func(ctx context.Context, sessionID string, msgs ...api.Message) error {
 		for _, msg := range msgs {
 			if msg.Role == api.MessageRoleTool {
-				note("append")
+				note("append " + strings.Join(msg.EvidenceHandles, ","))
 			}
 		}
 		return mem.AppendMessages(ctx, sessionID, msgs...)
@@ -406,8 +414,8 @@ func TestLoopPublishesClassifiedResultBeforeEvidence(t *testing.T) {
 		},
 	})
 	testutil.FailErr(t, "loop.Run", err)
-	if len(order) < 2 || order[0] != "append" || order[1] != "evidence" {
-		t.Fatalf("commit order = %v want append before evidence", order)
+	if !slices.Equal(order, []string{"evidence", "append command#1"}) {
+		t.Fatalf("commit order = %v want the evidence, then the result appended with its handle", order)
 	}
 }
 

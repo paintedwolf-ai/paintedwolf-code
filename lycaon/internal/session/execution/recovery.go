@@ -9,6 +9,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/invocation"
+	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -24,7 +25,11 @@ func (m *Recovery) RecoverOrphanedTurns(ctx context.Context) error {
 	if err := m.transcript.RepairPendingOutputs(ctx); err != nil {
 		return err
 	}
-	if _, err := m.store.RecoverTurns(ctx); err != nil {
+	recovering, err := m.store.RecoverTurns(ctx)
+	if err != nil {
+		return err
+	}
+	if err := m.withdrawUnsettledDrafts(ctx, recovering); err != nil {
 		return err
 	}
 	if _, err := m.store.SettleAbandonedTurnClocks(ctx); err != nil {
@@ -47,6 +52,20 @@ func (m *Recovery) RecoverOrphanedTurns(ctx context.Context) error {
 	}
 }
 
+func (m *Recovery) withdrawUnsettledDrafts(ctx context.Context, recovering []store.Turn) error {
+	seen := map[string]bool{}
+	for _, turn := range recovering {
+		if seen[turn.SessionID] {
+			continue
+		}
+		seen[turn.SessionID] = true
+		if err := m.transcript.WithdrawUnsettledDrafts(ctx, turn.SessionID); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 // RecoverOrphanedTurnsForSession repairs projections and fences one session after a panic.
 func (m *Recovery) RecoverOrphanedTurnsForSession(ctx context.Context, sessionID string) error {
 	sessionID = strings.TrimSpace(sessionID)
@@ -57,7 +76,11 @@ func (m *Recovery) RecoverOrphanedTurnsForSession(ctx context.Context, sessionID
 	if err := m.transcript.RepairPendingOutputs(ctx); err != nil {
 		return err
 	}
-	if _, err := m.store.RecoverTurnsForSession(ctx, sessionID); err != nil {
+	recovering, err := m.store.RecoverTurnsForSession(ctx, sessionID)
+	if err != nil {
+		return err
+	}
+	if err := m.withdrawUnsettledDrafts(ctx, recovering); err != nil {
 		return err
 	}
 	sess, err := m.store.Get(ctx, sessionID)

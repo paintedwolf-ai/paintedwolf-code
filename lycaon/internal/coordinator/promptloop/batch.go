@@ -75,7 +75,6 @@ type toolCallOutcome struct {
 	deliveries         []tools.SourceDeliveryTag
 	taskMessageID      string
 	committed          bool
-	storedID           string
 	persistedStored    []api.Message
 	persistedTransient []*api.Message
 	// err is a failure that produced no durable result.

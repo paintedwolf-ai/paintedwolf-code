@@ -63,6 +63,7 @@ type QueryStore interface {
 	GetPromptSubmission(ctx context.Context, id string) (*store.PromptSubmission, error)
 	ListQueuedUserPromptSubmissions(ctx context.Context, sessionID string) ([]store.PromptSubmission, error)
 	ListPendingModelOutputProjections(ctx context.Context) ([]store.PendingModelOutputProjection, error)
+	ListUnsettledLiveDrafts(ctx context.Context, sessionID string) ([]string, error)
 	SessionSecretExposure(ctx context.Context, sessionID string) (bool, error)
 	SessionUntrustedContent(sessionID string) bool
 	SessionUntrustedContentResult(ctx context.Context, sessionID string) (bool, error)
