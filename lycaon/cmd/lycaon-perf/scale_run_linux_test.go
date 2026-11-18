@@ -133,19 +133,37 @@ func fileBytes(path string) int64 {
 
 // vacuum frees the freelist in bounded steps and reports them as gauges.
 func vacuum(ctx context.Context, store *db.Store) {
-	var free, passes int64
-	_ = store.QueryRowContext(ctx, "PRAGMA freelist_count").Scan(&free)
-	for ; free > 256; passes++ {
-		if _, err := store.ExecContext(ctx, "PRAGMA incremental_vacuum(2048)"); err != nil {
+	free, err := writerFreelist(ctx, store)
+	var passes int64
+	// Each pass must shrink the freelist; one that cannot ends the drain.
+	for err == nil && free > 256 {
+		if _, err = store.ExecContext(ctx, "PRAGMA incremental_vacuum(2048)"); err != nil {
 			break
 		}
-		_ = store.QueryRowContext(ctx, "PRAGMA freelist_count").Scan(&free)
+		passes++
+		var after int64
+		if after, err = writerFreelist(ctx, store); err != nil || after >= free {
+			break
+		}
+		free = after
 	}
 	observability.RecordRuntimeSample(map[string]int64{
 		"store_maintenance_drains_done": 1, "store_maintenance_passes": passes, "store_maintenance_vacuum_passes": passes,
 		"store_maintenance_turns": passes + 1, "store_maintenance_peak_pass_pages": min(passes, 1) * db.VacuumPassPageLimit,
 		"store_maintenance_pages_reclaimed": passes * db.VacuumPassPageLimit,
 	})
+}
+
+// writerFreelist reads the freelist on the connection that vacuums it.
+func writerFreelist(ctx context.Context, store *db.Store) (int64, error) {
+	tx, err := store.BeginTx(ctx, nil)
+	if err != nil {
+		return 0, err
+	}
+	defer func() { _ = tx.Rollback() }()
+	var free int64
+	err = tx.QueryRowContext(ctx, "PRAGMA freelist_count").Scan(&free)
+	return free, err
 }
 
 func fakeRoutes(store *db.Store) *http.ServeMux {
