@@ -29,7 +29,7 @@ func TestLocalGenerationRepairRouteUsesHostState(t *testing.T) {
 		req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, base+"/v1/providers/"+tc.id+"/repair", nil)
 		testutil.FailErr(t, "create repair request", err)
 		if tc.authed {
-			hostapi.WithTestAuth(req)
+			req.Header.Set("Authorization", "Bearer "+hostapi.TestAPIToken)
 		}
 		response, err := http.DefaultClient.Do(req)
 		testutil.FailErr(t, "request local repair", err)

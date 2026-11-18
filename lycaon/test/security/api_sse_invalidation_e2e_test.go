@@ -130,7 +130,7 @@ func newProjectHub(t *testing.T, ctx context.Context, base, projectID string) *p
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet,
 		base+"/v1/events?project_id="+projectID, nil)
 	testutil.FailErr(t, "http.NewRequestWithContext failed", err)
-	req.Header.Set("Authorization", api.TestAuthHeader())
+	req.Header.Set("Authorization", "Bearer "+api.TestAPIToken)
 	resp, err := http.DefaultClient.Do(req) //nolint:bodyclose // The SSE reader closes resp.Body.
 	if err != nil {
 		t.Fatalf("subscribe: %v", err)
@@ -290,7 +290,7 @@ func journeyPatch(t *testing.T, base, path, body string, wantStatus int) {
 	req, err := http.NewRequestWithContext(t.Context(), http.MethodPatch, base+path, strings.NewReader(body))
 	testutil.FailErr(t, "http.NewRequest failed", err)
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", api.TestAuthHeader())
+	req.Header.Set("Authorization", "Bearer "+api.TestAPIToken)
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		t.Fatalf("PATCH %s: %v", path, err)

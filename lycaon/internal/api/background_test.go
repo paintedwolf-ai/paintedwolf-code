@@ -82,7 +82,7 @@ func TestServerCleanupReliablyReleasesResourcesInvariant(t *testing.T) {
 
 		req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, baseURL+"/v1/projects", nil)
 		testutil.FailErr(t, "build request", err)
-		WithTestAuth(req)
+		req.Header.Set("Authorization", "Bearer "+TestAPIToken)
 
 		resp, err := http.DefaultClient.Do(req)
 		testutil.FailErr(t, "execute request", err)

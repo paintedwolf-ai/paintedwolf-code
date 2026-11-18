@@ -33,7 +33,7 @@ func authedRequest(t *testing.T, method, path string, body io.Reader) *http.Requ
 	} else {
 		r = httptest.NewRequestWithContext(t.Context(), method, path, nil)
 	}
-	r.Header.Set("Authorization", api.TestAuthHeader())
+	r.Header.Set("Authorization", "Bearer "+api.TestAPIToken)
 	return r
 }
 
@@ -412,7 +412,7 @@ func settingsPut(t *testing.T, base, path, body string) (status int, out []byte)
 		t.Fatalf("http.NewRequest: %v", err)
 	}
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", api.TestAuthHeader())
+	req.Header.Set("Authorization", "Bearer "+api.TestAPIToken)
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		t.Fatalf("PUT %s: %v", path, err)
@@ -442,7 +442,7 @@ func settingsPatch(t *testing.T, base, path, body string) (status int, out []byt
 		t.Fatalf("http.NewRequest: %v", err)
 	}
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", api.TestAuthHeader())
+	req.Header.Set("Authorization", "Bearer "+api.TestAPIToken)
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		t.Fatalf("PATCH %s: %v", path, err)

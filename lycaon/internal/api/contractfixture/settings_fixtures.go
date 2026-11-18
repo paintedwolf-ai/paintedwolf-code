@@ -105,7 +105,7 @@ func PutApprovals(t *testing.T, base, query, body string, want int) {
 		url, strings.NewReader(body))
 	testutil.FailErr(t, "build approvals PUT", err)
 	req.Header.Set("Content-Type", "application/json")
-	hostapi.WithTestAuth(req)
+	req.Header.Set("Authorization", "Bearer "+hostapi.TestAPIToken)
 	resp, err := fixtureClient.Do(req)
 	testutil.FailErr(t, "approvals PUT", err)
 	_ = resp.Body.Close()

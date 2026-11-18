@@ -267,7 +267,7 @@ func (s *conformanceSweep) send(ctx context.Context, req conformanceRequest) con
 	reqCtx, cancel := context.WithTimeout(ctx, conformanceRequestBudget)
 	defer cancel()
 	r := httptest.NewRequestWithContext(reqCtx, req.op.Method, target, body)
-	r.Header.Set("Authorization", api.TestAuthHeader())
+	r.Header.Set("Authorization", "Bearer "+api.TestAPIToken)
 	if req.announcedLength > 0 {
 		r.ContentLength = req.announcedLength
 	}
