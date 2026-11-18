@@ -43,7 +43,7 @@ func TestRetirementsAbsentFromActiveSurfacesAndMapped(t *testing.T) {
 		"parse_decomposition",
 		"parse_delegation_plan",
 	}
-	retirementsPath := filepath.Join("..", "..", "..", "schemas", "agent-public-retirements.json")
+	retirementsPath := filepath.Join("..", "..", "..", "..", "schemas", "agent-public-retirements.json")
 	rawLedger, err := os.ReadFile(retirementsPath)
 	testutil.FailErr(t, "read agent-public-retirements.json", err)
 	var ledger struct {

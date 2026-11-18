@@ -60,7 +60,7 @@ func (q *QueuedWorkerScripts) Mock(h **Harness) *llm.KickDrivenMock {
 				}
 				return modelcall.Completion{Content: "All obligations are complete."}
 			}
-			task, ok := (*h).Workers.Queue.Get(jobID)
+			task, ok := (*h).Workers.Queue.Get(jobID) //nolint:contextcheck // Get reads the store with its own context.
 			if !ok || task == nil {
 				return modelcall.Completion{Content: "Done."}
 			}

@@ -212,7 +212,7 @@ func collectStepPrograms(steps []oar.NextStep, out *[][]string) {
 // Every native program a next step offers is accepted as written by the real
 // language, once its placeholders are filled.
 func TestOfferedProgramsParseAndRun(t *testing.T) {
-	files, err := filepath.Glob(filepath.Join("..", "..", "config", "packs", "painted-wolf", "*", "host", "next-steps", "*.yaml"))
+	files, err := filepath.Glob(filepath.Join("..", "..", "..", "config", "packs", "painted-wolf", "*", "host", "next-steps", "*.yaml"))
 	testutil.FailErr(t, "list catalog", err)
 	if len(files) == 0 {
 		t.Fatal("no next-step catalog found")
