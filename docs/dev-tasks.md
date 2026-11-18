@@ -1013,9 +1013,7 @@ request still wants can be withdrawn directly.
 
 Each shared-batch request prints its own receipt path under `verification/<batch-id>/` in the artifact root
 and returns its own result: passed, failed, unverified, or cancelled. Receipts
-include source identity, stage evidence, and stages left unverified. A Go package
-that passed by replaying an earlier result carries `reused` with the batch and
-stage that recorded it. A request whose Go package failed while its stage was
+include source identity, stage evidence, and stages left unverified. A request whose Go package failed while its stage was
 still running returns at once; its evidence names the failed tests and links the
 package's output under `<stage-id>-failures/`. A `test:digest`, `test:short` or `test:contract`
 request instead waits for its whole package selection, because its recipe declares

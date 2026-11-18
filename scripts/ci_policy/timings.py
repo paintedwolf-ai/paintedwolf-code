@@ -66,8 +66,7 @@ def record(root, run):
         for events in sorted((root / "verification").glob("*/stage-*-events.jsonl")):
             for line in events.read_text().splitlines():
                 event = json.loads(line)
-                if isinstance(event.get("package"), str) and type(event.get("elapsed")) in (int, float) \
-                        and not event.get("reused"):
+                if isinstance(event.get("package"), str) and type(event.get("elapsed")) in (int, float):
                     packages[event["package"]] = packages.get(event["package"], 0) + event["elapsed"]
     job_start = run.get('job_started_at')
     complete = valid_seconds(job_start, allow_zero=True) and job_start <= run['started_at']

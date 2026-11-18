@@ -211,13 +211,11 @@ def request_admissions(queue, plan, requested):
 
 
 def subscribe(queue, lease_class, lock_file, root, binary, arguments, plan, environment):
-    from verification_reuse import environment_identity
     requested = int(environment["PW_TEST_WORKERS"])
     admissions = request_admissions(queue, plan, requested)
     descriptor = {"kind": "request", "source": str(Path(root).resolve()), "binary": str(Path(binary).resolve()),
                   "arguments": arguments, "plan": plan, "admissions": admissions, "admission": admissions[0],
-                  "compatibility": compatibility(root, binary, environment),
-                  "environment_identity": environment_identity(environment)}
+                  "compatibility": compatibility(root, binary, environment)}
     name = ", ".join(plan["names"])
     supervisor = None
     assignment = None

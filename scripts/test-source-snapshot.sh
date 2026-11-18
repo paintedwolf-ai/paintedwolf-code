@@ -245,7 +245,14 @@ run_commit() {
     /*|[A-Za-z]:/*|[A-Za-z]:\\*) ;;
     *) export OPENGREP_CACHE_DIR="$PWD/$OPENGREP_CACHE_DIR" ;;
   esac
-  export CARGO_TARGET_DIR="${CARGO_TARGET_DIR:-$ROOT/lycaon-den/target}"
+  # Cargo judges freshness by file times, so a target another source built later passes for this
+  # one. A hosted runner verifies only its job's source; elsewhere each slot keeps its own targets.
+  if [[ "${GITHUB_ACTIONS:-}" == true ]]; then
+    export CARGO_TARGET_DIR="${CARGO_TARGET_DIR:-$ROOT/lycaon-den/target}"
+  else
+    export PW_COMPILER_CACHE_DIR="${PW_COMPILER_CACHE_DIR}/slots/$(basename "$SNAPSHOT_DIR")"
+    export CARGO_TARGET_DIR="${PW_COMPILER_CACHE_DIR}/den"
+  fi
   cd "$SNAPSHOT_DIR"
   set +e
   "$@"

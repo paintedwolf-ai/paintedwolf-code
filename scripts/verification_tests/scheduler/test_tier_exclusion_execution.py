@@ -3,7 +3,8 @@ import tempfile
 import unittest
 
 import verification_plan as planning
-from verification_execute import excluded_tier_tests, exclusion_notice, flag_tags, tier_tags
+from verification_execute import excluded_tier_tests, exclusion_notice, tier_tags
+from verification_plan import flag_tags
 
 
 class TierExclusionTests(unittest.TestCase):

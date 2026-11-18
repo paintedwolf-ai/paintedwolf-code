@@ -34,10 +34,9 @@ class MeasuredTimingsTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             (root / "ci").mkdir()
-            events(root, "a", [{"package": "p/one", "elapsed": 4.0, "reused": False},
-                               {"package": "p/two", "elapsed": 9.5, "reused": True},
+            events(root, "a", [{"package": "p/one", "elapsed": 4.0},
                                {"package": "p/three", "exit_code": 1}])
-            events(root, "b", [{"package": "p/one", "elapsed": 1.25, "reused": False}])
+            events(root, "b", [{"package": "p/one", "elapsed": 1.25}])
             run = {"lane": BEHAVIOR, "shard": "1/2", "status": "passed", "exit_code": 0,
                    "job_started_at": 80.0, "started_at": 100.0, "finished_at": 160.0}
             timings.record(root, run)

@@ -22,6 +22,13 @@ import verification_resources as resources
 
 
 class TaskAdmissionTests(unittest.TestCase):
+    def setUp(self):
+        # A host's configured capacity replaces the derived budget these tests measure.
+        environment = patch.dict(os.environ)
+        environment.start()
+        self.addCleanup(environment.stop)
+        os.environ.pop("PW_TEST_CAPACITY", None)
+
     def test_task_option_values_cannot_bypass_admission(self):
         self.assertTrue(execution.scheduled_task(["--output-group-begin", "--dry", "check"]))
         self.assertTrue(execution.scheduled_task(["-n", "--dry=false", "check"]))
@@ -413,6 +420,7 @@ while True: time.sleep(.1)
         task = self.root / "fixture-task"
         task.write_text('#!/usr/bin/env bash\nset -eu\nshift 2\n'
                         'if [[ "${1:-}" == "--dry" ]]; then echo "task: [den:harness] fixture $*" >&2; exit 0; fi\n'
+                        'if [[ "${1:-}" == "--force" ]]; then shift; fi\n'
                         'if [[ "${1:-}" == "--concurrency" ]]; then shift 2; fi\n'
                         '[[ "$1" == "den:harness" ]]\nshift\n'
                         'if [[ "${1:-}" == "--" ]]; then shift; else set -- --supervised; fi\n'
