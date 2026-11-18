@@ -124,7 +124,9 @@ func TestQuietedDirectIPAskIssuesTheOncePermit(t *testing.T) {
 	cards := &cardCountingHITL{}
 	executor := NewExecutor(nil, nil, "implement")
 	executor.Approvals.checkpointMgr = cards
-	executor.Approvals.approvalGate = quietedDirectIPGate{decisionGate{decision: &gate.Decision{Primary: api.GateUnobservedChannel, Cited: []gate.Fact{directFact}}}}
+	executor.Approvals.approvalGate = quietedDirectIPGate{decisionGate{decision: &gate.Decision{
+		Primary: api.GateUnobservedChannel, Cited: []gate.Fact{directFact}, ReasonKey: string(api.GateUnobservedChannel) + ":unconfined",
+	}}}
 	executor.Capabilities.SetDirectIPCapabilityRuntime(runtime)
 	toolCtx := tools.ToolContext{
 		Invocation: tools.Invocation{Contract: contract},
