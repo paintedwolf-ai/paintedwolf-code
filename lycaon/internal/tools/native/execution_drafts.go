@@ -48,7 +48,7 @@ func (e ExecutionRevisions) captureDocument(ctx context.Context, tctx tools.Tool
 	if err != nil || !unsaved {
 		return nil, revision, nil, false, err
 	}
-	doc, open, err := sourceview.OpenDocument(ctx, tctx, resolved)
+	doc, open, err := sourceview.OpenPinnedDocument(ctx, tctx, resolved)
 	if err != nil || !open || !doc.Dirty {
 		return nil, revision, nil, false, err
 	}
@@ -72,7 +72,6 @@ func (e ExecutionRevisions) captureDocument(ctx context.Context, tctx tools.Tool
 		release()
 		return nil, revision, nil, false, err
 	}
-	tools.PinDraft(ctx, doc.ID, doc.Revision)
 	return encoded, revision, release, true, nil
 }
 

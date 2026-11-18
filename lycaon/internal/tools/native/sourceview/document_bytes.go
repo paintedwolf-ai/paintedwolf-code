@@ -30,3 +30,20 @@ func OpenDocument(ctx context.Context, tctx tools.ToolContext, resolved projectp
 	}
 	return doc, open, nil
 }
+
+// OpenPinnedDocument returns the document at a revision it has pinned for the
+// program. It pins what it read and reads again until the two agree, so no
+// launch save can move the document between the read and its pin.
+func OpenPinnedDocument(ctx context.Context, tctx tools.ToolContext, resolved projectpaths.Resolved) (tools.EditorDocumentText, bool, error) {
+	doc, open, err := OpenDocument(ctx, tctx, resolved)
+	for err == nil && open {
+		tools.PinDraft(ctx, doc.ID, doc.Revision)
+		var current tools.EditorDocumentText
+		current, open, err = OpenDocument(ctx, tctx, resolved)
+		if current.ID == doc.ID && current.Revision == doc.Revision {
+			break
+		}
+		doc = current
+	}
+	return doc, open, err
+}

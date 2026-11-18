@@ -280,6 +280,13 @@ func TestProgramLaunchBoundsTheUnsavedDraftsItNames(t *testing.T) {
 // in the same statement leaves it unsaved and unreported, and neither stage is
 // refused for the other. The next statement's launch saves it.
 func TestProgramLaunchLeavesADraftItsOwnStageIsReading(t *testing.T) {
+	// The read and the launch race in every pipeline; each order must hold.
+	for round := range 12 {
+		t.Run(fmt.Sprint(round), programLaunchLeavesADraftItsOwnStageIsReading)
+	}
+}
+
+func programLaunchLeavesADraftItsOwnStageIsReading(t *testing.T) {
 	f, service, p := documentProgram(t)
 	writeTreeFile(t, f, "piped.txt", "saved\n")
 	writeTreeFile(t, f, "other.txt", "saved\n")

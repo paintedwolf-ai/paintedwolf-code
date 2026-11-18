@@ -249,7 +249,12 @@ func captureDestinationRevision(ctx context.Context, tctx tools.ToolContext, res
 				return sourceview.Text{}, toolcontract.ExecutionRevision{}, &ExecutionRevisionConflict{Path: resolved.DisplayPath, Pinned: revision, Cause: err}
 			}
 		}
-		tools.PinDraft(ctx, st.Editor.ID, st.Editor.Revision)
+		// A launch save that landed before the pin moved the document: capture it again.
+		if pinned, open, err := sourceview.OpenPinnedDocument(ctx, tctx, resolved); err != nil {
+			return sourceview.Text{}, toolcontract.ExecutionRevision{}, err
+		} else if !open || pinned.Revision != st.Editor.Revision {
+			return captureDestinationRevision(ctx, tctx, resolved)
+		}
 	} else {
 		revision.Mode, revision.Representation = toolcontract.PublishedDiskRevision, toolcontract.UTF8SourceBytes
 		revision.DiskSHA256 = st.Disk.RawSHA256()
