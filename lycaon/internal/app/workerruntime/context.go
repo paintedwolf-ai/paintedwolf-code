@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/lycaon/lycaon/internal/coordinator/inject"
 	"github.com/lycaon/lycaon/internal/coordinator/loopwake"
 	"github.com/lycaon/lycaon/internal/evidence"
 	"github.com/lycaon/lycaon/internal/guidance/feedback"
@@ -97,18 +98,7 @@ func (r *Runtime) wireWorkerContext(deps Dependencies) error {
 		if sess == nil {
 			return nil
 		}
-		metas := policy.ListForPrompt(ctx, sess, profileID)
-		// The leg names exactly what the worker's request offers.
-		if machine := deps.Sessions.Manager.Profiles.ProjectMachine(ctx, sess, profileID); machine.Compiled() {
-			metas = tools.HideSkillsReadWhenEmpty(metas, machine.SkillCount)
-		}
-		var names []string
-		for _, meta := range metas {
-			if strings.TrimSpace(meta.Name) != "" {
-				names = append(names, meta.Name)
-			}
-		}
-		return names
+		return offeredLegTools(policy.ListForPrompt(ctx, sess, profileID), deps.Sessions.Manager.Profiles.ProjectMachine(ctx, sess, profileID))
 	})
 	agentsForSession := func(sess *wire.Session) profiles.AgentProfileResolver {
 		if view := deps.Sessions.Manager.Catalog.ViewForSession(context.Background(), sess); view != nil {
@@ -170,4 +160,19 @@ func reviewSubjectNames(ctx context.Context, records *workerrecords.Store, jobID
 		return "", "", false, err
 	}
 	return names.Worker, subject.ResultID, true, nil
+}
+
+// offeredLegTools names the tools a worker's request offers: the profile's
+// listed tools, without skills_read when its compiled skill catalog is empty.
+func offeredLegTools(metas []tools.ToolMeta, machine inject.Machine) []string {
+	if machine.Compiled() {
+		metas = tools.HideSkillsReadWhenEmpty(metas, machine.SkillCount)
+	}
+	var names []string
+	for _, meta := range metas {
+		if strings.TrimSpace(meta.Name) != "" {
+			names = append(names, meta.Name)
+		}
+	}
+	return names
 }
