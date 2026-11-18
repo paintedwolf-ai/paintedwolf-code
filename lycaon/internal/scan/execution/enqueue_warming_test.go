@@ -3,7 +3,6 @@ package execution
 import (
 	"context"
 	"errors"
-	"github.com/lycaon/lycaon/internal/scan/scantest"
 	"os"
 	"path/filepath"
 	"testing"
@@ -12,6 +11,7 @@ import (
 	"github.com/lycaon/lycaon/internal/backgroundwork"
 	scanbase "github.com/lycaon/lycaon/internal/scan"
 	scancfg "github.com/lycaon/lycaon/internal/scan/configuration"
+	"github.com/lycaon/lycaon/internal/scan/scantest"
 	"github.com/lycaon/lycaon/internal/sourceblob"
 	"github.com/lycaon/lycaon/internal/sourcesnapshot"
 	"github.com/lycaon/lycaon/internal/testdbfixture"
@@ -88,7 +88,7 @@ func TestWarmingPublishFailureHoldsThenFails(t *testing.T) {
 		Trigger: api.ScanTriggerManual,
 	}
 	testutil.FailErr(t, "insert warming", store.Runs.Insert(t.Context(), rec, nil, ""))
-	runner := NewRunner(store, &scantest.MockRegistry{Scanner: &scantest.MockScanner{}}, scanbase.NoopIngester{}, scancfg.DefaultRunnerConfig(), nil)
+	runner := NewRunner(store, &scantest.MockRegistry{Scanner: &scantest.MockScanner{}}, scantest.DiscardIngester{}, scancfg.DefaultRunnerConfig(), nil)
 	runner.Coordinator = coord
 	runner.RetryDelay = time.Nanosecond
 	terminal := make(chan api.CodeScan, 1)

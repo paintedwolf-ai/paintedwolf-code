@@ -8,6 +8,7 @@ import (
 
 	scancatalog "github.com/lycaon/lycaon/internal/scan/catalog"
 	"github.com/lycaon/lycaon/internal/scan/rules"
+	"github.com/lycaon/lycaon/internal/testutil/scantest"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 )
 
@@ -19,14 +20,14 @@ func TestLycaonGateRulesContract(t *testing.T) {
 	gates, err := rules.LoadOpengrepGates()
 	contractcheck.FailErr(t, "rules.LoadOpengrepGates failed", err)
 
-	prov, err := rules.LoadRulesProvenance()
-	contractcheck.FailErr(t, "rules.LoadRulesProvenance failed", err)
+	prov, err := scantest.LoadRulesProvenance()
+	contractcheck.FailErr(t, "scantest.LoadRulesProvenance failed", err)
 
 	if prov.Lycaon.License != "CC-BY-4.0" {
 		t.Fatalf("lycaon provenance license = %q, want CC-BY-4.0", prov.Lycaon.License)
 	}
-	if prov.Lycaon.Origin != rules.LycaonProvenanceOriginBundledInRepo {
-		t.Fatalf("lycaon provenance origin = %q, want %q", prov.Lycaon.Origin, rules.LycaonProvenanceOriginBundledInRepo)
+	if prov.Lycaon.Origin != scantest.LycaonProvenanceOriginBundledInRepo {
+		t.Fatalf("lycaon provenance origin = %q, want %q", prov.Lycaon.Origin, scantest.LycaonProvenanceOriginBundledInRepo)
 	}
 	if prov.Lycaon.Authorship != "in-repo" {
 		t.Fatalf("lycaon provenance authorship = %q, want in-repo", prov.Lycaon.Authorship)
@@ -43,12 +44,12 @@ func TestLycaonGateRulesContract(t *testing.T) {
 			t.Fatal("provenance file entry missing path")
 		}
 		provPaths[f.Path] = struct{}{}
-		abs := rules.ResolveModulePath(lycaonRoot, f.Path)
+		abs := filepath.Join(lycaonRoot, filepath.FromSlash(f.Path))
 		if _, err := os.Stat(abs); err != nil {
 			t.Fatalf("provenance path missing on disk: %s: %v", f.Path, err)
 		}
 		if f.Test != "" {
-			testAbs := rules.ResolveModulePath(lycaonRoot, f.Test)
+			testAbs := filepath.Join(lycaonRoot, filepath.FromSlash(f.Test))
 			if _, err := os.Stat(testAbs); err != nil {
 				t.Fatalf("provenance test path missing: %s: %v", f.Test, err)
 			}
@@ -61,20 +62,20 @@ func TestLycaonGateRulesContract(t *testing.T) {
 		if !strings.Contains(rel, "config/runtime/scanners/rules/lycaon/") {
 			t.Fatalf("lycaon gate path %q must live under config/runtime/scanners/rules/lycaon/", rel)
 		}
-		abs := rules.ResolveModulePath(lycaonRoot, rel)
+		abs := filepath.Join(lycaonRoot, filepath.FromSlash(rel))
 		if _, err := os.Stat(abs); err != nil {
 			t.Fatalf("opengrep-gates lycaon path missing: %s: %v", rel, err)
 		}
 		if _, ok := provPaths[rel]; !ok {
 			t.Fatalf("active gate path %q not listed in rules-provenance.yaml lycaon.files", rel)
 		}
-		if err := rules.ValidateRuleFile(abs); err != nil {
+		if err := scantest.ValidateRuleFile(abs); err != nil {
 			t.Fatalf("validate %s: %v", rel, err)
 		}
 	}
 
 	lycaonRulesRoot := filepath.Join(lycaonRoot, "config", "runtime", "scanners", "rules", "lycaon")
-	if _, err := rules.CollectRuleIDsFromDir(lycaonRulesRoot); err != nil {
+	if _, err := scantest.CollectRuleIDsFromDir(lycaonRulesRoot); err != nil {
 		t.Fatalf("duplicate rule ids in lycaon tree: %v", err)
 	}
 	_ = filepath.WalkDir(lycaonRulesRoot, func(path string, d os.DirEntry, err error) error {
@@ -87,7 +88,7 @@ func TestLycaonGateRulesContract(t *testing.T) {
 		if !strings.HasSuffix(path, ".yaml") || strings.HasSuffix(path, ".test.yaml") {
 			return nil
 		}
-		rf, err := rules.LoadRuleFile(path)
+		rf, err := scantest.LoadRuleFile(path)
 		if err != nil {
 			return err
 		}

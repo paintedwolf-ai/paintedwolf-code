@@ -3,7 +3,6 @@ package toolapi_test
 import (
 	"context"
 	"encoding/json"
-	"github.com/lycaon/lycaon/internal/scan/scantest"
 	"strings"
 	"testing"
 	"time"
@@ -17,6 +16,7 @@ import (
 	scanexecution "github.com/lycaon/lycaon/internal/scan/execution"
 	scanfindings "github.com/lycaon/lycaon/internal/scan/findings"
 	scanoutput "github.com/lycaon/lycaon/internal/scan/output"
+	"github.com/lycaon/lycaon/internal/scan/scantest"
 	"github.com/lycaon/lycaon/internal/scan/testfixture"
 	scantoolapi "github.com/lycaon/lycaon/internal/scan/toolapi"
 	"github.com/lycaon/lycaon/internal/testdbfixture"
@@ -105,7 +105,7 @@ func TestScanPackToolCanWaitForSummary(t *testing.T) {
 	testutil.FailErr(t, "RegisterScanTools", scantoolapi.RegisterScanTools(toolReg, coord, scantoolapi.ResultViews{Reads: store.Reads, FullPasses: store.FullPasses}, scannerReg, scancadence.New(store, coord, scannerReg, nil, scancfg.DefaultGatesConfig(), nil), nil, nil, nil))
 
 	runnerConfig := scancfg.DefaultRunnerConfig()
-	runner := scanexecution.NewRunner(store, scannerReg, scanbase.NoopIngester{}, runnerConfig, nil)
+	runner := scanexecution.NewRunner(store, scannerReg, scantest.DiscardIngester{}, runnerConfig, nil)
 	runner.Snapshots = coord.SnapshotStore()
 	runCtx, cancel := context.WithCancel(t.Context())
 	runnerDone := make(chan struct{})

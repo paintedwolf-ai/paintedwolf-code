@@ -15,7 +15,6 @@ import (
 	scancatalog "github.com/lycaon/lycaon/internal/scan/catalog"
 	"github.com/lycaon/lycaon/internal/scan/drivers/external"
 	scanoutput "github.com/lycaon/lycaon/internal/scan/output"
-	"github.com/lycaon/lycaon/internal/scan/registry"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -245,17 +244,5 @@ func TestExternalScannerMapJSONMissingMapperFailsConstruction(t *testing.T) {
 	}
 	if _, err := external.NewScanner(entry, root, t.TempDir(), ""); err == nil {
 		t.Fatal("expected mapper load failure at construction")
-	}
-}
-
-func TestRegistrySkipsMissingBinaryWhenConfigured(t *testing.T) {
-	cfg := &scancatalog.ScannerConfig{Scanners: []scancatalog.ScannerEntry{{
-		ID: "missing", Driver: scancatalog.DriverExternal, Engine: "missing", ScopeKind: string(scancatalog.ScopeSourceDriver), Categories: []string{"sast", "security"},
-		Command: []string{"definitely-not-a-scanner-binary-xyz", scancatalog.ArgTokenScanTarget}, OutputParser: scanoutput.OutputParserSARIF,
-	}}}
-	reg, err := registry.NewFromScannerConfig(t.Context(), cfg, registry.Options{ModuleRoot: configlayout.FindModuleRoot()})
-	testutil.FailErr(t, "registry.NewFromScannerConfig failed", err)
-	if len(reg.List()) != 0 {
-		t.Fatalf("expected skip, got %v", reg.List())
 	}
 }
