@@ -103,8 +103,7 @@ func (e *PostureRuleEngine) Evaluate(ctx context.Context, eval EvalContext) (*Ru
 	if err != nil {
 		return nil, err
 	}
-	engine := &SimpleEngine{rules: rules, registry: e.Registry}
-	outcome, err := engine.Evaluate(ctx, eval)
+	outcome, err := evaluateOrderedRules(e.Registry, rules, eval)
 	if err != nil {
 		return nil, err
 	}

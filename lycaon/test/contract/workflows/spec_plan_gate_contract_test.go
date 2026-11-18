@@ -5,10 +5,10 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/lycaon/lycaon/config"
 	"github.com/lycaon/lycaon/internal/conditions"
 	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/rules"
+	"github.com/lycaon/lycaon/internal/rules/rulestest"
 	"github.com/lycaon/lycaon/internal/workflow/runstate"
 	"github.com/lycaon/lycaon/pkg/api"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
@@ -27,20 +27,8 @@ type specPlanGateCase struct {
 	wantSubstr string
 }
 
-func specPlanEngine(t *testing.T) *rules.SimpleEngine {
-	t.Helper()
-	cfg, err := rules.LoadRulesConfig(config.PostureRulesDir.Join("spec.yaml"))
-	contractcheck.FailErr(t, "load rules config YAML", err)
-	reg, err := conditions.NewDefaultRegistry(conditions.RegistryDeps{})
-	contractcheck.FailErr(t, "build conditions registry", err)
-	if err := rules.RegisterRuleConditions(reg); err != nil {
-		contractcheck.FailErr(t, "register rule conditions", err)
-	}
-	return rules.NewSimpleEngine(cfg, reg)
-}
-
 func TestSpecPlanGateRejectCodesSubset(t *testing.T) {
-	engine := specPlanEngine(t)
+	engine := rulestest.BundledEngine(t, ruleConditionRegistry(t))
 	stubInvalid := ""
 	stubComplete := "---\ntitle: Ship it\nresearch_depth: light\n---\n## Goal\n\nx\n\n## Assumptions\n\nx\n\n## Plan implementation scope\n\n**Size:** s\n\n## Plan breaking changes\n\nnone\n\n## Approach\n\nship it\n"
 	scopeBreaking := stubComplete
@@ -101,7 +89,7 @@ func TestSpecPlanGateRejectCodesSubset(t *testing.T) {
 }
 
 func TestSpecDelegateDenyCarriesPlanProgress(t *testing.T) {
-	engine := specPlanEngine(t)
+	engine := rulestest.BundledEngine(t, ruleConditionRegistry(t))
 	plan := "---\nresearch_depth: none\n---\n## Goal\n\nx\n\n## Assumptions\n\nx\n"
 	progress := guidance.ComputePlanProgress(plan, guidance.PlanEvalFlags{}, guidance.DispatchSnapshot{})
 	out, err := engine.Evaluate(context.Background(), rules.EvalContext{EvalContext: conditions.EvalContext{SessionPosture: api.SessionPostureSpec, ToolName: "plan_from_blueprint", PlanContent: plan}, PlanProgress: progress})
@@ -115,7 +103,7 @@ func TestSpecDelegateDenyCarriesPlanProgress(t *testing.T) {
 }
 
 func TestSpecPlanGateAllowsCriticOnReview(t *testing.T) {
-	engine := specPlanEngine(t)
+	engine := rulestest.BundledEngine(t, ruleConditionRegistry(t))
 	expandPlan := "---\ntitle: Ship it\nresearch_depth: light\n---\n## Goal\n\nx\n\n## Assumptions\n\nx\n\n## Plan implementation scope\n\n**Size:** s\n\n## Plan breaking changes\n\nnone\n\n## Approach\n\nship it\n\n## Plan review depth\n\ndual\n\n<!-- lycaon:tasks\n[{\"id\":\"t1\",\"title\":\"Ship\"}]\n-->"
 	allowed := []string{"plan-writer", "repo-researcher", "plan-reviewer", "implementer"}
 	out, err := engine.Evaluate(context.Background(), rules.EvalContext{EvalContext: conditions.EvalContext{SessionPosture: api.SessionPostureSpec, Phase: "review", ReviewLoopActive: true, ToolName: "task", ToolArgs: map[string]any{"agent_type": "plan-reviewer"}, PlanContent: expandPlan, AllowedAgents: allowed}})

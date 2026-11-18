@@ -4,11 +4,9 @@ import (
 	"context"
 	"testing"
 
-	sessionposture "github.com/lycaon/lycaon/internal/session/posture"
-
 	"github.com/lycaon/lycaon/internal/conditions"
 	"github.com/lycaon/lycaon/internal/rules"
-	"github.com/lycaon/lycaon/internal/session/profiles"
+	"github.com/lycaon/lycaon/internal/rules/rulestest"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -151,19 +149,10 @@ func TestPostureEngineEachRulesFileDenyRuleReachable(t *testing.T) {
 
 func newBundledPostureEngine(t *testing.T) *rules.PostureRuleEngine {
 	t.Helper()
-	postures, err := profiles.LoadPostureRegistry()
-	testutil.FailErr(t, "profiles.LoadPostureRegistry failed", err)
-	packs, err := rules.LoadBundledRules()
-	testutil.FailErr(t, "rules.LoadBundledRules failed", err)
-	if err := rules.ValidatePostureRules(postures, sessionposture.AllSessionPostures(), packs); err != nil {
-		testutil.FailErr(t, "rules.ValidatePostureRules failed", err)
-	}
 	reg, err := conditions.NewDefaultRegistry(conditions.RegistryDeps{})
 	testutil.FailErr(t, "build conditions registry", err)
 	if err := rules.RegisterRuleConditions(reg); err != nil {
 		testutil.FailErr(t, "register rule conditions", err)
 	}
-	engine, err := rules.NewPostureRuleEngine(postures, packs, reg)
-	testutil.FailErr(t, "rules.NewPostureRuleEngine failed", err)
-	return engine
+	return rulestest.BundledEngine(t, reg)
 }
