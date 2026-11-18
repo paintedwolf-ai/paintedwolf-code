@@ -285,7 +285,7 @@ func TestProgramRetainedNativeSourceOnlyQualifiesActuallyDeliveredExactPages(t *
 		testutil.FailErr(t, "confirm actual emitted bytes against native capture", err)
 		// The host delivery acknowledgement is explicit. Reading/fetching above has
 		// not committed evidence; the existing source owner does so only here.
-		result, err := f.recorder.CommitProgramSourceDelivery(ctx, invocation.ProgramSourceDelivery{SessionID: f.session, ProgramID: f.program, OutputReference: f.reference, OutputStartByte: start, OutputEndByte: end, Observation: observation}, f.owner, f.quota)
+		result, err := f.recorder.CommitProgramSourceDelivery(ctx, invocation.ProgramSourceDelivery{SessionID: f.session, ProgramID: f.program, OutputReference: f.reference, OutputStartByte: start, OutputEndByte: end, Observation: observation}, f.owner.Evidence, f.quota)
 		testutil.FailErr(t, "commit exact native delivery through current evidence owner", err)
 		if !result.ReceiptRecorded || result.SourceOwnerReference == "" {
 			t.Fatal("delivery lost independent owner/receipt settlement")
@@ -306,13 +306,13 @@ func TestProgramRetainedNativeSourceOnlyQualifiesActuallyDeliveredExactPages(t *
 	if _, err = evidence.ConfirmDeliveredSource("fixture.txt", f.pin, f.source, []byte(transformed[:13]), toolcontract.StreamSourceMapping{Source: f.pin, SourceEndByte: 13, OutputEndByte: 13}, "response:transformed", "delivery:transformed"); err == nil {
 		t.Fatal("transformed source-like output qualified")
 	}
-	failed, err := f.recorder.CommitProgramSourceDelivery(ctx, invocation.ProgramSourceDelivery{SessionID: f.session, ProgramID: f.program, OutputReference: "output:external-printed-path", OutputStartByte: 0, OutputEndByte: 13, Observation: preview}, f.owner, f.quota)
+	failed, err := f.recorder.CommitProgramSourceDelivery(ctx, invocation.ProgramSourceDelivery{SessionID: f.session, ProgramID: f.program, OutputReference: "output:external-printed-path", OutputStartByte: 0, OutputEndByte: 13, Observation: preview}, f.owner.Evidence, f.quota)
 	if err == nil || failed.SourceOwnerReference != "" {
 		t.Fatal("printed external path created native delivery evidence")
 	}
 	// Idempotent acknowledgement records exactly one delivery, and unknown output
 	// receipt errors cannot erase an already committed source owner observation.
-	repeated, err := f.recorder.CommitProgramSourceDelivery(ctx, invocation.ProgramSourceDelivery{SessionID: f.session, ProgramID: f.program, OutputReference: f.reference, OutputStartByte: 13, OutputEndByte: 26, Observation: exactPage}, f.owner, f.quota)
+	repeated, err := f.recorder.CommitProgramSourceDelivery(ctx, invocation.ProgramSourceDelivery{SessionID: f.session, ProgramID: f.program, OutputReference: f.reference, OutputStartByte: 13, OutputEndByte: 26, Observation: exactPage}, f.owner.Evidence, f.quota)
 	testutil.FailErr(t, "repeat same exact acknowledged delivery", err)
 	if repeated.SourceOwnerReference != shown {
 		t.Fatal("delivery retry manufactured another observation")

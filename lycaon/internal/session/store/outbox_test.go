@@ -18,7 +18,7 @@ func TestSQLMutationOutboxCommitsObserverEvents(t *testing.T) {
 	database := testdbfixture.Open(t, "store.db")
 	testdbseed.InsertProjectRoot(t, database, testdbseed.DefaultProjectID, t.TempDir())
 	hub := events.NewMemoryHub()
-	ch, unsubscribe, err := hub.Subscribe(t.Context(), events.Subscription{Project: testdbseed.DefaultProjectID, Viewer: testutil.People.HostOwner()})
+	ch, unsubscribe, err := hub.Subscribe(t.Context(), events.Subscription{Project: testdbseed.DefaultProjectID, Viewer: testutil.HostOwner()})
 	testutil.FailErr(t, "subscribe events", err)
 	defer unsubscribe()
 	outbox := eventoutbox.New(database, hub)

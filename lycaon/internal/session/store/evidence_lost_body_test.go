@@ -67,7 +67,7 @@ func TestLoadLedgerReportsALostBodyOnce(t *testing.T) {
 		_, err := store.Evidence.LoadLedger(context.Background(), sessionID)
 		testutil.FailErr(t, "LoadLedger", err)
 	}
-	if got := store.lostBodies.Len(); got != 1 {
+	if got := store.core.lostBodies.Len(); got != 1 {
 		t.Fatalf("lost bodies remembered = %d, want the one digest", got)
 	}
 }

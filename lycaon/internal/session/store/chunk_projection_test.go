@@ -12,13 +12,13 @@ import (
 
 func TestChunkProjectionSurvivesUnrelatedViewInvalidation(t *testing.T) {
 
-	var transcript compactionMutationStore
+	var transcript *Repositories
 	var projections messageview.ChunkProjectionStore
 
 	database := testdbfixture.Open(t, "chunks.db")
 	testdbseed.InsertProjectRoot(t, database, testdbseed.DefaultProjectID, t.TempDir())
 	st := NewSQL(database)
-	transcript, projections = st, st
+	transcript, projections = st, st.Compaction
 
 	sess, err := transcript.Sessions.Create(t.Context(), api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
@@ -32,7 +32,7 @@ func TestChunkProjectionSurvivesUnrelatedViewInvalidation(t *testing.T) {
 		SourceSeq: rows[1].Seq, Messages: rows,
 	}))
 	projection := messageview.ChunkProjection{Revision: "revision", Content: "summary", Meta: &api.CompactedChunkMeta{Strategy: "summarize"}}
-	testutil.FailErr(t, "store reusable summary", projections.Compaction.PutChunkProjection(t.Context(), sess.ID, "source", projection))
+	testutil.FailErr(t, "store reusable summary", projections.PutChunkProjection(t.Context(), sess.ID, "source", projection))
 	_, err = transcript.Transcript.UpdateMessage(t.Context(), sess.ID, "unrelated", api.Message{Role: api.MessageRoleAssistant, Content: "new reply"})
 	testutil.FailErr(t, "edit unrelated source", err)
 	_, exists, err := transcript.Compaction.GetCompactionView(t.Context(), sess.ID)
@@ -40,19 +40,19 @@ func TestChunkProjectionSurvivesUnrelatedViewInvalidation(t *testing.T) {
 	if exists {
 		t.Fatal("covered edit did not invalidate the full view")
 	}
-	got, ok, err := projections.Compaction.GetChunkProjection(t.Context(), sess.ID, "source")
+	got, ok, err := projections.GetChunkProjection(t.Context(), sess.ID, "source")
 	testutil.FailErr(t, "read reusable summary", err)
 	if !ok || got.Revision != "revision" || got.Content != "summary" {
 		t.Fatalf("lost reusable summary: %+v", got)
 	}
 	got.Meta.Strategy = "changed by caller"
-	again, _, err := projections.Compaction.GetChunkProjection(t.Context(), sess.ID, "source")
+	again, _, err := projections.GetChunkProjection(t.Context(), sess.ID, "source")
 	testutil.FailErr(t, "read independent snapshot", err)
 	if again.Meta.Strategy != "summarize" {
 		t.Fatal("projection aliases caller-owned memory")
 	}
-	testutil.FailErr(t, "remember no reduction", projections.Compaction.PutChunkProjection(t.Context(), sess.ID, "source", messageview.ChunkProjection{Revision: "new-revision"}))
-	got, ok, err = projections.Compaction.GetChunkProjection(t.Context(), sess.ID, "source")
+	testutil.FailErr(t, "remember no reduction", projections.PutChunkProjection(t.Context(), sess.ID, "source", messageview.ChunkProjection{Revision: "new-revision"}))
+	got, ok, err = projections.GetChunkProjection(t.Context(), sess.ID, "source")
 	testutil.FailErr(t, "read no-reduction receipt", err)
 	if !ok || got.Meta != nil || got.Revision != "new-revision" {
 		t.Fatalf("no-reduction receipt = %+v", got)
