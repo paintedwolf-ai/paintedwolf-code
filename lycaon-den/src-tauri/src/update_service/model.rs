@@ -3,7 +3,7 @@ use super::UpdateError;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
-/// Every update request leaves from this origin, which serves both feeds and artifacts.
+/// The production origin, which serves both feeds and artifacts.
 pub const DOWNLOAD_ORIGIN: &str = "https://downloads.paintedwolf.dev";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -32,20 +32,54 @@ impl UpdateChannel {
             Self::Preview => "preview",
         }
     }
-    pub fn endpoint(self) -> String {
-        let channel = self.name();
+}
+
+/// What this build trusts for updates: one key generation's artifact and feed keys and
+/// the origin serving feeds and artifacts. Production trusts the generation compiled in.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Trust {
+    pub generation: u64,
+    pub artifact_key: String,
+    pub feed_key: String,
+    pub origin: String,
+}
+impl Trust {
+    pub fn embedded() -> Self {
+        static EMBEDDED: std::sync::LazyLock<Trust> = std::sync::LazyLock::new(|| {
+            let registry: serde_json::Value =
+                serde_json::from_str(include_str!("../../../../packaging/update-keys.json"))
+                    .expect("compiled updater key registry");
+            let number = registry["embedded_generation"]
+                .as_u64()
+                .expect("embedded key generation");
+            let row = registry["generations"]
+                .as_array()
+                .expect("key generations")
+                .iter()
+                .find(|row| row["generation"].as_u64() == Some(number))
+                .expect("embedded key generation row");
+            let key = |field: &str| row[field].as_str().expect("public key string").to_owned();
+            Trust {
+                generation: number,
+                artifact_key: key("public_key"),
+                feed_key: key("feed_public_key"),
+                origin: DOWNLOAD_ORIGIN.into(),
+            }
+        });
+        EMBEDDED.clone()
+    }
+    pub fn endpoint(&self, channel: UpdateChannel) -> String {
+        // Spelled as the egress inventory's endpoint template.
         format!(
-            "{DOWNLOAD_ORIGIN}/updates/{channel}/key-{}/latest.json",
-            super::feed::embedded_key().0
+            "{origin}/updates/{channel}/key-{key_generation}/latest.json",
+            origin = self.origin,
+            channel = channel.name(),
+            key_generation = self.generation
         )
     }
-    /// The signed name of this channel's pointer; it binds channel and key generation.
-    pub fn feed_name(self) -> String {
-        format!(
-            "latest-{}-key-{}.json",
-            self.name(),
-            super::feed::embedded_key().0
-        )
+    /// The signed name of a channel's pointer; it binds channel and key generation.
+    pub fn feed_name(&self, channel: UpdateChannel) -> String {
+        format!("latest-{}-key-{}.json", channel.name(), self.generation)
     }
 }
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]

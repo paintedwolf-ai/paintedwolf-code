@@ -177,16 +177,26 @@ fn maturity_selects_initial_channel_without_overriding_preferences() {
     );
 }
 #[test]
-fn the_embedded_generation_carries_an_artifact_key_and_a_distinct_feed_key() {
-    let (generation, artifact_key) = feed::embedded_key();
-    let feed_key = feed::feed_key();
-    assert!(generation > 0);
-    verification::decode_key(&artifact_key).expect("artifact key decodes");
-    verification::decode_key(&feed_key).expect("feed key decodes");
-    assert_ne!(artifact_key, feed_key);
-    // Each channel reads the feed signed for this generation.
-    assert!(UpdateChannel::Stable.endpoint().contains(&format!("key-{generation}")));
-    assert!(UpdateChannel::Preview.feed_name().contains(&format!("key-{generation}")));
+fn feed_endpoints_bind_the_trusted_origin_channel_and_key_generation() {
+    let trust = Trust {
+        generation: 7,
+        origin: "https://origin.test".into(),
+        ..Trust::embedded()
+    };
+    assert_eq!(
+        trust.endpoint(UpdateChannel::Stable),
+        "https://origin.test/updates/stable/key-7/latest.json"
+    );
+    assert_eq!(trust.feed_name(UpdateChannel::Preview), "latest-preview-key-7.json");
+}
+
+#[test]
+fn embedded_artifact_and_feed_keys_are_valid_and_distinct() {
+    let trust = Trust::embedded();
+    assert!(trust.generation > 0);
+    verification::decode_key(&trust.artifact_key).expect("artifact key decodes");
+    verification::decode_key(&trust.feed_key).expect("feed key decodes");
+    assert_ne!(trust.artifact_key, trust.feed_key);
 }
 #[test]
 fn automatic_retry_is_bounded() {

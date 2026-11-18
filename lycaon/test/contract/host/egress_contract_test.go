@@ -250,9 +250,8 @@ func TestNonHTTPOutboundAdaptersBindInventoryClasses(t *testing.T) {
 		!strings.Contains(service, fmt.Sprintf("const DOWNLOAD_ORIGIN: &str = %q;", origin)) {
 		t.Fatalf("update service does not bind inventory origin %q", origin)
 	}
-	template := strings.ReplaceAll(strings.TrimPrefix(update.EndpointTemplate, origin), "{key_generation}", "{}")
-	if !strings.Contains(service, fmt.Sprintf("%q", "{DOWNLOAD_ORIGIN}"+template)) ||
-		!strings.Contains(service, "embedded_key().0") {
+	if !strings.Contains(service, fmt.Sprintf("%q", "{origin}"+strings.TrimPrefix(update.EndpointTemplate, origin))) ||
+		!strings.Contains(service, "origin: DOWNLOAD_ORIGIN.into()") {
 		t.Fatalf("update service does not bind inventory template %q", update.EndpointTemplate)
 	}
 	transport := contractcheck.ReadRepoFile(t, contractcheck.RepoRoot(t), "lycaon-den/src-tauri/src/http_transport.rs")
