@@ -1,3 +1,5 @@
+//go:build darwin || linux
+
 package sourceapi
 
 import (
@@ -129,7 +131,7 @@ func TestOutsideReaderUsesAHeldFile(t *testing.T) {
 	testutil.FailErr(t, "write outside source", os.WriteFile(file, []byte("read me\n"), 0o600))
 	rel, ok := projectroot.OutsideRel(file)
 	if !ok {
-		t.Skip("outside paths require a platform with a single host root")
+		t.Fatal("fixture lacks an outside address")
 	}
 	create := func() *httptest.ResponseRecorder {
 		return callSourceViewHandlerAs(t, ctx, server.Views.HandleCreateSourceView, p.ID, "", wire.SourceComparisonViewCreate{
