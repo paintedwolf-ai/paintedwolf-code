@@ -18,7 +18,8 @@ import (
 	"github.com/lycaon/lycaon/internal/llm/modelinfo"
 	"github.com/lycaon/lycaon/internal/llm/providerprofile"
 	"github.com/lycaon/lycaon/internal/llm/providers/openaicompat"
-	"github.com/lycaon/lycaon/internal/session/store"
+	"github.com/lycaon/lycaon/internal/session/store/storetest"
+	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/pkg/api"
@@ -180,7 +181,7 @@ func TestPromptLoopSoftStopAllowsOneToolRoundThenClosesOut(t *testing.T) {
 		{ToolCalls: []api.ToolCall{{Name: "read", ID: "landing", Args: map[string]any{"path": "b"}}}},
 		{Content: "Landed with the best usable result."},
 	}}
-	messages := store.NewMemory()
+	messages := storetest.New(t, testdbseed.DefaultProjectID, "project")
 	deps := StoreDeps(messages)
 	deps.Model.LLM = client
 	deps.Context.Policy = softStopToolPolicy{}

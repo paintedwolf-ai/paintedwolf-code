@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"github.com/lycaon/lycaon/internal/session/store"
+	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -20,7 +20,7 @@ func TestStateToolsRespectProjectDir(t *testing.T) {
 	sqlDB := testdbfixture.Open(t, "wf.db")
 
 	wfStore := workflowpersistence.New(sqlDB)
-	sessStore := store.NewMemory()
+	sessStore := storetest.New(t, testdbseed.DefaultProjectID)
 	reg, err := workflowdef.RegistryFromDirs("")
 	testutil.FailErr(t, "workflow.RegistryFromDirs failed", err)
 	mgr := workflow.NewManager(wfStore, sessStore, reg, nil)

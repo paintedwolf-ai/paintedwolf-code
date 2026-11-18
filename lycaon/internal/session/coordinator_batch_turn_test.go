@@ -17,6 +17,7 @@ import (
 	"github.com/lycaon/lycaon/internal/session"
 	sessiondecisions "github.com/lycaon/lycaon/internal/session/decisions"
 	"github.com/lycaon/lycaon/internal/session/store"
+	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/testdbseed"
@@ -31,7 +32,7 @@ import (
 func TestCoordinatorBatchTurn_oneSynthesisPerTurnLatch(t *testing.T) {
 	hints, err := guidance.LoadHintConfigStock()
 	testutil.FailErr(t, "load hints", err)
-	store := store.NewMemory()
+	store := storetest.New(t, "coordinator")
 	mgr := session.NewHost(store, session.Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, toolstest.NewRegistry())
 	mgr.SetRejectFormatter(guidance.NewStaticRejectFormatter(hints))
 
@@ -59,7 +60,7 @@ func TestCoordinatorBatchTurn_oneSynthesisPerTurnLatch(t *testing.T) {
 }
 
 func TestCoordinatorBatchTurn_groundingRetryDoesNotSetLatch(t *testing.T) {
-	store := store.NewMemory()
+	store := storetest.New(t, "coordinator")
 	mgr := session.NewHost(store, session.Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, toolstest.NewRegistry())
 
 	ctx := context.Background()
@@ -186,7 +187,7 @@ func TestExecutionObservationRejectsMissingSession(t *testing.T) {
 }
 
 func TestExecutionTreeSupportsWorkflowStartsWithoutPromptAdmission(t *testing.T) {
-	st := store.NewMemory()
+	st := storetest.New(t, "project")
 	root, err := st.Create(t.Context(), api.CreateSessionRequest{}, "project")
 	testutil.FailErr(t, "create workflow session", err)
 	manager := session.NewHost(st, session.Models{Client: nil, Provider: nil, Limits: settings.SessionLimits{}, Cost: nil}, nil)
@@ -233,7 +234,7 @@ func (failingKickPromptEngine) Register(string, string) error { return nil }
 
 func TestPromptDoesNotQueueGreenfieldBuildKickForPlanReviewPolicyPrompt(t *testing.T) {
 	t.Setenv("LYCAON_LLM_MOCK", "1")
-	store := store.NewMemory()
+	store := storetest.New(t, testdbseed.DefaultProjectID)
 	rec := llm.NewRecordingClient(llm.NewMockProvider(&llm.MockConfig{Responses: []llm.MockResponseEntry{{Pattern: ".", Text: "ok"}}}))
 	mgr := session.NewHost(store, session.Models{Client: rec, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, toolstest.NewRegistry())
 	oartest.InstallCloseoutPolicy(t, mgr)
@@ -260,7 +261,7 @@ func TestPromptDoesNotQueueGreenfieldBuildKickForPlanReviewPolicyPrompt(t *testi
 
 func TestQueueCoordinatorKickPrependsOnPrompt(t *testing.T) {
 	t.Setenv("LYCAON_LLM_MOCK", "1")
-	store := store.NewMemory()
+	store := storetest.New(t, testdbseed.DefaultProjectID)
 	rec := llm.NewRecordingClient(llm.NewMockProvider(&llm.MockConfig{Responses: []llm.MockResponseEntry{{Pattern: ".", Text: "ok"}}}))
 	mgr := session.NewHost(store, session.Models{Client: rec, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, toolstest.NewRegistry())
 	oartest.InstallCloseoutPolicy(t, mgr)
@@ -310,7 +311,7 @@ func TestQueueCoordinatorKickPrependsOnPrompt(t *testing.T) {
 
 func TestPromptRenderFailurePreservesCoordinatorKickForRetry(t *testing.T) {
 	t.Setenv("LYCAON_LLM_MOCK", "1")
-	st := store.NewMemory()
+	st := storetest.New(t, testdbseed.DefaultProjectID)
 	rec := llm.NewRecordingClient(llm.NewMockProvider(&llm.MockConfig{Responses: []llm.MockResponseEntry{{Pattern: ".", Text: "ok"}}}))
 	mgr := session.NewHost(st, session.Models{Client: rec, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, toolstest.NewRegistry())
 	oartest.InstallCloseoutPolicy(t, mgr)

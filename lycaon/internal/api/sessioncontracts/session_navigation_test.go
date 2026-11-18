@@ -3,10 +3,6 @@ package sessioncontracts
 import (
 	"bytes"
 	"encoding/json"
-	"github.com/lycaon/lycaon/internal/testdbfixture"
-	"github.com/lycaon/lycaon/internal/testdbseed"
-	"github.com/lycaon/lycaon/internal/worker"
-	"github.com/lycaon/lycaon/internal/worker/workertest"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -18,7 +14,11 @@ import (
 	"github.com/lycaon/lycaon/internal/enginepaths"
 	"github.com/lycaon/lycaon/internal/project"
 	"github.com/lycaon/lycaon/internal/session/store"
+	"github.com/lycaon/lycaon/internal/testdbfixture"
+	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/worker"
+	"github.com/lycaon/lycaon/internal/worker/workertest"
 	"github.com/lycaon/lycaon/internal/workspace"
 	wire "github.com/lycaon/lycaon/pkg/api"
 )

@@ -2,12 +2,13 @@ package worker
 
 import (
 	"context"
+	"path/filepath"
+	"strings"
+
 	"github.com/lycaon/lycaon/internal/project"
 	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/workspace"
 	"github.com/lycaon/lycaon/pkg/api"
-	"path/filepath"
-	"strings"
 )
 
 // TaskRootRefs returns a worker's captured or attached roots.

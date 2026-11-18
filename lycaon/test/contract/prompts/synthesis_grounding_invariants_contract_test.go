@@ -11,6 +11,7 @@ import (
 	"github.com/lycaon/lycaon/internal/orchestration"
 	"github.com/lycaon/lycaon/internal/session/closeoutevidence"
 	"github.com/lycaon/lycaon/internal/session/store"
+	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -65,7 +66,7 @@ func TestSynthesisGroundingInvariants_dispatchedLegEvidenceIsObserved(t *testing
 	t.Parallel()
 	root := t.TempDir()
 	ctx := context.Background()
-	store := store.NewMemory()
+	store := storetest.New(t, testdbseed.DefaultProjectID)
 	parent, err := store.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "Create parent session", err)
 	child, err := store.CreateChild(ctx, parent, api.SpawnChildRequest{AgentType: "path-explorer", Prompt: "survey"})

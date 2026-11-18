@@ -4,8 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/lycaon/lycaon/internal/layeredfs/adapter/platform"
-	"github.com/lycaon/lycaon/internal/tools/toolstest"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -20,12 +18,13 @@ import (
 	"github.com/lycaon/lycaon/internal/findings"
 	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/hostcmd"
+	"github.com/lycaon/lycaon/internal/layeredfs/adapter/platform"
 	"github.com/lycaon/lycaon/internal/llm"
 	"github.com/lycaon/lycaon/internal/llm/compaction"
 	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/prompts/promptstest"
 	"github.com/lycaon/lycaon/internal/session/promptsource"
-	"github.com/lycaon/lycaon/internal/session/store"
+	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"github.com/lycaon/lycaon/internal/session/workercontext"
 	"github.com/lycaon/lycaon/internal/session/workeroutcomes"
 	"github.com/lycaon/lycaon/internal/session/workerworkspace"
@@ -36,6 +35,7 @@ import (
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/testutil/oartest"
 	"github.com/lycaon/lycaon/internal/tools"
+	"github.com/lycaon/lycaon/internal/tools/toolstest"
 	"github.com/lycaon/lycaon/internal/workspace"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -49,7 +49,7 @@ func TestParkBlockedLiveCommandsArmsExactProcessSubscription(t *testing.T) {
 	t.Cleanup(func() {
 		testutil.FailErr(t, "dispose process", reg.Lifecycle.DisposeSession(ctx, "session-1", bgprocess.TerminationChatDeleted))
 	})
-	mgr := NewHost(store.NewMemory(), Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, toolstest.NewRegistry())
+	mgr := NewHost(storetest.New(t, testdbseed.DefaultProjectID), Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, toolstest.NewRegistry())
 	mgr.SetBackgroundRegistry(reg)
 	handle, err := reg.StartPipeline(ctx, bgprocess.PipelineSpec{
 		SessionID:  "session-1",
@@ -84,7 +84,7 @@ func TestParkBlockedLiveCommandsArmsExactProcessSubscription(t *testing.T) {
 }
 
 func TestParkBlockedLiveCommandsDoesNothingWithoutVisibleJob(t *testing.T) {
-	mgr := NewHost(store.NewMemory(), Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, toolstest.NewRegistry())
+	mgr := NewHost(storetest.New(t, testdbseed.DefaultProjectID), Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, toolstest.NewRegistry())
 	mgr.SetBackgroundRegistry(bgprocess.NewRegistry(bgprocess.Config{}, bgprocess.Hooks{}))
 	if (&promptsource.Control{Processes: mgr.Processes, Runtime: mgr.Coordinator.Runtime}).ParkBlockedLiveCommands(context.Background(), "session-1") {
 		t.Fatal("empty process registry must not arm a wait")
@@ -177,7 +177,7 @@ func (jobLister) ClaimWorkerBranch(context.Context, string) (*api.WorkerTask, er
 }
 
 func TestCloseoutEvidenceListsDispatchedLegsSinceTheIntent(t *testing.T) {
-	st := store.NewMemory()
+	st := storetest.New(t, "project-1")
 	mgr := NewHost(st, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
 	parent, err := st.Create(t.Context(), api.CreateSessionRequest{}, "project-1")
 	testutil.FailErr(t, "create parent", err)
@@ -214,7 +214,7 @@ func (v *evidenceWorkflowView) ActiveBySession(context.Context, string) (*api.Wo
 
 func TestWorkflowEvidenceSurvivesLaterUserMessagesAndCompaction(t *testing.T) {
 	mgr, st := newTestManager(t)
-	parent, err := st.Create(t.Context(), api.CreateSessionRequest{}, "project-1")
+	parent, err := st.Create(t.Context(), api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create parent", err)
 	child, err := st.CreateChild(t.Context(), parent, api.SpawnChildRequest{AgentType: "skeptic", Prompt: "Review"})
 	testutil.FailErr(t, "create reviewer", err)
@@ -257,11 +257,11 @@ func TestFailedSynthesisKeepsPublishedRecoveryAndCanonicalHistory(t *testing.T) 
 	cfg.ChunkTokenThreshold = 1_000_000
 	cfg.KeepRecentMessages = 2
 
-	mem := store.NewMemory()
-	mgr := NewHost(mem, Models{Client: llm.NewMockProvider(testMockConfig(t)), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, toolstest.NewRegistry())
+	sessionStore := storetest.New(t, testdbseed.DefaultProjectID)
+	mgr := NewHost(sessionStore, Models{Client: llm.NewMockProvider(testMockConfig(t)), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, toolstest.NewRegistry())
 	oartest.InstallCloseoutPolicy(t, mgr)
 	mgr.Runner.History.SetCompactor(compaction.NewSimpleCompactor(cfg, failedCompactionSummarizer{}))
-	sess, err := mem.Create(t.Context(), api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
+	sess, err := sessionStore.Create(t.Context(), api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
 
 	block := strings.Repeat("retained fact ", 120)
@@ -273,18 +273,18 @@ func TestFailedSynthesisKeepsPublishedRecoveryAndCanonicalHistory(t *testing.T) 
 		}
 		seed = append(seed, api.Message{ID: fmt.Sprintf("seed-%d", i), Role: role, Content: block})
 	}
-	testutil.FailErr(t, "append canonical history", mem.AppendMessages(t.Context(), sess.ID, seed...))
+	testutil.FailErr(t, "append canonical history", sessionStore.AppendMessages(t.Context(), sess.ID, seed...))
 	mgr.Runner.History.ObserveTokens(sess.ID, sess.ProviderID, sess.Model, 1000, 1000)
 
 	_, err = mgr.Submissions.Prompt(t.Context(), sess.ID, "first attempt")
 	testutil.FailErr(t, "first prompt", err)
 	mgr.Runner.History.Wait()
-	got, err := mem.Get(t.Context(), sess.ID)
+	got, err := sessionStore.Get(t.Context(), sess.ID)
 	testutil.FailErr(t, "get session after failure", err)
 	if got.CompactionGeneration == 0 {
 		t.Fatalf("failed synthesis lost its independent baseline: generation %d", got.CompactionGeneration)
 	}
-	if _, ok, viewErr := mem.GetCompactionView(t.Context(), sess.ID); viewErr != nil || !ok {
+	if _, ok, viewErr := sessionStore.GetCompactionView(t.Context(), sess.ID); viewErr != nil || !ok {
 		t.Fatalf("failed synthesis did not retain a view: ok=%v err=%v", ok, viewErr)
 	}
 
@@ -293,12 +293,12 @@ func TestFailedSynthesisKeepsPublishedRecoveryAndCanonicalHistory(t *testing.T) 
 	_, err = mgr.Submissions.Prompt(t.Context(), sess.ID, "retry")
 	testutil.FailErr(t, "retry prompt", err)
 	mgr.Runner.History.Wait()
-	got, err = mem.Get(t.Context(), sess.ID)
+	got, err = sessionStore.Get(t.Context(), sess.ID)
 	testutil.FailErr(t, "get session after retry", err)
 	if got.CompactionGeneration == 0 {
 		t.Fatal("successful retry did not persist a compaction view")
 	}
-	if _, ok, viewErr := mem.GetCompactionView(t.Context(), sess.ID); viewErr != nil || !ok {
+	if _, ok, viewErr := sessionStore.GetCompactionView(t.Context(), sess.ID); viewErr != nil || !ok {
 		t.Fatalf("successful retry view: ok=%v err=%v", ok, viewErr)
 	}
 }
@@ -308,7 +308,7 @@ func TestWorkerChildProjectDirIsDelegationNotOverlay(t *testing.T) {
 	dir := t.TempDir()
 	overlay := filepath.Join(dir, settingsoverlay.DirName(), "overlays", "job-write")
 
-	store := store.NewMemory()
+	store := storetest.New(t, testdbseed.DefaultProjectID)
 	parent, err := store.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create parent", err)
 	child, err := store.CreateChild(ctx, parent, api.SpawnChildRequest{AgentType: "implementer", Prompt: "write leg"})
@@ -323,7 +323,7 @@ func TestWorkerChildProjectDirIsDelegationNotOverlay(t *testing.T) {
 }
 
 func TestRecentSiblingNotesExcludesPriorRunFindings(t *testing.T) {
-	transcript := store.NewMemory()
+	transcript := storetest.New(t, testdbseed.DefaultProjectID)
 	parent, err := transcript.Create(t.Context(), api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create parent", err)
 	root := parent.ID

@@ -1,9 +1,10 @@
 package worker
 
 import (
+	"strings"
+
 	"github.com/lycaon/lycaon/internal/project"
 	"github.com/lycaon/lycaon/pkg/api"
-	"strings"
 )
 
 func enqueueScope(projectID string, task *api.WorkerTask) project.ProjectScope {

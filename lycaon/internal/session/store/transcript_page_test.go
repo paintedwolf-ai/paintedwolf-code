@@ -4,18 +4,18 @@ import (
 	"context"
 	"testing"
 
-	"github.com/lycaon/lycaon/internal/session/store"
+	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
 func TestTranscriptPageTailAndCursors(t *testing.T) {
 	ctx := context.Background()
-	mem := store.NewMemory()
-	sess, err := mem.Create(ctx, api.CreateSessionRequest{ProjectID: "p1", Posture: api.SessionPostureBuild}, "p1")
+	sessionStore := storetest.New(t, "p1")
+	sess, err := sessionStore.Create(ctx, api.CreateSessionRequest{ProjectID: "p1", Posture: api.SessionPostureBuild}, "p1")
 	testutil.FailErr(t, "create session", err)
 
-	empty, err := mem.GetTranscriptPage(ctx, sess.ID, api.TranscriptPageQuery{Limit: 5})
+	empty, err := sessionStore.GetTranscriptPage(ctx, sess.ID, api.TranscriptPageQuery{Limit: 5})
 	testutil.FailErr(t, "empty page", err)
 	if empty.OrdBounds != nil {
 		t.Fatalf("empty ord_bounds = %+v, want nil", empty.OrdBounds)
@@ -25,9 +25,9 @@ func TestTranscriptPageTailAndCursors(t *testing.T) {
 	for i := 0; i < 12; i++ {
 		msgs = append(msgs, api.Message{Role: api.MessageRoleUser, Content: "m"})
 	}
-	testutil.FailErr(t, "append", mem.AppendMessages(ctx, sess.ID, msgs...))
+	testutil.FailErr(t, "append", sessionStore.AppendMessages(ctx, sess.ID, msgs...))
 
-	tail, err := mem.GetTranscriptPage(ctx, sess.ID, api.TranscriptPageQuery{Limit: 5})
+	tail, err := sessionStore.GetTranscriptPage(ctx, sess.ID, api.TranscriptPageQuery{Limit: 5})
 	testutil.FailErr(t, "tail page", err)
 	if len(tail.Messages) != 5 {
 		t.Fatalf("tail len = %d, want 5", len(tail.Messages))
@@ -51,7 +51,7 @@ func TestTranscriptPageTailAndCursors(t *testing.T) {
 	}
 
 	before := tail.Messages[0].Ord
-	older, err := mem.GetTranscriptPage(ctx, sess.ID, api.TranscriptPageQuery{Limit: 5, Before: &before})
+	older, err := sessionStore.GetTranscriptPage(ctx, sess.ID, api.TranscriptPageQuery{Limit: 5, Before: &before})
 	testutil.FailErr(t, "before page", err)
 	if len(older.Messages) != 5 {
 		t.Fatalf("before len = %d, want 5", len(older.Messages))
@@ -64,7 +64,7 @@ func TestTranscriptPageTailAndCursors(t *testing.T) {
 	}
 
 	after := older.Messages[len(older.Messages)-1].Ord
-	newer, err := mem.GetTranscriptPage(ctx, sess.ID, api.TranscriptPageQuery{Limit: 5, After: &after})
+	newer, err := sessionStore.GetTranscriptPage(ctx, sess.ID, api.TranscriptPageQuery{Limit: 5, After: &after})
 	testutil.FailErr(t, "after page", err)
 	if len(newer.Messages) != 5 {
 		t.Fatalf("after len = %d, want 5", len(newer.Messages))
@@ -76,8 +76,8 @@ func TestTranscriptPageTailAndCursors(t *testing.T) {
 
 func TestTranscriptPageDefaultLimitIsBundledConst(t *testing.T) {
 	ctx := context.Background()
-	mem := store.NewMemory()
-	sess, err := mem.Create(ctx, api.CreateSessionRequest{ProjectID: "p1", Posture: api.SessionPostureBuild}, "p1")
+	sessionStore := storetest.New(t, "p1")
+	sess, err := sessionStore.Create(ctx, api.CreateSessionRequest{ProjectID: "p1", Posture: api.SessionPostureBuild}, "p1")
 	testutil.FailErr(t, "create session", err)
 
 	n := api.DefaultTranscriptPageLimit + 25
@@ -85,9 +85,9 @@ func TestTranscriptPageDefaultLimitIsBundledConst(t *testing.T) {
 	for i := 0; i < n; i++ {
 		batch = append(batch, api.Message{Role: api.MessageRoleUser, Content: "m"})
 	}
-	testutil.FailErr(t, "append", mem.AppendMessages(ctx, sess.ID, batch...))
+	testutil.FailErr(t, "append", sessionStore.AppendMessages(ctx, sess.ID, batch...))
 
-	page, err := mem.GetTranscriptPage(ctx, sess.ID, api.TranscriptPageQuery{})
+	page, err := sessionStore.GetTranscriptPage(ctx, sess.ID, api.TranscriptPageQuery{})
 	testutil.FailErr(t, "default page", err)
 	if len(page.Messages) != api.DefaultTranscriptPageLimit {
 		t.Fatalf("default limit len = %d, want %d", len(page.Messages), api.DefaultTranscriptPageLimit)

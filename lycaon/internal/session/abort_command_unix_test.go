@@ -17,7 +17,7 @@ import (
 	"github.com/lycaon/lycaon/internal/lineage"
 	"github.com/lycaon/lycaon/internal/osprocess"
 	"github.com/lycaon/lycaon/internal/programtest"
-	"github.com/lycaon/lycaon/internal/session/store"
+	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -34,7 +34,7 @@ type commandTurnResult struct {
 // abort must end the job, let the turn unwind, and settle the session.
 func TestAbortEndsATurnBlockedInACommand(t *testing.T) {
 	ctx := context.Background()
-	st := store.NewMemory()
+	st := storetest.New(t, testdbseed.DefaultProjectID)
 	mgr := NewHost(st, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
 	reg := bgprocess.NewRegistry(bgprocess.DefaultConfig(), bgprocess.Hooks{})
 	mgr.SetBackgroundRegistry(reg)
@@ -82,7 +82,7 @@ func TestAbortEndsATurnBlockedInACommand(t *testing.T) {
 
 func TestAbortStopsWithoutATurnThatNeverReleases(t *testing.T) {
 	ctx := context.Background()
-	st := store.NewMemory()
+	st := storetest.New(t, testdbseed.DefaultProjectID)
 	mgr := NewHost(st, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
 	mgr.Stops.SetTurnReleaseTimeout(100 * time.Millisecond)
 	sess, err := st.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)

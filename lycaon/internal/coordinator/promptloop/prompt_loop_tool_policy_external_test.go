@@ -3,7 +3,6 @@ package promptloop_test
 import (
 	"context"
 	"fmt"
-	"github.com/lycaon/lycaon/internal/tools/toolstest"
 	"slices"
 	"strings"
 	"testing"
@@ -17,12 +16,13 @@ import (
 	"github.com/lycaon/lycaon/internal/prompts/promptstest"
 	"github.com/lycaon/lycaon/internal/rules"
 	"github.com/lycaon/lycaon/internal/session/loopguard"
-	"github.com/lycaon/lycaon/internal/session/store"
+	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/toolpolicy"
 	"github.com/lycaon/lycaon/internal/tools"
+	"github.com/lycaon/lycaon/internal/tools/toolstest"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -35,7 +35,7 @@ func TestLoopRuleRejectAppendsToolMessage(t *testing.T) {
 			Args: map[string]any{"path": "x"},
 		}},
 	}}})
-	store := store.NewMemory()
+	store := storetest.New(t, testdbseed.DefaultProjectID)
 	deps := promptloop.StoreDeps(store)
 	deps.Model.LLM = client
 	deps.Context.Policy = denyToolPolicy{}
@@ -75,7 +75,7 @@ func TestPromptLoop_SpecDenyToolMessageShape(t *testing.T) {
 		}}},
 		{Content: "Plan workflow continues."},
 	}}
-	store := store.NewMemory()
+	store := storetest.New(t, testdbseed.DefaultProjectID)
 	deps := promptloop.StoreDeps(store)
 	deps.Model.LLM = client
 	deps.Context.Policy = listedEvaluatingPolicy{
@@ -117,7 +117,7 @@ func TestLoopDoomLoopRejectKeepsCallResultPair(t *testing.T) {
 	guard := loopguard.NewMemoryDoomLoopGuard()
 	ctx := context.Background()
 	args := map[string]any{"path": "README.md"}
-	store := store.NewMemory()
+	store := storetest.New(t, testdbseed.DefaultProjectID)
 	sess, err := store.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session in store", err)
 	for i := 0; i < loopguard.DoomLoopMaxAttempts; i++ {
@@ -179,7 +179,7 @@ func TestLoopDoomLoopRejectKeepsCallResultPair(t *testing.T) {
 func TestLoopTruncatesLargeToolResult(t *testing.T) {
 	limits := settings.DefaultSessionLimits()
 	limits.MaxToolResultBytes = 20
-	store := store.NewMemory()
+	store := storetest.New(t, testdbseed.DefaultProjectID)
 	reg := toolstest.NewRegistry()
 	_ = reg.Register("command", func(_ context.Context, _ map[string]any, _ tools.ToolContext) (string, error) {
 		return strings.Repeat("x", 100), nil
@@ -242,9 +242,9 @@ func TestLoopRejectsUnofferedToolCalls(t *testing.T) {
 			if !withRead {
 				client.completions[0].ToolCalls = client.completions[0].ToolCalls[1:]
 			}
-			mem := store.NewMemory()
+			sessionStore := storetest.New(t, testdbseed.DefaultProjectID)
 			ctx := context.Background()
-			sess, err := mem.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
+			sess, err := sessionStore.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 			testutil.FailErr(t, "create session", err)
 			sess.ParentSessionID = "parent-1"
 			sess.AgentType = orchestration.ProfileImplementer
@@ -257,7 +257,7 @@ func TestLoopRejectsUnofferedToolCalls(t *testing.T) {
 				progressCalls++
 				return `{"status":"updated"}`, nil
 			})
-			deps := promptloop.StoreDeps(mem)
+			deps := promptloop.StoreDeps(sessionStore)
 			deps.Model.LLM = client
 			deps.Context.Policy = &fixedToolPolicy{metas: []tools.ToolMeta{{Name: "read"}}}
 			deps.Context.Tools = reg

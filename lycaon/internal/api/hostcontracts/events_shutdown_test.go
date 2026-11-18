@@ -14,20 +14,22 @@ import (
 	"github.com/lycaon/lycaon/internal/events"
 	"github.com/lycaon/lycaon/internal/project"
 	"github.com/lycaon/lycaon/internal/session"
-	"github.com/lycaon/lycaon/internal/session/store"
+	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/testutil"
 )
 
 func TestShutdownReleasesOpenEventStream(t *testing.T) {
+	sessionFixture := storetest.New(t)
+
 	hub := events.NewMemoryHub()
-	reg := project.NewMemoryRegistry()
+	reg := project.NewSQLRegistry(sessionFixture.DB())
 	p, err := project.CreateWithRoot(t.Context(), reg, t.TempDir())
 	testutil.FailErr(t, "project.CreateWithRoot failed", err)
 
-	memStore := store.NewMemory()
+	sessionStore := sessionFixture
 	srv := hostapi.NewServer(contractfixture.RequiredTestDeps(t, hostapi.Dependencies{Core: hostapi.CoreDependencies{
-		Store: memStore, Projects: reg, Sessions: session.NewHost(memStore, session.Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)}, Host: hostapi.HostDependencies{Events: hub}}), nil, hostapi.TestAPIToken)
+		Store: sessionStore, Projects: reg, Sessions: session.NewHost(sessionStore, session.Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)}, Host: hostapi.HostDependencies{Events: hub}}), nil, hostapi.TestAPIToken)
 
 	ln, err := (&net.ListenConfig{}).Listen(t.Context(), "tcp", "127.0.0.1:0")
 	testutil.FailErr(t, "net.Listen failed", err)

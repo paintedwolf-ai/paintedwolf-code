@@ -20,9 +20,8 @@ type turnStatusStore interface {
 func TestLatestTurnStatusParity(t *testing.T) {
 	for _, fixture := range []struct {
 		name string
-		open func(*testing.T) turnStatusStore
+		open func(t *testing.T) turnStatusStore
 	}{
-		{"memory", func(*testing.T) turnStatusStore { return NewMemory() }},
 		{"sql", func(t *testing.T) turnStatusStore { return openTurnSQLStore(t).(*SQL) }},
 	} {
 		t.Run(fixture.name, func(t *testing.T) {

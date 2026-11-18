@@ -3,8 +3,6 @@ package session
 import (
 	"context"
 	"errors"
-	"github.com/lycaon/lycaon/internal/testutil/exposure"
-	"github.com/lycaon/lycaon/internal/tools/toolstest"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -23,12 +21,15 @@ import (
 	"github.com/lycaon/lycaon/internal/llm"
 	"github.com/lycaon/lycaon/internal/session/promptinput"
 	"github.com/lycaon/lycaon/internal/session/store"
+	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"github.com/lycaon/lycaon/internal/session/workflowfacts"
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/testutil/exposure"
 	"github.com/lycaon/lycaon/internal/toolpolicy"
 	"github.com/lycaon/lycaon/internal/tools"
+	"github.com/lycaon/lycaon/internal/tools/toolstest"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -46,7 +47,7 @@ func (v requestWorkflowView) ResolvedRequest(_ context.Context, sessionID string
 }
 
 func TestTurnRequestDecidesAUserTurnForItsInstruction(t *testing.T) {
-	mgr := NewHost(store.NewMemory(), Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
+	mgr := NewHost(storetest.New(t, testdbseed.DefaultProjectID), Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
 	opening, text, ok := mgr.Coordinator.Loading.Request(t.Context(), promptinput.Input{Text: "fix the flaky test"}, nil, "u1", workflowfacts.ResolvedWorkflowRequest{})
 	if !ok || opening != "u1" || text != "fix the flaky test" {
 		t.Fatalf("user turn = %q %q %v", opening, text, ok)
@@ -54,7 +55,7 @@ func TestTurnRequestDecidesAUserTurnForItsInstruction(t *testing.T) {
 }
 
 func TestTurnRequestDecidesAParkedRequestOnItsFirstHostTurn(t *testing.T) {
-	mgr := NewHost(store.NewMemory(), Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
+	mgr := NewHost(storetest.New(t, testdbseed.DefaultProjectID), Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
 	history := []api.Message{
 		{ID: "slash", Role: api.MessageRoleUser, Origin: api.MessageOriginUser, Content: "/security-survey"},
 		{ID: "wake", Role: api.MessageRoleUser, Origin: api.MessageOriginHost, Kind: api.MessageKindHostLoopWake, Visibility: api.MessageVisibilityInternal},
@@ -72,10 +73,11 @@ func TestTurnRequestDecidesAParkedRequestOnItsFirstHostTurn(t *testing.T) {
 }
 
 func TestTurnRequestKeepsADecidedRequestAcrossHostTurns(t *testing.T) {
-	st := store.NewMemory()
+	st := storetest.New(t, "project-1")
 	mgr := NewHost(st, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
 	sess, err := st.Create(t.Context(), api.CreateSessionRequest{}, "project-1")
 	testutil.FailErr(t, "create session", err)
+	testutil.FailErr(t, "persist opening message", st.AppendMessages(t.Context(), sess.ID, api.Message{ID: "u1", Role: api.MessageRoleUser, Content: "inspect the logs"}))
 	_, err = st.PutTurnLoadReceipt(t.Context(), store.TurnLoadReceipt{SessionID: sess.ID, OpeningMessageID: "u1", Trigger: store.TurnLoadTriggerTurn})
 	testutil.FailErr(t, "put receipt", err)
 	history := []api.Message{{ID: "u1", Role: api.MessageRoleUser, Origin: api.MessageOriginUser, Content: "add a flag"}}
@@ -86,7 +88,7 @@ func TestTurnRequestKeepsADecidedRequestAcrossHostTurns(t *testing.T) {
 }
 
 func TestResolvedWorkflowRequestDoesNotReplaceWorkerAssignment(t *testing.T) {
-	st := store.NewMemory()
+	st := storetest.New(t, "project-1")
 	mgr := NewHost(st, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
 	var asked []string
 	mgr.SetWorkflowDomains(workflowDomainFixture(requestWorkflowView{request: workflowfacts.ResolvedWorkflowRequest{Text: "run request"}, asked: &asked}))
@@ -109,7 +111,7 @@ func TestResolvedWorkflowRequestDoesNotReplaceWorkerAssignment(t *testing.T) {
 }
 
 func TestTurnRequestNeedsNoWorkflow(t *testing.T) {
-	mgr := NewHost(store.NewMemory(), Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
+	mgr := NewHost(storetest.New(t, testdbseed.DefaultProjectID), Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
 	resolved := mgr.Coordinator.Loading.ResolvedRequest(t.Context(), &api.Session{ID: "s1"})
 	opening, text, ok := mgr.Coordinator.Loading.Request(t.Context(), promptinput.Input{Text: "inspect the logs"}, nil, "u1", resolved)
 	if !ok || opening != "u1" || text != "inspect the logs" {
@@ -119,10 +121,11 @@ func TestTurnRequestNeedsNoWorkflow(t *testing.T) {
 
 func TestTurnOptimizationRunsWithoutWorkflowOptIn(t *testing.T) {
 	for _, unavailable := range []bool{false, true} {
-		st := store.NewMemory()
+		st := storetest.New(t, "project-1")
 		mgr := NewHost(st, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
 		sess, err := st.Create(t.Context(), api.CreateSessionRequest{}, "project-1")
 		testutil.FailErr(t, "create session", err)
+		testutil.FailErr(t, "persist opening message", st.AppendMessages(t.Context(), sess.ID, api.Message{ID: "u1", Role: api.MessageRoleUser, Content: "inspect the logs"}))
 		engine := &decidetest.Fake{Unavailable: unavailable}
 		mgr.Coordinator.Loading.SetDecider(engine)
 		mgr.Coordinator.Loading.SetLedger(turnload.NewLedger())
@@ -147,8 +150,7 @@ func TestTurnOptimizationRunsWithoutWorkflowOptIn(t *testing.T) {
 	}
 }
 
-// noFolderLoadable lists the tools the investigate surface can load before a folder is
-// attached, which is where these sessions run.
+// noFolderLoadable returns deferred tools for an investigate frame with no roots.
 func noFolderLoadable(t *testing.T) []string {
 	t.Helper()
 	plan, err := surface.CompileToolPlan(surface.TurnProfile{SurfaceID: "implement_investigate"}, 0)
@@ -176,10 +178,11 @@ func (loadablePolicy) EvaluateInvoke(context.Context, *api.Session, string, map[
 }
 
 func TestTurnOptimizationFailureClearsTheStaleSkill(t *testing.T) {
-	st := store.NewMemory()
+	st := storetest.New(t, "project-1")
 	mgr := NewHost(st, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
 	sess, err := st.Create(t.Context(), api.CreateSessionRequest{}, "project-1")
 	testutil.FailErr(t, "create session", err)
+	testutil.FailErr(t, "persist opening message", st.AppendMessages(t.Context(), sess.ID, api.Message{ID: "u1", Role: api.MessageRoleUser, Content: "inspect the logs"}))
 	mgr.Coordinator.Loading.SetDecider(&decidetest.Fake{Err: errors.New("engine failed")})
 	ledger := turnload.NewLedger()
 	ledger.Restore(sess.ID, turnload.Standing{Skill: &turnload.SkillPreload{Name: "old", Body: "old"}}, nil)
@@ -198,7 +201,7 @@ func TestTurnOptimizationFailureClearsTheStaleSkill(t *testing.T) {
 }
 
 func TestWorkflowStartDecisionUsesItsBoundRequestOnce(t *testing.T) {
-	st := store.NewMemory()
+	st := storetest.New(t, "project-1")
 	mgr := NewHost(st, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
 	sess, err := st.Create(t.Context(), api.CreateSessionRequest{}, "project-1")
 	testutil.FailErr(t, "create session", err)
@@ -214,6 +217,9 @@ func TestWorkflowStartDecisionUsesItsBoundRequestOnce(t *testing.T) {
 			t.Fatalf("workflow start = %q %q %v", opening, text, ok)
 		}
 	}
+	testdbseed.InsertSessionWorkflowRun(t, st.DB(), "old-run", sess.ID, "complete")
+	testdbseed.InsertSessionWorkflowRun(t, st.DB(), "new-run", sess.ID, "running")
+	testutil.FailErr(t, "persist workflow opening", st.AppendMessages(t.Context(), sess.ID, history...))
 	_, err = st.PutTurnLoadReceipt(t.Context(), store.TurnLoadReceipt{SessionID: sess.ID, OpeningMessageID: "start", Trigger: store.TurnLoadTriggerTurn})
 	testutil.FailErr(t, "record start decision", err)
 	if _, _, ok := mgr.Coordinator.Loading.Request(t.Context(), wake, history, "", request); ok {
@@ -337,12 +343,12 @@ func TestWaitResumeAcquiresItsOwnDispatchLane(t *testing.T) {
 
 func TestConsumedStartupWakeKeepsWaitingUserTurnBusy(t *testing.T) {
 	ctx := t.Context()
-	memory := store.NewMemory()
+	sessionStore := storetest.New(t, testdbseed.DefaultProjectID)
 	client := llm.NewRecordingClient(llm.NewMockProvider(&llm.MockConfig{Responses: []llm.MockResponseEntry{{Pattern: ".", Text: "unexpected follow-up"}}}))
-	mgr := NewHost(memory, Models{Client: client, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, toolstest.NewRegistry())
-	sess, err := memory.Create(ctx, api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
+	mgr := NewHost(sessionStore, Models{Client: client, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, toolstest.NewRegistry())
+	sess, err := sessionStore.Create(ctx, api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
-	testutil.FailErr(t, "start visible turn", memory.SetSessionStatus(ctx, sess.ID, api.SessionStatusBusy))
+	testutil.FailErr(t, "start visible turn", sessionStore.SetSessionStatus(ctx, sess.ID, api.SessionStatusBusy))
 	loopWorkflowFixture1 := &settlementWorkflowSource{active: &api.WorkflowRun{
 		ID: "run", Revision: 5, Status: api.WorkflowRunStatusRunning, CurrentPhase: "work",
 	}}
@@ -359,7 +365,7 @@ func TestConsumedStartupWakeKeepsWaitingUserTurnBusy(t *testing.T) {
 	finish()
 	loop.Turns.WaitForAsyncTurns(t.Context())
 	testutil.FailErr(t, "settle drained wakes", mgr.Runner.Settlement.Drain(ctx, sess.ID))
-	current, err := memory.Get(ctx, sess.ID)
+	current, err := sessionStore.Get(ctx, sess.ID)
 	testutil.FailErr(t, "read waiting session", err)
 	if current.Status != api.SessionStatusBusy || !loop.Waits.IsSleeping(sess.ID) || len(client.AllRequests()) != 0 {
 		t.Fatalf("status=%s sleeping=%v prompts=%d", current.Status, loop.Waits.IsSleeping(sess.ID), len(client.AllRequests()))

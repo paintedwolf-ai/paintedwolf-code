@@ -2,17 +2,17 @@ package store
 
 import (
 	"context"
-	"github.com/lycaon/lycaon/internal/messageview"
-	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"testing"
 
 	"github.com/google/uuid"
+	"github.com/lycaon/lycaon/internal/messageview"
+	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
-func TestUserContinuationKeepsCurrentTurnInMemoryAndSQL(t *testing.T) {
+func TestUserContinuationKeepsCurrentTurn(t *testing.T) {
 	ctx := t.Context()
 	database := testdbfixture.Open(t, "store.db")
 	testdbseed.InsertProjectRoot(t, database, testdbseed.DefaultProjectID, t.TempDir())
@@ -26,7 +26,7 @@ func TestUserContinuationKeepsCurrentTurnInMemoryAndSQL(t *testing.T) {
 			GetMessage(context.Context, string, string) (api.Message, error)
 		}
 	}{
-		{name: "memory", store: NewMemory()},
+
 		{name: "sql", store: NewSQL(database)},
 	}
 	for _, test := range stores {
@@ -73,7 +73,7 @@ func TestTurnNumbersAreNotReusedAfterTranscriptTruncation(t *testing.T) {
 		AppendMessages(context.Context, string, ...api.Message) error
 		ReadSourceTurn(context.Context, string, int) (messageview.SourceTurn, error)
 		Get(context.Context, string) (*api.Session, error)
-	}{"memory": NewMemory(), "sql": NewSQL(database)} {
+	}{"sql": NewSQL(database)} {
 		t.Run(name, func(t *testing.T) {
 			ctx := t.Context()
 			sess, err := st.Create(ctx, api.CreateSessionRequest{}, testdbseed.DefaultProjectID)

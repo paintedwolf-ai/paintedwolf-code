@@ -2,15 +2,15 @@
 package workertest
 
 import (
-	"github.com/lycaon/lycaon/internal/db"
-	"github.com/lycaon/lycaon/internal/sourceblob"
-	"github.com/lycaon/lycaon/internal/workspacebaseline"
 	"path/filepath"
 	"testing"
 
+	"github.com/lycaon/lycaon/internal/db"
+	"github.com/lycaon/lycaon/internal/sourceblob"
 	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/worker"
+	"github.com/lycaon/lycaon/internal/workspacebaseline"
 )
 
 // NewQueue seeds the declared project and sessions in a disposable database.

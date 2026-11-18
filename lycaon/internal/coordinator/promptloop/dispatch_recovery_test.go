@@ -14,7 +14,7 @@ import (
 	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/llm"
 	"github.com/lycaon/lycaon/internal/llm/modelcall"
-	"github.com/lycaon/lycaon/internal/session/store"
+	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/tools"
@@ -64,7 +64,7 @@ func TestLoopSummarizeParallelCappedInOneTurn(t *testing.T) {
 			{ID: "tc1", Name: "summarize", Args: map[string]any{"task": "first", "path": "a.go"}},
 			{ID: "tc2", Name: "summarize", Args: map[string]any{"task": "second", "path": "b.go"}},
 		})})
-		store := store.NewMemory()
+		store := storetest.New(t, testdbseed.DefaultProjectID)
 		deps := promptloop.StoreDeps(store)
 		deps.Context.Limits = loopTestLimits(2)
 		deps.Model.LLM = client
@@ -93,7 +93,7 @@ func TestLoopSummarizeParallelCappedInOneTurn(t *testing.T) {
 }
 
 func TestPartialDispatchRepairsFailedPeerWhileAcceptedWorkerRuns(t *testing.T) {
-	storage := store.NewMemory()
+	storage := storetest.New(t, testdbseed.DefaultProjectID)
 	sess, err := storage.Create(t.Context(), api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create coordinator", err)
 	reg := tools.NewDefaultRegistry()

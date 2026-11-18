@@ -137,7 +137,11 @@ func Fill(t *testing.T, d *Deps) {
 		d.Database = testdbfixture.Open(t, "api-deps.db")
 	}
 	if d.Store == nil {
-		d.Store = sessionstore.NewMemory()
+		database, ok := d.Database.(db.ReadHandle)
+		if !ok {
+			t.Fatal("session fixtures require a database with consistent read snapshots")
+		}
+		d.Store = sessionstore.NewSQL(database)
 	}
 	if d.Projects == nil {
 		// Source ledger rows reference the project table in the same database.
@@ -326,8 +330,8 @@ func (refusingExecutor) Execute(context.Context, wire.WorkerTask, worker.WorkerR
 func (refusingExecutor) AbortWorkerRuntime(context.Context, wire.WorkerTask) error { return nil }
 
 func storeDatabase(store session.Store) db.Handle {
-	if owner, ok := store.(interface{ DB() db.Handle }); ok {
-		return owner.DB()
+	if database, ok := store.(interface{ DB() db.Handle }); ok {
+		return database.DB()
 	}
 	return nil
 }

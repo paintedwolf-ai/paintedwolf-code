@@ -4,7 +4,6 @@ package sessioncontracts
 
 import (
 	"encoding/json"
-	"github.com/lycaon/lycaon/internal/tools/toolstest"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -17,18 +16,22 @@ import (
 	"github.com/lycaon/lycaon/internal/project"
 	"github.com/lycaon/lycaon/internal/session"
 	"github.com/lycaon/lycaon/internal/session/store"
+	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/tools/toolstest"
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
 
 func TestHandleCostSummarySessionBreakdown(t *testing.T) {
+	sessionFixture := storetest.New(t, testdbseed.DefaultProjectID)
+
 	tracker := costtest.NewTracker(t, nil)
-	store := store.NewMemory()
+	store := sessionFixture
 	mgr := session.NewHost(store, session.Models{Client: llm.NewMockProvider(nil), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: tracker}, toolstest.NewRegistry())
-	srv := hostapi.NewServer(contractfixture.RequiredTestDeps(t, hostapi.Dependencies{Core: hostapi.CoreDependencies{Store: store, Projects: project.NewMemoryRegistry(), Sessions: mgr}}), nil, hostapi.TestAPIToken)
+	srv := hostapi.NewServer(contractfixture.RequiredTestDeps(t, hostapi.Dependencies{Core: hostapi.CoreDependencies{Store: store, Projects: project.NewSQLRegistry(sessionFixture.DB()), Sessions: mgr}}), nil, hostapi.TestAPIToken)
 
 	parent, err := store.Create(t.Context(), wire.CreateSessionRequest{Posture: wire.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session in store", err)
@@ -64,16 +67,18 @@ func TestHandleCostSummarySessionBreakdown(t *testing.T) {
 }
 
 func TestHandleCostSummaryProjectBreakdown(t *testing.T) {
+	sessionFixture := storetest.New(t, testdbseed.DefaultProjectID)
+
 	tracker := costtest.NewTracker(t, nil)
-	store := store.NewMemory()
+	store := sessionFixture
 	mgr := session.NewHost(store, session.Models{Client: llm.NewMockProvider(nil), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: tracker}, toolstest.NewRegistry())
-	reg := project.NewMemoryRegistry()
+	reg := project.NewSQLRegistry(sessionFixture.DB())
 	srv := hostapi.NewServer(contractfixture.RequiredTestDeps(t, hostapi.Dependencies{Core: hostapi.CoreDependencies{Store: store, Projects: reg, Sessions: mgr}}), nil, hostapi.TestAPIToken)
 
 	dir := t.TempDir()
 	p, err := project.CreateWithRoot(t.Context(), reg, dir)
 	testutil.FailErr(t, "reg.Open failed", err)
-	parent, err := store.Create(t.Context(), wire.CreateSessionRequest{Posture: wire.SessionPostureBuild, ProjectID: p.ID}, "")
+	parent, err := store.Create(t.Context(), wire.CreateSessionRequest{Posture: wire.SessionPostureBuild, ProjectID: p.ID}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session in store", err)
 	child, err := store.CreateChild(t.Context(), parent, wire.SpawnChildRequest{AgentType: "implementer", Prompt: "work"})
 	testutil.FailErr(t, "store.CreateChild failed", err)
@@ -108,23 +113,23 @@ func TestHandleCostSummaryProjectBreakdown(t *testing.T) {
 func TestHandleProjectCostReportIncludesSessionBreakdownAndArchivedChats(t *testing.T) {
 	sqlDB := testdbfixture.Open(t, "cost-report.db")
 	tracker := &contractfixture.ProjectReportCountingTracker{CostTracker: cost.NewSQLTracker(sqlDB, nil)}
-	memStore := store.NewSQL(sqlDB)
-	mgr := session.NewHost(memStore, session.Models{Client: llm.NewMockProvider(nil), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: tracker}, toolstest.NewRegistry())
+	sessionStore := store.NewSQL(sqlDB)
+	mgr := session.NewHost(sessionStore, session.Models{Client: llm.NewMockProvider(nil), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: tracker}, toolstest.NewRegistry())
 	reg := project.NewSQLRegistry(sqlDB)
-	srv := hostapi.NewServer(contractfixture.RequiredTestDeps(t, hostapi.Dependencies{Core: hostapi.CoreDependencies{Store: memStore, Projects: reg, Sessions: mgr}}), nil, hostapi.TestAPIToken)
+	srv := hostapi.NewServer(contractfixture.RequiredTestDeps(t, hostapi.Dependencies{Core: hostapi.CoreDependencies{Store: sessionStore, Projects: reg, Sessions: mgr}}), nil, hostapi.TestAPIToken)
 
 	dir := t.TempDir()
 	p, err := project.CreateWithRoot(t.Context(), reg, dir)
 	testutil.FailErr(t, "create project", err)
-	first, err := memStore.Create(t.Context(), wire.CreateSessionRequest{
+	first, err := sessionStore.Create(t.Context(), wire.CreateSessionRequest{
 		Posture: wire.SessionPostureBuild, ProjectID: p.ID,
 	}, "")
 	testutil.FailErr(t, "create first session", err)
-	child, err := memStore.CreateChild(t.Context(), first, wire.SpawnChildRequest{
+	child, err := sessionStore.CreateChild(t.Context(), first, wire.SpawnChildRequest{
 		AgentType: "implementer", Prompt: "work",
 	})
 	testutil.FailErr(t, "create worker child", err)
-	second, err := memStore.Create(t.Context(), wire.CreateSessionRequest{
+	second, err := sessionStore.Create(t.Context(), wire.CreateSessionRequest{
 		Posture: wire.SessionPostureVet, ProjectID: p.ID,
 	}, "")
 	testutil.FailErr(t, "create second session", err)

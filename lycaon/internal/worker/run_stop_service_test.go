@@ -3,19 +3,19 @@ package worker
 import (
 	"context"
 	"errors"
-	"github.com/lycaon/lycaon/internal/tools/toolstest"
 	"testing"
 
 	"github.com/google/uuid"
 	"github.com/lycaon/lycaon/internal/llm"
 	"github.com/lycaon/lycaon/internal/session"
-	"github.com/lycaon/lycaon/internal/session/store"
+	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"github.com/lycaon/lycaon/internal/session/workeroutcomes"
 	"github.com/lycaon/lycaon/internal/session/workerresults"
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/tools/toolstest"
 	"github.com/lycaon/lycaon/internal/workerrecords"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -28,7 +28,7 @@ func (allowAllWorkflowRuns) AssertWorkerTask(context.Context, *api.WorkerTask) e
 
 func TestRunStopServiceCancelProjectsWorkerCard(t *testing.T) {
 	ctx := context.Background()
-	store := store.NewMemory()
+	store := storetest.New(t, testdbseed.DefaultProjectID)
 	mgr := session.NewHost(store, session.Models{Client: llm.NewMockProvider(&llm.MockConfig{}), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, toolstest.NewRegistry())
 	sess, err := store.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
@@ -188,7 +188,7 @@ func TestRunStopServiceHoldContinuesPastPoisonTask(t *testing.T) {
 
 func TestRunStopServiceHoldPatchesCanonicalWorkerRow(t *testing.T) {
 	ctx := context.Background()
-	store := store.NewMemory()
+	store := storetest.New(t, testdbseed.DefaultProjectID)
 	mgr := session.NewHost(store, session.Models{Client: llm.NewMockProvider(&llm.MockConfig{}), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, toolstest.NewRegistry())
 	sess, err := store.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)

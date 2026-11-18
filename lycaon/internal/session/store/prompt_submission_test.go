@@ -3,11 +3,11 @@ package store
 import (
 	"context"
 	"errors"
-	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"testing"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/pkg/api"
@@ -189,9 +189,9 @@ func TestPromptAttachmentAdmissionReleasesOnTerminalReceipt(t *testing.T) {
 	}
 }
 
-func TestMemoryPromptAttachmentRetentionsFollowReceiptAndMessageLifecycle(t *testing.T) {
+func TestPromptAttachmentRetentionsFollowReceiptAndMessageLifecycle(t *testing.T) {
 	ctx := t.Context()
-	sessions := NewMemory()
+	sessions := newSQLTestStore(t)
 	sess, err := sessions.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
 	id := uuid.NewString()

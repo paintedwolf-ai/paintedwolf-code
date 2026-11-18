@@ -4,11 +4,6 @@ package toolhost
 
 import (
 	"context"
-	"github.com/lycaon/lycaon/internal/projectroot"
-	"github.com/lycaon/lycaon/internal/testdbseed"
-	repotest "github.com/lycaon/lycaon/internal/testsetup/repoinfo"
-	"github.com/lycaon/lycaon/internal/toolexecution"
-	"github.com/lycaon/lycaon/internal/worker/workertest"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -17,9 +12,14 @@ import (
 
 	"github.com/lycaon/lycaon/internal/board"
 	"github.com/lycaon/lycaon/internal/platform"
+	"github.com/lycaon/lycaon/internal/projectroot"
+	"github.com/lycaon/lycaon/internal/testdbseed"
+	repotest "github.com/lycaon/lycaon/internal/testsetup/repoinfo"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/testutil/extpackstest"
+	"github.com/lycaon/lycaon/internal/toolexecution"
 	"github.com/lycaon/lycaon/internal/tools"
+	"github.com/lycaon/lycaon/internal/worker/workertest"
 )
 
 func boardToolFixture(t *testing.T) (*toolexecution.Executor, *tools.DefaultRegistry) {

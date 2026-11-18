@@ -13,6 +13,7 @@ import (
 	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/session"
 	"github.com/lycaon/lycaon/internal/session/store"
+	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	sessiontree "github.com/lycaon/lycaon/internal/session/tree"
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/settingsoverlay"
@@ -31,7 +32,7 @@ func TestRootSessionKeyedFindingsAppendRecentParityContract(t *testing.T) {
 	dir := t.TempDir()
 	overlay := filepath.Join(dir, settingsoverlay.DirName(), "overlays", "job-a")
 
-	store := store.NewMemory()
+	store := storetest.New(t, testdbseed.DefaultProjectID)
 	parent, err := store.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	contractcheck.FailErr(t, "create parent", err)
 	child, err := store.CreateChild(ctx, parent, api.SpawnChildRequest{AgentType: "implementer", Prompt: "leg"})

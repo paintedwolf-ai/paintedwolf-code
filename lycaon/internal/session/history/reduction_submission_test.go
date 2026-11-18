@@ -7,6 +7,7 @@ import (
 	"github.com/lycaon/lycaon/internal/llm/compaction"
 	"github.com/lycaon/lycaon/internal/session/lifecycle"
 	"github.com/lycaon/lycaon/internal/session/store"
+	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/pkg/api"
@@ -31,15 +32,15 @@ func (s *publicationOnlyStore) Get(ctx context.Context, id string) (*api.Session
 }
 
 func TestPreparedPublicationDoesNotSubmitWorkUnderItsAdmissionGate(t *testing.T) {
-	mem := store.NewMemory()
-	sess, err := mem.Create(t.Context(), api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
+	sessionStore := storetest.New(t, testdbseed.DefaultProjectID)
+	sess, err := sessionStore.Create(t.Context(), api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
-	testutil.FailErr(t, "append source", mem.AppendMessages(t.Context(), sess.ID, api.Message{ID: "source", Role: "assistant", Content: "original source"}))
-	rows, err := mem.GetMessages(t.Context(), sess.ID)
+	testutil.FailErr(t, "append source", sessionStore.AppendMessages(t.Context(), sess.ID, api.Message{ID: "source", Role: "assistant", Content: "original source"}))
+	rows, err := sessionStore.GetMessages(t.Context(), sess.ID)
 	testutil.FailErr(t, "read source", err)
 	release := make(chan struct{})
-	st := &publicationOnlyStore{Store: mem, release: release}
-	svc := &Service{store: st, Gate: lifecycle.New(mem), Runner: NewRunner(), Compactor: compaction.NewSimpleCompactor(compaction.DefaultCompactionConfig(), nil)}
+	st := &publicationOnlyStore{Store: sessionStore, release: release}
+	svc := &Service{store: st, Gate: lifecycle.New(sessionStore), Runner: NewRunner(), Compactor: compaction.NewSimpleCompactor(compaction.DefaultCompactionConfig(), nil)}
 	defer func() {
 		close(release)
 		svc.Runner.Stop()

@@ -11,7 +11,7 @@ import (
 	"github.com/lycaon/lycaon/internal/coordinator/promptloop"
 	"github.com/lycaon/lycaon/internal/llm"
 	"github.com/lycaon/lycaon/internal/llm/modelcall"
-	"github.com/lycaon/lycaon/internal/session/store"
+	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/tools"
@@ -20,7 +20,7 @@ import (
 
 func TestLoopContinuesAfterTaskEnqueue(t *testing.T) {
 	ctx := context.Background()
-	store := store.NewMemory()
+	store := storetest.New(t, testdbseed.DefaultProjectID)
 	sess, err := store.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session in store", err)
 	if err := store.AppendMessages(ctx, sess.ID, api.Message{
@@ -79,7 +79,7 @@ func TestLoopContinuesAfterTaskEnqueue(t *testing.T) {
 
 func TestLoopBatchThreeTaskOneTurn(t *testing.T) {
 	ctx := context.Background()
-	store := store.NewMemory()
+	store := storetest.New(t, testdbseed.DefaultProjectID)
 	sess, err := store.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session in store", err)
 
@@ -144,7 +144,7 @@ func TestLoopBatchThreeTaskOneTurn(t *testing.T) {
 
 func TestLoopBatchTaskAndReadSameTurn(t *testing.T) {
 	ctx := context.Background()
-	store := store.NewMemory()
+	store := storetest.New(t, testdbseed.DefaultProjectID)
 	sess, err := store.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session in store", err)
 
@@ -213,7 +213,7 @@ func TestLoopReloadsHistoryAfterToolBatchCompaction(t *testing.T) {
 		{ToolCalls: []api.ToolCall{{ID: "tc1", Name: "read", Args: map[string]any{"path": "x.go"}}}},
 		{Content: "done"},
 	}}
-	store := store.NewMemory()
+	store := storetest.New(t, testdbseed.DefaultProjectID)
 	ctx := context.Background()
 	sess, err := store.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)

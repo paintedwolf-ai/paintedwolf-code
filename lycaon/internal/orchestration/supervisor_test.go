@@ -2,24 +2,25 @@ package orchestration_test
 
 import (
 	"context"
-	"github.com/lycaon/lycaon/internal/orchestration/orchestrationtest"
-	"github.com/lycaon/lycaon/internal/tools/toolstest"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/llm"
 	"github.com/lycaon/lycaon/internal/orchestration"
+	"github.com/lycaon/lycaon/internal/orchestration/orchestrationtest"
 	"github.com/lycaon/lycaon/internal/session"
 	"github.com/lycaon/lycaon/internal/session/store"
+	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/tools/toolstest"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
-func newSupervisorTestOrchestrator(t *testing.T, rec *recordingWorkers) (*orchestration.OrchestratorImpl, *orchestration.MemoryTopologyWorkers, *session.Host, *store.Memory) {
+func newSupervisorTestOrchestrator(t *testing.T, rec *recordingWorkers) (*orchestration.OrchestratorImpl, *orchestration.MemoryTopologyWorkers, *session.Host, *store.SQL) {
 	t.Helper()
 	mem := orchestration.NewMemoryTopologyWorkers()
-	sessStore := store.NewMemory()
+	sessStore := storetest.New(t, testdbseed.DefaultProjectID)
 	sessMgr := session.NewHost(sessStore, session.Models{Client: llm.NewMockProvider(nil), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, toolstest.NewRegistry())
 	if rec == nil {
 		rec = &recordingWorkers{}

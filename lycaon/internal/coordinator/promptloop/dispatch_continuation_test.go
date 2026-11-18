@@ -2,16 +2,17 @@ package promptloop_test
 
 import (
 	"context"
+	"testing"
+
 	"github.com/lycaon/lycaon/internal/coordinator/loopwake"
 	"github.com/lycaon/lycaon/internal/coordinator/promptloop"
 	"github.com/lycaon/lycaon/internal/coordinator/surface"
 	"github.com/lycaon/lycaon/internal/llm/modelcall"
-	"github.com/lycaon/lycaon/internal/session/store"
+	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/pkg/api"
-	"testing"
 )
 
 func TestDispatchContinuesUntilExplicitWait(t *testing.T) {
@@ -25,7 +26,7 @@ func TestDispatchContinuesUntilExplicitWait(t *testing.T) {
 		{name: "wait for one prerequisite", workers: 1},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			storage := store.NewMemory()
+			storage := storetest.New(t, testdbseed.DefaultProjectID)
 			sess, err := storage.Create(t.Context(), api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 			testutil.FailErr(t, "create coordinator", err)
 			wakes := loopwake.NewLoopEngine()

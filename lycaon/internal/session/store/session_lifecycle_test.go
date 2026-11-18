@@ -9,12 +9,11 @@ import (
 
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
-
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
-func TestMemoryStoreCreateGet(t *testing.T) {
-	store := NewMemory()
+func TestStoreCreateGet(t *testing.T) {
+	store := newSQLTestStore(t)
 	ctx := context.Background()
 
 	sess, err := store.Create(ctx, api.CreateSessionRequest{
@@ -41,8 +40,8 @@ func TestMemoryStoreCreateGet(t *testing.T) {
 	}
 }
 
-func TestMemoryStoreCreateChildPersistsAgentType(t *testing.T) {
-	store := NewMemory()
+func TestStoreCreateChildPersistsAgentType(t *testing.T) {
+	store := newSQLTestStore(t)
 	ctx := t.Context()
 	parent, err := store.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create parent", err)
@@ -61,16 +60,16 @@ func TestMemoryStoreCreateChildPersistsAgentType(t *testing.T) {
 	}
 }
 
-func TestMemoryStoreGetNotFound(t *testing.T) {
-	store := NewMemory()
+func TestStoreGetNotFound(t *testing.T) {
+	store := newSQLTestStore(t)
 	_, err := store.Get(context.Background(), "missing")
 	if err == nil {
 		t.Fatal("expected error")
 	}
 }
 
-func TestMemoryStoreList(t *testing.T) {
-	store := NewMemory()
+func TestStoreList(t *testing.T) {
+	store := newSQLTestStore(t, "project-0", "project-1")
 	ctx := context.Background()
 
 	for i := 0; i < 2; i++ {
@@ -91,8 +90,8 @@ func TestMemoryStoreList(t *testing.T) {
 	}
 }
 
-func TestMemoryStoreDelete(t *testing.T) {
-	store := NewMemory()
+func TestStoreDelete(t *testing.T) {
+	store := newSQLTestStore(t)
 	ctx := context.Background()
 
 	sess, err := store.Create(ctx, api.CreateSessionRequest{
@@ -110,30 +109,30 @@ func TestMemoryStoreDelete(t *testing.T) {
 	}
 }
 
-func TestMemoryStoreDeleteNotFound(t *testing.T) {
-	store := NewMemory()
+func TestStoreDeleteNotFound(t *testing.T) {
+	store := newSQLTestStore(t)
 	if err := store.Delete(context.Background(), "missing"); err == nil {
 		t.Fatal("expected error")
 	}
 }
 
-func TestMemoryStoreDeleteRemovesChildTree(t *testing.T) {
+func TestStoreDeleteRemovesChildTree(t *testing.T) {
 	ctx := context.Background()
-	mem := NewMemory()
-	parent, err := mem.Create(ctx, api.CreateSessionRequest{
+	sessionStore := newSQLTestStore(t)
+	parent, err := sessionStore.Create(ctx, api.CreateSessionRequest{
 		Posture: api.SessionPostureBuild,
 	}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create parent", err)
-	child, err := mem.CreateChild(ctx, parent, api.SpawnChildRequest{AgentType: "implementer"})
+	child, err := sessionStore.CreateChild(ctx, parent, api.SpawnChildRequest{AgentType: "implementer"})
 	testutil.FailErr(t, "create child", err)
-	testutil.FailErr(t, "delete parent", mem.Delete(ctx, parent.ID))
-	if _, err := mem.Get(ctx, child.ID); !errors.Is(err, ErrSessionNotFound) {
+	testutil.FailErr(t, "delete parent", sessionStore.Delete(ctx, parent.ID))
+	if _, err := sessionStore.Get(ctx, child.ID); !errors.Is(err, ErrSessionNotFound) {
 		t.Fatalf("child after parent delete: %v", err)
 	}
 }
 
 func TestConcurrentSessionCreation(t *testing.T) {
-	store := NewMemory()
+	store := newSQLTestStore(t)
 	ctx := context.Background()
 	var wg sync.WaitGroup
 
@@ -143,7 +142,7 @@ func TestConcurrentSessionCreation(t *testing.T) {
 			defer wg.Done()
 			_, err := store.Create(ctx, api.CreateSessionRequest{
 				Posture: api.SessionPostureBuild,
-			}, fmt.Sprintf("project-%d", idx))
+			}, testdbseed.DefaultProjectID)
 			if err != nil {
 				t.Errorf("create session %d: %v", idx, err)
 			}
@@ -161,20 +160,20 @@ func TestConcurrentSessionCreation(t *testing.T) {
 }
 
 func TestAppendMessagesRejectsExistingID(t *testing.T) {
-	mem := NewMemory()
+	sessionStore := newSQLTestStore(t)
 	ctx := context.Background()
-	sess, err := mem.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
+	sess, err := sessionStore.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create", err)
 	msg := api.Message{ID: "same-id", Role: api.MessageRoleUser, Content: "first"}
-	testutil.FailErr(t, "first append", mem.AppendMessages(ctx, sess.ID, msg))
-	err = mem.AppendMessages(ctx, sess.ID, api.Message{ID: "same-id", Role: api.MessageRoleUser, Content: "again"})
+	testutil.FailErr(t, "first append", sessionStore.AppendMessages(ctx, sess.ID, msg))
+	err = sessionStore.AppendMessages(ctx, sess.ID, api.Message{ID: "same-id", Role: api.MessageRoleUser, Content: "again"})
 	if !errors.Is(err, ErrDuplicateMessageID) {
 		t.Fatalf("second append = %v want ErrDuplicateMessageID", err)
 	}
 }
 
 func TestContextCancellation(t *testing.T) {
-	store := NewMemory()
+	store := newSQLTestStore(t)
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 

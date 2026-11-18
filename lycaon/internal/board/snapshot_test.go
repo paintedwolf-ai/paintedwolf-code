@@ -3,7 +3,6 @@ package board
 import (
 	"context"
 	"errors"
-	"github.com/lycaon/lycaon/internal/worker/workertest"
 	"path/filepath"
 	"testing"
 	"time"
@@ -20,6 +19,7 @@ import (
 	repotest "github.com/lycaon/lycaon/internal/testsetup/repoinfo"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/worker"
+	"github.com/lycaon/lycaon/internal/worker/workertest"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 

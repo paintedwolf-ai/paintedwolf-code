@@ -21,7 +21,7 @@ import (
 	contractfixture "github.com/lycaon/lycaon/internal/api/contractfixture"
 	"github.com/lycaon/lycaon/internal/eventoutbox"
 	"github.com/lycaon/lycaon/internal/project"
-	"github.com/lycaon/lycaon/internal/session/store"
+	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -30,8 +30,8 @@ import (
 )
 
 func TestHandleUploadLiveToolRecordingRejectsInvalidInput(t *testing.T) {
-	projects, projectID := contractfixture.ArtifactProject(t)
-	sessionStore := store.NewMemory()
+	sessionStore := storetest.New(t)
+	projects, projectID := contractfixture.ArtifactProject(t, sessionStore.DB())
 	sess, err := sessionStore.Create(t.Context(), api.CreateSessionRequest{
 		ProjectID: projectID,
 		Posture:   api.SessionPostureBuild,
@@ -84,8 +84,8 @@ func TestHandleUploadLiveToolRecordingRejectsInvalidInput(t *testing.T) {
 }
 
 func TestHandleUploadLiveToolRecordingPersistsMP4(t *testing.T) {
-	projects, projectID := contractfixture.ArtifactProject(t)
-	sessionStore := store.NewMemory()
+	sessionStore := storetest.New(t)
+	projects, projectID := contractfixture.ArtifactProject(t, sessionStore.DB())
 	sess, err := sessionStore.Create(t.Context(), api.CreateSessionRequest{
 		ProjectID: projectID,
 		Posture:   api.SessionPostureBuild,
@@ -161,8 +161,8 @@ func TestHandleUploadLiveToolRecordingPersistsMP4(t *testing.T) {
 }
 
 func TestHandleSessionArtifact_roundTrip(t *testing.T) {
-	projects, projectID := contractfixture.ArtifactProject(t)
-	store := store.NewMemory()
+	store := storetest.New(t)
+	projects, projectID := contractfixture.ArtifactProject(t, store.DB())
 	sess, err := store.Create(t.Context(), api.CreateSessionRequest{
 		ProjectID: projectID,
 		Posture:   api.SessionPostureBuild,
@@ -197,8 +197,8 @@ func TestHandleSessionArtifact_roundTrip(t *testing.T) {
 }
 
 func TestHandleSessionArtifactUnavailable(t *testing.T) {
-	projects, projectID := contractfixture.ArtifactProject(t)
-	store := store.NewMemory()
+	store := storetest.New(t)
+	projects, projectID := contractfixture.ArtifactProject(t, store.DB())
 	sess, err := store.Create(t.Context(), api.CreateSessionRequest{
 		ProjectID: projectID,
 		Posture:   api.SessionPostureBuild,
@@ -231,8 +231,8 @@ func TestHandleSessionArtifactUnavailable(t *testing.T) {
 }
 
 func TestHandleSessionArtifact_childSessionResolvesTreeStore(t *testing.T) {
-	projects, projectID := contractfixture.ArtifactProject(t)
-	store := store.NewMemory()
+	store := storetest.New(t)
+	projects, projectID := contractfixture.ArtifactProject(t, store.DB())
 	parent, err := store.Create(t.Context(), api.CreateSessionRequest{
 		ProjectID: projectID,
 		Posture:   api.SessionPostureBuild,
@@ -268,12 +268,14 @@ type listArtifactsFixture struct {
 }
 
 func newListArtifactsFixture(t *testing.T) listArtifactsFixture {
+	sessionFixture := storetest.New(t)
+
 	t.Helper()
 	dataDir := t.TempDir()
-	reg := project.NewMemoryRegistry()
+	reg := project.NewSQLRegistry(sessionFixture.DB())
 	proj, err := reg.Create(t.Context(), project.CreateParams{Draft: true, Name: "list-scope"})
 	testutil.FailErr(t, "reg.Create failed", err)
-	sessStore := store.NewMemory()
+	sessStore := sessionFixture
 	sessA, err := sessStore.Create(t.Context(), api.CreateSessionRequest{
 		ProjectID: proj.ID,
 		Posture:   api.SessionPostureBuild,
@@ -458,8 +460,10 @@ func TestHandleListProjectArtifacts_filtersAndCursorScope(t *testing.T) {
 }
 
 func TestHandleArtifacts_durableRestartFetchAndGallery(t *testing.T) {
+	sessionFixture := storetest.New(t)
+
 	dataDir := t.TempDir()
-	reg := project.NewMemoryRegistry()
+	reg := project.NewSQLRegistry(sessionFixture.DB())
 	proj, err := reg.Create(t.Context(), project.CreateParams{Draft: true, Name: "restart-gallery"})
 	testutil.FailErr(t, "reg.Create failed", err)
 	sqlDB := testdbfixture.Open(t, "store.db")
@@ -473,7 +477,7 @@ func TestHandleArtifacts_durableRestartFetchAndGallery(t *testing.T) {
 		return dir, nil
 	}
 
-	sessStore := store.NewMemory()
+	sessStore := sessionFixture
 	sess, err := sessStore.Create(t.Context(), api.CreateSessionRequest{
 		ProjectID: proj.ID,
 		Posture:   api.SessionPostureBuild,
@@ -549,11 +553,13 @@ func TestHandleArtifacts_durableRestartFetchAndGallery(t *testing.T) {
 // Deletion removes bytes while preserving reference identity.
 
 func TestHandleDeleteProjectArtifact_tombstonesAndReportsImpact(t *testing.T) {
+	sessionFixture := storetest.New(t)
+
 	dataDir := t.TempDir()
-	reg := project.NewMemoryRegistry()
+	reg := project.NewSQLRegistry(sessionFixture.DB())
 	proj, err := reg.Create(t.Context(), project.CreateParams{Draft: true, Name: "delete-artifact"})
 	testutil.FailErr(t, "reg.Create failed", err)
-	sessStore := store.NewMemory()
+	sessStore := sessionFixture
 	sess, err := sessStore.Create(t.Context(), api.CreateSessionRequest{
 		ProjectID: proj.ID,
 		Posture:   api.SessionPostureBuild,
@@ -614,8 +620,8 @@ func TestHandleDeleteProjectArtifact_tombstonesAndReportsImpact(t *testing.T) {
 }
 
 func TestSessionArtifactAbsenceCodes(t *testing.T) {
-	projects, projectID := contractfixture.ArtifactProject(t)
-	sessStore := store.NewMemory()
+	sessStore := storetest.New(t)
+	projects, projectID := contractfixture.ArtifactProject(t, sessStore.DB())
 	sess, err := sessStore.Create(t.Context(), api.CreateSessionRequest{
 		ProjectID: projectID,
 		Posture:   api.SessionPostureBuild,

@@ -16,7 +16,7 @@ import (
 	"github.com/lycaon/lycaon/internal/events"
 	"github.com/lycaon/lycaon/internal/project"
 	"github.com/lycaon/lycaon/internal/session"
-	"github.com/lycaon/lycaon/internal/session/store"
+	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/testutil"
 	wire "github.com/lycaon/lycaon/pkg/api"
@@ -267,20 +267,22 @@ func TestDeleteSessionRemovesRow(t *testing.T) {
 }
 
 func TestSessionCreateDeletePublishLifecycleActions(t *testing.T) {
+	sessionFixture := storetest.New(t)
+
 	t.Setenv("LYCAON_LLM_MOCK", "1")
 	ctx := context.Background()
-	reg := project.NewMemoryRegistry()
-	p, err := reg.Create(ctx, project.CreateParams{})
+	reg := project.NewSQLRegistry(sessionFixture.DB())
+	p, err := project.CreateWithRoot(ctx, reg, t.TempDir())
 	testutil.FailErr(t, "create project", err)
-	mem := store.NewMemory()
+	sessionStore := sessionFixture
 	hub := events.NewMemoryHub()
-	mgr := session.NewHost(mem, session.Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
+	mgr := session.NewHost(sessionStore, session.Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
 	mgr.SetProjectRegistry(reg)
 	mgr.SetEventPublisher(&events.Publisher{
 		Hub:    hub,
 		Lookup: project.ScopeLookup{Registry: reg},
 	})
-	srv := hostapi.NewServer(contractfixture.RequiredTestDeps(t, hostapi.Dependencies{Core: hostapi.CoreDependencies{Store: mem, Projects: reg, Sessions: mgr}, Host: hostapi.HostDependencies{Events: hub}}), nil, hostapi.TestAPIToken)
+	srv := hostapi.NewServer(contractfixture.RequiredTestDeps(t, hostapi.Dependencies{Core: hostapi.CoreDependencies{Store: sessionStore, Projects: reg, Sessions: mgr}, Host: hostapi.HostDependencies{Events: hub}}), nil, hostapi.TestAPIToken)
 	eventsCh, unsubscribe, err := hub.Subscribe(ctx, events.Subscription{Project: p.ID, Viewer: testutil.HostOwner()})
 	testutil.FailErr(t, "subscribe events", err)
 	defer unsubscribe()

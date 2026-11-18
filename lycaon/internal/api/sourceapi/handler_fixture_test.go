@@ -15,8 +15,7 @@ import (
 	"github.com/lycaon/lycaon/internal/api/httpio"
 	"github.com/lycaon/lycaon/internal/api/taskgroup"
 	"github.com/lycaon/lycaon/internal/people"
-	"github.com/lycaon/lycaon/internal/project"
-	"github.com/lycaon/lycaon/internal/session/store"
+	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/testutil/apitestdeps"
 	wire "github.com/lycaon/lycaon/pkg/api"
@@ -49,12 +48,14 @@ func readSourceViewResponse(t *testing.T, response *httptest.ResponseRecorder, s
 }
 
 func newSourceHandlerFixture(t *testing.T, opts ...func(*Deps)) *Handler {
+	sessionFixture := storetest.New(t)
+
 	t.Helper()
 	group := &taskgroup.Group{}
 	deps := Deps{
-		SessionStore:    store.NewMemory(),
-		Git:             &gitadmin.Handler{},
-		ProjectRegistry: project.NewMemoryRegistry(),
+
+		SessionStore: sessionFixture,
+		Git:          &gitadmin.Handler{},
 	}
 	for _, opt := range opts {
 		opt(&deps)
@@ -66,6 +67,7 @@ func newSourceHandlerFixture(t *testing.T, opts ...func(*Deps)) *Handler {
 		Workers: deps.Workers,
 	}
 	apitestdeps.Fill(t, &required)
+	deps.ProjectRegistry = required.Projects
 	deps.EditorDocuments, deps.Briefings.Files, deps.ManagedSecrets = required.EditorDocuments, required.FileBriefings, required.ManagedSecrets
 	deps.MutationGate, deps.SourceLedger = required.MutationGate, required.SourceLedger
 	deps.SourceMutations, deps.FileOperations = required.SourceMutations, required.FileOperations

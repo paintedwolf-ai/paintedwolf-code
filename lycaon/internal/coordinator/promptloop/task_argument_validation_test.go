@@ -11,7 +11,7 @@ import (
 	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/invocation"
 	"github.com/lycaon/lycaon/internal/llm/modelcall"
-	"github.com/lycaon/lycaon/internal/session/store"
+	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/tools"
@@ -88,11 +88,11 @@ func runTaskArgumentCall(t *testing.T, call api.ToolCall) (invocation.Settlement
 	def, _ := reg.Definition("task")
 	def.Meta.ArgsSchema = meta.ArgsSchema
 	testutil.FailErr(t, "publish task schema", reg.RegisterDefinition(def))
-	mem := store.NewMemory()
-	sess, err := mem.Create(t.Context(), api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
+	sessionStore := storetest.New(t, testdbseed.DefaultProjectID)
+	sess, err := sessionStore.Create(t.Context(), api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
 	rec := newRecordingRecorder()
-	deps := promptloop.StoreDeps(mem)
+	deps := promptloop.StoreDeps(sessionStore)
 	deps.Context.LoadedTools = workersLoaded
 	deps.Context.Tools, deps.Tools.Invocations = reg, rec
 	deps.Context.Limits = loopTestLimits(2)

@@ -111,8 +111,8 @@ func TestForceCompactReportsStoredGenerationForChunksAndNoop(t *testing.T) {
 
 func TestPublishedViewRetainsCanonicalActiveWorkingSet(t *testing.T) {
 	cfg := compaction.DefaultCompactionConfig()
-	svc, mem := newCompactionManager(t, cfg)
-	sess, err := mem.Create(t.Context(), api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
+	svc, sqlStore := newCompactionManager(t, cfg)
+	sess, err := sqlStore.Create(t.Context(), api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create active session", err)
 	rows := []api.Message{
 		{ID: "old", Role: api.MessageRoleAssistant, Content: "old transcript"},
@@ -122,11 +122,11 @@ func TestPublishedViewRetainsCanonicalActiveWorkingSet(t *testing.T) {
 		{ID: "read", Role: api.MessageRoleAssistant, ToolCalls: []api.ToolCall{{ID: "current", Name: "read"}}},
 		{ID: "rejected", Role: api.MessageRoleTool, Content: "argument rejected", ToolResult: &api.ToolResult{Tool: "read", ToolCallID: "current", AssistantMessageID: "read"}},
 	}
-	testutil.FailErr(t, "append working exchanges", mem.AppendMessages(t.Context(), sess.ID, rows...))
-	canonical, err := mem.GetMessages(t.Context(), sess.ID)
+	testutil.FailErr(t, "append working exchanges", sqlStore.AppendMessages(t.Context(), sess.ID, rows...))
+	canonical, err := sqlStore.GetMessages(t.Context(), sess.ID)
 	testutil.FailErr(t, "load canonical rows", err)
 	last := canonical[len(canonical)-1]
-	testutil.FailErr(t, "publish view omitting recovered observation", mem.PutCompactionView(t.Context(), sess.ID, store.CompactionView{
+	testutil.FailErr(t, "publish view omitting recovered observation", sqlStore.PutCompactionView(t.Context(), sess.ID, store.CompactionView{
 		Generation: 1, CoveredThroughOrd: last.Ord, CoveredThroughID: last.ID, SourceSeq: last.Seq,
 		Messages: []api.Message{{ID: "summary", Role: api.MessageRoleAssistant, Content: "references"}, canonical[1], canonical[4], canonical[5]},
 	}))

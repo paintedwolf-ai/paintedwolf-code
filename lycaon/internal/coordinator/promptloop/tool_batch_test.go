@@ -1,9 +1,6 @@
 package promptloop_test
 
 import (
-	"github.com/lycaon/lycaon/internal/toolcontract"
-	"github.com/lycaon/lycaon/internal/tools/toolstest"
-
 	"context"
 	"slices"
 	"sort"
@@ -17,14 +14,17 @@ import (
 	"github.com/lycaon/lycaon/internal/coordinator/promptloop"
 	"github.com/lycaon/lycaon/internal/llm"
 	"github.com/lycaon/lycaon/internal/session/store"
+	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/tools"
+	"github.com/lycaon/lycaon/internal/tools/toolstest"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
-func commitEvidenceFromStore(store *store.Memory) func(context.Context, string, *api.Session, string, map[string]any, string, string) (string, string, error) {
+func commitEvidenceFromStore(store *store.SQL) func(context.Context, string, *api.Session, string, map[string]any, string, string) (string, string, error) {
 	return func(ctx context.Context, sessionID string, sess *api.Session, toolName string, args map[string]any, content, artifactID string) (string, string, error) {
 		if sess == nil {
 			return "", content, nil
@@ -77,7 +77,7 @@ func TestLoopRunsConcurrentTools(t *testing.T) {
 			{ID: "tc1", Name: "read", Args: map[string]any{"path": "a.go"}},
 			{ID: "tc2", Name: "read", Args: map[string]any{"path": "b.go"}},
 		})})
-		store := store.NewMemory()
+		store := storetest.New(t, testdbseed.DefaultProjectID)
 		deps := promptloop.StoreDeps(store)
 		deps.Context.LoadedTools = workersLoaded
 		deps.Context.Limits = loopTestLimits(2)
@@ -115,7 +115,7 @@ func TestLoopCoordinatorReadsGetHandlesAcrossSurfaces(t *testing.T) {
 				{ID: "tc1", Name: "command", Args: map[string]any{"path": "a.go", "command": "cat a.go"}},
 				{ID: "tc2", Name: "command", Args: map[string]any{"path": "b.go", "command": "cat b.go"}},
 			})})
-			store := store.NewMemory()
+			store := storetest.New(t, testdbseed.DefaultProjectID)
 			deps := promptloop.StoreDeps(store)
 			deps.Context.LoadedTools = workersLoaded
 			// The final iteration is prose-only.
@@ -177,7 +177,7 @@ func TestLoopParallelWorkerReadsCommitInCallOrder(t *testing.T) {
 			{ID: "tc2", Name: "read", Args: map[string]any{"path": "b.go"}},
 			{ID: "tc3", Name: "read", Args: map[string]any{"path": "c.go"}},
 		})})
-		store := store.NewMemory()
+		store := storetest.New(t, testdbseed.DefaultProjectID)
 		deps := promptloop.StoreDeps(store)
 		deps.Context.LoadedTools = workersLoaded
 		deps.Context.Limits = loopTestLimits(2)
@@ -276,7 +276,7 @@ func TestLoopMixedBatchSerializesWriteAfterParallelReads(t *testing.T) {
 			{ID: "tc2", Name: "read", Args: map[string]any{"path": "b.go"}},
 			{ID: "tc3", Name: "write", Args: map[string]any{"path": "a.go", "content": "x"}},
 		})})
-		store := store.NewMemory()
+		store := storetest.New(t, testdbseed.DefaultProjectID)
 		deps := promptloop.StoreDeps(store)
 		deps.Context.LoadedTools = workersLoaded
 		deps.Context.Limits = loopTestLimits(2)
@@ -321,7 +321,7 @@ func TestLoopDropsEmptyArgPhantomTaskBeforeExecution(t *testing.T) {
 		{ID: "tc_valid", Name: "task", Args: taskCallArgs("implementer", "work")},
 		{ID: "tc_phantom", Name: "task", Args: nil},
 	})})
-	store := store.NewMemory()
+	store := storetest.New(t, testdbseed.DefaultProjectID)
 	deps := promptloop.StoreDeps(store)
 	deps.Context.LoadedTools = workersLoaded
 	deps.Context.Limits = loopTestLimits(2)
@@ -380,8 +380,8 @@ func TestLoopStoresClassifiedResultWithItsEvidence(t *testing.T) {
 	client := llm.NewMockProvider(&llm.MockConfig{Responses: mockToolThenDone("review", []llm.MockToolCall{
 		{ID: "tc1", Name: "command", Args: map[string]any{"path": "a.go", "command": "cat a.go"}},
 	})})
-	mem := store.NewMemory()
-	deps := promptloop.StoreDeps(mem)
+	sessionStore := storetest.New(t, testdbseed.DefaultProjectID)
+	deps := promptloop.StoreDeps(sessionStore)
 	deps.Context.LoadedTools = workersLoaded
 	deps.Context.Limits = loopTestLimits(2)
 	deps.Model.LLM = client
@@ -394,15 +394,15 @@ func TestLoopStoresClassifiedResultWithItsEvidence(t *testing.T) {
 				note("append " + strings.Join(msg.EvidenceHandles, ","))
 			}
 		}
-		return mem.AppendMessages(ctx, sessionID, msgs...)
+		return sessionStore.AppendMessages(ctx, sessionID, msgs...)
 	}
 	deps.Tools.CommitEvidenceToolResult = func(ctx context.Context, sessionID string, sess *api.Session, toolName string, args map[string]any, content, artifactID string) (string, string, error) {
 		note("evidence")
-		return mem.CommitVisualEvidenceToolResult(ctx, sessionID, sess.WorkspacePath, toolName, args, content, artifactID)
+		return sessionStore.CommitVisualEvidenceToolResult(ctx, sessionID, sess.WorkspacePath, toolName, args, content, artifactID)
 	}
 	loop := promptloop.NewPromptLoopForTest(deps)
 	ctx := context.Background()
-	sess, err := mem.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
+	sess, err := sessionStore.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
 	_, err = loop.Run(ctx, promptloop.PromptRunInput{
 		SessionID:  sess.ID,
@@ -439,16 +439,16 @@ func TestLoopPublishesParallelResultAsEachFinishes(t *testing.T) {
 		{ID: "tc-slow", Name: "read", Args: map[string]any{"path": "slow.go"}},
 		{ID: "tc-fast", Name: "read", Args: map[string]any{"path": "fast.go"}},
 	})})
-	mem := store.NewMemory()
-	deps := promptloop.StoreDeps(mem)
+	sessionStore := storetest.New(t, testdbseed.DefaultProjectID)
+	deps := promptloop.StoreDeps(sessionStore)
 	deps.Context.LoadedTools = workersLoaded
 	deps.Context.Limits = loopTestLimits(2)
 	deps.Model.LLM = client
 	deps.Context.Tools = reg
 	deps.Context.Policy = &recordingToolPolicy{}
-	deps.Tools.CommitEvidenceToolResult = commitEvidenceFromStore(mem)
+	deps.Tools.CommitEvidenceToolResult = commitEvidenceFromStore(sessionStore)
 	deps.Projection.AppendMessages = func(ctx context.Context, sessionID string, msgs ...api.Message) error {
-		err := mem.AppendMessages(ctx, sessionID, msgs...)
+		err := sessionStore.AppendMessages(ctx, sessionID, msgs...)
 		for _, msg := range msgs {
 			if msg.Role == api.MessageRoleTool && msg.ToolResult != nil &&
 				msg.ToolResult.ToolCallID == "tc-fast" {
@@ -459,7 +459,7 @@ func TestLoopPublishesParallelResultAsEachFinishes(t *testing.T) {
 	}
 	loop := promptloop.NewPromptLoopForTest(deps)
 	ctx := context.Background()
-	sess, err := mem.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
+	sess, err := sessionStore.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
 	sess.ParentSessionID = "coordinator-parent"
 	done := make(chan error, 1)

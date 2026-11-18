@@ -121,8 +121,8 @@ func TestEvidenceLedgerStore_markSuperseded(t *testing.T) {
 	}
 }
 
-func TestMemoryStoreCommitEvidenceSequentialOrdinals(t *testing.T) {
-	store := NewMemory()
+func TestStoreCommitEvidenceSequentialOrdinals(t *testing.T) {
+	store := newSQLTestStore(t)
 	ctx := context.Background()
 	dir := t.TempDir()
 	sess, err := store.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
@@ -137,8 +137,8 @@ func TestMemoryStoreCommitEvidenceSequentialOrdinals(t *testing.T) {
 	}
 }
 
-func TestMemoryStoreCommitEvidenceOrdinalSurvivesCrossKindSupersession(t *testing.T) {
-	store := NewMemory()
+func TestStoreCommitEvidenceOrdinalSurvivesCrossKindSupersession(t *testing.T) {
+	store := newSQLTestStore(t)
 	ctx := context.Background()
 	dir := t.TempDir()
 	sess, err := store.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
@@ -157,9 +157,11 @@ func TestMemoryStoreCommitEvidenceOrdinalSurvivesCrossKindSupersession(t *testin
 	if first != "read#1" || second != "read#2" {
 		t.Fatalf("read handles = %q, %q want read#1, read#2", first, second)
 	}
-	row, ok := store.evidence[sess.ID]["read#1"]
-	if !ok || row.supersededBy != "write#1" {
-		t.Fatalf("historical read#1 = %+v ok=%v", row, ok)
+	var supersededBy string
+	err = store.DB().QueryRowContext(ctx, `SELECT superseded_by FROM evidence_records WHERE session_id = ? AND handle = ?`, sess.ID, "read#1").Scan(&supersededBy)
+	testutil.FailErr(t, "read historical evidence", err)
+	if supersededBy != "write#1" {
+		t.Fatalf("historical read superseded by %q", supersededBy)
 	}
 }
 
@@ -363,9 +365,8 @@ func TestCommitEvidenceToolResult_reReadPreservesMutation(t *testing.T) {
 	}
 }
 
-// Memory store parity for reReadPreservesMutation.
-func TestMemoryStoreCommitEvidence_reReadPreservesMutation(t *testing.T) {
-	store := NewMemory()
+func TestStoreCommitEvidence_reReadPreservesMutation(t *testing.T) {
+	store := newSQLTestStore(t)
 	ctx := context.Background()
 	dir := t.TempDir()
 	sess, err := store.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
@@ -380,7 +381,7 @@ func TestMemoryStoreCommitEvidence_reReadPreservesMutation(t *testing.T) {
 	ev, err := store.LoadLedger(ctx, sess.ID)
 	testutil.FailErr(t, "LoadLedger", err)
 	if _, ok := evidence.ResolveHandle(ev, "write#1"); !ok {
-		t.Fatal("read of a written path must not supersede the write mutation handle (memory store)")
+		t.Fatal("read of a written path must not supersede the write mutation handle")
 	}
 }
 
@@ -471,8 +472,7 @@ func TestCommitEvidenceToolResult_externalFileCustodyAndModelIngestion(t *testin
 		t.Fatalf("read record = %+v urls=%v, want UntrustedContent=true and propagated ObservedURLs", gotRead, gotURLs)
 	}
 
-	// An edit keeps external custody and a full write clears it, in SQL and memory alike.
-	// clears it; verify SQL and Memory parity.
+	// An edit keeps external custody; a full write clears it.
 	for _, backend := range []struct {
 		name string
 		s    interface {
@@ -482,7 +482,6 @@ func TestCommitEvidenceToolResult_externalFileCustodyAndModelIngestion(t *testin
 		}
 	}{
 		{"sql", store},
-		{"memory", NewMemory()},
 	} {
 		t.Run(backend.name+"_partial_vs_full_replacement", func(t *testing.T) {
 			s2, err := backend.s.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
@@ -795,7 +794,6 @@ func TestEvidenceLedgerStore_CrossKindChronologySkewAndReloadParity(t *testing.T
 
 	sqlDB := testdbfixture.OpenPath(t, filepath.Join(dir, "chronology_skew.db"))
 	testdbseed.InsertProjectRoot(t, sqlDB, testdbseed.DefaultProjectID, dir)
-	memStore := NewMemory()
 
 	for _, tc := range []struct {
 		name   string
@@ -804,10 +802,6 @@ func TestEvidenceLedgerStore_CrossKindChronologySkewAndReloadParity(t *testing.T
 		{
 			name:   "sql_with_reopen",
 			reopen: func() chronologyBackend { return NewSQL(sqlDB) },
-		},
-		{
-			name:   "memory",
-			reopen: func() chronologyBackend { return memStore },
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {

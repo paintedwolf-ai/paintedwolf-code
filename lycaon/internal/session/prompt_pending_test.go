@@ -61,7 +61,7 @@ func lastSessionEvent(t *testing.T, published []api.SessionEvent) api.SessionEve
 }
 
 // observePendingPrompts wires a publisher that reads session state from mgr.
-func observePendingPrompts(t *testing.T, mgr *Host, st *store.Memory) (*events.MemoryHub, *api.Session, <-chan api.EventEnvelope) {
+func observePendingPrompts(t *testing.T, mgr *Host, st *store.SQL) (*events.MemoryHub, *api.Session, <-chan api.EventEnvelope) {
 	t.Helper()
 	hub := events.NewMemoryHub()
 	mgr.SetEventPublisher(&events.Publisher{Hub: hub, SessionState: mgr.Runner.SubmissionState})

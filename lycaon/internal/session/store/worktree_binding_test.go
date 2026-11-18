@@ -2,13 +2,14 @@ package store
 
 import (
 	"context"
+	"path/filepath"
+	"testing"
+	"time"
+
 	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/pkg/api"
-	"path/filepath"
-	"testing"
-	"time"
 )
 
 type worktreeStore interface {
@@ -31,19 +32,6 @@ func TestWorktreeBindingRoundTrip(t *testing.T) {
 				sqlDB := testdbfixture.OpenPath(t, filepath.Join(dir, "store.db"))
 				testdbseed.InsertProjectRoot(t, sqlDB, testdbseed.DefaultProjectID, dir)
 				st := NewSQL(sqlDB)
-				sess, err := st.Create(context.Background(), api.CreateSessionRequest{
-					Posture:   api.SessionPostureBuild,
-					ProjectID: testdbseed.DefaultProjectID,
-				}, testdbseed.DefaultProjectID)
-				testutil.FailErr(t, "create", err)
-				return st, sess.ID, testdbseed.DefaultProjectID
-			},
-		},
-		{
-			name: "memory",
-			setup: func(t *testing.T) (worktreeStore, string, string) {
-				t.Helper()
-				st := NewMemory()
 				sess, err := st.Create(context.Background(), api.CreateSessionRequest{
 					Posture:   api.SessionPostureBuild,
 					ProjectID: testdbseed.DefaultProjectID,

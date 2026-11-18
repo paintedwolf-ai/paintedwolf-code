@@ -8,9 +8,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/lycaon/lycaon/internal/testdbseed"
-	"github.com/lycaon/lycaon/pkg/api"
-
 	"github.com/lycaon/lycaon/internal/browser/pagesession"
 	"github.com/lycaon/lycaon/internal/coordinator/anchor"
 	"github.com/lycaon/lycaon/internal/extpacks"
@@ -18,10 +15,12 @@ import (
 	"github.com/lycaon/lycaon/internal/project"
 	"github.com/lycaon/lycaon/internal/projectcontrib"
 	"github.com/lycaon/lycaon/internal/session/loopguard"
-	sessionstore "github.com/lycaon/lycaon/internal/session/store"
+	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/skills"
+	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/pkg/api"
 )
 
 func pendingReconcileNudge(mgr *Host, rootID string) (string, bool) {
@@ -332,7 +331,7 @@ func TestDoomLoopPageResolverWiringOrder(t *testing.T) {
 			name = "guard first"
 		}
 		t.Run(name, func(t *testing.T) {
-			manager := NewHost(sessionstore.NewMemory(), Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
+			manager := NewHost(storetest.New(t, testdbseed.DefaultProjectID), Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
 			guard := newResolverRecordingGuard()
 			pages := pagesession.NewRegistry(pagesession.DefaultConfig())
 			t.Cleanup(func() { pages.Close(t.Context()) })

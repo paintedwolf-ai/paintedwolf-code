@@ -4,20 +4,19 @@ package board
 
 import (
 	"context"
-	repotest "github.com/lycaon/lycaon/internal/testsetup/repoinfo"
-	"github.com/lycaon/lycaon/internal/worker/workertest"
 	"os"
 	"path/filepath"
 	"testing"
-
 	"time"
 
 	"github.com/lycaon/lycaon/internal/git"
 	"github.com/lycaon/lycaon/internal/packboard"
 	"github.com/lycaon/lycaon/internal/repoinfo"
 	"github.com/lycaon/lycaon/internal/testdbseed"
+	repotest "github.com/lycaon/lycaon/internal/testsetup/repoinfo"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/testutil/gittest"
+	"github.com/lycaon/lycaon/internal/worker/workertest"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 

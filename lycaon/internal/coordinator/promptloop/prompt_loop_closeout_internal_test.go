@@ -7,7 +7,7 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/llm"
-	"github.com/lycaon/lycaon/internal/session/store"
+	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/pkg/api"
@@ -99,8 +99,8 @@ func TestAppendTurnCloseoutNudgeDedupsVerbatim(t *testing.T) {
 }
 
 func TestEarlyWorkerCloseoutExecutesCompleteLeg(t *testing.T) {
-	memory := store.NewMemory()
-	sess, err := memory.Create(t.Context(), api.CreateSessionRequest{Posture: api.SessionPostureBuild}, "project-1")
+	sessionStore := storetest.New(t, "project-1")
+	sess, err := sessionStore.Create(t.Context(), api.CreateSessionRequest{Posture: api.SessionPostureBuild}, "project-1")
 	testutil.FailErr(t, "create worker", err)
 	sess.ParentSessionID = "parent-1"
 	sess.AgentType = "security-reviewer"
@@ -119,7 +119,7 @@ func TestEarlyWorkerCloseoutExecutesCompleteLeg(t *testing.T) {
 			}},
 		}},
 	})
-	deps := StoreDeps(memory)
+	deps := StoreDeps(sessionStore)
 	deps.Model.LLM = client
 	deps.Context.Tools = reg
 	deps.Context.Policy = &recordingToolPolicy{}

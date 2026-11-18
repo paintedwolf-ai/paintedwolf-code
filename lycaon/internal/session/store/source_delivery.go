@@ -11,8 +11,7 @@ import (
 	"github.com/lycaon/lycaon/internal/evidence"
 )
 
-// CommitDeliveredSource records a confirmed exact delivered page through the
-// existing evidence owner. It never calls RememberAgentRead or accepts stdout.
+// CommitDeliveredSource persists a confirmed source delivery and its evidence.
 func (s *SQL) CommitDeliveredSource(ctx context.Context, sessionID string, observation evidence.DeliveredSourceObservation) (string, error) {
 	rec := observation.Record()
 	if rec.SourceDelivery == nil {
@@ -53,9 +52,7 @@ func (s *SQL) CommitDeliveredSource(ctx context.Context, sessionID string, obser
 		return "", err
 	}
 	rec.Handle = evidence.FormatHandle(rec.Kind, ordinal)
-	// The mint confirms bytes without workspace context; stamp the durable
-	// (root, scope-relative) identity at write time so delivered source
-	// records key citations the same way as every other rooted record.
+	// Bind confirmed bytes to the session root for citation identity.
 	if id := evidence.ResolvePathIdentity(roots, rec.Path); id.ScopeRel != "" {
 		rec.Path = id.ScopeRel
 		rec.RootID = id.RootID
@@ -84,67 +81,5 @@ func (s *SQL) CommitDeliveredSource(ctx context.Context, sessionID string, obser
 	}
 	bumpUntrusted(s.sqlCore, sessionID, rec)
 	bumpSecretExposure(s.sqlCore, sessionID, rec)
-	if err := s.projectUntrustedLedger(ctx, nil, sessionID, rec); err != nil {
-		return "", err
-	}
-	return rec.Handle, nil
-}
-
-// CommitDeliveredSource records a confirmed exact delivered page in memory.
-func (ev *memoryEvidence) CommitDeliveredSource(ctx context.Context, sessionID string, observation evidence.DeliveredSourceObservation) (string, error) {
-	if err := ctx.Err(); err != nil {
-		return "", err
-	}
-	rec := observation.Record()
-	if rec.SourceDelivery == nil {
-		return "", fmt.Errorf("confirmed source delivery required")
-	}
-	s := ev.core
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	if _, ok := s.sessions[sessionID]; !ok {
-		return "", ErrSessionNotFound
-	}
-	fact := rec.SourceDelivery
-	liveRows := ensureEvidenceSession(s, sessionID)
-	for handle, row := range liveRows {
-		if existing := row.rec.SourceDelivery; existing != nil &&
-			existing.ResponseID == fact.ResponseID &&
-			existing.DeliveryID == fact.DeliveryID &&
-			existing.Source.SHA256 == fact.Source.SHA256 &&
-			existing.Source.SourceID == fact.Source.SourceID &&
-			existing.Source.Revision == fact.Source.Revision &&
-			existing.SourceStartByte == fact.SourceStartByte &&
-			existing.SourceEndByte == fact.SourceEndByte {
-			return handle, nil
-		}
-	}
-	liveRecords := collectMemoryEvidenceRecordsLocked(liveRows, true)
-	live := evidence.AssembleLedger(liveRecords)
-	if rec.Path != "" {
-		if urls := evidence.ExternalCustodyURLs(live, []string{rec.Path}); len(urls) > 0 {
-			evidence.ApplyExternalCustody(&rec, urls)
-		}
-	}
-	rec.Handle = evidence.FormatHandle(rec.Kind, nextEvidenceOrdinalLocked(s, sessionID, rec.Kind))
-	for _, path := range evidence.IndexedPathsForRecord(rec) {
-		for _, oldHandle := range live.ByPath[path] {
-			if oldHandle == rec.Handle {
-				continue
-			}
-			row, ok := liveRows[oldHandle]
-			if !ok || row.supersededBy != "" {
-				continue
-			}
-			if !evidence.SupersedesPathHandle(rec, row.rec) {
-				continue
-			}
-			row.supersededBy = rec.Handle
-			liveRows[oldHandle] = row
-		}
-	}
-	putMemoryEvidenceRowLocked(s, sessionID, rec.Handle, rec)
-	bumpUntrustedLocked(s, sessionID, rec)
-	bumpSecretExposureLocked(s, sessionID, rec)
 	return rec.Handle, nil
 }

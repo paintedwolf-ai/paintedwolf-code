@@ -13,6 +13,7 @@ import (
 	"github.com/lycaon/lycaon/internal/orchestration"
 	"github.com/lycaon/lycaon/internal/session"
 	"github.com/lycaon/lycaon/internal/session/store"
+	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"github.com/lycaon/lycaon/internal/session/workercompletion"
 	"github.com/lycaon/lycaon/internal/session/workeroutcomes"
 	"github.com/lycaon/lycaon/internal/settings"
@@ -34,7 +35,7 @@ func (s stubCoordinatorContext) BuildCoordinatorTurnFrame(_ context.Context, _ s
 }
 
 func TestCoordinatorRunContextDelegatesToBuilder(t *testing.T) {
-	store := store.NewMemory()
+	store := storetest.New(t, testdbseed.DefaultProjectID)
 	mgr := session.NewHost(store, session.Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
 	mgr.SetCoordinatorTurnFrameSource(stubCoordinatorContext{
 		ctx: wire.CoordinatorRunContext{WorkflowID: "hotfix-session", CoordinatorBrief: "brief text"},
@@ -132,7 +133,7 @@ func TestImplementModeWorkerSummaryUsesCompletionEnvelope(t *testing.T) {
 }
 
 func TestAppendWorkerSummaryFinalizesEnqueuedTaskTool(t *testing.T) {
-	store := store.NewMemory()
+	store := storetest.New(t, testdbseed.DefaultProjectID)
 	mgr := session.NewHost(store, session.Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
 	ctx := context.Background()
 

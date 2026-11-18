@@ -1,13 +1,14 @@
 package worker
 
 import (
+	"path/filepath"
+	"testing"
+
 	"github.com/lycaon/lycaon/internal/db"
 	"github.com/lycaon/lycaon/internal/sourceblob"
 	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/workspacebaseline"
-	"path/filepath"
-	"testing"
 )
 
 func newTestQueue(t testing.TB, maxRunning int, projectID string, sessionIDs ...string) *SQLQueue {

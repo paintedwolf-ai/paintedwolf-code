@@ -12,7 +12,7 @@ import (
 	"github.com/lycaon/lycaon/internal/llm"
 	"github.com/lycaon/lycaon/internal/project"
 	"github.com/lycaon/lycaon/internal/session"
-	"github.com/lycaon/lycaon/internal/session/store"
+	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/tools/toolstest"
@@ -20,14 +20,16 @@ import (
 )
 
 func newRealServerWithSession(t *testing.T, root string) (*api.Server, string) {
+	sessionFixture := storetest.New(t, testdbseed.DefaultProjectID)
+
 	t.Helper()
-	store := store.NewMemory()
+	store := sessionFixture
 	mockCfg, err := llm.LoadMockConfig()
 	if err != nil {
 		t.Fatalf("load mock config: %v", err)
 	}
 	mgr := session.NewHost(store, session.Models{Client: llm.NewMockProvider(mockCfg), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, toolstest.NewRegistry())
-	srv := api.NewServer(apitest.Dependencies(t, api.Dependencies{Core: api.CoreDependencies{Store: store, Projects: project.NewMemoryRegistry(), Sessions: mgr}}), nil, api.TestAPIToken)
+	srv := api.NewServer(apitest.Dependencies(t, api.Dependencies{Core: api.CoreDependencies{Store: store, Projects: project.NewSQLRegistry(sessionFixture.DB()), Sessions: mgr}}), nil, api.TestAPIToken)
 
 	// Wait for detached prompt work before temporary-directory cleanup.
 	t.Cleanup(func() {

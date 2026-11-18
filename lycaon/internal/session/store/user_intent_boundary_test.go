@@ -19,7 +19,7 @@ func TestUserIntentBoundaryExcludesLaterTurnsAndFallsBackToCreation(t *testing.T
 		Create(context.Context, api.CreateSessionRequest, string) (*api.Session, error)
 		AppendMessages(context.Context, string, ...api.Message) error
 		UserIntentBefore(context.Context, string, time.Time) (time.Time, error)
-	}{"memory": NewMemory(), "sql": NewSQL(database)} {
+	}{"sql": NewSQL(database)} {
 		t.Run(name, func(t *testing.T) {
 			sess, err := st.Create(t.Context(), api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
 			testutil.FailErr(t, "create root", err)

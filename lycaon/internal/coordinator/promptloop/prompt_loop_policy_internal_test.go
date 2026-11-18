@@ -8,7 +8,7 @@ import (
 	"github.com/lycaon/lycaon/internal/coordinator/surface"
 	"github.com/lycaon/lycaon/internal/llm"
 	"github.com/lycaon/lycaon/internal/prompts"
-	"github.com/lycaon/lycaon/internal/session/store"
+	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/toolsurface"
@@ -16,10 +16,10 @@ import (
 )
 
 func TestRunLoadsOneCoordinatorFramePerModelTurn(t *testing.T) {
-	memory := store.NewMemory()
+	sessionStore := storetest.New(t, "project")
 	source := &countingCoordinatorFrameSource{}
 	buildCalls := 0
-	deps := StoreDeps(memory)
+	deps := StoreDeps(sessionStore)
 	deps.Model.LLM = llm.NewMockProvider(&llm.MockConfig{Responses: []llm.MockResponseEntry{{Pattern: ".", Text: "done"}}})
 	deps.Context.CoordinatorFrame = source
 	deps.Context.BuildMessages = func(_ context.Context, _ *api.Session, history []api.Message, frame *inject.CoordinatorTurnFrame) ([]api.Message, error) {
@@ -29,7 +29,7 @@ func TestRunLoadsOneCoordinatorFramePerModelTurn(t *testing.T) {
 		}
 		return history, nil
 	}
-	sess, err := memory.Create(t.Context(), api.CreateSessionRequest{Posture: api.SessionPostureBuild}, "project")
+	sess, err := sessionStore.Create(t.Context(), api.CreateSessionRequest{Posture: api.SessionPostureBuild}, "project")
 	testutil.FailErr(t, "create session", err)
 	_, err = NewPromptLoopForTest(deps).Run(t.Context(), PromptRunInput{
 		SessionID: sess.ID,
@@ -44,9 +44,9 @@ func TestRunLoadsOneCoordinatorFramePerModelTurn(t *testing.T) {
 }
 
 func TestRunBindsCoordinatorPolicySnapshotToPromptToolSchema(t *testing.T) {
-	memory := store.NewMemory()
+	sessionStore := storetest.New(t, "project")
 	policy := &frameCheckingToolPolicy{}
-	deps := StoreDeps(memory)
+	deps := StoreDeps(sessionStore)
 	deps.Model.LLM = llm.NewMockProvider(&llm.MockConfig{Responses: []llm.MockResponseEntry{{Pattern: ".", Text: "done"}}})
 	deps.Context.CoordinatorFrame = staticCoordinatorFrameSource{frame: inject.CoordinatorTurnFrame{
 		RunContext:    api.CoordinatorRunContext{WorkflowID: "implement", RunID: "run-1", CurrentPhase: "verify"},
@@ -57,7 +57,7 @@ func TestRunBindsCoordinatorPolicySnapshotToPromptToolSchema(t *testing.T) {
 		return []string{"postures/build.yaml"}, nil
 	}
 	deps.Context.Policy = policy
-	sess, err := memory.Create(t.Context(), api.CreateSessionRequest{Posture: api.SessionPostureBuild}, "project")
+	sess, err := sessionStore.Create(t.Context(), api.CreateSessionRequest{Posture: api.SessionPostureBuild}, "project")
 	testutil.FailErr(t, "create session", err)
 	_, err = NewPromptLoopForTest(deps).Run(t.Context(), PromptRunInput{
 		SessionID: sess.ID,

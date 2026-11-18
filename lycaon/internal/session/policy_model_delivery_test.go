@@ -3,7 +3,6 @@ package session_test
 import (
 	"context"
 	"fmt"
-	"github.com/lycaon/lycaon/internal/tools/toolstest"
 	"os"
 	"path/filepath"
 	"strings"
@@ -21,6 +20,7 @@ import (
 	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/internal/session"
 	"github.com/lycaon/lycaon/internal/session/store"
+	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"github.com/lycaon/lycaon/internal/session/workercloseout"
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/testdbseed"
@@ -28,14 +28,18 @@ import (
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/testutil/oartest"
 	"github.com/lycaon/lycaon/internal/tools"
+	"github.com/lycaon/lycaon/internal/tools/toolstest"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
 func TestPolicyAdvisoryReachesActualModelRequest(t *testing.T) {
+
 	for _, anchor := range []string{oar.AnchorContentInput, oar.AnchorCoordinatorPreInvoke} {
 		t.Run(anchor, func(t *testing.T) {
+			sessionFixture := storetest.New(t)
+
 			t.Setenv("LYCAON_LLM_MOCK", "1")
-			mem := store.NewMemory()
+			sessionStore := sessionFixture
 			root := t.TempDir()
 			response := llm.MockResponseEntry{Pattern: ".", Text: "ok"}
 			if anchor == oar.AnchorCoordinatorPreInvoke {
@@ -47,8 +51,8 @@ func TestPolicyAdvisoryReachesActualModelRequest(t *testing.T) {
 			testutil.FailErr(t, "register command tool", registry.Register("command", func(context.Context, map[string]any, tools.ToolContext) (string, error) {
 				return "", nil
 			}))
-			mgr := session.NewHost(mem, session.Models{Client: recorder, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, registry)
-			projects := project.NewMemoryRegistry()
+			mgr := session.NewHost(sessionStore, session.Models{Client: recorder, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, registry)
+			projects := project.NewSQLRegistry(sessionFixture.DB())
 			proj, err := project.CreateWithRoot(t.Context(), projects, root)
 			testutil.FailErr(t, "create rooted project", err)
 			mgr.SetProjectRegistry(projects)
@@ -62,7 +66,7 @@ func TestPolicyAdvisoryReachesActualModelRequest(t *testing.T) {
 			pipeline.EnableAnchor(anchor)
 			pipeline.EnableAnchor(oar.AnchorCoordinatorCloseoutCheck)
 			mgr.SetOARPipeline(pipeline, oar.NewRenderer(nil, nil))
-			sess, err := mem.Create(t.Context(), api.CreateSessionRequest{Posture: api.SessionPostureBuild}, proj.ID)
+			sess, err := sessionStore.Create(t.Context(), api.CreateSessionRequest{Posture: api.SessionPostureBuild}, proj.ID)
 			testutil.FailErr(t, "create session", err)
 			_, err = mgr.Submissions.Prompt(t.Context(), sess.ID, "continue")
 			testutil.FailErr(t, "run prompt", err)
@@ -78,7 +82,7 @@ func TestPolicyAdvisoryReachesActualModelRequest(t *testing.T) {
 			if !found {
 				t.Fatalf("%s advisory absent from actual model request", anchor)
 			}
-			messages, err := mem.GetMessages(t.Context(), sess.ID)
+			messages, err := sessionStore.GetMessages(t.Context(), sess.ID)
 			testutil.FailErr(t, "read transcript", err)
 			found = false
 			for _, message := range messages {
@@ -124,10 +128,10 @@ func loadTestAgentRegistry(t *testing.T) *orchestration.MemoryAgentRegistry {
 	return reg
 }
 
-func newPromptTestManager(t *testing.T, llmClient modelcall.LLMClient) (*session.Host, *store.Memory) {
+func newPromptTestManager(t *testing.T, llmClient modelcall.LLMClient) (*session.Host, *store.SQL) {
 	t.Helper()
 	t.Setenv("LYCAON_LLM_MOCK", "1")
-	store := store.NewMemory()
+	store := storetest.New(t, testdbseed.DefaultProjectID)
 	toolReg := tools.NewExecutorRegistry(nil, tools.NewDefaultRegistry())
 	mgr := session.NewHost(store, session.Models{Client: llmClient, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, toolReg)
 	oartest.InstallCloseoutPolicy(t, mgr)
@@ -198,7 +202,7 @@ func TestCoordinatorPromptIncludesPackBoardInject(t *testing.T) {
 		testutil.FailErr(t, "write file", err)
 	}
 	rec := llm.NewRecordingClient(llm.NewMockProvider(&llm.MockConfig{Responses: []llm.MockResponseEntry{{Pattern: ".", Text: "ok"}}}))
-	store := store.NewMemory()
+	store := storetest.New(t, testdbseed.DefaultProjectID)
 	mgr := session.NewHost(store, session.Models{Client: rec, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, toolstest.NewRegistry())
 	oartest.InstallCloseoutPolicy(t, mgr)
 	wirePromptTestManager(t, mgr)

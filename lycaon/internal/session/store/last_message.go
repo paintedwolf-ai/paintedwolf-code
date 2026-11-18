@@ -4,8 +4,6 @@ import (
 	"context"
 	"database/sql"
 	"errors"
-
-	"github.com/lycaon/lycaon/pkg/api"
 )
 
 // LastAssistantMessageContent returns the newest assistant message body, or
@@ -33,31 +31,4 @@ func (s *sqlTranscript) LastTurnMessageContent(ctx context.Context, sessionID st
 		return "", nil
 	}
 	return content, err
-}
-
-// LastAssistantMessageContent scans the in-memory transcript from its tail.
-func (s *memoryTranscript) LastAssistantMessageContent(ctx context.Context, sessionID string) (string, error) {
-	return lastContentByRole(ctx, s.core, sessionID, api.MessageRoleAssistant)
-}
-
-// LastTurnMessageContent scans the in-memory transcript from its tail.
-func (s *memoryTranscript) LastTurnMessageContent(ctx context.Context, sessionID string) (string, error) {
-	return lastContentByRole(ctx, s.core, sessionID, api.MessageRoleUser, api.MessageRoleAssistant)
-}
-
-func lastContentByRole(ctx context.Context, s *memoryCore, sessionID string, roles ...api.MessageRole) (string, error) {
-	if err := ctx.Err(); err != nil {
-		return "", err
-	}
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	msgs := s.messages[sessionID]
-	for i := len(msgs) - 1; i >= 0; i-- {
-		for _, role := range roles {
-			if msgs[i].Role == role {
-				return msgs[i].Content, nil
-			}
-		}
-	}
-	return "", nil
 }

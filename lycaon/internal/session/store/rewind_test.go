@@ -44,9 +44,8 @@ func commitFixtureRewind(t *testing.T, ctx context.Context, st rewindTestStore, 
 func TestCommittedRewindSweepAndRetentionParity(t *testing.T) {
 	for _, fixture := range []struct {
 		name string
-		open func(*testing.T) rewindTestStore
+		open func(t *testing.T) rewindTestStore
 	}{
-		{name: "memory", open: func(*testing.T) rewindTestStore { return NewMemory() }},
 		{name: "sql", open: func(t *testing.T) rewindTestStore { return openTurnSQLStore(t).(*SQL) }},
 	} {
 		t.Run(fixture.name, func(t *testing.T) {

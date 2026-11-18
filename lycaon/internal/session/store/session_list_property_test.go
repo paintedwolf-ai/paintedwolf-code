@@ -2,8 +2,9 @@ package store
 
 import (
 	"fmt"
-	"github.com/lycaon/lycaon/internal/timelayout"
 	"reflect"
+	"sort"
+	"strings"
 	"testing"
 	"time"
 
@@ -11,16 +12,16 @@ import (
 	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/timelayout"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
-func TestSessionSummaryPagingMatchesMemoryModel(t *testing.T) {
+func TestSessionSummaryPagingMatchesFixtureModel(t *testing.T) {
 	sqlDB := testdbfixture.Open(t, "store.db")
 	testdbseed.InsertProject(t, sqlDB, testdbseed.DefaultProjectID)
 	testdbseed.InsertProject(t, sqlDB, "other-project")
 
-	memory := NewMemory()
-	seedSummaryStores(t, sqlDB, memory)
+	fixtures := seedSummaryStores(t, sqlDB)
 	sqlStore := NewSQL(sqlDB)
 	sorts := []api.SessionListSort{
 		api.SessionListSortActivity,
@@ -53,7 +54,7 @@ func TestSessionSummaryPagingMatchesMemoryModel(t *testing.T) {
 						name := fmt.Sprintf("archived=%t/pinned=%s/sort=%s/order=%s/query=%q",
 							archived, pinnedFilterName(pinned), sortBy, order, titleQuery)
 						t.Run(name, func(t *testing.T) {
-							assertSummaryPagesMatch(t, sqlStore, memory, q)
+							assertSummaryPagesMatch(t, sqlStore, fixtures, q)
 						})
 					}
 				}
@@ -69,7 +70,8 @@ func pinnedFilterName(pinned *bool) string {
 	return fmt.Sprintf("%t", *pinned)
 }
 
-func seedSummaryStores(t *testing.T, sqlDB db.Handle, memory *Memory) {
+func seedSummaryStores(t *testing.T, sqlDB db.Handle) []api.Session {
+	var fixtures []api.Session
 	t.Helper()
 	base := time.Date(2026, time.January, 2, 3, 4, 5, 0, time.UTC)
 	for i := 0; i < 30; i++ {
@@ -95,7 +97,8 @@ func seedSummaryStores(t *testing.T, sqlDB db.Handle, memory *Memory) {
 			rank := 40 - i
 			sess.PinRank = &rank
 		}
-		seedSummarySession(t, sqlDB, memory, sess)
+		seedSummarySession(t, sqlDB, sess)
+		fixtures = append(fixtures, sess)
 	}
 	for i := 0; i < 4; i++ {
 		sess := api.Session{
@@ -109,8 +112,10 @@ func seedSummaryStores(t *testing.T, sqlDB db.Handle, memory *Memory) {
 			ActivityAt:      base,
 			UpdatedAt:       base,
 		}
-		seedSummarySession(t, sqlDB, memory, sess)
+		seedSummarySession(t, sqlDB, sess)
+		fixtures = append(fixtures, sess)
 	}
+	return fixtures
 }
 
 func summaryFixtureTitle(i int) string {
@@ -128,7 +133,7 @@ func summaryFixtureTitle(i int) string {
 	}
 }
 
-func seedSummarySession(t *testing.T, sqlDB db.Handle, memory *Memory, sess api.Session) {
+func seedSummarySession(t *testing.T, sqlDB db.Handle, sess api.Session) {
 	t.Helper()
 	var parent any
 	if sess.ParentSessionID != "" {
@@ -143,8 +148,6 @@ func seedSummarySession(t *testing.T, sqlDB db.Handle, memory *Memory, sess api.
 		nullableSummaryTime(sess.ArchivedAt), sess.PinRank, timelayout.Format(sess.CreatedAt),
 		timelayout.Format(sess.ActivityAt), timelayout.Format(sess.UpdatedAt))
 	testutil.FailErr(t, "insert session summary fixture", err)
-	copy := sess
-	memory.sessions[sess.ID] = &copy
 }
 
 func nullableSummaryTime(value *time.Time) any {
@@ -154,40 +157,62 @@ func nullableSummaryTime(value *time.Time) any {
 	return timelayout.Format(*value)
 }
 
-func assertSummaryPagesMatch(t *testing.T, sqlStore *SQL, memory *Memory, q SummaryQuery) {
+func assertSummaryPagesMatch(t *testing.T, sqlStore *SQL, fixtures []api.Session, q SummaryQuery) {
 	t.Helper()
-	var sqlIDs []string
-	seen := make(map[string]struct{})
+	var expected []api.Session
+	for _, row := range fixtures {
+		if row.ProjectID != q.ProjectID || row.ParentSessionID != "" || (row.ArchivedAt != nil) != q.Archived {
+			continue
+		}
+		if q.Pinned != nil && (row.PinRank != nil) != *q.Pinned {
+			continue
+		}
+		if !strings.Contains(strings.ToLower(row.Title), strings.ToLower(q.TitleQuery)) {
+			continue
+		}
+		expected = append(expected, row)
+	}
+	value := func(row api.Session) string {
+		switch q.Sort {
+		case api.SessionListSortCreated:
+			return timelayout.Format(row.CreatedAt)
+		case api.SessionListSortTitle:
+			return strings.ToLower(row.Title)
+		case api.SessionListSortPin:
+			return fmt.Sprintf("%020d", *row.PinRank)
+		default:
+			return timelayout.Format(row.ActivityAt)
+		}
+	}
+	sort.Slice(expected, func(i, j int) bool {
+		left, right := value(expected[i]), value(expected[j])
+		if left == right {
+			left, right = expected[i].ID, expected[j].ID
+		}
+		if q.Order == api.SessionListOrderAsc {
+			return left < right
+		}
+		return left > right
+	})
+	expectedIDs := make([]string, 0, len(expected))
+	for _, row := range expected {
+		expectedIDs = append(expectedIDs, row.ID)
+	}
+	actualIDs := make([]string, 0, len(expected))
 	for pageNumber := 0; pageNumber < 100; pageNumber++ {
-		sqlPage, err := sqlStore.ListProjectSummaries(t.Context(), q)
+		page, err := sqlStore.ListProjectSummaries(t.Context(), q)
 		testutil.FailErr(t, "list SQL page", err)
-		memoryPage, err := memory.ListProjectSummaries(t.Context(), q)
-		testutil.FailErr(t, "list memory page", err)
-
-		if sqlPage.Total != memoryPage.Total {
-			t.Fatalf("page %d totals: SQL=%d memory=%d", pageNumber, sqlPage.Total, memoryPage.Total)
+		if page.Total != len(expectedIDs) {
+			t.Fatalf("total = %d, want %d", page.Total, len(expectedIDs))
 		}
-		if !reflect.DeepEqual(summaryIDs(sqlPage.Sessions), summaryIDs(memoryPage.Sessions)) {
-			t.Fatalf("page %d ids: SQL=%v memory=%v", pageNumber,
-				summaryIDs(sqlPage.Sessions), summaryIDs(memoryPage.Sessions))
-		}
-		if !reflect.DeepEqual(sqlPage.Next, memoryPage.Next) {
-			t.Fatalf("page %d cursors: SQL=%+v memory=%+v", pageNumber, sqlPage.Next, memoryPage.Next)
-		}
-		for _, id := range summaryIDs(sqlPage.Sessions) {
-			if _, duplicate := seen[id]; duplicate {
-				t.Fatalf("session %q appeared on multiple pages", id)
-			}
-			seen[id] = struct{}{}
-			sqlIDs = append(sqlIDs, id)
-		}
-		if sqlPage.Next == nil {
-			if len(sqlIDs) != sqlPage.Total {
-				t.Fatalf("walked %d rows, total is %d", len(sqlIDs), sqlPage.Total)
+		actualIDs = append(actualIDs, summaryIDs(page.Sessions)...)
+		if page.Next == nil {
+			if !reflect.DeepEqual(actualIDs, expectedIDs) {
+				t.Fatalf("session IDs = %v, want %v", actualIDs, expectedIDs)
 			}
 			return
 		}
-		q.After = sqlPage.Next
+		q.After = page.Next
 	}
 	t.Fatal("pagination did not terminate")
 }

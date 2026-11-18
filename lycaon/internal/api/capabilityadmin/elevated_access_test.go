@@ -16,18 +16,20 @@ import (
 	"github.com/lycaon/lycaon/internal/api/httpio"
 	"github.com/lycaon/lycaon/internal/hitl"
 	"github.com/lycaon/lycaon/internal/project"
-	"github.com/lycaon/lycaon/internal/session/store"
+	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/testutil"
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
 
 func elevatedTestHandler(t *testing.T) (*Handler, *wire.Session) {
+	sessionFixture := storetest.New(t)
+
 	t.Helper()
 	approvals, err := settings.NewApprovalStoreAt(filepath.Join(t.TempDir(), "approvals.yaml"))
 	testutil.FailErr(t, "create approvals", err)
-	sessions := store.NewMemory()
-	projects := project.NewMemoryRegistry()
+	sessions := sessionFixture
+	projects := project.NewSQLRegistry(sessionFixture.DB())
 	p, err := project.CreateWithRoot(t.Context(), projects, t.TempDir())
 	testutil.FailErr(t, "create project", err)
 	chat, err := sessions.Create(t.Context(), wire.CreateSessionRequest{}, p.ID)
