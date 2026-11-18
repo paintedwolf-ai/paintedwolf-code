@@ -11,7 +11,6 @@ import (
 )
 
 func TestHostResourcesPartialGroupsPresenceAndCap(t *testing.T) {
-	prompts.ResetPersonaContractCache()
 	engine := prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{})
 	vars := prompts.AgentPromptSurfaceTemplateVars(prompts.AgentPromptSurface{
 		HostResources: []prompts.AgentHostResourceView{
@@ -54,7 +53,6 @@ func TestHostResourcesPartialGroupsPresenceAndCap(t *testing.T) {
 }
 
 func TestHostResourcesPartialOmitsEmptyInventory(t *testing.T) {
-	prompts.ResetPersonaContractCache()
 	engine := prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{})
 	profiles, err := sandbox.LoadToolProfiles()
 	testutil.FailErr(t, "LoadToolProfiles", err)
