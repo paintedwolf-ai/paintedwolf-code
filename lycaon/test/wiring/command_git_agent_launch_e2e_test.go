@@ -41,7 +41,17 @@ func TestCommandProgramGitRunsUnderTheAgentLaunch(t *testing.T) {
 	if state := s.programState(t); state != "completed" {
 		t.Fatalf("program state = %q, result %q", state, result)
 	}
-	t.Logf("executions %v", s.executions(t))
+	// One completed git child receipt per statement shows each ran as a child
+	// of the agent's command program.
+	executions := s.executions(t)
+	if len(executions) != 6 {
+		t.Fatalf("child receipts = %v, want one per git statement", executions)
+	}
+	for _, row := range executions {
+		if !strings.HasPrefix(row, "git") || !strings.HasSuffix(row, "=completed") {
+			t.Fatalf("child receipts = %v, want completed git children only", executions)
+		}
+	}
 	if outcome := s.outcome(t, "program-1"); outcome.NativeGaps != 0 {
 		t.Fatalf("git ran as an installed-program gap %d times", outcome.NativeGaps)
 	}

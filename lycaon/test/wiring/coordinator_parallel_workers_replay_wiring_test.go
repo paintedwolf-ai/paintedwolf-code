@@ -113,9 +113,8 @@ func TestCoordinatorParallelWorkersReplayLineShiftAtomicRejection(t *testing.T) 
 			}},
 		}},
 	})
-	t.Logf("merge error %T %#v reject=%+v", mergeErr, mergeErr, toolrejection.AsToolReject(mergeErr))
-	if mergeErr == nil {
-		t.Fatal("expected atomic promote to reject invalid resolution")
+	if reject := toolrejection.AsToolReject(mergeErr); reject == nil || reject.Code != worker.OverlayPromoteResolutionsRequiredCode {
+		t.Fatalf("promote error = %v, want typed %s refusal for the out-of-range hunk", mergeErr, worker.OverlayPromoteResolutionsRequiredCode)
 	}
 	if _, statErr := os.Stat(filepath.Join(dir, "safe.go")); !os.IsNotExist(statErr) {
 		t.Fatalf("rejected promote changed safe.go: %v", statErr)
