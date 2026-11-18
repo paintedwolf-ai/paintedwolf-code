@@ -217,7 +217,7 @@ components:
       properties:
         repo_id:
           type: string
-          format: uuid
+          pattern: '^[a-zA-Z0-9_-]+$'
         label:
           type: string
         branch:
@@ -235,7 +235,6 @@ components:
       type: object
       required:
       - available
-      - repo_id
       - label
       - dirty
       - staged_count
@@ -247,8 +246,9 @@ components:
         available:
           type: boolean
         repo_id:
+          description: Absent when the active folder is not in a git repository.
           type: string
-          format: uuid
+          pattern: '^[a-zA-Z0-9_-]+$'
         label:
           type: string
         branch:

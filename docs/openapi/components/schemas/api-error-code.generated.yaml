@@ -45,6 +45,7 @@ components:
         - project_mutation_in_progress
         - promotion_conflict
         - promotion_not_found
+        - project_not_draft
         - draft_root_immutable
         - project_busy
         - checkpoint_not_pending

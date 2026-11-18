@@ -71,6 +71,7 @@ func TestApproveBlueprintRequiresTheBoundRunAndCurrentContent(t *testing.T) {
 		{name: "unknown blueprint", path: "/v1/projects/" + f.project.ID + "/blueprints/" + uuid.NewString() + "/approve", body: body(bound.ID, "d"), want: wire.ApiErrorCodeBlueprintNotFound},
 		{name: "malformed", path: approve, body: `{`, want: wire.ApiErrorCodeInvalidJson},
 		{name: "run bound elsewhere", path: approve, body: body(unbound.ID, "d"), want: wire.ApiErrorCodeWorkflowRunNotActive},
+		{name: "unknown run", path: approve, body: body(uuid.NewString(), "d"), want: wire.ApiErrorCodeWorkflowRunNotFound},
 		{name: "stale content", path: approve, body: body(bound.ID, "sha256:stale"), want: wire.ApiErrorCodeBlueprintContentConflict},
 	}
 	for _, tt := range tests {
