@@ -14,8 +14,9 @@ import (
 )
 
 type journalRecord struct {
-	Version int            `json:"version"`
-	Signed  SignedManifest `json:"signed"`
+	Version   int            `json:"version"`
+	Signed    SignedManifest `json:"signed"`
+	Selection string         `json:"selection,omitempty"`
 }
 
 func (s *Store) journalPath() string { return filepath.Join(s.root, "journal.jsonl") }
@@ -62,9 +63,15 @@ func (s *Store) journalBytes() (data []byte, resultErr error) {
 	return raw, nil
 }
 
-func (s *Store) parseRecords(raw []byte) ([]Manifest, int, error) {
+type journalHistory struct {
+	all       []Manifest
+	visible   []Manifest
+	selection Selection
+}
+
+func (s *Store) parseRecords(raw []byte) (journalHistory, int, error) {
 	end := bytes.LastIndexByte(raw, '\n') + 1
-	var records []Manifest
+	h := journalHistory{selection: Selection{State: "unconfigured"}}
 	for i, line := range bytes.Split(raw[:end], []byte{'\n'}) {
 		if len(line) == 0 {
 			continue
@@ -73,26 +80,49 @@ func (s *Store) parseRecords(raw []byte) ([]Manifest, int, error) {
 		decoder := json.NewDecoder(bytes.NewReader(line))
 		decoder.DisallowUnknownFields()
 		if err := decoder.Decode(&record); err != nil {
-			return nil, 0, fmt.Errorf("modelstore: record %d: %w", i, err)
+			return h, 0, fmt.Errorf("modelstore: record %d: %w", i, err)
 		}
 		if err := decoder.Decode(new(any)); err != io.EOF {
-			return nil, 0, fmt.Errorf("modelstore: trailing value in record %d", i)
+			return h, 0, fmt.Errorf("modelstore: trailing value in record %d", i)
 		}
-		if record.Version != 1 {
-			return nil, 0, fmt.Errorf("modelstore: unknown journal version %d", record.Version)
+		if err := h.apply(record, s.signer); err != nil {
+			return h, 0, err
 		}
-		if err := validate(record.Signed.Manifest); err != nil {
-			return nil, 0, err
-		}
-		if s.signer == nil {
-			return nil, 0, errors.New("modelstore: no manifest authority configured")
-		}
-		if err := s.signer.Verify(record.Signed); err != nil {
-			return nil, 0, fmt.Errorf("modelstore: journal authority: %w", err)
-		}
-		records = append(records, record.Signed.Manifest)
 	}
-	return records, end, nil
+	return h, end, nil
+}
+
+func (h *journalHistory) apply(record journalRecord, signer Signer) error {
+	switch {
+	case record.Version == 2 && record.Selection == "opted_out":
+		if record.Signed.Manifest.Model != "" || record.Signed.Signature != "" {
+			return errors.New("modelstore: unexpected opt-out manifest")
+		}
+		h.visible = nil
+		h.selection = Selection{State: "opted_out"}
+		return nil
+	case record.Version == 2 && record.Selection == "selected":
+	case record.Version == 1 && record.Selection == "":
+	default:
+		return fmt.Errorf("modelstore: unknown journal version or selection %d/%q", record.Version, record.Selection)
+	}
+	m := record.Signed.Manifest
+	if err := validate(m); err != nil {
+		return err
+	}
+	if signer == nil {
+		return errors.New("modelstore: no manifest authority configured")
+	}
+	if err := signer.Verify(record.Signed); err != nil {
+		return fmt.Errorf("modelstore: journal authority: %w", err)
+	}
+	h.all = append(h.all, m)
+	if record.Version == 2 {
+		h.visible = nil
+		h.selection = Selection{State: "selected", Model: m.Model, Device: m.Device, Revision: m.Revision}
+	}
+	h.visible = append(h.visible, m)
+	return nil
 }
 
 // recoverJournal preserves complete records and removes only an interrupted append.
@@ -121,14 +151,16 @@ func (s *Store) recoverJournal() (resultErr error) {
 	return fssync.File(f)
 }
 
-func (s *Store) readRecords() ([]Manifest, error) {
+func (s *Store) history() (journalHistory, error) {
 	raw, err := s.journalBytes()
 	if err != nil {
-		return nil, err
+		return journalHistory{}, err
 	}
 	records, _, err := s.parseRecords(raw)
 	return records, err
 }
+
+func (s *Store) readRecords() ([]Manifest, error) { h, err := s.history(); return h.visible, err }
 
 // Active returns the newest authenticated manifest per model and device.
 func (s *Store) Active() (map[string]Manifest, error) {

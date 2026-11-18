@@ -34,3 +34,7 @@ func availableDiskBytes(blocks uint64, blockSize int64) (int64, error) {
 	}
 	return int64(available), nil
 }
+
+func openPartial(root *os.Root, name string) (*os.File, error) {
+	return root.OpenFile(name, os.O_RDWR|os.O_CREATE|syscall.O_NOFOLLOW|syscall.O_NONBLOCK, 0600)
+}

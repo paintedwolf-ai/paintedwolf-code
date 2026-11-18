@@ -15,3 +15,5 @@ func defaultFreeBytes(string) (int64, error) { return 0, errUnsupportedPlatform 
 func openBundlePayload(*os.Root, string) (*os.File, error) {
 	return nil, errUnsupportedPlatform
 }
+
+func openPartial(*os.Root, string) (*os.File, error) { return nil, errUnsupportedPlatform }
