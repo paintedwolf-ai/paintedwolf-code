@@ -347,7 +347,7 @@ func newHostEventManager(t *testing.T, run *api.WorkflowRun) (*Host, string) {
 	sess, err := store.Create(ctx, api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "store.Create failed", err)
 	if run != nil {
-		testdbseed.InsertWorkflowRun(t, store.DB(), run.ID, sess.ID, sess.ProjectID)
+		testdbseed.InsertSessionWorkflowRun(t, store.DB(), run.ID, sess.ID, "running")
 	}
 	return mgr, sess.ID
 }

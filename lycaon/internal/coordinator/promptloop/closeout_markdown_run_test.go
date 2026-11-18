@@ -54,7 +54,7 @@ func newMarkdownRun(t *testing.T, completions ...*modelcall.Completion) *markdow
 	session, err := r.store.Create(t.Context(), api.CreateSessionRequest{Posture: api.SessionPostureBuild}, "project")
 	testutil.FailErr(t, "create session", err)
 	r.session = session
-	testdbseed.InsertWorkflowRun(t, r.store.DB(), "run-1", session.ID, session.ProjectID)
+	testdbseed.InsertSessionWorkflowRun(t, r.store.DB(), "run-1", session.ID, "running")
 	deps := promptloop.StoreDeps(r.store)
 	deps.Projection.AppendMessages = func(ctx context.Context, sessionID string, messages ...api.Message) error {
 		for i := range messages {

@@ -217,8 +217,8 @@ func TestWorkflowStartDecisionUsesItsBoundRequestOnce(t *testing.T) {
 			t.Fatalf("workflow start = %q %q %v", opening, text, ok)
 		}
 	}
-	testdbseed.InsertWorkflowRun(t, st.DB(), "old-run", sess.ID, sess.ProjectID)
-	testdbseed.InsertWorkflowRun(t, st.DB(), "new-run", sess.ID, sess.ProjectID)
+	testdbseed.InsertSessionWorkflowRun(t, st.DB(), "old-run", sess.ID, "complete")
+	testdbseed.InsertSessionWorkflowRun(t, st.DB(), "new-run", sess.ID, "running")
 	testutil.FailErr(t, "persist workflow opening", st.AppendMessages(t.Context(), sess.ID, history...))
 	_, err = st.PutTurnLoadReceipt(t.Context(), store.TurnLoadReceipt{SessionID: sess.ID, OpeningMessageID: "start", Trigger: store.TurnLoadTriggerTurn})
 	testutil.FailErr(t, "record start decision", err)
