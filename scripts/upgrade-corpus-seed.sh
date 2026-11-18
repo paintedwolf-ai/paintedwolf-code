@@ -99,7 +99,7 @@ mkdir -p "${CONFIG_DIR}" "${SEED_PROJECT_ROOT}/${OVERLAY_DIR}" "${STAGE_DIR}"
 SEED_PROJECT_ROOT="$(cd "${SEED_PROJECT_ROOT}" && pwd -P)"
 mkdir -p "${SEED_PROJECT_ROOT}/${OVERLAY_DIR}"
 
-printf 'overlay_format: 1\n' >"${SEED_PROJECT_ROOT}/${OVERLAY_DIR}/overlay.yaml"
+cp "${GO_DIR}/testdata/overlay-example/${OVERLAY_FIXTURE_DIR}/overlay.yaml" "${SEED_PROJECT_ROOT}/${OVERLAY_DIR}/overlay.yaml"
 printf 'format: 1\ndisabled: []\n' >"${SEED_PROJECT_ROOT}/${OVERLAY_DIR}/extensions.yaml"
 # Target for the locked mock tool call (pattern "corpus seed" → command cat README.md).
 printf '# corpus seed\n' >"${SEED_PROJECT_ROOT}/README.md"
