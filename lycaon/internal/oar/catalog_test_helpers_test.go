@@ -18,5 +18,7 @@ func ensureCatalog(t *testing.T) {
 	// ([OAR-PROF-3]), so a test that loads rules needs it installed too.
 	profile := filepath.Join(testutil.CheckoutRoot(t), "lycaon", "config", "packs", "painted-wolf",
 		"platform", "host", "anchors", "oar-profile.yaml")
-	testutil.FailErr(t, "install capability document", InstallEngineDeclarationFile(profile))
+	declaration, err := LoadEngineDeclaration(profile)
+	testutil.FailErr(t, "load capability document", err)
+	InstallEngineDeclaration(declaration)
 }

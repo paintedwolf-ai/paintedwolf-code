@@ -31,13 +31,20 @@ func TestWorkspaceRootsPromptMarksSessionFolderAndOmittedCount(t *testing.T) {
 	for _, tc := range []struct {
 		name      string
 		rootCount int
+		// inMemory names the roots without attaching folders: the cap and the
+		// omitted count depend on the references, not on the directories.
+		inMemory bool
 	}{
 		{name: "single root", rootCount: 1},
 		{name: "two roots", rootCount: 2},
-		{name: "over collection cap", rootCount: pongoplain.MaxCollectionItems + 1},
+		{name: "over collection cap", rootCount: pongoplain.MaxCollectionItems + 1, inMemory: true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			reg, projectID, refs, active := workspaceRootsContractFixture(t, tc.rootCount)
+			fixture := workspaceRootsContractFixture
+			if tc.inMemory {
+				fixture = workspaceRootsReferenceFixture
+			}
+			reg, projectID, refs, active := fixture(t, tc.rootCount)
 			sess := &api.Session{
 				ProjectID:       projectID,
 				WorkspaceRootID: active.ID,
@@ -265,37 +272,69 @@ func assertNoHostPaths(t *testing.T, what, text string, refs []projectroot.RootR
 	}
 }
 
-// workspaceRootsContractFixture attaches rootCount folders to one project: the
-// first is primary, the second ("Draft") is the session's active root. With a
-// single root that root is "Draft" and is both primary and active.
-func workspaceRootsContractFixture(t *testing.T, rootCount int) (*project.MemoryRegistry, string, []projectroot.RootRef, projectroot.RootRef) {
+// workspaceRootLabel names root i: the first is primary, the second ("Draft")
+// is the session's active root. With a single root that root is "Draft" and
+// is both primary and active.
+func workspaceRootLabel(i, rootCount int) string {
+	switch {
+	case rootCount == 1:
+		return "Draft"
+	case i == 0:
+		return "app"
+	case i == 1:
+		return "Draft"
+	}
+	return fmt.Sprintf("root-%03d", i)
+}
+
+// workspaceRootsContractFixture attaches rootCount real folders to one project
+// through the registry.
+func workspaceRootsContractFixture(t *testing.T, rootCount int) (scope.Projects, string, []projectroot.RootRef, projectroot.RootRef) {
 	t.Helper()
 	base := t.TempDir()
 	roots := make([]project.AttachRootParams, rootCount)
 	for i := range roots {
 		dir := filepath.Join(base, fmt.Sprintf("root-%03d", i))
 		contractcheck.FailErr(t, fmt.Sprintf("mkdir root %d", i), os.MkdirAll(dir, 0o755))
-		label := fmt.Sprintf("root-%03d", i)
-		switch {
-		case rootCount == 1:
-			label = "Draft"
-		case i == 0:
-			label = "app"
-		case i == 1:
-			label = "Draft"
-		}
-		roots[i] = project.AttachRootParams{Path: dir, Label: label}
+		roots[i] = project.AttachRootParams{Path: dir, Label: workspaceRootLabel(i, rootCount)}
 	}
 	reg := project.NewMemoryRegistry()
 	created, err := reg.Create(context.Background(), project.CreateParams{Roots: roots})
 	contractcheck.FailErr(t, "create project", err)
-	refs := project.RootRefsFrom(created)
+	refs, active := workspaceRootsActive(t, project.RootRefsFrom(created), rootCount)
+	return reg, created.ID, refs, active
+}
+
+// workspaceRootsReferenceFixture names rootCount roots of one project that no
+// directory backs.
+func workspaceRootsReferenceFixture(t *testing.T, rootCount int) (scope.Projects, string, []projectroot.RootRef, projectroot.RootRef) {
+	t.Helper()
+	base := t.TempDir()
+	p := &project.Project{ID: "workspace-roots-project", Roots: make([]project.Root, rootCount)}
+	for i := range p.Roots {
+		p.Roots[i] = project.Root{
+			ID: fmt.Sprintf("root-%03d", i), ProjectID: p.ID, IsPrimary: i == 0,
+			Path: filepath.Join(base, fmt.Sprintf("root-%03d", i)), Label: workspaceRootLabel(i, rootCount),
+		}
+	}
+	refs, active := workspaceRootsActive(t, project.RootRefsFrom(p), rootCount)
+	return referenceProjects{p.ID: p}, p.ID, refs, active
+}
+
+// workspaceRootsActive checks every root was admitted and picks the active one.
+func workspaceRootsActive(t *testing.T, refs []projectroot.RootRef, rootCount int) ([]projectroot.RootRef, projectroot.RootRef) {
+	t.Helper()
 	if len(refs) != rootCount {
 		t.Fatalf("attached %d roots, want %d", len(refs), rootCount)
 	}
-	active := refs[0]
 	if rootCount > 1 {
-		active = refs[1]
+		return refs, refs[1]
 	}
-	return reg, created.ID, refs, active
+	return refs, refs[0]
+}
+
+type referenceProjects map[string]*project.Project
+
+func (p referenceProjects) Get(_ context.Context, id string) (*project.Project, error) {
+	return p[id], nil
 }

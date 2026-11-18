@@ -207,7 +207,7 @@ func TestLoopTruncatesLargeToolResult(t *testing.T) {
 			Identity: tools.InvocationIdentity{SessionID: sess.ID},
 		},
 	}); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "loop.Run failed", err)
 	}
 	msgs, err := store.GetMessages(ctx, sess.ID)
 	testutil.FailErr(t, "store.GetMessages failed", err)

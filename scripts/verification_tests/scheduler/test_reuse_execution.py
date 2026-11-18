@@ -114,12 +114,12 @@ class InputTests(unittest.TestCase):
 
     def test_fingerprint_follows_content_listings_and_values(self):
         inputs = [("open", "<source>/lycaon/pkg/testdata/a.txt"), ("open", "<source>/lycaon/pkg/testdata"),
-                  ("getenv", "LYCAON_FLAG"), ("getenv", "HOME"), ("getenv", "PW_TEST_TIMEOUT_SCALE"),
+                  ("getenv", "LYCAON_FLAG"), ("getenv", "HOME"), ("getenv", "PW_TEST_WORKERS"),
                   ("stat", "<source>/lycaon/pkg/missing")]
-        environment = {"LYCAON_FLAG": "1", "HOME": str(self.scratch / "home"), "PW_TEST_TIMEOUT_SCALE": "1"}
+        environment = {"LYCAON_FLAG": "1", "HOME": str(self.scratch / "home"), "PW_TEST_WORKERS": "1"}
         first = reuse.fingerprint(inputs, self.context, environment)
         moved = reuse.Context(str(self.source), str(self.root / "other-scratch"), str(self.source / "lycaon"))
-        self.assertEqual(first, reuse.fingerprint(inputs, self.context, {**environment, "PW_TEST_TIMEOUT_SCALE": "3"}))
+        self.assertEqual(first, reuse.fingerprint(inputs, self.context, {**environment, "PW_TEST_WORKERS": "3"}))
         self.assertEqual(first, reuse.fingerprint(inputs, moved, {**environment,
                                                                   "HOME": str(self.root / "other-scratch" / "home")}))
         os.utime(self.package / "testdata" / "a.txt", (1, 1))

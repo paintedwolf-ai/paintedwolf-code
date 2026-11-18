@@ -125,7 +125,7 @@ func TestInstalledPacksReachEngines(t *testing.T) {
 	})
 
 	t.Run("guidance + shared/partials → prompt layer", func(t *testing.T) {
-		layout := prompts.DefaultBundledLayout()
+		layout := prompts.BundledLayout{}
 		_, at, err := layout.ReadBundled("guidance/example-house-style")
 		testutil.FailErr(t, "resolve guidance ref", err)
 		if path := filepath.ToSlash(at.String()); !strings.Contains(path, "example-packs/onboarding-copy") {

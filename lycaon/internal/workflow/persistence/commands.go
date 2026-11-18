@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/lycaon/lycaon/internal/timelayout"
-	"github.com/lycaon/lycaon/internal/worker/jobstate"
 	"strings"
 	"time"
 
@@ -157,7 +156,7 @@ func (s *Commands) CommitCommand(ctx context.Context, run *api.WorkflowRun, muta
 	}
 	if mutation.Workers != (runstate.WorkerMutation{}) {
 		// Publish worker events in the workflow transaction.
-		if err := jobstate.EnqueueRunJobEventsTx(ctx, tx, s.transactions.outbox, run.ID); err != nil {
+		if err := s.transactions.jobs.EnqueueRunJobEventsTx(ctx, tx, s.transactions.outbox, run.ID); err != nil {
 			return err
 		}
 	}

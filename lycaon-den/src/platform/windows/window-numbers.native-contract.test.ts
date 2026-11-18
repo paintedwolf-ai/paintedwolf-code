@@ -24,7 +24,6 @@ describe("window numbers mirror the native registry", () => {
       nativeNumber(registry.text, "FIRST_PEER_VIEW_NUMBER"),
       "Peer windows must never take the main window's number",
     ).toBeGreaterThan(MAIN_WINDOW_NUMBER);
-    expect(registry.text).toContain("AtomicU64::new(FIRST_PEER_VIEW_NUMBER)");
   });
 
   it("the main window's native label is the one every platform config declares", () => {

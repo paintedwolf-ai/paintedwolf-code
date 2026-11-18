@@ -18,9 +18,9 @@ on:
 permissions:
   contents: read
 
-# Maintenance runs one workflow at a time; staggered schedules keep a pending run from being replaced.
+# Its own group: another workflow's pending run cannot replace a scheduled rehearsal.
 concurrency:
-  group: maintenance
+  group: release-system-live-test
   cancel-in-progress: false
 
 jobs:

@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"path/filepath"
 	"testing"
-	"time"
 
 	"github.com/lycaon/lycaon/internal/llm/compaction"
 	providercredentials "github.com/lycaon/lycaon/internal/llm/credentials"
@@ -119,14 +118,10 @@ func TestRegistryListCachedServesStaleWhileRefreshing(t *testing.T) {
 		t.Fatalf("stale len=%d warm=%d", len(stale), len(warm))
 	}
 	// Background refresh should repopulate without blocking this call.
-	for t.Context().Err() == nil {
+	testutil.WaitFor(t, "the list cache refreshes in the background", func() bool {
 		_, _, fresh, _ := reg.listCache.Read()
-		if fresh {
-			return
-		}
-		time.Sleep(10 * time.Millisecond)
-	}
-	t.Fatal("list cache did not refresh in background")
+		return fresh
+	})
 }
 
 func TestWorkerChildCompactionConfigTightensBudget(t *testing.T) {

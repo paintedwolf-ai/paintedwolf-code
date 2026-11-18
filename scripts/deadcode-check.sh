@@ -5,6 +5,12 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+if ! python3 "$ROOT/scripts/test-execution.py" holding; then
+  exec python3 "$ROOT/scripts/test-execution.py" run --name "lint:deadcode" -- bash "$0" "$@"
+fi
+if ! bash "$ROOT/scripts/repo-snapshot-lock.sh" holding; then
+  exec bash "$ROOT/scripts/repo-snapshot-lock.sh" read -- "$0" "$@"
+fi
 # shellcheck source=artifact-paths.sh
 source "$(dirname "$0")/artifact-paths.sh"
 BIN_DIR="${PW_BIN_DIR}"

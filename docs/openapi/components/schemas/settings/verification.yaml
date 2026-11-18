@@ -67,6 +67,14 @@ components:
           $ref: "#/components/schemas/VerifySuggestionState"
         dismissed:
           type: boolean
+        rejected:
+          type: array
+          items:
+            $ref: preferences.yaml#/components/schemas/ProjectSettingsRejectedRow
+          description: >
+            Present on project scope when the project's verify.yaml could not be
+            applied. No test command is declared while it stands, and the
+            project's verify settings cannot be saved until the file is fixed.
     VerifySuggestionState:
       type: string
       description: Derived per-project state of the "set a test command" suggestion.

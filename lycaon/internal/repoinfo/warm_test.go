@@ -24,8 +24,7 @@ func TestBriefReturnsPlaceholderUntilWarmCompletes(t *testing.T) {
 	if brief.Materialized || brief.FileCount != 0 {
 		t.Fatalf("first miss = %+v, want an unmeasured placeholder", brief)
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), testutil.Timeout(time.Minute))
-	defer cancel()
+	ctx := t.Context()
 	materialized, err := repoinfo.AwaitBrief(ctx, p, dir)
 	testutil.FailErr(t, "AwaitBrief", err)
 	if !materialized.Materialized {
@@ -93,8 +92,7 @@ func TestProgressiveBriefCacheHitAfterBackgroundFinish(t *testing.T) {
 	if first.Materialized {
 		t.Fatal("first Brief should be an unmeasured placeholder")
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), testutil.Timeout(time.Minute))
-	defer cancel()
+	ctx := t.Context()
 	_, err = repoinfo.AwaitBrief(ctx, p, dir)
 	testutil.FailErr(t, "AwaitBrief", err)
 

@@ -3,6 +3,7 @@ import json
 import os
 from pathlib import Path
 import re
+import subprocess
 import time
 
 from artifact_paths import artifact_root
@@ -83,6 +84,12 @@ def summary_lines(failure):
             *(f"  {line}" for line in body), "  ```", "  </details>"]
 
 
+def source():
+    """The commit and tree this job checked out; a run dispatched on a named commit verifies that one."""
+    revision = lambda name: subprocess.check_output(["git", "rev-parse", name], cwd=ROOT, text=True).strip()
+    return {"sha": revision("HEAD"), "tree": revision("HEAD^{tree}")}
+
+
 def report(status):
     root = artifact_root(ROOT)
     path = root / "ci" / "run.json"
@@ -92,6 +99,7 @@ def report(status):
         failure["signature"] = failure_signature(failure)
     (root / "ci").mkdir(parents=True, exist_ok=True)
     (root / "ci" / "failures.json").write_text(json.dumps(found, indent=2) + "\n")
+    (root / "ci" / "source.json").write_text(json.dumps(source(), indent=2) + "\n")
     if record:
         record["passed_stages"] = passed_stages(root)
         path.write_text(json.dumps(record, indent=2) + "\n")

@@ -79,7 +79,7 @@ func Read(ctx context.Context, capture, sessionID string) (Evidence, error) {
 		}
 		result.Sessions = append(result.Sessions, member)
 	}
-	tasks, err := worker.NewSQLStore(database).ListBySession(ctx, root.ProjectID, sessionID)
+	tasks, err := worker.NewSQLStoreIn(database, capture).ListBySession(ctx, root.ProjectID, sessionID)
 	if err != nil {
 		return result, err
 	}

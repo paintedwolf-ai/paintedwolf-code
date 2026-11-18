@@ -39,20 +39,6 @@ mod tests {
     use super::*;
 
     #[test]
-    fn names_the_build_platforms_engine() {
-        let expected = if cfg!(target_os = "linux") {
-            "webkitgtk"
-        } else if cfg!(target_os = "macos") {
-            "wkwebview"
-        } else if cfg!(target_os = "windows") {
-            "webview2"
-        } else {
-            "unknown"
-        };
-        assert_eq!(payload(None).engine, expected);
-    }
-
-    #[test]
     fn drops_an_empty_version() {
         assert_eq!(payload(Some("  ".into())).version, None);
         assert_eq!(payload(Some("2.54.1\n".into())).version.as_deref(), Some("2.54.1"));

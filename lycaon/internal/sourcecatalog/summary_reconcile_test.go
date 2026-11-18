@@ -269,15 +269,11 @@ func TestClearTreeStoresJoinsPreviouslyAdmittedWriter(t *testing.T) {
 			return nil
 		})
 	}()
-	for t.Context().Err() == nil {
+	testutil.WaitFor(t, "the store retires", func() bool {
 		store.core().mu.Lock()
-		retired := store.core().retired
-		store.core().mu.Unlock()
-		if retired {
-			break
-		}
-		runtime.Gosched()
-	}
+		defer store.core().mu.Unlock()
+		return store.core().retired
+	})
 	select {
 	case <-clearing:
 		t.Fatal("storage clear overtook an admitted writer")

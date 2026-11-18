@@ -3,12 +3,15 @@ package worker
 import (
 	"context"
 	"fmt"
+	"path/filepath"
 	"strings"
 	"time"
 
 	"github.com/lycaon/lycaon/internal/db"
 	"github.com/lycaon/lycaon/internal/timelayout"
+	"github.com/lycaon/lycaon/internal/workerplacement"
 	"github.com/lycaon/lycaon/internal/workspace"
+	"github.com/lycaon/lycaon/internal/workspacebaseline"
 )
 
 // SetChildSessionID records the child session for transcript drill-down.
@@ -40,7 +43,7 @@ func (s *SQLStore) SetWorkerWorkspace(ctx context.Context, jobID, root, baseline
 	if jobID == "" || root == "" || (baselinePath == "" && !workspace.BranchUsesCheckpoints(root)) {
 		return false, nil
 	}
-	baselineID, relpath, err := workerWorkspaceIdentity(ctx, s.db, root, baselinePath)
+	baselineID, relpath, err := s.workspaceIdentity(root, baselinePath)
 	if err != nil {
 		return false, err
 	}
@@ -82,4 +85,35 @@ func (s *SQLStore) ClearWorkerWorkspace(ctx context.Context, jobID string) error
 	return s.mutateInTx(ctx, jobID, func(q *db.Queries) error {
 		return q.ClearWorkerJobWorkspaceRoot(ctx, jobID)
 	})
+}
+
+// workspaceIdentity maps a branch and its baseline to their stored addresses.
+func (s *SQLStore) workspaceIdentity(root, baseline string) (string, string, error) {
+	dataDir, err := s.jobs.DataDir()
+	if err != nil {
+		return "", "", err
+	}
+	// A branch captured by checkpoint records no baseline.
+	id := ""
+	if strings.TrimSpace(baseline) != "" {
+		id, err = workspacebaseline.ID(baseline)
+		if err != nil {
+			return "", "", err
+		}
+		resolved, err := workspacebaseline.Path(dataDir, id)
+		if err != nil {
+			return "", "", err
+		}
+		if filepath.Clean(baseline) != resolved {
+			return "", "", fmt.Errorf("worker baseline is outside the active installation")
+		}
+	}
+	rel, ok, err := workerplacement.LogicalFromPhysical(dataDir, root)
+	if err != nil {
+		return "", "", err
+	}
+	if !ok {
+		return "", "", fmt.Errorf("worker branch is outside the active installation")
+	}
+	return id, rel, nil
 }

@@ -148,7 +148,7 @@ func (r *Run) Fatalf(format string, args ...any) {
 // Must ends the check when err is not nil.
 func (r *Run) Must(err error) {
 	if err != nil {
-		r.Fatal(err)
+		panic(abort{err})
 	}
 }
 

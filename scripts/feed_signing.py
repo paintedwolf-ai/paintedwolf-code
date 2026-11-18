@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Select a generation's feed credential and sign a fully prepared pointer."""
+"""Sign channel pointers with a generation's feed credential, and prove the update signing credentials."""
 from __future__ import annotations
 
 import argparse
@@ -12,7 +12,9 @@ import sys
 import tempfile
 
 from feed_signature import check
-from update_keys import decode_public_key, load_registry
+from update_keys import decode_public_key, generation, load_registry
+
+ARTIFACT_SECRET = "TAURI_SIGNING_PRIVATE_KEY"
 
 
 def credentials(document: str) -> dict:
@@ -99,9 +101,32 @@ def check_credentials(registry: dict) -> None:
             pointer.write_text('{"version":"0.0.0"}')
             sign(pointer, row["generation"], registry)
 
+def check_artifact_credential(registry: dict) -> int:
+    """Sign a temporary probe with the updater artifact key and verify it with the committed key."""
+    if not os.environ.get(ARTIFACT_SECRET):
+        raise ValueError(f"{ARTIFACT_SECRET} is required to sign updater archives")
+    number = registry["signing_generation"]
+    public_key = generation(registry, number)["public_key"]
+    env = {**os.environ, ARTIFACT_SECRET + "_PASSWORD": os.environ.get(ARTIFACT_SECRET + "_PASSWORD", "")}
+    with tempfile.TemporaryDirectory(prefix="artifact-credential-") as directory:
+        probe = Path(directory) / "probe"
+        probe.write_text("credential probe\n")
+        # Signer diagnostics can contain credentials.
+        result = subprocess.run(["bun", "run", "tauri", "signer", "sign", str(probe.resolve())],
+                                cwd=Path(__file__).resolve().parent.parent / "lycaon-den", env=env, capture_output=True)
+        if result.returncode:
+            raise ValueError(f"{ARTIFACT_SECRET} cannot sign; check the key and its password")
+        try:
+            verify(probe, Path(str(probe) + ".sig").read_text(), public_key)
+        except ValueError:
+            raise ValueError(f"{ARTIFACT_SECRET} does not match the artifact key of generation {number}") from None
+    return number
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--check-credentials", action="store_true")
+    parser.add_argument("--check-artifact-credential", action="store_true")
     parser.add_argument("--file", type=Path)
     parser.add_argument("--generation", type=int)
     parser.add_argument("--registry", type=Path)
@@ -109,12 +134,14 @@ def main() -> None:
     args = parser.parse_args()
     try:
         registry = signing_registry(args.registry, args.storage_prefix)
-        if args.check_credentials:
+        if args.check_artifact_credential:
+            print(f"updater artifact key signs for generation {check_artifact_credential(registry)}")
+        elif args.check_credentials:
             check_credentials(registry)
         elif args.file is not None and args.generation is not None:
             sign(args.file, args.generation, registry)
         else:
-            parser.error("supply --check-credentials or --file and --generation")
+            parser.error("supply --check-credentials, --check-artifact-credential, or --file and --generation")
     except (OSError, ValueError, KeyError) as error:
         print(f"error: {error}", file=sys.stderr)
         raise SystemExit(1) from None

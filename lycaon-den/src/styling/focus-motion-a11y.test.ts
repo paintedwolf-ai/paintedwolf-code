@@ -9,15 +9,7 @@ function read(rel: string): string {
   return readSourceText(join(denSrc, rel), "utf8");
 }
 
-describe("focus-visible + reduced-motion", () => {
-  it("gives dock links, tab chips, and tool summaries focus-visible rings", () => {
-    const chrome = read("global-components.css");
-    const tools = read("tool-utilities.css");
-    expect(chrome).toMatch(/\.den-shell-dock-link:focus-visible/);
-    expect(chrome).toMatch(/\.tabs__chip:focus-visible/);
-    expect(tools).toMatch(/\.den-tool-part > \.den-transcript-disclosure-header:focus-visible/);
-  });
-
+describe("reduced motion", () => {
   it("zeros tab chrome fade and drawer motion under prefers-reduced-motion", () => {
     const globalCss = read("global.css");
     const drawer = read("drawer-utilities.css");

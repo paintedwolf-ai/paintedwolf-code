@@ -277,6 +277,7 @@ func promoteWorkflowCheckpoint(t *testing.T, cpStore *checkpoint.Store, trunkDir
 	promoter, err := checkpoint.NewPromoter(checkpoint.PromoterConfig{
 		Store:       cpStore,
 		TargetRoots: map[string]string{"primary": trunkDir},
+		PrimaryRoot: "primary",
 	})
 	if err != nil {
 		t.Fatalf("checkpoint.NewPromoter: %v", err)
