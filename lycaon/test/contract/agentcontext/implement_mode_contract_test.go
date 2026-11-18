@@ -74,8 +74,8 @@ func TestImplementBootResolvesSynthesisOrInvestigate(t *testing.T) {
 	t.Parallel()
 	root := contractcheck.RepoRoot(t)
 	configRoot := filepath.Join(root, "lycaon")
-	profile := surface.ResolveTurnProfile(surface.EnrichRunContextForWorkflow(api.CoordinatorRunContext{
-		WorkflowID:      "implement",
+	profile := surface.ResolveTurnProfile(bindFixturePhase(t, api.CoordinatorRunContext{
+		WorkflowID: "implement", SurfaceProfile: "implement",
 		WorkflowVersion: "1.0.0",
 		CurrentPhase:    "boot",
 	}, configRoot), &api.Session{
@@ -84,8 +84,8 @@ func TestImplementBootResolvesSynthesisOrInvestigate(t *testing.T) {
 	if profile.ModeRefs[0] != "implement-synthesis" {
 		t.Fatalf("mode refs = %v want implement-synthesis for implement boot loop wake", profile.ModeRefs)
 	}
-	investigateProfile := surface.ResolveTurnProfile(surface.EnrichRunContextForWorkflow(api.CoordinatorRunContext{
-		WorkflowID: "implement", CurrentPhase: "boot",
+	investigateProfile := surface.ResolveTurnProfile(bindFixturePhase(t, api.CoordinatorRunContext{
+		WorkflowID: "implement", SurfaceProfile: "implement", CurrentPhase: "boot",
 	}, configRoot), &api.Session{Posture: api.SessionPostureBuild}, coordinatorTurnHistory(nil, "Map this codebase"))
 	if investigateProfile.SurfaceID != toolcontract.SurfaceImplementInvestigate {
 		t.Fatalf("visible user boot surface = %q want investigate", investigateProfile.SurfaceID)
@@ -149,7 +149,7 @@ func TestCoordinatorInvestigateSurfaceStateMatrix(t *testing.T) {
 			if tc.rowSess != nil {
 				rowSess = tc.rowSess
 			}
-			runCtx := surface.EnrichRunContextForWorkflow(tc.runCtx, filepath.Join(contractcheck.RepoRoot(t), "lycaon"))
+			runCtx := bindFixturePhase(t, tc.runCtx, filepath.Join(contractcheck.RepoRoot(t), "lycaon"))
 			profile := surface.ResolveTurnProfile(runCtx, rowSess, coordinatorTurnHistory(tc.history, tc.prompt), tc.state)
 			if profile.SurfaceID != tc.wantSurf {
 				t.Fatalf("surface = %q want %q", profile.SurfaceID, tc.wantSurf)

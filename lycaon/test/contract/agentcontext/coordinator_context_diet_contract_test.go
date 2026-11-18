@@ -16,7 +16,7 @@ func TestCoordinatorContextDietTurnProfileMatrix(t *testing.T) {
 	for _, row := range ContextDietMatrix {
 		t.Run(row.Name, func(t *testing.T) {
 			t.Parallel()
-			runCtx := surface.EnrichRunContextForWorkflow(row.RunCtx, root)
+			runCtx := bindFixturePhase(t, row.RunCtx, root)
 			profile := surface.ResolveTurnProfile(runCtx, row.Sess, coordinatorTurnHistory(row.History, row.UserPrompt), row.State)
 			if profile.SurfaceID != row.SurfaceID {
 				t.Fatalf("surface = %q want %q", profile.SurfaceID, row.SurfaceID)

@@ -126,7 +126,7 @@ func renderCoordinatorTripartiteForRunContext(
 		implState = state[0]
 	}
 	var profile surface.TurnProfile
-	runCtx = surface.EnrichRunContextForWorkflow(runCtx, filepath.Join(root, "lycaon"))
+	runCtx = bindFixturePhase(t, runCtx, filepath.Join(root, "lycaon"))
 	if strings.TrimSpace(forcedSurfaceID) != "" {
 		profile = surface.ResolveTurnProfileForSurface(forcedSurfaceID, runCtx, sess)
 	} else {
