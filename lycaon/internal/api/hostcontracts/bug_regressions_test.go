@@ -236,7 +236,7 @@ func TestCreateProviderRejectsInvalidBaseURL(t *testing.T) {
 // List endpoints encode empty collections as arrays.
 
 func TestWorkersEmptyListReturnsArrayNotNull(t *testing.T) {
-	srv := contractfixture.NewInMemoryWorkersServer(t)
+	srv := contractfixture.NewWorkersServer(t)
 	projectDir := t.TempDir()
 	opened := contractfixture.CreateProjectForTest(t, srv, projectDir)
 
@@ -256,18 +256,22 @@ func TestWorkersEmptyListReturnsArrayNotNull(t *testing.T) {
 }
 
 func TestListWorkersFiltersBySessionID(t *testing.T) {
-	srv := contractfixture.NewInMemoryWorkersServer(t)
+	srv := contractfixture.NewWorkersServer(t)
 	projectDir := t.TempDir()
 	opened := contractfixture.CreateProjectForTest(t, srv, projectDir)
 
 	ctx := context.Background()
+	first, err := srv.Sources.Workspace.SessionStore.Create(ctx, wire.CreateSessionRequest{Posture: wire.SessionPostureBuild}, opened.ID)
+	testutil.FailErr(t, "create first parent", err)
+	second, err := srv.Sources.Workspace.SessionStore.Create(ctx, wire.CreateSessionRequest{Posture: wire.SessionPostureBuild}, opened.ID)
+	testutil.FailErr(t, "create second parent", err)
 	now := time.Now().UTC()
-	queue := srv.Admin.Project.Sandboxes.Workers.(*worker.InMemoryQueue)
+	queue := srv.Admin.Project.Sandboxes.Workers.(*worker.SQLQueue)
 	if _, err := queue.Enqueue(ctx, wire.WorkerTask{
 		Prompt:          "fixture",
 		Brief:           "fixture",
 		ID:              "worker-a",
-		ParentSessionID: "sess-a",
+		ParentSessionID: first.ID,
 		ProjectID:       opened.ID,
 		WorkspacePath:   contractfixture.PrimaryRootPath(opened),
 		AgentType:       "implementer",
@@ -280,7 +284,7 @@ func TestListWorkersFiltersBySessionID(t *testing.T) {
 		Prompt:          "fixture",
 		Brief:           "fixture",
 		ID:              "worker-b",
-		ParentSessionID: "sess-b",
+		ParentSessionID: second.ID,
 		ProjectID:       opened.ID,
 		WorkspacePath:   contractfixture.PrimaryRootPath(opened),
 		AgentType:       "implementer",
@@ -292,7 +296,7 @@ func TestListWorkersFiltersBySessionID(t *testing.T) {
 
 	req := contractfixture.NewAuthedRequest(
 		http.MethodGet,
-		"/v1/workers?project_id="+opened.ID+"&session_id=sess-a",
+		"/v1/workers?project_id="+opened.ID+"&session_id="+first.ID,
 		nil,
 	)
 	w := httptest.NewRecorder()

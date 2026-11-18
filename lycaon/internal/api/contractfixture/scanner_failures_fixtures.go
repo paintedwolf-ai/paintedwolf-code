@@ -3,7 +3,6 @@ package contractfixture
 import (
 	"context"
 	"database/sql"
-	"github.com/lycaon/lycaon/internal/tools/toolstest"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/api"
@@ -15,8 +14,11 @@ import (
 	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/sourcesnapshot"
+	"github.com/lycaon/lycaon/internal/testdbfixture"
 	repotest "github.com/lycaon/lycaon/internal/testsetup/repoinfo"
+	"github.com/lycaon/lycaon/internal/tools/toolstest"
 	"github.com/lycaon/lycaon/internal/worker"
+	"github.com/lycaon/lycaon/internal/worker/workertest"
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -80,18 +82,19 @@ func (e *ErrScanCoordinator) ResolveID(ctx context.Context, path, prefix string)
 
 func (c *ErrScanCoordinator) SnapshotStore() *sourcesnapshot.Store { return nil }
 
-func NewInMemoryWorkersServer(t *testing.T) *api.Server {
+func NewWorkersServer(t *testing.T) *api.Server {
 	t.Helper()
-	store := store.NewMemory()
+	database := testdbfixture.Open(t, "workers.db")
+	store := store.NewSQL(database)
 	mock := llm.NewMockProvider(TestMockConfig(t))
 	mgr := session.NewHost(store, session.Models{Client: mock, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, toolstest.NewRegistry())
 	workersCfg := worker.DefaultWorkersConfig()
-	queue := worker.NewInMemoryQueue(workersCfg.Poller.MaxConcurrency)
+	queue := workertest.OnDatabase(t, database, workersCfg.Poller.MaxConcurrency)
 	queue.SetWorkersConfig(workersCfg)
-	reg := project.NewMemoryRegistry()
+	reg := project.NewSQLRegistry(database)
 	snap := &board.SnapshotBuilder{Workers: queue, Repo: repotest.NewProvider(t)}
 	return api.NewServer(RequiredTestDeps(t, api.Dependencies{Core: api.CoreDependencies{
-		Store: store, Projects: reg, Sessions: mgr}, Workflow: api.WorkflowDependencies{
+		Database: database, Store: store, Projects: reg, Sessions: mgr}, Workflow: api.WorkflowDependencies{
 		Workers: queue, Board: snap}}), nil, api.TestAPIToken)
 }
 

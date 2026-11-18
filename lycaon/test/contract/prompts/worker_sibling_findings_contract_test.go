@@ -2,6 +2,7 @@ package contract
 
 import (
 	"context"
+	"github.com/lycaon/lycaon/internal/worker/workertest"
 	"path/filepath"
 	"testing"
 	"time"
@@ -80,7 +81,7 @@ func TestWorkerChildDelegationProjectDirInvariantContract(t *testing.T) {
 	parent, err := store.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	contractcheck.FailErr(t, "create parent", err)
 
-	q := worker.NewInMemoryQueue(4)
+	q := workertest.NewQueue(t, 4, testdbseed.DefaultProjectID, parent.ID)
 	task := api.WorkerTask{
 		Prompt: "fixture", Brief: "fixture",
 		ID: "job-write", ParentSessionID: parent.ID, ProjectID: testdbseed.DefaultProjectID, WorkspacePath: dir,

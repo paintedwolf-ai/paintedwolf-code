@@ -13,7 +13,7 @@ import (
 )
 
 func TestWorkerEnqueueRejectedBySessionStopAdmission(t *testing.T) {
-	queue := NewInMemoryQueue(1)
+	queue := newTestQueue(t, 1, testdbseed.DefaultProjectID, "parent")
 	queue.SetSessionAdmission(func(context.Context, string, func() error) error {
 		return lifecycle.ErrStopping
 	})
@@ -35,7 +35,7 @@ func TestWorkerEnqueueRejectedBySessionStopAdmission(t *testing.T) {
 
 type cancelOnClaimQueue struct {
 	WorkerQueue
-	base *InMemoryQueue
+	base *SQLQueue
 }
 
 func (q *cancelOnClaimQueue) ClaimNext(ctx context.Context, req ClaimRequest) (*api.WorkerTask, error) {
@@ -74,7 +74,7 @@ func (e *joinProbeExecutor) Execute(ctx context.Context, _ api.WorkerTask, _ Wor
 
 func TestPollerDoesNotExecuteJobCanceledBetweenClaimAndRegistration(t *testing.T) {
 	ctx := context.Background()
-	base := NewInMemoryQueue(1)
+	base := newTestQueue(t, 1, testdbseed.DefaultProjectID, "parent")
 	queue := &cancelOnClaimQueue{WorkerQueue: base, base: base}
 	executor := &countingStartExecutor{}
 	poller := NewLocalWorkerPoller(queue, executor, DefaultWorkersConfig(), discardOutcomeRecorder{})
@@ -101,7 +101,7 @@ func TestPollerDoesNotExecuteJobCanceledBetweenClaimAndRegistration(t *testing.T
 
 func TestPollerAbortWaitsForExecutionExit(t *testing.T) {
 	ctx := context.Background()
-	queue := NewInMemoryQueue(1)
+	queue := newTestQueue(t, 1, testdbseed.DefaultProjectID, "parent")
 	executor := &joinProbeExecutor{
 		started: make(chan struct{}), canceled: make(chan struct{}), release: make(chan struct{}),
 	}
@@ -136,7 +136,7 @@ func TestPollerAbortWaitsForExecutionExit(t *testing.T) {
 }
 
 func TestPollerAbortHonorsCallerCancellation(t *testing.T) {
-	queue := NewInMemoryQueue(1)
+	queue := newTestQueue(t, 1, testdbseed.DefaultProjectID, "parent")
 	executor := &joinProbeExecutor{
 		started: make(chan struct{}), canceled: make(chan struct{}), release: make(chan struct{}),
 	}

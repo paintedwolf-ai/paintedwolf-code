@@ -208,7 +208,7 @@ func registerContextualToolsCoordinatorExtras(
 	bundledDir string,
 ) {
 	t.Helper()
-	queue := worker.NewInMemoryQueue(4)
+	queue := worker.NewSQLQueue(sqlDB, 4)
 	if err := worker.RegisterTaskTool(reg, worker.TaskToolDeps{
 		Queue:         queue,
 		Agents:        agents,

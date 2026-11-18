@@ -2,9 +2,6 @@ package toolfixture
 
 import (
 	"context"
-	"github.com/lycaon/lycaon/internal/blueprint/blueprinttest"
-	"github.com/lycaon/lycaon/internal/scan"
-	scannerfixture "github.com/lycaon/lycaon/internal/scan/scantest"
 	"path/filepath"
 	"testing"
 
@@ -12,6 +9,7 @@ import (
 	"github.com/lycaon/lycaon/internal/bgprocess"
 	"github.com/lycaon/lycaon/internal/blobstore"
 	"github.com/lycaon/lycaon/internal/blueprint"
+	"github.com/lycaon/lycaon/internal/blueprint/blueprinttest"
 	"github.com/lycaon/lycaon/internal/board"
 	"github.com/lycaon/lycaon/internal/browser"
 	"github.com/lycaon/lycaon/internal/browser/pagesession"
@@ -30,14 +28,16 @@ import (
 	"github.com/lycaon/lycaon/internal/parse"
 	"github.com/lycaon/lycaon/internal/progress"
 	"github.com/lycaon/lycaon/internal/recall"
-
+	"github.com/lycaon/lycaon/internal/scan"
 	scancadence "github.com/lycaon/lycaon/internal/scan/cadence"
 	scancfg "github.com/lycaon/lycaon/internal/scan/configuration"
+	scannerfixture "github.com/lycaon/lycaon/internal/scan/scantest"
 	scantoolapi "github.com/lycaon/lycaon/internal/scan/toolapi"
 	"github.com/lycaon/lycaon/internal/secretcap"
 	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/session/workercompletion"
 	"github.com/lycaon/lycaon/internal/testdbfixture"
+	"github.com/lycaon/lycaon/internal/testdbseed"
 	repotest "github.com/lycaon/lycaon/internal/testsetup/repoinfo"
 	"github.com/lycaon/lycaon/internal/testutil/scantest"
 	"github.com/lycaon/lycaon/internal/toolhost"
@@ -50,6 +50,7 @@ import (
 	workertools "github.com/lycaon/lycaon/internal/tools/native/workercontrol"
 	"github.com/lycaon/lycaon/internal/webresearch"
 	"github.com/lycaon/lycaon/internal/worker"
+	"github.com/lycaon/lycaon/internal/worker/workertest"
 	"github.com/lycaon/lycaon/internal/workerops"
 	"github.com/lycaon/lycaon/internal/workerplan"
 	"github.com/lycaon/lycaon/internal/workerplan/plantest"
@@ -104,7 +105,7 @@ func registerCatalogToolsOnto(t *testing.T, reg *tools.DefaultRegistry) {
 	}
 	if err := worker.RegisterWorkerTools(reg, worker.WorkerToolDeps{
 		Ops:     &workerops.Service{},
-		Queue:   worker.NewInMemoryQueue(2),
+		Queue:   workertest.NewQueue(t, 2, testdbseed.DefaultProjectID),
 		Workers: worker.DefaultWorkersConfig(),
 		Plan:    planSvc,
 	}); err != nil {
@@ -220,7 +221,7 @@ func ContractServeBootRegistry(t *testing.T) *tools.DefaultRegistry {
 	contractcheck.FailErr(t, "LoadRequiredAgentRegistry", orchestration.LoadRequiredAgentRegistry(context.Background(), agents))
 	planSvc := plantest.New(t, plantest.Deps(workerrecords.New(sqlDB)))
 	if err := worker.RegisterTaskTool(rt.Registry, worker.TaskToolDeps{
-		Queue:         worker.NewInMemoryQueue(2),
+		Queue:         workertest.NewQueue(t, 2, testdbseed.DefaultProjectID),
 		Agents:        agents,
 		Workers:       worker.DefaultWorkersConfig(),
 		WorkerRecords: workerrecords.New(sqlDB),
@@ -231,7 +232,7 @@ func ContractServeBootRegistry(t *testing.T) *tools.DefaultRegistry {
 	}
 	if err := worker.RegisterWorkerTools(rt.Registry, worker.WorkerToolDeps{
 		Ops:     &workerops.Service{},
-		Queue:   worker.NewInMemoryQueue(2),
+		Queue:   workertest.NewQueue(t, 2, testdbseed.DefaultProjectID),
 		Workers: worker.DefaultWorkersConfig(),
 		Plan:    planSvc,
 	}); err != nil {
