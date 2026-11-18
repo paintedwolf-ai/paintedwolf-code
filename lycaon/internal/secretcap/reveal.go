@@ -85,6 +85,9 @@ func (s *Reveals) BeginReveal(
 func (s *Reveals) CompleteReveal(
 	ctx context.Context, projectID, reference, personID string, proof presence.Proof,
 ) (RevealResult, error) {
+	s.repository.mutationMu.Lock()
+	defer s.repository.mutationMu.Unlock()
+
 	row, err := s.repository.projectRow(ctx, projectID, reference)
 	if err != nil {
 		return RevealResult{}, err
