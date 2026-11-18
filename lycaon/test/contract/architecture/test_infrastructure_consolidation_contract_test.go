@@ -42,7 +42,7 @@ func TestTestMainUsesSharedProcessSetup(t *testing.T) {
 					return true
 				}
 				switch selector.Sel.Name {
-				case "LoadRegistryFromConfigRoot", "SetGuidanceRenderer", "TestingEnableBundledBinary":
+				case "LoadRegistryFromConfigRoot", "SetGuidanceRenderer":
 					pos := corpus.Fset.Position(selector.Pos())
 					findings = append(findings, pos.String()+": TestMain repeats shared process setup")
 				}

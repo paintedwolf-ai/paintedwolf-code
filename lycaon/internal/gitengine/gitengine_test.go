@@ -12,7 +12,6 @@ import (
 )
 
 func TestResolvePrefersStructuredEngineRoot(t *testing.T) {
-	resetForTest()
 	t.Setenv(EnvGitBinary, "")
 	t.Setenv(EnvTest, "")
 
@@ -22,17 +21,14 @@ func TestResolvePrefersStructuredEngineRoot(t *testing.T) {
 	bin := filepath.Join(engineRoot, "gitengine", gitRel)
 	testutil.FailErr(t, "mkdir", os.MkdirAll(filepath.Dir(bin), 0o755))
 	writeStubGit(t, bin, pinnedReportedVersion(t))
-
-	got, err := BinaryPath()
-	testutil.FailErr(t, "BinaryPath", err)
-	if got != bin {
-		t.Fatalf("BinaryPath = %q, want engine-root binary %q", got, bin)
+	path, err := resolve()
+	testutil.FailErr(t, "resolve Git installation", err)
+	if path.binary != bin {
+		t.Fatalf("binary = %q, want engine-root binary %q", path.binary, bin)
 	}
-	lfs, err := LFSPath()
-	testutil.FailErr(t, "LFSPath", err)
 	_, lfsRel := engineBinaryPaths(runtime.GOOS)
-	if want := filepath.Join(engineRoot, "gitengine", lfsRel); lfs != want {
-		t.Fatalf("LFSPath = %q, want %q", lfs, want)
+	if want := filepath.Join(engineRoot, "gitengine", lfsRel); path.lfs != want {
+		t.Fatalf("LFS path = %q, want %q", path.lfs, want)
 	}
 }
 
@@ -80,12 +76,11 @@ func TestPlatformPinKeys(t *testing.T) {
 }
 
 func TestResolveNoPathFallback(t *testing.T) {
-	resetForTest()
 	t.Setenv(EnvGitBinary, "")
 	t.Setenv(EnvTest, "")
 	t.Setenv("LYCAON_ENGINE_ROOT", "")
 
-	_, err := BinaryPath()
+	_, err := resolve()
 	var ue *UnavailableError
 	if !errors.As(err, &ue) {
 		t.Fatalf("err = %v (%T), want UnavailableError", err, err)
@@ -96,7 +91,6 @@ func TestResolveNoPathFallback(t *testing.T) {
 }
 
 func TestTestSeamRequiresTestEnv(t *testing.T) {
-	resetForTest()
 	root := t.TempDir()
 	seam := filepath.Join(root, "seam-git")
 	writeStubGit(t, seam, pinnedReportedVersion(t))
@@ -105,30 +99,27 @@ func TestTestSeamRequiresTestEnv(t *testing.T) {
 
 	t.Setenv(EnvGitBinary, seam)
 	t.Setenv(EnvTest, "")
-	_, err := BinaryPath()
+	_, err := resolve()
 	var ignored *UnavailableError
 	if !errors.As(err, &ignored) {
 		t.Fatalf("without LYCAON_TEST, seam must be ignored; err=%v", err)
 	}
 
-	resetForTest()
 	t.Setenv(EnvGitBinary, seam)
 	t.Setenv(EnvTest, "1")
-	got, err := BinaryPath()
+	got, err := resolve()
 	testutil.FailErr(t, "BinaryPath with test seam", err)
-	if got != seam {
-		t.Fatalf("BinaryPath = %q, want seam %q", got, seam)
+	if got.binary != seam {
+		t.Fatalf("binary = %q, want seam %q", got.binary, seam)
 	}
 }
 
 func TestVersionMismatchIsError(t *testing.T) {
-	resetForTest()
 	t.Setenv(EnvGitBinary, "")
 	t.Setenv(EnvTest, "")
 
 	stageEngineGit(t, "0.0.1")
-
-	_, err := BinaryPath()
+	_, err := resolve()
 	var ue *UnavailableError
 	if !errors.As(err, &ue) {
 		t.Fatalf("err = %v (%T), want UnavailableError", err, err)
@@ -145,27 +136,31 @@ func TestVersionMismatchIsError(t *testing.T) {
 }
 
 func TestVersionAssertedOnce(t *testing.T) {
-	resetForTest()
 	t.Setenv(EnvGitBinary, "")
 	t.Setenv(EnvTest, "")
 
 	_, bin := stageEngineGit(t, pinnedReportedVersion(t))
 
-	got, err := BinaryPath()
-	testutil.FailErr(t, "BinaryPath", err)
-	if got != bin {
-		t.Fatalf("BinaryPath = %q, want %q", got, bin)
+	load := newResolver()
+	first, err := load()
+	testutil.FailErr(t, "resolve staged Git", err)
+	if first.binary != bin {
+		t.Fatalf("first binary = %q, want %q", first.binary, bin)
 	}
-	writeStubGit(t, bin, "0.0.1")
-	got, err = BinaryPath()
-	testutil.FailErr(t, "cached BinaryPath", err)
-	if got != bin {
-		t.Fatalf("cached BinaryPath = %q, want %q", got, bin)
+	testutil.FailErr(t, "remove staged Git", os.Remove(bin))
+	cached, err := load()
+	testutil.FailErr(t, "reuse cached Git", err)
+	if cached != first {
+		t.Fatalf("cached installation = %+v, want %+v", cached, first)
+	}
+	_, err = newResolver()()
+	var unavailable *UnavailableError
+	if !errors.As(err, &unavailable) || unavailable.Reason != "missing" {
+		t.Fatalf("fresh resolution error = %v, want missing binary", err)
 	}
 }
 
 func TestEmptyHooksDirIsEmptyAndRestrictive(t *testing.T) {
-	resetForTest()
 	cfg := t.TempDir()
 	t.Setenv("LYCAON_CONFIG_DIR", cfg)
 
@@ -190,7 +185,6 @@ func TestEmptyHooksDirIsEmptyAndRestrictive(t *testing.T) {
 	plant := filepath.Join(dir, "pre-commit")
 	testutil.FailErr(t, "plant hook", os.WriteFile(plant, []byte("evil"), 0o644))
 	testutil.FailErr(t, "chmod restore", os.Chmod(dir, 0o500))
-	resetForTest()
 	t.Setenv("LYCAON_CONFIG_DIR", cfg)
 	_, err = EmptyHooksDir()
 	if err == nil {
@@ -202,7 +196,6 @@ func TestEmptyHooksDirIsEmptyAndRestrictive(t *testing.T) {
 }
 
 func TestEmptyHooksDirRechecksEachCall(t *testing.T) {
-	resetForTest()
 	cfg := t.TempDir()
 	t.Setenv("LYCAON_CONFIG_DIR", cfg)
 
