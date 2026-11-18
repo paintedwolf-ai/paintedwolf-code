@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/commandsurface"
+	"github.com/lycaon/lycaon/internal/commandsurface/commandsurfacetest"
 	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/internal/toolcommand"
@@ -18,7 +19,7 @@ func TestProgramSyntaxFeedbackUsesTypedSpansWithoutGuessedRepairs(t *testing.T) 
 	formatter := guidance.NewStaticRejectFormatter(cfg)
 	for _, sourced := range []bool{false, true} {
 		for _, source := range []string{"printf ok; if", "if false; then trap unknown; fi", "printf ok; echo ${(q)name}", strings.Repeat(" ", int(commandsurface.SyntaxUnitByteLimit(sourced))+1)} {
-			_, err := commandsurface.ParseProgram([]byte(source), commandsurface.ParseOptions{SourceName: "fixture.pw", Sourced: sourced})
+			_, err := commandsurfacetest.Admit(t, []byte(source), commandsurface.ParseOptions{SourceName: "fixture.pw", Sourced: sourced})
 			rejection := toolcommand.ProgramSyntaxObservation("command", err)
 			if rejection == nil {
 				t.Fatalf("missing typed program feedback (sourced=%t): %v", sourced, err)
