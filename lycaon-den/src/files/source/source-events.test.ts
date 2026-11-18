@@ -1,6 +1,8 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { SourceChange, SourceDirListing } from "../../api/types.ts";
 import { applySourceChangesEvent, requestSourceProjectionResync } from "./source-events.ts";
+import { chatLocationsEpoch, recordChatLocations, resetChatLocationsForTests } from "./chat-locations.ts";
+import { recordOutsideRoot, resetOutsideRootsForTests } from "./outside-namespace.ts";
 import { setBufferLiveHandlers } from "../documents/buffer-live.ts";
 import { applyFilesBufferLoad, applyFilesBufferDraft } from "../documents/project-files-buffer-io.ts";
 import { openFilesBuffer, resetProjectFilesForTests } from "../documents/project-files-buffer-lifecycle.ts";
@@ -35,6 +37,8 @@ function listing(dir: string, entries: SourceDirListing["entries"]): SourceDirLi
 
 afterEach(() => {
   resetSourceTreeStoreForTests();
+  resetChatLocationsForTests();
+  resetOutsideRootsForTests();
   resetProjectFilesForTests();
   vi.useRealTimers();
 });
@@ -195,6 +199,21 @@ describe("source-events", () => {
     expect(sourceRefresh).not.toHaveBeenCalled();
     setSourceRefresh(projectId, null);
     connection.disconnect();
+  });
+
+  it("refreshes outside locations even when a change uses a known anchor", () => {
+    const project = "outside-project";
+    const outside = "outside-root";
+    recordOutsideRoot(project, outside);
+    recordChatLocations(project, [{
+      id: "loc", root_id: outside, session_id: "chat", kind: "folder", anchor: "home/me/notes",
+      path: "/home/me/notes", label: "notes", hidden: false, available: true,
+    }]);
+    applySourceChangesEvent({
+      project_id: project, workspace_id: WORKSPACE, workspace_kind: "project", resync: false,
+      changes: [change("home/me/notes/index.txt", { root_id: outside })],
+    });
+    expect(chatLocationsEpoch(project)).toBe(1);
   });
 
   it("refreshes root-derived views once when promoted changes land", async () => {
