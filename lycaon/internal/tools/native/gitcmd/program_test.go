@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/lycaon/lycaon/internal/tooloutput"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -25,6 +24,7 @@ import (
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/toolexecution"
+	"github.com/lycaon/lycaon/internal/tooloutput"
 	"github.com/lycaon/lycaon/internal/toolprofiles"
 	"github.com/lycaon/lycaon/pkg/api"
 
