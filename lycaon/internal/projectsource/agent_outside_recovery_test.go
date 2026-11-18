@@ -5,7 +5,6 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
-	"time"
 
 	"github.com/lycaon/lycaon/internal/db"
 	"github.com/lycaon/lycaon/internal/fseffect"
@@ -23,18 +22,15 @@ func TestOutsideEffectAndReferenceRecoverTogether(t *testing.T) {
 	service, p, _, _ := sourceMutationFixture(t)
 	database := service.Journal.db
 	testdbseed.InsertSession(t, database, "chat", p.ID)
-	_, err := database.ExecContext(ctx, `
-		INSERT INTO project_roots(id, project_id, path, label, is_primary, added_at, kind)
-		VALUES ('outside', ?, '/', 'outside', 0, ?, 'outside')
-	`, p.ID, db.FormatTime(time.Now()))
-	testutil.FailErr(t, "insert outside namespace", err)
+	outsideID, err := db.New(database).GetProjectOutsideRootID(ctx, p.ID)
+	testutil.FailErr(t, "read outside namespace", err)
 	root := t.TempDir()
 	path := filepath.Join(root, "note.txt")
 	before, after := []byte("before"), []byte("after")
 	testutil.FailErr(t, "seed external file", os.WriteFile(path, before, 0o600))
 	record := sourceledger.RecordInput{
 		ProjectID: p.ID, SessionID: "chat", ToolCallID: "outside-call", Turn: 1,
-		RecordLocation: sourceledger.RecordLocation{RootID: "outside", Path: "outside-fixture/note.txt"},
+		RecordLocation: sourceledger.RecordLocation{RootID: outsideID, Path: "outside-fixture/note.txt"},
 		Op:             api.SourceChangeOpWrite, Origin: api.SourceChangeOriginAgent,
 		Before: before, After: after, BeforeSHA256: textfile.SHA256(before), AfterSHA256: textfile.SHA256(after),
 	}
@@ -61,7 +57,7 @@ func TestOutsideEffectAndReferenceRecoverTogether(t *testing.T) {
 		err := database.QueryRowContext(ctx, `SELECT
 			(SELECT count(*) FROM source_operations WHERE operation_key = ?),
 			(SELECT count(*) FROM source_chat_files WHERE session_id = 'chat' AND changed = 1),
-			(SELECT count(*) FROM source_effects WHERE root_id = 'outside')`, pending.ID()).Scan(&ops, &refs, &effects)
+			(SELECT count(*) FROM source_effects WHERE root_id = ?)`, pending.ID(), outsideID).Scan(&ops, &refs, &effects)
 		testutil.FailErr(t, "count operation, reference and effect", err)
 		if ops != want || refs != want || effects != want {
 			t.Fatalf("operation, reference and effect counts = %d, %d, %d; want %d each", ops, refs, effects, want)
@@ -84,7 +80,7 @@ func TestOutsideEffectAndReferenceRecoverTogether(t *testing.T) {
 	}
 	var effectID string
 	testutil.FailErr(t, "find recovered effect", database.QueryRowContext(ctx,
-		`SELECT id FROM source_effects WHERE root_id = 'outside'`).Scan(&effectID))
+		`SELECT id FROM source_effects WHERE root_id = ?`, outsideID).Scan(&effectID))
 	comparison, err := store.Comparisons.CompareEffect(ctx, p.ID, effectID)
 	testutil.FailErr(t, "compare recovered effect", err)
 	if comparison.Before.Content != "before" || comparison.After.Content != "after" {

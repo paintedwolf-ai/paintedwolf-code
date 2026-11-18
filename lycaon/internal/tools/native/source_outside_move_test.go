@@ -71,7 +71,7 @@ func TestNativeMoveAndAttachKeepFileAndDocumentIdentity(t *testing.T) {
 
 	move("start.txt", moved)
 	outsidePath, _ := projectroot.OutsideRel(fspath.CanonicalPath(moved))
-	checkAddress("outside", outsidePath)
+	checkAddress(tctx.Source.OutsideRoot.ID, outsidePath)
 	if _, err := st.History.ResolveHead(ctx, "p1", sourcebranch.Trunk, "r1", "start.txt"); !errors.Is(err, sourceledger.ErrHistoryNotFound) {
 		t.Fatalf("old path remains live: %v", err)
 	}
@@ -115,14 +115,12 @@ func outsideNativeFixture(t *testing.T) (*sourceledger.Store, tools.ToolContext,
 	st := bindLedgerForWrites(t, inside)
 	database := st.LedgerDB()
 	testdbseed.InsertSession(t, database, "s1", "p1")
-	now := db.FormatTime(time.Now().UTC())
-	_, err = database.ExecContext(ctx, `INSERT INTO project_roots(id, project_id, path, label, is_primary, added_at, kind)
-		VALUES ('outside', 'p1', '/', 'outside', 0, ?, 'outside')`, now)
-	testutil.FailErr(t, "insert outside namespace", err)
+	outsideID, err := db.New(database).GetProjectOutsideRootID(ctx, "p1")
+	testutil.FailErr(t, "read outside namespace", err)
 
 	tctx := nativefixture.Context(inside)
 	tctx.Identity.ProjectID, tctx.Identity.SessionID, tctx.Identity.UserTurn = "p1", "s1", 1
-	tctx.Source.OutsideRoot = projectroot.OutsideRef("outside")
+	tctx.Source.OutsideRoot = projectroot.OutsideRef(outsideID)
 	tctx.Source.SourceLedger = st
 	tctx.Source.SourceMutations = projectsource.NewSourceMutationService(database, st)
 	return st, tctx, inside, outside
@@ -166,7 +164,7 @@ func TestNativeOutsideMutationsRetainExactEffects(t *testing.T) {
 			t.Fatalf("turn %d has changes %+v", tc.Identity.UserTurn, walk.Files)
 		}
 		effect := walk.Files[0].Effects[0]
-		if effect.Op != step.op || effect.RootID != "outside" || effect.ToolCallID != "outside-edit" || effect.CaptureQuality != "exact" {
+		if effect.Op != step.op || effect.RootID != tc.Source.OutsideRoot.ID || effect.ToolCallID != "outside-edit" || effect.CaptureQuality != "exact" {
 			t.Fatalf("turn %d effect = %+v", tc.Identity.UserTurn, effect)
 		}
 		comparison, err := st.Comparisons.CompareEffect(ctx, "p1", effect.ID)
