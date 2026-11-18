@@ -1,5 +1,5 @@
 import { render } from "solid-js/web";
-import { createSignal, Show } from "solid-js";
+import { createSignal, For, Show } from "solid-js";
 import { SourceReader } from "../../src/components/source/reader/SourceReader.tsx";
 import type { SourceReaderAccess } from "../../src/api/source-reader.ts";
 import type { SourceComparisonSession } from "../../src/api/source-comparison-session.ts";
@@ -49,8 +49,8 @@ function Fixture() {
       <Show when={mounted()} fallback={<div style={{ height: `${heldHeight}px` }} />}>
         <div class="den-file-edit-diff"><SourceReader access={access} path="example.ts" wrap scrollPastEnd={false} onReady={setReady} /></div>
       </Show>
-      {[0, 1, 2].map(index => <img data-testid={`image-${index}`} width="400" height="272" alt={`Capture ${index + 1}`}
-        src={`data:image/svg+xml,${encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="400" height="272"><rect width="400" height="272" fill="teal"/></svg>')}`} />)}
+      <For each={[0, 1, 2]}>{index => <img data-testid={`image-${index}`} width="400" height="272" alt={`Capture ${index + 1}`}
+        src={`data:image/svg+xml,${encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="400" height="272"><rect width="400" height="272" fill="teal"/></svg>')}`} />}</For>
       <div style={{ height: "800px" }}>Following conversation</div>
     </div>
   </>;

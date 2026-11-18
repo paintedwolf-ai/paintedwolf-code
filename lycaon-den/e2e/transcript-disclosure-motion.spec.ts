@@ -8,6 +8,7 @@ import {
   transcriptMessages,
   webE2e,
 } from "./helpers.ts";
+import { directInputSettled, scrollSettled, settleTranscriptLayout } from "./fixtures/settle.ts";
 import {
   disclosureViewportState,
   disclosureCornerState,
@@ -146,7 +147,7 @@ webE2e(`transcript disclosures animate without moving the viewport${expandedSpac
     .first();
   await expect(activity).toBeVisible({ timeout: 30_000 });
   // Initial row measurements settle before disclosure growth.
-  await page.waitForTimeout(300);
+  await settleTranscriptLayout(page);
 
   await positionDisclosure(page, summary, "center");
   const before = await stream.evaluate((element) => ({
@@ -348,7 +349,7 @@ webE2e(`expanding a tall row at the tail preserves the reading position${expande
     )
     .first();
   await expect(activity).toBeVisible({ timeout: 30_000 });
-  await page.waitForTimeout(300);
+  await settleTranscriptLayout(page);
 
   await clickDisclosureWithoutReveal(activity.locator(":scope > .den-transcript-disclosure-header"));
   await expect(activity).toHaveAttribute("data-expanded", "true");
@@ -359,17 +360,18 @@ webE2e(`expanding a tall row at the tail preserves the reading position${expande
   const nested = activity.locator(".den-tool-part > .den-transcript-disclosure-header").last();
   const nestedShell = nested.locator("..");
   await expect(nestedShell).not.toHaveAttribute("data-expanded", "true");
-  await page.waitForTimeout(300);
+  await settleTranscriptLayout(page);
 
   // Returning to the bottom re-arms the scrollport tail pin.
   const box = await stream.boundingBox();
   if (!box) throw new Error("chat viewport is missing");
   await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
   await page.mouse.wheel(0, -400);
-  await page.waitForTimeout(240);
+  await expect(page.getByTestId("stream-scroll-jump")).toHaveAttribute("aria-hidden", "false");
   await page.mouse.wheel(0, 2_400);
-  // Past the wheel settle window, so the click carries no residual input.
-  await page.waitForTimeout(900);
+  // The click carries no residual input once the scrollport has let the wheel go.
+  await directInputSettled(stream);
+  await scrollSettled(stream);
   await expectTranscriptTailBounded(page);
   const before = await stream.evaluate((element) => element.scrollTop);
   const collapsedHeight = await nestedShell.evaluate(

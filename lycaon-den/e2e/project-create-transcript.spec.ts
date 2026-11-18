@@ -1,13 +1,11 @@
 import { expect } from "@playwright/test";
 
-import { liveChatStage, webE2e } from "./helpers.ts";
+import { gotoShell, liveChatStage, webE2e } from "./helpers.ts";
 
 webE2e("new draft shows its starter prompt immediately", async ({ page }) => {
   const prompt = `Build a small security alert triage dashboard ${Date.now()}`;
 
-  await page.goto("/");
-  // Wait for the hydrated Home stage.
-  await expect(page.getByText("Harness").first()).toBeVisible({ timeout: 30_000 });
+  await gotoShell(page);
   await page.getByTestId("home-idea-input").fill(prompt);
   await page.getByTestId("home-idea-send").click();
 

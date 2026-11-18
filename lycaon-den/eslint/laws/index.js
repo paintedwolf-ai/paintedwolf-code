@@ -1,3 +1,4 @@
+import browserTests from "./browser-tests.js";
 import hostAuthority from "./host-authority.js";
 import nativeChrome from "./native-chrome.js";
 import platformBoundaries from "./platform-boundaries.js";
@@ -10,4 +11,4 @@ import shellLayout from "./shell-layout.js";
  * selectors (`syntax`) and modules (`imports`) it bans there, and a `seed`
  * that violates it. Test files are governed only when `tests` is true.
  */
-export default [...hostAuthority, ...platformBoundaries, ...shellLayout, ...nativeChrome, ...reactivity];
+export default [...hostAuthority, ...platformBoundaries, ...shellLayout, ...nativeChrome, ...reactivity, ...browserTests];
