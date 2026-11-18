@@ -46,6 +46,7 @@ func (e *Boundary) preInvokePolicyContext(
 	if tc.Invocation.NativeOperation != nil {
 		policyEval.NativeOperation = tc.Invocation.NativeOperation
 		policyEval.BoundStages = tc.Invocation.NativeStages
+		policyEval.EntryTool = tc.Invocation.EntryTool
 	}
 	if e.Metadata.registry != nil {
 		if meta, ok := e.Metadata.registry.Meta(tool); ok {
