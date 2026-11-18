@@ -1,12 +1,12 @@
 package contract
 
 import (
+	"github.com/lycaon/lycaon/pkg/api/apitest"
 	"reflect"
 	"sort"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/testutil"
-	"github.com/lycaon/lycaon/pkg/api"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 	"github.com/lycaon/lycaon/test/contract/internal/wirespec"
 )
@@ -23,17 +23,17 @@ func TestAllEnumRegistriesExhaustive(t *testing.T) {
 		typeName string
 		registry []string
 	}{
-		{"MessageKind", wirespec.GoEnumValues(api.AllMessageKinds()...)},
-		{"CompletionReportScope", wirespec.GoEnumValues(api.AllCompletionReportScopes()...)},
-		{"DraftStatus", wirespec.GoEnumValues(api.AllDraftStatuses()...)},
-		{"MessageVisibility", wirespec.GoEnumValues(api.AllMessageVisibilities()...)},
-		{"MessageLiveStatus", wirespec.GoEnumValues(api.AllMessageLiveStatuses()...)},
-		{"NavigationEntryKind", wirespec.GoEnumValues(api.AllNavigationEntryKinds()...)},
-		{"WorkerStatus", wirespec.GoEnumValues(api.AllWorkerStatuses()...)},
-		{"WorkerSummaryStatus", wirespec.GoEnumValues(api.AllWorkerSummaryStatuses()...)},
-		{"CheckpointStatus", wirespec.GoEnumValues(api.AllCheckpointStatuses()...)},
+		{"MessageKind", wirespec.GoEnumValues(apitest.AllMessageKinds()...)},
+		{"CompletionReportScope", wirespec.GoEnumValues(apitest.AllCompletionReportScopes()...)},
+		{"DraftStatus", wirespec.GoEnumValues(apitest.AllDraftStatuses()...)},
+		{"MessageVisibility", wirespec.GoEnumValues(apitest.AllMessageVisibilities()...)},
+		{"MessageLiveStatus", wirespec.GoEnumValues(apitest.AllMessageLiveStatuses()...)},
+		{"NavigationEntryKind", wirespec.GoEnumValues(apitest.AllNavigationEntryKinds()...)},
+		{"WorkerStatus", wirespec.GoEnumValues(apitest.AllWorkerStatuses()...)},
+		{"WorkerSummaryStatus", wirespec.GoEnumValues(apitest.AllWorkerSummaryStatuses()...)},
+		{"CheckpointStatus", wirespec.GoEnumValues(apitest.AllCheckpointStatuses()...)},
 		{"WorkflowRunStatus", wirespec.GoEnumValues(api.AllWorkflowRunStatuses()...)},
-		{"WorkflowBoundaryKind", wirespec.GoEnumValues(api.AllWorkflowBoundaryKinds()...)},
+		{"WorkflowBoundaryKind", wirespec.GoEnumValues(apitest.AllWorkflowBoundaryKinds()...)},
 	}
 	for _, check := range checks {
 		t.Run(check.typeName, func(t *testing.T) {
@@ -55,38 +55,38 @@ func TestAllEnumRegistriesExhaustive(t *testing.T) {
 // Enum registry smoke — keeps All…() entry points reachable for property tests.
 func TestEnumRegistriesNonEmpty(t *testing.T) {
 	t.Parallel()
-	if len(api.AllMessageKinds()) == 0 {
+	if len(apitest.AllMessageKinds()) == 0 {
 		t.Fatal("AllMessageKinds empty")
 	}
-	if len(api.AllDraftStatuses()) == 0 {
+	if len(apitest.AllDraftStatuses()) == 0 {
 		t.Fatal("AllDraftStatuses empty")
 	}
-	if len(api.AllMessageVisibilities()) == 0 {
+	if len(apitest.AllMessageVisibilities()) == 0 {
 		t.Fatal("AllMessageVisibilities empty")
 	}
-	if len(api.AllMessageLiveStatuses()) == 0 {
+	if len(apitest.AllMessageLiveStatuses()) == 0 {
 		t.Fatal("AllMessageLiveStatuses empty")
 	}
-	if len(api.AllNavigationEntryKinds()) == 0 {
+	if len(apitest.AllNavigationEntryKinds()) == 0 {
 		t.Fatal("AllNavigationEntryKinds empty")
 	}
-	if len(api.AllWorkerStatuses()) == 0 {
+	if len(apitest.AllWorkerStatuses()) == 0 {
 		t.Fatal("AllWorkerStatuses empty")
 	}
-	if len(api.AllWorkerSummaryStatuses()) == 0 {
+	if len(apitest.AllWorkerSummaryStatuses()) == 0 {
 		t.Fatal("AllWorkerSummaryStatuses empty")
 	}
-	if len(api.AllCheckpointStatuses()) == 0 {
+	if len(apitest.AllCheckpointStatuses()) == 0 {
 		t.Fatal("AllCheckpointStatuses empty")
 	}
 	if len(api.AllWorkflowRunStatuses()) == 0 {
 		t.Fatal("AllWorkflowRunStatuses empty")
 	}
-	if len(api.AllWorkflowBoundaryKinds()) == 0 {
+	if len(apitest.AllWorkflowBoundaryKinds()) == 0 {
 		t.Fatal("AllWorkflowBoundaryKinds empty")
 	}
 	foundPlan := false
-	for _, kind := range api.AllMessageKinds() {
+	for _, kind := range apitest.AllMessageKinds() {
 		if kind == api.MessageKindBlueprint {
 			foundPlan = true
 			break

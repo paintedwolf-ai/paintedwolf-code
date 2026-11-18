@@ -5,13 +5,13 @@ package property
 import (
 	"context"
 	"github.com/lycaon/lycaon/internal/testdbfixture"
+	"github.com/lycaon/lycaon/pkg/api/apitest"
 	"testing"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/testdbseed"
-	"github.com/lycaon/lycaon/pkg/api"
 	"pgregory.net/rapid"
 )
 
@@ -49,8 +49,8 @@ func TestOrdCreatedAtImmutabilityAcrossPatches(t *testing.T) {
 			Role:              rapid.SampledFrom([]api.MessageRole{api.MessageRoleUser, api.MessageRoleAssistant, api.MessageRoleTool, api.MessageRoleSystem}).Draw(t, "role"),
 			Content:           rapid.StringMatching(`[a-z .,]{0,40}`).Draw(t, "content"),
 			Kind:              rapid.SampledFrom([]api.MessageKind{"", api.MessageKindDraft, api.MessageKindWorkflowBoundary, api.MessageKindProgressUpdate}).Draw(t, "kind"),
-			Visibility:        rapid.SampledFrom(api.AllMessageVisibilities()).Draw(t, "visibility"),
-			DraftStatus:       rapid.SampledFrom(append([]api.DraftStatus{""}, api.AllDraftStatuses()...)).Draw(t, "draft_status"),
+			Visibility:        rapid.SampledFrom(apitest.AllMessageVisibilities()).Draw(t, "visibility"),
+			DraftStatus:       rapid.SampledFrom(append([]api.DraftStatus{""}, apitest.AllDraftStatuses()...)).Draw(t, "draft_status"),
 			DraftVersionCount: rapid.IntRange(0, 5).Draw(t, "draft_version_count"),
 			CreatedAt:         patchTS,
 		}

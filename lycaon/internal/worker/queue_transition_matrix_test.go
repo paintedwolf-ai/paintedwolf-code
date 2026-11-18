@@ -3,6 +3,7 @@ package worker_test
 import (
 	"context"
 	"errors"
+	"github.com/lycaon/lycaon/pkg/api/apitest"
 	"reflect"
 	"testing"
 
@@ -10,7 +11,6 @@ import (
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/worker"
-	"github.com/lycaon/lycaon/pkg/api"
 )
 
 type allowAllRuns struct{}
@@ -195,7 +195,7 @@ func matrixTask(t *testing.T, queue worker.WorkerQueue, jobID string) *api.Worke
 
 func TestTerminalWorkerStatusesRejectEveryTransition(t *testing.T) {
 	for backend := range matrixQueueBackends {
-		for _, status := range api.AllWorkerStatuses() {
+		for _, status := range apitest.AllWorkerStatuses() {
 			if !status.IsTerminal() {
 				continue
 			}
@@ -217,7 +217,7 @@ func TestTerminalWorkerStatusesRejectEveryTransition(t *testing.T) {
 
 func TestNonTerminalWorkerStatusesCancel(t *testing.T) {
 	for backend := range matrixQueueBackends {
-		for _, status := range api.AllWorkerStatuses() {
+		for _, status := range apitest.AllWorkerStatuses() {
 			if status.IsTerminal() {
 				continue
 			}

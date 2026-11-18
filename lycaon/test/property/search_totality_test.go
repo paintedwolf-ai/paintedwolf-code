@@ -1,11 +1,11 @@
 package property
 
 import (
+	"github.com/lycaon/lycaon/pkg/api/apitest"
 	"testing"
 	"time"
 
 	"github.com/lycaon/lycaon/internal/search"
-	"github.com/lycaon/lycaon/pkg/api"
 	"pgregory.net/rapid"
 )
 
@@ -70,7 +70,7 @@ func fixtureForKind(kind api.MessageKind) api.Message {
 }
 
 func TestSearchProjectionTotalOverMessageKinds(t *testing.T) {
-	for _, kind := range api.AllMessageKinds() {
+	for _, kind := range apitest.AllMessageKinds() {
 		t.Run(string(kind), func(t *testing.T) {
 			if kindProjectionExempt[kind] {
 				return
