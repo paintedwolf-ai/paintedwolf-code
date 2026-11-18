@@ -25,9 +25,9 @@ type Part struct {
 func Revision5(target Baseline) Step {
 	return composeStep(Step{
 		ID:       "source-manifests-and-command-records",
-		Checksum: "8e1afb6494bcc70516ccbb226a0128d9d2d566bac1d05a829ed98aa7daeb93ae",
+		Checksum: "a5886d1744abaa161c54529b47e2a35b861d487ba00ee9585cda0ccfb49d9228",
 		From:     manifestLayoutSource, To: target,
-	}, SourceManifestLayout(), VaultUnlockAway(), EffectPermitIdentity(), ProgramReceipts(), SourceLinkKind(), SessionProgressIdentity(), TurnLoadVisibility(), EvidenceRootID(), ToolResultFileEdits(), Briefings(), LiveModelOutputs(), WorkerRecords())
+	}, SourceManifestLayout(), VaultUnlockAway(), EffectPermitIdentity(), ProgramReceipts(), SourceLinkKind(), SessionProgressIdentity(), TurnLoadVisibility(), EvidenceRootID(), ToolResultFileEdits(), Briefings(), LiveModelOutputs(), WorkerRecords(), WorkflowManifestStorage())
 }
 
 func composeStep(step Step, parts ...Part) Step {
@@ -78,6 +78,16 @@ var briefingsSQL []byte
 func Briefings() Part {
 	return Part{Source: briefingsSQL, Apply: func(ctx context.Context, tx *sql.Tx) error {
 		_, err := tx.ExecContext(ctx, string(briefingsSQL))
+		return err
+	}}
+}
+
+//go:embed workflow_manifest_storage.sql
+var workflowManifestStorageSQL []byte
+
+func WorkflowManifestStorage() Part {
+	return Part{Source: workflowManifestStorageSQL, Apply: func(ctx context.Context, tx *sql.Tx) error {
+		_, err := tx.ExecContext(ctx, string(workflowManifestStorageSQL))
 		return err
 	}}
 }

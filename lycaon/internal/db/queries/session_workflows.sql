@@ -1,27 +1,28 @@
 -- Per-session workflow manifests and the session scaffold vars sidecar.
 
 -- name: UpsertSessionWorkflow :exec
-INSERT INTO session_workflows (session_id, workflow_id, version, manifest_yaml, effective_summary_json, created_at, created_by, created_by_person_id)
-VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+INSERT INTO session_workflows (session_id, workflow_id, version, manifest_yaml, effective_summary_json, created_at, created_by, created_by_person_id, authored_yaml)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
 ON CONFLICT(session_id, workflow_id, version) DO UPDATE SET
     manifest_yaml = excluded.manifest_yaml,
     effective_summary_json = excluded.effective_summary_json,
     created_at = excluded.created_at,
     created_by = excluded.created_by,
-    created_by_person_id = excluded.created_by_person_id;
+    created_by_person_id = excluded.created_by_person_id,
+    authored_yaml = excluded.authored_yaml;
 
 -- name: DeleteSessionWorkflow :execrows
 DELETE FROM session_workflows
 WHERE session_id = ? AND workflow_id = ? AND version = ?;
 
 -- name: ListSessionWorkflows :many
-SELECT session_id, workflow_id, version, manifest_yaml, effective_summary_json, created_at, created_by, created_by_person_id
+SELECT session_id, workflow_id, version, manifest_yaml, effective_summary_json, created_at, created_by, created_by_person_id, authored_yaml
 FROM session_workflows
 WHERE session_id = ?
 ORDER BY workflow_id ASC, version DESC;
 
 -- name: GetSessionWorkflow :one
-SELECT session_id, workflow_id, version, manifest_yaml, effective_summary_json, created_at, created_by, created_by_person_id
+SELECT session_id, workflow_id, version, manifest_yaml, effective_summary_json, created_at, created_by, created_by_person_id, authored_yaml
 FROM session_workflows
 WHERE session_id = ? AND workflow_id = ? AND version = ?;
 
@@ -34,3 +35,9 @@ VALUES (?, ?, ?)
 ON CONFLICT(session_id) DO UPDATE SET
     vars_json = excluded.vars_json,
     updated_at = excluded.updated_at;
+
+-- name: SaveRunManifest :exec
+INSERT INTO workflow_run_manifests (run_id, manifest_yaml) VALUES (?, ?);
+
+-- name: GetRunManifest :one
+SELECT manifest_yaml FROM workflow_run_manifests WHERE run_id = ?;
