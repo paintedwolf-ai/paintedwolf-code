@@ -20,13 +20,15 @@ func appendSummaryPage(summary, page compactionSummary) compactionSummary {
 }
 
 func appendSummaryItems(accepted, page []string, limit int) []string {
-	items := slices.Clone(accepted)
-	for _, item := range page {
-		if len(items) >= limit {
-			break
-		}
-		if !slices.Contains(items, item) {
-			items = append(items, item)
+	items := make([]string, 0, min(limit, len(accepted)+len(page)))
+	for _, clues := range [][]string{accepted, page} {
+		for _, item := range clues {
+			if len(items) == limit {
+				return items
+			}
+			if !slices.Contains(items, item) {
+				items = append(items, item)
+			}
 		}
 	}
 	return items

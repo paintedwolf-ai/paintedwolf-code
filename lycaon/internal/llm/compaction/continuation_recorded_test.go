@@ -104,10 +104,10 @@ func TestRecordedContinuationRenderMatrix(t *testing.T) {
 	}{
 		{"detailed", "detailed", 32768, 0, 0, true, true},
 		{"compact", "compact", 8192, 0, 0, true, true},
-		{"references", "references", 2048, 0, 256, true, true},
+		{"references", "references", 2048, 0, 192, true, true},
 		{"zero recorded rows", "detailed", 32768, 0, 0, true, false},
 		{"one recorded row", "detailed", 32768, 2, 0, false, false},
-		{"over-budget", "references", 2048, 0, 256, false, false},
+		{"over-budget", "references", 2048, 0, 115, false, false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			record := messageview.CloneContinuation(baseline)
@@ -116,6 +116,9 @@ func TestRecordedContinuationRenderMatrix(t *testing.T) {
 			case tc.enriched:
 				record.Reason, record.SummaryThroughOrd = "summarized", record.ThroughOrd
 				record.Summary.Facts = []string{"Inventory checks passed."}
+				if tc.level == "references" {
+					record.Summary.Pending = []string{strings.Repeat("Inventory coverage remains under review. ", 4)}
+				}
 			case tc.name == "zero recorded rows":
 				record.Sources, record.RecordedRows = nil, 0
 			case tc.trim > 0:
@@ -172,7 +175,7 @@ func TestSynthesisAppendsAcceptedPageFacts(t *testing.T) {
 	if calls != 2 || accepted.SummaryThroughOrd != 2 || !reflect.DeepEqual(accepted.Summary.Facts, want) {
 		t.Fatalf("calls = %d, accepted = %+v", calls, accepted)
 	}
-	list := appendSummaryItems(want, []string{want[1], "Third page observation.", "Beyond the cap."}, 3)
+	list := appendSummaryItems(append(append([]string(nil), want...), want[0]), []string{want[1], "Third page observation.", "Beyond the cap."}, 3)
 	if len(list) != 3 || !reflect.DeepEqual(list[:2], want) {
 		t.Fatalf("bounded append replaced earlier observations: %v", list)
 	}

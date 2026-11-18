@@ -3,6 +3,7 @@ package compaction
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"strings"
 	"testing"
 
@@ -183,8 +184,8 @@ func TestCompactionMeasurementIncludesStructuredToolFeedback(t *testing.T) {
 func TestSessionRejectsValidEnglishSummaryThatExpandsTokens(t *testing.T) {
 	fields := map[string][]string{}
 	for field, count := range map[string]int{"facts": 8, "completed": 5, "pending": 5, "reacquire": 8, "constraints": 5} {
-		for range count {
-			fields[field] = append(fields[field], "Keep SQL, CSV, HTTP, JSON, YAML and ID checks; retry at most 2 times and log all failed rows.")
+		for i := range count {
+			fields[field] = append(fields[field], fmt.Sprintf("Check %d: Keep SQL, CSV, HTTP, JSON, YAML and ID checks. Retry twice and log all failed rows.", i))
 		}
 	}
 	raw, err := json.Marshal(fields)
