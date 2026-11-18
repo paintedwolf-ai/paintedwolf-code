@@ -13,6 +13,7 @@ import (
 	"github.com/lycaon/lycaon/internal/enginepaths"
 	"github.com/lycaon/lycaon/internal/layeredfs"
 	"github.com/lycaon/lycaon/internal/layeredfs/adapter"
+	"github.com/lycaon/lycaon/internal/layeredfs/adapter/adaptertest"
 	"github.com/lycaon/lycaon/internal/layeredfs/adapter/platform"
 	"github.com/lycaon/lycaon/internal/layeredfs/checkpoint"
 	"github.com/lycaon/lycaon/internal/layeredfs/recovery"
@@ -139,7 +140,7 @@ func TestCompletionCheckpointTakesBaseBytesFromThePristineTree(t *testing.T) {
 func TestACopyThatPassesItsBudgetMovesOnToTheMount(t *testing.T) {
 	source := materializedSource(t)
 	var mounted atomic.Int32
-	mount := adapter.NewMountedAdapter(adapter.MountedAdapterConfig{
+	mount := adaptertest.NewMounted(adaptertest.MountedConfig{
 		AdapterID: adapter.AdapterFUSELinux,
 		MountProbeFn: func(context.Context, string, string) (adapter.ReasonCode, string, error) {
 			return adapter.ReasonNone, "", nil
@@ -177,7 +178,7 @@ func TestACopyThatPassesItsBudgetMovesOnToTheMount(t *testing.T) {
 
 func TestTheCostIsDeclaredBeforeTheFirstCopy(t *testing.T) {
 	source := materializedSource(t)
-	denied := adapter.NewMountedAdapter(adapter.MountedAdapterConfig{
+	denied := adaptertest.NewMounted(adaptertest.MountedConfig{
 		AdapterID: adapter.AdapterFUSELinux,
 		MountProbeFn: func(context.Context, string, string) (adapter.ReasonCode, string, error) {
 			return adapter.ReasonMountDenied, "fixture", errors.New("EPERM")

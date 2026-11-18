@@ -3,7 +3,6 @@ package workspace_test
 import (
 	"context"
 	"errors"
-	"github.com/lycaon/lycaon/internal/layeredfs/adapter/platform"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -12,6 +11,8 @@ import (
 
 	"github.com/lycaon/lycaon/internal/enginepaths"
 	"github.com/lycaon/lycaon/internal/layeredfs/adapter"
+	"github.com/lycaon/lycaon/internal/layeredfs/adapter/adaptertest"
+	"github.com/lycaon/lycaon/internal/layeredfs/adapter/platform"
 	"github.com/lycaon/lycaon/internal/layeredfs/claim"
 	"github.com/lycaon/lycaon/internal/layeredfs/consumer"
 	"github.com/lycaon/lycaon/internal/layeredfs/privategit"
@@ -23,7 +24,7 @@ import (
 
 func fixtureMountedManager(t *testing.T, unmount func(context.Context, string, string) error) (*workspace.Manager, *adapter.ActiveViewRegistry) {
 	t.Helper()
-	mounted := adapter.NewMountedAdapter(adapter.MountedAdapterConfig{
+	mounted := adaptertest.NewMounted(adaptertest.MountedConfig{
 		AdapterID: adapter.AdapterFUSELinux,
 		MountProbeFn: func(context.Context, string, string) (adapter.ReasonCode, string, error) {
 			return adapter.ReasonNone, "", nil
@@ -31,7 +32,7 @@ func fixtureMountedManager(t *testing.T, unmount func(context.Context, string, s
 		UnmountViewFn: unmount,
 	})
 	selector := adapter.NewSelector("linux", mounted, nil, adapter.NewEagerCopyAdapter())
-	selector.BudgetFor = adapter.ZeroBudget
+	selector.BudgetFor = adaptertest.ZeroBudget
 	selector.RequireConfinement, selector.Confinement = true, fixtureConfinement{}
 	branches := t.TempDir()
 	privateGit, err := workspace.OpenPrivateGit(branches)

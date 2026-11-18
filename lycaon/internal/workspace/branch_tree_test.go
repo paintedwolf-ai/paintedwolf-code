@@ -3,7 +3,6 @@ package workspace_test
 import (
 	"context"
 	"errors"
-	"github.com/lycaon/lycaon/internal/layeredfs/adapter/platform"
 	"os"
 	"path/filepath"
 	"slices"
@@ -12,6 +11,8 @@ import (
 	"github.com/lycaon/lycaon/internal/confine"
 	"github.com/lycaon/lycaon/internal/enginepaths"
 	"github.com/lycaon/lycaon/internal/layeredfs/adapter"
+	"github.com/lycaon/lycaon/internal/layeredfs/adapter/adaptertest"
+	"github.com/lycaon/lycaon/internal/layeredfs/adapter/platform"
 	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/workspace"
@@ -34,7 +35,7 @@ func TestBranchTreeAnswersFromTheViewOnEveryProvider(t *testing.T) {
 				t.Skip("this host applies no confinement")
 			}
 			selector := workspace.HostSelector()
-			selector.BudgetFor = adapter.ZeroBudget
+			selector.BudgetFor = adaptertest.ZeroBudget
 			branches := enginepaths.WorkerBranchesRootUnder(state)
 			privateGit, err := workspace.OpenPrivateGit(branches)
 			testutil.FailErr(t, "open private Git", err)

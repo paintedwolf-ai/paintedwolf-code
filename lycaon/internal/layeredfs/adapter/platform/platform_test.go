@@ -17,6 +17,7 @@ import (
 	lexec "github.com/lycaon/lycaon/internal/exec"
 	"github.com/lycaon/lycaon/internal/gitexec"
 	"github.com/lycaon/lycaon/internal/layeredfs/adapter"
+	"github.com/lycaon/lycaon/internal/layeredfs/adapter/adaptertest"
 	"github.com/lycaon/lycaon/internal/layeredfs/adapter/platform"
 	"github.com/lycaon/lycaon/internal/layeredfs/adapter/viewconfine"
 	"github.com/lycaon/lycaon/internal/layeredfs/privategit"
@@ -43,7 +44,7 @@ func TestSelectionRefusesOverLimitWorkWithoutEnforcement(t *testing.T) {
 	} {
 		t.Run(name, func(t *testing.T) {
 			selector := platform.NewSelector(cfg)
-			selector.BudgetFor = adapter.ZeroBudget
+			selector.BudgetFor = adaptertest.ZeroBudget
 			choice, err := selector.Choose(t.Context(), adapter.ChooseRequest{
 				Probe:  adapter.ProbeConfig{RuntimeDir: t.TempDir()},
 				Grants: []adapter.RootGrant{{RootID: "primary", SourcePath: t.TempDir(), IsPrimary: true}},
@@ -101,7 +102,7 @@ func TestRealEnforcerSelectsAndVerifiesAMountedView(t *testing.T) {
 // case a mount exists for.
 func overBudgetChoice(t *testing.T, selector *adapter.Selector, probeDir, source string) (adapter.Adapter, adapter.ProbeResult) {
 	t.Helper()
-	selector.BudgetFor = adapter.ZeroBudget
+	selector.BudgetFor = adaptertest.ZeroBudget
 	choice, err := selector.Choose(t.Context(), adapter.ChooseRequest{
 		Probe:  adapter.ProbeConfig{RuntimeDir: probeDir},
 		Grants: []adapter.RootGrant{{RootID: "primary", SourcePath: source, IsPrimary: true}},

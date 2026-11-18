@@ -2,7 +2,6 @@ package worker
 
 import (
 	"context"
-	"github.com/lycaon/lycaon/internal/layeredfs/adapter/platform"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -11,6 +10,8 @@ import (
 
 	"github.com/lycaon/lycaon/internal/enginepaths"
 	"github.com/lycaon/lycaon/internal/layeredfs/adapter"
+	"github.com/lycaon/lycaon/internal/layeredfs/adapter/adaptertest"
+	"github.com/lycaon/lycaon/internal/layeredfs/adapter/platform"
 	"github.com/lycaon/lycaon/internal/layeredfs/claim"
 	"github.com/lycaon/lycaon/internal/sourceledger"
 	"github.com/lycaon/lycaon/internal/testbaseline"
@@ -102,7 +103,7 @@ func TestClaimWorkerBranchMountedViewSkipsBaselineTreeWalkAndExposesWorkspaceSta
 	sqlDB := testdbfixture.Open(t, "store.db")
 	testdbseed.InsertProjectRootWithID(t, sqlDB, testdbseed.DefaultProjectID, "root-id", dir)
 
-	mountedAdp := adapter.NewMountedAdapter(adapter.MountedAdapterConfig{
+	mountedAdp := adaptertest.NewMounted(adaptertest.MountedConfig{
 		AdapterID: adapter.AdapterNFSDarwin,
 		TargetOS:  runtime.GOOS,
 		MountProbeFn: func(_ context.Context, _, _ string) (adapter.ReasonCode, string, error) {
@@ -110,7 +111,7 @@ func TestClaimWorkerBranchMountedViewSkipsBaselineTreeWalkAndExposesWorkspaceSta
 		},
 	})
 	sel := adapter.NewSelector(runtime.GOOS, mountedAdp, mountedAdp, adapter.NewEagerCopyAdapter())
-	sel.BudgetFor = adapter.ZeroBudget
+	sel.BudgetFor = adaptertest.ZeroBudget
 	sel.Confinement = fixtureConfinement{}
 	wsMgr := workspace.NewManager(filepath.Join(testbaseline.DataDir(t, sqlDB), "worker-branches"), sel, workspace.Filesystem{})
 

@@ -1,0 +1,14 @@
+{
+  "category": "test_files",
+  "artifact": "lycaon/internal/workspace/materialized_branch_internal_test.go",
+  "kind": "test_suite",
+  "workstream": "mounted-adapter-fixtures",
+  "disposition": "retain",
+  "reason": "The suite keeps materialization budgets, pristine checkpoint bases, restart reconstruction, eviction, and Git-object confinement together around one branch manifest contract. The changed mount fixture construction preserves those cases; all selected file contracts pass on Linux.",
+  "reviewed_commit": "c9f75fb9971bf0c0531d3c43c9887b8017f4fd91",
+  "ceiling": 442,
+  "boundaries": {
+    "lycaon/internal/workspace/materialized_branch_internal_test.go": "f2119f1157999bb3f17512a76730a3b2c3b6387ceed971cbd13cedef4c0643f4",
+    "lycaon/internal/layeredfs/adapter/adaptertest/mounted.go": "bc1f2db28445274aa58cfc1da3e46ccd35805824d6b149d4bcd6524c507a3f64"
+  }
+}

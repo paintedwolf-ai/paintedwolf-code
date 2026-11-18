@@ -12,6 +12,7 @@ import (
 	"github.com/lycaon/lycaon/internal/enginepaths"
 	"github.com/lycaon/lycaon/internal/layeredfs"
 	"github.com/lycaon/lycaon/internal/layeredfs/adapter"
+	"github.com/lycaon/lycaon/internal/layeredfs/adapter/adaptertest"
 	"github.com/lycaon/lycaon/internal/layeredfs/checkpoint"
 	"github.com/lycaon/lycaon/internal/layeredfs/privategit"
 	"github.com/lycaon/lycaon/internal/layeredfs/recovery"
@@ -297,7 +298,7 @@ func TestStackedWorkerClaimsAndPromotesThroughTheOneTransaction(t *testing.T) {
 	})
 	t.Run("real mount", func(t *testing.T) {
 		selector := workspace.HostSelector()
-		selector.BudgetFor = adapter.ZeroBudget
+		selector.BudgetFor = adaptertest.ZeroBudget
 		skipWithoutMount(t, selector)
 		testStackedWorkerPromotion(t, selector, func(t *testing.T, task *api.WorkerTask, rel, content string) {
 			testutil.FailErr(t, "write through the mount", os.WriteFile(filepath.Join(task.WorkspaceRoot, rel), []byte(content), 0o644))
@@ -324,7 +325,7 @@ func TestNonPrimaryRootRefsReachPromotionAndRollBack(t *testing.T) {
 	privateGit, err := workspace.OpenPrivateGit(branches)
 	testutil.FailErr(t, "open private Git", err)
 	selector := workspace.HostSelector()
-	selector.BudgetFor = adapter.ZeroBudget
+	selector.BudgetFor = adaptertest.ZeroBudget
 	skipWithoutMount(t, selector)
 	manager := workspace.NewManager(branches, selector, workspace.Filesystem{}).WithPrivateGit(privateGit)
 	binding, _, err := manager.CreateWorkerBranch(workspace.WithWorkspaceProject(t.Context(), testdbseed.DefaultProjectID), roots, "p", "job-roots")

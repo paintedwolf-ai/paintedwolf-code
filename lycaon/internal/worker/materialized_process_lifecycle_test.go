@@ -14,6 +14,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/confine"
 	"github.com/lycaon/lycaon/internal/layeredfs/adapter"
+	"github.com/lycaon/lycaon/internal/layeredfs/adapter/adaptertest"
 	"github.com/lycaon/lycaon/internal/layeredfs/adapter/platform"
 	"github.com/lycaon/lycaon/internal/layeredfs/checkpoint"
 	"github.com/lycaon/lycaon/internal/layeredfs/recovery"
@@ -110,7 +111,7 @@ func runWorkerLifecyclePhase(t *testing.T, root, phase string, mounted, sourceCo
 		confine.TestingSetAutoConfine(t)
 		t.Setenv("LYCAON_CONFIG_DIR", filepath.Dir(branches))
 		selector = workspace.HostSelector()
-		selector.BudgetFor = adapter.ZeroBudget
+		selector.BudgetFor = adaptertest.ZeroBudget
 	}
 	recoveryRoot := filepath.Join(branches, ".adapter", "recovery")
 	checkpointStore, err := checkpoint.NewStore(filepath.Join(recoveryRoot, "checkpoints"))

@@ -3,8 +3,6 @@ package workspace_test
 import (
 	"context"
 	"errors"
-	"github.com/lycaon/lycaon/internal/enginepaths"
-	"github.com/lycaon/lycaon/internal/layeredfs/adapter/platform"
 	"io/fs"
 	"os"
 	"os/exec"
@@ -12,8 +10,11 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/lycaon/lycaon/internal/enginepaths"
 	"github.com/lycaon/lycaon/internal/layeredfs"
 	"github.com/lycaon/lycaon/internal/layeredfs/adapter"
+	"github.com/lycaon/lycaon/internal/layeredfs/adapter/adaptertest"
+	"github.com/lycaon/lycaon/internal/layeredfs/adapter/platform"
 	"github.com/lycaon/lycaon/internal/layeredfs/privategit"
 	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/settingsoverlay"
@@ -251,7 +252,7 @@ func TestProductionCreateWorkerWorkspaceRoutesThroughAdapterAndMountedSelector(t
 
 	// 2. A manager built with the mounted selector prepares and releases through the mounted adapter.
 	var mountedPrepared, mountedReleased bool
-	mountedAdp := adapter.NewMountedAdapter(adapter.MountedAdapterConfig{
+	mountedAdp := adaptertest.NewMounted(adaptertest.MountedConfig{
 		AdapterID: adapter.AdapterNFSDarwin,
 		TargetOS:  "",
 		MountProbeFn: func(ctx context.Context, probeDir, backingDir string) (adapter.ReasonCode, string, error) {
@@ -267,7 +268,7 @@ func TestProductionCreateWorkerWorkspaceRoutesThroughAdapterAndMountedSelector(t
 		},
 	})
 	mountedSel := adapter.NewSelector("", mountedAdp, mountedAdp, adapter.NewEagerCopyAdapter())
-	mountedSel.BudgetFor = adapter.ZeroBudget
+	mountedSel.BudgetFor = adaptertest.ZeroBudget
 	mountedSel.Confinement = fixtureConfinement{}
 	mBinding, err := workspace.NewManager(branches, mountedSel, workspace.Filesystem{}).CreateWorkerWorkspace(ctx, primary, "prod-mounted")
 	testutil.FailErr(t, "CreateWorkerWorkspace mounted", err)
