@@ -292,7 +292,7 @@ func (s *MergeService) assessChildRebase(ctx context.Context, sessionID string, 
 	}
 	defer lease.Release()
 	paths := s.jobPromotePaths(ctx, &child, "")
-	return s.assessMerge(ctx, sessionID, &child, paths)
+	return s.assessMerge(ctx, sessionID, &child, paths, "")
 }
 
 func (s *MergeService) childOverlaysOf(ctx context.Context, sessionID, parentOverlayID string) ([]api.WorkerTask, error) {

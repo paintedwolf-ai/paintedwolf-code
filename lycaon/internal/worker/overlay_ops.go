@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/gitexec"
+	"github.com/lycaon/lycaon/internal/layeredfs/checkpoint"
 	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/session"
 	"github.com/lycaon/lycaon/internal/sourceworkspace"
@@ -175,6 +176,9 @@ func (s *MergeService) applyPromoteOverlayPlans(ctx context.Context, work promot
 		return api.WorkerMergeResult{}, err
 	}
 	defer documents.release(ctx, false)
+	if err := session.RevalidateTaskCheckpointPreview(ctx, work.task, work.roots, work.review); err != nil {
+		return api.WorkerMergeResult{}, err
+	}
 	claim, claimCtx, err := s.beginMergeClaim(ctx, work.overlayID)
 	if err != nil {
 		return api.WorkerMergeResult{}, err
@@ -224,6 +228,7 @@ type promoteWork struct {
 	overlayID    string
 	task         *api.WorkerTask
 	checkpointID string
+	review       *checkpoint.PromotionPreview
 	roots        []projectroot.RootRef
 	paths        []string
 	targets      map[string]promoteTarget
@@ -276,7 +281,7 @@ func (s *MergeService) resolvePromoteWork(ctx context.Context, sessionID, overla
 	}
 	return promoteWork{
 		sessionID: sessionID, overlayID: overlayID,
-		task: task, roots: roots, checkpointID: checkpointID, paths: s.jobPromotePaths(ctx, task, checkpointID), lease: lease,
+		task: task, roots: roots, checkpointID: checkpointID, review: review, paths: s.jobPromotePaths(ctx, task, checkpointID), lease: lease,
 	}, nil
 }
 
@@ -316,6 +321,9 @@ func (s *MergeService) finalizeEmptyPromote(ctx context.Context, work promoteWor
 		return out, errors.Join(err, s.releaseMergeClaim(ctx, claim))
 	}
 	out.Rebased = rebased
+	if err := session.RevalidateTaskCheckpointPreview(claimCtx, work.task, work.roots, work.review); err != nil {
+		return out, errors.Join(err, s.releaseMergeClaim(ctx, claim))
+	}
 	zeroTx, err := beginPromoteTransaction(s.hostDataDirFor(work.task), work.overlayID, nil)
 	if err != nil {
 		return out, errors.Join(err, s.releaseMergeClaim(ctx, claim))
