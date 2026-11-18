@@ -18,7 +18,6 @@ import (
 	"github.com/lycaon/lycaon/internal/llm/modelcall"
 	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/internal/sandbox"
-	sessionprofiles "github.com/lycaon/lycaon/internal/session/profiles"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/tools"
@@ -33,7 +32,6 @@ type reachOracle struct {
 	names    *toolvocab.Catalog
 	fields   map[string]bool
 	profiles []sandbox.ToolProfile
-	postures *sessionprofiles.PostureRegistry
 }
 
 func newReachOracle(t *testing.T) *reachOracle {
@@ -47,15 +45,13 @@ func newReachOracle(t *testing.T) *reachOracle {
 	testutil.FailErr(t, "load tool schemas", err)
 	names, err := toolvocab.NewCatalog(schemas, profiles, toolvocab.Provenance{})
 	testutil.FailErr(t, "tool vocabulary", err)
-	postures, err := sessionprofiles.LoadPostureRegistry()
-	testutil.FailErr(t, "load postures", err)
 	fields := map[string]bool{}
 	for name := range schemas.Tools {
 		if meta, ok := schemas.ToolMeta(name); ok {
 			maps.Copy(fields, argFields(meta.ArgsSchema))
 		}
 	}
-	return &reachOracle{names: names, fields: fields, profiles: profiles, postures: postures}
+	return &reachOracle{names: names, fields: fields, profiles: profiles}
 }
 
 // argFields is every argument path a schema accepts, with each path's head.
@@ -69,15 +65,10 @@ func argFields(schema map[string]any) map[string]bool {
 }
 
 // commandReach is what the executor admits through command for a profile on
-// a surface in a posture, as the reach markers the vocabulary reads.
-func (o *reachOracle) commandReach(t *testing.T, profileID, surfaceID string, posture api.SessionPosture) map[string]bool {
+// a surface, from the session's posture-narrowed profiles, as the reach
+// markers the vocabulary reads.
+func commandReach(t *testing.T, profiles []sandbox.ToolProfile, profileID, surfaceID string) map[string]bool {
 	t.Helper()
-	p, err := o.postures.Get(posture)
-	testutil.FailErr(t, "posture "+string(posture), err)
-	profiles := slices.Clone(o.profiles)
-	for i := range profiles {
-		profiles[i].CommandEffects &= p.CommandEffects
-	}
 	if profileID == "" {
 		profileID = prompts.CoordinatorProfileID
 	}
@@ -131,7 +122,7 @@ var backtickedIdent = regexp.MustCompile("`([A-Za-z_][A-Za-z0-9_]*(?:\\.[A-Za-z_
 // offer: a tool, operation or command program outside its tools and command
 // reach, and, in a refused call's recovery, an argument that neither the
 // refused tool nor any tool the recovery names accepts as sent.
-func (o *reachOracle) check(t *testing.T, req modelcall.CompletionRequest, posture api.SessionPosture) []string {
+func (o *reachOracle) check(t *testing.T, req modelcall.CompletionRequest, profiles []sandbox.ToolProfile) []string {
 	t.Helper()
 	offered := map[string]bool{}
 	schemas := map[string]map[string]bool{}
@@ -139,7 +130,7 @@ func (o *reachOracle) check(t *testing.T, req modelcall.CompletionRequest, postu
 		offered[meta.Name] = true
 		schemas[meta.Name] = argFields(meta.ArgsSchema)
 	}
-	maps.Copy(offered, o.commandReach(t, req.Debug.ProfileID, req.Debug.Surface, posture))
+	maps.Copy(offered, commandReach(t, profiles, req.Debug.ProfileID, req.Debug.Surface))
 	var out []string
 	for i, m := range req.Messages {
 		for _, text := range hostText(m) {
@@ -338,6 +329,10 @@ func runReachScenario(t *testing.T, oracle *reachOracle, sc reachScenario) reach
 		_, err := h.Sessions.Manager.Submissions.Prompt(ctx, sess.ID, prompt)
 		testutil.FailErr(t, "prompt "+prompt, err)
 	}
+	stored, err := h.Store.Get(ctx, sess.ID)
+	testutil.FailErr(t, "read the session", err)
+	profiles := h.Sessions.Manager.Profiles.ForSession(ctx, stored)
+	t.Logf("session posture %s", stored.Posture)
 	out := reachResult{counts: map[reachCell]int{}}
 	for i, req := range rec.AllRequests() {
 		if req.Composition != modelcall.CompositionConversation {
@@ -347,13 +342,13 @@ func runReachScenario(t *testing.T, oracle *reachOracle, sc reachScenario) reach
 		if where == "" {
 			where = req.Debug.AgentType
 		}
-		out.counts[reachCell{Surface: where, Phase: phase, Posture: string(sc.posture), Loading: sc.loading}]++
+		out.counts[reachCell{Surface: where, Phase: phase, Posture: string(stored.Posture), Loading: sc.loading}]++
 		for _, m := range req.Messages {
 			if m.ToolResult != nil && m.ToolResult.Outcome == api.ToolResultOutcomeRejected {
 				out.codes = append(out.codes, m.ToolResult.Codes...)
 			}
 		}
-		found := oracle.check(t, req, sc.posture)
+		found := oracle.check(t, req, profiles)
 		for _, v := range found {
 			out.violations = append(out.violations, fmt.Sprintf("request %d on %s: %s", i, where, v))
 		}
@@ -422,7 +417,7 @@ func TestRequestReachFailsOnSeededRequests(t *testing.T) {
 	} {
 		t.Run(name, func(t *testing.T) {
 			req := modelcall.CompletionRequest{Tools: offered, Messages: []api.Message{tc.message}, Debug: modelcall.RequestDebug{ProfileID: prompts.CoordinatorProfileID, Surface: surface.SurfaceImplementPark}}
-			if got := oracle.check(t, req, api.SessionPostureBuild); len(got) != tc.want {
+			if got := oracle.check(t, req, oracle.profiles); len(got) != tc.want {
 				t.Fatalf("%d findings, want %d:\n%s", len(got), tc.want, strings.Join(got, "\n"))
 			}
 		})
