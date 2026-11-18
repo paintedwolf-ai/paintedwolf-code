@@ -1,0 +1,13 @@
+{
+  "category": "test_files",
+  "artifact": "lycaon/internal/layeredfs/privategit/retention_import_test.go",
+  "kind": "test_suite",
+  "workstream": "privategit-command-fixtures",
+  "disposition": "retain",
+  "reason": "Private Git retention tests cover pruning, concurrent object reuse, import faults and rollback through one retained-store fixture. Keep recovery assertions beside the operations that create their state at the current measured size.",
+  "reviewed_commit": "54ad1deb254aec3533c9ced5d1c22be62bf3e87a",
+  "ceiling": 448,
+  "boundaries": {
+    "lycaon/internal/layeredfs/privategit/retention_import_test.go": "af568592b668c7b6ab16df95a70ffd7546a6dddf3a93d6d49bce5d156ee95055"
+  }
+}
