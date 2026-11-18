@@ -6033,7 +6033,7 @@ paths:
         cursor: cursor
         next: next_cursor
         bounded:
-          - files
+          - files[].effects
       summary: List Walk effects by lens baseline
       description: |
         File-first cross-session groups. baseline is a query parameter only
