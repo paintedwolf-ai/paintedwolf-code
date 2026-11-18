@@ -135,7 +135,7 @@ func newBundledPlanWorkflowManager(t *testing.T) (context.Context, *workflow.Run
 	runStore := workflowpersistence.New(sqlDB)
 	// The seal is a precondition of the grant, so the run store carries the same
 	// recorder the sidecar wires.
-	runStore.Transactions.SetAuthzRecorder(authzcontext.SQLRecorder(sqlDB))
+	runStore.Transactions.SetAuthzRecorder(authzcontext.LedgerRecorder{Ledger: &authzcontext.Ledger{Store: authzcontext.NewSQLStore(sqlDB)}})
 	mgr := workflow.NewManager(runStore, sessStore, manifestRegistry, nil)
 	blueprintMgr.AfterRetarget = mgr.Blueprints.RebindBlueprintPath
 	mgr.Blueprints.Creator = blueprint.WorkflowBlueprintCreator{Manager: blueprintMgr}

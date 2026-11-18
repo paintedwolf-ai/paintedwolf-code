@@ -25,7 +25,7 @@ func TestManagerPublishCheckpointSSE(t *testing.T) {
 
 	hub := events.NewMemoryHub()
 	pub := &events.Publisher{Hub: hub}
-	mgr := hitl.NewCheckpoints(hitl.NewSQLStore(sqlDB), pub, authzcontext.SQLRecorder(sqlDB))
+	mgr := hitl.NewCheckpoints(hitl.NewSQLStore(sqlDB), pub, authzcontext.LedgerRecorder{Ledger: &authzcontext.Ledger{Store: authzcontext.NewSQLStore(sqlDB)}})
 
 	ch, unsub, err := hub.Subscribe(ctx, events.Subscription{Project: testdbseed.DefaultProjectID, Viewer: testutil.HostOwner()})
 	testutil.FailErr(t, "hub.Subscribe failed", err)
@@ -59,7 +59,7 @@ func TestManagerCheckpointRoutesByProjectID(t *testing.T) {
 	testdbseed.InsertSession(t, sqlDB, sessionID, projectID)
 
 	hub := events.NewMemoryHub()
-	mgr := hitl.NewCheckpoints(hitl.NewSQLStore(sqlDB), &events.Publisher{Hub: hub}, authzcontext.SQLRecorder(sqlDB))
+	mgr := hitl.NewCheckpoints(hitl.NewSQLStore(sqlDB), &events.Publisher{Hub: hub}, authzcontext.LedgerRecorder{Ledger: &authzcontext.Ledger{Store: authzcontext.NewSQLStore(sqlDB)}})
 
 	// Subscribe by canonical project UUID.
 	ch, unsub, err := hub.Subscribe(ctx, events.Subscription{Project: projectID, Viewer: testutil.HostOwner()})
@@ -94,7 +94,7 @@ func TestManagerContentApplyRoutesByProjectID(t *testing.T) {
 	testdbseed.InsertSession(t, sqlDB, sessionID, projectID)
 
 	hub := events.NewMemoryHub()
-	mgr := hitl.NewCheckpoints(hitl.NewSQLStore(sqlDB), &events.Publisher{Hub: hub}, authzcontext.SQLRecorder(sqlDB))
+	mgr := hitl.NewCheckpoints(hitl.NewSQLStore(sqlDB), &events.Publisher{Hub: hub}, authzcontext.LedgerRecorder{Ledger: &authzcontext.Ledger{Store: authzcontext.NewSQLStore(sqlDB)}})
 
 	ch, unsub, err := hub.Subscribe(ctx, events.Subscription{Project: projectID, Viewer: testutil.HostOwner()})
 	testutil.FailErr(t, "hub.Subscribe failed", err)
@@ -123,7 +123,7 @@ func TestPatchPendingAIRationaleNoSSEAfterResolve(t *testing.T) {
 	testdbseed.InsertSession(t, sqlDB, sessionID, projectID)
 
 	hub := events.NewMemoryHub()
-	mgr := hitl.NewCheckpoints(hitl.NewSQLStore(sqlDB), &events.Publisher{Hub: hub}, authzcontext.SQLRecorder(sqlDB))
+	mgr := hitl.NewCheckpoints(hitl.NewSQLStore(sqlDB), &events.Publisher{Hub: hub}, authzcontext.LedgerRecorder{Ledger: &authzcontext.Ledger{Store: authzcontext.NewSQLStore(sqlDB)}})
 
 	ch, unsub, err := hub.Subscribe(ctx, events.Subscription{Project: projectID, Viewer: testutil.HostOwner()})
 	testutil.FailErr(t, "hub.Subscribe failed", err)
@@ -195,7 +195,7 @@ func TestClearPendingAIRationale(t *testing.T) {
 	testdbseed.InsertSession(t, sqlDB, sessionID, projectID)
 
 	hub := events.NewMemoryHub()
-	mgr := hitl.NewCheckpoints(hitl.NewSQLStore(sqlDB), &events.Publisher{Hub: hub}, authzcontext.SQLRecorder(sqlDB))
+	mgr := hitl.NewCheckpoints(hitl.NewSQLStore(sqlDB), &events.Publisher{Hub: hub}, authzcontext.LedgerRecorder{Ledger: &authzcontext.Ledger{Store: authzcontext.NewSQLStore(sqlDB)}})
 
 	ch, unsub, err := hub.Subscribe(ctx, events.Subscription{Project: projectID, Viewer: testutil.HostOwner()})
 	testutil.FailErr(t, "hub.Subscribe failed", err)

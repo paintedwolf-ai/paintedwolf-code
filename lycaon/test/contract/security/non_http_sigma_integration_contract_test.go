@@ -190,10 +190,10 @@ func TestNonHTTPContractCapabilityGrantsCannotSuppressDetection(t *testing.T) {
 func TestNonHTTPContractCapabilityAndDetectionRemainSeparateRecords(t *testing.T) {
 	t.Parallel()
 	root := contractcheck.RepoRoot(t)
-	actions := authzcontext.AllEventActions()
+	actions := authzVocabulary(t, "EventAction")
 	var hasCap, hasDet bool
-	for _, a := range actions {
-		switch a {
+	for _, value := range actions {
+		switch authzcontext.EventAction(value) {
 		case authzcontext.EventActionCapabilityApplied, authzcontext.EventActionCapabilityGranted:
 			hasCap = true
 		case authzcontext.EventActionDetectionResolved:

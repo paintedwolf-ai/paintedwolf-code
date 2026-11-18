@@ -49,7 +49,7 @@ func TestUnixSocketPendingRestartWithdrawsStaleCardAndFreshApprovalExecutes(t *t
 	ctx := testdbseed.OwnerCaller(t, t.Context(), database)
 	store := hitl.NewSQLStore(database)
 	newManager := func() *hitl.Checkpoints {
-		return hitl.NewCheckpoints(store, &events.Publisher{Hub: events.NewMemoryHub()}, authzcontext.SQLRecorder(database))
+		return hitl.NewCheckpoints(store, &events.Publisher{Hub: events.NewMemoryHub()}, authzcontext.LedgerRecorder{Ledger: &authzcontext.Ledger{Store: authzcontext.NewSQLStore(database)}})
 	}
 	capture := func() (confine.SocketGrant, *socketref.Lease) {
 		owner, err := socketref.Capture(path)

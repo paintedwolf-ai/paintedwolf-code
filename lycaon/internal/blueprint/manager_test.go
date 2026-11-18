@@ -19,7 +19,7 @@ func TestBlueprintManagerProjectsCanonicalApproval(t *testing.T) {
 	testdbseed.InsertProjectRoot(t, sqlDB, testdbseed.DefaultProjectID, projectDir)
 	blueprintStore := NewFileStoreForTest(projectDir)
 	mgr := NewManager(blueprintStore)
-	mgr.Approvals = NewApprovalStore(sqlDB, authzcontext.SQLRecorder(sqlDB))
+	mgr.Approvals = NewApprovalStore(sqlDB, authzcontext.LedgerRecorder{Ledger: &authzcontext.Ledger{Store: authzcontext.NewSQLStore(sqlDB)}})
 	ctx := context.Background()
 	testdbseed.InsertSession(t, sqlDB, "sess-approval", testdbseed.DefaultProjectID)
 
