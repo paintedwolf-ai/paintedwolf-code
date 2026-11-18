@@ -157,7 +157,7 @@ func TestSaveForAgentLaunchHoldsForEveryDraftState(t *testing.T) {
 				before[path] = f.observeLaunchDraft(t, d.ID, path)
 			}
 
-			unsaved, err := f.service.SaveForAgentLaunch(t.Context(), f.project.ID, f.project.SourceBranch, call)
+			unsaved, err := f.service.SaveForAgentLaunch(t.Context(), f.project.ID, f.project.SourceBranch, call, nil)
 			testutil.FailErr(t, "launch save", err)
 
 			got, want, published := unsavedByPath(unsaved), map[string]UnsavedCause{}, 0
@@ -200,7 +200,7 @@ func TestSaveForAgentLaunchHoldsForEveryDraftState(t *testing.T) {
 			for path, d := range documents {
 				settled[path] = f.observeLaunchDraft(t, d.ID, path)
 			}
-			again, err := f.service.SaveForAgentLaunch(t.Context(), f.project.ID, f.project.SourceBranch, call)
+			again, err := f.service.SaveForAgentLaunch(t.Context(), f.project.ID, f.project.SourceBranch, call, nil)
 			testutil.FailErr(t, "second launch save", err)
 			if !equalCauses(unsavedByPath(again), want) {
 				t.Fatalf("second launch unsaved = %v, want %v", unsavedByPath(again), want)
@@ -222,7 +222,7 @@ func TestSaveForAgentLaunchHoldsForEveryDraftState(t *testing.T) {
 				path := state.name + "/f.txt"
 				state.release(t, f, path)
 				delete(want, path)
-				released, err := f.service.SaveForAgentLaunch(t.Context(), f.project.ID, f.project.SourceBranch, call)
+				released, err := f.service.SaveForAgentLaunch(t.Context(), f.project.ID, f.project.SourceBranch, call, nil)
 				testutil.FailErr(t, "launch save after release", err)
 				if !equalCauses(unsavedByPath(released), want) {
 					t.Fatalf("after releasing %s unsaved = %v, want %v", state.name, unsavedByPath(released), want)
@@ -294,7 +294,7 @@ func TestSaveForAgentLaunchTreatsEachDraftStateAlone(t *testing.T) {
 			f.write(t, path, "saved\n")
 			d := state.arrange(t, f, path)
 			was := f.observeLaunchDraft(t, d.ID, path)
-			unsaved, err := f.service.SaveForAgentLaunch(t.Context(), f.project.ID, f.project.SourceBranch, launchCall("command"))
+			unsaved, err := f.service.SaveForAgentLaunch(t.Context(), f.project.ID, f.project.SourceBranch, launchCall("command"), nil)
 			testutil.FailErr(t, "launch save", err)
 			want := map[string]UnsavedCause{}
 			if state.cause != "" {
@@ -322,7 +322,7 @@ func TestSaveForAgentLaunchFollowsLaterTyping(t *testing.T) {
 		if got := f.disk(t, "a.txt"); got == text {
 			t.Fatalf("typing reached disk without a save: %q", got)
 		}
-		unsaved, err := f.service.SaveForAgentLaunch(t.Context(), f.project.ID, f.project.SourceBranch, launchCall("command"))
+		unsaved, err := f.service.SaveForAgentLaunch(t.Context(), f.project.ID, f.project.SourceBranch, launchCall("command"), nil)
 		testutil.FailErr(t, "launch save", err)
 		if len(unsaved) != 0 || f.disk(t, "a.txt") != text {
 			t.Fatalf("after typing %q: unsaved=%v disk=%q", text, unsaved, f.disk(t, "a.txt"))
@@ -336,7 +336,7 @@ func TestSaveForAgentLaunchReturnsACanceledContext(t *testing.T) {
 	f.typeDraft(t, f.open(t, "a.txt"), "typed\n")
 	ctx, cancel := context.WithCancel(t.Context())
 	cancel()
-	unsaved, err := f.service.SaveForAgentLaunch(ctx, f.project.ID, f.project.SourceBranch, launchCall("command"))
+	unsaved, err := f.service.SaveForAgentLaunch(ctx, f.project.ID, f.project.SourceBranch, launchCall("command"), nil)
 	if !errors.Is(err, context.Canceled) || unsaved != nil {
 		t.Fatalf("unsaved=%v err=%v", unsaved, err)
 	}
@@ -359,7 +359,10 @@ func TestSaveForAgentOperationKeepsItsRefusals(t *testing.T) {
 		var failed *PublicationFailure
 		switch state.cause {
 		case UnsavedChangedOutside:
-			if !errors.As(err, &conflict) || conflict.Path != path {
+			if err == nil {
+				t.Errorf("%s: a mutation saved over a change made outside the document", state.name)
+			}
+			if state.name == "changed-outside" && (!errors.As(err, &conflict) || conflict.Path != path) {
 				t.Errorf("%s: err = %v, want a conflict at the path", state.name, err)
 			}
 		case UnsavedNotWritten:
@@ -373,5 +376,43 @@ func TestSaveForAgentOperationKeepsItsRefusals(t *testing.T) {
 				t.Errorf("%s: a mutation left the draft unsaved", state.name)
 			}
 		}
+	}
+}
+
+// A revision the launching program has pinned is left to the operation that
+// captured it: the launch neither saves it nor reports it, whatever else the
+// same launch saves, and once the document moves past the pin the next launch
+// saves it.
+func TestSaveForAgentLaunchLeavesPinnedRevisionsAlone(t *testing.T) {
+	f, _ := newLedgerAgentFixture(t, map[string]string{"pinned.txt": "saved\n", "free.txt": "saved\n", "stale-pin.txt": "saved\n"})
+	pinned := f.typeDraft(t, f.open(t, "pinned.txt"), "captured by a native stage\n")
+	free := f.typeDraft(t, f.open(t, "free.txt"), "typed and free\n")
+	stale := f.typeDraft(t, f.open(t, "stale-pin.txt"), "typed\n")
+	pins := []PinnedRevision{
+		{DocumentID: pinned.ID, Revision: pinned.Revision},
+		// A pin on a revision the document has left pins nothing.
+		{DocumentID: stale.ID, Revision: stale.Revision - 1},
+		{DocumentID: "no-such-document", Revision: 1},
+	}
+	for range 2 {
+		unsaved, err := f.service.SaveForAgentLaunch(t.Context(), f.project.ID, f.project.SourceBranch, launchCall("command"), pins)
+		testutil.FailErr(t, "launch save", err)
+		if len(unsaved) != 0 {
+			t.Fatalf("a pinned draft was reported unsaved: %+v", unsaved)
+		}
+		if now := f.observeLaunchDraft(t, pinned.ID, "pinned.txt"); now.disk != "saved\n" || !now.dirty || now.revision != pinned.Revision {
+			t.Fatalf("the launch moved a pinned document: %+v", now)
+		}
+		for name, d := range map[string]*Document{"free.txt": free, "stale-pin.txt": stale} {
+			if now := f.observeLaunchDraft(t, d.ID, name); now.dirty || now.disk != d.Draft {
+				t.Fatalf("%s was not saved beside a pinned draft: %+v", name, now)
+			}
+		}
+	}
+	moved := f.typeDraft(t, pinned, "captured by a native stage\nthen typed on\n")
+	unsaved, err := f.service.SaveForAgentLaunch(t.Context(), f.project.ID, f.project.SourceBranch, launchCall("command"), pins)
+	testutil.FailErr(t, "launch save after the document moved", err)
+	if now := f.observeLaunchDraft(t, moved.ID, "pinned.txt"); len(unsaved) != 0 || now.dirty || now.disk != moved.Draft {
+		t.Fatalf("a document past its pin was not saved: unsaved=%+v %+v", unsaved, now)
 	}
 }

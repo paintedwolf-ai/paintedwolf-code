@@ -46,6 +46,13 @@ type EditorAgentCall struct {
 	ToolName   string
 }
 
+// EditorPinnedRevision is a document revision a program's native operation
+// captured and has yet to finish with.
+type EditorPinnedRevision struct {
+	DocumentID string
+	Revision   int64
+}
+
 // EditorUnsavedDocument is a draft a launch save could not publish, with a
 // toolcontract unsaved cause.
 type EditorUnsavedDocument struct {
@@ -188,8 +195,10 @@ type EditorDocuments interface {
 	// document whose file changed outside it returns *EditorFileChanged.
 	SaveForAgentOperation(ctx context.Context, projectID string, branch sourcebranch.ID, rootID, path string, descendants bool, call EditorAgentCall) error
 	// SaveForAgentLaunch saves every unsaved document on the branch before a
-	// process reads the tree from disk, and returns the drafts it could not save.
-	SaveForAgentLaunch(ctx context.Context, projectID string, branch sourcebranch.ID, call EditorAgentCall) ([]EditorUnsavedDocument, error)
+	// process reads the tree from disk, and returns the drafts it could not
+	// save. It skips a pinned revision, which belongs to the operation that
+	// captured it.
+	SaveForAgentLaunch(ctx context.Context, projectID string, branch sourcebranch.ID, call EditorAgentCall, pinned []EditorPinnedRevision) ([]EditorUnsavedDocument, error)
 	// DirtyDocuments lists the project's documents whose draft differs from
 	// the saved file, so a search reads the person's text instead.
 	DirtyDocuments(ctx context.Context, projectID string, branch sourcebranch.ID) ([]EditorDocumentPath, error)

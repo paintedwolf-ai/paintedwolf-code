@@ -36,16 +36,21 @@ const (
 // errAgentEditHeld stops a launch save at a draft holding unpublished agent text.
 var errAgentEditHeld = errors.New("document holds an unpublished agent edit")
 
-// draftScope selects which drafts an agent-caused save may publish.
-type draftScope int
+// errChangedOutside stops a launch save at a draft whose file changed outside it.
+var errChangedOutside = errors.New("file changed outside its open document")
 
-const (
-	// everyDraft is a mutation admitted at the path: it publishes what the
-	// document holds.
-	everyDraft draftScope = iota
-	// personDrafts is a launch: it publishes only the person's own text.
-	personDrafts
-)
+// PinnedRevision is a document revision a program's native operation captured.
+type PinnedRevision struct {
+	DocumentID string
+	Revision   int64
+}
+
+// launchSave is a launch's rule for one draft: it publishes only the person's
+// own text, and leaves a revision the launching program has pinned to the
+// operation that pinned it.
+type launchSave struct {
+	pinned map[PinnedRevision]bool
+}
 
 // UnsavedDocument is a draft a launch save could not publish.
 type UnsavedDocument struct {
@@ -74,14 +79,15 @@ func (s *Service) SaveForAgentOperation(ctx context.Context, projectID string, b
 		return err
 	}
 	return s.VisitUnsavedDocuments(ctx, p.ID, branch, rootID, path, descendants, func(state DocumentPathState) error {
-		return s.saveForAgent(ctx, p, state.ID, call, everyDraft)
+		return s.saveForAgent(ctx, p, state.ID, call, nil)
 	})
 }
 
 // SaveForAgentLaunch saves the person's drafts on the branch before a process
 // reads the tree from disk. A draft it cannot publish is returned, not
-// refused: the launch overwrites nothing.
-func (s *Service) SaveForAgentLaunch(ctx context.Context, projectID string, branch sourcebranch.ID, call AgentCall) ([]UnsavedDocument, error) {
+// refused: the launch overwrites nothing. A pinned revision is skipped: saving
+// it would move the document under the operation that captured it.
+func (s *Service) SaveForAgentLaunch(ctx context.Context, projectID string, branch sourcebranch.ID, call AgentCall, pinned []PinnedRevision) ([]UnsavedDocument, error) {
 	if s == nil || s.store == nil {
 		return nil, nil
 	}
@@ -89,9 +95,13 @@ func (s *Service) SaveForAgentLaunch(ctx context.Context, projectID string, bran
 	if err != nil {
 		return nil, err
 	}
+	launch := &launchSave{pinned: make(map[PinnedRevision]bool, len(pinned))}
+	for _, pin := range pinned {
+		launch.pinned[pin] = true
+	}
 	var unsaved []UnsavedDocument
 	err = s.VisitUnsavedDocuments(ctx, p.ID, branch, "", "", true, func(state DocumentPathState) error {
-		cause, err := launchSaveCause(ctx, s.saveForAgent(ctx, p, state.ID, call, personDrafts))
+		cause, err := launchSaveCause(ctx, s.saveForAgent(ctx, p, state.ID, call, launch))
 		if err != nil {
 			return err
 		}
@@ -115,7 +125,7 @@ func launchSaveCause(ctx context.Context, err error) (UnsavedCause, error) {
 		return "", nil
 	case ctx.Err() != nil:
 		return "", err
-	case errors.As(err, &conflict):
+	case errors.Is(err, errChangedOutside), errors.As(err, &conflict):
 		return UnsavedChangedOutside, nil
 	case errors.As(err, &failed):
 		return UnsavedNotWritten, nil
@@ -125,7 +135,9 @@ func launchSaveCause(ctx context.Context, err error) (UnsavedCause, error) {
 	return "", err
 }
 
-func (s *Service) saveForAgent(ctx context.Context, p *project.Project, documentID string, call AgentCall, scope draftScope) error {
+// saveForAgent publishes one draft for an agent's call. A mutation at the
+// path passes no launch rule and publishes what the document holds.
+func (s *Service) saveForAgent(ctx context.Context, p *project.Project, documentID string, call AgentCall, launch *launchSave) error {
 	s.ops.RLock()
 	defer s.ops.RUnlock()
 	unlock := s.docLocks.lock(documentLockKey(documentID))
@@ -137,13 +149,20 @@ func (s *Service) saveForAgent(ctx context.Context, p *project.Project, document
 	if !current.Dirty || current.BranchID != p.BranchForRoot(current.RootID) {
 		return nil
 	}
-	if scope == personDrafts {
+	if launch != nil {
+		if launch.pinned[PinnedRevision{DocumentID: current.ID, Revision: current.Revision}] {
+			return nil
+		}
 		held, err := s.holdsUnpublishedAgentText(ctx, current)
 		if err != nil {
 			return err
 		}
 		if held {
 			return errAgentEditHeld
+		}
+		// A launch needs the fact, not the hashes a refusal reports.
+		if current.Diverged {
+			return errChangedOutside
 		}
 	}
 	if current.Diverged {
@@ -157,6 +176,9 @@ func (s *Service) saveForAgent(ctx context.Context, p *project.Project, document
 		ToolName:   strings.TrimSpace(call.ToolName),
 	})
 	if errors.Is(err, projectsource.ErrSourceWriteConflict) {
+		if launch != nil {
+			return errChangedOutside
+		}
 		return s.fileChangedOutside(p, current)
 	}
 	if err != nil {

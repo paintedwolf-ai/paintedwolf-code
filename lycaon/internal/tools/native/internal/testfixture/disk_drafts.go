@@ -2,8 +2,6 @@ package testfixture
 
 import (
 	"context"
-	"os"
-	"path/filepath"
 	"sort"
 	"sync"
 
@@ -12,11 +10,12 @@ import (
 )
 
 // DiskDrafts holds the person's unsaved text beside a real tree in root r1: a
-// launch save writes each draft it may save to disk, as the document owner
-// does, and returns the rest.
+// launch save publishes each draft it may save, as the document owner does,
+// and returns the rest.
 type DiskDrafts struct {
 	tools.EditorDocuments
-	Dir string
+	// Publish writes a saved draft to the tree.
+	Publish func(path, text string) error
 	// Blocked names, by path, why a draft cannot be saved.
 	Blocked map[string]string
 	// Err fails every launch save.
@@ -53,7 +52,7 @@ func (d *DiskDrafts) ForgetCalls() {
 	d.calls = nil
 }
 
-func (d *DiskDrafts) SaveForAgentLaunch(_ context.Context, _ string, _ sourcebranch.ID, call tools.EditorAgentCall) ([]tools.EditorUnsavedDocument, error) {
+func (d *DiskDrafts) SaveForAgentLaunch(_ context.Context, _ string, _ sourcebranch.ID, call tools.EditorAgentCall, _ []tools.EditorPinnedRevision) ([]tools.EditorUnsavedDocument, error) {
 	if d.OnSave != nil {
 		d.OnSave()
 	}
@@ -69,7 +68,7 @@ func (d *DiskDrafts) SaveForAgentLaunch(_ context.Context, _ string, _ sourcebra
 			unsaved = append(unsaved, tools.EditorUnsavedDocument{RootID: "r1", Path: path, Cause: cause})
 			continue
 		}
-		if err := os.WriteFile(filepath.Join(d.Dir, filepath.FromSlash(path)), []byte(d.drafts[path]), 0o644); err != nil {
+		if err := d.Publish(path, d.drafts[path]); err != nil {
 			return nil, err
 		}
 		delete(d.drafts, path)

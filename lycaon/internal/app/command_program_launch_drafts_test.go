@@ -29,15 +29,20 @@ var launchShapes = []struct {
 	name, source string
 	// dir is the directory the process runs in.
 	dir string
+	// detached marks a process whose output is not the program's.
+	detached bool
 }{
 	{name: "alone", source: diskReader + " %[1]s"},
 	{name: "after a native read", source: "cat %[1]s > /dev/null; " + diskReader + " %[1]s"},
-	{name: "pipeline stage", source: "cat %[1]s | " + diskReader + " %[1]s"},
+	{name: "pipeline stage", source: "cat clean.txt | " + stdinThenDiskReader + " %[1]s"},
 	{name: "subshell", source: "(" + diskReader + " %[1]s)"},
-	{name: "background job", source: diskReader + " %[1]s & wait"},
+	{name: "background job", source: diskReader + " %[1]s & wait", detached: true},
 	{name: "second launch", source: "python3 -c 'pass'; " + diskReader + " %[1]s"},
 	{name: "from a subdirectory", source: "cd nested && " + diskReader + " %[1]s", dir: "nested"},
 }
+
+// stdinThenDiskReader drains its input, then writes a file's bytes from disk.
+const stdinThenDiskReader = `python3 -c 'import sys; sys.stdin.buffer.read(); sys.stdout.buffer.write(open(sys.argv[1],"rb").read())'`
 
 // launchPlacements are where a draft sits relative to the program's directory.
 var launchPlacements = []struct {
@@ -89,6 +94,7 @@ func TestProgramLaunchReadsTheBytesNativeReadsServe(t *testing.T) {
 					writeTreeFile(t, f, placed.path, saved)
 					documents[placed.path] = typeHumanDraftEOL(t, service, p, placed.path, typed, placed.eol)
 				}
+				writeTreeFile(t, f, "clean.txt", "")
 				native := callDocumentProgram(t, f, "cat "+read.path)
 				if native.Status != 0 || native.Stderr != "" {
 					t.Fatalf("native read=%+v", native)
@@ -105,7 +111,7 @@ func TestProgramLaunchReadsTheBytesNativeReadsServe(t *testing.T) {
 				if launched.Status != 0 || launched.Stderr != "" || launched.StopCode != "" {
 					t.Fatalf("launch=%+v", launched)
 				}
-				if launched.Stdout != native.Stdout {
+				if !shape.detached && launched.Stdout != native.Stdout {
 					t.Fatalf("the process read %q, the native read served %q", launched.Stdout, native.Stdout)
 				}
 				if !reflect.DeepEqual(launched.LaunchDrafts, toolcontract.LaunchDrafts{}) {
@@ -267,5 +273,91 @@ func TestProgramLaunchBoundsTheUnsavedDraftsItNames(t *testing.T) {
 		if want := fmt.Sprintf("many/f%02d.txt", i); document.Path != want || document.Cause != toolcontract.UnsavedChangedOutside {
 			t.Fatalf("unsaved[%d] = %+v, want %s", i, document, want)
 		}
+	}
+}
+
+// A draft one stage of a program is reading natively is that stage's: a launch
+// in the same statement leaves it unsaved and unreported, and neither stage is
+// refused for the other. The next statement's launch saves it.
+func TestProgramLaunchLeavesADraftItsOwnStageIsReading(t *testing.T) {
+	f, service, p := documentProgram(t)
+	writeTreeFile(t, f, "piped.txt", "saved\n")
+	writeTreeFile(t, f, "other.txt", "saved\n")
+	piped := typeHumanDraft(t, service, p, "piped.txt", "typed and piped\n")
+	other := typeHumanDraft(t, service, p, "other.txt", "typed elsewhere\n")
+	consume := `python3 -c 'import sys; sys.stdout.buffer.write(sys.stdin.buffer.read())'`
+	result := callDocumentProgram(t, f, "cat piped.txt | "+consume)
+	if result.Status != 0 || result.StopCode != "" || result.Stdout != "typed and piped\n" || !reflect.DeepEqual(result.LaunchDrafts, toolcontract.LaunchDrafts{}) {
+		t.Fatalf("pipeline over a draft=%+v", result)
+	}
+	if live, err := service.CurrentSnapshot(t.Context(), p.ID, other.ID); err != nil || live.Dirty || readTreeFile(t, f, "other.txt") != "typed elsewhere\n" {
+		t.Fatalf("the launch did not save the other draft: %+v, %v", live, err)
+	}
+	if live, err := service.CurrentSnapshot(t.Context(), p.ID, piped.ID); err != nil || live.Draft != "typed and piped\n" {
+		t.Fatalf("the piped draft changed: %+v, %v", live, err)
+	}
+	later := callDocumentProgram(t, f, diskReader+" piped.txt")
+	if later.Status != 0 || later.Stdout != "typed and piped\n" || readTreeFile(t, f, "piped.txt") != "typed and piped\n" {
+		t.Fatalf("the next launch did not save the piped draft: %+v", later)
+	}
+}
+
+// A redirect into a draft from an installed process lands with the draft: the
+// launch leaves the destination to the write that pinned it, and the write
+// saves the person's text with the process's output.
+func TestProgramLaunchLeavesARedirectDestinationToItsWrite(t *testing.T) {
+	for _, c := range []struct{ name, source, want string }{
+		{"append", `python3 -c 'print("process line")' >> a.txt`, "human unsaved\nprocess line\n"},
+		{"replace", `python3 -c 'print("process line")' > a.txt`, "process line\n"},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			f, service, p := documentProgram(t)
+			writeTreeFile(t, f, "a.txt", "saved\n")
+			writeTreeFile(t, f, "b.txt", "saved\n")
+			doc := typeHumanDraft(t, service, p, "a.txt", "human unsaved\n")
+			other := typeHumanDraft(t, service, p, "b.txt", "typed elsewhere\n")
+			result := callDocumentProgram(t, f, c.source)
+			if result.Status != 0 || result.StopCode != "" || !reflect.DeepEqual(result.LaunchDrafts, toolcontract.LaunchDrafts{}) {
+				t.Fatalf("redirect=%+v", result)
+			}
+			if live, err := service.CurrentSnapshot(t.Context(), p.ID, doc.ID); err != nil || live.Dirty || live.Draft != c.want || readTreeFile(t, f, "a.txt") != c.want {
+				t.Fatalf("destination: %+v, %v, disk=%q", live, err, readTreeFile(t, f, "a.txt"))
+			}
+			if live, err := service.CurrentSnapshot(t.Context(), p.ID, other.ID); err != nil || live.Dirty || readTreeFile(t, f, "b.txt") != "typed elsewhere\n" {
+				t.Fatalf("the launch did not save the other draft: %+v, %v", live, err)
+			}
+		})
+	}
+}
+
+// A process that rewrites a file replaces what the launch saved for it: the
+// document follows the disk, and the person's text is the version the launch
+// published, recorded under the launching call.
+func TestProgramProcessRewritesTheTextTheLaunchSaved(t *testing.T) {
+	f, service, p := documentProgram(t)
+	writeTreeFile(t, f, "a.txt", "one\ntwo\n")
+	doc := typeHumanDraft(t, service, p, "a.txt", "one\nmy two\n")
+	rewritten := callDocumentProgram(t, f, `python3 -c 'from pathlib import Path; text = Path("a.txt").read_text(); Path("a.txt").write_text(text.upper())'`)
+	if rewritten.Status != 0 || rewritten.StopCode != "" {
+		t.Fatalf("rewrite=%+v", rewritten)
+	}
+	// The process read the person's text, so its rewrite carries it.
+	if got := readTreeFile(t, f, "a.txt"); got != "ONE\nMY TWO\n" {
+		t.Fatalf("disk=%q", got)
+	}
+	observed, err := service.ObserveDisk(t.Context(), p, doc.ID, "window")
+	testutil.FailErr(t, "observe the rewrite", err)
+	if observed.Dirty || observed.Diverged || observed.Draft != "ONE\nMY TWO\n" {
+		t.Fatalf("document after the rewrite=%+v", observed)
+	}
+	var published int
+	testutil.FailErr(t, "published version", f.Database.QueryRowContext(t.Context(),
+		`SELECT COUNT(DISTINCT e.id) FROM source_effects e
+ JOIN source_operations o ON o.id=e.operation_id
+ JOIN source_effect_contributions ec ON ec.effect_id=e.id
+ JOIN source_text_contributions c ON c.id=ec.contribution_id
+ WHERE e.path='a.txt' AND o.origin='agent' AND o.tool_name='command' AND o.session_id=? AND c.origin!='agent'`, f.Session).Scan(&published))
+	if published != 1 {
+		t.Fatalf("the launch recorded %d versions of the person's text, want 1", published)
 	}
 }

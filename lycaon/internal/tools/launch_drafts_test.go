@@ -23,11 +23,17 @@ type launchDocuments struct {
 	err    error
 	calls  []EditorAgentCall
 	branch []sourcebranch.ID
+	// pinned is what each call was told to leave alone.
+	pinned [][]EditorPinnedRevision
 }
 
-func (d *launchDocuments) SaveForAgentLaunch(_ context.Context, _ string, branch sourcebranch.ID, call EditorAgentCall) ([]EditorUnsavedDocument, error) {
+func (d *launchDocuments) SaveForAgentLaunch(_ context.Context, _ string, branch sourcebranch.ID, call EditorAgentCall, pinned []EditorPinnedRevision) ([]EditorUnsavedDocument, error) {
 	d.calls = append(d.calls, call)
 	d.branch = append(d.branch, branch)
+	sort.Slice(pinned, func(i, j int) bool {
+		return pinned[i].DocumentID < pinned[j].DocumentID || pinned[i].DocumentID == pinned[j].DocumentID && pinned[i].Revision < pinned[j].Revision
+	})
+	d.pinned = append(d.pinned, pinned)
 	return d.left, d.err
 }
 
@@ -193,5 +199,50 @@ func TestSaveLaunchDraftsFailsWhenTheSaveCannotRun(t *testing.T) {
 	got, err := SaveLaunchDrafts(WithProgramDrafts(t.Context(), drafts), launchContext(documents))
 	if !errors.Is(err, failure) || !reflect.DeepEqual(got, toolcontract.LaunchDrafts{}) || !reflect.DeepEqual(drafts.Unsaved(), toolcontract.LaunchDrafts{}) {
 		t.Fatalf("err=%v result=%+v program=%+v", err, got, drafts.Unsaved())
+	}
+}
+
+// A launch leaves alone exactly the revisions the program's native operations
+// hold at that moment: each pin counts once however often it is taken, lapses
+// when its last holder releases it, and outside a program nothing is pinned.
+func TestSaveLaunchDraftsPassesTheProgramsLivePins(t *testing.T) {
+	documents := &launchDocuments{}
+	drafts := NewProgramDrafts("command")
+	ctx := WithProgramDrafts(t.Context(), drafts)
+	tc := launchContext(documents)
+	launch := func(ctx context.Context) []EditorPinnedRevision {
+		t.Helper()
+		_, err := SaveLaunchDrafts(ctx, tc)
+		testutil.FailErr(t, "launch save", err)
+		return documents.pinned[len(documents.pinned)-1]
+	}
+	a2, b7 := EditorPinnedRevision{DocumentID: "doc-a", Revision: 2}, EditorPinnedRevision{DocumentID: "doc-b", Revision: 7}
+	a3 := EditorPinnedRevision{DocumentID: "doc-a", Revision: 3}
+
+	if got := launch(ctx); len(got) != 0 {
+		t.Fatalf("a program with no captures pinned %+v", got)
+	}
+	releaseFirst := drafts.Pin(a2.DocumentID, a2.Revision)
+	releaseSecond := drafts.Pin(a2.DocumentID, a2.Revision)
+	releaseB := drafts.Pin(b7.DocumentID, b7.Revision)
+	steps := []struct {
+		name string
+		act  func()
+		want []EditorPinnedRevision
+	}{
+		{"two holders of one revision and another document", func() {}, []EditorPinnedRevision{a2, b7}},
+		{"one holder released, and released again", func() { releaseFirst(); releaseFirst() }, []EditorPinnedRevision{a2, b7}},
+		{"the last holder released", releaseSecond, []EditorPinnedRevision{b7}},
+		{"the document moved on and was captured again", func() { drafts.Pin(a3.DocumentID, a3.Revision) }, []EditorPinnedRevision{a3, b7}},
+		{"the other document released", releaseB, []EditorPinnedRevision{a3}},
+	}
+	for _, step := range steps {
+		step.act()
+		if got := launch(ctx); !reflect.DeepEqual(got, step.want) {
+			t.Fatalf("%s: pinned = %+v, want %+v", step.name, got, step.want)
+		}
+	}
+	if got := launch(t.Context()); len(got) != 0 {
+		t.Fatalf("a launch outside the program was given its pins: %+v", got)
 	}
 }

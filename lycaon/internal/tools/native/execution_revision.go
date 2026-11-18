@@ -249,6 +249,9 @@ func captureDestinationRevision(ctx context.Context, tctx tools.ToolContext, res
 				return sourceview.Text{}, toolcontract.ExecutionRevision{}, &ExecutionRevisionConflict{Path: resolved.DisplayPath, Pinned: revision, Cause: err}
 			}
 		}
+		if drafts, ok := tools.ProgramDraftsFrom(ctx); ok {
+			drafts.Pin(st.Editor.ID, st.Editor.Revision)
+		}
 	} else {
 		revision.Mode, revision.Representation = toolcontract.PublishedDiskRevision, toolcontract.UTF8SourceBytes
 		revision.DiskSHA256 = st.Disk.RawSHA256()

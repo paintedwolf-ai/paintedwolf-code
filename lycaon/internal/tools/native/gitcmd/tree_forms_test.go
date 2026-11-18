@@ -22,36 +22,36 @@ var formInvocations = map[string]struct {
 	argv       []string
 	unlaunched bool
 }{
-	"git status": {argv: []string{"status", "--short"}}, "git diff": {argv: []string{"diff"}},
-	"git blame": {argv: []string{"blame", "a.txt"}}, "git ls-files": {argv: []string{"ls-files"}},
-	"git grep": {argv: []string{"grep", "one"}}, "git describe": {argv: []string{"describe", "--tags"}},
-	"git log": {argv: []string{"log", "--oneline"}}, "git show": {argv: []string{"show", "--stat"}},
-	"git branch": {argv: []string{"branch", "--list"}}, "git tag": {argv: []string{"tag", "-l"}},
-	"git rev-parse": {argv: []string{"rev-parse", "HEAD"}}, "git rev-list": {argv: []string{"rev-list", "HEAD"}},
-	"git merge-base": {argv: []string{"merge-base", "HEAD", "topic"}}, "git remote": {argv: []string{"remote"}},
-	"git config": {argv: []string{"config", "--get", "user.name"}}, "git stash list": {argv: []string{"stash", "list"}},
-	"git worktree list": {argv: []string{"worktree", "list"}}, "git reflog": {argv: []string{"reflog"}},
-	"git shortlog": {argv: []string{"shortlog", "-s", "HEAD"}}, "git ls-tree": {argv: []string{"ls-tree", "HEAD"}},
-	"git cat-file": {argv: []string{"cat-file", "-t", "HEAD"}}, "git show-ref": {argv: []string{"show-ref"}},
-	"git for-each-ref": {argv: []string{"for-each-ref"}},
+	"git status": {argv: []string{"git", "status", "--short"}}, "git diff": {argv: []string{"git", "diff"}},
+	"git blame": {argv: []string{"git", "blame", "a.txt"}}, "git ls-files": {argv: []string{"git", "ls-files"}},
+	"git grep": {argv: []string{"git", "grep", "one"}}, "git describe": {argv: []string{"git", "describe", "--tags"}},
+	"git log": {argv: []string{"git", "log", "--oneline"}}, "git show": {argv: []string{"git", "show", "--stat"}},
+	"git branch": {argv: []string{"git", "branch", "--list"}}, "git tag": {argv: []string{"git", "tag", "-l"}},
+	"git rev-parse": {argv: []string{"git", "rev-parse", "HEAD"}}, "git rev-list": {argv: []string{"git", "rev-list", "HEAD"}},
+	"git merge-base": {argv: []string{"git", "merge-base", "HEAD", "topic"}}, "git remote": {argv: []string{"git", "remote"}},
+	"git config": {argv: []string{"git", "config", "--get", "user.name"}}, "git stash list": {argv: []string{"git", "stash", "list"}},
+	"git worktree list": {argv: []string{"git", "worktree", "list"}}, "git reflog": {argv: []string{"git", "reflog"}},
+	"git shortlog": {argv: []string{"git", "shortlog", "-s", "HEAD"}}, "git ls-tree": {argv: []string{"git", "ls-tree", "HEAD"}},
+	"git cat-file": {argv: []string{"git", "cat-file", "-t", "HEAD"}}, "git show-ref": {argv: []string{"git", "show-ref"}},
+	"git for-each-ref": {argv: []string{"git", "for-each-ref"}},
 
-	"git add": {argv: []string{"add", "new.txt"}}, "git commit": {argv: []string{"commit", "-m", "staged work"}},
-	"git restore": {argv: []string{"restore", "a.txt"}}, "git checkout": {argv: []string{"checkout", "topic"}},
-	"git switch": {argv: []string{"switch", "topic"}}, "git merge": {argv: []string{"merge", "topic"}},
-	"git cherry-pick": {argv: []string{"cherry-pick", "v1"}}, "git revert": {argv: []string{"revert", "--no-edit", "HEAD"}},
-	"git rebase": {argv: []string{"rebase", "topic"}}, "git stash": {argv: []string{"stash"}},
-	"git reset": {argv: []string{"reset", "--hard"}}, "git clean": {argv: []string{"clean", "-n"}},
-	"git worktree": {argv: []string{"worktree", "prune"}}, "git apply": {argv: []string{"apply", "--check", "new.txt"}},
-	"git rm": {argv: []string{"rm", "sub/b.txt"}}, "git mv": {argv: []string{"mv", "sub/b.txt", "sub/c.txt"}},
-	"git bisect": {argv: []string{"bisect", "good"}}, "git bisect start": {argv: []string{"bisect", "start"}},
-	"git bisect skip": {argv: []string{"bisect", "skip"}}, "git bisect run": {argv: []string{"bisect", "run", "true"}},
-	"git bisect reset": {argv: []string{"bisect", "reset"}}, "git bisect log": {argv: []string{"bisect", "log"}},
-	"git bisect terms": {argv: []string{"bisect", "terms"}}, "git bisect visualize": {argv: []string{"bisect", "visualize"}},
-	"git bisect view": {argv: []string{"bisect", "view"}}, "git init": {argv: []string{"init", "fresh"}},
+	"git add": {argv: []string{"git", "add", "new.txt"}}, "git commit": {argv: []string{"git", "commit", "-m", "staged work"}},
+	"git restore": {argv: []string{"git", "restore", "a.txt"}}, "git checkout": {argv: []string{"git", "checkout", "topic"}},
+	"git switch": {argv: []string{"git", "switch", "topic"}}, "git merge": {argv: []string{"git", "merge", "topic"}},
+	"git cherry-pick": {argv: []string{"git", "cherry-pick", "v1"}}, "git revert": {argv: []string{"git", "revert", "--no-edit", "HEAD"}},
+	"git rebase": {argv: []string{"git", "rebase", "topic"}}, "git stash": {argv: []string{"git", "stash"}},
+	"git reset": {argv: []string{"git", "reset", "--hard"}}, "git clean": {argv: []string{"git", "clean", "-n"}},
+	"git worktree": {argv: []string{"git", "worktree", "prune"}}, "git apply": {argv: []string{"git", "apply", "--check", "new.txt"}},
+	"git rm": {argv: []string{"git", "rm", "sub/b.txt"}}, "git mv": {argv: []string{"git", "mv", "sub/b.txt", "sub/c.txt"}},
+	"git bisect": {argv: []string{"git", "bisect", "good"}}, "git bisect start": {argv: []string{"git", "bisect", "start"}},
+	"git bisect skip": {argv: []string{"git", "bisect", "skip"}}, "git bisect run": {argv: []string{"git", "bisect", "run", "true"}},
+	"git bisect reset": {argv: []string{"git", "bisect", "reset"}}, "git bisect log": {argv: []string{"git", "bisect", "log"}},
+	"git bisect terms": {argv: []string{"git", "bisect", "terms"}}, "git bisect visualize": {argv: []string{"git", "bisect", "visualize"}},
+	"git bisect view": {argv: []string{"git", "bisect", "view"}}, "git init": {argv: []string{"git", "init", "fresh"}},
 
-	"git pull": {argv: []string{"pull"}, unlaunched: true}, "git fetch": {argv: []string{"fetch"}, unlaunched: true},
-	"git push": {argv: []string{"push"}, unlaunched: true}, "git ls-remote": {argv: []string{"ls-remote"}, unlaunched: true},
-	"git clone": {argv: []string{"clone", "https://example.test/repo.git", "cloned"}, unlaunched: true},
+	"git pull": {argv: []string{"git", "pull"}, unlaunched: true}, "git fetch": {argv: []string{"git", "fetch"}, unlaunched: true},
+	"git push": {argv: []string{"git", "push"}, unlaunched: true}, "git ls-remote": {argv: []string{"git", "ls-remote"}, unlaunched: true},
+	"git clone": {argv: []string{"git", "clone", "https://example.test/repo.git", "cloned"}, unlaunched: true},
 }
 
 func sortedForms[V any](forms map[string]V) []string {
@@ -123,7 +123,9 @@ func draftHarness(t *testing.T) (*harness, *nativefixture.DiskDrafts, *launchEve
 	t.Helper()
 	h := newApplyHarness(t)
 	events := &launchEvents{}
-	drafts := &nativefixture.DiskDrafts{Dir: h.root, Blocked: map[string]string{}, OnSave: func() { events.note("save") }}
+	drafts := &nativefixture.DiskDrafts{Blocked: map[string]string{}, OnSave: func() { events.note("save") }, Publish: func(path, text string) error {
+		return os.WriteFile(filepath.Join(h.root, filepath.FromSlash(path)), []byte(text), 0o644)
+	}}
 	h.tc.Identity.ProjectID = "p1"
 	h.tc.Source.EditorDocuments = drafts
 	h.owners.Launch = func(ctx context.Context, tc tools.ToolContext, subject, line string, services []confine.HostService) (lycexec.LaunchPlan, func(context.Context, tools.AgentLaunchOutcome), error) {
@@ -180,17 +182,17 @@ func TestGitWorkingTreeFormsSeeThePersonsDraft(t *testing.T) {
 		sees  func(h *harness, r run) bool
 		draft string
 	}{
-		{name: "diff", argv: []string{"diff"}, sees: func(_ *harness, r run) bool { return strings.Contains(r.stdout, "+typed by the person") }},
-		{name: "status", argv: []string{"status", "--short"}, draft: "sub/b.txt", sees: func(_ *harness, r run) bool { return strings.Contains(r.stdout, "sub/b.txt") }},
-		{name: "grep", argv: []string{"grep", "typed by"}, sees: func(_ *harness, r run) bool { return strings.Contains(r.stdout, "a.txt") }},
-		{name: "blame", argv: []string{"blame", "a.txt"}, sees: func(_ *harness, r run) bool { return strings.Contains(r.stdout, "typed by the person") }},
-		{name: "add", argv: []string{"add", "a.txt"}, sees: func(h *harness, _ run) bool {
+		{name: "diff", argv: []string{"git", "diff"}, sees: func(_ *harness, r run) bool { return strings.Contains(r.stdout, "+typed by the person") }},
+		{name: "status", argv: []string{"git", "status", "--short"}, draft: "sub/b.txt", sees: func(_ *harness, r run) bool { return strings.Contains(r.stdout, "sub/b.txt") }},
+		{name: "grep", argv: []string{"git", "grep", "typed by"}, sees: func(_ *harness, r run) bool { return strings.Contains(r.stdout, "a.txt") }},
+		{name: "blame", argv: []string{"git", "blame", "a.txt"}, sees: func(_ *harness, r run) bool { return strings.Contains(r.stdout, "typed by the person") }},
+		{name: "add", argv: []string{"git", "add", "a.txt"}, sees: func(h *harness, _ run) bool {
 			return strings.Contains(h.git("diff", "--cached"), "+typed by the person")
 		}},
-		{name: "stash", argv: []string{"stash"}, sees: func(h *harness, _ run) bool {
+		{name: "stash", argv: []string{"git", "stash"}, sees: func(h *harness, _ run) bool {
 			return strings.Contains(h.git("stash", "show", "-p"), "+typed by the person")
 		}},
-		{name: "mv", argv: []string{"mv", "a.txt", "moved.txt"}, sees: func(h *harness, _ run) bool {
+		{name: "mv", argv: []string{"git", "mv", "a.txt", "moved.txt"}, sees: func(h *harness, _ run) bool {
 			moved, ok := h.lookup("moved.txt")
 			return ok && strings.Contains(moved, "typed by the person")
 		}},
@@ -221,7 +223,7 @@ func TestGitRunsOverADraftItCannotSave(t *testing.T) {
 	drafts.Type("a.txt", "unsavable\n")
 	drafts.Type("sub/b.txt", "bee\ntyped by the person\n")
 	drafts.Blocked["a.txt"] = "changed_outside"
-	r := h.exec("diff")
+	r := h.exec("git", "diff")
 	if r.err != nil || r.result.Status != 0 {
 		t.Fatalf("status=%d err=%v stderr=%s", r.result.Status, r.err, r.stderr)
 	}

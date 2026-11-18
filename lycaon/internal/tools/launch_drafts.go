@@ -16,7 +16,8 @@ func SaveLaunchDrafts(ctx context.Context, tc ToolContext) (toolcontract.LaunchD
 	if !ok {
 		return toolcontract.LaunchDrafts{}, nil
 	}
-	left, err := documents.SaveForAgentLaunch(ctx, tc.Identity.ProjectID, tc.Source.ProjectSourceBranch, DraftSaveCall(ctx, tc))
+	program, inProgram := ProgramDraftsFrom(ctx)
+	left, err := documents.SaveForAgentLaunch(ctx, tc.Identity.ProjectID, tc.Source.ProjectSourceBranch, DraftSaveCall(ctx, tc), program.pinnedRevisions())
 	if err != nil {
 		return toolcontract.LaunchDrafts{}, err
 	}
@@ -27,8 +28,8 @@ func SaveLaunchDrafts(ctx context.Context, tc ToolContext) (toolcontract.LaunchD
 			Cause: document.Cause,
 		})
 	}
-	if drafts, ok := ProgramDraftsFrom(ctx); ok {
-		drafts.launchSaved(unsaved)
+	if inProgram {
+		program.launchSaved(unsaved)
 	}
 	return boundLaunchDrafts(unsaved), nil
 }
@@ -44,6 +45,9 @@ func DraftSaveCall(ctx context.Context, tc ToolContext) EditorAgentCall {
 }
 
 func boundLaunchDrafts(unsaved []toolcontract.UnsavedDocument) toolcontract.LaunchDrafts {
+	if len(unsaved) == 0 {
+		return toolcontract.LaunchDrafts{}
+	}
 	sort.Slice(unsaved, func(i, j int) bool { return unsaved[i].Path < unsaved[j].Path })
 	if len(unsaved) <= toolcontract.MaxUnsavedDocuments {
 		return toolcontract.LaunchDrafts{UnsavedDocuments: unsaved}

@@ -47,8 +47,12 @@ func (a editorDocumentsAdapter) SaveForAgentOperation(ctx context.Context, proje
 	return documentEditError(a.service.SaveForAgentOperation(ctx, projectID, branch, rootID, path, descendants, agentCall(call)))
 }
 
-func (a editorDocumentsAdapter) SaveForAgentLaunch(ctx context.Context, projectID string, branch sourcebranch.ID, call tools.EditorAgentCall) ([]tools.EditorUnsavedDocument, error) {
-	left, err := a.service.SaveForAgentLaunch(ctx, projectID, branch, agentCall(call))
+func (a editorDocumentsAdapter) SaveForAgentLaunch(ctx context.Context, projectID string, branch sourcebranch.ID, call tools.EditorAgentCall, pinned []tools.EditorPinnedRevision) ([]tools.EditorUnsavedDocument, error) {
+	revisions := make([]editordoc.PinnedRevision, 0, len(pinned))
+	for _, pin := range pinned {
+		revisions = append(revisions, editordoc.PinnedRevision{DocumentID: pin.DocumentID, Revision: pin.Revision})
+	}
+	left, err := a.service.SaveForAgentLaunch(ctx, projectID, branch, agentCall(call), revisions)
 	if err != nil {
 		return nil, documentEditError(err)
 	}

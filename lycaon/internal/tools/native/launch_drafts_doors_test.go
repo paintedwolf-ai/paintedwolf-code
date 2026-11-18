@@ -46,7 +46,9 @@ func newLaunchDoorWorld(t *testing.T) *launchDoorWorld {
 	registry := tools.NewDefaultRegistry()
 	testutil.FailErr(t, "register terminal tools", RegisterTerminalSessionTools(registry, bg))
 	w := &launchDoorWorld{t: t, dir: f.dir, registry: registry, tc: f.tc}
-	w.documents = &nativefixture.DiskDrafts{Dir: f.dir, Blocked: map[string]string{}}
+	w.documents = &nativefixture.DiskDrafts{Blocked: map[string]string{}, Publish: func(path, text string) error {
+		return os.WriteFile(filepath.Join(f.dir, filepath.FromSlash(path)), []byte(text), 0o644)
+	}}
 	w.tc.Source.EditorDocuments = w.documents
 	w.tc.Effects.Out = &tools.ToolInvocationOut{}
 	boundary := sandbox.NewBoundary(sandbox.Config{ProjectRootRequired: true}, []sandbox.ToolProfile{{ID: w.tc.Identity.Agent, Tools: map[string]bool{"command": true}}})

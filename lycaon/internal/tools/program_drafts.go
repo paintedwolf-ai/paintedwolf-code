@@ -10,19 +10,20 @@ import (
 type programDraftsKey struct{}
 
 // ProgramDrafts is one program's view of the person's unsaved documents:
-// which paths held a draft when a root was first read, and which drafts its
-// launches could not save.
+// which paths held a draft when a root was first read, which revisions its
+// native operations have pinned, and which drafts its launches could not save.
 type ProgramDrafts struct {
 	tool string
 
 	mu      sync.Mutex
 	roots   map[string]map[string]bool
+	pinned  map[EditorPinnedRevision]int
 	unsaved map[string]toolcontract.UnsavedDocument
 }
 
 // NewProgramDrafts starts the view for a program run by tool.
 func NewProgramDrafts(tool string) *ProgramDrafts {
-	return &ProgramDrafts{tool: tool, roots: map[string]map[string]bool{}, unsaved: map[string]toolcontract.UnsavedDocument{}}
+	return &ProgramDrafts{tool: tool, roots: map[string]map[string]bool{}, pinned: map[EditorPinnedRevision]int{}, unsaved: map[string]toolcontract.UnsavedDocument{}}
 }
 
 // WithProgramDrafts binds a program's draft view to its evaluation.
@@ -50,6 +51,40 @@ func (d *ProgramDrafts) Holds(rootID, path string, load func() (map[string]bool,
 		d.roots[rootID] = paths
 	}
 	return paths[path], nil
+}
+
+// Pin marks a document revision a native operation captured, so a launch
+// leaves that draft to the operation. A source capture releases it when its
+// bytes are done with; a destination's pin lapses when its write moves the
+// document on.
+func (d *ProgramDrafts) Pin(documentID string, revision int64) (release func()) {
+	pin := EditorPinnedRevision{DocumentID: documentID, Revision: revision}
+	d.mu.Lock()
+	d.pinned[pin]++
+	d.mu.Unlock()
+	var once sync.Once
+	return func() {
+		once.Do(func() {
+			d.mu.Lock()
+			defer d.mu.Unlock()
+			if d.pinned[pin]--; d.pinned[pin] <= 0 {
+				delete(d.pinned, pin)
+			}
+		})
+	}
+}
+
+func (d *ProgramDrafts) pinnedRevisions() []EditorPinnedRevision {
+	if d == nil {
+		return nil
+	}
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	pins := make([]EditorPinnedRevision, 0, len(d.pinned))
+	for pin := range d.pinned {
+		pins = append(pins, pin)
+	}
+	return pins
 }
 
 // launchSaved records a launch save: every root's inventory is stale, and the

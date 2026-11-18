@@ -18,15 +18,16 @@ func TestExternalCommandSaveMergesWithHumanTyping(t *testing.T) {
 	testutil.FailErr(t, "saved checkpoint", os.WriteFile(path, []byte("one\ntwo\n"), 0644))
 	document, err := service.Open(t.Context(), p, "a.txt", "r1", "", "window", nil)
 	testutil.FailErr(t, "open editor", err)
+	outside := callDocumentProgram(t, f, `python3 -c 'from pathlib import Path; Path("a.txt").write_text("ONE\ntwo\n")'`)
+	if outside.Status != 0 || outside.StopCode != "" || outside.Stdout != "" || outside.Stderr != "" {
+		t.Fatalf("external save=%+v", outside)
+	}
+	// The person types before their window has observed the process's save.
 	typed, err := service.ReplaceSnapshot(t.Context(), document.ID, p.ID, editordoc.SnapshotReplacement{
 		DocumentCommand: editordoc.DocumentCommand{ClientID: "window", OperationID: uuid.NewString(), ExpectedRevision: document.Revision},
 		Content:         "one\nmy two\n", EOL: "lf",
 	})
 	testutil.FailErr(t, "person types", err)
-	outside := callDocumentProgram(t, f, `python3 -c 'from pathlib import Path; Path("a.txt").write_text("ONE\ntwo\n")'`)
-	if outside.Status != 0 || outside.StopCode != "" || outside.Stdout != "" || outside.Stderr != "" {
-		t.Fatalf("external save=%+v", outside)
-	}
 	saved, err := os.ReadFile(path)
 	testutil.FailErr(t, "external disk bytes", err)
 	if string(saved) != "ONE\ntwo\n" {
