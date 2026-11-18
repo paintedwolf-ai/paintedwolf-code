@@ -12,7 +12,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/lycaon/lycaon/internal/api"
 	"github.com/lycaon/lycaon/internal/testutil"
 	wire "github.com/lycaon/lycaon/pkg/api"
 	"github.com/lycaon/lycaon/test/wiring"
@@ -129,7 +128,7 @@ func getJSON[T any](t *testing.T, base, path string, wantStatus int) T {
 	t.Helper()
 	req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, base+path, nil)
 	testutil.FailErr(t, "http.NewRequest failed", err)
-	req.Header.Set("Authorization", "Bearer "+api.TestAPIToken)
+	req.Header.Set("Authorization", fixtureAuthorization())
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		t.Fatalf("GET %s: %v", path, err)
@@ -160,7 +159,7 @@ func drainPerMessageStream(t *testing.T, url string, deadline time.Duration) ([]
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	testutil.FailErr(t, "http.NewRequestWithContext failed", err)
-	req.Header.Set("Authorization", "Bearer "+api.TestAPIToken)
+	req.Header.Set("Authorization", fixtureAuthorization())
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		t.Fatalf("open per-message stream: %v", err)
@@ -211,7 +210,7 @@ func subscribeProjectEvents(t *testing.T, ctx context.Context, base, projectID s
 	t.Helper()
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, base+"/v1/events?project_id="+projectID, nil)
 	testutil.FailErr(t, "http.NewRequestWithContext failed", err)
-	req.Header.Set("Authorization", "Bearer "+api.TestAPIToken)
+	req.Header.Set("Authorization", fixtureAuthorization())
 	resp, err := http.DefaultClient.Do(req) //nolint:bodyclose // The SSE reader closes resp.Body.
 	if err != nil {
 		t.Fatalf("subscribe events: %v", err)

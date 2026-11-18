@@ -98,8 +98,7 @@ func TestWorkerOutcomesAdvancePlannedWorkflow(t *testing.T) {
 				}
 				testutil.FailErr(t, "reconcile before coordinator request", h.Sessions.Manager.Coordinator.Control.AssertRunnable(ctx, sess.ID))
 			} else {
-				stop := h.StartBackgroundWorkers(t, ctx)
-				t.Cleanup(stop)
+				h.Start(t)
 			}
 			waitWorkflowPhase(t, ctx, h.Workflows.Manager, run.ID, "claims")
 			stale := tasks[0]

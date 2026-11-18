@@ -59,13 +59,16 @@ type Harness struct {
 	testDir         string
 	dbPath          string
 	settlesTopology bool
+	startup         *ServeStartup
 }
 
 // BuildForTest constructs a production-parity server via app.Build with test defaults.
 func BuildForTest(t *testing.T, opts ...Option) *Harness {
 	t.Helper()
 	t.Setenv("LYCAON_LLM_MOCK", "1")
-	t.Setenv("LYCAON_API_TOKEN", api.TestAPIToken)
+	token, err := api.GenerateAPIToken()
+	testutil.FailErr(t, "generate harness bearer", err)
+	t.Setenv("LYCAON_API_TOKEN", token)
 	t.Setenv("LYCAON_TEST", "1")
 	t.Setenv("LYCAON_LOG_LEVEL", "error")
 	// Isolate device configuration for deterministic tests.
@@ -86,7 +89,8 @@ func BuildForTest(t *testing.T, opts ...Option) *Harness {
 		testutil.FailErr(t, "write global approvals", os.WriteFile(filepath.Join(os.Getenv("LYCAON_CONFIG_DIR"), "approvals.yaml"), []byte("approval_posture: "+string(o.globalApprovalPosture)+"\n"), 0o600))
 	}
 
-	cfg := configuration.Config{WebResearchExchange: o.webResearchExchange}
+	startup := NewServeStartup()
+	cfg := configuration.Config{Startup: startup, WebResearchExchange: o.webResearchExchange}
 	cfg.ConfigRoot = configlayout.FindModuleRoot()
 	// Install packs before the builder resolves the catalog.
 	installHarnessPacks(t, o.installedPackDirs)
@@ -169,6 +173,7 @@ func BuildForTest(t *testing.T, opts ...Option) *Harness {
 		testDir:         testDir,
 		dbPath:          dbPath,
 		settlesTopology: o.autoCompleteLegs,
+		startup:         startup,
 	}
 	return h
 }
@@ -302,20 +307,6 @@ func (h *Harness) ProgressUpdateArgs(t *testing.T, ctx context.Context, sessionI
 	}
 	args["expected_revision"], args["item_ids"] = current.Revision, ids
 	return args
-}
-
-// StartBackgroundWorkers runs worker and scan pollers until cancellation.
-func (h *Harness) StartBackgroundWorkers(t *testing.T, ctx context.Context) context.CancelFunc {
-	t.Helper()
-	if h == nil || h.ServeApp == nil {
-		t.Fatal("harness serve app missing")
-	}
-	if h.settlesTopology {
-		t.Fatal("topology settlement fixture requires an isolated queue claimant")
-	}
-	cancel, err := h.ServeApp.StartBackgroundWorkers(ctx)
-	testutil.FailErr(t, "start background workers", err)
-	return cancel
 }
 
 // MemoryHub returns the event hub when backed by MemoryHub, unwrapping publishers.

@@ -37,8 +37,7 @@ func TestFreeChatImplementerTask(t *testing.T) {
 	}})
 	rec := llmtest.NewRecordingClient(mock)
 	h := BuildForTest(t, WithLLMClient(rec))
-	cancel := h.StartBackgroundWorkers(t, context.Background())
-	t.Cleanup(cancel)
+	h.Start(t)
 
 	ctx := context.Background()
 	dir := t.TempDir()

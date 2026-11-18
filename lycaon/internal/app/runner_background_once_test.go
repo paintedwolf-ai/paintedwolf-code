@@ -31,13 +31,13 @@ func TestBackgroundOneShotDoesNotGateStartupAndJoinsOnCancellation(t *testing.T)
 	case <-t.Context().Done():
 		t.Fatal("background warm blocked startup")
 	}
-	t.Cleanup(app.stopRunners)
+	t.Cleanup(func() { app.stopRunnersWithin(context.Background()) })
 	select {
 	case <-entered:
 	case <-t.Context().Done():
 		t.Fatal("background warm never started")
 	}
-	app.stopRunners()
+	app.stopRunnersWithin(t.Context())
 	select {
 	case <-returned:
 	default:
@@ -65,13 +65,13 @@ func TestBackgroundOneShotSettlesOnceForEveryOutcome(t *testing.T) {
 				}
 			})
 			testutil.FailErr(t, "start background one shot", app.startRunners(t.Context()))
-			t.Cleanup(app.stopRunners)
+			t.Cleanup(func() { app.stopRunnersWithin(context.Background()) })
 			select {
 			case <-app.runners.runners[0].done:
 			case <-t.Context().Done():
 				t.Fatal("one-shot accounting did not settle")
 			}
-			app.stopRunners()
+			app.stopRunnersWithin(t.Context())
 			if calls.Load() != 1 || len(app.unfinishedRunners()) != 0 {
 				t.Fatalf("calls=%d unfinished=%v", calls.Load(), app.unfinishedRunners())
 			}
@@ -129,7 +129,7 @@ func TestInstalledDecisionWarmCompletesBeforeStartupReturns(t *testing.T) {
 	case <-t.Context().Done():
 		t.Fatal("startup did not finish after warm")
 	}
-	t.Cleanup(app.stopRunners)
+	t.Cleanup(func() { app.stopRunnersWithin(context.Background()) })
 	if !engine.ready.Load() {
 		t.Fatal("first request could observe unwarmed installed engine")
 	}

@@ -8,7 +8,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/lycaon/lycaon/internal/api"
 	"github.com/lycaon/lycaon/internal/llm"
 	"github.com/lycaon/lycaon/internal/testutil"
 	wire "github.com/lycaon/lycaon/pkg/api"
@@ -210,7 +209,7 @@ func settingsGetRaw(t *testing.T, base, path string) string {
 	t.Helper()
 	req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, base+path, nil)
 	testutil.FailErr(t, "http.NewRequest failed", err)
-	req.Header.Set("Authorization", "Bearer "+api.TestAPIToken)
+	req.Header.Set("Authorization", fixtureAuthorization())
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		t.Fatalf("GET %s: %v", path, err)
