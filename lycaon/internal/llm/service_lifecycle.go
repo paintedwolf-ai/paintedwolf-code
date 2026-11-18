@@ -68,6 +68,18 @@ func NewService(ctx context.Context, mock modelcall.LLMClient, local *nativegen.
 		Capacity:               NewCapacityGate(catalog.CapacityPolicy()),
 		Refusals:               providerretry.NewModelRefusalGate(),
 	}
+	if local != nil && local.Store != nil {
+		if err := local.Store.BindSelectedRoles(svc.initializeLocalRoles); err != nil {
+			if local.Runtime != nil {
+				local.Runtime.ReportSelectionError(err)
+			} else {
+				registry.localStartup.Detail = err.Error()
+			}
+		}
+	}
+	if local != nil && local.OfflineInstaller && local.Runtime != nil {
+		local.Runtime.SetupInstaller(local.OfflineTier, svc.initializeLocalRoles, func() { registry.RefreshDiscovery(IncludedProviderID); svc.ResetPlanes() })
+	}
 	return svc, nil
 }
 
@@ -123,6 +135,7 @@ func NewRegistry(ctx context.Context, catalog *ProviderCatalog, credentials *pro
 		r.localRuntime = local.Runtime
 		r.localStartup = local.Initial
 		r.localStore = local.Store
+		r.offlineInstaller = local.OfflineInstaller
 	}
 	r.rateGate = providerretry.NewProviderRateGate(rateDirectory)
 	r.catalog = catalog

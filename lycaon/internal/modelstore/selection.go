@@ -10,10 +10,11 @@ import (
 )
 
 type Selection struct {
-	State    string
-	Model    string
-	Device   string
-	Revision string
+	BindingPending bool
+	State          string
+	Model          string
+	Device         string
+	Revision       string
 }
 
 func (s *Store) Selection() (Selection, error) {
@@ -39,7 +40,7 @@ func (s *Store) checkEvictable(history []Manifest, keep *Manifest) error {
 			return err
 		}
 		ok, err := filelock.TryExclusive(f)
-		if err = errors.Join(err, f.Close()); err != nil {
+		if err := errors.Join(err, f.Close()); err != nil {
 			return err
 		}
 		if !ok {
@@ -149,4 +150,39 @@ func (s *Store) install(ctx context.Context, signed SignedManifest, resumable bo
 		return err
 	}
 	return s.finishSelection()
+}
+
+// A failed low-space switch must not restore the installer tier on restart.
+func (s *Store) AwaitingInitialModel() (bool, error) {
+	h, err := s.history()
+	return h.selection.State == "unconfigured" && len(h.all) == 0, err
+}
+
+// The selection stays pending until the corresponding policy write succeeds.
+func (s *Store) BindSelectedRoles(apply func(string) error) (resultErr error) {
+	selection, err := s.Selection()
+	if err != nil || !selection.BindingPending {
+		return err
+	}
+	provision, err := s.provisioningLock()
+	if err != nil {
+		return err
+	}
+	defer func() { resultErr = errors.Join(resultErr, provision.Close()) }()
+	selection, err = s.Selection()
+	if err != nil || !selection.BindingPending {
+		return err
+	}
+	if err := apply(selection.Model); err != nil {
+		return err
+	}
+	lock, err := s.lockJournal()
+	if err != nil {
+		return err
+	}
+	defer lock.Unlock()
+	if err := s.recoverJournal(); err != nil {
+		return err
+	}
+	return s.appendRecord(journalRecord{Version: 2, Selection: "roles_bound"})
 }

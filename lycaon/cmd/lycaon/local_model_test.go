@@ -16,7 +16,7 @@ import (
 
 func TestLocalModelCLI(t *testing.T) {
 	dir := t.TempDir()
-	manifest := fmt.Sprintf(`{"manifest":{"model":"dense","revision":"r1","device":"mlx","artifact":{"name":"weights","format":"safetensors","bytes":1,"digest":"%s"}}}`, strings.Repeat("a", 64))
+	manifest := fmt.Sprintf(`{"manifest":{"model":"dense","revision":"r1","device":"mlx","artifact":{"name":"weights","format":"safetensors","bytes":1,"digest":%q}}}`, strings.Repeat("a", 64))
 	testutil.FailErr(t, "write model fixture", os.WriteFile(filepath.Join(dir, "manifest.json"), []byte(manifest), 0600))
 	for _, tc := range []struct {
 		args []string

@@ -51,24 +51,24 @@ func TestTransferAdmissionAndCancellation(t *testing.T) {
 	req := api.LocalModelSelectionRequest{Model: tiers[1].id}
 	settled := make(chan struct{})
 	notify := func() { close(settled) }
-	if err := rt.StartSelection(req, notify); !errors.Is(err, inference.ErrCapacity) {
+	if err := rt.StartSelection(req, nil, notify); !errors.Is(err, inference.ErrCapacity) {
 		t.Fatalf("capacity: %v", err)
 	}
 	rt.config.PhysicalBytes = 32 << 30
 	rt.config.DeviceMemory, _ = inference.NewMemoryBudget(20 << 30)
 	rt.config.Pins = []modelstore.ModelPin{}
-	if err := rt.StartSelection(req, notify); err == nil {
+	if err := rt.StartSelection(req, nil, notify); err == nil {
 		t.Fatal("accepted unpublished tier")
 	}
 	req.BundlePath = "unknown/relative"
-	if err := rt.StartSelection(req, notify); err == nil {
+	if err := rt.StartSelection(req, nil, notify); err == nil {
 		t.Fatal("accepted relative path")
 	}
 	_, release, err := rt.acquire(t.Context())
 	testutil.FailErr(t, "acquire inference", err)
 	req.BundlePath = filepath.Join(t.TempDir(), "model.pwmodel")
-	testutil.FailErr(t, "start import", rt.StartSelection(req, notify))
-	if err := rt.StartSelection(req, notify); err == nil {
+	testutil.FailErr(t, "start import", rt.StartSelection(req, nil, notify))
+	if err := rt.StartSelection(req, nil, notify); err == nil {
 		t.Fatal("started overlapping import")
 	}
 	rt.SelectionStatus(&status)
@@ -116,7 +116,7 @@ func TestOfflineSelectionLoadsAndDiscoversChosenTier(t *testing.T) {
 	rt.config.DeviceMemory, _ = inference.NewMemoryBudget(12 << 30)
 	request := api.LocalModelSelectionRequest{Model: tiers[1].id, PackagedSeed: true}
 	notified := make(chan struct{})
-	testutil.FailErr(t, "start seed import", rt.StartSelection(request, func() { close(notified) }))
+	testutil.FailErr(t, "start seed import", rt.StartSelection(request, nil, func() { close(notified) }))
 	<-notified
 	if err := rt.Warm(t.Context(), DefaultModelID); err == nil || rt.Readiness().State != "ready" {
 		t.Fatal("stale request displaced the admitted tier")
@@ -127,5 +127,40 @@ func TestOfflineSelectionLoadsAndDiscoversChosenTier(t *testing.T) {
 	testutil.FailErr(t, "discover selected revision", err)
 	if status.SelectedModel != request.Model || status.SeedModel != request.Model || len(entries) != 1 || entries[0].ID != request.Model || rt.loaded.process == prior {
 		t.Fatalf("tier switch: %+v %+v", status, entries)
+	}
+}
+
+func TestOfflineInstallerProvisionsOnlyAPristineStore(t *testing.T) {
+	rt := repairFixture(t)
+	rt.unload()
+	rt.config.ModelStore = modelstore.New(t.TempDir(), fixtureAuthority{})
+	rt.config.DeviceMemory, _ = inference.NewMemoryBudget(8 << 30)
+	rt.config.PhysicalBytes = 16 << 30
+	done := make(chan struct{})
+	initialized := ""
+	rt.SetupInstaller(DefaultModelID, func(id string) error { initialized = id; return nil }, func() { close(done) })
+	<-done
+	selection, err := rt.config.ModelStore.Selection()
+	testutil.FailErr(t, "read offline selection", err)
+	if initialized != DefaultModelID || selection.Model != DefaultModelID || rt.Readiness().State != "ready" {
+		t.Fatalf("offline setup: %+v %+v", selection, rt.Readiness())
+	}
+	testutil.FailErr(t, "opt out", rt.RemoveModel(t.Context()))
+	rt.SetupInstaller(DefaultModelID, nil, nil)
+	selection, err = rt.config.ModelStore.Selection()
+	testutil.FailErr(t, "read retained opt-out", err)
+	if selection.State != "opted_out" {
+		t.Fatal("installer revoked opt-out")
+	}
+}
+
+func TestDiscreteRecommendationLeavesAdmissibleHigherTierSelectable(t *testing.T) {
+	host, _ := inference.NewMemoryBudget(32 << 30)
+	device, _ := inference.NewMemoryBudget(16646579098)
+	rt := NewRuntime(RuntimeConfig{Backend: "vulkan", PhysicalBytes: 20 << 30, DeviceMemory: device, HostMemory: host})
+	defer rt.Close()
+	options := rt.ModelTiers()
+	if !options[1].Recommended || !options[2].Eligible || options[2].Recommended {
+		t.Fatalf("discrete tier choices: %+v", options)
 	}
 }

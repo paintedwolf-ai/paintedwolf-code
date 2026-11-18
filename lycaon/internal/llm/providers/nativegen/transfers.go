@@ -53,7 +53,7 @@ func (p *Runtime) SelectionStatus(status *api.LocalGenerationStatus) {
 	}
 }
 
-func (p *Runtime) StartSelection(req api.LocalModelSelectionRequest, settled func()) error {
+func (p *Runtime) StartSelection(req api.LocalModelSelectionRequest, installed func(string) error, settled func()) error {
 	if p == nil || p.config.ModelStore == nil {
 		return errors.New("local generation runtime is unavailable")
 	}
@@ -92,10 +92,13 @@ func (p *Runtime) StartSelection(req api.LocalModelSelectionRequest, settled fun
 	go func() {
 		defer cancel()
 		err := p.importSelection(ctx, req, pin, job)
+		if installed != nil {
+			err = errors.Join(err, p.config.ModelStore.BindSelectedRoles(installed))
+		}
 		p.transfers.Lock()
 		p.transfers.active = nil
 		if err != nil && !errors.Is(err, context.Canceled) {
-			p.readiness.Store(&Readiness{State: "unavailable", Action: "retry", Detail: err.Error()})
+			p.ReportSelectionError(err)
 		}
 		close(job.done)
 		p.transfers.Unlock()
@@ -173,4 +176,17 @@ func (p *Runtime) RemoveModel(ctx context.Context) error {
 	}
 	p.publishReadiness("opted_out", "none")
 	return nil
+}
+
+func (p *Runtime) SetupInstaller(model string, installed func(string) error, settled func()) {
+	fresh, err := p.config.ModelStore.AwaitingInitialModel()
+	if err == nil && !fresh {
+		return
+	}
+	if err == nil {
+		err = p.StartSelection(api.LocalModelSelectionRequest{Model: model, PackagedSeed: true}, installed, settled)
+	}
+	if err != nil {
+		p.ReportSelectionError(err)
+	}
 }

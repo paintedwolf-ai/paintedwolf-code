@@ -13,8 +13,15 @@ import (
 
 func runLocalModel(ctx context.Context, args []string, out io.Writer, send func(context.Context, clisocket.Request) (clisocket.Response, error)) error {
 	var req clisocket.Request
-	switch {
-	case len(args) == 2 && args[0] == "import":
+	const usage = "usage: pw local-model import <path> | pw local-model opt-out"
+	if len(args) == 0 {
+		return errors.New(usage)
+	}
+	switch args[0] {
+	case "import":
+		if len(args) != 2 {
+			return errors.New(usage)
+		}
 		path, err := filepath.Abs(args[1])
 		if err != nil {
 			return err
@@ -24,10 +31,13 @@ func runLocalModel(ctx context.Context, args []string, out io.Writer, send func(
 			return err
 		}
 		req = clisocket.Request{Op: clisocket.OpImportModel, Target: path, Model: slot.Model}
-	case len(args) == 1 && args[0] == "opt-out":
+	case "opt-out":
+		if len(args) != 1 {
+			return errors.New(usage)
+		}
 		req.Op = clisocket.OpOptOutModel
 	default:
-		return errors.New("usage: pw local-model import <path> | pw local-model opt-out")
+		return errors.New(usage)
 	}
 	reply, err := send(ctx, req)
 	if err != nil {

@@ -9,14 +9,15 @@ import (
 )
 
 type tier struct {
-	id, name                         string
-	minimum, recommended, workingSet uint64
+	id, name                             string
+	minimum, recommended, workingSet     uint64
+	discreteMinimum, discreteRecommended uint64
 }
 
 var tiers = [...]tier{
-	{DefaultModelID, "Gemma 4 E4B", 8 << 30, 8 << 30, 5 << 30},
-	{"gemma4-12b-paintedwolf", "Gemma 4 12B", 16 << 30, 24 << 30, 8 << 30},
-	{"gemma4-26b-paintedwolf", "Gemma 4 26B-A4B", 24 << 30, 32 << 30, 15 << 30},
+	{DefaultModelID, "Gemma 4 E4B", 8 << 30, 8 << 30, 5 << 30, 8 << 30, 8 << 30},
+	{"gemma4-12b-paintedwolf", "Gemma 4 12B", 16 << 30, 24 << 30, 8 << 30, 12 << 30, 16 << 30},
+	{"gemma4-26b-paintedwolf", "Gemma 4 26B-A4B", 24 << 30, 32 << 30, 15 << 30, 16 << 30, 24 << 30},
 }
 
 //go:embed release-pins.json
@@ -52,7 +53,11 @@ func (p *Runtime) ModelTiers() []api.LocalModelTier {
 	out := make([]api.LocalModelTier, 0, len(tiers))
 	best := -1
 	for _, t := range tiers {
-		row := api.LocalModelTier{ID: t.id, DisplayName: t.name, MinMemoryBytes: int(t.minimum)}
+		minimum, recommended := t.minimum, t.recommended
+		if p != nil && p.config.Backend == "vulkan" && !p.config.UnifiedMemory {
+			minimum, recommended = t.discreteMinimum, t.discreteRecommended
+		}
+		row := api.LocalModelTier{ID: t.id, DisplayName: t.name, MinMemoryBytes: int(minimum)}
 		if p != nil {
 			pin, ok := p.pin(t.id)
 			row.DownloadBytes = int(pin.TotalBytes)
@@ -62,8 +67,8 @@ func (p *Runtime) ModelTiers() []api.LocalModelTier {
 				if p.config.UnifiedMemory {
 					capacity = min(capacity, p.config.HostMemory.Snapshot().CapacityBytes)
 				}
-				row.Eligible = p.config.PhysicalBytes >= t.minimum && capacity >= t.workingSet
-				if row.Eligible && p.config.PhysicalBytes >= t.recommended {
+				row.Eligible = p.config.PhysicalBytes >= minimum && capacity >= t.workingSet
+				if row.Eligible && p.config.PhysicalBytes >= recommended {
 					best = len(out)
 				}
 			}

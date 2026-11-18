@@ -24,10 +24,10 @@ func (s *Store) ImportFromBucket(ctx context.Context, pin ModelPin, progress fun
 	client.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
 	defer client.CloseIdleConnections()
 	origin := egressclass.RequireSingleFixedEndpoint(egressclass.LocalModelDownload, egressclass.HTTPDownload)
-	return s.download(ctx, origin, client, pin, progress)
+	return s.download(ctx, modelBucket{base: origin, client: client}, pin, progress)
 }
 
-func (s *Store) download(ctx context.Context, origin string, client *http.Client, pin ModelPin, progress func(int64, int64)) (resultErr error) {
+func (s *Store) download(ctx context.Context, source modelBucket, pin ModelPin, progress func(int64, int64)) (resultErr error) {
 	if err := validateIdentity(Manifest{Model: pin.Model, Device: pin.Device, Revision: pin.Revision}); err != nil {
 		return err
 	}
@@ -39,8 +39,8 @@ func (s *Store) download(ctx context.Context, origin string, client *http.Client
 		return err
 	}
 	defer func() { resultErr = errors.Join(resultErr, lock.Close()) }()
-	base := fmt.Sprintf("%s/models/%s/%s/%s/", origin, pin.Model, pin.Device, pin.Revision)
-	signed, err := fetchManifest(ctx, client, base+"manifest.json", pin)
+	source.base = fmt.Sprintf("%s/models/%s/%s/%s/", source.base, pin.Model, pin.Device, pin.Revision)
+	signed, err := source.fetchManifest(ctx, pin)
 	if err != nil {
 		return err
 	}
@@ -50,18 +50,23 @@ func (s *Store) download(ctx context.Context, origin string, client *http.Client
 			transfer.add(a.Bytes)
 			return nil
 		}
-		return s.downloadArtifact(ctx, client, base+a.Name, a, &transfer)
+		return s.downloadArtifact(ctx, source, a, &transfer)
 	})
 }
 
-func fetchManifest(ctx context.Context, client *http.Client, url string, pin ModelPin) (signed SignedManifest, resultErr error) {
+type modelBucket struct {
+	base   string
+	client *http.Client
+}
+
+func (b modelBucket) fetchManifest(ctx context.Context, pin ModelPin) (signed SignedManifest, resultErr error) {
 	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, b.base+"manifest.json", nil)
 	if err != nil {
 		return signed, err
 	}
-	resp, err := client.Do(req)
+	resp, err := b.client.Do(req)
 	if err != nil {
 		return signed, err
 	}
@@ -108,3 +113,36 @@ func (t *transferProgress) add(n int64) {
 }
 
 func (t *transferProgress) Write(p []byte) (int, error) { t.add(int64(len(p))); return len(p), nil }
+
+// The returned offset is zero when the origin sends the full payload.
+func (b modelBucket) openPayload(ctx context.Context, a Artifact, offset int64) (io.ReadCloser, int64, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, b.base+a.Name, nil)
+	if err != nil {
+		return nil, 0, err
+	}
+	req.Header.Set("Accept-Encoding", "identity")
+	if offset > 0 {
+		req.Header.Set("Range", fmt.Sprintf("bytes=%d-", offset))
+	}
+	resp, err := b.client.Do(req)
+	if err != nil {
+		return nil, 0, err
+	}
+	switch resp.StatusCode {
+	case http.StatusOK:
+		offset = 0
+	case http.StatusPartialContent:
+		if offset == 0 || resp.Header.Get("Content-Range") != fmt.Sprintf("bytes %d-%d/%d", offset, a.Bytes-1, a.Bytes) {
+			err = errors.New("modelstore: inconsistent range response")
+		}
+	default:
+		err = fmt.Errorf("modelstore: payload HTTP %d", resp.StatusCode)
+	}
+	if err == nil && resp.ContentLength >= 0 && resp.ContentLength != a.Bytes-offset {
+		err = errors.New("modelstore: payload length differs from manifest")
+	}
+	if err != nil {
+		return nil, 0, errors.Join(err, resp.Body.Close())
+	}
+	return resp.Body, offset, nil
+}

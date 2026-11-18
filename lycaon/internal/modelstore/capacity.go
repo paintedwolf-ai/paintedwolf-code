@@ -74,7 +74,7 @@ func (s *Store) evictForInstall(ctx context.Context, target Manifest, need Space
 	if err != nil {
 		return err
 	}
-	if err = s.CheckSpace(SpaceRequirement{StagingBytes: max(0, needed-reclaimed)}); err != nil {
+	if err := s.CheckSpace(SpaceRequirement{StagingBytes: max(0, needed-reclaimed)}); err != nil {
 		return err
 	}
 	if err := ctx.Err(); err != nil {

@@ -3,8 +3,10 @@ package localmodels
 import (
 	"context"
 	"errors"
+	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 
 	"github.com/lycaon/lycaon/internal/configdir"
 	"github.com/lycaon/lycaon/internal/configlayout"
@@ -17,10 +19,12 @@ import (
 
 // Startup retains initialization facts without making external providers depend on local hardware.
 type Startup struct {
-	Runtime  *Runtime
-	Store    *modelstore.Store
-	Decision bialy.Config
-	Issue    error
+	OfflineInstaller bool
+	OfflineTier      string
+	Runtime          *Runtime
+	Store            *modelstore.Store
+	Decision         bialy.Config
+	Issue            error
 }
 
 // Start resolves the co-versioned executable, shaders, release keys, and seed.
@@ -31,6 +35,15 @@ func Start(ctx context.Context, fixture bool) Startup {
 	}
 	binary := configlayout.SiblingExecutable("nativegen")
 	root := configlayout.EngineRoot()
+	if root != "" {
+		marker, err := os.ReadFile(filepath.Join(root, "generation", "offline-model"))
+		result.OfflineInstaller = !errors.Is(err, os.ErrNotExist)
+		if err != nil && result.OfflineInstaller {
+			result.Issue = err
+			return result
+		}
+		result.OfflineTier = strings.TrimSpace(string(marker))
+	}
 
 	config, err := configdir.UserConfigDir()
 	if err != nil {
@@ -74,7 +87,7 @@ func Start(ctx context.Context, fixture bool) Startup {
 
 func (s *Startup) Generation() *nativegen.Availability {
 	if s.Runtime != nil {
-		return &nativegen.Availability{Runtime: s.Runtime.Generation}
+		return &nativegen.Availability{Runtime: s.Runtime.Generation, Store: s.Runtime.Store, OfflineInstaller: s.OfflineInstaller, OfflineTier: s.OfflineTier}
 	}
 	if s.Issue == nil {
 		return nil
@@ -83,7 +96,7 @@ func (s *Startup) Generation() *nativegen.Availability {
 	if errors.Is(s.Issue, inference.ErrCapacity) {
 		status.State = "insufficient_memory"
 	}
-	return &nativegen.Availability{Initial: status, Store: s.Store}
+	return &nativegen.Availability{Initial: status, Store: s.Store, OfflineInstaller: s.OfflineInstaller, OfflineTier: s.OfflineTier}
 }
 
 func (s *Startup) CloseGeneration(context.Context) error {

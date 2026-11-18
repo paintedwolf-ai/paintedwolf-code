@@ -58,6 +58,9 @@ func (s *Service) ApplyModelPolicy(ctx context.Context, scope SettingsScope, pro
 	if err != nil {
 		return err
 	}
+	if scope == SettingsScopeGlobal {
+		patch = initialCoordinatorPatch(overlay, patch)
+	}
 	previousThinking := overlay.ThinkingOverrides
 	overlay = applyPolicyPatch(overlay, patch)
 	if err := validatePolicyShape(overlay); err != nil {
@@ -470,4 +473,12 @@ func (s *Service) ValidatePolicyModels(ctx context.Context, p ModelPolicy) error
 // hands the unchanged conversation to its configured provider.
 type ConversationPreparation interface {
 	Wrap(modelcall.LLMClient) modelcall.LLMClient
+}
+
+// The first coordinator choice writes both slots in the same policy update.
+func initialCoordinatorPatch(overlay ModelPolicy, patch ModelPolicyPatch) ModelPolicyPatch {
+	if patch.Coordinator != nil && modelRefSet(*patch.Coordinator) && patch.Lite == nil && !modelRefSet(overlay.Coordinator) && !modelRefSet(overlay.Lite) {
+		patch.Lite = patch.Coordinator
+	}
+	return patch
 }

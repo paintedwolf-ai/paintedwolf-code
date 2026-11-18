@@ -35,6 +35,6 @@ func TestPartialRefusesLinkedFile(t *testing.T) {
 	testutil.FailErr(t, "link original", os.Link(original, filepath.Join(s.Root(), "partial")))
 	if f, err := openPartial(root, "partial"); err == nil {
 		_ = f.Close()
-		t.Fatal("accepted hardlinked partial")
+		t.Fatal("accepted a partial with multiple hard links")
 	}
 }
