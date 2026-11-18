@@ -4,11 +4,12 @@
   "kind": "test_suite",
   "workstream": "release-admission",
   "disposition": "retain",
-  "reason": "The measured 434 code-bearing lines bind the retained upgrade corpus, source admission, immutable deposit order and halt/recovery contract to one release blast-radius boundary. Keep the shared corpus fixtures and publication-order checks together at this measured ceiling; graph topology and public-artifact flow are enforced by the separate shared lane model. The halt needle now names the job-level barrier that gates its apply job; the measured size is unchanged.",
-  "reviewed_commit": "a77b283e25cd1b8fbf694bab6652ee25536fff71",
+  "reason": "The measured 434 code-bearing lines bind the retained upgrade corpus, source admission, immutable deposit order and halt/recovery contract to one release blast-radius boundary. Keep the shared corpus fixtures and publication-order checks together at this measured ceiling; graph topology and public-artifact flow are enforced by the separate shared lane model. The halt needle now names the job-level barrier that gates its apply job; the measured size is unchanged. Local-data fixture review retains 434 lines. Corpus credential exclusion now uses independent classified-path fixtures. Reviewed the prior exposure assertion helper substitutions and qualified their signing-key custody cases alongside all release blast-radius cases; publication and halt contracts remain unchanged.",
+  "reviewed_commit": "d4df22b743b1b21dc9cc7adce6f624dc9e3f0ce5",
   "ceiling": 434,
   "boundaries": {
-    "lycaon/test/contract/runner/release_blast_radius_contract_test.go": "7525dc67b675fabcc68b8ae68d1b2d5ed94e2114446306aa3807a7872beb9d0b",
-    "lycaon/test/contract/runner/release_lane_invariants_contract_test.go": "beeca6ee53a62894a8f756a3b9cf707e4db4dbec9a5eb380a5189a6aea421d96"
+    "lycaon/test/contract/runner/release_blast_radius_contract_test.go": "d736f62e7ad7b87a73cb7996b780c37b84f8e19381cee102d93c7e8b4a7e7561",
+    "lycaon/test/contract/runner/release_lane_invariants_contract_test.go": "40162b9f43a7befb6f105154385dc04f6379f0c680e809571ebee9ae3c151a24",
+    "lycaon/internal/testutil/localdatatest/inventory.go": "60f7db05a4a33fddd0d2cf5543bd05cd8b620b9579f31c22227ccd30c1b25add"
   }
 }

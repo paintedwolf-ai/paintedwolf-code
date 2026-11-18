@@ -1,0 +1,15 @@
+{
+  "category": "test_files",
+  "artifact": "lycaon/internal/diagnostics/bundle_test.go",
+  "kind": "test_suite",
+  "workstream": "localdata-fixture-contracts",
+  "disposition": "retain",
+  "reason": "Retain the 388-line diagnostic bundle suite. Allowed configuration, secret canaries, redaction and boundary override evidence share the same bundle representation. Expected exclusions now come from an independent inventory checked against production classification, so policy changes cannot silently weaken the canary set. The complete diagnostic suite and focused final canary case passed. Freeze this suite at its measured size.",
+  "reviewed_commit": "d4df22b743b1b21dc9cc7adce6f624dc9e3f0ce5",
+  "ceiling": 388,
+  "boundaries": {
+    "lycaon/internal/diagnostics/bundle_test.go": "f0a3149856efab462a13049d9bfae96f1cf2e30299042f2e7526ce80d0916f6f",
+    "lycaon/internal/testutil/localdatatest/inventory.go": "60f7db05a4a33fddd0d2cf5543bd05cd8b620b9579f31c22227ccd30c1b25add",
+    "lycaon/internal/localdata/fixture_inventory_test.go": "d22f91b5f0c1aa12cca64cb81d98a255db1b0eec10e4cd8ed311b9412117d883"
+  }
+}
