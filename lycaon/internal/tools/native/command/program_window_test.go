@@ -79,7 +79,7 @@ func (f *windowFixture) run(t *testing.T, source string) command.ProgramOutcome 
 }
 
 // continued follows a program that outlasted its call to the outcome its job
-// writes as its last line.
+// writes to stderr when it ends.
 func (f *windowFixture) continued(t *testing.T, handle string) command.ProgramOutcome {
 	t.Helper()
 	testutil.WaitFor(t, "the continued program ends", func() bool {
@@ -88,8 +88,16 @@ func (f *windowFixture) continued(t *testing.T, handle string) command.ProgramOu
 	})
 	snap, err := f.Background.Snapshot(t.Context(), f.Session, handle, 1<<20)
 	testutil.FailErr(t, "read continued program", err)
-	lines := strings.Split(strings.TrimRight(snap.Output, "\n"), "\n")
-	return decodeOutcome(t, lines[len(lines)-1])
+	lines := strings.Split(snap.Output, "\n")
+	for i := len(lines) - 1; i >= 0; i-- {
+		body, ok := strings.CutPrefix(lines[i], "stderr: ")
+		var outcome command.ProgramOutcome
+		if ok && json.Unmarshal([]byte(body), &outcome) == nil && outcome.ProgramID != "" {
+			return outcome
+		}
+	}
+	t.Fatalf("continued program wrote no outcome:\n%s", snap.Output)
+	return command.ProgramOutcome{}
 }
 
 // effects reads the session's recorded effects by path.
