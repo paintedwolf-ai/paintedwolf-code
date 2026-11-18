@@ -55,6 +55,38 @@ func (r *ReadRoot) OpenExact(rel string) (*os.File, error) {
 	return r.openReadContained(relative)
 }
 
+// OpenCanonicalFile opens a regular file at its exact canonical address.
+func (r *ReadRoot) OpenCanonicalFile(rel string) (*os.File, error) {
+	relative, err := exactReadRelative(rel)
+	if err != nil {
+		return nil, err
+	}
+	address := filepath.Join(r.Path(), relative)
+	return walkReadContained(r.root, relative, true, func(dir *os.File, name string, expected *unix.Stat_t) (*os.File, error) {
+		actual := filepath.Join(dir.Name(), name)
+		if actual != address {
+			return nil, ErrSymlink
+		}
+		if expected.Mode&unix.S_IFMT != unix.S_IFREG {
+			return nil, os.ErrNotExist
+		}
+		fd, err := openLeafReadAt(int(dir.Fd()), name)
+		if err != nil {
+			return nil, err
+		}
+		var opened unix.Stat_t
+		if err = unix.Fstat(fd, &opened); err != nil || opened.Ino != expected.Ino || deviceID(&opened) != deviceID(expected) {
+			_ = unix.Close(fd)
+			if err != nil {
+				return nil, err
+			}
+			return nil, ErrPredicateChanged
+		}
+		r.root.readOpens.Add(1)
+		return os.NewFile(uintptr(fd), actual), nil
+	})
+}
+
 // MetadataRoot holds descriptor-relative launch metadata authority. Entry opens
 // require native execution permission; cwd opens require directory search only.
 type MetadataRoot struct{ root *openedRoot }
