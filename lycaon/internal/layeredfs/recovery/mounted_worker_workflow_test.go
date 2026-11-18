@@ -87,7 +87,7 @@ func TestMountedWorkerWorkflowCheckpointCrashRecoveryAndStackedPromotion(t *test
 	if _, err := gitExec.Run(t.Context(), ".", "add", "README.md", "parent_feature.txt"); err != nil {
 		t.Fatalf("git add: %v", err)
 	}
-	if _, err := gitExec.Commit(t.Context(), "parent commit A over the mount"); err != nil {
+	if _, err := gitExec.Run(t.Context(), ".", "commit", "-m", "parent commit A over the mount"); err != nil {
 		t.Fatalf("git commit: %v", err)
 	}
 	headOIDA, err := gitExec.Run(t.Context(), ".", "rev-parse", "HEAD")

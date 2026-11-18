@@ -12,6 +12,7 @@ import (
 	"github.com/lycaon/lycaon/internal/layeredfs"
 	"github.com/lycaon/lycaon/internal/layeredfs/checkpoint"
 	"github.com/lycaon/lycaon/internal/layeredfs/consumer"
+	"github.com/lycaon/lycaon/internal/layeredfs/consumer/consumertest"
 	"github.com/lycaon/lycaon/internal/project"
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
@@ -74,7 +75,7 @@ func TestSourceBranchScopeAndWorkerDivergenceUseLayeredConsumerEngine(t *testing
 		BackingDir:       backingDir,
 		Core:             core,
 		CheckpointStore:  ckptStore,
-		Index: consumer.SourceIndexFunc(func(_ context.Context, _ consumer.SourceIndexQuery) (consumer.SourceIndexResult, error) {
+		Index: consumertest.IndexFunc(func(_ context.Context, _ consumer.SourceIndexQuery) (consumer.SourceIndexResult, error) {
 			return consumer.SourceIndexResult{
 				Entries: []consumer.SourceIndexEntry{
 					{Path: layeredfs.QualifiedPath{RootID: "code", Rel: "app.go"}, Kind: layeredfs.EntryRegular, Mode: 0o644, Size: 25, ModTime: now, ObservedAt: now},

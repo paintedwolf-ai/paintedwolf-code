@@ -164,7 +164,7 @@ func TestEngineStartersEnterAMountUnderForcedGC(t *testing.T) {
 	testutil.FailErr(t, "mkdir on mount", os.MkdirAll(sub, 0o755))
 	testutil.FailErr(t, "write tool on mount", os.WriteFile(filepath.Join(mount, "tool"), []byte("#!/bin/sh\nexit 0\n"), 0o755))
 	executor := privategit.NewGitExecutor(mgr, view.ViewID, privategit.RemotePolicy{})
-	_, err = executor.Status(t.Context())
+	_, err = executor.Run(t.Context(), ".", "status")
 	testutil.FailErr(t, "initialize private Git", err)
 
 	starters := map[string]func(ctx context.Context) error{
@@ -175,7 +175,7 @@ func TestEngineStartersEnterAMountUnderForcedGC(t *testing.T) {
 			return exitOK(gitexec.Run(ctx, sub, []string{"--version"}, gitexec.Opts{}))
 		},
 		"private Git executor": func(ctx context.Context) error {
-			_, err := executor.Status(ctx)
+			_, err := executor.Run(ctx, ".", "status")
 			return err
 		},
 		"launch with a working directory on the mount": func(ctx context.Context) error {
