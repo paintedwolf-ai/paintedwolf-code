@@ -12,7 +12,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/lycaon/lycaon/internal/confine"
+	"github.com/lycaon/lycaon/internal/confine/admissiontest"
 	"github.com/lycaon/lycaon/internal/hostprocess"
 	"github.com/lycaon/lycaon/internal/lineage"
 	"github.com/lycaon/lycaon/internal/programtest"
@@ -23,7 +23,7 @@ import (
 )
 
 func TestTerminalAndCommandShareLaunchEnvironmentAndScratch(t *testing.T) {
-	confine.TestingSetAutoConfine(t)
+	admissiontest.Enable(t)
 	t.Setenv("LYCAON_BYPASS_APPROVALS", "0")
 	t.Setenv("LYCAON_SANDBOX", "on")
 	t.Setenv("LYCAON_SANDBOX_NETWORK", "deny")

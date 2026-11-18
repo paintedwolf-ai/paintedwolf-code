@@ -6,11 +6,12 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/confine"
+	"github.com/lycaon/lycaon/internal/confine/admissiontest"
 	"github.com/lycaon/lycaon/internal/fspath"
 )
 
 func TestOutputCapabilityGrantsReadWithoutWriteAuthority(t *testing.T) {
-	confine.TestingSetAutoConfine(t)
+	admissiontest.Enable(t)
 	state, project := t.TempDir(), t.TempDir()
 	t.Setenv("LYCAON_CONFIG_DIR", state)
 	t.Setenv("LYCAON_SANDBOX_DENY_READ", "")

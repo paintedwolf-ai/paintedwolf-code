@@ -11,7 +11,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/lycaon/lycaon/internal/confine"
+	"github.com/lycaon/lycaon/internal/confine/admissiontest"
 	"github.com/lycaon/lycaon/internal/layeredfs/adapter"
 	"github.com/lycaon/lycaon/internal/session"
 	"github.com/lycaon/lycaon/internal/sourceledger"
@@ -110,7 +110,7 @@ func TestStressFirefoxMountedSparseWorkerLifecycle(t *testing.T) {
 
 func newFirefoxWorkerFixture(t *testing.T, source string) *layeredWorkerFixture {
 	t.Helper()
-	confine.TestingSetAutoConfine(t)
+	admissiontest.Enable(t)
 	database := testdbfixture.Open(t, "store.db")
 	testdbseed.InsertProjectRootWithID(t, database, testdbseed.DefaultProjectID, "root-id", source)
 	branches := filepath.Join(testbaseline.DataDir(t, database), "worker-branches")

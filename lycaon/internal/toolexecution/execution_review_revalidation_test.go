@@ -8,7 +8,7 @@ import (
 	"slices"
 	"testing"
 
-	"github.com/lycaon/lycaon/internal/confine"
+	"github.com/lycaon/lycaon/internal/confine/admissiontest"
 	"github.com/lycaon/lycaon/internal/hitl"
 	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/sandbox"
@@ -43,7 +43,7 @@ func TestExecutionReviewHonorsReviewedReasonAndLaterDeny(t *testing.T) {
 			name += "-confined"
 		}
 		t.Run(name, func(t *testing.T) {
-			confine.TestingSetAutoConfine(t)
+			admissiontest.Enable(t)
 			t.Setenv("LYCAON_SANDBOX", "on")
 			t.Setenv("LYCAON_BYPASS_APPROVALS", "0")
 			if scenario.sandboxOff {

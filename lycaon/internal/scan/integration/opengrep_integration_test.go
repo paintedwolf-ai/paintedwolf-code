@@ -10,7 +10,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/configdir"
 	"github.com/lycaon/lycaon/internal/configlayout"
-	"github.com/lycaon/lycaon/internal/confine"
+	"github.com/lycaon/lycaon/internal/confine/admissiontest"
 	"github.com/lycaon/lycaon/internal/scan"
 	"github.com/lycaon/lycaon/internal/scan/bundled"
 	bundleddriver "github.com/lycaon/lycaon/internal/scan/drivers/bundled"
@@ -23,7 +23,7 @@ func TestOpenGrepBundledAdapterFixture(t *testing.T) {
 	if testing.Short() {
 		t.Skip("opengrep binary integration skipped in -short")
 	}
-	confine.TestingSetAutoConfine(t)
+	admissiontest.Enable(t)
 
 	manifest, err := bundled.LoadManifest()
 	testutil.FailErr(t, "bundled.LoadManifest failed", err)

@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/lycaon/lycaon/internal/confine"
+	"github.com/lycaon/lycaon/internal/confine/admissiontest"
 	"github.com/lycaon/lycaon/internal/hitl"
 	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/sandbox"
@@ -27,7 +28,7 @@ func TestExecutionCapabilityAsksBeforeSpawnAndConsumesOnce(t *testing.T) {
 			if (capability == "process_control" || capability == "credential_store") && !confine.Available() {
 				t.Skip("confined execution capabilities require an available sandbox")
 			}
-			confine.TestingSetAutoConfine(t)
+			admissiontest.Enable(t)
 			stageApprovals(t, settings.ApprovalEffectAsk)
 			root := t.TempDir()
 			branch := t.TempDir()

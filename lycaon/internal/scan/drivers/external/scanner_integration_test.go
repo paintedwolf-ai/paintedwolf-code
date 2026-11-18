@@ -11,6 +11,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/configlayout"
 	"github.com/lycaon/lycaon/internal/confine"
+	"github.com/lycaon/lycaon/internal/confine/admissiontest"
 	"github.com/lycaon/lycaon/internal/scan"
 	scancatalog "github.com/lycaon/lycaon/internal/scan/catalog"
 	"github.com/lycaon/lycaon/internal/scan/drivers/external"
@@ -206,7 +207,7 @@ func TestExternalScannerWritesProjectTree(t *testing.T) {
 	if !confine.Available() {
 		t.Skip("OS confinement unavailable")
 	}
-	confine.TestingSetAutoConfine(t)
+	admissiontest.Enable(t)
 	t.Setenv("LYCAON_BYPASS_APPROVALS", "")
 	t.Setenv("LYCAON_SANDBOX", "")
 

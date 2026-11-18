@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/lycaon/lycaon/internal/confine"
+	"github.com/lycaon/lycaon/internal/confine/admissiontest"
 	"github.com/lycaon/lycaon/internal/testutil"
 )
 
@@ -24,7 +25,7 @@ type linuxPinnedPayload struct {
 }
 
 func TestPreparedLinuxBinaryPreservesNativePathArgvCwdAndExecuteOnlyMode(t *testing.T) {
-	confine.TestingSetAutoConfine(t)
+	admissiontest.Enable(t)
 	// Execute-only images are intentionally non-dumpable. Read AT_EXECFN from
 	// the process's initial auxiliary vector rather than reopening /proc/self.
 	self := filepath.Join(t.TempDir(), "native-payload")

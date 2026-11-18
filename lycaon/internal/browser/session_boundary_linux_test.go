@@ -13,7 +13,7 @@ import (
 	"golang.org/x/sys/unix"
 
 	"github.com/lycaon/lycaon/internal/browserengine"
-	"github.com/lycaon/lycaon/internal/confine"
+	"github.com/lycaon/lycaon/internal/confine/admissiontest"
 	"github.com/lycaon/lycaon/internal/confine/linuxsandbox"
 	"github.com/lycaon/lycaon/internal/testutil"
 )
@@ -53,7 +53,7 @@ func refuseBrowserWithoutLandlock(t *testing.T) {
 	}
 	t.Setenv("LYCAON_SANDBOX", "")
 	t.Setenv("LYCAON_BYPASS_APPROVALS", "")
-	confine.TestingSetAutoConfine(t)
+	admissiontest.Enable(t)
 	box, applied, err := browserBoundary([]string{t.TempDir()})
 	if box != nil || applied {
 		t.Fatal("browser received a boundary with unavailable Landlock")

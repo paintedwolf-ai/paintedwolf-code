@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/confine"
+	"github.com/lycaon/lycaon/internal/confine/admissiontest"
 	"github.com/lycaon/lycaon/internal/gate"
 	"github.com/lycaon/lycaon/internal/hitl"
 	"github.com/lycaon/lycaon/internal/platform"
@@ -143,7 +144,7 @@ func TestCurrentReviewTracksDetectionEffectsRatherThanCorrelation(t *testing.T) 
 func TestCurrentReviewCannotReplaceExecutionPermit(t *testing.T) {
 	for _, capability := range []string{"host_execution", "process_control", "credential_store"} {
 		t.Run(capability, func(t *testing.T) {
-			confine.TestingSetAutoConfine(t)
+			admissiontest.Enable(t)
 			stageApprovals(t, settings.ApprovalEffectAsk)
 			root := t.TempDir()
 			store, err := settings.NewApprovalStoreAt(filepath.Join(t.TempDir(), "global.yaml"))

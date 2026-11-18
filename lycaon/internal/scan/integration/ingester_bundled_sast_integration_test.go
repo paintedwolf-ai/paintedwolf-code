@@ -10,7 +10,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/configdir"
 	"github.com/lycaon/lycaon/internal/configlayout"
-	"github.com/lycaon/lycaon/internal/confine"
+	"github.com/lycaon/lycaon/internal/confine/admissiontest"
 	"github.com/lycaon/lycaon/internal/scan"
 	"github.com/lycaon/lycaon/internal/scan/bundled"
 	scancfg "github.com/lycaon/lycaon/internal/scan/configuration"
@@ -22,7 +22,7 @@ import (
 // Guidance persistence and lookup over a real TLS verification finding.
 func TestIngesterBundledSASTProducesGuidance(t *testing.T) {
 	testutil.SkipIfShort(t, "runs real opengrep over the scan fixture")
-	confine.TestingSetAutoConfine(t)
+	admissiontest.Enable(t)
 	corpus := scanFixtureCorpus(t)
 	home, err := configdir.UserConfigDir()
 	testutil.FailErr(t, "UserConfigDir", err)
