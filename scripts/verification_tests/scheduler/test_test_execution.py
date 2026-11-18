@@ -21,6 +21,13 @@ import verification_resources as resources  # importable once test-execution.py 
 
 
 class TaskAdmissionTests(unittest.TestCase):
+    def setUp(self):
+        # A host's configured capacity replaces the derived budget these tests measure.
+        environment = patch.dict(os.environ)
+        environment.start()
+        self.addCleanup(environment.stop)
+        os.environ.pop("PW_TEST_CAPACITY", None)
+
     def test_task_option_values_cannot_bypass_admission(self):
         self.assertTrue(execution.scheduled_task(["--output-group-begin", "--dry", "check"]))
         self.assertTrue(execution.scheduled_task(["-n", "--dry=false", "check"]))
