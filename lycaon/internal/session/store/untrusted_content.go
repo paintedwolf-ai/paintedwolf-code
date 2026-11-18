@@ -142,24 +142,24 @@ func (ev *sqlEvidence) SessionContacts(sessionID string) map[string]evidence.Con
 
 // SessionURLStanding reports how the session's evidence knows exactly this
 // address. An unreadable ledger knows nothing.
-func (ev *memoryEvidence) SessionURLStanding(sessionID, rawURL string) evidence.URLStanding {
+func (ev *memoryEvidence) SessionURLStanding(ctx context.Context, sessionID, rawURL string) evidence.URLStanding {
 	sessionID = strings.TrimSpace(sessionID)
 	if sessionID == "" {
 		return evidence.URLUnknown
 	}
-	ledger, err := loadLedgerMemory(context.Background(), ev.core, sessionID)
+	ledger, err := loadLedgerMemory(ctx, ev.core, sessionID)
 	if err != nil {
 		return evidence.URLUnknown
 	}
 	return evidence.StandingOfURL(ledger, rawURL)
 }
 
-func (ev *sqlEvidence) SessionURLStanding(sessionID, rawURL string) evidence.URLStanding {
+func (ev *sqlEvidence) SessionURLStanding(ctx context.Context, sessionID, rawURL string) evidence.URLStanding {
 	sessionID = strings.TrimSpace(sessionID)
 	if sessionID == "" {
 		return evidence.URLUnknown
 	}
-	ledger, err := loadLedger(context.Background(), ev.core, ev.core.queries, sessionID)
+	ledger, err := loadLedger(ctx, ev.core, ev.core.queries, sessionID)
 	if err != nil {
 		return evidence.URLUnknown
 	}
