@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/conditions"
+	"github.com/lycaon/lycaon/internal/testutil/conditionstest"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 	"gopkg.in/yaml.v3"
 )
@@ -37,7 +38,7 @@ func TestDeferredScanCatalogStubsNotInBundledWorkflows(t *testing.T) {
 			if cw == "" {
 				continue
 			}
-			for _, stub := range conditions.ScanCatalogStubIDs() {
+			for _, stub := range conditionstest.DeferredScanIDs {
 				if strings.Contains(cw, stub) {
 					t.Fatalf("%s phase %q references deferred scan stub %q in complete_when %q", e.Name(), p.ID, stub, cw)
 				}
@@ -50,7 +51,7 @@ func TestImplementedScanDomainIDsRegisteredOnBoot(t *testing.T) {
 	t.Parallel()
 	reg, err := conditions.NewDefaultRegistry(conditions.RegistryDeps{})
 	contractcheck.FailErr(t, "build conditions registry", err)
-	for _, id := range conditions.ShippedScanDomainIDs() {
+	for _, id := range conditionstest.ScanIDs {
 		if !reg.Has(id) {
 			t.Fatalf("shipped scan domain id %q not registered", id)
 		}

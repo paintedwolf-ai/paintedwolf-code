@@ -5,8 +5,8 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/lycaon/lycaon/internal/conditions"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/testutil/conditionstest"
 	"github.com/lycaon/lycaon/internal/workflow/runstate"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -26,7 +26,7 @@ func (p *reviewPublications) PublishSession(context.Context, *api.WorkflowRun) {
 
 func TestReviewContractCommitFailureDoesNotPublishOrPause(t *testing.T) {
 	mgr, _, blueprints, _ := testManager(t)
-	setTestRegistry(t, mgr, blueprints, conditions.TestRegistryDeps())
+	setTestRegistry(t, mgr, blueprints, conditionstest.Dependencies())
 	run := startReviewLoopRun(t.Context(), t, mgr)
 	failure := errors.New("commit unavailable")
 	journal := *mgr.Repairs.Journal

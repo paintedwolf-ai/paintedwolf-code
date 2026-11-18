@@ -13,6 +13,7 @@ import (
 	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/testdbseed"
+	"github.com/lycaon/lycaon/internal/testutil/conditionstest"
 	"github.com/lycaon/lycaon/internal/workflow"
 	workflowblueprintfiles "github.com/lycaon/lycaon/internal/workflow/blueprintfiles"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
@@ -35,7 +36,7 @@ func TestPlanWorkflowPostureLifecycleContract(t *testing.T) {
 	}
 	seed, err := blueprintMgr.Get(ctx, run.ProjectID, run.BlueprintPath)
 	contractcheck.FailErr(t, "blueprintMgr.Get before seed", err)
-	bp, err := blueprintMgr.Store.UpdateContent(ctx, run.ProjectID, run.BlueprintPath, conditions.TestPlanContentWithTasks, blueprint.ContentDigest(seed.Content))
+	bp, err := blueprintMgr.Store.UpdateContent(ctx, run.ProjectID, run.BlueprintPath, conditionstest.PlanWithTasks, blueprint.ContentDigest(seed.Content))
 	if err != nil {
 		contractcheck.FailErr(t, "seed blueprint content", err)
 	}

@@ -9,11 +9,11 @@ import (
 
 	"github.com/lycaon/lycaon/internal/blueprint"
 	"github.com/lycaon/lycaon/internal/blueprint/blueprinttest"
-	"github.com/lycaon/lycaon/internal/conditions"
 	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/testutil/conditionstest"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 	workflowinputs "github.com/lycaon/lycaon/internal/workflow/inputs"
 	"github.com/lycaon/lycaon/internal/workflow/runstate"
@@ -33,7 +33,7 @@ func TestPlanImplementPhaseInvokesImplementChild(t *testing.T) {
 	wfStore := testRunStore(t, sqlDB)
 	mgr := NewManager(wfStore, sessStore, reg, nil)
 	WireBlueprintDepsForTest(mgr, dir)
-	setTestRegistry(t, mgr, blueprintMgr, conditions.TestRegistryDepsWithEvidence())
+	setTestRegistry(t, mgr, blueprintMgr, conditionstest.DependenciesWithEvidence())
 
 	testdbseed.InsertProjectRoot(t, sqlDB, testdbseed.DefaultProjectID, dir)
 
@@ -159,7 +159,7 @@ func TestInvokeChildRejectsGrandchildDepth(t *testing.T) {
 
 func TestChildCompleteAutoFinishesParentPlan(t *testing.T) {
 	mgr, repositories, blueprintMgr, projectDir := testManagerWithRegistry(t)
-	deps := conditions.TestRegistryDepsWithEvidence()
+	deps := conditionstest.DependenciesWithEvidence()
 	deps.DeliveryReported = func(context.Context, string, string, string) (bool, error) { return true, nil }
 	setTestRegistry(t, mgr, blueprintMgr, deps)
 	ctx := context.Background()
@@ -214,7 +214,7 @@ func TestChildCompleteAutoFinishesParentPlan(t *testing.T) {
 
 func TestExitChildRunResumesParent(t *testing.T) {
 	mgr, repositories, blueprintMgr, projectDir := testManagerWithRegistry(t)
-	setTestRegistry(t, mgr, blueprintMgr, conditions.TestRegistryDepsWithEvidence())
+	setTestRegistry(t, mgr, blueprintMgr, conditionstest.DependenciesWithEvidence())
 	ctx := context.Background()
 
 	run, err := startRun(ctx, mgr, "sess-1", "plan", "1.0.1")
@@ -253,7 +253,7 @@ func TestExitCatalogRunSpawnsAmbientImplement(t *testing.T) {
 	mgr := NewManager(wfStore, sessStore, reg, nil)
 	dir := t.TempDir()
 	blueprintMgr := WireBlueprintDepsForTest(mgr, dir)
-	setTestRegistry(t, mgr, blueprintMgr, conditions.TestRegistryDeps())
+	setTestRegistry(t, mgr, blueprintMgr, conditionstest.Dependencies())
 
 	testdbseed.InsertProjectRoot(t, sqlDB, testdbseed.DefaultProjectID, dir)
 	sess, err := sessStore.Sessions.Create(ctx, api.CreateSessionRequest{}, testdbseed.DefaultProjectID)

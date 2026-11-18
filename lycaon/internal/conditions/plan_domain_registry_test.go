@@ -2,6 +2,7 @@ package conditions_test
 
 import (
 	"context"
+	"github.com/lycaon/lycaon/internal/testutil/conditionstest"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/conditions"
@@ -23,7 +24,7 @@ func TestResearchSatisfiedWhenResearchPhaseSkipped(t *testing.T) {
 func TestPlanDomainPredicatesEvaluateState(t *testing.T) {
 	deps := conditions.RegistryDeps{
 		BlueprintGet: func(_ context.Context, _ string) (*api.Blueprint, error) {
-			return &api.Blueprint{Content: conditions.TestPlanContentFullSections}, nil
+			return &api.Blueprint{Content: conditionstest.PlanWithReviewDepth}, nil
 		},
 	}
 	reg, err := conditions.NewDefaultRegistry(deps)

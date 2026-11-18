@@ -2,6 +2,7 @@ package conditions_test
 
 import (
 	"context"
+	"github.com/lycaon/lycaon/internal/testutil/conditionstest"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/conditions"
@@ -12,7 +13,7 @@ import (
 func TestPlanStubValid(t *testing.T) {
 	reg, err := conditions.NewDefaultRegistry(conditions.RegistryDeps{
 		BlueprintGet: func(_ context.Context, _ string) (*api.Blueprint, error) {
-			return &api.Blueprint{Content: conditions.TestPlanContentWithTasks}, nil
+			return &api.Blueprint{Content: conditionstest.PlanWithTasks}, nil
 		},
 	})
 	testutil.FailErr(t, "build conditions registry", err)
@@ -37,7 +38,7 @@ func TestResearchSatisfiedSkipAndDepth(t *testing.T) {
 	}
 	deps := conditions.RegistryDeps{
 		BlueprintGet: func(_ context.Context, _ string) (*api.Blueprint, error) {
-			return &api.Blueprint{Content: conditions.TestPlanContentWithTasks}, nil
+			return &api.Blueprint{Content: conditionstest.PlanWithTasks}, nil
 		},
 	}
 	reg, err = conditions.NewDefaultRegistry(deps)
@@ -96,7 +97,7 @@ func TestImplementWorkflowReadyRequiresTasks(t *testing.T) {
 	}
 	reg, err = conditions.NewDefaultRegistry(conditions.RegistryDeps{
 		BlueprintGet: func(_ context.Context, _ string) (*api.Blueprint, error) {
-			return &api.Blueprint{Content: conditions.TestPlanContentWithTasks}, nil
+			return &api.Blueprint{Content: conditionstest.PlanWithTasks}, nil
 		},
 	})
 	testutil.FailErr(t, "build conditions registry", err)
@@ -112,7 +113,7 @@ func TestImplementWorkflowReadyRequiresTasks(t *testing.T) {
 func TestPlanAwaitingApproval(t *testing.T) {
 	reg, err := conditions.NewDefaultRegistry(conditions.RegistryDeps{
 		BlueprintGet: func(_ context.Context, _ string) (*api.Blueprint, error) {
-			return &api.Blueprint{Content: conditions.TestPlanContentWithTasks}, nil
+			return &api.Blueprint{Content: conditionstest.PlanWithTasks}, nil
 		},
 	})
 	testutil.FailErr(t, "build conditions registry", err)
@@ -131,7 +132,7 @@ func TestPlanAwaitingApproval(t *testing.T) {
 func TestPlanAwaitingApprovalWithoutTasksMarker(t *testing.T) {
 	reg, err := conditions.NewDefaultRegistry(conditions.RegistryDeps{
 		BlueprintGet: func(_ context.Context, _ string) (*api.Blueprint, error) {
-			return &api.Blueprint{Content: conditions.TestPlanContentStubOnly}, nil
+			return &api.Blueprint{Content: conditionstest.PlanStub}, nil
 		},
 	})
 	testutil.FailErr(t, "build conditions registry", err)

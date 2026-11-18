@@ -3,6 +3,7 @@ package workflow
 import (
 	"context"
 	"errors"
+	"github.com/lycaon/lycaon/internal/testutil/conditionstest"
 	"testing"
 	"time"
 
@@ -53,7 +54,7 @@ func TestRegistryWorkflowReadyCheckerAndPlannedWorkFanoutBinding(t *testing.T) {
 	_, err = mgr.Controls.Cancel(t.Context(), planRun.ID, "done")
 	testutil.FailErr(t, "cancel plan run", err)
 
-	condReg, err := conditions.NewDefaultRegistry(registryDepsForTests(mgr, bpMgr, conditions.TestRegistryDeps()))
+	condReg, err := conditions.NewDefaultRegistry(registryDepsForTests(mgr, bpMgr, conditionstest.Dependencies()))
 	testutil.FailErr(t, "new condition registry", err)
 	mgr.SetConditionRegistry(condReg)
 

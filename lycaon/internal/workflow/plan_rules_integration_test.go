@@ -4,6 +4,7 @@ package workflow
 
 import (
 	"context"
+	"github.com/lycaon/lycaon/internal/testutil/conditionstest"
 	"testing"
 
 	"github.com/lycaon/lycaon/config"
@@ -14,7 +15,7 @@ import (
 )
 
 func TestSpecPostureBlocksStateWhenStubInvalid(t *testing.T) {
-	reg, err := conditions.NewDefaultRegistry(conditions.TestRegistryDeps())
+	reg, err := conditions.NewDefaultRegistry(conditionstest.Dependencies())
 	testutil.FailErr(t, "conditions.NewDefaultRegistry failed", err)
 	if err := rules.RegisterRuleConditions(reg); err != nil {
 		testutil.FailErr(t, "register rule conditions", err)
@@ -31,7 +32,7 @@ func TestSpecPostureBlocksStateWhenStubInvalid(t *testing.T) {
 }
 
 func TestSpecPostureBlocksDelegateWithStubInvalid(t *testing.T) {
-	reg, err := conditions.NewDefaultRegistry(conditions.TestRegistryDeps())
+	reg, err := conditions.NewDefaultRegistry(conditionstest.Dependencies())
 	testutil.FailErr(t, "conditions.NewDefaultRegistry failed", err)
 	if err := rules.RegisterRuleConditions(reg); err != nil {
 		testutil.FailErr(t, "register rule conditions", err)
@@ -51,7 +52,7 @@ func TestSpecPostureBlocksDelegateWithStubInvalid(t *testing.T) {
 }
 
 func TestBuildPostureAllowsImplementerTask(t *testing.T) {
-	reg, err := conditions.NewDefaultRegistry(conditions.TestRegistryDepsWithEvidence())
+	reg, err := conditions.NewDefaultRegistry(conditionstest.DependenciesWithEvidence())
 	testutil.FailErr(t, "conditions.NewDefaultRegistry failed", err)
 	if err := rules.RegisterRuleConditions(reg); err != nil {
 		testutil.FailErr(t, "register rule conditions", err)

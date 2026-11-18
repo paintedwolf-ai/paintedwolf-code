@@ -2,6 +2,7 @@ package security
 
 import (
 	"encoding/json"
+	"github.com/lycaon/lycaon/internal/testutil/conditionstest"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -9,7 +10,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/lycaon/lycaon/internal/conditions"
 	"github.com/lycaon/lycaon/internal/events"
 	"github.com/lycaon/lycaon/internal/testutil"
 	wire "github.com/lycaon/lycaon/pkg/api"
@@ -32,7 +32,7 @@ func TestStartBugbashViaOrchestrator(t *testing.T) {
 	waitWorkflowPhase(t, h.workflowMgr, run.ID, "expand")
 	blueprintPath := filepath.Join(h.projectDir, filepath.FromSlash(run.BlueprintPath))
 	testutil.FailErr(t, "create Bugbash blueprint dir", os.MkdirAll(filepath.Dir(blueprintPath), 0o755))
-	testutil.FailErr(t, "write Bugbash blueprint", os.WriteFile(blueprintPath, []byte(conditions.TestPlanContentStubOnly), 0o644))
+	testutil.FailErr(t, "write Bugbash blueprint", os.WriteFile(blueprintPath, []byte(conditionstest.PlanStub), 0o644))
 	_, err := h.workflowMgr.Phases.TryAutoAdvanceThroughCommittedGates(t.Context(), run.ID, 8)
 	testutil.FailErr(t, "advance Bugbash blueprint gate", err)
 	waitWorkflowPhase(t, h.workflowMgr, run.ID, "approve")

@@ -3,13 +3,13 @@ package workflow
 import (
 	"testing"
 
-	"github.com/lycaon/lycaon/internal/conditions"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/testutil/conditionstest"
 )
 
 func TestPlanStatusVarAutoAdvances(t *testing.T) {
 	mgr, repositories, blueprintMgr, projectDir := testManagerWithRegistry(t)
-	setTestRegistry(t, mgr, blueprintMgr, conditions.TestRegistryDepsWithEvidence())
+	setTestRegistry(t, mgr, blueprintMgr, conditionstest.DependenciesWithEvidence())
 	ctx := workflowCaller(t, repositories)
 	run, err := startRun(ctx, mgr, "sess-1", "plan", "1.0.1")
 	testutil.FailErr(t, "startRun failed", err)

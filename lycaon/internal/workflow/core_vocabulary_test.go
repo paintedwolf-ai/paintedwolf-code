@@ -2,6 +2,7 @@ package workflow
 
 import (
 	"context"
+	"github.com/lycaon/lycaon/internal/testutil/conditionstest"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/conditions"
@@ -11,7 +12,7 @@ import (
 )
 
 func TestTwoManifestsShareTopologyStageComplete(t *testing.T) {
-	reg, err := conditions.NewDefaultRegistry(conditions.TestRegistryDeps())
+	reg, err := conditions.NewDefaultRegistry(conditionstest.Dependencies())
 	testutil.FailErr(t, "conditions.NewDefaultRegistry failed", err)
 	eval := RegistryGateEvaluator{Registry: reg}
 	vars := map[string]any{
@@ -50,7 +51,7 @@ func TestTwoManifestsShareTopologyStageComplete(t *testing.T) {
 
 func TestUserDecisionRejectPausesRun(t *testing.T) {
 	mgr, store, _, _ := testManager(t)
-	reg, err := conditions.NewDefaultRegistry(conditions.TestRegistryDeps())
+	reg, err := conditions.NewDefaultRegistry(conditionstest.Dependencies())
 	testutil.FailErr(t, "conditions.NewDefaultRegistry failed", err)
 	mgr.SetConditionRegistry(reg)
 	manifest := workflowdef.FinalizeManifest(workflowdef.Manifest{
@@ -85,7 +86,7 @@ func TestUserDecisionRejectPausesRun(t *testing.T) {
 
 func TestUserFeedbackFromChat(t *testing.T) {
 	mgr, _, _, _ := testManager(t)
-	reg, err := conditions.NewDefaultRegistry(conditions.TestRegistryDeps())
+	reg, err := conditions.NewDefaultRegistry(conditionstest.Dependencies())
 	testutil.FailErr(t, "conditions.NewDefaultRegistry failed", err)
 	mgr.SetConditionRegistry(reg)
 	manifest := workflowdef.FinalizeManifest(workflowdef.Manifest{
@@ -117,7 +118,7 @@ func TestUserFeedbackFromChat(t *testing.T) {
 
 func TestAdvanceBlockedUntilTopologyStageComplete(t *testing.T) {
 	mgr, _, _, _ := testManager(t)
-	reg, err := conditions.NewDefaultRegistry(conditions.TestRegistryDeps())
+	reg, err := conditions.NewDefaultRegistry(conditionstest.Dependencies())
 	testutil.FailErr(t, "conditions.NewDefaultRegistry failed", err)
 	mgr.SetConditionRegistry(reg)
 	manifest := workflowdef.FinalizeManifest(workflowdef.Manifest{

@@ -4,6 +4,7 @@ package workflow
 
 import (
 	"context"
+	"github.com/lycaon/lycaon/internal/testutil/conditionstest"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/conditions"
@@ -19,7 +20,7 @@ import (
 
 func TestWorkflowModeIntegrationImplementOnEnter(t *testing.T) {
 	mgr, sessStore, blueprintMgr, projectDir := testManagerWithRegistry(t)
-	setTestRegistry(t, mgr, blueprintMgr, conditions.TestRegistryDeps())
+	setTestRegistry(t, mgr, blueprintMgr, conditionstest.Dependencies())
 	ctx := context.Background()
 
 	run, err := startRun(ctx, mgr, "sess-1", "plan", "1.0.1")

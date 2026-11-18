@@ -22,6 +22,7 @@ import (
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/testdbseed"
+	"github.com/lycaon/lycaon/internal/testutil/conditionstest"
 	"github.com/lycaon/lycaon/internal/workflow"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 	workflowdrafts "github.com/lycaon/lycaon/internal/workflow/drafts"
@@ -134,7 +135,7 @@ func TestPlanResearchObligationsInInject(t *testing.T) {
 	}
 	seed, err := blueprintMgr.Get(ctx, run.ProjectID, run.BlueprintPath)
 	contractcheck.FailErr(t, "blueprintMgr.Get", err)
-	researchPlan := strings.Replace(conditions.TestPlanContentWithTasks, "research_depth: none", "research_depth: light", 1)
+	researchPlan := strings.Replace(conditionstest.PlanWithTasks, "research_depth: none", "research_depth: light", 1)
 	_, err = blueprintMgr.Store.UpdateContent(
 		ctx, run.ProjectID, run.BlueprintPath, researchPlan, blueprint.ContentDigest(seed.Content),
 	)

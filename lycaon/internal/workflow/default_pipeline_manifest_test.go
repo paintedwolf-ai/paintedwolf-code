@@ -2,6 +2,7 @@ package workflow
 
 import (
 	"context"
+	"github.com/lycaon/lycaon/internal/testutil/conditionstest"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/conditions"
@@ -123,7 +124,7 @@ func TestBugbashParallelStagesGate(t *testing.T) {
 func TestBugbashApprovedBlueprintRunsImplementChildAndCompletes(t *testing.T) {
 	mgr, repositories, blueprintMgr, projectDir := testManager(t)
 	delivered := false
-	deps := conditions.TestRegistryDepsWithEvidence()
+	deps := conditionstest.DependenciesWithEvidence()
 	deps.DeliveryReported = func(context.Context, string, string, string) (bool, error) { return delivered, nil }
 	setTestRegistry(t, mgr, blueprintMgr, deps)
 	ctx := workflowCaller(t, repositories)

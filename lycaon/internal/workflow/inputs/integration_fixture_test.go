@@ -14,6 +14,7 @@ import (
 	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/testutil/conditionstest"
 	workflow "github.com/lycaon/lycaon/internal/workflow"
 	workflowblueprintfiles "github.com/lycaon/lycaon/internal/workflow/blueprintfiles"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
@@ -85,7 +86,7 @@ func setTestRegistry(t *testing.T, mgr *workflow.RunManager, blueprintMgr *bluep
 func testManagerWithRegistry(t *testing.T) (*workflow.RunManager, *store.Repositories, *blueprint.Manager, string) {
 	t.Helper()
 	mgr, store, blueprintMgr, projectDir := testManager(t)
-	setTestRegistry(t, mgr, blueprintMgr, conditions.TestRegistryDeps())
+	setTestRegistry(t, mgr, blueprintMgr, conditionstest.Dependencies())
 	return mgr, store, blueprintMgr, projectDir
 }
 

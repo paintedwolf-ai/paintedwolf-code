@@ -2,6 +2,7 @@ package contract
 
 import (
 	"context"
+	"github.com/lycaon/lycaon/internal/testutil/conditionstest"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/conditions"
@@ -17,7 +18,7 @@ func TestPlanStubValidRuleGateParity(t *testing.T) {
 		name string
 		body string
 	}{
-		{"valid stub", conditions.TestPlanContentWithTasks},
+		{"valid stub", conditionstest.PlanWithTasks},
 		{"missing title", "---\nresearch_depth: none\n---\n## Goal\n\nx\n\n## Assumptions\n\nx\n\n## Plan implementation scope\n\n**Size:** small\n\n## Plan breaking changes\n\nnone\n\n## Approach\n\nship it\n"},
 		{"missing research depth", "## Goal\n\nx\n\n## Assumptions\n\nx\n"},
 		{"missing scope", "---\nresearch_depth: none\n---\n## Goal\n\nx\n\n## Assumptions\n\nx\n\n## Plan breaking changes\n\nnone\n"},

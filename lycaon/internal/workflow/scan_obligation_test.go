@@ -2,6 +2,7 @@ package workflow
 
 import (
 	"context"
+	"github.com/lycaon/lycaon/internal/testutil/conditionstest"
 	"testing"
 	"time"
 
@@ -59,7 +60,7 @@ func TestScanObligationUsesDeclaredGateInWorkflowStatus(t *testing.T) {
 				History:  workflowFindingHistory{},
 			}
 			mgr.Obligations.Register(obligation)
-			deps := conditions.TestRegistryDeps()
+			deps := conditionstest.Dependencies()
 			deps.ObligationResolvers = map[string]conditions.ObligationStatusReader{"scan": obligation}
 			reg, err := conditions.NewDefaultRegistry(deps)
 			testutil.FailErr(t, "conditions registry", err)

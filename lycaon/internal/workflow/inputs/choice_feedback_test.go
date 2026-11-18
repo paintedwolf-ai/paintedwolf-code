@@ -3,6 +3,7 @@ package inputs_test
 import (
 	"context"
 	"errors"
+	"github.com/lycaon/lycaon/internal/testutil/conditionstest"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/conditions"
@@ -15,7 +16,7 @@ import (
 // membership in the selected set, the run advances, and the question card records the answer.
 func TestResolveMultiChoiceAdvancesAndStampsAnswer(t *testing.T) {
 	mgr, store, _, _ := testManager(t)
-	reg, err := conditions.NewDefaultRegistry(conditions.TestRegistryDeps())
+	reg, err := conditions.NewDefaultRegistry(conditionstest.Dependencies())
 	testutil.FailErr(t, "conditions.NewDefaultRegistry", err)
 	mgr.SetConditionRegistry(reg)
 	manifest := workflowdef.FinalizeManifest(workflowdef.Manifest{
@@ -68,7 +69,7 @@ func TestResolveMultiChoiceAdvancesAndStampsAnswer(t *testing.T) {
 // allow_other lets a single_choice phase accept a value outside the declared options.
 func TestResolveSingleChoiceRejectsUnknownWithoutAllowOther(t *testing.T) {
 	mgr, _, _, _ := testManager(t)
-	reg, err := conditions.NewDefaultRegistry(conditions.TestRegistryDeps())
+	reg, err := conditions.NewDefaultRegistry(conditionstest.Dependencies())
 	testutil.FailErr(t, "conditions.NewDefaultRegistry", err)
 	mgr.SetConditionRegistry(reg)
 	manifest := workflowdef.FinalizeManifest(workflowdef.Manifest{

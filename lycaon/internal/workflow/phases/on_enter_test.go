@@ -10,6 +10,7 @@ import (
 	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/testutil/conditionstest"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 	workflowphases "github.com/lycaon/lycaon/internal/workflow/phases"
 	"github.com/lycaon/lycaon/internal/workflow/runstate"
@@ -144,7 +145,7 @@ func TestApplyPhaseOnEnterInvalidExecutionMode(t *testing.T) {
 
 func TestRefreshHumanApprovalReadyStubOnly(t *testing.T) {
 	const lockedReadiness = "plan_stub_valid"
-	planBody := conditions.TestPlanContentStubOnly
+	planBody := conditionstest.PlanStub
 	reg, err := conditions.NewDefaultRegistry(conditions.RegistryDeps{
 		BlueprintGet: func(_ context.Context, planID string) (*api.Blueprint, error) {
 			if planID == "empty-plan" {
