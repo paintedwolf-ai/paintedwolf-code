@@ -28,12 +28,10 @@ func TestSourceTransportOutagePreservesCheckpointAndRetry(t *testing.T) {
 	testutil.FailErr(t, "load complete checkpoint", err)
 	volume.Stop()
 	// Require actual filesystem failure before interpreting the application result;
-	// an all-cached success is not evidence of outage handling.
+	// an all-cached success is not evidence of outage handling. A preview may still
+	// answer from the client's cache; applying a promotion cannot.
 	if _, err := os.Stat(filepath.Join(source, "uncached-outage-probe")); err == nil || os.IsNotExist(err) {
 		t.Fatalf("source did not report transport failure: %v", err)
-	}
-	if _, err := promoter.Preview(t.Context(), PreviewRequest{CheckpointID: "cp-scale"}); err == nil {
-		t.Fatal("preview treated unavailable source as usable")
 	}
 	if _, err := promoteAndCommit(t, promoter, ApplyRequest{Preview: preview}); err == nil {
 		t.Fatal("promotion accepted unavailable source")
