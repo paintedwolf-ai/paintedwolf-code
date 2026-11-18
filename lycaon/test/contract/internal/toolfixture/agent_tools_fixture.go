@@ -11,9 +11,7 @@ import (
 	"github.com/lycaon/lycaon/internal/orchestration"
 	"github.com/lycaon/lycaon/internal/platform"
 	"github.com/lycaon/lycaon/internal/prompts"
-	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"github.com/lycaon/lycaon/internal/testdbfixture"
-	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/toolexecution"
 	"github.com/lycaon/lycaon/internal/toolhost"
 	"github.com/lycaon/lycaon/internal/tools"
@@ -33,7 +31,7 @@ func ContractToolRuntime(t *testing.T) *toolhost.Runtime {
 	rt, err := toolhost.NewRuntime(toolhost.RuntimeConfig{ConfigRoot: configRoot, Catalog: contractcheck.StockCatalog(t)})
 	contractcheck.FailErr(t, "toolhost.NewRuntime failed", err)
 	applyStockToolSchemas(t, rt)
-	wireContractProgramServices(t, rt, testdbfixture.Open(t, "exec-boot.db"), storetest.New(t, testdbseed.DefaultProjectID).Sessions)
+	wireContractProgramServices(t, rt, testdbfixture.Open(t, "exec-boot.db"))
 	hints, err := guidance.LoadHintConfigStock()
 	contractcheck.FailErr(t, "load hint registry", err)
 	guidance.SetGuidanceRenderer(prompts.NewGuidanceRenderer(prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{})))
