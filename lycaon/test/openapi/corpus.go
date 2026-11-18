@@ -40,6 +40,9 @@ type CorpusExchange struct {
 	Query     map[string][]string `json:"query,omitempty"`
 	Request   json.RawMessage     `json:"request,omitempty"`
 	Status    int                 `json:"status"`
+	// ContentType is the answer's media type, recorded for every answer
+	// whose body the corpus keeps or leaves out.
+	ContentType string `json:"content_type,omitempty"`
 	// Body is the JSON answer; Text is any other text answer.
 	Body json.RawMessage `json:"body,omitempty"`
 	Text string          `json:"text,omitempty"`

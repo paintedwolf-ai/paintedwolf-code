@@ -28,11 +28,8 @@ func TestHostCorpusMatchesTheContract(t *testing.T) {
 	succeeded := map[string]bool{}
 	for _, ex := range corpus.Exchanges {
 		header := http.Header{}
-		switch {
-		case len(ex.Body) > 0:
-			header.Set("Content-Type", "application/json")
-		case ex.Text != "":
-			header.Set("Content-Type", "text/event-stream")
+		if ex.ContentType != "" {
+			header.Set("Content-Type", ex.ContentType)
 		}
 		body := []byte(ex.Body)
 		if ex.Text != "" {
