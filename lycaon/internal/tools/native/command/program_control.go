@@ -112,7 +112,9 @@ func (d *ProgramDispatcher) invokeHosted(ctx context.Context, spec toolcontract.
 		if err := d.checkPreparedPolicy(ctx, tc, spec, request.EffectMode, request, d.paths.Cwd(), prepared.Review); err != nil {
 			return ownerFailure(err), err
 		}
-		noteJobNative(ctx, request.Argv.Values())
+		if !prefixCommands[spec.Name] {
+			noteJobNative(ctx, request.Argv.Values())
+		}
 		res, invokeErr := prepared.Invoke(ctx, tc, streams)
 		if invokeErr == nil && res.Status == 0 {
 			d.run.noteNativeFileMutation(ctx, spec.Name, prepared.Review.PathTargets)

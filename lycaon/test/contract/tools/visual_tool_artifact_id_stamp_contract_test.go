@@ -16,7 +16,7 @@ import (
 // visualToolResultAttachAllowlist limits production call sites of
 // visual.AttachToolResult to ensure artifact_id stamping.
 var visualToolResultAttachAllowlist = map[string]bool{
-	"lycaon/internal/coordinator/promptloop/tools.go": true,
+	"lycaon/internal/coordinator/promptloop/tool_result_message.go": true,
 }
 
 // TestVisualToolResultArtifactIDStampContract verifies artifact_id stamping

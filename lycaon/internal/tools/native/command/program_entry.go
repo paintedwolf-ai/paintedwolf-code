@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"maps"
 	"slices"
 	"strings"
 	"sync"
@@ -398,11 +399,18 @@ func (r *ProgramRuntime) bindProgramSurface(ctx context.Context, run *programRun
 	}()
 	jobs := r.Supervisor.Jobs(tc.Identity.SessionID, tc.Identity.ProjectID)
 	builtins := jobBuiltins(jobs, run.commands)
-	builtins["lsof"] = lsofBuiltin(run.commands["lsof"], tc.Identity.SessionID, jobs, r.Ports, tc.Execution.ProcessReview)
-	builtins["sleep"] = sleepBuiltin()
-	dispatcher := &ProgramDispatcher{run: run, builtins: builtins, natives: owners.Natives, binder: commandprogram.CatalogBinder{}, paths: paths, shared: &dispatchShared{}, redirections: owners.Redirections}
+	listeners := listenerInspection{sessionID: tc.Identity.SessionID, jobs: jobs, ports: r.Ports, review: tc.Execution.ProcessReview}
+	natives := map[string]NativeOperation{
+		"kill":  killOperation(jobs, run.commands["kill"]),
+		"lsof":  listeners.operation(run.commands["lsof"]),
+		"pgrep": pgrepOperation(jobs, run.commands["pgrep"]),
+		"pkill": pkillOperation(jobs, run.commands["pkill"]),
+		"sleep": sleepOperation(run.commands["sleep"]),
+	}
+	dispatcher := &ProgramDispatcher{run: run, builtins: builtins, natives: natives, binder: commandprogram.CatalogBinder{}, paths: paths, shared: &dispatchShared{}, redirections: owners.Redirections}
 	builtins["timeout"] = timeoutBuiltin(run.commands["timeout"], dispatcher, r.clock())
-	builtins["nohup"] = nohupBuiltin(run.commands["nohup"], dispatcher)
+	natives["nohup"] = nohupOperation(run.commands["nohup"], dispatcher)
+	maps.Copy(natives, owners.Natives)
 	var publication commandprogram.OutputPublication
 	if owners.Publication != nil {
 		publication = dispatcher.wrapOutputPublication(owners.Publication(dispatcher.outputAdmission()), paths)
@@ -431,7 +439,7 @@ func (r *ProgramRuntime) bindProgramSurface(ctx context.Context, run *programRun
 		active = append(active, offeredProgramDefinition(programPublicationTool, write.Operation, nil))
 	}
 	seen := map[string]bool{external.ReadOnlyFacts().Identity: true, programPublicationTool: true}
-	for _, operation := range owners.Natives {
+	for _, operation := range natives {
 		for _, tool := range append([]string{operation.Tool}, operation.Tools...) {
 			if tool == "" || seen[tool] {
 				continue
@@ -455,7 +463,7 @@ func (r *ProgramRuntime) bindProgramSurface(ctx context.Context, run *programRun
 	for name := range pathCommands {
 		run.control.available[name] = true
 	}
-	for name := range owners.Natives {
+	for name := range natives {
 		run.control.available[name] = true
 	}
 	run.control.taken = seen
