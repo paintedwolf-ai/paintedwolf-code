@@ -2,10 +2,11 @@ package sourcesnapshot
 
 import (
 	"context"
-	"github.com/lycaon/lycaon/internal/timelayout"
 	"sort"
 	"strings"
 	"time"
+
+	"github.com/lycaon/lycaon/internal/timelayout"
 
 	"github.com/lycaon/lycaon/internal/db"
 )
