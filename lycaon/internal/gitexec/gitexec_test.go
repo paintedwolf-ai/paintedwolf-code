@@ -14,14 +14,9 @@ import (
 	"testing"
 	"time"
 
-	gittestsetup "github.com/lycaon/lycaon/internal/testsetup/git"
+	"github.com/lycaon/lycaon/internal/gitengine"
 	"github.com/lycaon/lycaon/internal/testutil"
 )
-
-func TestMain(m *testing.M) {
-	gittestsetup.Enable()
-	os.Exit(m.Run())
-}
 
 func useBundledGit(t *testing.T) string {
 	t.Helper()
