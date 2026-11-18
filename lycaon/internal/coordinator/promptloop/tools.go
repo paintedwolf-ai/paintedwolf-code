@@ -13,6 +13,7 @@ import (
 	"github.com/lycaon/lycaon/internal/curationctx"
 	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/invocation"
+	"github.com/lycaon/lycaon/internal/isolation"
 	"github.com/lycaon/lycaon/internal/observability"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/tooloutput"
@@ -345,6 +346,9 @@ func (l *toolInvocations) finalizeToolRun(ctx context.Context, sess *api.Session
 	defer func() {
 		if run.toolCtx.Effects.Out != nil {
 			result.facts = result.facts.Merge(run.toolCtx.Effects.Out.Facts)
+		}
+		if program := captures.commandProgram; program != nil && program.State == "completed" && program.StatusCode != nil {
+			result.facts.CommandExitedZero = *program.StatusCode == 0
 		}
 		// Every returned result, including failures, crosses policy before logging or delivery.
 		if ownerInvoked || run.runErr == nil {

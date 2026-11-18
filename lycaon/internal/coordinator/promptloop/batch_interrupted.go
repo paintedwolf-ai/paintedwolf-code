@@ -232,9 +232,12 @@ func (l *toolBatch) settleRejectedToolCall(
 		toolMsg:       l.Tools.toolRejectMessage(tc.Name, tc.ID, assistantMessageID, tc.Args, run.asReject()),
 		breakToolLoop: advance,
 	}
+	if run.captures.commandProgram != nil {
+		run.facts = run.facts.WithOutcome(api.ToolResultOutcomeRejected)
+		out.toolMsg = l.Tools.composeToolResultMessage(ctx, sess, sessionID, tc, assistantMessageID, api.MessageOriginTool, &run)
+	}
 	if out.toolMsg.ToolResult != nil {
 		out.toolMsg.ToolResult.Invocation = run.receipt
-		out.toolMsg.ToolResult.CommandProgram = run.captures.commandProgram
 	}
 	return out
 }

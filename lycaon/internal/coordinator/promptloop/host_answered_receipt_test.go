@@ -315,8 +315,9 @@ func TestInvocationSettlementMatchesEffectsAndRefusal(t *testing.T) {
 				if want.programState == "" {
 					return "", toolrejection.RenderReject(&toolrejection.ToolReject{Code: want.code, BeforeEffect: want.beforeEffect}, nil)
 				}
+				status := 0
 				tc.Effects.Out.CommandProgram = &api.CommandProgramReceipt{
-					ID: "program", ParentReceiptID: tc.Invocation.ID, State: want.programState, StopCode: want.code,
+					ID: "program", ParentReceiptID: tc.Invocation.ID, State: want.programState, StopCode: want.code, StatusCode: &status,
 				}
 				tc.Effects.Out.CommandStarted = want.programStarted
 				return "fixture command outcome", nil

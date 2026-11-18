@@ -25,7 +25,8 @@ type ToolResultFacts struct {
 	// Feedback retains distinct observations; Codes is its unique code projection.
 	Feedback []api.ToolFeedback
 	// Confine is the post-invoke boundary observation.
-	Confine confine.Observation
+	Confine           confine.Observation
+	CommandExitedZero bool
 	// IndexWatch is the Git index a command started with; post-invoke guidance
 	// releases it.
 	IndexWatch indexwatch.Snapshot
@@ -133,6 +134,7 @@ func (f ToolResultFacts) Merge(other ToolResultFacts) ToolResultFacts {
 		next = next.WithFeedback(feedback.Code, feedback.Details, feedback.Subject)
 	}
 	next.Confine = f.Confine.Merge(other.Confine)
+	next.CommandExitedZero = f.CommandExitedZero || other.CommandExitedZero
 	if other.IndexWatch.Active() {
 		next.IndexWatch = other.IndexWatch
 	}

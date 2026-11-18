@@ -234,6 +234,8 @@ host_facts:
    observation: The capability_request.write_root path whose approval would open each refused write path that a reviewed grant can open; empty when none.
  - name: paintedwolf.refused_read_paths
    type: list<string>
+ - name: paintedwolf.optional_read_paths
+   type: list<string>
    observation: Paths the kernel refused the invocation's processes for reading, at any layer; empty when none.
  - name: paintedwolf.refused_read_grants
    type: list<string>

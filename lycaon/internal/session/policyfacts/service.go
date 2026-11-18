@@ -38,6 +38,7 @@ type Service struct {
 	credentialDecisions        credentialDecisions
 	authorship                 touchedpaths.AuthoredSource
 	candidateReader            candidateReader
+	optionalReads              optionalReadNotices
 }
 
 // observeSocketResources names the host resources whose local service each

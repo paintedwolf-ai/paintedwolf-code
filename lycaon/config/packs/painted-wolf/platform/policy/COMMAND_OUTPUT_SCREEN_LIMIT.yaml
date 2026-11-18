@@ -10,7 +10,7 @@ effect: block
 x-paintedwolf-category: recoverable
 x-paintedwolf-emit: guard:command_composition_redirect
 message: Command output exceeded a screening limit
-what: Command output was withheld at the {{ paintedwolf.resource }} limit of {{ paintedwolf.maximum }}.
+what: Command output delivery stopped at the {{ paintedwolf.resource }} limit of {{ paintedwolf.maximum }}.
 cause: '{% if paintedwolf.command_exit_recorded %}The command exited with status {{ paintedwolf.command_exit_status }}.{% endif %}'
 fix: '{% if paintedwolf.saved_output_paths %}Read the retained output in bounded slices from {{ paintedwolf.saved_output_paths }}.{% endif %}'
 x-paintedwolf-scenarios:

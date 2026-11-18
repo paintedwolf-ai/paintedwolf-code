@@ -42,7 +42,7 @@ type LoopbackConnectRequest struct {
 const MaxLocalListenPorts = 8
 
 // MaxReadPaths bounds the exact protected paths in one capability request.
-const MaxReadPaths = 8
+const MaxReadPaths = 32
 
 // MaxLoopbackConnectPorts bounds capability_request.loopback_connect.ports.
 const MaxLoopbackConnectPorts = 8
@@ -212,7 +212,7 @@ func parseReadPaths(raw any) ([]string, *toolrejection.ToolReject) {
 	}
 	if len(values) == 0 || len(values) > MaxReadPaths {
 		return nil, toolrejection.RejectInvalidArguments(isolation.CodeCapabilityRequestInvalid, map[string]any{
-			"reason": "read_path must name between one and eight exact protected paths", "capability": "read_path",
+			"reason": "read_path must name between one and 32 exact protected paths", "capability": "read_path",
 		})
 	}
 	paths := make([]string, 0, len(values))

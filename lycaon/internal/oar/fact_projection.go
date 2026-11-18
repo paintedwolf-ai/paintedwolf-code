@@ -134,6 +134,7 @@ func bareActivation(gc *GuardContext) map[string]any {
 		"process_running":                     gc.Execution.ProcessRunning,
 		"refused_write_paths":                 strList(gc.Refusals.RefusedWritePaths),
 		"refused_write_grants":                strList(gc.Refusals.RefusedWriteGrants),
+		"optional_read_paths":                 strList(gc.Refusals.OptionalReadPaths),
 		"refused_read_paths":                  strList(gc.Refusals.RefusedReadPaths),
 		"refused_read_grants":                 strList(gc.Refusals.RefusedReadGrants),
 		"refused_multiple_read_grants":        len(gc.Refusals.RefusedReadGrants) > 1,
