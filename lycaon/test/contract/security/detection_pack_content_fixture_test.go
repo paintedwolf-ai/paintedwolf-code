@@ -43,7 +43,7 @@ func contractToolEvent(
 }
 
 var bundledDetectionCatalog = sync.OnceValues(func() (*detectionpack.Catalog, error) {
-	packs, err := shippedDetectionPacks(context.Background())
+	packs, err := resolveStockDetectionPacks(context.Background())
 	if err != nil {
 		return nil, err
 	}

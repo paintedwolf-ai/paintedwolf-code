@@ -10,7 +10,7 @@ import (
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 )
 
-func shippedDetectionPacks(ctx context.Context) ([]detectionpack.Pack, error) {
+func resolveStockDetectionPacks(ctx context.Context) ([]detectionpack.Pack, error) {
 	catalog, err := extpacks.ResolveStockCatalog(ctx, nil)
 	if err != nil {
 		return nil, err
@@ -22,13 +22,18 @@ func shippedDetectionPacks(ctx context.Context) ([]detectionpack.Pack, error) {
 	return packs, nil
 }
 
+func shippedDetectionPacks(t *testing.T) []detectionpack.Pack {
+	t.Helper()
+	packs, err := resolveStockDetectionPacks(t.Context())
+	contractcheck.FailErr(t, "load shipped detection packs", err)
+	return packs
+}
+
 func detectionInput(t *testing.T, configDir, projectDir string) detectionpack.Input {
 	t.Helper()
-	packs, err := shippedDetectionPacks(t.Context())
-	contractcheck.FailErr(t, "load shipped detection packs", err)
 	return detectionpack.Input{
 		ConfigDir:   configDir,
 		ProjectDir:  projectDir,
-		Contributed: packs,
+		Contributed: shippedDetectionPacks(t),
 	}
 }
