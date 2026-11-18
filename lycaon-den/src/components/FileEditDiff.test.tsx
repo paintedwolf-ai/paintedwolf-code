@@ -158,7 +158,7 @@ describe("FileEditDiff", () => {
     screen.getByText(path).click();
     expect(openSourceLocation).toHaveBeenCalledTimes(calls);
     expect(reportError).not.toHaveBeenCalled();
-    expect(screen.getByTestId("file-edit-diff")).toHaveAttribute("data-expanded", expanded);
+    expect(screen.getByTestId("file-edit-diff").getAttribute("data-expanded")).toBe(expanded);
   });
 
   it("names no writes and offers no strip for a single write", () => {
