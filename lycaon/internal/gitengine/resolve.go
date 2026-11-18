@@ -14,39 +14,38 @@ import (
 	execpkg "github.com/lycaon/lycaon/internal/exec"
 )
 
-// versionOfFn isolates version probes in tests.
-var versionOfFn = versionOf
-
-func resolve() (bin string, lfs string, err error) {
-	if path := strings.TrimSpace(os.Getenv(EnvGitBinary)); path != "" && testEnvArmed() {
-		if isExecutable(path) {
-			if err := assertPinnedVersion(path); err != nil {
-				return "", "", err
-			}
-			return path, lfsForBinary(path, runtime.GOOS), nil
-		}
+func resolve() (installation, error) {
+	bin := ""
+	if path := strings.TrimSpace(os.Getenv(EnvGitBinary)); path != "" && testEnvArmed() && isExecutable(path) {
+		bin = path
 	}
-	bin = bundledBinaryPath()
-	if isExecutable(bin) {
-		if err := assertPinnedVersion(bin); err != nil {
-			return "", "", err
-		}
-		return bin, lfsForBinary(bin, runtime.GOOS), nil
+	if bin == "" {
+		bin = BundledBinary(configlayout.EngineRoot())
 	}
-	return "", "", &UnavailableError{Reason: "missing"}
+	if bin == "" {
+		return installation{}, &UnavailableError{Reason: "missing"}
+	}
+	if err := assertPinnedVersion(bin); err != nil {
+		return installation{}, err
+	}
+	return installation{binary: bin, lfs: lfsForBinary(bin, runtime.GOOS)}, nil
 }
 
 func testEnvArmed() bool {
 	return configdir.EnvTruthy(os.Getenv(EnvTest))
 }
 
-func bundledBinaryPath() string {
-	root := configlayout.EngineRoot()
+// BundledBinary returns the executable in an engine resource root.
+func BundledBinary(root string) string {
 	if root == "" {
 		return ""
 	}
 	gitRel, _ := engineBinaryPaths(runtime.GOOS)
-	return filepath.Clean(filepath.Join(root, "gitengine", gitRel))
+	bin := filepath.Join(root, "gitengine", gitRel)
+	if isExecutable(bin) {
+		return bin
+	}
+	return ""
 }
 
 func engineBinaryPaths(goos string) (gitRel, lfsRel string) {
@@ -78,7 +77,7 @@ func assertPinnedVersion(bin string) error {
 	if err != nil {
 		return err
 	}
-	found, err := versionOfFn(bin)
+	found, err := versionOf(bin)
 	if err != nil {
 		return &UnavailableError{Reason: "missing", Expected: expected}
 	}

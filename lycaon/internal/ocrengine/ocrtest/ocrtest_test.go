@@ -1,10 +1,13 @@
 package ocrtest
 
 import (
+	"os"
+	"path/filepath"
 	"runtime"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/ocrengine"
+	"github.com/lycaon/lycaon/internal/testutil"
 )
 
 // recordingTB records how SkipIfNoEngine ended a test. Like the real methods,
@@ -58,5 +61,25 @@ func TestSkipIfNoEngineFailsWhenTheEngineIsRequired(t *testing.T) {
 	tb := gate(t)
 	if !tb.failed || tb.skipped {
 		t.Fatalf("skipped=%t failed=%t, want a failure", tb.skipped, tb.failed)
+	}
+}
+
+func TestConfigureStagedSelectsCheckoutRoot(t *testing.T) {
+	checkout := t.TempDir()
+	t.Chdir(checkout)
+	t.Setenv(ocrengine.EnvRoot, "")
+	testutil.FailErr(t, "write task file", os.WriteFile(filepath.Join(checkout, "Taskfile.yml"), nil, 0o600))
+	root := filepath.Join(checkout, "lycaon-den", "src-tauri", "engine-root", ocrengine.DirName)
+	testutil.FailErr(t, "create staged directory", os.MkdirAll(root, 0o755))
+	configureStaged(t)
+	if got := os.Getenv(ocrengine.EnvRoot); got != root {
+		t.Fatalf("OCR root = %q, want %q", got, root)
+	}
+
+	override := t.TempDir()
+	t.Setenv(ocrengine.EnvRoot, override)
+	configureStaged(t)
+	if got := os.Getenv(ocrengine.EnvRoot); got != override {
+		t.Fatalf("configured OCR root = %q, want %q", got, override)
 	}
 }
