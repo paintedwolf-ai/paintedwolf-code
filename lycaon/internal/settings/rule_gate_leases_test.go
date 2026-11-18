@@ -43,7 +43,7 @@ func TestRuleApprovalGateExactActionSetLease(t *testing.T) {
 	if !first.Required() {
 		t.Fatalf("first irreversible action must ask: %+v", first)
 	}
-	offer := hitl.ExactActionSetOffer(action, []string{hitl.GrantKey(action)})
+	offer := hitl.ExactActionSetOfferAtScope(action, []string{hitl.GrantKey(action)}, hitl.ApprovalGrantScopeChat)
 	created, err := approvalGate.ApplyGrant(offer.Grant)
 	testutil.FailErr(t, "approvalGate.ApplyGrant", err)
 	if !created {

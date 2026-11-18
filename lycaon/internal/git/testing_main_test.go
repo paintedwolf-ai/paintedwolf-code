@@ -141,15 +141,12 @@ func CloneFixtureInto(t *testing.T, name, dst string, seed func(dir string)) {
 	testutil.FailErr(t, "clone fixture tree", err)
 }
 
-// SeedGitEnv builds the environment for git commands seeding fixture
-// templates. Their commits spawn detached auto-maintenance, which takes
-// objects/maintenance.lock and races the template walk, so it is disabled per
-// command; LocalGitEnv strips inherited GIT_* variables, so the override must
-// ride as an extra.
+// SeedGitEnv disables detached Git maintenance while fixture templates are built.
 func SeedGitEnv(extra ...string) []string {
-	return lyexec.LocalGitEnv(append([]string{
+	env := append(lyexec.InheritedEnviron(),
 		"GIT_CONFIG_COUNT=1",
 		"GIT_CONFIG_KEY_0=maintenance.auto",
 		"GIT_CONFIG_VALUE_0=false",
-	}, extra...)...)
+	)
+	return append(env, extra...)
 }

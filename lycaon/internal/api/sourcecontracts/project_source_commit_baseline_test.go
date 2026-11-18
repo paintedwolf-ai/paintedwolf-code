@@ -82,7 +82,7 @@ func TestRestoreGitCausedVersionUsesGitObjectStore(t *testing.T) {
 
 	revParse := func() string {
 		cmd := exec.CommandContext(t.Context(), "git", "-C", repo, "rev-parse", "HEAD")
-		cmd.Env = lyexec.LocalGitEnv()
+		cmd.Env = lyexec.InheritedEnviron()
 		out, err := cmd.CombinedOutput()
 		testutil.FailErr(t, "git rev-parse", err)
 		return strings.TrimSpace(string(out))
@@ -388,7 +388,7 @@ func TestCommitRestoreRefusesADriftedObject(t *testing.T) {
 	srv := contractfixture.NewTestServer(t, contractfixture.WithTestGitManager, withLedger)
 	repo, nested := contractfixture.NestedRootRepo(t)
 	head := exec.CommandContext(t.Context(), "git", "-C", repo, "rev-parse", "HEAD")
-	head.Env = lyexec.LocalGitEnv()
+	head.Env = lyexec.InheritedEnviron()
 	headOut, err := head.CombinedOutput()
 	testutil.FailErr(t, "git rev-parse", err)
 	commit := strings.TrimSpace(string(headOut))

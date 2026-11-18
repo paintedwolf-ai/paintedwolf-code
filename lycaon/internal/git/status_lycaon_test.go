@@ -26,7 +26,7 @@ func TestGitManagerStatusReportsProjectOverlayPolicy(t *testing.T) {
 	write(settingsoverlay.DirName()+"/blueprints/feature.md", "plan\n")
 	git := func(args ...string) {
 		cmd := exec.CommandContext(context.Background(), "git", append([]string{"-C", dir}, args...)...)
-		cmd.Env = lyexec.LocalGitEnv()
+		cmd.Env = lyexec.InheritedEnviron()
 		if out, err := cmd.CombinedOutput(); err != nil {
 			t.Fatalf("git %v: %v %s", args, err, out)
 		}

@@ -124,7 +124,7 @@ func TestDetectionOverlayNeverAllowsDenyOrSuppress(t *testing.T) {
 	// Exact-action leases cover identical argv; family host leases leave the ask intact.
 	gateGranted := gateWithDetection(t, gate.PostureBalanced, src)
 	action := containedCommand("echo hi")
-	offer := hitl.ExactActionSetOffer(action, []string{hitl.GrantKey(action)})
+	offer := hitl.ExactActionSetOfferAtScope(action, []string{hitl.GrantKey(action)}, hitl.ApprovalGrantScopeChat)
 	_, err = gateGranted.ApplyGrant(offer.Grant)
 	testutil.FailErr(t, "ApplyGrant", err)
 	res, err := gateGranted.Evaluate(context.Background(), action)

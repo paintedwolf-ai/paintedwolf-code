@@ -174,7 +174,7 @@ func TestVendorRuleFilesAreTracked(t *testing.T) {
 
 	cmd := exec.Command("git", "ls-files", "-s", "--", rel)
 	cmd.Dir = root
-	cmd.Env = lyexec.LocalGitEnv()
+	cmd.Env = lyexec.InheritedEnviron()
 	out, err := cmd.Output()
 	if err != nil {
 		t.Skipf("git ls-files unavailable: %v", err)

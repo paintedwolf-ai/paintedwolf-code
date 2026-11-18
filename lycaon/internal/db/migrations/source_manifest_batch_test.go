@@ -133,7 +133,7 @@ func TestManifestMigrationBatchBoundariesPreserveRowsAndBoundCalls(t *testing.T)
 			testutil.FailErr(t, "prepare full conversion statement", err)
 			defer insert.Close()
 			entries := manifestBatchEntries(count)
-			chunk, err := writeLayoutChunk(t.Context(), tx, insert, entries)
+			chunk, err := insertLayoutChunk(t.Context(), tx, insert, buildLayoutChunk(entries), entries)
 			testutil.FailErr(t, "write actual chunk", err)
 			if len(trace.arguments) != (count+63)/64 || trace.maximum > 2 || trace.prepares != 1+min(count%64, 1) {
 				t.Fatalf("unbounded insert work: prepares=%d live=%d calls=%d rows=%d", trace.prepares, trace.maximum, len(trace.arguments), count)
@@ -158,7 +158,7 @@ func TestManifestMigrationBatchBoundariesPreserveRowsAndBoundCalls(t *testing.T)
 				t.Fatal("batching changed source paths, bytes or observation identity")
 			}
 			calls, prepares := len(trace.arguments), trace.prepares
-			reused, err := writeLayoutChunk(t.Context(), tx, insert, entries)
+			reused, err := insertLayoutChunk(t.Context(), tx, insert, buildLayoutChunk(entries), entries)
 			testutil.FailErr(t, "reuse identical stored chunk", err)
 			if reused != chunk || calls != len(trace.arguments) || prepares != trace.prepares {
 				t.Fatal("deduplicated chunk repeated entry writes or changed identity")
@@ -185,7 +185,7 @@ func TestManifestMigrationBatchFailureAndCancellationRollBack(t *testing.T) {
 			} else {
 				entries[70].size = -1
 			}
-			if _, err := writeLayoutChunk(ctx, tx, insert, entries); err == nil {
+			if _, err := insertLayoutChunk(ctx, tx, insert, buildLayoutChunk(entries), entries); err == nil {
 				t.Fatal("interrupted conversion accepted")
 			}
 			if len(trace.arguments) == 0 {

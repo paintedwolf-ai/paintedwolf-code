@@ -43,34 +43,16 @@ func TestReducedEnvironDropsAmbientCredentials(t *testing.T) {
 	if err != nil || !slices.Contains(opts.AppendEnv, "GIT_PAGER=cat") {
 		t.Fatalf("AgentLaunchOptions AppendEnv = %v, err = %v", opts.AppendEnv, err)
 	}
-	env, err := ProcessEnvironment(ExecOpts{
+	env, err := FinalProcessEnvironment(ExecOpts{
 		Launch: AgentLaunch(LaunchAgentCommand, "exec test", nil),
 		Env:    []string{"AWS_SECRET_ACCESS_KEY=caller-leaked"},
-	})
+	}, nil)
 	if err != nil {
-		t.Fatalf("ProcessEnvironment err = %v", err)
+		t.Fatalf("FinalProcessEnvironment err = %v", err)
 	}
 	envJoined := strings.Join(env, "\n")
 	if strings.Contains(envJoined, "AWS_SECRET_ACCESS_KEY=") || !strings.Contains(envJoined, "LANG=en_US.UTF-8") {
-		t.Fatalf("ProcessEnvironment did not preserve reduced agent environment when Env was provided: %v", env)
-	}
-}
-
-func TestLocalGitEnvStripsInheritedGitKeepsExtras(t *testing.T) {
-	t.Setenv("GIT_DIR", "/inherited/hook/state")
-	t.Setenv("LD_PRELOAD", "/evil.so")
-	got := LocalGitEnv("GIT_CONFIG_GLOBAL=/dev/null", "EXTRA=1")
-	if slices.Contains(got, "GIT_DIR=/inherited/hook/state") {
-		t.Fatalf("inherited GIT_DIR leaked into %v", got)
-	}
-	if slices.Contains(got, "LD_PRELOAD=/evil.so") {
-		t.Fatalf("inherited LD_PRELOAD leaked into %v", got)
-	}
-	if !slices.Contains(got, "GIT_CONFIG_GLOBAL=/dev/null") {
-		t.Fatalf("explicit GIT_CONFIG_GLOBAL extra dropped from %v", got)
-	}
-	if !slices.Contains(got, "EXTRA=1") {
-		t.Fatalf("expected EXTRA=1 in %v", got)
+		t.Fatalf("FinalProcessEnvironment did not preserve reduced agent environment when Env was provided: %v", env)
 	}
 }
 

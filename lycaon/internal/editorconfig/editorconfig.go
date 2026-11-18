@@ -111,15 +111,7 @@ func Parse(dir, content string) File {
 	return f
 }
 
-// Resolve applies configs ordered farthest from the file first, so nearer
-// files and later sections win.
-func Resolve(path string, configs []File) Properties {
-	props, _ := resolveContributors(path, configs)
-	return props
-}
-
-// resolveContributors also returns the directories of the files whose sections
-// matched, nearest first.
+// resolveContributors applies the nearest matching sections last and returns their directories nearest first.
 func resolveContributors(path string, configs []File) (Properties, []string) {
 	file := strings.TrimPrefix(strings.ReplaceAll(path, "\\", "/"), "./")
 	lowerFile := strings.ToLower(file)

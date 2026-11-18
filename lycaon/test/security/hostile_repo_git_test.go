@@ -104,7 +104,7 @@ func plantHostileRepo(t *testing.T, dir string) []string {
 	if err != nil {
 		t.Skip("host git required to plant the hostile fixture")
 	}
-	env := lyexec.LocalGitEnv()
+	env := lyexec.InheritedEnviron()
 	run := func(args ...string) {
 		t.Helper()
 		cmd := osexec.CommandContext(t.Context(), ref, append([]string{"-C", dir}, args...)...)
@@ -274,7 +274,7 @@ func plantFilterRepo(t *testing.T, dir, sentinel string) {
 	if err != nil {
 		t.Skip("host git required to plant the hostile fixture")
 	}
-	env := lyexec.LocalGitEnv()
+	env := lyexec.InheritedEnviron()
 	run := func(args ...string) {
 		t.Helper()
 		cmd := osexec.CommandContext(t.Context(), ref, append([]string{"-C", dir}, args...)...)
