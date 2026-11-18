@@ -139,6 +139,7 @@ type ScansDependencies struct {
 }
 
 type WorkflowDependencies struct {
+	Branches          *worker.BranchService
 	Workflows         *workflow.RunManager
 	WorkflowCatalog   workflowcatalog.Resolver
 	WorkflowRuns      *runstate.Repository

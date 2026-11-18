@@ -195,7 +195,6 @@ func TestEditorConfigMismatchCardAnnotatesTheLandedWrite(t *testing.T) {
 // stubWorkerCycleLister implements WorkerCycleLister for the stacked-base tests.
 // Only Get is exercised — workeradmission.ValidateStackedBase does not enumerate the queue.
 type stubWorkerCycleLister struct {
-	noopWorkerBranchClaim
 	tasks map[string]*api.WorkerTask
 }
 

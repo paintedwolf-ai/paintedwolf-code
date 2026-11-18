@@ -8,9 +8,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/db"
 	"github.com/lycaon/lycaon/internal/events"
-	"github.com/lycaon/lycaon/internal/keylock"
 	"github.com/lycaon/lycaon/internal/worker/jobstate"
-	"github.com/lycaon/lycaon/internal/workspacebaseline"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -28,49 +26,25 @@ type CriteriaEvaluator func(
 	report *api.WorkerChangeReport,
 ) string
 
-type sqlQueueConfig struct {
+// SQLQueue persists admitted worker rounds and their outcomes.
+type SQLQueue struct {
+	Branches          *BranchService
+	Promotions        *PromotionStore
 	maxRunning        int
 	defaultTarget     api.ExecutionTarget
-	onRunningCancel   func(ctx context.Context, jobID string) error
-	activeExecution   func(jobID string) bool
-	workerWorkspace   WorkerWorkspaceManager
-	projects          ProjectStore
+	onRunningCancel   func(context.Context, string) error
+	activeExecution   func(string) bool
 	workflowRuns      *WorkflowDomains
-	sessionAdmission  func(ctx context.Context, sessionID string, fn func() error) error
+	sessionAdmission  func(context.Context, string, func() error) error
 	failureCatalog    ExecuteFailureRenderer
-	lanes             *WorkerLanes
 	criteriaEvaluator CriteriaEvaluator
-	onRoundSettled    func(ctx context.Context, parentSessionID string)
-}
-
-type sqlQueueCore struct {
-	sqlQueueConfig
-	self          *SQLQueue
-	branchClaims  keylock.Group
-	baselines     *workspacebaseline.Store
-	db            db.Handle
-	store         *SQLStore
-	mu            sync.Mutex
-	cancelReports ChangeReportDeps
-	preparations  map[string]*api.WorkspacePreparation
-	runnable      *runnableSignal
-	changes       *jobChanges
-}
-
-type sqlQueueClaims struct {
-	*sqlQueueCore
-}
-
-type sqlQueuePromotion struct {
-	*sqlQueueCore
-}
-
-// SQLQueue persists worker tasks.
-type SQLQueue struct {
-	Promotions *PromotionStore
-	*sqlQueueCore
-	sqlQueueClaims
-	sqlQueuePromotion
+	onRoundSettled    func(context.Context, string)
+	db                db.Handle
+	store             *SQLStore
+	mu                sync.Mutex
+	cancelReports     ChangeReportDeps
+	runnable          *runnableSignal
+	changes           *jobChanges
 }
 
 // SetCancellationReports wires observations for cancellation and crash recovery.
@@ -88,7 +62,7 @@ func (q *SQLQueue) SetSessionAdmission(admit func(ctx context.Context, sessionID
 }
 
 // WithTaskAdmission guards worker admission against session stop.
-func (q *sqlQueueCore) WithTaskAdmission(ctx context.Context, task api.WorkerTask, fn func() error) error {
+func (q *SQLQueue) WithTaskAdmission(ctx context.Context, task api.WorkerTask, fn func() error) error {
 	q.mu.Lock()
 	admit := q.sessionAdmission
 	q.mu.Unlock()
@@ -125,34 +99,26 @@ func NewSQLQueue(database db.Handle, maxRunning int) *SQLQueue {
 	if maxRunning <= 0 {
 		maxRunning = MaxWorkers
 	}
-	core := &sqlQueueCore{
-		sqlQueueConfig: sqlQueueConfig{
-			maxRunning:    maxRunning,
-			defaultTarget: api.ExecutionTargetLocal,
-		},
-		db:           database,
-		store:        NewSQLStore(database),
-		preparations: make(map[string]*api.WorkspacePreparation),
-		runnable:     newRunnableSignal(),
-	}
-	core.changes = &jobChanges{store: core.store}
+	store := NewSQLStore(database)
+	changes := &jobChanges{store: store}
+	runnable := newRunnableSignal()
 	q := &SQLQueue{
-		Promotions:        &PromotionStore{store: core.store, changes: core.changes, runnable: core.runnable},
-		sqlQueueCore:      core,
-		sqlQueueClaims:    sqlQueueClaims{sqlQueueCore: core},
-		sqlQueuePromotion: sqlQueuePromotion{sqlQueueCore: core},
+		db: database, store: store, changes: changes, runnable: runnable,
+		maxRunning: maxRunning, defaultTarget: api.ExecutionTargetLocal,
+		Branches:   &BranchService{store: store, changes: changes, preparations: make(map[string]*api.WorkspacePreparation)},
+		Promotions: &PromotionStore{store: store, changes: changes, runnable: runnable},
 	}
-	core.self = q
+
 	return q
 }
 
-func (q *sqlQueueCore) NotifyRunnable() {
+func (q *SQLQueue) NotifyRunnable() {
 	if q != nil {
 		q.runnable.NotifyRunnable()
 	}
 }
 
-func (q *sqlQueueCore) RunnableWake() <-chan struct{} {
+func (q *SQLQueue) RunnableWake() <-chan struct{} {
 	if q == nil {
 		return nil
 	}
@@ -167,27 +133,6 @@ func (q *SQLQueue) SetWorkersConfig(cfg WorkersConfig) {
 	if cfg.Poller.MaxConcurrency > 0 {
 		q.maxRunning = cfg.Poller.MaxConcurrency
 	}
-}
-
-// SetWorkerWorkspaceManager provisions write-worker branches on first use.
-func (q *SQLQueue) SetWorkerWorkspaceManager(ws WorkerWorkspaceManager) {
-	q.mu.Lock()
-	defer q.mu.Unlock()
-	q.workerWorkspace = ws
-}
-
-// SetWorkerLanes runs worker rounds' write jobs in their workers' lanes.
-func (q *SQLQueue) SetWorkerLanes(lanes *WorkerLanes) {
-	q.mu.Lock()
-	defer q.mu.Unlock()
-	q.lanes = lanes
-}
-
-// SetProjectStore loads project roots when provisioning worker sandboxes.
-func (q *SQLQueue) SetProjectStore(store ProjectStore) {
-	q.mu.Lock()
-	defer q.mu.Unlock()
-	q.projects = store
 }
 
 // SetRunningCancel is invoked when canceling a running job.
@@ -212,10 +157,4 @@ func (q *SQLQueue) SetEventOutbox(outbox jobstate.JobEventOutbox) {
 // SetWorkflowDomains gates enqueue when a workflow run is paused or terminal.
 func (q *SQLQueue) SetWorkflowDomains(domains *WorkflowDomains) {
 	q.workflowRuns = domains
-}
-
-func (q *SQLQueue) SetBaselineStore(store *workspacebaseline.Store) {
-	q.mu.Lock()
-	defer q.mu.Unlock()
-	q.baselines = store
 }

@@ -184,7 +184,7 @@ func prepareOverlay(ctx context.Context, queue worker.WorkerQueue, sessions sess
 	if claimed.ID != id {
 		return PreparedOverlay{}, fmt.Errorf("fixture claimed an unexpected worker")
 	}
-	branch, err := queue.ClaimWorkerBranch(ctx, id)
+	branch, err := queue.Branches.ClaimWorkerBranch(ctx, id)
 	if err != nil {
 		return PreparedOverlay{}, err
 	}

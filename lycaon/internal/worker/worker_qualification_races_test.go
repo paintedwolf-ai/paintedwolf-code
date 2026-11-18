@@ -139,21 +139,21 @@ func newRaceQualificationEnv(t *testing.T) *raceQualificationEnv {
 	outbox := eventoutbox.New(sqlDB, nil)
 	queue := NewSQLQueue(sqlDB, 4)
 	queue.SetEventOutbox(outbox)
-	queue.SetProjectStore(projects)
+	queue.Branches.SetProjectStore(projects)
 	dataDir := testbaseline.DataDir(t, sqlDB)
 	ledger := sourceledger.New(sqlDB, filepath.Join(dataDir, "source-content"))
-	queue.SetBaselineStore(ledger.Baselines)
+	queue.Branches.SetBaselineStore(ledger.Baselines)
 
 	mgr := workspace.NewManager(filepath.Join(dataDir, "worker-branches"), platform.NewSelector(platform.Config{}))
 	rec, err := mgr.CheckpointCoordinator()
 	testutil.FailErr(t, "open checkpoint coordinator", err)
 	mgr.WithRecovery(rec)
-	queue.SetWorkerWorkspaceManager(mgr)
+	queue.Branches.SetWorkerWorkspaceManager(mgr)
 	fw := &faultWorkspaces{inner: mgr}
 	records := workerrecords.New(sqlDB)
 	ls := &mutableLaneState{inner: workerlane.NewM14State(queue)}
 	lanes := &WorkerLanes{Lanes: workerlane.New(fw, records), Records: records, State: ls, Checkpoints: rec}
-	queue.SetWorkerLanes(lanes)
+	queue.Branches.SetWorkerLanes(lanes)
 
 	decisions := sessiondecisions.NewSQL(sqlDB)
 	ops := &workerops.Service{
@@ -179,7 +179,7 @@ func newRaceQualificationEnv(t *testing.T) *raceQualificationEnv {
 	rejectFmt := guidance.NewStaticRejectFormatter(cfg)
 
 	merge := &MergeService{
-		Queue:        queue,
+		Queue: queue, Branches: queue.Branches,
 		Store:        queue.Promotions,
 		Projects:     projects,
 		Workspace:    mgr,
@@ -261,7 +261,7 @@ func (e *raceQualificationEnv) claimAndBranch(t *testing.T, jobID, childID strin
 		testutil.FailErr(t, "bind child", e.queue.store.SetChildSessionID(t.Context(), jobID, childID))
 		claimed.ChildSessionID = childID
 	}
-	branched, err := e.queue.ClaimWorkerBranch(t.Context(), jobID)
+	branched, err := e.queue.Branches.ClaimWorkerBranch(t.Context(), jobID)
 	testutil.FailErr(t, "claim branch "+jobID, err)
 	branched.ClaimToken = claimed.ClaimToken
 	return branched
@@ -573,7 +573,7 @@ func TestPromotionRefreshFailureHoldAndClosedWorkerCallback(t *testing.T) {
 	testutil.FailErr(t, "instruct r2", err)
 	claimed2, err := e.queue.ClaimNext(t.Context(), ClaimRequest{ProjectID: testdbseed.DefaultProjectID, ClaimedBy: "qual", ExecutionTarget: api.ExecutionTargetLocal})
 	testutil.FailErr(t, "claim r2", err)
-	if _, branchErr := e.queue.ClaimWorkerBranch(t.Context(), claimed2.ID); branchErr == nil {
+	if _, branchErr := e.queue.Branches.ClaimWorkerBranch(t.Context(), claimed2.ID); branchErr == nil {
 		t.Fatal("ClaimWorkerBranch succeeded while workspace fault remained active")
 	}
 
@@ -581,7 +581,7 @@ func TestPromotionRefreshFailureHoldAndClosedWorkerCallback(t *testing.T) {
 	e.workspaces.failErr = nil
 	e.workspaces.mu.Unlock()
 
-	branched2, err := e.queue.ClaimWorkerBranch(t.Context(), eff2.Dispatch.WorkerID)
+	branched2, err := e.queue.Branches.ClaimWorkerBranch(t.Context(), eff2.Dispatch.WorkerID)
 	testutil.FailErr(t, "retry branch preparation", err)
 	if branched2.WorkspaceRoot == job1.WorkspaceRoot {
 		t.Fatalf("retried preparation kept stale lane %s", branched2.WorkspaceRoot)

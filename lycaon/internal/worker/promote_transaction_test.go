@@ -312,7 +312,7 @@ func TestMergeServiceCheckpointExactBaseConflictSurface(t *testing.T) {
 	testutil.FailErr(t, "SetWorkerWorkspace", err)
 	testutil.FailErr(t, "SetMergeStatus", q.Promotions.SetMergeStatus(ctx, jobID, api.WorkerMergeStatusPending))
 
-	svc := &MergeService{Queue: q, Store: q.Promotions, DataDir: t.TempDir()}
+	svc := &MergeService{Queue: q, Branches: q.Branches, Store: q.Promotions, DataDir: t.TempDir()}
 	previewOut, err := svc.PreviewForSession(ctx, "parent-cp-conf", jobID, "full", nil)
 	testutil.FailErr(t, "PreviewForSession", err)
 	if len(previewOut.Conflicts) != 2 {

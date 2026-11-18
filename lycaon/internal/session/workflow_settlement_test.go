@@ -40,7 +40,6 @@ func (*settlementWorkflowSource) HostObligationHoldKinds(context.Context, string
 }
 
 type settlementWorkerQueue struct {
-	noopWorkerBranchClaim
 	idle atomic.Bool
 }
 
@@ -74,7 +73,7 @@ func TestWorkflowCompletionSettlesAfterExecutionDrains(t *testing.T) {
 			loop := mgr.Coordinator.Runtime.CoordinatorLoop()
 			workers := &settlementWorkerQueue{}
 			workers.idle.Store(blocker != "workers")
-			mgr.SetWorkerQueue(workers)
+			mgr.SetWorkerQueue(workers, nil)
 			loop.Waits.EnterSleep(ctx, sess.ID, time.Now().Add(time.Hour), "phase wait", loopwake.HostObligationWaitTriggers(false), nil, loopwake.SleepMoverHost)
 			unblock := func() {}
 			switch blocker {

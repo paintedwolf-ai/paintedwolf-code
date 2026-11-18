@@ -129,7 +129,7 @@ func TestCoordinatorParallelWorkersReplayLineShiftAtomicRejection(t *testing.T) 
 		Status:                wire.WorkerStatusComplete,
 	}
 	svc := &worker.MergeService{
-		Queue:  replayMergeQueue{task: task},
+		Queue: replayMergeQueue{task: task}, Branches: replayMergeQueue{task: task},
 		Reject: rejectFmt,
 	}
 	_, mergeErr := svc.PromoteOverlay(ctx, "parent-replay", jobID, wire.PromoteOverlayInput{

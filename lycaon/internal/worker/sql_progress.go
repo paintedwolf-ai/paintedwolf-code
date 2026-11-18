@@ -35,7 +35,7 @@ func (s *SQLStore) SetProgress(ctx context.Context, workerJobID string, snap wor
 }
 
 // SetChildSessionID binds the spawned child session to a worker job.
-func (q *sqlQueuePromotion) SetChildSessionID(ctx context.Context, jobID, childSessionID string) error {
+func (q *SQLQueue) SetChildSessionID(ctx context.Context, jobID, childSessionID string) error {
 	if err := q.store.SetChildSessionID(ctx, jobID, childSessionID); err != nil {
 		return err
 	}
@@ -44,8 +44,8 @@ func (q *sqlQueuePromotion) SetChildSessionID(ctx context.Context, jobID, childS
 }
 
 // PublishWorkerProgress checkpoints round boundaries.
-func (q *sqlQueuePromotion) PublishWorkerProgress(ctx context.Context, workerJobID string, snap workerprogress.Snapshot, checkpoint bool) error {
-	if q == nil || q.sqlQueueCore == nil || q.store == nil {
+func (q *SQLQueue) PublishWorkerProgress(ctx context.Context, workerJobID string, snap workerprogress.Snapshot, checkpoint bool) error {
+	if q == nil || q.store == nil {
 		return nil
 	}
 	workerJobID = strings.TrimSpace(workerJobID)

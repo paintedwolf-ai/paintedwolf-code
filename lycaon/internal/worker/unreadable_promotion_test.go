@@ -44,8 +44,8 @@ func TestEntryLeftOutOfTheBranchIsNotAWorkerDeletion(t *testing.T) {
 	dataDir := testbaseline.DataDir(t, sqlDB)
 	mgr := workspace.NewManager(filepath.Join(dataDir, "worker-branches"), platform.NewSelector(platform.Config{}))
 	q := NewSQLQueue(sqlDB, 4)
-	q.SetBaselineStore(sourceledger.New(sqlDB, filepath.Join(dataDir, "source-content")).Baselines)
-	q.SetWorkerWorkspaceManager(mgr)
+	q.Branches.SetBaselineStore(sourceledger.New(sqlDB, filepath.Join(dataDir, "source-content")).Baselines)
+	q.Branches.SetWorkerWorkspaceManager(mgr)
 	id, err := q.Enqueue(ctx, api.WorkerTask{
 		ProjectID: testdbseed.DefaultProjectID, WorkspacePath: project, WorkspaceRootID: "root-id",
 		Scope:     &api.TaskScope{Mode: api.TaskScopeModeWrite, Paths: []string{"."}},
@@ -54,7 +54,7 @@ func TestEntryLeftOutOfTheBranchIsNotAWorkerDeletion(t *testing.T) {
 	testutil.FailErr(t, "enqueue", err)
 	claimed, err := q.ClaimNext(ctx, ClaimRequest{ProjectID: testdbseed.DefaultProjectID, ClaimedBy: "test", ExecutionTarget: api.ExecutionTargetLocal})
 	testutil.FailErr(t, "claim", err)
-	claimed, err = q.ClaimWorkerBranch(ctx, claimed.ID)
+	claimed, err = q.Branches.ClaimWorkerBranch(ctx, claimed.ID)
 	testutil.FailErr(t, "claim branch", err)
 	testutil.FailErr(t, "worker edit", os.WriteFile(filepath.Join(claimed.WorkspaceRoot, "main.go"), []byte("package worker\n"), 0o644))
 	committed, err := q.Complete(ctx, claimed, api.WorkerResult{Status: "complete", Summary: "done"})
@@ -71,7 +71,7 @@ func TestEntryLeftOutOfTheBranchIsNotAWorkerDeletion(t *testing.T) {
 	if len(changed) != 1 || changed[0] != "main.go" {
 		t.Fatalf("changes = %v", changed)
 	}
-	svc := &MergeService{Queue: q, Store: q.Promotions, Workspace: mgr, DataDir: t.TempDir()}
+	svc := &MergeService{Queue: q, Branches: q.Branches, Store: q.Promotions, Workspace: mgr, DataDir: t.TempDir()}
 	out, err := svc.PromoteOverlay(ctx, "", id, api.PromoteOverlayInput{})
 	testutil.FailErr(t, "promote", err)
 	if out.Status != api.WorkerMergeStatusMerged {

@@ -32,9 +32,9 @@ func TestPreparedOverlaysUseRealQueueAndConflict(t *testing.T) {
 	queue := &fixtureQueue{SQLQueue: worker.NewSQLQueue(database, 2)}
 	manager := workspace.NewManager(filepath.Join(testbaseline.DataDir(t, database), "worker-branches"), platform.NewSelector(platform.Config{}))
 	ledger := sourceledger.New(database, filepath.Join(testbaseline.DataDir(t, database), "source-content"))
-	queue.SetBaselineStore(ledger.Baselines)
-	queue.SetProjectStore(projects)
-	queue.SetWorkerWorkspaceManager(manager)
+	queue.Branches.SetBaselineStore(ledger.Baselines)
+	queue.Branches.SetProjectStore(projects)
+	queue.Branches.SetWorkerWorkspaceManager(manager)
 	setup := Setup{Overlays: []Overlay{
 		{Label: "Filter", Files: map[string]string{"catalog.py": "value = 'filter'\n"}},
 		{Label: "Page", ResultStatus: "partial", Files: map[string]string{"catalog.py": "value = 'page'\n"}},
@@ -65,7 +65,7 @@ func TestPreparedOverlaysUseRealQueueAndConflict(t *testing.T) {
 			t.Fatalf("child parent: %s", child.ParentSessionID)
 		}
 	}
-	service := &worker.MergeService{Queue: queue, Store: worker.NewSQLStore(database), Projects: projects, Workspace: manager, DataDir: t.TempDir(), SourceLedger: ledger, SourceHistory: ledger.Walk}
+	service := &worker.MergeService{Queue: queue, Branches: queue.Branches, Store: worker.NewSQLStore(database), Projects: projects, Workspace: manager, DataDir: t.TempDir(), SourceLedger: ledger, SourceHistory: ledger.Walk}
 	first := evidence.Overlays[0].JobID
 	landed, err := service.PromoteOverlay(t.Context(), parent.ID, first, api.PromoteOverlayInput{})
 	testutil.FailErr(t, "promote first overlay", err)

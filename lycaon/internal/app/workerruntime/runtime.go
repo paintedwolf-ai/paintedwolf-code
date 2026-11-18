@@ -73,7 +73,7 @@ func (r *Runtime) BranchRetentionDeps() branchretention.Deps {
 	return branchretention.Deps{
 		BranchRoot: r.BranchRoot,
 		Jobs: func(ctx context.Context) (map[string]branchretention.JobState, error) {
-			jobs, err := r.Queue.ListBranchJobs(ctx)
+			jobs, err := r.Queue.Branches.ListBranchJobs(ctx)
 			if err != nil {
 				return nil, err
 			}
@@ -83,7 +83,7 @@ func (r *Runtime) BranchRetentionDeps() branchretention.Deps {
 			}
 			return out, nil
 		},
-		Evict: worker.BranchEvictor(r.Queue),
+		Evict: r.Queue.Branches.EvictBranch,
 	}
 }
 
@@ -106,7 +106,7 @@ func (r *Runtime) RecoverWorkerViews(ctx context.Context) error {
 	if r.Recovery == nil || r.Queue == nil {
 		return nil
 	}
-	err := worker.SettleWorkerViewsAtStartup(ctx, r.Queue, r.Workspace)
+	err := worker.SettleWorkerViewsAtStartup(ctx, r.Queue, r.Queue.Branches, r.Workspace)
 	if _, gcErr := r.Recovery.CollectGarbage(ctx); gcErr != nil {
 		slog.WarnContext(ctx, "collect retained worker checkpoints", "err", gcErr)
 	}
@@ -137,7 +137,7 @@ func (r *Runtime) ReconcileWorkerSandboxes(ctx context.Context, roots []string) 
 		return 0, nil
 	}
 	loadRetainedJobs := func(c context.Context) (map[string]struct{}, error) {
-		jobs, err := r.Queue.ListBranchJobs(c)
+		jobs, err := r.Queue.Branches.ListBranchJobs(c)
 		if err != nil {
 			return nil, err
 		}

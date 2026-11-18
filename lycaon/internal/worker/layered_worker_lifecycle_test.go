@@ -89,8 +89,8 @@ func newLayeredWorkerFixture(t *testing.T, selector *adapter.Selector) *layeredW
 	}
 	manager := workspace.NewManager(branches, selector).WithPrivateGit(privateGit)
 	queue := NewSQLQueue(sqlDB, 4)
-	queue.SetBaselineStore(sourceledger.New(sqlDB, filepath.Join(testbaseline.DataDir(t, sqlDB), "source-content")).Baselines)
-	queue.SetWorkerWorkspaceManager(manager)
+	queue.Branches.SetBaselineStore(sourceledger.New(sqlDB, filepath.Join(testbaseline.DataDir(t, sqlDB), "source-content")).Baselines)
+	queue.Branches.SetWorkerWorkspaceManager(manager)
 	return &layeredWorkerFixture{db: sqlDB, queue: queue, manager: manager, source: source, branches: branches}
 }
 
@@ -105,7 +105,7 @@ func (f *layeredWorkerFixture) claim(t *testing.T) *api.WorkerTask {
 	testutil.FailErr(t, "Enqueue", err)
 	next, err := f.queue.ClaimNext(t.Context(), ClaimRequest{ProjectID: testdbseed.DefaultProjectID, ClaimedBy: "test", ExecutionTarget: api.ExecutionTargetLocal})
 	testutil.FailErr(t, "ClaimNext", err)
-	claimed, err := f.queue.ClaimWorkerBranch(t.Context(), id)
+	claimed, err := f.queue.Branches.ClaimWorkerBranch(t.Context(), id)
 	testutil.FailErr(t, "ClaimWorkerBranch", err)
 	claimed.ClaimToken = next.ClaimToken
 	return claimed

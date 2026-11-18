@@ -43,12 +43,6 @@ func (j fixedJobs) Get(jobID string) (*api.WorkerTask, bool) {
 	return task, ok
 }
 
-func (fixedJobs) ReviewsWorker(context.Context, *api.WorkerTask) bool { return false }
-
-func (fixedJobs) ClaimWorkerBranch(context.Context, string) (*api.WorkerTask, error) {
-	return nil, nil
-}
-
 func TestTurnDeliversEveryQueuedKickAndDropsNoticesForFinishedRounds(t *testing.T) {
 	t.Setenv("LYCAON_LLM_MOCK", "1")
 	st := store.NewMemory()
@@ -61,7 +55,7 @@ func TestTurnDeliversEveryQueuedKickAndDropsNoticesForFinishedRounds(t *testing.
 	mgr.SetWorkerQueue(fixedJobs{
 		"job-running":  {ID: "job-running", Status: api.WorkerStatusRunning},
 		"job-finished": {ID: "job-finished", Status: api.WorkerStatusComplete},
-	})
+	}, nil)
 
 	ctx := context.Background()
 	sess, err := st.Create(ctx, api.CreateSessionRequest{}, testdbseed.DefaultProjectID)

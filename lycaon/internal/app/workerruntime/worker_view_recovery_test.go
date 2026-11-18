@@ -454,7 +454,7 @@ func TestRetentionEvictsVerifiedCheckpointAndLeaseRebuildsIt(t *testing.T) {
 	if _, err := os.Stat(task.WorkspaceRoot); !errors.Is(err, os.ErrNotExist) {
 		t.Fatalf("tree survives eviction: %v", err)
 	}
-	_, lease, err := engine.Queue.EnsureWorkerBranch(t.Context(), task.ID)
+	_, lease, err := engine.Queue.Branches.EnsureWorkerBranch(t.Context(), task.ID)
 	testutil.FailErr(t, "rebuild from checkpoint", err)
 	defer lease.Release()
 	if got := f.readBranch(task.WorkspaceRoot, "app.txt"); got != "checkpoint-A\n" {

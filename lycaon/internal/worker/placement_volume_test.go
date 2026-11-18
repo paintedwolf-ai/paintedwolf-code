@@ -38,13 +38,13 @@ func TestPlacedWorkerSurvivesEjectAndRelocatesThroughBackup(t *testing.T) {
 	testdbseed.InsertProjectRootWithID(t, database, testdbseed.DefaultProjectID, "root-id", project)
 	dataDir := testbaseline.DataDir(t, database)
 	queue := NewSQLQueue(database, 1)
-	queue.SetBaselineStore(sourceledger.New(database, filepath.Join(dataDir, "source-content")).Baselines)
-	queue.SetWorkerWorkspaceManager(workspace.NewManager(enginepaths.WorkerBranchesRootUnder(dataDir), platform.NewSelector(platform.Config{})))
+	queue.Branches.SetBaselineStore(sourceledger.New(database, filepath.Join(dataDir, "source-content")).Baselines)
+	queue.Branches.SetWorkerWorkspaceManager(workspace.NewManager(enginepaths.WorkerBranchesRootUnder(dataDir), platform.NewSelector(platform.Config{})))
 	id, err := queue.Enqueue(ctx, api.WorkerTask{ProjectID: testdbseed.DefaultProjectID, WorkspacePath: project, WorkspaceRootID: "root-id", Scope: &api.TaskScope{Mode: api.TaskScopeModeWrite, Paths: []string{"."}}, AgentType: "implementer", Prompt: "edit", Brief: "edit"})
 	testutil.FailErr(t, "enqueue", err)
 	_, err = queue.ClaimNext(ctx, ClaimRequest{ProjectID: testdbseed.DefaultProjectID, ClaimedBy: "test", ExecutionTarget: api.ExecutionTargetLocal})
 	testutil.FailErr(t, "claim", err)
-	task, err := queue.ClaimWorkerBranch(ctx, id)
+	task, err := queue.Branches.ClaimWorkerBranch(ctx, id)
 	testutil.FailErr(t, "claim branch", err)
 	root := task.WorkspaceRoot
 	if !strings.HasPrefix(root, volume.Root+string(filepath.Separator)) {
@@ -67,7 +67,7 @@ func TestPlacedWorkerSurvivesEjectAndRelocatesThroughBackup(t *testing.T) {
 	if !ok || read.WorkspaceRoot != root {
 		t.Fatalf("resolved root while ejected = %+v", read)
 	}
-	if _, _, err := queue.EnsureWorkerBranch(ctx, id); !errors.Is(err, ErrWorkerBranchUnavailable) {
+	if _, _, err := queue.Branches.EnsureWorkerBranch(ctx, id); !errors.Is(err, ErrWorkerBranchUnavailable) {
 		t.Fatalf("ensure while ejected = %v", err)
 	}
 	testutil.FailErr(t, "upgrade readiness with an absent volume", backup.ValidateLiveReferences(ctx, database, dataDir))
@@ -77,7 +77,7 @@ func TestPlacedWorkerSurvivesEjectAndRelocatesThroughBackup(t *testing.T) {
 	}
 
 	volume.Remount(t)
-	_, lease, err := queue.EnsureWorkerBranch(ctx, id)
+	_, lease, err := queue.Branches.EnsureWorkerBranch(ctx, id)
 	testutil.FailErr(t, "ensure after remount", err)
 	body, err := os.ReadFile(filepath.Join(lease.Root, "main.go"))
 	lease.Release()

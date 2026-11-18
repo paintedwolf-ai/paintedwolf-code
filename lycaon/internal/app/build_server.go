@@ -92,7 +92,7 @@ func (b *serveBuilder) wireServer() error {
 			Sockets: b.security.Sockets, ChatGrants: chatGrantLedger(b.sessions.Checkpoints), Vault: b.security.Unlocks,
 		}}, Scans: api.ScansDependencies{
 		ScanCoordinator: b.scanning.Coordinator, ScannerRegistry: b.scanning.Registry, ScanCadence: b.scanning.Cadence,
-		GateRepeatLedger: b.sessions.GateRepeat, PublishDetections: b.security.Detections.Publish}, Workflow: api.WorkflowDependencies{
+		GateRepeatLedger: b.sessions.GateRepeat, PublishDetections: b.security.Detections.Publish}, Workflow: api.WorkflowDependencies{Branches: b.workerRuntime.Queue.Branches,
 		Workflows: b.workflows.Manager, WorkflowCatalog: b.workflows.Resolver,
 		WorkflowRuns: b.workflows.Store, WorkflowComposer: b.workflows.Composer, WorkflowPersister: b.workflows.Persister,
 		Blueprints: b.workflows.Blueprints, Orchestrator: b.server.Orchestrator, Workers: b.workerRuntime.Queue,
@@ -439,7 +439,7 @@ func (b *serveBuilder) quietRounds() *worker.QuietRounds {
 		Notify: b.sessions.Manager.Coordinator.Workers.RoundNotice,
 		After:  b.worker.cfg.RoundPolicy().QuietNoticeAfter,
 		Waiting: func(ctx context.Context, task *wire.WorkerTask) bool {
-			pending, err := workerops.PrerequisitePending(ctx, queries.LatestRoundJobForJob, b.workerRuntime.Queue, *task)
+			pending, err := workerops.PrerequisitePending(ctx, queries.LatestRoundJobForJob, b.workerRuntime.Queue.Get, *task)
 			return err == nil && pending
 		},
 	}

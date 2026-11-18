@@ -169,12 +169,6 @@ func (j jobLister) ListBySession(_ context.Context, _, sessionID string, _ ...ap
 }
 func (jobLister) ListPendingOutcomes(context.Context) ([]api.WorkerTask, error) { return nil, nil }
 func (jobLister) Get(string) (*api.WorkerTask, bool)                            { return nil, false }
-func (jobLister) ReviewsWorker(context.Context, *api.WorkerTask) bool           { return false }
-
-func (jobLister) ClaimWorkerBranch(context.Context, string) (*api.WorkerTask, error) {
-	return nil, nil
-}
-
 func TestCloseoutEvidenceListsDispatchedLegsSinceTheIntent(t *testing.T) {
 	st := store.NewMemory()
 	mgr := NewHost(st, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
@@ -187,7 +181,7 @@ func TestCloseoutEvidenceListsDispatchedLegsSinceTheIntent(t *testing.T) {
 		{ID: "plain", ParentSessionID: parent.ID, ChildSessionID: "child-plain", CreatedAt: intent.Add(2 * time.Minute)},
 		{ID: "pending", ParentSessionID: parent.ID, CreatedAt: intent.Add(3 * time.Minute)},
 		{ID: "other", ParentSessionID: "someone-else", ChildSessionID: "child-other", CreatedAt: intent.Add(time.Minute)},
-	}})
+	}}, nil)
 
 	legs, err := mgr.Verification.Evidence.WorkerLegs(t.Context(), parent.ID, intent)
 	testutil.FailErr(t, "worker legs", err)
@@ -224,14 +218,14 @@ func TestWorkflowEvidenceSurvivesLaterUserMessagesAndCompaction(t *testing.T) {
 		{ID: "original", ParentSessionID: parent.ID, ChildSessionID: child.ID, AgentType: "skeptic", Status: api.WorkerStatusComplete, Result: &api.WorkerResult{CompletionReport: &api.WorkerCompletionReport{LegStatus: "complete"}}, WorkflowRunID: run.ID, WorkflowPhase: run.CurrentPhase, CreatedAt: before},
 		{ID: "unrelated", ParentSessionID: parent.ID, ChildSessionID: "other", AgentType: "skeptic", Status: api.WorkerStatusComplete, Result: &api.WorkerResult{CompletionReport: &api.WorkerCompletionReport{LegStatus: "complete"}}, WorkflowRunID: "another-run", CreatedAt: before.Add(time.Hour)},
 	}
-	mgr.SetWorkerQueue(jobLister{tasks: tasks})
+	mgr.SetWorkerQueue(jobLister{tasks: tasks}, nil)
 	legs, err := mgr.Verification.Evidence.WorkerLegs(t.Context(), parent.ID, before.Add(time.Minute))
 	testutil.FailErr(t, "read run evidence", err)
 	if len(legs) != 1 || legs[0].ChildSessionID != child.ID {
 		t.Fatalf("run evidence = %+v", legs)
 	}
 	tasks = append(tasks, api.WorkerTask{ID: "previous-phase", ParentSessionID: parent.ID, ChildSessionID: "earlier-phase-child", AgentType: "skeptic", Status: api.WorkerStatusComplete, Result: &api.WorkerResult{CompletionReport: &api.WorkerCompletionReport{LegStatus: "complete"}}, WorkflowRunID: run.ID, WorkflowPhase: "claims", CreatedAt: before})
-	mgr.SetWorkerQueue(jobLister{tasks: tasks})
+	mgr.SetWorkerQueue(jobLister{tasks: tasks}, nil)
 	reviewers, err := mgr.Coordinator.Closeout.ReviewerEvidence(t.Context(), parent.ID, []api.Message{{Role: api.MessageRoleUser, CreatedAt: before.Add(time.Minute)}}, []string{"skeptic"})
 	testutil.FailErr(t, "read reviewers without summaries", err)
 	if len(reviewers) != 1 || len(reviewers[0].LegIDs) != 1 || reviewers[0].LegIDs[0] != child.ID {
@@ -360,7 +354,6 @@ func TestRecentSiblingNotesExcludesPriorRunFindings(t *testing.T) {
 }
 
 type stubSiblingTaskQueue struct {
-	noopWorkerBranchClaim
 	byChild map[string]*api.WorkerTask
 }
 

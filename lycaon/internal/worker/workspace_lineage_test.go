@@ -23,8 +23,8 @@ func TestDecisionBranchStaysAttachedButCannotBePromoted(t *testing.T) {
 	testutil.FailErr(t, "create project", err)
 	queue := newTestQueue(t, 1, p.ID, "parent")
 	testdbseed.InsertProjectRootWithID(t, queue.db, p.ID, p.Roots[0].ID, canonical)
-	queue.SetProjectStore(projects)
-	queue.SetWorkerWorkspaceManager(workspace.NewManager(filepath.Join(db.DataDir(queue.db), "worker-branches"), platform.NewSelector(platform.Config{})))
+	queue.Branches.SetProjectStore(projects)
+	queue.Branches.SetWorkerWorkspaceManager(workspace.NewManager(filepath.Join(db.DataDir(queue.db), "worker-branches"), platform.NewSelector(platform.Config{})))
 	id, err := queue.Enqueue(t.Context(), api.WorkerTask{
 		ProjectID: p.ID, ParentSessionID: "parent", WorkspaceRootID: p.Roots[0].ID, WorkspacePath: canonical,
 		AgentType: "implementer", Prompt: "choose", Brief: "choose",
@@ -33,7 +33,7 @@ func TestDecisionBranchStaysAttachedButCannotBePromoted(t *testing.T) {
 	testutil.FailErr(t, "enqueue worker", err)
 	_, err = queue.ClaimNext(t.Context(), ClaimRequest{ProjectID: p.ID, ExecutionTarget: api.ExecutionTargetLocal})
 	testutil.FailErr(t, "claim worker", err)
-	claimed, err := queue.ClaimWorkerBranch(t.Context(), id)
+	claimed, err := queue.Branches.ClaimWorkerBranch(t.Context(), id)
 	testutil.FailErr(t, "claim worker branch", err)
 	testutil.FailErr(t, "edit decision branch", os.WriteFile(filepath.Join(claimed.WorkspaceRoot, "main.go"), []byte("package undecided\n"), 0o644))
 	testdbseed.InsertSession(t, queue.db, "child", p.ID)

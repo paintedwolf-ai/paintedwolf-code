@@ -123,6 +123,7 @@ type HarnessProviders struct {
 }
 
 type LocalData struct {
+	branches         *worker.BranchService
 	extensionOwner   *extensionstate.Owner
 	dataDir          string
 	localData        *localdata.Registry
@@ -162,7 +163,7 @@ func composeDomains(s *Server, deps Dependencies) {
 	s.Routes.HarnessControl = &HarnessControl{Workflow: deps.Workflow.Workflows, checkpoints: deps.Approvals.Checkpoints, eventPublisher: s.eventPublisher, harness: &s.harness, manualLLM: deps.Harness.ManualLLM, requireClientAuth: s.requireClientAuth, responses: &s.responses, router: s.router, sessionStore: s.sessionStore, sessions: s.sessions, visualStore: deps.Source.VisualStore}
 	s.Routes.HarnessPreparation = &HarnessPreparation{Workflow: deps.Workflow.Workflows, dataDir: s.dataDir, database: deps.Core.Database, harness: &s.harness, harnessWorkers: deps.Harness.HarnessWorkers, llmSvc: deps.Providers.LLM, projectRegistry: deps.Core.Projects, responses: &s.responses, sessionStore: s.sessionStore, sessions: s.sessions, workers: deps.Workflow.Workers}
 	s.Routes.HarnessProviders = &HarnessProviders{costTracker: deps.Providers.CostTracker, llmSvc: deps.Providers.LLM, responses: &s.responses}
-	s.Routes.LocalData = &LocalData{extensionOwner: s.Admin.Extensions.Mutations.Owner, dataDir: s.dataDir, responses: &s.responses, sessions: s.sessions, sourceLedger: s.Sources.Workspace.SourceLedger, webIndex: deps.External.WebIndex, workerBranchRoot: s.workerBranchRoot, workers: deps.Workflow.Workers}
+	s.Routes.LocalData = &LocalData{branches: deps.Workflow.Branches, extensionOwner: s.Admin.Extensions.Mutations.Owner, dataDir: s.dataDir, responses: &s.responses, sessions: s.sessions, sourceLedger: s.Sources.Workspace.SourceLedger, webIndex: deps.External.WebIndex, workerBranchRoot: s.workerBranchRoot, workers: deps.Workflow.Workers}
 	s.Routes.Storage = &Storage{dataDir: s.dataDir, database: deps.Core.Database, markRestorePending: s.markRestorePending, recovery: s.recovery, responses: &s.responses, storePath: s.storePath}
 	s.Routes.Workers = &Workers{Git: &s.Admin.Git, board: deps.Workflow.Board, projectRegistry: deps.Core.Projects, responses: &s.responses, sessionStore: s.sessionStore, workerCancel: deps.Workflow.WorkerCancel, workerOps: buildWorkerOps(deps), workers: deps.Workflow.Workers}
 	s.Routes.HarnessControl.HarnessPreparation = s.Routes.HarnessPreparation

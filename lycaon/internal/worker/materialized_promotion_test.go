@@ -37,8 +37,8 @@ func TestMaterializedWorkerPromotesThreeWayFromItsPristineBase(t *testing.T) {
 	selector.Confinement = nil
 	manager := workspace.NewManager(filepath.Join(dataDir, "worker-branches"), selector)
 	queue := NewSQLQueue(database, 4)
-	queue.SetBaselineStore(sourceledger.New(database, filepath.Join(dataDir, "source-content")).Baselines)
-	queue.SetWorkerWorkspaceManager(manager)
+	queue.Branches.SetBaselineStore(sourceledger.New(database, filepath.Join(dataDir, "source-content")).Baselines)
+	queue.Branches.SetWorkerWorkspaceManager(manager)
 	id, err := queue.Enqueue(ctx, api.WorkerTask{
 		ParentSessionID: "parent", ProjectID: testdbseed.DefaultProjectID, WorkspacePath: source, WorkspaceRootID: "root-id",
 		Scope:     &api.TaskScope{Mode: api.TaskScopeModeWrite, Paths: []string{"."}},
@@ -48,7 +48,7 @@ func TestMaterializedWorkerPromotesThreeWayFromItsPristineBase(t *testing.T) {
 	t.Cleanup(func() { session.ClearTaskCheckpointPreview(id) })
 	next, err := queue.ClaimNext(ctx, ClaimRequest{ProjectID: testdbseed.DefaultProjectID, ClaimedBy: "test", ExecutionTarget: api.ExecutionTargetLocal})
 	testutil.FailErr(t, "claim next", err)
-	task, err := queue.ClaimWorkerBranch(ctx, id)
+	task, err := queue.Branches.ClaimWorkerBranch(ctx, id)
 	testutil.FailErr(t, "claim branch", err)
 	task.ClaimToken = next.ClaimToken
 
@@ -62,7 +62,7 @@ func TestMaterializedWorkerPromotesThreeWayFromItsPristineBase(t *testing.T) {
 	moved[8] = "NINE"
 	testutil.FailErr(t, "source moves", os.WriteFile(filepath.Join(source, "notes.txt"), []byte(strings.Join(moved, "\n")+"\n"), 0o644))
 
-	service := &MergeService{Queue: queue, Store: queue.Promotions, DataDir: dataDir}
+	service := &MergeService{Queue: queue, Branches: queue.Branches, Store: queue.Promotions, DataDir: dataDir}
 	result, err := service.PromoteOverlay(ctx, "parent", id, api.PromoteOverlayInput{})
 	testutil.FailErr(t, "promote", err)
 	if result.Status != api.WorkerMergeStatusMerged {

@@ -42,7 +42,7 @@ func TestPromoteOverlayPreparesEveryMutationBeforeWriting(t *testing.T) {
 		Scope:                 &scope,
 	}
 	svc := &worker.MergeService{
-		Queue:   &mergeQueueStub{task: task},
+		Queue: &mergeQueueStub{task: task}, Branches: &mergeQueueStub{task: task},
 		Store:   &mergeStoreStub{},
 		Reject:  mergeRejectFmt(t),
 		DataDir: t.TempDir(),
@@ -80,7 +80,7 @@ func TestPromoteOverlayRollsBackFilesystemWhenDurableCommitFails(t *testing.T) {
 	}
 	store := &mergeStoreStub{commitErr: errors.New("durable promotion rejected")}
 	svc := &worker.MergeService{
-		Queue: &mergeQueueStub{task: task}, Store: store,
+		Queue: &mergeQueueStub{task: task}, Branches: &mergeQueueStub{task: task}, Store: store,
 		Reject: mergeRejectFmt(t), DataDir: t.TempDir(),
 	}
 
@@ -126,7 +126,7 @@ func TestPromoteOverlayConflictMenuCannotLandCleanOrResolvedSubset(t *testing.T)
 		MergeStatus: api.WorkerMergeStatusPending, Status: api.WorkerStatusComplete,
 		Scope: &api.TaskScope{Mode: api.TaskScopeModeWrite, Paths: paths},
 	}
-	svc := &worker.MergeService{Queue: &mergeQueueStub{task: task}, Store: &mergeStoreStub{}, Reject: mergeRejectFmt(t), DataDir: t.TempDir()}
+	svc := &worker.MergeService{Queue: &mergeQueueStub{task: task}, Branches: &mergeQueueStub{task: task}, Store: &mergeStoreStub{}, Reject: mergeRejectFmt(t), DataDir: t.TempDir()}
 	resolutions := []api.WorkerPromoteResolution{{Path: "first.txt", Content: "resolved\n"}, {Path: "second.txt", Content: "resolved\n"}}
 	for count := 0; count < len(resolutions); count++ {
 		out, err := svc.PromoteOverlay(t.Context(), "parent", task.ID, api.PromoteOverlayInput{Resolutions: resolutions[:count]})

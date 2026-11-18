@@ -37,7 +37,7 @@ func TestPromoteOverlayLandsNewFilesOnPrimary(t *testing.T) {
 	}
 	store := &mergeStoreStub{}
 	svc := &worker.MergeService{
-		Queue: &mergeQueueStub{task: task},
+		Queue: &mergeQueueStub{task: task}, Branches: &mergeQueueStub{task: task},
 
 		Store:  store,
 		Reject: mergeRejectFmt(t),

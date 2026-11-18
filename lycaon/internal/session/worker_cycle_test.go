@@ -239,7 +239,7 @@ func TestShouldNudgeCoordinatorLoopAfterWorkerTask(t *testing.T) {
 	dir := t.TempDir()
 	parent := "parent-1"
 	mgr := session.NewHost(store.NewMemory(), session.Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
-	mgr.SetWorkerQueue(q)
+	mgr.SetWorkerQueue(q, q.Branches)
 
 	if !mgr.Workers.State.ShouldNudge(ctx, parent, testdbseed.DefaultProjectID, "") {
 		t.Fatal("expected true when worker cycle is idle")
@@ -268,7 +268,7 @@ func TestShouldNudgeCoordinatorLoopAfterWorkerTaskWriteDefersUntilIdle(t *testin
 	dir := t.TempDir()
 	parent := "parent-1"
 	mgr := session.NewHost(store.NewMemory(), session.Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
-	mgr.SetWorkerQueue(q)
+	mgr.SetWorkerQueue(q, q.Branches)
 
 	writeA, err := q.Enqueue(ctx, api.WorkerTask{
 		ParentSessionID: parent,
@@ -300,7 +300,7 @@ func TestShouldNudgeCoordinatorLoopAfterWorkerTaskPerJobWakeWhileSiblingsInFligh
 	dir := t.TempDir()
 	parent := "parent-1"
 	mgr := session.NewHost(store.NewMemory(), session.Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
-	mgr.SetWorkerQueue(q)
+	mgr.SetWorkerQueue(q, q.Branches)
 
 	jobA, err := q.Enqueue(ctx, api.WorkerTask{
 		ParentSessionID: parent,
@@ -354,7 +354,7 @@ func TestBuildImplementSessionStateLedgerOverridesStaleEnvelope(t *testing.T) {
 	}
 
 	mgr := session.NewHost(store, session.Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
-	mgr.SetWorkerQueue(q)
+	mgr.SetWorkerQueue(q, q.Branches)
 	state := mgr.Workers.State.ForSession(ctx, parent)
 	if len(state.PendingOverlayIDs) != 0 {
 		t.Fatalf("pending = %v want empty when ledger has no pending merges", state.PendingOverlayIDs)

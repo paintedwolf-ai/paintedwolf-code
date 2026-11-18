@@ -17,17 +17,17 @@ import (
 )
 
 // Complete commits the result only while the claim remains current.
-func (q *sqlQueueClaims) Complete(ctx context.Context, claimed *api.WorkerTask, result api.WorkerResult) (bool, error) {
-	return admitWorkerTransition(ctx, q.self, claimed, func() (bool, error) {
+func (q *SQLQueue) Complete(ctx context.Context, claimed *api.WorkerTask, result api.WorkerResult) (bool, error) {
+	return admitWorkerTransition(ctx, q, claimed, func() (bool, error) {
 		return q.completeAdmitted(ctx, claimed, result)
 	})
 }
 
-func (q *sqlQueueClaims) completeAdmitted(ctx context.Context, claimed *api.WorkerTask, result api.WorkerResult) (bool, error) {
+func (q *SQLQueue) completeAdmitted(ctx context.Context, claimed *api.WorkerTask, result api.WorkerResult) (bool, error) {
 	if claimed == nil || strings.TrimSpace(claimed.ID) == "" || strings.TrimSpace(claimed.ClaimToken) == "" {
 		return false, fmt.Errorf("claimed worker task required")
 	}
-	task, mergeStatus, teardown := q.resolveWriteCompletionTarget(ctx, claimed, result)
+	task, mergeStatus, teardown := q.Branches.resolveWriteCompletionTarget(ctx, claimed, result)
 	jobID := claimed.ID
 	overlayPath, checkpointID := "", ""
 	// A view publishes its checkpoint; an earlier-format branch seals an overlay against its baseline.
@@ -41,7 +41,7 @@ func (q *sqlQueueClaims) completeAdmitted(ctx context.Context, claimed *api.Work
 			_, checkpointID, _ = workspace.BranchCheckpoint(task.WorkspaceRoot)
 		}
 		if !published && strings.TrimSpace(task.WorkspaceBaselinePath) != "" {
-			captured, err := q.captureOverlay(ctx, task)
+			captured, err := q.Branches.captureOverlay(ctx, task)
 			if err != nil {
 				if errors.Is(err, workspacebaseline.ErrOverlayBudgetExceeded) {
 					workerWorkspaceLog.Warn("write overlay exceeds budget; leaving unsealed for review",
@@ -57,13 +57,13 @@ func (q *sqlQueueClaims) completeAdmitted(ctx context.Context, claimed *api.Work
 	criteriaJSON := q.evaluateRoundCriteria(ctx, task, strings.TrimSpace(result.Status) != "needs_decision", result.Summary, result.ChangeReport)
 	completion, err := q.store.CompleteJob(ctx, jobID, result, claimed.ClaimToken, mergeStatus, teardown, overlayPath, checkpointID, criteriaJSON)
 	if err != nil || !completion.Committed || completion.Suspended {
-		q.discardOverlay(ctx, overlayPath)
+		q.Branches.discardOverlay(ctx, overlayPath)
 	}
 	if err != nil || !completion.Committed {
 		return false, err
 	}
 	if teardown && !completion.Suspended {
-		q.destroyWorkerWorkspace(ctx, task)
+		q.Branches.destroyWorkerWorkspace(ctx, task)
 	}
 	q.changes.byID(ctx, jobID)
 	if !completion.Suspended {
@@ -72,66 +72,14 @@ func (q *sqlQueueClaims) completeAdmitted(ctx context.Context, claimed *api.Work
 	return true, nil
 }
 
-func (q *sqlQueueClaims) resolveWriteCompletionTarget(ctx context.Context, claimed *api.WorkerTask, result api.WorkerResult) (*api.WorkerTask, api.WorkerMergeStatus, bool) {
-	task := claimed
-	if !task.EffectiveScope().IsWrite() {
-		return task, "", false
-	}
-	if strings.TrimSpace(task.WorkspaceRoot) == "" {
-		if loaded, ok := q.store.getTask(ctx, claimed.ID); ok && loaded != nil {
-			loaded.ClaimToken = claimed.ClaimToken
-			task = loaded
-		}
-	}
-	layeredDiverges, layeredHandled := hasLayeredOverlayDivergence(ctx, task)
-	switch {
-	case strings.TrimSpace(result.Status) == "needs_decision":
-		return task, "", false
-	case layeredHandled && layeredDiverges:
-		return task, api.WorkerMergeStatusPending, false
-	case layeredHandled:
-		return task, api.WorkerMergeStatusAborted, true
-	case session.OverlayAwaitingPromote(ctx, task):
-		return task, api.WorkerMergeStatusPending, false
-	case q.overlayDivergesFromProject(ctx, task):
-		workerWorkspaceLog.Warn("write overlay retained despite empty baseline diff",
-			"job_id", claimed.ID, "branch_root", strings.TrimSpace(task.WorkspaceRoot))
-		return task, api.WorkerMergeStatusPending, false
-	default:
-		return task, api.WorkerMergeStatusAborted, true
-	}
-}
-
-// keptCheckpoint publishes the checkpoint of a write round that ends
-// without delivering, so its changes stay under its result.
-func (q *sqlQueueClaims) keptCheckpoint(ctx context.Context, task *api.WorkerTask) string {
-	if task == nil || !task.EffectiveScope().IsWrite() || strings.TrimSpace(task.WorkspaceRoot) == "" ||
-		strings.TrimSpace(task.WorkspaceOverlayPath) != "" {
-		return ""
-	}
-	if _, status, _ := q.resolveWriteCompletionTarget(ctx, task, api.WorkerResult{}); status != api.WorkerMergeStatusPending {
-		return ""
-	}
-	published, err := workspace.PublishBranchCheckpoint(ctx, task.WorkspaceRoot)
-	if err != nil {
-		workerWorkspaceLog.Warn("ended round kept its branch without a checkpoint", "job_id", task.ID, "error", err)
-		return ""
-	}
-	if !published {
-		return ""
-	}
-	_, checkpointID, _ := workspace.BranchCheckpoint(task.WorkspaceRoot)
-	return checkpointID
-}
-
 // Fail commits a failure only while the claim remains current.
-func (q *sqlQueueClaims) Fail(ctx context.Context, claimed *api.WorkerTask, runErr error) (bool, error) {
-	return admitWorkerTransition(ctx, q.self, claimed, func() (bool, error) {
+func (q *SQLQueue) Fail(ctx context.Context, claimed *api.WorkerTask, runErr error) (bool, error) {
+	return admitWorkerTransition(ctx, q, claimed, func() (bool, error) {
 		return q.failAdmitted(ctx, claimed, runErr)
 	})
 }
 
-func (q *sqlQueueClaims) failAdmitted(ctx context.Context, claimed *api.WorkerTask, runErr error) (bool, error) {
+func (q *SQLQueue) failAdmitted(ctx context.Context, claimed *api.WorkerTask, runErr error) (bool, error) {
 	if claimed == nil || strings.TrimSpace(claimed.ID) == "" || strings.TrimSpace(claimed.ClaimToken) == "" {
 		return false, fmt.Errorf("claimed worker task required")
 	}
@@ -151,7 +99,7 @@ func (q *sqlQueueClaims) failAdmitted(ctx context.Context, claimed *api.WorkerTa
 			task = loaded
 		}
 	}
-	kept := q.keptCheckpoint(ctx, task)
+	kept := q.Branches.keptCheckpoint(ctx, task)
 	criteriaJSON := q.evaluateRoundCriteria(ctx, task, false, "", nil)
 	won, err := q.store.FailJob(ctx, claimed, msg, failure, kept, criteriaJSON)
 	if err != nil {
@@ -161,7 +109,7 @@ func (q *sqlQueueClaims) failAdmitted(ctx context.Context, claimed *api.WorkerTa
 		return false, nil
 	}
 	if task != nil && kept == "" {
-		q.destroyWorkerWorkspace(ctx, task)
+		q.Branches.destroyWorkerWorkspace(ctx, task)
 	}
 	q.changes.byID(ctx, claimed.ID)
 	q.notifyRoundSettled(ctx, task)
@@ -169,13 +117,13 @@ func (q *sqlQueueClaims) failAdmitted(ctx context.Context, claimed *api.WorkerTa
 }
 
 // Retry records the failed attempt and keeps the child/workspace for resume.
-func (q *sqlQueueClaims) Retry(ctx context.Context, claimed *api.WorkerTask, runErr error) (bool, error) {
-	return admitWorkerTransition(ctx, q.self, claimed, func() (bool, error) {
+func (q *SQLQueue) Retry(ctx context.Context, claimed *api.WorkerTask, runErr error) (bool, error) {
+	return admitWorkerTransition(ctx, q, claimed, func() (bool, error) {
 		return q.retryAdmitted(ctx, claimed, runErr)
 	})
 }
 
-func (q *sqlQueueClaims) retryAdmitted(ctx context.Context, claimed *api.WorkerTask, runErr error) (bool, error) {
+func (q *SQLQueue) retryAdmitted(ctx context.Context, claimed *api.WorkerTask, runErr error) (bool, error) {
 	if claimed == nil || strings.TrimSpace(claimed.ID) == "" || strings.TrimSpace(claimed.ClaimToken) == "" {
 		return false, fmt.Errorf("claimed worker task required")
 	}
@@ -197,13 +145,13 @@ func (q *sqlQueueClaims) retryAdmitted(ctx context.Context, claimed *api.WorkerT
 	return true, nil
 }
 
-func (q *sqlQueueClaims) Park(ctx context.Context, claimed *api.WorkerTask) (bool, error) {
-	return admitWorkerTransition(ctx, q.self, claimed, func() (bool, error) {
+func (q *SQLQueue) Park(ctx context.Context, claimed *api.WorkerTask) (bool, error) {
+	return admitWorkerTransition(ctx, q, claimed, func() (bool, error) {
 		return q.parkAdmitted(ctx, claimed)
 	})
 }
 
-func (q *sqlQueueClaims) parkAdmitted(ctx context.Context, claimed *api.WorkerTask) (bool, error) {
+func (q *SQLQueue) parkAdmitted(ctx context.Context, claimed *api.WorkerTask) (bool, error) {
 	won, err := q.store.ParkJob(ctx, claimed)
 	if err == nil && won {
 		q.changes.byID(ctx, claimed.ID)
@@ -212,7 +160,7 @@ func (q *sqlQueueClaims) parkAdmitted(ctx context.Context, claimed *api.WorkerTa
 }
 
 // ResumeReadyWaits atomically expires deadlines and makes every resolved worker runnable.
-func (q *sqlQueueClaims) ResumeReadyWaits(ctx context.Context) (int, error) {
+func (q *SQLQueue) ResumeReadyWaits(ctx context.Context) (int, error) {
 	now := timelayout.Format(time.Now().UTC())
 	tx, err := q.db.BeginTx(ctx, nil)
 	if err != nil {
@@ -268,7 +216,7 @@ func hasLayeredOverlayDivergence(ctx context.Context, task *api.WorkerTask) (boo
 	return err != nil || len(paths) > 0, true
 }
 
-func (q *sqlQueueClaims) evaluateRoundCriteria(
+func (q *SQLQueue) evaluateRoundCriteria(
 	ctx context.Context,
 	task *api.WorkerTask,
 	jobComplete bool,
@@ -280,29 +228,29 @@ func (q *sqlQueueClaims) evaluateRoundCriteria(
 	}
 	q.mu.Lock()
 	eval := q.criteriaEvaluator
-	projects := q.projects
 	q.mu.Unlock()
 	if eval == nil {
 		return ""
 	}
+	roots := q.Branches.rootRefs(ctx, task)
 	var diverged []string
 	if strings.TrimSpace(task.WorkspaceRoot) != "" {
 		if paths, handled, err := workspace.OverlayWorkspaceDivergencePaths(ctx, task.WorkspaceRoot); handled && err == nil {
 			diverged = paths
 		} else {
-			diverged = session.OverlayWorkspaceDivergencePaths(task, TaskRootRefs(ctx, task, projects)) //nolint:contextcheck // Divergence summary inspects baseline snapshots synchronously.
+			diverged = session.OverlayWorkspaceDivergencePaths(task, roots) //nolint:contextcheck // Divergence summary inspects baseline snapshots synchronously.
 		}
 	}
 	projectDir := strings.TrimSpace(task.WorkspacePath)
 	if projectDir == "" {
-		if refs := TaskRootRefs(ctx, task, projects); len(refs) > 0 {
+		if refs := roots; len(refs) > 0 {
 			projectDir = strings.TrimSpace(refs[0].Path)
 		}
 	}
 	return eval(ctx, task, projectDir, jobComplete, summary, diverged, report)
 }
 
-func (q *sqlQueueClaims) notifyRoundSettled(ctx context.Context, task *api.WorkerTask) {
+func (q *SQLQueue) notifyRoundSettled(ctx context.Context, task *api.WorkerTask) {
 	if task == nil || strings.TrimSpace(task.ParentSessionID) == "" {
 		return
 	}

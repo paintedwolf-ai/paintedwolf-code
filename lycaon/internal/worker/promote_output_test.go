@@ -34,7 +34,7 @@ func TestPreviewForSessionHunksOmitsFullBodies(t *testing.T) {
 		Status:                api.WorkerStatusComplete,
 	}
 	svc := &worker.MergeService{
-		Queue:  &mergeQueueStub{task: task},
+		Queue: &mergeQueueStub{task: task}, Branches: &mergeQueueStub{task: task},
 		Reject: mergeRejectFmt(t),
 	}
 	out, err := svc.PreviewForSession(ctx, "parent-1", "job-hunks", "hunks", []string{"d.go"})
@@ -81,7 +81,7 @@ func TestPreviewForSessionIncludesOverlayIntent(t *testing.T) {
 		Result:                &api.WorkerResult{Summary: "Add who/uname builtins"},
 	}
 	svc := &worker.MergeService{
-		Queue:  &mergeQueueStub{task: task},
+		Queue: &mergeQueueStub{task: task}, Branches: &mergeQueueStub{task: task},
 		Reject: mergeRejectFmt(t),
 	}
 	out, err := svc.PreviewForSession(ctx, "parent-1", "job-intent", "hunks", nil)
@@ -114,7 +114,7 @@ func TestPreviewForSessionFullIncludesBodies(t *testing.T) {
 		Status:                api.WorkerStatusComplete,
 	}
 	svc := &worker.MergeService{
-		Queue:  &mergeQueueStub{task: task},
+		Queue: &mergeQueueStub{task: task}, Branches: &mergeQueueStub{task: task},
 		Reject: mergeRejectFmt(t),
 	}
 	out, err := svc.PreviewForSession(ctx, "parent-1", "job-full", "full", []string{"d.go"})

@@ -133,7 +133,7 @@ func TestPendingOverlayCloseoutUsesLedgerOnEveryTurnOrigin(t *testing.T) {
 				ID: "pending-worker", ParentSessionID: sess.ID, ProjectID: sess.ProjectID,
 				Status: api.WorkerStatusComplete, MergeStatus: api.WorkerMergeStatusPending,
 				WorkspaceRoot: t.TempDir(), Scope: &api.TaskScope{Mode: api.TaskScopeModeWrite},
-			}}})
+			}}}, nil)
 			mgr.SetJobNames(pendingJobNames{})
 			history := []api.Message{{Role: api.MessageRoleUser, Origin: origin, Content: "Continue"}}
 			if origin == api.MessageOriginHost {
@@ -163,20 +163,20 @@ func TestPendingOverlayCloseoutClearsOnlyAfterDisposition(t *testing.T) {
 	task := api.WorkerTask{ID: "worker", ParentSessionID: sess.ID, ProjectID: sess.ProjectID,
 		Status: api.WorkerStatusComplete, MergeStatus: api.WorkerMergeStatusPending,
 		WorkspaceRoot: t.TempDir(), Scope: &api.TaskScope{Mode: api.TaskScopeModeWrite}}
-	mgr.SetWorkerQueue(jobLister{tasks: []api.WorkerTask{task}})
+	mgr.SetWorkerQueue(jobLister{tasks: []api.WorkerTask{task}}, nil)
 	if _, blocked := mgr.Coordinator.Guards.PendingOverlays(t.Context(), sess, true); !blocked {
 		t.Fatal("pending overlay did not block")
 	}
 	for _, status := range []api.WorkerMergeStatus{api.WorkerMergeStatusMerged, api.WorkerMergeStatusRejected} {
 		task.MergeStatus = status
-		mgr.SetWorkerQueue(jobLister{tasks: []api.WorkerTask{task}})
+		mgr.SetWorkerQueue(jobLister{tasks: []api.WorkerTask{task}}, nil)
 		if reject, blocked := mgr.Coordinator.Guards.PendingOverlays(t.Context(), sess, true); blocked {
 			t.Fatalf("settled %s overlay blocked: %v", status, reject)
 		}
 	}
 	task.MergeStatus = api.WorkerMergeStatusPending
 	task.Scope = &api.TaskScope{Mode: api.TaskScopeModeRead}
-	mgr.SetWorkerQueue(jobLister{tasks: []api.WorkerTask{task}})
+	mgr.SetWorkerQueue(jobLister{tasks: []api.WorkerTask{task}}, nil)
 	if _, blocked := mgr.Coordinator.Guards.PendingOverlays(t.Context(), sess, true); blocked {
 		t.Fatal("read worker created an overlay obligation")
 	}

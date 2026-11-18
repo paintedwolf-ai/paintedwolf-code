@@ -150,7 +150,7 @@ func TestPromoteOverlayDoesNotInferSatisfiedEditsFromLinePresence(t *testing.T) 
 				MergeStatus: api.WorkerMergeStatusPending, Status: api.WorkerStatusComplete,
 				Scope: &api.TaskScope{Mode: api.TaskScopeModeWrite, Paths: []string{path}},
 			}
-			svc := &worker.MergeService{Queue: &mergeQueueStub{task: task}, Store: &mergeStoreStub{}, Reject: mergeRejectFmt(t), DataDir: t.TempDir()}
+			svc := &worker.MergeService{Queue: &mergeQueueStub{task: task}, Branches: &mergeQueueStub{task: task}, Store: &mergeStoreStub{}, Reject: mergeRejectFmt(t), DataDir: t.TempDir()}
 			out, err := svc.PromoteOverlay(t.Context(), "parent", task.ID, api.PromoteOverlayInput{})
 			if err == nil || len(out.Conflicts) != 1 || out.OverlayPromotion != nil {
 				t.Fatalf("overlapping structural edit accepted: result=%+v error=%v", out, err)

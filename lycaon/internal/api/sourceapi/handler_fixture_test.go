@@ -70,6 +70,7 @@ func newSourceHandlerFixture(t *testing.T, opts ...func(*Deps)) *Handler {
 	deps.MutationGate, deps.SourceLedger = required.MutationGate, required.SourceLedger
 	deps.SourceMutations, deps.FileOperations = required.SourceMutations, required.FileOperations
 	deps.Workers = required.Workers
+	deps.Branches = required.Branches
 	handler := New(&httpio.Responder{Logger: slog.Default()}, group, Operations{}, deps)
 	t.Cleanup(func() {
 		group.Stop()

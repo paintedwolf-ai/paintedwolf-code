@@ -70,6 +70,7 @@ import (
 
 // Deps mirrors the API dependencies a server cannot be built without.
 type Deps struct {
+	Branches          *worker.BranchService
 	ApprovalDecisions interface {
 		ListApprovalDecisionsSince(context.Context, time.Time) ([]authzcontext.Event, error)
 	}
@@ -277,7 +278,11 @@ func fillHost(t *testing.T, d *Deps) {
 func fillWorkers(t *testing.T, d *Deps) {
 	t.Helper()
 	if d.Workers == nil {
-		d.Workers = worker.NewSQLQueue(d.Database, 2)
+		queue := worker.NewSQLQueue(d.Database, 2)
+		d.Workers, d.Branches = queue, queue.Branches
+	}
+	if queue, ok := d.Workers.(*worker.SQLQueue); ok && d.Branches == nil {
+		d.Branches = queue.Branches
 	}
 	if d.WorkerCancel == nil {
 		d.WorkerCancel = &worker.CancelService{Queue: d.Workers, Events: d.Sessions.Coordinator.Workers, Graceful: d.Sessions.Workers.Cancel, Cancellations: d.Sessions.Workers.Cancellations}

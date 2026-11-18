@@ -56,7 +56,7 @@ func (f *layeredWorkerFixture) claimChild(t *testing.T, baseID string) *api.Work
 	t.Helper()
 	id, err := f.enqueueStacked(t, baseID)
 	testutil.FailErr(t, "claim next stacked", err)
-	child, err := f.queue.ClaimWorkerBranch(t.Context(), id)
+	child, err := f.queue.Branches.ClaimWorkerBranch(t.Context(), id)
 	testutil.FailErr(t, "claim stacked branch", err)
 	next, ok := f.queue.Get(id)
 	if !ok {
@@ -166,7 +166,7 @@ func TestStackedWorkerRefusesAParentWithNoImmutableResult(t *testing.T) {
 	running := fixture.claim(t)
 	id, err := fixture.enqueueStacked(t, running.ID)
 	testutil.FailErr(t, "claim next", err)
-	if _, err := fixture.queue.ClaimWorkerBranch(t.Context(), id); !errors.Is(err, ErrWorkerBranchClaimFailed) {
+	if _, err := fixture.queue.Branches.ClaimWorkerBranch(t.Context(), id); !errors.Is(err, ErrWorkerBranchClaimFailed) {
 		t.Fatalf("claim over a running parent = %v", err)
 	}
 	if task, ok := fixture.queue.Get(id); !ok || task.WorkspaceRoot != "" {
@@ -230,7 +230,7 @@ func testStackedWorkerPromotion(t *testing.T, selector *adapter.Selector, write 
 
 	hook := &stackedPromotionHook{}
 	dataDir := t.TempDir()
-	svc := &MergeService{Queue: fixture.queue, Store: fixture.queue.Promotions, DataDir: dataDir, Workspace: fixture.manager, Scans: hook}
+	svc := &MergeService{Queue: fixture.queue, Branches: fixture.queue.Branches, Store: fixture.queue.Promotions, DataDir: dataDir, Workspace: fixture.manager, Scans: hook}
 	coordinator, err := fixture.manager.CheckpointCoordinator()
 	testutil.FailErr(t, "coordinator", err)
 	assertOriginalTarget := func(t *testing.T) {
@@ -266,7 +266,7 @@ func testStackedWorkerPromotion(t *testing.T, selector *adapter.Selector, write 
 	hook.crash = false
 	_, err = fixture.db.ExecContext(t.Context(), `UPDATE worker_jobs SET merge_lease_expires_at = '2000-01-01T00:00:00Z' WHERE id = ?`, child.ID)
 	testutil.FailErr(t, "expire crashed lease", err)
-	restarted := &MergeService{Queue: fixture.queue, Store: fixture.queue.Promotions, DataDir: dataDir, Workspace: fixture.manager, Scans: hook}
+	restarted := &MergeService{Queue: fixture.queue, Branches: fixture.queue.Branches, Store: fixture.queue.Promotions, DataDir: dataDir, Workspace: fixture.manager, Scans: hook}
 	testutil.FailErr(t, "startup recovery", restarted.RecoverOrphanedMergeApplies(t.Context()))
 	assertOriginalTarget(t)
 

@@ -87,7 +87,6 @@ func TestSourceEvidenceCloseoutAllowsExplicitUnverifiedAfterBoundedAttempts(t *t
 }
 
 type sourceEvidenceWorkerQueue struct {
-	noopWorkerBranchClaim
 	task *api.WorkerTask
 }
 
@@ -124,7 +123,7 @@ func workerSourceEvidenceCloseoutHarness(t *testing.T) (*Host, *api.Session, *ap
 		Status: api.WorkerStatusRunning, MergeStatus: api.WorkerMergeStatusPending,
 		Scope: &scope, WorkspaceBaselinePath: raw,
 	}
-	mgr.SetWorkerQueue(sourceEvidenceWorkerQueue{task: task})
+	mgr.SetWorkerQueue(sourceEvidenceWorkerQueue{task: task}, nil)
 	return mgr, child, task, nil
 }
 

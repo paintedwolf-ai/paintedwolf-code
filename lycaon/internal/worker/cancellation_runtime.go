@@ -30,7 +30,7 @@ var _ CanceledWorkRetainer = (*workspace.Manager)(nil)
 
 // retryOnFullDisk gives a cancellation write one more try with the reserve freed. A worker that
 // filled the volume the database shares must still be cancelable, or nothing can free the space.
-func (q *sqlQueueCore) retryOnFullDisk(write func() error) error {
+func (q *BranchService) retryOnFullDisk(write func() error) error {
 	err := write()
 	if !db.IsDiskFull(err) {
 		return err
@@ -46,8 +46,8 @@ func (q *sqlQueueCore) retryOnFullDisk(write func() error) error {
 
 // settleCanceledRuntime runs on every cancellation path because each one finishes here. On
 // failure the job stays cancel-requested, so maintenance retries it and its data stays put.
-func (q *sqlQueueCore) settleCanceledRuntime(ctx context.Context, jobID string) error {
-	task, ok := q.Get(jobID) //nolint:contextcheck // Get has internal sqlQueueGetTimeout
+func (q *BranchService) settleCanceledRuntime(ctx context.Context, jobID string) error {
+	task, ok := q.store.getTask(ctx, jobID) //nolint:contextcheck // Get has internal sqlQueueGetTimeout
 	if !ok || task.Status.IsTerminal() || strings.TrimSpace(task.WorkspaceRoot) == "" {
 		return nil
 	}

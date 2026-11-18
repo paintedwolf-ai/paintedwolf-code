@@ -25,7 +25,7 @@ import (
 func TestBeforeWorkerWriteRejectsReadScopedMutation(t *testing.T) {
 	mgr := session.NewHost(sessionstore.NewMemory(), session.Models{Client: nil, Provider: nil, Limits: settings.SessionLimits{}, Cost: nil}, nil)
 	q := workertest.NewQueue(t, 8, testdbseed.DefaultProjectID, "parent")
-	mgr.SetWorkerQueue(q)
+	mgr.SetWorkerQueue(q, q.Branches)
 	dir := t.TempDir()
 	readScope := api.TaskScope{Mode: api.TaskScopeModeRead, Paths: []string{"internal/**"}}
 	_, err := q.Enqueue(context.Background(), api.WorkerTask{
@@ -56,7 +56,7 @@ func TestBeforeWorkerWriteRejectsReadScopedMutation(t *testing.T) {
 func TestBeforeWorkerWriteAllowsPathOutsideSuggestion(t *testing.T) {
 	mgr := session.NewHost(sessionstore.NewMemory(), session.Models{Client: nil, Provider: nil, Limits: settings.SessionLimits{}, Cost: nil}, nil)
 	q := workertest.NewQueue(t, 8, testdbseed.DefaultProjectID, "parent")
-	mgr.SetWorkerQueue(q)
+	mgr.SetWorkerQueue(q, q.Branches)
 	writeScope := api.TaskScope{Mode: api.TaskScopeModeWrite, Paths: []string{"src/allowed/**"}}
 	_, err := q.Enqueue(context.Background(), api.WorkerTask{
 		ID: "job-write", ParentSessionID: "parent", ProjectID: testdbseed.DefaultProjectID,
@@ -94,7 +94,7 @@ func TestWorkerReadToolsIgnoreSuggestedPaths(t *testing.T) {
 	ctx := context.Background()
 	mgr := session.NewHost(sessionstore.NewMemory(), session.Models{Client: nil, Provider: nil, Limits: settings.SessionLimits{}, Cost: nil}, nil)
 	queue := workertest.NewQueue(t, 8, testdbseed.DefaultProjectID, "parent", "child-read-discovery")
-	mgr.SetWorkerQueue(queue)
+	mgr.SetWorkerQueue(queue, queue.Branches)
 	scope := api.TaskScope{Mode: api.TaskScopeModeRead, Paths: []string{"docs/README.md"}}
 	child := api.Session{ID: "child-read-discovery", ParentSessionID: "parent"}
 	_, err := queue.Enqueue(ctx, api.WorkerTask{
@@ -135,7 +135,7 @@ func readScopedWorkerManager(t *testing.T, jobID string, mode api.TaskScopeMode)
 	t.Helper()
 	mgr := session.NewHost(sessionstore.NewMemory(), session.Models{Client: nil, Provider: nil, Limits: settings.SessionLimits{}, Cost: nil}, nil)
 	q := workertest.NewQueue(t, 8, testdbseed.DefaultProjectID, "parent")
-	mgr.SetWorkerQueue(q)
+	mgr.SetWorkerQueue(q, q.Branches)
 	scope := api.TaskScope{Mode: mode, Paths: []string{"."}}
 	ctx := context.Background()
 	_, err := q.Enqueue(ctx, api.WorkerTask{

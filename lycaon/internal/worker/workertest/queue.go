@@ -29,6 +29,6 @@ func OnDatabase(t testing.TB, database db.Handle, maxRunning int) *worker.SQLQue
 	t.Helper()
 	queue := worker.NewSQLQueue(database, maxRunning)
 	root := db.DataDir(database)
-	queue.SetBaselineStore(workspacebaseline.New(database, sourceblob.New(filepath.Join(root, "source-content")), filepath.Join(root, "worker-baselines")))
+	queue.Branches.SetBaselineStore(workspacebaseline.New(database, sourceblob.New(filepath.Join(root, "source-content")), filepath.Join(root, "worker-baselines")))
 	return queue
 }

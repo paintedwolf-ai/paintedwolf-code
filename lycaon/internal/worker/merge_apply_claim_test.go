@@ -134,7 +134,7 @@ func TestMergeServicePreviewAndPromoteFromPublishedCheckpoint(t *testing.T) {
 			trunkUpdated := "package app\n\nfunc A() int { return 10 }\n\nfunc B() int { return 2 }\n"
 			testutil.FailErr(t, "write trunk update", os.WriteFile(filepath.Join(primary, "app.go"), []byte(trunkUpdated), 0o644))
 
-			svc := &MergeService{Queue: q, Store: q.Promotions, DataDir: t.TempDir()}
+			svc := &MergeService{Queue: q, Branches: q.Branches, Store: q.Promotions, DataDir: t.TempDir()}
 			previewOut, err := svc.PreviewForSession(ctx, "parent-cp", jobID, "summary", nil)
 			testutil.FailErr(t, "PreviewForSession", err)
 			if len(previewOut.CleanPaths) != 3 {

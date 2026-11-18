@@ -38,6 +38,7 @@ func TestPeerReservationsHideOwnHoldsAndRetainSiblingLabels(t *testing.T) {
 	service := New(reservationSessions{}, nil, nil)
 	service.calls = rows
 	service.SetTasks(jobs)
+	service.SetBranches(jobs)
 	service.SetWorkerNames(func(_ context.Context, jobID string) (string, bool, error) {
 		return map[string]string{"peer": "reviewer"}[jobID], jobID == "peer", nil
 	})

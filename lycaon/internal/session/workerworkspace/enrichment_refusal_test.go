@@ -38,6 +38,7 @@ func TestReadWorkerEnrichmentKeepsProjectSourcesAndContextIdentity(t *testing.T)
 	service := New(nil, nil, nil)
 	jobs := &enrichmentJobs{task: &api.WorkerTask{ID: "read-job"}}
 	service.SetTasks(jobs)
+	service.SetBranches(jobs)
 	input := tools.ToolContext{Identity: tools.InvocationIdentity{RootSessionID: "retained-root"}}
 	child := &api.Session{ID: "child", ParentSessionID: " parent "}
 	out, err := service.Enrich(workercontext.WithJob(t.Context(), "read-job"), child, input)
@@ -62,6 +63,7 @@ func TestWorkerBranchClaimFailurePreservesInvocation(t *testing.T) {
 	jobs := &enrichmentJobs{task: &api.WorkerTask{ID: "write-job", Scope: &api.TaskScope{Mode: api.TaskScopeModeWrite}}, claimErr: cause}
 	service := New(nil, nil, nil)
 	service.SetTasks(jobs)
+	service.SetBranches(jobs)
 	input := tools.ToolContext{Identity: tools.InvocationIdentity{WorkerJobID: "write-job", RootSessionID: "root"}}
 	child := &api.Session{ID: "child", ParentSessionID: "parent"}
 	out, err := service.Enrich(t.Context(), child, input)
@@ -88,6 +90,7 @@ func TestWorkerWriteReservesNormalizedTouchAndRefusesReadScopedMutation(t *testi
 	service.calls = calls
 	jobs := &enrichmentJobs{task: &api.WorkerTask{ID: "job", Scope: &api.TaskScope{Mode: api.TaskScopeModeWrite}}}
 	service.SetTasks(jobs)
+	service.SetBranches(jobs)
 	ctx := tools.ToolContext{Identity: tools.InvocationIdentity{WorkerJobID: "job", HandoffSessionID: "parent", HandoffAgentID: "job"}}
 	testutil.FailErr(t, "reserve write", service.BeforeWorkerWrite(t.Context(), ctx, "folder/../item.txt"))
 	if calls.session != "parent" || calls.agent != "job" || !reflect.DeepEqual(calls.paths, []string{"item.txt"}) || !reflect.DeepEqual(service.Touches.Paths("job"), []string{"item.txt"}) {
@@ -105,6 +108,7 @@ func TestReadBranchClaimKeepsProjectSourceRouting(t *testing.T) {
 	service := New(nil, nil, nil)
 	jobs := &enrichmentJobs{claimTask: &api.WorkerTask{ID: "read-job", Scope: &api.TaskScope{Mode: api.TaskScopeModeRead}}}
 	service.SetTasks(jobs)
+	service.SetBranches(jobs)
 	input := tools.ToolContext{Identity: tools.InvocationIdentity{WorkerJobID: "read-job"}, Source: tools.InvocationSource{SourceWorkspaceKind: api.SourceWorkspaceKindWorker}}
 	out, err := service.EnsureBranch(t.Context(), input)
 	testutil.FailErr(t, "resolve read worker branch", err)
@@ -138,5 +142,17 @@ func TestWriteWorkerEnrichmentBindsPersistedBranchRoots(t *testing.T) {
 	testutil.FailErr(t, "a branch with no mounted view has nothing to record", out.Source.RecordViewProcess(os.Getpid()))
 	if out.Source.WorkerBranchRoot != root || out.Source.BranchWorkspace != branch || out.Source.SourceWorkspaceKind != api.SourceWorkspaceKindWorker || len(out.Source.Roots) != 1 || out.Source.Roots[0].ID != "root" || !reflect.DeepEqual(out.Source.WorkerSourceRoots, []string{root}) {
 		t.Fatalf("write branch context=%+v", out.Source)
+	}
+}
+
+func TestWorkerBranchProviderRequiredBeforeMutation(t *testing.T) {
+	service := New(nil, nil, nil)
+	defer service.Close()
+	jobs := &enrichmentJobs{task: &api.WorkerTask{ID: "write-job", Scope: &api.TaskScope{Mode: api.TaskScopeModeWrite}}}
+	service.SetTasks(jobs)
+	input := tools.ToolContext{Identity: tools.InvocationIdentity{WorkerJobID: "write-job", RootSessionID: "root"}}
+	out, err := service.Enrich(t.Context(), &api.Session{ID: "child", ParentSessionID: "parent"}, input)
+	if err == nil || !reflect.DeepEqual(out, input) || jobs.claims != 0 {
+		t.Fatalf("missing branch provider: context=%+v error=%v claims=%d", out, err, jobs.claims)
 	}
 }

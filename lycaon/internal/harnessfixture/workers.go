@@ -383,7 +383,7 @@ func (w *Workers) answeredOption(ctx context.Context, childID string) (string, b
 }
 
 func (w *Workers) deliverWrite(ctx context.Context, child *api.Session, task api.WorkerTask, delivery Delivery) (api.WorkerResult, error) {
-	branch, err := w.queue.ClaimWorkerBranch(ctx, task.ID)
+	branch, err := w.queue.Branches.ClaimWorkerBranch(ctx, task.ID)
 	if err != nil {
 		return api.WorkerResult{}, err
 	}

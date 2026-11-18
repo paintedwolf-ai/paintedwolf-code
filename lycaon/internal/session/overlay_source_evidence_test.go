@@ -93,7 +93,7 @@ func TestBuildImplementSessionStateListsLedgerPendingOverlays(t *testing.T) {
 	mgr := session.NewHost(mem, session.Models{Client: llm.NewMockProvider(&llm.MockConfig{}), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
 	t.Cleanup(mgr.BeginEngineShutdown)
 	q := workertest.OnDatabase(t, database, 4)
-	mgr.SetWorkerQueue(q)
+	mgr.SetWorkerQueue(q, q.Branches)
 	parent, err := mem.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create parent", err)
 
@@ -141,7 +141,7 @@ func TestCompleteWriteWorkerThenHostCycleSelectsOverlayPromote(t *testing.T) {
 	mgr := session.NewHost(mem, session.Models{Client: llm.NewMockProvider(&llm.MockConfig{}), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
 	t.Cleanup(mgr.BeginEngineShutdown)
 	q := workertest.OnDatabase(t, database, 4)
-	mgr.SetWorkerQueue(q)
+	mgr.SetWorkerQueue(q, q.Branches)
 	parent, err := mem.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create parent", err)
 
@@ -387,7 +387,7 @@ func TestWorkerProjectionWaitsForOriginalDispatchResponse(t *testing.T) {
 			messages := store.NewSQL(database)
 			mgr := session.NewHost(messages, session.Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
 			queue := workertest.OnDatabase(t, database, 2)
-			mgr.SetWorkerQueue(queue)
+			mgr.SetWorkerQueue(queue, queue.Branches)
 			parent, err := messages.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 			testutil.FailErr(t, "create parent", err)
 			jobID, err := queue.Enqueue(ctx, api.WorkerTask{
@@ -618,7 +618,7 @@ func newObservationHost(t *testing.T) (*store.SQL, *tools.StubRegistry, *session
 	mgr.Verification.SetEvidenceStore(inspector.NewJSONLStore(inspector.DefaultEvidenceDir))
 
 	q := workertest.OnDatabase(t, database, 4)
-	mgr.SetWorkerQueue(q)
+	mgr.SetWorkerQueue(q, q.Branches)
 
 	return mem, reg, mgr, q
 }

@@ -271,13 +271,13 @@ func (r Reader) job(jobID string) (api.WorkerTask, bool) {
 // PrerequisitePending reports a job one of whose producers has no ready
 // output yet. A long-lived producer is judged on its latest round, which
 // latestRoundJob names for the job a prerequisite was given as.
-func PrerequisitePending(ctx context.Context, latestRoundJob func(context.Context, string) (string, error), jobs Jobs, job api.WorkerTask) (bool, error) {
+func PrerequisitePending(ctx context.Context, latestRoundJob func(context.Context, string) (string, error), lookup func(string) (*api.WorkerTask, bool), job api.WorkerTask) (bool, error) {
 	for _, id := range job.AfterWorkers {
 		latest, err := latestRoundJob(ctx, id)
 		if err != nil {
 			return false, err
 		}
-		upstream, _ := jobs.Get(latest)
+		upstream, _ := lookup(latest)
 		if !api.WorkerOutputReady(upstream) {
 			return true, nil
 		}
@@ -311,7 +311,7 @@ func (r Reader) round(ctx context.Context, w workerrecords.Worker, latest worker
 			out.Held = !out.DecisionPending
 		case api.WorkerStatusPending:
 			// A job waits on its prerequisites before it queues for a slot.
-			waiting, err := PrerequisitePending(ctx, r.Records.LatestRoundJob, r.Jobs, job)
+			waiting, err := PrerequisitePending(ctx, r.Records.LatestRoundJob, r.Jobs.Get, job)
 			if err != nil {
 				return nil, err
 			}

@@ -45,7 +45,7 @@ func TestPromoteOverlayNeverLandsTheProjectOverlay(t *testing.T) {
 		WorkspacePath: primary, WorkspaceRoot: overlay, WorkspaceBaselinePath: baseline,
 		MergeStatus: api.WorkerMergeStatusPending, AgentType: "implementer", Scope: &scope, Status: api.WorkerStatusComplete,
 	}
-	svc := &worker.MergeService{Queue: &mergeQueueStub{task: task}, Store: &mergeStoreStub{}, Reject: mergeRejectFmt(t)}
+	svc := &worker.MergeService{Queue: &mergeQueueStub{task: task}, Branches: &mergeQueueStub{task: task}, Store: &mergeStoreStub{}, Reject: mergeRejectFmt(t)}
 
 	var named []api.WorkerPromoteResolution
 	for _, rel := range overlayFiles {

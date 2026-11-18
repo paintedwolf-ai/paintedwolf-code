@@ -247,7 +247,7 @@ func TestQueuedPromptDispatchesWhenRoundCompletesAfterTurnEndCheck(t *testing.T)
 		ID: "job-1", ParentSessionID: sess.ID, ProjectID: testdbseed.DefaultProjectID,
 		WorkspacePath: dir, Status: api.WorkerStatusRunning,
 	}}}
-	mgr.SetWorkerQueue(workers)
+	mgr.SetWorkerQueue(workers, nil)
 
 	row, _, err := mgr.Submissions.AdmitPrompt(ctx, sess.ID, uuid.NewString(), "second", promptinput.Input{Text: "second of two"})
 	testutil.FailErr(t, "admit prompt", err)

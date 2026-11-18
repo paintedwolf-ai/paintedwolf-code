@@ -43,20 +43,17 @@ type CheckpointBranchRebuilder interface {
 	RebuildRecoveredBranch(ctx context.Context, root, jobID string) (bool, error)
 }
 
-// BranchEvictor is the eviction path for every retention caller: a queue whose workspace manager
-// knows the recovery rules applies them, and anything else evicts on the sealed record.
-func BranchEvictor(queue WorkerQueue) func(ctx context.Context, branchRoot string) error {
-	if sql, ok := queue.(*SQLQueue); ok {
-		sql.mu.Lock()
-		ws := sql.workerWorkspace
-		sql.mu.Unlock()
-		if evictor, ok := ws.(interface {
-			EvictWorkerBranch(ctx context.Context, branchRoot string) error
-		}); ok {
-			return evictor.EvictWorkerBranch
-		}
+// EvictBranch applies the workspace recovery rules before reclaiming a sealed tree.
+func (b *BranchService) EvictBranch(ctx context.Context, branchRoot string) error {
+	b.mu.Lock()
+	ws := b.workerWorkspace
+	b.mu.Unlock()
+	if evictor, ok := ws.(interface {
+		EvictWorkerBranch(context.Context, string) error
+	}); ok {
+		return evictor.EvictWorkerBranch(ctx, branchRoot)
 	}
-	return workspace.EvictJobTree
+	return workspace.EvictJobTree(ctx, branchRoot)
 }
 
 // WorkerBranches materializes a job's branch tree on demand. A tree that
@@ -66,7 +63,7 @@ type WorkerBranches interface {
 	EnsureWorkerBranch(ctx context.Context, jobID string) (*api.WorkerTask, *BranchLease, error)
 }
 
-// ensureWorkerBranch is the shared lease path for both queue implementations.
+// ensureWorkerBranch rebuilds the tree while holding its lease.
 func ensureWorkerBranch(ctx context.Context, task *api.WorkerTask, ws WorkerWorkspaceManager) (*BranchLease, error) {
 	if task == nil || !task.EffectiveScope().IsWrite() {
 		return nil, fmt.Errorf("%w: %s is not a write worker", ErrWorkerBranchUnavailable, taskIDOrBlank(task))
@@ -139,8 +136,7 @@ func taskIDOrBlank(task *api.WorkerTask) string {
 	return task.ID
 }
 
-// LeaseExistingBranch holds a branch tree that is already on disk. It never
-// rebuilds; callers that own a queue use EnsureWorkerBranch instead.
+// LeaseExistingBranch holds an existing branch without reconstructing it.
 func LeaseExistingBranch(ctx context.Context, task *api.WorkerTask) (*BranchLease, error) {
 	return ensureWorkerBranch(ctx, task, nil)
 }
@@ -319,6 +315,9 @@ func (s *MergeService) teardownBranch(ctx context.Context, task *api.WorkerTask)
 // holdBranch leases the overlay's branch tree for a merge read, rebuilding a
 // reclaimed tree. A tree that cannot be rebuilt rejects as not pending.
 func (s *MergeService) holdBranch(ctx context.Context, jobID string) (*BranchLease, error) {
+	if s.Branches == nil {
+		return nil, fmt.Errorf("worker branch access unavailable")
+	}
 	task, exists := s.Queue.Get(jobID)
 	checkpointed := exists && task != nil && session.CheckpointStoreDirForTask(task) != ""
 	if checkpointed {
@@ -326,7 +325,7 @@ func (s *MergeService) holdBranch(ctx context.Context, jobID string) (*BranchLea
 			return nil, fmt.Errorf("rehydrate checkpoint branch: %w", err)
 		}
 	}
-	_, lease, err := s.Queue.EnsureWorkerBranch(ctx, jobID)
+	_, lease, err := s.Branches.EnsureWorkerBranch(ctx, jobID)
 	if err != nil {
 		if errors.Is(err, ErrWorkerBranchUnavailable) {
 			if checkpointed {

@@ -178,14 +178,6 @@ func (p preparedCapture) CommitTx(ctx context.Context, tx *sql.Tx) (sourceledger
 }
 func (p preparedCapture) Close() {}
 
-type noopWorkerBranchClaim struct{}
-
-func (noopWorkerBranchClaim) ReviewsWorker(context.Context, *api.WorkerTask) bool { return false }
-
-func (noopWorkerBranchClaim) ClaimWorkerBranch(context.Context, string) (*api.WorkerTask, error) {
-	return nil, fmt.Errorf("worker branch claim not available")
-}
-
 type failingWorkerModelStore struct {
 	*store.Memory
 	err error
@@ -270,7 +262,7 @@ func TestWorkerSynthesisSettlesAfterOutcomeAcknowledgement(t *testing.T) {
 	q := &pendingOutcomeQueue{pending: []api.WorkerTask{{
 		ID: "job-a", ProjectID: sess.ProjectID, ParentSessionID: sess.ID, Status: api.WorkerStatusComplete,
 	}}}
-	mgr.SetWorkerQueue(q)
+	mgr.SetWorkerQueue(q, nil)
 	loop := mgr.Coordinator.Runtime.CoordinatorLoop()
 	finishExecution := loop.Admission.BeginPromptExecution(t.Context(), sess.ID)
 	defer finishExecution()

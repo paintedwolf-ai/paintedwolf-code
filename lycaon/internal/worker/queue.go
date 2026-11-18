@@ -72,12 +72,6 @@ type WorkerQueue interface {
 	RecoverExpiredClaims(ctx context.Context) ([]api.WorkerTask, error)
 	ListPendingOutcomes(ctx context.Context) ([]api.WorkerTask, error)
 	MarkOutcomeDelivered(ctx context.Context, jobID string) error
-	// ClaimWorkerBranch provisions a write worker's branch on first use.
-	ClaimWorkerBranch(ctx context.Context, jobID string) (*api.WorkerTask, error)
-	// EnsureWorkerBranch materializes a claimed branch and leases it to the caller.
-	EnsureWorkerBranch(ctx context.Context, jobID string) (*api.WorkerTask, *BranchLease, error)
-	// ListBranchJobs includes jobs whose branch is still being provisioned.
-	ListBranchJobs(ctx context.Context) ([]BranchJob, error)
 }
 
 // admitWorkerTransition holds session admission until the claim transition commits.

@@ -133,7 +133,7 @@ func TestPromoteOverlayEmitsRootScopeSourceChanges(t *testing.T) {
 		firstWrite: []string{"src/edited.go", "src/added.go"},
 	}
 	svc := &worker.MergeService{
-		Queue: &mergeQueueStub{task: task},
+		Queue: &mergeQueueStub{task: task}, Branches: &mergeQueueStub{task: task},
 
 		Store:        &mergeStoreStub{},
 		Reject:       mergeRejectFmt(t),
@@ -356,7 +356,7 @@ func newEditorSyncPromotion(t *testing.T, store *mergeStoreStub) editorSyncPromo
 	}
 	projects := &testProjectStore{p: &project.Project{ID: testdbseed.DefaultProjectID}}
 	svc := &worker.MergeService{
-		Queue:        &mergeQueueStub{task: task},
+		Queue: &mergeQueueStub{task: task}, Branches: &mergeQueueStub{task: task},
 		Store:        store,
 		Reject:       mergeRejectFmt(t),
 		SourceLedger: ledger, SourceHistory: ledger,

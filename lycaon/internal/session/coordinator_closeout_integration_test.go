@@ -30,7 +30,7 @@ func TestLegFinishedQueuesKickAndAutoPrompts(t *testing.T) {
 	fix := setupLoopFixture(t, settings.DefaultSessionLimits())
 	ctx := context.Background()
 	queue := worker.NewSQLQueue(fix.store.DB(), 4)
-	fix.mgr.SetWorkerQueue(queue)
+	fix.mgr.SetWorkerQueue(queue, queue.Branches)
 	child, err := fix.store.CreateChild(ctx, fix.sess, wire.SpawnChildRequest{AgentType: orchestration.ProfilePathExplorer})
 	testutil.FailErr(t, "create child", err)
 	jobID, err := queue.Enqueue(ctx, wire.WorkerTask{

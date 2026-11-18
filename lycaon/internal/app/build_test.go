@@ -146,7 +146,7 @@ func TestBuildWithSeparateStoreDirectorySupportsWorkers(t *testing.T) {
 		ProjectID: testdbseed.DefaultProjectID, ClaimedBy: "store-root-test", ExecutionTarget: wire.ExecutionTargetLocal,
 	})
 	testutil.FailErr(t, "claim worker", err)
-	job, err := app.Workers.Queue.ClaimWorkerBranch(t.Context(), jobID)
+	job, err := app.Workers.Queue.Branches.ClaimWorkerBranch(t.Context(), jobID)
 	testutil.FailErr(t, "claim worker branch under active store", err)
 	rel, err := filepath.Rel(filepath.Dir(cfg.DBPath), job.WorkspaceRoot)
 	testutil.FailErr(t, "resolve branch against active store", err)
