@@ -62,7 +62,6 @@ func resetForTest() {
 	cachedBin = ""
 	cachedLFS = ""
 	cachedErr = nil
-	versionOfFn = versionOf
 }
 
 // TestingEnableBundledBinary configures the staged test binary when present.
