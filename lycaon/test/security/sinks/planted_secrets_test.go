@@ -16,6 +16,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/google/uuid"
 	"github.com/lycaon/lycaon/config"
 	"github.com/lycaon/lycaon/internal/events"
 	"github.com/lycaon/lycaon/internal/hitl"
@@ -86,7 +87,7 @@ func catalogPlants(t *testing.T) []plant {
 			if len(rule.Examples) == 0 || manifest.Inventory.ExcludedRules[rule.ID] != "" {
 				continue
 			}
-			if value, ok := recognisedExample(matcher, rule.ID, rule.Examples); ok {
+			if value, ok := recognisedExample(matcher, rule.Examples); ok {
 				plants = append(plants, plant{rule: rule.ID, value: value})
 			} else {
 				unrecognised = append(unrecognised, rule.ID)
@@ -97,21 +98,26 @@ func catalogPlants(t *testing.T) []plant {
 	testutil.FailErr(t, "walk detector catalog", err)
 	sort.Strings(unrecognised)
 	if len(unrecognised) > 0 {
-		t.Errorf("%d catalog rules recognise none of their own examples: %v", len(unrecognised), unrecognised)
+		t.Errorf("%d catalog rules have no example the matcher recognises: %v", len(unrecognised), unrecognised)
 	}
 	t.Logf("plants: %d catalog rules with a recognised example", len(plants))
 	return plants
 }
 
-// recognisedExample returns the secret the rule finds in its first example it
-// recognises.
-func recognisedExample(matcher *secretmatch.Matcher, ruleID string, examples []string) (string, bool) {
+// recognisedExample returns the longest value the matcher recognises in the
+// rule's first recognised example. Overlapping rules may claim the span; any
+// recognised value must stay out of every sink.
+func recognisedExample(matcher *secretmatch.Matcher, examples []string) (string, bool) {
 	for _, example := range examples {
 		runes := []rune(example)
+		best := ""
 		for _, hit := range matcher.Screen(example) {
-			if strings.TrimPrefix(hit.RuleID, "gitleaks:") == ruleID && hit.End <= len(runes) {
-				return string(runes[hit.Start:hit.End]), true
+			if hit.End <= len(runes) && hit.End-hit.Start > len([]rune(best)) {
+				best = string(runes[hit.Start:hit.End])
 			}
+		}
+		if best != "" {
+			return best, true
 		}
 	}
 	return "", false
@@ -295,7 +301,7 @@ func promptAnsweringCards(t *testing.T, h *wiring.Harness, sess *wire.Session, p
 
 func storeManagedSecret(t *testing.T, h *wiring.Harness, projectID, value string) {
 	t.Helper()
-	body, _ := json.Marshal(map[string]any{"name": "canary", "purpose": "secret canary", "secret_value": value, "operation_id": "canary-1"})
+	body, _ := json.Marshal(map[string]any{"name": "canary", "purpose": "secret canary", "secret_value": value, "operation_id": uuid.NewString()})
 	rec := serve(t, h, http.MethodPost, "/v1/projects/"+projectID+"/secrets", body)
 	if rec.Code != http.StatusCreated && rec.Code != http.StatusOK {
 		t.Fatalf("store managed secret = %d: %s", rec.Code, rec.Body.String())
