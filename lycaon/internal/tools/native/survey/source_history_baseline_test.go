@@ -214,9 +214,9 @@ func (l listingSignal) OpenSessionWindows(projectID, sessionID string) []sourcel
 }
 
 func TestSourceHistoryOverviewACCW02WaitsForTheAsynchronousSettle(t *testing.T) {
-
 	repochangetest.Acquire(t)
-	h := newHistoryHarness(t)
+	endSettle := make(chan time.Time)
+	h := newHistoryHarness(t, sourceledger.WithCommandWindowTimer(func(time.Duration) <-chan time.Time { return endSettle }))
 	roots := make([]sourceledger.RootSpec, 0, len(h.tctx.Source.Roots))
 	for _, root := range h.tctx.Source.Roots {
 		roots = append(roots, sourceledger.RootSpec{ID: root.ID, Path: root.Path})
@@ -224,8 +224,6 @@ func TestSourceHistoryOverviewACCW02WaitsForTheAsynchronousSettle(t *testing.T) 
 		t.Cleanup(func() { repochange.CloseRoot(root.Path) })
 	}
 	h.beginSession(historySession)
-	endSettle := make(chan time.Time)
-	h.store.Commands.SetWindowSettleGateForTest(endSettle)
 	waiting := make(chan struct{})
 	h.tctx.Source.History.Windows = listingSignal{h.store.Commands, sync.OnceFunc(func() { close(waiting) })}
 	h.tool.settleBudget = time.Hour

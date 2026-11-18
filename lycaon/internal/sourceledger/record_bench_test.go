@@ -105,8 +105,8 @@ func benchmarkOpenCommandWindow(b *testing.B, files int, committed, watched bool
 		b.Fatalf("insert root: %v", err)
 	}
 	store := New(sqlDB, b.TempDir())
-	store.Commands.SetWindowSettleForTest(0)
-	store.Commands.SetWindowStartQuietForTest(0, 0)
+	setWindowTimer(store.Commands, func() <-chan time.Time { return time.After(0) })
+	store.Commands.startQuietGrace, store.Commands.startQuietWait = 0, 0
 	store.Commands.observationBudget = time.Minute
 	if watched {
 		repochangetest.Watch(b, root)

@@ -51,13 +51,13 @@ func (o *countingOpener) OpenCommandWindow(ctx context.Context, in sourceledger.
 	return o.inner.OpenCommandWindow(ctx, in)
 }
 
-func newWindowFixture(t *testing.T) *windowFixture {
+func newWindowFixture(t *testing.T, options ...sourceledger.Option) *windowFixture {
 	t.Helper()
 	// Without watcher coverage a close settles before the program's result.
 
 	repochangetest.Acquire(t)
 	f := programtest.New(t, programtest.Options{})
-	ledger := f.AttachLedger(t)
+	ledger := f.AttachLedger(t, options...)
 	opener := &countingOpener{inner: ledger.Commands}
 	configure := f.Configure
 	f.Configure = func(tc *tools.ToolContext) {
@@ -119,11 +119,10 @@ func TestProgramWindowACCW01UntrustedTokenSettlesBeforeTheResult(t *testing.T) {
 }
 
 func TestProgramWindowACCW02TrustedTokenSettlesAfterTheResult(t *testing.T) {
-	f := newWindowFixture(t)
+	gate := make(chan time.Time)
+	f := newWindowFixture(t, sourceledger.WithCommandWindowTimer(func(time.Duration) <-chan time.Time { return gate }))
 	repochangetest.Watch(t, f.Dir)
 	t.Cleanup(func() { repochange.CloseRoot(f.Dir) })
-	gate := make(chan time.Time)
-	f.ledger.Commands.SetWindowSettleGateForTest(gate)
 	outcome := f.run(t, writeGen)
 	if outcome.SourceWindow == nil || outcome.SourceWindow.Settled {
 		t.Fatalf("outcome = %+v, want an unsettled source window", outcome)
@@ -491,12 +490,9 @@ func TestProgramWindowIsActiveWhileAnyLaunchIsLive(t *testing.T) {
 		"substitute": `echo "$(/bin/sh -c '` + waitForRelease + `')"`,
 	} {
 		t.Run(name, func(t *testing.T) {
-			f := newWindowFixture(t)
-			f.Runtime.ParkThreshold = time.Hour
-			idled := make(chan string, 4)
 			gate := make(chan time.Time)
-			f.ledger.Commands.SetWindowSettleGateForTest(gate)
-			f.ledger.Commands.SetWindowIdledForTest(func(id string) { idled <- id })
+			f := newWindowFixture(t, sourceledger.WithCommandWindowTimer(func(time.Duration) <-chan time.Time { return gate }))
+			f.Runtime.ParkThreshold = time.Hour
 			done := make(chan callResult, 1)
 			go func() {
 				content, err := f.Call(t, t.Context(), source+`; touch finished; until [ -e end ]; do sleep 0.01; done`)
@@ -516,7 +512,7 @@ func TestProgramWindowIsActiveWhileAnyLaunchIsLive(t *testing.T) {
 			f.wantWindowEffect(t, "during.txt", listed[0].ID)
 
 			testutil.FailErr(t, "end the launch", os.WriteFile(filepath.Join(f.Dir, "release"), nil, 0o600))
-			testutil.Receive(t, "the window goes idle", idled)
+			f.AwaitIdleWindow(t, f.ledger.Commands)
 			testutil.FailErr(t, "drift after the launch", os.WriteFile(filepath.Join(f.Dir, "after.txt"), []byte("gap"), 0o600))
 			f.forcePass(t, "after.txt")
 			after, ok := f.newestEffect(t, "after.txt")
@@ -643,11 +639,8 @@ func TestProgramWindowSpansAPark(t *testing.T) {
 // A person's edit while a program is parked after its last external process is
 // no part of that program's window, whether the file had a ledger head or not.
 func TestOutsideEditDuringAParkIsNotAttributedToTheProgram(t *testing.T) {
-	f := newWindowFixture(t)
 	gate := make(chan time.Time)
-	f.ledger.Commands.SetWindowSettleGateForTest(gate)
-	idled := make(chan string, 2)
-	f.ledger.Commands.SetWindowIdledForTest(func(id string) { idled <- id })
+	f := newWindowFixture(t, sourceledger.WithCommandWindowTimer(func(time.Duration) <-chan time.Time { return gate }))
 	parking := newRecordingParking()
 	f.Runtime.Parking, f.Runtime.ParkThreshold = parking, time.Nanosecond
 	raw, err := f.Call(t, t.Context(), writeGen+`; sleep 60`)
@@ -657,7 +650,7 @@ func TestOutsideEditDuringAParkIsNotAttributedToTheProgram(t *testing.T) {
 	}
 	parked := testutil.Receive(t, "the program parks", parking.parked)
 	close(gate)
-	windowID := testutil.Receive(t, "the window goes idle after the generator", idled)
+	windowID := f.AwaitIdleWindow(t, f.ledger.Commands)
 	f.wantWindowEffect(t, "gen.txt", windowID)
 
 	for path, content := range map[string]string{"notes.md": "a person's note\n", "gen.txt": "a person's edit\n"} {
@@ -681,12 +674,9 @@ func TestOutsideEditDuringAParkIsNotAttributedToTheProgram(t *testing.T) {
 
 // A process that starts after a gap brings the window back without taking the gap.
 func TestLaunchAfterAGapDoesNotClaimTheGap(t *testing.T) {
-	f := newWindowFixture(t)
-	f.Runtime.ParkThreshold = time.Hour
 	gate := make(chan time.Time)
-	f.ledger.Commands.SetWindowSettleGateForTest(gate)
-	idled := make(chan string, 2)
-	f.ledger.Commands.SetWindowIdledForTest(func(id string) { idled <- id })
+	f := newWindowFixture(t, sourceledger.WithCommandWindowTimer(func(time.Duration) <-chan time.Time { return gate }))
+	f.Runtime.ParkThreshold = time.Hour
 	done := make(chan callResult, 1)
 	go func() {
 		content, err := f.Call(t, t.Context(), writeGen+`; until [ -e go ]; do sleep 0.01; done; external -- /bin/sh -c 'echo second > second.txt'`)
@@ -697,7 +687,7 @@ func TestLaunchAfterAGapDoesNotClaimTheGap(t *testing.T) {
 		return err == nil
 	})
 	close(gate)
-	windowID := testutil.Receive(t, "the window goes idle", idled)
+	windowID := f.AwaitIdleWindow(t, f.ledger.Commands)
 	testutil.FailErr(t, "write during the gap", os.WriteFile(filepath.Join(f.Dir, "gap.txt"), []byte("gap"), 0o600))
 	testutil.FailErr(t, "continue the program", os.WriteFile(filepath.Join(f.Dir, "go"), nil, 0o600))
 	result := testutil.Receive(t, "program result", done)

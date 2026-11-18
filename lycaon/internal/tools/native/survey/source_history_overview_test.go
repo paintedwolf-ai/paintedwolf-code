@@ -42,7 +42,7 @@ type historyHarness struct {
 	nextOp int
 }
 
-func newHistoryHarness(t *testing.T) *historyHarness {
+func newHistoryHarness(t *testing.T, options ...sourceledger.Option) *historyHarness {
 	t.Helper()
 	sqlDB := testdbfixture.Open(t, "store.db")
 	testdbseed.InsertProject(t, sqlDB, historyProject)
@@ -55,7 +55,7 @@ func newHistoryHarness(t *testing.T) *historyHarness {
 	`, dir, now, second, now)
 	testutil.FailErr(t, "insert roots", err)
 	blobs := t.TempDir()
-	store := sourceledger.New(sqlDB, blobs)
+	store := sourceledger.New(sqlDB, blobs, options...)
 	tctx := nativefixture.Context(dir)
 	tctx.Identity.ProjectID, tctx.Identity.SessionID = historyProject, historySession
 	tctx.Source.Roots = append(tctx.Source.Roots, projectroot.RootRef{ID: "r2", Label: "docs", Path: second})

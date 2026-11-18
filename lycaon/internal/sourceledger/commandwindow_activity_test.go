@@ -69,24 +69,24 @@ func programWindow(t *testing.T, store *Store, ctx context.Context, root string)
 	return window, release
 }
 
-func idleObserver(store *Store) <-chan string {
-	idled := make(chan string, 4)
-	store.Commands.SetWindowIdledForTest(func(id string) { idled <- id })
-	return idled
+func awaitIdle(t *testing.T, window *OpenCommandWindow) {
+	t.Helper()
+	testutil.WaitFor(t, "command window goes idle", func() bool {
+		window.store.windowsMu.Lock()
+		defer window.store.windowsMu.Unlock()
+		return !window.window.active
+	})
 }
 
 func TestWindowClaimsDriftOnlyUntilItsLastProcessSettles(t *testing.T) {
 	store, ctx, root := openLedgerOnDisk(t)
 	writeRootFile(t, root, "seed.txt", "seed\n")
-	idled := idleObserver(store)
 	window, release := programWindow(t, store, ctx, root)
 
 	writeRootFile(t, root, "gen.txt", "generated\n")
 	deliverWrites(ctx, root, "gen.txt")
 	release()
-	if id := testutil.Receive(t, "the window goes idle", idled); id != window.ID {
-		t.Fatalf("idled window = %s, want %s", id, window.ID)
-	}
+	awaitIdle(t, window)
 	if effect := newestEffects(t, store, ctx)["gen.txt"]; effect.CommandWindowID != window.ID {
 		t.Fatalf("the last process's output = %+v, want the window, landed by the grace's pass", effect)
 	}
@@ -112,7 +112,6 @@ func TestWindowClaimsDriftOnlyUntilItsLastProcessSettles(t *testing.T) {
 
 func TestHoldsCountConcurrentProcesses(t *testing.T) {
 	store, ctx, root := openLedgerOnDisk(t)
-	idled := idleObserver(store)
 	window, first := programWindow(t, store, ctx, root)
 	second, err := window.Hold(ctx)
 	testutil.FailErr(t, "second hold", err)
@@ -125,7 +124,7 @@ func TestHoldsCountConcurrentProcesses(t *testing.T) {
 		t.Fatalf("drift with one process still live = %+v, want the window", effect)
 	}
 	second()
-	testutil.Receive(t, "the window goes idle", idled)
+	awaitIdle(t, window)
 	closeAndSettle(t, ctx, window)
 	if _, err := window.Hold(ctx); !errors.Is(err, ErrWindowClosed) {
 		t.Fatalf("hold after close = %v, want ErrWindowClosed", err)
@@ -136,7 +135,6 @@ func TestHoldsCountConcurrentProcesses(t *testing.T) {
 // the grace's settle period has passed, and only the new process's end idles it.
 func TestHoldDuringTheGraceKeepsTheWindowActive(t *testing.T) {
 	store, ctx, root := openLedgerOnDisk(t)
-	idled := idleObserver(store)
 	endSettle := holdSettlePeriods(store)
 	window, first := programWindow(t, store, ctx, root)
 	first()
@@ -145,10 +143,12 @@ func TestHoldDuringTheGraceKeepsTheWindowActive(t *testing.T) {
 	endSettle()
 	// A grace still running would idle the window now. This cannot fail correct
 	// code; no pass runs meanwhile, because one would hold that grace back.
-	select {
-	case <-idled:
+	time.Sleep(500 * time.Millisecond)
+	window.store.windowsMu.Lock()
+	active := window.window.active
+	window.store.windowsMu.Unlock()
+	if !active {
 		t.Fatal("the ended grace idled a window with a live process")
-	case <-time.After(500 * time.Millisecond):
 	}
 	writeRootFile(t, root, "during.txt", "live\n")
 	deliverWrites(ctx, root, "during.txt")
@@ -157,7 +157,7 @@ func TestHoldDuringTheGraceKeepsTheWindowActive(t *testing.T) {
 		t.Fatalf("drift after a hold during the grace = %+v, want the window", effect)
 	}
 	second()
-	testutil.Receive(t, "the window goes idle", idled)
+	awaitIdle(t, window)
 	closeAndSettle(t, ctx, window)
 }
 
@@ -203,10 +203,9 @@ func windowPins(t *testing.T, store *Store, ctx context.Context, id string) map[
 // before-images are what it must keep.
 func TestReanchorRetainsTheNewStart(t *testing.T) {
 	store, ctx, root := openLedgerOnDisk(t)
-	idled := idleObserver(store)
 	window, first := programWindow(t, store, ctx, root)
 	first()
-	testutil.Receive(t, "the window goes idle", idled)
+	awaitIdle(t, window)
 
 	writeRootFile(t, root, "gap.txt", "gap\n")
 	deliverWrites(ctx, root, "gap.txt")
@@ -216,7 +215,7 @@ func TestReanchorRetainsTheNewStart(t *testing.T) {
 		t.Fatalf("pins after the re-anchor = %v, want the gap's file", pins)
 	}
 	second()
-	testutil.Receive(t, "the window goes idle again", idled)
+	awaitIdle(t, window)
 	closeAndSettle(t, ctx, window)
 }
 
@@ -224,10 +223,9 @@ func TestReanchorRetainsTheNewStart(t *testing.T) {
 // the gap out of the window.
 func TestReanchorKeepsAGapThatNoPassObservedOutOfTheWindow(t *testing.T) {
 	store, ctx, root := openLedgerOnDisk(t)
-	idled := idleObserver(store)
 	window, first := programWindow(t, store, ctx, root)
 	first()
-	testutil.Receive(t, "the window goes idle", idled)
+	awaitIdle(t, window)
 
 	writeRootFile(t, root, "gap.txt", "gap\n")
 	deliverWrites(ctx, root, "gap.txt")
@@ -236,7 +234,7 @@ func TestReanchorKeepsAGapThatNoPassObservedOutOfTheWindow(t *testing.T) {
 	writeRootFile(t, root, "second.txt", "second\n")
 	deliverWrites(ctx, root, "second.txt")
 	second()
-	testutil.Receive(t, "the window goes idle again", idled)
+	awaitIdle(t, window)
 	effects := newestEffects(t, store, ctx)
 	wantOutsideEffect(t, effects, "gap.txt")
 	if effects["second.txt"].CommandWindowID != window.ID {
@@ -248,10 +246,9 @@ func TestReanchorKeepsAGapThatNoPassObservedOutOfTheWindow(t *testing.T) {
 // A hold whose launch gives up leaves nothing active once the anchor lands.
 func TestHoldAbandonedDuringReanchorLeavesTheWindowIdle(t *testing.T) {
 	store, ctx, root := openLedgerOnDisk(t)
-	idled := idleObserver(store)
 	window, first := programWindow(t, store, ctx, root)
 	first()
-	testutil.Receive(t, "the window goes idle", idled)
+	awaitIdle(t, window)
 
 	gate := &gatedInventory{commandsInventoryPort: store.Commands.inventory, release: make(chan struct{}), entered: make(chan struct{}, 4)}
 	store.Commands.inventory = gate
@@ -325,13 +322,12 @@ func TestIncompleteWindowLeavesThePeersDriftToNobody(t *testing.T) {
 	repochangetest.Acquire(t)
 	store, ctx, root := openLedgerOnDisk(t)
 	writeRootFile(t, root, "seed.txt", "seed\n")
-	idled := idleObserver(store)
 	window, release := programWindow(t, store, ctx, root)
 	peer := openSessionWindow(t, store, ctx, root, "peer")
 	real := store.Commands.inventory
 	store.Commands.inventory = failingInventory{real}
 	release()
-	testutil.Receive(t, "the grace ends", idled)
+	awaitIdle(t, window)
 	store.Commands.inventory = real
 	if listed := store.Commands.OpenSessionWindows("p1", "s1"); len(listed) != 1 || !listed[0].Incomplete {
 		t.Fatalf("open windows = %+v, want it incomplete", listed)
@@ -425,13 +421,12 @@ func TestFailedGracePassListsAsIncompleteAndClearsOnTheNextPass(t *testing.T) {
 	repochangetest.Acquire(t)
 	store, ctx, root := openLedgerOnDisk(t)
 	writeRootFile(t, root, "seed.txt", "seed\n")
-	idled := idleObserver(store)
 	window, release := programWindow(t, store, ctx, root)
 	writeRootFile(t, root, "gen.txt", "generated\n")
 	real := store.Commands.inventory
 	store.Commands.inventory = failingInventory{real}
 	release()
-	testutil.Receive(t, "the grace ends", idled)
+	awaitIdle(t, window)
 	if listed := store.Commands.OpenSessionWindows("p1", "s1"); len(listed) != 1 || !listed[0].Incomplete || listed[0].Closing {
 		t.Fatalf("open windows = %+v, want it incomplete and not closing", listed)
 	}
@@ -710,8 +705,8 @@ func TestFailedWindowRecoveryReportsAndRetriesBeforeAnyWindowOpens(t *testing.T)
 	forceTestPass(t, store, ctx, root)
 
 	fresh := New(ledger.sqlDB, ledger.contentDir)
-	fresh.Commands.SetWindowSettleForTest(0)
-	fresh.Commands.SetWindowStartQuietForTest(0, 0)
+	setWindowTimer(fresh.Commands, func() <-chan time.Time { return time.After(0) })
+	fresh.Commands.startQuietGrace, fresh.Commands.startQuietWait = 0, 0
 	_, err := ledger.sqlDB.ExecContext(ctx, `CREATE TRIGGER refuse_recovery BEFORE UPDATE ON source_command_windows BEGIN SELECT RAISE(ABORT, 'recovery refused'); END`)
 	testutil.FailErr(t, "create trigger", err)
 	if err := fresh.Commands.RecoverInterruptedWindows(ctx); err == nil {
