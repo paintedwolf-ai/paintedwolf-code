@@ -68,7 +68,7 @@ def combined_exit(current, result):
     return 1 if 1 in (current, result) else current or result
 
 
-def run_lane(name, shard="", merge_group=False, clock=time.monotonic):
+def run_lane(name, shard="", clock=time.monotonic):
     lane = hosted_plan.lanes()[name]
     # The lane's minutes are its one time limit, counted from here across every phase.
     deadline = clock() + lane["minutes"] * 60
@@ -120,7 +120,6 @@ def run_lane(name, shard="", merge_group=False, clock=time.monotonic):
     try:
         code = 0
         record["phases"] = []
-        packages = None
         phases = lane.get("phases")
         if scope and phases == "affected-packages":
             from ci_policy.impact import go_scope
@@ -128,22 +127,16 @@ def run_lane(name, shard="", merge_group=False, clock=time.monotonic):
             if packages:
                 command += ["--", *packages]
                 record["packages"] = packages
-        # Admission reports every failure, so repairs need not rediscover them one run at a time.
-        # Every pull-request lane but lint does; lint reports every finding of its own accord.
-        complete = merge_group or "fast" in lane["profiles"] and lane["setup"] != "analysis"
+        # Every phase runs, so one run reports every failure and repairs need not rediscover them one at a time.
+        environment["PW_TEST_KEEP_GOING"] = "1"
         commands = [command]
-        if complete:
-            environment["PW_TEST_KEEP_GOING"] = "1"
         if phases == "admission":
-            commands = ready_scope.check_phases(hosted_plan.invocation(targets), scope, lane.get("early_targets", []))
+            commands = ready_scope.check_phases(hosted_plan.invocation(targets), scope)
         elif phases == "admission-tests":
             commands, record["packages"] = ready_scope.test_phases(scope)
-        if merge_group:
-            from ci_policy.merge_preflight import commands as ordered_commands
-            commands = ordered_commands(lane, hosted_plan.invocation(targets), packages)
         for command in commands:
             # A signal is the job being torn down, not a check's result, so nothing further can report.
-            if code < 0 or (code != 0 and not complete):
+            if code < 0:
                 break
             phase = {"command": command, "started_at": time.time()}
             record["phases"].append(phase)

@@ -19,6 +19,7 @@ import re
 import shutil
 import subprocess
 import sys
+import tempfile
 
 from artifact_paths import artifact_root
 import change_report
@@ -180,21 +181,25 @@ def measure_go(name, coverpkg, tested, module):
     so tests that run coverage builds of helpers send their counters to
     PW_GO_CHILD_COVERDIR, and those join the profile. Tests run uncached so
     every child runs."""
-    profile = artifact_root(ROOT) / "coverage" / f"{name}.out"
-    profile.parent.mkdir(parents=True, exist_ok=True)
-    profile.unlink(missing_ok=True)
-    children = profile.parent / f"{name}-children"
-    shutil.rmtree(children, ignore_errors=True)
-    children.mkdir()
-    code = subprocess.call(["bash", str(ROOT / "scripts" / "go-test-digest.sh"), "--name", "coverage:changes", "--",
-                            "-count=1", "-covermode=atomic", f"-coverpkg={','.join(sorted(coverpkg))}", f"-coverprofile={profile}",
-                            *sorted(tested)],
-                           cwd=GO_DIR, env={**os.environ, "PW_GO_CHILD_COVERDIR": str(children)})
-    if code != 0 or not profile.exists():
-        return None
-    blocks = read_go_profile(profile, module)
-    child_profile = children_profile(children, profile.parent / f"{name}-children.out")
-    return merge_go_blocks(blocks, read_go_profile(child_profile, module)) if child_profile else blocks
+    coverage = artifact_root(ROOT) / "coverage"
+    coverage.mkdir(parents=True, exist_ok=True)
+    # Batches from one checkout measure concurrently, so each measurement writes its own directory.
+    directory = Path(tempfile.mkdtemp(prefix=f"{name}-", dir=coverage))
+    try:
+        profile = directory / "profile.out"
+        children = directory / "children"
+        children.mkdir()
+        code = subprocess.call(["bash", str(ROOT / "scripts" / "go-test-digest.sh"), "--name", "coverage:changes", "--",
+                                "-count=1", "-covermode=atomic", f"-coverpkg={','.join(sorted(coverpkg))}",
+                                f"-coverprofile={profile}", *sorted(tested)],
+                               cwd=GO_DIR, env={**os.environ, "PW_GO_CHILD_COVERDIR": str(children)})
+        if code != 0 or not profile.exists():
+            return None
+        blocks = read_go_profile(profile, module)
+        child_profile = children_profile(children, directory / "children.out")
+        return merge_go_blocks(blocks, read_go_profile(child_profile, module)) if child_profile else blocks
+    finally:
+        shutil.rmtree(directory, ignore_errors=True)
 
 
 def children_profile(directory, out):

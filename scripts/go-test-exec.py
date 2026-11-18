@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
 """`go test -exec` program for shared verification stages.
 
-Reports each package's outcome the moment its test binary exits, replays a recorded pass for an
-identical build and identical observed inputs, and records new passes. Outside a shared stage it only
-runs the binary.
+Reports each package's outcome the moment its test binary exits, holds it to its memory budget, and fails
+it for processes it leaves behind. Outside a shared stage it only runs the binary.
 """
 
+import json
 import os
 from pathlib import Path
 import re
@@ -16,19 +16,17 @@ import tempfile
 import time
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-import verification_reuse as reuse  # noqa: E402
 from verification_lifecycle import custody  # noqa: E402
 from ci_policy.resources import Monitor, budget, runtime_environment  # noqa: E402
 
-CONTROL_ENV = ("PW_TEST_STAGE_EVENTS", "PW_TEST_REUSE_STORE", "PW_TEST_ENVIRONMENT_IDENTITY", "PW_TEST_PACKAGE_IDENTITIES",
-               "PW_TEST_RACE",
-               "PW_TEST_SCRATCH_ROOT", "PW_TEST_SOURCE_ROOT", "PW_TEST_MODULE_ROOT", "PW_TEST_STAGE_ID",
-               "PW_TEST_BATCH_DIRECTORY")
+CONTROL_ENV = ("PW_TEST_STAGE_EVENTS", "PW_TEST_RACE", "PW_TEST_SCRATCH_ROOT", "PW_TEST_MODULE_ROOT",
+               "PW_TEST_STAGE_ID", "PW_TEST_BATCH_DIRECTORY")
 # Every process a package starts inherits this entry unless it clears its environment.
 OWNER_ENV = "PW_TEST_PACKAGE_OWNER"
 # A test the watchdog found waiting is as much the failure as one that reported it.
 FAILED_TEST = re.compile(r"^\s*--- FAIL: (\S+)|^pending wait: (\S+): ")
 MAX_FAILED_TESTS = 20
+MAX_OUTPUT_BYTES = 64 << 20
 
 
 def write_all(data):
@@ -93,7 +91,7 @@ def execute(binary, arguments, env, owner, observe_forks, settle, resource_limit
             open_output = False
             return
         write_all(chunk)
-        if len(captured) <= reuse.MAX_OUTPUT_BYTES:
+        if len(captured) <= MAX_OUTPUT_BYTES:
             captured.extend(chunk)
 
     while status is None:
@@ -147,6 +145,28 @@ def settle_package_children(owner, entry):
     return leaked
 
 
+def fork_observable():
+    """Kernel process events report forks on macOS; elsewhere every package's children are scanned."""
+    return sys.platform == "darwin"
+
+
+def emit(events, value):
+    line = (json.dumps(value, separators=(",", ":")) + "\n").encode()
+    descriptor = os.open(events, os.O_WRONLY | os.O_APPEND | os.O_CREAT, 0o600)
+    try:
+        os.write(descriptor, line)
+    finally:
+        os.close(descriptor)
+
+
+def package_name(directory, module_root):
+    """Import path of the package whose test binary runs in `directory`."""
+    module = next((line.split()[1] for line in (Path(module_root) / "go.mod").read_text().splitlines()
+                   if line.startswith("module ")), None)
+    relative = Path(os.path.realpath(directory)).relative_to(os.path.realpath(module_root)).as_posix()
+    return module if relative == "." else f"{module}/{relative}"
+
+
 def failure_report(events, package, output):
     directory = Path(events).with_name(Path(events).name.removesuffix("-events.jsonl") + "-failures")
     directory.mkdir(exist_ok=True)
@@ -168,26 +188,9 @@ def main():
     events = environment.get("PW_TEST_STAGE_EVENTS")
     if not events:
         os.execve(binary, [binary, *arguments], child_environment)
-    context = reuse.Context.from_environment(environment)
-    package = context.package(os.getcwd())
-    store = Path(environment["PW_TEST_REUSE_STORE"]) if environment.get("PW_TEST_REUSE_STORE") else None
+    package = package_name(os.getcwd(), environment["PW_TEST_MODULE_ROOT"])
     race = environment.get("PW_TEST_RACE") == "1"
-    environment["PW_PACKAGE_RESOURCE_IDENTITY"] = str(budget(package, race))
-    key = reuse.result_key(arguments, package, environment) if store and reuse.fork_observable() else None
     started = time.monotonic()
-    if key:
-        hit = reuse.lookup(store, key, context, environment)
-        if hit:
-            output, provenance = hit
-            write_all(output)
-            reuse.emit(events, {"package": package, "exit_code": 0, "elapsed": round(time.monotonic() - started, 3),
-                                "reused": provenance or {"recorded": True}})
-            return 0
-    log = None
-    if key:
-        log = Path(environment["PW_TEST_SCRATCH_ROOT"]) / "test-logs" / f"{os.getpid()}.log"
-        log.parent.mkdir(exist_ok=True)
-        arguments = [f"-test.testlogfile={log}", *arguments]
     limit = budget(package, race)
     entry = f"{OWNER_ENV}={os.getpid()}-{os.urandom(8).hex()}"
     scan = {}
@@ -202,7 +205,7 @@ def main():
     with tempfile.NamedTemporaryFile(prefix="package-child-", dir=environment["PW_TEST_SCRATCH_ROOT"]) as owner:
         status, output, forked, resource_limit, leaked = execute(
             binary, arguments, {**runtime_environment(child_environment, limit), OWNER_ENV: entry.partition("=")[2]},
-            owner, reuse.fork_observable(), settle, limit)
+            owner, fork_observable(), settle, limit)
     elapsed = time.monotonic() - started
     code = os.waitstatus_to_exitcode(status)
     if resource_limit:
@@ -217,25 +220,14 @@ def main():
         diagnostic = f"\npackage left child processes: {package}: {leaked_names}\n".encode()
         output += diagnostic
         write_all(diagnostic)
-    event = {"package": package, "exit_code": code, "elapsed": round(elapsed, 3), "reused": False,
-             "forked": forked, "recorded": False}
+    event = {"package": package, "exit_code": code, "elapsed": round(elapsed, 3), "forked": forked}
     if scan:
         event["child_scan_seconds"] = scan["seconds"]
     if resource_limit:
         event["resource_limit"] = resource_limit
     if code != 0:
         event.update(failure_report(events, package, output))
-    elif key and forked is False and log is not None and log.is_file():
-        inputs = reuse.observed_inputs(log.read_text(errors="replace"), os.getcwd(), context)
-        if inputs is not None:
-            provenance = {"batch_id": Path(environment.get("PW_TEST_BATCH_DIRECTORY", "")).name,
-                          "stage_id": environment.get("PW_TEST_STAGE_ID", ""), "recorded_at": time.time()}
-            event["recorded"] = reuse.record(store, key, package, inputs, context, environment, output, elapsed,
-                                             provenance)
-            event["inputs"] = len(inputs)
-    if log is not None:
-        log.unlink(missing_ok=True)
-    reuse.emit(events, event)
+    emit(events, event)
     if code < 0:
         signal.signal(-code, signal.SIG_DFL)
         os.kill(os.getpid(), -code)
