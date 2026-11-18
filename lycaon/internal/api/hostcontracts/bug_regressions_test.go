@@ -3,6 +3,7 @@ package hostcontracts
 import (
 	"context"
 	"encoding/json"
+	"github.com/lycaon/lycaon/internal/blueprint/blueprinttest"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -80,7 +81,7 @@ func blueprintCall(t *testing.T, srv *hostapi.Server, method, target, body strin
 func TestBlueprintRoutesEditAndRemoveABlueprint(t *testing.T) {
 	dir := t.TempDir()
 	srv := contractfixture.NewTestServerWithWorkflows(t, func(d *hostapi.Dependencies) {
-		d.Workflow.Blueprints = blueprint.NewManager(blueprint.NewFileStoreForTest(dir))
+		d.Workflow.Blueprints = blueprint.NewManager(blueprinttest.NewFileStore(dir))
 	})
 	opened := contractfixture.CreateProjectForTest(t, srv, dir)
 	base := "/v1/projects/" + opened.ID + "/blueprints"

@@ -3,6 +3,7 @@ package cadence
 import (
 	"context"
 	"errors"
+	"github.com/lycaon/lycaon/internal/scan/scantest"
 	"os"
 	"path/filepath"
 	"testing"
@@ -27,11 +28,11 @@ func seedNonEmptyProject(t *testing.T, dir string) {
 	}
 }
 
-func defaultTestRegistry() *scanbase.MockRegistry {
-	return &scanbase.MockRegistry{Scanners: []scanbase.CodeScanner{
-		&scanbase.MockScanner{IDVal: "lycaon-sca", CategoryList: []api.ScanCategory{api.ScanCategorySCA, api.ScanCategorySecurity}},
-		&scanbase.MockScanner{IDVal: "lycaon-secrets", CategoryList: []api.ScanCategory{api.ScanCategorySecret, api.ScanCategorySecurity}},
-		&scanbase.MockScanner{IDVal: "lycaon-sast", CategoryList: []api.ScanCategory{api.ScanCategorySAST, api.ScanCategorySecurity}},
+func defaultTestRegistry() *scantest.MockRegistry {
+	return &scantest.MockRegistry{Scanners: []scanbase.CodeScanner{
+		&scantest.MockScanner{IDVal: "lycaon-sca", CategoryList: []api.ScanCategory{api.ScanCategorySCA, api.ScanCategorySecurity}},
+		&scantest.MockScanner{IDVal: "lycaon-secrets", CategoryList: []api.ScanCategory{api.ScanCategorySecret, api.ScanCategorySecurity}},
+		&scantest.MockScanner{IDVal: "lycaon-sast", CategoryList: []api.ScanCategory{api.ScanCategorySAST, api.ScanCategorySecurity}},
 	}}
 }
 

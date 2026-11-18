@@ -2,6 +2,7 @@ package contract
 
 import (
 	"context"
+	"github.com/lycaon/lycaon/internal/blueprint/blueprinttest"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/authzcontext"
@@ -130,7 +131,7 @@ func newBundledPlanWorkflowManager(t *testing.T) (context.Context, *workflow.Run
 	sessStore := store.NewSQL(sqlDB)
 	manifestRegistry, err := workflowdef.RegistryFromDirs("")
 	contractcheck.FailErr(t, "workflow.RegistryFromDirs failed", err)
-	blueprintStore := blueprint.NewFileStoreForTest(projectDir)
+	blueprintStore := blueprinttest.NewFileStore(projectDir)
 	blueprintMgr := blueprint.NewManager(blueprintStore)
 	runStore := workflowpersistence.New(sqlDB)
 	// The seal is a precondition of the grant, so the run store carries the same

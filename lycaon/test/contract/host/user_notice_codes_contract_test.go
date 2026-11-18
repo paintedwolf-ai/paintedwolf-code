@@ -89,7 +89,7 @@ func TestUserNoticeCodesWorkerFailureClosure(t *testing.T) {
 	cfg := loadUserNoticeConfig(t)
 
 	mapped := scanWorkerExecuteFailureCodes(t, filepath.Join(root, "lycaon", "internal", "worker"))
-	yamlWorker := usernotice.WorkerFailureCodes(cfg)
+	yamlWorker := noticeSurfaceCodes(cfg, "worker_failure")
 
 	var violations []string
 	for code := range mapped {
@@ -123,7 +123,7 @@ func TestUserNoticeCodesHTTPClosure(t *testing.T) {
 	emitted := scanAPIErrorCodes(t, apiDir)
 	// Codes other host packages hand to handlers as typed values.
 	handedOver := scanTypedAPIErrorCodes(t, filepath.Dir(apiDir))
-	yamlHTTP := usernotice.HTTPCodes(cfg)
+	yamlHTTP := noticeSurfaceCodes(cfg, "http")
 
 	var violations []string
 	for code := range emitted {
@@ -206,4 +206,15 @@ func TestAppBuildWiresUserNoticeCatalog(t *testing.T) {
 	if !strings.Contains(text, "LoadEffectiveUserNotices") {
 		t.Fatal("serve build graph must load the user notice catalog via LoadEffectiveUserNotices")
 	}
+}
+
+func noticeSurfaceCodes(cfg *usernotice.Config, surface string) []string {
+	var codes []string
+	for code, entry := range cfg.UserNotices {
+		if entry.IsUserVisible() && entry.HasSurface(surface) {
+			codes = append(codes, code)
+		}
+	}
+	sort.Strings(codes)
+	return codes
 }

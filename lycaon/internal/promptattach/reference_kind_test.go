@@ -1,6 +1,7 @@
 package promptattach_test
 
 import (
+	"github.com/lycaon/lycaon/pkg/api/apitest"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/promptattach"
@@ -20,14 +21,14 @@ func TestIngestReferences_stampsReferenceKind(t *testing.T) {
 	}
 
 	res, err := ingestReferences(t, deps, []api.PromptReferencePart{
-		api.NewPromptReferencePathFile(api.PromptReferencePathFilePart{
+		apitest.NewPromptReferencePathFile(api.PromptReferencePathFilePart{
 			ProjectID: "proj", RootID: "root-1", Path: "src/main.go",
 			StartLine: 12, EndLine: 34,
 		}),
-		api.NewPromptReferencePathFolder(api.PromptReferencePathFolderPart{
+		apitest.NewPromptReferencePathFolder(api.PromptReferencePathFolderPart{
 			ProjectID: "proj", RootID: "root-1", Path: "pkg",
 		}),
-		api.NewPromptReferenceSearchHit(api.PromptReferenceSearchHitPart{
+		apitest.NewPromptReferenceSearchHit(api.PromptReferenceSearchHitPart{
 			ProjectID: "proj", SourceRef: "msg-9", HitKind: "message",
 		}),
 	})
@@ -74,7 +75,7 @@ func TestIngestReferences_wholeFileHasNoLineScope(t *testing.T) {
 		ResolvePath: func(_, _, path string) (string, api.NavigationTarget, error) {
 			return path, api.NavigationTarget{ProjectID: "proj", RootID: "root-1", Path: path}, nil
 		},
-	}, []api.PromptReferencePart{api.NewPromptReferencePathFile(api.PromptReferencePathFilePart{
+	}, []api.PromptReferencePart{apitest.NewPromptReferencePathFile(api.PromptReferencePathFilePart{
 		ProjectID: "proj", RootID: "root-1", Path: "src/main.go",
 	})})
 	if err != nil {

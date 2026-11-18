@@ -1,6 +1,7 @@
 package findings_test
 
 import (
+	"github.com/lycaon/lycaon/internal/scan/findings/findingstest"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/advisory"
@@ -70,7 +71,7 @@ func TestFindingBudgetDedupeByFingerprint(t *testing.T) {
 		MinSeverity:         "info",
 		DedupeBy:            "fingerprint_primary",
 	})
-	dup := scanfindings.FixtureFinding("r1", api.FindingLevelHigh, "a", "src/a.go", 1)
+	dup := findingstest.Finding("r1", api.FindingLevelHigh, "a", "src/a.go", 1)
 	dup2 := dup
 	dup2.Locations = []api.SecurityFindingLocation{{URI: "src/b.go", StartLine: 2}}
 	scanfindings.RefreshFingerprint(&dup2)

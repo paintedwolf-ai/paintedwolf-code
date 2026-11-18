@@ -86,8 +86,3 @@ func nextReasoningFallback(err error, current reasoningFallback, hasOffToken boo
 		return current, false
 	}
 }
-
-// ResetReasoningProbeForTest clears probe cache (tests only).
-func ResetReasoningProbeForTest() {
-	reasoningUnsupported = sync.Map{}
-}

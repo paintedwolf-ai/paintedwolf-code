@@ -1,6 +1,7 @@
 package contract
 
 import (
+	"github.com/lycaon/lycaon/internal/vocabulary/vocabularytest"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/conditions"
@@ -23,8 +24,8 @@ func TestPlanDomainIDsRegisteredOnBoot(t *testing.T) {
 
 func TestVocabularyExportPlanCatalogStatus(t *testing.T) {
 	t.Parallel()
-	seen := map[string]vocabulary.CatalogEntry{}
-	for _, row := range vocabulary.ExportCatalog() {
+	seen := map[string]vocabularytest.CatalogEntry{}
+	for _, row := range vocabularytest.ExportCatalog() {
 		if row.Domain == "plan" {
 			seen[row.ID] = row
 		}

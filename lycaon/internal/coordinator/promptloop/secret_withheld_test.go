@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/tools/toolstest"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -177,7 +178,7 @@ func TestLengthTruncatedToolCallRecoversOnceWithHostNotice(t *testing.T) {
 	}
 
 	var writeInvocations int
-	reg := tools.NewStubRegistry()
+	reg := toolstest.NewRegistry()
 	testutil.FailErr(t, "register write", reg.Register("write", func(_ context.Context, _ map[string]any, _ tools.ToolContext) (string, error) {
 		writeInvocations++
 		return "ok", nil

@@ -3,6 +3,7 @@ package promptloop_test
 import (
 	"context"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/tools/toolstest"
 	"strings"
 	"testing"
 	"time"
@@ -27,7 +28,7 @@ func TestLoopContinuesAfterTaskEnqueue(t *testing.T) {
 	}); err != nil {
 		testutil.FailErr(t, "store.AppendMessages failed", err)
 	}
-	reg := tools.NewStubRegistry()
+	reg := toolstest.NewRegistry()
 	reg.Register("task", func(_ context.Context, _ map[string]any, tctx tools.ToolContext) (string, error) {
 		tctx.Effects.Out.Dispatch = &api.WorkerDispatch{WorkerID: "job-1"}
 		return `{"job_id":"job-1","status":"enqueued"}`, nil
@@ -82,7 +83,7 @@ func TestLoopBatchThreeTaskOneTurn(t *testing.T) {
 	sess, err := store.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session in store", err)
 
-	reg := tools.NewStubRegistry()
+	reg := toolstest.NewRegistry()
 	var taskCalls int
 	reg.Register("task", func(_ context.Context, _ map[string]any, tctx tools.ToolContext) (string, error) {
 		taskCalls++
@@ -147,7 +148,7 @@ func TestLoopBatchTaskAndReadSameTurn(t *testing.T) {
 	sess, err := store.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session in store", err)
 
-	reg := tools.NewStubRegistry()
+	reg := toolstest.NewRegistry()
 	reg.Register("task", func(_ context.Context, _ map[string]any, tctx tools.ToolContext) (string, error) {
 		tctx.Effects.Out.Dispatch = &api.WorkerDispatch{WorkerID: "job-1"}
 		return `{"job_id":"job-1","status":"enqueued"}`, nil
@@ -216,7 +217,7 @@ func TestLoopReloadsHistoryAfterToolBatchCompaction(t *testing.T) {
 	ctx := context.Background()
 	sess, err := store.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
-	reg := tools.NewStubRegistry()
+	reg := toolstest.NewRegistry()
 	_ = reg.Register("read", func(_ context.Context, _ map[string]any, _ tools.ToolContext) (string, error) {
 		return "ok", nil
 	})

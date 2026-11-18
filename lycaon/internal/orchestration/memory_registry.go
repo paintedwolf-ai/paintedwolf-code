@@ -23,25 +23,6 @@ func NewMemoryAgentRegistry() *MemoryAgentRegistry {
 	}
 }
 
-// NewMemoryAgentRegistryForTest seeds built-in defaults for unit tests without bundled YAML.
-func NewMemoryAgentRegistryForTest() *MemoryAgentRegistry {
-	r := NewMemoryAgentRegistry()
-	for _, p := range defaultAgentProfiles() {
-		_ = r.Register(p)
-	}
-	return r
-}
-
-func defaultAgentProfiles() []agentdef.Profile {
-	return []agentdef.Profile{
-		{ID: ProfileCoordinator, ToolProfile: "coordinator"},
-		{ID: ProfileImplementer, ToolProfile: "implement"},
-		{ID: ProfileRepoResearcher, ToolProfile: "explore_readonly"},
-		{ID: ProfileCodeReviewer, ToolProfile: "explore_readonly"},
-		{ID: ProfilePathExplorer, ToolProfile: "explore_readonly"},
-	}
-}
-
 // LoadFromDir loads agent YAML profiles from dir.
 func (r *MemoryAgentRegistry) LoadFromDir(_ context.Context, dir extpacks.Source) error {
 	profiles, err := agentdef.LoadDir(dir)

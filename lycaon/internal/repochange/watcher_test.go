@@ -22,22 +22,23 @@ func canonicalTestDir(t *testing.T, dir string) string {
 	return filepath.Clean(abs)
 }
 
+const watchBarrier = ".watch-barrier"
+
 // ensureLiveRoot binds a watch on dir and returns once its stream reports a
 // write, so a test's own writes are not made while the platform stream is
 // still starting.
 func ensureLiveRoot(t *testing.T, dir string) {
 	t.Helper()
 	root := canonicalTestDir(t, dir)
-	const barrier = ".watch-barrier"
 	var seen atomic.Bool
 	unbind := repochange.RegisterObserver(func(_ context.Context, ev repochange.Event) {
-		if ev.ProjectDir == root && ev.Kind == repochange.WorktreeChanged && slices.Contains(ev.Paths, barrier) {
+		if ev.ProjectDir == root && ev.Kind == repochange.WorktreeChanged && slices.Contains(ev.Paths, watchBarrier) {
 			seen.Store(true)
 		}
 	})
 	defer unbind()
 	repochange.EnsureRoot(t.Context(), dir)
-	testutil.FailErr(t, "write the watch barrier", os.WriteFile(filepath.Join(dir, barrier), nil, 0o644))
+	testutil.FailErr(t, "write the watch barrier", os.WriteFile(filepath.Join(dir, watchBarrier), nil, 0o644))
 	testutil.WaitFor(t, "the watch reports its barrier write", func() bool {
 		repochange.ResetDebouncerForTest(t.Context())
 		return seen.Load()

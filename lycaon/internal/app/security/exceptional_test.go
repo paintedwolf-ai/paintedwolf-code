@@ -3,6 +3,7 @@ package security
 import (
 	"context"
 	"errors"
+	"github.com/lycaon/lycaon/internal/tools/toolstest"
 	"net"
 	"os"
 	"path/filepath"
@@ -33,7 +34,7 @@ func (a *directAuditFixture) AppendDirectIPLifecycle(ctx context.Context, record
 }
 
 func TestExceptionalCapabilitiesReleasePermitsAtRunEndAndGrantsAtChatDisposal(t *testing.T) {
-	host := session.NewHost(store.NewMemory(), session.Models{Limits: settings.DefaultSessionLimits()}, tools.NewStubRegistry())
+	host := session.NewHost(store.NewMemory(), session.Models{Limits: settings.DefaultSessionLimits()}, toolstest.NewRegistry())
 	control := &toolexecution.Capabilities{}
 	var runtime Runtime
 	audit := &directAuditFixture{}

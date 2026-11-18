@@ -69,7 +69,7 @@ func TestLoadAgentProfilesRejectsDuplicateIDs(t *testing.T) {
 }
 
 func TestComposeEnforcesMaxTeamAgents(t *testing.T) {
-	reg := NewMemoryAgentRegistryForTest()
+	reg := agentRegistryFixture(t)
 	ids := []string{"coordinator", "implementer", "repo-researcher", "code-reviewer", "path-explorer", "plan-writer"}
 	_, err := reg.Compose(TeamStrategyParallel, ids)
 	if err == nil {

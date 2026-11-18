@@ -5,6 +5,7 @@ package workflow
 import (
 	"context"
 	"errors"
+	"github.com/lycaon/lycaon/internal/blueprint/blueprinttest"
 	workflowinputs "github.com/lycaon/lycaon/internal/workflow/inputs"
 	"testing"
 
@@ -25,7 +26,7 @@ func TestPlanImplementPhaseInvokesImplementChild(t *testing.T) {
 
 	sessStore := store.NewSQL(sqlDB)
 	dir := t.TempDir()
-	blueprintStore := blueprint.NewFileStoreForTest(dir)
+	blueprintStore := blueprinttest.NewFileStore(dir)
 	blueprintMgr := blueprint.NewManager(blueprintStore)
 	reg, err := workflowdef.RegistryFromDirs("")
 	testutil.FailErr(t, "RegistryFromDirs", err)

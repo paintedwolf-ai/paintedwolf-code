@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/tools/toolstest"
 	"slices"
 	"strings"
 	"testing"
@@ -44,7 +45,7 @@ func TestRepeatedProseRejectionEndsWithBoundedHandoff(t *testing.T) {
 	client := &repeatedProseClient{}
 	deps := promptloop.StoreDeps(messages)
 	deps.Model.LLM = client
-	deps.Context.Tools = tools.NewStubRegistry()
+	deps.Context.Tools = toolstest.NewRegistry()
 	deps.Context.Policy = &recordingToolPolicy{}
 	deps.Closeout.BeforeFinishNoToolTurn = func(_ context.Context, _ *api.Session, _ []api.Message, _, _ string, _ guidance.CloseoutDraft, _ string, _ bool, _ []string, _ bool) (*guidance.Refusal, bool) {
 		return guidance.NewRefusal("SOURCE_EVIDENCE_UNMET_BEFORE_CLOSEOUT", "Required check is unresolved."), true
@@ -78,7 +79,7 @@ func TestGatedCloseoutGetsOneActingRepairRound(t *testing.T) {
 				sess, err := messages.Create(t.Context(), api.CreateSessionRequest{Posture: api.SessionPostureBuild}, "")
 				testutil.FailErr(t, "create session", err)
 				gateOpen := true
-				registry := tools.NewStubRegistry()
+				registry := toolstest.NewRegistry()
 				calls := 0
 				testutil.FailErr(t, "register command", registry.Register("command", func(context.Context, map[string]any, tools.ToolContext) (string, error) {
 					calls++
@@ -173,7 +174,7 @@ func TestGatedCloseoutPathsSettleAsCloseoutBlocked(t *testing.T) {
 			messages := store.NewMemory()
 			sess, err := messages.Create(t.Context(), api.CreateSessionRequest{Posture: api.SessionPostureBuild}, "")
 			testutil.FailErr(t, "create session", err)
-			registry := tools.NewStubRegistry()
+			registry := toolstest.NewRegistry()
 			testutil.FailErr(t, "register read", registry.Register("read", func(context.Context, map[string]any, tools.ToolContext) (string, error) {
 				return "partial evidence", nil
 			}))

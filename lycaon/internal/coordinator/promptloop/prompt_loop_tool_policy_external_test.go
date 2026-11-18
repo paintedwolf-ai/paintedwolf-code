@@ -3,6 +3,7 @@ package promptloop_test
 import (
 	"context"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/tools/toolstest"
 	"slices"
 	"strings"
 	"testing"
@@ -133,7 +134,7 @@ func TestLoopDoomLoopRejectKeepsCallResultPair(t *testing.T) {
 	})
 	deps := promptloop.StoreDeps(store)
 	deps.Model.LLM = client
-	deps.Context.Tools = tools.NewStubRegistry()
+	deps.Context.Tools = toolstest.NewRegistry()
 	deps.Context.Policy = &recordingToolPolicy{}
 	deps.Nudges.DoomLoop = guard
 	deps.Closeout.RejectFmt = fmttr
@@ -179,7 +180,7 @@ func TestLoopTruncatesLargeToolResult(t *testing.T) {
 	limits := settings.DefaultSessionLimits()
 	limits.MaxToolResultBytes = 20
 	store := store.NewMemory()
-	reg := tools.NewStubRegistry()
+	reg := toolstest.NewRegistry()
 	_ = reg.Register("command", func(_ context.Context, _ map[string]any, _ tools.ToolContext) (string, error) {
 		return strings.Repeat("x", 100), nil
 	})
@@ -247,7 +248,7 @@ func TestLoopRejectsUnofferedToolCalls(t *testing.T) {
 			testutil.FailErr(t, "create session", err)
 			sess.ParentSessionID = "parent-1"
 			sess.AgentType = orchestration.ProfileImplementer
-			reg := tools.NewStubRegistry()
+			reg := toolstest.NewRegistry()
 			_ = reg.Register("read", func(_ context.Context, _ map[string]any, _ tools.ToolContext) (string, error) {
 				readCalls++
 				return "ok", nil

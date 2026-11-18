@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"github.com/lycaon/lycaon/internal/scan/findings/findingstest"
+	"github.com/lycaon/lycaon/internal/scan/scantest"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -12,7 +14,7 @@ import (
 
 	scanbase "github.com/lycaon/lycaon/internal/scan"
 	scancatalog "github.com/lycaon/lycaon/internal/scan/catalog"
-	scanfindings "github.com/lycaon/lycaon/internal/scan/findings"
+
 	scanoutput "github.com/lycaon/lycaon/internal/scan/output"
 	"github.com/lycaon/lycaon/internal/sourcesnapshot"
 	"github.com/lycaon/lycaon/internal/testdbfixture"
@@ -34,8 +36,8 @@ func TestBaseComparisonAvailabilityPreservesCurrentFindings(t *testing.T) {
 			testutil.FailErr(t, "capture base", err)
 			entries, err := snapshots.EntriesUnder(ctx, base.ID, root, ".")
 			testutil.FailErr(t, "read base", err)
-			scanner := &scanbase.MockScanner{Result: &scanoutput.Result{ScannedPaths: []string{"a.go", "b.go"}}}
-			runner := &Runner{Store: store, Snapshots: snapshots, Registry: &scanbase.MockRegistry{Scanner: scanner}, DataDir: t.TempDir()}
+			scanner := &scantest.MockScanner{Result: &scanoutput.Result{ScannedPaths: []string{"a.go", "b.go"}}}
+			runner := &Runner{Store: store, Snapshots: snapshots, Registry: &scantest.MockRegistry{Scanner: scanner}, DataDir: t.TempDir()}
 			if scenario == "cached clean" {
 				runner.cacheFileFindings(ctx, "execution", entries, scanner.Result)
 			}
@@ -58,7 +60,7 @@ func TestBaseComparisonAvailabilityPreservesCurrentFindings(t *testing.T) {
 			}, []string{"a.go", "b.go"}, baseID))
 			job, err := store.ClaimNext(ctx)
 			testutil.FailErr(t, "claim scan", err)
-			finding := scanfindings.FixtureFinding("rule", api.FindingLevelHigh, "current finding", "a.go", 1)
+			finding := findingstest.Finding("rule", api.FindingLevelHigh, "current finding", "a.go", 1)
 			current := &scanoutput.Result{ScannedPaths: []string{"a.go", "b.go"}, Findings: []api.SecurityFinding{finding}}
 			if scenario == "current warning" {
 				current.Warnings = []api.ScanWarning{{Kind: api.ScanWarningFilePartialParse, File: "a.go"}}

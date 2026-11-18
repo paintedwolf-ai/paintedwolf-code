@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"github.com/lycaon/lycaon/internal/testutil/exposure"
+	"github.com/lycaon/lycaon/internal/tools/toolstest"
 	"runtime"
 	"strings"
 	"testing"
@@ -17,7 +18,6 @@ import (
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
-	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -44,7 +44,7 @@ func (g *growingRedactor) redact(_ context.Context, msg api.Message) (api.Messag
 func TestSweepRewritesRowsScreenedBeforeTheEvidenceGrew(t *testing.T) {
 	ctx := context.Background()
 	mem := store.NewMemory()
-	mgr := NewHost(mem, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
+	mgr := NewHost(mem, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, toolstest.NewRegistry())
 	evidence := &growingRedactor{}
 	mgr.Runner.Transcript.SetRedactor(evidence.redact)
 	sess, err := mem.Create(ctx, api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
@@ -84,7 +84,7 @@ func TestSweepRewritesRowsScreenedBeforeTheEvidenceGrew(t *testing.T) {
 func TestSweepSkipsRowsAlreadyStampedAtTheGeneration(t *testing.T) {
 	ctx := context.Background()
 	mem := store.NewMemory()
-	mgr := NewHost(mem, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
+	mgr := NewHost(mem, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, toolstest.NewRegistry())
 	evidence := &growingRedactor{known: true}
 	mgr.Runner.Transcript.SetRedactor(evidence.redact)
 	sess, err := mem.Create(ctx, api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
@@ -114,7 +114,7 @@ func TestSweepRevisitsRowsStampedByAnEarlierRun(t *testing.T) {
 	testutil.FailErr(t, "create session", err)
 
 	blind := &growingRedactor{}
-	first := NewHost(mem, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
+	first := NewHost(mem, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, toolstest.NewRegistry())
 	first.Runner.Transcript.SetRedactor(blind.redact)
 	testutil.FailErr(t, "append mint row", first.Runner.Transcript.Append(ctx, sess.ID, api.Message{
 		ID: "tool-1", Role: api.MessageRoleTool, Content: "token " + sweepSecret,
@@ -125,7 +125,7 @@ func TestSweepRevisitsRowsStampedByAnEarlierRun(t *testing.T) {
 	}
 
 	// Restart with an empty revision counter.
-	second := NewHost(mem, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
+	second := NewHost(mem, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, toolstest.NewRegistry())
 	second.Runner.Transcript.SetRedactor((&growingRedactor{known: true}).redact)
 	second.Runner.Transcript.SweepSessionTree(ctx, sess.ID, 1)
 
@@ -151,7 +151,7 @@ func TestSweepContinuesPastARowTheStoreRefuses(t *testing.T) {
 	ctx := context.Background()
 	mem := store.NewMemory()
 	blocked := &failingUpdateStore{Memory: mem, messageID: "tool-1"}
-	mgr := NewHost(blocked, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
+	mgr := NewHost(blocked, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, toolstest.NewRegistry())
 	mgr.Runner.Transcript.SetRedactor((&growingRedactor{known: true}).redact)
 	sess, err := mem.Create(ctx, api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
@@ -182,7 +182,7 @@ func TestSweepContinuesPastARowTheStoreRefuses(t *testing.T) {
 func TestScreenGenerationStampNarrowsTheCandidateSet(t *testing.T) {
 	ctx := context.Background()
 	mem := store.NewMemory()
-	mgr := NewHost(mem, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
+	mgr := NewHost(mem, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, toolstest.NewRegistry())
 	sess, err := mem.Create(ctx, api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
 	testutil.FailErr(t, "append row", mgr.Runner.Transcript.Append(ctx, sess.ID, api.Message{

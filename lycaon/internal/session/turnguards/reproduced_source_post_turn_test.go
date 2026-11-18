@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/tools/toolstest"
 	"os"
 	"path/filepath"
 	"strings"
@@ -115,7 +116,7 @@ func newReproducedSourceFixture(t *testing.T, completions []*modelcall.Completio
 	mem := store.NewMemory()
 	client := &scriptedTurnClient{completions: completions}
 
-	registry := tools.NewStubRegistry()
+	registry := toolstest.NewRegistry()
 	testutil.FailErr(t, "register command tool", registry.Register("command", func(_ context.Context, args map[string]any, _ tools.ToolContext) (string, error) {
 		cmd, _ := args["command"].(string)
 		rel := strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(cmd), "cat "))

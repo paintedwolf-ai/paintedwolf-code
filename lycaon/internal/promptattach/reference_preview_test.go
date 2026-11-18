@@ -1,6 +1,7 @@
 package promptattach
 
 import (
+	"github.com/lycaon/lycaon/pkg/api/apitest"
 	"io"
 	"os"
 	"path/filepath"
@@ -53,7 +54,7 @@ func TestExternalReferenceRejectsSpecialFile(t *testing.T) {
 		return
 	}
 	_, err := IngestReferences(ReferenceDeps{SessionProjectID: "project"}, nil, []api.PromptReferencePart{
-		api.NewPromptReferenceExternalFile(api.PromptReferenceExternalFilePart{ProjectID: "project", Path: os.DevNull}),
+		apitest.NewPromptReferenceExternalFile(api.PromptReferenceExternalFilePart{ProjectID: "project", Path: os.DevNull}),
 	})
 	if attacherr.CodeOf(err) != attacherr.CodeUnsupported {
 		t.Fatalf("special file err=%v", err)

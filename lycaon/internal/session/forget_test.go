@@ -3,6 +3,7 @@ package session
 import (
 	"context"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/orchestration/orchestrationtest"
 	"github.com/lycaon/lycaon/internal/toolreach"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/toolsurface"
@@ -191,7 +192,7 @@ func TestResolveToolProfileDelegationUsesCoordinator(t *testing.T) {
 }
 
 func TestResolveToolProfileWorkerAgent(t *testing.T) {
-	reg := orchestration.NewMemoryAgentRegistryForTest()
+	reg := orchestrationtest.Registry(t)
 	sess := &api.Session{Posture: api.SessionPostureOrchestrate, AgentType: "implementer"}
 	if got := profiles.ResolveToolProfile(sess, reg, ""); got != "implement" {
 		t.Fatalf("profile = %q want implement", got)
