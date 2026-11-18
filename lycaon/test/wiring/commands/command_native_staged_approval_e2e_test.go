@@ -19,10 +19,11 @@ import (
 )
 
 func TestSedStagedApprovalRetainsFinalWriteAuthorityAndInputs(t *testing.T) {
+	p := newProgramHost(t)
 	for _, posture := range []gate.Posture{gate.PostureLight, gate.PostureBalanced, gate.PostureStrict} {
 		for _, option := range []string{"approve_current_action", "recommended"} {
 			t.Run(string(posture)+"/"+option, func(t *testing.T) {
-				p := newProgramHost(t, posture)
+				p.usePosture(t, posture)
 				script := filepath.Join(outsideCommandFolder(t), "write.sed")
 				written := filepath.Join(outsideCommandFolder(t), "written.txt")
 				testutil.FailErr(t, "seed staged script", os.WriteFile(script, []byte("w "+written+"\n"), 0o600))
@@ -55,9 +56,10 @@ func TestSedStagedApprovalRetainsFinalWriteAuthorityAndInputs(t *testing.T) {
 // Denying the derived effect must preserve the actual destination, even after
 // approving the script read needed to discover that effect.
 func TestSedDisclosedWriteDeclinePreservesDestination(t *testing.T) {
+	p := newProgramHost(t)
 	for _, posture := range []gate.Posture{gate.PostureLight, gate.PostureBalanced, gate.PostureStrict} {
 		t.Run(string(posture), func(t *testing.T) {
-			p := newProgramHost(t, posture)
+			p.usePosture(t, posture)
 			script := filepath.Join(outsideCommandFolder(t), "write.sed")
 			written := filepath.Join(outsideCommandFolder(t), "written.txt")
 			const original = "independent destination bytes\n"
