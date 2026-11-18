@@ -8,6 +8,12 @@ import tempfile
 import unittest
 
 import yaml
+from verification_tests.ci.fixture_plan import live
+
+DEN = live(runs="den:typecheck")
+ADMISSION = live(phase="admission")
+ADMISSION_TESTS = live(phase="admission-tests")
+LINT_ADMISSION = live(runs="arch-lint:changes", area="always")
 
 
 ROOT = Path(__file__).resolve().parents[3]
@@ -72,8 +78,8 @@ class WorkflowCommandTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             summary = Path(directory) / "summary.md"
             measured = Path(directory) / "timings.json"
-            measured.write_text(json.dumps({"run": 42, "lanes": {"ready": 250, "ready-lint": 200, "frontend": 230,
-                                                         **{f"ready-tests {index}/4": 240 for index in range(1, 5)}}}))
+            measured.write_text(json.dumps({"run": 42, "lanes": {ADMISSION: 250, LINT_ADMISSION: 200, DEN: 230,
+                                                         **{f"{ADMISSION_TESTS} {index}/4": 240 for index in range(1, 5)}}}))
             result = self.command('matrix', 'fast', '--timings', str(measured),
                                   GITHUB_STEP_SUMMARY=str(summary))
             self.assertEqual(result.returncode, 0, result.stderr)

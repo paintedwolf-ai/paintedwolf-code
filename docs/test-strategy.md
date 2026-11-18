@@ -955,6 +955,14 @@ adds it once the fast tier's `check` passes. Auto-merge is enabled with the
 author's own credentials. No workflow enables it, because a merge enabled with
 a workflow's `GITHUB_TOKEN` would not start main's cache warming workflow.
 
+Lanes are named once, in `scripts/verification-plan.json`. Each declares in
+`changes` the change areas that select it (`always`, `go`, `den`, `scripts`,
+`confinement`, `command-language`, and one area per native source tree) and in
+`phases` any execution of its own: admission's check phases, admission's test
+phases, or the Go packages a change affects. The planner maps changed paths to
+areas and selects the lanes that declare them, so no script names a lane and a
+rename touches only the plan.
+
 The integration gate uses a conservative change planner. It always compiles
 the host and runs repository contracts and smoke tests. Go changes add integration-enabled reverse import
 closure, including test imports; Den changes run the complete frontend suite.

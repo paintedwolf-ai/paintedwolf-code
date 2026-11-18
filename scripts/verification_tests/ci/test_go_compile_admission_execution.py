@@ -5,6 +5,7 @@ from unittest.mock import patch
 
 from ci_policy import hosted_plan, native_admission, ready_scope
 import verification_plan
+from verification_tests.ci.fixture_plan import live
 
 
 class GoCompileAdmissionTests(unittest.TestCase):
@@ -20,7 +21,7 @@ class GoCompileAdmissionTests(unittest.TestCase):
     def test_catalog_refuses_unknown_or_partial_early_native_checks(self):
         for declaration in (None, {}, [['unknown:task']], [['test:confine:linux', '--', 'browser']]):
             data = copy.deepcopy(verification_plan.catalog())
-            data['ci']['ready']['admission_checks'] = declaration
+            data['ci'][live(phase='admission')]['admission_checks'] = declaration
             with self.subTest(declaration=declaration), patch.object(hosted_plan, 'catalog', return_value=data):
                 with self.assertRaises(ValueError):
                     hosted_plan.matrix('fast')

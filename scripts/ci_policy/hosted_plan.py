@@ -22,6 +22,12 @@ SETUPS = {"verification", "shell", "harness", "frontend", "analysis"}
 PLATFORMS = {"linux": {"ubuntu-24.04", "ubuntu-24.04-arm"}}
 # The setup inputs a lane can need, as the catalog's `provisions` declares them; `engine_free` names
 # targets that run without the runtime engines every other target needs.
+# Change areas a lane declares in `changes`; the change planner selects the lanes of each area it finds.
+AREAS = {"always", "go", "den", "scripts", "confinement", "command-language", "shell-native", "decide-native",
+         "documentcore-native"}
+# Execution a lane declares in `phases`: admission's check phases, admission's test phases, or the Go packages
+# a change affects. Each belongs to one lane.
+PHASES = {"admission", "admission-tests", "affected-packages"}
 INPUTS = ("containers", "browser", "userlands", "repository_tools", "nix", "linux_launch", "notices",
           "analysis_lint", "analysis_vulnerabilities")
 
@@ -38,7 +44,8 @@ def lanes():
         if not re.fullmatch(r"[a-z][a-z0-9-]*", name):
             raise ValueError(f"invalid CI lane: {name}")
         if set(lane) - {"targets", "minutes", "profiles", "suite", "setup", "runner", "workers", "shards", "priority",
-                        "platform", "arguments", "early_targets", "contract_first", "admission_checks"}:
+                        "platform", "arguments", "early_targets", "contract_first", "admission_checks", "changes",
+                        "phases"}:
             raise ValueError(f"unknown CI lane fields: {name}")
         if "arguments" in lane and (len(lane["targets"]) != 1 or not lane["arguments"]
                                     or not all(isinstance(value, str) and value for value in lane["arguments"])):
@@ -47,8 +54,14 @@ def lanes():
             if (lane["targets"] != ["test:stress"] or not lane.get("arguments")
                     or not {"integration", "nightly", "release"}.issubset(lane["profiles"])):
                 raise ValueError(f"CI lane {name} requires explicit scale scope and complete qualification profiles")
+        changes = lane.get("changes", [])
+        if (not isinstance(changes, list) or not set(changes) <= AREAS or len(set(changes)) != len(changes)
+                or not changes and set(lane["profiles"]) & {"fast", "integration"}):
+            raise ValueError(f"CI lane {name} needs the change areas that select it")
+        if lane.get("phases", "admission") not in PHASES:
+            raise ValueError(f"CI lane {name} has unknown phases")
         admission = lane.get('admission_checks', [])
-        if ('admission_checks' in lane and name != 'ready'
+        if ('admission_checks' in lane and lane.get('phases') != 'admission'
                 or not isinstance(admission, list)
                 or admission not in ([], [['test:confine:linux', '--', 'supervisor']])):
             raise ValueError(f'CI lane {name} has invalid early native checks')
@@ -87,6 +100,9 @@ def lanes():
                                    or lane.get("runner", "ubuntu-24.04") not in PLATFORMS[lane["platform"]]
                                    or set(lane["profiles"]) & {"fast", GATE}):
             raise ValueError(f"CI lane {name} is a platform lane on its platform's runners, outside the fast and {GATE} tiers")
+    for phase in PHASES:
+        if sum(lane.get("phases") == phase for lane in values.values()) > 1:
+            raise ValueError(f"CI phases {phase} belong to one lane")
     validate_provisions(values, targets)
     expected = Counter(stage["name"] for stage in expand([GATE]))
     actual = Counter(stage["name"] for lane in values.values() if GATE in lane["profiles"]
@@ -119,6 +135,11 @@ def lanes():
     if stress != expected_stress:
         raise ValueError(f"nightly stress partition differs: {expected_stress - stress}, {stress - expected_stress}")
     return values
+
+
+def lanes_of(values, areas):
+    """The lanes a change in any of `areas` selects."""
+    return {name for name, lane in values.items() if set(lane.get("changes", [])) & set(areas)}
 
 
 def max_parallel(profile):
@@ -230,7 +251,8 @@ def matrix(profile, suite="all", scope=None, platform=False, timings=None):
                            "linux_launch": needs["linux_launch"],
                            # Admission runs package metadata and script coverage in the ready lane when the change needs them.
                            "repository_tools": needs["repository_tools"]
-                           or (name == "ready" and (runs_package_metadata(scope) or runs_script_coverage(scope))),
+                           or (lane.get("phases") == "admission"
+                               and (runs_package_metadata(scope) or runs_script_coverage(scope))),
                            "nix": needs["nix"],
                            "analysis": {(True, True): "all", (True, False): "lint", (False, True): "vulnerabilities",
                                         (False, False): "none"}[needs["analysis_lint"], needs["analysis_vulnerabilities"]],

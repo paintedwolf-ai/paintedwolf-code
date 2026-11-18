@@ -119,40 +119,43 @@ def broad_scope(paths):
 def fast_lanes(scope, lanes):
     """A pull request's lanes. Prose alone leaves the static job, which checks its links, the only check;
     the Den suite runs when its inputs change. A scope without a base runs every lane."""
+    from ci_policy.hosted_plan import lanes_of
     paths = scope.get("paths", [])
     if docs_only(paths):
         return set()
     if paths and not frontend_change(paths):
-        return set(lanes) - {"frontend"}
+        return set(lanes) - (lanes_of(lanes, {"den"}) - lanes_of(lanes, {"always"}))
     return set(lanes)
 
 
 def selected_lanes(scope, lanes):
+    """The merge queue's lanes for a change: those declaring an area the change touches."""
+    from ci_policy.hosted_plan import lanes_of
+    return lanes_of(lanes, change_areas(scope))
+
+
+def change_areas(scope):
+    """The change areas, as lanes declare them in `changes`, that a scope touches. A broad change
+    touches every area, and the scripts only when its paths reach them."""
+    from ci_policy.hosted_plan import AREAS
     if scope["full"]:
         paths = scope.get("paths", [])
-        return set(lanes) if not paths or script_change(paths) else set(lanes) - {"runner"}
+        return set(AREAS) if not paths or script_change(paths) else AREAS - {"scripts"}
     paths = [path for path in scope["paths"] if not prose(path) and not tooling(path)]
     native = [native_dependencies(path) for path in paths if native_dependencies(path) is not None]
     ordinary = [path for path in paths if native_dependencies(path) is None]
-    areas = {"go" if p.startswith("lycaon/") else "den" for p in ordinary}
-    # Repository contracts read source outside the package/import graph.
-    chosen = {"build", "behavior"}
-    for dependency in native:
-        chosen |= dependency["lanes"]
+    # Repository contracts read source outside the package/import graph, so some lanes always run.
+    areas = {"always", *(dependency["area"] for dependency in native),
+             *("go" if p.startswith("lycaon/") else "den" for p in ordinary)}
     if script_change(scope["paths"]):
-        chosen.add("runner")
-    if "go" in areas:
-        chosen |= {"behavior", "lint", "vulnerabilities", "command-scale"}
-    if "den" in areas:
-        # Any Den source can change the DOM that WebKitGTK answers screen reader queries about.
-        chosen |= {"frontend", "webkit-gtk"}
+        areas.add("scripts")
+    # Seccomp filters, syscall numbers and argument layouts differ by architecture.
     if any(confinement_source(p) for p in paths):
-        # Seccomp filters, syscall numbers and argument layouts differ by architecture.
-        chosen.add("confinement-arm64")
+        areas.add("confinement")
+    # The live differential compares the command language with the reference userlands.
     if any(command_language_source(p) for p in paths):
-        # The live differential compares the command language with the reference userlands.
-        chosen.add("reference-userlands")
-    return chosen & set(lanes)
+        areas.add("command-language")
+    return areas
 
 
 def confinement_source(path):

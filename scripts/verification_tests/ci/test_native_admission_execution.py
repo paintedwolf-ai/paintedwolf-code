@@ -3,11 +3,17 @@ import unittest
 import verification_plan
 from unittest.mock import patch
 from ci_policy import native_admission, native_verify, hosted_plan
+from verification_tests.ci.fixture_plan import live
+
+DEN = live(runs="den:typecheck")
+ADMISSION = live(phase="admission")
+LINT_ADMISSION = live(runs="arch-lint:changes", area="always")
+ADMISSION_TESTS = live(phase="admission-tests")
 
 
 class NativeAdmissionTests(unittest.TestCase):
     def test_admission_runs_supervisor_and_script_checks_without_native_compilation(self):
-        go = {'ready': 'verification', 'ready-lint': 'analysis', 'ready-tests': 'verification'}
+        go = {ADMISSION: 'verification', LINT_ADMISSION: 'analysis', ADMISSION_TESTS: 'verification'}
         for scope, frontend in ((None, True), ({'full': True, 'paths': []}, True),
                                 ({'full': False, 'paths': ['lycaon-den/src-tauri/src/main.rs']}, True),
                                 ({'full': False, 'paths': ['lycaon/internal/decide/native/src/main.rs']}, False)):
@@ -18,7 +24,7 @@ class NativeAdmissionTests(unittest.TestCase):
                 expected = [*expected, ['./task', 'scripts:coverage:changes']]
             self.assertEqual(native_admission.commands(scope), expected)
             rows = hosted_plan.matrix('fast', scope=scope)['include']
-            self.assertEqual({row['lane']: row['setup'] for row in rows}, {**go, **({'frontend': 'frontend'} if frontend else {})})
+            self.assertEqual({row['lane']: row['setup'] for row in rows}, {**go, **({DEN: 'frontend'} if frontend else {})})
         # The native unit tests compile in the merge queue, without the engines a host check needs.
         native = [lane for lane in hosted_plan.lanes().values() if 'den:test:rust' in lane['targets']]
         self.assertTrue(native)
@@ -34,7 +40,7 @@ class NativeAdmissionTests(unittest.TestCase):
                 scope = {'full': False, 'paths': [path]}
                 commands = native_admission.commands(scope)
                 self.assertEqual([command for command in commands if command in lint], lint)
-                ready = next(row for row in hosted_plan.matrix('fast', scope=scope)['include'] if row['lane'] == 'ready')
+                ready = next(row for row in hosted_plan.matrix('fast', scope=scope)['include'] if row['lane'] == ADMISSION)
                 self.assertTrue(ready['repository_tools'])
         for path in ('lycaon-den/src/ui.ts', 'lycaon/internal/settings/settings.go', 'scripts/linux-package-manifest.py',
                      'docs/packaging.md'):

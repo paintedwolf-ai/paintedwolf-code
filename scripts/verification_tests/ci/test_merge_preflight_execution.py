@@ -9,6 +9,11 @@ from unittest.mock import patch
 
 from ci_policy import hosted_plan, merge_preflight as preflight
 import verification_plan
+from verification_tests.ci.fixture_plan import live
+
+BEHAVIOR = live(phase="affected-packages")
+LINT = live(runs="test:fail-messages:check")
+ADMISSION = live(phase="admission")
 
 
 class MergePreflightTests(unittest.TestCase):
@@ -74,7 +79,7 @@ class MergePreflightTests(unittest.TestCase):
 
     def history_archive(self, record=None, failures=None):
         record = record if record is not None else {
-            'lane': 'ready', 'shard': '', 'status': 'failed',
+            'lane': ADMISSION, 'shard': '', 'status': 'failed',
             'identity': {'run': '20', 'attempt': '2', 'sha': 'synthetic-merge'}}
         failures = failures if failures is not None else [{'stage': 'budgets', 'status': 'failed'}]
         output = io.BytesIO()
@@ -114,14 +119,14 @@ class MergePreflightTests(unittest.TestCase):
                     preflight.package_phases(None)
 
     def test_catalog_orders_diagnostics_without_repeating_targets(self):
-        lane = hosted_plan.lanes()["lint"]
+        lane = hosted_plan.lanes()[LINT]
         commands = preflight.commands(lane, lane["targets"])
         self.assertEqual(commands[0], ["./task", "comments:check", "test:fail-messages:check"])
         self.assertEqual(commands[1], ["./task", "lint:full", "arch-lint:changes"])
         self.assertEqual(sorted([target for command in commands for target in command[1:]]), sorted(lane["targets"]))
-        with patch.object(preflight, "package_phases", return_value=[["contract"], ["behavior"]]):
-            self.assertEqual(preflight.commands(hosted_plan.lanes()["behavior"], ["test:full"]),
-                             [["./task", "test:full", "--", "contract"], ["./task", "test:full", "--", "behavior"]])
+        with patch.object(preflight, "package_phases", return_value=[["contract"], [BEHAVIOR]]):
+            self.assertEqual(preflight.commands(hosted_plan.lanes()[BEHAVIOR], ["test:full"]),
+                             [["./task", "test:full", "--", "contract"], ["./task", "test:full", "--", BEHAVIOR]])
 
     def execute_behavior_preflight(self, phases_effect, call_code=0):
         from ci_policy import hosted_execution
@@ -130,20 +135,20 @@ class MergePreflightTests(unittest.TestCase):
                 patch.object(hosted_execution, "artifact_root", return_value=Path(directory)), \
                 patch.object(preflight, "package_phases", **phase_kw), \
                 patch.object(hosted_execution.subprocess, "call", return_value=call_code) as run:
-            verdict = hosted_execution.run_lane("behavior", "1/2", merge_group=True)
+            verdict = hosted_execution.run_lane(BEHAVIOR, "1/2", merge_group=True)
             return verdict, run, json.loads((Path(directory) / "ci/run.json").read_text())
 
     def test_failed_contract_phase_still_reports_behavior(self):
         for code in (1, 2):
             with self.subTest(code=code):
-                verdict, run, record = self.execute_behavior_preflight([["contract"], ["behavior"]], code)
+                verdict, run, record = self.execute_behavior_preflight([["contract"], [BEHAVIOR]], code)
                 self.assertEqual(verdict, code)
                 self.assertEqual(run.call_count, 2)
                 self.assertEqual(record["phases"][0]["exit_code"], code)
                 self.assertEqual(len(record["phases"]), 2)
 
     def test_interrupted_contract_phase_stops_the_lane(self):
-        verdict, run, record = self.execute_behavior_preflight([["contract"], ["behavior"]], -15)
+        verdict, run, record = self.execute_behavior_preflight([["contract"], [BEHAVIOR]], -15)
         self.assertEqual(verdict, -15)
         run.assert_called_once()
         self.assertEqual(run.call_args.args[0], ["./task", "test:full", "--", "contract"])
@@ -229,7 +234,7 @@ class MergePreflightTests(unittest.TestCase):
                 for name, value in files.items():
                     handle.writestr(name, value)
             return buffer.getvalue()
-        record = {"lane": "behavior", "classification": "runner_oom"}
+        record = {"lane": BEHAVIOR, "classification": "runner_oom"}
         payloads = {
             1: archive({"ci/run.json": json.dumps(record), "ci/failures.json": json.dumps([{"stage": "go"}]),
                         "ci/other.json": "{}", "big/ci/run.json": json.dumps({"x": "y" * health.MAX_MEMBER_BYTES})}),

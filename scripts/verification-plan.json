@@ -1124,7 +1124,10 @@
         "fast"
       ],
       "suite": "all",
-      "setup": "analysis"
+      "setup": "analysis",
+      "changes": [
+        "always"
+      ]
     },
     "ready": {
       "targets": [
@@ -1149,7 +1152,11 @@
       "early_targets": [
         "budgets",
         "coverage:changes"
-      ]
+      ],
+      "changes": [
+        "always"
+      ],
+      "phases": "admission"
     },
     "ready-tests": {
       "targets": [
@@ -1163,7 +1170,11 @@
       ],
       "suite": "all",
       "setup": "verification",
-      "shards": 4
+      "shards": 4,
+      "changes": [
+        "always"
+      ],
+      "phases": "admission-tests"
     },
     "build": {
       "targets": [
@@ -1190,7 +1201,10 @@
         "budgets",
         "coverage:changes"
       ],
-      "priority": "reject"
+      "priority": "reject",
+      "changes": [
+        "always"
+      ]
     },
     "lint": {
       "targets": [
@@ -1211,6 +1225,9 @@
       "early_targets": [
         "comments:check",
         "test:fail-messages:check"
+      ],
+      "changes": [
+        "go"
       ]
     },
     "deadcode": {
@@ -1236,7 +1253,10 @@
         "nightly"
       ],
       "suite": "all",
-      "setup": "analysis"
+      "setup": "analysis",
+      "changes": [
+        "go"
+      ]
     },
     "runner": {
       "targets": [
@@ -1250,7 +1270,10 @@
       ],
       "suite": "all",
       "setup": "verification",
-      "priority": "reject"
+      "priority": "reject",
+      "changes": [
+        "scripts"
+      ]
     },
     "behavior": {
       "targets": [
@@ -1268,7 +1291,11 @@
       "workers": 2,
       "shards": 2,
       "contract_first": true,
-      "priority": "critical"
+      "priority": "critical",
+      "changes": [
+        "always"
+      ],
+      "phases": "affected-packages"
     },
     "frontend": {
       "targets": [
@@ -1286,7 +1313,12 @@
         "nightly"
       ],
       "suite": "all",
-      "setup": "frontend"
+      "setup": "frontend",
+      "changes": [
+        "den",
+        "shell-native",
+        "documentcore-native"
+      ]
     },
     "native": {
       "targets": [
@@ -1301,7 +1333,11 @@
         "nightly"
       ],
       "suite": "all",
-      "setup": "shell"
+      "setup": "shell",
+      "changes": [
+        "shell-native",
+        "decide-native"
+      ]
     },
     "webkit": {
       "targets": [
@@ -1327,7 +1363,11 @@
       ],
       "suite": "e2e",
       "setup": "harness",
-      "platform": "linux"
+      "platform": "linux",
+      "changes": [
+        "den",
+        "shell-native"
+      ]
     },
     "confinement-arm64": {
       "targets": [
@@ -1342,7 +1382,10 @@
       "suite": "behavior",
       "setup": "verification",
       "runner": "ubuntu-24.04-arm",
-      "platform": "linux"
+      "platform": "linux",
+      "changes": [
+        "confinement"
+      ]
     },
     "reference-userlands": {
       "targets": [
@@ -1357,7 +1400,10 @@
       ],
       "suite": "behavior",
       "setup": "verification",
-      "platform": "linux"
+      "platform": "linux",
+      "changes": [
+        "command-language"
+      ]
     },
     "nix": {
       "targets": [
@@ -1465,7 +1511,10 @@
         "release"
       ],
       "suite": "performance",
-      "setup": "verification"
+      "setup": "verification",
+      "changes": [
+        "go"
+      ]
     }
   },
   "capacity": {

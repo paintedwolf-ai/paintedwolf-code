@@ -83,6 +83,25 @@ class LaneRuleTests(unittest.TestCase):
                 ci.matrix("check", platform=True)
 
 
+class SelectionFieldTests(unittest.TestCase):
+    def test_a_selected_lane_declares_known_areas_and_each_phase_belongs_to_one_lane(self):
+        for tests in ({**lane("test:short"), "changes": []}, {**lane("test:short"), "changes": ["prose"]},
+                      {**lane("test:short"), "changes": ["go", "go"]}, lane("test:short", phases="everything")):
+            with self.subTest(tests=tests), plan(ci=lanes(tests=tests)), self.assertRaises(ValueError):
+                ci.lanes()
+        twice = lanes(stress=lane("test:stress", profiles=("nightly",), phases="affected-packages"),
+                      tests=lane("test:short", phases="affected-packages"))
+        with plan(ci=twice), self.assertRaises(ValueError):
+            ci.lanes()
+
+    def test_lanes_are_found_by_the_areas_they_declare(self):
+        values = lanes(go=lane("lint:fast", changes=["go"], profiles=("nightly",)),
+                       den=lane("lint:full", changes=["den", "shell-native"], profiles=("nightly",)),
+                       tests=lane("test:short", phases="admission"))
+        self.assertEqual(ci.lanes_of(values, {"go"}), {"go"})
+        self.assertEqual(ci.lanes_of(values, {"shell-native", "always"}), {"den", "tests"})
+
+
 class ProvisionTests(unittest.TestCase):
     def test_a_lane_gets_each_input_its_targets_and_packages_need_and_no_other(self):
         provisions = {"containers": {"targets": {"lint:fast": []}},

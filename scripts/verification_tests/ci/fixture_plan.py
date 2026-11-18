@@ -12,8 +12,9 @@ LIVE = json.loads(verification_plan.CATALOG.read_text())
 
 
 def lane(*targets, profiles=("fast", "check", "integration", "nightly"), **fields):
+    selected = {"changes": ["always"]} if set(profiles) & {"fast", "integration"} else {}
     return {"targets": list(targets), "minutes": 10, "profiles": list(profiles), "suite": "all",
-            "setup": "verification", **fields}
+            "setup": "verification", **selected, **fields}
 
 
 def lanes(**extra):
@@ -37,3 +38,22 @@ def plan(ci=None, provisions=None, check=("test:short",), fast=("test:short",), 
         path.write_text(json.dumps(data))
         with patch.object(verification_plan, "CATALOG", path):
             yield data
+
+
+def live(phase=None, runs=None, area=None):
+    """The name of the live lane with `phase`, running target `runs`, or selected by change `area` alone,
+    so a test of live behaviour never spells a lane name."""
+    from ci_policy.hosted_plan import lanes
+    found = [name for name, spec in lanes().items()
+             if (phase is None or spec.get("phases") == phase)
+             and (runs is None or runs in spec["targets"])
+             and (area is None or spec.get("changes") == [area])]
+    if len(found) != 1:
+        raise AssertionError(f"expected one live lane for phase={phase} runs={runs} area={area}: {found}")
+    return found[0]
+
+
+def live_lanes(*areas):
+    """Live lanes a change in any of `areas` selects."""
+    from ci_policy.hosted_plan import lanes, lanes_of
+    return lanes_of(lanes(), areas)
