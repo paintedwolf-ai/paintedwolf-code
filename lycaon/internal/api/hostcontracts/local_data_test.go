@@ -27,9 +27,10 @@ func TestLocalDataGetAndClear(t *testing.T) {
 	fetchDir := filepath.Join(base, "fetch-cache")
 	testutil.FailErr(t, "mkdir fetch", os.MkdirAll(fetchDir, 0o700))
 	testutil.FailErr(t, "write fetch", os.WriteFile(filepath.Join(fetchDir, "a"), []byte("body"), 0o600))
-	protected := localdatatest.SeedProtected(t, base)
 
 	srv := hostapi.NewServer(contractfixture.RequiredTestDeps(t, hostapi.Dependencies{Core: hostapi.CoreDependencies{Store: sessionstore.NewMemory()}, Storage: hostapi.StorageDependencies{DataDir: base}}), nil, hostapi.TestAPIToken)
+	// Construct readers before installing opaque preservation canaries.
+	protected := localdatatest.SeedProtected(t, base)
 
 	req := httptest.NewRequest(http.MethodGet, "/v1/local-data", nil)
 	w := httptest.NewRecorder()
