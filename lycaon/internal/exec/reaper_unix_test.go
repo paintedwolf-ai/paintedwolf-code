@@ -18,6 +18,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/osprocess"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"golang.org/x/sys/unix"
 )
 
 // reaperRoleEnv selects which part a re-executed test binary plays.
@@ -182,6 +183,25 @@ func TestReaperKillsWhatRunsUnderTheSandboxMarkAndRemovesIt(t *testing.T) {
 	}
 }
 
+func TestReaperDropsOnlyDescriptorsInheritedByAccident(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "held")
+	testutil.FailErr(t, "create held file", os.WriteFile(path, nil, 0o600))
+	stray, err := syscall.Open(path, syscall.O_RDONLY, 0)
+	testutil.FailErr(t, "open a descriptor without close-on-exec", err)
+	kept, err := os.Open(path) // #nosec G304 -- the test's own temp file
+	testutil.FailErr(t, "open a close-on-exec descriptor", err)
+	defer func() { _ = kept.Close() }()
+
+	closeInheritedDescriptors()
+	if _, err := unix.FcntlInt(uintptr(stray), unix.F_GETFD, 0); !errors.Is(err, unix.EBADF) {
+		_ = syscall.Close(stray)
+		t.Fatalf("a descriptor without close-on-exec stayed open: %v", err)
+	}
+	if _, err := unix.FcntlInt(kept.Fd(), unix.F_GETFD, 0); err != nil {
+		t.Fatalf("a close-on-exec descriptor was closed: %v", err)
+	}
+}
+
 func TestReaperSparesForgottenAndUnanchoredDirs(t *testing.T) {
 	root := t.TempDir()
 	forgotten := filepath.Join(root, "forgotten")
@@ -242,18 +262,12 @@ func assertEngineDeathReapsOwnedGroup(t *testing.T, role string) {
 // only when the parent case re-execs this binary with reaperRoleEnv set.
 func TestReaperHelperProcess(t *testing.T) {
 	role, dir, _ := strings.Cut(os.Getenv(reaperRoleEnv), ":")
-	switch role {
-	case "reaper":
-		os.Exit(RunReaper(os.Stdin))
-	case "engine", "engine-group":
-	default:
+	if role != "engine" && role != "engine-group" {
 		t.Skip("helper process for TestEngineKilledOutrightTakesItsTrackedGroupsWithIt")
 	}
-	// The companion inherits this environment and so takes the reaper role.
-	t.Setenv(reaperRoleEnv, "reaper")
 	self, err := os.Executable()
 	if err == nil {
-		err = StartReaper(self, "-test.run=^TestReaperHelperProcess$", "-test.v=false")
+		err = StartReaper(self, ReaperCommand)
 	}
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "start reaper: %v\n", err)

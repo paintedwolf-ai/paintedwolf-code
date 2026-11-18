@@ -1,8 +1,10 @@
 """Recorded Go package results: keys, observed inputs, replay, and early outcomes."""
 
+import importlib.util
 import json
 import os
 from pathlib import Path
+import signal
 import subprocess
 import sys
 import tempfile
@@ -297,6 +299,22 @@ printf 'GOMEMLIMIT %s RACE %s\\n' "$GOMEMLIMIT" "${PW_TEST_RACE:-unset}"
         self.assertEqual(event["exit_code"], 1)
 
     @unittest.skipUnless(reuse.fork_observable(), "recording requires process fork observation")
+    def test_a_process_gone_before_it_is_named_is_not_a_leak(self):
+        spec = importlib.util.spec_from_file_location("go_test_exec", Path(__file__).resolve().parents[2] / "go-test-exec.py")
+        wrapper = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(wrapper)
+        births = {11: 100, 12: 200}
+        with tempfile.NamedTemporaryFile() as owner, \
+                patch.object(wrapper.custody, "lease_holders", return_value={11}), \
+                patch.object(wrapper.custody, "carriers", return_value={12}), \
+                patch.object(wrapper.custody, "birth", side_effect=births.get), \
+                patch.object(wrapper.custody, "commands", return_value={12: "sleep"}), \
+                patch.object(wrapper.custody, "carries", return_value=True), \
+                patch.object(wrapper.os, "kill") as kill:
+            leaked = wrapper.settle_package_children(owner, "PW_TEST_PACKAGE_OWNER=1-x")
+        self.assertEqual(leaked, {12: "sleep"})
+        kill.assert_called_once_with(12, signal.SIGKILL)
+
     def test_a_recorded_pass_replays_until_an_observed_input_changes(self):
         first, event = self.run_wrapper()
         self.assertEqual(first.returncode, 0, first.stderr)

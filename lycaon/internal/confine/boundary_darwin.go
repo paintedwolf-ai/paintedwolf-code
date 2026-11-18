@@ -5,6 +5,8 @@ package confine
 import (
 	"os"
 	"syscall"
+
+	"github.com/lycaon/lycaon/internal/sandboxmark"
 )
 
 // renderProfile is the Seatbelt profile on this platform, ending with the
@@ -14,7 +16,11 @@ func renderProfile(c Confinement) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return profile + sandboxMarkRule(), nil
+	if own := sandboxmark.OwnPath(); own != "" {
+		// Last, so no earlier deny overrides it.
+		profile += "(allow file-write-data (literal " + sbplString(own) + "))\n"
+	}
+	return profile, nil
 }
 
 // applyAndExec applies the profile to this process, confirms kernel membership,

@@ -11,8 +11,8 @@ import (
 	"strings"
 	"syscall"
 
-	"github.com/lycaon/lycaon/internal/confine"
 	"github.com/lycaon/lycaon/internal/osprocess"
+	"github.com/lycaon/lycaon/internal/sandboxmark"
 )
 
 type reaperOps struct {
@@ -26,7 +26,7 @@ type reaperOps struct {
 
 func defaultReaperOps() reaperOps {
 	return reaperOps{
-		markedProcesses:  confine.MarkedProcesses,
+		markedProcesses:  sandboxmark.Processes,
 		sessionMembers:   osprocess.SessionMembers,
 		incarnationOf:    osprocess.IncarnationOf,
 		incarnationAlive: osprocess.Incarnation.Alive,

@@ -95,7 +95,7 @@ func startLoadedEngine(t *testing.T) *loadedEngine {
 	for _, name := range []string{"LYCAON_API_TOKEN", app.ParentPIDEnv, config.EnvConfigRoot, "TMPDIR"} {
 		env = withoutEnv(env, name)
 	}
-	proc.Env = append(env,
+	env = append(env,
 		"LYCAON_ADDR="+addr,
 		"LYCAON_LLM_MOCK=1",
 		"LYCAON_CONFIG_DIR="+filepath.Join(work, "config"),
@@ -104,6 +104,7 @@ func startLoadedEngine(t *testing.T) *loadedEngine {
 		startupprotocol.APITokenStdinEnv+"=1",
 		app.ParentPIDEnv+"="+strconv.Itoa(parent.Process.Pid),
 	)
+	proc.Env = env
 	stdin, err := proc.StdinPipe()
 	testutil.FailErr(t, "open engine input", err)
 	done := startSmokeProcess(t, proc)
@@ -131,9 +132,10 @@ func openEventSubscriber(t *testing.T, baseURL, apiToken, projectID string) <-ch
 	req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, baseURL+"/v1/events?project_id="+projectID, nil)
 	testutil.FailErr(t, "event subscription request", err)
 	req.Header.Set("Authorization", "Bearer "+apiToken)
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := http.DefaultClient.Do(req) //nolint:bodyclose // the drain goroutine closes it when the stream ends
 	testutil.FailErr(t, "subscribe to events", err)
 	if resp.StatusCode != http.StatusOK {
+		_ = resp.Body.Close()
 		t.Fatalf("event subscription status = %d", resp.StatusCode)
 	}
 	ended := make(chan struct{})

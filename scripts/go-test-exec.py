@@ -133,9 +133,10 @@ def settle_package_children(owner, entry):
     names = custody.commands(found)
     leaked = {}
     for pid, created in births.items():
-        if created is None:
+        # A process gone by the time it is named exited on its own.
+        if created is None or pid not in names or custody.birth(pid) != created:
             continue
-        leaked[pid] = names.get(pid, "unknown command")
+        leaked[pid] = names[pid]
         if custody.carries(pid, entry) and custody.birth(pid) == created:
             try:
                 os.kill(pid, signal.SIGKILL)
