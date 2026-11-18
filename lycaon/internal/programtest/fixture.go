@@ -180,12 +180,12 @@ func New(t testing.TB, options Options) *Fixture {
 
 // AttachLedger binds the fixture's root to a real source ledger, so programs
 // run against the host's actual observation windows.
-func (f *Fixture) AttachLedger(t testing.TB, options ...sourceledger.Option) *sourceledger.Store {
+func (f *Fixture) AttachLedger(t testing.TB, timing sourceledger.Timing) *sourceledger.Store {
 	t.Helper()
 	_, err := f.Database.ExecContext(context.Background(), `INSERT INTO project_roots (id, project_id, path, label, is_primary, added_at, kind)
 		VALUES ('r1', ?, ?, 'root', 1, ?, 'attached')`, testdbseed.DefaultProjectID, f.Dir, timelayout.Format(time.Now().UTC()))
 	testutil.FailErr(t, "insert fixture root", err)
-	ledger := sourceledger.New(f.Database, t.TempDir(), options...)
+	ledger := sourceledger.New(f.Database, t.TempDir(), timing)
 	configure := f.Configure
 	f.Configure = func(tc *tools.ToolContext) {
 		tc.Source.Commands = ledger.Commands

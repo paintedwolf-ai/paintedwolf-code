@@ -60,7 +60,7 @@ func newRevisionFixture(t *testing.T, files map[string]string) *revisionFixture 
 		testutil.FailErr(t, "write "+name, os.WriteFile(filepath.Join(root, name), []byte(content), 0o644))
 	}
 	p := &project.Project{ID: projectID, Roots: []project.Root{{ID: rootID, ProjectID: projectID, Path: root, IsPrimary: true}}}
-	ledger := sourceledger.New(sqlDB, "")
+	ledger := sourceledger.New(sqlDB, "", sourceledger.Timing{})
 	service := editordoc.New(editordoc.NewStore(sqlDB), ledger, ledger.History, adapterRoots{p: p})
 	adapter := editorDocumentsAdapter{service: service}
 	boundary := sandbox.NewBoundary(sandbox.Config{ProjectRootRequired: true, RejectSymlinkEscape: true}, []sandbox.ToolProfile{{ID: "coordinator", Tools: map[string]bool{"read": true, "write": true}}})

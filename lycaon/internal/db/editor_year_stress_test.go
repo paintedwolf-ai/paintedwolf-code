@@ -36,7 +36,7 @@ func TestStressEditorWorkingYearWithRecovery(t *testing.T) {
 	rootID := uuid.NewString()
 	testdbseed.InsertProjectRootWithID(t, database, testdbseed.DefaultProjectID, rootID, root)
 	p := &project.Project{ID: testdbseed.DefaultProjectID, Roots: []project.Root{{ID: rootID, ProjectID: testdbseed.DefaultProjectID, Path: root, IsPrimary: true}}}
-	sourceHistory13 := sourceledger.New(database, filepath.Join(config, "source-content"))
+	sourceHistory13 := sourceledger.New(database, filepath.Join(config, "source-content"), sourceledger.Timing{})
 	service := editordoc.New(editordoc.NewStore(database), sourceHistory13, sourceHistory13.History, storageStressRoots{p})
 	t.Cleanup(func() { _ = service.Close(context.Background()) })
 	random := rand.New(rand.NewPCG(31, 47))

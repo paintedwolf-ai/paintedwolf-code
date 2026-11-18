@@ -10,13 +10,13 @@ import (
 
 	"github.com/lycaon/lycaon/internal/pagedview"
 	"github.com/lycaon/lycaon/internal/repochange"
+	"github.com/lycaon/lycaon/internal/repochange/repochangetest"
 	"github.com/lycaon/lycaon/internal/testutil"
 )
 
 func watchRestoreRoot(t *testing.T, path string) {
 	t.Helper()
-	repochange.EnsureRoot(t.Context(), path)
-	t.Cleanup(func() { repochange.CloseRoot(path) })
+	repochangetest.Watch(t, path)
 	if !repochange.DirWatched(path, ".") {
 		t.Fatal("restore fixture has no live watcher")
 	}

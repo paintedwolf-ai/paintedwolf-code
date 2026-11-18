@@ -10,7 +10,7 @@ import (
 // engine never observes its own writes or a broad tree's churn.
 func TestEditorOnlyRootsAreNeverWatched(t *testing.T) {
 	facts := rootfacts.Install(t)
-	reg := NewWatcherRegistry()
+	reg := newWatcherRegistry()
 	t.Cleanup(reg.CloseAll)
 	for _, root := range facts.EditorOnly() {
 		reg.Ensure(t.Context(), root.Path)

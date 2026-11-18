@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/lycaon/lycaon/internal/repochange"
+	"github.com/lycaon/lycaon/internal/repochange/repochangetest"
 	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	gittestsetup "github.com/lycaon/lycaon/internal/testsetup/git"
@@ -36,7 +37,7 @@ func BenchmarkRecordBatchPromoteScale(b *testing.B) {
 			`, now); err != nil {
 				b.Fatalf("insert root: %v", err)
 			}
-			store := New(sqlDB, b.TempDir())
+			store := New(sqlDB, b.TempDir(), Timing{})
 			ctx := context.Background()
 
 			b.ResetTimer()
@@ -79,8 +80,8 @@ func BenchmarkOpenCommandWindow(b *testing.B) {
 
 func benchmarkOpenCommandWindow(b *testing.B, files int, committed, watched bool) {
 	if !watched {
-		repochange.DisableWatchersForTest()
-		b.Cleanup(repochange.ResetWatchersForTest)
+
+		repochangetest.Acquire(b)
 	}
 	sqlDB := testdbfixture.Open(b, "store.db")
 	testdbseed.InsertProject(b, sqlDB, "p1")
@@ -103,12 +104,12 @@ func benchmarkOpenCommandWindow(b *testing.B, files int, committed, watched bool
 		VALUES ('r1', 'p1', ?, 'root', 1, ?, 'attached')`, root, timelayout.Format(time.Now().UTC())); err != nil {
 		b.Fatalf("insert root: %v", err)
 	}
-	store := New(sqlDB, b.TempDir())
+	store := New(sqlDB, b.TempDir(), Timing{})
 	setWindowTimer(store.Commands, func() <-chan time.Time { return time.After(0) })
 	store.Commands.startQuietGrace, store.Commands.startQuietWait = 0, 0
 	store.Commands.observationBudget = time.Minute
 	if watched {
-		repochange.MarkCoverageCompleteForTest(root)
+		repochangetest.Watch(b, root)
 		b.Cleanup(func() { repochange.CloseRoot(root) })
 	}
 	in := CommandWindowInput{ProjectID: "p1", Roots: []RootSpec{{ID: "r1", Path: root}}, SessionID: "s1", ToolName: "command", CommandLine: "make"}

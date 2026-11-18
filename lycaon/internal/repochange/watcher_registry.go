@@ -13,29 +13,30 @@ import (
 
 	"github.com/lycaon/lycaon/internal/sourcescope"
 	"github.com/lycaon/lycaon/internal/watchfd"
+	"github.com/lycaon/lycaon/internal/workscope"
 )
 
-// WatcherRegistry tracks per-project-dir worktree watchers.
-type WatcherRegistry struct {
+// watcherRegistry tracks per-project-dir worktree watchers.
+type watcherRegistry struct {
 	mu      sync.Mutex
 	byDir   map[string]*worktreeWatcher
 	maxDirs int
 	// budget is process-wide: one descriptor pool for every worktree watcher.
-	budget *watchfd.Budget
-	// disabled keeps Ensure from starting platform watchers.
-	disabled bool
+	budget   *watchfd.Budget
+	closed   bool
+	work     workscope.Group
+	debounce *debouncer
 }
 
-// NewWatcherRegistry returns an empty registry.
-func NewWatcherRegistry() *WatcherRegistry {
-	return &WatcherRegistry{
-		byDir:   map[string]*worktreeWatcher{},
-		maxDirs: watchfd.MaxDirs,
-		budget:  watchfd.NewProcessBudget(),
+// newWatcherRegistry returns an empty registry.
+func newWatcherRegistry() *watcherRegistry {
+	return &watcherRegistry{
+		byDir:    map[string]*worktreeWatcher{},
+		maxDirs:  watchfd.MaxDirs,
+		budget:   watchfd.NewProcessBudget(),
+		debounce: newDebouncer(DefaultDebounce),
 	}
 }
-
-var globalWatchers = NewWatcherRegistry()
 
 // WatchDirectory is a catalog-discovered directory and its immediate width.
 type WatchDirectory struct {
@@ -44,11 +45,11 @@ type WatchDirectory struct {
 }
 
 // EnsureRoot starts watching a root.
-func EnsureRoot(ctx context.Context, root string) { globalWatchers.Ensure(ctx, root) }
+func EnsureRoot(ctx context.Context, root string) { processWatchers().Ensure(ctx, root) }
 
 // SeedWatch registers catalog directories without walking the tree again.
 func SeedWatch(ctx context.Context, root string, directories []WatchDirectory) {
-	globalWatchers.Seed(ctx, root, directories)
+	processWatchers().Seed(ctx, root, directories)
 }
 
 // CoverageRevalidationInterval bounds how stale an unwatched subtree may be.
@@ -83,10 +84,10 @@ type WatchCoverage struct {
 }
 
 // Coverage reports one root's watch registration state.
-func Coverage(root string) WatchCoverage { return globalWatchers.Coverage(root) }
+func Coverage(root string) WatchCoverage { return processWatchers().Coverage(root) }
 
 // Coverage reports one root's watch registration state.
-func (r *WatcherRegistry) Coverage(root string) WatchCoverage {
+func (r *watcherRegistry) Coverage(root string) WatchCoverage {
 	key := canonicalDir(root)
 	out := WatchCoverage{Root: key}
 	if r == nil || key == "" {
@@ -102,11 +103,11 @@ func (r *WatcherRegistry) Coverage(root string) WatchCoverage {
 }
 
 // DirWatched reports whether one root-relative directory is watched.
-func DirWatched(root, dir string) bool { return globalWatchers.DirWatched(root, dir) }
+func DirWatched(root, dir string) bool { return processWatchers().DirWatched(root, dir) }
 
 // DirWatched reports whether one root-relative directory holds a live watch
 // registration.
-func (r *WatcherRegistry) DirWatched(root, dir string) bool {
+func (r *watcherRegistry) DirWatched(root, dir string) bool {
 	if r == nil {
 		return false
 	}
@@ -140,8 +141,8 @@ func watchTarget(root, dir string) string {
 }
 
 // Ensure starts watching projectDir if not already.
-func (r *WatcherRegistry) Ensure(ctx context.Context, projectDir string) {
-	if r == nil || r.disabled {
+func (r *watcherRegistry) Ensure(ctx context.Context, projectDir string) {
+	if r == nil {
 		return
 	}
 	key, err := filepath.Abs(strings.TrimSpace(projectDir))
@@ -155,6 +156,10 @@ func (r *WatcherRegistry) Ensure(ctx context.Context, projectDir string) {
 		return
 	}
 	r.mu.Lock()
+	if r.closed {
+		r.mu.Unlock()
+		return
+	}
 	if _, ok := r.byDir[key]; ok {
 		r.mu.Unlock()
 		return
@@ -165,18 +170,43 @@ func (r *WatcherRegistry) Ensure(ctx context.Context, projectDir string) {
 		slog.WarnContext(ctx, "worktree watch could not start", "root", key, "err", err)
 		return
 	}
+	w.starting = true
+	w.refs.work = &r.work
+	if r.debounce == nil {
+		r.debounce = newDebouncer(DefaultDebounce)
+	}
+	w.debounce = r.debounce
+	loopCtx, finish, err := r.work.Begin(context.WithoutCancel(ctx))
+	if err != nil {
+		w.close()
+		r.mu.Unlock()
+		return
+	}
 	r.byDir[key] = w
 	r.mu.Unlock()
 	coverage := w.coverage()
 	slog.InfoContext(ctx, "worktree watch bound",
 		"root", key, "recursive", coverage.Recursive, "complete", coverage.Complete)
-	go w.loop(context.WithoutCancel(ctx))
+	// Reopening coverage must account for changes from the unwatched interval.
+	initial := w.debounce.NotifyWorktreeChanges(loopCtx, key, []WorktreeChange{{Path: ".", Kind: WorktreeChangeResync}}, SourceWatcher)
+	go func() {
+		defer finish()
+		select {
+		case <-initial:
+		case <-w.done:
+			return
+		}
+		w.mu.Lock()
+		w.starting = false
+		w.mu.Unlock()
+		w.loop(loopCtx)
+	}()
 }
 
 // Seed extends an existing root watcher from deterministic catalog metadata.
 // Each pass recomputes the root's truncation from what it could register, so
 // coverage heals on a later pass once capacity frees.
-func (r *WatcherRegistry) Seed(ctx context.Context, root string, directories []WatchDirectory) {
+func (r *watcherRegistry) Seed(ctx context.Context, root string, directories []WatchDirectory) {
 	if r == nil {
 		return
 	}
@@ -284,12 +314,14 @@ func pathDepth(relSlash string) int {
 }
 
 // CloseAll releases every watcher.
-func (r *WatcherRegistry) CloseAll() {
+func (r *watcherRegistry) CloseAll() {
 	if r == nil {
 		return
 	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
+	r.closed = true
+	r.work.Seal()
 	for k, w := range r.byDir {
 		w.close()
 		delete(r.byDir, k)
@@ -297,7 +329,7 @@ func (r *WatcherRegistry) CloseAll() {
 }
 
 // CloseRoot releases one root's watcher and descriptor budget.
-func (r *WatcherRegistry) CloseRoot(root string) {
+func (r *watcherRegistry) CloseRoot(root string) {
 	if r == nil {
 		return
 	}
@@ -314,42 +346,5 @@ func (r *WatcherRegistry) CloseRoot(root string) {
 	}
 }
 
-// ResetWatchersForTest closes the process-global registry.
-func ResetWatchersForTest() {
-	globalWatchers.CloseAll()
-	globalWatchers = NewWatcherRegistry()
-}
-
-// DisableWatchersForTest closes the process-global registry and keeps it from
-// starting platform watchers, so only events a test publishes reach observers.
-func DisableWatchersForTest() {
-	globalWatchers.CloseAll()
-	globalWatchers = NewWatcherRegistry()
-	globalWatchers.disabled = true
-}
-
-// CloseWatchers releases every process-wide filesystem descriptor at shutdown.
-func CloseWatchers() { globalWatchers.CloseAll() }
-
-// CloseRoot releases one process-wide root watcher.
-func CloseRoot(root string) { globalWatchers.CloseRoot(root) }
-
-// MarkCoverageCompleteForTest registers root as recursively watched with
-// complete coverage and no platform stream, so a test can exercise the
-// paths that trust the watcher by delivering events through Notify itself.
-func MarkCoverageCompleteForTest(root string) {
-	key := canonicalDir(root)
-	if key == "" {
-		return
-	}
-	w := &worktreeWatcher{
-		root: key, recursive: true, done: make(chan struct{}),
-		watched: map[string]int{key: 1},
-	}
-	globalWatchers.mu.Lock()
-	if previous := globalWatchers.byDir[key]; previous != nil {
-		previous.close()
-	}
-	globalWatchers.byDir[key] = w
-	globalWatchers.mu.Unlock()
-}
+// CloseRoot releases one process-wide root watcher without joining its callbacks.
+func CloseRoot(root string) { processWatchers().CloseRoot(root) }

@@ -97,7 +97,7 @@ func newRewindControlFixture(t *testing.T) (*Rewinds, *sessionstore.Repositories
 	workspace := sessionscope.New(repository.Sessions)
 	workspace.SetProjects(projects)
 	captures := NewCapture(t.TempDir(), repository.Sessions, repository.Rewind, workspace)
-	ledger := sourceledger.New(database, filepath.Join(captures.dataDir, "source-content"))
+	ledger := sourceledger.New(database, filepath.Join(captures.dataDir, "source-content"), sourceledger.Timing{})
 	mutations := projectsource.NewSourceMutationService(database, ledger)
 	rewinds := NewRewinds(repository.Sessions, repository.Transcript, repository.Rewind, captures, &promptstate.MutexRegistry{}, workspace, projects, &sourcerewind.Service{Planner: ledger.Comparisons, Mutations: mutations}, nil, Runtime{WorkersInFlight: func(context.Context, *api.Session) int { return 0 }})
 	session, err := repository.Sessions.Create(t.Context(), api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)

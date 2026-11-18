@@ -22,7 +22,7 @@ func TestOpenObservedKeepsSavedSourceAndLiveDraftDistinct(t *testing.T) {
 	testdbseed.InsertProjectRootWithID(t, db, projectID, rootID, root)
 	testutil.FailErr(t, "write source", os.WriteFile(filepath.Join(root, "a.txt"), []byte("saved\n"), 0o644))
 	p := &project.Project{ID: projectID, Roots: []project.Root{{ID: rootID, ProjectID: projectID, Path: root, IsPrimary: true}}}
-	sourceHistory9 := sourceledger.New(db, "")
+	sourceHistory9 := sourceledger.New(db, "", sourceledger.Timing{})
 	service := New(NewStore(db), sourceHistory9, sourceHistory9.History, fixedRoots{p: p})
 	closeServiceAtCleanup(t, service)
 	observation, err := projectsource.ObserveProjectSource(p, projectsource.SourceReadRequest{Path: "a.txt", RootID: rootID})
@@ -84,7 +84,7 @@ func TestOpenObservedBinaryDoesNotCreateDocument(t *testing.T) {
 	testdbseed.InsertProjectRootWithID(t, db, projectID, rootID, root)
 	testutil.FailErr(t, "write binary", os.WriteFile(filepath.Join(root, "data.bin"), []byte{0, 1, 2, 3}, 0o644))
 	p := &project.Project{ID: projectID, Roots: []project.Root{{ID: rootID, ProjectID: projectID, Path: root, IsPrimary: true}}}
-	sourceHistory10 := sourceledger.New(db, "")
+	sourceHistory10 := sourceledger.New(db, "", sourceledger.Timing{})
 	service := New(NewStore(db), sourceHistory10, sourceHistory10.History, fixedRoots{p: p})
 	closeServiceAtCleanup(t, service)
 	observation, err := projectsource.ObserveProjectSource(p, projectsource.SourceReadRequest{Path: "data.bin", RootID: rootID})
@@ -103,7 +103,7 @@ func TestOpenRejectsDirectoryPath(t *testing.T) {
 	projectID, rootID := testdbseed.DefaultProjectID, uuid.NewString()
 	testdbseed.InsertProjectRootWithID(t, db, projectID, rootID, root)
 	p := &project.Project{ID: projectID, Roots: []project.Root{{ID: rootID, ProjectID: projectID, Path: root, IsPrimary: true}}}
-	sourceHistory := sourceledger.New(db, "")
+	sourceHistory := sourceledger.New(db, "", sourceledger.Timing{})
 	service := New(NewStore(db), sourceHistory, sourceHistory.History, fixedRoots{p: p})
 	closeServiceAtCleanup(t, service)
 

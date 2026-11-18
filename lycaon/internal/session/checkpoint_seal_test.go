@@ -53,7 +53,7 @@ func newCheckpointTestSession(t *testing.T) (*Host, string, string, *sessionstor
 	st := sessionstore.NewSQL(database)
 	mgr := newTestManagerWithStore(t, st)
 	mgr.SetProjectRegistry(project.NewSQLRegistry(database))
-	ledger := sourceledger.New(database, filepath.Join(mgr.Workspace.DataDir, "source-content"))
+	ledger := sourceledger.New(database, filepath.Join(mgr.Workspace.DataDir, "source-content"), sourceledger.Timing{})
 	mgr.SetSourceLedger(ledger, tools.SourceHistory{Files: ledger.History, Comparison: ledger.Comparisons, Git: ledger.Git, Authorship: ledger.Walk}, ledger.Commands, ledger.Git, ledger.Checkpoints, ledger.Inventory)
 	mutations := projectsource.NewSourceMutationService(database, ledger)
 	mgr.ToolContext.SetSourceMutations(mutations)

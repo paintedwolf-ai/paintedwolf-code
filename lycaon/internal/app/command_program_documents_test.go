@@ -40,7 +40,7 @@ func documentProgram(t *testing.T) (*programtest.Fixture, *editordoc.Service, *p
 	f := programtest.New(t, programtest.Options{})
 	p := &project.Project{ID: testdbseed.DefaultProjectID, Roots: []project.Root{{ID: "r1", ProjectID: testdbseed.DefaultProjectID, Path: f.Dir, IsPrimary: true}}}
 	testdbseed.InsertProjectRootWithID(t, f.Database, p.ID, "r1", f.Dir)
-	ledger := sourceledger.New(f.Database, "")
+	ledger := sourceledger.New(f.Database, "", sourceledger.Timing{})
 	service := editordoc.New(editordoc.NewStore(f.Database), ledger, ledger.History, adapterRoots{p: p})
 	t.Cleanup(func() { _ = service.Close(context.Background()) })
 	f.Context = func(_ string, tc *tools.ToolContext) {

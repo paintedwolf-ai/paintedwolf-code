@@ -77,7 +77,7 @@ func newHarness(t *testing.T, files map[string]string) *harness {
 	testdbseed.InsertProject(t, sqlDB, "p1")
 	_, err = sqlDB.ExecContext(t.Context(), `INSERT INTO project_roots (id, project_id, path, label, is_primary, added_at) VALUES ('r1', 'p1', ?, 'root', 1, ?)`, root, timelayout.Format(time.Now().UTC()))
 	testutil.FailErr(t, "insert root", err)
-	ledger := sourceledger.New(sqlDB, t.TempDir())
+	ledger := sourceledger.New(sqlDB, t.TempDir(), sourceledger.Timing{})
 	service := projectsource.NewSourceMutationService(ledger.LedgerDB(), ledger)
 	tc := nativefixture.Context(root)
 	tc.Identity.ProjectID, tc.Identity.SessionID, tc.Identity.UserTurn = "p1", "s1", 1

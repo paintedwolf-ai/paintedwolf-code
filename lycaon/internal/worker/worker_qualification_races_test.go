@@ -142,7 +142,7 @@ func newRaceQualificationEnv(t *testing.T) *raceQualificationEnv {
 	queue.SetEventOutbox(outbox)
 	queue.Branches.SetProjectStore(projects)
 	dataDir := testbaseline.DataDir(t, sqlDB)
-	ledger := sourceledger.New(sqlDB, filepath.Join(dataDir, "source-content"))
+	ledger := sourceledger.New(sqlDB, filepath.Join(dataDir, "source-content"), sourceledger.Timing{})
 	queue.Branches.SetBaselineStore(ledger.Baselines)
 
 	mgr := workspace.NewManager(filepath.Join(dataDir, "worker-branches"), platform.NewSelector(platform.Config{}), workspace.Filesystem{})

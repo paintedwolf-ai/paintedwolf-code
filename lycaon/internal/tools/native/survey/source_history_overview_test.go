@@ -42,7 +42,7 @@ type historyHarness struct {
 	nextOp int
 }
 
-func newHistoryHarness(t *testing.T, options ...sourceledger.Option) *historyHarness {
+func newHistoryHarness(t *testing.T, timing sourceledger.Timing) *historyHarness {
 	t.Helper()
 	sqlDB := testdbfixture.Open(t, "store.db")
 	testdbseed.InsertProject(t, sqlDB, historyProject)
@@ -55,7 +55,7 @@ func newHistoryHarness(t *testing.T, options ...sourceledger.Option) *historyHar
 	`, dir, now, second, now)
 	testutil.FailErr(t, "insert roots", err)
 	blobs := t.TempDir()
-	store := sourceledger.New(sqlDB, blobs, options...)
+	store := sourceledger.New(sqlDB, blobs, timing)
 	tctx := nativefixture.Context(dir)
 	tctx.Identity.ProjectID, tctx.Identity.SessionID = historyProject, historySession
 	tctx.Source.Roots = append(tctx.Source.Roots, projectroot.RootRef{ID: "r2", Label: "docs", Path: second})
@@ -175,7 +175,7 @@ func runOverviewCall(t *testing.T, tool *SourceHistoryTool, tctx tools.ToolConte
 }
 
 func TestSourceHistoryOverviewACOV01ListsEveryActorPerFile(t *testing.T) {
-	h := newHistoryHarness(t)
+	h := newHistoryHarness(t, sourceledger.Timing{})
 	h.record(effectSeed{path: "before.go", content: "earlier session\n", session: "s0"})
 	h.beginSession(historySession)
 	floor, _, err := h.store.History.SessionActivityFloor(t.Context(), historyProject, historySession)
@@ -211,7 +211,7 @@ func TestSourceHistoryOverviewACOV01ListsEveryActorPerFile(t *testing.T) {
 }
 
 func TestSourceHistoryOverviewACOV02UnknownWindowListsNothing(t *testing.T) {
-	h := newHistoryHarness(t)
+	h := newHistoryHarness(t, sourceledger.Timing{})
 	h.record(effectSeed{path: "a.go", content: "one\n"})
 	result := runOverviewCall(t, h.tool, h.tctx)
 	if result.Recorded || result.Note == "" || len(result.Files) != 0 || result.Since != nil {
@@ -220,7 +220,7 @@ func TestSourceHistoryOverviewACOV02UnknownWindowListsNothing(t *testing.T) {
 }
 
 func TestSourceHistoryOverviewACOV03OverflowIsAFloor(t *testing.T) {
-	h := newHistoryHarness(t)
+	h := newHistoryHarness(t, sourceledger.Timing{})
 	h.beginSession(historySession)
 	for i := range overviewEffectCap + 100 {
 		h.record(effectSeed{path: fmt.Sprintf("f%d.go", i%450), content: fmt.Sprintf("v%d\n", i)})
@@ -239,7 +239,7 @@ func TestSourceHistoryOverviewACOV03OverflowIsAFloor(t *testing.T) {
 }
 
 func TestSourceHistoryOverviewACOV04WorkerSeesItsBranchOnly(t *testing.T) {
-	h := newHistoryHarness(t)
+	h := newHistoryHarness(t, sourceledger.Timing{})
 	h.beginSession(historySession)
 	h.record(effectSeed{path: "trunk.go", content: "trunk\n"})
 	h.record(effectSeed{path: "mine.go", content: "worker\n", branch: "job-1", session: "child", job: "job-1"})
@@ -263,7 +263,7 @@ func TestSourceHistoryOverviewACOV04WorkerSeesItsBranchOnly(t *testing.T) {
 }
 
 func TestSourceHistoryOverviewACOV16EmptyListSaysWhatItCannotKnow(t *testing.T) {
-	h := newHistoryHarness(t)
+	h := newHistoryHarness(t, sourceledger.Timing{})
 	h.record(effectSeed{path: "earlier.go", content: "x\n", session: "s0"})
 	h.beginSession(historySession)
 	result := runOverviewCall(t, h.tool, h.tctx)
@@ -277,7 +277,7 @@ func TestSourceHistoryOverviewACOV16EmptyListSaysWhatItCannotKnow(t *testing.T) 
 }
 
 func TestSourceHistoryOverviewACOV17RowFollowsADirectoryMove(t *testing.T) {
-	h := newHistoryHarness(t)
+	h := newHistoryHarness(t, sourceledger.Timing{})
 	h.record(effectSeed{path: "a", kind: sourceledger.EntryKindDirectory, session: "s0", op: api.SourceChangeOpCreate})
 	h.record(effectSeed{path: "a/x.go", content: "before\n", session: "s0", op: api.SourceChangeOpCreate})
 	baseline := h.head("a/x.go").VersionID
@@ -304,7 +304,7 @@ func TestSourceHistoryOverviewACOV17RowFollowsADirectoryMove(t *testing.T) {
 }
 
 func TestSourceHistoryOverviewACOV05SecondaryRootIsQualified(t *testing.T) {
-	h := newHistoryHarness(t)
+	h := newHistoryHarness(t, sourceledger.Timing{})
 	h.beginSession(historySession)
 	h.record(effectSeed{root: "r2", path: "guide.md", content: "doc\n"})
 	h.record(effectSeed{path: "a.go", content: "code\n"})
@@ -317,7 +317,7 @@ func TestSourceHistoryOverviewACOV05SecondaryRootIsQualified(t *testing.T) {
 // A worktree binding can place one root on its own branch while another stays on
 // trunk; each root must answer for its own branch only.
 func TestSourceHistoryOverviewReadsEachRootOnItsOwnBranch(t *testing.T) {
-	h := newHistoryHarness(t)
+	h := newHistoryHarness(t, sourceledger.Timing{})
 	h.beginSession(historySession)
 	worktree := sourcebranch.ForWorktree("w1")
 	h.record(effectSeed{path: "on-worktree.go", content: "in\n", branch: worktree})
@@ -339,7 +339,7 @@ func TestSourceHistoryOverviewReadsEachRootOnItsOwnBranch(t *testing.T) {
 }
 
 func TestSourceHistoryOverviewACOV06EffectsModeStillNeedsAPath(t *testing.T) {
-	h := newHistoryHarness(t)
+	h := newHistoryHarness(t, sourceledger.Timing{})
 	h.beginSession(historySession)
 	_, err := h.tool.Run(t.Context(), map[string]any{"mode": "effects"}, h.tctx)
 	var reject *toolrejection.ToolReject
@@ -349,7 +349,7 @@ func TestSourceHistoryOverviewACOV06EffectsModeStillNeedsAPath(t *testing.T) {
 }
 
 func TestSourceHistoryOverviewACOV07AndACOV10MineStaysAuthoredPaths(t *testing.T) {
-	h := newHistoryHarness(t)
+	h := newHistoryHarness(t, sourceledger.Timing{})
 	h.beginSession(historySession)
 	h.record(effectSeed{path: "mine.go", content: "mine\n"})
 	h.record(effectSeed{path: "user.go", content: "theirs\n", origin: api.SourceChangeOriginUser})
@@ -380,7 +380,7 @@ func TestSourceHistoryOverviewACOV07AndACOV10MineStaysAuthoredPaths(t *testing.T
 }
 
 func TestSourceHistoryOverviewACOV13ExplicitModeMatchesTheDefault(t *testing.T) {
-	h := newHistoryHarness(t)
+	h := newHistoryHarness(t, sourceledger.Timing{})
 	h.beginSession(historySession)
 	h.record(effectSeed{path: "a.go", content: "one\n"})
 	want := runOverviewCall(t, h.tool, h.tctx)
@@ -404,7 +404,7 @@ func TestSourceHistoryOverviewACOV13ExplicitModeMatchesTheDefault(t *testing.T) 
 }
 
 func TestSourceHistoryOverviewACOV09WorkerFloodNeitherFillsNorTruncates(t *testing.T) {
-	h := newHistoryHarness(t)
+	h := newHistoryHarness(t, sourceledger.Timing{})
 	h.beginSession(historySession)
 	for i := range 3 {
 		h.record(effectSeed{path: fmt.Sprintf("trunk%d.go", i), content: "trunk\n"})
@@ -459,7 +459,7 @@ func windowContext(t *testing.T, files *windowLedger, windows tools.SourceWindow
 	t.Helper()
 	tctx := nativefixture.Context(t.TempDir())
 	tctx.Identity.ProjectID, tctx.Identity.SessionID = historyProject, historySession
-	store := newHistoryHarness(t).store
+	store := newHistoryHarness(t, sourceledger.Timing{}).store
 	tctx.Source.History = tools.SourceHistory{Files: files, Comparison: store.Comparisons, Git: store.Git, Authorship: store.Walk, Windows: windows}
 	return tctx
 }
@@ -590,7 +590,7 @@ func TestSourceHistoryOverviewReportsLedgerFailures(t *testing.T) {
 	failure := errors.New("ledger down")
 	tctx := nativefixture.Context(t.TempDir())
 	tctx.Identity.ProjectID, tctx.Identity.SessionID = historyProject, historySession
-	store := newHistoryHarness(t).store
+	store := newHistoryHarness(t, sourceledger.Timing{}).store
 	history := tools.SourceHistory{Comparison: store.Comparisons, Git: store.Git, Authorship: store.Walk}
 
 	t.Run("no ledger", func(t *testing.T) {
@@ -617,7 +617,7 @@ func TestSourceHistoryOverviewReportsLedgerFailures(t *testing.T) {
 		}
 	})
 	t.Run("current path", func(t *testing.T) {
-		h := newHistoryHarness(t)
+		h := newHistoryHarness(t, sourceledger.Timing{})
 		h.beginSession(historySession)
 		h.record(effectSeed{path: "a.go", content: "a\n"})
 		h.tctx.Source.History.Files = failingRowPath{SourceFileHistory: h.store.History, err: failure}

@@ -11,6 +11,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/db"
 	"github.com/lycaon/lycaon/internal/repochange"
+	"github.com/lycaon/lycaon/internal/repochange/repochangetest"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/pkg/api"
@@ -43,7 +44,7 @@ func openDiskLedger(t *testing.T) diskLedger {
 	`, root, timelayout.Format(time.Now().UTC()))
 	testutil.FailErr(t, "insert root", err)
 	contentDir := t.TempDir()
-	store := New(sqlDB, contentDir)
+	store := New(sqlDB, contentDir, Timing{})
 	// These tests deliver the command's writes themselves, so a window neither
 	// waits at its start for events on their way nor, closed and still owing a
 	// pass, waits out the settle period.
@@ -171,9 +172,10 @@ func TestCommandWindowAdmitsWhatTheCommandChanged(t *testing.T) {
 }
 
 func TestWindowIsSettledFollowsSettlement(t *testing.T) {
-	repochange.DisableWatchersForTest()
-	t.Cleanup(repochange.ResetWatchersForTest)
+
+	repochangetest.Acquire(t)
 	store, ctx, root := openLedgerOnDisk(t)
+	loseInventoryCoverage(store, root)
 	window := openTestWindow(t, store, ctx, root, "make")
 	if window.IsSettled() {
 		t.Fatal("open window reported settled")
@@ -187,7 +189,7 @@ func TestWindowIsSettledFollowsSettlement(t *testing.T) {
 
 func TestWindowOnTrustedCoverageSettlesAfterClose(t *testing.T) {
 	store, ctx, root := openLedgerOnDisk(t)
-	repochange.MarkCoverageCompleteForTest(root)
+	repochangetest.Watch(t, root)
 	t.Cleanup(func() { repochange.CloseRoot(root) })
 	endSettle := holdSettlePeriods(store)
 	window := openTestWindow(t, store, ctx, root, "make")
@@ -205,7 +207,7 @@ func TestWindowOnTrustedCoverageSettlesAfterClose(t *testing.T) {
 
 func TestOpenSessionWindowsListsOnlyThatSessionsUnsettledWindows(t *testing.T) {
 	store, ctx, root := openLedgerOnDisk(t)
-	repochange.MarkCoverageCompleteForTest(root)
+	repochangetest.Watch(t, root)
 	t.Cleanup(func() { repochange.CloseRoot(root) })
 	endSettle := holdSettlePeriods(store)
 	mine := openTestWindow(t, store, ctx, root, "make")
@@ -404,7 +406,7 @@ func TestInterruptedWindowsSettleWhenAFreshProcessOpensOne(t *testing.T) {
 	quiet := openTestWindow(t, store, ctx, root, "true")
 
 	// A new process holds no memory of either window.
-	fresh := New(ledger.sqlDB, ledger.contentDir)
+	fresh := New(ledger.sqlDB, ledger.contentDir, Timing{})
 	setWindowTimer(fresh.Commands, func() <-chan time.Time { return time.After(0) })
 	fresh.Commands.startQuietGrace, fresh.Commands.startQuietWait = 0, 0
 	next, err := fresh.Commands.OpenCommandWindow(ctx, CommandWindowInput{

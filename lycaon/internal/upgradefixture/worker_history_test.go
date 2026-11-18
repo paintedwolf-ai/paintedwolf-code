@@ -29,7 +29,7 @@ func TestWorkerFixtureReconstructsAfterOriginalWorkspaceRemoval(t *testing.T) {
 	parent, err := sessions.Sessions.Create(t.Context(), api.CreateSessionRequest{WorkspaceRootID: attached.Roots[0].ID}, attached.ID)
 	testutil.FailErr(t, "create fixture session", err)
 	queue := worker.NewSQLServices(database, 2).Queue
-	queue.Branches.SetBaselineStore(sourceledger.New(database, filepath.Join(dataDir, "source-content")).Baselines)
+	queue.Branches.SetBaselineStore(sourceledger.New(database, filepath.Join(dataDir, "source-content"), sourceledger.Timing{}).Baselines)
 	queue.Branches.SetProjectStore(projects)
 	queue.Branches.SetWorkerWorkspaceManager(workspace.NewManager(filepath.Join(dataDir, "worker-branches"), platform.NewSelector(platform.Config{}), workspace.Filesystem{}))
 	prepared, err := harnessfixture.Prepare(t.Context(), queue, queue.Branches, sessions.Sessions, parent, attached.Roots[0], sessions.Transcript, harnessfixture.Setup{

@@ -122,7 +122,7 @@ func newFirefoxWorkerFixture(t *testing.T, source string) *layeredWorkerFixture 
 	manager := workspace.NewManager(branches, selector, workspace.Filesystem{}).WithPrivateGit(git)
 	services := NewSQLServices(database, 4)
 	queue := services.Queue
-	queue.Branches.SetBaselineStore(sourceledger.New(database, filepath.Join(testbaseline.DataDir(t, database), "source-content")).Baselines)
+	queue.Branches.SetBaselineStore(sourceledger.New(database, filepath.Join(testbaseline.DataDir(t, database), "source-content"), sourceledger.Timing{}).Baselines)
 	queue.Branches.SetWorkerWorkspaceManager(manager)
 	return &layeredWorkerFixture{db: database, queue: queue, promotions: services.Promotions, manager: manager, source: source, branches: branches}
 }

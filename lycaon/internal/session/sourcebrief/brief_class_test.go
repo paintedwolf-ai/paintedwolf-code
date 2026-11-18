@@ -39,7 +39,7 @@ func newBriefLedger(t *testing.T) *briefLedger {
  VALUES (?,'p1',?,'command','npm run build','ended',?,?)`, fmt.Sprintf("w%d", i+1), session, i+1, now)
 		testutil.FailErr(t, "seed window", err)
 	}
-	return &briefLedger{t: t, ledger: sourceledger.New(sqlDB, t.TempDir())}
+	return &briefLedger{t: t, ledger: sourceledger.New(sqlDB, t.TempDir(), sourceledger.Timing{})}
 }
 
 func (l *briefLedger) checkpoint(turn int) {

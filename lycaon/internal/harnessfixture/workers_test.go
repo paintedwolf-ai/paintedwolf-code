@@ -89,7 +89,7 @@ func newScriptedHarness(t *testing.T, files map[string]string) *scriptedHarness 
 	testutil.FailErr(t, "create parent", err)
 	h.parent = parent
 	h.queue = worker.NewSQLServices(database, 8).Queue
-	h.ledger = sourceledger.New(database, filepath.Join(testbaseline.DataDir(t, database), "source-content"))
+	h.ledger = sourceledger.New(database, filepath.Join(testbaseline.DataDir(t, database), "source-content"), sourceledger.Timing{})
 	h.queue.Branches.SetBaselineStore(h.ledger.Baselines)
 	h.queue.Branches.SetProjectStore(h.projects)
 	h.manager = workspace.NewManager(filepath.Join(testbaseline.DataDir(t, database), "worker-branches"), platform.NewSelector(platform.Config{}), workspace.Filesystem{})

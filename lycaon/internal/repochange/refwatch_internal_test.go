@@ -14,7 +14,6 @@ import (
 
 // A running timer callback must observe closure.
 func TestScheduleHeadNotifyStaysSilentOnceClosed(t *testing.T) {
-	t.Cleanup(ResetObserversForTest)
 	root := t.TempDir()
 	synctest.Test(t, func(t *testing.T) {
 		var moved atomic.Int32

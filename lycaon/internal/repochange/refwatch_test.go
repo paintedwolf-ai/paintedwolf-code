@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/repochange"
+	"github.com/lycaon/lycaon/internal/repochange/repochangetest"
 	"github.com/lycaon/lycaon/internal/testutil"
 )
 
@@ -29,9 +30,8 @@ func seedBareGitLayout(t *testing.T, root string) {
 }
 
 func TestRefWatchEmitsHeadMovedForOutsideCommit(t *testing.T) {
-	t.Cleanup(repochange.ResetObserversForTest)
 	t.Cleanup(func() { repochange.ResetDebouncerForTest(context.Background()) })
-	t.Cleanup(repochange.ResetWatchersForTest)
+	repochangetest.Acquire(t)
 
 	rootDir := t.TempDir()
 	seedBareGitLayout(t, rootDir)
@@ -40,7 +40,7 @@ func TestRefWatchEmitsHeadMovedForOutsideCommit(t *testing.T) {
 	var headMoved atomic.Int32
 	var mu sync.Mutex
 	var worktree [][]string
-	repochange.RegisterObserver(func(_ context.Context, ev repochange.Event) {
+	t.Cleanup(repochange.RegisterObserver(func(_ context.Context, ev repochange.Event) {
 		if ev.ProjectDir != root {
 			return
 		}
@@ -56,7 +56,7 @@ func TestRefWatchEmitsHeadMovedForOutsideCommit(t *testing.T) {
 			worktree = append(worktree, ev.Paths)
 			mu.Unlock()
 		}
-	})
+	}))
 
 	ensureLiveRoot(t, root)
 	// The seeded layout predates the stream; only changes after this point count.
@@ -83,20 +83,19 @@ func TestRefWatchEmitsHeadMovedForOutsideCommit(t *testing.T) {
 }
 
 func TestRefWatchReportsIndexChanges(t *testing.T) {
-	t.Cleanup(repochange.ResetObserversForTest)
 	t.Cleanup(func() { repochange.ResetDebouncerForTest(context.Background()) })
-	t.Cleanup(repochange.ResetWatchersForTest)
+	repochangetest.Acquire(t)
 
 	rootDir := t.TempDir()
 	seedBareGitLayout(t, rootDir)
 
 	root := canonicalTestDir(t, rootDir)
 	var indexChanged atomic.Int32
-	repochange.RegisterObserver(func(_ context.Context, ev repochange.Event) {
+	t.Cleanup(repochange.RegisterObserver(func(_ context.Context, ev repochange.Event) {
 		if ev.ProjectDir == root && ev.Kind == repochange.IndexChanged {
 			indexChanged.Add(1)
 		}
-	})
+	}))
 
 	ensureLiveRoot(t, root)
 
@@ -109,9 +108,8 @@ func TestRefWatchReportsIndexChanges(t *testing.T) {
 }
 
 func TestRefWatchEmitsForLinkedWorktreeCommonDirectory(t *testing.T) {
-	t.Cleanup(repochange.ResetObserversForTest)
 	t.Cleanup(func() { repochange.ResetDebouncerForTest(context.Background()) })
-	t.Cleanup(repochange.ResetWatchersForTest)
+	repochangetest.Acquire(t)
 
 	root := t.TempDir()
 	common := t.TempDir()
@@ -127,11 +125,11 @@ func TestRefWatchEmitsForLinkedWorktreeCommonDirectory(t *testing.T) {
 
 	canonical := canonicalTestDir(t, root)
 	var headMoved atomic.Int32
-	repochange.RegisterObserver(func(_ context.Context, event repochange.Event) {
+	t.Cleanup(repochange.RegisterObserver(func(_ context.Context, event repochange.Event) {
 		if event.ProjectDir == canonical && event.Kind == repochange.HeadMoved {
 			headMoved.Add(1)
 		}
-	})
+	}))
 	ensureLiveRoot(t, root)
 	testutil.FailErr(t, "move shared branch", os.WriteFile(branch, []byte("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\n"), 0o644))
 	testutil.WaitFor(t, "the head move is reported", func() bool { return headMoved.Load() > 0 })

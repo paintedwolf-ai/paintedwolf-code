@@ -1,6 +1,8 @@
 package session
 
 import (
+	"github.com/lycaon/lycaon/internal/repochange/repochangetest"
+
 	"context"
 	"fmt"
 	"os"
@@ -21,7 +23,6 @@ import (
 	"github.com/lycaon/lycaon/internal/orchestration"
 	"github.com/lycaon/lycaon/internal/orchestration/orchestrationtest"
 	"github.com/lycaon/lycaon/internal/progress"
-	"github.com/lycaon/lycaon/internal/repochange"
 	"github.com/lycaon/lycaon/internal/session/approvalstate"
 	sessioncheckpoint "github.com/lycaon/lycaon/internal/session/checkpoint"
 	"github.com/lycaon/lycaon/internal/session/profiles"
@@ -175,11 +176,12 @@ func TestForgetJobClearsUnclaimedWakePayloads(t *testing.T) {
 }
 
 func TestMain(m *testing.M) {
+	releaseWatchers := repochangetest.Suite()
 	gittestsetup.Enable()
 	guidancetestsetup.Install()
 	anchortestsetup.Install()
 	testutil.VerifyNoLeaks(m, func() {
-		repochange.ResetWatchersForTest()
+		releaseWatchers()
 		ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 		defer cancel()
 		if err := sourcecatalog.Process().Drain(ctx); err != nil {

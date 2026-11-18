@@ -14,6 +14,7 @@ import (
 	"github.com/lycaon/lycaon/internal/git"
 	"github.com/lycaon/lycaon/internal/programtest"
 	"github.com/lycaon/lycaon/internal/repochange"
+	"github.com/lycaon/lycaon/internal/repochange/repochangetest"
 	"github.com/lycaon/lycaon/internal/sourceledger"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -27,10 +28,10 @@ import (
 // A generated file stages with the session's work because the session's own
 // program was observed creating it; a peer's dirty file stays out.
 func TestGitCommitStagesWhatTheSessionsProgramGeneratedACCW10(t *testing.T) {
-	repochange.DisableWatchersForTest()
-	t.Cleanup(repochange.ResetWatchersForTest)
+
+	repochangetest.Acquire(t)
 	f := programtest.New(t, programtest.Options{})
-	ledger := f.AttachLedger(t)
+	ledger := f.AttachLedger(t, sourceledger.Timing{})
 	manager := git.NewManager()
 	ledger.Git.SetGitReader(walkGitReader{manager})
 	gittest.Init(t, f.Dir)
@@ -81,12 +82,12 @@ func TestGitCommitStagesWhatTheSessionsProgramGeneratedACCW10(t *testing.T) {
 // A person's save while a program sits between external processes is not staged
 // by the session's bulk commit; explicit paths remain the way to commit it.
 func TestBulkCommitLeavesAnOutsideEditMadeBetweenProcessesOfAProgram(t *testing.T) {
-	repochange.DisableWatchersForTest()
-	t.Cleanup(repochange.ResetWatchersForTest)
+
+	repochangetest.Acquire(t)
 	f := programtest.New(t, programtest.Options{})
 	f.Runtime.ParkThreshold = time.Hour
 	gate := make(chan time.Time)
-	ledger := f.AttachLedger(t, sourceledger.WithCommandWindowTimer(func(time.Duration) <-chan time.Time { return gate }))
+	ledger := f.AttachLedger(t, sourceledger.Timing{After: func(time.Duration) <-chan time.Time { return gate }})
 	manager := git.NewManager()
 	ledger.Git.SetGitReader(walkGitReader{manager})
 	seedRepository(t, f.Dir)
@@ -119,10 +120,10 @@ func TestBulkCommitLeavesAnOutsideEditMadeBetweenProcessesOfAProgram(t *testing.
 
 // Drift while two sessions' windows are active belongs to neither bulk commit.
 func TestBulkCommitLeavesDriftObservedWhileTwoSessionsWereActive(t *testing.T) {
-	repochange.DisableWatchersForTest()
-	t.Cleanup(repochange.ResetWatchersForTest)
+
+	repochangetest.Acquire(t)
 	f := programtest.New(t, programtest.Options{})
-	ledger := f.AttachLedger(t)
+	ledger := f.AttachLedger(t, sourceledger.Timing{})
 	manager := git.NewManager()
 	ledger.Git.SetGitReader(walkGitReader{manager})
 	seedRepository(t, f.Dir)
@@ -162,10 +163,10 @@ func TestBulkCommitLeavesDriftObservedWhileTwoSessionsWereActive(t *testing.T) {
 // A person's edit to a file a window claimed earlier is theirs: it stays out of
 // the bulk commit and uncommitted_paths reports it.
 func TestBulkCommitLeavesAPersonsEditToAFileAWindowClaimed(t *testing.T) {
-	repochange.DisableWatchersForTest()
-	t.Cleanup(repochange.ResetWatchersForTest)
+
+	repochangetest.Acquire(t)
 	f := programtest.New(t, programtest.Options{})
-	ledger := f.AttachLedger(t)
+	ledger := f.AttachLedger(t, sourceledger.Timing{})
 	manager := git.NewManager()
 	ledger.Git.SetGitReader(walkGitReader{manager})
 	seedRepository(t, f.Dir)
@@ -216,11 +217,11 @@ func runTrustedGenerator(t *testing.T, f *programtest.Fixture, name string) {
 func TestBulkCommitWaitsForItsSessionsClosingWindow(t *testing.T) {
 	f := programtest.New(t, programtest.Options{})
 	gate := make(chan time.Time)
-	ledger := f.AttachLedger(t, sourceledger.WithCommandWindowTimer(func(time.Duration) <-chan time.Time { return gate }))
+	ledger := f.AttachLedger(t, sourceledger.Timing{After: func(time.Duration) <-chan time.Time { return gate }})
 	manager := git.NewManager()
 	ledger.Git.SetGitReader(walkGitReader{manager})
 	seedRepository(t, f.Dir)
-	repochange.MarkCoverageCompleteForTest(f.Dir)
+	repochangetest.Watch(t, f.Dir)
 	t.Cleanup(func() { repochange.CloseRoot(f.Dir) })
 	runTrustedGenerator(t, f, "gen.txt")
 
@@ -241,13 +242,13 @@ func TestBulkCommitReportsWhatAWindowStillSettlingLeftOut(t *testing.T) {
 	t.Cleanup(func() { close(held) })
 	var activeGate atomic.Pointer[chan time.Time]
 	activeGate.Store(&first)
-	ledger := f.AttachLedger(t, sourceledger.WithCommandWindowTimer(func(time.Duration) <-chan time.Time {
+	ledger := f.AttachLedger(t, sourceledger.Timing{After: func(time.Duration) <-chan time.Time {
 		return *activeGate.Load()
-	}))
+	}})
 	manager := git.NewManager()
 	ledger.Git.SetGitReader(walkGitReader{manager})
 	seedRepository(t, f.Dir)
-	repochange.MarkCoverageCompleteForTest(f.Dir)
+	repochangetest.Watch(t, f.Dir)
 	t.Cleanup(func() { repochange.CloseRoot(f.Dir) })
 
 	runTrustedGenerator(t, f, "first.txt")

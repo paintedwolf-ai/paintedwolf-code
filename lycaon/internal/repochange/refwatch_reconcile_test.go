@@ -23,7 +23,6 @@ type gitWatchFixture struct {
 
 func newGitWatchFixture(t *testing.T) *gitWatchFixture {
 	t.Helper()
-	t.Cleanup(ResetObserversForTest)
 	t.Cleanup(func() { ResetDebouncerForTest(context.Background()) })
 	root, err := filepath.EvalSymlinks(t.TempDir())
 	testutil.FailErr(t, "resolve root", err)

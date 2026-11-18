@@ -52,7 +52,7 @@ func composedMutationEntry(t *testing.T) (*programtest.Fixture, *projectsource.S
 	fixture.Runtime = runtime.Commands.programs()
 	_, err = fixture.Database.ExecContext(t.Context(), `INSERT INTO project_roots (id,project_id,path,label,is_primary,added_at) VALUES ('r1',?,?,'root',1,?)`, testdbseed.DefaultProjectID, root, timelayout.Format(time.Now().UTC()))
 	testutil.FailErr(t, "attach durable root", err)
-	ledger := sourceledger.New(fixture.Database, t.TempDir())
+	ledger := sourceledger.New(fixture.Database, t.TempDir(), sourceledger.Timing{})
 	service := projectsource.NewSourceMutationService(fixture.Database, ledger)
 	t.Cleanup(func() { testutil.FailErr(t, "close source mutation service", service.Close()) })
 	scratch, err := filepath.EvalSymlinks(t.TempDir())

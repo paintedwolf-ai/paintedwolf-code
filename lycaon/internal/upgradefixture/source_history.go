@@ -56,7 +56,7 @@ func SeedSourceHistory(ctx context.Context, database db.Handle, dataDir, project
 	if err := writeSourceFixture(projectDir, body); err != nil {
 		return SourceEvidence{}, err
 	}
-	ledger := sourceledger.New(database, filepath.Join(dataDir, enginepaths.SourceContentDirName))
+	ledger := sourceledger.New(database, filepath.Join(dataDir, enginepaths.SourceContentDirName), sourceledger.Timing{})
 	defer func() { _ = ledger.Snapshots.Close() }()
 	if err := ledger.Record(ctx, sourceledger.RecordInput{
 		RecordLocation: sourceledger.RecordLocation{RootID: rootID, Path: sourceHistoryPath},
@@ -108,7 +108,7 @@ func VerifySourceHistory(ctx context.Context, database db.Handle, dataDir, proje
 		return fmt.Errorf("source fixture has no independent historical version")
 	}
 	contentDir := filepath.Join(dataDir, enginepaths.SourceContentDirName)
-	ledger := sourceledger.New(database, contentDir)
+	ledger := sourceledger.New(database, contentDir, sourceledger.Timing{})
 	defer func() { _ = ledger.Snapshots.Close() }()
 	version, err := ledger.History.ReadRestorableVersion(ctx, projectID, evidence.SourceVersionID)
 	if err != nil {

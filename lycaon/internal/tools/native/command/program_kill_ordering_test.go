@@ -2,6 +2,7 @@ package command_test
 
 import (
 	"context"
+	"github.com/lycaon/lycaon/internal/sourceledger"
 	"sync"
 	"testing"
 	"time"
@@ -24,7 +25,7 @@ func TestProgramKillRightAfterBackgroundReportsItsSignal(t *testing.T) {
 				job + ` & kill %%; wait; printf 'bare:%s\n' "$?"`
 			fixtures := make([]*windowFixture, concurrentPrograms)
 			for i := range fixtures {
-				fixtures[i] = newWindowFixture(t)
+				fixtures[i] = newWindowFixture(t, sourceledger.Timing{})
 				fixtures[i].Runtime.ParkThreshold = time.Hour
 			}
 			outcomes := make([]string, concurrentPrograms)
@@ -54,7 +55,7 @@ func TestProgramKillRightAfterBackgroundReportsItsSignal(t *testing.T) {
 // The launch is held before its process exists, so the job is listed with nothing to
 // signal yet. Its stop still has to decide the status, and no process may start after.
 func TestProgramKillBeforeTheProcessStartsReportsItsSignal(t *testing.T) {
-	f := newWindowFixture(t)
+	f := newWindowFixture(t, sourceledger.Timing{})
 	f.Runtime.ParkThreshold = time.Hour
 	release := make(chan struct{})
 	var once sync.Once

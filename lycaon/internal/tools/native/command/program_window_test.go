@@ -14,6 +14,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/programtest"
 	"github.com/lycaon/lycaon/internal/repochange"
+	"github.com/lycaon/lycaon/internal/repochange/repochangetest"
 	"github.com/lycaon/lycaon/internal/sourceledger"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -28,8 +29,9 @@ const writeGen = `external -- /bin/sh -c 'echo generated > gen.txt'`
 // every window open counted.
 type windowFixture struct {
 	*programtest.Fixture
-	ledger *sourceledger.Store
-	opener *countingOpener
+	ledger             *sourceledger.Store
+	opener             *countingOpener
+	continuousCoverage atomic.Bool
 }
 
 // countingOpener counts opens around the real ledger. before, when set, runs
@@ -50,20 +52,25 @@ func (o *countingOpener) OpenCommandWindow(ctx context.Context, in sourceledger.
 	return o.inner.OpenCommandWindow(ctx, in)
 }
 
-func newWindowFixture(t *testing.T, options ...sourceledger.Option) *windowFixture {
+func newWindowFixture(t *testing.T, timing sourceledger.Timing) *windowFixture {
 	t.Helper()
-	// Without watcher coverage a close settles before the program's result.
-	repochange.DisableWatchersForTest()
-	t.Cleanup(repochange.ResetWatchersForTest)
+	repochangetest.Acquire(t)
 	f := programtest.New(t, programtest.Options{})
-	ledger := f.AttachLedger(t, options...)
+	ledger := f.AttachLedger(t, timing)
 	opener := &countingOpener{inner: ledger.Commands}
 	configure := f.Configure
 	f.Configure = func(tc *tools.ToolContext) {
 		configure(tc)
 		tc.Source.Commands = opener
 	}
-	return &windowFixture{Fixture: f, ledger: ledger, opener: opener}
+	fixture := &windowFixture{Fixture: f, ledger: ledger, opener: opener}
+	// Retire each observed stream to exercise settlement without coverage.
+	t.Cleanup(repochange.RegisterObserver(func(_ context.Context, event repochange.Event) {
+		if event.ProjectDir == f.Dir && event.Source == repochange.SourceWatcher && !fixture.continuousCoverage.Load() {
+			repochange.CloseRoot(f.Dir)
+		}
+	}))
+	return fixture
 }
 
 func (f *windowFixture) run(t *testing.T, source string) command.ProgramOutcome {
@@ -109,7 +116,7 @@ func (f *windowFixture) forcePass(t *testing.T, paths ...string) {
 }
 
 func TestProgramWindowACCW01UntrustedTokenSettlesBeforeTheResult(t *testing.T) {
-	f := newWindowFixture(t)
+	f := newWindowFixture(t, sourceledger.Timing{})
 	outcome := f.run(t, writeGen)
 	if outcome.Status != 0 || outcome.SourceWindow == nil || outcome.SourceWindow.ID == "" || !outcome.SourceWindow.Settled {
 		t.Fatalf("outcome = %+v, want a settled source window", outcome)
@@ -119,8 +126,9 @@ func TestProgramWindowACCW01UntrustedTokenSettlesBeforeTheResult(t *testing.T) {
 
 func TestProgramWindowACCW02TrustedTokenSettlesAfterTheResult(t *testing.T) {
 	gate := make(chan time.Time)
-	f := newWindowFixture(t, sourceledger.WithCommandWindowTimer(func(time.Duration) <-chan time.Time { return gate }))
-	repochange.MarkCoverageCompleteForTest(f.Dir)
+	f := newWindowFixture(t, sourceledger.Timing{After: func(time.Duration) <-chan time.Time { return gate }})
+	f.continuousCoverage.Store(true)
+	repochangetest.Watch(t, f.Dir)
 	t.Cleanup(func() { repochange.CloseRoot(f.Dir) })
 	outcome := f.run(t, writeGen)
 	if outcome.SourceWindow == nil || outcome.SourceWindow.Settled {
@@ -141,7 +149,7 @@ func TestProgramWindowACCW02TrustedTokenSettlesAfterTheResult(t *testing.T) {
 
 // A job the program waits on is part of evaluation, however long it runs.
 func TestProgramWindowACCW03JobTheProgramWaitsOnIsObserved(t *testing.T) {
-	f := newWindowFixture(t)
+	f := newWindowFixture(t, sourceledger.Timing{})
 	f.Runtime.ParkThreshold = time.Hour
 	done := make(chan callResult, 1)
 	go func() {
@@ -173,7 +181,7 @@ wait`)
 
 // A detached job outliving evaluation is observed only until evaluation ends.
 func TestProgramWindowACCW03DetachedJobIsObservedUntilEvaluationEnds(t *testing.T) {
-	f := newWindowFixture(t)
+	f := newWindowFixture(t, sourceledger.Timing{})
 	outcome := f.run(t, `external -- /bin/sh -c 'echo job > job.txt; until test -e release; do sleep 0.01; done; echo end > job.txt; touch finished' &
 until [ -e job.txt ]; do sleep 0.01; done`)
 	if outcome.SourceWindow == nil || outcome.SourceWindow.ID == "" || !outcome.SourceWindow.Settled {
@@ -201,7 +209,7 @@ until [ -e job.txt ]; do sleep 0.01; done`)
 // One session's dev server costs no other session its attribution, and claims
 // nobody's edits.
 func TestDetachedJobLeavesOtherSessionsAttributionAndOutsideEditsAlone(t *testing.T) {
-	f := newWindowFixture(t)
+	f := newWindowFixture(t, sourceledger.Timing{})
 	outcome := f.run(t, `external -- /bin/sh -c 'echo server > server.txt; until test -e release; do sleep 0.01; done; touch finished' &
 until [ -e server.txt ]; do sleep 0.01; done`)
 	if outcome.SourceWindow == nil || !outcome.SourceWindow.Settled {
@@ -235,7 +243,7 @@ until [ -e server.txt ]; do sleep 0.01; done`)
 }
 
 func TestProgramWindowACCW04WorkerBranchOpensNone(t *testing.T) {
-	f := newWindowFixture(t)
+	f := newWindowFixture(t, sourceledger.Timing{})
 	configure := f.Configure
 	f.Configure = func(tc *tools.ToolContext) {
 		configure(tc)
@@ -268,7 +276,7 @@ func (f *windowFixture) windowRows(t *testing.T) int {
 }
 
 func TestProgramWindowACCW05OpenFailureRunsUnobservedOnce(t *testing.T) {
-	f := newWindowFixture(t)
+	f := newWindowFixture(t, sourceledger.Timing{})
 	f.opener.before = func(context.Context) error { return errors.New("reconcile unavailable") }
 	outcome := f.run(t, writeGen+`; external -- /bin/sh -c 'echo second > second.txt'`)
 	if outcome.Status != 0 || outcome.SourceWindow == nil || outcome.SourceWindow.ID != "" || !outcome.SourceWindow.Unobserved {
@@ -290,7 +298,7 @@ func TestProgramWindowACCW09PipelineAndLoopShareOne(t *testing.T) {
 		"loop":     `for i in 1 2 3 4 5 6 7 8 9 10; do external -- /bin/sh -c "echo $i > f$i.txt"; done`,
 	} {
 		t.Run(name, func(t *testing.T) {
-			f := newWindowFixture(t)
+			f := newWindowFixture(t, sourceledger.Timing{})
 			outcome := f.run(t, source)
 			if outcome.Status != 0 || outcome.SourceWindow == nil {
 				t.Fatalf("outcome = %+v", outcome)
@@ -316,7 +324,7 @@ func TestProgramWindowACCW09PipelineAndLoopShareOne(t *testing.T) {
 }
 
 func TestProgramWindowIsNotOpenedForAProgramNotFound(t *testing.T) {
-	f := newWindowFixture(t)
+	f := newWindowFixture(t, sourceledger.Timing{})
 	outcome := f.run(t, `external -- paintedwolf-absent-generator`)
 	if opens := f.opener.opens.Load(); opens != 0 || outcome.Status != 127 || outcome.SourceWindow != nil {
 		t.Fatalf("window opens = %d, outcome = %+v", opens, outcome)
@@ -324,7 +332,7 @@ func TestProgramWindowIsNotOpenedForAProgramNotFound(t *testing.T) {
 }
 
 func TestProgramWindowCoversNestedCommands(t *testing.T) {
-	f := newWindowFixture(t)
+	f := newWindowFixture(t, sourceledger.Timing{})
 	outcome := f.run(t, `timeout 60 /bin/sh -c 'echo a > timed.txt'; nohup /bin/sh -c 'echo b > nohup.txt'`)
 	if outcome.Status != 0 || outcome.SourceWindow == nil {
 		t.Fatalf("outcome = %+v", outcome)
@@ -339,7 +347,7 @@ func TestProgramWindowCoversNestedCommands(t *testing.T) {
 // A stage that skipped the wait would create its output while the open is held
 // here. A slow host can only miss the mistake, never fail on correct code.
 func TestProgramWindowEveryStageWaitsForTheOpen(t *testing.T) {
-	f := newWindowFixture(t)
+	f := newWindowFixture(t, sourceledger.Timing{})
 	var startedEarly atomic.Bool
 	f.opener.before = func(context.Context) error {
 		for range 30 {
@@ -369,7 +377,7 @@ func TestProgramWindowEveryStageWaitsForTheOpen(t *testing.T) {
 
 // Drift to a file with a ledger head before the launch stays out of its window.
 func TestProgramWindowDoesNotClaimEarlierDriftToATrackedFile(t *testing.T) {
-	f := newWindowFixture(t)
+	f := newWindowFixture(t, sourceledger.Timing{})
 	seed := f.run(t, `external -- /bin/sh -c 'echo one > peer.txt'`)
 	if seed.SourceWindow == nil {
 		t.Fatalf("seed outcome = %+v", seed)
@@ -419,7 +427,7 @@ func (c durationClock) AfterFunc(d time.Duration, fire func()) func() bool {
 // so a slow open cannot report 124 for a process that never started. The open
 // carries on for later launches, and the result says what went unobserved.
 func TestTimeoutDoesNotReportExpiryForALaunchTheOpenDelayed(t *testing.T) {
-	f := newWindowFixture(t)
+	f := newWindowFixture(t, sourceledger.Timing{})
 	clock := durationClock{ManualClock: programtest.NewManualClock(), requested: make(chan time.Duration, 16)}
 	f.Runtime.Clock, f.Runtime.ParkThreshold = clock, time.Hour
 	release := make(chan struct{})
@@ -461,7 +469,7 @@ func TestTimeoutDoesNotReportExpiryForALaunchTheOpenDelayed(t *testing.T) {
 
 // A launch that ran with no window watching it says so.
 func TestProgramResultStatesWhenObservationNeverStarted(t *testing.T) {
-	f := newWindowFixture(t)
+	f := newWindowFixture(t, sourceledger.Timing{})
 	f.opener.before = func(context.Context) error { return sourceledger.ErrWindowStartPending }
 	raw, err := f.Call(t, t.Context(), writeGen)
 	testutil.FailErr(t, "run program", err)
@@ -490,7 +498,7 @@ func TestProgramWindowIsActiveWhileAnyLaunchIsLive(t *testing.T) {
 	} {
 		t.Run(name, func(t *testing.T) {
 			gate := make(chan time.Time)
-			f := newWindowFixture(t, sourceledger.WithCommandWindowTimer(func(time.Duration) <-chan time.Time { return gate }))
+			f := newWindowFixture(t, sourceledger.Timing{After: func(time.Duration) <-chan time.Time { return gate }})
 			f.Runtime.ParkThreshold = time.Hour
 			done := make(chan callResult, 1)
 			go func() {
@@ -528,7 +536,7 @@ func TestProgramWindowIsActiveWhileAnyLaunchIsLive(t *testing.T) {
 // A stop during the open reaches the waiting stage, and settlement abandons
 // the open rather than waiting out its budget.
 func TestProgramWindowStopDuringOpenAbandonsIt(t *testing.T) {
-	f := newWindowFixture(t)
+	f := newWindowFixture(t, sourceledger.Timing{})
 	entered := make(chan struct{})
 	f.opener.before = func(ctx context.Context) error {
 		close(entered)
@@ -554,7 +562,7 @@ func TestProgramWindowStopDuringOpenAbandonsIt(t *testing.T) {
 // A job launching after evaluation ended runs, opens nothing, and leaves the
 // result it could not have been part of unchanged.
 func TestLaunchAfterEvaluationEndedRunsUnobservedAndOpensNothing(t *testing.T) {
-	f := newWindowFixture(t)
+	f := newWindowFixture(t, sourceledger.Timing{})
 	outcome := f.run(t, `{ until [ -e go ]; do sleep 0.01; done; `+writeGen+`; touch finished; } &`)
 	if outcome.SourceWindow != nil {
 		t.Fatalf("outcome = %+v, want no window with no launch by the result", outcome)
@@ -577,7 +585,7 @@ func TestLaunchAfterEvaluationEndedRunsUnobservedAndOpensNothing(t *testing.T) {
 
 // A job the program waits on stays observed while the program is parked.
 func TestProgramWindowSpansAParkOverAJobItWaitsOn(t *testing.T) {
-	f := newWindowFixture(t)
+	f := newWindowFixture(t, sourceledger.Timing{})
 	parking := newRecordingParking()
 	f.Runtime.Parking, f.Runtime.ParkThreshold = parking, time.Nanosecond
 	raw, err := f.Call(t, t.Context(), `external -- /bin/sh -c 'echo a > gen.txt; until test -e release; do sleep 0.01; done; echo b > late.txt' &
@@ -609,7 +617,7 @@ wait`)
 // A program that parks keeps its window across the park, and its final result
 // states it.
 func TestProgramWindowSpansAPark(t *testing.T) {
-	f := newWindowFixture(t)
+	f := newWindowFixture(t, sourceledger.Timing{})
 	parking := newRecordingParking()
 	f.Runtime.Parking, f.Runtime.ParkThreshold = parking, time.Nanosecond
 	raw, err := f.Call(t, t.Context(), writeGen+`; sleep 60`)
@@ -639,7 +647,7 @@ func TestProgramWindowSpansAPark(t *testing.T) {
 // no part of that program's window, whether the file had a ledger head or not.
 func TestOutsideEditDuringAParkIsNotAttributedToTheProgram(t *testing.T) {
 	gate := make(chan time.Time)
-	f := newWindowFixture(t, sourceledger.WithCommandWindowTimer(func(time.Duration) <-chan time.Time { return gate }))
+	f := newWindowFixture(t, sourceledger.Timing{After: func(time.Duration) <-chan time.Time { return gate }})
 	parking := newRecordingParking()
 	f.Runtime.Parking, f.Runtime.ParkThreshold = parking, time.Nanosecond
 	raw, err := f.Call(t, t.Context(), writeGen+`; sleep 60`)
@@ -674,7 +682,7 @@ func TestOutsideEditDuringAParkIsNotAttributedToTheProgram(t *testing.T) {
 // A process that starts after a gap brings the window back without taking the gap.
 func TestLaunchAfterAGapDoesNotClaimTheGap(t *testing.T) {
 	gate := make(chan time.Time)
-	f := newWindowFixture(t, sourceledger.WithCommandWindowTimer(func(time.Duration) <-chan time.Time { return gate }))
+	f := newWindowFixture(t, sourceledger.Timing{After: func(time.Duration) <-chan time.Time { return gate }})
 	f.Runtime.ParkThreshold = time.Hour
 	done := make(chan callResult, 1)
 	go func() {

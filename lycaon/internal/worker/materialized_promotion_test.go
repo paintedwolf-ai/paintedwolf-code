@@ -37,7 +37,7 @@ func TestMaterializedWorkerPromotesThreeWayFromItsPristineBase(t *testing.T) {
 	manager := workspace.NewManager(filepath.Join(dataDir, "worker-branches"), selector, workspace.Filesystem{})
 	queueServices := NewSQLServices(database, 4)
 	queue := queueServices.Queue
-	queue.Branches.SetBaselineStore(sourceledger.New(database, filepath.Join(dataDir, "source-content")).Baselines)
+	queue.Branches.SetBaselineStore(sourceledger.New(database, filepath.Join(dataDir, "source-content"), sourceledger.Timing{}).Baselines)
 	queue.Branches.SetWorkerWorkspaceManager(manager)
 	id, err := queue.Enqueue(ctx, api.WorkerTask{
 		ParentSessionID: "parent", ProjectID: testdbseed.DefaultProjectID, WorkspacePath: source, WorkspaceRootID: "root-id",

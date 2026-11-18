@@ -229,7 +229,7 @@ func TestBuildWindowKeepsProjectWideEffects(t *testing.T) {
  (id, project_id, path, label, is_primary, added_at, kind)
  VALUES ('r1','p1','/tmp/brief-root','root',1,?,'attached')`, timelayout.Format(time.Now().UTC()))
 		testutil.FailErr(t, "seed root", err)
-		ledger := sourceledger.New(sqlDB, t.TempDir())
+		ledger := sourceledger.New(sqlDB, t.TempDir(), sourceledger.Timing{})
 		checkpoint := func(turn int) {
 			_, err := ledger.Checkpoints.CreateStructuralCheckpoint(t.Context(), sourceledger.StructuralCheckpointInput{
 				ProjectID: "p1", Kind: sourceledger.CheckpointTurn, Label: "Turn start", SessionID: "s1", Turn: turn,

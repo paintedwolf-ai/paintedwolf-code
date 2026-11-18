@@ -1,6 +1,8 @@
 package sourceledger
 
 import (
+	"github.com/lycaon/lycaon/internal/repochange/repochangetest"
+
 	"context"
 	"errors"
 	"os"
@@ -9,7 +11,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/lycaon/lycaon/internal/repochange"
 	"github.com/lycaon/lycaon/internal/sourceblob"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/pkg/api"
@@ -318,8 +319,8 @@ func (failingInventory) EnsureInventory(context.Context, InventoryRequest) error
 // A failed window may still have drift to its name, so a peer does not claim what
 // it might have been.
 func TestIncompleteWindowLeavesThePeersDriftToNobody(t *testing.T) {
-	repochange.DisableWatchersForTest()
-	t.Cleanup(repochange.ResetWatchersForTest)
+
+	repochangetest.Acquire(t)
 	store, ctx, root := openLedgerOnDisk(t)
 	writeRootFile(t, root, "seed.txt", "seed\n")
 	window, release := programWindow(t, store, ctx, root)
@@ -343,9 +344,10 @@ func TestIncompleteWindowLeavesThePeersDriftToNobody(t *testing.T) {
 }
 
 func TestFailedSettlementReportsUnsettledAndListsAsIncomplete(t *testing.T) {
-	repochange.DisableWatchersForTest()
-	t.Cleanup(repochange.ResetWatchersForTest)
+
+	repochangetest.Acquire(t)
 	store, ctx, root := openLedgerOnDisk(t)
+	loseInventoryCoverage(store, root)
 	writeRootFile(t, root, "seed.txt", "seed\n")
 	window := openTestWindow(t, store, ctx, root, "make")
 	writeRootFile(t, root, "gen.txt", "generated\n")
@@ -389,8 +391,9 @@ func (failingLocks) lockObservations(context.Context, string, []RootSpec) (func(
 func TestFailedLockLeavesTheRowUntilTheNextBoot(t *testing.T) {
 	ledger := openDiskLedger(t)
 	store, ctx, root := ledger.store, context.Background(), ledger.root
-	repochange.DisableWatchersForTest()
-	t.Cleanup(repochange.ResetWatchersForTest)
+	loseInventoryCoverage(store, root)
+
+	repochangetest.Acquire(t)
 	window := openTestWindow(t, store, ctx, root, "make")
 	real := store.Commands.git
 	store.Commands.git = failingLocks{real}
@@ -410,16 +413,17 @@ func TestFailedLockLeavesTheRowUntilTheNextBoot(t *testing.T) {
 	if listed := store.Commands.OpenSessionWindows("p1", "s1"); len(listed) != 0 {
 		t.Fatalf("a completed pass left it listed: %+v", listed)
 	}
-	testutil.FailErr(t, "boot recovery", New(ledger.sqlDB, ledger.contentDir).Commands.RecoverInterruptedWindows(ctx))
+	testutil.FailErr(t, "boot recovery", New(ledger.sqlDB, ledger.contentDir, Timing{}).Commands.RecoverInterruptedWindows(ctx))
 	if _, err := store.queries.GetSourceCommandWindow(ctx, window.ID); err == nil {
 		t.Fatal("quiet window's row survived the next boot's recovery")
 	}
 }
 
 func TestFailedGracePassListsAsIncompleteAndClearsOnTheNextPass(t *testing.T) {
-	repochange.DisableWatchersForTest()
-	t.Cleanup(repochange.ResetWatchersForTest)
+
+	repochangetest.Acquire(t)
 	store, ctx, root := openLedgerOnDisk(t)
+	loseInventoryCoverage(store, root)
 	writeRootFile(t, root, "seed.txt", "seed\n")
 	window, release := programWindow(t, store, ctx, root)
 	writeRootFile(t, root, "gen.txt", "generated\n")
@@ -500,9 +504,10 @@ func manualLedgerClock(store *Store) *settableClock {
 // A forced pass that outlasts the open is reused by the next open instead of
 // forcing another, so a tree without complete watcher coverage still gets windows.
 func TestUntrustedCoverageConvergesOnAPassLongerThanTheBudget(t *testing.T) {
-	repochange.DisableWatchersForTest()
-	t.Cleanup(repochange.ResetWatchersForTest)
+
+	repochangetest.Acquire(t)
 	store, ctx, root := openLedgerOnDisk(t)
+	loseInventoryCoverage(store, root)
 	clock := manualLedgerClock(store)
 	gate := &gatedInventory{commandsInventoryPort: store.Commands.inventory, release: make(chan struct{}), entered: make(chan struct{}, 8)}
 	store.Commands.inventory = gate
@@ -555,9 +560,10 @@ func TestUntrustedCoverageConvergesOnAPassLongerThanTheBudget(t *testing.T) {
 // A final pass longer than the budget serves the next open too, so programs
 // after the first do not alternate between observed and not.
 func TestFinalPassLongerThanTheBudgetServesTheNextOpen(t *testing.T) {
-	repochange.DisableWatchersForTest()
-	t.Cleanup(repochange.ResetWatchersForTest)
+
+	repochangetest.Acquire(t)
 	store, ctx, root := openLedgerOnDisk(t)
+	loseInventoryCoverage(store, root)
 	clock := manualLedgerClock(store)
 	first := openTestWindow(t, store, ctx, root, "make")
 	released := make(chan struct{})
@@ -575,9 +581,10 @@ func TestFinalPassLongerThanTheBudgetServesTheNextOpen(t *testing.T) {
 
 // Reuse lasts for the pass's own length when that is beyond the floor.
 func TestSlowPassIsReusedForItsOwnLength(t *testing.T) {
-	repochange.DisableWatchersForTest()
-	t.Cleanup(repochange.ResetWatchersForTest)
+
+	repochangetest.Acquire(t)
 	store, ctx, root := openLedgerOnDisk(t)
+	loseInventoryCoverage(store, root)
 	clock := manualLedgerClock(store)
 	first := openTestWindow(t, store, ctx, root, "make")
 	released := make(chan struct{})
@@ -704,7 +711,7 @@ func TestFailedWindowRecoveryReportsAndRetriesBeforeAnyWindowOpens(t *testing.T)
 	deliverWrites(ctx, root, "public/bundle.js")
 	forceTestPass(t, store, ctx, root)
 
-	fresh := New(ledger.sqlDB, ledger.contentDir)
+	fresh := New(ledger.sqlDB, ledger.contentDir, Timing{})
 	setWindowTimer(fresh.Commands, func() <-chan time.Time { return time.After(0) })
 	fresh.Commands.startQuietGrace, fresh.Commands.startQuietWait = 0, 0
 	_, err := ledger.sqlDB.ExecContext(ctx, `CREATE TRIGGER refuse_recovery BEFORE UPDATE ON source_command_windows BEGIN SELECT RAISE(ABORT, 'recovery refused'); END`)

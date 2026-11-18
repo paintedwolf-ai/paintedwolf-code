@@ -60,7 +60,7 @@ func TestSourceObservationsTrackExactContentAcrossTime(t *testing.T) {
 	m := New(sessions.Sessions, sessions.Transcript, scope.New(sessions.Sessions), nil)
 	m.SetDataDir(t.TempDir())
 	m.SetEvidenceStore(inspector.NewJSONLStore(inspector.DefaultEvidenceDir))
-	ledger := sourceledger.New(testdbfixture.Open(t, "store.db"), t.TempDir())
+	ledger := sourceledger.New(testdbfixture.Open(t, "store.db"), t.TempDir(), sourceledger.Timing{})
 	m.SetSourceObservations(ledger.Inventory)
 	path := filepath.Join(sess.WorkspacePath, "source.txt")
 	write := func(content string) {

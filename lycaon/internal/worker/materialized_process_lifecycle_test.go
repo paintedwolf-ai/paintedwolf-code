@@ -129,7 +129,7 @@ func runWorkerLifecyclePhase(t *testing.T, root, phase string, mounted, sourceCo
 	manager := workspace.NewManager(branches, selector, workspace.Filesystem{}).WithPrivateGit(gitManager).WithRecovery(coordinator)
 	queueServices := NewSQLServices(database, 4)
 	queue := queueServices.Queue
-	queue.Branches.SetBaselineStore(sourceledger.New(database, filepath.Join(root, "source-content")).Baselines)
+	queue.Branches.SetBaselineStore(sourceledger.New(database, filepath.Join(root, "source-content"), sourceledger.Timing{}).Baselines)
 	queue.Branches.SetWorkerWorkspaceManager(manager)
 	fixture := &layeredWorkerFixture{db: database, queue: queue, manager: manager, source: source, branches: branches}
 	if phase == "prepare" {

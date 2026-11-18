@@ -28,7 +28,7 @@ func TestGitCommitEmitsHeadMoved(t *testing.T) {
 	events := 0
 	absDir, err := filepath.Abs(dir)
 	testutil.FailErr(t, "abs dir", err)
-	repochange.RegisterObserver(func(_ context.Context, ev repochange.Event) {
+	t.Cleanup(repochange.RegisterObserver(func(_ context.Context, ev repochange.Event) {
 		if ev.ProjectDir != absDir { // isolate from other tests' commits
 			return
 		}
@@ -36,7 +36,7 @@ func TestGitCommitEmitsHeadMoved(t *testing.T) {
 		got = ev
 		events++
 		mu.Unlock()
-	})
+	}))
 
 	mutations := GitMutations{Git: git.NewManager(), Boundary: nativefixture.Boundary(t)}
 	_, _, err = mutations.Commit(context.Background(), nativefixture.Context(dir), GitCommitRequest{Message: "init", Paths: []string{"a.txt"}})

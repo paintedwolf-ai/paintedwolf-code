@@ -50,7 +50,7 @@ func TestLifecycleDependentsIncludeOpenAndUnsavedDocuments(t *testing.T) {
 	testdbseed.InsertProjectRootWithID(t, sqlDB, projectID, rootID, root)
 	testutil.FailErr(t, "write", os.WriteFile(filepath.Join(root, "a.txt"), []byte("base\n"), 0o644))
 	p := &project.Project{ID: projectID, Roots: []project.Root{{ID: rootID, ProjectID: projectID, Path: root, IsPrimary: true}}}
-	sourceHistory7 := sourceledger.New(sqlDB, "")
+	sourceHistory7 := sourceledger.New(sqlDB, "", sourceledger.Timing{})
 	service := New(NewStore(sqlDB), sourceHistory7, sourceHistory7.History, fixedRoots{p: p})
 	closeServiceAtCleanup(t, service)
 
@@ -112,7 +112,7 @@ func TestSaveFeedFailureRollsBackDocumentAndMutation(t *testing.T) {
 	testdbseed.InsertProjectRootWithID(t, sqlDB, projectID, rootID, root)
 	testutil.FailErr(t, "write", os.WriteFile(filepath.Join(root, "a.txt"), []byte("base\n"), 0o644))
 	p := &project.Project{ID: projectID, Roots: []project.Root{{ID: rootID, ProjectID: projectID, Path: root, IsPrimary: true}}}
-	recorder := &captureRecorder{Store: sourceledger.New(sqlDB, "")}
+	recorder := &captureRecorder{Store: sourceledger.New(sqlDB, "", sourceledger.Timing{})}
 	service := New(NewStore(sqlDB), recorder, recorder.History, fixedRoots{p: p})
 	closeServiceAtCleanup(t, service)
 	document, err := service.Open(t.Context(), p, "a.txt", rootID, "", "window", nil)

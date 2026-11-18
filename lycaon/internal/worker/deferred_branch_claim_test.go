@@ -28,7 +28,7 @@ func TestClaimNextDoesNotProvisionBranch(t *testing.T) {
 	testdbseed.InsertProjectRootWithID(t, sqlDB, testdbseed.DefaultProjectID, "root-id", dir)
 
 	q := NewSQLServices(sqlDB, 4).Queue
-	q.Branches.SetBaselineStore(sourceledger.New(sqlDB, filepath.Join(testbaseline.DataDir(t, sqlDB), "source-content")).Baselines)
+	q.Branches.SetBaselineStore(sourceledger.New(sqlDB, filepath.Join(testbaseline.DataDir(t, sqlDB), "source-content"), sourceledger.Timing{}).Baselines)
 	q.Branches.SetWorkerWorkspaceManager(workspace.NewManager(filepath.Join(testbaseline.DataDir(t, sqlDB), "worker-branches"), platform.NewSelector(platform.Config{}), workspace.Filesystem{}))
 
 	id, err := q.Enqueue(context.Background(), api.WorkerTask{
@@ -115,7 +115,7 @@ func TestClaimWorkerBranchMountedViewSkipsBaselineTreeWalkAndExposesWorkspaceSta
 	wsMgr := workspace.NewManager(filepath.Join(testbaseline.DataDir(t, sqlDB), "worker-branches"), sel, workspace.Filesystem{})
 
 	q := NewSQLServices(sqlDB, 4).Queue
-	q.Branches.SetBaselineStore(sourceledger.New(sqlDB, filepath.Join(testbaseline.DataDir(t, sqlDB), "source-content")).Baselines)
+	q.Branches.SetBaselineStore(sourceledger.New(sqlDB, filepath.Join(testbaseline.DataDir(t, sqlDB), "source-content"), sourceledger.Timing{}).Baselines)
 	q.Branches.SetWorkerWorkspaceManager(wsMgr)
 
 	id, err := q.Enqueue(t.Context(), api.WorkerTask{
