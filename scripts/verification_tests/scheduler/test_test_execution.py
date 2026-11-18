@@ -21,6 +21,16 @@ import verification_history as history  # importable once test-execution.py exte
 import verification_resources as resources
 
 
+class HostSettingIsolationTests(unittest.TestCase):
+    def test_admission_cases_hold_on_a_host_that_exports_its_capacity(self):
+        scripts = Path(__file__).resolve().parents[2]
+        environment = {**os.environ, "PYTHONPATH": os.pathsep.join(sys.path), "PW_TEST_CAPACITY": "12",
+                       "PW_TEST_WORKERS": "12", "PW_TEST_HOST": "dedicated"}
+        result = subprocess.run([sys.executable, "-m", "unittest", f"{__name__}.TaskAdmissionTests"], cwd=scripts,
+                                env=environment, capture_output=True, text=True, timeout=300)
+        self.assertEqual(result.returncode, 0, result.stderr[-4000:])
+
+
 class TaskAdmissionTests(unittest.TestCase):
     def setUp(self):
         # A host's configured capacity replaces the derived budget these tests measure.
