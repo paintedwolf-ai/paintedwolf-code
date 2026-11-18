@@ -128,6 +128,7 @@ func TestCoordinatorParallelWorkersReplayLineShiftAtomicRejection(t *testing.T) 
 		WorkspaceBaselinePath: testbaseline.FromFiles(t, "root", map[string]testbaseline.File{"safe.go": {}, "shifted.py": {Content: base}}),
 		Status:                wire.WorkerStatusComplete,
 	}
+	testbaseline.RecordBranch(t, "root", dir, branch)
 	svc := &worker.MergeService{
 		Queue:  replayMergeQueue{task: task},
 		Reject: rejectFmt,

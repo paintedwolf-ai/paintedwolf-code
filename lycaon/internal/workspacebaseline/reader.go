@@ -91,10 +91,14 @@ func Open(ctx context.Context, path string, blobs *sourceblob.Store) (*Reader, e
 	}
 	if format == 2 {
 		var invalid bool
-		err := d.QueryRowContext(ctx, "SELECT EXISTS(SELECT 1 FROM files WHERE trim(root_id) = '' OR scope_rel = '')").Scan(&invalid)
-		if err != nil || invalid {
+		err := d.QueryRowContext(ctx, "SELECT EXISTS(SELECT 1 FROM files WHERE root_id IS NULL OR trim(root_id) = '' OR scope_rel IS NULL OR scope_rel = '')").Scan(&invalid)
+		if err != nil {
 			_ = d.Close()
-			return nil, fmt.Errorf("workspace manifest contains an invalid file identity: %v", err)
+			return nil, fmt.Errorf("validate workspace manifest identities: %w", err)
+		}
+		if invalid {
+			_ = d.Close()
+			return nil, fmt.Errorf("workspace manifest contains an entry without a root identity or root-relative path")
 		}
 	}
 	return &Reader{db: d, blobs: blobs, format: format}, nil
