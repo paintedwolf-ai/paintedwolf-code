@@ -54,8 +54,14 @@ export function OnboardingGate(props: Props) {
 
   const advance = () => setPage((p) => onboardingNextPage(p) ?? p);
   const finishModelStep = async () => {
-    await completeLocalModelOnboarding();
-    if (!upgrade) advance();
+    if (dismissing()) return;
+    setDismissing(true);
+    try {
+      await completeLocalModelOnboarding();
+      if (!upgrade) setPage("summarizer");
+    } finally {
+      setDismissing(false);
+    }
   };
   const goBack = () => setPage((p) => onboardingPreviousPage(p) ?? p);
 
@@ -157,7 +163,7 @@ export function OnboardingGate(props: Props) {
                 <Show when={props.client && localProvider()} fallback={
                   <div>
                     <p role="status">{props.settingsChecked && props.client ? "Local generation is unavailable on this device." : "Waiting for the local engine…"}</p>
-                    <DenButton variant="primary" onClick={() => void finishModelStep()}>Continue without a local model</DenButton>
+                    <DenButton variant="primary" disabled={dismissing()} onClick={() => void finishModelStep()}>Continue without a local model</DenButton>
                   </div>
                 }>
                   {provider => <LocalModelSelector client={props.client!} provider={provider()}
