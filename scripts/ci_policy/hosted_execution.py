@@ -128,6 +128,14 @@ def run_lane(name, shard="", merge_group=False, clock=time.monotonic):
             if packages:
                 command += ["--", *packages]
                 record["packages"] = packages
+        if phases == "changed-packages":
+            from ci_policy.impact import changed_packages
+            # The planner selects this lane only for a change that edits Go source, so no scope is a fault.
+            packages = changed_packages(scope or {"paths": []})
+            if not packages:
+                raise ValueError(f"CI lane {name} found no changed Go package to run")
+            command += ["--", *packages]
+            record["packages"] = packages
         # Admission reports every failure, so repairs need not rediscover them one run at a time.
         # Every pull-request lane but lint does; lint reports every finding of its own accord.
         complete = merge_group or "fast" in lane["profiles"] and lane["setup"] != "analysis"

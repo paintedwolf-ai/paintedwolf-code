@@ -276,8 +276,9 @@ join the permanent corpus.
 Agents write code and prompt copy fast. These checks shape it through
 feedback an agent meets while it works: a warning as something approaches
 its limit, then a stop for a change that leaves a touched artifact past it.
-Both gates enforce size budgets. `check` and exact-landing CI enforce changed
-coverage; focused ready checks run before queue admission.
+Both gates enforce size budgets. `check` and the pull request enforce changed Go
+coverage, which measures a change against its base; exact-landing CI enforces
+changed frontend and script coverage.
 
 ### Size budgets
 
@@ -940,11 +941,16 @@ Native Rust compilation and execution occur together in the landing native lane;
 ready admission does not repeat a compile-only copy. Standalone compile-only
 selection remains available for focused local diagnosis.
 
-The merge queue measures changed coverage on its exact source and executes the
-complete affected integration selection. Frontend and scripts assertions execute
-once through their coverage stages; distinct short-covered and integration-tagged
-Go recipes retain their separate modes. Every lane runs to the end, so one failed group reports all its failures.
-Budgets and changed coverage are the first stages of the build lane.
+The merge queue executes the complete affected integration selection on its exact
+source. It leaves to the pull request the stages that judge a change against its
+base: lint findings, comment and failure-message rules, and changed Go coverage
+(`QUEUE_LEAVES` in [`hosted_plan.py`](../scripts/ci_policy/hosted_plan.py); the plan
+refuses to leave a stage no pull request runs). Two changes that each pass them can
+still fail together; the nightly reports that. Size budgets stay in the queue's
+build lane, because two changes that each fit a limit can exceed it together.
+Frontend and scripts assertions execute once through their coverage stages;
+distinct short-covered and integration-tagged Go recipes retain their separate
+modes. Every lane runs to the end, so one failed group reports all its failures.
 
 Pull requests no longer run the integration gate themselves. Running it for
 the pull request and again for its merge group doubled demand on the
@@ -957,10 +963,11 @@ author's own credentials. No workflow enables it, because a merge enabled with
 a workflow's `GITHUB_TOKEN` would not start main's cache warming workflow.
 
 Lanes are named once, in `scripts/verification-plan.json`. Each declares in
-`changes` the change areas that select it (`always`, `go`, `den`, `scripts`,
-`confinement`, `command-language`, and one area per native source tree) and in
-`phases` any execution of its own: admission's check phases, admission's test
-phases, or the Go packages a change affects. The planner maps changed paths to
+`changes` the change areas that select it (`always`, `go`, `go-code`, `den`,
+`den-tests`, `scripts`, `dependencies`, `confinement`, `command-language`,
+`command-scale`, and one area per native source tree) and in `phases` any
+execution of its own: admission's check phases, admission's test phases, the Go
+packages a change affects, or the Go packages whose source it edits. The planner maps changed paths to
 areas and selects the lanes that declare them, so no script names a lane and a
 rename touches only the plan.
 
@@ -975,11 +982,13 @@ documentation are build inputs and widen the gate. CI's own logic and tests unde
 `scripts/ci_policy/` and `scripts/verification_tests/`, and workflows, add only the
 runner lane, because no product test reads them. The files that decide how every
 lane runs (`ci.yml`, `verification.yml`, lane planning and execution) still widen.
-Any file in a Go package's tree under `internal/`, `cmd/`, or `test/`, whether
+Any file in a Go package's tree under `internal/`, `cmd/`, `test/`, `config/` or `pkg/`, whether
 source, embedded data, or a test fixture, seeds the nearest package's reverse import
 closure, including test imports. Contract and smoke packages remain mandatory.
-Unknown paths, dependencies, build inputs, generated contracts, shipped
-configuration, verification policy, public package contracts, and nested modules
+Den's browser journeys under `lycaon-den/e2e/` and the host configuration under
+`lycaon/config/`, which Den's tests read, also select the frontend lane.
+Unknown paths, dependencies, build inputs, generated contracts, the bundled
+engines' pins, verification policy, and nested modules
 such as the harness fixture projects expand to the full `check` profile. A missing
 Git base fails planning; an unresolved Go graph runs the full Go recipe.
 Changes to command or test source do not select unrelated native or frontend
@@ -1033,8 +1042,8 @@ The planner in [`scripts/ci_policy/impact.py`](../scripts/ci_policy/impact.py)
 uses the pull request merge base or the merge group's explicit `base_sha`, not
 the moving `origin/main` tip. That same base reaches changed coverage and budget
 checks. [`verification-plan.json`](../scripts/verification-plan.json) owns the
-recipes and partitions. The integration partition covers `check` except Windows
-cross compilation; broad changes include that too. Ordinary source changes
+recipes and partitions. The integration partition covers `check` but for the
+stages the queue leaves to the pull request. Ordinary source changes
 select only relevant lanes. Each lane still enters through `./task`, capturing
 source and producing normal receipts.
 
@@ -1047,6 +1056,22 @@ Den source change; changes to the check, its probe, or the harness fixtures are
 broad. Like every lane, it fails when the check reports unverified: an image
 that cannot be built, a missing container runtime, or a harness that does not
 start leaves the change unverified, never admitted.
+
+The `browser-smoke` lane runs `den:harness:canary`, eight browser journeys on the
+harness stack (boot, a prompt, the first run, a project switch, a tool approval,
+a busy-queue send and the sidecar's CORS), for any change under `lycaon/` or
+`lycaon-den/`. Setup installs the Playwright browsers before the lane goes
+offline. The `race-changes` lane runs `test:race` over the packages whose Go
+source the change edits, with the host-level journeys `test/wiring` and
+`test/security` select under the race detector; `internal/db`, whose race run
+takes about 40 minutes, stays nightly. The `dependencies` lane runs the
+vulnerability scan and the third-party notices when a dependency graph, the
+vulnerability database or allowlist, the licensing catalog or their scripts
+change, and nightly. `command-scale` runs the scale tests and the allocation- and
+byte-gated benchmarks of the command entry, `toolhost` and `jq` when those
+packages change. `confinement-macos` runs the applied Seatbelt suites on
+`macos-15` for the same sources as `confinement-arm64`; macOS runners cannot
+isolate the network, so it runs online.
 
 Linux confinement compiles per architecture: seccomp filters name the audit
 architecture and syscall numbers, arm64 has no legacy calls such as `open`,
@@ -1301,8 +1326,9 @@ introduced. Compiler cache hits never substitute for executed test receipts.
 ##### Integration capacity
 
 A group's runtime lower bound is `max(total runner-minutes / lane cap, longest job
-duration)`. The cap of six keeps that near the longest job. Extra lanes cannot
-shorten the longest job, so compare preparation costs before raising it further.
+duration)`. The queue builds one group at a time with a cap of twelve lanes, so
+no lane waits for a slot. A second speculative group was cancelled whenever the
+first failed and halved each group's cap.
 
 Apply queue settings only after this workflow is available on main:
 `GITHUB_REPOSITORY=paintedwolf-ai/paintedwolf-code PYTHONPATH=scripts python3 -m ci_policy.queue_settings 24657984`
@@ -1312,9 +1338,7 @@ not something feature CI performs.
 
 ### Merge-group early checks and throughput
 
-The first integration slots run limits, lint, and the two Go behavior shards.
-On the exact merge-group source, lint completes comment and failure-message checks
-before analysis. Each Go shard runs repository contracts with the full integration
+The first integration slots run build and the Go behavior shards. Each Go shard runs repository contracts with the full integration
 recipe before its remaining affected packages. The two phases are disjoint and
 retain the same shard, worker cap, and package measurements. A failed first phase
 never starts its second phase; the matrix cancels siblings on failure. Other

@@ -555,7 +555,7 @@ tasks:
       - bash {{.SCRIPTS_DIR}}/den-webkit-atspi.sh {{.CLI_ARGS}}
 
   den:harness:canary:
-    desc: 'Minimal harness e2e slice (boot + driver chat + prompt) — the tier-is-alive check run by check:digest'
+    desc: 'Browser journeys on the harness stack (boot, prompt, first run, project switch, approval, queue, CORS); the merge queue''s browser-smoke lane and check:digest'
     preconditions:
       - sh: command -v go
         msg: Go required — see lycaon/go.mod

@@ -1180,10 +1180,8 @@
     "build": {
       "targets": [
         "budgets",
-        "coverage:changes",
         "build",
         "build:cross",
-        "licenses:notices",
         "check:drift",
         "openapi:lint",
         "validate:workflows",
@@ -1199,8 +1197,7 @@
       "suite": "all",
       "setup": "verification",
       "early_targets": [
-        "budgets",
-        "coverage:changes"
+        "budgets"
       ],
       "priority": "reject",
       "changes": [
@@ -1212,23 +1209,38 @@
         "lint:full",
         "test:fail-messages:check",
         "comments:check",
-        "arch-lint:changes"
+        "arch-lint:changes",
+        "coverage:changes"
       ],
       "minutes": 90,
       "profiles": [
         "check",
-        "integration",
         "nightly"
       ],
       "suite": "all",
-      "setup": "analysis",
+      "setup": "verification",
       "priority": "reject",
       "early_targets": [
         "comments:check",
         "test:fail-messages:check"
+      ]
+    },
+    "dependencies": {
+      "targets": [
+        "lint:vuln",
+        "licenses:notices"
       ],
+      "minutes": 60,
+      "profiles": [
+        "check",
+        "release",
+        "integration",
+        "nightly"
+      ],
+      "suite": "all",
+      "setup": "verification",
       "changes": [
-        "go"
+        "dependencies"
       ]
     },
     "deadcode": {
@@ -1241,23 +1253,6 @@
       ],
       "suite": "all",
       "setup": "analysis"
-    },
-    "vulnerabilities": {
-      "targets": [
-        "lint:vuln"
-      ],
-      "minutes": 60,
-      "profiles": [
-        "check",
-        "release",
-        "integration",
-        "nightly"
-      ],
-      "suite": "all",
-      "setup": "analysis",
-      "changes": [
-        "go"
-      ]
     },
     "runner": {
       "targets": [
@@ -1290,7 +1285,7 @@
       "suite": "behavior",
       "setup": "verification",
       "workers": 2,
-      "shards": 2,
+      "shards": 3,
       "contract_first": true,
       "priority": "critical",
       "changes": [
@@ -1317,6 +1312,7 @@
       "setup": "frontend",
       "changes": [
         "den",
+        "den-tests",
         "shell-native",
         "documentcore-native"
       ]
@@ -1498,7 +1494,8 @@
     },
     "command-scale": {
       "targets": [
-        "test:stress"
+        "test:stress",
+        "perf:bench"
       ],
       "arguments": [
         "./internal/tools/native/command",
@@ -1514,14 +1511,67 @@
       "suite": "performance",
       "setup": "verification",
       "changes": [
-        "go"
+        "command-scale"
+      ]
+    },
+    "race-changes": {
+      "targets": [
+        "test:race"
+      ],
+      "minutes": 60,
+      "profiles": [
+        "integration"
+      ],
+      "suite": "race",
+      "setup": "verification",
+      "changes": [
+        "go-code"
+      ],
+      "phases": "changed-packages"
+    },
+    "browser-smoke": {
+      "targets": [
+        "den:harness:canary"
+      ],
+      "minutes": 30,
+      "profiles": [
+        "integration",
+        "nightly"
+      ],
+      "suite": "e2e",
+      "setup": "harness",
+      "changes": [
+        "go",
+        "den",
+        "den-tests",
+        "shell-native",
+        "decide-native",
+        "documentcore-native"
+      ]
+    },
+    "confinement-macos": {
+      "targets": [
+        "test:seatbelt"
+      ],
+      "minutes": 60,
+      "profiles": [
+        "integration",
+        "nightly",
+        "release"
+      ],
+      "suite": "behavior",
+      "setup": "verification",
+      "runner": "macos-15",
+      "platform": "macos",
+      "changes": [
+        "confinement"
       ]
     }
   },
   "capacity": {
     "max_parallel": {
       "fast": 6,
-      "integration": 6,
+      "integration": 12,
       "check": 3,
       "nightly": 6,
       "release": 1
@@ -1593,6 +1643,12 @@
         "den:test:rust": [],
         "decide:test": [],
         "scripts:coverage:changes": []
+      }
+    },
+    "playwright": {
+      "targets": {
+        "den:harness:canary": [],
+        "den:harness:test": []
       }
     }
   }

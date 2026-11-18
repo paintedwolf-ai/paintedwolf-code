@@ -37,7 +37,7 @@ class LaneRuleTests(unittest.TestCase):
 
     def test_arguments_early_targets_and_contract_order_belong_to_their_targets(self):
         gate = dict(check=("test:short", "lint:fast"), fast=("test:short", "lint:fast"))
-        for change in ({"arguments": []}, {"arguments": [""]}, {"arguments": ["x"]},
+        for change in ({"arguments": []}, {"arguments": [""]},
                        {"early_targets": ["test:race"]}, {"early_targets": ["lint:fast", "lint:fast"]},
                        {"contract_first": True}, {"admission_checks": [["test:confine:linux", "--", "supervisor"]]}):
             with self.subTest(change=change):

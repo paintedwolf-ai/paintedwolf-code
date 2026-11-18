@@ -4,14 +4,19 @@ from ci_policy.timings import valid_seconds
 PRIORITIES = {"reject": 0, "critical": 1, "normal": 2}
 
 
+def unmeasured(row, lanes, measured):
+    """A row nightly should have measured and did not. Nightly cannot run a lane scoped to a change,
+    so such a lane keeps its budget without moving the rest of the matrix off its measurements."""
+    return "nightly" in lanes[row["lane"]]["profiles"] and not valid_seconds(measured.get(row["timing_row"]))
+
+
 def order(rows, lanes, timings=None):
     measured = (timings or {}).get("lanes", {})
-    missing = [row["timing_row"] for row in rows
-               if not valid_seconds(measured.get(row["timing_row"]))]
-    complete = not missing
+    complete = not any(unmeasured(row, lanes, measured) for row in rows)
     estimates = {}
     for row in rows:
-        seconds = measured[row["timing_row"]] if complete else row["minutes"] * 60
+        seconds = measured[row["timing_row"]] if complete and valid_seconds(measured.get(row["timing_row"])) \
+            else row["minutes"] * 60
         estimates[row["lane"]] = max(estimates.get(row["lane"], 0), seconds)
     result = [{**row, "expected_seconds": estimates[row["lane"]],
                "timing_basis": "measured" if complete else "catalog-budget",

@@ -48,13 +48,13 @@ class LaneProofTests(unittest.TestCase):
             lane_proof.seal(Path("/source"), self.record, self.environment)
 
     def test_every_shard_must_be_proven_once_by_one_attempt(self):
-        first, second = self.proof(), self.proof(shard="2/2")
-        for proofs in ([first], [first, first, second], [first, {**second, "run_attempt": 1}]):
+        first, second, third = self.proof(shard="1/3"), self.proof(shard="2/3"), self.proof(shard="3/3")
+        for proofs in ([first, second], [first, first, second, third], [first, second, {**third, "run_attempt": 1}]):
             remaining, reused = proof_reuse.select(self.rows, proofs, self.run, "org/repo", self.tree)
             self.assertEqual(remaining, self.rows)
             self.assertEqual(reused, [])
-        remaining, reused = proof_reuse.select(self.rows, [first, second], self.run, "org/repo", self.tree)
-        self.assertEqual(len(reused), 2)
+        remaining, reused = proof_reuse.select(self.rows, [first, second, third], self.run, "org/repo", self.tree)
+        self.assertEqual(len(reused), 3)
         self.assertFalse(any(row["lane"] == "behavior" for row in remaining["include"]))
         self.assertTrue(any(row["lane"] == "build" for row in remaining["include"]))
 

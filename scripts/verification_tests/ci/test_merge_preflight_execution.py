@@ -12,7 +12,7 @@ import verification_plan
 from verification_tests.ci.fixture_plan import live
 
 BEHAVIOR = live(phase="affected-packages")
-LINT = live(runs="test:fail-messages:check")
+BUILD = live(runs="check:drift")
 ADMISSION = live(phase="admission")
 
 
@@ -119,10 +119,10 @@ class MergePreflightTests(unittest.TestCase):
                     preflight.package_phases(None)
 
     def test_catalog_orders_diagnostics_without_repeating_targets(self):
-        lane = hosted_plan.lanes()[LINT]
+        lane = hosted_plan.lanes()[BUILD]
         commands = preflight.commands(lane, lane["targets"])
-        self.assertEqual(commands[0], ["./task", "comments:check", "test:fail-messages:check"])
-        self.assertEqual(commands[1], ["./task", "lint:full", "arch-lint:changes"])
+        self.assertEqual(commands[0], ["./task", *lane["early_targets"]])
+        self.assertEqual(commands[1], ["./task", *[target for target in lane["targets"] if target not in lane["early_targets"]]])
         self.assertEqual(sorted([target for command in commands for target in command[1:]]), sorted(lane["targets"]))
         with patch.object(preflight, "package_phases", return_value=[["contract"], [BEHAVIOR]]):
             self.assertEqual(preflight.commands(hosted_plan.lanes()[BEHAVIOR], ["test:full"]),
@@ -135,7 +135,7 @@ class MergePreflightTests(unittest.TestCase):
                 patch.object(hosted_execution, "artifact_root", return_value=Path(directory)), \
                 patch.object(preflight, "package_phases", **phase_kw), \
                 patch.object(hosted_execution.subprocess, "call", return_value=call_code) as run:
-            verdict = hosted_execution.run_lane(BEHAVIOR, "1/2", merge_group=True)
+            verdict = hosted_execution.run_lane(BEHAVIOR, "1/3", merge_group=True)
             return verdict, run, json.loads((Path(directory) / "ci/run.json").read_text())
 
     def test_failed_contract_phase_still_reports_behavior(self):
@@ -152,7 +152,7 @@ class MergePreflightTests(unittest.TestCase):
         self.assertEqual(verdict, -15)
         run.assert_called_once()
         self.assertEqual(run.call_args.args[0], ["./task", "test:full", "--", "contract"])
-        self.assertEqual(run.call_args.kwargs["env"]["PW_GO_SHARD"], "1/2")
+        self.assertEqual(run.call_args.kwargs["env"]["PW_GO_SHARD"], "1/3")
         self.assertEqual(len(record["phases"]), 1)
 
     def test_failed_package_planning_finalizes_unverified_lane_evidence(self):

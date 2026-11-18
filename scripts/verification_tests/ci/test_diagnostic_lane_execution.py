@@ -80,7 +80,7 @@ else: raise SystemExit(2)
                               cwd=ROOT, env=environment, text=True, capture_output=True, timeout=30)
 
     def test_manual_selection_keeps_every_shard_of_the_requested_lane(self):
-        for lane, shards in [(RUNNER, ['']), (BEHAVIOR, ['1/2', '2/2'])]:
+        for lane, shards in [(RUNNER, ['']), (BEHAVIOR, ['1/3', '2/3', '3/3'])]:
             with self.subTest(lane=lane):
                 result = self.plan('check', lane)
                 self.assertEqual(result.returncode, 0, result.stderr)

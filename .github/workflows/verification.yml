@@ -148,6 +148,7 @@ jobs:
           # build them from each distribution as it ships that day.
           containers: ${{ matrix.containers && (inputs.profile == 'fast' || inputs.profile == 'integration') }}
           browser: ${{ matrix.browser }}
+          playwright: ${{ matrix.playwright }}
           linux-launch: ${{ matrix.linux_launch }}
           repository-tools: ${{ matrix.repository_tools }}
           nix: ${{ matrix.nix }}
@@ -170,8 +171,8 @@ jobs:
         env:
           LANE: ${{ matrix.lane }}
           SHARD: ${{ matrix.shard }}
-          # Admission runs with loopback networking only.
-          OFFLINE: ${{ inputs.profile == 'fast' || inputs.profile == 'integration' }}
+          # Admission runs with loopback networking only, where the runner can isolate it.
+          OFFLINE: ${{ (inputs.profile == 'fast' || inputs.profile == 'integration') && runner.os == 'Linux' }}
           PW_CI_PACKAGE_TIMINGS: ${{ needs.plan.outputs.package-timings }}
           PYTHONPATH: scripts
         run: |
