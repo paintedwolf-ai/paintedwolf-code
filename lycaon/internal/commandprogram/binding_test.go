@@ -1,11 +1,11 @@
 package commandprogram
 
 import (
-	"context"
 	"encoding/json"
 	"errors"
 	"testing"
 
+	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 )
 
@@ -13,34 +13,28 @@ func fixtureInvocation() toolcontract.OperationInvocation {
 	return toolcontract.OperationInvocation{Kind: toolcontract.ProgramChildInvocation, Identity: toolcontract.ExecutionIdentity{ProgramID: "program", NodeID: "node", ExecutionID: "execution"}, ActorID: "actor", SessionID: "session", Scope: toolcontract.OperationScope{Kind: toolcontract.ProjectOperationScope, ProjectID: "project"}, SourceUnitID: "source", Span: toolcontract.SourceSpan{Line: 1, Column: 1}, CatalogDigest: toolcontract.LanguageCatalogDigest()}
 }
 
-func TestUnofferedDirectBindingDoesNotExecute(t *testing.T) {
+func TestOfferedOperationsValidateDefinitionAndInvocation(t *testing.T) {
 	contract, _ := toolcontract.Lookup("write")
 	definition, err := toolcontract.ToolOperation("write", json.RawMessage(`{"type":"object"}`), contract)
-	if err != nil {
-		t.Fatalf("compile: %v", err)
-	}
-	called := 0
-	binding := Binding[string, string]{Definition: definition, InvokeOwner: func(context.Context, toolcontract.OperationInvocation, string) (string, error) {
-		called++
-		return "ok", nil
-	}}
-	_, err = Invoke(t.Context(), Offer(), binding, fixtureInvocation(), "input")
+	testutil.FailErr(t, "compile operation", err)
+	invocation := fixtureInvocation()
+	err = Offer().Validate(definition, invocation)
 	var rejected *AdmissionError
-	if !errors.As(err, &rejected) || rejected.Code != "TOOL_NOT_OFFERED" || called != 0 {
-		t.Fatalf("unoffered execution: %v count=%d", err, called)
+	if !errors.As(err, &rejected) || rejected.Code != "TOOL_NOT_OFFERED" || rejected.Operation != "write" {
+		t.Fatalf("unoffered operation error = %v", err)
 	}
-	if got, err := Invoke(t.Context(), Offer(definition), binding, fixtureInvocation(), "input"); err != nil || got != "ok" || called != 1 {
-		t.Fatalf("offered result=%s err=%v count=%d", got, err, called)
-	}
-	invalid := fixtureInvocation()
+	offered := Offer(definition)
+	testutil.FailErr(t, "validate offered operation", offered.Validate(definition, invocation))
+
+	invalid := invocation
 	invalid.ActorID = ""
-	if _, err := Invoke(t.Context(), Offer(definition), binding, invalid, "input"); err == nil || called != 1 {
-		t.Fatal("missing actor reached owner")
+	if err := offered.Validate(definition, invalid); err == nil {
+		t.Fatal("accepted invocation without an actor")
 	}
-	wrongCatalog := fixtureInvocation()
+	wrongCatalog := invocation
 	wrongCatalog.CatalogDigest = "different-catalog"
-	if _, err := Invoke(t.Context(), Offer(definition), binding, wrongCatalog, "input"); err == nil || called != 1 {
-		t.Fatal("mismatched catalog reached owner")
+	if err := offered.Validate(definition, wrongCatalog); err == nil {
+		t.Fatal("accepted invocation from a different catalog")
 	}
 }
 
