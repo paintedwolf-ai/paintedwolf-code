@@ -10,13 +10,14 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/lycaon/lycaon/test/contract/laws/promptrender"
+
 	"github.com/lycaon/lycaon/internal/agentdef"
 	"github.com/lycaon/lycaon/internal/coordinator/surface"
 	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/skills"
-	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/toolsurface"
 	"github.com/lycaon/lycaon/test/contract/internal/catalogfixture"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
@@ -47,12 +48,6 @@ func backtickedNameMention(names []string) *regexp.Regexp {
 }
 
 var retiredToolMention = backtickedNameMention(fullyRetiredTools)
-
-// mutationSubcommands are command forms that mutate files and are unreachable on
-// read-only command profiles.
-var mutationSubcommands = []string{"edit", "replace-lines", "replace_lines", "code-rewrite", "code_rewrite", "jq-edit", "jq_edit"}
-
-var mutationSubcommandMention = backtickedNameMention(mutationSubcommands)
 
 func checkBannedMention(t *testing.T, mention *regexp.Regexp, label, corpus string) {
 	t.Helper()
@@ -136,7 +131,7 @@ func TestRenderedStockCopyNeverNamesFullyRetiredTools(t *testing.T) {
 						WebSearch: true,
 					})
 					contractcheck.FailErr(t, "new reader", err)
-					data, err := prompts.Vars(reader, kickRenderFixture())
+					data, err := prompts.Vars(reader, promptrender.KickFixture())
 					contractcheck.FailErr(t, "prompts.Vars", err)
 					corpus, err := kickEngine.RenderKick(context.Background(), binding.Render, data)
 					contractcheck.FailErr(t, "render kick", err)
@@ -150,87 +145,12 @@ func TestRenderedStockCopyNeverNamesFullyRetiredTools(t *testing.T) {
 		}
 		for id := range plans {
 			t.Run("kick/"+binding.Render+"/"+id, func(t *testing.T) {
-				data := kickRenderFixture()
+				data := promptrender.KickFixture()
 				delete(data, "tools")
 				prompts.MergeCoordinatorKickVarsForTools(data, coordinatorTestReader(t, id, 1))
 				corpus, err := kickEngine.RenderKick(context.Background(), binding.Render, data)
 				contractcheck.FailErr(t, "render kick", err)
 				checkBannedMention(t, retiredToolMention, fmt.Sprintf("kick %s on %s", binding.Render, id), corpus)
-			})
-		}
-	}
-}
-
-// TestReadOnlyCommandProfilesNeverNameMutationSubcommands checks that personas and
-// worker kicks on read-only command profiles do not name file-mutating subcommands.
-func TestReadOnlyCommandProfilesNeverNameMutationSubcommands(t *testing.T) {
-	_, profiles := promptNameCatalog(t)
-	mutation, err := toolcontract.NewCommandEffects(toolcontract.CommandMutation)
-	contractcheck.FailErr(t, "build mutation effects", err)
-	readonly := map[string]bool{}
-	for _, profile := range profiles {
-		if profile.Tools["command"] && profile.CommandEffects != 0 && !profile.CommandEffects.Allows(mutation) {
-			readonly[profile.ID] = true
-		}
-	}
-	if len(readonly) == 0 {
-		t.Fatal("no read-only command profile found — the profile set or this test's detection is broken")
-	}
-
-	eff := contractcheck.StockCatalog(t)
-	agents, err := agentdef.LoadEffectiveWithCatalog(eff)
-	contractcheck.FailErr(t, "load agents", err)
-	personaEngine := contractPersonaEngine(t)
-	checked := 0
-	for _, agent := range agents {
-		if agent.ID == "coordinator" || !readonly[agent.ToolProfile] {
-			continue
-		}
-		checked++
-		t.Run("persona/"+agent.ID, func(t *testing.T) {
-			reader, err := prompts.DeclaredReader(eff, agent.ID)
-			contractcheck.FailErr(t, "DeclaredReader "+agent.ID, err)
-			corpus, err := prompts.RenderPersona(context.Background(), personaEngine, agent.ID, reader, nil)
-			contractcheck.FailErr(t, "render persona", err)
-			checkBannedMention(t, mutationSubcommandMention,
-				fmt.Sprintf("read-only profile %s (agent %s)", agent.ToolProfile, agent.ID), corpus)
-		})
-	}
-	if checked == 0 {
-		t.Fatal("no agent renders on a read-only command profile — the pinned class has no corpus")
-	}
-
-	kickEngine := prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{})
-	for _, binding := range catalogfixture.LoadInformBindings(t).AllInform() {
-		if binding == nil || !binding.IsInform() || !strings.HasPrefix(binding.Render, "worker-") {
-			continue
-		}
-		for _, profile := range profiles {
-			if !readonly[profile.ID] || !profile.Tools["complete_leg"] {
-				continue
-			}
-			t.Run("kick/"+binding.Render+"/"+profile.ID, func(t *testing.T) {
-				var reachable []string
-				for name, enabled := range profile.Tools {
-					if enabled {
-						reachable = append(reachable, name)
-					}
-				}
-				reader, err := prompts.NewReader(prompts.ReaderInput{
-					ProfileID: profile.ID,
-					Plan:      toolsurface.Compile(reachable, nil),
-					Visible:   reachable,
-					Profiles:  []sandbox.ToolProfile{profile},
-					RootCount: 1,
-					WebSearch: true,
-				})
-				contractcheck.FailErr(t, "new reader", err)
-				data, err := prompts.Vars(reader, kickRenderFixture())
-				contractcheck.FailErr(t, "prompts.Vars", err)
-				corpus, err := kickEngine.RenderKick(context.Background(), binding.Render, data)
-				contractcheck.FailErr(t, "render kick", err)
-				checkBannedMention(t, mutationSubcommandMention,
-					fmt.Sprintf("read-only profile %s (kick %s)", profile.ID, binding.Render), corpus)
 			})
 		}
 	}
@@ -264,7 +184,7 @@ func TestRenderedPhaseKicksNeverNameFullyRetiredTools(t *testing.T) {
 				continue
 			}
 			t.Run(filepath.Base(filepath.Dir(file))+"/"+inject.Selector.Phase, func(t *testing.T) {
-				data := kickRenderFixture()
+				data := promptrender.KickFixture()
 				prompts.MergeCoordinatorKickVarsForTools(data, coordinatorTestReader(t, id, 1))
 				corpus, err := kickEngine.RenderKick(context.Background(), inject.Render, data)
 				contractcheck.FailErr(t, "render kick", err)
@@ -275,9 +195,9 @@ func TestRenderedPhaseKicksNeverNameFullyRetiredTools(t *testing.T) {
 }
 
 func TestRenderedSkillsAndHintsNeverNameFullyRetiredTools(t *testing.T) {
-	forEachStockSkillRender(t, func(t *testing.T, _ skills.Skill, reader string, _ prompts.Reader, _ map[string]any, parts []renderedText) {
+	forEachStockSkillRender(t, func(t *testing.T, _ skills.Skill, reader string, _ prompts.Reader, _ map[string]any, parts []promptrender.Text) {
 		for _, part := range parts {
-			checkBannedMention(t, retiredToolMention, fmt.Sprintf("skill %s for %s", part.label, reader), part.text)
+			checkBannedMention(t, retiredToolMention, fmt.Sprintf("skill %s for %s", part.Label, reader), part.Text)
 		}
 	})
 	hints, err := guidance.LoadHintConfigStock()

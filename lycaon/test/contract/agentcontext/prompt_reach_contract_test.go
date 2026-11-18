@@ -10,6 +10,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/lycaon/lycaon/test/contract/laws/promptrender"
+
 	"github.com/lycaon/lycaon/internal/agentdef"
 	"github.com/lycaon/lycaon/internal/coordinator/surface"
 	"github.com/lycaon/lycaon/internal/extpacks"
@@ -120,7 +122,7 @@ func TestRenderedCoordinatorKicksNameOnlyReachableTools(t *testing.T) {
 		for id := range plans {
 			t.Run(kickID+"/"+id, func(t *testing.T) {
 				reader := coordinatorTestReader(t, id, 1)
-				data := kickRenderFixture()
+				data := promptrender.KickFixture()
 				delete(data, "tools")
 				// The host digest quotes observations the reader already holds.
 				delete(data, "evidence_digest")
@@ -178,7 +180,7 @@ func TestRenderedPhaseKicksNameOnlyTheirSurfacesTools(t *testing.T) {
 			}
 			t.Run(filepath.Base(filepath.Dir(file))+"/"+inject.Selector.Phase, func(t *testing.T) {
 				reader := coordinatorTestReader(t, id, 1)
-				data := kickRenderFixture()
+				data := promptrender.KickFixture()
 				// The host digest quotes observations the reader already holds.
 				delete(data, "evidence_digest")
 				prompts.MergeCoordinatorKickVarsForTools(data, reader)
@@ -216,7 +218,7 @@ func TestRenderedWorkerKicksNameOnlyWorkerTools(t *testing.T) {
 						WebSearch: true,
 					})
 					contractcheck.FailErr(t, "build worker reader", err)
-					data := kickRenderFixture()
+					data := promptrender.KickFixture()
 					// The host digest quotes observations the reader already holds.
 					delete(data, "evidence_digest")
 					maps.Copy(data, reader.Facts())

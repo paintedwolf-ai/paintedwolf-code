@@ -218,8 +218,8 @@ func TestWorkerCopyLifetimesAndSkillHistory(t *testing.T) {
 		before := renderSkillParts(t, sk, varsA)
 		after := renderSkillParts(t, sk, varsA)
 		for i := range before {
-			if before[i].text != after[i].text {
-				t.Fatalf("skill read part %s mutated across volatile state", before[i].label)
+			if before[i].Text != after[i].Text {
+				t.Fatalf("skill read part %s mutated across volatile state", before[i].Label)
 			}
 		}
 	}

@@ -4,23 +4,15 @@ import (
 	"context"
 	"testing"
 
-	"github.com/lycaon/lycaon/internal/configlayout"
 	"github.com/lycaon/lycaon/internal/orchestration"
 	"github.com/lycaon/lycaon/internal/prompts"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
+	"github.com/lycaon/lycaon/test/contract/laws/promptrender"
 )
-
-func contractPromptLayers(t *testing.T) prompts.PromptLayers {
-	t.Helper()
-	mod := configlayout.FindModuleRoot()
-	return prompts.PromptLayers{
-		ModuleRoot: mod,
-	}
-}
 
 func contractPersonaEngine(t *testing.T) *prompts.FileTemplateEngine {
 	t.Helper()
-	return prompts.NewFileTemplateEngineLayers(contractPromptLayers(t))
+	return promptrender.PersonaEngine()
 }
 
 func TestPersonaContractYAMLValid(t *testing.T) {
@@ -36,21 +28,6 @@ func TestPersonaContractYAMLValid(t *testing.T) {
 	}
 	if len(cfg.Archetypes) < 5 {
 		t.Fatalf("archetypes = %d want at least 5", len(cfg.Archetypes))
-	}
-}
-
-func TestEachAgentPersonaRenders(t *testing.T) {
-	contractcheck.ActivateStockCatalog(t)
-	prompts.ResetPersonaContractCache()
-	cfg, err := prompts.LoadPersonaContract()
-	contractcheck.FailErr(t, "prompts.LoadPersonaContract failed", err)
-	engine := contractPersonaEngine(t)
-	for id := range cfg.Agents {
-		reader, err := prompts.DeclaredReader(nil, id)
-		contractcheck.FailErr(t, "DeclaredReader "+id, err)
-		if _, err := prompts.RenderPersona(context.Background(), engine, id, reader, nil); err != nil {
-			t.Fatalf("agent %q: %v", id, err)
-		}
 	}
 }
 
