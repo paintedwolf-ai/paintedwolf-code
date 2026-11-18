@@ -19,3 +19,5 @@ func openBundlePayload(*os.Root, string) (*os.File, error) {
 func openPartial(*os.Root, string) (*os.File, error) { return nil, errUnsupportedPlatform }
 
 func reclaimableBlocks(os.FileInfo, int) int64 { return 0 }
+
+func privatePartial(os.FileInfo) bool { return false }

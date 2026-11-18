@@ -33,6 +33,11 @@ func (s *Store) importRevision(ctx context.Context, signed SignedManifest, sourc
 	if err := s.signer.Verify(signed); err != nil {
 		return err
 	}
+	lock, err := s.provisioningLock()
+	if err != nil {
+		return err
+	}
+	defer func() { resultErr = errors.Join(resultErr, lock.Close()) }()
 	pins, err := s.pinImport(signed.Manifest, repair)
 	if err != nil {
 		return err
@@ -56,7 +61,7 @@ func (s *Store) importRevision(ctx context.Context, signed SignedManifest, sourc
 		if reader == nil {
 			return errors.New("modelstore: artifact source returned no reader")
 		}
-		stageErr := s.Stage(contextReader{ctx: ctx, reader: reader}, a)
+		stageErr := s.stage(contextReader{ctx: ctx, reader: reader}, a)
 		closeErr := reader.Close()
 		if err := errors.Join(stageErr, closeErr); err != nil {
 			return err

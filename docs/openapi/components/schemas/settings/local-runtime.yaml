@@ -32,6 +32,9 @@ components:
           type: integer
         total_bytes:
           type: integer
+        offline_installer:
+          type: boolean
+          description: This installation was packaged with an explicitly selected offline tier.
         seed_model:
           type: string
           description: Tier contained in the packaged offline seed.

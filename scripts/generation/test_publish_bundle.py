@@ -1,5 +1,6 @@
-import hashlib
 """Contracts for uploading signed student bundles."""
+
+import hashlib
 
 import io
 import json

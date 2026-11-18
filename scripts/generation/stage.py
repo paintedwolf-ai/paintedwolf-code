@@ -22,6 +22,7 @@ def stage(output, resources, model=None):
     runtime.build(argparse.Namespace(backend="native"))
     stage_runtime(build, build / "release/nativegen", output, resources, backend)
     if not model:
+        (resources / "offline-model").unlink(missing_ok=True)
         models = resources / "models"
         if models.exists():
             shutil.rmtree(models)

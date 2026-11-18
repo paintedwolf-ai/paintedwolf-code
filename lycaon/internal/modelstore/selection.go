@@ -106,7 +106,7 @@ func (s *Store) finishSelection() error {
 	if err != nil {
 		return err
 	}
-	return errors.Join(root.RemoveAll("partials"), root.Close())
+	return errors.Join(removeAbandonedStages(root), root.RemoveAll("partials"), root.Close())
 }
 
 func (s *Store) install(ctx context.Context, signed SignedManifest, resumable bool, beforeEviction func() error, stage func(Artifact) error) (resultErr error) {

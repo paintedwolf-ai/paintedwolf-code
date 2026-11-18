@@ -118,6 +118,9 @@ func TestOfflineSelectionLoadsAndDiscoversChosenTier(t *testing.T) {
 	notified := make(chan struct{})
 	testutil.FailErr(t, "start seed import", rt.StartSelection(request, func() { close(notified) }))
 	<-notified
+	if err := rt.Warm(t.Context(), DefaultModelID); err == nil || rt.Readiness().State != "ready" {
+		t.Fatal("stale request displaced the admitted tier")
+	}
 	status := api.LocalGenerationStatus{}
 	rt.SelectionStatus(&status)
 	entries, err := rt.DiscoverModels(t.Context())

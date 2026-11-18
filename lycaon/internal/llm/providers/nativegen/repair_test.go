@@ -8,8 +8,10 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/lycaon/lycaon/internal/inference"
 	"github.com/lycaon/lycaon/internal/modelstore"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/pkg/api"
 )
 
 func repairFixture(t *testing.T) *Runtime {
@@ -51,6 +53,16 @@ func TestRepairFailureCanBeRetriedWithoutRestartingHost(t *testing.T) {
 	installed := filepath.Join(runtime.loaded.process.lease.Dir, "model.gguf")
 	testutil.FailErr(t, "make installed fixture writable", os.Chmod(installed, 0o600))
 	testutil.FailErr(t, "damage installed payload", os.WriteFile(installed, []byte("invalid weights"), 0o600))
+	runtime.config.DeviceMemory, _ = inference.NewMemoryBudget(8 << 30)
+	runtime.config.PhysicalBytes = 16 << 30
+	if err := runtime.Warm(t.Context(), DefaultModelID); err == nil {
+		t.Fatal("warm installed a seed without a selection")
+	}
+	selectSeed := func() {
+		done := make(chan struct{})
+		testutil.FailErr(t, "request seed import", runtime.StartSelection(api.LocalModelSelectionRequest{Model: DefaultModelID, PackagedSeed: true}, func() { close(done) }))
+		<-done
+	}
 	payload := filepath.Join(runtime.config.SeedDirectory, "model.gguf")
 	testutil.FailErr(t, "damage seed payload", os.WriteFile(payload, []byte("invalid weights"), 0o600))
 	if err := runtime.Repair(t.Context()); err == nil {
@@ -88,24 +100,32 @@ func TestMissingSeedDoesNotHideHealthyProcess(t *testing.T) {
 	}
 }
 
-func TestFirstLoadImportsSeedAndRetriesFailedInstallation(t *testing.T) {
+func TestExplicitSeedImportRetriesFailedInstallation(t *testing.T) {
 	for _, damaged := range []bool{false, true} {
 		t.Run(map[bool]string{false: "valid", true: "retry"}[damaged], func(t *testing.T) {
 			runtime := repairFixture(t)
 			runtime.unload()
 			runtime.config.ModelStore = modelstore.New(t.TempDir(), fixtureAuthority{})
+			runtime.config.DeviceMemory, _ = inference.NewMemoryBudget(8 << 30)
+			runtime.config.PhysicalBytes = 16 << 30
+			if err := runtime.Warm(t.Context(), DefaultModelID); err == nil {
+				t.Fatal("warm installed a seed without a selection")
+			}
+			selectSeed := func() {
+				done := make(chan struct{})
+				testutil.FailErr(t, "request seed import", runtime.StartSelection(api.LocalModelSelectionRequest{Model: DefaultModelID, PackagedSeed: true}, func() { close(done) }))
+				<-done
+			}
 			payload := filepath.Join(runtime.config.SeedDirectory, "model.gguf")
 			if damaged {
 				testutil.FailErr(t, "damage initial seed", os.WriteFile(payload, []byte("damaged"), 0o600))
-				if err := runtime.Warm(t.Context(), DefaultModelID); err == nil {
-					t.Fatal("loaded damaged seed")
-				}
-				if runtime.Readiness().State != "repair_required" || runtime.loaded != nil || runtime.config.HostMemory.Snapshot().ReservedBytes != 0 {
+				selectSeed()
+				if runtime.Readiness().State != "unavailable" || runtime.loaded != nil || runtime.config.HostMemory.Snapshot().ReservedBytes != 0 {
 					t.Fatal("initial import failure retained resources or lost repair state")
 				}
 				testutil.FailErr(t, "restore initial seed", os.WriteFile(payload, []byte("fixture weights"), 0o600))
 			}
-			testutil.FailErr(t, "load initial seed", runtime.Warm(t.Context(), DefaultModelID))
+			selectSeed()
 			if runtime.Readiness().State != "ready" || runtime.config.ModelStore.Status(DefaultModelID, "vulkan").State != modelstore.StateReady {
 				t.Fatal("first load did not install and admit the seed")
 			}

@@ -4316,6 +4316,8 @@ type LocalGenerationStatus struct {
 	TargetModel     string `json:"target_model,omitempty"`
 	DownloadedBytes int    `json:"downloaded_bytes,omitempty"`
 	TotalBytes      int    `json:"total_bytes,omitempty"`
+	// This installation was packaged with an explicitly selected offline tier.
+	OfflineInstaller bool `json:"offline_installer,omitempty"`
 	// Tier contained in the packaged offline seed.
 	SeedModel       string           `json:"seed_model,omitempty"`
 	SeedAvailable   bool             `json:"seed_available,omitempty"`

@@ -42,7 +42,7 @@ func openPartial(root *os.Root, name string) (*os.File, error) {
 		return nil, err
 	}
 	info, err := f.Stat()
-	if err == nil && (!info.Mode().IsRegular() || info.Sys().(*syscall.Stat_t).Nlink != 1) {
+	if err == nil && !privatePartial(info) {
 		err = errors.New("modelstore: unsafe partial file")
 	}
 	if err != nil {
@@ -57,4 +57,8 @@ func reclaimableBlocks(info os.FileInfo, links int) int64 {
 		return 0
 	}
 	return min(info.Size(), stat.Blocks*512)
+}
+
+func privatePartial(info os.FileInfo) bool {
+	return info.Mode().IsRegular() && info.Sys().(*syscall.Stat_t).Nlink == 1
 }
