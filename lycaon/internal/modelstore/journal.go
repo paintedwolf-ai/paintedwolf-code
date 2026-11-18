@@ -94,12 +94,12 @@ func (s *Store) parseRecords(raw []byte) (journalHistory, int, error) {
 
 func (h *journalHistory) apply(record journalRecord, signer Signer) error {
 	switch {
-	case record.Version == 2 && record.Selection == "opted_out":
+	case record.Version == 2 && (record.Selection == "opted_out" || record.Selection == "evicted"):
 		if record.Signed.Manifest.Model != "" || record.Signed.Signature != "" {
 			return errors.New("modelstore: unexpected opt-out manifest")
 		}
 		h.visible = nil
-		h.selection = Selection{State: "opted_out"}
+		h.selection = Selection{State: record.Selection}
 		return nil
 	case record.Version == 2 && record.Selection == "selected":
 	case record.Version == 1 && record.Selection == "" && h.selection.State == "unconfigured":
