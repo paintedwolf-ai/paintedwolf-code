@@ -51,7 +51,7 @@ const (
 	ruleOperationsSucceed            conformanceRule = "every_operation_succeeds"
 	ruleKeyedOperationsAreIdempotent conformanceRule = "keyed_operations_are_idempotent"
 	ruleCorpusIsCurrent              conformanceRule = "host_corpus_is_current"
-	ruleRequestsNeedTheBearer conformanceRule = "requests_need_the_bearer"
+	ruleRequestsNeedTheBearer        conformanceRule = "requests_need_the_bearer"
 )
 
 var conformanceRules = []conformanceRule{
