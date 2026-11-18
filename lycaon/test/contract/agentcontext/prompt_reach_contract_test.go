@@ -71,9 +71,15 @@ func TestRenderedCoordinatorPromptsNameOnlyReachableTools(t *testing.T) {
 		contractcheck.FailErr(t, "compile tool plans", err)
 		for id := range plans {
 			reader := coordinatorTestReader(t, id, rootCount)
+			// The render attaches units for the widest turn, every loadable
+			// tool loaded, so names are read against that turn's tools.
+			held := reader.Held()
+			for _, name := range plans[id].DeferredNames() {
+				held[name] = true
+			}
 			check := func(t *testing.T, corpus string) {
 				t.Helper()
-				if names := unreachableNames(t, catalog, corpus, reader); len(names) > 0 {
+				if names := toolvocab.UnreachableNames(catalog, corpus, held); len(names) > 0 {
 					t.Errorf("names %s, which this surface cannot reach:\n%s", strings.Join(names, ", "), linesNaming(corpus, names))
 				}
 			}

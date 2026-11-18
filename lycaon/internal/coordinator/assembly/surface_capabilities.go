@@ -200,12 +200,14 @@ func (e *promptSurface) turnReader(
 	turn *TurnAssemblyScratch,
 	fallbackRootCount int,
 ) (prompts.Reader, error) {
-	if turn != nil && turn.Reader.Valid() {
-		return turn.Reader, nil
-	}
 	profile, _ := e.resolveCoordinatorProfile(ctx, sess, frame, history, turn)
 	if frame.Roster != nil && strings.TrimSpace(frame.Roster.Facts.SurfaceID) != "" {
 		profile = surface.TurnProfile{SurfaceID: strings.TrimSpace(frame.Roster.Facts.SurfaceID)}
+	}
+	// A turn that moves to another surface, as a dispatch moves it to park,
+	// is read with that surface's tools.
+	if turn != nil && turn.Reader.Valid() && turn.Reader.SurfaceID() == profile.SurfaceID {
+		return turn.Reader, nil
 	}
 	_, rootCount, _, _, ok := e.workspaceRootsForTurn(ctx, sess, turn)
 	if !ok {

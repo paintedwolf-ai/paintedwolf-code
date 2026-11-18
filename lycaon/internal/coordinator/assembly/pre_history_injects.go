@@ -238,11 +238,25 @@ func (e *turnContextAssembler) prepareCoordinatorBoard(
 	}
 	if strings.TrimSpace(block) == "" && turn.Iteration > 0 {
 		block = turn.BoardBlock
+		// A turn that moved surface renders the board for the surface it is on.
+		if turn.BoardSurfaceID != turn.SurfaceID {
+			deps.Board.InvalidateOrientation(sess.ID)
+			if refreshed, changed := deps.Board.PrependBoardIfChanged(ctx, sess, frame.RunContext); changed {
+				block = refreshed
+				if hash := deps.Board.BoardInjectHash(sess.ID); hash != "" && deps.BoardOrientReady != nil {
+					if err := deps.BoardOrientReady.RecordBoardOrientReady(ctx, sess.ID, hash); err != nil {
+						deps.Board.InvalidateOrientation(sess.ID)
+						return frame, "", err
+					}
+				}
+			}
+		}
 	}
 	if strings.TrimSpace(block) != "" {
 		hash := deps.Board.BoardInjectHash(sess.ID)
 		turn.BoardBlock = block
 		turn.BoardKey = boardInjectFingerprint(hash, strings.TrimSpace(frame.RunContext.CurrentPhase))
+		turn.BoardSurfaceID = turn.SurfaceID
 	}
 	return frame, block, nil
 }

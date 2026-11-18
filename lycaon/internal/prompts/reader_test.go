@@ -50,7 +50,9 @@ func TestNewReaderRefusesIncompleteInput(t *testing.T) {
 	}
 }
 
-func TestReaderHeldComposesToolsAndReachMarks(t *testing.T) {
+// A reader holds the tools it is offered and their command reach; a tool it
+// can only request is not held until it loads.
+func TestReaderHeldComposesOfferedToolsAndReachMarks(t *testing.T) {
 	profiles, err := sandbox.LoadToolProfiles()
 	testutil.FailErr(t, "load tool profiles", err)
 
@@ -102,9 +104,6 @@ func TestReaderHeldComposesToolsAndReachMarks(t *testing.T) {
 
 			want := map[string]bool{}
 			for _, name := range tc.offered {
-				want[name] = true
-			}
-			for _, name := range tc.requestable {
 				want[name] = true
 			}
 			maps.Copy(want, toolcontract.ReachMarks(want["command"], reader.Effects()))
