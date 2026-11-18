@@ -1,6 +1,7 @@
 package validation
 
 import (
+	"errors"
 	"fmt"
 	"strings"
 
@@ -36,42 +37,9 @@ func ValidateBundled(reg *conditions.ConditionRegistry, manifests *workflowdef.R
 func validateManifest(reg *conditions.ConditionRegistry, key string, m workflowdef.Manifest) []api.ComposeValidationError {
 	var out []api.ComposeValidationError
 	for _, phase := range m.PhaseDefs {
-		out = append(out, validatePhasePredicates(reg, fmt.Sprintf("workflow[%s].phases[%s]", key, phase.ID), phase)...)
+		out = append(out, phase.PredicateDiagnostics(fmt.Sprintf("workflow[%s].phases[%s]", key, phase.ID), reg.Has, false)...)
 	}
 	return out
-}
-
-func validatePhasePredicates(reg *conditions.ConditionRegistry, path string, phase workflowdef.PhaseDef) []api.ComposeValidationError {
-	var out []api.ComposeValidationError
-	for _, field := range phase.PredicateFields() {
-		name := path + "." + field.Path
-		if field.Err != nil {
-			out = append(out, workflowdiag.EmitDefault(workflowdiag.MustCode("boolexpr_parse"), name, map[string]any{"detail": field.Err.Error()}))
-			continue
-		}
-		for _, leaf := range field.Leaves {
-			out = append(out, validateLeafID(reg, name, leaf)...)
-		}
-	}
-	return out
-}
-
-func validateLeafID(reg *conditions.ConditionRegistry, field, id string) []api.ComposeValidationError {
-	id = strings.TrimSpace(id)
-	if conditions.ForbiddenPredicateConfigError(id) != nil {
-		hint := conditions.ForbiddenPredicateReplacementHint(id)
-		return []api.ComposeValidationError{workflowdiag.EmitDefault(workflowdiag.MustCode("forbidden_predicate"), field,
-			map[string]any{"leaf": id, "replacement_hint": hint})}
-	}
-	if vocabulary.IsCatalogOnly(id) {
-		return []api.ComposeValidationError{workflowdiag.EmitDefault(workflowdiag.MustCode("catalog_only_predicate"), field,
-			map[string]any{"leaf": id})}
-	}
-	if !reg.Has(id) || !vocabulary.IsPredicate(id) {
-		return []api.ComposeValidationError{workflowdiag.EmitDefault(workflowdiag.MustCode("unknown_predicate"), field,
-			map[string]any{"leaf": id})}
-	}
-	return nil
 }
 
 func validateWhenKey(field, key string) []api.ComposeValidationError {
@@ -79,12 +47,12 @@ func validateWhenKey(field, key string) []api.ComposeValidationError {
 	if key == "" {
 		return nil
 	}
-	if conditions.IsForbidden(key) {
-		hint := conditions.ForbiddenPredicateReplacementHint(key)
+	if vocabulary.IsForbidden(key) {
+		hint := vocabulary.ForbiddenPredicateReplacementHint(key)
 		return []api.ComposeValidationError{workflowdiag.EmitDefault(workflowdiag.MustCode("forbidden_predicate"), field,
 			map[string]any{"leaf": key, "replacement_hint": hint})}
 	}
-	if conditions.IsHostOnlyCondition(key) {
+	if vocabulary.IsHostOnlyCondition(key) {
 		return []api.ComposeValidationError{workflowdiag.EmitDefault(workflowdiag.MustCode("forbidden_predicate"), field,
 			map[string]any{"leaf": key, "replacement_hint": "host-only conditions cannot appear in rule when"})}
 	}
@@ -98,8 +66,7 @@ func validateRules(reg *conditions.ConditionRegistry, idx int, cfg *rules.RulesC
 			out = append(out, validateWhenKey(fmt.Sprintf("rules[%d].%s.when", idx, rule.ID), key)...)
 		}
 		field := fmt.Sprintf("rules[%d].%s.when", idx, rule.ID)
-		// The map form is validated from its leaves, whose names are registry keys,
-		// not from re-lexed rendered text.
+		// Map values can contain expression delimiters.
 		leaves, err := rules.CanonicalWhenLeaves(rule.When)
 		if err != nil {
 			out = append(out, workflowdiag.EmitDefault(workflowdiag.MustCode("boolexpr_parse"), field,
@@ -107,7 +74,22 @@ func validateRules(reg *conditions.ConditionRegistry, idx int, cfg *rules.RulesC
 			continue
 		}
 		for _, leaf := range leaves {
-			out = append(out, validateLeafID(reg, field, leaf.Name)...)
+			out = append(out, workflowdiag.PredicateLeaf(field, leaf.Name, reg.Has, false, false)...)
+		}
+	}
+	return out
+}
+
+// PredicateLoadErrors preserves field diagnostics across manifest loaders.
+func PredicateLoadErrors(err error, prefix string) []api.ComposeValidationError {
+	var issues workflowdef.PredicateErrors
+	if !errors.As(err, &issues) {
+		return nil
+	}
+	out := append([]api.ComposeValidationError(nil), issues...)
+	if prefix != "" {
+		for i := range out {
+			out[i].Field = prefix + ": " + out[i].Field
 		}
 	}
 	return out

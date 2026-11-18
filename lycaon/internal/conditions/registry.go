@@ -49,7 +49,6 @@ type EvalContext struct {
 
 // ConditionRegistry maps vocabulary ids to evaluators. Unknown ids fail closed.
 type ConditionRegistry struct {
-	shipped       bool
 	mu            sync.RWMutex
 	conditions    map[string]ConditionFunc
 	applicability map[string]ConditionFunc
@@ -94,7 +93,7 @@ func (r *ConditionRegistry) register(name string, fn, active ConditionFunc) erro
 	if err := checkForbiddenRegister(name); err != nil {
 		return err
 	}
-	if r.shipped && !vocabulary.CanBind(name) {
+	if !vocabulary.CanBind(name, false) {
 		return fmt.Errorf("%w: %s", ErrUnknownCondition, name)
 	}
 	if fn == nil {
@@ -124,7 +123,7 @@ func (r *ConditionRegistry) RegisterParameterized(prefix string, fn ConditionFun
 	if err := checkForbiddenRegister(prefix); err != nil {
 		return err
 	}
-	if r.shipped && !vocabulary.CanBind(prefix+"*") {
+	if !vocabulary.CanBind(prefix, true) {
 		return fmt.Errorf("%w: %s", ErrUnknownCondition, prefix)
 	}
 	if fn == nil {
@@ -170,7 +169,7 @@ func (r *ConditionRegistry) Evaluate(name string, ctx EvalContext) (bool, error)
 		ctx.Ctx = context.Background()
 	}
 	name = strings.TrimSpace(name)
-	if IsForbidden(name) {
+	if vocabulary.IsForbidden(name) {
 		return false, fmt.Errorf("%w: %s", ErrForbiddenCondition, name)
 	}
 	r.mu.RLock()
@@ -200,7 +199,7 @@ func (r *ConditionRegistry) Applicable(name string, ctx EvalContext) (bool, erro
 		ctx.Ctx = context.Background()
 	}
 	name = strings.TrimSpace(name)
-	if IsForbidden(name) {
+	if vocabulary.IsForbidden(name) {
 		return false, fmt.Errorf("%w: %s", ErrForbiddenCondition, name)
 	}
 	r.mu.RLock()

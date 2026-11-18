@@ -27,7 +27,6 @@ import (
 
 func checkClosure(
 	opts CatalogValidateOptions,
-	condReg *conditions.ConditionRegistry,
 	path string,
 	m workflowdef.Manifest,
 	overlayRules bool,
@@ -36,7 +35,6 @@ func checkClosure(
 	out = append(out, checkInvoke(opts, path, m)...)
 	out = append(out, checkPrompts(opts, path, m)...)
 	out = append(out, checkKicks(opts, path, m)...)
-	out = append(out, checkReadiness(condReg, path, m)...)
 	out = append(out, checkEvidenceKeys(path, m)...)
 	// Review-loop fixtures exist only in bundled source trees.
 	if opts.Mode == ModeBundled && !overlayRules {
@@ -47,14 +45,8 @@ func checkClosure(
 
 func checkOverlayGateKit(path string, m workflowdef.Manifest) []api.ComposeValidationError {
 	var out []api.ComposeValidationError
-	for _, p := range m.PhaseDefs {
-		for _, id := range collectLeaves(p) {
-			if !vocabulary.IsOverlayLeaf(id) {
-				out = append(out, workflowdiag.EmitDefault(workflowdiag.MustCode("domain_leaf_on_overlay"),
-					fmt.Sprintf("%s: phases[%s]", path, p.ID),
-					map[string]any{"leaf": id}))
-			}
-		}
+	for _, phase := range m.PhaseDefs {
+		out = append(out, phase.PredicateDiagnostics(fmt.Sprintf("%s: phases[%s]", path, phase.ID), vocabulary.IsPredicate, true)...)
 	}
 	return out
 }
@@ -293,25 +285,6 @@ func renderTemplateExistsAny(dirs []extpacks.Source, render string) bool {
 	return false
 }
 
-func checkReadiness(condReg *conditions.ConditionRegistry, path string, m workflowdef.Manifest) []api.ComposeValidationError {
-	var out []api.ComposeValidationError
-	for _, p := range m.PhaseDefs {
-		if p.HumanApproval == nil {
-			continue
-		}
-		leaf := strings.TrimSpace(p.HumanApproval.Readiness)
-		if leaf == "" {
-			continue
-		}
-		if condReg != nil && (!condReg.Has(leaf) || !vocabulary.IsPredicate(leaf)) {
-			out = append(out, workflowdiag.EmitDefault(workflowdiag.MustCode("unknown_readiness"),
-				fmt.Sprintf("%s: phases[%s].human_approval.readiness", path, p.ID),
-				map[string]any{"leaf": leaf}))
-		}
-	}
-	return out
-}
-
 func checkEvidenceKeys(path string, m workflowdef.Manifest) []api.ComposeValidationError {
 	known := knownEvidenceKeys()
 	var out []api.ComposeValidationError
@@ -439,7 +412,7 @@ func checkGateFeedbackCoverage(opts CatalogValidateOptions, reg *workflowdef.Reg
 		}
 		for _, p := range m.PhaseDefs {
 			for _, leaf := range collectLeaves(p) {
-				if !vocabulary.IsPredicate(leaf) && !workflowdef.IsKnownCompleteWhen(leaf) {
+				if !vocabulary.IsPredicate(leaf) {
 					continue
 				}
 				if !fbCat.Has(leaf) {

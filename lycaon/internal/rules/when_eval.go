@@ -7,6 +7,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/boolexpr"
 	"github.com/lycaon/lycaon/internal/conditions"
+	"github.com/lycaon/lycaon/internal/vocabulary"
 )
 
 // MatchWhen evaluates a rule map through the condition registry. Every leaf must
@@ -66,7 +67,7 @@ func renderLeaves(leaves []WhenLeaf) string {
 }
 
 func validateLeafName(reg *conditions.ConditionRegistry, name string) error {
-	if conditions.IsForbidden(name) {
+	if vocabulary.IsForbidden(name) {
 		return fmt.Errorf("%w: %s", conditions.ErrForbiddenCondition, name)
 	}
 	if !reg.Has(name) {

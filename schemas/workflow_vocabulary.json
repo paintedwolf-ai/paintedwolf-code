@@ -666,6 +666,14 @@
       "overlay": true
     },
     {
+      "id": "var_set:*",
+      "layer": "core",
+      "domain": "—",
+      "status": "catalog",
+      "parameterized": true,
+      "overlay": false
+    },
+    {
       "id": "var_truthy:*",
       "layer": "core",
       "domain": "—",

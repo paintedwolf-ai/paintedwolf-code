@@ -25,7 +25,7 @@ type ObligationSpecs map[string]ObligationSpec
 func ValidateComposeManifest(reg *conditions.ConditionRegistry, specs ObligationSpecs, m workflowdef.Manifest) []api.ComposeValidationError {
 	var out []api.ComposeValidationError
 	for _, p := range m.PhaseDefs {
-		out = append(out, validatePhasePredicates(reg, fmt.Sprintf("phases[%s]", p.ID), p)...)
+		out = append(out, p.PredicateDiagnostics(fmt.Sprintf("phases[%s]", p.ID), reg.Has, false)...)
 		if fb := p.OnEnter.RequestUserFeedback; fb != nil {
 			if strings.TrimSpace(fb.Prompt) == "" {
 				out = append(out, workflowdiag.EmitDefault(workflowdiag.MustCode("prompt_required"),

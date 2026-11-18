@@ -32,7 +32,6 @@ type RegistryDeps struct {
 // NewDefaultRegistry registers bundled workflow and rule conditions.
 func NewDefaultRegistry(deps RegistryDeps) (*ConditionRegistry, error) {
 	reg := NewRegistry()
-	reg.shipped = true
 	core := CoreDeps{
 		SessionWorkIDs:          deps.SessionWorkIDs,
 		Evidence:                deps.Evidence,

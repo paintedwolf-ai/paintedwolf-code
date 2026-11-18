@@ -99,6 +99,9 @@ func (p *Persister) Persist(ctx context.Context, req PersistRequest) (*PersistRe
 	}
 	raw, err := workflowdef.ParseManifestYAML([]byte(rec.ManifestYAML))
 	if err != nil {
+		if issues := workflowvalidation.PredicateLoadErrors(err, ""); len(issues) > 0 {
+			return nil, &ComposeValidationFailed{Errors: issues}
+		}
 		return nil, &ComposeValidationFailed{Errors: []api.ComposeValidationError{{
 			Field: "manifest", Code: "parse_error", Message: err.Error(),
 		}}}

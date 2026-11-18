@@ -7,6 +7,7 @@ const (
 	overlayPredicate
 	completionForm
 	catalogOnly
+	hostOnly
 )
 
 type declaration struct {
@@ -15,6 +16,7 @@ type declaration struct {
 }
 
 var declarations = map[string]declaration{
+	"var_set:*":                    {"—", hostOnly},
 	"agent_is:*":                   {"—", predicate},
 	"agent_is_plan_writer":         {"—", predicate},
 	"approval_denied":              {"—", predicate},

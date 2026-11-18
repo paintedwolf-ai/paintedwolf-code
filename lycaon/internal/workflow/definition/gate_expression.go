@@ -50,6 +50,16 @@ func (p PhaseDef) PredicateFields() []PredicateField {
 		leaves, err := expressionLeaves(p.EntryWhen)
 		out = append(out, PredicateField{"entry_when", leaves, err})
 	}
+	if p.HumanApproval != nil && p.HumanApproval.Readiness != "" {
+		leaves, err := expressionLeaves(p.HumanApproval.Readiness)
+		out = append(out, PredicateField{"human_approval.readiness", leaves, err})
+	}
+	for _, edge := range p.Transitions {
+		if edge.When != "" {
+			leaves, err := expressionLeaves(edge.When)
+			out = append(out, PredicateField{"transitions[" + edge.ID + "].when", leaves, err})
+		}
+	}
 	for _, group := range []struct {
 		path  string
 		gates []string

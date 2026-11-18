@@ -83,6 +83,9 @@ func (c *Composer) Compose(ctx context.Context, req ComposeRequest) (*ComposeRes
 	}
 	raw, err := workflowdef.ParseManifestYAML(req.ManifestYAML)
 	if err != nil {
+		if issues := workflowvalidation.PredicateLoadErrors(err, ""); len(issues) > 0 {
+			return nil, &ComposeValidationFailed{Errors: issues}
+		}
 		return nil, &ComposeValidationFailed{Errors: []api.ComposeValidationError{{
 			Field: "manifest", Code: "parse_error", Message: err.Error(),
 		}}}
@@ -160,6 +163,9 @@ func (c *Composer) validateBody(data []byte) []api.ComposeValidationError {
 	}
 	raw, err := workflowdef.ParseManifestYAML(data)
 	if err != nil {
+		if issues := workflowvalidation.PredicateLoadErrors(err, ""); len(issues) > 0 {
+			return issues
+		}
 		out = append(out, api.ComposeValidationError{
 			Field: "manifest", Code: "parse_error", Message: err.Error(),
 		})

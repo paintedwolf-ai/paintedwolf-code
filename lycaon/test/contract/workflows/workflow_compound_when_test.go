@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/conditions"
+	"github.com/lycaon/lycaon/internal/vocabulary"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 	workflowvalidation "github.com/lycaon/lycaon/internal/workflow/validation"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
@@ -48,7 +49,7 @@ func TestCompoundCompleteWhenForbiddenLeafFailsLoad(t *testing.T) {
 
 func TestVarSetForbiddenInRuleWhen(t *testing.T) {
 	t.Parallel()
-	if !conditions.IsHostOnlyCondition("var_set:plan.status") {
+	if !vocabulary.IsHostOnlyCondition("var_set:plan.status") {
 		t.Fatal("var_set must be host-only")
 	}
 }

@@ -1,15 +1,5 @@
 package conditions
 
-import (
-	"strings"
-)
-
-// IsHostOnlyCondition reports ids that may only be written by host subsystems, not rule when: keys.
-func IsHostOnlyCondition(name string) bool {
-	name = strings.TrimSpace(name)
-	return strings.HasPrefix(name, "var_set:")
-}
-
 func registerCoreVars(reg *ConditionRegistry) error {
 	if reg == nil {
 		return nil

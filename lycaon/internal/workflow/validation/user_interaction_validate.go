@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/lycaon/lycaon/internal/boolexpr"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 	"github.com/lycaon/lycaon/internal/workflowdiag"
 	"github.com/lycaon/lycaon/pkg/api"
@@ -71,39 +70,15 @@ func ValidateUserInteractionGates(m workflowdef.Manifest) []api.ComposeValidatio
 }
 
 func collectPhaseConditionIDs(p workflowdef.PhaseDef) []string {
-	var exprs []string
-	if cw := strings.TrimSpace(p.CompleteWhen); cw != "" && cw != workflowdef.CompleteWhenGatesSatisfied {
-		exprs = append(exprs, cw)
-	}
-	if ew := strings.TrimSpace(p.EntryWhen); ew != "" {
-		exprs = append(exprs, ew)
-	}
-	for _, g := range p.Gates {
-		if g = strings.TrimSpace(g); g != "" {
-			exprs = append(exprs, g)
-		}
-	}
-	return collectConditionIDs(exprs...)
-}
-
-func collectConditionIDs(exprs ...string) []string {
-	seen := map[string]struct{}{}
+	seen := map[string]bool{}
 	var out []string
-	for _, expr := range exprs {
-		expr = strings.TrimSpace(expr)
-		if expr == "" {
-			continue
+	for _, field := range p.PredicateFields() {
+		for _, leaf := range field.Leaves {
+			if !seen[leaf] {
+				seen[leaf] = true
+				out = append(out, leaf)
+			}
 		}
-		node, err := boolexpr.Parse(expr)
-		if err != nil {
-			continue
-		}
-		for _, id := range boolexpr.CollectIdents(node) {
-			seen[id] = struct{}{}
-		}
-	}
-	for id := range seen {
-		out = append(out, id)
 	}
 	return out
 }

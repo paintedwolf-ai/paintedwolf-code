@@ -9,12 +9,12 @@ import (
 
 func TestConditionRegistryRegisterAndEvaluate(t *testing.T) {
 	reg := conditions.NewRegistry()
-	if err := reg.Register("always_true", func(_ conditions.EvalContext) (bool, error) {
+	if err := reg.Register("workflow_active", func(_ conditions.EvalContext) (bool, error) {
 		return true, nil
 	}); err != nil {
 		testutil.FailErr(t, "reg.Register failed", err)
 	}
-	ok, err := reg.Evaluate("always_true", conditions.EvalContext{})
+	ok, err := reg.Evaluate("workflow_active", conditions.EvalContext{})
 	if err != nil || !ok {
 		t.Fatalf("evaluate = %v err = %v", ok, err)
 	}
@@ -22,8 +22,8 @@ func TestConditionRegistryRegisterAndEvaluate(t *testing.T) {
 
 func TestConditionRegistryDuplicateRegister(t *testing.T) {
 	reg := conditions.NewRegistry()
-	_ = reg.Register("dup", func(_ conditions.EvalContext) (bool, error) { return true, nil })
-	err := reg.Register("dup", func(_ conditions.EvalContext) (bool, error) { return false, nil })
+	_ = reg.Register("workflow_paused", func(_ conditions.EvalContext) (bool, error) { return true, nil })
+	err := reg.Register("workflow_paused", func(_ conditions.EvalContext) (bool, error) { return false, nil })
 	if err == nil {
 		t.Fatal("expected duplicate error")
 	}

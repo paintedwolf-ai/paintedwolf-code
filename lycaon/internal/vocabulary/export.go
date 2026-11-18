@@ -22,7 +22,7 @@ func ExportCatalog() []CatalogEntry {
 			layer = "domain"
 		}
 		status := "shipped"
-		if d.usage == catalogOnly {
+		if d.usage == catalogOnly || d.usage == hostOnly {
 			status = "catalog"
 		}
 		rows = append(rows, CatalogEntry{ID: id, Layer: layer, Domain: d.domain, Status: status, Parameterized: strings.HasSuffix(id, ":*"), Overlay: d.usage == overlayPredicate || d.usage == completionForm})
@@ -52,8 +52,15 @@ func IsCatalogOnly(id string) bool {
 	return lookup(id).usage == catalogOnly
 }
 
+func IsHostOnlyCondition(id string) bool { return lookup(id).usage == hostOnly }
+
 // CanBind checks the declaration spelling, including the wildcard for a family.
-func CanBind(id string) bool {
+func CanBind(id string, family bool) bool {
+	if family {
+		id += "*"
+	} else if strings.Contains(id, ":") {
+		return false
+	}
 	d, ok := declarations[id]
 	return ok && (d.usage == predicate || d.usage == overlayPredicate)
 }

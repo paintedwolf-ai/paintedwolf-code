@@ -69,6 +69,10 @@ func ValidateCatalog(ctx context.Context, opts CatalogValidateOptions) ([]api.Co
 		for _, p := range opts.Paths {
 			m, err := workflowdef.LoadManifestFromFile(p)
 			if err != nil {
+				if issues := workflowvalidation.PredicateLoadErrors(err, p); len(issues) > 0 {
+					out = append(out, issues...)
+					continue
+				}
 				out = append(out, workflowdiag.EmitDefault(workflowdiag.MustCode("load_error"), p,
 					map[string]any{"detail": err.Error()}))
 				continue
@@ -95,6 +99,9 @@ func ValidateCatalog(ctx context.Context, opts CatalogValidateOptions) ([]api.Co
 
 	reg, sources, err := CatalogSources(opts)
 	if err != nil {
+		if issues := workflowvalidation.PredicateLoadErrors(err, ""); len(issues) > 0 {
+			return issues, nil
+		}
 		return []api.ComposeValidationError{workflowdiag.EmitDefault(workflowdiag.MustCode("load_error"), "catalog", //nolint:nilerr // the load error is returned as a api.ComposeValidationError, which is this API's error channel
 			map[string]any{"detail": err.Error()})}, nil
 	}
@@ -178,7 +185,7 @@ func validateOne(
 		out = append(out, d)
 	}
 	out = append(out, checkLeaveability(opts, path, m)...)
-	out = append(out, checkClosure(opts, condReg, path, m, overlayRules)...)
+	out = append(out, checkClosure(opts, path, m, overlayRules)...)
 	if overlayRules {
 		out = append(out, checkOverlayGateKit(path, m)...)
 		out = append(out, checkOverlayExplicitSurfaces(path, m)...)

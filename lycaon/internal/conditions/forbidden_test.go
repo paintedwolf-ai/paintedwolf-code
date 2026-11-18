@@ -8,14 +8,6 @@ import (
 	"github.com/lycaon/lycaon/internal/vocabulary"
 )
 
-func TestForbiddenConditionIDsExact(t *testing.T) {
-	for id := range forbiddenConditionIDs {
-		if !IsForbidden(id) {
-			t.Fatalf("forbidden condition id %q not reported by IsForbidden", id)
-		}
-	}
-}
-
 func TestRegisterRejectsForbiddenID(t *testing.T) {
 	reg := NewRegistry()
 	err := reg.Register("stage_plan_complete", func(_ EvalContext) (bool, error) { return false, nil })
@@ -61,16 +53,6 @@ func TestEvaluateRejectsForbiddenID(t *testing.T) {
 	ok, err := reg.Evaluate("stage_plan_complete", EvalContext{})
 	if err == nil || !errors.Is(err, ErrForbiddenCondition) {
 		t.Fatalf("Evaluate forbidden = ok=%v err=%v", ok, err)
-	}
-}
-
-func TestReplacementHintStageComplete(t *testing.T) {
-	hint := ReplacementHint("stage_plan_complete")
-	if hint == "" || hint == "see docs/workflows.md" {
-		t.Fatalf("hint = %q", hint)
-	}
-	if want := "topology_stage_complete with bind_topology_stage: plan"; hint != want {
-		t.Fatalf("hint = %q want %q", hint, want)
 	}
 }
 

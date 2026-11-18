@@ -7,6 +7,7 @@ import (
 	"sync"
 
 	"github.com/lycaon/lycaon/internal/conditions"
+	"github.com/lycaon/lycaon/internal/vocabulary"
 )
 
 var (
@@ -42,7 +43,7 @@ func projectWhenMapKeys(reg *conditions.ConditionRegistry) []string {
 	set := map[string]struct{}{}
 	postureFamily := false
 	for _, name := range reg.ExactNames() {
-		if conditions.IsHostOnlyCondition(name) {
+		if vocabulary.IsHostOnlyCondition(name) {
 			continue
 		}
 		if strings.HasPrefix(name, "posture_is_") {

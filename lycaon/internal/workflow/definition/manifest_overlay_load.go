@@ -137,6 +137,13 @@ func RegistryFromDirsWithSources(projectDir string) (*Registry, map[string]Manif
 	if err != nil {
 		return nil, nil, err
 	}
+	for key, source := range sources {
+		if source.Origin == OriginOverlay {
+			if err := resolved[key].checkPredicates(true); err != nil {
+				return nil, nil, fmt.Errorf("%s: %w", source.Path, err)
+			}
+		}
+	}
 	if ref, cfgErr := LoadRegistryConfig(extpacks.Bundled(config.PlatformFlows)); cfgErr == nil {
 		if err := ValidateAmbientAttachBijection(resolved, ref); err != nil {
 			return nil, nil, err

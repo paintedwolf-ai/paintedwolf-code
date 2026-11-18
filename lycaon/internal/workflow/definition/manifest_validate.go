@@ -6,7 +6,6 @@ import (
 	"unicode/utf8"
 
 	"github.com/lycaon/lycaon/internal/coordinator/surface"
-	"github.com/lycaon/lycaon/internal/vocabulary"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -35,6 +34,9 @@ func validateManifestSchema(m Manifest) error {
 	}
 	knownProfiles, err := surface.LoadSurfaceProfiles("")
 	if err != nil {
+		return err
+	}
+	if err := m.checkPredicates(false); err != nil {
 		return err
 	}
 	return validateManifestSurfaceBinding(m, knownSurfaces, knownProfiles)
@@ -105,11 +107,7 @@ func validatePhaseTransitions(m Manifest) error {
 			if _, ok := byID[t.To]; !ok {
 				return fmt.Errorf("workflow manifest %s: phase %q transition %q: unknown to %q", m.ID, p.ID, t.ID, t.To)
 			}
-			if when := strings.TrimSpace(t.When); when != "" {
-				if vocabulary.IsCatalogOnly(when) {
-					return fmt.Errorf("workflow manifest %s: phase %q transition %q: when %q is catalog-only", m.ID, p.ID, t.ID, when)
-				}
-			}
+
 		}
 	}
 	return nil
@@ -140,26 +138,10 @@ func validateGatesSatisfiedPhases(m Manifest) error {
 }
 
 func validatePhaseDef(p PhaseDef) error {
-	if ew := strings.TrimSpace(p.EntryWhen); ew != "" {
-		if vocabulary.IsCatalogOnly(ew) {
-			return fmt.Errorf("phase %q entry_when %q is catalog-only", p.ID, ew)
-		}
-		if !IsKnownCompleteWhen(ew) {
-			return fmt.Errorf("phase %q entry_when %q is not a known condition", p.ID, ew)
-		}
-	}
-	for _, g := range p.Gates {
-		if strings.TrimSpace(g) == "" {
-			return fmt.Errorf("phase %q: empty gates entry", p.ID)
-		}
-	}
 	if p.CompleteWhen == CompleteWhenGatesSatisfied && len(p.Gates) == 0 {
 		return fmt.Errorf("phase %q: gates_satisfied requires non-empty gates", p.ID)
 	}
 	if childWhen := strings.TrimSpace(p.ChildCompleteWhen); childWhen != "" {
-		if !IsKnownCompleteWhen(childWhen) {
-			return fmt.Errorf("phase %q: child_complete_when %q is not a known condition", p.ID, childWhen)
-		}
 		if childWhen == CompleteWhenGatesSatisfied && len(p.ChildGates) == 0 {
 			return fmt.Errorf("phase %q: child_complete_when gates_satisfied requires child_gates", p.ID)
 		}
