@@ -107,8 +107,14 @@ if [[ "${LYCAON_E2E_SHARD_CHILD:-0}" != "1" ]]; then
     prepare_engine "${prepared}"
     # Playwright's --shard splits by test count and sends every file with its own browser options
     # to the last shard; dealing files in turn spreads each family of slow specs across shards.
+    deal_args=()
+    # Main's nightly spec durations; every job of a run receives the same file, so the deals agree.
+    if [[ -n "${LYCAON_E2E_SPEC_TIMINGS:-}" ]]; then
+      printf '%s\n' "${LYCAON_E2E_SPEC_TIMINGS}" > "${prepared}/spec-timings.json"
+      deal_args+=(--timings "${prepared}/spec-timings.json")
+    fi
     PLAYWRIGHT_E2E=web bunx playwright test --project=web "$@" --list --reporter=json \
-      | python3 "${E2E_DIR}/deal-test-files.py" "${total_shards}" "${prepared}/test-lists"
+      | python3 "${E2E_DIR}/deal-test-files.py" "${total_shards}" "${prepared}/test-lists" ${deal_args[@]+"${deal_args[@]}"}
     pids=()
     stop_shards() {
       if ((${#pids[@]} > 0)); then
@@ -127,6 +133,7 @@ if [[ "${LYCAON_E2E_SHARD_CHILD:-0}" != "1" ]]; then
       selection="${prepared}/test-lists/shard-${global_shard}.txt"
       [[ -s "${selection}" ]] || continue
       LYCAON_E2E_SHARD_CHILD=1 \
+      LYCAON_E2E_SHARD_NAME="${global_shard}" \
       LYCAON_E2E_PLAYWRIGHT_READY=1 \
       LYCAON_E2E_OUTPUT_DIR="${ROOT}/lycaon-den/test-results/shard-${shard}" \
         bash "$0" "$@" --test-list "${prepared}/test-lists/shard-${global_shard}.txt" &
@@ -230,8 +237,14 @@ export LYCAON_E2E_DOCKER_STACK=1
 echo "e2e-den (web/docker): project=${LYCAON_E2E_DOCKER_PROJECT} base=${LYCAON_E2E_BASE_URL} state=${LYCAON_E2E_STATE_DIR}" >&2
 
 export PLAYWRIGHT_E2E=web
-if ((${#EXTRA[@]} > 0)); then
-  bunx playwright test --project=web "${EXTRA[@]}"
-else
-  bunx playwright test --project=web
+# The JSON report measures each spec for the nightly durations that deal later runs.
+report="${LYCAON_E2E_STATE_DIR}/playwright-report.json"
+status=0
+PLAYWRIGHT_JSON_OUTPUT_FILE="${report}" bunx playwright test --project=web --reporter=list,json ${EXTRA[@]+"${EXTRA[@]}"} \
+  || status=$?
+if [[ -s "${report}" ]]; then
+  PYTHONPATH="${ROOT}/scripts" python3 -m ci_policy.timings specs "${report}" \
+    "${PW_ARTIFACT_ROOT}/ci/e2e-specs-${LYCAON_E2E_SHARD_NAME:-1}.json" \
+    || echo "warning: spec durations were not recorded" >&2
 fi
+exit "${status}"

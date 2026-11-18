@@ -76,6 +76,9 @@ jobs:
   e2e:
     needs: [source, platform, platform-lanes]
     uses: ./.github/workflows/e2e-verification.yml
+    permissions:
+      contents: read
+      actions: read
     with:
       web-parallel: 2
       source-sha: ${{ needs.source.outputs.source-sha }}
