@@ -348,3 +348,9 @@ func TestRefusalFeedSuppressesBenignSocketProbes(t *testing.T) {
 		t.Fatalf("actionable socket refusal = %+v, heard = %d", got.Refusals, heard.Load())
 	}
 }
+
+func (w *refusalWatchT) currentState() watchState {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	return w.state
+}

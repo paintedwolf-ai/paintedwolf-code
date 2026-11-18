@@ -74,14 +74,6 @@ type FloorRecovery struct {
 // Terminal reports a layer that no approval can open.
 func (r FloorRecovery) Terminal() bool { return r.Capability == "" }
 
-// FloorLayers returns every layer a filesystem verdict can report.
-func FloorLayers() []FloorLayer {
-	return []FloorLayer{
-		FloorOutsideWriteRoots, FloorBaseline, FloorProtected, FloorAgentPolicy, FloorControlPlane,
-		FloorReadConfigured, FloorReadKeyMaterial, FloorReadCredentialStore, FloorReadControlPlane,
-	}
-}
-
 // Recovery returns the route from this layer's deny to an ask.
 func (l FloorLayer) Recovery() FloorRecovery {
 	switch l {

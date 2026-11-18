@@ -53,11 +53,11 @@ func TestRecordRunClassifiesTheHelperOutcome(t *testing.T) {
 func TestUnavailabilityIsAnError(t *testing.T) {
 	t.Parallel()
 	err := error(&Unavailability{Code: UnavailableSeccomp, Detail: "ENOSYS"})
-	u, ok := AsUnavailable(err)
-	if !ok || u.Code != UnavailableSeccomp || err.Error() != "linux sandbox unavailable: seccomp_unavailable: ENOSYS" {
-		t.Fatalf("AsUnavailable = %+v, %v (%v)", u, ok, err)
+	var u *Unavailability
+	if !errors.As(err, &u) || u.Code != UnavailableSeccomp || err.Error() != "linux sandbox unavailable: seccomp_unavailable: ENOSYS" {
+		t.Fatalf("typed unavailability = %+v (%v)", u, err)
 	}
-	if _, ok := AsUnavailable(errors.New("other")); ok {
+	if errors.As(errors.New("other"), &u) {
 		t.Fatal("plain error classified as unavailability")
 	}
 	unsupported := error(&Unsupported{Code: UnsupportedNetworkMode, Detail: "tunnel"})
