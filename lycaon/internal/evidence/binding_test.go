@@ -63,6 +63,9 @@ func TestBindingUndeclaredToolNoKind(t *testing.T) {
 	if b.ToolKind("unknown_native_tool") != "" {
 		t.Fatalf("undeclared tool kind = %q want empty", b.ToolKind("unknown_native_tool"))
 	}
+	if b.ToolKind("read") != "read" {
+		t.Fatalf("declared read kind = %q want read", b.ToolKind("read"))
+	}
 	ev := ledgertest.BuildFromMessages("", []api.Message{
 		{Role: api.MessageRoleAssistant, ToolCalls: []api.ToolCall{
 			{Name: "unknown_native_tool", ID: "c1", Args: map[string]any{}},

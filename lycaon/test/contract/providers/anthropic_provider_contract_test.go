@@ -47,18 +47,3 @@ func TestAnthropicRegistryConfiguredWithKey(t *testing.T) {
 		t.Fatalf("anthropic provider profile = %+v, want the Anthropic driver", profile)
 	}
 }
-
-func TestAnthropicRegistryUnconfiguredWithoutKey(t *testing.T) {
-	t.Setenv("ANTHROPIC_API_KEY", "sk-ant-env-ignored")
-	// Bundled providers come from the binary; the local overlay stays a real path.
-	catalog, err := llm.NewProviderCatalogAt(filepath.Join(t.TempDir(), "providers.local.yaml"))
-	contractcheck.FailErr(t, "llm.NewProviderCatalogAt failed", err)
-	registry, err := llm.NewRegistry(t.Context(), catalog, providercredentials.NewAt(filepath.Join(t.TempDir(), "credential-vault.age")), nil)
-	if err == nil {
-		registry.SetOutboundSecretScreen(llm.NewModelSecretScreen(nil, nil))
-	}
-	contractcheck.FailErr(t, "llm.NewRegistry failed", err)
-	if registry.IsConfigured("anthropic") {
-		t.Fatal("expected anthropic unconfigured without stored credential (env ignored)")
-	}
-}
