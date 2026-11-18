@@ -53,7 +53,7 @@ func (b *BranchService) EvictBranch(ctx context.Context, branchRoot string) erro
 	}); ok {
 		return evictor.EvictWorkerBranch(ctx, branchRoot)
 	}
-	return workspace.EvictJobTree(ctx, branchRoot)
+	return fmt.Errorf("worker workspace eviction unavailable")
 }
 
 // WorkerBranches materializes a job's branch tree on demand. A tree that

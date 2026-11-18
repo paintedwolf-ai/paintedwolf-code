@@ -63,14 +63,16 @@ func newSourceHandlerFixture(t *testing.T, opts ...func(*Deps)) *Handler {
 		Store: deps.SessionStore, Projects: deps.ProjectRegistry, EditorDocuments: deps.EditorDocuments,
 		FileBriefings: deps.Briefings.Files, ManagedSecrets: deps.ManagedSecrets, MutationGate: deps.MutationGate,
 		SourceLedger: deps.SourceLedger, SourceMutations: deps.SourceMutations, FileOperations: deps.FileOperations,
-		Workers: deps.Workers, Branches: deps.Branches,
+		Workers: deps.Workers,
 	}
 	apitestdeps.Fill(t, &required)
 	deps.EditorDocuments, deps.Briefings.Files, deps.ManagedSecrets = required.EditorDocuments, required.FileBriefings, required.ManagedSecrets
 	deps.MutationGate, deps.SourceLedger = required.MutationGate, required.SourceLedger
 	deps.SourceMutations, deps.FileOperations = required.SourceMutations, required.FileOperations
 	deps.Workers = required.Workers
-	deps.Branches = required.Branches
+	if deps.Branches == nil {
+		deps.Branches = required.Branches
+	}
 	handler := New(&httpio.Responder{Logger: slog.Default()}, group, Operations{}, deps)
 	t.Cleanup(func() {
 		group.Stop()

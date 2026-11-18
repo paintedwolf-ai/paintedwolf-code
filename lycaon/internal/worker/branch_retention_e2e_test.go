@@ -579,3 +579,18 @@ func TestPromotionRequiresBranchProviderBeforeRecovery(t *testing.T) {
 		t.Fatalf("branch provider absence: lease=%v error=%v", lease, err)
 	}
 }
+
+func TestBranchEvictionRequiresRecoveryCapability(t *testing.T) {
+	root := t.TempDir()
+	path := filepath.Join(root, "retained.txt")
+	testutil.FailErr(t, "seed retained branch", os.WriteFile(path, []byte("retain"), 0o600))
+	branches := &BranchService{}
+	if err := branches.EvictBranch(t.Context(), root); err == nil {
+		t.Fatal("eviction accepted an unconfigured workspace")
+	}
+	contents, err := os.ReadFile(path)
+	testutil.FailErr(t, "read retained branch", err)
+	if string(contents) != "retain" {
+		t.Fatalf("branch contents = %q", contents)
+	}
+}

@@ -91,9 +91,6 @@ var queueMethodsWithoutStatusWrites = map[string]string{
 	"RenewClaim":                      "extends a running lease only",
 	"ListPendingOutcomes":             "read",
 	"MarkOutcomeDelivered":            "delivery ledger only",
-	"ClaimWorkerBranch":               "branch provisioning only",
-	"EnsureWorkerBranch":              "branch provisioning only",
-	"ListBranchJobs":                  "read",
 }
 
 func TestQueueStatusTransitionsCoverWorkerQueue(t *testing.T) {
