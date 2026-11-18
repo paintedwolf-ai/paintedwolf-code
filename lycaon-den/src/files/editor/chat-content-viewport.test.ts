@@ -14,5 +14,7 @@ describe("chat reader coordinates", () => {
     const doc = Text.of(["🌲\r", "🌱 abc"]);
     expect(inlineRange(doc, { row: 1, column: 2, length: 3 })).toEqual({ anchor: 7, head: 10 });
     expect(inlineRange(doc, { offset: 5, length: 3 })).toEqual({ anchor: 7, head: 10 });
+    const receipt = Text.of(["🌲", ""]);
+    expect(inlineRange(receipt, { row: 0, column: 2, length: 0 })).toEqual({ anchor: 3, head: 3 });
   });
 });

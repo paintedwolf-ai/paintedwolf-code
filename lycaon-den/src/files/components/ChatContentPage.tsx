@@ -220,17 +220,19 @@ function InlineChatContent(props: {
     const host = parent(); if (!host) return;
     const value = untrack(rawText);
     const language = untrack(() => props.languageExtension) ?? undefined;
+    let stopRestore: (() => void) | undefined;
     const view = new EditorView({ parent: host, state: createSourceEditorState({ surface: "diff-viewer", doc: value, language, ...untrack(editorDisplayPrefs), editable: false, scrollPastEnd: false, commandBridge: true,
       extensions: [
         EditorState.lineSeparator.of("\n"),
+        EditorView.updateListener.of(update => { if (update.selectionSet) stopRestore?.(); }),
         redactions.of(buildRawRedactionExtension(value, untrack(redactionSpans))),
         createPrettyExtension(untrack(prettyConfig)),
       ],
     }) });
     editor = view;
     props.onEditor(view);
-    const stop = untrack(() => props.restorePlace(view));
-    onCleanup(() => { stop?.(); view.destroy(); if (editor === view) editor = undefined; props.onEditor(undefined); });
+    stopRestore = untrack(() => props.restorePlace(view));
+    onCleanup(() => { stopRestore?.(); view.destroy(); if (editor === view) editor = undefined; props.onEditor(undefined); });
   });
   createEffect(() => {
     const value = rawText(), view = editor; if (!view) return;

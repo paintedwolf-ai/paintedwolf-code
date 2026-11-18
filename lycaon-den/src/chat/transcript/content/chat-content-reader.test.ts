@@ -99,6 +99,16 @@ describe("retained chat content", () => {
     expect(get).not.toHaveBeenCalled();
   });
 
+  it("locates the last retained row for a viewport at EOF", async () => {
+    const ref = { ...reference(""), total_runes: 3 };
+    const rows = [{ index: 0, offset: 0, text: "x🌲\n", spans: [] }];
+    const get = vi.fn(async (..._args: Parameters<LycaonClient["getChatContent"]>) =>
+      ({ reference: ref, rows, offset: 0, end_offset: 3, complete: true, text: "", spans: [] }));
+    const reader = createChatContentAccess({ client: stubClient({ getChatContent: get }), sessionId: "s", messageId: "m", reference: ref });
+    expect(await reader.revealTarget({ offset: 3, length: 0 }, new AbortController().signal)).toEqual({ rows, row: 0, from: 4, to: 4 });
+    expect(get.mock.calls[0]?.[3]).toEqual({ locate: 2 });
+  });
+
   it("reveals a document offset as a range of its row", async () => {
     const rows: ChatContentRow[] = [{ index: 7, offset: 70, text: "🌲 needle here\n", spans: [] }];
     const get = vi.fn(async (..._args: Parameters<LycaonClient["getChatContent"]>) => ({ reference: reference("x"), rows, offset: 70, end_offset: 85, complete: false, text: "", spans: [] }));

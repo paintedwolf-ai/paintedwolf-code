@@ -159,8 +159,9 @@ export class ChatContentEditor {
     let loaded: ChatContentDocumentRow | undefined;
     while (!signal.aborted && !this.abort.signal.aborted) {
       const { view, document } = this.reader;
+      if (view.scrollDOM.clientHeight === 0) return undefined;
       const rank = this.reader.viewportAnchor()?.rank;
-      if (rank === undefined || view.scrollDOM.clientHeight === 0) return undefined;
+      if (rank === undefined) return undefined;
       const gap = !document.rowAt(MAIN_SECTION, rank);
       const anchor = gap ? undefined : topTextAnchor(view);
       const entry = anchor && document.at(anchor.pos);

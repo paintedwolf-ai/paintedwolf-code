@@ -143,7 +143,9 @@ export function createChatContentAccess(options: {
         const row = loaded.find(value => value.index === match.row);
         return row && { rows: loaded, row: row.index, ...runeRangeToUtf16(row.text, match.column, match.length) };
       }
-      const loaded = await readPage({ locate: match.offset }, signal);
+      // EOF follows the final row; load that row to place its trailing boundary.
+      const locate = match.offset === reference.total_runes && !match.length ? Math.max(0, match.offset - 1) : match.offset;
+      const loaded = await readPage({ locate }, signal);
       const row = loaded[0];
       return row && { rows: loaded, row: row.index, ...runeRangeToUtf16(row.text, match.offset - row.offset, match.length) };
     },
