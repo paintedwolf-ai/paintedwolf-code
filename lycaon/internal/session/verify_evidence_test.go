@@ -242,7 +242,7 @@ func TestWorkflowSourceVerifyPassedReadsCurrentSessionEvidence(t *testing.T) {
 	})
 	sess, err := sessionStore.Create(ctx, api.CreateSessionRequest{ProjectID: "verify-proj"}, "verify-proj")
 	testutil.FailErr(t, "create verify session", err)
-	testdbseed.BindSessionWorkspace(t, sessionStore, sess.ID, t.TempDir())
+	testdbseed.BindSessionWorkspace(t, sessionStore.DB(), sess.ID, t.TempDir())
 	sess, err = sessionStore.Get(ctx, sess.ID)
 	testutil.FailErr(t, "reload session workspace", err)
 	testutil.FailErr(t, "append user boundary", sessionStore.AppendMessages(ctx, sess.ID, api.Message{
