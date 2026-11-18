@@ -39,8 +39,6 @@ type ProgramOutcome struct {
 	// SourceWindow is the observation window of a program that launched an
 	// external process.
 	SourceWindow *hostcmd.SourceWindow `json:"source_window,omitempty"`
-	// LaunchDrafts names the person's drafts a launch could not save; its
-	// processes read those files' earlier bytes.
 	toolcontract.LaunchDrafts
 }
 

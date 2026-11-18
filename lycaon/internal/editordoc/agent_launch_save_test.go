@@ -12,19 +12,13 @@ import (
 	"github.com/lycaon/lycaon/internal/testutil"
 )
 
-// launchDraftState is one state a document can be in when a process launches.
-// Each lives in its own directory, so a state that needs an unwritable
-// directory constrains only itself.
+// Separate directories isolate unwritable fixtures.
 type launchDraftState struct {
-	name string
-	// arrange leaves <name>/f.txt in the state and returns its document.
-	arrange func(t *testing.T, f agentFixture, path string) *Document
-	// cause is why the launch save leaves the draft unsaved; empty means the
-	// state holds nothing unsaved after the call.
-	cause UnsavedCause
-	// publishes is set when the call writes the draft to disk.
+	name      string
+	arrange   func(t *testing.T, f agentFixture, path string) *Document
+	cause     UnsavedCause
 	publishes bool
-	// release lifts what blocked the save, where a later launch can save it.
+	// release lets a later launch retry a blocked save.
 	release func(t *testing.T, f agentFixture, path string)
 }
 
@@ -40,8 +34,6 @@ func (f agentFixture) releaseDirectory(t *testing.T, path string) {
 	testutil.FailErr(t, "release directory", os.Chmod(filepath.Join(f.root, filepath.Dir(path)), 0o755))
 }
 
-// heldAgentEdit accepts an agent edit whose publication fails, so the document
-// holds agent text only the reviewed publication door may publish.
 func (f agentFixture) heldAgentEdit(t *testing.T, d *Document, path, content string) *Document {
 	t.Helper()
 	f.holdDirectory(t, path)
@@ -101,7 +93,6 @@ var launchDraftStates = []launchDraftState{
 	}},
 }
 
-// launchObservation is what a launch save may change about one document.
 type launchObservation struct {
 	disk     string
 	draft    string
@@ -117,7 +108,7 @@ func (f agentFixture) observeLaunchDraft(t *testing.T, id, path string) launchOb
 }
 
 func unsavedByPath(unsaved []UnsavedDocument) map[string]UnsavedCause {
-	out := make(map[string]UnsavedCause, len(unsaved))
+	out := make(map[string]UnsavedCause, len(save.Unsaved))
 	for _, document := range unsaved {
 		out[document.Path] = document.Cause
 	}
@@ -128,7 +119,6 @@ func launchCall(tool string) AgentCall {
 	return AgentCall{SessionID: "chat-launch", Turn: 5, ToolCallID: "call-launch-" + tool, ToolName: tool}
 }
 
-// launchOperations counts the save operations the ledger attributes to call.
 func (f agentFixture) launchOperations(t *testing.T, call AgentCall) int {
 	t.Helper()
 	var n int
@@ -137,9 +127,6 @@ func (f agentFixture) launchOperations(t *testing.T, call AgentCall) int {
 	return n
 }
 
-// A launch save publishes exactly the drafts that are the person's to publish,
-// returns every other draft with its cause, changes nothing about a draft it
-// returns, and is the same whichever draft states share the project.
 func TestSaveForAgentLaunchHoldsForEveryDraftState(t *testing.T) {
 	for _, tool := range []string{"command", "verify"} {
 		t.Run(tool, func(t *testing.T) {
@@ -157,10 +144,10 @@ func TestSaveForAgentLaunchHoldsForEveryDraftState(t *testing.T) {
 				before[path] = f.observeLaunchDraft(t, d.ID, path)
 			}
 
-			unsaved, err := f.service.SaveForAgentLaunch(t.Context(), f.project.ID, f.project.SourceBranch, call, nil)
+			save, err := f.service.SaveForAgentLaunch(t.Context(), f.project.ID, f.project.SourceBranch, call, nil)
 			testutil.FailErr(t, "launch save", err)
 
-			got, want, published := unsavedByPath(unsaved), map[string]UnsavedCause{}, 0
+			got, want, published := unsavedByPath(save.Unsaved), map[string]UnsavedCause{}, 0
 			for _, state := range launchDraftStates {
 				path := state.name + "/f.txt"
 				was, now := before[path], f.observeLaunchDraft(t, documents[path].ID, path)
@@ -187,6 +174,9 @@ func TestSaveForAgentLaunchHoldsForEveryDraftState(t *testing.T) {
 					}
 				}
 			}
+			if save.Published != (published > 0) {
+				t.Fatalf("published = %v, completed saves = %d", save.Published, published)
+			}
 			if !equalCauses(got, want) {
 				t.Fatalf("unsaved = %v, want %v", got, want)
 			}
@@ -195,15 +185,14 @@ func TestSaveForAgentLaunchHoldsForEveryDraftState(t *testing.T) {
 			}
 			f.assertLaunchAuthorship(t, call)
 
-			// A second launch finds nothing new to publish and reports the same drafts.
 			settled := map[string]launchObservation{}
 			for path, d := range documents {
 				settled[path] = f.observeLaunchDraft(t, d.ID, path)
 			}
 			again, err := f.service.SaveForAgentLaunch(t.Context(), f.project.ID, f.project.SourceBranch, call, nil)
 			testutil.FailErr(t, "second launch save", err)
-			if !equalCauses(unsavedByPath(again), want) {
-				t.Fatalf("second launch unsaved = %v, want %v", unsavedByPath(again), want)
+			if again.Published || !equalCauses(unsavedByPath(again.Unsaved), want) {
+				t.Fatalf("second launch unsaved = %v, want %v", unsavedByPath(again.Unsaved), want)
 			}
 			for path, d := range documents {
 				if now := f.observeLaunchDraft(t, d.ID, path); now.disk != settled[path].disk || now.draft != settled[path].draft || now.dirty != settled[path].dirty {
@@ -214,7 +203,6 @@ func TestSaveForAgentLaunchHoldsForEveryDraftState(t *testing.T) {
 				t.Fatalf("a second launch recorded operations: %d, want %d", n, published)
 			}
 
-			// Once what blocked a save is lifted, the next launch saves that draft.
 			for _, state := range launchDraftStates {
 				if state.release == nil {
 					continue
@@ -224,8 +212,8 @@ func TestSaveForAgentLaunchHoldsForEveryDraftState(t *testing.T) {
 				delete(want, path)
 				released, err := f.service.SaveForAgentLaunch(t.Context(), f.project.ID, f.project.SourceBranch, call, nil)
 				testutil.FailErr(t, "launch save after release", err)
-				if !equalCauses(unsavedByPath(released), want) {
-					t.Fatalf("after releasing %s unsaved = %v, want %v", state.name, unsavedByPath(released), want)
+				if !equalCauses(unsavedByPath(released.Unsaved), want) {
+					t.Fatalf("after releasing %s unsaved = %v, want %v", state.name, unsavedByPath(released.Unsaved), want)
 				}
 				if now := f.observeLaunchDraft(t, documents[path].ID, path); now.dirty || diskText(t, documents[path], now.disk) != before[path].draft {
 					t.Errorf("%s: not saved once released: %+v", state.name, now)
@@ -235,7 +223,6 @@ func TestSaveForAgentLaunchHoldsForEveryDraftState(t *testing.T) {
 	}
 }
 
-// diskText is the LF text of disk bytes saved in the document's line ending.
 func diskText(t *testing.T, d *Document, disk string) string {
 	t.Helper()
 	if d.EOL != "crlf" {
@@ -259,8 +246,6 @@ func equalCauses(got, want map[string]UnsavedCause) bool {
 	return true
 }
 
-// assertLaunchAuthorship holds every operation of call to the agent's call
-// and tool, and every text contribution it published to its own author.
 func (f agentFixture) assertLaunchAuthorship(t *testing.T, call AgentCall) {
 	t.Helper()
 	var foreign int
@@ -283,8 +268,6 @@ func (f agentFixture) assertLaunchAuthorship(t *testing.T, call AgentCall) {
 	}
 }
 
-// Each state alone gives the result it gives among the others: no state's
-// outcome depends on which other drafts are held.
 func TestSaveForAgentLaunchTreatsEachDraftStateAlone(t *testing.T) {
 	for _, state := range launchDraftStates {
 		t.Run(state.name, func(t *testing.T) {
@@ -294,14 +277,14 @@ func TestSaveForAgentLaunchTreatsEachDraftStateAlone(t *testing.T) {
 			f.write(t, path, "saved\n")
 			d := state.arrange(t, f, path)
 			was := f.observeLaunchDraft(t, d.ID, path)
-			unsaved, err := f.service.SaveForAgentLaunch(t.Context(), f.project.ID, f.project.SourceBranch, launchCall("command"), nil)
+			save, err := f.service.SaveForAgentLaunch(t.Context(), f.project.ID, f.project.SourceBranch, launchCall("command"), nil)
 			testutil.FailErr(t, "launch save", err)
 			want := map[string]UnsavedCause{}
 			if state.cause != "" {
 				want[path] = state.cause
 			}
-			if !equalCauses(unsavedByPath(unsaved), want) {
-				t.Fatalf("unsaved = %v, want %v", unsavedByPath(unsaved), want)
+			if save.Published != state.publishes || !equalCauses(unsavedByPath(save.Unsaved), want) {
+				t.Fatalf("unsaved = %v, want %v", unsavedByPath(save.Unsaved), want)
 			}
 			if now := f.observeLaunchDraft(t, d.ID, path); now.dirty != (state.cause != "") || (state.publishes && diskText(t, d, now.disk) != was.draft) {
 				t.Fatalf("after the launch save: %+v (was %+v)", now, was)
@@ -310,8 +293,6 @@ func TestSaveForAgentLaunchTreatsEachDraftStateAlone(t *testing.T) {
 	}
 }
 
-// Text typed after one launch is the next launch's to save, and every launch
-// leaves the disk holding exactly what the document held when it saved.
 func TestSaveForAgentLaunchFollowsLaterTyping(t *testing.T) {
 	f, _ := newLedgerAgentFixture(t, map[string]string{"a.txt": "saved\n"})
 	d := f.open(t, "a.txt")
@@ -322,31 +303,28 @@ func TestSaveForAgentLaunchFollowsLaterTyping(t *testing.T) {
 		if got := f.disk(t, "a.txt"); got == text {
 			t.Fatalf("typing reached disk without a save: %q", got)
 		}
-		unsaved, err := f.service.SaveForAgentLaunch(t.Context(), f.project.ID, f.project.SourceBranch, launchCall("command"), nil)
+		save, err := f.service.SaveForAgentLaunch(t.Context(), f.project.ID, f.project.SourceBranch, launchCall("command"), nil)
 		testutil.FailErr(t, "launch save", err)
-		if len(unsaved) != 0 || f.disk(t, "a.txt") != text {
-			t.Fatalf("after typing %q: unsaved=%v disk=%q", text, unsaved, f.disk(t, "a.txt"))
+		if len(save.Unsaved) != 0 || f.disk(t, "a.txt") != text {
+			t.Fatalf("after typing %q: unsaved=%v disk=%q", text, save.Unsaved, f.disk(t, "a.txt"))
 		}
 	}
 }
 
-// A launch whose context has ended reports that, never a draft it could not save.
 func TestSaveForAgentLaunchReturnsACanceledContext(t *testing.T) {
 	f, _ := newLedgerAgentFixture(t, map[string]string{"a.txt": "saved\n"})
 	f.typeDraft(t, f.open(t, "a.txt"), "typed\n")
 	ctx, cancel := context.WithCancel(t.Context())
 	cancel()
-	unsaved, err := f.service.SaveForAgentLaunch(ctx, f.project.ID, f.project.SourceBranch, launchCall("command"), nil)
-	if !errors.Is(err, context.Canceled) || unsaved != nil {
-		t.Fatalf("unsaved=%v err=%v", unsaved, err)
+	save, err := f.service.SaveForAgentLaunch(ctx, f.project.ID, f.project.SourceBranch, launchCall("command"), nil)
+	if !errors.Is(err, context.Canceled) || save.Unsaved != nil || save.Published {
+		t.Fatalf("unsaved=%v err=%v", save.Unsaved, err)
 	}
 	if f.disk(t, "a.txt") != "saved\n" {
 		t.Fatal("a canceled launch saved a draft")
 	}
 }
 
-// A mutation at a path keeps its own rule: it publishes what the document
-// holds, and a draft it cannot save refuses the operation.
 func TestSaveForAgentOperationKeepsItsRefusals(t *testing.T) {
 	f, _ := newLedgerAgentFixture(t, nil)
 	for _, state := range launchDraftStates {
@@ -370,7 +348,7 @@ func TestSaveForAgentOperationKeepsItsRefusals(t *testing.T) {
 				t.Errorf("%s: err = %v, want a publication failure at the path", state.name, err)
 			}
 		default:
-			// A held agent edit is the mutation's to publish: its write is admitted at the path.
+			// The path mutation already has admission to publish the held edit.
 			testutil.FailErr(t, state.name+": save for a mutation", err)
 			if now := f.observeLaunchDraft(t, d.ID, path); now.dirty {
 				t.Errorf("%s: a mutation left the draft unsaved", state.name)
@@ -379,10 +357,6 @@ func TestSaveForAgentOperationKeepsItsRefusals(t *testing.T) {
 	}
 }
 
-// A revision the launching program has pinned is left to the operation that
-// captured it: the launch neither saves it nor reports it, whatever else the
-// same launch saves, and once the document moves past the pin the next launch
-// saves it.
 func TestSaveForAgentLaunchLeavesPinnedRevisionsAlone(t *testing.T) {
 	f, _ := newLedgerAgentFixture(t, map[string]string{"pinned.txt": "saved\n", "free.txt": "saved\n", "stale-pin.txt": "saved\n"})
 	pinned := f.typeDraft(t, f.open(t, "pinned.txt"), "captured by a native stage\n")
@@ -391,14 +365,13 @@ func TestSaveForAgentLaunchLeavesPinnedRevisionsAlone(t *testing.T) {
 	asked := map[string]bool{}
 	pins := func(documentID string, revision int64) bool {
 		asked[documentID] = true
-		// A pin on a revision the document has left pins nothing.
 		return documentID == pinned.ID && revision == pinned.Revision || documentID == stale.ID && revision == stale.Revision-1
 	}
 	for range 2 {
-		unsaved, err := f.service.SaveForAgentLaunch(t.Context(), f.project.ID, f.project.SourceBranch, launchCall("command"), pins)
+		save, err := f.service.SaveForAgentLaunch(t.Context(), f.project.ID, f.project.SourceBranch, launchCall("command"), pins)
 		testutil.FailErr(t, "launch save", err)
-		if len(unsaved) != 0 {
-			t.Fatalf("a pinned draft was reported unsaved: %+v", unsaved)
+		if len(save.Unsaved) != 0 {
+			t.Fatalf("a pinned draft was reported unsaved: %+v", save.Unsaved)
 		}
 		if now := f.observeLaunchDraft(t, pinned.ID, "pinned.txt"); now.disk != "saved\n" || !now.dirty || now.revision != pinned.Revision {
 			t.Fatalf("the launch moved a pinned document: %+v", now)
@@ -413,9 +386,9 @@ func TestSaveForAgentLaunchLeavesPinnedRevisionsAlone(t *testing.T) {
 		t.Fatalf("the pin rule was not asked about every draft: %v", asked)
 	}
 	moved := f.typeDraft(t, pinned, "captured by a native stage\nthen typed on\n")
-	unsaved, err := f.service.SaveForAgentLaunch(t.Context(), f.project.ID, f.project.SourceBranch, launchCall("command"), pins)
+	save, err := f.service.SaveForAgentLaunch(t.Context(), f.project.ID, f.project.SourceBranch, launchCall("command"), pins)
 	testutil.FailErr(t, "launch save after the document moved", err)
-	if now := f.observeLaunchDraft(t, moved.ID, "pinned.txt"); len(unsaved) != 0 || now.dirty || now.disk != moved.Draft {
-		t.Fatalf("a document past its pin was not saved: unsaved=%+v %+v", unsaved, now)
+	if now := f.observeLaunchDraft(t, moved.ID, "pinned.txt"); len(save.Unsaved) != 0 || now.dirty || now.disk != moved.Draft {
+		t.Fatalf("a document past its pin was not saved: unsaved=%+v %+v", save.Unsaved, now)
 	}
 }

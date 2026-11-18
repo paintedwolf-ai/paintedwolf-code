@@ -9,9 +9,7 @@ import (
 	"github.com/lycaon/lycaon/internal/tools"
 )
 
-// DiskDrafts holds the person's unsaved text beside a real tree in root r1: a
-// launch save publishes each draft it may save, as the document owner does,
-// and returns the rest.
+// DiskDrafts publishes fixture drafts to a real tree.
 type DiskDrafts struct {
 	tools.EditorDocuments
 	// Publish writes a saved draft to the tree.
@@ -52,7 +50,7 @@ func (d *DiskDrafts) ForgetCalls() {
 	d.calls = nil
 }
 
-func (d *DiskDrafts) SaveForAgentLaunch(_ context.Context, _ string, _ sourcebranch.ID, call tools.EditorAgentCall, _ func(string, int64) bool) ([]tools.EditorUnsavedDocument, error) {
+func (d *DiskDrafts) SaveForAgentLaunch(_ context.Context, _ string, _ sourcebranch.ID, call tools.EditorAgentCall, _ func(string, int64) bool) (tools.EditorLaunchSave, error) {
 	if d.OnSave != nil {
 		d.OnSave()
 	}
@@ -60,23 +58,24 @@ func (d *DiskDrafts) SaveForAgentLaunch(_ context.Context, _ string, _ sourcebra
 	defer d.mu.Unlock()
 	d.calls = append(d.calls, call)
 	if d.Err != nil {
-		return nil, d.Err
+		return tools.EditorLaunchSave{}, d.Err
 	}
-	var unsaved []tools.EditorUnsavedDocument
+	var save tools.EditorLaunchSave
 	for _, path := range d.heldPaths() {
 		if cause, held := d.Blocked[path]; held {
-			unsaved = append(unsaved, tools.EditorUnsavedDocument{RootID: "r1", Path: path, Cause: cause})
+			save.Unsaved = append(save.Unsaved, tools.EditorUnsavedDocument{RootID: "r1", Path: path, Cause: cause})
 			continue
 		}
 		if err := d.Publish(path, d.drafts[path]); err != nil {
-			return nil, err
+			return save, err
 		}
 		delete(d.drafts, path)
+		save.Published = true
 	}
-	return unsaved, nil
+	return save, nil
 }
 
-// OpenDocument has no open document to serve: reads fall through to the tree.
+// OpenDocument leaves reads on disk.
 func (d *DiskDrafts) OpenDocument(context.Context, string, sourcebranch.ID, string, string) (tools.EditorDocumentText, bool, error) {
 	return tools.EditorDocumentText{}, false, nil
 }

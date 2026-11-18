@@ -24,33 +24,31 @@ type AgentCall struct {
 type UnsavedCause string
 
 const (
-	// UnsavedChangedOutside is a draft whose file changed outside its document.
 	UnsavedChangedOutside UnsavedCause = "changed_outside"
-	// UnsavedNotWritten is a draft whose publication failed.
-	UnsavedNotWritten UnsavedCause = "not_written"
-	// UnsavedAgentEditHeld is a draft holding an agent edit, which only the
-	// reviewed publication door may publish.
-	UnsavedAgentEditHeld UnsavedCause = "agent_edit_held"
+	UnsavedNotWritten     UnsavedCause = "not_written"
+	UnsavedAgentEditHeld  UnsavedCause = "agent_edit_held"
 )
 
-// errAgentEditHeld stops a launch save at a draft holding unpublished agent text.
 var errAgentEditHeld = errors.New("document holds an unpublished agent edit")
 
-// errChangedOutside stops a launch save at a draft whose file changed outside it.
 var errChangedOutside = errors.New("file changed outside its open document")
 
-// launchSave is a launch's rule for one draft: it publishes only the person's
-// own text, and leaves a revision the launching program has pinned to the
-// operation that pinned it. pinned is asked under the document's lock, so a
-// pin taken before the save reaches the document always holds.
 type launchSave struct {
-	pinned func(documentID string, revision int64) bool
+	// Check pins under the document lock.
+	pinned    func(documentID string, revision int64) bool
+	published bool
 }
 
 // UnsavedDocument is a draft a launch save could not publish.
 type UnsavedDocument struct {
 	RootID, Path string
 	Cause        UnsavedCause
+}
+
+// LaunchSave records the documents left unsaved and whether disk was updated.
+type LaunchSave struct {
+	Unsaved   []UnsavedDocument
+	Published bool
 }
 
 // PublicationFailure is a draft the document still holds because its save failed.
@@ -78,20 +76,15 @@ func (s *Service) SaveForAgentOperation(ctx context.Context, projectID string, b
 	})
 }
 
-// SaveForAgentLaunch saves the person's drafts on the branch before a process
-// reads the tree from disk. A draft it cannot publish is returned, not
-// refused: the launch overwrites nothing. A pinned revision is skipped: saving
-// it would move the document under the operation that captured it.
-func (s *Service) SaveForAgentLaunch(ctx context.Context, projectID string, branch sourcebranch.ID, call AgentCall, pinned func(documentID string, revision int64) bool) ([]UnsavedDocument, error) {
+// SaveForAgentLaunch publishes person-authored drafts and skips revisions
+// pinned by the program.
+func (s *Service) SaveForAgentLaunch(ctx context.Context, projectID string, branch sourcebranch.ID, call AgentCall, pinned func(documentID string, revision int64) bool) (LaunchSave, error) {
 	if s == nil || s.store == nil {
-		return nil, nil
+		return LaunchSave{}, nil
 	}
 	p, err := s.projectBranch(ctx, strings.TrimSpace(projectID), branch)
 	if err != nil {
-		return nil, err
-	}
-	if pinned == nil {
-		pinned = func(string, int64) bool { return false }
+		return LaunchSave{}, err
 	}
 	launch := &launchSave{pinned: pinned}
 	var unsaved []UnsavedDocument
@@ -106,9 +99,9 @@ func (s *Service) SaveForAgentLaunch(ctx context.Context, projectID string, bran
 		return nil
 	})
 	if err != nil {
-		return nil, err
+		return LaunchSave{Published: launch.published}, err
 	}
-	return unsaved, nil
+	return LaunchSave{Unsaved: unsaved, Published: launch.published}, nil
 }
 
 // launchSaveCause separates a draft left unsaved from a save that could not run.
@@ -145,7 +138,7 @@ func (s *Service) saveForAgent(ctx context.Context, p *project.Project, document
 		return nil
 	}
 	if launch != nil {
-		if launch.pinned(current.ID, current.Revision) {
+		if launch.pinned != nil && launch.pinned(current.ID, current.Revision) {
 			return nil
 		}
 		held, err := s.holdsUnpublishedAgentText(ctx, current)
@@ -155,7 +148,6 @@ func (s *Service) saveForAgent(ctx context.Context, p *project.Project, document
 		if held {
 			return errAgentEditHeld
 		}
-		// A launch needs the fact, not the hashes a refusal reports.
 		if current.Diverged {
 			return errChangedOutside
 		}
@@ -180,6 +172,9 @@ func (s *Service) saveForAgent(ctx context.Context, p *project.Project, document
 		return &PublicationFailure{RootID: current.RootID, Path: current.Path, Err: err}
 	}
 	if saved != nil {
+		if launch != nil {
+			launch.published = true
+		}
 		s.agentReads.replaceRevision(p.ID, current.ID, current.Revision, saved.Revision)
 	}
 	return nil

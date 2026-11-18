@@ -141,7 +141,6 @@ type Result struct {
 	LeftRunning int `json:"left_running,omitempty"`
 	// SourceWindow is present when a window observed the command.
 	SourceWindow *SourceWindow `json:"source_window,omitempty"`
-	// LaunchDrafts names the person's drafts the launch could not save.
 	toolcontract.LaunchDrafts
 	// GuidanceCodes classify a confinement refusal.
 	GuidanceCodes []string `json:"-"`
@@ -178,7 +177,6 @@ type CommandRunningResult struct {
 	Network []confine.EgressHost `json:"network,omitempty"`
 	// SourceWindow is present when a window observes the command.
 	SourceWindow *SourceWindow `json:"source_window,omitempty"`
-	// LaunchDrafts names the person's drafts the launch could not save.
 	toolcontract.LaunchDrafts
 	// Report is the confinement summary every process-spawning tool states.
 	confine.Report

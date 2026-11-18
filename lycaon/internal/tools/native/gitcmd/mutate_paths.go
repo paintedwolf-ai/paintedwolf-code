@@ -131,6 +131,9 @@ func expandRestorePaths(ctx context.Context, p Prepared, dir, repoRoot string, r
 			add(rel)
 			continue
 		}
+		if err := p.prepareWorktree(ctx); err != nil {
+			return nil, err
+		}
 		changed, err := p.owners.Git.ChangedPaths(ctx, repoRoot)
 		if err != nil {
 			return nil, err
@@ -162,6 +165,9 @@ func expandRestorePaths(ctx context.Context, p Prepared, dir, repoRoot string, r
 func expandStashPaths(ctx context.Context, p Prepared, dir, repoRoot string, rawPaths []string, includeUntracked bool) ([]string, error) {
 	rels, err := repoRelPaths(ctx, p, dir, repoRoot, rawPaths)
 	if err != nil {
+		return nil, err
+	}
+	if err := p.prepareWorktree(ctx); err != nil {
 		return nil, err
 	}
 	status, err := p.owners.Git.Status(ctx, repoRoot)

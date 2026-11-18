@@ -23,6 +23,8 @@ type GitMutations struct {
 	Git        git.GitManager
 	Boundary   *sandbox.Boundary
 	PrivateGit *privategit.Manager
+	// BeforeWorktree publishes admitted inputs before Git inspects the tree.
+	BeforeWorktree func(context.Context) error
 }
 
 // Operate runs one reviewed repository operation in the active root. A
@@ -63,6 +65,11 @@ func (m GitMutations) Operate(ctx context.Context, tc tools.ToolContext, req git
 	target := root.Abs
 	if managed {
 		target = cwd
+	}
+	if m.BeforeWorktree != nil {
+		if err := m.BeforeWorktree(ctx); err != nil {
+			return git.OperationResult{}, err
+		}
 	}
 	result, err := m.Git.Operate(ctx, target, req)
 	if err != nil && !result.Attempted {

@@ -7,7 +7,6 @@ import type { EditorDocument } from "../src/api/types.ts";
 import { apiJson, apiPostPrompt, openProjectFilesFixture, webE2e } from "./helpers.ts";
 import { manualHarnessTools } from "./manual-harness-tools.ts";
 
-/** The accepted text a wire document carries inside its CRDT state. */
 function documentText(document: EditorDocument): string {
   const state = new Y.Doc();
   Y.applyUpdate(state, new Uint8Array(Buffer.from(document.crdt_update, "base64")));
@@ -16,7 +15,7 @@ function documentText(document: EditorDocument): string {
   return text;
 }
 
-/** A settled command program's status and output, from its tool result. */
+// The tool result may prefix its JSON payload with display text.
 function programResult(content: string): { status: number; stdout: string; stderr: string } {
   return JSON.parse(content.slice(content.indexOf("{")));
 }
@@ -65,11 +64,9 @@ webE2e("a process the agent launches reads the person's unsaved text", async ({ 
     await page.keyboard.insertText("Unsaved person 🐺\n");
     await expect.poll(async () => documentText(await readDocument())).toContain("Unsaved person 🐺");
 
-    // A native read serves the draft and leaves it unsaved.
     expect((await run("cat shared.txt")).stdout).toContain("Unsaved person 🐺");
     expect(onDisk()).toBe("First line\nLast line\n");
 
-    // Git reads the working tree from disk, so its launch saves the draft first.
     const diff = await run("git diff -- shared.txt");
     expect(diff.stdout, diff.content).toContain("+Unsaved person 🐺");
     expect(diff.content).not.toContain("unsaved_documents");
@@ -77,7 +74,6 @@ webE2e("a process the agent launches reads the person's unsaved text", async ({ 
     await expect(editor).toContainText("Unsaved person 🐺");
     expect(documentText(await readDocument())).toBe("Unsaved person 🐺\nFirst line\nLast line\n");
 
-    // Text typed after one launch is the next launch's to save.
     await editor.click();
     await page.keyboard.press("ControlOrMeta+End");
     await page.keyboard.insertText("Typed after the launch 世界\n");

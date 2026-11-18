@@ -2,6 +2,7 @@ package gitcmd
 
 import (
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"sort"
@@ -20,11 +21,12 @@ import (
 // remote, no bisect in progress) is marked unlaunched.
 var formInvocations = map[string]struct {
 	argv       []string
+	saves      bool
 	unlaunched bool
 }{
-	"git status": {argv: []string{"git", "status", "--short"}}, "git diff": {argv: []string{"git", "diff"}},
-	"git blame": {argv: []string{"git", "blame", "a.txt"}}, "git ls-files": {argv: []string{"git", "ls-files"}},
-	"git grep": {argv: []string{"git", "grep", "one"}}, "git describe": {argv: []string{"git", "describe", "--tags"}},
+	"git status": {argv: []string{"git", "status", "--short"}, saves: true}, "git diff": {argv: []string{"git", "diff"}, saves: true},
+	"git blame": {argv: []string{"git", "blame", "a.txt"}, saves: true}, "git ls-files": {argv: []string{"git", "ls-files"}},
+	"git grep": {argv: []string{"git", "grep", "one"}, saves: true}, "git describe": {argv: []string{"git", "describe", "--tags"}},
 	"git log": {argv: []string{"git", "log", "--oneline"}}, "git show": {argv: []string{"git", "show", "--stat"}},
 	"git branch": {argv: []string{"git", "branch", "--list"}}, "git tag": {argv: []string{"git", "tag", "-l"}},
 	"git rev-parse": {argv: []string{"git", "rev-parse", "HEAD"}}, "git rev-list": {argv: []string{"git", "rev-list", "HEAD"}},
@@ -35,15 +37,15 @@ var formInvocations = map[string]struct {
 	"git cat-file": {argv: []string{"git", "cat-file", "-t", "HEAD"}}, "git show-ref": {argv: []string{"git", "show-ref"}},
 	"git for-each-ref": {argv: []string{"git", "for-each-ref"}},
 
-	"git add": {argv: []string{"git", "add", "new.txt"}}, "git commit": {argv: []string{"git", "commit", "-m", "staged work"}},
-	"git restore": {argv: []string{"git", "restore", "a.txt"}}, "git checkout": {argv: []string{"git", "checkout", "topic"}},
-	"git switch": {argv: []string{"git", "switch", "topic"}}, "git merge": {argv: []string{"git", "merge", "topic"}},
-	"git cherry-pick": {argv: []string{"git", "cherry-pick", "v1"}}, "git revert": {argv: []string{"git", "revert", "--no-edit", "HEAD"}},
-	"git rebase": {argv: []string{"git", "rebase", "topic"}}, "git stash": {argv: []string{"git", "stash"}},
-	"git reset": {argv: []string{"git", "reset", "--hard"}}, "git clean": {argv: []string{"git", "clean", "-n"}},
+	"git add": {argv: []string{"git", "add", "new.txt"}, saves: true}, "git commit": {argv: []string{"git", "commit", "-m", "staged work"}, saves: true},
+	"git restore": {argv: []string{"git", "restore", "a.txt"}, saves: true}, "git checkout": {argv: []string{"git", "checkout", "topic"}, saves: true},
+	"git switch": {argv: []string{"git", "switch", "topic"}, saves: true}, "git merge": {argv: []string{"git", "merge", "topic"}, saves: true},
+	"git cherry-pick": {argv: []string{"git", "cherry-pick", "v1"}, saves: true}, "git revert": {argv: []string{"git", "revert", "--no-edit", "HEAD"}, saves: true},
+	"git rebase": {argv: []string{"git", "rebase", "topic"}, saves: true}, "git stash": {argv: []string{"git", "stash"}, saves: true},
+	"git reset": {argv: []string{"git", "reset", "--hard"}, saves: true}, "git clean": {argv: []string{"git", "clean", "-n"}, saves: true},
 	"git worktree": {argv: []string{"git", "worktree", "prune"}}, "git apply": {argv: []string{"git", "apply", "--check", "new.txt"}},
-	"git rm": {argv: []string{"git", "rm", "sub/b.txt"}}, "git mv": {argv: []string{"git", "mv", "sub/b.txt", "sub/c.txt"}},
-	"git bisect": {argv: []string{"git", "bisect", "good"}}, "git bisect start": {argv: []string{"git", "bisect", "start"}},
+	"git rm": {argv: []string{"git", "rm", "sub/b.txt"}, saves: true}, "git mv": {argv: []string{"git", "mv", "sub/b.txt", "sub/c.txt"}, saves: true},
+	"git bisect": {argv: []string{"git", "bisect", "good"}}, "git bisect start": {argv: []string{"git", "bisect", "start"}, saves: true},
 	"git bisect skip": {argv: []string{"git", "bisect", "skip"}}, "git bisect run": {argv: []string{"git", "bisect", "run", "true"}},
 	"git bisect reset": {argv: []string{"git", "bisect", "reset"}}, "git bisect log": {argv: []string{"git", "bisect", "log"}},
 	"git bisect terms": {argv: []string{"git", "bisect", "terms"}}, "git bisect visualize": {argv: []string{"git", "bisect", "visualize"}, unlaunched: true},
@@ -156,7 +158,7 @@ func TestGitSavesDraftsExactlyForFormsThatReadTheTree(t *testing.T) {
 				return
 			}
 			want := 0
-			if treeForms[name] {
+			if invocation.saves {
 				want = 1
 			}
 			if saves != want {
@@ -170,6 +172,76 @@ func TestGitSavesDraftsExactlyForFormsThatReadTheTree(t *testing.T) {
 				t.Fatalf("%s: the draft on disk = %v, want %v", name, onDisk, want == 1)
 			}
 		})
+	}
+}
+
+func TestGitDraftSavesFollowTheSelectedSource(t *testing.T) {
+	for _, tc := range []struct {
+		name  string
+		argv  []string
+		saves bool
+	}{
+		{name: "diff index", argv: []string{"diff", "--staged"}},
+		{name: "blame commit", argv: []string{"blame", "HEAD", "--", "a.txt"}},
+		{name: "list modified", argv: []string{"ls-files", "--modified"}, saves: true},
+		{name: "list untracked", argv: []string{"ls-files", "--others"}, saves: true},
+		{name: "list deleted", argv: []string{"ls-files", "--deleted"}, saves: true},
+		{name: "describe dirty", argv: []string{"describe", "--tags", "--dirty"}, saves: true},
+		{name: "grep index", argv: []string{"grep", "--cached", "one"}},
+		{name: "grep commit", argv: []string{"grep", "one", "HEAD"}},
+		{name: "restore index", argv: []string{"restore", "--staged", "a.txt"}},
+		{name: "reset soft", argv: []string{"reset", "--soft", "HEAD"}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			h, drafts, events := draftHarness(t)
+			drafts.Type("notes.txt", "typed by the person\n")
+			got := h.exec(append([]string{"git"}, tc.argv...)...)
+			if got.err != nil || got.result.Status != 0 {
+				t.Fatalf("%v: status=%d err=%v stderr=%s", tc.argv, got.result.Status, got.err, got.stderr)
+			}
+			_, onDisk := h.lookup("notes.txt")
+			if onDisk != tc.saves || (events.count("save") == 1) != tc.saves {
+				t.Fatalf("%v: draft on disk=%v, events=%v, want save=%v", tc.argv, onDisk, events.events, tc.saves)
+			}
+		})
+	}
+}
+
+func TestGitKeepsDraftsWhenWorktreeAdmissionFails(t *testing.T) {
+	for _, argv := range [][]string{
+		{"git", "-C", "absent", "status"},
+		{"git", "add", "--", "../outside"},
+		{"git", "commit", "-m", "example", "--", "../outside"},
+		{"git", "grep", "-E", "["},
+		{"git", "bisect", "start", "missing-ref"},
+	} {
+		t.Run(strings.Join(argv, " "), func(t *testing.T) {
+			h, drafts, events := draftHarness(t)
+			drafts.Type("notes.txt", "typed by the person\n")
+			got := h.exec(argv...)
+			if got.result.Status == 0 || events.count("launch") != 1 {
+				t.Fatalf("expected a failure after launch binding: status=%d err=%v events=%v", got.result.Status, got.err, events.events)
+			}
+			if events.count("save") != 0 {
+				t.Fatalf("draft save preceded admission: events=%v", events.events)
+			}
+		})
+	}
+}
+
+func TestGitRechecksLaunchAuthorityBeforeSavingDrafts(t *testing.T) {
+	h, drafts, events := draftHarness(t)
+	drafts.Type("notes.txt", "typed by the person\n")
+	bind := h.owners.Launch
+	denied := errors.New("authority changed after binding")
+	h.owners.Launch = func(ctx context.Context, tc tools.ToolContext, subject, line string, services []confine.HostService) (lycexec.LaunchPlan, func(context.Context, tools.AgentLaunchOutcome), error) {
+		plan, release, err := bind(ctx, tc, subject, line, services)
+		plan.CurrentAuthority = func(context.Context) error { return denied }
+		return plan, release, err
+	}
+	got := h.exec("git", "status")
+	if !errors.Is(got.err, denied) || events.count("save") != 0 {
+		t.Fatalf("git status: err=%v events=%v", got.err, events.events)
 	}
 }
 

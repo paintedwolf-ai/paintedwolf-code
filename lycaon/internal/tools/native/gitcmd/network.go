@@ -24,7 +24,6 @@ import (
 	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/internal/tools"
-	"github.com/lycaon/lycaon/internal/tools/native"
 )
 
 func runNetwork(ctx context.Context, p Prepared, tc tools.ToolContext, dir string, repo gitrepo.Repo, out *meteredOutput, stderr io.Writer, certainty toolcontract.EffectCertainty) (toolcontract.ProducerResult, error) {
@@ -115,7 +114,7 @@ func runPull(ctx context.Context, p Prepared, tc tools.ToolContext, dir string, 
 	} else if has(p.Argv, "--ff-only") {
 		req.Mode = "ff_only"
 	}
-	mut := native.GitMutations{Git: p.owners.Git, Boundary: p.owners.Boundary, PrivateGit: p.owners.PrivateGit}
+	mut := p.mutations()
 	res, opErr := mut.Operate(ctx, tc, req)
 	result, err := settleOperate(ctx, p, res, out, stderr, has(p.Argv, "-q"), opErr)
 	// The merge or rebase places fetched content in the files it changed, and

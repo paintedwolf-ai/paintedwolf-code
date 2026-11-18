@@ -104,6 +104,11 @@ func (l ExternalStages) Launch(ctx context.Context, request commandprogram.Opera
 		}
 		return externalLaunchFailure(err, refusedResult("COMMAND_EXEC_DENIED")), err
 	}
+	launchArgv, cleanupProcSubst, err := materializeExternalArgv(tctx.Host.SessionScratchDir, fields)
+	if err != nil {
+		return toolcontract.ProducerResult{Status: 1, Terminal: toolcontract.ProducerFailed, EffectCertainty: toolcontract.NoEffect}, err
+	}
+	defer cleanupProcSubst()
 	if _, err := tools.SaveLaunchDrafts(ctx, tctx); err != nil {
 		if ctx.Err() != nil {
 			return toolcontract.ProducerResult{Status: 130, Terminal: toolcontract.ProducerInterrupted, EffectCertainty: toolcontract.NoEffect}, errors.Join(ctx.Err(), err)
@@ -117,11 +122,6 @@ func (l ExternalStages) Launch(ctx context.Context, request commandprogram.Opera
 		return toolcontract.ProducerResult{Status: 130, Terminal: toolcontract.ProducerInterrupted, EffectCertainty: toolcontract.NoEffect}, err
 	}
 	defer release()
-	launchArgv, cleanupProcSubst, err := materializeExternalArgv(tctx.Host.SessionScratchDir, fields)
-	if err != nil {
-		return toolcontract.ProducerResult{Status: 1, Terminal: toolcontract.ProducerFailed, EffectCertainty: toolcontract.NoEffect}, err
-	}
-	defer cleanupProcSubst()
 	opts.Started = func(pid int) { noteJobProcess(ctx, pid, launchArgv) }
 	async, err := lycexec.StartPipelineAsync(ctx, []lycexec.Stage{{Name: launchArgv[0], Args: launchArgv[1:]}}, opts, nonNilWriter(streams.Output), nonNilWriter(streams.Error))
 	if err != nil {

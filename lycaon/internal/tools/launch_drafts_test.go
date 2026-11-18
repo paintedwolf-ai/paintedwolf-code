@@ -15,23 +15,21 @@ import (
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
-// launchDocuments is the document owner a launch save reaches: it answers
-// with the drafts it was told it cannot save and records each call.
 type launchDocuments struct {
 	EditorDocuments
-	left   []EditorUnsavedDocument
-	err    error
-	calls  []EditorAgentCall
-	branch []sourcebranch.ID
-	// pinned is the rule the latest call was given for drafts to leave alone.
-	pinned func(documentID string, revision int64) bool
+	left      []EditorUnsavedDocument
+	published bool
+	err       error
+	calls     []EditorAgentCall
+	branch    []sourcebranch.ID
+	pinned    func(documentID string, revision int64) bool
 }
 
-func (d *launchDocuments) SaveForAgentLaunch(_ context.Context, _ string, branch sourcebranch.ID, call EditorAgentCall, pinned func(string, int64) bool) ([]EditorUnsavedDocument, error) {
+func (d *launchDocuments) SaveForAgentLaunch(_ context.Context, _ string, branch sourcebranch.ID, call EditorAgentCall, pinned func(string, int64) bool) (EditorLaunchSave, error) {
 	d.calls = append(d.calls, call)
 	d.branch = append(d.branch, branch)
 	d.pinned = pinned
-	return d.left, d.err
+	return EditorLaunchSave{Unsaved: d.left, Published: d.published}, d.err
 }
 
 func launchContext(documents EditorDocuments) ToolContext {
@@ -46,9 +44,6 @@ func launchContext(documents EditorDocuments) ToolContext {
 	return tc
 }
 
-// Every context that has no shared documents launches without asking for a
-// save: a worker's private branch, a non-project workspace, and a call with no
-// project or no document owner.
 func TestSaveLaunchDraftsAsksOnlyWhereDocumentsAreShared(t *testing.T) {
 	for name, strip := range map[string]func(*ToolContext){
 		"worker branch":         func(tc *ToolContext) { tc.Source.WorkerBranchRoot = "/branches/job-1" },
@@ -60,7 +55,7 @@ func TestSaveLaunchDraftsAsksOnlyWhereDocumentsAreShared(t *testing.T) {
 			documents := &launchDocuments{left: []EditorUnsavedDocument{{RootID: "r1", Path: "a.go", Cause: toolcontract.UnsavedNotWritten}}}
 			tc := launchContext(documents)
 			strip(&tc)
-			drafts := NewProgramDrafts("command")
+			drafts := NewProgramDrafts("command", nil)
 			got, err := SaveLaunchDrafts(WithProgramDrafts(t.Context(), drafts), tc)
 			testutil.FailErr(t, "launch save", err)
 			if len(documents.calls) != 0 || !reflect.DeepEqual(got, toolcontract.LaunchDrafts{}) || !reflect.DeepEqual(drafts.Unsaved(), toolcontract.LaunchDrafts{}) {
@@ -70,9 +65,6 @@ func TestSaveLaunchDraftsAsksOnlyWhereDocumentsAreShared(t *testing.T) {
 	}
 }
 
-// The save is attributed to the call that launches: inside a program to the
-// program's tool, whose children carry operation names, and otherwise to the
-// invoked tool.
 func TestSaveLaunchDraftsNamesTheLaunchingCall(t *testing.T) {
 	for _, c := range []struct {
 		name    string
@@ -87,7 +79,7 @@ func TestSaveLaunchDraftsNamesTheLaunchingCall(t *testing.T) {
 			documents := &launchDocuments{}
 			ctx := t.Context()
 			if c.program != "" {
-				ctx = WithProgramDrafts(ctx, NewProgramDrafts(c.program))
+				ctx = WithProgramDrafts(ctx, NewProgramDrafts(c.program, nil))
 			}
 			_, err := SaveLaunchDrafts(ctx, launchContext(documents))
 			testutil.FailErr(t, "launch save", err)
@@ -102,14 +94,11 @@ func TestSaveLaunchDraftsNamesTheLaunchingCall(t *testing.T) {
 	}
 }
 
-// A result names unsaved drafts the way the model addresses files, in path
-// order, and never more than the bound: the rest are counted.
 func TestSaveLaunchDraftsBoundsAndAddressesTheUnsavedList(t *testing.T) {
 	for _, total := range []int{0, 1, toolcontract.MaxUnsavedDocuments - 1, toolcontract.MaxUnsavedDocuments, toolcontract.MaxUnsavedDocuments + 1, 4 * toolcontract.MaxUnsavedDocuments} {
 		t.Run(fmt.Sprint(total), func(t *testing.T) {
 			documents := &launchDocuments{}
 			var want []toolcontract.UnsavedDocument
-			// The owner answers in no particular order, across both roots.
 			for i := total - 1; i >= 0; i-- {
 				root, cause := "r1", toolcontract.UnsavedChangedOutside
 				display := fmt.Sprintf("pkg/f%03d.go", i)
@@ -133,12 +122,9 @@ func TestSaveLaunchDraftsBoundsAndAddressesTheUnsavedList(t *testing.T) {
 	}
 }
 
-// A program's result states every draft any of its launches left unsaved,
-// once each with the latest cause, and each launch drops the program's draft
-// inventory so the next native read asks again.
 func TestProgramDraftsAccumulateAcrossLaunches(t *testing.T) {
 	documents := &launchDocuments{}
-	drafts := NewProgramDrafts("command")
+	drafts := NewProgramDrafts("command", nil)
 	ctx := WithProgramDrafts(t.Context(), drafts)
 	tc := launchContext(documents)
 	loads := 0
@@ -188,36 +174,28 @@ func TestProgramDraftsAccumulateAcrossLaunches(t *testing.T) {
 	}
 }
 
-// A save that could not run fails the launch and states nothing as unsaved.
 func TestSaveLaunchDraftsFailsWhenTheSaveCannotRun(t *testing.T) {
 	failure := errors.New("document store unavailable")
 	documents := &launchDocuments{err: failure, left: []EditorUnsavedDocument{{RootID: "r1", Path: "a.go", Cause: toolcontract.UnsavedNotWritten}}}
-	drafts := NewProgramDrafts("command")
+	drafts := NewProgramDrafts("command", nil)
 	got, err := SaveLaunchDrafts(WithProgramDrafts(t.Context(), drafts), launchContext(documents))
 	if !errors.Is(err, failure) || !reflect.DeepEqual(got, toolcontract.LaunchDrafts{}) || !reflect.DeepEqual(drafts.Unsaved(), toolcontract.LaunchDrafts{}) {
 		t.Fatalf("err=%v result=%+v program=%+v", err, got, drafts.Unsaved())
 	}
 }
 
-// revisionOf is a document revision a test asks a launch's pin rule about.
 type revisionOf struct {
 	document string
 	revision int64
 }
 
-// A launch leaves alone exactly the revisions the program's operations hold as
-// the save reaches each document: a pin counts once however many operations
-// take it, lapses when the last operation holding it settles, outlives every
-// operation when taken outside one, holds when taken after the save began,
-// and outside a program nothing is pinned.
 func TestSaveLaunchDraftsLeavesTheProgramsLivePins(t *testing.T) {
 	documents := &launchDocuments{}
-	drafts := NewProgramDrafts("command")
+	drafts := NewProgramDrafts("command", nil)
 	ctx := WithProgramDrafts(t.Context(), drafts)
 	tc := launchContext(documents)
 	a2, a3, b7, c1 := revisionOf{"doc-a", 2}, revisionOf{"doc-a", 3}, revisionOf{"doc-b", 7}, revisionOf{"doc-c", 1}
 	all := []revisionOf{a2, a3, b7, c1}
-	// held asks the rule the launch gave the document owner, now.
 	held := func() []revisionOf {
 		var out []revisionOf
 		for _, candidate := range all {
@@ -261,7 +239,7 @@ func TestSaveLaunchDraftsLeavesTheProgramsLivePins(t *testing.T) {
 			t.Fatalf("%s: pinned = %+v, want %+v", step.name, got, step.want)
 		}
 	}
-	// The rule is live: a settle after the save began is seen by that save.
+	// The same predicate sees pins settle after the save starts.
 	settleThird()
 	if got := held(); !reflect.DeepEqual(got, []revisionOf{c1}) {
 		t.Fatalf("the rule a save holds did not follow a settled operation: %+v", got)
@@ -279,4 +257,34 @@ func TestSaveLaunchDraftsLeavesTheProgramsLivePins(t *testing.T) {
 		t.Fatalf("a launch outside a program was given pins: %+v", got)
 	}
 	settle()
+}
+
+func TestProgramDraftsReportsLaunchPublicationToObserver(t *testing.T) {
+	failed := errors.New("store failed")
+	for _, tc := range []struct {
+		name      string
+		documents *launchDocuments
+		want      []bool
+	}{
+		{name: "no shared documents", want: []bool{false}},
+		{name: "no publication", documents: &launchDocuments{}, want: []bool{false}},
+		{name: "published", documents: &launchDocuments{published: true}, want: []bool{true}},
+		{name: "failed before publication", documents: &launchDocuments{err: failed}},
+		{name: "failed after publication", documents: &launchDocuments{err: failed, published: true}, want: []bool{true}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var got []bool
+			drafts := NewProgramDrafts("verify", func(_ context.Context, published bool) { got = append(got, published) })
+			ctx := WithProgramDrafts(t.Context(), drafts)
+			var documents EditorDocuments
+			var wantErr error
+			if tc.documents != nil {
+				documents, wantErr = tc.documents, tc.documents.err
+			}
+			_, err := SaveLaunchDrafts(ctx, launchContext(documents))
+			if !errors.Is(err, wantErr) || !reflect.DeepEqual(got, tc.want) {
+				t.Fatalf("observed %v, err %v; want %v, %v", got, err, tc.want, wantErr)
+			}
+		})
+	}
 }

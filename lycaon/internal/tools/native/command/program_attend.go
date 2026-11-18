@@ -59,7 +59,7 @@ type programEvaluation struct {
 	outputs        *invocation.ProgramOutputRetention
 	scope          captureprojection.Scope
 	paths          *projectpaths.ProgramPaths
-	verification   func() commandSourceIdentity
+	verification   *programVerificationSource
 	failureAttempt *commandFailureAttempt
 	release        func()
 	// callTC is the call's own tool context; evaluation writes its effects to
@@ -363,22 +363,20 @@ func (l *programLifetime) settled() {
 // stampProgramRun states the settled program's run for verification evidence:
 // passed on status 0, failed otherwise, unverifiable when the host stopped it.
 // A program whose jobs still run states nothing.
-func stampProgramRun(tc tools.ToolContext, source string, cwd projectpaths.Resolved, outcome ProgramOutcome, verification func() commandSourceIdentity) {
+func stampProgramRun(tc tools.ToolContext, source string, cwd projectpaths.Resolved, outcome ProgramOutcome, verification *programVerificationSource) {
 	if tc.Effects.Out == nil {
 		return
 	}
+	identity, mixed := verification.result()
 	verdict := api.SourceVerdictPassed
 	switch {
-	case outcome.Refusal != nil || outcome.State == "interrupted":
+	case mixed || outcome.Refusal != nil || outcome.State == "interrupted":
 		verdict = api.SourceVerdictUnverifiable
 	case outcome.Status != 0:
 		verdict = api.SourceVerdictFailed
 	}
 	run := &tools.SourceRunCapture{CheckID: tc.Identity.ToolCallID, ProgramID: outcome.ProgramID, IsCheck: tc.Execution.VerificationCheck, Command: source, ExitCode: outcome.Status, Verdict: verdict, Cwd: cwd.DisplayPath}
-	if tc.Execution.VerificationCheck && verification != nil {
-		identity := verification()
-		run.SourceRevision, run.SourceRootDigest = identity.Revision, identity.Root
-	}
+	run.SourceRevision, run.SourceRootDigest = identity.Revision, identity.Root
 	tc.Effects.Out.SourceRun = run
 	if tc.Execution.VerificationCheck && verdict == api.SourceVerdictUnverifiable {
 		tc.Effects.Out.Facts = guidance.ToolResultFacts{}.WithCode(toolrejection.VerifyUnverifiableCode).Merge(tc.Effects.Out.Facts)

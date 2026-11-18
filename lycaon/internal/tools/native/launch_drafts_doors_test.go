@@ -22,7 +22,6 @@ import (
 	"github.com/lycaon/lycaon/internal/tools/native/terminal"
 )
 
-// launchDoorWorld is one tree, its drafts, and the tools that start processes in it.
 type launchDoorWorld struct {
 	t         *testing.T
 	dir       string
@@ -30,7 +29,6 @@ type launchDoorWorld struct {
 	registry  *tools.DefaultRegistry
 	capture   *command.CommandTool
 	tc        tools.ToolContext
-	// terminal is the open terminal a send door feeds.
 	terminal string
 }
 
@@ -56,7 +54,6 @@ func newLaunchDoorWorld(t *testing.T) *launchDoorWorld {
 	testutil.FailErr(t, "make subdirectory", os.Mkdir(filepath.Join(f.dir, "sub"), 0o755))
 	w.write("a.txt", "saved\n")
 	w.write("sub/b.txt", "saved b\n")
-	// The process each door starts copies the file it finds on disk.
 	w.script("copy.sh", "cp a.txt witness.txt\n")
 	w.script("copy-on-enter.sh", "IFS= read -r _\ncp a.txt witness.txt\nIFS= read -r _\n")
 	return w
@@ -77,7 +74,6 @@ func (w *launchDoorWorld) read(path string) (string, bool) {
 	return string(raw), err == nil
 }
 
-// witness is what the door's process read from a.txt.
 func (w *launchDoorWorld) witness() string {
 	w.t.Helper()
 	testutil.WaitFor(w.t, "the launched process copies the file", func() bool {
@@ -108,15 +104,11 @@ func (w *launchDoorWorld) openTerminal(script string) (terminal.OpenResult, erro
 	return opened, nil
 }
 
-// launchDoor is one tool call that starts a process, or feeds one, that reads
-// the tree from disk.
 type launchDoor struct {
 	name string
-	// tool is the call the save is attributed to.
 	tool string
-	// prepare runs before any draft exists.
+	// prepare opens any terminal needed before the draft is typed.
 	prepare func(w *launchDoorWorld)
-	// launch passes the door and returns what its result says was left unsaved.
 	launch func(w *launchDoorWorld) (toolcontract.LaunchDrafts, error)
 }
 
@@ -164,9 +156,6 @@ func enterLaunchDoor(t *testing.T, door launchDoor) *launchDoorWorld {
 	return w
 }
 
-// Through every door, the process reads the person's draft because the door
-// saved it first, once, under the launching call, with every other draft in
-// the tree, and the result states nothing unsaved.
 func TestEveryLaunchDoorSavesDraftsBeforeItsProcessReads(t *testing.T) {
 	for _, door := range launchDoors {
 		t.Run(door.name, func(t *testing.T) {
@@ -191,9 +180,6 @@ func TestEveryLaunchDoorSavesDraftsBeforeItsProcessReads(t *testing.T) {
 	}
 }
 
-// Through every door, a draft that cannot be saved does not stop the process:
-// it reads that file's earlier bytes, the other drafts are saved, and the
-// result names the unsaved draft with its cause.
 func TestEveryLaunchDoorNamesDraftsItCouldNotSave(t *testing.T) {
 	for _, door := range launchDoors {
 		for _, cause := range []string{toolcontract.UnsavedChangedOutside, toolcontract.UnsavedNotWritten, toolcontract.UnsavedAgentEditHeld} {
@@ -219,7 +205,6 @@ func TestEveryLaunchDoorNamesDraftsItCouldNotSave(t *testing.T) {
 	}
 }
 
-// Through every door, a result names at most the bound and counts the rest.
 func TestEveryLaunchDoorBoundsTheDraftsItNames(t *testing.T) {
 	for _, door := range launchDoors {
 		t.Run(door.name, func(t *testing.T) {
@@ -241,8 +226,6 @@ func TestEveryLaunchDoorBoundsTheDraftsItNames(t *testing.T) {
 	}
 }
 
-// Through every door, a save that cannot run fails the call before its process
-// reads anything: the next call, once the save runs, is the first to reach it.
 func TestEveryLaunchDoorStartsNothingWhenTheSaveCannotRun(t *testing.T) {
 	failure := errors.New("document store unavailable")
 	for _, door := range launchDoors {
@@ -259,7 +242,6 @@ func TestEveryLaunchDoorStartsNothingWhenTheSaveCannotRun(t *testing.T) {
 			w.documents.Err = nil
 			_, err := door.launch(w)
 			testutil.FailErr(t, "launch once the save runs", err)
-			// A process the failed call had started would have copied the saved bytes.
 			if got := w.witness(); got != "typed by the person\n" {
 				t.Fatalf("the failed call reached its process: it read %q", got)
 			}
@@ -267,8 +249,6 @@ func TestEveryLaunchDoorStartsNothingWhenTheSaveCannotRun(t *testing.T) {
 	}
 }
 
-// A call that reads, snapshots or closes a terminal, and a call refused before
-// its process starts, saves nothing.
 func TestCallsThatStartNoProcessSaveNoDraft(t *testing.T) {
 	w := newLaunchDoorWorld(t)
 	opened, err := w.openTerminal("copy-on-enter.sh")

@@ -186,7 +186,7 @@ func runCommandForeground(
 	}
 	cmdKey := CanonicalCommandKey(tctx, args)
 	approach := commandFailureApproachKey(CanonicalToolArgs(tctx, args))
-	observeSource, verificationSource := commandSourceReaders(ctx, tctx, cwd)
+	observeSource := commandSourceReader(ctx, tctx, commandFailureSourceRoot(tctx, cwd))
 	failureAttempt, tr := ft.begin(tctx.Identity.SessionID, approach, cmdKey, observeSource)
 	if tr != nil {
 		return RunOutcome{}, tr
@@ -222,11 +222,6 @@ func runCommandForeground(
 	if bound.lease != nil {
 		spawnFacts.Network = bound.lease.ObservedHosts
 	}
-	var sourceRevision, sourceRootDigest string
-	if tctx.Execution.VerificationCheck {
-		source := verificationSource()
-		sourceRevision, sourceRootDigest = source.Revision, source.Root
-	}
 	if err := tctx.Effects.Secrets.HandOff(ctx, nil); err != nil {
 		bound.close(ctx)
 		return RunOutcome{}, toolrejection.HeldHandOffReject(toolName, err)
@@ -236,10 +231,11 @@ func runCommandForeground(
 		bound.close(ctx)
 		return RunOutcome{}, err
 	}
+	source := captureVerificationSource(ctx, tctx)
 	index := watchIndex(tctx, confinement)
 	handle, err := registry.StartPipeline(ctx, bgprocess.PipelineSpec{
 		IsCheck:        tctx.Execution.VerificationCheck,
-		SourceRevision: sourceRevision, SourceRootDigest: sourceRootDigest, Cwd: cwdDisplay,
+		SourceRevision: source.Revision, SourceRootDigest: source.Root, Cwd: cwdDisplay,
 		SessionID: tctx.Identity.SessionID, RootSessionID: tctx.ChatSessionID(),
 		ProjectID: tctx.Identity.ProjectID, Request: req,
 		Runner: runner,
@@ -272,7 +268,7 @@ func runCommandForeground(
 
 	out := RunOutcome{
 		IsCheck:        tctx.Execution.VerificationCheck,
-		SourceRevision: sourceRevision, SourceRootDigest: sourceRootDigest,
+		SourceRevision: source.Revision, SourceRootDigest: source.Root,
 		Finished: finished,
 		Handle:   handle,
 		Snapshot: snap,

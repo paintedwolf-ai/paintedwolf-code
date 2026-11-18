@@ -61,7 +61,6 @@ func SendHandler(bg *bgprocess.Registry) tools.ToolHandler {
 		if err := tctx.Effects.Secrets.HandOff(ctx, nil); err != nil {
 			return "", toolrejection.HeldHandOffReject("terminal_send", err)
 		}
-		// Input can start a command in the shell, which then reads the tree.
 		drafts, err := tools.SaveLaunchDrafts(ctx, tctx)
 		if err != nil {
 			return "", err

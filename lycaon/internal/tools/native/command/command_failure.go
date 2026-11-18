@@ -70,8 +70,7 @@ func (s commandSourceIdentity) known() bool { return s.Revision != "" && s.Root 
 
 func commandSourceReader(ctx context.Context, tctx tools.ToolContext, root string) func() commandSourceIdentity {
 	return sync.OnceValue(func() commandSourceIdentity {
-		revision, root := sourceledger.VerificationState(ctx, tctx.Source.Observations, root)
-		return commandSourceIdentity{revision, root}
+		return readCommandSource(ctx, tctx, root)
 	})
 }
 
@@ -84,6 +83,11 @@ func commandSourceReaders(ctx context.Context, tctx tools.ToolContext, cwd strin
 		verification = commandSourceReader(ctx, tctx, receiptRoot)
 	}
 	return failure, verification
+}
+
+func readCommandSource(ctx context.Context, tc tools.ToolContext, root string) commandSourceIdentity {
+	revision, digest := sourceledger.VerificationState(ctx, tc.Source.Observations, root)
+	return commandSourceIdentity{Revision: revision, Root: digest}
 }
 
 // commandFailureSourceRoot excludes scratch and preserves worker isolation.

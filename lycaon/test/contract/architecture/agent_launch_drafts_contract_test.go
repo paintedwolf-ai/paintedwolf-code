@@ -21,9 +21,8 @@ var agentProcessStarts = map[string]bool{
 // draft save and why.
 var agentLaunchDraftExemptions = map[string]string{}
 
-// gitLaunchBinder is the one Git function that admits a launch: it saves
-// drafts for the forms that read the working tree.
 const gitLaunchBinder = "internal/tools/native/gitcmd/tree_forms.go bindLaunch"
+const gitDraftSaver = "internal/tools/native/gitcmd/tree_forms.go saveWorktreeDrafts"
 
 // Every agent tool function that starts a process saves the person's drafts
 // first, so no door can be added that lets a process read text a native read
@@ -39,7 +38,7 @@ func TestAgentProcessStartsSaveDraftsFirst(t *testing.T) {
 		unused[key] = true
 	}
 	var offences []string
-	starts, gitBinders := 0, 0
+	starts, gitBinders, gitSavers := 0, 0, 0
 	for _, gf := range corp.Files() {
 		rel := filepath.ToSlash(gf.Rel)
 		if gf.IsTest || !strings.HasPrefix(rel, "internal/tools/") {
@@ -53,12 +52,18 @@ func TestAgentProcessStartsSaveDraftsFirst(t *testing.T) {
 			}
 			key := rel + " " + fn.Name.Name
 			saved, started, gitLaunch := launchDraftCalls(fn, toolsName)
-			if gitLaunch != token.NoPos && strings.HasPrefix(rel, "internal/tools/native/gitcmd/") {
-				gitBinders++
-				if key != gitLaunchBinder {
-					offences = append(offences, key+" admits a Git launch outside bindLaunch")
-				} else if saved == token.NoPos {
-					offences = append(offences, key+" admits a Git launch without saving drafts")
+			if strings.HasPrefix(rel, "internal/tools/native/gitcmd/") {
+				if gitLaunch != token.NoPos {
+					gitBinders++
+					if key != gitLaunchBinder {
+						offences = append(offences, key+" admits a Git launch outside bindLaunch")
+					}
+				}
+				if saved != token.NoPos {
+					gitSavers++
+					if key != gitDraftSaver {
+						offences = append(offences, key+" saves drafts outside saveWorktreeDrafts")
+					}
 				}
 			}
 			for _, start := range started {
@@ -78,8 +83,8 @@ func TestAgentProcessStartsSaveDraftsFirst(t *testing.T) {
 		t.Errorf("a process an agent starts reads the tree from disk, so its function calls tools.SaveLaunchDrafts "+
 			"before the start (docs/files-live.md, the open document is the file):\n  %s", strings.Join(offences, "\n  "))
 	}
-	if starts == 0 || gitBinders != 1 {
-		t.Errorf("the scan found %d process starts and %d Git launch binders; it no longer sees the doors it guards", starts, gitBinders)
+	if starts == 0 || gitBinders != 1 || gitSavers != 1 {
+		t.Errorf("the scan found %d process starts, %d Git launch binders and %d Git draft savers", starts, gitBinders, gitSavers)
 	}
 	for key := range unused {
 		t.Errorf("exemption %q no longer matches a process start and should be deleted", key)

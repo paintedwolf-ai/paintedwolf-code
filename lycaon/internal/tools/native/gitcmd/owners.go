@@ -218,7 +218,8 @@ type Prepared struct {
 	// filesystem supplies the program's shared file effects and pinned inputs.
 	filesystem *mutation.Owners
 	// execution records the pinned file inputs.
-	execution string
+	execution          string
+	saveWorktreeDrafts func(context.Context) error
 	// request and nested let git bisect run dispatch its check as a child.
 	request commandprogram.OperationRequest
 	nested  commandprogram.NestedCommand
@@ -296,6 +297,7 @@ func (p Prepared) InvokeOwner(ctx context.Context, tc tools.ToolContext, streams
 		}()
 		ctx = gitexec.WithAgentLaunch(ctx, gitexec.AgentLaunch{Plan: plan})
 	}
+	p.bindWorktreeDrafts(tc)
 	ctx = reportRepositoryRead(ctx, p.commandDir())
 	if _, ok := mutateForms[p.command.spec.Name]; ok {
 		return invokeMutation(ctx, p, tc, streams)

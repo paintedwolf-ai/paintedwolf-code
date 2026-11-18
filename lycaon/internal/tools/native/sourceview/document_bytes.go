@@ -17,8 +17,7 @@ func OpenDocument(ctx context.Context, tctx tools.ToolContext, resolved projectp
 	return openDocument(ctx, tctx, resolved)
 }
 
-// OpenPinnedDocument returns the document and pins the revision it read for
-// the program, as one step no launch save of the program can come between.
+// OpenPinnedDocument captures and pins a revision under the program's read lock.
 func OpenPinnedDocument(ctx context.Context, tctx tools.ToolContext, resolved projectpaths.Resolved) (tools.EditorDocumentText, bool, error) {
 	defer tools.ReadingDrafts(ctx)()
 	doc, open, err := openDocument(ctx, tctx, resolved)

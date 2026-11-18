@@ -47,16 +47,16 @@ func (a editorDocumentsAdapter) SaveForAgentOperation(ctx context.Context, proje
 	return documentEditError(a.service.SaveForAgentOperation(ctx, projectID, branch, rootID, path, descendants, agentCall(call)))
 }
 
-func (a editorDocumentsAdapter) SaveForAgentLaunch(ctx context.Context, projectID string, branch sourcebranch.ID, call tools.EditorAgentCall, pinned func(string, int64) bool) ([]tools.EditorUnsavedDocument, error) {
-	left, err := a.service.SaveForAgentLaunch(ctx, projectID, branch, agentCall(call), pinned)
+func (a editorDocumentsAdapter) SaveForAgentLaunch(ctx context.Context, projectID string, branch sourcebranch.ID, call tools.EditorAgentCall, pinned func(string, int64) bool) (tools.EditorLaunchSave, error) {
+	saved, err := a.service.SaveForAgentLaunch(ctx, projectID, branch, agentCall(call), pinned)
 	if err != nil {
-		return nil, documentEditError(err)
+		return tools.EditorLaunchSave{Published: saved.Published}, documentEditError(err)
 	}
-	unsaved := make([]tools.EditorUnsavedDocument, 0, len(left))
-	for _, document := range left {
+	unsaved := make([]tools.EditorUnsavedDocument, 0, len(saved.Unsaved))
+	for _, document := range saved.Unsaved {
 		unsaved = append(unsaved, tools.EditorUnsavedDocument{RootID: document.RootID, Path: document.Path, Cause: string(document.Cause)})
 	}
-	return unsaved, nil
+	return tools.EditorLaunchSave{Unsaved: unsaved, Published: saved.Published}, nil
 }
 
 func (a editorDocumentsAdapter) DirtyDocuments(ctx context.Context, projectID string, branch sourcebranch.ID) ([]tools.EditorDocumentPath, error) {

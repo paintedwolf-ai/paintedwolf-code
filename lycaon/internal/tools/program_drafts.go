@@ -9,14 +9,12 @@ import (
 
 type programDraftsKey struct{}
 
-// ProgramDrafts is one program's view of the person's unsaved documents:
-// which paths held a draft when a root was first read, which revisions its
-// native operations have pinned, and which drafts its launches could not save.
+// ProgramDrafts tracks draft paths, pinned revisions, and launch remainders.
 type ProgramDrafts struct {
-	tool string
+	tool          string
+	observeLaunch func(context.Context, bool)
 
-	// saving excludes a launch save from the program's own document reads:
-	// a read and its pin complete before a save starts, or begin after it.
+	// A document lookup and its pin must precede or follow the launch save.
 	saving sync.RWMutex
 
 	mu      sync.Mutex
@@ -25,9 +23,12 @@ type ProgramDrafts struct {
 	unsaved map[string]toolcontract.UnsavedDocument
 }
 
-// NewProgramDrafts starts the view for a program run by tool.
-func NewProgramDrafts(tool string) *ProgramDrafts {
-	return &ProgramDrafts{tool: tool, roots: map[string]map[string]bool{}, pinned: map[draftPin]int{}, unsaved: map[string]toolcontract.UnsavedDocument{}}
+// NewProgramDrafts optionally reports whether each launch published a draft.
+func NewProgramDrafts(tool string, observeLaunch func(context.Context, bool)) *ProgramDrafts {
+	return &ProgramDrafts{
+		tool: tool, observeLaunch: observeLaunch, roots: map[string]map[string]bool{},
+		pinned: map[draftPin]int{}, unsaved: map[string]toolcontract.UnsavedDocument{},
+	}
 }
 
 // WithProgramDrafts binds a program's draft view to its evaluation.
@@ -71,8 +72,7 @@ type draftPins struct {
 	releases []func()
 }
 
-// WithDraftPins scopes the document pins of one program operation: release
-// drops them once the operation has settled and verified what it captured.
+// WithDraftPins scopes pins to one program operation.
 func WithDraftPins(ctx context.Context) (context.Context, func()) {
 	pins := &draftPins{}
 	return context.WithValue(ctx, draftPinsKey{}, pins), func() {
@@ -86,10 +86,8 @@ func WithDraftPins(ctx context.Context) (context.Context, func()) {
 	}
 }
 
-// PinDraft marks a document revision a native operation captured, so a launch
-// in the same program leaves that draft to the operation. The pin lasts until
-// the operation's scope releases it; outside one, a destination captured for a
-// redirect, it lapses when the write moves the document on.
+// PinDraft protects a captured revision from the program's launch saves.
+// A redirect pin lasts until the revision changes or the program ends.
 func PinDraft(ctx context.Context, documentID string, revision int64) {
 	drafts, ok := ProgramDraftsFrom(ctx)
 	if !ok {
@@ -120,9 +118,7 @@ func (d *ProgramDrafts) pin(documentID string, revision int64) (release func()) 
 	}
 }
 
-// ReadingDrafts holds off the program's launch saves while one of its
-// operations reads a document; done ends the read. Outside a program it does
-// nothing.
+// ReadingDrafts excludes launch saves during a program's document lookup.
 func ReadingDrafts(ctx context.Context) (done func()) {
 	drafts, ok := ProgramDraftsFrom(ctx)
 	if !ok {
@@ -132,8 +128,7 @@ func ReadingDrafts(ctx context.Context) (done func()) {
 	return drafts.saving.RUnlock
 }
 
-// Pinned reports whether an operation of the program holds the document at
-// this revision. No program pins nothing.
+// Pinned reports whether the program holds this revision.
 func (d *ProgramDrafts) Pinned(documentID string, revision int64) bool {
 	if d == nil {
 		return false
@@ -143,8 +138,6 @@ func (d *ProgramDrafts) Pinned(documentID string, revision int64) bool {
 	return d.pinned[draftPin{documentID, revision}] > 0
 }
 
-// launchSaved records a launch save: every root's inventory is stale, and the
-// drafts it left unsaved join the program's result.
 func (d *ProgramDrafts) launchSaved(unsaved []toolcontract.UnsavedDocument) {
 	d.mu.Lock()
 	defer d.mu.Unlock()

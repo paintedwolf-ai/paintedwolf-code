@@ -124,6 +124,11 @@ func (p Prepared) grep(ctx context.Context, tc tools.ToolContext, streams comman
 		return 0, err
 	}
 	for _, source := range sources {
+		if source.tree == "worktree" {
+			if err := p.prepareWorktree(ctx); err != nil {
+				return 0, err
+			}
+		}
 		if err := g.search(source); err != nil {
 			if out.err != nil {
 				return 0, out.err

@@ -8,25 +8,26 @@ import (
 	"github.com/lycaon/lycaon/internal/toolcontract"
 )
 
-// SaveLaunchDrafts saves the person's unsaved documents before a process the
-// call launches reads the tree from disk, and returns the drafts it could not
-// save. Inside a program they also join the program's result.
+// SaveLaunchDrafts publishes person-authored drafts and reports any left unsaved.
 func SaveLaunchDrafts(ctx context.Context, tc ToolContext) (toolcontract.LaunchDrafts, error) {
-	documents, ok := ProjectDocuments(tc)
-	if !ok {
-		return toolcontract.LaunchDrafts{}, nil
-	}
 	program, inProgram := ProgramDraftsFrom(ctx)
 	if inProgram {
 		program.saving.Lock()
 		defer program.saving.Unlock()
 	}
-	left, err := documents.SaveForAgentLaunch(ctx, tc.Identity.ProjectID, tc.Source.ProjectSourceBranch, DraftSaveCall(ctx, tc), program.Pinned)
+	var saved EditorLaunchSave
+	var err error
+	if documents, ok := ProjectDocuments(tc); ok {
+		saved, err = documents.SaveForAgentLaunch(ctx, tc.Identity.ProjectID, tc.Source.ProjectSourceBranch, DraftSaveCall(ctx, tc), program.Pinned)
+	}
+	if inProgram && program.observeLaunch != nil && (err == nil || saved.Published) {
+		program.observeLaunch(ctx, saved.Published)
+	}
 	if err != nil {
 		return toolcontract.LaunchDrafts{}, err
 	}
-	unsaved := make([]toolcontract.UnsavedDocument, 0, len(left))
-	for _, document := range left {
+	unsaved := make([]toolcontract.UnsavedDocument, 0, len(saved.Unsaved))
+	for _, document := range saved.Unsaved {
 		unsaved = append(unsaved, toolcontract.UnsavedDocument{
 			Path:  projectroot.DisplayPath(tc.Source.Roots, tc.Source.ActiveRootID, document.RootID, document.Path),
 			Cause: document.Cause,
@@ -38,8 +39,7 @@ func SaveLaunchDrafts(ctx context.Context, tc ToolContext) (toolcontract.LaunchD
 	return boundLaunchDrafts(unsaved), nil
 }
 
-// DraftSaveCall names the call that causes a document save: the program's
-// tool inside a program, whose children carry operation names.
+// DraftSaveCall attributes a save inside a program to its invoking tool.
 func DraftSaveCall(ctx context.Context, tc ToolContext) EditorAgentCall {
 	call := EditorAgentCall{SessionID: tc.Identity.SessionID, Turn: tc.Identity.UserTurn, ToolCallID: tc.Identity.ToolCallID, ToolName: tc.Invocation.ToolName}
 	if drafts, ok := ProgramDraftsFrom(ctx); ok {

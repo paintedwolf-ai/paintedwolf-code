@@ -68,7 +68,7 @@ func runCommandTerminalCapture(
 	}
 	commandLine := CanonicalCommandKey(tctx, args)
 	approach := commandFailureApproachKey(CanonicalToolArgs(tctx, args))
-	observeSource, verificationSource := commandSourceReaders(ctx, tctx, cwd)
+	observeSource := commandSourceReader(ctx, tctx, commandFailureSourceRoot(tctx, cwd))
 	failureAttempt, reject := tracker.begin(tctx.Identity.SessionID, approach, commandLine, observeSource)
 	if reject != nil {
 		return RunOutcome{}, reject
@@ -113,11 +113,6 @@ func runCommandTerminalCapture(
 		}
 		return RunOutcome{}, toolrejection.HeldHandOffReject(toolName, err)
 	}
-	var sourceRevision, sourceRootDigest string
-	if tctx.Execution.VerificationCheck {
-		source := verificationSource()
-		sourceRevision, sourceRootDigest = source.Revision, source.Root
-	}
 	drafts, err := tools.SaveLaunchDrafts(ctx, tctx)
 	if err != nil {
 		bound.close(ctx)
@@ -126,6 +121,7 @@ func runCommandTerminalCapture(
 		}
 		return RunOutcome{}, err
 	}
+	source := captureVerificationSource(ctx, tctx)
 	captured, runErr := registry.Terminal.RunPTYCapture(
 		ctx, tctx.Identity.SessionID, tctx.Identity.ParentSessionID, tctx.Identity.ProjectID, request, runner,
 		terminalCaptureWinSize(args), facts,
@@ -155,7 +151,7 @@ func runCommandTerminalCapture(
 	tracker.record(failureAttempt, captured.ExitCode == 0 || captured.TimedOut)
 	return RunOutcome{
 		IsCheck:        tctx.Execution.VerificationCheck,
-		SourceRevision: sourceRevision, SourceRootDigest: sourceRootDigest,
+		SourceRevision: source.Revision, SourceRootDigest: source.Root,
 		Finished: true,
 		Snapshot: TerminalCaptureSnapshot(captured, stages[0].EchoLine(), tail),
 		Boundary: captured.Boundary, Network: network, Refusals: refusals, IO: ioParams, Cwd: cwdDisplay,

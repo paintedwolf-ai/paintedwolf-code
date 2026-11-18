@@ -207,8 +207,6 @@ func (r *ProgramRuntime) Run(ctx context.Context, tool string, args map[string]a
 	}
 	run.windows = &tools.ProgramWindows{}
 	ctx = tools.WithProgramWindows(ctx, run.windows)
-	run.drafts = tools.NewProgramDrafts(tool)
-	ctx = tools.WithProgramDrafts(ctx, run.drafts)
 	ctx = tools.WithCommandReadObserver(ctx, func(ctx context.Context, root, path string) error {
 		run.observeProvenanceFileRead(ctx, root, path)
 		return nil
@@ -217,6 +215,8 @@ func (r *ProgramRuntime) Run(ctx context.Context, tool string, args map[string]a
 	if err != nil {
 		return "", err
 	}
+	run.drafts = tools.NewProgramDrafts(tool, verification.observeLaunch)
+	ctx = tools.WithProgramDrafts(ctx, run.drafts)
 	var owners ProgramOwners
 	if r.Owners != nil {
 		if owners, err = r.Owners(tc, paths, memory, r.sessionResources(tc.Identity.SessionID)); err != nil {

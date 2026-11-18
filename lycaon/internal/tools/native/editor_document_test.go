@@ -146,19 +146,19 @@ func (f *fakeEditorDocuments) SaveForAgentOperation(ctx context.Context, project
 	})
 }
 
-// SaveForAgentLaunch saves every draft as its base and returns the diverged ones.
-func (f *fakeEditorDocuments) SaveForAgentLaunch(ctx context.Context, projectID string, branch sourcebranch.ID, _ tools.EditorAgentCall, _ func(string, int64) bool) ([]tools.EditorUnsavedDocument, error) {
-	var unsaved []tools.EditorUnsavedDocument
+func (f *fakeEditorDocuments) SaveForAgentLaunch(ctx context.Context, projectID string, branch sourcebranch.ID, _ tools.EditorAgentCall, _ func(string, int64) bool) (tools.EditorLaunchSave, error) {
+	var save tools.EditorLaunchSave
 	err := f.VisitUnsavedDocuments(ctx, projectID, branch, "", "", true, func(state tools.EditorDocumentState) error {
 		doc := f.docs[state.RootID+"/"+state.Path]
 		if doc.Diverged {
-			unsaved = append(unsaved, tools.EditorUnsavedDocument{RootID: state.RootID, Path: state.Path, Cause: toolcontract.UnsavedChangedOutside})
+			save.Unsaved = append(save.Unsaved, tools.EditorUnsavedDocument{RootID: state.RootID, Path: state.Path, Cause: toolcontract.UnsavedChangedOutside})
 			return nil
 		}
 		doc.Dirty, doc.BaseSHA256, doc.Revision = false, doc.SHA256, doc.Revision+1
+		save.Published = true
 		return nil
 	})
-	return unsaved, err
+	return save, err
 }
 
 func (f *fakeEditorDocuments) DirtyDocuments(_ context.Context, _ string, _ sourcebranch.ID) ([]tools.EditorDocumentPath, error) {
