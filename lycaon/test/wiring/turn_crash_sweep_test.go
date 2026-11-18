@@ -1,174 +1,18 @@
 package wiring
 
 import (
-	"bufio"
 	"database/sql"
 	"encoding/json"
-	"errors"
-	"fmt"
 	"maps"
-	"net/url"
 	"os"
-	"os/exec"
 	"path/filepath"
+	"regexp"
 	"slices"
-	"strconv"
 	"strings"
-	"sync"
-	"sync/atomic"
 	"testing"
-	"time"
 
 	"github.com/lycaon/lycaon/internal/testutil"
-	wire "github.com/lycaon/lycaon/pkg/api"
-	"modernc.org/sqlite"
 )
-
-const (
-	crashDirEnv  = "PW_TURN_CRASH_DIR"
-	crashAtEnv   = "PW_TURN_CRASH_AT"
-	crashExit    = 75
-	finishedExit = 76
-	crashStore   = "wiring-test.db"
-	crashLog     = "commits.log"
-	crashSession = "session-id"
-)
-
-// commitTracer names each commit on one store file by the table operations it
-// carried and that label's occurrence since arming, and can exit the process
-// inside the commit hook so the commit never becomes durable.
-type commitTracer struct {
-	path   string
-	killAt string
-	armed  atomic.Bool
-	mu     sync.Mutex
-	seen   map[string]int
-	log    *os.File
-}
-
-var preUpdateOps = map[int32]string{9: "delete", 18: "insert", 23: "update"}
-
-func installCommitTracer(t *testing.T, path, killAt, logPath string) *commitTracer {
-	t.Helper()
-	log, err := os.OpenFile(logPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o600)
-	testutil.FailErr(t, "open commit log", err)
-	c := &commitTracer{path: path, killAt: killAt, seen: map[string]int{}, log: log}
-	sqlite.RegisterConnectionHook(func(conn sqlite.ExecQuerierContext, dsn string) error {
-		u, err := url.Parse(dsn)
-		if err != nil || filepath.Clean(u.Path) != c.path {
-			return nil
-		}
-		hooks, ok := conn.(sqlite.HookRegisterer)
-		if !ok {
-			return errors.New("sqlite connection cannot register hooks")
-		}
-		// Hooks on one connection run on that connection's goroutine in turn.
-		ops := map[string]bool{}
-		hooks.RegisterPreUpdateHook(func(d sqlite.SQLitePreUpdateData) {
-			ops[d.TableName+":"+preUpdateOps[d.Op]] = true
-		})
-		hooks.RegisterRollbackHook(func() { clear(ops) })
-		hooks.RegisterCommitHook(func() int32 {
-			label := slices.Sorted(func(yield func(string) bool) {
-				for op := range ops {
-					if !yield(op) {
-						return
-					}
-				}
-			})
-			clear(ops)
-			if len(label) > 0 && c.armed.Load() {
-				c.commit(strings.Join(label, " "))
-			}
-			return 0
-		})
-		return nil
-	})
-	return c
-}
-
-func (c *commitTracer) commit(label string) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	c.seen[label]++
-	point := label + " #" + strconv.Itoa(c.seen[label])
-	if point == c.killAt {
-		os.Exit(crashExit)
-	}
-	_, _ = fmt.Fprintln(c.log, point)
-}
-
-// crashTurnScript is one model output with a tool call, then the closing answer.
-func crashTurnScript() *stackScriptLLM {
-	return &stackScriptLLM{steps: []stackStep{commandStep("Reading the notes.", "cat notes.txt")}}
-}
-
-// runCrashChild drives one turn on dir and exits: at the named commit point, or
-// with finishedExit once the turn and its event delivery have settled.
-func runCrashChild(t *testing.T, dir, killAt string) {
-	tracer := installCommitTracer(t, filepath.Join(dir, crashStore), killAt, filepath.Join(dir, crashLog))
-	t.Setenv("LYCAON_BYPASS_APPROVALS", "1")
-	h := BuildForTestAt(t, dir, WithLLMClient(crashTurnScript()))
-	project := h.ProjectDir(t, "project")
-	testutil.FailErr(t, "seed notes", os.WriteFile(filepath.Join(project, "notes.txt"), []byte("first note\nsecond note\n"), 0o644))
-	sess, err := h.CreateHarnessSession(t, wire.CreateSessionRequest{}, project)
-	testutil.FailErr(t, "create session", err)
-	AttachDefaultAmbient(t, h, t.Context(), sess.ID)
-	testutil.FailErr(t, "record session", os.WriteFile(filepath.Join(dir, crashSession), []byte(sess.ID), 0o600))
-	tracer.armed.Store(true)
-	_, err = h.Sessions.Manager.Submissions.Prompt(t.Context(), sess.ID, "Read the notes.")
-	testutil.FailErr(t, "prompt", err)
-	waitForOutboxDrained(t, h)
-	tracer.armed.Store(false)
-	os.Exit(finishedExit)
-}
-
-func startCrashChild(t *testing.T, dir, killAt string) int {
-	t.Helper()
-	child := exec.Command(os.Args[0], "-test.run=^TestTurnSurvivesKillAtEveryCommitPoint$", "-test.count=1")
-	child.Env = append(os.Environ(), crashDirEnv+"="+dir, crashAtEnv+"="+killAt)
-	output, err := child.CombinedOutput()
-	var exited *exec.ExitError
-	if !errors.As(err, &exited) {
-		t.Fatalf("crash child at %q: %v\n%s", killAt, err, output)
-	}
-	if code := exited.ExitCode(); code != crashExit && code != finishedExit {
-		t.Fatalf("crash child at %q exited %d\n%s", killAt, code, output)
-	}
-	return exited.ExitCode()
-}
-
-func readCommitPoints(t *testing.T, dir string) []string {
-	t.Helper()
-	file, err := os.Open(filepath.Join(dir, crashLog))
-	testutil.FailErr(t, "open commit log", err)
-	defer func() { _ = file.Close() }()
-	var points []string
-	scanner := bufio.NewScanner(file)
-	for scanner.Scan() {
-		points = append(points, scanner.Text())
-	}
-	testutil.FailErr(t, "read commit log", scanner.Err())
-	return points
-}
-
-// waitForOutboxDrained returns once delivery has emptied the outbox; the
-// test deadline bounds it.
-func waitForOutboxDrained(t *testing.T, h *Harness) {
-	t.Helper()
-	for {
-		var queued int
-		testutil.FailErr(t, "count queued events", h.DB.QueryRowContext(t.Context(), `SELECT count(*) FROM event_outbox`).Scan(&queued))
-		if queued == 0 {
-			return
-		}
-		select {
-		case <-t.Context().Done():
-			t.Fatalf("outbox still holds %d events", queued)
-		case <-time.After(10 * time.Millisecond):
-		}
-	}
-}
 
 // storeDump is every row of every table keyed by its primary key, read
 // without production code.
@@ -271,35 +115,198 @@ func diffDumps(before, after storeDump) []string {
 	return out
 }
 
-// bootCrashedStore opens the host a crash left on dir, runs startup recovery
-// and closes it.
-func bootCrashedStore(t *testing.T, dir string) {
-	t.Helper()
-	t.Run("boot", func(t *testing.T) {
-		t.Setenv("LYCAON_BYPASS_APPROVALS", "1")
-		h := BuildForTestAt(t, dir, WithLLMClient(crashTurnScript()))
-		stop := h.StartBackgroundWorkers(t, t.Context())
-		waitForOutboxDrained(t, h)
-		stop()
-	})
+// reclaimedTables hold rows that recovery or delivery may remove after a
+// crash: each removal is the row's purpose being fulfilled.
+var reclaimedTables = map[string]string{
+	"event_outbox": "a delivered event leaves the outbox; delivery is checked separately",
 }
 
+// bootVolatile are the rows every boot rewrites.
+var bootVolatile = map[string]string{
+	"store_meta": "store_revision counts boots",
+}
+
+// crashRun is one store a child turn left behind, read before and after the
+// two boots.
+type crashRun struct {
+	crashed, boot1, boot2 storeDump
+	prompt                []promptLine
+	recovered             []string
+}
+
+var settledEntry = regexp.MustCompile(`msg="startup recovery settled" entry=(\S+)`)
+
+func bootTwice(t *testing.T, dir string) crashRun {
+	t.Helper()
+	run := crashRun{crashed: dumpStore(t, filepath.Join(dir, crashStore))}
+	code, output := startCrashChild(t, "boot", dir, "")
+	if code != 0 {
+		t.Fatalf("boot child exited %d\n%s", code, output)
+	}
+	readCrashJSON(t, filepath.Join(dir, crashBoot1), &run.boot1)
+	readCrashJSON(t, filepath.Join(dir, crashBoot2), &run.boot2)
+	readCrashJSON(t, filepath.Join(dir, crashPrompt), &run.prompt)
+	for _, match := range settledEntry.FindAllStringSubmatch(output, -1) {
+		run.recovered = append(run.recovered, match[1])
+	}
+	requireStoreIntegrity(t, filepath.Join(dir, crashStore))
+	return run
+}
+
+func requireStoreIntegrity(t *testing.T, path string) {
+	t.Helper()
+	database, err := sql.Open("sqlite", "file:"+filepath.ToSlash(path)+"?mode=ro")
+	testutil.FailErr(t, "open store for integrity", err)
+	defer func() { _ = database.Close() }()
+	var verdict string
+	testutil.FailErr(t, "integrity check", database.QueryRowContext(t.Context(), `PRAGMA integrity_check`).Scan(&verdict))
+	if verdict != "ok" {
+		t.Fatalf("integrity check: %s", verdict)
+	}
+	rows, err := database.QueryContext(t.Context(), `PRAGMA foreign_key_check`)
+	testutil.FailErr(t, "foreign key check", err)
+	defer func() { _ = rows.Close() }()
+	if rows.Next() {
+		t.Fatal("foreign key check found a dangling reference")
+	}
+	testutil.FailErr(t, "finish foreign key check", rows.Err())
+}
+
+func rowsOf(t *testing.T, dump storeDump, table string) []map[string]any {
+	t.Helper()
+	var out []map[string]any
+	for _, raw := range dump[table] {
+		var row map[string]any
+		testutil.FailErr(t, "decode "+table, json.Unmarshal([]byte(raw), &row))
+		out = append(out, row)
+	}
+	return out
+}
+
+// checkCrashRun holds a crashed store to P1 against the uninterrupted reference.
+func checkCrashRun(t *testing.T, run, reference crashRun) {
+	t.Helper()
+	for table, rows := range run.crashed {
+		if _, ok := reclaimedTables[table]; ok {
+			continue
+		}
+		for key := range rows {
+			if _, ok := run.boot1[table][key]; !ok {
+				t.Errorf("acknowledged %s row %s is gone after boot", table, key)
+			}
+		}
+	}
+	for _, event := range rowsOf(t, run.crashed, "event_outbox") {
+		if event["topic"] == "" || !json.Valid([]byte(event["data_json"].(string))) {
+			t.Errorf("committed event %v cannot be delivered", event["event_id"])
+		}
+	}
+	for _, dump := range []storeDump{run.boot1, run.boot2} {
+		if queued := len(dump["event_outbox"]); queued != 0 {
+			t.Errorf("%d committed events still queued after boot", queued)
+		}
+	}
+	users := map[string]int{}
+	results := map[string]int{}
+	for _, msg := range rowsOf(t, run.boot2, "messages") {
+		if msg["role"] == "user" {
+			users[msg["content"].(string)]++
+		}
+		if id, _ := msg["tool_result_call_id"].(string); id != "" {
+			results[id]++
+		}
+	}
+	for content, count := range users {
+		if count > 1 {
+			t.Errorf("user boundary %q stored %d times", content, count)
+		}
+	}
+	for id, count := range results {
+		if count > 1 {
+			t.Errorf("tool call %s has %d results", id, count)
+		}
+	}
+	for _, table := range []string{"turns", "turn_attempts"} {
+		for _, row := range rowsOf(t, run.boot2, table) {
+			if status := row["status"]; status == "running" || status == "recovering" {
+				t.Errorf("%s %v left %v after boot", table, row["id"], status)
+			}
+		}
+	}
+	changed := diffDumps(withoutVolatile(run.boot1), withoutVolatile(run.boot2))
+	if len(changed) > 0 {
+		t.Errorf("second boot changed the store:\n%s", strings.Join(changed, "\n"))
+	}
+	if len(run.prompt) > len(reference.prompt) || !promptPrefix(run.prompt, reference.prompt) {
+		t.Errorf("prompt after recovery is not the uninterrupted prompt up to its settled point:\n got %+v\nwant prefix of %+v", run.prompt, reference.prompt)
+	}
+}
+
+func withoutVolatile(dump storeDump) storeDump {
+	out := maps.Clone(dump)
+	for table := range bootVolatile {
+		delete(out, table)
+	}
+	return out
+}
+
+func promptPrefix(got, want []promptLine) bool {
+	for i := range got {
+		a, _ := json.Marshal(got[i])
+		b, _ := json.Marshal(want[i])
+		if string(a) != string(b) {
+			return false
+		}
+	}
+	return true
+}
+
+// Killed at any commit of a turn and booted twice, the store keeps every
+// acknowledged row, fences the turn, stays consistent, and the second boot
+// changes nothing (invariant P1).
 func TestTurnSurvivesKillAtEveryCommitPoint(t *testing.T) {
-	if dir := os.Getenv(crashDirEnv); dir != "" {
-		runCrashChild(t, dir, os.Getenv(crashAtEnv))
+	switch os.Getenv(crashModeEnv) {
+	case "turn":
+		runTurnChild(t, os.Getenv(crashDirEnv), os.Getenv(crashAtEnv))
+		return
+	case "boot":
+		runBootChild(t, os.Getenv(crashDirEnv))
 		return
 	}
-	reference := t.TempDir()
-	if code := startCrashChild(t, reference, ""); code != finishedExit {
-		t.Fatalf("clean run exited %d", code)
+	dir := t.TempDir()
+	if code, output := startCrashChild(t, "turn", dir, ""); code != finishedExit {
+		t.Fatalf("uninterrupted turn exited %d\n%s", code, output)
 	}
-	points := readCommitPoints(t, reference)
+	points := readCommitPoints(t, dir)
+	reference := bootTwice(t, dir)
+	checkCrashRun(t, reference, reference)
+	slices.Sort(reference.recovered)
 	t.Logf("%d commit points:\n%s", len(points), strings.Join(points, "\n"))
-	afterRun := dumpStore(t, filepath.Join(reference, crashStore))
-	bootCrashedStore(t, reference)
-	boot1 := dumpStore(t, filepath.Join(reference, crashStore))
-	bootCrashedStore(t, reference)
-	boot2 := dumpStore(t, filepath.Join(reference, crashStore))
-	t.Logf("boot 1 changes:\n%s", strings.Join(diffDumps(afterRun, boot1), "\n"))
-	t.Logf("boot 2 changes:\n%s", strings.Join(diffDumps(boot1, boot2), "\n"))
+	t.Logf("%d recovery entries settled over two boots:\n%s", len(reference.recovered), strings.Join(slices.Compact(reference.recovered), "\n"))
+	requirePinnedCommitPoints(t, points)
+
+	for _, point := range points {
+		t.Run(point, func(t *testing.T) {
+			t.Parallel()
+			dir := t.TempDir()
+			if code, output := startCrashChild(t, "turn", dir, point); code != crashExit {
+				t.Fatalf("turn child exited %d, not at the commit point\n%s", code, output)
+			}
+			checkCrashRun(t, bootTwice(t, dir), reference)
+		})
+	}
+}
+
+// requirePinnedCommitPoints fails when the turn gains, loses or reshapes a
+// commit, so each new commit point joins the sweep deliberately.
+func requirePinnedCommitPoints(t *testing.T, points []string) {
+	t.Helper()
+	raw, err := os.ReadFile(filepath.Join("testdata", "turn-commit-points.txt"))
+	testutil.FailErr(t, "read pinned commit points", err)
+	pinned := strings.Split(strings.TrimSpace(string(raw)), "\n")
+	got := slices.Sorted(slices.Values(points))
+	slices.Sort(pinned)
+	if !slices.Equal(got, pinned) {
+		t.Fatalf("turn commit points changed; review each and update testdata/turn-commit-points.txt to:\n%s", strings.Join(got, "\n"))
+	}
 }

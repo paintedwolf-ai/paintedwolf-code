@@ -1,0 +1,82 @@
+authorization_contexts:insert #1
+checkpoint_anchors:insert history_storage_clock:update #1
+content_blob_objects:insert evidence_records:insert #1
+content_blob_objects:insert evidence_records:insert #2
+content_blob_objects:insert model_outputs:insert #1
+content_blob_objects:insert model_outputs:insert #2
+editor_document_snapshots:insert #1
+editor_documents:insert history_storage_clock:update #1
+editor_replica_heads:insert #1
+event_outbox:delete #1
+event_outbox:delete #10
+event_outbox:delete #11
+event_outbox:delete #12
+event_outbox:delete #13
+event_outbox:delete #14
+event_outbox:delete #15
+event_outbox:delete #16
+event_outbox:delete #17
+event_outbox:delete #18
+event_outbox:delete #19
+event_outbox:delete #2
+event_outbox:delete #3
+event_outbox:delete #4
+event_outbox:delete #5
+event_outbox:delete #6
+event_outbox:delete #7
+event_outbox:delete #8
+event_outbox:delete #9
+event_outbox:insert evidence_index:delete evidence_index:insert history_storage_clock:update messages:update sessions:update #1
+event_outbox:insert evidence_index:delete evidence_index:insert history_storage_clock:update messages:update sessions:update #2
+event_outbox:insert evidence_index:delete evidence_index:insert history_storage_clock:update messages:update sessions:update #3
+event_outbox:insert evidence_index:delete evidence_index:insert history_storage_clock:update messages:update sessions:update #4
+event_outbox:insert evidence_index:delete evidence_index:insert history_storage_clock:update messages:update sessions:update #5
+event_outbox:insert evidence_index:insert history_storage_clock:update messages:insert projects:update session_entries:insert session_source_turns:insert sessions:update #1
+event_outbox:insert evidence_index:insert history_storage_clock:update messages:insert projects:update session_entries:insert sessions:update #1
+event_outbox:insert evidence_index:insert history_storage_clock:update messages:insert projects:update session_entries:insert sessions:update #2
+event_outbox:insert evidence_index:insert history_storage_clock:update messages:update sessions:update #1
+event_outbox:insert evidence_index:insert history_storage_clock:update messages:update sessions:update #2
+event_outbox:insert history_storage_clock:update messages:insert session_entries:insert sessions:update #1
+event_outbox:insert history_storage_clock:update messages:insert session_entries:insert sessions:update #2
+event_outbox:insert history_storage_clock:update messages:insert session_entries:insert sessions:update #3
+event_outbox:insert history_storage_clock:update sessions:update #1
+event_outbox:insert history_storage_clock:update sessions:update #2
+event_outbox:insert history_storage_clock:update workflow_commands:insert workflow_runs:update #1
+event_outbox:insert history_storage_clock:update workflow_runs:update #1
+event_outbox:insert history_storage_clock:update workflow_runs:update #2
+event_outbox:insert history_storage_clock:update workflow_runs:update #3
+history_storage_clock:update llm_calls:insert llm_cost_totals:insert #1
+history_storage_clock:update llm_calls:insert llm_cost_totals:insert #2
+history_storage_clock:update llm_calls:update llm_cost_totals:delete llm_cost_totals:insert llm_cost_totals:update #1
+history_storage_clock:update llm_calls:update llm_cost_totals:delete llm_cost_totals:update #1
+history_storage_clock:update projects:update source_blob_objects:insert source_blob_reclaim_queue:delete source_blob_reclaim_queue:insert source_directories:insert source_files:insert source_head_entries:insert source_versions:insert #1
+history_storage_clock:update source_manifest_chunks:insert source_manifest_entries:insert #1
+invocation_program_definitions:insert invocation_program_executions:insert invocation_program_nodes:update invocation_program_outputs:insert invocation_programs:update #1
+invocation_program_deliveries:insert invocation_programs:update #1
+invocation_program_executions:update invocation_program_outputs:insert invocation_programs:update #1
+invocation_program_executions:update invocation_programs:update #1
+invocation_program_nodes:insert invocation_program_outputs:insert invocation_program_sources:insert invocation_programs:insert invocation_programs:update #1
+invocation_program_outputs:insert invocation_programs:update #1
+invocation_program_outputs:insert invocation_programs:update #2
+invocation_program_revision_pins:insert #1
+invocation_programs:update #1
+invocation_receipts:insert #1
+invocation_receipts:update #1
+model_output_projections:insert #1
+model_output_projections:insert #2
+session_turn_heads:insert turn_attempts:insert turns:insert #1
+session_turn_heads:update turn_attempt_closeouts:insert turn_attempts:update turns:update #1
+source_checkpoints:insert #1
+source_manifest_layout:insert source_manifests:insert #1
+source_manifest_staging:delete #1
+source_manifest_staging:insert #1
+source_snapshot_heads:insert source_snapshot_roots:insert source_snapshots:insert #1
+source_snapshot_heads:update #1
+turn_attempts:update turns:update #1
+turn_attempts:update turns:update #2
+turn_attempts:update turns:update #3
+turn_clocks:insert #1
+turn_clocks:update #1
+turn_load_receipts:insert #1
+turns:update #1
+turns:update #2
