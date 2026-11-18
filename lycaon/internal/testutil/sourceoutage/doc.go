@@ -36,7 +36,7 @@ func Restore(t testing.TB) {
 // request returns once the volume has carried out the command.
 func request(t testing.TB, command string) {
 	t.Helper()
-	conn, err := net.Dial("unix", os.Getenv(EnvControl)) // #nosec G704 -- the parent test names its own socket
+	conn, err := new(net.Dialer).DialContext(t.Context(), "unix", os.Getenv(EnvControl)) // #nosec G704 -- the parent test names its own socket
 	if err != nil {
 		t.Fatalf("source outage control: %v", err)
 	}
