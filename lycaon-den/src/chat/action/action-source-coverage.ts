@@ -1,7 +1,76 @@
+import { createEffect, createMemo, createSignal, onCleanup, type Accessor } from "solid-js";
+import type { LycaonClient } from "../../api/client.ts";
+import { LycaonApiError } from "../../api/http.ts";
 import type { ActionFact } from "../../api/types.ts";
+import { subscribeSourceInvalidation } from "../../files/source/source-invalidation.ts";
 import { BOUNDARY_REASONS, GAP_REASONS } from "../../files/source/source-command-window.ts";
+import type { CardAction } from "./action-merge.ts";
 
 type FolderCoverage = NonNullable<ActionFact["source_coverage"]>[number];
+
+export function useActionCoverage(
+  action: Accessor<CardAction>,
+  scope: { client?: LycaonClient | null; projectId?: string; sessionId?: string },
+): Accessor<CardAction> {
+  const observation = () => action().facts.find((fact) => fact.kind === "source_observation");
+  const ids = createMemo(() => observation()?.source_windows?.join(",") ?? "");
+  const [loaded, setLoaded] = createSignal<FolderCoverage[]>([]);
+  createEffect(() => {
+    const { client, projectId, sessionId } = scope;
+    const windows = ids();
+    setLoaded([]);
+    if (!client || !projectId || !sessionId || !windows) return;
+    const controller = new AbortController();
+    const pending = new Set(windows.split(","));
+    const coverage = new Map<string, FolderCoverage[]>();
+    let refreshing = false;
+    let again = false;
+    const refresh = async () => {
+      if (refreshing) {
+        again = true;
+        return;
+      }
+      refreshing = true;
+      do {
+        again = false;
+        await Promise.all([...pending].map(async (id) => {
+          try {
+            const state = await client.getProjectSourceCommandObservation(projectId, sessionId, id, controller.signal);
+            coverage.set(id, state.coverage);
+            if (!state.settling) pending.delete(id);
+          } catch (error) {
+            // Settled windows with no history or gaps are pruned.
+            if (error instanceof LycaonApiError && error.status === 404) pending.delete(id);
+          }
+        }));
+        if (controller.signal.aborted) return;
+        setLoaded([...coverage.values()].flat());
+      } while (again && pending.size);
+      refreshing = false;
+    };
+    const unsubscribe = subscribeSourceInvalidation((event) => {
+      if (event.projectId === projectId && pending.size) void refresh();
+    });
+    onCleanup(() => {
+      unsubscribe();
+      controller.abort();
+    });
+    void refresh();
+  });
+  return createMemo(() => {
+    const current = action();
+    const fact = observation();
+    if (!fact?.source_windows?.length) return current;
+    const coverage = [...(fact.source_coverage ?? []), ...loaded()];
+    const facts = coverage.length
+      ? current.facts.map((entry) => entry === fact ? { ...fact, source_coverage: coverage } : entry)
+      : current.facts.filter((entry) => entry !== fact);
+    const row = coverage.length && !current.row.includes("source_observation")
+      ? [...current.row.slice(0, 1), "source_observation" as const]
+      : current.row;
+    return { ...current, facts, row };
+  });
+}
 
 export function activityCoverageNotices(coverage: readonly FolderCoverage[] = []): string[] {
   const notices = new Set<string>();

@@ -34,6 +34,14 @@ type FolderCoverage struct {
 	OmittedBoundaries int
 }
 
+func (f FolderCoverage) ActivityFact(folder string) api.CommandFolderCoverage {
+	out := api.CommandFolderCoverage{Folder: folder, Coverage: f.State, Reason: f.Reason, OmittedBoundaries: f.OmittedBoundaries}
+	for _, boundary := range f.Boundaries {
+		out.Boundaries = append(out.Boundaries, api.SourceWindowBoundary{Path: boundary.Path, Reason: boundary.Reason})
+	}
+	return out
+}
+
 func notObserved(rootID, path, folder string, reason api.SourceWindowGapReason) FolderCoverage {
 	return FolderCoverage{RootID: rootID, Path: path, Folder: folder, State: api.SourceWindowCoverageNotObserved, Reason: reason}
 }

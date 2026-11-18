@@ -9,6 +9,7 @@ import { searchToolPart, toolPartFindCorpus } from "../../chat/tool/tool-part-fi
 import type { ToolPartView } from "../../chat/tool/tool-part-model.ts";
 import type { CardAction } from "../../chat/action/action-merge.ts";
 import { NetworkActionContext } from "../../chat/network-action-context.ts";
+import { invalidateSourceQueries } from "../../files/source/source-invalidation.ts";
 import { stubClient } from "../../test/client-fixture.ts";
 import { ActionCard } from "./ActionCard.tsx";
 
@@ -57,6 +58,34 @@ describe("ActionCard", () => {
     open(container);
     const coverage = container.querySelector('[data-kind="source_observation"] dd');
     expect(coverage?.textContent).toContain("/srv/shared was not observed: the observation ran out of time.");
+  });
+
+  it("refreshes a pending command window when its observation settles", async () => {
+    const get = vi.fn()
+      .mockResolvedValueOnce({ settling: true, coverage: [] })
+      .mockResolvedValueOnce({
+        settling: false,
+        coverage: [{ folder: "/srv/shared", coverage: "not_observed", reason: "io_error" }],
+      });
+    const client = stubClient({ getProjectSourceCommandObservation: get });
+    const action: ActionDescriptor = {
+      ...descriptor,
+      facts: [{ kind: "source_observation", source_windows: ["window"] }],
+      row: [],
+      opener: undefined,
+    };
+    const { container } = render(() => <ActionCard part={part()} action={action} layout="chat" sessionId="chat" projectId="project" client={client} />);
+    const row = container.querySelector('[data-testid="action-card"] > button')!;
+    expect(row.textContent).not.toContain("File observation incomplete");
+    expect(get).toHaveBeenCalledWith("project", "chat", "window", expect.any(AbortSignal));
+    invalidateSourceQueries({ projectId: "other" });
+    expect(get).toHaveBeenCalledTimes(1);
+    invalidateSourceQueries({ projectId: "project" });
+    await waitFor(() => expect(row.textContent).toContain("File observation incomplete"));
+    invalidateSourceQueries({ projectId: "project" });
+    expect(get).toHaveBeenCalledTimes(2);
+    open(container);
+    expect(container.querySelector('[data-kind="source_observation"] dd')?.textContent).toContain("/srv/shared was not observed");
   });
 
   it("opens to what ran, the summary, facts, preview and records, in that order and nothing else", () => {

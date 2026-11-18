@@ -13,6 +13,7 @@ import (
 	"github.com/lycaon/lycaon/internal/db"
 	"github.com/lycaon/lycaon/internal/repochange"
 	"github.com/lycaon/lycaon/internal/sourcebranch"
+	"github.com/lycaon/lycaon/internal/sourcefeed"
 	"github.com/lycaon/lycaon/internal/sourcesnapshot"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -502,6 +503,11 @@ func (s *Commands) settleCommandWindow(ctx context.Context, w *openCommandWindow
 	var finishErr error
 	if lockErr == nil {
 		finishErr = s.finishWindow(ctx, w.id, admission, append(attached, w.outside.decided()...), ended)
+		if finishErr == nil {
+			if err := sourcefeed.EmitProjectSignal(ctx, w.projectID, rootRefsOf(w.roots)); err != nil {
+				slog.WarnContext(ctx, "publish command observation", "window_id", w.id, "err", err)
+			}
+		}
 	}
 	s.windowsMu.Lock()
 	defer s.windowsMu.Unlock()

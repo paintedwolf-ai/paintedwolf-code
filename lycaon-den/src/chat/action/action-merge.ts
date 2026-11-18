@@ -39,11 +39,14 @@ export function mergeActions(actions: readonly ActionDescriptor[]): CardAction |
   const steps: ActionFact = sequence.length
     ? { kind: "steps", count: actions.length, unit: "actions", sequence: sequence.slice(-8) }
     : { kind: "steps", count: actions.length, failed: actions.filter((action) => action.status === "error").length || undefined, unit: "calls" };
-  const coverage = actions.flatMap((action) =>
-    action.facts.find((fact) => fact.kind === "source_observation")?.source_coverage ?? []);
+  const observations = actions.flatMap((action) => action.facts.filter((fact) => fact.kind === "source_observation"));
+  const coverage = observations.flatMap((fact) => fact.source_coverage ?? []);
+  const windows = [...new Set(observations.flatMap((fact) => fact.source_windows ?? []))];
   const facts = ordered([
     steps,
-    ...(coverage.length ? [{ kind: "source_observation", source_coverage: coverage } satisfies ActionFact] : []),
+    ...(coverage.length || windows.length ? [
+      { kind: "source_observation", source_coverage: coverage, source_windows: windows } satisfies ActionFact,
+    ] : []),
     ...last.facts.filter((fact) => fact.kind !== "steps" && fact.kind !== "source_observation"),
   ]);
   const row = coverage.length

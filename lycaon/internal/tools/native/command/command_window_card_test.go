@@ -24,4 +24,8 @@ func TestStateObservationRecordsOnlyCoverageGaps(t *testing.T) {
 		facts[0].SourceCoverage[0].Folder != gap.Folder {
 		t.Fatalf("card facts = %+v, want only the gap", facts)
 	}
+	stateObservation(tctx, &hostcmd.SourceWindow{ID: "window"})
+	if fact := tctx.Effects.Out.CardFacts[0]; len(fact.SourceCoverage) != 0 || len(fact.SourceWindows) != 1 || fact.SourceWindows[0] != "window" {
+		t.Fatalf("pending window fact = %+v", fact)
+	}
 }

@@ -83,6 +83,10 @@ components:
           description: "source_observation: gaps in a command's before-and-after comparison."
           items:
             $ref: "#/components/schemas/CommandFolderCoverage"
+        source_windows:
+          type: array
+          description: "source_observation: windows still settling when the result was published."
+          items: {type: string, format: uuid}
         outcome:
           type: string
           description: "result: how the action ended."
@@ -226,6 +230,17 @@ components:
         omitted_boundaries:
           type: integer
           minimum: 0
+    CommandObservationStatus:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      required: [settling, coverage]
+      properties:
+        settling: {type: boolean}
+        coverage:
+          type: array
+          items:
+            $ref: "#/components/schemas/CommandFolderCoverage"
     ActionPreview:
       x-go-generate: true
       type: object

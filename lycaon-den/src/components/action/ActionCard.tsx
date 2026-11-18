@@ -19,7 +19,7 @@ import { visualFromPart } from "../../chat/visual/visual-artifact-model.ts";
 import { visualProducerEntryKey } from "../../chat/visual/visual-artifact-canonical.ts";
 import { TranscriptVisualSlot } from "../transcript/TranscriptVisualSlot.tsx";
 import { ActionPreview } from "./ActionPreview.tsx";
-import { activityCoverageNotices } from "../../chat/action/action-source-coverage.ts";
+import { activityCoverageNotices, useActionCoverage } from "../../chat/action/action-source-coverage.ts";
 
 const RAN_FIELD = "ran.text";
 
@@ -36,6 +36,7 @@ type Props = {
 
 /** Every action's card: what ran, its summary, facts, preview, latest capture and records. */
 export function ActionCard(props: Props) {
+  const action = useActionCoverage(() => props.action, props);
   const status = () => (props.action.status === "done" ? "completed" : props.action.status);
   const members = () => [props.part, ...(props.part.foldMembers ?? [])];
   // Hosts the host let through, which the network fact offers to block.
@@ -47,7 +48,7 @@ export function ActionCard(props: Props) {
     return sessionId && handle ? { sessionId, handle } : undefined;
   };
   // A live process states its own state, so the card drops the recorded one.
-  const facts = () => (process() ? props.action.facts.filter((fact) => fact.kind !== "process") : props.action.facts);
+  const facts = () => (process() ? action().facts.filter((fact) => fact.kind !== "process") : action().facts);
   const port = () => props.action.facts.find((fact) => fact.kind === "process")?.port;
   // A fold keeps only its newest capture; the captured fact names it.
   const capture = () => {
@@ -65,7 +66,7 @@ export function ActionCard(props: Props) {
       projectId={props.projectId}
       client={props.client}
       name={props.action.label}
-      outcome={formatActionRow(props.action)}
+      outcome={formatActionRow(action())}
       status={status()}
       testId="action-card"
     >
