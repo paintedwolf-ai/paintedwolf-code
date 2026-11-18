@@ -4,7 +4,8 @@ import path from "node:path";
 import { expect } from "@playwright/test";
 import type { CheckpointListResponse, SourceComparison } from "../src/api/types.ts";
 import {
-  apiJson, apiPostPrompt, e2eTempDir, openNewChatSession, openProjectFilesFixture, webE2e,
+  apiJson, apiPostPrompt, bootstrapActiveProject, e2eTempDir, e2eUniqueLabel,
+  openNewChatSession, settledChatSessionId, waitForChatComposerReady, webE2e,
 } from "./helpers.ts";
 import { manualHarnessTools } from "./manual-harness-tools.ts";
 
@@ -16,14 +17,11 @@ webE2e("Review shows an outside edit and its retained versions in the chat that 
   const destination = path.join(folder, filename);
   try {
     writeFileSync(destination, "Original notes\n");
-    const { project } = await openProjectFilesFixture(page, request, {
-      prefix: "outside-review",
-      name: "Outside file review",
-      seed: (root) => writeFileSync(path.join(root, "revised.txt"), "Updated notes\n"),
-    });
-    const session = page.locator('[data-testid="focused-session-list"] [data-session-id]');
-    await expect(session).toHaveCount(1);
-    const sessionId = (await session.getAttribute("data-session-id"))!;
+    const root = e2eTempDir(request, "outside-review-project");
+    writeFileSync(path.join(root, "revised.txt"), "Updated notes\n");
+    const project = await bootstrapActiveProject(page, request, root, e2eUniqueLabel("Outside file review"));
+    await waitForChatComposerReady(page);
+    const sessionId = await settledChatSessionId(page);
     await apiJson(request, "POST", "/harness/llm/auto", { enabled: false });
     try {
       const prompt = await apiPostPrompt(request, sessionId, { text: "Update the notes using revised.txt." });
@@ -48,10 +46,14 @@ webE2e("Review shows an outside edit and its retained versions in the chat that 
       const completion = "The notes are updated.";
       await apiJson(request, "POST", "/harness/llm/auto", { enabled: true, text: completion });
     }
-    const openReview = () => page.evaluate((projectId) => {
-      const harness = (window as unknown as { __harness: { openReviewLens(id: string, scope: { kind: string }): void } }).__harness;
-      harness.openReviewLens(projectId, { kind: "session" });
-    }, project.id);
+    const openReview = async () => {
+      await page.getByTestId("project-files-entry").click();
+      await expect(page.getByTestId("files-tree")).toBeVisible();
+      await page.evaluate((projectId) => {
+        const harness = (window as unknown as { __harness: { openReviewLens(id: string, scope: { kind: string }): void } }).__harness;
+        harness.openReviewLens(projectId, { kind: "session" });
+      }, project.id);
+    };
     await openReview();
 
     const row = page.getByTestId("review-lens").getByTestId("changes-row-file").filter({ hasText: filename });
