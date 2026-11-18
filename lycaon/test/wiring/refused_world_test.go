@@ -678,7 +678,7 @@ func itoa(n int) string {
 
 // outsidePathRefusals are refusal codes that decide an outside path outright,
 // without a card; an allowed call ending in one has reached the boundary.
-var outsidePathRefusals = []string{"SURVEY_PATH_ESCAPE", "POLICY_CONTEXT_UNAVAILABLE"}
+var outsidePathRefusals = []string{"SURVEY_PATH_ESCAPE", "POLICY_CONTEXT_UNAVAILABLE", "FILE_CHANGE_APPROVAL_UNAVAILABLE"}
 
 // controlUnreachable are path tools that no allowed call can point at the
 // outside file, each with why; their escape cells still run.
