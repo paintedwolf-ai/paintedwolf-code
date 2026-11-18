@@ -95,21 +95,15 @@ func continuationField(param string) string {
 	return param + "_cursor"
 }
 
-// walkPages checks every single-stream paged list against its own rows: the declared
+// walkPages checks every paged list against its own rows: the declared
 // maximum is accepted, and pages of one row each, followed by their
-// continuation, visit every row exactly once. A list holding fewer than two
-// rows is seeded by its collection's create first.
+// continuation, visit every row of each array limit bounds exactly once. A list
+// holding fewer than two rows is seeded first.
 func (s *conformanceSweep) walkPages(ctx context.Context) {
 	for _, op := range s.ops {
-		pages := op.pageParams()
+		stream, pages := op.pageStream()
 		limit := paramSchema(op.query("limit"))
-		if len(pages) == 0 || limit == nil || limit.Max == nil {
-			continue
-		}
-		// Each stream pages by its own cursor, and the spec does not say
-		// which array limit bounds, so one-row pages have no single list.
-		if op.MultiStream {
-			s.outcomes.multiStream++
+		if !pages || limit == nil || limit.Max == nil {
 			continue
 		}
 		base, err := s.successRequest(ctx, op)
@@ -117,65 +111,137 @@ func (s *conformanceSweep) walkPages(ctx context.Context) {
 			s.findings.add(rulePagination, op.ID, "walk", "could not prepare: %v", err)
 			continue
 		}
-		params := base.params
-		page := func(probe string, n int64, param, cursor string) (conformanceExchange, []any) {
+		page := func(probe string, n int64, cursor string) (conformanceExchange, map[string][]any) {
 			query := url.Values{}
 			for k, v := range base.query {
 				query[k] = append([]string(nil), v...)
 			}
 			query.Set("limit", strconv.FormatInt(n, 10))
 			if cursor != "" {
-				query.Set(param, cursor)
+				query.Set(stream.cursor, cursor)
 			}
-			ex := s.send(ctx, conformanceRequest{op: op, probe: probe, params: params, query: query})
-			return ex, listMembers(op.Path, ex.body)
+			ex := s.send(ctx, conformanceRequest{op: op, probe: probe, params: base.params, query: query})
+			return ex, stream.rows(op.Path, ex.body)
 		}
-		whole, members := page("limit at maximum", int64(*limit.Max), "", "")
+		whole, members := page("limit at maximum", int64(*limit.Max), "")
 		if whole.status/100 != 2 {
 			s.findings.add(rulePagination, op.ID, "limit at maximum", "answered %s, want a page", whole.outcome())
 			continue
 		}
-		if len(members) < 2 {
+		if streamRows(members) < 2 {
 			s.seedCollection(ctx, op)
-			whole, members = page("limit at maximum", int64(*limit.Max), "", "")
+			whole, members = page("limit at maximum", int64(*limit.Max), "")
 		}
-		if len(members) < 2 {
-			s.findings.add(rulePagination, op.ID, "walk", "holds %d rows; paging needs at least 2", len(members))
+		if total := streamRows(members); total < 2 {
+			s.findings.add(rulePagination, op.ID, "walk", "holds %d rows; paging needs at least 2", total)
 			continue
 		}
 		s.outcomes.paged++
-		param := pages[0]
-		seen := map[string]bool{}
+		seen := map[string]map[string]bool{}
 		cursor := ""
 		for step := 0; ; step++ {
 			if step == pageWalkBound {
 				s.findings.add(rulePagination, op.ID, "walk", "still continuing after %d pages", step)
 				break
 			}
-			ex, rows := page("walk", 1, param, cursor)
+			ex, rows := page("walk", 1, cursor)
 			if ex.status/100 != 2 {
 				s.findings.add(rulePagination, op.ID, "walk", "page %d answered %s", step, ex.outcome())
 				break
 			}
-			if len(rows) > 1 {
-				s.findings.add(rulePagination, op.ID, "walk", "limit 1 answered %d rows", len(rows))
-			}
-			for _, row := range rows {
-				id := memberIdentity(row)
-				if seen[id] {
-					s.findings.add(rulePagination, op.ID, "walk", "row %s appeared twice", id)
+			for _, array := range slices.Sorted(maps.Keys(rows)) {
+				if len(rows[array]) > 1 {
+					s.findings.add(rulePagination, op.ID, "walk", "limit 1 answered %d rows%s", len(rows[array]), streamName(array))
 				}
-				seen[id] = true
+				if seen[array] == nil {
+					seen[array] = map[string]bool{}
+				}
+				for _, row := range rows[array] {
+					id := memberIdentity(row)
+					if seen[array][id] {
+						s.findings.add(rulePagination, op.ID, "walk", "row %s appeared twice%s", id, streamName(array))
+					}
+					seen[array][id] = true
+				}
 			}
-			cursor = continuation(ex.body, param)
-			if cursor == "" {
+			if cursor = stream.continuation(ex.body); cursor == "" {
 				break
 			}
 		}
-		if hasMore := continuation(whole.body, param) != ""; !hasMore && len(seen) != len(members) {
-			s.findings.add(rulePagination, op.ID, "walk", "visited %d rows; one page at the maximum holds %d", len(seen), len(members))
+		if stream.continuation(whole.body) != "" {
+			continue
+		}
+		for _, array := range slices.Sorted(maps.Keys(members)) {
+			if len(seen[array]) != len(members[array]) {
+				s.findings.add(rulePagination, op.ID, "walk", "visited %d rows%s; one page at the maximum holds %d", len(seen[array]), streamName(array), len(members[array]))
+			}
 		}
 	}
+}
+
+// rows maps each array the stream pages to its rows in body.
+func (st pageStream) rows(path string, body []byte) map[string][]any {
+	if len(st.arrays) == 0 {
+		return map[string][]any{"": listMembers(path, body)}
+	}
+	var envelope map[string]any
+	_ = json.Unmarshal(body, &envelope)
+	out := make(map[string][]any, len(st.arrays))
+	for _, array := range st.arrays {
+		out[array] = nestedRows(envelope, array)
+	}
+	return out
+}
+
+// nestedRows reads an array, or with "outer[].inner" the inner arrays of
+// every outer member, end to end.
+func nestedRows(envelope map[string]any, path string) []any {
+	outer, inner, nested := strings.Cut(path, "[].")
+	list, _ := envelope[outer].([]any)
+	if !nested {
+		return list
+	}
+	var rows []any
+	for _, member := range list {
+		if fields, ok := member.(map[string]any); ok {
+			items, _ := fields[inner].([]any)
+			rows = append(rows, items...)
+		}
+	}
+	return rows
+}
+
+// continuation is the cursor body offers for the next page: a string, or a
+// positive sequence number.
+func (st pageStream) continuation(body []byte) string {
+	var envelope map[string]any
+	if json.Unmarshal(body, &envelope) != nil {
+		return ""
+	}
+	switch next := envelope[st.next].(type) {
+	case string:
+		return next
+	case float64:
+		if next > 0 {
+			return strconv.FormatInt(int64(next), 10)
+		}
+	}
+	return ""
+}
+
+func streamRows(rows map[string][]any) int {
+	total := 0
+	for _, list := range rows {
+		total += len(list)
+	}
+	return total
+}
+
+func streamName(array string) string {
+	if array == "" {
+		return ""
+	}
+	return " in " + array
 }
 
 // seedCollection runs op's seed recipe, or repeats the create that adds
@@ -238,13 +304,4 @@ func memberIdentity(row any) string {
 	}
 	raw, _ := json.Marshal(row)
 	return string(raw)
-}
-
-func continuation(body []byte, param string) string {
-	var envelope map[string]any
-	if json.Unmarshal(body, &envelope) != nil {
-		return ""
-	}
-	cursor, _ := envelope[continuationField(param)].(string)
-	return cursor
 }

@@ -1069,8 +1069,9 @@ func sessionPrepareWorkerHistory(ctx context.Context, s *conformanceSweep, _ *co
 	return successInputs{query: map[string]string{"project_id": s.fixture.project.ID, "session_id": chat, "worker": name}}, nil
 }
 
-// sessionRosterWorker puts a worker with two settled rounds on the chat's
-// roster, as a coordinator's spawn does, and returns its name.
+// sessionRosterWorker puts a worker with two settled rounds, each with a
+// coordinator message, on the chat's roster, as a coordinator's spawn does,
+// and returns its name.
 func sessionRosterWorker(ctx context.Context, s *conformanceSweep, chat string) (string, error) {
 	parent, err := s.host.Sessions.Store.Get(ctx, chat)
 	if err != nil {
@@ -1099,6 +1100,12 @@ func sessionRosterWorker(ctx context.Context, s *conformanceSweep, chat string) 
 		}
 		if _, err := s.host.Workers.Records.AdmitRound(ctx, coordinator, workerrecords.Op{ID: uuid.NewString()}, created.WorkerID, workerrecords.RoundSpec{
 			JobID: job, ExecutionTarget: "local",
+		}); err != nil {
+			return "", err
+		}
+		// A running round takes the coordinator's message, which history pages.
+		if _, err := s.host.Workers.Records.AppendMessage(ctx, coordinator, workerrecords.Op{ID: uuid.NewString()}, created.WorkerID, workerrecords.MessageSpec{
+			Body: "conformance",
 		}); err != nil {
 			return "", err
 		}

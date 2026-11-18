@@ -39,8 +39,9 @@ type conformanceOp struct {
 	// IdempotentRelease marks a release whose unknown handle is already
 	// released (x-idempotent-release).
 	IdempotentRelease bool
-	// MultiStream marks a list answering several arrays (x-multi-stream-list).
-	MultiStream bool
+	// MultiStream is the page stream a list answering several arrays declares
+	// (x-multi-stream-list); nil for a list of one array.
+	MultiStream *pageStream
 	// ReadEffect names the work a read declares it may start
 	// (x-read-starts-work).
 	ReadEffect string
@@ -60,7 +61,7 @@ func conformanceOperations(doc *openapi3.T) []*conformanceOp {
 			}
 			out.Authenticated = len(security) > 0
 			out.IdempotentRelease = op.Extensions["x-idempotent-release"] == true
-			out.MultiStream = op.Extensions["x-multi-stream-list"] == true
+			out.MultiStream = declaredPageStream(op.Extensions["x-multi-stream-list"])
 			out.ReadEffect, _ = op.Extensions["x-read-starts-work"].(string)
 			ops = append(ops, out)
 		}
@@ -184,4 +185,42 @@ func paramSchema(p *openapi3.Parameter) *openapi3.Schema {
 		return nil
 	}
 	return p.Schema.Value
+}
+
+// pageStream is how a list pages: the query parameter that takes a cursor, the
+// answer field that continues it, and the arrays limit bounds.
+type pageStream struct {
+	cursor, next string
+	// arrays is empty for a list of one array, found by listMembers.
+	arrays []string
+}
+
+// declaredPageStream reads an x-multi-stream-list declaration.
+func declaredPageStream(raw any) *pageStream {
+	decl, ok := raw.(map[string]any)
+	if !ok {
+		return nil
+	}
+	stream := &pageStream{}
+	stream.cursor, _ = decl["cursor"].(string)
+	stream.next, _ = decl["next"].(string)
+	bounded, _ := decl["bounded"].([]any)
+	for _, name := range bounded {
+		if text, ok := name.(string); ok {
+			stream.arrays = append(stream.arrays, text)
+		}
+	}
+	return stream
+}
+
+// pageStream is the stream op pages by, if it pages.
+func (op *conformanceOp) pageStream() (pageStream, bool) {
+	if op.MultiStream != nil {
+		return *op.MultiStream, true
+	}
+	pages := op.pageParams()
+	if len(pages) == 0 {
+		return pageStream{}, false
+	}
+	return pageStream{cursor: pages[0], next: continuationField(pages[0])}, true
 }
