@@ -14,9 +14,15 @@ import (
 )
 
 type Sessions interface {
-	Get(context.Context, string) (*api.Session, error)
-	GetMessages(context.Context, string) ([]api.Message, error)
-	LoadLedger(context.Context, string) (evidence.Ledger, error)
+	Get(ctx context.Context, id string) (*api.Session, error)
+}
+
+type Transcript interface {
+	GetMessages(ctx context.Context, id string) ([]api.Message, error)
+}
+
+type EvidenceStore interface {
+	LoadLedger(ctx context.Context, sessionID string) (evidence.Ledger, error)
 }
 type Workspace interface {
 	Roots(context.Context, *api.Session) ([]projectroot.RootRef, error)
@@ -41,7 +47,9 @@ type WorkflowRuns interface {
 }
 
 type Service struct {
-	store              Sessions
+	sessionStore       Sessions
+	transcriptStore    Transcript
+	evidenceStore      EvidenceStore
 	workspace          Workspace
 	state              State
 	evidence           Evidence
@@ -51,8 +59,8 @@ type Service struct {
 	sourceVerification SourceVerification
 }
 
-func New(store Sessions, workspace Workspace, state State, evidence Evidence) *Service {
-	return &Service{store: store, workspace: workspace, state: state, evidence: evidence}
+func New(sessionStore Sessions, transcriptStore Transcript, evidenceStore EvidenceStore, workspace Workspace, state State, evidence Evidence) *Service {
+	return &Service{sessionStore: sessionStore, transcriptStore: transcriptStore, evidenceStore: evidenceStore, workspace: workspace, state: state, evidence: evidence}
 }
 func (s *Service) SetWorkflow(workflows *WorkflowDomains)          { s.workflows = workflows }
 func (s *Service) SetPrompts(prompts prompts.PromptTemplateEngine) { s.prompts = prompts }

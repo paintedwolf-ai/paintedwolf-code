@@ -13,7 +13,7 @@ import (
 )
 
 type retirementSelectionStore struct {
-	Store
+	Sessions
 	pageError, treeError error
 	pages                int
 }
@@ -30,28 +30,28 @@ func (s *retirementSelectionStore) ListProjectSummaries(ctx context.Context, q s
 		return store.SummaryPage{}, s.pageError
 	}
 	q.Limit = 1
-	return s.Store.ListProjectSummaries(ctx, q)
+	return s.Sessions.ListProjectSummaries(ctx, q)
 }
 func (s *retirementSelectionStore) SessionTreeIDs(ctx context.Context, id string) ([]string, error) {
 	if s.treeError != nil {
 		return nil, s.treeError
 	}
-	return s.Store.SessionTreeIDs(ctx, id)
+	return s.Sessions.SessionTreeIDs(ctx, id)
 }
 func TestProjectRetirementSelectionPagesBothArchiveStatesWithoutHydration(t *testing.T) {
 	sessionStore := storetest.New(t, "other", "target")
 	for i := range 3 {
-		root, err := sessionStore.Create(t.Context(), wire.CreateSessionRequest{ProjectID: "target"}, "target")
+		root, err := sessionStore.Sessions.Create(t.Context(), wire.CreateSessionRequest{ProjectID: "target"}, "target")
 		testutil.FailErr(t, "create root", err)
 		if i == 0 {
-			_, err = sessionStore.CreateChild(t.Context(), root, wire.SpawnChildRequest{AgentType: "implementer"})
+			_, err = sessionStore.Sessions.CreateChild(t.Context(), root, wire.SpawnChildRequest{AgentType: "implementer"})
 			testutil.FailErr(t, "create child", err)
-			testutil.FailErr(t, "archive root", sessionStore.UpdateSession(t.Context(), root.ID, func(s *wire.Session) { now := time.Now(); s.ArchivedAt = &now }))
+			testutil.FailErr(t, "archive root", sessionStore.Sessions.UpdateSession(t.Context(), root.ID, func(s *wire.Session) { now := time.Now(); s.ArchivedAt = &now }))
 		}
 	}
-	_, err := sessionStore.Create(t.Context(), wire.CreateSessionRequest{ProjectID: "other"}, "other")
+	_, err := sessionStore.Sessions.Create(t.Context(), wire.CreateSessionRequest{ProjectID: "other"}, "other")
 	testutil.FailErr(t, "create unrelated chat", err)
-	selected := &retirementSelectionStore{Store: sessionStore}
+	selected := &retirementSelectionStore{Sessions: sessionStore.Sessions}
 	plan, err := planProjectRetirement(t.Context(), selected, "target")
 	testutil.FailErr(t, "select project chats", err)
 	if len(plan.roots) != 3 || plan.total != 4 || selected.pages != 3 {
@@ -64,7 +64,7 @@ func TestProjectRetirementSelectionPagesBothArchiveStatesWithoutHydration(t *tes
 	}
 	for _, treeFailure := range []bool{false, true} {
 		want := errors.New("selection unavailable")
-		broken := &retirementSelectionStore{Store: sessionStore}
+		broken := &retirementSelectionStore{Sessions: sessionStore.Sessions}
 		if treeFailure {
 			broken.treeError = want
 		} else {

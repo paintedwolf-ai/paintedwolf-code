@@ -150,7 +150,7 @@ func waitOnePendingApproval(t *testing.T, h *wiring.Harness, sessionID string) w
 func dumpSessionFloorDebug(t *testing.T, h *wiring.Harness, sessionID string, promptErr error) {
 	t.Helper()
 	pending, _ := h.Sessions.Checkpoints.ListPending(context.Background(), sessionID, nil)
-	msgs, _ := h.Store.GetMessages(context.Background(), sessionID)
+	msgs, _ := h.Store.Transcript.GetMessages(context.Background(), sessionID)
 	t.Logf("promptErr=%v pending=%d", promptErr, len(pending))
 	for _, p := range pending {
 		t.Logf("pending kind=%s id=%s tp=%+v", p.Kind, p.ID, p.ToolApproval)
@@ -189,7 +189,7 @@ func resolveCheckpointHTTP(t *testing.T, srv *internalapi.Server, sessionID, che
 
 func assertToolMessageContains(t *testing.T, h *wiring.Harness, sessionID, want string) {
 	t.Helper()
-	msgs, err := h.Store.GetMessages(context.Background(), sessionID)
+	msgs, err := h.Store.Transcript.GetMessages(context.Background(), sessionID)
 	testutil.FailErr(t, "GetMessages", err)
 	for _, m := range msgs {
 		if m.Role == wire.MessageRoleTool && strings.Contains(m.Content, want) {

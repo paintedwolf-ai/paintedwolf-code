@@ -2,21 +2,24 @@ package eventing
 
 import (
 	"context"
-	sessiontree "github.com/lycaon/lycaon/internal/session/tree"
 	"strings"
 	"sync"
 
 	"github.com/lycaon/lycaon/internal/agentpresence"
-	"github.com/lycaon/lycaon/internal/session"
+	sessiontree "github.com/lycaon/lycaon/internal/session/tree"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
 const presenceChatCacheSize = 1024
 
+type presenceSessions interface {
+	Get(context.Context, string) (*api.Session, error)
+}
+
 // presenceChats places sessions in their chats. A session's project, chat, and
 // job never change, so they are cached; titles arrive through session events.
 type presenceChats struct {
-	store      session.Store
+	store      presenceSessions
 	workerJobs func(ctx context.Context, childSessionID string) (*api.WorkerTask, bool)
 
 	mu    sync.Mutex

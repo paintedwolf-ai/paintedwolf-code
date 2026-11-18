@@ -8,7 +8,6 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
-
 	contractfixture "github.com/lycaon/lycaon/internal/api/contractfixture"
 	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -22,7 +21,7 @@ func TestStreamReplayRequiresTranscriptMembership(t *testing.T) {
 			a := contractfixture.CreateSessionAtPathOnServer(t, srv, t.TempDir(), wire.SessionPostureBuild)
 			b := contractfixture.CreateSessionAtPathOnServer(t, srv, t.TempDir(), wire.SessionPostureBuild)
 			msg := wire.Message{ID: uuid.NewString(), Role: wire.MessageRoleAssistant, Content: "session A content"}
-			testutil.FailErr(t, "append message", srv.Sources.Workspace.SessionStore.AppendMessages(t.Context(), a.ID, msg))
+			testutil.FailErr(t, "append message", srv.Admin.SessionAdmin.Transcript.TranscriptStore.AppendMessages(t.Context(), a.ID, msg))
 			switch mode {
 			case "tokens":
 				srv.Admin.SessionAdmin.Lifecycle.Sessions.Runner.Transcript.Streams.CacheReplay(msg.ID, msg.Content, []string{msg.Content})
@@ -43,9 +42,9 @@ func TestStreamReplayRequiresTranscriptMembership(t *testing.T) {
 			if w := request(a.ID); w.Code != http.StatusOK || !strings.Contains(w.Body.String(), msg.Content) {
 				t.Fatalf("owner replay status=%d body=%s", w.Code, w.Body.String())
 			}
-			rewindFrom(t, srv.Sources.Workspace.SessionStore, a.ID, msg.ID)
+			rewindFrom(t, srv.Admin.Project.Roots.RewindStore, a.ID, msg.ID)
 			contractfixture.AssertErrorResponse(t, request(a.ID), http.StatusNotFound, "message_not_found")
-			testutil.FailErr(t, "delete session", srv.Sources.Workspace.SessionStore.Delete(t.Context(), a.ID))
+			testutil.FailErr(t, "delete session", srv.Admin.SessionAdmin.Lifecycle.SessionStore.Delete(t.Context(), a.ID))
 			if w := request(a.ID); w.Code != http.StatusNotFound {
 				t.Fatalf("deleted session status=%d", w.Code)
 			}

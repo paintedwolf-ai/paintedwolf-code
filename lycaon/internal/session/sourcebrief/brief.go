@@ -3,7 +3,6 @@ package sourcebrief
 import (
 	"context"
 	"encoding/json"
-	"github.com/lycaon/lycaon/internal/messageview"
 	"log/slog"
 	"slices"
 	"strings"
@@ -11,6 +10,7 @@ import (
 	"github.com/lycaon/lycaon/internal/coordinator/inject"
 	"github.com/lycaon/lycaon/internal/coordinator/surface"
 	"github.com/lycaon/lycaon/internal/evidence"
+	"github.com/lycaon/lycaon/internal/messageview"
 	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/session/touchedpaths"
 	"github.com/lycaon/lycaon/internal/sourceledger"
@@ -18,11 +18,17 @@ import (
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
-type Store interface {
-	PutTurnSourceBrief(context.Context, string, string, evidence.SourceChangeMint) error
-	TurnSourceBriefs(context.Context, string) (map[string]string, error)
-	ReadSourceTurn(context.Context, string, int) (messageview.SourceTurn, error)
-	LoadLedger(context.Context, string) (evidence.Ledger, error)
+type Transcript interface {
+	ReadSourceTurn(ctx context.Context, id string, number int) (messageview.SourceTurn, error)
+}
+
+type Turns interface {
+	PutTurnSourceBrief(ctx context.Context, sessionID, openingMessageID string, mint evidence.SourceChangeMint) error
+	TurnSourceBriefs(ctx context.Context, sessionID string) (map[string]string, error)
+}
+
+type Evidence interface {
+	LoadLedger(ctx context.Context, sessionID string) (evidence.Ledger, error)
 }
 
 type Roots interface {
@@ -30,13 +36,17 @@ type Roots interface {
 }
 
 type Service struct {
-	store       Store
-	roots       Roots
-	history     tools.SourceHistory
-	checkpoints Checkpoints
+	transcriptStore Transcript
+	turnStore       Turns
+	evidenceStore   Evidence
+	roots           Roots
+	history         tools.SourceHistory
+	checkpoints     Checkpoints
 }
 
-func New(store Store, roots Roots) *Service { return &Service{store: store, roots: roots} }
+func New(transcriptStore Transcript, turnStore Turns, evidenceStore Evidence, roots Roots) *Service {
+	return &Service{transcriptStore: transcriptStore, turnStore: turnStore, evidenceStore: evidenceStore, roots: roots}
+}
 func (m *Service) SetSources(history tools.SourceHistory, checkpoints Checkpoints) {
 	m.history = history
 	m.checkpoints = checkpoints
@@ -71,7 +81,7 @@ func (m *Service) Record(ctx context.Context, sess *api.Session, openingMessageI
 		raw, err := json.Marshal(cited)
 		return string(raw), records, err
 	}
-	if err := m.store.PutTurnSourceBrief(ctx, sess.ID, openingMessageID, mint); err != nil {
+	if err := m.turnStore.PutTurnSourceBrief(ctx, sess.ID, openingMessageID, mint); err != nil {
 		slog.WarnContext(ctx, "source change brief not recorded", "session_id", sess.ID, "err", err)
 	}
 }
@@ -79,10 +89,10 @@ func (m *Service) Record(ctx context.Context, sess *api.Session, openingMessageI
 // Recorded returns the session's recorded briefs keyed by the message
 // that opened each turn.
 func (m *Service) Recorded(ctx context.Context, sess *api.Session) map[string]inject.SourceChangeBrief {
-	if m == nil || m.store == nil || sess == nil {
+	if m == nil || m.turnStore == nil || sess == nil {
 		return nil
 	}
-	recorded, err := m.store.TurnSourceBriefs(ctx, sess.ID)
+	recorded, err := m.turnStore.TurnSourceBriefs(ctx, sess.ID)
 	if err != nil || len(recorded) == 0 {
 		return nil
 	}
@@ -103,10 +113,10 @@ func (m *Service) Build(ctx context.Context, sess *api.Session) inject.SourceCha
 		return inject.SourceChangeBrief{}
 	}
 	reader := m.history
-	if reader.Files == nil || reader.Git == nil || reader.Authorship == nil || m.checkpoints == nil || m.store == nil {
+	if reader.Files == nil || reader.Git == nil || reader.Authorship == nil || m.checkpoints == nil || (m.transcriptStore == nil || m.turnStore == nil || m.evidenceStore == nil) {
 		return inject.SourceChangeBrief{}
 	}
-	turnSource, err := m.store.ReadSourceTurn(ctx, sess.ID, 0)
+	turnSource, err := m.transcriptStore.ReadSourceTurn(ctx, sess.ID, 0)
 	turn := turnSource.Number
 	if err != nil || turn < 2 {
 		return inject.SourceChangeBrief{}
@@ -267,7 +277,7 @@ func (m *Service) sessionTouchedPaths(
 	reader tools.SourceHistory,
 	roots []projectroot.RootRef,
 ) map[string]bool {
-	paths := touchedpaths.List(ctx, sess.ProjectID, sess.ID, sess.WorkspaceRootID, roots, m.store, reader.Authorship, 0)
+	paths := touchedpaths.List(ctx, sess.ProjectID, sess.ID, sess.WorkspaceRootID, roots, m.evidenceStore, reader.Authorship, 0)
 	touched := make(map[string]bool, len(paths))
 	for _, p := range paths {
 		touched[projectroot.DisplayPath(roots, sess.WorkspaceRootID, p.RootID, p.RelPath)] = true

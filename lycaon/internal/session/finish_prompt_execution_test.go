@@ -4,8 +4,6 @@ package session_test
 
 import (
 	"context"
-	"github.com/lycaon/lycaon/internal/blueprint/blueprinttest"
-	"github.com/lycaon/lycaon/internal/tools/toolstest"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -13,6 +11,7 @@ import (
 	"time"
 
 	"github.com/lycaon/lycaon/internal/blueprint"
+	"github.com/lycaon/lycaon/internal/blueprint/blueprinttest"
 	"github.com/lycaon/lycaon/internal/configlayout"
 	"github.com/lycaon/lycaon/internal/coordinator/anchor"
 	"github.com/lycaon/lycaon/internal/coordinator/loopwake"
@@ -29,6 +28,7 @@ import (
 	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/tools/toolstest"
 	"github.com/lycaon/lycaon/internal/workflow"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 	workflowdrafts "github.com/lycaon/lycaon/internal/workflow/drafts"
@@ -64,14 +64,14 @@ func TestFinishPromptExecutionDrainsLoopPendingAfterCanceledRequestCtx(t *testin
 
 	testdbseed.InsertProjectRoot(t, sqlDB, testdbseed.DefaultProjectID, dir)
 
-	sess, err := store.Create(ctx, wire.CreateSessionRequest{}, testdbseed.DefaultProjectID)
+	sess, err := store.Sessions.Create(ctx, wire.CreateSessionRequest{}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session in store", err)
 	ref, err := workflowdef.LoadRegistryConfig(extpacks.OnDisk(bundledDir))
 	testutil.FailErr(t, "LoadRegistryConfig", err)
 	run, err := wfMgr.Ambient.StartAmbient(ctx, sess.ID, ref.ID, ref.Version)
 	testutil.FailErr(t, "StartAmbient", err)
 	_ = run
-	if err := store.SetSessionStatus(ctx, sess.ID, wire.SessionStatusBusy); err != nil {
+	if err := store.Sessions.SetSessionStatus(ctx, sess.ID, wire.SessionStatusBusy); err != nil {
 		testutil.FailErr(t, "store.SetSessionStatus failed", err)
 	}
 
@@ -90,7 +90,7 @@ func TestFinishPromptExecutionDrainsLoopPendingAfterCanceledRequestCtx(t *testin
 	}()
 
 	testutil.WaitFor(t, "the loop wake message is stored", func() bool {
-		msgs, err := store.GetMessages(ctx, sess.ID)
+		msgs, err := store.Transcript.GetMessages(ctx, sess.ID)
 		if err != nil {
 			return false
 		}
@@ -139,7 +139,7 @@ func setupPlanTripartiteFixture(t *testing.T) coordinatorPromptFixture {
 
 	testdbseed.InsertProjectRoot(t, sqlDB, testdbseed.DefaultProjectID, dir)
 
-	sess, err := store.Create(ctx, wire.CreateSessionRequest{}, testdbseed.DefaultProjectID)
+	sess, err := store.Sessions.Create(ctx, wire.CreateSessionRequest{}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session in store", err)
 	plan, ok := manifestReg.FindTriggerMatch("/plan")
 	if !ok {
@@ -257,13 +257,13 @@ func TestFailedHostTurnReportsItself(t *testing.T) {
 	dir := t.TempDir()
 	testdbseed.InsertProjectRoot(t, sqlDB, testdbseed.DefaultProjectID, dir)
 
-	sess, err := st.Create(ctx, wire.CreateSessionRequest{}, testdbseed.DefaultProjectID)
+	sess, err := st.Sessions.Create(ctx, wire.CreateSessionRequest{}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session in store", err)
 	ref, err := workflowdef.LoadRegistryConfig(extpacks.OnDisk(bundledDir))
 	testutil.FailErr(t, "LoadRegistryConfig", err)
 	_, err = wfMgr.Ambient.StartAmbient(ctx, sess.ID, ref.ID, ref.Version)
 	testutil.FailErr(t, "StartAmbient", err)
-	testutil.FailErr(t, "set session busy", st.SetSessionStatus(ctx, sess.ID, wire.SessionStatusBusy))
+	testutil.FailErr(t, "set session busy", st.Sessions.SetSessionStatus(ctx, sess.ID, wire.SessionStatusBusy))
 
 	finishExecution := mgr.Runner.Coordinator.CoordinatorLoop().Admission.BeginPromptExecution(t.Context(), sess.ID)
 	mgr.Coordinator.Runtime.CoordinatorLoop().Nudges.Nudge(ctx, sess.ID, anchor.LegFinished, anchor.LegFinished,

@@ -28,7 +28,7 @@ func TestUserTurnOpensWithTheInterruptedParkedProgram(t *testing.T) {
 	mgr := NewHost(sessionStore, Models{Client: llm.NewMockProvider(testMockConfig(t)), Limits: settings.DefaultSessionLimits()}, registry)
 	oartest.InstallCloseoutPolicy(t, mgr)
 	mgr.Coordinator.Guards.SetToolMetadata(testtool.RegistryInvoker{Registry: registry})
-	sess, err := sessionStore.Create(t.Context(), api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
+	sess, err := sessionStore.Sessions.Create(t.Context(), api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
 	database := testdbfixture.Open(t, "waits.db")
 	testdbseed.InsertSession(t, database, sess.ID, testdbseed.DefaultProjectID)

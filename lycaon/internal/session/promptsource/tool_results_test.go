@@ -12,7 +12,7 @@ import (
 )
 
 func TestToolResultsRequireSuccessfulStructuredDispatchForEnqueueFeedback(t *testing.T) {
-	results := &ToolResults{Batch: batchcontrol.New(nil, nil, nil, nil)}
+	results := &ToolResults{Batch: batchcontrol.New(nil, nil, nil, nil, nil)}
 	session := &api.Session{ID: "session"}
 	for _, tc := range []struct {
 		name, tool string

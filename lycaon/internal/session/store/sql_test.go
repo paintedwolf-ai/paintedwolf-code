@@ -3,7 +3,6 @@ package store
 import (
 	"context"
 	"errors"
-	"github.com/lycaon/lycaon/internal/timelayout"
 	"os"
 	"path/filepath"
 	"strings"
@@ -14,6 +13,7 @@ import (
 	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/timelayout"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -23,17 +23,17 @@ func TestSQLStoreCreateChildPersistsAgentType(t *testing.T) {
 	testdbseed.InsertProjectRoot(t, sqlDB, testdbseed.DefaultProjectID, dir)
 	store := NewSQL(sqlDB)
 	ctx := t.Context()
-	parent, err := store.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
+	parent, err := store.Sessions.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create parent", err)
-	if _, err := store.CreateChild(ctx, parent, api.SpawnChildRequest{}); err == nil {
+	if _, err := store.Sessions.CreateChild(ctx, parent, api.SpawnChildRequest{}); err == nil {
 		t.Fatal("expected blank agent_type to fail")
 	}
-	child, err := store.CreateChild(ctx, parent, api.SpawnChildRequest{AgentType: " implementer "})
+	child, err := store.Sessions.CreateChild(ctx, parent, api.SpawnChildRequest{AgentType: " implementer "})
 	testutil.FailErr(t, "create child", err)
 	if child.AgentType != "implementer" {
 		t.Fatalf("child agent_type = %q want implementer", child.AgentType)
 	}
-	stored, err := store.Get(ctx, child.ID)
+	stored, err := store.Sessions.Get(ctx, child.ID)
 	testutil.FailErr(t, "get child", err)
 	if stored.AgentType != "implementer" {
 		t.Fatalf("stored agent_type = %q want implementer", stored.AgentType)
@@ -45,7 +45,7 @@ func TestSQLStoreReferenceFenceAndArtifactIDsRoundTrip(t *testing.T) {
 	sqlDB := testdbfixture.OpenPath(t, filepath.Join(dir, "store.db"))
 	testdbseed.InsertProjectRoot(t, sqlDB, testdbseed.DefaultProjectID, dir)
 	store := NewSQL(sqlDB)
-	sess, err := store.Create(context.Background(), api.CreateSessionRequest{
+	sess, err := store.Sessions.Create(context.Background(), api.CreateSessionRequest{
 		Posture:   api.SessionPostureBuild,
 		ProjectID: testdbseed.DefaultProjectID,
 	}, testdbseed.DefaultProjectID)
@@ -53,13 +53,13 @@ func TestSQLStoreReferenceFenceAndArtifactIDsRoundTrip(t *testing.T) {
 
 	wantID := "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"
 	fence := "```attachment filename=\"readme.md\" mime=\"text/plain\" truncated=\"false\"\n[User attached file: readme.md]\n```"
-	testutil.FailErr(t, "append", store.AppendMessages(context.Background(), sess.ID, api.Message{
+	testutil.FailErr(t, "append", store.Transcript.AppendMessages(context.Background(), sess.ID, api.Message{
 		ID:          "msg-ref",
 		Role:        api.MessageRoleUser,
 		Content:     "look\n\n" + fence,
 		ArtifactIDs: []string{wantID},
 	}))
-	msgs, err := store.GetMessages(context.Background(), sess.ID)
+	msgs, err := store.Transcript.GetMessages(context.Background(), sess.ID)
 	testutil.FailErr(t, "GetMessages", err)
 	if len(msgs) != 1 {
 		t.Fatalf("msgs=%d", len(msgs))
@@ -77,20 +77,20 @@ func TestSQLStoreArtifactIDsRoundTrip(t *testing.T) {
 	sqlDB := testdbfixture.OpenPath(t, filepath.Join(dir, "store.db"))
 	testdbseed.InsertProjectRoot(t, sqlDB, testdbseed.DefaultProjectID, dir)
 	store := NewSQL(sqlDB)
-	sess, err := store.Create(context.Background(), api.CreateSessionRequest{
+	sess, err := store.Sessions.Create(context.Background(), api.CreateSessionRequest{
 		Posture:   api.SessionPostureBuild,
 		ProjectID: testdbseed.DefaultProjectID,
 	}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
 
 	wantID := "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"
-	testutil.FailErr(t, "append", store.AppendMessages(context.Background(), sess.ID, api.Message{
+	testutil.FailErr(t, "append", store.Transcript.AppendMessages(context.Background(), sess.ID, api.Message{
 		ID:          "msg-art",
 		Role:        api.MessageRoleUser,
 		Content:     "with image",
 		ArtifactIDs: []string{wantID},
 	}))
-	msgs, err := store.GetMessages(context.Background(), sess.ID)
+	msgs, err := store.Transcript.GetMessages(context.Background(), sess.ID)
 	testutil.FailErr(t, "GetMessages", err)
 	if len(msgs) != 1 || len(msgs[0].ArtifactIDs) != 1 || msgs[0].ArtifactIDs[0] != wantID {
 		t.Fatalf("ArtifactIDs after append = %#v", msgs)
@@ -98,9 +98,9 @@ func TestSQLStoreArtifactIDsRoundTrip(t *testing.T) {
 
 	msgs[0].Content = "patched"
 	msgs[0].ArtifactIDs = []string{wantID, "bbbbbbbb-cccc-dddd-eeee-ffffffffffff"}
-	_, err = store.UpdateMessage(context.Background(), sess.ID, "msg-art", msgs[0])
+	_, err = store.Transcript.UpdateMessage(context.Background(), sess.ID, "msg-art", msgs[0])
 	testutil.FailErr(t, "UpdateMessage", err)
-	msgs, err = store.GetMessages(context.Background(), sess.ID)
+	msgs, err = store.Transcript.GetMessages(context.Background(), sess.ID)
 	testutil.FailErr(t, "GetMessages after update", err)
 	if len(msgs) != 1 || len(msgs[0].ArtifactIDs) != 2 {
 		t.Fatalf("ArtifactIDs after update = %#v", msgs[0].ArtifactIDs)
@@ -114,12 +114,12 @@ func TestSQLStorePersistenceAcrossReopen(t *testing.T) {
 	sqlDB := testdbfixture.OpenPath(t, dbPath)
 	testdbseed.InsertProjectRoot(t, sqlDB, testdbseed.DefaultProjectID, dir)
 	store := NewSQL(sqlDB)
-	sess, err := store.Create(context.Background(), api.CreateSessionRequest{
+	sess, err := store.Sessions.Create(context.Background(), api.CreateSessionRequest{
 		Posture:   api.SessionPostureBuild,
 		ProjectID: testdbseed.DefaultProjectID,
 	}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session in store", err)
-	if err := store.AppendMessages(context.Background(), sess.ID, api.Message{
+	if err := store.Transcript.AppendMessages(context.Background(), sess.ID, api.Message{
 		ID:      "msg-1",
 		Role:    api.MessageRoleUser,
 		Content: "hello",
@@ -130,12 +130,12 @@ func TestSQLStorePersistenceAcrossReopen(t *testing.T) {
 
 	sqlDB2 := testdbfixture.OpenPath(t, dbPath)
 	store2 := NewSQL(sqlDB2)
-	got, err := store2.Get(context.Background(), sess.ID)
+	got, err := store2.Sessions.Get(context.Background(), sess.ID)
 	testutil.FailErr(t, "store2.Get failed", err)
 	if got.ProjectID != testdbseed.DefaultProjectID {
 		t.Fatalf("project_id = %q", got.ProjectID)
 	}
-	msgs, err := store2.GetMessages(context.Background(), sess.ID)
+	msgs, err := store2.Transcript.GetMessages(context.Background(), sess.ID)
 	if err != nil || len(msgs) != 1 || msgs[0].Content != "hello" {
 		t.Fatalf("messages = %#v err=%v", msgs, err)
 	}
@@ -229,7 +229,7 @@ func TestSQLDeleteRemovesSessionTreeAndPreservesReviewHistory(t *testing.T) {
 		VALUES (?, 'child-file', 1, 1, 'child-effect')
 	`, testdbseed.DefaultProjectID)
 
-	testutil.FailErr(t, "delete parent", NewSQL(sqlDB).Delete(ctx, "parent"))
+	testutil.FailErr(t, "delete parent", NewSQL(sqlDB).Sessions.Delete(ctx, "parent"))
 	assertCount := func(label, query string, want int) {
 		t.Helper()
 		var got int
@@ -290,7 +290,7 @@ func TestSQLDeleteRevokesBlueprintGrantsSealedByTheSessionTree(t *testing.T) {
 			(?, '.paintedwolf/blueprints/survivor.md', 'digest', NULL, 0, 'approved', ?, 'chat', (SELECT id FROM people WHERE role = 'owner'), 'survivor')
 	`, testdbseed.DefaultProjectID, now, testdbseed.DefaultProjectID, now)
 
-	testutil.FailErr(t, "delete parent", NewSQL(sqlDB).Delete(ctx, "parent"))
+	testutil.FailErr(t, "delete parent", NewSQL(sqlDB).Sessions.Delete(ctx, "parent"))
 
 	var status, cause string
 	testutil.FailErr(t, "read child grant", sqlDB.QueryRowContext(ctx, `
@@ -321,7 +321,7 @@ func TestSQLStoreCreateDraftProjectUsesScratchWorkspace(t *testing.T) {
 	rootID, wantPrefix := testdbseed.InsertDraftScratchRoot(t, sqlDB, testdbseed.DefaultProjectID)
 	store := NewSQL(sqlDB)
 
-	sess, err := store.Create(context.Background(), api.CreateSessionRequest{
+	sess, err := store.Sessions.Create(context.Background(), api.CreateSessionRequest{
 		Posture:   api.SessionPostureBuild,
 		ProjectID: testdbseed.DefaultProjectID,
 	}, testdbseed.DefaultProjectID)
@@ -337,7 +337,7 @@ func TestSQLStoreCreateDraftProjectUsesScratchWorkspace(t *testing.T) {
 		t.Fatalf("scratch workspace not created: %v", statErr)
 	}
 
-	got, err := store.Get(context.Background(), sess.ID)
+	got, err := store.Sessions.Get(context.Background(), sess.ID)
 	testutil.FailErr(t, "get rootless session", err)
 	if !strings.HasPrefix(got.WorkspacePath, wantPrefix) {
 		t.Fatalf("hydrated WorkspacePath = %q, want prefix %q", got.WorkspacePath, wantPrefix)
@@ -354,7 +354,7 @@ func TestSQLStoreRejectsProjectWithoutPrimaryRoot(t *testing.T) {
 	`, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "insert root", err)
 
-	_, err = NewSQL(sqlDB).Create(t.Context(), api.CreateSessionRequest{
+	_, err = NewSQL(sqlDB).Sessions.Create(t.Context(), api.CreateSessionRequest{
 		Posture:   api.SessionPostureBuild,
 		ProjectID: testdbseed.DefaultProjectID,
 	}, testdbseed.DefaultProjectID)
@@ -369,7 +369,7 @@ func TestSQLTranscriptPageOrdCursors(t *testing.T) {
 	testdbseed.InsertProjectRoot(t, sqlDB, testdbseed.DefaultProjectID, dir)
 	s := NewSQL(sqlDB)
 	ctx := context.Background()
-	sess, err := s.Create(ctx, api.CreateSessionRequest{
+	sess, err := s.Sessions.Create(ctx, api.CreateSessionRequest{
 		Posture:   api.SessionPostureBuild,
 		ProjectID: testdbseed.DefaultProjectID,
 	}, testdbseed.DefaultProjectID)
@@ -379,21 +379,21 @@ func TestSQLTranscriptPageOrdCursors(t *testing.T) {
 	for i := 0; i < 10; i++ {
 		batch = append(batch, api.Message{Role: api.MessageRoleUser, Content: "m"})
 	}
-	testutil.FailErr(t, "append", s.AppendMessages(ctx, sess.ID, batch...))
+	testutil.FailErr(t, "append", s.Transcript.AppendMessages(ctx, sess.ID, batch...))
 
-	tail, err := s.GetTranscriptPage(ctx, sess.ID, api.TranscriptPageQuery{Limit: 4})
+	tail, err := s.Transcript.GetTranscriptPage(ctx, sess.ID, api.TranscriptPageQuery{Limit: 4})
 	testutil.FailErr(t, "tail", err)
 	if len(tail.Messages) != 4 || tail.BeforeCursor == "" || tail.AfterCursor != "" {
 		t.Fatalf("tail=%d before=%v after=%v", len(tail.Messages), tail.BeforeCursor, tail.AfterCursor)
 	}
 	before := tail.Messages[0].Ord
-	older, err := s.GetTranscriptPage(ctx, sess.ID, api.TranscriptPageQuery{Limit: 4, Before: &before})
+	older, err := s.Transcript.GetTranscriptPage(ctx, sess.ID, api.TranscriptPageQuery{Limit: 4, Before: &before})
 	testutil.FailErr(t, "before", err)
 	if len(older.Messages) != 4 || older.Messages[len(older.Messages)-1].Ord >= before {
 		t.Fatalf("before page newest=%d want < %d (len=%d)", older.Messages[len(older.Messages)-1].Ord, before, len(older.Messages))
 	}
 	after := older.Messages[len(older.Messages)-1].Ord
-	forward, err := s.GetTranscriptPage(ctx, sess.ID, api.TranscriptPageQuery{Limit: 4, After: &after})
+	forward, err := s.Transcript.GetTranscriptPage(ctx, sess.ID, api.TranscriptPageQuery{Limit: 4, After: &after})
 	testutil.FailErr(t, "after", err)
 	if len(forward.Messages) != 4 || forward.Messages[0].Ord <= after {
 		t.Fatalf("after page oldest=%d want > %d", forward.Messages[0].Ord, after)
@@ -405,13 +405,13 @@ func TestSQLCompactionViewCannotRepublishDeletedBoundary(t *testing.T) {
 	sqlDB := testdbfixture.OpenPath(t, filepath.Join(dir, "store.db"))
 	testdbseed.InsertProjectRoot(t, sqlDB, testdbseed.DefaultProjectID, dir)
 	s := NewSQL(sqlDB)
-	sess, err := s.Create(t.Context(), api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
+	sess, err := s.Sessions.Create(t.Context(), api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
-	testutil.FailErr(t, "append history", s.AppendMessages(t.Context(), sess.ID,
+	testutil.FailErr(t, "append history", s.Transcript.AppendMessages(t.Context(), sess.ID,
 		api.Message{ID: "before", Role: api.MessageRoleUser, Content: "before"},
 		api.Message{ID: "boundary", Role: api.MessageRoleAssistant, Content: "boundary"},
 	))
-	messages, err := s.GetMessages(t.Context(), sess.ID)
+	messages, err := s.Transcript.GetMessages(t.Context(), sess.ID)
 	testutil.FailErr(t, "load history", err)
 	boundary := messages[len(messages)-1]
 	view := CompactionView{
@@ -421,9 +421,9 @@ func TestSQLCompactionViewCannotRepublishDeletedBoundary(t *testing.T) {
 		CoveredThroughID:  boundary.ID,
 		SourceSeq:         boundary.Seq,
 	}
-	testutil.FailErr(t, "put compaction view", s.PutCompactionView(t.Context(), sess.ID, view))
+	testutil.FailErr(t, "put compaction view", s.Compaction.PutCompactionView(t.Context(), sess.ID, view))
 	rewindFrom(t, s, sess.ID, boundary.ID)
-	if err := s.PutCompactionView(t.Context(), sess.ID, view); err == nil {
+	if err := s.Compaction.PutCompactionView(t.Context(), sess.ID, view); err == nil {
 		t.Fatal("stale compaction view republished after its boundary was deleted")
 	}
 }
@@ -433,13 +433,13 @@ func TestSQLEvidenceHandlesSurviveTranscriptReload(t *testing.T) {
 	sqlDB := testdbfixture.OpenPath(t, filepath.Join(dir, "store.db"))
 	testdbseed.InsertProjectRoot(t, sqlDB, testdbseed.DefaultProjectID, dir)
 	store := NewSQL(sqlDB)
-	sess, err := store.Create(t.Context(), api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
+	sess, err := store.Sessions.Create(t.Context(), api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
-	testutil.FailErr(t, "append evidence row", store.AppendMessages(t.Context(), sess.ID, api.Message{
+	testutil.FailErr(t, "append evidence row", store.Transcript.AppendMessages(t.Context(), sess.ID, api.Message{
 		Role: api.MessageRoleTool, Content: "observed", EvidenceHandles: []string{"read#1"},
 	}))
 
-	messages, err := store.GetMessages(t.Context(), sess.ID)
+	messages, err := store.Transcript.GetMessages(t.Context(), sess.ID)
 	testutil.FailErr(t, "reload messages", err)
 	if len(messages) != 1 || len(messages[0].EvidenceHandles) != 1 || messages[0].EvidenceHandles[0] != "read#1" {
 		t.Fatalf("evidence handles = %+v", messages)

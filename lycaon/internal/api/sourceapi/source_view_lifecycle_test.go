@@ -65,7 +65,7 @@ func TestSourceViewsEndWithTheirChat(t *testing.T) {
 	sessions := storetest.New(t, testdbseed.DefaultProjectID)
 	server := newSourceHandlerFixture(t, func(deps *Deps) { deps.SessionStore = sessions })
 	p := sourceViewFixtureProject(t, server)
-	chat, err := sessions.Create(t.Context(), wire.CreateSessionRequest{Posture: wire.SessionPostureBuild}, p.ID)
+	chat, err := sessions.Sessions.Create(t.Context(), wire.CreateSessionRequest{Posture: wire.SessionPostureBuild}, p.ID)
 	testutil.FailErr(t, "create chat", err)
 	addressed := readSourceViewResponse(t, createTreeView(t, server, p, chat.ID), http.StatusCreated).Tree
 	unaddressed := readSourceViewResponse(t, createTreeView(t, server, p, ""), http.StatusCreated).Tree

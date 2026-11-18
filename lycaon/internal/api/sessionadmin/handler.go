@@ -4,6 +4,7 @@ import (
 	"github.com/lycaon/lycaon/internal/api/gitadmin"
 	"github.com/lycaon/lycaon/internal/api/httpio"
 	"github.com/lycaon/lycaon/internal/api/promptadmin"
+	"github.com/lycaon/lycaon/internal/api/requestscope"
 	"github.com/lycaon/lycaon/internal/api/sessionview"
 	"github.com/lycaon/lycaon/internal/api/sourceapi"
 	"github.com/lycaon/lycaon/internal/api/taskgroup"
@@ -16,6 +17,7 @@ import (
 	"github.com/lycaon/lycaon/internal/project"
 	"github.com/lycaon/lycaon/internal/rules"
 	"github.com/lycaon/lycaon/internal/session"
+	sessionstore "github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/worker"
 	"github.com/lycaon/lycaon/internal/workflow"
@@ -32,7 +34,7 @@ type Deps struct {
 	ProgressStore  progress.Store
 	Projects       project.Registry
 	ProjectRules   *rules.ProjectRulesOverlay
-	Store          session.Store
+	Store          *sessionstore.Repositories
 	Sessions       *session.Host
 	Workers        worker.WorkerQueue
 	Workflows      *workflow.RunManager
@@ -60,7 +62,7 @@ type Bootstrap struct {
 	ProgressStore  progress.Store
 	SessionView    *sessionview.Projector
 	Sessions       *session.Host
-	Store          session.Store
+	SessionStore   requestscope.Sessions
 	Workers        worker.WorkerQueue
 	responses      *httpio.Responder
 }
@@ -75,7 +77,7 @@ type Lifecycle struct {
 	SessionView     *sessionview.Projector
 	Sessions        *session.Host
 	Settings        *settings.Service
-	Store           session.Store
+	SessionStore    sessionstore.SessionRepository
 	Workflows       *workflow.RunManager
 	background      *taskgroup.Group
 	responses       *httpio.Responder
@@ -86,7 +88,7 @@ type Lifecycle struct {
 type Navigation struct {
 	Branches        worker.WorkerBranches
 	Sessions        *session.Host
-	Store           session.Store
+	SessionStore    requestscope.Sessions
 	Workers         worker.WorkerQueue
 	responses       *httpio.Responder
 	sourceWorkspace *sourceapi.Workspace
@@ -103,12 +105,13 @@ type Rewind struct {
 }
 
 type Transcript struct {
-	Events      events.ReplayHub
-	Invocations invocation.Recorder
-	Projects    project.Registry
-	Sessions    *session.Host
-	Store       session.Store
-	responses   *httpio.Responder
+	Events          events.ReplayHub
+	Invocations     invocation.Recorder
+	Projects        project.Registry
+	Sessions        *session.Host
+	SessionStore    sessionstore.SessionRepository
+	TranscriptStore sessionstore.TranscriptRepository
+	responses       *httpio.Responder
 }
 
 func New(responses *httpio.Responder, background *taskgroup.Group, deps Deps) Handler {
@@ -116,16 +119,17 @@ func New(responses *httpio.Responder, background *taskgroup.Group, deps Deps) Ha
 		httpio.Required{Name: "Invocations", Present: deps.Invocations != nil},
 		httpio.Required{Name: "Projects", Present: deps.Projects != nil},
 		httpio.Required{Name: "Sessions", Present: deps.Sessions != nil},
-		httpio.Required{Name: "Store", Present: deps.Store != nil},
+		httpio.Required{Name: "Store.Sessions", Present: deps.Store != nil && deps.Store.Sessions != nil},
+		httpio.Required{Name: "Store.Transcript", Present: deps.Store != nil && deps.Store.Transcript != nil},
 		httpio.Required{Name: "Branches", Present: deps.Branches != nil},
 		httpio.Required{Name: "Workflows", Present: deps.Workflows != nil},
 	)
 	h := Handler{}
-	h.Bootstrap = &Bootstrap{Checkpoints: deps.Checkpoints, EventPublisher: deps.EventPublisher, Events: deps.Events, Preview: deps.Preview, ProgressStore: deps.ProgressStore, SessionView: deps.SessionView, Sessions: deps.Sessions, Store: deps.Store, Workers: deps.Workers, responses: responses}
-	h.Lifecycle = &Lifecycle{Events: deps.Events, Git: deps.Git, LLMService: deps.LLMService, ProjectRules: deps.ProjectRules, Projects: deps.Projects, Prompt: deps.Prompt.Queue, SessionView: deps.SessionView, Sessions: deps.Sessions, Settings: deps.Settings, Store: deps.Store, Workflows: deps.Workflows, background: background, responses: responses, sourceWatch: deps.Sources.Watch, sourceWorkspace: deps.Sources.Workspace}
-	h.Navigation = &Navigation{Branches: deps.Branches, Sessions: deps.Sessions, Store: deps.Store, Workers: deps.Workers, responses: responses, sourceWorkspace: deps.Sources.Workspace}
+	h.Bootstrap = &Bootstrap{Checkpoints: deps.Checkpoints, EventPublisher: deps.EventPublisher, Events: deps.Events, Preview: deps.Preview, ProgressStore: deps.ProgressStore, SessionView: deps.SessionView, Sessions: deps.Sessions, SessionStore: deps.Store.Sessions, Workers: deps.Workers, responses: responses}
+	h.Lifecycle = &Lifecycle{Events: deps.Events, Git: deps.Git, LLMService: deps.LLMService, ProjectRules: deps.ProjectRules, Projects: deps.Projects, Prompt: deps.Prompt.Queue, SessionView: deps.SessionView, Sessions: deps.Sessions, Settings: deps.Settings, SessionStore: deps.Store.Sessions, Workflows: deps.Workflows, background: background, responses: responses, sourceWatch: deps.Sources.Watch, sourceWorkspace: deps.Sources.Workspace}
+	h.Navigation = &Navigation{Branches: deps.Branches, Sessions: deps.Sessions, SessionStore: deps.Store.Sessions, Workers: deps.Workers, responses: responses, sourceWorkspace: deps.Sources.Workspace}
 	h.Recovery = &Recovery{Sessions: deps.Sessions, responses: responses}
 	h.Rewind = &Rewind{Sessions: deps.Sessions, responses: responses}
-	h.Transcript = &Transcript{Events: deps.Events, Invocations: deps.Invocations, Projects: deps.Projects, Sessions: deps.Sessions, Store: deps.Store, responses: responses}
+	h.Transcript = &Transcript{Events: deps.Events, Invocations: deps.Invocations, Projects: deps.Projects, Sessions: deps.Sessions, SessionStore: deps.Store.Sessions, TranscriptStore: deps.Store.Transcript, responses: responses}
 	return h
 }

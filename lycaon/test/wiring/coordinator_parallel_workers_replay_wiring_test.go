@@ -229,9 +229,9 @@ func parallelWorkersHarness(t *testing.T, fix workerpeercoord.ParallelWorkersRep
 	_, err = h.Workers.Queue.Enqueue(ctx, taskB)
 	testutil.FailErr(t, "enqueue b", err)
 
-	childA, err := h.Store.CreateChild(ctx, parent, wire.SpawnChildRequest{AgentType: "implementer", Prompt: "leg a"})
+	childA, err := h.Store.Sessions.CreateChild(ctx, parent, wire.SpawnChildRequest{AgentType: "implementer", Prompt: "leg a"})
 	testutil.FailErr(t, "create child a", err)
-	childB, err := h.Store.CreateChild(ctx, parent, wire.SpawnChildRequest{AgentType: "implementer", Prompt: "leg b"})
+	childB, err := h.Store.Sessions.CreateChild(ctx, parent, wire.SpawnChildRequest{AgentType: "implementer", Prompt: "leg b"})
 	testutil.FailErr(t, "create child b", err)
 	testutil.FailErr(t, "link a", h.Workers.Queue.SetChildSessionID(ctx, taskA.ID, childA.ID))
 	testutil.FailErr(t, "link b", h.Workers.Queue.SetChildSessionID(ctx, taskB.ID, childB.ID))
@@ -252,7 +252,7 @@ func seedReplayFindingEvidence(t *testing.T, h *Harness, ctx context.Context, se
 		if line > 0 {
 			ranges = []evidence.LineRange{{Start: line, End: line}}
 		}
-		testutil.FailErr(t, "seed finding evidence", h.Store.UpsertEvidenceRecord(ctx, sessionID, evidence.Record{
+		testutil.FailErr(t, "seed finding evidence", h.Store.Evidence.UpsertEvidenceRecord(ctx, sessionID, evidence.Record{
 			Handle: fmt.Sprintf("read#%d", i+1), Kind: "read", Shape: "file_region",
 			Fidelity: "structured", SourceTool: "read", Path: path, LineRanges: ranges,
 			Body: []string{"fixture observation"},

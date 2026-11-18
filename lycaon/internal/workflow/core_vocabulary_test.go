@@ -72,7 +72,7 @@ func TestUserDecisionRejectPausesRun(t *testing.T) {
 		}},
 	})
 	mgr.Resolver.Overlay = workflowdef.NewRegistry(map[string]workflowdef.Manifest{"decision-flow@1.0.0": manifest})
-	ctx := workflowCaller(t, mgr)
+	ctx := workflowCaller(t, store)
 	run, err := startRun(ctx, mgr, "sess-1", "decision-flow", "1.0.0")
 	testutil.FailErr(t, "startRun failed", err)
 	run, err = mgr.Feedback.ResolveUserDecision(ctx, "sess-1", run.ID, "confirm", []string{"no"}, "")

@@ -226,7 +226,7 @@ func TestEffectiveSkillsNoTaint(t *testing.T) {
 		Projects: reg,
 	})
 
-	sess, err := sessionStore.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, p.ID)
+	sess, err := sessionStore.Sessions.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, p.ID)
 	testutil.FailErr(t, "create session", err)
 
 	loaded, _ := m.Profiles.EffectiveSkills(ctx, p.ID, []string{root})
@@ -239,7 +239,7 @@ func TestEffectiveSkillsNoTaint(t *testing.T) {
 	if !found {
 		t.Fatal("expected project skill")
 	}
-	if sessionStore.SessionUntrustedContent(sess.ID) {
+	if sessionStore.Evidence.SessionUntrustedContent(sess.ID) {
 		t.Fatal("loading a project skill must not taint the session")
 	}
 }

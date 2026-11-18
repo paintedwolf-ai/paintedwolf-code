@@ -77,7 +77,7 @@ func registerCatalogToolsOnto(t *testing.T, reg *tools.DefaultRegistry) {
 	}
 	sqlDB := testdbfixture.Open(t, "wf-contract.db")
 	workflowMgr := workflow.NewManager(workflowpersistence.New(sqlDB), storetest.New(t, testdbseed.DefaultProjectID), contractcheck.CatalogRegistry(t), nil)
-	if err := workflowstatetools.RegisterStateTools(reg, workflowstatetools.StateToolDeps{Runs: workflowMgr.Store.Runs, Vars: workflowMgr.Phases.Vars, Journal: workflowMgr.Phases.Journal, Resolver: &workflowMgr.Resolver, Starts: workflowMgr.Starts, Controls: workflowMgr.Controls, Scaffold: workflowMgr.Blueprints.Scaffold, Sessions: storetest.New(t, testdbseed.DefaultProjectID)}); err != nil {
+	if err := workflowstatetools.RegisterStateTools(reg, workflowstatetools.StateToolDeps{Runs: workflowMgr.Store.Runs, Vars: workflowMgr.Phases.Vars, Journal: workflowMgr.Phases.Journal, Resolver: &workflowMgr.Resolver, Starts: workflowMgr.Starts, Controls: workflowMgr.Controls, Scaffold: workflowMgr.Blueprints.Scaffold, Sessions: storetest.New(t, testdbseed.DefaultProjectID).Sessions}); err != nil {
 		contractcheck.FailErr(t, "workflow.RegisterStateTools failed", err)
 	}
 	blueprintMgr := blueprint.NewManager(blueprinttest.NewFileStore(t.TempDir()))
@@ -282,7 +282,7 @@ func ContractServeBootRegistry(t *testing.T) *tools.DefaultRegistry {
 		contractcheck.FailErr(t, "heldtools.Register failed", err)
 	}
 	memStore := storetest.New(t, testdbseed.DefaultProjectID)
-	wireContractProgramServices(t, rt, sqlDB, memStore)
+	wireContractProgramServices(t, rt, sqlDB, memStore.Sessions)
 	if err := native.RegisterRecallTool(rt.Registry, recall.NewService(sqlDB, t.TempDir())); err != nil {
 		contractcheck.FailErr(t, "native.RegisterRecallTool failed", err)
 	}

@@ -19,7 +19,7 @@ func (m *Service) PromptAuthor(ctx context.Context, in promptinput.Input) (strin
 	if in.AuthorPersonID != "" {
 		return in.AuthorPersonID, nil
 	}
-	author, err := people.Acting(ctx, m.store)
+	author, err := people.Acting(ctx, m.people)
 	if err != nil {
 		return "", fmt.Errorf("resolve prompt author: %w", err)
 	}
@@ -55,7 +55,7 @@ func (m *Service) AppendContinuation(ctx context.Context, sessionID string, in p
 		msg = stamped
 	} else if !errors.Is(err, store.ErrDuplicateMessageID) {
 		return api.Message{}, err
-	} else if stored, getErr := m.store.GetMessage(ctx, sessionID, msg.ID); getErr == nil && stored.ID != "" {
+	} else if stored, getErr := m.transcriptStore.GetMessage(ctx, sessionID, msg.ID); getErr == nil && stored.ID != "" {
 		msg = stored
 	}
 	if m.workflows != nil && in.Recovery == nil && api.IsUserInstructionMessage(msg) {

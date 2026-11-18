@@ -328,7 +328,7 @@ func TestBuildImplementSessionStateLedgerOverridesStaleEnvelope(t *testing.T) {
 	ctx := context.Background()
 	dir := t.TempDir()
 	store := storetest.New(t, testdbseed.DefaultProjectID)
-	parent, err := store.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
+	parent, err := store.Sessions.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "Create parent", err)
 
 	q := workertest.NewQueue(t, 4, testdbseed.DefaultProjectID, parent.ID)
@@ -346,7 +346,7 @@ func TestBuildImplementSessionStateLedgerOverridesStaleEnvelope(t *testing.T) {
 	testutil.FailErr(t, "Enqueue merged worker", err)
 
 	staleEnvelope := `<task job_id="job-stale" agent_type="implementer" state="complete" merge_status="pending"><summary>wrote</summary></task>`
-	if err := store.AppendMessages(ctx, parent.ID, api.Message{
+	if err := store.Transcript.AppendMessages(ctx, parent.ID, api.Message{
 		Role:    api.MessageRoleAssistant,
 		Content: staleEnvelope,
 	}); err != nil {

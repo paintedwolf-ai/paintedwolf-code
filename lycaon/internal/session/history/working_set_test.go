@@ -31,7 +31,7 @@ func turnExchange(i int, body string) []api.Message {
 }
 
 // seedTurn appends an older row, the human opener, and exchanges of two rows each.
-func seedTurn(t *testing.T, sqlStore *store.SQL, sessionID string, exchanges int, body string) []api.Message {
+func seedTurn(t *testing.T, sqlStore *store.Repositories, sessionID string, exchanges int, body string) []api.Message {
 	t.Helper()
 	rows := []api.Message{
 		{ID: "before", Role: api.MessageRoleAssistant, Content: "earlier work"},
@@ -40,14 +40,14 @@ func seedTurn(t *testing.T, sqlStore *store.SQL, sessionID string, exchanges int
 	for i := range exchanges {
 		rows = append(rows, turnExchange(i, body)...)
 	}
-	testutil.FailErr(t, "append turn", sqlStore.AppendMessages(t.Context(), sessionID, rows...))
-	canonical, err := sqlStore.GetMessages(t.Context(), sessionID)
+	testutil.FailErr(t, "append turn", sqlStore.Transcript.AppendMessages(t.Context(), sessionID, rows...))
+	canonical, err := sqlStore.Transcript.GetMessages(t.Context(), sessionID)
 	testutil.FailErr(t, "read turn", err)
 	return canonical
 }
 
 // publishCoverage stores a view whose copies of retained rows are distinguishable from canonical rows.
-func publishCoverage(t *testing.T, sqlStore *store.SQL, sessionID string, canonical []api.Message, covered, summarized int64, window int) {
+func publishCoverage(t *testing.T, sqlStore *store.Repositories, sessionID string, canonical []api.Message, covered, summarized int64, window int) {
 	t.Helper()
 	messages := []api.Message{
 		{ID: "checkpoint", Role: api.MessageRoleUser, Origin: api.MessageOriginHost, CompactionCheckpoint: true, Content: "checkpoint"},
@@ -66,7 +66,7 @@ func publishCoverage(t *testing.T, sqlStore *store.SQL, sessionID string, canoni
 			messages = append(messages, row)
 		}
 	}
-	testutil.FailErr(t, "publish coverage", sqlStore.PutCompactionView(t.Context(), sessionID, store.CompactionView{
+	testutil.FailErr(t, "publish coverage", sqlStore.Compaction.PutCompactionView(t.Context(), sessionID, store.CompactionView{
 		Generation: 1, CoveredThroughOrd: last.Ord, CoveredThroughID: last.ID, SourceSeq: canonical[len(canonical)-1].Seq, Messages: messages,
 		Continuation: &messageview.Continuation{Format: messageview.ContinuationFormat, ThroughOrd: summarized, SummaryThroughOrd: summarized,
 			Window: window, Reason: "summarized"},
@@ -109,10 +109,10 @@ func assertPairedExchanges(t *testing.T, rows []api.Message) {
 	}
 }
 
-func newTurnSession(t *testing.T, cfg compaction.CompactionConfig) (*Service, *store.SQL, *api.Session) {
+func newTurnSession(t *testing.T, cfg compaction.CompactionConfig) (*Service, *store.Repositories, *api.Session) {
 	t.Helper()
 	svc, sqlStore := newCompactionManager(t, cfg)
-	sess, err := sqlStore.Create(t.Context(), api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
+	sess, err := sqlStore.Sessions.Create(t.Context(), api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
 	return svc, sqlStore, sess
 }
@@ -152,7 +152,7 @@ func TestShortActiveTurnStaysCanonicalAC_KV_02(t *testing.T) {
 
 func TestLongTurnReplacesOnlyValidatedOlderRangeAC_KV_01(t *testing.T) {
 	cfg := compaction.DefaultCompactionConfig()
-	seeded := func(t *testing.T) (*Service, *store.SQL, *api.Session, []api.Message) {
+	seeded := func(t *testing.T) (*Service, *store.Repositories, *api.Session, []api.Message) {
 		t.Helper()
 		svc, sqlStore, sess := newTurnSession(t, cfg)
 		return svc, sqlStore, sess, seedTurn(t, sqlStore, sess.ID, 160, "recorded observation")
@@ -196,7 +196,7 @@ func TestLongTurnReplacesOnlyValidatedOlderRangeAC_KV_01(t *testing.T) {
 		if opener, summary := indexOfID(projected, "opener"), indexOfID(projected, "summary"); opener < 0 || opener > summary {
 			t.Fatalf("opener %d must precede intra-turn continuation %d", opener, summary)
 		}
-		view, _, err := sqlStore.GetCompactionView(t.Context(), sess.ID)
+		view, _, err := sqlStore.Compaction.GetCompactionView(t.Context(), sess.ID)
 		testutil.FailErr(t, "read view", err)
 		if view.Continuation.ThroughOrd != summarized {
 			t.Fatalf("stored coverage changed to %d", view.Continuation.ThroughOrd)
@@ -247,7 +247,7 @@ func TestCoverageLagKeepsGapOrNamesOmissionAC_KV_05(t *testing.T) {
 		if projected[noticeAt].Content != want.Content {
 			t.Fatalf("notice does not name interval 41-%d", next.Ord-1)
 		}
-		view, _, err := sqlStore.GetCompactionView(t.Context(), sess.ID)
+		view, _, err := sqlStore.Compaction.GetCompactionView(t.Context(), sess.ID)
 		testutil.FailErr(t, "read view", err)
 		if view.CoveredThroughOrd != 40 || view.Continuation.ThroughOrd != 20 {
 			t.Fatalf("omission advanced coverage: %d/%d", view.CoveredThroughOrd, view.Continuation.ThroughOrd)
@@ -273,7 +273,7 @@ func TestCoverageLagKeepsGapOrNamesOmissionAC_KV_05(t *testing.T) {
 		publishCoverage(t, sqlStore, sess.ID, canonical, 40, 20, cfg.ModelContextWindow)
 		edited := canonical[5]
 		edited.Content = "edited observation"
-		_, err := sqlStore.UpdateMessage(t.Context(), sess.ID, edited.ID, edited)
+		_, err := sqlStore.Transcript.UpdateMessage(t.Context(), sess.ID, edited.ID, edited)
 		testutil.FailErr(t, "edit covered row", err)
 		projected := loadProjected(t, svc, sess)
 		if countID(projected, "summary") != 0 || countID(projected, edited.ID) != 1 {
@@ -287,12 +287,12 @@ func TestPublishedSummaryStopsBeforeWorkingSet(t *testing.T) {
 	cfg.ModelContextWindow, cfg.HardCeilingTokens, cfg.TargetTokens = 32768, 27000, 2000
 	svc, sqlStore, sess := newTurnSession(t, cfg)
 	seedTurn(t, sqlStore, sess.ID, 120, strings.Repeat("recorded observation ", 12))
-	originals, err := sqlStore.GetMessages(t.Context(), sess.ID)
+	originals, err := sqlStore.Transcript.GetMessages(t.Context(), sess.ID)
 	testutil.FailErr(t, "read turn", err)
 	start := activeWorkingSetStart(originals, activeTurnAllocation(cfg), 0)
 	_, err = svc.ForceCompact(t.Context(), sess.ID)
 	testutil.FailErr(t, "force compact", err)
-	view, ok, err := sqlStore.GetCompactionView(t.Context(), sess.ID)
+	view, ok, err := sqlStore.Compaction.GetCompactionView(t.Context(), sess.ID)
 	testutil.FailErr(t, "read view", err)
 	if !ok || view.Continuation == nil || view.Continuation.ThroughOrd == 0 {
 		t.Fatal("fixture published no summary")
@@ -391,12 +391,12 @@ func requestFor(sess *api.Session, frame string, rows []api.Message) modelcall.C
 func TestOneLiveConfigBoundsEveryRequestAC_KV_09(t *testing.T) {
 	const providerWindow = 1_048_572
 	feed := &feedWindow{}
-	setup := func(t *testing.T, recall bool) (*Service, *store.SQL, *api.Session) {
+	setup := func(t *testing.T, recall bool) (*Service, *store.Repositories, *api.Session) {
 		t.Helper()
 		svc, sqlStore := newCompactionManager(t, compaction.DefaultCompactionConfig())
 		svc.Limits.SetModelSources(feedPolicy{llm.ModelRef{ProviderID: "fixture", Model: "feed-model"}}, feed)
 		svc.recallAvailable = func(context.Context, *api.Session) bool { return recall }
-		sess, err := sqlStore.Create(t.Context(), api.CreateSessionRequest{ProviderID: "fixture", Model: "feed-model"}, testdbseed.DefaultProjectID)
+		sess, err := sqlStore.Sessions.Create(t.Context(), api.CreateSessionRequest{ProviderID: "fixture", Model: "feed-model"}, testdbseed.DefaultProjectID)
 		testutil.FailErr(t, "create session", err)
 		return svc, sqlStore, sess
 	}
@@ -415,7 +415,7 @@ func TestOneLiveConfigBoundsEveryRequestAC_KV_09(t *testing.T) {
 		feed.window = 65536
 		_, err := svc.ForceCompact(t.Context(), sess.ID)
 		testutil.FailErr(t, "force compact", err)
-		view, ok, err := sqlStore.GetCompactionView(t.Context(), sess.ID)
+		view, ok, err := sqlStore.Compaction.GetCompactionView(t.Context(), sess.ID)
 		testutil.FailErr(t, "read view", err)
 		if !ok || view.Continuation == nil {
 			t.Fatal("fixture published no continuation")
@@ -436,7 +436,7 @@ func TestOneLiveConfigBoundsEveryRequestAC_KV_09(t *testing.T) {
 			seedTurn(t, sqlStore, sess.ID, 300, strings.Repeat("recorded observation ", 150))
 			frame := strings.Repeat("Standing instructions. ", 400)
 			for step := range 4 {
-				testutil.FailErr(t, "append exchange", sqlStore.AppendMessages(t.Context(), sess.ID, turnExchange(1000+step, strings.Repeat("recorded observation ", 150))...))
+				testutil.FailErr(t, "append exchange", sqlStore.Transcript.AppendMessages(t.Context(), sess.ID, turnExchange(1000+step, strings.Repeat("recorded observation ", 150))...))
 				history, err := svc.Load(t.Context(), sess)
 				testutil.FailErr(t, "load", err)
 				fitted, err := svc.FitRequest(t.Context(), sess, history, requestFor(sess, frame, history), feedBudgets{feed}, nil)
@@ -471,7 +471,7 @@ func TestOneLiveConfigBoundsEveryRequestAC_KV_09(t *testing.T) {
 		if len(result.Content) > 2048 || result.ToolResult.ToolCallID != "call-0" {
 			t.Fatalf("result not bounded with its pairing: %d bytes", len(result.Content))
 		}
-		canonical, err := sqlStore.GetMessages(t.Context(), sess.ID)
+		canonical, err := sqlStore.Transcript.GetMessages(t.Context(), sess.ID)
 		testutil.FailErr(t, "read canonical", err)
 		if canonical[len(canonical)-1].Content != huge {
 			t.Fatal("bounded representation changed canonical history")
@@ -608,8 +608,8 @@ func TestDraftRecoveryExchangeKeepsCanonicalBoundaryAndViewSpliceIntact(t *testi
 	draft.Ord = lastOrd + 1
 	recovery.Ord = lastOrd + 2
 	result.Ord = lastOrd + 3
-	testutil.FailErr(t, "append draft-recovery exchange", sqlStore.AppendMessages(t.Context(), sess.ID, draft, recovery, result))
-	all, err := sqlStore.GetMessages(t.Context(), sess.ID)
+	testutil.FailErr(t, "append draft-recovery exchange", sqlStore.Transcript.AppendMessages(t.Context(), sess.ID, draft, recovery, result))
+	all, err := sqlStore.Transcript.GetMessages(t.Context(), sess.ID)
 	testutil.FailErr(t, "read canonical messages", err)
 	publishCoverage(t, sqlStore, sess.ID, all[:len(all)-3], lastOrd, lastOrd, cfg.ModelContextWindow)
 
@@ -690,8 +690,8 @@ func TestApplyViewFiltersSplicedPromptHistoryAcrossBoundary(t *testing.T) {
 		Kind:    api.MessageKindAgentNote,
 		Content: "Checking file.",
 	}
-	testutil.FailErr(t, "append messages", sqlStore.AppendMessages(t.Context(), sess.ID, u1, carrier, result, derived))
-	all, err := sqlStore.GetMessages(t.Context(), sess.ID)
+	testutil.FailErr(t, "append messages", sqlStore.Transcript.AppendMessages(t.Context(), sess.ID, u1, carrier, result, derived))
+	all, err := sqlStore.Transcript.GetMessages(t.Context(), sess.ID)
 	testutil.FailErr(t, "get messages", err)
 	publishCoverage(t, sqlStore, sess.ID, all[:3], all[2].Ord, all[0].Ord, cfg.ModelContextWindow)
 

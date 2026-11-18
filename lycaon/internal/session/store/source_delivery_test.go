@@ -40,7 +40,7 @@ func TestDeliveredSourcePersistsExactWindowAndDoesNotQualifyUnseenBytes(t *testi
 	testdbseed.InsertProjectRoot(t, database, testdbseed.DefaultProjectID, dir)
 	owner := NewSQL(database)
 	owner.SetDataDir(dir)
-	session, err := owner.Create(t.Context(), api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
+	session, err := owner.Sessions.Create(t.Context(), api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create source delivery session", err)
 	captured := []byte("first unseen\nsecond shown\nthird unseen\n")
 	page := []byte("second shown\n")
@@ -49,14 +49,14 @@ func TestDeliveredSourcePersistsExactWindowAndDoesNotQualifyUnseenBytes(t *testi
 	mapping := toolcontract.StreamSourceMapping{Source: pin, SourceStartByte: 13, SourceEndByte: 26, OutputEndByte: 13}
 	observation, err := evidence.ConfirmDeliveredSource("src/fixture.txt", pin, captured, page, mapping, "response:one", "delivery:one")
 	testutil.FailErr(t, "confirm actual page bytes", err)
-	before, err := owner.LoadLedger(t.Context(), session.ID)
+	before, err := owner.Evidence.LoadLedger(t.Context(), session.ID)
 	testutil.FailErr(t, "read ledger before delivery commit", err)
 	if len(before.Handles) != 0 {
 		t.Fatal("capture alone populated observation ledger")
 	}
-	handle, err := owner.CommitDeliveredSource(t.Context(), session.ID, observation)
+	handle, err := owner.Evidence.CommitDeliveredSource(t.Context(), session.ID, observation)
 	testutil.FailErr(t, "commit exact delivered page", err)
-	repeated, err := owner.CommitDeliveredSource(t.Context(), session.ID, observation)
+	repeated, err := owner.Evidence.CommitDeliveredSource(t.Context(), session.ID, observation)
 	testutil.FailErr(t, "repeat acknowledged delivery", err)
 	if repeated != handle {
 		t.Fatal("delivery retry minted duplicate observation")
@@ -65,7 +65,7 @@ func TestDeliveredSourcePersistsExactWindowAndDoesNotQualifyUnseenBytes(t *testi
 	// ranges remain unavailable after the original delivering component disappears.
 	restored := NewSQL(database)
 	restored.SetDataDir(dir)
-	ledger, err := restored.LoadLedger(t.Context(), session.ID)
+	ledger, err := restored.Evidence.LoadLedger(t.Context(), session.ID)
 	testutil.FailErr(t, "restore delivered source ledger", err)
 	record, ok := evidence.ResolveHandle(ledger, handle)
 	if !ok || record.SourceDelivery == nil || record.SourceDelivery.Source != pin {
@@ -87,7 +87,7 @@ func TestDeliveredSourceStampsRootedIdentity(t *testing.T) {
 	rootID := testdbseed.InsertProjectRoot(t, database, testdbseed.DefaultProjectID, dir)
 	owner := NewSQL(database)
 	owner.SetDataDir(dir)
-	session, err := owner.Create(t.Context(), api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
+	session, err := owner.Sessions.Create(t.Context(), api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create rooted delivery session", err)
 	captured := []byte("rooted first\nrooted second\n")
 	sum := sha256.Sum256(captured)
@@ -95,9 +95,9 @@ func TestDeliveredSourceStampsRootedIdentity(t *testing.T) {
 	mapping := toolcontract.StreamSourceMapping{Source: pin, SourceStartByte: 0, SourceEndByte: int64(len(captured)), OutputEndByte: int64(len(captured))}
 	observation, err := evidence.ConfirmDeliveredSource("src/rooted.txt", pin, captured, captured, mapping, "response:rooted", "delivery:rooted")
 	testutil.FailErr(t, "confirm rooted page bytes", err)
-	handle, err := owner.CommitDeliveredSource(t.Context(), session.ID, observation)
+	handle, err := owner.Evidence.CommitDeliveredSource(t.Context(), session.ID, observation)
 	testutil.FailErr(t, "commit rooted delivery", err)
-	ledger, err := owner.LoadLedger(t.Context(), session.ID)
+	ledger, err := owner.Evidence.LoadLedger(t.Context(), session.ID)
 	testutil.FailErr(t, "load rooted delivery ledger", err)
 	record, ok := evidence.ResolveHandle(ledger, handle)
 	if !ok {
@@ -114,9 +114,9 @@ func TestDeliveredSourceStampsRootedIdentity(t *testing.T) {
 	outside := "/paintedwolf-wr09-legacy-scope/notes.txt"
 	legacyObservation, err := evidence.ConfirmDeliveredSource(outside, pin, captured, captured, mapping, "response:legacy", "delivery:legacy")
 	testutil.FailErr(t, "confirm legacy page bytes", err)
-	legacyHandle, err := owner.CommitDeliveredSource(t.Context(), session.ID, legacyObservation)
+	legacyHandle, err := owner.Evidence.CommitDeliveredSource(t.Context(), session.ID, legacyObservation)
 	testutil.FailErr(t, "commit legacy delivery", err)
-	legacyLedger, err := owner.LoadLedger(t.Context(), session.ID)
+	legacyLedger, err := owner.Evidence.LoadLedger(t.Context(), session.ID)
 	testutil.FailErr(t, "load legacy delivery ledger", err)
 	legacy, ok := evidence.ResolveHandle(legacyLedger, legacyHandle)
 	if !ok {
@@ -157,7 +157,7 @@ func (q *deliveryQuota) ReserveBytes(_ context.Context, n int64) error { q.detec
 func (q *deliveryQuota) ReleaseBytes(n int64)                          { q.detector -= n }
 
 type retainedDeliveryFixture struct {
-	owner                                  *SQL
+	owner                                  *Repositories
 	recorder                               *invocation.SQLRecorder
 	outputs                                *invocation.ProgramOutputRetention
 	source                                 []byte
@@ -176,7 +176,7 @@ func newRetainedDeliveryFixture(t *testing.T) retainedDeliveryFixture {
 	rootID := testdbseed.InsertProjectRoot(t, database, testdbseed.DefaultProjectID, dir)
 	owner := NewSQL(database)
 	owner.SetDataDir(dataDir)
-	session, err := owner.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
+	session, err := owner.Sessions.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create actual delivery task", err)
 	testutil.FailErr(t, "create native source fixture", os.WriteFile(filepath.Join(dir, "fixture.txt"), []byte("first unseen\nsecond shown\nthird unseen\n"), 0600))
 	recorder := invocation.NewSQLRecorder(database)
@@ -261,7 +261,7 @@ func newRetainedDeliveryFixture(t *testing.T) retainedDeliveryFixture {
 func TestProgramRetainedNativeSourceOnlyQualifiesActuallyDeliveredExactPages(t *testing.T) {
 	f := newRetainedDeliveryFixture(t)
 	ctx := t.Context()
-	before, err := f.owner.LoadLedger(ctx, f.session)
+	before, err := f.owner.Evidence.LoadLedger(ctx, f.session)
 	testutil.FailErr(t, "inspect before any delivery", err)
 	if len(before.Handles) != 0 {
 		t.Fatal("internal capture/full retained output became model observation")
@@ -285,7 +285,7 @@ func TestProgramRetainedNativeSourceOnlyQualifiesActuallyDeliveredExactPages(t *
 		testutil.FailErr(t, "confirm actual emitted bytes against native capture", err)
 		// The host delivery acknowledgement is explicit. Reading/fetching above has
 		// not committed evidence; the existing source owner does so only here.
-		result, err := f.recorder.CommitProgramSourceDelivery(ctx, invocation.ProgramSourceDelivery{SessionID: f.session, ProgramID: f.program, OutputReference: f.reference, OutputStartByte: start, OutputEndByte: end, Observation: observation}, f.owner, f.quota)
+		result, err := f.recorder.CommitProgramSourceDelivery(ctx, invocation.ProgramSourceDelivery{SessionID: f.session, ProgramID: f.program, OutputReference: f.reference, OutputStartByte: start, OutputEndByte: end, Observation: observation}, f.owner.Evidence, f.quota)
 		testutil.FailErr(t, "commit exact native delivery through current evidence owner", err)
 		if !result.ReceiptRecorded || result.SourceOwnerReference == "" {
 			t.Fatal("delivery lost independent owner/receipt settlement")
@@ -306,20 +306,20 @@ func TestProgramRetainedNativeSourceOnlyQualifiesActuallyDeliveredExactPages(t *
 	if _, err = evidence.ConfirmDeliveredSource("fixture.txt", f.pin, f.source, []byte(transformed[:13]), toolcontract.StreamSourceMapping{Source: f.pin, SourceEndByte: 13, OutputEndByte: 13}, "response:transformed", "delivery:transformed"); err == nil {
 		t.Fatal("transformed source-like output qualified")
 	}
-	failed, err := f.recorder.CommitProgramSourceDelivery(ctx, invocation.ProgramSourceDelivery{SessionID: f.session, ProgramID: f.program, OutputReference: "output:external-printed-path", OutputStartByte: 0, OutputEndByte: 13, Observation: preview}, f.owner, f.quota)
+	failed, err := f.recorder.CommitProgramSourceDelivery(ctx, invocation.ProgramSourceDelivery{SessionID: f.session, ProgramID: f.program, OutputReference: "output:external-printed-path", OutputStartByte: 0, OutputEndByte: 13, Observation: preview}, f.owner.Evidence, f.quota)
 	if err == nil || failed.SourceOwnerReference != "" {
 		t.Fatal("printed external path created native delivery evidence")
 	}
 	// Idempotent acknowledgement records exactly one delivery, and unknown output
 	// receipt errors cannot erase an already committed source owner observation.
-	repeated, err := f.recorder.CommitProgramSourceDelivery(ctx, invocation.ProgramSourceDelivery{SessionID: f.session, ProgramID: f.program, OutputReference: f.reference, OutputStartByte: 13, OutputEndByte: 26, Observation: exactPage}, f.owner, f.quota)
+	repeated, err := f.recorder.CommitProgramSourceDelivery(ctx, invocation.ProgramSourceDelivery{SessionID: f.session, ProgramID: f.program, OutputReference: f.reference, OutputStartByte: 13, OutputEndByte: 26, Observation: exactPage}, f.owner.Evidence, f.quota)
 	testutil.FailErr(t, "repeat same exact acknowledged delivery", err)
 	if repeated.SourceOwnerReference != shown {
 		t.Fatal("delivery retry manufactured another observation")
 	}
-	restored := NewSQL(f.owner.db)
-	restored.SetDataDir(f.owner.dataDir)
-	ledger, err := restored.LoadLedger(ctx, f.session)
+	restored := NewSQL(f.owner.core.db)
+	restored.SetDataDir(f.owner.core.dataDir)
+	ledger, err := restored.Evidence.LoadLedger(ctx, f.session)
 	testutil.FailErr(t, "recover qualified source pages from actual owner", err)
 	record, ok := evidence.ResolveHandle(ledger, shown)
 	if !ok {
@@ -333,10 +333,10 @@ func TestProgramRetainedNativeSourceOnlyQualifiesActuallyDeliveredExactPages(t *
 			t.Fatalf("unseen range %d qualified from retained full body", line)
 		}
 	}
-	_, err = f.owner.db.ExecContext(ctx, `DELETE FROM invocation_programs WHERE id=?`, f.program)
+	_, err = f.owner.core.db.ExecContext(ctx, `DELETE FROM invocation_programs WHERE id=?`, f.program)
 	testutil.FailErr(t, "release compacted invocation detail references", err)
 	testutil.FailErr(t, "collect full output while evidence owner keeps only delivered page", f.outputs.Close(ctx))
-	after, err := restored.LoadLedger(ctx, f.session)
+	after, err := restored.Evidence.LoadLedger(ctx, f.session)
 	testutil.FailErr(t, "retain exact observation through output collection", err)
 	if _, ok = evidence.ResolveHandle(after, shown); !ok {
 		t.Fatal("receipt/output collection erased independent delivered evidence")

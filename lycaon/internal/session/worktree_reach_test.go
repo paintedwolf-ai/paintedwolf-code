@@ -54,7 +54,7 @@ func initReachRepo(t *testing.T) string {
 
 type reachFixture struct {
 	mgr          *Host
-	sessionStore *store.SQL
+	sessionStore *store.Repositories
 	reg          *project.SQLRegistry
 	project      *project.Project
 	sess         *api.Session
@@ -76,7 +76,7 @@ func newReachFixture(t *testing.T, rootPath string) *reachFixture {
 	mgr.SetProjectRegistry(reg)
 	// Command programs publish output beneath the host's per-session folders.
 	mgr.SetScratchFolders(scratch.New(t.TempDir()))
-	sess, err := sessionStore.Create(t.Context(), api.CreateSessionRequest{
+	sess, err := sessionStore.Sessions.Create(t.Context(), api.CreateSessionRequest{
 		Posture:   api.SessionPostureBuild,
 		ProjectID: p.ID,
 	}, p.ID)
@@ -102,7 +102,7 @@ func (f *reachFixture) bind(t *testing.T) {
 	branch := "session/" + f.sess.ID
 	testutil.FailErr(t, "AddWorktree", f.gm.AddWorktree(t.Context(), f.repoDir, wt, branch, base))
 	f.wtPath = wt
-	testutil.FailErr(t, "PutWorktreeBinding", f.sessionStore.PutWorktreeBinding(t.Context(), store.WorktreeBinding{
+	testutil.FailErr(t, "PutWorktreeBinding", f.sessionStore.Sessions.PutWorktreeBinding(t.Context(), store.WorktreeBinding{
 		SessionID:    f.sess.ID,
 		ProjectID:    f.project.ID,
 		RepoID:       "r-test",
@@ -294,7 +294,7 @@ func TestWorktreeReach_rootBelowToplevel(t *testing.T) {
 	p, err := project.CreateWithRoot(t.Context(), reg, web)
 	testutil.FailErr(t, "CreateWithRoot", err)
 	mgr.SetProjectRegistry(reg)
-	sess, err := sessionStore.Create(t.Context(), api.CreateSessionRequest{
+	sess, err := sessionStore.Sessions.Create(t.Context(), api.CreateSessionRequest{
 		Posture: api.SessionPostureBuild, ProjectID: p.ID,
 	}, p.ID)
 	testutil.FailErr(t, "create", err)
@@ -304,7 +304,7 @@ func TestWorktreeReach_rootBelowToplevel(t *testing.T) {
 	testutil.FailErr(t, "branch", err)
 	wt := filepath.Join(t.TempDir(), "wt")
 	testutil.FailErr(t, "AddWorktree", gm.AddWorktree(t.Context(), top, wt, "session/"+sess.ID, base))
-	testutil.FailErr(t, "bind", sessionStore.PutWorktreeBinding(t.Context(), store.WorktreeBinding{
+	testutil.FailErr(t, "bind", sessionStore.Sessions.PutWorktreeBinding(t.Context(), store.WorktreeBinding{
 		SessionID: sess.ID, ProjectID: p.ID, RepoID: "r",
 		Toplevel: top, WorktreePath: wt, Branch: "session/" + sess.ID, BaseBranch: base,
 	}))
@@ -328,7 +328,7 @@ func TestWorktreeReach_workerInheritance(t *testing.T) {
 	if !sameReachPath(tctx.Source.Roots[0].Path, f.wtPath) {
 		t.Fatalf("substituted root = %q want %q", tctx.Source.Roots[0].Path, f.wtPath)
 	}
-	child, err := f.sessionStore.CreateChild(t.Context(), f.sess, api.SpawnChildRequest{AgentType: "implementer", Prompt: "edit"})
+	child, err := f.sessionStore.Sessions.CreateChild(t.Context(), f.sess, api.SpawnChildRequest{AgentType: "implementer", Prompt: "edit"})
 	testutil.FailErr(t, "CreateChild", err)
 	childCtx, err := f.mgr.ToolContext.Build(t.Context(), child, "", inject.Machine{})
 	testutil.FailErr(t, "build child ToolContext", err)
@@ -369,7 +369,7 @@ func TestWorktreeReach_staleRefusesTurn(t *testing.T) {
 }
 
 type getFailStore struct {
-	Store
+	store.SessionRepository
 	failGet bool
 }
 
@@ -377,7 +377,7 @@ func (s *getFailStore) GetWorktreeBinding(ctx context.Context, sessionID string)
 	if s.failGet {
 		return nil, false, errors.New("injected get failure")
 	}
-	return s.Store.GetWorktreeBinding(ctx, sessionID)
+	return s.SessionRepository.GetWorktreeBinding(ctx, sessionID)
 }
 
 func TestWorktreeReach_getFailureRefuses(t *testing.T) {
@@ -385,14 +385,15 @@ func TestWorktreeReach_getFailureRefuses(t *testing.T) {
 
 	repoDir := initReachRepo(t)
 	sessionStore := sessionFixture
-	failing := &getFailStore{Store: sessionStore, failGet: true}
+	failing := &getFailStore{SessionRepository: sessionStore.Sessions, failGet: true}
+	sessionStore.Sessions = failing
 	mock := llm.NewMockProvider(&llm.MockConfig{Responses: []llm.MockResponseEntry{{Pattern: ".", Text: "ok"}}})
-	mgr := NewHost(failing, Models{Client: mock, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, toolstest.NewRegistry())
+	mgr := NewHost(sessionStore, Models{Client: mock, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, toolstest.NewRegistry())
 	reg := project.NewSQLRegistry(sessionFixture.DB())
 	p, err := project.CreateWithRoot(t.Context(), reg, repoDir)
 	testutil.FailErr(t, "CreateWithRoot", err)
 	mgr.SetProjectRegistry(reg)
-	sess, err := sessionStore.Create(t.Context(), api.CreateSessionRequest{
+	sess, err := sessionStore.Sessions.Create(t.Context(), api.CreateSessionRequest{
 		Posture:   api.SessionPostureBuild,
 		ProjectID: p.ID,
 	}, p.ID)

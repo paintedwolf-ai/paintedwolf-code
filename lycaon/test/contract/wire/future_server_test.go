@@ -168,7 +168,7 @@ func newRealServerWithSession(t *testing.T, root string) (*api.Server, string) {
 		defer cancel()
 		srv.WaitForBackground(ctx)
 	})
-	sess, err := store.Create(context.Background(), wire.CreateSessionRequest{
+	sess, err := store.Sessions.Create(context.Background(), wire.CreateSessionRequest{
 		Posture: wire.SessionPostureBuild,
 	}, testdbseed.DefaultProjectID)
 	if err != nil {

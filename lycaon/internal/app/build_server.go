@@ -3,7 +3,6 @@ package app
 import (
 	"context"
 	"fmt"
-	"github.com/lycaon/lycaon/internal/workerops"
 	"os"
 	"time"
 
@@ -42,6 +41,7 @@ import (
 	"github.com/lycaon/lycaon/internal/viewstate"
 	"github.com/lycaon/lycaon/internal/worker"
 	"github.com/lycaon/lycaon/internal/workernotice"
+	"github.com/lycaon/lycaon/internal/workerops"
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -107,7 +107,7 @@ func (b *serveBuilder) wireServer() error {
 		deps.Approvals.Authority.ApprovalDecisions = b.security.Authority.Store
 	}
 	b.server.ProjectLiveness = projectliveness.New(projectliveness.Config{
-		Sessions: b.storage.Sessions,
+		Sessions: b.storage.Sessions.Sessions,
 		Handler: appProjectLifecycleHandler{
 			activate: func(ctx context.Context, projectID string) error {
 				if b.server.Server != nil {
@@ -151,10 +151,10 @@ func (b *serveBuilder) wireServer() error {
 	deps.External.HistoryStorage = b.server.HistoryStorage
 	// HTTP and SSE share one attention source.
 	deps.Host.Attention = &attention.Source{
-		Sessions:    b.storage.Sessions,
+		Sessions:    b.storage.Sessions.Sessions,
 		Checkpoints: b.sessions.Checkpoints,
 		Asks:        b.workflows.Manager.Asks,
-		Finishes:    b.storage.Sessions,
+		Finishes:    b.storage.Sessions.Sessions,
 		Projects:    attention.RegistryNamer{Registry: b.storage.Projects},
 	}
 	b.events.Publisher.Attention = deps.Host.Attention

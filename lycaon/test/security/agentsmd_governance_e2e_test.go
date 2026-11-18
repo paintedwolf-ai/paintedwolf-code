@@ -76,7 +76,7 @@ func runAgentsMDWriteApproval(t *testing.T, call llm.MockToolCall, kind wire.Che
 		}
 		select {
 		case err := <-done:
-			messages, readErr := h.Store.GetMessages(ctx, sess.ID)
+			messages, readErr := h.Store.Transcript.GetMessages(ctx, sess.ID)
 			testutil.FailErr(t, "read completed session", readErr)
 			t.Fatalf("session completed before approval: %v\n%s", err, flattenMessages(messages))
 		default:

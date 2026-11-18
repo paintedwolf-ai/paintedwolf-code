@@ -90,7 +90,7 @@ func TestSessionNamerUsesPlaneWhenServiceWired(t *testing.T) {
 		Policy:   policy,
 		Utility:  llm.NewUtilityPlane(),
 	}
-	mgr := New(nil, nil, svc, nil)
+	mgr := New(nil, nil, nil, nil, svc, nil)
 
 	namer := mgr.namer(nil, "session_title", "/tmp/proj")
 	if _, ok := namer.(llm.PlaneNamer); !ok {
@@ -99,7 +99,7 @@ func TestSessionNamerUsesPlaneWhenServiceWired(t *testing.T) {
 }
 
 func TestSessionNamerDoesNotBypassTheRoutedUtilityPlane(t *testing.T) {
-	mgr := New(nil, nil, nil, nil)
+	mgr := New(nil, nil, nil, nil, nil, nil)
 	if namer := mgr.namer(nil, "session_title", "/tmp/proj"); namer != nil {
 		t.Fatalf("namer type = %T want nil without routed utility service", namer)
 	}

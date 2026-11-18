@@ -56,31 +56,26 @@ type sqlCore struct {
 }
 
 type sqlSessions struct{ core *sqlCore }
-type sqlSessionViews struct{ core *sqlCore }
 type sqlTranscript struct{ core *sqlCore }
 type sqlCompaction struct{ core *sqlCore }
 type sqlTurns struct{ core *sqlCore }
-type sqlTurnTelemetry struct{ core *sqlCore }
 type sqlSubmissions struct{ core *sqlCore }
 type sqlAttachmentBlobs struct{ core *sqlCore }
 type sqlEvidence struct{ core *sqlCore }
-type sqlScreenGeneration struct{ core *sqlCore }
 type sqlRewind struct{ core *sqlCore }
 
-// SQL persists sessions and messages.
-type SQL struct {
-	*sqlCore
-	sqlSessions
-	sqlSessionViews
-	sqlTranscript
-	sqlCompaction
-	sqlTurns
-	sqlTurnTelemetry
-	sqlSubmissions
-	sqlAttachmentBlobs
-	sqlEvidence
-	sqlScreenGeneration
-	sqlRewind
+// Repositories shares database transactions and session mutation serialization.
+type Repositories struct {
+	core        *sqlCore
+	People      *peoplestore.Store
+	Sessions    SessionRepository
+	Transcript  TranscriptRepository
+	Compaction  CompactionRepository
+	Turns       TurnRepository
+	Submissions SubmissionRepository
+	Attachments AttachmentRepository
+	Evidence    EvidenceRepository
+	Rewind      RewindRepository
 }
 
 func (s *sqlCore) lockMutation(id string) func() {
@@ -94,64 +89,66 @@ func (s *sqlCore) lockMutation(id string) func() {
 }
 
 // SetEventOutbox makes transcript mutations publish from their transaction.
-func (s *SQL) SetEventOutbox(outbox *eventoutbox.Outbox) {
-	s.outbox = outbox
+func (s *Repositories) SetEventOutbox(outbox *eventoutbox.Outbox) {
+	s.core.outbox = outbox
 }
 
 // SetArtifactRecords lets evidence commits stamp handles onto artifact rows.
-func (s *SQL) SetArtifactRecords(records *visual.Records) {
-	s.artifacts = records
+func (s *Repositories) SetArtifactRecords(records *visual.Records) {
+	s.core.artifacts = records
 }
 
 // SetSessionRevisions sets the shared session-event revision source.
-func (s *SQL) SetSessionRevisions(src SessionRevisionSource) {
-	s.sessionRevisions = src
+func (s *Repositories) SetSessionRevisions(src SessionRevisionSource) {
+	s.core.sessionRevisions = src
 }
 
 // SetPromptPending sets the source of prompt_pending on outbox session events.
-func (s *SQL) SetPromptPending(src PromptPendingSource) {
-	s.promptPending = src
+func (s *Repositories) SetPromptPending(src PromptPendingSource) {
+	s.core.promptPending = src
 }
 
 // SetDataDir sets the device root for spill reclamation.
-func (s *SQL) SetDataDir(dir string) {
-	if s != nil && s.sqlCore != nil {
-		s.dataDir = strings.TrimSpace(dir)
+func (s *Repositories) SetDataDir(dir string) {
+	if s != nil && s.core != nil {
+		s.core.dataDir = strings.TrimSpace(dir)
 	}
 }
 
-// MutationEventsOutboxed reports whether the store publishes message events.
-func (s *SQL) MutationEventsOutboxed() bool {
-	return s != nil && s.sqlCore != nil && s.outbox != nil
+// SessionEventsOutboxed reports atomic lifecycle observer publication.
+func (s *sqlSessions) SessionEventsOutboxed() bool {
+	return s != nil && s.core != nil && s.core.outbox != nil
 }
 
-// NewSQL creates a store backed by the given database.
-func NewSQL(database db.ReadHandle) *SQL {
+// MessageEventsOutboxed reports atomic transcript observer publication.
+func (s *sqlTranscript) MessageEventsOutboxed() bool {
+	return s != nil && s.core != nil && s.core.outbox != nil
+}
+
+// NewSQL constructs repositories over one durable transaction domain.
+func NewSQL(database db.ReadHandle) *Repositories {
 	core := &sqlCore{
 		db:          database,
 		queries:     db.New(database),
 		peopleStore: peoplestore.New(database),
 	}
-	return &SQL{
-		sqlCore:             core,
-		sqlSessions:         sqlSessions{core: core},
-		sqlSessionViews:     sqlSessionViews{core: core},
-		sqlTranscript:       sqlTranscript{core: core},
-		sqlCompaction:       sqlCompaction{core: core},
-		sqlTurns:            sqlTurns{core: core},
-		sqlTurnTelemetry:    sqlTurnTelemetry{core: core},
-		sqlSubmissions:      sqlSubmissions{core: core},
-		sqlAttachmentBlobs:  sqlAttachmentBlobs{core: core},
-		sqlEvidence:         sqlEvidence{core: core},
-		sqlScreenGeneration: sqlScreenGeneration{core: core},
-		sqlRewind:           sqlRewind{core: core},
+	return &Repositories{
+		core: core, People: core.peopleStore,
+		Sessions:    &sqlSessions{core: core},
+		Transcript:  &sqlTranscript{core: core},
+		Compaction:  &sqlCompaction{core: core},
+		Turns:       &sqlTurns{core: core},
+		Submissions: &sqlSubmissions{core: core},
+		Attachments: &sqlAttachmentBlobs{core: core},
+		Evidence:    &sqlEvidence{core: core},
+		Rewind:      &sqlRewind{core: core},
 	}
 }
 
-// DB exposes the store handle for read-side projections.
-func (s *SQL) DB() db.Handle {
-	if s == nil || s.sqlCore == nil {
+// DB exposes the database for shared read-side projections.
+func (s *Repositories) DB() db.Handle {
+	if s == nil || s.core == nil {
 		return nil
 	}
-	return s.db
+	return s.core.db
 }

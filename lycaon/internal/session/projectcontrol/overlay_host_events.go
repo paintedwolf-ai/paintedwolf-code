@@ -22,7 +22,7 @@ func (m *Service) SetOverlayPromoter(p OverlayPromoter) {
 
 // PromoteOverlay merges one overlay and records the landing.
 func (m *Service) PromoteOverlay(ctx context.Context, sessionID, overlayID string, in api.PromoteOverlayInput) (api.WorkerMergeResult, error) {
-	if m == nil || m.overlayPromoter == nil || m.store == nil {
+	if m == nil || m.overlayPromoter == nil || (m.sessionStore == nil || m.transcriptStore == nil) {
 		return api.WorkerMergeResult{}, nil
 	}
 	sessionID = strings.TrimSpace(sessionID)
@@ -32,7 +32,7 @@ func (m *Service) PromoteOverlay(ctx context.Context, sessionID, overlayID strin
 	}
 	// Attribute host-initiated promotions to the active user turn.
 	if in.UserTurn == 0 {
-		if turnSource, err := m.store.ReadSourceTurn(ctx, sessionID, 0); err == nil {
+		if turnSource, err := m.transcriptStore.ReadSourceTurn(ctx, sessionID, 0); err == nil {
 			in.UserTurn = turnSource.Number
 		}
 	}
@@ -55,7 +55,7 @@ func (m *Service) PromoteOverlay(ctx context.Context, sessionID, overlayID strin
 
 // RejectOverlay closes an overlay and records affected children.
 func (m *Service) RejectOverlay(ctx context.Context, sessionID, overlayID, reason string) (api.OverlayRejectOutcome, error) {
-	if m == nil || m.overlayPromoter == nil || m.store == nil {
+	if m == nil || m.overlayPromoter == nil || (m.sessionStore == nil || m.transcriptStore == nil) {
 		return api.OverlayRejectOutcome{}, nil
 	}
 	sessionID = strings.TrimSpace(sessionID)

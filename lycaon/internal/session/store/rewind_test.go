@@ -11,31 +11,18 @@ import (
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
-type rewindTestStore interface {
-	Create(context.Context, api.CreateSessionRequest, string) (*api.Session, error)
-	AppendMessages(context.Context, string, ...api.Message) error
-	PrepareRewind(context.Context, RewindOperation) error
-	SetRewindPhase(context.Context, string, string, string) error
-	CommitRewind(context.Context, string, string, string, api.RewindSessionResponse) (int, error)
-	GetRewindOperation(context.Context, string) (*RewindOperation, error)
-	RewindOperationsForRecovery(context.Context) ([]RewindOperation, error)
-	RewindOperationsForRecoverySession(context.Context, string) ([]RewindOperation, error)
-	CommittedRewindOperationsForSweep(context.Context) ([]RewindOperationSweepItem, error)
-	DeleteRewindOperation(context.Context, string, time.Time) error
-}
-
 // commitFixtureRewind follows the transaction phases with inert filesystem paths.
-func commitFixtureRewind(t *testing.T, ctx context.Context, st rewindTestStore, sessionID, anchorID string) string {
+func commitFixtureRewind(t *testing.T, ctx context.Context, st *Repositories, sessionID, anchorID string) string {
 	t.Helper()
 	opID := uuid.NewString()
-	testutil.FailErr(t, "prepare rewind", st.PrepareRewind(ctx, RewindOperation{
+	testutil.FailErr(t, "prepare rewind", st.Rewind.PrepareRewind(ctx, RewindOperation{
 		ID: opID, SessionID: sessionID, AnchorMessageID: anchorID,
 		InputDigest: "digest", ProjectDir: "/project",
 		CheckpointAnchorIDs: []string{anchorID},
 	}))
-	testutil.FailErr(t, "phase applying", st.SetRewindPhase(ctx, opID, "applying", ""))
-	testutil.FailErr(t, "phase files_applied", st.SetRewindPhase(ctx, opID, "files_applied", ""))
-	_, err := st.CommitRewind(ctx, opID, sessionID, anchorID, api.RewindSessionResponse{})
+	testutil.FailErr(t, "phase applying", st.Rewind.SetRewindPhase(ctx, opID, "applying", ""))
+	testutil.FailErr(t, "phase files_applied", st.Rewind.SetRewindPhase(ctx, opID, "files_applied", ""))
+	_, err := st.Rewind.CommitRewind(ctx, opID, sessionID, anchorID, api.RewindSessionResponse{})
 	testutil.FailErr(t, "commit rewind", err)
 	return opID
 }
@@ -44,34 +31,34 @@ func commitFixtureRewind(t *testing.T, ctx context.Context, st rewindTestStore, 
 func TestCommittedRewindSweepAndRetentionParity(t *testing.T) {
 	for _, fixture := range []struct {
 		name string
-		open func(t *testing.T) rewindTestStore
+		open func(t *testing.T) *Repositories
 	}{
-		{name: "sql", open: func(t *testing.T) rewindTestStore { return openTurnSQLStore(t).(*SQL) }},
+		{name: "sql", open: func(t *testing.T) *Repositories { return openTurnSQLStore(t) }},
 	} {
 		t.Run(fixture.name, func(t *testing.T) {
 			ctx := t.Context()
 			st := fixture.open(t)
-			sess, err := st.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
+			sess, err := st.Sessions.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 			testutil.FailErr(t, "create session", err)
 			anchor := api.Message{
 				ID: "anchor-1", Role: api.MessageRoleUser, Content: "hi",
 				Origin: api.MessageOriginUser, Authority: api.ContentAuthorityUser,
 				TrustTier: api.ContentTrustTierTrusted,
 			}
-			testutil.FailErr(t, "append anchor", st.AppendMessages(ctx, sess.ID, anchor))
+			testutil.FailErr(t, "append anchor", st.Transcript.AppendMessages(ctx, sess.ID, anchor))
 
 			opID := commitFixtureRewind(t, ctx, st, sess.ID, anchor.ID)
 
 			// Committed operations stay out of the recovery listing: boot re-stats
 			// every journal path in it, so it tracks in-flight rewinds, not history.
-			hot, err := st.RewindOperationsForRecovery(ctx)
+			hot, err := st.Rewind.RewindOperationsForRecovery(ctx)
 			testutil.FailErr(t, "recovery listing", err)
 			for _, op := range hot {
 				if op.ID == opID {
 					t.Fatalf("committed operation %s appeared in the hot recovery listing", opID)
 				}
 			}
-			hotForSession, err := st.RewindOperationsForRecoverySession(ctx, sess.ID)
+			hotForSession, err := st.Rewind.RewindOperationsForRecoverySession(ctx, sess.ID)
 			testutil.FailErr(t, "recovery listing for session", err)
 			for _, op := range hotForSession {
 				if op.ID == opID {
@@ -79,7 +66,7 @@ func TestCommittedRewindSweepAndRetentionParity(t *testing.T) {
 				}
 			}
 
-			swept, err := st.CommittedRewindOperationsForSweep(ctx)
+			swept, err := st.Rewind.CommittedRewindOperationsForSweep(ctx)
 			testutil.FailErr(t, "sweep listing", err)
 			var found *RewindOperationSweepItem
 			for i := range swept {
@@ -96,8 +83,8 @@ func TestCommittedRewindSweepAndRetentionParity(t *testing.T) {
 
 			// Not yet past retention: the row survives so an operation-id retry
 			// within the window can still replay its cached receipt.
-			testutil.FailErr(t, "delete before cutoff", st.DeleteRewindOperation(ctx, opID, found.CreatedAt))
-			stillThere, err := st.GetRewindOperation(ctx, opID)
+			testutil.FailErr(t, "delete before cutoff", st.Rewind.DeleteRewindOperation(ctx, opID, found.CreatedAt))
+			stillThere, err := st.Rewind.GetRewindOperation(ctx, opID)
 			testutil.FailErr(t, "get after no-op delete", err)
 			if stillThere == nil || stillThere.Status != "committed" {
 				t.Fatalf("operation = %+v, want to survive a delete call at its own created_at", stillThere)
@@ -105,8 +92,8 @@ func TestCommittedRewindSweepAndRetentionParity(t *testing.T) {
 
 			// Past retention: the caller-supplied cutoff, not any fixed
 			// duration, decides when the row ages out.
-			testutil.FailErr(t, "delete past cutoff", st.DeleteRewindOperation(ctx, opID, found.CreatedAt.Add(time.Second)))
-			gone, err := st.GetRewindOperation(ctx, opID)
+			testutil.FailErr(t, "delete past cutoff", st.Rewind.DeleteRewindOperation(ctx, opID, found.CreatedAt.Add(time.Second)))
+			gone, err := st.Rewind.GetRewindOperation(ctx, opID)
 			testutil.FailErr(t, "get after delete", err)
 			if gone != nil {
 				t.Fatalf("operation = %+v, want deleted past retention", gone)

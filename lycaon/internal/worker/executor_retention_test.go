@@ -62,11 +62,11 @@ func TestExecuteRetainsChildSessionForDenTranscript(t *testing.T) {
 	var childID string
 	runner := &fakePromptRunner{
 		spawnChild: func(ctx context.Context, parentID string, req api.SpawnChildRequest) (*api.Session, error) {
-			parent, err := store.Get(ctx, parentID)
+			parent, err := store.Sessions.Get(ctx, parentID)
 			if err != nil {
 				return nil, err
 			}
-			child, err := store.CreateChild(ctx, parent, req)
+			child, err := store.Sessions.CreateChild(ctx, parent, req)
 			if err != nil {
 				return nil, err
 			}
@@ -78,7 +78,7 @@ func TestExecuteRetainsChildSessionForDenTranscript(t *testing.T) {
 	exec := NewLocalWorkerExecutor(runner, binder, runner, runner, runner, runner, runner, runner)
 	exec.SetPromptInjects(promptstest.InjectRenderer(t))
 
-	parent, err := store.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
+	parent, err := store.Sessions.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session in store", err)
 
 	queue := NewSQLServices(store.DB(), 1).Queue
@@ -101,7 +101,7 @@ func TestExecuteRetainsChildSessionForDenTranscript(t *testing.T) {
 	if binder.jobID != jobID || binder.childID != childID {
 		t.Fatalf("child binding = %q/%q", binder.jobID, binder.childID)
 	}
-	if _, err := store.Get(ctx, childID); err != nil {
+	if _, err := store.Sessions.Get(ctx, childID); err != nil {
 		t.Fatalf("child session removed after worker completion: %v", err)
 	}
 }

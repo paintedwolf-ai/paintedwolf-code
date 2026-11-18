@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/lycaon/lycaon/internal/tools/toolstest"
 	"slices"
 	"strings"
 	"testing"
@@ -18,6 +17,7 @@ import (
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/tools"
+	"github.com/lycaon/lycaon/internal/tools/toolstest"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -41,7 +41,7 @@ func (c *repeatedProseClient) Stream(ctx context.Context, req modelcall.Completi
 
 func TestRepeatedProseRejectionEndsWithBoundedHandoff(t *testing.T) {
 	messages := storetest.New(t, testdbseed.DefaultProjectID)
-	sess, err := messages.Create(t.Context(), api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
+	sess, err := messages.Sessions.Create(t.Context(), api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
 	client := &repeatedProseClient{}
 	deps := promptloop.StoreDeps(messages)
@@ -77,7 +77,7 @@ func TestGatedCloseoutGetsOneActingRepairRound(t *testing.T) {
 		for _, repaired := range []bool{false, true} {
 			t.Run(fmt.Sprintf("barrier=%t/repaired=%t", barrier, repaired), func(t *testing.T) {
 				messages := storetest.New(t, testdbseed.DefaultProjectID)
-				sess, err := messages.Create(t.Context(), api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
+				sess, err := messages.Sessions.Create(t.Context(), api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 				testutil.FailErr(t, "create session", err)
 				gateOpen := true
 				registry := toolstest.NewRegistry()
@@ -149,7 +149,7 @@ func TestGatedCloseoutGetsOneActingRepairRound(t *testing.T) {
 						!strings.Contains(result.CloseoutBlocked.Notice, "Workflow phase implement is waiting on open gate(s): test, build (WORKFLOW_GATES_OPEN_BEFORE_CLOSEOUT)") {
 						t.Fatalf("closeout_blocked=%+v", result.CloseoutBlocked)
 					}
-					stored, err := messages.GetMessages(t.Context(), sess.ID)
+					stored, err := messages.Transcript.GetMessages(t.Context(), sess.ID)
 					testutil.FailErr(t, "read transcript messages", err)
 					var foundNotice bool
 					for _, msg := range stored {
@@ -173,7 +173,7 @@ func TestGatedCloseoutPathsSettleAsCloseoutBlocked(t *testing.T) {
 	for _, path := range []string{"normal", "prose_finish", "completion_barrier"} {
 		t.Run(path, func(t *testing.T) {
 			messages := storetest.New(t, testdbseed.DefaultProjectID)
-			sess, err := messages.Create(t.Context(), api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
+			sess, err := messages.Sessions.Create(t.Context(), api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 			testutil.FailErr(t, "create session", err)
 			registry := toolstest.NewRegistry()
 			testutil.FailErr(t, "register read", registry.Register("read", func(context.Context, map[string]any, tools.ToolContext) (string, error) {

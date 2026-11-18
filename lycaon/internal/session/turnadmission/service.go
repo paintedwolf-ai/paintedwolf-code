@@ -12,8 +12,11 @@ import (
 )
 
 type Sessions interface {
-	Get(context.Context, string) (*api.Session, error)
-	ListQueuedUserPromptSubmissions(context.Context, string) ([]store.PromptSubmission, error)
+	Get(ctx context.Context, id string) (*api.Session, error)
+}
+
+type SubmissionsStore interface {
+	ListQueuedUserPromptSubmissions(ctx context.Context, sessionID string) ([]store.PromptSubmission, error)
 }
 type Workspace interface {
 	CheckReady(context.Context, string) error
@@ -36,22 +39,23 @@ type Cycles interface {
 	WorkerCycleIsIdle(context.Context, string) bool
 }
 type Service struct {
-	Gate           *lifecycle.State
-	Workspace      Workspace
-	Runner         Runner
-	Turns          Turns
-	Settlement     Settlement
-	Submissions    Submissions
-	store          Sessions
-	queue          *queue.Store
-	nudges         Nudges
-	cycles         Cycles
-	promotionHook  promotionHook
-	roundEndDrains roundEndDrains
+	Gate            *lifecycle.State
+	Workspace       Workspace
+	Runner          Runner
+	Turns           Turns
+	Settlement      Settlement
+	Submissions     Submissions
+	sessionStore    Sessions
+	submissionStore SubmissionsStore
+	queue           *queue.Store
+	nudges          Nudges
+	cycles          Cycles
+	promotionHook   promotionHook
+	roundEndDrains  roundEndDrains
 }
 
-func New(sessions Sessions, gate *lifecycle.State, workspace Workspace, turns Turns, pending *queue.Store) *Service {
-	return &Service{store: sessions, Gate: gate, Workspace: workspace, Turns: turns, queue: pending}
+func New(sessionStore Sessions, submissionStore SubmissionsStore, gate *lifecycle.State, workspace Workspace, turns Turns, pending *queue.Store) *Service {
+	return &Service{sessionStore: sessionStore, submissionStore: submissionStore, Gate: gate, Workspace: workspace, Turns: turns, queue: pending}
 }
 func (s *Service) Bind(runner Runner, settlement Settlement, submissions Submissions) {
 	s.Runner = runner

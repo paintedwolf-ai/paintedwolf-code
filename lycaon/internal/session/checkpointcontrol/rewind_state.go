@@ -2,9 +2,10 @@ package checkpointcontrol
 
 import (
 	"context"
+	"strings"
+
 	sessiontree "github.com/lycaon/lycaon/internal/session/tree"
 	"github.com/lycaon/lycaon/pkg/api"
-	"strings"
 )
 
 // rollbackEphemeralState reconciles domain state with the truncated timeline.
@@ -13,7 +14,7 @@ func (m *Rewinds) rollbackEphemeralState(ctx context.Context, sess *api.Session)
 		return
 	}
 	sessionID := strings.TrimSpace(sess.ID)
-	rootID := sessiontree.RootID(ctx, m.store, sessionID)
+	rootID := sessiontree.RootID(ctx, m.sessionStore, sessionID)
 	m.captures.Capture.Reset(rootID)
 	m.runtime.ResetWorkers(ctx, sess, rootID)
 	m.runtime.ResetCoordinator(ctx, sessionID)

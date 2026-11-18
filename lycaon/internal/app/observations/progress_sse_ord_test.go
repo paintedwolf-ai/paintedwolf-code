@@ -46,13 +46,13 @@ func TestProgressUpdateSSECarriesMintedOrd(t *testing.T) {
 
 	hub := events.NewMemoryHub()
 	pub := &events.Publisher{Hub: hub}
-	sess, err := store.Get(context.Background(), sessionID)
+	sess, err := store.Sessions.Get(context.Background(), sessionID)
 	testutil.FailErr(t, "store.Get", err)
 	ch, unsub, err := hub.Subscribe(context.Background(), events.Subscription{Project: sess.ProjectID, Viewer: testutil.HostOwner()})
 	testutil.FailErr(t, "hub.Subscribe", err)
 	t.Cleanup(unsub)
 
-	flush := newProgressChangeEmitter(store, pub, fixedActiveRun(runID), prog)
+	flush := newProgressChangeEmitter(store.Sessions, store.Transcript, pub, fixedActiveRun(runID), prog)
 	flush(progress.FlushPayload{
 		SessionID: sessionID,
 		Baseline:  progress.Snapshot{},
@@ -72,7 +72,7 @@ func TestProgressUpdateSSECarriesMintedOrd(t *testing.T) {
 		t.Fatalf("SSE progress_update seq = %d want > 0", ev.Message.Seq)
 	}
 
-	stored := findMessageByKind(t, mustGetMessages(t, store, sessionID), wire.MessageKindProgressUpdate)
+	stored := findMessageByKind(t, mustGetMessages(t, store.Transcript, sessionID), wire.MessageKindProgressUpdate)
 	if ev.Message.Ord != stored.Ord || ev.Message.Seq != stored.Seq {
 		t.Fatalf("SSE clocks (ord=%d seq=%d) != store (ord=%d seq=%d)",
 			ev.Message.Ord, ev.Message.Seq, stored.Ord, stored.Seq)
@@ -88,7 +88,7 @@ func TestProgressCompleteSSECarriesMintedOrd(t *testing.T) {
 
 	hub := events.NewMemoryHub()
 	pub := &events.Publisher{Hub: hub}
-	sess, err := store.Get(context.Background(), sessionID)
+	sess, err := store.Sessions.Get(context.Background(), sessionID)
 	testutil.FailErr(t, "store.Get", err)
 	ch, unsub, err := hub.Subscribe(context.Background(), events.Subscription{Project: sess.ProjectID, Viewer: testutil.HostOwner()})
 	testutil.FailErr(t, "hub.Subscribe", err)
@@ -103,7 +103,7 @@ func TestProgressCompleteSSECarriesMintedOrd(t *testing.T) {
 	if ev.Message.Ord <= 0 {
 		t.Fatalf("SSE progress_complete ord = %d want > 0", ev.Message.Ord)
 	}
-	stored := findMessageByKind(t, mustGetMessages(t, store, sessionID), wire.MessageKindProgressComplete)
+	stored := findMessageByKind(t, mustGetMessages(t, store.Transcript, sessionID), wire.MessageKindProgressComplete)
 	if ev.Message.Ord != stored.Ord {
 		t.Fatalf("SSE ord %d != store ord %d", ev.Message.Ord, stored.Ord)
 	}

@@ -42,7 +42,7 @@ func TestOutboundSecretFloorJ1WebSearchDeny(t *testing.T) {
 		t.Fatalf("provider HTTP called %d times: %+v", len(got), got)
 	}
 	assertToolMessageContains(t, h, sess.ID, "OUTBOUND_SECRET_DENIED")
-	msgs, err := h.Store.GetMessages(context.Background(), sess.ID)
+	msgs, err := h.Store.Transcript.GetMessages(context.Background(), sess.ID)
 	testutil.FailErr(t, "GetMessages", err)
 	var toolContents []string
 	for _, m := range msgs {

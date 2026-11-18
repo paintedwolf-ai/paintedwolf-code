@@ -32,7 +32,7 @@ func TestInvokeStillDeniesWhenToolNotListed(t *testing.T) {
 	projectDir := t.TempDir()
 	sess := createSessionWithPostureHTTP(t, srv, projectDir, wire.SessionPostureSpec)
 	ctx := context.Background()
-	sessionRec, err := store.Get(ctx, sess.ID)
+	sessionRec, err := store.Sessions.Get(ctx, sess.ID)
 	testutil.FailErr(t, "store.Get failed", err)
 	if err := mgr.Coordinator.Guards.Policy().EvaluateInvoke(ctx, sessionRec, "plan_from_blueprint", nil); err == nil {
 		t.Fatal("invoke-time rules must still deny plan_from_blueprint in spec posture")

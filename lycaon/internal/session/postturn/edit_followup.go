@@ -17,7 +17,7 @@ func (m *Service) EditFollowUp(ctx context.Context, sess *api.Session, userPromp
 	if !surface.IsCoordinatorSession(sess) {
 		return
 	}
-	history, err := m.store.GetMessages(ctx, sess.ID)
+	history, err := m.transcriptStore.GetMessages(ctx, sess.ID)
 	if err != nil {
 		return
 	}

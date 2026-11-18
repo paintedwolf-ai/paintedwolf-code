@@ -2,11 +2,11 @@ package lifecycle_test
 
 import (
 	"context"
-	"github.com/lycaon/lycaon/internal/configlayout"
 	"path/filepath"
 	"testing"
 	"time"
 
+	"github.com/lycaon/lycaon/internal/configlayout"
 	"github.com/lycaon/lycaon/internal/extpacks"
 	sessionstore "github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/testdbseed"
@@ -18,7 +18,7 @@ import (
 func TestReconcileOrphanedRunEmitsInterruptedBoundary(t *testing.T) {
 	mgr, store, _, projectDir := testManager(t)
 	ctx := context.Background()
-	sess, err := store.Create(ctx, api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
+	sess, err := store.Sessions.Create(ctx, api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
 	mgr.Recovery.Busy = func(context.Context, string) bool { return false }
 
@@ -34,7 +34,7 @@ func TestReconcileOrphanedRunEmitsInterruptedBoundary(t *testing.T) {
 	if got.Status != api.WorkflowRunStatusInterrupted {
 		t.Fatalf("status = %q want interrupted", got.Status)
 	}
-	msgs, err := store.GetMessages(ctx, sess.ID)
+	msgs, err := store.Transcript.GetMessages(ctx, sess.ID)
 	testutil.FailErr(t, "get messages", err)
 	for _, msg := range msgs {
 		if msg.WorkflowBoundary != nil && msg.WorkflowBoundary.Event == "interrupted" {
@@ -49,7 +49,7 @@ func TestReconcileOrphanedRunEmitsInterruptedBoundary(t *testing.T) {
 func TestReconcileOrphanedRunsSkipsAmbientSessionCreate(t *testing.T) {
 	mgr, store, _, _ := testManager(t)
 	ctx := context.Background()
-	sess, err := store.Create(ctx, api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
+	sess, err := store.Sessions.Create(ctx, api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
 	mgr.Recovery.Busy = func(context.Context, string) bool { return false }
 
@@ -76,7 +76,7 @@ func TestReconcileOrphanedRunsSkipsAmbientSessionCreate(t *testing.T) {
 		Role:    api.MessageRoleUser,
 		Content: "Tell me about this repo",
 	}))
-	msgs, err := store.GetMessages(ctx, sess.ID)
+	msgs, err := store.Transcript.GetMessages(ctx, sess.ID)
 	testutil.FailErr(t, "GetMessages", err)
 	for _, msg := range msgs {
 		if msg.Role == api.MessageRoleUser && msg.Content == "Tell me about this repo" {
@@ -94,7 +94,7 @@ func TestReconcileOrphanedRunsSkipsAmbientSessionCreate(t *testing.T) {
 func TestReconcileOrphanedRunsInterruptsChildImplement(t *testing.T) {
 	mgr, store, _, _ := testManager(t)
 	ctx := context.Background()
-	sess, err := store.Create(ctx, api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
+	sess, err := store.Sessions.Create(ctx, api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
 	mgr.Recovery.Busy = func(context.Context, string) bool { return false }
 
@@ -149,7 +149,7 @@ func TestReconcileOrphanedRunsInterruptsChildImplement(t *testing.T) {
 func TestReconcileOrphanedRunsSkipsSessionsActiveSinceBoot(t *testing.T) {
 	mgr, store, _, _ := testManager(t)
 	ctx := context.Background()
-	sess, err := store.Create(ctx, api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
+	sess, err := store.Sessions.Create(ctx, api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
 	mgr.Recovery.Busy = func(context.Context, string) bool { return false }
 
@@ -163,11 +163,11 @@ func TestReconcileOrphanedRunsSkipsSessionsActiveSinceBoot(t *testing.T) {
 	mgr.Recovery.Before = time.Now().UTC()
 
 	// Resumed activity under this process: a turn starts and finishes.
-	execution, err := store.BeginTurn(ctx, sessionstore.TurnStart{
+	execution, err := store.Turns.BeginTurn(ctx, sessionstore.TurnStart{
 		SessionID: sess.ID, ProjectID: sess.ProjectID, Origin: sessionstore.TurnOriginUser, InputJSON: "{}",
 	})
 	testutil.FailErr(t, "begin turn", err)
-	_, err = store.FinishTurn(ctx, execution.Turn.ID, execution.Attempt.ID, sessionstore.TurnStatusComplete, "", "", "")
+	_, err = store.Turns.FinishTurn(ctx, execution.Turn.ID, execution.Attempt.ID, sessionstore.TurnStatusComplete, "", "", "")
 	testutil.FailErr(t, "finish turn", err)
 
 	testutil.FailErr(t, "reconcile", mgr.Recovery.ReconcileOrphanedRuns(ctx, sess.ID))
@@ -184,10 +184,10 @@ func TestReconcileOrphanedRunsSkipsSessionsActiveSinceBoot(t *testing.T) {
 func TestReconcileOrphanedRunsInterruptsRunsOfSessionsOnlyTouchedSinceBoot(t *testing.T) {
 	mgr, store, _, _ := testManager(t)
 	ctx := context.Background()
-	sess, err := store.Create(ctx, api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
+	sess, err := store.Sessions.Create(ctx, api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
 	mgr.Recovery.Busy = func(context.Context, string) bool { return false }
-	testutil.FailErr(t, "SetSessionStatus busy", store.SetSessionStatus(ctx, sess.ID, api.SessionStatusBusy))
+	testutil.FailErr(t, "SetSessionStatus busy", store.Sessions.SetSessionStatus(ctx, sess.ID, api.SessionStatusBusy))
 
 	run := &api.WorkflowRun{
 		ID: "run-crashed", SessionID: sess.ID, WorkflowID: "plan",
@@ -196,8 +196,8 @@ func TestReconcileOrphanedRunsInterruptsRunsOfSessionsOnlyTouchedSinceBoot(t *te
 	testutil.FailErr(t, "create run", mgr.Store.State.CreateState(ctx, run, sess.WorkspacePath, nil))
 
 	mgr.Recovery.Before = time.Now().UTC()
-	testutil.FailErr(t, "SetSessionStatus idle", store.SetSessionStatus(ctx, sess.ID, api.SessionStatusIdle))
-	testutil.FailErr(t, "rename", store.UpdateSession(ctx, sess.ID, func(s *api.Session) {
+	testutil.FailErr(t, "SetSessionStatus idle", store.Sessions.SetSessionStatus(ctx, sess.ID, api.SessionStatusIdle))
+	testutil.FailErr(t, "rename", store.Sessions.UpdateSession(ctx, sess.ID, func(s *api.Session) {
 		s.Title = "Renamed after restart"
 	}))
 
@@ -214,7 +214,7 @@ func TestReconcileOrphanedRunsInterruptsRunsOfSessionsOnlyTouchedSinceBoot(t *te
 func TestReconcileOrphanedRunsInterruptsUntouchedPreBootRuns(t *testing.T) {
 	mgr, store, _, _ := testManager(t)
 	ctx := context.Background()
-	sess, err := store.Create(ctx, api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
+	sess, err := store.Sessions.Create(ctx, api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
 	mgr.Recovery.Busy = func(context.Context, string) bool { return false }
 
@@ -237,7 +237,7 @@ func TestReconcileOrphanedRunsInterruptsUntouchedPreBootRuns(t *testing.T) {
 func TestReconcileOrphanedRunsPreservesPendingUserInput(t *testing.T) {
 	mgr, store, _, projectDir := testManager(t)
 	ctx := context.Background()
-	sess, err := store.Create(ctx, api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
+	sess, err := store.Sessions.Create(ctx, api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
 	mgr.Recovery.Busy = func(context.Context, string) bool { return false }
 

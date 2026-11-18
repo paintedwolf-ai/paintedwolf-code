@@ -140,14 +140,14 @@ func TestCredentialDeliveryPersistsExposureWithoutHarvest(t *testing.T) {
 	testdbseed.InsertSession(t, database, "reader", testdbseed.DefaultProjectID)
 	testdbseed.InsertSession(t, database, "other", testdbseed.DefaultProjectID)
 	sessions := store.NewSQL(database)
-	files := newCredentialFiles(nil, nil, database, nil, sessions)
+	files := newCredentialFiles(nil, nil, database, nil, sessions.Evidence)
 	read := tools.CredentialFileRead{ProjectID: testdbseed.DefaultProjectID, SessionID: "reader", RootSessionID: "reader", Container: ".env", Content: "API_TOKEN=person-typed-token"}
 	testutil.FailErr(t, "deliver credential read without harvesting", files.Delivered(t.Context(), read))
 	// A fresh reader must recover exposure from durable evidence, not a warm cache.
 	reopened := store.NewSQL(database)
-	exposed, err := reopened.SessionSecretExposure(t.Context(), "reader")
+	exposed, err := reopened.Evidence.SessionSecretExposure(t.Context(), "reader")
 	testutil.FailErr(t, "recover credential exposure", err)
-	other, err := reopened.SessionSecretExposure(t.Context(), "other")
+	other, err := reopened.Evidence.SessionSecretExposure(t.Context(), "other")
 	testutil.FailErr(t, "read unrelated chat exposure", err)
 	if !exposed || other {
 		t.Fatalf("exposure crossed chat identity: reader=%v other=%v", exposed, other)

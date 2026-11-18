@@ -26,7 +26,7 @@ func TestListWorkflowsIncludesSessionScope(t *testing.T) {
 	dir := t.TempDir()
 	p, err := project.CreateWithRoot(t.Context(), projReg, dir)
 	testutil.FailErr(t, "reg.Create failed", err)
-	sess, err := store.Create(t.Context(), wire.CreateSessionRequest{ProjectID: p.ID}, p.ID)
+	sess, err := store.Sessions.Create(t.Context(), wire.CreateSessionRequest{ProjectID: p.ID}, p.ID)
 	testutil.FailErr(t, "create session in store", err)
 
 	sessionStore := workflowdrafts.NewSQL(sessionFixture.DB())

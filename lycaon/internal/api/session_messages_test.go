@@ -73,7 +73,7 @@ func TestGetSessionMessagesPositionsWindows(t *testing.T) {
 		d.Core.Store = sessions
 		d.Core.Projects = project.NewSQLRegistry(sessions.DB())
 	})
-	created, err := sessions.Create(t.Context(), wire.CreateSessionRequest{}, testdbseed.DefaultProjectID)
+	created, err := sessions.Sessions.Create(t.Context(), wire.CreateSessionRequest{}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
 	for _, content := range []string{"one", "two", "three", "four", "five"} {
 		testutil.FailErr(t, "append message", srv.Admin.SessionAdmin.Lifecycle.Sessions.Runner.Transcript.AppendPlain(
@@ -151,7 +151,7 @@ func TestGetSessionMessagesFiltersReusedChildByWorkerJob(t *testing.T) {
 		d.Core.Store = sessions
 		d.Core.Projects = project.NewSQLRegistry(sessions.DB())
 	})
-	created, err := sessions.Create(t.Context(), wire.CreateSessionRequest{}, testdbseed.DefaultProjectID)
+	created, err := sessions.Sessions.Create(t.Context(), wire.CreateSessionRequest{}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
 	firstJobID := "11111111-1111-4111-8111-111111111111"
 	secondJobID := "22222222-2222-4222-8222-222222222222"

@@ -2,12 +2,13 @@ package projectcontrol
 
 import (
 	"context"
+	"reflect"
+	"testing"
+
 	"github.com/lycaon/lycaon/internal/coordinator/anchor"
 	"github.com/lycaon/lycaon/internal/project"
 	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/pkg/api"
-	"reflect"
-	"testing"
 )
 
 type detachSessions struct {
@@ -57,7 +58,7 @@ func (p detachProjects) Get(context.Context, string) (*project.Project, error) {
 func TestProjectDeleteStopsDependenciesAndRetargetsDetachedSessions(t *testing.T) {
 	sessions := &detachSessions{sessions: []*api.Session{{ID: "busy", ProjectID: "project", WorkspaceRootID: "one", WorkspacePath: "cached", Status: api.SessionStatusBusy}, {ID: "idle", ProjectID: "project", Status: api.SessionStatusIdle}, {ID: "foreign", ProjectID: "foreign", WorkspacePath: "untouched", Status: api.SessionStatusBusy}, nil}}
 	actions := &detachActions{}
-	s := New(sessions, actions, actions, nil, nil, nil, nil)
+	s := New(sessions, nil, actions, actions, nil, nil, nil, nil)
 	s.SetProjects(detachProjects{&project.Project{ID: "project", Roots: []project.Root{{ID: "one", Path: t.TempDir(), IsPrimary: true}, {ID: "two", Path: t.TempDir()}}}})
 	s.SetWorkerAbort(actions)
 	s.SetAnchors(actions)
@@ -98,7 +99,7 @@ func TestProjectPromotionWaitsForIdleCompletedRounds(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			sessions := &detachSessions{sessions: []*api.Session{nil, {ID: "foreign", ProjectID: "foreign", Status: api.SessionStatusBusy}, {ID: "local", ProjectID: "project", Status: tc.status}}}
-			s := New(sessions, nil, nil, quiescentAdmission{tc.complete}, nil, nil, nil)
+			s := New(sessions, nil, nil, nil, quiescentAdmission{tc.complete}, nil, nil, nil)
 			s.SetProjects(detachProjects{&project.Project{ID: "project", Roots: []project.Root{{ID: "root", Path: t.TempDir(), IsPrimary: true}}}})
 			got, err := s.ProjectPromoteQuiescent(t.Context(), "project")
 			if err != nil || got != tc.want {

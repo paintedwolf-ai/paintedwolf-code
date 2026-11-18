@@ -13,7 +13,6 @@ import (
 	"github.com/lycaon/lycaon/internal/editordoc"
 	"github.com/lycaon/lycaon/internal/project"
 	sessionstore "github.com/lycaon/lycaon/internal/session/store"
-	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
@@ -39,7 +38,6 @@ func NewSourceContentFixture(t *testing.T, raw []byte) SourceContentFixture {
 	testutil.FailErr(t, "write source", os.WriteFile(path, raw, 0o600))
 	p, err := project.CreateWithRoot(t.Context(), srv.Sources.Workspace.ProjectRegistry, dir)
 	testutil.FailErr(t, "create project", err)
-	testdbseed.InsertProjectRootWithID(t, database, p.ID, p.Roots[0].ID, dir)
 	StopBackgroundOnCleanup(t, srv)
 	return SourceContentFixture{Server: srv, Project: p, Path: path, Url: "/v1/projects/" + p.ID}
 }

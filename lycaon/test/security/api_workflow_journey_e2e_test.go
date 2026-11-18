@@ -107,7 +107,7 @@ func assertPhaseGateError(t *testing.T, body []byte, phase, failedGate string) {
 func assertPlanWriteAllowed(t *testing.T, h *wiring.Harness, sessionID string) {
 	t.Helper()
 	ctx := context.Background()
-	loaded, err := h.Store.Get(ctx, sessionID)
+	loaded, err := h.Store.Sessions.Get(ctx, sessionID)
 	testutil.FailErr(t, "h.Store.Get failed", err)
 	planPath := settingsoverlay.Rel("blueprints/plan.md")
 	err = h.Sessions.Manager.Coordinator.Guards.Policy().EvaluateInvoke(ctx, loaded, "write", map[string]any{

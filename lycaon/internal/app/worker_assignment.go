@@ -36,7 +36,7 @@ func composeWorkerTaskAssignment(
 	brief wire.WorkerTaskCharter,
 	task *wire.WorkerTask,
 ) (string, error) {
-	msgs, err := storage.Sessions.GetMessages(ctx, tctx.Identity.SessionID)
+	msgs, err := storage.Sessions.Transcript.GetMessages(ctx, tctx.Identity.SessionID)
 	if err != nil {
 		return brief.Goal, err
 	}

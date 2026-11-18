@@ -12,7 +12,7 @@ import (
 )
 
 func TestResolveUserFeedbackValidatesPending(t *testing.T) {
-	mgr, _, _, _ := testManager(t)
+	mgr, repositories, _, _ := testManager(t)
 	reg, err := conditions.NewDefaultRegistry(conditions.TestRegistryDeps())
 	testutil.FailErr(t, "conditions.NewDefaultRegistry failed", err)
 	mgr.SetConditionRegistry(reg)
@@ -28,7 +28,7 @@ func TestResolveUserFeedbackValidatesPending(t *testing.T) {
 		}},
 	})
 	mgr.Resolver.Overlay = workflowdef.NewRegistry(map[string]workflowdef.Manifest{"feedback-resolve@1.0.0": manifest})
-	ctx := workflowCaller(t, mgr)
+	ctx := workflowCaller(t, repositories)
 	run, err := startRun(ctx, mgr, "sess-1", "feedback-resolve", "1.0.0")
 	testutil.FailErr(t, "startRun failed", err)
 	if _, err := mgr.Feedback.ResolveUserFeedback(ctx, "sess-1", run.ID, "wrong-phase", "REST"); !errors.Is(err, runstate.ErrFeedbackNotPending) {
@@ -40,7 +40,7 @@ func TestResolveUserFeedbackValidatesPending(t *testing.T) {
 }
 
 func TestResolveUserFeedbackTriggersAutoAdvance(t *testing.T) {
-	mgr, _, _, _ := testManager(t)
+	mgr, repositories, _, _ := testManager(t)
 	reg, err := conditions.NewDefaultRegistry(conditions.TestRegistryDeps())
 	testutil.FailErr(t, "conditions.NewDefaultRegistry failed", err)
 	mgr.SetConditionRegistry(reg)
@@ -58,7 +58,7 @@ func TestResolveUserFeedbackTriggersAutoAdvance(t *testing.T) {
 		}, {ID: "done"}},
 	})
 	mgr.Resolver.Overlay = workflowdef.NewRegistry(map[string]workflowdef.Manifest{"feedback-advance@1.0.0": manifest})
-	ctx := workflowCaller(t, mgr)
+	ctx := workflowCaller(t, repositories)
 	run, err := startRun(ctx, mgr, "sess-1", "feedback-advance", "1.0.0")
 	testutil.FailErr(t, "startRun failed", err)
 	run, err = mgr.Feedback.ResolveUserFeedback(ctx, "sess-1", run.ID, "clarify", "yes go ahead")
@@ -72,7 +72,7 @@ func TestResolveUserFeedbackTriggersAutoAdvance(t *testing.T) {
 }
 
 func TestResolveUserFeedbackRejectsStaleReviewedRevision(t *testing.T) {
-	mgr, _, _, _ := testManager(t)
+	mgr, repositories, _, _ := testManager(t)
 	reg, err := conditions.NewDefaultRegistry(conditions.TestRegistryDeps())
 	testutil.FailErr(t, "conditions.NewDefaultRegistry", err)
 	mgr.SetConditionRegistry(reg)
@@ -84,7 +84,7 @@ func TestResolveUserFeedbackRejectsStaleReviewedRevision(t *testing.T) {
 		}},
 	})
 	mgr.Resolver.Overlay = workflowdef.NewRegistry(map[string]workflowdef.Manifest{"feedback-revision@1.0.0": manifest})
-	ctx := workflowCaller(t, mgr)
+	ctx := workflowCaller(t, repositories)
 	run, err := startRun(ctx, mgr, "sess-1", "feedback-revision", "1.0.0")
 	testutil.FailErr(t, "startRun", err)
 	staleRevision := run.Revision

@@ -65,7 +65,7 @@ func (s *Attachments) HandleUploadAttachment(w http.ResponseWriter, r *http.Requ
 		s.Submission.WriteAttachmentError(w, err)
 		return
 	}
-	if err := s.Store.RecordPromptAttachmentBlob(r.Context(), projectID, receipt.BlobID, receipt.Bytes); err != nil {
+	if err := s.AttachmentBlobs.RecordPromptAttachmentBlob(r.Context(), projectID, receipt.BlobID, receipt.Bytes); err != nil {
 		_, _ = store.DiscardStagedBefore(receipt.BlobID, time.Time{})
 		s.responses.InternalError(w, r, err)
 		return
@@ -103,10 +103,10 @@ func (s *Attachments) AttachmentStore(ctx context.Context, projectID string) (bl
 			return lifecycle.Unlock, true
 		},
 		Retained: func(blobID string) (bool, error) {
-			return s.Store.PromptAttachmentBlobRetained(ctx, projectID, blobID)
+			return s.AttachmentBlobs.PromptAttachmentBlobRetained(ctx, projectID, blobID)
 		},
 		Released: func(blobID string) error {
-			return s.Store.DeletePromptAttachmentBlob(ctx, projectID, blobID)
+			return s.AttachmentBlobs.DeletePromptAttachmentBlob(ctx, projectID, blobID)
 		},
 	}
 	return store, store.Available()
@@ -151,7 +151,7 @@ func (s *Attachments) RunPromptAttachmentMaintenance(ctx context.Context) error 
 
 func (s *Attachments) maintainPromptAttachments(ctx context.Context, projectID string, store blobstore.Store) error {
 	cutoff := time.Now().Add(-promptattach.StagedTTL)
-	candidates, err := s.Store.ListPromptAttachmentReclaimCandidates(ctx, projectID, cutoff, attachmentReclaimBatchSize)
+	candidates, err := s.AttachmentBlobs.ListPromptAttachmentReclaimCandidates(ctx, projectID, cutoff, attachmentReclaimBatchSize)
 	if err != nil {
 		return err
 	}

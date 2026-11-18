@@ -1,6 +1,9 @@
 package contract
 
 import (
+	"go/ast"
+	"go/parser"
+	"go/token"
 	"os"
 	"path/filepath"
 	"strings"
@@ -26,8 +29,15 @@ func TestNoDeleteFromMessagesInLifecycleSQL(t *testing.T) {
 			if err != nil {
 				return err
 			}
-			if strings.Contains(string(body), "func (s *SQL) DeleteMessage") {
-				t.Errorf("%s: session store must not define DeleteMessage (append-only lifecycle)", path)
+			file, err := parser.ParseFile(token.NewFileSet(), path, body, 0)
+			if err != nil {
+				return err
+			}
+			for _, declaration := range file.Decls {
+				method, ok := declaration.(*ast.FuncDecl)
+				if ok && method.Recv != nil && method.Name.Name == "DeleteMessage" {
+					t.Errorf("%s: session lifecycle must not define DeleteMessage", path)
+				}
 			}
 			if strings.Contains(string(body), "DELETE FROM messages") {
 				t.Errorf("%s: lifecycle path must not DELETE FROM messages", path)

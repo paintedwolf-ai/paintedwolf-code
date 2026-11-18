@@ -7,28 +7,31 @@ import (
 
 	"github.com/lycaon/lycaon/internal/events"
 	"github.com/lycaon/lycaon/internal/workflow/runstate"
-
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
-type TranscriptStore interface {
-	Get(context.Context, string) (*api.Session, error)
-	AppendMessages(context.Context, string, ...api.Message) error
-	MutationEventsOutboxed() bool
+type Sessions interface {
+	Get(ctx context.Context, id string) (*api.Session, error)
+}
+
+type Transcript interface {
+	AppendMessages(ctx context.Context, id string, msgs ...api.Message) error
+	MessageEventsOutboxed() bool
 }
 
 // Messages admits workflow-stamped transcript rows and publishes committed changes.
 type Messages struct {
-	Sessions TranscriptStore
-	Events   *events.Publisher
-	Runs     runstate.RunsRepository
+	SessionStore    Sessions
+	TranscriptStore Transcript
+	Events          *events.Publisher
+	Runs            runstate.RunsRepository
 }
 
 func (m *Messages) Append(ctx context.Context, sessionID string, msgs ...api.Message) error {
-	if m == nil || m.Sessions == nil {
+	if m == nil || (m.SessionStore == nil || m.TranscriptStore == nil) {
 		return fmt.Errorf("session store not configured")
 	}
-	if err := m.Sessions.AppendMessages(ctx, sessionID, msgs...); err != nil {
+	if err := m.TranscriptStore.AppendMessages(ctx, sessionID, msgs...); err != nil {
 		return err
 	}
 	m.PublishAppends(ctx, sessionID, msgs...)
@@ -39,11 +42,11 @@ func (m *Messages) PublishAppends(ctx context.Context, sessionID string, msgs ..
 	if m == nil || m.Events == nil || len(msgs) == 0 {
 		return
 	}
-	if m.Sessions != nil && m.Sessions.MutationEventsOutboxed() {
+	if (m.SessionStore != nil && m.TranscriptStore != nil) && m.TranscriptStore.MessageEventsOutboxed() {
 		return
 	}
 	key := ""
-	if sess, err := m.Sessions.Get(ctx, sessionID); err == nil && sess != nil {
+	if sess, err := m.SessionStore.Get(ctx, sessionID); err == nil && sess != nil {
 		key = sess.ProjectID
 	}
 	if key == "" {
@@ -62,11 +65,11 @@ func (m *Messages) PublishPatch(ctx context.Context, sessionID string, msg api.M
 	if m == nil || m.Events == nil || msg.ID == "" {
 		return
 	}
-	if m.Sessions != nil && m.Sessions.MutationEventsOutboxed() {
+	if (m.SessionStore != nil && m.TranscriptStore != nil) && m.TranscriptStore.MessageEventsOutboxed() {
 		return
 	}
 	key := ""
-	if sess, err := m.Sessions.Get(ctx, sessionID); err == nil && sess != nil {
+	if sess, err := m.SessionStore.Get(ctx, sessionID); err == nil && sess != nil {
 		key = sess.ProjectID
 	}
 	if key == "" {
@@ -77,7 +80,7 @@ func (m *Messages) PublishPatch(ctx context.Context, sessionID string, msg api.M
 
 // StampAndAppendMessages sets workflow_run_id on messages while a run is active.
 func (m *Messages) StampAndAppendMessages(ctx context.Context, sessionID string, msgs ...api.Message) error {
-	if m == nil || m.Sessions == nil {
+	if m == nil || (m.SessionStore == nil || m.TranscriptStore == nil) {
 		return fmt.Errorf("session store not configured")
 	}
 	active, err := m.Runs.ActiveBySession(ctx, sessionID)
@@ -92,5 +95,5 @@ func (m *Messages) StampAndAppendMessages(ctx context.Context, sessionID string,
 			msgs[i].WorkflowRunID = active.ID
 		}
 	}
-	return m.Sessions.AppendMessages(ctx, sessionID, msgs...)
+	return m.TranscriptStore.AppendMessages(ctx, sessionID, msgs...)
 }

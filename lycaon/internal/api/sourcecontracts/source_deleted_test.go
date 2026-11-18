@@ -24,11 +24,10 @@ import (
 )
 
 func TestDeletedSourceNavigationAndReadPreferCurrentPath(t *testing.T) {
-	ledger, ledgerDB, withLedger := contractfixture.TestSourceLedger(t)
+	ledger, _, withLedger := contractfixture.TestSourceLedger(t)
 	srv := contractfixture.NewTestServer(t, withLedger)
 	root := t.TempDir()
 	p := contractfixture.CreateProjectForTest(t, srv, root)
-	contractfixture.MirrorLedgerProject(t, ledgerDB, p)
 	rootID := p.Roots[0].ID
 	testutil.FailErr(t, "record deletion", ledger.Record(t.Context(), sourceledger.RecordInput{
 		RecordLocation: sourceledger.RecordLocation{RootID: rootID, Path: "gone.go"},
@@ -93,10 +92,9 @@ func TestDeletedSourceKeepsContentAvailabilityAndScreening(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			matcher, err := secretmatch.BuildMatcher(secretmatch.Bundled())
 			testutil.FailErr(t, "build secret matcher", err)
-			ledger, ledgerDB, withLedger := contractfixture.TestSourceLedger(t)
+			ledger, _, withLedger := contractfixture.TestSourceLedger(t)
 			srv := contractfixture.NewTestServer(t, withLedger, func(d *hostapi.Dependencies) { d.Approvals.SecretSpans = secretspan.New(matcher) })
 			p := contractfixture.CreateProjectForTest(t, srv, t.TempDir())
-			contractfixture.MirrorLedgerProject(t, ledgerDB, p)
 			testutil.FailErr(t, "record deletion", ledger.Record(t.Context(), sourceledger.RecordInput{
 				RecordLocation: sourceledger.RecordLocation{RootID: p.Roots[0].ID, Path: "gone"},
 				ProjectID:      p.ID, Op: wire.SourceChangeOpDelete,
@@ -133,7 +131,6 @@ func TestDeletedWorkerSourceDoesNotOpenThePrimaryReplacement(t *testing.T) {
 	srv := contractfixture.NewTestServer(t, withLedger, contractfixture.WithWorkers(queue))
 	primary, branchRoot := t.TempDir(), workertest.NewBranch(t, ledgerDB)
 	p := contractfixture.CreateProjectForTest(t, srv, primary)
-	contractfixture.MirrorLedgerProject(t, ledgerDB, p)
 	rootID := p.Roots[0].ID
 	testutil.FailErr(t, "primary file", os.WriteFile(filepath.Join(primary, "gone.go"), []byte("primary replacement\n"), 0600))
 	testutil.FailErr(t, "worker metadata", workspace.WriteJobMeta(enginepaths.MetaDirForBranchRoot(branchRoot), workspace.JobMeta{

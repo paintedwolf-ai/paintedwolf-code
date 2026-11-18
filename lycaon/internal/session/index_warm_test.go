@@ -94,7 +94,7 @@ func TestFirstPromptWithDeclaredURLFiresIndexWarmerAndAppendsMessage(t *testing.
 	}
 	mgr.Chats.Research.SetWarmer(warmer)
 	ctx := context.Background()
-	sess, err := store.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
+	sess, err := store.Sessions.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
 
 	userText := "summarize https://docs.example/widget"
@@ -135,7 +135,7 @@ func TestEachPromptOffersItsDeclaredURLsToWarming(t *testing.T) {
 	warmer := &fakeIndexWarmer{}
 	mgr.Chats.Research.SetWarmer(warmer)
 	ctx := context.Background()
-	sess, err := store.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
+	sess, err := store.Sessions.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
 
 	first := "summarize https://docs.example/widget"
@@ -159,7 +159,7 @@ func TestWarmDeclaredURLsWithoutCallbackResultAppendsNothing(t *testing.T) {
 	warmer := &fakeIndexWarmer{}
 	mgr.Chats.Research.SetWarmer(warmer)
 	ctx := context.Background()
-	sess, err := store.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
+	sess, err := store.Sessions.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
 
 	_, err = mgr.Submissions.Prompt(ctx, sess.ID, "read https://docs.example/widget")
@@ -182,7 +182,7 @@ func TestHostTurnsDoNotWarm(t *testing.T) {
 	warmer := &fakeIndexWarmer{fire: true, meta: api.IndexWarmingMeta{Trigger: "declared_url", Pages: 1}}
 	mgr.Chats.Research.SetWarmer(warmer)
 	ctx := context.Background()
-	sess, err := store.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
+	sess, err := store.Sessions.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
 
 	_, err = mgr.Submissions.LoopWake(ctx, sess.ID)
@@ -206,7 +206,7 @@ func TestHostLoopWakeTextFromUserRemainsUserIntent(t *testing.T) {
 	warmer := &fakeIndexWarmer{}
 	mgr.Chats.Research.SetWarmer(warmer)
 	ctx := context.Background()
-	sess, err := store.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
+	sess, err := store.Sessions.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
 
 	_, err = mgr.Submissions.Prompt(ctx, sess.ID, surface.HostLoopWakeSentinel)
@@ -232,7 +232,7 @@ func TestNavigationCandidateRechecksOnlyTheSelectedStoredAddress(t *testing.T) {
 	p, err := registry.Create(t.Context(), project.CreateParams{Roots: []project.AttachRootParams{{Path: t.TempDir()}}})
 	testutil.FailErr(t, "create project", err)
 	sessionStore := sessionFixture
-	sess, err := sessionStore.Create(t.Context(), api.CreateSessionRequest{}, p.ID)
+	sess, err := sessionStore.Sessions.Create(t.Context(), api.CreateSessionRequest{}, p.ID)
 	testutil.FailErr(t, "create session", err)
 	mgr := NewHost(sessionStore, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, toolstest.NewRegistry())
 	mgr.SetProjectRegistry(registry)
@@ -244,11 +244,11 @@ func TestNavigationCandidateRechecksOnlyTheSelectedStoredAddress(t *testing.T) {
 		},
 	}
 	const content = "See `same.go`."
-	if err := sessionStore.AppendMessages(t.Context(), sess.ID, api.Message{ID: "invalid", Role: api.MessageRoleAssistant, Content: content, NavigationRefs: []api.NavigationReference{ref}}); err == nil {
+	if err := sessionStore.Transcript.AppendMessages(t.Context(), sess.ID, api.Message{ID: "invalid", Role: api.MessageRoleAssistant, Content: content, NavigationRefs: []api.NavigationReference{ref}}); err == nil {
 		t.Fatal("cross-project candidate was persisted")
 	}
 	ref.Candidates = ref.Candidates[:2]
-	testutil.FailErr(t, "append ambiguous message", sessionStore.AppendMessages(t.Context(), sess.ID, api.Message{ID: "m", Role: api.MessageRoleAssistant, Content: content, NavigationRefs: []api.NavigationReference{ref}}))
+	testutil.FailErr(t, "append ambiguous message", sessionStore.Transcript.AppendMessages(t.Context(), sess.ID, api.Message{ID: "m", Role: api.MessageRoleAssistant, Content: content, NavigationRefs: []api.NavigationReference{ref}}))
 	index := 1
 	req := api.ResolveMessageNavigationRequest{MessageID: "m", ContentSHA256: sessionstore.NavigationContentHash(content), ReferenceID: ref.ID, CandidateIndex: &index}
 	calls := 0
@@ -265,7 +265,7 @@ func TestNavigationCandidateRechecksOnlyTheSelectedStoredAddress(t *testing.T) {
 	if !out.References[0].Deleted || calls != 1 {
 		t.Fatalf("resolution = %+v, calls = %d", out, calls)
 	}
-	stored, err := sessionStore.GetMessage(t.Context(), sess.ID, "m")
+	stored, err := sessionStore.Transcript.GetMessage(t.Context(), sess.ID, "m")
 	testutil.FailErr(t, "read original reference", err)
 	if stored.NavigationRefs[0].Status != api.NavigationAmbiguous || len(stored.NavigationRefs[0].Candidates) != 2 {
 		t.Fatal("candidate selection rewrote durable binding")
@@ -292,7 +292,7 @@ func TestAssistantCommitAndNotePersistNavigationReferences(t *testing.T) {
 	p, err := registry.Create(ctx, project.CreateParams{Roots: []project.AttachRootParams{{Path: root}}})
 	testutil.FailErr(t, "create project", err)
 	sessionStore := sessionFixture
-	sess, err := sessionStore.Create(ctx, api.CreateSessionRequest{}, p.ID)
+	sess, err := sessionStore.Sessions.Create(ctx, api.CreateSessionRequest{}, p.ID)
 	testutil.FailErr(t, "create session", err)
 	mgr := NewHost(sessionStore, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, toolstest.NewRegistry())
 	mgr.SetProjectRegistry(registry)
@@ -310,7 +310,7 @@ func TestAssistantCommitAndNotePersistNavigationReferences(t *testing.T) {
 		ID: "answer-1", Role: api.MessageRoleAssistant, Content: "See FINDINGS.md.",
 		Visibility: api.MessageVisibilityTranscript,
 	}))
-	msgs, err := sessionStore.GetMessages(ctx, sess.ID)
+	msgs, err := sessionStore.Transcript.GetMessages(ctx, sess.ID)
 	testutil.FailErr(t, "read messages", err)
 	if len(msgs) != 2 || len(msgs[0].NavigationRefs) != 1 || len(msgs[1].NavigationRefs) != 1 {
 		t.Fatalf("messages = %+v", msgs)
@@ -327,10 +327,10 @@ func TestNavigationParsesWorktreeAbsolutePathsWithoutFilesystemValidation(t *tes
 	p, err := registry.Create(t.Context(), project.CreateParams{Roots: []project.AttachRootParams{{Path: t.TempDir()}}})
 	testutil.FailErr(t, "project", err)
 	sessionStore := sessionFixture
-	sess, err := sessionStore.Create(t.Context(), api.CreateSessionRequest{}, p.ID)
+	sess, err := sessionStore.Sessions.Create(t.Context(), api.CreateSessionRequest{}, p.ID)
 	testutil.FailErr(t, "session", err)
 	branch := filepath.Join(t.TempDir(), "not-materialized")
-	testutil.FailErr(t, "worktree binding", sessionStore.PutWorktreeBinding(t.Context(), sessionstore.WorktreeBinding{SessionID: sess.ID, ProjectID: p.ID, Toplevel: p.Roots[0].Path, WorktreePath: branch, Branch: "work", BaseBranch: "main"}))
+	testutil.FailErr(t, "worktree binding", sessionStore.Sessions.PutWorktreeBinding(t.Context(), sessionstore.WorktreeBinding{SessionID: sess.ID, ProjectID: p.ID, Toplevel: p.Roots[0].Path, WorktreePath: branch, Branch: "work", BaseBranch: "main"}))
 	mgr := NewHost(sessionStore, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, toolstest.NewRegistry())
 	mgr.SetProjectRegistry(registry)
 	rows := []api.Message{{Role: api.MessageRoleAssistant, Content: "[file](" + filepath.ToSlash(filepath.Join(branch, "src/a.go")) + ")", Visibility: api.MessageVisibilityTranscript}}

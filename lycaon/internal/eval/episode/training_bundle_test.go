@@ -39,7 +39,7 @@ func newBundleFixture(t *testing.T) bundleFixture {
 	testutil.FailErr(t, "bind child", err)
 	history := store.NewSQL(database)
 	history.SetDataDir(capture)
-	turn, err := history.BeginTurn(t.Context(), store.TurnStart{SessionID: "root", ProjectID: project, Origin: store.TurnOriginUser, InputJSON: "{}"})
+	turn, err := history.Turns.BeginTurn(t.Context(), store.TurnStart{SessionID: "root", ProjectID: project, Origin: store.TurnOriginUser, InputJSON: "{}"})
 	testutil.FailErr(t, "begin turn", err)
 	settled := map[string]string{}
 	for i, output := range []store.ModelOutput{
@@ -48,13 +48,13 @@ func newBundleFixture(t *testing.T) bundleFixture {
 		{ID: "o3", MessageID: "m2", Content: "Done, revised."},
 	} {
 		output.TurnAttemptID, output.SessionID, output.Iteration, output.ProviderID, output.Model = turn.Attempt.ID, "root", i+1, "provider", "model"
-		_, err := history.SettleModelOutput(t.Context(), output)
+		_, err := history.Turns.SettleModelOutput(t.Context(), output)
 		testutil.FailErr(t, "settle output", err)
 		settled[output.ID] = time.Date(2026, 11, 12, 10, i, 0, 0, time.UTC).Format(time.RFC3339Nano)
 		_, err = database.ExecContext(t.Context(), `UPDATE model_outputs SET settled_at=? WHERE id=?`, settled[output.ID], output.ID)
 		testutil.FailErr(t, "order settlement", err)
 	}
-	testutil.FailErr(t, "append messages", history.AppendMessages(t.Context(), "root",
+	testutil.FailErr(t, "append messages", history.Transcript.AppendMessages(t.Context(), "root",
 		api.Message{ID: "m1", Role: api.MessageRoleAssistant, ToolCalls: []api.ToolCall{{ID: "c1", Name: "read", Args: map[string]any{"path": "a.go"}}}},
 		api.Message{ID: "m2", Role: api.MessageRoleAssistant, Content: "Done."}))
 	read, _ := toolcontract.Lookup("read")

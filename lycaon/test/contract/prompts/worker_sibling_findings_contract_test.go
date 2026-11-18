@@ -28,14 +28,14 @@ func TestRootSessionKeyedFindingsAppendRecentParityContract(t *testing.T) {
 	overlay := filepath.Join(dir, settingsoverlay.DirName(), "overlays", "job-a")
 
 	store := storetest.New(t, testdbseed.DefaultProjectID)
-	parent, err := store.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
+	parent, err := store.Sessions.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	contractcheck.FailErr(t, "create parent", err)
-	child, err := store.CreateChild(ctx, parent, api.SpawnChildRequest{AgentType: "implementer", Prompt: "leg"})
+	child, err := store.Sessions.CreateChild(ctx, parent, api.SpawnChildRequest{AgentType: "implementer", Prompt: "leg"})
 	contractcheck.FailErr(t, "create child", err)
 
 	findingsStore := findingstest.New(t, parent.ID)
 	scopeKey := func(c context.Context, sessionID string) string {
-		return sessiontree.RootID(c, store, sessionID)
+		return sessiontree.RootID(c, store.Sessions, sessionID)
 	}
 	reg := tools.NewDefaultRegistry()
 	contractcheck.FailErr(t, "register record_finding", native.RegisterRecordFindingTool(reg, reporttools.RecordFindingGates{}, findingsStore, scopeKey))
@@ -78,7 +78,7 @@ func TestWorkerChildDelegationProjectDirInvariantContract(t *testing.T) {
 	overlay := filepath.Join(dir, settingsoverlay.DirName(), "overlays", "job-write")
 
 	store := storetest.New(t, testdbseed.DefaultProjectID)
-	parent, err := store.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
+	parent, err := store.Sessions.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	contractcheck.FailErr(t, "create parent", err)
 
 	q := workertest.NewQueue(t, 4, testdbseed.DefaultProjectID, parent.ID)
@@ -94,7 +94,7 @@ func TestWorkerChildDelegationProjectDirInvariantContract(t *testing.T) {
 	contractcheck.FailErr(t, "enqueue defaults", worker.ApplyEnqueueDefaults(&task, projScope, worker.DefaultWorkersConfig()))
 	_, err = q.Enqueue(ctx, task)
 	contractcheck.FailErr(t, "enqueue", err)
-	child, err := store.CreateChild(ctx, parent, api.SpawnChildRequest{AgentType: "implementer", Prompt: "write"})
+	child, err := store.Sessions.CreateChild(ctx, parent, api.SpawnChildRequest{AgentType: "implementer", Prompt: "write"})
 	contractcheck.FailErr(t, "create child", err)
 
 	if child.WorkspacePath != parent.WorkspacePath {

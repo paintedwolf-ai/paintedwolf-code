@@ -32,7 +32,7 @@ func (s *replaySession) call(t *testing.T, tool string, args map[string]any) *wi
 	t.Helper()
 	s.config.Responses[0].ToolCalls = []llm.MockToolCall{{ID: t.Name() + tool, Name: tool, Args: args}}
 	testutil.FailErr(t, "prompt", s.prompt(t.Context()))
-	msgs, err := s.h.Store.GetMessages(t.Context(), s.session)
+	msgs, err := s.h.Store.Transcript.GetMessages(t.Context(), s.session)
 	testutil.FailErr(t, "read transcript", err)
 	for i := len(msgs) - 1; i >= 0; i-- {
 		if msgs[i].Role == wire.MessageRoleTool && msgs[i].ToolResult != nil && msgs[i].ToolResult.Tool == tool {

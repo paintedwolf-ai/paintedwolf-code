@@ -10,7 +10,7 @@ import (
 )
 
 func (m *Service) GetMessages(ctx context.Context, id string) ([]api.Message, error) {
-	msgs, err := m.store.GetMessages(ctx, id)
+	msgs, err := m.transcriptStore.GetMessages(ctx, id)
 	if err != nil {
 		return nil, err
 	}
@@ -22,7 +22,7 @@ func (m *Service) GetTranscriptPage(ctx context.Context, id string, q api.Transc
 	if m.reconcile != nil {
 		_ = m.reconcile.ReconcileOrphanedRuns(ctx, id)
 	}
-	page, err := m.store.GetTranscriptPage(ctx, id, q)
+	page, err := m.transcriptStore.GetTranscriptPage(ctx, id, q)
 	if err != nil {
 		return page, err
 	}
@@ -64,7 +64,7 @@ func (m *Service) withPageTurnFacts(ctx context.Context, page api.SessionTranscr
 // TurnLoadsForPage projects the receipts of the turns a transcript page shows.
 func (m *Service) TurnLoadsForPage(ctx context.Context, page api.SessionTranscriptPage) ([]api.TurnLoad, error) {
 	out := []api.TurnLoad{}
-	if m == nil || m.store == nil || len(page.Messages) == 0 {
+	if m == nil || (m.sessionStore == nil || m.transcriptStore == nil || m.turnStore == nil || m.people == nil) || len(page.Messages) == 0 {
 		return out, nil
 	}
 	ids := make([]string, 0, len(page.Messages))
@@ -73,7 +73,7 @@ func (m *Service) TurnLoadsForPage(ctx context.Context, page api.SessionTranscri
 			ids = append(ids, msg.ID)
 		}
 	}
-	receipts, err := m.store.ListTurnLoadReceiptsForTurns(ctx, ids)
+	receipts, err := m.turnStore.ListTurnLoadReceiptsForTurns(ctx, ids)
 	if err != nil {
 		return nil, err
 	}

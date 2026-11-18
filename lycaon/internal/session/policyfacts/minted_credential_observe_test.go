@@ -22,7 +22,7 @@ func (s *countingMintSource) MintedCredentialRule(hitl.ProposedAction) (hitl.Det
 func TestMintedCredentialObservationTracksReloads(t *testing.T) {
 	t.Parallel()
 	manager := New(nil)
-	manager.SetSources(nil, mintWorkspace{}, nil, nil)
+	manager.SetSources(nil, nil, mintWorkspace{}, nil, nil)
 	var published atomic.Pointer[countingMintSource]
 	manager.SetMintedCredentialSource(func() MintedCredentialSource {
 		if source := published.Load(); source != nil {

@@ -12,7 +12,7 @@ func (m *Service) BootstrapProgress(ctx context.Context, sessionID string, msg a
 	if m == nil || m.progress == nil || !promptinput.VisibleIntent(msg) {
 		return
 	}
-	sess, err := m.store.Get(ctx, sessionID)
+	sess, err := m.sessionStore.Get(ctx, sessionID)
 	if err != nil || sess == nil || sess.ParentSessionID != "" {
 		return
 	}

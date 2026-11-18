@@ -14,8 +14,8 @@ import (
 	"github.com/google/uuid"
 	"github.com/lycaon/lycaon/internal/configdir"
 	"github.com/lycaon/lycaon/internal/fseffect"
-	"github.com/lycaon/lycaon/internal/session"
 	sessiondecisions "github.com/lycaon/lycaon/internal/session/decisions"
+	sessionstore "github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/worker"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -77,18 +77,19 @@ type dispatchPlan struct {
 
 // Workers uses scripts for registered sessions and the live executor otherwise.
 type Workers struct {
-	root      string
-	sessions  session.Store
-	queue     worker.WorkerQueue
-	branches  *worker.BranchService
-	verify    VerifyWorker
-	read      ReadWorker
-	decisions sessiondecisions.Store
-	fallback  worker.WorkerExecutor
-	locks     sync.Map
+	root       string
+	sessions   sessionstore.SessionRepository
+	transcript sessionstore.TranscriptRepository
+	queue      worker.WorkerQueue
+	branches   *worker.BranchService
+	verify     VerifyWorker
+	read       ReadWorker
+	decisions  sessiondecisions.Store
+	fallback   worker.WorkerExecutor
+	locks      sync.Map
 }
 
-func NewWorkers(root string, sessions session.Store, queue worker.WorkerQueue, branches *worker.BranchService, verify VerifyWorker, read ReadWorker, decisions sessiondecisions.Store, fallback worker.WorkerExecutor) (*Workers, error) {
+func NewWorkers(root string, sessions *sessionstore.Repositories, queue worker.WorkerQueue, branches *worker.BranchService, verify VerifyWorker, read ReadWorker, decisions sessiondecisions.Store, fallback worker.WorkerExecutor) (*Workers, error) {
 	if !configdir.IsHarnessChannel() || sessions == nil || queue == nil || branches == nil || verify == nil || read == nil || decisions == nil || fallback == nil {
 		return nil, fmt.Errorf("scripted workers require an isolated harness and worker services")
 	}
@@ -96,7 +97,7 @@ func NewWorkers(root string, sessions session.Store, queue worker.WorkerQueue, b
 	if err := os.MkdirAll(filepath.Join(root, "outcomes"), 0o700); err != nil {
 		return nil, err
 	}
-	return &Workers{root: root, sessions: sessions, queue: queue, branches: branches, verify: verify, read: read, decisions: decisions, fallback: fallback}, nil
+	return &Workers{root: root, sessions: sessions.Sessions, transcript: sessions.Transcript, queue: queue, branches: branches, verify: verify, read: read, decisions: decisions, fallback: fallback}, nil
 }
 
 // Install binds the fixture's scripts to the prepared children and the parent.
@@ -371,7 +372,7 @@ func (w *Workers) executeStage(ctx context.Context, child *api.Session, task api
 }
 
 func (w *Workers) answeredOption(ctx context.Context, childID string) (string, bool, error) {
-	messages, err := w.sessions.GetMessages(ctx, childID)
+	messages, err := w.transcript.GetMessages(ctx, childID)
 	if err != nil {
 		return "", false, err
 	}

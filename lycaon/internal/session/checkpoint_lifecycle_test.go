@@ -31,18 +31,18 @@ func TestRemoveOrphanCheckpointsKeepsLiveSessionsOnly(t *testing.T) {
 	mgr, sessions := newTestManager(t)
 	dir := t.TempDir()
 	ctx := t.Context()
-	live, err := sessions.Create(ctx, api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
+	live, err := sessions.Sessions.Create(ctx, api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create live session", err)
 	liveSessionID := live.ID
 
-	store := sessioncheckpoint.New(mgr.Workspace.DataDir, dir, mgr.Coordinator.Context.Sessions.(Store))
+	store := sessioncheckpoint.New(mgr.Workspace.DataDir, dir, sessions.Rewind)
 	_, err = store.Open(t.Context(), liveSessionID, "anchor-live")
 	testutil.FailErr(t, "open live anchor", err)
-	dead, err := sessions.Create(ctx, api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
+	dead, err := sessions.Sessions.Create(ctx, api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create retiring session", err)
 	_, err = store.Open(ctx, dead.ID, "anchor-dead")
 	testutil.FailErr(t, "open retiring anchor", err)
-	testutil.FailErr(t, "delete session rows", sessions.Delete(ctx, dead.ID))
+	testutil.FailErr(t, "delete session rows", sessions.Sessions.Delete(ctx, dead.ID))
 
 	if removed := mgr.Chats.Captures.RemoveOrphanCheckpoints(ctx, dir); removed != 1 {
 		t.Fatalf("removed = %d, want 1", removed)
@@ -56,8 +56,8 @@ func TestRemoveOrphanCheckpointsKeepsLiveSessionsOnly(t *testing.T) {
 }
 
 func TestDeleteSessionRemovesCheckpoints(t *testing.T) {
-	mgr, sessionID, dir := newCheckpointTestSession(t)
-	checkpoint := sessioncheckpoint.New(mgr.Workspace.DataDir, dir, mgr.Coordinator.Context.Sessions.(Store))
+	mgr, sessionID, dir, repositories := newCheckpointTestSession(t)
+	checkpoint := sessioncheckpoint.New(mgr.Workspace.DataDir, dir, repositories.Rewind)
 	_, err := checkpoint.Open(t.Context(), sessionID, "anchor")
 	testutil.FailErr(t, "open checkpoint", err)
 
@@ -76,7 +76,7 @@ func TestCompactionUsesObservedTokenOverhead(t *testing.T) {
 	mgr, store := newCompactionManager(t, cfg)
 	ctx := context.Background()
 
-	sess, err := store.Create(ctx, api.CreateSessionRequest{
+	sess, err := store.Sessions.Create(ctx, api.CreateSessionRequest{
 		Posture: api.SessionPostureBuild,
 	}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
@@ -104,7 +104,7 @@ func TestCompactionColdStartReservesStaticStack(t *testing.T) {
 	mgr, store := newCompactionManager(t, compaction.DefaultCompactionConfig())
 	ctx := context.Background()
 
-	sess, err := store.Create(ctx, api.CreateSessionRequest{
+	sess, err := store.Sessions.Create(ctx, api.CreateSessionRequest{
 		Posture: api.SessionPostureBuild,
 	}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
@@ -138,13 +138,13 @@ func TestSessionContextUsesCorrectedEstimate(t *testing.T) {
 	mgr, store := newCompactionManager(t, cfg)
 	ctx := context.Background()
 
-	sess, err := store.Create(ctx, api.CreateSessionRequest{
+	sess, err := store.Sessions.Create(ctx, api.CreateSessionRequest{
 		Posture: api.SessionPostureBuild,
 	}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
 
 	block := strings.Repeat("a ", 2000)
-	if err := store.AppendMessages(ctx, sess.ID,
+	if err := store.Transcript.AppendMessages(ctx, sess.ID,
 		api.Message{ID: "u1", Role: api.MessageRoleUser, Content: block},
 	); err != nil {
 		testutil.FailErr(t, "store.AppendMessages failed", err)
@@ -172,13 +172,13 @@ func TestCompactionFitThenReplace(t *testing.T) {
 	mgr, store := newCompactionManager(t, cfg)
 	ctx := context.Background()
 
-	sess, err := store.Create(ctx, api.CreateSessionRequest{
+	sess, err := store.Sessions.Create(ctx, api.CreateSessionRequest{
 		Posture: api.SessionPostureBuild,
 	}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
 
 	log := strings.Repeat("ERROR: build failed line\n", 8000)
-	if err := store.AppendMessages(ctx, sess.ID,
+	if err := store.Transcript.AppendMessages(ctx, sess.ID,
 		api.Message{ID: "log", Role: api.MessageRoleUser, Content: log},
 		api.Message{ID: "ack", Role: api.MessageRoleAssistant, Content: "seen"},
 	); err != nil {
@@ -191,13 +191,13 @@ func TestCompactionFitThenReplace(t *testing.T) {
 	testutil.FailErr(t, "mgr.Submissions.Prompt", err)
 	mgr.Runner.History.Wait()
 
-	canonical, err := store.GetMessages(ctx, sess.ID)
+	canonical, err := store.Transcript.GetMessages(ctx, sess.ID)
 	testutil.FailErr(t, "canonical GetMessages", err)
 	if canonical[0].Content != log {
 		t.Fatal("canonical history must stay full-fidelity after background pass")
 	}
 
-	sess, err = store.Get(ctx, sess.ID)
+	sess, err = store.Sessions.Get(ctx, sess.ID)
 	testutil.FailErr(t, "store.Get after compaction", err)
 	if sess.CompactionGeneration == 0 {
 		t.Fatal("expected compaction generation bump after background pass")
@@ -210,7 +210,7 @@ func TestCompactionFitThenReplace(t *testing.T) {
 }
 
 func TestSettlementCannotCompleteWithOpenWorkflowGates(t *testing.T) {
-	mgr, sess := newSynthesisDelayManager(t)
+	mgr, sess, _ := newSynthesisDelayManager(t)
 	mgr.SetWorkflowDomains(workflowDomainFixture(gatedCloseoutView{state: gatedExecuteState()}))
 	hub := events.NewMemoryHub()
 	mgr.SetEventPublisher(&events.Publisher{Hub: hub})

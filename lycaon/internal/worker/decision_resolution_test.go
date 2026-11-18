@@ -1,8 +1,8 @@
 package worker
 
 import (
-	"github.com/lycaon/lycaon/internal/timelayout"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -14,6 +14,7 @@ import (
 	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/timelayout"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -143,5 +144,24 @@ func TestSQLDecisionResolverRequeuesSameWorkerWithBranchContinuity(t *testing.T)
 	).Scan(&delivered))
 	if delivered != 0 {
 		t.Fatalf("stale checkpoint deliveries = %d want 0", delivered)
+	}
+}
+
+func TestSQLDecisionResolverRequiresSharedDatabase(t *testing.T) {
+	database := testdbfixture.Open(t, "workers.db")
+	otherDatabase := testdbfixture.Open(t, "messages.db")
+	messages := sessionstore.NewSQL(database)
+	queue := NewSQLServices(database, 1).Queue
+	for name, resolver := range map[string]*SQLDecisionResolver{
+		"missing repositories": NewSQLDecisionResolver(nil, queue),
+		"missing queue":        NewSQLDecisionResolver(messages, nil),
+		"different database":   NewSQLDecisionResolver(sessionstore.NewSQL(otherDatabase), queue),
+	} {
+		t.Run(name, func(t *testing.T) {
+			err := resolver.Resolve(t.Context(), api.WorkerDecisionRequest{}, api.Message{})
+			if err == nil || !strings.Contains(err.Error(), "not configured") {
+				t.Fatalf("invalid transaction dependencies = %v", err)
+			}
+		})
 	}
 }

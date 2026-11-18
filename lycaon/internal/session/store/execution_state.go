@@ -25,7 +25,7 @@ type ExecutionState struct {
 }
 
 // ReadExecutionState reads occupancy and failures from one store snapshot.
-func (s *sqlSessionViews) ReadExecutionState(ctx context.Context, root string) (ExecutionState, error) {
+func (s *sqlSessions) ReadExecutionState(ctx context.Context, root string) (ExecutionState, error) {
 	var state ExecutionState
 	rows, err := s.core.queries.ReadExecutionState(ctx, root)
 	if err != nil {

@@ -151,14 +151,14 @@ func TestWriteRootAuthorizeSkipsCardWhenOverlayCovers(t *testing.T) {
 func TestWorkerUsesItsChatsApprovedWriteRoot(t *testing.T) {
 	t.Parallel()
 	store := storetest.New(t, testdbseed.DefaultProjectID)
-	parent, err := store.Create(t.Context(), api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
+	parent, err := store.Sessions.Create(t.Context(), api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create chat", err)
-	child, err := store.CreateChild(t.Context(), parent, api.SpawnChildRequest{AgentType: "implementer"})
+	child, err := store.Sessions.CreateChild(t.Context(), parent, api.SpawnChildRequest{AgentType: "implementer"})
 	testutil.FailErr(t, "create worker", err)
 	rt := approvalstate.NewSandboxPathGrantRuntime()
 	approved := filepath.Join(t.TempDir(), "approved")
 	rt.GrantChat(parent.ID, approved, "grant-approved", "cp-1", nil)
-	broker := &WriteRootCheckpointBroker{Checkpoints: unusedWriteRootCheckpoints{t: t}, Runtime: rt, Store: store}
+	broker := &WriteRootCheckpointBroker{Checkpoints: unusedWriteRootCheckpoints{t: t}, Runtime: rt, Store: store.Sessions}
 	got, err := broker.Authorize(t.Context(), command.SandboxWriteRootAsk{
 		SessionID: child.ID, ParentSessionID: parent.ID, ProposedWriteRoot: approved,
 	})

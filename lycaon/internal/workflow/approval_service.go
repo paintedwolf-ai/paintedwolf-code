@@ -3,17 +3,17 @@ package workflow
 import (
 	"context"
 	"fmt"
+	"strings"
+
 	"github.com/lycaon/lycaon/internal/conditions"
 	"github.com/lycaon/lycaon/internal/coordinator/inject"
 	"github.com/lycaon/lycaon/internal/scaffoldvars"
-	"github.com/lycaon/lycaon/internal/session"
 	workflowblueprintfiles "github.com/lycaon/lycaon/internal/workflow/blueprintfiles"
 	"github.com/lycaon/lycaon/internal/workflow/catalog"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 	workflowphases "github.com/lycaon/lycaon/internal/workflow/phases"
 	"github.com/lycaon/lycaon/internal/workflow/runstate"
 	"github.com/lycaon/lycaon/pkg/api"
-	"strings"
 )
 
 type Approvals struct {
@@ -22,7 +22,7 @@ type Approvals struct {
 	Records                 runstate.BlueprintsRepository
 	Vars                    *runstate.Variables
 	Resolver                *catalog.Resolver
-	Sessions                session.Store
+	Sessions                SessionReader
 	Getter                  workflowblueprintfiles.Getter
 	Registry                *conditions.ConditionRegistry
 	Phases                  *workflowphases.Service

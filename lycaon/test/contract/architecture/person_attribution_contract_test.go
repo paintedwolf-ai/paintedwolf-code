@@ -18,7 +18,6 @@ const peoplePkg = "github.com/lycaon/lycaon/internal/people"
 // Only admitted authorship may fall back to the host owner.
 var actingFallbacks = map[string]string{
 	"internal/session/store:sqlSessions.CreateWithStatus":     "a root chat the host opens belongs to the host owner",
-	"internal/session/store:memorySessions.CreateWithStatus":  "memory twin of the SQL session store",
 	"internal/session/transcript:Service.PromptAuthor":        "a prompt without an admission receipt is authored by its request's caller",
 	"internal/session/submissions:Service.admitPrompt":        "a user prompt admission names its request's caller",
 	"internal/editordoc:authorshipTracker.personActor":        "editor transitions are authored by their client's person",

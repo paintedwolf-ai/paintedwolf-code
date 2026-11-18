@@ -8,10 +8,10 @@ import (
 )
 
 func (m *Service) DeliveredWorkflowPhase(ctx context.Context, sessionID, runID, phase string) (bool, error) {
-	if m == nil || m.store == nil || strings.TrimSpace(runID) == "" {
+	if m == nil || (m.sessionStore == nil || m.transcriptStore == nil || m.turnStore == nil || m.people == nil) || strings.TrimSpace(runID) == "" {
 		return false, nil
 	}
-	messages, err := m.store.GetMessages(ctx, sessionID)
+	messages, err := m.transcriptStore.GetMessages(ctx, sessionID)
 	if err != nil {
 		return false, err
 	}

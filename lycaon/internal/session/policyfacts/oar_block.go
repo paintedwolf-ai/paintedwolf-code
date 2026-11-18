@@ -127,8 +127,8 @@ func (m *Service) FormatDoomLoopReject(ctx context.Context, sessionID, tool stri
 		return nil, nil
 	}
 	var sess *api.Session
-	if m.store != nil && sessionID != "" {
-		if s, err := m.store.Get(ctx, sessionID); err == nil {
+	if (m.sessionStore != nil && m.evidenceStore != nil) && sessionID != "" {
+		if s, err := m.sessionStore.Get(ctx, sessionID); err == nil {
 			sess = s
 		}
 	}
@@ -158,8 +158,8 @@ func (m *Service) EscalateRepeatedCode(ctx context.Context, sessionID, tool stri
 		return nil
 	}
 	var sess *api.Session
-	if m.store != nil && sessionID != "" {
-		if s, err := m.store.Get(ctx, sessionID); err == nil {
+	if (m.sessionStore != nil && m.evidenceStore != nil) && sessionID != "" {
+		if s, err := m.sessionStore.Get(ctx, sessionID); err == nil {
 			sess = s
 		}
 	}

@@ -11,28 +11,23 @@ import (
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
-type PreviewStore interface {
-	LastAssistantMessageContent(context.Context, string) (string, error)
-}
-type StatusStore interface {
-	PreviewStore
-	Get(context.Context, string) (*api.Session, error)
-}
-
 // Status publishes session transitions from bounded persisted previews.
 type Status struct {
-	store  StatusStore
-	events *events.Publisher
+	sessionStore    Sessions
+	transcriptStore Transcript
+	events          *events.Publisher
 }
 
-func NewStatus(store StatusStore) *Status               { return &Status{store: store} }
+func NewStatus(sessionStore Sessions, transcriptStore Transcript) *Status {
+	return &Status{sessionStore: sessionStore, transcriptStore: transcriptStore}
+}
 func (m *Status) SetPublisher(events *events.Publisher) { m.events = events }
 func (m *Status) PublishBusy(ctx context.Context, sess *api.Session, preview string, hostTurn, turnWasIdle bool) {
 	if m == nil || m.events == nil || sess == nil || (hostTurn && !turnWasIdle) {
 		return
 	}
 	if preview == "" {
-		preview = LastAssistantMessageContent(ctx, m.store, sess.ID)
+		preview = LastAssistantMessageContent(ctx, m.transcriptStore, sess.ID)
 	}
 	m.events.PublishSession(ctx, sess.ProjectID, sess.ID, api.SessionStatusBusy, preview)
 }
@@ -42,16 +37,16 @@ func (m *Status) PublishIdle(ctx context.Context, sessionID string, disposition 
 }
 
 func (m *Status) PublishIdleWithMessage(ctx context.Context, sessionID string, disposition api.SessionIdleDisposition, messageOverride string) {
-	if m == nil || m.events == nil || m.store == nil {
+	if m == nil || m.events == nil || (m.sessionStore == nil || m.transcriptStore == nil) {
 		return
 	}
-	updated, err := m.store.Get(ctx, sessionID)
+	updated, err := m.sessionStore.Get(ctx, sessionID)
 	if err != nil {
 		return
 	}
 	lastMessage := strings.TrimSpace(messageOverride)
 	if lastMessage == "" {
-		lastMessage = LastAssistantMessageContent(ctx, m.store, sessionID)
+		lastMessage = LastAssistantMessageContent(ctx, m.transcriptStore, sessionID)
 	}
 	m.events.PublishSessionIdle(ctx, updated.ProjectID, sessionID, lastMessage, disposition)
 }
@@ -59,7 +54,7 @@ func (m *Status) PublishIdleWithMessage(ctx context.Context, sessionID string, d
 // LastAssistantMessageContent is the idle preview: one tail read, never the
 // transcript. A read failure yields an empty preview rather than a lost event.
 
-func LastAssistantMessageContent(ctx context.Context, store PreviewStore, sessionID string) string {
+func LastAssistantMessageContent(ctx context.Context, store Transcript, sessionID string) string {
 	if store == nil {
 		return ""
 	}
@@ -93,10 +88,10 @@ func (m *Status) Preparing(ctx context.Context, sess *api.Session, sessionID str
 }
 
 func (m *Status) PublishAssistant(ctx context.Context, sessionID, content string) {
-	if m == nil || m.events == nil || m.store == nil {
+	if m == nil || m.events == nil || (m.sessionStore == nil || m.transcriptStore == nil) {
 		return
 	}
-	if sess, err := m.store.Get(ctx, sessionID); err == nil && sess != nil {
+	if sess, err := m.sessionStore.Get(ctx, sessionID); err == nil && sess != nil {
 		m.events.PublishSession(ctx, sess.ProjectID, sessionID, sess.Status, content)
 	}
 }

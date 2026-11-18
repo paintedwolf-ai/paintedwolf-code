@@ -1,9 +1,6 @@
 package phases_test
 
 import (
-	workflow "github.com/lycaon/lycaon/internal/workflow"
-	"github.com/lycaon/lycaon/internal/workflow/workflowtest"
-
 	"context"
 	"testing"
 
@@ -11,9 +8,11 @@ import (
 	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
+	workflow "github.com/lycaon/lycaon/internal/workflow"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 	workflowpersistence "github.com/lycaon/lycaon/internal/workflow/persistence"
 	"github.com/lycaon/lycaon/internal/workflow/runstate"
+	"github.com/lycaon/lycaon/internal/workflow/workflowtest"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -42,7 +41,7 @@ func TestTryAutoAdvanceInvokesPhaseAdvancedHook(t *testing.T) {
 
 	testdbseed.InsertProjectRoot(t, sqlDB, testdbseed.DefaultProjectID, dir)
 
-	sess, err := store.Create(ctx, api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
+	sess, err := store.Sessions.Create(ctx, api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session in store", err)
 	run, err := mgr.Starts.StartHuman(ctx, sess.ID, api.StartWorkflowRunRequest{WorkflowID: "hook-test", WorkflowVersion: "1.0.0"})
 	testutil.FailErr(t, "mgr.StartHuman failed", err)

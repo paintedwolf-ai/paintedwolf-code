@@ -1,13 +1,13 @@
 package upgradefixture
 
 import (
-	"github.com/lycaon/lycaon/internal/layeredfs/adapter/platform"
 	"os"
 	"path/filepath"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/db"
 	"github.com/lycaon/lycaon/internal/harnessfixture"
+	"github.com/lycaon/lycaon/internal/layeredfs/adapter/platform"
 	"github.com/lycaon/lycaon/internal/project"
 	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/sourceledger"
@@ -26,13 +26,13 @@ func TestWorkerFixtureReconstructsAfterOriginalWorkspaceRemoval(t *testing.T) {
 	attached, err := projects.Create(t.Context(), project.CreateParams{Roots: []project.AttachRootParams{{Path: root}}})
 	testutil.FailErr(t, "attach fixture project", err)
 	sessions := store.NewSQL(database)
-	parent, err := sessions.Create(t.Context(), api.CreateSessionRequest{WorkspaceRootID: attached.Roots[0].ID}, attached.ID)
+	parent, err := sessions.Sessions.Create(t.Context(), api.CreateSessionRequest{WorkspaceRootID: attached.Roots[0].ID}, attached.ID)
 	testutil.FailErr(t, "create fixture session", err)
 	queue := worker.NewSQLServices(database, 2).Queue
 	queue.Branches.SetBaselineStore(sourceledger.New(database, filepath.Join(dataDir, "source-content")).Baselines)
 	queue.Branches.SetProjectStore(projects)
 	queue.Branches.SetWorkerWorkspaceManager(workspace.NewManager(filepath.Join(dataDir, "worker-branches"), platform.NewSelector(platform.Config{}), workspace.Filesystem{}))
-	prepared, err := harnessfixture.Prepare(t.Context(), queue, queue.Branches, sessions, parent, attached.Roots[0], harnessfixture.Setup{
+	prepared, err := harnessfixture.Prepare(t.Context(), queue, queue.Branches, sessions.Sessions, parent, attached.Roots[0], sessions.Transcript, harnessfixture.Setup{
 		Overlays: []harnessfixture.Overlay{{Label: "Retained history", Files: map[string]string{"README.md": "changed\n", "new.txt": "new\n"}}},
 	}, nil)
 	testutil.FailErr(t, "complete fixture worker", err)

@@ -2,9 +2,6 @@ package wiring
 
 import (
 	"context"
-	"github.com/lycaon/lycaon/internal/progress"
-	scannerfixture "github.com/lycaon/lycaon/internal/scan/scantest"
-	"github.com/lycaon/lycaon/internal/toolrejection"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -25,17 +22,18 @@ import (
 	"github.com/lycaon/lycaon/internal/llm"
 	"github.com/lycaon/lycaon/internal/mcp"
 	"github.com/lycaon/lycaon/internal/orchestration"
+	"github.com/lycaon/lycaon/internal/progress"
 	"github.com/lycaon/lycaon/internal/project"
 	"github.com/lycaon/lycaon/internal/projectroot"
-
 	scanoutput "github.com/lycaon/lycaon/internal/scan/output"
-	"github.com/lycaon/lycaon/internal/session"
+	scannerfixture "github.com/lycaon/lycaon/internal/scan/scantest"
 	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/sourcecatalog"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/testutil/scantest"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/workertopology"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
@@ -55,7 +53,7 @@ func stageFakeMCPDistro(t *testing.T) {
 type Harness struct {
 	*app.ServeApp
 	Recording       *llm.RecordingClient
-	Store           session.Store
+	Store           *store.Repositories
 	testDir         string
 	dbPath          string
 	settlesTopology bool
@@ -225,7 +223,7 @@ func (h *Harness) CreateHarnessSession(t *testing.T, req wire.CreateSessionReque
 	if strings.TrimSpace(req.ProjectID) == "" {
 		req.ProjectID = testdbseed.DefaultProjectID
 	}
-	return h.Store.Create(t.Context(), req, testdbseed.DefaultProjectID)
+	return h.Store.Sessions.Create(t.Context(), req, testdbseed.DefaultProjectID)
 }
 
 // OwnerCtx binds the harness host owner to ctx as the deciding caller.

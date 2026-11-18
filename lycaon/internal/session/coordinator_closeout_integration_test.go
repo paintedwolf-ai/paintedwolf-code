@@ -31,7 +31,7 @@ func TestLegFinishedQueuesKickAndAutoPrompts(t *testing.T) {
 	ctx := context.Background()
 	queue := worker.NewSQLServices(fix.store.DB(), 4).Queue
 	fix.mgr.SetWorkerQueue(queue, queue.Branches)
-	child, err := fix.store.CreateChild(ctx, fix.sess, wire.SpawnChildRequest{AgentType: orchestration.ProfilePathExplorer})
+	child, err := fix.store.Sessions.CreateChild(ctx, fix.sess, wire.SpawnChildRequest{AgentType: orchestration.ProfilePathExplorer})
 	testutil.FailErr(t, "create child", err)
 	jobID, err := queue.Enqueue(ctx, wire.WorkerTask{
 		ParentSessionID: fix.sess.ID, ChildSessionID: child.ID, ProjectID: fix.sess.ProjectID,
@@ -55,7 +55,7 @@ func TestLegFinishedQueuesKickAndAutoPrompts(t *testing.T) {
 	testutil.FailErr(t, "append leg summary", err)
 	simulateWorkerJobComplete(t, fix.mgr, queue, jobID)
 	testutil.WaitFor(t, "the loop wake message is stored", func() bool {
-		msgs, err := fix.store.GetMessages(ctx, fix.sess.ID)
+		msgs, err := fix.store.Transcript.GetMessages(ctx, fix.sess.ID)
 		if err != nil {
 			return false
 		}

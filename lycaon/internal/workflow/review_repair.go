@@ -20,14 +20,14 @@ import (
 // ReviewRepairs accounts for refused verdicts and pauses a review whose repair
 // cannot converge, retaining the evidence an incomplete report needs.
 type ReviewRepairs struct {
-	Runs        runstate.RunsRepository
-	Vars        *runstate.Variables
-	Resolver    *workflowcatalog.Resolver
-	Sessions    reviewTranscript
-	Coverage    *workflowreview.Coverage
-	Verdicts    *workflowreview.Verdicts
-	Journal     *runstate.Journal
-	Publication reviewPublication
+	Runs            runstate.RunsRepository
+	Vars            *runstate.Variables
+	Resolver        *workflowcatalog.Resolver
+	TranscriptStore reviewTranscript
+	Coverage        *workflowreview.Coverage
+	Verdicts        *workflowreview.Verdicts
+	Journal         *runstate.Journal
+	Publication     reviewPublication
 }
 
 type reviewTranscript interface {
@@ -66,10 +66,10 @@ func (m *ReviewRepairs) RecordReviewToolResult(ctx context.Context, sessionID st
 			return nil
 		}
 	}
-	if m.Sessions == nil {
+	if m.TranscriptStore == nil {
 		return fmt.Errorf("review repair requires transcript storage")
 	}
-	messages, err := m.Sessions.GetMessages(ctx, sessionID)
+	messages, err := m.TranscriptStore.GetMessages(ctx, sessionID)
 	if err != nil {
 		return err
 	}
@@ -146,7 +146,7 @@ func (m *ReviewRepairs) RecordReviewToolResult(ctx context.Context, sessionID st
 // Recover closes the crash window between transcript commit and repair
 // accounting. Accepted submissions delimit the current repair sequence.
 func (m *ReviewRepairs) Recover(ctx context.Context) error {
-	if m.Sessions == nil {
+	if m.TranscriptStore == nil {
 		return nil
 	}
 	runs, err := m.Runs.ListRunning(ctx)
@@ -154,7 +154,7 @@ func (m *ReviewRepairs) Recover(ctx context.Context) error {
 		return err
 	}
 	for _, run := range runs {
-		messages, err := m.Sessions.GetMessages(ctx, run.SessionID)
+		messages, err := m.TranscriptStore.GetMessages(ctx, run.SessionID)
 		if err != nil {
 			return err
 		}

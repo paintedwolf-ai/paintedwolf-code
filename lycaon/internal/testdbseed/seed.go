@@ -98,7 +98,7 @@ func BindSessionWorkspace(t *testing.T, sessionStore interface {
 	testutil.FailErr(t, "read session project", err)
 	var rootID string
 	err = database.QueryRowContext(t.Context(), `SELECT id FROM project_roots WHERE project_id = ? AND path = ?`, projectID, path).Scan(&rootID)
-	if err == sql.ErrNoRows {
+	if db.IsNoRows(err) {
 		rootID = InsertProjectRoot(t, database, projectID, path)
 	} else {
 		testutil.FailErr(t, "find workspace root", err)

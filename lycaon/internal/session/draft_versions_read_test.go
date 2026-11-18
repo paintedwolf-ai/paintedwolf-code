@@ -3,7 +3,6 @@ package session
 import (
 	"context"
 	"encoding/json"
-	"github.com/lycaon/lycaon/internal/tools/toolstest"
 	"strings"
 	"testing"
 	"time"
@@ -18,17 +17,18 @@ import (
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/toolrejection"
+	"github.com/lycaon/lycaon/internal/tools/toolstest"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
 func TestMessageCarriesVersionCount(t *testing.T) {
 	store := storetest.New(t, testdbseed.DefaultProjectID)
 	ctx := context.Background()
-	sess, err := store.Create(ctx, api.CreateSessionRequest{ProjectID: testdbseed.DefaultProjectID}, testdbseed.DefaultProjectID)
+	sess, err := store.Sessions.Create(ctx, api.CreateSessionRequest{ProjectID: testdbseed.DefaultProjectID}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "Create", err)
 
 	slotID := "slot-1"
-	if _, err := store.AppendDraftVersion(ctx, sess.ID, slotID, "v0", "CODE_A"); err != nil {
+	if _, err := store.Transcript.AppendDraftVersion(ctx, sess.ID, slotID, "v0", "CODE_A"); err != nil {
 		testutil.FailErr(t, "AppendDraftVersion", err)
 	}
 	msg := api.Message{
@@ -40,10 +40,10 @@ func TestMessageCarriesVersionCount(t *testing.T) {
 		DraftVersionCount: 2,
 		CreatedAt:         time.Now().UTC(),
 	}
-	if err := store.AppendMessages(ctx, sess.ID, msg); err != nil {
+	if err := store.Transcript.AppendMessages(ctx, sess.ID, msg); err != nil {
 		testutil.FailErr(t, "AppendMessages", err)
 	}
-	msgs, err := store.GetMessages(ctx, sess.ID)
+	msgs, err := store.Transcript.GetMessages(ctx, sess.ID)
 	testutil.FailErr(t, "GetMessages", err)
 	if len(msgs) != 1 || msgs[0].DraftVersionCount != 2 {
 		t.Fatalf("messages = %+v want draft_version_count=2", msgs)
@@ -53,18 +53,18 @@ func TestMessageCarriesVersionCount(t *testing.T) {
 func TestDraftVersionsEndpointOrder(t *testing.T) {
 	store := storetest.New(t, testdbseed.DefaultProjectID)
 	ctx := context.Background()
-	sess, err := store.Create(ctx, api.CreateSessionRequest{ProjectID: testdbseed.DefaultProjectID}, testdbseed.DefaultProjectID)
+	sess, err := store.Sessions.Create(ctx, api.CreateSessionRequest{ProjectID: testdbseed.DefaultProjectID}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "Create", err)
-	if _, err := store.AppendDraftVersion(ctx, sess.ID, "slot-1", "v0", "A"); err != nil {
+	if _, err := store.Transcript.AppendDraftVersion(ctx, sess.ID, "slot-1", "v0", "A"); err != nil {
 		testutil.FailErr(t, "AppendDraftVersion v0", err)
 	}
-	if _, err := store.AppendDraftVersion(ctx, sess.ID, "slot-1", "v1", "B"); err != nil {
+	if _, err := store.Transcript.AppendDraftVersion(ctx, sess.ID, "slot-1", "v1", "B"); err != nil {
 		testutil.FailErr(t, "AppendDraftVersion v1", err)
 	}
-	if _, err := store.AppendDraftVersion(ctx, sess.ID, "slot-1", "v2", "C"); err != nil {
+	if _, err := store.Transcript.AppendDraftVersion(ctx, sess.ID, "slot-1", "v2", "C"); err != nil {
 		testutil.FailErr(t, "AppendDraftVersion v2", err)
 	}
-	got, err := store.ListDraftVersions(ctx, sess.ID, "slot-1")
+	got, err := store.Transcript.ListDraftVersions(ctx, sess.ID, "slot-1")
 	testutil.FailErr(t, "ListDraftVersions", err)
 	if len(got) != 3 || got[0].Body != "v0" || got[2].OutcomeCode != "C" {
 		t.Fatalf("versions = %+v", got)
@@ -80,7 +80,7 @@ func TestDraftNeverEmitsDeleteOpForCoordinatorDraftSlot(t *testing.T) {
 	projectID := attachTestProject(t, mgr, store)
 
 	ctx := context.Background()
-	sess, err := store.Create(ctx, api.CreateSessionRequest{ProjectID: projectID}, projectID)
+	sess, err := store.Sessions.Create(ctx, api.CreateSessionRequest{ProjectID: projectID}, projectID)
 	testutil.FailErr(t, "Create", err)
 
 	slotID := "draft-slot-1"
@@ -99,10 +99,10 @@ func TestDraftNeverEmitsDeleteOpForCoordinatorDraftSlot(t *testing.T) {
 		Visibility:  api.MessageVisibilityInternal,
 		CreatedAt:   time.Now().UTC(),
 	}
-	if err := store.AppendMessages(ctx, sess.ID, placeholder); err != nil {
+	if err := store.Transcript.AppendMessages(ctx, sess.ID, placeholder); err != nil {
 		testutil.FailErr(t, "AppendMessages", err)
 	}
-	if _, err := store.AppendDraftVersion(ctx, sess.ID, slotID, "attempt one", "SYNTH_HANDLE_NOT_IN_LEGS"); err != nil {
+	if _, err := store.Transcript.AppendDraftVersion(ctx, sess.ID, slotID, "attempt one", "SYNTH_HANDLE_NOT_IN_LEGS"); err != nil {
 		testutil.FailErr(t, "AppendDraftVersion", err)
 	}
 	reset := placeholder
@@ -148,13 +148,13 @@ func TestSQLStoreDraftVersionsUnknownSlotEmpty(t *testing.T) {
 	store := store.NewSQL(sqlDB)
 	ctx := context.Background()
 	testdbseed.InsertProjectRoot(t, sqlDB, testdbseed.DefaultProjectID, t.TempDir())
-	sess, err := store.Create(ctx, api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
+	sess, err := store.Sessions.Create(ctx, api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "Create", err)
 
-	if _, err := store.AppendDraftVersion(ctx, sess.ID, "slot-1", "body", "CODE"); err != nil {
+	if _, err := store.Transcript.AppendDraftVersion(ctx, sess.ID, "slot-1", "body", "CODE"); err != nil {
 		testutil.FailErr(t, "AppendDraftVersion", err)
 	}
-	got, err := store.ListDraftVersions(ctx, sess.ID, "unknown-slot")
+	got, err := store.Transcript.ListDraftVersions(ctx, sess.ID, "unknown-slot")
 	testutil.FailErr(t, "ListDraftVersions unknown slot", err)
 	if len(got) != 0 {
 		t.Fatalf("unknown slot versions = %+v want empty", got)

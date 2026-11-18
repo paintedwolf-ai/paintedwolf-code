@@ -168,7 +168,7 @@ func recordSandboxAskSuppressed(ctx context.Context, req sandboxAskRequest, caus
 }
 
 // askSessionIDs returns the invoking session and its chat.
-func askSessionIDs(ctx context.Context, store Store, sessionID, parentSessionID string) (string, string) {
+func askSessionIDs(ctx context.Context, store sessiontree.Reader, sessionID, parentSessionID string) (string, string) {
 	invokingSessionID := strings.TrimSpace(sessionID)
 	if invokingSessionID == "" {
 		invokingSessionID = strings.TrimSpace(parentSessionID)

@@ -57,7 +57,7 @@ func TestWorkersBoardAndCancelHandlers(t *testing.T) {
 	testutil.FailErr(t, "create project", err)
 
 	sessStore := sessionFixture
-	coord, err := sessStore.Create(ctx, wire.CreateSessionRequest{ProjectID: proj.ID, Posture: wire.SessionPostureBuild}, proj.ID)
+	coord, err := sessStore.Sessions.Create(ctx, wire.CreateSessionRequest{ProjectID: proj.ID, Posture: wire.SessionPostureBuild}, proj.ID)
 	testutil.FailErr(t, "create session", err)
 
 	queue := workertest.NewQueue(t, 2, proj.ID, coord.ID)

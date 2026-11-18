@@ -31,13 +31,14 @@ import (
 
 // receiptRecorder records admitted receipt ids. Host turns mint their own operation id.
 type receiptRecorder struct {
-	*store.SQL
-	mu  sync.Mutex
-	ids []string
+	store.SubmissionRepository
+	repositories *store.Repositories
+	mu           sync.Mutex
+	ids          []string
 }
 
 func (r *receiptRecorder) PutPromptSubmission(ctx context.Context, in store.PromptSubmission) (*store.PromptSubmission, bool, error) {
-	row, created, err := r.SQL.PutPromptSubmission(ctx, in)
+	row, created, err := r.SubmissionRepository.PutPromptSubmission(ctx, in)
 	if err == nil && created {
 		r.mu.Lock()
 		r.ids = append(r.ids, row.ID)
@@ -54,9 +55,11 @@ func (r *receiptRecorder) admitted() []string {
 
 func newReceiptTestManager(t *testing.T) (*Host, *receiptRecorder) {
 	t.Helper()
-	recorder := &receiptRecorder{SQL: storetest.New(t, testdbseed.DefaultProjectID)}
+	repositories := storetest.New(t, testdbseed.DefaultProjectID)
+	recorder := &receiptRecorder{SubmissionRepository: repositories.Submissions, repositories: repositories}
+	repositories.Submissions = recorder
 	registry := toolstest.NewRegistry()
-	mgr := NewHost(recorder, Models{Client: llm.NewMockProvider(testMockConfig(t)), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, registry)
+	mgr := NewHost(repositories, Models{Client: llm.NewMockProvider(testMockConfig(t)), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, registry)
 	oartest.InstallCloseoutPolicy(t, mgr)
 	mgr.Coordinator.Guards.SetToolMetadata(testtool.RegistryInvoker{Registry: registry})
 	return mgr, recorder
@@ -64,7 +67,7 @@ func newReceiptTestManager(t *testing.T) (*Host, *receiptRecorder) {
 
 func newReceiptTestSession(t *testing.T, mgr *Host, sessions *receiptRecorder) *api.Session {
 	t.Helper()
-	sess, err := sessions.Create(context.Background(), api.CreateSessionRequest{
+	sess, err := sessions.repositories.Sessions.Create(context.Background(), api.CreateSessionRequest{
 		Posture: api.SessionPostureBuild,
 	}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
@@ -76,7 +79,7 @@ func TestHostTurnWritesReceipt(t *testing.T) {
 	mgr, sessions := newReceiptTestManager(t)
 	ctx := workercontext.WithJob(context.Background(), "worker-job-1")
 	sess := newReceiptTestSession(t, mgr, sessions)
-	testdbseed.InsertWorkerJob(t, sessions.DB(), "worker-job-1", sess.ID)
+	testdbseed.InsertWorkerJob(t, sessions.repositories.DB(), "worker-job-1", sess.ID)
 
 	_, err := mgr.Submissions.PromptHostTurn(ctx, sess.ID, store.PromptSubmissionOriginWorkerCloseout, "closeout kick")
 	testutil.FailErr(t, "run host turn", err)
@@ -109,7 +112,7 @@ func TestHostTurnWritesReceipt(t *testing.T) {
 		t.Fatal("worker closeout must persist ProseFinish so replay gates invocation")
 	}
 
-	msgs, err := sessions.GetMessages(ctx, sess.ID)
+	msgs, err := sessions.repositories.Transcript.GetMessages(ctx, sess.ID)
 	testutil.FailErr(t, "get messages", err)
 	var kick api.Message
 	for _, msg := range msgs {
@@ -273,12 +276,12 @@ func TestProgressMissingSkipsWorkerChild(t *testing.T) {
 	mgr := newPostHookManager(t)
 	sessionStore := storetest.New(t, "proj-1")
 	ctx := t.Context()
-	parent, err := sessionStore.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, "proj-1")
+	parent, err := sessionStore.Sessions.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, "proj-1")
 	testutil.FailErr(t, "Create parent", err)
-	child, err := sessionStore.CreateChild(ctx, parent, api.SpawnChildRequest{AgentType: "implementer"})
+	child, err := sessionStore.Sessions.CreateChild(ctx, parent, api.SpawnChildRequest{AgentType: "implementer"})
 	testutil.FailErr(t, "CreateChild", err)
-	mgr.Coordinator.Context.Sessions = sessionStore
-	mgr.Runner.PostTurn = postturn.New(sessionStore, mgr.Coordinator.Guidance)
+	mgr.Coordinator.Context.Sessions = sessionStore.Sessions
+	mgr.Runner.PostTurn = postturn.New(sessionStore.Sessions, sessionStore.Transcript, mgr.Coordinator.Guidance)
 	mgr.SetProgressStore(progress.NewMemoryStore())
 
 	mgr.Runner.PostTurn.ProgressMissing(ctx, child.ID, []string{"task"})
@@ -296,10 +299,10 @@ func TestProgressMissingSkipsWorkerChild(t *testing.T) {
 func TestProgressMissingSkipsSpecWorkflowArtifacts(t *testing.T) {
 	mgr := newPostHookManager(t)
 	sessionStore := storetest.New(t, "proj-1")
-	sess, err := sessionStore.Create(t.Context(), api.CreateSessionRequest{Posture: api.SessionPostureSpec}, "proj-1")
+	sess, err := sessionStore.Sessions.Create(t.Context(), api.CreateSessionRequest{Posture: api.SessionPostureSpec}, "proj-1")
 	testutil.FailErr(t, "Create session", err)
-	mgr.Coordinator.Context.Sessions = sessionStore
-	mgr.Runner.PostTurn = postturn.New(sessionStore, mgr.Coordinator.Guidance)
+	mgr.Coordinator.Context.Sessions = sessionStore.Sessions
+	mgr.Runner.PostTurn = postturn.New(sessionStore.Sessions, sessionStore.Transcript, mgr.Coordinator.Guidance)
 	mgr.SetProgressStore(progress.NewMemoryStore())
 
 	mgr.Runner.PostTurn.ProgressMissing(t.Context(), sess.ID, []string{"write"})
@@ -311,10 +314,10 @@ func TestProgressMissingSkipsSpecWorkflowArtifacts(t *testing.T) {
 func TestWorkflowPhaseExitNudgesAfterUnrelatedToolArc(t *testing.T) {
 	mgr := newPostHookManager(t)
 	sessionStore := storetest.New(t, "proj-1")
-	sess, err := sessionStore.Create(t.Context(), api.CreateSessionRequest{}, "proj-1")
+	sess, err := sessionStore.Sessions.Create(t.Context(), api.CreateSessionRequest{}, "proj-1")
 	testutil.FailErr(t, "Create session", err)
-	mgr.Coordinator.Context.Sessions = sessionStore
-	mgr.Runner.PostTurn = postturn.New(sessionStore, mgr.Coordinator.Guidance)
+	mgr.Coordinator.Context.Sessions = sessionStore.Sessions
+	mgr.Runner.PostTurn = postturn.New(sessionStore.Sessions, sessionStore.Transcript, mgr.Coordinator.Guidance)
 	mgr.SetCoordinatorTurnFrameSource(postHookWorkflowContext{wf: feedback.WorkflowEvaluationContext{
 		WorkflowID:         "example",
 		CurrentPhase:       "intake",
@@ -336,10 +339,10 @@ func TestWorkflowPhaseExitNudgesAfterUnrelatedToolArc(t *testing.T) {
 func TestWorkflowPhaseExitAllowsAnotherAsk(t *testing.T) {
 	mgr := newPostHookManager(t)
 	sessionStore := storetest.New(t, "proj-1")
-	sess, err := sessionStore.Create(t.Context(), api.CreateSessionRequest{}, "proj-1")
+	sess, err := sessionStore.Sessions.Create(t.Context(), api.CreateSessionRequest{}, "proj-1")
 	testutil.FailErr(t, "Create session", err)
-	mgr.Coordinator.Context.Sessions = sessionStore
-	mgr.Runner.PostTurn = postturn.New(sessionStore, mgr.Coordinator.Guidance)
+	mgr.Coordinator.Context.Sessions = sessionStore.Sessions
+	mgr.Runner.PostTurn = postturn.New(sessionStore.Sessions, sessionStore.Transcript, mgr.Coordinator.Guidance)
 	mgr.SetCoordinatorTurnFrameSource(postHookWorkflowContext{wf: feedback.WorkflowEvaluationContext{
 		WorkflowID:         "example",
 		CurrentPhase:       "intake",

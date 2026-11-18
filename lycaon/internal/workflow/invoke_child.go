@@ -4,9 +4,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
+	"time"
+
 	"github.com/google/uuid"
 	"github.com/lycaon/lycaon/internal/conditions"
-	"github.com/lycaon/lycaon/internal/session"
 	workflowblueprints "github.com/lycaon/lycaon/internal/workflow/blueprints"
 	"github.com/lycaon/lycaon/internal/workflow/catalog"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
@@ -14,8 +16,6 @@ import (
 	"github.com/lycaon/lycaon/internal/workflow/publication"
 	"github.com/lycaon/lycaon/internal/workflow/runstate"
 	"github.com/lycaon/lycaon/pkg/api"
-	"strings"
-	"time"
 )
 
 // ErrSubworkflowDepthExceeded is returned when a child run attempts to invoke another workflow.
@@ -29,7 +29,7 @@ var ErrChildRunActive = errors.New("child workflow run already active")
 type Children struct {
 	Runs              runstate.RunsRepository
 	Starts            runstate.StartsRepository
-	Sessions          session.Store
+	Sessions          SessionReader
 	Resolver          *catalog.Resolver
 	Vars              *runstate.Variables
 	Journal           *runstate.Journal

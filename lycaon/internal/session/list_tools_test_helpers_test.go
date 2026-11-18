@@ -50,7 +50,7 @@ import (
 
 type contextualToolsFixture struct {
 	Mgr        *session.Host
-	Store      session.Store
+	Store      *store.Repositories
 	Workflow   *workflow.RunManager
 	Executor   *toolexecution.Executor
 	Sess       *api.Session
@@ -107,7 +107,7 @@ func setupContextualToolsFixtureFull(t *testing.T, posture api.SessionPosture, c
 	if err := workflowstatetools.RegisterStateTools(rt.Registry, workflowstatetools.StateToolDeps{
 		Runs: workflowMgr.Store.Runs, Vars: workflowMgr.Phases.Vars, Journal: workflowMgr.Phases.Journal,
 		Resolver: &workflowMgr.Resolver, Starts: workflowMgr.Starts, Controls: workflowMgr.Controls,
-		Scaffold: workflowMgr.Blueprints.Scaffold, Sessions: store,
+		Scaffold: workflowMgr.Blueprints.Scaffold, Sessions: store.Sessions,
 	}); err != nil {
 		testutil.FailErr(t, "workflowstatetools.RegisterStateTools failed", err)
 	}
@@ -132,7 +132,7 @@ func setupContextualToolsFixtureFull(t *testing.T, posture api.SessionPosture, c
 
 	testdbseed.InsertProjectRoot(t, sqlDB, testdbseed.DefaultProjectID, projectDir)
 	ctx := context.Background()
-	sess, err := store.Create(ctx, api.CreateSessionRequest{Posture: posture}, testdbseed.DefaultProjectID)
+	sess, err := store.Sessions.Create(ctx, api.CreateSessionRequest{Posture: posture}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session in store", err)
 	if err := mgr.Chats.SetAgentType(ctx, sess.ID, orchestration.ProfileCoordinator); err != nil {
 		testutil.FailErr(t, "mgr.Chats.SetAgentType failed", err)
@@ -271,7 +271,7 @@ func TestStampMessageLiveStatusStreamingOnlyForActiveRow(t *testing.T) {
 	ctx := t.Context()
 	store := storetest.New(t, "p1")
 	mgr := session.NewHost(store, session.Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
-	sess, err := store.Create(ctx, api.CreateSessionRequest{
+	sess, err := store.Sessions.Create(ctx, api.CreateSessionRequest{
 		ProjectID: "p1",
 		Posture:   api.SessionPostureBuild,
 	}, "p1")
@@ -284,7 +284,7 @@ func TestStampMessageLiveStatusStreamingOnlyForActiveRow(t *testing.T) {
 		{ID: "live-row", Role: api.MessageRoleAssistant, Content: "partial", CreatedAt: sess.CreatedAt},
 		{ID: "done-row", Role: api.MessageRoleAssistant, Content: "done", CreatedAt: sess.CreatedAt},
 	}
-	testutil.FailErr(t, "AppendMessages", store.AppendMessages(ctx, sess.ID, msgs...))
+	testutil.FailErr(t, "AppendMessages", store.Transcript.AppendMessages(ctx, sess.ID, msgs...))
 
 	page, err := mgr.Runner.Transcript.GetTranscriptPage(ctx, sess.ID, api.TranscriptPageQuery{})
 	testutil.FailErr(t, "GetTranscriptPage", err)
@@ -317,13 +317,13 @@ func TestHydrationYieldsCompleteWhenNoActiveTurn(t *testing.T) {
 	ctx := t.Context()
 	store := storetest.New(t, "p1")
 	mgr := session.NewHost(store, session.Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
-	sess, err := store.Create(ctx, api.CreateSessionRequest{
+	sess, err := store.Sessions.Create(ctx, api.CreateSessionRequest{
 		ProjectID: "p1",
 		Posture:   api.SessionPostureBuild,
 	}, "p1")
 	testutil.FailErr(t, "Create session", err)
 
-	testutil.FailErr(t, "AppendMessages", store.AppendMessages(ctx, sess.ID, api.Message{
+	testutil.FailErr(t, "AppendMessages", store.Transcript.AppendMessages(ctx, sess.ID, api.Message{
 		ID:          "a1",
 		Role:        api.MessageRoleAssistant,
 		Content:     "stuck live body",

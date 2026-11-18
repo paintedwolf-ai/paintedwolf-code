@@ -5,11 +5,11 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/lycaon/lycaon/internal/toolrejection"
 	"slices"
 
 	scanfindings "github.com/lycaon/lycaon/internal/scan/findings"
 	"github.com/lycaon/lycaon/internal/tooloutput"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/internal/tools/surveyjson"
 	workflowcatalog "github.com/lycaon/lycaon/internal/workflow/catalog"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
@@ -23,12 +23,12 @@ import (
 // InventoryAccounting answers scan_query's accounting views from a run's
 // accepted evidence and its latest candidate submission.
 type InventoryAccounting struct {
-	Runs     runstate.RunsRepository
-	Vars     *runstate.Variables
-	Resolver *workflowcatalog.Resolver
-	Sessions reviewTranscript
-	Coverage *workflowreview.Coverage
-	Verdicts *workflowreview.Verdicts
+	Runs            runstate.RunsRepository
+	Vars            *runstate.Variables
+	Resolver        *workflowcatalog.Resolver
+	TranscriptStore reviewTranscript
+	Coverage        *workflowreview.Coverage
+	Verdicts        *workflowreview.Verdicts
 }
 
 type inventoryAccountRow struct {
@@ -193,14 +193,14 @@ func (m *InventoryAccounting) candidateInventory(ctx context.Context, run *api.W
 	if err != nil {
 		return empty, "", err
 	}
-	if repair == nil || repair.CandidateMessageID == "" || m.Sessions == nil {
+	if repair == nil || repair.CandidateMessageID == "" || m.TranscriptStore == nil {
 		return empty, "absent", nil
 	}
 	phase, ok := manifest.PhaseByID(run.CurrentPhase)
 	if !ok || phase.ReviewLoop == nil {
 		return empty, "absent", nil
 	}
-	messages, err := m.Sessions.GetMessages(ctx, run.SessionID)
+	messages, err := m.TranscriptStore.GetMessages(ctx, run.SessionID)
 	if err != nil {
 		return empty, "", err
 	}

@@ -16,7 +16,7 @@ import (
 
 func (s *Composition) HandleComposeWorkflow(w http.ResponseWriter, r *http.Request) {
 	sessionID := chi.URLParam(r, "id")
-	sess, ok := requestscope.Session(s.Store, s.responses, w, r, sessionID)
+	sess, ok := requestscope.Session(s.SessionStore, s.responses, w, r, sessionID)
 	if !ok {
 		return
 	}
@@ -83,7 +83,7 @@ func (s *Composition) HandleListWorkflowTemplates(w http.ResponseWriter, r *http
 
 func (s *Composition) HandleComposeFromTemplate(w http.ResponseWriter, r *http.Request) {
 	sessionID := chi.URLParam(r, "id")
-	sess, ok := requestscope.Session(s.Store, s.responses, w, r, sessionID)
+	sess, ok := requestscope.Session(s.SessionStore, s.responses, w, r, sessionID)
 	if !ok {
 		return
 	}

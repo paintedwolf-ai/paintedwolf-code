@@ -3,8 +3,6 @@ package session
 import (
 	"context"
 	"encoding/json"
-	"github.com/lycaon/lycaon/internal/timelayout"
-	"github.com/lycaon/lycaon/internal/tools/toolstest"
 	"testing"
 	"time"
 
@@ -15,6 +13,8 @@ import (
 	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/timelayout"
+	"github.com/lycaon/lycaon/internal/tools/toolstest"
 	wire "github.com/lycaon/lycaon/pkg/api"
 	"github.com/lycaon/lycaon/pkg/api/apitest"
 )
@@ -31,7 +31,7 @@ func TestAppendMessagesSSECarriesOrdForEveryMessageKind(t *testing.T) {
 
 	ctx := context.Background()
 	testdbseed.InsertProjectRoot(t, sqlDB, testdbseed.DefaultProjectID, t.TempDir())
-	sess, err := store.Create(ctx, wire.CreateSessionRequest{}, testdbseed.DefaultProjectID)
+	sess, err := store.Sessions.Create(ctx, wire.CreateSessionRequest{}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
 
 	const runID = "run-sse-ord-kinds"
@@ -64,7 +64,7 @@ func TestAppendMessagesSSECarriesOrdForEveryMessageKind(t *testing.T) {
 			if ev.Message.Seq <= 0 {
 				t.Fatalf("SSE %s seq = %d want > 0", tc.name, ev.Message.Seq)
 			}
-			stored, err := store.GetMessages(ctx, sess.ID)
+			stored, err := store.Transcript.GetMessages(ctx, sess.ID)
 			testutil.FailErr(t, "GetMessages", err)
 			var row wire.Message
 			for _, m := range stored {

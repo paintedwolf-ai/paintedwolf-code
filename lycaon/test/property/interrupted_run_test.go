@@ -26,7 +26,7 @@ func TestInterruptedRunReconcileEmitsTerminalBoundary(t *testing.T) {
 	runMgr.Recovery.Busy = func(context.Context, string) bool { return false }
 
 	rapid.Check(t, func(rt *rapid.T) {
-		sess, err := sessStore.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
+		sess, err := sessStore.Sessions.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 		failErr(rt, "create session", err)
 
 		runID := "run-" + rapid.StringMatching(`[a-z0-9]{6,10}`).Draw(rt, "run")
@@ -47,7 +47,7 @@ func TestInterruptedRunReconcileEmitsTerminalBoundary(t *testing.T) {
 		if got.Status != api.WorkflowRunStatusInterrupted {
 			rt.Fatalf("status = %q want interrupted", got.Status)
 		}
-		msgs, err := sessStore.GetMessages(ctx, sess.ID)
+		msgs, err := sessStore.Transcript.GetMessages(ctx, sess.ID)
 		failErr(rt, "messages", err)
 		var boundaries int
 		for _, msg := range msgs {

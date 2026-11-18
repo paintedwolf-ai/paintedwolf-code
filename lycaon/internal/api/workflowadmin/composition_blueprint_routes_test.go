@@ -96,7 +96,7 @@ func TestLaunchBlueprintRefusesIncompatibleTargets(t *testing.T) {
 	wantError(t, f.postJSON(t, launch, `{`), wire.ApiErrorCodeInvalidJson)
 	wantError(t, f.postJSON(t, launch, `{"target_workflow_id":"no-such-workflow"}`), wire.ApiErrorCodeBlueprintLaunchIncompatible)
 
-	sessions, err := f.sessions.List(t.Context())
+	sessions, err := f.sessions.Sessions.List(t.Context())
 	testutil.FailErr(t, "list sessions", err)
 	if len(sessions) != 0 {
 		t.Fatalf("refused launch materialized %d sessions", len(sessions))

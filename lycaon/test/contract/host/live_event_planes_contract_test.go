@@ -3,7 +3,6 @@ package contract_test
 import (
 	"context"
 	"encoding/json"
-	"github.com/lycaon/lycaon/internal/tools/toolstest"
 	"strconv"
 	"testing"
 	"time"
@@ -16,6 +15,7 @@ import (
 	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/tools/toolstest"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -38,9 +38,9 @@ func TestParentOnlyProjectSubscriberCannotSeeWorkerLiveBodies(t *testing.T) {
 	mgr.SetEventPublisher(pub)
 
 	ctx := context.Background()
-	parent, err := st.Create(ctx, api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
+	parent, err := st.Sessions.Create(ctx, api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create parent", err)
-	child, err := st.Create(ctx, api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
+	child, err := st.Sessions.Create(ctx, api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create child", err)
 	_ = parent
 
@@ -70,7 +70,7 @@ func TestParentOnlyProjectSubscriberCannotSeeWorkerLiveBodies(t *testing.T) {
 	_ = drain()
 
 	childMsg := "child-live-1"
-	testutil.FailErr(t, "append child placeholder", st.AppendMessages(ctx, child.ID, api.Message{
+	testutil.FailErr(t, "append child placeholder", st.Transcript.AppendMessages(ctx, child.ID, api.Message{
 		ID:         childMsg,
 		Role:       api.MessageRoleAssistant,
 		Visibility: api.MessageVisibilityInternal,

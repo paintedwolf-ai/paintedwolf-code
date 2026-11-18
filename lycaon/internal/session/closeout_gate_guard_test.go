@@ -35,7 +35,7 @@ func gatedExecuteState() workflowfacts.WorkflowCloseoutGateState {
 }
 
 func TestGatedCloseoutStopsWhenInvokeGated(t *testing.T) {
-	mgr, sess := newSynthesisDelayManager(t)
+	mgr, sess, _ := newSynthesisDelayManager(t)
 	mgr.SetWorkflowDomains(workflowDomainFixture(gatedCloseoutView{state: gatedExecuteState()}))
 
 	if reject, block := mgr.Coordinator.Guards.OpenGates(context.Background(), sess, true, false); !block || !errors.Is(reject, guidance.ErrCloseoutStopped) || !errors.Is(reject, guidance.ErrCloseoutNeedsRepairTurn) {
@@ -44,7 +44,7 @@ func TestGatedCloseoutStopsWhenInvokeGated(t *testing.T) {
 }
 
 func TestGatedCloseoutBlocksOnOpenGates(t *testing.T) {
-	mgr, sess := newSynthesisDelayManager(t)
+	mgr, sess, _ := newSynthesisDelayManager(t)
 	mgr.SetWorkflowDomains(workflowDomainFixture(gatedCloseoutView{state: gatedExecuteState()}))
 
 	reject, block := mgr.Coordinator.Guards.OpenGates(tools.WithCallReach(context.Background(), toolreach.Offered([]string{"ask_user"})), sess, true, true)
@@ -64,7 +64,7 @@ func TestGatedCloseoutBlocksOnOpenGates(t *testing.T) {
 }
 
 func TestGatedCloseoutAllowsWhenNotGated(t *testing.T) {
-	mgr, sess := newSynthesisDelayManager(t)
+	mgr, sess, _ := newSynthesisDelayManager(t)
 	mgr.SetWorkflowDomains(workflowDomainFixture(gatedCloseoutView{state: workflowfacts.WorkflowCloseoutGateState{}}))
 
 	if _, block := mgr.Coordinator.Guards.OpenGates(context.Background(), sess, true, true); block {
@@ -73,7 +73,7 @@ func TestGatedCloseoutAllowsWhenNotGated(t *testing.T) {
 }
 
 func TestGatedCloseoutSkipsBusyWorkers(t *testing.T) {
-	mgr, sess := newSynthesisDelayManager(t)
+	mgr, sess, _ := newSynthesisDelayManager(t)
 	mgr.SetWorkflowDomains(workflowDomainFixture(gatedCloseoutView{state: gatedExecuteState()}))
 
 	if _, block := mgr.Coordinator.Guards.OpenGates(context.Background(), sess, false, true); block {
@@ -82,7 +82,7 @@ func TestGatedCloseoutSkipsBusyWorkers(t *testing.T) {
 }
 
 func TestGatedCloseoutBoundedPerPrompt(t *testing.T) {
-	mgr, sess := newSynthesisDelayManager(t)
+	mgr, sess, _ := newSynthesisDelayManager(t)
 	mgr.SetWorkflowDomains(workflowDomainFixture(gatedCloseoutView{state: gatedExecuteState()}))
 	ctx := context.Background()
 
@@ -116,7 +116,7 @@ func (v gatedCloseoutView) AssertSessionCompletion(context.Context, string) erro
 }
 
 func TestGatedCloseoutRejectsUnreadableState(t *testing.T) {
-	mgr, sess := newSynthesisDelayManager(t)
+	mgr, sess, _ := newSynthesisDelayManager(t)
 	failure := errors.New("workflow ledger unavailable")
 	mgr.SetWorkflowDomains(workflowDomainFixture(gatedCloseoutView{err: failure}))
 	reject, block := mgr.Coordinator.Guards.OpenGates(t.Context(), sess, true, true)
@@ -128,7 +128,7 @@ func TestGatedCloseoutRejectsUnreadableState(t *testing.T) {
 func TestPendingOverlayCloseoutUsesLedgerOnEveryTurnOrigin(t *testing.T) {
 	for _, origin := range []api.MessageOrigin{api.MessageOriginUser, api.MessageOriginHost} {
 		t.Run(string(origin), func(t *testing.T) {
-			mgr, sess := newSynthesisDelayManager(t)
+			mgr, sess, _ := newSynthesisDelayManager(t)
 			mgr.SetWorkerQueue(jobLister{tasks: []api.WorkerTask{{
 				ID: "pending-worker", ParentSessionID: sess.ID, ProjectID: sess.ProjectID,
 				Status: api.WorkerStatusComplete, MergeStatus: api.WorkerMergeStatusPending,
@@ -159,7 +159,7 @@ func TestPendingOverlayCloseoutUsesLedgerOnEveryTurnOrigin(t *testing.T) {
 }
 
 func TestPendingOverlayCloseoutClearsOnlyAfterDisposition(t *testing.T) {
-	mgr, sess := newSynthesisDelayManager(t)
+	mgr, sess, _ := newSynthesisDelayManager(t)
 	task := api.WorkerTask{ID: "worker", ParentSessionID: sess.ID, ProjectID: sess.ProjectID,
 		Status: api.WorkerStatusComplete, MergeStatus: api.WorkerMergeStatusPending,
 		WorkspaceRoot: t.TempDir(), Scope: &api.TaskScope{Mode: api.TaskScopeModeWrite}}

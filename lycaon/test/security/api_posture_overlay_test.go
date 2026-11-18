@@ -105,7 +105,7 @@ postures:
 		testutil.FailErr(t, "decode accepted session", err)
 	}
 	testutil.WaitFor(t, "the session is in error", func() bool {
-		stored, err := h.Store.Get(t.Context(), sess.ID)
+		stored, err := h.Store.Sessions.Get(t.Context(), sess.ID)
 		return err == nil && stored.Status == wire.SessionStatusError
 	})
 }

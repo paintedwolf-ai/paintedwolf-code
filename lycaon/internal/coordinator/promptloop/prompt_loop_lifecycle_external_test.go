@@ -3,7 +3,6 @@ package promptloop_test
 import (
 	"context"
 	"errors"
-	"github.com/lycaon/lycaon/internal/tools/toolstest"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/coordinator/promptloop"
@@ -13,6 +12,7 @@ import (
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/tools"
+	"github.com/lycaon/lycaon/internal/tools/toolstest"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -44,7 +44,7 @@ func TestSendWithdrawsObsoleteToolProposalAndContinuesSameLoop(t *testing.T) {
 			Content: "Use new.go instead; do not read old.go.",
 		}}, nil
 	}
-	sess, err := st.Create(t.Context(), api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
+	sess, err := st.Sessions.Create(t.Context(), api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
 	result, err := promptloop.NewPromptLoopForTest(deps).Run(t.Context(), promptloop.PromptRunInput{
 		SessionID: sess.ID,
@@ -71,7 +71,7 @@ func TestSendWithdrawsObsoleteToolProposalAndContinuesSameLoop(t *testing.T) {
 	if !foundContinuation {
 		t.Fatalf("second model request omitted sent continuation: %+v", client.requests[1].Messages)
 	}
-	messages, err := st.GetMessages(t.Context(), sess.ID)
+	messages, err := st.Transcript.GetMessages(t.Context(), sess.ID)
 	testutil.FailErr(t, "read messages", err)
 	if len(messages) < 2 || messages[0].DraftStatus != api.DraftStatusWithdrawn {
 		t.Fatalf("obsolete assistant proposal was not withdrawn: %+v", messages)
@@ -86,7 +86,7 @@ func TestLoopStopsOnNoToolCalls(t *testing.T) {
 	deps.Context.Policy = &recordingToolPolicy{}
 	loop := promptloop.NewPromptLoopForTest(deps)
 	ctx := context.Background()
-	sess, err := store.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
+	sess, err := store.Sessions.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session in store", err)
 	result, err := loop.Run(ctx, promptloop.PromptRunInput{
 		SessionID: sess.ID,
@@ -98,7 +98,7 @@ func TestLoopStopsOnNoToolCalls(t *testing.T) {
 	if result.LastAssistantContent != "done" {
 		t.Fatalf("content = %q want done", result.LastAssistantContent)
 	}
-	msgs, err := store.GetMessages(ctx, sess.ID)
+	msgs, err := store.Transcript.GetMessages(ctx, sess.ID)
 	testutil.FailErr(t, "store.GetMessages failed", err)
 	if len(msgs) != 1 {
 		t.Fatalf("messages = %d want 1 assistant", len(msgs))
@@ -121,7 +121,7 @@ func TestLoopWorkflowAbortAfterAssistant(t *testing.T) {
 	}
 	loop := promptloop.NewPromptLoopForTest(deps)
 	ctx := context.Background()
-	sess, err := store.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
+	sess, err := store.Sessions.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session in store", err)
 	result, err := loop.Run(ctx, promptloop.PromptRunInput{
 		SessionID: sess.ID,

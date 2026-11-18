@@ -32,7 +32,7 @@ func TestSummarizeAnchorHandlesPatched(t *testing.T) {
 	dir := t.TempDir()
 	store := newSQLTestStore(t, "p1")
 	ctx := context.Background()
-	sess, err := store.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, "p1")
+	sess, err := store.Sessions.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, "p1")
 	testutil.FailErr(t, "Create", err)
 
 	content := summarizeAnchorJSON([]map[string]any{
@@ -40,7 +40,7 @@ func TestSummarizeAnchorHandlesPatched(t *testing.T) {
 		{"path": "src/b.go", "line": 20, "excerpt": "package b"},
 		{"path": "src/c.go", "line": 30, "excerpt": "import x"},
 	})
-	parentHandle, patched, err := store.CommitEvidenceToolResult(ctx, sess.ID, dir, "summarize", map[string]any{"task": "t"}, content)
+	parentHandle, patched, err := store.Evidence.CommitEvidenceToolResult(ctx, sess.ID, dir, "summarize", map[string]any{"task": "t"}, content)
 	testutil.FailErr(t, "CommitEvidenceToolResult", err)
 	if parentHandle != "summarize#4" {
 		t.Fatalf("parent handle = %q want summarize#4", parentHandle)
@@ -72,17 +72,17 @@ func TestSummarizeAnchorResolvesInLedgerWithFixture(t *testing.T) {
 	dir := t.TempDir()
 	store := newSQLTestStore(t, "p1")
 	ctx := context.Background()
-	sess, err := store.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, "p1")
+	sess, err := store.Sessions.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, "p1")
 	testutil.FailErr(t, "Create", err)
 
 	content := summarizeAnchorJSON([]map[string]any{
 		{"path": "src/a.go", "line": 10, "excerpt": "func entry() {}"},
 		{"path": "src/b.go", "line": 20, "excerpt": "package b"},
 	})
-	_, patched, err := store.CommitEvidenceToolResult(ctx, sess.ID, dir, "summarize", map[string]any{"task": "t"}, content)
+	_, patched, err := store.Evidence.CommitEvidenceToolResult(ctx, sess.ID, dir, "summarize", map[string]any{"task": "t"}, content)
 	testutil.FailErr(t, "CommitEvidenceToolResult", err)
 
-	ev, err := store.LoadLedger(ctx, sess.ID)
+	ev, err := store.Evidence.LoadLedger(ctx, sess.ID)
 	testutil.FailErr(t, "LoadLedger", err)
 	rec, ok := evidence.ResolveHandle(ev, "summarize#2")
 	if !ok {
@@ -104,16 +104,16 @@ func TestSummarizeAnchorResolvesInLedger_sql(t *testing.T) {
 
 	store := NewSQL(sqlDB)
 	ctx := context.Background()
-	sess, err := store.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
+	sess, err := store.Sessions.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "Create", err)
 
 	content := summarizeAnchorJSON([]map[string]any{
 		{"path": "src/a.go", "line": 10, "excerpt": "func entry() {}"},
 	})
-	_, _, err = store.CommitEvidenceToolResult(ctx, sess.ID, dir, "summarize", map[string]any{"task": "t"}, content)
+	_, _, err = store.Evidence.CommitEvidenceToolResult(ctx, sess.ID, dir, "summarize", map[string]any{"task": "t"}, content)
 	testutil.FailErr(t, "CommitEvidenceToolResult", err)
 
-	ev, err := store.LoadLedger(ctx, sess.ID)
+	ev, err := store.Evidence.LoadLedger(ctx, sess.ID)
 	testutil.FailErr(t, "LoadLedger", err)
 	if !evidence.ExcerptMatchesHandle(ev, "summarize#1", "src/a.go", 10, "func entry() {}") {
 		t.Fatal("expected summarize#1 excerpt match after SQL round-trip")
@@ -124,11 +124,11 @@ func TestSummarizeNoAnchorsMintsNoneAtCommit(t *testing.T) {
 	dir := t.TempDir()
 	store := newSQLTestStore(t, "p1")
 	ctx := context.Background()
-	sess, err := store.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, "p1")
+	sess, err := store.Sessions.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, "p1")
 	testutil.FailErr(t, "Create", err)
 
 	content := summarizeAnchorJSON(nil)
-	handle, patched, err := store.CommitEvidenceToolResult(ctx, sess.ID, dir, "summarize", map[string]any{"task": "t"}, content)
+	handle, patched, err := store.Evidence.CommitEvidenceToolResult(ctx, sess.ID, dir, "summarize", map[string]any{"task": "t"}, content)
 	testutil.FailErr(t, "CommitEvidenceToolResult", err)
 	if handle != "summarize#1" {
 		t.Fatalf("handle = %q want summarize#1", handle)
@@ -137,7 +137,7 @@ func TestSummarizeNoAnchorsMintsNoneAtCommit(t *testing.T) {
 		t.Fatalf("patched content changed without anchors")
 	}
 
-	ev, err := store.LoadLedger(ctx, sess.ID)
+	ev, err := store.Evidence.LoadLedger(ctx, sess.ID)
 	testutil.FailErr(t, "LoadLedger", err)
 	if _, ok := evidence.ResolveHandle(ev, "summarize#2"); ok {
 		t.Fatal("expected no summarize#2 without anchors")

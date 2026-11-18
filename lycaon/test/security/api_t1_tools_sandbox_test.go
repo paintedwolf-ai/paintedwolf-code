@@ -25,13 +25,13 @@ func TestStateToolsRespectProjectDir(t *testing.T) {
 	testutil.FailErr(t, "workflow.RegistryFromDirs failed", err)
 	mgr := workflow.NewManager(wfStore, sessStore, reg, nil)
 	toolReg := tools.NewDefaultRegistry()
-	if err := workflowstatetools.RegisterStateTools(toolReg, workflowstatetools.StateToolDeps{Runs: mgr.Store.Runs, Vars: mgr.Phases.Vars, Journal: mgr.Phases.Journal, Resolver: &mgr.Resolver, Starts: mgr.Starts, Controls: mgr.Controls, Scaffold: mgr.Blueprints.Scaffold, Sessions: sessStore}); err != nil {
+	if err := workflowstatetools.RegisterStateTools(toolReg, workflowstatetools.StateToolDeps{Runs: mgr.Store.Runs, Vars: mgr.Phases.Vars, Journal: mgr.Phases.Journal, Resolver: &mgr.Resolver, Starts: mgr.Starts, Controls: mgr.Controls, Scaffold: mgr.Blueprints.Scaffold, Sessions: sessStore.Sessions}); err != nil {
 		testutil.FailErr(t, "workflow.RegisterStateTools failed", err)
 	}
 
 	dirA := t.TempDir()
 	dirB := t.TempDir()
-	sess, err := sessStore.Create(context.Background(), api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
+	sess, err := sessStore.Sessions.Create(context.Background(), api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "sessStore.Create failed", err)
 	testdbseed.BindSessionWorkspace(t, sessStore, sess.ID, dirA)
 

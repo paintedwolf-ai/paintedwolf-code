@@ -26,7 +26,7 @@ func NewComposeTestServer(t *testing.T) (*api.Server, wire.Session, *workflowcom
 	dir := t.TempDir()
 	p, err := project.CreateWithRoot(t.Context(), projReg, dir)
 	testutil.FailErr(t, "reg.Create failed", err)
-	sess, err := store.Create(t.Context(), wire.CreateSessionRequest{ProjectID: p.ID}, p.ID)
+	sess, err := store.Sessions.Create(t.Context(), wire.CreateSessionRequest{ProjectID: p.ID}, p.ID)
 	testutil.FailErr(t, "create session in store", err)
 	reg, err := conditions.NewDefaultRegistry(conditions.RegistryDeps{})
 	testutil.FailErr(t, "build conditions registry", err)

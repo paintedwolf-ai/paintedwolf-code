@@ -43,7 +43,7 @@ func runFormToolCitation(t *testing.T, step citableStep) (result string, tags []
 			closeout = msg
 		}
 	}
-	ledger, err := h.Store.LoadLedger(t.Context(), sess.ID)
+	ledger, err := h.Store.Evidence.LoadLedger(t.Context(), sess.ID)
 	testutil.FailErr(t, "load ledger", err)
 	ledgerKinds = map[string]int{}
 	for _, record := range ledger.Handles {

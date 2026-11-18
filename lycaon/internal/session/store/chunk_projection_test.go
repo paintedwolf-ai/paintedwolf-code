@@ -12,30 +12,30 @@ import (
 
 func TestChunkProjectionSurvivesUnrelatedViewInvalidation(t *testing.T) {
 
-	var transcript compactionMutationStore
+	var transcript *Repositories
 	var projections messageview.ChunkProjectionStore
 
 	database := testdbfixture.Open(t, "chunks.db")
 	testdbseed.InsertProjectRoot(t, database, testdbseed.DefaultProjectID, t.TempDir())
 	st := NewSQL(database)
-	transcript, projections = st, st
+	transcript, projections = st, st.Compaction
 
-	sess, err := transcript.Create(t.Context(), api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
+	sess, err := transcript.Sessions.Create(t.Context(), api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
-	testutil.FailErr(t, "append source rows", transcript.AppendMessages(t.Context(), sess.ID,
+	testutil.FailErr(t, "append source rows", transcript.Transcript.AppendMessages(t.Context(), sess.ID,
 		api.Message{ID: "source", Role: api.MessageRoleUser, Content: "source"},
 		api.Message{ID: "unrelated", Role: api.MessageRoleAssistant, Content: "old reply"}))
-	rows, err := transcript.GetMessages(t.Context(), sess.ID)
+	rows, err := transcript.Transcript.GetMessages(t.Context(), sess.ID)
 	testutil.FailErr(t, "load covered rows", err)
-	testutil.FailErr(t, "install full view", transcript.PutCompactionView(t.Context(), sess.ID, CompactionView{
+	testutil.FailErr(t, "install full view", transcript.Compaction.PutCompactionView(t.Context(), sess.ID, CompactionView{
 		Generation: 1, CoveredThroughOrd: rows[1].Ord, CoveredThroughID: rows[1].ID,
 		SourceSeq: rows[1].Seq, Messages: rows,
 	}))
 	projection := messageview.ChunkProjection{Revision: "revision", Content: "summary", Meta: &api.CompactedChunkMeta{Strategy: "summarize"}}
 	testutil.FailErr(t, "store reusable summary", projections.PutChunkProjection(t.Context(), sess.ID, "source", projection))
-	_, err = transcript.UpdateMessage(t.Context(), sess.ID, "unrelated", api.Message{Role: api.MessageRoleAssistant, Content: "new reply"})
+	_, err = transcript.Transcript.UpdateMessage(t.Context(), sess.ID, "unrelated", api.Message{Role: api.MessageRoleAssistant, Content: "new reply"})
 	testutil.FailErr(t, "edit unrelated source", err)
-	_, exists, err := transcript.GetCompactionView(t.Context(), sess.ID)
+	_, exists, err := transcript.Compaction.GetCompactionView(t.Context(), sess.ID)
 	testutil.FailErr(t, "check invalidated view", err)
 	if exists {
 		t.Fatal("covered edit did not invalidate the full view")

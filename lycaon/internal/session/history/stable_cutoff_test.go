@@ -184,11 +184,11 @@ func TestBoundaryConstraintsAC_KV_06(t *testing.T) {
 }
 
 // tailStarts replays appends through Load and records where the canonical tail begins.
-func tailStarts(t *testing.T, svc *Service, sqlStore *store.SQL, sess *api.Session, appends int, first int, body string) []int64 {
+func tailStarts(t *testing.T, svc *Service, sqlStore *store.Repositories, sess *api.Session, appends int, first int, body string) []int64 {
 	t.Helper()
 	var starts []int64
 	for i := range appends {
-		testutil.FailErr(t, "append exchange", sqlStore.AppendMessages(t.Context(), sess.ID, turnExchange(first+i, body)...))
+		testutil.FailErr(t, "append exchange", sqlStore.Transcript.AppendMessages(t.Context(), sess.ID, turnExchange(first+i, body)...))
 		rows, err := svc.Load(t.Context(), sess)
 		testutil.FailErr(t, "load", err)
 		assertPairedExchanges(t, rows)
@@ -212,7 +212,7 @@ func burstConfig() compaction.CompactionConfig {
 
 // stableTurnSession publishes nothing in the background, so a cutoff sequence
 // depends only on the appends a test makes.
-func stableTurnSession(t *testing.T, cfg compaction.CompactionConfig) (*Service, *store.SQL, *api.Session) {
+func stableTurnSession(t *testing.T, cfg compaction.CompactionConfig) (*Service, *store.Repositories, *api.Session) {
 	t.Helper()
 	svc, sqlStore, sess := newTurnSession(t, cfg)
 	svc.Runner = nil
@@ -221,10 +221,10 @@ func stableTurnSession(t *testing.T, cfg compaction.CompactionConfig) (*Service,
 
 // appendEditBurst fills the tail near its byte bound, then appends one batch of
 // eight ~35 KB tool results that crosses it.
-func appendEditBurst(t *testing.T, sqlStore *store.SQL, sessionID string) {
+func appendEditBurst(t *testing.T, sqlStore *store.Repositories, sessionID string) {
 	t.Helper()
 	for i := range 120 {
-		testutil.FailErr(t, "append exchange", sqlStore.AppendMessages(t.Context(), sessionID, turnExchange(100+i, strings.Repeat("o", 1000))...))
+		testutil.FailErr(t, "append exchange", sqlStore.Transcript.AppendMessages(t.Context(), sessionID, turnExchange(100+i, strings.Repeat("o", 1000))...))
 	}
 	call := []api.ToolCall{}
 	for i := range 8 {
@@ -236,7 +236,7 @@ func appendEditBurst(t *testing.T, sqlStore *store.SQL, sessionID string) {
 		batch = append(batch, api.Message{ID: fmt.Sprintf("edit-result-%d", i), Role: api.MessageRoleTool, Content: content,
 			ToolResult: &api.ToolResult{Tool: "edit", ToolCallID: call[i].ID, AssistantMessageID: "edits", Content: content, Outcome: api.ToolResultOutcomeCompleted}})
 	}
-	testutil.FailErr(t, "append edit batch", sqlStore.AppendMessages(t.Context(), sessionID, batch...))
+	testutil.FailErr(t, "append edit batch", sqlStore.Transcript.AppendMessages(t.Context(), sessionID, batch...))
 }
 
 func TestEightEditBurstDoesNotSlideTheTailAC_KV_06(t *testing.T) {
@@ -279,7 +279,7 @@ func TestOversizedBodiesHoldTheirProjectionAC_KV_06(t *testing.T) {
 	var previous []api.Message
 	held, moved := 0, 0
 	for step := range 64 {
-		testutil.FailErr(t, "append exchange", sqlStore.AppendMessages(t.Context(), sess.ID, turnExchange(5000+step, strings.Repeat("o", 1000))...))
+		testutil.FailErr(t, "append exchange", sqlStore.Transcript.AppendMessages(t.Context(), sess.ID, turnExchange(5000+step, strings.Repeat("o", 1000))...))
 		history, err := svc.Load(t.Context(), sess)
 		testutil.FailErr(t, "load", err)
 		fitted, err := svc.FitRequest(t.Context(), sess, history, requestFor(sess, frame, history), budgets, nil)
@@ -345,7 +345,7 @@ func TestTighterFitFeedsLaterProjectionAC_KV_04(t *testing.T) {
 	var starts []int64
 	fits, stableRequests := 0, 0
 	for step := range 260 {
-		testutil.FailErr(t, "append exchange", sqlStore.AppendMessages(t.Context(), sess.ID, turnExchange(1000+step, body)...))
+		testutil.FailErr(t, "append exchange", sqlStore.Transcript.AppendMessages(t.Context(), sess.ID, turnExchange(1000+step, body)...))
 		history, err := svc.Load(t.Context(), sess)
 		testutil.FailErr(t, "load", err)
 		fitted, err := svc.FitRequest(t.Context(), sess, history, requestFor(sess, frame, history), budgets, nil)
@@ -405,7 +405,7 @@ func TestSecondCollapseSignatureHoldsBehindAViewAC_KV_07(t *testing.T) {
 	var previous []api.Message
 	moved, held := 0, 0
 	for step := range 120 {
-		testutil.FailErr(t, "append exchange", sqlStore.AppendMessages(t.Context(), sess.ID, turnExchange(3000+step, body)...))
+		testutil.FailErr(t, "append exchange", sqlStore.Transcript.AppendMessages(t.Context(), sess.ID, turnExchange(3000+step, body)...))
 		history, err := svc.Load(t.Context(), sess)
 		testutil.FailErr(t, "load", err)
 		fitted, err := svc.FitRequest(t.Context(), sess, history, requestFor(sess, frame, history), budgets, nil)
@@ -430,7 +430,7 @@ func TestSecondCollapseSignatureHoldsBehindAViewAC_KV_07(t *testing.T) {
 
 func TestCutoffStateInvalidatesAndRebuildsAC_KV_08(t *testing.T) {
 	cfg := compaction.DefaultCompactionConfig()
-	setup := func(t *testing.T) (*Service, *store.SQL, *api.Session) {
+	setup := func(t *testing.T) (*Service, *store.Repositories, *api.Session) {
 		t.Helper()
 		svc, sqlStore, sess := stableTurnSession(t, cfg)
 		seedTurn(t, sqlStore, sess.ID, 100, "recorded observation")
@@ -452,7 +452,7 @@ func TestCutoffStateInvalidatesAndRebuildsAC_KV_08(t *testing.T) {
 			t.Fatalf("rebuilt start %d (first %d), change %q", rebuilt, first, facts.Change)
 		}
 		for i := range 8 {
-			testutil.FailErr(t, "append exchange", sqlStore.AppendMessages(t.Context(), sess.ID, turnExchange(4000+i, "recorded observation")...))
+			testutil.FailErr(t, "append exchange", sqlStore.Transcript.AppendMessages(t.Context(), sess.ID, turnExchange(4000+i, "recorded observation")...))
 			held, facts := project(t, svc, sess)
 			if held != rebuilt || facts.Change != "" {
 				t.Fatalf("append %d: start %d, change %q", i, held, facts.Change)
@@ -506,7 +506,7 @@ func TestCutoffStateInvalidatesAndRebuildsAC_KV_08(t *testing.T) {
 		}
 		edited := canonical[5]
 		edited.Content = "edited observation"
-		_, err := sqlStore.UpdateMessage(t.Context(), sess.ID, edited.ID, edited)
+		_, err := sqlStore.Transcript.UpdateMessage(t.Context(), sess.ID, edited.ID, edited)
 		testutil.FailErr(t, "edit covered row", err)
 		if countID(loadProjected(t, svc, sess), "summary") != 0 {
 			t.Fatal("summary survived its source being replaced")

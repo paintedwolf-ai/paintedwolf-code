@@ -1,13 +1,14 @@
 package store
 
 import (
+	"testing"
+
 	"github.com/lycaon/lycaon/internal/eventoutbox"
 	"github.com/lycaon/lycaon/internal/events"
 	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/pkg/api"
-	"testing"
 )
 
 // Reading the outbox directly avoids delivery timing in the revision assertion.
@@ -27,7 +28,7 @@ func TestSQLSessionEventSharesRevisionWithDirectPublishPath(t *testing.T) {
 		t.Fatalf("direct path's first revision = %d, want 1", got)
 	}
 
-	sess, err := store.Create(t.Context(), api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
+	sess, err := store.Sessions.Create(t.Context(), api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
 
 	var outboxRevision uint64
@@ -55,7 +56,7 @@ func TestSQLSessionEventUnwiredRevisionsLeavesZero(t *testing.T) {
 	store := NewSQL(database)
 	store.SetEventOutbox(outbox)
 
-	sess, err := store.Create(t.Context(), api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
+	sess, err := store.Sessions.Create(t.Context(), api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
 
 	var outboxRevision uint64

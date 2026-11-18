@@ -6,8 +6,6 @@ import (
 	"path/filepath"
 	"strings"
 
-	sessiontree "github.com/lycaon/lycaon/internal/session/tree"
-
 	"github.com/lycaon/lycaon/internal/app/configuration"
 	"github.com/lycaon/lycaon/internal/app/decisions"
 	"github.com/lycaon/lycaon/internal/app/eventing"
@@ -31,6 +29,7 @@ import (
 	"github.com/lycaon/lycaon/internal/projectcontrib"
 	"github.com/lycaon/lycaon/internal/repoinfo"
 	"github.com/lycaon/lycaon/internal/secretmatch"
+	sessiontree "github.com/lycaon/lycaon/internal/session/tree"
 	"github.com/lycaon/lycaon/internal/sourcecatalog"
 	workertools "github.com/lycaon/lycaon/internal/tools/native/workercontrol"
 	"github.com/lycaon/lycaon/internal/visualscreen"
@@ -179,7 +178,7 @@ func (r *Runtime) WireBoardAndResearch(ctx context.Context) error {
 
 	if sessions := r.deps.Storage.Sessions; sessions != nil {
 		deps.AddressOrigin = func(sessionID, rawURL string) confine.AddressOrigin {
-			return addressOrigin(sessions.SessionURLStanding(sessionID, rawURL))
+			return addressOrigin(sessions.Evidence.SessionURLStanding(sessionID, rawURL))
 		}
 	}
 
@@ -266,7 +265,7 @@ func (r *Runtime) ProjectRootPaths(ctx context.Context) ([]string, error) {
 }
 
 func (r *Runtime) rootSessionKey(ctx context.Context, sessionID string) string {
-	return sessiontree.RootID(ctx, r.deps.Storage.Sessions, sessionID)
+	return sessiontree.RootID(ctx, r.deps.Storage.Sessions.Sessions, sessionID)
 }
 
 // addressOrigin maps how evidence knows an address onto what a retrieval

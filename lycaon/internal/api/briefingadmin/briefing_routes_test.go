@@ -85,7 +85,7 @@ func newEngineRoutes(t *testing.T, setting *switchable, policy briefing.Policy) 
 	files := filebriefing.NewService(context.Background(), filebriefing.Dependencies{Store: filebriefing.NewSQL(deps.Core.Database), Settings: setting})
 	t.Cleanup(func() { files.Stop(); files.Wait(context.Background()) })
 	h := briefingadmin.New(&httpio.Responder{Logger: slog.Default()}, briefingadmin.Dependencies{
-		Briefings: briefingadmin.Services{Files: files, Host: host}, ProjectRegistry: deps.Core.Projects, SessionStore: deps.Core.Store,
+		Briefings: briefingadmin.Services{Files: files, Host: host}, ProjectRegistry: deps.Core.Projects, SessionStore: deps.Core.Store.Sessions,
 	})
 	r := chi.NewRouter()
 	r.Post("/v1/projects/{id}/briefings", h.Engine.HandleRequestBriefing)

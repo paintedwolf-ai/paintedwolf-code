@@ -22,7 +22,7 @@ func (s *History) HandleGetProjectSourceWalkSummary(w http.ResponseWriter, r *ht
 	if !ok {
 		return
 	}
-	project, ok = requestscope.ProjectForRequest(s.SessionStore, s.responses, w, r, project)
+	project, ok = requestscope.ProjectForRequest(s.SessionQueries, s.responses, w, r, project)
 	if !ok {
 		return
 	}
@@ -109,7 +109,7 @@ func (s *History) HandleListProjectSourceWalk(w http.ResponseWriter, r *http.Req
 		return
 	}
 	if query.currentTurn {
-		turnSource, err := s.SessionStore.ReadSourceTurn(r.Context(), bas.SessionID, 0)
+		turnSource, err := s.TranscriptQueries.ReadSourceTurn(r.Context(), bas.SessionID, 0)
 		turn := turnSource.Number
 		if err != nil {
 			s.responses.InternalError(w, r, err)
@@ -238,7 +238,7 @@ func (s *History) scopeProjectForWalk(w http.ResponseWriter, r *http.Request, p 
 		}
 		sessionID = bas.SessionID
 	}
-	scoped, ok := requestscope.ProjectForSession(s.SessionStore, s.responses, w, r, p, sessionID)
+	scoped, ok := requestscope.ProjectForSession(s.SessionQueries, s.responses, w, r, p, sessionID)
 	return scoped, sessionID, ok
 }
 

@@ -5,6 +5,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/api/httpio"
 	"github.com/lycaon/lycaon/internal/api/promptadmin"
+	"github.com/lycaon/lycaon/internal/api/requestscope"
 	"github.com/lycaon/lycaon/internal/api/scanadmin"
 	"github.com/lycaon/lycaon/internal/api/taskgroup"
 	"github.com/lycaon/lycaon/internal/api/workflowadmin"
@@ -26,7 +27,7 @@ type Deps struct {
 	MCPRegistry *mcp.Runtime
 	ModuleRoot  string
 	Projects    project.Registry
-	Store       session.Store
+	Store       requestscope.Sessions
 	Sessions    *session.Host
 	Settings    *settings.Service
 	Workflow    *workflowadmin.Handler
@@ -70,7 +71,7 @@ type Execution struct {
 	PromptExecution  *promptadmin.Execution
 	Runtime          ContributionRuntime
 	Sessions         *session.Host
-	Store            session.Store
+	Store            requestscope.Sessions
 	Workflow         *workflowadmin.RunControl
 	responses        *httpio.Responder
 }

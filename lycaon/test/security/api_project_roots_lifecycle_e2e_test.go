@@ -2,7 +2,6 @@ package security
 
 import (
 	"errors"
-	"github.com/lycaon/lycaon/internal/toolrejection"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -10,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/test/wiring"
 )
@@ -54,7 +54,7 @@ func TestDetachThenReadDenied(t *testing.T) {
 		t.Fatalf("roots_generation = %d want 1", updated.RootsGeneration)
 	}
 
-	gotSess, err := h.Store.Get(t.Context(), sess.ID)
+	gotSess, err := h.Store.Sessions.Get(t.Context(), sess.ID)
 	testutil.FailErr(t, "get session", err)
 	if gotSess.WorkspaceRootID != "" {
 		t.Fatalf("workspace_root_id = %q want empty", gotSess.WorkspaceRootID)

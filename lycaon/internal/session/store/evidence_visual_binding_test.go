@@ -52,7 +52,7 @@ func TestCommitVisualEvidenceBindsHandleToArtifact(t *testing.T) {
 			projectID := testdbseed.DefaultProjectID
 			testdbseed.InsertProjectRoot(t, sqlDB, projectID, t.TempDir())
 			sessions := NewSQL(sqlDB)
-			sess, err := sessions.Create(ctx, api.CreateSessionRequest{ProjectID: projectID, Posture: api.SessionPostureBuild}, projectID)
+			sess, err := sessions.Sessions.Create(ctx, api.CreateSessionRequest{ProjectID: projectID, Posture: api.SessionPostureBuild}, projectID)
 			testutil.FailErr(t, "create session", err)
 
 			records := visual.NewRecords(sqlDB, eventoutbox.New(sqlDB, nil), visual.ArtifactProjection{})
@@ -73,7 +73,7 @@ func TestCommitVisualEvidenceBindsHandleToArtifact(t *testing.T) {
 			})
 			testutil.FailErr(t, "put artifact", err)
 
-			handle, _, err := sessions.CommitVisualEvidenceToolResult(ctx, sess.ID, t.TempDir(), tc.tool, tc.args, tc.content, stored.ID)
+			handle, _, err := sessions.Evidence.CommitVisualEvidenceToolResult(ctx, sess.ID, t.TempDir(), tc.tool, tc.args, tc.content, stored.ID)
 			testutil.FailErr(t, "commit visual evidence", err)
 			if handle == "" {
 				t.Fatalf("%s minted no evidence handle", tc.tool)
@@ -86,7 +86,7 @@ func TestCommitVisualEvidenceBindsHandleToArtifact(t *testing.T) {
 			if got := res.Meta().EvidenceHandle; got != handle {
 				t.Fatalf("artifact evidence_handle = %q, want %q", got, handle)
 			}
-			ledger, err := sessions.LoadLedger(ctx, sess.ID)
+			ledger, err := sessions.Evidence.LoadLedger(ctx, sess.ID)
 			testutil.FailErr(t, "load ledger", err)
 			if rec := ledger.Handles[handle]; rec.ArtifactID != stored.ID {
 				t.Fatalf("ledger %s artifact_id = %q, want %s", handle, rec.ArtifactID, stored.ID)
@@ -101,16 +101,16 @@ func TestCommitVisualEvidenceRollsBackWhenArtifactMissing(t *testing.T) {
 	projectID := testdbseed.DefaultProjectID
 	testdbseed.InsertProjectRoot(t, sqlDB, projectID, t.TempDir())
 	sessions := NewSQL(sqlDB)
-	sess, err := sessions.Create(ctx, api.CreateSessionRequest{ProjectID: projectID, Posture: api.SessionPostureBuild}, projectID)
+	sess, err := sessions.Sessions.Create(ctx, api.CreateSessionRequest{ProjectID: projectID, Posture: api.SessionPostureBuild}, projectID)
 	testutil.FailErr(t, "create session", err)
 	sessions.SetArtifactRecords(visual.NewRecords(sqlDB, eventoutbox.New(sqlDB, nil), visual.ArtifactProjection{}))
 
-	_, _, err = sessions.CommitVisualEvidenceToolResult(ctx, sess.ID, t.TempDir(), "fetch_url",
+	_, _, err = sessions.Evidence.CommitVisualEvidenceToolResult(ctx, sess.ID, t.TempDir(), "fetch_url",
 		map[string]any{"url": "https://example.org/a.png"}, `{"url":"https://example.org/a.png"}`, "00000000-0000-4000-8000-000000000000")
 	if err == nil {
 		t.Fatal("binding to an absent artifact succeeded")
 	}
-	ledger, err := sessions.LoadLedger(ctx, sess.ID)
+	ledger, err := sessions.Evidence.LoadLedger(ctx, sess.ID)
 	testutil.FailErr(t, "load ledger", err)
 	if len(ledger.Handles) != 0 {
 		t.Fatalf("ledger kept %d handles after a failed binding", len(ledger.Handles))

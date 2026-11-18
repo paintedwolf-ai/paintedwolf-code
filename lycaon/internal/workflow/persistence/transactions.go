@@ -5,8 +5,6 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
-	"github.com/lycaon/lycaon/internal/timelayout"
-	"github.com/lycaon/lycaon/internal/worker/jobstate"
 	"strings"
 	"time"
 
@@ -15,18 +13,21 @@ import (
 	"github.com/lycaon/lycaon/internal/db"
 	"github.com/lycaon/lycaon/internal/eventoutbox"
 	"github.com/lycaon/lycaon/internal/events"
+	"github.com/lycaon/lycaon/internal/timelayout"
+	"github.com/lycaon/lycaon/internal/worker/jobstate"
 	"github.com/lycaon/lycaon/internal/workflow/runstate"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
 type Transactions struct {
-	db       db.Handle
-	queries  *db.Queries
-	jobs     jobstate.Reader
-	outbox   *eventoutbox.Outbox
-	sessions runstate.SessionMutations
-	authz    authzledger.TransactionalRecorder
-	workers  runstate.RunnableNotifier
+	db         db.Handle
+	queries    *db.Queries
+	jobs       jobstate.Reader
+	outbox     *eventoutbox.Outbox
+	sessions   runstate.Sessions
+	transcript runstate.Transcript
+	authz      authzledger.TransactionalRecorder
+	workers    runstate.RunnableNotifier
 }
 
 func (s *Transactions) SetEventOutbox(outbox *eventoutbox.Outbox) {
@@ -41,8 +42,9 @@ func (s *Transactions) MutationEventsOutboxed() bool {
 	return s != nil && s.outbox != nil
 }
 
-func (s *Transactions) SetSessionMutations(store runstate.SessionMutations) {
-	s.sessions = store
+func (s *Transactions) SetSessionPersistence(sessions runstate.Sessions, transcript runstate.Transcript) {
+	s.sessions = sessions
+	s.transcript = transcript
 }
 
 func (s *Transactions) SetAuthzRecorder(rec authzledger.TransactionalRecorder) {
@@ -118,7 +120,7 @@ func (s *Transactions) planCancellationBoundaries(
 	if len(runs) == 0 {
 		return nil, nil
 	}
-	if s.sessions == nil {
+	if s.transcript == nil {
 		return nil, fmt.Errorf("workflow transcript transaction participant unavailable")
 	}
 	queries := db.New(tx)
@@ -149,10 +151,10 @@ func (s *Transactions) appendPlannedRowsTx(
 	if len(msgs) == 0 {
 		return nil
 	}
-	if s.sessions == nil {
+	if s.transcript == nil {
 		return fmt.Errorf("workflow transcript transaction participant unavailable")
 	}
-	return s.sessions.AppendMessagesTx(ctx, tx, sessionID, msgs...)
+	return s.transcript.AppendMessagesTx(ctx, tx, sessionID, msgs...)
 }
 
 func (s *Transactions) revisionConflict(ctx context.Context, runID string, expected int64) error {

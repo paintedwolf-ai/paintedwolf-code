@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/lycaon/lycaon/internal/tools/toolstest"
 	"net/http"
 	"net/http/httptest"
 	"slices"
@@ -22,6 +21,7 @@ import (
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/tools"
+	"github.com/lycaon/lycaon/internal/tools/toolstest"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -210,7 +210,7 @@ func TestPromptLoopSoftStopAllowsOneToolRoundThenClosesOut(t *testing.T) {
 		return nil
 	}
 	loop := NewPromptLoopForTest(deps)
-	sess, err := messages.Create(
+	sess, err := messages.Sessions.Create(
 		context.Background(), api.CreateSessionRequest{Posture: api.SessionPostureBuild}, "project",
 	)
 	testutil.FailErr(t, "create session", err)

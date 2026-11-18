@@ -17,7 +17,6 @@ import (
 	"github.com/lycaon/lycaon/internal/secretcap"
 	"github.com/lycaon/lycaon/internal/secretmatch"
 	"github.com/lycaon/lycaon/internal/secretspan"
-	"github.com/lycaon/lycaon/internal/session"
 	sessiontree "github.com/lycaon/lycaon/internal/session/tree"
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
@@ -84,7 +83,7 @@ func Metadata(item secretcap.Metadata) wire.ManagedSecret {
 
 const maxPromptSecretReferences = 32
 
-func ReferenceBlock(store session.Store, secrets *secretcap.Service, ctx context.Context, sessionID string, refs []wire.PromptSecretReferencePart) (string, error) {
+func ReferenceBlock(store sessiontree.Reader, secrets *secretcap.Service, ctx context.Context, sessionID string, refs []wire.PromptSecretReferencePart) (string, error) {
 	if len(refs) == 0 {
 		return "", nil
 	}
@@ -99,7 +98,7 @@ func ReferenceBlock(store session.Store, secrets *secretcap.Service, ctx context
 	return strings.Join(lines, "\n"), nil
 }
 
-func ReferenceLines(store session.Store, secrets *secretcap.Service,
+func ReferenceLines(store sessiontree.Reader, secrets *secretcap.Service,
 	ctx context.Context,
 	sess *wire.Session,
 	refs []wire.PromptSecretReferencePart,

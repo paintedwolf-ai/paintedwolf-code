@@ -63,7 +63,7 @@ func (f *outputTruncatedFixtureLLM) Stream(ctx context.Context, req modelcall.Co
 	return ch, nil
 }
 
-func newOutputTruncatedTestHost(t *testing.T, client modelcall.LLMClient) (*Host, *store.SQL) {
+func newOutputTruncatedTestHost(t *testing.T, client modelcall.LLMClient) (*Host, *store.Repositories) {
 	t.Helper()
 	sessionStore := storetest.New(t, testdbseed.DefaultProjectID)
 	registry := toolstest.NewRegistry()
@@ -113,7 +113,7 @@ func TestCoordinatorTurnRecoversOnceFromLengthTruncatedToolCall(t *testing.T) {
 
 	mgr, sessionStore := newOutputTruncatedTestHost(t, client)
 	ctx := context.Background()
-	sess, err := sessionStore.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
+	sess, err := sessionStore.Sessions.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
 
 	resp, err := mgr.Submissions.Prompt(ctx, sess.ID, "write the large file")
@@ -125,7 +125,7 @@ func TestCoordinatorTurnRecoversOnceFromLengthTruncatedToolCall(t *testing.T) {
 		t.Fatalf("requests = %d, want 2", len(client.requests))
 	}
 
-	status, err := sessionStore.LatestTurnStatus(ctx, sess.ID)
+	status, err := sessionStore.Turns.LatestTurnStatus(ctx, sess.ID)
 	testutil.FailErr(t, "LatestTurnStatus", err)
 	if status != store.TurnStatusComplete {
 		t.Fatalf("turn status = %q, want %q", status, store.TurnStatusComplete)
@@ -165,7 +165,7 @@ func TestCoordinatorTurnSecondLengthTruncationRecordsTypedOutcomeWithoutFailedTu
 
 	mgr, sessionStore := newOutputTruncatedTestHost(t, client)
 	ctx := context.Background()
-	sess, err := sessionStore.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
+	sess, err := sessionStore.Sessions.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
 
 	resp, err := mgr.Submissions.Prompt(ctx, sess.ID, "write the huge file")
@@ -189,7 +189,7 @@ func TestCoordinatorTurnSecondLengthTruncationRecordsTypedOutcomeWithoutFailedTu
 		t.Fatalf("expected low output ceiling guidance in notice, got %q", resp.OutputTruncated.Notice)
 	}
 
-	status, err := sessionStore.LatestTurnStatus(ctx, sess.ID)
+	status, err := sessionStore.Turns.LatestTurnStatus(ctx, sess.ID)
 	testutil.FailErr(t, "LatestTurnStatus", err)
 	if status != store.TurnStatusComplete {
 		t.Fatalf("turn status = %q, want %q", status, store.TurnStatusComplete)

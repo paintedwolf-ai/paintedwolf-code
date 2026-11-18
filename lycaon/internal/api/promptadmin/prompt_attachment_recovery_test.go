@@ -17,14 +17,14 @@ import (
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
 
-func newPromptAttachmentRecoveryFixture(t *testing.T) (*Handler, *store.SQL, blobstore.Store, *wire.Session) {
+func newPromptAttachmentRecoveryFixture(t *testing.T) (*Handler, *store.Repositories, blobstore.Store, *wire.Session) {
 	t.Helper()
 	sessions := storetest.New(t, "project")
-	sess, err := sessions.Create(t.Context(), wire.CreateSessionRequest{Posture: wire.SessionPostureBuild}, "project")
+	sess, err := sessions.Sessions.Create(t.Context(), wire.CreateSessionRequest{Posture: wire.SessionPostureBuild}, "project")
 	testutil.FailErr(t, "create session", err)
 	manager := session.NewHost(sessions, session.Models{Client: nil, Provider: nil, Limits: settings.SessionLimits{}, Cost: nil}, nil)
 	manager.SetDataDir(t.TempDir())
-	server := &Handler{Attachments: &Attachments{Store: sessions, Sessions: manager}, Submission: &Submission{Sessions: manager}}
+	server := &Handler{Attachments: &Attachments{SessionQueries: sessions.Sessions, AttachmentBlobs: sessions.Attachments, Sessions: manager}, Submission: &Submission{Sessions: manager}}
 	attachmentStore, available := server.Attachments.AttachmentStore(t.Context(), sess.ProjectID)
 	if !available {
 		t.Fatal("attachment store unavailable")
@@ -34,18 +34,18 @@ func newPromptAttachmentRecoveryFixture(t *testing.T) (*Handler, *store.SQL, blo
 
 func admitRetainedAttachment(
 	t *testing.T,
-	sessions *store.SQL,
+	sessions *store.Repositories,
 	attachmentStore blobstore.Store,
 	sess *wire.Session,
 ) (string, blobstore.Blob) {
 	t.Helper()
 	blob, err := attachmentStore.Put("notes.txt", strings.NewReader("notes"), bytebound.Materialization(100))
 	testutil.FailErr(t, "put attachment", err)
-	testutil.FailErr(t, "record attachment", sessions.RecordPromptAttachmentBlob(t.Context(), sess.ProjectID, blob.ID, blob.Size))
+	testutil.FailErr(t, "record attachment", sessions.Attachments.RecordPromptAttachmentBlob(t.Context(), sess.ProjectID, blob.ID, blob.Size))
 	operationID := uuid.NewString()
 	_, err = attachmentStore.Retain(operationID, []string{blob.ID})
 	testutil.FailErr(t, "retain attachment", err)
-	_, _, err = sessions.PutPromptSubmission(t.Context(), store.PromptSubmission{
+	_, _, err = sessions.Submissions.PutPromptSubmission(t.Context(), store.PromptSubmission{
 		ID: operationID, SessionID: sess.ID, ProjectID: sess.ProjectID,
 		InputDigest: operationID, InputJSON: `{}`, Origin: store.PromptSubmissionOriginUser, SubmittedBy: sess.OwnerPersonID,
 		AttachmentBlobIDs: []string{blob.ID},
@@ -60,12 +60,12 @@ func TestPromptAttachmentRetentionsDropFailedAdmission(t *testing.T) {
 	operationID, blob := admitRetainedAttachment(t, sessions, attachmentStore, sess)
 	retentions, err := server.Attachments.capturePromptAttachmentRetentions(t.Context(), operationID)
 	testutil.FailErr(t, "capture attachment retentions", err)
-	claimed, won, err := sessions.ClaimPromptSubmission(t.Context(), operationID)
+	claimed, won, err := sessions.Submissions.ClaimPromptSubmission(t.Context(), operationID)
 	testutil.FailErr(t, "claim prompt", err)
 	if !won {
 		t.Fatal("prompt claim lost")
 	}
-	testutil.FailErr(t, "fail prompt", sessions.FinishPromptSubmission(
+	testutil.FailErr(t, "fail prompt", sessions.Submissions.FinishPromptSubmission(
 		t.Context(), operationID, claimed.ClaimToken, store.PromptSubmissionFailed, "",
 		store.PromptSubmissionFailure{Message: "failed"},
 	))
@@ -80,16 +80,16 @@ func TestPromptAttachmentRetentionsKeepMessageReference(t *testing.T) {
 	operationID, blob := admitRetainedAttachment(t, sessions, attachmentStore, sess)
 	retentions, err := server.Attachments.capturePromptAttachmentRetentions(t.Context(), operationID)
 	testutil.FailErr(t, "capture attachment retentions", err)
-	claimed, won, err := sessions.ClaimPromptSubmission(t.Context(), operationID)
+	claimed, won, err := sessions.Submissions.ClaimPromptSubmission(t.Context(), operationID)
 	testutil.FailErr(t, "claim prompt", err)
 	if !won {
 		t.Fatal("prompt claim lost")
 	}
-	testutil.FailErr(t, "append attachment message", sessions.AppendMessages(t.Context(), sess.ID, wire.Message{
+	testutil.FailErr(t, "append attachment message", sessions.Transcript.AppendMessages(t.Context(), sess.ID, wire.Message{
 		ID: operationID, Role: wire.MessageRoleUser, Content: "notes",
 		ContentParts: []wire.MessageContentPart{{BlobID: blob.ID}},
 	}))
-	testutil.FailErr(t, "finish prompt", sessions.FinishPromptSubmission(
+	testutil.FailErr(t, "finish prompt", sessions.Submissions.FinishPromptSubmission(
 		t.Context(), operationID, claimed.ClaimToken, store.PromptSubmissionComplete, `{}`, store.PromptSubmissionFailure{},
 	))
 	testutil.FailErr(t, "reconcile attachment retentions", server.Attachments.reconcilePromptAttachmentRetentions(t.Context(), retentions))

@@ -19,7 +19,7 @@ func TestReasoningReadIsBoundedAndWholeWhereItFits(t *testing.T) {
 	database := testdbfixture.Open(t, "briefing-reasoning-tail.db")
 	testdbseed.InsertProjectRoot(t, database, testdbseed.DefaultProjectID, t.TempDir())
 	sessions := store.NewSQL(database)
-	session, err := sessions.Create(t.Context(), api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
+	session, err := sessions.Sessions.Create(t.Context(), api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
 
 	jsonOverhead := len(`{"text":""}`)
@@ -45,7 +45,7 @@ func TestReasoningReadIsBoundedAndWholeWhereItFits(t *testing.T) {
 		api.Message{ID: "m-null", Role: api.MessageRoleAssistant, ToolCalls: call("null")},
 		api.Message{ID: "m-empty", Role: api.MessageRoleAssistant, ToolCalls: call("empty"), ModelReasoning: &api.ModelReasoning{Text: "set empty below"}},
 	)
-	testutil.FailErr(t, "append history", sessions.AppendMessages(t.Context(), session.ID, history...))
+	testutil.FailErr(t, "append history", sessions.Transcript.AppendMessages(t.Context(), session.ID, history...))
 	_, err = database.ExecContext(t.Context(), `UPDATE messages SET reasoning_json = '' WHERE id = 'm-empty'`)
 	testutil.FailErr(t, "store empty reasoning", err)
 

@@ -21,7 +21,7 @@ func TestSourceRewindSelectivelyUndoesAgentTextAndPreservesSavedHumanText(t *tes
 	anchor := uuid.NewString()
 	testdbseed.InsertSession(t, f.store.db, sessionID, f.project.ID)
 	sessions := sessionstore.NewSQL(f.store.db.(db.ReadHandle))
-	testutil.FailErr(t, "append selected ask", sessions.AppendMessages(ctx, sessionID, api.Message{ID: anchor, Role: api.MessageRoleUser, Origin: api.MessageOriginUser, Content: "change the first line"}))
+	testutil.FailErr(t, "append selected ask", sessions.Transcript.AppendMessages(ctx, sessionID, api.Message{ID: anchor, Role: api.MessageRoleUser, Origin: api.MessageOriginUser, Content: "change the first line"}))
 	d := f.open(t, "a.txt")
 	request := agentEdit(d, "one agent\ntwo\n")
 	request.Turn = 1

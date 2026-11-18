@@ -4,15 +4,15 @@ package property
 
 import (
 	"context"
-	"github.com/lycaon/lycaon/internal/testdbfixture"
-	"github.com/lycaon/lycaon/pkg/api"
-	"github.com/lycaon/lycaon/pkg/api/apitest"
 	"testing"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/lycaon/lycaon/internal/session/store"
+	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/testdbseed"
+	"github.com/lycaon/lycaon/pkg/api"
+	"github.com/lycaon/lycaon/pkg/api/apitest"
 	"pgregory.net/rapid"
 )
 
@@ -24,11 +24,11 @@ func TestOrdCreatedAtImmutabilityAcrossPatches(t *testing.T) {
 	store := store.NewSQL(sqlDB)
 
 	rapid.Check(t, func(t *rapid.T) {
-		sess, err := store.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
+		sess, err := store.Sessions.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 		failErr(t, "create isolated session", err)
 		id := uuid.NewString()
 		created := time.Date(2026, 7, 8, 12, 0, rapid.IntRange(0, 59).Draw(t, "created_sec"), 0, time.UTC)
-		failErr(t, "append", store.AppendMessages(ctx, sess.ID, api.Message{
+		failErr(t, "append", store.Transcript.AppendMessages(ctx, sess.ID, api.Message{
 			ID:        id,
 			Role:      api.MessageRoleAssistant,
 			Content:   "seed body",
@@ -55,7 +55,7 @@ func TestOrdCreatedAtImmutabilityAcrossPatches(t *testing.T) {
 			DraftVersionCount: rapid.IntRange(0, 5).Draw(t, "draft_version_count"),
 			CreatedAt:         patchTS,
 		}
-		_, err = store.UpdateMessage(ctx, sess.ID, id, patch)
+		_, err = store.Transcript.UpdateMessage(ctx, sess.ID, id, patch)
 		failErr(t, "patch", err)
 
 		after := mustFindMessage(t, ctx, store, sess.ID, id)
@@ -70,7 +70,7 @@ func TestOrdCreatedAtImmutabilityAcrossPatches(t *testing.T) {
 		}
 
 		// Hydration follows the immutable ordinal.
-		all, err := store.GetMessages(ctx, sess.ID)
+		all, err := store.Transcript.GetMessages(ctx, sess.ID)
 		failErr(t, "get messages", err)
 		for i := 1; i < len(all); i++ {
 			if all[i].Ord <= all[i-1].Ord {

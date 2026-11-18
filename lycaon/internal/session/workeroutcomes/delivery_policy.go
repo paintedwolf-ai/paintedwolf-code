@@ -22,9 +22,7 @@ type SessionFacts interface {
 type PolicyFeedback interface {
 	RenderResult(context.Context, string, *oar.PipelineResult) (*guidance.Refusal, bool, error)
 }
-type SessionReader interface {
-	Get(context.Context, string) (*api.Session, error)
-}
+
 type ProfileReader interface {
 	PromptToolProfile(context.Context, *api.Session) (string, error)
 }
@@ -33,7 +31,7 @@ type DeliveryPolicy struct {
 	pipeline FinalizePipeline
 	facts    SessionFacts
 	feedback PolicyFeedback
-	sessions SessionReader
+	sessions Sessions
 	profiles ProfileReader
 }
 
@@ -41,7 +39,7 @@ type DeliveryPolicyPorts struct {
 	Pipeline FinalizePipeline
 	Facts    SessionFacts
 	Feedback PolicyFeedback
-	Sessions SessionReader
+	Sessions Sessions
 	Profiles ProfileReader
 }
 

@@ -75,7 +75,7 @@ func (r *Runtime) BuildWorkers(ctx context.Context, deps Dependencies) error {
 		Reject:        deps.Execution.Rejections,
 		Reports: worker.ChangeReportDeps{
 			Messages: func(c context.Context, childSessionID string) ([]wire.Message, error) {
-				return deps.Storage.Sessions.GetMessages(c, childSessionID)
+				return deps.Storage.Sessions.Transcript.GetMessages(c, childSessionID)
 			},
 		},
 	}
@@ -87,7 +87,7 @@ func (r *Runtime) BuildWorkers(ctx context.Context, deps Dependencies) error {
 		Records:       r.Records,
 	}
 	deps.Workflows.Manager.Recovery.Busy = func(c context.Context, sessionID string) bool {
-		sess, err := deps.Storage.Sessions.Get(c, sessionID)
+		sess, err := deps.Storage.Sessions.Sessions.Get(c, sessionID)
 		if err != nil || sess == nil {
 			return false
 		}
@@ -98,7 +98,7 @@ func (r *Runtime) BuildWorkers(ctx context.Context, deps Dependencies) error {
 
 	workflowReady := workflow.RegistryWorkflowReadyChecker{
 		Registry: deps.Workflows.Conditions,
-		Sessions: deps.Storage.Sessions,
+		Sessions: deps.Storage.Sessions.Sessions,
 		Runs:     deps.Workflows.Store.Runs,
 	}
 	plan, err := workerplan.New(workerplan.Deps{

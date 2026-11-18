@@ -3,7 +3,6 @@ package api
 import (
 	"encoding/json"
 	"fmt"
-	"github.com/lycaon/lycaon/internal/tools/toolstest"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -21,6 +20,7 @@ import (
 	"github.com/lycaon/lycaon/internal/testtool"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/timelayout"
+	"github.com/lycaon/lycaon/internal/tools/toolstest"
 	"github.com/lycaon/lycaon/internal/worker"
 	"github.com/lycaon/lycaon/internal/workerrecords"
 	wire "github.com/lycaon/lycaon/pkg/api"
@@ -29,7 +29,7 @@ import (
 type workerHistoryTestEnv struct {
 	srv       *Server
 	sqlDB     *db.Store
-	store     *store.SQL
+	store     *store.Repositories
 	projects  *project.SQLRegistry
 	queue     *worker.SQLQueue
 	records   *workerrecords.Store
@@ -64,9 +64,9 @@ func newWorkerHistoryTestEnv(t *testing.T) *workerHistoryTestEnv {
 		Roots: []project.AttachRootParams{{Path: rootDir, IsPrimary: ptrBoolForTest(true)}},
 	})
 	testutil.FailErr(t, "create project", err)
-	sess, err := st.Create(ctx, wire.CreateSessionRequest{}, proj.ID)
+	sess, err := st.Sessions.Create(ctx, wire.CreateSessionRequest{}, proj.ID)
 	testutil.FailErr(t, "create session", err)
-	child, err := st.CreateChild(ctx, sess, wire.SpawnChildRequest{AgentType: "implementer"})
+	child, err := st.Sessions.CreateChild(ctx, sess, wire.SpawnChildRequest{AgentType: "implementer"})
 	testutil.FailErr(t, "create child session", err)
 
 	srv := newServerForTest(t, Dependencies{

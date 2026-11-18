@@ -69,3 +69,9 @@ func TestPromptLockFailedTryReleasesReference(t *testing.T) {
 		t.Fatalf("failed try retained %d idle lock entries", got)
 	}
 }
+
+func (r *MutexRegistry) len() int {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return len(r.entries)
+}

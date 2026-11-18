@@ -36,7 +36,7 @@ func TestNeedsDecisionRoundTrip(t *testing.T) {
 	testutil.FailErr(t, "enqueue defaults", worker.ApplyEnqueueDefaults(&task, project.ProjectScope{ProjectID: testdbseed.DefaultProjectID, WorkspacePath: dir}, worker.DefaultWorkersConfig()))
 	jobID, err := h.Workers.Queue.Enqueue(ctx, task)
 	testutil.FailErr(t, "enqueue", err)
-	child, err := h.Store.CreateChild(ctx, sess, wire.SpawnChildRequest{AgentType: "implementer", Prompt: "Wire the parser"})
+	child, err := h.Store.Sessions.CreateChild(ctx, sess, wire.SpawnChildRequest{AgentType: "implementer", Prompt: "Wire the parser"})
 	testutil.FailErr(t, "create child", err)
 	testutil.FailErr(t, "set child", h.Workers.Queue.SetChildSessionID(ctx, jobID, child.ID))
 	records := workerrecords.New(h.DB)
@@ -79,7 +79,7 @@ func TestNeedsDecisionRoundTrip(t *testing.T) {
 	if !wire.WorkerResultStatusReactable(status) {
 		t.Fatal("needs_decision must wake the coordinator (reactable)")
 	}
-	parentMsgs, err := h.Store.GetMessages(ctx, sess.ID)
+	parentMsgs, err := h.Store.Transcript.GetMessages(ctx, sess.ID)
 	testutil.FailErr(t, "parent messages", err)
 	if !anyMessageContains(parentMsgs, "decision_request_json") {
 		t.Fatal("parent envelope missing structured decision")
@@ -113,12 +113,12 @@ func TestNeedsDecisionRoundTrip(t *testing.T) {
 		t.Fatalf("answer_decision out = %q", out)
 	}
 
-	childMsgs, err := h.Store.GetMessages(ctx, child.ID)
+	childMsgs, err := h.Store.Transcript.GetMessages(ctx, child.ID)
 	testutil.FailErr(t, "child messages", err)
 	if !anyMessageContains(childMsgs, "write a new parser") {
 		t.Fatalf("child did not receive the decision")
 	}
-	if _, ok, err := h.Sessions.Manager.Decisions.Get(ctx, child.ID); err != nil || ok {
+	if _, ok, err := h.Sessions.Manager.Decisions.Sessions.Get(ctx, child.ID); err != nil || ok {
 		t.Fatal("decision stash not cleared after answer")
 	}
 

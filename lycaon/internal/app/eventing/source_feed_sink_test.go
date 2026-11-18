@@ -2,13 +2,14 @@ package eventing
 
 import (
 	"context"
+	"testing"
+
 	"github.com/lycaon/lycaon/internal/eventoutbox"
 	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/pkg/api"
-	"testing"
 )
 
 type countingProjectLookup struct {
@@ -69,11 +70,11 @@ func TestWorkerPresenceResolvesParentChatAndKeepsWorkerTaskIdentity(t *testing.T
 	database := testdbfixture.Open(t, "presence-placement.db")
 	testdbseed.InsertSessionWithRoot(t, database, "parent", testdbseed.DefaultProjectID, t.TempDir())
 	sessions := store.NewSQL(database)
-	parent, err := sessions.Get(t.Context(), "parent")
+	parent, err := sessions.Sessions.Get(t.Context(), "parent")
 	testutil.FailErr(t, "read parent chat", err)
-	child, err := sessions.CreateChild(t.Context(), parent, api.SpawnChildRequest{AgentType: "implementer"})
+	child, err := sessions.Sessions.CreateChild(t.Context(), parent, api.SpawnChildRequest{AgentType: "implementer"})
 	testutil.FailErr(t, "create worker session", err)
-	chats := presenceChats{store: sessions, workerJobs: func(_ context.Context, id string) (*api.WorkerTask, bool) {
+	chats := presenceChats{store: sessions.Sessions, workerJobs: func(_ context.Context, id string) (*api.WorkerTask, bool) {
 		if id != child.ID {
 			t.Fatalf("task lookup changed session:%q", id)
 		}

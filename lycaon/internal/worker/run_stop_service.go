@@ -265,16 +265,20 @@ type DecisionResolver interface {
 
 // SQLDecisionResolver resolves decisions in one database transaction.
 type SQLDecisionResolver struct {
-	messages *sessionstore.SQL
+	messages sessionstore.TranscriptRepository
+	database db.Handle
 	queue    *SQLQueue
 }
 
-func NewSQLDecisionResolver(messages *sessionstore.SQL, queue *SQLQueue) *SQLDecisionResolver {
-	return &SQLDecisionResolver{messages: messages, queue: queue}
+func NewSQLDecisionResolver(messages *sessionstore.Repositories, queue *SQLQueue) *SQLDecisionResolver {
+	if messages == nil {
+		return &SQLDecisionResolver{queue: queue}
+	}
+	return &SQLDecisionResolver{messages: messages.Transcript, database: messages.DB(), queue: queue}
 }
 
 func (r *SQLDecisionResolver) Resolve(ctx context.Context, expected api.WorkerDecisionRequest, message api.Message) error {
-	if r == nil || r.messages == nil || r.queue == nil || r.messages.DB() == nil || r.messages.DB() != r.queue.db {
+	if r == nil || r.messages == nil || r.queue == nil || r.database == nil || r.database != r.queue.db {
 		return fmt.Errorf("decision resolver not configured")
 	}
 	return r.resolve(ctx, expected, message)

@@ -20,14 +20,14 @@ func (m *Service) EvaluateVerdictGrounding(
 	citedURLs []string,
 	owedAgents []string,
 ) (guidance.VerdictGroundingEval, error) {
-	if m == nil || m.store == nil {
+	if m == nil || (m.sessionStore == nil || m.transcriptStore == nil || m.evidenceStore == nil) {
 		return guidance.VerdictGroundingEval{}, nil
 	}
 	var roots evidence.CitationRoots
-	if sess, err := m.store.Get(ctx, sessionID); err == nil && sess != nil {
+	if sess, err := m.sessionStore.Get(ctx, sessionID); err == nil && sess != nil {
 		roots, _ = m.CitationRoots(ctx, sess)
 	}
-	history, err := m.store.GetMessages(ctx, sessionID)
+	history, err := m.transcriptStore.GetMessages(ctx, sessionID)
 	if err != nil {
 		return guidance.VerdictGroundingEval{}, err
 	}
@@ -281,7 +281,7 @@ func (m *Service) ReviewerEvidence(ctx context.Context, sessionID string, histor
 				continue
 			}
 			leg := guidance.EvidenceLeg{ChildSessionID: task.ChildSessionID, LegID: task.LegID}
-			ledger, err := m.store.LoadLedger(ctx, task.ChildSessionID)
+			ledger, err := m.evidenceStore.LoadLedger(ctx, task.ChildSessionID)
 			if err != nil {
 				return nil, err
 			}

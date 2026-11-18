@@ -16,6 +16,14 @@ The host uses one durable SQLite fact database, one rebuildable web index, and c
 
 Large repository bytes do not live in table rows. Revision payloads and source snapshot content are content-addressed objects beside SQLite. Rebuildable materialized trees and the web index have independent clear paths, and rebuildable specialist indexes never become the only copy of a durable fact.
 
+### Session persistence components
+
+`session/store.NewSQL` constructs eight repositories over one shared database and mutation-lock set: sessions, transcript, compaction, turns, submissions, attachments, evidence, and rewind. The construction bundle also supplies the person store. Runtime services receive the repositories or query interfaces their operations use; the bundle has no persistence forwarding methods.
+
+Operations that span these components retain one commit boundary. Child creation commits the initial transcript and lifecycle event together. Transcript appends allocate ordinals and enqueue message events in the same transaction. Evidence writes update their durable projections before commit and publish cache state afterward. Workflow transitions and worker decision resolution join transcript persistence through explicit transaction participants, preserving session serialization before acquiring a database writer.
+
+Tests use these SQL repositories with real parent rows and foreign keys. Failure injection decorates the relevant repository interface, so a failure exercises the same transaction and publication behavior as production.
+
 ### Store claim
 
 The claim (`internal/hostlock`) records the identity of the engine's lock file and store file. Jobs that judge files by database rows are only correct while the store path still names those files; a renamed or replaced data directory breaks that pairing.

@@ -74,7 +74,7 @@ func (r *Runtime) wireGroundingCoordinators() error {
 	r.Grounding = &toolhost.GroundingService{
 		Config:    groundingCfg,
 		State:     grounding.NewStateStore(),
-		Ledger:    r.deps.Storage.Sessions,
+		Ledger:    r.deps.Storage.Sessions.Evidence,
 		RejectFmt: r.deps.Execution.Rejections,
 		Nudger:    r.deps.Sessions.Manager.Coordinator.Guidance,
 	}
@@ -150,7 +150,7 @@ func (r *Runtime) wireVisualAndRenderTools(ctx context.Context) error {
 			return project.HostSubdir(r.deps.Storage.Directory, projectID, "artifacts")
 		},
 		Lookup: func(ctx context.Context, sessionID string) (string, error) {
-			sess, err := r.deps.Storage.Sessions.Get(ctx, sessionID)
+			sess, err := r.deps.Storage.Sessions.Sessions.Get(ctx, sessionID)
 			if err != nil || sess == nil {
 				return "", err
 			}
@@ -170,7 +170,7 @@ func (r *Runtime) wireVisualAndRenderTools(ctx context.Context) error {
 	})
 	r.deps.Sessions.Manager.SetVisualStore(r.Visual)
 	releaseVisual := providerwire.SetVisualBytesResolver(func(sessionID, artifactID string) ([]byte, string, bool) {
-		root := sessiontree.RootID(context.WithoutCancel(ctx), r.deps.Storage.Sessions, sessionID)
+		root := sessiontree.RootID(context.WithoutCancel(ctx), r.deps.Storage.Sessions.Sessions, sessionID)
 		res := r.Visual.Resolve(context.WithoutCancel(ctx), root, artifactID)
 		if !res.IsPresent() {
 			return nil, "", false
@@ -245,7 +245,7 @@ func (r *Runtime) wireDecisionAndCallTools(ctx context.Context) error {
 		return fmt.Errorf("request_decision tool: %w", err)
 	}
 	callLookup := call.StoreSessionLookup{Get: func(ctx context.Context, id string) (string, error) {
-		sess, err := r.deps.Storage.Sessions.Get(ctx, id)
+		sess, err := r.deps.Storage.Sessions.Sessions.Get(ctx, id)
 		if err != nil {
 			return "", err
 		}
@@ -323,7 +323,7 @@ func (r *Runtime) wireApprovalRationaleAttacher() {
 		Cause:       briefingstore.NewCausal(r.deps.Storage.Database),
 		Workers:     r.deps.Workers.Queue,
 		Progress:    r.Progress,
-		Root:        sessionRootResolver{store: r.deps.Storage.Sessions},
+		Root:        sessionRootResolver{store: r.deps.Storage.Sessions.Sessions},
 		Engine:      briefings.Engine,
 		Router:      briefings.Router,
 		Pins:        briefings.Store,
@@ -334,7 +334,7 @@ func (r *Runtime) wireApprovalRationaleAttacher() {
 }
 
 type sessionRootResolver struct {
-	store session.Store
+	store sessiontree.Reader
 }
 
 func (s sessionRootResolver) RootSessionID(ctx context.Context, sessionID string) string {

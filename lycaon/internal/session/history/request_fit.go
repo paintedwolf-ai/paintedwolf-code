@@ -183,14 +183,14 @@ func requestInputLimit(hard, frameInput int) int {
 // requestView returns the published view only while its source is current;
 // omissions are named separately from what it covers.
 func (m *Service) requestView(ctx context.Context, sess *api.Session) *store.CompactionView {
-	if m == nil || m.store == nil || sess == nil {
+	if m == nil || (m.sessionStore == nil || m.transcriptStore == nil || m.compactionStore == nil) || sess == nil {
 		return nil
 	}
-	view, ok, err := m.store.GetCompactionView(ctx, sess.ID)
+	view, ok, err := m.compactionStore.GetCompactionView(ctx, sess.ID)
 	if err != nil || !ok {
 		return nil
 	}
-	if current, err := m.store.CompactionViewCurrent(ctx, sess.ID, view.CoveredThroughOrd, view.CoveredThroughID, view.SourceSeq); err != nil || !current {
+	if current, err := m.compactionStore.CompactionViewCurrent(ctx, sess.ID, view.CoveredThroughOrd, view.CoveredThroughID, view.SourceSeq); err != nil || !current {
 		return nil
 	}
 	return view
@@ -357,7 +357,7 @@ func (m *Service) fitRequestHistory(ctx context.Context, sess *api.Session, hist
 	}
 	rows = promptassembly.MarkContextPins(sess, rows, min(8192, max(0, tokens/5)))
 	reserve := fitReserve(tokens)
-	canShrinkTools := shrinkTools && m != nil && m.store != nil && recall
+	canShrinkTools := shrinkTools && m != nil && (m.sessionStore != nil && m.transcriptStore != nil && m.compactionStore != nil) && recall
 	if canShrinkTools {
 		// Sized below the whole allocation so the projection and tail hold across appends.
 		toolTokens := max(1, tokens-noticeTokens-reserve)

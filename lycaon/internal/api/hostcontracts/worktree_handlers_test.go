@@ -3,7 +3,6 @@ package hostcontracts
 import (
 	"encoding/json"
 	"errors"
-	"github.com/lycaon/lycaon/internal/tools/toolstest"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -21,6 +20,7 @@ import (
 	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/tools/toolstest"
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -30,7 +30,7 @@ func TestGitWorktreeBindHappyPath(t *testing.T) {
 	if !view.Bound || view.State != "ready" || view.Path != "" {
 		t.Fatalf("view = %#v", view)
 	}
-	binding, ok, err := srv.Sources.Workspace.SessionStore.GetWorktreeBinding(t.Context(), sess.ID)
+	binding, ok, err := srv.Admin.SessionAdmin.Lifecycle.SessionStore.GetWorktreeBinding(t.Context(), sess.ID)
 	testutil.FailErr(t, "get binding", err)
 	if !ok {
 		t.Fatal("expected binding row")
@@ -93,7 +93,7 @@ func TestGitWorktreeBindRejectsTakenBranch(t *testing.T) {
 	if contractfixture.DecodeErr(t, bw).Code != "worktree_branch_exists" {
 		t.Fatalf("code = %q", contractfixture.DecodeErr(t, bw).Code)
 	}
-	_, ok, err := srv.Sources.Workspace.SessionStore.GetWorktreeBinding(t.Context(), sess.ID)
+	_, ok, err := srv.Admin.SessionAdmin.Lifecycle.SessionStore.GetWorktreeBinding(t.Context(), sess.ID)
 	testutil.FailErr(t, "get", err)
 	if ok {
 		t.Fatal("no row should be written")
@@ -184,7 +184,7 @@ func TestGitWorktreeBindLeavesConfigUntouched(t *testing.T) {
 	if before != after {
 		t.Fatalf("config fingerprint changed: %s -> %s", before, after)
 	}
-	binding, ok, err := srv.Sources.Workspace.SessionStore.GetWorktreeBinding(t.Context(), view.SessionID)
+	binding, ok, err := srv.Admin.SessionAdmin.Lifecycle.SessionStore.GetWorktreeBinding(t.Context(), view.SessionID)
 	testutil.FailErr(t, "binding", err)
 	if !ok {
 		t.Fatal("expected binding")
@@ -201,15 +201,15 @@ func TestGitWorktreeBindRollsBack(t *testing.T) {
 
 	dir := contractfixture.InitCommittedRepoDir(t)
 	sessionStore := sessionFixture
-	failing := &contractfixture.PutFailStore{Store: sessionStore, FailPut: true}
+	sessionStore.Sessions = &contractfixture.PutFailStore{SessionRepository: sessionStore.Sessions, FailPut: true}
 	mock := llm.NewMockProvider(contractfixture.TestMockConfig(t))
-	mgr := session.NewHost(failing, session.Models{Client: mock, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, toolstest.NewRegistry())
+	mgr := session.NewHost(sessionStore, session.Models{Client: mock, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, toolstest.NewRegistry())
 	contractfixture.WireTestBindingRegistry(t)
 	reg := project.NewSQLRegistry(sessionFixture.DB())
 	p, err := project.CreateWithRoot(t.Context(), reg, dir)
 	testutil.FailErr(t, "open", err)
 	srv := hostapi.NewServer(contractfixture.RequiredTestDeps(t, hostapi.Dependencies{Core: hostapi.CoreDependencies{
-		Store: failing, Projects: reg, Sessions: mgr, UserNotices: contractfixture.TestUserNotices(t)}, Storage: hostapi.StorageDependencies{DataDir: t.TempDir()}, Workflow: hostapi.WorkflowDependencies{
+		Store: sessionStore, Projects: reg, Sessions: mgr, UserNotices: contractfixture.TestUserNotices(t)}, Storage: hostapi.StorageDependencies{DataDir: t.TempDir()}, Workflow: hostapi.WorkflowDependencies{
 		Board: contractfixture.NewGitBoard(), RepoSetCache: git.NewRepoSetCache(git.DefaultStatusCacheTTL)}}), nil, hostapi.TestAPIToken)
 
 	body := `{"project_id":"` + p.ID + `","posture":"build"}`
@@ -251,7 +251,7 @@ func TestGitWorktreeViewUnbound(t *testing.T) {
 func TestGitWorktreeViewStaleAndReady(t *testing.T) {
 	srv, _, projectID := contractfixture.NewWorktreeTestServer(t)
 	sess, _, _ := contractfixture.CreateBoundSession(t, srv, projectID)
-	binding, ok, err := srv.Sources.Workspace.SessionStore.GetWorktreeBinding(t.Context(), sess.ID)
+	binding, ok, err := srv.Admin.SessionAdmin.Lifecycle.SessionStore.GetWorktreeBinding(t.Context(), sess.ID)
 	testutil.FailErr(t, "binding", err)
 	if !ok {
 		t.Fatal("expected binding")
@@ -274,7 +274,7 @@ func TestGitWorktreeViewStaleAndReady(t *testing.T) {
 func TestGitWorktreeLandHappyAndNothingToLand(t *testing.T) {
 	srv, _, projectID := contractfixture.NewWorktreeTestServer(t)
 	sess, _, _ := contractfixture.CreateBoundSession(t, srv, projectID)
-	binding, ok, err := srv.Sources.Workspace.SessionStore.GetWorktreeBinding(t.Context(), sess.ID)
+	binding, ok, err := srv.Admin.SessionAdmin.Lifecycle.SessionStore.GetWorktreeBinding(t.Context(), sess.ID)
 	testutil.FailErr(t, "binding", err)
 	if !ok {
 		t.Fatal("expected binding")
@@ -304,7 +304,7 @@ func TestGitWorktreeLandHappyAndNothingToLand(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(binding.Toplevel, "landed.txt")); err != nil {
 		t.Fatalf("merge did not land file: %v", err)
 	}
-	if _, ok, err := srv.Sources.Workspace.SessionStore.GetWorktreeBinding(t.Context(), sess.ID); err != nil || !ok {
+	if _, ok, err := srv.Admin.SessionAdmin.Lifecycle.SessionStore.GetWorktreeBinding(t.Context(), sess.ID); err != nil || !ok {
 		t.Fatal("binding must remain after land")
 	}
 }
@@ -312,7 +312,7 @@ func TestGitWorktreeLandHappyAndNothingToLand(t *testing.T) {
 func TestGitWorktreeLandConflict(t *testing.T) {
 	srv, _, projectID := contractfixture.NewWorktreeTestServer(t)
 	sess, _, _ := contractfixture.CreateBoundSession(t, srv, projectID)
-	binding, _, _ := srv.Sources.Workspace.SessionStore.GetWorktreeBinding(t.Context(), sess.ID)
+	binding, _, _ := srv.Admin.SessionAdmin.Lifecycle.SessionStore.GetWorktreeBinding(t.Context(), sess.ID)
 	testutil.FailErr(t, "wt edit", os.WriteFile(filepath.Join(binding.WorktreePath, "README.md"), []byte("wt\n"), 0o644))
 	contractfixture.RunGitIn(t, binding.WorktreePath, "add", "README.md")
 	contractfixture.RunGitIn(t, binding.WorktreePath, "commit", "-m", "wt")
@@ -405,7 +405,7 @@ func TestGitWorktreeLandRefusalsKeepTheirCodes(t *testing.T) {
 	} {
 		t.Run(string(tc.code), func(t *testing.T) {
 			sess, _, _ := contractfixture.CreateBoundSession(t, srv, projectID)
-			binding, _, _ := srv.Sources.Workspace.SessionStore.GetWorktreeBinding(t.Context(), sess.ID)
+			binding, _, _ := srv.Admin.SessionAdmin.Lifecycle.SessionStore.GetWorktreeBinding(t.Context(), sess.ID)
 			tc.block(t, binding.WorktreePath)
 			w := contractfixture.LandWorktree(t, srv, sess.ID)
 			if w.Code != http.StatusConflict || contractfixture.DecodeErr(t, w).Code != tc.code {
@@ -418,7 +418,7 @@ func TestGitWorktreeLandRefusalsKeepTheirCodes(t *testing.T) {
 func TestGitWorktreeRemoveHappyDirtyStale(t *testing.T) {
 	srv, _, projectID := contractfixture.NewWorktreeTestServer(t)
 	sess, _, _ := contractfixture.CreateBoundSession(t, srv, projectID)
-	binding, _, _ := srv.Sources.Workspace.SessionStore.GetWorktreeBinding(t.Context(), sess.ID)
+	binding, _, _ := srv.Admin.SessionAdmin.Lifecycle.SessionStore.GetWorktreeBinding(t.Context(), sess.ID)
 	branch := binding.Branch
 	path := binding.WorktreePath
 
@@ -444,7 +444,7 @@ func TestGitWorktreeRemoveHappyDirtyStale(t *testing.T) {
 	if _, err := os.Stat(path); !errors.Is(err, os.ErrNotExist) {
 		t.Fatalf("directory should be gone: %v", err)
 	}
-	_, ok, err := srv.Sources.Workspace.SessionStore.GetWorktreeBinding(t.Context(), sess.ID)
+	_, ok, err := srv.Admin.SessionAdmin.Lifecycle.SessionStore.GetWorktreeBinding(t.Context(), sess.ID)
 	testutil.FailErr(t, "get", err)
 	if ok {
 		t.Fatal("row should be gone")
@@ -464,13 +464,13 @@ func TestGitWorktreeRemoveHappyDirtyStale(t *testing.T) {
 	if bw.Code != http.StatusOK {
 		t.Fatalf("rebind status=%d body=%s", bw.Code, bw.Body.String())
 	}
-	binding2, _, _ := srv.Sources.Workspace.SessionStore.GetWorktreeBinding(t.Context(), sess.ID)
+	binding2, _, _ := srv.Admin.SessionAdmin.Lifecycle.SessionStore.GetWorktreeBinding(t.Context(), sess.ID)
 	testutil.FailErr(t, "rm stale", os.RemoveAll(binding2.WorktreePath))
 	w = contractfixture.RemoveWorktree(t, srv, sess.ID)
 	if w.Code != http.StatusNoContent {
 		t.Fatalf("stale remove status=%d body=%s", w.Code, w.Body.String())
 	}
-	_, ok, err = srv.Sources.Workspace.SessionStore.GetWorktreeBinding(t.Context(), sess.ID)
+	_, ok, err = srv.Admin.SessionAdmin.Lifecycle.SessionStore.GetWorktreeBinding(t.Context(), sess.ID)
 	testutil.FailErr(t, "get after stale", err)
 	if ok {
 		t.Fatal("stale row should be gone")

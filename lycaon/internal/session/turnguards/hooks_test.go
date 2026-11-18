@@ -3,7 +3,6 @@ package turnguards
 import (
 	"context"
 	"errors"
-	"github.com/lycaon/lycaon/internal/toolreach"
 	"path/filepath"
 	"testing"
 
@@ -19,6 +18,7 @@ import (
 	"github.com/lycaon/lycaon/internal/session/promptinput"
 	sessionverification "github.com/lycaon/lycaon/internal/session/verification"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/toolreach"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/workerplan"
 	"github.com/lycaon/lycaon/internal/workerrecords"
@@ -82,7 +82,7 @@ func TestBeforeToolObservesWaitVisibility(t *testing.T) {
 	pipeline.EnableAnchor(oar.AnchorCoordinatorPreInvoke)
 
 	policy := policyfacts.New(stubProfiles{})
-	policy.SetSources(nil, nil, stubFeedback{}, nil)
+	policy.SetSources(nil, nil, nil, stubFeedback{}, nil)
 	policy.SetPipeline(pipeline)
 
 	svc := New(nil, policy, nil, nil, stubState{}, nil, nil, nil, nil, nil, nil, nil)
@@ -111,6 +111,7 @@ func (s unreadableLedger) LoadLedger(context.Context, string) (evidence.Ledger, 
 }
 
 func TestMidTurnEvidenceUnreadable(t *testing.T) {
+	offline := unreadableLedger{err: errors.New("offline")}
 	for _, tc := range []struct {
 		name string
 		svc  *Service
@@ -118,8 +119,8 @@ func TestMidTurnEvidenceUnreadable(t *testing.T) {
 	}{
 		{name: "no ledger wired", svc: &Service{}},
 		{name: "no evidence service", svc: &Service{Verification: &sessionverification.Service{}}},
-		{name: "readable", svc: &Service{Verification: &sessionverification.Service{Evidence: closeoutevidence.New(unreadableLedger{})}}},
-		{name: "read fails", svc: &Service{Verification: &sessionverification.Service{Evidence: closeoutevidence.New(unreadableLedger{err: errors.New("offline")})}}, want: true},
+		{name: "readable", svc: &Service{Verification: &sessionverification.Service{Evidence: closeoutevidence.New(unreadableLedger{}, unreadableLedger{})}}},
+		{name: "read fails", svc: &Service{Verification: &sessionverification.Service{Evidence: closeoutevidence.New(offline, offline)}}, want: true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			if got := tc.svc.midTurnEvidenceUnreadable(t.Context(), "coord-1", nil); got != tc.want {
@@ -139,7 +140,7 @@ func TestBeforeFinishSkipsHostNoToolTurnWhenInvokeDisallowed(t *testing.T) {
 	pipeline.EnableAnchor(oar.AnchorCoordinatorCloseoutCheck)
 
 	policy := policyfacts.New(stubProfiles{})
-	policy.SetSources(nil, nil, stubFeedback{}, nil)
+	policy.SetSources(nil, nil, nil, stubFeedback{}, nil)
 	policy.SetPipeline(pipeline)
 
 	sess := &api.Session{ID: "coord-1", Posture: api.SessionPostureBuild}
@@ -164,7 +165,7 @@ func TestBeforeFinishPrioritizesOpenProgressAndWaivesAfterRetryCap(t *testing.T)
 	pipeline.EnableAnchor(oar.AnchorCoordinatorCloseoutCheck)
 
 	policy := policyfacts.New(stubProfiles{})
-	policy.SetSources(nil, nil, stubFeedback{}, nil)
+	policy.SetSources(nil, nil, nil, stubFeedback{}, nil)
 	policy.SetPipeline(pipeline)
 
 	sess := &api.Session{ID: "coord-1", Posture: api.SessionPostureBuild}
@@ -239,7 +240,7 @@ func TestPlanCloseoutBlocksUnmetCriteriaAndAssertCompletion(t *testing.T) {
 	pipeline.EnableAnchor(oar.AnchorCoordinatorCloseoutCheck)
 
 	policy := policyfacts.New(stubProfiles{})
-	policy.SetSources(nil, nil, stubFeedback{}, nil)
+	policy.SetSources(nil, nil, nil, stubFeedback{}, nil)
 	policy.SetPipeline(pipeline)
 
 	sess := &api.Session{ID: "coord-plan", ProjectID: "proj-1", Posture: api.SessionPostureBuild}

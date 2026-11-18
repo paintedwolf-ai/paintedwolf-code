@@ -103,9 +103,9 @@ func TestWorkerReadToolsIgnoreSuggestedPaths(t *testing.T) {
 	queue := workertest.OnDatabase(t, sessions.DB(), 8)
 	mgr.SetWorkerQueue(queue, queue.Branches)
 	scope := api.TaskScope{Mode: api.TaskScopeModeRead, Paths: []string{"docs/README.md"}}
-	parent, err := sessions.Get(ctx, "parent")
+	parent, err := sessions.Sessions.Get(ctx, "parent")
 	testutil.FailErr(t, "read parent", err)
-	child, err := sessions.CreateChild(ctx, parent, api.SpawnChildRequest{AgentType: "repo-researcher"})
+	child, err := sessions.Sessions.CreateChild(ctx, parent, api.SpawnChildRequest{AgentType: "repo-researcher"})
 	testutil.FailErr(t, "create child", err)
 	_, err = queue.Enqueue(ctx, api.WorkerTask{
 		ID: "job-read-discovery", ParentSessionID: child.ParentSessionID,

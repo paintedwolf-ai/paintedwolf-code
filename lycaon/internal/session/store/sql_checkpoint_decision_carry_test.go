@@ -2,11 +2,12 @@ package store
 
 import (
 	"context"
+	"testing"
+
 	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/pkg/api"
-	"testing"
 )
 
 // Stale enrichment preserves a settled checkpoint decision.
@@ -15,7 +16,7 @@ func TestUpdateMessageKeepsSettledCheckpointDecision(t *testing.T) {
 	sqlDB := testdbfixture.Open(t, "checkpoint-carry.db")
 	testdbseed.InsertProjectRoot(t, sqlDB, testdbseed.DefaultProjectID, t.TempDir())
 	s := NewSQL(sqlDB)
-	sess, err := s.Create(ctx, api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
+	sess, err := s.Sessions.Create(ctx, api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
 
 	settled := api.Message{
@@ -33,9 +34,9 @@ func TestUpdateMessageKeepsSettledCheckpointDecision(t *testing.T) {
 			},
 		},
 	}
-	testutil.FailErr(t, "append settled tool row", s.AppendMessages(ctx, sess.ID, settled))
+	testutil.FailErr(t, "append settled tool row", s.Transcript.AppendMessages(ctx, sess.ID, settled))
 
-	stored, err := s.GetMessages(ctx, sess.ID)
+	stored, err := s.Transcript.GetMessages(ctx, sess.ID)
 	testutil.FailErr(t, "read settled row", err)
 	if len(stored) != 1 || stored[0].ToolResult.CheckpointDecision == nil {
 		t.Fatalf("decision missing after append: %+v", stored)
@@ -49,10 +50,10 @@ func TestUpdateMessageKeepsSettledCheckpointDecision(t *testing.T) {
 		ToolCallID: stored[0].ToolResult.ToolCallID,
 	}
 	enriched.EvidenceHandles = []string{"ev-1"}
-	_, err = s.UpdateMessage(ctx, sess.ID, enriched.ID, enriched)
+	_, err = s.Transcript.UpdateMessage(ctx, sess.ID, enriched.ID, enriched)
 	testutil.FailErr(t, "enrich tool row", err)
 
-	after, err := s.GetMessages(ctx, sess.ID)
+	after, err := s.Transcript.GetMessages(ctx, sess.ID)
 	testutil.FailErr(t, "read enriched row", err)
 	if len(after) != 1 || after[0].ToolResult == nil {
 		t.Fatalf("row lost after update: %+v", after)
