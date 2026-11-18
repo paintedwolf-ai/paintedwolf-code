@@ -121,20 +121,22 @@ def run_lane(name, shard="", merge_group=False, clock=time.monotonic):
         code = 0
         record["phases"] = []
         packages = None
-        if scope and name == "behavior":
+        phases = lane.get("phases")
+        if scope and phases == "affected-packages":
             from ci_policy.impact import go_scope
             packages = go_scope(scope)
             if packages:
                 command += ["--", *packages]
                 record["packages"] = packages
         # Admission reports every failure, so repairs need not rediscover them one run at a time.
-        complete = merge_group or name in {"ready", "ready-tests", "frontend"}
+        # Every pull-request lane but lint does; lint reports every finding of its own accord.
+        complete = merge_group or "fast" in lane["profiles"] and lane["setup"] != "analysis"
         commands = [command]
         if complete:
             environment["PW_TEST_KEEP_GOING"] = "1"
-        if name == "ready":
+        if phases == "admission":
             commands = ready_scope.check_phases(hosted_plan.invocation(targets), scope, lane.get("early_targets", []))
-        elif name == "ready-tests":
+        elif phases == "admission-tests":
             commands, record["packages"] = ready_scope.test_phases(scope)
         if merge_group:
             from ci_policy.merge_preflight import commands as ordered_commands

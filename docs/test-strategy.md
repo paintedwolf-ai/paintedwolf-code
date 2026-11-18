@@ -956,6 +956,14 @@ adds it once the fast tier's `check` passes. Auto-merge is enabled with the
 author's own credentials. No workflow enables it, because a merge enabled with
 a workflow's `GITHUB_TOKEN` would not start main's cache warming workflow.
 
+Lanes are named once, in `scripts/verification-plan.json`. Each declares in
+`changes` the change areas that select it (`always`, `go`, `den`, `scripts`,
+`confinement`, `command-language`, and one area per native source tree) and in
+`phases` any execution of its own: admission's check phases, admission's test
+phases, or the Go packages a change affects. The planner maps changed paths to
+areas and selects the lanes that declare them, so no script names a lane and a
+rename touches only the plan.
+
 The integration gate uses a conservative change planner. It always compiles
 the host and runs repository contracts and smoke tests. Go changes add integration-enabled reverse import
 closure, including test imports; Den changes run the complete frontend suite.
@@ -1123,6 +1131,14 @@ notices, and decision heads; host admission and behavior checks retain their
 runtime engines. Only
 main publishes archives, after successful installation. Package candidates still
 follow the runner's distribution repositories.
+
+A lane's setup inputs (container images, the pinned browser, the reference userlands,
+repository tools, Nix, the protected-launch display and native libraries, notices
+tools, analysis tool sets, and whether it needs the runtime engines) are derived
+from what it runs. `provisions` in `scripts/verification-plan.json` names, once, the
+targets (and, where a script runs legs, the arguments) and the Go packages that
+need each input; the plan refuses a provision naming a target or package that does
+not exist or that no lane runs, so an input cannot drift from the lane that needs it.
 
 Pinned Go, Cargo, frontend, scanner, and generator inputs are provisioned first;
 Go and Cargo offline modes reject missing inputs during execution. Dependency

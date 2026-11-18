@@ -8,17 +8,23 @@ import tempfile
 import unittest
 
 import yaml
+from verification_tests.ci.fixture_plan import live
+
+BEHAVIOR = live(phase="affected-packages")
+CONFINE = live(runs="test:confine:linux")
+ADMISSION = live(phase="admission")
+RUNNER = live(area="scripts")
 
 ROOT = Path(__file__).resolve().parents[3]
 
 
 class DiagnosticLaneTests(unittest.TestCase):
     def test_complete_platform_diagnostic_has_no_queue_or_impact_requirement(self):
-        result = self.plan('integration', 'confinement-arm64')
+        result = self.plan('integration', CONFINE)
         self.assertEqual(result.returncode, 0, result.stderr)
         rows = json.loads(result.stdout)['include']
         self.assertEqual([(row['lane'], row['runner']) for row in rows],
-                         [('confinement-arm64', 'ubuntu-24.04-arm')])
+                         [(CONFINE, 'ubuntu-24.04-arm')])
         workflow = yaml.safe_load((ROOT / '.github/workflows/verification.yml').read_text())
         watch = next(step for step in workflow['jobs']['verify']['steps']
                      if step.get('uses') == './.github/actions/merge-group-watch')
@@ -29,7 +35,7 @@ class DiagnosticLaneTests(unittest.TestCase):
     def test_fast_dispatch_provisions_the_scope_its_ready_lane_executes(self):
         caller = yaml.safe_load((ROOT / '.github/workflows/ci.yml').read_text())
         self.assertIs(caller['jobs']['fast']['with']['affected'], True)
-        result = self.plan('fast', 'ready', affected=True)
+        result = self.plan('fast', ADMISSION, affected=True)
         self.assertEqual(result.returncode, 0, result.stderr)
         rows = json.loads(result.stdout)['include']
         self.assertEqual(len(rows), 1)
@@ -39,7 +45,7 @@ class DiagnosticLaneTests(unittest.TestCase):
         workflow = yaml.safe_load((ROOT / '.github/workflows/verification.yml').read_text())
         command = next(step['run'] for step in workflow['jobs']['plan']['steps']
                        if step.get('name') == 'Resolve verification jobs')
-        for lane in ('', 'confinement-arm64'):
+        for lane in ('', CONFINE):
             with self.subTest(lane=lane), tempfile.TemporaryDirectory() as directory:
                 root = Path(directory)
                 fake = root / 'python3'
@@ -74,7 +80,7 @@ else: raise SystemExit(2)
                               cwd=ROOT, env=environment, text=True, capture_output=True, timeout=30)
 
     def test_manual_selection_keeps_every_shard_of_the_requested_lane(self):
-        for lane, shards in [('runner', ['']), ('behavior', ['1/2', '2/2'])]:
+        for lane, shards in [(RUNNER, ['']), (BEHAVIOR, ['1/2', '2/2'])]:
             with self.subTest(lane=lane):
                 result = self.plan('check', lane)
                 self.assertEqual(result.returncode, 0, result.stderr)
@@ -83,10 +89,10 @@ else: raise SystemExit(2)
                 self.assertEqual([row['shard'] for row in rows], shards)
 
     def test_protected_events_and_unknown_or_wrong_profile_lanes_are_refused(self):
-        for profile, lane, event in [('check', 'runner', 'pull_request'),
-                                     ('integration', 'runner', 'merge_group'),
+        for profile, lane, event in [('check', RUNNER, 'pull_request'),
+                                     ('integration', RUNNER, 'merge_group'),
                                      ('check', 'missing', 'workflow_dispatch'),
-                                     ('fast', 'runner', 'workflow_dispatch')]:
+                                     ('fast', RUNNER, 'workflow_dispatch')]:
             with self.subTest(profile=profile, lane=lane, event=event):
                 result = self.plan(profile, lane, event)
                 self.assertNotEqual(result.returncode, 0)

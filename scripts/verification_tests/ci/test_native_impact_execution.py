@@ -8,22 +8,21 @@ from ci_policy.native_impact import dependencies
 
 
 class NativeImpactTests(unittest.TestCase):
-    def lanes(self, *paths):
+    def areas(self, *paths):
         full, reasons = impact.broad_scope(paths)
-        return {row["lane"] for row in hosted_plan.matrix(
-            "integration", scope=dict(full=full, paths=list(paths), reasons=reasons))["include"]}
+        return impact.change_areas(dict(full=full, paths=list(paths), reasons=reasons))
 
     def test_native_source_selects_its_dependencies_and_the_repository_baseline(self):
-        baseline = {"build", "behavior"}
         cases = {
-            "lycaon-den/src-tauri/src/lib.rs": {"native", "frontend", "webkit-gtk"},
-            "lycaon/internal/decide/native/src/main.rs": {"native"},
-            "lycaon/internal/documentcore/native/src/main.rs": {"frontend"},
+            "lycaon-den/src-tauri/src/lib.rs": "shell-native",
+            "lycaon/internal/decide/native/src/main.rs": "decide-native",
+            "lycaon/internal/documentcore/native/src/main.rs": "documentcore-native",
         }
-        for path, additional in cases.items():
+        for path, area in cases.items():
             with self.subTest(path=path):
                 self.assertEqual(impact.broad_scope([path]), (False, []))
-                self.assertEqual(self.lanes(path), baseline | additional)
+                self.assertEqual(self.areas(path), {"always", area})
+                self.assertTrue(hosted_plan.lanes_of(hosted_plan.lanes(), {area}))
 
     def test_manifests_fixtures_build_policy_and_unknown_rust_stay_broad(self):
         for path in ["lycaon-den/src-tauri/Cargo.toml", "lycaon-den/src-tauri/Cargo.lock",
@@ -34,16 +33,14 @@ class NativeImpactTests(unittest.TestCase):
             with self.subTest(path=path):
                 self.assertIsNone(dependencies(path))
                 self.assertTrue(impact.broad_scope([path])[0])
-                self.assertIn("build", self.lanes(path))
-                self.assertIn("confinement-arm64", self.lanes(path))
+                self.assertLessEqual({"always", "confinement"}, self.areas(path))
 
     def test_mixed_changes_union_native_go_and_den_obligations(self):
-        lanes = self.lanes("lycaon/internal/decide/native/src/main.rs", "lycaon/internal/a/a.go",
+        areas = self.areas("lycaon/internal/decide/native/src/main.rs", "lycaon/internal/a/a.go",
                            "lycaon-den/src/index.tsx")
-        self.assertLessEqual({"native", "lint", "vulnerabilities", "frontend", "webkit-gtk"}, lanes)
-        self.assertNotIn("confinement-arm64", lanes)
-        self.assertIn("confinement-arm64", self.lanes("lycaon/internal/exec/supervisor_linux.go",
-                                                     "lycaon/internal/documentcore/native/src/main.rs"))
+        self.assertEqual(areas, {"always", "decide-native", "go", "den"})
+        self.assertIn("confinement", self.areas("lycaon/internal/exec/supervisor_linux.go",
+                                                "lycaon/internal/documentcore/native/src/main.rs"))
 
     def graph(self):
         module = "github.com/lycaon/lycaon/"
