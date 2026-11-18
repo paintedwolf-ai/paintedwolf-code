@@ -16,7 +16,10 @@ export function copyAsShown(state: EditorState, from: number, to: number): strin
       cursor.next();
     } while (cursor.value && cursor.from === pos);
     if (pos <= from || !hasBreak) continue;
-    parts.push(state.sliceDoc(start, pos).replace(/[ \t]+$/, ""), state.lineBreak, " ".repeat(columns));
+    const line = state.sliceDoc(start, pos);
+    let end = line.length;
+    while (end && (line[end - 1] === " " || line[end - 1] === "\t")) end--;
+    parts.push(line.slice(0, end), state.lineBreak, " ".repeat(columns));
     start = pos;
   }
   parts.push(state.sliceDoc(start, to));
