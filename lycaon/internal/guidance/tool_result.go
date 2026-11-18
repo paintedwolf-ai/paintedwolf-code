@@ -3,6 +3,7 @@ package guidance
 import (
 	"strings"
 
+	"github.com/lycaon/lycaon/internal/approvaloutcome"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -66,7 +67,8 @@ func ApplyTaskDispatchMetadata(toolName string, tr *api.ToolResult, dispatch *ap
 
 // UiVisibilityForCode classifies a raised code for quiet mode.
 func UiVisibilityForCode(hints *HintConfig, code string) api.ToolResultUiVisibility {
-	if code == "" {
+	switch code {
+	case "", approvaloutcome.CodeApprovalDenied, approvaloutcome.CodeApprovalExpired, approvaloutcome.CodeApprovalCanceled:
 		return api.ToolResultUiVisibilityNormal
 	}
 	if hints != nil {

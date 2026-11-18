@@ -132,7 +132,7 @@ type Prepared struct {
 
 // Prepare binds a reached command through the catalog option grammar. It
 // performs no read; paths is the invocation's logical cwd.
-func (o *Owners) Prepare(paths *projectpaths.ProgramPaths, request commandprogram.OperationRequest) (Prepared, error) {
+func (o *Owners) Prepare(ctx context.Context, paths *projectpaths.ProgramPaths, request commandprogram.OperationRequest) (Prepared, error) {
 	if err := request.Validate(); err != nil {
 		return Prepared{}, err
 	}
@@ -144,6 +144,11 @@ func (o *Owners) Prepare(paths *projectpaths.ProgramPaths, request commandprogra
 	bound, err := commandprogram.CatalogBinder{}.Bind(spec, request.Argv)
 	if err != nil {
 		return Prepared{}, argvRejection(err, spec)
+	}
+	if command == "repo-map" && !bound.Help {
+		if err := validateRepoMapPath(ctx, paths, bound, request.Invocation.Span); err != nil {
+			return Prepared{}, err
+		}
 	}
 	review := bound.Review(o.ops[command])
 	review.PathTargets = []commandprogram.PathTarget{}

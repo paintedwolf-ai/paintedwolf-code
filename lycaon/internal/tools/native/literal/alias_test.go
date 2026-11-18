@@ -15,7 +15,7 @@ func TestRepoMapAliasUsesCanonicalOwnerAndActualArguments(t *testing.T) {
 	request := requestFor(h, "repo-map", "--path", "pkg")
 	request.Argv[0].Value = "survey-repo"
 	streams := streamsFor("")
-	prepared, err := h.owners.Prepare(paths, request)
+	prepared, err := h.owners.Prepare(t.Context(), paths, request)
 	testutil.FailErr(t, "prepare repo-map alias", err)
 	result, err := prepared.InvokeOwner(t.Context(), h.tc, streams)
 	testutil.FailErr(t, "invoke repo-map alias", err)
@@ -28,7 +28,7 @@ func TestRepoMapAliasUsesCanonicalOwnerAndActualArguments(t *testing.T) {
 		t.Fatalf("alias response = %+v", response)
 	}
 	request.Argv[0].Value = "cat"
-	if _, err := h.owners.Prepare(paths, request); err == nil {
+	if _, err := h.owners.Prepare(t.Context(), paths, request); err == nil {
 		t.Fatal("canonical owner accepted an undeclared command spelling")
 	}
 }

@@ -48,7 +48,7 @@ type programOwnerTools struct {
 }
 
 func directProgramOutputAdmission(current *tools.ToolContext) tools.CommandOutputAdmission {
-	return func(context.Context, commandprogram.OutputDestination, string, string) (tools.CommandOutputWrite, error) {
+	return func(context.Context, commandprogram.OutputDestination, tools.CommandOutputTarget) (tools.CommandOutputWrite, error) {
 		return tools.CommandOutputWrite{
 			Publish: func(ctx context.Context, apply func(context.Context, tools.ToolContext) (commandprogram.OutputPublished, error)) (commandprogram.OutputPublished, error) {
 				return apply(ctx, *current)
@@ -184,8 +184,8 @@ func (t programOwnerTools) compose(recorder *invocation.SQLRecorder) (func(tools
 		}
 		for _, name := range literalOwners.Commands() {
 			tool, _ := literalOwners.Operation(name)
-			owners.Natives[name] = command.NativeOperation{Tool: tool, Prepare: func(_ context.Context, frame *projectpaths.ProgramPaths, _ commandprogram.Dispatch, request commandprogram.OperationRequest) (command.NativePrepared, error) {
-				prepared, err := literalOwners.Prepare(frame, request)
+			owners.Natives[name] = command.NativeOperation{Tool: tool, Prepare: func(ctx context.Context, frame *projectpaths.ProgramPaths, _ commandprogram.Dispatch, request commandprogram.OperationRequest) (command.NativePrepared, error) {
+				prepared, err := literalOwners.Prepare(ctx, frame, request)
 				if err != nil {
 					return command.NativePrepared{}, err
 				}

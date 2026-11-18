@@ -38,25 +38,27 @@ func warnLedgerUnwired() {
 
 // toolCaptures holds per-invocation UI metadata.
 type toolCaptures struct {
-	sourceContext    *api.SourceContext
-	overlayPromotion *api.OverlayPromotion
-	ownerRef         string
-	fileEdits        []api.FileEditSnapshot
-	fileEditsOmitted int
-	visual           *tools.VisualCapture
-	externalAccess   *api.ExternalAccess
-	displaySubject   string
-	skill            *api.SkillActivation
-	process          *api.ToolProcessHandle
-	verdict          *api.VerdictOutcome
-	commandProgram   *api.CommandProgramReceipt
-	sourceDeliveries []tools.SourceDeliveryTag
-	sourceRun        *tools.SourceRunCapture
-	listener         *api.LoopbackListenerFact
-	cardFacts        []api.ActionFact
-	dispatch         *api.WorkerDispatch
-	workerReport     *api.WorkerReportAcceptance
-	completion       *api.ToolCompletion
+	programRefusal           *tools.ProgramRefusalVisibility
+	programProgressPublished bool
+	sourceContext            *api.SourceContext
+	overlayPromotion         *api.OverlayPromotion
+	ownerRef                 string
+	fileEdits                []api.FileEditSnapshot
+	fileEditsOmitted         int
+	visual                   *tools.VisualCapture
+	externalAccess           *api.ExternalAccess
+	displaySubject           string
+	skill                    *api.SkillActivation
+	process                  *api.ToolProcessHandle
+	verdict                  *api.VerdictOutcome
+	commandProgram           *api.CommandProgramReceipt
+	sourceDeliveries         []tools.SourceDeliveryTag
+	sourceRun                *tools.SourceRunCapture
+	listener                 *api.LoopbackListenerFact
+	cardFacts                []api.ActionFact
+	dispatch                 *api.WorkerDispatch
+	workerReport             *api.WorkerReportAcceptance
+	completion               *api.ToolCompletion
 	// retrievedFrom is the handler-observed retrieval host.
 	retrievedFrom string
 	// sourceReads is the project text the handler returned.
@@ -421,11 +423,13 @@ func toolCapturesFrom(out *tools.ToolInvocationOut) toolCaptures {
 		return toolCaptures{}
 	}
 	return toolCaptures{
-		workerReport:     out.WorkerReport,
-		displaySubject:   out.DisplaySubject,
-		overlayPromotion: out.OverlayPromotion,
-		sourceContext:    out.SourceContext,
-		ownerRef:         out.OwnerRef, fileEdits: out.FileEdits, fileEditsOmitted: out.FileEditsOmitted, visual: out.Visual,
+		programRefusal:           out.ProgramRefusal,
+		programProgressPublished: out.ProgramProgressPublished(),
+		workerReport:             out.WorkerReport,
+		displaySubject:           out.DisplaySubject,
+		overlayPromotion:         out.OverlayPromotion,
+		sourceContext:            out.SourceContext,
+		ownerRef:                 out.OwnerRef, fileEdits: out.FileEdits, fileEditsOmitted: out.FileEditsOmitted, visual: out.Visual,
 		externalAccess: out.ExternalAccess,
 		skill:          out.Skill, process: out.Process, verdict: out.Verdict,
 		commandProgram:   out.CommandProgram,
@@ -538,10 +542,9 @@ func applyToolResultSidecars(
 	}
 	if captures.process != nil {
 		tr.Process = captures.process
-		if captures.process.Running {
-			// A live handle stays visible until the mirror reports it settled.
-			tr.UiVisibility = api.ToolResultUiVisibilityNormal
-		}
+	}
+	if captures.programProgressPublished || (tr.Process != nil && tr.Process.Running) {
+		tr.UiVisibility = api.ToolResultUiVisibilityNormal
 	}
 	if captures.verdict != nil {
 		tr.Verdict = captures.verdict

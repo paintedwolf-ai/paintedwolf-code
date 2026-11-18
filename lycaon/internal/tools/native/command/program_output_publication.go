@@ -14,24 +14,30 @@ import (
 	"github.com/lycaon/lycaon/internal/tools"
 )
 
-// beginOutput records the actual redirect, not a fabricated utility invocation.
-// Its owner admission waits for the staged bytes; its original pin never refreshes.
-// The reviewed inputs carry the resolved path; the receipt's command is the
-// operator and the display path, which activity subjects read back.
-func (d *ProgramDispatcher) beginOutput(ctx context.Context, destination commandprogram.OutputDestination, path, displayPath string) (tools.CommandOutputWrite, error) {
+// beginOutput checks the resolved destination before the producer can run.
+func (d *ProgramDispatcher) beginOutput(ctx context.Context, destination commandprogram.OutputDestination, target tools.CommandOutputTarget) (tools.CommandOutputWrite, error) {
 	definition, ok := d.run.registry.Operation("write")
 	if !ok {
 		return tools.CommandOutputWrite{}, fmt.Errorf("output publication requires write owner")
 	}
 	operation := definition.Operation
+	checkProgress := func(ctx context.Context) error {
+		return toolexecution.CheckReachedMutationProgress(ctx, d.run.progress, operation, destination.Invocation, target.RootID, target.Path)
+	}
+	path := target.Path
 	bound, err := toolcontract.BindPublication(operation, destination.Invocation, toolcontract.RedirectPublication, destination.Redirect.Operator)
 	if err != nil {
 		return tools.CommandOutputWrite{}, err
 	}
 	review := commandprogram.ArgvReview{OperationID: operation.Facts().Identity, Command: destination.Redirect.Operator, Operands: []string{path}, Options: []commandprogram.ReviewedOption{}}
-	child, err := d.prepareInvocation(ctx, operation, destination.Invocation, destination.Redirect.Operator+" "+displayPath, review.Arguments(), nil)
+	child, err := d.prepareInvocation(ctx, operation, destination.Invocation, destination.Redirect.Operator+" "+target.DisplayPath, review.Arguments(), nil)
 	if err != nil {
 		return tools.CommandOutputWrite{}, err
+	}
+	if err := checkProgress(ctx); err != nil {
+		defer child.release()
+		d.noteOutputRefusal(bound, err)
+		return tools.CommandOutputWrite{}, joinSettle(err, d.settle(ctx, child, ownerFailure(err), false, ""))
 	}
 	var once sync.Once
 	var published commandprogram.OutputPublished
@@ -51,6 +57,9 @@ func (d *ProgramDispatcher) beginOutput(ctx context.Context, destination command
 		effect := toolexecution.NativeEffect{Operation: bound, Argv: &review, Inspection: d.run.capture,
 			Stage: toolcontract.ExecutionStage{ExecutionID: destination.Invocation.Identity.ExecutionID, OperationID: definition.Operation.Facts().Identity, Argv: []string{destination.Redirect.Operator, path}},
 			PrepareReviewed: func(ctx context.Context, values map[string]any, tc tools.ToolContext) (toolexecution.PreparedNativeEffect, error) {
+				if err := checkProgress(ctx); err != nil {
+					return toolexecution.PreparedNativeEffect{}, err
+				}
 				reviewed, err := tc.Invocation.NativeInputs.Reviewed()
 				if err != nil {
 					return toolexecution.PreparedNativeEffect{}, err
@@ -78,13 +87,7 @@ func (d *ProgramDispatcher) beginOutput(ctx context.Context, destination command
 		}
 		marker := &invocation.ProgramAdmissionRecorder{Recorder: d.run.recorder, Inputs: d.run.capture}
 		result, err := d.run.executor.InvokeNative(ctx, d.run.frame, d.run.surface, d.run.memory, d.run.progress, marker, effect, d.run.tc)
-		if toolrejection.AsToolReject(err) != nil {
-			d.shared.mu.Lock()
-			if d.shared.rejected == nil {
-				d.shared.rejected = &nativeRejection{operation: bound, cause: err}
-			}
-			d.shared.mu.Unlock()
-		}
+		d.noteOutputRefusal(bound, err)
 		finalErr = errors.Join(err, d.settleWith(ctx, child, toolcontract.ProgramChildSettlement{Result: result.Producer, OwnerInvoked: result.OwnerInvoked || marker.OwnerStartRecorded, HostStopCode: result.HostStopCode, AcceptedRevision: published.AcceptedRevision, PublishedRevision: published.PublishedRevision, Conflict: revisionConflict(err)}))
 	}
 	return tools.CommandOutputWrite{Publish: func(ctx context.Context, apply func(context.Context, tools.ToolContext) (commandprogram.OutputPublished, error)) (commandprogram.OutputPublished, error) {
@@ -94,4 +97,15 @@ func (d *ProgramDispatcher) beginOutput(ctx context.Context, destination command
 		once.Do(func() { settle(ctx, nil, cause) })
 		return finalErr
 	}}, nil
+}
+
+func (d *ProgramDispatcher) noteOutputRefusal(bound toolcontract.BoundOperation, err error) {
+	if toolrejection.AsToolReject(err) == nil {
+		return
+	}
+	d.shared.mu.Lock()
+	defer d.shared.mu.Unlock()
+	if d.shared.rejected == nil {
+		d.shared.rejected = &nativeRejection{operation: bound, cause: err}
+	}
 }

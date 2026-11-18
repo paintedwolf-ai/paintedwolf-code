@@ -5,6 +5,22 @@ import (
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
+// ProgramRefusalVisibility records the refusal code and whether it preceded admission.
+type ProgramRefusalVisibility struct {
+	Code            string
+	BeforeAdmission bool
+}
+
+func (o *ToolInvocationOut) MarkProgramProgressPublished() {
+	if o != nil {
+		o.programProgressPublished.Store(true)
+	}
+}
+
+func (o *ToolInvocationOut) ProgramProgressPublished() bool {
+	return o != nil && o.programProgressPublished.Load()
+}
+
 // MergeScope names the seam a child's outputs cross.
 type MergeScope int
 

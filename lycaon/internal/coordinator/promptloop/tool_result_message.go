@@ -30,6 +30,12 @@ func (l *toolInvocations) composeToolResultMessage(
 ) api.Message {
 	result := guidance.ComposeToolResult(run.content, run.facts, l.Closeout.Deps.HintConfig)
 	if result != nil {
+		if refusal := run.captures.programRefusal; refusal != nil {
+			result.UiVisibility = api.ToolResultUiVisibilityNormal
+			if refusal.BeforeAdmission {
+				result.UiVisibility = guidance.UiVisibilityForCode(l.Closeout.Deps.HintConfig, refusal.Code)
+			}
+		}
 		result.Tool = call.Name
 		result.ToolCallID = call.ID
 		result.AssistantMessageID = strings.TrimSpace(assistantMessageID)

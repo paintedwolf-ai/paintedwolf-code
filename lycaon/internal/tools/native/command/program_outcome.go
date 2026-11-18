@@ -38,7 +38,8 @@ type ProgramOutcome struct {
 	Refusal *ProgramRefusal `json:"refusal,omitempty"`
 	// SourceWindow is the observation window of a program that launched an
 	// external process.
-	SourceWindow *hostcmd.SourceWindow `json:"source_window,omitempty"`
+	SourceWindow        *hostcmd.SourceWindow `json:"source_window,omitempty"`
+	hasAdmittedActivity bool
 }
 
 // ProgramRefusal is a typed host refusal at the program's stop point with its

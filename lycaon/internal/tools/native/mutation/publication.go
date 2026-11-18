@@ -55,7 +55,7 @@ func (p *Publication) Open(ctx context.Context, destination commandprogram.Outpu
 	if display == "" {
 		display = destination.Target.Value
 	}
-	admission, err := p.Admission(ctx, destination, bound.Resolved.Abs, display)
+	admission, err := p.Admission(ctx, destination, tools.CommandOutputTarget{Path: bound.Resolved.Abs, DisplayPath: display, RootID: bound.Resolved.Root.ID})
 	if err != nil {
 		return nil, err
 	}

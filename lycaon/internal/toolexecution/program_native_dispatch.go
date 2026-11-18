@@ -123,7 +123,7 @@ func (e *Executor) InvokeNative(ctx context.Context, frame ProgramFrame, surface
 		program.MergeChild(child, scope)
 	}()
 	tc.Effects.CheckMutationProgress = func(ctx context.Context, rootID, path string) error {
-		return checkReachedMutationProgress(ctx, progressFacts, definition, invocation, rootID, path)
+		return CheckReachedMutationProgress(ctx, progressFacts, definition, invocation, rootID, path)
 	}
 	if !facts.Contract.AdmitsSession(tc.Identity.ParentSessionID != "") {
 		return result, fmt.Errorf("native operation is outside its declared session scope")
@@ -327,8 +327,7 @@ func (e *Executor) InvokeNative(ctx context.Context, frame ProgramFrame, surface
 }
 
 func checkLiveProgramProgress(ctx context.Context, provider ProgramProgressFacts, bound toolcontract.BoundOperation) error {
-	// Redirect publication reaches the write door after its output is staged.
-	// Its destination, including scratch or output, decides the checklist gate.
+	// Redirect progress checks use the resolved destination root.
 	if bound.Publication() == toolcontract.RedirectPublication {
 		return nil
 	}

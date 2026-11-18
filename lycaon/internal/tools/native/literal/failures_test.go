@@ -194,7 +194,7 @@ func TestOperationBoundaryRejectsForeignCommands(t *testing.T) {
 	h := formHarness(t)
 	request := requestFor(h, "cat", "input")
 	request.OperationID = "wc"
-	if _, err := h.owners.Prepare(mustPaths(t, h), request); err == nil {
+	if _, err := h.owners.Prepare(t.Context(), mustPaths(t, h), request); err == nil {
 		t.Fatal("cat bound under the wc operation")
 	}
 	if _, ok := h.owners.Operation("grep"); ok {
@@ -212,7 +212,7 @@ func TestOperationBoundaryRejectsForeignCommands(t *testing.T) {
 			t.Errorf("%s operation = %q, want %q", command, got, operation)
 		}
 	}
-	prepared, err := h.owners.Prepare(mustPaths(t, h), requestFor(h, "head", "-3", "--", "-input"))
+	prepared, err := h.owners.Prepare(t.Context(), mustPaths(t, h), requestFor(h, "head", "-3", "--", "-input"))
 	testutil.FailErr(t, "prepare head", err)
 	if prepared.Review.OperationID != "read" || len(prepared.Review.Options) != 1 || prepared.Review.Options[0].Option != "-n" || prepared.Review.Options[0].Values[0] != "3" || prepared.Review.Operands[0] != "-input" {
 		t.Fatalf("review = %+v", prepared.Review)
