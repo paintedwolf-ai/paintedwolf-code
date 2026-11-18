@@ -9,39 +9,38 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/lycaon/lycaon/internal/authzcontext"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 )
 
 func TestAuthzEventEnumVocabulary(t *testing.T) {
 	t.Parallel()
-	wantActions := map[authzcontext.EventAction]bool{
-		authzcontext.EventActionApprovalDecision:           true,
-		authzcontext.EventActionToolDenied:                 true,
-		authzcontext.EventActionCapabilityRequested:        true,
-		authzcontext.EventActionCapabilityGranted:          true,
-		authzcontext.EventActionCapabilityDenied:           true,
-		authzcontext.EventActionCapabilityRevoked:          true,
-		authzcontext.EventActionCapabilityApplied:          true,
-		authzcontext.EventActionDirectIPLeaseReused:        true,
-		authzcontext.EventActionDirectIPStarted:            true,
-		authzcontext.EventActionDirectIPCompleted:          true,
-		authzcontext.EventActionDirectIPReconstructed:      true,
-		authzcontext.EventActionMediatedEndpoint:           true,
-		authzcontext.EventActionDetectionResolved:          true,
-		authzcontext.EventActionAskSuppressed:              true,
-		authzcontext.EventActionSecretPermissionUsed:       true,
-		authzcontext.EventActionSecretReceipt:              true,
-		authzcontext.EventActionSecretContest:              true,
-		authzcontext.EventActionSecretDestinationTrusted:   true,
-		authzcontext.EventActionSecretHostComposedRedacted: true,
-		authzcontext.EventActionSecretChatLocalRelease:     true,
-		authzcontext.EventActionContentApplyResolved:       true,
-		authzcontext.EventActionBlueprintApproved:          true,
-		authzcontext.EventActionBlueprintSuperseded:        true,
-		authzcontext.EventActionBlueprintRevoked:           true,
+	wantActions := map[string]bool{
+		"approval_decision":             true,
+		"tool_denied":                   true,
+		"capability_requested":          true,
+		"capability_granted":            true,
+		"capability_denied":             true,
+		"capability_revoked":            true,
+		"capability_applied":            true,
+		"direct_ip_lease_reused":        true,
+		"direct_ip_started":             true,
+		"direct_ip_completed":           true,
+		"direct_ip_reconstructed":       true,
+		"mediated_endpoint":             true,
+		"detection_resolved":            true,
+		"ask_suppressed":                true,
+		"secret_permission_used":        true,
+		"secret_receipt":                true,
+		"secret_contest":                true,
+		"secret_destination_trusted":    true,
+		"secret_host_composed_redacted": true,
+		"secret_chat_local_release":     true,
+		"content_apply_resolved":        true,
+		"blueprint_approved":            true,
+		"blueprint_superseded":          true,
+		"blueprint_revoked":             true,
 	}
-	for _, a := range authzcontext.AllEventActions() {
+	for _, a := range authzVocabulary(t, "EventAction") {
 		if !wantActions[a] {
 			t.Fatalf("unexpected action %q", a)
 		}
@@ -51,11 +50,11 @@ func TestAuthzEventEnumVocabulary(t *testing.T) {
 		t.Fatalf("missing actions: %v", wantActions)
 	}
 
-	wantOutcomes := map[authzcontext.EventOutcome]bool{
-		authzcontext.EventOutcomeAllowed: true,
-		authzcontext.EventOutcomeDenied:  true,
+	wantOutcomes := map[string]bool{
+		"allowed": true,
+		"denied":  true,
 	}
-	for _, o := range authzcontext.AllEventOutcomes() {
+	for _, o := range authzVocabulary(t, "EventOutcome") {
 		if !wantOutcomes[o] {
 			t.Fatalf("unexpected outcome %q", o)
 		}
@@ -65,15 +64,15 @@ func TestAuthzEventEnumVocabulary(t *testing.T) {
 		t.Fatalf("missing outcomes: %v", wantOutcomes)
 	}
 
-	wantResolved := map[authzcontext.ResolvedBy]bool{
-		authzcontext.ResolvedByHuman:      true,
-		authzcontext.ResolvedByExpiry:     true,
-		authzcontext.ResolvedBySystemDeny: true,
-		authzcontext.ResolvedByUserStop:   true,
-		authzcontext.ResolvedByHostStop:   true,
-		authzcontext.ResolvedByPolicy:     true,
+	wantResolved := map[string]bool{
+		"human":       true,
+		"expiry":      true,
+		"system_deny": true,
+		"user_stop":   true,
+		"host_stop":   true,
+		"policy":      true,
 	}
-	for _, r := range authzcontext.AllResolvedBy() {
+	for _, r := range authzVocabulary(t, "ResolvedBy") {
 		if !wantResolved[r] {
 			t.Fatalf("unexpected resolved_by %q", r)
 		}

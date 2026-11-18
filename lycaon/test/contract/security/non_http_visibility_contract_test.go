@@ -15,7 +15,8 @@ func TestNonHTTPContractMandatoryAuthzDetailForSocketAndDirect(t *testing.T) {
 	t.Parallel()
 	root := contractcheck.RepoRoot(t)
 	actions := map[authzcontext.EventAction]bool{}
-	for _, a := range authzcontext.AllEventActions() {
+	for _, value := range authzVocabulary(t, "EventAction") {
+		a := authzcontext.EventAction(value)
 		actions[a] = true
 	}
 	for _, want := range []authzcontext.EventAction{

@@ -28,5 +28,5 @@ func RejectEvents(t testing.TB, database db.Handle) authzcontext.LedgerRecorder 
 		END
 	`)
 	testutil.FailErr(t, "reject authorization events", err)
-	return authzcontext.SQLRecorder(database)
+	return authzcontext.LedgerRecorder{Ledger: &authzcontext.Ledger{Store: authzcontext.NewSQLStore(database)}}
 }

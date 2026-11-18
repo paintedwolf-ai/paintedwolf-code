@@ -38,7 +38,7 @@ func TestLedger_appendGateFailClosed(t *testing.T) {
 func TestLedgerApprovalDecisionCarriesApprovalRuleProvenance(t *testing.T) {
 	sqlDB := testdbfixture.Open(t, "store.db")
 	insertSession(t, sqlDB, "sess-policy", time.Now().UTC())
-	recorder := authzcontext.SQLRecorder(sqlDB)
+	recorder := authzcontext.LedgerRecorder{Ledger: &authzcontext.Ledger{Store: authzcontext.NewSQLStore(sqlDB)}}
 	tx, err := sqlDB.BeginTx(t.Context(), nil)
 	testutil.FailErr(t, "begin", err)
 	testutil.FailErr(t, "append gate tx", recorder.AppendApprovalGateTx(t.Context(), tx, authzledger.ApprovalDecisionRecord{

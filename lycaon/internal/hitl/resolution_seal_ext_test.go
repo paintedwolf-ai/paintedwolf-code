@@ -94,7 +94,7 @@ func TestDetectionResolvedSurvivesRestart(t *testing.T) {
 	resp, err := requestExplicitApprovalCheckpoint(t, ctx, mgr, detectionCheckpointRequest(sessionID))
 	testutil.FailErr(t, "RequestCheckpoint", err)
 
-	restarted := hitl.NewCheckpoints(hitl.NewSQLStore(sqlDB), nil, authzcontext.SQLRecorder(sqlDB))
+	restarted := hitl.NewCheckpoints(hitl.NewSQLStore(sqlDB), nil, authzcontext.LedgerRecorder{Ledger: &authzcontext.Ledger{Store: authzcontext.NewSQLStore(sqlDB)}})
 	restarted.SetCheckpointExpiry(func() time.Duration { return time.Nanosecond })
 	testutil.FailErr(t, "RestorePending", restarted.RestorePending(ctx))
 

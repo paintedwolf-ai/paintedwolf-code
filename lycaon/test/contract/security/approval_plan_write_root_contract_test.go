@@ -26,7 +26,7 @@ func newApprovalPlanStore(t *testing.T, sessionID string) (*hitl.SQLStore, authz
 	t.Helper()
 	sqlDB := testdbfixture.Open(t, "store.db")
 	testdbseed.InsertSessionWithRoot(t, sqlDB, sessionID, testdbseed.DefaultProjectID, t.TempDir())
-	return hitl.NewSQLStore(sqlDB), authzcontext.SQLRecorder(sqlDB), testdbseed.OwnerCaller(t, t.Context(), sqlDB)
+	return hitl.NewSQLStore(sqlDB), authzcontext.LedgerRecorder{Ledger: &authzcontext.Ledger{Store: authzcontext.NewSQLStore(sqlDB)}}, testdbseed.OwnerCaller(t, t.Context(), sqlDB)
 }
 
 type approvalPlanEvents struct{ events chan api.CheckpointEvent }

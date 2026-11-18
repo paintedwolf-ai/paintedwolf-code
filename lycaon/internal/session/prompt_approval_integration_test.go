@@ -95,7 +95,7 @@ func TestPromptAskWriteApproveRunsTool(t *testing.T) {
 	exec := toolexecution.NewExecutor(policy, reg, "implement")
 	hub := events.NewMemoryHub()
 	pub := &events.Publisher{Hub: hub}
-	hitlMgr := hitl.NewCheckpoints(hitl.NewSQLStore(sqlDB), pub, authzcontext.SQLRecorder(sqlDB))
+	hitlMgr := hitl.NewCheckpoints(hitl.NewSQLStore(sqlDB), pub, authzcontext.LedgerRecorder{Ledger: &authzcontext.Ledger{Store: authzcontext.NewSQLStore(sqlDB)}})
 	hitlMgr.Authority.SetApprovalAuthorityInstaller(promptApprovalInstaller{})
 	exec.Approvals.SetCheckpointManager(t.Context(), hitlMgr, gate)
 	toolReg := tools.NewExecutorRegistry(exec, reg)
@@ -219,7 +219,7 @@ func TestPromptAskWriteRejectSurfacesApprovalDenied(t *testing.T) {
 	exec.Approvals.SetApprovalOutcomeRenderer(outcomes)
 	hub := events.NewMemoryHub()
 	pub := &events.Publisher{Hub: hub}
-	hitlMgr := hitl.NewCheckpoints(hitl.NewSQLStore(sqlDB), pub, authzcontext.SQLRecorder(sqlDB))
+	hitlMgr := hitl.NewCheckpoints(hitl.NewSQLStore(sqlDB), pub, authzcontext.LedgerRecorder{Ledger: &authzcontext.Ledger{Store: authzcontext.NewSQLStore(sqlDB)}})
 	exec.Approvals.SetCheckpointManager(t.Context(), hitlMgr, gate)
 	toolReg := tools.NewExecutorRegistry(exec, reg)
 

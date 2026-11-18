@@ -74,7 +74,7 @@ func testUnixSocketCookieIssuerReplacement(t *testing.T, value string) {
 	authority := settings.NewRuleApprovalGate(approvals, settings.NoSources())
 	runtime := approvalstate.NewSocketCapabilityRuntime()
 	defer runtime.Close()
-	checkpoints := hitl.NewCheckpoints(hitl.NewSQLStore(database), &events.Publisher{Hub: events.NewMemoryHub()}, authzcontext.SQLRecorder(database))
+	checkpoints := hitl.NewCheckpoints(hitl.NewSQLStore(database), &events.Publisher{Hub: events.NewMemoryHub()}, authzcontext.LedgerRecorder{Ledger: &authzcontext.Ledger{Store: authzcontext.NewSQLStore(database)}})
 	defer func() {
 		testutil.FailErr(t, "stop cookie checkpoints", checkpoints.StopExpiryTimers(context.Background()))
 	}()
@@ -169,7 +169,7 @@ func testUnixSocketCookieIssuerReplacement(t *testing.T, value string) {
 	defer runtime.Close()
 	service = secretcap.NewWithStore(database, values, nil)
 	service.SetFingerprinter(fingerprinter)
-	checkpoints = hitl.NewCheckpoints(hitl.NewSQLStore(database), &events.Publisher{Hub: events.NewMemoryHub()}, authzcontext.SQLRecorder(database))
+	checkpoints = hitl.NewCheckpoints(hitl.NewSQLStore(database), &events.Publisher{Hub: events.NewMemoryHub()}, authzcontext.LedgerRecorder{Ledger: &authzcontext.Ledger{Store: authzcontext.NewSQLStore(database)}})
 	checkpoints.Authority.SetApprovalAuthorityInstaller(&Installation{Gate: authority, Sockets: runtime, authorityMu: &sync.Mutex{}})
 	review = &socketOwnerReview{Checkpoints: checkpoints, decisionContext: ctx}
 	executor = newCookieOwnerExecutor(t, ctx, database, review, authority, runtime, service, matcher)
@@ -233,7 +233,7 @@ func newCookieOwnerExecutor(t *testing.T, ctx context.Context, database db.Handl
 	registry := tools.NewDefaultRegistry()
 	executor := toolexecution.NewExecutor(nil, registry, "implement")
 	executor.Approvals.SetCheckpointManager(ctx, review, authority)
-	executor.Approvals.SetAuthzRecorder(authzcontext.SQLRecorder(database))
+	executor.Approvals.SetAuthzRecorder(authzcontext.LedgerRecorder{Ledger: &authzcontext.Ledger{Store: authzcontext.NewSQLStore(database)}})
 	executor.Network.SetEgressPostureSource(func(string) gate.Posture { return gate.PostureStrict })
 	executor.Capabilities.SetSocketCapabilityRuntime(runtime)
 	executor.Secrets.SetSecretResolver(service)

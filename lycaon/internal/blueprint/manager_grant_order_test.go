@@ -102,7 +102,7 @@ func TestUpdateSupersedesAndDeleteRevokes(t *testing.T) {
 }
 
 func sealingRecorder(sqlDB db.Handle) authzledger.TransactionalRecorder {
-	return authzcontext.SQLRecorder(sqlDB)
+	return authzcontext.LedgerRecorder{Ledger: &authzcontext.Ledger{Store: authzcontext.NewSQLStore(sqlDB)}}
 }
 
 func assertApprovalStatus(t *testing.T, sqlDB db.Handle, path, want string) {
