@@ -5,6 +5,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/testutil/guidancetest"
 )
 
 func TestHintDeprecatedSuccessorValidated(t *testing.T) {
@@ -17,7 +18,7 @@ func TestHintDeprecatedSuccessorValidated(t *testing.T) {
 	entry.Status = "deprecated"
 	entry.Successor = "WRITE_BINARY_DENIED"
 	cfg.HintCodes["WRITE_SCOPE_DENIED"] = entry
-	testutil.FailErr(t, "ValidateHintConfig", guidance.ValidateHintConfig(cfg))
+	testutil.FailErr(t, "ValidateHintConfig", guidancetest.ValidateHints(cfg))
 }
 
 func TestHintSuccessorUnknownRejected(t *testing.T) {
@@ -28,7 +29,7 @@ func TestHintSuccessorUnknownRejected(t *testing.T) {
 		entry.Status = "deprecated"
 		entry.Successor = successor
 		cfg.HintCodes["WRITE_SCOPE_DENIED"] = entry
-		if err := guidance.ValidateHintConfig(cfg); err == nil {
+		if err := guidancetest.ValidateHints(cfg); err == nil {
 			t.Errorf("successor %s was accepted", successor)
 		}
 	}
@@ -41,7 +42,7 @@ func TestHintDeprecatedSuccessorRequired(t *testing.T) {
 	entry.Status = "deprecated"
 	entry.Successor = " "
 	cfg.HintCodes["WRITE_SCOPE_DENIED"] = entry
-	if err := guidance.ValidateHintConfig(cfg); err == nil {
+	if err := guidancetest.ValidateHints(cfg); err == nil {
 		t.Error("deprecated code without a successor was accepted")
 	}
 }
@@ -53,5 +54,5 @@ func TestHintBoundarySuccessorValidated(t *testing.T) {
 	entry.Status = "deprecated"
 	entry.Successor = "approval gate agent_policy_change"
 	cfg.HintCodes["WRITE_SCOPE_DENIED"] = entry
-	testutil.FailErr(t, "validate boundary retirement", guidance.ValidateHintConfig(cfg))
+	testutil.FailErr(t, "validate boundary retirement", guidancetest.ValidateHints(cfg))
 }
