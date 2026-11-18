@@ -165,14 +165,14 @@ func isEnvelopeOnlyTool(f *laws.GoFile) bool {
 var capNameParts = []string{"Max", "Timeout", "Bytes", "Depth", "Scan", "Zoom", "Entries", "Paths", "Files", "Matches", "Results", "Pattern", "Context", "Recursive"}
 
 var surveyTools = []laws.Rule{{
-	Name:    "envelope-only-tools-use-safecmd",
+	Name: "envelope-only-tools-use-safecmd",
 	Anchors: append(goPaths([]string{
 		"internal/tools/native/survey/find.go",
 		"internal/tools/native/survey/find_walk.go",
 		"internal/tools/native/survey/grep.go",
 		"internal/tools/native/jq/decode.go",
 	}), laws.Package("internal/tools/safecmd")),
-	Exempt:  []laws.Exemption{{Key: "internal/tools/native/survey/grep.go:hostGrepMaxFileBytes", Reason: "a package variable tests lower to exercise the clamp"}},
+	Exempt: []laws.Exemption{{Key: "internal/tools/native/survey/grep.go:hostGrepMaxFileBytes", Reason: "a package variable tests lower to exercise the clamp"}},
 	Check: func(r *laws.Run) {
 		banned := map[string]string{
 			"github.com/lycaon/lycaon/internal/tools/projectpaths": "ResolveRead",

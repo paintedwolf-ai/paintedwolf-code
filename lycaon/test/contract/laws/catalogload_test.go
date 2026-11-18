@@ -10,7 +10,7 @@ import (
 const packs = "lycaon/config/packs/painted-wolf/"
 
 var partialTree = map[string]string{
-	packs + "platform/agents/prompts/coordinator.md": "Intro\n{% include \"partials/shared.md\" %}\n",
+	packs + "platform/agents/prompts/coordinator.md":     "Intro\n{% include \"partials/shared.md\" %}\n",
 	packs + "platform/agents/prompts/partials/shared.md": "Shared text\n",
 }
 
