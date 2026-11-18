@@ -94,13 +94,13 @@ def module_tree(path):
     Nested modules, such as the harness projects, are read by other lanes rather than compiled here;
     native trees declare their own dependencies.
     """
-    if not path.startswith(("lycaon/internal/", "lycaon/cmd/", "lycaon/test/")) or "/native/" in path:
+    if not path.startswith(("lycaon/internal/", "lycaon/cmd/", "lycaon/test/")):
         return False
     if Path(path).name in {"go.mod", "go.sum"}:
         return False
     directories = Path(path).parent.relative_to("lycaon").parts
-    return not any((ROOT / "lycaon" / Path(*directories[:depth]) / "go.mod").exists()
-                   for depth in range(1, len(directories) + 1))
+    return not any((ROOT / "lycaon" / Path(*directories[:depth]) / manifest).exists()
+                   for depth in range(1, len(directories) + 1) for manifest in ("go.mod", "Cargo.toml"))
 
 
 def broad_scope(paths):

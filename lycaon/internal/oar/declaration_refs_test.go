@@ -49,6 +49,11 @@ host_facts:
 	if err := os.WriteFile(filepath.Join(policy, "CONSUMER.yaml"), []byte(rule), 0o644); err != nil {
 		testutil.FailErr(t, "write file", err)
 	}
+	for _, rel := range []string{"THIRD-PARTY-NOTICES.md", "lycaon-den/src-tauri/THIRD-PARTY-NOTICES.md"} {
+		path := filepath.Join(root, rel)
+		testutil.FailErr(t, "create notices directory", os.MkdirAll(filepath.Dir(path), 0o755))
+		testutil.FailErr(t, "write generated notices", os.WriteFile(path, []byte("paintedwolf.audited_orphan"), 0o644))
+	}
 	got, err := UnreferencedDeclaredFacts(module)
 	testutil.FailErr(t, "UnreferencedDeclaredFacts failed", err)
 	// can_ask_user has no literal reference in the fixture tree but is in the
