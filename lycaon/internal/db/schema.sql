@@ -1015,8 +1015,7 @@ CREATE TABLE event_outbox (
     facet TEXT,
     entity_revision INTEGER NOT NULL DEFAULT 0 CHECK (entity_revision >= 0),
     data_json TEXT NOT NULL CHECK (data_json = '' OR json_valid(data_json)),
-    -- Bounds retry of an undeliverable row: drain() gives up at the attempts
-    -- cap so later rows are not blocked behind it.
+    -- Delivery diagnostics for the next retry.
     attempts INTEGER NOT NULL DEFAULT 0 CHECK (attempts >= 0),
     last_error TEXT NOT NULL DEFAULT '',
     created_at TEXT NOT NULL

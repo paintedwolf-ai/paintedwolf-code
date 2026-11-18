@@ -220,3 +220,34 @@ class MergePreflightTests(unittest.TestCase):
                 os.chdir(before)
         self.assertEqual((report["runs_observed"], report["throughput"]["decided_groups"], report["job_costs"]["totals"]["runner_seconds"]), (2, 2, 600))
         self.assertEqual(sum("/jobs?filter=all" in path for path in calls), 2)
+
+    def test_queue_health_reads_only_bounded_receipts_of_the_run_attempt(self):
+        from ci_policy import health
+        def archive(files):
+            buffer = io.BytesIO()
+            with zipfile.ZipFile(buffer, "w") as handle:
+                for name, value in files.items():
+                    handle.writestr(name, value)
+            return buffer.getvalue()
+        record = {"lane": "behavior", "classification": "runner_oom"}
+        payloads = {
+            1: archive({"ci/run.json": json.dumps(record), "ci/failures.json": json.dumps([{"stage": "go"}]),
+                        "ci/other.json": "{}", "big/ci/run.json": json.dumps({"x": "y" * health.MAX_MEMBER_BYTES})}),
+            2: archive({"ci/run.json": json.dumps([record]), "ci/failures.json": json.dumps({"stage": "go"})}),
+        }
+        artifact = lambda number, name, **extra: {"id": number, "name": name, "expired": False,
+                                                  "size_in_bytes": 10, **extra}
+        artifacts = [artifact(1, "receipt-behavior-2"), artifact(2, "receipt-native-2"),
+                     artifact(3, "receipt-behavior-1"), artifact(4, "logs-behavior-2"),
+                     artifact(5, "receipt-expired-2", expired=True),
+                     artifact(6, "receipt-large-2", size_in_bytes=health.MAX_ARTIFACT_BYTES + 1)]
+        downloads = []
+        def download(command):
+            number = int(command[-1].split("/")[-2])
+            downloads.append(number)
+            return payloads[number]
+        with patch.object(health, "pages", return_value=iter(artifacts)), \
+                patch.object(health, "repository", return_value="repos/o/r"), \
+                patch.object(health.subprocess, "check_output", side_effect=download):
+            records, failures = health.evidence({"id": 9, "run_attempt": 2})
+        self.assertEqual((records, failures, downloads), ([record], [{"stage": "go"}], [1, 2]))
