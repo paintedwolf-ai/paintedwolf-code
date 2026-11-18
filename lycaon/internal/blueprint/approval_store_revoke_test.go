@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/authzcontext"
+	"github.com/lycaon/lycaon/internal/authzcontext/authztest"
 	"github.com/lycaon/lycaon/internal/db"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -174,7 +175,7 @@ func TestEndOfGrantFailsClosedWhenLedgerAppendFails(t *testing.T) {
 			const path = ".paintedwolf/blueprints/auth.md"
 			seedApprovedBlueprint(t, sqlDB, path)
 
-			store := NewApprovalStore(sqlDB, authzcontext.LedgerRecorder{Ledger: &authzcontext.Ledger{Store: authzcontext.FailStore{}}})
+			store := NewApprovalStore(sqlDB, authztest.RejectEvents(t, sqlDB))
 			if err := tc.end(store, ctx, path); err == nil {
 				t.Fatal("transition must fail when the ledger append fails")
 			}

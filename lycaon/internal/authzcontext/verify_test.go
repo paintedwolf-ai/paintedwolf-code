@@ -5,12 +5,14 @@ import (
 	"context"
 	"encoding/json"
 	"github.com/lycaon/lycaon/internal/testdbfixture"
+	"github.com/lycaon/lycaon/internal/testdbseed"
 	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/lycaon/lycaon/internal/authzcontext"
+	"github.com/lycaon/lycaon/internal/authzcontext/authztest"
 	"github.com/lycaon/lycaon/internal/gate"
 	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/settings"
@@ -19,8 +21,8 @@ import (
 )
 
 func TestVerify_eventReorderBreaks(t *testing.T) {
-	mem := authzcontext.NewMemoryStore()
-	ledger := &authzcontext.Ledger{Store: mem}
+	ledgerStore := authztest.NewStore(t, "sess-reorder")
+	ledger := &authzcontext.Ledger{Store: ledgerStore}
 	for i := 0; i < 3; i++ {
 		ledger.AppendRecord(context.Background(), authzcontext.RecordInput{
 			SessionID:  "sess-reorder",
@@ -30,7 +32,7 @@ func TestVerify_eventReorderBreaks(t *testing.T) {
 			Detail:     authzcontext.DetailInput{Tool: "command"},
 		})
 	}
-	rows, err := mem.ListEvents(context.Background(), "sess-reorder")
+	rows, err := ledgerStore.ListEvents(context.Background(), "sess-reorder")
 	if err != nil || len(rows) != 3 {
 		t.Fatalf("events = %d err = %v", len(rows), err)
 	}
@@ -105,8 +107,8 @@ func TestVerify_sqlEventTamperAndReorder(t *testing.T) {
 }
 
 func TestListEvents_newestFirstLimit(t *testing.T) {
-	mem := authzcontext.NewMemoryStore()
-	ledger := &authzcontext.Ledger{Store: mem}
+	ledgerStore := authztest.NewStore(t, "sess-list")
+	ledger := &authzcontext.Ledger{Store: ledgerStore}
 	for i := 0; i < 5; i++ {
 		ledger.AppendRecord(context.Background(), authzcontext.RecordInput{
 			SessionID:  "sess-list",
@@ -116,7 +118,7 @@ func TestListEvents_newestFirstLimit(t *testing.T) {
 			Detail:     authzcontext.DetailInput{Tool: "command"},
 		})
 	}
-	got, err := authzcontext.ListEvents(context.Background(), mem, "sess-list", 2)
+	got, err := authzcontext.ListEvents(context.Background(), ledgerStore, "sess-list", 2)
 	if err != nil {
 		testutil.FailErr(t, "list", err)
 	}
@@ -129,13 +131,13 @@ func TestListEvents_newestFirstLimit(t *testing.T) {
 }
 
 func TestExportSessionAuthz_jsonlHead(t *testing.T) {
-	mem := authzcontext.NewMemoryStore()
-	sealer := &authzcontext.Sealer{Store: mem}
+	ledgerStore := authztest.NewStore(t, "sess-export")
+	sealer := &authzcontext.Sealer{Store: ledgerStore}
 	sess := &api.Session{ID: "sess-export", ProjectID: "p1", AgentType: "implementer", Posture: api.SessionPostureBuild}
 	if err := sealer.Seal(context.Background(), sess, "implement", ""); err != nil {
 		testutil.FailErr(t, "seal", err)
 	}
-	ledger := &authzcontext.Ledger{Store: mem}
+	ledger := &authzcontext.Ledger{Store: ledgerStore}
 	ledger.AppendRecord(context.Background(), authzcontext.RecordInput{
 		SessionID:  "sess-export",
 		Action:     authzcontext.EventActionToolDenied,
@@ -145,7 +147,7 @@ func TestExportSessionAuthz_jsonlHead(t *testing.T) {
 	})
 
 	var buf bytes.Buffer
-	if err := authzcontext.ExportSessionAuthz(context.Background(), &buf, mem, "sess-export"); err != nil {
+	if err := authzcontext.ExportSessionAuthz(context.Background(), &buf, ledgerStore, "sess-export"); err != nil {
 		testutil.FailErr(t, "export", err)
 	}
 	lines := strings.Split(strings.TrimSpace(buf.String()), "\n")
@@ -195,28 +197,30 @@ func TestSQLStore_contextTamperTable(t *testing.T) {
 }
 
 func TestVerifyBindsTheResolvingPersonIntoTheChain(t *testing.T) {
-	mem := authzcontext.NewMemoryStore()
-	ledger := &authzcontext.Ledger{Store: mem}
-	for _, resolver := range []string{"person-a", "person-b"} {
-		ledger.AppendRecord(context.Background(), authzcontext.RecordInput{
-			SessionID:        "sess-resolver",
-			Action:           authzcontext.EventActionApprovalDecision,
-			Outcome:          authzcontext.EventOutcomeAllowed,
-			ResolvedBy:       authzcontext.ResolvedByHuman,
-			ResolverPersonID: resolver,
-			Detail:           authzcontext.DetailInput{Tool: "command"},
-		})
-	}
-	rows, err := mem.ListEvents(context.Background(), "sess-resolver")
+	const sessionID = "sess-resolver"
+	database := testdbfixture.Open(t, "authorization.db")
+	insertSession(t, database, sessionID, time.Now().UTC())
+	resolverID := testdbseed.OwnerID(t, database)
+	ledgerStore := authzcontext.NewSQLStore(database)
+	ledger := &authzcontext.Ledger{Store: ledgerStore}
+	testutil.FailErr(t, "record resolving person", ledger.AppendGate(t.Context(), authzcontext.RecordInput{
+		SessionID:        sessionID,
+		Action:           authzcontext.EventActionApprovalDecision,
+		Outcome:          authzcontext.EventOutcomeAllowed,
+		ResolvedBy:       authzcontext.ResolvedByHuman,
+		ResolverPersonID: resolverID,
+		Detail:           authzcontext.DetailInput{Tool: "command"},
+	}))
+	rows, err := ledgerStore.ListEvents(t.Context(), sessionID)
 	testutil.FailErr(t, "list events", err)
-	if len(rows) != 2 || rows[0].ResolverPersonID != "person-a" || rows[1].ResolverPersonID != "person-b" {
+	if len(rows) != 1 || rows[0].ResolverPersonID != resolverID {
 		t.Fatalf("events = %+v", rows)
 	}
-	if br := authzcontext.VerifyEvents("sess-resolver", rows); br != nil {
+	if br := authzcontext.VerifyEvents(sessionID, rows); br != nil {
 		t.Fatalf("verify before tamper: %+v", br)
 	}
-	rows[0].ResolverPersonID = "person-b"
-	if br := authzcontext.VerifyEvents("sess-resolver", rows); br == nil {
+	rows[0].ResolverPersonID = ""
+	if br := authzcontext.VerifyEvents(sessionID, rows); br == nil {
 		t.Fatal("changing the resolving person did not break the chain")
 	}
 }
