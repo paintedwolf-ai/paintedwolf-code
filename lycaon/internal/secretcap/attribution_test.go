@@ -44,7 +44,7 @@ func TestSettingsSecretRecordsItsCreator(t *testing.T) {
 	id, err := ParseReference(meta.Reference)
 	testutil.FailErr(t, "parse reference", err)
 	var creator string
-	testutil.FailErr(t, "read creator", service.handle.QueryRowContext(t.Context(),
+	testutil.FailErr(t, "read creator", service.repository.handle.QueryRowContext(t.Context(),
 		`SELECT created_by_person_id FROM managed_secrets WHERE id = ?`, id).Scan(&creator))
 	if creator != owner {
 		t.Fatalf("created_by_person_id = %q, want %q", creator, owner)
@@ -67,7 +67,7 @@ func TestRevokeProjectRecordsTheRevokingPerson(t *testing.T) {
 	id, err := ParseReference(meta.Reference)
 	testutil.FailErr(t, "parse reference", err)
 	var revokedBy, revoker string
-	testutil.FailErr(t, "read revoker", service.handle.QueryRowContext(t.Context(),
+	testutil.FailErr(t, "read revoker", service.repository.handle.QueryRowContext(t.Context(),
 		`SELECT revoked_by, revoked_by_person_id FROM managed_secrets WHERE id = ?`, id).Scan(&revokedBy, &revoker))
 	if revokedBy != "person" || revoker != owner {
 		t.Fatalf("revoked_by = %q, revoked_by_person_id = %q, want person/%q", revokedBy, revoker, owner)
@@ -84,23 +84,23 @@ func TestRevealCompletesOnlyForThePersonWhoBeganIt(t *testing.T) {
 	testutil.FailErr(t, "create settings secret", err)
 	privateKey := configureRevealKey(t, service)
 
-	stolen, err := service.BeginReveal(t.Context(), testdbseed.DefaultProjectID, meta.Reference, "main", owner)
+	stolen, err := service.Reveals.BeginReveal(t.Context(), testdbseed.DefaultProjectID, meta.Reference, "main", owner)
 	testutil.FailErr(t, "begin reveal", err)
-	if _, err := service.CompleteReveal(t.Context(), testdbseed.DefaultProjectID, meta.Reference,
+	if _, err := service.Reveals.CompleteReveal(t.Context(), testdbseed.DefaultProjectID, meta.Reference,
 		"00000000-0000-4000-8000-0000000000ee", signedProof(privateKey, stolen, presence.AuthenticatorMacOS)); !errors.Is(err, presence.ErrDenied) {
 		t.Fatalf("reveal completed by another person error = %v", err)
 	}
 
-	challenge, err := service.BeginReveal(t.Context(), testdbseed.DefaultProjectID, meta.Reference, "main", owner)
+	challenge, err := service.Reveals.BeginReveal(t.Context(), testdbseed.DefaultProjectID, meta.Reference, "main", owner)
 	testutil.FailErr(t, "begin reveal again", err)
-	_, err = service.CompleteReveal(t.Context(), testdbseed.DefaultProjectID, meta.Reference,
+	_, err = service.Reveals.CompleteReveal(t.Context(), testdbseed.DefaultProjectID, meta.Reference,
 		owner, signedProof(privateKey, challenge, presence.AuthenticatorMacOS))
 	testutil.FailErr(t, "complete reveal", err)
 	id, err := ParseReference(meta.Reference)
 	testutil.FailErr(t, "parse reference", err)
 	var count int
 	var person string
-	testutil.FailErr(t, "read reveal audit", service.handle.QueryRowContext(t.Context(),
+	testutil.FailErr(t, "read reveal audit", service.repository.handle.QueryRowContext(t.Context(),
 		`SELECT COUNT(*), MAX(person_id) FROM managed_secret_reveals WHERE secret_id = ?`, id).Scan(&count, &person))
 	if count != 1 || person != owner {
 		t.Fatalf("reveal audit = %d rows by %q, want 1 by %q", count, person, owner)

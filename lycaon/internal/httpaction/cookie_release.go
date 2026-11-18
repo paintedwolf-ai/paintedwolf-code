@@ -97,7 +97,7 @@ func refreshManagedCookieJar(
 			return false, nil
 		}
 	}
-	fresh, err := deps.Secrets.OpenCookieJar(ctx, req)
+	fresh, err := deps.Jars.OpenCookieJar(ctx, req)
 	if err != nil {
 		return false, cookieJarOpenReject(jar.Name, err)
 	}

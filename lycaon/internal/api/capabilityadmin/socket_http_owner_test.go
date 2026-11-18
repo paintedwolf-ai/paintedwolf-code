@@ -168,7 +168,7 @@ func testUnixSocketRecipientLifetime(t *testing.T, tokens bool) {
 	boundary := sandbox.NewBoundary(sandbox.Config{ProjectRootRequired: true, RejectSymlinkEscape: true}, []sandbox.ToolProfile{{ID: "implement", Tools: map[string]bool{"http_request": true}}})
 	var decoy *net.UnixListener
 	swapped := false
-	testutil.FailErr(t, "register retained HTTP consumer", httpaction.Register(registry, httpaction.Deps{Boundary: boundary, Secrets: service, SecretMatcher: matcher, SecretAsk: func(ctx context.Context, alert secretmatch.Alert) (secretmatch.Resolution, error) {
+	testutil.FailErr(t, "register retained HTTP consumer", httpaction.Register(registry, httpaction.Deps{Boundary: boundary, Secrets: service, Jars: service.Jars, SecretMatcher: matcher, SecretAsk: func(ctx context.Context, alert secretmatch.Alert) (secretmatch.Resolution, error) {
 		if !swapped {
 			// ClaimDeclaredSocket has consumed the real permit before this final screen.
 			if err := os.Rename(path, path+"-original"); err != nil {
@@ -206,7 +206,7 @@ func testUnixSocketRecipientLifetime(t *testing.T, tokens bool) {
 		t.Fatal("same live binding did not reuse recipient permission")
 	}
 	jarRequest := secretcap.TokenJarRequest{ProjectID: testdbseed.DefaultProjectID, ChatSessionID: "root-1", SessionID: "root-1", OperationID: "inspect", Name: "service-tokens"}
-	jar, err := service.OpenTokenJar(ctx, jarRequest)
+	jar, err := service.Jars.OpenTokenJar(ctx, jarRequest)
 	testutil.FailErr(t, "read retained token jar", err)
 	originalToken := jar.Tokens["api"]
 	if originalToken.Value != issuedToken || originalToken.Origin == "" {
@@ -236,7 +236,7 @@ func testUnixSocketRecipientLifetime(t *testing.T, tokens bool) {
 	}
 	assertNoUnixAccept(t, decoy)
 	assertSocketCredentialPreserved(t, ctx, service, credentialReference)
-	preserved, err := service.OpenTokenJar(ctx, jarRequest)
+	preserved, err := service.Jars.OpenTokenJar(ctx, jarRequest)
 	testutil.FailErr(t, "preserve original token jar", err)
 	if preserved.Tokens["api"] != originalToken {
 		t.Fatal("changed recipient rewrote or discarded token data")
@@ -266,7 +266,7 @@ func testUnixSocketRecipientLifetime(t *testing.T, tokens bool) {
 			t.Fatalf("restart reused stale token recipient authority: %v", err)
 		}
 		assertNoUnixAccept(t, decoy)
-		restored, err := service.OpenTokenJar(ctx, jarRequest)
+		restored, err := service.Jars.OpenTokenJar(ctx, jarRequest)
 		testutil.FailErr(t, "token data survives restart", err)
 		if restored.Tokens["api"] != originalToken {
 			t.Fatal("engine restart discarded or rebound token data")

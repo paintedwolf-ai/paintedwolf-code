@@ -62,7 +62,7 @@ func TestForeignIssuerCookieFaultsStopTheRequestBeforeDelivery(t *testing.T) {
 			before := seedRetainedIssuerCookie(t, secrets, server.URL)
 
 			var asked atomic.Int64
-			deps := Deps{Boundary: testBoundary(), Secrets: secrets, SecretMatcher: tc.matcher}
+			deps := Deps{Boundary: testBoundary(), Secrets: secrets, Jars: secrets.Jars, SecretMatcher: tc.matcher}
 			if tc.ask != nil {
 				deps.SecretAsk = tc.ask(&asked)
 			}
@@ -77,7 +77,7 @@ func TestForeignIssuerCookieFaultsStopTheRequestBeforeDelivery(t *testing.T) {
 			if requests.Load() != 0 || asked.Load() != tc.asked {
 				t.Fatalf("requests=%d asks=%d, want no delivery and %d asks", requests.Load(), asked.Load(), tc.asked)
 			}
-			after, err := secrets.OpenCookieJar(t.Context(), cookieSeedRequest("inspect"))
+			after, err := secrets.Jars.OpenCookieJar(t.Context(), cookieSeedRequest("inspect"))
 			testutil.FailErr(t, "reopen protected jar", err)
 			if !reflect.DeepEqual(after.Store.Snapshot(), before) {
 				t.Fatal("a disclosure fault changed the protected cookie")
@@ -103,15 +103,15 @@ func cookieSeedRequest(operation string) secretcap.CookieJarRequest {
 // retained socket object writes it, and returns its persisted form.
 func seedRetainedIssuerCookie(t *testing.T, secrets *secretcap.Service, rawURL string) []httpcookies.Cookie {
 	t.Helper()
-	jar, err := secrets.OpenCookieJar(t.Context(), cookieSeedRequest("seed"))
+	jar, err := secrets.Jars.OpenCookieJar(t.Context(), cookieSeedRequest("seed"))
 	testutil.FailErr(t, "open seed jar", err)
 	target, err := url.Parse(rawURL + "/private")
 	testutil.FailErr(t, "seed target", err)
 	jar.Store.SetDelivery("retained-service-binding", nil)
 	jar.Store.SetCookies(target, []*http.Cookie{{Name: "session", Value: "retained-service-session-4411", Path: "/"}})
-	_, err = secrets.SaveCookieJar(t.Context(), cookieSeedRequest("seed"), jar)
+	_, err = secrets.Jars.SaveCookieJar(t.Context(), cookieSeedRequest("seed"), jar)
 	testutil.FailErr(t, "persist seed jar", err)
-	stored, err := secrets.OpenCookieJar(t.Context(), cookieSeedRequest("inspect"))
+	stored, err := secrets.Jars.OpenCookieJar(t.Context(), cookieSeedRequest("inspect"))
 	testutil.FailErr(t, "reopen seed jar", err)
 	snapshot := stored.Store.Snapshot()
 	if len(snapshot) != 1 || snapshot[0].NativeIssuer == "" {
@@ -211,21 +211,21 @@ func testJarModifiedDuringEgressWaitCannotSendUnreviewedCookie(t *testing.T) {
 
 	target, err := url.Parse(server.URL + "/api")
 	testutil.FailErr(t, "parse target", err)
-	seedJar, err := secrets.OpenCookieJar(t.Context(), cookieSeedRequest("seed-initial"))
+	seedJar, err := secrets.Jars.OpenCookieJar(t.Context(), cookieSeedRequest("seed-initial"))
 	testutil.FailErr(t, "open seed jar", err)
 	seedJar.Store.SetCookies(target, []*http.Cookie{{Name: "benign", Value: "public-cookie-value-1111", Path: "/"}})
-	_, err = secrets.SaveCookieJar(t.Context(), cookieSeedRequest("seed-initial"), seedJar)
+	_, err = secrets.Jars.SaveCookieJar(t.Context(), cookieSeedRequest("seed-initial"), seedJar)
 	testutil.FailErr(t, "save seed jar", err)
 
 	confine.SetEgressPosture(confine.PostureAsk)
 	confine.SetEgressResolver(func(_ context.Context, _ confine.EgressCommand, _ egressproxy.Endpoint, _ *confine.EgressDetectionCitation) bool {
 		// While egress route admission waits, another operation injects a foreign-issuer
 		// cookie into the managed jar.
-		mutated, openErr := secrets.OpenCookieJar(t.Context(), cookieSeedRequest("mutate-during-wait"))
+		mutated, openErr := secrets.Jars.OpenCookieJar(t.Context(), cookieSeedRequest("mutate-during-wait"))
 		testutil.FailErr(t, "open jar during wait", openErr)
 		mutated.Store.SetDelivery("retained-socket-issuer", nil)
 		mutated.Store.SetCookies(target, []*http.Cookie{{Name: "injected", Value: "foreign-secret-cookie-9999", Path: "/"}})
-		_, saveErr := secrets.SaveCookieJar(t.Context(), cookieSeedRequest("mutate-during-wait"), mutated)
+		_, saveErr := secrets.Jars.SaveCookieJar(t.Context(), cookieSeedRequest("mutate-during-wait"), mutated)
 		testutil.FailErr(t, "save jar during wait", saveErr)
 		return true
 	})
@@ -236,8 +236,8 @@ func testJarModifiedDuringEgressWaitCannotSendUnreviewedCookie(t *testing.T) {
 
 	var secretAsks atomic.Int64
 	deps := Deps{
-		Boundary:      testBoundary(),
-		Secrets:       secrets,
+		Boundary: testBoundary(),
+		Secrets:  secrets, Jars: secrets.Jars,
 		SecretMatcher: testSecretMatcher(t),
 		SecretAsk: func(_ context.Context, a secretmatch.Alert) (secretmatch.Resolution, error) {
 			secretAsks.Add(1)
@@ -272,12 +272,12 @@ func testJarRevokedDuringSecretReviewWaitStopsBeforeDelivery(t *testing.T) {
 	}))
 	t.Cleanup(server.Close)
 	seedRetainedIssuerCookie(t, secrets, server.URL)
-	opened, err := secrets.OpenCookieJar(t.Context(), cookieSeedRequest("lookup-ref"))
+	opened, err := secrets.Jars.OpenCookieJar(t.Context(), cookieSeedRequest("lookup-ref"))
 	testutil.FailErr(t, "open seeded jar", err)
 
 	deps := Deps{
-		Boundary:      testBoundary(),
-		Secrets:       secrets,
+		Boundary: testBoundary(),
+		Secrets:  secrets, Jars: secrets.Jars,
 		SecretMatcher: testSecretMatcher(t),
 		SecretAsk: func(ctx context.Context, _ secretmatch.Alert) (secretmatch.Resolution, error) {
 			// While the secret review card is waiting, the cookie jar is revoked.

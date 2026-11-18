@@ -64,7 +64,7 @@ func openCookieJar(ctx context.Context, deps Deps, tctx tools.ToolContext, args 
 	if name == "" {
 		return nil, secretcap.CookieJarRequest{}, invalid(fmt.Errorf("cookie_jar must be a name"))
 	}
-	if deps.Secrets == nil {
+	if deps.Jars == nil {
 		return nil, secretcap.CookieJarRequest{}, &toolrejection.ToolReject{
 			Code: CookieJarFailedCode, Data: map[string]any{"jar": name, "cookie_jar_name": name, "reason": "managed secrets are unavailable"},
 		}
@@ -73,7 +73,7 @@ func openCookieJar(ctx context.Context, deps Deps, tctx tools.ToolContext, args 
 		ProjectID: strings.TrimSpace(tctx.Identity.ProjectID), ChatSessionID: tctx.ChatSessionID(),
 		SessionID: strings.TrimSpace(tctx.Identity.SessionID), OperationID: strings.TrimSpace(tctx.Identity.ToolCallID), Name: name,
 	}
-	jar, err := deps.Secrets.OpenCookieJar(ctx, req)
+	jar, err := deps.Jars.OpenCookieJar(ctx, req)
 	if err != nil {
 		return nil, req, cookieJarOpenReject(name, err)
 	}
@@ -95,7 +95,7 @@ func saveCookieJar(ctx context.Context, deps Deps, req secretcap.CookieJarReques
 	// Persist those effects independently, with a bounded shutdown delay.
 	saveCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
 	defer cancel()
-	meta, err := deps.Secrets.SaveCookieJar(saveCtx, req, jar)
+	meta, err := deps.Jars.SaveCookieJar(saveCtx, req, jar)
 	if err != nil {
 		receipt.Persisted, receipt.Error = false, err.Error()
 		return receipt

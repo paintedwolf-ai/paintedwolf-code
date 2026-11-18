@@ -242,7 +242,7 @@ func (s *Service) resolveString(ctx context.Context, value string, access Resolv
 			if err != nil {
 				return "", err
 			}
-			secret.useID = s.recordUse(ctx, id, secret.version, UseResolved, access)
+			secret.useID = s.repository.recordUse(ctx, id, secret.version, UseResolved, access)
 			r.values[id] = secret
 		}
 		r.bindings = append(r.bindings, binding{path: path, id: id})
@@ -260,7 +260,7 @@ func (s *Service) resolveString(ctx context.Context, value string, access Resolv
 
 // substitute validates and loads one capability version.
 func (s *Service) substitute(ctx context.Context, id string, access ResolveContext) (resolvedValue, error) {
-	row, err := s.queries.GetManagedSecret(ctx, id)
+	row, err := s.repository.queries.GetManagedSecret(ctx, id)
 	if errors.Is(err, sql.ErrNoRows) {
 		return resolvedValue{}, ErrNotFound
 	}
@@ -270,32 +270,32 @@ func (s *Service) substitute(ctx context.Context, id string, access ResolveConte
 	if err := visible(row, access.ProjectID, access.ChatSessionID); err != nil {
 		// Usage stays with the reference's project.
 		if row.ProjectID == strings.TrimSpace(access.ProjectID) {
-			s.recordUse(ctx, id, 0, UseOutOfScope, access)
+			s.repository.recordUse(ctx, id, 0, UseOutOfScope, access)
 		}
 		return resolvedValue{}, err
 	}
 	if row.RevokedAt.Valid {
-		s.recordUse(ctx, id, 0, UseRevoked, access)
+		s.repository.recordUse(ctx, id, 0, UseRevoked, access)
 		return resolvedValue{}, ErrRevoked
 	}
-	if agentUseEnded(row.AgentUseEndsAt, s.now()) {
-		s.recordUse(ctx, id, 0, UseAgentUseExpired, access)
+	if agentUseEnded(row.AgentUseEndsAt, s.repository.now()) {
+		s.repository.recordUse(ctx, id, 0, UseAgentUseExpired, access)
 		return resolvedValue{}, ErrAgentUseExpired
 	}
-	current, hasCurrent, err := s.currentVersion(ctx, id)
+	current, hasCurrent, err := s.repository.currentVersion(ctx, id)
 	if err != nil {
 		return resolvedValue{}, err
 	}
 	if !hasCurrent {
-		s.recordUse(ctx, id, 0, UseUnavailable, access)
+		s.repository.recordUse(ctx, id, 0, UseUnavailable, access)
 		return resolvedValue{}, ErrValueMissing
 	}
-	entry, ok := s.values.get(current.ID)
+	entry, ok := s.repository.values.get(current.ID)
 	if !ok {
-		s.recordUse(ctx, id, current.Version, UseUnavailable, access)
+		s.repository.recordUse(ctx, id, current.Version, UseUnavailable, access)
 		return resolvedValue{}, ErrValueMissing
 	}
-	s.rememberValue(access.ChatSessionID, row.Name, id, entry.Value)
+	s.repository.rememberValue(access.ChatSessionID, row.Name, id, entry.Value)
 	value := resolvedValue{
 		id: id, version: current.Version, name: row.Name, value: entry.Value, custody: entry.Custody,
 		chatGenerated: entry.GeneratedFor(access.ChatSessionID),

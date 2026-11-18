@@ -330,7 +330,7 @@ func TestRememberProjectValuesIncludesRetiredChatSecrets(t *testing.T) {
 
 	var gotRoot string
 	var got []secretmatch.Remembered
-	service.remember = func(root string, values []secretmatch.Remembered) {
+	service.repository.remember = func(root string, values []secretmatch.Remembered) {
 		gotRoot = root
 		got = append(got, values...)
 	}
@@ -352,7 +352,7 @@ func TestReconcileRetainsExpiredEvidenceAndPurgesOrphans(t *testing.T) {
 	retained := currentValueID(t, service, meta.Reference)
 	orphanID := "00000000-0000-4000-8000-000000000001"
 	testutil.FailErr(t, "store orphan", values.Set(orphanID, "orphan-secret-value-123456"))
-	service.now = func() time.Time { return time.Date(2026, 8, 31, 12, 2, 0, 0, time.UTC) }
+	service.repository.now = func() time.Time { return time.Date(2026, 8, 31, 12, 2, 0, 0, time.UTC) }
 	testutil.FailErr(t, "reconcile", service.Reconcile(t.Context()))
 	if _, ok := values.Get(retained); !ok {
 		t.Fatal("expired provider-screening evidence was removed")
@@ -427,14 +427,14 @@ func testService(t *testing.T) (*Service, *credentialstore.Store, *[]secretmatch
 	service := NewWithStore(database, values, func(_ string, items []secretmatch.Remembered) {
 		*remembered = append(*remembered, items...)
 	})
-	service.now = func() time.Time { return time.Date(2026, 8, 31, 12, 0, 0, 0, time.UTC) }
+	service.repository.now = func() time.Time { return time.Date(2026, 8, 31, 12, 0, 0, 0, time.UTC) }
 	return service, values, remembered
 }
 
 // testOwner returns the person every test store seeds.
 func testOwner(t *testing.T, service *Service) string {
 	t.Helper()
-	return testdbseed.OwnerID(t, service.handle)
+	return testdbseed.OwnerID(t, service.repository.handle)
 }
 
 // putPerson names the owner for person-supplied origins and nobody for agent ones.
@@ -451,7 +451,7 @@ func currentValueID(t *testing.T, service *Service, reference string) string {
 	t.Helper()
 	id, err := ParseReference(reference)
 	testutil.FailErr(t, "parse reference", err)
-	current, ok, err := service.currentVersion(t.Context(), id)
+	current, ok, err := service.repository.currentVersion(t.Context(), id)
 	testutil.FailErr(t, "read current version", err)
 	if !ok {
 		t.Fatalf("no current version behind %s", reference)

@@ -40,13 +40,13 @@ type revealSubject struct {
 }
 
 // PresenceAvailable reports whether this device can verify presence.
-func (s *secretAdminService) PresenceAvailable() bool { return s != nil && s.presence.Available() }
+func (s *Reveals) PresenceAvailable() bool { return s != nil && s.broker.Available() }
 
 // BeginReveal binds presence to one value version, window, and person.
-func (s *secretAdminService) BeginReveal(
+func (s *Reveals) BeginReveal(
 	ctx context.Context, projectID, reference, windowLabel, personID string,
 ) (RevealChallenge, error) {
-	row, err := s.projectRow(ctx, projectID, reference)
+	row, err := s.repository.projectRow(ctx, projectID, reference)
 	if err != nil {
 		return RevealChallenge{}, err
 	}
@@ -56,17 +56,17 @@ func (s *secretAdminService) BeginReveal(
 	if row.RevokedAt.Valid {
 		return RevealChallenge{}, ErrRevoked
 	}
-	current, ok, err := s.currentVersion(ctx, row.ID)
+	current, ok, err := s.repository.currentVersion(ctx, row.ID)
 	if err != nil {
 		return RevealChallenge{}, err
 	}
 	if !ok {
 		return RevealChallenge{}, ErrValueMissing
 	}
-	if _, ok := s.values.get(current.ID); !ok {
+	if _, ok := s.repository.values.get(current.ID); !ok {
 		return RevealChallenge{}, ErrValueMissing
 	}
-	challenge, err := s.presence.Begin(presence.Claim{
+	challenge, err := s.broker.Begin(presence.Claim{
 		Purpose: presence.PurposeReveal, PersonID: personID, WindowLabel: windowLabel, Key: row.ID,
 		Subject: revealSubject{ProjectID: row.ProjectID, SecretID: row.ID, Version: current.Version},
 	})
@@ -82,14 +82,14 @@ func (s *secretAdminService) BeginReveal(
 
 // CompleteReveal consumes one challenge and records the reveal before
 // returning the value to the person who began it.
-func (s *secretAdminService) CompleteReveal(
+func (s *Reveals) CompleteReveal(
 	ctx context.Context, projectID, reference, personID string, proof presence.Proof,
 ) (RevealResult, error) {
-	row, err := s.projectRow(ctx, projectID, reference)
+	row, err := s.repository.projectRow(ctx, projectID, reference)
 	if err != nil {
 		return RevealResult{}, err
 	}
-	verified, err := s.presence.Complete(proof, presence.PurposeReveal, personID)
+	verified, err := s.broker.Complete(proof, presence.PurposeReveal, personID)
 	if err != nil {
 		return RevealResult{}, err
 	}
@@ -101,7 +101,7 @@ func (s *secretAdminService) CompleteReveal(
 	if row.RevokedAt.Valid {
 		return RevealResult{}, ErrRevoked
 	}
-	current, ok, err := s.currentVersion(ctx, row.ID)
+	current, ok, err := s.repository.currentVersion(ctx, row.ID)
 	if err != nil {
 		return RevealResult{}, err
 	}
@@ -111,12 +111,12 @@ func (s *secretAdminService) CompleteReveal(
 	if current.Version != subject.Version {
 		return RevealResult{}, ErrValueChanged
 	}
-	entry, ok := s.values.get(current.ID)
+	entry, ok := s.repository.values.get(current.ID)
 	if !ok {
 		return RevealResult{}, ErrValueMissing
 	}
-	revealedAt := timelayout.Format(s.now())
-	if err := s.queries.CreateManagedSecretReveal(ctx, db.CreateManagedSecretRevealParams{
+	revealedAt := timelayout.Format(s.repository.now())
+	if err := s.repository.queries.CreateManagedSecretReveal(ctx, db.CreateManagedSecretRevealParams{
 		ID: verified.ChallengeID, SecretID: row.ID, Version: current.Version,
 		Authenticator: verified.Authenticator, WindowLabel: verified.WindowLabel, PersonID: verified.PersonID,
 		RevealedAt: revealedAt,

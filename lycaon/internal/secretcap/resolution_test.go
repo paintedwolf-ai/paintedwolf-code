@@ -84,7 +84,7 @@ func TestDeliveryHistorySeparatesResolutionFromHandoff(t *testing.T) {
 
 func TestReferenceSupportsConcurrentWorkers(t *testing.T) {
 	service, _, _ := testService(t)
-	service.remember = nil
+	service.repository.remember = nil
 	meta, err := service.Generate(t.Context(), GenerateRequest{
 		ProjectID: testdbseed.DefaultProjectID, ChatSessionID: "root-1", SessionID: "root-1", OperationID: "workers", Name: "Worker key",
 	})
@@ -204,9 +204,9 @@ func TestCustodyIgnoresRelabeledMetadata(t *testing.T) {
 	testutil.FailErr(t, "create settings secret", err)
 	id, err := ParseReference(person.Reference)
 	testutil.FailErr(t, "parse reference", err)
-	_, err = service.handle.ExecContext(t.Context(), `PRAGMA ignore_check_constraints = ON`)
+	_, err = service.repository.handle.ExecContext(t.Context(), `PRAGMA ignore_check_constraints = ON`)
 	testutil.FailErr(t, "allow forged metadata", err)
-	_, err = service.handle.ExecContext(t.Context(),
+	_, err = service.repository.handle.ExecContext(t.Context(),
 		`UPDATE managed_secrets SET origin = 'generated', scope = 'chat', chat_session_id = 'root-1',
 		 created_by_person_id = NULL, format = 'base64url', entropy_bits = 256 WHERE id = ?`, id)
 	testutil.FailErr(t, "relabel metadata", err)
@@ -303,7 +303,7 @@ func TestChatCustodyIsBoundInTheVault(t *testing.T) {
 	testutil.FailErr(t, "generate project value", err)
 	projectID, err := ParseReference(project.Reference)
 	testutil.FailErr(t, "parse project reference", err)
-	_, err = service.handle.ExecContext(t.Context(),
+	_, err = service.repository.handle.ExecContext(t.Context(),
 		`UPDATE managed_secrets SET scope = 'chat', chat_session_id = 'root-1' WHERE id = ?`, projectID)
 	testutil.FailErr(t, "relabel project value as chat", err)
 	resolution, fingerprints := resolveReferences(t, service, matcher, project.Reference)
@@ -318,7 +318,7 @@ func TestChatCustodyIsBoundInTheVault(t *testing.T) {
 	testutil.FailErr(t, "generate chat value", err)
 	chatID, err := ParseReference(chat.Reference)
 	testutil.FailErr(t, "parse chat reference", err)
-	_, err = service.handle.ExecContext(t.Context(), `UPDATE managed_secrets SET chat_session_id = 'root-2' WHERE id = ?`, chatID)
+	_, err = service.repository.handle.ExecContext(t.Context(), `UPDATE managed_secrets SET chat_session_id = 'root-2' WHERE id = ?`, chatID)
 	testutil.FailErr(t, "move chat value", err)
 	moved, err := service.Resolve(t.Context(), map[string]any{"value": chat.Reference},
 		ResolveContext{ProjectID: testdbseed.DefaultProjectID, ChatSessionID: "root-2", SessionID: "root-2", ToolName: "command"})
@@ -329,7 +329,7 @@ func TestChatCustodyIsBoundInTheVault(t *testing.T) {
 	if moved.Custody(secretmatch.Fingerprints(matches)).ChatGenerated {
 		t.Fatal("a chat value moved to another chat kept chat custody there")
 	}
-	_, err = service.handle.ExecContext(t.Context(), `UPDATE managed_secrets SET chat_session_id = 'root-1' WHERE id = ?`, chatID)
+	_, err = service.repository.handle.ExecContext(t.Context(), `UPDATE managed_secrets SET chat_session_id = 'root-1' WHERE id = ?`, chatID)
 	testutil.FailErr(t, "restore chat value", err)
 
 	scope := ScopeProject

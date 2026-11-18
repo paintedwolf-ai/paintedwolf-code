@@ -79,7 +79,7 @@ func TestAskSecretScreenReleasesChatSecretsLocallyBelowStrict(t *testing.T) {
 			}
 			// No one reviewed the recipients, so no connection consent follows.
 			recipient := secretmatch.Recipient{ID: "proxy", Surface: secretmatch.SurfaceCommand, Kind: secretmatch.DestinationProcess}
-			if resolution.RecipientApproved(recipient) || resolution.UseCovered("fp-chat", recipient) {
+			if resolution.RecipientApproved(recipient) || resolution.UseCovered(chatSecretAlert().Fingerprints[0], recipient) {
 				t.Fatal("a posture release was recorded as a reviewed handoff")
 			}
 		})
@@ -92,18 +92,22 @@ func TestAskSecretScreenAsksForEveryOtherChatSecretRelease(t *testing.T) {
 	for name, tt := range map[string]struct {
 		posture gate.Posture
 		edit    func(*secretmatch.Alert)
-		value   *secretcap.Resolution
+		custody secretcap.Custody
 	}{
-		"strict":           {gate.PostureStrict, func(*secretmatch.Alert) {}, screenedValue(t, secretcap.CustodyChat, true)},
-		"remote recipient": {gate.PostureLight, func(a *secretmatch.Alert) { a.RecipientsLocal = false }, screenedValue(t, secretcap.CustodyChat, true)},
-		"host value":       {gate.PostureLight, func(*secretmatch.Alert) {}, screenedValue(t, secretcap.CustodyHost, false)},
-		"unresolved bytes": {gate.PostureLight, func(*secretmatch.Alert) {}, nil},
+		"strict":           {gate.PostureStrict, func(*secretmatch.Alert) {}, secretcap.CustodyChat},
+		"remote recipient": {gate.PostureLight, func(a *secretmatch.Alert) { a.RecipientsLocal = false }, secretcap.CustodyChat},
+		"host value":       {gate.PostureLight, func(*secretmatch.Alert) {}, secretcap.CustodyHost},
+		"unresolved bytes": {gate.PostureLight, func(*secretmatch.Alert) {}, ""},
 	} {
 		t.Run(name, func(t *testing.T) {
 			exec, recorder := chatReleaseExecutor(tt.posture)
 			alert := chatSecretAlert()
 			tt.edit(&alert)
-			_, err := exec.Secrets.AskSecretScreen(secretcap.WithResolution(context.Background(), tt.value), alert)
+			var resolution *secretcap.Resolution
+			if tt.custody != "" {
+				resolution = screenedValue(t, tt.custody, tt.custody == secretcap.CustodyChat)
+			}
+			_, err := exec.Secrets.AskSecretScreen(secretcap.WithResolution(context.Background(), resolution), alert)
 			fault, ok := secretmatch.Faulted(err)
 			if !ok || fault.Stage != secretmatch.FaultStageCheckpointsUnwired {
 				t.Fatalf("err = %v, want the card path", err)
@@ -196,6 +200,7 @@ func TestApprovedHeldValueWaitsBehindTheChatsOpenCard(t *testing.T) {
 		"person refuses": {refused: true},
 	} {
 		t.Run(name, func(t *testing.T) {
+			resolution := screenedValue(t, secretcap.CustodyPerson, false)
 			synctest.Test(t, func(t *testing.T) {
 				exec, _ := chatReleaseExecutor(gate.PostureLight)
 				exec.Secrets.SetPresenceAvailable(func() bool { return true })
@@ -212,7 +217,6 @@ func TestApprovedHeldValueWaitsBehindTheChatsOpenCard(t *testing.T) {
 					}
 					closeCard(tt.refused)
 				}()
-				resolution := screenedValue(t, secretcap.CustodyPerson, false)
 				alert := chatSecretAlert()
 				recipients, err := secretScreenRecipients(alert)
 				testutil.FailErr(t, "recipients", err)
