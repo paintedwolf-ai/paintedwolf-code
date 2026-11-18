@@ -25,7 +25,10 @@ func (s *Trees) watchTreeView(view *sourceView, p *project.Project) {
 			refresher.notify()
 		}
 	})
+	// The feed's observer list is process-wide; the view ends its subscription,
+	// and so does the server's shutdown, so a retained view never pins the host.
 	context.AfterFunc(view.ctx, unsubscribe)
+	context.AfterFunc(s.background.Context(), unsubscribe) //nolint:contextcheck // Server shutdown ends the subscription.
 	s.background.Go(view.ctx, func(ctx context.Context) { s.Watch.ensureWorkspaceWatch(ctx, p) })
 }
 
