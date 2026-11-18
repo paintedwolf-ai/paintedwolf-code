@@ -20,8 +20,8 @@ import (
 )
 
 // programProbe asks the executor one question about a native program. Effect
-// reports whether the program did what it was asked, read from the outcome or
-// from the directory the probe acts in.
+// reports whether a program that exited 0 did what it was asked, read from the
+// outcome or from the directory the probe acts in.
 type programProbe struct {
 	// source names the agent's write directory as {w}; a probe that names it
 	// acts there, so a refusal is about the program, never about the path.
@@ -42,12 +42,12 @@ var programProbes = []programProbe{
 	{program: "grep", source: "grep note notes.txt", effect: stdoutIs(probeNotes)},
 	{program: "stat", source: "stat notes.txt", effect: stdoutHas("notes.txt")},
 	{program: "code-rewrite", source: "code-rewrite --path notes.txt --pattern '$A' --rewrite '$A' --dry-run",
-		effect: func(dir string, out command.ProgramOutcome) bool {
-			return out.Status == 0 && fileIs(dir, "notes.txt", probeNotes)
+		effect: func(dir string, _ command.ProgramOutcome) bool {
+			return fileIs(dir, "notes.txt", probeNotes)
 		}},
 	{program: "repo-map", source: "repo-map", effect: stdoutHas("notes.txt")},
 	{program: "summarize", source: "summarize --path notes.txt", effect: func(_ string, out command.ProgramOutcome) bool {
-		return out.Status == 0 && strings.TrimSpace(out.Stdout) != ""
+		return strings.TrimSpace(out.Stdout) != ""
 	}},
 	{program: "mkdir", source: "mkdir {w}/made", effect: func(dir string, _ command.ProgramOutcome) bool {
 		info, err := os.Stat(filepath.Join(dir, "made"))
@@ -69,12 +69,12 @@ var programProbes = []programProbe{
 }
 
 func stdoutIs(want string) func(string, command.ProgramOutcome) bool {
-	return func(_ string, out command.ProgramOutcome) bool { return out.Status == 0 && out.Stdout == want }
+	return func(_ string, out command.ProgramOutcome) bool { return out.Stdout == want }
 }
 
 func stdoutHas(want string) func(string, command.ProgramOutcome) bool {
 	return func(_ string, out command.ProgramOutcome) bool {
-		return out.Status == 0 && strings.Contains(out.Stdout, want)
+		return strings.Contains(out.Stdout, want)
 	}
 }
 
@@ -87,8 +87,8 @@ func fileIs(dir, name, want string) bool {
 var profileRefusals = []string{"COMMAND_EFFECT_NOT_ALLOWED", "COMMAND_OPERATION_NOT_ALLOWED"}
 
 // probeProgram runs one probe and reports whether the host refused it. A run
-// must show its effect and a refusal must be typed and leave the world as it
-// was; anything else fails the test.
+// must exit 0 and show its effect, and a refusal must be typed and leave the
+// world as it was; anything else fails the test.
 func probeProgram(t *testing.T, s *replaySession, probe programProbe, writeDir string) (refused bool) {
 	t.Helper()
 	dir := s.dir
@@ -110,7 +110,7 @@ func probeProgram(t *testing.T, s *replaySession, probe programProbe, writeDir s
 			t.Fatalf("%s was refused but its effect happened: %+v", source, out)
 		}
 		return true
-	case hasOutcome && out.State == "completed" && out.Refusal == nil && probe.effect(dir, out):
+	case hasOutcome && out.State == "completed" && out.Status == 0 && out.Refusal == nil && probe.effect(dir, out):
 		return false
 	default:
 		t.Fatalf("%s neither ran with its effect nor was refused by profile: outcome %+v, feedback %+v", source, out, result.Feedback)
