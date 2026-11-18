@@ -81,7 +81,7 @@ func TestConformanceSweepDetectsEachBrokenInvariant(t *testing.T) {
 		{"limit ignored", widgetFaults{ignoresLimit: true}, rulePagination,
 			"listWidgets: walk: limit 1 answered 2 rows"},
 		{"mutation never succeeds", widgetFaults{refusesCreate: true}, ruleOperationsSucceed,
-			"createPart: success: never answered a success; last answer success answered 400 invalid_request"},
+			"createPart: success: never answered a success; last answer success answered 400 invalid_request map[field:name]"},
 		{"route without the bearer check", widgetFaults{unguardedRoute: true}, ruleRequestsNeedTheBearer,
 			"getPart: no credential: answered 200, want 401 unauthorized"},
 		{"route without the bearer check, wrong token", widgetFaults{unguardedRoute: true}, ruleRequestsNeedTheBearer,
