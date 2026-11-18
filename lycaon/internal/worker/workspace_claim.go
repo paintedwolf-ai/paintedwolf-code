@@ -43,7 +43,7 @@ type ProjectStore interface {
 	Get(ctx context.Context, projectID string) (*project.Project, error)
 }
 
-func (q *BranchService) ClaimWorkerBranch(ctx context.Context, jobID string) (*api.WorkerTask, error) {
+func (b *BranchService) ClaimWorkerBranch(ctx context.Context, jobID string) (*api.WorkerTask, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
@@ -51,56 +51,56 @@ func (q *BranchService) ClaimWorkerBranch(ctx context.Context, jobID string) (*a
 	if jobID == "" {
 		return nil, ErrWorkerBranchClaimFailed
 	}
-	release, err := q.branchClaims.Acquire(ctx, jobID)
+	release, err := b.branchClaims.Acquire(ctx, jobID)
 	if err != nil {
 		return nil, err
 	}
 	defer release()
-	task, ok := q.store.getTask(ctx, jobID)
+	task, ok := b.store.getTask(ctx, jobID)
 	if !ok || task == nil {
 		return nil, ErrWorkerBranchClaimFailed
 	}
-	if pending, err := workerops.PrerequisitePending(ctx, q.store.queries.LatestRoundJobForJob, func(id string) (*api.WorkerTask, bool) { return q.store.getTask(ctx, id) }, *task); err != nil {
+	if pending, err := workerops.PrerequisitePending(ctx, b.store.queries.LatestRoundJobForJob, func(id string) (*api.WorkerTask, bool) { return b.store.getTask(ctx, id) }, *task); err != nil {
 		return nil, err
 	} else if pending {
 		return nil, ErrWorkerPrerequisitesPending
 	}
-	if !task.EffectiveScope().IsWrite() && !q.ReviewsWorker(ctx, task) {
+	if !task.EffectiveScope().IsWrite() && !b.ReviewsWorker(ctx, task) {
 		return task, nil
 	}
 	if strings.TrimSpace(task.WorkspaceRoot) != "" {
 		return task, nil
 	}
-	claimCtx, stopPreparation := q.withWorkspacePreparation(ctx, task)
+	claimCtx, stopPreparation := b.withWorkspacePreparation(ctx, task)
 	defer stopPreparation()
-	if err := q.provisionWorkerBranch(claimCtx, task); err != nil {
+	if err := b.provisionWorkerBranch(claimCtx, task); err != nil {
 		return nil, err
 	}
 	stopPreparation()
-	q.changes.board(ctx, *task, task.ProjectID)
+	b.changes.board(ctx, *task, task.ProjectID)
 	return task, nil
 }
 
 // ReviewsWorker reports a read job that reviews a sealed result: it runs in
 // a view of that result, prepared like a lane.
-func (q *BranchService) ReviewsWorker(ctx context.Context, task *api.WorkerTask) bool {
-	q.mu.Lock()
-	lanes := q.lanes
-	q.mu.Unlock()
+func (b *BranchService) ReviewsWorker(ctx context.Context, task *api.WorkerTask) bool {
+	b.mu.Lock()
+	lanes := b.lanes
+	b.mu.Unlock()
 	return lanes != nil && lanes.Reviews(ctx, task)
 }
 
-func (q *BranchService) provisionWorkerBranch(ctx context.Context, task *api.WorkerTask) error {
+func (b *BranchService) provisionWorkerBranch(ctx context.Context, task *api.WorkerTask) error {
 	if task == nil || strings.TrimSpace(task.WorkspaceRoot) != "" {
 		return nil
 	}
-	reviewer := q.ReviewsWorker(ctx, task)
+	reviewer := b.ReviewsWorker(ctx, task)
 	if !task.EffectiveScope().IsWrite() && !reviewer {
 		return nil
 	}
-	q.mu.Lock()
-	ws, projects, baselines, lanes := q.workerWorkspace, q.projects, q.baselines, q.lanes
-	q.mu.Unlock()
+	b.mu.Lock()
+	ws, projects, baselines, lanes := b.workerWorkspace, b.projects, b.baselines, b.lanes
+	b.mu.Unlock()
 	if ws == nil || baselines == nil {
 		return ErrWorkerBranchClaimFailed
 	}
@@ -118,7 +118,7 @@ func (q *BranchService) provisionWorkerBranch(ctx context.Context, task *api.Wor
 			if err != nil {
 				return fmt.Errorf("%w: %w", ErrWorkerBranchClaimFailed, err)
 			}
-			return q.bindWorkerBranch(ctx, task, &workspace.Binding{ID: task.ID, Root: root}, workspace.SandboxLayout{}, baselines, ws, false)
+			return b.bindWorkerBranch(ctx, task, &workspace.Binding{ID: task.ID, Root: root}, workspace.SandboxLayout{}, baselines, ws, false)
 		}
 		if err != nil {
 			return fmt.Errorf("%w: %w", ErrWorkerBranchClaimFailed, err)
@@ -128,7 +128,7 @@ func (q *BranchService) provisionWorkerBranch(ctx context.Context, task *api.Wor
 		// A reviewer has no view but its subject's.
 		return fmt.Errorf("%w: review view unavailable", ErrWorkerBranchClaimFailed)
 	}
-	parentCheckpoint, err := stackedParentCheckpoint(ctx, task, roots, q.store.getTask, ws)
+	parentCheckpoint, err := stackedParentCheckpoint(ctx, task, roots, b.store.getTask, ws)
 	if err != nil {
 		return fmt.Errorf("%w: %w", ErrWorkerBranchClaimFailed, err)
 	}
@@ -140,13 +140,13 @@ func (q *BranchService) provisionWorkerBranch(ctx context.Context, task *api.Wor
 	if binding == nil || strings.TrimSpace(binding.Root) == "" {
 		return ErrWorkerBranchClaimFailed
 	}
-	return q.bindWorkerBranch(ctx, task, binding, layout, baselines, ws, true)
+	return b.bindWorkerBranch(ctx, task, binding, layout, baselines, ws, true)
 }
 
 // bindWorkerBranch records the branch a job runs in. A branch the job
 // created is released if another claim recorded one first; a worker's lane
 // outlives the job and is never released here.
-func (q *BranchService) bindWorkerBranch(ctx context.Context, task *api.WorkerTask, binding *workspace.Binding, layout workspace.SandboxLayout, baselines *workspacebaseline.Store, ws WorkerWorkspaceManager, owned bool) error {
+func (b *BranchService) bindWorkerBranch(ctx context.Context, task *api.WorkerTask, binding *workspace.Binding, layout workspace.SandboxLayout, baselines *workspacebaseline.Store, ws WorkerWorkspaceManager, owned bool) error {
 	if binding == nil || strings.TrimSpace(binding.Root) == "" {
 		return ErrWorkerBranchClaimFailed
 	}
@@ -171,7 +171,7 @@ func (q *BranchService) bindWorkerBranch(ctx context.Context, task *api.WorkerTa
 			_ = baselines.Discard(cleanupCtx, baselinePath)
 		}()
 	}
-	won, err := q.store.SetWorkerWorkspace(ctx, task.ID, binding.Root, baselinePath)
+	won, err := b.store.SetWorkerWorkspace(ctx, task.ID, binding.Root, baselinePath)
 	if err != nil {
 		return err
 	}
@@ -179,7 +179,7 @@ func (q *BranchService) bindWorkerBranch(ctx context.Context, task *api.WorkerTa
 		if !owned {
 			binding = &workspace.Binding{ID: task.ID}
 		}
-		if err := q.adoptExistingWorkerWorkspace(ctx, task, binding, ws); err != nil {
+		if err := b.adoptExistingWorkerWorkspace(ctx, task, binding, ws); err != nil {
 			return err
 		}
 	} else {
@@ -189,8 +189,8 @@ func (q *BranchService) bindWorkerBranch(ctx context.Context, task *api.WorkerTa
 }
 
 // adoptExistingWorkerWorkspace takes the branch another claim recorded first and releases this one.
-func (q *BranchService) adoptExistingWorkerWorkspace(ctx context.Context, task *api.WorkerTask, binding *workspace.Binding, ws WorkerWorkspaceManager) error {
-	stored, ok := q.store.getTask(ctx, task.ID)
+func (b *BranchService) adoptExistingWorkerWorkspace(ctx context.Context, task *api.WorkerTask, binding *workspace.Binding, ws WorkerWorkspaceManager) error {
+	stored, ok := b.store.getTask(ctx, task.ID)
 	if !ok || stored == nil || strings.TrimSpace(stored.WorkspaceRoot) == "" {
 		return ErrWorkerBranchClaimFailed
 	}
@@ -203,7 +203,7 @@ func (q *BranchService) adoptExistingWorkerWorkspace(ctx context.Context, task *
 	return nil
 }
 
-func (q *BranchService) withWorkspacePreparation(ctx context.Context, task *api.WorkerTask) (context.Context, func()) {
+func (b *BranchService) withWorkspacePreparation(ctx context.Context, task *api.WorkerTask) (context.Context, func()) {
 	if task == nil || !task.EffectiveScope().IsWrite() {
 		return ctx, func() {}
 	}
@@ -218,10 +218,10 @@ func (q *BranchService) withWorkspacePreparation(ctx context.Context, task *api.
 			return
 		}
 		stopped = true
-		q.mu.Lock()
-		delete(q.preparations, task.ID)
+		b.mu.Lock()
+		delete(b.preparations, task.ID)
 		task.WorkspacePreparation = nil
-		q.mu.Unlock()
+		b.mu.Unlock()
 	}
 	return workspace.WithPreparationReporter(ctx, func(progress workspace.PreparationProgress) {
 		reportMu.Lock()
@@ -241,43 +241,43 @@ func (q *BranchService) withWorkspacePreparation(ctx context.Context, task *api.
 		}
 		now := time.Now()
 		emit := progress.Stage != lastStage || now.Sub(lastEmit) >= workspacePreparationEmitInterval
-		q.mu.Lock()
-		q.preparations[task.ID], task.WorkspacePreparation = preparation, preparation
+		b.mu.Lock()
+		b.preparations[task.ID], task.WorkspacePreparation = preparation, preparation
 		snapshot := *task
-		q.mu.Unlock()
+		b.mu.Unlock()
 		if emit {
 			lastEmit, lastStage = now, progress.Stage
-			q.changes.board(context.WithoutCancel(ctx), snapshot, task.ProjectID)
+			b.changes.board(context.WithoutCancel(ctx), snapshot, task.ProjectID)
 		}
 	}), stop
 }
 
-func (q *BranchService) decorateWorkspacePreparations(tasks []api.WorkerTask) {
-	q.mu.Lock()
-	defer q.mu.Unlock()
+func (b *BranchService) decorateWorkspacePreparations(tasks []api.WorkerTask) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
 	for i := range tasks {
-		tasks[i].WorkspacePreparation = q.preparations[tasks[i].ID]
+		tasks[i].WorkspacePreparation = b.preparations[tasks[i].ID]
 	}
 }
 
 // overlayDivergesFromProject checks the full branch against the project.
-func (q *BranchService) overlayDivergesFromProject(ctx context.Context, task *api.WorkerTask) bool {
+func (b *BranchService) overlayDivergesFromProject(ctx context.Context, task *api.WorkerTask) bool {
 	if task == nil || !task.EffectiveScope().IsWrite() {
 		return false
 	}
-	q.mu.Lock()
-	projects := q.projects
-	q.mu.Unlock()
+	b.mu.Lock()
+	projects := b.projects
+	b.mu.Unlock()
 	return len(session.OverlayWorkspaceDivergencePaths(task, TaskRootRefs(ctx, task, projects))) > 0 //nolint:contextcheck // The divergence summary reads the core, which takes no context.
 }
 
-func (q *BranchService) destroyWorkerWorkspace(ctx context.Context, task *api.WorkerTask) {
+func (b *BranchService) destroyWorkerWorkspace(ctx context.Context, task *api.WorkerTask) {
 	if task == nil || strings.TrimSpace(task.WorkspaceRoot) == "" {
 		return
 	}
-	q.mu.Lock()
-	ws, lanes := q.workerWorkspace, q.lanes
-	q.mu.Unlock()
+	b.mu.Lock()
+	ws, lanes := b.workerWorkspace, b.lanes
+	b.mu.Unlock()
 	if ws == nil || lanes.Holds(ctx, task) {
 		return
 	}
@@ -288,10 +288,10 @@ func (q *BranchService) destroyWorkerWorkspace(ctx context.Context, task *api.Wo
 
 // captureOverlay seals a completing write worker's changes so its branch tree
 // can be reclaimed and rebuilt while the overlay waits for review.
-func (q *BranchService) captureOverlay(ctx context.Context, task *api.WorkerTask) (string, error) {
-	q.mu.Lock()
-	baselines, projects := q.baselines, q.projects
-	q.mu.Unlock()
+func (b *BranchService) captureOverlay(ctx context.Context, task *api.WorkerTask) (string, error) {
+	b.mu.Lock()
+	baselines, projects := b.baselines, b.projects
+	b.mu.Unlock()
 	if baselines == nil {
 		return "", fmt.Errorf("worker %s: overlay capture requires a baseline store", task.ID)
 	}
@@ -304,13 +304,13 @@ func (q *BranchService) captureOverlay(ctx context.Context, task *api.WorkerTask
 }
 
 // discardOverlay drops a capture the completion did not publish.
-func (q *BranchService) discardOverlay(ctx context.Context, overlayPath string) {
+func (b *BranchService) discardOverlay(ctx context.Context, overlayPath string) {
 	if overlayPath == "" {
 		return
 	}
-	q.mu.Lock()
-	baselines := q.baselines
-	q.mu.Unlock()
+	b.mu.Lock()
+	baselines := b.baselines
+	b.mu.Unlock()
 	if baselines != nil {
 		cleanupCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
 		defer cancel()
@@ -320,14 +320,14 @@ func (q *BranchService) discardOverlay(ctx context.Context, overlayPath string) 
 
 // EnsureWorkerBranch hands back the job's branch tree, rebuilding it first
 // when retention reclaimed it.
-func (q *BranchService) EnsureWorkerBranch(ctx context.Context, jobID string) (*api.WorkerTask, *BranchLease, error) {
-	task, ok := q.store.getTask(ctx, strings.TrimSpace(jobID))
+func (b *BranchService) EnsureWorkerBranch(ctx context.Context, jobID string) (*api.WorkerTask, *BranchLease, error) {
+	task, ok := b.store.getTask(ctx, strings.TrimSpace(jobID))
 	if !ok || task == nil {
 		return nil, nil, fmt.Errorf("%w: job %q not found", ErrWorkerBranchUnavailable, jobID)
 	}
-	q.mu.Lock()
-	ws := q.workerWorkspace
-	q.mu.Unlock()
+	b.mu.Lock()
+	ws := b.workerWorkspace
+	b.mu.Unlock()
 	lease, err := ensureWorkerBranch(ctx, task, ws)
 	if err != nil {
 		return nil, nil, err
@@ -343,8 +343,8 @@ func createTaskBranch(ctx context.Context, ws WorkerWorkspaceManager, roots []pr
 }
 
 // ListBranchJobs reports every job that still names a branch tree.
-func (q *BranchService) ListBranchJobs(ctx context.Context) ([]BranchJob, error) {
-	rows, err := q.store.queries.ListWorkerJobsForBranchRetention(ctx)
+func (b *BranchService) ListBranchJobs(ctx context.Context) ([]BranchJob, error) {
+	rows, err := b.store.queries.ListWorkerJobsForBranchRetention(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -355,7 +355,7 @@ func (q *BranchService) ListBranchJobs(ctx context.Context) ([]BranchJob, error)
 		overlayID := db.StringFromNull(row.WorkspaceOverlayID)
 		var branchRoot string
 		if status == api.WorkerStatusComplete && strings.TrimSpace(overlayID) == "" {
-			if task, ok := q.store.getTask(ctx, row.ID); ok && task != nil {
+			if task, ok := b.store.getTask(ctx, row.ID); ok && task != nil {
 				branchRoot = task.WorkspaceRoot
 			}
 		}

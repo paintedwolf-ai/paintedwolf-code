@@ -26,7 +26,8 @@ func (c *jobChanges) board(ctx context.Context, task api.WorkerTask, projectID s
 }
 
 func (c *jobChanges) byID(ctx context.Context, jobID string) {
-	lookupCtx, cancel := context.WithTimeout(context.Background(), sqlQueueGetTimeout)
+	// Read the committed job even if its caller has canceled.
+	lookupCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), sqlQueueGetTimeout)
 	defer cancel()
 	if task, ok := c.store.getTask(lookupCtx, jobID); ok {
 		c.board(ctx, *task, task.ProjectID)
