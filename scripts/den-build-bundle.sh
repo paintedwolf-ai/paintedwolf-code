@@ -2,10 +2,12 @@
 set -euo pipefail
 
 PACKAGE_ARGS=()
+UNSIGNED=0
 for argument in "$@"; do
   case "${argument}" in
     --pacman) PACKAGE_ARGS+=(--pacman) ;;
     --pacman-container) PACKAGE_ARGS+=(--pacman-container) ;;
+    --unsigned) UNSIGNED=1 ;;
     *) echo "error: unsupported bundle argument ${argument}" >&2; exit 2 ;;
   esac
 done
@@ -53,6 +55,9 @@ case "${TARGET}" in
   *-pc-windows-msvc) HOST_KIND="windows"; EXE_SUFFIX=".exe" ;;
   *) echo "error: unsupported desktop target ${TARGET}" >&2; exit 1 ;;
 esac
+# shellcheck source=toolchain/bundle-signing.sh
+source "${ROOT}/scripts/toolchain/bundle-signing.sh"
+bundle_signing "${HOST_KIND}" "${UNSIGNED}" || exit 2
 SIDECAR_BIN="${BINARIES_DIR}/${SIDECAR_NAME}-${TARGET}${EXE_SUFFIX}"
 LOG_VIEWER_BIN="${BINARIES_DIR}/pw-logs-${TARGET}${EXE_SUFFIX}"
 DECIDE_BIN="${BINARIES_DIR}/bialy-${TARGET}${EXE_SUFFIX}"
@@ -60,7 +65,7 @@ DOCUMENT_CORE_BIN="${BINARIES_DIR}/pw-document-core-${TARGET}${EXE_SUFFIX}"
 
 bash "${ROOT}/scripts/sync-den-versions.sh"
 
-bash "${ROOT}/scripts/stage-engine.sh" --release
+bash "${ROOT}/scripts/stage-engine.sh" "${STAGE_ARGS[@]}"
 BUNDLED_OPENGREP="$(bash "${ROOT}/scripts/stage-bundled-opengrep.sh" --verify "${ENGINE_ROOT}" "${TARGET}" "${SIDECAR_BIN}")"
 
 if [[ ! -f "${ROOT}/THIRD-PARTY-NOTICES.md" ]]; then
@@ -92,8 +97,6 @@ macho_files() {
 }
 
 if [[ "${HOST_KIND}" == "darwin" ]]; then
-  # Without a Developer ID the same bundle is signed ad hoc.
-  SIGNING_IDENTITY="${APPLE_SIGNING_IDENTITY:--}"
   GITENGINE_ROOT="${ENGINE_ROOT}/gitengine"
   # The staged credential helper already carries its signature and profile.
   if [[ -d "${GITENGINE_ROOT}" ]]; then
@@ -138,7 +141,7 @@ fi
 chmod +x "${SIDECAR_BIN}"
 
 export CI=false
-if [[ "${HOST_KIND}" == "darwin" && -n "${APPLE_SIGNING_IDENTITY:-}" ]]; then
+if [[ "${HOST_KIND}" == "darwin" && "${UNSIGNED}" == "0" ]]; then
   if [[ -n "${APPLE_API_ISSUER:-}" && -n "${APPLE_API_KEY:-}" && -n "${APPLE_API_KEY_PATH:-}" ]]; then
     echo "den:bundle — notarizing via App Store Connect API key" >&2
   elif [[ -n "${APPLE_ID:-}" && -n "${APPLE_PASSWORD:-}" && -n "${APPLE_TEAM_ID:-}" ]]; then
@@ -282,7 +285,7 @@ fi
 if [[ -n "${APP_PATH}" ]]; then
   VERIFY_ARGS=(--app "${APP_PATH}")
   # Only a Developer ID build can satisfy the signing audit; an unsigned build still gets the rest.
-  [[ -z "${APPLE_SIGNING_IDENTITY:-}" ]] || VERIFY_ARGS+=(--require-signed)
+  [[ "${UNSIGNED}" == "1" ]] || VERIFY_ARGS+=(--require-signed)
   echo "den:bundle — verifying bundle integrity" >&2
   bash "${ROOT}/scripts/verify-bundle.sh" "${VERIFY_ARGS[@]}"
 fi

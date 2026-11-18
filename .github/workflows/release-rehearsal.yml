@@ -194,7 +194,7 @@ jobs:
           key="$RUNNER_TEMP/updater/rehearsal.key"
           # bun run drops an empty argument, so the disposable key gets a throwaway password.
           (cd lycaon-den && bun run tauri signer generate --ci --password rehearsal --write-keys "$key")
-          TAURI_SIGNING_PRIVATE_KEY="$(cat "$key")" TAURI_SIGNING_PRIVATE_KEY_PASSWORD=rehearsal ./task den:bundle
+          TAURI_SIGNING_PRIVATE_KEY="$(cat "$key")" TAURI_SIGNING_PRIVATE_KEY_PASSWORD=rehearsal ./task den:bundle -- --unsigned
 
       - name: Audit the unsigned bundle
         run: |
