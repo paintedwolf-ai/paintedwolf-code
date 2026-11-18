@@ -73,7 +73,7 @@ func TestBackgroundJobWorkAlwaysFoldsIntoItsLaunch(t *testing.T) {
 		if len(job) != 1 || values[job[0]].ID != "job" {
 			t.Fatalf("trial %d: launch rows %v: %+v", trial, job, values)
 		}
-		want := activityStepState(groups[0].counts, launch.receipt)
+		want := activityStepState(groups[0].counts)
 		for _, id := range descendants {
 			if row, ok := owner[id]; !ok || row != job[0] {
 				t.Fatalf("trial %d: job step %s outside its launch: %+v", trial, id, values)
