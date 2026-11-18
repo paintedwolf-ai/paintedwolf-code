@@ -95,8 +95,10 @@ func messageFromRow(r db.ListSessionMessagesRow) (api.Message, error) {
 		return api.Message{}, navigationErr
 	}
 	msg.NavigationRefs = navigationRefs.Refs
-	if r.NavigationRefsJson.Valid {
-		msg.SourceContext = &navigationRefs.Context
+	// Metadata stored for navigation alone carries an empty context, which reads
+	// as none, as the row's events publish it.
+	if context := navigationRefs.Context; r.NavigationRefsJson.Valid && (len(context.Locations) > 0 || context.Truncated || context.View != nil) {
+		msg.SourceContext = &context
 	}
 	_ = db.UnmarshalJSON(r.CompactedChunkJson, &msg.CompactedChunk)
 	var err error
