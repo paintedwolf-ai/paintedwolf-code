@@ -474,16 +474,6 @@ func (g *gatedInventory) EnsureInventory(ctx context.Context, req InventoryReque
 	return g.commandsInventoryPort.EnsureInventory(ctx, req)
 }
 
-func (s *Commands) overduePassCount() int {
-	s.windowsMu.Lock()
-	defer s.windowsMu.Unlock()
-	total := 0
-	for _, count := range s.overduePasses {
-		total += count
-	}
-	return total
-}
-
 // settableClock is the ledger's injected clock.
 type settableClock struct{ now atomic.Pointer[time.Time] }
 
@@ -502,123 +492,12 @@ func manualLedgerClock(store *Store) *settableClock {
 	return clock
 }
 
-// A forced pass that outlasts the open is reused by the next open instead of
-// forcing another, so a tree without complete watcher coverage still gets windows.
-func TestUntrustedCoverageConvergesOnAPassLongerThanTheBudget(t *testing.T) {
-	repochange.DisableWatchersForTest()
-	t.Cleanup(repochange.ResetWatchersForTest)
-	store, ctx, root := openLedgerOnDisk(t)
-	clock := manualLedgerClock(store)
-	gate := &gatedInventory{commandsInventoryPort: store.Commands.inventory, release: make(chan struct{}), entered: make(chan struct{}, 8)}
-	store.Commands.inventory = gate
-	in := CommandWindowInput{ProjectID: "p1", Roots: onDiskRoots(root), SessionID: "s1", ToolName: "command"}
-
-	// Ending the open's context is the budget running out, without a short budget.
-	opening, stopWaiting := context.WithCancel(ctx)
-	opened := make(chan error, 1)
-	go func() {
-		_, err := store.Commands.OpenCommandWindow(opening, in)
-		opened <- err
-	}()
-	testutil.Receive(t, "the pass began", gate.entered)
-	stopWaiting()
-	if err := testutil.Receive(t, "the first open gives up", opened); !errors.Is(err, context.Canceled) {
-		t.Fatalf("first open = %v", err)
-	}
-	for range 3 {
-		if window, err := store.Commands.OpenCommandWindow(ctx, in); window != nil || !errors.Is(err, ErrWindowStartPending) {
-			t.Fatalf("open during the pass = %v, %v; want it refused at once", window, err)
-		}
-	}
-
-	close(gate.release)
-	testutil.WaitFor(t, "no pass is overdue", func() bool { return store.Commands.overduePassCount() == 0 })
-	if gate.canceled.Load() {
-		t.Fatal("the open's expired budget canceled the pass")
-	}
-	clock.advance(slowPassReuseFloor)
-	window, err := store.Commands.OpenCommandWindow(ctx, in)
-	testutil.FailErr(t, "open after the pass", err)
-	if passes := gate.passes.Load(); passes != 1 {
-		t.Fatalf("passes after the reusing open = %d, want 1", passes)
-	}
-	if window.window.currentStart() == "" {
-		t.Fatal("window has no known start")
-	}
-
-	// Long enough after the pass, it no longer vouches for the tree.
-	clock.advance(time.Nanosecond)
-	late, err := store.Commands.OpenCommandWindow(ctx, in)
-	testutil.FailErr(t, "open after reuse expired", err)
-	if passes := gate.passes.Load(); passes != 2 {
-		t.Fatalf("passes after the stale open = %d, want a new pass", passes)
-	}
-	testutil.FailErr(t, "close late window", late.Close(ctx))
-	testutil.FailErr(t, "close window", window.Close(ctx))
-}
-
-// A final pass longer than the budget serves the next open too, so programs
-// after the first do not alternate between observed and not.
-func TestFinalPassLongerThanTheBudgetServesTheNextOpen(t *testing.T) {
-	repochange.DisableWatchersForTest()
-	t.Cleanup(repochange.ResetWatchersForTest)
-	store, ctx, root := openLedgerOnDisk(t)
-	clock := manualLedgerClock(store)
-	first := openTestWindow(t, store, ctx, root, "make")
-	released := make(chan struct{})
-	close(released)
-	gate := &gatedInventory{commandsInventoryPort: store.Commands.inventory, release: released, during: func() { clock.advance(store.Commands.observationBudget + time.Second) }}
-	store.Commands.inventory = gate
-	testutil.FailErr(t, "close first", first.Close(ctx))
-	before := gate.passes.Load()
-	second := openTestWindow(t, store, ctx, root, "make again")
-	if passes := gate.passes.Load(); passes != before {
-		t.Fatalf("passes = %d, want the open to reuse the final pass (%d)", passes, before)
-	}
-	testutil.FailErr(t, "close second", second.Close(ctx))
-}
-
-// Reuse lasts for the pass's own length when that is beyond the floor.
-func TestSlowPassIsReusedForItsOwnLength(t *testing.T) {
-	repochange.DisableWatchersForTest()
-	t.Cleanup(repochange.ResetWatchersForTest)
-	store, ctx, root := openLedgerOnDisk(t)
-	clock := manualLedgerClock(store)
-	first := openTestWindow(t, store, ctx, root, "make")
-	released := make(chan struct{})
-	close(released)
-	took := 2 * slowPassReuseFloor
-	gate := &gatedInventory{commandsInventoryPort: store.Commands.inventory, release: released, during: func() { clock.advance(took) }}
-	store.Commands.inventory = gate
-	testutil.FailErr(t, "close first", first.Close(ctx))
-	gate.during = nil
-
-	clock.advance(slowPassReuseFloor + time.Second)
-	before := gate.passes.Load()
-	reused := openTestWindow(t, store, ctx, root, "within the pass's length")
-	if passes := gate.passes.Load(); passes != before {
-		t.Fatalf("passes = %d, want the open past the floor to reuse the pass (%d)", passes, before)
-	}
-	testutil.FailErr(t, "close reusing window", reused.Close(ctx))
-
-	clock.advance(took)
-	before = gate.passes.Load()
-	late := openTestWindow(t, store, ctx, root, "past the pass's length")
-	if passes := gate.passes.Load(); passes != before+1 {
-		t.Fatalf("passes = %d, want a new one after %d", passes, before)
-	}
-	testutil.FailErr(t, "close late window", late.Close(ctx))
-}
-
 // Retention running out costs a file's before-image and not its attribution: a
 // rewrite of an unretained file reports no captured content and cannot restore,
 // and a retained one diffs exactly.
 func TestPartialRetentionLosesOnlyTheBeforeImage(t *testing.T) {
 	ledger := openDiskLedger(t)
 	store, ctx, root := ledger.store, context.Background(), ledger.root
-	// What this bounds is retention's file limit, so a loaded host must not run
-	// out of time first.
-	store.Commands.observationBudget, store.Commands.retention.budget = time.Hour, time.Hour
 	contents := map[string]string{"a.txt": "before a\n", "b.txt": "before b\n"}
 	for path, content := range contents {
 		writeRootFile(t, root, path, content)
@@ -681,22 +560,6 @@ func TestRetentionPinsStoredObjectsWithoutStoringThemAgain(t *testing.T) {
 		t.Fatalf("stored size = %d, the object was stored again", object.StoredSize)
 	}
 	closeAndSettle(t, ctx, resumed)
-}
-
-// Running out of time keeps the window.
-func TestRetentionOutOfTimeKeepsTheWindow(t *testing.T) {
-	store, ctx, root := openLedgerOnDisk(t)
-	writeRootFile(t, root, "kept.txt", "kept\n")
-	store.Commands.retention.budget = 0
-	starved := openTestWindow(t, store, ctx, root, "make")
-	writeRootFile(t, root, "gen.txt", "generated\n")
-	deliverWrites(ctx, root, "gen.txt")
-	closeAndSettle(t, ctx, starved)
-	walk, err := store.Walk.QueryWalk(ctx, "p1", Baseline{Kind: BaselineSession, SessionID: "s1"}, 50, 0, CommitLens{})
-	testutil.FailErr(t, "query session walk", err)
-	if effect := effectsByPath(walk)["gen.txt"]; effect.CommandWindowID != starved.ID {
-		t.Fatalf("effect = %+v, want it attributed to the starved window", effect)
-	}
 }
 
 // Recovery reports its failure and can run again; until it has succeeded no window

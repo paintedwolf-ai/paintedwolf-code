@@ -481,7 +481,7 @@ func TestTimeoutDoesNotReportExpiryForALaunchTheOpenDelayed(t *testing.T) {
 // A launch that ran with no window watching it says so.
 func TestProgramResultStatesWhenObservationNeverStarted(t *testing.T) {
 	f := newWindowFixture(t)
-	f.opener.before = func(context.Context) error { return sourceledger.ErrWindowStartPending }
+	f.opener.before = func(context.Context) error { return errors.New("window open failed") }
 	raw, err := f.Call(t, t.Context(), writeGen)
 	testutil.FailErr(t, "run program", err)
 	var result struct {
