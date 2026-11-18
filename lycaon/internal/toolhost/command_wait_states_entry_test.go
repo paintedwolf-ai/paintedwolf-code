@@ -479,7 +479,7 @@ func TestCommandEntryExactExternalJobWaitParksAndResumes(t *testing.T) {
 	f := newWaitStateFixture(t)
 	done := f.start(t, f.externalHelper()+" & wait $!")
 	f.awaitExternal(t)
-	f.awaitTimers(t, command.DefaultParkThreshold)
+	f.awaitTimers(t, toolcontract.ProgramParkThreshold)
 	f.clock.Advance(10 * time.Second)
 	pending := receive(t, f, f.parked, "the program to park")
 	if got := receive(t, f, done, "the call's result"); !strings.Contains(got, "parked") {
@@ -517,7 +517,7 @@ func TestCommandEntryAwaitedBackgroundFramesKeepTheExactJobIdentity(t *testing.T
 			body := strings.ReplaceAll(tc.body, "HELPER", f.externalHelper())
 			done := f.start(t, "{ "+body+"; } & wait $!")
 			f.awaitExternal(t)
-			f.awaitTimers(t, command.DefaultParkThreshold)
+			f.awaitTimers(t, toolcontract.ProgramParkThreshold)
 			f.clock.Advance(10 * time.Second)
 			pending := receive(t, f, f.parked, "the program to park")
 			receive(t, f, done, "the call's result")
@@ -536,8 +536,8 @@ func TestCommandEntryBareWaitIgnoresItsOwnContinuation(t *testing.T) {
 	f := newWaitStateFixture(t)
 	done := f.start(t, f.externalHelper()+"; wait; echo after")
 	f.awaitExternal(t)
-	f.awaitTimers(t, command.ProgramInlineWait)
-	f.clock.Advance(command.ProgramInlineWait)
+	f.awaitTimers(t, toolcontract.ProgramInlineWait)
+	f.clock.Advance(toolcontract.ProgramInlineWait)
 	var running command.RunningProgramResult
 	testutil.FailErr(t, "decode running program", json.Unmarshal([]byte(receive(t, f, done, "the call's result")), &running))
 	if running.State != "running" || running.Handle == "" {
@@ -565,5 +565,23 @@ func TestCommandEntryBoundRefusalKeepsDetachedJobsAlive(t *testing.T) {
 	case parked := <-f.parked:
 		t.Fatalf("over-bound wait parked %+v", parked.request)
 	default:
+	}
+}
+
+// A wait is measured against the program lifetime from the program's start,
+// so a sleep that fits from now but ends past the lifetime is refused before
+// it waits, and the refusal names the lifetime and the statement.
+func TestCommandEntryRefusesAWaitPastTheProgramLifetime(t *testing.T) {
+	f := newWaitStateFixture(t)
+	f.call(t, "echo start; sleep 2000; sleep 2000; echo done")
+	pending := receive(t, f, f.parked, "the program to park")
+	f.clock.Advance(2000 * time.Second)
+	outcome := decodeWaitOutcome(t, receive(t, f, pending.settled, "the refused program's result"))
+	if outcome.Stdout != "start\n" || outcome.Refusal == nil || outcome.Refusal.Code != "COMMAND_LIMIT_EXCEEDED" {
+		t.Fatalf("refused program %+v", outcome)
+	}
+	details := outcome.Refusal.Details
+	if details["limit_id"] != "program_lifetime_ms" || details["observed"] != float64(4000000) || details["wait_refused"] != true || details["waiting_statement"] != "sleep 2000" {
+		t.Fatalf("refusal details %v", details)
 	}
 }

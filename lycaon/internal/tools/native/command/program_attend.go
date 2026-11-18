@@ -82,7 +82,7 @@ func (r *ProgramRuntime) attend(callCtx context.Context, e *programEvaluation) (
 	lifetime := &programLifetime{release: e.release}
 	e.release = lifetime.settled
 	defer lifetime.callerDone()
-	budget := newForegroundBudget(r.clock(), ProgramInlineWait)
+	budget := newForegroundBudget(r.clock(), toolcontract.ProgramInlineWait)
 	defer budget.Close()
 	expired := budget.Expired()
 	e.waits = &programWaits{budget: budget}
@@ -276,6 +276,16 @@ func (r *ProgramRuntime) finish(e *programEvaluation) (string, error) {
 		evaluated, err = r.Evaluate(ctx, e.plan, e.ports)
 		return evaluatedResult(evaluated), err
 	})
+	var expired *callDeadline
+	// A program that ended on its own as the bound expired keeps its result.
+	if evalErr != nil && errors.As(context.Cause(ctx), &expired) {
+		stop := e.call.bound.deadlineStop(expired, r.clock().Now().Sub(e.call.started))
+		if projection, err := r.Recorder.ProjectProgram(context.WithoutCancel(ctx), run.tc.Identity.SessionID, run.root.Identity.ProgramID, 1); err == nil {
+			stop.Data["children_started"] = projection.ExecutedChildren
+		}
+		result.Status, result.Terminal, result.StopCode = commandprogram.TimedOutStatus, toolcontract.ProducerInterrupted, stop.Code
+		evalErr = errors.Join(evalErr, stop)
+	}
 	e.park.settle()
 	// Attribution ends with evaluation: a detached job must not hold other
 	// sessions' attribution or claim a person's edits for its whole life.
@@ -296,8 +306,8 @@ func (r *ProgramRuntime) finish(e *programEvaluation) (string, error) {
 		// & jobs still run under supervision; the program settles when they end.
 	}
 	feedbackCtx := ctx
-	if errors.Is(evalErr, ErrProgramInterrupted) {
-		// The interruption canceled the program; its refusal still renders.
+	if errors.Is(evalErr, ErrProgramInterrupted) || expired != nil {
+		// The interruption or deadline canceled the program; its refusal still renders.
 		feedbackCtx = context.WithoutCancel(ctx)
 	}
 	refusal, releaseFeedback, feedbackErr := r.feedback(feedbackCtx, run, e.dispatcher, e.stderr, evalErr)

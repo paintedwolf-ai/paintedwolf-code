@@ -34,7 +34,6 @@ func TestDirectIPLeaseIdentitySurvivesNeutralArgs(t *testing.T) {
 	}
 	base := directIPLeaseFor(t, map[string]any{
 		"command":            ".venv/bin/python3 rate_service.py",
-		"timeout_ms":         120000,
 		"capability_request": capReq(declared),
 	}, declared)
 	if !base.Complete() {
@@ -42,8 +41,7 @@ func TestDirectIPLeaseIdentitySurvivesNeutralArgs(t *testing.T) {
 	}
 
 	captured := directIPLeaseFor(t, map[string]any{
-		"command":    ".venv/bin/python3 rate_service.py",
-		"timeout_ms": 120000,
+		"command": ".venv/bin/python3 rate_service.py",
 		"terminal_capture": map[string]any{
 			"caption": "Exchange rate cache service demo",
 			"winsize": map[string]any{"cols": 120, "rows": 40},
@@ -57,7 +55,6 @@ func TestDirectIPLeaseIdentitySurvivesNeutralArgs(t *testing.T) {
 	reordered := []string{"https://api.frankfurter.dev:443", "https://open.er-api.com:443"}
 	shuffled := directIPLeaseFor(t, map[string]any{
 		"command":            ".venv/bin/python3 rate_service.py",
-		"timeout_ms":         120000,
 		"capability_request": capReq(reordered),
 	}, reordered)
 	if shuffled.IdentityKey() != base.IdentityKey() {
@@ -66,7 +63,6 @@ func TestDirectIPLeaseIdentitySurvivesNeutralArgs(t *testing.T) {
 
 	widened := directIPLeaseFor(t, map[string]any{
 		"command":            ".venv/bin/python3 rate_service.py",
-		"timeout_ms":         120000,
 		"capability_request": map[string]any{"direct_ip": true},
 	}, nil)
 	if widened.IdentityKey() == base.IdentityKey() {
@@ -74,7 +70,6 @@ func TestDirectIPLeaseIdentitySurvivesNeutralArgs(t *testing.T) {
 	}
 	other := directIPLeaseFor(t, map[string]any{
 		"command":            "rm -f rates.db && .venv/bin/python3 rate_service.py",
-		"timeout_ms":         120000,
 		"capability_request": capReq(declared),
 	}, declared)
 	if other.IdentityKey() == base.IdentityKey() {

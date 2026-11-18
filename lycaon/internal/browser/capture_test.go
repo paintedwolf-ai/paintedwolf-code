@@ -393,7 +393,7 @@ func TestCaptureReactiveFillThenClick(t *testing.T) {
 		Actions: []CaptureAction{
 			{Type: "fill", ActionLocator: ActionLocator{Selector: "#name"}, Value: "Ada"},
 			{Type: "click", ActionLocator: ActionLocator{Selector: "#submit"}},
-			{Type: "wait_for", ActionLocator: ActionLocator{Text: "submitted:Ada"}, TimeoutMS: 5000},
+			{Type: "wait_for", ActionLocator: ActionLocator{Text: "submitted:Ada"}},
 		},
 		Width:  400,
 		Height: 300,
@@ -488,7 +488,7 @@ func TestCaptureRoleLabelClicksBareButtonAndServesStaticJSON(t *testing.T) {
 		ProjectDir: fixtureDir(t, "role-label-button"),
 		Actions: []CaptureAction{
 			{Type: "click", ActionLocator: ActionLocator{Role: "button", Label: "Check configuration"}, Wait: "idle"},
-			{Type: "wait_for", ActionLocator: ActionLocator{Text: "ok:static"}, TimeoutMS: 5000},
+			{Type: "wait_for", ActionLocator: ActionLocator{Text: "ok:static"}},
 		},
 		Width:  400,
 		Height: 300,

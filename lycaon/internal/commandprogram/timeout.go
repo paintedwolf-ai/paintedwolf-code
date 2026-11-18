@@ -69,8 +69,8 @@ type timeoutBound struct {
 }
 
 // RemainingBound reports how long ctx's command has before a deadline or an
-// enclosing timeout ends it. A timeout expires through its clock and the relay,
-// so its context carries no deadline of its own.
+// enclosing bound ends it. A bound expires through its clock, so its context
+// carries no deadline of its own.
 func RemainingBound(ctx context.Context) (time.Duration, bool) {
 	remaining, bounded := time.Duration(0), false
 	if deadline, ok := ctx.Deadline(); ok {
@@ -85,8 +85,9 @@ func RemainingBound(ctx context.Context) (time.Duration, bool) {
 	return max(remaining, 0), bounded
 }
 
-// withTimeoutBound keeps the earlier of d from now and any enclosing timeout.
-func withTimeoutBound(ctx context.Context, clock Clock, d time.Duration) context.Context {
+// WithBound records that ctx's command ends d from now on clock, keeping the
+// earlier of that and any enclosing bound.
+func WithBound(ctx context.Context, clock Clock, d time.Duration) context.Context {
 	at := clock.Now().Add(d)
 	if outer, ok := ctx.Value(timeoutBoundKey{}).(timeoutBound); ok && outer.at.Before(at) {
 		return ctx
@@ -104,7 +105,7 @@ func RunTimeout(ctx context.Context, clock Clock, plan TimeoutPlan, sent func(Si
 	inner, cancel := context.WithCancelCause(ctx)
 	defer cancel(nil)
 	if plan.Duration > 0 {
-		inner = withTimeoutBound(inner, clock, plan.Duration)
+		inner = WithBound(inner, clock, plan.Duration)
 	}
 	relay := &SignalRelay{}
 	var (

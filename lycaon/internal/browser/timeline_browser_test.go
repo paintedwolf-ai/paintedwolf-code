@@ -83,7 +83,7 @@ func TestRecordingSurvivesTheStepThatFails(t *testing.T) {
 	tail := 1000
 	rec, err := held.Record(t.Context(), []CaptureAction{
 		{Type: "click", ActionLocator: ActionLocator{Selector: "#go"}},
-		{Type: "click", ActionLocator: ActionLocator{Selector: "#missing"}, TimeoutMS: 200},
+		{Type: "click", ActionLocator: ActionLocator{Selector: "#missing"}},
 	}, RecordOpts{Watch: []string{"#content"}, TailMS: &tail}, nil)
 	var rej *browserengine.RejectError
 	if !errors.As(err, &rej) || rej.Code != "CAPTURE_ACTION_FAILED" || rej.Data["index"] != 1 {

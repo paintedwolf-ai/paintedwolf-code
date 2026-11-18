@@ -138,7 +138,7 @@ func TestBackgroundedProgramCarriesEffectsRecordedBeforeItsCallReturned(t *testi
 		done <- callResult{s, e}
 	}()
 	<-entered
-	clock.Advance(command.ProgramInlineWait)
+	clock.Advance(toolcontract.ProgramInlineWait)
 	got := <-done
 	testutil.FailErr(t, "return running program", got.err)
 	var running command.RunningProgramResult
@@ -229,7 +229,7 @@ func TestBackgroundedProgramHandsItsLaterEditsToTheCallsStoredResult(t *testing.
 		done <- callResult{s, e}
 	}()
 	<-entered
-	clock.Advance(command.ProgramInlineWait)
+	clock.Advance(toolcontract.ProgramInlineWait)
 	got := <-done
 	testutil.FailErr(t, "return running program", got.err)
 	var running command.RunningProgramResult

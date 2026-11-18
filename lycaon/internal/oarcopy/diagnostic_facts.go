@@ -16,6 +16,7 @@ func PublishDiagnosticKnowledge(facts, data map[string]any) {
 	facts["paintedwolf.background_limit_known"] = observedCount(data, "background_limit")
 	facts["paintedwolf.awaited_capacity_known"] = observedCount(data, "count") && observedCount(data, "max_awaited")
 	facts["paintedwolf.failure_count_known"] = observedCount(data, "count")
+	facts["paintedwolf.children_started_known"] = observedCount(data, "children_started")
 }
 
 // The glob bound's declared presentation type is a decimal string.

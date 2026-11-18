@@ -121,7 +121,6 @@ func runCommandTerminalCapture(
 	captured, runErr := registry.Terminal.RunPTYCapture(
 		ctx, tctx.Identity.SessionID, tctx.Identity.ParentSessionID, tctx.Identity.ProjectID, request, runner,
 		terminalCaptureWinSize(args), facts,
-		commandTimeout(args, toolName),
 	)
 	if directIPApplied {
 		tools.EmitDirectIPLifecycle(tctx, tools.DirectIPLifecycleCompleted)

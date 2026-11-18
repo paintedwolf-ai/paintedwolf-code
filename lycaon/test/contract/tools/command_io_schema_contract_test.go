@@ -19,7 +19,6 @@ func TestCommandToolSchemaIncludesIOParams(t *testing.T) {
 	for _, field := range []string{
 		"command:",
 		"cwd:",
-		"timeout_ms:",
 		"capability_request:",
 	} {
 		if !strings.Contains(commandText, field) {

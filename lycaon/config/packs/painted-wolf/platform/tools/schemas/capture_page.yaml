@@ -40,7 +40,7 @@ schema:
           type:
             type: string
             enum: [click, hover, drag, scroll, fill, type, select, press, wait_for, wait]
-            description: "Step kind. click, hover, drag, scroll move the pointer; fill, type, select, press use keys/controls; wait_for awaits a target; wait pauses."
+            description: "Step kind. click, hover, drag, scroll move the pointer; fill, type, select, press use keys/controls; wait_for awaits a selector or text (or its absence with gone); wait settles until the page is network-quiet and DOM-stable."
           testid: {type: string, description: "data-testid of the target."}
           selector: {type: string, description: "CSS selector of the target."}
           role: {type: string, description: "ARIA role or implicit native role (button, link); pair with label or text."}
@@ -74,7 +74,7 @@ schema:
             required: [x, "y"]
             additionalProperties: false
           hold_ms: {type: integer, minimum: 0, maximum: 5000, description: "Hover dwell, or hold before a drag moves."}
-          timeout_ms: {type: integer, minimum: 1, description: "Per-step timeout in milliseconds."}
+          gone: {type: boolean, description: "For wait_for: wait until the selector or text is gone instead of present."}
           wait: {type: string, enum: [idle], description: "Settle after the step: network-quiet and DOM-stable."}
         required: [type]
         additionalProperties: false

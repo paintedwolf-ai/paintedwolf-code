@@ -65,7 +65,7 @@ type ProgramRuntime struct {
 	// the foreground.
 	Parking tools.ProgramParking
 	// ParkThreshold is how long a call holds its turn while its program waits;
-	// zero means DefaultParkThreshold.
+	// zero means toolcontract.ProgramParkThreshold.
 	ParkThreshold time.Duration
 	// Clock times program waits; nil is the system clock.
 	Clock commandprogram.Clock
@@ -90,7 +90,7 @@ func (r *ProgramRuntime) clock() commandprogram.Clock {
 
 func (r *ProgramRuntime) parkThreshold() time.Duration {
 	if r.ParkThreshold <= 0 {
-		return DefaultParkThreshold
+		return toolcontract.ProgramParkThreshold
 	}
 	return r.ParkThreshold
 
@@ -160,7 +160,7 @@ func (r *ProgramRuntime) Run(ctx context.Context, tool string, args map[string]a
 		return "", err
 	}
 	callCtx := ctx
-	ctx, call := r.newProgramCall(ctx, args, catalog)
+	ctx, call := r.newProgramCall(ctx, catalog)
 	handedOff := false
 	defer func() {
 		if !handedOff {
@@ -285,7 +285,7 @@ func (r *ProgramRuntime) Run(ctx context.Context, tool string, args map[string]a
 	callTC := tc
 	run.tc.Effects.Out = &tools.ToolInvocationOut{}
 	run.tc.Effects.GitNoRepository = &atomic.Bool{}
-	park := newProgramPark(r.clock(), call, r.parkThreshold())
+	park := call.park
 	ports.Waits = park
 	handedOff = true
 	return r.attend(callCtx, &programEvaluation{
@@ -549,8 +549,12 @@ func (r *ProgramRuntime) retainScreened(ctx context.Context, memory *toolcontrac
 func (r *ProgramRuntime) settleProgram(ctx context.Context, run *programRun, result toolcontract.ProducerResult, evaluated commandprogram.ProgramOutcome, stopped bool) error {
 	settlement := evaluated.Settlement("output:program-source:" + run.root.Identity.ProgramID)
 	if stopped || result.Terminal == toolcontract.ProducerInterrupted {
-		status := 130
-		settlement.State, settlement.Status, settlement.StopCode = "interrupted", &status, toolrejection.ToolOwnerInterruptedCode
+		status, code := 130, toolrejection.ToolOwnerInterruptedCode
+		if !stopped && result.StopCode != "" {
+			// A typed stop such as the call deadline keeps its own code.
+			status, code = result.Status, result.StopCode
+		}
+		settlement.State, settlement.Status, settlement.StopCode = "interrupted", &status, code
 	}
 	return r.Recorder.SettleProgram(context.WithoutCancel(ctx), run.root.Identity.ProgramID, settlement)
 }

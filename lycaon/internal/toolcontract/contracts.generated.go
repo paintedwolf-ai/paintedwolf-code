@@ -154,7 +154,6 @@ var compiledFamilies = map[string][]string{
 var compiledGrantIdentityNeutralArgs = map[string][]string{
 	"command": {
 		"terminal_capture",
-		"timeout_ms",
 	},
 	"fetch_url": {
 		"parallel",
@@ -179,9 +178,6 @@ var compiledGrantIdentityNeutralArgs = map[string][]string{
 	"source_history": {
 		"before_ordinal",
 		"limit",
-	},
-	"verify": {
-		"timeout_ms",
 	},
 	"view_image": {
 		"scale",

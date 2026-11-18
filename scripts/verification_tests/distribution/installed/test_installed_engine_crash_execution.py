@@ -111,7 +111,7 @@ class EngineCrashTests(unittest.TestCase):
         self.assertEqual(unrelated.waited, 5)
         provider = scenario.mock('ProviderFixture').call_args.args[0][0]
         self.assertEqual(provider['name'], 'command')
-        self.assertEqual((provider['arguments']['background'], provider['arguments']['wait_ms'], provider['arguments']['timeout_ms']), (True, 1, 90000))
+        self.assertEqual((provider['arguments']['background'], provider['arguments']['wait_ms']), (True, 1))
         self.assertNotIn('capability_request', provider['arguments'])
         self.assertTrue(provider['arguments']['command'].endswith('lifecycle.py detached'))
         scenario.mock('approve_host_execution').assert_not_called()

@@ -54,7 +54,6 @@ func TestGrantKeyIgnoresAuthorityNeutralArgs(t *testing.T) {
 	}
 	base := directIPAction(map[string]any{
 		"command":            ".venv/bin/python3 rate_service.py",
-		"timeout_ms":         120000,
 		"capability_request": capReq("https://open.er-api.com:443", "https://api.frankfurter.dev:443"),
 	})
 	want := hitl.GrantKey(base)
@@ -62,18 +61,11 @@ func TestGrantKeyIgnoresAuthorityNeutralArgs(t *testing.T) {
 	cases := map[string]map[string]any{
 		"terminal capture added": {
 			"command":            ".venv/bin/python3 rate_service.py",
-			"timeout_ms":         120000,
 			"terminal_capture":   map[string]any{"caption": "Exchange rate cache service demo", "winsize": map[string]any{"cols": 120, "rows": 40}},
-			"capability_request": capReq("https://open.er-api.com:443", "https://api.frankfurter.dev:443"),
-		},
-		"timeout changed": {
-			"command":            ".venv/bin/python3 rate_service.py",
-			"timeout_ms":         20000,
 			"capability_request": capReq("https://open.er-api.com:443", "https://api.frankfurter.dev:443"),
 		},
 		"destinations reordered": {
 			"command":            ".venv/bin/python3 rate_service.py",
-			"timeout_ms":         120000,
 			"capability_request": capReq("https://api.frankfurter.dev:443", "https://open.er-api.com:443"),
 		},
 	}
@@ -86,29 +78,19 @@ func TestGrantKeyIgnoresAuthorityNeutralArgs(t *testing.T) {
 	}
 }
 
-func TestVerifyGrantKeyIgnoresItsDeclaredWaitWindow(t *testing.T) {
-	base := directIPAction(map[string]any{"program": "go test ./...", "timeout_ms": 1000})
-	base.Invocation.Tool = "verify"
-	changed := directIPAction(map[string]any{"program": "go test ./...", "timeout_ms": 5000})
-	changed.Invocation.Tool = "verify"
-	if hitl.GrantKey(base) != hitl.GrantKey(changed) {
-		t.Fatal("verify's declared wait window changed execution authority")
-	}
-}
-
 // The same canonicalization must not blur anything the boundary depends on.
 func TestGrantKeySeparatesAuthorityBearingArgs(t *testing.T) {
-	base := directIPAction(map[string]any{"command": "curl https://example.org", "timeout_ms": 1000})
+	base := directIPAction(map[string]any{"command": "curl https://example.org"})
 	want := hitl.GrantKey(base)
 	cases := map[string]map[string]any{
-		"undeclared command wait": {"command": "curl https://example.org", "timeout_ms": 1000, "wait_ms": 5000},
-		"different command":       {"command": "curl https://evil.example", "timeout_ms": 1000},
-		"cwd added":               {"command": "curl https://example.org", "timeout_ms": 1000, "cwd": "sub"},
-		"env added":               {"command": "curl https://example.org", "timeout_ms": 1000, "env": map[string]any{"TOKEN": "x"}},
-		"background added":        {"command": "curl https://example.org", "timeout_ms": 1000, "background": true},
-		"socks proxy added":       {"command": "curl https://example.org", "timeout_ms": 1000, "socks_proxy": true},
-		"stdout redirect":         {"command": "curl https://example.org", "timeout_ms": 1000, "stdout_to": "out.txt"},
-		"destination widened":     {"command": "curl https://example.org", "timeout_ms": 1000, "capability_request": map[string]any{"direct_ip": true}},
+		"undeclared command wait": {"command": "curl https://example.org", "wait_ms": 5000},
+		"different command":       {"command": "curl https://evil.example"},
+		"cwd added":               {"command": "curl https://example.org", "cwd": "sub"},
+		"env added":               {"command": "curl https://example.org", "env": map[string]any{"TOKEN": "x"}},
+		"background added":        {"command": "curl https://example.org", "background": true},
+		"socks proxy added":       {"command": "curl https://example.org", "socks_proxy": true},
+		"stdout redirect":         {"command": "curl https://example.org", "stdout_to": "out.txt"},
+		"destination widened":     {"command": "curl https://example.org", "capability_request": map[string]any{"direct_ip": true}},
 	}
 	for name, args := range cases {
 		t.Run(name, func(t *testing.T) {

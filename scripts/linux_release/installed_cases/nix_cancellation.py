@@ -44,7 +44,7 @@ def scenario(binding: dict) -> tuple[str, dict, dict]:
                          'nix-command', '--offline', '--option', 'substituters', '', '--option',
                          'extra-substituters', '', '--option', 'builders', '', '--store', 'daemon',
                          'build', '--no-link', '--max-jobs', '1', selected['derivation'] + '^out']),
-                         'background': True, 'wait_ms': 1, 'timeout_ms': 180000,
+                         'background': True, 'wait_ms': 1,
                          'capability_request': {'host_execution': True}}
             with InstalledApp(binding) as app, ProviderFixture([{'name': 'command', 'arguments': arguments}]) as provider:
                 with ToolTurn(app, provider, Path(directory)) as turn:

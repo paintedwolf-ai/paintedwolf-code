@@ -44,8 +44,11 @@ var declaredReaderFactScalarNames = []string{
 	"requestable_capabilities",
 	"root_count",
 	"runner_direct_ip_tools",
+	"runner_inline_wait_seconds",
 	"runner_local_listen_tools",
 	"runner_loopback_connect_tools",
+	"runner_park_seconds",
+	"runner_program_lifetime_minutes",
 	"runner_socket_tools",
 	"runner_write_root_tools",
 	"surface_card_label",
@@ -104,8 +107,11 @@ var declaredReaderFactScalars = map[string]ReaderFactScalarSpec{
 	"requestable_capabilities":           {Name: "requestable_capabilities", Type: "[]string", States: "Capability group labels for tools loadable via request_tools."},
 	"root_count":                         {Name: "root_count", Type: "int", States: "Workspace roots attached to the session."},
 	"runner_direct_ip_tools":             {Name: "runner_direct_ip_tools", Type: "[]string", States: "Offered host-runner tools that can dial direct IP literals."},
+	"runner_inline_wait_seconds":         {Name: "runner_inline_wait_seconds", Type: "int", States: "Seconds a command call waits for running work before returning its handle."},
 	"runner_local_listen_tools":          {Name: "runner_local_listen_tools", Type: "[]string", States: "Offered host-runner tools that can bind a local listener."},
 	"runner_loopback_connect_tools":      {Name: "runner_loopback_connect_tools", Type: "[]string", States: "Offered host-runner tools that can connect to loopback ports."},
+	"runner_park_seconds":                {Name: "runner_park_seconds", Type: "int", States: "Seconds a command call holds a waiting program before parking it in the background."},
+	"runner_program_lifetime_minutes":    {Name: "runner_program_lifetime_minutes", Type: "int", States: "Minutes the host lets one command or verify program run before ending it."},
 	"runner_socket_tools":                {Name: "runner_socket_tools", Type: "[]string", States: "Offered host-runner tools that can connect to Unix sockets."},
 	"runner_write_root_tools":            {Name: "runner_write_root_tools", Type: "[]string", States: "Offered host-runner tools that can write inside workspace roots."},
 	"surface_card_label":                 {Name: "surface_card_label", Type: "string", States: "Human-readable label for the active coordinator surface card."},
@@ -184,8 +190,11 @@ type ReaderFacts struct {
 	RequestableCapabilities        []string
 	RootCount                      int
 	RunnerDirectIPTools            []string
+	RunnerInlineWaitSeconds        int
 	RunnerLocalListenTools         []string
 	RunnerLoopbackConnectTools     []string
+	RunnerParkSeconds              int
+	RunnerProgramLifetimeMinutes   int
 	RunnerSocketTools              []string
 	RunnerWriteRootTools           []string
 	SurfaceCardLabel               string
@@ -214,7 +223,7 @@ type ReaderFacts struct {
 
 // Map flattens the typed reader facts and family maps into a template variable map.
 func (f ReaderFacts) Map() map[string]any {
-	out := make(map[string]any, 62+len(f.ProfileHas)+len(f.AgentHasSkill))
+	out := make(map[string]any, 65+len(f.ProfileHas)+len(f.AgentHasSkill))
 	out["agent_tools"] = f.AgentTools
 	out["caps"] = map[string]any{"vision": f.CapsVision}
 	out["card_edit_deferred"] = f.CardEditDeferred
@@ -275,6 +284,7 @@ func (f ReaderFacts) Map() map[string]any {
 	} else {
 		out["runner_direct_ip_tools"] = []string(nil)
 	}
+	out["runner_inline_wait_seconds"] = f.RunnerInlineWaitSeconds
 	if f.RunnerLocalListenTools != nil {
 		out["runner_local_listen_tools"] = append([]string(nil), f.RunnerLocalListenTools...)
 	} else {
@@ -285,6 +295,8 @@ func (f ReaderFacts) Map() map[string]any {
 	} else {
 		out["runner_loopback_connect_tools"] = []string(nil)
 	}
+	out["runner_park_seconds"] = f.RunnerParkSeconds
+	out["runner_program_lifetime_minutes"] = f.RunnerProgramLifetimeMinutes
 	if f.RunnerSocketTools != nil {
 		out["runner_socket_tools"] = append([]string(nil), f.RunnerSocketTools...)
 	} else {

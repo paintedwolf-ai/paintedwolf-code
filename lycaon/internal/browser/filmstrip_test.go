@@ -104,10 +104,10 @@ func TestCaptureFilmstripMultiStepForm(t *testing.T) {
 		Actions: []CaptureAction{
 			{Type: "fill", ActionLocator: ActionLocator{Selector: "#email"}, Value: "a@b.c"},
 			{Type: "click", ActionLocator: ActionLocator{Selector: "#next"}},
-			{Type: "wait_for", ActionLocator: ActionLocator{Selector: "#code"}, TimeoutMS: 5000},
+			{Type: "wait_for", ActionLocator: ActionLocator{Selector: "#code"}},
 			{Type: "fill", ActionLocator: ActionLocator{Selector: "#code"}, Value: "42"},
 			{Type: "click", ActionLocator: ActionLocator{Selector: "#finish"}},
-			{Type: "wait_for", ActionLocator: ActionLocator{Text: "done:a@b.c:42"}, TimeoutMS: 5000},
+			{Type: "wait_for", ActionLocator: ActionLocator{Text: "done:a@b.c:42"}},
 		},
 		Width:  400,
 		Height: 300,
@@ -154,7 +154,7 @@ func TestCaptureFilmstripPopulateAfterTick(t *testing.T) {
 		Wait:       "idle",
 		Actions: []CaptureAction{
 			{Type: "click", ActionLocator: ActionLocator{Selector: "#load"}},
-			{Type: "wait_for", ActionLocator: ActionLocator{Text: "gamma"}, TimeoutMS: 5000},
+			{Type: "wait_for", ActionLocator: ActionLocator{Text: "gamma"}},
 		},
 		Width:  400,
 		Height: 300,
