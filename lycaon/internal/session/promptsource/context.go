@@ -68,7 +68,10 @@ func (m *Context) Build() promptloop.ContextDeps {
 		Limits: m.Limits.Effective,
 		Tools:  m.Tools,
 		ResolveEffectiveMode: func(ctx context.Context, id string) (store.RootAuthority, error) {
-			return store.ResolveEffectiveMode(ctx, m.Sessions, id)
+			if m.Sessions == nil {
+				return store.RootAuthority{}, store.ErrSessionModeUnavailable
+			}
+			return m.Sessions.ResolveEffectiveMode(ctx, id)
 		},
 		ActivateAgentWorkflow: m.ActivateAgentWorkflow,
 		RefreshRoundMachine:   m.Profiles.CompileMachine,
