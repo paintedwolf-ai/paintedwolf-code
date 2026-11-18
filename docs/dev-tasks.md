@@ -1185,7 +1185,7 @@ The public artifact collector requires every catalog-public package, its checksu
 
 **Third-party notices.** `./task licenses:notices` generates `THIRD-PARTY-NOTICES.md` at the repo root from Go, Den npm, and Tauri crate dependency manifests plus a bundled-binaries catalog. Opengrep's catalog entry refers to the selected verified release artifact, so its version, license, notices, and corresponding-source path follow that pin. The file is gitignored and never hand-maintained. The release workflow runs generation before bundling; the fast and full verification gates run it explicitly (fail-closed on unknown licenses); the artifact audit asserts presence. About → **Third-party software** opens the shipped file.
 
-Local release packaging uses `./task den:bundle`, which injects `VERSION` into the sidecar and syncs Den package/Tauri/Cargo versions. On macOS it requires the Developer ID identity and engine provisioning profile enforced by the [bundle build](../scripts/den-build-bundle.sh). Use `./task den:app -- --debug` for local development without provisioning.
+Local release packaging uses `./task den:bundle`, which injects `VERSION` into the sidecar and syncs Den package/Tauri/Cargo versions. On macOS it requires the Developer ID identity and engine provisioning profile, and refuses before compiling anything when either is missing ([bundle build](../scripts/den-build-bundle.sh)). `./task den:bundle -- --unsigned` builds the same bundle signed ad hoc, for the nightly release rehearsal; it refuses when a signing identity is present, and nothing in the release passes it. Use `./task den:app -- --debug` for local development without provisioning.
 
 ### Nix development and package builds
 

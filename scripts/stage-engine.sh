@@ -24,12 +24,14 @@ fi
 
 MODE="full"
 RELEASE_BUILD=0
+AD_HOC_HOST=0
 for arg in "$@"; do
   case "${arg}" in
     --minimal) MODE="minimal" ;;
     --release) RELEASE_BUILD=1 ;;
+    --ad-hoc-host) AD_HOC_HOST=1 ;;
     *)
-      echo "usage: stage-engine.sh [--minimal] [--release]" >&2
+      echo "usage: stage-engine.sh [--minimal] [--release] [--ad-hoc-host]" >&2
       echo "error: unknown argument ${arg}" >&2
       exit 2
       ;;
@@ -201,9 +203,8 @@ fi
 
 if [[ "${HOST_KIND}" == "darwin" ]]; then
   HOST_ARGS=(--binary "${SIDECAR_BIN}" --output "${TAURI_DIR}/host-bundle" --version "${APP_VERSION}")
-  # The host takes its Developer ID profile only in a build signed with that identity;
-  # an unsigned release build gets the ad hoc host the rest of its bundle has.
-  if [[ "${RELEASE_BUILD}" == "1" && -n "${APPLE_SIGNING_IDENTITY:-}" ]]; then
+  # An unsigned release bundle asks for the ad hoc host the rest of it has.
+  if [[ "${RELEASE_BUILD}" == "1" && "${AD_HOC_HOST}" == "0" ]]; then
     HOST_ARGS+=(--release)
   fi
   python3 "${ROOT}/scripts/stage-macos-host.py" "${HOST_ARGS[@]}"
