@@ -1,7 +1,6 @@
 package rules
 
 import (
-	"context"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/conditions"
@@ -12,7 +11,7 @@ import (
 
 func TestDisallowedAgentRule(t *testing.T) {
 	reg := ruleTestRegistry(t)
-	engine := NewSimpleEngine(&RulesConfig{Rules: []RuleEntry{{
+	rules := []RuleEntry{{
 		ID: "deny_bad_agent",
 		When: map[string]any{
 			"tool_names_agent": true,
@@ -24,8 +23,8 @@ func TestDisallowedAgentRule(t *testing.T) {
 				"message": "not allowed",
 			},
 		},
-	}}}, reg)
-	outcome, err := engine.Evaluate(context.Background(), EvalContext{EvalContext: conditions.EvalContext{ToolName: "task", ToolArgs: map[string]any{"agent_type": "sentinel"}, AllowedAgents: []string{
+	}}
+	outcome, err := evaluateOrderedRules(reg, rules, EvalContext{EvalContext: conditions.EvalContext{ToolName: "task", ToolArgs: map[string]any{"agent_type": "sentinel"}, AllowedAgents: []string{
 		"plan-writer", "repo-researcher",
 	}}})
 	testutil.FailErr(t, "engine.Evaluate failed", err)
@@ -36,7 +35,7 @@ func TestDisallowedAgentRule(t *testing.T) {
 		t.Fatalf("code = %q", outcome.Code)
 	}
 
-	outcome, err = engine.Evaluate(context.Background(), EvalContext{EvalContext: conditions.EvalContext{ToolName: "task", ToolArgs: map[string]any{"agent_type": "plan-writer"}, AllowedAgents: []string{
+	outcome, err = evaluateOrderedRules(reg, rules, EvalContext{EvalContext: conditions.EvalContext{ToolName: "task", ToolArgs: map[string]any{"agent_type": "plan-writer"}, AllowedAgents: []string{
 		"plan-writer", "repo-researcher",
 	}}})
 	testutil.FailErr(t, "engine.Evaluate failed", err)
@@ -49,18 +48,18 @@ func TestDisallowedAgentRule(t *testing.T) {
 // instructing it without naming an agent changes nothing to check.
 func TestDisallowedAgentCoversAgentChanges(t *testing.T) {
 	reg := ruleTestRegistry(t)
-	engine := NewSimpleEngine(&RulesConfig{Rules: []RuleEntry{{
+	rules := []RuleEntry{{
 		ID:   "deny_bad_agent",
 		When: map[string]any{"tool_names_agent": true, "disallowed_agent": true},
 		Then: map[string]any{"deny": map[string]any{"code": "DISALLOWED_AGENT"}},
-	}}}, reg)
+	}}
 	roster := []string{"repo-researcher"}
-	outcome, err := engine.Evaluate(context.Background(), EvalContext{EvalContext: conditions.EvalContext{ToolName: "instruct_worker", ToolArgs: map[string]any{"worker": "scout", "agent_type": "implementer"}, AllowedAgents: roster}})
+	outcome, err := evaluateOrderedRules(reg, rules, EvalContext{EvalContext: conditions.EvalContext{ToolName: "instruct_worker", ToolArgs: map[string]any{"worker": "scout", "agent_type": "implementer"}, AllowedAgents: roster}})
 	testutil.FailErr(t, "evaluate agent change", err)
 	if outcome.Allowed || outcome.Code != "DISALLOWED_AGENT" {
 		t.Fatalf("agent change outside the roster = %+v", outcome)
 	}
-	outcome, err = engine.Evaluate(context.Background(), EvalContext{EvalContext: conditions.EvalContext{ToolName: "instruct_worker", ToolArgs: map[string]any{"worker": "scout"}, AllowedAgents: roster}})
+	outcome, err = evaluateOrderedRules(reg, rules, EvalContext{EvalContext: conditions.EvalContext{ToolName: "instruct_worker", ToolArgs: map[string]any{"worker": "scout"}, AllowedAgents: roster}})
 	testutil.FailErr(t, "evaluate instruction", err)
 	if !outcome.Allowed {
 		t.Fatalf("instruction without an agent = %+v", outcome)
@@ -69,7 +68,7 @@ func TestDisallowedAgentCoversAgentChanges(t *testing.T) {
 
 func TestDisallowedAgentIgnoredWithoutAllowlist(t *testing.T) {
 	reg := ruleTestRegistry(t)
-	engine := NewSimpleEngine(&RulesConfig{Rules: []RuleEntry{{
+	rules := []RuleEntry{{
 		When: map[string]any{
 			"tool_names_agent": true,
 			"disallowed_agent": true,
@@ -77,8 +76,8 @@ func TestDisallowedAgentIgnoredWithoutAllowlist(t *testing.T) {
 		Then: map[string]any{
 			"deny": map[string]any{"code": "DISALLOWED_AGENT"},
 		},
-	}}}, reg)
-	outcome, err := engine.Evaluate(context.Background(), EvalContext{EvalContext: conditions.EvalContext{SessionPosture: api.SessionPostureOrchestrate, ToolName: "task", ToolArgs: map[string]any{"agent_type": "implementer"}}})
+	}}
+	outcome, err := evaluateOrderedRules(reg, rules, EvalContext{EvalContext: conditions.EvalContext{SessionPosture: api.SessionPostureOrchestrate, ToolName: "task", ToolArgs: map[string]any{"agent_type": "implementer"}}})
 	testutil.FailErr(t, "engine.Evaluate failed", err)
 	if !outcome.Allowed {
 		t.Fatal("expected allow when workflow allowlist is empty")
@@ -89,7 +88,7 @@ func TestDisallowedAgentIgnoredWithoutAllowlist(t *testing.T) {
 // any dispatch gets DISALLOWED_AGENT, never the unfiltered declared list.
 func TestDisallowedAgentEmptyEffectiveRosterDeniesAll(t *testing.T) {
 	reg := ruleTestRegistry(t)
-	engine := NewSimpleEngine(&RulesConfig{Rules: []RuleEntry{{
+	rules := []RuleEntry{{
 		ID: "deny_bad_agent",
 		When: map[string]any{
 			"tool_names_agent": true,
@@ -101,8 +100,8 @@ func TestDisallowedAgentEmptyEffectiveRosterDeniesAll(t *testing.T) {
 				"message": "not allowed",
 			},
 		},
-	}}}, reg)
-	outcome, err := engine.Evaluate(context.Background(), EvalContext{EvalContext: conditions.EvalContext{
+	}}
+	outcome, err := evaluateOrderedRules(reg, rules, EvalContext{EvalContext: conditions.EvalContext{
 		ToolName: "task", ToolArgs: map[string]any{"agent_type": "implementer"},
 		AllowedAgents: []string{},
 	}})

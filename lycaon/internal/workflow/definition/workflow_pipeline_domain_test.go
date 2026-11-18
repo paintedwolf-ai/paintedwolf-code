@@ -38,12 +38,8 @@ func TestBugbashManifestVocabularyRegistered(t *testing.T) {
 	orchCfg, err := rules.LoadRulesConfig(config.PostureRulesDir.Join("orchestrate.yaml"))
 	testutil.FailErr(t, "load rules config YAML", err)
 	for _, rule := range orchCfg.Rules {
-		whenStr, err := rules.CanonicalWhenString(rule.When)
-		if err != nil {
+		if err := rules.ValidateWhen(reg, rule.When); err != nil {
 			t.Fatalf("rule %q: %v", rule.ID, err)
-		}
-		if _, err := rules.MatchWhenExpr(reg, whenStr, rules.EvalContext{}); err != nil {
-			t.Fatalf("rule %q when %q: %v", rule.ID, whenStr, err)
 		}
 	}
 }

@@ -1,7 +1,6 @@
 package rules
 
 import (
-	"context"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/conditions"
@@ -9,15 +8,14 @@ import (
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
-func TestSimpleEngineDeniesDelegationInPlanMode(t *testing.T) {
+func TestOrderedRulesDenyDelegationInSpecPosture(t *testing.T) {
 	cfg := loadSpecRules(t)
 	reg, err := conditions.NewDefaultRegistry(conditions.RegistryDeps{})
 	testutil.FailErr(t, "build conditions registry", err)
 	if err := RegisterRuleConditions(reg); err != nil {
 		testutil.FailErr(t, "RegisterRuleConditions failed", err)
 	}
-	engine := NewSimpleEngine(cfg, reg)
-	outcome, err := engine.Evaluate(context.Background(), EvalContext{EvalContext: conditions.EvalContext{SessionPosture: api.SessionPostureSpec, ToolName: "plan_from_blueprint"}})
+	outcome, err := evaluateOrderedRules(reg, cfg.Rules, EvalContext{EvalContext: conditions.EvalContext{SessionPosture: api.SessionPostureSpec, ToolName: "plan_from_blueprint"}})
 	testutil.FailErr(t, "engine.Evaluate failed", err)
 	if outcome.Allowed {
 		t.Fatal("expected plan_from_blueprint denied in plan mode")

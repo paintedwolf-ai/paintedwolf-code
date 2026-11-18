@@ -16,6 +16,7 @@ import (
 	"github.com/lycaon/lycaon/internal/oar"
 	"github.com/lycaon/lycaon/internal/prompts/promptstest"
 	"github.com/lycaon/lycaon/internal/rules"
+	"github.com/lycaon/lycaon/internal/rules/rulestest"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/workflow/runstate"
 	"github.com/lycaon/lycaon/pkg/api"
@@ -50,7 +51,7 @@ func loadBundledHintConfig(t *testing.T) *guidance.HintConfig {
 
 func TestSpecToolFeedbackRejectShape(t *testing.T) {
 	guidance.SetGuidanceRenderer(promptstest.GuidanceRenderer(t))
-	engine := specPlanEngine(t)
+	engine := rulestest.BundledEngine(t, ruleConditionRegistry(t))
 	bp := phaseTestBlockPlane(t)
 	formatter := guidance.NewToolRejectFormatter(guidance.NewFeedbackDeduper())
 
