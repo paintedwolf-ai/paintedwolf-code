@@ -111,10 +111,6 @@ func (d *debouncer) NotifyWorktree(ctx context.Context, dir string, paths []stri
 	d.NotifyWorktreeChanges(ctx, dir, changes, source)
 }
 
-func NotifyWorktreeChangesDebounced(ctx context.Context, dir string, changes []WorktreeChange, source Source) {
-	processWatchers().debounce.NotifyWorktreeChanges(ctx, dir, changes, source)
-}
-
 // NotifyWorktreeChanges schedules a coalesced WorktreeChanged with structured path facts.
 func (d *debouncer) NotifyWorktreeChanges(ctx context.Context, dir string, changes []WorktreeChange, source Source) <-chan struct{} {
 	if d == nil {
