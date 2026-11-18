@@ -21,22 +21,13 @@ class InstalledPerformanceTests(unittest.TestCase):
             with self.subTest(samples=samples), self.assertRaises(ValueError):
                 performance.distribution(samples)
 
-    def test_absolute_limits_are_not_first_sample_regression_budgets(self):
-        self.assertEqual(performance.enforce({'restart.ready': [7500] * 20}, {'restart.ready': 7500}), [])
-        result = performance.enforce({'restart.ready': [7501] * 20}, {'restart.ready': 7500})
-        self.assertEqual(result, [{'metric': 'restart.ready', 'p95': 7501, 'absolute_limit': 7500}])
-        for samples, absolute in [({'restart.ready': [1] * 19}, {'restart.ready': 7500}),
-                                  ({'unknown': [1] * 20}, {'restart.ready': 7500})]:
-            with self.assertRaises(ValueError):
-                performance.enforce(samples, absolute)
-
-    def test_shipped_absolute_limits_refuse_invalid_or_forged_values(self):
+    def test_shipped_resource_limits_refuse_invalid_or_forged_values(self):
         report = performance.limits()
-        self.assertEqual(report['startup.ready'], 7500)
+        self.assertEqual(set(report), {'peak_rss_bytes', 'rss_growth_bytes'})
         self.assertEqual(report['peak_rss_bytes'], 512 << 20)
         document = json.loads(performance.BUDGET_PATH.read_text())
         for value in [True, 0, -1, float('nan'), '7500']:
-            document['latency_p95_ms']['startup.ready'] = value
+            document['resources']['peak_rss_bytes'] = value
             with self.subTest(value=value), patch.object(Path, 'read_text', return_value=json.dumps(document)):
                 with self.assertRaises(ValueError):
                     performance.limits()
