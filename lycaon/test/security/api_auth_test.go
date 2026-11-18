@@ -13,21 +13,59 @@ import (
 	"github.com/lycaon/lycaon/internal/configdir"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/tools"
+	wire "github.com/lycaon/lycaon/pkg/api"
 	"github.com/lycaon/lycaon/test/wiring"
 )
 
-func TestV1RequiresBearerToken(t *testing.T) {
+// TestBearerTokenAdmission checks what each credential earns on one server:
+// none and a wrong one are refused with the declared error, the right one is
+// served, health needs none, and a session request naming a directory is
+// refused at decode. Every operation's refusal is swept by TestAPIConformance.
+func TestBearerTokenAdmission(t *testing.T) {
 	srv := wiring.BuildForTest(t).Server
-
-	req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/v1/projects", nil)
-	w := httptest.NewRecorder()
-	srv.ServeHTTP(w, req)
-	if w.Code != http.StatusUnauthorized {
-		t.Fatalf("status = %d body = %s", w.Code, w.Body.String())
-	}
-	errResp := decodeAPIError(t, w)
-	if errResp.Code != "unauthorized" {
-		t.Fatalf("code = %q", errResp.Code)
+	sessID := "00000000-0000-4000-8000-000000000001"
+	for _, tc := range []struct {
+		name, method, path, authorization, body string
+		status                                  int
+		code                                    wire.ApiErrorCode
+		openAPIPath                             string
+		params                                  map[string]string
+	}{
+		{name: "no token", method: http.MethodGet, path: "/v1/projects", status: http.StatusUnauthorized, code: wire.ApiErrorCodeUnauthorized},
+		{name: "no token on a session matches the declared error", method: http.MethodGet, path: "/v1/sessions/" + sessID,
+			status: http.StatusUnauthorized, code: wire.ApiErrorCodeUnauthorized, openAPIPath: "/v1/sessions/{id}", params: map[string]string{"id": sessID}},
+		{name: "wrong token", method: http.MethodGet, path: "/v1/projects", authorization: "Bearer wrong-token", status: http.StatusUnauthorized, code: wire.ApiErrorCodeUnauthorized},
+		{name: "valid token", method: http.MethodGet, path: "/v1/projects", authorization: api.TestAuthHeader(), status: http.StatusOK},
+		{name: "health needs no token", method: http.MethodGet, path: "/health", status: http.StatusOK},
+		{name: "a session names no project directory", method: http.MethodPost, path: "/v1/sessions", authorization: api.TestAuthHeader(),
+			body: `{"project_dir":"/tmp","posture":"build"}`, status: http.StatusBadRequest, code: wire.ApiErrorCodeInvalidJson},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var body io.Reader
+			if tc.body != "" {
+				body = strings.NewReader(tc.body)
+			}
+			req := httptest.NewRequestWithContext(t.Context(), tc.method, tc.path, body)
+			if tc.authorization != "" {
+				req.Header.Set("Authorization", tc.authorization)
+			}
+			if tc.body != "" {
+				req.Header.Set("Content-Type", "application/json")
+			}
+			w := httptest.NewRecorder()
+			srv.ServeHTTP(w, req)
+			if w.Code != tc.status {
+				t.Fatalf("status = %d body = %s", w.Code, w.Body.String())
+			}
+			if tc.code != "" {
+				if got := decodeAPIError(t, w).Code; got != tc.code {
+					t.Fatalf("code = %q, want %q", got, tc.code)
+				}
+			}
+			if tc.openAPIPath != "" {
+				AssertResponseMatchesOpenAPI(t, w, tc.method, tc.openAPIPath, tc.params)
+			}
+		})
 	}
 }
 
@@ -52,114 +90,12 @@ func TestVaultLockAcceptsStepAwayReasonsOnly(t *testing.T) {
 	}
 }
 
-func TestUnauthenticatedGetSessionMatchesOpenAPIError(t *testing.T) {
-	srv := wiring.BuildForTest(t).Server
-	sessID := "00000000-0000-4000-8000-000000000001"
-	req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/v1/sessions/"+sessID, nil)
-	w := httptest.NewRecorder()
-	srv.ServeHTTP(w, req)
-	if w.Code != http.StatusUnauthorized {
-		t.Fatalf("status = %d body = %s", w.Code, w.Body.String())
-	}
-	AssertResponseMatchesOpenAPI(t, w, http.MethodGet, "/v1/sessions/{id}", map[string]string{"id": sessID})
-}
-
-func TestV1WrongBearerToken(t *testing.T) {
-	srv := wiring.BuildForTest(t).Server
-
-	req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/v1/projects", nil)
-	req.Header.Set("Authorization", "Bearer wrong-token")
-	w := httptest.NewRecorder()
-	srv.ServeHTTP(w, req)
-	if w.Code != http.StatusUnauthorized {
-		t.Fatalf("status = %d", w.Code)
-	}
-}
-
-func TestV1ValidBearerToken(t *testing.T) {
-	srv := wiring.BuildForTest(t).Server
-
-	req := authedRequest(t, http.MethodGet, "/v1/projects", nil)
-	w := httptest.NewRecorder()
-	srv.ServeHTTP(w, req)
-	if w.Code != http.StatusOK {
-		t.Fatalf("status = %d body = %s", w.Code, w.Body.String())
-	}
-}
-
-func TestHealthExemptFromAuth(t *testing.T) {
-	srv := wiring.BuildForTest(t).Server
-
-	req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/health", nil)
-	w := httptest.NewRecorder()
-	srv.ServeHTTP(w, req)
-	if w.Code != http.StatusOK {
-		t.Fatalf("status = %d", w.Code)
-	}
-}
-
 func TestResolveAPITokenFromEnv(t *testing.T) {
 	t.Setenv("LYCAON_API_TOKEN", "env-token-123")
 	got, err := api.ResolveAPIToken()
 	testutil.FailErr(t, "api.ResolveAPIToken failed", err)
 	if got != "env-token-123" {
 		t.Fatalf("token = %q", got)
-	}
-}
-
-func TestV1RoutesRequireAuthTable(t *testing.T) {
-	srv := wiring.BuildForTest(t).Server
-	sessID := "00000000-0000-4000-8000-000000000001"
-
-	routes := []struct {
-		method string
-		path   string
-		body   string
-	}{
-		{http.MethodGet, "/v1/projects", ""},
-		{http.MethodPost, "/v1/sessions", `{"project_id":"00000000-0000-4000-8000-000000000001","posture":"build"}`},
-		{http.MethodPost, "/v1/projects", `{"roots":[{"path":"/tmp"}]}`},
-		{http.MethodGet, "/v1/sessions/" + sessID, ""},
-		{http.MethodGet, "/v1/settings/model-policy", ""},
-		{http.MethodGet, "/v1/settings/approvals", ""},
-		{http.MethodGet, "/v1/cost/summary", ""},
-		{http.MethodPatch, "/v1/settings/model-policy", `{}`},
-	}
-
-	for _, route := range routes {
-		t.Run(route.method+" "+route.path, func(t *testing.T) {
-			var body io.Reader
-			if route.body != "" {
-				body = strings.NewReader(route.body)
-			}
-			req := httptest.NewRequestWithContext(t.Context(), route.method, route.path, body)
-			if route.body != "" {
-				req.Header.Set("Content-Type", "application/json")
-			}
-			w := httptest.NewRecorder()
-			srv.ServeHTTP(w, req)
-			if w.Code != http.StatusUnauthorized {
-				t.Fatalf("status = %d body = %s", w.Code, w.Body.String())
-			}
-		})
-	}
-}
-
-func TestCreateSessionRejectsProjectDir(t *testing.T) {
-	srv := wiring.BuildForTest(t).Server
-	body := `{"project_dir":"/tmp","posture":"build"}`
-	req := authedRequest(t, http.MethodPost, "/v1/sessions", strings.NewReader(body))
-	req.Header.Set("Content-Type", "application/json")
-	w := httptest.NewRecorder()
-	srv.ServeHTTP(w, req)
-	if w.Code != http.StatusBadRequest {
-		t.Fatalf("status = %d body = %s", w.Code, w.Body.String())
-	}
-	errResp := decodeAPIError(t, w)
-	// CreateSessionRequest has no project_dir; DisallowUnknownFields rejects it
-	// at decode time as invalid_json, not invalid_request.
-	if errResp.Code != "invalid_json" {
-		t.Fatalf("code = %q", errResp.Code)
 	}
 }
 
