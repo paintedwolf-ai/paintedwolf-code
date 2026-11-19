@@ -974,6 +974,23 @@
       ]
     },
     {
+      "tool": "inspect_source",
+      "owner": "source_ledger",
+      "disposition": "retain-domain-structured",
+      "command": "",
+      "lifecycle": "read_only",
+      "reuse": "File inspection reuses native read operations. Git HEAD uses bounded metadata reads.",
+      "source": "lycaon/config/packs/painted-wolf/platform/tools/schemas/inspect_source.yaml",
+      "test": "lycaon/internal/tools/native/inspect_source_test.go",
+      "cleanup": "Expose the inspection tool on read-only surfaces.",
+      "selected_disposition": "Retain typed source inspection",
+      "behavior_change_or_retention": "Select one read operation with typed arguments.",
+      "existing_semantic_difference": "One bounded source inspection per tool call.",
+      "implementing_issues": [],
+      "existing_rejection_code": "",
+      "command_forms": []
+    },
+    {
       "tool": "instruct_worker",
       "owner": "workers",
       "disposition": "retain-domain-structured",

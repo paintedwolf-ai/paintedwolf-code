@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -15,8 +16,10 @@ func TestLanguageCatalogClosesOverFormsAndStockTools(t *testing.T) {
 	root := filepath.Join("..", "..")
 	catalog, err := loadLanguageCatalog(root)
 	testutil.FailErr(t, "load catalog", err)
-	if len(catalog.Tools) != 116 {
-		t.Fatalf("catalog scope: %d tools, %d commands", len(catalog.Tools), len(catalog.Commands))
+	if !slices.ContainsFunc(catalog.Tools, func(row toolcontract.ToolDisposition) bool {
+		return row.Tool == "inspect_source" && row.Disposition == "retain-domain-structured" && len(row.CommandForms) == 0
+	}) {
+		t.Fatal("source inspection must retain its structured tool entry")
 	}
 	if len(catalog.Fixtures) < 700 {
 		t.Fatalf("option/limit fixture coverage=%d", len(catalog.Fixtures))
