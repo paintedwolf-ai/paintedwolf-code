@@ -25,8 +25,24 @@ func registerStubEditorRoutes(mux *http.ServeMux, writeJSON stubJSONWriter) {
 				ID: "11111111-1111-4111-8111-111111111111", Path: "/fixture/root",
 				Watch: api.SourceWatchCoverage{State: api.SourceWatchLive, Recursive: true},
 			}},
-			Inventory: api.SourceInventoryState{Status: "ready", Complete: true},
+			OutsideRootID: fixtureOutsideRootID,
+			Inventory:     api.SourceInventoryState{Status: "ready", Complete: true},
 		})
+	})
+	mux.HandleFunc("POST /v1/projects/{id}/source/outside-files", func(w http.ResponseWriter, r *http.Request) {
+		writeJSON(w, http.StatusOK, api.OpenedOutsideFile{
+			RootID: fixtureOutsideRootID, Path: "Users/me/notes.txt", FileID: "33333333-3333-4333-8333-333333333333",
+			Location: fixtureChatLocation(),
+		})
+	})
+	mux.HandleFunc("POST /v1/projects/{id}/source/outside-locations/{location_id}/files", func(w http.ResponseWriter, r *http.Request) {
+		writeJSON(w, http.StatusOK, api.OpenedOutsideFile{
+			RootID: fixtureOutsideRootID, Path: "Users/me/notes.txt", FileID: "33333333-3333-4333-8333-333333333333",
+			Location: fixtureChatLocation(),
+		})
+	})
+	mux.HandleFunc("PATCH /v1/projects/{id}/source/outside-locations/{location_id}", func(w http.ResponseWriter, r *http.Request) {
+		writeJSON(w, http.StatusOK, fixtureChatLocation())
 	})
 	mux.HandleFunc("POST /v1/projects/{id}/attachments", func(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusCreated, api.AttachmentUploadResponse{
@@ -179,4 +195,13 @@ func registerStubEditorRoutes(mux *http.ServeMux, writeJSON stubJSONWriter) {
 		})
 	})
 
+}
+
+const fixtureOutsideRootID = "22222222-2222-4222-8222-222222222222"
+
+func fixtureChatLocation() api.SourceChatLocation {
+	return api.SourceChatLocation{
+		ID: "44444444-4444-4444-8444-444444444444", SessionID: "55555555-5555-4555-8555-555555555555",
+		RootID: fixtureOutsideRootID, Anchor: "Users/me", Path: "/Users/me", Kind: "folder", Label: "me",
+	}
 }

@@ -252,7 +252,7 @@ func TestAppendWorkerSummaryEligibleOverlayOpens(t *testing.T) {
 	mgr := session.NewHost(mem, session.Models{Client: llm.NewMockProvider(&llm.MockConfig{}), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
 	ledger := sourceledger.New(testdbfixture.Open(t, "source.db"), t.TempDir())
 	t.Cleanup(func() { testutil.FailErr(t, "close source snapshot store", ledger.Snapshots.Close()) })
-	mgr.SetSourceLedger(ledger, tools.SourceHistory{Files: ledger.History, Comparison: ledger.Comparisons, Git: ledger.Git, Authorship: ledger.Walk}, ledger.Commands, ledger.Git, ledger.Checkpoints, ledger.Inventory)
+	mgr.SetSourceLedger(ledger, ledger, tools.SourceHistory{Files: ledger.History, Comparison: ledger.Comparisons, Git: ledger.Git, Authorship: ledger.Walk}, ledger.Commands, ledger.Git, ledger.Checkpoints, ledger.Inventory)
 	q := worker.NewInMemoryQueue(4)
 	mgr.SetWorkerQueue(q)
 	primary := t.TempDir()

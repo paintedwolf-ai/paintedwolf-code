@@ -54,7 +54,7 @@ it.each(["expand", "folder"])("recovers an expired view for %s commands", async 
     if (path.endsWith("/views") && init?.method === "POST") {
       const request = JSON.parse(String(init.body)) as SourceTreeViewCreate;
       creates.push(request);
-      current = { kind: "tree", id: `view-${creates.length}`, workspace_id: "workspace", roots: [], intent: request.intent,
+      current = { kind: "tree", id: `view-${creates.length}`, workspace_id: "workspace", roots: [], outside_locations: [], intent: request.intent,
         intent_revision: "intent", projection_revision: "projection", state: "ready",
         extent: { rows: 0, complete: true }, loading_directories: 0, expires_at: "2026-09-16T23:00:00Z" };
     }
@@ -85,7 +85,7 @@ function scriptedHost(options: { command?: (path: string) => void } = {}) {
     const view = (id: string) => views.get(id)!;
     if (init?.method === "POST" && path.endsWith("/views")) {
       const request = JSON.parse(String(init.body)) as SourceTreeViewCreate;
-      const created: SourceTreeView = { kind: "tree", id: `view-${views.size + 1}`, workspace_id: "workspace", roots: [], intent: request.intent,
+      const created: SourceTreeView = { kind: "tree", id: `view-${views.size + 1}`, workspace_id: "workspace", roots: [], outside_locations: [], intent: request.intent,
         intent_revision: "intent", projection_revision: "projection", state: "ready", extent: { rows: 0, complete: true },
         loading_directories: 0, expires_at: "2026-09-16T23:00:00Z" };
       views.set(created.id, created);
@@ -237,7 +237,7 @@ it.each([false, true])("recovers failed preparation and preserves recursive disc
     if (init?.method === "POST") {
       const request = JSON.parse(String(init.body)) as SourceTreeViewCreate;
       creates.push(request);
-      current = { kind: "tree", id: `view-${creates.length}`, workspace_id: "workspace", roots: [], intent: request.intent,
+      current = { kind: "tree", id: `view-${creates.length}`, workspace_id: "workspace", roots: [], outside_locations: [], intent: request.intent,
         intent_revision: "intent", projection_revision: "projection", state: creates.length === 1 ? "failed" : "ready",
         failure: creates.length === 1 ? { code: "unavailable", message: "Saved expansion is unavailable." } : undefined,
         extent: { rows: 0, complete: true }, loading_directories: 0, expires_at: "2026-09-16T23:00:00Z" };

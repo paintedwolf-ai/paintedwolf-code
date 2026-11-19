@@ -32,6 +32,7 @@ type sourceReadNavigation struct {
 	treeInitialized bool
 	treeIntent      wire.SourceTreeIntent
 	roots           []wire.ProjectRoot
+	outside         []wire.SourceChatLocation
 }
 
 type sourceReadFiltering struct {
@@ -56,7 +57,7 @@ func (view *sourceView) read() (*sourceViewRead, func()) {
 	read := &sourceViewRead{
 		scope: view.scope, id: view.id, workspaceID: view.workspaceID, state: view.state,
 		intentRevision: view.commands.Revision(), projectionRevision: view.projectionRevision, failure: view.failure, expires: view.expires, navigation: sourceReadNavigation{
-			tree: view.navigation.tree, treeInitialized: view.navigation.treeInitialized, treeIntent: view.navigation.treeIntent, roots: view.navigation.roots}, filtering: sourceReadFiltering{filtered: view.filtering.filtered}, reviewing: sourceReadReviewing{
+			tree: view.navigation.tree, treeInitialized: view.navigation.treeInitialized, treeIntent: view.navigation.treeIntent, roots: view.navigation.roots, outside: view.navigation.outside}, filtering: sourceReadFiltering{filtered: view.filtering.filtered}, reviewing: sourceReadReviewing{
 			reviewPreparing: view.reviewing.reviewPreparing}, comparisonData: sourceReadComparisonData{
 			comparisonIntent: view.comparisonData.comparisonIntent, comparison: view.comparisonData.comparison, current: view.comparisonData.current,
 			projection: view.comparisonData.projection, details: view.comparisonData.details}}

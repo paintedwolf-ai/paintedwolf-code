@@ -103,7 +103,7 @@ func landPinnedText(ctx context.Context, tctx tools.ToolContext, resolved projec
 		reportLandedEditorConfig(ctx, tctx, resolved, st, newContent)
 		return landing{change: mutationContext(st.Content, newContent), publishedSHA256: textfile.SHA256(after)}, nil
 	}
-	documents, ok := sourceview.DocumentsFor(tctx, resolved)
+	documents, _, ok := sourceview.DocumentsFor(tctx, resolved)
 	if !ok {
 		return landing{}, &toolrejection.ToolReject{Code: "EDITOR_DOCUMENT_CHANGING", Data: map[string]any{"path": resolved.DisplayPath}}
 	}
@@ -138,7 +138,7 @@ func landPinnedText(ctx context.Context, tctx tools.ToolContext, resolved projec
 		return landing{}, err
 	}
 	tctx.RecordModelAuthoredCredentials(ctx, resolved.Abs, []byte(newContent))
-	reportLanded(tctx, applied.Document)
+	recordLandedDocument(tctx, applied.Document)
 	reportLandedEditorConfig(ctx, tctx, resolved, st, newContent)
 	landed := landing{change: mutationContext(preview.Before.Text, applied.Document.Text), editor: true, saved: applied.Saved,
 		recreated: st.Editor.Absent && applied.Saved, heldVersionID: applied.HeldVersionID, publicationError: applied.PublicationError,

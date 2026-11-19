@@ -2,6 +2,7 @@ package sourceledger
 
 import (
 	"context"
+	"errors"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/db"
@@ -62,15 +63,15 @@ func TestOutsideWritesReferenceTheirRootChat(t *testing.T) {
 	if head.FileID != refs[0].FileID {
 		t.Fatalf("reference names %s, head is %s", refs[0].FileID, head.FileID)
 	}
-	held, err := store.OutsideFileHeld(ctx, "p1", "home/me/.zshrc")
-	testutil.FailErr(t, "check the held file", err)
-	if !held {
-		t.Fatal("a referenced outside file reads as unheld")
+	rootID, path, err := store.HeldFileAddress(ctx, "p1", head.FileID)
+	testutil.FailErr(t, "resolve the held outside file", err)
+	if rootID != outside || path != "home/me/.zshrc" {
+		t.Fatalf("held outside address = %q %q", rootID, path)
 	}
-	held, err = store.OutsideFileHeld(ctx, "p1", "home/me/.bashrc")
-	testutil.FailErr(t, "check an untouched file", err)
-	if held {
-		t.Fatal("an untouched outside path reads as held")
+	unheld, err := store.TrackFile(ctx, TrackInput{ProjectID: "p1", RootID: outside, Path: "home/me/.bashrc", Content: []byte("export A=3\n")})
+	testutil.FailErr(t, "track a file without a chat reference", err)
+	if _, _, err := store.HeldFileAddress(ctx, "p1", unheld.FileID); !errors.Is(err, ErrHistoryNotFound) {
+		t.Fatalf("unheld outside file resolved: %v", err)
 	}
 }
 

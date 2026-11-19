@@ -1,4 +1,5 @@
 import { captureReaderBufferViewState, readerBufferViewState } from "../editor/editor-session-fidelity.ts";
+import { outsideFileId, outsideRootId } from "../source/outside-namespace.ts";
 import type { LycaonClient } from "../../api/client.ts";
 import { sourceReaderAccess } from "../../api/source-reader.ts";
 import { SourceReader, type SourceReaderHandle } from "../../components/source/reader/SourceReader.tsx";
@@ -63,7 +64,9 @@ export function FilesInfoCard(props: Props) {
     const client = props.client, projectId = props.projectId, buffer = props.buffer;
     if (!client || !projectId || (buffer.content.state === "suspended" || buffer.content.state === "unloaded") || buffer.loading || buffer.loadError || !buffer.overLimit || !buffer.encoding || buffer.jobId) return undefined;
     void buffer.mtime;
-    return sourceReaderAccess(client, projectId, { kind: "current", root_id: buffer.rootId, path: buffer.path, decode_as: explicitSourceEncoding(buffer.encoding) }, props.sessionId);
+    const fileId = outsideFileId(projectId, buffer);
+    const address = fileId ? { file_id: fileId } : { root_id: buffer.rootId, path: buffer.path };
+    return sourceReaderAccess(client, projectId, { kind: "current", ...address, decode_as: explicitSourceEncoding(buffer.encoding) }, props.sessionId);
   });
   usePresentationParticipant("file-reader", () => !reader() || reader() === readyReader());
   createEffect(() => {
@@ -228,7 +231,7 @@ export function FilesInfoCard(props: Props) {
                     Open as UTF-16 BE
                   </DenButton>
                 </Show>
-                <OpenInButton target={fileOpenTarget(props.buffer, props.roots)} onOpenChange={setOpenInMenuOpen} />
+                <OpenInButton target={fileOpenTarget(props.buffer, props.roots, undefined, props.projectId ? outsideRootId(props.projectId) : undefined)} onOpenChange={setOpenInMenuOpen} />
                 <Show when={variant() === "binary" && props.onReopenAsUTF16}>
                   <DenButton
                     variant="ghost"

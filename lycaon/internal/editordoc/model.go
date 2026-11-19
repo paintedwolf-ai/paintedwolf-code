@@ -12,6 +12,7 @@ import (
 	"github.com/lycaon/lycaon/internal/documentcore"
 	"github.com/lycaon/lycaon/internal/fspath"
 	"github.com/lycaon/lycaon/internal/project"
+	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/projectsource"
 	"github.com/lycaon/lycaon/internal/sourcebranch"
 	"github.com/lycaon/lycaon/internal/textfile"
@@ -42,6 +43,8 @@ type Document struct {
 
 // DocumentBase holds baseline file content and encoding attributes.
 type DocumentBase struct {
+	OutsideParentBinding string `json:"-"`
+
 	BaseContent, BaseSHA256, Encoding string
 	SizeBytes                         int64
 	EOL, BaseEOL                      string
@@ -140,6 +143,9 @@ func saveInputDigest(documentID, projectID string, actor saveActor, expected int
 }
 
 func rootPath(p *project.Project, rootID string) string {
+	if rootID != "" && rootID == p.Outside.ID {
+		return projectroot.OutsidePath
+	}
 	for _, root := range p.Roots {
 		if root.ID == rootID {
 			return fspath.CanonicalPath(root.Path)
@@ -165,4 +171,12 @@ func serializeEOL(content, eol string) string {
 		return strings.ReplaceAll(content, "\n", "\r\n")
 	}
 	return content
+}
+
+// Expose the outside namespace only for outside documents.
+func documentProject(p *project.Project, rootID string) *project.Project {
+	if p != nil && rootID != "" && rootID == p.Outside.ID {
+		return project.WithOutside(p)
+	}
+	return p
 }

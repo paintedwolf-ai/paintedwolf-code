@@ -106,6 +106,9 @@ func (o documentOpener) openObservedDocument(ctx context.Context, p *project.Pro
 			return nil, err
 		}
 		*read = *latest
+		if err := s.bindObservedParent(ctx, d, observation.OutsideParentIdentity); err != nil {
+			return nil, err
+		}
 		if !options.requireWritable {
 			if err := validateDocumentAdmission(read); err != nil {
 				return nil, err
@@ -128,7 +131,8 @@ func (o documentOpener) openObservedDocument(ctx context.Context, p *project.Pro
 			RootID: read.RootID, Path: read.Path,
 			Draft: content, Revision: 1,
 			DocumentBase: DocumentBase{
-				BaseContent: content, BaseSHA256: read.SHA256, Encoding: read.Encoding,
+				OutsideParentBinding: outsideParentBinding(read.Path, observation.OutsideParentIdentity),
+				BaseContent:          content, BaseSHA256: read.SHA256, Encoding: read.Encoding,
 				SizeBytes: read.SizeBytes,
 				EOL:       eol, BaseEOL: eol, MixedEOL: mixed, BaseMixedEOL: mixed,
 				CreatedAt:     now,
@@ -186,9 +190,13 @@ func observeDocumentSource(p *project.Project, d *Document) (*projectsource.Sour
 	if err := checkWorkspace(p, d); err != nil {
 		return nil, nil, err
 	}
+	p = documentProject(p, d.RootID)
 	req := projectsource.SourceReadRequest{Path: d.Path, RootID: d.RootID}
 	observation, err := projectsource.ObserveProjectSource(p, req)
 	if err != nil {
+		return nil, nil, err
+	}
+	if err := d.checkObservedParent(observation.OutsideParentIdentity); err != nil {
 		return nil, nil, err
 	}
 	read, err := observation.Project()
@@ -206,6 +214,9 @@ func observeDocumentSource(p *project.Project, d *Document) (*projectsource.Sour
 	req.DecodeAs = decodeAs
 	observation, err = projectsource.ObserveProjectSource(p, req)
 	if err != nil {
+		return nil, nil, err
+	}
+	if err := d.checkObservedParent(observation.OutsideParentIdentity); err != nil {
 		return nil, nil, err
 	}
 	read, err = observation.Project()

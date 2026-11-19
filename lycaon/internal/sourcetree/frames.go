@@ -54,10 +54,11 @@ func (v *View) snapshot(ctx context.Context) (*snapshot, error) {
 		frame.releaseReview = review.retain()
 	}
 
+	rootOrder := v.rootOrder
 	v.mu.Unlock()
 	var identity strings.Builder
 	identity.WriteString(frame.revision.Intent)
-	roots := append([]Root(nil), v.rootOrder...)
+	roots := append([]Root(nil), rootOrder...)
 	// Acquire bounded root pools in one order across views before restoring display order.
 	sort.Slice(roots, func(i, j int) bool {
 		if roots[i].Path == roots[j].Path {
@@ -136,8 +137,8 @@ func (v *View) snapshot(ctx context.Context) (*snapshot, error) {
 		identity.WriteByte(0)
 		identity.WriteString(projectionRevision)
 	}
-	positions := make(map[string]int, len(v.rootOrder))
-	for i, root := range v.rootOrder {
+	positions := make(map[string]int, len(rootOrder))
+	for i, root := range rootOrder {
 		positions[root.ID] = i
 	}
 	sort.Slice(frame.roots, func(i, j int) bool { return positions[frame.roots[i].root.ID] < positions[frame.roots[j].root.ID] })

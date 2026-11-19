@@ -320,6 +320,7 @@ CREATE TABLE IF NOT EXISTS editor_documents (
     held_agent_version_id TEXT NOT NULL DEFAULT '',
     -- The path has no file on disk; the draft and saved base stay.
     absent INTEGER NOT NULL DEFAULT 0 CHECK (absent IN (0, 1)),
+    outside_parent_binding TEXT NOT NULL DEFAULT '',
     -- One document per branch path; file_id rebinds when the path is recreated.
     UNIQUE(project_id, branch_id, root_id, path)
 ) STRICT;
@@ -3123,6 +3124,27 @@ WHEN NOT EXISTS (
 )
 BEGIN
     SELECT RAISE(ABORT, 'source_chat_files session_id is not a root chat of the file project');
+END;
+
+-- Where a root chat has worked outside the project: an outside-namespace
+-- folder, repository work tree, or exact file. Hiding presents nothing and
+-- revokes nothing.
+CREATE TABLE IF NOT EXISTS source_chat_locations (
+    id TEXT PRIMARY KEY,
+    session_id TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
+    anchor TEXT NOT NULL CHECK (anchor != '' AND substr(anchor, 1, 1) != '/'),
+    anchor_identity TEXT NOT NULL,
+    kind TEXT NOT NULL CHECK (kind IN ('repository', 'folder', 'file')),
+    hidden INTEGER NOT NULL DEFAULT 0 CHECK (hidden IN (0, 1)),
+    created_ts TEXT NOT NULL,
+    UNIQUE(session_id, anchor)
+) STRICT;
+
+CREATE TRIGGER IF NOT EXISTS source_chat_locations_chat_insert
+BEFORE INSERT ON source_chat_locations
+WHEN NOT EXISTS (SELECT 1 FROM sessions s WHERE s.id = new.session_id AND s.parent_session_id IS NULL)
+BEGIN
+    SELECT RAISE(ABORT, 'source_chat_locations session_id is not a root chat');
 END;
 
 -- Last observed git position per attached root. A row states what was true at

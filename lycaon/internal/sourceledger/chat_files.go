@@ -10,6 +10,10 @@ import (
 	"github.com/lycaon/lycaon/internal/sourcebranch"
 )
 
+type ChatFileRecorder interface {
+	TrackChatFile(context.Context, TrackInput, string, ChatFileRelation) (TrackedFile, error)
+}
+
 // ChatFileRelation is how a chat came to hold an outside file.
 type ChatFileRelation int
 
@@ -52,17 +56,17 @@ func (s *Store) outsideOperationSession(ctx context.Context, q *db.Queries, in R
 }
 
 func (s *Store) referenceMutationChatFile(ctx context.Context, q *db.Queries, in RecordInput, fileID string) error {
-	if err := s.referenceChatFile(ctx, q, in.ProjectID, in.RootID, in.SessionID, fileID, ChatFileChanged, in.TS); err != nil {
+	if err := s.referenceChatFile(ctx, q, in.ProjectID, in.RootID, in.Path, in.SessionID, fileID, ChatFileChanged, in.TS); err != nil {
 		return err
 	}
 	if in.FromRootID != "" && in.FromRootID != in.RootID {
-		return s.referenceChatFile(ctx, q, in.ProjectID, in.FromRootID, in.SessionID, fileID, ChatFileChanged, in.TS)
+		return s.referenceChatFile(ctx, q, in.ProjectID, in.FromRootID, in.FromPath, in.SessionID, fileID, ChatFileChanged, in.TS)
 	}
 	return nil
 }
 
-// A worker's outside file reference belongs to its root chat.
-func (s *Store) referenceChatFile(ctx context.Context, q *db.Queries, projectID, rootID, sessionID, fileID string, relation ChatFileRelation, ts time.Time) error {
+// referenceChatFile links a root chat to an outside file and its location.
+func (s *Store) referenceChatFile(ctx context.Context, q *db.Queries, projectID, rootID, rel, sessionID, fileID string, relation ChatFileRelation, ts time.Time) error {
 	if sessionID == "" || fileID == "" {
 		return nil
 	}
@@ -83,31 +87,45 @@ func (s *Store) referenceChatFile(ctx context.Context, q *db.Queries, projectID,
 		}
 		return 0
 	}
-	return q.RecordSourceChatFile(ctx, db.RecordSourceChatFileParams{
+	if err := q.RecordSourceChatFile(ctx, db.RecordSourceChatFileParams{
 		SessionID: chat, FileID: fileID,
 		Changed: flag(ChatFileChanged), Read: flag(ChatFileRead), Opened: flag(ChatFileOpened),
 		Ts: ts.UTC().Format(time.RFC3339Nano),
-	})
+	}); err != nil {
+		return err
+	}
+	if rel == "" {
+		return nil
+	}
+	return placeChatLocation(ctx, q, chat, rel, relation, ts)
 }
 
-// OutsideFileHeld checks chat references to the current file at rel.
-func (s *Store) OutsideFileHeld(ctx context.Context, projectID, rel string) (bool, error) {
-	outside, err := s.outsideRootID(ctx, s.queries, projectID)
-	if err != nil || outside == "" {
-		return false, err
-	}
-	head, err := s.queries.GetSourceBranchHeadByPath(ctx, db.GetSourceBranchHeadByPathParams{ProjectID: projectID, BranchID: "", RootID: outside, Path: rel})
-	fileID := head.FileID
+// HeldFileAddress follows an outside file through address changes.
+func (s *Store) HeldFileAddress(ctx context.Context, projectID, fileID string) (rootID, path string, err error) {
+	head, err := s.queries.GetSourceBranchHeadByFile(ctx, db.GetSourceBranchHeadByFileParams{ProjectID: projectID, BranchID: string(sourcebranch.Trunk), FileID: fileID})
 	if errors.Is(err, sql.ErrNoRows) {
-		deleted, deleteErr := s.History.ResolveDeletedPath(ctx, projectID, sourcebranch.Trunk, outside, rel)
-		if errors.Is(deleteErr, ErrHistoryNotFound) {
-			return false, nil
-		}
-		fileID, err = deleted.FileID, deleteErr
+		return "", "", ErrHistoryNotFound
 	}
 	if err != nil {
-		return false, err
+		return "", "", err
 	}
+	outside, err := s.outsideRootID(ctx, s.queries, projectID)
+	if err != nil {
+		return "", "", err
+	}
+	if head.RootID == outside {
+		held, err := s.outsideFileReferenced(ctx, projectID, fileID)
+		if err != nil {
+			return "", "", err
+		}
+		if !held {
+			return "", "", ErrHistoryNotFound
+		}
+	}
+	return head.RootID, head.Path, nil
+}
+
+func (s *Store) outsideFileReferenced(ctx context.Context, projectID, fileID string) (bool, error) {
 	referenced, err := s.queries.SourceFileReferencedInProject(ctx, db.SourceFileReferencedInProjectParams{FileID: fileID, ProjectID: projectID})
-	return referenced != 0, err
+	return referenced.Valid && referenced.Bool, err
 }

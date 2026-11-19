@@ -59,6 +59,18 @@ func (s *Views) createSourceView(w http.ResponseWriter, r *http.Request, p *proj
 		return true
 	}
 	p = scoped.Project
+	scope := pagedview.Scope{Person: requestscope.Caller(r).ID, Project: p.ID}
+	var locations chatLocationProjection
+	if request.Tree != nil {
+		locations, err = s.Trees.chatLocations(r.Context(), scope, p, request.Tree.Intent.ChatID)
+		if err == nil {
+			err = validateDisclosureRoots(p, locations.roots, request.Tree.Intent.Disclosures)
+		}
+		if err != nil {
+			s.writeSourceViewError(w, r, err)
+			return true
+		}
+	}
 	if request.Tree != nil && request.Tree.WorkspaceID != p.WorkspaceID() {
 		s.Workspace.writeSourceWorkspaceMismatch(w, request.Tree.WorkspaceID, p.WorkspaceID())
 		return true
@@ -68,12 +80,11 @@ func (s *Views) createSourceView(w http.ResponseWriter, r *http.Request, p *proj
 		s.writeSourceViewError(w, r, err)
 		return true
 	}
-	scope := pagedview.Scope{Person: requestscope.Caller(r).ID, Project: p.ID}
 	key := sourceViewCreateKey{scope: scope, client: clientID, operation: operationID}
 	//nolint:contextcheck // Accepted views follow server shutdown and explicit release, not request cancellation.
 	view, release, created, err := s.sourceViewRegistry().create(r.Context(), key, canonical, generation, func() *sourceView {
 		if request.Tree != nil {
-			return s.Trees.newTreeView(scope, p, *request.Tree)
+			return s.Trees.newTreeView(scope, p, *request.Tree, locations)
 		}
 		return s.ComparisonViews.newComparisonView(scope, p, *request.Comparison)
 	})
@@ -85,7 +96,8 @@ func (s *Views) createSourceView(w http.ResponseWriter, r *http.Request, p *proj
 		return true
 	}
 	// The preparation pin protects accepted-state construction.
-	if _, err := s.sourceViewProject(r.Context(), p, view); err != nil {
+	viewProject, err := s.sourceViewProject(r.Context(), p, view)
+	if err != nil {
 		if created {
 			view.cancel()
 			s.sourceViewRegistry().registry.Release(scope, view.id)
@@ -99,7 +111,7 @@ func (s *Views) createSourceView(w http.ResponseWriter, r *http.Request, p *proj
 		if view.navigation.tree != nil {
 			s.Trees.prepareTreeView(view, release)
 		} else {
-			s.ComparisonViews.prepareComparisonView(view, p, release)
+			s.ComparisonViews.prepareComparisonView(view, viewProject, release)
 		}
 	} else {
 		release()
@@ -152,8 +164,10 @@ func validateSourceViewCreate(p *project.Project, request wire.SourceViewCreate)
 			return pagedview.ErrBudget
 		}
 		for _, disclosure := range request.Tree.Intent.Disclosures {
-
-			if err := validateSourceTreeAddress(p, disclosure.Address); err != nil {
+			if _, err := uuid.Parse(disclosure.Address.RootID); err != nil {
+				return rejectedSourceIntent("A disclosure root_id must be a UUID.")
+			}
+			if err := validateSourcePath(disclosure.Address.Path); err != nil {
 				return err
 			}
 		}
@@ -163,7 +177,11 @@ func validateSourceViewCreate(p *project.Project, request wire.SourceViewCreate)
 		return rejectedSourceIntent(err.Error())
 	}
 	if source := request.Comparison.Source.Current; source != nil {
-		if err := validateSourceTreeAddress(p, wire.SourceTreeAddress{RootID: source.RootID, Path: source.Path}); err != nil {
+		if source.FileID != "" {
+			if uuid.Validate(source.FileID) != nil || source.RootID != "" || source.Path != "" {
+				return rejectedSourceIntent("Use file_id alone to address the file by its ID.")
+			}
+		} else if err := validateSourceTreeAddress(p, wire.SourceTreeAddress{RootID: source.RootID, Path: source.Path}); err != nil {
 			return err
 		}
 		if source.DecodeAs != "" && source.DecodeAs != "utf-16le" && source.DecodeAs != "utf-16be" {
@@ -173,14 +191,25 @@ func validateSourceViewCreate(p *project.Project, request wire.SourceViewCreate)
 	return validateSourceComparisonIntent(request.Comparison.Intent)
 }
 
-func validateSourceTreeAddress(p *project.Project, address wire.SourceTreeAddress) error {
-	if address.Path == "" || len(address.Path) > 65536 || strings.ContainsAny(address.Path, "\\\x00") || strings.HasPrefix(address.Path, "/") {
-		return pagedview.ErrRange
+func validateDisclosureRoots(p *project.Project, outside []sourcetree.Root, disclosures []wire.SourceTreeDisclosure) error {
+	roots := make(map[string]bool, len(p.Roots)+len(outside))
+	for _, root := range p.Roots {
+		roots[root.ID] = true
 	}
-	for _, part := range strings.Split(address.Path, "/") {
-		if part == ".." || part == "" || part == "." && address.Path != "." {
-			return pagedview.ErrRange
+	for _, root := range outside {
+		roots[root.ID] = true
+	}
+	for _, disclosure := range disclosures {
+		if !roots[disclosure.Address.RootID] {
+			return sourcetree.ErrUnknownRoot
 		}
+	}
+	return nil
+}
+
+func validateSourceTreeAddress(p *project.Project, address wire.SourceTreeAddress) error {
+	if err := validateSourcePath(address.Path); err != nil {
+		return err
 	}
 	for _, root := range p.Roots {
 		if root.ID == address.RootID {
@@ -188,6 +217,18 @@ func validateSourceTreeAddress(p *project.Project, address wire.SourceTreeAddres
 		}
 	}
 	return sourcetree.ErrUnknownRoot
+}
+
+func validateSourcePath(path string) error {
+	if path == "" || len(path) > 65536 || strings.ContainsAny(path, "\\\x00") || strings.HasPrefix(path, "/") {
+		return pagedview.ErrRange
+	}
+	for _, part := range strings.Split(path, "/") {
+		if part == ".." || part == "" || part == "." && path != "." {
+			return pagedview.ErrRange
+		}
+	}
+	return nil
 }
 
 func validateSourceComparisonIntent(intent wire.SourceComparisonIntent) error {

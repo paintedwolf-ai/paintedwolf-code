@@ -100,7 +100,8 @@ func editorDocumentText(d *editordoc.Document) (tools.EditorDocumentText, error)
 		base = ""
 	}
 	return tools.EditorDocumentText{
-		ID: d.ID, Revision: d.Revision, Text: d.Draft, SHA256: sha, BaseSHA256: base, Encoding: d.Encoding, EOL: d.EOL, Dirty: d.Dirty, Diverged: d.Diverged, Absent: d.Absent, ReadWhole: true,
+		ID: d.ID, FileID: d.FileID, RootID: d.RootID, Path: d.Path,
+		Revision: d.Revision, Text: d.Draft, SHA256: sha, BaseSHA256: base, Encoding: d.Encoding, EOL: d.EOL, Dirty: d.Dirty, Diverged: d.Diverged, Absent: d.Absent, ReadWhole: true,
 	}, nil
 }
 

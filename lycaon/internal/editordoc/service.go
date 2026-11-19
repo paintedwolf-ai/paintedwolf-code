@@ -201,6 +201,7 @@ func (s *Service) CurrentSnapshot(ctx context.Context, projectID, documentID str
 // its document in the absent state.
 func (o documentOpener) Open(ctx context.Context, p *project.Project, path, rootID, decodeAs, clientID string, retained *Retained) (*Document, error) {
 	s := o.s
+	p = documentProject(p, rootID)
 	options := documentOpenOptions{join: true, retained: retained}
 	for attempt := 0; ; attempt++ {
 		observation, err := projectsource.ObserveProjectSource(p, projectsource.SourceReadRequest{Path: path, RootID: rootID, DecodeAs: decodeAs})

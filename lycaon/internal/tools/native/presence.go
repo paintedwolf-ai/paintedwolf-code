@@ -40,10 +40,15 @@ func reportTextIntent(tctx tools.ToolContext, resolved projectpaths.Resolved, st
 	tctx.Effects.Presence.Intents([]agentpresence.Intent{intent})
 }
 
-// reportLanded names the document revision a write produced.
-func reportLanded(tctx tools.ToolContext, document tools.EditorDocumentText) {
+func recordLandedDocument(tctx tools.ToolContext, document tools.EditorDocumentText) {
 	if tctx.Effects.Presence != nil && document.ID != "" {
 		tctx.Effects.Presence.Landed([]agentpresence.Document{{ID: document.ID, Revision: document.Revision}})
+	}
+	if outside := tctx.Source.OutsideRoot.ID; outside != "" && document.RootID == outside && document.FileID != "" {
+		tctx.RecordSourceLocation(api.NavigationTarget{
+			ProjectID: tctx.Identity.ProjectID, RootID: document.RootID, Path: document.Path,
+			FileID: document.FileID, EntryKind: api.NavigationEntryKindFile,
+		})
 	}
 }
 

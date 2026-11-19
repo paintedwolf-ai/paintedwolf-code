@@ -12,8 +12,16 @@ export function recordOutsideRoot(projectId: string, rootId: string): void {
   setOutsideRoots(next);
 }
 
+export function outsideRootId(projectId: string): string | undefined {
+  return outsideRoots().get(projectId);
+}
+
 export function isOutsideRoot(projectId: string, rootId: string | undefined): boolean {
-  return !!rootId && outsideRoots().get(projectId) === rootId;
+  return !!rootId && outsideRootId(projectId) === rootId;
+}
+
+export function outsideFileId(projectId: string, file: { rootId: string; fileId?: string | null }): string | undefined {
+  return isOutsideRoot(projectId, file.rootId) ? file.fileId ?? undefined : undefined;
 }
 
 export function outsideHostPath(path: string): string {

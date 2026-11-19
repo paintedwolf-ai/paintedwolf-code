@@ -6,6 +6,8 @@ import { FilesTree } from "./FilesTree.tsx";
 import type { FilesTreeEntrySelection, FilesTreeFolderScope, FilesTreeHandle } from "./files-tree-context.ts";
 import { treeViewFixture, TREE_ROOTS } from "../../test/source-tree-view-fixture.ts";
 
+import { resetAppStateSnapshotForTests } from "../../store/app-state-snapshot.ts";
+import { recordChatLocations } from "../source/chat-locations.ts";
 import { resetFilesTreeViewStateForTests } from "./files-tree-view-state.ts";
 
 import { createNoticeStore } from "../../notices/notice-store.ts";
@@ -14,9 +16,18 @@ import { selectProjectNoticeGroups } from "../../notices/notice-select.ts";
 export const projectNotices = (store: ReturnType<typeof createNoticeStore>, projectId: string) =>
   selectProjectNoticeGroups(store.index()).find(group => group.projectId === projectId)?.notices ?? [];
 
-export function installFilesTreeCleanup() { afterEach(() => { cleanup(); resetEditorPrefsForTests(); resetFilesTreeViewStateForTests(); vi.useRealTimers(); }); }
+export function installFilesTreeCleanup() {
+  afterEach(() => {
+    cleanup();
+    resetAppStateSnapshotForTests();
+    recordChatLocations("p1", []);
+    resetEditorPrefsForTests();
+    resetFilesTreeViewStateForTests();
+    vi.useRealTimers();
+  });
+}
 export const echoPath = async (_kind: string, _root: string, path: string) => path;
-export const queryButton = (path: string) => document.querySelector<HTMLButtonElement>(`.den-files-tree__label[data-path="${path}"]`);
+export const queryButton = (path: string) => document.querySelector<HTMLButtonElement>(`.den-files-tree .den-files-tree__label[data-path="${path}"]`);
 export function button(path: string): HTMLButtonElement {
   const result = queryButton(path);
   if (!result) throw new Error(`Missing tree button: ${path}`);

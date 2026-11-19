@@ -210,6 +210,19 @@ describe("fileEditStepsFromParts", () => {
     expect(steps[0]!.tool).toBe("edit");
   });
 
+  it("matches an outside edit to a unique recorded file target", () => {
+    const target = { project_id: "p1", root_id: "outside", path: "tmp/a.ts", file_id: "file-a", entry_kind: "file" } as const;
+    const outside = fileEditPreviewFixture({ path: "/tmp/a.ts", before: V1, after: V2 });
+    const steps = fileEditStepsFromParts([
+      part({ fileEdits: [outside], sourceLocations: [target, { ...target, path: "tmp/b.ts" }] }),
+      part({ fileEdits: [outside], sourceLocations: [target, { ...target, file_id: "other" }] }),
+      part({ fileEdits: [outside], sourceLocations: [{ ...target, file_id: undefined }] }),
+      part({ fileEdits: [{ ...outside, deleted: true }], sourceLocations: [target] }),
+      part({ fileEdits: [{ ...outside, root_id: "attached" }], sourceLocations: [target] }),
+    ]);
+    expect(steps.map((step) => step.navigationTarget)).toEqual([target, undefined, undefined, undefined, undefined]);
+  });
+
   it("takes one step per file a call edited", () => {
     const steps = fileEditStepsFromParts([
       part({

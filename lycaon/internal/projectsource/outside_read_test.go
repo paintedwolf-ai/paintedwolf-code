@@ -57,3 +57,38 @@ func TestOutsideReadRequiresTheRecordedAddress(t *testing.T) {
 	}
 
 }
+
+func TestOutsideSourceStreamRejectsAChangedParent(t *testing.T) {
+	base, err := filepath.EvalSymlinks(t.TempDir())
+	testutil.FailErr(t, "resolve fixture directory", err)
+	folder := filepath.Join(base, "folder")
+	testutil.FailErr(t, "create the recorded folder", os.Mkdir(folder, 0o700))
+	file := filepath.Join(folder, "note.txt")
+	testutil.FailErr(t, "write the recorded file", os.WriteFile(file, []byte("recorded"), 0o600))
+	rel, ok := projectroot.OutsideRel(file)
+	if !ok {
+		t.Fatal("fixture lacks an outside address")
+	}
+	p := outsideReadProject{fixtureProject(t.TempDir())}
+	request := SourceReadRequest{RootID: "outside", Path: rel}
+	stream, err := OpenProjectSourceStream(p, request)
+	testutil.FailErr(t, "open the recorded stream", err)
+	defer stream.Close()
+	if !stream.Current() {
+		t.Fatal("the recorded stream could not be revalidated")
+	}
+	testutil.FailErr(t, "move the recorded folder", os.Rename(folder, filepath.Join(base, "moved")))
+	testutil.FailErr(t, "create a replacement folder", os.Mkdir(folder, 0o700))
+	testutil.FailErr(t, "link the same file from the replacement", os.Link(filepath.Join(base, "moved", "note.txt"), file))
+	if stream.Current() {
+		t.Fatal("the stream accepted a replacement parent")
+	}
+	testutil.FailErr(t, "remove the replacement link", os.Remove(file))
+	testutil.FailErr(t, "redirect the recorded path", os.Symlink(filepath.Join(base, "moved", "note.txt"), file))
+	if replacement, err := OpenProjectSourceStream(p, request); !errors.Is(err, ErrSourcePathDenied) {
+		if replacement != nil {
+			replacement.Close()
+		}
+		t.Fatalf("redirected outside stream = %v", err)
+	}
+}

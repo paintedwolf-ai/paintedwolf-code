@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/api/httpio"
+	"github.com/lycaon/lycaon/internal/api/outsideaccess"
 	"github.com/lycaon/lycaon/internal/api/requestscope"
 	"github.com/lycaon/lycaon/internal/api/secretview"
 	"github.com/lycaon/lycaon/internal/editordoc"
@@ -56,26 +57,26 @@ func (s *Comparisons) readChatFileEdit(ctx context.Context, sessionID string, re
 	return wire.FileEditSnapshot{}, errors.New("file edit not found")
 }
 
-func (s *Comparisons) readerCurrentSide(ctx context.Context, p *project.Project, rootID, path string) (wire.SourceComparisonSide, error) {
-	p, err := admitOutside(ctx, s.SourceLedger, p, rootID, path)
+func (s *Comparisons) readerCurrentSide(ctx context.Context, p *project.Project, requested outsideaccess.Address) (wire.SourceComparisonSide, error) {
+	p, target, err := outsideaccess.Resolve(ctx, s.SourceLedger, p, requested)
 	if err != nil {
-		return wire.SourceComparisonSide{}, err
+		return wire.SourceComparisonSide{}, currentSourceReadError(err)
 	}
-	snapshot, err := s.EditorDocuments.ResolveSourceSnapshot(ctx, p, projectsource.SourceReadRequest{RootID: rootID, Path: path}, editordoc.ObserveCurrent)
+	snapshot, err := s.EditorDocuments.ResolveSourceSnapshot(ctx, p, projectsource.SourceReadRequest{RootID: target.RootID, Path: target.Path}, editordoc.ObserveCurrent)
 	if errors.Is(err, projectsource.ErrSourceNotFound) {
-		return wire.SourceComparisonSide{Path: path, State: "absent", Availability: "absent"}, nil
+		return wire.SourceComparisonSide{Path: target.Path, State: "absent", Availability: "absent"}, nil
 	}
 	if err != nil {
 		return wire.SourceComparisonSide{}, err
 	}
 	if snapshot.Document != nil {
-		return readerTextSide(path, snapshot.Document.Draft), nil
+		return readerTextSide(target.Path, snapshot.Document.Draft), nil
 	}
 	read := snapshot.Source
 	if read.Binary || read.OverLimit {
-		return wire.SourceComparisonSide{Path: path, State: "content", Availability: "unavailable"}, nil
+		return wire.SourceComparisonSide{Path: target.Path, State: "content", Availability: "unavailable"}, nil
 	}
-	return readerTextSide(path, read.Content), nil
+	return readerTextSide(target.Path, read.Content), nil
 }
 
 func (s *Comparisons) writeSourceComparison(w http.ResponseWriter, r *http.Request, projectID string, comparison sourceledger.Comparison) {

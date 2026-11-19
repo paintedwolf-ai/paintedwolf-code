@@ -14,7 +14,7 @@ func stubSourceTreeView() api.SourceTreeView {
 	return api.SourceTreeView{
 		Kind: "tree", ID: fixtureSourceViewID, IntentRevision: "intent-1", ProjectionRevision: "projection-1",
 		State: "ready", Extent: api.SourceViewExtent{Complete: true}, ExpiresAt: fixtureTimeValue(),
-		WorkspaceID: fixtureWorkspaceID, Roots: []api.ProjectRoot{},
+		WorkspaceID: fixtureWorkspaceID, Roots: []api.ProjectRoot{}, OutsideLocations: []api.SourceChatLocation{},
 	}
 }
 

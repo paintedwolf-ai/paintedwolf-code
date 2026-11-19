@@ -1,3 +1,4 @@
+import { outsideFileId } from "./outside-namespace.ts";
 import { documentResidency, documentResourceKey, documentOpeningReservation, documentAdmissionBytes, type DocumentReservation, type ResidencyPriority } from "../documents/document-residency.ts";
 import { clientIdentity, prepareClientIdentity } from "../../platform/connection/client-identity.ts";
 import type { LycaonClient } from "../../api/client.ts";
@@ -18,7 +19,7 @@ export function explicitSourceEncoding(
 export async function readFileBufferSource(
   client: LycaonClient,
   projectId: string,
-  buffer: Pick<FileBuffer, "encoding" | "path" | "jobId" | "rootId">,
+  buffer: Pick<FileBuffer, "encoding" | "path" | "jobId" | "rootId"> & Partial<Pick<FileBuffer, "fileId">>,
   sessionId?: string,
 ) {
   const decodeAs = explicitSourceEncoding(buffer.encoding);
@@ -27,6 +28,7 @@ export async function readFileBufferSource(
     client.getProjectSource(projectId, path, {
       workerId: jobId,
       rootId: rootId || undefined,
+      fileId: outsideFileId(projectId, buffer),
       sessionId,
       decodeAs: encoding,
       includeDeleted: Boolean(rootId),
@@ -101,10 +103,12 @@ async function readOpenedFileBuffer(client: LycaonClient, projectId: string,
   if (buffer.jobId || !buffer.rootId) return { source: await readFileBufferSource(client, projectId, buffer, sessionId) };
   await prepareClientIdentity();
   const retained = await retainedOpening(projectId, { rootId: buffer.rootId, path: buffer.path, documentId: buffer.documentId }, reservation);
+  const fileId = outsideFileId(projectId, buffer);
   const read = async (decode_as?: "utf-16le" | "utf-16be"): Promise<OpenedFileBufferSource> => {
     try {
       const opened = await openSourceDocument(client, projectId, {
-        path: buffer.path, root_id: buffer.rootId, client_id: clientIdentity(), ...(decode_as ? { decode_as } : {}), ...(retained?.replica ? { replica: retained.replica } : {}),
+        ...(fileId ? { file_id: fileId } : { path: buffer.path, root_id: buffer.rootId }),
+        client_id: clientIdentity(), ...(decode_as ? { decode_as } : {}), ...(retained?.replica ? { replica: retained.replica } : {}),
       }, sessionId);
       if (!holdsDraft(opened.document)) {
         void releaseUnclaimedEditorDocument(projectId, opened.document).catch(() => undefined);

@@ -5,6 +5,7 @@ import type {
   ChatContentReference,
   ToolCall,
   FileEditPreview,
+  NavigationTarget,
   VisualArtifact,
   WorkerSummaryMeta,
   ExternalAccess,
@@ -87,6 +88,7 @@ export interface ToolPartView {
   childSessionId?: string;
   /** Text changes the call made, one per file. */
   fileEdits?: readonly FileEditPreview[];
+  sourceLocations?: readonly NavigationTarget[];
   /** Further text changes the result does not hold. */
   fileEditsOmitted?: number;
   visual?: VisualArtifact | null;
@@ -360,6 +362,7 @@ export function toolPartFromCall(
     jobId,
     childSessionId: resultMsg?.tool_result?.dispatch?.child_session_id?.trim(),
     fileEdits: resultMsg?.tool_result?.file_edit_previews ?? [],
+    sourceLocations: resultMsg?.source_context?.locations,
     fileEditsOmitted: resultMsg?.tool_result?.file_edits_omitted ?? 0,
     visual: resultMsg?.tool_result?.visual ?? null,
     externalAccess: resultMsg?.tool_result?.external_access ?? null,

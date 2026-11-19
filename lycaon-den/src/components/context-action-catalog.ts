@@ -52,6 +52,7 @@ export const CONTEXT_ACTIONS = {
   moveDown: { label: "Move down" },
   moveTo: { label: "Move to…" },
   moveToTrash: { label: "Move to trash", danger: true },
+  hideFromChat: { label: "Hide from this chat" },
   moveUp: { label: "Move up" },
   newFile: { label: "New file" },
   newFolder: { label: "New folder" },

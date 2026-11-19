@@ -25,6 +25,11 @@ import type {
   SourceDefinitionRequest,
   SourceDefinitionResponse,
   SourceDirListing,
+  OpenOutsideFileRequest,
+  OpenChatLocationFileRequest,
+  OpenedOutsideFile,
+  SourceChatLocation,
+  UpdateSourceChatLocationRequest,
 } from "../types.ts";
 
 /** Defaults to the primary root's top folder. */
@@ -38,6 +43,7 @@ export interface SourceClient {
     projectId: string,
     path: string,
     opts?: {
+      fileId?: string;
       workerId?: string;
       rootId?: string;
       sessionId?: string;
@@ -55,6 +61,7 @@ export interface SourceClient {
     projectId: string,
     path: string,
     opts: {
+      fileId?: string;
       rootId?: string;
       workerId?: string;
       sessionId?: string;
@@ -72,6 +79,11 @@ export interface SourceClient {
     sessionId?: string,
   ): Promise<MakeProjectSourceEditableResponse>;
   getSourceWorkspace(projectId: string, sessionId?: string): Promise<SourceWorkspace>;
+  /** Adds a file the person picked outside the project to a chat's Files section. */
+  openChatLocationFile(projectId: string, locationId: string, req: OpenChatLocationFileRequest): Promise<OpenedOutsideFile>;
+  openOutsideFile(projectId: string, req: OpenOutsideFileRequest): Promise<OpenedOutsideFile>;
+  /** Hides or shows a chat location; it revokes and deletes nothing. */
+  updateSourceChatLocation(projectId: string, locationId: string, req: UpdateSourceChatLocationRequest): Promise<SourceChatLocation>;
   createProjectSourceEntry(
     projectId: string,
     req: CreateProjectSourceEntryRequest,
@@ -144,9 +156,10 @@ export function createSourceClient(j: JsonRequester, connection: BackendConnecti
     getProjectSource: (projectId, path, opts) =>
       j(
         `/v1/projects/${projectId}/source${formatQuery({
-          path,
-          worker_id: opts?.workerId,
-          root_id: opts?.rootId,
+          file_id: opts?.fileId,
+          path: opts?.fileId ? undefined : path,
+          worker_id: opts?.fileId ? undefined : opts?.workerId,
+          root_id: opts?.fileId ? undefined : opts?.rootId,
           session_id: opts?.sessionId,
           decode_as: opts?.decodeAs,
           include_deleted: opts?.includeDeleted,
@@ -164,9 +177,10 @@ export function createSourceClient(j: JsonRequester, connection: BackendConnecti
       lycaonBlob(
         connection,
         `/v1/projects/${projectId}/source/raw${formatQuery({
-          path,
-          root_id: opts?.rootId,
-          worker_id: opts?.workerId,
+          file_id: opts?.fileId,
+          path: opts?.fileId ? undefined : path,
+          root_id: opts?.fileId ? undefined : opts?.rootId,
+          worker_id: opts?.fileId ? undefined : opts?.workerId,
           session_id: opts?.sessionId,
         })}`,
         { signal: opts.signal },
@@ -180,6 +194,12 @@ export function createSourceClient(j: JsonRequester, connection: BackendConnecti
       j(`/v1/projects/${projectId}/source/editable${formatQuery({ session_id: sessionId })}`, jsonRequest("POST", req)),
     getSourceWorkspace: (projectId, sessionId) =>
       j(`/v1/projects/${projectId}/source/workspace${formatQuery({ session_id: sessionId })}`),
+    openChatLocationFile: (projectId, locationId, req) =>
+      j(`/v1/projects/${projectId}/source/outside-locations/${encodeURIComponent(locationId)}/files`, jsonRequest("POST", req)),
+    openOutsideFile: (projectId, req) =>
+      j(`/v1/projects/${projectId}/source/outside-files`, { method: "POST", body: JSON.stringify(req) }),
+    updateSourceChatLocation: (projectId, locationId, req) =>
+      j(`/v1/projects/${projectId}/source/outside-locations/${locationId}`, { method: "PATCH", body: JSON.stringify(req) }),
     createProjectSourceEntry: (projectId, req, sessionId) =>
       sourceOperation(connection, projectId, req.operation_id,`/v1/projects/${projectId}/source${formatQuery({ session_id: sessionId })}`, {
         method: "POST",

@@ -242,6 +242,9 @@ func OpenWrite(loc Location, appendMode bool, mode os.FileMode) (*os.File, error
 }
 
 func stageReplace(req ReplaceRequest, inject func(stage) error) (*Replacement, Result, error) {
+	if req.ExpectedParentIdentity != "" {
+		return nil, Result{}, ErrUnsupported
+	}
 	if req.Source == nil {
 		return nil, Result{}, fmt.Errorf("atomic filesystem effect request is incomplete")
 	}

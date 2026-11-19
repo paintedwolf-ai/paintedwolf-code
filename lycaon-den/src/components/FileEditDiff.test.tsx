@@ -6,6 +6,11 @@ import { FileEditDiff } from "./FileEditDiff.tsx";
 import { assertNamedControl } from "../test/controls.ts";
 import { foldFileEdits } from "../chat/file-edit/file-edit-fold.ts";
 import type { FileEditStep } from "../chat/file-edit/file-edit-fold.ts";
+import {
+  registerOpenSourceProjectLookup,
+  registerOpenSourceSink,
+  resetOpenSourceForTests,
+} from "../platform/navigation/open-source.ts";
 import { resetFindControllerForTests } from "../find/find-controller.ts";
 import { transcriptDisclosureKey } from "../chat/transcript/presentation/transcript-disclosure-key.ts";
 import {
@@ -33,6 +38,7 @@ vi.mock("../platform/connection/app-connection.ts", async original => ({
 afterEach(() => {
   cleanup();
   resetFindControllerForTests();
+  resetOpenSourceForTests();
   resetFindRevealHostsForTests();
   document.body.replaceChildren();
 });
@@ -73,6 +79,34 @@ describe("FileEditDiff", () => {
     assertNamedControl(screen.getByTestId("file-edit-diff-toggle"), "button").click();
     expect(controller.following()).toBe(following);
   });
+  it("opens the recorded outside file while keeping its diff disclosure independent", () => {
+    const roots = [{ id: "attached", path: "/repo" }];
+    registerOpenSourceProjectLookup(() => ({ roots, outsideRootId: "outside" }));
+    const open = vi.fn();
+    registerOpenSourceSink(open);
+    const snapshot = fileEditPreviewFixture({ path: "/tmp/notes.txt", before: V1, after: V2 });
+    const recorded = {
+      key: "t1", tool: "write", snapshot,
+      navigationTarget: {
+        project_id: "p1", root_id: "outside", path: "tmp/notes.txt",
+        file_id: "file-1", entry_kind: "file" as const,
+      },
+    };
+    const fold = foldFileEdits([recorded, { key: "t2", tool: "write", snapshot }])[0]!;
+    render(() => <FileEditDiff projectId="p1" sessionId="s1" rootRefs={roots} fold={fold} />);
+
+    const toggle = assertNamedControl(screen.getByTestId("file-edit-diff-toggle"), "button");
+    expect(screen.queryByTestId("source-path-link")).toBeNull();
+    toggle.click();
+    assertNamedControl(screen.getByTestId("file-edit-diff-step-1"), "button").click();
+    assertNamedControl(screen.getByTestId("source-path-link"), "button").click();
+    expect(open).toHaveBeenCalledWith({
+      projectId: "p1", rootId: "outside", path: "tmp/notes.txt", absolutePath: "/tmp/notes.txt",
+      fileId: "file-1", intent: "permanent",
+    });
+    expect(toggle.getAttribute("aria-expanded")).toBe("true");
+  });
+
   it("shows the range's stat and the write count for a path written more than once", async () => {
     render(() => <FileEditDiff projectId="p1" sessionId="s1" fold={multiWriteFold()} />);
     // Three writes; the range is one changed line.

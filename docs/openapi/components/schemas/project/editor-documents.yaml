@@ -136,8 +136,13 @@ components:
       x-go-generate: true
       type: object
       additionalProperties: false
-      required: [path, root_id, client_id]
+      required: [client_id]
+      description: Use file_id for an outside file, or root_id and path for an attached file.
       properties:
+        file_id:
+          type: string
+          format: uuid
+          description: Recorded project file identity for an outside tab.
         path:
           type: string
           minLength: 1

@@ -75,11 +75,26 @@ func OpenWrite(loc Location, appendMode bool, mode os.FileMode) (*os.File, error
 	return os.NewFile(uintptr(fd), filepath.Join(parent.rootPath, parent.rel, parent.name)), nil
 }
 
+func openReplacementParent(req ReplaceRequest) (*openedParent, error) {
+	parent, err := openParent(req.Location, req.ExpectedParentIdentity == "", req.dirMode())
+	if err != nil {
+		return nil, err
+	}
+	if req.ExpectedParentIdentity != "" {
+		actual, err := parentDirectoryIdentity(parent)
+		if err != nil || actual != req.ExpectedParentIdentity {
+			parent.close()
+			return nil, ErrPredicateChanged
+		}
+	}
+	return parent, nil
+}
+
 func stageReplace(req ReplaceRequest, inject func(stage) error) (*Replacement, Result, error) {
 	if req.Source == nil {
 		return nil, Result{}, fmt.Errorf("atomic filesystem effect request is incomplete")
 	}
-	parent, err := openParent(req.Location, true, req.dirMode())
+	parent, err := openReplacementParent(req)
 	if err != nil {
 		return nil, Result{}, err
 	}
@@ -139,8 +154,11 @@ func stageReplace(req ReplaceRequest, inject func(stage) error) (*Replacement, R
 	staged.publish = func() (Result, error) {
 		unlock := lockTarget(req.Location)
 		defer unlock()
-		if req.ReviewStaged != nil {
+		if req.ReviewStaged != nil || req.ExpectedParentIdentity != "" {
 			if err := verifyReviewedParent(req.Location, parent); err != nil {
+				if req.ExpectedParentIdentity != "" {
+					err = errors.Join(ErrPredicateChanged, err)
+				}
 				return result, err
 			}
 		}

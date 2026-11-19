@@ -31,6 +31,8 @@ export type FilesContextTarget =
       isDir: boolean;
       isRoot: boolean;
       deleted?: boolean;
+      /** The chat location holding the row; its addresses are outside-namespace paths. */
+      outsideLocation?: string;
     }
   | { surface: "tree-background" }
   | {
@@ -77,6 +79,8 @@ export type FilesContextMenuActions = {
   addToChat: (rootId: string, path: string, isDir: boolean) => void;
   explainFile?: (rootId: string, path: string) => void;
   openInTarget?: (target: FilesContextTarget) => LocalPathTarget | null;
+  manageLocationAccess?: () => void;
+  hideChatLocation?: (locationId: string) => void;
   collapseAllFolders: (scope?: { rootId: string; dir: string }) => void;
   expandAllFolders: (scope?: { rootId: string; dir: string }) => void;
   closeTab: (bufferKey: string) => void;
@@ -511,6 +515,7 @@ export function filesContextMenuItems(
         }),
       ];
     case "tree-row": {
+      if (target.outsideLocation) return outsideRowMenuItems(target, actions, openIn);
       const dir = target.isDir ? target.path : parentDir(target.path);
       const items: ContextMenuItem[] = [];
       const revertChangedFile = actions.revertChangedFile;
@@ -612,6 +617,41 @@ export function filesContextMenuItems(
       return items;
     }
   }
+}
+
+function outsideRowMenuItems(
+  target: Extract<FilesContextTarget, { surface: "tree-row" }>,
+  actions: FilesContextMenuActions,
+  openIn: ReturnType<NonNullable<FilesContextMenuActions["openInTarget"]>> | undefined,
+): ContextMenuItem[] {
+  const items: ContextMenuItem[] = [];
+  const openFileInNewWindow = actions.openFileInNewWindow;
+  if (!target.isDir && openFileInNewWindow) {
+    items.push(contextAction("openInNewWindow", {
+      testId: "files-ctx-open-window",
+      onSelect: () => openFileInNewWindow(target.rootId, target.path, target.name),
+    }));
+  }
+  items.push(...pathMenuItems({
+    open: !target.isDir && actions.openFile ? { testId: "files-ctx-open", onSelect: () => actions.openFile?.(target.rootId, target.path) } : undefined,
+    openIn,
+    copyAbsolute: () => actions.copyPath(target.rootId, target.path),
+    copyRelative: null,
+    absoluteTestId: "files-ctx-copy-path",
+    relativeTestId: "files-ctx-copy-relative-path",
+  }));
+  if (target.isRoot && actions.manageLocationAccess) {
+    items.push({ label: "Manage agent access", testId: "files-ctx-manage-location-access", onSelect: actions.manageLocationAccess });
+  }
+  const hideChatLocation = actions.hideChatLocation;
+  if (target.isRoot && target.outsideLocation && hideChatLocation) {
+    const location = target.outsideLocation;
+    items.push(contextAction("hideFromChat", {
+      testId: "files-ctx-hide-location",
+      onSelect: () => hideChatLocation(location),
+    }));
+  }
+  return items;
 }
 
 function parentDir(path: string): string {

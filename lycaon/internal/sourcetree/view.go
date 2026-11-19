@@ -18,15 +18,16 @@ type Root struct {
 }
 
 type View struct {
-	live      liveView
-	mu        sync.Mutex
-	scope     pagedview.Scope
-	roots     map[string]sourcecatalog.Root
-	rootOrder []Root
-	revision  string
-	catalog   *sourcecatalog.Catalog
-	rules     Rules
-	review    *ReviewSet
+	live           liveView
+	mu             sync.Mutex
+	scope          pagedview.Scope
+	roots          map[string]sourcecatalog.Root
+	rootOrder      []Root
+	demandReleases map[string]func()
+	revision       string
+	catalog        *sourcecatalog.Catalog
+	rules          Rules
+	review         *ReviewSet
 
 	ctx           context.Context
 	cancel        context.CancelFunc
@@ -42,16 +43,25 @@ type View struct {
 // New follows the host lifetime.
 func New(ctx context.Context, scope pagedview.Scope, roots []Root, catalog *sourcecatalog.Catalog, notify func()) *View {
 	lifetime, cancel := context.WithCancel(ctx)
-	view := &View{scope: scope, roots: make(map[string]sourcecatalog.Root), catalog: catalog, ctx: lifetime, cancel: cancel, notify: notify, rootOrder: append([]Root(nil), roots...), revision: uuid.NewString(), loading: make(map[Address]chan struct{})}
+	view := &View{scope: scope, roots: make(map[string]sourcecatalog.Root), catalog: catalog, ctx: lifetime, cancel: cancel, notify: notify, rootOrder: append([]Root(nil), roots...), revision: uuid.NewString(), loading: make(map[Address]chan struct{}), demandReleases: make(map[string]func())}
 	for _, root := range roots {
 		view.roots[root.ID] = root.Root
+		if root.OnDemand {
+			continue
+		}
 		// An open view keeps its roots resident until its lifetime ends. A root
 		// that cannot be held fails the catalog reads the view makes instead.
 		if release, err := catalog.Trees.HoldRoot(lifetime, scope.Project, root.Root); err == nil {
 			context.AfterFunc(lifetime, release)
 		}
 	}
+	view.rules.roots = view.roots
 	view.startLive()
+	for _, root := range roots {
+		if root.OnDemand {
+			view.holdDemandRoot(lifetime, root)
+		}
+	}
 	return view
 }
 
@@ -66,7 +76,9 @@ type RulesBasis struct {
 func (v *View) Disclose(ctx context.Context, basis *RulesBasis, changes ...IntentEntry) error {
 	return v.changeDisclosures(ctx, func(rules *Rules) []IntentEntry {
 		if basis != nil && basis.Replace {
+			roots := rules.roots
 			*rules = basis.Rules.Clone()
+			rules.limitToRoots(roots)
 		}
 		return changes
 	})
@@ -78,7 +90,9 @@ func (v *View) Toggle(ctx context.Context, basis *RulesBasis, address Address, c
 	}
 	return v.changeDisclosures(ctx, func(rules *Rules) []IntentEntry {
 		if basis != nil && basis.Replace {
+			roots := rules.roots
 			*rules = basis.Rules.Clone()
+			rules.limitToRoots(roots)
 		}
 		open := rules.At(address).Open
 		if open && collapseDescendants {
@@ -114,6 +128,7 @@ func (v *View) changeDisclosures(ctx context.Context, change func(*Rules) []Inte
 		}
 		basis := v.revision
 		copy := v.rules.Clone()
+		roots := v.roots
 		v.mu.Unlock()
 		rules := &copy
 		changes := change(rules)
@@ -121,8 +136,12 @@ func (v *View) changeDisclosures(ctx context.Context, change func(*Rules) []Inte
 			if !validAddress(change.Address) {
 				return ErrAddress
 			}
-			if _, ok := v.roots[change.Address.Root]; !ok {
+			root, ok := roots[change.Address.Root]
+			if !ok {
 				return ErrUnknownRoot
+			}
+			if root.OnDemand && change.Disclosure.Recursive && change.Disclosure.Open {
+				return ErrAddress
 			}
 		}
 		for _, change := range changes {
@@ -131,7 +150,7 @@ func (v *View) changeDisclosures(ctx context.Context, change func(*Rules) []Inte
 		if rules.count() > maxIntentRules || rules.bytes() > maxIntentBytes {
 			return pagedview.ErrBudget
 		}
-		ready, err := v.deriveBoundaries(ctx, rules)
+		ready, err := v.deriveBoundaries(ctx, rules, roots)
 		if err != nil {
 			return err
 		}
@@ -168,7 +187,7 @@ func (v *View) changeDisclosures(ctx context.Context, change func(*Rules) []Inte
 
 // deriveBoundaries closes the collapse boundaries beneath recursively open paths.
 // It never waits; false means the opened directories are not yet listed.
-func (v *View) deriveBoundaries(ctx context.Context, rules *Rules) (bool, error) {
+func (v *View) deriveBoundaries(ctx context.Context, rules *Rules, roots map[string]sourcecatalog.Root) (bool, error) {
 	anchors := rules.recursiveAnchors()
 	if len(anchors) == 0 {
 		rules.reconcileDerived(nil)
@@ -176,7 +195,7 @@ func (v *View) deriveBoundaries(ctx context.Context, rules *Rules) (bool, error)
 	}
 	wanted := make(map[Address]bool)
 	for _, anchor := range anchors {
-		root, ok := v.roots[anchor.Root]
+		root, ok := roots[anchor.Root]
 		if !ok {
 			continue
 		}
@@ -209,9 +228,10 @@ func (v *View) refreshBoundaries(ctx context.Context) {
 	}
 	basis := v.revision
 	rules := v.rules.Clone()
+	roots := v.roots
 	v.mu.Unlock()
 	before := rules.Derived()
-	ready, err := v.deriveBoundaries(ctx, &rules)
+	ready, err := v.deriveBoundaries(ctx, &rules, roots)
 	if err != nil || !ready || slices.Equal(before, rules.Derived()) {
 		return
 	}
@@ -270,6 +290,9 @@ func (v *View) Close() {
 	v.mu.Lock()
 	v.closed = true
 	v.cancel()
+	for _, release := range v.demandReleases {
+		release()
+	}
 	v.mu.Unlock()
 	for _, unsubscribe := range v.live.unsubscribe {
 		unsubscribe()

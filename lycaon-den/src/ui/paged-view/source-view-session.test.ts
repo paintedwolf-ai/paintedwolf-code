@@ -7,7 +7,7 @@ import { endSourceViewsForChat, receiveSourceViewEvent, resyncSourceViews, Sourc
 function state(revision = "one", expiresAt = "2026-09-15T23:00:00Z"): SourceTreeView {
   return { kind: "tree", id: "view", intent_revision: "intent", projection_revision: revision,
     state: "ready", extent: { rows: 1, complete: true }, expires_at: expiresAt,
-    workspace_id: "workspace", roots: [], loading_directories: 0, intent: {} };
+    workspace_id: "workspace", roots: [], outside_locations: [], loading_directories: 0, intent: {} };
 }
 
 const snapshots = new Map<string, SourceTreeView>();

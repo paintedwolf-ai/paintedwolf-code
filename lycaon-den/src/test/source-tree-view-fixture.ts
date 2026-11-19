@@ -23,6 +23,7 @@ export function treeViewFixture(initial = [treeRow(".", "directory", true), tree
   let intentRevision = 1;
   let workspace = "ws1";
   let intent: SourceTreeView["intent"] = {};
+  let outside: SourceTreeView["outside_locations"] = [];
   const requests: { method: string; path: string; body?: unknown; signal?: AbortSignal | null }[] = [];
   const commands: SourceTreeCommand[] = [];
   let update: ((command: SourceTreeCommand) => void | Promise<void>) | undefined;
@@ -33,7 +34,7 @@ export function treeViewFixture(initial = [treeRow(".", "directory", true), tree
   type Generation = { state: SourceTreeView; revision: string; rows: SourceTreeRow[]; total: number; rowAt: (index: number) => SourceTreeRow; rank?: (path: string) => number };
   // Captured generations remain immutable.
   const retained = new Map<string, Generation>();
-  const state = (): SourceTreeView => ({ kind: "tree", id, workspace_id: workspace, roots: TREE_ROOTS,
+  const state = (): SourceTreeView => ({ kind: "tree", id, workspace_id: workspace, roots: TREE_ROOTS, outside_locations: outside,
     intent_revision: `intent-${intentRevision}`, projection_revision: `projection-${revision}`,
     state: failure ? "failed" : complete ? "ready" : "preparing", extent: { rows: total, complete },
     ...(failure ? { failure: { code: "preparation_failed" as const, message: failure } } : {}),
@@ -66,6 +67,7 @@ export function treeViewFixture(initial = [treeRow(".", "directory", true), tree
     }
     if (method === "POST" && url.pathname.endsWith("/views")) {
       workspace = body?.workspace_id as string ?? "ws1";
+      intent = body?.intent as SourceTreeView["intent"] ?? {};
       if (expired.has(id)) id = crypto.randomUUID();
     }
     if (url.pathname.endsWith("/presentations") && method === "POST") {
@@ -117,6 +119,7 @@ export function treeViewFixture(initial = [treeRow(".", "directory", true), tree
       if (command.kind === "disclose") intent = { ...intent, disclosures: [...(intent.disclosures ?? []), ...command.disclosures] };
       if (command.kind === "filter") intent = { ...intent, filter: command.query };
       if (command.kind === "review") intent = { ...intent, review: command.scope };
+      if (command.kind === "select_chat") intent = { ...intent, chat_id: command.chat_id };
       await update?.(command);
 
       intentRevision++; revision++;
@@ -141,6 +144,7 @@ export function treeViewFixture(initial = [treeRow(".", "directory", true), tree
     /** Ends the current handle; the next create answers with a new view. */
     expire: () => { expired.add(id); revision++; },
     update: (handler: typeof update) => { update = handler; },
+    outside: (locations: SourceTreeView["outside_locations"]) => { outside = locations; },
     read: (handler: typeof read) => { read = handler; },
     rows: (next: SourceTreeRow[]) => { knownRows.clear(); rows = next; rank = undefined; total = rows.length; rowAt = index => next[index]!; },
     large: (count: number, select: typeof rowAt, locate?: (path: string) => number) => { knownRows.clear(); total = count; rowAt = select; rank = locate; },

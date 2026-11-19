@@ -11,6 +11,7 @@ import { scrollportMotionForHost } from "../../platform/scrolling/scrollport-mot
 import { FILES_TREE_ROW_HEIGHT_PX } from "./project-files-tree-flat.ts";
 import { getFilesTreeScrollTop } from "./files-tree-view-state.ts";
 import { workspaceMismatchId } from "../source/source-workspace-identity.ts";
+import { chatLocationsEpoch, recordChatLocations, refreshChatLocations } from "../source/chat-locations.ts";
 import { type FilesTreeProps, type ActiveFile } from "./files-tree-context.ts";
 
 function activeFileRevealKey(file: ActiveFile): string | null {
@@ -18,7 +19,7 @@ function activeFileRevealKey(file: ActiveFile): string | null {
 }
 
 
-type SourceProps = Pick<FilesTreeProps, "projectId" | "workspaceId" | "client" | "sessionId" |
+type SourceProps = Pick<FilesTreeProps, "projectId" | "workspaceId" | "roots" | "client" | "sessionId" | "chatId" | "approvalsRevision" |
   "filterQuery" | "reviewScope" | "activeFile" | "navigationRevision" | "autoReveal" |
   "onWorkspaceMismatch" | "onInitialLoadSettled" | "onSelectEntry">;
 
@@ -96,14 +97,24 @@ export function createFilesTreeSource(props: SourceProps, deps: {
 
   function observeSession() {
     createEffect(() => {
+      const current = state();
+      const chat = props.chatId;
+      const project = props.projectId;
+      untrack(() => recordChatLocations(project, current?.intent.chat_id === chat ? current?.outside_locations ?? [] : []));
+    });
+    createEffect(() => {
       const project = props.projectId;
       const workspace = props.workspaceId;
       const client = props.client;
       const session = props.sessionId;
       if (!project || !workspace || !client) { setSourceView(undefined); return; }
-      const held = untrack(() => retainFilesTreeSession(client, project, workspace, session, {
-        disclosures: restoredFilesTreeDisclosures(workspace), filter: props.filterQuery, review: props.reviewScope,
-      }));
+      const held = untrack(() => {
+        const roots = new Set(props.roots.map(root => root.id));
+        const disclosures = restoredFilesTreeDisclosures(workspace)?.filter(rule => roots.has(rule.address.root_id));
+        return retainFilesTreeSession(client, project, workspace, session, {
+          chat_id: props.chatId, disclosures, filter: props.filterQuery, review: props.reviewScope,
+        });
+      });
       if (seededWorkspaceKey !== workspace) {
         seededWorkspaceKey = workspace; deps.setDirStates({});
         deps.restoration.pendingScroll = getFilesTreeScrollTop(workspace);
@@ -133,6 +144,49 @@ export function createFilesTreeSource(props: SourceProps, deps: {
       }).catch(reportTreeError).finally(() => {
         if (!abort.signal.aborted) props.onInitialLoadSettled?.(workspace);
       }).catch(() => undefined);
+    });
+    let approvalsRevision: number | undefined;
+    createEffect(() => {
+      const revision = props.approvalsRevision;
+      const project = props.projectId;
+      const changed = approvalsRevision !== undefined && revision !== approvalsRevision;
+      approvalsRevision = revision;
+      if (changed) untrack(() => refreshChatLocations(project));
+    });
+    createEffect(() => {
+      const current = state();
+      const project = props.projectId;
+      const now = Date.now();
+      const expires = Math.min(...(current?.outside_locations ?? []).flatMap(location => {
+        const value = location.access?.expires_at ? Date.parse(location.access.expires_at) : NaN;
+        return Number.isFinite(value) && value >= now ? [value] : [];
+      }));
+      if (!Number.isFinite(expires)) return;
+      const timeout = setTimeout(() => refreshChatLocations(project), Math.min(2_147_483_647, Math.max(25, expires - now + 25)));
+      onCleanup(() => clearTimeout(timeout));
+    });
+    let previous: { view: FilesTreeSession; chat?: string; epoch: number } | undefined;
+    createEffect(() => {
+      const view = sourceView();
+      const live = deps.surfaceLive();
+      const chat = props.chatId;
+      const epoch = chatLocationsEpoch(props.projectId);
+      if (!view || !live) return;
+      const earlier = previous;
+      const reopening = earlier?.view !== view && !!view.state();
+      previous = { view, chat, epoch };
+      const abort = new AbortController();
+      onCleanup(() => abort.abort());
+      untrack(() => {
+        void view.open().then(current => {
+          if (abort.signal.aborted) return;
+          const refresh = reopening || earlier?.view === view && earlier.epoch !== epoch;
+          if (current.intent.chat_id === chat && (!refresh || !chat)) return;
+          return view.command({ kind: "select_chat", chat_id: chat }, undefined, abort.signal);
+        }).catch(error => {
+          if (!abort.signal.aborted) reportTreeError(error);
+        });
+      });
     });
     // Workspace refreshes can finish after the first frame arrives.
     createEffect(() => {
@@ -200,9 +254,7 @@ export function createFilesTreeSource(props: SourceProps, deps: {
           follow).then(completed => {
           if (completed && !abort.signal.aborted) preparedTreePath = { view, key };
         }).catch(error => {
-          // Following the reader's file is best effort when the tree does not list it.
           if (abort.signal.aborted || error instanceof FilesTreePathAbsentError) return;
-          console.error("Files tree reveal failed", { projectId: props.projectId, target, activity: view.activity() }, error);
           reportTreeError(error);
         });
       });

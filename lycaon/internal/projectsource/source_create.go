@@ -87,7 +87,7 @@ func ApplySourceWriteCreate(p ProjectSource, req SourceWriteRequest) (*SourceWri
 		return nil, err
 	}
 	abs, rel, ok := evidence.ResolveCitationAbs(root.Path, req.Path)
-	if !ok {
+	if !ok || root.Outside && abs != filepath.Join(root.Path, filepath.FromSlash(req.Path)) {
 		return nil, ErrSourcePathDenied
 	}
 	if isReservedSourceRel(rel) {
@@ -100,10 +100,11 @@ func ApplySourceWriteCreate(p ProjectSource, req SourceWriteRequest) (*SourceWri
 	}
 	location := fseffect.Location{Root: root.Path, Rel: filepath.FromSlash(rel)}
 	if _, err := fseffect.Replace(fseffect.ReplaceRequest{
-		Location: location,
-		Source:   bytes.NewReader(next),
-		Mode:     sourceCreateFileMode,
-		DirMode:  sourceCreateDirMode,
+		Location:               location,
+		ExpectedParentIdentity: req.OutsideParentIdentity,
+		Source:                 bytes.NewReader(next),
+		Mode:                   sourceCreateFileMode,
+		DirMode:                sourceCreateDirMode,
 		BeforeCommit: func(target fseffect.Target, _ fseffect.Result) error {
 			// The target must still be free under the parent lock.
 			if _, err := target.Lstat(); err == nil {
@@ -114,7 +115,7 @@ func ApplySourceWriteCreate(p ProjectSource, req SourceWriteRequest) (*SourceWri
 			return nil
 		},
 	}); err != nil {
-		if errors.Is(err, ErrSourceWriteConflict) {
+		if errors.Is(err, ErrSourceWriteConflict) || errors.Is(err, fseffect.ErrPredicateChanged) {
 			return nil, ErrSourceWriteConflict
 		}
 		return nil, fmt.Errorf("create source: %w", err)

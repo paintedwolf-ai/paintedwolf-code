@@ -57,7 +57,7 @@ func ResolveProjectPath(p ProjectSource, rootID, pathQuery string) (ResolvedProj
 	matches := make([]ResolvedProjectPath, 0, 1)
 	denied := false
 	for _, root := range roots {
-		resolved, resolveErr := resolveProjectPathInRoot(root, rel)
+		resolved, resolveErr := resolveProjectPathInRoot(root, rel, sourceReadBinding(p))
 		switch {
 		case resolveErr == nil:
 			matches = append(matches, resolved)
@@ -100,9 +100,9 @@ func normalizeNavigableProjectPath(raw string) (string, error) {
 	return strings.Join(segments, "/"), nil
 }
 
-func resolveProjectPathInRoot(root projectroot.RootRef, rel string) (ResolvedProjectPath, error) {
+func resolveProjectPathInRoot(root projectroot.RootRef, rel string, binding projectroot.OutsideBinding) (ResolvedProjectPath, error) {
 	if root.Outside {
-		target, file, err := openOutsideSourceRead(rel, root.ID)
+		target, file, err := openOutsideSourceRead(rel, root.ID, binding)
 		if err != nil {
 			return ResolvedProjectPath{}, err
 		}

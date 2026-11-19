@@ -2708,9 +2708,11 @@ type CreateSessionRequest struct {
 
 // CurrentComparisonSource A read-only, immutable snapshot of the current on-disk file. Frames and search remain bounded for files above the editing limit.
 type CurrentComparisonSource struct {
-	Kind     string `json:"kind"`
-	RootID   string `json:"root_id"`
-	Path     string `json:"path"`
+	Kind string `json:"kind"`
+	// The recorded outside file ID. Use without root_id or path.
+	FileID   string `json:"file_id,omitempty"`
+	RootID   string `json:"root_id,omitempty"`
+	Path     string `json:"path,omitempty"`
 	DecodeAs string `json:"decode_as,omitempty"`
 }
 
@@ -4827,17 +4829,43 @@ type ObserveEditorDocumentRequest struct {
 	ClientID string `json:"client_id"`
 }
 
-// OpenEditorDocumentRequest
-type OpenEditorDocumentRequest struct {
-	// Root-relative, slash-separated file path.
+// OpenChatLocationFileRequest
+type OpenChatLocationFileRequest struct {
+	// File row path under the location root.
 	Path string `json:"path"`
+}
+
+// OpenEditorDocumentRequest Use file_id for an outside file, or root_id and path for an attached file.
+type OpenEditorDocumentRequest struct {
+	// Recorded project file identity for an outside tab.
+	FileID string `json:"file_id,omitempty"`
+	// Root-relative, slash-separated file path.
+	Path string `json:"path,omitempty"`
 	// Attached root that contains the file.
-	RootID string `json:"root_id"`
+	RootID string `json:"root_id,omitempty"`
 	// Stable id for the client view opening the document.
 	ClientID string `json:"client_id"`
 	// Explicit decoding for BOM-less UTF-16 text.
 	DecodeAs string           `json:"decode_as,omitempty"`
 	Replica  *RetainedReplica `json:"replica,omitempty"`
+}
+
+// OpenOutsideFileRequest
+type OpenOutsideFileRequest struct {
+	// The chat whose Files section receives the file.
+	SessionID string `json:"session_id"`
+	// Absolute host path the person chose in the native file picker.
+	Path string `json:"path"`
+}
+
+// OpenedOutsideFile
+type OpenedOutsideFile struct {
+	// The project's outside namespace.
+	RootID string `json:"root_id"`
+	// The file's outside-namespace path.
+	Path     string             `json:"path"`
+	FileID   string             `json:"file_id"`
+	Location SourceChatLocation `json:"location"`
 }
 
 // OverlayMergePlan
@@ -5914,8 +5942,10 @@ type RetainedComparisonSource struct {
 	Kind       string `json:"kind"`
 	ViewID     string `json:"view_id"`
 	Comparison string `json:"comparison"`
-	RootID     string `json:"root_id,omitempty"`
-	Path       string `json:"path,omitempty"`
+	// The recorded outside file ID. Use without root_id or path.
+	FileID string `json:"file_id,omitempty"`
+	RootID string `json:"root_id,omitempty"`
+	Path   string `json:"path,omitempty"`
 }
 
 // RetainedReplica State the client already holds, from a live replica or from the synchronized checkpoint it preserved. When it names the current document and epoch, crdt_update carries only the state missing from state_vector and base_content is omitted for a matching base_sha256 (a client without the saved text sends an empty hash, which never matches); otherwise the response is a full snapshot.
@@ -7127,6 +7157,28 @@ type SourceChangesEvent struct {
 	GitChanged bool `json:"git_changed,omitempty"`
 }
 
+// SourceChatLocation A place outside the project where a root chat has worked. A Files tree view for the chat lists each visible location as a root whose id is the location id; its rows address files by the location and their path under the anchor.
+type SourceChatLocation struct {
+	ID string `json:"id"`
+	// The root chat the location belongs to.
+	SessionID string `json:"session_id"`
+	// The project's outside namespace, which addresses the location's files in source history.
+	RootID string `json:"root_id"`
+	// The anchor's outside-namespace path, its host path without the leading slash.
+	Anchor string `json:"anchor"`
+	// The anchor's host path.
+	Path string `json:"path"`
+	// What the location is anchored at: a repository work tree, a folder, or one protected file listed alone.
+	Kind string `json:"kind"`
+	// The anchor's name for display.
+	Label string `json:"label"`
+	// Hidden from the chat's Files section. Hiding revokes and deletes nothing.
+	Hidden bool `json:"hidden"`
+	// Whether the host can still address the observed location.
+	Available bool                  `json:"available"`
+	Access    *SourceLocationAccess `json:"access,omitempty"`
+}
+
 // SourceCommandWindow One host-run command's observation window: the span of a command or
 // verify tool call during which reconcile passes attribute the file
 // changes they observe to that command, and admit files the window's
@@ -7751,6 +7803,15 @@ type SourceInventoryState struct {
 	CompletedAt   *time.Time `json:"completed_at,omitempty"`
 }
 
+// SourceLocationAccess The strongest active saved approval covering this location or a path within it.
+type SourceLocationAccess struct {
+	Path      string     `json:"path"`
+	Mode      string     `json:"mode"`
+	Tree      bool       `json:"tree"`
+	Scope     string     `json:"scope"`
+	ExpiresAt *time.Time `json:"expires_at,omitempty"`
+}
+
 // SourceOperationEvent A file operation's status after a persisted transition or progress save; the same shape the operation list returns.
 type SourceOperationEvent struct {
 	ProjectID string                `json:"project_id"`
@@ -8136,6 +8197,8 @@ type SourceTreeIntent struct {
 	Disclosures []SourceTreeDisclosure `json:"disclosures,omitempty"`
 	Filter      string                 `json:"filter,omitempty"`
 	Review      *SourceTreeReviewScope `json:"review,omitempty"`
+	// Chat whose outside locations are shown. Omit for project folders only.
+	ChatID string `json:"chat_id,omitempty"`
 }
 
 // SourceTreeLocation
@@ -8199,6 +8262,13 @@ type SourceTreeSearchPage struct {
 	Matches            []SourceTreeSearchMatch `json:"matches"`
 }
 
+// SourceTreeSelectChat
+type SourceTreeSelectChat struct {
+	Kind string `json:"kind"`
+	// Chat whose outside locations are shown. Omit for project folders only.
+	ChatID string `json:"chat_id,omitempty"`
+}
+
 // SourceTreeToggle
 type SourceTreeToggle struct {
 	Kind    string            `json:"kind"`
@@ -8220,6 +8290,8 @@ type SourceTreeView struct {
 	WorkspaceID        string             `json:"workspace_id"`
 	Intent             SourceTreeIntent   `json:"intent"`
 	Roots              []ProjectRoot      `json:"roots"`
+	// The view's chat's visible locations outside the project, in tree order after the roots. Each is also a tree root whose id is the location id.
+	OutsideLocations []SourceChatLocation `json:"outside_locations"`
 	// Directory reads still pending for this view.
 	LoadingDirectories int `json:"loading_directories"`
 }
@@ -9095,6 +9167,12 @@ type UpdateSessionRequest struct {
 	Pinned *bool `json:"pinned,omitempty"`
 	// Moves a pinned session to this 1-based position in its project's pinned order; a position past the end moves it last. The project's pinned chats are renumbered 1…n.
 	PinPosition *int `json:"pin_position,omitempty"`
+}
+
+// UpdateSourceChatLocationRequest
+type UpdateSourceChatLocationRequest struct {
+	// Whether the chat's Files section hides the location; omitted keeps it.
+	Hidden *bool `json:"hidden,omitempty"`
 }
 
 // UpdateTrustSettingsRequest

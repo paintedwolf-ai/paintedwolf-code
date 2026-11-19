@@ -27,6 +27,7 @@ type SourceSnapshot struct {
 // ResolveSourceSnapshot serves the pinned document when it holds unsaved edits or
 // the mode admits it for editing, and the disk observation otherwise.
 func (s *Service) ResolveSourceSnapshot(ctx context.Context, p *project.Project, req projectsource.SourceReadRequest, mode SourceSnapshotMode) (*SourceSnapshot, error) {
+	p = documentProject(p, req.RootID)
 	if mode == AdmitEditable {
 		d, err := s.Open(ctx, p, req.Path, req.RootID, req.DecodeAs, "", nil)
 		if err != nil {

@@ -451,29 +451,30 @@ type EditorDocumentSnapshots struct {
 }
 
 type EditorDocuments struct {
-	BranchID           string `json:"branch_id"`
-	ID                 string `json:"id"`
-	ProjectID          string `json:"project_id"`
-	FileID             string `json:"file_id"`
-	RootID             string `json:"root_id"`
-	Path               string `json:"path"`
-	Draft              string `json:"draft"`
-	BaseContent        string `json:"base_content"`
-	BaseSha256         string `json:"base_sha256"`
-	Encoding           string `json:"encoding"`
-	SizeBytes          int64  `json:"size_bytes"`
-	Eol                string `json:"eol"`
-	BaseEol            string `json:"base_eol"`
-	MixedEol           int64  `json:"mixed_eol"`
-	BaseMixedEol       int64  `json:"base_mixed_eol"`
-	Revision           int64  `json:"revision"`
-	Dirty              int64  `json:"dirty"`
-	Diverged           int64  `json:"diverged"`
-	CreatedAt          string `json:"created_at"`
-	UpdatedAt          string `json:"updated_at"`
-	OpenedAt           string `json:"opened_at"`
-	HeldAgentVersionID string `json:"held_agent_version_id"`
-	Absent             int64  `json:"absent"`
+	BranchID             string `json:"branch_id"`
+	ID                   string `json:"id"`
+	ProjectID            string `json:"project_id"`
+	FileID               string `json:"file_id"`
+	RootID               string `json:"root_id"`
+	Path                 string `json:"path"`
+	Draft                string `json:"draft"`
+	BaseContent          string `json:"base_content"`
+	BaseSha256           string `json:"base_sha256"`
+	Encoding             string `json:"encoding"`
+	SizeBytes            int64  `json:"size_bytes"`
+	Eol                  string `json:"eol"`
+	BaseEol              string `json:"base_eol"`
+	MixedEol             int64  `json:"mixed_eol"`
+	BaseMixedEol         int64  `json:"base_mixed_eol"`
+	Revision             int64  `json:"revision"`
+	Dirty                int64  `json:"dirty"`
+	Diverged             int64  `json:"diverged"`
+	CreatedAt            string `json:"created_at"`
+	UpdatedAt            string `json:"updated_at"`
+	OpenedAt             string `json:"opened_at"`
+	HeldAgentVersionID   string `json:"held_agent_version_id"`
+	Absent               int64  `json:"absent"`
+	OutsideParentBinding string `json:"outside_parent_binding"`
 }
 
 type EditorMutations struct {
@@ -1665,6 +1666,16 @@ type SourceChatFiles struct {
 	Opened    int64  `json:"opened"`
 	FirstTs   string `json:"first_ts"`
 	LastTs    string `json:"last_ts"`
+}
+
+type SourceChatLocations struct {
+	ID             string `json:"id"`
+	SessionID      string `json:"session_id"`
+	Anchor         string `json:"anchor"`
+	AnchorIdentity string `json:"anchor_identity"`
+	Kind           string `json:"kind"`
+	Hidden         int64  `json:"hidden"`
+	CreatedTs      string `json:"created_ts"`
 }
 
 type SourceCheckpointGitStates struct {

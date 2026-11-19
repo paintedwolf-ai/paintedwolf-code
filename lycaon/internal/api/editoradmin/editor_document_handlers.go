@@ -9,11 +9,13 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/lycaon/lycaon/internal/api/httpio"
+	"github.com/lycaon/lycaon/internal/api/outsideaccess"
 	"github.com/lycaon/lycaon/internal/api/requestscope"
 	"github.com/lycaon/lycaon/internal/documentcore"
 	"github.com/lycaon/lycaon/internal/editordoc"
 	"github.com/lycaon/lycaon/internal/project"
 	"github.com/lycaon/lycaon/internal/projectsource"
+
 	"github.com/lycaon/lycaon/internal/textfile"
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
@@ -41,10 +43,16 @@ func (s *Handler) HandleOpenEditorDocument(w http.ResponseWriter, r *http.Reques
 		return
 	}
 	switch {
-	case strings.TrimSpace(req.Path) == "":
+	case req.FileID != "" && uuid.Validate(req.FileID) != nil:
+		s.responses.InvalidField(w, "file_id", "must be a UUID")
+		return
+	case req.FileID != "" && (req.RootID != "" || req.Path != ""):
+		s.responses.InvalidField(w, "file_id", "cannot be combined with root_id or path")
+		return
+	case req.FileID == "" && strings.TrimSpace(req.Path) == "":
 		s.responses.InvalidField(w, "path", "is required")
 		return
-	case uuid.Validate(req.RootID) != nil:
+	case req.FileID == "" && uuid.Validate(req.RootID) != nil:
 		s.responses.InvalidField(w, "root_id", "must be a UUID")
 		return
 	case strings.TrimSpace(req.ClientID) == "":
@@ -60,12 +68,12 @@ func (s *Handler) HandleOpenEditorDocument(w http.ResponseWriter, r *http.Reques
 	if !ok {
 		return
 	}
-	// Outside files are read through the source reader.
-	if req.RootID == p.Outside.ID {
-		s.writeEditorDocumentError(w, r, editordoc.ErrReadOnly)
+	p, target, err := outsideaccess.Resolve(r.Context(), s.SourceLedger, p, outsideaccess.Address{RootID: req.RootID, Path: req.Path, FileID: req.FileID})
+	if err != nil {
+		s.writeEditorDocumentError(w, r, err)
 		return
 	}
-	d, err := s.EditorDocuments.Open(r.Context(), p, req.Path, req.RootID, req.DecodeAs, req.ClientID, retainedReplica(req.Replica))
+	d, err := s.EditorDocuments.Open(r.Context(), p, target.Path, target.RootID, req.DecodeAs, req.ClientID, retainedReplica(req.Replica))
 	if err != nil {
 		s.writeEditorDocumentError(w, r, err)
 		return

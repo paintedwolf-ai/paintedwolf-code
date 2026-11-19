@@ -9,15 +9,19 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/lycaon/lycaon/internal/api/httpio"
+	"github.com/lycaon/lycaon/internal/api/outsideaccess"
 	"github.com/lycaon/lycaon/internal/api/requestscope"
 	"github.com/lycaon/lycaon/internal/pagecursor"
 	"github.com/lycaon/lycaon/internal/pagedview"
 	"github.com/lycaon/lycaon/internal/project"
+	"github.com/lycaon/lycaon/internal/projectsource"
 	sessionscope "github.com/lycaon/lycaon/internal/session/scope"
 	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/sourcetree"
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
+
+var errCurrentSourceAddressChanged = errors.New("current source address changed")
 
 // sourceHandleError is a view, presentation, or interest path parameter that
 // is not a UUID.
@@ -96,6 +100,14 @@ func (s *Views) sourceViewProject(ctx context.Context, p *project.Project, view 
 	if view.comparisonData.comparisonSource.Chat != nil {
 		source = view.comparisonData.comparisonSource.Chat
 	}
+	current := view.comparisonData.comparisonSource.Current
+	prepared := view.comparisonData.current
+	if current == nil && prepared != nil {
+		current = &wire.CurrentComparisonSource{FileID: prepared.fileID}
+		if prepared.fileID == "" {
+			current.RootID, current.Path = prepared.stream.RootID, prepared.stream.Path
+		}
+	}
 	view.mu.Unlock()
 	if source != nil {
 		if _, err := s.Comparisons.readChatFileEdit(ctx, view.sessionID, source.First); err != nil {
@@ -105,7 +117,22 @@ func (s *Views) sourceViewProject(ctx context.Context, p *project.Project, view 
 			return nil, errSourceViewEditGone
 		}
 	}
+	if current != nil {
+		admitted, req, err := s.resolveCurrentSource(ctx, scope.Project, current)
+		if err == nil && prepared != nil && (prepared.stream.RootID != req.RootID || prepared.stream.Path != req.Path) {
+			err = errCurrentSourceAddressChanged
+		}
+		return admitted, err
+	}
 	return scope.Project, nil
+}
+
+func (s *Views) resolveCurrentSource(ctx context.Context, p *project.Project, source *wire.CurrentComparisonSource) (*project.Project, projectsource.SourceReadRequest, error) {
+	p, target, err := outsideaccess.Resolve(ctx, s.Workspace.SourceLedger, p, outsideaccess.Address{RootID: source.RootID, Path: source.Path, FileID: source.FileID})
+	if errors.Is(err, projectsource.ErrSourcePathDenied) {
+		err = sourcetree.ErrUnknownRoot
+	}
+	return p, projectsource.SourceReadRequest{Path: target.Path, RootID: target.RootID, DecodeAs: source.DecodeAs}, err
 }
 
 func (s *Views) HandleGetSourceView(w http.ResponseWriter, r *http.Request) {
@@ -163,6 +190,10 @@ func (s *Views) writeSourceViewAddressError(w http.ResponseWriter, r *http.Reque
 	}
 	var handle *sourceHandleError
 	switch {
+	case errors.Is(err, errCurrentSourceAddressChanged):
+		s.responses.Fail(w, wire.ApiErrorCodeSourceVersionChanged, "The file changed. Reload it to read the current version.")
+	case errors.Is(err, projectsource.ErrSourceNotFound):
+		s.responses.Fail(w, wire.ApiErrorCodeSourceNotFound, "This file is no longer available.")
 	case errors.As(err, &handle):
 		s.responses.FailReason(w, wire.ApiErrorCodeInvalidRequest, handle.Error())
 	case errors.Is(err, sessionscope.ErrWorktreeStale):
