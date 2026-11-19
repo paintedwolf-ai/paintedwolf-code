@@ -522,9 +522,7 @@ func captureRemovedEntry(ctx context.Context, loc fseffect.Location, memory *too
 	return captureAgentFileAt(loc, ctx, memory, retainBody)
 }
 
-// recoverableRemoval is the attributed removal of an entry in an attached
-// root on a project or worktree branch. A worker overlay is already a private
-// copy its promotion records, and a path outside every root has no history.
+// Recovery snapshots cover removals in attached roots on durable branches.
 func recoverableRemoval(tctx tools.ToolContext, m agentMutation) (sourceeffect.Removal, bool) {
 	if tctx.Source.SourceMutations == nil {
 		return sourceeffect.Removal{}, false

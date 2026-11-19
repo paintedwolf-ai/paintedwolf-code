@@ -24,8 +24,8 @@ var ErrEditorExecutionConflict = errors.New("editor document changed since the p
 // EditorDocumentText is what an open editor document presents for one
 // project-tree path: the text the person sees, whatever the file holds.
 type EditorDocumentText struct {
-	ID       string
-	Revision int64
+	ID, FileID, RootID, Path string
+	Revision                 int64
 	// Text is the LF-normalized draft.
 	Text string
 	// SHA256 identifies the bytes a save of this draft writes; for a clean

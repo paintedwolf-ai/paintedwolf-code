@@ -47,9 +47,10 @@ type ParkedProgram interface {
 }
 
 type ProgramEffects struct {
-	FileEdits   []api.FileEditSnapshot
-	Omitted     int
-	Observation *api.ActionFact
+	FileEdits     []api.FileEditSnapshot
+	Omitted       int
+	Observation   *api.ActionFact
+	SourceContext *api.SourceContext
 }
 
 // ProgramEffectSink applies deferred facts to the original call's result.

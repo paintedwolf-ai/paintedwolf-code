@@ -3,6 +3,7 @@ package transcript
 import (
 	"context"
 	"fmt"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -92,6 +93,46 @@ func TestProgramEffectsWaitForTheirResultRow(t *testing.T) {
 			}
 			if len(svc.programEffects.held) != 0 {
 				t.Fatalf("still holding %+v", svc.programEffects.held)
+			}
+		})
+	}
+}
+
+func TestLateProgramLocationsJoinTheirFileEdit(t *testing.T) {
+	for _, lateFirst := range []bool{true, false} {
+		t.Run(fmt.Sprintf("effects first %t", lateFirst), func(t *testing.T) {
+			svc, mem, sessionID := programEffectsFixture(t)
+			row := commandRow("outside")
+			before := api.NavigationTarget{ProjectID: "project", RootID: "attached", Path: "one.txt", EntryKind: api.NavigationEntryKindFile}
+			outside := api.NavigationTarget{ProjectID: "project", RootID: "outside", Path: "home/two.txt", FileID: "file-two", EntryKind: api.NavigationEntryKindFile}
+			view := &api.ViewContext{}
+			row.SourceContext = &api.SourceContext{Locations: []api.NavigationTarget{before}, View: view}
+			appendEffects := func() {
+				svc.AppendProgramEffects(t.Context(), sessionID, row.ToolResult.ToolCallID, tools.ProgramEffects{
+					FileEdits:     []api.FileEditSnapshot{{Path: "/home/two.txt", After: "two"}},
+					SourceContext: &api.SourceContext{Locations: []api.NavigationTarget{before, outside}, Truncated: true},
+					Observation:   &api.ActionFact{Kind: api.ActionFactSourceObservation, SourceWindows: []string{"settled"}},
+				})
+			}
+			if lateFirst {
+				appendEffects()
+			}
+			testutil.FailErr(t, "store command result", svc.Append(t.Context(), sessionID, row))
+			if !lateFirst {
+				appendEffects()
+			}
+			msg, err := mem.GetMessage(t.Context(), sessionID, row.ID)
+			testutil.FailErr(t, "load command result", err)
+			if msg.SourceContext == nil || !slices.Equal(msg.SourceContext.Locations, []api.NavigationTarget{before, outside}) ||
+				!msg.SourceContext.Truncated || msg.SourceContext.View == nil {
+				t.Fatalf("source context = %+v", msg.SourceContext)
+			}
+			if len(msg.ToolResult.FileEdits) != 1 || msg.ToolResult.FileEdits[0].Path != "/home/two.txt" {
+				t.Fatalf("file edits = %+v", msg.ToolResult.FileEdits)
+			}
+			facts := msg.ToolResult.CardFacts
+			if len(facts) != 1 || facts[0].Kind != api.ActionFactSourceObservation || !slices.Equal(facts[0].SourceWindows, []string{"settled"}) {
+				t.Fatalf("observation facts = %+v", facts)
 			}
 		})
 	}

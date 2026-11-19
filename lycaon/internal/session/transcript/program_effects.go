@@ -8,6 +8,7 @@ import (
 	"sync"
 
 	"github.com/lycaon/lycaon/internal/session/store"
+	"github.com/lycaon/lycaon/internal/sourceref"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -19,7 +20,7 @@ type pendingProgramEffects struct {
 }
 
 func (m *Service) AppendProgramEffects(ctx context.Context, sessionID, toolCallID string, late tools.ProgramEffects) {
-	if m == nil || m.store == nil || (len(late.FileEdits) == 0 && late.Omitted == 0 && late.Observation == nil) {
+	if m == nil || m.store == nil || (len(late.FileEdits) == 0 && late.Omitted == 0 && late.Observation == nil && late.SourceContext == nil) {
 		return
 	}
 	// The lookup and the hold are one step, so a row stored meanwhile finds the hold.
@@ -105,5 +106,12 @@ func (m *Service) applyProgramEffects(ctx context.Context, sessionID, messageID 
 		result.CardFacts = append(result.CardFacts, *late.Observation)
 	}
 	message.ToolResult = &result
+	if late.SourceContext != nil {
+		merged := sourceref.Merge(message.SourceContext, late.SourceContext)
+		if message.SourceContext != nil {
+			merged.View = message.SourceContext.View
+		}
+		message.SourceContext = merged
+	}
 	return m.Update(ctx, sessionID, messageID, message)
 }

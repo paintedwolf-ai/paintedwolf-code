@@ -233,7 +233,8 @@ func (r *ProgramRuntime) recordDetachedEffects(ctx context.Context, run *program
 		return
 	}
 	r.Effects.AppendProgramEffects(ctx, run.tc.Identity.SessionID, run.tc.Identity.ToolCallID, tools.ProgramEffects{
-		FileEdits: late.FileEdits, Omitted: late.FileEditsOmitted, Observation: observationFact(run.window.fact()),
+		FileEdits: late.FileEdits, Omitted: late.FileEditsOmitted,
+		SourceContext: late.SourceContext, Observation: observationFact(run.window.fact()),
 	})
 }
 
