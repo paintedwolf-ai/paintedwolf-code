@@ -3,7 +3,6 @@ package confine
 import (
 	"os"
 	"path/filepath"
-	"slices"
 	"strings"
 	"sync/atomic"
 
@@ -181,89 +180,4 @@ func writeRootStructuralRefusal(root string) (cleaned, code string) {
 		return "", WriteRootCodeNotAbsolute
 	}
 	return p, ""
-}
-
-// PrivateTemp identifies the sandbox directories that present session scratch.
-// An empty ScratchRoot gives each launch its own filesystem.
-type PrivateTemp struct {
-	Paths       []string
-	ScratchRoot string
-	Retained    []string
-}
-
-// Resolve maps a sandbox operand to its backing path for host file operations.
-func (t PrivateTemp) Resolve(path string) (string, bool) {
-	suffix, mapped := t.relative(path)
-	if !mapped || t.ScratchRoot == "" {
-		return "", false
-	}
-	if suffix == "" {
-		return t.ScratchRoot, true
-	}
-	return t.ScratchRoot + string(filepath.Separator) + suffix, true
-}
-
-func (t PrivateTemp) relative(path string) (string, bool) {
-	if len(t.Paths) == 0 || !filepath.IsAbs(path) {
-		return "", false
-	}
-	sep := string(filepath.Separator)
-	for _, alias := range t.Paths {
-		if path == alias {
-			return "", true
-		}
-		if suffix, inside := strings.CutPrefix(path, alias+sep); inside {
-			return suffix, !underAny(path, t.Retained)
-		}
-	}
-	// Resolve only the prefix. Once we enter a mount, its links belong to scratch.
-	root := filepath.VolumeName(path) + sep
-	prefix, rest := root, strings.TrimPrefix(path, root)
-	for hops := 0; rest != "" && hops < 40; {
-		part, tail, _ := strings.Cut(rest, sep)
-		rest = tail
-		if part == "" || part == "." {
-			continue
-		}
-		if part == ".." {
-			prefix = filepath.Dir(prefix)
-			continue
-		}
-		next := filepath.Join(prefix, part)
-		if slices.Contains(t.Paths, next) {
-			return rest, !underAny(filepath.Join(next, rest), t.Retained)
-		}
-		target, err := os.Readlink(next)
-		if err != nil {
-			prefix = next
-			continue
-		}
-		if filepath.IsAbs(target) {
-			prefix = root
-			target = strings.TrimPrefix(target, root)
-		}
-		rest = target + sep + rest
-		hops++
-	}
-	return "", false
-}
-
-// ProjectPrivateTemp keeps attached, scratch, read-only and reviewed paths
-// visible when their host paths are below a sandbox temp directory.
-func ProjectPrivateTemp(projectID, scratch string, roots, granted, readRoots []string) PrivateTemp {
-	temp := PrivateTempFor(fspath.CanonicalPath(scratch))
-	if len(temp.Paths) == 0 {
-		return temp
-	}
-	for _, list := range [][]string{roots, granted, grantedWriteRoots(projectID), readRoots, {temp.ScratchRoot}} {
-		for _, path := range list {
-			p := fspath.CanonicalPath(path)
-			if slices.ContainsFunc(temp.Paths, func(alias string) bool { return PathStrictlyUnder(p, alias) }) {
-				temp.Retained = append(temp.Retained, p)
-			}
-		}
-	}
-	slices.Sort(temp.Retained)
-	temp.Retained = slices.Compact(temp.Retained)
-	return temp
 }

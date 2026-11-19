@@ -739,6 +739,3 @@ func coveredByList(list []string, path string) bool {
 	}
 	return false
 }
-
-// PrivateTempFor reports the absence of remapped temp paths.
-func PrivateTempFor(string) PrivateTemp { return PrivateTemp{} }
