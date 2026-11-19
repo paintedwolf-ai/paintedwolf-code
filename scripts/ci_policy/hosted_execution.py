@@ -132,8 +132,14 @@ def run_lane(name, shard="", clock=time.monotonic, profile=hosted_plan.GATE):
             from ci_policy.impact import changed_packages
             # The planner selects this lane only for a change that edits Go source, so no scope is a fault.
             packages = changed_packages(scope or {"paths": []})
+            if packages:
+                from ci_policy.impact import buildable
+                from verification_plan import catalog
+                options = catalog()["go"][targets[0]]["options"]
+                tags = options[options.index("--tags") + 1].split(",") if "--tags" in options else []
+                packages = buildable(packages, tags)
             if not packages:
-                raise ValueError(f"CI lane {name} found no changed Go package to run")
+                raise ValueError(f"CI lane {name} found no changed Go package that builds on this runner")
             command += ["--", *packages]
             record["packages"] = packages
         # Every phase runs, so one run reports every failure and repairs need not rediscover them one at a time.

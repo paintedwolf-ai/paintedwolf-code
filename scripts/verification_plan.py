@@ -43,6 +43,8 @@ GO_VALUES = {"-p": (re.compile(r"[1-9]\d*"), "a positive integer"),
 EXIT_PASSED = 0
 EXIT_FAILED = 1
 EXIT_UNVERIFIED = 2
+# The runner selection that runs every declared script suite in place of its own.
+EVERY_SUITE = "--every-suite"
 
 
 def outcome_exit(code, verified=True):
@@ -358,10 +360,12 @@ def validate_selection(names, arguments):
             raise ValueError(f"{names[0]}: {' '.join(missing)} matches no test file under {DEN.name}/src. "
                              "No verification was queued")
     elif grammar == "unittest":
+        if arguments == [EVERY_SUITE]:
+            return
         if len(arguments) % 2 or any(
                 arguments[index] != "-k" or not arguments[index + 1].strip()
                 or arguments[index + 1].startswith("-") for index in range(0, len(arguments), 2)):
-            raise ValueError(f"{names[0]} accepts only repeated -k <nonempty pattern> selections. "
+            raise ValueError(f"{names[0]} accepts only repeated -k <nonempty pattern> selections or {EVERY_SUITE}. "
                              "No verification was queued")
     elif grammar == "playwright":
         missing = unmatched_playwright_filters(selection_filters(arguments, PLAYWRIGHT_FLAGS, names[0]))

@@ -36,6 +36,13 @@ class UnittestSelectionTests(unittest.TestCase):
         other = planning.request(["test:runner", "--", "-k", "other"], {})["stages"][0]
         self.assertNotEqual(planning.stage_key(stage), planning.stage_key(other))
 
+    def test_every_suite_is_a_selection_of_its_own(self):
+        arguments = ["test:runner", "--", planning.EVERY_SUITE]
+        self.assertEqual(planning.request(arguments, {})["stages"][0]["arguments"], arguments)
+        for flags in ([planning.EVERY_SUITE, "-k", "terminal"], ["-k", planning.EVERY_SUITE]):
+            with self.subTest(flags=flags), self.assertRaisesRegex(ValueError, "No verification was queued"):
+                planning.request(["test:runner", "--", *flags], {})
+
     def test_unsupported_or_incomplete_selectors_are_refused_before_admission(self):
         for flags in (["-k"], ["-k", ""], ["-k", " "], ["-k", "-v"], ["-k=terminal"],
                       ["terminal"], ["-v"], ["--failfast"], ["-s", "/foreign"],

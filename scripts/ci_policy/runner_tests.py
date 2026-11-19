@@ -9,9 +9,7 @@ sys.path.insert(0, str(SCRIPTS))
 from toolchain import python_tools
 import coverage_policy
 import python_coverage
-
-# Runs every script suite coverage policy declares, each with its own requirements, instead of this one.
-EVERY_SUITE = "--every-suite"
+from verification_plan import EVERY_SUITE
 
 
 def discovery_arguments(arguments):

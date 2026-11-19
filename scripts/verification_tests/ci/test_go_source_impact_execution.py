@@ -185,6 +185,12 @@ class QueueScopeTests(unittest.TestCase):
                 self.assertNotIn("go-code", impact.change_areas(scope))
                 self.assertNotIn(live(phase="changed-packages"), self.queue([path]))
 
+    def test_a_package_whose_build_constraints_exclude_every_file_has_nothing_to_run(self):
+        # Every file of the scan stress package needs its own build tag.
+        self.assertEqual(impact.buildable(["./test/scanstress", "./internal/confine"], ["integration"]),
+                         ["./internal/confine"])
+        self.assertEqual(impact.buildable([], ["integration"]), [])
+
     def test_changed_packages_are_the_edited_go_source_without_the_database_or_deleted_packages(self):
         scope = {"paths": ["lycaon/internal/confine/seatbelt_darwin.go", "lycaon/internal/confine/testdata/x.json",
                            "lycaon/internal/db/store.go", "lycaon/internal/removed/gone.go", "lycaon-den/src/a.ts",

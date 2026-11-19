@@ -218,6 +218,21 @@ def changed_packages(scope):
                   if not exclude or not re.search(exclude, package))
 
 
+def buildable(packages, tags):
+    """The packages holding Go files for this runner and these tags, as Go resolves their build constraints."""
+    if not packages:
+        return []
+    from verification_execute import json_stream
+    command = ["go", "list", "-e", "-json", f"-tags={','.join(tags)}", *packages]
+    result = subprocess.run(command, cwd=ROOT / "lycaon", capture_output=True, text=True,
+                            env={**os.environ, "GOPROXY": "off", "GOTOOLCHAIN": "local"})
+    if result.returncode:
+        raise ValueError(f"go list could not resolve the changed packages: {result.stderr.strip()}")
+    found = {"./" + Path(record["Dir"]).relative_to(ROOT / "lycaon").as_posix() for record in json_stream(result.stdout)
+             if record.get("GoFiles") or record.get("TestGoFiles") or record.get("XTestGoFiles")}
+    return [package for package in packages if package in found]
+
+
 def confinement_source(path):
     """The sandbox, its helper and sandbox marks, and the command supervisor's Linux process handling."""
     if path.startswith(("lycaon/internal/confine/", "lycaon/internal/sandboxmark/")):

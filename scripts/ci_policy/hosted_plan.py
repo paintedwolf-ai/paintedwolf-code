@@ -6,7 +6,7 @@ import re
 from ci_policy.hosted_schedule import order, PRIORITIES
 from ci_policy.timings import row_key
 from ci_policy.native_admission import SCRIPT_COVERAGE, runs_package_metadata, runs_script_coverage
-from verification_plan import catalog, expand
+from verification_plan import EVERY_SUITE, catalog, expand
 
 ROOT = Path(__file__).resolve().parents[2]
 PROFILES = {"fast", "check", "nightly", "release", "integration"}
@@ -28,7 +28,7 @@ QUEUE_LEAVES = {"lint:full", "arch-lint:changes", "comments:check", "test:fail-m
 # profile a lane runs, in each one's place, the tests it measures without the measurement; one that only judges
 # the change runs nothing there.
 CHANGE_GATES = {"den:coverage:changes": [["den:test"]], "den:knip:changes": [],
-                "scripts:coverage:changes": [["test:runner", "--", "--every-suite"]]}
+                "scripts:coverage:changes": [["test:runner", "--", EVERY_SUITE]]}
 BASED_PROFILES = {"fast", GATE}
 # The setup inputs a lane can need, as the catalog's `provisions` declares them; `engine_free` names
 # targets that run without the runtime engines every other target needs.
