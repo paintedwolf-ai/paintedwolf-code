@@ -154,7 +154,15 @@ func (s *supervisor) performSessionSocket(target *targetProcess, req SocketReque
 		}
 		return 0, errAnswered
 	}
-	destination, err := unix.Openat2(unix.AT_FDCWD, req.Unix, &unix.OpenHow{Flags: unix.O_PATH | unix.O_CLOEXEC, Resolve: unix.RESOLVE_NO_SYMLINKS})
+	root, err := unix.Open("/proc/"+strconv.Itoa(target.pid)+"/root", unix.O_PATH|unix.O_DIRECTORY|unix.O_CLOEXEC, 0)
+	if err != nil {
+		return 0, errnoOf(err, unix.EACCES)
+	}
+	defer unix.Close(root)
+	if !target.valid() {
+		return 0, unix.EINTR
+	}
+	destination, err := unix.Openat2(root, req.Unix, &unix.OpenHow{Flags: unix.O_PATH | unix.O_CLOEXEC, Resolve: unix.RESOLVE_IN_ROOT | unix.RESOLVE_NO_SYMLINKS})
 	if err != nil {
 		return 0, errnoOf(err, unix.EACCES)
 	}

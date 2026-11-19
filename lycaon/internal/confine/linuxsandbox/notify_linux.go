@@ -242,9 +242,23 @@ func (s *supervisor) decodeAddress(req *SocketRequest, info socketInfo, raw []by
 		if i := indexByte(path, 0); i >= 0 {
 			path = path[:i]
 		}
-		resolved, ok := resolveSocketPath(string(path), target)
+		rawPath := string(path)
+		dir, base := rawPath, ""
+		if req.Op == OpBind {
+			dir, base = filepath.Split(rawPath)
+			if base == "" || base == "." || base == ".." {
+				return errUnresolvedSocketPath
+			}
+			if dir == "" {
+				dir = "."
+			}
+		}
+		resolved, ok := resolveSocketPath(dir, target)
 		if !ok {
 			return errUnresolvedSocketPath
+		}
+		if base != "" {
+			resolved = filepath.Join(resolved, base)
 		}
 		req.Unix = resolved
 		return nil
