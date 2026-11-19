@@ -1,0 +1,10 @@
+'on': session.mode.agent_enabled
+selector:
+  surface: coordinator
+effect: inform
+render: session-agent-enabled
+tier: builtin
+invariants:
+  trigger_class: host_api
+  fires_in:
+  - the first coordinator round that observes the chat switched from Ask to Agent

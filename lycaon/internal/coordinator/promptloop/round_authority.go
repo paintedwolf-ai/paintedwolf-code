@@ -3,12 +3,11 @@ package promptloop
 import (
 	"context"
 
+	"github.com/lycaon/lycaon/internal/coordinator/anchor"
 	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/pkg/api"
 )
-
-const agentEnabledSignal = "session.mode.agent_enabled"
 
 // RoundAuthority is the root ceiling frozen with the model's tool offer.
 type RoundAuthority struct {
@@ -60,7 +59,7 @@ func (l *PromptLoop) appendAgentEnabledNudge(ctx context.Context, sessionID stri
 		return nil, err
 	}
 	return l.Nudges.appendHostNudge(ctx, sessionID, state.history, HostNudge{
-		SignalID: agentEnabledSignal,
+		SignalID: anchor.SessionAgentEnabled.String(),
 		Content:  content,
 	}, "", state)
 }

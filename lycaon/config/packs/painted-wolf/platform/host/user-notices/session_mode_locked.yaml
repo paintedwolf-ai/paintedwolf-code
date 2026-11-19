@@ -1,0 +1,8 @@
+surfaces: [http]
+notification: { tier: non_catastrophic, scope: session }
+title: Chat mode is locked
+message: This chat has started in Agent mode.
+suggested_action: Open a new chat to use Ask.
+scenarios:
+  - id: default
+    vars: {}

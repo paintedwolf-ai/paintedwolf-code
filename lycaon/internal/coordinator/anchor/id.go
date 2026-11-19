@@ -39,6 +39,7 @@ const (
 	CoordinatorPresentationRepair ID = "coordinator.presentation.repair"
 	ProjectRootsChanged           ID = "project.roots.changed"
 	ProjectPostureChanged         ID = "project.posture.changed"
+	SessionAgentEnabled           ID = "session.mode.agent_enabled"
 	ProjectRootDetachCanceled     ID = "project.root.detach_canceled"
 	WorkerCloseout                ID = "worker.closeout"
 	WorkerCancelCloseout          ID = "worker.cancel.closeout"
