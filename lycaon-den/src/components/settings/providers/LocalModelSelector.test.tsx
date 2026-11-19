@@ -42,6 +42,24 @@ describe("Local model selection", () => {
     expect(client.selectLocalModel).not.toHaveBeenCalled();
   });
 
+  it("preselects an eligible download when the recommended tier is unpublished", () => {
+    const partial = {...initial, available_models: tiers.map(t => ({...t, download_available: !t.recommended}))};
+    const {client} = mount(partial);
+    const small = screen.getByRole("radio", {name: /Small/}) as HTMLInputElement;
+    const medium = screen.getByRole("radio", {name: /Medium/}) as HTMLInputElement;
+    expect(small.checked).toBe(true);
+    fireEvent.click(medium);
+    expect(medium.checked).toBe(true);
+    expect(screen.getByText("Import offline bundle")).toBeTruthy();
+    expect(client.selectLocalModel).not.toHaveBeenCalled();
+    cleanup();
+    mount({...partial, selected_model: "medium"});
+    expect((screen.getByRole("radio", {name: /Medium/}) as HTMLInputElement).checked).toBe(true);
+    cleanup();
+    mount({...partial, state: "opted_out"});
+    expect((screen.getByRole("radio", {name: "Use no local model"}) as HTMLInputElement).checked).toBe(true);
+  });
+
   it("waits for the accepted transfer to finish before advancing", async () => {
     const { client, done } = mount();
     client.selectLocalModel.mockResolvedValue(progress);

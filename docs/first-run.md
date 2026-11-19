@@ -10,7 +10,7 @@ The hard gate a new install shows before the home stage, and how a missing provi
 
 ## The gate
 
-Fresh installations from normal downloads open on local model selection when the release offers a model download. Normal application downloads contain no generation weights. The host detects available hardware locally and recommends a tier. Setup preselects that tier, and the user can choose another eligible model, import a signed offline bundle, or continue without a local model. A transfer begins only after an explicit choice.
+Fresh installations from normal downloads open on local model selection when the release offers a model download. Normal application downloads contain no generation weights. The host detects available hardware locally and recommends a tier. Setup preselects that tier when published. If another eligible tier has a download, setup can preselect it instead. The user can choose another eligible model, import a signed offline bundle, or continue without a local model. A transfer begins only after an explicit choice.
 
 | Page | Choice |
 |------|--------|

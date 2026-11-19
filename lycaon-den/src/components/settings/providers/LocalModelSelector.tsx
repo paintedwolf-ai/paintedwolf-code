@@ -25,8 +25,16 @@ export function LocalModelSelector(props: Props) {
   const [pendingModel, setPendingModel] = createSignal<string>();
   const status = () => snapshot() ?? props.provider.local_runtime;
   const tiers = () => status()?.available_models ?? [];
+  const suggested = () => {
+    const recommended = tiers().find(t => t.eligible && t.recommended);
+    if (props.onContinue && !recommended?.download_available) {
+      const published = tiers().find(t => t.eligible && t.download_available);
+      if (published) return published.id;
+    }
+    return recommended?.id ?? NONE;
+  };
   const selected = () => choice() ?? status()?.selected_model
-    ?? (status()?.state === "opted_out" ? NONE : tiers().find(t => t.eligible && t.recommended)?.id ?? NONE);
+    ?? (status()?.state === "opted_out" ? NONE : suggested());
   const tier = () => tiers().find(t => t.id === selected());
   const seedTier = () => status()?.seed_available ? tiers().find(t => t.id === status()?.seed_model) : undefined;
   const downloading = () => status()?.state === "downloading";
