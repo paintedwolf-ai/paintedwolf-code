@@ -222,6 +222,7 @@ type InvocationSource struct {
 	MutationRecorder PrimaryMutationRecorder
 	// SourceLedger records project mutations in this app instance.
 	SourceLedger    sourceledger.Recorder
+	OutsideReads    sourceledger.ChatFileRecorder
 	History         SourceHistory
 	Commands        sourceledger.CommandWindowOpener
 	GitMutations    SourceGitMutations

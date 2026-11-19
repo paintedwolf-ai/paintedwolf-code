@@ -42,9 +42,8 @@ func (s *Workspace) HandleOpenOutsideFile(w http.ResponseWriter, r *http.Request
 	if !ok {
 		return
 	}
-	sess, err := s.SessionStore.Get(r.Context(), strings.TrimSpace(req.SessionID))
-	if err != nil || sess.ProjectID != p.ID || sess.ParentSessionID != "" || sess.OwnerPersonID != requestscope.Caller(r).ID {
-		s.responses.Fail(w, wire.ApiErrorCodeSessionNotFound, "chat not found in this project")
+	sess, ok := s.ownedLocationChat(w, r, p.ID, req.SessionID)
+	if !ok {
 		return
 	}
 	scoped, ok := requestscope.ProjectForSession(s.SessionStore, s.responses, w, r, p, sess.ID)
@@ -156,9 +155,7 @@ func (s *Workspace) HandleUpdateSourceChatLocation(w http.ResponseWriter, r *htt
 		s.responses.InternalError(w, r, err)
 		return
 	}
-	chat, err := s.SessionStore.Get(r.Context(), location.SessionID)
-	if err != nil || chat.OwnerPersonID != requestscope.Caller(r).ID {
-		s.responses.Fail(w, wire.ApiErrorCodeNotFound, "location not found")
+	if _, ok := s.ownedLocationChat(w, r, p.ID, location.SessionID); !ok {
 		return
 	}
 	if req.Hidden != nil {
@@ -200,9 +197,8 @@ func (s *Workspace) HandleOpenChatLocationFile(w http.ResponseWriter, r *http.Re
 		s.responses.InternalError(w, r, err)
 		return
 	}
-	chat, err := s.SessionStore.Get(r.Context(), location.SessionID)
-	if err != nil || chat.OwnerPersonID != requestscope.Caller(r).ID {
-		s.responses.Fail(w, wire.ApiErrorCodeSessionNotFound, "chat not found")
+	chat, ok := s.ownedLocationChat(w, r, p.ID, location.SessionID)
+	if !ok {
 		return
 	}
 	scoped, ok := requestscope.ProjectForSession(s.SessionStore, s.responses, w, r, p, chat.ID)
@@ -225,6 +221,18 @@ func (s *Workspace) HandleOpenChatLocationFile(w http.ResponseWriter, r *http.Re
 		return
 	}
 	s.trackOpenedOutsideFile(w, r, scoped, chat.ID, rel, file, &location)
+}
+
+func (s *Workspace) ownedLocationChat(w http.ResponseWriter, r *http.Request, projectID, chatID string) (*wire.Session, bool) {
+	chat, ok := requestscope.Session(s.SessionStore, s.responses, w, r, strings.TrimSpace(chatID))
+	if !ok {
+		return nil, false
+	}
+	if chat == nil || chat.ProjectID != projectID || chat.ParentSessionID != "" || chat.OwnerPersonID != requestscope.Caller(r).ID {
+		s.responses.Fail(w, wire.ApiErrorCodeNotFound, "chat not found in this project")
+		return nil, false
+	}
+	return chat, true
 }
 
 func openChatLocationFile(location sourceledger.ChatLocation, path string) (*os.File, error) {

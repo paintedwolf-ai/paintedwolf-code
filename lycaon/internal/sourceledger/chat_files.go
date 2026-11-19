@@ -10,6 +10,10 @@ import (
 	"github.com/lycaon/lycaon/internal/sourcebranch"
 )
 
+type ChatFileRecorder interface {
+	TrackChatFile(context.Context, TrackInput, string, ChatFileRelation) (TrackedFile, error)
+}
+
 // ChatFileRelation is how a chat came to hold an outside file.
 type ChatFileRelation int
 

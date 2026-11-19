@@ -37,6 +37,7 @@ type Service struct {
 	projects        Projects
 	loopbackProv    tools.LoopbackEndpointObserver
 	SourceLedger    sourceledger.Recorder
+	outsideReads    sourceledger.ChatFileRecorder
 	history         tools.SourceHistory
 	commands        sourceledger.CommandWindowOpener
 	gitMutations    tools.SourceGitMutations
@@ -70,8 +71,9 @@ func (m *Service) SetDataDir(dir string) { m.dataDir = strings.TrimSpace(dir) }
 func (m *Service) SetLoopbackObserver(containers tools.LoopbackEndpointObserver) {
 	m.loopbackProv = containers
 }
-func (m *Service) SetSourceLedger(source sourceledger.Recorder, history tools.SourceHistory, commands sourceledger.CommandWindowOpener, mutations tools.SourceGitMutations, observations *sourceledger.Inventory) {
+func (m *Service) SetSourceLedger(source sourceledger.Recorder, outsideReads sourceledger.ChatFileRecorder, history tools.SourceHistory, commands sourceledger.CommandWindowOpener, mutations tools.SourceGitMutations, observations *sourceledger.Inventory) {
 	m.SourceLedger = source
+	m.outsideReads = outsideReads
 	m.history = history
 	m.commands = commands
 	m.gitMutations = mutations

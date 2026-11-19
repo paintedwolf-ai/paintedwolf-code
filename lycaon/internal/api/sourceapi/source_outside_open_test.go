@@ -6,6 +6,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -16,6 +17,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/lycaon/lycaon/internal/project"
 	"github.com/lycaon/lycaon/internal/projectroot"
+	"github.com/lycaon/lycaon/internal/session"
 	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/sourceledger"
 	"github.com/lycaon/lycaon/internal/testdbfixture"
@@ -152,6 +154,18 @@ func TestPickedOutsideLocationCanBeHiddenAndShown(t *testing.T) {
 			t.Fatalf("covering location = %+v, found=%t after hidden=%t", covering, found, hidden)
 		}
 	}
+	server.Workspace.SessionStore = unavailableLocationChatStore{Store: sessions}
+	sourceViewErrorCode(t, pick(chat.ID, picked), http.StatusInternalServerError)
+	sourceViewErrorCode(t, update(opened.Location.ID, true), http.StatusInternalServerError)
+	open := callChatLocation(t, ctx, http.MethodPost, server.Workspace.HandleOpenChatLocationFile,
+		p.ID, opened.Location.ID, wire.OpenChatLocationFileRequest{Path: "notes.txt"})
+	sourceViewErrorCode(t, open, http.StatusInternalServerError)
+}
+
+type unavailableLocationChatStore struct{ session.Store }
+
+func (unavailableLocationChatStore) Get(context.Context, string) (*wire.Session, error) {
+	return nil, errors.New("session store unavailable")
 }
 
 func callChatLocation(t *testing.T, ctx context.Context, method string, handler http.HandlerFunc, projectID, locationID string, body any) *httptest.ResponseRecorder {

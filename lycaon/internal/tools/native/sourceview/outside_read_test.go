@@ -32,7 +32,7 @@ func TestOutsideReadRecordsAnOrdinaryPathButNotScratch(t *testing.T) {
 		Source: tools.InvocationSource{
 			Roots:        []projectroot.RootRef{{ID: rootID, Path: projectFolder}},
 			OutsideRoot:  projectroot.OutsideRef(outsideID),
-			SourceLedger: ledger,
+			OutsideReads: ledger,
 		},
 	}
 

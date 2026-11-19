@@ -107,7 +107,7 @@ func Build(ctx context.Context, deps Dependencies) (*Runtime, error) {
 			return nil, err
 		}
 	}
-	mgr.SetSourceLedger(ledger, tools.SourceHistory{
+	mgr.SetSourceLedger(ledger, ledger, tools.SourceHistory{
 		Files: ledger.History, Comparison: ledger.Comparisons, Git: ledger.Git, Authorship: ledger.Walk, Windows: ledger.Commands, Tree: session.OverlayTree{},
 	}, ledger.Commands, ledger.Git, ledger.Checkpoints, ledger.Inventory)
 	mgr.Profiles.SetAgentRegistry(deps.Agents.Registry)

@@ -80,6 +80,7 @@ func (m *Service) Build(ctx context.Context, sess *api.Session, profileID string
 		tctx.Host.ModelContextWindow = m.limits.Compaction(ctx, sess).ModelContextWindow
 		tctx.Source.MutationRecorder = m.captures
 		tctx.Source.SourceLedger = m.SourceLedger
+		tctx.Source.OutsideReads = m.outsideReads
 		tctx.Source.History = m.history
 		tctx.Source.Commands = m.commands
 		tctx.Source.GitMutations = m.gitMutations
