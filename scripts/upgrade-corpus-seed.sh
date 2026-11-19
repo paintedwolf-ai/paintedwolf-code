@@ -76,6 +76,7 @@ CREDENTIAL_RELS=(
   .credential-vault-development-identity
   api.token
   host-identity.pem
+  mcp.yaml
 )
 
 WORKDIR="$(mktemp -d "${TMPDIR:-/tmp}/upgrade-corpus-seed.XXXXXX")"
@@ -102,7 +103,11 @@ mkdir -p "${SEED_PROJECT_ROOT}/${OVERLAY_DIR}"
 printf 'format: 1\ndisabled: []\n' >"${SEED_PROJECT_ROOT}/${OVERLAY_DIR}/extensions.yaml"
 # Include the overlay examples before capturing trust state.
 for example in "${GO_DIR}/testdata/overlay-example/${OVERLAY_FIXTURE_DIR}/"*.yaml; do
-  seeded="${SEED_PROJECT_ROOT}/${OVERLAY_DIR}/$(basename "${example}")"
+  name="${example##*/}"
+  for credential in "${CREDENTIAL_RELS[@]}"; do
+    [[ "${name}" != "${credential}" ]] || continue 2
+  done
+  seeded="${SEED_PROJECT_ROOT}/${OVERLAY_DIR}/${name}"
   [[ -e "${seeded}" ]] || cp "${example}" "${seeded}"
 done
 # Target for the locked mock tool call (pattern "corpus seed" → command cat README.md).
