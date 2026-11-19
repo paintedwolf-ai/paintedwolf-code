@@ -213,10 +213,29 @@ func TestOutsideReaderOpensARecordedCommandFile(t *testing.T) {
 		}
 		return current.State == "ready"
 	})
+	moved := file + "-moved"
+	testutil.FailErr(t, "rename the outside file", os.Rename(file, moved))
+	testutil.FailErr(t, "record the outside move", ledger.Record(ctx, sourceledger.RecordInput{
+		RecordLocation: sourceledger.RecordLocation{RootID: p.Outside.ID, FromPath: rel, Path: rel + "-moved"},
+		ProjectID:      p.ID, SessionID: chat.ID, FileID: tracked.FileID,
+		Origin: wire.SourceChangeOriginAgent, Op: wire.SourceChangeOpRename, After: []byte("read me\n"),
+	}))
+	stale := callSourceViewHandlerAs(t, ctx, server.Views.HandleGetSourceView, p.ID, view.ID, nil)
+	if code := sourceViewErrorCode(t, stale, http.StatusConflict); code != wire.ApiErrorCodeSourceVersionChanged {
+		t.Fatalf("moved source returned %q", code)
+	}
+	view = readSourceViewResponse(t, create(selector), http.StatusCreated).Comparison
+	testutil.WaitFor(t, "reader reopens at the current address", func() bool {
+		current := readSourceViewResponse(t, callSourceViewHandlerAs(t, ctx, server.Views.HandleGetSourceView, p.ID, view.ID, nil), http.StatusOK).Comparison
+		if current.State == "failed" {
+			t.Fatalf("reopening after the move failed: %+v", current.Failure)
+		}
+		return current.State == "ready" && current.Comparison != nil && current.Comparison.After != nil && current.Comparison.After.Path == rel+"-moved"
+	})
 	testutil.FailErr(t, "move the observed folder", os.Rename(dir, dir+"-old"))
 	t.Cleanup(func() { testutil.FailErr(t, "remove moved folder", os.RemoveAll(dir+"-old")) })
 	testutil.FailErr(t, "replace observed folder", os.Mkdir(dir, 0o700))
-	testutil.FailErr(t, "write replacement text", os.WriteFile(file, []byte("unexpected file"), 0o600))
+	testutil.FailErr(t, "write replacement text", os.WriteFile(moved, []byte("unexpected file"), 0o600))
 	view = readSourceViewResponse(t, create(selector), http.StatusCreated).Comparison
 	testutil.WaitFor(t, "reader rejects the replacement", func() bool {
 		current := readSourceViewResponse(t, callSourceViewHandlerAs(t, ctx, server.Views.HandleGetSourceView, p.ID, view.ID, nil), http.StatusOK).Comparison
