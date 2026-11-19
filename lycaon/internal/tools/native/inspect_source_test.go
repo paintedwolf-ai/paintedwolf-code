@@ -8,7 +8,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/lycaon/lycaon/internal/gitrepo"
+	"github.com/lycaon/lycaon/internal/fspath"
+	"github.com/lycaon/lycaon/internal/isolation"
 	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/toolprofiles"
@@ -81,7 +82,9 @@ func TestInspectSourceRejectsExternalGitMetadata(t *testing.T) {
 	for _, name := range []string{".git", "commondir"} {
 		t.Run(name, func(t *testing.T) {
 			dir := t.TempDir()
-			external := filepath.Join(t.TempDir(), "metadata")
+			outside := t.TempDir()
+			t.Setenv("LYCAON_SANDBOX_DENY_READ", outside)
+			external := filepath.Join(outside, "metadata")
 			testutil.FailErr(t, "write external metadata", os.WriteFile(external, nil, 0o600))
 			rel := ".git"
 			if name == "commondir" {
@@ -92,7 +95,8 @@ func TestInspectSourceRejectsExternalGitMetadata(t *testing.T) {
 
 			tool := &InspectSourceTool{Boundary: nativefixture.Boundary(t)}
 			_, err := tool.inspectGitHead(t.Context(), provenanceCtx(dir, nil), ".")
-			if reject := toolrejection.AsToolReject(err); reject == nil || reject.Code != "SURVEY_PATH_ESCAPE" || reject.Data["path"] != filepath.Join(gitrepo.CanonicalDir(dir), rel) {
+			reject := toolrejection.AsToolReject(err)
+			if reject == nil || reject.Code != isolation.CodeControlPlaneDenied || reject.Data["path"] != fspath.CanonicalPath(external) {
 				t.Fatalf("external metadata %s was not rejected at its read boundary: %v", name, err)
 			}
 		})
@@ -101,13 +105,13 @@ func TestInspectSourceRejectsExternalGitMetadata(t *testing.T) {
 
 func TestInspectSourceIgnoresMissingOptionalMetadataOutsideReadGlobs(t *testing.T) {
 	dir := t.TempDir()
-	writeGitInspectionFixture(t, dir, "HEAD", "ref: refs/heads/review")
+	writeGitInspectionFixture(t, filepath.Join(dir, "checkout"), "HEAD", "ref: refs/heads/review")
 	boundary := sandbox.NewBoundary(sandbox.Config{ProjectRootRequired: true, RejectSymlinkEscape: true}, []sandbox.ToolProfile{{
 		ID:        toolprofiles.DefaultToolProfileID,
-		ReadGlobs: []string{".", ".git", ".git/HEAD"},
+		ReadGlobs: []string{"checkout", "checkout/.git", "checkout/.git/HEAD"},
 	}})
 	tool := &InspectSourceTool{Boundary: boundary}
-	got, err := tool.inspectGitHead(t.Context(), provenanceCtx(dir, nil), ".")
+	got, err := tool.inspectGitHead(t.Context(), provenanceCtx(dir, nil), "checkout")
 	testutil.FailErr(t, "inspect unborn HEAD", err)
 	if !got.Unborn {
 		t.Fatalf("Git HEAD = %+v, want unborn branch", got)
