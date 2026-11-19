@@ -46,7 +46,7 @@ func CloneSnapshot(ctx context.Context, sqlDB DBTX, storePath, destPath string) 
 
 // checkpointSnapshot folds committed frames into a quiescent database file.
 func checkpointSnapshot(ctx context.Context, path string) error {
-	clone, err := openCounted(fileDSN(path, "_pragma=busy_timeout(10000)"))
+	clone, err := openCounted(fileDSN(path, "_pragma=busy_timeout(10000)"), nil)
 	if err != nil {
 		return fmt.Errorf("snapshot checkpoint: open source: %w", err)
 	}

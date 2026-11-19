@@ -57,7 +57,7 @@ func executeRetainedUpgrade(ctx context.Context, path string, plan migrations.Pl
 
 func openRetainedUpgradeWriter(ctx context.Context, path string) (*sql.DB, error) {
 	query := writerDSNQuery + "&_pragma=journal_mode(off)&_pragma=temp_store(file)&_pragma=threads(0)&_pragma=cache_size(-2000)"
-	writer, err := openCounted(fileDSN(path, query))
+	writer, err := openCounted(fileDSN(path, query), nil)
 	if err != nil {
 		return nil, err
 	}

@@ -25,7 +25,7 @@ type retainedCopyResult struct {
 // index audits run after activation rather than delaying normal use.
 func copyWholeRetainedStore(ctx context.Context, source, destination string, plan migrations.Plan) (retainedCopyResult, bool, error) {
 	var result retainedCopyResult
-	reader, err := openCounted(fileDSN(source, readerDSNQuery+"&_pragma=temp_store(file)&_pragma=threads(0)&_pragma=cache_size(-2000)"))
+	reader, err := openCounted(fileDSN(source, readerDSNQuery+"&_pragma=temp_store(file)&_pragma=threads(0)&_pragma=cache_size(-2000)"), nil)
 	if err != nil {
 		return result, false, err
 	}
