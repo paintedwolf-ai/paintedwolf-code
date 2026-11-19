@@ -4,7 +4,7 @@ import path from "node:path";
 import { expect } from "@playwright/test";
 import type { CheckpointListResponse, SourceComparison } from "../../src/api/types.ts";
 import {
-  apiJson, apiPostPrompt, bootstrapActiveProject, e2eTempDir, e2eUniqueLabel, openNewChatSession,
+  apiJson, apiPostPrompt, bootstrapActiveProject, e2eTempDir, e2eUniqueLabel,
   settledChatSessionId, waitForChatComposerReady, webE2e,
 } from "../helpers.ts";
 import { manualHarnessTools } from "../manual-harness-tools.ts";
@@ -78,7 +78,8 @@ webE2e("Review shows an outside edit and its retained versions in the chat that 
     await expect(retained).toBeVisible();
     await expect(retained).not.toBeEditable();
 
-    expect(await openNewChatSession(page)).not.toBe(sessionId);
+    await page.getByTestId("new-chat-btn").click();
+    await expect.poll(() => settledChatSessionId(page), { timeout: 90_000 }).not.toBe(sessionId);
     await openReview();
     await expect(page.getByTestId("review-lens-empty")).toBeVisible();
     await expect(row).toHaveCount(0);
