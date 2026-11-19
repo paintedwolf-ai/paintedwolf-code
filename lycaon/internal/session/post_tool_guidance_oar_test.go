@@ -42,6 +42,7 @@ func newPostToolGuidanceManager(t *testing.T) *Host {
 	pipeline.EnableAnchor(oar.AnchorToolPost)
 	pipeline.EnableAnchor(oar.AnchorToolRejected)
 	pipeline.EnableAnchor(oar.AnchorCredentialAssignment)
+	pipeline.EnableAnchor(oar.AnchorSharedTemp)
 	mgr, _ := newTestManager(t)
 	mgr.SetRejectFormatter(rejectFmt)
 	mgr.SetOARPipeline(pipeline, oar.NewRenderer(rejectFmt, nil))

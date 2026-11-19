@@ -48,6 +48,7 @@ host_anchors:
   - content.output
   - content.tool_result
   - credential.assignment
+  - sandbox.shared_temp
   - tool.rejected
 
 profiles:
@@ -226,7 +227,28 @@ host_facts:
    observation: True when the invocation's process was still running when observed.
  - name: paintedwolf.refused_write_paths
    type: list<string>
-   observation: Paths the kernel refused the invocation's processes for writing, at any layer; empty when none.
+   observation: Refused write paths covered by ordinary path recovery.
+ - name: paintedwolf.refused_shared_temp
+   type: list<string>
+   observation: Shared temporary directories refused for writing in this occurrence.
+ - name: paintedwolf.shared_temp_allowed
+   type: list<string>
+   observation: Refused shared temporary directories now authorized for this chat.
+ - name: paintedwolf.shared_temp_declined
+   type: list<string>
+   observation: Refused shared temporary directories denied for this chat.
+ - name: paintedwolf.shared_temp_unanswered
+   type: list<string>
+   observation: Refused shared temporary directories without a completed authorization.
+ - name: paintedwolf.shared_temp_tolerated
+   type: bool
+   observation: The command exited successfully after a refused shared temp write.
+ - name: paintedwolf.session_scratch_available
+   type: bool
+   observation: The invocation has a session scratch folder.
+ - name: paintedwolf.private_temp
+   type: bool
+   observation: The invocation sees private temporary directories.
  - name: paintedwolf.refused_write_grants
    type: list<string>
    observation: The capability_request.write_root path whose approval would open each refused write path that a reviewed grant can open; empty when none.

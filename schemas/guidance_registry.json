@@ -2408,6 +2408,16 @@
       "emit": "guard:sandbox_read_path",
       "summary": "{{ tool }} was not granted read access to {{ paintedwolf.path }}."
     },
+    "SANDBOX_SHARED_TEMP_REFUSED": {
+      "category": "recoverable",
+      "emit": "guard:sandbox",
+      "summary": "The sandbox refused writes under {{ paintedwolf.refused_shared_temp }}.{% if paintedwolf.process_running %} The job is still running. A new grant would apply only to a later launch.{% endif %}"
+    },
+    "SANDBOX_SHARED_TEMP_TOLERATED": {
+      "category": "recoverable",
+      "emit": "guard:sandbox",
+      "summary": "The program exited successfully after the sandbox refused a write under {{ paintedwolf.refused_shared_temp }}."
+    },
     "SANDBOX_SOCKET_PATH_CHANGED": {
       "branch_instruction": "Branch on Code; re-request after the socket path is stable",
       "category": "recoverable",

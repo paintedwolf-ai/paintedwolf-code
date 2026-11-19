@@ -28,5 +28,5 @@ func InlineAdvisory(anchor string, effect Effect) bool {
 	if anchor == AnchorWorkerFinalize {
 		return true
 	}
-	return effect == EffectWarn && (anchor == AnchorToolPost || anchor == AnchorCredentialAssignment)
+	return effect == EffectWarn && (anchor == AnchorToolPost || anchor == AnchorCredentialAssignment || anchor == AnchorSharedTemp)
 }

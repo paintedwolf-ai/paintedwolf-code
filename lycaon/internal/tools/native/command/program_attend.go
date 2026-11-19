@@ -118,6 +118,7 @@ func (r *ProgramRuntime) attend(callCtx context.Context, e *programEvaluation) (
 		out.MergeChild(program, tools.MergeProgram)
 		out.CommandProgram, out.SourceRun = program.CommandProgram, program.SourceRun
 	}
+	r.reviewSharedTemp(callCtx, e.callTC, e.run.tool, e.run.source, false)
 	stateGitNoRepository(e)
 	return ending.result, ending.err
 }
@@ -174,6 +175,7 @@ func (r *ProgramRuntime) parkProgram(callCtx context.Context, e *programEvaluati
 			out.CommandProgram = &receipt
 		}
 	}
+	r.reviewSharedTemp(callCtx, e.callTC, e.run.tool, e.run.source, true)
 	stateGitNoRepository(e)
 	result := ParkedProgramResult{ProgramID: programID, State: "parked", Reason: state.Statement, LeaseID: parked.LeaseID()}
 	if run.tool == "verify" {

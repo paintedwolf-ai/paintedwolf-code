@@ -18,6 +18,13 @@ func buildOccurrenceFactDecls() []factDecl {
 }
 
 var staticOccurrenceFactDecls = []factDecl{
+	{"refused_shared_temp", oarcore.TypeListString, FactTierHost, ""},
+	{"shared_temp_allowed", oarcore.TypeListString, FactTierHost, ""},
+	{"shared_temp_declined", oarcore.TypeListString, FactTierHost, ""},
+	{"shared_temp_unanswered", oarcore.TypeListString, FactTierHost, ""},
+	{"shared_temp_tolerated", oarcore.TypeBool, FactTierHost, ""},
+	{"session_scratch_available", oarcore.TypeBool, FactTierHost, ""},
+	{"private_temp", oarcore.TypeBool, FactTierHost, ""},
 	{"native_command", oarcore.TypeString, FactTierHost, ""},
 	{"source_line", oarcore.TypeInt, FactTierHost, ""},
 	{"source_column", oarcore.TypeInt, FactTierHost, ""},

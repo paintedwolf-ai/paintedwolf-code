@@ -71,9 +71,12 @@ func (t *CommandTool) Run(ctx context.Context, args map[string]any, tctx tools.T
 		return "", err
 	}
 	if !outcome.Finished {
-		return EncodeCommandRunning(tctx, outcome, WaitBudget(args))
+		result, err := EncodeCommandRunning(tctx, outcome, WaitBudget(args))
+		t.Programs.reviewSharedTemp(ctx, tctx, "command", CanonicalCommandKey(tctx, args), true)
+		return result, err
 	}
 	StampBoundaryRefusal(tctx, res)
+	t.Programs.reviewSharedTemp(ctx, tctx, "command", CanonicalCommandKey(tctx, args), outcome.Terminal != nil && outcome.Terminal.TimedOut)
 	StampIndexWatch(tctx, outcome.IndexWatch)
 	commandVerdict, _ := VerdictFor(res)
 	StampSourceRun(tctx, res, commandVerdict, outcome)

@@ -839,6 +839,16 @@ anchors:
       vars:
         tool: { type: string }
 
+  - id: sandbox.shared_temp
+    title: Shared temporary directory write
+    description: A command encountered a refused write to a shared temporary directory.
+    trigger_class: post_tool
+    surface: coordinator
+    planes: [block]
+    envelope:
+      vars:
+        tool: { type: string }
+
   - id: credential.assignment
     title: Credential assignment
     description: One literal credential assignment observed on a completed tool call. Rules decide quality policy from measured material and provenance.

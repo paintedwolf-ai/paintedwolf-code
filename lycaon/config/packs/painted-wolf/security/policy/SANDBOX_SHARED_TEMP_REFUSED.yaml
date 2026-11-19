@@ -1,0 +1,35 @@
+spec_version: "1.0"
+id: SANDBOX_SHARED_TEMP_REFUSED
+kind: policy
+on: sandbox.shared_temp
+selector:
+  tools: [command, verify, command_output]
+requires_facts: [paintedwolf.process_running, paintedwolf.refused_shared_temp, paintedwolf.session_scratch_available, paintedwolf.shared_temp_allowed, paintedwolf.shared_temp_declined, paintedwolf.shared_temp_tolerated, paintedwolf.shared_temp_unanswered]
+when: size(paintedwolf.refused_shared_temp) > 0 && !paintedwolf.shared_temp_tolerated
+effect: warn
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:sandbox
+message: a program encountered a shared temporary directory write restriction
+what: 'The sandbox refused writes under {{ paintedwolf.refused_shared_temp }}.{% if paintedwolf.process_running %} The job is still running. A new grant would apply only to a later launch.{% endif %}'
+cause: ''
+why: ''
+fix: '{% if paintedwolf.shared_temp_allowed %}This chat can now write under {{ paintedwolf.shared_temp_allowed }}. Check which effects completed and submit only the remaining work.{% endif %}{% if paintedwolf.shared_temp_declined %} Write access to {{ paintedwolf.shared_temp_declined }} was declined. Avoid those locations.{% if paintedwolf.session_scratch_available %} Configure the program to use the session scratch folder instead.{% endif %}{% endif %}{% if paintedwolf.shared_temp_unanswered %} Write access to {{ paintedwolf.shared_temp_unanswered }} remains unapproved. If the work still needs it, check earlier effects and run the remaining work to request access again.{% endif %}'
+instead: ''
+x-paintedwolf-scenarios:
+  - id: mixed_decisions
+    vars:
+      tool: command
+      refused_shared_temp: [/tmp, /var/tmp]
+      shared_temp_allowed: [/tmp]
+      shared_temp_declined: [/var/tmp]
+      session_scratch_available: true
+  - id: running
+    vars:
+      tool: command_output
+      refused_shared_temp: [/tmp]
+      process_running: true
+  - id: unanswered
+    vars:
+      tool: verify
+      refused_shared_temp: [/tmp]
+      shared_temp_unanswered: [/tmp]

@@ -158,6 +158,7 @@ func TestPostureRulesAreMonotone(t *testing.T) {
 		}{
 			{"releasesChatSecrets", lower.releasesChatSecrets, higher.releasesChatSecrets},
 			{"quietsPublicRegistries", lower.quietsPublicRegistries, higher.quietsPublicRegistries},
+			{"quietsSharedTemp", lower.quietsSharedTemp, higher.quietsSharedTemp},
 			{"quietsOwnedLocalServices", lower.quietsOwnedLocalServices, higher.quietsOwnedLocalServices},
 		}
 		for _, q := range quiets {

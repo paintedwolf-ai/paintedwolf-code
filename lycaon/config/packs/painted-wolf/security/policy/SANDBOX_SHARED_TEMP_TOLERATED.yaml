@@ -1,0 +1,23 @@
+spec_version: "1.0"
+id: SANDBOX_SHARED_TEMP_TOLERATED
+kind: policy
+on: sandbox.shared_temp
+selector:
+  tools: [command, verify]
+requires_facts: [paintedwolf.refused_shared_temp, paintedwolf.shared_temp_tolerated]
+when: size(paintedwolf.refused_shared_temp) > 0 && paintedwolf.shared_temp_tolerated
+effect: warn
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:sandbox
+message: a program tolerated a refused temporary file write
+what: 'The program exited successfully after the sandbox refused a write under {{ paintedwolf.refused_shared_temp }}.'
+cause: ''
+why: ''
+fix: ''
+instead: ''
+x-paintedwolf-scenarios:
+  - id: two_locations
+    vars:
+      tool: command
+      refused_shared_temp: [/tmp, /var/tmp]
+      shared_temp_tolerated: true

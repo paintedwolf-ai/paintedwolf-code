@@ -61,6 +61,7 @@ type postureRule struct {
 	// quietsOwnedLocalServices lets a listener on an unprivileged port, and a
 	// loopback connection to ports the chat owns, widen without a card.
 	quietsOwnedLocalServices bool
+	quietsSharedTemp         bool
 	// reviewsConfinedWrites asks for a write even inside the chat's scratch
 	// authority.
 	reviewsConfinedWrites bool
@@ -72,7 +73,7 @@ type postureRule struct {
 var postureRules = map[Posture]postureRule{
 	PostureLight: {
 		strictness: 0, ladder: LadderPolicy{Widening: WidenFromFirstCard},
-		releasesChatSecrets: true, quietsPublicRegistries: true, quietsOwnedLocalServices: true,
+		releasesChatSecrets: true, quietsPublicRegistries: true, quietsOwnedLocalServices: true, quietsSharedTemp: true,
 	},
 	PostureBalanced: {
 		strictness: 1, ladder: LadderPolicy{Widening: WidenMenuOnly},

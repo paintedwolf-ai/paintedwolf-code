@@ -70,8 +70,8 @@ type ProgramRuntime struct {
 	// Clock times program waits; nil is the system clock.
 	Clock commandprogram.Clock
 	// Effects records the file edits a program makes after its call returns.
-	Effects tools.ProgramEffectSink
-	// SourceRuns records a parked program's run evidence.
+	Effects        tools.ProgramEffectSink
+	SharedTemp     SharedTempReviewer
 	SourceRuns     SourceRunRecorder
 	FailureTracker *CommandFailureTracker
 

@@ -123,44 +123,49 @@ func requireAppliedBoundary(t *testing.T) {
 	t.Skip("this host has no confinement adapter")
 }
 
-func TestProgramExternalOutsideWriteRefusedWhileTempWriteAllowed(t *testing.T) {
+func TestProgramExternalOutsideWriteAndSessionTemp(t *testing.T) {
 	requireAppliedBoundary(t)
 	confine.TestingSetAutoConfine(t)
 	t.Setenv("LYCAON_SANDBOX_NETWORK", "deny")
 
 	account, err := user.LookupId(strconv.Itoa(os.Getuid()))
 	testutil.FailErr(t, "look up account home", err)
-	stateDir, err := os.MkdirTemp(account.HomeDir, ".paintedwolf-cmd-state-") //nolint:usetesting // /tmp must stay a write root
+	stateDir, err := os.MkdirTemp(account.HomeDir, ".paintedwolf-cmd-state-") //nolint:usetesting // State must be outside the shared temp under review.
 	testutil.FailErr(t, "create state fixture dir", err)
 	t.Cleanup(func() { _ = os.RemoveAll(stateDir) })
 	t.Setenv("HOME", stateDir)
 	t.Setenv("XDG_CONFIG_HOME", filepath.Join(stateDir, "xdg-config"))
 
-	outsideDir, err := os.MkdirTemp(account.HomeDir, ".paintedwolf-cmd-outside-") //nolint:usetesting // Must lie outside OS temporary write roots.
+	outsideDir, err := os.MkdirTemp(account.HomeDir, ".paintedwolf-cmd-outside-") //nolint:usetesting // This target must stay outside every writable directory.
 	testutil.FailErr(t, "create outside fixture dir", err)
 	t.Cleanup(func() { _ = os.RemoveAll(outsideDir) })
 
-	tmpDir, err := os.MkdirTemp("/tmp", "paintedwolf-cmd-temp-") //nolint:usetesting // Exercises /tmp write root explicitly.
-	testutil.FailErr(t, "create /tmp fixture dir", err)
-	t.Cleanup(func() { _ = os.RemoveAll(tmpDir) })
-
 	f := newProgramFixture(t)
-	tmpTarget := filepath.Join(tmpDir, "allowed.txt")
-	out, err := f.call(t, t.Context(), "external -- /bin/sh -c 'printf ok > \"$1\"' sh "+tmpTarget)
-	testutil.FailErr(t, "run confined /tmp write", err)
-	if outcome := decodeOutcome(t, out); outcome.Status != 0 {
-		t.Fatalf("confined /tmp write failed: %+v", outcome)
+	marker := filepath.Join(f.Dir, "starts")
+	hostTarget := filepath.Join("/tmp", "paintedwolf-"+filepath.Base(outsideDir))
+	var effects tools.ToolInvocationOut
+	f.Configure = func(tc *tools.ToolContext) { effects = tools.ToolInvocationOut{}; tc.Effects.Out = &effects }
+	// A committed marker counts launches even when the later temp write fails.
+	out, err := f.call(t, t.Context(), "external -- /bin/sh -c 'printf x >> \"$1\"; printf ok > \"$2\"' sh "+marker+" "+hostTarget)
+	testutil.FailErr(t, "run shared temp write", err)
+	status := decodeOutcome(t, out).Status
+	if privatePath, mapped := confine.PrivateTempFor(f.ScratchDir).Resolve(hostTarget); mapped {
+		data, readErr := os.ReadFile(privatePath)
+		if status != 0 || string(data) != "ok" || readErr != nil {
+			t.Fatalf("scratch write status=%d bytes=%q error=%v", status, data, readErr)
+		}
+	} else if status == 0 {
+		t.Fatal("shared write succeeded without a grant")
 	}
-	if data, readErr := os.ReadFile(tmpTarget); readErr != nil || string(data) != "ok" {
-		t.Fatalf("/tmp file content = %q, %v", data, readErr)
+	if _, err := os.Lstat(hostTarget); !os.IsNotExist(err) {
+		t.Fatalf("shared target stat=%v", err)
+	}
+	data, readErr := os.ReadFile(marker)
+	if readErr != nil || string(data) != "x" {
+		t.Fatalf("launch marker=%q error=%v", data, readErr)
 	}
 
 	outsideTarget := filepath.Join(outsideDir, "refused.txt")
-	var effects tools.ToolInvocationOut
-	f.Configure = func(tc *tools.ToolContext) {
-		effects = tools.ToolInvocationOut{}
-		tc.Effects.Out = &effects
-	}
 	out, err = f.call(t, t.Context(), "external -- /bin/sh -c 'printf nope > \"$1\"' sh "+outsideTarget)
 	testutil.FailErr(t, "run confined outside write", err)
 	if outcome := decodeOutcome(t, out); outcome.Status == 0 {

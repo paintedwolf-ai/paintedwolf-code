@@ -53,6 +53,12 @@ func (b *WriteRootCheckpointBroker) posture(projectDir string) gate.Posture {
 
 // Authorize implements command.SandboxWriteRootGate.
 func (b *WriteRootCheckpointBroker) Authorize(ctx context.Context, in command.SandboxWriteRootAsk) (command.SandboxWriteRootResult, error) {
+	return b.authorizeWriteRoot(ctx, in, awaitSandboxAsk)
+}
+
+type writeRootReview func(context.Context, sandboxAskRequest) (sandboxAskResolution, error)
+
+func (b *WriteRootCheckpointBroker) authorizeWriteRoot(ctx context.Context, in command.SandboxWriteRootAsk, review writeRootReview) (command.SandboxWriteRootResult, error) {
 	var out command.SandboxWriteRootResult
 	if b == nil || b.Checkpoints == nil || b.Runtime == nil {
 		return out, nil
@@ -127,7 +133,8 @@ func (b *WriteRootCheckpointBroker) Authorize(ctx context.Context, in command.Sa
 	// The posture decides whether declared authority needs a prompt.
 	target := &gate.FileTarget{
 		Path: proposed, Mode: gate.ModeWrite,
-		OutsideRoots: !inRoots,
+		OutsideRoots:    !inRoots,
+		SharedTempGrant: isSharedTempRoot(proposed),
 	}
 	// Protected subjects ask regardless of root or catalog coverage.
 	if subject.Kind != confine.WriteSubjectOrdinary {
@@ -162,19 +169,19 @@ func (b *WriteRootCheckpointBroker) Authorize(ctx context.Context, in command.Sa
 		}, nil
 	}
 
-	return b.raiseWriteRootCard(ctx, in, invokingSessionID, rootSessionID, projectDir, proposed, subject, decision, approvalMatches)
+	return b.raiseWriteRootCard(ctx, review, in, invokingSessionID, rootSessionID, projectDir, proposed, subject, decision, approvalMatches)
 }
 
 // raiseWriteRootCard builds and awaits a write-root checkpoint.
 func (b *WriteRootCheckpointBroker) raiseWriteRootCard(
-	ctx context.Context,
+	ctx context.Context, review writeRootReview,
 	in command.SandboxWriteRootAsk,
 	invokingSessionID, rootSessionID, projectDir, proposed string,
 	subject confine.WriteSubject,
 	decision *gate.Decision,
 	approvalMatches []hitl.ApprovalRuleMatch,
 ) (command.SandboxWriteRootResult, error) {
-	resolved, err := awaitSandboxAsk(ctx, sandboxAskRequest{
+	resolved, err := review(ctx, sandboxAskRequest{
 		Gate: b.Runtime, Checkpoints: b.Checkpoints, Authz: b.Authz,
 		InvokingSessionID: invokingSessionID, Key: proposed, ToolCallID: in.ToolCallID,
 		ProjectID: in.ProjectID, Tool: "write_root",
@@ -227,6 +234,13 @@ func writeRootCardCopyFor(subject confine.WriteSubject, proposed string, protect
 		out.ifWrongLine = "Keys here authenticate as you. A program that writes them can replace or add credentials that act as this machine."
 		out.allowLine = "writes to " + proposed
 	case confine.WriteSubjectOrdinary:
+		if isSharedTempRoot(proposed) {
+			out.targetKind = "shared_temp"
+			out.subjectTitle = "Allow writes to " + proposed
+			out.impactLine = "Other programs keep temporary files here."
+			out.ifWrongLine = "Programs in this chat can modify files other programs use."
+			out.allowLine = "writes within " + proposed + " for this chat"
+		}
 	}
 	return out
 }
@@ -265,7 +279,7 @@ func (b *WriteRootCheckpointBroker) buildWriteRootCard(
 		},
 	}
 	var grantOffers []hitl.ApprovalGrantOffer
-	if b.Authority != nil && subject.Kind == confine.WriteSubjectOrdinary {
+	if b.Authority != nil && subject.Kind == confine.WriteSubjectOrdinary && !isSharedTempRoot(proposed) {
 		grantOffers = b.Authority.GrantOffers(grantAction, &hitl.ApprovalResult{Decision: decision})
 	}
 	protectedWithin := confine.ProtectedPathsWithin(proposed)

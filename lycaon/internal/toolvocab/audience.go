@@ -31,6 +31,7 @@ var anchorAudience = map[string]audienceClass{
 	oar.AnchorToolHandler:              audienceAnyCaller,
 	oar.AnchorToolRejected:             audienceAnyCaller,
 	oar.AnchorToolPost:                 audienceAnyCaller,
+	oar.AnchorSharedTemp:               audienceAnyCaller,
 	oar.AnchorCredentialAssignment:     audienceAnyCaller,
 	oar.AnchorSessionPreInvoke:         audienceAnyCaller,
 	oar.AnchorContentInput:             audienceAnyCaller,

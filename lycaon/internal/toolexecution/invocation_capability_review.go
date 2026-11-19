@@ -105,7 +105,7 @@ func (e *Executor) reviewInvocationCapabilities(ctx context.Context, tool string
 func capabilityReviewDenialCode(plan *hitl.ApprovalPlan) string {
 	for _, target := range plan.Subject.Targets {
 		switch target.Kind {
-		case "write_root", "credential_file", "key_material":
+		case "write_root", "credential_file", "key_material", "shared_temp":
 			return isolation.CodeWriteRootDenied
 		case "read_path":
 			return isolation.CodeReadPathDenied

@@ -2,6 +2,7 @@ package approvalstate
 
 import (
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/lycaon/lycaon/internal/confine"
@@ -12,7 +13,8 @@ const pathRunGrantCap = 32
 
 // SandboxPathGrantRuntime stores one independent read or write grant set.
 type SandboxPathGrantRuntime struct {
-	guard sandboxAskGuard[PathChatGrant]
+	guard     sandboxAskGuard[PathChatGrant]
+	tempChats sync.Map // chat ID to *SharedTempHistory
 }
 
 // PathChatGrant is one revocable chat path authority.
@@ -196,4 +198,5 @@ func (r *SandboxPathGrantRuntime) ForgetSession(rootSessionID string) {
 		return
 	}
 	r.guard.forgetSession(rootSessionID)
+	r.tempChats.Delete(rootSessionID)
 }

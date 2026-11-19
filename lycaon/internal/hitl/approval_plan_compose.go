@@ -229,7 +229,7 @@ func actionSetOptionContinues(targets []ApprovalTarget, authority []ApprovalAuth
 			required["loopback_connect"] = true
 		case "secret":
 			required["secret"] = true
-		case "write_root", "credential_file", "key_material":
+		case "write_root", "credential_file", "key_material", "shared_temp":
 			required["write_path"] = true
 		case "read_path":
 			required["read_path"] = true

@@ -232,7 +232,13 @@ func (m *Service) AfterTool(ctx context.Context, sess *api.Session, tool string,
 		facts.ContentReplaced = true
 		return "", facts.WithOutcome(api.ToolResultOutcomeError)
 	}
-	return m.feedback.DeliverPostToolResult(ctx, oar.AnchorToolPost, output, res)
+	delivered, facts = m.feedback.DeliverPostToolResult(ctx, oar.AnchorToolPost, output, res)
+	if !facts.ContentReplaced && raised.SharedTemp != nil && len(raised.SharedTemp.Refused) > 0 && m.Pipeline.AnchorEnforced(oar.AnchorSharedTemp) {
+		var contribution guidance.ToolResultFacts
+		delivered, contribution = m.sharedTempResult(ctx, sess, tool, args, delivered, *raised.SharedTemp)
+		facts = facts.Merge(contribution)
+	}
+	return delivered, facts
 }
 
 // fruitlessSearchRun reads question-specific counts without recording an attempt.

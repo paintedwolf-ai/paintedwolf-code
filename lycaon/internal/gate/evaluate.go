@@ -184,11 +184,11 @@ func definitions() []definition {
 			predicate: sensitiveLocation,
 		},
 		{
-			gate:      api.GateOutsideRootsWrite,
-			stages:    []Stage{StagePreSpawn},
-			when:      ordinaryAction,
-			requires:  ProducerFilePath | ProducerLease,
-			predicate: outsideRootsWrite,
+			gate:             api.GateOutsideRootsWrite,
+			stages:           []Stage{StagePreSpawn},
+			when:             ordinaryAction,
+			requires:         ProducerFilePath | ProducerLease,
+			posturePredicate: outsideRootsWrite,
 		},
 		{
 			gate:      api.GateOutsideRootsRead,
@@ -633,11 +633,11 @@ func sensitiveLocation(f Facts) (bool, []Fact, string) {
 	), f.File.CatalogID
 }
 
-func outsideRootsWrite(f Facts) (bool, []Fact, string) {
+func outsideRootsWrite(f Facts, p Posture) (bool, []Fact, string) {
 	if f.File == nil || f.FileLeased || !f.File.OutsideRoots || f.File.WithinConfinement {
 		return false, nil, ""
 	}
-	if f.File.Mode == ModeRead {
+	if f.File.Mode == ModeRead || (f.File.SharedTempGrant && !f.File.ProtectedSubject && !f.File.Sensitive && p.rule().quietsSharedTemp) {
 		return false, nil, ""
 	}
 	return true, fileFacts(*f.File), string(f.File.Mode) + ":" + filepath.Dir(f.File.Path)

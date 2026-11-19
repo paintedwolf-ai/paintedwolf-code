@@ -71,6 +71,7 @@ func (r *ProgramRuntime) continueProgram(ctx context.Context, e *programEvaluati
 			out.CommandProgram = &projection.Program
 		}
 	}
+	r.reviewSharedTemp(ctx, e.callTC, run.tool, run.source, true)
 	result, err := surveyjson.Marshal(RunningProgramResult{ProgramID: run.root.Identity.ProgramID, State: "running", Handle: handle})
 	return string(result), err
 }
