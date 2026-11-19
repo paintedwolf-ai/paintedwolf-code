@@ -16,6 +16,7 @@ BEHAVIOR = live(phase="affected-packages")
 ADMISSION, ADMISSION_TESTS = live(phase="admission"), live(phase="admission-tests")
 DEN, RACE, CONFINE = live(runs="den:typecheck"), live(runs="test:race", profiles=["nightly"]), live(runs="test:confine:linux")
 NIX, BUILD = live(runs="nix:check"), live(runs="check:drift")
+SCRIPTS = live(runs="scripts:coverage:changes")
 STRESS = next(name for name, lane in hosted_plan.lanes().items()
               if lane["targets"] == ["test:stress"] and lane["profiles"] == ["nightly"])
 
@@ -364,6 +365,17 @@ class HostedExecutionTests(unittest.TestCase):
             self.assertEqual(ci.run_lane(DEN), 1)
         self.assertEqual(run.call_args.args[0][1:], ['den:typecheck', 'den:lint', 'den:knip:changes', 'den:coverage:changes'])
         self.assertEqual(run.call_args.kwargs['env']['PW_TEST_KEEP_GOING'], '1')
+
+    def test_outside_a_change_base_lanes_run_the_suites_their_gates_measure(self):
+        with tempfile.TemporaryDirectory() as directory, \
+                patch.object(ci, 'artifact_root', return_value=Path(directory)), \
+                patch.object(ci.subprocess, 'call', return_value=0) as run:
+            ci.run_lane(DEN, profile='integration')
+            self.assertEqual(run.call_args.args[0], ['./task', 'den:typecheck', 'den:lint', 'den:test'])
+            ci.run_lane(SCRIPTS, profile='nightly')
+            self.assertEqual(run.call_args.args[0], ['./task', 'test:runner', '--', '--every-suite'])
+            ci.run_lane(SCRIPTS)
+            self.assertEqual(run.call_args.args[0], ['./task', 'scripts:coverage:changes'])
 
     def test_fast_lane_stops_when_a_phase_is_interrupted(self):
         scope = dict(base='b' * 40, head='a' * 40, paths=[], full=False)

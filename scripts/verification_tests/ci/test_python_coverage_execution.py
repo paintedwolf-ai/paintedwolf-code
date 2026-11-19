@@ -237,6 +237,19 @@ class DeclaredSuiteTests(unittest.TestCase):
                          ["scripts", os.pathsep.join(["/tools/runner.txt", "scripts"])])
         self.assertEqual({c.kwargs["cwd"] for c in call.call_args_list}, {ROOT})
 
+    def test_the_runner_runs_every_declared_suite_unmeasured_on_request(self):
+        for failed, exits in (([], False), (["harness"], True)):
+            with self.subTest(failed=failed), \
+                    patch.object(runner_tests.python_coverage, "run", return_value=failed) as run, \
+                    patch.object(runner_tests.unittest, "main") as discovery:
+                if exits:
+                    with self.assertRaisesRegex(SystemExit, "harness"):
+                        runner_tests.main([runner_tests.EVERY_SUITE])
+                else:
+                    runner_tests.main([runner_tests.EVERY_SUITE])
+            run.assert_called_once_with(ROOT, coverage_policy.python_suites())
+            discovery.assert_not_called()
+
     def test_suites_need_a_start_and_pattern(self):
         with tempfile.TemporaryDirectory() as directory:
             policy = Path(directory) / "policy.json"

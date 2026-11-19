@@ -989,9 +989,13 @@ base: lint findings, comment and failure-message rules, and changed Go coverage
 refuses to leave a stage no pull request runs). Two changes that each pass them can
 still fail together; the nightly reports that. Size budgets stay in the queue's
 build lane, because two changes that each fit a limit can exceed it together.
-Frontend and scripts assertions execute once through their coverage stages;
-distinct short-covered and integration-tagged Go recipes retain their separate
-modes. Every lane runs to the end, so one failed group reports all its failures.
+Changed Den and script coverage, and unused-export analysis, measure a change
+against its base, so only the pull request and the check profile run them
+(`CHANGE_GATES` in [`hosted_plan.py`](../scripts/ci_policy/hosted_plan.py)). The
+queue, the nightly and a release run the suites they measure without the
+measurement: the frontend lane runs the Den suite, and the runner lane runs every
+script suite (`test:runner -- --every-suite`). Distinct short-covered and
+integration-tagged Go recipes retain their separate modes. Every lane runs to the end, so one failed group reports all its failures.
 
 Pull requests no longer run the integration gate themselves. Running it for
 the pull request and again for its merge group doubled demand on the
@@ -1368,8 +1372,10 @@ and races remain blocking; there is no assertion retry policy.
 
 Ready admission runs focused Go tests and frontend seam canaries after repository
 contracts. Changed Go coverage also runs early in admission; all changed-statement
-coverage and native compilation execute at the exact landing source. Frontend and script coverage stages supply the complete
-assertion suites, avoiding a second uncovered execution in the same qualification.
+coverage and native compilation execute at the exact landing source. In the pull
+request, frontend and script coverage stages supply the complete assertion suites,
+avoiding a second uncovered execution; the landing source runs those suites once,
+unmeasured.
 The failed/unverified/previously-passed frontier changes order, never the complete
 successful-path inventory. Unknown source scope still selects the complete recipe.
 

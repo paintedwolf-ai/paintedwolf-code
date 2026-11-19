@@ -157,12 +157,13 @@ jobs:
           # Admission runs with loopback networking only, where the runner can isolate it.
           OFFLINE: ${{ (inputs.profile == 'fast' || inputs.profile == 'integration') && runner.os == 'Linux' }}
           PW_CI_PACKAGE_TIMINGS: ${{ needs.plan.outputs.package-timings }}
+          PROFILE: ${{ inputs.profile }}
           PYTHONPATH: scripts
         run: |
           if [[ "$OFFLINE" == true ]]; then
-            python3 -m ci_policy.offline "$LANE" --shard "$SHARD"
+            python3 -m ci_policy.offline "$LANE" --shard "$SHARD" --profile "$PROFILE"
           else
-            python3 scripts/ci_verification.py run "$LANE" --shard "$SHARD"
+            python3 scripts/ci_verification.py run "$LANE" --shard "$SHARD" --profile "$PROFILE"
           fi
 
       - uses: ./.github/actions/verification-evidence

@@ -3,6 +3,9 @@ from ci_policy.impact import script_change
 from verification_plan import catalog
 
 
+SCRIPT_COVERAGE = 'scripts:coverage:changes'
+
+
 def runs_script_coverage(scope):
     """A change to what the script suites read gets those suites before the queue; a scope without a base
     runs them too."""
@@ -30,5 +33,5 @@ def commands(scope):
     if runs_package_metadata(scope):
         result.extend(['./task', target] for target in PACKAGE_METADATA_TARGETS)
     if runs_script_coverage(scope):
-        result.append(['./task', 'scripts:coverage:changes'])
+        result.append(['./task', SCRIPT_COVERAGE])
     return result

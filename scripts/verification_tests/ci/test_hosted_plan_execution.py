@@ -59,6 +59,21 @@ class LaneRuleTests(unittest.TestCase):
         with plan(ci=lanes(lint=lane("lint:fast")), **gate):
             self.assertEqual(set(rows("check")), {"tests", "lint"})
 
+    def test_a_change_gate_runs_only_where_a_change_base_exists(self):
+        gate = dict(check=("test:short", "den:knip:changes", "scripts:coverage:changes"),
+                    fast=("test:short", "den:knip:changes"))
+        scripts = lane("scripts:coverage:changes", profiles=("check", "integration", "nightly"))
+        with plan(ci=lanes(knip=lane("den:knip:changes"), scripts=scripts), **gate):
+            for profile in ("fast", "check"):
+                self.assertIn("knip", rows(profile), profile)
+            for profile in ("integration", "nightly"):
+                self.assertNotIn("knip", rows(profile), profile)
+            self.assertEqual(ci.profile_invocations(ci.lanes()["scripts"], "check"), [["scripts:coverage:changes"]])
+            self.assertEqual(ci.profile_invocations(ci.lanes()["scripts"], "integration"),
+                             [["test:runner", "--", "--every-suite"]])
+        # A lane's own arguments would reach the replacement, which takes its own.
+        self.refused(ci=lanes(knip=lane("den:knip:changes", arguments=["x"]), scripts=scripts), **gate)
+
     def test_nightly_includes_every_qualification_lane_and_the_whole_stress_partition(self):
         self.refused(ci=lanes(tests=lane("test:short", profiles=("fast", "check", "integration"))))
         partial = lane("test:stress", profiles=("nightly",), arguments=["./internal/db"])

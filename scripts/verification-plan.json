@@ -1788,7 +1788,10 @@
       "targets": {
         "den:test:rust": [],
         "decide:test": [],
-        "scripts:coverage:changes": []
+        "scripts:coverage:changes": [],
+        "test:runner": [
+          "--every-suite"
+        ]
       }
     },
     "playwright": {

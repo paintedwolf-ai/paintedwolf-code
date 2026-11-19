@@ -68,14 +68,15 @@ def combined_exit(current, result):
     return 1 if 1 in (current, result) else current or result
 
 
-def run_lane(name, shard="", clock=time.monotonic):
+def run_lane(name, shard="", clock=time.monotonic, profile=hosted_plan.GATE):
     lane = hosted_plan.lanes()[name]
     # The lane's minutes are its one time limit, counted from here across every phase.
     deadline = clock() + lane["minutes"] * 60
     count = lane.get("shards", 1)
     if (shard == "") != (count == 1) or shard and shard not in {f"{k}/{count}" for k in range(1, count + 1)}:
         raise ValueError(f"CI lane {name} has {count} shard(s); got {shard!r}")
-    targets = lane["targets"]
+    invocations = hosted_plan.profile_invocations(lane, profile)
+    targets = [invocation[0] for invocation in invocations]
     scope = None
     if os.environ.get("PW_CI_AFFECTED") == "1" or "budgets" in targets:
         from ci_policy.impact import change
@@ -141,6 +142,8 @@ def run_lane(name, shard="", clock=time.monotonic):
         # A selection reaches one target at a time, so a lane's arguments run as one phase per target.
         if "arguments" in lane and len(hosted_plan.invocation(targets)) > 1:
             commands = [["./task", target, "--", *lane["arguments"]] for target in hosted_plan.invocation(targets)]
+        elif any(len(invocation) > 1 for invocation in invocations):
+            commands = [["./task", *invocation] for invocation in invocations]
         if phases == "admission":
             commands = ready_scope.check_phases(hosted_plan.invocation(targets), scope)
         elif phases == "admission-tests":

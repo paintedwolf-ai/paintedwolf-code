@@ -5,7 +5,7 @@ import re
 
 from ci_policy.hosted_schedule import order, PRIORITIES
 from ci_policy.timings import row_key
-from ci_policy.native_admission import runs_package_metadata, runs_script_coverage
+from ci_policy.native_admission import SCRIPT_COVERAGE, runs_package_metadata, runs_script_coverage
 from verification_plan import catalog, expand
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -24,6 +24,12 @@ PLATFORMS = {"linux": {"ubuntu-24.04", "ubuntu-24.04-arm"}, "macos": {"macos-15"
 # base: lint findings, comment and failure-message rules, and changed-statement coverage. A combination of
 # changes that each pass them is judged by the nightly.
 QUEUE_LEAVES = {"lint:full", "arch-lint:changes", "comments:check", "test:fail-messages:check", "coverage:changes"}
+# Stages that measure a change against its base, which only the fast and check profiles have. In every other
+# profile a lane runs, in each one's place, the tests it measures without the measurement; one that only judges
+# the change runs nothing there.
+CHANGE_GATES = {"den:coverage:changes": [["den:test"]], "den:knip:changes": [],
+                "scripts:coverage:changes": [["test:runner", "--", "--every-suite"]]}
+BASED_PROFILES = {"fast", GATE}
 # The setup inputs a lane can need, as the catalog's `provisions` declares them; `engine_free` names
 # targets that run without the runtime engines every other target needs.
 # Change areas a lane declares in `changes`; the change planner selects the lanes of each area it finds.
@@ -43,6 +49,17 @@ def supplemental(lane):
     """A lane beside the check gate: the merge queue or a release runs it, and the gate every development
     host runs does not."""
     return GATE not in lane["profiles"] and bool({"integration", "release"} & set(lane["profiles"]))
+
+
+def profile_invocations(lane, profile):
+    """The task invocations a lane runs in a profile, each a target and its own arguments."""
+    if profile in BASED_PROFILES:
+        return [[target] for target in lane["targets"]]
+    return [invocation for target in lane["targets"] for invocation in CHANGE_GATES.get(target, [[target]])]
+
+
+def profile_targets(lane, profile):
+    return [invocation[0] for invocation in profile_invocations(lane, profile)]
 
 
 def lanes():
@@ -78,13 +95,15 @@ def lanes():
             raise ValueError(f"CI lane {name} has an invalid scheduling priority")
         if not lane["targets"] or not set(lane["targets"]).issubset(targets):
             raise ValueError(f"CI lane {name} must name existing task targets")
+        if set(CHANGE_GATES) & set(lane["targets"]) and "arguments" in lane:
+            raise ValueError(f"CI lane {name} gives its arguments to a change gate's replacement")
         if type(lane["minutes"]) is not int or not 1 <= lane["minutes"] <= 300:
             raise ValueError(f"CI lane {name} must leave time for setup and evidence upload")
         if not lane["profiles"] or not set(lane["profiles"]).issubset(PROFILES):
             raise ValueError(f"invalid CI profiles: {name}")
         if lane["suite"] not in SUITES or lane.get("setup") not in SETUPS:
             raise ValueError(f"invalid CI setup or suite: {name}")
-        if lane["setup"] == "frontend" and not set(lane["targets"]).issubset({
+        if lane["setup"] == "frontend" and not set(lane["targets"]) | set(profile_targets(lane, "integration")) <= ({
                 "den:typecheck", "den:lint", "den:test", "den:coverage:changes", "den:knip:changes"}):
             raise ValueError(f"CI lane {name} requires toolchains outside frontend setup")
         if lane["setup"] == "analysis" and not set(lane["targets"]).issubset({
@@ -102,6 +121,9 @@ def lanes():
                                    or lane.get("runner", "ubuntu-24.04") not in PLATFORMS[lane["platform"]]
                                    or set(lane["profiles"]) & {"fast", GATE}):
             raise ValueError(f"CI lane {name} is a platform lane on its platform's runners, outside the fast and {GATE} tiers")
+    replacements = {invocation[0] for invocations in CHANGE_GATES.values() for invocation in invocations}
+    if not replacements <= targets:
+        raise ValueError(f"change gates are replaced by targets nothing declares: {sorted(replacements - targets)}")
     for phase in PHASES:
         if sum(lane.get("phases") == phase for lane in values.values()) > 1:
             raise ValueError(f"CI phases {phase} belong to one lane")
@@ -119,12 +141,15 @@ def lanes():
     if fast != expected_fast:
         raise ValueError(f"CI fast tier must run stages of {FAST_GATE} once each: {dict(fast)}")
     expected_check = Counter(stage["name"] for stage in expand([GATE]))
-    expected = Counter({name: count for name, count in expected_check.items() if name not in QUEUE_LEAVES})
+    expected = Counter(stage["name"] for stage in stages_of([replacement[0] for name in expected_check.elements()
+                                                             for replacement in CHANGE_GATES.get(name, [[name]])])
+                       if stage["name"] not in QUEUE_LEAVES)
     actual = Counter(stage["name"] for lane in values.values() if "integration" in lane["profiles"] and not supplemental(lane)
-                     for stage in expand(lane["targets"]))
+                     for stage in stages_of(profile_targets(lane, "integration")))
     if actual != expected:
         raise ValueError(f"integration partition differs from check: {expected - actual}, {actual - expected}")
-    unjudged = QUEUE_LEAVES & set(expected_check) - set(fast) - STATIC_STAGES
+    # Admission runs the script suites' changed coverage when a change reaches them.
+    unjudged = (QUEUE_LEAVES | set(CHANGE_GATES)) & set(expected_check) - set(fast) - STATIC_STAGES - {SCRIPT_COVERAGE}
     if unjudged:
         raise ValueError(f"the merge queue leaves stages no pull request runs: {sorted(unjudged)}")
     platform = {stage["name"] for lane in values.values() if lane.get("platform") == GATE_PLATFORM
@@ -174,12 +199,13 @@ def stages_of(targets):
             for stage in (expand([target]) if target in declared else [{"kind": "task", "name": target}])]
 
 
-def provisioned(lane):
-    """The setup inputs a lane needs, derived from the targets and Go packages it runs.
+def provisioned(lane, profile=GATE):
+    """The setup inputs a lane needs in a profile, derived from the targets and Go packages it runs.
     A target's provision may apply only to some of its arguments, such as one leg of a script."""
-    stages = stages_of(lane["targets"])
-    names = set(lane["targets"]) | {stage["name"] for stage in stages}
-    arguments = lane.get("arguments", [])
+    invocations = profile_invocations(lane, profile)
+    stages = stages_of([invocation[0] for invocation in invocations])
+    names = {invocation[0] for invocation in invocations} | {stage["name"] for stage in stages}
+    arguments = lane.get("arguments", []) or [argument for invocation in invocations for argument in invocation[2:]]
     packages = [package for stage in stages if stage["kind"] == "go"
                 for package in (arguments or stage["packages"])]
 
@@ -191,7 +217,9 @@ def provisioned(lane):
 
     provisions = catalog()["provisions"]
     result = {name: name in provisions and needs(provisions[name]) for name in INPUTS}
-    result["runtime_engines"] = not names <= set(provisions.get("engine_free", {"targets": {}})["targets"])
+    free = provisions.get("engine_free", {"targets": {}})["targets"]
+    result["runtime_engines"] = not all(name in free and (not free[name] or set(free[name]) & set(arguments))
+                                        for name in names)
     return result
 
 
@@ -209,12 +237,13 @@ def validate_provisions(values, targets):
         if missing:
             raise ValueError(f"provision {name} names what nothing declares: {', '.join(missing)}")
     for lane in values.values():
-        for name, used in provisioned({**lane, "arguments": []}).items():
-            if name in needed:
-                needed[name] = needed[name] or used
-        if "engine_free" in needed:
-            # The engine-free declaration serves a lane that runs without the engines.
-            needed["engine_free"] = needed["engine_free"] or not provisioned(lane)["runtime_engines"]
+        for profile in lane["profiles"]:
+            for name, used in provisioned({**lane, "arguments": []}, profile).items():
+                if name in needed:
+                    needed[name] = needed[name] or used
+            if "engine_free" in needed:
+                # The engine-free declaration serves a lane that runs without the engines.
+                needed["engine_free"] = needed["engine_free"] or not provisioned(lane, profile)["runtime_engines"]
     unused = sorted(name for name, used in needed.items() if not used)
     if unused:
         raise ValueError(f"no lane runs what these provisions serve: {', '.join(unused)}")
@@ -239,8 +268,10 @@ def matrix(profile, suite="all", scope=None, platform=False, timings=None):
             continue
         if profile == "nightly" and suite != "all" and lane["suite"] == "all" and GATE in lane["profiles"]:
             continue
+        if not profile_invocations(lane, profile):
+            continue
         count = lane.get("shards", 1)
-        needs = provisioned(lane)
+        needs = provisioned(lane, profile)
         for index in range(1, count + 1):
             result.append({"lane": name,
                            "timing_row": row_key(name, f"{index}/{count}" if count > 1 else ""),
