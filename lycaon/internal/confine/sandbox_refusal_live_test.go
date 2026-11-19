@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/lycaon/lycaon/internal/confine"
+	"github.com/lycaon/lycaon/internal/fspath"
 	"github.com/lycaon/lycaon/internal/testutil"
 )
 
@@ -149,5 +150,33 @@ func TestOrdinaryToolchainsStartWithoutRefusals(t *testing.T) {
 			}
 			t.Errorf("%s started with refusals:\n%s\noutput: %s", strings.Join(probe, " "), strings.Join(lines, "\n"), out)
 		}
+	}
+}
+
+func TestSharedTempWriteRefusalNamesItsLocation(t *testing.T) {
+	self := requireLiveBoundary(t)
+	requireRefusalWatch(t)
+	project, custom := t.TempDir(), outsideTemporaryWriteRoots(t)
+	t.Setenv("TMPDIR", custom)
+	for _, location := range []string{"/tmp", "/var/tmp", custom} {
+		t.Run(filepath.Base(location), func(t *testing.T) {
+			file, err := os.CreateTemp(location, "pw-temp-location-")
+			testutil.FailErr(t, "seed temp sentinel", err)
+			testutil.FailErr(t, "close temp sentinel", file.Close())
+			t.Cleanup(func() { _ = os.Remove(file.Name()) })
+			target := fspath.CanonicalPath(file.Name())
+			refusals, out := refusalsOf(t, self, liveBoundaryRoots(project), "/bin/sh", "-c", `printf x > "$1"`, "sh", target)
+			for _, refused := range refusals.Refusals {
+				if refused.Target == target && refused.Layer == confine.FloorSharedTemp && refused.Recovery == confine.RecoverWriteRoot && refused.Grant == fspath.CanonicalPath(location) {
+					info, err := os.Stat(target)
+					testutil.FailErr(t, "inspect sentinel", err)
+					if info.Size() != 0 {
+						t.Fatal("refused write changed the file")
+					}
+					return
+				}
+			}
+			t.Fatalf("shared temp write: refusals=%+v, output=%q", refusals, out)
+		})
 	}
 }

@@ -17,17 +17,8 @@ from typing import NamedTuple
 UNMOUNT_TIMEOUT_SECONDS = 15
 OWNER_RELEASE_SECONDS = 15
 HOLDERS_EXIT_SECONDS = 5
-
-
-def fixture_root(kind: str) -> Path:
-    if sys.platform == "linux":
-        import pwd
-        # Confined fixtures must survive the private temp mount and stay outside writable caches.
-        return Path(pwd.getpwuid(os.getuid()).pw_dir) / ".local" / "state" / f"pw-{kind}"
-    return Path(f"/tmp/paintedwolf-{kind}-{os.getuid()}")
-
-
-RUN_ROOT = fixture_root("test-runs") if hasattr(os, "getuid") else None
+# Short paths keep Unix sockets within platform limits; test-run-isolation.sh names the same root.
+RUN_ROOT = Path(f"/tmp/paintedwolf-test-runs-{os.getuid()}") if hasattr(os, "getuid") else None
 SIGKILL_PENDING = 1 << 8
 FUSE_CONNECTIONS = Path("/sys/fs/fuse/connections")
 

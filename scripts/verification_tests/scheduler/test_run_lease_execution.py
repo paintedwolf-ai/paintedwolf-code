@@ -20,22 +20,6 @@ class TestRunPruneExecution(unittest.TestCase):
         self.addCleanup(temporary.cleanup)
         self.root = Path(temporary.name).resolve()
 
-    def test_fixture_storage_is_independent_of_relocated_home_and_temp(self):
-        import pwd
-        account = Path(pwd.getpwuid(os.getuid()).pw_dir)
-        for platform in ("linux", "darwin"):
-            with self.subTest(platform=platform), mock.patch.object(self.lease.sys, "platform", platform), mock.patch.dict(
-                os.environ, {"HOME": str(self.root), "TMPDIR": str(self.root), "XDG_CACHE_HOME": str(self.root)}
-            ):
-                runs = self.lease.fixture_root("test-runs")
-                sources = self.lease.fixture_root("source-snapshots")
-                self.assertNotEqual(runs, sources)
-                for location in (runs, sources):
-                    if platform == "linux":
-                        self.assertTrue(location.is_relative_to(account / ".local" / "state"))
-                    else:
-                        self.assertEqual(location.parent, Path("/tmp"))
-
     def run_dir(self, name):
         run = self.root / name
         (run / "tmp" / "mounts" / "primary").mkdir(parents=True)

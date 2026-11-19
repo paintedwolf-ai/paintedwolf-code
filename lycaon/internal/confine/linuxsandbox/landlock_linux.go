@@ -62,11 +62,6 @@ func landlockRules(fs Filesystem, abi int) ([]landlockRule, error) {
 			unix.LANDLOCK_ACCESS_FS_READ_DIR | unix.LANDLOCK_ACCESS_FS_IOCTL_DEV) & handled},
 		{path: "/dev/shm", access: handled},
 	}...)
-	if fs.PrivateTemp != nil {
-		for _, alias := range fs.PrivateTemp.Paths {
-			rules = append(rules, landlockRule{path: alias, access: handled})
-		}
-	}
 	for _, root := range fs.WriteRoots {
 		rules = append(rules, landlockRule{path: root, access: handled})
 	}

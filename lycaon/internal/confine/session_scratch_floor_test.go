@@ -80,33 +80,3 @@ func TestBoundaryLetsSessionReadBackItsOwnScratch(t *testing.T) {
 		t.Fatal("other session scratch read exit = 0, want denied")
 	}
 }
-
-func TestPrivateTempResolution(t *testing.T) {
-	scratch := t.TempDir()
-	alias, err := filepath.EvalSymlinks(t.TempDir())
-	testutil.FailErr(t, "resolve temp alias", err)
-	link := filepath.Join(t.TempDir(), "temp-link")
-	testutil.FailErr(t, "link to temp", os.Symlink(alias, link))
-	pinned := filepath.Join(alias, "attached")
-	mapping := confine.PrivateTemp{Paths: []string{alias}, ScratchRoot: scratch, Retained: []string{pinned}}
-	for _, tc := range []struct{ path, want string }{
-		{alias, scratch},
-		{alias + "/./note", scratch + "/./note"},
-		{filepath.Dir(alias) + "/unused/../" + filepath.Base(alias) + "/note", filepath.Join(scratch, "note")},
-		{link + "/sub/../note", scratch + "/sub/../note"},
-		{filepath.Join(alias, "a", "b"), filepath.Join(scratch, "a", "b")},
-		{alias + "-sibling", ""},
-		{pinned, ""},
-		{filepath.Join(pinned, "note"), ""},
-		{filepath.Join(alias, "attached-neighbor"), filepath.Join(scratch, "attached-neighbor")},
-		{"relative", ""},
-	} {
-		got, ok := mapping.Resolve(tc.path)
-		if got != tc.want || ok != (tc.want != "") {
-			t.Errorf("Resolve(%q) = (%q, %t), want %q", tc.path, got, ok, tc.want)
-		}
-	}
-	if _, ok := (confine.PrivateTemp{Paths: []string{alias}}).Resolve(alias); ok {
-		t.Fatal("launch-local tmpfs resolved to a host path")
-	}
-}

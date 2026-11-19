@@ -10,7 +10,6 @@ import (
 	"io"
 	"os"
 	"os/exec"
-	"path/filepath"
 	"runtime/debug"
 	"testing"
 	"time"
@@ -57,17 +56,15 @@ func runSharedMemoryProbe(mode string) error {
 		}
 		return err
 	}
-	if mode != "temp-capacity" {
-		if err := checkSharedMemoryMount(mode != "native-file" && mode != "native-mmap"); err != nil {
-			return err
-		}
+	if err := checkSharedMemoryMount(mode != "native-file" && mode != "native-mmap"); err != nil {
+		return err
 	}
 	f, err := os.OpenFile(path, os.O_CREATE|os.O_EXCL|os.O_RDWR, 0o600)
 	if err != nil {
 		return err
 	}
 	defer func() { _ = os.Remove(path); _ = f.Close() }()
-	if mode == "capacity" || mode == "temp-capacity" {
+	if mode == "capacity" {
 		return checkSharedMemoryLimit(f)
 	}
 	if mode == "mmap" || mode == "native-mmap" {
@@ -212,90 +209,4 @@ func TestLinuxSharedMemoryIsPrivateBetweenLaunches(t *testing.T) {
 	}
 	testutil.FailErr(t, "finish shared memory owner", input.Close())
 	testutil.FailErr(t, "wait for shared memory owner", owner.Wait())
-}
-
-func TestLinuxPrivateTempSurvivesOnlyItsSession(t *testing.T) {
-	self := requireLinuxSandbox(t)
-	host, err := os.CreateTemp("/tmp", "pw-shared-sentinel-")
-	testutil.FailErr(t, "plant shared sentinel", err)
-	t.Cleanup(func() { _ = os.Remove(host.Name()) })
-	_, err = host.WriteString("host")
-	testutil.FailErr(t, "write shared sentinel", err)
-	testutil.FailErr(t, "close shared sentinel", host.Close())
-	name := filepath.Base(host.Name())
-	session := denyConfinement(t.TempDir())
-	session.SessionScratchRoot = t.TempDir()
-	run := func(c confine.Confinement, command string, args ...string) {
-		t.Helper()
-		status, out := linuxConfinedRun(t, self, c, nil, "/bin/sh", append([]string{"-ec", command, "sh"}, args...)...)
-		if status.ExitStatus() != 0 {
-			t.Fatalf("temp command exited %d: %s", status.ExitStatus(), out)
-		}
-	}
-	run(session, `test ! -e "/tmp/$1"; printf session > "/tmp/$1"; printf private > "/var/tmp/$1.alt"`, name)
-	run(session, `test "$(cat "/var/tmp/$1")" = session; test "$(cat "/tmp/$1.alt")" = private`, name)
-	for _, probe := range []struct{ path, want string }{
-		{host.Name(), "host"},
-		{filepath.Join(session.SessionScratchRoot, name), "session"},
-		{filepath.Join(session.SessionScratchRoot, name+".alt"), "private"},
-	} {
-		got, err := os.ReadFile(probe.path)
-		testutil.FailErr(t, "read temp observation", err)
-		if string(got) != probe.want {
-			t.Fatalf("read %q from %s, want %q", got, probe.path, probe.want)
-		}
-	}
-	session.SessionScratchRoot = t.TempDir()
-	run(session, `test ! -e "/tmp/$1"; test ! -e "/var/tmp/$1.alt"`, name)
-	session.SessionScratchRoot = ""
-	run(session, `printf local > "/tmp/$1"; test "$(cat "/var/tmp/$1")" = local`, name)
-	run(session, `test ! -e "/tmp/$1"`, name)
-}
-
-func TestLinuxLaunchLocalTempIsBounded(t *testing.T) {
-	self := requireLinuxSandbox(t)
-	session := denyConfinement(t.TempDir())
-	status, out := linuxConfinedRun(t, self, session, shmEnv("temp-capacity", "/tmp/fill"), self, shmTestFlag)
-	if status.ExitStatus() != 0 {
-		t.Fatalf("private temp capacity: exit %d: %s", status.ExitStatus(), out)
-	}
-}
-
-func TestLinuxPrivateTempKeepsExplicitHostSubtrees(t *testing.T) {
-	self := requireLinuxSandbox(t)
-	host, err := os.MkdirTemp("/tmp", "pw-attached-temp-")
-	testutil.FailErr(t, "create host temp attachment", err)
-	t.Cleanup(func() { _ = os.RemoveAll(host) })
-	attached := filepath.Join(host, "project")
-	readOnly := filepath.Join(host, "reviewed")
-	testutil.FailErr(t, "create attached directory", os.Mkdir(attached, 0o700))
-	testutil.FailErr(t, "seed read-only path", os.WriteFile(readOnly, []byte("original"), 0o600))
-	session := denyConfinement(attached)
-	session.ReadRoots = []string{readOnly}
-	session.SessionScratchRoot = t.TempDir()
-	status, out := linuxConfinedRun(t, self, session, nil, "/bin/sh", "-ec",
-		`printf updated > "$1/file"; test "$(cat "$2")" = original; if (printf change > "$2"); then exit 1; fi`, "sh", attached, readOnly)
-	if status.ExitStatus() != 0 {
-		t.Fatalf("retained paths: exit %d: %s", status.ExitStatus(), out)
-	}
-	got, err := os.ReadFile(filepath.Join(attached, "file"))
-	testutil.FailErr(t, "read retained attachment", err)
-	if string(got) != "updated" {
-		t.Fatalf("attached file = %q", got)
-	}
-}
-
-func TestLinuxObservedCustomTempRefusalNamesSharedLocation(t *testing.T) {
-	self := requireLiveBoundary(t)
-	project, custom := t.TempDir(), outsideTemporaryWriteRoots(t)
-	t.Setenv("TMPDIR", custom)
-	target := filepath.Join(custom, "output")
-	refusals, out := refusalsOf(t, self, liveBoundaryRoots(project), "/bin/sh", "-c", `printf x > "$1"`, "sh", target)
-	refused, ok := findRefusal(refusals, "file-write-create", target)
-	if !ok || refused.Layer != confine.FloorSharedTemp || refused.Recovery != confine.RecoverWriteRoot || refused.Grant != custom {
-		t.Fatalf("shared temp write: refusals=%+v, output=%q", refusals, out)
-	}
-	if _, err := os.Lstat(target); !errors.Is(err, os.ErrNotExist) {
-		t.Fatalf("refused file exists: %v", err)
-	}
 }

@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 
+# Short paths keep Unix sockets within platform limits.
+TEST_RUN_ROOT="/tmp/paintedwolf-test-runs-${UID}"
 TEST_RUN_LEASE_HELPER="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/test-run-lease.py"
-TEST_RUN_ROOT="$(python3 "${TEST_RUN_LEASE_HELPER}" fixture-root test-runs)"
 
 test_run_prune_abandoned() {
   python3 "${TEST_RUN_LEASE_HELPER}" prune "${TEST_RUN_ROOT}"

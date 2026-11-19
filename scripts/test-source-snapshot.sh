@@ -4,8 +4,7 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 # shellcheck source=artifact-paths.sh
 source "${ROOT}/scripts/artifact-paths.sh"
-export PW_TEST_SNAPSHOT_ROOT="${PW_TEST_SNAPSHOT_ROOT:-$(python3 "${ROOT}/scripts/test-run-lease.py" fixture-root source-snapshots)}"
-SNAPSHOT_PARENT="${PW_TEST_SNAPSHOT_ROOT}"
+SNAPSHOT_PARENT="${PW_TEST_SNAPSHOT_ROOT:-/tmp/paintedwolf-source-snapshots-${UID}}"
 CAPTURE_ATTEMPTS="${PW_TEST_SNAPSHOT_CAPTURE_ATTEMPTS:-20}"
 CAPTURE_LOCK_TIMEOUT="${PW_TEST_SNAPSHOT_LOCK_TIMEOUT:-3600}"
 CAPTURE_LOCKDIR="${PW_LOCK_ROOT}/source-capture.lockdir"
