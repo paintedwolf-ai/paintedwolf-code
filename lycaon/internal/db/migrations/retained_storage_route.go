@@ -2,7 +2,7 @@ package migrations
 
 import sqlite3 "modernc.org/sqlite/lib"
 
-var reviewedRetainedTarget = Baseline{Revision: 5, Shape: "fe24b55031e83df3f0a868536623a6298f2419950fb40aac72b2a87ed80ae433"}
+var reviewedRetainedTarget = Baseline{Revision: 5, Shape: "48da8f1e05a9e9a375a49a9e9c2b7809533c71c9fae25e39328ed646f356294e"}
 
 // BoundedRetainedStorage recognizes exactly the route whose indexes and
 // sorter inputs were reviewed. A future step keeps conservative admission
@@ -29,5 +29,5 @@ func (p Plan) reviewedRetainedRoute() bool {
 	// and inserts one row per project. Chat locations and observation coverage
 	// add empty tables. Existing editor rows use the binding column's default.
 	return p.steps[0].ID == "source-manifests-and-command-records" &&
-		p.steps[0].Checksum == "b277cbcfdb3b3c0cb5fe291b8ce2a4482f4d7dfd243a2f39cb898b0be2fcc4b6"
+		p.steps[0].Checksum == "c38581eb2b464761460f2bc5a3f4e175fc5f39c34e982f5a2be0aaf76fc57747"
 }

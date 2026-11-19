@@ -76,6 +76,7 @@ CREDENTIAL_RELS=(
   .credential-vault-development-identity
   api.token
   host-identity.pem
+  mcp.yaml
 )
 
 WORKDIR="$(mktemp -d "${TMPDIR:-/tmp}/upgrade-corpus-seed.XXXXXX")"
@@ -259,9 +260,13 @@ manifest['worker_history']['overlay'] = {'README.md': sha('# retained worker ove
 path.write_text(json.dumps(manifest, indent=2) + '\n')
 PYCODE
 node "${ROOT}/scripts/upgrade-editor-fixture.mjs" seed "${BASE}" "${CONFIG_DIR}" "${STAGE_DIR}/MANIFEST.json" "${SEED_PROJECT_ROOT}"
-# Review every overlay surface that the fixture will restore.
+# Exclude credential basenames before trust review records the settings.
 for example in "${OVERLAY_EXAMPLE}/"*.yaml; do
-  recorded="${SEED_PROJECT_ROOT}/${OVERLAY_DIR}/$(basename "${example}")"
+  name="${example##*/}"
+  for rel in "${CREDENTIAL_RELS[@]}"; do
+    [[ "${name}" != "${rel##*/}" ]] || continue 2
+  done
+  recorded="${SEED_PROJECT_ROOT}/${OVERLAY_DIR}/${name}"
   [[ -e "${recorded}" ]] || cp "${example}" "${recorded}"
 done
 curl -fsS "${AUTH_HDR[@]}" -X POST "${BASE}/v1/projects/${PROJECT_ID}/trust/review" \

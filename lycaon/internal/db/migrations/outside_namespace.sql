@@ -49,19 +49,6 @@ DROP INDEX idx_project_roots_label;
 CREATE UNIQUE INDEX IF NOT EXISTS idx_project_roots_label
     ON project_roots(project_id, label COLLATE NOCASE) WHERE kind != 'outside';
 
-CREATE TRIGGER IF NOT EXISTS projects_outside_namespace
-AFTER INSERT ON projects
-BEGIN
-    INSERT INTO project_roots (id, project_id, path, label, is_primary, added_at, kind)
-    VALUES (
-        lower(hex(randomblob(4))) || '-' || lower(hex(randomblob(2))) || '-4'
-            || substr(lower(hex(randomblob(2))), 2) || '-'
-            || substr('89ab', 1 + abs(random()) % 4, 1) || substr(lower(hex(randomblob(2))), 2) || '-'
-            || lower(hex(randomblob(6))),
-        new.id, '', 'outside', 0, new.created_at, 'outside'
-    );
-END;
-
 CREATE TABLE IF NOT EXISTS source_chat_files (
     session_id TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
     file_id TEXT NOT NULL REFERENCES source_files(id) ON DELETE CASCADE,
