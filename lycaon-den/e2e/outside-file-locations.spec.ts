@@ -3,6 +3,7 @@ import path from "node:path";
 import { expect } from "@playwright/test";
 import type { OpenedOutsideFile } from "../src/api/types.ts";
 import {
+  apiConfig,
   apiJson,
   bootstrapActiveProject,
   e2eTempDir,
@@ -53,6 +54,13 @@ webE2e("Outside locations follow the chat while a dirty file stays open", async 
   await expect(outsideLocation).toHaveCount(0);
   await expect(content).toContainText("Unsaved notes");
   expect(readFileSync(outside, "utf8")).toBe("Original notes\n");
+
+  const { apiUrl, token } = apiConfig();
+  const deleted = await request.delete(`${apiUrl}/v1/sessions/${first}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  expect(deleted.status(), await deleted.text()).toBe(204);
+  await expect(content).toContainText("Unsaved notes");
 
   await save.click();
   await expect.poll(() => readFileSync(outside, "utf8")).toBe("Unsaved notes");
