@@ -2,7 +2,7 @@ package migrations
 
 import sqlite3 "modernc.org/sqlite/lib"
 
-var reviewedRetainedTarget = Baseline{Revision: 5, Shape: "f0cc2d043d6f66bd8ce7f8ee9c64753e4e34db7da5c1ecf63efe4e3ee641d576"}
+var reviewedRetainedTarget = Baseline{Revision: 5, Shape: "316cd982d9e09326cf2ef247e6a35060e65067f9a5fff351e03978ed39ee6952"}
 
 // BoundedRetainedStorage recognizes exactly the route whose indexes and
 // sorter inputs were reviewed. A future step keeps conservative admission
@@ -28,5 +28,5 @@ func (p Plan) reviewedRetainedRoute() bool {
 	// rewriting rows. The outside namespace rebuilds the measured root indexes
 	// and inserts one row per project into the existing index structures.
 	return p.steps[0].ID == "source-manifests-and-command-records" &&
-		p.steps[0].Checksum == "ec396f93b92732e98c170b52ffefad02623826beb503c34e6fd4e6c44182af8d"
+		p.steps[0].Checksum == "d6ae34315c541893c86b8e9829e3de1a5762d80e9df5b230fe3961c43cf532e3"
 }
