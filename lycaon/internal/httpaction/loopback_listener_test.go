@@ -39,7 +39,7 @@ func TestHTTPRequestLoopbackListenerAttributionOtherSessionAndReplacement(t *tes
 	t.Cleanup(server.Close)
 
 	registry := tools.NewDefaultRegistry()
-	if err := Register(registry, Deps{Boundary: testBoundary()}); err != nil {
+	if err := registerPerform(registry, Deps{Boundary: testBoundary()}); err != nil {
 		t.Fatalf("register http_request: %v", err)
 	}
 

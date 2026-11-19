@@ -1,17 +1,19 @@
 package httpaction
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/lycaon/lycaon/internal/toolrejection"
 	"regexp"
 	"sort"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/lycaon/lycaon/internal/outboundhttp"
 	"github.com/lycaon/lycaon/internal/secretcap"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/internal/tools"
 )
 
@@ -33,8 +35,7 @@ type tokenReceipt struct {
 	Held      int      `json:"held"`
 	Captured  int      `json:"captured"`
 	Names     []string `json:"names,omitempty"`
-	// Issuers maps each held token to the service that issued it, which is
-	// where a reference to it is placed without review.
+	// Issuers contains display labels for the issuing services.
 	Issuers   map[string]string `json:"issuers,omitempty"`
 	Persisted bool              `json:"persisted"`
 	Error     string            `json:"error,omitempty"`
@@ -64,7 +65,7 @@ func (r *tokenReceipt) facts() map[string]any {
 		return nil
 	}
 	out := map[string]any{
-		"jar": r.Jar, "held": r.Held, "captured": r.Captured, "persisted": r.Persisted,
+		"jar": r.Jar, "token_jar_name": r.Jar, "held": r.Held, "captured": r.Captured, "persisted": r.Persisted,
 	}
 	if r.Reference != "" {
 		out["reference"] = r.Reference
@@ -98,6 +99,7 @@ func parseCaptureTokens(raw any) ([]captureTokenRule, error) {
 		return nil, fmt.Errorf("capture_tokens accepts at most 16 rules")
 	}
 	out := make([]captureTokenRule, 0, len(items))
+	seen := make(map[string]bool, len(items))
 	for _, item := range items {
 		obj, ok := item.(map[string]any)
 		if !ok {
@@ -110,7 +112,12 @@ func parseCaptureTokens(raw any) ([]captureTokenRule, error) {
 		if name == "" || from == "" {
 			return nil, fmt.Errorf("each capture_tokens rule requires name and from")
 		}
-		if !strings.HasPrefix(from, "json:") && !strings.HasPrefix(from, "header:") {
+		if utf8.RuneCountInString(name) > 64 || utf8.RuneCountInString(from) > 128 || seen[name] {
+			return nil, fmt.Errorf("capture names must be unique and at most 64 characters, with sources at most 128 characters")
+		}
+		seen[name] = true
+		kind, path, ok := strings.Cut(from, ":")
+		if !ok || strings.TrimSpace(path) == "" || (kind != "json" && kind != "header") {
 			return nil, fmt.Errorf("capture_tokens from must begin with 'json:' or 'header:'")
 		}
 		out = append(out, captureTokenRule{Name: name, From: from})
@@ -127,16 +134,16 @@ func openTokenJar(ctx context.Context, deps Deps, tctx tools.ToolContext, args m
 	if name == "" {
 		return nil, secretcap.TokenJarRequest{}, invalid(fmt.Errorf("token_jar must be a name"))
 	}
-	if deps.Secrets == nil {
+	if deps.Jars == nil || deps.Secrets == nil {
 		return nil, secretcap.TokenJarRequest{}, &toolrejection.ToolReject{
 			Code: TokenJarFailedCode, Data: map[string]any{"jar": name, "token_jar_name": name, "reason": "managed secrets are unavailable"},
 		}
 	}
 	req := secretcap.TokenJarRequest{
 		ProjectID: strings.TrimSpace(tctx.Identity.ProjectID), ChatSessionID: tctx.ChatSessionID(),
-		SessionID: strings.TrimSpace(tctx.Identity.SessionID), OperationID: strings.TrimSpace(tctx.Identity.ToolCallID), Name: name,
+		SessionID: strings.TrimSpace(tctx.Identity.SessionID), OperationID: "token-jar:" + tctx.EffectActionID(), Name: name,
 	}
-	jar, err := deps.Secrets.OpenTokenJar(ctx, req)
+	jar, err := deps.Jars.OpenTokenJar(ctx, req)
 	if err != nil {
 		return nil, req, &toolrejection.ToolReject{
 			Code: TokenJarFailedCode, Data: map[string]any{"jar": name, "token_jar_name": name, "reason": err.Error()},
@@ -207,7 +214,11 @@ func extractTokens(resp outboundhttp.Response, rules []captureTokenRule) (map[st
 			jsonPath := strings.TrimSpace(strings.TrimPrefix(rule.From, "json:"))
 			if !bodyParsed {
 				bodyParsed = true
-				_ = json.Unmarshal(resp.Body, &bodyJSON)
+				if json.Valid(resp.Body) {
+					decoder := json.NewDecoder(bytes.NewReader(resp.Body))
+					decoder.UseNumber()
+					_ = decoder.Decode(&bodyJSON)
+				}
 			}
 			if bodyJSON == nil {
 				missing = append(missing, rule.Name)
@@ -243,8 +254,8 @@ func lookupJSONPath(root any, p string) (string, bool) {
 	switch v := curr.(type) {
 	case string:
 		return v, true
-	case float64:
-		return fmt.Sprintf("%v", v), true
+	case json.Number:
+		return v.String(), true
 	case bool:
 		return fmt.Sprintf("%v", v), true
 	default:
@@ -260,7 +271,7 @@ func saveTokenJar(ctx context.Context, deps Deps, req secretcap.TokenJarRequest,
 	receipt.Captured = capturedCount
 	saveCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
 	defer cancel()
-	meta, err := deps.Secrets.SaveTokenJar(saveCtx, req, jar)
+	meta, err := deps.Jars.SaveTokenJar(saveCtx, req, jar)
 	if err != nil {
 		receipt.Persisted, receipt.Error = false, err.Error()
 		return receipt
@@ -282,20 +293,11 @@ func captureResponseTokens(
 	resp outboundhttp.Response,
 	issuerID, issuerLabel string,
 ) (*tokenReceipt, *toolrejection.ToolReject) {
-	if jar == nil && len(rules) == 0 {
-		return nil, nil
-	}
-	if jar == nil && len(rules) > 0 {
-		return nil, invalid(fmt.Errorf("capture_tokens requires token_jar"))
-	}
 	if len(rules) == 0 {
-		// Nothing was captured: rewriting the stored jar from this request's
-		// snapshot would only drop what a concurrent request captured. A jar
-		// not yet stored is saved so the reference exists.
-		if jar.Reference != "" {
-			return heldTokens(jar), nil
-		}
-		return saveTokenJar(ctx, deps, req, jar, 0), nil
+		return heldTokens(jar), nil
+	}
+	if jar == nil {
+		return nil, invalid(fmt.Errorf("capture_tokens requires token_jar"))
 	}
 	captured, missing := extractTokens(resp, rules)
 	if len(missing) > 0 {

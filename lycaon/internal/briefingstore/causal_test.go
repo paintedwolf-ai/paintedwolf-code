@@ -1,7 +1,6 @@
 package briefingstore
 
 import (
-	"context"
 	"fmt"
 	"strings"
 	"testing"
@@ -17,11 +16,6 @@ import (
 
 const workerRunA = "11111111-1111-4111-8111-111111111111"
 
-type sessionWriter interface {
-	Create(context.Context, api.CreateSessionRequest, string) (*api.Session, error)
-	AppendMessages(context.Context, string, ...api.Message) error
-}
-
 func TestActionCause(t *testing.T) {
 	database := testdbfixture.Open(t, "briefing-cause.db")
 	testdbseed.InsertProjectRoot(t, database, testdbseed.DefaultProjectID, t.TempDir())
@@ -31,7 +25,7 @@ func TestActionCause(t *testing.T) {
 	_, err = database.ExecContext(t.Context(), `INSERT INTO worker_jobs (id, project_id, child_session_id, agent_type, status, prompt, brief, created_at)
 		VALUES (?, ?, ?, 'repo-researcher', 'complete', 'fixture', 'fixture', ?)`, workerRunA, testdbseed.DefaultProjectID, session.ID, time.Now().UTC().Format(time.RFC3339Nano))
 	testutil.FailErr(t, "insert worker run", err)
-	assertActionCause(t, sessions, NewCausal(database), session.ID)
+	assertActionCause(t, sessions.Transcript, NewCausal(database), session.ID)
 }
 
 func call(id string) []api.ToolCall { return []api.ToolCall{{ID: id, Name: "command"}} }
@@ -40,7 +34,7 @@ func result(id, callID, content string) api.Message {
 	return api.Message{ID: id, Role: api.MessageRoleTool, Content: content, ToolResult: &api.ToolResult{ToolCallID: callID, Tool: "command", Outcome: api.ToolResultOutcome("success"), Content: content}}
 }
 
-func assertActionCause(t *testing.T, sessions sessionWriter, reader briefing.CausalReader, sessionID string) {
+func assertActionCause(t *testing.T, transcript store.TranscriptRepository, reader briefing.CausalReader, sessionID string) {
 	t.Helper()
 	history := []api.Message{
 		{ID: "u1", Role: api.MessageRoleUser, Content: "first goal"},
@@ -56,7 +50,7 @@ func assertActionCause(t *testing.T, sessions sessionWriter, reader briefing.Cau
 		api.Message{ID: "anchor", Role: api.MessageRoleAssistant, Content: "Pushing now.", ToolCalls: append([]api.ToolCall{{ID: "target", Name: "command", Args: map[string]any{"command": "git push"}}}, call("other")...), ModelReasoning: &api.ModelReasoning{Text: "push after tests"}},
 		api.Message{ID: "worker", Role: api.MessageRoleAssistant, Content: "worker step", ToolCalls: call("worker-call"), WorkerID: workerRunA},
 	)
-	testutil.FailErr(t, "append history", sessions.AppendMessages(t.Context(), sessionID, history...))
+	testutil.FailErr(t, "append history", transcript.AppendMessages(t.Context(), sessionID, history...))
 
 	read, err := reader.ReadActionCause(t.Context(), briefing.ActionRef{SessionID: sessionID, ToolCallID: "target"})
 	testutil.FailErr(t, "read pending action", err)
@@ -73,7 +67,7 @@ func assertActionCause(t *testing.T, sessions sessionWriter, reader briefing.Cau
 		t.Fatalf("reasoning %+v", got)
 	}
 
-	testutil.FailErr(t, "settle target", sessions.AppendMessages(t.Context(), sessionID, result("r-target", "target", "pushed"), api.Message{ID: "later", Role: api.MessageRoleAssistant, Content: "after", ToolCalls: call("target-again")}))
+	testutil.FailErr(t, "settle target", transcript.AppendMessages(t.Context(), sessionID, result("r-target", "target", "pushed"), api.Message{ID: "later", Role: api.MessageRoleAssistant, Content: "after", ToolCalls: call("target-again")}))
 	settled, err := reader.ReadActionCause(t.Context(), briefing.ActionRef{SessionID: sessionID, ToolCallID: "target"})
 	testutil.FailErr(t, "read settled action", err)
 	if settled.Call.Result == nil || settled.Call.Result.Content != "pushed" || settled.Call.Result.Ref != "message:r-target" {
@@ -103,7 +97,7 @@ func assertActionCause(t *testing.T, sessions sessionWriter, reader briefing.Cau
 	for i := range 64 {
 		filler = append(filler, api.Message{ID: fmt.Sprintf("f%d", i), Role: api.MessageRoleAssistant, Content: "filler"})
 	}
-	testutil.FailErr(t, "append filler", sessions.AppendMessages(t.Context(), sessionID, filler...))
+	testutil.FailErr(t, "append filler", transcript.AppendMessages(t.Context(), sessionID, filler...))
 	if found(briefing.ActionRef{SessionID: sessionID, ToolCallID: "target-again"}) {
 		t.Fatal("the search reached past its 64-row bound")
 	}

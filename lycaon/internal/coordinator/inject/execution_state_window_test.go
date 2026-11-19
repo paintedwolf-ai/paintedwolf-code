@@ -123,15 +123,13 @@ func TestAgesSurviveCompactionAndRestartInTheStore_ACEXEC04(t *testing.T) {
 		api.Message{ID: "user", Role: api.MessageRoleUser, Origin: api.MessageOriginUser, Content: "go"},
 		assistant("batch-failed"),
 		tool(rejectedWrite("failed", "a.go"))))
-	appendBatch := func(store interface {
-		AppendMessages(context.Context, string, ...api.Message) error
-	}, i int) {
+	appendBatch := func(i int) {
 		id := fmt.Sprintf("batch-%d", i)
-		testutil.FailErr(t, "append batch", store.AppendMessages(t.Context(), sess.ID, assistant(id),
+		testutil.FailErr(t, "append batch", st.Transcript.AppendMessages(t.Context(), sess.ID, assistant(id),
 			tool(receiptMessage(receiptSpec{batch: id, call: "call-" + id, tool: "read", digest: id}))))
 	}
 	for age := 1; age <= MaxRejectedOperationStepAge; age++ {
-		appendBatch(st, age)
+		appendBatch(age)
 		rows, err := st.Transcript.GetMessages(t.Context(), sess.ID)
 		testutil.FailErr(t, "read canonical", err)
 		last := rows[len(rows)-1]

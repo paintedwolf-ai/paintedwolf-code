@@ -35,7 +35,7 @@ func TestMockLLMReceivesWorkflowFilteredTools(t *testing.T) {
 	if _, err := specFix.Mgr.Submissions.Prompt(context.Background(), specFix.Sess.ID, "hello"); err != nil {
 		testutil.FailErr(t, "specFix.Mgr.Prompt failed", err)
 	}
-	specSession, err := specFix.Store.Get(t.Context(), specFix.Sess.ID)
+	specSession, err := specFix.Store.Sessions.Get(t.Context(), specFix.Sess.ID)
 	testutil.FailErr(t, "read spec workflow posture", err)
 	if specSession.Posture != api.SessionPostureSpec || !hasTool(rec.LastRequest().Tools, "command") {
 		t.Fatalf("spec workflow lost its reading posture: posture=%s tools=%v", specSession.Posture, toolNames(rec.LastRequest().Tools))
@@ -53,7 +53,7 @@ func TestMockLLMReceivesWorkflowFilteredTools(t *testing.T) {
 	if _, err := buildFix.Mgr.Submissions.Prompt(context.Background(), buildFix.Sess.ID, "hello"); err != nil {
 		testutil.FailErr(t, "buildFix.Mgr.Prompt failed", err)
 	}
-	buildSession, err := buildFix.Store.Get(t.Context(), buildFix.Sess.ID)
+	buildSession, err := buildFix.Store.Sessions.Get(t.Context(), buildFix.Sess.ID)
 	testutil.FailErr(t, "read attached workflow posture", err)
 	if buildSession.Posture != api.SessionPostureBuild {
 		t.Fatalf("default workflow posture = %s, want build", buildSession.Posture)
@@ -229,7 +229,7 @@ func TestMockLLMRecoversPersistedToolSchemas(t *testing.T) {
 	}})
 	fixture.Mgr.SetPromptEngine(prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{}))
 	assistantID, callID := uuid.NewString(), uuid.NewString()
-	testutil.FailErr(t, "persist schema activation", fixture.Store.AppendMessages(t.Context(), fixture.Sess.ID,
+	testutil.FailErr(t, "persist schema activation", fixture.Store.Transcript.AppendMessages(t.Context(), fixture.Sess.ID,
 		api.Message{ID: assistantID, Role: api.MessageRoleAssistant, ToolCalls: []api.ToolCall{{ID: callID, Name: "request_tools"}}},
 		api.Message{ID: uuid.NewString(), Role: api.MessageRoleTool, ToolResult: &api.ToolResult{
 			Tool: "request_tools", ToolCallID: callID, AssistantMessageID: assistantID,
@@ -238,7 +238,7 @@ func TestMockLLMRecoversPersistedToolSchemas(t *testing.T) {
 		}},
 	))
 	// request_tools records the standing set it produced.
-	_, err := fixture.Store.PutTurnLoadReceipt(t.Context(), store.TurnLoadReceipt{
+	_, err := fixture.Store.Turns.PutTurnLoadReceipt(t.Context(), store.TurnLoadReceipt{
 		SessionID: fixture.Sess.ID, Trigger: store.TurnLoadTriggerRequest, ToolCallID: callID,
 		Decisions: "{}", StateJSON: "{}",
 		Standing: `{"tools":[{"tool":"command","source":"requested","need":"run the local service"}]}`,

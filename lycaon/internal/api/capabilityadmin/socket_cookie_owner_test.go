@@ -29,6 +29,7 @@ import (
 	"github.com/lycaon/lycaon/internal/gate"
 	"github.com/lycaon/lycaon/internal/hitl"
 	"github.com/lycaon/lycaon/internal/httpaction"
+	"github.com/lycaon/lycaon/internal/httpaction/httpactiontest"
 	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/secretcap"
@@ -93,7 +94,7 @@ func testUnixSocketCookieIssuerReplacement(t *testing.T, value string) {
 		t.Fatalf("same issuer: original-cookie-requests=%d, secret-cards=%d, cards=%d", originalCookieRequests.Load(), review.secretCards, review.cards)
 	}
 	jarRequest := secretcap.CookieJarRequest{ProjectID: testdbseed.DefaultProjectID, ChatSessionID: "chat", SessionID: "chat", OperationID: "inspect", Name: "service-cookies"}
-	jar, err := service.OpenCookieJar(ctx, jarRequest)
+	jar, err := service.Jars.OpenCookieJar(ctx, jarRequest)
 	testutil.FailErr(t, "inspect original cookie", err)
 	before := jar.Store.Snapshot()
 	if len(before) != 1 || before[0].NativeIssuer == "" {
@@ -117,7 +118,7 @@ func testUnixSocketCookieIssuerReplacement(t *testing.T, value string) {
 	}
 	<-observed
 	assertCookieDecisionLedger(t, ctx, authzcontext.NewSQLStore(database), "new-socket-recipient", authzcontext.EventOutcomeDenied)
-	restored, err := service.OpenCookieJar(ctx, jarRequest)
+	restored, err := service.Jars.OpenCookieJar(ctx, jarRequest)
 	testutil.FailErr(t, "preserve cookie data", err)
 	if !reflect.DeepEqual(restored.Store.Snapshot(), before) {
 		t.Fatal("recipient refusal changed stored cookies")
@@ -127,7 +128,7 @@ func testUnixSocketCookieIssuerReplacement(t *testing.T, value string) {
 	}
 	testCookieReferenceDisclosure(t, value, args, invoke)
 	invoke("approval-was-only-one-invocation", args, true, false)
-	stillOriginal, err := service.OpenCookieJar(ctx, jarRequest)
+	stillOriginal, err := service.Jars.OpenCookieJar(ctx, jarRequest)
 	testutil.FailErr(t, "inspect invocation-only approval", err)
 	if !reflect.DeepEqual(stillOriginal.Store.Snapshot(), before) {
 		t.Fatal("approval or withholding rewrote issuer or attributes")
@@ -138,7 +139,7 @@ func testUnixSocketCookieIssuerReplacement(t *testing.T, value string) {
 	reissue.Store(true)
 	invoke("actual-issuer-reissues", args, true, false)
 	reissue.Store(false)
-	reissued, err := service.OpenCookieJar(ctx, jarRequest)
+	reissued, err := service.Jars.OpenCookieJar(ctx, jarRequest)
 	testutil.FailErr(t, "inspect actual reissuance", err)
 	after := reissued.Store.Snapshot()
 	if len(after) != 1 || after[0].NativeIssuer == "" || after[0].NativeIssuer == before[0].NativeIssuer {
@@ -173,7 +174,7 @@ func testUnixSocketCookieIssuerReplacement(t *testing.T, value string) {
 	checkpoints.Authority.SetApprovalAuthorityInstaller(&Installation{Gate: authority, Sockets: runtime, authorityMu: &sync.Mutex{}})
 	review = &socketOwnerReview{Checkpoints: checkpoints, decisionContext: ctx}
 	executor = newCookieOwnerExecutor(t, ctx, database, review, authority, runtime, service, matcher)
-	persisted, err := service.OpenCookieJar(ctx, jarRequest)
+	persisted, err := service.Jars.OpenCookieJar(ctx, jarRequest)
 	testutil.FailErr(t, "reopen protected cookie after engine restart", err)
 	if !reflect.DeepEqual(persisted.Store.Snapshot(), after) {
 		t.Fatal("restart changed protected cookie receipt or attributes")
@@ -239,7 +240,7 @@ func newCookieOwnerExecutor(t *testing.T, ctx context.Context, database db.Handl
 	executor.Secrets.SetSecretResolver(service)
 	executor.Secrets.SetSecretMatcher(matcher)
 	boundary := sandbox.NewBoundary(sandbox.Config{ProjectRootRequired: true, RejectSymlinkEscape: true}, []sandbox.ToolProfile{{ID: "implement", Tools: map[string]bool{"http_request": true}}})
-	testutil.FailErr(t, "register cookie native consumer", httpaction.Register(registry, httpaction.Deps{Boundary: boundary, Secrets: service, SecretMatcher: matcher, SecretAsk: executor.Secrets.AskSecretScreen}))
+	testutil.FailErr(t, "register cookie native consumer", httpactiontest.Register(registry, httpaction.Deps{Boundary: boundary, Secrets: service, Jars: service.Jars, SecretMatcher: matcher, SecretAsk: executor.Secrets.AskSecretScreen}))
 	return executor
 }
 
@@ -274,16 +275,16 @@ func testLegacyCookieIssuer(t *testing.T, ctx context.Context, service *secretca
 	t.Helper()
 	legacyRequest := jarRequest
 	legacyRequest.Name, legacyRequest.OperationID = "legacy-cookies", "legacy-seed"
-	legacy, err := service.OpenCookieJar(ctx, legacyRequest)
+	legacy, err := service.Jars.OpenCookieJar(ctx, legacyRequest)
 	testutil.FailErr(t, "open pre-change jar", err)
 	legacyURL, err := url.Parse(args["url"].(string))
 	testutil.FailErr(t, "legacy cookie target", err)
 	legacy.Store.SetCookies(legacyURL, []*http.Cookie{{Name: "session", Value: value, Path: "/private", HttpOnly: true}})
-	_, err = service.SaveCookieJar(ctx, legacyRequest, legacy)
+	_, err = service.Jars.SaveCookieJar(ctx, legacyRequest, legacy)
 	testutil.FailErr(t, "persist pre-change protected value", err)
 	// Compare persisted forms: the seeded store's clock readings carry state
 	// that protected storage does not.
-	seeded, err := service.OpenCookieJar(ctx, legacyRequest)
+	seeded, err := service.Jars.OpenCookieJar(ctx, legacyRequest)
 	testutil.FailErr(t, "reopen pre-change jar", err)
 	legacyBefore := seeded.Store.Snapshot()
 	if len(legacyBefore) != 1 || legacyBefore[0].NativeIssuer != "" {
@@ -292,7 +293,7 @@ func testLegacyCookieIssuer(t *testing.T, ctx context.Context, service *secretca
 	legacyArgs := maps.Clone(args)
 	legacyArgs["cookie_jar"] = legacyRequest.Name
 	invoke("legacy-cookie-unknown-issuer", legacyArgs, true, false)
-	reopenedLegacy, err := service.OpenCookieJar(ctx, legacyRequest)
+	reopenedLegacy, err := service.Jars.OpenCookieJar(ctx, legacyRequest)
 	testutil.FailErr(t, "preserve old entry", err)
 	if !reflect.DeepEqual(reopenedLegacy.Store.Snapshot(), legacyBefore) {
 		t.Fatal("legacy load or denial rewrote saved data")

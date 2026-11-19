@@ -25,9 +25,9 @@ func chronologySecret(t *testing.T, service *Service) Metadata {
 func TestUseChronologyAcrossFractionalSecondPrecision(t *testing.T) {
 	service, _, _ := testService(t)
 	meta := chronologySecret(t, service)
-	start := service.now()
+	start := service.repository.now()
 	for i, offset := range []time.Duration{0, 100 * time.Millisecond} {
-		service.now = func() time.Time { return start.Add(offset) }
+		service.repository.now = func() time.Time { return start.Add(offset) }
 		_, err := service.Resolve(t.Context(), map[string]any{"value": meta.Reference}, ResolveContext{
 			ProjectID: testdbseed.DefaultProjectID, ChatSessionID: "root-1", SessionID: "root-1",
 			ToolName: "command", ToolCallID: fmt.Sprintf("call-%d", i),
@@ -54,13 +54,13 @@ func TestUseRetentionBreaksTimestampTiesByAdmission(t *testing.T) {
 	testutil.FailErr(t, "parse history reference", err)
 	const total = maxUseHistory + 5
 	for i := 0; i < total; i++ {
-		err := service.queries.CreateManagedSecretUse(t.Context(), db.CreateManagedSecretUseParams{
+		err := service.repository.queries.CreateManagedSecretUse(t.Context(), db.CreateManagedSecretUseParams{
 			ID: fmt.Sprintf("00000000-0000-4000-8000-%012d", total-i), SecretID: secretID,
 			ToolName: "command", ToolCallID: nullable(fmt.Sprintf("call-%d", i)),
-			Outcome: UseResolved, Delivery: DeliveryPending, UsedAt: timelayout.Format(service.now()),
+			Outcome: UseResolved, Delivery: DeliveryPending, UsedAt: timelayout.Format(service.repository.now()),
 		})
 		testutil.FailErr(t, "insert equal-time use", err)
-		err = service.queries.TrimManagedSecretUses(t.Context(), db.TrimManagedSecretUsesParams{SecretID: secretID, Keep: maxUseHistory})
+		err = service.repository.queries.TrimManagedSecretUses(t.Context(), db.TrimManagedSecretUsesParams{SecretID: secretID, Keep: maxUseHistory})
 		testutil.FailErr(t, "trim equal-time uses", err)
 	}
 	history, err := service.Uses(t.Context(), testdbseed.DefaultProjectID, meta.Reference, 0)
@@ -79,12 +79,12 @@ func TestRevealSummaryAcrossFractionalSecondPrecision(t *testing.T) {
 	service, _, _ := testService(t)
 	meta := chronologySecret(t, service)
 	privateKey := configureRevealKey(t, service)
-	start := service.now()
+	start := service.repository.now()
 	for _, offset := range []time.Duration{0, 100 * time.Millisecond} {
-		service.now = func() time.Time { return start.Add(offset) }
-		challenge, err := service.BeginReveal(t.Context(), testdbseed.DefaultProjectID, meta.Reference, "main", testOwner(t, service))
+		service.repository.now = func() time.Time { return start.Add(offset) }
+		challenge, err := service.Reveals.BeginReveal(t.Context(), testdbseed.DefaultProjectID, meta.Reference, "main", testOwner(t, service))
 		testutil.FailErr(t, "begin timed reveal", err)
-		_, err = service.CompleteReveal(t.Context(), testdbseed.DefaultProjectID, meta.Reference,
+		_, err = service.Reveals.CompleteReveal(t.Context(), testdbseed.DefaultProjectID, meta.Reference,
 			testOwner(t, service), signedProof(privateKey, challenge, presence.AuthenticatorMacOS))
 		testutil.FailErr(t, "complete timed reveal", err)
 	}
@@ -102,7 +102,7 @@ func TestUseHistoryRefusesVariableWidthTimestamps(t *testing.T) {
 	secretID, err := ParseReference(meta.Reference)
 	testutil.FailErr(t, "parse history reference", err)
 	for _, stamp := range []string{"2026-08-31T12:00:00Z", "2026-08-31T12:00:00.1Z", "2026-08-31T12:00:00.100000000+00:00"} {
-		err := service.queries.CreateManagedSecretUse(t.Context(), db.CreateManagedSecretUseParams{
+		err := service.repository.queries.CreateManagedSecretUse(t.Context(), db.CreateManagedSecretUseParams{
 			ID: "00000000-0000-4000-8000-000000000001", SecretID: secretID,
 			ToolName: "command", Outcome: UseResolved, Delivery: DeliveryPending, UsedAt: stamp,
 		})

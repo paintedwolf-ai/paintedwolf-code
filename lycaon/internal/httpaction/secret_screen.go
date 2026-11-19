@@ -2,7 +2,6 @@ package httpaction
 
 import (
 	"context"
-	"strings"
 
 	"github.com/lycaon/lycaon/internal/egressgate"
 	"github.com/lycaon/lycaon/internal/outboundhttp"
@@ -12,16 +11,17 @@ import (
 )
 
 type outboundRequest struct {
-	beforeCookieHop func(context.Context, outboundhttp.HopRequest) error
-	classification  map[secretmatch.SecretFingerprint]bool
-	url             string
-	hostHeader      string
-	headers         []outboundhttp.Header
-	body            []byte
-	protected       map[int][]string
+	validateJarSlots func(outboundhttp.HopRequest) error
+	beforeCookieHop  func(context.Context, outboundhttp.HopRequest) error
+	classification   map[secretmatch.SecretFingerprint]bool
+	url              string
+	hostHeader       string
+	headers          []outboundhttp.Header
+	body             []byte
+	protected        map[int][]string
 	// redacted reports that the sent bytes differ everywhere the screen matched.
-	redacted bool
-	receipt  string
+	redacted          bool
+	redactionReceipts []string
 }
 
 // requestField preserves the header label for both screening and redaction.
@@ -137,7 +137,7 @@ func screenRequest(ctx context.Context, deps Deps, spec requestSpec, args map[st
 		RuleID:      match.RuleID, RuleTitle: match.Title, GenericShape: match.GenericShape,
 		Occurrences: len(matches), SourceKind: secretmatch.SourceToolArgument, SourceTool: "http_request",
 		SourcePath: path, OriginKind: origin, Fingerprints: secretmatch.Fingerprints(matches),
-		VarName: match.VarName, Container: match.Container, ContestToken: strings.TrimSpace(spec.contest),
+		VarName: match.VarName, Container: match.Container, ContestToken: spec.contest,
 		RecipientsLocal: spec.dialsLoopback(),
 	})
 	if err != nil {
@@ -178,7 +178,10 @@ func screenRequest(ctx context.Context, deps Deps, spec requestSpec, args map[st
 	}
 	tc.Effects.Secrets.Redacted(spec.outgoing)
 	rewritten.classification = classification
-	rewritten.redacted, rewritten.receipt = true, resolution.ReceiptToken
+	rewritten.redacted = true
+	if resolution.ReceiptToken != "" {
+		rewritten.redactionReceipts = []string{resolution.ReceiptToken}
+	}
 	return rewritten, nil
 }
 

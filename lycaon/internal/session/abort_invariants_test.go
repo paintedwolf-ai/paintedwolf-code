@@ -357,7 +357,7 @@ func TestAbortPropagatesProjectDirToWorkerAbort(t *testing.T) {
 		Posture: api.SessionPostureBuild,
 	}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "Create session", err)
-	testdbseed.BindSessionWorkspace(t, store, sess.ID, projectDir)
+	testdbseed.BindSessionWorkspace(t, store.DB(), sess.ID, projectDir)
 	sess, err = store.Sessions.Get(ctx, sess.ID)
 	testutil.FailErr(t, "Get session", err)
 

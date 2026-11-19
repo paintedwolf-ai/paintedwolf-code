@@ -41,36 +41,40 @@ type tlsOptions struct {
 }
 
 type options struct {
-	url            string
-	method         string
-	headers        [][2]string
-	data           []dataPart
-	forms          []string
-	user           string
-	output         string
-	dumpHeader     string
-	cookieJar      string
-	cookies        []string
-	writeOut       []writeToken
-	hasWriteOut    bool
-	silent         bool
-	showError      bool
-	include        bool
-	head           bool
-	location       bool
-	fail           failMode
-	verbose        bool
-	maxTime        time.Duration
-	connectTimeout time.Duration
-	unixSocket     string
-	compressed     bool
-	userAgent      string
-	get            bool
-	json           []string
-	upload         string
-	byteRange      string
-	tls            tlsOptions
-	dial           []outboundhttp.ResolveMapping
+	url             string
+	method          string
+	headers         [][2]string
+	data            []dataPart
+	forms           []string
+	user            string
+	output          string
+	dumpHeader      string
+	cookieJar       string
+	managedCookies  string
+	managedTokens   string
+	reviewRedaction string
+	captures        []any
+	cookies         []string
+	writeOut        []writeToken
+	hasWriteOut     bool
+	silent          bool
+	showError       bool
+	include         bool
+	head            bool
+	location        bool
+	fail            failMode
+	verbose         bool
+	maxTime         time.Duration
+	connectTimeout  time.Duration
+	unixSocket      string
+	compressed      bool
+	userAgent       string
+	get             bool
+	json            []string
+	upload          string
+	byteRange       string
+	tls             tlsOptions
+	dial            []outboundhttp.ResolveMapping
 }
 
 func usage(word, expected string) error {
@@ -187,6 +191,26 @@ func parseOptions(bound commandprogram.BoundArgv) (options, error) {
 			o.output = value
 		case "-D":
 			o.dumpHeader = value
+		case "--managed-cookie-jar", "--managed-token-jar":
+			if strings.TrimSpace(value) == "" {
+				return options{}, usage(option.Spelling, "a managed jar name")
+			}
+			if option.Key == "--managed-cookie-jar" {
+				o.managedCookies = value
+			} else {
+				o.managedTokens = value
+			}
+		case "--review-redaction":
+			if len(value) == 0 || len(value) > 64 {
+				return options{}, usage(option.Spelling, "a redaction receipt")
+			}
+			o.reviewRedaction = value
+		case "--capture-token":
+			name, from, ok := strings.Cut(value, "=")
+			if !ok || strings.TrimSpace(name) == "" || !(strings.HasPrefix(from, "json:") || strings.HasPrefix(from, "header:")) || strings.TrimSpace(strings.SplitN(from, ":", 2)[1]) == "" || len(o.captures) >= 16 {
+				return options{}, usage(option.Spelling, "up to 16 NAME=json:PATH or NAME=header:FIELD captures")
+			}
+			o.captures = append(o.captures, map[string]any{"name": name, "from": from})
 		case "-c":
 			o.cookieJar = value
 		case "-b":
@@ -238,6 +262,12 @@ func parseOptions(bound commandprogram.BoundArgv) (options, error) {
 	}
 	if o.upload != "" && o.get {
 		return options{}, usage("-G", "query data from -d forms, not an -T upload")
+	}
+	if o.managedCookies != "" && (len(o.cookies) > 0 || o.cookieJar != "") {
+		return options{}, usage("--managed-cookie-jar", "a single cookie store for the transfer")
+	}
+	if len(o.captures) != 0 && o.managedTokens == "" {
+		return options{}, usage("--capture-token", "--managed-token-jar NAME")
 	}
 	o.dial = composeDial(connectTo, o.dial)
 	return o, nil

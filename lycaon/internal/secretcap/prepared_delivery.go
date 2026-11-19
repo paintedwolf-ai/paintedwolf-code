@@ -74,12 +74,12 @@ func (r *Resolution) prepareDelivery(ctx context.Context, included func(string) 
 }
 
 func (s *Service) checkCapabilityActive(ctx context.Context, id string, access ResolveContext) error {
-	if s == nil || s.queries == nil {
+	if s == nil || s.repository.queries == nil {
 		return nil
 	}
 	queryCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), time.Second)
 	defer cancel()
-	row, err := s.queries.GetManagedSecret(queryCtx, id)
+	row, err := s.repository.queries.GetManagedSecret(queryCtx, id)
 	if errors.Is(err, sql.ErrNoRows) {
 		return ErrNotFound
 	}
@@ -92,7 +92,7 @@ func (s *Service) checkCapabilityActive(ctx context.Context, id string, access R
 	if row.RevokedAt.Valid {
 		return ErrRevoked
 	}
-	if agentUseEnded(row.AgentUseEndsAt, s.now()) {
+	if agentUseEnded(row.AgentUseEndsAt, s.repository.now()) {
 		return ErrAgentUseExpired
 	}
 	return nil

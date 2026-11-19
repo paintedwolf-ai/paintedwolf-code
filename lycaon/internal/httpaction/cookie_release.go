@@ -3,36 +3,15 @@ package httpaction
 import (
 	"context"
 	"net/http"
-	"net/url"
-	"strings"
 
 	"github.com/lycaon/lycaon/internal/httpcookies"
 	"github.com/lycaon/lycaon/internal/outboundhttp"
-	"github.com/lycaon/lycaon/internal/secretcap"
 	"github.com/lycaon/lycaon/internal/secretmatch"
 	"github.com/lycaon/lycaon/internal/tools"
 )
 
 type cookieStoreProvider interface {
 	CookieStore() *httpcookies.Store
-}
-
-type managedJarAdapter struct {
-	jar *secretcap.CookieJar
-}
-
-func (a *managedJarAdapter) Cookies(u *url.URL) []*http.Cookie {
-	if a == nil || a.jar == nil || a.jar.Store == nil {
-		return nil
-	}
-	return a.jar.Store.Cookies(u)
-}
-
-func (a *managedJarAdapter) SetCookies(u *url.URL, cookies []*http.Cookie) {
-	if a == nil || a.jar == nil || a.jar.Store == nil {
-		return
-	}
-	a.jar.Store.SetCookies(u, cookies)
 }
 
 func cookieHopIssuer(spec requestSpec) string {
@@ -57,182 +36,6 @@ func admittedHTTP(selected []httpcookies.Cookie, allowed map[httpcookies.Cookie]
 		})
 	}
 	return out
-}
-
-func refreshManagedCookieJar(
-	ctx context.Context, deps Deps, req secretcap.CookieJarRequest, jar *secretcap.CookieJar, lastVersion *int64,
-) (bool, error) {
-	if deps.Secrets == nil || jar == nil || req.ProjectID == "" || req.ChatSessionID == "" || req.Name == "" {
-		return false, nil
-	}
-	if jar.Reference != "" {
-		meta, err := deps.Secrets.Describe(ctx, req.ProjectID, req.ChatSessionID, jar.Reference)
-		if err != nil {
-			return false, cookieJarOpenReject(jar.Name, err)
-		}
-		switch meta.State {
-		case secretcap.StateRevoked:
-			return false, cookieJarOpenReject(jar.Name, secretcap.ErrRevoked)
-		case secretcap.StateAgentUseExpired:
-			return false, cookieJarOpenReject(jar.Name, secretcap.ErrAgentUseExpired)
-		case secretcap.StateUnavailable:
-			return false, cookieJarOpenReject(jar.Name, secretcap.ErrValueMissing)
-		}
-		if lastVersion != nil && meta.Version == *lastVersion {
-			return false, nil
-		}
-	} else {
-		list, err := deps.Secrets.List(ctx, req.ProjectID, req.ChatSessionID)
-		if err != nil {
-			return false, cookieJarOpenReject(jar.Name, err)
-		}
-		found := false
-		for _, item := range list {
-			if item.Origin == secretcap.OriginCookieJar && item.Name == req.Name && item.State == secretcap.StateActive {
-				found = true
-				break
-			}
-		}
-		if !found {
-			return false, nil
-		}
-	}
-	fresh, err := deps.Secrets.OpenCookieJar(ctx, req)
-	if err != nil {
-		return false, cookieJarOpenReject(jar.Name, err)
-	}
-	jar.Reference = fresh.Reference
-	if lastVersion != nil && jar.Reference != "" {
-		if meta, err := deps.Secrets.Describe(ctx, req.ProjectID, req.ChatSessionID, jar.Reference); err == nil {
-			*lastVersion = meta.Version
-		}
-	}
-	if jar.Store == nil || jar.Store.Changes().Empty() {
-		jar.Store = fresh.Store
-	} else {
-		jar.Store = jar.Store.Changes().Merge(fresh.Store.Snapshot())
-	}
-	return true, nil
-}
-
-func prepareRequestCookieDelivery(
-	ctx context.Context, deps Deps, spec requestSpec, tctx tools.ToolContext,
-	jar *secretcap.CookieJar, jarReq secretcap.CookieJarRequest, frontendJar http.CookieJar, preRunHop0 bool,
-) (func(context.Context, outboundhttp.HopRequest) error, error) {
-	if jar != nil {
-		return managedJarCookieDelivery(ctx, deps, spec, jar, jarReq, preRunHop0)
-	}
-	return frontendJarCookieDelivery(ctx, deps, spec, tctx, frontendJar)
-}
-
-// managedJarCookieDelivery reviews the managed jar on every hop and asks for
-// authority before retained cookies cross to an unreviewed destination.
-func managedJarCookieDelivery(
-	ctx context.Context, deps Deps, spec requestSpec,
-	jar *secretcap.CookieJar, jarReq secretcap.CookieJarRequest, preRunHop0 bool,
-) (func(context.Context, outboundhttp.HopRequest) error, error) {
-	var lastVersion int64
-	if deps.Secrets != nil && jar.Reference != "" && jarReq.ProjectID != "" && jarReq.ChatSessionID != "" {
-		if meta, err := deps.Secrets.Describe(ctx, jarReq.ProjectID, jarReq.ChatSessionID, jar.Reference); err == nil {
-			lastVersion = meta.Version
-		}
-	}
-	reviewed := make(map[httpcookies.Cookie]map[string]bool)
-	current := make(map[httpcookies.Cookie]bool)
-	initialIssuer := cookieHopIssuer(spec)
-	jar.Store.SetDelivery(initialIssuer, func(cookie httpcookies.Cookie) bool { return current[cookie] })
-	beforeHop := func(hopCtx context.Context, hop outboundhttp.HopRequest) error {
-		if _, err := refreshManagedCookieJar(hopCtx, deps, jarReq, jar, &lastVersion); err != nil {
-			return err
-		}
-		target := hop.URL
-		hopSpec := spec.forHop(hop)
-		hopIssuer := cookieHopIssuer(hopSpec)
-		destination, label := requestDestination(hopSpec)
-		for {
-			selected := jar.Store.Selected(target)
-			var foreign []httpcookies.Cookie
-			current = make(map[httpcookies.Cookie]bool, len(selected))
-			jar.Store.SetDelivery(hopIssuer, func(cookie httpcookies.Cookie) bool { return current[cookie] })
-			for _, cookie := range selected {
-				// Ordinary URL cookies retain their RFC selection on plain routes.
-				// Any retained service receipt or recipient routing override requires
-				// matching issuer authority or explicit review.
-				if cookie.Value == "" || cookie.NativeIssuer == hopIssuer {
-					current[cookie] = true
-					continue
-				}
-				if decisions := reviewed[cookie]; decisions != nil {
-					if allowed, ok := decisions[destination]; ok {
-						current[cookie] = allowed
-						continue
-					}
-				}
-				foreign = append(foreign, cookie)
-			}
-			if len(foreign) == 0 {
-				admitted := admittedHTTP(selected, current)
-				if hop.FreezeCookies(admitted) {
-					_ = jar.Store.Cookies(target)
-				}
-				return nil
-			}
-			if deps.SecretAsk == nil {
-				return screenFaultReject(secretmatch.FaultStageScreenUnwired)
-			}
-			var names []string
-			var fingerprints []secretmatch.SecretFingerprint
-			for _, cookie := range foreign {
-				match, err := deps.SecretMatcher.ManagedValue(cookie.Value, cookie.Name, jar.Reference)
-				if err != nil {
-					return screenFaultReject(secretmatch.FaultStageScreenUnwired)
-				}
-				names = append(names, cookie.Name)
-				fingerprints = append(fingerprints, match.Fingerprint)
-			}
-			resolution, err := deps.SecretAsk(hopCtx, secretmatch.Alert{
-				Surface: secretmatch.SurfaceHTTPRequest, DestinationID: destination, DestinationLabel: label,
-				SecretNames: sortedUnique(names), Fingerprints: fingerprints,
-				RuleID: secretmatch.ManagedRuleID, RuleTitle: secretmatch.ManagedRuleTitle,
-				GenericShape: "Protected value", Occurrences: len(foreign),
-				SourceKind: secretmatch.SourceToolArgument, SourceTool: "http_request", SourcePath: "cookies",
-				OriginKind: secretmatch.OriginField, Container: "cookie jar " + jar.Name,
-				IssuerUnverified: true, RecipientsLocal: hopSpec.dialsLoopback(),
-			})
-			if err != nil {
-				stage := secretmatch.FaultStageRaise
-				if fault, ok := secretmatch.Faulted(err); ok {
-					stage = fault.Stage
-				}
-				return screenFaultReject(stage)
-			}
-			// A denial/redaction withholds only these bytes, not the HTTP operation.
-			allowed := resolution.Decision == secretmatch.SendUnchanged
-			for _, cookie := range foreign {
-				if reviewed[cookie] == nil {
-					reviewed[cookie] = make(map[string]bool)
-				}
-				reviewed[cookie][destination], current[cookie] = allowed, allowed
-			}
-			reloaded, err := refreshManagedCookieJar(hopCtx, deps, jarReq, jar, &lastVersion)
-			if err != nil {
-				return err
-			}
-			if !reloaded {
-				admitted := admittedHTTP(selected, current)
-				if hop.FreezeCookies(admitted) {
-					_ = jar.Store.Cookies(target)
-				}
-				return nil
-			}
-		}
-	}
-	if preRunHop0 {
-		if err := beforeHop(ctx, outboundhttp.HopRequest{URL: spec.target, Method: spec.method, HostHeader: spec.hostHeader}); err != nil {
-			return nil, err
-		}
-	}
-	return beforeHop, nil
 }
 
 // frontendJarCookieDelivery screens a caller-supplied cookie jar's store before
@@ -328,7 +131,6 @@ func frontendJarCookieDelivery(
 			Fingerprints:     secretmatch.Fingerprints(matches),
 			VarName:          match.VarName,
 			Container:        match.Container,
-			ContestToken:     strings.TrimSpace(spec.contest),
 			RecipientsLocal:  hopSpec.dialsLoopback(),
 		})
 		if err != nil {

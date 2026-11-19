@@ -130,6 +130,7 @@ func (r *ProgramRuntime) outcome(ctx context.Context, run *programRun, outputs *
 	if err := r.Provenance.MarkProgramPublicationMaterialized(ctx, target.SessionID, programID); err != nil {
 		return ProgramOutcome{}, err
 	}
+	run.statePrintedPages()
 	if run.tc.Effects.Out != nil && run.tc.Effects.Out.CommandProgram != nil {
 		run.tc.Effects.Out.CommandProgram.Outputs = append([]api.CommandProgramOutputWindow(nil), out.Outputs...)
 	}

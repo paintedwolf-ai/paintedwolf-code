@@ -66,7 +66,7 @@ func WithLLMClient(client modelcall.LLMClient) Option {
 	}
 }
 
-// WithSecretMatcher injects a test outbound secret matcher (e.g. NewInertMatcher).
+// WithSecretMatcher injects a test outbound secret matcher.
 func WithSecretMatcher(m *secretmatch.Matcher) Option {
 	return func(o *options) {
 		o.secretMatcher = m

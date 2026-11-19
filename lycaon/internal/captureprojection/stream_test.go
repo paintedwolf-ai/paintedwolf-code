@@ -104,7 +104,7 @@ func TestScreenStreamEncodedLongValueAcrossCatalogBoundary(t *testing.T) {
 	if len(encoded) <= 64<<10 {
 		t.Fatal("fixture does not exceed legacy overlap")
 	}
-	m := secretmatch.NewInertMatcher()
+	m := &secretmatch.Matcher{}
 	m.SetHarvestSource(func(context.Context) []secretmatch.HarvestedValue {
 		return []secretmatch.HarvestedValue{{Secret: value, RuleID: secretmatch.ManagedRuleID, NonDisclosable: true}}
 	})
@@ -126,7 +126,7 @@ func TestScreenStreamEncodedLongValueAcrossCatalogBoundary(t *testing.T) {
 }
 
 func TestScreenStreamOrdinaryOccurrenceCapIsGlobal(t *testing.T) {
-	m := secretmatch.NewInertMatcher()
+	m := &secretmatch.Matcher{}
 	value := "ordinary-fixture-value"
 	m.SetHarvestSource(func(context.Context) []secretmatch.HarvestedValue {
 		return []secretmatch.HarvestedValue{{Secret: value, RuleID: secretmatch.HarvestRuleID}}
@@ -222,7 +222,7 @@ func TestScreenStreamTerminalControls(t *testing.T) {
 func TestScreenStreamInvalidUTF8LongRunProgress(t *testing.T) {
 	raw := bytes.Repeat([]byte{0x80}, 3<<20)
 	var out bytes.Buffer
-	p := New(secretmatch.NewInertMatcher(), nil)
+	p := New(&secretmatch.Matcher{}, nil)
 	metadata, err := p.ScreenStream(t.Context(), Scope{}, "", bytes.NewReader(raw), &out, streamOptionsFixture(&streamMemoryFixture{}))
 	if err != nil || !metadata.Complete || !bytes.Equal(raw, out.Bytes()) {
 		t.Fatalf("binary run changed or stalled: %+v %v", metadata, err)
@@ -271,7 +271,7 @@ func TestScreenStreamExactInputAndOutputLimits(t *testing.T) {
 	options.Bounds.InputBytes = int64(len(raw))
 	options.Bounds.OutputBytes = int64(len(raw))
 	var out bytes.Buffer
-	p := New(secretmatch.NewInertMatcher(), nil)
+	p := New(&secretmatch.Matcher{}, nil)
 	metadata, err := p.ScreenStream(t.Context(), Scope{}, "", bytes.NewReader(raw), &out, options)
 	if err != nil || !metadata.Complete || !bytes.Equal(out.Bytes(), raw) {
 		t.Fatalf("exact limits rejected: %+v %v", metadata, err)
@@ -279,7 +279,7 @@ func TestScreenStreamExactInputAndOutputLimits(t *testing.T) {
 }
 
 func TestScreenStreamDenseEvidenceRefusesWithoutRawOutput(t *testing.T) {
-	m := secretmatch.NewInertMatcher()
+	m := &secretmatch.Matcher{}
 	m.SetHarvestSource(func(context.Context) []secretmatch.HarvestedValue {
 		return []secretmatch.HarvestedValue{{Secret: "abcd", RuleID: secretmatch.ManagedRuleID, NonDisclosable: true}}
 	})

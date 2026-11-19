@@ -2,14 +2,8 @@ package httpaction
 
 import (
 	"errors"
-	"github.com/lycaon/lycaon/internal/toolrejection"
-	"net/url"
 	"regexp"
 	"sort"
-	"strings"
-
-	"github.com/lycaon/lycaon/internal/outboundhttp"
-	"github.com/lycaon/lycaon/internal/secretcap"
 )
 
 // CookieNotHeldCode rejects a reference to a cookie the jar does not carry to
@@ -32,50 +26,6 @@ func hasCookieReference(req outboundRequest) bool {
 		}
 	}
 	return false
-}
-
-// resolveCookieReferences substitutes each reference with the cookie the jar
-// would send to target. An unheld name is refused rather than sent literally.
-func resolveCookieReferences(req outboundRequest, jar *secretcap.CookieJar, target *url.URL) (outboundRequest, *toolrejection.ToolReject) {
-	if !hasCookieReference(req) {
-		return req, nil
-	}
-	if jar == nil {
-		return outboundRequest{}, invalid(errCookieReferenceNeedsJar)
-	}
-	var missing []string
-	substitute := func(in string) string {
-		return cookieReference.ReplaceAllStringFunc(in, func(match string) string {
-			name := strings.TrimSpace(cookieReference.FindStringSubmatch(match)[1])
-			value, ok := jar.Store.Lookup(target, name)
-			if !ok {
-				missing = append(missing, name)
-				return match
-			}
-			return value
-		})
-	}
-	out := req
-	out.headers = make([]outboundhttp.Header, len(req.headers))
-	out.body = []byte(substitute(string(req.body)))
-
-	for i, header := range req.headers {
-		out.headers[i] = outboundhttp.Header{Name: header.Name, Value: substitute(header.Value)}
-	}
-	if len(missing) > 0 {
-		return outboundRequest{}, &toolrejection.ToolReject{
-			Code: CookieNotHeldCode,
-			Data: map[string]any{
-				"jar":     jar.Name,
-				"missing": sortedUnique(missing),
-				"held":    jar.Store.NamesForURL(target),
-			},
-		}
-	}
-	if err := outboundhttp.ValidateHeaders(out.headers); err != nil {
-		return outboundRequest{}, invalid(err)
-	}
-	return out, nil
 }
 
 func sortedUnique(values []string) []string {

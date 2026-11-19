@@ -3,13 +3,14 @@ package httpaction
 import (
 	"context"
 	"fmt"
-	"github.com/lycaon/lycaon/internal/toolexecution"
 	"io"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/lycaon/lycaon/internal/toolexecution"
 
 	"github.com/lycaon/lycaon/internal/hitl"
 	"github.com/lycaon/lycaon/internal/settings"
@@ -102,7 +103,7 @@ func TestSetupPermissionCoversRepeatedAuthenticatedServiceUse(t *testing.T) {
 		}
 		return "service configured", nil
 	}))
-	testutil.FailErr(t, "register HTTP consumer", Register(registry, Deps{Boundary: testBoundary(), SecretMatcher: matcher, SecretAsk: executor.Secrets.AskSecretScreen, Secrets: service}))
+	testutil.FailErr(t, "register HTTP consumer", registerPerform(registry, Deps{Boundary: testBoundary(), SecretMatcher: matcher, SecretAsk: executor.Secrets.AskSecretScreen, Secrets: service}))
 	tc := tools.ToolContext{
 		Identity: tools.InvocationIdentity{ProjectID: testdbseed.DefaultProjectID,
 			SessionID:  "task",

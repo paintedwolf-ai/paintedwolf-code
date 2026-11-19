@@ -7,8 +7,6 @@ import (
 	"errors"
 	"fmt"
 	"strings"
-	"sync"
-	"sync/atomic"
 	"time"
 
 	"github.com/google/uuid"
@@ -77,42 +75,27 @@ var (
 // RememberFunc admits a managed value to exact-match secret screening.
 type RememberFunc func(chatSessionID string, values []secretmatch.Remembered)
 
-// Service manages capability metadata and protected values.
+// Service manages capability creation, use, and lifecycle.
 type Service struct {
-	serviceCore
-	secretJarService
-	secretVersionService
-	secretAdminService
+	repository  *repository
+	Jars        *Jars
+	Reveals     *Reveals
+	unlocks     *presence.Unlocks
+	fingerprint func(string) secretmatch.SecretFingerprint
 }
 
-type serviceCore struct {
-	durable                durableEvidence
-	mutationMu             sync.Mutex
-	screeningGeneration    atomic.Uint64
-	handle                 db.Handle
-	queries                *db.Queries
-	values                 vaultValues
-	remember               RememberFunc
-	now                    func() time.Time
-	presence               *presence.Broker
-	unlocks                *presence.Unlocks
-	fingerprint            func(string) secretmatch.SecretFingerprint
-	onScreeningInvalidated []func(context.Context, string)
-}
+// Jars applies scoped cookie and token operations with their save receipts.
+type Jars struct{ repository *repository }
 
-type secretJarService struct{ *serviceCore }
-type secretVersionService struct{ *serviceCore }
-type secretAdminService struct{ *serviceCore }
+// Reveals verifies presence against a value version and records disclosure.
+type Reveals struct {
+	repository *repository
+	broker     *presence.Broker
+}
 
 // AddScreeningInvalidationObserver installs a boot-time observer for protected-value mutations.
-func (s *serviceCore) AddScreeningInvalidationObserver(fn func(context.Context, string)) {
-	s.onScreeningInvalidated = append(s.onScreeningInvalidated, fn)
-}
-
-func (s *serviceCore) invalidateScreening(ctx context.Context, projectID string) {
-	for _, observer := range s.onScreeningInvalidated {
-		observer(ctx, projectID)
-	}
+func (s *Service) AddScreeningInvalidationObserver(fn func(context.Context, string)) {
+	s.repository.onScreeningInvalidated = append(s.repository.onScreeningInvalidated, fn)
 }
 
 // DefaultSlot describes the protected value namespace.
@@ -142,34 +125,26 @@ func New(database db.Handle, remember RememberFunc) (*Service, error) {
 
 // NewWithStore constructs a service over an explicit value store.
 func NewWithStore(database db.Handle, values *credentialstore.Store, remember RememberFunc) *Service {
-	s := &Service{
-		serviceCore: serviceCore{
-			handle: database, queries: db.New(database), values: vaultValues{store: values}, remember: remember,
-			now: time.Now,
-		},
-	}
-	s.secretJarService = secretJarService{&s.serviceCore}
-	s.secretVersionService = secretVersionService{&s.serviceCore}
-	s.secretAdminService = secretAdminService{&s.serviceCore}
-	return s
+	repository := &repository{handle: database, queries: db.New(database), values: vaultValues{store: values}, remember: remember, now: time.Now}
+	return &Service{repository: repository, Jars: &Jars{repository: repository}, Reveals: &Reveals{repository: repository}}
 }
 
 // SetPresence installs the broker that verifies reveals.
-func (s *serviceCore) SetPresence(broker *presence.Broker) { s.presence = broker }
+func (s *Reveals) SetPresence(broker *presence.Broker) { s.broker = broker }
 
 // SetUnlocks installs the chats' unlocks a held value's handoff needs.
-func (s *serviceCore) SetUnlocks(unlocks *presence.Unlocks) { s.unlocks = unlocks }
+func (s *Service) SetUnlocks(unlocks *presence.Unlocks) { s.unlocks = unlocks }
 
 // SetFingerprinter installs the screen's identity for exact bytes, so a
 // resolution can name which screened values a person holds.
-func (s *serviceCore) SetFingerprinter(fp *secretmatch.Fingerprinter) { s.fingerprint = fp.Fingerprint }
+func (s *Service) SetFingerprinter(fp *secretmatch.Fingerprinter) { s.fingerprint = fp.Fingerprint }
 
 // ScreeningGeneration changes when screening gains protected bytes.
-func (s *serviceCore) ScreeningGeneration() uint64 {
+func (s *Service) ScreeningGeneration() uint64 {
 	if s == nil {
 		return 0
 	}
-	return s.screeningGeneration.Load()
+	return s.repository.screeningGeneration.Load()
 }
 
 func validID(id string) bool {
@@ -207,233 +182,38 @@ type Metadata struct {
 	RevealCount    int64   `json:"reveal_count"`
 }
 
-type facts struct {
-	// chatPresent and chatTitle describe the owning chat when it still exists.
-	chatPresent     bool
-	chatTitle       string
-	version         int64
-	valueID         string
-	valueReplacedAt string
-	useCount        int64
-	lastUsedAt      string
-	revealCount     int64
-	lastRevealedAt  string
-}
-
 // List returns value-free capabilities visible from a chat.
-func (s *serviceCore) List(ctx context.Context, projectID, chatSessionID string) ([]Metadata, error) {
+func (s *Service) List(ctx context.Context, projectID, chatSessionID string) ([]Metadata, error) {
 	projectID = strings.TrimSpace(projectID)
-	rows, err := s.queries.ListVisibleManagedSecrets(ctx, db.ListVisibleManagedSecretsParams{
+	rows, err := s.repository.queries.ListVisibleManagedSecrets(ctx, db.ListVisibleManagedSecretsParams{
 		ProjectID: projectID, ChatSessionID: nullable(strings.TrimSpace(chatSessionID)),
 	})
 	if err != nil {
 		return nil, err
 	}
-	return s.metadataList(ctx, projectID, rows)
+	return s.repository.metadataList(ctx, projectID, rows)
 }
 
 // ListProject returns project metadata without protected values.
-func (s *serviceCore) ListProject(ctx context.Context, projectID string) ([]Metadata, error) {
+func (s *Service) ListProject(ctx context.Context, projectID string) ([]Metadata, error) {
 	projectID = strings.TrimSpace(projectID)
-	rows, err := s.queries.ListProjectManagedSecrets(ctx, projectID)
+	rows, err := s.repository.queries.ListProjectManagedSecrets(ctx, projectID)
 	if err != nil {
 		return nil, err
 	}
-	return s.metadataList(ctx, projectID, rows)
+	return s.repository.metadataList(ctx, projectID, rows)
 }
 
 // Describe returns value-free metadata visible to a chat.
-func (s *serviceCore) Describe(ctx context.Context, projectID, chatSessionID, reference string) (Metadata, error) {
-	row, err := s.rowForReference(ctx, reference)
+func (s *Service) Describe(ctx context.Context, projectID, chatSessionID, reference string) (Metadata, error) {
+	row, err := s.repository.rowForReference(ctx, reference)
 	if err != nil {
 		return Metadata{}, err
 	}
 	if err := visible(row, projectID, chatSessionID); err != nil {
 		return Metadata{}, err
 	}
-	return s.metadataRow(ctx, row)
-}
-
-func (s *serviceCore) metadataList(ctx context.Context, projectID string, rows []db.ManagedSecrets) ([]Metadata, error) {
-	byID, err := s.projectFacts(ctx, projectID)
-	if err != nil {
-		return nil, err
-	}
-	out := make([]Metadata, 0, len(rows))
-	for _, row := range rows {
-		out = append(out, s.metadata(row, byID[row.ID]))
-	}
-	return out, nil
-}
-
-func (s *serviceCore) metadataRow(ctx context.Context, row db.ManagedSecrets) (Metadata, error) {
-	f, err := s.secretFacts(ctx, row.ID)
-	if err != nil {
-		return Metadata{}, err
-	}
-	return s.metadata(row, f), nil
-}
-
-// projectFacts loads current versions and use summaries for one project.
-func (s *serviceCore) projectFacts(ctx context.Context, projectID string) (map[string]facts, error) {
-	versions, err := s.queries.ListProjectManagedSecretVersions(ctx, projectID)
-	if err != nil {
-		return nil, err
-	}
-	out := make(map[string]facts, len(versions))
-	for _, version := range versions {
-		if version.RetiredAt.Valid {
-			continue
-		}
-		entry := out[version.SecretID]
-		entry.version, entry.valueID = version.Version, version.ID
-		if version.Version > 1 {
-			entry.valueReplacedAt = version.CreatedAt
-		}
-		out[version.SecretID] = entry
-	}
-	usage, err := s.queries.ListProjectManagedSecretUsage(ctx, projectID)
-	if err != nil {
-		return nil, err
-	}
-	for _, summary := range usage {
-		entry := out[summary.SecretID]
-		entry.useCount, entry.lastUsedAt = summary.UseCount, summary.LastUsedAt
-		out[summary.SecretID] = entry
-	}
-	reveals, err := s.queries.ListProjectManagedSecretRevealSummaries(ctx, projectID)
-	if err != nil {
-		return nil, err
-	}
-	for _, summary := range reveals {
-		entry := out[summary.SecretID]
-		entry.revealCount, entry.lastRevealedAt = summary.RevealCount, summary.LastRevealedAt
-		out[summary.SecretID] = entry
-	}
-	chats, err := s.queries.ListProjectManagedSecretChats(ctx, projectID)
-	if err != nil {
-		return nil, err
-	}
-	for _, chat := range chats {
-		entry := out[chat.SecretID]
-		entry.chatPresent, entry.chatTitle = true, chat.Title.String
-		out[chat.SecretID] = entry
-	}
-	return out, nil
-}
-
-func (s *serviceCore) secretFacts(ctx context.Context, secretID string) (facts, error) {
-	var out facts
-	current, hasCurrent, err := s.currentVersion(ctx, secretID)
-	if err != nil {
-		return facts{}, err
-	}
-	if hasCurrent {
-		out.version, out.valueID = current.Version, current.ID
-		if current.Version > 1 {
-			out.valueReplacedAt = current.CreatedAt
-		}
-	}
-	usage, err := s.queries.GetManagedSecretUsage(ctx, secretID)
-	if err != nil {
-		return facts{}, err
-	}
-	out.useCount, out.lastUsedAt = usage.UseCount, usage.LastUsedAt
-	reveals, err := s.queries.GetManagedSecretRevealSummary(ctx, secretID)
-	if err != nil {
-		return facts{}, err
-	}
-	out.revealCount, out.lastRevealedAt = reveals.RevealCount, reveals.LastRevealedAt
-	title, err := s.queries.GetManagedSecretChat(ctx, secretID)
-	switch {
-	case err == nil:
-		out.chatPresent, out.chatTitle = true, title.String
-	case errors.Is(err, sql.ErrNoRows):
-	default:
-		return facts{}, err
-	}
-	return out, nil
-}
-
-func (s *serviceCore) metadata(row db.ManagedSecrets, f facts) Metadata {
-	meta := Metadata{
-		Reference: secretmatch.ReferenceToken(row.ID), Name: row.Name, Purpose: row.Purpose,
-		Scope: row.Scope, Origin: row.Origin, CreatedAt: row.CreatedAt,
-		State: s.state(row, f), Version: f.version, UseCount: f.useCount,
-		RevealCount: f.revealCount,
-	}
-	if entry, ok := s.values.get(f.valueID); ok && f.valueID != "" {
-		meta.Custody = entry.Custody
-	}
-	if row.ChatSessionID.Valid {
-		value := row.ChatSessionID.String
-		meta.ChatSessionID = &value
-		meta.ChatTitle, meta.ChatDeleted = f.chatTitle, !f.chatPresent
-	}
-	if row.Format.Valid {
-		meta.Format = row.Format.String
-	}
-	if row.EntropyBits.Valid {
-		meta.EntropyBits = row.EntropyBits.Int64
-	}
-	if row.AgentUseEndsAt.Valid {
-		value := row.AgentUseEndsAt.String
-		meta.AgentUseEndsAt = &value
-	}
-	if f.valueReplacedAt != "" {
-		value := f.valueReplacedAt
-		meta.ValueReplacedAt = &value
-	}
-	if f.lastUsedAt != "" {
-		value := f.lastUsedAt
-		meta.LastUsedAt = &value
-	}
-	if f.lastRevealedAt != "" {
-		value := f.lastRevealedAt
-		meta.LastRevealedAt = &value
-	}
-	return meta
-}
-
-// state prioritizes terminal, missing-value, then agent-use constraints.
-func (s *serviceCore) state(row db.ManagedSecrets, f facts) string {
-	if row.RevokedAt.Valid {
-		return StateRevoked
-	}
-	if f.valueID == "" {
-		return StateUnavailable
-	}
-	if _, ok := s.values.get(f.valueID); !ok {
-		return StateUnavailable
-	}
-	if agentUseEnded(row.AgentUseEndsAt, s.now()) {
-		return StateAgentUseExpired
-	}
-	return StateActive
-}
-
-func (s *serviceCore) rowForReference(ctx context.Context, reference string) (db.ManagedSecrets, error) {
-	id, err := ParseReference(reference)
-	if err != nil {
-		return db.ManagedSecrets{}, err
-	}
-	row, err := s.queries.GetManagedSecret(ctx, id)
-	if errors.Is(err, sql.ErrNoRows) {
-		return db.ManagedSecrets{}, ErrNotFound
-	}
-	return row, err
-}
-
-// projectRow accepts every capability scope in the project.
-func (s *serviceCore) projectRow(ctx context.Context, projectID, reference string) (db.ManagedSecrets, error) {
-	row, err := s.rowForReference(ctx, reference)
-	if err != nil {
-		return db.ManagedSecrets{}, err
-	}
-	if row.ProjectID != strings.TrimSpace(projectID) {
-		return db.ManagedSecrets{}, ErrNotVisible
-	}
-	return row, nil
+	return s.repository.metadataRow(ctx, row)
 }
 
 func nullable(value string) sql.NullString {

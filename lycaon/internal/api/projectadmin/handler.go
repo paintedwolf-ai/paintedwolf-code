@@ -145,6 +145,7 @@ type Sandboxes struct {
 
 type Secrets struct {
 	ManagedSecrets *secretcap.Service
+	Reveals        *secretcap.Reveals
 	MutationGate   *project.MutationGate
 	Registry       project.Registry
 	SecretIgnores  *projectignore.SecretService
@@ -189,7 +190,7 @@ func New(responses *httpio.Responder, background *taskgroup.Group, deps Deps) Ha
 	h.Removal = &Removal{background: background, DataDir: deps.DataDir, Database: deps.Database, Extensions: deps.Extensions.Mutations, ManagedSecrets: deps.ManagedSecrets, MutationGate: deps.MutationGate, Registry: deps.Registry, Sessions: deps.Sessions, Settings: deps.Settings, responses: responses, sourceViews: deps.Sources.Views, sourceWatch: deps.Sources.Watch}
 	h.Roots = &Roots{DataDir: deps.DataDir, Git: deps.Git, MutationGate: deps.MutationGate, ProjectRules: deps.ProjectRules, Registry: deps.Registry, ScanCadence: deps.ScanCadence, Sessions: deps.Sessions, Settings: deps.Settings, RewindStore: deps.Store.Rewind, background: background, responses: responses, sourceEditor: deps.Sources.Editor, sourceViews: deps.Sources.Views, sourceWatch: deps.Sources.Watch, sourceWorkspace: deps.Sources.Workspace}
 	h.Sandboxes = &Sandboxes{Board: deps.Board, Sessions: deps.Sessions, WorkerBranchRoot: deps.WorkerBranchRoot, Workers: deps.Workers, background: background}
-	h.Secrets = &Secrets{ManagedSecrets: deps.ManagedSecrets, MutationGate: deps.MutationGate, Registry: deps.Registry, SecretIgnores: deps.SecretIgnores, responses: responses}
+	h.Secrets = &Secrets{ManagedSecrets: deps.ManagedSecrets, Reveals: deps.ManagedSecrets.Reveals, MutationGate: deps.MutationGate, Registry: deps.Registry, SecretIgnores: deps.SecretIgnores, responses: responses}
 	h.Trust = &Trust{Events: deps.Events, Extensions: deps.Extensions.Mutations, Registry: deps.Registry, Settings: deps.Settings, responses: responses}
 	h.Verification = &Verification{Events: deps.Events, LLMService: deps.LLMService, Registry: deps.Registry, Sessions: deps.Sessions, Settings: deps.Settings, background: background}
 	h.Projects.Roots = h.Roots

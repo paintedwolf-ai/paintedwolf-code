@@ -1195,16 +1195,16 @@
       "summary": "{% if paintedwolf.action_host_resource_denials %}Effective policy denies these requested host resources: {{ paintedwolf.action_host_resource_denials }}.{% else %}A requested host resource was denied by effective policy.{% endif %}"
     },
     "HTTP_REQUEST_COOKIE_JAR_FAILED": {
-      "branch_instruction": "Branch on Code HTTP_REQUEST_COOKIE_JAR_FAILED; use another jar name or drop the jar",
+      "branch_instruction": "Inspect the named cookie jar in the capability inventory.",
       "category": "recoverable",
       "emit": "guard:http_request",
-      "summary": "Cookie jar {{ paintedwolf.cookie_jar_name }} could not be opened; no request was sent."
+      "summary": "The host could not open or update the named cookie jar."
     },
     "HTTP_REQUEST_COOKIE_NOT_HELD": {
-      "branch_instruction": "Branch on Code HTTP_REQUEST_COOKIE_NOT_HELD; issue the login or session request first, or reference a held cookie",
+      "branch_instruction": "Use a cookie that applies to the selected destination.",
       "category": "recoverable",
       "emit": "guard:http_request",
-      "summary": "The request named a cookie the jar does not carry for this URL, so nothing was sent."
+      "summary": "The selected jar cannot supply a referenced cookie at this destination."
     },
     "HTTP_REQUEST_FAILED": {
       "branch_instruction": "{{ paintedwolf.next_steps }}",
@@ -1224,29 +1224,23 @@
       "emit": "guard:http_request",
       "summary": "The request connected to {{ paintedwolf.destination }} on port {{ paintedwolf.port }}, where another listener is active."
     },
-    "HTTP_REQUEST_RESPONSE_PATH_DENIED": {
-      "branch_instruction": "Recover evidence without duplicating the remote operation",
-      "category": "recoverable",
-      "emit": "guard:http_request",
-      "summary": "http_request could not store the response at {{ paintedwolf.path }}.{% if paintedwolf.http_responses_received %} The exchange already received a response with status {{ paintedwolf.http_last_status }}.{% endif %}"
-    },
     "HTTP_REQUEST_TOKEN_CAPTURE_FAILED": {
-      "branch_instruction": "Branch on Code HTTP_REQUEST_TOKEN_CAPTURE_FAILED; inspect endpoint response structure and correct capture_tokens rules",
+      "branch_instruction": "Use the receipt to identify which capture names were missing.",
       "category": "recoverable",
       "emit": "guard:http_request",
-      "summary": "Token capture rules failed to extract tokens from the response."
+      "summary": "The exchange completed but a requested response field was missing or unusable."
     },
     "HTTP_REQUEST_TOKEN_JAR_FAILED": {
-      "branch_instruction": "Branch on Code HTTP_REQUEST_TOKEN_JAR_FAILED; use another jar name or resolve store availability",
+      "branch_instruction": "Inspect the named token jar in the capability inventory.",
       "category": "recoverable",
       "emit": "guard:http_request",
-      "summary": "Token jar {{ paintedwolf.token_jar_name }} could not be opened; no request was sent."
+      "summary": "The host could not open or update the named token jar."
     },
     "HTTP_REQUEST_TOKEN_NOT_HELD": {
-      "branch_instruction": "Branch on Code HTTP_REQUEST_TOKEN_NOT_HELD; issue the auth request first, or reference a held token",
+      "branch_instruction": "Use a token name listed in the jar receipt.",
       "category": "recoverable",
       "emit": "guard:http_request",
-      "summary": "The request named a token reference that the token jar does not carry, so nothing was sent."
+      "summary": "The request references a token the jar does not hold."
     },
     "HTTP_REQUEST_WEB_PAGE": {
       "branch_instruction": "Keep native curl when you need the exact markup, headers, or status of this endpoint",

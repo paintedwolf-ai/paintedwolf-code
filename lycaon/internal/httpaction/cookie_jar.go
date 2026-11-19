@@ -4,19 +4,17 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/lycaon/lycaon/internal/toolrejection"
 	"strings"
 	"time"
 
 	"github.com/lycaon/lycaon/internal/secretcap"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/internal/tools"
 )
 
 // CookieJarFailedCode rejects a named jar that cannot be opened, before any
 // request is sent.
 const CookieJarFailedCode = "HTTP_REQUEST_COOKIE_JAR_FAILED"
-
-var errCookieReferenceNeedsJar = fmt.Errorf("a {{cookie:…}} reference requires cookie_jar")
 
 // cookieReceipt is what the model learns about a jar: names and counts, never
 // a value.
@@ -39,7 +37,7 @@ func (r *cookieReceipt) facts() map[string]any {
 		return nil
 	}
 	out := map[string]any{
-		"jar": r.Jar, "sent": r.Sent, "stored": r.Stored, "persisted": r.Persisted,
+		"jar": r.Jar, "cookie_jar_name": r.Jar, "sent": r.Sent, "stored": r.Stored, "persisted": r.Persisted,
 	}
 	if r.Reference != "" {
 		out["reference"] = r.Reference
@@ -53,8 +51,7 @@ func (r *cookieReceipt) facts() map[string]any {
 	return out
 }
 
-// openCookieJar loads the named jar for this chat. No jar name means no jar,
-// and the request carries only the cookies the caller wrote as headers.
+// openCookieJar resolves a name within the current project and chat.
 func openCookieJar(ctx context.Context, deps Deps, tctx tools.ToolContext, args map[string]any) (*secretcap.CookieJar, secretcap.CookieJarRequest, error) {
 	name, _ := args["cookie_jar"].(string)
 	name = strings.TrimSpace(name)
@@ -64,16 +61,16 @@ func openCookieJar(ctx context.Context, deps Deps, tctx tools.ToolContext, args 
 	if name == "" {
 		return nil, secretcap.CookieJarRequest{}, invalid(fmt.Errorf("cookie_jar must be a name"))
 	}
-	if deps.Secrets == nil {
+	if deps.Jars == nil || deps.Secrets == nil {
 		return nil, secretcap.CookieJarRequest{}, &toolrejection.ToolReject{
 			Code: CookieJarFailedCode, Data: map[string]any{"jar": name, "cookie_jar_name": name, "reason": "managed secrets are unavailable"},
 		}
 	}
 	req := secretcap.CookieJarRequest{
 		ProjectID: strings.TrimSpace(tctx.Identity.ProjectID), ChatSessionID: tctx.ChatSessionID(),
-		SessionID: strings.TrimSpace(tctx.Identity.SessionID), OperationID: strings.TrimSpace(tctx.Identity.ToolCallID), Name: name,
+		SessionID: strings.TrimSpace(tctx.Identity.SessionID), OperationID: "cookie-jar:" + tctx.EffectActionID(), Name: name,
 	}
-	jar, err := deps.Secrets.OpenCookieJar(ctx, req)
+	jar, err := deps.Jars.OpenCookieJar(ctx, req)
 	if err != nil {
 		return nil, req, cookieJarOpenReject(name, err)
 	}
@@ -95,7 +92,7 @@ func saveCookieJar(ctx context.Context, deps Deps, req secretcap.CookieJarReques
 	// Persist those effects independently, with a bounded shutdown delay.
 	saveCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
 	defer cancel()
-	meta, err := deps.Secrets.SaveCookieJar(saveCtx, req, jar)
+	meta, err := deps.Jars.SaveCookieJar(saveCtx, req, jar)
 	if err != nil {
 		receipt.Persisted, receipt.Error = false, err.Error()
 		return receipt

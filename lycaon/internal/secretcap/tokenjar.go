@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"maps"
 	"strings"
 
 	"github.com/google/uuid"
@@ -15,7 +16,7 @@ import (
 
 const tokenJarPurpose = "HTTP token jar"
 
-// TokenJarRequest identifies the jar one http_request call opens.
+// TokenJarRequest identifies the jar one HTTP exchange opens.
 type TokenJarRequest struct {
 	ProjectID, ChatSessionID, SessionID, OperationID, Name string
 }
@@ -35,9 +36,10 @@ type TokenJar struct {
 	Name      string
 	Reference string
 	Tokens    map[string]Token
+	changes   map[string]Token
 	id        string
 	request   TokenJarRequest
-	issuer    *secretJarService
+	issuer    *Jars
 }
 
 // Names returns the held token names in no particular order.
@@ -78,18 +80,22 @@ func (j *TokenJar) Set(name string, token Token) {
 	if j.Tokens == nil {
 		j.Tokens = make(map[string]Token)
 	}
+	if j.changes == nil {
+		j.changes = make(map[string]Token)
+	}
+	j.changes[name] = token
 	j.Tokens[name] = token
 }
 
 // OpenTokenJar loads the chat-visible jar and registers its values for screening.
 // An absent jar starts empty in memory.
-func (s *secretJarService) OpenTokenJar(ctx context.Context, req TokenJarRequest) (*TokenJar, error) {
+func (s *Jars) OpenTokenJar(ctx context.Context, req TokenJarRequest) (*TokenJar, error) {
 	req = normalizeTokenJarRequest(req)
 	if !validJarName(req.Name) || req.ProjectID == "" || req.ChatSessionID == "" || req.SessionID == "" || req.OperationID == "" {
 		return nil, ErrInvalidPut
 	}
-	s.mutationMu.Lock()
-	defer s.mutationMu.Unlock()
+	s.repository.mutationMu.Lock()
+	defer s.repository.mutationMu.Unlock()
 
 	row, found, err := s.jarRow(ctx, OriginTokenJar, req.ProjectID, req.ChatSessionID, req.Name)
 	if err != nil {
@@ -104,32 +110,38 @@ func (s *secretJarService) OpenTokenJar(ctx context.Context, req TokenJarRequest
 	}
 	jar.id, jar.Reference = row.ID, secretmatch.ReferenceToken(row.ID)
 	access := ResolveContext{ProjectID: req.ProjectID, ChatSessionID: req.ChatSessionID, SessionID: req.SessionID, ToolName: jarTool}
-	current, hasCurrent, err := s.currentVersion(ctx, row.ID)
+	current, tokens, err := s.tokenJarCurrent(ctx, row.ID)
 	if err != nil {
+		s.repository.recordUse(ctx, row.ID, current.Version, UseUnavailable, access)
 		return nil, err
 	}
-	if !hasCurrent {
-		s.recordUse(ctx, row.ID, 0, UseUnavailable, access)
-		return nil, ErrValueMissing
-	}
-	entry, ok := s.values.get(current.ID)
-	if !ok {
-		s.recordUse(ctx, row.ID, current.Version, UseUnavailable, access)
-		return nil, ErrValueMissing
-	}
-	var tokens map[string]Token
-	if err := json.Unmarshal([]byte(entry.Value), &tokens); err != nil {
-		s.recordUse(ctx, row.ID, current.Version, UseUnavailable, access)
-		return nil, fmt.Errorf("%w: stored token jar is unreadable", ErrValueMissing)
-	}
 	jar.Tokens = tokens
-	s.recordUse(ctx, row.ID, current.Version, UseResolved, access)
+	s.repository.recordUse(ctx, row.ID, current.Version, UseResolved, access)
 	s.rememberJarValues(req.ChatSessionID, "token", row.ID, jar.Values())
 	return jar, nil
 }
 
+func (s *Jars) tokenJarCurrent(ctx context.Context, id string) (db.ManagedSecretVersions, map[string]Token, error) {
+	current, found, err := s.repository.currentVersion(ctx, id)
+	if err != nil {
+		return current, nil, err
+	}
+	if !found {
+		return current, nil, ErrValueMissing
+	}
+	entry, ok := s.repository.values.get(current.ID)
+	if !ok {
+		return current, nil, ErrValueMissing
+	}
+	var tokens map[string]Token
+	if err := json.Unmarshal([]byte(entry.Value), &tokens); err != nil || tokens == nil {
+		return current, nil, fmt.Errorf("%w: stored token jar is unreadable", ErrValueMissing)
+	}
+	return current, tokens, nil
+}
+
 // SaveTokenJar commits token changes and saves the operation receipt.
-func (s *secretJarService) SaveTokenJar(ctx context.Context, req TokenJarRequest, jar *TokenJar) (*Metadata, error) {
+func (s *Jars) SaveTokenJar(ctx context.Context, req TokenJarRequest, jar *TokenJar) (*Metadata, error) {
 	if jar == nil {
 		return nil, nil
 	}
@@ -137,12 +149,12 @@ func (s *secretJarService) SaveTokenJar(ctx context.Context, req TokenJarRequest
 	if jar.issuer != s || jar.request != req || jar.Tokens == nil {
 		return nil, ErrInvalidPut
 	}
-	if len(jar.Tokens) == 0 {
+	if len(jar.changes) == 0 {
 		return nil, nil
 	}
-	defer s.invalidateScreening(ctx, req.ProjectID)
-	s.mutationMu.Lock()
-	defer s.mutationMu.Unlock()
+	defer s.repository.invalidateScreening(ctx, req.ProjectID)
+	s.repository.mutationMu.Lock()
+	defer s.repository.mutationMu.Unlock()
 
 	s.rememberJarValues(req.ChatSessionID, "token", jar.id, jar.Values())
 	if meta, found, err := s.tokenJarSavedOperation(ctx, req, jar); found || err != nil {
@@ -152,7 +164,16 @@ func (s *secretJarService) SaveTokenJar(ctx context.Context, req TokenJarRequest
 	if err != nil {
 		return nil, err
 	}
-	encoded, err := json.Marshal(jar.Tokens)
+	var current db.ManagedSecretVersions
+	merged := jar.changes
+	if found {
+		current, merged, err = s.tokenJarCurrent(ctx, row.ID)
+		if err != nil {
+			return nil, err
+		}
+		maps.Copy(merged, jar.changes)
+	}
+	encoded, err := json.Marshal(merged)
 	if err != nil {
 		return nil, err
 	}
@@ -162,22 +183,18 @@ func (s *secretJarService) SaveTokenJar(ctx context.Context, req TokenJarRequest
 	if !found {
 		return s.createTokenJar(ctx, req, jar, string(encoded))
 	}
-	current, _, err := s.currentVersion(ctx, row.ID)
-	if err != nil {
-		return nil, err
-	}
 	record := s.tokenJarSaveRecorder(ctx, req, row.ID)
-	err = s.replaceOnto(ctx, row, current, true, CustodyHost, string(encoded), record)
+	err = s.repository.replaceOnto(ctx, row, current, true, CustodyHost, string(encoded), record)
 	if err != nil {
 		return nil, err
 	}
-	s.screeningGeneration.Add(1)
+	s.repository.screeningGeneration.Add(1)
 	jar.id, jar.Reference = row.ID, secretmatch.ReferenceToken(row.ID)
-	meta, err := s.metadataRow(ctx, row)
+	meta, err := s.repository.metadataRow(ctx, row)
 	return &meta, err
 }
 
-func (s *secretJarService) createTokenJar(ctx context.Context, req TokenJarRequest, jar *TokenJar, serialized string) (*Metadata, error) {
+func (s *Jars) createTokenJar(ctx context.Context, req TokenJarRequest, jar *TokenJar, serialized string) (*Metadata, error) {
 	id := uuid.NewString()
 	put := PutRequest{
 		ProjectID: req.ProjectID, ChatSessionID: req.ChatSessionID, SessionID: req.SessionID,
@@ -187,20 +204,20 @@ func (s *secretJarService) createTokenJar(ctx context.Context, req TokenJarReque
 	if err := validatePut(put); err != nil {
 		return nil, err
 	}
-	if err := s.createWithFirstVersion(ctx, id, put, s.now().UTC(), s.tokenJarSaveRecorder(ctx, req, id)); err != nil {
+	if err := s.repository.createWithFirstVersion(ctx, id, put, s.repository.now().UTC(), s.tokenJarSaveRecorder(ctx, req, id)); err != nil {
 		return nil, err
 	}
-	s.screeningGeneration.Add(1)
+	s.repository.screeningGeneration.Add(1)
 	jar.id, jar.Reference = id, secretmatch.ReferenceToken(id)
-	row, err := s.queries.GetManagedSecret(ctx, id)
+	row, err := s.repository.queries.GetManagedSecret(ctx, id)
 	if err != nil {
 		return nil, err
 	}
-	meta, err := s.metadataRow(ctx, row)
+	meta, err := s.repository.metadataRow(ctx, row)
 	return &meta, err
 }
 
-func (s *secretJarService) tokenJarSaveRecorder(ctx context.Context, req TokenJarRequest, secretID string) func(*db.Queries) error {
+func (s *Jars) tokenJarSaveRecorder(ctx context.Context, req TokenJarRequest, secretID string) func(*db.Queries) error {
 	return func(q *db.Queries) error {
 		return q.CreateTokenJarSave(ctx, db.CreateTokenJarSaveParams{
 			ProjectID: req.ProjectID, ChatSessionID: req.ChatSessionID, SessionID: req.SessionID,
@@ -210,8 +227,8 @@ func (s *secretJarService) tokenJarSaveRecorder(ctx context.Context, req TokenJa
 	}
 }
 
-func (s *secretJarService) tokenJarSavedOperation(ctx context.Context, req TokenJarRequest, jar *TokenJar) (*Metadata, bool, error) {
-	save, err := s.queries.GetTokenJarSave(ctx, db.GetTokenJarSaveParams{
+func (s *Jars) tokenJarSavedOperation(ctx context.Context, req TokenJarRequest, jar *TokenJar) (*Metadata, bool, error) {
+	save, err := s.repository.queries.GetTokenJarSave(ctx, db.GetTokenJarSaveParams{
 		ProjectID: req.ProjectID, SessionID: req.SessionID, OperationID: req.OperationID,
 	})
 	if err != nil {
@@ -220,19 +237,26 @@ func (s *secretJarService) tokenJarSavedOperation(ctx context.Context, req Token
 		}
 		return nil, false, err
 	}
+	if save.ChatSessionID != req.ChatSessionID || save.Name != req.Name ||
+		(save.SecretID.Valid && jar.id != "" && jar.id != save.SecretID.String) {
+		return nil, true, ErrInvalidPut
+	}
 	if !save.SecretID.Valid || save.SecretID.String == "" {
 		return nil, true, nil
 	}
-	row, err := s.rowForReference(ctx, secretmatch.ReferenceToken(save.SecretID.String))
+	row, err := s.repository.rowForReference(ctx, secretmatch.ReferenceToken(save.SecretID.String))
 	if err != nil {
 		return nil, true, err
 	}
+	if err := s.jarAccess(row, OriginTokenJar, ErrInvalidPut, req.ProjectID, req.ChatSessionID); err != nil {
+		return nil, true, err
+	}
 	jar.id, jar.Reference = row.ID, secretmatch.ReferenceToken(row.ID)
-	meta, err := s.metadataRow(ctx, row)
+	meta, err := s.repository.metadataRow(ctx, row)
 	return &meta, true, err
 }
 
-func (s *secretJarService) tokenJarSaveTarget(ctx context.Context, req TokenJarRequest, jar *TokenJar) (db.ManagedSecrets, bool, error) {
+func (s *Jars) tokenJarSaveTarget(ctx context.Context, req TokenJarRequest, jar *TokenJar) (db.ManagedSecrets, bool, error) {
 	var row db.ManagedSecrets
 	var found bool
 	var err error
@@ -240,7 +264,7 @@ func (s *secretJarService) tokenJarSaveTarget(ctx context.Context, req TokenJarR
 		row, found, err = s.jarRow(ctx, OriginTokenJar, req.ProjectID, req.ChatSessionID, req.Name)
 		found = found && row.Scope == ScopeChat
 	} else {
-		row, err = s.rowForReference(ctx, secretmatch.ReferenceToken(jar.id))
+		row, err = s.repository.rowForReference(ctx, secretmatch.ReferenceToken(jar.id))
 		found = err == nil
 	}
 	if err == nil && found {

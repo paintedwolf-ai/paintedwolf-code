@@ -55,7 +55,7 @@ func TestReleaseCredentialReviewsEachSavedRelease(t *testing.T) {
 		{name: "a missing review keeps the credential", matcher: fingerprinterMatcher(t), password: fixtureCredentialPassword},
 		{name: "a missing matcher keeps the credential", withAsk: true, ask: askResult{decision: secretmatch.SendUnchanged}, password: fixtureCredentialPassword},
 		{name: "an empty credential is never reviewed", withAsk: true, matcher: fingerprinterMatcher(t), ask: askResult{decision: secretmatch.SendUnchanged}},
-		{name: "a matcher without fingerprinting keeps the credential", withAsk: true, matcher: secretmatch.NewInertMatcher(), ask: askResult{decision: secretmatch.SendUnchanged}, password: fixtureCredentialPassword},
+		{name: "a matcher without fingerprinting keeps the credential", withAsk: true, matcher: &secretmatch.Matcher{}, ask: askResult{decision: secretmatch.SendUnchanged}, password: fixtureCredentialPassword},
 		{name: "a faulting review keeps the credential", withAsk: true, matcher: fingerprinterMatcher(t), ask: askResult{decision: secretmatch.SendUnchanged, err: errors.New("review unavailable")}, password: fixtureCredentialPassword, wantAsk: true},
 		{name: "a withheld decision keeps the credential", withAsk: true, matcher: fingerprinterMatcher(t), ask: askResult{decision: secretmatch.Withhold}, password: fixtureCredentialPassword, wantAsk: true},
 		{name: "a redacted decision keeps the credential", withAsk: true, matcher: fingerprinterMatcher(t), ask: askResult{decision: secretmatch.SendRedacted}, password: fixtureCredentialPassword, wantAsk: true},

@@ -30,7 +30,7 @@ func (inv *invocation) writeOut(exit int) error {
 		b.WriteString(value)
 		carried = carried || (value != "" && writeOutCarriesResponseText(token.variable, inv.exchange))
 	}
-	_, err := io.WriteString(inv.stdout, b.String())
+	_, err := io.WriteString(inv.stdout, inv.jarOutput.Text(b.String()))
 	if err == nil && carried && inv.exchange != nil && inv.exchange.External {
 		inv.provenance.WroteStdout = true
 	}

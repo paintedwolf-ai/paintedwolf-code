@@ -5,7 +5,6 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
-	"github.com/lycaon/lycaon/internal/toolexecution"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -13,6 +12,8 @@ import (
 	"sort"
 	"strings"
 	"testing"
+
+	"github.com/lycaon/lycaon/internal/toolexecution"
 
 	"github.com/lycaon/lycaon/internal/hitl"
 	"github.com/lycaon/lycaon/internal/settings"
@@ -160,19 +161,6 @@ func TestSecretCanaryNeverEchoedByHTTPRequestResult(t *testing.T) {
 		wire = append(wire, r.Header.Get("Authorization")+"|"+r.Header.Get("X-Api-Key")+"|"+r.Header.Get("Cookie"))
 		w.WriteHeader(http.StatusNoContent)
 	})
-	mux.HandleFunc("/start", func(w http.ResponseWriter, r *http.Request) {
-		wire = append(wire, r.URL.Query().Get("key"))
-		http.Redirect(w, r, "/final?echo="+url.QueryEscape(r.URL.Query().Get("key"))+"&page=2", http.StatusFound)
-	})
-	mux.HandleFunc("/final", func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusNoContent) })
-	mux.HandleFunc("/form", func(w http.ResponseWriter, _ *http.Request) {
-		http.SetCookie(w, &http.Cookie{Name: "csrftoken", Value: url.QueryEscape(canaryValue), Path: "/"})
-		w.WriteHeader(http.StatusNoContent)
-	})
-	mux.HandleFunc("/submit", func(w http.ResponseWriter, r *http.Request) {
-		wire = append(wire, r.Header.Get("X-Csrftoken"))
-		w.WriteHeader(http.StatusNoContent)
-	})
 	server := httptest.NewServer(mux)
 	defer server.Close()
 
@@ -189,7 +177,7 @@ func TestSecretCanaryNeverEchoedByHTTPRequestResult(t *testing.T) {
 	executor.Secrets.SetSecretMatcher(matcher)
 	executor.Capabilities.SetLoopbackConnectGate(review)
 	executor.Boundary.SetSessionLoopbackGrant(review.SessionLoopbackGrant)
-	testutil.FailErr(t, "register http_request", Register(registry, Deps{
+	testutil.FailErr(t, "register http_request", registerPerform(registry, Deps{
 		Boundary: testBoundary(), SecretMatcher: matcher, SecretAsk: executor.Secrets.AskSecretScreen, Secrets: service,
 	}))
 	root := t.TempDir()
@@ -197,7 +185,6 @@ func TestSecretCanaryNeverEchoedByHTTPRequestResult(t *testing.T) {
 
 	for _, tc := range []struct {
 		scheme string
-		prime  map[string]any
 		args   map[string]any
 		wire   string
 	}{
@@ -213,28 +200,10 @@ func TestSecretCanaryNeverEchoedByHTTPRequestResult(t *testing.T) {
 		{scheme: "cookie header reference", wire: "||session=" + canaryValue, args: map[string]any{
 			"url": server.URL + "/echo", "headers": []any{map[string]any{"name": "Cookie", "value": "session=" + meta.Reference}},
 		}},
-		{scheme: "jar cookie reference", wire: url.QueryEscape(canaryValue),
-			prime: map[string]any{"url": server.URL + "/form", "cookie_jar": "app"},
-			args: map[string]any{
-				"url": server.URL + "/submit", "method": "POST", "cookie_jar": "app",
-				"headers": []any{map[string]any{"name": "X-CSRFToken", "value": "{{cookie:csrftoken}}"}},
-			}},
-		{scheme: "query reference with redirect", wire: canaryValue, args: map[string]any{
-			"url": server.URL + "/start", "redirects": "safe",
-			"query": []any{map[string]any{"name": "key", "value": meta.Reference}},
-		}},
 	} {
 		t.Run(tc.scheme, func(t *testing.T) {
 			call := strings.ReplaceAll(tc.scheme, " ", "-")
 			tctx := sessionContext(root, call)
-			if tc.prime != nil {
-				tc.prime["capability_request"] = capability
-				tctx.Identity.ToolCallID = call + "-prime"
-				primed, err := executor.Invoke(t.Context(), "http_request", tc.prime, tctx)
-				testutil.FailErr(t, "prime cookie jar", err)
-				assertNoCanary(t, "http_request", tc.scheme+" (prime)", primed)
-				tctx.Identity.ToolCallID = call
-			}
 			tc.args["capability_request"] = capability
 			sent := len(wire)
 			out, err := executor.Invoke(t.Context(), "http_request", tc.args, tctx)

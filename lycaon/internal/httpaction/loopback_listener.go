@@ -296,7 +296,9 @@ func mergeListenerHolders(a, b []api.LoopbackListenerHolder) []api.LoopbackListe
 	return out
 }
 
-func reportLoopbackListener(tctx tools.ToolContext, fact *api.LoopbackListenerFact) {
+// ReportLoopbackListener attaches the listener an exchange reached to the call
+// and states the warning when another session or a container mismatch holds it.
+func ReportLoopbackListener(tctx tools.ToolContext, fact *api.LoopbackListenerFact) {
 	if fact == nil || tctx.Effects.Out == nil {
 		return
 	}

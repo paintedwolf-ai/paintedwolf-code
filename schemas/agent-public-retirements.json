@@ -224,6 +224,10 @@
     "paintedwolf.grep_scope_required": {
       "version": 1,
       "summary": "Open-root grep needed a path or narrowing glob; search through command walks the requested scope under the program's own budgets."
+    },
+    "paintedwolf.http_request_response_path_denied": {
+      "version": 1,
+      "summary": "response_path could not land the response body in the project; curl writes bodies with -o through the write door."
     }
   },
   "vocabularies": {
@@ -743,7 +747,11 @@
       ],
       "DELEGATE_DISPATCH_LEG_REQUIRED": [
         "TOOL_ARGS_INVALID"
-      ]
+      ],
+      "HTTP_REQUEST_RESPONSE_PATH_DENIED": {
+        "content_contract": "paintedwolf.http_request_response_path_denied",
+        "version": 1
+      }
     },
     "tools": {
       "chmod": [

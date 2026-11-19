@@ -173,7 +173,7 @@ func (inv *invocation) failure(err error) (toolcontract.ProducerResult, error) {
 		}
 	}
 	var dns *net.DNSError
-	if transport != nil && transport.Reject != nil && (transport.Reject.Code == "HTTP_REQUEST_HOST_DENIED" || transport.Reject.Code == isolation.CodeTryLoopbackConnect || transport.Reject.Code == toolrejection.OutboundSecretDeniedCode || transport.Reject.Code == toolrejection.OutboundSecretScreenFailedCode || transport.Reject.Code == httpaction.CookieJarFailedCode || transport.Reject.Code == httpaction.TokenJarFailedCode || toolrejection.IsSecretCapabilityCode(transport.Reject.Code)) && !errors.As(err, &dns) {
+	if transport != nil && transport.Reject != nil && (transport.Reject.Code == "HTTP_REQUEST_HOST_DENIED" || transport.Reject.Code == isolation.CodeTryLoopbackConnect || transport.Reject.Code == httpaction.CookieJarFailedCode || transport.Reject.Code == httpaction.TokenJarFailedCode || transport.Reject.Code == httpaction.CookieNotHeldCode || transport.Reject.Code == toolrejection.OutboundSecretDeniedCode || transport.Reject.Code == toolrejection.OutboundSecretScreenFailedCode || toolrejection.IsSecretCapabilityCode(transport.Reject.Code)) && !errors.As(err, &dns) {
 		return inv.refused(err, 7)
 	}
 	code, result := TransportOutcome(err)
@@ -181,7 +181,7 @@ func (inv *invocation) failure(err error) (toolcontract.ProducerResult, error) {
 		failure = classify(err)
 	}
 	if !inv.opts.silent || inv.opts.showError {
-		_, _ = fmt.Fprintf(inv.stderr, "curl: (%d) %s\n", code, failure.message)
+		_, _ = fmt.Fprintf(inv.stderr, "curl: (%d) %s\n", code, inv.jarOutput.Text(failure.message))
 	}
 	result.Evidence = inv.evidence()
 	return result, err
@@ -231,6 +231,17 @@ func (inv *invocation) evidence() toolcontract.OperationEvidence {
 	}
 	if inv.transfer.ReceivedSHA256 != "" {
 		refs = append(refs, "received:sha256:"+inv.transfer.ReceivedSHA256, "emitted:sha256:"+inv.transfer.EmittedSHA256)
+	}
+	if ex := inv.exchange; ex != nil {
+		for _, receipt := range ex.RedactionReceipts {
+			refs = append(refs, "redaction_receipt:"+receipt)
+		}
+		if ex.CookieJarRef != "" {
+			refs = append(refs, "cookie_jar:"+ex.CookieJarRef)
+		}
+		if ex.TokenJarRef != "" {
+			refs = append(refs, "token_jar:"+ex.TokenJarRef)
+		}
 	}
 	evidence.EvidenceRef = strings.Join(refs, " ")
 	return evidence

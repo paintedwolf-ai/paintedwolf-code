@@ -2,17 +2,11 @@
 package httpaction
 
 import (
-	"github.com/lycaon/lycaon/internal/capabilityrequest"
-	"github.com/lycaon/lycaon/internal/evidence"
-	"github.com/lycaon/lycaon/internal/socketref"
-
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
 	"fmt"
-	"github.com/lycaon/lycaon/internal/toolrejection"
-	"io"
 	"net"
 	"net/http"
 	"net/netip"
@@ -23,6 +17,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/lycaon/lycaon/internal/capabilityrequest"
 	"github.com/lycaon/lycaon/internal/confine"
 	"github.com/lycaon/lycaon/internal/egress"
 	"github.com/lycaon/lycaon/internal/egressclass"
@@ -32,9 +27,9 @@ import (
 	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/secretcap"
 	"github.com/lycaon/lycaon/internal/secretmatch"
+	"github.com/lycaon/lycaon/internal/socketref"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/internal/tools"
-	"github.com/lycaon/lycaon/internal/tools/inboundwrite"
-	"github.com/lycaon/lycaon/internal/tools/surveyjson"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -42,44 +37,13 @@ type Deps struct {
 	Boundary      *sandbox.Boundary
 	SecretMatcher *secretmatch.Matcher
 	SecretAsk     secretmatch.AskFunc
-	// Named cookie and token jars require the managed secret store.
-	Secrets *secretcap.Service
+	Secrets       SecretMetadata
+	Jars          *secretcap.Jars
 }
 
-type result struct {
-	Status       int                     `json:"status"`
-	FinalURL     string                  `json:"final_url"`
-	Headers      []outboundhttp.Header   `json:"headers,omitempty"`
-	SentHeaders  []outboundhttp.Header   `json:"sent_headers,omitempty"`
-	Redirects    []outboundhttp.Hop      `json:"redirects,omitempty"`
-	DurationMS   int64                   `json:"duration_ms"`
-	TimingMS     *outboundhttp.HopTiming `json:"timing_ms,omitempty"`
-	TLS          *outboundhttp.TLSInfo   `json:"tls,omitempty"`
-	Bytes        int64                   `json:"bytes,omitempty"`
-	SHA256       string                  `json:"sha256,omitempty"`
-	ContentType  string                  `json:"content_type,omitempty"`
-	Body         string                  `json:"body,omitempty"`
-	BodyEncoding string                  `json:"body_encoding,omitempty"`
-	BodyOmitted  bool                    `json:"body_omitted,omitempty"`
-	// BodySpillPath names the full response body covered by SHA256.
-	BodySpillPath string `json:"body_spill_path,omitempty"`
-	// BodyUnavailable reports a body that was neither inlined nor kept.
-	BodyUnavailable bool `json:"body_unavailable,omitempty"`
-	// BodyRedacted reports that the response echoed a protected value, so the
-	// placed, landed, or spilled bytes carry references where the received
-	// bytes covered by SHA256 carried the value.
-	BodyRedacted bool `json:"body_redacted,omitempty"`
-	// Written confirms ResponsePath contains the bytes covered by SHA256.
-	ResponsePath string         `json:"response_path,omitempty"`
-	Written      bool           `json:"written,omitempty"`
-	Cookies      *cookieReceipt `json:"cookies,omitempty"`
-	Tokens       *tokenReceipt  `json:"tokens,omitempty"`
-	Redacted     bool           `json:"redacted,omitempty"`
-	ReceiptToken string         `json:"redaction_receipt,omitempty"`
-	// UnixSocket is the reviewed socket the request reached; the URL host
-	// then names no network destination.
-	UnixSocket string                    `json:"unix_socket,omitempty"`
-	Listener   *api.LoopbackListenerFact `json:"listener,omitempty"`
+// SecretMetadata supplies value-free identities for jar release review.
+type SecretMetadata interface {
+	Describe(context.Context, string, string, string) (secretcap.Metadata, error)
 }
 
 type requestSpec struct {
@@ -93,8 +57,6 @@ type requestSpec struct {
 	headerSources []headerSource
 	body          requestBody
 	redirects     string
-	disposition   responseDisposition
-	contest       string
 	// unixSocket is the argument; socket labels the retained destination in receipts.
 	unixSocket    string
 	socket        string
@@ -102,72 +64,20 @@ type requestSpec struct {
 	hostHeader    string
 	resolve       []outboundhttp.ResolveMapping
 	tokenJar      string
+	contest       string
 	captureTokens []captureTokenRule
 }
 
-func Register(reg *tools.DefaultRegistry, deps Deps) error {
-	if reg == nil || deps.Boundary == nil {
-		return fmt.Errorf("registry and sandbox boundary required")
-	}
-	return reg.Register("http_request", func(ctx context.Context, args map[string]any, tctx tools.ToolContext) (string, error) {
-		ex, err := exchange(ctx, deps, args, tctx, ExchangeOptions{}, modelResponse)
-		var transport *TransportFailure
-		if errors.As(err, &transport) {
-			return "", transport.Reject
-		}
-		if err != nil {
-			return "", err
-		}
-		resp := ex.resp
-		out := result{
-			Status: resp.Status, FinalURL: ex.finalURL, Headers: resp.Headers, Redirects: ex.redirects,
-			SentHeaders: ex.sentHeaders,
-			DurationMS:  resp.DurationMS, TimingMS: resp.Timing, TLS: resp.TLS,
-			Bytes: resp.Bytes, SHA256: resp.SHA256, ContentType: resp.ContentType,
-			Redacted: ex.outbound.redacted, ReceiptToken: ex.outbound.receipt, UnixSocket: ex.spec.socket,
-			Tokens: ex.tokens, BodyRedacted: ex.bodyRedacted, Listener: ex.listener,
-		}
-		placement := placeResponseBody(ctx, resp, tctx, ex.landed != nil, ex.spec.disposition.discard)
-		out.Body, out.BodyEncoding = placement.inline, placement.encoding
-		out.BodyOmitted, out.BodySpillPath = placement.omitted, placement.spillPath
-		out.BodyUnavailable = placement.spillFailed
-		if ex.landed != nil {
-			out.ResponsePath, out.Written = ex.landed.Path, true
-		}
-		out.Cookies = ex.cookies
-		reportWebPage(tctx, ex.spec, resp, placement, ex.finalURL)
-		reportLoopbackListener(tctx, ex.listener)
-		extURLs := externalObservedURLs(tctx.Effects.Secrets, ex.spec, ex.finalURL, ex.redirects)
-		var writtenFiles []string
-		if out.Written && out.ResponsePath != "" {
-			writtenFiles = []string{out.ResponsePath}
-		} else if out.BodySpillPath != "" {
-			writtenFiles = []string{out.BodySpillPath}
-		}
-		evidence.ReportExchangeProvenance(ctx, evidence.ExchangeProvenance{
-			External:     len(extURLs) > 0,
-			ObservedURLs: extURLs,
-			WroteStdout:  out.ResponsePath == "" && !ex.spec.disposition.discard && !out.BodyUnavailable,
-			WrittenFiles: writtenFiles,
-		})
-		if tctx.Effects.Out != nil {
-			tctx.Effects.Out.RetrievedFrom = retrievedFrom(ex.spec, resp.FinalURL)
-		}
-		encoded, err := surveyjson.MarshalIndent(out, "", "  ")
-		return string(encoded), err
-	})
-}
-
-// ExchangeOptions select a typed frontend's response handling. Jar replaces
-// a named cookie jar with a frontend-owned one; MaxBodyBytes keeps the whole
-// received body in Exchange.Response.Body up to that bound; RedirectLimit
-// bounds followed redirects within the owner's maximum; ConnectTimeout bounds
-// each hop's connection separately from the exchange timeout.
+// ExchangeOptions binds transfer limits, transport overrides and managed output.
 type ExchangeOptions struct {
-	Jar            http.CookieJar
-	MaxBodyBytes   int64
-	RedirectLimit  int
-	ConnectTimeout time.Duration
+	DecodeManagedBody func([]outboundhttp.Header, []byte, int64) ([]byte, error)
+	Output            *JarOutput
+	finalHop          func(requestSpec)
+	Slots             JarSlots
+	Jar               http.CookieJar
+	MaxBodyBytes      int64
+	RedirectLimit     int
+	ConnectTimeout    time.Duration
 	// WireHeaders keeps complete headers and any observable cleartext block.
 	WireHeaders bool
 	// TLS adds request-scoped trust and a client certificate.
@@ -181,47 +91,53 @@ type ExchangeOptions struct {
 // screening belong to the command's model-delivery boundary. SentBodyBytes
 // and SentBodySHA256 identify the request body as it went on the wire.
 type Exchange struct {
-	Response       outboundhttp.Response
-	FinalURL       string
-	Redirects      []outboundhttp.Hop
-	SentHeaders    []outboundhttp.Header
-	SentBodyBytes  int64
-	SentBodySHA256 string
-	External       bool
-	ObservedURLs   []string
+	RedactionReceipts []string
+	CookieJarRef      string
+	TokenJarRef       string
+	Response          outboundhttp.Response
+	FinalURL          string
+	Redirects         []outboundhttp.Hop
+	SentHeaders       []outboundhttp.Header
+	SentBodyBytes     int64
+	SentBodySHA256    string
+	External          bool
+	ObservedURLs      []string
+	// Listener is the loopback listener the request reached.
+	Listener *api.LoopbackListenerFact
+	// RemotePage reports a successful remote GET that returned an HTML document.
+	RemotePage bool
 }
 
-// Perform runs one request with the same screening, approval, secret,
-// cookie, token, loopback and egress handling as the http_request tool. args
-// is that tool's declared argument record; response_path and named cookie
-// jars stay with the tool. A transport failure is a *TransportFailure.
+// Perform runs one request curl assembled, with the host's screening, approval,
+// secret, cookie, loopback and egress handling. args holds url, method,
+// headers, host_header, body_text or form, auth, redirects, timeout_ms and
+// unix_socket. A transport failure is a *TransportFailure.
 func Perform(ctx context.Context, deps Deps, args map[string]any, tctx tools.ToolContext, opts ExchangeOptions) (Exchange, error) {
-	if _, present := args["response_path"]; present {
-		return Exchange{}, invalid(fmt.Errorf("response_path belongs to the http_request tool"))
+	if opts.Jar != nil && args["cookie_jar"] != nil {
+		return Exchange{}, invalid(errors.New("choose one cookie store"))
 	}
-	if opts.Jar != nil {
-		if _, present := args["cookie_jar"]; present {
-			return Exchange{}, invalid(fmt.Errorf("a frontend cookie jar replaces cookie_jar"))
-		}
-	}
-	if _, present := args["resolve"]; present && len(opts.Dial) > 0 {
-		return Exchange{}, invalid(fmt.Errorf("frontend dial overrides replace resolve"))
-	}
-	ex, err := exchange(ctx, deps, args, tctx, opts, commandResponse)
+	ex, err := exchange(ctx, deps, args, tctx, opts)
 	if err != nil {
-		return Exchange{}, err
+		return Exchange{}, opts.Output.diagnostic(err)
 	}
 	sum := sha256.Sum256(ex.outbound.body)
 	extURLs := externalObservedURLs(tctx.Effects.Secrets, ex.spec, ex.finalURL, ex.redirects)
+	for i, u := range extURLs {
+		extURLs[i] = opts.Output.Text(u)
+	}
 	return Exchange{
+		RedactionReceipts: ex.outbound.redactionReceipts,
+		CookieJarRef:      ex.cookieJarRef, TokenJarRef: ex.tokenJarRef,
 		Response:       ex.resp,
-		FinalURL:       ex.finalURL,
+		FinalURL:       opts.Output.Text(ex.finalURL),
 		Redirects:      ex.redirects,
 		SentHeaders:    ex.sentHeaders,
 		SentBodyBytes:  int64(len(ex.outbound.body)),
 		SentBodySHA256: hex.EncodeToString(sum[:]),
 		External:       len(extURLs) > 0,
 		ObservedURLs:   extURLs,
+		Listener:       ex.listener,
+		RemotePage:     remotePage(ex.spec, ex.resp),
 	}, nil
 }
 
@@ -238,28 +154,19 @@ func (f *TransportFailure) Error() string   { return f.Reject.Error() }
 func (f *TransportFailure) Unwrap() []error { return []error{f.Reject, f.Cause} }
 
 type exchanged struct {
+	cookieJarRef string
+	tokenJarRef  string
 	spec         requestSpec
 	outbound     outboundRequest
 	resp         outboundhttp.Response
-	landed       *inboundwrite.Receipt
 	finalURL     string
 	redirects    []outboundhttp.Hop
 	sentHeaders  []outboundhttp.Header
-	tokens       *tokenReceipt
-	cookies      *cookieReceipt
-	bodyRedacted bool
 	listener     *api.LoopbackListenerFact
 }
 
-type responseUse uint8
-
-const (
-	modelResponse responseUse = iota
-	commandResponse
-)
-
 // exchange is the owner's complete request lifecycle up to presentation.
-func exchange(ctx context.Context, deps Deps, args map[string]any, tctx tools.ToolContext, opts ExchangeOptions, use responseUse) (exchanged, error) {
+func exchange(ctx context.Context, deps Deps, args map[string]any, tctx tools.ToolContext, opts ExchangeOptions) (exchanged, error) {
 	ctx = withRequestFiles(ctx)
 	spec, err := parseRequestSpec(ctx, deps.Boundary, tctx, args)
 	if err != nil {
@@ -286,6 +193,12 @@ func exchange(ctx context.Context, deps Deps, args map[string]any, tctx tools.To
 	tokenJar, tokenJarReq, err := openTokenJar(ctx, deps, tctx, args)
 	if err != nil {
 		return exchanged{}, err
+	}
+	if jar != nil {
+		opts.Output.protect(jar.Store.Values()...)
+	}
+	if tokenJar != nil {
+		opts.Output.protect(tokenJar.Values()...)
 	}
 	if spec.unixSocket != "" {
 		grant, reject := tools.ClaimDeclaredSocket(ctx, tctx, spec.unixSocket)
@@ -318,28 +231,14 @@ func exchange(ctx context.Context, deps Deps, args map[string]any, tctx tools.To
 		return exchanged{}, invalid(err)
 	}
 	cookieSpec.hostHeader = screened.hostHeader
-	screened.beforeCookieHop, err = prepareRequestCookieDelivery(ctx, deps, cookieSpec, tctx, jar, jarReq, opts.Jar, hasCookieReference(screened))
+	templates := opts.Slots.templates(screened)
+	screened.beforeCookieHop, err = prepareRequestCookieDelivery(ctx, deps, cookieSpec, tctx, jar, opts.Jar, hasCookieReference(templates))
 	if err != nil {
 		return exchanged{}, err
 	}
-	// Stored cookies and references use the same reviewed delivery view.
-	outbound, reject := resolveCookieReferences(screened, jar, spec.target)
-	if reject != nil {
-		return exchanged{}, reject
-	}
-	// A token is placed at its issuer the same way; anywhere else the
-	// screen decides the disclosure before the value touches the wire.
-	placements, reject := placedTokens(outbound, tokenJar, spec)
-	if reject != nil {
-		return exchanged{}, reject
-	}
-	release, reject := releaseForeignTokens(ctx, deps, spec, tctx, spec.tokenJar, placements)
-	if reject != nil {
-		return exchanged{}, reject
-	}
-	outbound, reject = substituteTokens(outbound, placements, release)
-	if reject != nil {
-		return exchanged{}, reject
+	outbound, err := placeJarSlots(ctx, deps, tctx, cookieSpec, screened, templates, jar, tokenJar)
+	if err != nil {
+		return exchanged{}, err
 	}
 	if reject := reviewClientIdentity(ctx, deps, spec, tctx, opts.TLS); reject != nil {
 		return exchanged{}, reject
@@ -354,42 +253,76 @@ func exchange(ctx context.Context, deps Deps, args map[string]any, tctx tools.To
 		})
 		defer confine.ForgetEgressAction(tctx.Identity.SessionID, tctx.EffectActionID())
 	}
-	resp, landed, bufferedBody, listenerFact, err := send(ctx, deps, tctx, spec, outbound, jar, tokenJar, tokenJarReq, allowAddress, durationArg(args["timeout_ms"]), opts)
+	lastHop := cookieSpec
+	opts.finalHop = func(hop requestSpec) {
+		lastHop = hop
+		if jar != nil {
+			opts.Output.protect(jar.Store.Values()...)
+		}
+	}
+	resp, listenerFact, err := send(ctx, deps, tctx, spec, outbound, jar, tokenJar, tokenJarReq, allowAddress, durationArg(args["timeout_ms"]), opts)
+	if jar != nil {
+		opts.Output.protect(jar.Store.Changes().Values()...)
+	}
 	if err != nil {
+		cookieReceipt := saveCookieJar(ctx, deps, jarReq, jar)
 		if spec.socket != "" && (errors.Is(err, socketref.ErrUnbound) || errors.Is(err, syscall.ECONNREFUSED)) {
 			return exchanged{}, capabilityrequest.SocketResolveReject(&confine.SocketResolveError{Code: confine.SocketResolveChanged, Path: spec.unixSocket, Err: err})
 		}
 		var exErr *outboundhttp.ExchangeError
 		if reject := toolrejection.AsToolReject(err); reject != nil && (!errors.As(err, &exErr) || (exErr.RequestsStarted == 0 && exErr.ResponsesReceived == 0)) &&
-			(reject.Code == CookieJarFailedCode || reject.Code == TokenJarFailedCode || reject.Code == toolrejection.OutboundSecretDeniedCode || reject.Code == toolrejection.OutboundSecretScreenFailedCode || toolrejection.IsSecretCapabilityCode(reject.Code)) {
+			(reject.Code == toolrejection.OutboundSecretDeniedCode || reject.Code == toolrejection.OutboundSecretScreenFailedCode || toolrejection.IsSecretCapabilityCode(reject.Code)) {
 			return exchanged{}, reject
 		}
-		return exchanged{}, &TransportFailure{Reject: sendReject(ctx, deps, jarReq, jar, tokenJarReq, tokenJar, err), Cause: err}
-	}
-	if bufferedBody != nil {
-		resp.Body = bufferedBody
-	}
-	issuerID, issuerLabel := responseIssuer(spec, resp)
-	tokenRec, tokenReject := captureResponseTokens(ctx, deps, tokenJar, tokenJarReq, spec.captureTokens, resp, issuerID, issuerLabel)
-	if tokenReject != nil {
-		return exchanged{}, tokenReject
-	}
-	bodyRedacted := false
-	finalURL, redirects := resp.FinalURL, resp.Redirects
-	if use == modelResponse {
-		resp, bodyRedacted = scrubResponse(resp, tokenJar, tctx.Effects.Secrets)
-		finalURL, redirects = observedURLs(tctx.Effects.Secrets, resp.FinalURL, resp.Redirects)
-	}
-	if bufferedBody != nil {
-		receipt, err := inboundwrite.Write(ctx, deps.Boundary, tctx, spec.disposition.path, resp.Body, "HTTP_REQUEST_RESPONSE_PATH_DENIED")
-		if err != nil {
-			return exchanged{}, err
+		rejection := sendReject(ctx, err)
+		if cookieReceipt != nil {
+			if rejection.Data == nil {
+				rejection.Data = map[string]any{}
+			}
+			rejection.Data["cookies"] = cookieReceipt.facts()
 		}
-		landed = &receipt
+		if opts.Output != nil {
+			rejection.Data, _ = opts.Output.fact(rejection.Data).(map[string]any)
+		}
+		return exchanged{}, &TransportFailure{Reject: rejection, Cause: err}
 	}
-	return exchanged{spec: spec, outbound: outbound, resp: resp, landed: landed, finalURL: finalURL, redirects: redirects,
-		sentHeaders: sentHeaders(spec, statedHeaders(tctx, args, screened)), tokens: tokenRec,
-		cookies: saveCookieJar(ctx, deps, jarReq, jar), bodyRedacted: bodyRedacted, listener: listenerFact}, nil
+	cookies := saveCookieJar(ctx, deps, jarReq, jar)
+	if cookies != nil && !cookies.Persisted {
+		return exchanged{}, afterResponse(resp, &toolrejection.ToolReject{Code: CookieJarFailedCode, Data: cookies.facts()})
+	}
+	if opts.DecodeManagedBody != nil && len(resp.Body) > 0 {
+		resp.Body, err = opts.DecodeManagedBody(resp.Headers, resp.Body, opts.MaxBodyBytes)
+		if err != nil {
+			return exchanged{}, afterResponse(resp, err)
+		}
+	}
+	issuerID, issuerLabel := requestDestination(lastHop)
+	tokens, captureErr := captureResponseTokens(ctx, deps, tokenJar, tokenJarReq, spec.captureTokens, resp, issuerID, issuerLabel)
+	if captureErr != nil {
+		return exchanged{}, afterResponse(resp, captureErr)
+	}
+	if tokenJar != nil {
+		opts.Output.protect(tokenJar.Values()...)
+	}
+	if tokens != nil && !tokens.Persisted {
+		return exchanged{}, afterResponse(resp, &toolrejection.ToolReject{Code: TokenJarFailedCode, Data: tokens.facts()})
+	}
+	var cookieRef, tokenRef string
+	if cookies != nil {
+		cookieRef = cookies.Reference
+	}
+	if tokens != nil {
+		tokenRef = tokens.Reference
+	}
+	finalURL, redirects := resp.FinalURL, resp.Redirects
+	return exchanged{cookieJarRef: cookieRef, tokenJarRef: tokenRef, spec: spec, outbound: outbound, resp: resp, finalURL: finalURL, redirects: redirects,
+		sentHeaders: sentHeaders(spec, statedHeaders(tctx, args, screened)),
+		listener:    listenerFact}, nil
+}
+
+func afterResponse(resp outboundhttp.Response, err error) error {
+	hops := len(resp.Redirects) + 1
+	return &outboundhttp.ExchangeError{RequestsStarted: hops, ResponsesReceived: hops, LastStatus: resp.Status, Err: err}
 }
 
 // parseRequestSpec validates declared fields before screening or transport.
@@ -401,13 +334,10 @@ func parseRequestSpec(ctx context.Context, boundary *sandbox.Boundary, tctx tool
 	}
 	rawURL, _ := args["url"].(string)
 	if err := referencesOutsideTheirFields(rawURL, args["host_header"]); err != nil {
-		return requestSpec{}, invalid(err)
+		return requestSpec{}, err
 	}
 	target, err := outboundhttp.NormalizeURL(rawURL)
 	if err != nil {
-		return requestSpec{}, err
-	}
-	if err := applyQuery(target, args["query"]); err != nil {
 		return requestSpec{}, err
 	}
 	headers, err := parseHeaders(args["headers"])
@@ -435,21 +365,12 @@ func parseRequestSpec(ctx context.Context, boundary *sandbox.Boundary, tctx tool
 	if err := outboundhttp.ValidateHeaders(headers); err != nil {
 		return requestSpec{}, err
 	}
-	disposition, err := parseResponseDisposition(args)
-	if err != nil {
-		return requestSpec{}, err
-	}
 	redirects, _ := args["redirects"].(string)
-	contest, _ := args["unredact"].(string)
 	unixSocket, err := parseUnixSocket(args["unix_socket"])
 	if err != nil {
 		return requestSpec{}, err
 	}
 	hostHeader, err := parseHostHeader(args["host_header"])
-	if err != nil {
-		return requestSpec{}, err
-	}
-	resolve, err := parseResolve(args["resolve"])
 	if err != nil {
 		return requestSpec{}, err
 	}
@@ -462,31 +383,31 @@ func parseRequestSpec(ctx context.Context, boundary *sandbox.Boundary, tctx tool
 	if len(captureTokens) > 0 && tokenJar == "" {
 		return requestSpec{}, fmt.Errorf("capture_tokens requires token_jar")
 	}
+	contest, _ := args["unredact"].(string)
 	return requestSpec{
+		contest: contest, tokenJar: tokenJar, captureTokens: captureTokens,
 		method: method, target: target, headers: headers, headerSources: sources, body: body,
 		outgoing:        func(path string) bool { return secretmatch.HTTPArgumentConsumed(args, path) },
 		outgoingHeaders: func(path string) bool { return secretmatch.HTTPHeaderArgumentConsumed(args, path) },
 		outgoingBody:    func(path string) bool { return secretmatch.HTTPBodyArgumentConsumed(args, path) },
-		redirects:       redirects, disposition: disposition, contest: contest,
-		unixSocket: unixSocket, hostHeader: hostHeader, resolve: resolve,
-		tokenJar: tokenJar, captureTokens: captureTokens,
+		redirects:       redirects,
+		unixSocket:      unixSocket, hostHeader: hostHeader,
 	}, nil
 }
 
-// response_path bodies land through the write door and return a file receipt;
-// one that may need a scrub is buffered first.
+// send revalidates each hop before dispatch.
 func send(
 	ctx context.Context, deps Deps, tctx tools.ToolContext, spec requestSpec, outbound outboundRequest,
 	jar *secretcap.CookieJar, tokenJar *secretcap.TokenJar, tokenJarReq secretcap.TokenJarRequest,
 	allowAddress func(netip.Addr, uint16) bool, timeout time.Duration, opts ExchangeOptions,
-) (outboundhttp.Response, *inboundwrite.Receipt, []byte, *api.LoopbackListenerFact, error) {
+) (outboundhttp.Response, *api.LoopbackListenerFact, error) {
 	var loopbackObs loopbackHopObservation
 	var headerDelivery, bodyDelivery *secretcap.PreparedDelivery
 	firstHopSeen := false
 	req := outboundhttp.Request{
 		Class:  egressclass.AgentHTTPRequest,
 		Method: spec.method, URL: outbound.url, OriginHeaders: outbound.headers, Body: outbound.body, Timeout: timeout,
-		Redirects: outboundhttp.RedirectMode(spec.redirects), DiscardBody: spec.disposition.discard, AllowAddress: allowAddress,
+		Redirects: outboundhttp.RedirectMode(spec.redirects), AllowAddress: allowAddress,
 		UnixSocket:                  spec.socket,
 		SocketBinding:               spec.socketBinding,
 		HostHeader:                  outbound.hostHeader,
@@ -510,11 +431,31 @@ func send(
 				return err
 			}
 		}
+
 		if spec.socket == "" {
 			recipientID, _ := requestDestination(spec.forHop(hop))
 			if err := admitHopRoute(hopCtx, hop.URL, hop.Method, spec.resolve, recipientID); err != nil {
 				return err
 			}
+		}
+		if jar != nil {
+			_, err := deps.Jars.RefreshCookieJar(hopCtx, jar)
+			if err != nil {
+				return cookieJarOpenReject(jar.Name, err)
+			}
+			// The delivery filter contains only cookies reviewed before the route wait.
+			hop.FreezeCookies(jar.Store.Cookies(hop.URL))
+			if outbound.validateJarSlots != nil {
+				if err := outbound.validateJarSlots(hop); err != nil {
+					return err
+				}
+			}
+		}
+		if err := checkTokenJarState(hopCtx, deps, tokenJarReq, tokenJar); err != nil {
+			return err
+		}
+		if opts.finalHop != nil {
+			opts.finalHop(spec.forHop(hop))
 		}
 		if !firstHopSeen {
 			firstHopSeen = true
@@ -525,9 +466,6 @@ func send(
 				if err := deps.SecretMatcher.CheckClassification(hopCtx, outbound.classification); err != nil {
 					return screenFaultReject(secretmatch.FaultStageRaise)
 				}
-			}
-			if err := checkTokenJarState(hopCtx, deps, tokenJarReq, tokenJar); err != nil {
-				return err
 			}
 			var err error
 			headerDelivery, err = tctx.Effects.Secrets.PrepareDelivery(hopCtx, spec.outgoingHeaders)
@@ -550,17 +488,14 @@ func send(
 			return nil
 		}
 		// What the first hop checked before sending applies again before the
-		// material is resent: a classification withdrawn or a jar revoked
-		// while an earlier hop ran stops the replay.
+		// material is resent: a classification withdrawn while an earlier hop
+		// ran stops the replay.
 		if deps.SecretMatcher != nil {
 			if err := deps.SecretMatcher.CheckClassification(hopCtx, outbound.classification); err != nil {
 				return screenFaultReject(secretmatch.FaultStageRaise)
 			}
 		}
 		if sameOrigin {
-			if err := checkTokenJarState(hopCtx, deps, tokenJarReq, tokenJar); err != nil {
-				return err
-			}
 			if err := tctx.Effects.Secrets.Precheck(hopCtx, spec.outgoingHeaders); err != nil {
 				return toolrejection.HeldHandOffReject("http_request", err)
 			}
@@ -573,7 +508,7 @@ func send(
 		return nil
 	}
 	if jar != nil {
-		req.Jar = &managedJarAdapter{jar: jar}
+		req.Jar = jar.Store
 	}
 	if opts.Jar != nil {
 		req.Jar = opts.Jar
@@ -585,46 +520,15 @@ func send(
 		req.RedirectLimit = opts.RedirectLimit
 	}
 	req.ConnectTimeout, req.WireHeaders, req.TLS = opts.ConnectTimeout, opts.WireHeaders, opts.TLS
-	var landed *inboundwrite.Receipt
-	var bufferedResponsePathBytes []byte
-	if spec.disposition.path != "" {
-		req.MaxBodyBytes = maxResponseFile
-		req.StreamBody = func(body io.Reader) error {
-			// A body that could echo a held token or a resolved value is
-			// buffered so it can be scrubbed before it lands.
-			if tokenJar != nil || len(spec.captureTokens) > 0 || tctx.Effects.Secrets.Resolved() {
-				data, err := io.ReadAll(io.LimitReader(body, maxResponseFile+1))
-				if err != nil {
-					return err
-				}
-				if int64(len(data)) > maxResponseFile {
-					return &outboundhttp.BodyTooLargeError{Limit: maxResponseFile}
-				}
-				bufferedResponsePathBytes = data
-				return nil
-			}
-			receipt, err := inboundwrite.WriteFrom(ctx, deps.Boundary, tctx, spec.disposition.path, body, "HTTP_REQUEST_RESPONSE_PATH_DENIED")
-			if err != nil {
-				return err
-			}
-			landed = &receipt
-			return nil
-		}
-	}
 	resp, err := outboundhttp.Do(ctx, req)
 	if err != nil {
-		return resp, landed, bufferedResponsePathBytes, nil, err
+		return resp, nil, err
 	}
-	return resp, landed, bufferedResponsePathBytes, loopbackObs.settle(ctx, tctx, spec, resp), nil
+	return resp, loopbackObs.settle(ctx, tctx, spec, resp), nil
 }
 
-// sendReject maps a typed transport failure after received cookies are saved.
-func sendReject(
-	ctx context.Context, deps Deps, jarReq secretcap.CookieJarRequest, jar *secretcap.CookieJar,
-	tokenJarReq secretcap.TokenJarRequest, tokenJar *secretcap.TokenJar, err error,
-) *toolrejection.ToolReject {
-	cookies := saveCookieJar(ctx, deps, jarReq, jar)
-	tokens := heldTokens(tokenJar)
+// sendReject maps a typed transport failure.
+func sendReject(ctx context.Context, err error) *toolrejection.ToolReject {
 	attach := func(reject *toolrejection.ToolReject) *toolrejection.ToolReject {
 		var exchange *outboundhttp.ExchangeError
 		if errors.As(err, &exchange) {
@@ -638,18 +542,6 @@ func sendReject(
 			if len(exchange.Redirects) > 0 && reject.Data["redirects"] == nil {
 				reject.Data["redirects"] = redirectFacts(exchange.Redirects)
 			}
-		}
-		if cookies != nil {
-			if reject.Data == nil {
-				reject.Data = map[string]any{}
-			}
-			reject.Data["cookies"] = cookies.facts()
-		}
-		if tokens != nil {
-			if reject.Data == nil {
-				reject.Data = map[string]any{}
-			}
-			reject.Data["tokens"] = tokens.facts()
 		}
 		var tlsFault *outboundhttp.TLSFault
 		if errors.As(err, &tlsFault) {
@@ -715,17 +607,6 @@ func redirectFacts(hops []outboundhttp.Hop) []any {
 		out = append(out, item)
 	}
 	return out
-}
-
-// retrievedFrom labels where response content came from.
-func retrievedFrom(spec requestSpec, finalURL string) string {
-	if spec.socket != "" {
-		return "unix:" + spec.socket
-	}
-	if target, err := outboundhttp.NormalizeURL(finalURL); err == nil {
-		return target.Hostname()
-	}
-	return ""
 }
 
 // hopLoopbackTarget is the loopback address and port a hop dials; ok is

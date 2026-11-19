@@ -1,6 +1,7 @@
 package store
 
 import (
+	"context"
 	"maps"
 	"testing"
 
@@ -124,12 +125,17 @@ func testSessionURLStanding(t *testing.T, st *Repositories, projectID string) {
 		"https://docs.example.org/":             evidence.URLUnknown,
 		"":                                      evidence.URLUnknown,
 	} {
-		if got := st.Evidence.SessionURLStanding(sess.ID, address); got != want {
+		if got := st.Evidence.SessionURLStanding(ctx, sess.ID, address); got != want {
 			t.Errorf("SessionURLStanding(%q) = %d, want %d", address, got, want)
 		}
 	}
+	canceled, cancel := context.WithCancel(ctx)
+	cancel()
+	if got := st.Evidence.SessionURLStanding(canceled, sess.ID, recorded); got != evidence.URLUnknown {
+		t.Fatalf("canceled lookup returned recorded standing %v", got)
+	}
 	for name, sessionID := range map[string]string{"another session": other.ID, "no session": "", "a missing session": "missing-session"} {
-		if got := st.Evidence.SessionURLStanding(sessionID, recorded); got != evidence.URLUnknown {
+		if got := st.Evidence.SessionURLStanding(ctx, sessionID, recorded); got != evidence.URLUnknown {
 			t.Errorf("%s knows the address: %d", name, got)
 		}
 	}

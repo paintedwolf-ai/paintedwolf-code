@@ -114,7 +114,7 @@ func (m *Matcher) streamHarvest(ctx context.Context, text string, base, until in
 // streamCatalog calls only the selected bounded detector entry point. Its meter
 // borrows from the same pool as retained input and pending evidence.
 func (m *Matcher) streamCatalog(ctx context.Context, text string, base int64, memory *streamMemory, hits *streamHits, work int64) error {
-	if m.inert || m.detector == nil {
+	if m.detector == nil {
 		return nil
 	}
 	var borrowed int64

@@ -17,6 +17,7 @@ import (
 	"github.com/lycaon/lycaon/internal/secretcap"
 	"github.com/lycaon/lycaon/internal/secretmatch"
 	"github.com/lycaon/lycaon/internal/secretspan"
+	"github.com/lycaon/lycaon/internal/testsecret"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -45,11 +46,8 @@ func (m *invariantCheckpointMgr) ListPendingForParent(context.Context, string, *
 	return nil, nil
 }
 
-// Invariant 1: Posture, gating, and grant rules for file secrets.
-// Balanced/light posture releases chat secret silently and writes ActionSecretChatLocalRelease.
-// Strict posture or non-chat secret asks for approval for destination "file:.env".
-// Existing grant writes covered secret silently, recording ActionSecretGrantCovered.
-func runInvariant1Case1A(t *testing.T, m *secretmatch.Matcher, chatSecretRef, chatSecretVal string) {
+// File releases follow posture, scope, and existing grants.
+func runInvariant1Case1A(t *testing.T, service *secretcap.Service, m *secretmatch.Matcher, chatSecretRef, chatSecretVal string) {
 	for _, posture := range []gate.Posture{gate.PostureBalanced, gate.PostureLight} {
 		t.Run(string(posture)+"_chat_secret_silent", func(t *testing.T) {
 			recorder := &capabilityRecorder{}
@@ -58,14 +56,7 @@ func runInvariant1Case1A(t *testing.T, m *secretmatch.Matcher, chatSecretRef, ch
 			exec.Approvals.SetAuthzRecorder(recorder)
 			exec.Network.SetEgressPostureSource(func(string) gate.Posture { return posture })
 
-			exec.Secrets.secretResolver = func(_ context.Context, canonical map[string]any, access secretcap.ResolveContext) (*secretcap.Resolution, error) {
-				return secretcap.NewResolutionForTest(map[string]any{
-					"path":    canonical["path"],
-					"content": "TOKEN=" + chatSecretVal + "\n",
-				}, []secretcap.TestResolvedValue{
-					{ID: "11111111-1111-1111-1111-111111111111", Name: "chat token", Value: chatSecretVal, ChatGenerated: true, Path: "/content", Fingerprint: fingerprintFor(m, chatSecretVal)},
-				}), nil
-			}
+			exec.Secrets.secretResolver = service.Resolve
 
 			reg := tools.NewDefaultRegistry()
 			var handledArgs map[string]any
@@ -105,7 +96,7 @@ func runInvariant1Case1A(t *testing.T, m *secretmatch.Matcher, chatSecretRef, ch
 	}
 }
 
-func runInvariant1Case1B(t *testing.T, m *secretmatch.Matcher, chatSecretRef, chatSecretVal, projSecretRef, projSecretVal string) {
+func runInvariant1Case1B(t *testing.T, service *secretcap.Service, m *secretmatch.Matcher, chatSecretRef, chatSecretVal, projSecretRef, projSecretVal string) {
 	cases := map[string]struct {
 		posture       gate.Posture
 		chatGenerated bool
@@ -127,7 +118,7 @@ func runInvariant1Case1B(t *testing.T, m *secretmatch.Matcher, chatSecretRef, ch
 	}
 	for name, tcCase := range cases {
 		t.Run(name, func(t *testing.T) {
-			// Subcase 1: User approves
+
 			{
 				recorder := &capabilityRecorder{}
 				mgr := &invariantCheckpointMgr{status: hitl.DecisionStatusApproved}
@@ -137,18 +128,7 @@ func runInvariant1Case1B(t *testing.T, m *secretmatch.Matcher, chatSecretRef, ch
 				exec.Network.SetEgressPostureSource(func(string) gate.Posture { return tcCase.posture })
 				exec.Approvals.SetCheckpointManager(t.Context(), mgr, nil)
 
-				exec.Secrets.secretResolver = func(_ context.Context, canonical map[string]any, access secretcap.ResolveContext) (*secretcap.Resolution, error) {
-					id := "11111111-1111-1111-1111-111111111111"
-					if !tcCase.chatGenerated {
-						id = "22222222-2222-2222-2222-222222222222"
-					}
-					return secretcap.NewResolutionForTest(map[string]any{
-						"path":    canonical["path"],
-						"content": "TOKEN=" + tcCase.val + "\n",
-					}, []secretcap.TestResolvedValue{
-						{ID: id, Name: "token", Value: tcCase.val, ChatGenerated: tcCase.chatGenerated, Path: "/content", Fingerprint: fingerprintFor(m, tcCase.val)},
-					}), nil
-				}
+				exec.Secrets.secretResolver = service.Resolve
 
 				reg := tools.NewDefaultRegistry()
 				var handledArgs map[string]any
@@ -188,7 +168,6 @@ func runInvariant1Case1B(t *testing.T, m *secretmatch.Matcher, chatSecretRef, ch
 				}
 			}
 
-			// Subcase 2: User rejects
 			{
 				recorder := &capabilityRecorder{}
 				mgr := &invariantCheckpointMgr{status: hitl.DecisionStatusRejected}
@@ -198,18 +177,7 @@ func runInvariant1Case1B(t *testing.T, m *secretmatch.Matcher, chatSecretRef, ch
 				exec.Network.SetEgressPostureSource(func(string) gate.Posture { return tcCase.posture })
 				exec.Approvals.SetCheckpointManager(t.Context(), mgr, nil)
 
-				exec.Secrets.secretResolver = func(_ context.Context, canonical map[string]any, access secretcap.ResolveContext) (*secretcap.Resolution, error) {
-					id := "11111111-1111-1111-1111-111111111111"
-					if !tcCase.chatGenerated {
-						id = "22222222-2222-2222-2222-222222222222"
-					}
-					return secretcap.NewResolutionForTest(map[string]any{
-						"path":    canonical["path"],
-						"content": "TOKEN=" + tcCase.val + "\n",
-					}, []secretcap.TestResolvedValue{
-						{ID: id, Name: "token", Value: tcCase.val, ChatGenerated: tcCase.chatGenerated, Path: "/content", Fingerprint: fingerprintFor(m, tcCase.val)},
-					}), nil
-				}
+				exec.Secrets.secretResolver = service.Resolve
 
 				var writeCalled bool
 				reg := tools.NewDefaultRegistry()
@@ -241,7 +209,7 @@ func runInvariant1Case1B(t *testing.T, m *secretmatch.Matcher, chatSecretRef, ch
 	}
 }
 
-func runInvariant1Case1C(t *testing.T, m *secretmatch.Matcher, projSecretRef, projSecretVal string) {
+func runInvariant1Case1C(t *testing.T, service *secretcap.Service, m *secretmatch.Matcher, projSecretRef, projSecretVal string) {
 	t.Run("grant_covered_skips_card", func(t *testing.T) {
 		recorder := &capabilityRecorder{}
 		mgr := &invariantCheckpointMgr{status: hitl.DecisionStatusPending}
@@ -252,12 +220,10 @@ func runInvariant1Case1C(t *testing.T, m *secretmatch.Matcher, projSecretRef, pr
 		exec.Approvals.SetCheckpointManager(t.Context(), mgr, nil)
 
 		exec.Secrets.secretResolver = func(_ context.Context, canonical map[string]any, access secretcap.ResolveContext) (*secretcap.Resolution, error) {
-			res := secretcap.NewResolutionForTest(map[string]any{
-				"path":    canonical["path"],
-				"content": "TOKEN=" + projSecretVal + "\n",
-			}, []secretcap.TestResolvedValue{
-				{ID: "22222222-2222-2222-2222-222222222222", Name: "project token", Value: projSecretVal, ChatGenerated: false, Path: "/content", Fingerprint: fingerprintFor(m, projSecretVal)},
-			})
+			res, err := service.Resolve(t.Context(), canonical, access)
+			if err != nil {
+				return nil, err
+			}
 			recipient := secretmatch.Recipient{
 				ID: "file:.env", Label: "Local file: .env", Surface: secretmatch.SurfaceFile, Kind: secretmatch.DestinationFile,
 			}
@@ -297,10 +263,12 @@ func runInvariant1Case1C(t *testing.T, m *secretmatch.Matcher, projSecretRef, pr
 }
 
 func TestInvariant1_PostureGatingAndGrantRulesForFileSecrets(t *testing.T) {
-	const chatSecretRef = "{{paintedwolf-secret:11111111-1111-1111-1111-111111111111}}"
+	fixture := testsecret.New(t, "proj-1", "root-1", "sess-1")
 	const chatSecretVal = "chat-super-secret-token-12345678"
-	const projSecretRef = "{{paintedwolf-secret:22222222-2222-2222-2222-222222222222}}"
+
 	const projSecretVal = "proj-super-secret-token-87654321"
+	chatSecretRef := fixture.Put(t, "chat token", chatSecretVal, secretcap.ScopeChat, secretcap.OriginGenerated).Reference
+	projSecretRef := fixture.Put(t, "project token", projSecretVal, secretcap.ScopeProject, secretcap.OriginGenerated).Reference
 
 	m, err := secretmatch.BuildMatcher(secretmatch.Bundled())
 	testutil.FailErr(t, "BuildMatcher", err)
@@ -322,28 +290,21 @@ func TestInvariant1_PostureGatingAndGrantRulesForFileSecrets(t *testing.T) {
 		}
 	})
 
-	runInvariant1Case1A(t, m, chatSecretRef, chatSecretVal)
-	runInvariant1Case1B(t, m, chatSecretRef, chatSecretVal, projSecretRef, projSecretVal)
-	runInvariant1Case1C(t, m, projSecretRef, projSecretVal)
+	runInvariant1Case1A(t, fixture.Service, m, chatSecretRef, chatSecretVal)
+	runInvariant1Case1B(t, fixture.Service, m, chatSecretRef, chatSecretVal, projSecretRef, projSecretVal)
+	runInvariant1Case1C(t, fixture.Service, m, projSecretRef, projSecretVal)
 }
 
-// Invariant 2: the review diff masks Before and After to reference tokens with
+// the review diff masks Before and After to reference tokens with
 // no raw credential bytes, and approval substitutes resolved bytes before commit.
 func TestInvariant2_SymmetricValueFreeWireDiffAndSpanTableRestoration(t *testing.T) {
-	const oldSecretID = "33333333-3333-3333-3333-333333333333"
-	const oldSecretRef = "{{paintedwolf-secret:33333333-3333-3333-3333-333333333333}}"
+	fixture := testsecret.New(t, "proj-1", "root-1", "sess-1")
 	const oldSecretVal = "old-secret-raw-value-99999"
-
-	const newSecretID = "44444444-4444-4444-4444-444444444444"
-	const newSecretRef = "{{paintedwolf-secret:44444444-4444-4444-4444-444444444444}}"
 	const newSecretVal = "new-secret-raw-value-88888"
+	oldSecretRef := fixture.Put(t, "old secret", oldSecretVal, secretcap.ScopeChat, secretcap.OriginGenerated).Reference
+	newSecretRef := fixture.Put(t, "new secret", newSecretVal, secretcap.ScopeChat, secretcap.OriginGenerated).Reference
+	res := fixture.Resolve(t, map[string]any{"old": oldSecretRef, "new": newSecretRef})
 
-	res := secretcap.NewResolutionForTest(map[string]any{}, []secretcap.TestResolvedValue{
-		{ID: oldSecretID, Name: "old secret", Value: oldSecretVal, ChatGenerated: true},
-		{ID: newSecretID, Name: "new secret", Value: newSecretVal, ChatGenerated: true},
-	})
-
-	// 1. Verify ReferenceEchoes symmetrically masks raw secrets in Before and After
 	beforeRaw := "API_KEY=" + oldSecretVal + "\nOTHER=1\n"
 	afterRaw := "API_KEY=" + newSecretVal + "\nOTHER=1\n"
 
@@ -359,7 +320,6 @@ func TestInvariant2_SymmetricValueFreeWireDiffAndSpanTableRestoration(t *testing
 		t.Fatal("maskedAfter does not contain new secret reference token")
 	}
 
-	// 2. Verify Substitute restores the real bytes upon approval
 	// The user approved the masked diff (which contains newSecretRef)
 	approvedText := "API_KEY=" + newSecretRef + "\nOTHER=1\n"
 	diskBytes, err := res.Substitute(approvedText)
@@ -369,7 +329,6 @@ func TestInvariant2_SymmetricValueFreeWireDiffAndSpanTableRestoration(t *testing
 		t.Fatalf("substituted disk bytes = %q, want %q", diskBytes, afterRaw)
 	}
 
-	// 3. Verify that an unknown / invalid reference cannot substitute
 	const unknownRef = "{{paintedwolf-secret:00000000-0000-0000-0000-000000000000}}"
 	_, err = res.Substitute("KEY=" + unknownRef)
 	if !errors.Is(err, secretcap.ErrValueMissing) {
@@ -377,7 +336,7 @@ func TestInvariant2_SymmetricValueFreeWireDiffAndSpanTableRestoration(t *testing
 	}
 }
 
-// Invariant 3: Slot-level resolution and batch operations.
+// Slot-level resolution and batch operations.
 // File tools resolve only in declared secret_reference_args; non-target slots are not resolved.
 // Command surface resolves across all argument trees (command, env, stdin).
 // replace_lines resolves new_content across operations array.
@@ -385,7 +344,7 @@ func TestInvariant2_SymmetricValueFreeWireDiffAndSpanTableRestoration(t *testing
 func TestInvariant3_SlotLevelResolutionAndBatchOperations(t *testing.T) {
 	const secretRef = "{{paintedwolf-secret:55555555-5555-5555-5555-555555555555}}"
 
-	// 1. File slot isolation: path is not resolved even if it contains a token.
+	// Paths remain literal even when they contain reference syntax.
 	writeContract := catalogContract(t, "write")
 	if !writeContract.SecretReferenceSurface.IsFile() {
 		t.Fatalf("write contract surface = %v, want file", writeContract.SecretReferenceSurface)
@@ -410,7 +369,7 @@ func TestInvariant3_SlotLevelResolutionAndBatchOperations(t *testing.T) {
 		t.Fatal("ReferenceUseInSlots did not detect complete reference in declared slot 'content'")
 	}
 
-	// 2. Command surface: no slot restriction, resolves anywhere
+	// Commands permit references throughout their arguments.
 	cmdContract := catalogContract(t, "command")
 	if len(cmdContract.SecretReferenceArgs) != 0 {
 		t.Fatalf("command must not restrict slots: got %v", cmdContract.SecretReferenceArgs)
@@ -422,7 +381,7 @@ func TestInvariant3_SlotLevelResolutionAndBatchOperations(t *testing.T) {
 		t.Fatal("command must resolve references in env")
 	}
 
-	// 3. replace_lines: operations array new_content slot matching
+	// Batched line edits declare nested content slots.
 	replaceContract := catalogContract(t, "replace_lines")
 	use = secretcap.ReferenceUseInSlots(map[string]any{
 		"operations": []any{
@@ -437,7 +396,7 @@ func TestInvariant3_SlotLevelResolutionAndBatchOperations(t *testing.T) {
 		t.Fatal("replace_lines did not detect reference in operations.*.new_content")
 	}
 
-	// 4. jq_edit: vars map slot matching
+	// JSON edit variables are declared reference slots.
 	jqContract := catalogContract(t, "jq_edit")
 	use = secretcap.ReferenceUseInSlots(map[string]any{
 		"path":  "config.json",
@@ -457,7 +416,7 @@ func TestInvariant3_SlotLevelResolutionAndBatchOperations(t *testing.T) {
 	}
 }
 
-// Invariant 4: line-oriented file tools reject secret values containing
+// line-oriented file tools reject secret values containing
 // newlines or NUL bytes with SECRET_REFERENCE_VALUE_UNSAFE before any card.
 func TestInvariant4_UnsafeRawValueRejection(t *testing.T) {
 	for _, unsafeVal := range []string{
@@ -465,18 +424,15 @@ func TestInvariant4_UnsafeRawValueRejection(t *testing.T) {
 		"has\rreturn",
 		"has\x00null",
 	} {
-		const secretRef = "{{paintedwolf-secret:66666666-6666-6666-6666-666666666666}}"
-		res := secretcap.NewResolutionForTest(map[string]any{"content": unsafeVal, "old_string": unsafeVal, "new_string": unsafeVal, "new_content": unsafeVal}, []secretcap.TestResolvedValue{
-			{ID: "66666666-6666-6666-6666-666666666666", Name: "unsafe secret", Value: unsafeVal},
-		})
+		fixture := testsecret.New(t, "proj-1", "root-1", "sess-1")
+		secretRef := fixture.Put(t, "unsafe secret", unsafeVal, secretcap.ScopeChat, secretcap.OriginGenerated).Reference
+		res := fixture.Resolve(t, map[string]any{"content": secretRef})
 		if !res.HasUnsafeFileBytes() {
 			t.Fatalf("HasUnsafeFileBytes failed for value %q", unsafeVal)
 		}
 
 		exec := NewExecutor(nil, tools.NewDefaultRegistry(), "implement")
-		exec.Secrets.secretResolver = func(_ context.Context, canonical map[string]any, access secretcap.ResolveContext) (*secretcap.Resolution, error) {
-			return res, nil
-		}
+		exec.Secrets.secretResolver = fixture.Service.Resolve
 		for _, tool := range []string{"write", "edit", "replace_lines"} {
 			contract := catalogContract(t, tool)
 			slot := "content"
@@ -485,6 +441,7 @@ func TestInvariant4_UnsafeRawValueRejection(t *testing.T) {
 			}
 			args := map[string]any{slot: secretRef}
 			tc := tools.ToolContext{
+				Identity:   tools.InvocationIdentity{ProjectID: "proj-1", SessionID: "sess-1", ParentSessionID: "root-1"},
 				Invocation: tools.Invocation{Contract: contract},
 			}
 			_, _, _, err := exec.applyPreInvokeBoundary(context.Background(), tool, "implement", args, tc)
@@ -502,18 +459,21 @@ func TestInvariant4_UnsafeRawValueRejection(t *testing.T) {
 	}
 }
 
-// Invariant 5: resolve_secret_references: false keeps reference tokens literal
+// resolve_secret_references: false keeps reference tokens literal
 // and skips resolution, malformed-token checks, and secret screening.
 func TestInvariant5_ExplicitLiteralTokenOptOut(t *testing.T) {
 	const literalRef = "{{paintedwolf-secret:77777777-7777-7777-7777-777777777777}}"
 	const malformedRef = "{{paintedwolf-secret:[REDACTED]}}"
+
+	fixture := testsecret.New(t, "proj-1", "root-1", "sess-1")
+	reference := fixture.Put(t, "literal test", "secret-value", secretcap.ScopeChat, secretcap.OriginGenerated).Reference
+	resolution := fixture.Resolve(t, map[string]any{"content": reference})
 
 	exec := NewExecutor(nil, tools.NewDefaultRegistry(), "implement")
 
 	for _, tool := range []string{"write", "edit", "replace_lines", "jq_edit"} {
 		contract := catalogContract(t, tool)
 
-		// 1. Literal complete token is kept literal
 		args := map[string]any{
 			"content":                   literalRef,
 			"old_string":                literalRef,
@@ -526,7 +486,6 @@ func TestInvariant5_ExplicitLiteralTokenOptOut(t *testing.T) {
 			t.Fatalf("%s: content changed despite opt-out", tool)
 		}
 
-		// 2. Malformed token produces no error when opt-out is enabled
 		malformedArgs := map[string]any{
 			"content":                   malformedRef,
 			"old_string":                malformedRef,
@@ -539,12 +498,9 @@ func TestInvariant5_ExplicitLiteralTokenOptOut(t *testing.T) {
 			t.Fatalf("%s: malformed content changed despite opt-out", tool)
 		}
 
-		// 3. screenFileSecrets returns nil immediately
 		tc := tools.ToolContext{
 			Invocation: tools.Invocation{Contract: contract},
-			Effects: tools.InvocationEffects{Secrets: secretcap.NewResolutionForTest(map[string]any{}, []secretcap.TestResolvedValue{
-				{ID: "77777777-7777-7777-7777-777777777777", Value: "secret-value"},
-			})},
+			Effects:    tools.InvocationEffects{Secrets: resolution},
 		}
 		if err := exec.Secrets.screenFileSecrets(context.Background(), tool, args, tc); err != nil {
 			t.Fatalf("%s: screenFileSecrets failed with opt-out: %v", tool, err)
@@ -552,7 +508,7 @@ func TestInvariant5_ExplicitLiteralTokenOptOut(t *testing.T) {
 	}
 }
 
-// Invariant 6: Screener and editor highlighting.
+// Screener and editor highlighting.
 // Files on disk containing resolved secrets are scanned by the screener:
 // - Live secret -> StateTracked (reference populated).
 // - Rotated or revoked secret -> StateRetired (reference empty).
@@ -610,7 +566,7 @@ func TestInvariant6_ScreenerAndEditorHighlighting(t *testing.T) {
 	}
 }
 
-// Invariant 7: reading or projecting a file masks live secrets to reference
+// reading or projecting a file masks live secrets to reference
 // tokens and retired or revoked secrets to [REDACTED].
 func TestInvariant7_OutboundReadMasking(t *testing.T) {
 	const liveVal = "live-database-password-val-abc123"
@@ -654,15 +610,6 @@ func TestInvariant7_OutboundReadMasking(t *testing.T) {
 	if replacements[1].Reference != "" {
 		t.Fatalf("replacement[1].Reference = %q, want empty (placeholder)", replacements[1].Reference)
 	}
-}
-
-// fingerprintFor is the screen identity m gives value.
-func fingerprintFor(m *secretmatch.Matcher, value string) secretmatch.SecretFingerprint {
-	match, err := m.ManagedValue(value, "", "")
-	if err != nil {
-		return ""
-	}
-	return match.Fingerprint
 }
 
 func (*invariantCheckpointMgr) ApprovalReviewSuppressed(context.Context, string, string) (bool, error) {

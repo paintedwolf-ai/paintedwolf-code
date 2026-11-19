@@ -27,10 +27,10 @@ func RecordUnlock(ctx context.Context, tx *sql.Tx, projectID string, unlock pres
 
 // RecordUnlockEnd audits why an unlock ended. A failed write leaves the row
 // open, and the next boot closes it as restart.
-func (s *secretAdminService) RecordUnlockEnd(ctx context.Context, unlock presence.Unlock, reason presence.EndReason, at time.Time) {
+func (s *Reveals) RecordUnlockEnd(ctx context.Context, unlock presence.Unlock, reason presence.EndReason, at time.Time) {
 	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), time.Second)
 	defer cancel()
-	if err := s.queries.EndVaultUnlock(ctx, db.EndVaultUnlockParams{
+	if err := s.repository.queries.EndVaultUnlock(ctx, db.EndVaultUnlockParams{
 		EndedAt: nullable(timelayout.Format(at)), EndReason: nullable(string(reason)), ID: unlock.ID,
 	}); err != nil {
 		slog.WarnContext(ctx, "vault unlock end write failed", "unlock_id", unlock.ID, "reason", reason)
@@ -39,8 +39,8 @@ func (s *secretAdminService) RecordUnlockEnd(ctx context.Context, unlock presenc
 
 // CloseUnlocksLeftOpen ends the unlocks a stopped engine left open. Unlocks
 // live only in memory, so at boot none is open; run it before any can be.
-func (s *secretAdminService) CloseUnlocksLeftOpen(ctx context.Context) error {
-	if _, err := s.queries.EndOpenVaultUnlocks(ctx, nullable(timelayout.Format(s.now()))); err != nil {
+func (s *Reveals) CloseUnlocksLeftOpen(ctx context.Context) error {
+	if _, err := s.repository.queries.EndOpenVaultUnlocks(ctx, nullable(timelayout.Format(s.repository.now()))); err != nil {
 		return fmt.Errorf("close vault unlocks left open: %w", err)
 	}
 	return nil

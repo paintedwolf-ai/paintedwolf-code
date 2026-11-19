@@ -13,12 +13,12 @@ import (
 
 const (
 	cookieJarPurpose = "HTTP cookie jar"
-	// jarTool is the only jar consumer; uses are recorded under its name.
-	jarTool         = "http_request"
+	// Jar access is attributed to the submitted command.
+	jarTool         = "command"
 	maxJarNameRunes = 64
 )
 
-// CookieJarRequest identifies the jar one http_request call opens.
+// CookieJarRequest identifies the jar one HTTP exchange opens.
 type CookieJarRequest struct {
 	ProjectID, ChatSessionID, SessionID, OperationID, Name string
 }
@@ -29,8 +29,9 @@ type CookieJar struct {
 	Reference string
 	Store     *httpcookies.Store
 	id        string
+	version   int64
 	request   CookieJarRequest
-	issuer    *secretJarService
+	issuer    *Jars
 }
 
 // ErrInvalidCookieJar refuses a jar name outside its limits.
@@ -38,13 +39,13 @@ var ErrInvalidCookieJar = fmt.Errorf("%w: cookie jar name", ErrInvalidPut)
 
 // OpenCookieJar loads the chat-visible jar and registers its values for screening.
 // An absent jar starts empty in memory.
-func (s *secretJarService) OpenCookieJar(ctx context.Context, req CookieJarRequest) (*CookieJar, error) {
+func (s *Jars) OpenCookieJar(ctx context.Context, req CookieJarRequest) (*CookieJar, error) {
 	req = normalizeCookieJarRequest(req)
 	if !validJarName(req.Name) || req.ProjectID == "" || req.ChatSessionID == "" || req.SessionID == "" || req.OperationID == "" {
 		return nil, ErrInvalidCookieJar
 	}
-	s.mutationMu.Lock()
-	defer s.mutationMu.Unlock()
+	s.repository.mutationMu.Lock()
+	defer s.repository.mutationMu.Unlock()
 
 	row, found, err := s.jarRow(ctx, OriginCookieJar, req.ProjectID, req.ChatSessionID, req.Name)
 	if err != nil {
@@ -59,34 +60,35 @@ func (s *secretJarService) OpenCookieJar(ctx context.Context, req CookieJarReque
 	}
 	jar.id, jar.Reference = row.ID, secretmatch.ReferenceToken(row.ID)
 	access := ResolveContext{ProjectID: req.ProjectID, ChatSessionID: req.ChatSessionID, SessionID: req.SessionID, ToolName: jarTool}
-	current, hasCurrent, err := s.currentVersion(ctx, row.ID)
+	current, hasCurrent, err := s.repository.currentVersion(ctx, row.ID)
 	if err != nil {
 		return nil, err
 	}
 	if !hasCurrent {
-		s.recordUse(ctx, row.ID, 0, UseUnavailable, access)
+		s.repository.recordUse(ctx, row.ID, 0, UseUnavailable, access)
 		return nil, ErrValueMissing
 	}
-	entry, ok := s.values.get(current.ID)
+	entry, ok := s.repository.values.get(current.ID)
 	if !ok {
-		s.recordUse(ctx, row.ID, current.Version, UseUnavailable, access)
+		s.repository.recordUse(ctx, row.ID, current.Version, UseUnavailable, access)
 		return nil, ErrValueMissing
 	}
 	cookies, err := httpcookies.Decode([]byte(entry.Value))
 	if err != nil {
-		s.recordUse(ctx, row.ID, current.Version, UseUnavailable, access)
+		s.repository.recordUse(ctx, row.ID, current.Version, UseUnavailable, access)
 		return nil, fmt.Errorf("%w: stored cookie jar is unreadable", ErrValueMissing)
 	}
+	jar.version = current.Version
 	jar.Store = httpcookies.New(cookies)
-	s.recordUse(ctx, row.ID, current.Version, UseResolved, access)
+	s.repository.recordUse(ctx, row.ID, current.Version, UseResolved, access)
 	s.rememberJarValues(req.ChatSessionID, "cookie", row.ID, jar.Store.Values())
 	return jar, nil
 }
 
 // jarRow finds the live jar of origin named name that the chat can see,
 // preferring the chat's own jar over a project one.
-func (s *secretJarService) jarRow(ctx context.Context, origin, projectID, chatSessionID, name string) (row db.ManagedSecrets, found bool, err error) {
-	rows, err := s.queries.ListVisibleManagedSecrets(ctx, db.ListVisibleManagedSecretsParams{
+func (s *Jars) jarRow(ctx context.Context, origin, projectID, chatSessionID, name string) (row db.ManagedSecrets, found bool, err error) {
+	rows, err := s.repository.queries.ListVisibleManagedSecrets(ctx, db.ListVisibleManagedSecretsParams{
 		ProjectID: strings.TrimSpace(projectID), ChatSessionID: nullable(chatSessionID),
 	})
 	if err != nil {
@@ -117,7 +119,7 @@ func validJarName(name string) bool {
 }
 
 // jarAccess admits a live, visible jar of origin; any other origin is wrongOrigin.
-func (s *secretJarService) jarAccess(row db.ManagedSecrets, origin string, wrongOrigin error, projectID, chatSessionID string) error {
+func (s *Jars) jarAccess(row db.ManagedSecrets, origin string, wrongOrigin error, projectID, chatSessionID string) error {
 	if row.Origin != origin {
 		return wrongOrigin
 	}
@@ -127,15 +129,15 @@ func (s *secretJarService) jarAccess(row db.ManagedSecrets, origin string, wrong
 	if row.RevokedAt.Valid {
 		return ErrRevoked
 	}
-	if agentUseEnded(row.AgentUseEndsAt, s.now()) {
+	if agentUseEnded(row.AgentUseEndsAt, s.repository.now()) {
 		return ErrAgentUseExpired
 	}
 	return nil
 }
 
 // rememberJarValues screens individual entries without substituting the whole jar.
-func (s *secretJarService) rememberJarValues(chatSessionID, entry, jarID string, values []string) {
-	if s.remember == nil || strings.TrimSpace(chatSessionID) == "" || len(values) == 0 {
+func (s *Jars) rememberJarValues(chatSessionID, entry, jarID string, values []string) {
+	if s.repository.remember == nil || strings.TrimSpace(chatSessionID) == "" || len(values) == 0 {
 		return
 	}
 	items := make([]secretmatch.Remembered, 0, len(values))
@@ -150,7 +152,7 @@ func (s *secretJarService) rememberJarValues(chatSessionID, entry, jarID string,
 		})
 	}
 	if len(items) > 0 {
-		s.remember(chatSessionID, items)
+		s.repository.remember(chatSessionID, items)
 	}
 }
 

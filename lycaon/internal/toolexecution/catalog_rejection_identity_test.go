@@ -77,8 +77,6 @@ func TestCatalogIntrinsicRejectionsKeepTheirIdentity(t *testing.T) {
 		{"render_view", "RENDER_MARKUP_FORBIDDEN"},
 		{"grep", "GREP_DEADLINE_EXCEEDED"},
 		{"find", "SURVEY_INVENTORY_WARMING"},
-		{"http_request", "HTTP_REQUEST_COOKIE_NOT_HELD"},
-		{"http_request", "HTTP_REQUEST_COOKIE_JAR_FAILED"},
 		{"wait", "WAIT_PROBE_SECRET_UNSUPPORTED"},
 	} {
 		t.Run(tc.code, func(t *testing.T) {
