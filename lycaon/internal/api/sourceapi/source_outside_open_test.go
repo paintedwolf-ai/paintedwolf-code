@@ -168,7 +168,7 @@ func callChatLocation(t *testing.T, ctx context.Context, method string, handler 
 	return recorder
 }
 
-func TestOutsideReaderUsesAHeldFile(t *testing.T) {
+func TestOutsideReaderOpensARecordedCommandFile(t *testing.T) {
 	db := testdbfixture.Open(t, "store.db")
 	sessions := store.NewSQL(db)
 	server := newSourceHandlerFixture(t, func(deps *Deps) {
@@ -187,23 +187,43 @@ func TestOutsideReaderUsesAHeldFile(t *testing.T) {
 	if !ok {
 		t.Fatal("fixture lacks an outside address")
 	}
-	create := func() *httptest.ResponseRecorder {
+	create := func(source wire.CurrentComparisonSource) *httptest.ResponseRecorder {
 		return callSourceViewHandlerAs(t, ctx, server.Views.HandleCreateSourceView, p.ID, "", wire.SourceComparisonViewCreate{
 			Kind: "comparison", OperationID: uuid.NewString(), ClientID: "window:main",
-			Source: wire.SourceComparisonSelector{Current: &wire.CurrentComparisonSource{Kind: "current", RootID: p.Outside.ID, Path: rel}},
+			Source: wire.SourceComparisonSelector{Current: &source},
 			Intent: wire.SourceComparisonIntent{Mode: "full"},
 		})
 	}
-	sourceViewErrorCode(t, create(), http.StatusNotFound)
-	readOpenedFile(t, callSourceViewHandlerAs(t, ctx, server.Workspace.HandleOpenOutsideFile, p.ID, "",
-		wire.OpenOutsideFileRequest{SessionID: chat.ID, Path: file}))
-	view := readSourceViewResponse(t, create(), http.StatusCreated).Comparison
+	sourceViewErrorCode(t, create(wire.CurrentComparisonSource{Kind: "current", RootID: p.Outside.ID, Path: rel}), http.StatusNotFound)
+	sourceViewErrorCode(t, create(wire.CurrentComparisonSource{Kind: "current", FileID: uuid.NewString()}), http.StatusNotFound)
+	ledger := server.Workspace.SourceLedger
+	testutil.FailErr(t, "record command write", ledger.Record(ctx, sourceledger.RecordInput{
+		RecordLocation: sourceledger.RecordLocation{RootID: p.Outside.ID, Path: rel},
+		ProjectID:      p.ID, SessionID: chat.ID, ToolName: "command", ToolCallID: "call-1",
+		Origin: wire.SourceChangeOriginAgent, Op: wire.SourceChangeOpCreate, After: []byte("read me\n"),
+	}))
+	tracked, err := ledger.LookupFile(ctx, sourceledger.TrackInput{ProjectID: p.ID, RootID: p.Outside.ID, Path: rel})
+	testutil.FailErr(t, "resolve recorded file ID", err)
+	selector := wire.CurrentComparisonSource{Kind: "current", FileID: tracked.FileID}
+	view := readSourceViewResponse(t, create(selector), http.StatusCreated).Comparison
 	testutil.WaitFor(t, "outside reader ready", func() bool {
 		current := readSourceViewResponse(t, callSourceViewHandlerAs(t, ctx, server.Views.HandleGetSourceView, p.ID, view.ID, nil), http.StatusOK).Comparison
 		if current.State == "failed" {
 			t.Fatalf("outside reader failed: %+v", current.Failure)
 		}
 		return current.State == "ready"
+	})
+	testutil.FailErr(t, "move the observed folder", os.Rename(dir, dir+"-old"))
+	t.Cleanup(func() { testutil.FailErr(t, "remove moved folder", os.RemoveAll(dir+"-old")) })
+	testutil.FailErr(t, "replace observed folder", os.Mkdir(dir, 0o700))
+	testutil.FailErr(t, "write replacement text", os.WriteFile(file, []byte("unexpected file"), 0o600))
+	view = readSourceViewResponse(t, create(selector), http.StatusCreated).Comparison
+	testutil.WaitFor(t, "reader rejects the replacement", func() bool {
+		current := readSourceViewResponse(t, callSourceViewHandlerAs(t, ctx, server.Views.HandleGetSourceView, p.ID, view.ID, nil), http.StatusOK).Comparison
+		if current.State == "ready" {
+			t.Fatal("reader opened the replacement directory")
+		}
+		return current.State == "failed"
 	})
 }
 

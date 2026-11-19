@@ -8,6 +8,11 @@ import (
 	"github.com/lycaon/lycaon/internal/fspath"
 )
 
+// OutsideBinding pins a read to an observed directory.
+type OutsideBinding struct {
+	Directory, Identity string
+}
+
 // OutsideDirectoryIdentity identifies a canonical host directory from a held descriptor.
 func OutsideDirectoryIdentity(abs string) (string, error) {
 	root, err := fseffect.OpenMetadataRoot(OutsidePath)

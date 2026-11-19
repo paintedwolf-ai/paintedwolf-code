@@ -20,6 +20,7 @@ type currentSourceSnapshot struct {
 	document *sourcecomparison.CurrentDocument
 	stream   *projectsource.SourceStream
 	users    atomic.Int64
+	fileID   string
 }
 
 func (snapshot *currentSourceSnapshot) retain() { snapshot.users.Add(1) }
@@ -36,7 +37,11 @@ func currentSourceChanged() error {
 
 func (s *ComparisonViews) prepareCurrentSource(view *sourceView, p *project.Project) error {
 	source := view.comparisonData.comparisonSource.Current
-	stream, err := projectsource.OpenProjectSourceStream(p, projectsource.SourceReadRequest{Path: source.Path, RootID: source.RootID, DecodeAs: source.DecodeAs})
+	p, req, err := s.Views.resolveCurrentSource(view.ctx, p, source)
+	if err != nil {
+		return currentSourceReadError(err)
+	}
+	stream, err := projectsource.OpenProjectSourceStream(p, req)
 	if err != nil {
 		return currentSourceReadError(err)
 	}
@@ -50,10 +55,10 @@ func (s *ComparisonViews) prepareCurrentSource(view *sourceView, p *project.Proj
 		stream.Close()
 		return currentSourceChanged()
 	}
-	snapshot := &currentSourceSnapshot{document: document, stream: stream}
+	snapshot := &currentSourceSnapshot{document: document, stream: stream, fileID: source.FileID}
 	snapshot.users.Store(1)
 	s.installCurrentSource(view, snapshot)
-	if source.RootID != p.Outside.ID {
+	if req.RootID != p.Outside.ID {
 		s.background.Go(view.ctx, func(ctx context.Context) { s.Watch.ensureWorkspaceWatch(ctx, p) })
 	}
 	return nil

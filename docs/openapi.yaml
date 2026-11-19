@@ -3324,10 +3324,16 @@ paths:
       parameters:
         - $ref: '#/components/parameters/ProjectId'
         - $ref: '#/components/parameters/SourceSessionIdQuery'
+        - name: file_id
+          in: query
+          description: Recorded file ID. Required for outside files. Use without path, root_id or worker_id.
+          schema:
+            type: string
+            format: uuid
         - name: path
           in: query
-          required: true
-          description: Repo-relative path (slash-separated)
+          required: false
+          description: Attached-root-relative path. Required when file_id is omitted.
           schema:
             type: string
             minLength: 1
@@ -3349,7 +3355,7 @@ paths:
             format: uuid
         - name: include_deleted
           in: query
-          description: Open retained deletion history when the exact root-addressed path is absent. Existing files always take precedence. Requires root_id; does not search history for other paths.
+          description: Open retained deletion history when the exact root-addressed path is absent. Existing files always take precedence. Requires root_id or file_id; does not search history for other paths.
           schema:
             type: boolean
             default: false
@@ -5087,10 +5093,16 @@ paths:
       parameters:
         - $ref: '#/components/parameters/ProjectId'
         - $ref: '#/components/parameters/SourceSessionIdQuery'
+        - name: file_id
+          in: query
+          description: Recorded file ID. Required for outside files. Use without path, root_id or worker_id.
+          schema:
+            type: string
+            format: uuid
         - name: path
           in: query
-          required: true
-          description: Repo-relative path (slash-separated)
+          required: false
+          description: Attached-root-relative path. Required when file_id is omitted.
           schema:
             type: string
             minLength: 1
@@ -34336,10 +34348,8 @@ components:
       type: object
       additionalProperties: false
       required:
-        - path
-        - root_id
         - client_id
-      description: A document opens at its current address when a file ID is supplied.
+      description: Use file_id for an outside file, or root_id and path for an attached file.
       properties:
         file_id:
           type: string
@@ -41995,13 +42005,15 @@ components:
       description: A read-only, immutable snapshot of the current on-disk file. Frames and search remain bounded for files above the editing limit.
       required:
         - kind
-        - root_id
-        - path
       properties:
         kind:
           type: string
           enum:
             - current
+        file_id:
+          type: string
+          format: uuid
+          description: The recorded outside file ID. Use without root_id or path.
         root_id:
           type: string
           format: uuid
@@ -42284,6 +42296,10 @@ components:
           enum:
             - before
             - current
+        file_id:
+          type: string
+          format: uuid
+          description: The recorded outside file ID. Use without root_id or path.
         root_id:
           type: string
           format: uuid

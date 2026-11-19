@@ -70,7 +70,7 @@ func openSourceStream(p ProjectSource, req SourceReadRequest) (*SourceStream, er
 	if p != nil {
 		for _, root := range p.SourceRoots() {
 			if root.Outside && root.ID == req.RootID {
-				file, identity, err := openOutsideFile(req.Path, "")
+				file, identity, err := openOutsideFile(req.Path, sourceReadBinding(p))
 				if err != nil {
 					return nil, err
 				}

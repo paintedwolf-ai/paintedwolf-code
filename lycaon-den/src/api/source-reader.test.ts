@@ -76,7 +76,7 @@ it("preserves reference session identity when current comparison has no explicit
   const open = vi.fn(host.createSourceView);
   const client = stubClient({ ...host.methods, createSourceView: open });
   const original = sourceReaderAccess(client, "project", reader);
-  const current = currentComparisonAccess(original, client, "project", "root-1", "file.ts");
+  const current = currentComparisonAccess(original, client, "project", { root_id: "root-1", path: "file.ts" });
   await current.summary();
   expect(open).toHaveBeenCalled();
   const currentCall = open.mock.calls.find(call => call[1]?.kind === "comparison" && call[1]?.source.kind === "retained" && call[1]?.source.comparison === "current");

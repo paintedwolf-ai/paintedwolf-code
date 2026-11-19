@@ -54,7 +54,8 @@ func (s *Workspace) HandleGetProjectSource(w http.ResponseWriter, r *http.Reques
 		s.writeSourceReadError(w, r, err)
 		return
 	}
-	if p, err = outsideaccess.Admit(r.Context(), s.SourceLedger, p, req.RootID, req.Path); err != nil {
+	p, err = s.resolveSourceReadAddress(r, p, &req)
+	if err != nil {
 		s.writeSourceReadError(w, r, err)
 		return
 	}
@@ -80,7 +81,7 @@ func (s *Workspace) HandleGetProjectSource(w http.ResponseWriter, r *http.Reques
 	observation, err := projectsource.ObserveProjectSource(p, req)
 	if errors.Is(err, projectsource.ErrSourceNotFound) && includeDeleted && (workerID == "" || branch.IsWorker()) {
 		var deleted *wire.ProjectSourceReadResponse
-		deleted, err = s.readDeletedSource(r.Context(), p, req, scope)
+		deleted, err = s.readDeletedSource(r.Context(), p, req, scope, strings.TrimSpace(r.URL.Query().Get("file_id")))
 		if err == nil {
 			httpio.WriteJSON(w, http.StatusOK, deleted)
 			return
@@ -112,8 +113,8 @@ func sourceViewerRequest(r *http.Request) (projectsource.SourceReadRequest, bool
 	if err != nil {
 		return req, false, err
 	}
-	if includeDeleted && req.RootID == "" {
-		return req, false, fmt.Errorf("include_deleted requires root_id")
+	if includeDeleted && req.RootID == "" && r.URL.Query().Get("file_id") == "" {
+		return req, false, fmt.Errorf("include_deleted requires root_id or file_id")
 	}
 	return req, includeDeleted, nil
 }
@@ -285,12 +286,10 @@ func (s *Workspace) HandleGetProjectSourceRaw(w http.ResponseWriter, r *http.Req
 		Path:   strings.TrimSpace(q.Get("path")),
 		RootID: strings.TrimSpace(q.Get("root_id")),
 	}
-	if branchRoot == "" {
-		p, err = outsideaccess.Admit(r.Context(), s.SourceLedger, p, req.RootID, req.Path)
-		if err != nil {
-			s.writeSourceReadError(w, r, err)
-			return
-		}
+	p, err = s.resolveSourceReadAddress(r, p, &req)
+	if err != nil {
+		s.writeSourceReadError(w, r, err)
+		return
 	}
 	result, err := projectsource.ReadProjectSourceRaw(p, req)
 	if err != nil {
@@ -305,6 +304,19 @@ func (s *Workspace) HandleGetProjectSourceRaw(w http.ResponseWriter, r *http.Req
 	w.WriteHeader(http.StatusOK)
 	// #nosec G705 -- sniffed image bytes; sandbox CSP disables active SVG content.
 	_, _ = w.Write(result.Bytes)
+}
+
+func (s *Workspace) resolveSourceReadAddress(r *http.Request, p *project.Project, req *projectsource.SourceReadRequest) (*project.Project, error) {
+	fileID := strings.TrimSpace(r.URL.Query().Get("file_id"))
+	if fileID != "" && r.URL.Query().Get("worker_id") != "" {
+		return nil, projectsource.ErrSourcePathInvalid
+	}
+	p, target, err := outsideaccess.Resolve(r.Context(), s.SourceLedger, p, outsideaccess.Address{RootID: req.RootID, Path: req.Path, FileID: fileID})
+	if err != nil {
+		return nil, err
+	}
+	req.RootID, req.Path = target.RootID, target.Path
+	return p, nil
 }
 
 // A usable worker overlay stays leased until release; unavailable trees return no root.

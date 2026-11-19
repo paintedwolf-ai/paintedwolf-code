@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/lycaon/lycaon/internal/api/outsideaccess"
 	"github.com/lycaon/lycaon/internal/pagedview"
 	"github.com/lycaon/lycaon/internal/project"
 	"github.com/lycaon/lycaon/internal/sourcecomparison"
@@ -186,7 +187,7 @@ func (s *ComparisonViews) loadRetainedViewComparison(ctx context.Context, p *pro
 	}
 	held.mu.Unlock()
 	if source.Comparison == "current" {
-		before, err = s.Comparisons.readerCurrentSide(ctx, p, source.RootID, source.Path)
+		before, err = s.Comparisons.readerCurrentSide(ctx, p, outsideaccess.Address{RootID: source.RootID, Path: source.Path, FileID: source.FileID})
 		if err != nil {
 			return wire.SourceComparison{}, err
 		}

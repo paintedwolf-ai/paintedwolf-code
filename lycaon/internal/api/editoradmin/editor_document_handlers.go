@@ -15,7 +15,7 @@ import (
 	"github.com/lycaon/lycaon/internal/editordoc"
 	"github.com/lycaon/lycaon/internal/project"
 	"github.com/lycaon/lycaon/internal/projectsource"
-	"github.com/lycaon/lycaon/internal/sourceledger"
+
 	"github.com/lycaon/lycaon/internal/textfile"
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
@@ -46,6 +46,9 @@ func (s *Handler) HandleOpenEditorDocument(w http.ResponseWriter, r *http.Reques
 	case req.FileID != "" && uuid.Validate(req.FileID) != nil:
 		s.responses.InvalidField(w, "file_id", "must be a UUID")
 		return
+	case req.FileID != "" && (req.RootID != "" || req.Path != ""):
+		s.responses.InvalidField(w, "file_id", "cannot be combined with root_id or path")
+		return
 	case req.FileID == "" && strings.TrimSpace(req.Path) == "":
 		s.responses.InvalidField(w, "path", "is required")
 		return
@@ -65,25 +68,12 @@ func (s *Handler) HandleOpenEditorDocument(w http.ResponseWriter, r *http.Reques
 	if !ok {
 		return
 	}
-	root, path := req.RootID, req.Path
-	if req.FileID != "" {
-		var err error
-		root, path, err = s.SourceLedger.HeldFileAddress(r.Context(), p.ID, req.FileID)
-		if errors.Is(err, sourceledger.ErrHistoryNotFound) {
-			s.writeEditorDocumentError(w, r, editordoc.ErrNotFound)
-			return
-		}
-		if err != nil {
-			s.writeEditorDocumentError(w, r, err)
-			return
-		}
-	}
-	p, err := outsideaccess.Admit(r.Context(), s.SourceLedger, p, root, path)
+	p, target, err := outsideaccess.Resolve(r.Context(), s.SourceLedger, p, outsideaccess.Address{RootID: req.RootID, Path: req.Path, FileID: req.FileID})
 	if err != nil {
 		s.writeEditorDocumentError(w, r, err)
 		return
 	}
-	d, err := s.EditorDocuments.Open(r.Context(), p, path, root, req.DecodeAs, req.ClientID, retainedReplica(req.Replica))
+	d, err := s.EditorDocuments.Open(r.Context(), p, target.Path, target.RootID, req.DecodeAs, req.ClientID, retainedReplica(req.Replica))
 	if err != nil {
 		s.writeEditorDocumentError(w, r, err)
 		return

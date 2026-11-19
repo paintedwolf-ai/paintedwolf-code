@@ -46,4 +46,4 @@ func (*ReadRoot) DescriptorOpens() int64 { return 0 }
 
 func (*ReadRoot) DirectoryIdentityDescriptors() (int64, int64) { return 0, 0 }
 
-func (*ReadRoot) OpenCanonicalFile(string) (*os.File, error) { return nil, ErrUnsupported }
+func (*ReadRoot) OpenCanonicalFile(string) (*os.File, string, error) { return nil, "", ErrUnsupported }

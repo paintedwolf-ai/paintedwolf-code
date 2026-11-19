@@ -43,3 +43,14 @@ func WithOutside(p *Project) *Project {
 	out.Roots = append(append([]Root(nil), p.Roots...), p.Outside)
 	return &out
 }
+
+// WithOutsideRead binds an admitted request to its observed directory.
+func WithOutsideRead(p *Project, binding projectroot.OutsideBinding) *Project {
+	out := *WithOutside(p)
+	out.outsideReadBinding = binding
+	return &out
+}
+
+func (p *Project) OutsideReadBinding() projectroot.OutsideBinding {
+	return p.outsideReadBinding
+}

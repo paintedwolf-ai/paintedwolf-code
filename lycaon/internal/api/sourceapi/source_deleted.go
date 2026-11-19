@@ -36,12 +36,33 @@ func (s *Workspace) resolveNavigationPath(ctx context.Context, p *project.Projec
 		file = head
 		ref.RootID, ref.Path = file.RootID, file.Path
 	}
-	scoped, err := outsideaccess.Admit(ctx, s.SourceLedger, p, ref.RootID, ref.Path)
-	if err != nil {
-		ref.Status = wire.NavigationUnavailable
-		return ref
+	scoped := p
+	if p != nil && p.Outside.ID != "" && ref.RootID == p.Outside.ID {
+		if ref.FileID == "" {
+			ref.Status = wire.NavigationUnavailable
+			return ref
+		}
+		var address outsideaccess.Address
+		var err error
+		scoped, address, err = outsideaccess.Resolve(ctx, s.SourceLedger, p, outsideaccess.Address{FileID: ref.FileID})
+		if err != nil {
+			ref.Status = wire.NavigationUnavailable
+			return ref
+		}
+		ref.RootID, ref.Path = address.RootID, address.Path
+		file, err := projectsource.OpenOutsideSourceFile(ref.Path, scoped.OutsideReadBinding())
+		switch {
+		case err == nil:
+			_ = file.Close()
+			ref.Status, ref.EntryKind = wire.NavigationResolved, wire.NavigationEntryKindFile
+		case errors.Is(err, projectsource.ErrSourceNotFound):
+			ref.Status = wire.NavigationMissing
+		default:
+			ref.Status = wire.NavigationUnavailable
+		}
+	} else {
+		ref = project.ResolveNavigation(ctx, p, []wire.NavigationReference{ref})[0]
 	}
-	ref = project.ResolveNavigation(ctx, scoped, []wire.NavigationReference{ref})[0]
 	if ref.Status == wire.NavigationResolved && file.FileID != "" && (file.State == "absent" || ref.RootID != file.RootID || ref.Path != file.Path) {
 		ref.Status = wire.NavigationUnavailable
 	}
@@ -64,7 +85,7 @@ func (s *Workspace) resolveNavigationPath(ctx context.Context, p *project.Projec
 }
 
 // readDeletedSource serves retained content only while the exact address is absent.
-func (s *Workspace) readDeletedSource(ctx context.Context, p *project.Project, req projectsource.SourceReadRequest, scope sourceViewerWorkspace) (*wire.ProjectSourceReadResponse, error) {
+func (s *Workspace) readDeletedSource(ctx context.Context, p *project.Project, req projectsource.SourceReadRequest, scope sourceViewerWorkspace, fileID string) (*wire.ProjectSourceReadResponse, error) {
 	path, err := projectsource.ResolveAbsentSourcePath(p, req.RootID, req.Path)
 	if err != nil {
 		return nil, err
@@ -75,6 +96,9 @@ func (s *Workspace) readDeletedSource(ctx context.Context, p *project.Project, r
 	}
 	if err != nil {
 		return nil, err
+	}
+	if fileID != "" && deleted.FileID != fileID {
+		return nil, projectsource.ErrSourceNotFound
 	}
 	previous, err := s.SourceLedger.History.DeletedPathContent(ctx, p.ID, deleted)
 	if err != nil {

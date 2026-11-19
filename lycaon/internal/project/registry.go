@@ -93,8 +93,9 @@ type Project struct {
 	Name         string // empty when unset (wire null)
 	Roots        []Root
 	// Outside is the namespace for files beyond every root; it is never in Roots.
-	Outside         Root
-	RootsGeneration int
+	Outside            Root
+	outsideReadBinding projectroot.OutsideBinding
+	RootsGeneration    int
 	// TrustEnabled is surface id → enabled. Missing key means on.
 	TrustEnabled map[string]bool
 	// TrustSeen holds read summaries; file bytes live in the trust baseline store.

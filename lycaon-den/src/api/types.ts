@@ -13585,7 +13585,7 @@ export interface components {
             state_vector: string;
             base_sha256: string;
         };
-        /** @description A document opens at its current address when a file ID is supplied. */
+        /** @description Use file_id for an outside file, or root_id and path for an attached file. */
         OpenEditorDocumentRequest: {
             /**
              * Format: uuid
@@ -13593,12 +13593,12 @@ export interface components {
              */
             file_id?: string;
             /** @description Root-relative, slash-separated file path. */
-            path: string;
+            path?: string;
             /**
              * Format: uuid
              * @description Attached root that contains the file.
              */
-            root_id: string;
+            root_id?: string;
             /** @description Stable id for the client view opening the document. */
             client_id: string;
             /**
@@ -16823,9 +16823,14 @@ export interface components {
              * @enum {string}
              */
             kind: "current";
+            /**
+             * Format: uuid
+             * @description The recorded outside file ID. Use without root_id or path.
+             */
+            file_id?: string;
             /** Format: uuid */
-            root_id: string;
-            path: string;
+            root_id?: string;
+            path?: string;
             /** @enum {string} */
             decode_as?: "utf-16le" | "utf-16be";
         };
@@ -16967,6 +16972,11 @@ export interface components {
             view_id: string;
             /** @enum {string} */
             comparison: "before" | "current";
+            /**
+             * Format: uuid
+             * @description The recorded outside file ID. Use without root_id or path.
+             */
+            file_id?: string;
             /** Format: uuid */
             root_id?: string;
             path?: string;
@@ -21086,11 +21096,13 @@ export interface operations {
     };
     getProjectSource: {
         parameters: {
-            query: {
+            query?: {
                 /** @description Optional session whose bound checkout supplies the project roots */
                 session_id?: components["parameters"]["SourceSessionIdQuery"];
-                /** @description Repo-relative path (slash-separated) */
-                path: string;
+                /** @description Recorded file ID. Required for outside files. Use without path, root_id or worker_id. */
+                file_id?: string;
+                /** @description Attached-root-relative path. Required when file_id is omitted. */
+                path?: string;
                 /** @description Attached root to pin the read to; omitted searches every root primary-first */
                 root_id?: string;
                 /**
@@ -21098,7 +21110,7 @@ export interface operations {
                  *     that overlay while it is available, including absent files.
                  */
                 worker_id?: string;
-                /** @description Open retained deletion history when the exact root-addressed path is absent. Existing files always take precedence. Requires root_id; does not search history for other paths. */
+                /** @description Open retained deletion history when the exact root-addressed path is absent. Existing files always take precedence. Requires root_id or file_id; does not search history for other paths. */
                 include_deleted?: boolean;
                 /**
                  * @description Explicit human choice to reopen an otherwise unsupported file as
@@ -22790,11 +22802,13 @@ export interface operations {
     };
     getProjectSourceRaw: {
         parameters: {
-            query: {
+            query?: {
                 /** @description Optional session whose bound checkout supplies the project roots */
                 session_id?: components["parameters"]["SourceSessionIdQuery"];
-                /** @description Repo-relative path (slash-separated) */
-                path: string;
+                /** @description Recorded file ID. Required for outside files. Use without path, root_id or worker_id. */
+                file_id?: string;
+                /** @description Attached-root-relative path. Required when file_id is omitted. */
+                path?: string;
                 /** @description Attached root to pin the read to */
                 root_id?: string;
                 /** @description Worker job whose live overlay contains this path */

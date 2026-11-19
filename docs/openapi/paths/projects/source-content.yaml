@@ -32,10 +32,16 @@ paths:
       parameters:
       - $ref: ../../components/parameters.yaml#/components/parameters/ProjectId
       - $ref: ../../components/parameters.yaml#/components/parameters/SourceSessionIdQuery
+      - name: file_id
+        in: query
+        description: Recorded file ID. Required for outside files. Use without path, root_id or worker_id.
+        schema:
+          type: string
+          format: uuid
       - name: path
         in: query
-        required: true
-        description: Repo-relative path (slash-separated)
+        required: false
+        description: Attached-root-relative path. Required when file_id is omitted.
         schema:
           type: string
           minLength: 1
@@ -57,7 +63,7 @@ paths:
           format: uuid
       - name: include_deleted
         in: query
-        description: Open retained deletion history when the exact root-addressed path is absent. Existing files always take precedence. Requires root_id; does not search history for other paths.
+        description: Open retained deletion history when the exact root-addressed path is absent. Existing files always take precedence. Requires root_id or file_id; does not search history for other paths.
         schema:
           type: boolean
           default: false
@@ -395,10 +401,16 @@ paths:
       parameters:
       - $ref: ../../components/parameters.yaml#/components/parameters/ProjectId
       - $ref: ../../components/parameters.yaml#/components/parameters/SourceSessionIdQuery
+      - name: file_id
+        in: query
+        description: Recorded file ID. Required for outside files. Use without path, root_id or worker_id.
+        schema:
+          type: string
+          format: uuid
       - name: path
         in: query
-        required: true
-        description: Repo-relative path (slash-separated)
+        required: false
+        description: Attached-root-relative path. Required when file_id is omitted.
         schema:
           type: string
           minLength: 1

@@ -24,3 +24,17 @@ WHERE l.id = sqlc.arg(id) AND s.project_id = sqlc.arg(project_id);
 
 -- name: SetSourceChatLocationHidden :exec
 UPDATE source_chat_locations SET hidden = sqlc.arg(hidden) WHERE id = sqlc.arg(id);
+
+-- name: FindSourceFileChatAnchor :one
+SELECT l.anchor_identity
+FROM source_chat_files c
+JOIN source_chat_locations l ON l.session_id = c.session_id
+WHERE c.file_id = sqlc.arg(file_id) AND l.anchor = sqlc.arg(anchor)
+  AND l.anchor_identity != '' AND (l.kind != 'file' OR l.anchor = sqlc.arg(path))
+ORDER BY l.created_ts DESC, l.id
+LIMIT 1;
+
+-- name: GetEditorOutsideParentBinding :one
+SELECT outside_parent_binding FROM editor_documents
+WHERE project_id = sqlc.arg(project_id) AND file_id = sqlc.arg(file_id)
+  AND outside_parent_binding != '';

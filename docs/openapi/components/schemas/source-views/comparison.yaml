@@ -315,6 +315,10 @@ components:
           enum:
             - "before"
             - "current"
+        file_id:
+          type: "string"
+          format: "uuid"
+          description: The recorded outside file ID. Use without root_id or path.
         root_id:
           type: "string"
           format: "uuid"
@@ -327,11 +331,15 @@ components:
       type: "object"
       additionalProperties: false
       description: "A read-only, immutable snapshot of the current on-disk file. Frames and search remain bounded for files above the editing limit."
-      required: [kind, root_id, path]
+      required: [kind]
       properties:
         kind:
           type: "string"
           enum: [current]
+        file_id:
+          type: "string"
+          format: "uuid"
+          description: The recorded outside file ID. Use without root_id or path.
         root_id:
           type: "string"
           format: "uuid"
