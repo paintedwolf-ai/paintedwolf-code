@@ -1726,6 +1726,11 @@
       "emit": "guard:edit",
       "summary": "{{ tool }} on {{ paintedwolf.path }} was not applied because the file already has syntax errors and the proposed edit does not reduce them."
     },
+    "OPTIONAL_PROTECTED_READ_WITHHELD": {
+      "category": "informational",
+      "emit": "guard:optional_protected_read",
+      "summary": "The command exited successfully with protected reads withheld at {{ paintedwolf.optional_read_paths }}."
+    },
     "OUTBOUND_SECRET_DENIED": {
       "branch_instruction": "Preserve the withheld value; use an authorized redacted request or report the blocked send",
       "category": "recoverable",
@@ -2411,11 +2416,6 @@
       "category": "recoverable",
       "emit": "guard:sandbox_loopback_connect",
       "summary": "The local service connection request was invalid."
-    },
-    "SANDBOX_OPTIONAL_READ_WITHHELD": {
-      "category": "informational",
-      "emit": "guard:sandbox",
-      "summary": "The command exited successfully with protected reads withheld at {{ paintedwolf.optional_read_paths }}."
     },
     "SANDBOX_READ_PATH_DENIED": {
       "branch_instruction": "Respect this rejection; fresh user direction permits a new approval request",

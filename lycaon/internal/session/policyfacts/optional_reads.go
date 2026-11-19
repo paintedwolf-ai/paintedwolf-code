@@ -9,7 +9,7 @@ import (
 
 const (
 	maxOptionalReadNotices = 512
-	optionalReadNoticeCode = "SANDBOX_OPTIONAL_READ_WITHHELD"
+	optionalReadNoticeCode = "OPTIONAL_PROTECTED_READ_WITHHELD"
 )
 
 type optionalReadNotices struct {

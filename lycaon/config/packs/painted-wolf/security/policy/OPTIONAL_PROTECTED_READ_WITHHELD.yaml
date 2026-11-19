@@ -1,5 +1,5 @@
 spec_version: "1.0"
-id: SANDBOX_OPTIONAL_READ_WITHHELD
+id: OPTIONAL_PROTECTED_READ_WITHHELD
 kind: policy
 on: tool.post_invoke
 selector:
@@ -8,7 +8,7 @@ requires_facts: [paintedwolf.optional_read_paths]
 when: size(paintedwolf.optional_read_paths) > 0
 effect: warn
 x-paintedwolf-category: informational
-x-paintedwolf-emit: guard:sandbox
+x-paintedwolf-emit: guard:optional_protected_read
 message: A command succeeded with protected reads withheld
 what: The command exited successfully with protected reads withheld at {{ paintedwolf.optional_read_paths }}.
 x-paintedwolf-scenarios:
