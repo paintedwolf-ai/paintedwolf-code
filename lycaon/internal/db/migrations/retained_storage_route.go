@@ -12,9 +12,12 @@ func (p Plan) reviewedRetainedRoute() bool {
 	if sqlite3.SQLITE_SOURCE_ID != sourceID || p.Source != manifestLayoutSource || p.CopyPlan() == nil || len(p.steps) != 2 {
 		return false
 	}
+	// The storage bound applies to these reviewed migration statements.
 	first, second := p.steps[0], p.steps[1]
 	return first.From == p.Source && first.To == releasedRevision5 &&
-		first.ID == revision5ID && first.Checksum == revision5Checksum &&
+		first.ID == "source-manifests-and-command-records" &&
+		first.Checksum == "8e1afb6494bcc70516ccbb226a0128d9d2d566bac1d05a829ed98aa7daeb93ae" &&
 		second.From == releasedRevision5 && second.To == p.Target && p.Target.Revision == 6 &&
-		second.ID == revision6ID && second.Checksum == revision6Checksum
+		second.ID == "session-mode-authority" &&
+		second.Checksum == "77168ac8ec2e74b3a9408abffc7b7bed8bbd39e918a51f47c3f938c100b693b2"
 }
