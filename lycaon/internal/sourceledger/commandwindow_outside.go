@@ -335,7 +335,7 @@ func (s *Inventory) recordOutsideHead(ctx context.Context, projectID string, hea
 	}
 	input := cause.apply(RecordInput{
 		RecordLocation: RecordLocation{RootID: head.RootID, Path: head.Path, EntryKind: EntryKindFile},
-		ProjectID: projectID, BranchID: sourcebranch.ID(head.BranchID), FileID: head.FileID, OperationID: newID(),
+		ProjectID:      projectID, BranchID: sourcebranch.ID(head.BranchID), FileID: head.FileID, OperationID: newID(),
 	})
 	input, err := s.admissionInput(ctx, input, change.Before, change.After)
 	if err != nil || (change.After != nil && input.AfterSHA256 == "") {

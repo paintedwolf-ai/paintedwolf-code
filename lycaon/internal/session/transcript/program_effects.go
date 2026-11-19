@@ -99,10 +99,10 @@ func (m *Service) applyProgramEffects(ctx context.Context, sessionID, messageID 
 		}
 	}
 	if late.Observation != nil {
-		facts := slices.DeleteFunc(slices.Clone(result.CardFacts), func(fact api.ActionFact) bool {
+		result.CardFacts = slices.DeleteFunc(slices.Clone(result.CardFacts), func(fact api.ActionFact) bool {
 			return fact.Kind == api.ActionFactSourceObservation
 		})
-		result.CardFacts = append(facts, *late.Observation)
+		result.CardFacts = append(result.CardFacts, *late.Observation)
 	}
 	message.ToolResult = &result
 	return m.Update(ctx, sessionID, messageID, message)
