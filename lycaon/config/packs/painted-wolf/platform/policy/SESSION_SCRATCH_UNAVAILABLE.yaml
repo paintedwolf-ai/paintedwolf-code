@@ -3,7 +3,7 @@ id: SESSION_SCRATCH_UNAVAILABLE
 kind: policy
 on: tool.rejected
 selector: {}
-requires_facts: [paintedwolf.path, paintedwolf.rejection_code]
+requires_facts: [paintedwolf.path, paintedwolf.private_temp, paintedwolf.rejection_code]
 when: paintedwolf.rejection_code == "SESSION_SCRATCH_UNAVAILABLE"
 effect: block
 x-paintedwolf-category: recoverable
@@ -12,10 +12,11 @@ message: Session scratch is unavailable in this chat
 what: 'Session scratch is unavailable in this chat, so {{ paintedwolf.path }} has no folder to resolve against.'
 cause: The host could not prepare this chat's scratch folder; the cause is in the host log.
 why: Scratch is a folder outside the project, so an @scratch path cannot fall back to another location.
-fix: Keep intermediate output in the tool result, or write to a temporary location such as /tmp. Do not move scratch files into the project.
+fix: 'Keep intermediate output in the tool result.{% if paintedwolf.private_temp %} A confined program can use its launch-local /tmp for files needed only during that launch.{% endif %}'
 instead: Branch on Code; never re-create scratch files inside an attached folder
 x-paintedwolf-scenarios:
   - id: default
     vars:
+      private_temp: false
       path: '@scratch/notes.txt'
       tool: read

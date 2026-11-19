@@ -1,8 +1,10 @@
 package confine
 
 import (
+	"github.com/lycaon/lycaon/internal/fspath"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 )
 
@@ -51,4 +53,46 @@ func packageCacheHomePath(home, relative string) string {
 		return ""
 	}
 	return filepath.Join(home, relative)
+}
+
+// SharedTempLocations returns the canonical machine temp directories.
+func SharedTempLocations() []string {
+	var locations []string
+	for _, path := range []string{"/tmp", "/var/tmp", os.TempDir(), platformUserTemp()} {
+		if !filepath.IsAbs(path) {
+			continue
+		}
+		location := fspath.CanonicalPath(path)
+		if location != "" && filepath.Dir(location) != location && !slices.Contains(locations, location) {
+			locations = append(locations, location)
+		}
+	}
+	return locations
+}
+
+// SharedTempLocation selects the narrowest location covering path.
+func SharedTempLocation(path string) string {
+	if !filepath.IsAbs(path) {
+		return ""
+	}
+	path = fspath.CanonicalPath(path)
+	var best string
+	for _, location := range SharedTempLocations() {
+		if len(location) > len(best) && PathAtOrUnder(path, location) {
+			best = location
+		}
+	}
+	return best
+}
+
+// WritableSharedTempLocations lists the shared locations covered by live write roots.
+func WritableSharedTempLocations(projectID string, grants []string) []string {
+	roots := append(slices.Clone(grants), grantedWriteRoots(projectID)...)
+	var allowed []string
+	for _, location := range SharedTempLocations() {
+		if PathWithinRoots(location, roots) {
+			allowed = append(allowed, location)
+		}
+	}
+	return allowed
 }

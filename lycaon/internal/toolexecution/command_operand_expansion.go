@@ -109,7 +109,7 @@ func sessionOperandReject(err error) *toolrejection.ToolReject {
 		if operandErr != nil && operandErr.Area == projectroot.VirtualOutputLabel {
 			code = tools.SessionOutputUnavailableCode
 		}
-		return &toolrejection.ToolReject{Code: code, Data: map[string]any{"path": operand}}
+		return &toolrejection.ToolReject{Code: code, Data: map[string]any{"path": operand, "private_temp": confine.Enforcing() && len(confine.PrivateTempFor("").Paths) > 0}}
 	}
 	if errors.Is(err, projectroot.ErrPathEscape) {
 		return &toolrejection.ToolReject{Code: "SURVEY_PATH_ESCAPE", Data: map[string]any{"path": operand, "reason": err.Error()}}

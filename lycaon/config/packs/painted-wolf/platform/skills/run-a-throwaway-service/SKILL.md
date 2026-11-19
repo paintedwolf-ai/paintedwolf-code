@@ -9,6 +9,8 @@ metadata:
 
 Use this workflow to give a task a real service it can safely break. The container engine is a local service on this device; on a process start that uses it, declare the resolved engine id (`docker` or `podman`) in `capability_request.host_resources`. Podman accepts the same command surface as Docker below.
 
+For a local PostgreSQL process, {% if private_temp %}the default socket under `/tmp` uses the session’s private temp mount.{% else %}{% if session_scratch_dir %}pass `-k "$SCRATCH_DIR"` to `postgres` and use the same folder for the client’s `-h` option.{% else %}use a loopback TCP connection if the socket folder is unavailable.{% endif %}{% endif %}
+
 ## Workflow
 
 1. Name what the task needs — engine, version, and configuration matching the target environment (the Postgres major matters; a mismatched version proves nothing).

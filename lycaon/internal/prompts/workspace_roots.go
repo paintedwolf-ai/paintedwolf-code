@@ -117,7 +117,7 @@ func rootsKickRows(roots []projectroot.RootRef, activeID string) []map[string]an
 }
 
 // PostureChangedKickNeeded reports whether a posture change alters whether
-// writes outside the project (including temporary and cache folders) ask first.
+// writes to standard cache folders require review.
 func PostureChangedKickNeeded(before, after gate.Posture) bool {
 	return before.ReviewsConfinedWrites() != after.ReviewsConfinedWrites()
 }

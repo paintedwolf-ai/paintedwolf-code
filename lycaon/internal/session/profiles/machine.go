@@ -2,6 +2,7 @@ package profiles
 
 import (
 	"context"
+	"github.com/lycaon/lycaon/internal/confine"
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/coordinator/inject"
@@ -112,6 +113,12 @@ func (m *Service) promptSurface(ctx context.Context, sess *api.Session, loaded [
 	if m == nil || sess == nil {
 		return out
 	}
+	out.PrivateTemp = confine.Enforcing() && len(confine.PrivateTempFor("").Paths) > 0
+	var grants []string
+	if m.SessionWriteRoots != nil {
+		grants = m.SessionWriteRoots(ctx, sess.ID, sess.ParentSessionID)
+	}
+	out.SharedTempLocations = confine.WritableSharedTempLocations(sess.ProjectID, grants)
 	out.Skills = agentSkillViews(loaded)
 	ambient := hostresources.ProjectAmbient(hostresources.AmbientInput{
 		Snapshot:        snapshot,

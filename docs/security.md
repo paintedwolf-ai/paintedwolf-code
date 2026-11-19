@@ -182,12 +182,16 @@ Third-party processes the host executes on the person's behalf (a local MCP serv
 
 | Direction | Default |
 |-----------|---------|
-| Writes | Admitted project roots, approved exact/tree grants, bounded temp/dev/cache locations, and declared host-managed scratch |
+| Writes | Admitted project roots, approved exact/tree grants, standard caches, package stores, device sinks, and declared host-managed scratch |
 | Reads | Broad enough for toolchains, with the app config tree and protected/sensitive locations separately controlled |
 | Symlinks | Followed only while descriptor-relative resolution remains inside the admitted root |
 | Signals | Same-boundary descendants, or the session's own processes through host-mediated process control |
 
 Default write roots derive from operating-system cache conventions rather than a list of programming ecosystems. Bounded exceptions name package stores within tool homes or Linux's data directory, plus Go's local telemetry counters; the exact set is in `confine/package_cache_roots.go`. Extracted packages there are the same risk class as conventional build caches. The surrounding tool homes and their install and `bin` directories are not roots, because programs installed there run outside the sandbox. A program installed under a writable cache or package store is the accepted cost of those defaults ([What stays quiet](#what-stays-quiet-and-why)).
+
+Linux mounts session scratch at `/tmp` and `/var/tmp`. Explicitly attached or reviewed subfolders keep their identity. Without scratch, a confined launch gets private temporary storage for its lifetime. On macOS these paths name machine directories. Programs that honor `TMPDIR` use session scratch on either platform.
+
+A failed foreground command that encounters a `shared_temp` write refusal submits the affected locations for chat-scoped review. The host reports each outcome and leaves the remaining work to the caller. A successful command raises no card and reports a tolerated refusal once per chat and location. Approval applies to future launches.
 
 On Linux, neither `XDG_DATA_HOME` (default `~/.local/share`) nor `XDG_STATE_HOME` (default `~/.local/state`) is a blanket write root. This keeps D-Bus activation services, user systemd units and their `*.wants` links, desktop entries and other launcher metadata outside the default boundary. Changing one requires an explicit grant; adding a newly discovered launcher does not require another deny rule. The engine and desktop app write their own data outside the agent subprocess boundary.
 
@@ -511,7 +515,7 @@ That catalog is two bundled detection packs, `key-material` and `credential-stor
 
 The managed browser renders untrusted pages under the same floors as any confined process (the protected, agent-policy, and control-plane write floors and the key-material read floor) while its own cache and profile directories stay writable.
 
-A writable root cannot equal or contain the app's state tree. Admitted folders, reviewed and durable grants, and session scratch pass that rule before launch; unsafe default temporary and cache roots are excluded. Canonical path comparison covers aliases, and the rule remains active when state reads are enabled. This prevents a program from moving the state tree by renaming an ancestor. Other broad folders may contain protected stores, but cannot be a store or lie inside it. Per-path floors remain independent: the control plane is refused, key material and credential stores need exact-path approval, and agent-policy writes need their own review. Native reads of catalogued protected locations remain reviewable even inside attached roots; a broad read-tree grant never covers them.
+A writable root cannot equal or contain the app's state tree. Admitted folders, reviewed and durable grants, and session scratch pass that rule before launch; unsafe default cache roots are excluded. Canonical path comparison covers aliases, and the rule remains active when state reads are enabled. This prevents a program from moving the state tree by renaming an ancestor. Other broad folders may contain protected stores, but cannot be a store or lie inside it. Per-path floors remain independent: the control plane is refused, key material and credential stores need exact-path approval, and agent-policy writes need their own review. Native reads of catalogued protected locations remain reviewable even inside attached roots; a broad read-tree grant never covers them.
 
 File-read cards offer host-approved ancestor directory scopes, beginning at the target's containing directory. Each scope has its own opaque option for every duration. Sensitive targets and all writes retain exact-path grants. Choosing a broader directory updates the host-authored coverage and never accepts a caller-written path.
 

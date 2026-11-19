@@ -39,6 +39,7 @@ type Service struct {
 	postureObserver       func(context.Context, string, gate.Posture)
 	externalObserver      func(context.Context, string, gate.Posture, bool)
 	commandExternalHidden func() bool
+	SessionWriteRoots     func(context.Context, string, string) []string
 	coordinatorProfile    func(context.Context, string) string
 }
 

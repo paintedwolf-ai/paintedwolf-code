@@ -9,6 +9,8 @@ metadata:
 
 Run the toolchain in `command` and declare its id (`android-sdk`, `flutter`, or `xcode`) in `capability_request.host_resources` on that call.
 
+{% if private_temp %}A confined toolchain’s fixed paths under `/tmp` use private temp storage.{% else %}{% if session_scratch_dir %}For an isolated Xcode build, pass `-derivedDataPath @scratch/DerivedData`.{% endif %} If a developer shim needs the system temp directory and fails, follow the host’s reported review outcome.{% endif %}
+
 ## Rules for every platform
 
 1. **Use the project's own entry point**: the Gradle wrapper, the Flutter project, the Xcode scheme. Discover real names before building (`xcodebuild -list`, `adb devices -l`, `xcrun simctl list devices available`, `flutter doctor`).

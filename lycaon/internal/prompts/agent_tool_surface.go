@@ -53,6 +53,8 @@ type AgentPromptSurface struct {
 	HostResourcesOmitted  int // rows the ambient budget dropped
 	Fingerprint           string
 	SessionScratchDir     string
+	PrivateTemp           bool
+	SharedTempLocations   []string
 	Posture               gate.Posture
 	CommandExternalHidden bool
 }
@@ -91,6 +93,9 @@ func AgentPromptSurfaceTemplateVars(surface AgentPromptSurface) map[string]any {
 		"agent_host_resources":         groupHostResources(surface.HostResources),
 		"agent_host_resources_omitted": surface.HostResourcesOmitted,
 		"prompt_surface_fingerprint":   surface.Fingerprint,
+		"private_temp":                 surface.PrivateTemp,
+		"shared_temp_writable":         len(surface.SharedTempLocations) > 0,
+		"shared_temp_locations":        surface.SharedTempLocations,
 		"session_scratch_dir":          surface.SessionScratchDir,
 		"reviews_confined_writes":      surface.Posture.ReviewsConfinedWrites(),
 		"command_external_hidden":      surface.CommandExternalHidden,

@@ -9,6 +9,8 @@ metadata:
 
 Use this workflow to run the project's own end-to-end suite and turn failures into evidence instead of noise. On a process start that runs the suite, declare `node` in `capability_request.host_resources`.
 
+{% if private_temp %}A confined browser’s fixed paths under `/tmp` use private temp storage.{% elif session_scratch_dir %}If the suite needs a persistent browser profile, give Playwright’s `launchPersistentContext` a fresh user data directory under `$SCRATCH_DIR`.{% endif %}
+
 ## Workflow
 
 1. Find the project's Playwright configuration and read it — projects, reporters, the `baseURL`, and whether a dev server is expected. Run against the target the config declares; if the `baseURL` is not a loopback address, stop and confirm with the user before running anything that submits forms or mutates state.
