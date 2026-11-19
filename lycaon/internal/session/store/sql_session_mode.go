@@ -86,21 +86,8 @@ func (s *sqlSessions) setModeLocked(ctx context.Context, id string, mode api.Ses
 		return nil, err
 	}
 	defer func() { _ = tx.Rollback() }()
-	q := core.queries.WithTx(tx)
-	root, err := resolveEffectiveModeSQL(ctx, q, id)
-	if err != nil {
-		return nil, err
-	}
-	if root.RootSessionID != id {
-		return nil, ErrChildSessionMode
-	}
-	if _, err := root.WithModeIntent(&mode); err != nil {
-		return nil, err
-	}
-	if err := putRootMode(ctx, core, tx, root, mode, root.Started); err != nil {
-		return nil, err
-	}
-	session, err := sessionModeSnapshot(ctx, q, id)
+	records := sqlModeRecords{core: core, tx: tx}
+	session, err := setModeSnapshot(ctx, records, id, mode)
 	if err != nil {
 		return nil, err
 	}
@@ -120,33 +107,28 @@ func (s *sqlSessions) AdmitModeInTx(ctx context.Context, tx *sql.Tx, id string, 
 }
 
 func admitModeSQL(ctx context.Context, s *sqlCore, tx *sql.Tx, id string, intent *api.SessionMode, validate func(api.SessionMode) error) error {
-	root, err := resolveEffectiveModeSQL(ctx, s.queries.WithTx(tx), id)
-	if err != nil {
-		return err
-	}
-	if intent != nil && root.RootSessionID != id {
-		return ErrChildSessionMode
-	}
-	mode, err := root.WithModeIntent(intent)
-	if err != nil {
-		return err
-	}
-	if validate != nil {
-		if err := validate(mode); err != nil {
-			return err
-		}
-	}
-	return putRootMode(ctx, s, tx, root, mode, true)
+	records := sqlModeRecords{core: s, tx: tx}
+	return applyModeIntent(ctx, records, id, intent, true, validate)
 }
 
-func putRootMode(ctx context.Context, s *sqlCore, tx *sql.Tx, root RootAuthority, mode api.SessionMode, started bool) error {
-	if root.Mode == mode && root.Started == started {
-		return nil
-	}
+type sqlModeRecords struct {
+	core *sqlCore
+	tx   *sql.Tx
+}
+
+func (r sqlModeRecords) ReadAuthority(ctx context.Context, id string) (RootAuthority, error) {
+	return resolveEffectiveModeSQL(ctx, r.core.queries.WithTx(r.tx), id)
+}
+
+func (r sqlModeRecords) StoreAuthority(ctx context.Context, root RootAuthority) error {
+	return putRootAuthority(ctx, r.core, r.tx, root)
+}
+
+func putRootAuthority(ctx context.Context, s *sqlCore, tx *sql.Tx, root RootAuthority) error {
 	q := s.queries.WithTx(tx)
 	if err := q.SetRootSessionMode(ctx, db.SetRootSessionModeParams{
-		ID: root.RootSessionID, Mode: db.NullString(string(mode)),
-		Started: int64(boolToInt(started)), UpdatedAt: timelayout.Format(time.Now().UTC()),
+		ID: root.RootSessionID, Mode: db.NullString(string(root.Mode)),
+		Started: int64(boolToInt(root.Started)), UpdatedAt: timelayout.Format(time.Now().UTC()),
 	}); err != nil {
 		return err
 	}
@@ -161,7 +143,8 @@ func putRootMode(ctx context.Context, s *sqlCore, tx *sql.Tx, root RootAuthority
 	return enqueueSessionEvent(ctx, s, tx, sess, api.SessionEventActionUpdated)
 }
 
-func sessionModeSnapshot(ctx context.Context, q *db.Queries, id string) (*api.Session, error) {
+func (r sqlModeRecords) SessionSnapshot(ctx context.Context, id string) (*api.Session, error) {
+	q := r.core.queries.WithTx(r.tx)
 	row, err := q.GetSession(ctx, id)
 	if err != nil {
 		return nil, err

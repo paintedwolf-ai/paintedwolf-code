@@ -26,7 +26,7 @@ func (sub *memorySubmissions) PutPromptSubmission(ctx context.Context, in Prompt
 		copy := current
 		return &copy, false, nil
 	}
-	if err := admitModeLocked(s, in.SessionID, in.Mode); err != nil {
+	if err := applyModeIntent(ctx, memoryModeRecords{s}, in.SessionID, in.Mode, true, nil); err != nil {
 		return nil, false, err
 	}
 	in.Mode = nil

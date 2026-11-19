@@ -17,10 +17,15 @@ func (s *Memory) ResolveEffectiveMode(ctx context.Context, id string) (RootAutho
 	}
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	return resolveEffectiveModeLocked(s.memoryCore, id)
+	return (memoryModeRecords{s.memoryCore}).ReadAuthority(ctx, id)
 }
 
-func resolveEffectiveModeLocked(s *memoryCore, id string) (RootAuthority, error) {
+type memoryModeRecords struct {
+	core *memoryCore
+}
+
+func (r memoryModeRecords) ReadAuthority(_ context.Context, id string) (RootAuthority, error) {
+	s := r.core
 	row := s.sessions[id]
 	if row == nil {
 		return RootAuthority{}, sessionModeUnavailable(id, ErrSessionNotFound)
@@ -51,40 +56,27 @@ func (s *memorySessions) SetMode(ctx context.Context, id string, mode api.Sessio
 	if core.sessions[id] == nil {
 		return nil, ErrSessionNotFound
 	}
-	root, err := resolveEffectiveModeLocked(core, id)
-	if err != nil {
-		return nil, err
-	}
-	if root.RootSessionID != id {
-		return nil, ErrChildSessionMode
-	}
-	if _, err := root.WithModeIntent(&mode); err != nil {
-		return nil, err
-	}
-	sess := core.sessions[id]
-	if mode != sess.Mode {
-		sess.Mode = mode
-		sess.UpdatedAt = time.Now().UTC()
-	}
-	return projectMemorySession(core, sess), nil
+	return setModeSnapshot(ctx, memoryModeRecords{core}, id, mode)
 }
 
-func admitModeLocked(s *memoryCore, id string, intent *api.SessionMode) error {
-	root, err := resolveEffectiveModeLocked(s, id)
-	if err != nil {
-		return err
-	}
-	if intent != nil && root.RootSessionID != id {
-		return ErrChildSessionMode
-	}
-	mode, err := root.WithModeIntent(intent)
-	if err != nil {
-		return err
-	}
-	row := s.sessions[root.RootSessionID]
-	if !row.Started || row.Mode != mode {
-		row.Mode, row.Started = mode, true
-		row.UpdatedAt = time.Now().UTC()
-	}
+func (r memoryModeRecords) StoreAuthority(_ context.Context, root RootAuthority) error {
+	row := r.core.sessions[root.RootSessionID]
+	row.Mode, row.Started = root.Mode, root.Started
+	row.UpdatedAt = time.Now().UTC()
 	return nil
+}
+
+func (r memoryModeRecords) SessionSnapshot(ctx context.Context, id string) (*api.Session, error) {
+	sess := r.core.sessions[id]
+	if sess == nil {
+		return nil, ErrSessionNotFound
+	}
+	view := *sess
+	view.UntrustedContent = r.core.untrustedRecords[id] > 0
+	view.CurrentTurn = currentUserTurnLocked(r.core, id)
+	view.Mode, view.Started = "", false
+	if root, err := r.ReadAuthority(ctx, id); err == nil {
+		view.Mode, view.Started = root.Mode, root.Started
+	}
+	return &view, nil
 }

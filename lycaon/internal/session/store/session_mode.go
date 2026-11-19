@@ -1,6 +1,7 @@
 package store
 
 import (
+	"context"
 	"errors"
 	"fmt"
 
@@ -36,6 +37,45 @@ func (a RootAuthority) WithModeIntent(intent *api.SessionMode) (api.SessionMode,
 		return "", ErrSessionModeLocked
 	}
 	return *intent, nil
+}
+
+// modeRecords uses the caller's transaction or memory lock for reads and writes.
+type modeRecords interface {
+	ReadAuthority(context.Context, string) (RootAuthority, error)
+	StoreAuthority(context.Context, RootAuthority) error
+	SessionSnapshot(context.Context, string) (*api.Session, error)
+}
+
+func setModeSnapshot(ctx context.Context, records modeRecords, id string, mode api.SessionMode) (*api.Session, error) {
+	if err := applyModeIntent(ctx, records, id, &mode, false, nil); err != nil {
+		return nil, err
+	}
+	return records.SessionSnapshot(ctx, id)
+}
+
+func applyModeIntent(ctx context.Context, records modeRecords, id string, intent *api.SessionMode, start bool, validate func(api.SessionMode) error) error {
+	root, err := records.ReadAuthority(ctx, id)
+	if err != nil {
+		return err
+	}
+	if intent != nil && root.RootSessionID != id {
+		return ErrChildSessionMode
+	}
+	mode, err := root.WithModeIntent(intent)
+	if err != nil {
+		return err
+	}
+	if validate != nil {
+		if err := validate(mode); err != nil {
+			return err
+		}
+	}
+	started := start || root.Started
+	if root.Mode == mode && root.Started == started {
+		return nil
+	}
+	root.Mode, root.Started = mode, started
+	return records.StoreAuthority(ctx, root)
 }
 
 func validSessionMode(mode api.SessionMode) bool {

@@ -116,7 +116,7 @@ func createMemorySession(ctx context.Context, s *memoryCore, ownerPersonID strin
 	if parentID == "" {
 		sess.RootSessionID, sess.Mode = sess.ID, mode
 	} else {
-		root, err := resolveEffectiveModeLocked(s, parentID)
+		root, err := (memoryModeRecords{s}).ReadAuthority(ctx, parentID)
 		if err != nil {
 			return nil, err
 		}
@@ -127,7 +127,7 @@ func createMemorySession(ctx context.Context, s *memoryCore, ownerPersonID strin
 		sess.RootSessionID, sess.WorkspacePath = root.RootSessionID, parent.WorkspacePath
 	}
 	s.sessions[sess.ID] = sess
-	return projectMemorySession(s, sess), nil
+	return (memoryModeRecords{s}).SessionSnapshot(ctx, sess.ID)
 }
 
 // Get returns a session by ID.
@@ -140,22 +140,7 @@ func (s *memorySessions) Get(ctx context.Context, id string) (*api.Session, erro
 	core.mu.RLock()
 	defer core.mu.RUnlock()
 
-	sess, ok := core.sessions[id]
-	if !ok {
-		return nil, ErrSessionNotFound
-	}
-	return projectMemorySession(core, sess), nil
-}
-
-func projectMemorySession(core *memoryCore, sess *api.Session) *api.Session {
-	view := *sess
-	view.UntrustedContent = core.untrustedRecords[sess.ID] > 0
-	view.CurrentTurn = currentUserTurnLocked(core, sess.ID)
-	view.Mode, view.Started = "", false
-	if root, err := resolveEffectiveModeLocked(core, sess.ID); err == nil {
-		view.Mode, view.Started = root.Mode, root.Started
-	}
-	return &view
+	return (memoryModeRecords{core}).SessionSnapshot(ctx, id)
 }
 
 // List returns all sessions.
@@ -169,8 +154,13 @@ func (s *memorySessions) List(ctx context.Context) ([]*api.Session, error) {
 	defer core.mu.RUnlock()
 
 	out := make([]*api.Session, 0, len(core.sessions))
-	for _, sess := range core.sessions {
-		out = append(out, projectMemorySession(core, sess))
+	records := memoryModeRecords{core}
+	for id := range core.sessions {
+		sess, err := records.SessionSnapshot(ctx, id)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, sess)
 	}
 	return out, nil
 }
