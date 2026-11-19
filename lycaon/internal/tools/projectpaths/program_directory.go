@@ -8,31 +8,19 @@ import (
 	"path/filepath"
 
 	"github.com/lycaon/lycaon/internal/fspath"
-	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/toolrejection"
 )
 
 // Directory is the frame's absolute logical working directory: the value
 // pwd prints, PWD holds and an external process starts in.
-func (p *ProgramPaths) Directory() string { return p.cwd.Resolved.programPath() }
-
-func (r Resolved) privateTempAddressed() bool {
-	return r.Root.ID == projectroot.VirtualScratchLabel && filepath.IsAbs(r.DisplayPath)
-}
-
-func (r Resolved) programPath() string {
-	if r.privateTempAddressed() {
-		return filepath.Clean(r.DisplayPath)
-	}
-	return filepath.Clean(r.Abs)
-}
+func (p *ProgramPaths) Directory() string { return filepath.Clean(p.cwd.Resolved.Abs) }
 
 // PreviousDirectory is OLDPWD: the directory the last successful cd left.
 func (p *ProgramPaths) PreviousDirectory() (string, bool) {
 	if !p.hasPrevious {
 		return "", false
 	}
-	return p.previous.Resolved.programPath(), true
+	return filepath.Clean(p.previous.Resolved.Abs), true
 }
 
 // Address converts an unquoted @label or @scratch word prefix to its native
@@ -116,7 +104,7 @@ func (p *ProgramPaths) Chdir(ctx context.Context, operand string, physical bool)
 	target := operand
 	if !physical {
 		if !filepath.IsAbs(target) && p.cwd.Resolved.Abs != "" {
-			target = p.Directory() + string(filepath.Separator) + target
+			target = p.cwd.Resolved.Abs + string(filepath.Separator) + target
 		}
 		target = filepath.Clean(target)
 	}

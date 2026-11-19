@@ -116,7 +116,6 @@ func (g *RuleApprovalGate) declaredFileTargets(action hitl.ProposedAction) []*ga
 		if pathWrite {
 			mode, catalogMode = gate.ModeWrite, sensitivepath.ModeWrite
 		}
-		path = actionFilePath(action, path)
 		target := &gate.FileTarget{
 			Path: path, Mode: mode,
 			OutsideRoots: PathEscapesRoots(roots, path),
@@ -161,23 +160,6 @@ func (g *RuleApprovalGate) declaredFileTargets(action hitl.ProposedAction) []*ga
 		}
 	}
 	return targets
-}
-
-// actionFilePath projects a declared file into the session mount view before review.
-func actionFilePath(action hitl.ProposedAction, path string) string {
-	if !action.Execution.Contained.Active() {
-		return path
-	}
-	if _, ok := confine.PrivateTempFor(action.Scope.SessionScratchRoot).Resolve(path); !ok {
-		return path
-	}
-	c := action.Execution.Contained
-	mapping := confine.ProjectPrivateTemp(action.Scope.ProjectID, action.Scope.SessionScratchRoot,
-		workspaceRoots(action), c.GrantedWriteRoots, append(append([]string(nil), c.ReadRoots...), action.Scope.SessionOutputRoot))
-	if backing, ok := mapping.Resolve(path); ok {
-		return backing
-	}
-	return path
 }
 
 func pathWithinFileAuthority(action hitl.ProposedAction, roots []string, path string, write bool) bool {

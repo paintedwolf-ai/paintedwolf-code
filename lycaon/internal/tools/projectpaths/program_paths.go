@@ -226,7 +226,7 @@ func (p *ProgramPaths) Bind(ctx context.Context, operand string, write bool) (Bo
 		}
 		_ = held.Close()
 		if !filepath.IsAbs(operand) {
-			addressed = p.Directory() + string(filepath.Separator) + operand
+			addressed = p.cwd.Resolved.Abs + string(filepath.Separator) + operand
 		}
 	}
 	var resolved Resolved
@@ -242,9 +242,6 @@ func (p *ProgramPaths) Bind(ctx context.Context, operand string, write bool) (Bo
 	identity, err := directoryIdentity(resolved.Root.Path)
 	if err != nil {
 		return BoundPath{}, err
-	}
-	if backing, mapped := tools.PrivateTempOperand(p.context, addressed); mapped {
-		addressed = backing
 	}
 	relative, err := exactRelativeOperand(resolved, addressed)
 	if err != nil && resolved.External {
@@ -419,9 +416,6 @@ func (p *ProgramPaths) nativePath(ctx context.Context, operand string, nul bool)
 		}
 	}
 	native := bound.Resolved.Abs
-	if bound.Resolved.privateTempAddressed() {
-		native = bound.Resolved.DisplayPath
-	}
 	if !nul && strings.HasSuffix(native, "\n") {
 		return "", invalidOperand(operand, "native path ending LF is not representable in scalar substitution")
 	}

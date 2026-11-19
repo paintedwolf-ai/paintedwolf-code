@@ -10,9 +10,6 @@ import (
 
 func SocketArgPath(tc ToolContext, raw string) string {
 	raw = strings.TrimSpace(raw)
-	if filepath.IsAbs(raw) {
-		return raw
-	}
 	if abs, err := ApprovalFilePath(tc, raw); err == nil {
 		return abs
 	}
@@ -21,9 +18,6 @@ func SocketArgPath(tc ToolContext, raw string) string {
 
 func ApprovalFilePath(tc ToolContext, path string) (string, error) {
 	if filepath.IsAbs(path) {
-		if backing, ok := PrivateTempOperand(tc, path); ok {
-			return backing, nil
-		}
 		return path, nil
 	}
 	if area, rel, ok := projectroot.SessionAddress(path); ok {

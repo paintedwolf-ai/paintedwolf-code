@@ -441,7 +441,6 @@ func controlPlaneDenyResult(action hitl.ProposedAction) *hitl.ApprovalResult {
 		if !filepath.IsAbs(path) {
 			continue
 		}
-		path = actionFilePath(action, path)
 		if confine.ControlPlanePathDenied(path, pathWrite, action.Scope.SessionScratchRoot, action.Scope.SessionOutputRoot) {
 			return &hitl.ApprovalResult{
 				Denied:      true,
