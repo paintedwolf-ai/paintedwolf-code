@@ -52,13 +52,10 @@ func (m *Recovery) RecoverOrphanedTurns(ctx context.Context) error {
 	}
 }
 
+// withdrawUnsettledDrafts is idempotent, so a session with several
+// recovering turns is simply visited again.
 func (m *Recovery) withdrawUnsettledDrafts(ctx context.Context, recovering []store.Turn) error {
-	seen := map[string]bool{}
 	for _, turn := range recovering {
-		if seen[turn.SessionID] {
-			continue
-		}
-		seen[turn.SessionID] = true
 		if err := m.transcript.WithdrawUnsettledDrafts(ctx, turn.SessionID); err != nil {
 			return err
 		}
