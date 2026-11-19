@@ -20,7 +20,7 @@ const initial: LocalGenerationStatus = { state: "idle", recovery_action: "none",
 const installed: LocalGenerationStatus = { ...initial, selected_model: "medium" };
 const progress: LocalGenerationStatus = { ...initial, state: "downloading", target_model: "medium", total_bytes: 200, downloaded_bytes: 100 };
 
-function mount(status = initial) {
+function mount(status = initial, setup = true) {
   const client = {
     getLocalModelStatus: vi.fn().mockResolvedValue(installed),
     selectLocalModel: vi.fn().mockResolvedValue(installed),
@@ -30,7 +30,7 @@ function mount(status = initial) {
   const done = vi.fn();
   const refresh = vi.fn().mockResolvedValue(undefined);
   render(() => <LocalModelSelector client={client as never} provider={includedProvider(status)}
-    onRefresh={refresh} onContinue={done} />);
+    onRefresh={refresh} onContinue={setup ? done : undefined} />);
   return { client, done, refresh };
 }
 
@@ -63,6 +63,14 @@ describe("Local model selection", () => {
     cleanup();
     mount({...partial, state: "opted_out"});
     expect((screen.getByRole("radio", {name: "Use no local model"}) as HTMLInputElement).checked).toBe(true);
+  });
+
+  it("offers no model by default when the only published tier exceeds device capacity", () => {
+    const {client} = mount({...initial, available_models: tiers.map(t => ({...t, download_available: !t.eligible}))});
+    expect((screen.getByRole("radio", {name: "Use no local model"}) as HTMLInputElement).checked).toBe(true);
+    expect((screen.getByRole("button", {name: "Continue without a local model"}) as HTMLButtonElement).disabled).toBe(false);
+    expect(client.selectLocalModel).not.toHaveBeenCalled();
+    expect(client.deleteLocalModel).not.toHaveBeenCalled();
   });
 
   it("waits for the accepted transfer to finish before advancing", async () => {
@@ -112,12 +120,12 @@ describe("Local model selection", () => {
   });
 
   it("allows signed offline imports when the tier has no download", async () => {
-    const { client, done } = mount({ ...initial, available_models: tiers.map(t => ({ ...t, download_available: false })) });
+    const { client, refresh } = mount({ ...initial, available_models: tiers.map(t => ({ ...t, download_available: false })) }, false);
     expect((screen.getByRole("button", { name: "Download unavailable" }) as HTMLButtonElement).disabled).toBe(true);
     vi.mocked(nativePathDialog).mockResolvedValue({ path: "/models/test.pwmodel", grant: null });
     fireEvent.click(screen.getByText("Import offline bundle"));
     fireEvent.click(screen.getByRole("button", { name: "Choose archive…" }));
-    await waitFor(() => expect(done).toHaveBeenCalledOnce());
+    await waitFor(() => expect(refresh).toHaveBeenCalledOnce());
     expect(client.selectLocalModel).toHaveBeenCalledWith("nativegen", { model: "medium", bundle_path: "/models/test.pwmodel" });
   });
 

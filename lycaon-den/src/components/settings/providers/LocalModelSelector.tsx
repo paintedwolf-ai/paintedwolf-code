@@ -36,8 +36,7 @@ export function LocalModelSelector(props: Props) {
   const suggested = () => {
     const recommended = tiers().find(t => t.eligible && t.recommended);
     if (props.onContinue && !recommended?.download_available) {
-      const published = tiers().find(t => t.eligible && t.download_available);
-      if (published) return published.id;
+      return tiers().find(t => t.eligible && t.download_available)?.id ?? "";
     }
     return recommended?.id ?? "";
   };
