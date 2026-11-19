@@ -1,7 +1,6 @@
 package confine
 
 import (
-	"os"
 	"path/filepath"
 	"runtime"
 	"sort"
@@ -18,8 +17,7 @@ func isWindowsAbsPath(path string) bool {
 }
 
 func osDefaultWriteRoots() []string {
-	standard := append([]string{"/tmp", "/private/tmp", "/var/tmp", "/private/var/tmp", os.TempDir()}, standardCacheDataRoots()...)
-	return append(standard, darwinUserRoots()...)
+	return append(standardCacheDataRoots(), platformUserCache())
 }
 
 // WriteRootsForBoundary is the write profile for one confinement: attached

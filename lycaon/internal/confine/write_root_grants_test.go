@@ -496,21 +496,17 @@ func TestWriteRootsForBoundaryIncludesSessionScratch(t *testing.T) {
 	}
 }
 
-func TestWriteRootsForBoundaryIncludesDarwinConfstrRootsWithOverriddenTMPDIR(t *testing.T) {
+func TestDarwinTempAndCacheWithOverriddenTMPDIR(t *testing.T) {
 	if runtime.GOOS != "darwin" {
-		t.Skip("confstr's per-user temporary roots exist only on macOS")
-	}
-	userRoots := darwinUserRoots()
-	if len(userRoots) == 0 {
-		t.Fatal("darwinUserRoots() returned no confstr roots on darwin")
+		t.Skip("Darwin confstr directories")
 	}
 	t.Setenv("TMPDIR", t.TempDir())
 	roots, err := WriteRootsForBoundary("", nil, nil, "")
 	testutil.FailErr(t, "admit write roots", err)
-	for _, root := range userRoots {
-		probe := filepath.Join(root, "xcrun_db-probe")
-		if !PathWithinRoots(probe, roots) {
-			t.Fatalf("darwin confstr root child %q not within WriteRootsForBoundary when TMPDIR is overridden: %v", probe, roots)
-		}
+	if temp := platformUserTemp(); temp == "" || SharedTempLocation(temp) == "" || PathWithinRoots(temp, roots) {
+		t.Fatalf("shared temp %q in boundary %v", temp, roots)
+	}
+	if cache := platformUserCache(); cache == "" || !PathWithinRoots(cache, roots) {
+		t.Fatalf("missing cache %q in boundary %v", cache, roots)
 	}
 }

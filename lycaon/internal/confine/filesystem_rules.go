@@ -23,6 +23,7 @@ type FloorLayer string
 const (
 	// FloorOutsideWriteRoots is the profile's default write deny.
 	FloorOutsideWriteRoots FloorLayer = "outside_write_roots"
+	FloorSharedTemp        FloorLayer = "shared_temp"
 	// FloorBaseline protects read-only roots and the host config ancestor.
 	// A validated reviewed root or managed workspace may override it.
 	FloorBaseline FloorLayer = "baseline"
@@ -50,6 +51,7 @@ type FloorGrant string
 const (
 	// GrantContainingDirectory asks for the directory that holds the path.
 	GrantContainingDirectory FloorGrant = "containing_directory"
+	GrantTempLocation        FloorGrant = "temp_location"
 	// GrantExactPath asks for the path itself.
 	GrantExactPath FloorGrant = "exact_path"
 	// GrantRepositoryTree asks for the nearest enclosing repository work tree,
@@ -77,7 +79,7 @@ func (r FloorRecovery) Terminal() bool { return r.Capability == "" }
 // FloorLayers returns every layer a filesystem verdict can report.
 func FloorLayers() []FloorLayer {
 	return []FloorLayer{
-		FloorOutsideWriteRoots, FloorBaseline, FloorProtected, FloorAgentPolicy, FloorControlPlane,
+		FloorOutsideWriteRoots, FloorSharedTemp, FloorBaseline, FloorProtected, FloorAgentPolicy, FloorControlPlane,
 		FloorReadConfigured, FloorReadKeyMaterial, FloorReadCredentialStore, FloorReadControlPlane,
 	}
 }
@@ -85,6 +87,8 @@ func FloorLayers() []FloorLayer {
 // Recovery returns the route from this layer's deny to an ask.
 func (l FloorLayer) Recovery() FloorRecovery {
 	switch l {
+	case FloorSharedTemp:
+		return FloorRecovery{Capability: "write_root", Grant: GrantTempLocation}
 	case FloorOutsideWriteRoots:
 		return FloorRecovery{Capability: "write_root", Grant: GrantRepositoryTree}
 	case FloorBaseline:
@@ -105,6 +109,8 @@ func (l FloorLayer) Recovery() FloorRecovery {
 // GrantPath is the path a recovery names for a denied path below roots.
 func (r FloorRecovery) GrantPath(path string, roots ...string) string {
 	switch r.Grant {
+	case GrantTempLocation:
+		return SharedTempLocation(path)
 	case GrantContainingDirectory:
 		return filepath.Dir(path)
 	case GrantRepositoryTree:
@@ -277,6 +283,9 @@ func (r FilesystemRules) Verdict(access FilesystemAccess, path string) FloorVerd
 			}
 			break
 		}
+	}
+	if verdict.Layer == FloorOutsideWriteRoots && SharedTempLocation(path) != "" {
+		verdict.Layer = FloorSharedTemp
 	}
 	return verdict
 }

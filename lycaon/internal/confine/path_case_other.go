@@ -72,4 +72,5 @@ func flipASCIICase(name string) string {
 	return name
 }
 
-func darwinUserRoots() []string { return nil }
+func platformUserTemp() string  { return "" }
+func platformUserCache() string { return "" }
