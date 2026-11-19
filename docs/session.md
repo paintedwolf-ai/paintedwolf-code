@@ -12,7 +12,8 @@ In Den, a new chat opens in the mode you last started a chat with on this
 device. Fresh installs start in Agent. Choose Agent or Ask inside the composer
 before the first prompt or workflow start. When you send an idea from Home, use
 the control inside the idea box. Opening a folder, cloning a repository, and
-starting a new session from Crossbar take you to the chat composer.
+starting a new session from Crossbar take you to the chat composer. New chats
+created through the API default to Agent unless the caller chooses Ask.
 
 The host records your mode at first admission. An Ask chat can switch to Agent
 once. This upgrade leaves your default for new chats as it was. Rewinding the
