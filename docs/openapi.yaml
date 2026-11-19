@@ -39097,6 +39097,12 @@ components:
           type: integer
           minimum: 0
           description: Admitted context capacity of the ready process.
+        memory_kind:
+          type: string
+          enum:
+            - system
+            - gpu
+          description: Memory named in local model requirements on this generation host.
         selected_model:
           type: string
         target_model:

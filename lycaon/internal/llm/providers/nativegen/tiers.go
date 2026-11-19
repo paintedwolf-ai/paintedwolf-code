@@ -15,9 +15,9 @@ type tier struct {
 }
 
 var tiers = [...]tier{
-	{DefaultModelID, "Plain Bialy", "The smallest model. Leaves the most memory for other apps.", 8 << 30, 8 << 30, 5 << 30, 8 << 30, 8 << 30},
-	{"gemma4-12b-paintedwolf", "Poppy Bialy", "A mid-sized model for everyday coding.", 16 << 30, 24 << 30, 8 << 30, 12 << 30, 16 << 30},
-	{"gemma4-26b-paintedwolf", "Egg and Cheese Bialy", "The largest model, for workstations with more memory.", 24 << 30, 32 << 30, 15 << 30, 16 << 30, 24 << 30},
+	{DefaultModelID, "Small", "Leaves the most memory for your other apps.", 8 << 30, 8 << 30, 5 << 30, 8 << 30, 8 << 30},
+	{"gemma4-12b-paintedwolf", "Medium", "A balance of model size and memory use for everyday coding.", 16 << 30, 24 << 30, 8 << 30, 12 << 30, 16 << 30},
+	{"gemma4-26b-paintedwolf", "Large", "The most parameters, for devices with more memory.", 24 << 30, 32 << 30, 15 << 30, 16 << 30, 24 << 30},
 }
 
 //go:embed release-pins.json

@@ -11,8 +11,8 @@ Product vs engine names, and one functional id per concept.
 | Name | Use |
 |------|-----|
 | **Painted Wolf Code** | **Product name** — desktop app + local sidecar experience shipped to users |
-| **Bialy** | Local model family. The decision engine (`bialy`) is built on Laya. |
-| **Plain Bialy**, **Poppy Bialy**, **Egg and Cheese Bialy** | Downloadable generation models based on Gemma 4 E4B, 12B and 26B-A4B respectively. |
+| **Bialy** | Local decision engine (`bialy`), built on Laya. |
+| **Small**, **Medium**, **Large** | Downloadable generation models based on Gemma 4 E4B, 12B and 26B-A4B respectively. |
 | **Painted Wolf Code SDK** | **Workflow customization SDK** — `pw workflow validate`, schemas, `.paintedwolf/` authoring |
 | **Lycaon** | **Engine codename** — Go module path, `lycaon serve`, and the `lycaon/` · `lycaon-den/` source directories. Not the repository name |
 | **`lycaon-den/`** | **Repo directory** for the Tauri frontend — not a user-facing product name |
