@@ -57,7 +57,15 @@ func TestNativePathRefusalsNameNoProjectRoot(t *testing.T) {
 	type tool interface {
 		Run(ctx context.Context, args map[string]any, tctx tools.ToolContext) (string, error)
 	}
-	for _, path := range []string{filepath.Join("..", "outside", "secret.txt"), filepath.Join("link", "secret.txt"), target} {
+	// The absolute target lies outside the project, scratch and every default write root.
+	home, err := os.UserHomeDir()
+	testutil.FailErr(t, "read home directory", err)
+	absOutside, err := os.MkdirTemp(home, ".pw-native-refusal-")
+	testutil.FailErr(t, "create home folder", err)
+	t.Cleanup(func() { _ = os.RemoveAll(absOutside) })
+	absTarget := filepath.Join(absOutside, "secret.txt")
+	testutil.FailErr(t, "write home target", os.WriteFile(absTarget, []byte("outside"), 0o644))
+	for _, path := range []string{filepath.Join("..", "outside", "secret.txt"), filepath.Join("link", "secret.txt"), absTarget} {
 		for name, run := range map[string]func() error{
 			"write": func() error {
 				_, err := (&WriteTool{Boundary: boundary}).Run(t.Context(), map[string]any{"path": path, "content": "x"}, nativefixture.AgentContext(projectDir, "implement"))
@@ -82,7 +90,9 @@ func TestNativePathRefusalsNameNoProjectRoot(t *testing.T) {
 			}
 		}
 	}
-	if data, err := os.ReadFile(target); err != nil || string(data) != "outside" {
-		t.Fatalf("outside file = %q, %v", data, err)
+	for _, file := range []string{target, absTarget} {
+		if data, err := os.ReadFile(file); err != nil || string(data) != "outside" {
+			t.Fatalf("outside file %s = %q, %v", file, data, err)
+		}
 	}
 }
