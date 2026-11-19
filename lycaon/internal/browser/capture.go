@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"net/url"
 	"strings"
-	"time"
 
 	"github.com/go-rod/rod"
 	"github.com/go-rod/rod/lib/proto"
@@ -412,7 +411,7 @@ func injectDriver(page *rod.Page) error {
 }
 
 func driverCall(page *rod.Page, method string, args map[string]any) ([]byte, error) {
-	ctx, cancel := pageOperationContext(page.GetContext(), page, driverBudget(args))
+	ctx, cancel := pageOperationContext(page.GetContext(), page, ActionTimeout)
 	defer cancel()
 	page = page.Context(ctx)
 	js, evalArgs, err := driverCallScript(method, args)
@@ -424,7 +423,6 @@ func driverCall(page *rod.Page, method string, args map[string]any) ([]byte, err
 	if err := page.WaitLoad(); err != nil {
 		return nil, err
 	}
-	started := time.Now()
 	res, err := page.Eval(js, evalArgs...)
 	if err != nil {
 		return nil, err
@@ -432,19 +430,7 @@ func driverCall(page *rod.Page, method string, args map[string]any) ([]byte, err
 	if res == nil {
 		return []byte("null"), nil
 	}
-	return driverResult(method, res.Value.Val(), args, time.Since(started))
-}
-
-// driverResult encodes a driver call's value; a failed call also reports the
-// deadline it ran under, how long it ran and whether the deadline ran out.
-func driverResult(method string, value any, args map[string]any, elapsed time.Duration) ([]byte, error) {
-	deadline, _ := args["timeout_ms"].(int)
-	if failed, ok := value.(map[string]any); ok && failed["ok"] == false && deadline > 0 {
-		failed["deadline_ms"] = deadline
-		failed["elapsed_ms"] = elapsed.Milliseconds()
-		failed["deadline_expired"] = elapsed >= time.Duration(deadline)*time.Millisecond
-	}
-	return marshalDriverResult(method, value)
+	return marshalDriverResult(method, res.Value)
 }
 
 func marshalDriverResult(method string, value any) ([]byte, error) {

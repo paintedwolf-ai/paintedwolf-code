@@ -250,7 +250,7 @@ func checkTypedLength(value string) error {
 // focusField presses the target field so it takes focus the way a reader's click gives it.
 func focusField(page *rod.Page, drive *pageDrive, act CaptureAction) (aimResult, json.RawMessage, error) {
 	opts := act.driverArgs()
-	raw, err := driverCall(page, "aimField", withTimeout(opts, targetTimeoutMS))
+	raw, err := driverCall(page, "aimField", withTimeout(opts, act.TimeoutMS))
 	if err != nil || !driverOK(raw) {
 		return aimResult{}, raw, err
 	}
