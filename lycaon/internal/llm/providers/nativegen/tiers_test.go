@@ -72,7 +72,7 @@ func TestTransferAdmissionAndCancellation(t *testing.T) {
 		t.Fatal("started overlapping import")
 	}
 	rt.SelectionStatus(&status)
-	if status.State != "downloading" || status.TargetModel != req.Model {
+	if status.State != "downloading" || status.TargetModel != req.Model || status.TransferPhase != "preparing" {
 		t.Fatalf("transfer status: %+v", status)
 	}
 	testutil.FailErr(t, "cancel import", rt.CancelTransfer(t.Context()))

@@ -4311,9 +4311,11 @@ type LocalGenerationStatus struct {
 	// Authenticated revision held by the admitted model process.
 	Revision string `json:"revision,omitempty"`
 	// Admitted context capacity of the ready process.
-	ContextTokens   int    `json:"context_tokens,omitempty"`
-	SelectedModel   string `json:"selected_model,omitempty"`
-	TargetModel     string `json:"target_model,omitempty"`
+	ContextTokens int    `json:"context_tokens,omitempty"`
+	SelectedModel string `json:"selected_model,omitempty"`
+	TargetModel   string `json:"target_model,omitempty"`
+	// Current phase of an active model installation.
+	TransferPhase   string `json:"transfer_phase,omitempty"`
 	DownloadedBytes int    `json:"downloaded_bytes,omitempty"`
 	TotalBytes      int    `json:"total_bytes,omitempty"`
 	// This installation was packaged with an explicitly selected offline tier.
@@ -4334,8 +4336,10 @@ type LocalModelSelectionRequest struct {
 
 // LocalModelTier
 type LocalModelTier struct {
-	ID                string `json:"id"`
-	DisplayName       string `json:"display_name"`
+	ID          string `json:"id"`
+	DisplayName string `json:"display_name"`
+	// Short guidance for choosing this tier.
+	Description       string `json:"description"`
 	DownloadBytes     int    `json:"download_bytes"`
 	MinMemoryBytes    int    `json:"min_memory_bytes"`
 	Eligible          bool   `json:"eligible"`
