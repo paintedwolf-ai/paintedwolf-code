@@ -1,12 +1,11 @@
-// Ollama discovery for mock E2E runs: one tool-capable model, no inference.
-// Writes the bound port to MODEL_FIXTURE_PORT_FILE once it is listening.
+// Model discovery for manual test completions.
 const portFile = process.env.MODEL_FIXTURE_PORT_FILE;
 if (!portFile) {
   throw new Error("MODEL_FIXTURE_PORT_FILE is required");
 }
 
 const server = Bun.serve({
-  hostname: "127.0.0.1",
+  hostname: process.env.MODEL_FIXTURE_HOST ?? "127.0.0.1",
   port: Number(process.env.MODEL_FIXTURE_PORT ?? 0),
   fetch(request) {
     const path = new URL(request.url).pathname;

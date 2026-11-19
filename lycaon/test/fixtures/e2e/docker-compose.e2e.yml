@@ -5,27 +5,16 @@ services:
   model-fixture:
     image: oven/bun:1.3.14
     network_mode: ${LYCAON_E2E_NETWORK_MODE:-}
+    volumes:
+      - type: bind
+        source: ${LYCAON_REPO_ROOT}/scripts/e2e/model-fixture.ts
+        target: /fixture/model-fixture.ts
+        read_only: true
     environment:
-      LISTEN_HOST: ${LYCAON_E2E_LISTEN_HOST:-0.0.0.0}
-      LISTEN_PORT: ${LYCAON_E2E_MODEL_FIXTURE_PORT:-11434}
-    command:
-      - bun
-      - -e
-      - |
-        Bun.serve({
-          hostname: process.env.LISTEN_HOST,
-          port: Number(process.env.LISTEN_PORT),
-          fetch(request) {
-            const path = new URL(request.url).pathname;
-            if (request.method === "GET" && path === "/api/tags") {
-              return Response.json({models: [{name: "mock-model"}]});
-            }
-            if (request.method === "POST" && path === "/api/show") {
-              return Response.json({capabilities: ["completion", "tools"]});
-            }
-            return new Response("not found", {status: 404});
-          },
-        });
+      MODEL_FIXTURE_HOST: ${LYCAON_E2E_LISTEN_HOST:-0.0.0.0}
+      MODEL_FIXTURE_PORT: ${LYCAON_E2E_MODEL_FIXTURE_PORT:-11434}
+      MODEL_FIXTURE_PORT_FILE: /tmp/model-fixture.port
+    command: [bun, /fixture/model-fixture.ts]
 
   # The engine runs reads through the native document core; build it for Linux.
   document-core:
