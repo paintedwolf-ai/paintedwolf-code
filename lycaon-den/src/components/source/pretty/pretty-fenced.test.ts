@@ -1,7 +1,9 @@
+// @vitest-environment jsdom
 import { indentUnit } from "@codemirror/language";
 import { EditorState } from "@codemirror/state";
 import { describe, expect, it } from "vitest";
 import { languageExtensionForPath } from "../editor/codemirror-lang.ts";
+import { finishFixtureParsing } from "../../../test/codemirror-parsing-fixture.ts";
 import { createPrettyExtension } from "./pretty-layout.ts";
 import { prettyLayoutDecorations } from "./pretty-view.ts";
 
@@ -31,26 +33,17 @@ describe("Markdown fenced code improvements", () => {
       `      const x = { a: "${"v".repeat(250)}", b: [1, 2, 3] };`,
       "      ```",
     ].join("\n");
-    const state = EditorState.create({
-      doc,
-      extensions: mdExtensions,
-    });
+    const state = finishFixtureParsing(EditorState.create({ doc, extensions: mdExtensions }));
     expect(breakCount(state)).toBeGreaterThan(2);
   });
 
   it("lays out JSON containers inside unlabelled fences while leaving prose fences untouched", () => {
     const jsonDoc = ["```", '{"a":1,"b":{"c":2}}', "```"].join("\n");
-    const jsonState = EditorState.create({
-      doc: jsonDoc,
-      extensions: mdExtensions,
-    });
+    const jsonState = finishFixtureParsing(EditorState.create({ doc: jsonDoc, extensions: mdExtensions }));
     expect(breakCount(jsonState)).toBeGreaterThan(0);
 
     const proseDoc = ["```", "+---+   +---+", "| A |-->| B |", "+---+   +---+", "```"].join("\n");
-    const proseState = EditorState.create({
-      doc: proseDoc,
-      extensions: mdExtensions,
-    });
+    const proseState = finishFixtureParsing(EditorState.create({ doc: proseDoc, extensions: mdExtensions }));
     expect(breakCount(proseState)).toBe(0);
   });
 });
