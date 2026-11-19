@@ -14,6 +14,7 @@ import (
 	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/session/verification"
 	"github.com/lycaon/lycaon/internal/settings"
+	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/pkg/api"
@@ -29,7 +30,8 @@ func (s stubVerifyConfig) VerifyTestCommand(string) string { return s.cmd }
 func verifyGateHarness(t *testing.T, declared string) (*Host, *api.Session, []api.Message) {
 	t.Helper()
 	ctx := context.Background()
-	mgr := NewHost(store.NewMemory(), Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
+	memory := store.NewMemory()
+	mgr := NewHost(memory, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
 	mgr.SetDataDir(t.TempDir())
 	mgr.Verification.SetEvidenceStore(inspector.NewJSONLStore(inspector.DefaultEvidenceDir))
 	mgr.Verification.SetRevisionSource(func(_ context.Context, root string) (string, string) {
@@ -38,12 +40,9 @@ func verifyGateHarness(t *testing.T, declared string) (*Host, *api.Session, []ap
 	if declared != "" {
 		mgr.Verification.SetVerifyConfig(stubVerifyConfig{cmd: declared})
 	}
-	sess, err := mgr.Coordinator.Context.Sessions.(Store).Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, "")
-	if err != nil {
-		t.Fatalf("create session: %v", err)
-	}
-	sess.ProjectID = "verify-proj"
-	sess.WorkspacePath = t.TempDir()
+	sess, err := memory.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, "verify-proj")
+	testutil.FailErr(t, "create verify session", err)
+	sess.WorkspacePath = testdbseed.OrchestrationWorkspace(t, memory, sess)
 	history := []api.Message{{Role: api.MessageRoleUser, Content: "do the work", CreatedAt: time.Now().Add(-time.Minute)}}
 	return mgr, sess, history
 }
@@ -241,7 +240,7 @@ func TestWorkflowSourceVerifyPassedReadsCurrentSessionEvidence(t *testing.T) {
 	})
 	sess, err := memory.Create(ctx, api.CreateSessionRequest{ProjectID: "verify-proj"}, "verify-proj")
 	testutil.FailErr(t, "create verify session", err)
-	sess.WorkspacePath = t.TempDir()
+	sess.WorkspacePath = testdbseed.OrchestrationWorkspace(t, memory, sess)
 	testutil.FailErr(t, "append user boundary", memory.AppendMessages(ctx, sess.ID, api.Message{
 		ID: "user-1", Role: api.MessageRoleUser, Content: "fix it", CreatedAt: time.Now().Add(-time.Minute),
 	}))
