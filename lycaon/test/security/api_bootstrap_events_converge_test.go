@@ -40,7 +40,7 @@ const (
 // events after k equals a fresh bootstrap and the whole stored transcript,
 // for a subscriber that stays and one that resumes; a subscriber that watched
 // from the start agrees with both. A cursor that left the replay window, and a
-// write whose event is the bootstrap's cursor, are fixed cases.
+// stream resumed at a bootstrap taken right after a write, are fixed cases.
 func TestBootstrapPlusEventsConverges(t *testing.T) {
 	// Every generated case creates two chats; admission limits are their own contract.
 	t.Setenv("LYCAON_RATE_SESSIONS_PER_MIN", "100000000")
@@ -143,7 +143,7 @@ func TestBootstrapPlusEventsConverges(t *testing.T) {
 		world.requireConverged(chat, stateFromBootstrap(boot).apply(chat, world.sync(stream)))
 	})
 
-	t.Run("a write whose event is the bootstrap's cursor is not delivered again", func(t *testing.T) {
+	t.Run("a stream resumed at the bootstrap's cursor delivers only later events", func(t *testing.T) {
 		world := world.on(t)
 		chat := CreateSessionForProjectHTTP(t, h.Server, project.ID, wire.SessionPostureBuild).ID
 		atCut := world.append(chat)
@@ -157,10 +157,13 @@ func TestBootstrapPlusEventsConverges(t *testing.T) {
 		after := world.append(chat)
 		world.settle()
 		delivered := world.sync(stream)
+		cut, ok := cursorSequence(boot.EventCursor)
+		if !ok {
+			t.Fatalf("the bootstrap names an unreadable cursor %q", boot.EventCursor)
+		}
 		for _, env := range delivered {
-			var ev wire.MessageEvent
-			if env.Topic == wire.EventTopicMessage && json.Unmarshal(env.Data, &ev) == nil && ev.Message.ID == atCut {
-				t.Fatalf("message %s, inside the bootstrap, was delivered again after its cursor", atCut)
+			if sequence, _ := cursorSequence(env.Cursor); sequence <= cut {
+				t.Fatalf("%s event at cursor %d, inside the bootstrap at %d, was delivered again", env.Topic, sequence, cut)
 			}
 		}
 		folded := stateFromBootstrap(boot).apply(chat, delivered)
@@ -518,17 +521,26 @@ func lastCursor(envelopes []wire.EventEnvelope, fallback string) string {
 func requireIncreasingCursors(rt *rapid.T, who string, envelopes []wire.EventEnvelope) {
 	var previous uint64
 	for i, env := range envelopes {
-		payload, _, _ := strings.Cut(env.Cursor, ".")
-		raw, err := base64.RawURLEncoding.DecodeString(payload)
-		var cursor struct {
-			Sequence uint64 `json:"s"`
-		}
-		if err != nil || json.Unmarshal(raw, &cursor) != nil {
+		sequence, ok := cursorSequence(env.Cursor)
+		if !ok {
 			rt.Fatalf("%s: event %d carries an unreadable cursor %q", who, i, env.Cursor)
 		}
-		if cursor.Sequence <= previous {
-			rt.Fatalf("%s: event %d cursor %d does not follow %d", who, i, cursor.Sequence, previous)
+		if sequence <= previous {
+			rt.Fatalf("%s: event %d cursor %d does not follow %d", who, i, sequence, previous)
 		}
-		previous = cursor.Sequence
+		previous = sequence
 	}
+}
+
+// cursorSequence reads the hub sequence a cursor names.
+func cursorSequence(cursor string) (uint64, bool) {
+	payload, _, _ := strings.Cut(cursor, ".")
+	raw, err := base64.RawURLEncoding.DecodeString(payload)
+	var decoded struct {
+		Sequence uint64 `json:"s"`
+	}
+	if err != nil || json.Unmarshal(raw, &decoded) != nil {
+		return 0, false
+	}
+	return decoded.Sequence, true
 }
