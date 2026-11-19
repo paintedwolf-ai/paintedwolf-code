@@ -415,9 +415,9 @@ export function HomeView(props: Props) {
                 }}
               />
             </Scrollport>
-            <Show when={ideaMode.mode()}>
+            <ShowLatest when={ideaMode.mode()}>
               {(mode) => <SessionModeSwitch mode={mode()} disabled={props.submitting} onSelect={ideaMode.select} />}
-            </Show>
+            </ShowLatest>
             <button
               type="button"
               class="home-view__idea-send"

@@ -169,6 +169,8 @@ describe("HomeView draft materialization", () => {
     const ask = screen.getByRole("radio", { name: "Ask" });
     const agent = screen.getByRole("radio", { name: "Agent" });
     expect(group.nextElementSibling).toBe(screen.getByTestId("home-idea-send"));
+    const thumb = group.querySelector(".den-browse-segment-thumb");
+    expect(thumb).not.toBeNull();
 
     const press = (segment: HTMLElement) => {
       const event = new Event("pointerdown", { bubbles: true, cancelable: true });
@@ -181,6 +183,8 @@ describe("HomeView draft materialization", () => {
     press(ask);
     expect(document.activeElement).toBe(input);
     expect(screen.getByTestId("home-idea-input")).toBe(input);
+    expect(screen.getByRole("radiogroup", { name: "Session mode" })).toBe(group);
+    expect(group.querySelector(".den-browse-segment-thumb")).toBe(thumb);
     expect(input.placeholder).toBe("Describe your idea…");
     expect(input.hasAttribute("data-hint-out")).toBe(true);
     vi.advanceTimersByTime(120);

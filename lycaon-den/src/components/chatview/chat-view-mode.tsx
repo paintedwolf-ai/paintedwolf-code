@@ -1,10 +1,11 @@
-import { createEffect, createMemo, createSignal, on, onCleanup, Show, type Accessor } from "solid-js";
+import { createEffect, createMemo, createSignal, on, onCleanup, type Accessor } from "solid-js";
 import type { LycaonClient } from "../../api/client.ts";
 import type { SessionMode } from "../../api/types.ts";
 import { captureInitialSessionMode, sessionModeView, setDraftSessionMode } from "../../chat/session/session-mode-state.ts";
 import { upgradeSessionMode } from "../../chat/session/session-mode-upgrade.ts";
 import { prefersReducedMotion } from "../../platform/interaction/reduced-motion.ts";
 import type { AppStore } from "../../store/app-state-model.ts";
+import { ShowLatest } from "../primitives/ShowLatest.tsx";
 import { SessionModeSwitch } from "./SessionModeSwitch.tsx";
 import { SESSION_MODE_UPGRADE_REFUSAL } from "./session-mode-copy.ts";
 
@@ -74,7 +75,7 @@ function ComposerModeControl(props: ModeControlProps) {
   ));
 
   return (
-    <Show when={mounted() && selection().mode}>
+    <ShowLatest when={mounted() && selection().mode}>
       {(mode) => (
         <SessionModeSwitch
           ref={(node) => { element = node; }}
@@ -88,7 +89,7 @@ function ComposerModeControl(props: ModeControlProps) {
           }}
         />
       )}
-    </Show>
+    </ShowLatest>
   );
 }
 

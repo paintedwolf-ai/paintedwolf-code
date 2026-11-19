@@ -293,7 +293,9 @@ export function createChatViewComposer(props: ChatViewProps, options: ComposerOp
                       role="status"
                     >
                       <span class="den-workflow-arm-chip__label">
-                        {armed.label} — {armedNeedsAgent() ? WORKFLOW_NEEDS_AGENT : "send to start"}
+                        {armed.label} — <Show when={armedNeedsAgent()} fallback="send to start">
+                          {WORKFLOW_NEEDS_AGENT}
+                        </Show>
                       </span>
                       <button
                         type="button"

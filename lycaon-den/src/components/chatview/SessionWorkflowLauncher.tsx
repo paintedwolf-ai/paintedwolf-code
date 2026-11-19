@@ -69,7 +69,9 @@ export function SessionWorkflowLauncher(props: Props) {
                   <span class="den-session-launcher__tile-title">{tile.title}</span>
                   <Show when={disabled()}>
                     <span class="den-workflow-needs-badge" data-needs-agent={needsAgent() ? "" : undefined}>
-                      {needsAgent() ? NEEDS_AGENT_BADGE : "Needs repo"}
+                      <Show when={needsAgent()} fallback="Needs repo">
+                        {NEEDS_AGENT_BADGE}
+                      </Show>
                     </span>
                   </Show>
                 </span>
