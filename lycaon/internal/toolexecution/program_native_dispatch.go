@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"slices"
 	"strings"
+	"sync"
 
 	"github.com/lycaon/lycaon/internal/approvaloutcome"
 	"github.com/lycaon/lycaon/internal/capabilityrequest"
@@ -36,19 +37,20 @@ type NativeInvocationResult struct {
 	Producer          toolcontract.ProducerResult
 }
 
-// NativeEffectStart commits the existing invocation owner's start fact before
-// any typed owner executes. Failure prevents dispatch. Settlement remains with
-// the recorder and cannot overwrite the returned domain outcome.
-type NativeEffectStart interface {
+// NativeAdmissionObserver records a child's admission transitions.
+type NativeAdmissionObserver interface {
 	BeforeNativeOwner(context.Context, toolcontract.BoundOperation, string, toolcontract.ReviewedOperationInputs) error
+	BeforeNativeApprovalWait(context.Context, toolcontract.BoundOperation, string)
 }
 
 // PreparedNativeEffect binds actual reviewed/resolved inputs into one complete
 // typed owner operation. Preparation parses/binds only; it performs no program
 // mutation, external launch or egress. Embedded programs are classified here.
 type PreparedNativeEffect struct {
-	Operation   toolcontract.BoundOperation
-	InvokeOwner func(context.Context, tools.ToolContext, commandprogram.Streams) (toolcontract.ProducerResult, error)
+	Operation toolcontract.BoundOperation
+	// CheckAdmission validates reviewed inputs without touching owner data.
+	CheckAdmission func(context.Context) error
+	InvokeOwner    func(context.Context, tools.ToolContext, commandprogram.Streams) (toolcontract.ProducerResult, error)
 	// DisclosedArgv is the one concrete source-disclosure transition. The
 	// source was admitted for reading; newly parsed path targets still require
 	// their own boundary before this owner can run.
@@ -66,6 +68,7 @@ type NativeEffect struct {
 	Arguments       map[string]any
 	Argv            *commandprogram.ArgvReview
 	Streams         commandprogram.Streams
+	CheckOutputs    func(context.Context) error
 	PrepareReviewed func(context.Context, map[string]any, tools.ToolContext) (PreparedNativeEffect, error)
 }
 
@@ -74,7 +77,7 @@ type NativeEffect struct {
 // A held review keeps the same child identity; a fresh invocation uses a new one.
 //
 //nolint:funlen // Linear reached-effect admission, review, and receipt settlement pipeline.
-func (e *Executor) InvokeNative(ctx context.Context, frame ProgramFrame, surface ProgramSurface, admission *toolcontract.ProgramMemory, progressFacts ProgramProgressFacts, observer NativeEffectStart, effect NativeEffect, tc tools.ToolContext) (result NativeInvocationResult, err error) {
+func (e *Executor) InvokeNative(ctx context.Context, frame ProgramFrame, surface ProgramSurface, admission *toolcontract.ProgramMemory, progressFacts ProgramProgressFacts, observer NativeAdmissionObserver, effect NativeEffect, tc tools.ToolContext) (result NativeInvocationResult, err error) {
 	ctx, socketScope := socketref.WithScope(ctx)
 	defer socketScope.Close()
 	end, err := frame.beginUse()
@@ -88,10 +91,11 @@ func (e *Executor) InvokeNative(ctx context.Context, frame ProgramFrame, surface
 	boundaryStarted := false
 	ownerStarted := false
 	defer func() {
-		if !ownerStarted || result.Producer.Terminal == toolcontract.ProducerRefused {
+		// Admission checks supply their own attribution, which can be shared across producers.
+		if result.Producer.Terminal == "" || (ownerStarted && result.Producer.Terminal == toolcontract.ProducerRefused) {
 			completeNativeRejection(bound, err)
 		}
-		if !ownerStarted {
+		if !ownerStarted && result.Producer.Terminal == "" {
 			certainty := toolcontract.NoEffect
 			if boundaryStarted {
 				certainty = toolcontract.EffectUnknown
@@ -123,7 +127,7 @@ func (e *Executor) InvokeNative(ctx context.Context, frame ProgramFrame, surface
 		program.MergeChild(child, scope)
 	}()
 	tc.Effects.CheckMutationProgress = func(ctx context.Context, rootID, path string) error {
-		return checkReachedMutationProgress(ctx, progressFacts, definition, invocation, rootID, path)
+		return CheckReachedMutationProgress(ctx, progressFacts, definition, invocation, rootID, path)
 	}
 	if !facts.Contract.AdmitsSession(tc.Identity.ParentSessionID != "") {
 		return result, fmt.Errorf("native operation is outside its declared session scope")
@@ -188,6 +192,10 @@ func (e *Executor) InvokeNative(ctx context.Context, frame ProgramFrame, surface
 	}
 	ctx = withSecretUse(ctx, secretUse)
 	defer func() { tc.Effects.Secrets.Finish(ctx) }()
+	var firstWait sync.Once
+	ctx = hitl.WithCheckpointWaitNotification(ctx, func(ctx context.Context, checkpointID string) {
+		firstWait.Do(func() { observer.BeforeNativeApprovalWait(ctx, effect.Operation, checkpointID) })
+	})
 	boundaryStarted = true
 	canonical, tc, boundaryApproved, err := e.applyPreInvokeBoundary(ctx, facts.Identity, surface.profile, arguments.values, tc)
 	if err != nil {
@@ -285,6 +293,16 @@ func (e *Executor) InvokeNative(ctx context.Context, frame ProgramFrame, surface
 	if err := e.recheckNativeOwnerAdmission(ctx, frame, surface.profile, bound, progressFacts, tc); err != nil {
 		return result, err
 	}
+	ctx = hitl.WithCheckpointWaitNotification(ctx, nil)
+	for _, check := range []func(context.Context) error{prepared.CheckAdmission, effect.CheckOutputs} {
+		if check == nil {
+			continue
+		}
+		if err := check(ctx); err != nil {
+			result.Producer = nativeAdmissionFailure(err, toolcontract.NoEffect)
+			return result, err
+		}
+	}
 	if err := observer.BeforeNativeOwner(ctx, bound, tc.Identity.ToolCallID, reviewed); err != nil {
 		return result, err
 	}
@@ -327,8 +345,7 @@ func (e *Executor) InvokeNative(ctx context.Context, frame ProgramFrame, surface
 }
 
 func checkLiveProgramProgress(ctx context.Context, provider ProgramProgressFacts, bound toolcontract.BoundOperation) error {
-	// Redirect publication reaches the write door after its output is staged.
-	// Its destination, including scratch or output, decides the checklist gate.
+	// Redirect progress checks use the resolved destination root.
 	if bound.Publication() == toolcontract.RedirectPublication {
 		return nil
 	}

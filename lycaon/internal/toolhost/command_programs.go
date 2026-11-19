@@ -48,14 +48,14 @@ type programOwnerTools struct {
 }
 
 func directProgramOutputAdmission(current *tools.ToolContext) tools.CommandOutputAdmission {
-	return func(context.Context, commandprogram.OutputDestination, string, string) (tools.CommandOutputWrite, error) {
+	return tools.CommandOutputAdmission{Begin: func(context.Context, commandprogram.OutputDestination, tools.CommandOutputTarget) (tools.CommandOutputWrite, error) {
 		return tools.CommandOutputWrite{
 			Publish: func(ctx context.Context, apply func(context.Context, tools.ToolContext) (commandprogram.OutputPublished, error)) (commandprogram.OutputPublished, error) {
 				return apply(ctx, *current)
 			},
 			Abandon: func(context.Context, error) error { return nil },
 		}, nil
-	}
+	}}
 }
 
 // compose builds the literal and mutation owners once and returns the
@@ -189,7 +189,7 @@ func (t programOwnerTools) compose(recorder *invocation.SQLRecorder) (func(tools
 				if err != nil {
 					return command.NativePrepared{}, err
 				}
-				return command.NativePrepared{Review: prepared.Review, Invoke: prepared.InvokeOwner}, nil
+				return command.NativePrepared{Review: prepared.Review, CheckAdmission: prepared.CheckAdmission, Invoke: prepared.InvokeOwner}, nil
 			}}
 		}
 		for _, name := range searchOwners.Commands() {

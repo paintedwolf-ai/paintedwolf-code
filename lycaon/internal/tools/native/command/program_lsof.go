@@ -30,77 +30,93 @@ const LsofWithheldNote = "lsof: this host withholds some sockets from this view,
 // maxJobAncestry bounds the parent walk from a listener to the job that started it.
 const maxJobAncestry = 64
 
-// lsofBuiltin answers `lsof [-nPt] [-i :PORT|-iTCP:PORT|-iUDP:PORT]
-// [-sTCP:LISTEN]`. The session's own listeners are always listed with their
-// job identity. For a named port, listeners held outside the session are
-// listed only after the host process inspection approval process_list uses;
-// without it the result says they were not inspected. Status 1 means no row.
-func lsofBuiltin(spec toolcontract.CommandSpecification, sessionID string, jobs *SessionJobs, ports PortInventory, review tools.ProcessReviewer) jobBuiltin {
-	return func(ctx context.Context, request commandprogram.OperationRequest, streams commandprogram.Streams) (toolcontract.ProducerResult, error) {
-		bound, err := commandprogram.CatalogBinder{}.Bind(spec, request.Argv)
+type listenerInspection struct {
+	sessionID string
+	jobs      *SessionJobs
+	ports     PortInventory
+	review    tools.ProcessReviewer
+}
+
+func (o listenerInspection) operation(spec toolcontract.CommandSpecification) NativeOperation {
+	return preparedHostBuiltin(spec, func(_ commandprogram.OperationRequest, bound commandprogram.BoundArgv) (hostedBody, error) {
+		query, err := lsofQuery(bound)
 		if err != nil {
-			return refusedResult("COMMAND_OPERAND_INVALID"), argvRejection(spec, err)
+			return nil, err
 		}
-		if len(bound.Operands()) != 0 {
-			return refusedResult("COMMAND_OPERAND_INVALID"), toolrejection.RejectInvalidArguments("COMMAND_OPERAND_INVALID", map[string]any{"command": "lsof", "reason": "takes no operands"})
-		}
-		var query lineage.ListenerQuery
-		if option, ok := bound.Last("-i"); ok {
-			if query, err = lsofEndpoint(option.Values[0].Value); err != nil {
-				return refusedResult("COMMAND_OPERAND_INVALID"), toolrejection.RejectInvalidArguments("COMMAND_OPERAND_INVALID", map[string]any{"command": "lsof", "word": option.Values[0].Value, "expected": ":PORT, TCP:PORT or UDP:PORT"})
-			}
-		}
-		if option, ok := bound.Last("-s"); ok && !strings.EqualFold(option.Values[0].Value, "TCP:LISTEN") {
-			return refusedResult("COMMAND_OPERAND_INVALID"), toolrejection.RejectInvalidArguments("COMMAND_OPERAND_INVALID", map[string]any{"command": "lsof", "word": option.Values[0].Value, "expected": "TCP:LISTEN"})
-		}
-		if ports == nil {
-			err := errors.New("host listener inventory is not configured")
-			return ownerFailure(err), err
-		}
-		table, err := ports.PortHolders(ctx, sessionID, query)
-		if err != nil {
-			return ownerFailure(err), err
-		}
-		holders := table.Holders
-		shown := slices.DeleteFunc(slices.Clone(holders), func(h hostprocess.PortHolder) bool { return h.Process == nil || !h.Process.Owned })
-		uninspected := ""
-		switch {
-		case len(shown) == len(holders):
-		case query.Port == 0:
-			uninspected = "lsof: only this session's listeners are listed; name a port with -i :PORT to include other processes\n"
-		case review == nil:
-			uninspected = fmt.Sprintf("lsof: port %d is held outside this session; host process inspection is unavailable here, so those holders were not inspected\n", query.Port)
-		default:
-			err := review(ctx, "list", nil)
-			if err == nil {
-				shown = holders
-				break
-			}
-			if toolrejection.AsToolReject(err) == nil {
-				return ownerFailure(err), err
-			}
-			uninspected = fmt.Sprintf("lsof: port %d is held outside this session; host process inspection was not approved, so those holders were not inspected\n", query.Port)
-		}
-		var out strings.Builder
-		if len(bound.Options("-t")) > 0 {
-			writeLsofPIDs(&out, shown)
-		} else {
-			writeLsofRows(&out, shown, jobIdentities(ctx, jobs))
-		}
-		if _, err := fmt.Fprint(nonNilWriter(streams.Output), out.String()); err != nil {
-			return ownerFailure(err), err
-		}
-		if !table.Complete {
-			uninspected += LsofWithheldNote
-		}
-		if _, err := fmt.Fprint(nonNilWriter(streams.Error), uninspected); err != nil {
-			return ownerFailure(err), err
-		}
-		if out.Len() == 0 {
-			return toolcontract.ProducerResult{Status: 1, Terminal: toolcontract.ProducerCompleted, Complete: true, EffectCertainty: toolcontract.NoEffect}, nil
-		}
-		return readResult(0), nil
+		terse := len(bound.Options("-t")) > 0
+		return func(ctx context.Context, streams commandprogram.Streams) (toolcontract.ProducerResult, error) {
+			return o.inspect(ctx, query, terse, streams)
+		}, nil
+	})
+}
+
+func lsofQuery(bound commandprogram.BoundArgv) (lineage.ListenerQuery, error) {
+	if len(bound.Operands()) != 0 {
+		return lineage.ListenerQuery{}, toolrejection.RejectInvalidArguments("COMMAND_OPERAND_INVALID", map[string]any{"command": "lsof", "reason": "takes no operands"})
 	}
+	var query lineage.ListenerQuery
+	if option, ok := bound.Last("-i"); ok {
+		value, err := lsofEndpoint(option.Values[0].Value)
+		if err != nil {
+			return lineage.ListenerQuery{}, toolrejection.RejectInvalidArguments("COMMAND_OPERAND_INVALID", map[string]any{"command": "lsof", "word": option.Values[0].Value, "expected": ":PORT, TCP:PORT or UDP:PORT"})
+		}
+		query = value
+	}
+	if option, ok := bound.Last("-s"); ok && !strings.EqualFold(option.Values[0].Value, "TCP:LISTEN") {
+		return lineage.ListenerQuery{}, toolrejection.RejectInvalidArguments("COMMAND_OPERAND_INVALID", map[string]any{"command": "lsof", "word": option.Values[0].Value, "expected": "TCP:LISTEN"})
+	}
+	return query, nil
+}
+
+// inspect discloses holders outside the session only after process review.
+func (o listenerInspection) inspect(ctx context.Context, query lineage.ListenerQuery, terse bool, streams commandprogram.Streams) (toolcontract.ProducerResult, error) {
+	if o.ports == nil {
+		err := errors.New("host listener inventory is not configured")
+		return ownerFailure(err), err
+	}
+	table, err := o.ports.PortHolders(ctx, o.sessionID, query)
+	if err != nil {
+		return ownerFailure(err), err
+	}
+	holders := table.Holders
+	shown := slices.DeleteFunc(slices.Clone(holders), func(h hostprocess.PortHolder) bool { return h.Process == nil || !h.Process.Owned })
+	uninspected := ""
+	switch {
+	case len(shown) == len(holders):
+	case query.Port == 0:
+		uninspected = "lsof: only this session's listeners are listed; name a port with -i :PORT to include other processes\n"
+	case o.review == nil:
+		uninspected = fmt.Sprintf("lsof: port %d is held outside this session; host process inspection is unavailable here, so those holders were not inspected\n", query.Port)
+	default:
+		err := o.review(ctx, "list", nil)
+		if err == nil {
+			shown = holders
+			break
+		}
+		if toolrejection.AsToolReject(err) == nil {
+			return ownerFailure(err), err
+		}
+		uninspected = fmt.Sprintf("lsof: port %d is held outside this session; host process inspection was not approved, so those holders were not inspected\n", query.Port)
+	}
+	var out strings.Builder
+	if terse {
+		writeLsofPIDs(&out, shown)
+	} else {
+		writeLsofRows(&out, shown, jobIdentities(ctx, o.jobs))
+	}
+	if _, err := fmt.Fprint(nonNilWriter(streams.Output), out.String()); err != nil {
+		return ownerFailure(err), err
+	}
+	if !table.Complete {
+		uninspected += LsofWithheldNote
+	}
+	if _, err := fmt.Fprint(nonNilWriter(streams.Error), uninspected); err != nil {
+		return ownerFailure(err), err
+	}
+	if out.Len() == 0 {
+		return toolcontract.ProducerResult{Status: 1, Terminal: toolcontract.ProducerCompleted, Complete: true, EffectCertainty: toolcontract.NoEffect}, nil
+	}
+	return readResult(0), nil
 }
 
 // lsofEndpoint reads -i's [PROTOCOL]:PORT; lsof names protocols in any case.

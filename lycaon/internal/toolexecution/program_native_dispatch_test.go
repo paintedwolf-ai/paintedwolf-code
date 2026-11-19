@@ -37,6 +37,9 @@ func (f nativeStartFunc) BeforeNativeOwner(ctx context.Context, b toolcontract.B
 	return f(ctx, b, call, review)
 }
 
+func (nativeStartFunc) BeforeNativeApprovalWait(context.Context, toolcontract.BoundOperation, string) {
+}
+
 func TestNativeEntryFreezesInputsUsesActualReadDoorAndRecordsInvokedNoMutation(t *testing.T) {
 	for _, tool := range []string{"command", "verify"} {
 		t.Run(tool, func(t *testing.T) { nativeReadAdmissionFixture(t, "input", tool) })
@@ -290,6 +293,15 @@ func (m *nativeRecorderReviewManager) RequestCheckpoint(ctx context.Context, req
 	return m.invariantCheckpointMgr.RequestCheckpoint(ctx, req)
 }
 
+type nativeWaitObserver struct {
+	nativeStartFunc
+	onWait func(toolcontract.BoundOperation, string)
+}
+
+func (o nativeWaitObserver) BeforeNativeApprovalWait(_ context.Context, bound toolcontract.BoundOperation, checkpointID string) {
+	o.onWait(bound, checkpointID)
+}
+
 // Preparation can read source bytes before the final producer is invoked.
 // A human reply cannot preserve authority withdrawn during that wait.
 func TestNativePreparationRechecksAuthorityAfterApproval(t *testing.T) {
@@ -334,7 +346,7 @@ func TestNativePreparationRechecksAuthorityAfterApproval(t *testing.T) {
 			bound, err := toolcontract.BindOperation(definition, child, "cat", definition.Facts().Commands[0].Effects[0].Mode, nil)
 			testutil.FailErr(t, "bind read", err)
 			var preparedBytes, output bytes.Buffer
-			asks, records, preparations := 0, 0, 0
+			asks, waits, records, preparations := 0, 0, 0, 0
 			manager := &nativeRecorderReviewManager{invariantCheckpointMgr: invariantCheckpointMgr{status: hitl.DecisionStatusApproved, result: &hitl.DecisionResult{Approved: true}}}
 			manager.onRequest = func(req hitl.CheckpointRequest) {
 				asks++
@@ -392,13 +404,22 @@ func TestNativePreparationRechecksAuthorityAfterApproval(t *testing.T) {
 			owner := progress.NewMemoryStore()
 			testutil.FailErr(t, "seed progress", owner.Set(parent.SessionID, "- [ ] Inspect"))
 			memory := stageMemory(t, 64<<20)
-			result, err := executor.InvokeNative(ctx, frame, surface, memory, nativeProgressFixture{owner}, nativeStartFunc(func(context.Context, toolcontract.BoundOperation, string, toolcontract.ReviewedOperationInputs) error {
-				records++
-				return nil
-			}), effect, tc)
+			observer := nativeWaitObserver{
+				nativeStartFunc: func(context.Context, toolcontract.BoundOperation, string, toolcontract.ReviewedOperationInputs) error {
+					records++
+					return nil
+				},
+				onWait: func(operation toolcontract.BoundOperation, checkpointID string) {
+					waits++
+					if operation.Invocation().Identity != child.Identity || checkpointID != "chk-invariant" || records != 0 {
+						t.Fatalf("unexpected approval wait: %s for %v, after %d owner starts", checkpointID, operation.Invocation().Identity, records)
+					}
+				},
+			}
+			result, err := executor.InvokeNative(ctx, frame, surface, memory, nativeProgressFixture{owner}, observer, effect, tc)
 			frame.Close()
-			if asks != wantAsks || memory.InUse().State != 0 || frameMemory.InUse().State != 0 {
-				t.Fatal("review or retention contract failed")
+			if asks != wantAsks || waits != 1 || memory.InUse().State != 0 || frameMemory.InUse().State != 0 {
+				t.Fatalf("review or retention contract failed: asks=%d waits=%d", asks, waits)
 			}
 			// The cwd door projects binding errors into its own repair code.
 			// Observe the live refusal at its owner rather than requiring a Go

@@ -44,6 +44,9 @@ func (p *programDoorStart) BeforeNativeOwner(context.Context, toolcontract.Bound
 	return nil
 }
 
+func (*programDoorStart) BeforeNativeApprovalWait(context.Context, toolcontract.BoundOperation, string) {
+}
+
 // This binds the existing mutation door and source ledger through reached
 // admission. It does not qualify parser dispatch or an implemented tee utility.
 func TestProgramAdmissionPreservesActualFirstCreationAndMissingProgress(t *testing.T) {

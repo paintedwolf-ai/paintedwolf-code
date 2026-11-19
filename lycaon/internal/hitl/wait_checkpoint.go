@@ -7,6 +7,13 @@ import (
 
 const checkpointPollInterval = 200 * time.Millisecond
 
+type checkpointWaitNotificationKey struct{}
+
+// WithCheckpointWaitNotification observes the checkpoint a caller waits on.
+func WithCheckpointWaitNotification(ctx context.Context, notify func(context.Context, string)) context.Context {
+	return context.WithValue(ctx, checkpointWaitNotificationKey{}, notify)
+}
+
 type checkpointPoller interface {
 	PollCheckpoint(ctx context.Context, checkpointID string) (*CheckpointResponse, error)
 }
@@ -20,6 +27,9 @@ type checkpointWaitObserver interface {
 // A poller that observes waits sees the whole blocked interval.
 func WaitForCheckpoint(ctx context.Context, poller checkpointPoller, checkpointID string) (*CheckpointResponse, error) {
 	defer beginHumanWait(ctx)()
+	if notify, _ := ctx.Value(checkpointWaitNotificationKey{}).(func(context.Context, string)); notify != nil {
+		notify(ctx, checkpointID)
+	}
 	if checkpoints, ok := poller.(*Checkpoints); ok {
 		defer checkpoints.Sessions.ObserveCheckpointWait(ctx, checkpointID)()
 	} else if observer, ok := poller.(checkpointWaitObserver); ok {

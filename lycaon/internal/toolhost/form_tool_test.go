@@ -16,7 +16,7 @@ import (
 
 func runFormTool(t *testing.T, f *programtest.Fixture, name string, argv func(map[string]any) []string, args map[string]any) command.ProgramOutcome {
 	t.Helper()
-	tool := &native.FormTool{Programs: f.Runtime, Argv: argv}
+	tool := &native.FormTool{Name: name, Programs: f.Runtime, Argv: argv}
 	raw, err := f.Invoke(t, t.Context(), name, args, tool.Run)
 	testutil.FailErr(t, "invoke "+name, err)
 	var outcome command.ProgramOutcome

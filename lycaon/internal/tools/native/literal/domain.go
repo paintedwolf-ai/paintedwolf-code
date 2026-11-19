@@ -1,9 +1,16 @@
 package literal
 
 import (
+	"context"
 	"fmt"
-	"github.com/lycaon/lycaon/internal/tools"
 	"slices"
+
+	"github.com/lycaon/lycaon/internal/commandprogram"
+	"github.com/lycaon/lycaon/internal/sandbox"
+	"github.com/lycaon/lycaon/internal/toolcontract"
+	"github.com/lycaon/lycaon/internal/toolrejection"
+	"github.com/lycaon/lycaon/internal/tools"
+	"github.com/lycaon/lycaon/internal/tools/projectpaths"
 
 	"github.com/lycaon/lycaon/internal/fileoutline"
 	reposurvey "github.com/lycaon/lycaon/internal/survey"
@@ -131,6 +138,24 @@ func runSummarize(inv *invocation) error {
 		}
 	}
 	return inv.structured(resp)
+}
+
+func validateRepoMapPath(ctx context.Context, paths *projectpaths.ProgramPaths, argv commandprogram.BoundArgv, span toolcontract.SourceSpan) error {
+	path := "."
+	if option, ok := argv.Last("--path"); ok && len(option.Values) != 0 {
+		path = option.Values[0].Value
+	}
+	bound, err := paths.Bind(ctx, path, false)
+	if _, ok := ordinary(err); ok {
+		return nil
+	}
+	if err != nil {
+		return projectpaths.WithPathRejection(err, span)
+	}
+	if sandbox.HasParentTraversal(bound.Resolved.Abs) {
+		return toolrejection.RejectInvalidArguments("SURVEY_PATH_ESCAPE", map[string]any{"path": bound.Resolved.Abs})
+	}
+	return nil
 }
 
 // runRepoMap runs one catalog bundle. Its probes read catalog and directory

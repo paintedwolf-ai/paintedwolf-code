@@ -14,8 +14,10 @@ import (
 	"github.com/lycaon/lycaon/internal/observability"
 	"github.com/lycaon/lycaon/internal/project"
 	"github.com/lycaon/lycaon/internal/tooloutput"
+	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/tools/readcaps"
 	"github.com/lycaon/lycaon/internal/tools/surveyreceipt"
+	"github.com/lycaon/lycaon/internal/visual"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -30,6 +32,12 @@ func (l *toolInvocations) composeToolResultMessage(
 ) api.Message {
 	result := guidance.ComposeToolResult(run.content, run.facts, l.Closeout.Deps.HintConfig)
 	if result != nil {
+		if refusal := run.captures.programRefusal; refusal != nil {
+			result.UiVisibility = api.ToolResultUiVisibilityNormal
+			if refusal.BeforeAdmission {
+				result.UiVisibility = guidance.UiVisibilityForCode(l.Closeout.Deps.HintConfig, refusal.Code)
+			}
+		}
 		result.Tool = call.Name
 		result.ToolCallID = call.ID
 		result.AssistantMessageID = strings.TrimSpace(assistantMessageID)
@@ -62,6 +70,78 @@ func (l *toolInvocations) composeToolResultMessage(
 		Content:         content,
 		EvidenceHandles: deliveryHandles(run.captures.sourceDeliveries),
 		ToolResult:      result,
+	}
+}
+
+func applyToolResultSidecars(
+	ctx context.Context,
+	store visual.Store,
+	designateCover func(ctx context.Context, projectID, rootSessionID, artifactID string) error,
+	projectID string,
+	rootSessionID string,
+	producerSessionID string,
+	toolName, toolContent string,
+	tr *api.ToolResult,
+	captures toolCaptures,
+) string {
+	guidance.ApplyTaskDispatchMetadata(toolName, tr, captures.dispatch)
+	tr.WorkerReport = captures.workerReport
+	tr.DisplaySubject = captures.displaySubject
+	tr.OverlayPromotion = captures.overlayPromotion
+	if captures.completion != nil {
+		completion := *captures.completion
+		tr.Completion = &completion
+	}
+	tr.FileEdits, tr.FileEditsOmitted = captures.fileEdits, captures.fileEditsOmitted
+	if captures.externalAccess != nil {
+		tr.ExternalAccess = tools.ExternalAccessFromCapture(captures.externalAccess)
+	}
+	if captures.skill != nil {
+		tr.Skill = captures.skill
+	}
+	if captures.process != nil {
+		tr.Process = captures.process
+	}
+	if captures.programProgressPublished || (tr.Process != nil && tr.Process.Running) {
+		tr.UiVisibility = api.ToolResultUiVisibilityNormal
+	}
+	if captures.verdict != nil {
+		tr.Verdict = captures.verdict
+	}
+	if captures.commandProgram != nil {
+		tr.CommandProgram = captures.commandProgram
+	}
+	if captures.listener != nil {
+		tr.Listener = captures.listener
+	}
+	tr.CardFacts = captures.cardFacts
+	if visualCap := captures.visual; visualCap != nil && store != nil && strings.TrimSpace(rootSessionID) != "" {
+		stamped, err := visual.AttachToolResult(ctx, store, rootSessionID, producerSessionID, tr.ToolCallID, tr, visualCap, toolContent)
+		if err != nil {
+			return toolContent
+		}
+		toolContent = stamped
+		// Visual artifacts stay visible when textual output is benign.
+		if tr.Visual != nil {
+			tr.UiVisibility = api.ToolResultUiVisibilityNormal
+		}
+		if tr.Visual != nil && designateCover != nil && strings.TrimSpace(projectID) != "" && isCoverProducerTool(toolName) {
+			src := tr.Visual.Source
+			if (src == api.VisualArtifactSourceCapture || src == api.VisualArtifactSourceRender) &&
+				visual.IsRasterMime(tr.Visual.Mime) {
+				_ = designateCover(ctx, projectID, rootSessionID, tr.Visual.ID)
+			}
+		}
+	}
+	return toolContent
+}
+
+func isCoverProducerTool(toolName string) bool {
+	switch strings.TrimSpace(toolName) {
+	case "capture_page", "render_view":
+		return true
+	default:
+		return false
 	}
 }
 
