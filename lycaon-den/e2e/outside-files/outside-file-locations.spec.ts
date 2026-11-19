@@ -1,7 +1,7 @@
 import { readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { expect } from "@playwright/test";
-import type { OpenedOutsideFile } from "../src/api/types.ts";
+import type { OpenedOutsideFile } from "../../src/api/types.ts";
 import {
   apiConfig,
   apiJson,
@@ -13,7 +13,7 @@ import {
   settledChatSessionId,
   waitForChatComposerReady,
   webE2e,
-} from "./helpers.ts";
+} from "../helpers.ts";
 
 webE2e("Outside locations follow the chat while a dirty file stays open", async ({ page, request }) => {
   const filename = "outside-notes.txt";
