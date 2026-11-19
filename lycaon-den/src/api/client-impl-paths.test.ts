@@ -196,7 +196,7 @@ describe("client-impl request paths", () => {
     const requests = clientRequests();
     expect(requests.length).toBeGreaterThan(100);
     const unsupported = requests.filter((request) =>
-      !matchesOperation(request.path, request.method),
+      request.method === undefined || !matchesOperation(request.path, request.method),
     );
     expect(unsupported).toEqual([]);
   });
