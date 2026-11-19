@@ -22,8 +22,9 @@ func (r *registryCore) LocalGenerationStatus() api.LocalGenerationStatus {
 		if err != nil {
 			out.Detail = err.Error()
 		} else {
+			out.SelectionState = selection.State
 			out.SelectedModel = selection.Model
-			if selection.State == "opted_out" {
+			if selection.State == "opted_out" && out.State != "unavailable" {
 				out.State = "opted_out"
 				out.RecoveryAction = "none"
 			}

@@ -44,6 +44,7 @@ func (p *Runtime) SelectionStatus(status *api.LocalGenerationStatus) {
 		status.State = "unavailable"
 		return
 	}
+	status.SelectionState = selection.State
 	status.SelectedModel = selection.Model
 	if selection.State == "opted_out" && status.State != "unavailable" {
 		status.State = "opted_out"
