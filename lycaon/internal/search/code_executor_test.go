@@ -491,6 +491,7 @@ func TestCodeExecutorPrefilterRejectsIndexFalsePositive(t *testing.T) {
 	root := t.TempDir()
 	testutil.FailErr(t, "write hit", os.WriteFile(filepath.Join(root, "hit.txt"), []byte("abcabc\n"), 0o644))
 	testutil.FailErr(t, "write grams", os.WriteFile(filepath.Join(root, "grams.txt"), []byte("abc bca cab\n"), 0o644))
+	testutil.FailErr(t, "await source index", catalogtest.AwaitIndex(t.Context(), sourcecatalog.Process(), "p1", sourcecatalog.Root{ID: "root", Path: root}))
 	report, err := NewCodeExecutor(decide.Reranker{}).Run(context.Background(), PlanLeg{Code: &CodePlanLeg{
 		Query:     TextExpr{Text: "abcabc"},
 		PathRoots: []CodeRoot{{ProjectID: "p1", RootID: "root", Path: root}},
