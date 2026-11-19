@@ -6,6 +6,7 @@ from verification_tests.ci.fixture_plan import live
 
 BEHAVIOR = live(phase="affected-packages")
 BUILD = live(runs="check:drift")
+SHARDS = hosted_plan.lanes()[BEHAVIOR]["shards"]
 
 
 class NightlyHistoryTests(unittest.TestCase):
@@ -17,11 +18,11 @@ class NightlyHistoryTests(unittest.TestCase):
         self.assertEqual({row["timing_basis"] for row in matrix["include"]}, {"measured"})
         build = next(row for row in matrix["include"] if row["lane"] == BUILD)
         self.assertEqual((build["timing_row"], build["expected_seconds"]), (BUILD, 600))
-        self.assertEqual([row["lane"] for row in matrix["include"][:4]], [BUILD, BEHAVIOR, BEHAVIOR, BEHAVIOR])
+        self.assertEqual([row["lane"] for row in matrix["include"][:1 + SHARDS]], [BUILD] + [BEHAVIOR] * SHARDS)
         # Nightly cannot run the lane scoped to the change's own packages; its budget stands alone.
         race = next(row for row in matrix["include"] if row["lane"] == live(phase="changed-packages"))
         self.assertEqual(race["expected_seconds"], race["minutes"] * 60)
-        del measured["lanes"][f"{BEHAVIOR} 2/3"]
+        del measured["lanes"][f"{BEHAVIOR} 2/{SHARDS}"]
         fallback = hosted_plan.matrix("integration", scope=scope, timings=measured)
         self.assertEqual({row["timing_basis"] for row in fallback["include"]}, {"catalog-budget"})
 

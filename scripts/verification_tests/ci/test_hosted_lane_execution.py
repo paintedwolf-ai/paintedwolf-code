@@ -231,7 +231,7 @@ class HostedExecutionTests(unittest.TestCase):
                 patch.object(ci, "artifact_root", return_value=Path(directory)), \
                 patch.dict(ci.os.environ, {"PW_CI_PACKAGE_TIMINGS": measured}), \
                 patch.object(ci.subprocess, "call", return_value=0) as run:
-            ci.run_lane(BEHAVIOR, "2/3")
+            ci.run_lane(BEHAVIOR, BEHAVIOR_FIRST)
             environment = run.call_args.kwargs["env"]
             self.assertNotIn("PW_CI_PACKAGE_TIMINGS", environment)
             self.assertEqual(Path(environment["PW_GO_TIMINGS"]).read_text(), measured)
