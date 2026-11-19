@@ -2,7 +2,7 @@
 
 import { createSignal, untrack } from "solid-js";
 import { invoke } from "@tauri-apps/api/core";
-import type { ComposerPendingAttachment } from "./composer-attachments.ts";
+import { sameComposerAttachment, type ComposerPendingAttachment } from "./composer-attachments.ts";
 import { isTauriRuntime } from "../../platform/runtime.ts";
 import { listenHostEvent } from "../../platform/windows/window-channel.ts";
 import { windowViewId } from "../../platform/windows/window-subject.ts";
@@ -205,11 +205,15 @@ export async function applySharedComposerMutation(
 ): Promise<SharedComposerDocument> {
   if (!isTauriRuntime()) {
     const current = localDocument(seed);
-    const known = new Set(current.attachments.map((attachment) => attachment.id));
-    const additions = attachments.filter((attachment) => !known.has(attachment.id));
+    const merged = [...current.attachments];
+    for (const attachment of attachments) {
+      if (!merged.some((existing) => sameComposerAttachment(existing, attachment))) {
+        merged.push(attachment);
+      }
+    }
     return note({
       ...current,
-      attachments: [...current.attachments, ...additions],
+      attachments: merged,
       draft:
         current.draft.trim() || !draftPrefill ? current.draft : draftPrefill,
       revision: current.revision + 1,

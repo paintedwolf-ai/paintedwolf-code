@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { createSignal } from "solid-js";
 import { render, screen, waitFor, cleanup } from "@solidjs/testing-library";
 import { stubFilesClient } from "../test/source-client-fixture.ts";
+import { NoticeReporterProvider } from "../notices/notice-reporter.tsx";
 import { FileEditDiff } from "./FileEditDiff.tsx";
 import { assertNamedControl } from "../test/controls.ts";
 import { foldFileEdits } from "../chat/file-edit/file-edit-fold.ts";
@@ -26,12 +27,17 @@ import { useElapsableClock } from "../test/elapse.ts";
 const elapse = useElapsableClock();
 
 const client = stubFilesClient();
+const openSourceLocation = vi.hoisted(() => vi.fn());
+vi.mock("../platform/navigation/open-source.ts", async original => ({
+  ...await original<typeof import("../platform/navigation/open-source.ts")>(), openSourceLocation,
+}));
 vi.mock("../platform/connection/app-connection.ts", async original => ({
   ...await original<typeof import("../platform/connection/app-connection.ts")>(), getLycaonClient: () => client,
 }));
 
 afterEach(() => {
   cleanup();
+  openSourceLocation.mockReset();
   resetFindControllerForTests();
   resetFindRevealHostsForTests();
   document.body.replaceChildren();
@@ -47,7 +53,7 @@ function step(
   after: string,
   tool = "edit",
 ): FileEditStep {
-  return { key, snapshot: fileEditPreviewFixture({ path: "pipeline.py", before, after }), tool };
+  return { key, snapshot: fileEditPreviewFixture({ root_id: "r1", path: "pipeline.py", before, after }), tool };
 }
 
 function multiWriteFold() {
@@ -133,6 +139,26 @@ describe("FileEditDiff", () => {
     expect(
       link.compareDocumentPosition(fill) & Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy();
+  });
+
+  it.each([
+    { path: "/external/readme.md", rootId: undefined, calls: 0, expanded: "true" },
+    { path: "readme.md", rootId: "r1", calls: 1, expanded: "false" },
+  ])("opens a source only for an attached edit at $path", ({ path, rootId, calls, expanded }) => {
+    const reportError = vi.fn();
+    openSourceLocation.mockResolvedValue({ status: "opened-in-app" });
+    const fold = singleFileEditFold("t1", fileEditPreviewFixture({
+      path, root_id: rootId, before: V1, after: V2,
+    }));
+    render(() => (
+      <NoticeReporterProvider reporter={{ reportError, publish: vi.fn() }}>
+        <FileEditDiff projectId="p1" sessionId="s1" fold={fold} rootRefs={[{ id: "r1", path: "/attached" }]} />
+      </NoticeReporterProvider>
+    ));
+    screen.getByText(path).click();
+    expect(openSourceLocation).toHaveBeenCalledTimes(calls);
+    expect(reportError).not.toHaveBeenCalled();
+    expect(screen.getByTestId("file-edit-diff").getAttribute("data-expanded")).toBe(expanded);
   });
 
   it("names no writes and offers no strip for a single write", () => {

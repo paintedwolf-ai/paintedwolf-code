@@ -24,6 +24,7 @@ import { setLycaonClientForTest } from "../../platform/connection/app-connection
 import type { AttachmentUploadResponse } from "../../api/types.ts";
 import { loadAppState } from "../../platform/persistence/app-state.ts";
 import { sharedComposerDocument } from "./shared-composer-document.ts";
+import { attachmentReceiptToPending } from "./composer-attachments.ts";
 
 /** Accepts uploads while these tests exercise staging. */
 function seedUploadHost(): void {
@@ -39,12 +40,21 @@ function seedUploadHost(): void {
 }
 
 
-const sharedComposerBehavior = vi.hoisted(() => ({ failPublish: false }));
+const sharedComposerBehavior = vi.hoisted(() => ({
+  failPublish: false,
+  nextMutation: undefined as Promise<void> | undefined,
+}));
 
 vi.mock("./shared-composer-document.ts", async (importOriginal) => {
   const actual = await importOriginal<typeof import("./shared-composer-document.ts")>();
   return {
     ...actual,
+    applySharedComposerMutation: async (...args: Parameters<typeof actual.applySharedComposerMutation>) => {
+      const wait = sharedComposerBehavior.nextMutation;
+      sharedComposerBehavior.nextMutation = undefined;
+      if (wait) await wait;
+      return actual.applySharedComposerMutation(...args);
+    },
     publishSharedComposerDraft: (...args: Parameters<typeof actual.publishSharedComposerDraft>) =>
       sharedComposerBehavior.failPublish
         ? Promise.reject(new Error("publish failed"))
@@ -62,6 +72,7 @@ beforeEach(() => {
   resetAppStateSnapshotForTests();
   seedUploadHost();
   sharedComposerBehavior.failPublish = false;
+  sharedComposerBehavior.nextMutation = undefined;
   resetComposerAttachmentsForTests();
   resetComposerDraftsForTests();
   resetComposerDocumentStoreForTests();
@@ -138,6 +149,26 @@ describe("shared composer mutation boundary", () => {
     expect(result).toEqual({ ok: true });
     expect(pendingAttachmentsForSession("session-2")).toHaveLength(1);
     expect(composerDraftForSession("session-2")).toBe("Explain this.");
+  });
+
+  it("stages a repeated upload if the preceding write fails", async () => {
+    const destination = { projectId: "project-1", sessionId: "session-2" };
+    const receipt = {
+      blob_id: "a".repeat(64),
+      filename: "note.txt",
+      mime: "text/plain",
+      kind: "text",
+      bytes: 4,
+    } satisfies AttachmentUploadResponse;
+    let refuseFirst!: (error: Error) => void;
+    sharedComposerBehavior.nextMutation = new Promise((_, reject) => { refuseFirst = reject; });
+    const first = stageComposerMutation(destination, [attachmentReceiptToPending(receipt)]);
+    const repeated = attachmentReceiptToPending(receipt);
+    const second = stageComposerMutation(destination, [repeated]);
+    refuseFirst(new Error("first write failed"));
+    expect((await first).ok).toBe(false);
+    expect(await second).toEqual({ ok: true });
+    expect(pendingAttachmentsForSession(destination.sessionId)).toEqual([repeated]);
   });
 
   it("rejects a reference whose project differs from the destination", async () => {

@@ -84,7 +84,10 @@ components:
       required: [path, reference, added, removed, before_sha256, after_sha256, created, deleted]
       properties:
         path: {type: string}
-        root_id: {type: string, format: uuid}
+        root_id:
+          type: string
+          format: uuid
+          description: Attached folder containing the file. Absent for edits outside attached folders.
         reference: {$ref: '#/components/schemas/FileEditReference'}
         added: {type: integer, minimum: 0}
         removed: {type: integer, minimum: 0}
