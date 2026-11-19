@@ -70,12 +70,12 @@ describe("generated operation query contract", () => {
         invalid(String(bound + 1));
       }
       if (minLength !== undefined) {
-        const atBound = parameter.enum?.find((value) => [...String(value)].length === minLength);
+        const atBound = parameter.enum?.find((value) => Array.from(String(value)).length === minLength);
         if (!parameter.enum || atBound !== undefined) valid(String(atBound ?? "🐺".repeat(minLength)));
         if (minLength > 0) invalid("🐺".repeat(minLength - 1));
       }
       if (maxLength !== undefined) {
-        const atBound = parameter.enum?.find((value) => [...String(value)].length === maxLength);
+        const atBound = parameter.enum?.find((value) => Array.from(String(value)).length === maxLength);
         if (!parameter.enum || atBound !== undefined) valid(String(atBound ?? "🐺".repeat(maxLength)));
         invalid("🐺".repeat(maxLength + 1));
       }

@@ -107,7 +107,8 @@ function queryValueError(parameter: QueryParameter, value: string): string | und
       decoded = value === "true";
       break;
     case "string": {
-      const length = [...value].length;
+      // OpenAPI string lengths count Unicode code points.
+      const length = Array.from(value).length;
       if (parameter.minLength !== undefined && length < parameter.minLength) return `is shorter than ${parameter.minLength} characters`;
       if (parameter.maxLength !== undefined && length > parameter.maxLength) return `is longer than ${parameter.maxLength} characters`;
       break;
