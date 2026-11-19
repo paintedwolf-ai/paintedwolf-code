@@ -106,6 +106,12 @@ webE2e("An outside text edit opens the recorded file from chat", async ({ page, 
       }
       await driver.completed(call);
       expect(readFileSync(destination, "utf8")).toBe("Updated report\n");
+      const transcript = await apiJson<SessionTranscriptPage>(request, "GET", `/v1/sessions/${sessionId}/messages`);
+      const message = transcript.messages.find((entry) => entry.tool_result?.tool_call_id === call);
+      expect(message?.tool_result?.file_edit_previews).toContainEqual(expect.objectContaining({ path: destination }));
+      expect(message?.source_context?.locations).toContainEqual(expect.objectContaining({
+        project_id: project.id, path: destination.slice(1), file_id: expect.any(String),
+      }));
     } finally {
       await apiJson(request, "POST", "/harness/llm/auto", { enabled: true, text: "The report is updated." });
     }
@@ -117,12 +123,14 @@ webE2e("An outside text edit opens the recorded file from chat", async ({ page, 
     await expect(disclosure).toHaveAttribute("aria-expanded", "true");
     await disclosure.click();
     await expect(disclosure).toHaveAttribute("aria-expanded", "false");
+    const link = card.getByTestId("source-path-link");
+    await expect(link).toBeVisible();
     const open = page.waitForResponse((response) => {
       const request = response.request();
       return new URL(response.url()).pathname === `/v1/projects/${project.id}/editor-documents` &&
         request.method() === "POST" && Boolean(request.postDataJSON().file_id);
     });
-    await card.getByTestId("source-path-link").click();
+    await link.click();
     expect((await open).ok()).toBe(true);
     const editor = page.getByTestId("files-editor-host").filter({ visible: true }).locator(".cm-content");
     await expect(editor).toContainText("Updated report");
