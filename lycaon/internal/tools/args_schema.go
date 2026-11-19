@@ -78,7 +78,11 @@ func ValidateCallArguments(qualifiedName string, args, schema map[string]any, tc
 				data["missing_required_arguments"] = required
 				data["missing_required_paths"] = argdiag.MissingRequiredPaths(invalid)
 			}
-			data["schema_issues"] = argdiag.SchemaIssues(invalid)
+			issues, unsupported := argdiag.SchemaIssues(invalid)
+			data["schema_issues"] = issues
+			if len(unsupported) > 0 {
+				data["unsupported_property_paths"] = unsupported
+			}
 			return toolrejection.RejectInvalidArguments("TOOL_ARGS_INVALID", data)
 		}
 	}

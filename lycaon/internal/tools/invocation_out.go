@@ -22,8 +22,8 @@ const (
 const MaxSourceDeliveryTags = 16
 
 // MergeChild moves a child's outputs onto o. Effects that already happened
-// always cross, advisory facts cross by scope, and fields that describe the
-// child's own call never do.
+// always cross. Advisory facts cross by scope. Program settlement facts cross
+// only with the whole program.
 func (o *ToolInvocationOut) MergeChild(child *ToolInvocationOut, scope MergeScope) {
 	if o == nil || child == nil || o == child {
 		return

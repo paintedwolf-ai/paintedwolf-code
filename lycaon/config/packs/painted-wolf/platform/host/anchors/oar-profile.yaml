@@ -1288,6 +1288,9 @@ host_facts:
    type: string
  - name: paintedwolf.missing_required_paths
    type: list<string>
+ - name: paintedwolf.unsupported_property_paths
+   type: list<string>
+   observation: Bounded quoted JSON pointers to properties the offered schema forbids outside alternatives.
  - name: paintedwolf.controlled_header
    type: string
  - name: paintedwolf.found_under
