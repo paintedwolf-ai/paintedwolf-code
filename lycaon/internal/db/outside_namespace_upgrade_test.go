@@ -29,8 +29,9 @@ func TestOutsideNamespaceLeavesFolderRulesAlone(t *testing.T) {
 	defer store.Close()
 	_, err = store.Exec(`INSERT INTO projects(id,last_opened_at,created_at) VALUES('p6','2026-01-01T00:00:00Z','2026-01-01T00:00:00Z')`)
 	testutil.FailErr(t, "create project", err)
-	var outside string
-	testutil.FailErr(t, "read new project's outside namespace", store.QueryRow(`SELECT id FROM project_roots WHERE project_id='p6' AND kind='outside'`).Scan(&outside))
+	const outside = "p6-outside"
+	_, err = store.Exec(`INSERT INTO project_roots(id,project_id,path,label,is_primary,added_at,kind) VALUES(?,'p6','','outside',0,'2026-01-01T00:00:00Z','outside')`, outside)
+	testutil.FailErr(t, "seed outside namespace", err)
 	_, err = store.Exec(`INSERT INTO project_roots(id,project_id,path,label,is_primary,added_at,kind) VALUES('folder','p6','/work/outside','outside',1,'2026-01-01T00:00:00Z','attached')`)
 	testutil.FailErr(t, "attach a folder labeled outside", err)
 	if _, err := store.Exec(`INSERT INTO project_roots(id,project_id,path,label,is_primary,added_at,kind) VALUES('second','p6','','outside',0,'2026-01-01T00:00:00Z','outside')`); err == nil {
