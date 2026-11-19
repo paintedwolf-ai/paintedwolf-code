@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { CommandActivity, CommandActivityStep, CommandProgramReceipt } from "../../api/types.ts";
 import type { ToolPartView } from "./tool-part-model.ts";
 import type { ActivitySpanEntry } from "../transcript/projection/transcript-item-model.ts";
-import { commandActivityGroups, commandActivityHeadline, commandActivityRank, createCommandActivityProjection } from "./command-activity-model.ts";
+import { commandActivityHeadline, commandActivityRank, createCommandActivityProjection } from "./command-activity-model.ts";
 
 function fact(id: string, overrides: Partial<CommandActivity> = {}): CommandActivity {
   return { id, group: "Exploring project files", phase: "inspect", label: "Read source", subject: "source.rs", state: "completed", outcome: "Exited 0", status_code: 0, execution_ids: [id], spans: [], ...overrides };
@@ -235,16 +235,6 @@ it("projects source inspection using its program receipt and keeps Git HEAD visi
  const settled = parts(project([entry("list", [fact("list")]), entry("read", [fact("read")], "inspect_source")]));
  expect(settled).toHaveLength(1);
  expect(settled[0]!.commandActivity!.calls.map(call => call.toolCallId)).toEqual(["list", "read"]);
-});
-
-it("lists activity groups in first-appearance order", () => {
- const project = createCommandActivityProjection();
- const entries = [
-  entry("a", [fact("a", { steps: [step("s1"), step("s2")] })]),
-  entry("b", [fact("b", { steps: [step("s3")] })]),
-  entry("c", [fact("c", { group: "Changing files", label: "Change files", phase: "mutate" })]),
- ];
- expect(commandActivityGroups(project(entries))).toEqual(["Exploring project files", "Changing files"]);
 });
 
 it("keeps a program-level failure visible after successful child activities", () => {

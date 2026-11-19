@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { toolSchemaNames } from "./tool-catalog-tools.ts";
-import { toolPartFromCall, toolPartSummaryTitle } from "./tool-part-model.ts";
+import { toolPartFromCall, toolSummaryFields } from "./tool-part-model.ts";
 import { resolveChickletTitle } from "./tool-chicklet-titles.ts";
 import {
   TOOL_CHICKLET_RUNNING_LABELS,
@@ -158,7 +158,7 @@ describe("tool-chicklet-titles", () => {
         },
         "asst",
       );
-      const title = toolPartSummaryTitle(part);
+      const title = toolSummaryFields(part).title;
       expect(title, tool).not.toBe(tool);
       expect(title.length).toBeGreaterThan(0);
     }
@@ -188,7 +188,7 @@ describe("tool-chicklet-titles", () => {
       },
       "asst",
     );
-    expect(toolPartSummaryTitle(part)).toBe("git_status");
+    expect(toolSummaryFields(part).title).toBe("git_status");
   });
 
   it("titles the argument-free source_history call with its declared fallback", () => {
@@ -209,7 +209,7 @@ describe("tool-chicklet-titles", () => {
       },
       "asst",
     );
-    expect(toolPartSummaryTitle(part)).toBe("page_close");
+    expect(toolSummaryFields(part).title).toBe("page_close");
   });
 
   describe("declared title keys are exhaustive", () => {
@@ -430,6 +430,6 @@ it("prefers the resolved result target over the provisional call label", () => {
     id: "result", role: "tool", origin: "tool", authority: "none", trust_tier: "untrusted", content: "done", created_at: "t",
     tool_result: { content: "done", display_title: "./task den:test:fast", display_subject: "./task den:test:fast", outcome: "completed" },
   }, "assistant");
-  expect(toolPartSummaryTitle(part)).toBe("./task den:test:fast");
+  expect(toolSummaryFields(part).title).toBe("./task den:test:fast");
   expect(part.args?.handle).toBe(handle);
 });
