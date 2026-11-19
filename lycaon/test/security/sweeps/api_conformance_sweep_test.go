@@ -100,7 +100,7 @@ func TestAPIConformance(t *testing.T) {
 	sweep.hold = newConformanceHold()
 	h := wiring.BuildForTest(t, wiring.WithChangeDebounce(conformanceDebounce), wiring.WithFileOperationHold(sweep.hold.wait),
 		wiring.WithInstalledPack(filepath.Join("testdata", "conformance-pack")),
-		wiring.WithMCPConnector(conformanceMCP()))
+		wiring.WithMCPConnector(conformanceMCP()), wiring.WithModelFeedFixture())
 	hub := h.MemoryHub()
 	if hub == nil {
 		t.Fatal("conformance sweep needs the in-memory event hub")

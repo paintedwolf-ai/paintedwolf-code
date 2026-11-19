@@ -125,6 +125,9 @@ func BuildForTestAt(t *testing.T, dir string, opts ...Option) *Harness {
 	if !o.productionCostPricer {
 		cfg.TestCostPricer = testCostPricer{}
 	}
+	if o.modelFeedFixture {
+		cfg.TestModelFeedDocument = filepath.Join(configlayout.FindModuleRoot(), "internal", "pricing", "testdata", "models-dev", "api.json")
+	}
 	if o.autoCompleteLegs {
 		cfg.TestOrchestrator = autoCompleteOrchestrator
 	}
