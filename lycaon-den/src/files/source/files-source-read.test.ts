@@ -79,7 +79,7 @@ describe("file acquisition", () => {
     const getProjectSource = vi.fn().mockResolvedValue(source({ binary: true, content: "", mime: "image/png" }));
     try {
       const result = await openFileBufferSource(stubClient({ openEditorDocument, getProjectSource }), project, {
-        rootId: root, path: "home/me/diagram.png", fileId,
+        rootId: root, path: "home/me/diagram.png", fileId, encoding: null,
       });
       result.reservation?.release();
       expect(openEditorDocument).toHaveBeenCalledExactlyOnceWith(project, { file_id: fileId, client_id: "window" }, undefined);
