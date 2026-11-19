@@ -26,7 +26,8 @@ func TestRuntimeRunPromptDelegatesToLoop(t *testing.T) {
 		LoopDeps: func() promptloop.PromptLoopDeps {
 			return promptloop.PromptLoopDeps{
 				Context: promptloop.ContextDeps{
-					Limits: func(context.Context, *api.Session) settings.SessionLimits { return settings.DefaultSessionLimits() },
+					Limits:               func(context.Context, *api.Session) settings.SessionLimits { return settings.DefaultSessionLimits() },
+					ResolveEffectiveMode: store.ResolveEffectiveMode,
 					BuildMessages: func(_ context.Context, _ *api.Session, history []api.Message, _ *inject.CoordinatorTurnFrame) ([]api.Message, error) {
 						return history, nil
 					},
