@@ -234,14 +234,16 @@ host_facts:
    observation: The capability_request.write_root path whose approval would open each refused write path that a reviewed grant can open; empty when none.
  - name: paintedwolf.refused_read_paths
    type: list<string>
- - name: paintedwolf.optional_read_paths
-   type: list<string>
    observation: Paths the kernel refused the invocation's processes for reading, at any layer; empty when none.
  - name: paintedwolf.refused_read_grants
    type: list<string>
+   observation: The capability_request.read_path path whose approval would open each refused read path that a reviewed grant can open; empty when none.
+ - name: paintedwolf.optional_read_paths
+   type: list<string>
+   observation: Protected reads withheld on a successful command exit that remain eligible for a notice in this chat.
  - name: paintedwolf.refused_multiple_read_grants
    type: bool
-   observation: The capability_request.read_path path whose approval would open each refused read path that a reviewed grant can open; empty when none.
+   observation: More than one exact read grant is available for protected reads this invocation attempted.
  - name: paintedwolf.refused_credential_store_paths
    type: list<string>
    observation: Host OS credential store paths or session D-Bus endpoints the kernel refused the invocation's processes; empty when none.
