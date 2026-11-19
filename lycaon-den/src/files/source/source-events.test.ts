@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import type { SourceChange, SourceDirListing } from "../../api/types.ts";
 import { applySourceChangesEvent, requestSourceProjectionResync } from "./source-events.ts";
 import { chatLocationsEpoch, recordChatLocations } from "./chat-locations.ts";
-import { recordOutsideRoot, resetOutsideRootsForTests } from "./outside-namespace.ts";
+import { recordOutsideRoot } from "./outside-namespace.ts";
 import { setBufferLiveHandlers } from "../documents/buffer-live.ts";
 import { applyFilesBufferLoad, applyFilesBufferDraft } from "../documents/project-files-buffer-io.ts";
 import { openFilesBuffer, resetProjectFilesForTests } from "../documents/project-files-buffer-lifecycle.ts";
@@ -38,7 +38,6 @@ function listing(dir: string, entries: SourceDirListing["entries"]): SourceDirLi
 afterEach(() => {
   resetSourceTreeStoreForTests();
   recordChatLocations("outside-project", []);
-  resetOutsideRootsForTests();
   resetProjectFilesForTests();
   vi.useRealTimers();
 });

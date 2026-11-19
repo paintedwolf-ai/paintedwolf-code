@@ -11,7 +11,7 @@ import { stubClient } from "../../test/client-fixture.ts";
 import { copyTextToClipboard } from "../../utils/clipboard.ts";
 import { projectFilesState } from "../documents/files-buffer-state.ts";
 import { chatLocationsEpoch } from "../source/chat-locations.ts";
-import { recordOutsideRoot, resetOutsideRootsForTests } from "../source/outside-namespace.ts";
+import { recordOutsideRoot } from "../source/outside-namespace.ts";
 import { createFileContextActions, createFilePathIntents } from "./file-context-actions.ts";
 import { filesContextMenuItems } from "./project-files-context-menu.ts";
 
@@ -24,7 +24,6 @@ vi.mock("../../utils/clipboard.ts", async importOriginal => ({
   copyTextToClipboard: vi.fn(),
 }));
 
-const projectId = () => "project";
 const filesRoots = (): ProjectRoot[] => [{
   id: "attached", label: "project", path: "/home/me/project", is_primary: true,
   kind: "attached", admitted: true, admission_code: null, added_at: "2026-01-01T00:00:00Z",
@@ -33,7 +32,8 @@ const location: SourceChatLocation = {
   id: "loc", root_id: "outside", session_id: "chat", kind: "folder", label: "notes",
   anchor: "home/me/notes", path: "/home/me/notes", available: true, hidden: false,
 };
-function actionsFor(client: () => LycaonClient | null) {
+function actionsFor(project: string, client: () => LycaonClient | null) {
+  const projectId = () => project;
   const activeBuffer = () => null;
   const paths = createFilePathIntents({
     projectId, filesRoots, activeBuffer, rootLabelFor: () => "project", openReviewRowFile: vi.fn(),
@@ -54,13 +54,13 @@ function actionsFor(client: () => LycaonClient | null) {
 afterEach(() => {
   setStatusChipNavigationSink(null);
   resetContributionStoreForTest();
-  resetOutsideRootsForTests();
   vi.clearAllMocks();
 });
 
 it("opens approvals and refreshes the tree only after the host hides a location", async () => {
+  const project = "hide-location-project";
   seedStockFrame();
-  recordOutsideRoot(projectId(), location.root_id);
+  recordOutsideRoot(project, location.root_id);
   const navigate = vi.fn();
   setStatusChipNavigationSink(navigate);
   const updateSourceChatLocation = vi.fn<LycaonClient["updateSourceChatLocation"]>()
@@ -68,7 +68,7 @@ it("opens approvals and refreshes the tree only after the host hides a location"
     .mockRejectedValueOnce(new Error("Location unavailable"));
   const connected = stubClient({ updateSourceChatLocation });
   let client: LycaonClient | null = connected;
-  const actions = actionsFor(() => client);
+  const actions = actionsFor(project, () => client);
   const items = filesContextMenuItems({
     surface: "tree-row", rootId: location.root_id, path: location.anchor, name: location.label,
     isDir: true, isRoot: true, outsideLocation: location.id,
@@ -80,16 +80,16 @@ it("opens approvals and refreshes the tree only after the host hides a location"
   select("files-ctx-copy-path");
   expect(copyTextToClipboard).toHaveBeenCalledExactlyOnceWith(location.path);
 
-  const epoch = chatLocationsEpoch(projectId());
+  const epoch = chatLocationsEpoch(project);
   select("files-ctx-hide-location");
-  expect(updateSourceChatLocation).toHaveBeenCalledExactlyOnceWith(projectId(), location.id, { hidden: true });
-  expect(chatLocationsEpoch(projectId())).toBe(epoch);
-  await vi.waitFor(() => expect(chatLocationsEpoch(projectId())).toBe(epoch + 1));
+  expect(updateSourceChatLocation).toHaveBeenCalledExactlyOnceWith(project, location.id, { hidden: true });
+  expect(chatLocationsEpoch(project)).toBe(epoch);
+  await vi.waitFor(() => expect(chatLocationsEpoch(project)).toBe(epoch + 1));
   select("files-ctx-hide-location");
   await vi.waitFor(() => expect(reportSurfaceFailure).toHaveBeenCalledWith(
-    expect.objectContaining({ code: "files_location_hide_failed" }), "Location unavailable", projectId(),
+    expect.objectContaining({ code: "files_location_hide_failed" }), "Location unavailable", project,
   ));
-  expect(chatLocationsEpoch(projectId())).toBe(epoch + 1);
+  expect(chatLocationsEpoch(project)).toBe(epoch + 1);
 
   client = null;
   select("files-ctx-hide-location");
@@ -97,8 +97,9 @@ it("opens approvals and refreshes the tree only after the host hides a location"
 });
 
 it("preserves an outside file's host address and unavailable state when opening it externally", () => {
-  recordOutsideRoot(projectId(), location.root_id);
-  const { openInTarget } = actionsFor(() => null);
+  const project = "external-file-project";
+  recordOutsideRoot(project, location.root_id);
+  const { openInTarget } = actionsFor(project, () => null);
   expect(openInTarget?.({
     surface: "tree-row", rootId: location.root_id, path: location.anchor + "/notes.txt", name: "notes.txt",
     isDir: false, isRoot: false, outsideLocation: location.id, deleted: true,

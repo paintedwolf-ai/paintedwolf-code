@@ -1,9 +1,7 @@
-import { afterEach, describe, expect, it } from "vitest";
-import { isOutsideRoot, outsideHostDirectory, outsideHostPath, outsideRootId, recordOutsideRoot, resetOutsideRootsForTests } from "./outside-namespace.ts";
+import { describe, expect, it } from "vitest";
+import { isOutsideRoot, outsideHostDirectory, outsideHostPath, outsideRootId, recordOutsideRoot } from "./outside-namespace.ts";
 
 describe("outside namespace", () => {
-  afterEach(resetOutsideRootsForTests);
-
   it("knows each project's outside root separately", () => {
     recordOutsideRoot("project-a", "outside-a");
     recordOutsideRoot("project-b", "outside-b");
