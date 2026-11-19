@@ -4,11 +4,10 @@ import {
   isLoopbackTarget,
   isTaskToolName,
   toolDrawsWhileRunning,
-  toolPartDisplayStatus,
 } from "./tool-part-model.ts";
 import { ACTIVITY_ROLE_TIERS, TOOL_ACTIVITY_PRESENTATION } from "./tool-presentation.generated.ts";
 import type { ToolActivityRole } from "./tool-presentation.generated.ts";
-import type { ToolPartStatus, ToolPartView } from "./tool-part-model.ts";
+import type { ToolPartView } from "./tool-part-model.ts";
 import type { ActivitySpanEntry, DisplayTranscriptItem, RawTranscriptItem } from "../transcript/projection/transcript-item-model.ts";
 import type { TranscriptLayout } from "../transcript/layout/transcript-layout.ts";
 import { LOCAL_AI_LABEL } from "../turnload/turn-load-rows.ts";
@@ -135,28 +134,6 @@ function activityCandidate(
 
 export function activitySpanEntryKey(entry: ActivitySpanEntry): string {
   return entry.kind === "tool" ? entry.part.id : entry.key;
-}
-
-/** Running wins; otherwise the newest settled tool determines the status dot. */
-export function activitySpanStatus(
-  entries: readonly ActivitySpanEntry[],
-  sessionId?: string,
-): ToolPartStatus {
-  const statuses = activitySpanToolParts(entries).map((part) =>
-    toolPartDisplayStatus(part, sessionId),
-  );
-  if (statuses.includes("running")) return "running";
-  return statuses[statuses.length - 1] === "error" ? "error" : "completed";
-}
-
-/** Failures remain explicit even when later work recovers the status dot. */
-export function activitySpanFailureCount(
-  entries: readonly ActivitySpanEntry[],
-  sessionId?: string,
-): number {
-  return activitySpanToolParts(entries).filter(
-    (part) => toolPartDisplayStatus(part, sessionId) === "error",
-  ).length;
 }
 
 /** Resolves the specificity tier for a candidate from its role. */
