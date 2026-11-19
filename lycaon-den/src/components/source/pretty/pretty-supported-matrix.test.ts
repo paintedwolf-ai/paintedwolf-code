@@ -13,6 +13,7 @@ import {
   prettyLayoutForLanguage,
   prettyLayoutForPath,
 } from "../editor/codemirror-lang.ts";
+import { finishFixtureParsing } from "../../../test/codemirror-parsing-fixture.ts";
 import { createPrettyExtension, prettyOutcomeOf } from "./pretty-layout.ts";
 import { PrettyBreakWidget, prettyLayoutDecorations } from "./pretty-view.ts";
 
@@ -94,13 +95,7 @@ function open(doc: string, filePath: string, language?: string): EditorState {
 }
 
 function openForced(doc: string, filePath: string, language?: string): EditorState {
-  const view = new EditorView({ state: open(doc, filePath, language) });
-  try {
-    forceParsing(view, doc.length, 5_000);
-    return view.state;
-  } finally {
-    view.destroy();
-  }
+  return finishFixtureParsing(open(doc, filePath, language), filePath);
 }
 
 function breaks(state: EditorState): number[] {
