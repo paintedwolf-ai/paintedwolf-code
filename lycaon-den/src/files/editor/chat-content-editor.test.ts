@@ -4,6 +4,7 @@ import type { ChatContentReference, ChatContentRow, ChatContentPage } from "../.
 import { createChatContentAccess, clearChatContentCache } from "../../chat/transcript/content/chat-content-reader.ts";
 import { stubClient } from "../../test/client-fixture.ts";
 import { editorDisplayPrefs } from "../../components/source/editor/editor-display-prefs.ts";
+import type { ChatReadingPlace } from "./chat-content-viewport.ts";
 import { ChatContentEditor } from "./chat-content-editor.ts";
 
 const row = (index: number): ChatContentRow => ({index,offset:index*8,text:"content\n",spans:[]});
@@ -12,14 +13,14 @@ const reference: ChatContentReference = {field:"tool_output",sha256:"fixture",to
 const cleanup: (()=>void)[] = [];
 afterEach(() => { for(const dispose of cleanup.splice(0)) dispose(); clearChatContentCache(); });
 
-function fixture() {
+function fixture(place?: ChatReadingPlace) {
   let finish: (page:ChatContentPage)=>void = () => {};
   const getRows = vi.fn(() => new Promise<ChatContentPage>(resolve => {finish=resolve;}));
   const client = stubClient({getChatContent:getRows});
   const parent = document.createElement("div");
   document.body.append(parent);
   const error = vi.fn();
-  const editor = new ChatContentEditor(parent,createChatContentAccess({client,sessionId:"session",messageId:"message",reference}),editorDisplayPrefs(),error);
+  const editor = new ChatContentEditor(parent,createChatContentAccess({client,sessionId:"session",messageId:"message",reference}),editorDisplayPrefs(),error,place);
   cleanup.push(() => {editor.destroy();parent.remove();});
   return {editor,getRows,error,finish:() => finish({reference,rows:Array.from({length:64},(_,index)=>row(index+100)),
     offset:800,end_offset:1312,complete:false,text:"",spans:[]})};
@@ -76,4 +77,26 @@ it("uses the measured character beside a gap whose estimated rank differs", asyn
     offset: -1, left: 20, target: { offset: 18, length: 0 },
   });
   expect(f.getRows).not.toHaveBeenCalled();
+});
+
+it("materializes a retained handoff without moving the selection", async () => {
+  const f = fixture({ target: { offset: 804, length: 0 }, offset: -1, left: 20 });
+  expect(f.getRows.mock.calls[0]?.slice(3, 4)).toEqual([{ locate: 804 }]);
+  const { reader } = f.editor;
+  const initial = reader.view.state.selection.main.head;
+  f.finish();
+  await vi.waitFor(() => expect(reader.document.rowAt("", 100)).toBeDefined());
+  expect(reader.view.state.selection.main.head).toBe(initial);
+  expect(f.error).not.toHaveBeenCalled();
+});
+
+it("selects the matched text when the latest navigation finishes", async () => {
+  const f = fixture();
+  const pending = f.editor.revealMatch({ offset: 804, length: 3 });
+  f.finish();
+  await pending;
+  const { reader } = f.editor;
+  const selection = reader.view.state.selection.main;
+  expect(reader.document.at(selection.from)?.row?.index).toBe(100);
+  expect(reader.view.state.sliceDoc(selection.from, selection.to)).toBe("ent");
 });

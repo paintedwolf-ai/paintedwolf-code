@@ -175,7 +175,7 @@ describe("bounded Pretty snapshot reads", () => {
       const page = { reference, offset: position.offset, end_offset: end, text: "x".repeat(position.limit), spans: [], complete: end === ref.total_runes };
       if (!bad) return page;
       if (position.offset || fault === "caller abort") {
-        await new Promise<void>((_, reject) => signal.addEventListener("abort", () => reject(signal.reason), { once: true }));
+        await new Promise<void>((_, reject) => signal.addEventListener("abort", () => reject(new DOMException("Canceled", "AbortError")), { once: true }));
       }
       return fault === "invalid span" ? { ...page, spans: [{ field: "content", kind: "secret", start: position.limit, length: 1 }] }
         : { ...page, reference: { ...reference, sha256: "different" } };
