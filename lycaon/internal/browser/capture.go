@@ -432,11 +432,17 @@ func driverCall(page *rod.Page, method string, args map[string]any) ([]byte, err
 	if res == nil {
 		return []byte("null"), nil
 	}
-	body, err := marshalDriverResult(method, res.Value)
+	return driverResult(method, res.Value, args, time.Since(started))
+}
+
+// driverResult encodes a driver call's value with the deadline a failed call
+// ran under.
+func driverResult(method string, value any, args map[string]any, elapsed time.Duration) ([]byte, error) {
+	body, err := marshalDriverResult(method, value)
 	if err != nil {
 		return nil, err
 	}
-	return withDriverDeadline(body, args, time.Since(started)), nil
+	return withDriverDeadline(body, args, elapsed), nil
 }
 
 // withDriverDeadline adds to a failed driver result the deadline the call ran
