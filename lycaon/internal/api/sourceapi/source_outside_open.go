@@ -281,6 +281,6 @@ func pathInsideAttached(p *project.Project, abs string) bool {
 
 func notifyChatLocationChange(r *http.Request, p *project.Project) {
 	if err := sourcefeed.EmitProjectSignal(r.Context(), p.ID, project.RootRefsFrom(p)); err != nil {
-		slog.Debug("Chat location event was not published", "project", p.ID, "error", err)
+		slog.DebugContext(r.Context(), "Chat location event was not published", "project", p.ID, "error", err)
 	}
 }
