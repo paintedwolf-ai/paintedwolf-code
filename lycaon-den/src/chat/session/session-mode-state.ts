@@ -9,7 +9,7 @@ type UpgradePhase = "sending" | "reconciling";
 type ModeIntent = {
   initial?: SessionMode;
   draft?: SessionMode;
-  admission?: { mode: SessionMode; count: number; token: symbol };
+  admission?: { mode: SessionMode; count: number; remember: () => void };
   upgrade?: UpgradePhase;
 };
 
@@ -89,21 +89,30 @@ export function beginSessionModeAdmission(appStore: AppStore, sessionId: string,
     confirm: () => confirmSessionModeAdmission(appStore, sessionId, explicit),
     finish() {},
   };
-  const token = entry?.admission?.token ?? Symbol();
-  setIntent(sessionId, { ...entry, initial: entry?.initial ?? mode, admission: { mode, count: (entry?.admission?.count ?? 0) + 1, token } });
+  let remembered = false;
+  const remember = entry?.admission?.remember ?? (() => {
+    if (remembered) return;
+    remembered = true;
+    rememberStartedMode(mode);
+  });
+  setIntent(sessionId, {
+    ...entry,
+    initial: entry?.initial ?? mode,
+    admission: { mode, count: (entry?.admission?.count ?? 0) + 1, remember },
+  });
   return {
     mode,
     confirm() {
-      rememberStartedMode(mode);
+      remember();
       confirmSessionModeAdmission(appStore, sessionId, mode);
     },
     finish() {
       const current = intents[sessionId];
-      if (current?.admission?.token !== token) return;
+      if (current?.admission?.remember !== remember) return;
       const { count } = current.admission;
       setIntent(sessionId, {
         ...current,
-        admission: count > 1 ? { mode, count: count - 1, token } : undefined,
+        admission: count > 1 ? { mode, count: count - 1, remember } : undefined,
       });
     },
   };

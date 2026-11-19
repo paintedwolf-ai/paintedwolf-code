@@ -59,6 +59,27 @@ describe("session mode intent", () => {
     admission.finish();
   });
 
+  it("keeps a later chat's default when a second response arrives for the first chat", () => {
+    const store = createAppStore();
+    store.actions.setCurrentSession({ ...session, started: false });
+    setDraftSessionMode(store, session.id, "ask");
+    const first = beginSessionModeAdmission(store, session.id);
+    const overlap = beginSessionModeAdmission(store, session.id);
+    first.confirm();
+    first.finish();
+    expect(lastStartedModePref()).toBe("ask");
+
+    const id = "next";
+    store.actions.setCurrentSession({ ...session, id, root_session_id: id, started: false });
+    setDraftSessionMode(store, id, "agent");
+    const next = beginSessionModeAdmission(store, id);
+    next.confirm();
+    next.finish();
+    overlap.confirm();
+    overlap.finish();
+    expect(lastStartedModePref()).toBe("agent");
+  });
+
   it("defaults a pre-armed Agent workflow to Agent even when the last start used Ask", () => {
     setAppStateSnapshot({ ...EMPTY_APP_STATE_V1, chat: { lastStartedMode: "ask" } });
     syncChatPrefsFromSnapshot();
