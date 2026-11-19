@@ -4,7 +4,6 @@ import {
   type Json,
   type PointerReach,
   type TargetOpts,
-  deadlineReport,
   describeElement,
   findTarget,
   isDisabled,
@@ -395,7 +394,7 @@ async function aimAt(
     }
     await sleep(100);
   }
-  return { ok: false, ...last, ...deadlineReport(timeoutMs, start), locators: locatorView(opts), state: readCompactState() };
+  return { ok: false, ...last, deadline_ms: timeoutMs, elapsed_ms: Date.now() - start, deadline_expired: true, locators: locatorView(opts), state: readCompactState() };
 }
 
 export function installLycaonDriver(): LycaonDriverApi {
