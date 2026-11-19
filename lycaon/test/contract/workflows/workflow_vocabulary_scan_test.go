@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/conditions"
+	"github.com/lycaon/lycaon/internal/testutil/vocabularytest"
 	"github.com/lycaon/lycaon/internal/vocabulary"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 )
@@ -16,7 +17,7 @@ func TestScanDomainShippedInCatalog(t *testing.T) {
 			seen[row.ID] = row
 		}
 	}
-	for _, id := range vocabulary.DomainIDs("scan", "shipped") {
+	for _, id := range vocabularytest.DomainIDs("scan", "shipped") {
 		row, ok := seen[id]
 		if !ok {
 			t.Fatalf("missing shipped scan domain catalog row for %q", id)
@@ -25,7 +26,7 @@ func TestScanDomainShippedInCatalog(t *testing.T) {
 			t.Fatalf("scan domain %q catalog = %+v", id, row)
 		}
 	}
-	for _, id := range vocabulary.DomainIDs("scan", "catalog") {
+	for _, id := range vocabularytest.DomainIDs("scan", "catalog") {
 		row, ok := seen[id]
 		if !ok {
 			t.Fatalf("missing scan catalog stub row for %q", id)

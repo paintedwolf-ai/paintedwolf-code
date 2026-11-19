@@ -22,13 +22,18 @@ func ExportCatalog() []CatalogEntry {
 		if d.domain != "—" {
 			layer = "domain"
 		}
-		status := "shipped"
-		if d.usage == catalogOnly || d.usage == hostOnly {
-			status = "catalog"
+		kind, status := "predicate", "shipped"
+		switch d.usage {
+		case completionForm:
+			kind = "completion_form"
+		case catalogOnly:
+			kind, status = "reserved", "catalog"
+		case hostOnly:
+			kind, status = "host_only", "catalog"
 		}
 		rows = append(rows, CatalogEntry{
 			ID: id, Layer: layer, Domain: d.domain, Status: status, Parameterized: strings.HasSuffix(id, ":*"),
-			Kind: d.usage.kind(), Overlay: d.usage == overlayPredicate || d.usage == completionForm,
+			Kind: kind, Overlay: d.usage == overlayPredicate || d.usage == completionForm,
 		})
 	}
 	sort.Slice(rows, func(i, j int) bool { return rows[i].ID < rows[j].ID })
@@ -67,14 +72,4 @@ func CanBind(id string, family bool) bool {
 	}
 	d, ok := declarations[id]
 	return ok && (d.usage == predicate || d.usage == overlayPredicate)
-}
-
-func DomainIDs(domain, status string) []string {
-	var ids []string
-	for _, row := range ExportCatalog() {
-		if row.Domain == domain && row.Status == status {
-			ids = append(ids, row.ID)
-		}
-	}
-	return ids
 }

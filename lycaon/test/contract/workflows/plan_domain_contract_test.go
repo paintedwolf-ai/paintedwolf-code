@@ -5,6 +5,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/conditions"
 	"github.com/lycaon/lycaon/internal/rules"
+	"github.com/lycaon/lycaon/internal/testutil/vocabularytest"
 	"github.com/lycaon/lycaon/internal/vocabulary"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 	workflowvalidation "github.com/lycaon/lycaon/internal/workflow/validation"
@@ -15,7 +16,7 @@ func TestPlanDomainIDsRegisteredOnBoot(t *testing.T) {
 	t.Parallel()
 	reg, err := conditions.NewDefaultRegistry(conditions.RegistryDeps{})
 	contractcheck.FailErr(t, "build conditions registry", err)
-	for _, id := range vocabulary.DomainIDs("plan", "shipped") {
+	for _, id := range vocabularytest.DomainIDs("plan", "shipped") {
 		if !reg.Has(id) {
 			t.Fatalf("shipped plan domain id %q not registered", id)
 		}
@@ -30,7 +31,7 @@ func TestVocabularyExportPlanCatalogStatus(t *testing.T) {
 			seen[row.ID] = row
 		}
 	}
-	for _, id := range vocabulary.DomainIDs("plan", "shipped") {
+	for _, id := range vocabularytest.DomainIDs("plan", "shipped") {
 		row, ok := seen[id]
 		if !ok {
 			t.Fatalf("missing plan domain catalog row for %q", id)
