@@ -3,6 +3,7 @@ package llm
 import (
 	"context"
 	"errors"
+	"github.com/lycaon/lycaon/internal/llm/providers/nativegen"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -63,7 +64,7 @@ func TestRouterAvailabilityUsesRequestContext(t *testing.T) {
 		if got.Value(requestKey{}) != "request" {
 			t.Fatal("availability lookup lost request attribution")
 		}
-		return DefaultLocalModelRef().Model
+		return nativegen.DefaultModelID
 	})
 	selected, err := router.Lite(ctx)
 	testutil.FailErr(t, "resolve included default", err)

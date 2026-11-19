@@ -526,33 +526,28 @@ func TestRouterOverlayRootsUsesProjectPolicy(t *testing.T) {
 }
 
 func TestLocalDefaultRoleResolution(t *testing.T) {
-	localRef := DefaultLocalModelRef()
-	if localRef.ProviderID != IncludedProviderID || localRef.Model != nativegen.DefaultModelID {
-		t.Fatalf("DefaultLocalModelRef() = %+v", localRef)
-	}
-
-	// Both unset: both Coordinator and Lite bind to the bundled local model when available.
+	localRef := ModelRef{ProviderID: IncludedProviderID, Model: nativegen.DefaultModelID}
 	unsetPolicy := ModelPolicy{}
-	if got := CoordinatorRefWithLocalDefault(unsetPolicy, DefaultLocalModelRef().Model); got != localRef {
+	if got := CoordinatorRefWithLocalDefault(unsetPolicy, nativegen.DefaultModelID); got != localRef {
 		t.Fatalf("unset coordinator with local default = %+v, want %+v", got, localRef)
 	}
-	if got := SummarizerRefWithLocalDefault(unsetPolicy, DefaultLocalModelRef().Model); got != localRef {
+	if got := SummarizerRefWithLocalDefault(unsetPolicy, nativegen.DefaultModelID); got != localRef {
 		t.Fatalf("unset summarizer with local default = %+v, want %+v", got, localRef)
 	}
-	if !SummarizerSharesCoordinatorWithLocalDefault(unsetPolicy, DefaultLocalModelRef().Model) {
+	if !SummarizerSharesCoordinatorWithLocalDefault(unsetPolicy, nativegen.DefaultModelID) {
 		t.Fatal("unset roles should share the bundled local provider")
 	}
 
 	// Remote coordinator + unset summarizer: summarizer resolves to local default while coordinator stays remote.
 	remoteCoord := ModelRef{ProviderID: "anthropic", Model: "claude-sonnet-4-6"}
 	hybridPolicy := ModelPolicy{Coordinator: remoteCoord}
-	if got := CoordinatorRefWithLocalDefault(hybridPolicy, DefaultLocalModelRef().Model); got != remoteCoord {
+	if got := CoordinatorRefWithLocalDefault(hybridPolicy, nativegen.DefaultModelID); got != remoteCoord {
 		t.Fatalf("remote coordinator = %+v, want %+v", got, remoteCoord)
 	}
-	if got := SummarizerRefWithLocalDefault(hybridPolicy, DefaultLocalModelRef().Model); got != localRef {
+	if got := SummarizerRefWithLocalDefault(hybridPolicy, nativegen.DefaultModelID); got != localRef {
 		t.Fatalf("unset summarizer with remote coordinator = %+v, want %+v", got, localRef)
 	}
-	if SummarizerSharesCoordinatorWithLocalDefault(hybridPolicy, DefaultLocalModelRef().Model) {
+	if SummarizerSharesCoordinatorWithLocalDefault(hybridPolicy, nativegen.DefaultModelID) {
 		t.Fatal("remote coordinator and local default summarizer do not share provider capacity")
 	}
 
@@ -568,7 +563,7 @@ func TestLocalDefaultRoleResolution(t *testing.T) {
 
 	// StaticModelRouter.WithLocalDefault routes unset slots to the bundled local model.
 	store := NewInMemoryPolicyStore(hybridPolicy)
-	router := NewStaticModelRouter(store).WithLocalDefault(func(context.Context) string { return DefaultLocalModelRef().Model })
+	router := NewStaticModelRouter(store).WithLocalDefault(func(context.Context) string { return nativegen.DefaultModelID })
 	coordSel, err := router.Coordinator(t.Context())
 	testutil.FailErr(t, "router coordinator", err)
 	if coordSel.ProviderID != remoteCoord.ProviderID || coordSel.Model != remoteCoord.Model {
