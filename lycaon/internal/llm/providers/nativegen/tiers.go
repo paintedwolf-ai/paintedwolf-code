@@ -8,16 +8,25 @@ import (
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
-type tier struct {
-	id, name, description                string
-	minimum, recommended, workingSet     uint64
-	discreteMinimum, discreteRecommended uint64
+type tierMemory struct {
+	minimum, recommended, workingSet uint64
 }
 
+type tier struct {
+	id, name, description string
+	unified, discrete     tierMemory
+}
+
+// The 44,800-token Vulkan plan includes weights, KV storage and workspace.
+const largeVulkanWorkingSet = 16_646_471_680
+
 var tiers = [...]tier{
-	{DefaultModelID, "Small", "Leaves the most memory for your other apps.", 8 << 30, 8 << 30, 5 << 30, 8 << 30, 8 << 30},
-	{"gemma4-12b-paintedwolf", "Medium", "A balance of model size and memory use for everyday coding.", 16 << 30, 24 << 30, 8 << 30, 12 << 30, 16 << 30},
-	{"gemma4-26b-paintedwolf", "Large", "The most parameters, for devices with more memory.", 24 << 30, 32 << 30, 15 << 30, 16 << 30, 24 << 30},
+	{DefaultModelID, "Small", "Leaves the most memory for your other apps.",
+		tierMemory{8 << 30, 8 << 30, 5 << 30}, tierMemory{8 << 30, 8 << 30, 5 << 30}},
+	{"gemma4-12b-paintedwolf", "Medium", "A balance of model size and memory use for everyday coding.",
+		tierMemory{16 << 30, 24 << 30, 8 << 30}, tierMemory{12 << 30, 16 << 30, 8 << 30}},
+	{"gemma4-26b-paintedwolf", "Large", "The most parameters, for devices with more memory.",
+		tierMemory{24 << 30, 32 << 30, 15 << 30}, tierMemory{0, 24 << 30, largeVulkanWorkingSet}},
 }
 
 //go:embed release-pins.json
@@ -53,11 +62,12 @@ func (p *Runtime) ModelTiers() []api.LocalModelTier {
 	out := make([]api.LocalModelTier, 0, len(tiers))
 	best := -1
 	for _, t := range tiers {
-		minimum, recommended := t.minimum, t.recommended
+		requirements := t.unified
 		if p != nil && p.config.Backend == "vulkan" && !p.config.UnifiedMemory {
-			minimum, recommended = t.discreteMinimum, t.discreteRecommended
+			requirements = t.discrete
+			requirements.minimum = max(requirements.minimum, requirements.workingSet+p.config.DecisionDeviceBytes)
 		}
-		row := api.LocalModelTier{ID: t.id, DisplayName: t.name, Description: t.description, MinMemoryBytes: int(minimum)} // #nosec G115 -- Tier constants fit the supported 64-bit hosts.
+		row := api.LocalModelTier{ID: t.id, DisplayName: t.name, Description: t.description, MinMemoryBytes: int(requirements.minimum)} // #nosec G115 -- The memory plan fits the supported 64-bit hosts.
 		if p != nil {
 			pin, ok := p.pin(t.id)
 			row.DownloadBytes = int(pin.TotalBytes)
@@ -67,8 +77,8 @@ func (p *Runtime) ModelTiers() []api.LocalModelTier {
 				if p.config.UnifiedMemory {
 					capacity = min(capacity, p.config.HostMemory.Snapshot().CapacityBytes)
 				}
-				row.Eligible = p.config.PhysicalBytes >= minimum && capacity >= t.workingSet
-				if row.Eligible && p.config.PhysicalBytes >= recommended {
+				row.Eligible = p.config.PhysicalBytes >= requirements.minimum && capacity >= requirements.workingSet
+				if row.Eligible && p.config.PhysicalBytes >= requirements.recommended {
 					best = len(out)
 				}
 			}

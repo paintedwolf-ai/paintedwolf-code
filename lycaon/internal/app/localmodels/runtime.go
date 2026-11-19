@@ -81,7 +81,7 @@ func Build(ctx context.Context, options Options) (*Runtime, error) {
 	return &Runtime{
 		Decision: decision, Store: store, Resources: resources, Backend: inventory.Backend,
 		Generation: nativegen.NewRuntime(nativegen.RuntimeConfig{
-			PhysicalBytes: physicalBytes, BinaryPath: options.Binary, MetalLibrary: options.MetalLibrary,
+			DecisionDeviceBytes: plan.DeviceBytes, PhysicalBytes: physicalBytes, BinaryPath: options.Binary, MetalLibrary: options.MetalLibrary,
 			Backend: inventory.Backend, PhysicalDevice: device.PhysicalDevice,
 			Devices: resources.Devices, HostMemory: resources.GenerationHost,
 			DeviceMemory: resources.GenerationDevice, UnifiedMemory: device.UnifiedMemory,

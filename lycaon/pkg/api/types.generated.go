@@ -4313,9 +4313,11 @@ type LocalGenerationStatus struct {
 	// Admitted context capacity of the ready process.
 	ContextTokens int `json:"context_tokens,omitempty"`
 	// Memory named in local model requirements on this generation host.
-	MemoryKind    string `json:"memory_kind,omitempty"`
-	SelectedModel string `json:"selected_model,omitempty"`
-	TargetModel   string `json:"target_model,omitempty"`
+	MemoryKind string `json:"memory_kind,omitempty"`
+	// Persisted local model decision when the host can read its store.
+	SelectionState string `json:"selection_state,omitempty"`
+	SelectedModel  string `json:"selected_model,omitempty"`
+	TargetModel    string `json:"target_model,omitempty"`
 	// Current phase of an active model installation.
 	TransferPhase   string `json:"transfer_phase,omitempty"`
 	DownloadedBytes int    `json:"downloaded_bytes,omitempty"`

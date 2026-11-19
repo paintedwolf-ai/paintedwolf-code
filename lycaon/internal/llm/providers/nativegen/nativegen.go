@@ -17,6 +17,7 @@ import (
 // RuntimeConfig binds the packaged adapter to host-owned resource admission.
 type RuntimeConfig struct {
 	PhysicalBytes        uint64
+	DecisionDeviceBytes  uint64
 	Pins                 []modelstore.ModelPin
 	ContextLimit         int
 	PrefillChunk         int

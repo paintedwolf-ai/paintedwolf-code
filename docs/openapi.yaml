@@ -39103,6 +39103,13 @@ components:
             - system
             - gpu
           description: Memory named in local model requirements on this generation host.
+        selection_state:
+          type: string
+          enum:
+            - unconfigured
+            - selected
+            - opted_out
+          description: Persisted local model decision when the host can read its store.
         selected_model:
           type: string
         target_model:

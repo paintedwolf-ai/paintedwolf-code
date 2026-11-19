@@ -57,7 +57,7 @@ func TestTransferAdmissionAndCancellation(t *testing.T) {
 	_, rt := fixtureProvider(t)
 	var status api.LocalGenerationStatus
 	rt.SelectionStatus(&status)
-	if len(status.AvailableModels) != 3 || status.SelectedModel != DefaultModelID {
+	if len(status.AvailableModels) != 3 || status.SelectionState != "selected" || status.SelectedModel != DefaultModelID {
 		t.Fatalf("installed status: %+v", status)
 	}
 	req := api.LocalModelSelectionRequest{Model: tiers[1].id}
@@ -84,7 +84,7 @@ func TestTransferAdmissionAndCancellation(t *testing.T) {
 		t.Fatal("started overlapping import")
 	}
 	rt.SelectionStatus(&status)
-	if status.State != "downloading" || status.TargetModel != req.Model || status.TransferPhase != "preparing" {
+	if status.State != "downloading" || status.SelectionState != "selected" || status.TargetModel != req.Model || status.TransferPhase != "preparing" {
 		t.Fatalf("transfer status: %+v", status)
 	}
 	testutil.FailErr(t, "cancel import", rt.CancelTransfer(t.Context()))
@@ -93,7 +93,7 @@ func TestTransferAdmissionAndCancellation(t *testing.T) {
 	testutil.FailErr(t, "remove model", rt.RemoveModel(t.Context()))
 	status = api.LocalGenerationStatus{}
 	rt.SelectionStatus(&status)
-	if status.State != "opted_out" || status.SelectedModel != "" {
+	if status.State != "opted_out" || status.SelectionState != "opted_out" || status.SelectedModel != "" {
 		t.Fatalf("removed status: %+v", status)
 	}
 	entries, err := rt.DiscoverModels(t.Context())
@@ -166,13 +166,41 @@ func TestOfflineInstallerProvisionsOnlyAPristineStore(t *testing.T) {
 	}
 }
 
-func TestDiscreteRecommendationLeavesAdmissibleHigherTierSelectable(t *testing.T) {
-	host, _ := inference.NewMemoryBudget(32 << 30)
-	device, _ := inference.NewMemoryBudget(16646579098)
-	rt := NewRuntime(RuntimeConfig{Backend: "vulkan", PhysicalBytes: 20 << 30, DeviceMemory: device, HostMemory: host})
-	defer rt.Close()
-	options := rt.ModelTiers()
-	if !options[1].Recommended || !options[2].Eligible || options[2].Recommended {
-		t.Fatalf("discrete tier choices: %+v", options)
+func TestLargeDiscreteTierIncludesDecisionReservation(t *testing.T) {
+	const decisionBytes = 3_239_398_502
+	const generationBytes = 16_646_471_680
+	const required = decisionBytes + generationBytes
+	for _, tc := range []struct {
+		name               string
+		physical, capacity uint64
+		eligible           bool
+	}{
+		{"16 GiB", 16 << 30, 16<<30 - decisionBytes, false},
+		{"physical floor", required, generationBytes, true},
+		{"below physical floor", required - 1, generationBytes, false},
+		{"below generation budget", 24 << 30, generationBytes - 1, false},
+		{"Radeon RX 7900 XT", 21_458_059_264, 16_646_579_098, true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			host, _ := inference.NewMemoryBudget(32 << 30)
+			device, _ := inference.NewMemoryBudget(tc.capacity)
+			rt := NewRuntime(RuntimeConfig{
+				Backend: "vulkan", PhysicalBytes: tc.physical, DecisionDeviceBytes: decisionBytes,
+				DeviceMemory: device, HostMemory: host,
+			})
+			t.Cleanup(func() { _ = rt.Close() })
+			options := rt.ModelTiers()
+			large := options[2]
+			if large.MinMemoryBytes != required || large.Eligible != tc.eligible || large.Recommended || !options[1].Recommended {
+				t.Fatalf("discrete tier choices: %+v", options)
+			}
+			if !tc.eligible {
+				req := api.LocalModelSelectionRequest{Model: large.ID}
+				rt.config.ModelStore = modelstore.New(t.TempDir(), fixtureAuthority{})
+				if err := rt.StartSelection(req, nil, nil); !errors.Is(err, inference.ErrCapacity) {
+					t.Fatalf("inadmissible selection: %v", err)
+				}
+			}
+		})
 	}
 }

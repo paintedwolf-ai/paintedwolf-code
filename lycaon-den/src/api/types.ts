@@ -15684,6 +15684,11 @@ export interface components {
              * @enum {string}
              */
             memory_kind?: "system" | "gpu";
+            /**
+             * @description Persisted local model decision when the host can read its store.
+             * @enum {string}
+             */
+            selection_state?: "unconfigured" | "selected" | "opted_out";
             selected_model?: string;
             target_model?: string;
             /**
