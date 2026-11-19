@@ -93,6 +93,9 @@ func (s *ReadSession) placeBeneathRoot(modelPath string) (abs string, root proje
 // hostAddressed reports a path the host's own namespaces answer before any
 // attached root: agent spill output and the session scratch folder.
 func (s *ReadSession) hostAddressed(modelPath string) bool {
+	if _, ok := tools.PrivateTempOperand(s.tctx, modelPath); ok {
+		return true
+	}
 	if host := strings.TrimSpace(s.tctx.Host.HostDataDir); host != "" {
 		if _, ok := tooloutput.AgentWireSpillScopeRel(host, modelPath); ok {
 			return true

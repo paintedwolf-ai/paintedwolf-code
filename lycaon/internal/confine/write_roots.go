@@ -23,6 +23,10 @@ func osDefaultWriteRoots() []string {
 // WriteRootsForBoundary is the write profile for one confinement: attached
 // roots, session scratch, OS caches, durable grants, and per-action granted overlays.
 func WriteRootsForBoundary(projectID string, projectRoots, granted []string, sessionScratchRoot string) ([]string, error) {
+	return filesystemRoots(projectID, projectRoots, granted, sessionScratchRoot, osDefaultWriteRoots())
+}
+
+func filesystemRoots(projectID string, projectRoots, granted []string, sessionScratchRoot string, defaults []string) ([]string, error) {
 	roots := []string{}
 	add := func(p string) {
 		if strings.TrimSpace(p) == "" {
@@ -50,7 +54,7 @@ func WriteRootsForBoundary(projectID string, projectRoots, granted []string, ses
 	if sessionScratchRoot != "" {
 		add(sessionScratchRoot)
 	}
-	for _, root := range osDefaultWriteRoots() {
+	for _, root := range defaults {
 		if !defaultRootContainsStateFolder(fspath.CanonicalPath(root)) {
 			add(root)
 		}
@@ -77,27 +81,6 @@ func WriteRootsForBoundary(projectID string, projectRoots, granted []string, ses
 		return nil, err
 	}
 	return out, nil
-}
-
-// FilesystemRootForPath returns the narrowest process write root containing path.
-// Callers enforce protected paths and worker isolation separately.
-func FilesystemRootForPath(projectID string, roots, granted []string, sessionScratch, path string) (string, error) {
-	if !filepath.IsAbs(path) {
-		return "", nil
-	}
-	allowed, err := WriteRootsForBoundary(projectID, roots, granted, sessionScratch)
-	if err != nil {
-		return "", err
-	}
-	abs := fspath.CanonicalPath(path)
-	var best string
-	for _, root := range allowed {
-		rel, err := filepath.Rel(root, abs)
-		if err == nil && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)) && len(root) > len(best) {
-			best = root
-		}
-	}
-	return best, nil
 }
 
 // PathWithinRoots matches existing and not-yet-created paths.

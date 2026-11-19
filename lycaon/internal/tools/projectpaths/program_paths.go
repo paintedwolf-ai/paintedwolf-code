@@ -243,6 +243,9 @@ func (p *ProgramPaths) Bind(ctx context.Context, operand string, write bool) (Bo
 	if err != nil {
 		return BoundPath{}, err
 	}
+	if backing, mapped := tools.PrivateTempOperand(p.context, addressed); mapped {
+		addressed = backing
+	}
 	relative, err := exactRelativeOperand(resolved, addressed)
 	if err != nil && resolved.External {
 		// An outside grant anchors on canonical names, so an operand spelled

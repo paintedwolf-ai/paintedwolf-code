@@ -622,9 +622,9 @@ Domain tools expose intent and consequences as fields. `command` expresses progr
 
 ### Root-scope guards
 
-Native tools do not extend past attached project folders without explicit approval. Project file tools resolve through attached root identity, the shared default filesystem boundary, or approved absolute paths. Paths are normalized, symlink escapes are refused, and write scope is checked at the final mutation boundary. An absolute path outside attached roots and permitted scratch areas raises an approval card at every posture, and the approved grant admits the call ([grant shapes](authorization.md#the-filesystem-axis)). Without a covering grant, after the person declines, discovery tools report `SURVEY_PATH_ESCAPE`.
+Native file tools may change files in attached folders, session scratch, and locations covered by a reviewed grant. Strict also reviews confined writes. A write to another absolute path requires approval at every posture. Paths are normalized, symlink escapes are refused, and write scope is checked at the final mutation boundary. See [filesystem grants](authorization.md#the-filesystem-axis).
 
-Temporary, cache, and tool data paths derive from the same OS conventions as subprocess write roots; below Strict, native tools need no extra outside-folders approval there. Strict reviews a native write to those paths and leaves reads and subprocess write roots alone. Scratch files stay outside project identity, editor presence, and rewind; deliverables belong in attached folders so they show in Files.
+Native reads also resolve under the operating system’s temporary, cache, and tool data folders. Protected-path and worker restrictions still apply. Scratch files stay outside project identity, editor presence, and rewind. Place deliverables in attached folders so they show in Files.
 
 Multi-root calls use explicit root addressing when a relative path is ambiguous. Host-data-relative spill paths are a separate jailed namespace that never exposes the absolute config directory.
 

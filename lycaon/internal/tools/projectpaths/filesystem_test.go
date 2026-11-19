@@ -15,13 +15,12 @@ import (
 	"github.com/lycaon/lycaon/internal/tools/projectpaths"
 )
 
-func TestNativeScratchUsesProcessFilesystemRoots(t *testing.T) {
+func TestNativeSharedTempReadPreservesExternalScope(t *testing.T) {
 	project, scratch := t.TempDir(), t.TempDir()
 	path := filepath.Join(scratch, "scratch.txt")
-	root, err := confine.FilesystemRootForPath("project", []string{project}, nil, "", path)
-	testutil.FailErr(t, "resolve process filesystem root", err)
+	root := confine.SharedTempLocation(path)
 	if root == "" {
-		t.Fatal("OS temporary directory missing from process boundary")
+		t.Fatal("fixture outside shared temp")
 	}
 	recorder := &mutationRecorder{}
 	tc := tools.ToolContext{
@@ -32,10 +31,10 @@ func TestNativeScratchUsesProcessFilesystemRoots(t *testing.T) {
 	}
 	read, err := projectpaths.ResolveRead(t.Context(), nil, tc, path)
 	testutil.FailErr(t, "resolve native scratch read", err)
-	write, err := projectpaths.ResolveWrite(t.Context(), nil, tc, path)
-	testutil.FailErr(t, "resolve native scratch write", err)
-	if read.Root.Path != root || write.Root.Path != root || !read.External || !write.External || len(recorder.paths) != 0 {
-		t.Fatalf("scratch became project state or changed authority: read=%+v write=%+v recorded=%v", read, write, recorder.paths)
+	_, err = projectpaths.ResolveWrite(t.Context(), nil, tc, path)
+	requireReject(t, err, "SURVEY_PATH_ESCAPE")
+	if read.Root.Path != root || !read.External || len(recorder.paths) != 0 {
+		t.Fatalf("scratch became project state or changed authority: read=%+v recorded=%v", read, recorder.paths)
 	}
 	if _, err := projectpaths.ResolveWrite(t.Context(), nil, tc, filepath.Join(scratch, ".git", "config")); err == nil {
 		t.Fatal("scratch authority bypassed protected metadata")
@@ -46,7 +45,7 @@ func TestNativeScratchUsesProcessFilesystemRoots(t *testing.T) {
 	}
 }
 
-func TestNativeWriteCreatesAnAbsentCacheRootThroughTheDescriptorDoor(t *testing.T) {
+func TestReviewedNativeWriteCreatesAnAbsentCacheRoot(t *testing.T) {
 	project := t.TempDir()
 	cache := filepath.Join(t.TempDir(), "new-cache")
 	t.Setenv("XDG_CACHE_HOME", cache)
@@ -56,6 +55,9 @@ func TestNativeWriteCreatesAnAbsentCacheRootThroughTheDescriptorDoor(t *testing.
 			ActiveRootID: "root"},
 	}
 	boundary := sandbox.NewBoundary(sandbox.Config{ProjectRootRequired: true}, nil)
+	_, err := projectpaths.ResolveWrite(t.Context(), boundary, tc, path)
+	requireReject(t, err, "SURVEY_PATH_ESCAPE")
+	tc.Files.GrantedWriteRoots = []string{cache}
 	resolved, err := projectpaths.ResolveWrite(t.Context(), boundary, tc, path)
 	testutil.FailErr(t, "resolve absent cache file", err)
 	_, err = fseffect.Replace(fseffect.ReplaceRequest{Location: resolved.EffectLocation(), Source: strings.NewReader("ready"), Mode: 0o600})
@@ -67,5 +69,43 @@ func TestNativeWriteCreatesAnAbsentCacheRootThroughTheDescriptorDoor(t *testing.
 	testutil.FailErr(t, "read cache file", err)
 	if string(data) != "ready" || !resolved.External {
 		t.Fatalf("cache write changed data or project identity: %q, %+v", data, resolved)
+	}
+}
+
+func TestPrivateTempOperandsKeepSessionIdentity(t *testing.T) {
+	tc, scratch, rec := scratchToolContext(t)
+	if len(confine.PrivateTempFor(scratch).Paths) == 0 {
+		return
+	}
+	for _, alias := range confine.PrivateTempFor(scratch).Paths {
+		path := filepath.Join(alias, "nested", "output.txt")
+		want := filepath.Join(scratch, "nested", "output.txt")
+		write, err := projectpaths.ResolveWrite(t.Context(), nil, tc, path)
+		testutil.FailErr(t, "resolve private temp write", err)
+		if write.Abs != want || write.DisplayPath != path || !write.External {
+			t.Fatalf("private temp write = %+v", write)
+		}
+		_, err = fseffect.Replace(fseffect.ReplaceRequest{Location: write.EffectLocation(), Source: strings.NewReader(path), Mode: 0600})
+		testutil.FailErr(t, "write to private temp", err)
+		session := projectpaths.NewReadSession(nil, tc)
+		defer session.Close()
+		read, err := session.Resolve(t.Context(), path)
+		testutil.FailErr(t, "resolve private temp read", err)
+		if read != write {
+			t.Fatalf("read = %+v, write = %+v", read, write)
+		}
+		file, err := session.Open(t.Context(), read)
+		testutil.FailErr(t, "open private temp", err)
+		data, err := io.ReadAll(file)
+		testutil.FailErr(t, "read private temp", err)
+		testutil.FailErr(t, "close private temp", file.Close())
+		if string(data) != path || len(rec.mutations) > 0 {
+			t.Fatalf("read %q, mutations %v", data, rec.mutations)
+		}
+		approval, err := tools.ApprovalFilePath(tc, path)
+		testutil.FailErr(t, "locate approval subject", err)
+		if approval != want || tools.SocketArgPath(tc, path) != path {
+			t.Fatal("file and socket subjects lost their namespaces")
+		}
 	}
 }

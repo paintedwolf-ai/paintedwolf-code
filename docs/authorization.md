@@ -191,7 +191,7 @@ Advanced Off disables eligible prompted asks and allows the effect when enforcem
 | Shape | Root tree | Exact path or approved tree according to subject |
 | Review surface | Project folders | Approval card and Saved approvals |
 
-Approving access does not edit the person's project definition. Native tools do not extend past attached project folders without an explicit path grant. Filesystem resolution checks attached roots, explicit grants, and the shared default temporary, cache, and tool data boundary. Ordinary scratch access needs no additional outside-folders grant, except that Strict reviews a native write there. Sensitive-location and protected-path rules still apply.
+Approving access does not edit the person's project definition. Native tools resolve changes under attached folders, session scratch, and reviewed paths. Native reads also admit the operating system’s temporary, cache, and tool data folders. Strict reviews writes in scratch. Sensitive-location and protected-path rules still apply.
 
 Applied read-only confinement roots, including the current session’s command output, satisfy read scope without granting writes. Other sessions and paths reached through escaping symlinks remain outside that authority.
 
