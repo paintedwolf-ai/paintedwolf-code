@@ -110,6 +110,7 @@ describe("session mode intent", () => {
 
     const client = stubClient({ updateSession: async () => ({ ...session, mode: "agent" }) });
     expect(await upgradeSessionMode(store, client, session.id)).toBe(true);
+    expect(session.mode).toBe("ask");
     expect(lastStartedModePref()).toBe("ask");
   });
 

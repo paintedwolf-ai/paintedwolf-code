@@ -159,11 +159,12 @@ describe("tile grid reflow", () => {
       join(import.meta.dirname, "../../chat-utilities.css"),
       "utf8",
     );
-    const iconOnly = css.match(
-      /@container den-session-launcher-tile \(max-width:\s*[\d.]+rem\)\s*\{([\s\S]*?)\n\}/,
-    )?.[1];
+    const tileTiers = css.matchAll(
+      /@container den-session-launcher-tile \(max-width:\s*[\d.]+rem\)\s*\{([\s\S]*?)\n\}/g,
+    );
+    const iconOnly = Array.from(tileTiers, ([, rules]) => rules)
+      .find((rules) => rules.includes(".den-session-launcher__tile-title"));
     expect(iconOnly, "icon-only tile tier missing").toBeTruthy();
-    expect(iconOnly).toMatch(/\.den-session-launcher__tile-title/);
     expect(iconOnly).toMatch(/display:\s*none/);
   });
 

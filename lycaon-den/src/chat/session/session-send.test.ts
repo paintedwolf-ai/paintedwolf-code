@@ -4,6 +4,7 @@ import { resetSessionSnapshotReads } from "../../api/session-snapshot-refresh.ts
 import { stubClient, type ClientStubs } from "../../test/client-fixture.ts";
 import { describe, expect, it, vi } from "vitest";
 import { createAppStore } from "../../store/app-state.ts";
+import { syncChatPrefsFromSnapshot } from "../../settings/chat/chat-prefs.ts";
 import { createNoticeStore } from "../../notices/notice-store.ts";
 import { selectSessionNotices } from "../../notices/notice-select.ts";
 import { setDraftSessionMode, sessionModeView } from "./session-mode-state.ts";
@@ -43,6 +44,7 @@ describe("sendChatPrompt", () => {
   }
 
   it("includes the selected Ask mode even while first-send preparation is pending", async () => {
+    syncChatPrefsFromSnapshot();
     const appStore = createAppStore();
     appStore.actions.setCurrentSession({ ...idle, started: false });
     const client = promptClient({ getSession: async () => ({ ...idle, mode: "ask", started: true }) });

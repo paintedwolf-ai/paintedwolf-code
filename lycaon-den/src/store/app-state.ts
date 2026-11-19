@@ -647,7 +647,9 @@ export function createAppStore(
       const updated = current && sessionReceivesMode(current, sessionId)
         ? mergeSessionMode(current, projection)
         : undefined;
-      if (updated && current !== updated) setState("currentSession", updated);
+      if (updated && current !== updated) {
+        setState(produce((draft) => { draft.currentSession = updated; }));
+      }
       settleSessionModeIntent(actions, {
         id: sessionId,
         mode: updated?.mode ?? projection.mode,

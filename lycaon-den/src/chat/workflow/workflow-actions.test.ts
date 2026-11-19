@@ -6,6 +6,7 @@ import { describe, expect, it, vi } from "vitest";
 import { wireProject } from "../../api/mocks/project-fixture.ts";
 import { createAppStore } from "../../store/app-state.ts";
 import { createProjectsStore } from "../../store/projects-store.ts";
+import { syncChatPrefsFromSnapshot } from "../../settings/chat/chat-prefs.ts";
 import type { Message, WorkflowRun } from "../../api/types.ts";
 import { mergeWorkflowRunsFromMessages, refreshWorkflowState, startWorkflowForSession, exitActiveWorkflow } from "./workflow-actions.ts";
 import { emptyProjects } from "../../test/projects-fixture.ts";
@@ -26,6 +27,7 @@ const terminalRun: WorkflowRun = {
 };
 
 it("binds the current draft mode when starting a workflow by request", async () => {
+  syncChatPrefsFromSnapshot();
   const store = createAppStore();
   store.actions.setCurrentSession({
     id: "s1", root_session_id: "s1", owner_person_id: "person", project_id: "p1",
