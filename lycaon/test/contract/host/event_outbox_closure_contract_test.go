@@ -65,7 +65,6 @@ var outboxSilentMutators = map[string]string{
 
 	// Prompt submission receipts reach clients only as the reply to a prompt
 	// admission or its replay; the queue draft and the run announce the rest.
-	"lycaon/internal/session/store/sql_prompt_submission.go:putPromptSubmissionSQL":                     "admits a queue receipt; session.Manager publishes the queue snapshot through events.Publisher.PublishQueue",
 	"lycaon/internal/session/store/sql_prompt_submission.go:claimPromptSubmissionSQL":                   "claims one admitted receipt for execution; the run announces through its session and message events",
 	"lycaon/internal/session/store/sql_prompt_submission.go:claimPromptSubmissionsSQL":                  "claims queued receipts for one dispatch; the queue snapshot is published through PublishQueue",
 	"lycaon/internal/session/store/sql_prompt_submission.go:FinishPromptSubmission":                     "finishes a claimed submission",
@@ -76,6 +75,13 @@ var outboxSilentMutators = map[string]string{
 	"lycaon/internal/session/store/sql_prompt_attachment.go:recoverPromptSubmissionsSQL":                "requeues interrupted receipts at boot, before any subscriber; recovered submissions announce as they dispatch",
 	"lycaon/internal/session/store/turn_sql_recovery.go:recoverTurnsSQL":                                "completes running receipts whose turns finished before host exit, at boot before any subscriber; the idle transitions after it announce the sessions",
 	"lycaon/internal/session/store/turn_sql_recovery.go:recoverTurnsForSessionSQL":                      "completes a panicked session's running receipts whose turns finished; the session's idle transition after it announces the recovery",
+
+	// Turn admission can announce the session start latch. Turn records
+	// support execution and recovery.
+	"lycaon/internal/session/store/turn_closeout.go:checkpointTurnTx":    "saves the attempt's recovery checkpoint and advances its turn's progress clock",
+	"lycaon/internal/session/store/turn_closeout.go:sealTurnCloseoutSQL": "points the session at the finalized closeout used for recovery",
+	"lycaon/internal/session/store/turn_sql.go:TouchTurnProgress":        "refreshes the running turn's progress clock for the watchdog",
+	"lycaon/internal/session/store/turn_sql_recovery.go:finishTurnSQL":   "settles the turn and its attempt. Session lifecycle events announce session status",
 
 	// Session and transcript rows written beside an announced transition.
 	"lycaon/internal/session/store/secret_screen_generation.go:StampMessageScreenGeneration": "stamps the evidence revision a row was screened at; the content rewrite beside it goes through UpdateMessage, which announces",
