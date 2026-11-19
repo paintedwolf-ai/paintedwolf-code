@@ -68,6 +68,51 @@ def combined_exit(current, result):
     return 1 if 1 in (current, result) else current or result
 
 
+def lane_commands(name, lane, profile, scope, goos=None):
+    """The commands a lane runs in a profile for a change scope, and the Go packages it selected there.
+    `goos` names the runner's system when it is not this one."""
+    invocations = hosted_plan.profile_invocations(lane, profile)
+    targets = [invocation[0] for invocation in invocations]
+    command = ["./task", *hosted_plan.invocation(targets)]
+    if "arguments" in lane:
+        command += ["--", *lane["arguments"]]
+    packages = None
+    phases = lane.get("phases")
+    if scope and phases == "affected-packages":
+        from ci_policy.impact import go_scope
+        selected = go_scope(scope)
+        if selected:
+            command += ["--", *selected]
+            packages = selected
+    if phases == "changed-packages":
+        from ci_policy.impact import buildable, changed_packages
+        # The planner selects this lane only for a change that edits Go source, so no scope is a fault.
+        packages = changed_packages(scope or {"paths": []})
+        if packages:
+            packages = buildable(packages, recipe_tags(targets[0]), goos)
+        if not packages:
+            raise ValueError(f"CI lane {name} found no changed Go package that builds on this runner")
+        command += ["--", *packages]
+    commands = [command]
+    # A selection reaches one target at a time, so a lane's arguments run as one phase per target.
+    if "arguments" in lane and len(hosted_plan.invocation(targets)) > 1:
+        commands = [["./task", target, "--", *lane["arguments"]] for target in hosted_plan.invocation(targets)]
+    elif any(len(invocation) > 1 for invocation in invocations):
+        commands = [["./task", *invocation] for invocation in invocations]
+    if phases == "admission":
+        commands = ready_scope.check_phases(hosted_plan.invocation(targets), scope)
+    elif phases == "admission-tests":
+        commands, packages = ready_scope.test_phases(scope)
+    return commands, packages
+
+
+def recipe_tags(target):
+    """The build tags a Go recipe compiles with."""
+    from verification_plan import catalog
+    options = catalog()["go"][target]["options"]
+    return options[options.index("--tags") + 1].split(",") if "--tags" in options else []
+
+
 def run_lane(name, shard="", clock=time.monotonic, profile=hosted_plan.GATE):
     lane = hosted_plan.lanes()[name]
     # The lane's minutes are its one time limit, counted from here across every phase.
@@ -114,46 +159,14 @@ def run_lane(name, shard="", clock=time.monotonic, profile=hosted_plan.GATE):
     stop = threading.Event()
     if os.environ.get("PW_TEST_HOST") == "dedicated" and Path("/proc/meminfo").exists():
         threading.Thread(target=sample_resources, args=(stop,), daemon=True).start()
-    command = ["./task", *hosted_plan.invocation(targets)]
-    if "arguments" in lane:
-        command += ["--", *lane["arguments"]]
-
     try:
         code = 0
         record["phases"] = []
-        phases = lane.get("phases")
-        if scope and phases == "affected-packages":
-            from ci_policy.impact import go_scope
-            packages = go_scope(scope)
-            if packages:
-                command += ["--", *packages]
-                record["packages"] = packages
-        if phases == "changed-packages":
-            from ci_policy.impact import changed_packages
-            # The planner selects this lane only for a change that edits Go source, so no scope is a fault.
-            packages = changed_packages(scope or {"paths": []})
-            if packages:
-                from ci_policy.impact import buildable
-                from verification_plan import catalog
-                options = catalog()["go"][targets[0]]["options"]
-                tags = options[options.index("--tags") + 1].split(",") if "--tags" in options else []
-                packages = buildable(packages, tags)
-            if not packages:
-                raise ValueError(f"CI lane {name} found no changed Go package that builds on this runner")
-            command += ["--", *packages]
+        commands, packages = lane_commands(name, lane, profile, scope)
+        if packages is not None or lane.get("phases") == "admission-tests":
             record["packages"] = packages
         # Every phase runs, so one run reports every failure and repairs need not rediscover them one at a time.
         environment["PW_TEST_KEEP_GOING"] = "1"
-        commands = [command]
-        # A selection reaches one target at a time, so a lane's arguments run as one phase per target.
-        if "arguments" in lane and len(hosted_plan.invocation(targets)) > 1:
-            commands = [["./task", target, "--", *lane["arguments"]] for target in hosted_plan.invocation(targets)]
-        elif any(len(invocation) > 1 for invocation in invocations):
-            commands = [["./task", *invocation] for invocation in invocations]
-        if phases == "admission":
-            commands = ready_scope.check_phases(hosted_plan.invocation(targets), scope)
-        elif phases == "admission-tests":
-            commands, record["packages"] = ready_scope.test_phases(scope)
         for command in commands:
             # A signal is the job being torn down, not a check's result, so nothing further can report.
             if code < 0:

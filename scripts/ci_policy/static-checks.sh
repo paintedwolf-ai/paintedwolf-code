@@ -19,5 +19,6 @@ if git grep -nE '^(<<<<<<<|>>>>>>>)( |$)' -- . >&2; then
 fi
 bash scripts/doc-link-check.sh || status=1
 PYTHONPATH=scripts python3 -m ci_policy.tier_reach || status=1
+PYTHONPATH=scripts python3 -m ci_policy.lane_admission || status=1
 bash scripts/release-preflight.sh --static || status=1
 exit "${status}"

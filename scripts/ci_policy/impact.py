@@ -218,15 +218,16 @@ def changed_packages(scope):
                   if not exclude or not re.search(exclude, package))
 
 
-def buildable(packages, tags):
-    """The packages holding Go files for this runner and these tags, as Go resolves their build constraints."""
+def buildable(packages, tags, goos=None):
+    """The packages holding Go files for a system (this one by default) and these tags, as Go resolves their
+    build constraints."""
     if not packages:
         return []
     from verification_execute import json_stream
     command = ["go", "list", "-e", "-json", f"-tags={','.join(tags)}", *packages]
     # The caller's toolchain selection stands: the lane runs these packages with the same Go.
     result = subprocess.run(command, cwd=ROOT / "lycaon", capture_output=True, text=True,
-                            env={**os.environ, "GOPROXY": "off"})
+                            env={**os.environ, "GOPROXY": "off", **({"GOOS": goos} if goos else {})})
     if result.returncode:
         raise ValueError(f"go list could not resolve the changed packages: {result.stderr.strip()}")
     found = {"./" + Path(record["Dir"]).relative_to(ROOT / "lycaon").as_posix() for record in json_stream(result.stdout)
