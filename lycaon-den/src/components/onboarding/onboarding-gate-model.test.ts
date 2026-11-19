@@ -5,7 +5,6 @@ import {
   onboardingEscapeTarget,
   onboardingGateStep,
   onboardingLayoutChoice,
-  onboardingNextPage,
   onboardingSplitCompanion,
   shouldShowOnboardingHardGate,
   shouldSuppressShellForFirstRun,
@@ -90,11 +89,6 @@ describe("onboarding page order", () => {
     expect(onboardingGateStep("local_model")).toBe(1);
     expect(onboardingGateStep("layout")).toBe(2);
     expect(onboardingGateStep("welcome")).toBe(3);
-  });
-
-  it("walks forward and back through the layout page", () => {
-    expect(onboardingNextPage("layout")).toBe("welcome");
-    expect(onboardingNextPage("welcome")).toBeNull();
   });
 
   it("escapes from the ends and steps forward between them", () => {

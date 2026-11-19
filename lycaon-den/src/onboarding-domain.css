@@ -289,23 +289,3 @@
     animation: none;
   }
 }
-
-.local-model-choices {
-  display: grid;
-  gap: 0.5rem;
-  margin: 0;
-  padding: 0;
-  border: 0;
-}
-
-.local-model-choice {
-  display: flex;
-  align-items: baseline;
-  gap: 0.6rem;
-  padding-block: 0.35rem;
-}
-
-.local-model-choice small {
-  display: block;
-  color: var(--den-text-muted);
-}

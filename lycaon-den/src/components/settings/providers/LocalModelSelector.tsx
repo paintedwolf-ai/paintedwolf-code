@@ -3,6 +3,7 @@ import type { SettingsClient } from "../../../api/http-capabilities/settings.ts"
 import type { LocalGenerationStatus, ProviderMeta } from "../../../api/types.ts";
 import { hostSharesDevice } from "../../../platform/connection/host-identity.ts";
 import { OfflineModelImport } from "./OfflineModelImport.tsx";
+import { DenRadio } from "../../primitives/DenRadio.tsx";
 import { DenButton } from "../../primitives/DenButton.tsx";
 
 type Props = {
@@ -77,9 +78,9 @@ export function LocalModelSelector(props: Props) {
       } catch (err) {
         if (!stopped && ticket === version) setError(err instanceof Error ? err.message : String(err));
       }
-      if (!stopped) timer = setTimeout(poll, 750);
+      if (!stopped) timer = setTimeout(() => void poll(), 750);
     };
-    timer = setTimeout(poll, 750);
+    timer = setTimeout(() => void poll(), 750);
     onCleanup(() => { stopped = true; clearTimeout(timer); });
   });
 
@@ -119,25 +120,22 @@ export function LocalModelSelector(props: Props) {
 
   return (
     <div class="onboarding-gate__card--stack">
-      <fieldset class="local-model-choices" disabled={working() || downloading()}>
+      <fieldset class="m-0 grid gap-2 border-0 p-0" disabled={working() || downloading()}>
         <legend class="sr-only">Local model for this device</legend>
         <For each={tiers()}>{model => (
-          <label class="local-model-choice">
-            <input type="radio" name="local-model-tier" checked={selected() === model.id}
-              disabled={!model.eligible} onChange={() => setChoice(model.id)} />
-            <span><strong>{model.display_name}</strong>
+          <DenRadio class="items-baseline py-1" name="local-model-tier" checked={selected() === model.id}
+            disabled={!model.eligible} onChange={() => setChoice(model.id)}>
+            <strong>{model.display_name}</strong>
               <Show when={model.recommended}> · Recommended for this device</Show>
-              <small>{gibibytes(model.min_memory_bytes)} memory required
+              <small class="block text-[var(--den-text-muted)]">{gibibytes(model.min_memory_bytes)} memory required
                 <Show when={model.download_bytes > 0}> · {gibibytes(model.download_bytes)} download</Show>
                 <Show when={!model.eligible}> · Insufficient device memory</Show>
               </small>
-            </span>
-          </label>
+          </DenRadio>
         )}</For>
-        <label class="local-model-choice">
-          <input type="radio" name="local-model-tier" checked={!selected()} onChange={() => setChoice(NONE)} />
-          <span>Use no local model</span>
-        </label>
+        <DenRadio class="items-baseline py-1" name="local-model-tier" checked={!selected()} onChange={() => setChoice(NONE)}>
+          Use no local model
+        </DenRadio>
       </fieldset>
       <Show when={downloading()} fallback={
         <>
@@ -151,9 +149,9 @@ export function LocalModelSelector(props: Props) {
             <OfflineModelImport busy={working()} onImport={path => run("import", path)} onFailure={setError} />
           </Show>
           <div class="den-settings-provider-actions">
-            <Show when={seedTier()}>{seed => (
-              <DenButton variant="secondary" disabled={working() || !seed().eligible}
-                onClick={() => void run("seed")}>Install packaged {seed().display_name}</DenButton>
+            <Show when={seedTier()} keyed>{seed => (
+              <DenButton variant="secondary" disabled={working() || !seed.eligible}
+                onClick={() => void run("seed")}>Install packaged {seed.display_name}</DenButton>
             )}</Show>
             <DenButton variant="primary" disabled={!canApply()} onClick={() => void run("apply")}>
               {applyLabel()}

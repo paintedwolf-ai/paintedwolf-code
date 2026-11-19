@@ -3,6 +3,7 @@ import type { JSX } from "solid-js";
 import { lastSeenHealth } from "../../platform/connection/health.ts";
 import {
   firstRunSetupCompletedPref,
+  localModelOnboardingCompletedPref,
   onboardingPrefsReady,
 } from "../../settings/system/onboarding-prefs.ts";
 import {
@@ -51,6 +52,7 @@ export function WhatsNewNotice(props: WhatsNewNoticeProps): JSX.Element {
       onboardingHardGate: shouldShowOnboardingHardGate({
         prefsReady: onboardingPrefsReady(),
         firstRunSetupCompleted: firstRunSetupCompletedPref(),
+        localModelOnboardingCompleted: localModelOnboardingCompletedPref(),
       }),
     });
 

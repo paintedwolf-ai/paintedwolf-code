@@ -11,6 +11,7 @@ import { soleWindowControls } from "../shell/WindowControls.tsx";
 import { chromeProps } from "../../styling/ui-chrome.ts";
 import { BrandLockup } from "../primitives/BrandLockup.tsx";
 import { DenButton } from "../primitives/DenButton.tsx";
+import { ShowLatest } from "../primitives/ShowLatest.tsx";
 import { Scrollport } from "../primitives/Scrollport.tsx";
 import {
   ONBOARDING_GATE_STEP_COUNT,
@@ -36,6 +37,11 @@ export function OnboardingGate(props: Props) {
   const [includesModel, setIncludesModel] = createSignal(false);
   const [dismissing, setDismissing] = createSignal(false);
   const localProvider = () => props.settingsStore.state.providers.find(isIncludedProvider);
+  const modelSetup = () => {
+    const client = props.client;
+    const provider = localProvider();
+    return client && provider ? { client, provider } : null;
+  };
   let entryResolved = false;
 
   const finishModelStep = async () => {
@@ -155,18 +161,18 @@ export function OnboardingGate(props: Props) {
                 <p class="onboarding-gate__lede">Run a model on this device. You can change your choice in Settings.</p>
               </header>
               <div class="onboarding-gate__card">
-                <Show when={props.client && localProvider()} fallback={
+                <ShowLatest when={modelSetup()} fallback={
                   <div>
                     <p role="status">{props.settingsChecked && props.client ? "Local generation is unavailable on this device." : "Waiting for the local engine…"}</p>
                     <DenButton variant="primary" disabled={dismissing()} onClick={() => void finishModelStep()}>Continue without a local model</DenButton>
                   </div>
                 }>
-                  {provider => <LocalModelSelector client={props.client!} provider={provider()}
+                  {setup => <LocalModelSelector client={setup().client} provider={setup().provider}
                     onRefresh={async () => {
                       if (props.client) props.settingsStore.actions.setProviders(await props.client.listProviders());
                     }}
                     onContinue={() => void finishModelStep()} />}
-                </Show>
+                </ShowLatest>
               </div>
             </OnboardingStepPage>
           </Show>

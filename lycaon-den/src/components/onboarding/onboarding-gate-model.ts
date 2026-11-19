@@ -39,15 +39,8 @@ export function onboardingGateStep(page: OnboardingGatePage): number {
   return ONBOARDING_GATE_PAGES.indexOf(page) + 1;
 }
 
-export function onboardingNextPage(
-  page: OnboardingGatePage,
-): OnboardingGatePage | null {
-  return ONBOARDING_GATE_PAGES[ONBOARDING_GATE_PAGES.indexOf(page) + 1] ?? null;
-}
-
 export function onboardingEscapeTarget(page: OnboardingGatePage): OnboardingGatePage | "finish" {
-  if (page === "local_model") return "finish";
-  return onboardingNextPage(page) ?? "finish";
+  return page === "layout" ? "welcome" : "finish";
 }
 
 /** The two starting layouts first run offers; Settings lists every companion. */
