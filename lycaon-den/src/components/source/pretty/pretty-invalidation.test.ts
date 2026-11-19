@@ -105,6 +105,9 @@ describe("incremental block facts", () => {
     const vocabulary = new Set([...operators, ...jsx, ...REGEX_AFTER_WORDS]);
     let edits = 0;
     let state = open(original, path);
+    const checkpoint = state.field(prettyLayoutField).checkpoints.iter(1);
+    expect(checkpoint.value).toBeTruthy();
+    expect(checkpoint.from).toBeLessThan(before.length);
     function apply(changes: ChangeSpec): void {
       state = compare(state, changes, path, `${path} edit ${++edits}`);
     }
@@ -145,9 +148,8 @@ describe("incremental block facts", () => {
       seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0;
       return Math.floor(seed / 0x100000000 * n);
     };
-    state = open(original, path);
-    while (edits < 2000) {
-      if (edits % 50 === 0) state = open(original, path);
+    for (let sample = 0; sample < 2000; sample++) {
+      if (sample % 50 === 0) state = open(original, path);
       // Sample the syntax on both sides of the padding and edits near the saved checkpoint.
       const ends = Math.min(180, state.doc.length);
       const from = random(3) === 0 ? random(ends) : state.doc.length - 1 - random(ends);
