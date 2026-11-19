@@ -26,7 +26,9 @@ describe("chat-prefs", () => {
   });
 
   it("persists the message times choice through save and load", async () => {
-    await saveMessageTimes("always");
+    const saving = saveMessageTimes("always");
+    await flushAppState();
+    await saving;
     expect(messageTimesPref()).toBe("always");
     expect(getAppStateSnapshot().chat?.messageTimes).toBe("always");
     const loaded = await loadAppState();
@@ -34,9 +36,12 @@ describe("chat-prefs", () => {
   });
 
   it("persists the last started mode alongside existing chat preferences", async () => {
-    await saveMessageTimes("always");
+    const saving = saveMessageTimes("always");
+    await flushAppState();
+    await saving;
     rememberStartedMode("ask");
     expect(lastStartedModePref()).toBe("ask");
+    expect(getAppStateSnapshot().chat).toEqual({ messageTimes: "always", lastStartedMode: "ask" });
     await flushAppState();
     expect((await loadAppState()).chat).toEqual({ messageTimes: "always", lastStartedMode: "ask" });
   });
