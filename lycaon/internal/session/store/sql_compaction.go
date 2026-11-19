@@ -138,7 +138,7 @@ func (s *sqlCompaction) GetCompactionView(ctx context.Context, sessionID string)
 	if err := json.Unmarshal([]byte(row.ViewJson), &projection); err != nil {
 		return nil, false, err
 	}
-	if projection.Format != 1 {
+	if projection.Format != 1 || (projection.Continuation != nil && projection.Continuation.Format != messageview.ContinuationFormat) {
 		return nil, false, nil
 	}
 	view.Messages, view.Continuation = projection.Messages, projection.Continuation

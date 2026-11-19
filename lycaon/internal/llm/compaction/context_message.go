@@ -31,6 +31,7 @@ type ContextMessage struct {
 type ContextMessageProvenance struct {
 	CommandResult       *transcript.CommandResultProvenance `json:"-"`
 	Execution           *messageview.ContinuationExecution  `json:"recorded_execution,omitempty"`
+	CompletionOpening   string                              `json:"completion_opening,omitempty"`
 	Seq                 int64
 	Origin              api.MessageOrigin
 	Authority           api.ContentAuthority
@@ -96,6 +97,7 @@ func ContextMessageFromAPI(m api.Message) ContextMessage {
 			DietStampSource:      m.DietStampSource,
 		},
 	}
+	out.CompletionOpening = recordedCompletionOpening(m)
 	if m.ToolResult != nil {
 		out.CommandResult = transcript.CommandProvenance(m.ToolResult)
 		out.Execution = continuationExecution(m.ToolResult)

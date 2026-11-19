@@ -202,6 +202,7 @@ func (m *Service) applyRestoredReceiverView(ctx context.Context, sess *api.Sessi
 	}
 	record := restoredCoverage(view.Continuation, tailStart)
 	record.Window = cfg.ModelContextWindow
+	record.RenderTokens = 0
 	record.Receiver = sess.Model
 	recall := m.recallAvailable != nil && m.recallAvailable(ctx, sess)
 	continuationText, err := compaction.RenderContinuation(ctx, record, recall, 0)
@@ -239,11 +240,21 @@ func restoredCoverage(prior *messageview.Continuation, tailStart int64) *message
 		record.Reason = "references_only"
 	}
 	filtered := make([]messageview.ContinuationSource, 0, len(record.Sources))
+	known, kept := 0, 0
 	for _, src := range record.Sources {
+		recorded := src.HasRecordedDetail()
+		if recorded {
+			known++
+		}
 		if src.Ord <= 0 || src.Ord < tailStart {
 			filtered = append(filtered, src)
+			if recorded {
+				kept++
+			}
 		}
 	}
+	record.RecordedRowsClipped = prior.RecordedRows > known
+	record.RecordedRows = kept
 	record.Sources = filtered
 	return record
 }

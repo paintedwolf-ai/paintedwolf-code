@@ -88,7 +88,9 @@ func TestOptionalEnrichmentCannotExpandTheAcceptedProjection(t *testing.T) {
 	enriched.SummaryThroughOrd = source.Ord
 	enriched.Summary.Facts = []string{strings.Repeat("larger generated continuation ", 100)}
 	svc := &Service{store: mem}
-	testutil.FailErr(t, "reject growing enrichment", svc.publishSynthesis(t.Context(), compaction.SessionInfo{ID: sess.ID}, snapshot, enriched))
+	if err := svc.publishSynthesis(t.Context(), compaction.SessionInfo{ID: sess.ID}, snapshot, enriched); !errors.Is(err, synthesisWouldGrow) {
+		t.Fatalf("expected size refusal, got %v", err)
+	}
 	current, _, err := mem.GetCompactionView(t.Context(), sess.ID)
 	testutil.FailErr(t, "read preserved baseline", err)
 	if current.Generation != 1 || current.Messages[0].Content != "small" {

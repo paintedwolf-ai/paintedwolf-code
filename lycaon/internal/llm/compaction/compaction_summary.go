@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/lycaon/lycaon/internal/messageview"
 	"io"
 	"strings"
 
@@ -122,7 +121,6 @@ type CompactedSource struct {
 	Handles   []string
 	Tool      string
 	MessageID string
-	Execution *messageview.ContinuationExecution
 }
 
 func (s CompactedSource) templateVars() map[string]any {
@@ -130,12 +128,11 @@ func (s CompactedSource) templateVars() map[string]any {
 		"handles":    append([]string(nil), s.Handles...),
 		"tool":       s.Tool,
 		"message_id": s.MessageID,
-		"execution":  continuationExecutionJSON(s.Execution),
 	}
 }
 
-// renderContinuationRecord combines summary data with host-authored recall instructions.
-func renderContinuationRecord(ctx context.Context, summary compactionSummary, sources []CompactedSource, recallAvailable bool) (string, error) {
+// renderContinuation renders the selected facts and their recovery addresses.
+func renderContinuation(ctx context.Context, summary compactionSummary, sources []CompactedSource, recallAvailable bool, details []map[string]any, omitted int, clipped bool) (string, error) {
 	rows := make([]map[string]any, 0, len(sources))
 	for _, s := range sources {
 		rows = append(rows, s.templateVars())
@@ -151,6 +148,9 @@ func renderContinuationRecord(ctx context.Context, summary compactionSummary, so
 		"reacquire":           summary.Reacquire,
 		"constraints":         summary.Constraints,
 		"compacted_sources":   rows,
+		"recorded_details":    details,
+		"recorded_omitted":    omitted,
+		"recorded_clipped":    clipped,
 		"recall_available":    recallAvailable,
 	})
 	if err != nil {
@@ -199,12 +199,4 @@ var (
 // CompactionSummaryResponseFormat constrains durable continuation synthesis.
 func CompactionSummaryResponseFormat() *modelcall.ResponseFormat {
 	return modelcall.JSONSchemaFormat("compaction_summary", compactionSummarySchema)
-}
-
-func continuationExecutionJSON(execution *messageview.ContinuationExecution) string {
-	if execution == nil {
-		return ""
-	}
-	raw, _ := json.Marshal(execution) //nolint:errchkjson // Recorded fields contain no custom encoders.
-	return string(raw)
 }

@@ -3,6 +3,7 @@ package history
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"strings"
 	"sync"
 	"testing"
@@ -120,7 +121,7 @@ func (p *scriptedProvider) count() int {
 func answerUnproductive() (string, error) {
 	facts := make([]string, 8)
 	for i := range facts {
-		facts[i] = strings.Repeat("A retained fact. ", 9)
+		facts[i] = fmt.Sprintf("Clue %d. %s", i, strings.Repeat("A retained fact. ", 9))
 	}
 	return summaryAnswer(facts...)
 }

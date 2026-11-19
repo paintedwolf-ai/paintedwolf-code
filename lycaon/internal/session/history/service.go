@@ -30,17 +30,18 @@ type Store interface {
 
 // Service owns bounded history projection and durable compaction scheduling.
 type Service struct {
-	store           Store
-	Gate            *lifecycle.State
-	Workspace       *sessionscope.Service
-	Limits          *limits.Service
-	Compactor       compaction.ContextCompactor
-	Runner          *Runner
-	router          *llm.StaticModelRouter
-	dataDir         string
-	calibration     scopedstore.LRU[tokenCalibration]
-	cutoffs         cutoffTracker
-	recallAvailable func(context.Context, *api.Session) bool
+	store             Store
+	Gate              *lifecycle.State
+	Workspace         *sessionscope.Service
+	Limits            *limits.Service
+	Compactor         compaction.ContextCompactor
+	Runner            *Runner
+	router            *llm.StaticModelRouter
+	dataDir           string
+	calibration       scopedstore.LRU[tokenCalibration]
+	synthesisAttempts scopedstore.LRU[synthesisSource]
+	cutoffs           cutoffTracker
+	recallAvailable   func(context.Context, *api.Session) bool
 }
 
 func New(store Store, gate *lifecycle.State, workspace *sessionscope.Service, limits *limits.Service, router *llm.StaticModelRouter, recall func(context.Context, *api.Session) bool) *Service {
@@ -55,6 +56,7 @@ func (m *Service) SetDataDir(dir string) { m.dataDir = dir }
 // ForgetSessionState releases calibration, cutoff, and attempt records after a reset or eviction.
 func (m *Service) ForgetSessionState(sessionID string) {
 	m.calibration.Delete(sessionID)
+	m.synthesisAttempts.Delete(sessionID)
 	m.cutoffs.sessions.Delete(sessionID)
 	if m.Runner != nil {
 		m.Runner.attempts.forget(sessionID)

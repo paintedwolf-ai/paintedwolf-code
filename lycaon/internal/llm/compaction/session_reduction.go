@@ -4,7 +4,6 @@ import (
 	"context"
 
 	"github.com/lycaon/lycaon/internal/messageview"
-	"github.com/lycaon/lycaon/internal/tokenest"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -49,7 +48,7 @@ func (c *SimpleCompactor) compactSession(ctx context.Context, info SessionInfo, 
 			return sessionReduction{reason: prior.Reason, cacheHit: true}, nil
 		}
 	}
-	summary, sources, summaryErr := c.summarizePrefix(ctx, info, page.source)
+	summary, sources, summaryErr := c.summarizePrefix(ctx, info, page.source, nil)
 	if ctx.Err() != nil {
 		return sessionReduction{reason: "failed"}, ctx.Err()
 	}
@@ -147,6 +146,7 @@ func continuationFor(info SessionInfo, removed []ContextMessage, summary compact
 	if info.PriorContinuation != nil {
 		record.ThroughOrd = info.PriorContinuation.ThroughOrd
 		record.RemovedRows = info.PriorContinuation.RemovedRows
+		record.RecordedRows = info.PriorContinuation.RecordedRows
 		record.SummaryThroughOrd = info.PriorContinuation.SummaryThroughOrd
 	}
 	for _, row := range removed {
@@ -157,13 +157,16 @@ func continuationFor(info SessionInfo, removed []ContextMessage, summary compact
 			record.RemovedRows++
 		}
 	}
-	if summaryErr != nil {
-		record.Reason = "references_only"
-	}
 	for _, source := range sources {
+		if source.HasRecordedDetail() && (info.PriorContinuation == nil || source.Ord > info.PriorContinuation.ThroughOrd) {
+			record.RecordedRows++
+		}
 		if source.Disposition != "reference" && source.Ord > record.SummaryThroughOrd {
 			record.SummaryThroughOrd = source.Ord
 		}
+	}
+	if summaryErr != nil || record.SummaryThroughOrd < record.ThroughOrd {
+		record.Reason = "references_only"
 	}
 	record.Summary = messageview.ContinuationSummary{Facts: summary.Facts, Completed: summary.Completed,
 		Pending: summary.Pending, Reacquire: summary.Reacquire, Constraints: summary.Constraints}
@@ -172,100 +175,4 @@ func continuationFor(info SessionInfo, removed []ContextMessage, summary compact
 
 func isContinuationSummary(row ContextMessage) bool {
 	return len(row.ContentParts) == 1 && row.ContentParts[0].Source == "compaction_summary"
-}
-
-// RenderContinuation selects one receiver-sized representation of accepted observations.
-func RenderContinuation(ctx context.Context, record *messageview.Continuation, recall bool, tokens int) (string, error) {
-	budget := min(4096, max(192, record.Window/8))
-	if tokens > 0 {
-		budget = min(budget, tokens)
-	}
-	for _, level := range []string{"detailed", "compact", "references"} {
-		if level == "detailed" && record.Window > 0 && record.Window < 16384 {
-			continue
-		}
-		summary := priorSummary(record)
-		summary.ThroughOrd = record.ThroughOrd
-		summary.SummaryThroughOrd = record.SummaryThroughOrd
-		summary.ReferenceOnly = record.Reason == "references_only"
-		summary.Level = level
-		limit := 16
-		if level == "compact" {
-			summary.Facts = summary.Facts[:min(2, len(summary.Facts))]
-			summary.Completed = summary.Completed[:min(1, len(summary.Completed))]
-			summary.Pending = summary.Pending[:min(3, len(summary.Pending))]
-			summary.Constraints = summary.Constraints[:min(3, len(summary.Constraints))]
-			summary.Reacquire = nil
-			limit = 4
-		}
-		if level == "references" {
-			summary = compactionSummary{Level: level, ThroughOrd: record.ThroughOrd, ReferenceOnly: true}
-			limit = 2
-		}
-		sources := recoverySources(record.Sources, limit)
-		seen := make(map[string]bool, len(sources))
-		for _, source := range sources {
-			seen[source.MessageID] = true
-		}
-		for i := len(record.Sources) - 1; i >= 0 && len(sources) < limit; i-- {
-			source := record.Sources[i]
-			if !seen[source.MessageID] {
-				sources = append(sources, CompactedSource{Handles: source.Handles[:min(4, len(source.Handles))], Tool: source.Tool, MessageID: source.MessageID, Execution: source.Execution})
-				seen[source.MessageID] = true
-			}
-		}
-		text, err := renderContinuationRecord(ctx, summary, sources, recall)
-		if err != nil {
-			return "", err
-		}
-		if level == "references" && len(sources) > 0 && tokenest.EstimateDefault(text) > max(192, budget) {
-			text, err = renderContinuationRecord(ctx, summary, nil, recall)
-			if err != nil {
-				return "", err
-			}
-		}
-		if tokenest.EstimateDefault(text) <= budget || level == "references" {
-			record.Level = level
-			return text, nil
-		}
-	}
-	panic("unreachable continuation level")
-}
-
-// recoverySources keeps a bounded set of evidence and original-call addresses.
-func recoverySources(rows []messageview.ContinuationSource, limit int) []CompactedSource {
-	limit = max(2, limit)
-	var out []CompactedSource
-	seen := make(map[string]bool)
-	for _, singleEach := range []bool{true, false} {
-		for _, allowRecall := range []bool{false, true} {
-			for _, wantHandles := range []bool{true, false} {
-				for step := 0; step < len(rows); step++ {
-					i := step
-					if !singleEach {
-						i = len(rows) - 1 - step
-					}
-					row := rows[i]
-					hasHandles := len(row.Handles) > 0
-					isRecall := row.Tool == "recall"
-					if seen[row.MessageID] || row.MessageID == "" || isRecall != allowRecall || hasHandles != wantHandles || !hasHandles && row.Tool == "" {
-						continue
-					}
-					seen[row.MessageID] = true
-					out = append(out, CompactedSource{Handles: row.Handles[:min(2, len(row.Handles))], Tool: sourceTool(row), MessageID: row.MessageID, Execution: row.Execution})
-					if len(out) >= limit {
-						return out
-					}
-					if singleEach {
-						break
-					}
-				}
-			}
-		}
-	}
-	return out
-}
-
-func sourceTool(row messageview.ContinuationSource) string {
-	return row.Tool
 }

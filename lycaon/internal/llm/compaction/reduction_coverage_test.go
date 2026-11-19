@@ -43,7 +43,7 @@ func TestSynthesisCoverageDoesNotDependOnTheRecoveryHintBudget(t *testing.T) {
 		t.Fatalf("source page and recovery hints were not independently bounded: sources=%d hints=%d", len(report.SynthesisSources), len(report.Continuation.Sources))
 	}
 	apiRows := ContextMessagesToAPI(report.SynthesisSources, ContextMessagesToAPI(rows, nil))
-	enriched, err := c.EnrichContinuation(t.Context(), info, apiRows, report.Continuation)
+	enriched, err := c.EnrichContinuation(t.Context(), info, apiRows, report.Continuation, nil)
 	testutil.FailErr(t, "enrich complete captured page", err)
 	if len(summary.seen) != 100 || enriched.SummaryThroughOrd != 100 || summary.calls > c.cfg.ChunkMaxPerPass {
 		t.Fatalf("synthesis skipped sources or exceeded its work budget: seen=%d through=%d calls=%d", len(summary.seen), enriched.SummaryThroughOrd, summary.calls)
