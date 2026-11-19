@@ -8,7 +8,7 @@ import {
   toolPartDisplayStatus,
   toolPartFromCall,
   toolCompletionLabel,
-  toolPartSummaryTitle,
+  toolSummaryFields,
 } from "./tool-part-model.ts";
 import {
   applyBackgroundProcessEvent,
@@ -124,7 +124,7 @@ describe("tool-part-model", () => {
     expect(shouldOmitToolPartFromTranscript(undefined, "find", chat)).toBe(false);
   });
 
-  it("toolPartSummaryTitle includes the count of additional array targets", () => {
+  it("the summary title includes the count of additional array targets", () => {
     const part: ToolPartView = {
       id: "tc-stat",
       toolCallId: "tc-stat",
@@ -138,7 +138,7 @@ describe("tool-part-model", () => {
       output: "{}",
       error: null,
     };
-    expect(toolPartSummaryTitle(part)).toBe("internal/foo.go +1 more");
+    expect(toolSummaryFields(part).title).toBe("internal/foo.go +1 more");
   });
 
   it("projects typed lifecycle completion without reading result text", () => {

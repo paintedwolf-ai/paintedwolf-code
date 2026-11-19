@@ -2,7 +2,6 @@ import { sourceTextHash, fileEditPreviewFixture } from "../../test/file-edit-fix
 import { describe, expect, it } from "vitest";
 import {
   activitySpanFailureCount,
-  activitySpanHint,
   activitySpanStatus,
   omitIndexWarmingFromTranscript,
   projectActivitySpans,
@@ -610,16 +609,6 @@ describe("activity span summary", () => {
     expect(activitySpanFailureCount(entries("error", "completed", "error"))).toBe(2);
   });
 
-  it("puts a failed call first in the collapsed hint", () => {
-    const hint = activitySpanHint(
-      [
-        toolEntry(part("r1", "read", "a.go")),
-        toolEntry(part("r2", "read", "missing.go", { status: "error" })),
-      ],
-      "investigating",
-    );
-    expect(hint).toBe("missing.go, +1");
-  });
 });
 
 describe("application testing and title stability", () => {
