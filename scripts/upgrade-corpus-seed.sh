@@ -99,7 +99,8 @@ mkdir -p "${CONFIG_DIR}" "${SEED_PROJECT_ROOT}/${OVERLAY_DIR}" "${STAGE_DIR}"
 SEED_PROJECT_ROOT="$(cd "${SEED_PROJECT_ROOT}" && pwd -P)"
 mkdir -p "${SEED_PROJECT_ROOT}/${OVERLAY_DIR}"
 
-printf 'overlay_format: 1\n' >"${SEED_PROJECT_ROOT}/${OVERLAY_DIR}/overlay.yaml"
+OVERLAY_EXAMPLE="${GO_DIR}/testdata/overlay-example/${OVERLAY_FIXTURE_DIR}"
+cp "${OVERLAY_EXAMPLE}/overlay.yaml" "${SEED_PROJECT_ROOT}/${OVERLAY_DIR}/overlay.yaml"
 printf 'format: 1\ndisabled: []\n' >"${SEED_PROJECT_ROOT}/${OVERLAY_DIR}/extensions.yaml"
 # Target for the locked mock tool call (pattern "corpus seed" → command cat README.md).
 printf '# corpus seed\n' >"${SEED_PROJECT_ROOT}/README.md"
@@ -259,7 +260,7 @@ path.write_text(json.dumps(manifest, indent=2) + '\n')
 PYCODE
 node "${ROOT}/scripts/upgrade-editor-fixture.mjs" seed "${BASE}" "${CONFIG_DIR}" "${STAGE_DIR}/MANIFEST.json" "${SEED_PROJECT_ROOT}"
 # Review every overlay surface that the fixture will restore.
-for example in "${GO_DIR}/testdata/overlay-example/${OVERLAY_FIXTURE_DIR}/"*.yaml; do
+for example in "${OVERLAY_EXAMPLE}/"*.yaml; do
   recorded="${SEED_PROJECT_ROOT}/${OVERLAY_DIR}/$(basename "${example}")"
   [[ -e "${recorded}" ]] || cp "${example}" "${recorded}"
 done
