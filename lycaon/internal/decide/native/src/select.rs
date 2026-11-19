@@ -350,6 +350,9 @@ mod tests {
         assert!(!cache.join(VERDICT_FILE).exists());
     }
 
+    /// A requirement every in-process measurement meets, however slowly the host runs.
+    const ANY_TIME: Duration = Duration::MAX;
+
     fn options(dir: &Path, cache: &Path, qualify: Option<Duration>) -> EngineOptions {
         EngineOptions {
             model_dir: dir.to_path_buf(),
@@ -374,7 +377,7 @@ mod tests {
         let dir = scratch_dir("select-ok");
         write_tiny_checkpoint(&dir);
         let cache = dir.join("cache");
-        let opts = options(&dir, &cache, Some(Duration::from_secs(60)));
+        let opts = options(&dir, &cache, Some(ANY_TIME));
         let engine = auto(&opts).unwrap();
         assert!(engine.identity().probe_ms.is_some());
         let verdict = read(&cache.join(VERDICT_FILE)).unwrap();
@@ -392,7 +395,8 @@ mod tests {
         let dir = scratch_dir("select-none");
         write_tiny_checkpoint(&dir);
         let cache = dir.join("cache");
-        let opts = options(&dir, &cache, Some(Duration::ZERO));
+        let mut opts = options(&dir, &cache, Some(Duration::from_millis(1)));
+        opts.probe_exe = Some(fake_probe(&dir, r#"echo '{"probe_ms": 5.0}'"#));
         let err = auto(&opts).unwrap_err();
         assert!(matches!(err, Error::NoCapableDevice(ref m) if m.contains("cpu")), "{err}");
         let verdict = read(&cache.join(VERDICT_FILE)).unwrap();
@@ -400,7 +404,7 @@ mod tests {
 
         // The remembered refusal holds until something it was measured against changes.
         assert!(matches!(auto(&opts).unwrap_err(), Error::NoCapableDevice(_)));
-        let relaxed = options(&dir, &cache, Some(Duration::from_secs(60)));
+        let relaxed = EngineOptions { qualify: Some(Duration::from_millis(10)), ..opts };
         assert!(auto(&relaxed).is_ok());
     }
 
@@ -448,7 +452,7 @@ mod tests {
         let dir = scratch_dir("select-died");
         write_tiny_checkpoint(&dir);
         let cache = dir.join("cache");
-        let opts = options(&dir, &cache, Some(Duration::from_secs(60)));
+        let opts = options(&dir, &cache, Some(ANY_TIME));
         let first = auto(&opts).unwrap();
         let device = first.identity().device.clone();
         drop(first);
