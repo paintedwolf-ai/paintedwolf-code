@@ -11,6 +11,7 @@ import {
   e2eTempDir,
   e2eUniqueLabel,
   liveChatStage,
+  openNewChatSession,
   sendChatPrompt,
   settledChatSessionId,
   waitForChatComposerReady,
@@ -49,9 +50,7 @@ webE2e("Outside locations follow the chat while a dirty file stays open", async 
   const save = page.getByTestId("files-editor-save");
   await expect(save).toBeEnabled();
 
-  await page.getByTestId("new-chat-btn").click();
-  await waitForChatComposerReady(page);
-  expect(await settledChatSessionId(page)).not.toBe(first);
+  expect(await openNewChatSession(page)).not.toBe(first);
   await page.getByTestId("project-files-entry").click();
   await expect(tree.getByTestId("files-tree-file").filter({ hasText: "project.txt" })).toBeVisible();
   await expect(outsideLocation).toHaveCount(0);
@@ -85,8 +84,11 @@ webE2e("An outside text edit opens the recorded file from chat", async ({ page, 
       const prompt = await apiPostPrompt(request, sessionId, { text: "Update the report." });
       expect(prompt.ok(), await prompt.text()).toBe(true);
       const driver = manualHarnessTools(request, sessionId);
-      await driver.loadTools("write");
-      const call = await driver.invoke("write", { path: destination, content: "Updated report\n" });
+      await driver.loadTools("command");
+      const quoted = "'" + destination.replaceAll("'", "'\\''") + "'";
+      const call = await driver.invoke("command", {
+        command: `cat > ${quoted} <<'REPORT'\nUpdated report\nREPORT`,
+      });
       const checkpoints = `/v1/sessions/${sessionId}/checkpoints`;
       let approval: CheckpointListResponse["checkpoints"][number] | undefined;
       await expect.poll(async () => {
