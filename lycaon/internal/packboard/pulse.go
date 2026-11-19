@@ -75,7 +75,7 @@ func orientationRootsSig(roots []api.BoardOrientationRoot) string {
 	return strings.Join(parts, ";")
 }
 
-// PulseFingerprint hashes fast-changing board facts (clock day, workers, scans).
+// PulseFingerprint hashes fast-changing board facts (clock day, workers, scans, reservations).
 func PulseFingerprint(snap api.BoardSnapshot, now time.Time) string {
 	return strings.Join([]string{
 		OrientationDayKey(now),
@@ -84,6 +84,7 @@ func PulseFingerprint(snap api.BoardSnapshot, now time.Time) string {
 		PromotePathPulseSig(PromotePathsFromSnapshot(snap)),
 		ScanPulseSig(snap.Scans),
 		StandingFlagsPulseSig(StandingFlagsFromSnapshot(snap)),
+		ReservationPulseSig(ReservationsFromSnapshot(snap)),
 	}, "|")
 }
 

@@ -65,8 +65,16 @@ func TestHumanInputScaffoldDeniesCoordinatorLoop(t *testing.T) {
 				dir := h.ProjectDir(t, fmt.Sprintf("human-input-%d", cells))
 				sess, err := h.CreateHarnessSession(t, wire.CreateSessionRequest{Posture: wire.SessionPostureSpec}, dir)
 				testutil.FailErr(t, "create session", err)
-				run, err := h.Workflows.Manager.Starts.StartHuman(ctx, sess.ID, wire.StartWorkflowRunRequest{WorkflowID: m.ID, WorkflowVersion: m.Version, Request: "Plan the change"})
+				_, err = h.Workflows.Manager.Starts.StartHuman(ctx, sess.ID, wire.StartWorkflowRunRequest{WorkflowID: m.ID, WorkflowVersion: m.Version, Request: "Plan the change"})
 				testutil.FailErr(t, "start "+key, err)
+				// A human start wakes the initial phase; an executing turn refuses
+				// every wake as busy, so the parked state is set once it settles.
+				WaitForSessionIdleGate(t, h, ctx, sess.ID)
+				run, err := h.Workflows.Manager.Store.Runs.ActiveBySession(ctx, sess.ID)
+				testutil.FailErr(t, "active run", err)
+				if run == nil {
+					t.Fatal("no active run after the initial wake settled")
+				}
 				run.CurrentPhase = phase.ID
 				run.Status = wire.WorkflowRunStatusRunning
 				vars, err := workflowphases.ApplyPhaseOnEnter(ctx, workflowphases.PhaseEnterRequest{

@@ -55,6 +55,7 @@ func BuildInjectLines(snapshot api.BoardSnapshot, scope InjectScope, opts Orient
 	if flags := FormatFlagsLine(StandingFlagsFromSnapshot(snapshot)); flags != "" {
 		lines = append(lines, flags)
 	}
+	lines = append(lines, FormatReservedPathsLines(ReservationsFromSnapshot(snapshot))...)
 	if opts.IncludeDetail {
 		if len(NamedWorkersFromSnapshot(snapshot)) == 0 {
 			for _, t := range tasks {
