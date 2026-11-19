@@ -35,7 +35,14 @@ func TestAskExecutorAdmitsOnlyRegisteredReadTools(t *testing.T) {
 			}
 			if tc.registered {
 				meta := tools.ToolMeta{Name: tc.name, ReadOnlyHint: tc.mcpRead, ArgsSchema: map[string]any{"type": "object"}}
-				testutil.FailErr(t, "register tool", reg.RegisterDerived(meta, handler))
+				if meta.IsMCP() {
+					meta.Source, meta.SourceID = tools.ToolSourceMCP, "fixture"
+					testutil.FailErr(t, "register MCP tool", reg.RegisterDefinition(tools.Definition{
+						Meta: meta, Contract: toolcontract.External("mcp:fixture"), Handler: handler,
+					}))
+				} else {
+					testutil.FailErr(t, "register native tool", reg.Register(tc.name, handler))
+				}
 			}
 			executor := NewExecutor(nil, reg, "implement")
 			ctx := fixtureToolContext(t.TempDir())
