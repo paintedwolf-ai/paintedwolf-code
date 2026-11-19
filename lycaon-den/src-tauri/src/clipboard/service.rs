@@ -320,18 +320,16 @@ mod tests {
         second.await.unwrap().unwrap();
     }
 
-    #[test]
-    fn unanswered_operations_time_out_and_leave_the_service_usable() {
+    #[tokio::test(start_paused = true)]
+    async fn unanswered_operations_time_out_and_leave_the_service_usable() {
         let fake = Fake::default();
         fake.state().hold_writes = true;
         let service = service(&fake, Duration::from_millis(30));
-        block_on(async {
-            let result = service.write(&Inline, "slow".into()).await;
-            assert_eq!(result, Err(ClipboardError::Timeout));
-            fake.state().hold_writes = false;
-            service.write(&Inline, "quick".into()).await.unwrap();
-            assert_eq!(service.read(&Inline).await.unwrap(), "quick");
-        });
+        let result = service.write(&Inline, "slow".into()).await;
+        assert_eq!(result, Err(ClipboardError::Timeout));
+        fake.state().hold_writes = false;
+        service.write(&Inline, "quick".into()).await.unwrap();
+        assert_eq!(service.read(&Inline).await.unwrap(), "quick");
     }
 
     #[test]

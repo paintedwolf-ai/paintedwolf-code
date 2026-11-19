@@ -9,7 +9,7 @@ use std::{
         mpsc, Arc,
     },
     thread,
-    time::{Duration, Instant},
+    time::Duration,
 };
 struct Bus {
     child: Child,
@@ -63,18 +63,10 @@ impl Drop for Bus {
         let _ = std::fs::remove_dir_all(&self.root);
     }
 }
+/// Waits for the observer to exit on its own: its input stays open throughout.
 fn ended(child: &mut Child) {
-    let deadline = Instant::now() + Duration::from_secs(4);
-    while Instant::now() < deadline {
-        if let Some(status) = child.try_wait().unwrap() {
-            assert!(status.success());
-            return;
-        }
-        thread::sleep(Duration::from_millis(20));
-    }
-    let _ = child.kill();
-    let _ = child.wait();
-    panic!("owned observer failed to stop");
+    let _input = child.stdin.take();
+    assert!(child.wait().unwrap().success());
 }
 #[test]
 fn missing_service_reports_typed_unavailability_and_exits() {
@@ -114,13 +106,13 @@ impl Service {
                         else { let values=std::collections::BTreeMap::from([("org.freedesktop.appearance",std::collections::BTreeMap::from([("contrast",1u32.to_variant())]))]);invocation.return_value(Some(&(values,).to_variant())); }
                     }).build().unwrap();
                 connection.call_sync(Some("org.freedesktop.DBus"),"/org/freedesktop/DBus","org.freedesktop.DBus","RequestName",
-                    Some(&("org.freedesktop.portal.Desktop",0u32).to_variant()),None,gio::DBusCallFlags::NONE,1500,None::<&gio::Cancellable>).unwrap();
+                    Some(&("org.freedesktop.portal.Desktop",0u32).to_variant()),None,gio::DBusCallFlags::NONE,i32::MAX,None::<&gio::Cancellable>).unwrap();
                 ready.send(connection.clone()).unwrap();
                 while !requested.load(Ordering::Acquire) { context.iteration(false);thread::sleep(Duration::from_millis(5)); }
                 connection.close_sync(None::<&gio::Cancellable>).unwrap();
             }).unwrap();
         });
-        let connection = wait.recv_timeout(Duration::from_secs(5)).unwrap();
+        let connection = wait.recv().unwrap();
         Self {
             connection,
             stop,

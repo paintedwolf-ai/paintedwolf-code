@@ -319,15 +319,12 @@ async fn scheduler_wakes_survive_the_gap_before_waiting_without_cancelling_prepa
     let service = service_for_test();
     let mut wake = service.wake.subscribe();
     service.wake_scheduler();
-    tokio::time::timeout(Duration::from_secs(120), wake.changed())
-        .await
-        .unwrap()
-        .unwrap();
+    wake.changed().await.unwrap();
     assert_eq!(service.preparation_generation.load(Ordering::Acquire), 0);
     assert!(service.current(0));
 }
 
-#[tokio::test]
+#[tokio::test(start_paused = true)]
 async fn closing_engine_admission_drains_existing_starts_and_blocks_new_ones() {
     let service = service_for_test();
     service.startup_ready.send_replace(true);

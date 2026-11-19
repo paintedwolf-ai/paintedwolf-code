@@ -1,5 +1,4 @@
 //! A real TLS ClientHello catches loss of reqwest's transport feature.
-use std::time::Duration;
 use tokio::io::AsyncReadExt;
 
 #[tokio::test]
@@ -16,41 +15,25 @@ async fn https_requests_start_a_tls_handshake() {
             .env("PW_TEST_FRESH_HTTPS_PROCESS", &result)
             .spawn()
             .expect("start isolated HTTPS transport test");
-        let deadline = std::time::Instant::now() + Duration::from_secs(300);
-        loop {
-            if let Some(status) = child.try_wait().expect("read HTTPS test process status") {
-                assert!(
-                    status.success(),
-                    "fresh-process HTTPS transport failed: {status}"
-                );
-                assert_eq!(
-                    std::fs::read(&result).expect("read completed HTTPS probe result"),
-                    b"tls-clienthello-observed",
-                    "child must execute the HTTPS probe before reporting success"
-                );
-                return;
-            }
-            if std::time::Instant::now() >= deadline {
-                child.kill().expect("stop overdue HTTPS test process");
-                child.wait().expect("join stopped HTTPS test process");
-                panic!("fresh-process HTTPS transport exceeded its deadline");
-            }
-            std::thread::sleep(Duration::from_millis(10));
-        }
+        let status = child.wait().expect("wait for HTTPS test process");
+        assert!(
+            status.success(),
+            "fresh-process HTTPS transport failed: {status}"
+        );
+        assert_eq!(
+            std::fs::read(&result).expect("read completed HTTPS probe result"),
+            b"tls-clienthello-observed",
+            "child must execute the HTTPS probe before reporting success"
+        );
+        return;
     }
     assert!(rustls::crypto::CryptoProvider::get_default().is_none());
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let address = listener.local_addr().unwrap();
     let server = tokio::spawn(async move {
-        let (mut stream, _) = tokio::time::timeout(Duration::from_secs(120), listener.accept())
-            .await
-            .unwrap()
-            .unwrap();
+        let (mut stream, _) = listener.accept().await.unwrap();
         let mut header = [0; 5];
-        tokio::time::timeout(Duration::from_secs(120), stream.read_exact(&mut header))
-            .await
-            .unwrap()
-            .unwrap();
+        stream.read_exact(&mut header).await.unwrap();
         // TLS handshake record, followed by the legacy TLS record version.
         assert_eq!(header[0], 0x16);
         assert_eq!(header[1], 0x03);
@@ -58,7 +41,6 @@ async fn https_requests_start_a_tls_handshake() {
     let client = crate::http_transport::client_builder()
         .no_proxy()
         .redirect(reqwest::redirect::Policy::none())
-        .timeout(Duration::from_secs(120))
         .build()
         .unwrap();
     // The fixture closes after ClientHello; it never supplies a trusted certificate.

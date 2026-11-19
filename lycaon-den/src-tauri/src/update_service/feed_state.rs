@@ -102,7 +102,7 @@ mod tests {
         }
         assert_eq!(state.feeds["latest-preview-key-1.json"], 800);
     }
-    #[tokio::test]
+    #[tokio::test(start_paused = true)]
     async fn cancellation_does_not_leave_a_lock_or_accept_a_timestamp() {
         let root = TempDir::new("update-feed-cancel");
         let lock = record_lock::acquire(&root, "feed-state.lock").unwrap();

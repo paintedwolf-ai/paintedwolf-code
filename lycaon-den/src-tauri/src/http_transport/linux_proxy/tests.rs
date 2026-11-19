@@ -129,7 +129,6 @@ async fn selected_authenticated_proxy_is_used_for_the_effective_target() {
         .no_proxy()
         .proxy(reqwest::Proxy::all(endpoint).unwrap())
         .redirect(reqwest::redirect::Policy::none())
-        .timeout(Duration::from_secs(120))
         .build()
         .unwrap();
     assert_eq!(

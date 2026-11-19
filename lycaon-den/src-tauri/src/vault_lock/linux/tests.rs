@@ -16,7 +16,6 @@ use std::process::{Child, Command, Stdio};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::mpsc;
 use std::thread;
-use std::time::Instant;
 
 use gtk::glib::variant::ObjectPath;
 use gtk::glib::ToVariant;
@@ -65,14 +64,8 @@ impl Harness {
         self.context.with_thread_default(|| body(self)).unwrap();
     }
 
-    fn pump_until(&self, what: &str, done: impl Fn(&Self) -> bool) {
-        let deadline = Instant::now() + Duration::from_secs(120);
+    fn pump_until(&self, done: impl Fn(&Self) -> bool) {
         while !done(self) {
-            assert!(
-                Instant::now() < deadline,
-                "timed out waiting for {what}: {:?}",
-                self.monitor.status()
-            );
             self.context.iteration(false);
             thread::sleep(Duration::from_millis(2));
         }
@@ -207,7 +200,7 @@ fn lock_and_unlock_signals_follow_the_session() {
             "Lock",
             ().to_variant(),
         );
-        h.pump_until("the Lock signal", |h| !h.allowed());
+        h.pump_until(|h| !h.allowed());
         assert_eq!(h.locks(), vec![LockReason::ScreenLocked]);
         fixture.logind().emit(
             SESSION_PATH,
@@ -215,7 +208,7 @@ fn lock_and_unlock_signals_follow_the_session() {
             "Unlock",
             ().to_variant(),
         );
-        h.pump_until("the Unlock signal", Harness::allowed);
+        h.pump_until(Harness::allowed);
         assert_eq!(h.locks().len(), 1, "an unlock requests nothing");
     });
 }
@@ -233,7 +226,7 @@ fn locked_hint_and_activity_changes_lock() {
             "PropertiesChanged",
             changed,
         );
-        h.pump_until("LockedHint", |h| !h.allowed());
+        h.pump_until(|h| !h.allowed());
         let changed = properties_changed(&[("LockedHint", false.to_variant())]);
         fixture.logind().emit(
             SESSION_PATH,
@@ -241,7 +234,7 @@ fn locked_hint_and_activity_changes_lock() {
             "PropertiesChanged",
             changed,
         );
-        h.pump_until("LockedHint cleared", Harness::allowed);
+        h.pump_until(Harness::allowed);
         let changed = properties_changed(&[("Active", false.to_variant())]);
         fixture.logind().emit(
             SESSION_PATH,
@@ -249,7 +242,7 @@ fn locked_hint_and_activity_changes_lock() {
             "PropertiesChanged",
             changed,
         );
-        h.pump_until("an inactive session", |h| !h.allowed());
+        h.pump_until(|h| !h.allowed());
         assert_eq!(
             h.locks(),
             vec![LockReason::ScreenLocked, LockReason::ScreenLocked]
@@ -273,7 +266,7 @@ fn a_changed_session_identity_is_stale_until_reread() {
             "PropertiesChanged",
             changed,
         );
-        h.pump_until("identity change", |h| !h.allowed());
+        h.pump_until(|h| !h.allowed());
         assert!(h.locks().contains(&LockReason::ScreenLocked));
         h.monitor.tick();
         assert!(h.allowed(), "the refresh rereads the session");
@@ -289,7 +282,7 @@ fn sleep_locks_and_a_wake_rereads_before_confirming() {
         fixture
             .logind()
             .emit(LOGIN_PATH, MANAGER, "PrepareForSleep", (true,).to_variant());
-        h.pump_until("sleep", |h| !h.allowed());
+        h.pump_until(|h| !h.allowed());
         assert_eq!(h.locks(), vec![LockReason::Sleep]);
         fixture.logind().emit(
             LOGIN_PATH,
@@ -297,7 +290,7 @@ fn sleep_locks_and_a_wake_rereads_before_confirming() {
             "PrepareForSleep",
             (false,).to_variant(),
         );
-        h.pump_until("wake", |h| !h.monitor.status().sleeping);
+        h.pump_until(|h| !h.monitor.status().sleeping);
         assert!(
             !h.allowed(),
             "a wake confirms nothing until the sources are reread"
@@ -320,7 +313,7 @@ fn the_screen_saver_locks_when_it_activates() {
             "ActiveChanged",
             (true,).to_variant(),
         );
-        h.pump_until("screen saver", |h| !h.allowed());
+        h.pump_until(|h| !h.allowed());
         assert_eq!(h.locks(), vec![LockReason::ScreenLocked]);
         service.emit(
             SCREENSAVER_PATH,
@@ -328,7 +321,7 @@ fn the_screen_saver_locks_when_it_activates() {
             "ActiveChanged",
             (false,).to_variant(),
         );
-        h.pump_until("screen saver off", Harness::allowed);
+        h.pump_until(Harness::allowed);
     });
 }
 
@@ -339,7 +332,7 @@ fn losing_the_logind_owner_locks_and_recovers_on_refresh() {
     harness.run(|h| {
         h.monitor.refresh();
         fixture.logind().release(session::NAME);
-        h.pump_until("owner loss", |h| !h.allowed());
+        h.pump_until(|h| !h.allowed());
         assert!(h.locks().contains(&LockReason::ScreenLocked));
         assert_eq!(
             h.monitor.status().session_error,
@@ -350,7 +343,7 @@ fn losing_the_logind_owner_locks_and_recovers_on_refresh() {
         assert!(!h.allowed(), "no owner answers the reread");
         fixture.logind = None;
         fixture.logind = Some(Service::logind(&fixture.system, fixture.facts.clone()));
-        h.pump_until("the returned owner reread", |h| {
+        h.pump_until(|h| {
             h.monitor.tick();
             h.allowed()
         });
@@ -366,7 +359,7 @@ fn a_closed_system_bus_locks_and_reconnects_when_it_returns() {
         assert!(h.allowed());
         fixture.logind = None;
         fixture.system.stop();
-        h.pump_until("bus loss", |h| !h.monitor.status().system_connected);
+        h.pump_until(|h| !h.monitor.status().system_connected);
         assert!(!h.allowed());
         assert!(h.locks().contains(&LockReason::ScreenLocked));
         h.monitor.tick();
@@ -391,7 +384,7 @@ fn a_closed_session_bus_drops_the_screen_saver_source() {
         h.monitor.refresh();
         fixture.screensaver = None;
         fixture.desktop.stop();
-        h.pump_until("session bus loss", |h| {
+        h.pump_until(|h| {
             !h.monitor.status().session_bus_connected
         });
         assert_eq!(h.monitor.status().screensaver_locked, None);

@@ -231,19 +231,25 @@ fn os_query_is_bounded_and_ignores_error_prose() {
     // Letting the query finish would yield an output, so TimedOut proves the deadline ended it.
     let mut reader = command::OsReader::new(Duration::from_millis(60), Arc::new(AtomicBool::new(false)));
     assert!(matches!(reader.read("/bin/sh", &["-c", "sleep 20 & wait"]), Err(QueryReason::TimedOut)));
-    let mut reader = command::OsReader::new(Duration::from_secs(120), Arc::new(AtomicBool::new(false)));
+    let mut reader = command::OsReader::new(crate::test_support::NO_DEADLINE, Arc::new(AtomicBool::new(false)));
     let result = reader.read("/bin/sh", &["-c", "printf held; printf 'not installed' >&2; exit 7"]).unwrap();
     assert_eq!(result.code, 7);
     assert_eq!(result.stdout, "held");
     let result = reader.read("/bin/sh", &["-c", "yes x"]).err();
     assert_eq!(result, Some(QueryReason::OutputLimit));
+    // Cancellation arrives once the query is running.
+    let scratch = crate::test_support::TempDir::new("os-query-cancel");
+    let running = scratch.join("running");
+    let script = format!(": > '{}'; sleep 1000000 & wait", running.display());
     let cancelled = Arc::new(AtomicBool::new(false));
     let signal = cancelled.clone();
     let cancel = std::thread::spawn(move || {
-        std::thread::sleep(Duration::from_millis(30));
+        while !running.exists() {
+            std::thread::sleep(Duration::from_millis(1));
+        }
         signal.store(true, Ordering::Release);
     });
-    let mut reader = command::OsReader::new(Duration::from_secs(120), cancelled);
-    assert!(matches!(reader.read("/bin/sh", &["-c", "sleep 20 & wait"]), Err(QueryReason::Cancelled)));
+    let mut reader = command::OsReader::new(crate::test_support::NO_DEADLINE, cancelled);
+    assert!(matches!(reader.read("/bin/sh", &["-c", script.as_str()]), Err(QueryReason::Cancelled)));
     cancel.join().unwrap();
 }

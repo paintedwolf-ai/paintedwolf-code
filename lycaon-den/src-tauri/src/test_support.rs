@@ -7,6 +7,11 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::process;
 use std::sync::atomic::{AtomicU64, Ordering};
+use std::time::Duration;
+
+/// A bound for product calls that require one, past the end of any run, so it
+/// never decides a verdict.
+pub const NO_DEADLINE: Duration = Duration::from_secs(1 << 32);
 
 /// Separates directories created by one process.
 static NEXT_ID: AtomicU64 = AtomicU64::new(0);

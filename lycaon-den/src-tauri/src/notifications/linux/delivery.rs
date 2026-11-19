@@ -378,12 +378,20 @@ fn call(
 /// Service calls are capped well below the request deadline so one slow call
 /// cannot consume the whole request.
 fn timeout(deadline: Instant) -> Result<i32, String> {
-    remaining(deadline).map(|remaining| remaining.min(500))
+    timeout_at(deadline, Instant::now())
+}
+
+fn timeout_at(deadline: Instant, now: Instant) -> Result<i32, String> {
+    remaining_at(deadline, now).map(|remaining| remaining.min(500))
 }
 
 fn remaining(deadline: Instant) -> Result<i32, String> {
+    remaining_at(deadline, Instant::now())
+}
+
+fn remaining_at(deadline: Instant, now: Instant) -> Result<i32, String> {
     let remaining = deadline
-        .saturating_duration_since(Instant::now())
+        .saturating_duration_since(now)
         .as_millis()
         .min(i32::MAX as u128);
     if remaining == 0 {
@@ -423,11 +431,14 @@ mod tests {
 
     #[test]
     fn request_deadline_bounds_each_service_call() {
-        assert!(timeout(Instant::now()).is_err());
-        assert!(remaining(Instant::now()).is_err());
-        let deadline = Instant::now() + std::time::Duration::from_secs(10);
-        assert_eq!(timeout(deadline).unwrap(), 500);
-        assert!(remaining(deadline).unwrap() > 9_000);
+        let now = Instant::now();
+        assert!(timeout_at(now, now).is_err());
+        assert!(remaining_at(now, now).is_err());
+        let deadline = now + std::time::Duration::from_secs(10);
+        assert_eq!(timeout_at(deadline, now).unwrap(), 500);
+        assert_eq!(remaining_at(deadline, now).unwrap(), 10_000);
+        let close = now + std::time::Duration::from_millis(200);
+        assert_eq!(timeout_at(close, now).unwrap(), 200);
     }
 }
 
