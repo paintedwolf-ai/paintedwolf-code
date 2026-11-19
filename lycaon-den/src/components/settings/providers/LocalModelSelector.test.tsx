@@ -55,7 +55,7 @@ describe("Local model selection", () => {
 
   it("keeps rounded progress distinct from completion and measures every byte", () => {
     mount({...progress, downloaded_bytes: 6_500_000_000, total_bytes:6_731_357_749});
-    expect(screen.getByText("Almost 6 GiB transferred")).toBeTruthy();
+    expect(screen.getByText("About 6 GiB transferred")).toBeTruthy();
     expect(screen.getByText("96%")).toBeTruthy();
     const bar = screen.getByRole("progressbar");
     expect(bar.getAttribute("value")).toBe("6500000000");

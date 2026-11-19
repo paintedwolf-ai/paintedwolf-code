@@ -28,7 +28,7 @@ export function LocalModelTransfer(props: Props) {
     const amount = formatModelBytes(received());
     if (total() <= 0) return `${amount} transferred`;
     const size = formatModelBytes(total());
-    if (received() < total() && amount === size) return `Almost ${size} transferred`;
+    if (received() < total() && amount === size) return `About ${size} transferred`;
     return `${amount} of ${size}`;
   };
 
