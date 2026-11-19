@@ -1,4 +1,4 @@
-import type { CommandActivityView } from "./command-activity-model.ts";
+import type { CommandActivityView } from "./command-activity-facts.ts";
 import type {
   ActionDescriptor,
   Message,
