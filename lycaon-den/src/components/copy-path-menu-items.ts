@@ -10,6 +10,7 @@ export type CopyPathMenuOptions = {
   copyAbsolute?: CopyPathCommand | null;
   copyRelative?: CopyPathCommand | null;
   copyFileName?: CopyPathCommand | null;
+  copyAsShown?: ContextActionHandler;
   copyContents?: CopyPathCommand | null;
   absoluteTestId: string;
   relativeTestId: string;
@@ -48,6 +49,9 @@ export function copyPathMenuItems(
       testId: opts.contentsTestId,
       ...(typeof contents === "function" ? { onSelect: contents } : contents),
     }));
+  }
+  if (opts.copyAsShown) {
+    items.push(contextAction("copyAsShown", { testId: "files-editor-copy-as-shown", onSelect: opts.copyAsShown }));
   }
   return items;
 }

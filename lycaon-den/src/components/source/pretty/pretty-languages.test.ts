@@ -3,6 +3,7 @@ import { EditorState, type Extension } from "@codemirror/state";
 import { describe, expect, it } from "vitest";
 import { languageExtensionForPath, prettyLayoutCatalog } from "../editor/codemirror-lang.ts";
 import { createPrettyExtension, prettyOutcomeOf } from "./pretty-layout.ts";
+import { copyAsShown } from "./pretty-copy.ts";
 import { PrettyBreakWidget, prettyLayoutDecorations } from "./pretty-view.ts";
 
 function open(doc: string, path: string): EditorState {
@@ -90,6 +91,7 @@ describe("bracket layout for every language declared with it", () => {
       for (const pos of positions) {
         for (const [from, to] of protectedRanges) expect(pos > from && pos < to, `${ext} break at ${pos} inside ${from}-${to}`).toBe(false);
       }
+      expect(copyAsShown(state, 0, state.doc.length)).toBe(writtenOut(state));
       expect(breaks(open(writtenOut(state), path)), `${ext} second pass`).toEqual([]);
       expect(breaks(open("value = call(item0, [item1], (item2))\n", path)), `${ext} formatted`).toEqual([]);
 
@@ -195,6 +197,7 @@ describe("after-block breaks, PowerShell, and SQL predicates/CASE", () => {
     for (const [path, src, needle] of fixtures) {
       const state = open(src, path);
       expect(breaks(state), `${path} should break before ${needle}`).toContain(src.indexOf(needle));
+      expect(copyAsShown(state, 0, state.doc.length)).toBe(writtenOut(state));
       expect(breaks(open(writtenOut(state), path)), `${path} pass 2`).toEqual([]);
     }
 
@@ -211,6 +214,7 @@ describe("after-block breaks, PowerShell, and SQL predicates/CASE", () => {
     for (const path of ["deploy.ps1", "module.psm1", "manifest.psd1"]) {
       const state = open(ps, path);
       expect(breaks(state).length, `${path} breaks`).toBeGreaterThan(0);
+      expect(copyAsShown(state, 0, state.doc.length)).toBe(writtenOut(state));
       expect(breaks(open(writtenOut(state), path)), `${path} pass 2`).toEqual([]);
     }
     expect(breaks(open("param($x)\nWrite-Host $x\n", "ok.ps1"))).toEqual([]);

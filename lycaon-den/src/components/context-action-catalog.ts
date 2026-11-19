@@ -14,6 +14,7 @@ export const CONTEXT_ACTIONS = {
   convertIndentationToSpaces: { label: "Convert indentation to spaces" },
   convertIndentationToTabs: { label: "Convert indentation to tabs" },
   copy: { label: "Copy" },
+  copyAsShown: { label: "Copy as shown" },
   copyContents: { label: "Copy contents" },
   copyFileName: { label: "Copy file name" },
   copyJobID: { label: "Copy job ID" },

@@ -108,6 +108,7 @@ export type FilesContextMenuActions = {
   infoCopyPath?: () => void;
   infoCopyRelativePath?: () => void;
   infoAddToChat?: () => void;
+  editorCopyAsShown?: () => Promise<void>;
   editorCopyPath?: () => void;
   editorCopyRelativePath?: () => void;
   editorAddSelectionToChat?: () => void;
@@ -428,6 +429,7 @@ export function filesContextMenuItems(
       const items: ContextMenuItem[] = [
         ...textEditSystemMenuItems(target.textEdit, {
           omitMutatorsWhenReadOnly: true,
+          copyAsShown: actions.editorCopyAsShown,
         }),
         {
           separator: true,
