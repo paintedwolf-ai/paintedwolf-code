@@ -113,8 +113,10 @@ printf 'GOMEMLIMIT %s RACE %s\\n' "$GOMEMLIMIT" "${PW_TEST_RACE:-unset}"
         result, _ = self.run_wrapper()
         self.assertIn(f"GOMEMLIMIT {ceiling * 80 // 100} RACE unset".encode(), result.stdout)
         result, _ = self.run_wrapper(PW_TEST_RACE="1")
-        self.assertEqual(resources.budget("fixture/pkg", race=True), int(ceiling * 1.5))
-        self.assertIn(f"GOMEMLIMIT {int(ceiling * 1.5) * 80 // 100} RACE unset".encode(), result.stdout)
+        scaled = int(ceiling * json.loads(resources.POLICY.read_text())["race_scale"])
+        self.assertGreater(scaled, ceiling)
+        self.assertEqual(resources.budget("fixture/pkg", race=True), scaled)
+        self.assertIn(f"GOMEMLIMIT {scaled * 80 // 100} RACE unset".encode(), result.stdout)
 
     def test_failures_are_reported_as_they_happen_with_their_output(self):
         result, event = self.run_wrapper("fail")
