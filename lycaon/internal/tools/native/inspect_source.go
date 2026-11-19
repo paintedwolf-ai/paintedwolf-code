@@ -58,18 +58,16 @@ func (t *InspectSourceTool) inspectGitHead(ctx context.Context, tc tools.ToolCon
 	if info, err := os.Stat(dir); err == nil && !info.IsDir() {
 		dir = filepath.Dir(dir)
 	}
-	repo, ok := gitrepo.Discover(dir)
-	if !ok {
+	root := gitrepo.FindRoot(dir)
+	if root == "" {
 		return gitHead{}, nil
 	}
-	if repo.GitDir == "" || repo.CommonDir == "" {
-		return gitHead{}, invalidGitHead(path)
-	}
-	if _, err := projectpaths.ResolveRead(ctx, t.Boundary, tc, repo.Root); err != nil {
+	gitDir, err := t.inspectGitDir(ctx, tc, root)
+	if err != nil {
 		return gitHead{}, err
 	}
 	state := gitHead{Repository: true}
-	head, err := t.readGitMetadata(ctx, tc, filepath.Join(repo.GitDir, "HEAD"), 4096)
+	head, err := t.readGitMetadata(ctx, tc, filepath.Join(gitDir, "HEAD"), 4096)
 	if err != nil {
 		return gitHead{}, err
 	}
@@ -77,8 +75,12 @@ func (t *InspectSourceTool) inspectGitHead(ctx context.Context, tc tools.ToolCon
 		if !strings.HasPrefix(ref, "refs/") || plumbing.ReferenceName(ref).Validate() != nil {
 			return gitHead{}, invalidGitHead(path)
 		}
+		commonDir, err := t.inspectCommonDir(ctx, tc, gitDir)
+		if err != nil {
+			return gitHead{}, err
+		}
 		state.Reference = ref
-		state.Commit, err = t.readGitRef(ctx, tc, repo.CommonDir, ref)
+		state.Commit, err = t.readGitRef(ctx, tc, commonDir, ref)
 		state.Unborn = state.Commit == ""
 		return state, err
 	}
@@ -89,18 +91,61 @@ func (t *InspectSourceTool) inspectGitHead(ctx context.Context, tc tools.ToolCon
 	return state, nil
 }
 
+func (t *InspectSourceTool) inspectGitDir(ctx context.Context, tc tools.ToolContext, root string) (string, error) {
+	if _, err := projectpaths.ResolveRead(ctx, t.Boundary, tc, root); err != nil {
+		return "", err
+	}
+	dot := filepath.Join(root, ".git")
+	pointer, err := t.readGitMetadata(ctx, tc, dot, 4096)
+	if errors.Is(err, projectpaths.ErrIsDirectory) {
+		return dot, nil
+	}
+	if err != nil {
+		return "", err
+	}
+	dir := gitrepo.GitDirFromPointer(root, pointer)
+	if dir == "" {
+		return "", invalidGitHead(dot)
+	}
+	return dir, nil
+}
+
+func (t *InspectSourceTool) inspectCommonDir(ctx context.Context, tc tools.ToolContext, gitDir string) (string, error) {
+	path := filepath.Join(gitDir, "commondir")
+	pointer, err := t.readOptionalGitMetadata(ctx, tc, path, 4096)
+	if errors.Is(err, os.ErrNotExist) {
+		return gitDir, nil
+	}
+	if err != nil {
+		return "", err
+	}
+	dir := gitrepo.CommonDirFromPointer(gitDir, pointer)
+	if dir == "" {
+		return "", invalidGitHead(path)
+	}
+	return dir, nil
+}
+
+func (t *InspectSourceTool) readOptionalGitMetadata(ctx context.Context, tc tools.ToolContext, path string, limit int64) (string, error) {
+	// Missing entries do not need a read grant. Check the name without following its final link.
+	if _, err := os.Lstat(path); errors.Is(err, os.ErrNotExist) {
+		return "", err
+	}
+	return t.readGitMetadata(ctx, tc, path, limit)
+}
+
 func (t *InspectSourceTool) readGitMetadata(ctx context.Context, tc tools.ToolContext, path string, limit int64) (string, error) {
 	resolved, err := projectpaths.ResolveRead(ctx, t.Boundary, tc, path)
 	if err != nil {
 		return "", err
 	}
-	value, err := resolved.ReadBounded(limit)
+	value, err := resolved.ReadRegularBounded(limit)
 	return string(value), err
 }
 
 func (t *InspectSourceTool) readGitRef(ctx context.Context, tc tools.ToolContext, commonDir, ref string) (string, error) {
 	path := filepath.Join(commonDir, filepath.FromSlash(ref))
-	loose, err := t.readGitMetadata(ctx, tc, path, 4096)
+	loose, err := t.readOptionalGitMetadata(ctx, tc, path, 4096)
 	if err == nil {
 		if oid := strings.TrimSpace(loose); validGitHeadCommit(oid) {
 			return oid, nil
@@ -110,7 +155,7 @@ func (t *InspectSourceTool) readGitRef(ctx context.Context, tc tools.ToolContext
 	if !errors.Is(err, os.ErrNotExist) {
 		return "", err
 	}
-	packed, err := t.readGitMetadata(ctx, tc, filepath.Join(commonDir, "packed-refs"), 4<<20)
+	packed, err := t.readOptionalGitMetadata(ctx, tc, filepath.Join(commonDir, "packed-refs"), 4<<20)
 	if errors.Is(err, os.ErrNotExist) {
 		return "", nil
 	}

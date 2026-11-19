@@ -2,14 +2,19 @@ package native
 
 import (
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
+	"github.com/lycaon/lycaon/internal/gitrepo"
+	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/toolprofiles"
 	"github.com/lycaon/lycaon/internal/toolrejection"
 	nativefixture "github.com/lycaon/lycaon/internal/tools/native/internal/testfixture"
+	"github.com/lycaon/lycaon/internal/tools/projectpaths"
 )
 
 func TestInspectSourceReadsGitHeadFromBoundedMetadata(t *testing.T) {
@@ -51,6 +56,73 @@ func TestInspectSourceRejectsUnsafeGitReference(t *testing.T) {
 	_, err := tool.Run(t.Context(), map[string]any{"operation": "git_head"}, provenanceCtx(dir, nil))
 	if reject := toolrejection.AsToolReject(err); reject == nil || reject.Code != "TOOL_ARGS_INVALID" {
 		t.Fatalf("malformed symbolic head was not rejected: %v", err)
+	}
+}
+
+func TestInspectSourceReadsLinkedWorktreeHead(t *testing.T) {
+	dir := t.TempDir()
+	checkout := filepath.Join(dir, "checkout")
+	testutil.FailErr(t, "make worktree", os.Mkdir(checkout, 0o700))
+	testutil.FailErr(t, "write worktree pointer", os.WriteFile(filepath.Join(checkout, ".git"), []byte("gitdir: ../.git/worktrees/checkout\n"), 0o600))
+	writeGitInspectionFixture(t, dir, "worktrees/checkout/HEAD", "ref: refs/heads/review")
+	writeGitInspectionFixture(t, dir, "worktrees/checkout/commondir", "../..")
+	oid := strings.Repeat("b", 40)
+	writeGitInspectionFixture(t, dir, "refs/heads/review", oid)
+
+	tool := &InspectSourceTool{Boundary: nativefixture.Boundary(t)}
+	got, err := tool.inspectGitHead(t.Context(), provenanceCtx(dir, nil), "checkout")
+	testutil.FailErr(t, "inspect linked worktree HEAD", err)
+	if want := (gitHead{Repository: true, Reference: "refs/heads/review", Commit: oid}); got != want {
+		t.Fatalf("Git HEAD = %+v, want %+v", got, want)
+	}
+}
+
+func TestInspectSourceRejectsExternalGitMetadata(t *testing.T) {
+	for _, name := range []string{".git", "commondir"} {
+		t.Run(name, func(t *testing.T) {
+			dir := t.TempDir()
+			external := filepath.Join(t.TempDir(), "metadata")
+			testutil.FailErr(t, "write external metadata", os.WriteFile(external, nil, 0o600))
+			rel := ".git"
+			if name == "commondir" {
+				writeGitInspectionFixture(t, dir, "HEAD", "ref: refs/heads/review")
+				rel = filepath.Join(rel, name)
+			}
+			testutil.FailErr(t, "link external metadata", os.Symlink(external, filepath.Join(dir, rel)))
+
+			tool := &InspectSourceTool{Boundary: nativefixture.Boundary(t)}
+			_, err := tool.inspectGitHead(t.Context(), provenanceCtx(dir, nil), ".")
+			if reject := toolrejection.AsToolReject(err); reject == nil || reject.Code != "SURVEY_PATH_ESCAPE" || reject.Data["path"] != filepath.Join(gitrepo.CanonicalDir(dir), rel) {
+				t.Fatalf("external metadata %s was not rejected at its read boundary: %v", name, err)
+			}
+		})
+	}
+}
+
+func TestInspectSourceIgnoresMissingOptionalMetadataOutsideReadGlobs(t *testing.T) {
+	dir := t.TempDir()
+	writeGitInspectionFixture(t, dir, "HEAD", "ref: refs/heads/review")
+	boundary := sandbox.NewBoundary(sandbox.Config{ProjectRootRequired: true, RejectSymlinkEscape: true}, []sandbox.ToolProfile{{
+		ID:        toolprofiles.DefaultToolProfileID,
+		ReadGlobs: []string{".", ".git", ".git/HEAD"},
+	}})
+	tool := &InspectSourceTool{Boundary: boundary}
+	got, err := tool.inspectGitHead(t.Context(), provenanceCtx(dir, nil), ".")
+	testutil.FailErr(t, "inspect unborn HEAD", err)
+	if !got.Unborn {
+		t.Fatalf("Git HEAD = %+v, want unborn branch", got)
+	}
+}
+
+func TestInspectSourceRejectsOversizedCommonDir(t *testing.T) {
+	dir := t.TempDir()
+	writeGitInspectionFixture(t, dir, "HEAD", "ref: refs/heads/review")
+	writeGitInspectionFixture(t, dir, "commondir", strings.Repeat("x", 4097))
+	tool := &InspectSourceTool{Boundary: nativefixture.Boundary(t)}
+	_, err := tool.inspectGitHead(t.Context(), provenanceCtx(dir, nil), ".")
+	var tooLarge *projectpaths.FileTooLargeError
+	if !errors.As(err, &tooLarge) || tooLarge.Limit != 4096 {
+		t.Fatalf("oversized commondir was not refused at the read limit: %v", err)
 	}
 }
 
