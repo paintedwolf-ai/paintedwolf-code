@@ -5,8 +5,13 @@ package confine
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 
+	"github.com/lycaon/lycaon/internal/configdir"
 	"github.com/lycaon/lycaon/internal/confine/linuxsandbox"
+	"github.com/lycaon/lycaon/internal/confine/linuxsandbox/sessionipc"
+	"github.com/lycaon/lycaon/internal/enginepaths"
+	"github.com/lycaon/lycaon/internal/fspath"
 	"github.com/lycaon/lycaon/internal/socketref"
 )
 
@@ -42,7 +47,25 @@ func prepareCredentialSocket(c Confinement) (Confinement, func(), error) {
 	return c, lease.Close, nil
 }
 
-func socketCommandFiles(grants []SocketGrant) ([]*os.File, func(), error) {
+var sessionSockets sessionipc.Registry
+
+func sessionSocketRoot(c Confinement) string {
+	if c.HostExecution || c.SessionScratchRoot == "" {
+		return ""
+	}
+	state, err := configdir.UserConfigDir()
+	if err != nil {
+		return ""
+	}
+	root := filepath.Clean(c.SessionScratchRoot)
+	if filepath.Dir(root) != fspath.CanonicalPath(enginepaths.ScratchRootUnder(state)) {
+		return ""
+	}
+	return root
+}
+
+func socketCommandFiles(c Confinement) ([]*os.File, func(), error) {
+	grants := c.SocketGrants
 	files := make([]*os.File, 0, len(grants))
 	closeFiles := func() {
 		for _, file := range files {
@@ -62,6 +85,14 @@ func socketCommandFiles(grants []SocketGrant) ([]*os.File, func(), error) {
 			return nil, func() {}, err
 		}
 		files = append(files, file)
+	}
+	if root := sessionSocketRoot(c); root != "" {
+		channel, err := sessionSockets.Channel(root)
+		if err != nil {
+			closeFiles()
+			return nil, func() {}, err
+		}
+		files = append(files, channel)
 	}
 	return files, closeFiles, nil
 }

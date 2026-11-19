@@ -14,7 +14,7 @@ import (
 //	then path, new path and content, each a u32 length and its bytes.
 const pathCallHeader = 4 + 4 + 4 + 8*5
 
-var callOps = []string{"", callOpen, callMkdir, callMknod, callSymlink, callLink, callRename, callUnlink, callTruncate, callListener}
+var callOps = []string{"", callOpen, callMkdir, callMknod, callSymlink, callLink, callRename, callUnlink, callTruncate, callListener, callSessionBind}
 
 func callOpCode(op string) (byte, bool) {
 	for i, name := range callOps {

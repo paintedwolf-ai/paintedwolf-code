@@ -100,6 +100,7 @@ const (
 // and carries them to other hosts through a gateway interface, deciding each
 // datagram itself.
 type Network struct {
+	SessionSocketRoot    string           `json:"session_socket_root,omitempty"`
 	Mode                 string           `json:"mode"`
 	LoopbackConnect      bool             `json:"loopback_connect,omitempty"`
 	LoopbackConnectPorts []uint16         `json:"loopback_connect_ports,omitempty"`

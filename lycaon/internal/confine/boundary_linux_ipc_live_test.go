@@ -3,13 +3,18 @@
 package confine_test
 
 import (
+	"bufio"
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/scratch"
 	"io"
 	"os"
 	"os/exec"
+	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 	"unsafe"
@@ -224,4 +229,67 @@ func TestLinuxIPCIsolatesHostAndSiblingActions(t *testing.T) {
 	testutil.FailErr(t, "finish sibling owner", input.Close())
 	testutil.FailErr(t, "wait for sibling owner", owner.Wait())
 	testutil.FailErr(t, "host IPC remains intact", host.check(true))
+}
+
+func TestLinuxSessionSocketAcrossCommands(t *testing.T) {
+	self := requireLinuxSandbox(t)
+	state, err := os.MkdirTemp("/tmp", "pw-uds-") //nolint:usetesting // Unix socket addresses have a fixed size.
+	testutil.FailErr(t, "create session fixture", err)
+	t.Cleanup(func() { _ = os.RemoveAll(state) })
+	t.Setenv("LYCAON_CONFIG_DIR", state)
+	folders := scratch.New(state)
+	project := t.TempDir()
+	session := func(id string) confine.Confinement {
+		dirs, err := folders.Ensure(id)
+		testutil.FailErr(t, "prepare session", err)
+		c := denyConfinement(project)
+		c.SessionScratchRoot = dirs.Scratch
+		return c
+	}
+	owner, worker := session("owner"), session("worker")
+	listenerPath := filepath.Join(owner.SessionScratchRoot, "service.sock")
+	hostPath := filepath.Join(owner.SessionScratchRoot, "external.sock")
+	greeter(t, "unix", hostPath)
+	ctx, cancel := context.WithTimeout(t.Context(), 40*time.Second)
+	defer cancel()
+	listen := `import socket, sys
+with socket.socket(socket.AF_UNIX) as server:
+    server.bind(sys.argv[1])
+    server.listen()
+    print("listening", flush=True)
+    with server.accept()[0] as peer: peer.sendall(b"session")
+`
+	server, release, err := confine.Command(ctx, helperBinary(t, self), "/usr/bin/python3", []string{"-I", "-c", listen, listenerPath}, owner)
+	testutil.FailErr(t, "prepare listener", err)
+	defer release()
+	stdout, err := server.StdoutPipe()
+	testutil.FailErr(t, "open listener output", err)
+	var diagnostic bytes.Buffer
+	server.Stderr = &diagnostic
+	testutil.FailErr(t, "start listener", server.Start())
+	defer func() { cancel(); _ = server.Wait() }()
+	ready, err := bufio.NewReader(stdout).ReadString('\n')
+	if err != nil || ready != "listening\n" {
+		_ = server.Wait()
+		t.Fatalf("session listener startup %q: %v: %s", ready, err, diagnostic.String())
+	}
+	dial := `import socket, sys
+with socket.socket(socket.AF_UNIX) as client:
+    try:
+        client.connect(sys.argv[1])
+        print(client.recv(7).decode())
+    except OSError as e: print("errno", e.errno)
+`
+	probe := func(c confine.Confinement, path, want string) {
+		t.Helper()
+		status, out := linuxConfinedRun(t, self, c, nil, "/usr/bin/python3", "-I", "-c", dial, path)
+		if !status.Exited() || status.ExitStatus() != 0 || !strings.Contains(out, want+"\n") {
+			t.Fatalf("session %s accessing %s: status %v; output %q; want %q", c.SessionScratchRoot, path, status, out, want)
+		}
+	}
+	probe(owner, hostPath, "errno 13")
+	alias := filepath.Join(worker.SessionScratchRoot, "other-session.sock")
+	testutil.FailErr(t, "link socket into other session", os.Link(listenerPath, alias))
+	probe(worker, alias, "errno 13")
+	probe(owner, listenerPath, "session")
 }

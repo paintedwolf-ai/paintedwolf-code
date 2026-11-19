@@ -31,6 +31,8 @@ func (f creationFloors) perform(call pathCall, dirs []int) (pathResult, int) {
 		}
 	}
 	switch call.Op {
+	case callSessionBind:
+		return f.bindSessionSocket(call, dirs), -1
 	case callOpen:
 		return f.open(dir(0), call)
 	case callMkdir, callMknod, callSymlink:

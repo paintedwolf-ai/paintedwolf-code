@@ -6,8 +6,10 @@ import (
 	"fmt"
 	"os"
 	"strconv"
+	"strings"
 	"sync"
 
+	"github.com/lycaon/lycaon/internal/confine/linuxsandbox/sessionipc"
 	"golang.org/x/sys/unix"
 )
 
@@ -32,6 +34,16 @@ func OwnSocketReferences(network Network) (func(), error) {
 		}
 		unix.CloseOnExec(grant.FD)
 		files = append(files, os.NewFile(uintptr(grant.FD), "approved local service"))
+	}
+	if network.SessionSocketRoot != "" {
+		fd := SocketReferenceFD + len(network.SocketGrants)
+		kind, err := unix.GetsockoptInt(fd, unix.SOL_SOCKET, unix.SO_TYPE)
+		if err != nil || kind != unix.SOCK_SEQPACKET {
+			closeFiles()
+			return nil, fmt.Errorf("session socket channel unavailable")
+		}
+		unix.CloseOnExec(fd)
+		files = append(files, os.NewFile(uintptr(fd), "session sockets"))
 	}
 	return closeFiles, nil
 }
@@ -61,6 +73,15 @@ func retainSocketReferences(network Network) (*socketReferences, error) {
 			return nil, err
 		}
 		refs.files[grant.FD] = os.NewFile(uintptr(fd), "supervisor local service")
+	}
+	if network.SessionSocketRoot != "" {
+		id := SocketReferenceFD + len(network.SocketGrants)
+		fd, err := unix.FcntlInt(uintptr(id), unix.F_DUPFD_CLOEXEC, 0)
+		if err != nil {
+			refs.close()
+			return nil, err
+		}
+		refs.files[id] = os.NewFile(uintptr(fd), "session sockets")
 	}
 	return refs, nil
 }
@@ -114,4 +135,67 @@ func (s *supervisor) connectUnix(socket, referenceID int) unix.Errno {
 	}
 	address := &unix.SockaddrUnix{Name: "/proc/self/fd/" + strconv.Itoa(int(reference.Fd()))}
 	return errnoOf(unix.Connect(socket, address), 0)
+}
+
+func (s *supervisor) performSessionSocket(target *targetProcess, req SocketRequest, socket int) (int64, unix.Errno) {
+	channel, err := s.socketRefs.duplicate(SocketReferenceFD + len(s.network.SocketGrants))
+	if err != nil {
+		return 0, unix.EACCES
+	}
+	defer channel.Close()
+	if req.Op == OpBind {
+		if s.performer == nil {
+			return 0, unix.EACCES
+		}
+		call := pathCall{Op: callSessionBind, Path: req.Unix, NewPath: s.network.SessionSocketRoot,
+			Dirs: 2, Notification: target.id, Caller: target.pid, Umask: target.caller.umask}
+		if err := s.performer.forward(call, []int{socket, int(channel.Fd())}); err != nil {
+			return 0, unix.EACCES
+		}
+		return 0, errAnswered
+	}
+	destination, err := unix.Openat2(unix.AT_FDCWD, req.Unix, &unix.OpenHow{Flags: unix.O_PATH | unix.O_CLOEXEC, Resolve: unix.RESOLVE_NO_SYMLINKS})
+	if err != nil {
+		return 0, errnoOf(err, unix.EACCES)
+	}
+	defer unix.Close(destination)
+	if !sessionipc.Admits(int(channel.Fd()), destination) {
+		s.refusals.report(Refusal{Operation: "network-outbound", Target: req.Unix, Process: target.comm()})
+		return 0, unix.EACCES
+	}
+	return 0, errnoOf(unix.Connect(socket, &unix.SockaddrUnix{Name: "/proc/self/fd/" + strconv.Itoa(destination)}), 0)
+}
+
+// The performer binds from its pinned parent with the caller's filesystem restrictions.
+func (f creationFloors) bindSessionSocket(call pathCall, dirs []int) pathResult {
+	if len(dirs) != 2 || call.NewPath == "" {
+		return errnoResult(unix.EINVAL)
+	}
+	p, err := resolveParent(unix.AT_FDCWD, call.Path, unix.RESOLVE_NO_SYMLINKS)
+	if err != nil {
+		return errnoResult(err)
+	}
+	defer p.close()
+	if !strings.HasPrefix(p.path, call.NewPath+"/") || f.refuses(createEntry, p.path) {
+		return pathResult{Errno: int(unix.EACCES), Refusal: &Refusal{Operation: "network-bind", Target: call.Path}}
+	}
+	cwd, err := unix.Open(".", unix.O_PATH|unix.O_DIRECTORY|unix.O_CLOEXEC, 0)
+	if err != nil {
+		return errnoResult(err)
+	}
+	defer unix.Close(cwd)
+	if err := unix.Fchdir(p.fd); err != nil {
+		return errnoResult(err)
+	}
+	err = unix.Bind(dirs[0], &unix.SockaddrUnix{Name: p.base})
+	if err := unix.Fchdir(cwd); err != nil {
+		return errnoResult(err)
+	}
+	if err != nil {
+		return errnoResult(err)
+	}
+	if !sessionipc.Register(dirs[1], dirs[0]) {
+		return errnoResult(unix.EACCES)
+	}
+	return pathResult{}
 }

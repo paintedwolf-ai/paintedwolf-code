@@ -175,6 +175,8 @@ func (s *supervisor) decideAndPerform(target *targetProcess, n seccompNotif, fd,
 	switch decision.Action {
 	case Refuse:
 		return 0, unix.EACCES
+	case SessionSocket:
+		return s.performSessionSocket(target, req, sock)
 	case HostSocket:
 		return s.hostSocketCall(target, fd, sock, info, req, decision)
 	case Perform:
