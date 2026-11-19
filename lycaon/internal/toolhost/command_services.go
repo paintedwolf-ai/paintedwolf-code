@@ -145,6 +145,7 @@ func (r *CommandServices) SetProgramServices(services ProgramServices) error {
 	programs.Clock = services.Clock
 	if programs.Executor != nil {
 		programs.Executor.Metadata.SetCommandExternalHidden(services.ExternalHidden)
+		r.owners.reviewRoot = programs.Executor.Boundary.ReviewRedirectRoot
 	}
 	owners, err := r.owners.compose(services.Recorder)
 	if err != nil {

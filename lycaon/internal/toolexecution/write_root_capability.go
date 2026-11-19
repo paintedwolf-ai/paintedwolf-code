@@ -29,18 +29,32 @@ func (e *Boundary) preflightWriteRoot(ctx context.Context, tool string, args map
 		}
 		return e.preparePolicyWrite(tc, request.WriteRoot)
 	}
+	return e.reviewWriteRoot(ctx, tool, args, *tc, request.WriteRoot)
+}
+
+// ReviewRedirectRoot reviews the destination before its producer starts.
+func (e *Boundary) ReviewRedirectRoot(ctx context.Context, tc tools.ToolContext, operator, path, root string) (tools.ToolContext, error) {
+	args := map[string]any{"command": operator + " " + path}
+	if err := e.reviewWriteRoot(ctx, "command", args, tc, root); err != nil {
+		return tc, err
+	}
+	tc.Files.GrantedWriteRoots = e.actionConfineRequest(ctx, tc).GrantedWriteRoots
+	return tc, nil
+}
+
+func (e *Boundary) reviewWriteRoot(ctx context.Context, tool string, args map[string]any, tc tools.ToolContext, root string) error {
 	if e.writeRootPreflight == nil {
 		return e.Rejections.rejectBeforeInvoke(ctx, tool, tc.Identity.Agent, args, &toolrejection.ToolReject{
 			Code: isolation.CodeApprovalUnavailable,
 			Data: map[string]any{"reason": "write-root approval is not configured"},
 		})
 	}
-	authorized, denied, guidance, err := e.writeRootPreflight(ctx, tool, args, *tc, request.WriteRoot)
+	authorized, denied, guidance, err := e.writeRootPreflight(ctx, tool, args, tc, root)
 	if err != nil {
 		return e.Approvals.rejectApprovalErr(ctx, tool, tc.Identity.Agent, args, err)
 	}
 	if !authorized {
-		data := map[string]any{"path": request.WriteRoot}
+		data := map[string]any{"path": root}
 		if guidance != "" {
 			data[toolrejection.UserGuidanceKey] = guidance
 		}
