@@ -9,6 +9,47 @@ import (
 	"context"
 )
 
+const findSourceFileChatAnchor = `-- name: FindSourceFileChatAnchor :one
+SELECT l.anchor_identity
+FROM source_chat_files c
+JOIN source_chat_locations l ON l.session_id = c.session_id
+WHERE c.file_id = ?1 AND l.anchor = ?2
+  AND l.anchor_identity != '' AND (l.kind != 'file' OR l.anchor = ?3)
+ORDER BY l.created_ts DESC, l.id
+LIMIT 1
+`
+
+type FindSourceFileChatAnchorParams struct {
+	FileID string `json:"file_id"`
+	Anchor string `json:"anchor"`
+	Path   string `json:"path"`
+}
+
+func (q *Queries) FindSourceFileChatAnchor(ctx context.Context, arg FindSourceFileChatAnchorParams) (string, error) {
+	row := q.db.QueryRowContext(ctx, findSourceFileChatAnchor, arg.FileID, arg.Anchor, arg.Path)
+	var anchor_identity string
+	err := row.Scan(&anchor_identity)
+	return anchor_identity, err
+}
+
+const getEditorOutsideParentBinding = `-- name: GetEditorOutsideParentBinding :one
+SELECT outside_parent_binding FROM editor_documents
+WHERE project_id = ?1 AND file_id = ?2
+  AND outside_parent_binding != ''
+`
+
+type GetEditorOutsideParentBindingParams struct {
+	ProjectID string `json:"project_id"`
+	FileID    string `json:"file_id"`
+}
+
+func (q *Queries) GetEditorOutsideParentBinding(ctx context.Context, arg GetEditorOutsideParentBindingParams) (string, error) {
+	row := q.db.QueryRowContext(ctx, getEditorOutsideParentBinding, arg.ProjectID, arg.FileID)
+	var outside_parent_binding string
+	err := row.Scan(&outside_parent_binding)
+	return outside_parent_binding, err
+}
+
 const getSourceChatLocation = `-- name: GetSourceChatLocation :one
 SELECT l.id, l.session_id, l.anchor, l.anchor_identity, l.kind, l.hidden, l.created_ts
 FROM source_chat_locations l

@@ -136,8 +136,8 @@ components:
       x-go-generate: true
       type: object
       additionalProperties: false
-      required: [path, root_id, client_id]
-      description: A document opens at its current address when a file ID is supplied.
+      required: [client_id]
+      description: Use file_id for an outside file, or root_id and path for an attached file.
       properties:
         file_id:
           type: string

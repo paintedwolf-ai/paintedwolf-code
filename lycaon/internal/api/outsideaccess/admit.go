@@ -1,30 +1,49 @@
-// Package outsideaccess admits requests for paths in a project's outside
-// namespace.
+// Package outsideaccess resolves requests for held outside files.
 package outsideaccess
 
 import (
 	"context"
-	"path"
+	"errors"
 
+	"github.com/google/uuid"
 	"github.com/lycaon/lycaon/internal/project"
 	"github.com/lycaon/lycaon/internal/projectsource"
 	"github.com/lycaon/lycaon/internal/sourceledger"
 )
 
-// Admit resolves an outside address held by a chat or open document.
-func Admit(ctx context.Context, ledger *sourceledger.Store, p *project.Project, rootID, rel string) (*project.Project, error) {
-	if p == nil || rootID == "" || rootID != p.Outside.ID {
-		return p, nil
+type Address struct {
+	RootID, Path, FileID string
+}
+
+// Resolve admits outside reads only by an identity held in this project.
+func Resolve(ctx context.Context, ledger *sourceledger.Store, p *project.Project, target Address) (*project.Project, Address, error) {
+	if target.FileID == "" {
+		if p.Outside.ID != "" && target.RootID == p.Outside.ID {
+			return nil, Address{}, projectsource.ErrSourcePathDenied
+		}
+		return p, target, nil
 	}
-	if ledger == nil || rel == "" || path.Clean(rel) != rel || path.IsAbs(rel) {
-		return nil, projectsource.ErrSourcePathDenied
+	if uuid.Validate(target.FileID) != nil || target.RootID != "" || target.Path != "" {
+		return nil, Address{}, projectsource.ErrSourcePathInvalid
 	}
-	admitted, err := ledger.OutsideFileHeld(ctx, p.ID, rel)
+	root, path, err := ledger.HeldFileAddress(ctx, p.ID, target.FileID)
 	if err != nil {
-		return nil, err
+		return nil, Address{}, sourceError(err)
 	}
-	if !admitted {
-		return nil, projectsource.ErrSourcePathDenied
+	target.RootID, target.Path = root, path
+	if root == p.Outside.ID {
+		binding, err := ledger.OutsideReadBinding(ctx, p.ID, target.FileID, path)
+		if err != nil {
+			return nil, Address{}, sourceError(err)
+		}
+		p = project.WithOutsideRead(p, binding)
 	}
-	return project.WithOutside(p), nil
+	return p, target, nil
+}
+
+func sourceError(err error) error {
+	if errors.Is(err, sourceledger.ErrHistoryNotFound) {
+		return projectsource.ErrSourceNotFound
+	}
+	return err
 }

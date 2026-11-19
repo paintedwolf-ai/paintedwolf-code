@@ -1,3 +1,4 @@
+import { outsideFileId } from "../source/outside-namespace.ts";
 import { retainFileDocument } from "../documents/files-residency.ts";
 import { DocumentCapacityError, type DocumentReservation } from "../documents/document-residency.ts";
 import { onCleanup } from "solid-js";
@@ -221,6 +222,7 @@ export function createBufferLoading({ projectId, client, sourceSessionId, dropFi
         const res = await c.getProjectSource(projectId(), buf.path, {
           workerId: buf.jobId,
           rootId: buf.rootId || undefined,
+          fileId: outsideFileId(projectId(), buf),
           sessionId: sourceSessionId(),
           decodeAs,
         });

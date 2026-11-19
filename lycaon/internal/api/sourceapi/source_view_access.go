@@ -99,8 +99,12 @@ func (s *Views) sourceViewProject(ctx context.Context, p *project.Project, view 
 		source = view.comparisonData.comparisonSource.Chat
 	}
 	current := view.comparisonData.comparisonSource.Current
-	if current == nil && view.comparisonData.current != nil {
-		current = &wire.CurrentComparisonSource{RootID: view.comparisonData.current.stream.RootID, Path: view.comparisonData.current.stream.Path}
+	prepared := view.comparisonData.current
+	if current == nil && prepared != nil {
+		current = &wire.CurrentComparisonSource{FileID: prepared.fileID}
+		if prepared.fileID == "" {
+			current.RootID, current.Path = prepared.stream.RootID, prepared.stream.Path
+		}
 	}
 	view.mu.Unlock()
 	if source != nil {
@@ -112,13 +116,21 @@ func (s *Views) sourceViewProject(ctx context.Context, p *project.Project, view 
 		}
 	}
 	if current != nil {
-		admitted, err := outsideaccess.Admit(ctx, s.Workspace.SourceLedger, scope.Project, current.RootID, current.Path)
-		if errors.Is(err, projectsource.ErrSourcePathDenied) {
-			return nil, sourcetree.ErrUnknownRoot
+		admitted, req, err := s.resolveCurrentSource(ctx, scope.Project, current)
+		if err == nil && prepared != nil && (prepared.stream.RootID != req.RootID || prepared.stream.Path != req.Path) {
+			err = currentSourceChanged()
 		}
-		return admitted, err
+		return admitted, currentSourceReadError(err)
 	}
 	return scope.Project, nil
+}
+
+func (s *Views) resolveCurrentSource(ctx context.Context, p *project.Project, source *wire.CurrentComparisonSource) (*project.Project, projectsource.SourceReadRequest, error) {
+	p, target, err := outsideaccess.Resolve(ctx, s.Workspace.SourceLedger, p, outsideaccess.Address{RootID: source.RootID, Path: source.Path, FileID: source.FileID})
+	if errors.Is(err, projectsource.ErrSourcePathDenied) {
+		err = sourcetree.ErrUnknownRoot
+	}
+	return p, projectsource.SourceReadRequest{Path: target.Path, RootID: target.RootID, DecodeAs: source.DecodeAs}, err
 }
 
 func (s *Views) HandleGetSourceView(w http.ResponseWriter, r *http.Request) {

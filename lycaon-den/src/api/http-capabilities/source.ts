@@ -43,6 +43,7 @@ export interface SourceClient {
     projectId: string,
     path: string,
     opts?: {
+      fileId?: string;
       workerId?: string;
       rootId?: string;
       sessionId?: string;
@@ -60,6 +61,7 @@ export interface SourceClient {
     projectId: string,
     path: string,
     opts: {
+      fileId?: string;
       rootId?: string;
       workerId?: string;
       sessionId?: string;
@@ -154,9 +156,10 @@ export function createSourceClient(j: JsonRequester, connection: BackendConnecti
     getProjectSource: (projectId, path, opts) =>
       j(
         `/v1/projects/${projectId}/source${formatQuery({
-          path,
+          file_id: opts?.fileId,
+          path: opts?.fileId ? undefined : path,
           worker_id: opts?.workerId,
-          root_id: opts?.rootId,
+          root_id: opts?.fileId ? undefined : opts?.rootId,
           session_id: opts?.sessionId,
           decode_as: opts?.decodeAs,
           include_deleted: opts?.includeDeleted,
@@ -174,8 +177,9 @@ export function createSourceClient(j: JsonRequester, connection: BackendConnecti
       lycaonBlob(
         connection,
         `/v1/projects/${projectId}/source/raw${formatQuery({
-          path,
-          root_id: opts?.rootId,
+          file_id: opts?.fileId,
+          path: opts?.fileId ? undefined : path,
+          root_id: opts?.fileId ? undefined : opts?.rootId,
           worker_id: opts?.workerId,
           session_id: opts?.sessionId,
         })}`,

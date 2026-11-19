@@ -46,10 +46,20 @@ func TestOpenEditorDocumentResolvesAHeldOutsideFile(t *testing.T) {
 		ProjectID: project.ID, RootID: outside, Path: rel, Content: content,
 	}, chatID, sourceledger.ChatFileOpened)
 	testutil.FailErr(t, "track opened outside file", err)
-	doc := decodeStatus[wire.EditorDocument](t, "open held identity", open(wire.OpenEditorDocumentRequest{
-		FileID: file.FileID, RootID: f.project.Roots[0].ID, Path: "a.txt",
-	}), http.StatusCreated)
+	request := wire.OpenEditorDocumentRequest{FileID: file.FileID}
+	doc := decodeStatus[wire.EditorDocument](t, "open held identity", open(request), http.StatusCreated)
 	if doc.FileID != file.FileID || doc.RootID != outside || doc.Path != rel || doc.BaseSHA256 != fmt.Sprintf("%x", sha256.Sum256(content)) {
 		t.Fatalf("editor opened an unexpected file: %+v", doc)
 	}
+	_, err = f.h.SourceLedger.LedgerDB().ExecContext(t.Context(), "DELETE FROM sessions WHERE id=?", chatID)
+	testutil.FailErr(t, "delete the chat", err)
+	reopened := decodeStatus[wire.EditorDocument](t, "reopen by retained document", open(request), http.StatusCreated)
+	if reopened.ID != doc.ID || reopened.FileID != file.FileID {
+		t.Fatalf("reopened editor changed file identity: %+v", reopened)
+	}
+	testutil.FailErr(t, "move the held folder", os.Rename(folder, folder+"-old"))
+	t.Cleanup(func() { testutil.FailErr(t, "remove the moved folder", os.RemoveAll(folder+"-old")) })
+	testutil.FailErr(t, "create replacement folder", os.Mkdir(folder, 0o700))
+	testutil.FailErr(t, "create replacement file", os.WriteFile(name, []byte("different file"), 0o600))
+	expectCode(t, "reopen with replaced parent", open(request), wire.ApiErrorCodeSourcePathDenied)
 }

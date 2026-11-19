@@ -12,44 +12,63 @@ import (
 	"github.com/lycaon/lycaon/internal/projectroot"
 )
 
-// OpenOutsideSourceFile opens a canonical ledger address after caller admission.
-func OpenOutsideSourceFile(rel string) (*os.File, error) {
-	file, _, err := openOutsideFile(rel, "")
+// OpenOutsideSourceFile opens a canonical address after caller admission.
+func OpenOutsideSourceFile(rel string, binding projectroot.OutsideBinding) (*os.File, error) {
+	file, _, err := openOutsideFile(rel, binding)
 	return file, err
 }
 
-// OpenBoundOutsideSourceFile checks the parent identity on the read descriptor.
 func OpenBoundOutsideSourceFile(rel, identity string) (*os.File, error) {
-	file, _, err := openOutsideFile(rel, identity)
-	return file, err
+	return OpenOutsideSourceFile(rel, parentBinding(rel, identity))
 }
 
-func openOutsideFile(rel, identity string) (*os.File, string, error) {
+func parentBinding(rel, identity string) projectroot.OutsideBinding {
+	return projectroot.OutsideBinding{Directory: filepath.Dir(projectroot.OutsideAbs(rel)), Identity: identity}
+}
+
+func sourceReadBinding(p ProjectSource) projectroot.OutsideBinding {
+	if bound, ok := p.(interface {
+		OutsideReadBinding() projectroot.OutsideBinding
+	}); ok {
+		return bound.OutsideReadBinding()
+	}
+	return projectroot.OutsideBinding{}
+}
+
+func openOutsideFile(rel string, binding projectroot.OutsideBinding) (*os.File, string, error) {
 	if !filepath.IsLocal(rel) || rel == "." || filepath.Clean(rel) != rel {
 		return nil, "", ErrSourcePathDenied
 	}
-	parent := filepath.Dir(projectroot.OutsideAbs(rel))
-	root, err := fseffect.OpenReadRoot(parent)
+	if binding.Directory == "" {
+		binding = parentBinding(rel, "")
+	}
+	path, err := filepath.Rel(binding.Directory, projectroot.OutsideAbs(rel))
+	if err != nil || !filepath.IsLocal(path) || path == "." {
+		return nil, "", ErrSourcePathDenied
+	}
+	root, err := fseffect.OpenReadRoot(binding.Directory)
 	if err != nil {
 		return nil, "", outsideOpenError(err)
 	}
 	defer func() { _ = root.Close() }()
-	if root.Path() != parent {
+	if root.Path() != binding.Directory {
 		return nil, "", ErrSourcePathDenied
 	}
-	held, err := root.Open(".")
-	if err != nil {
-		return nil, "", outsideOpenError(err)
+	if binding.Identity != "" {
+		held, err := root.Open(".")
+		if err != nil {
+			return nil, "", outsideOpenError(err)
+		}
+		identity, err := fspath.FileIdentity(held)
+		_ = held.Close()
+		if err != nil {
+			return nil, "", err
+		}
+		if identity != binding.Identity {
+			return nil, "", ErrSourcePathDenied
+		}
 	}
-	defer func() { _ = held.Close() }()
-	parentID, err := fspath.FileIdentity(held)
-	if err != nil {
-		return nil, "", err
-	}
-	if identity != "" && identity != parentID {
-		return nil, "", ErrSourcePathDenied
-	}
-	file, err := root.OpenCanonicalFile(filepath.Base(rel))
+	file, parentID, err := root.OpenCanonicalFile(path)
 	return file, parentID, outsideOpenError(err)
 }
 
@@ -67,7 +86,7 @@ func outsideOpenError(err error) error {
 func openSourceRead(p ProjectSource, path, rootID string) (sourceReadTarget, *os.File, error) {
 	for _, root := range p.SourceRoots() {
 		if root.Outside && root.ID == rootID && rootID != "" {
-			return openOutsideSourceRead(path, rootID)
+			return openOutsideSourceRead(path, rootID, sourceReadBinding(p))
 		}
 	}
 	target, err := resolveSourceReadTarget(p, strings.TrimSpace(path), rootID)
@@ -84,8 +103,8 @@ func openSourceRead(p ProjectSource, path, rootID string) (sourceReadTarget, *os
 	return target, file, nil
 }
 
-func openOutsideSourceRead(path, rootID string) (sourceReadTarget, *os.File, error) {
-	file, parentID, err := openOutsideFile(path, "")
+func openOutsideSourceRead(path, rootID string, binding projectroot.OutsideBinding) (sourceReadTarget, *os.File, error) {
+	file, parentID, err := openOutsideFile(path, binding)
 	if err != nil {
 		return sourceReadTarget{}, nil, err
 	}

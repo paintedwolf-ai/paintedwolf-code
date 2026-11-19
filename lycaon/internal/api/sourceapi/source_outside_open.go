@@ -65,7 +65,7 @@ func (s *Workspace) HandleOpenOutsideFile(w http.ResponseWriter, r *http.Request
 		s.responses.InvalidField(w, "path", "has no outside-project address on this platform")
 		return
 	}
-	file, err := projectsource.OpenOutsideSourceFile(rel)
+	file, err := projectsource.OpenOutsideSourceFile(rel, projectroot.OutsideBinding{})
 	if err != nil {
 		s.writeOutsideFileOpenError(w, r, err)
 		return
@@ -235,27 +235,15 @@ func openChatLocationFile(location sourceledger.ChatLocation, path string) (*os.
 	} else if confine.ClassifyBlockedWrite(filepath.Join(location.Directory(), path)).Kind != confine.WriteSubjectOrdinary {
 		return nil, projectsource.ErrSourcePathDenied
 	}
-	root, err := fseffect.OpenReadRoot(location.Directory())
-	if err != nil {
-		return nil, err
-	}
-	defer func() { _ = root.Close() }()
-	if root.Path() != location.Directory() {
+	rel, ok := projectroot.OutsideRel(filepath.Join(location.Directory(), path))
+	if !ok || location.AnchorIdentity == "" {
 		return nil, projectsource.ErrSourceNotFound
 	}
-	held, err := root.Open(".")
-	if err != nil {
-		return nil, err
-	}
-	defer func() { _ = held.Close() }()
-	identity, err := fspath.FileIdentity(held)
-	if err != nil {
-		return nil, err
-	}
-	if identity != location.AnchorIdentity {
+	file, err := projectsource.OpenOutsideSourceFile(rel, projectroot.OutsideBinding{Directory: location.Directory(), Identity: location.AnchorIdentity})
+	if errors.Is(err, projectsource.ErrSourcePathDenied) {
 		return nil, projectsource.ErrSourceNotFound
 	}
-	return root.OpenCanonicalFile(path)
+	return file, err
 }
 
 func (s *Workspace) writeOutsideFileOpenError(w http.ResponseWriter, r *http.Request, err error) {

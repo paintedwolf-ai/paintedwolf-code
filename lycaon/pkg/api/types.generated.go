@@ -2728,9 +2728,11 @@ type CreateSessionRequest struct {
 
 // CurrentComparisonSource A read-only, immutable snapshot of the current on-disk file. Frames and search remain bounded for files above the editing limit.
 type CurrentComparisonSource struct {
-	Kind     string `json:"kind"`
-	RootID   string `json:"root_id"`
-	Path     string `json:"path"`
+	Kind string `json:"kind"`
+	// The recorded outside file ID. Use without root_id or path.
+	FileID   string `json:"file_id,omitempty"`
+	RootID   string `json:"root_id,omitempty"`
+	Path     string `json:"path,omitempty"`
 	DecodeAs string `json:"decode_as,omitempty"`
 }
 
@@ -4853,14 +4855,14 @@ type OpenChatLocationFileRequest struct {
 	Path string `json:"path"`
 }
 
-// OpenEditorDocumentRequest A document opens at its current address when a file ID is supplied.
+// OpenEditorDocumentRequest Use file_id for an outside file, or root_id and path for an attached file.
 type OpenEditorDocumentRequest struct {
 	// Recorded project file identity for an outside tab.
 	FileID string `json:"file_id,omitempty"`
 	// Root-relative, slash-separated file path.
-	Path string `json:"path"`
+	Path string `json:"path,omitempty"`
 	// Attached root that contains the file.
-	RootID string `json:"root_id"`
+	RootID string `json:"root_id,omitempty"`
 	// Stable id for the client view opening the document.
 	ClientID string `json:"client_id"`
 	// Explicit decoding for BOM-less UTF-16 text.
@@ -5960,8 +5962,10 @@ type RetainedComparisonSource struct {
 	Kind       string `json:"kind"`
 	ViewID     string `json:"view_id"`
 	Comparison string `json:"comparison"`
-	RootID     string `json:"root_id,omitempty"`
-	Path       string `json:"path,omitempty"`
+	// The recorded outside file ID. Use without root_id or path.
+	FileID string `json:"file_id,omitempty"`
+	RootID string `json:"root_id,omitempty"`
+	Path   string `json:"path,omitempty"`
 }
 
 // RetainedReplica State the client already holds, from a live replica or from the synchronized checkpoint it preserved. When it names the current document and epoch, crdt_update carries only the state missing from state_vector and base_content is omitted for a matching base_sha256 (a client without the saved text sends an empty hash, which never matches); otherwise the response is a full snapshot.

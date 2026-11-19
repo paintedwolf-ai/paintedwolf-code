@@ -3,10 +3,12 @@
 package fseffect
 
 import (
-	"golang.org/x/sys/unix"
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/lycaon/lycaon/internal/fspath"
+	"golang.org/x/sys/unix"
 )
 
 // Canonical returns an existing descriptor-resolved native identity.
@@ -55,16 +57,17 @@ func (r *ReadRoot) OpenExact(rel string) (*os.File, error) {
 	return r.openReadContained(relative)
 }
 
-// OpenCanonicalFile opens a regular file at its exact canonical address.
-func (r *ReadRoot) OpenCanonicalFile(rel string) (*os.File, error) {
+// OpenCanonicalFile opens a regular file and identifies its held parent.
+func (r *ReadRoot) OpenCanonicalFile(rel string) (*os.File, string, error) {
 	relative, err := exactReadRelative(rel)
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
 	if !filepath.IsLocal(relative) || filepath.Clean(relative) != relative {
-		return nil, ErrInvalidPath
+		return nil, "", ErrInvalidPath
 	}
-	return walkReadContained(r.root, relative, refuseReadLinks, func(dir *os.File, name string, expected *unix.Stat_t) (*os.File, error) {
+	var identity string
+	file, err := walkReadContained(r.root, relative, refuseReadLinks, func(dir *os.File, name string, expected *unix.Stat_t) (*os.File, error) {
 		if expected.Mode&unix.S_IFMT != unix.S_IFREG {
 			return nil, os.ErrNotExist
 		}
@@ -80,9 +83,15 @@ func (r *ReadRoot) OpenCanonicalFile(rel string) (*os.File, error) {
 			}
 			return nil, ErrPredicateChanged
 		}
+		identity, err = fspath.FileIdentity(dir)
+		if err != nil {
+			_ = unix.Close(fd)
+			return nil, err
+		}
 		r.root.readOpens.Add(1)
 		return os.NewFile(uintptr(fd), filepath.Join(dir.Name(), name)), nil
 	})
+	return file, identity, err
 }
 
 // MetadataRoot holds descriptor-relative launch metadata authority. Entry opens

@@ -177,7 +177,11 @@ func validateSourceViewCreate(p *project.Project, request wire.SourceViewCreate)
 		return rejectedSourceIntent(err.Error())
 	}
 	if source := request.Comparison.Source.Current; source != nil {
-		if err := validateSourceTreeAddress(project.WithOutside(p), wire.SourceTreeAddress{RootID: source.RootID, Path: source.Path}); err != nil {
+		if source.FileID != "" {
+			if uuid.Validate(source.FileID) != nil || source.RootID != "" || source.Path != "" {
+				return rejectedSourceIntent("Use file_id alone to address the file by its ID.")
+			}
+		} else if err := validateSourceTreeAddress(p, wire.SourceTreeAddress{RootID: source.RootID, Path: source.Path}); err != nil {
 			return err
 		}
 		if source.DecodeAs != "" && source.DecodeAs != "utf-16le" && source.DecodeAs != "utf-16be" {
