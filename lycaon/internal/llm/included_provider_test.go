@@ -52,7 +52,7 @@ func TestScopedRoutersObserveCurrentLocalAvailability(t *testing.T) {
 	remote := ModelRef{ProviderID: "remote", Model: "selected"}
 	router := NewStaticModelRouter(NewInMemoryPolicyStore(ModelPolicy{Coordinator: remote})).WithLocalDefault(func(context.Context) string {
 		if available.Load() {
-			return DefaultLocalModelRef().Model
+			return nativegen.DefaultModelID
 		}
 		return ""
 	})

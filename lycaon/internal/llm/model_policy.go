@@ -214,14 +214,6 @@ func mergePolicy(base, overlay ModelPolicy) ModelPolicy {
 	return normalizePolicy(out)
 }
 
-// DefaultLocalModelRef returns the bundled local model reference.
-func DefaultLocalModelRef() ModelRef {
-	return ModelRef{
-		ProviderID: IncludedProviderID,
-		Model:      nativegen.DefaultModelID,
-	}
-}
-
 // Unassigned coordinator roles follow the admitted local model.
 func CoordinatorRefWithLocalDefault(p ModelPolicy, model string) ModelRef {
 	if modelRefSet(p.Coordinator) {
