@@ -22,10 +22,12 @@ func ExportCatalog() []CatalogEntry {
 		if d.domain != "—" {
 			layer = "domain"
 		}
-		kind, status := "predicate", "shipped"
+		var kind, status string
 		switch d.usage {
+		case predicate, overlayPredicate:
+			kind, status = "predicate", "shipped"
 		case completionForm:
-			kind = "completion_form"
+			kind, status = "completion_form", "shipped"
 		case catalogOnly:
 			kind, status = "reserved", "catalog"
 		case hostOnly:
