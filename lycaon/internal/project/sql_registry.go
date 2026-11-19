@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/timelayout"
 	"strings"
 	"time"
@@ -58,6 +59,15 @@ func (r *SQLRegistry) Create(ctx context.Context, params CreateParams) (*Project
 		Starred:         0,
 	}); err != nil {
 		return nil, fmt.Errorf("insert project: %w", err)
+	}
+	if err := q.CreateProjectRoot(ctx, db.CreateProjectRootParams{
+		ID:        uuid.NewString(),
+		ProjectID: id,
+		Label:     projectroot.OutsideLabel,
+		AddedAt:   timelayout.Format(now),
+		Kind:      string(RootKindOutside),
+	}); err != nil {
+		return nil, fmt.Errorf("insert outside namespace: %w", err)
 	}
 	p := &Project{
 		ID:           id,

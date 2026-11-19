@@ -98,20 +98,6 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_project_roots_label
 CREATE UNIQUE INDEX IF NOT EXISTS idx_project_roots_one_draft
     ON project_roots(project_id) WHERE kind = 'draft';
 
--- Every project has its outside namespace from creation.
-CREATE TRIGGER IF NOT EXISTS projects_outside_namespace
-AFTER INSERT ON projects
-BEGIN
-    INSERT INTO project_roots (id, project_id, path, label, is_primary, added_at, kind)
-    VALUES (
-        lower(hex(randomblob(4))) || '-' || lower(hex(randomblob(2))) || '-4'
-            || substr(lower(hex(randomblob(2))), 2) || '-'
-            || substr('89ab', 1 + abs(random()) % 4, 1) || substr(lower(hex(randomblob(2))), 2) || '-'
-            || lower(hex(randomblob(6))),
-        new.id, '', 'outside', 0, new.created_at, 'outside'
-    );
-END;
-
 -- Restart-safe draft-to-folder transitions.
 CREATE TABLE IF NOT EXISTS project_promotions (
     project_id TEXT PRIMARY KEY REFERENCES projects(id) ON DELETE CASCADE,
