@@ -161,7 +161,7 @@ func landEditedText(ctx context.Context, tctx tools.ToolContext, tool string, re
 	readEdit.Content = proposal.Authored
 	documents.AdvanceAgentRead(tctx.Identity.ProjectID, tctx.Identity.SessionID, tctx.Source.EditorReadBases, readEdit, applied.Document)
 	tctx.RecordModelAuthoredCredentials(ctx, resolved.Abs, []byte(newContent))
-	reportLanded(tctx, applied.Document)
+	recordLandedDocument(tctx, applied.Document)
 	reportLandedEditorConfig(ctx, tctx, resolved, st, newContent)
 	return landing{change: mutationContext(preview.Before.Text, applied.Document.Text), editor: true, saved: applied.Saved, recreated: st.Editor.Absent && applied.Saved,
 		heldVersionID: applied.HeldVersionID, publicationError: applied.PublicationError}, nil

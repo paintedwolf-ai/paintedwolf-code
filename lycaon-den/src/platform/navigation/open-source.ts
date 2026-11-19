@@ -16,7 +16,7 @@ export type OpenSourceLocationArgs = {
   projectId: string;
   action?: SourceNavigationAction;
   entryKind?: "file" | "folder" | "unknown";
-  /** Pinned attached root. */
+  /** Pinned source root. */
   rootId?: string;
   /** Session's active root; bare paths resolve against it when rootId is absent. */
   activeRootId?: string;

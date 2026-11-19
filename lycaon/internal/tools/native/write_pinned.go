@@ -138,7 +138,7 @@ func landPinnedText(ctx context.Context, tctx tools.ToolContext, resolved projec
 		return landing{}, err
 	}
 	tctx.RecordModelAuthoredCredentials(ctx, resolved.Abs, []byte(newContent))
-	reportLanded(tctx, applied.Document)
+	recordLandedDocument(tctx, applied.Document)
 	reportLandedEditorConfig(ctx, tctx, resolved, st, newContent)
 	landed := landing{change: mutationContext(preview.Before.Text, applied.Document.Text), editor: true, saved: applied.Saved,
 		recreated: st.Editor.Absent && applied.Saved, heldVersionID: applied.HeldVersionID, publicationError: applied.PublicationError,
