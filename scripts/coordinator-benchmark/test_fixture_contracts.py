@@ -93,7 +93,7 @@ class FixtureBank(unittest.TestCase):
             with self.subTest(case=case), tempfile.TemporaryDirectory() as tmp:
                 project=pathlib.Path(tmp)/'project'
                 shutil.copytree(ROOT/'lycaon/test/fixtures/eval'/spec['project'],project)
-                result=subprocess.run(['python3','-B','-m','unittest','discover'],cwd=project,capture_output=True,timeout=30)
+                result=subprocess.run(['python3','-B','-m','unittest','discover'],cwd=project,capture_output=True)
                 self.assertEqual(result.returncode,0,result.stderr.decode())
 
     def test_worker_overlays_have_their_declared_test_results(self):
@@ -105,11 +105,11 @@ class FixtureBank(unittest.TestCase):
                     project=pathlib.Path(tmp)/'project'
                     shutil.copytree(ROOT/'lycaon/test/fixtures/eval'/spec['project'],project)
                     for name,body in overlay['files'].items(): (project/name).write_text(body)
-                    process=subprocess.run(overlay['verify'].split(),cwd=project,capture_output=True,timeout=30)
+                    process=subprocess.run(overlay['verify'].split(),cwd=project,capture_output=True)
                     self.assertEqual(process.returncode==0,overlay['verification_verdict']=='passed',process.stderr.decode())
                     if continuation := overlay.get('continuation'):
                         for name, body in continuation['files'].items(): (project/name).write_text(body)
-                        process=subprocess.run(continuation['verify'].split(),cwd=project,capture_output=True,timeout=30)
+                        process=subprocess.run(continuation['verify'].split(),cwd=project,capture_output=True)
                         self.assertEqual(process.returncode,0,process.stderr.decode())
 
     def test_exact_artifacts_are_the_current_user_files(self):

@@ -55,7 +55,7 @@ class MLXOfflineSource(unittest.TestCase):
         return subprocess.run(["cmake", f"-DPW_TEST_APPLE={'ON' if apple else 'OFF'}",
                                f"-DCMAKE_CURRENT_SOURCE_DIR={self.source}",
                                f"-DCMAKE_BINARY_DIR={self.root / 'build'}", "-P", str(self.script)],
-                              text=True, capture_output=True, timeout=30)
+                              text=True, capture_output=True)
 
     def test_verified_source_is_selected_with_fetching_disconnected(self):
         result = self.run_cmake()

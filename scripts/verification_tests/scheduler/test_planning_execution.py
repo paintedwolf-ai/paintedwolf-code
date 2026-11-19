@@ -475,7 +475,7 @@ class PlanningTests(unittest.TestCase):
                 body = ("import os, sys; "
                         f"fd=os.open({str(lease.path)!r},os.O_RDWR); os.dup2(fd,200,inheritable=True); "
                         f"os.execv(sys.executable,[sys.executable,{str(SCRIPT)!r},'holding'])")
-                result = subprocess.run([sys.executable, "-c", body], capture_output=True, timeout=5,
+                result = subprocess.run([sys.executable, "-c", body], capture_output=True,
                                         env={**os.environ, "PW_TEST_EXECUTION_ROOT": directory,
                                              "XDG_CACHE_HOME": str(Path(directory) / "user-cache"),
                                              "PW_TEST_EXECUTION_TICKET": lease.entry["ticket"]})

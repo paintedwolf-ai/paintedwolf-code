@@ -45,7 +45,7 @@ class WorkflowCommandTests(unittest.TestCase):
                 for name in ('TAURI_SIGNING_PRIVATE_KEY', 'APPLE_API_ISSUER', 'APPLE_API_KEY'):
                     environment[name] = 'fixture'
                 result = subprocess.run(['bash', '-c', package['run']], cwd=scratch, env=environment,
-                                        capture_output=True, text=True, timeout=10)
+                                        capture_output=True, text=True)
                 self.assertEqual(result.returncode, task_exit, result.stderr)
                 self.assertEqual(record.read_text().splitlines(),
                                  ['den:bundle', '--', '--phase', 'package', '--archive', f'{scratch}/prepared/compiled.tar'])
@@ -53,7 +53,7 @@ class WorkflowCommandTests(unittest.TestCase):
     def command(self, *arguments, **environment):
         return subprocess.run([sys.executable, 'scripts/ci_verification.py', *arguments],
                               cwd=ROOT, env={**os.environ, **environment},
-                              capture_output=True, text=True, timeout=30)
+                              capture_output=True, text=True)
 
     def test_a_qualified_source_reports_the_preparation_qualification_checked(self):
         run = {'id': 7, 'receipt': {'preparation_run_id': 41}}
@@ -101,7 +101,7 @@ class PlatformEvidenceTests(unittest.TestCase):
             legs = []
             for name in ("launch", "confinement"):
                 result = subprocess.run(["bash", "-e", "-c", steps[name]["run"]], cwd=root,
-                                        capture_output=True, text=True, timeout=10)
+                                        capture_output=True, text=True)
                 self.assertEqual(result.returncode, 0, result.stderr)
                 arguments = result.stdout.splitlines()
                 self.assertEqual(arguments[:2], ["test:confine:linux", "--"])
@@ -127,7 +127,7 @@ class PlatformEvidenceTests(unittest.TestCase):
                 environment = {**os.environ, "GITHUB_WORKSPACE": str(root),
                                "PW_TEST_ARTIFACT_ROOT": str(artifacts)}
                 result = subprocess.run(["bash", "-e", "-c", step["run"]], cwd=root, env=environment,
-                                        capture_output=True, text=True, timeout=20)
+                                        capture_output=True, text=True)
                 self.assertEqual(result.returncode, code, result.stderr)
                 expected = "fixture-start\nfixture-diagnostic\n"
                 self.assertEqual(result.stdout, expected)

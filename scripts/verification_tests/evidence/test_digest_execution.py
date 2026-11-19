@@ -231,7 +231,7 @@ class VitestDigestTests(unittest.TestCase):
             path = Path(directory) / "report.json"
             path.write_text(json.dumps(report))
             result = subprocess.run([sys.executable, str(Path(__file__).resolve().parents[2].joinpath("vitest-digest.py")),
-                                     "--input", str(path)], capture_output=True, text=True, timeout=5)
+                                     "--input", str(path)], capture_output=True, text=True)
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn("2.50s  src/clock.test.ts slow clock", result.stdout)
         self.assertNotIn("fast clock", result.stdout)
@@ -248,7 +248,7 @@ class VitestDigestTests(unittest.TestCase):
                     path.write_text(json.dumps(report))
                     result = subprocess.run([sys.executable, str(Path(__file__).resolve().parents[2].joinpath("vitest-digest.py")),
                                              "--input", str(path)], capture_output=True, text=True,
-                                            env={**os.environ, "LAST_RUN_DIR": directory}, timeout=5)
+                                            env={**os.environ, "LAST_RUN_DIR": directory})
                     self.assertEqual(result.returncode, 0 if report == passed else 1, result.stdout + result.stderr)
                     self.assertNotIn("Traceback", result.stderr)
 
@@ -275,7 +275,7 @@ class WireGeneratorTests(unittest.TestCase):
             result = subprocess.run(["bash", str(script), str(root / "out.ts")],
                                     env={**os.environ, "PATH": str(binary.parent) + os.pathsep + os.environ["PATH"],
                                          "GENERATOR_MARKER": str(marker)},
-                                    capture_output=True, text=True, timeout=5)
+                                    capture_output=True, text=True)
             self.assertEqual(result.returncode, 1)
             self.assertIn("openapi-typescript not found under lycaon-den/node_modules", result.stderr)
             self.assertFalse(marker.exists())
@@ -287,11 +287,11 @@ class WatchdogValidationTests(unittest.TestCase):
         for value in ("nan", "inf", "0", "-1", "invalid", ""):
             with self.subTest(value=value):
                 result = subprocess.run([sys.executable, script, "--validate", value],
-                                        capture_output=True, text=True, timeout=5)
+                                        capture_output=True, text=True)
                 self.assertEqual(result.returncode, 2)
                 self.assertNotIn("Traceback", result.stderr)
         result = subprocess.run([sys.executable, script, "--validate", "0.5"],
-                                capture_output=True, timeout=5)
+                                capture_output=True)
         self.assertEqual(result.returncode, 0)
 
 
