@@ -24,13 +24,14 @@ function mount(status = initial) {
   const client = {
     getLocalModelStatus: vi.fn().mockResolvedValue(installed),
     selectLocalModel: vi.fn().mockResolvedValue(installed),
-    removeLocalModel: vi.fn().mockResolvedValue({ ...initial, state: "opted_out" }),
+    deleteLocalModel: vi.fn().mockResolvedValue(undefined),
     cancelLocalModelTransfer: vi.fn().mockResolvedValue(initial),
   };
   const done = vi.fn();
+  const refresh = vi.fn().mockResolvedValue(undefined);
   render(() => <LocalModelSelector client={client as never} provider={includedProvider(status)}
-    onRefresh={async () => undefined} onContinue={done} />);
-  return { client, done };
+    onRefresh={refresh} onContinue={done} />);
+  return { client, done, refresh };
 }
 
 describe("Local model selection", () => {
@@ -65,7 +66,7 @@ describe("Local model selection", () => {
     fireEvent.click(screen.getByRole("button", { name: "Download and continue" }));
     fireEvent.click(await screen.findByRole("button", { name: "Cancel transfer" }));
     await waitFor(() => expect(client.cancelLocalModelTransfer).toHaveBeenCalledWith("nativegen"));
-    expect(client.removeLocalModel).not.toHaveBeenCalled();
+    expect(client.deleteLocalModel).not.toHaveBeenCalled();
     expect(done).not.toHaveBeenCalled();
   });
 
@@ -106,15 +107,17 @@ describe("Local model selection", () => {
   });
 
   it("offers opt-out without downloading and keeps errors actionable", async () => {
-    const { client, done } = mount(installed);
+    const { client, done, refresh } = mount(installed);
     fireEvent.click(screen.getByRole("radio", { name: "Use no local model" }));
     const remove = screen.getByRole("button", { name: "Remove local model" });
-    client.removeLocalModel.mockRejectedValueOnce(new Error("Device busy"));
+    client.deleteLocalModel.mockRejectedValueOnce(new Error("Device busy"));
     fireEvent.click(remove);
     expect((await screen.findByRole("alert")).textContent).toBe("Device busy");
     expect(done).not.toHaveBeenCalled();
+    expect(refresh).not.toHaveBeenCalled();
     fireEvent.click(remove);
     await waitFor(() => expect(done).toHaveBeenCalledOnce());
+    expect(refresh).toHaveBeenCalledOnce();
     expect(client.selectLocalModel).not.toHaveBeenCalled();
   });
 });

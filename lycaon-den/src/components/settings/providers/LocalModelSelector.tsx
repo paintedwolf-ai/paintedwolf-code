@@ -55,7 +55,7 @@ export function LocalModelSelector(props: Props) {
     if (!alive) return;
     setSnapshot(undefined);
     const selectedTarget = next.selected_model === target && (next.state === "ready" || next.state === "idle");
-    if (target !== undefined && (selectedTarget || (target === NONE && next.state === "opted_out"))) {
+    if (target !== undefined && selectedTarget) {
       props.onContinue?.();
     } else if (target !== undefined) {
       setError(next.detail || "The requested model change did not finish.");
@@ -101,11 +101,15 @@ export function LocalModelSelector(props: Props) {
         props.onContinue?.();
         return;
       }
+      if (!model) {
+        await props.client.deleteLocalModel(props.provider.id);
+        await props.onRefresh();
+        if (alive) props.onContinue?.();
+        return;
+      }
       setPendingModel(model);
-      const next = model
-        ? await props.client.selectLocalModel(props.provider.id, action === "seed" ? { model, packaged_seed: true } : { model, bundle_path: path })
-        : await props.client.removeLocalModel(props.provider.id);
-      await accept(next);
+      const selection = action === "seed" ? { model, packaged_seed: true } : { model, bundle_path: path };
+      await accept(await props.client.selectLocalModel(props.provider.id, selection));
     } catch (err) {
       if (alive) { setPendingModel(undefined); setError(err instanceof Error ? err.message : String(err)); }
     } finally {

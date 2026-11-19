@@ -67,7 +67,7 @@ export interface SettingsClient {
   refreshProviderModels(id: string): Promise<ProviderMeta>;
   getLocalModelStatus(id: string): Promise<LocalGenerationStatus>;
   selectLocalModel(id: string, req: LocalModelSelectionRequest): Promise<LocalGenerationStatus>;
-  removeLocalModel(id: string): Promise<LocalGenerationStatus>;
+  deleteLocalModel(id: string): Promise<void>;
   cancelLocalModelTransfer(id: string): Promise<LocalGenerationStatus>;
   repairLocalGeneration(id: string): Promise<LocalGenerationRepairResult>;
   /** Settings reads and writes name a project for its overlay and omit it for the global layer. */
@@ -131,10 +131,10 @@ export function createSettingsClient(j: JsonRequester): SettingsClient {
     refreshProviderModels: (id) =>
       j(`/v1/providers/${encodeURIComponent(id)}/refresh`, { method: "POST" }),
     getLocalModelStatus: (id) => j(`/v1/providers/${encodeURIComponent(id)}/local-model`),
-    selectLocalModel: (id, req) => j(`/v1/providers/${encodeURIComponent(id)}/local-model`, {
-      method: "PUT", body: JSON.stringify(req),
+    selectLocalModel: (id, req) => j(`/v1/providers/${encodeURIComponent(id)}/local-model/select`, {
+      method: "POST", body: JSON.stringify(req),
     }),
-    removeLocalModel: (id) => j(`/v1/providers/${encodeURIComponent(id)}/local-model`, { method: "DELETE" }),
+    deleteLocalModel: (id) => j(`/v1/providers/${encodeURIComponent(id)}/local-model`, { method: "DELETE" }),
     cancelLocalModelTransfer: (id) => j(`/v1/providers/${encodeURIComponent(id)}/local-model/cancel`, { method: "POST" }),
     repairLocalGeneration: (id) =>
       j(`/v1/providers/${encodeURIComponent(id)}/repair`, { method: "POST" }),
