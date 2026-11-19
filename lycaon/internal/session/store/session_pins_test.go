@@ -19,6 +19,7 @@ type pinTestStore interface {
 	CreateChild(ctx context.Context, parent *api.Session, req api.SpawnChildRequest) (*api.Session, error)
 	Get(ctx context.Context, id string) (*api.Session, error)
 	UpdateSession(ctx context.Context, id string, fn func(*api.Session)) error
+	MarkSessionSeen(ctx context.Context, id string, seenAt time.Time) error
 	AppendMessages(ctx context.Context, id string, msgs ...api.Message) error
 	PinSession(ctx context.Context, id string) error
 	UnpinSession(ctx context.Context, id string) error
@@ -155,9 +156,8 @@ func TestActivityFollowsVisibleTranscript(t *testing.T) {
 				testutil.FailErr(t, "append internal row", st.AppendMessages(ctx, id, api.Message{
 					Role: api.MessageRoleUser, Content: "host note", Visibility: api.MessageVisibilityInternal,
 				}))
-				testutil.FailErr(t, "mark seen", st.UpdateSession(ctx, id, func(sess *api.Session) {
-					now := time.Now().UTC()
-					sess.SeenAt = &now
+				testutil.FailErr(t, "mark seen", st.MarkSessionSeen(ctx, id, time.Now()))
+				testutil.FailErr(t, "rename chat", st.UpdateSession(ctx, id, func(sess *api.Session) {
 					sess.Title = "renamed"
 				}))
 				testutil.FailErr(t, "pin", st.PinSession(ctx, id))

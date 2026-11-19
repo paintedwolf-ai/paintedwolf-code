@@ -264,7 +264,29 @@ func TestSQLProjectTouchEventPreservesQueuedPromotion(t *testing.T) {
 	destination := t.TempDir()
 	_, err = reg.CreatePromotion(ctx, p.ID, destination, true)
 	testutil.FailErr(t, "queue promotion", err)
-	testutil.FailErr(t, "touch last opened", reg.TouchLastOpened(ctx, p.ID))
+	_, err = reg.Create(ctx, project.CreateParams{Name: "More recent project"})
+	testutil.FailErr(t, "create more recent project", err)
+	var priorEventID int64
+	testutil.FailErr(t, "find the event boundary", sqlDB.QueryRowContext(ctx, "SELECT MAX(id) FROM event_outbox").Scan(&priorEventID))
+	moved, err := reg.TouchLastOpened(ctx, p.ID)
+	testutil.FailErr(t, "touch last opened", err)
+	if !moved {
+		t.Fatal("project did not move to the front")
+	}
+
+	moved, err = reg.TouchLastOpened(ctx, p.ID)
+	testutil.FailErr(t, "touch the most recent project", err)
+	if moved {
+		t.Fatal("touching the first project changed its recent position")
+	}
+	var updates int
+	testutil.FailErr(t, "count project updates", sqlDB.QueryRowContext(ctx, `
+		SELECT COUNT(*) FROM event_outbox
+		WHERE id > ? AND project_id = ? AND topic = 'project' AND json_extract(data_json, '$.action') = 'updated'
+	`, priorEventID, p.ID).Scan(&updates))
+	if updates != 1 {
+		t.Fatalf("project updates = %d, want 1", updates)
+	}
 
 	var raw string
 	testutil.FailErr(t, "read touch event", sqlDB.QueryRowContext(ctx, `

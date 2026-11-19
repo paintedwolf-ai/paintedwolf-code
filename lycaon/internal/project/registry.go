@@ -150,7 +150,7 @@ type Registry interface {
 	CommitPromotion(ctx context.Context, projectID string) (*Project, error)
 	DeletePromotion(ctx context.Context, projectID string) error
 	CancelPromotion(ctx context.Context, projectID string) (*Project, error)
-	TouchLastOpened(ctx context.Context, id string) error
+	TouchLastOpened(ctx context.Context, id string) (movedToFront bool, err error)
 	AttachRoot(ctx context.Context, id string, params AttachRootParams) (*RootChange, error)
 	DetachRoot(ctx context.Context, id, rootID string) (*RootChange, error)
 	PatchRoot(ctx context.Context, id, rootID string, params PatchRootParams) (*RootChange, error)
@@ -333,18 +333,29 @@ func (r *MemoryRegistry) Patch(ctx context.Context, id string, params PatchParam
 	return cloneProject(p), nil
 }
 
-func (r *MemoryRegistry) TouchLastOpened(ctx context.Context, id string) error {
+func (r *MemoryRegistry) TouchLastOpened(ctx context.Context, id string) (bool, error) {
 	if err := ctx.Err(); err != nil {
-		return err
+		return false, err
 	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	p, ok := r.projects[id]
 	if !ok {
-		return fmt.Errorf("%w: %s", ErrNotFound, id)
+		return false, fmt.Errorf("%w: %s", ErrNotFound, id)
 	}
-	p.LastOpenedAt = time.Now().UTC()
-	return nil
+	previous := p.LastOpenedAt
+	now := time.Now().UTC()
+	if !now.After(previous) {
+		return false, nil
+	}
+	p.LastOpenedAt = now
+	var latestOther time.Time
+	for otherID, other := range r.projects {
+		if otherID != id && other.LastOpenedAt.After(latestOther) {
+			latestOther = other.LastOpenedAt
+		}
+	}
+	return latestOther.After(previous) && now.After(latestOther), nil
 }
 
 func (r *MemoryRegistry) AttachRoot(ctx context.Context, id string, params AttachRootParams) (*RootChange, error) {

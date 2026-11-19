@@ -81,7 +81,8 @@ func TestFolderDetectDistinguishesSingleAndMultiRootMatches(t *testing.T) {
 	// Adding a dedicated single-root project puts the single-root match first and populates project_id.
 	single, err := project.CreateWithRoot(t.Context(), reg, sharedDir)
 	testutil.FailErr(t, "create single-root project", err)
-	testutil.FailErr(t, "touch multi-root", reg.TouchLastOpened(t.Context(), multi.ID))
+	_, err = reg.TouchLastOpened(t.Context(), multi.ID)
+	testutil.FailErr(t, "touch multi-root", err)
 
 	both := contractfixture.DetectFolder(t, srv, sharedDir)
 	if both.ProjectID != single.ID {

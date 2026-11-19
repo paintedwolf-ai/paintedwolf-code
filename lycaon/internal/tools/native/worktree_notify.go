@@ -17,11 +17,12 @@ import (
 type mutationLocation struct {
 	rootID   string
 	scopeRel string
+	abs      string
 	display  string
 }
 
 func resolvedMutationLocation(res projectpaths.Resolved) mutationLocation {
-	return mutationLocation{rootID: res.Root.ID, scopeRel: res.ScopeRel, display: res.DisplayPath}
+	return mutationLocation{rootID: res.Root.ID, scopeRel: res.ScopeRel, abs: res.Abs, display: res.DisplayPath}
 }
 
 // afterSuccessfulMutationResolved reports one resolved mutation.
@@ -68,8 +69,12 @@ func notifyWorktreeChangedLocations(ctx context.Context, tctx tools.ToolContext,
 				continue
 			}
 		}
-		// External areas and grants have no root: their spelling lands under the write root.
-		add(fallbackRoot, loc.display)
+		if fallbackRoot == "" || !filepath.IsAbs(loc.abs) {
+			continue
+		}
+		if rel, err := filepath.Rel(fallbackRoot, loc.abs); err == nil && rel != "." && filepath.IsLocal(rel) {
+			add(fallbackRoot, rel)
+		}
 	}
 	for _, rootPath := range order {
 		notifyWorktreeRoot(ctx, rootPath, grouped[rootPath]...)
@@ -90,7 +95,7 @@ func mutationRootPath(tctx tools.ToolContext, rootID string) string {
 }
 
 // notifyWorktreeRoot debounces invalidation and change notification for one
-// root. Paths are scope-relative under the root or absolute.
+// root. Paths are scope-relative under the root.
 func notifyWorktreeRoot(ctx context.Context, rootPath string, paths ...string) {
 	cleaned := make([]string, 0, len(paths))
 	for _, p := range paths {

@@ -142,8 +142,9 @@ func (s *Lifecycle) prepareCreatedSession(parent context.Context, req wire.Creat
 		}
 		perf.Mark("workspace")
 		if err == nil {
-			err = s.Projects.TouchLastOpened(ctx, sess.ProjectID)
-			if err == nil {
+			var moved bool
+			moved, err = s.Projects.TouchLastOpened(ctx, sess.ProjectID)
+			if err == nil && moved {
 				projectview.PublishTouch(s.Projects, s.Events, ctx, sess.ProjectID)
 			}
 		}
@@ -220,10 +221,13 @@ func (s *Lifecycle) MaterializeSession(
 			return nil, err
 		}
 	}
-	if err := s.Projects.TouchLastOpened(ctx, projectID); err != nil {
+	moved, err := s.Projects.TouchLastOpened(ctx, projectID)
+	if err != nil {
 		return nil, err
 	}
-	projectview.PublishTouch(s.Projects, s.Events, ctx, projectID)
+	if moved {
+		projectview.PublishTouch(s.Projects, s.Events, ctx, projectID)
+	}
 
 	sess, err := s.Store.Create(ctx, req, projectID)
 	if err != nil {

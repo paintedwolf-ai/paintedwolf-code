@@ -102,6 +102,7 @@ type CommandStore interface {
 	PinSession(ctx context.Context, id string) error
 	UnpinSession(ctx context.Context, id string) error
 	MovePinnedSession(ctx context.Context, id string, position int) error
+	MarkSessionSeen(ctx context.Context, id string, seenAt time.Time) error
 	UpdateTitleIfUnset(ctx context.Context, id, title string) (bool, error)
 	ReassignSessionsWorkspaceRoot(ctx context.Context, projectID, fromRootID, toRootID string) error
 	SetSessionStatus(ctx context.Context, id string, status api.SessionStatus) error

@@ -18,9 +18,7 @@ import (
 func (s *Transcript) HandleMarkSessionSeen(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
 	seenAt := time.Now().UTC()
-	err := s.Store.UpdateSession(r.Context(), id, func(sess *wire.Session) {
-		sess.SeenAt = &seenAt
-	})
+	err := s.Store.MarkSessionSeen(r.Context(), id, seenAt)
 	if err != nil {
 		if errors.Is(err, store.ErrSessionNotFound) {
 			s.responses.Fail(w, wire.ApiErrorCodeSessionNotFound, "chat not found")
@@ -37,11 +35,14 @@ func (s *Transcript) HandleMarkSessionSeen(w http.ResponseWriter, r *http.Reques
 		return
 	}
 	if sess.ProjectID != "" {
-		if err := s.Projects.TouchLastOpened(ctx, sess.ProjectID); err != nil {
+		moved, err := s.Projects.TouchLastOpened(ctx, sess.ProjectID)
+		if err != nil {
 			s.responses.InternalError(w, r, err)
 			return
 		}
-		projectview.PublishTouch(s.Projects, s.Events, ctx, sess.ProjectID)
+		if moved {
+			projectview.PublishTouch(s.Projects, s.Events, ctx, sess.ProjectID)
+		}
 	}
 	if s.Sessions != nil {
 		s.Sessions.ContextPreparation.Focus(ctx, sess.ID, sess.ProjectID)

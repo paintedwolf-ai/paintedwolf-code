@@ -734,6 +734,17 @@ func (q *Queries) MarkProjectStorageTierCold(ctx context.Context, id string) err
 	return err
 }
 
+const mostRecentlyOpenedProjectID = `-- name: MostRecentlyOpenedProjectID :one
+SELECT id FROM projects ORDER BY last_opened_at DESC, rowid DESC LIMIT 1
+`
+
+func (q *Queries) MostRecentlyOpenedProjectID(ctx context.Context) (string, error) {
+	row := q.db.QueryRowContext(ctx, mostRecentlyOpenedProjectID)
+	var id string
+	err := row.Scan(&id)
+	return id, err
+}
+
 const projectIDForCanonicalPath = `-- name: ProjectIDForCanonicalPath :one
 SELECT project_id
 FROM project_roots
@@ -888,20 +899,23 @@ func (q *Queries) SetProjectTrustSeen(ctx context.Context, arg SetProjectTrustSe
 	return err
 }
 
-const touchProjectLastOpened = `-- name: TouchProjectLastOpened :exec
+const touchProjectLastOpened = `-- name: TouchProjectLastOpened :execrows
 UPDATE projects
-SET last_opened_at = ?
-WHERE id = ?
+SET last_opened_at = MAX(last_opened_at, ?1)
+WHERE id = ?2
 `
 
 type TouchProjectLastOpenedParams struct {
-	LastOpenedAt string `json:"last_opened_at"`
-	ID           string `json:"id"`
+	LastOpenedAt interface{} `json:"last_opened_at"`
+	ID           string      `json:"id"`
 }
 
-func (q *Queries) TouchProjectLastOpened(ctx context.Context, arg TouchProjectLastOpenedParams) error {
-	_, err := q.db.ExecContext(ctx, touchProjectLastOpened, arg.LastOpenedAt, arg.ID)
-	return err
+func (q *Queries) TouchProjectLastOpened(ctx context.Context, arg TouchProjectLastOpenedParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, touchProjectLastOpened, arg.LastOpenedAt, arg.ID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
 }
 
 const updateProjectName = `-- name: UpdateProjectName :exec

@@ -89,9 +89,15 @@ func IngestAttachments(
 	extractor := docext.New(caps.DocumentBounds())
 	out := IngestResult{Parts: make([]FramedPart, 0, len(parts))}
 	turnBytes := int64(0)
+	ingested := make(map[string]struct{}, len(parts))
 
 	for _, part := range parts {
-		blob, err := store.Resolve(strings.TrimSpace(part.BlobID))
+		id := strings.TrimSpace(part.BlobID)
+		if _, ok := ingested[id]; ok {
+			continue
+		}
+		ingested[id] = struct{}{}
+		blob, err := store.Resolve(id)
 		if err != nil {
 			return IngestResult{}, resolveError(part.BlobID, err)
 		}
