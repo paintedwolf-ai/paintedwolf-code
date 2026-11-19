@@ -133,9 +133,9 @@ export function createCommandActivityProjection() {
       for (const [index, fact] of facts.entries()) {
         const identity = `${program.id}:${fact.id}`;
         if (fact.phase !== "inspect" || fact.job_handle) lastRow = undefined;
-        const foldTarget = index === 0
-          ? callAssignments.get(identity)?.row ?? (lastRow && lastRow.commandActivity?.fact.group === fact.group ? lastRow.id : undefined)
-          : undefined;
+        const preceding = index === 0 && !assignments.has(identity) &&
+          lastRow?.commandActivity?.fact.group === fact.group ? lastRow.id : undefined;
+        const foldTarget = callAssignments.get(identity)?.row ?? preceding;
         const target = foldTarget ? rows.get(foldTarget) : undefined;
         if (target?.commandActivity) {
           if (!assignments.has(identity)) assignments.set(identity, { program: program.id, key: target.id, label: fact.label, group: fact.group, subject: fact.subject });

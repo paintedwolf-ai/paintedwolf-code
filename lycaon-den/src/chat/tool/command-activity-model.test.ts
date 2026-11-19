@@ -56,6 +56,14 @@ describe("command activity composition", () => {
   expect(after[0]!.commandActivity!.members.map(member => member.id)).toEqual(["read-a", "read-b"]);
   expect(after[0]!.commandActivity!.receiptScopes).toEqual([{ programId: "program:a", activityId: "read-a" }, { programId: "program:b", activityId: "read-b" }]);
  });
+ it("keeps an activity visible when an earlier receipt arrives", () => {
+  const project = createCommandActivityProjection();
+  const earlier = entry("comparison");
+  const later = entry("closure", [fact("grep"), fact("yes", { phase: "execute", label: "Run process" })]);
+  const live = parts(project([earlier, later])).filter(row => row.toolCallId === "closure");
+  const settled = parts(project([entry("comparison", [fact("compare")]), later]));
+  expect(settled.filter(row => row.toolCallId === "closure").map(row => row.id)).toEqual(live.map(row => row.id));
+ });
  it("keeps coalescing idempotent across re-projections", () => {
   const project = createCommandActivityProjection();
   const entries = [entry("a", [fact("a", { execution_count: 2, steps: [step("s1")] })]), entry("b", [fact("b", { execution_count: 3, steps: [step("s2")] })])];
