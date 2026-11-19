@@ -105,7 +105,7 @@ func TestEvidenceRootIDBackfillKeysRecordsByRoot(t *testing.T) {
 
 	// The seeded roots stay put so the resolved identities remain checkable.
 	var count int
-	testutil.FailErr(t, "count roots", upgraded.QueryRow(`SELECT COUNT(*) FROM project_roots WHERE project_id='fixture-project'`).Scan(&count))
+	testutil.FailErr(t, "count roots", upgraded.QueryRow(`SELECT COUNT(*) FROM project_roots WHERE project_id='fixture-project' AND kind != 'outside'`).Scan(&count))
 	if count != 2 {
 		t.Fatalf("project_roots rows = %d, want 2", count)
 	}

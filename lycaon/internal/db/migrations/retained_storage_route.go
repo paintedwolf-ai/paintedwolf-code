@@ -2,6 +2,8 @@ package migrations
 
 import sqlite3 "modernc.org/sqlite/lib"
 
+var reviewedRetainedTarget = Baseline{Revision: 5, Shape: "316cd982d9e09326cf2ef247e6a35060e65067f9a5fff351e03978ed39ee6952"}
+
 // BoundedRetainedStorage recognizes exactly the route whose indexes and
 // sorter inputs were reviewed. A future step keeps conservative admission
 // until its physical work has been included in that proof.
@@ -11,7 +13,7 @@ func (p Plan) BoundedRetainedStorage() bool {
 
 func (p Plan) reviewedRetainedRoute() bool {
 	const sourceID = "2026-10-16 14:45:20 555e07ef33f69a0957d24d8e555b702464a131d6f1607f4c3c1e4551e8e6ca76"
-	if sqlite3.SQLITE_SOURCE_ID != sourceID || p.Target != (Baseline{Revision: 5, Shape: "a1c252d46e94940750d9b239e96716d7f8d3a612fb1a2d24969085876aac2aaa"}) {
+	if sqlite3.SQLITE_SOURCE_ID != sourceID || p.Target != reviewedRetainedTarget {
 		return false
 	}
 	if p.Source != manifestLayoutSource || p.CopyPlan() == nil || len(p.steps) != 1 {
@@ -23,7 +25,8 @@ func (p Plan) reviewedRetainedRoute() bool {
 	// empty briefing tables, and worker records backfill bound their row
 	// rewrites and index sync through declared Writes estimates, adding no
 	// sorters or rebuilds. Discarding live_model_outputs drops a table without
-	// rewriting rows.
+	// rewriting rows. The outside namespace rebuilds the measured root indexes
+	// and inserts one row per project into the existing index structures.
 	return p.steps[0].ID == "source-manifests-and-command-records" &&
-		p.steps[0].Checksum == "8e1afb6494bcc70516ccbb226a0128d9d2d566bac1d05a829ed98aa7daeb93ae"
+		p.steps[0].Checksum == "d6ae34315c541893c86b8e9829e3de1a5762d80e9df5b230fe3961c43cf532e3"
 }

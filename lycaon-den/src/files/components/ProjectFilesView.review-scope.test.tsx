@@ -104,6 +104,7 @@ describe("Review files use the current editor", () => {
         inventory: {
           status: "ready",
           complete: true,
+          outside_root_id: "0e5f1c2a-6b7d-4e8f-9a0b-1c2d3e4f5a6b",
           roots_generation: 1,
           indexed_files: 0,
         },

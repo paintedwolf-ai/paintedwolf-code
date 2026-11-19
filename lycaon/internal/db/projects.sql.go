@@ -102,7 +102,7 @@ func (q *Queries) CountProjectBlockingDependents(ctx context.Context, projectID 
 const countProjectRoots = `-- name: CountProjectRoots :one
 SELECT COUNT(*) AS count
 FROM project_roots
-WHERE project_id = ?
+WHERE project_id = ? AND kind != 'outside'
 `
 
 func (q *Queries) CountProjectRoots(ctx context.Context, projectID string) (int64, error) {
@@ -327,6 +327,17 @@ func (q *Queries) GetProjectByID(ctx context.Context, id string) (GetProjectByID
 	return i, err
 }
 
+const getProjectOutsideRootID = `-- name: GetProjectOutsideRootID :one
+SELECT id FROM project_roots WHERE project_id = ? AND kind = 'outside'
+`
+
+func (q *Queries) GetProjectOutsideRootID(ctx context.Context, projectID string) (string, error) {
+	row := q.db.QueryRowContext(ctx, getProjectOutsideRootID, projectID)
+	var id string
+	err := row.Scan(&id)
+	return id, err
+}
+
 const getProjectPromotion = `-- name: GetProjectPromotion :one
 SELECT project_id, root_id, source_path, destination_path, stage_path,
        reservation_path, init_git, phase, source_sha256, manifest_sha256, last_error,
@@ -359,7 +370,7 @@ func (q *Queries) GetProjectPromotion(ctx context.Context, projectID string) (Pr
 const getProjectRootByID = `-- name: GetProjectRootByID :one
 SELECT id, project_id, path, label, is_primary, git_remote_hash, added_at, kind
 FROM project_roots
-WHERE id = ? AND project_id = ?
+WHERE id = ? AND project_id = ? AND kind != 'outside'
 `
 
 type GetProjectRootByIDParams struct {
@@ -488,6 +499,7 @@ func (q *Queries) GetProjectWithStats(ctx context.Context, id string) (GetProjec
 const listAllProjectRoots = `-- name: ListAllProjectRoots :many
 SELECT id, project_id, path, label, is_primary, git_remote_hash, added_at, kind
 FROM project_roots
+WHERE kind != 'outside'
 ORDER BY project_id, added_at
 `
 
@@ -559,6 +571,38 @@ func (q *Queries) ListIdleHotProjects(ctx context.Context, arg ListIdleHotProjec
 	return items, nil
 }
 
+const listProjectOutsideRoots = `-- name: ListProjectOutsideRoots :many
+SELECT project_id, id FROM project_roots WHERE kind = 'outside' ORDER BY project_id
+`
+
+type ListProjectOutsideRootsRow struct {
+	ProjectID string `json:"project_id"`
+	ID        string `json:"id"`
+}
+
+func (q *Queries) ListProjectOutsideRoots(ctx context.Context) ([]ListProjectOutsideRootsRow, error) {
+	rows, err := q.db.QueryContext(ctx, listProjectOutsideRoots)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListProjectOutsideRootsRow
+	for rows.Next() {
+		var i ListProjectOutsideRootsRow
+		if err := rows.Scan(&i.ProjectID, &i.ID); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listProjectPromotions = `-- name: ListProjectPromotions :many
 SELECT project_id, root_id, source_path, destination_path, stage_path,
        reservation_path, init_git, phase, source_sha256, manifest_sha256, last_error,
@@ -607,7 +651,7 @@ func (q *Queries) ListProjectPromotions(ctx context.Context) ([]ProjectPromotion
 const listProjectRoots = `-- name: ListProjectRoots :many
 SELECT id, project_id, path, label, is_primary, git_remote_hash, added_at, kind
 FROM project_roots
-WHERE project_id = ?
+WHERE project_id = ? AND kind != 'outside'
 ORDER BY added_at
 `
 
@@ -737,7 +781,7 @@ func (q *Queries) MarkProjectStorageTierCold(ctx context.Context, id string) err
 const projectIDForCanonicalPath = `-- name: ProjectIDForCanonicalPath :one
 SELECT project_id
 FROM project_roots
-WHERE ?1 = path OR instr(?1, path || '/') = 1
+WHERE kind != 'outside' AND (?1 = path OR instr(?1, path || '/') = 1)
 ORDER BY length(path) DESC
 LIMIT 1
 `

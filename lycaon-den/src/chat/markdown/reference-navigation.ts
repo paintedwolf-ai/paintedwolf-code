@@ -46,7 +46,7 @@ export function createReferenceNavigation(props: {
       }
       dispatched = true;
       const result = await openSourceLocation({
-        projectId: ref.project_id, rootId: ref.root_id, jobId: ref.worker_id,
+        projectId: ref.project_id, rootId: ref.root_id, jobId: ref.worker_id, fileId: ref.file_id,
         path: ref.path, entryKind: ref.entry_kind, line: ref.line,
         endLine: ref.end_line,
         intent: "permanent", action: state.action,

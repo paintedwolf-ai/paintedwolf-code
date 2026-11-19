@@ -4,12 +4,17 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/lycaon/lycaon/internal/confine"
+	"github.com/lycaon/lycaon/internal/fspath"
 	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/sourcebranch"
 )
 
 // SourceBranch is the line of source history this call's writes record against.
 func (tc ToolContext) SourceBranch(rootID string) (sourcebranch.ID, error) {
+	if rootID != "" && rootID == tc.Source.OutsideRoot.ID {
+		return sourcebranch.Trunk, nil
+	}
 	branch, err := sourcebranch.FromKindAndJob(tc.Source.SourceWorkspaceKind, tc.Identity.WorkerJobID)
 	if err == nil && !branch.IsWorker() {
 		if branch, ok := tc.Source.ProjectRootBranches[rootID]; ok {
@@ -36,6 +41,45 @@ func (tc ToolContext) SourceLocation(path string) (projectroot.RootRef, string, 
 		return projectroot.RootRef{}, "", false
 	}
 	return root, projectroot.ScopeRel(root, abs), true
+}
+
+// RecordedLocation maps a touched path to where source history records it: an
+// attached root, or the outside namespace for any other host path.
+func (tc ToolContext) RecordedLocation(path string) (projectroot.RootRef, string, bool) {
+	if root, rel, ok := tc.SourceLocation(path); ok {
+		return root, rel, true
+	}
+	return tc.outsideLocation(path)
+}
+
+func (tc ToolContext) outsideLocation(path string) (projectroot.RootRef, string, bool) {
+	if tc.Source.OutsideRoot.ID == "" || !filepath.IsAbs(path) {
+		return projectroot.RootRef{}, "", false
+	}
+	abs := fspath.CanonicalPath(path)
+	if abs == "" {
+		abs = filepath.Clean(path)
+	}
+	for _, root := range tc.unrecordedRoots() {
+		if root != "" && confine.PathAtOrUnder(abs, fspath.CanonicalPath(root)) {
+			return projectroot.RootRef{}, "", false
+		}
+	}
+	rel, ok := projectroot.OutsideRel(abs)
+	if !ok {
+		return projectroot.RootRef{}, "", false
+	}
+	return tc.Source.OutsideRoot, rel, true
+}
+
+// unrecordedRoots are the folders whose paths never enter the outside
+// namespace: the project's own trees and the host's scratch and state.
+func (tc ToolContext) unrecordedRoots() []string {
+	roots := append(confine.UnrecordedRoots(), tc.Source.WorkerBranchRoot, tc.Host.SessionScratchDir, tc.Host.SessionOutputDir, tc.Host.HostDataDir)
+	for _, root := range tc.Source.Roots {
+		roots = append(roots, root.Path)
+	}
+	return roots
 }
 
 // branchRel accepts the branch root as configured or canonicalized, since

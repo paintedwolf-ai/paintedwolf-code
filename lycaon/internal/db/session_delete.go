@@ -21,6 +21,10 @@ func DeleteSessionTree(ctx context.Context, tx *sql.Tx, rootID string) ([]string
 	if len(ids) == 0 {
 		return nil, nil
 	}
+	var projectID string
+	if err := tx.QueryRowContext(ctx, `SELECT project_id FROM sessions WHERE id = ?`, rootID).Scan(&projectID); err != nil {
+		return nil, fmt.Errorf("session project: %w", err)
+	}
 	now := time.Now().UTC()
 	for _, id := range ids {
 		if err := deleteSessionOwnedRows(ctx, tx, id, now); err != nil {
@@ -34,7 +38,34 @@ func DeleteSessionTree(ctx context.Context, tx *sql.Tx, rootID string) ([]string
 	if n, _ := res.RowsAffected(); n == 0 {
 		return nil, nil
 	}
+	if err := ReleaseOutsideFiles(ctx, New(tx), projectID); err != nil {
+		return nil, fmt.Errorf("release outside files: %w", err)
+	}
 	return ids, nil
+}
+
+// ReleaseOutsideFiles deletes the history of outside files nothing holds any
+// longer, together with operations left without effects or versions.
+func ReleaseOutsideFiles(ctx context.Context, q *Queries, projectID string) error {
+	released, err := q.ListReleasedOutsideFiles(ctx, projectID)
+	if err != nil {
+		return err
+	}
+	for _, fileID := range released {
+		operations, err := q.ListSourceFileOperationIDs(ctx, fileID)
+		if err != nil {
+			return err
+		}
+		if err := q.DeleteReleasedOutsideFile(ctx, DeleteReleasedOutsideFileParams{FileID: fileID, ProjectID: projectID}); err != nil {
+			return err
+		}
+		for _, operation := range operations {
+			if err := q.DeleteEmptySourceOperation(ctx, operation); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
 }
 
 // sessionTreeQuery returns a root session and its descendants.
@@ -107,7 +138,7 @@ func deleteWorkflowRuns(ctx context.Context, tx *sql.Tx, runIDs []string) error 
 	return nil
 }
 
-func queryStringColumn(ctx context.Context, tx *sql.Tx, query string, args ...any) ([]string, error) {
+func queryStringColumn(ctx context.Context, tx DBTX, query string, args ...any) ([]string, error) {
 	rows, err := tx.QueryContext(ctx, query, args...)
 	if err != nil {
 		return nil, err

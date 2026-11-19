@@ -163,22 +163,14 @@ func ObserveProjectSource(p ProjectSource, req SourceReadRequest) (*SourceReadOb
 		return nil, ErrSourceDecodeAsInvalid
 	}
 
-	target, err := resolveSourceReadTarget(p, pathQuery, req.RootID)
+	target, f, err := openSourceRead(p, req.Path, req.RootID)
 	if err != nil {
 		return nil, err
 	}
+	defer func() { _ = f.Close() }()
 
 	size := target.info.Size()
 	overLimit := size > SourceReadMaxBytes
-
-	f, err := os.Open(target.abs)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return nil, ErrSourceNotFound
-		}
-		return nil, fmt.Errorf("open source: %w", err)
-	}
-	defer func() { _ = f.Close() }()
 
 	sniffLen := int64(sourceSniffPrefixBytes)
 	if size < sniffLen {
@@ -338,23 +330,16 @@ func ReadProjectSourceRaw(p ProjectSource, req SourceReadRequest) (*SourceRawRes
 	if len(p.SourceRoots()) == 0 {
 		return nil, ErrSourceNoRoot
 	}
-	target, err := resolveSourceReadTarget(p, pathQuery, req.RootID)
+	target, f, err := openSourceRead(p, req.Path, req.RootID)
 	if err != nil {
 		return nil, err
 	}
+	defer func() { _ = f.Close() }()
+
 	size := target.info.Size()
 	if size > SourceRawMaxBytes {
 		return nil, ErrSourceRawTooLarge
 	}
-
-	f, err := os.Open(target.abs)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return nil, ErrSourceNotFound
-		}
-		return nil, fmt.Errorf("open source: %w", err)
-	}
-	defer func() { _ = f.Close() }()
 
 	sniffLen := int64(sourceSniffPrefixBytes)
 	if size < sniffLen {
@@ -401,6 +386,9 @@ func sourceSearchBases(p ProjectSource, rootID string) ([]sourceBase, error) {
 	}
 	bases := make([]sourceBase, 0, len(roots))
 	for _, root := range roots {
+		if root.Outside {
+			continue
+		}
 		bases = append(bases, sourceBase{Dir: root.Path, RootID: root.ID})
 	}
 	return bases, nil

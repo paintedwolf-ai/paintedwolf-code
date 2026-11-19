@@ -57,6 +57,10 @@ func (s *Comparisons) readChatFileEdit(ctx context.Context, sessionID string, re
 }
 
 func (s *Comparisons) readerCurrentSide(ctx context.Context, p *project.Project, rootID, path string) (wire.SourceComparisonSide, error) {
+	p, err := admitOutside(ctx, s.SourceLedger, p, rootID, path)
+	if err != nil {
+		return wire.SourceComparisonSide{}, err
+	}
 	snapshot, err := s.EditorDocuments.ResolveSourceSnapshot(ctx, p, projectsource.SourceReadRequest{RootID: rootID, Path: path}, editordoc.ObserveCurrent)
 	if errors.Is(err, projectsource.ErrSourceNotFound) {
 		return wire.SourceComparisonSide{Path: path, State: "absent", Availability: "absent"}, nil

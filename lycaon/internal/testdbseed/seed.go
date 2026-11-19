@@ -27,7 +27,7 @@ func formatTime(t time.Time) string {
 	return t.UTC().Format(time.RFC3339Nano)
 }
 
-// InsertProject inserts a minimal projects row for FK-backed tests.
+// InsertProject seeds a project and its outside namespace.
 func InsertProject(t testing.TB, sqlDB store, projectID string) {
 	t.Helper()
 	now := formatTime(time.Now().UTC())
@@ -36,6 +36,12 @@ func InsertProject(t testing.TB, sqlDB store, projectID string) {
 		VALUES (?, NULL, ?, ?, 0)
 	`, projectID, now, now)
 	testutil.FailErr(t, "insert project", err)
+	_, err = sqlDB.ExecContext(t.Context(), `
+		INSERT INTO project_roots (id, project_id, path, label, is_primary, added_at, kind)
+		SELECT ?, id, '', 'outside', 0, created_at, 'outside' FROM projects WHERE id = ?
+		ON CONFLICT(project_id, path) DO NOTHING
+	`, uuid.NewString(), projectID)
+	testutil.FailErr(t, "insert outside namespace", err)
 }
 
 // InsertProjectRoot attaches one folder root.
@@ -49,7 +55,7 @@ func InsertProjectRootWithID(t *testing.T, sqlDB store, projectID, rootID, path 
 	t.Helper()
 	InsertProject(t, sqlDB, projectID)
 	var existing int
-	err := sqlDB.QueryRowContext(t.Context(), `SELECT COUNT(*) FROM project_roots WHERE project_id = ?`, projectID).Scan(&existing)
+	err := sqlDB.QueryRowContext(t.Context(), `SELECT COUNT(*) FROM project_roots WHERE project_id = ? AND kind != 'outside'`, projectID).Scan(&existing)
 	testutil.FailErr(t, "count project roots", err)
 	isPrimary := 0
 	if existing == 0 {

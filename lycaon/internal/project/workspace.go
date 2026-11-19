@@ -72,8 +72,12 @@ func WithWorktree(p *Project, binding Binding) *Project {
 	return out
 }
 
-// BranchForRoot preserves sharing for roots outside a bound worktree.
+// BranchForRoot preserves sharing for roots outside a bound worktree. The
+// outside namespace has one history, on the trunk.
 func (p *Project) BranchForRoot(rootID string) sourcebranch.ID {
+	if rootID != "" && rootID == p.Outside.ID {
+		return sourcebranch.Trunk
+	}
 	if branch, ok := p.RootBranches[rootID]; ok {
 		return branch
 	}

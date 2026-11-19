@@ -53,6 +53,10 @@ func (s *Workspace) HandleGetProjectSource(w http.ResponseWriter, r *http.Reques
 		s.writeSourceReadError(w, r, err)
 		return
 	}
+	if p, err = admitOutside(r.Context(), s.SourceLedger, p, req.RootID, req.Path); err != nil {
+		s.writeSourceReadError(w, r, err)
+		return
+	}
 	if !branch.IsWorker() {
 		rootID, rootErr := sourceRootID(p, req.RootID)
 		if rootErr != nil {
@@ -99,7 +103,7 @@ func (s *Workspace) HandleGetProjectSource(w http.ResponseWriter, r *http.Reques
 
 func sourceViewerRequest(r *http.Request) (projectsource.SourceReadRequest, bool, error) {
 	req := projectsource.SourceReadRequest{
-		Path:     strings.TrimSpace(r.URL.Query().Get("path")),
+		Path:     r.URL.Query().Get("path"),
 		RootID:   strings.TrimSpace(r.URL.Query().Get("root_id")),
 		DecodeAs: strings.TrimSpace(r.URL.Query().Get("decode_as")),
 	}
@@ -169,7 +173,7 @@ func SourceWorkspaceDTO(p *project.Project, sessionScoped bool, inventory wire.S
 			ID:       root.ID, Path: root.Path, Watch: SourceWatchCoverageDTO(repochange.Coverage(root.Path)),
 		})
 	}
-	return wire.SourceWorkspace{WorkspaceID: p.WorkspaceID(), SessionScoped: sessionScoped, Roots: roots, Inventory: inventory}
+	return wire.SourceWorkspace{WorkspaceID: p.WorkspaceID(), SessionScoped: sessionScoped, Roots: roots, OutsideRootID: p.Outside.ID, Inventory: inventory}
 }
 
 func SourceWatchCoverageDTO(coverage repochange.WatchCoverage) wire.SourceWatchCoverage {

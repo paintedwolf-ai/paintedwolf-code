@@ -1,7 +1,9 @@
+// @vitest-environment jsdom
 import { indentUnit } from "@codemirror/language";
 import { EditorState, type Extension } from "@codemirror/state";
 import { describe, expect, it } from "vitest";
 import { languageExtensionForPath } from "../editor/codemirror-lang.ts";
+import { finishFixtureParsing } from "../../../test/codemirror-parsing-fixture.ts";
 import { createPrettyExtension, prettyOutcomeOf, prettyWorkOf } from "./pretty-layout.ts";
 import { PRETTY_MAX_INPUT, type PrettyConfig } from "./pretty-rescan.ts";
 import { PRETTY_CHECKPOINT_INTERVAL } from "./pretty-scan-state.ts";
@@ -14,7 +16,7 @@ function extraLanguage(path: string | undefined): Extension {
 }
 
 function open(doc: string, config: Omit<PrettyConfig, "enabled">, unit = "  ", extra: Extension = []): EditorState {
-  return EditorState.create({
+  return finishFixtureParsing(EditorState.create({
     doc,
     extensions: [
       extraLanguage(config.path),
@@ -23,7 +25,7 @@ function open(doc: string, config: Omit<PrettyConfig, "enabled">, unit = "  ", e
       createPrettyExtension({ enabled: true, ...config }),
       extra,
     ],
-  });
+  }));
 }
 
 function layoutOf(state: EditorState): Layout {
@@ -62,7 +64,7 @@ function pretty(doc: string, path: string, unit = "  "): string {
 
 function rebuilt(state: EditorState): Layout {
   const cfg = currentConfig(state);
-  return layoutOf(EditorState.create({
+  return layoutOf(finishFixtureParsing(EditorState.create({
     doc: state.doc,
     extensions: [
       extraLanguage(cfg.path),
@@ -70,7 +72,7 @@ function rebuilt(state: EditorState): Layout {
       EditorState.tabSize.of(state.tabSize),
       createPrettyExtension(cfg),
     ],
-  }));
+  })));
 }
 
 const configs = new WeakMap<EditorState, PrettyConfig>();
@@ -79,7 +81,7 @@ function currentConfig(state: EditorState): PrettyConfig {
 }
 
 function edit(state: EditorState, from: number, to: number, insert: string): EditorState {
-  const next = state.update({ changes: { from, to, insert } }).state;
+  const next = finishFixtureParsing(state.update({ changes: { from, to, insert } }).state);
   configs.set(next, currentConfig(state));
   return next;
 }

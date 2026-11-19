@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/timelayout"
 	"strings"
 	"time"
@@ -59,6 +60,15 @@ func (r *SQLRegistry) Create(ctx context.Context, params CreateParams) (*Project
 	}); err != nil {
 		return nil, fmt.Errorf("insert project: %w", err)
 	}
+	if err := q.CreateProjectRoot(ctx, db.CreateProjectRootParams{
+		ID:        uuid.NewString(),
+		ProjectID: id,
+		Label:     projectroot.OutsideLabel,
+		AddedAt:   timelayout.Format(now),
+		Kind:      string(RootKindOutside),
+	}); err != nil {
+		return nil, fmt.Errorf("insert outside namespace: %w", err)
+	}
 	p := &Project{
 		ID:           id,
 		Name:         name.String,
@@ -112,6 +122,14 @@ func (r *SQLRegistry) List(ctx context.Context) ([]Project, error) {
 		return nil, err
 	}
 	rootsByProject := projectRootsByProjectID(allRoots)
+	outsideRows, err := r.queries.ListProjectOutsideRoots(ctx)
+	if err != nil {
+		return nil, err
+	}
+	outside := make(map[string]string, len(outsideRows))
+	for _, row := range outsideRows {
+		outside[row.ProjectID] = row.ID
+	}
 	promotionRows, err := r.queries.ListProjectPromotions(ctx)
 	if err != nil {
 		return nil, err
@@ -131,6 +149,7 @@ func (r *SQLRegistry) List(ctx context.Context) ([]Project, error) {
 			return nil, err
 		}
 		p.Promotion = promotions[p.ID]
+		p.Outside = outsideRoot(p.ID, outside[p.ID], p.CreatedAt)
 		if err := ValidateLifecycle(p); err != nil {
 			return nil, err
 		}

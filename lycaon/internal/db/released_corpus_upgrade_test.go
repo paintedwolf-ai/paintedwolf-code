@@ -169,6 +169,7 @@ var queuedByRegisteredSteps = map[string]string{
 	"schema_migrations":         "each applied step records its ledger row",
 	"source_blob_reclaim_queue": "SourceManifestLayout queues the blobs retired manifest entries named for the reclaimer to re-check",
 	"store_meta":                "UpgradeStaged records the deferred exhaustive integrity audit obligation",
+	"project_roots":             "OutsideNamespace gives every project its outside namespace",
 }
 
 // retiredColumnsByRegisteredSteps names released columns a registered step

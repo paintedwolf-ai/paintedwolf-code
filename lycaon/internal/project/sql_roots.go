@@ -11,6 +11,8 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/lycaon/lycaon/internal/db"
+	"github.com/lycaon/lycaon/internal/fspath"
+	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -390,6 +392,13 @@ func attachRootTx(ctx context.Context, q *db.Queries, p *Project, params AttachR
 			return Root{}, fmt.Errorf("%w: %s", ErrDuplicateRoot, abs)
 		}
 		return Root{}, err
+	}
+	if kind == RootKindAttached {
+		if rel, ok := projectroot.OutsideRel(fspath.CanonicalPath(abs)); ok {
+			if err := db.AdoptOutsideTree(ctx, q, p.ID, root.ID, rel); err != nil {
+				return Root{}, fmt.Errorf("adopt outside files: %w", err)
+			}
+		}
 	}
 	p.Roots = append(p.Roots, root)
 	return root, nil

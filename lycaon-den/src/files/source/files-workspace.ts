@@ -25,6 +25,7 @@ import { connectSourceTreeWorkspace, prepareSourceTreeWorkspace, type SourceTree
 import { sourceWatchNotice } from "./source-watch-notice.ts";
 import { workspaceMismatchId } from "./source-workspace-identity.ts";
 import { resolveSourceWorkspaceRoots } from "./source-workspace-roots.ts";
+import { recordOutsideRoot } from "./outside-namespace.ts";
 import { observeWorkspaceInvalidation } from "./workspace-invalidation.ts";
 
 type FilesWorkspacePresentation = {
@@ -191,6 +192,7 @@ export function createFilesWorkspace(options: {
               throw new Error("Files workspace response is missing its identity.");
             }
             const address = workspace.session_scoped ? sessionId : undefined;
+            recordOutsideRoot(options.projectId, workspace.outside_root_id);
             if (filesWorkspaceId() !== workspaceId) {
               setWorkspaceSettled(false);
               setTreeSettled(false);

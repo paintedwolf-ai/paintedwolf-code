@@ -15,9 +15,12 @@ import {
 import { wholeFileOpChange } from "../../components/source/reader/source-reader-change.ts";
 import type { ChatAttachmentRef } from "../../chat/composer/add-to-chat.ts";
 import { startChatAttachmentDrag } from "../../chat/composer/chat-attachment-drag.ts";
+import { outsideHostDirectory } from "../source/outside-namespace.ts";
 
 type Props = {
   row: ReviewListRow;
+  /** The file lies outside the project's folders; its folder reads as a host path. */
+  outside?: boolean;
   /** Some visible row has line counts, so every row holds the column. */
   reserveStat: boolean;
   expanded: boolean;
@@ -138,8 +141,8 @@ export function ReviewFileRow(props: Props) {
             <Show when={props.row.tip.state === "absent"}>
               <span class="den-review-row__dir">Deleted</span>
             </Show>
-            <Show when={props.row.dirname}>
-              <span class="den-review-row__dir">{props.row.dirname}</span>
+            <Show when={props.outside ? outsideHostDirectory(props.row.path) : props.row.dirname}>
+              {(dirname) => <span class="den-review-row__dir" data-outside={props.outside ? "" : undefined}>{dirname()}</span>}
             </Show>
           </span>
           <Show when={props.row.contributors.length > 0}>

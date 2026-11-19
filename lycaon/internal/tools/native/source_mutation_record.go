@@ -69,7 +69,8 @@ func finishAgentMutation(ctx context.Context, tctx tools.ToolContext, mutation a
 	}
 	if journal != nil {
 		err := journal.Finish(ctx, effectErr)
-		if effectErr == nil {
+		committed := recordCommittedOutsideMutation(context.WithoutCancel(ctx), tctx, mutation, journal.ID())
+		if !committed && effectErr == nil {
 			recordAgentMutationPaths(tctx, mutation)
 		}
 		return err
@@ -179,20 +180,23 @@ func commitAgentMutation(ctx context.Context, tctx tools.ToolContext, m agentMut
 	return commitAgentMutationWithoutStore(ctx, tctx.Source.SourceLedger, in, change)
 }
 
-// Paths outside attached roots produce no durable mutation.
+// Scratch, caches and host state produce no durable mutation.
 func agentCommitInputs(tctx tools.ToolContext, m agentMutation) (sourceledger.RecordInput, sourcefeed.Change, bool) {
 	return agentCommitInputsWithWorkspace(tctx, m, "")
 }
 
 func agentCommitInputsWithWorkspace(tctx tools.ToolContext, m agentMutation, workspaceID string) (sourceledger.RecordInput, sourcefeed.Change, bool) {
-	root, path, located := tctx.SourceLocation(m.AbsPath)
+	root, path, located := tctx.RecordedLocation(m.AbsPath)
 	if tctx.Identity.ProjectID == "" || !located {
 		return sourceledger.RecordInput{}, sourcefeed.Change{}, false
 	}
-	fromPath := ""
+	var fromRootID, fromPath string
 	if m.FromAbsPath != "" {
-		if _, from, ok := tctx.SourceLocation(m.FromAbsPath); ok {
+		if fromRoot, from, ok := tctx.RecordedLocation(m.FromAbsPath); ok {
 			fromPath = from
+			if fromRoot.ID != root.ID {
+				fromRootID = fromRoot.ID
+			}
 		}
 	}
 	// Branchless worker calls produce no durable mutation.
@@ -201,7 +205,7 @@ func agentCommitInputsWithWorkspace(tctx tools.ToolContext, m agentMutation, wor
 		return sourceledger.RecordInput{}, sourcefeed.Change{}, false
 	}
 	in := sourceledger.RecordInput{
-		RecordLocation: sourceledger.RecordLocation{RootID: root.ID, Path: path, FromPath: fromPath, EntryKind: sourceledger.EntryKindFile},
+		RecordLocation: sourceledger.RecordLocation{RootID: root.ID, Path: path, FromPath: fromPath, FromRootID: fromRootID, EntryKind: sourceledger.EntryKindFile},
 		ProjectID:      tctx.Identity.ProjectID,
 		BranchID:       branch,
 		Op:             m.Op, Origin: api.SourceChangeOriginAgent,
@@ -210,6 +214,10 @@ func agentCommitInputsWithWorkspace(tctx tools.ToolContext, m agentMutation, wor
 		Turn:         tctx.Identity.UserTurn,
 		BeforeSHA256: m.BeforeSHA256, AfterSHA256: m.AfterSHA256, Before: m.Before, After: m.After,
 		BeforeSize: max(m.BeforeSize, int64(len(m.Before))), AfterSize: max(m.AfterSize, int64(len(m.After)))}
+	if m.Op == api.SourceChangeOpRename {
+		// The approval previews the overwritten target; history follows the moved entry.
+		in.Before, in.BeforeSHA256, in.BeforeSize = in.After, in.AfterSHA256, in.AfterSize
+	}
 	isDir := m.IsDir
 	if m.IsDir {
 		in.EntryKind = sourceledger.EntryKindDirectory
@@ -226,6 +234,7 @@ func agentCommitInputsWithWorkspace(tctx tools.ToolContext, m agentMutation, wor
 		RootID:        root.ID,
 		Path:          path,
 		FromPath:      fromPath,
+		FromRootID:    fromRootID,
 		Op:            m.Op,
 		Origin:        api.SourceChangeOriginAgent,
 		SessionID:     tctx.Identity.SessionID,
@@ -306,4 +315,38 @@ func recordAgentMutationPaths(tctx tools.ToolContext, m agentMutation) {
 	if m.FromAbsPath != "" {
 		tctx.RecordSourcePath(m.FromAbsPath, kind)
 	}
+}
+
+func recordCommittedOutsideMutation(ctx context.Context, tc tools.ToolContext, mutation agentMutation, operationID string) bool {
+	outsideID := tc.Source.OutsideRoot.ID
+	if tc.Effects.Out == nil || outsideID == "" || mutation.IsDir || mutation.IsLink || operationID == "" {
+		return false
+	}
+	_, _, inside := tc.SourceLocation(mutation.AbsPath)
+	if inside {
+		_, _, fromInside := tc.SourceLocation(mutation.FromAbsPath)
+		if mutation.FromAbsPath == "" || fromInside {
+			return false
+		}
+	}
+	database := agentLedgerDB(tc.Source.SourceLedger)
+	if database == nil {
+		return false
+	}
+	effect, err := sourceledger.FindOutsideFileEffect(ctx, database, tc.Identity.ProjectID, outsideID, operationID)
+	if err != nil {
+		return false
+	}
+	record := func(rootID, path string) {
+		if path == "" || rootID == "" {
+			return
+		}
+		tc.RecordSourceLocation(api.NavigationTarget{
+			ProjectID: tc.Identity.ProjectID, RootID: rootID, Path: path,
+			FileID: effect.FileID, EntryKind: api.NavigationEntryKindFile,
+		})
+	}
+	record(effect.RootID, effect.Path)
+	record(effect.FromRootID, effect.FromPath)
+	return true
 }

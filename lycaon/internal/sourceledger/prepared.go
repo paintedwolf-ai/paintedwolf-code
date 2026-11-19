@@ -543,6 +543,9 @@ func normalizedInput(in RecordInput) RecordInput {
 			in.CaptureQuality = "observed"
 		}
 	}
+	if in.FromPath != "" && in.FromRootID == "" {
+		in.FromRootID = in.RootID
+	}
 	if in.EntryKind == "" {
 		in.EntryKind = EntryKindFile
 	}

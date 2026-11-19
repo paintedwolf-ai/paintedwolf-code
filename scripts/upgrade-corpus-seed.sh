@@ -76,6 +76,7 @@ CREDENTIAL_RELS=(
   .credential-vault-development-identity
   api.token
   host-identity.pem
+  mcp.yaml
 )
 
 WORKDIR="$(mktemp -d "${TMPDIR:-/tmp}/upgrade-corpus-seed.XXXXXX")"
@@ -99,7 +100,8 @@ mkdir -p "${CONFIG_DIR}" "${SEED_PROJECT_ROOT}/${OVERLAY_DIR}" "${STAGE_DIR}"
 SEED_PROJECT_ROOT="$(cd "${SEED_PROJECT_ROOT}" && pwd -P)"
 mkdir -p "${SEED_PROJECT_ROOT}/${OVERLAY_DIR}"
 
-printf 'overlay_format: 1\n' >"${SEED_PROJECT_ROOT}/${OVERLAY_DIR}/overlay.yaml"
+OVERLAY_EXAMPLE="${GO_DIR}/testdata/overlay-example/${OVERLAY_FIXTURE_DIR}"
+cp "${OVERLAY_EXAMPLE}/overlay.yaml" "${SEED_PROJECT_ROOT}/${OVERLAY_DIR}/overlay.yaml"
 printf 'format: 1\ndisabled: []\n' >"${SEED_PROJECT_ROOT}/${OVERLAY_DIR}/extensions.yaml"
 # Target for the locked mock tool call (pattern "corpus seed" → command cat README.md).
 printf '# corpus seed\n' >"${SEED_PROJECT_ROOT}/README.md"
@@ -258,6 +260,15 @@ manifest['worker_history']['overlay'] = {'README.md': sha('# retained worker ove
 path.write_text(json.dumps(manifest, indent=2) + '\n')
 PYCODE
 node "${ROOT}/scripts/upgrade-editor-fixture.mjs" seed "${BASE}" "${CONFIG_DIR}" "${STAGE_DIR}/MANIFEST.json" "${SEED_PROJECT_ROOT}"
+# Exclude credential basenames before trust review records the settings.
+for example in "${OVERLAY_EXAMPLE}/"*.yaml; do
+  name="${example##*/}"
+  for rel in "${CREDENTIAL_RELS[@]}"; do
+    [[ "${name}" != "${rel##*/}" ]] || continue 2
+  done
+  recorded="${SEED_PROJECT_ROOT}/${OVERLAY_DIR}/${name}"
+  [[ -e "${recorded}" ]] || cp "${example}" "${recorded}"
+done
 curl -fsS "${AUTH_HDR[@]}" -X POST "${BASE}/v1/projects/${PROJECT_ID}/trust/review" \
   | jq -e '.review.changes | length > 0' >/dev/null
 printf '# Retained configuration change.\nformat: 1\ndisabled: []\n' >"${SEED_PROJECT_ROOT}/${OVERLAY_DIR}/extensions.yaml"
@@ -330,11 +341,6 @@ cp -a "${APP_STATE_PATH}" "${STAGE_DIR}/app-state-v1"
 cp -a "${SEED_PROJECT_ROOT}/." "${STAGE_DIR}/project-root/"
 # Boot restores the overlay directory name from this fixture placeholder.
 mv "${STAGE_DIR}/project-root/${OVERLAY_DIR}" "${STAGE_DIR}/project-root/${OVERLAY_FIXTURE_DIR}"
-# The corpus records every overlay setting this release reads; later releases must still load them.
-for example in "${GO_DIR}/testdata/overlay-example/${OVERLAY_FIXTURE_DIR}/"*.yaml; do
-  recorded="${STAGE_DIR}/project-root/${OVERLAY_FIXTURE_DIR}/$(basename "${example}")"
-  [[ -e "${recorded}" ]] || cp "${example}" "${recorded}"
-done
 
 if [[ -d "${CONFIG_DIR}/extensions-cache" ]] && [[ -n "$(ls -A "${CONFIG_DIR}/extensions-cache" 2>/dev/null || true)" ]]; then
   cp -a "${CONFIG_DIR}/extensions-cache" "${STAGE_DIR}/extensions-cache"

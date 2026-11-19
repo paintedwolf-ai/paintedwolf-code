@@ -6192,7 +6192,12 @@ export interface components {
             root_id: string;
             /** @description Root-relative path after the change (destination for rename). */
             path: string;
-            /** @description Root-relative path before a rename; omit for other ops. */
+            /**
+             * Format: uuid
+             * @description Source root for a rename across roots.
+             */
+            from_root_id?: string;
+            /** @description Path before a rename, relative to from_root_id when present and root_id otherwise. */
             from_path?: string;
             op: components["schemas"]["SourceChangeOp"];
             origin: components["schemas"]["SourceChangeOrigin"];
@@ -6628,6 +6633,11 @@ export interface components {
             id: string;
             name: string | null;
             roots: components["schemas"]["ProjectRoot"][];
+            /**
+             * Format: uuid
+             * @description The project's namespace for files beyond every root. Source history addresses those files by this root id and their host path without its leading slash.
+             */
+            outside_root_id: string;
             roots_generation: number;
             /** @description Number of retained root chats, including archived chats and excluding worker sessions. */
             session_count: number;
@@ -11731,6 +11741,11 @@ export interface components {
             /** Format: uuid */
             root_id: string;
             path: string;
+            /**
+             * Format: uuid
+             * @description Host-recorded logical identity for a file outside the project folders.
+             */
+            file_id?: string;
             entry_kind: components["schemas"]["NavigationEntryKind"];
             /** Format: uuid */
             worker_id?: string;
@@ -11755,11 +11770,16 @@ export interface components {
             /** Format: uuid */
             root_id?: string;
             path: string;
+            /**
+             * Format: uuid
+             * @description Host-recorded logical identity for a file outside the project folders.
+             */
+            file_id?: string;
             entry_kind?: components["schemas"]["NavigationEntryKind"];
             status: components["schemas"]["NavigationStatus"];
             /** @description True only for an authored Markdown destination, rather than an inferred prose path. */
             explicit: boolean;
-            /** @description The exact path is absent and has retained deletion history. Availability is rechecked when opening; this never pins the link to a file or version. */
+            /** @description The current address is absent and has retained deletion history. Availability is rechecked when opening. */
             deleted?: boolean;
             /** Format: uuid */
             worker_id?: string;
@@ -13264,6 +13284,11 @@ export interface components {
             session_scoped: boolean;
             /** @description Ordered physical roots used by every Files read and path action. */
             roots: components["schemas"]["SourceWorkspaceRoot"][];
+            /**
+             * Format: uuid
+             * @description The project's namespace for files beyond every root. Source history addresses those files by this root id and their host path without its leading slash.
+             */
+            outside_root_id: string;
             /** @description The ledger's pass over the tree. Outside edits to tracked files reach history by path before it completes; untracked files enter history when the pass, or an open command window, admits them. */
             inventory: components["schemas"]["SourceInventoryState"];
         };

@@ -30,7 +30,7 @@ func (r *ReadRoot) Access(rel string, mode AccessMode, admit func(string) error)
 		return false, err
 	}
 	result := false
-	_, err = walkReadContained(r.root, relative, true, func(dir *os.File, name string, st *unix.Stat_t) (*os.File, error) {
+	_, err = walkReadContained(r.root, relative, followReadLinks, func(dir *os.File, name string, st *unix.Stat_t) (*os.File, error) {
 		if admit != nil {
 			if err := admit(filepath.Join(dir.Name(), name)); err != nil {
 				return nil, err

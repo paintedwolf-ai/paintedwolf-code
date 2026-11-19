@@ -4776,15 +4776,17 @@ type NavigationReference struct {
 	// Markdown occurrence kind (link, code, fence, or text).
 	Syntax string `json:"syntax"`
 	// Exact Markdown destination or standalone path token; independent of display label.
-	Mention   string              `json:"mention"`
-	ProjectID string              `json:"project_id"`
-	RootID    string              `json:"root_id,omitempty"`
-	Path      string              `json:"path"`
+	Mention   string `json:"mention"`
+	ProjectID string `json:"project_id"`
+	RootID    string `json:"root_id,omitempty"`
+	Path      string `json:"path"`
+	// Host-recorded logical identity for a file outside the project folders.
+	FileID    string              `json:"file_id,omitempty"`
 	EntryKind NavigationEntryKind `json:"entry_kind,omitempty"`
 	Status    NavigationStatus    `json:"status"`
 	// True only for an authored Markdown destination, rather than an inferred prose path.
 	Explicit bool `json:"explicit"`
-	// The exact path is absent and has retained deletion history. Availability is rechecked when opening; this never pins the link to a file or version.
+	// The current address is absent and has retained deletion history. Availability is rechecked when opening.
 	Deleted    bool               `json:"deleted,omitempty"`
 	WorkerID   string             `json:"worker_id,omitempty"`
 	Line       int                `json:"line,omitempty"`
@@ -4794,9 +4796,11 @@ type NavigationReference struct {
 
 // NavigationTarget
 type NavigationTarget struct {
-	ProjectID string              `json:"project_id"`
-	RootID    string              `json:"root_id"`
-	Path      string              `json:"path"`
+	ProjectID string `json:"project_id"`
+	RootID    string `json:"root_id"`
+	Path      string `json:"path"`
+	// Host-recorded logical identity for a file outside the project folders.
+	FileID    string              `json:"file_id,omitempty"`
 	EntryKind NavigationEntryKind `json:"entry_kind"`
 	WorkerID  string              `json:"worker_id,omitempty"`
 }
@@ -5137,10 +5141,12 @@ type ProgressUpdateSummary struct {
 
 // Project
 type Project struct {
-	ID              string        `json:"id"`
-	Name            *string       `json:"name"`
-	Roots           []ProjectRoot `json:"roots"`
-	RootsGeneration int           `json:"roots_generation"`
+	ID    string        `json:"id"`
+	Name  *string       `json:"name"`
+	Roots []ProjectRoot `json:"roots"`
+	// The project's namespace for files beyond every root. Source history addresses those files by this root id and their host path without its leading slash.
+	OutsideRootID   string `json:"outside_root_id"`
+	RootsGeneration int    `json:"roots_generation"`
 	// Number of retained root chats, including archived chats and excluding worker sessions.
 	SessionCount int  `json:"session_count"`
 	Starred      bool `json:"starred"`
@@ -7092,7 +7098,9 @@ type SourceChange struct {
 	RootID string `json:"root_id"`
 	// Root-relative path after the change (destination for rename).
 	Path string `json:"path"`
-	// Root-relative path before a rename; omit for other ops.
+	// Source root for a rename across roots.
+	FromRootID string `json:"from_root_id,omitempty"`
+	// Path before a rename, relative to from_root_id when present and root_id otherwise.
 	FromPath string             `json:"from_path,omitempty"`
 	Op       SourceChangeOp     `json:"op"`
 	Origin   SourceChangeOrigin `json:"origin"`
@@ -8437,6 +8445,8 @@ type SourceWorkspace struct {
 	SessionScoped bool `json:"session_scoped"`
 	// Ordered physical roots used by every Files read and path action.
 	Roots []SourceWorkspaceRoot `json:"roots"`
+	// The project's namespace for files beyond every root. Source history addresses those files by this root id and their host path without its leading slash.
+	OutsideRootID string `json:"outside_root_id"`
 	// The ledger's pass over the tree. Outside edits to tracked files reach history by path before it completes; untracked files enter history when the pass, or an open command window, admits them.
 	Inventory SourceInventoryState `json:"inventory"`
 }

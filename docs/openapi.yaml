@@ -16437,9 +16437,13 @@ components:
         path:
           type: string
           description: Root-relative path after the change (destination for rename).
+        from_root_id:
+          type: string
+          format: uuid
+          description: Source root for a rename across roots.
         from_path:
           type: string
-          description: Root-relative path before a rename; omit for other ops.
+          description: Path before a rename, relative to from_root_id when present and root_id otherwise.
         op:
           $ref: '#/components/schemas/SourceChangeOp'
         origin:
@@ -17494,6 +17498,7 @@ components:
         - id
         - name
         - roots
+        - outside_root_id
         - roots_generation
         - session_count
         - starred
@@ -17511,6 +17516,7 @@ components:
         - id
         - name
         - roots
+        - outside_root_id
         - roots_generation
         - session_count
         - starred
@@ -17531,6 +17537,11 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/ProjectRoot'
+        outside_root_id:
+          type: string
+          format: uuid
+          description: |
+            The project's namespace for files beyond every root. Source history addresses those files by this root id and their host path without its leading slash.
         roots_generation:
           type: integer
           minimum: 0
@@ -30168,6 +30179,10 @@ components:
           format: uuid
         path:
           type: string
+        file_id:
+          type: string
+          format: uuid
+          description: Host-recorded logical identity for a file outside the project folders.
         entry_kind:
           $ref: '#/components/schemas/NavigationEntryKind'
         worker_id:
@@ -30236,6 +30251,10 @@ components:
         path:
           type: string
           minLength: 1
+        file_id:
+          type: string
+          format: uuid
+          description: Host-recorded logical identity for a file outside the project folders.
         entry_kind:
           $ref: '#/components/schemas/NavigationEntryKind'
         status:
@@ -30245,7 +30264,7 @@ components:
           description: True only for an authored Markdown destination, rather than an inferred prose path.
         deleted:
           type: boolean
-          description: The exact path is absent and has retained deletion history. Availability is rechecked when opening; this never pins the link to a file or version.
+          description: The current address is absent and has retained deletion history. Availability is rechecked when opening.
         worker_id:
           type: string
           format: uuid
@@ -33607,6 +33626,7 @@ components:
         - workspace_id
         - session_scoped
         - roots
+        - outside_root_id
         - inventory
       properties:
         workspace_id:
@@ -33623,6 +33643,11 @@ components:
           description: Ordered physical roots used by every Files read and path action.
           items:
             $ref: '#/components/schemas/SourceWorkspaceRoot'
+        outside_root_id:
+          type: string
+          format: uuid
+          description: |
+            The project's namespace for files beyond every root. Source history addresses those files by this root id and their host path without its leading slash.
         inventory:
           $ref: '#/components/schemas/SourceInventoryState'
           description: |
