@@ -214,7 +214,7 @@ describe("ChatView composer", () => {
     const agent = screen.getByRole("radio", { name: "Agent" });
     agent.focus();
     fireEvent.click(agent);
-    expect(agent).toHaveAttribute("aria-checked", "true");
+    expect(agent.getAttribute("aria-checked")).toBe("true");
     await vi.advanceTimersByTimeAsync(0);
     expect(upgrade).toHaveBeenCalledWith(SESSION, { mode: "agent" });
     expect(appStore.state.currentSession?.mode).toBe("agent");

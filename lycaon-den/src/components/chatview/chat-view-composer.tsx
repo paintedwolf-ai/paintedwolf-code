@@ -165,6 +165,7 @@ export function createChatViewComposer(props: ChatViewProps, options: ComposerOp
     });
   };
 
+  const sendBlocked = () => Boolean(armedNeedsAgent()) && !pendingAsk() && !approvalRedirectCheckpoint();
   const sendWithStreamFollow = async (
     payload: import("./Composer.tsx").ComposerSendPayload,
   ): Promise<boolean | void> => {
@@ -419,7 +420,7 @@ export function createChatViewComposer(props: ChatViewProps, options: ComposerOp
                 activityLabel={stopping() ? "Stopping…" : thinkingLabel()}
                 turnClock={props.appStore.state.turnClock}
                 externalContent={sessionHoldsExternalContent()}
-                sendBlocked={Boolean(armedNeedsAgent()) && !pendingAsk() && !approvalRedirectCheckpoint()}
+                sendBlocked={sendBlocked()}
                 onSend={sendWithStreamFollow}
                 onStop={props.onStop}
               />
