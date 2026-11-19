@@ -211,6 +211,8 @@ describe("ChatView composer", () => {
     onTestFinished(() => vi.useRealTimers());
     const upgrade = vi.fn(async () => ({ id: SESSION, mode: "agent", started: true }));
     const { composer, appStore } = mountChat({ session: { mode: "ask" }, client: { updateSession: upgrade } });
+    await vi.advanceTimersByTimeAsync(0);
+    expect(document.activeElement).toBe(composer());
     const agent = screen.getByRole("radio", { name: "Agent" });
     agent.focus();
     fireEvent.click(agent);
