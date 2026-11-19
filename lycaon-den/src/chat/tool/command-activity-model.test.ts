@@ -218,6 +218,25 @@ it("holds running FormTool calls back and coalesces the settled inspect sequence
  expect(jobBetween.map(row => row.id)).toEqual(["side-c", "job", "side-d"]);
 });
 
+it("projects source inspection using its program receipt and keeps Git HEAD visible", () => {
+ const project = createCommandActivityProjection();
+ const read = entry("read", undefined, "inspect_source");
+ const head = entry("head", undefined, "inspect_source");
+ if (read.kind === "tool") {
+  read.part.args = { operation: "read", path: "README.md" };
+  read.part.status = "running";
+ }
+ if (head.kind === "tool") {
+  head.part.args = { operation: "git_head" };
+  head.part.status = "running";
+ }
+ expect(parts(project([read, head])).map(row => row.id)).toEqual(["head"]);
+
+ const settled = parts(project([entry("list", [fact("list")]), entry("read", [fact("read")], "inspect_source")]));
+ expect(settled).toHaveLength(1);
+ expect(settled[0]!.commandActivity!.calls.map(call => call.toolCallId)).toEqual(["list", "read"]);
+});
+
 it("lists activity groups in first-appearance order", () => {
  const project = createCommandActivityProjection();
  const entries = [

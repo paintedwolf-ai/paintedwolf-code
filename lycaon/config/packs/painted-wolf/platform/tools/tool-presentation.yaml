@@ -474,7 +474,7 @@ tools:
     activity: {headline: "summarizing source", salience: primary, role: investigation}
   inspect_source:
     label: "Inspect source"
-    title_keys: [operation, path]
+    title_keys: [path, pattern, query]
     running_label: "Inspecting source…"
     activity: {headline: "inspecting source", salience: primary, role: investigation}
   survey_repo:

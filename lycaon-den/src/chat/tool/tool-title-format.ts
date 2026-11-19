@@ -40,6 +40,18 @@ export function compositeToolTitle(tool: string, args: Record<string, unknown>):
   switch (tool) {
     case "diff": return comparison(text("path_a"), text("path_b"));
     case "git_compare": return comparison(text("base_ref"), text("head_ref"));
+    case "inspect_source": {
+      const path = text("path");
+      switch (args.operation) {
+        case "read": return path || "Read file";
+        case "list": return path || "List files";
+        case "search": return text("pattern") || path || "Search files";
+        case "query_json": return path || "Query JSON";
+        case "query_yaml": return path || "Query YAML";
+        case "git_head": return path ? pairTitle("Git branch and commit", " · ", path) : "Git branch and commit";
+        default: return null;
+      }
+    }
     case "command":
     case "verify": {
       if (text("command")) return text("command");

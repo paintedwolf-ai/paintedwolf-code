@@ -20,6 +20,14 @@ type CallAssignment = { row: string; program: string };
 /** Tools whose calls run host command programs and take part in activity projection. */
 const FORM_PROGRAM_TOOLS = new Set(["command", "summarize", "survey_repo", "code_rewrite"]);
 
+function usesCommandProgram(part: ToolPartView): boolean {
+  if (part.tool === "inspect_source") {
+    const operation = part.args?.operation;
+    return !!part.commandProgram || (typeof operation === "string" && operation !== "git_head");
+  }
+  return FORM_PROGRAM_TOOLS.has(part.tool);
+}
+
 /** Wire phase base rank (mechanics §3.1); group sub-tiers offset 0..2 within the phase. */
 const ACTIVITY_PHASE_RANK: Readonly<Record<string, number>> = { inspect: 10, execute: 20, mutate: 30 };
 const ACTIVITY_GROUP_TIER: Readonly<Record<string, number>> = {
@@ -85,7 +93,8 @@ export function createCommandActivityProjection() {
     for (const entry of entries) {
       if (entry.kind === "turn_load") { decisions.push(entry); lastRow = undefined; continue; }
       if (entry.kind !== "tool") { result.push(entry); continue; }
-      if (!FORM_PROGRAM_TOOLS.has(entry.part.tool) || !entry.part.commandProgram) lastRow = undefined;
+      const usesProgram = usesCommandProgram(entry.part);
+      if (!usesProgram || !entry.part.commandProgram) lastRow = undefined;
       let program = preferredCommandProgram(entry.part.commandProgram, live(entry.part));
       const previous = remembered.get(entry.part.toolCallId);
       if (program && previous?.id === program.id && !program.activities && previous.activities?.length) {
@@ -128,7 +137,7 @@ export function createCommandActivityProjection() {
       }
 
       if (!program || !facts?.length) {
-        if (program?.activities?.length === 0 || (FORM_PROGRAM_TOOLS.has(entry.part.tool) && entry.part.status === "running")) continue;
+        if (program?.activities?.length === 0 || (usesProgram && entry.part.status === "running")) continue;
         result.push(entry); continue;
       }
       for (const [index, fact] of facts.entries()) {
