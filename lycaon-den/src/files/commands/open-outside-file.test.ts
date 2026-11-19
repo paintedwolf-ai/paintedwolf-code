@@ -3,6 +3,7 @@ import type { LycaonClient } from "../../api/client.ts";
 import { contributionCommandAvailable } from "../../contributions/dispatch.ts";
 import { resetContributionStoreForTest } from "../../contributions/contribution-store.ts";
 import { seedStockFrame } from "../../contributions/stock-frame-test.ts";
+import { stubClient } from "../../test/client-fixture.ts";
 import { projectFilesState } from "../documents/files-buffer-state.ts";
 import { resetProjectFilesForTests } from "../documents/project-files-buffer-lifecycle.ts";
 import { resetChatLocationsForTests } from "../source/chat-locations.ts";
@@ -43,8 +44,14 @@ it("uses the native-picked path and opens the returned file identity", async () 
   platform.desktop.mockReturnValue(true);
   platform.platform.mockReturnValue("linux");
   platform.pick.mockResolvedValue({ path: "/home/me/outside.txt", grant: null });
-  const open = vi.fn().mockResolvedValue({ root_id: "outside", path: "home/me/outside.txt", file_id: "file" });
-  const client = { openOutsideFile: open } as unknown as LycaonClient;
+  const open = vi.fn<LycaonClient["openOutsideFile"]>().mockResolvedValue({
+    root_id: "outside", path: "home/me/outside.txt", file_id: "file",
+    location: {
+      id: "location", session_id: "chat", root_id: "outside", anchor: "home/me", path: "/home/me",
+      kind: "folder", label: "me", hidden: false, available: true,
+    },
+  });
+  const client = stubClient({ openOutsideFile: open });
   await openOutsideFile(client, "project", "chat");
   expect(open).toHaveBeenCalledExactlyOnceWith("project", { session_id: "chat", path: "/home/me/outside.txt" });
   const state = projectFilesState("project");
@@ -53,8 +60,8 @@ it("uses the native-picked path and opens the returned file identity", async () 
 });
 
 it("leaves the picker closed in the browser, on Windows, or without a chat", async () => {
-  const open = vi.fn();
-  const client = { openOutsideFile: open } as unknown as LycaonClient;
+  const open = vi.fn<LycaonClient["openOutsideFile"]>();
+  const client = stubClient({ openOutsideFile: open });
   platform.desktop.mockReturnValue(false);
   platform.platform.mockReturnValue("linux");
   await openOutsideFile(client, "project", "chat");
