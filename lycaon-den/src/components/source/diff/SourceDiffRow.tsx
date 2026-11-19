@@ -188,7 +188,6 @@ export function SourceDiffRow(props: Props) {
         class="den-file-edit-diff-header"
         onClick={toggleDiff}
       >
-        {/* The path handles clicks separately. */}
         <SourcePathLink
           truncate
           strong

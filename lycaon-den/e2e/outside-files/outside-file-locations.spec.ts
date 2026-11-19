@@ -107,11 +107,13 @@ webE2e("An outside text edit opens the recorded file from chat", async ({ page, 
     const disclosure = card.getByTestId("file-edit-diff-toggle");
     await disclosure.click();
     await expect(disclosure).toHaveAttribute("aria-expanded", "true");
-    const read = page.waitForResponse((response) =>
-      response.url().includes(`/v1/projects/${project.id}/source/`) &&
-      response.url().includes("file_id="));
+    const open = page.waitForResponse((response) => {
+      const request = response.request();
+      return new URL(response.url()).pathname === `/v1/projects/${project.id}/editor-documents` &&
+        request.method() === "POST" && Boolean(request.postDataJSON().file_id);
+    });
     await card.getByTestId("source-path-link").click();
-    expect((await read).ok()).toBe(true);
+    expect((await open).ok()).toBe(true);
     const editor = page.getByTestId("files-editor-host").filter({ visible: true }).locator(".cm-content");
     await expect(editor).toContainText("Updated report");
   } finally {
