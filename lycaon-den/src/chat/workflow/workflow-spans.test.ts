@@ -1,6 +1,6 @@
 import { fileEditPreviewFixture, sourceTextHash } from "../../test/file-edit-fixture.ts";
 import { describe, expect, it } from "vitest";
-import type { CommandProgramReceipt, Message, WorkerTask, WorkflowRun } from "../../api/types.ts";
+import type { Message, WorkerTask, WorkflowRun } from "../../api/types.ts";
 import {
   buildChatTranscriptBlocks,
   isCatalogSpan,
@@ -937,11 +937,14 @@ describe("workflow-spans", () => {
       progress: {
         phase: "executing", files_searched: 0, files_skipped: 0, matches: 0,
         command_program: {
-          id: "program", state: "waiting", activities: [{
+          id: "program", parent_receipt_id: "invocation", language_version: 1,
+          catalog_digest: "catalog", source_digest: "source", source_ref: "source-ref",
+          state: "waiting", detail_ref: "detail", progress_state: "unchanged", started_at: "t",
+          activities: [{
             id: "build", label: "Run process", subject: "cargo build", group: "Running programs",
             state: "waiting", outcome: "Waiting", spans: [], execution_ids: [],
           }],
-        } as CommandProgramReceipt,
+        },
       },
     });
     try {

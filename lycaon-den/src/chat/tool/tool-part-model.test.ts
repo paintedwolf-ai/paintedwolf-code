@@ -1,4 +1,4 @@
-import { isBenignToolResult, isCoordinatorInternalTool, shouldHideCoordinatorInternalTool, shouldOmitToolPartFromTranscript } from "./tool-transcript-visibility.ts";
+import { isCoordinatorInternalTool, shouldOmitToolPartFromTranscript } from "./tool-transcript-visibility.ts";
 import { beforeEach, describe, expect, it } from "vitest";
 import { at, keyAt } from "../../test/at.ts";
 import fixtures from "../fixtures/tool-messages.json";
@@ -118,9 +118,10 @@ describe("tool-part-model", () => {
   });
 
   it("hides orientation tools in parent chat only", () => {
-    expect(shouldHideCoordinatorInternalTool("git_status", "chat")).toBe(true);
-    expect(shouldHideCoordinatorInternalTool("git_status", "worker")).toBe(false);
-    expect(shouldHideCoordinatorInternalTool("find", "chat")).toBe(false);
+    const chat = { verboseMode: true, layout: "chat" as const };
+    expect(shouldOmitToolPartFromTranscript(undefined, "git_status", chat)).toBe(true);
+    expect(shouldOmitToolPartFromTranscript(undefined, "git_status", { verboseMode: false, layout: "worker" })).toBe(false);
+    expect(shouldOmitToolPartFromTranscript(undefined, "find", chat)).toBe(false);
   });
 
   it("toolPartSummaryTitle includes the count of additional array targets", () => {
@@ -194,7 +195,6 @@ describe("tool-part-model", () => {
       "msg-asst",
     );
     expect(benignCompleted.status).toBe("completed");
-    expect(isBenignToolResult(benignResultMsg)).toBe(true);
 
     const rejected = toolPartFromCall(
       { id: "tc-read", name: "read", args: { path: "x" } },

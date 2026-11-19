@@ -50,19 +50,6 @@ export function isCoordinatorInternalTool(toolName: string): boolean {
   return COORDINATOR_INTERNAL_TOOL_SET.has(toolName.toLowerCase());
 }
 
-/** Parent chat hides orientation tools; worker drawer shows full child-session activity. */
-export function shouldHideCoordinatorInternalTool(
-  toolName: string,
-  layout: TranscriptLayout = "chat",
-): boolean {
-  return layout === "chat" && isCoordinatorInternalTool(toolName);
-}
-
-/** Host-stamped quiet chrome (`tool_result.ui_visibility === "benign"`). */
-export function isBenignToolResult(resultMsg?: Message): boolean {
-  return resultMsg?.tool_result?.ui_visibility === "benign";
-}
-
 type ToolPartTranscriptOmitOptions = {
   verboseMode: boolean;
   layout?: TranscriptLayout;
@@ -81,14 +68,14 @@ function toolTranscriptVisibility(
   layout: TranscriptLayout,
   shownInFlight: boolean,
 ): ToolTranscriptVisibility {
-  if (shouldHideCoordinatorInternalTool(toolName, layout)) return "hidden";
   if (layout === "worker") return "visible";
+  if (isCoordinatorInternalTool(toolName)) return "hidden";
   if (shownInFlight || isLifecycleVisibleTool(toolName)) return "visible";
   if (!resultMsg) return "verbose_only";
   const result = resultMsg.tool_result;
   if (result?.process?.running && result.process.handle?.trim()) return "visible";
   if (result?.file_edit_previews?.some((edit) => edit.path.trim() !== "") || (result?.file_edits_omitted ?? 0) > 0) return "visible";
-  return isBenignToolResult(resultMsg) ? "verbose_only" : "visible";
+  return result?.ui_visibility === "benign" ? "verbose_only" : "visible";
 }
 
 /** Quiet chat defers ordinary tools until they settle. */
