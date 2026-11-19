@@ -25,8 +25,8 @@ export function isKnownOutsideRoot(rootId: string): boolean {
   return false;
 }
 
-export function outsideFileId(projectId: string, file: { rootId: string; fileId?: string }): string | undefined {
-  return isOutsideRoot(projectId, file.rootId) ? file.fileId : undefined;
+export function outsideFileId(projectId: string, file: { rootId: string; fileId?: string | null }): string | undefined {
+  return isOutsideRoot(projectId, file.rootId) ? file.fileId ?? undefined : undefined;
 }
 
 export function outsideHostPath(path: string): string {
