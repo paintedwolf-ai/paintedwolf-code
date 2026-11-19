@@ -41,7 +41,7 @@ function baseName(path: string): string {
 }
 
 // An exact-file root displays the containing folder.
-export function locationLedgerPath(location: SourceChatLocation, path: string): string {
+function locationLedgerPath(location: SourceChatLocation, path: string): string {
   if (location.kind === "file") return path === "." ? parentPath(location.anchor) : location.anchor;
   return path === "." ? location.anchor : `${location.anchor}/${path}`;
 }
@@ -71,9 +71,4 @@ export function treeAddress(projectId: string, outsideRootId: string | undefined
     if (row !== undefined) return { rootId: location.id, path: row };
   }
   return undefined;
-}
-
-export function resetChatLocationsForTests(): void {
-  setLocationsByProject(new Map());
-  setEpochs(new Map());
 }

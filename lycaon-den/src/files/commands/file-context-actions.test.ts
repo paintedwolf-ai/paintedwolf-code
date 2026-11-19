@@ -10,7 +10,7 @@ import { required } from "../../test/at.ts";
 import { stubClient } from "../../test/client-fixture.ts";
 import { copyTextToClipboard } from "../../utils/clipboard.ts";
 import { projectFilesState } from "../documents/files-buffer-state.ts";
-import { chatLocationsEpoch, resetChatLocationsForTests } from "../source/chat-locations.ts";
+import { chatLocationsEpoch } from "../source/chat-locations.ts";
 import { recordOutsideRoot, resetOutsideRootsForTests } from "../source/outside-namespace.ts";
 import { createFileContextActions, createFilePathIntents } from "./file-context-actions.ts";
 import { filesContextMenuItems } from "./project-files-context-menu.ts";
@@ -54,7 +54,6 @@ function actionsFor(client: () => LycaonClient | null) {
 afterEach(() => {
   setStatusChipNavigationSink(null);
   resetContributionStoreForTest();
-  resetChatLocationsForTests();
   resetOutsideRootsForTests();
   vi.clearAllMocks();
 });
@@ -81,15 +80,16 @@ it("opens approvals and refreshes the tree only after the host hides a location"
   select("files-ctx-copy-path");
   expect(copyTextToClipboard).toHaveBeenCalledExactlyOnceWith(location.path);
 
+  const epoch = chatLocationsEpoch(projectId());
   select("files-ctx-hide-location");
   expect(updateSourceChatLocation).toHaveBeenCalledExactlyOnceWith(projectId(), location.id, { hidden: true });
-  expect(chatLocationsEpoch(projectId())).toBe(0);
-  await vi.waitFor(() => expect(chatLocationsEpoch(projectId())).toBe(1));
+  expect(chatLocationsEpoch(projectId())).toBe(epoch);
+  await vi.waitFor(() => expect(chatLocationsEpoch(projectId())).toBe(epoch + 1));
   select("files-ctx-hide-location");
   await vi.waitFor(() => expect(reportSurfaceFailure).toHaveBeenCalledWith(
     expect.objectContaining({ code: "files_location_hide_failed" }), "Location unavailable", projectId(),
   ));
-  expect(chatLocationsEpoch(projectId())).toBe(1);
+  expect(chatLocationsEpoch(projectId())).toBe(epoch + 1);
 
   client = null;
   select("files-ctx-hide-location");

@@ -7,7 +7,7 @@ import type { FilesTreeEntrySelection, FilesTreeFolderScope, FilesTreeHandle } f
 import { treeViewFixture, TREE_ROOTS } from "../../test/source-tree-view-fixture.ts";
 
 import { resetAppStateSnapshotForTests } from "../../store/app-state-snapshot.ts";
-import { resetChatLocationsForTests } from "../source/chat-locations.ts";
+import { recordChatLocations } from "../source/chat-locations.ts";
 import { resetFilesTreeViewStateForTests } from "./files-tree-view-state.ts";
 
 import { createNoticeStore } from "../../notices/notice-store.ts";
@@ -20,7 +20,7 @@ export function installFilesTreeCleanup() {
   afterEach(() => {
     cleanup();
     resetAppStateSnapshotForTests();
-    resetChatLocationsForTests();
+    recordChatLocations("p1", []);
     resetEditorPrefsForTests();
     resetFilesTreeViewStateForTests();
     vi.useRealTimers();

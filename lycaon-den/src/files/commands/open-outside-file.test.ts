@@ -6,7 +6,6 @@ import { seedStockFrame } from "../../contributions/stock-frame-test.ts";
 import { stubClient } from "../../test/client-fixture.ts";
 import { projectFilesState } from "../documents/files-buffer-state.ts";
 import { resetProjectFilesForTests } from "../documents/project-files-buffer-lifecycle.ts";
-import { resetChatLocationsForTests } from "../source/chat-locations.ts";
 import { isOutsideRoot, resetOutsideRootsForTests } from "../source/outside-namespace.ts";
 import { openOutsideFile } from "./open-outside-file.ts";
 
@@ -26,7 +25,6 @@ afterEach(() => {
   resetContributionStoreForTest();
   resetProjectFilesForTests();
   resetOutsideRootsForTests();
-  resetChatLocationsForTests();
   vi.resetAllMocks();
 });
 
