@@ -190,7 +190,6 @@ export function FilesTree(props: FilesTreeProps) {
     viewVersion();
     const presentation = sourceView()?.presentation();
     const retained = previous?.workspace === workspace ? previous.presentation : undefined;
-    if (retained?.frames.length && !presentation?.frames.length && presentation?.state?.extent.rows !== 0) return previous!;
     if (!retained?.frames.length && presentation?.frames.length && presentation.state) {
       const height = untrack(virtualViewportHeight);
       const offset = Math.min(untrack(virtualScrollTop), Math.max(0, presentation.state.extent.rows * FILES_TREE_ROW_HEIGHT_PX - height));
