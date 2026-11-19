@@ -41,6 +41,18 @@ func TestTierRecommendationUsesDeviceAndReservedCapacity(t *testing.T) {
 	}
 }
 
+func TestTierMemoryKindUsesGenerationBackend(t *testing.T) {
+	for _, tc := range []struct{ backend, kind string }{{"mlx", "system"}, {"vulkan", "gpu"}, {"", ""}} {
+		rt := NewRuntime(RuntimeConfig{Backend: tc.backend})
+		var status api.LocalGenerationStatus
+		rt.SelectionStatus(&status)
+		testutil.FailErr(t, "close runtime", rt.Close())
+		if status.MemoryKind != tc.kind {
+			t.Fatalf("%s memory kind = %q, want %q", tc.backend, status.MemoryKind, tc.kind)
+		}
+	}
+}
+
 func TestTransferAdmissionAndCancellation(t *testing.T) {
 	_, rt := fixtureProvider(t)
 	var status api.LocalGenerationStatus

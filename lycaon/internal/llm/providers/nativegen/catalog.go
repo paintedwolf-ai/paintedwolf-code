@@ -9,7 +9,7 @@ import (
 )
 
 const (
-	// DefaultModelID identifies Plain Bialy in signed artifacts and settings.
+	// DefaultModelID identifies the Small tier in signed artifacts and settings.
 	DefaultModelID = "gemma4-e4b-paintedwolf"
 	// DefaultContextWindowTokens caps the artifact context window.
 	DefaultContextWindowTokens = 65536

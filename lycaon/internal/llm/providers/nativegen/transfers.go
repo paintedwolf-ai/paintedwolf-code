@@ -26,7 +26,16 @@ type transfer struct {
 
 func (p *Runtime) SelectionStatus(status *api.LocalGenerationStatus) {
 	status.AvailableModels = p.ModelTiers()
-	if p == nil || p.config.ModelStore == nil {
+	if p == nil {
+		return
+	}
+	switch p.config.Backend {
+	case "mlx":
+		status.MemoryKind = "system"
+	case "vulkan":
+		status.MemoryKind = "gpu"
+	}
+	if p.config.ModelStore == nil {
 		return
 	}
 	selection, err := p.config.ModelStore.Selection()

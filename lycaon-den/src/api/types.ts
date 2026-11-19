@@ -15679,6 +15679,11 @@ export interface components {
             revision?: string;
             /** @description Admitted context capacity of the ready process. */
             context_tokens?: number;
+            /**
+             * @description Memory named in local model requirements on this generation host.
+             * @enum {string}
+             */
+            memory_kind?: "system" | "gpu";
             selected_model?: string;
             target_model?: string;
             /**

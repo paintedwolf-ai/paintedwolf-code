@@ -4311,7 +4311,9 @@ type LocalGenerationStatus struct {
 	// Authenticated revision held by the admitted model process.
 	Revision string `json:"revision,omitempty"`
 	// Admitted context capacity of the ready process.
-	ContextTokens int    `json:"context_tokens,omitempty"`
+	ContextTokens int `json:"context_tokens,omitempty"`
+	// Memory named in local model requirements on this generation host.
+	MemoryKind    string `json:"memory_kind,omitempty"`
 	SelectedModel string `json:"selected_model,omitempty"`
 	TargetModel   string `json:"target_model,omitempty"`
 	// Current phase of an active model installation.
