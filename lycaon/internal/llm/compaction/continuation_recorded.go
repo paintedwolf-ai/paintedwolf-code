@@ -2,8 +2,8 @@ package compaction
 
 import (
 	"strings"
-	"unicode/utf8"
 
+	"github.com/lycaon/lycaon/internal/runeclamp"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -47,9 +47,5 @@ func continuationExcerpt(text string) string {
 	if len(text) <= continuationExcerptBytes {
 		return text
 	}
-	end := continuationExcerptBytes - len("…")
-	for !utf8.RuneStart(text[end]) {
-		end--
-	}
-	return text[:end] + "…"
+	return runeclamp.ClampBytes(text, continuationExcerptBytes-len(runeclamp.Marker))
 }
