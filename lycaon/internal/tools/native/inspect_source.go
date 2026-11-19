@@ -3,7 +3,6 @@ package native
 import (
 	"context"
 	"encoding/hex"
-	"encoding/json"
 	"errors"
 	"os"
 	"path/filepath"
@@ -15,6 +14,7 @@ import (
 	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/tools/projectpaths"
+	"github.com/lycaon/lycaon/internal/tools/surveyjson"
 )
 
 type InspectSourceTool struct {
@@ -38,7 +38,7 @@ func (t *InspectSourceTool) Run(ctx context.Context, args map[string]any, tc too
 	if err != nil {
 		return "", err
 	}
-	body, err := json.Marshal(observed)
+	body, err := surveyjson.Marshal(observed)
 	return string(body), err
 }
 
@@ -95,7 +95,7 @@ func (t *InspectSourceTool) inspectGitDir(ctx context.Context, tc tools.ToolCont
 	if _, err := projectpaths.ResolveRead(ctx, t.Boundary, tc, root); err != nil {
 		return "", err
 	}
-	dot := filepath.Join(root, ".git")
+	dot := gitrepo.WorktreeEntry(root)
 	pointer, err := t.readGitMetadata(ctx, tc, dot, 4096)
 	if errors.Is(err, projectpaths.ErrIsDirectory) {
 		return dot, nil
@@ -162,16 +162,11 @@ func (t *InspectSourceTool) readGitRef(ctx context.Context, tc tools.ToolContext
 	if err != nil {
 		return "", err
 	}
-	for line := range strings.SplitSeq(packed, "\n") {
-		oid, name, found := strings.Cut(strings.TrimSpace(line), " ")
-		if found && name == ref {
-			if validGitHeadCommit(oid) {
-				return oid, nil
-			}
-			return "", invalidGitHead(path)
-		}
+	oid, found := gitrepo.PackedRef(packed, ref)
+	if found && !validGitHeadCommit(oid) {
+		return "", invalidGitHead(path)
 	}
-	return "", nil
+	return oid, nil
 }
 
 func validGitHeadCommit(oid string) bool {

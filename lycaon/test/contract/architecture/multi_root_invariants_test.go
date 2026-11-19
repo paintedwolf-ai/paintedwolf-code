@@ -85,7 +85,7 @@ func TestMultiRootPathDiscoveryToolsRejectUnknownLabel(t *testing.T) {
 			continue
 		}
 		schema := contractArgsSchemaFor(reg, schemas, name)
-		args, planted := multiRootPlantArgsFromSchema(schema, probe, true)
+		args, planted := multiRootPlantArgsFromSchema(name, schema, probe, true)
 		if !planted {
 			t.Errorf("path/discovery tool %q has no path-shaped schema property — add multiRootProbeExempt with a reason or extend multiRootPathArgProps", name)
 			continue
@@ -148,7 +148,7 @@ func TestMultiRootZeroRootsStructuredReject(t *testing.T) {
 			continue
 		}
 		schema := contractArgsSchemaFor(reg, schemas, name)
-		args, planted := multiRootPlantArgsFromSchema(schema, ".", false)
+		args, planted := multiRootPlantArgsFromSchema(name, schema, ".", false)
 		if !planted {
 			t.Errorf("path/discovery tool %q has no path-shaped schema property", name)
 			continue
@@ -190,6 +190,23 @@ func TestMultiRootZeroRootsStructuredReject(t *testing.T) {
 			t.Fatalf("err = %v code = %q want PROJECT_HAS_NO_ROOTS", err, code)
 		}
 	})
+}
+
+func TestMultiRootInspectSourceReportsSelectedRepository(t *testing.T) {
+	reg := toolfixture.ContractServeBootRegistry(t)
+	fix := newMultiRootFixture(t)
+	dir := filepath.Join(fix.secondaryDir, ".git")
+	oid := strings.Repeat("a", 40)
+	contractcheck.FailErr(t, "create metadata directory", os.Mkdir(dir, 0o700))
+	contractcheck.FailErr(t, "seed detached HEAD", os.WriteFile(filepath.Join(dir, "HEAD"), []byte(oid+"\n"), 0o600))
+
+	out, err := reg.Run(t.Context(), "inspect_source", map[string]any{
+		"operation": "git_head", "path": "@lycaon-den/secondary-sentinel.txt",
+	}, fix.tctx("s1"))
+	contractcheck.FailErr(t, "inspect secondary Git HEAD", err)
+	if !strings.Contains(out, oid) {
+		t.Fatalf("secondary Git HEAD = %s", out)
+	}
 }
 
 func TestMultiRootPathToolResolvesLabeledRoot(t *testing.T) {

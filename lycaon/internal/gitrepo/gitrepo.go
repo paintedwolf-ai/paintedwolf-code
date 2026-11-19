@@ -30,8 +30,13 @@ type Repo struct {
 //
 // Lstat, so a .git symlink counts by name; a dangling one still marks a boundary.
 func IsRoot(dir string) bool {
-	_, err := os.Lstat(filepath.Join(dir, dotGit))
+	_, err := os.Lstat(WorktreeEntry(dir))
 	return err == nil
+}
+
+// WorktreeEntry names the .git directory or pointer for a worktree.
+func WorktreeEntry(dir string) string {
+	return filepath.Join(dir, dotGit)
 }
 
 // Discover returns the repository containing dir, walking up to the filesystem root.
@@ -94,7 +99,7 @@ func CanonicalDir(dir string) string {
 // repoAt fills in the layout for a directory already known to hold a .git entry.
 func repoAt(root string) Repo {
 	repo := Repo{Root: root}
-	dot := filepath.Join(root, dotGit)
+	dot := WorktreeEntry(root)
 	info, err := os.Stat(dot)
 	if err != nil {
 		// Present to Lstat, unreadable to Stat: a dangling symlink, or an untraversable
@@ -189,7 +194,7 @@ func scopePathIncludesLinkedCheckout(root, raw string) bool {
 		return false
 	}
 	for cur := target; ; {
-		gitPath := filepath.Join(cur, dotGit)
+		gitPath := WorktreeEntry(cur)
 		if IsGitlinkFile(gitPath) {
 			return true
 		}
