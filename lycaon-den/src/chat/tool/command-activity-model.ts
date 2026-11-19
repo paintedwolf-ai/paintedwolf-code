@@ -42,9 +42,14 @@ export function commandActivityHeadline(entries: readonly ActivitySpanEntry[], f
  return headline;
 }
 
-/** Activity groups in first-appearance order. */
-export function commandActivityGroups(entries: readonly ActivitySpanEntry[]): string[] {
-  return [...new Set(activityFacts(entries).map(fact => fact.group))];
+const MAX_SEQUENCE_LABELS = 3;
+
+export function commandActivitySequence(entries: readonly ActivitySpanEntry[]): string {
+  const groups = [...new Set(activityFacts(entries).map(fact => fact.group).filter(Boolean))];
+  if (groups.length < 2) return "";
+  const sequence = groups.slice(0, MAX_SEQUENCE_LABELS).join(" → ");
+  const remaining = groups.length - MAX_SEQUENCE_LABELS;
+  return remaining > 0 ? `${sequence} · +${remaining}` : sequence;
 }
 
 type LiveProgram = (part: ToolPartView) => CommandProgramReceipt | undefined;

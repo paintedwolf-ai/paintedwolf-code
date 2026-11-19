@@ -110,7 +110,7 @@ Activity-span principles:
 - retain stable constituent ids and expansion state;
 - show zero-net-change rather than erase the activity;
 - keep worker branches separate because their paths resolve in different workspaces;
-- keep active status, the current context hint, and failures visible while details remain collapsed.
+- show the group headline, status, and applicable action and failure counts in the header. Command groups reserve a second line so the header keeps its height when another activity type appears. Groups with multiple distinct activity labels show the first three in order, joined by arrows, followed by the number of additional labels.
 
 A large set of file folds may receive a manifest group. That is presentation over the same rows, not a new source of change history.
 
@@ -170,8 +170,7 @@ is shown on its own.
 Activities sit in the span as single-line rows that open into details; grouping
 adds no further disclosure level. Rows show only the action and outcome, with
 any output-read or step count after the outcome, so neither is clipped by a
-target at chat widths. The target stays in the row's accessible name, in a
-single-entry span's hint, and in Find.
+target at chat widths. The target stays in the row's accessible name and in Find.
 
 When one command runs several statements, each activity shows the text at its
 own spans on the submitted source. Spans on an `eval` string or a sourced script

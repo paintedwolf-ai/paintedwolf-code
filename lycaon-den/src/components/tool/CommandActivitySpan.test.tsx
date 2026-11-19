@@ -39,11 +39,17 @@ it("advances the span label only on a strict rank increase (AT-ACT-HEAD-01)", ()
   const [entries, setEntries] = createSignal([entry("read", "Reading files", "completed", "inspect")]);
   const view = render(() => <CommandActivitySpan label="Running commands" entries={entries()} layout="chat" entryKey="command-groups-rank" renderToolEntry={part => <ToolPartShell part={part()} layout="chat"><span>Recorded detail</span></ToolPartShell>} />);
   const label = () => view.container.querySelector(".den-activity-span-name")?.textContent;
+  const sequence = () => view.container.querySelector(".den-activity-span-hint")?.textContent;
+  expect(sequence()).toBe("");
   expect(label()).toBe("Reading files");
   setEntries([entry("read", "Reading files", "completed", "inspect"), entry("search", "Searching codebase", "completed", "inspect")]);
+  expect(sequence()).toBe("Reading files → Searching codebase");
   expect(label()).toBe("Reading files");
   setEntries([entry("read", "Reading files", "completed", "inspect"), entry("search", "Searching codebase", "completed", "inspect"), entry("map", "Mapping codebase", "completed", "inspect")]);
   expect(label()).toBe("Mapping codebase");
+  expect(sequence()).toBe("Reading files → Searching codebase → Mapping codebase");
+  setEntries(previous => [...previous, entry("again", "Reading files"), entry("build", "Running programs"), entry("test", "Running tests")]);
+  expect(sequence()).toBe("Reading files → Searching codebase → Mapping codebase · +2");
 });
 
 it("takes its status from the settled receipt, not the program recorded while running", async () => {
