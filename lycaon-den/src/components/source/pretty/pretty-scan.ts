@@ -1,3 +1,4 @@
+import { PROTECTED_END } from "./pretty-block-facts.ts";
 import { closeBracketLine, stepBracket } from "./pretty-bracket.ts";
 import { closeChainLine, startChainLine, stepChain } from "./pretty-chain.ts";
 import { INITIAL_CLAUSE_STATE, stepClause } from "./pretty-clause.ts";
@@ -228,6 +229,13 @@ export class PrettyScanner implements ScanCursor {
     const end = this.spanEnd >= 0 ? this.spanEnd : s.lineEnd;
     if (s.visualFrom >= 0 && s.visualColumns > 0 && end > s.visualFrom) {
       this.sink.indent(s.visualFrom, end, s.visualColumns);
+    }
+    if (s.protectedRun) {
+      this.options.factEvent?.(end, PROTECTED_END);
+      s.protectedRun = false;
+    }
+    if (end < this.options.doc.length && (s.rule?.kind === "jsx" || s.rule?.kind === "markup" || (s.rule?.kind === "bracket" && s.rule.statements))) {
+      this.options.factEvent?.(end, 10);
     }
     s.visualFrom = -1;
     s.pending = -1;
