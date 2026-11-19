@@ -154,7 +154,7 @@ func renderProfile(c Confinement) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	fs, err := compileFilesystemPlan(rules)
+	fs, err := linuxFilesystem(c, rules)
 	if err != nil {
 		return "", err
 	}
@@ -737,4 +737,19 @@ func coveredByList(list []string, path string) bool {
 		}
 	}
 	return false
+}
+
+// PrivateTempFor describes the Linux mount view for a confined launch.
+func PrivateTempFor(scratch string) PrivateTemp {
+	return PrivateTemp{Paths: linuxsandbox.PrivateTempPaths(), ScratchRoot: scratch}
+}
+
+func linuxFilesystem(c Confinement, rules FilesystemRules) (linuxsandbox.Filesystem, error) {
+	fs, err := compileFilesystemPlan(rules)
+	if err != nil {
+		return fs, err
+	}
+	mapping := ProjectPrivateTemp(c.ProjectID, c.SessionScratchRoot, c.Roots, c.GrantedWriteRoots, c.ReadRoots)
+	fs.PrivateTemp = &linuxsandbox.PrivateTempMounts{Paths: mapping.Paths, Scratch: mapping.ScratchRoot, Retained: mapping.Retained}
+	return fs, nil
 }

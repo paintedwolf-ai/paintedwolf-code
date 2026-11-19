@@ -16,7 +16,7 @@ import (
 )
 
 // PlanVersion is the plan shape this helper reads.
-const PlanVersion = 2
+const PlanVersion = 3
 
 // Plan is the typed boundary the helper applies. The host renders it from the
 // same policy inputs as the macOS profile; the helper never widens it.
@@ -65,6 +65,7 @@ const (
 // Filesystem is the mount and Landlock expression of the filesystem rules.
 // Landlock grants are positive; mounts express the denials inside them.
 type Filesystem struct {
+	PrivateTemp *PrivateTempMounts `json:"private_temp,omitempty"`
 	// WriteRoots are directories the process may read and change.
 	WriteRoots []string `json:"write_roots"`
 	// WriteFiles are exact files the process may read and change.
@@ -210,6 +211,9 @@ func DecodePlan(raw []byte) (Plan, error) {
 func (p Plan) Validate() error {
 	if p.Version != PlanVersion {
 		return &Unsupported{Code: UnsupportedPlanVersion, Detail: fmt.Sprintf("version %d, helper reads %d", p.Version, PlanVersion)}
+	}
+	if err := p.Filesystem.PrivateTemp.validate(); err != nil {
+		return err
 	}
 	n := p.Network
 	switch n.Mode {

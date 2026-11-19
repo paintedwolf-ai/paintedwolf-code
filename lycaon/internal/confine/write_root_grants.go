@@ -3,6 +3,7 @@ package confine
 import (
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync/atomic"
 
@@ -180,4 +181,56 @@ func writeRootStructuralRefusal(root string) (cleaned, code string) {
 		return "", WriteRootCodeNotAbsolute
 	}
 	return p, ""
+}
+
+// PrivateTemp identifies the sandbox directories that present session scratch.
+// An empty ScratchRoot gives each launch its own filesystem.
+type PrivateTemp struct {
+	Paths       []string
+	ScratchRoot string
+	Retained    []string
+}
+
+// Resolve maps a sandbox operand to its backing path for host file operations.
+func (t PrivateTemp) Resolve(path string) (string, bool) {
+	if t.ScratchRoot == "" || !filepath.IsAbs(path) {
+		return "", false
+	}
+	for _, alias := range t.Paths {
+		suffix, inside := strings.CutPrefix(path, alias+string(filepath.Separator))
+		if path == alias {
+			return t.ScratchRoot, true
+		}
+		if !inside {
+			continue
+		}
+		for _, root := range t.Retained {
+			if strings.HasPrefix(root, alias+string(filepath.Separator)) && PathAtOrUnder(path, root) {
+				return "", false
+			}
+		}
+		// The file binder resolves links before a following parent component.
+		return t.ScratchRoot + string(filepath.Separator) + suffix, true
+	}
+	return "", false
+}
+
+// ProjectPrivateTemp keeps attached, scratch, read-only and reviewed paths
+// visible when their host paths are below a sandbox temp directory.
+func ProjectPrivateTemp(projectID, scratch string, roots, granted, readRoots []string) PrivateTemp {
+	temp := PrivateTempFor(fspath.CanonicalPath(scratch))
+	if len(temp.Paths) == 0 {
+		return temp
+	}
+	for _, list := range [][]string{roots, granted, grantedWriteRoots(projectID), readRoots, {temp.ScratchRoot}} {
+		for _, path := range list {
+			p := fspath.CanonicalPath(path)
+			if slices.ContainsFunc(temp.Paths, func(alias string) bool { return PathStrictlyUnder(p, alias) }) {
+				temp.Retained = append(temp.Retained, p)
+			}
+		}
+	}
+	slices.Sort(temp.Retained)
+	temp.Retained = slices.Compact(temp.Retained)
+	return temp
 }

@@ -143,6 +143,9 @@ func applyFilesystem(fs Filesystem) error {
 			}
 		}
 	}
+	if err := mountPrivateTemp(fs.PrivateTemp); err != nil {
+		return mountFailure("mount private temp", err)
+	}
 	return restoreWorkingDirectory(cwd)
 }
 

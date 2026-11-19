@@ -9,3 +9,6 @@ import "github.com/lycaon/lycaon/internal/confine/linuxsandbox"
 func LinuxCapabilities() (linuxsandbox.Capabilities, bool) {
 	return linuxsandbox.Capabilities{}, false
 }
+
+// PrivateTempFor is empty on platforms without private temp mounts.
+func PrivateTempFor(string) PrivateTemp { return PrivateTemp{} }

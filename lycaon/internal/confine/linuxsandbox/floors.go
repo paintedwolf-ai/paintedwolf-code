@@ -18,6 +18,7 @@ type NamedFloor struct {
 // not exist yet is held here by name. Names and paths fold case, as the
 // loaders do, so a case-insensitive directory cannot alias one.
 type creationFloors struct {
+	temp *PrivateTempMounts
 	// protected are write- and read-floor locations, existing or not.
 	protected []string
 	// names are basenames protected at any depth below a directory.
@@ -30,7 +31,7 @@ type creationFloors struct {
 }
 
 func newCreationFloors(fs Filesystem) creationFloors {
-	f := creationFloors{names: fs.ReadOnlyNames, sensitive: map[string]bool{}}
+	f := creationFloors{temp: fs.PrivateTemp, names: fs.ReadOnlyNames, sensitive: map[string]bool{}}
 	f.protected = append(append(f.protected, fs.ReadOnly...), fs.Hidden...)
 	f.grants = append(append(append(f.grants, fs.Restored...), fs.WriteFiles...), fs.WriteRoots...)
 	for _, p := range f.protected {
@@ -75,7 +76,7 @@ const (
 
 // refuses reports whether the floors hold path against the creation.
 func (f creationFloors) refuses(kind creation, path string) bool {
-	path = filepath.Clean(strings.TrimSuffix(path, " (deleted)"))
+	path = f.temp.policyPath(filepath.Clean(strings.TrimSuffix(path, " (deleted)")))
 	for _, p := range f.protected {
 		if !atOrUnderFold(path, p) {
 			continue
@@ -106,6 +107,7 @@ func (f creationFloors) refuses(kind creation, path string) bool {
 // crossesNamedFloor reports whether moving oldPath to newPath crosses the
 // boundary of any NamedFloor.
 func (f creationFloors) crossesNamedFloor(oldPath, newPath string) bool {
+	oldPath, newPath = f.temp.policyPath(oldPath), f.temp.policyPath(newPath)
 	for _, n := range f.names {
 		if atOrUnderFold(oldPath, n.Below) != atOrUnderFold(newPath, n.Below) {
 			return true

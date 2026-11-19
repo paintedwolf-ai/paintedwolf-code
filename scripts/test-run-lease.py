@@ -9,7 +9,7 @@ import os
 from pathlib import Path
 import sys
 
-from verification_lifecycle.run_lease import prune, remove
+from verification_lifecycle.run_lease import fixture_root, prune, remove
 
 if __name__ == "__main__":
     if sys.argv[1] == "lock":
@@ -20,6 +20,8 @@ if __name__ == "__main__":
             fcntl.flock(int(sys.argv[2]), fcntl.LOCK_EX | fcntl.LOCK_NB)
         except BlockingIOError:
             raise SystemExit(1)
+    elif sys.argv[1] == "fixture-root" and sys.argv[2] in {"test-runs", "source-snapshots"}:
+        print(fixture_root(sys.argv[2]))
     elif sys.argv[1] == "path-key":
         print(hashlib.sha256(os.path.realpath(sys.argv[2]).encode()).hexdigest()[:12])
     elif sys.argv[1] == "prune":
@@ -27,4 +29,4 @@ if __name__ == "__main__":
     elif sys.argv[1] == "remove":
         remove(Path(sys.argv[2]), Path(sys.argv[3]))
     else:
-        raise SystemExit("expected lock, try-lock, path-key, prune, or remove")
+        raise SystemExit("expected lock, try-lock, fixture-root, path-key, prune, or remove")
