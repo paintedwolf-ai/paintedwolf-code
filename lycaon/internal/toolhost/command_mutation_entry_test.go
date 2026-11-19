@@ -70,6 +70,28 @@ func composedMutationEntry(t *testing.T) (*programtest.Fixture, *projectsource.S
 	return fixture, service, p, ledger
 }
 
+// settledProgramResult follows a program that outlived its inline wait to its
+// end, as an agent reading its handle would, and returns its final result.
+func settledProgramResult(t *testing.T, fixture *programtest.Fixture, raw string) string {
+	t.Helper()
+	var running command.RunningProgramResult
+	if json.Unmarshal([]byte(raw), &running) != nil || running.State != "running" || running.Handle == "" {
+		return raw
+	}
+	_, _, err := fixture.Background.Lifecycle.Wait(t.Context(), fixture.Session, running.Handle)
+	testutil.FailErr(t, "join the running program", err)
+	output, err := fixture.Background.Output.ReadCommandOutput(t.Context(), fixture.Session, running.Handle, 0)
+	testutil.FailErr(t, "read the program's final result", err)
+	var stderr strings.Builder
+	for _, chunk := range output.Output.Chunks {
+		if chunk.Stream == "stderr" {
+			stderr.WriteString(chunk.Text)
+		}
+	}
+	lines := strings.Split(strings.TrimSpace(stderr.String()), "\n")
+	return lines[len(lines)-1]
+}
+
 func runMutationEntryTree(t *testing.T, total int) {
 	t.Helper()
 	fixture, service, p, _ := composedMutationEntry(t)
@@ -82,6 +104,7 @@ func runMutationEntryTree(t *testing.T, total int) {
 	call := func(source string) {
 		raw, err := fixture.Call(t, t.Context(), source)
 		testutil.FailErr(t, "run production command entry", err)
+		raw = settledProgramResult(t, fixture, raw)
 		var outcome command.ProgramOutcome
 		testutil.FailErr(t, "decode program outcome", json.Unmarshal([]byte(raw), &outcome))
 		if outcome.State != "completed" || outcome.Status != 0 {
