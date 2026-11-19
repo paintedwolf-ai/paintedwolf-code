@@ -72,7 +72,7 @@ function settleScroll(
   read: (view: EditorView) => SettleOffset | null,
   fallback: (view: EditorView) => StateEffect<unknown>,
   onRelease?: () => void,
-): void {
+): () => void {
   const token = {};
   activeSettles.set(view, token);
   settleStarts.set(view, settleGeneration(view) + 1);
@@ -112,7 +112,7 @@ function settleScroll(
             stable = 0;
             // A measure's write phase may not dispatch.
             queueMicrotask(() => {
-              if (v.dom.isConnected) v.dispatch({ effects: fallback(v) });
+              if (activeSettles.get(v) === token && v.dom.isConnected) v.dispatch({ effects: fallback(v) });
             });
           } else {
             const before = { top: v.scrollDOM.scrollTop, left: v.scrollDOM.scrollLeft };
@@ -138,6 +138,7 @@ function settleScroll(
     });
   };
   requestAnimationFrame(check);
+  return release;
 }
 
 /**
@@ -207,10 +208,10 @@ export function captureScrollAnchor(view: EditorView): ScrollAnchor | null {
  * editor estimates the width of text it has not drawn and a scroll request
  * can land far from the position.
  */
-export function restoreScrollAnchor(view: EditorView, anchor: ScrollAnchor): void {
+export function restoreScrollAnchor(view: EditorView, anchor: ScrollAnchor): () => void {
   const pos = (v: EditorView) => Math.min(anchor.pos, v.state.doc.length);
   heldAnchors.set(view, anchor);
-  settleScroll(
+  return settleScroll(
     view,
     (v) => {
       const rect = positionRect(v, pos(v));

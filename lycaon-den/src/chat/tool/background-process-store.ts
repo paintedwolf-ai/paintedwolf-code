@@ -163,6 +163,10 @@ export function prepareBackgroundProcessOutput(client: BackgroundProcessSnapshot
   preparing.set(id, request);
   return request;
 }
+/** Missing text may still be loading or have been evicted independently of status. */
+export function getBackgroundProcessText(sessionId: string, processId: string): string | undefined {
+  return textCache.get(key(sessionId, processId));
+}
 export function getBackgroundProcessSnapshot(sessionId: string, processId: string): BackgroundProcessSnapshot | undefined {
   const id = key(sessionId, processId); const status = snapshots.get(id);
   return status ? { ...status, text: textCache.get(id) ?? "" } : undefined;

@@ -13,6 +13,7 @@ import "../../src/tailwind.css";
 import "../../src/global.css";
 import "../../src/markdown.css";
 import "../../src/platform/themed-scrollbars.css";
+import { EditorView } from "@codemirror/view";
 import { render } from "solid-js/web";
 import { createSignal, onCleanup, Show } from "solid-js";
 import type { ChatContentRow, Message } from "../../src/api/types.ts";
@@ -90,4 +91,78 @@ function Fixture() {
   </main>
  </TranscriptDisclosureProvider>;
 }
-render(()=><Fixture />,document.getElementById("fixture")!);
+type ReaderPosition = { row: number; column: number };
+
+function PrettyReaderFixture(props: { receipts: boolean }) {
+  const lines = Array.from({ length: 192 }, (_, row) => JSON.stringify({
+    row, ...Object.fromEntries(Array.from({ length: 24 }, (_, field) => [`field${field}`, `🌲 item ${row}/${field}`])),
+  }));
+  const rows = lines.map((line, index): ChatContentRow => ({ text: line + "\n", index, offset: 0, spans: [] }));
+  const runes = Array.from(rows.map(row => row.text).join(""));
+  let nextOffset = 0;
+  for (const row of rows) { row.offset = nextOffset; nextOffset += Array.from(row.text).length; }
+  const reference = { field: "tool_output" as const, sha256: "fixture", rows: rows.length,
+    total_runes: runes.length, size_bytes: new TextEncoder().encode(runes.join("")).length, preview_rows: rows.slice(0, 8) };
+  const scopes = Array.from({ length: 65 }, (_, i) => ({ programId: `p${i}` }));
+  const source: ChatContentDocument = {
+    kind: "tool", sessionId: "s", messageId: "m", toolCallId: "c", pane: "output", title: "Snapshot", language: "jsonl",
+    content: props.receipts ? { kind: "command_receipts", scopes } : { kind: "retained", reference },
+  };
+  const getChatContent: LycaonClient["getChatContent"] = async (_session, _message, ref, position) => {
+    if ("offset" in position) {
+      const end = Math.min(runes.length, position.offset + position.limit);
+      return { reference: ref, offset: position.offset, end_offset: end, complete: end === runes.length,
+        spans: [], text: runes.slice(position.offset, end).join("") };
+    }
+    const start = "row" in position ? position.row : rows.findLastIndex(row => row.offset <= position.locate);
+    const loaded = rows.slice(start, start + 16);
+    return { reference: ref, offset: rows[start]!.offset, end_offset: rows[start + loaded.length]?.offset ?? runes.length,
+      complete: start + loaded.length === rows.length, spans: [], text: "", rows: loaded };
+  };
+  const getCommandReceiptDocument: LycaonClient["getCommandReceiptDocument"] = async (_session, scopes, window) => {
+    const base = scopes[0] === "p0" ? 0 : 96;
+    const end = Math.min(96, window.offset + window.limit);
+    return { revision: `fixture-${base}`, offset: window.offset, end_offset: end, total_rows: 96, complete: end === 96, settled: true,
+      rows: lines.slice(base + window.offset, base + end).map((text, i) => ({ text, index: window.offset + i })) };
+  };
+  const client = { getChatContent, getCommandReceiptDocument } as LycaonClient;
+  const editor = () => EditorView.findFromDOM(document.querySelector(".cm-content")!)!;
+  const position = (target: ReaderPosition) => {
+    const view = editor();
+    const from = view.state.doc.toString().indexOf(lines[target.row]!);
+    return from < 0 ? undefined : from + target.column;
+  };
+  const fixture = {
+    positionAtTop() {
+      const view = editor(), port = view.scrollDOM.getBoundingClientRect();
+      const x = Math.max(port.left, view.contentDOM.getBoundingClientRect().left) + 1;
+      const pos = view.posAtCoords({ x, y: port.top + 1 }, false);
+      const line = view.state.doc.lineAt(pos);
+      const row = lines.indexOf(line.text);
+      return { row, column: pos - line.from };
+    },
+    distance(target: ReaderPosition) {
+      const view = editor(), pos = position(target);
+      const rect = pos === undefined ? null : view.coordsAtPos(pos);
+      return rect ? (rect.top - view.scrollDOM.getBoundingClientRect().top) / view.defaultLineHeight : null;
+    },
+    readAwayFromCaret(target: ReaderPosition) {
+      const view = editor(), pos = position(target);
+      if (pos === undefined) return false;
+      view.contentDOM.blur();
+      view.dispatch({ selection: { anchor: 0 }, effects: EditorView.scrollIntoView(pos, { y: "start", yMargin: 0 }) });
+      return true;
+    },
+    caretVisible() {
+      const view = editor(), rect = view.coordsAtPos(view.state.selection.main.head), port = view.scrollDOM.getBoundingClientRect();
+      return !!rect && rect.bottom > port.top && rect.top < port.bottom;
+    },
+  };
+  Object.assign(window, { prettyReader: fixture });
+  return <main style={{ width: "540px", height: "360px", display: "flex", "flex-direction": "column", margin: "40px" }}>
+    <EditorCommandBar /><ChatContentPage projectId="fixture" document={source} client={client} />
+  </main>;
+}
+
+const prettySource = new URLSearchParams(location.search).get("pretty");
+render(() => prettySource ? <PrettyReaderFixture receipts={prettySource === "receipts"} /> : <Fixture />, document.getElementById("fixture")!);
