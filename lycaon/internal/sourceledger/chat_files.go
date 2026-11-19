@@ -96,27 +96,6 @@ func (s *Store) referenceChatFile(ctx context.Context, q *db.Queries, projectID,
 	return placeChatLocation(ctx, q, chat, rel, relation, ts)
 }
 
-// OutsideFileHeld checks chat references to the current file at rel.
-func (s *Store) OutsideFileHeld(ctx context.Context, projectID, rel string) (bool, error) {
-	outside, err := s.outsideRootID(ctx, s.queries, projectID)
-	if err != nil || outside == "" {
-		return false, err
-	}
-	head, err := s.queries.GetSourceBranchHeadByPath(ctx, db.GetSourceBranchHeadByPathParams{ProjectID: projectID, BranchID: "", RootID: outside, Path: rel})
-	fileID := head.FileID
-	if errors.Is(err, sql.ErrNoRows) {
-		deleted, deleteErr := s.History.ResolveDeletedPath(ctx, projectID, sourcebranch.Trunk, outside, rel)
-		if errors.Is(deleteErr, ErrHistoryNotFound) {
-			return false, nil
-		}
-		fileID, err = deleted.FileID, deleteErr
-	}
-	if err != nil {
-		return false, err
-	}
-	return s.outsideFileReferenced(ctx, projectID, fileID)
-}
-
 // HeldFileAddress follows an outside file through address changes.
 func (s *Store) HeldFileAddress(ctx context.Context, projectID, fileID string) (rootID, path string, err error) {
 	head, err := s.queries.GetSourceBranchHeadByFile(ctx, db.GetSourceBranchHeadByFileParams{ProjectID: projectID, FileID: fileID})
