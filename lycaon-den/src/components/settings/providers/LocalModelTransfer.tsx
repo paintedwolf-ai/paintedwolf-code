@@ -34,8 +34,12 @@ export function LocalModelTransfer(props: Props) {
         <strong role="status">{phaseLabels[phase()]} {name()}…</strong>
         <Show when={measured()}><span class="tabular-nums">{percent()}%</span></Show>
       </div>
-      <progress class="local-model-progress" aria-label={`${phaseLabels[phase()]} ${name()}`}
-        value={measured() ? Math.min(received(), total()) : undefined} max={measured() ? total() : undefined} />
+      <Show when={measured()} fallback={
+        <progress class="local-model-progress" aria-label={`${phaseLabels[phase()]} ${name()}`} />
+      }>
+        <progress class="local-model-progress" aria-label={`${phaseLabels[phase()]} ${name()}`}
+          value={Math.min(received(), total())} max={total()} />
+      </Show>
       <div class="flex flex-wrap items-center justify-between gap-2">
         <span class="den-settings-hint tabular-nums">
           {movingBytes() ? byteLabel() : phase() === "activating" ? "Starting the local runtime." : "Checking the model bundle."}

@@ -166,7 +166,7 @@ export function LocalModelSelector(props: Props) {
     <div class="onboarding-gate__card--stack">
       <ShowLatest when={transfer()} fallback={
         <>
-          <LocalModelChoices tiers={tiers()} selected={selected()} installed={status()?.selected_model} busy={working()} onChoose={choose} />
+          <LocalModelChoices tiers={tiers()} selected={selected()} installed={status()?.selected_model} memoryKind={status()?.memory_kind} busy={working()} onChoose={choose} />
           <Show when={status()?.selected_model && !installed()}>
             <p class="den-settings-hint">{selected() ? "Switching replaces your installed local model." : "Continuing removes your installed local model."}</p>
           </Show>

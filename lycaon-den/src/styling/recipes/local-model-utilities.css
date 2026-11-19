@@ -1,4 +1,6 @@
 @utility local-model-option {
+  --model-title-height: 1.5rem;
+  --model-radio-size: 1.2rem;
   display: grid;
   grid-template-columns: auto minmax(0, 1fr);
   align-items: start;
@@ -7,14 +9,24 @@
   border: 1px solid var(--den-border);
   border-radius: var(--den-radius-lg);
   line-height: 1.35;
+  cursor: pointer;
 
   & .den-radio {
-    margin-top: 1px;
+    width: var(--model-radio-size);
+    height: var(--model-radio-size);
+    margin-top: calc((var(--model-title-height) - var(--model-radio-size)) / 2);
+  }
+  &:has(.den-radio:disabled) {
+    cursor: not-allowed;
   }
   &:has(.den-radio:checked) {
     border-color: var(--den-accent-signal);
     background: color-mix(in srgb, var(--den-accent-signal) 5%, var(--den-background));
   }
+}
+
+@utility local-model-title {
+  line-height: var(--model-title-height);
 }
 
 @utility local-model-recommendation {

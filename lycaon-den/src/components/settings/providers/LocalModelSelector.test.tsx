@@ -42,6 +42,11 @@ describe("Local model selection", () => {
     expect(client.selectLocalModel).not.toHaveBeenCalled();
   });
 
+  it.each([["system", "system memory"], ["gpu", "GPU memory"]] as const)("uses the host's %s memory label", (memory_kind, label) => {
+    mount({...initial, memory_kind});
+    expect(screen.getByRole("radio", {name: /Medium/}).parentElement?.textContent).toContain(`Requires 8 GiB of ${label}`);
+  });
+
   it("preselects an eligible download when the recommended tier is unpublished", () => {
     const partial = {...initial, available_models: tiers.map(t => ({...t, download_available: !t.recommended}))};
     const {client} = mount(partial);
