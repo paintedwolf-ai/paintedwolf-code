@@ -1,4 +1,4 @@
-import { indentUnit } from "@codemirror/language";
+import { ensureSyntaxTree, indentUnit, syntaxTreeAvailable } from "@codemirror/language";
 import { EditorState, type Extension } from "@codemirror/state";
 import { describe, expect, it } from "vitest";
 import { languageExtensionForPath, prettyLayoutCatalog } from "../editor/codemirror-lang.ts";
@@ -8,7 +8,11 @@ import { PrettyBreakWidget, prettyLayoutDecorations } from "./pretty-view.ts";
 function open(doc: string, path: string): EditorState {
   const language = languageExtensionForPath(path);
   const extensions: Extension[] = [indentUnit.of("  "), EditorState.tabSize.of(4), createPrettyExtension({ enabled: true, path })];
-  return EditorState.create({ doc, extensions: language ? [language, ...extensions] : extensions });
+  const state = EditorState.create({ doc, extensions: language ? [language, ...extensions] : extensions });
+  if (!language || syntaxTreeAvailable(state)) return state;
+  // Publish the completed parse so Pretty can lay out the whole fixture.
+  expect(ensureSyntaxTree(state, doc.length, Infinity), path).not.toBeNull();
+  return state.update({}).state;
 }
 
 function breaks(state: EditorState): number[] {
@@ -103,8 +107,8 @@ describe("bracket layout for every language declared with it", () => {
     });
   }
 
-  it("keeps a Go header clause on its line", () => {
-    const line = `if err := load(${Array.from({ length: 60 }, (_, i) => `a${i}`).join(", ")}); err != nil { return err }`;
+  it("keeps a Go header clause on its line beyond the initial parse viewport", () => {
+    const line = `if err := load(${Array.from({ length: 800 }, (_, i) => `a${i}`).join(", ")}); err != nil { return err }`;
     const state = open(line, "main.go");
     const semicolon = line.indexOf(";");
     expect(breaks(state)).not.toContain(line.indexOf("err", semicolon));
