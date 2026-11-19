@@ -2,6 +2,7 @@ package packboard
 
 import (
 	"fmt"
+	"sort"
 	"strings"
 
 	"github.com/lycaon/lycaon/pkg/api"
@@ -50,4 +51,14 @@ func FormatReservedPathsLines(reservations []api.BoardReservationEntry) []string
 		return nil
 	}
 	return lines
+}
+
+// ReservationPulseSig hashes active reservations for inject dedup.
+func ReservationPulseSig(reservations []api.BoardReservationEntry) string {
+	parts := make([]string, 0, len(reservations))
+	for _, r := range reservations {
+		parts = append(parts, r.JobID+":"+r.Path)
+	}
+	sort.Strings(parts)
+	return strings.Join(parts, ",")
 }

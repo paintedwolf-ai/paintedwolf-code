@@ -10,6 +10,7 @@ import (
 	"github.com/lycaon/lycaon/internal/packboard"
 	"github.com/lycaon/lycaon/internal/project"
 	"github.com/lycaon/lycaon/internal/projectroot"
+	"github.com/lycaon/lycaon/internal/session/workercontext"
 	"github.com/lycaon/lycaon/internal/settingsoverlay"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -23,6 +24,7 @@ type handoffReservation struct {
 	dir    string
 	parent *wire.Session
 	childB *wire.Session
+	jobB   string
 }
 
 // reservedHandoff runs two implementer legs under one coordinator session and
@@ -37,7 +39,6 @@ func reservedHandoff(t *testing.T) handoffReservation {
 	testutil.FailErr(t, "create parent", err)
 
 	overlayA := filepath.Join(dir, settingsoverlay.DirName(), "overlays", "job-a")
-	overlayB := filepath.Join(dir, settingsoverlay.DirName(), "overlays", "job-b")
 	spawnAt := time.Now().UTC()
 
 	taskA := wire.WorkerTask{
@@ -49,7 +50,7 @@ func reservedHandoff(t *testing.T) handoffReservation {
 	taskB := wire.WorkerTask{
 		ID: "job-b", ParentSessionID: parent.ID, ProjectID: testdbseed.DefaultProjectID, WorkspacePath: dir,
 		AgentType: "implementer", Prompt: "Parser leg", Brief: "Parser leg", Status: wire.WorkerStatusRunning,
-		WorkspaceRoot: overlayB, Scope: &wire.TaskScope{Mode: wire.TaskScopeModeWrite, Paths: []string{"pkg/**"}},
+		Scope:     &wire.TaskScope{Mode: wire.TaskScopeModeWrite, Paths: []string{"pkg/**"}},
 		CreatedAt: spawnAt,
 	}
 	testutil.FailErr(t, "defaults", worker.ApplyEnqueueDefaults(&taskA, project.ProjectScope{ProjectID: testdbseed.DefaultProjectID, WorkspacePath: dir}, worker.DefaultWorkersConfig()))
@@ -78,7 +79,7 @@ func reservedHandoff(t *testing.T) handoffReservation {
 			WorkerJobID:      taskA.ID},
 	})
 	testutil.FailErr(t, "handoff_reserve", err)
-	return handoffReservation{h: h, dir: dir, parent: parent, childB: childB}
+	return handoffReservation{h: h, dir: dir, parent: parent, childB: childB, jobB: taskB.ID}
 }
 
 const reservedPath = "shellsim/builtins.py"
@@ -122,7 +123,11 @@ func TestBoardInjectReachesCoordinatorAndWorkerTurnsWiring(t *testing.T) {
 		t.Fatalf("coordinator board inject lacks the pack board or reservation: %q", block)
 	}
 
-	workerBlock, ok := engine.WorkerBoard(ctx, f.childB)
+	// The second leg gets a real private branch; its board resolves the
+	// branch roots for the job its request runs.
+	_, err := f.h.Workers.Queue.ClaimWorkerBranch(ctx, f.jobB)
+	testutil.FailErr(t, "claim worker branch", err)
+	workerBlock, ok := engine.WorkerBoard(workercontext.WithJob(ctx, f.jobB), f.childB)
 	if !ok {
 		t.Fatal("worker request received no board inject")
 	}

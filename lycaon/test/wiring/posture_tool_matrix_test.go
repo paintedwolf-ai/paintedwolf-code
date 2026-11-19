@@ -40,7 +40,9 @@ func TestFrozenPostureToolMatrix(t *testing.T) {
 		},
 	} {
 		t.Run(row.name, func(t *testing.T) {
-			sess, err := h.CreateHarnessSession(t, api.CreateSessionRequest{Posture: row.posture}, t.TempDir())
+			// Every row's folder joins the same project; the first becomes its
+			// primary root, so each must outlive its own subtest.
+			sess, err := h.CreateHarnessSession(t, api.CreateSessionRequest{Posture: row.posture}, h.ProjectDir(t, "posture-"+row.name))
 			testutil.FailErr(t, "create session", err)
 			if row.withRun {
 				_, err := h.Workflows.Manager.Starts.StartHuman(ctx, sess.ID, api.StartWorkflowRunRequest{WorkflowID: "plan", WorkflowVersion: "1.0.1"})
