@@ -119,7 +119,7 @@ class PartialCandidateDiagnosticsTests(unittest.TestCase):
         output = self.root / "cli"
         result = subprocess.run([sys.executable, "-m", "scripts.linux_release.candidate_diagnostics",
                                  "--source", str(self.source), "--output", str(output), "--controller", "d" * 40],
-                                cwd=SCRIPTS.parent, capture_output=True, text=True, timeout=60)
+                                cwd=SCRIPTS.parent, capture_output=True, text=True)
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(json.loads((output / "diagnostics.json").read_text())["controller_commit"], "d" * 40)
 

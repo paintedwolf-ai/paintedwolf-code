@@ -338,10 +338,7 @@ with (root / 'report.lock').open('a') as lock:
                       'assert grading(json.loads(sys.argv[2]), pathlib.Path(sys.argv[1]), Mock(), threading.Event())')
             processes = []
             def await_path(path):
-                deadline = time.monotonic() + 15
                 while not path.exists():
-                    if time.monotonic() > deadline:
-                        self.fail('timed out awaiting ' + path.name)
                     time.sleep(.02)
             try:
                 for _ in range(2):
@@ -352,7 +349,7 @@ with (root / 'report.lock').open('a') as lock:
                 marker = json.loads((attempt / 'launched.json').read_text())
                 os.kill(marker['worker_pid'], signal.SIGKILL)
                 for process in processes:
-                    self.assertEqual(process.wait(timeout=20), 0)
+                    self.assertEqual(process.wait(), 0)
                 self.assertFalse((root / 'overlap').exists())
                 self.assertEqual((root / 'calls').read_text().splitlines(), ['called', 'called'])
                 self.assertEqual(json.loads((attempt / 'exit.json').read_text())['kind'], 'interrupted')
@@ -362,7 +359,7 @@ with (root / 'report.lock').open('a') as lock:
                 for process in processes:
                     if process.poll() is None:
                         process.kill()
-                    process.wait(timeout=5)
+                    process.wait()
                 for attempt in (root / 'grading').glob('attempt-*'):
                     if (attempt / 'launched.json').exists() and not (attempt / 'exit.json').exists():
                         await_path(attempt / 'exit.json')

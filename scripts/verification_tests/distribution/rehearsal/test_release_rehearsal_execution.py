@@ -82,7 +82,7 @@ class LimitTests(unittest.TestCase):
             sparse.truncate(json.loads(limits.LIMITS.read_text())["max_download_bytes"] + 1)
         result = subprocess.run([sys.executable, str(limits.LIMITS.parents[1] / "scripts/release_assembly/artifact_limits.py"),
                                  "--artifact", str(artifact), "--version", "1.1.0", "--platform", "darwin-aarch64"],
-                                capture_output=True, text=True, timeout=60)
+                                capture_output=True, text=True)
         self.assertEqual(result.returncode, 1)
 
 
@@ -151,11 +151,11 @@ class MacosTests(unittest.TestCase):
             if arguments[:2] == ["brew", "--repository"]:
                 return subprocess.CompletedProcess(arguments, 0, str(self.taps) + "\n")
             if arguments[:2] == ["bash", str(rehearsal.ROOT / "scripts/release_assembly/render-cask.sh")]:
-                return subprocess.run(arguments, check=True, capture_output=True, text=True, timeout=60)
+                return subprocess.run(arguments, check=True, capture_output=True, text=True)
             if arguments[:3] == ["brew", "install", "--cask"]:
                 cask = (self.taps / "Casks/painted-wolf-code@preview.rb").read_text()
                 url = cask.split('url "', 1)[1].split('"', 1)[0].replace("#{version}", rehearsal.version())
-                with __import__("urllib.request").request.urlopen(url, timeout=10) as response:
+                with __import__("urllib.request").request.urlopen(url) as response:
                     self.assertEqual(response.read(), self.dmg.read_bytes())
                 (self.application / "Contents").mkdir(parents=True)
                 (self.application / "Contents/Info.plist").write_bytes(plistlib.dumps({"CFBundleShortVersionString": rehearsal.version()}))

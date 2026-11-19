@@ -185,7 +185,7 @@ class UpgradeOwnedEndpointTests(unittest.TestCase):
             for pid, host, port, accepted in cases:
                 with self.subTest(pid=pid, host=host, port=port):
                     manifest.write_text(json.dumps({"pid": pid, "host": host, "port": port}))
-                    result = subprocess.run(command, capture_output=True, text=True, timeout=10)
+                    result = subprocess.run(command, capture_output=True, text=True)
                     self.assertEqual(result.returncode == 0, accepted, result.stderr)
                     self.assertEqual(result.stdout, "http://127.0.0.1:49123\n" if accepted else "")
             manifest.unlink()

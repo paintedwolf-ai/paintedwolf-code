@@ -53,7 +53,7 @@ run.enter_frozen_runtime(root, root/'credentials')
 raise RuntimeError('handoff returned to the original runtime')
 '''
             subprocess.run([run.sys.executable, '-c', script, str(root)],
-                           cwd=pathlib.Path(run.__file__).parent, check=True, timeout=15)
+                           cwd=pathlib.Path(run.__file__).parent, check=True)
             self.assertEqual((root / 'executed-runtime').read_text(), str(entry))
 
     def test_controller_handoff_executes_only_the_frozen_runtime_before_spending(self):

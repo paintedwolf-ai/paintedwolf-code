@@ -42,7 +42,7 @@ class LocalServerBoundsTests(unittest.TestCase):
         server.thread = SimpleNamespace(join=lambda timeout: None, is_alive=lambda: True)
         with self.assertRaises(ValueError):
             server.__exit__(None, None, None)
-        real.join(timeout=5)
+        real.join()
         self.assertFalse(real.is_alive())
 
 

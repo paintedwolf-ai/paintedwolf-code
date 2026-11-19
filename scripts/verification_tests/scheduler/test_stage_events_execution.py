@@ -98,12 +98,12 @@ printf 'GOMEMLIMIT %s RACE %s\\n' "$GOMEMLIMIT" "${PW_TEST_RACE:-unset}"
                "PW_TEST_BATCH_DIRECTORY": str(self.root / f"batch-{mode}"), "PW_TEST_STAGE_ID": "stage-001"}
         result = subprocess.run([sys.executable, str(WRAPPER), str(self.binary), "-test.paniconexit0",
                                  "-test.timeout=10m0s", "-test.v=test2json"], cwd=self.package, env=env,
-                                capture_output=True, timeout=30)
+                                capture_output=True)
         return result, read_events(self.events)["fixture/pkg"]
 
     def test_outside_a_stage_the_binary_runs_unchanged(self):
         result = subprocess.run([sys.executable, str(WRAPPER), str(self.binary)], cwd=self.package,
-                                env={"PATH": os.environ["PATH"]}, capture_output=True, timeout=30)
+                                env={"PATH": os.environ["PATH"]}, capture_output=True)
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn(b"PASS one", result.stdout)
         self.assertFalse(self.events.exists())

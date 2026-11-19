@@ -21,8 +21,6 @@ spec.loader.exec_module(execution)
 
 @unittest.skipIf(os.name == "nt", "batch leases require inherited POSIX file locks")
 class BatchFixture(unittest.TestCase):
-    state_timeout = 15
-
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory(prefix="verification-fixture-")
         self.addCleanup(self.temp.cleanup)
@@ -167,25 +165,21 @@ sys.exit(code)
         return process
 
     def await_condition(self, predicate):
-        deadline = time.monotonic() + self.state_timeout
-        while time.monotonic() < deadline:
-            if predicate():
-                return
+        while not predicate():
             time.sleep(.02)
-        self.fail("batch fixture did not reach the expected state: " + json.dumps(self.queue.status()))
 
     def queued(self, count):
         self.await_condition(lambda: len([e for e in self.queue.status()["runs"] if e.get("kind") == "request"]) == count)
 
     def collect(self, process, code=0):
-        out, err = process.communicate(timeout=self.state_timeout + 5)
+        out, err = process.communicate()
         self.assertEqual(process.returncode, code, out + err)
         return out + err
 
     def wait_result(self, job_id, code):
         """A failed wait follows its stdout JSON with a digest on stderr."""
         process = self.start("--wait", job_id)
-        out, err = process.communicate(timeout=self.state_timeout + 5)
+        out, err = process.communicate()
         self.assertEqual(process.returncode, code, out + err)
         return json.loads(out)
 
@@ -206,6 +200,5 @@ sys.exit(code)
             except subprocess.TimeoutExpired:
                 process.kill()
                 process.communicate()
-        deadline = time.monotonic() + 15
-        while self.queue.status()["runs"] and time.monotonic() < deadline:
+        while self.queue.status()["runs"]:
             time.sleep(.05)

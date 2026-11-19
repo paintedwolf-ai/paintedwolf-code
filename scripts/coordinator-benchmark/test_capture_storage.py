@@ -143,7 +143,7 @@ connection.commit()
 connection.execute("INSERT INTO outcomes VALUES ('uncommitted')")
 os._exit(0)
 ''', str(database)])
-            self.assertEqual(process.wait(timeout=30), 0)
+            self.assertEqual(process.wait(), 0)
             self.assertGreater((root / 'store.db-wal').stat().st_size, 0)
             with self.assertRaisesRegex(ValueError, 'uncheckpointed'):
                 with closed_ledger(root):

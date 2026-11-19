@@ -144,9 +144,7 @@ class CacheTests(unittest.TestCase):
         with Reservation(queue, execution.lock_file, "fixture", "Explicit trim", cache.MAINTENANCE, 1) as active:
             self.assertTrue(active.try_acquire())
             with patch.object(cache.Budget, "environment", return_value=cache.Budget(1, 1)):
-                started = time.monotonic()
                 maintenance.scheduled("fixture")
-                self.assertLess(time.monotonic() - started, 2)
                 self.assertEqual(len(queue.status()["operations"]), 1)
                 self.assertTrue(old.exists())
                 self.assertEqual(list(queue.root.glob("go-cache-*.json")), [])

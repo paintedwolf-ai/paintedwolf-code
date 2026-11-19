@@ -37,7 +37,7 @@ sys.stdout.buffer.flush()
         finally:
             process.stdin.close()
             process.stdout.close()
-            process.wait(timeout=5)
+            process.wait()
 
     def test_e2b_is_limited_to_the_explicit_reference_backend(self):
         flags = ["runtime", "bench", "--reference-model-size", "e2b"]

@@ -36,7 +36,7 @@ class AnalysisSetupTests(unittest.TestCase):
             environment = {**os.environ, "PATH": str(root / "tools") + os.pathsep + os.environ["PATH"], "CALLS": str(calls)}
             for args, code in [(["analysis"], 0), (["unknown"], 2), (["analysis", "extra"], 2)]:
                 result = subprocess.run(["bash", str(scripts / "provision.sh"), *args], env=environment,
-                                        capture_output=True, text=True, timeout=10)
+                                        capture_output=True, text=True)
                 self.assertEqual(result.returncode, code, result.stderr)
             self.assertEqual(calls.read_text().splitlines(), ["mod download", "mod download", "workflow --provision"])
 

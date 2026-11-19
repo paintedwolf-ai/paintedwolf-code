@@ -66,7 +66,7 @@ else: raise SystemExit(2)
                          'PROFILE': 'integration', 'GITHUB_EVENT_NAME': 'workflow_dispatch',
                          'LANE': lane, 'AFFECTED': 'false', 'PLATFORM': 'false', 'REUSE': 'false',
                          'SUITE': 'all', 'RUNNER_TEMP': str(root), 'GITHUB_OUTPUT': str(root / 'outputs'),
-                         'FIXTURE_CALLS': str(calls)}, text=True, capture_output=True, timeout=30)
+                         'FIXTURE_CALLS': str(calls)}, text=True, capture_output=True)
                 self.assertEqual(result.returncode, 0, result.stderr)
                 observed = [json.loads(line) for line in calls.read_text().splitlines()]
                 self.assertEqual(sum(call == ['-m', 'ci_policy.queue_dispatch'] for call in observed),
@@ -77,7 +77,7 @@ else: raise SystemExit(2)
         environment.pop('GITHUB_STEP_SUMMARY', None)
         return subprocess.run([sys.executable, str(ROOT / 'scripts/ci_verification.py'),
                                'matrix', profile, '--lane', lane, *(['--affected'] if affected else [])],
-                              cwd=ROOT, env=environment, text=True, capture_output=True, timeout=30)
+                              cwd=ROOT, env=environment, text=True, capture_output=True)
 
     def test_manual_selection_keeps_every_shard_of_the_requested_lane(self):
         for lane, shards in [(RUNNER, ['']), (BEHAVIOR, ['1/3', '2/3', '3/3'])]:

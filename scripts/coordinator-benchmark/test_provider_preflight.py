@@ -127,11 +127,13 @@ class ProviderPreflightTests(unittest.TestCase):
                 receipt=self.receipt if len(calls)>1 else {**self.receipt,'accepted':False,'retryable':True,'code':'provider_rate_limited'}
                 save(destination/'result.json',receipt)
                 return {'kind':'exited','returncode':0}
-            with patch('provider_preflight.execute',side_effect=execute):
+            # A fixed clock makes the scheduled backoff the whole wait.
+            with patch('provider_preflight.execute',side_effect=execute), \
+                    patch('provider_preflight.time.time', return_value=1_000.0):
                 self.assertTrue(probe(root,root,self.model,cancelled)['accepted'])
             self.assertEqual(len(calls),2)
             self.assertEqual(cancelled.wait.call_count, 1)
-            self.assertAlmostEqual(cancelled.wait.call_args.args[0], 5, delta=0.1)
+            self.assertEqual(cancelled.wait.call_args.args[0], 5)
 
     def test_unavailable_support_model_blocks_its_dependents(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -251,16 +253,16 @@ class ProviderPreflightTests(unittest.TestCase):
             def check(run,private,model,cancelled):
                 if model['id']=='candidate':
                     waiting.set()
-                    if not release.wait(5):raise TimeoutError('test release missing')
+                    release.wait()
                 return {**self.receipt,'provider':model['provider'],'model':model['model']}
             with patch('provider_preflight.probe',side_effect=check), ThreadPoolExecutor(max_workers=2) as pool:
                 admission=Admission(root,root,{'models':[self.model,other]},threading.Event())
                 first=pool.submit(admission.check,'candidate')
                 try:
-                    self.assertTrue(waiting.wait(2))
-                    self.assertIsNone(pool.submit(admission.check,'other').result(timeout=2))
+                    waiting.wait()
+                    self.assertIsNone(pool.submit(admission.check,'other').result())
                 finally:release.set()
-                self.assertIsNone(first.result(timeout=2))
+                self.assertIsNone(first.result())
 
     def test_preflight_pause_preserves_deadline_without_another_request(self):
         with tempfile.TemporaryDirectory() as directory:

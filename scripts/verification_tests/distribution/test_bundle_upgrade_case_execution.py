@@ -205,7 +205,7 @@ class PriorAppSemanticsTests(unittest.TestCase):
         self.manifest = corpus / "MANIFEST.json"
         self.config = root / "config"
         subprocess.run([sys.executable, str(driver.SCRIPTS / "upgrade-fixture-files.py"), "materialize", str(corpus), str(self.config)],
-                       check=True, timeout=120, env={**os.environ, "PYTHONPATH": str(driver.SCRIPTS)})
+                       check=True, env={**os.environ, "PYTHONPATH": str(driver.SCRIPTS)})
         (self.config / "api.token").write_text("fixture-token")
         evidence = json.loads(self.manifest.read_text())["editor_history"]
         self.evidence = evidence
@@ -260,7 +260,7 @@ class PriorAppSemanticsTests(unittest.TestCase):
     def verify(self):
         return subprocess.run(["node", str(driver.SCRIPTS / "upgrade-editor-fixture.mjs"), "verify", self.base,
                                str(self.config), str(self.manifest), str(self.config / "project")],
-                              capture_output=True, text=True, timeout=120)
+                              capture_output=True, text=True)
 
     def test_an_acknowledged_relay_passes_the_prior_app_check(self):
         self.relay()

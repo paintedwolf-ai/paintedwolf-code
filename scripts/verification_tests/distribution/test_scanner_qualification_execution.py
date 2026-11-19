@@ -49,7 +49,7 @@ pathlib.Path(os.environ['FIXTURE_RESULT']).write_text(json.dumps({
     def invoke(self, command, missing=""):
         return subprocess.run(command, cwd=self.root,
                               env={**self.env, "FIXTURE_MISSING": missing},
-                              text=True, capture_output=True, timeout=10)
+                              text=True, capture_output=True)
 
     def test_full_catalog_recipe_carries_authenticated_identity_and_requires_scanners(self):
         stage = next(s for s in planning.expand(["test:full"]) if s["kind"] == "go")

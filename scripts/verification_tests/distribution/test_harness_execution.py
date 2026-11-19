@@ -127,7 +127,7 @@ class HarnessRuntimeTest(unittest.TestCase):
 
     def run_script(self, name, env, *args):
         return subprocess.run(["bash", str(self.scripts / name), *args], env=env,
-                              capture_output=True, text=True, timeout=30)
+                              capture_output=True, text=True)
 
     def stop_states(self):
         for env in self.states:
@@ -208,7 +208,7 @@ class BrowserArtifactTests(unittest.TestCase):
         return browser
 
     def run_sidecar(self):
-        return subprocess.run(["bash", str(self.script)], env=self.env, capture_output=True, text=True, timeout=15)
+        return subprocess.run(["bash", str(self.script)], env=self.env, capture_output=True, text=True)
 
     def test_prepared_browser_survives_config_isolation(self):
         result = self.run_sidecar()

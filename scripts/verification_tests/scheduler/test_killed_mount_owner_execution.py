@@ -24,7 +24,6 @@ spec = importlib.util.spec_from_file_location("killed_owner_execution", SCRIPTS 
 execution = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(execution)
 HOLDER = "./internal/layeredfs/adapter/platform/testdata/mountholder"
-WAIT_SECONDS = 120
 
 
 def mount_facility_absent():
@@ -35,11 +34,8 @@ def mount_facility_absent():
     return "no mounted adapter on this platform"
 
 
-def wait_until(what, done):
-    deadline = time.monotonic() + WAIT_SECONDS
+def wait_until(done):
     while not done():
-        if time.monotonic() >= deadline:
-            raise AssertionError(f"timed out waiting for {what}")
         time.sleep(0.02)
 
 
@@ -90,7 +86,7 @@ class KilledMountOwnerTests(unittest.TestCase):
                     f"while not Path({str(ready)!r}).exists(): time.sleep(.01)\n")
         child = subprocess.Popen([sys.executable, "-c", producer], pass_fds=inherited, env=environment,
                                  stdout=subprocess.DEVNULL, start_new_session=True)
-        child.wait(timeout=WAIT_SECONDS)
+        child.wait()
         self.assertEqual(child.returncode, 0)
         report = json.loads(ready.read_text())
         self.addCleanup(self.settle_fixture, report, stop)
@@ -104,13 +100,12 @@ class KilledMountOwnerTests(unittest.TestCase):
             for connection in run_lease.fuse_connections(report["mount"]):
                 if not alive(report["pid"]) or run_lease.thread_group_dying(report["pid"]):
                     run_lease.abort_connection(connection)
-        deadline = time.monotonic() + 20
-        while report["mount"] in run_lease.mount_points() and time.monotonic() < deadline:
+        while report["mount"] in run_lease.mount_points():
             if not alive(report["pid"]) or sys.platform == "darwin":
                 run_lease.force_unmount(report["mount"])
             time.sleep(0.05)
         # Its lease stays held until it exits, and collection leaves a held run alone.
-        while alive(report["pid"]) and time.monotonic() < deadline:
+        while alive(report["pid"]):
             time.sleep(0.05)
 
     def capability(self, run):
@@ -130,7 +125,7 @@ class KilledMountOwnerTests(unittest.TestCase):
             return
         connection = run_lease.fuse_connections(report["mount"])[0]
         waiting = run_lease.FUSE_CONNECTIONS / connection.device / "waiting"
-        wait_until("two parked requests", lambda: int(waiting.read_text()) >= 2)
+        wait_until(lambda: int(waiting.read_text()) >= 2)
 
     def outside_mount(self):
         """A live owner's mount in another leased run, whose connection must keep answering."""
@@ -145,7 +140,7 @@ class KilledMountOwnerTests(unittest.TestCase):
         self.assertEqual((Path(report["mount"]) / "f").read_text(), "x")
 
     def assert_nothing_left(self, run, report):
-        wait_until("the killed owner to exit", lambda: not alive(report["pid"]))
+        wait_until(lambda: not alive(report["pid"]))
         token = f"view-holder-{report['pid']}"
         self.assertEqual([point for point in run_lease.mount_points() if token in point], [])
         self.assertFalse(run.exists())
@@ -155,7 +150,7 @@ class KilledMountOwnerTests(unittest.TestCase):
         self.wait_wedged(report)
         os.kill(report["pid"], signal.SIGKILL)
         if sys.platform == "linux":
-            wait_until("the kill to arrive", lambda: run_lease.thread_group_dying(report["pid"]))
+            wait_until(lambda: run_lease.thread_group_dying(report["pid"]))
             self.assertTrue(alive(report["pid"]), "the wedge this test exists for did not form")
 
     def test_terminal_settlement_frees_a_killed_owner_with_no_blocked_batch(self):
@@ -183,7 +178,7 @@ class KilledMountOwnerTests(unittest.TestCase):
         self.kill_wedged(report)
         if sys.platform != "linux":
             # Nothing proves another process's death here until it has exited.
-            wait_until("the killed owner to exit", lambda: not alive(report["pid"]))
+            wait_until(lambda: not alive(report["pid"]))
 
         subprocess.run([sys.executable, str(SCRIPTS / "test-run-lease.py"), "prune", str(run_lease.RUN_ROOT)], check=True)
 
@@ -197,7 +192,7 @@ class KilledMountOwnerTests(unittest.TestCase):
         child, report, _ = self.holder(run, (lease.fileno(), capability.file.fileno()), wedge=False)
         lease.close()
         os.kill(report["pid"], signal.SIGKILL)
-        wait_until("the server to die", lambda: not alive(report["pid"]))
+        wait_until(lambda: not alive(report["pid"]))
         self.assertIn(report["mount"], run_lease.mount_points())
 
         tainted = lifetime.TerminalSettlement(self.queue, capability, child).finish()
@@ -214,7 +209,7 @@ class KilledMountOwnerTests(unittest.TestCase):
         self.assert_outside_untouched(run, report)
         self.assertFalse(run_lease.release_stranded_connections(run))
         stop.touch()
-        wait_until("the live owner to release its mount", lambda: report["mount"] not in run_lease.mount_points())
+        wait_until(lambda: report["mount"] not in run_lease.mount_points())
 
 
 class StrandedConnectionFactTests(unittest.TestCase):

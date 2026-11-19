@@ -37,7 +37,7 @@ class PublicPlatformTests(unittest.TestCase):
 
     def run_script(self, script, *args, success=True):
         command = ["bash" if script.endswith(".sh") else sys.executable, str(ROOT / "scripts" / script), *map(str, args)]
-        result = subprocess.run(command, capture_output=True, text=True, timeout=30,
+        result = subprocess.run(command, capture_output=True, text=True,
                                 env={**os.environ, "DOWNLOAD_BASE_URL": "https://downloads.paintedwolf.dev"})
         self.assertEqual(result.returncode == 0, success, result.stdout + result.stderr)
         return result

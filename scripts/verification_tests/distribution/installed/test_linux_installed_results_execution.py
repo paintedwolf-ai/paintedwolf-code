@@ -216,7 +216,7 @@ class LinuxInstalledResultsTests(unittest.TestCase):
                    "--final-artifacts", str(self.root / "artifacts.json"),
                    "--source-commit", SOURCE, "--evidence-root", str(self.root)]
         result = subprocess.run(command, cwd=Path(__file__).resolve().parents[4],
-                                text=True, capture_output=True, timeout=10)
+                                text=True, capture_output=True)
         self.assertNotEqual(result.returncode, 0)
         report = json.loads(result.stdout)
         self.assertFalse(report["accepted"])
@@ -234,17 +234,17 @@ class LinuxInstalledResultsTests(unittest.TestCase):
         cwd = Path(__file__).resolve().parents[4]
         with tempfile.TemporaryDirectory() as output_directory:
             output = Path(output_directory) / "report.json"
-            result = subprocess.run(command + [str(output)], cwd=cwd, text=True, capture_output=True, timeout=10)
+            result = subprocess.run(command + [str(output)], cwd=cwd, text=True, capture_output=True)
             self.assertEqual(result.returncode, 1, result.stderr)
             retained = output.read_bytes()
             self.assertEqual(json.loads(retained), json.loads(result.stdout))
             self.assertFalse(json.loads(retained)["accepted"])
             self.assertTrue(json.loads(retained)["manual_checklist"])
-            repeated = subprocess.run(command + [str(output)], cwd=cwd, text=True, capture_output=True, timeout=10)
+            repeated = subprocess.run(command + [str(output)], cwd=cwd, text=True, capture_output=True)
             self.assertNotEqual(repeated.returncode, 0)
             self.assertEqual(output.read_bytes(), retained)
         before = self.proof.read_bytes()
-        refused = subprocess.run(command + [str(self.proof)], cwd=cwd, text=True, capture_output=True, timeout=10)
+        refused = subprocess.run(command + [str(self.proof)], cwd=cwd, text=True, capture_output=True)
         self.assertNotEqual(refused.returncode, 0)
         self.assertEqual(self.proof.read_bytes(), before)
 

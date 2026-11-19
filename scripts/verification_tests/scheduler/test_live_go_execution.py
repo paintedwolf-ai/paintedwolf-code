@@ -13,9 +13,6 @@ SCRIPT = support.SCRIPT
 
 
 class LiveGoBatchTests(support.BatchFixture):
-    # Real source capture, compiler startup, and publication share this deadline.
-    state_timeout = 60
-
     def setUp(self):
         super().setUp()
         for name in ["task.sh", "analysis_tools.py", "go-test-digest.sh", "go-test-exec.py", "test-digest.py",
@@ -163,7 +160,7 @@ func TestFixture(t *testing.T) {
 
         def verify(*flags):
             process = self.start("test:digest", "--", *flags, "./good")
-            out, err = process.communicate(timeout=self.state_timeout + 5)
+            out, err = process.communicate()
             self.await_condition(lambda: not self.queue.status()["runs"])
             return process.returncode, out + err
         for flags in ((), ("-failfast",)):
@@ -190,7 +187,7 @@ func TestFixture(t *testing.T) {
         self.queue.resume()
         self.collect(self.start("fixture:sourced", "--", "pass"))
         failed = self.start("fixture:sourced", "--", "fail")
-        out, err = failed.communicate(timeout=self.state_timeout + 5)
+        out, err = failed.communicate()
         self.assertNotEqual(failed.returncode, 0, out + err)
 
     def test_concurrent_go_publication_cannot_replace_another_runs_evidence(self):

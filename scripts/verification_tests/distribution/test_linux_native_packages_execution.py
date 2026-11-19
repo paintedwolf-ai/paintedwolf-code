@@ -119,14 +119,15 @@ elif 'install' in sys.argv:
             def transfer(uri, path, received, deadline):
                 calls.append(uri)
                 self.assertEqual(received, row)
-                self.assertGreater(deadline, time.monotonic())
+                self.assertEqual(deadline, 100 + NATIVE.TRANSFER_SECONDS)
                 if len(calls) == 1:
                     path.write_bytes(b"partial")
                     raise TimeoutError("slow origin")
                 path.write_bytes(PAYLOAD)
 
-            with patch.object(NATIVE, "transfer", side_effect=transfer):
-                self.assertEqual(NATIVE.fetch(row, root, time.monotonic() + 60), "downloaded")
+            with patch.object(NATIVE, "transfer", side_effect=transfer), \
+                    patch.object(NATIVE.time, "monotonic", return_value=100):
+                self.assertEqual(NATIVE.fetch(row, root, 100 + NATIVE.TRANSFER_SECONDS + 1), "downloaded")
             self.assertEqual(calls, [row["uri"], "https://archive.ubuntu.com/ubuntu/pool/a.deb"])
             self.assertTrue(NATIVE.verified(root / row["name"], row))
             self.assertFalse((root / "partial" / row["name"]).exists())
@@ -157,7 +158,7 @@ elif 'install' in sys.argv:
 
     def test_download_refuses_corruption_oversize_and_expired_deadline(self):
         row = NATIVE.archives(PLAN)[0]
-        with tempfile.TemporaryDirectory() as directory:
+        with tempfile.TemporaryDirectory() as directory, patch.object(NATIVE.time, "monotonic", return_value=100):
             path = Path(directory) / row["name"]
             for payload, accepted in [(b"wrong", False), (PAYLOAD + b"extra", False),
                                       (b"x" * len(PAYLOAD), False), (PAYLOAD, True)]:
@@ -165,16 +166,16 @@ elif 'install' in sys.argv:
                     Path(command[command.index("--output") + 1]).write_bytes(payload)
                     self.assertIn("--max-filesize", command)
                     self.assertEqual(command[-2:], ["--", row["uri"]])
-                    self.assertLessEqual(options["timeout"], 5)
+                    self.assertEqual(options["timeout"], 5)
 
                 with self.subTest(payload=payload), patch.object(NATIVE.subprocess, "run", side_effect=download):
                     if accepted:
-                        NATIVE.transfer(row["uri"], path, row, time.monotonic() + 5)
+                        NATIVE.transfer(row["uri"], path, row, 105)
                     else:
                         with self.assertRaises(ValueError):
-                            NATIVE.transfer(row["uri"], path, row, time.monotonic() + 5)
+                            NATIVE.transfer(row["uri"], path, row, 105)
             with patch.object(NATIVE.subprocess, "run") as download, self.assertRaises(TimeoutError):
-                NATIVE.transfer(row["uri"], path, row, time.monotonic() - 1)
+                NATIVE.transfer(row["uri"], path, row, 99)
             download.assert_not_called()
             self.assertTrue(NATIVE.verified(path, row))
 

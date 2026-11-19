@@ -24,7 +24,7 @@ class ServerTests(unittest.TestCase):
             log = root / "requests.jsonl"
             with serving({"/updates/preview/key-1/latest.json": payload}, certificate, key, log, port=0) as server:
                 context = ssl.create_default_context(cafile=str(ca))
-                connection = socket.create_connection(server.server_address, timeout=5)
+                connection = socket.create_connection(server.server_address)
                 with context.wrap_socket(connection, server_hostname=HOST) as stream:
                     stream.sendall(b"GET /updates/preview/key-1/latest.json HTTP/1.0\r\nHost: downloads.paintedwolf.dev\r\n\r\n")
                     response = http.client.HTTPResponse(stream)
@@ -33,14 +33,14 @@ class ServerTests(unittest.TestCase):
                     self.assertEqual(response.read(), payload.read_bytes())
                     self.assertEqual(response.headers["Cache-Control"], "no-store")
                 for route in ("/", "/../latest.json", "/updates/preview/key-1/latest.json?other=true"):
-                    connection = socket.create_connection(server.server_address, timeout=5)
+                    connection = socket.create_connection(server.server_address)
                     with context.wrap_socket(connection, server_hostname=HOST) as stream:
                         stream.sendall(f"GET {route} HTTP/1.0\r\nHost: {HOST}\r\n\r\n".encode())
                         response = http.client.HTTPResponse(stream)
                         response.begin()
                         self.assertEqual(response.status, 404)
                         response.read()
-                connection = socket.create_connection(server.server_address, timeout=5)
+                connection = socket.create_connection(server.server_address)
                 with connection, self.assertRaises(ssl.SSLCertVerificationError):
                     context.wrap_socket(connection, server_hostname="wrong.example")
             requests = [json.loads(line) for line in log.read_text().splitlines()]

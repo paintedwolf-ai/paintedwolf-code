@@ -57,10 +57,10 @@ class UnittestSelectionTests(unittest.TestCase):
             command = [sys.executable, "-m", "unittest", "discover", "-s", directory,
                        "-p", "test_*execution.py"]
             selected = subprocess.run([*command, "-k", "alpha", "-k", "beta"],
-                                      capture_output=True, text=True, timeout=20)
+                                      capture_output=True, text=True)
             self.assertEqual(selected.returncode, 0, selected.stdout + selected.stderr)
             self.assertIn("Ran 2 tests", selected.stderr)
-            default = subprocess.run(command, capture_output=True, text=True, timeout=20)
+            default = subprocess.run(command, capture_output=True, text=True)
             self.assertEqual(default.returncode, 1)
             self.assertIn("Ran 3 tests", default.stderr)
             self.assertIn("unselected case executed", default.stderr)
@@ -68,7 +68,7 @@ class UnittestSelectionTests(unittest.TestCase):
     def assert_actual_runner_recipe(self, flags, environment=None):
         result = subprocess.run([str(ROOT / "task"), "--dry", "--force", "--color=false", "test:runner",
                                  *(["--", *flags] if flags else [])],
-                                cwd=ROOT, env=environment, capture_output=True, text=True, timeout=30)
+                                cwd=ROOT, env=environment, capture_output=True, text=True)
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         lines = [line for line in (result.stdout + result.stderr).splitlines()
                  if line.startswith("task: [test:runner] ")]

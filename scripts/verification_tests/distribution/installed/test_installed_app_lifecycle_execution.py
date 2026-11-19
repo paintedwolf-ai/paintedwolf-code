@@ -170,7 +170,7 @@ class LaunchTests(unittest.TestCase):
             app = InstalledApp(binding(), arguments=['/'])
             self.assertIs(app.launch(), app)
             for reader in app._readers:
-                reader.join(5)
+                reader.join()
             self.assertEqual(launch.mocks[6].call_args.args[0], [LAUNCHER['path'], '/'])
             self.assertEqual(launch.mocks[6].call_args.kwargs['env'], {'DISPLAY': ':1'})
             self.assertTrue(launch.mocks[6].call_args.kwargs['start_new_session'])
@@ -191,7 +191,7 @@ class LaunchTests(unittest.TestCase):
             app = InstalledApp(binding())
             app.launch()
             for reader in app._readers:
-                reader.join(5)
+                reader.join()
             app.stop()
             self.assertTrue(app.observations['output_limit'])
             self.assertEqual(app.streams()['app-stdout'], b'')
@@ -210,7 +210,7 @@ class LaunchTests(unittest.TestCase):
             app = InstalledApp(binding())
             app.launch()
             for reader in app._readers:
-                reader.join(5)
+                reader.join()
             launch.mocks[6].assert_called_once()
             app.stop()
 

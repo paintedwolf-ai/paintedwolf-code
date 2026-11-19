@@ -154,8 +154,7 @@ class BatchTerminalIntegrationTests(support.BatchFixture):
         self.addCleanup(stop.touch)
         descendant = ("import os,time\nfrom pathlib import Path\n"
                       f"Path({str(ready)!r}).write_text(str(os.getpid()))\n"
-                      "deadline=time.monotonic()+20\n"
-                      f"while not Path({str(stop)!r}).exists() and time.monotonic()<deadline: time.sleep(.01)\n")
+                      f"while not Path({str(stop)!r}).exists(): os.kill({os.getpid()},0); time.sleep(.01)\n")
         producer = ("import os,subprocess,sys,time\nfrom pathlib import Path\n"
                     "fd=int(os.environ['PW_TEST_EXECUTION_FD'])\n"
                     f"subprocess.Popen([sys.executable,'-c',{descendant!r}],pass_fds=(fd,),start_new_session=True,stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)\n"

@@ -63,7 +63,7 @@ class TerminalFixture(unittest.TestCase):
         child = subprocess.Popen([sys.executable, "-c", parent], pass_fds=inherited,
                                  stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
         self.addCleanup(stop.touch)
-        child.wait(timeout=10)
+        child.wait()
         self.assertEqual(child.returncode, code)
         pid = int(ready.read_text())
         created = custody.birth(pid)
@@ -92,7 +92,7 @@ class TerminalProcessTests(TerminalFixture):
     def test_clean_completion_uses_kernel_probe_without_global_holder_scan(self):
         cap = self.capability()
         child = subprocess.Popen([sys.executable, "-c", "pass"], pass_fds=(cap.file.fileno(),))
-        child.wait(timeout=10)
+        child.wait()
         with patch.object(custody, "lease_holders", side_effect=AssertionError("unnecessary global FD scan")):
             self.assertFalse(lifetime.TerminalSettlement(self.queue, cap, child).finish())
 
@@ -122,7 +122,7 @@ class TerminalProcessTests(TerminalFixture):
             self.assertIsNone(child.poll())
         finally:
             child.terminate()
-            child.wait(timeout=10)
+            child.wait()
 
     def test_uninspectable_cleanup_keeps_original_owner_and_both_capabilities(self):
         run = self.capability("lease")
@@ -136,7 +136,7 @@ class TerminalProcessTests(TerminalFixture):
             thread = threading.Thread(target=settle)
             thread.start()
             try:
-                self.assertTrue(blocked.wait(10))
+                blocked.wait()
                 self.assertTrue(thread.is_alive(), "cleanup abandoned the original supervisor")
                 self.assertTrue(lifetime.retained(cap.entry))
                 for capability in (run, cap):
@@ -147,7 +147,7 @@ class TerminalProcessTests(TerminalFixture):
                     self.assertIn(cap.entry["ticket"], [r["ticket"] for r in reservations(self.queue, execution.lock_file)])
             finally:
                 stop.touch()
-                thread.join(timeout=10)
+                thread.join()
         self.assertFalse(thread.is_alive())
         self.assertEqual(result, [True], "an unverified cleanup later recovered into a pass")
         self.assertTrue(cap.entry["terminal_settlement"]["unverified"])
@@ -164,8 +164,7 @@ class TerminalProcessTests(TerminalFixture):
         self.addCleanup(stop.touch)
         descendant = ("import os,time\nfrom pathlib import Path\n"
                       f"Path({str(ready)!r}).write_text(str(os.getpid()))\n"
-                      "deadline=time.monotonic()+20\n"
-                      f"while not Path({str(stop)!r}).exists() and time.monotonic()<deadline: time.sleep(.01)\n")
+                      f"while not Path({str(stop)!r}).exists(): os.kill({os.getpid()},0); time.sleep(.01)\n")
         producer = ("import os,subprocess,sys,time\n"
                     "fds=tuple(int(os.environ[key]) for key in ('PW_TEST_EXECUTION_FD','PW_TEST_RESOURCE_FD'))\n"
                     f"subprocess.Popen([sys.executable,'-c',{descendant!r}],pass_fds=fds,start_new_session=True,stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)\n"

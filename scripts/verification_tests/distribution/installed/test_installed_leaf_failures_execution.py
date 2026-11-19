@@ -79,8 +79,8 @@ class InstalledLeafFailureTests(unittest.TestCase):
             stack.enter_context(patch.object(leaf, 'case_family', return_value='fixture_family'))
             def slow_or_quick(binding, capability, case, root):
                 if case == 'slow':
-                    import time
-                    time.sleep(5)
+                    import signal
+                    signal.pause()
                 return {'id': case, 'status': 'passed', 'evidence': [retain(binding, capability, case, root, 'passed', {})['evidence'][0]]}
             family = SimpleNamespace(execute=slow_or_quick, TIME_BUDGET_SECONDS=1)
             stack.enter_context(patch.dict(sys.modules, {leaf.__package__.rpartition('.')[0] + '.installed_cases.fixture_family': family}))

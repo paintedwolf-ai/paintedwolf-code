@@ -181,7 +181,7 @@ class LinuxPayloadTests(unittest.TestCase):
                 result = subprocess.run(["sh", "-s", "--", action], input=script,
                                         env={**os.environ, "PATH": str(commands) + os.pathsep + os.environ["PATH"],
                                              "POLICY_CALLS": str(log), "HOME": str(state.parent)},
-                                        capture_output=True, text=True, timeout=10)
+                                        capture_output=True, text=True)
                 self.assertEqual(result.returncode, 0, result.stderr)
             self.assertFalse(log.exists())
             self.assertEqual(state.read_text(), "preserve")

@@ -7,7 +7,7 @@ import tempfile
 import unittest
 import urllib.error
 import urllib.request
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 from bootstrap_policy import configure, open_request, retry_delay
 from episode import disposition
 
@@ -112,8 +112,11 @@ class ApplicationHTTPTests(unittest.TestCase):
         self.assertEqual(retry_delay('0', 4), 1)
         for value in [None, '', '-4', 'nan', '2.5', 'retry in 10 seconds']:
             self.assertEqual(retry_delay(value, 4), 4)
-        future = datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(seconds=120)
-        self.assertTrue(118 < retry_delay(email.utils.format_datetime(future), 4) <= 120)
+        now = datetime.datetime(2026, 1, 1, tzinfo=datetime.timezone.utc)
+        clock = Mock(now=Mock(return_value=now))
+        with patch('bootstrap_policy.datetime', Mock(datetime=clock, timezone=datetime.timezone)):
+            self.assertEqual(retry_delay(email.utils.format_datetime(now + datetime.timedelta(seconds=120)), 4), 120)
+        clock.now.assert_called_once_with(datetime.timezone.utc)
         self.assertEqual(retry_delay('Wed, 01 Jan 2020 00:00:00 GMT', 4), 1)
 
     def test_sustained_throttling_has_no_attempt_cutoff(self):

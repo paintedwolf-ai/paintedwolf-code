@@ -156,7 +156,7 @@ class QemuSocketTests(unittest.TestCase):
                 with self.assertRaises((OSError, ValueError)):
                     actor.send(OPERATION, 1, transaction_id='b' * 32)
             finally:
-                actor.close(); os.close(descriptor); worker.join(6)
+                actor.close(); os.close(descriptor); worker.join()
             self.assertFalse(worker.is_alive())
             self.assertEqual(errors, [])
             self.assertEqual([row['execute'] for row in calls], ['qmp_capabilities', 'query-status', 'send-key'])

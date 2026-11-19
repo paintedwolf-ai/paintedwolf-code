@@ -211,7 +211,7 @@ class MaintainerScripts(unittest.TestCase):
         path.write_text(script if script.startswith("#!") else "#!/bin/sh\n" + script)
         path.chmod(0o755)
         environment = {"PATH": f"{self.shims}:/usr/bin:/bin"}
-        return subprocess.run([str(path), *args], env=environment, capture_output=True, text=True, timeout=60)
+        return subprocess.run([str(path), *args], env=environment, capture_output=True, text=True)
 
     def recorded(self):
         return self.calls.read_text().splitlines() if self.calls.exists() else []

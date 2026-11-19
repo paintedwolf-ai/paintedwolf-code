@@ -57,7 +57,7 @@ class EngineAPITests(unittest.TestCase):
     def tearDownClass(cls):
         cls.server.shutdown()
         cls.server.server_close()
-        cls.thread.join(timeout=5)
+        cls.thread.join()
 
     def setUp(self):
         Handler.seen.clear()

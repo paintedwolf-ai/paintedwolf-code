@@ -79,7 +79,7 @@ class LauncherTests(unittest.TestCase):
                            '--rate-state-dir', str(root / 'provider-rate-state')]
                 if expected_plan is not None:
                     command.extend(['--expected-plan', str(expected_plan)])
-                result = subprocess.run(isolated_command(command, ROOT), cwd=root, capture_output=True, text=True, timeout=30,
+                result = subprocess.run(isolated_command(command, ROOT), cwd=root, capture_output=True, text=True,
                                         env={**os.environ, 'LYCAON_LLM_MOCK': '1', 'LYCAON_LLM_MANUAL': '1',
                                              'LYCAON_OPENGREP_CANDIDATE': '/unsealed/scanner',
                                              'LYCAON_BYPASS_APPROVALS': '1', 'LYCAON_CONFIG_STAGED': '/foreign/config'})

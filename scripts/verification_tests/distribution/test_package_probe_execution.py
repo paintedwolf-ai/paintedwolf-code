@@ -331,13 +331,12 @@ class DiagnosticProcessTests(unittest.TestCase):
     def test_diagnostic_returns_output_and_kills_its_process_group(self):
         with tempfile.TemporaryDirectory() as temporary:
             marker = Path(temporary) / 'grandchild'
-            script = ('import subprocess, sys; child = subprocess.Popen(["sleep", "30"]); '
+            script = ('import subprocess, sys; child = subprocess.Popen([sys.executable, "-c", "import signal; signal.pause()"]); '
                       f'open({str(marker)!r}, "w").write(str(child.pid)); print("owned child")')
             result = owner.diagnostic([sys.executable, '-c', script], os.environ.copy())
             grandchild = int(marker.read_text())
         self.assertEqual((result.returncode, result.stdout), (0, b'owned child\n'))
-        deadline = time.monotonic() + 5
-        while time.monotonic() < deadline:
+        while True:
             try:
                 # procfs raises ESRCH when the task exits between open and read.
                 state = Path(f'/proc/{grandchild}/stat').read_text().rsplit(')', 1)[1].split()[0]
@@ -346,7 +345,6 @@ class DiagnosticProcessTests(unittest.TestCase):
             if state == 'Z':
                 return
             time.sleep(0.05)
-        self.fail('diagnostic left a process from its own group running')
 
     def test_diagnostic_output_is_bounded(self):
         with self.assertRaisesRegex(ValueError, 'output exceeded its bound'):

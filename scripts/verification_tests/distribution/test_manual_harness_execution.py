@@ -191,7 +191,7 @@ _harness_seed_project() { :; }
 harness_up --interactive --reuse-built
 harness_up --interactive
 '''
-            result = subprocess.run(["bash", "-ec", script], env=env, text=True, capture_output=True, timeout=10)
+            result = subprocess.run(["bash", "-ec", script], env=env, text=True, capture_output=True)
             self.assertEqual(result.returncode, 0, result.stderr)
             self.assertEqual(log.read_text().splitlines(), ["--reuse-built", "preparation", "--reuse-built"])
 
@@ -202,6 +202,6 @@ harness_up --interactive
         source = Path(__file__).resolve().parents[2]
         env = {key: value for key, value in os.environ.items() if key != "LYCAON_E2E_STATE_DIR"}
         for arguments, message in ((["--reuse-built"], "prepared runtime"), (["--unknown"], "unknown harness arguments")):
-            result = subprocess.run(["bash", str(source / "den-harness.sh"), *arguments], env=env, capture_output=True, text=True, timeout=10)
+            result = subprocess.run(["bash", str(source / "den-harness.sh"), *arguments], env=env, capture_output=True, text=True)
             self.assertEqual(result.returncode, 2, result.stderr)
             self.assertIn(message, result.stderr)

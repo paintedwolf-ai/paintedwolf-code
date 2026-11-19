@@ -137,7 +137,7 @@ def main():
         raw = root / (pointer.name + '.minisig')
         comment = f'timestamp:1800000001\tfile:{pointer.name}\tversion:{option("--app-version")}'
         subprocess.run(['minisign', '-S', '-s', os.environ['PW_RELEASE_PROVIDER_KEY'], '-m', str(pointer),
-                        '-x', str(raw), '-t', comment], check=True, capture_output=True, timeout=30)
+                        '-x', str(raw), '-t', comment], check=True, capture_output=True)
         Path(str(pointer) + '.sig').write_text(base64.b64encode(raw.read_bytes()).decode())
     else:
         raise ValueError('fixture provider received an unsupported executable')

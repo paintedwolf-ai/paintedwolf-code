@@ -56,7 +56,7 @@ class DevelopmentStopTests(unittest.TestCase):
         for child in self.processes:
             if child.poll() is None:
                 child.terminate()
-            child.wait(timeout=10)
+            child.wait()
 
     def restrict_name_lookup_to(self, child):
         # A regression cannot discover or signal an actual application engine.
@@ -66,7 +66,7 @@ class DevelopmentStopTests(unittest.TestCase):
 
     def stop_selected(self, port=0):
         return subprocess.run(["bash", str(self.script)], env={**self.env, "LYCAON_ADDR": f"127.0.0.1:{port}"},
-                              text=True, capture_output=True, timeout=60)
+                              text=True, capture_output=True)
 
     def test_dev_lock_stops_only_its_engine(self):
         dev, _ = self.start(lock=self.config / "locks/dev.engine.lock")

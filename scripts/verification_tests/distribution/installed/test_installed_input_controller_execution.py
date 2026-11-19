@@ -184,7 +184,7 @@ class BridgeTests(unittest.TestCase):
                 patch.object(controller.subprocess, 'Popen', return_value=guest_pipe.process) as popen, \
                 patch.object(controller, 'MAX_LOG', max_log):
             bridge.__enter__()
-            bridge.thread.join(5)
+            bridge.thread.join()
         self.assertFalse(bridge.thread.is_alive())
         opened.assert_called_once_with(Path('/root/lease'), execution_nonce='a' * 32, vm_id='owned')
         self.assertEqual(popen.call_args.args[0], ['ssh', 'guest'])

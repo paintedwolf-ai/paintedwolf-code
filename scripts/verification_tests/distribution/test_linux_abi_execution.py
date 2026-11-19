@@ -93,7 +93,7 @@ class LinuxABITests(unittest.TestCase):
                                      "--tree", str(tree), "--architecture", "x86_64",
                                      "--floors", str(floor), "--output", str(report)],
                                     cwd=Path(__file__).resolve().parents[3],
-                                    capture_output=True, text=True, timeout=10)
+                                    capture_output=True, text=True)
             self.assertNotEqual(result.returncode, 0)
             self.assertIn("above GLIBC_2.39", result.stderr)
             self.assertFalse(json.loads(report.read_text())["passed"])

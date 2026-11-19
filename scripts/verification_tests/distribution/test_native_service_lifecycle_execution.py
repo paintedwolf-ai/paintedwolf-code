@@ -107,7 +107,7 @@ s.setdefault('generation_calls',[]).append(a);p.write_text(json.dumps(s))
         wrapper = FIXTURE + 'set -- ' + ' '.join(shlex.quote(value) for value in arguments) + '\n' + source
         result = subprocess.run(['/bin/sh', '-c', wrapper], env={**os.environ, 'PATH': str(self.bin),
             'SERVICE_STATE': str(self.state), 'FIXTURE_STATE': str(self.state_dir)},
-            capture_output=True, text=True, timeout=15)
+            capture_output=True, text=True)
         self.assertEqual(result.returncode, 0, result.stderr)
         return json.loads(self.state.read_text())
 

@@ -28,7 +28,7 @@ class OCRLanguagePayloadTests(unittest.TestCase):
                 result = subprocess.run(["bash", str(root / "scripts/ocrengine-fetch.sh"), "--target",
                                          "x86_64-unknown-linux-gnu", "--archive", str(root / "absent")],
                                         env={**os.environ, "OCRENGINE_DEST": str(root / "staged")},
-                                        text=True, capture_output=True, timeout=10)
+                                        text=True, capture_output=True)
                 self.assertNotEqual(result.returncode, 0)
                 self.assertIn(diagnostic, result.stderr)
                 self.assertNotIn("unbound variable", result.stderr)
@@ -62,11 +62,11 @@ class OCRLanguagePayloadTests(unittest.TestCase):
             command = ["bash", str(root / "scripts/ocrengine-fetch.sh"), "--target", "x86_64-unknown-linux-gnu",
                        "--archive", str(root / "absent-offline-archive")]
             environment = {**os.environ, "OCRENGINE_DEST": str(destination)}
-            result = subprocess.run(command, env=environment, text=True, capture_output=True, timeout=10)
+            result = subprocess.run(command, env=environment, text=True, capture_output=True)
             self.assertEqual(result.returncode, 0, result.stderr)
             self.assertIn("already at fixture", result.stderr)
             (destination / "tessdata/deu.traineddata").write_bytes(b"bad")
-            result = subprocess.run(command, env=environment, text=True, capture_output=True, timeout=10)
+            result = subprocess.run(command, env=environment, text=True, capture_output=True)
             self.assertNotEqual(result.returncode, 0, "an altered extra language was accepted as verified")
 
     def test_offline_supplemental_import_is_verified_before_replacing_destination(self):
@@ -106,15 +106,15 @@ class OCRLanguagePayloadTests(unittest.TestCase):
             command = ["bash", str(root / "scripts/ocrengine-fetch.sh"), "--target", "x86_64-unknown-linux-gnu",
                        "--archive", str(archive), "--trained-data-dir", str(models)]
             environment = {**os.environ, "OCRENGINE_DEST": str(destination)}
-            result = subprocess.run(command, env=environment, text=True, capture_output=True, timeout=10)
+            result = subprocess.run(command, env=environment, text=True, capture_output=True)
             self.assertEqual(result.returncode, 0, result.stderr)
             self.assertEqual((destination / "tessdata/deu.traineddata").read_bytes(), b"deu")
             (destination / "VERSION").write_text("previous")
             (models / "deu.traineddata").write_bytes(b"bad")
-            result = subprocess.run(command, env=environment, text=True, capture_output=True, timeout=10)
+            result = subprocess.run(command, env=environment, text=True, capture_output=True)
             self.assertNotEqual(result.returncode, 0)
             self.assertEqual((destination / "VERSION").read_text(), "previous")
             (models / "deu.traineddata").unlink()
-            result = subprocess.run(command, env=environment, text=True, capture_output=True, timeout=10)
+            result = subprocess.run(command, env=environment, text=True, capture_output=True)
             self.assertNotEqual(result.returncode, 0)
             self.assertEqual((destination / "VERSION").read_text(), "previous")
