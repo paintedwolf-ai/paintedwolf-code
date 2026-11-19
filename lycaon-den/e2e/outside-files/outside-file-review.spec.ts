@@ -2,12 +2,12 @@ import { mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "
 import { homedir } from "node:os";
 import path from "node:path";
 import { expect } from "@playwright/test";
-import type { CheckpointListResponse, SourceComparison } from "../src/api/types.ts";
+import type { CheckpointListResponse, SourceComparison } from "../../src/api/types.ts";
 import {
   apiJson, apiPostPrompt, bootstrapActiveProject, e2eTempDir, e2eUniqueLabel,
   settledChatSessionId, waitForChatComposerReady, webE2e,
-} from "./helpers.ts";
-import { manualHarnessTools } from "./manual-harness-tools.ts";
+} from "../helpers.ts";
+import { manualHarnessTools } from "../manual-harness-tools.ts";
 
 webE2e("Review shows an outside edit and its retained versions in the chat that made it", async ({ page, request }) => {
   const folder = realpathSync(process.env.LYCAON_E2E_DOCKER_STACK === "1"
