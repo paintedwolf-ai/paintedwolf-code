@@ -187,6 +187,7 @@ describe("ChatView composer", () => {
       ui: {
         current_phase_label: "Looking around",
         request: { cadence: "each_turn", question: "What would you like to work on?" },
+        request_state: { cadence: "each_turn", status: "waiting" },
       },
     } });
     const input = composer();

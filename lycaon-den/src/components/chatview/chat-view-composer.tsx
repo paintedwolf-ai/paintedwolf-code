@@ -61,7 +61,7 @@ export function createChatViewComposer(props: ChatViewProps, options: ComposerOp
     const run = activeRun();
     const ui = run?.ui;
     if (mode.view().workflowNeedsAgent && isAmbientRootRun(run) &&
-        ui?.request?.cadence === "each_turn" && ui.request_state?.status !== "waiting") {
+        ui?.request?.cadence === "each_turn") {
       return undefined;
     }
     return ui;
