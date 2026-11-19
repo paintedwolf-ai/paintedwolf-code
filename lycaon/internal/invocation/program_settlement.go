@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"time"
 
@@ -62,9 +63,9 @@ func (r *SQLRecorder) SettleChild(ctx context.Context, executionID string, in to
 		return err
 	}
 	defer func() { _ = tx.Rollback() }()
-	var programID, owner, state string
+	var programID, owner, operation string
 	var started bool
-	if err := tx.QueryRowContext(ctx, `SELECT program_id,owner,state,owner_started FROM invocation_program_executions WHERE id=?`, executionID).Scan(&programID, &owner, &state, &started); err != nil {
+	if err := tx.QueryRowContext(ctx, `SELECT program_id,owner,operation_id,owner_started FROM invocation_program_executions WHERE id=?`, executionID).Scan(&programID, &owner, &operation, &started); err != nil {
 		return err
 	}
 	result := in.Result
@@ -86,7 +87,11 @@ func (r *SQLRecorder) SettleChild(ctx context.Context, executionID string, in to
 		conflict = *in.Conflict
 	}
 	settleBytes := int64(len(result.Terminal) + len(result.StopCode) + len(in.HostStopCode) + len(result.EffectCertainty) + len(evidence.Kind) + len(evidence.EvidenceRef) + len(evidence.OwnerRef) + len(evidence.RecoveryRef) + len(evidence.HeldVersionID) + len(in.AcceptedRevision) + len(in.PublishedRevision) + len(in.DetailReference) + len(in.JobHandle) + len(conflict.Path) + len(conflict.ExpectedRevision) + len(conflict.ObservedRevision) + 32)
+	settleBytes += int64(len(in.ConsumerClosedExecutions))
 	if err := chargeProgramTrace(ctx, tx, programID, 1, settleBytes, traceChargeChildSettlement); err != nil {
+		return err
+	}
+	if err := recordConsumerClosures(ctx, tx, programID, executionID, operation, in); err != nil {
 		return err
 	}
 	transition, err := tx.ExecContext(ctx, `UPDATE invocation_program_executions SET state=?,owner_invoked=?,status_code=?,stop_code=?,host_stop_code=?,output_publishable=?,complete=?,publication_eligible=?,publication_basis=?,effect_certainty=?,evidence_kind=?,evidence_ref=?,owner_ref=?,recovery_ref=?,held_version_id=?,accepted_revision=?,published_revision=?,detail_ref=?,job_handle=?,conflict_path=?,conflict_expected_revision=?,conflict_observed_revision=?,settled_at=? WHERE id=? AND state IN ('prepared','waiting','running')`, string(result.Terminal), in.OwnerInvoked, result.Status, result.StopCode, in.HostStopCode, in.OutputPublishable, result.Complete, result.PublicationEligible, int(result.PublicationBasis), string(result.EffectCertainty), evidence.Kind, evidence.EvidenceRef, evidence.OwnerRef, evidence.RecoveryRef, evidence.HeldVersionID, in.AcceptedRevision, in.PublishedRevision, in.DetailReference, in.JobHandle, conflict.Path, conflict.ExpectedRevision, conflict.ObservedRevision, time.Now().UTC().Format(time.RFC3339Nano), executionID)
@@ -100,6 +105,36 @@ func (r *SQLRecorder) SettleChild(ctx context.Context, executionID string, in to
 		return err
 	}
 	notifyActivity(ctx, programID, executionID)
+	return nil
+}
+
+// recordConsumerClosures annotates the pipeline's settled child receipts in the same transaction.
+func recordConsumerClosures(ctx context.Context, tx *sql.Tx, program, execution, operation string, in toolcontract.ProgramChildSettlement) error {
+	ids := in.ConsumerClosedExecutions
+	if len(ids) == 0 {
+		return nil
+	}
+	if operation != "program |" || !in.Result.Complete || in.Result.Terminal != toolcontract.ProducerCompleted || in.Result.StopCode != "" || in.HostStopCode != "" {
+		return fmt.Errorf("consumer closure requires a complete pipeline settlement")
+	}
+	encoded, err := json.Marshal(ids)
+	if err != nil {
+		return err
+	}
+	result, err := tx.ExecContext(ctx, `UPDATE invocation_program_executions SET consumer_closed=1
+ WHERE program_id=? AND parent_execution_id=? AND consumer_closed=0 AND state IN ('completed','failed')
+ AND stop_code='' AND host_stop_code='' AND conflict_path=''
+ AND id IN (SELECT value FROM json_each(?))`, program, execution, string(encoded))
+	if err != nil {
+		return err
+	}
+	n, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if n != int64(len(ids)) {
+		return fmt.Errorf("consumer closure requires unique settled pipeline children")
+	}
 	return nil
 }
 

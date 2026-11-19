@@ -56,7 +56,7 @@ func TestBackgroundJobWorkAlwaysFoldsIntoItsLaunch(t *testing.T) {
 			groups[i].ordinal = int64(i + 1)
 		}
 
-		values := composeActivityGroups(groups, random.IntN(2) == 0)
+		values := composeActivityGroups(groups, activityProgramState(random.IntN(3)))
 		var job []int
 		owner := map[string]int{}
 		for row, activity := range values {
@@ -73,7 +73,7 @@ func TestBackgroundJobWorkAlwaysFoldsIntoItsLaunch(t *testing.T) {
 		if len(job) != 1 || values[job[0]].ID != "job" {
 			t.Fatalf("trial %d: launch rows %v: %+v", trial, job, values)
 		}
-		want := activityStepState(groups[0].counts, launch.receipt)
+		want := activityStepState(groups[0].counts)
 		for _, id := range descendants {
 			if row, ok := owner[id]; !ok || row != job[0] {
 				t.Fatalf("trial %d: job step %s outside its launch: %+v", trial, id, values)
@@ -81,7 +81,7 @@ func TestBackgroundJobWorkAlwaysFoldsIntoItsLaunch(t *testing.T) {
 		}
 		for _, g := range groups[1 : len(groups)-1] {
 			if activityPresentation(g.input).role != "container" {
-				if state := activityStepState(g.counts, g.input.receipt); activityStateRank[state] > activityStateRank[want] {
+				if state := activityStepState(g.counts); activityStateRank[state] > activityStateRank[want] {
 					want = state
 				}
 			}

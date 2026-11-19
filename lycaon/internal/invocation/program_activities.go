@@ -16,28 +16,34 @@ type activityInput struct {
 	pipeline                 bool
 }
 
-func activityOutcome(receipt api.CommandExecutionReceipt) (string, string) {
-	switch receipt.State {
+func activityOutcome(state string, status *int) string {
+	switch state {
 	case "prepared":
-		return "running", "Preparing"
-	case "running":
-		return "running", "Running"
-	case "waiting":
-		return "waiting", "Waiting"
-	case "refused":
-		return "refused", "Refused"
-	case "failed":
-		return "failed", "Failed"
-	case "interrupted":
-		return "interrupted", "Interrupted"
-	case "completed":
-		if receipt.StatusCode != nil {
-			return "completed", fmt.Sprintf("Exited %d", *receipt.StatusCode)
+		return "Preparing"
+	case "completed", "failed":
+		if status != nil && (state == "completed" || *status != 0) {
+			return fmt.Sprintf("Exited %d", *status)
 		}
-		return "completed", "Completed"
+		return activityStateOutcome(state)
+	case "running", "waiting", "refused", "interrupted":
+		return activityStateOutcome(state)
 	default:
-		return "unknown", "Outcome unknown"
+		return "Outcome unknown"
 	}
+}
+
+func failedActivityOutcome(activity api.CommandActivity) string {
+	if activity.FailedCount == 1 && activity.Repetitions == 1 {
+		for _, step := range activity.Steps {
+			if step.ID == activity.ID && step.Failed == 1 {
+				return step.Outcome
+			}
+		}
+	}
+	if activity.FailedCount < activity.ExecutionCount {
+		return fmt.Sprintf("Finished · %d steps reported failure", activity.FailedCount)
+	}
+	return activityStateOutcome("failed")
 }
 
 func readProgramActivities(ctx context.Context, tx *sql.Tx, program api.CommandProgramReceipt, display func(string) string) ([]api.CommandActivity, error) {
@@ -45,15 +51,23 @@ func readProgramActivities(ctx context.Context, tx *sql.Tx, program api.CommandP
 	if err != nil {
 		return nil, err
 	}
-	settled := program.State != "running" && program.State != "waiting"
-	activities := composeActivityGroups(groups, settled)
-	if len(activities) == 0 && settled {
+	state := activityProgramSettled
+	if program.State == "running" || program.State == "waiting" {
+		state = activityProgramRunning
+	} else if program.State == "completed" && program.StatusCode != nil && *program.StatusCode == 0 {
+		state = activityProgramSucceeded
+	}
+	activities := composeActivityGroups(groups, state)
+	if len(activities) == 0 && state != activityProgramRunning {
 		state := program.State
-		if state == "rejected" {
+		switch {
+		case state == "rejected":
 			state = "refused"
+		case state == "completed" && program.StatusCode != nil && *program.StatusCode != 0:
+			state = "failed"
 		}
-		normalized, outcome := activityOutcome(api.CommandExecutionReceipt{State: state, StatusCode: program.StatusCode})
-		activities = []api.CommandActivity{{ID: program.ID, Group: "Running commands", Phase: "execute", Label: "Run command", Subject: program.StopCode, State: normalized, Outcome: outcome, StatusCode: program.StatusCode, ExecutionIDs: []string{}, Spans: []api.CommandActivitySpan{}, Steps: []api.CommandActivityStep{}}}
+		outcome := activityOutcome(state, program.StatusCode)
+		activities = []api.CommandActivity{{ID: program.ID, Group: "Running commands", Phase: "execute", Label: "Run command", Subject: program.StopCode, State: state, Outcome: outcome, StatusCode: program.StatusCode, ExecutionIDs: []string{}, Spans: []api.CommandActivitySpan{}, Steps: []api.CommandActivityStep{}}}
 	}
 	return activities, nil
 }

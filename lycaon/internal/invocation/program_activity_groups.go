@@ -9,10 +9,6 @@ import (
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
-type activityCounts struct {
-	total, running, waiting, failed, interrupted, refused, uncertain, effects int
-}
-
 type activityKey struct {
 	node, operation, scope, launch string
 }
@@ -22,30 +18,6 @@ type activityGroup struct {
 	key, parent activityKey
 	ordinal     int64
 	counts      activityCounts
-}
-
-// Repetitions are counted in SQL; only the first execution's inputs are decoded.
-func readActivityCounts(ctx context.Context, tx *sql.Tx, program string) (groups []activityGroup, err error) {
-	rows, err := tx.QueryContext(ctx, `SELECT min(ordinal),count(*),
- sum(state IN ('prepared','running')),sum(state='waiting'),
- sum(state='failed' OR (state='completed' AND COALESCE(status_code,0)<>0)),
- sum(state='interrupted'),sum(state='refused'),
- sum(effect_certainty IN ('unknown','attempted')),sum(effect_certainty='completed')
- FROM invocation_program_executions WHERE program_id=?
- GROUP BY node_id,operation_id,scope_json,CASE WHEN operation_id='program &' THEN id ELSE '' END ORDER BY min(ordinal)`, program)
-	if err != nil {
-		return nil, err
-	}
-	defer func() { err = errors.Join(err, rows.Close()) }()
-	for rows.Next() {
-		var g activityGroup
-		c := &g.counts
-		if err := rows.Scan(&g.ordinal, &c.total, &c.running, &c.waiting, &c.failed, &c.interrupted, &c.refused, &c.uncertain, &c.effects); err != nil {
-			return nil, err
-		}
-		groups = append(groups, g)
-	}
-	return groups, rows.Err()
 }
 
 func readActivityGroups(ctx context.Context, tx *sql.Tx, program string, display func(string) string) ([]activityGroup, error) {
@@ -87,7 +59,7 @@ func readActivityGroups(ctx context.Context, tx *sql.Tx, program string, display
 
 func groupActivity(g activityGroup) api.CommandActivity {
 	rule := activityPresentation(g.input)
-	state := activityStepState(g.counts, g.input.receipt)
+	state := activityStepState(g.counts)
 	outcome := activityStateOutcome(state)
 	if g.input.operation == "program &" && state == "completed" {
 		outcome = "Started"
@@ -98,17 +70,17 @@ func groupActivity(g activityGroup) api.CommandActivity {
 // Precedence over folded steps decides the row state; membership never does.
 var activityStateRank = map[string]int{"unknown": 0, "completed": 0, "failed": 1, "interrupted": 2, "refused": 3, "running": 4, "waiting": 5}
 
-func activityStepState(c activityCounts, receipt api.CommandExecutionReceipt) string {
+func activityStepState(c activityCounts) string {
 	switch {
 	case c.waiting > 0:
 		return "waiting"
 	case c.running > 0:
 		return "running"
-	case c.refused > 0 || receipt.State == "refused":
+	case c.refused > 0:
 		return "refused"
 	case c.interrupted > 0:
 		return "interrupted"
-	case c.failed > 0 || receipt.State == "failed" || receipt.RevisionConflict != nil:
+	case c.failed > 0:
 		return "failed"
 	default:
 		return "completed"
@@ -134,8 +106,14 @@ func activityStateOutcome(state string) string {
 
 func appendActivityStep(a *api.CommandActivity, g activityGroup) {
 	c := g.counts
-	state := activityStepState(c, g.input.receipt)
-	_, outcome := activityOutcome(g.input.receipt)
+	state := activityStepState(c)
+	outcome := activityStateOutcome(state)
+	switch {
+	case state == "running" && g.input.receipt.State == "prepared":
+		outcome = activityOutcome("prepared", nil)
+	case state == "completed", state == "failed" && c.total == 1:
+		outcome = activityOutcome(state, g.input.receipt.StatusCode)
+	}
 	a.ExecutionCount += c.total
 	a.FailedCount += c.failed + c.refused + c.interrupted
 	a.WaitingCount += c.waiting
@@ -149,8 +127,16 @@ func appendActivityStep(a *api.CommandActivity, g activityGroup) {
 	}
 }
 
+type activityProgramState int
+
+const (
+	activityProgramRunning activityProgramState = iota
+	activityProgramSettled
+	activityProgramSucceeded
+)
+
 // Supporting steps follow recorded ancestry; sequential primaries fold by phase.
-func composeActivityGroups(groups []activityGroup, settled bool) []api.CommandActivity {
+func composeActivityGroups(groups []activityGroup, state activityProgramState) []api.CommandActivity {
 	byKey := make(map[activityKey]int, len(groups))
 	for i, g := range groups {
 		byKey[g.key] = i
@@ -166,6 +152,9 @@ func composeActivityGroups(groups []activityGroup, settled bool) []api.CommandAc
 	subjects := make(map[int]string)
 	for i, g := range groups {
 		launch, ok := launchOf(g, groups, byKey)
+		if !ok && state == activityProgramSucceeded {
+			groups[i].counts.recoverUtilityExits()
+		}
 		if !ok || activityPresentation(g.input).role == "container" {
 			continue
 		}
@@ -224,22 +213,7 @@ func composeActivityGroups(groups []activityGroup, settled bool) []api.CommandAc
 			parent = groups[p].parent
 		}
 	}
-	// Failed work with nowhere to fold becomes its own row instead of disappearing.
-	for i, g := range groups {
-		if _, assigned := assignments[i]; assigned {
-			continue
-		}
-		if g.counts.failed+g.counts.refused+g.counts.interrupted+g.counts.waiting == 0 {
-			continue
-		}
-		if activityPresentation(g.input).role == "container" && g.parent != (activityKey{}) {
-			if _, ok := byKey[g.parent]; ok {
-				continue
-			}
-		}
-		primary[i] = true
-		assignments[i] = i
-	}
+	assignActivityFallbacks(groups, byKey, primary, assignments)
 	var result []api.CommandActivity
 	positions := map[int]int{}
 	// written collects the write targets of each row's folded primaries.
@@ -275,7 +249,7 @@ func composeActivityGroups(groups []activityGroup, settled bool) []api.CommandAc
 			appendActivityStep(&result[positions[owner]], g)
 		}
 	}
-	if len(result) == 0 && settled && len(groups) > 0 {
+	if len(result) == 0 && state != activityProgramRunning && len(groups) > 0 {
 		for _, g := range groups {
 			if activityPresentation(g.input).role != "container" {
 				a := groupActivity(g)
@@ -295,8 +269,8 @@ func composeActivityGroups(groups []activityGroup, settled bool) []api.CommandAc
 	}
 	for i := range result {
 		a := &result[i]
-		if a.State == "failed" && a.FailedCount < a.ExecutionCount {
-			a.Outcome = fmt.Sprintf("Finished · %d steps reported failure", a.FailedCount)
+		if a.State == "failed" {
+			a.Outcome = failedActivityOutcome(*a)
 		}
 	}
 	return result
