@@ -210,11 +210,9 @@ function DirEntryRow(props: {
         onMouseOut={disengage}
         onFocusIn={engage}
         onFocusOut={disengage}
-        onPointerDown={
-          sticky() || location()
-            ? undefined
-            : (e) => ctx.onRowPointerDown(row().rootId, row().path, row().name, true, e)
-        }
+        onPointerDown={(event) => {
+          if (!sticky() && !location()) ctx.onRowPointerDown(row().rootId, row().path, row().name, true, event);
+        }}
         onContextMenu={(e) => {
           e.preventDefault();
           e.stopPropagation();

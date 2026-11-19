@@ -1,38 +1,33 @@
 import { readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { expect } from "@playwright/test";
-import type { OpenedOutsideFile, Session } from "../src/api/types.ts";
+import type { OpenedOutsideFile } from "../src/api/types.ts";
 import {
-  activateProject,
-  apiCreateProjectWithRoot,
   apiJson,
+  bootstrapActiveProject,
   e2eTempDir,
   e2eUniqueLabel,
-  gotoShell,
-  modelIndependentWebE2e,
-  openSessionRow,
+  liveChatStage,
+  sendChatPrompt,
+  settledChatSessionId,
+  waitForChatComposerReady,
+  webE2e,
 } from "./helpers.ts";
 
-modelIndependentWebE2e("Outside locations follow the chat while a dirty file stays open", async ({ page, request }) => {
+webE2e("Outside locations follow the chat while a dirty file stays open", async ({ page, request }) => {
   const filename = "outside-notes.txt";
   const outside = path.join(e2eTempDir(request, "outside-locations"), filename);
   const root = e2eTempDir(request, "outside-locations-project");
   writeFileSync(outside, "Original notes\n");
   writeFileSync(path.join(root, "project.txt"), "Project notes\n");
-  const project = await apiCreateProjectWithRoot(request, root, e2eUniqueLabel("Outside file locations"));
-  const createChat = () => apiJson<Session>(request, "POST", "/v1/sessions", {
-    project_id: project.id,
-    posture: "build",
-  });
-  const first = await createChat();
-  const second = await createChat();
+  const project = await bootstrapActiveProject(page, request, root, e2eUniqueLabel("Outside file locations"));
+  await sendChatPrompt(page, "Keep these notes handy.");
+  await expect(liveChatStage(page).getByText("Harness reply.", { exact: true })).toBeVisible();
+  const first = await settledChatSessionId(page);
   const picked = await apiJson<OpenedOutsideFile>(request, "POST", `/v1/projects/${project.id}/source/outside-files`, {
-    session_id: first.id,
+    session_id: first,
     path: outside,
   });
-  await gotoShell(page);
-  await activateProject(page, project.id);
-  await openSessionRow(page, first.id);
   await page.getByTestId("project-files-entry").click();
 
   const tree = page.getByTestId("files-tree");
@@ -50,8 +45,9 @@ modelIndependentWebE2e("Outside locations follow the chat while a dirty file sta
   const save = page.getByTestId("files-editor-save");
   await expect(save).toBeEnabled();
 
-  await page.getByTestId("files-back").click();
-  await openSessionRow(page, second.id);
+  await page.getByTestId("new-chat-btn").click();
+  await waitForChatComposerReady(page);
+  expect(await settledChatSessionId(page)).not.toBe(first);
   await page.getByTestId("project-files-entry").click();
   await expect(tree.getByTestId("files-tree-file").filter({ hasText: "project.txt" })).toBeVisible();
   await expect(outsideLocation).toHaveCount(0);
