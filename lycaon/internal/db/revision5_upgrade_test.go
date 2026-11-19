@@ -32,7 +32,7 @@ func releasedRevision4Store(t *testing.T, path string) *sql.DB {
 	testutil.FailErr(t, "seed released session", err)
 	released, err := inspectSchema(t.Context(), source)
 	testutil.FailErr(t, "inspect released store", err)
-	if released != migrations.Revision5().From {
+	if released != migrations.Revision5(released).From {
 		t.Fatalf("released store is %+v, not the registered revision-4 source", released)
 	}
 	return source

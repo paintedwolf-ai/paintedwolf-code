@@ -99,8 +99,12 @@ mkdir -p "${CONFIG_DIR}" "${SEED_PROJECT_ROOT}/${OVERLAY_DIR}" "${STAGE_DIR}"
 SEED_PROJECT_ROOT="$(cd "${SEED_PROJECT_ROOT}" && pwd -P)"
 mkdir -p "${SEED_PROJECT_ROOT}/${OVERLAY_DIR}"
 
-printf 'overlay_format: 1\n' >"${SEED_PROJECT_ROOT}/${OVERLAY_DIR}/overlay.yaml"
 printf 'format: 1\ndisabled: []\n' >"${SEED_PROJECT_ROOT}/${OVERLAY_DIR}/extensions.yaml"
+# Include the overlay examples before capturing trust state.
+for example in "${GO_DIR}/testdata/overlay-example/${OVERLAY_FIXTURE_DIR}/"*.yaml; do
+  seeded="${SEED_PROJECT_ROOT}/${OVERLAY_DIR}/$(basename "${example}")"
+  [[ -e "${seeded}" ]] || cp "${example}" "${seeded}"
+done
 # Target for the locked mock tool call (pattern "corpus seed" → command cat README.md).
 printf '# corpus seed\n' >"${SEED_PROJECT_ROOT}/README.md"
 
@@ -330,11 +334,6 @@ cp -a "${APP_STATE_PATH}" "${STAGE_DIR}/app-state-v1"
 cp -a "${SEED_PROJECT_ROOT}/." "${STAGE_DIR}/project-root/"
 # Boot restores the overlay directory name from this fixture placeholder.
 mv "${STAGE_DIR}/project-root/${OVERLAY_DIR}" "${STAGE_DIR}/project-root/${OVERLAY_FIXTURE_DIR}"
-# The corpus records every overlay setting this release reads; later releases must still load them.
-for example in "${GO_DIR}/testdata/overlay-example/${OVERLAY_FIXTURE_DIR}/"*.yaml; do
-  recorded="${STAGE_DIR}/project-root/${OVERLAY_FIXTURE_DIR}/$(basename "${example}")"
-  [[ -e "${recorded}" ]] || cp "${example}" "${recorded}"
-done
 
 if [[ -d "${CONFIG_DIR}/extensions-cache" ]] && [[ -n "$(ls -A "${CONFIG_DIR}/extensions-cache" 2>/dev/null || true)" ]]; then
   cp -a "${CONFIG_DIR}/extensions-cache" "${STAGE_DIR}/extensions-cache"

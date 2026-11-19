@@ -19,15 +19,13 @@ type Part struct {
 	Writes func(ctx context.Context, store DBTX, storeBytes uint64) (uint64, error)
 }
 
-var releasedRevision5 = Baseline{Revision: 5, Shape: "a1c252d46e94940750d9b239e96716d7f8d3a612fb1a2d24969085876aac2aaa"}
-
-// Revision5 upgrades to the released manifest and command-record schema.
-func Revision5() Step {
+// Revision5 composes the transformations from the shipped revision 4 schema.
+func Revision5(target Baseline) Step {
 	return composeStep(Step{
 		ID:       "source-manifests-and-command-records",
-		Checksum: "8e1afb6494bcc70516ccbb226a0128d9d2d566bac1d05a829ed98aa7daeb93ae",
-		From:     manifestLayoutSource, To: releasedRevision5,
-	}, SourceManifestLayout(), VaultUnlockAway(), EffectPermitIdentity(), ProgramReceipts(), SourceLinkKind(), SessionProgressIdentity(), TurnLoadVisibility(), EvidenceRootID(), ToolResultFileEdits(), Briefings(), LiveModelOutputs(), WorkerRecords())
+		Checksum: "c89ca3f37b41d2ff9efc47edd7365dd2bb8649d2baf084109192eb7b070673a2",
+		From:     manifestLayoutSource, To: target,
+	}, SourceManifestLayout(), VaultUnlockAway(), EffectPermitIdentity(), ProgramReceipts(), SourceLinkKind(), SessionProgressIdentity(), TurnLoadVisibility(), EvidenceRootID(), ToolResultFileEdits(), Briefings(), LiveModelOutputs(), WorkerRecords(), SessionMode())
 }
 
 func composeStep(step Step, parts ...Part) Step {
