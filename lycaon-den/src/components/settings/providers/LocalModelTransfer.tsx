@@ -24,9 +24,13 @@ export function LocalModelTransfer(props: Props) {
   const movingBytes = () => phase() === "downloading" || phase() === "importing";
   const measured = () => movingBytes() && total() > 0;
   const percent = () => Math.floor(Math.min(received(), total()) / total() * 100);
-  const byteLabel = () => total() > 0
-    ? `${formatModelBytes(received())} of ${formatModelBytes(total())}`
-    : `${formatModelBytes(received())} transferred`;
+  const byteLabel = () => {
+    const amount = formatModelBytes(received());
+    if (total() <= 0) return `${amount} transferred`;
+    const size = formatModelBytes(total());
+    if (received() < total() && amount === size) return `Almost ${size} transferred`;
+    return `${amount} of ${size}`;
+  };
 
   return (
     <section class="local-model-transfer" aria-label="Model installation">

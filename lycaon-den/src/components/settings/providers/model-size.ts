@@ -1,5 +1,5 @@
 const units = ["B", "KiB", "MiB", "GiB", "TiB"];
-const number = new Intl.NumberFormat(undefined, { maximumFractionDigits: 2 });
+const number = new Intl.NumberFormat(undefined, { maximumFractionDigits: 0 });
 
 export function formatModelBytes(bytes: number, rounding: "nearest" | "up" = "nearest"): string {
   let value = Math.max(0, bytes);
@@ -8,5 +8,5 @@ export function formatModelBytes(bytes: number, rounding: "nearest" | "up" = "ne
     value /= 1024;
     unit++;
   }
-  return `${number.format(rounding === "up" ? Math.ceil(value * 100) / 100 : value)} ${units[unit]}`;
+  return `${number.format(rounding === "up" ? Math.ceil(value) : value)} ${units[unit]}`;
 }

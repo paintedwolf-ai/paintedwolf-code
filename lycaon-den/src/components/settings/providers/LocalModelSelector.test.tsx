@@ -48,8 +48,21 @@ describe("Local model selection", () => {
   });
 
   it("rounds a fractional memory floor upward", () => {
-    mount({...initial, memory_kind:"gpu", available_models: tiers.map(t => ({...t, min_memory_bytes:16 * 2 ** 30 + 1}))});
-    expect(screen.getByRole("radio", {name: /Medium/}).parentElement?.textContent).toContain("Requires 16.01 GiB of GPU memory");
+    mount({...initial, memory_kind:"gpu", available_models: tiers.map(t => ({...t, min_memory_bytes:19_885_870_182, download_bytes:14_471_548_048}))});
+    expect(screen.getByRole("radio", {name: /Medium/}).parentElement?.textContent).toContain("13 GiB download · Requires 19 GiB of GPU memory");
+    expect(screen.getByRole("button", {name:"Download 13 GiB and continue"})).toBeTruthy();
+  });
+
+  it("keeps rounded progress distinct from completion and measures every byte", () => {
+    mount({...progress, downloaded_bytes: 6_500_000_000, total_bytes:6_731_357_749});
+    expect(screen.getByText("Almost 6 GiB transferred")).toBeTruthy();
+    expect(screen.getByText("96%")).toBeTruthy();
+    const bar = screen.getByRole("progressbar");
+    expect(bar.getAttribute("value")).toBe("6500000000");
+    expect(bar.getAttribute("max")).toBe("6731357749");
+    cleanup();
+    mount({...progress, downloaded_bytes: 1, total_bytes:1048576});
+    expect(screen.getByText("1 B of 1 MiB")).toBeTruthy();
   });
 
   it("preselects an eligible download when the recommended tier is unpublished", () => {
