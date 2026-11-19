@@ -215,14 +215,11 @@
   display: flex;
   flex-direction: column;
 }
-/* Let the teach card size to its content. */
 .onboarding-gate__teach-aside {
   flex: 1;
   min-height: 0;
   box-shadow: none;
 }
-/* No rail list above the teach dock: nothing to pull under its card, nothing
-   to wash. */
 .den-shell-aside-main.onboarding-gate__teach-aside > .den-shell-nav-dock {
   min-height: 0;
   margin-top: 0;

@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { render, screen } from "@solidjs/testing-library";
+import { fireEvent, render, screen } from "@solidjs/testing-library";
 import { assertNamedControl } from "../../test/controls.ts";
 import { SettingsNavSidebar } from "./SettingsNavSidebar.tsx";
 
@@ -27,8 +27,9 @@ describe("SettingsNavSidebar", () => {
   });
 
   it("renders one travelling marker and marks the selected row active", () => {
+    const onSelect = vi.fn();
     render(() => (
-      <SettingsNavSidebar section="approvals" onSectionChange={vi.fn()} />
+      <SettingsNavSidebar section="approvals" onSectionChange={onSelect} />
     ));
 
     expect(document.querySelectorAll(".den-nav-marker")).toHaveLength(1);
@@ -37,5 +38,14 @@ describe("SettingsNavSidebar", () => {
     expect(active[0]!.getAttribute("data-testid")).toBe(
       "settings-nav-approvals",
     );
+    fireEvent.click(screen.getByTestId("settings-nav-providers"));
+    expect(onSelect).toHaveBeenCalledWith("providers");
+  });
+
+  it("anchors the preview marker inside the selected row", () => {
+    render(() => <SettingsNavSidebar section="providers" />);
+    const dot = screen.getByTestId("settings-nav-providers").querySelector(".den-nav-marker");
+    expect(dot).not.toBeNull();
+    expect(document.querySelectorAll(".den-nav-marker")).toHaveLength(1);
   });
 });
