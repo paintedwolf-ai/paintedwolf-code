@@ -2,6 +2,7 @@ package confine
 
 import (
 	"os"
+	"os/user"
 	"path/filepath"
 	"slices"
 	"testing"
@@ -40,9 +41,9 @@ func assertCacheRootSet(t *testing.T, home, config string, conventions []string)
 // The fixture exercises cache authority outside the machine temp floor.
 func privateCacheFixture(t *testing.T) string {
 	t.Helper()
-	home, err := os.UserHomeDir()
+	account, err := user.Current()
 	testutil.FailErr(t, "locate account home", err)
-	dir, err := os.MkdirTemp(home, ".pw-cache-test-") //nolint:usetesting // Cache must lie outside shared temp.
+	dir, err := os.MkdirTemp(account.HomeDir, ".pw-cache-test-") //nolint:usetesting // Cache must lie outside shared temp.
 	testutil.FailErr(t, "create cache fixture", err)
 	t.Cleanup(func() { testutil.FailErr(t, "remove cache fixture", os.RemoveAll(dir)) })
 	return dir
