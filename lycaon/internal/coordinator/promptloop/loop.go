@@ -124,18 +124,12 @@ loop:
 			return nil, err
 		}
 		previous := sess.Mode
-		upgraded := previous == api.SessionModeAsk && authority.Mode == api.SessionModeAgent
-		if upgraded && !sess.IsWorkerChild() && l.Context.Deps.ActivateAgentWorkflow != nil {
-			if err := l.Context.Deps.ActivateAgentWorkflow(ctx, id); err != nil {
-				return nil, err
-			}
+		sess, err = l.Context.applyRoundAuthority(ctx, sess, authority, profileID, st)
+		if err != nil {
+			return nil, err
 		}
-		sess = authority.sessionView(sess)
 		setup.sess = sess
 		in.ToolCtx = authority.toolContext(baseToolCtx)
-		if previous != authority.Mode && l.Context.Deps.RefreshRoundMachine != nil {
-			st.machine = l.Context.Deps.RefreshRoundMachine(ctx, sess, profileID)
-		}
 		sentBeforeCall, err := l.Inbox.takeUserSend(ctx, id, st, &userPrompt)
 		if err != nil {
 			return nil, err
@@ -152,7 +146,7 @@ loop:
 				return nil, err
 			}
 		}
-		if upgraded {
+		if previous == api.SessionModeAsk && authority.Mode == api.SessionModeAgent {
 			st.history, err = l.appendAgentEnabledNudge(ctx, id, st)
 			if err != nil {
 				return nil, err

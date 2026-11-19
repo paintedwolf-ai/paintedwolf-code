@@ -32,13 +32,21 @@ func (l *promptContext) roundAuthority(ctx context.Context, sess *api.Session, w
 	}, nil
 }
 
-func (a RoundAuthority) sessionView(sess *api.Session) *api.Session {
-	if sess.Mode == a.Mode {
-		return sess
+func (l *promptContext) applyRoundAuthority(ctx context.Context, sess *api.Session, authority RoundAuthority, profileID string, state *promptLoopTurnState) (*api.Session, error) {
+	if sess.Mode == authority.Mode {
+		return sess, nil
+	}
+	if sess.Mode == api.SessionModeAsk && authority.Mode == api.SessionModeAgent && !sess.IsWorkerChild() && l.Deps.ActivateAgentWorkflow != nil {
+		if err := l.Deps.ActivateAgentWorkflow(ctx, sess.ID); err != nil {
+			return nil, err
+		}
 	}
 	updated := *sess
-	updated.Mode = a.Mode
-	return &updated
+	updated.Mode = authority.Mode
+	if l.Deps.RefreshRoundMachine != nil {
+		state.machine = l.Deps.RefreshRoundMachine(ctx, &updated, profileID)
+	}
+	return &updated, nil
 }
 
 func (a RoundAuthority) toolContext(base tools.ToolContext) tools.ToolContext {
