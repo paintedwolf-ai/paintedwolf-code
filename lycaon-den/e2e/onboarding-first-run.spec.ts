@@ -1,4 +1,5 @@
 import { expect, type Page } from "@playwright/test";
+import type { LocalGenerationStatus } from "../src/api/types.ts";
 import { includedProvider, publishedTier } from "../src/test/local-generation-fixture.ts";
 import { appStateStorageSliceKey } from "../shared/app-state-storage.ts";
 import {
@@ -12,10 +13,11 @@ import {
 const ONBOARDING_STATE_KEY = appStateStorageSliceKey("onboarding");
 const LAYOUT_STATE_KEY = appStateStorageSliceKey("layout");
 
-async function serveCatalog(page: Page, published: boolean) {
+async function serveCatalog(page: Page, published: boolean, runtime?: Partial<LocalGenerationStatus>) {
   const provider = includedProvider({
     state: "idle", recovery_action: "none",
     available_models: [{...publishedTier, download_available: published}],
+    ...runtime,
   });
   await page.route("**/v1/providers", async route => {
     if (route.request().method() === "GET") await route.fulfill({json: {providers: [provider]}});
@@ -174,6 +176,20 @@ webE2e.describe("onboarding first-run", () => {
     await expect(page.getByTestId("onboarding-local-model")).toBeVisible({timeout: 60_000});
     await expect(page.getByTestId("onboarding-progress")).toHaveText("1 / 1");
     expect(mutations).toEqual([]);
+  });
+
+  webE2e("a model imported before setup skips the published model choice", async ({page}) => {
+    await serveCatalog(page, true, {
+      state: "repair_required", recovery_action: "repair", selection_state: "selected", selected_model: publishedTier.id,
+    });
+    await seedFirstRunUnset(page);
+    await page.goto("/");
+    await expect(page.getByTestId("onboarding-layout")).toBeVisible({timeout: 60_000});
+    await expect(page.getByTestId("onboarding-progress")).toHaveText("1 / 2");
+    await expect(page.getByTestId("onboarding-layout-back")).toHaveCount(0);
+    await page.getByTestId("onboarding-layout-continue").click();
+    await page.getByTestId("onboarding-welcome-dismiss").click();
+    await expect(page.getByTestId("home-view")).toBeVisible({timeout: 60_000});
   });
 
   webE2e("an existing installation sees only the model choice", async ({ page }) => {
