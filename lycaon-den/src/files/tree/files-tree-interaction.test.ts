@@ -5,16 +5,23 @@ import { filesControllerFixture } from "../../test/files-controller-fixture.ts";
 import { createFilesTreeInteraction } from "./files-tree-interaction.ts";
 import { applyFilesBufferDraft } from "../documents/project-files-buffer-io.ts";
 import { resetProjectFilesForTests } from "../documents/project-files-buffer-lifecycle.ts";
-import { recordChatLocations, resetChatLocationsForTests } from "../source/chat-locations.ts";
+import { recordChatLocations } from "../source/chat-locations.ts";
 import { recordOutsideRoot, resetOutsideRootsForTests } from "../source/outside-namespace.ts";
 import type { FilesTreeHandle } from "./files-tree-context.ts";
 const history = vi.hoisted(() => ({ noteLifecycleChange: vi.fn(), refreshSourceHistory: vi.fn().mockResolvedValue(undefined), runSourceHistory: vi.fn(), reportHistoryFailure: vi.fn() }));
 vi.mock("../history/project-files-history.ts", () => ({ createSourceHistoryCommands: () => history }));
 const disposers: Array<() => void> = [];
-afterEach(() => { disposers.splice(0).forEach(dispose => dispose()); resetProjectFilesForTests(); resetChatLocationsForTests(); resetOutsideRootsForTests(); vi.clearAllMocks(); });
+const projectId = "tree-interaction";
+afterEach(() => {
+  disposers.splice(0).forEach(dispose => dispose());
+  resetProjectFilesForTests();
+  recordChatLocations(projectId, []);
+  resetOutsideRootsForTests();
+  vi.clearAllMocks();
+});
 
 function fixture() {
-  const f = filesControllerFixture("tree-interaction");
+  const f = filesControllerFixture(projectId);
   const browse = vi.fn().mockResolvedValue({ entries: [] }); const create = vi.fn().mockImplementation(async (_project, request: { path: string }) => ({ path: request.path }));
   Object.assign(f.client, { browseProjectSource: browse, createProjectSourceEntry: create });
   const [settled, setSettled] = createSignal(false);

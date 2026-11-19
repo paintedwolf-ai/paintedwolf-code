@@ -1,24 +1,26 @@
 import { afterEach, describe, expect, it } from "vitest";
 import type { SourceChatLocation } from "../../api/types.ts";
-import { ledgerAddress, locationLedgerPath, locationRowPath, recordChatLocations, resetChatLocationsForTests, treeAddress } from "./chat-locations.ts";
+import { ledgerAddress, locationRowPath, recordChatLocations, treeAddress } from "./chat-locations.ts";
 
 const folder: SourceChatLocation = { id: "loc-folder", session_id: "chat", root_id: "outside", anchor: "Users/me/site", path: "/Users/me/site", kind: "repository", label: "site", hidden: false, available: true };
 const file: SourceChatLocation = { id: "loc-file", session_id: "chat", root_id: "outside", anchor: "Users/me/.ssh/config", path: "/Users/me/.ssh/config", kind: "file", label: ".ssh", hidden: false, available: true };
 
 describe("chat locations", () => {
-  afterEach(resetChatLocationsForTests);
+  afterEach(() => recordChatLocations("project", []));
 
   it("maps folder rows to outside paths and back", () => {
-    expect(locationLedgerPath(folder, ".")).toBe("Users/me/site");
-    expect(locationLedgerPath(folder, "src/app.ts")).toBe("Users/me/site/src/app.ts");
+    recordChatLocations("project", [folder]);
+    expect(ledgerAddress("project", "outside", folder.id, ".")).toEqual({ rootId: "outside", path: folder.anchor });
+    expect(ledgerAddress("project", "outside", folder.id, "src/app.ts")).toEqual({ rootId: "outside", path: "Users/me/site/src/app.ts" });
     expect(locationRowPath(folder, "Users/me/site/src/app.ts")).toBe("src/app.ts");
     expect(locationRowPath(folder, "Users/me/site")).toBe(".");
     expect(locationRowPath(folder, "Users/me/sites/other")).toBeUndefined();
   });
 
   it("lists a file location as its one file", () => {
-    expect(locationLedgerPath(file, "config")).toBe("Users/me/.ssh/config");
-    expect(locationLedgerPath(file, ".")).toBe("Users/me/.ssh");
+    recordChatLocations("project", [file]);
+    expect(ledgerAddress("project", "outside", file.id, "config")).toEqual({ rootId: "outside", path: file.anchor });
+    expect(ledgerAddress("project", "outside", file.id, ".")).toEqual({ rootId: "outside", path: "Users/me/.ssh" });
     expect(locationRowPath(file, "Users/me/.ssh/config")).toBe("config");
     expect(locationRowPath(file, "Users/me/.ssh/known_hosts")).toBeUndefined();
   });
