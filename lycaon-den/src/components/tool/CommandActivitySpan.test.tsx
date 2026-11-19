@@ -16,11 +16,10 @@ function entry(
   group: string,
   state: "running" | "completed" | "failed" = "running",
   phase?: CommandActivity["phase"],
-  subject = "source.rs",
 ): ActivitySpanEntry {
   const label = phase === "execute" ? "Run process" : "Read source";
   const outcome = { running: "Running", completed: "Completed", failed: "Failed" }[state];
-  const fact: CommandActivity = { id, group, label, subject, state, outcome, phase, execution_ids: [id], spans: [] };
+  const fact: CommandActivity = { id, group, label, subject: "source.rs", state, outcome, phase, execution_ids: [id], spans: [] };
   const program = { id, state, activities: [fact] } as CommandProgramReceipt;
   const status = state === "failed" ? "error" : state;
   return { kind: "tool", part: { id, toolCallId: id, assistantMessageId: "assistant", messageId: "result", tool: "command", kind: "command", status, commandProgram: program } };
@@ -46,11 +45,17 @@ it("advances the span label only on a strict rank increase (AT-ACT-HEAD-01)", ()
   const [entries, setEntries] = createSignal([entry("read", "Reading files", "completed", "inspect")]);
   const view = render(() => <CommandActivitySpan label="Running commands" entries={entries()} layout="chat" entryKey="command-groups-rank" renderToolEntry={part => <ToolPartShell part={part()} layout="chat"><span>Recorded detail</span></ToolPartShell>} />);
   const label = () => view.container.querySelector(".den-activity-span-name")?.textContent;
+  const sequence = () => view.container.querySelector(".den-activity-span-hint")?.textContent;
+  expect(sequence()).toBe("");
   expect(label()).toBe("Reading files");
   setEntries([entry("read", "Reading files", "completed", "inspect"), entry("search", "Searching codebase", "completed", "inspect")]);
+  expect(sequence()).toBe("Reading files → Searching codebase");
   expect(label()).toBe("Reading files");
   setEntries([entry("read", "Reading files", "completed", "inspect"), entry("search", "Searching codebase", "completed", "inspect"), entry("map", "Mapping codebase", "completed", "inspect")]);
   expect(label()).toBe("Mapping codebase");
+  expect(sequence()).toBe("Reading files → Searching codebase → Mapping codebase");
+  setEntries(previous => [...previous, entry("again", "Reading files"), entry("build", "Running programs"), entry("test", "Running tests")]);
+  expect(sequence()).toBe("Reading files → Searching codebase → Mapping codebase · +2");
 });
 
 it("takes its status from the settled receipt, not the program recorded while running", async () => {
@@ -63,9 +68,12 @@ it("takes its status from the settled receipt, not the program recorded while ru
   await waitFor(() => expect(group()?.getAttribute("data-status")).toBe("done"));
 });
 
-it("updates a recovered command span's header without withdrawing its failed runs", async () => {
+it.each([
+  { group: "Running programs", sequence: "" },
+  { group: "Running tests", sequence: "Running programs → Running tests" },
+])("updates recovered command chrome with $group and keeps its rows", async ({ group, sequence }) => {
   const attempts = Array.from({ length: 16 }, (_, index) =>
-    entry(`attempt-${index}`, "Running programs", "failed", "execute", "Run test probe"),
+    entry(`attempt-${index}`, "Running programs", "failed", "execute"),
   );
   const [entries, setEntries] = createSignal(attempts);
   const { container } = render(() => (
@@ -79,33 +87,34 @@ it("updates a recovered command span's header without withdrawing its failed run
   const span = container.querySelector('[data-testid="activity-span-card"]')!;
   const toggle = disclosureToggle(span);
   const failureChip = () => span.querySelector('[data-testid="activity-span-failed"]');
-  const hint = () => span.querySelector(".den-activity-span-hint")?.textContent;
+  const headerSequence = () => span.querySelector(".den-activity-span-hint")?.textContent;
   const rows = () => Array.from(span.querySelectorAll('[data-testid="tool-part-card"]'));
   expect(span.getAttribute("data-status")).toBe("error");
   expect(failureChip()?.textContent).toBe("16 failed");
   expect(toggle.getAttribute("aria-label")).toContain("16 failed");
-  expect(hint()).toBe("Run test probe");
+  expect(headerSequence()).toBe("");
 
   fireEvent.click(toggle);
   const failedRows = rows();
   expect(failedRows).toHaveLength(16);
-  setEntries([...attempts, entry("verification", "Running programs", "completed", "execute", "Verify the fix")]);
+  setEntries([...attempts, entry("verification", group, "completed", "execute")]);
   expect(span.getAttribute("data-status")).toBe("done");
   expect(failureChip()).toBeNull();
   expect(toggle.getAttribute("aria-label")).toBe("Running programs, done, 17 actions");
-  expect(hint()).toBe("Verify the fix, +1");
-  expect(rows()).toHaveLength(17);
+  expect(headerSequence()).toBe(sequence);
+  const recoveredRows = rows();
+  expect(recoveredRows).toHaveLength(17);
   failedRows.forEach((row, index) => {
-    expect(rows()[index]).toBe(row);
+    expect(recoveredRows[index]).toBe(row);
     expect(row.getAttribute("data-status")).toBe("error");
   });
-  expect(rows().at(-1)?.getAttribute("data-status")).toBe("done");
+  expect(recoveredRows.at(-1)?.getAttribute("data-status")).toBe("done");
 
   try {
     await saveVerboseMode(true);
     expect(failureChip()?.textContent).toBe("16 failed");
     expect(toggle.getAttribute("aria-label")).toContain("16 failed");
-    expect(hint()).toBe("Run test probe, +1");
+    expect(headerSequence()).toBe(sequence);
     expect(rows()).toHaveLength(17);
     expect(isDisclosureOpen(span)).toBe(true);
   } finally {
