@@ -105,10 +105,13 @@ webE2e("An outside text edit opens the recorded file from chat", async ({ page, 
       await apiJson(request, "POST", "/harness/llm/auto", { enabled: true, text: "The report is updated." });
     }
 
-    const card = liveChatStage(page).getByTestId("file-edit-diff").filter({ hasText: destination });
+    const group = liveChatStage(page).getByTestId("diff-group");
+    await group.getByTestId("diff-group-files").click();
+    const card = group.getByTestId("file-edit-diff").filter({ hasText: destination });
     const disclosure = card.getByTestId("file-edit-diff-toggle");
-    await disclosure.click();
     await expect(disclosure).toHaveAttribute("aria-expanded", "true");
+    await disclosure.click();
+    await expect(disclosure).toHaveAttribute("aria-expanded", "false");
     const open = page.waitForResponse((response) => {
       const request = response.request();
       return new URL(response.url()).pathname === `/v1/projects/${project.id}/editor-documents` &&
