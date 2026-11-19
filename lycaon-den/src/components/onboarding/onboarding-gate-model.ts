@@ -1,3 +1,4 @@
+import type { LocalGenerationStatus } from "../../api/types.ts";
 import type { ContextNavItemId } from "../../../shared/app-state-types.ts";
 import { DEFAULT_SPLIT_COMPANION } from "../../shell/stage-placement.ts";
 
@@ -19,20 +20,23 @@ export function needsOnboardingConfig(input: {
   return input.readyProviderCount === 0 || !input.hasDefaultModel;
 }
 
+export function localModelSetup(runtime?: LocalGenerationStatus) {
+  if (runtime?.offline_installer) return "packaged";
+  if (!runtime?.available_models) return "unknown";
+  return runtime.available_models.some(tier => tier.download_available) ? "available" : "unpublished";
+}
+
 export function shouldShowOnboardingHardGate(input: {
   prefsReady: boolean;
   firstRunSetupCompleted: boolean;
   localModelOnboardingCompleted: boolean;
+  runtime?: LocalGenerationStatus;
 }): boolean {
-  return input.prefsReady && !(input.firstRunSetupCompleted && input.localModelOnboardingCompleted);
-}
-
-export function shouldSuppressShellForFirstRun(input: {
-  prefsReady: boolean;
-  firstRunSetupCompleted: boolean;
-  localModelOnboardingCompleted: boolean;
-}): boolean {
-  return !input.prefsReady || !(input.firstRunSetupCompleted && input.localModelOnboardingCompleted);
+  if (!input.prefsReady) return false;
+  if (!input.firstRunSetupCompleted) return true;
+  if (input.localModelOnboardingCompleted) return false;
+  const setup = localModelSetup(input.runtime);
+  return setup === "available" || setup === "packaged";
 }
 
 export function onboardingGateStep(page: OnboardingGatePage): number {

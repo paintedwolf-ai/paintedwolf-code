@@ -18,7 +18,7 @@ import {
   saveWorkspaceOrientation,
   startupCompanionPref,
 } from "../../shell/workspace-layout.ts";
-import { includedProvider } from "../../test/local-generation-fixture.ts";
+import { includedProvider, publishedTier } from "../../test/local-generation-fixture.ts";
 import { createSignal } from "solid-js";
 import { providerModel } from "../../test/provider-fixtures.ts";
 import { stageLabelFor } from "../stage/stage-registry.tsx";
@@ -39,12 +39,12 @@ vi.mock("../../store/app-state-snapshot.ts", () => ({
 let firstRunComplete = false;
 let modelStepComplete = false;
 const completeModelStep = vi.fn(async () => { modelStepComplete = true; });
-const completeFirstRunSetup = vi.fn().mockResolvedValue(undefined);
+const completeFirstRunSetup = vi.hoisted(() => vi.fn().mockResolvedValue(undefined));
 vi.mock("../../settings/system/onboarding-prefs.ts", () => ({
   localModelOnboardingCompletedPref: () => modelStepComplete,
   completeLocalModelOnboarding: () => completeModelStep(),
   firstRunSetupCompletedPref: () => firstRunComplete,
-  completeFirstRunSetup: () => completeFirstRunSetup(),
+  completeFirstRunSetup,
 }));
 
 
@@ -65,7 +65,7 @@ const readyProvider: ProviderMeta = {
   models: [providerModel("llama3.1")],
 };
 
-const normalProvider = includedProvider({state: "opted_out", recovery_action: "none", offline_installer: false});
+const normalProvider = includedProvider({state: "opted_out", recovery_action: "none", offline_installer: false, available_models: [publishedTier]});
 
 const policyWithDefault: ModelPolicy = {
   coordinator: { provider_id: "local", model: "llama3.1" },
@@ -183,6 +183,27 @@ describe("Local model setup", () => {
     fireEvent.click(screen.getByTestId("onboarding-layout-continue"));
     expect(screen.getByTestId("onboarding-progress").textContent).toBe("2 / 2");
     expect(completeModelStep).toHaveBeenCalledOnce();
+  });
+
+  it("defers the model decision while every download is unpublished", async () => {
+    const store = createSettingsStore({providers: [includedProvider({
+      state: "ready", recovery_action: "none", selected_model: "existing",
+    })]});
+    const client = mockClient();
+    render(() => <OnboardingGate client={client} settingsStore={store} settingsChecked={true} />);
+    expect(screen.getByTestId("onboarding-waiting")).toBeTruthy();
+    store.actions.setProviders([includedProvider({
+      state: "ready", recovery_action: "none", selected_model: "existing",
+      available_models: [{...publishedTier, download_available: false}],
+    })]);
+    expect(screen.getByTestId("onboarding-progress").textContent).toBe("1 / 2");
+    expect(screen.queryByTestId("onboarding-layout-back")).toBeNull();
+    fireEvent.click(screen.getByTestId("onboarding-layout-continue"));
+    expect(screen.getByTestId("onboarding-welcome").textContent).toContain("AI providers");
+    fireEvent.click(screen.getByTestId("onboarding-welcome-dismiss"));
+    expect(completeFirstRunSetup).toHaveBeenCalledWith({deferModelStep: true});
+    expect(completeModelStep).not.toHaveBeenCalled();
+    expect(store.state.providers[0]?.local_runtime?.selected_model).toBe("existing");
   });
 
   it("finishes the outstanding model step on a returning offline installation", async () => {

@@ -1,5 +1,5 @@
-import { expect } from "@playwright/test";
-import { includedProvider } from "../src/test/local-generation-fixture.ts";
+import { expect, type Page } from "@playwright/test";
+import { includedProvider, publishedTier } from "../src/test/local-generation-fixture.ts";
 import { appStateStorageSliceKey } from "../shared/app-state-storage.ts";
 import {
   apiClearDefaultModel,
@@ -12,12 +12,24 @@ import {
 const ONBOARDING_STATE_KEY = appStateStorageSliceKey("onboarding");
 const LAYOUT_STATE_KEY = appStateStorageSliceKey("layout");
 
+async function serveCatalog(page: Page, published: boolean) {
+  const provider = includedProvider({
+    state: "idle", recovery_action: "none",
+    available_models: [{...publishedTier, download_available: published}],
+  });
+  await page.route("**/v1/providers", async route => {
+    if (route.request().method() === "GET") await route.fulfill({json: {providers: [provider]}});
+    else await route.continue();
+  });
+}
+
 /** First-run model selection, starting layout, and workspace entry. */
 webE2e.describe("onboarding first-run", () => {
   webE2e(
     "den:harness — local model → layout pick → welcome dismiss latches; reload skips gate",
     async ({ page, request }) => {
       await apiEnsureDefaultModel(request);
+      await serveCatalog(page, true);
       await seedFirstRunUnset(page);
       await page.goto("/");
 
@@ -84,6 +96,7 @@ webE2e.describe("onboarding first-run", () => {
     "den:harness — Escape steps layout → welcome; Escape on welcome latches",
     async ({ page, request }) => {
       await apiEnsureDefaultModel(request);
+      await serveCatalog(page, true);
       await seedFirstRunUnset(page);
       await page.goto("/");
       await page.getByRole("radio", { name: "Use no local model" }).check();
@@ -139,7 +152,32 @@ webE2e.describe("onboarding first-run", () => {
     await expect(page.getByTestId("home-view")).toBeVisible();
   });
 
+  webE2e("an unpublished catalog defers model setup until downloads are offered", async ({page}) => {
+    await seedFirstRunUnset(page);
+    await serveCatalog(page, false);
+    const mutations: string[] = [];
+    page.on("request", request => {
+      if (request.url().includes("/local-model") && request.method() !== "GET") mutations.push(request.method());
+    });
+    await page.goto("/");
+    await expect(page.getByTestId("onboarding-layout")).toBeVisible({timeout: 60_000});
+    await expect(page.getByTestId("onboarding-progress")).toHaveText("1 / 2");
+    await page.getByTestId("onboarding-layout-continue").click();
+    await expect(page.getByTestId("onboarding-welcome-settings-teach")).toBeVisible();
+    await page.getByTestId("onboarding-welcome-dismiss").click();
+    await expect(page.getByTestId("home-view")).toBeVisible({timeout: 60_000});
+    await page.reload();
+    await expect(page.getByTestId("home-view")).toBeVisible({timeout: 60_000});
+    await expect(page.getByTestId("onboarding-gate")).toHaveCount(0);
+    await serveCatalog(page, true);
+    await page.reload();
+    await expect(page.getByTestId("onboarding-local-model")).toBeVisible({timeout: 60_000});
+    await expect(page.getByTestId("onboarding-progress")).toHaveText("1 / 1");
+    expect(mutations).toEqual([]);
+  });
+
   webE2e("an existing installation sees only the model choice", async ({ page }) => {
+    await serveCatalog(page, true);
     await seedAppState(page, {onboarding: {firstRunSetupCompleted: true, localModelOnboardingCompleted: false}});
     await page.goto("/");
     await expect(page.getByTestId("onboarding-local-model")).toBeVisible({timeout: 60_000});

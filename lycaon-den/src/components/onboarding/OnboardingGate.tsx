@@ -17,6 +17,7 @@ import {
   ONBOARDING_GATE_STEP_COUNT,
   onboardingEscapeTarget,
   onboardingGateStep,
+  localModelSetup,
   type OnboardingGatePage,
 } from "./onboarding-gate-model.ts";
 import { ONBOARDING_LAYOUT_COPY } from "./onboarding-layout-copy.ts";
@@ -43,6 +44,7 @@ export function OnboardingGate(props: Props) {
     return client && provider ? { client, provider } : null;
   };
   let entryResolved = false;
+  let modelStepDeferred = false;
 
   const finishModelStep = async () => {
     if (dismissing()) return;
@@ -58,11 +60,14 @@ export function OnboardingGate(props: Props) {
 
   createEffect(() => {
     if (entryResolved || !props.settingsChecked || !props.client) return;
-    const runtime = localProvider()?.local_runtime;
-    if (!runtime) return;
+    const setup = localModelSetup(localProvider()?.local_runtime);
+    if (setup === "unknown") return;
     entryResolved = true;
-    if (runtime.offline_installer) {
+    if (setup === "packaged") {
       void finishModelStep();
+    } else if (setup === "unpublished") {
+      modelStepDeferred = true;
+      setPage("layout");
     } else {
       setIncludesModel(true);
       setPage(localModelOnboardingCompletedPref() ? "layout" : "local_model");
@@ -76,7 +81,7 @@ export function OnboardingGate(props: Props) {
     if (dismissing()) return;
     setDismissing(true);
     try {
-      await completeFirstRunSetup();
+      await completeFirstRunSetup({ deferModelStep: modelStepDeferred });
     } finally {
       setDismissing(false);
     }

@@ -7,7 +7,6 @@ import {
   onboardingLayoutChoice,
   onboardingSplitCompanion,
   shouldShowOnboardingHardGate,
-  shouldSuppressShellForFirstRun,
   startupCompanionForChoice,
 } from "./onboarding-gate-model.ts";
 
@@ -51,35 +50,6 @@ describe("shouldShowOnboardingHardGate", () => {
     expect(shouldShowOnboardingHardGate({ ...base, prefsReady: false })).toBe(
       false,
     );
-  });
-});
-
-describe("shouldSuppressShellForFirstRun", () => {
-  it("suppresses home while unlatched after prefs load", () => {
-    expect(
-      shouldSuppressShellForFirstRun({
-        prefsReady: true, localModelOnboardingCompleted: true,
-        firstRunSetupCompleted: false,
-      }),
-    ).toBe(true);
-  });
-
-  it("never suppresses after the latch", () => {
-    expect(
-      shouldSuppressShellForFirstRun({
-        prefsReady: true, localModelOnboardingCompleted: true,
-        firstRunSetupCompleted: true,
-      }),
-    ).toBe(false);
-  });
-
-  it("suppresses until prefs load", () => {
-    expect(
-      shouldSuppressShellForFirstRun({
-        prefsReady: false, localModelOnboardingCompleted: false,
-        firstRunSetupCompleted: false,
-      }),
-    ).toBe(true);
   });
 });
 

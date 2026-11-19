@@ -48,8 +48,19 @@ describe("onboarding prefs durability", () => {
     expect(persistAppState).toHaveBeenCalledOnce();
   });
 
+  it("completes layout and welcome without recording an unpublished model decision", async () => {
+    const saving = completeFirstRunSetup({deferModelStep: true});
+    state.resolveWrite?.();
+    await saving;
+    expect(firstRunSetupCompletedPref()).toBe(true);
+    expect(localModelOnboardingCompletedPref()).toBe(false);
+    expect(persistAppState).toHaveBeenCalledWith({
+      onboarding: {firstRunSetupCompleted: true, localModelOnboardingCompleted: false},
+    });
+  });
+
   it("does not dismiss the hard gate before the completion latch is durable", async () => {
-    const saving = completeFirstRunSetup();
+    const saving = completeFirstRunSetup({deferModelStep: false});
 
     expect(firstRunSetupCompletedPref()).toBe(false);
     expect(persistAppState).toHaveBeenCalledOnce();

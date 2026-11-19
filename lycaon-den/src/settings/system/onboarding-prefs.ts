@@ -36,15 +36,16 @@ export async function completeLocalModelOnboarding(): Promise<void> {
   setLocalModelOnboardingCompleted(true);
 }
 
-export async function completeFirstRunSetup(): Promise<void> {
+export async function completeFirstRunSetup(options: { deferModelStep: boolean }): Promise<void> {
   setPrefsReady(true);
+  const modelCompleted = localModelOnboardingCompleted() || !options.deferModelStep;
   await persistAppStateInBackground({
     onboarding: {
       ...getAppStateSnapshot().onboarding,
       firstRunSetupCompleted: true,
-      localModelOnboardingCompleted: true,
+      localModelOnboardingCompleted: modelCompleted,
     },
   });
-  setLocalModelOnboardingCompleted(true);
+  setLocalModelOnboardingCompleted(modelCompleted);
   setFirstRunSetupCompleted(true);
 }

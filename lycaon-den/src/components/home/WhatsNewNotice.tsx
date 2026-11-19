@@ -13,6 +13,7 @@ import {
 } from "../../settings/system/whats-new-prefs.ts";
 import { notesForVersion } from "../../whats-new/changelog.ts";
 import { decideWhatsNew } from "../../whats-new/whats-new-gate.ts";
+import type { LocalGenerationStatus } from "../../api/types.ts";
 import { shouldShowOnboardingHardGate } from "../onboarding/onboarding-gate-model.ts";
 import type { NoticeStore } from "../../notices/notice-store.ts";
 import { APP_SCOPE } from "../../notices/notice-scope.ts";
@@ -21,6 +22,7 @@ import { WhatsNewDialog } from "./WhatsNewDialog.tsx";
 
 export type WhatsNewNoticeProps = {
   notices: NoticeStore;
+  localRuntime?: LocalGenerationStatus;
   currentVersion?: string | null;
   notesFor?: (version: string) => string;
   saveLatch?: (version: string) => Promise<void>;
@@ -51,6 +53,7 @@ export function WhatsNewNotice(props: WhatsNewNoticeProps): JSX.Element {
       prefsReady: whatsNewPrefsReady(),
       onboardingHardGate: shouldShowOnboardingHardGate({
         prefsReady: onboardingPrefsReady(),
+        runtime: props.localRuntime,
         firstRunSetupCompleted: firstRunSetupCompletedPref(),
         localModelOnboardingCompleted: localModelOnboardingCompletedPref(),
       }),

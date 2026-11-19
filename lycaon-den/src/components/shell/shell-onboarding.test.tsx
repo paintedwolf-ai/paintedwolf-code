@@ -5,9 +5,10 @@ import { createShellOnboarding, ShellOnboardingGate } from "./shell-onboarding.t
 import { createAppStore } from "../../store/app-state.ts";
 import { createSettingsStore } from "../../store/settings-store.ts";
 import type { OnboardingGate } from "../onboarding/OnboardingGate.tsx";
-const seams = vi.hoisted(() => ({ completed: true, prefsReady: true, frameReady: true, dismiss: vi.fn(async () => undefined),
+import { includedProvider, publishedTier } from "../../test/local-generation-fixture.ts";
+const seams = vi.hoisted(() => ({ completed: true, modelCompleted: true, prefsReady: true, frameReady: true, dismiss: vi.fn(async () => undefined),
   gate: null as unknown as ComponentProps<typeof OnboardingGate>, providers: vi.fn(async () => []), policy: vi.fn(async () => ({})) }));
-vi.mock("../../settings/system/onboarding-prefs.ts", () => ({ localModelOnboardingCompletedPref: () => true, firstRunSetupCompletedPref: () => seams.completed, onboardingPrefsReady: () => seams.prefsReady }));
+vi.mock("../../settings/system/onboarding-prefs.ts", () => ({ localModelOnboardingCompletedPref: () => seams.modelCompleted, firstRunSetupCompletedPref: () => seams.completed, onboardingPrefsReady: () => seams.prefsReady }));
 vi.mock("../../contributions/contribution-store.ts", () => ({ contributionFrameReady: () => seams.frameReady }));
 vi.mock("../../platform/connection/boot-fallback.ts", () => ({ dismissBootFallback: seams.dismiss }));
 vi.mock("../../platform/connection/app-connection.ts", () => { const client = { listProviders: seams.providers, getModelPolicySettings: seams.policy }; return { getLycaonClient: () => client }; });
@@ -24,7 +25,7 @@ function mountGate() {
   return { ...view, controller, appStore, settingsStore };
 }
 
-beforeEach(() => { seams.completed = true; seams.prefsReady = true; seams.frameReady = true; vi.clearAllMocks(); });
+beforeEach(() => { seams.completed = true; seams.modelCompleted = true; seams.prefsReady = true; seams.frameReady = true; vi.clearAllMocks(); });
 describe("shell onboarding authority", () => {
   it("loads provider policy before presenting a provider gap in an established workspace", async () => {
     const { controller, appStore } = mountGate();
@@ -33,6 +34,19 @@ describe("shell onboarding authority", () => {
     await waitFor(() => expect(controller.modelsChecked()).toBe(true));
     expect(seams.providers).toHaveBeenCalledOnce(); expect(seams.policy).toHaveBeenCalledTimes(2);
     expect(controller.providerGap()).toBeTruthy(); expect(controller.showNoProviderBanner()).toBe(true);
+  });
+
+  it("offers deferred setup once the host publishes a download", () => {
+    seams.modelCompleted = false;
+    const { settingsStore } = mountGate();
+    expect(screen.getByTestId("workspace")).toBeTruthy();
+    const runtime = { state: "idle", recovery_action: "none" } as const;
+    settingsStore.actions.setProviders([includedProvider({...runtime, available_models: []})]);
+    expect(screen.getByTestId("workspace")).toBeTruthy();
+    settingsStore.actions.setProviders([includedProvider({...runtime, available_models: [{...publishedTier, download_available: false}]})]);
+    expect(screen.queryByTestId("setup-gate")).toBeNull();
+    settingsStore.actions.setProviders([includedProvider({...runtime, available_models: [publishedTier]})]);
+    expect(screen.getByTestId("setup-gate")).toBeTruthy();
   });
 
   it("holds the first-run gate behind contribution readiness and releases boot fallback", () => {

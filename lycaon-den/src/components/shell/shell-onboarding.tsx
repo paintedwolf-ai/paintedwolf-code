@@ -9,10 +9,10 @@ import { type ProjectsStore } from "../../store/projects-store.ts";
 import { type SettingsStore } from "../../store/settings-store.ts";
 import { dismissBootFallback } from "../../platform/connection/boot-fallback.ts";
 import { providerConfigGap } from "../../notices/no-provider-card.ts";
-import { hasDefaultModel, readyProviders } from "../../settings/providers/models-editor-model.ts";
+import { hasDefaultModel, isIncludedProvider, readyProviders } from "../../settings/providers/models-editor-model.ts";
 import { firstRunSetupCompletedPref, localModelOnboardingCompletedPref, onboardingPrefsReady } from "../../settings/system/onboarding-prefs.ts";
 import { loadSettingsPanel } from "../../settings/settings-actions.ts";
-import { needsOnboardingConfig, shouldShowOnboardingHardGate, shouldSuppressShellForFirstRun } from "../onboarding/onboarding-gate-model.ts";
+import { needsOnboardingConfig, shouldShowOnboardingHardGate } from "../onboarding/onboarding-gate-model.ts";
 
 export function createShellOnboarding(appStore: AppStore, projects: ProjectsStore, settingsStore: SettingsStore) {
   const [modelsChecked, setModelsChecked] = createSignal(false);
@@ -42,14 +42,10 @@ export function createShellOnboarding(appStore: AppStore, projects: ProjectsStor
       prefsReady: onboardingPrefsReady(),
       localModelOnboardingCompleted: localModelOnboardingCompletedPref(),
       firstRunSetupCompleted: firstRunSetupCompletedPref(),
+      runtime: settingsStore.state.providers.find(isIncludedProvider)?.local_runtime,
     });
 
-  const suppressShellForFirstRun = () =>
-    shouldSuppressShellForFirstRun({
-      prefsReady: onboardingPrefsReady(),
-      localModelOnboardingCompleted: localModelOnboardingCompletedPref(),
-      firstRunSetupCompleted: firstRunSetupCompletedPref(),
-    });
+  const suppressShellForFirstRun = () => !onboardingPrefsReady() || showOnboardingGate();
 
   // Home and chat share one missing-provider condition.
   const providerGap = () =>
