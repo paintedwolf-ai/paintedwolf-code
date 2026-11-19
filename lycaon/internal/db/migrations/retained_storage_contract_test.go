@@ -1,6 +1,7 @@
 package migrations
 
 import (
+	"database/sql"
 	"math"
 	"strings"
 	"testing"
@@ -148,6 +149,24 @@ func TestRetainedSorterBudgetRejectsMergeAndFinalSumOverflow(t *testing.T) {
 				t.Fatal("accepted an overflowing scratch reservation")
 			}
 		})
+	}
+}
+
+func TestSessionModeWriteEstimateTracksSessionRows(t *testing.T) {
+	ctx := t.Context()
+	database, err := sql.Open("sqlite", ":memory:")
+	testutil.FailErr(t, "open session migration fixture", err)
+	defer database.Close()
+	_, err = database.ExecContext(ctx, "CREATE TABLE sessions(id TEXT PRIMARY KEY, title TEXT)")
+	testutil.FailErr(t, "create released session tree", err)
+	empty, err := sessionModeWrites(ctx, database, 0)
+	testutil.FailErr(t, "estimate writes for empty session tree", err)
+	_, err = database.ExecContext(ctx, "INSERT INTO sessions VALUES ('session', ?)", strings.Repeat("a", 8192))
+	testutil.FailErr(t, "seed session with overflow pages", err)
+	populated, err := sessionModeWrites(ctx, database, 0)
+	testutil.FailErr(t, "estimate writes for populated session tree", err)
+	if populated <= empty {
+		t.Fatalf("session rows did not increase write reservation: %d <= %d", populated, empty)
 	}
 }
 

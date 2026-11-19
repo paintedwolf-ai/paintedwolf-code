@@ -42,7 +42,7 @@ func TestReadWorkerEnrichmentKeepsProjectSourcesAndContextIdentity(t *testing.T)
 	child := &api.Session{ID: "child", ParentSessionID: " parent "}
 	out, err := service.Enrich(workercontext.WithJob(t.Context(), "read-job"), child, input)
 	testutil.FailErr(t, "enrich read worker", err)
-	if out.Identity.WorkerJobID != "read-job" || out.Identity.ParentSessionID != "parent" || out.Identity.HandoffSessionID != "parent" || out.Identity.HandoffAgentID != "read-job" || out.Identity.RootSessionID != "retained-root" || out.Source.SourceWorkspaceKind != api.SourceWorkspaceKindProject || out.Source.WorkerCoord != service || jobs.claims != 0 {
+	if out.Identity.WorkerJobID != "read-job" || out.Identity.ParentSessionID != "parent" || out.Identity.HandoffSessionID != "parent" || out.Identity.HandoffAgentID != "read-job" || out.Identity.RootSessionID != "retained-root" || out.Source.SourceWorkspaceKind != api.SourceWorkspaceKindProject || !out.Source.ReadOnly || out.Source.WorkerCoord != service || jobs.claims != 0 {
 		t.Fatalf("enriched=%+v claims=%d", out, jobs.claims)
 	}
 	input.Identity.RootSessionID = ""
