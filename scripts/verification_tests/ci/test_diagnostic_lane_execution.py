@@ -8,6 +8,7 @@ import tempfile
 import unittest
 
 import yaml
+from ci_policy import hosted_plan
 from verification_tests.ci.fixture_plan import live
 
 BEHAVIOR = live(phase="affected-packages")
@@ -80,7 +81,8 @@ else: raise SystemExit(2)
                               cwd=ROOT, env=environment, text=True, capture_output=True, timeout=30)
 
     def test_manual_selection_keeps_every_shard_of_the_requested_lane(self):
-        for lane, shards in [(RUNNER, ['']), (BEHAVIOR, ['1/3', '2/3', '3/3'])]:
+        count = hosted_plan.lanes()[BEHAVIOR]['shards']
+        for lane, shards in [(RUNNER, ['']), (BEHAVIOR, [f'{k}/{count}' for k in range(1, count + 1)])]:
             with self.subTest(lane=lane):
                 result = self.plan('check', lane)
                 self.assertEqual(result.returncode, 0, result.stderr)

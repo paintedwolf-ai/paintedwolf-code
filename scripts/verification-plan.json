@@ -1323,7 +1323,7 @@
       "suite": "behavior",
       "setup": "verification",
       "workers": 2,
-      "shards": 3,
+      "shards": 6,
       "priority": "critical",
       "changes": [
         "always"

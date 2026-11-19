@@ -17,6 +17,7 @@ ADMISSION, ADMISSION_TESTS = live(phase="admission"), live(phase="admission-test
 DEN, RACE, CONFINE = live(runs="den:typecheck"), live(runs="test:race", profiles=["nightly"]), live(runs="test:confine:linux")
 NIX, BUILD = live(runs="nix:check"), live(runs="check:drift")
 SCRIPTS = live(runs="scripts:coverage:changes")
+BEHAVIOR_FIRST = f"1/{hosted_plan.lanes()[BEHAVIOR]['shards']}"
 STRESS = next(name for name, lane in hosted_plan.lanes().items()
               if lane["targets"] == ["test:stress"] and lane["profiles"] == ["nightly"])
 
@@ -39,13 +40,14 @@ class HostedExecutionTests(unittest.TestCase):
 
     def test_behavior_shards_preserve_the_full_recipe_and_memory_cap(self):
         lane = hosted_plan.lanes()[BEHAVIOR]
+        shards = [f"{k}/{lane['shards']}" for k in range(1, lane["shards"] + 1)]
         for profile in ["check", "nightly", "release"]:
             rows = [row for row in hosted_plan.matrix(profile)["include"] if row["lane"] == BEHAVIOR]
-            self.assertEqual([row["shard"] for row in rows], ["1/3", "2/3", "3/3"])
+            self.assertEqual([row["shard"] for row in rows], shards)
         with tempfile.TemporaryDirectory() as directory, \
                 patch.object(ci, "artifact_root", return_value=Path(directory)), \
                 patch.object(ci.subprocess, "call", return_value=0) as run:
-            for shard in ["1/3", "2/3", "3/3"]:
+            for shard in shards:
                 ci.run_lane(BEHAVIOR, shard)
                 self.assertEqual(run.call_args.args[0], ["./task", "test:full"])
                 environment = run.call_args.kwargs["env"]
@@ -155,7 +157,7 @@ class HostedExecutionTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory, \
                 patch.object(ci, "artifact_root", return_value=Path(directory)), \
                 patch.object(ci.subprocess, "call", return_value=0) as run:
-            ci.run_lane(BEHAVIOR, "1/3")
+            ci.run_lane(BEHAVIOR, BEHAVIOR_FIRST)
             self.assertEqual(run.call_args.kwargs["env"]["PW_TEST_WORKERS"], str(hosted_plan.lanes()[BEHAVIOR]["workers"]))
             ci.run_lane(DEN)
             self.assertEqual(run.call_args.kwargs["env"].get("PW_TEST_WORKERS"), ci.os.environ.get("PW_TEST_WORKERS"))
@@ -246,9 +248,9 @@ class HostedExecutionTests(unittest.TestCase):
                 patch("ci_policy.impact.go_scope", return_value=["./internal/a", "./test/contract"]), \
                 patch.object(ci, "artifact_root", return_value=Path(directory)), \
                 patch.object(ci.subprocess, "call", return_value=0) as run:
-            ci.run_lane(BEHAVIOR, "1/3")
+            ci.run_lane(BEHAVIOR, BEHAVIOR_FIRST)
         self.assertEqual(run.call_args.args[0], ["./task", "test:full", "--", "./internal/a", "./test/contract"])
-        self.assertEqual(run.call_args.kwargs["env"]["PW_GO_SHARD"], "1/3")
+        self.assertEqual(run.call_args.kwargs["env"]["PW_GO_SHARD"], BEHAVIOR_FIRST)
 
     def test_lane_budget_bounds_the_go_watchdog_unless_the_caller_sets_one(self):
         minutes = hosted_plan.lanes()[BEHAVIOR]["minutes"]
@@ -259,7 +261,7 @@ class HostedExecutionTests(unittest.TestCase):
                         patch.object(ci.subprocess, "call", return_value=0) as run:
                     if not inherited:
                         ci.os.environ.pop("PW_GO_TEST_TIMEOUT_SECONDS", None)
-                    ci.run_lane(BEHAVIOR, "1/3", clock=lambda: 0)
+                    ci.run_lane(BEHAVIOR, BEHAVIOR_FIRST, clock=lambda: 0)
                     self.assertEqual(run.call_args.kwargs["env"]["PW_GO_TEST_TIMEOUT_SECONDS"], expected)
 
     def test_each_phase_watchdog_gets_what_is_left_of_the_lane_budget(self):

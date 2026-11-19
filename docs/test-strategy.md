@@ -1061,7 +1061,7 @@ Partial receipts from a cancelled run cannot
 mix short measured times with large timeout fallbacks. Shards share their lane's
 longest estimate because package balancing changes which packages each shard runs.
 The catalog orders lanes by explicit priority: `reject` for build, lint and runner,
-`critical` for both behavior shards, and `normal` for remaining work, longest
+`critical` for the behavior shards, and `normal` for remaining work, longest
 first. Timing estimates are advisory; the model is not a guarantee of hosted runtime.
 
 Lanes and shards are planned from measured durations. Each lane of main's
