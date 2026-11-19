@@ -178,7 +178,7 @@ describe("ChatView composer", () => {
 
   it("fades the ambient intake hint to Ask and disables empty Send", async () => {
     vi.useFakeTimers();
-    onTestFinished(() => vi.useRealTimers());
+    onTestFinished(() => { vi.useRealTimers(); });
     const { composer, setWorkflows } = mountChat({ session: { started: false } });
     setWorkflows({ active: {
       ...workflowRun(),
@@ -208,7 +208,7 @@ describe("ChatView composer", () => {
 
   it("rests on Agent after confirmation before returning focus to the same composer", async () => {
     vi.useFakeTimers();
-    onTestFinished(() => vi.useRealTimers());
+    onTestFinished(() => { vi.useRealTimers(); });
     const upgrade = vi.fn(async () => ({ id: SESSION, mode: "agent", started: true }));
     const { composer, appStore } = mountChat({ session: { mode: "ask" }, client: { updateSession: upgrade } });
     await vi.advanceTimersByTimeAsync(0);

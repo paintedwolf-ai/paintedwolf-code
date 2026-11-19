@@ -163,7 +163,7 @@ describe("tile grid reflow", () => {
       /@container den-session-launcher-tile \(max-width:\s*[\d.]+rem\)\s*\{([\s\S]*?)\n\}/g,
     );
     const iconOnly = Array.from(tileTiers, ([, rules]) => rules)
-      .find((rules) => rules.includes(".den-session-launcher__tile-title"));
+      .find((rules) => rules?.includes(".den-session-launcher__tile-title"));
     expect(iconOnly, "icon-only tile tier missing").toBeTruthy();
     expect(iconOnly).toMatch(/display:\s*none/);
   });
