@@ -3903,11 +3903,27 @@ export interface paths {
         };
         /** Inspect local model selection */
         get: operations["getLocalModelStatus"];
-        /** Start a local model download or offline import */
-        put: operations["selectLocalModel"];
+        put?: never;
         post?: never;
         /** Remove the local model */
-        delete: operations["removeLocalModel"];
+        delete: operations["deleteLocalModel"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/providers/{provider_id}/local-model/select": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Start a local model download or offline import */
+        post: operations["selectLocalModel"];
+        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
@@ -27025,6 +27041,32 @@ export interface operations {
             default: components["responses"]["Error"];
         };
     };
+    deleteLocalModel: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                provider_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Local model removed */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            429: components["responses"]["TooManyRequests"];
+            default: components["responses"]["Error"];
+        };
+    };
     selectLocalModel: {
         parameters: {
             query?: never;
@@ -27053,34 +27095,8 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             404: components["responses"]["NotFound"];
             409: components["responses"]["Conflict"];
-            429: components["responses"]["TooManyRequests"];
-            default: components["responses"]["Error"];
-        };
-    };
-    removeLocalModel: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                provider_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Current local model status */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["LocalGenerationStatus"];
-                };
-            };
-            400: components["responses"]["BadRequest"];
-            401: components["responses"]["Unauthorized"];
-            404: components["responses"]["NotFound"];
-            409: components["responses"]["Conflict"];
+            413: components["responses"]["ContentTooLarge"];
+            415: components["responses"]["UnsupportedMediaType"];
             429: components["responses"]["TooManyRequests"];
             default: components["responses"]["Error"];
         };

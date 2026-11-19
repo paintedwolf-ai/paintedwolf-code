@@ -66,6 +66,7 @@ export const API_OPERATIONS = {
   deleteExtensionPack: { method: "DELETE", path: "/v1/extensions/packs/{pack_id}" },
   deleteGitWorktree: { method: "DELETE", path: "/v1/sessions/{id}/git-worktree" },
   deleteHistoryProtection: { method: "DELETE", path: "/v1/history-storage/protections/{protection_id}" },
+  deleteLocalModel: { method: "DELETE", path: "/v1/providers/{provider_id}/local-model" },
   deleteMcpProvider: { method: "DELETE", path: "/v1/mcp/providers/{provider_id}" },
   deleteProjectArtifact: { method: "DELETE", path: "/v1/projects/{id}/artifacts/{artifact_id}" },
   deleteProjectFindingIgnore: { method: "DELETE", path: "/v1/projects/{id}/findings/ignores/{entry_id}" },
@@ -254,7 +255,6 @@ export const API_OPERATIONS = {
   releaseSourceViewportInterest: { method: "DELETE", path: "/v1/projects/{id}/source/views/{view_id}/interests/{interest_id}" },
   reloadEditorDocument: { method: "POST", path: "/v1/projects/{id}/editor-documents/{document_id}/reload" },
   reloadExtensionPack: { method: "POST", path: "/v1/extensions/packs/{pack_id}/reload" },
-  removeLocalModel: { method: "DELETE", path: "/v1/providers/{provider_id}/local-model" },
   renameProjectSource: { method: "POST", path: "/v1/projects/{id}/source/rename" },
   repairLocalGeneration: { method: "POST", path: "/v1/providers/{provider_id}/repair" },
   replaceEditorDocument: { method: "PUT", path: "/v1/projects/{id}/editor-documents/{document_id}" },
@@ -298,7 +298,7 @@ export const API_OPERATIONS = {
   searchContributionSource: { method: "POST", path: "/v1/projects/{id}/contribution-search/{source_id}" },
   searchProjectSource: { method: "GET", path: "/v1/projects/{id}/source/search" },
   searchSourceView: { method: "GET", path: "/v1/projects/{id}/source/views/{view_id}/presentations/{presentation_id}/search" },
-  selectLocalModel: { method: "PUT", path: "/v1/providers/{provider_id}/local-model" },
+  selectLocalModel: { method: "POST", path: "/v1/providers/{provider_id}/local-model/select" },
   sendPrompt: { method: "POST", path: "/v1/sessions/{id}/prompts" },
   startFullScan: { method: "POST", path: "/v1/projects/{id}/scans" },
   startMcpOAuth: { method: "POST", path: "/v1/mcp/providers/{provider_id}/oauth/start" },
@@ -417,6 +417,7 @@ export type OperationPathParameters = {
   deleteExtensionPack: { pack_id: string | number; };
   deleteGitWorktree: { id: string | number; };
   deleteHistoryProtection: { protection_id: string | number; };
+  deleteLocalModel: { provider_id: string | number; };
   deleteMcpProvider: { provider_id: string | number; };
   deleteProjectArtifact: { id: string | number; artifact_id: string | number; };
   deleteProjectFindingIgnore: { id: string | number; entry_id: string | number; };
@@ -605,7 +606,6 @@ export type OperationPathParameters = {
   releaseSourceViewportInterest: { id: string | number; view_id: string | number; interest_id: string | number; };
   reloadEditorDocument: { id: string | number; document_id: string | number; };
   reloadExtensionPack: { pack_id: string | number; };
-  removeLocalModel: { provider_id: string | number; };
   renameProjectSource: { id: string | number; };
   repairLocalGeneration: { provider_id: string | number; };
   replaceEditorDocument: { id: string | number; document_id: string | number; };

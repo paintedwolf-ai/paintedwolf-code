@@ -10208,43 +10208,7 @@ paths:
           required: true
           schema:
             type: string
-      responses:
-        '200':
-          description: Current local model status
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/LocalGenerationStatus'
-        '400':
-          $ref: '#/components/responses/BadRequest'
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-        '404':
-          $ref: '#/components/responses/NotFound'
-        '409':
-          $ref: '#/components/responses/Conflict'
-        '429':
-          $ref: '#/components/responses/TooManyRequests'
-        default:
-          $ref: '#/components/responses/Error'
-    put:
-      tags:
-        - providers
-      operationId: selectLocalModel
-      x-person-action: record
-      summary: Start a local model download or offline import
-      parameters:
-        - name: provider_id
-          in: path
-          required: true
-          schema:
-            type: string
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/LocalModelSelectionRequest'
+            pattern: ^[a-zA-Z0-9_.-]+$
       responses:
         '200':
           description: Current local model status
@@ -10267,7 +10231,7 @@ paths:
     delete:
       tags:
         - providers
-      operationId: removeLocalModel
+      operationId: deleteLocalModel
       x-person-action: record
       summary: Remove the local model
       parameters:
@@ -10276,6 +10240,42 @@ paths:
           required: true
           schema:
             type: string
+            pattern: ^[a-zA-Z0-9_.-]+$
+      responses:
+        '204':
+          description: Local model removed
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+        default:
+          $ref: '#/components/responses/Error'
+  /v1/providers/{provider_id}/local-model/select:
+    post:
+      tags:
+        - providers
+      operationId: selectLocalModel
+      x-person-action: record
+      summary: Start a local model download or offline import
+      parameters:
+        - name: provider_id
+          in: path
+          required: true
+          schema:
+            type: string
+            pattern: ^[a-zA-Z0-9_.-]+$
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LocalModelSelectionRequest'
       responses:
         '200':
           description: Current local model status
@@ -10291,6 +10291,10 @@ paths:
           $ref: '#/components/responses/NotFound'
         '409':
           $ref: '#/components/responses/Conflict'
+        '413':
+          $ref: '#/components/responses/ContentTooLarge'
+        '415':
+          $ref: '#/components/responses/UnsupportedMediaType'
         '429':
           $ref: '#/components/responses/TooManyRequests'
         default:
@@ -10308,6 +10312,7 @@ paths:
           required: true
           schema:
             type: string
+            pattern: ^[a-zA-Z0-9_.-]+$
       responses:
         '200':
           description: Current local model status
@@ -39035,6 +39040,7 @@ components:
       properties:
         id:
           type: string
+          pattern: ^[a-zA-Z0-9_.-]+$
         display_name:
           type: string
         download_bytes:
