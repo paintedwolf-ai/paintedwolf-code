@@ -7,7 +7,6 @@ import (
 	"errors"
 	"fmt"
 	"maps"
-	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -21,10 +20,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/lycaon/lycaon/internal/db"
 	"github.com/lycaon/lycaon/internal/session/promptassembly"
 	"github.com/lycaon/lycaon/internal/testutil"
 	wire "github.com/lycaon/lycaon/pkg/api"
-	"modernc.org/sqlite"
 )
 
 // storeDump is every row of every table keyed by its primary key, read
@@ -425,11 +424,10 @@ const (
 	crashPrompt  = "prompt.json"
 )
 
-// commitTracer names each commit on one store file by the table operations it
-// carried and that label's occurrence since arming, and can exit the process
-// inside the commit hook, before the commit is durable.
+// commitTracer names each commit on the host's store by the table operations
+// it carried and that label's occurrence since arming, and can exit the
+// process as the commit happens, before it is durable.
 type commitTracer struct {
-	path   string
 	killAt string
 	armed  atomic.Bool
 	mu     sync.Mutex
@@ -437,53 +435,29 @@ type commitTracer struct {
 	log    *os.File
 }
 
-var preUpdateOps = map[int32]string{9: "delete", 18: "insert", 23: "update"}
-
 // Full-text shadow tables change with segment merges, not with the write.
 var ftsShadow = regexp.MustCompile(`_fts_(data|idx|docsize|config|content)$`)
 
-func installCommitTracer(t *testing.T, path, killAt, logPath string) *commitTracer {
+func newCommitTracer(t *testing.T, killAt, logPath string) *commitTracer {
 	t.Helper()
 	log, err := os.OpenFile(logPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o600)
 	testutil.FailErr(t, "open commit log", err)
-	c := &commitTracer{path: path, killAt: killAt, seen: map[string]int{}, log: log}
-	sqlite.RegisterConnectionHook(func(conn sqlite.ExecQuerierContext, dsn string) error {
-		u, err := url.Parse(dsn)
-		if err != nil || filepath.Clean(u.Path) != c.path {
-			return nil
-		}
-		hooks, ok := conn.(sqlite.HookRegisterer)
-		if !ok {
-			return errors.New("sqlite connection cannot register hooks")
-		}
-		// One connection runs its hooks one at a time.
-		ops := map[string]bool{}
-		hooks.RegisterPreUpdateHook(func(d sqlite.SQLitePreUpdateData) {
-			if !ftsShadow.MatchString(d.TableName) {
-				ops[d.TableName+":"+preUpdateOps[d.Op]] = true
-			}
-		})
-		hooks.RegisterRollbackHook(func() { clear(ops) })
-		hooks.RegisterCommitHook(func() int32 {
-			label := slices.Sorted(mapsKeys(ops))
-			clear(ops)
-			if len(label) > 0 && c.armed.Load() {
-				c.commit(strings.Join(label, " "))
-			}
-			return 0
-		})
-		return nil
-	})
-	return c
+	return &commitTracer{killAt: killAt, seen: map[string]int{}, log: log}
 }
 
-func mapsKeys(m map[string]bool) func(func(string) bool) {
-	return func(yield func(string) bool) {
-		for k := range m {
-			if !yield(k) {
-				return
-			}
+// observe is the store's commit observer.
+func (c *commitTracer) observe(writes []db.TableWrite) {
+	if !c.armed.Load() {
+		return
+	}
+	ops := map[string]bool{}
+	for _, write := range writes {
+		if !ftsShadow.MatchString(write.Table) {
+			ops[write.Table+":"+write.Op] = true
 		}
+	}
+	if len(ops) > 0 {
+		c.commit(strings.Join(slices.Sorted(maps.Keys(ops)), " "))
 	}
 }
 
@@ -506,9 +480,9 @@ func crashTurnScript() *stackScriptLLM {
 // runTurnChild drives one turn on dir and exits: at the named commit point, or
 // with finishedExit once the turn and its event delivery have settled.
 func runTurnChild(t *testing.T, dir, killAt string) {
-	tracer := installCommitTracer(t, filepath.Join(dir, crashStore), killAt, filepath.Join(dir, crashLog))
+	tracer := newCommitTracer(t, killAt, filepath.Join(dir, crashLog))
 	t.Setenv("LYCAON_BYPASS_APPROVALS", "1")
-	h := BuildForTestAt(t, dir, WithLLMClient(crashTurnScript()))
+	h := BuildForTestAt(t, dir, WithLLMClient(crashTurnScript()), WithStoreCommitObserver(tracer.observe))
 	project := h.ProjectDir(t, "project")
 	testutil.FailErr(t, "seed notes", os.WriteFile(filepath.Join(project, "notes.txt"), []byte("first note\nsecond note\n"), 0o644))
 	sess, err := h.CreateHarnessSession(t, wire.CreateSessionRequest{}, project)

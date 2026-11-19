@@ -55,6 +55,8 @@ type Config struct {
 	// TestFileOperationHold runs before each file operation's work, while it
 	// is still cancelable.
 	TestFileOperationHold func(context.Context, fileops.Request)
+	// TestStoreCommitObserver sees each store write transaction as it commits.
+	TestStoreCommitObserver db.CommitObserver
 	// TestSecretMatcher supplies outbound secret matching in tests.
 	TestSecretMatcher *secretmatch.Matcher
 	// TestOrchestrator, when set, builds the workflow orchestrator from the

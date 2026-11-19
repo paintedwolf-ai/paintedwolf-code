@@ -37,6 +37,8 @@ type Runtime struct {
 	SourceLedger *sourceledger.Store
 	WebIndex     *webindex.Store
 	UpgradeReady func() error
+	// CommitObserver sees each write transaction on the store as it commits.
+	CommitObserver db.CommitObserver
 }
 
 func (b *Runtime) Open(ctx context.Context, dbPath string, startup startupprotocol.Sink, logger *slog.Logger, resources ResourceLifetime) error {

@@ -4,13 +4,16 @@ import (
 	"context"
 	"database/sql"
 	"path/filepath"
+	"reflect"
+	"slices"
+	"strings"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/testutil"
 )
 
 func TestWorkTallyCountsStatementsRowsAndPeaksOfItsContextOnly(t *testing.T) {
-	database, err := openCounted("file:" + filepath.Join(t.TempDir(), "work.db"))
+	database, err := openCounted("file:"+filepath.Join(t.TempDir(), "work.db"), nil)
 	testutil.FailErr(t, "open counted store", err)
 	defer func() { _ = database.Close() }()
 	database.SetMaxOpenConns(1)
@@ -88,5 +91,48 @@ func TestVacuumPassPagesNeverExceedsThePassLimit(t *testing.T) {
 	// A 4 KiB page's pointer map covers 819 pages, so a full pass spans at most four.
 	if got := VacuumPassShrinkLimit(4096); got != VacuumPassPageLimit+4 {
 		t.Fatalf("VacuumPassShrinkLimit(4096) = %d", got)
+	}
+}
+
+// The observer sees each committed write transaction once, with the writes its
+// cascades made, and nothing for a rollback or a read.
+func TestCommitObserverSeesEachCommittedWriteTransaction(t *testing.T) {
+	var seen [][]TableWrite
+	database, err := openCounted("file:"+filepath.Join(t.TempDir(), "observed.db"), func(writes []TableWrite) {
+		sorted := append([]TableWrite(nil), writes...)
+		slices.SortFunc(sorted, func(a, b TableWrite) int { return strings.Compare(a.Table+a.Op, b.Table+b.Op) })
+		seen = append(seen, sorted)
+	})
+	testutil.FailErr(t, "open observed store", err)
+	defer func() { _ = database.Close() }()
+	database.SetMaxOpenConns(1)
+	ctx := t.Context()
+	_, err = database.ExecContext(ctx, `PRAGMA foreign_keys = ON;
+CREATE TABLE parent (id INTEGER PRIMARY KEY);
+CREATE TABLE child (id INTEGER PRIMARY KEY, parent INTEGER REFERENCES parent(id) ON DELETE CASCADE);`)
+	testutil.FailErr(t, "create schema", err)
+	seen = nil
+
+	_, err = database.ExecContext(ctx, `INSERT INTO parent (id) VALUES (1)`)
+	testutil.FailErr(t, "insert parent", err)
+	tx, err := database.BeginTx(ctx, nil)
+	testutil.FailErr(t, "begin", err)
+	_, err = tx.ExecContext(ctx, `INSERT INTO child (parent) VALUES (1)`)
+	testutil.FailErr(t, "insert child", err)
+	testutil.FailErr(t, "rollback", tx.Rollback())
+	_, err = database.ExecContext(ctx, `INSERT INTO child (parent) VALUES (1)`)
+	testutil.FailErr(t, "insert child", err)
+	var n int
+	testutil.FailErr(t, "read", database.QueryRowContext(ctx, `SELECT count(*) FROM child`).Scan(&n))
+	_, err = database.ExecContext(ctx, `DELETE FROM parent WHERE id = 1`)
+	testutil.FailErr(t, "delete parent", err)
+
+	want := [][]TableWrite{
+		{{Table: "parent", Op: "insert"}},
+		{{Table: "child", Op: "insert"}},
+		{{Table: "child", Op: "delete"}, {Table: "parent", Op: "delete"}},
+	}
+	if !reflect.DeepEqual(seen, want) {
+		t.Fatalf("observed commits = %+v, want %+v", seen, want)
 	}
 }

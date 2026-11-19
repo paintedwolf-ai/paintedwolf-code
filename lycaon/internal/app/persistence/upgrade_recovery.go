@@ -58,7 +58,7 @@ func (b *Runtime) openUpgradeableStore(ctx context.Context, path string) (*db.St
 	var work db.WorkTally
 	upgraded := false
 	hooks.After = func(context.Context, migrations.Plan) error { upgraded = true; return nil }
-	database, err := db.OpenWithOptions(db.WithWorkTally(ctx, &work), path, hooks, db.StoreOptions{})
+	database, err := db.OpenWithOptions(db.WithWorkTally(ctx, &work), path, hooks, db.StoreOptions{CommitObserver: b.CommitObserver})
 	if err != nil {
 		return nil, err
 	}

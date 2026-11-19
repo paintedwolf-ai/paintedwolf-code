@@ -55,6 +55,8 @@ func DefaultPath() (string, error) {
 type StoreOptions struct {
 	// FastTestSync trades writer durability on power loss for test speed.
 	FastTestSync bool
+	// CommitObserver sees each write transaction on the writer as it commits.
+	CommitObserver CommitObserver
 }
 
 // Open prepares the schema and returns a pooled handle.
@@ -173,7 +175,7 @@ func emptyStoreHasRecoveryArtifacts(dbPath string) bool {
 // OpenReadOnly opens an existing store without schema preparation or write access.
 func OpenReadOnly(ctx context.Context, dbPath string) (*sql.DB, error) {
 	dsn := fileDSN(dbPath, readerDSNQuery)
-	sqlDB, err := openCounted(dsn)
+	sqlDB, err := openCounted(dsn, nil)
 	if err != nil {
 		return nil, fmt.Errorf("open read-only database: %w", err)
 	}
@@ -223,7 +225,7 @@ func openWriter(ctx context.Context, dbPath string, opts StoreOptions) (*sql.DB,
 		query = "_txlock=immediate&_pragma=foreign_keys(on)&_pragma=busy_timeout(10000)&_pragma=synchronous(normal)&_pragma=temp_store(memory)&_pragma=cache_size(-2000)"
 	}
 	dsn := fileDSN(dbPath, query)
-	sqlDB, err := openCounted(dsn)
+	sqlDB, err := openCounted(dsn, opts.CommitObserver)
 	if err != nil {
 		return nil, fmt.Errorf("open database: %w", err)
 	}

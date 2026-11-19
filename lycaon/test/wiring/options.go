@@ -4,6 +4,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/lycaon/lycaon/internal/db"
 	"github.com/lycaon/lycaon/internal/decide"
 	"github.com/lycaon/lycaon/internal/decide/decidetest"
 	"github.com/lycaon/lycaon/internal/fileops"
@@ -30,6 +31,7 @@ type options struct {
 	installedPackDirs       []string
 	changeDebounce          time.Duration
 	fileOperationHold       func(context.Context, fileops.Request)
+	storeCommitObserver     db.CommitObserver
 	globalApprovalPosture   gate.Posture
 	configRoot              *string
 }
@@ -90,6 +92,12 @@ func WithSecretMatcher(m *secretmatch.Matcher) Option {
 // is still cancelable.
 func WithFileOperationHold(hold func(context.Context, fileops.Request)) Option {
 	return func(o *options) { o.fileOperationHold = hold }
+}
+
+// WithStoreCommitObserver hands each store write transaction to observe as it
+// commits, before the commit is durable.
+func WithStoreCommitObserver(observe db.CommitObserver) Option {
+	return func(o *options) { o.storeCommitObserver = observe }
 }
 
 // WithMCPConnector replaces the default MockConnector used by BuildForTest.

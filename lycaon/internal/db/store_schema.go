@@ -194,7 +194,7 @@ func snapshotConnectionDB(database DBTX) (*sql.DB, error) {
 }
 
 func verifySnapshot(ctx context.Context, path string, expectedVersion int) error {
-	db, err := openCounted(path)
+	db, err := openCounted(path, nil)
 	if err != nil {
 		return fmt.Errorf("create snapshot: open verification database: %w", err)
 	}

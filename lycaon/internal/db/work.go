@@ -100,16 +100,33 @@ func contextTally(ctx context.Context) *WorkTally {
 	return tally
 }
 
-// openCounted opens dsn with every statement counted.
-func openCounted(dsn string) (*sql.DB, error) {
+// TableWrite is one table a transaction changed and how.
+type TableWrite struct {
+	Table string
+	Op    string
+}
+
+// CommitObserver sees each write transaction's table writes as it commits,
+// before the commit is durable. Each connection owns one commit hook, which
+// the work count holds, so observation rides on it.
+type CommitObserver func([]TableWrite)
+
+var preUpdateOps = map[int32]string{9: "delete", 18: "insert", 23: "update"}
+
+// openCounted opens dsn with every statement counted, and its commits
+// reported to observe when set.
+func openCounted(dsn string, observe CommitObserver) (*sql.DB, error) {
 	inner, err := sqlite.NewConnector(dsn)
 	if err != nil {
 		return nil, err
 	}
-	return sql.OpenDB(workConnector{inner: inner}), nil
+	return sql.OpenDB(workConnector{inner: inner, observe: observe}), nil
 }
 
-type workConnector struct{ inner driver.Connector }
+type workConnector struct {
+	inner   driver.Connector
+	observe CommitObserver
+}
 
 func (c workConnector) Driver() driver.Driver { return c.inner.Driver() }
 
@@ -139,8 +156,13 @@ func (c workConnector) Connect(ctx context.Context) (driver.Conn, error) {
 		_ = raw.Close()
 		return nil, errors.New("sqlite connection does not expose its work counters")
 	}
-	conn := &workConn{inner: inner}
-	inner.RegisterPreUpdateHook(func(sqlite.SQLitePreUpdateData) { conn.changed++ })
+	conn := &workConn{inner: inner, observe: c.observe}
+	inner.RegisterPreUpdateHook(func(d sqlite.SQLitePreUpdateData) {
+		conn.changed++
+		if conn.observe != nil {
+			conn.writes = append(conn.writes, TableWrite{Table: d.TableName, Op: preUpdateOps[d.Op]})
+		}
+	})
 	inner.RegisterCommitHook(func() int32 { conn.settle(true); return 0 })
 	inner.RegisterRollbackHook(func() { conn.settle(false) })
 	return conn, nil
@@ -157,6 +179,9 @@ type workConn struct {
 	// running statement's, which an autocommit transaction settles to.
 	txTally, stmtTally *WorkTally
 	inTx               bool
+	observe            CommitObserver
+	// writes are the open transaction's table writes, kept only when observed.
+	writes []TableWrite
 }
 
 func (c *workConn) settle(committed bool) {
@@ -164,6 +189,10 @@ func (c *workConn) settle(committed bool) {
 	if c.inTx {
 		tally = c.txTally
 	}
+	if committed && c.observe != nil && len(c.writes) > 0 {
+		c.observe(c.writes)
+	}
+	c.writes = c.writes[:0]
 	if committed {
 		changed := c.changed - c.settled
 		processWork.noteCommit(changed)

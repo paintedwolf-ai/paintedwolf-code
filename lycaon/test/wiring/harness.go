@@ -73,7 +73,7 @@ func BuildForTestAt(t *testing.T, dir string, opts ...Option) *Harness {
 	for _, opt := range opts {
 		opt(&o)
 	}
-	cfg := configuration.Config{TestChangeDebounce: o.changeDebounce, TestFileOperationHold: o.fileOperationHold}
+	cfg := configuration.Config{TestChangeDebounce: o.changeDebounce, TestFileOperationHold: o.fileOperationHold, TestStoreCommitObserver: o.storeCommitObserver}
 	cfg.ConfigRoot = configlayout.FindModuleRoot()
 	if o.configRoot != nil {
 		cfg.ConfigRoot = *o.configRoot

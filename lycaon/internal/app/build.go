@@ -82,7 +82,7 @@ func Build(ctx context.Context, cfg configuration.Config) (*ServeApp, error) {
 		resources.Track("change-debounce", 95, func(context.Context) error { restore(); return nil })
 	}
 	b := &serveBuilder{startup: startupBootstrap{ctx: ctx, cfg: cfg, resources: resources, recovery: bootrecovery.New()},
-		storage: persistence.Runtime{}}
+		storage: persistence.Runtime{CommitObserver: cfg.TestStoreCommitObserver}}
 	for _, step := range []struct {
 		name  string
 		phase startupprotocol.Phase
