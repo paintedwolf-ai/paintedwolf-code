@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 import { afterEach, expect, it, vi } from "vitest";
 import type { LycaonClient } from "../../api/client.ts";
 import type { ProjectRoot, SourceChatLocation } from "../../api/types.ts";
