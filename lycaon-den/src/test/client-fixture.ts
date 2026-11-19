@@ -1,6 +1,6 @@
 import { vi } from "vitest";
 import type { LycaonClient } from "../api/client.ts";
-import { observeOperationContract } from "../api/operation-contract.ts";
+import { OperationContractError } from "../api/operation-contract-error.ts";
 
 export type ClientStubs = Partial<Record<keyof LycaonClient, unknown>>;
 
@@ -24,7 +24,7 @@ function probeMethod(property: PropertyKey, override: Method): Method {
 
   const wrapped = new Proxy(original, {
     apply(target, thisArg, args) {
-      const violation = observeOperationContract(() => {
+      const violation = OperationContractError.capture(() => {
         try {
           const result: unknown = Reflect.apply(real, probeClient, args);
           void Promise.resolve(result).catch(() => undefined);

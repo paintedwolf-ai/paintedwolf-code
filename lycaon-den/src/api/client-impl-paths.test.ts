@@ -1,9 +1,10 @@
-import { operationPattern } from "./operation-contract.ts";
 import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import * as ts from "typescript";
 import { API_OPERATIONS } from "./operations.generated.ts";
+import { assertOperationRequest } from "./operation-contract.ts";
+import { OperationContractError } from "./operation-contract-error.ts";
 
 const clientSources = [
   "client-impl.ts",
@@ -66,9 +67,17 @@ function clientPathLiterals(): PathLiteral[] {
   return literals;
 }
 
-const operationPatterns = Object.values(API_OPERATIONS).map((operation) =>
-  operationPattern(operation.path),
-);
+const operationMethods = [...new Set(Object.values(API_OPERATIONS).map(({ method }) => method))];
+
+function matchesOperation(path: string, method: string): boolean {
+  try {
+    assertOperationRequest(path, method);
+    return true;
+  } catch (error) {
+    if (error instanceof OperationContractError) return false;
+    throw error;
+  }
+}
 
 const requestHelperAst = ts.createSourceFile(
   "http.ts", readFileSync(join(import.meta.dirname, "http.ts"), "utf8"), ts.ScriptTarget.Latest, true,
@@ -153,7 +162,7 @@ describe("client-impl request paths", () => {
     const unknown = literals
       .filter(
         (literal) =>
-          !operationPatterns.some((pattern) => pattern.test(literal.pathname)),
+          !operationMethods.some((method) => matchesOperation(literal.pathname, method)),
       )
       .map((literal) => `${literal.file}:${literal.line} ${literal.raw}`);
     expect(unknown).toEqual([]);
@@ -187,9 +196,7 @@ describe("client-impl request paths", () => {
     const requests = clientRequests();
     expect(requests.length).toBeGreaterThan(100);
     const unsupported = requests.filter((request) =>
-      !Object.values(API_OPERATIONS).some((operation) =>
-        operation.method === request.method && operationPattern(operation.path).test(request.path),
-      ),
+      !matchesOperation(request.path, request.method),
     );
     expect(unsupported).toEqual([]);
   });

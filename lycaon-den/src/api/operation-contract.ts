@@ -1,6 +1,7 @@
 import { API_OPERATIONS } from "./operations.generated.ts";
+import { OperationContractError } from "./operation-contract-error.ts";
 
-export type QueryParameter = {
+type QueryParameter = {
   name: string;
   type: "integer" | "number" | "string" | "boolean";
   required?: boolean;
@@ -20,11 +21,7 @@ type Operation = {
   query?: readonly QueryParameter[];
 };
 
-export class OperationContractError extends Error {
-  override name = "OperationContractError";
-}
-
-export function operationPattern(template: string): RegExp {
+function operationPattern(template: string): RegExp {
   const escaped = template.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   return new RegExp(`^${escaped.replace(/\\\{[^{}]+\\\}/g, "[^/]+")}$`);
 }
@@ -48,33 +45,12 @@ for (const templates of templatedOperations.values()) {
   templates.sort((a, b) => b.specificity.localeCompare(a.specificity));
 }
 
-let observer: ((error: OperationContractError) => void) | undefined;
-
-/** Captures a contract failure before the request promise rejects. */
-export function observeOperationContract(run: () => void): OperationContractError | undefined {
-  const previous = observer;
-  let first: OperationContractError | undefined;
-  observer = (error) => { first ??= error; };
-  try {
-    run();
-    return first;
-  } finally {
-    observer = previous;
-  }
-}
-
-function fail(message: string): never {
-  const error = new OperationContractError(message);
-  observer?.(error);
-  throw error;
-}
-
 export function assertOperationRequest(path: string, method: string): Operation {
   const pathname = path.split("?", 1)[0] ?? path;
   const normalizedMethod = method.toUpperCase();
   const operation = exactOperations.get(`${normalizedMethod} ${pathname}`)
     ?? templatedOperations.get(normalizedMethod)?.find(({ pattern }) => pattern.test(pathname))?.operation;
-  return operation ?? fail(`Unknown API operation ${normalizedMethod} ${pathname}`);
+  return operation ?? OperationContractError.raise(`Unknown API operation ${normalizedMethod} ${pathname}`);
 }
 
 export function assertOperationQuery(path: string, method: string): void {
@@ -100,7 +76,7 @@ export function assertOperationQuery(path: string, method: string): void {
 }
 
 function queryError(operation: Operation, name: string, reason: string): never {
-  return fail(`Query parameter "${name}" ${reason} on ${operation.method} ${operation.path}`);
+  return OperationContractError.raise(`Query parameter "${name}" ${reason} on ${operation.method} ${operation.path}`);
 }
 
 function queryCountError(parameter: QueryParameter, count: number): string | undefined {

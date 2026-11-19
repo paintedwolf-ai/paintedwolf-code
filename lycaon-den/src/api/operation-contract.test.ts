@@ -1,11 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { API_OPERATIONS } from "./operations.generated.ts";
-import {
-  assertOperationQuery,
-  assertOperationRequest,
-  OperationContractError,
-  type QueryParameter,
-} from "./operation-contract.ts";
+import { assertOperationQuery, assertOperationRequest } from "./operation-contract.ts";
+import { OperationContractError } from "./operation-contract-error.ts";
+
+type QueryParameter = NonNullable<ReturnType<typeof assertOperationRequest>["query"]>[number];
 
 const cases: { id: string; template: string; path: string; method: string; parameters: readonly QueryParameter[] }[] = Object.entries(API_OPERATIONS).map(([id, operation]) => ({
   id,
