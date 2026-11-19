@@ -54,7 +54,7 @@ func (e *Boundary) expandPlanOperands(
 	if dir, ok := commandDir(plan, *tc); ok {
 		confReq := e.actionConfineRequest(ctx, *tc)
 		stages, expanded, err = commandsurface.ExpandGlobs(ctx, stages, commandsurface.GlobScope{
-			Dir: dir, Readable: globReadable(confReq),
+			Dir: dir, ReadPath: globReadable(confReq),
 		})
 		if err != nil {
 			if reject := toolcommand.ArgvShapeObservation(tool, err); reject != nil {
@@ -118,11 +118,12 @@ func sessionOperandReject(err error) *toolrejection.ToolReject {
 }
 
 // globReadable is the read verdict of the boundary the command launches under.
-func globReadable(confReq confine.Request) func(string) bool {
+func globReadable(confReq confine.Request) func(string) (string, bool) {
 	confinement, _ := confine.DefaultConfinement(confReq)
 	rules := confine.BoundaryOf(confinement).Filesystem
-	return func(abs string) bool {
-		return !confine.ControlPlanePathDenied(abs, false, confReq.SessionScratchRoot, confReq.SessionOutputRoot) &&
+	return func(abs string) (string, bool) {
+		path, backed := rules.HostPath(abs)
+		return path, backed && !confine.ControlPlanePathDenied(path, false, confReq.SessionScratchRoot, confReq.SessionOutputRoot) &&
 			rules.Verdict(confine.AccessRead, abs).Allowed
 	}
 }

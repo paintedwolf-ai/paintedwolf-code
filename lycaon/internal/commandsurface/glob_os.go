@@ -11,14 +11,14 @@ import (
 // structured command path. Readable is the launch boundary's read verdict.
 type OSGlobFiles struct {
 	Dir      string
-	Readable func(abs string) bool
+	ReadPath func(abs string) (string, bool)
 }
 
 var _ GlobFiles = OSGlobFiles{}
 
 func (f OSGlobFiles) ListDir(_ context.Context, dir string, maximum int) ([]GlobEntry, error) {
-	abs := f.abs(dir)
-	if !f.readable(abs) {
+	abs, ok := f.readPath(dir)
+	if !ok {
 		return nil, nil
 	}
 	file, err := os.Open(abs)
@@ -41,8 +41,8 @@ func (f OSGlobFiles) ListDir(_ context.Context, dir string, maximum int) ([]Glob
 }
 
 func (f OSGlobFiles) Entry(_ context.Context, path string) (GlobEntry, bool, error) {
-	abs := f.abs(path)
-	if !f.readable(abs) {
+	abs, ok := f.readPath(path)
+	if !ok {
 		return GlobEntry{}, false, nil
 	}
 	info, err := os.Stat(abs)
@@ -54,7 +54,8 @@ func (f OSGlobFiles) Entry(_ context.Context, path string) (GlobEntry, bool, err
 }
 
 func (f OSGlobFiles) Admit(_ context.Context, path string) (bool, error) {
-	return f.readable(f.abs(path)), nil
+	_, ok := f.readPath(path)
+	return ok, nil
 }
 
 func (f OSGlobFiles) abs(rel string) string {
@@ -67,6 +68,10 @@ func (f OSGlobFiles) abs(rel string) string {
 	return filepath.Join(f.Dir, filepath.FromSlash(rel))
 }
 
-func (f OSGlobFiles) readable(abs string) bool {
-	return f.Readable == nil || f.Readable(abs)
+func (f OSGlobFiles) readPath(path string) (string, bool) {
+	abs := f.abs(path)
+	if f.ReadPath != nil {
+		return f.ReadPath(abs)
+	}
+	return abs, true
 }

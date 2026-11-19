@@ -155,7 +155,7 @@ func renderProfile(c Confinement) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	fs, err := linuxFilesystem(c, rules)
+	fs, err := linuxFilesystem(rules)
 	if err != nil {
 		return "", err
 	}
@@ -745,12 +745,12 @@ func PrivateTempFor(scratch string) PrivateTemp {
 	return PrivateTemp{Paths: linuxsandbox.PrivateTempPaths(), ScratchRoot: scratch}
 }
 
-func linuxFilesystem(c Confinement, rules FilesystemRules) (linuxsandbox.Filesystem, error) {
+func linuxFilesystem(rules FilesystemRules) (linuxsandbox.Filesystem, error) {
 	fs, err := compileFilesystemPlan(rules)
 	if err != nil {
 		return fs, err
 	}
-	mapping := ProjectPrivateTemp(c.ProjectID, c.SessionScratchRoot, c.Roots, c.GrantedWriteRoots, c.ReadRoots)
+	mapping := rules.privateTemp
 	fs.PrivateTemp = &linuxsandbox.PrivateTempMounts{Paths: mapping.Paths, Scratch: mapping.ScratchRoot, Retained: mapping.Retained}
 	for _, location := range SharedTempLocations() {
 		if !slices.ContainsFunc(mapping.Paths, func(alias string) bool { return PathAtOrUnder(location, alias) }) {

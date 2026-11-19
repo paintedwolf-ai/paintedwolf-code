@@ -86,10 +86,10 @@ func TestExpandGlobsResolvesUnderTheStageCwdAndAbsolutePaths(t *testing.T) {
 func TestExpandGlobsExcludesPathsTheProcessCannotRead(t *testing.T) {
 	root := globTree(t, "open/a.txt", "secret/b.txt", "secret.txt")
 	denied := filepath.Join(root, "secret")
-	readable := func(abs string) bool {
-		return abs != denied && !strings.HasPrefix(abs, denied+string(filepath.Separator)) && abs != denied+".txt"
+	readable := func(abs string) (string, bool) {
+		return abs, abs != denied && !strings.HasPrefix(abs, denied+string(filepath.Separator)) && abs != denied+".txt"
 	}
-	got, _, err := expandLine(t, "cat */*.txt *.txt **/b.txt", commandsurface.GlobScope{Dir: root, Readable: readable})
+	got, _, err := expandLine(t, "cat */*.txt *.txt **/b.txt", commandsurface.GlobScope{Dir: root, ReadPath: readable})
 	testutil.FailErr(t, "expand with read floor", err)
 	want := []string{"open/a.txt", "*.txt", "**/b.txt"}
 	if !reflect.DeepEqual(got, want) {
@@ -174,5 +174,20 @@ func TestMatchGlobDeductsItsBudget(t *testing.T) {
 	}
 	if commandsurface.GlobActive(`a\*b`) || !commandsurface.GlobActive("a/b?") {
 		t.Fatal("glob activity misread escapes")
+	}
+}
+
+func TestGlobReadsMappedDirectoryAndReturnsVisibleNames(t *testing.T) {
+	root := globTree(t, "scratch/result.txt", "visible/other.txt")
+	scope := commandsurface.GlobScope{Dir: root, ReadPath: func(path string) (string, bool) {
+		if rel, ok := strings.CutPrefix(path, filepath.Join(root, "visible")); ok {
+			return filepath.Join(root, "scratch") + rel, true
+		}
+		return path, true
+	}}
+	got, _, err := expandLine(t, "ls visible/*.txt", scope)
+	testutil.FailErr(t, "expand private temp", err)
+	if !reflect.DeepEqual(got, []string{"visible/result.txt"}) {
+		t.Fatalf("matches: %v", got)
 	}
 }

@@ -535,3 +535,21 @@ func TestSharedTempGrantNamesTheLocationAtEveryDepth(t *testing.T) {
 		t.Fatal("reviewed temp root did not admit nested write")
 	}
 }
+
+func TestSharedTempInsideCacheKeepsOnlyExplicitRoots(t *testing.T) {
+	cache := t.TempDir()
+	temp := filepath.Join(cache, "temporary")
+	attached := filepath.Join(temp, "attached")
+	t.Setenv("XDG_CACHE_HOME", cache)
+	t.Setenv("TMPDIR", temp)
+	rules, err := filesystemRules(Confinement{Roots: []string{attached}})
+	testutil.FailErr(t, "compile cache rules", err)
+	if got := rules.hostVerdict(AccessWrite, filepath.Join(temp, "out")); got.Layer != FloorSharedTemp {
+		t.Fatalf("temp inside cache: %+v", got)
+	}
+	for _, path := range []string{filepath.Join(cache, "index"), filepath.Join(attached, "out")} {
+		if !rules.hostVerdict(AccessWrite, path).Allowed {
+			t.Errorf("write refused: %s", path)
+		}
+	}
+}

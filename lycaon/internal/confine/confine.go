@@ -403,7 +403,11 @@ func writeFilesystemRules(b *strings.Builder, c Confinement, deny string) error 
 // filesystemRules builds the ordered filesystem policy for a confinement.
 // Later rules override earlier decisions.
 func filesystemRules(c Confinement) (FilesystemRules, error) {
-	rules := FilesystemRules{roots: append([]string(nil), c.Roots...)}
+	rules := FilesystemRules{
+		roots:       slices.Clone(c.Roots),
+		privateTemp: ProjectPrivateTemp(c.ProjectID, c.SessionScratchRoot, c.Roots, c.GrantedWriteRoots, c.ReadRoots),
+		sharedTemp:  SharedTempLocations(),
+	}
 	writeRoots, err := WriteRootsForBoundary(c.ProjectID, c.Roots, c.GrantedWriteRoots, c.SessionScratchRoot)
 	if err != nil {
 		return rules, err
@@ -464,6 +468,7 @@ func filesystemRules(c Confinement) (FilesystemRules, error) {
 		fsMatch{regex: "^/dev/ttys"},
 	)
 	rules.add(fsRule{op: opWrite, allow: true, matches: sinks})
+	rules.closeSharedTempInCaches(c, writeRoots)
 
 	specs, err := HardDenyWriteSpecs(c)
 	if err != nil {

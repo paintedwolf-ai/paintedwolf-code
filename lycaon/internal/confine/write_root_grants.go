@@ -193,24 +193,24 @@ type PrivateTemp struct {
 
 // Resolve maps a sandbox operand to its backing path for host file operations.
 func (t PrivateTemp) Resolve(path string) (string, bool) {
-	if t.ScratchRoot == "" || !filepath.IsAbs(path) {
+	suffix, mapped := t.relative(path)
+	if !mapped || t.ScratchRoot == "" {
 		return "", false
 	}
+	if suffix == "" {
+		return t.ScratchRoot, true
+	}
+	return t.ScratchRoot + string(filepath.Separator) + suffix, true
+}
+
+func (t PrivateTemp) relative(path string) (string, bool) {
 	for _, alias := range t.Paths {
-		suffix, inside := strings.CutPrefix(path, alias+string(filepath.Separator))
 		if path == alias {
-			return t.ScratchRoot, true
+			return "", true
 		}
-		if !inside {
-			continue
+		if suffix, inside := strings.CutPrefix(path, alias+string(filepath.Separator)); inside {
+			return suffix, !underAny(path, t.Retained)
 		}
-		for _, root := range t.Retained {
-			if strings.HasPrefix(root, alias+string(filepath.Separator)) && PathAtOrUnder(path, root) {
-				return "", false
-			}
-		}
-		// The file binder resolves links before a following parent component.
-		return t.ScratchRoot + string(filepath.Separator) + suffix, true
 	}
 	return "", false
 }

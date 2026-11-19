@@ -96,3 +96,23 @@ func WritableSharedTempLocations(projectID string, grants []string) []string {
 	}
 	return allowed
 }
+
+// A cache containing shared temp cannot grant the nested location implicitly.
+func (r *FilesystemRules) closeSharedTempInCaches(c Confinement, roots []string) {
+	for _, location := range r.sharedTemp {
+		if !underAny(location, roots) {
+			continue
+		}
+		explicit := slices.Concat(c.Roots, c.GrantedWriteRoots, grantedWriteRoots(c.ProjectID), environmentWriteRoots(), []string{c.SessionScratchRoot})
+		if PathWithinRoots(location, explicit) {
+			continue
+		}
+		var except []string
+		for _, root := range roots {
+			if PathStrictlyUnder(root, location) {
+				except = append(except, root)
+			}
+		}
+		r.add(fsRule{op: opWrite, matches: []fsMatch{{subpath: location, except: except, layer: FloorSharedTemp}}})
+	}
+}
