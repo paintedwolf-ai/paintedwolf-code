@@ -37,5 +37,5 @@ it("wait_for gone reports its deadline when the target stays", async () => {
   const driver = installLycaonDriver();
   const waiting = driver.waitFor({ selector: "#toast", gone: true, timeout_ms: 1_000 });
   await vi.advanceTimersByTimeAsync(1_200);
-  await expect(waiting).resolves.toMatchObject({ ok: false });
+  await expect(waiting).resolves.toMatchObject({ ok: false, deadline_ms: 1_000, deadline_expired: true });
 });
