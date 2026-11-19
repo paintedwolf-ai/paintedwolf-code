@@ -224,8 +224,9 @@ def buildable(packages, tags):
         return []
     from verification_execute import json_stream
     command = ["go", "list", "-e", "-json", f"-tags={','.join(tags)}", *packages]
+    # The caller's toolchain selection stands: the lane runs these packages with the same Go.
     result = subprocess.run(command, cwd=ROOT / "lycaon", capture_output=True, text=True,
-                            env={**os.environ, "GOPROXY": "off", "GOTOOLCHAIN": "local"})
+                            env={**os.environ, "GOPROXY": "off"})
     if result.returncode:
         raise ValueError(f"go list could not resolve the changed packages: {result.stderr.strip()}")
     found = {"./" + Path(record["Dir"]).relative_to(ROOT / "lycaon").as_posix() for record in json_stream(result.stdout)
