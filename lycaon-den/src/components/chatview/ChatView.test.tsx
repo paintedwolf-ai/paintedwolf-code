@@ -176,6 +176,35 @@ describe("ChatView composer", () => {
     expect(composer().placeholder).toBe("Ask a question…");
   });
 
+  it("fades the ambient intake hint to Ask and disables empty Send", async () => {
+    vi.useFakeTimers();
+    onTestFinished(() => vi.useRealTimers());
+    const { composer, setWorkflows } = mountChat({ session: { started: false } });
+    setWorkflows({ active: {
+      ...workflowRun(),
+      workflow_id: "implement",
+      attach_policy: "session_create",
+      ui: {
+        current_phase_label: "Looking around",
+        request: { cadence: "each_turn", question: "What would you like to work on?" },
+      },
+    } });
+    const input = composer();
+    input.blur();
+    const send = screen.getByTestId("composer-send");
+    expect(send).toHaveProperty("disabled", false);
+
+    fireEvent.click(screen.getByRole("radio", { name: "Ask" }));
+    expect(composer()).toBe(input);
+    expect(input.placeholder).toBe("What would you like to work on?");
+    expect(input.hasAttribute("data-hint-out")).toBe(true);
+    expect(send).toHaveProperty("disabled", true);
+
+    await vi.advanceTimersByTimeAsync(120);
+    expect(input.placeholder).toBe("Ask a question…");
+    expect(input.hasAttribute("data-hint-out")).toBe(false);
+  });
+
   it("rests on Agent after confirmation before returning focus to the same composer", async () => {
     vi.useFakeTimers();
     onTestFinished(() => vi.useRealTimers());

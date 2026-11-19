@@ -22,6 +22,7 @@ import { CheckpointCards } from "../checkpoint/CheckpointCards.tsx";
 import { AskUserDock } from "../workflow/AskUserDock.tsx";
 import type { AskUserDockSubmitFn } from "../workflow/AskUserDock.tsx";
 import { askUserDockMeta, pendingAskFeedbackEntry, pendingWorkflowFeedback, retainAskDockMeta, workflowFeedbackComposerPlaceholder } from "../../workflow/workflow-feedback-model.ts";
+import { isAmbientRootRun } from "../../workflow/workflow-run-stack.ts";
 import { clearUnreadBoundary } from "../../attention/unread-boundary.ts";
 import { armedComposerPlaceholder, armedWorkflowFromPickerRow, resolveComposerWorkflowStart } from "../../chat/workflow/workflow-arm.ts";
 import { clearPendingArmWorkflow, peekArmWorkflow } from "../../chat/workflow/pending-arm.ts";
@@ -56,6 +57,15 @@ export function createChatViewComposer(props: ChatViewProps, options: ComposerOp
   const [askRefocusPulse, setAskRefocusPulse] = createSignal(0);
   const mode = createChatViewMode(props.appStore, () => props.sessionId, surfaceActive, connectedClient, () => chatNotices().reportError);
   const armedNeedsAgent = () => mode.view().workflowNeedsAgent && workflow.armed()?.requiresAgent;
+  const composerRequest = () => {
+    const run = activeRun();
+    const ui = run?.ui;
+    if (mode.view().workflowNeedsAgent && isAmbientRootRun(run) &&
+        ui?.request?.cadence === "each_turn" && ui.request_state?.status !== "waiting") {
+      return undefined;
+    }
+    return ui;
+  };
   const [checkpointRefocusPulse, setCheckpointRefocusPulse] = createSignal(0);
   let askDockSubmit: AskUserDockSubmitFn | undefined;
   const [askAnswerReady, setAskAnswerReady] = createSignal(false);
@@ -390,15 +400,15 @@ export function createChatViewComposer(props: ChatViewProps, options: ComposerOp
                       activeRun(),
                       pendingAskMeta(),
                     ) ??
-                    activeRun()?.ui?.request?.question ??
+                    composerRequest()?.request?.question ??
                     (modeView.workflowNeedsAgent ? ASK_INPUT_HINT : undefined) ??
                     (modeView.show && !modeView.started ? NEW_CHAT_AGENT_INPUT_HINT : undefined)
                   );
                 })()}
                 emptySubmitEnabled={
                   Boolean(workflow.armed() && !armedNeedsAgent()) ||
-                  activeRun()?.ui?.request?.cadence === "each_turn" ||
-                  activeRun()?.ui?.request_state?.status === "waiting"
+                  composerRequest()?.request?.cadence === "each_turn" ||
+                  composerRequest()?.request_state?.status === "waiting"
                 }
                 streaming={chatLive()}
                 pendingTranscriptSend={props.appStore.state.pendingSends[props.sessionId]?.some(send => send.kind === "prompt")}

@@ -215,9 +215,9 @@ webE2e.describe("composer height motion", () => {
   });
 
   webE2e("leaving Ask restores the original composer without moving its actions", async ({ page, request }) => {
-    await page.setViewportSize({ width: 420, height: 900 });
     await bootstrapChatSession(page, request);
     const sessionId = await settledChatSessionId(page);
+    await page.setViewportSize({ width: 420, height: 900 });
     const stage = liveChatStage(page);
     const mode = stage.getByRole("radiogroup", { name: "Session mode" });
     const ask = mode.getByRole("radio", { name: "Ask" });
@@ -233,10 +233,13 @@ webE2e.describe("composer height motion", () => {
       const send = element.querySelector<HTMLElement>('[data-testid="composer-send"]')!.getBoundingClientRect();
       const group = element.querySelector<HTMLElement>(".den-session-mode")?.getBoundingClientRect();
       const style = getComputedStyle(input);
+      const inputBox = input.getBoundingClientRect();
+      const contentRight = inputBox.right - Number.parseFloat(style.paddingRight);
       return {
         height: bounds.height,
         line: Number.parseFloat(style.lineHeight),
-        contentRight: input.getBoundingClientRect().right - Number.parseFloat(style.paddingRight),
+        contentRight,
+        contentWidth: contentRight - inputBox.left - Number.parseFloat(style.paddingLeft),
         attachInset: bounds.right - attach.right,
         attachLeft: attach.left,
         attachMiddle: attach.top + attach.height / 2,
@@ -246,16 +249,19 @@ webE2e.describe("composer height motion", () => {
         modeMiddle: group && group.top + group.height / 2,
       };
     });
-    for (const scale of ["1", "1.3"]) {
-      await page.evaluate((scale) => document.documentElement.style.setProperty("--den-text-scale", scale), scale);
+    for (const layout of [{ width: 420, scale: 1 }, { width: 720 }]) {
+      await page.setViewportSize({ width: layout.width, height: 900 });
+      await page.evaluate((scale) => window.__harness!.setTextScale(scale), layout.scale);
       await composer.fill("A line that runs to the edge of the composer. ".repeat(6));
       const row = await measure();
+      expect(row.contentWidth).toBeGreaterThan(0);
       expect(row.contentRight).toBeLessThanOrEqual(row.modeLeft! + 1);
       expect(row.modeRight).toBeLessThanOrEqual(row.attachLeft);
       expect(row.modeMiddle).toBeCloseTo(row.attachMiddle, 0);
       expect(row.sendMiddle).toBeCloseTo(row.attachMiddle, 0);
     }
-    await page.evaluate(() => document.documentElement.style.setProperty("--den-text-scale", "1"));
+    await page.setViewportSize({ width: 420, height: 900 });
+    await page.evaluate(() => window.__harness!.setTextScale(1));
     await composer.fill("Describe this repository.");
     await stage.getByTestId("composer-send").click();
     await expect.poll(async () => {
