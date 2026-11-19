@@ -21,6 +21,8 @@ import (
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
 
+var errCurrentSourceAddressChanged = errors.New("current source address changed")
+
 // sourceHandleError is a view, presentation, or interest path parameter that
 // is not a UUID.
 type sourceHandleError struct{ param string }
@@ -118,9 +120,9 @@ func (s *Views) sourceViewProject(ctx context.Context, p *project.Project, view 
 	if current != nil {
 		admitted, req, err := s.resolveCurrentSource(ctx, scope.Project, current)
 		if err == nil && prepared != nil && (prepared.stream.RootID != req.RootID || prepared.stream.Path != req.Path) {
-			err = currentSourceChanged()
+			err = errCurrentSourceAddressChanged
 		}
-		return admitted, currentSourceReadError(err)
+		return admitted, err
 	}
 	return scope.Project, nil
 }
@@ -187,10 +189,11 @@ func (s *Views) writeSourceViewAddressError(w http.ResponseWriter, r *http.Reque
 		err = pagedview.ErrExpired
 	}
 	var handle *sourceHandleError
-	var comparison *comparisonFailure
 	switch {
-	case errors.As(err, &comparison):
-		s.responses.Fail(w, comparison.code, comparison.message)
+	case errors.Is(err, errCurrentSourceAddressChanged):
+		s.responses.Fail(w, wire.ApiErrorCodeSourceVersionChanged, "The file changed. Reload it to read the current version.")
+	case errors.Is(err, projectsource.ErrSourceNotFound):
+		s.responses.Fail(w, wire.ApiErrorCodeSourceNotFound, "This file is no longer available.")
 	case errors.As(err, &handle):
 		s.responses.FailReason(w, wire.ApiErrorCodeInvalidRequest, handle.Error())
 	case errors.Is(err, sessionscope.ErrWorktreeStale):
