@@ -5,7 +5,7 @@ import "github.com/lycaon/lycaon/internal/confine"
 // PrivateTempOperand locates a file in the same mount view as this invocation's processes.
 func PrivateTempOperand(tc ToolContext, path string) (string, bool) {
 	temp := confine.PrivateTempFor(tc.Host.SessionScratchDir)
-	if _, ok := temp.Resolve(path); !ok {
+	if _, ok := temp.Resolve(path); !ok || tc.Execution.HostExecution || !confine.Enforcing() {
 		return "", false
 	}
 	reads := append(ConfineReadRootsForAction(tc), tc.Host.SessionOutputDir)

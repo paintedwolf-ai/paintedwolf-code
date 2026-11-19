@@ -110,9 +110,13 @@ func resolveMutationScope(ctx context.Context, b *sandbox.Boundary, tctx tools.T
 func ChildResolved(tctx tools.ToolContext, parent Resolved, rel string) Resolved {
 	abs := filepath.Join(parent.Abs, rel)
 	scopeRel := projectroot.ScopeRel(parent.Root, abs)
+	display := QualifyAbs(tctx, parent.Root, abs)
+	if parent.privateTempAddressed() {
+		display = filepath.Join(parent.DisplayPath, rel)
+	}
 	return Resolved{
 		Abs:         abs,
-		DisplayPath: QualifyAbs(tctx, parent.Root, abs),
+		DisplayPath: display,
 		ScopeRel:    scopeRel,
 		Root:        parent.Root,
 		External:    parent.External,

@@ -31,7 +31,9 @@ func (p *ProgramPaths) directoryBinding(ctx context.Context, bound BoundPath) (B
 	if err != nil {
 		return BoundPath{}, nil, err
 	}
-	bound.Resolved.DisplayPath = logical.DisplayPath
+	if !bound.Resolved.privateTempAddressed() {
+		bound.Resolved.DisplayPath = logical.DisplayPath
+	}
 	bound.Resolved.ScopeRel = logical.ScopeRel
 	return bound, info, nil
 }

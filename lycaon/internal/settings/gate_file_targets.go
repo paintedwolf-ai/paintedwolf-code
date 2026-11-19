@@ -165,6 +165,9 @@ func (g *RuleApprovalGate) declaredFileTargets(action hitl.ProposedAction) []*ga
 
 // actionFilePath projects a declared file into the session mount view before review.
 func actionFilePath(action hitl.ProposedAction, path string) string {
+	if !action.Execution.Contained.Active() {
+		return path
+	}
 	if _, ok := confine.PrivateTempFor(action.Scope.SessionScratchRoot).Resolve(path); !ok {
 		return path
 	}

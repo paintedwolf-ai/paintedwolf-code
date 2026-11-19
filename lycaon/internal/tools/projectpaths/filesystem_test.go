@@ -74,7 +74,8 @@ func TestReviewedNativeWriteCreatesAnAbsentCacheRoot(t *testing.T) {
 
 func TestPrivateTempOperandsKeepSessionIdentity(t *testing.T) {
 	tc, scratch, rec := scratchToolContext(t)
-	if len(confine.PrivateTempFor(scratch).Paths) == 0 {
+	confine.TestingSetAutoConfine(t)
+	if len(confine.PrivateTempFor(scratch).Paths) == 0 || !confine.Enforcing() {
 		return
 	}
 	for _, alias := range confine.PrivateTempFor(scratch).Paths {
@@ -87,6 +88,13 @@ func TestPrivateTempOperandsKeepSessionIdentity(t *testing.T) {
 		}
 		_, err = fseffect.Replace(fseffect.ReplaceRequest{Location: write.EffectLocation(), Source: strings.NewReader(path), Mode: 0600})
 		testutil.FailErr(t, "write to private temp", err)
+		frame, err := projectpaths.NewProgramPaths(t.Context(), nil, tc, filepath.Dir(path))
+		testutil.FailErr(t, "enter private temp directory", err)
+		bound, err := frame.Bind(t.Context(), "output.txt", false)
+		testutil.FailErr(t, "bind relative operand in private temp", err)
+		if frame.Directory() != filepath.Dir(path) || bound.Resolved.DisplayPath != path || bound.Resolved.Abs != want {
+			t.Fatalf("directory = %q, bound file = %+v", frame.Directory(), bound.Resolved)
+		}
 		session := projectpaths.NewReadSession(nil, tc)
 		defer session.Close()
 		read, err := session.Resolve(t.Context(), path)
@@ -104,7 +112,11 @@ func TestPrivateTempOperandsKeepSessionIdentity(t *testing.T) {
 		}
 		approval, err := tools.ApprovalFilePath(tc, path)
 		testutil.FailErr(t, "locate approval subject", err)
-		if approval != want || tools.SocketArgPath(tc, path) != path {
+		tc.Execution.HostExecution = true
+		host, err := tools.ApprovalFilePath(tc, path)
+		testutil.FailErr(t, "locate host-execution subject", err)
+		tc.Execution.HostExecution = false
+		if host != path || approval != want || tools.SocketArgPath(tc, path) != path {
 			t.Fatal("file and socket subjects lost their namespaces")
 		}
 	}

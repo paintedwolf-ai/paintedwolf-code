@@ -118,3 +118,47 @@ func TestCopyByteBudgetCannotOverflowToEmptySuccess(t *testing.T) {
 		}
 	}
 }
+
+func TestSharedTempMutationRefusalsPreserveFile(t *testing.T) {
+	project, shared := t.TempDir(), t.TempDir()
+	t.Setenv("TMPDIR", shared)
+	path := filepath.Join(shared, "note.txt")
+	testutil.FailErr(t, "seed shared file", os.WriteFile(path, []byte("original"), 0o600))
+	testutil.FailErr(t, "seed source", os.WriteFile(filepath.Join(project, "source"), []byte("replacement"), 0o600))
+	writeTestZip(t, filepath.Join(project, "input.zip"), map[string]string{"note.txt": "replacement"})
+	b := nativefixture.Boundary(t)
+	for _, tc := range []struct {
+		name string
+		tool batchMutationTool
+		args map[string]any
+	}{
+		{"write", &WriteTool{Boundary: b}, map[string]any{"path": path, "content": "changed"}},
+		{"copy", &CopyTool{Boundary: b}, map[string]any{"copies": []any{map[string]any{"from": "source", "to": path}}}},
+		{"move", &MoveTool{Boundary: b}, map[string]any{"moves": []any{map[string]any{"from": "source", "to": path}}}},
+		{"delete", &DeleteTool{Boundary: b}, map[string]any{"paths": []any{path}}},
+		{"chmod", &ChmodTool{Boundary: b}, map[string]any{"paths": []any{path}, "mode": "755"}},
+		{"mkdir", &MkdirTool{Boundary: b}, map[string]any{"paths": []any{filepath.Join(shared, "child")}}},
+		{"restore_version", &RestoreVersionTool{Boundary: b}, map[string]any{"path": path}},
+		{"extract_archive", &ExtractArchiveTool{Boundary: b}, map[string]any{"path": "input.zip", "dest": shared}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := tc.tool.Run(t.Context(), tc.args, nativefixture.Context(project))
+			reject := toolrejection.AsToolReject(err)
+			if reject == nil || reject.Code != "SURVEY_PATH_ESCAPE" {
+				t.Fatalf("unexpected refusal: %v", err)
+			}
+			data, err := os.ReadFile(path)
+			testutil.FailErr(t, "read shared file", err)
+			info, err := os.Stat(path)
+			testutil.FailErr(t, "stat shared file", err)
+			if string(data) != "original" || info.Mode().Perm() != 0600 {
+				t.Fatalf("shared file = %q, mode %o", data, info.Mode().Perm())
+			}
+			entries, err := os.ReadDir(shared)
+			testutil.FailErr(t, "inspect shared directory", err)
+			if len(entries) != 1 {
+				t.Fatalf("shared directory changed: %v", entries)
+			}
+		})
+	}
+}
