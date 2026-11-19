@@ -2,6 +2,7 @@
 package sessionipc
 
 import (
+	"net"
 	"os"
 	"sync"
 
@@ -48,24 +49,29 @@ func (r *Registry) Channel(root string) (*os.File, error) {
 		unix.Close(dir)
 		return nil, err
 	}
+	file := os.NewFile(uintptr(pair[0]), "session socket registry")
+	channel, err := net.FileConn(file)
+	_ = file.Close()
+	if err != nil {
+		unix.Close(dir)
+		unix.Close(pair[1])
+		return nil, err
+	}
 	go func() {
 		defer unix.Close(dir)
-		defer unix.Close(pair[0])
-		r.serve(pair[0], session)
+		defer channel.Close()
+		r.serve(channel.(*net.UnixConn), session)
 	}()
 	return os.NewFile(uintptr(pair[1]), "session sockets"), nil
 }
 
-func (r *Registry) serve(channel int, session object) {
+func (r *Registry) serve(channel *net.UnixConn, session object) {
 	owned := make(map[object]int)
 	defer r.release(session, owned)
+	var data [1]byte
+	control := make([]byte, unix.CmsgSpace(2*4))
 	for {
-		var data [1]byte
-		control := make([]byte, unix.CmsgSpace(2*4))
-		n, size, flags, _, err := unix.Recvmsg(channel, data[:], control, unix.MSG_CMSG_CLOEXEC)
-		if err == unix.EINTR {
-			continue
-		}
+		n, size, flags, _, err := channel.ReadMsgUnix(data[:], control)
 		if err != nil || n == 0 {
 			return
 		}
