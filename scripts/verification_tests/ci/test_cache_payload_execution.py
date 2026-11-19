@@ -12,11 +12,12 @@ from ci_policy import cache_payload
 
 
 class CachePayloadTests(unittest.TestCase):
-    def test_native_cache_inputs_cover_workspace_manifests_and_current_runner_image(self):
+    def test_native_cache_inputs_cover_workspace_manifests_and_the_runner_os_release(self):
         import yaml
         root = Path(__file__).resolve().parents[3]
         for family, workspace in (("rust", "lycaon-den/src-tauri"),
                                   ("decide", "lycaon/internal/decide/native"),
+                                  ("generation", "lycaon/internal/generation/native"),
                                   ("document-core", "lycaon/internal/documentcore/native")):
             action = yaml.safe_load((root / f".github/actions/cache-{family}/action.yml").read_text())
             steps = action["runs"]["steps"]
@@ -28,18 +29,22 @@ class CachePayloadTests(unittest.TestCase):
             self.assertTrue(required)
             self.assertLessEqual(required, matched, family)
             paths = next(step for step in steps if step.get("id") == "paths")
-            prefixes = []
+            prefixes = {}
             with tempfile.TemporaryDirectory() as directory:
-                for image in ("20261101.1", "20261102.1"):
-                    output = Path(directory) / image
+                # Hosted runners of one OS release serve several image builds at once, so a build shares the cache
+                # of its release; another release starts its own.
+                for release, image in (("ubuntu24", "20261101.1"), ("ubuntu24", "20261102.1"), ("ubuntu26", "20261101.1")):
+                    output = Path(directory) / f"{release}-{image}"
                     result = subprocess.run(["bash", "-e", "-c", paths["run"]], cwd=root, text=True,
                                             capture_output=True, check=False,
                                             env={**os.environ, "RUNNER_OS": "Linux", "RUNNER_ARCH": "X64",
-                                                 "ImageOS": "ubuntu24", "ImageVersion": image,
+                                                 "ImageOS": release, "ImageVersion": image,
                                                  "GITHUB_WORKSPACE": str(root), "GITHUB_OUTPUT": str(output)})
                     self.assertEqual(result.returncode, 0, result.stderr)
-                    prefixes.append(next(line for line in output.read_text().splitlines() if line.startswith("prefix=")))
-            self.assertNotEqual(*prefixes, family)
+                    prefixes[release, image] = next(line for line in output.read_text().splitlines()
+                                                    if line.startswith("prefix="))
+            self.assertEqual(prefixes["ubuntu24", "20261101.1"], prefixes["ubuntu24", "20261102.1"], family)
+            self.assertNotEqual(prefixes["ubuntu24", "20261101.1"], prefixes["ubuntu26", "20261101.1"], family)
 
     def test_all_exact_hits_skip_preparation_on_push(self):
         records = {name: dict(active=True, hit="true") for name in ("go", "rust", "analysis")}

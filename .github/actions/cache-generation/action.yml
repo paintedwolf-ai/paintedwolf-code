@@ -21,7 +21,7 @@ runs:
         toolchain=system
         if [[ "${RUNNER_OS}" == macOS ]]; then toolchain="${DEVELOPER_DIR:-system}"; fi
         printf 'target=%s/generation-rust\n' "$(python3 scripts/artifact_paths.py compiler-cache "${GITHUB_WORKSPACE}")" >> "${GITHUB_OUTPUT}"
-        printf 'prefix=generation-v1-%s-%s-%s-%s-%s-\n' "${RUNNER_OS}" "${RUNNER_ARCH}" "${ImageOS:-}" "${ImageVersion:-}" "${toolchain}" >> "${GITHUB_OUTPUT}"
+        printf 'prefix=generation-v1-%s-%s-%s-%s-\n' "${RUNNER_OS}" "${RUNNER_ARCH}" "${ImageOS:-}" "${toolchain}" >> "${GITHUB_OUTPUT}"
     - id: restore
       uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
       with:

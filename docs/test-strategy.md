@@ -1489,7 +1489,10 @@ one shard. Per-job concurrency does not increase. The execution deadline allows
 ### Compiler cache lifecycle
 
 Only the serialized main warmer publishes compiler caches. Native cache identity
-includes the declared paths and compression format as well as the key. The warmer
+includes the declared paths and compression format as well as the key. Rust
+compiler keys name the runner's OS release, architecture and toolchain, not its
+image build: hosted runners of one release serve several image builds at once, and
+a key per build would leave most runners without a warm cache. The warmer
 probes exact identities without restoring payloads; prefix matches remain misses.
 Every run reports each applicable family as an exact hit or miss. An all-hit push
 skips preparation, compilation, publication, and lint diagnostics. Native package
