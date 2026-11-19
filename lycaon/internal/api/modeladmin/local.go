@@ -62,7 +62,7 @@ func (s *Handler) SelectLocalModel(w http.ResponseWriter, r *http.Request) {
 
 func (s *Handler) selectLocalModel(ctx context.Context, req wire.LocalModelSelectionRequest) error {
 	ctx = context.WithoutCancel(ctx)
-	return s.service.SelectLocalModel(req, func() {
+	return s.service.SelectLocalModel(req, func() { //nolint:contextcheck // Accepted transfers continue after the request returns.
 		s.publishProviderEvent(ctx, "models_refreshed", llm.IncludedProviderID)
 	})
 }

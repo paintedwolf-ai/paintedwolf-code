@@ -103,7 +103,7 @@ func (s *Startup) CloseGeneration(context.Context) error {
 	if s.Runtime == nil {
 		return nil
 	}
-	return s.Runtime.Generation.Close()
+	return s.Runtime.Generation.Close() //nolint:contextcheck // Shutdown waits for model leases to drain.
 }
 
 func (s *Startup) CloseResources(context.Context) error {

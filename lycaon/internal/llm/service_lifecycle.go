@@ -78,7 +78,7 @@ func NewService(ctx context.Context, mock modelcall.LLMClient, local *nativegen.
 		}
 	}
 	if local != nil && local.OfflineInstaller && local.Runtime != nil {
-		local.Runtime.SetupInstaller(local.OfflineTier, svc.initializeLocalRoles, func() { registry.RefreshDiscovery(IncludedProviderID); svc.ResetPlanes() })
+		local.Runtime.SetupInstaller(local.OfflineTier, svc.initializeLocalRoles, func() { registry.RefreshDiscovery(IncludedProviderID); svc.ResetPlanes() }) //nolint:contextcheck // The runtime owns the installer transfer.
 	}
 	return svc, nil
 }
