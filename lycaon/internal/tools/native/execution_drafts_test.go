@@ -1,12 +1,14 @@
 package native
 
 import (
+	"context"
 	"errors"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
+	"github.com/lycaon/lycaon/internal/sourcebranch"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/toolrejection"
@@ -59,5 +61,40 @@ func TestSaveDraftsRefusesAFileChangedOutsideItsDocument(t *testing.T) {
 	}
 	if !docs.docs["r1/a.txt"].Dirty {
 		t.Fatal("the draft was saved over the outside change")
+	}
+}
+
+type destinationDocuments struct {
+	*fakeEditorDocuments
+	opens int
+}
+
+func (d *destinationDocuments) OpenDocument(ctx context.Context, projectID string, branch sourcebranch.ID, rootID, path string) (tools.EditorDocumentText, bool, error) {
+	d.opens++
+	return d.fakeEditorDocuments.OpenDocument(ctx, projectID, branch, rootID, path)
+}
+
+func TestCaptureDestinationPinsTheRevisionItOpened(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "out.txt")
+	testutil.FailErr(t, "write destination", os.WriteFile(path, []byte("saved\n"), 0o644))
+	doc := openDoc("doc-out", "typed\n", true)
+	docs := &destinationDocuments{fakeEditorDocuments: &fakeEditorDocuments{
+		docs: map[string]*tools.EditorDocumentText{"r1/out.txt": doc},
+	}}
+	drafts := tools.NewProgramDrafts("command", nil)
+	ctx, release := tools.WithDraftPins(tools.WithProgramDrafts(t.Context(), drafts))
+	t.Cleanup(release)
+	revisions := ExecutionRevisions{Boundary: nativefixture.Boundary(t)}
+	tc := editorCtx(dir, docs.fakeEditorDocuments)
+	tc.Source.EditorDocuments = docs
+	pin, err := revisions.CaptureDestination(ctx, tc, path)
+	testutil.FailErr(t, "capture destination", err)
+	if docs.opens != 1 || pin.DocumentRevision != doc.Revision || !drafts.Pinned(doc.ID, pin.DocumentRevision) {
+		t.Fatalf("opened %d times, captured %+v, pinned: %v", docs.opens, pin, drafts.Pinned(doc.ID, pin.DocumentRevision))
+	}
+	release()
+	if drafts.Pinned(doc.ID, pin.DocumentRevision) {
+		t.Fatal("settled destination still pinned")
 	}
 }

@@ -225,7 +225,7 @@ func captureDestinationRevision(ctx context.Context, tctx tools.ToolContext, res
 			return sourceview.Text{}, link, err
 		}
 	}
-	st, err := sourceview.LoadText(ctx, "write", sourceview.AccessMutate, tctx, resolved)
+	st, err := sourceview.LoadPinnedDestination(ctx, tctx, resolved)
 	if rawDestination(err) {
 		return captureRawRevision(resolved, revision)
 	}

@@ -104,6 +104,7 @@ func (r *Terminal) startPTY(
 	if err != nil {
 		return "", err
 	}
+	req.ProjectDir = projectDir
 
 	handle := uuid.NewString()
 	runCtx, cancel := context.WithCancel(context.WithoutCancel(ctx))
@@ -184,6 +185,10 @@ func (r *Terminal) startPTY(
 	r.jobs.workDirs[handle] = projectDir
 	r.jobs.mu.Unlock()
 
+	if _, err := prepareJobStart(ctx, runCtx, req); err != nil {
+		cancel()
+		return "", r.jobs.failStart(proc, err)
+	}
 	stage := req.Stages[0]
 	session, err := lycexec.StartPTY(runCtx, stage.Name, stage.Args, lycexec.PTYOpts{
 		Dir:            projectDir,

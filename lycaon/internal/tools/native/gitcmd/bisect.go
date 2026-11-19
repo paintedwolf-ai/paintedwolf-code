@@ -13,7 +13,6 @@ import (
 	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/internal/tools"
-	"github.com/lycaon/lycaon/internal/tools/native"
 )
 
 // bisectReads change neither the work tree nor the session.
@@ -110,15 +109,6 @@ func (b *bisect) notBisecting() int {
 // start refuses a tree with tracked changes, because every step checks out
 // another commit over it. A separate worktree keeps the user's tree as is.
 func (b *bisect) start() (int, error) {
-	status, err := b.p.owners.Git.Status(b.ctx, b.root)
-	if err != nil {
-		return 0, err
-	}
-	for _, entry := range status.Files {
-		if entry.Status != "??" {
-			return 0, &toolrejection.ToolReject{Code: "GIT_BISECT_DIRTY_TREE", Data: map[string]any{"command": "git bisect start", "path": entry.Path}}
-		}
-	}
 	terms := [2]string{"bad", "good"}
 	var revs, names, words []string
 	for _, item := range b.p.Argv.Items {
@@ -142,12 +132,6 @@ func (b *bisect) start() (int, error) {
 	if b.p.Argv.EndOfOptions {
 		words = append(append(words, "--"), names...)
 	}
-	start := b.state.Start
-	if !b.state.Active {
-		if start, err = git.BisectStart(b.ctx, b.root); err != nil {
-			return 0, err
-		}
-	}
 	oids := make([]string, len(revs))
 	for i, rev := range revs {
 		oid, err := git.ResolveBisectCommit(b.ctx, b.root, rev)
@@ -159,6 +143,24 @@ func (b *bisect) start() (int, error) {
 			return 128, nil
 		}
 		oids[i] = oid
+	}
+	if err := b.p.prepareWorktree(b.ctx); err != nil {
+		return 0, err
+	}
+	status, err := b.p.owners.Git.Status(b.ctx, b.root)
+	if err != nil {
+		return 0, err
+	}
+	for _, entry := range status.Files {
+		if entry.Status != "??" {
+			return 0, &toolrejection.ToolReject{Code: "GIT_BISECT_DIRTY_TREE", Data: map[string]any{"command": "git bisect start", "path": entry.Path}}
+		}
+	}
+	start := b.state.Start
+	if !b.state.Active {
+		if start, err = git.BisectStart(b.ctx, b.root); err != nil {
+			return 0, err
+		}
 	}
 	if b.state.Active {
 		if err := git.ClearBisect(b.ctx, b.root); err != nil {
@@ -341,7 +343,7 @@ func (b *bisect) first(oid string) error {
 }
 
 func (b *bisect) checkout(req git.OperationRequest) (int, error) {
-	res, err := (native.GitMutations{Git: b.p.owners.Git, Boundary: b.p.owners.Boundary, PrivateGit: b.p.owners.PrivateGit}).Operate(b.ctx, b.tc, req)
+	res, err := b.p.mutations().Operate(b.ctx, b.tc, req)
 	if res.Attempted {
 		b.effects = true
 	}

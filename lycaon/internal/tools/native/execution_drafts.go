@@ -34,9 +34,7 @@ func SaveResolvedDrafts(ctx context.Context, tctx tools.ToolContext, resolved pr
 	if queryPath == "." {
 		queryPath = ""
 	}
-	err = documents.SaveForAgentOperation(ctx, tctx.Identity.ProjectID, branch, resolved.Root.ID, queryPath, descendants, tools.EditorAgentCall{
-		SessionID: tctx.Identity.SessionID, Turn: tctx.Identity.UserTurn, ToolCallID: tctx.Identity.ToolCallID, ToolName: "command",
-	})
+	err = documents.SaveForAgentOperation(ctx, tctx.Identity.ProjectID, branch, resolved.Root.ID, queryPath, descendants, tools.DraftSaveCall(ctx, tctx))
 	var changed *tools.EditorFileChanged
 	if errors.As(err, &changed) {
 		return fileChangedConflict(resolved, changed)
@@ -50,7 +48,7 @@ func (e ExecutionRevisions) captureDocument(ctx context.Context, tctx tools.Tool
 	if err != nil || !unsaved {
 		return nil, revision, nil, false, err
 	}
-	doc, open, err := sourceview.OpenDocument(ctx, tctx, resolved)
+	doc, open, err := sourceview.OpenPinnedDocument(ctx, tctx, resolved)
 	if err != nil || !open || !doc.Dirty {
 		return nil, revision, nil, false, err
 	}

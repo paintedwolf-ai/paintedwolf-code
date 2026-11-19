@@ -9,6 +9,7 @@ import (
 	"github.com/lycaon/lycaon/internal/argv"
 	"github.com/lycaon/lycaon/internal/confine"
 	"github.com/lycaon/lycaon/internal/exec"
+	"github.com/lycaon/lycaon/internal/toolcontract"
 )
 
 // Request runs one or more host command stages in projectDir.
@@ -23,6 +24,13 @@ type Request struct {
 	PathExtra []string
 	// ServiceEnv points a declared service's client at its reviewed endpoint.
 	ServiceEnv []string
+	// BeforeStart prepares the inputs of an admitted command job.
+	BeforeStart func(context.Context) (SourceIdentity, error)
+}
+
+// SourceIdentity states the verification inputs as prepared for launch.
+type SourceIdentity struct {
+	Revision, RootDigest string
 }
 
 // StageResult is one stage outcome in the tool-visible JSON envelope.
@@ -140,6 +148,7 @@ type Result struct {
 	LeftRunning int `json:"left_running,omitempty"`
 	// SourceWindow is present when a window observed the command.
 	SourceWindow *SourceWindow `json:"source_window,omitempty"`
+	toolcontract.LaunchDrafts
 	// GuidanceCodes classify a confinement refusal.
 	GuidanceCodes []string `json:"-"`
 	// Observation records the confinement boundary.
@@ -175,6 +184,7 @@ type CommandRunningResult struct {
 	Network []confine.EgressHost `json:"network,omitempty"`
 	// SourceWindow is present when a window observes the command.
 	SourceWindow *SourceWindow `json:"source_window,omitempty"`
+	toolcontract.LaunchDrafts
 	// Report is the confinement summary every process-spawning tool states.
 	confine.Report
 }

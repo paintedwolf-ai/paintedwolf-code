@@ -84,6 +84,9 @@ func runFileMutation(ctx context.Context, p Prepared, tc tools.ToolContext, dir 
 	var err error
 	operands, err := fileOperands(ctx, p, dir, repo.Root)
 	if err == nil {
+		err = p.prepareWorktree(ctx)
+	}
+	if err == nil {
 		r.indexHash = currentIndexHash(repo)
 		r.index, err = trackedEntries(ctx, p, repo.Root, operands, p.command.spec.Name == "git mv")
 	}

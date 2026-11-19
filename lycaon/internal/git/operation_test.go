@@ -53,6 +53,28 @@ func TestOperationBranchSynchronization(t *testing.T) {
 	operateOK(t, dir, OperationRequest{Kind: "checkout", Branch: "main"})
 }
 
+func TestOperationRechecksRefsAfterPreparingTheWorktree(t *testing.T) {
+	t.Parallel()
+	dir := operationFixture(t)
+	gittest.Run(t, dir, "branch", "feature")
+	reviewed := false
+	result, err := NewManager().Operate(t.Context(), dir, OperationRequest{
+		Kind: "checkout", Branch: "feature",
+		BeforeWorktree: func(context.Context) error {
+			gittest.Run(t, dir, "branch", "-D", "feature")
+			return nil
+		},
+		Review: func(context.Context, []RestoreFile) error {
+			reviewed = true
+			return nil
+		},
+	})
+	var refusal *OperationError
+	if !errors.As(err, &refusal) || refusal.Reason != "repository_changed_during_review" || reviewed || result.Attempted {
+		t.Fatalf("changed ref reached the worktree operation: result=%+v reviewed=%v err=%v", result, reviewed, err)
+	}
+}
+
 func TestOperationReviewRefusalAndStaleChanges(t *testing.T) {
 	t.Parallel()
 	for _, mutate := range []bool{false, true} {

@@ -24,7 +24,6 @@ import (
 	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/internal/tools"
-	"github.com/lycaon/lycaon/internal/tools/native"
 )
 
 func runNetwork(ctx context.Context, p Prepared, tc tools.ToolContext, dir string, repo gitrepo.Repo, out *meteredOutput, stderr io.Writer, certainty toolcontract.EffectCertainty) (toolcontract.ProducerResult, error) {
@@ -109,15 +108,23 @@ func runPull(ctx context.Context, p Prepared, tc tools.ToolContext, dir string, 
 		}
 		return toolcontract.ProducerResult{Status: code, Terminal: toolcontract.ProducerCompleted, Complete: true, EffectCertainty: toolcontract.EffectUnknown}, nil
 	}
+	if len(admitted.urls) == 0 {
+		failed = true
+		return settleMutationError(&toolrejection.ToolReject{
+			Code: "GIT_OPERATION_PRECONDITION",
+			Data: map[string]any{"reason": "fetch_head_missing", "tool": "git_pull"},
+		}, toolcontract.EffectUnknown)
+	}
 	req := git.OperationRequest{Kind: "merge", Mode: "ff", Ref: "FETCH_HEAD"}
 	if has(p.Argv, "--rebase") {
 		req = git.OperationRequest{Kind: "rebase", Ref: "FETCH_HEAD"}
 	} else if has(p.Argv, "--ff-only") {
 		req.Mode = "ff_only"
 	}
-	mut := native.GitMutations{Git: p.owners.Git, Boundary: p.owners.Boundary, PrivateGit: p.owners.PrivateGit}
+	mut := p.mutations()
 	res, opErr := mut.Operate(ctx, tc, req)
 	result, err := settleOperate(ctx, p, res, out, stderr, has(p.Argv, "-q"), opErr)
+	failed = err != nil || result.Status != 0
 	// The merge or rebase places fetched content in the files it changed, and
 	// its summary names them.
 	reportNetworkRead(ctx, admitted, networkRead{wroteStdout: out.written > 0, files: mergedPaths(repo.Root, res.Paths)})
@@ -278,7 +285,7 @@ func bindNetworkLaunch(ctx context.Context, p Prepared, tc tools.ToolContext, ad
 	launchTC := tc
 	launchTC.Files.SessionReadPaths = append(slices.Clone(tc.Files.SessionReadPaths), admitted.reads...)
 	launchTC.Files.GrantedWriteRoots = append(slices.Clone(tc.Files.GrantedWriteRoots), admitted.writes...)
-	plan, release, err := p.owners.Launch(ctx, launchTC, "git", p.commandLine(), []confine.HostService{service})
+	plan, release, err := p.bindLaunch(ctx, launchTC, []confine.HostService{service})
 	if err != nil {
 		releaseService()
 		_ = credentials.Close()

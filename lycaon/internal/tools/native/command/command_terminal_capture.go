@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/lycaon/lycaon/internal/toolrejection"
 	"os/exec"
 	"strings"
 
@@ -15,6 +14,8 @@ import (
 	lycexec "github.com/lycaon/lycaon/internal/exec"
 	"github.com/lycaon/lycaon/internal/hostcmd"
 	"github.com/lycaon/lycaon/internal/sandbox"
+	"github.com/lycaon/lycaon/internal/toolcontract"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/tools/projectpaths"
 )
@@ -68,7 +69,7 @@ func runCommandTerminalCapture(
 	}
 	commandLine := CanonicalCommandKey(tctx, args)
 	approach := commandFailureApproachKey(CanonicalToolArgs(tctx, args))
-	observeSource, verificationSource := commandSourceReaders(ctx, tctx, cwd)
+	observeSource := commandSourceReader(ctx, tctx, commandFailureSourceRoot(tctx, cwd))
 	failureAttempt, reject := tracker.begin(tctx.Identity.SessionID, approach, commandLine, observeSource)
 	if reject != nil {
 		return RunOutcome{}, reject
@@ -113,10 +114,16 @@ func runCommandTerminalCapture(
 		}
 		return RunOutcome{}, toolrejection.HeldHandOffReject(toolName, err)
 	}
-	var sourceRevision, sourceRootDigest string
-	if tctx.Execution.VerificationCheck {
-		source := verificationSource()
-		sourceRevision, sourceRootDigest = source.Revision, source.Root
+	var drafts toolcontract.LaunchDrafts
+	var source commandSourceIdentity
+	request.BeforeStart = func(ctx context.Context) (hostcmd.SourceIdentity, error) {
+		var err error
+		drafts, err = tools.SaveLaunchDrafts(ctx, tctx)
+		if err != nil {
+			return hostcmd.SourceIdentity{}, err
+		}
+		source = captureVerificationSource(ctx, tctx)
+		return hostcmd.SourceIdentity{Revision: source.Revision, RootDigest: source.Root}, nil
 	}
 	captured, runErr := registry.Terminal.RunPTYCapture(
 		ctx, tctx.Identity.SessionID, tctx.Identity.ParentSessionID, tctx.Identity.ProjectID, request, runner,
@@ -147,11 +154,11 @@ func runCommandTerminalCapture(
 	tracker.record(failureAttempt, captured.ExitCode == 0 || captured.TimedOut)
 	return RunOutcome{
 		IsCheck:        tctx.Execution.VerificationCheck,
-		SourceRevision: sourceRevision, SourceRootDigest: sourceRootDigest,
+		SourceRevision: source.Revision, SourceRootDigest: source.Root,
 		Finished: true,
 		Snapshot: TerminalCaptureSnapshot(captured, stages[0].EchoLine(), tail),
 		Boundary: captured.Boundary, Network: network, Refusals: refusals, IO: ioParams, Cwd: cwdDisplay,
-		Terminal: &captured,
+		Terminal: &captured, Drafts: drafts,
 	}, nil
 }
 

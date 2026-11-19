@@ -306,6 +306,9 @@ func (p Prepared) run(ctx context.Context, tc tools.ToolContext, streams command
 	if err != nil || status != 0 {
 		return status, err
 	}
+	if err := p.prepareWorktree(ctx); err != nil {
+		return 0, err
+	}
 	out := &meteredOutput{ctx: ctx, w: streams.Output, maximum: p.owners.limit("stream_bytes")}
 	if out.w == nil {
 		out.w = io.Discard

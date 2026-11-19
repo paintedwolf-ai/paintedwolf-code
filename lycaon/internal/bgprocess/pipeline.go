@@ -42,6 +42,7 @@ func (r *Registry) StartPipeline(ctx context.Context, spec PipelineSpec) (string
 		return "", err
 	}
 	req.ProjectDir = projectDir
+	spec.Request = req
 
 	runKey := hostcmd.ExecutionKey(req)
 	handle := uuid.NewString()
@@ -75,14 +76,12 @@ func (r *Registry) StartPipeline(ctx context.Context, spec PipelineSpec) (string
 			toolCallID: strings.TrimSpace(spec.ToolCallID),
 		},
 		processConfinementState: processConfinementState{
-			isCheck:          spec.IsCheck,
-			sourceRevision:   spec.SourceRevision,
-			sourceRootDigest: spec.SourceRootDigest,
-			cwd:              spec.Cwd,
-			runID:            strings.TrimSpace(spec.RunID),
-			runKey:           runKey,
-			boundary:         confine.BoundaryOf(req.Launch.Confinement),
-			facts:            spec.Facts,
+			isCheck:  spec.IsCheck,
+			cwd:      spec.Cwd,
+			runID:    strings.TrimSpace(spec.RunID),
+			runKey:   runKey,
+			boundary: confine.BoundaryOf(req.Launch.Confinement),
+			facts:    spec.Facts,
 		},
 	}
 	if proc.RootSessionID == "" {
@@ -139,6 +138,16 @@ func (r *Registry) StartPipeline(ctx context.Context, spec PipelineSpec) (string
 	r.jobs.workDirs[handle] = workDir
 	r.jobs.mu.Unlock()
 
+	return r.launchAdmittedPipeline(ctx, runCtx, proc, spec, workDir)
+}
+
+func (r *Registry) launchAdmittedPipeline(ctx, runCtx context.Context, proc *Process, spec PipelineSpec, workDir string) (string, error) {
+	req := spec.Request
+	source, err := prepareJobStart(ctx, runCtx, req)
+	if err != nil {
+		proc.cancel()
+		return "", r.jobs.failStart(proc, err)
+	}
 	stdout := streamWriter{proc: proc, stream: "stdout", publish: r.Output.publishStream}
 	stderr := streamWriter{proc: proc, stream: "stderr", publish: r.Output.publishStream}
 
@@ -154,15 +163,16 @@ func (r *Registry) StartPipeline(ctx context.Context, spec PipelineSpec) (string
 		Stdin:          req.Stdin,
 		Redirect:       req.Redirect,
 		Started: func(pid int) {
-			r.jobs.recordStagePID(handle, pid)
+			r.jobs.recordStagePID(proc.Handle, pid)
 		},
 	}, stdout, stderr)
 	if err != nil {
-		cancel()
+		proc.cancel()
 		return "", r.jobs.failStart(proc, err)
 	}
 	r.jobs.mu.Lock()
 	proc.async = async
+	proc.sourceRevision, proc.sourceRootDigest = source.Revision, source.RootDigest
 	stopped := r.jobs.revalidateStartedProcessLocked(proc, workDir)
 	startEv, emitStart := r.jobs.indexProjectProcessLocked(proc)
 	publishProject := r.Output.publishProject
@@ -171,15 +181,15 @@ func (r *Registry) StartPipeline(ctx context.Context, spec PipelineSpec) (string
 		async.Kill()
 	}
 	if emitStart && publishProject != nil {
-		publishProject(baseCtx, startEv)
+		publishProject(context.WithoutCancel(ctx), startEv)
 	}
 	if !proc.silent && !stopped {
 		r.sweeper.onJobStarted() //nolint:contextcheck // The sweeper loop outlives this call and holds its own context.
 	}
 
-	r.Output.watchRefusals(baseCtx, proc)
+	r.Output.watchRefusals(context.WithoutCancel(ctx), proc)
 	go r.waitProcess(context.WithoutCancel(ctx), proc, req.Stages)
-	return handle, nil
+	return proc.Handle, nil
 }
 
 type streamWriter struct {

@@ -105,7 +105,9 @@ type SessionOwners interface {
 type programRun struct {
 	tool string
 	// windows holds source windows its operations returned, until output delivery.
-	windows         *tools.ProgramWindows
+	windows *tools.ProgramWindows
+	// drafts is the program's view of the person's unsaved documents.
+	drafts          *tools.ProgramDrafts
 	control         programControlDefinition
 	publicationOnce sync.Once
 	publicationErr  error
@@ -205,7 +207,6 @@ func (r *ProgramRuntime) Run(ctx context.Context, tool string, args map[string]a
 	}
 	run.windows = &tools.ProgramWindows{}
 	ctx = tools.WithProgramWindows(ctx, run.windows)
-	ctx = tools.WithUnsavedPaths(ctx)
 	ctx = tools.WithCommandReadObserver(ctx, func(ctx context.Context, root, path string) error {
 		run.observeProvenanceFileRead(ctx, root, path)
 		return nil
@@ -214,6 +215,8 @@ func (r *ProgramRuntime) Run(ctx context.Context, tool string, args map[string]a
 	if err != nil {
 		return "", err
 	}
+	run.drafts = tools.NewProgramDrafts(tool, verification.observeLaunch)
+	ctx = tools.WithProgramDrafts(ctx, run.drafts)
 	var owners ProgramOwners
 	if r.Owners != nil {
 		if owners, err = r.Owners(tc, paths, memory, r.sessionResources(tc.Identity.SessionID)); err != nil {

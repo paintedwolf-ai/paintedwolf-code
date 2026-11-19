@@ -147,6 +147,7 @@ func CommandResultFromOutcome(
 		Cwd:               outcome.Cwd,
 		LeftRunning:       outcome.LeftRunning,
 		SourceWindow:      outcome.SourceWindow,
+		LaunchDrafts:      outcome.Drafts,
 	}
 	res.Tail = enginepaths.RewriteWorkerBranchPaths(res.Tail) // compilers print the absolute cwd
 	if snap := outcome.Snapshot; len(snap.Output) > len(snap.Tail) || snap.OutputEvicted {
@@ -213,6 +214,7 @@ func EncodeCommandRunning(tctx tools.ToolContext, outcome RunOutcome, budget tim
 		Network:      outcome.Network,
 		Report:       report.WithSandboxRefusals(outcome.Refusals),
 		SourceWindow: outcome.SourceWindow,
+		LaunchDrafts: outcome.Drafts,
 	})
 	if err != nil {
 		return "", fmt.Errorf("command running encode: %w", err)
