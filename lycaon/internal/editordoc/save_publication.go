@@ -131,7 +131,7 @@ func (c savePublisher) prepareSaveMutation(ctx context.Context, d *Document, ope
 	expected := d.BaseSHA256
 	if d.Absent {
 		expected = ""
-	} else if before, err = readBoundPublicationPreimage(root, d.Path, parentIdentity); err != nil && !errors.Is(err, fs.ErrNotExist) {
+	} else if before, err = readPublicationPreimage(root, d.Path, parentIdentity); err != nil && !errors.Is(err, fs.ErrNotExist) {
 		return nil, err
 	}
 	now := time.Now().UTC()

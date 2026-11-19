@@ -66,7 +66,7 @@ func (c saveCommitter) recoverMutation(ctx context.Context, p *project.Project, 
 		if parentErr != nil {
 			return s.abandonRecovery(ctx, document, mutation, parentErr)
 		}
-		raw, readErr := readBoundPublicationPreimage(root, mutation.Path, identity)
+		raw, readErr := readPublicationPreimage(root, mutation.Path, identity)
 		// A publication that expected no file resumes while the path is still free.
 		current := ""
 		switch {
@@ -120,6 +120,6 @@ func (c saveCommitter) mutationMatchesDisk(ctx context.Context, m *Mutation) boo
 	if err != nil {
 		return false
 	}
-	raw, err := readBoundPublicationPreimage(root, m.Path, identity)
+	raw, err := readPublicationPreimage(root, m.Path, identity)
 	return err == nil && textfile.SHA256(raw) == m.AfterSHA256
 }

@@ -9,11 +9,7 @@ import (
 	"github.com/lycaon/lycaon/internal/projectsource"
 )
 
-func readPublicationPreimage(root, path string) ([]byte, error) {
-	return readBoundPublicationPreimage(root, path, "")
-}
-
-func readBoundPublicationPreimage(root, path, identity string) ([]byte, error) {
+func readPublicationPreimage(root, path, identity string) ([]byte, error) {
 	var file *os.File
 	var err error
 	if identity != "" {
