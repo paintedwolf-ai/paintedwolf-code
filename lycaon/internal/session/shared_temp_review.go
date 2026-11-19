@@ -26,7 +26,18 @@ func (b *WriteRootCheckpointBroker) ReviewSharedTemp(ctx context.Context, in com
 		return result
 	}
 	_, chat := askSessionIDs(ctx, b.Store, in.SessionID, in.ParentSessionID)
-	history, end, err := b.Runtime.BeginSharedTemp(ctx, chat)
+	history, err := b.Runtime.SharedTempHistory(ctx, chat, b.TempHistory)
+	if err != nil {
+		if !failed {
+			return result
+		}
+		return guidance.SharedTempSettlement{Refused: roots, Unanswered: roots}
+	}
+	if !failed {
+		first := history.FirstReports(roots)
+		return guidance.SharedTempSettlement{Refused: first, Tolerated: len(first) > 0}
+	}
+	end, err := history.BeginReview(ctx)
 	if err != nil {
 		return guidance.SharedTempSettlement{Refused: roots, Unanswered: roots}
 	}
@@ -35,14 +46,6 @@ func (b *WriteRootCheckpointBroker) ReviewSharedTemp(ctx context.Context, in com
 	var reviews sharedTempReviews
 	for _, root := range roots {
 		if !isSharedTempRoot(root) {
-			continue
-		}
-		if !failed {
-			if !history.Reported[root] {
-				result.Refused = append(result.Refused, root)
-				history.Reported[root] = true
-				result.Tolerated = true
-			}
 			continue
 		}
 		result.Refused = append(result.Refused, root)
@@ -72,7 +75,7 @@ func (b *WriteRootCheckpointBroker) ReviewSharedTemp(ctx context.Context, in com
 	answer := b.reviewTempLocations(ctx, reviews, held, in)
 	for _, root := range held {
 		switch {
-		case hitl.CheckpointAuthorizes(answer) && sessionOverlayCovering(b.Runtime, chat, root) != "":
+		case sessionOverlayCovering(b.Runtime, chat, root) != "":
 			result.Allowed = append(result.Allowed, root)
 		case answer != nil && answer.Status == hitl.DecisionStatusRejected && answer.ResolvedBy == authzledger.ResolvedByHuman:
 			result.Declined = append(result.Declined, root)

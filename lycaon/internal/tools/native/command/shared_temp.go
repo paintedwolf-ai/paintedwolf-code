@@ -2,10 +2,8 @@ package command
 
 import (
 	"context"
-	"slices"
 
 	"github.com/lycaon/lycaon/internal/bgprocess"
-	"github.com/lycaon/lycaon/internal/confine"
 	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/tools"
 )
@@ -24,16 +22,10 @@ func (r *ProgramRuntime) reviewSharedTemp(ctx context.Context, tc tools.ToolCont
 	if !obs.Applied {
 		return
 	}
-	var roots []string
-	for _, path := range obs.Refusals.Paths(confine.AccessWrite) {
-		if path.Layer == confine.FloorSharedTemp && path.Grant != "" && !slices.Contains(roots, path.Grant) {
-			roots = append(roots, path.Grant)
-		}
-	}
+	roots := obs.Refusals.SharedTempRoots()
 	if len(roots) == 0 {
 		return
 	}
-	slices.Sort(roots)
 	result := guidance.SharedTempSettlement{Refused: roots}
 	switch {
 	case running || obs.Running:
@@ -51,4 +43,13 @@ func (r *ProgramRuntime) reviewSharedTemp(ctx context.Context, tc tools.ToolCont
 	}
 	result.ScratchAvailable = tc.Host.SessionScratchDir != ""
 	out.Facts.SharedTemp = &result
+}
+
+func (e *programEvaluation) observeRunningConfinement() {
+	if out := e.callTC.Effects.Out; out != nil {
+		e.run.tc.Effects.Out.WithLock(func(child *tools.ToolInvocationOut) {
+			out.Facts.Confine = child.Facts.Confine
+			out.Facts.Confine.Running = true
+		})
+	}
 }

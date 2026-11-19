@@ -149,12 +149,7 @@ func TestProgramExternalOutsideWriteAndSessionTemp(t *testing.T) {
 	out, err := f.call(t, t.Context(), "external -- /bin/sh -c 'printf x >> \"$1\"; printf ok > \"$2\"' sh "+marker+" "+hostTarget)
 	testutil.FailErr(t, "run shared temp write", err)
 	status := decodeOutcome(t, out).Status
-	if privatePath, mapped := confine.PrivateTempFor(f.ScratchDir).Resolve(hostTarget); mapped {
-		data, readErr := os.ReadFile(privatePath)
-		if status != 0 || string(data) != "ok" || readErr != nil {
-			t.Fatalf("scratch write status=%d bytes=%q error=%v", status, data, readErr)
-		}
-	} else if status == 0 {
+	if status == 0 {
 		t.Fatal("shared write succeeded without a grant")
 	}
 	if _, err := os.Lstat(hostTarget); !os.IsNotExist(err) {

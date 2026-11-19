@@ -84,3 +84,35 @@ func TestObserveConfineDropsAncestorMetadataReadGrant(t *testing.T) {
 		t.Fatalf("RefusedReadGrants = %v, want %v", gc.Refusals.RefusedReadGrants, wantGrants)
 	}
 }
+
+func TestSharedTempRefusalsKeepEveryOtherCapability(t *testing.T) {
+	items := []confine.SandboxRefusal{
+		{Operation: "file-read-data", Target: "/key", Layer: confine.FloorReadKeyMaterial, Recovery: confine.RecoverReadPath, Grant: "/key"},
+		{Operation: "file-write-data", Target: "/work/file", Layer: confine.FloorOutsideWriteRoots, Recovery: confine.RecoverWriteRoot, Grant: "/work"},
+		{Operation: "file-write-create", Target: "/tmp/slot", Layer: confine.FloorSharedTemp, Recovery: confine.RecoverWriteRoot, Grant: "/tmp"},
+		{Operation: "file-write-create", Target: "/state/file", Layer: confine.FloorControlPlane, Recovery: confine.RecoverNone},
+		{Operation: "file-read-data", Target: "/credential", Layer: confine.FloorReadCredentialStore, Recovery: confine.RecoverCredentialStore},
+		{Operation: "network-outbound", Target: "/socket", Recovery: confine.RecoverSocketPath, Grant: "/socket"},
+		{Operation: "signal", Target: "pid", Recovery: confine.RecoverProcessControl},
+		{Operation: "mount", Target: "device", Recovery: confine.RecoverHostExecution},
+	}
+	for mask := 1; mask < 1<<len(items); mask++ {
+		var subset confine.SandboxRefusals
+		for i, item := range items {
+			if mask&(1<<i) != 0 {
+				subset.Refusals = append(subset.Refusals, item)
+			}
+		}
+		gc := oar.NewGuardContext()
+		ObserveConfine(gc, confine.Observation{Applied: true, Refusals: subset})
+		groups := [][]string{gc.Refusals.RefusedReadGrants, gc.Refusals.RefusedWriteGrants, nil, gc.Refusals.RefusedTerminalWritePaths, gc.Refusals.RefusedCredentialStorePaths, gc.Refusals.RefusedSocketPaths, gc.Refusals.RefusedSignals, gc.Refusals.UnsandboxedRefusals}
+		for i, group := range groups {
+			if i != 2 && (len(group) > 0) != (mask&(1<<i) != 0) {
+				t.Fatalf("subset %b group %d=%v", mask, i, group)
+			}
+		}
+		if slices.Contains(gc.Refusals.RefusedWritePaths, "/tmp/slot") || slices.Contains(gc.Refusals.RefusedWriteGrants, "/tmp") {
+			t.Fatalf("temp leaked into ordinary writes in subset %b", mask)
+		}
+	}
+}

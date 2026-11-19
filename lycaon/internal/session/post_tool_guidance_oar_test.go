@@ -475,3 +475,26 @@ func TestEval10CredentialMonitorDoesNotConsumeWarning(t *testing.T) {
 		t.Fatalf("[OAR-OPS-1] monitor consumed warning: %s", output)
 	}
 }
+
+func TestSharedTempOccurrencePreservesOtherRecovery(t *testing.T) {
+	mgr := newPostToolGuidanceManager(t)
+	obs := confine.Observation{Applied: true, FailedStages: []string{"build"}, Refusals: confine.SandboxRefusals{Refusals: []confine.SandboxRefusal{
+		{Operation: "file-write-create", Target: "/tmp/build", Layer: confine.FloorSharedTemp, Grant: "/tmp", Recovery: confine.RecoverWriteRoot},
+		{Operation: "file-write-create", Target: "/outside/file", Layer: confine.FloorOutsideWriteRoots, Grant: "/outside", Recovery: confine.RecoverWriteRoot},
+	}}}
+	for _, tc := range []struct {
+		settled guidance.SharedTempSettlement
+		code    string
+	}{
+		{guidance.SharedTempSettlement{Refused: []string{"/tmp"}, Allowed: []string{"/tmp"}}, "SANDBOX_SHARED_TEMP_REFUSED"},
+		{guidance.SharedTempSettlement{Refused: []string{"/tmp"}, Declined: []string{"/tmp"}, ScratchAvailable: true}, "SANDBOX_SHARED_TEMP_REFUSED"},
+		{guidance.SharedTempSettlement{Refused: []string{"/tmp"}, Unanswered: []string{"/tmp"}}, "SANDBOX_SHARED_TEMP_REFUSED"},
+		{guidance.SharedTempSettlement{Refused: []string{"/tmp"}, Tolerated: true}, "SANDBOX_SHARED_TEMP_TOLERATED"},
+		{guidance.SharedTempSettlement{Refused: []string{"/tmp"}, Running: true}, "SANDBOX_SHARED_TEMP_REFUSED"},
+	} {
+		_, facts := mgr.ToolPolicy.AfterTool(t.Context(), &api.Session{ID: "chat"}, "command", map[string]any{"command": "build"}, "output", 1, guidance.ToolResultFacts{Confine: obs, SharedTemp: &tc.settled})
+		if !facts.HasCode(tc.code) || !facts.HasCode("SANDBOX_TRY_WRITE_ROOT") || !facts.Succeeded() {
+			t.Fatalf("settlement %+v -> %+v", tc.settled, facts)
+		}
+	}
+}

@@ -24,6 +24,7 @@ import (
 
 // WriteRootCheckpointBroker resolves write-root approval plans.
 type WriteRootCheckpointBroker struct {
+	TempHistory approvalstate.SharedTempHistoryReader
 	Checkpoints hitl.CheckpointManager
 	Store       Store
 	Runtime     *approvalstate.SandboxPathGrantRuntime
@@ -53,7 +54,26 @@ func (b *WriteRootCheckpointBroker) posture(projectDir string) gate.Posture {
 
 // Authorize implements command.SandboxWriteRootGate.
 func (b *WriteRootCheckpointBroker) Authorize(ctx context.Context, in command.SandboxWriteRootAsk) (command.SandboxWriteRootResult, error) {
-	return b.authorizeWriteRoot(ctx, in, awaitSandboxAsk)
+	if b == nil || b.Runtime == nil || !isSharedTempRoot(in.ProposedWriteRoot) {
+		return b.authorizeWriteRoot(ctx, in, awaitSandboxAsk)
+	}
+	_, chat := askSessionIDs(ctx, b.Store, in.SessionID, in.ParentSessionID)
+	history, err := b.Runtime.SharedTempHistory(ctx, chat, b.TempHistory)
+	if err != nil {
+		return command.SandboxWriteRootResult{}, err
+	}
+	end, err := history.BeginReview(ctx)
+	if err != nil {
+		return command.SandboxWriteRootResult{}, err
+	}
+	defer end()
+	return b.authorizeWriteRoot(ctx, in, func(ctx context.Context, req sandboxAskRequest) (sandboxAskResolution, error) {
+		result, err := awaitSandboxAsk(ctx, req)
+		if err == nil && result.HumanDeclined {
+			history.Declined[confine.SharedTempLocation(req.Key)] = true
+		}
+		return result, err
+	})
 }
 
 type writeRootReview func(context.Context, sandboxAskRequest) (sandboxAskResolution, error)
@@ -64,11 +84,15 @@ func (b *WriteRootCheckpointBroker) authorizeWriteRoot(ctx context.Context, in c
 		return out, nil
 	}
 	proposed := confine.NormalizeWriteRootKey(in.ProposedWriteRoot)
+	if isSharedTempRoot(proposed) {
+		proposed = confine.SharedTempLocation(proposed)
+	}
 	if proposed == "" {
 		return out, nil
 	}
 	// Control-plane writes are denied without prompting.
 	if confine.ControlPlanePathDenied(proposed, true, in.SessionScratchRoot, in.SessionOutputRoot) {
+		out.Denied = isSharedTempRoot(proposed)
 		return out, nil
 	}
 	// The invocation's own scratch is already inside its boundary.
@@ -83,6 +107,7 @@ func (b *WriteRootCheckpointBroker) authorizeWriteRoot(ctx context.Context, in c
 	if subject.Kind == confine.WriteSubjectOrdinary {
 		// A root granted here must also pass the boundary's granted lane.
 		if refused, _ := confine.GrantedWriteRootRefused(proposed); refused {
+			out.Denied = isSharedTempRoot(proposed)
 			return out, nil
 		}
 	}
@@ -133,8 +158,7 @@ func (b *WriteRootCheckpointBroker) authorizeWriteRoot(ctx context.Context, in c
 	// The posture decides whether declared authority needs a prompt.
 	target := &gate.FileTarget{
 		Path: proposed, Mode: gate.ModeWrite,
-		OutsideRoots:    !inRoots,
-		SharedTempGrant: isSharedTempRoot(proposed),
+		OutsideRoots: !inRoots,
 	}
 	// Protected subjects ask regardless of root or catalog coverage.
 	if subject.Kind != confine.WriteSubjectOrdinary {
@@ -157,11 +181,8 @@ func (b *WriteRootCheckpointBroker) authorizeWriteRoot(ctx context.Context, in c
 	}
 	verdict, decision := gate.Evaluate(facts, b.posture(projectDir))
 
-	autoGrant := verdict != gate.Ask
-	if b.ApprovalsDisabled != nil && b.ApprovalsDisabled(projectDir) {
-		autoGrant = true
-	}
-	if autoGrant {
+	autoGrant := verdict != gate.Ask || (b.ApprovalsDisabled != nil && b.ApprovalsDisabled(projectDir))
+	if autoGrant && !isSharedTempRoot(proposed) {
 		b.Runtime.GrantSessionWriteRoot(rootSessionID, proposed)
 		return command.SandboxWriteRootResult{
 			Authorized:        true,

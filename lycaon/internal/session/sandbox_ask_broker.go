@@ -59,11 +59,12 @@ type sandboxAskRequest struct {
 // sandboxAskResolution is the capability-neutral answer to one ask.
 type sandboxAskResolution struct {
 	// Answered reports whether the request reached a terminal answer.
-	Answered     bool
-	Raised       bool
-	Authorized   bool
-	Denied       bool
-	UserGuidance string
+	Answered      bool
+	Raised        bool
+	Authorized    bool
+	Denied        bool
+	HumanDeclined bool
+	UserGuidance  string
 }
 
 // awaitSandboxAsk runs one ask from guard to settled checkpoint.
@@ -151,7 +152,8 @@ func sandboxAskAnswer(final *hitl.CheckpointResponse) sandboxAskResolution {
 	authorized := hitl.CheckpointAuthorizes(final)
 	return sandboxAskResolution{
 		Answered: true, Raised: true, Authorized: authorized, Denied: !authorized,
-		UserGuidance: resolvedUserGuidance(final),
+		HumanDeclined: final != nil && final.Status == hitl.DecisionStatusRejected && final.ResolvedBy == authzledger.ResolvedByHuman,
+		UserGuidance:  resolvedUserGuidance(final),
 	}
 }
 

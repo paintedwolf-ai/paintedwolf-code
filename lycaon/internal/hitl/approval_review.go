@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"slices"
 
+	"github.com/lycaon/lycaon/internal/authzledger"
 	"github.com/lycaon/lycaon/internal/db"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -99,4 +100,33 @@ func reviewKeyDigest(key string) string {
 	}
 	digest := sha256.Sum256([]byte(key))
 	return hex.EncodeToString(digest[:])
+}
+
+// SharedTempHistory reads delivered reports and human denials for the current locations.
+func (s *SQLStore) SharedTempHistory(ctx context.Context, chat string, roots []string) (reported, declined []string, err error) {
+	type location struct {
+		Path string `json:"path"`
+		Key  string `json:"key"`
+	}
+	locations := make([]location, 0, len(roots))
+	for _, root := range roots {
+		locations = append(locations, location{root, reviewKeyDigest("sandbox:" + authzledger.AskFamilyWriteRoot + ":" + root)})
+	}
+	encoded, err := json.Marshal(locations)
+	if err != nil {
+		return nil, nil, err
+	}
+	rows, err := s.queries.ChatSharedTempHistory(ctx, db.ChatSharedTempHistoryParams{ChatID: chat, LocationsJson: string(encoded)})
+	if err != nil {
+		return nil, nil, err
+	}
+	for _, row := range rows {
+		if row.Reported != 0 {
+			reported = append(reported, row.Path)
+		}
+		if row.Declined != 0 {
+			declined = append(declined, row.Path)
+		}
+	}
+	return reported, declined, nil
 }

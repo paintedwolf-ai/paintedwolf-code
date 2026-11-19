@@ -246,9 +246,6 @@ host_facts:
  - name: paintedwolf.session_scratch_available
    type: bool
    observation: The invocation has a session scratch folder.
- - name: paintedwolf.private_temp
-   type: bool
-   observation: The invocation sees private temporary directories.
  - name: paintedwolf.refused_write_grants
    type: list<string>
    observation: The capability_request.write_root path whose approval would open each refused write path that a reviewed grant can open; empty when none.

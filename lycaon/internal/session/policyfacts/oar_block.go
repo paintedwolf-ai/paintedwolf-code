@@ -233,6 +233,9 @@ func (m *Service) AfterTool(ctx context.Context, sess *api.Session, tool string,
 		return "", facts.WithOutcome(api.ToolResultOutcomeError)
 	}
 	delivered, facts = m.feedback.DeliverPostToolResult(ctx, oar.AnchorToolPost, output, res)
+	if raised.SharedTemp == nil && raised.Confine.Applied && raised.Confine.Running {
+		raised.SharedTemp = &guidance.SharedTempSettlement{Refused: raised.Confine.Refusals.SharedTempRoots(), Running: true}
+	}
 	if !facts.ContentReplaced && raised.SharedTemp != nil && len(raised.SharedTemp.Refused) > 0 && m.Pipeline.AnchorEnforced(oar.AnchorSharedTemp) {
 		var contribution guidance.ToolResultFacts
 		delivered, contribution = m.sharedTempResult(ctx, sess, tool, args, delivered, *raised.SharedTemp)

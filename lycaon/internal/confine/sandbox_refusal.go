@@ -322,3 +322,15 @@ func operationAccess(operation string) FilesystemAccess {
 		return ""
 	}
 }
+
+// SharedTempRoots lists the shared directories identified by observed write refusals.
+func (s SandboxRefusals) SharedTempRoots() []string {
+	var roots []string
+	for _, path := range s.Paths(AccessWrite) {
+		if path.Layer == FloorSharedTemp && path.Grant != "" && !slices.Contains(roots, path.Grant) {
+			roots = append(roots, path.Grant)
+		}
+	}
+	slices.Sort(roots)
+	return roots
+}

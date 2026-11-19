@@ -47,10 +47,6 @@ func (t *CommandOutputTool) Run(ctx context.Context, args map[string]any, tctx t
 	out := commandOutputOf(snapshot.Output, snapshot.TerminationReason)
 	capBackgroundOutput(&out, 0)
 	payload := observeBackgroundOutput(tctx, out, snapshot.Confinement, snapshot.TerminationReason)
-	if out.Running {
-		var runtime *ProgramRuntime
-		runtime.reviewSharedTemp(ctx, tctx, "command_output", subject, true)
-	}
 	payload.ExecFailure = snapshot.Failure
 	t.Registry.Output.NoteRefusalsShown(tctx.Identity.SessionID, handle, len(payload.SandboxRefusals))
 	encoded, err := surveyjson.Marshal(payload)

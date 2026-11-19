@@ -120,6 +120,7 @@ func (r *Runtime) WireCheckpoints(ctx context.Context, deps CheckpointDependenci
 		slog.WarnContext(ctx, "sensitive locations catalog unavailable", "error", locErr)
 	}
 	writeBroker := &session.WriteRootCheckpointBroker{
+		TempHistory:       checkpointStore.SharedTempHistory,
 		Checkpoints:       r.Checkpoints,
 		Store:             deps.Sessions,
 		Runtime:           writeRootRT,

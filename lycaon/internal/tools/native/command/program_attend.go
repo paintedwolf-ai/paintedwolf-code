@@ -175,7 +175,7 @@ func (r *ProgramRuntime) parkProgram(callCtx context.Context, e *programEvaluati
 			out.CommandProgram = &receipt
 		}
 	}
-	r.reviewSharedTemp(callCtx, e.callTC, e.run.tool, e.run.source, true)
+	e.observeRunningConfinement()
 	stateGitNoRepository(e)
 	result := ParkedProgramResult{ProgramID: programID, State: "parked", Reason: state.Statement, LeaseID: parked.LeaseID()}
 	if run.tool == "verify" {

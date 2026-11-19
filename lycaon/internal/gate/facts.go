@@ -174,8 +174,6 @@ type FileTarget struct {
 	Mode FileMode
 	// OutsideRoots is true when the path falls outside every attached root.
 	OutsideRoots bool
-	// SharedTempGrant names a request for the shared location itself.
-	SharedTempGrant bool
 	// WithinConfinement is OS scratch/cache or write-root authority the posture
 	// accepts standing; Strict withholds it from writes.
 	WithinConfinement bool
