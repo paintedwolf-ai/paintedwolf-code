@@ -165,7 +165,8 @@ func (e *BodyTooLargeError) Error() string {
 
 // RequestInvalidError identifies an unusable method, header, or URL.
 type RequestInvalidError struct {
-	Reason string
+	Reason           string
+	ControlledHeader string
 }
 
 func (e *RequestInvalidError) Error() string { return e.Reason }

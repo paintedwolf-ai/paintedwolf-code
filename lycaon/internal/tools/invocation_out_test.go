@@ -19,35 +19,39 @@ const (
 	committedEffect mergeRule = iota
 	// advisoryFact crosses by scope.
 	advisoryFact
+	// wholeProgramFact crosses only when the parent receives the whole program.
+	wholeProgramFact
 	// outerEnvelope describes the child's own call and never crosses.
 	outerEnvelope
 )
 
 // Every exported field of ToolInvocationOut has exactly one merge rule.
 var invocationOutRules = map[string]mergeRule{
-	"SourceContext":    committedEffect,
-	"FileEdits":        committedEffect,
-	"FileEditsOmitted": committedEffect,
-	"SourceReads":      committedEffect,
-	"SourceDeliveries": committedEffect,
-	"Listener":         committedEffect,
-	"ExternalAccess":   committedEffect,
-	"Facts":            advisoryFact,
-	"DisplaySubject":   outerEnvelope,
-	"OwnerInvoked":     outerEnvelope,
-	"OwnerRef":         outerEnvelope,
-	"Dispatch":         outerEnvelope,
-	"WorkerReport":     outerEnvelope,
-	"Completion":       outerEnvelope,
-	"OverlayPromotion": outerEnvelope,
-	"Visual":           outerEnvelope,
-	"Skill":            outerEnvelope,
-	"Process":          outerEnvelope,
-	"Verdict":          outerEnvelope,
-	"CommandProgram":   outerEnvelope,
-	"SourceRun":        outerEnvelope,
-	"RetrievedFrom":    outerEnvelope,
-	"CardFacts":        outerEnvelope,
+	"SourceContext":         committedEffect,
+	"FileEdits":             committedEffect,
+	"FileEditsOmitted":      committedEffect,
+	"SourceReads":           committedEffect,
+	"SourceDeliveries":      committedEffect,
+	"Listener":              committedEffect,
+	"ExternalAccess":        committedEffect,
+	"Facts":                 advisoryFact,
+	"DisplaySubject":        outerEnvelope,
+	"OwnerInvoked":          outerEnvelope,
+	"OwnerRef":              outerEnvelope,
+	"Dispatch":              outerEnvelope,
+	"WorkerReport":          outerEnvelope,
+	"Completion":            outerEnvelope,
+	"OverlayPromotion":      outerEnvelope,
+	"Visual":                outerEnvelope,
+	"Skill":                 outerEnvelope,
+	"Process":               outerEnvelope,
+	"Verdict":               outerEnvelope,
+	"CommandProgram":        outerEnvelope,
+	"CommandStarted":        wholeProgramFact,
+	"CommandDeliveryReject": wholeProgramFact,
+	"SourceRun":             outerEnvelope,
+	"RetrievedFrom":         outerEnvelope,
+	"CardFacts":             outerEnvelope,
 }
 
 func sourceTarget(path string) api.NavigationTarget {
@@ -123,6 +127,10 @@ func TestMergeChildAppliesEachFieldRule(t *testing.T) {
 				case outerEnvelope:
 					if merged {
 						t.Errorf("envelope field %s crossed", name)
+					}
+				case wholeProgramFact:
+					if merged != (scope == tools.MergeProgram) {
+						t.Errorf("program fact %s crossed = %v at scope %v", name, merged, scope)
 					}
 				case advisoryFact:
 				}

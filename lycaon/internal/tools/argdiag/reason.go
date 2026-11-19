@@ -2,11 +2,13 @@ package argdiag
 
 import (
 	"fmt"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
 
 	"github.com/santhosh-tekuri/jsonschema/v6"
+	"github.com/santhosh-tekuri/jsonschema/v6/kind"
 )
 
 // Reason states the primary finding for logs and the generic refusal copy.
@@ -41,21 +43,54 @@ type SchemaIssue struct {
 	Keyword []string `json:"keyword"`
 }
 
-// SchemaIssues lists each leaf violation's instance and keyword paths.
-func SchemaIssues(err *jsonschema.ValidationError) []SchemaIssue {
-	var out []SchemaIssue
-	var visit func(*jsonschema.ValidationError)
-	visit = func(e *jsonschema.ValidationError) {
+// SchemaIssues returns leaf violations and exact paths of unsupported properties.
+func SchemaIssues(err *jsonschema.ValidationError) ([]SchemaIssue, []string) {
+	var issues []SchemaIssue
+	var unsupported []string
+	var visit func(*jsonschema.ValidationError, bool)
+	visit = func(e *jsonschema.ValidationError, certain bool) {
 		if len(e.Causes) == 0 {
-			out = append(out, SchemaIssue{Path: e.InstanceLocation, Keyword: e.ErrorKind.KeywordPath()})
-			return
+			issues = append(issues, SchemaIssue{Path: e.InstanceLocation, Keyword: e.ErrorKind.KeywordPath()})
+		}
+		switch violation := e.ErrorKind.(type) {
+		case *kind.AnyOf, *kind.OneOf, *kind.Not:
+			certain = false
+		case *kind.AdditionalProperties:
+			if certain {
+				unsupported = appendUnsupportedPaths(unsupported, e.InstanceLocation, violation.Properties)
+			}
 		}
 		for _, cause := range e.Causes {
-			visit(cause)
+			visit(cause, certain)
 		}
 	}
-	visit(err)
-	return out
+	visit(err, true)
+	slices.Sort(unsupported)
+	return issues, unsupported
+}
+
+var pointerEscape = strings.NewReplacer("~", "~0", "/", "~1")
+
+func appendUnsupportedPaths(paths, parent, names []string) []string {
+	if len(paths) >= 8 {
+		return paths
+	}
+	var prefix strings.Builder
+	for _, segment := range parent {
+		prefix.WriteByte('/')
+		prefix.WriteString(pointerEscape.Replace(segment))
+	}
+	for _, name := range slices.Sorted(slices.Values(names)) {
+		path := prefix.String() + "/" + pointerEscape.Replace(name)
+		encoded := strconv.Quote(path)
+		if len(encoded) <= 128 && !slices.Contains(paths, encoded) {
+			paths = append(paths, encoded)
+			if len(paths) == 8 {
+				break
+			}
+		}
+	}
+	return paths
 }
 
 // argPathLabel names a dotted argument path for diagnostics.

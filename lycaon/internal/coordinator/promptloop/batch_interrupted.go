@@ -81,6 +81,11 @@ func (l *toolBatch) settleToolResult(
 		if run.failure == nil {
 			run.failure = statedOrOwnerFailure(run.facts, run.contract, run.captures)
 		}
+	} else if program := run.captures.commandProgram; program != nil && program.State == "rejected" {
+		status = api.InvocationStatusRejected
+		evidenceKind = "rejection"
+		run.invoked = run.captures.commandStarted
+		run.failure = rejectionFailure(program.StopCode, "host_rejection", invocationFailureOwner(run.contract, run.captures), run.facts.FeedbackFor(program.StopCode).Details)
 	} else if !run.succeeded() {
 		status = api.InvocationStatusError
 		evidenceKind = "error"
@@ -226,6 +231,10 @@ func (l *toolBatch) settleRejectedToolCall(
 		toolName:      tc.Name,
 		toolMsg:       l.Tools.toolRejectMessage(tc.Name, tc.ID, assistantMessageID, tc.Args, run.asReject()),
 		breakToolLoop: advance,
+	}
+	if run.captures.commandProgram != nil {
+		run.facts = run.facts.WithOutcome(api.ToolResultOutcomeRejected)
+		out.toolMsg = l.Tools.composeToolResultMessage(ctx, sess, sessionID, tc, assistantMessageID, api.MessageOriginTool, &run)
 	}
 	if out.toolMsg.ToolResult != nil {
 		out.toolMsg.ToolResult.Invocation = run.receipt

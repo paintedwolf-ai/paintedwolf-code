@@ -558,6 +558,9 @@ func (l *toolBatch) executeOneToolCall(
 		return attachRejectReceipt(l.refuseToolCall(tc, assistantMessageID, reject), settled.receipt)
 	}
 
+	if program := run.captures.commandProgram; program != nil && program.State == "rejected" {
+		run.facts = run.facts.WithOutcome(api.ToolResultOutcomeRejected).WithCode(program.StopCode)
+	}
 	toolMsg := l.Tools.composeToolResultMessage(ctx, sess, sessionID, tc, assistantMessageID, toolOrigin, &run)
 	settled, settleErr := l.settleToolResult(ctx, tc, toolCtx, toolMsg, run)
 	if settleErr != nil {

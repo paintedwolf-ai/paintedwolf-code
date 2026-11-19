@@ -20,7 +20,7 @@ func commandReceiptBound(result *api.ToolResult) bool {
 		return false
 	}
 	p, inv := result.CommandProgram, result.Invocation
-	return p.ID != "" && inv.ID != "" && p.ParentReceiptID == inv.ID && commandResultTool(inv.Tool) && inv.ToolCallID != "" && inv.ToolCallID == result.ToolCallID && inv.Invoked
+	return p.ID != "" && inv.ID != "" && p.ParentReceiptID == inv.ID && commandResultTool(inv.Tool) && inv.ToolCallID != "" && inv.ToolCallID == result.ToolCallID && (inv.Invoked || (p.State == "rejected" && inv.Status == api.InvocationStatusRejected))
 }
 
 func CommandProvenance(result *api.ToolResult) *CommandResultProvenance {

@@ -13,6 +13,7 @@ import (
 	"github.com/lycaon/lycaon/internal/curationctx"
 	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/invocation"
+	"github.com/lycaon/lycaon/internal/isolation"
 	"github.com/lycaon/lycaon/internal/observability"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/tooloutput"
@@ -50,6 +51,7 @@ type toolCaptures struct {
 	process          *api.ToolProcessHandle
 	verdict          *api.VerdictOutcome
 	commandProgram   *api.CommandProgramReceipt
+	commandStarted   bool
 	sourceDeliveries []tools.SourceDeliveryTag
 	sourceRun        *tools.SourceRunCapture
 	listener         *api.LoopbackListenerFact
@@ -78,7 +80,7 @@ func (p toolResultProjection) withCode(code string) toolResultProjection {
 }
 
 // toolInvocation holds one settled call and its side outputs.
-// invoked is true only after reaching the subsystem owner.
+// invoked records whether the action started.
 type toolInvocation struct {
 	content string
 	facts   guidance.ToolResultFacts
@@ -185,8 +187,12 @@ func rejectionFailure(code, class, ownerRef string, details ...map[string]any) *
 	if len(details) > 0 {
 		data = details[0]
 	}
+	retryable := false
+	if outcome, ok := isolation.Lookup(code); ok {
+		class, retryable = api.FailureClassIsolationRejection, outcome.Retryable()
+	}
 	return &api.InvocationFailure{
-		Code: code, Class: class, Retryable: false, OwnerRef: strings.TrimSpace(ownerRef), Details: data,
+		Code: code, Class: class, Retryable: retryable, OwnerRef: strings.TrimSpace(ownerRef), Details: data,
 	}
 }
 
@@ -340,10 +346,17 @@ func (l *toolInvocations) executeToolCall(
 func (l *toolInvocations) finalizeToolRun(ctx context.Context, sess *api.Session, run completedToolRun) (result toolInvocation) {
 	ownerInvoked := run.toolCtx.Effects.Out != nil && run.toolCtx.Effects.Out.OwnerInvoked
 	captures := toolCapturesFrom(run.toolCtx.Effects.Out)
+	if out := run.toolCtx.Effects.Out; run.runErr == nil && out != nil && out.CommandDeliveryReject != nil {
+		reject := out.CommandDeliveryReject
+		run.runErr = l.toolReject(reject.Code, reject.Data).WithCause(reject)
+	}
 	toolContent := run.output
 	defer func() {
 		if run.toolCtx.Effects.Out != nil {
 			result.facts = result.facts.Merge(run.toolCtx.Effects.Out.Facts)
+		}
+		if program := captures.commandProgram; program != nil && program.State == "completed" && program.StatusCode != nil {
+			result.facts.CommandExitedZero = *program.StatusCode == 0
 		}
 		// Every returned result, including failures, crosses policy before logging or delivery.
 		if ownerInvoked || run.runErr == nil {
@@ -379,7 +392,8 @@ func (l *toolInvocations) finalizeToolRun(ctx context.Context, sess *api.Session
 			out.invoked = ownerInvoked
 			out.captures = captures
 			out.receipt, out.contract = run.receipt, run.contract
-			if toolrejection.AsToolReject(run.runErr) != nil {
+			if typed := toolrejection.AsToolReject(run.runErr); typed != nil {
+				out.invoked = ownerInvoked && !typed.BeforeEffect
 				out.failure = ownerFailureFromError(run.runErr, run.call.Name, run.contract, captures)
 				out.failure.Code = reject.Code()
 			} else {
@@ -428,7 +442,7 @@ func toolCapturesFrom(out *tools.ToolInvocationOut) toolCaptures {
 		ownerRef:         out.OwnerRef, fileEdits: out.FileEdits, fileEditsOmitted: out.FileEditsOmitted, visual: out.Visual,
 		externalAccess: out.ExternalAccess,
 		skill:          out.Skill, process: out.Process, verdict: out.Verdict,
-		commandProgram:   out.CommandProgram,
+		commandProgram: out.CommandProgram, commandStarted: out.CommandStarted,
 		sourceDeliveries: append([]tools.SourceDeliveryTag(nil), out.SourceDeliveries...),
 		sourceRun:        out.SourceRun, dispatch: out.Dispatch, completion: out.Completion,
 		listener:      out.Listener,

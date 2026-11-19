@@ -911,5 +911,9 @@ func declaredDirectIPMatch(raw string, addr netip.Addr, port uint16) (matched bo
 }
 
 func invalid(err error) *toolrejection.ToolReject {
+	var request *outboundhttp.RequestInvalidError
+	if errors.As(err, &request) && request.ControlledHeader != "" {
+		return &toolrejection.ToolReject{Code: "HTTP_REQUEST_HEADER_CONTROLLED", Data: map[string]any{"controlled_header": request.ControlledHeader}, BeforeEffect: true}
+	}
 	return &toolrejection.ToolReject{Code: "TOOL_ARGS_INVALID", Data: map[string]any{"reason": err.Error(), "tool": "http_request"}}
 }

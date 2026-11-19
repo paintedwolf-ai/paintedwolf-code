@@ -230,7 +230,8 @@
         },
         {
           "spellings": [
-            "--max-time"
+            "--max-time",
+            "-m"
           ],
           "arity": 1,
           "value_role": "seconds",

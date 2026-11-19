@@ -1098,3 +1098,25 @@ func TestCurlCookieJarSelectedSecretAuthorityAndRedirectDenial(t *testing.T) {
 	}
 	mu.Unlock()
 }
+
+func TestMaxTimeSpellingsBindTheSameDuration(t *testing.T) {
+	h := newHarness(t)
+	for _, spelling := range []string{"-m", "--max-time"} {
+		prepared, _, err := h.prepare(spelling, "1.25", "http://localhost")
+		testutil.FailErr(t, "bind "+spelling, err)
+		if prepared.options.maxTime != 1250*time.Millisecond {
+			t.Fatalf("%s timeout = %v", spelling, prepared.options.maxTime)
+		}
+	}
+}
+
+func TestHostControlledHeaderReportsItsPolicyCode(t *testing.T) {
+	h := newHarness(t)
+	for _, header := range []string{"Connection", "Content-Length", "Proxy-Authorization"} {
+		result := h.curl(t.Context(), "--header", header+": fixture", "http://localhost")
+		reject := toolrejection.AsToolReject(result.err)
+		if reject == nil || reject.Code != "HTTP_REQUEST_HEADER_CONTROLLED" || reject.Data["controlled_header"] != header {
+			t.Fatalf("header %s refusal = %+v, error = %v", header, reject, result.err)
+		}
+	}
+}

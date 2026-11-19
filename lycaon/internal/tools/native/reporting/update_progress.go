@@ -27,7 +27,7 @@ func ProgressHandler(store progress.Store, scopeKey ProgressScopeKey, reconcilia
 		if err != nil {
 			var rejected *progress.AuthorUpdateRejection
 			if errors.As(err, &rejected) {
-				return "", &toolrejection.ToolReject{Code: rejected.Code, Data: rejected.Data}
+				return "", &toolrejection.ToolReject{Code: rejected.Code, Data: rejected.Data, BeforeEffect: true}
 			}
 			return "", err
 		}
@@ -40,7 +40,7 @@ func ProgressHandler(store progress.Store, scopeKey ProgressScopeKey, reconcilia
 				if snapshot, ok := rejected.Data["snapshot"].(progress.Snapshot); ok {
 					rejected.Data["snapshot"] = progress.ForRequest(root, snapshot)
 				}
-				return "", &toolrejection.ToolReject{Code: rejected.Code, Data: rejected.Data}
+				return "", &toolrejection.ToolReject{Code: rejected.Code, Data: rejected.Data, BeforeEffect: true}
 			}
 			return "", err
 		}

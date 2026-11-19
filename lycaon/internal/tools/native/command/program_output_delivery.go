@@ -60,6 +60,7 @@ func (r *ProgramRuntime) outcome(ctx context.Context, run *programRun, outputs *
 			receipt = projection.Program
 		}
 		run.tc.Effects.Out.CommandProgram = &receipt
+		run.tc.Effects.Out.CommandStarted = projection.StartedChildren > 0
 	}
 	programID := run.root.Identity.ProgramID
 	out := ProgramOutcome{
@@ -89,6 +90,11 @@ func (r *ProgramRuntime) outcome(ctx context.Context, run *programRun, outputs *
 		}
 		out.NonzeroExecutions = append(out.NonzeroExecutions, observed)
 	}
+	if run.tc.Effects.Out != nil && run.tc.Effects.Out.CommandProgram != nil {
+		defer func() {
+			run.tc.Effects.Out.CommandProgram.Outputs = append([]api.CommandProgramOutputWindow(nil), out.Outputs...)
+		}()
+	}
 	stdoutBudget, stderrBudget := splitStreamBudgets(CommandOutputBudget(run.tc.Host.ModelContextWindow), int(stdout.Len()), int(stderr.Len()))
 	for i, stream := range []*programStream{stdout, stderr} {
 		if stream.Len() == 0 {
@@ -99,19 +105,21 @@ func (r *ProgramRuntime) outcome(ctx context.Context, run *programRun, outputs *
 			name, budget = "stderr", stderrBudget
 		}
 		delivered, window, err := r.deliverProgramStream(ctx, run, outputs, stream, name, budget, scope)
-		if err != nil {
-			return ProgramOutcome{}, err
+		if window.OutputPath != "" {
+			out.Outputs = append(out.Outputs, window)
+			out.Truncated = out.Truncated || window.Truncated
 		}
 		if i == 0 {
 			out.Stdout, out.StdoutRef = delivered, window.Ref
 		} else {
 			out.Stderr, out.StderrRef = delivered, window.Ref
 		}
-		out.Outputs = append(out.Outputs, window)
-		out.Truncated = out.Truncated || window.Truncated
-	}
-	if run.tc.Effects.Out != nil && run.tc.Effects.Out.CommandProgram != nil {
-		run.tc.Effects.Out.CommandProgram.Outputs = append([]api.CommandProgramOutputWindow(nil), out.Outputs...)
+		if err != nil {
+			if !recordOutputScreenLimit(run.tc, &out, projection.Program.StatusCode, err) {
+				return out, err
+			}
+			break
+		}
 	}
 	r.commitProgramHTTPProvenance(ctx, run, out.Stdout != "" || out.Stderr != "")
 	return out, nil
@@ -234,6 +242,9 @@ func (r *ProgramRuntime) deliverProgramStream(ctx context.Context, run *programR
 	}
 	if name == "stdout" {
 		r.commitProgramWindows(ctx, run, program, reference, ranges)
+	}
+	if limit := captureprojection.ScreeningLimit(spill.Failure); limit != nil {
+		return delivered, window, limit
 	}
 	return delivered, window, nil
 }

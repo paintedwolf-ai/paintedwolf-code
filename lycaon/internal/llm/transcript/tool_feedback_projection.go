@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"maps"
 
+	"github.com/lycaon/lycaon/internal/tools/surveyjson"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -24,15 +25,11 @@ func toolFeedbackParts(msg api.Message) []api.MessageContentPart {
 	budget := maxToolFeedbackBytes - toolFeedbackEnvelopeReserve - len(invocation)
 	omitted := 0
 	for _, feedback := range msg.ToolResult.Feedback {
-		// The rendered copy already shows these calls.
-		if _, shown := feedback.Details[api.ToolFeedbackNextCalls]; shown {
-			feedback.Details = maps.Clone(feedback.Details)
-			delete(feedback.Details, api.ToolFeedbackNextCalls)
-		}
+		feedback.Details = projectedFeedbackDetails(msg.ToolResult, feedback)
 		if len(feedback.Details) == 0 && feedback.Subject == nil {
 			continue
 		}
-		raw, err := json.Marshal(entry{ToolFeedback: feedback})
+		raw, err := surveyjson.Marshal(entry{ToolFeedback: feedback})
 		if err != nil || len(raw) > budget {
 			compact := api.ToolFeedback{Code: feedback.Code}
 			limit := maxHostDiagnosticBytes
@@ -40,9 +37,9 @@ func toolFeedbackParts(msg api.Message) []api.MessageContentPart {
 				limit = maxVerdictDiagnosticBytes
 			}
 			compact.Details = boundedHostDiagnostics(feedback.Details, limit)
-			raw, err = json.Marshal(entry{ToolFeedback: compact, DetailsOmitted: true, ResultMessageID: msg.ID})
+			raw, err = surveyjson.Marshal(entry{ToolFeedback: compact, DetailsOmitted: true, ResultMessageID: msg.ID})
 			if err != nil || len(raw)+1 > budget {
-				raw, err = json.Marshal(entry{ToolFeedback: api.ToolFeedback{Code: feedback.Code}, DetailsOmitted: true, ResultMessageID: msg.ID})
+				raw, err = surveyjson.Marshal(entry{ToolFeedback: api.ToolFeedback{Code: feedback.Code}, DetailsOmitted: true, ResultMessageID: msg.ID})
 			}
 		}
 		if err != nil || len(raw)+1 > budget || len(entries) >= 32 {
@@ -59,7 +56,7 @@ func toolFeedbackParts(msg api.Message) []api.MessageContentPart {
 	if invocationOmitted {
 		resultReference = msg.ID
 	}
-	body, err := json.Marshal(struct {
+	body, err := surveyjson.Marshal(struct {
 		Feedback          []json.RawMessage `json:"tool_feedback,omitempty"`
 		Omitted           int               `json:"omitted,omitempty"`
 		Invocation        json.RawMessage   `json:"invocation,omitempty"`
@@ -85,7 +82,7 @@ func invocationFeedback(result *api.ToolResult) (json.RawMessage, bool) {
 	if receipt.Failure != nil {
 		code = receipt.Failure.Code
 	}
-	body, err := json.Marshal(struct {
+	body, err := surveyjson.Marshal(struct {
 		ID               string               `json:"id"`
 		Tool             string               `json:"tool"`
 		ToolCallID       string               `json:"tool_call_id"`
@@ -100,4 +97,24 @@ func invocationFeedback(result *api.ToolResult) (json.RawMessage, bool) {
 		return nil, true
 	}
 	return body, false
+}
+
+func projectedFeedbackDetails(result *api.ToolResult, feedback api.ToolFeedback) map[string]any {
+	_, hasNextCalls := feedback.Details[api.ToolFeedbackNextCalls]
+	invocation := result.Invocation
+	isInvocationRejection := invocation != nil && invocation.Status == api.InvocationStatusRejected &&
+		invocation.Tool == result.Tool && invocation.ToolCallID == result.ToolCallID &&
+		invocation.Failure != nil && invocation.Failure.Code == feedback.Code
+	if !hasNextCalls && !isInvocationRejection {
+		return feedback.Details
+	}
+	details := maps.Clone(feedback.Details)
+	delete(details, api.ToolFeedbackNextCalls)
+	if isInvocationRejection {
+		delete(details, "tool")
+		delete(details, "owner_ref")
+		delete(details, "failure_class")
+		delete(details, "retryable")
+	}
+	return details
 }

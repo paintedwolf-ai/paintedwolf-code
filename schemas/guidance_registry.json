@@ -518,6 +518,11 @@
       "emit": "guard:tool",
       "summary": "The host could not complete a verified output read for {{ paintedwolf.path }} in this chat."
     },
+    "COMMAND_OUTPUT_SCREEN_LIMIT": {
+      "category": "recoverable",
+      "emit": "guard:command_composition_redirect",
+      "summary": "Command output delivery stopped at the {{ paintedwolf.resource }} limit of {{ paintedwolf.maximum }}."
+    },
     "COMMAND_PLATFORM_UNAVAILABLE": {
       "category": "recoverable",
       "emit": "guard:command_composition_redirect",
@@ -1217,6 +1222,11 @@
       "emit": "guard:http_request",
       "summary": "The HTTP request did not complete.{% if paintedwolf.http_requests_started %} The host started {{ paintedwolf.http_requests_started }} exchange attempts for {{ paintedwolf.http_method }}.{% endif %}{% if paintedwolf.http_responses_received %} It received {{ paintedwolf.http_responses_received }} responses; the last status was {{ paintedwolf.http_last_status }}.{% endif %}"
     },
+    "HTTP_REQUEST_HEADER_CONTROLLED": {
+      "category": "recoverable",
+      "emit": "guard:tool_args",
+      "summary": "The host controls the `{{ paintedwolf.controlled_header }}` request header."
+    },
     "HTTP_REQUEST_HOST_DENIED": {
       "branch_instruction": "Do not bypass the boundary through another network client",
       "category": "recoverable",
@@ -1716,6 +1726,11 @@
       "emit": "guard:edit",
       "summary": "{{ tool }} on {{ paintedwolf.path }} was not applied because the file already has syntax errors and the proposed edit does not reduce them."
     },
+    "OPTIONAL_PROTECTED_READ_WITHHELD": {
+      "category": "informational",
+      "emit": "guard:optional_protected_read",
+      "summary": "The command exited successfully with protected reads withheld at {{ paintedwolf.optional_read_paths }}."
+    },
     "OUTBOUND_SECRET_DENIED": {
       "branch_instruction": "Preserve the withheld value; use an authorized redacted request or report the blocked send",
       "category": "recoverable",
@@ -1945,7 +1960,7 @@
       "branch_instruction": "Repeating the same pending checklist does not resolve this rejection. Do not close unfinished rows to clear it. For a concrete blocker or authorized scope change, mark only the work you will not pursue `- [~]` and report the limitation.",
       "category": "recoverable",
       "emit": "guard:coordinator",
-      "summary": "This tool-free response would end the turn with {{ paintedwolf.progress_open_items }} progress steps still pending."
+      "summary": "This tool-free response would end the turn with {{ paintedwolf.progress_open_items }} progress {% if paintedwolf.progress_has_one_open_item %}step{% else %}steps{% endif %} still pending."
     },
     "PROGRESS_PENDING_AFTER_OPTIONAL": {
       "branch_instruction": "Branch on Code; reorder so optional `- [\u003e]` lines are last and retry update_progress",
@@ -3218,7 +3233,7 @@
     "TOOL_ARGS_INVALID": {
       "category": "recoverable",
       "emit": "guard:tool_args",
-      "summary": "{% if paintedwolf.json_malformed %}Argument `{{ paintedwolf.rejection_field }}` is not valid JSON, so it arrived as text instead of a native {{ paintedwolf.expected_type }}{% else %}{% if paintedwolf.json_encoded %}Argument `{{ paintedwolf.rejection_field }}` was passed as a JSON string instead of a native {{ paintedwolf.expected_type }}{% else %}{% if paintedwolf.misplaced_fields %}Arguments `{{ paintedwolf.misplaced_fields }}` were placed under {% if paintedwolf.found_under %}`{{ paintedwolf.found_under }}`{% else %}the top level{% endif %}; they belong under {% if paintedwolf.belongs_under %}`{{ paintedwolf.belongs_under }}`{% else %}the top level{% endif %}{% else %}{% if paintedwolf.conflict_keys %}Conflicting arguments provided: pass only one of {{ paintedwolf.conflict_keys }}{% else %}Tool arguments failed validation{% if paintedwolf.rejection_field %} at `{{ paintedwolf.rejection_field }}`{% endif %}: {{ paintedwolf.rejection_reason }}{% endif %}{% endif %}{% endif %}{% endif %}"
+      "summary": "{% if paintedwolf.json_malformed %}Argument `{{ paintedwolf.rejection_field }}` is not valid JSON, so it arrived as text instead of a native {{ paintedwolf.expected_type }}{% else %}{% if paintedwolf.json_encoded %}Argument `{{ paintedwolf.rejection_field }}` was passed as a JSON string instead of a native {{ paintedwolf.expected_type }}{% else %}{% if paintedwolf.misplaced_fields %}Arguments `{{ paintedwolf.misplaced_fields }}` were placed under {% if paintedwolf.found_under %}`{{ paintedwolf.found_under }}`{% else %}the top level{% endif %}; they belong under {% if paintedwolf.belongs_under %}`{{ paintedwolf.belongs_under }}`{% else %}the top level{% endif %}{% else %}{% if paintedwolf.conflict_keys %}Conflicting arguments provided: pass only one of {{ paintedwolf.conflict_keys }}{% else %}Tool arguments failed validation{% if paintedwolf.rejection_field %} at `{{ paintedwolf.rejection_field }}`{% endif %}{% if paintedwolf.rejection_reason %}: {{ paintedwolf.rejection_reason }}{% endif %}{% endif %}{% endif %}{% endif %}{% endif %}"
     },
     "TOOL_ARGS_MALFORMED": {
       "branch_instruction": "Repair the arguments object without changing the intended payload",

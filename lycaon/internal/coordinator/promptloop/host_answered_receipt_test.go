@@ -10,10 +10,12 @@ import (
 	"github.com/lycaon/lycaon/internal/coordinator/promptloop"
 	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/invocation"
+	"github.com/lycaon/lycaon/internal/isolation"
 	"github.com/lycaon/lycaon/internal/llm"
 	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -288,4 +290,61 @@ func TestGuidanceRejectedCallCarriesItsReceiptToTheCard(t *testing.T) {
 		return
 	}
 	t.Fatal("no tool card was written for the refused call")
+}
+
+func TestInvocationSettlementMatchesEffectsAndRefusal(t *testing.T) {
+	for _, want := range []struct {
+		name           string
+		beforeEffect   bool
+		programState   string
+		programStarted bool
+		deliveryReject bool
+		status         api.InvocationStatus
+		invoked        bool
+		code           string
+	}{
+		{name: "owner precondition", beforeEffect: true, status: api.InvocationStatusRejected, code: "PROGRESS_REVISION_REQUIRED"},
+		{name: "owner refused", status: api.InvocationStatusRejected, invoked: true, code: "ASK_USER_OPTIONS_FORBIDDEN"},
+		{name: "program stopped before any operation", programState: "rejected", status: api.InvocationStatusRejected, code: "COMMAND_OPTION_UNSUPPORTED"},
+		{name: "program stopped after an operation", programState: "rejected", programStarted: true, status: api.InvocationStatusRejected, invoked: true, code: "COMMAND_OPTION_UNSUPPORTED"},
+		{name: "program stopped at the control plane", programState: "rejected", status: api.InvocationStatusRejected, code: isolation.CodeControlPlaneDenied},
+		{name: "program ran to exit", programState: "completed", programStarted: true, status: api.InvocationStatusCompleted, invoked: true},
+		{name: "program exited but delivery was refused", programState: "completed", programStarted: true, deliveryReject: true, status: api.InvocationStatusRejected, invoked: true, code: "COMMAND_OUTPUT_SCREEN_LIMIT"},
+	} {
+		t.Run(want.name, func(t *testing.T) {
+			rec := newRecordingRecorder()
+			deps, mem := readCallDeps(t, rec)
+			reg := tools.NewStubRegistry()
+			testutil.FailErr(t, "register fixture handler", reg.Register("read", func(_ context.Context, _ map[string]any, tc tools.ToolContext) (string, error) {
+				if want.programState == "" {
+					return "", toolrejection.RenderReject(&toolrejection.ToolReject{Code: want.code, BeforeEffect: want.beforeEffect}, nil)
+				}
+				status := 0
+				tc.Effects.Out.CommandProgram = &api.CommandProgramReceipt{
+					ID: "program", ParentReceiptID: tc.Invocation.ID, State: want.programState, StopCode: want.code, StatusCode: &status,
+				}
+				tc.Effects.Out.CommandStarted = want.programStarted
+				if want.deliveryReject {
+					tc.Effects.Out.CommandProgram.StopCode = ""
+					tc.Effects.Out.CommandDeliveryReject = &toolrejection.ToolReject{Code: want.code, Data: map[string]any{"maximum": 8}}
+				}
+				return "fixture command outcome", nil
+			}))
+			deps.Context.Tools = reg
+			runReadCall(t, deps, mem)
+			_, settlement := rec.only(t)
+			code := ""
+			if settlement.Failure != nil {
+				code = settlement.Failure.Code
+			}
+			if settlement.Status != want.status || settlement.Invoked != want.invoked || code != want.code {
+				t.Fatalf("settlement = (%q, %v, %q), want (%q, %v, %q)", settlement.Status, settlement.Invoked, code, want.status, want.invoked, want.code)
+			}
+			if want.code == isolation.CodeControlPlaneDenied &&
+				(settlement.Isolation == nil || settlement.Isolation.Code != want.code ||
+					settlement.Failure.Class != api.FailureClassIsolationRejection || settlement.Failure.Retryable) {
+				t.Fatalf("missing terminal isolation facts: %+v", settlement)
+			}
+		})
+	}
 }

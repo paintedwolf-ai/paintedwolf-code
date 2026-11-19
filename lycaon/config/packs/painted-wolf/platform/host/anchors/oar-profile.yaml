@@ -161,6 +161,8 @@ host_facts:
    type: bool
  - name: paintedwolf.progress_open_items
    type: int
+ - name: paintedwolf.progress_has_one_open_item
+   type: bool
  - name: paintedwolf.progress_has_open_steps
    type: bool
  - name: paintedwolf.closeout_has_answer
@@ -236,6 +238,12 @@ host_facts:
  - name: paintedwolf.refused_read_grants
    type: list<string>
    observation: The capability_request.read_path path whose approval would open each refused read path that a reviewed grant can open; empty when none.
+ - name: paintedwolf.optional_read_paths
+   type: list<string>
+   observation: Protected reads withheld on a successful command exit that remain eligible for a notice in this chat.
+ - name: paintedwolf.refused_multiple_read_grants
+   type: bool
+   observation: More than one exact read grant is available for protected reads this invocation attempted.
  - name: paintedwolf.refused_credential_store_paths
    type: list<string>
    observation: Host OS credential store paths or session D-Bus endpoints the kernel refused the invocation's processes; empty when none.
@@ -1194,6 +1202,12 @@ host_facts:
    type: string
  - name: paintedwolf.resource
    type: string
+ - name: paintedwolf.command_exit_recorded
+   type: bool
+ - name: paintedwolf.command_exit_status
+   type: int
+ - name: paintedwolf.saved_output_paths
+   type: list<string>
  - name: paintedwolf.receipt_token
    type: string
  - name: paintedwolf.settled_work
@@ -1271,6 +1285,13 @@ host_facts:
  - name: paintedwolf.inapplicable_fields
    type: list<string>
  - name: paintedwolf.missing_required_arguments
+   type: string
+ - name: paintedwolf.missing_required_paths
+   type: list<string>
+ - name: paintedwolf.unsupported_property_paths
+   type: list<string>
+   observation: Bounded quoted JSON pointers to properties the offered schema forbids outside alternatives.
+ - name: paintedwolf.controlled_header
    type: string
  - name: paintedwolf.found_under
    type: string

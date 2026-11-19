@@ -467,3 +467,18 @@ func TestRejectedCommandProgramProjectsRejectionAndChecklistPrerequisite(t *test
 		t.Fatalf("expected matching activity subject retry to resolve oversize rejected command: %+v", gotAfterOversizeRetry)
 	}
 }
+
+func TestRejectedProgramKeepsReceiptInvocationFact(t *testing.T) {
+	for _, invoked := range []bool{true, false} {
+		result := &api.ToolResult{
+			Tool: "command",
+			Invocation: &api.InvocationReceipt{ID: "bound", Tool: "command", Status: api.InvocationStatusRejected, Invoked: invoked,
+				Failure: &api.InvocationFailure{Code: "COMMAND_OPTION_UNSUPPORTED"}},
+			CommandProgram: &api.CommandProgramReceipt{ID: "program", ParentReceiptID: "bound", State: "rejected", StopCode: "COMMAND_OPTION_UNSUPPORTED"},
+		}
+		row := newExecutionStateRow(result, 0, "")
+		if row.Invoked != invoked || row.Status != string(api.InvocationStatusRejected) || row.Code != "COMMAND_OPTION_UNSUPPORTED" {
+			t.Fatalf("execution reminder changed the invocation fact: %+v", row)
+		}
+	}
+}

@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/hostmarker"
+	"github.com/lycaon/lycaon/internal/tools/surveyjson"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -44,12 +45,12 @@ func projectRecallText(message api.Message, part api.MessageContentPart, parts [
 			entry["body_part"] = json.RawMessage(strconv.Itoa(len(sources)))
 			delete(entry, "content")
 		}
-		encoded, err := json.Marshal(entries)
+		encoded, err := surveyjson.Marshal(entries)
 		if err != nil {
 			return parts
 		}
 		history["entries"] = encoded
-		if encoded, err = json.Marshal(history); err != nil {
+		if encoded, err = surveyjson.Marshal(history); err != nil {
 			return parts
 		}
 		metadata["history"] = encoded
@@ -75,13 +76,13 @@ func projectRecallText(message api.Message, part api.MessageContentPart, parts [
 			hit["body_part"] = json.RawMessage(strconv.Itoa(len(sources)))
 			delete(hit, "body")
 		}
-		encoded, err := json.Marshal(hits)
+		encoded, err := surveyjson.Marshal(hits)
 		if err != nil {
 			return parts
 		}
 		metadata["hits"] = encoded
 	}
-	encoded, err := json.Marshal(metadata)
+	encoded, err := surveyjson.Marshal(metadata)
 	if err != nil {
 		return parts
 	}

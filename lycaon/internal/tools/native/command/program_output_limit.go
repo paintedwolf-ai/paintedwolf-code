@@ -3,9 +3,11 @@ package command
 import (
 	"errors"
 
-	"github.com/lycaon/lycaon/internal/secretmatch"
+	"github.com/lycaon/lycaon/internal/captureprojection"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/tooloutput"
+	"github.com/lycaon/lycaon/internal/toolrejection"
+	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -13,14 +15,14 @@ import (
 func outputDeliveryLimit(err error) *api.CommandProgramOutputLimit {
 	var spill *tooloutput.StreamSpillLimitError
 	var memory *toolcontract.ProgramMemoryLimitError
-	var screen *secretmatch.StreamLimitError
+	screen := captureprojection.ScreeningLimit(err)
 	limit := &api.CommandProgramOutputLimit{Code: "COMMAND_LIMIT_EXCEEDED"}
 	switch {
 	case errors.As(err, &spill):
 		limit.LimitID, limit.Maximum, limit.Observed = "spill_bytes", spill.Maximum, spill.Observed
 	case errors.As(err, &memory):
 		limit.LimitID, limit.Maximum, limit.Observed = memory.Account, memory.Maximum, memory.Observed
-	case errors.As(err, &screen):
+	case screen != nil:
 		limit.LimitID, limit.Maximum, limit.Observed = screen.Resource, screen.Maximum, screen.Observed
 		if screen.Resource == "screen_output_bytes" || screen.Resource == "screen_input_bytes" {
 			limit.LimitID = "spill_bytes"
@@ -29,4 +31,41 @@ func outputDeliveryLimit(err error) *api.CommandProgramOutputLimit {
 		return nil
 	}
 	return limit
+}
+
+func recordOutputScreenLimit(tc tools.ToolContext, out *ProgramOutcome, exit *int, err error) bool {
+	if out.State != "completed" {
+		exit = nil
+	}
+	limit := captureprojection.ScreeningLimit(err)
+	reject := rejectOutputScreenLimit(limit, exit, out.Outputs)
+	if reject == nil {
+		return false
+	}
+	out.OutputLimit = &api.CommandProgramOutputLimit{
+		Code: reject.Code, LimitID: limit.Resource, Maximum: limit.Maximum, Observed: limit.Observed,
+	}
+	tc.Effects.Out.WithLock(func(out *tools.ToolInvocationOut) { out.CommandDeliveryReject = reject })
+	return true
+}
+
+func rejectOutputScreenLimit(limit *captureprojection.LimitError, exit *int, saved []api.CommandProgramOutputWindow) *toolrejection.ToolReject {
+	if limit == nil {
+		return nil
+	}
+	details := map[string]any{"resource": limit.Resource, "maximum": limit.Maximum, "observed": limit.Observed}
+	if exit != nil {
+		details["command_exit_recorded"] = true
+		details["command_exit_status"] = *exit
+	}
+	var paths []string
+	for _, window := range saved {
+		if window.OutputPath != "" {
+			paths = append(paths, window.OutputPath)
+		}
+	}
+	if len(paths) != 0 {
+		details["saved_output_paths"] = paths
+	}
+	return &toolrejection.ToolReject{Code: "COMMAND_OUTPUT_SCREEN_LIMIT", Data: details}
 }
