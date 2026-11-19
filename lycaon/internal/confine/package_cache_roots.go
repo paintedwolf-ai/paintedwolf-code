@@ -1,11 +1,12 @@
 package confine
 
 import (
-	"github.com/lycaon/lycaon/internal/fspath"
 	"os"
 	"path/filepath"
 	"slices"
 	"strings"
+
+	"github.com/lycaon/lycaon/internal/fspath"
 )
 
 // packageCacheHomeRelRoots are home-relative package stores allowed as default
@@ -97,18 +98,21 @@ func WritableSharedTempLocations(projectID string, grants []string) []string {
 	return allowed
 }
 
-// A cache containing shared temp cannot grant the nested location implicitly.
+// A cache grant can overlap shared temp in either direction.
 func (r *FilesystemRules) closeSharedTempInCaches(c Confinement, roots []string) {
+	explicit := resolveEach(slices.Concat(c.Roots, c.GrantedWriteRoots, grantedWriteRoots(c.ProjectID), environmentWriteRoots(), []string{c.SessionScratchRoot}))
 	for _, location := range r.sharedTemp {
-		if !underAny(location, roots) {
+		if underAny(location, explicit) {
 			continue
 		}
-		explicit := slices.Concat(c.Roots, c.GrantedWriteRoots, grantedWriteRoots(c.ProjectID), environmentWriteRoots(), []string{c.SessionScratchRoot})
-		if PathWithinRoots(location, explicit) {
+		overlaps := slices.ContainsFunc(roots, func(root string) bool {
+			return !underAny(root, explicit) && (PathAtOrUnder(root, location) || PathAtOrUnder(location, root))
+		})
+		if !overlaps {
 			continue
 		}
 		var except []string
-		for _, root := range roots {
+		for _, root := range explicit {
 			if PathStrictlyUnder(root, location) {
 				except = append(except, root)
 			}
