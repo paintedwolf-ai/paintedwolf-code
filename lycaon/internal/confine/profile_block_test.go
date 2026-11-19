@@ -58,27 +58,11 @@ func profileBlockContaining(t *testing.T, profile, opener, needle string) (body 
 	return "", -1
 }
 
-// readAllowBackBlock returns the re-allow block after the secret read deny.
-func readAllowBackBlock(t *testing.T, profile string) string {
-	t.Helper()
-	_, denyAt := profileBlock(t, profile, blockDenyRead, 0)
-	body, _ := profileBlock(t, profile, blockAllowReadBack, denyAt)
-	return body
-}
-
 // assertBlockCoversPath requires a resolved subpath rule.
 func assertBlockCoversPath(t *testing.T, block, path, what string) {
 	t.Helper()
 	if !strings.Contains(block, `(subpath "`+resolvedForProfile(path)+`")`) {
 		t.Fatalf("%s must cover %q, block was:\n%s", what, path, block)
-	}
-}
-
-// assertBlockOmitsPath requires the block to omit path.
-func assertBlockOmitsPath(t *testing.T, block, path, what string) {
-	t.Helper()
-	if strings.Contains(block, `(subpath "`+resolvedForProfile(path)+`")`) {
-		t.Fatalf("%s must not cover %q, block was:\n%s", what, path, block)
 	}
 }
 

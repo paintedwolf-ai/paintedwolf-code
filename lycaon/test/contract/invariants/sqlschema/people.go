@@ -158,9 +158,10 @@ func checkClauses(sql string) []string {
 		start += i + at
 		depth, end := 0, start
 		for ; end < len(sql); end++ {
-			if sql[end] == '(' {
+			switch sql[end] {
+			case '(':
 				depth++
-			} else if sql[end] == ')' {
+			case ')':
 				depth--
 			}
 			if depth == 0 {

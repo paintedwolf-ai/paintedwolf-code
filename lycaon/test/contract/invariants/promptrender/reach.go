@@ -17,6 +17,7 @@ import (
 	sessionprofiles "github.com/lycaon/lycaon/internal/session/profiles"
 	"github.com/lycaon/lycaon/internal/toolschema"
 	"github.com/lycaon/lycaon/internal/toolvocab"
+	"github.com/lycaon/lycaon/internal/toolvocab/toolvocabtest"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 	workflowpresentation "github.com/lycaon/lycaon/internal/workflow/presentation"
 	"github.com/lycaon/lycaon/pkg/api"
@@ -57,7 +58,7 @@ func reportUnoffered(r *invariants.Run, label, text string, held map[string]bool
 		meta, ok := s.Schemas.ToolMeta(tool)
 		return meta.ArgsSchema, ok
 	}
-	for _, claim := range toolvocab.UnacceptedArgs(s.Names, text, schema) {
+	for _, claim := range toolvocabtest.UnacceptedArgs(s.Names, text, schema) {
 		r.Report("%s gives %s argument `%s`, which its schema lacks: %s", label, claim.Tool, claim.Arg, lineNaming(text, claim.Arg))
 	}
 }
@@ -348,7 +349,7 @@ func phaseExitsAreCallable(r *invariants.Run) {
 	}
 	grants := s.Profiles[coordinator].Tools
 	engine := s.Engine()
-	moduleRoot := r.Corpus.Path("lycaon")
+	moduleRoot := r.Path("lycaon")
 	checked := 0
 	for _, key := range sortedKeys(reg.All()) {
 		m := reg.All()[key]

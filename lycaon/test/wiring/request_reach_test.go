@@ -24,6 +24,7 @@ import (
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/toolschema"
 	"github.com/lycaon/lycaon/internal/toolvocab"
+	"github.com/lycaon/lycaon/internal/toolvocab/toolvocabtest"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -145,7 +146,7 @@ func (o *reachOracle) check(t *testing.T, req modelcall.CompletionRequest, profi
 			for _, name := range toolvocab.UnreachableNames(o.names, text, offered) {
 				out = append(out, fmt.Sprintf("message %d (%s %s) names %s, which the request does not offer: %s", i, m.Role, m.Kind, name, lineWith(text, name)))
 			}
-			for _, claim := range toolvocab.UnacceptedArgs(o.names, text, schemaSent) {
+			for _, claim := range toolvocabtest.UnacceptedArgs(o.names, text, schemaSent) {
 				out = append(out, fmt.Sprintf("message %d (%s %s) gives %s argument `%s`, which its schema as sent lacks: %s", i, m.Role, m.Kind, claim.Tool, claim.Arg, lineWith(text, claim.Arg)))
 			}
 			if m.ToolResult == nil || m.ToolResult.Outcome != api.ToolResultOutcomeRejected {

@@ -40,7 +40,7 @@ func stock(r *invariants.Run) *Stock {
 	return invariants.Part(r.Corpus, "stock prompt catalog", func() (*Stock, error) {
 		s, err := LoadStock(context.Background())
 		if err == nil {
-			s.Site = r.Corpus.Path("lycaon/" + protectedpath.PromptFilesDirName)
+			s.Site = r.Path("lycaon/" + protectedpath.PromptFilesDirName)
 		}
 		return s, err
 	})

@@ -321,6 +321,8 @@ func (s convergeState) apply(chat string, envelopes []wire.EventEnvelope) conver
 			if json.Unmarshal(env.Data, &ev) == nil && ev.ParentSessionID == chat {
 				out.workers[ev.WorkerID] = ev.Status
 			}
+		default:
+			// Other topics carry no state the fresh read compares.
 		}
 	}
 	return out
@@ -436,8 +438,9 @@ type convergeStream struct {
 
 func (w *convergeWorld) subscribe(after string) *convergeStream {
 	ctx, cancel := context.WithCancel(w.t.Context())
-	resp := w.openStream(ctx, after)
+	resp := w.openStream(ctx, after) //nolint:bodyclose // stream.close closes the body once the reader ends
 	if resp.StatusCode != http.StatusOK {
+		_ = resp.Body.Close()
 		cancel()
 		w.t.Fatalf("event stream after %q answered %d", after, resp.StatusCode)
 	}

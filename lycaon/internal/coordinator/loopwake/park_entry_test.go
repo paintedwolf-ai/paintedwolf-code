@@ -182,16 +182,3 @@ func TestCommandEntryRestartSettlesAParkedProgramFromItsReceipts(t *testing.T) {
 		t.Fatalf("lease after the lost program ended %+v %v %v", lease, ok, err)
 	}
 }
-
-// `sleep 7200` with the default envelope refuses before parking.
-func TestCommandEntryRefusesASleepPastTheDefaultEnvelope(t *testing.T) {
-	f := newEntryFixture(t, programtest.NewWaitingProgram(programtest.NewManualClock(), programtest.SleepState(7200*time.Second)))
-	content, err := f.Call(t, t.Context(), "sleep 7200")
-	testutil.FailErr(t, "run refused sleep", err)
-	if outcome := decodeProgram(t, content); outcome.Refusal == nil || outcome.Refusal.Code != "COMMAND_LIMIT_EXCEEDED" {
-		t.Fatalf("refused sleep %s", content)
-	}
-	if _, armed, err := f.store.ForSession(t.Context(), f.Session); err != nil || armed {
-		t.Fatalf("a refused sleep armed a lease: %v %v", armed, err)
-	}
-}

@@ -28,7 +28,7 @@ func (s *Trees) watchTreeView(view *sourceView, p *project.Project) {
 	// The feed's observer list is process-wide; the view ends its subscription,
 	// and so does the server's shutdown, so a retained view never pins the host.
 	context.AfterFunc(view.ctx, unsubscribe)
-	context.AfterFunc(s.background.Context(), unsubscribe) //nolint:contextcheck // Server shutdown ends the subscription.
+	context.AfterFunc(s.background.Context(), unsubscribe)
 	s.background.Go(view.ctx, func(ctx context.Context) { s.Watch.ensureWorkspaceWatch(ctx, p) })
 }
 
@@ -64,7 +64,7 @@ func (r *treeRefresher) run(ctx context.Context) {
 	// Tracked work outlives its parent's cancellation; the view's end stops it.
 	ctx, stop := context.WithCancel(ctx)
 	defer stop()
-	defer context.AfterFunc(r.ctx, stop)()
+	defer context.AfterFunc(r.ctx, stop)() //nolint:contextcheck // the view's own end stops its tracked refresh
 	for {
 		select {
 		case <-r.wake:

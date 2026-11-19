@@ -471,16 +471,16 @@ func (e *hostEffects) tables(ctx context.Context) (map[string]string, error) {
 	if err != nil {
 		return nil, err
 	}
+	defer func() { _ = rows.Close() }()
 	var names []string
 	for rows.Next() {
 		var name string
 		if err := rows.Scan(&name); err != nil {
-			_ = rows.Close()
 			return nil, err
 		}
 		names = append(names, name)
 	}
-	if err := rows.Close(); err != nil {
+	if err := rows.Err(); err != nil {
 		return nil, err
 	}
 	digests := make(map[string]string, len(names))

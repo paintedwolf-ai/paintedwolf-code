@@ -136,12 +136,3 @@ func TestConfinementIntegrityTokenHolderCannotAdmitControlPlaneRoot(t *testing.T
 	assertProjectRootEditorOnly(t, srv.URL, cfg, confine.WriteRootCodeSecretStore)
 	assertProjectRootAdmitted(t, srv.URL)
 }
-
-func offersTool(offered []tools.ToolMeta, name string) bool {
-	for _, tool := range offered {
-		if tool.Name == name {
-			return true
-		}
-	}
-	return false
-}

@@ -1,4 +1,5 @@
-package toolvocab
+// Package toolvocabtest reads tool arguments that rendered text attributes to a tool, for tests.
+package toolvocabtest
 
 import (
 	"regexp"
@@ -6,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/toolschema"
+	"github.com/lycaon/lycaon/internal/toolvocab"
 )
 
 // ArgClaim is an argument rendered text attributes to a tool.
@@ -23,7 +25,7 @@ var (
 // ArgClaimsIn lists, sorted, the arguments text attributes to a known tool:
 // the keyword arguments of a call written `tool(arg=…)` or `tool(arg: …)`, and
 // the head of a backticked `tool.arg` path. Quoted values are not read.
-func ArgClaimsIn(c *Catalog, text string) []ArgClaim {
+func ArgClaimsIn(c *toolvocab.Catalog, text string) []ArgClaim {
 	seen := map[ArgClaim]bool{}
 	for _, loc := range callOpen.FindAllStringSubmatchIndex(text, -1) {
 		tool := text[loc[2]:loc[3]]
@@ -76,7 +78,7 @@ func callArguments(rest string) string {
 // UnacceptedArgs lists the claims in text that their tool's schema does not
 // accept. schema reports a tool's argument schema; a tool it does not report
 // is skipped, since the name check covers a tool the reader lacks.
-func UnacceptedArgs(c *Catalog, text string, schema func(tool string) (map[string]any, bool)) []ArgClaim {
+func UnacceptedArgs(c *toolvocab.Catalog, text string, schema func(tool string) (map[string]any, bool)) []ArgClaim {
 	var out []ArgClaim
 	for _, claim := range ArgClaimsIn(c, text) {
 		args, ok := schema(claim.Tool)

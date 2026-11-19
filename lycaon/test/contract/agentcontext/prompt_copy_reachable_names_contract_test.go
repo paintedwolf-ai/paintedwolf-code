@@ -11,8 +11,6 @@ import (
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 )
 
-const packRoot = "lycaon/config/packs/painted-wolf"
-
 // skillCatalogNames reads the shipped skills through the runtime's own loader.
 func skillCatalogNames(t *testing.T) map[string]bool {
 	t.Helper()

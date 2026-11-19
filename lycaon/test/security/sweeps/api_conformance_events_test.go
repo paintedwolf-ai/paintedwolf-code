@@ -81,17 +81,19 @@ func conformanceHostLookup(t *testing.T, h *wiring.Harness) conformanceHostIDs {
 	}
 	remember := func(ctx context.Context) {
 		for _, table := range []string{"projects", "sessions"} {
-			rows, err := h.DB.QueryContext(ctx, `SELECT id FROM `+table)
-			testutil.FailErr(t, "list registered "+table, err)
-			for rows.Next() {
-				var id string
-				testutil.FailErr(t, "read a registered id", rows.Scan(&id))
-				mu.Lock()
-				remembered[table+"/"+id] = true
-				mu.Unlock()
-			}
-			testutil.FailErr(t, "list registered "+table, rows.Err())
-			_ = rows.Close()
+			func() {
+				rows, err := h.DB.QueryContext(ctx, `SELECT id FROM `+table)
+				testutil.FailErr(t, "list registered "+table, err)
+				defer func() { _ = rows.Close() }()
+				for rows.Next() {
+					var id string
+					testutil.FailErr(t, "read a registered id", rows.Scan(&id))
+					mu.Lock()
+					remembered[table+"/"+id] = true
+					mu.Unlock()
+				}
+				testutil.FailErr(t, "list registered "+table, rows.Err())
+			}()
 		}
 	}
 	return conformanceHostIDs{project: exists("projects"), session: exists("sessions"), remember: remember}

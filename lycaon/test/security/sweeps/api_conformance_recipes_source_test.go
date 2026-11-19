@@ -207,28 +207,6 @@ func sourceFindString(value any, key string) string {
 	return ""
 }
 
-// sourceFindObject returns the first object whose key holds want.
-func sourceFindObject(value any, key, want string) map[string]any {
-	switch v := value.(type) {
-	case map[string]any:
-		if found, ok := v[key].(string); ok && found == want {
-			return v
-		}
-		for _, child := range v {
-			if found := sourceFindObject(child, key, want); found != nil {
-				return found
-			}
-		}
-	case []any:
-		for _, child := range v {
-			if found := sourceFindObject(child, key, want); found != nil {
-				return found
-			}
-		}
-	}
-	return nil
-}
-
 // sourceCreateEntry creates an empty file through the journaled create route
 // and waits for it to land.
 func sourceCreateEntry(ctx context.Context, s *conformanceSweep, name string) error {

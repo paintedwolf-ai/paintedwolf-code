@@ -5,7 +5,6 @@ import (
 
 	"fmt"
 	"path/filepath"
-	"regexp"
 	"sort"
 	"strings"
 	"testing"
@@ -18,9 +17,6 @@ import (
 )
 
 const toolSchemaDir = "lycaon/config/packs/painted-wolf/platform/tools/schemas"
-
-// backtickedIdent matches argument names and dotted paths.
-var backtickedIdent = regexp.MustCompile("`([A-Za-z_][A-Za-z0-9_]*(?:\\.[A-Za-z_][A-Za-z0-9_]*)*)`")
 
 // toolFieldIndex is what each tool can carry, read from the shipped schemas.
 type toolFieldIndex struct {
@@ -57,11 +53,6 @@ func loadToolFieldIndex(t *testing.T) toolFieldIndex {
 		t.Fatal("tool schema index is empty — the walk found no tools or no fields")
 	}
 	return idx
-}
-
-func (idx toolFieldIndex) isTool(name string) bool {
-	_, ok := idx.byTool[name]
-	return ok
 }
 
 // TestCommandSurfaceRejectRoutesStayInsideTheirSelector verifies tool routing.

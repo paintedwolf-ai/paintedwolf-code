@@ -2,7 +2,6 @@ package scans
 
 import (
 	"context"
-	"fmt"
 	"os"
 	"testing"
 	"time"
@@ -110,17 +109,4 @@ func TestAPIScanPackMatchesPerCategoryAPIRuns(t *testing.T) {
 	if len(payload.ScanIDs) != 3 {
 		t.Fatalf("scan_ids = %v, want 3 engine rows", payload.ScanIDs)
 	}
-}
-
-// findingKeys identifies each finding by scanner, rule and first location.
-func findingKeys(scan wire.CodeScan) map[string]bool {
-	keys := map[string]bool{}
-	for _, f := range scan.Findings {
-		key := scan.ScannerID + " " + f.RuleID
-		if len(f.Locations) > 0 {
-			key += fmt.Sprintf(" %s:%d", f.Locations[0].URI, f.Locations[0].StartLine)
-		}
-		keys[key] = true
-	}
-	return keys
 }

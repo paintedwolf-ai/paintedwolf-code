@@ -2,6 +2,7 @@ package sweeps
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -1128,26 +1129,33 @@ func sessionTurnState(ctx context.Context, s *conformanceSweep, chat string) str
 	if err != nil {
 		queued = err.Error()
 	}
-	var receipts []string
-	if rows, err := s.host.DB.QueryContext(ctx, `SELECT tool_name, status FROM invocation_receipts WHERE session_id = ? ORDER BY started_at`, chat); err == nil {
-		for rows.Next() {
-			var tool, state string
-			if rows.Scan(&tool, &state) == nil {
-				receipts = append(receipts, tool+"="+state)
-			}
-		}
-		_ = rows.Close()
-	}
-	var messages []string
-	if rows, err := s.host.DB.QueryContext(ctx, `SELECT m.role, m.content FROM messages m JOIN session_entries e ON e.id = m.entry_id
-		WHERE m.session_id = ? ORDER BY e.ord DESC LIMIT 4`, chat); err == nil {
-		for rows.Next() {
-			var role, content string
-			if rows.Scan(&role, &content) == nil {
-				messages = append(messages, fmt.Sprintf("%s %.80q", role, content))
-			}
-		}
-		_ = rows.Close()
-	}
+	receipts := diagnosticRows(ctx, s.host.DB, `SELECT tool_name, status FROM invocation_receipts WHERE session_id = ? ORDER BY started_at`, chat,
+		func(a, b string) string { return a + "=" + b })
+	messages := diagnosticRows(ctx, s.host.DB, `SELECT m.role, m.content FROM messages m JOIN session_entries e ON e.id = m.entry_id
+		WHERE m.session_id = ? ORDER BY e.ord DESC LIMIT 4`, chat,
+		func(role, content string) string { return fmt.Sprintf("%s %.80q", role, content) })
 	return fmt.Sprintf("the chat is %s with receipts %v, queue %s and newest messages %v", status, receipts, queued, messages)
+}
+
+// diagnosticRows formats each two-column row a failure message reports; a read
+// error is reported in place of the rows it hid.
+func diagnosticRows(ctx context.Context, conn interface {
+	QueryContext(context.Context, string, ...any) (*sql.Rows, error)
+}, query, chat string, format func(a, b string) string) []string {
+	rows, err := conn.QueryContext(ctx, query, chat)
+	if err != nil {
+		return []string{"unreadable: " + err.Error()}
+	}
+	defer func() { _ = rows.Close() }()
+	var out []string
+	for rows.Next() {
+		var a, b string
+		if rows.Scan(&a, &b) == nil {
+			out = append(out, format(a, b))
+		}
+	}
+	if err := rows.Err(); err != nil {
+		out = append(out, "unreadable: "+err.Error())
+	}
+	return out
 }

@@ -344,8 +344,6 @@ func expireCancellationClaim(t *testing.T, q *SQLQueue, id string) {
 
 	_, err := q.db.ExecContext(t.Context(), "UPDATE worker_jobs SET lease_expires_at = ? WHERE id = ?", past.Format(time.RFC3339Nano), id)
 	testutil.FailErr(t, "expire cancellation claim", err)
-	return
-
 }
 
 func TestCancellationReportObservesDrainedRuntime(t *testing.T) {

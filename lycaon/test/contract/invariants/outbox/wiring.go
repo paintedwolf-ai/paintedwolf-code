@@ -56,16 +56,6 @@ func everyOutboxBearingStoreIsWired(r *invariants.Run) {
 	}
 }
 
-func exprText(expr ast.Expr) string {
-	switch typ := expr.(type) {
-	case *ast.Ident:
-		return typ.Name
-	case *ast.SelectorExpr:
-		return exprText(typ.X) + "." + typ.Sel.Name
-	}
-	return "a non-field expression"
-}
-
 // Interface peers count only when their actual constructor binds a concrete
 // store to the selected field. Merely implementing the interface is not wiring.
 func concreteOutboxOwner(r *invariants.Run, pkg *invariants.TypedPackage, method *ast.SelectorExpr) string {

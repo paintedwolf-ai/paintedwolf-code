@@ -14,9 +14,6 @@ import (
 var (
 	reMattnImport   = regexp.MustCompile(`github\.com/mattn/go-sqlite3`)
 	reSqlite3Driver = regexp.MustCompile(`sql\.Open\(\s*"sqlite3"`)
-	// reSQLInSprintf flags a fmt.Sprintf format literal that builds SQL — value
-	// interpolation into SQL is forbidden; bind with ? placeholders instead.
-	reSQLInSprintf = regexp.MustCompile(`(?i)(select\s|insert\s+into|update\s|delete\s+from|\swhere\s|\svalues\s*\()`)
 )
 
 // TestSingleSQLiteDriver keeps the whole repo on the pure-Go modernc.org/sqlite
