@@ -202,7 +202,7 @@ export class DataLexer extends LexerBase {
   }
 }
 
-const REGEX_AFTER_WORDS = new Set([
+export const REGEX_AFTER_WORDS: ReadonlySet<string> = new Set([
   "return", "case", "default", "throw", "delete", "void", "typeof", "instanceof", "in",
   "of", "yield", "await", "else", "do", "new",
 ]);

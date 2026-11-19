@@ -1,6 +1,7 @@
 import { EditorState, type ChangeSpec } from "@codemirror/state";
 import { describe, expect, it } from "vitest";
 import { createPrettyExtension, prettyLayoutField, prettyOutcomeOf, prettyWorkOf } from "./pretty-layout.ts";
+import { REGEX_AFTER_WORDS } from "./pretty-lexers.ts";
 import { PRETTY_CHECKPOINT_INTERVAL } from "./pretty-scan-state.ts";
 import { prettyLayoutDecorations } from "./pretty-view.ts";
 
@@ -95,21 +96,64 @@ describe("incremental block facts", () => {
     ["bundle.ts", "function f(x?: number){const h=x! / 2;"],
     ["bundle.tsx", "function f(x: number){const h=<Tag value={x! / 2}/>;"],
   ])("matches a fresh build after each context edit in %s", (path, prelude) => {
-    const words = ["retu", "rn", "typeof", "throw", "instanceof", "++", "!", "--", "/", "\\\n", "`", "${", "}", ";", "/*", "*/"];
-    if (path.endsWith("tsx")) words.push("<Tag", "/>", "</", "{expr}");
-    const doc = `${prelude}const table={${"k:12,".repeat(75)}v:retu /x;y/ + 1};return table}`;
+    const before = `${prelude}const table={a:1,b:2,pad:"${"p".repeat(PRETTY_CHECKPOINT_INTERVAL)}",v:`;
+    const after = " /x;y/ + 1,end:2};return table}";
+    const fixture = (word: string) => before + word + after;
+    const original = fixture("retu");
+    const operators = ["!", "++", "--", "/", "\\\n", "`", "${", "}", ";", "/*", "*/"];
+    const jsx = path.endsWith(".tsx") ? ["<", "/>", "</", "<Tag", "{expr}"] : [];
+    const vocabulary = new Set([...operators, ...jsx, ...REGEX_AFTER_WORDS]);
+    let edits = 0;
+    let state = open(original, path);
+    function apply(changes: ChangeSpec): void {
+      state = compare(state, changes, path, `${path} edit ${++edits}`);
+    }
+    function removeAndRestore(from: number, text: string): void {
+      expect(state.doc.sliceString(from, from + text.length)).toBe(text);
+      apply({ from, to: from + text.length });
+      apply({ from, insert: text });
+    }
+
+    // Complete and undo every split at the slash whose interpretation the word controls.
+    for (const word of REGEX_AFTER_WORDS) {
+      state = open(fixture(word), path);
+      removeAndRestore(before.length, word);
+      for (let cut = 1; cut < word.length; cut++) {
+        const prefix = word.slice(0, cut), suffix = word.slice(cut);
+        vocabulary.add(prefix);
+        vocabulary.add(suffix);
+        removeAndRestore(before.length, prefix);
+        removeAndRestore(before.length + cut, suffix);
+      }
+    }
+
+    // Mutate each punctuation token at least once before the seeded edit chains.
+    for (const token of operators) {
+      state = open(fixture(token), path);
+      removeAndRestore(before.length, token);
+    }
+    if (jsx.length) {
+      const element = "<Tag>{expr}<Leaf/></Tag>";
+      state = open(fixture(element), path);
+      for (const token of jsx) removeAndRestore(before.length + element.indexOf(token), token);
+    }
+
+    const tokens = [...vocabulary];
     let seed = 7919;
     for (const char of path) seed = (Math.imul(seed, 31) + char.charCodeAt(0)) >>> 0;
     const random = (n: number) => {
       seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0;
       return Math.floor(seed / 0x100000000 * n);
     };
-    let state = open(doc, path);
-    for (let i = 0; i < 2000; i++) {
-      if (i % 50 === 0) state = open(doc, path);
-      const from = random(state.doc.length);
-      const to = Math.min(state.doc.length, from + random(8));
-      state = compare(state, { from, to, insert: words[random(words.length)]! }, path, `${path} edit ${i}`);
+    state = open(original, path);
+    while (edits < 2000) {
+      if (edits % 50 === 0) state = open(original, path);
+      // Sample the syntax on both sides of the padding and edits near the saved checkpoint.
+      const ends = Math.min(180, state.doc.length);
+      const from = random(3) === 0 ? random(ends) : state.doc.length - 1 - random(ends);
+      const op = random(3);
+      const to = op === 0 ? from : Math.min(state.doc.length, from + 1 + random(7));
+      apply({ from, to, insert: op === 1 ? "" : tokens[random(tokens.length)]! });
     }
   });
 });
