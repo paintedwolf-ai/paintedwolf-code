@@ -20,8 +20,8 @@ export function isOutsideRoot(projectId: string, rootId: string | undefined): bo
   return !!rootId && outsideRoots().get(projectId) === rootId;
 }
 
-export function outsideFileId(projectId: string, file: { rootId: string; fileId?: string }): string | undefined {
-  return isOutsideRoot(projectId, file.rootId) ? file.fileId : undefined;
+export function outsideFileId(projectId: string, file: { rootId: string; fileId?: string | null }): string | undefined {
+  return isOutsideRoot(projectId, file.rootId) ? file.fileId ?? undefined : undefined;
 }
 
 export function outsideHostPath(path: string): string {
