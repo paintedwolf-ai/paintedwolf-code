@@ -1,7 +1,7 @@
 import { EditorState, type ChangeSpec } from "@codemirror/state";
 import { describe, expect, it } from "vitest";
 import { createPrettyExtension, prettyLayoutField, prettyOutcomeOf, prettyWorkOf } from "./pretty-layout.ts";
-import { REGEX_AFTER_WORDS } from "./pretty-lexers.ts";
+import { ScriptLexer } from "./pretty-lexers.ts";
 import { PRETTY_CHECKPOINT_INTERVAL } from "./pretty-scan-state.ts";
 import { prettyLayoutDecorations } from "./pretty-view.ts";
 
@@ -102,7 +102,7 @@ describe("incremental block facts", () => {
     const original = fixture("retu");
     const operators = ["!", "++", "--", "/", "\\\n", "`", "${", "}", ";", "/*", "*/"];
     const jsx = path.endsWith(".tsx") ? ["<", "/>", "</", "<Tag", "{expr}"] : [];
-    const vocabulary = new Set([...operators, ...jsx, ...REGEX_AFTER_WORDS]);
+    const vocabulary = new Set([...operators, ...jsx, ...ScriptLexer.regexAfterWords]);
     let edits = 0;
     let state = open(original, path);
     const checkpoint = state.field(prettyLayoutField).checkpoints.iter(1);
@@ -118,7 +118,7 @@ describe("incremental block facts", () => {
     }
 
     // Complete and undo every split at the slash whose interpretation the word controls.
-    for (const word of REGEX_AFTER_WORDS) {
+    for (const word of ScriptLexer.regexAfterWords) {
       state = open(fixture(word), path);
       removeAndRestore(before.length, word);
       for (let cut = 1; cut < word.length; cut++) {
