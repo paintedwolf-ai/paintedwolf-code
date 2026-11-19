@@ -2,12 +2,12 @@ import { chmodSync, mkdtempSync, readFileSync, realpathSync, rmSync, statSync, w
 import { homedir } from "node:os";
 import path from "node:path";
 import { expect, type APIRequestContext, type Page } from "@playwright/test";
-import type { CheckpointListResponse, SourceWalkResponse, SourceWorkspace, ToolResult } from "../src/api/types.ts";
+import type { CheckpointListResponse, SourceWalkResponse, SourceWorkspace, ToolResult } from "../../src/api/types.ts";
 import {
   apiConfig, apiPostPrompt, bootstrapActiveProject, e2eTempDir, e2eUniqueLabel,
   liveChatStage, settledChatSessionId, waitForChatComposerReady, webE2e,
-} from "./helpers.ts";
-import { manualHarnessTools } from "./manual-harness-tools.ts";
+} from "../helpers.ts";
+import { manualHarnessTools } from "../manual-harness-tools.ts";
 
 function outsideFixture(request: APIRequestContext) {
   const folder = process.env.LYCAON_E2E_DOCKER_PROJECT
