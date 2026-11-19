@@ -206,8 +206,8 @@ func (f creationFloors) bindSessionSocket(call pathCall, dirs []int) pathResult 
 	if err != nil {
 		return errnoResult(err)
 	}
-	if !sessionipc.Register(dirs[1], dirs[0]) {
-		return errnoResult(unix.EACCES)
+	if errno := sessionipc.Register(dirs[1], dirs[0]); errno != 0 {
+		return errnoResult(errno)
 	}
 	return pathResult{}
 }

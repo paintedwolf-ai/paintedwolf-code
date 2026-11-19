@@ -2,6 +2,7 @@
 package sessionipc
 
 import (
+	"encoding/binary"
 	"net"
 	"os"
 	"sync"
@@ -28,7 +29,7 @@ func identify(fd int, kind uint32) (object, error) {
 // Registry holds socket inodes while their creating commands are active.
 type Registry struct {
 	mu        sync.Mutex
-	endpoints map[object]map[object]struct{}
+	endpoints map[object]map[object]endpoint
 }
 
 // Channel pins the session directory and ties registrations to the launch.
@@ -85,11 +86,8 @@ func (r *Registry) serve(channel *net.UnixConn, session object) {
 			fds = append(fds, rights...)
 		}
 		if len(fds) == 2 && flags&(unix.MSG_CTRUNC|unix.MSG_TRUNC) == 0 {
-			answer := byte(0)
-			if r.request(session, owned, data[0], fds[0]) {
-				answer = 1
-			}
-			_ = unix.Sendmsg(fds[1], []byte{answer}, nil, nil, unix.MSG_NOSIGNAL)
+			errno := r.request(session, owned, data[0], fds[0])
+			_ = unix.Sendmsg(fds[1], binary.LittleEndian.AppendUint32(nil, uint32(errno)), nil, nil, unix.MSG_NOSIGNAL)
 		}
 		for _, fd := range fds {
 			unix.Close(fd)
@@ -97,49 +95,75 @@ func (r *Registry) serve(channel *net.UnixConn, session object) {
 	}
 }
 
-func (r *Registry) request(session object, owned map[object]int, op byte, fd int) bool {
+func (r *Registry) request(session object, owned map[object]int, op byte, fd int) unix.Errno {
 	if op == register {
 		// SIOCUNIXFILE returns the actual bound filesystem socket.
 		handle, _, errno := unix.Syscall(unix.SYS_IOCTL, uintptr(fd), 0x89e0, 0)
 		if errno != 0 {
-			return false
+			return errno
 		}
 		return r.retain(session, owned, int(handle))
 	}
 	if op != lookup {
-		return false
+		return unix.EINVAL
 	}
 	id, err := identify(fd, unix.S_IFSOCK)
 	if err != nil {
-		return false
+		return unix.EINVAL
 	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	_, admitted := r.endpoints[session][id]
-	return admitted
+	if _, admitted := r.endpoints[session][id]; !admitted {
+		return unix.EACCES
+	}
+	return 0
 }
 
-func (r *Registry) retain(session object, owned map[object]int, fd int) bool {
+// One session may keep this many named socket inodes pinned in the engine.
+const maxSessionSockets = 256
+
+type endpoint struct {
+	fd    int
+	owner map[object]int
+}
+
+func (r *Registry) retain(session object, owned map[object]int, fd int) unix.Errno {
 	id, err := identify(fd, unix.S_IFSOCK)
 	if err != nil {
 		unix.Close(fd)
-		return false
+		return unix.EINVAL
 	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if r.endpoints == nil {
-		r.endpoints = make(map[object]map[object]struct{})
+		r.endpoints = make(map[object]map[object]endpoint)
 	}
-	if r.endpoints[session] == nil {
-		r.endpoints[session] = make(map[object]struct{})
+	group := r.endpoints[session]
+	if group == nil {
+		group = make(map[object]endpoint)
+		r.endpoints[session] = group
 	}
-	if _, exists := r.endpoints[session][id]; exists {
+	if _, exists := group[id]; exists {
 		unix.Close(fd)
-		return false
+		return unix.EEXIST
 	}
-	r.endpoints[session][id] = struct{}{}
+	if len(group) >= maxSessionSockets {
+		for id, e := range group {
+			var stat unix.Stat_t
+			if unix.Fstat(e.fd, &stat) == nil && stat.Nlink == 0 {
+				delete(e.owner, id)
+				delete(group, id)
+				unix.Close(e.fd)
+			}
+		}
+		if len(group) >= maxSessionSockets {
+			unix.Close(fd)
+			return unix.ENOSPC
+		}
+	}
+	group[id] = endpoint{fd: fd, owner: owned}
 	owned[id] = fd
-	return true
+	return 0
 }
 
 func (r *Registry) release(session object, owned map[object]int) {

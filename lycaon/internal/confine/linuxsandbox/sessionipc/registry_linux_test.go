@@ -26,7 +26,7 @@ func TestRegistryTiesEndpointsToTheirDirectoryAndSocket(t *testing.T) {
 	fd, err := unix.Open(name, unix.O_PATH|unix.O_CLOEXEC, 0)
 	testutil.FailErr(t, "pin endpoint", err)
 	defer unix.Close(fd)
-	if Admits(int(channel.Fd()), fd) || Register(int(channel.Fd()), fd) || ask(int(channel.Fd()), fd, 0) {
+	if Admits(int(channel.Fd()), fd) || Register(int(channel.Fd()), fd) == 0 || ask(int(channel.Fd()), fd, 0) != unix.EINVAL {
 		t.Fatal("an unregistered pathname was admitted")
 	}
 	linked := filepath.Join(root, "alias")
@@ -62,7 +62,7 @@ func TestRegistryRetainsTheBoundObjectUntilLaunchExit(t *testing.T) {
 	defer original.Close()
 	var reg Registry
 	owned := make(map[object]int)
-	if !reg.retain(session, owned, pin()) {
+	if reg.retain(session, owned, pin()) != 0 {
 		t.Fatal("socket registration failed")
 	}
 	client, err := reg.Channel(root)
@@ -90,5 +90,28 @@ func TestRegistryRetainsTheBoundObjectUntilLaunchExit(t *testing.T) {
 	reg.release(session, owned)
 	if Admits(int(client.Fd()), before) {
 		t.Fatal("closed launch retained authority")
+	}
+}
+
+func TestRegistryPrunesUnlinkedSocketsAtCapacity(t *testing.T) {
+	root, err := os.MkdirTemp("/tmp", "pw-limit-") //nolint:usetesting // Unix socket addresses have a fixed size.
+	testutil.FailErr(t, "create short socket directory", err)
+	t.Cleanup(func() { _ = os.RemoveAll(root) })
+	var reg Registry
+	scope, owned := object{ino: 1}, make(map[object]int)
+	defer reg.release(scope, owned)
+	path := filepath.Join(root, "socket")
+	for i := 0; i <= maxSessionSockets; i++ {
+		ln, err := net.ListenUnix("unix", &net.UnixAddr{Name: path, Net: "unix"})
+		testutil.FailErr(t, "bind endpoint", err)
+		fd, err := unix.Open(path, unix.O_PATH|unix.O_CLOEXEC, 0)
+		testutil.FailErr(t, "pin endpoint", err)
+		testutil.FailErr(t, "remove endpoint", ln.Close())
+		if errno := reg.retain(scope, owned, fd); errno != 0 {
+			t.Fatalf("register %d: %v", i, errno)
+		}
+	}
+	if len(owned) != 1 {
+		t.Fatalf("retained %d endpoints, want 1", len(owned))
 	}
 }

@@ -1,6 +1,9 @@
 package sessionipc
 
-import "golang.org/x/sys/unix"
+import (
+	"encoding/binary"
+	"golang.org/x/sys/unix"
+)
 
 const (
 	register byte = 1
@@ -12,29 +15,32 @@ func socketPair() ([2]int, error) {
 }
 
 // Register records the socket just bound by the restricted performer.
-func Register(channel, bound int) bool { return ask(channel, bound, register) }
+func Register(channel, bound int) unix.Errno { return ask(channel, bound, register) }
 
 // Admits checks the pinned destination against the session's registrations.
-func Admits(channel, destination int) bool { return ask(channel, destination, lookup) }
+func Admits(channel, destination int) bool { return ask(channel, destination, lookup) == 0 }
 
-func ask(channel, fd int, op byte) bool {
+func ask(channel, fd int, op byte) unix.Errno {
 	pair, err := socketPair()
 	if err != nil {
-		return false
+		return unix.EIO
 	}
 	defer unix.Close(pair[0])
 	rights := unix.UnixRights(fd, pair[1])
 	err = unix.Sendmsg(channel, []byte{op}, rights, nil, unix.MSG_NOSIGNAL)
 	unix.Close(pair[1])
 	if err != nil {
-		return false
+		return unix.EIO
 	}
-	var reply [1]byte
+	var reply [4]byte
 	for {
 		n, err := unix.Read(pair[0], reply[:])
 		if err == unix.EINTR {
 			continue
 		}
-		return err == nil && n == 1 && reply[0] == 1
+		if err != nil || n != len(reply) {
+			return unix.EIO
+		}
+		return unix.Errno(binary.LittleEndian.Uint32(reply[:]))
 	}
 }
