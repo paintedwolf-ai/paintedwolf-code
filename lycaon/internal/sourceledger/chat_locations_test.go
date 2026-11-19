@@ -9,15 +9,9 @@ import (
 	"github.com/lycaon/lycaon/internal/testutil"
 )
 
-// The managed scratch roots do not produce outside references.
 func outsideFixture(t *testing.T) (string, string) {
 	t.Helper()
-	home, err := os.UserHomeDir()
-	testutil.FailErr(t, "locate the home folder", err)
-	dir, err := os.MkdirTemp(home, ".pw-outside-locations-")
-	testutil.FailErr(t, "make an outside folder", err)
-	t.Cleanup(func() { _ = os.RemoveAll(dir) })
-	canonical, err := filepath.EvalSymlinks(dir)
+	canonical, err := filepath.EvalSymlinks(t.TempDir())
 	testutil.FailErr(t, "canonicalize the outside folder", err)
 	rel, ok := projectroot.OutsideRel(canonical)
 	if !ok {

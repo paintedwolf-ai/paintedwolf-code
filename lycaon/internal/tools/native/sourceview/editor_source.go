@@ -125,11 +125,11 @@ func RecordOutsideRead(ctx context.Context, tctx tools.ToolContext, resolved pro
 	if _, err := recorder.TrackChatFile(ctx, sourceledger.TrackInput{
 		ProjectID: tctx.Identity.ProjectID, RootID: root.ID, Path: rel, SHA256: sha256, Size: size,
 	}, tctx.Identity.SessionID, sourceledger.ChatFileRead); err != nil {
-		slog.Debug("Outside read was not recorded", "path", resolved.DisplayPath, "error", err)
+		slog.DebugContext(ctx, "Outside read was not recorded", "path", resolved.DisplayPath, "error", err)
 		return
 	}
 	if err := sourcefeed.EmitProjectSignal(ctx, tctx.Identity.ProjectID, tctx.Source.Roots); err != nil {
-		slog.Debug("Outside read event was not published", "project", tctx.Identity.ProjectID, "error", err)
+		slog.DebugContext(ctx, "Outside read event was not published", "project", tctx.Identity.ProjectID, "error", err)
 	}
 }
 
