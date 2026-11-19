@@ -1,3 +1,4 @@
+import type { NavigationTarget } from "../../api/types.ts";
 import { Show, createMemo, createSignal, onCleanup } from "solid-js";
 import { openSourceLocation, sourceEntryKind, type OpenSourceLocationArgs } from "../../platform/navigation/open-source.ts";
 import {
@@ -47,6 +48,7 @@ export type SourcePathLinkProps = SourcePathVariant & {
   chatDestination?: ChatDestination | null;
   /** Host-verified openability; false renders plain text. */
   openable?: boolean;
+  navigationTarget?: NavigationTarget;
   /** Change colours apply only to plain labels (INV-SRC-12). */
   change?: ScopeChangeKind | null;
   /** Worker overlay; null selects the project tree. */
@@ -103,21 +105,29 @@ export function SourcePathLink(props: SourcePathLinkProps) {
   let menuGeneration = 0;
   onCleanup(() => { menuGeneration++; });
 
-  const openTarget = (): OpenSourceLocationArgs => ({
-    intent: "permanent",
-    projectId: projectId(),
-    rootId: resolvedPath()?.rootId ?? props.rootId,
-    path: relativePath() ?? path(),
-    entryKind: entryKind(),
-    line: props.line,
-    endLine: props.endLine,
-    jobId: jobId(),
-  });
+  const recordedTarget = () => props.navigationTarget?.project_id === projectId() ? props.navigationTarget : undefined;
+  const openTarget = (): OpenSourceLocationArgs => {
+    const target = recordedTarget();
+    if (target) return {
+      intent: "permanent", projectId: target.project_id, rootId: target.root_id,
+      path: target.path, fileId: target.file_id, entryKind: target.entry_kind, jobId: target.worker_id,
+    };
+    return {
+      intent: "permanent",
+      projectId: projectId(),
+      rootId: resolvedPath()?.rootId ?? props.rootId,
+      path: relativePath() ?? path(),
+      entryKind: entryKind(),
+      line: props.line,
+      endLine: props.endLine,
+      jobId: jobId(),
+    };
+  };
 
   const open = () => {
     const p = path();
     if (!p || !projectId() || props.openable === false) return;
-    if (rootRefs()?.length && !resolvedPath()) {
+    if (!recordedTarget() && rootRefs()?.length && !resolvedPath()) {
       beginSourceNavigation();
       notices.reportError(new Error(resolutionError() === "outside_roots"
         ? `${p} is outside the attached project folders. Attach its folder to this project to open it here.`
@@ -143,7 +153,7 @@ export function SourcePathLink(props: SourcePathLinkProps) {
     const roots = props.rootId
       ? availableRoots.filter((root) => root.id === props.rootId)
       : availableRoots;
-    if (!p || !roots.length) return undefined;
+    if (recordedTarget() || !p || !roots.length) return undefined;
     return resolveProjectFile({ roots }, p);
   });
   const resolutionError = () => {
@@ -220,7 +230,7 @@ export function SourcePathLink(props: SourcePathLinkProps) {
           data-testid="source-path-link"
           data-file-change={props.change ?? undefined}
           data-project-id={projectId() || undefined}
-          data-den-source-path={relativePath() ?? (path() || undefined)}
+          data-den-source-path={recordedTarget()?.path ?? relativePath() ?? (path() || undefined)}
           data-den-source-line={
             props.line != null && Number.isFinite(props.line)
               ? String(props.line)
@@ -234,7 +244,7 @@ export function SourcePathLink(props: SourcePathLinkProps) {
               ? String(props.endLine)
               : undefined
           }
-          data-root-id={resolvedPath()?.rootId ?? props.rootId}
+          data-root-id={recordedTarget()?.root_id ?? resolvedPath()?.rootId ?? props.rootId}
           draggable={chatRef() ? true : undefined}
           onDragStart={(event) => startChatAttachmentDrag(event, chatRef())}
           data-tip={props.truncate ? label() : undefined}
