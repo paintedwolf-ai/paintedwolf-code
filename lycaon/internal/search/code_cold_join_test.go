@@ -43,10 +43,19 @@ func coldLeg(root string) PlanLeg {
 
 func TestCodeExecutorReportsWarmingRootWhenWallExpires(t *testing.T) {
 	root, catalog, _ := coldRoot(t)
-	report, err := (&CodeExecutor{catalog: catalog, wallBudget: 50 * time.Millisecond}).Run(t.Context(), coldLeg(root))
+	exec := &CodeExecutor{catalog: catalog, wallBudget: 50 * time.Millisecond}
+	report, err := exec.Run(t.Context(), coldLeg(root))
 	testutil.FailErr(t, "run code leg", err)
-	if report.Code.WarmingRoots != 1 || !report.TimedOut || len(report.Hits) != 0 {
-		t.Fatalf("report = %+v, want one warming root when the wall expires", report)
+	issues := report.CoverageIssues(ExecutorCode)
+	if len(report.Hits) != 0 || len(issues) != 1 || issues[0].Reason != IssueCatalogWarming || issues[0].Count != 1 {
+		t.Fatalf("issues = %+v report = %+v, want catalog_warming alone", issues, report)
+	}
+	leg := coldLeg(root)
+	leg.Code.PathRoots = append(leg.Code.PathRoots, CodeRoot{ProjectID: "p1", RootID: "after", Path: t.TempDir()})
+	report, err = exec.Run(t.Context(), leg)
+	testutil.FailErr(t, "run code leg with a root left", err)
+	if report.Code.WarmingRoots != 1 || !report.TimedOut {
+		t.Fatalf("report = %+v, want warming plus time_budget for the unscanned root", report)
 	}
 }
 
@@ -68,8 +77,17 @@ func TestCandidatePagerReportsWarmingRootWhenWallExpires(t *testing.T) {
 	leg.Code.Wall = 50 * time.Millisecond
 	report, err := (&CodeExecutor{catalog: catalog}).Run(t.Context(), leg)
 	testutil.FailErr(t, "run candidate pager", err)
-	if report.Code.WarmingRoots != 1 || !report.TimedOut || len(report.Hits) != 0 {
-		t.Fatalf("report = %+v, want one warming root after the wall", report)
+	if report.Code.WarmingRoots != 1 || report.TimedOut || len(report.Hits) != 0 {
+		t.Fatalf("report = %+v, want one warming root and no time_budget", report)
+	}
+	leg = coldLeg(root)
+	leg.Code.Candidates = true
+	leg.Code.Wall = 50 * time.Millisecond
+	leg.Code.PathRoots = append(leg.Code.PathRoots, CodeRoot{ProjectID: "p1", RootID: "after", Path: t.TempDir()})
+	report, err = (&CodeExecutor{catalog: catalog}).Run(t.Context(), leg)
+	testutil.FailErr(t, "run candidate pager with a root left", err)
+	if report.Code.WarmingRoots != 1 || !report.TimedOut {
+		t.Fatalf("report = %+v, want warming plus time_budget for the unscanned root", report)
 	}
 }
 

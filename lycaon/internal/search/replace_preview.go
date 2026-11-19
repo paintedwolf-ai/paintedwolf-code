@@ -39,8 +39,8 @@ func previewReplace(ctx context.Context, catalog *sourcecatalog.Catalog, req Rep
 	result := ReplacePreviewResult{State: ReplacePreviewReady, Files: []ReplaceFilePreview{}, Issues: []Issue{}}
 	report := ExecutorReport{}
 	totalHunk := 0
-	// Cold roots share one complete-budget wall for their builds.
-	wallEnd := time.Now().Add(BudgetComplete.Wall())
+	// A preparing preview is asked again, so cold roots share the interactive wall.
+	wallEnd := time.Now().Add(BudgetInteractive.Wall())
 roots:
 	for _, root := range req.Roots {
 		if strings.TrimSpace(root.Path) == "" {

@@ -46,9 +46,9 @@ func resolveCodeGeneration(ctx context.Context, catalog *sourcecatalog.Catalog, 
 	if wait := time.Until(wallEnd); err == nil && reader == nil && wait > 0 {
 		reader, status, err = catalog.Trees.OpenIndex(ctx, root.ProjectID, catalogRoot, wait)
 	}
-	// The wall ends the join through its own timer or through ctx; either way
-	// nothing was readable in time.
-	if errors.Is(err, context.DeadlineExceeded) && !time.Now().Before(wallEnd) {
+	// The wall ends the join through its own timer or through ctx; for a root
+	// with no ready generation either way means nothing was readable in time.
+	if errors.Is(err, context.DeadlineExceeded) && status.State != sourcecatalog.StateReady && !time.Now().Before(wallEnd) {
 		return codeGeneration{}, errCodeCatalogWarming
 	}
 	if err != nil {

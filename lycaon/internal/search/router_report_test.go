@@ -223,6 +223,7 @@ func TestExportReportsTruncatedWhileSourceRootWarms(t *testing.T) {
 		RootsForProject: func(string) ([]CodeRoot, error) {
 			return []CodeRoot{{RootID: root.ID, Path: root.Path}}, nil
 		},
+		Budget: BudgetInteractive,
 	}
 
 	release := holdDirectoryAdmission(t)

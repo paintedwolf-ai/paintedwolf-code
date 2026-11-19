@@ -99,12 +99,13 @@ func (e *CodeExecutor) Run(ctx context.Context, leg PlanLeg) (ExecutorReport, er
 	report := ExecutorReport{}
 	stats := &report.Code
 roots:
-	for _, root := range leg.Code.PathRoots {
+	for ri, root := range leg.Code.PathRoots {
 		if spec.lineCap <= 0 && spec.fileCap <= 0 {
 			report.Limited = true
 			break
 		}
-		for _, selection := range codeIndexSelections(legCtx, e.catalog, root, leg.Code.Query, leg.Code.Flags, leg.Code.IncludeDependencies) {
+		selections := codeIndexSelections(legCtx, e.catalog, root, leg.Code.Query, leg.Code.Flags, leg.Code.IncludeDependencies)
+		for si, selection := range selections {
 			if spec.lineCap <= 0 && spec.fileCap <= 0 {
 				report.Limited = true
 				break roots
@@ -122,7 +123,9 @@ roots:
 				return report, ctx.Err()
 			}
 			if legCtx.Err() != nil || !time.Now().Before(wallEnd) {
-				report.TimedOut = true
+				// catalog_warming already accounts for a root still building;
+				// time_budget covers only work left after it.
+				report.TimedOut = !warming || si < len(selections)-1 || ri < len(leg.Code.PathRoots)-1
 				break roots
 			}
 			if err != nil && !warming {
