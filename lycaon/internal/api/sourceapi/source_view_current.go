@@ -93,7 +93,7 @@ func currentSourceReadError(err error) error {
 		return &comparisonFailure{wire.ApiErrorCodeUnsupportedEncoding, "The file contains invalid text for the selected encoding."}
 	case errors.Is(err, projectsource.ErrSourceBinary), errors.Is(err, textfile.ErrBinary):
 		return &comparisonFailure{wire.ApiErrorCodeSourceBinary, "This file contains binary data and cannot be shown as text."}
-	case errors.Is(err, os.ErrNotExist), errors.Is(err, projectsource.ErrSourceNotFound):
+	case errors.Is(err, os.ErrNotExist), errors.Is(err, projectsource.ErrSourceNotFound), errors.Is(err, projectsource.ErrSourcePathDenied):
 		return &comparisonFailure{wire.ApiErrorCodeSourceNotFound, "This file is no longer available."}
 	default:
 		return err

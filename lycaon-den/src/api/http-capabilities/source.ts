@@ -158,7 +158,7 @@ export function createSourceClient(j: JsonRequester, connection: BackendConnecti
         `/v1/projects/${projectId}/source${formatQuery({
           file_id: opts?.fileId,
           path: opts?.fileId ? undefined : path,
-          worker_id: opts?.workerId,
+          worker_id: opts?.fileId ? undefined : opts?.workerId,
           root_id: opts?.fileId ? undefined : opts?.rootId,
           session_id: opts?.sessionId,
           decode_as: opts?.decodeAs,
@@ -180,7 +180,7 @@ export function createSourceClient(j: JsonRequester, connection: BackendConnecti
           file_id: opts?.fileId,
           path: opts?.fileId ? undefined : path,
           root_id: opts?.fileId ? undefined : opts?.rootId,
-          worker_id: opts?.workerId,
+          worker_id: opts?.fileId ? undefined : opts?.workerId,
           session_id: opts?.sessionId,
         })}`,
         { signal: opts.signal },

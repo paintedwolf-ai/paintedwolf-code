@@ -18,13 +18,16 @@ type Address struct {
 // Resolve admits outside reads only by an identity held in this project.
 func Resolve(ctx context.Context, ledger *sourceledger.Store, p *project.Project, target Address) (*project.Project, Address, error) {
 	if target.FileID == "" {
-		if p.Outside.ID != "" && target.RootID == p.Outside.ID {
+		if p != nil && p.Outside.ID != "" && target.RootID == p.Outside.ID {
 			return nil, Address{}, projectsource.ErrSourcePathDenied
 		}
 		return p, target, nil
 	}
 	if uuid.Validate(target.FileID) != nil || target.RootID != "" || target.Path != "" {
 		return nil, Address{}, projectsource.ErrSourcePathInvalid
+	}
+	if ledger == nil || p == nil {
+		return nil, Address{}, projectsource.ErrSourceNotFound
 	}
 	root, path, err := ledger.HeldFileAddress(ctx, p.ID, target.FileID)
 	if err != nil {

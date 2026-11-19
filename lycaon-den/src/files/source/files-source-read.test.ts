@@ -5,6 +5,7 @@ import type { ProjectSourceReadResponse } from "../../api/types.ts";
 import { documentResidency, DOCUMENT_MEMORY_BUDGET, windowDocumentBudget } from "../documents/document-residency.ts";
 import { BackendTransportError } from "../../platform/connection/request-connectivity.ts";
 import { LycaonApiError } from "../../api/http.ts";
+import { recordOutsideRoot, resetOutsideRootsForTests } from "./outside-namespace.ts";
 import { openFileBufferSource, readFileBufferSource } from "./files-source-read.ts";
 import { DocumentFixture } from "../../test/document-fixture.ts";
 import { decodeUpdate, documentOutbox, encodeUpdate } from "../documents/document-outbox.ts";
@@ -70,6 +71,22 @@ describe("file acquisition", () => {
     expect(openEditorDocument).toHaveBeenCalledExactlyOnceWith("p1", {
       root_id: "r1", path: "wide.txt", client_id: expect.any(String),
     }, "s1");
+  });
+  it("preserves an outside file's identity when falling back from the editor", async () => {
+    const project = "p-outside", root = "outside", fileId = "file-1";
+    recordOutsideRoot(project, root);
+    const openEditorDocument = vi.fn().mockRejectedValue(new LycaonApiError("Image", 422, "source_binary"));
+    const getProjectSource = vi.fn().mockResolvedValue(source({ binary: true, content: "", mime: "image/png" }));
+    try {
+      const result = await openFileBufferSource(stubClient({ openEditorDocument, getProjectSource }), project, {
+        rootId: root, path: "home/me/diagram.png", fileId,
+      });
+      result.reservation?.release();
+      expect(openEditorDocument).toHaveBeenCalledExactlyOnceWith(project, { file_id: fileId, client_id: "window" }, undefined);
+      expect(getProjectSource).toHaveBeenCalledExactlyOnceWith(project, "home/me/diagram.png", expect.objectContaining({ fileId }));
+    } finally {
+      resetOutsideRootsForTests();
+    }
   });
   it.each(["source_binary", "source_content_too_large", "source_read_only"] as const)("reads a file the host refuses as a document (%s) as source", async (code) => {
     const binary = code === "source_read_only" ? source({ writable: false }) : source({ binary: true, content: "", mime: "image/png" });

@@ -70,9 +70,11 @@ func TestOutsideReadRecordsAnOrdinaryPathButNotScratch(t *testing.T) {
 	if !ok {
 		t.Fatal("fixture lacks an outside address")
 	}
-	held, err := ledger.OutsideFileHeld(ctx, projectID, rel)
-	testutil.FailErr(t, "check file hold after read", err)
-	if !held {
-		t.Fatal("outside read did not hold the file")
+	tracked, err := ledger.LookupFile(ctx, sourceledger.TrackInput{ProjectID: projectID, RootID: outsideID, Path: rel})
+	testutil.FailErr(t, "lookup file after read", err)
+	root, path, err := ledger.HeldFileAddress(ctx, projectID, tracked.FileID)
+	testutil.FailErr(t, "resolve the held file", err)
+	if root != outsideID || path != rel {
+		t.Fatalf("held file address = %q %q", root, path)
 	}
 }

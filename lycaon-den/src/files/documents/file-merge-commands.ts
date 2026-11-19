@@ -32,7 +32,7 @@ export function createFileMergeCommands({ projectId, client, sourceSessionId, st
       const res = await c.getProjectSource(projectId(), buf.path, {
         workerId: buf.jobId,
         rootId: buf.rootId || undefined,
-          fileId: outsideFileId(projectId(), buf),
+        fileId: outsideFileId(projectId(), buf),
         sessionId: sourceSessionId(),
       });
       const { text } = normalizeEolForEditor(res.content);

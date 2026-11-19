@@ -187,7 +187,10 @@ func (s *Views) writeSourceViewAddressError(w http.ResponseWriter, r *http.Reque
 		err = pagedview.ErrExpired
 	}
 	var handle *sourceHandleError
+	var comparison *comparisonFailure
 	switch {
+	case errors.As(err, &comparison):
+		s.responses.Fail(w, comparison.code, comparison.message)
 	case errors.As(err, &handle):
 		s.responses.FailReason(w, wire.ApiErrorCodeInvalidRequest, handle.Error())
 	case errors.Is(err, sessionscope.ErrWorktreeStale):
