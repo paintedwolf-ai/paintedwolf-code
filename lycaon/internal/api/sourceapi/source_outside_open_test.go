@@ -93,16 +93,8 @@ func TestChatLocationOpenUsesObservedAnchor(t *testing.T) {
 	opened := readOpenedFile(t, callSourceViewHandlerAs(t, ctx, server.Workspace.HandleOpenOutsideFile, p.ID, "",
 		wire.OpenOutsideFileRequest{SessionID: chat.ID, Path: picked}))
 	response := func(path string) *httptest.ResponseRecorder {
-		data, err := json.Marshal(wire.OpenChatLocationFileRequest{Path: path})
-		testutil.FailErr(t, "encode location open", err)
-		request := httptest.NewRequest(http.MethodPost, "/", bytes.NewReader(data))
-		request.Header.Set("Content-Type", "application/json")
-		route := chi.NewRouteContext()
-		route.URLParams.Add("id", p.ID)
-		route.URLParams.Add("location_id", opened.Location.ID)
-		recorder := httptest.NewRecorder()
-		server.Workspace.HandleOpenChatLocationFile(recorder, request.WithContext(context.WithValue(ctx, chi.RouteCtxKey, route)))
-		return recorder
+		return callChatLocation(t, ctx, http.MethodPost, server.Workspace.HandleOpenChatLocationFile,
+			p.ID, opened.Location.ID, wire.OpenChatLocationFileRequest{Path: path})
 	}
 	if got := readOpenedFile(t, response("picked.go")); got.FileID != opened.FileID {
 		t.Fatalf("reopening changed identity %q to %q", opened.FileID, got.FileID)
@@ -112,6 +104,68 @@ func TestChatLocationOpenUsesObservedAnchor(t *testing.T) {
 	testutil.FailErr(t, "create another folder at its path", os.Mkdir(dir, 0o700))
 	testutil.FailErr(t, "write replacement file", os.WriteFile(picked, []byte("replacement\n"), 0o600))
 	sourceViewErrorCode(t, response("picked.go"), http.StatusNotFound)
+}
+
+func TestPickedOutsideLocationCanBeHiddenAndShown(t *testing.T) {
+	db := testdbfixture.Open(t, "store.db")
+	sessions := store.NewSQL(db)
+	server := newSourceHandlerFixture(t, func(deps *Deps) {
+		deps.SessionStore, deps.ProjectRegistry = sessions, project.NewSQLRegistry(db)
+		deps.SourceLedger = sourceledger.New(db, t.TempDir())
+	})
+	p := sourceViewFixtureProject(t, server)
+	ctx := testdbseed.OwnerCaller(t, t.Context(), db)
+	chat, err := sessions.Create(ctx, wire.CreateSessionRequest{Posture: wire.SessionPostureBuild}, p.ID)
+	testutil.FailErr(t, "create chat", err)
+
+	pick := func(chatID, path string) *httptest.ResponseRecorder {
+		return callSourceViewHandlerAs(t, ctx, server.Workspace.HandleOpenOutsideFile, p.ID, "",
+			wire.OpenOutsideFileRequest{SessionID: chatID, Path: path})
+	}
+	outside := t.TempDir()
+	picked := filepath.Join(outside, "notes.txt")
+	testutil.FailErr(t, "write outside fixture", os.WriteFile(picked, []byte("notes"), 0o600))
+	sourceViewErrorCode(t, pick(uuid.NewString(), picked), http.StatusNotFound)
+	sourceViewErrorCode(t, pick(chat.ID, "notes.txt"), http.StatusBadRequest)
+	sourceViewErrorCode(t, pick(chat.ID, filepath.Join(p.Roots[0].Path, "inside.txt")), http.StatusBadRequest)
+	sourceViewErrorCode(t, pick(chat.ID, filepath.Join(outside, "missing.txt")), http.StatusNotFound)
+	opened := readOpenedFile(t, pick(chat.ID, picked))
+
+	update := func(id string, hidden bool) *httptest.ResponseRecorder {
+		return callChatLocation(t, ctx, http.MethodPatch, server.Workspace.HandleUpdateSourceChatLocation,
+			p.ID, id, wire.UpdateSourceChatLocationRequest{Hidden: &hidden})
+	}
+	sourceViewErrorCode(t, update(uuid.NewString(), true), http.StatusNotFound)
+	for _, hidden := range []bool{true, false} {
+		response := update(opened.Location.ID, hidden)
+		if response.Code != http.StatusOK {
+			t.Fatalf("update hidden=%t: %d %s", hidden, response.Code, response.Body.String())
+		}
+		var location wire.SourceChatLocation
+		testutil.FailErr(t, "decode updated location", json.Unmarshal(response.Body.Bytes(), &location))
+		if location.ID != opened.Location.ID || location.Hidden != hidden {
+			t.Fatalf("updated location = %+v, want hidden=%t", location, hidden)
+		}
+		covering, found, err := server.Workspace.SourceLedger.ChatLocationCovering(ctx, chat.ID, opened.Path)
+		testutil.FailErr(t, "find visible location for the opened file", err)
+		if found == hidden || found && covering.ID != opened.Location.ID {
+			t.Fatalf("covering location = %+v, found=%t after hidden=%t", covering, found, hidden)
+		}
+	}
+}
+
+func callChatLocation(t *testing.T, ctx context.Context, method string, handler http.HandlerFunc, projectID, locationID string, body any) *httptest.ResponseRecorder {
+	t.Helper()
+	data, err := json.Marshal(body)
+	testutil.FailErr(t, "encode location request", err)
+	route := chi.NewRouteContext()
+	route.URLParams.Add("id", projectID)
+	route.URLParams.Add("location_id", locationID)
+	request := httptest.NewRequestWithContext(context.WithValue(ctx, chi.RouteCtxKey, route), method, "/", bytes.NewReader(data))
+	request.Header.Set("Content-Type", "application/json")
+	recorder := httptest.NewRecorder()
+	handler(recorder, request)
+	return recorder
 }
 
 func TestOutsideReaderUsesAHeldFile(t *testing.T) {
