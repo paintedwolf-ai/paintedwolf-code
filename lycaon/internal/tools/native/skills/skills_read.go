@@ -3,7 +3,6 @@ package skills
 import (
 	"context"
 	"fmt"
-	"github.com/lycaon/lycaon/internal/confine"
 	"github.com/lycaon/lycaon/internal/toolrejection"
 	"strings"
 
@@ -160,14 +159,12 @@ func (t *SkillsReadTool) packConfiguration(
 func (t *SkillsReadTool) policyVars(ctx context.Context, tctx tools.ToolContext) map[string]any {
 	if t != nil && t.TemplateVars != nil {
 		if vars := t.TemplateVars(ctx, tctx); vars != nil {
-			vars["private_temp"] = confine.Enforcing() && len(confine.PrivateTempFor("").Paths) > 0
 			vars["session_scratch_dir"] = tctx.Host.SessionScratchDir
 			spawn.RefreshSizingHintVars(vars)
 			return vars
 		}
 	}
 	vars := spawn.PolicyTemplateVars()
-	vars["private_temp"] = confine.Enforcing() && len(confine.PrivateTempFor("").Paths) > 0
 	vars["session_scratch_dir"] = tctx.Host.SessionScratchDir
 	return vars
 }

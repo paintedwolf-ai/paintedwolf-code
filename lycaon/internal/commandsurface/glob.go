@@ -99,8 +99,9 @@ func MatchGlob(ctx context.Context, files GlobFiles, pattern string, budget *Glo
 type GlobScope struct {
 	// Dir is the absolute process directory relative patterns resolve under.
 	Dir string
-	// ReadPath resolves a readable operand to its host backing.
-	ReadPath func(abs string) (string, bool)
+	// Readable reports whether the launched process may read an absolute path;
+	// a match it could not read is not a match.
+	Readable func(abs string) bool
 	// MaxMatches and MaxVisits default to MaxGlobMatches and MaxGlobVisits.
 	MaxMatches int
 	MaxVisits  int
@@ -118,7 +119,7 @@ func ExpandGlobs(ctx context.Context, stages []exec.Stage, scope GlobScope) ([]e
 	if maxVisits <= 0 {
 		maxVisits = MaxGlobVisits
 	}
-	files := OSGlobFiles{Dir: scope.Dir, ReadPath: scope.ReadPath}
+	files := OSGlobFiles{Dir: scope.Dir, Readable: scope.Readable}
 	visitsLeft := maxVisits
 	out := make([]exec.Stage, len(stages))
 	changed := false

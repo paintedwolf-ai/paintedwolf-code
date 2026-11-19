@@ -42,7 +42,6 @@ func CommandGuidanceFactKeys() []string {
 		"runner_socket_tools",
 		"runner_write_root_tools",
 		"session_scratch_dir",
-		"private_temp",
 		"shared_temp_writable",
 		"shared_temp_locations",
 		"tool_profile",
@@ -74,7 +73,6 @@ type CommandGuidanceSnapshotInput struct {
 	RootCount             int
 	ProjectDir            string
 	SessionScratchDir     string
-	PrivateTemp           bool
 	SharedTempLocations   []string
 	Posture               gate.Posture
 	CommandExternalHidden bool
@@ -119,8 +117,9 @@ func BuildCommandGuidanceSnapshot(in CommandGuidanceSnapshotInput) ([]string, ma
 		vars = reader.Facts()
 	}
 	for k, v := range AgentPromptSurfaceTemplateVars(AgentPromptSurface{
-		SessionScratchDir: strings.TrimSpace(in.SessionScratchDir),
-		Posture:           in.Posture, PrivateTemp: in.PrivateTemp, SharedTempLocations: in.SharedTempLocations,
+		SessionScratchDir:     strings.TrimSpace(in.SessionScratchDir),
+		Posture:               in.Posture,
+		SharedTempLocations:   in.SharedTempLocations,
 		CommandExternalHidden: in.CommandExternalHidden,
 	}) {
 		vars[k] = v

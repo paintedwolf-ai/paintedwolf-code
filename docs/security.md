@@ -189,7 +189,7 @@ Third-party processes the host executes on the person's behalf (a local MCP serv
 
 Default write roots derive from operating-system cache conventions rather than a list of programming ecosystems. Bounded exceptions name package stores within tool homes or Linux's data directory, plus Go's local telemetry counters; the exact set is in `confine/package_cache_roots.go`. Extracted packages there are the same risk class as conventional build caches. The surrounding tool homes and their install and `bin` directories are not roots, because programs installed there run outside the sandbox. A program installed under a writable cache or package store is the accepted cost of those defaults ([What stays quiet](#what-stays-quiet-and-why)).
 
-Linux mounts session scratch at `/tmp` and `/var/tmp`. Explicitly attached or reviewed subfolders keep their identity. Without scratch, a confined launch gets private temporary storage for its lifetime. On macOS these paths name machine directories. Programs that honor `TMPDIR` use session scratch on either platform.
+On Linux and macOS, literal shared temp paths resolve to the machine’s directories. Confined programs can read a host-provided file there under the existing read policy. A write requires an attached folder or a reviewed grant, on every approval posture. Programs that honor `TMPDIR` use their session’s private scratch.
 
 A failed foreground command that encounters a `shared_temp` write refusal submits the affected locations for chat-scoped review. The host reports each outcome and leaves the remaining work to the caller. A successful command raises no card and reports a tolerated refusal once per chat and location. Approval applies to future launches.
 

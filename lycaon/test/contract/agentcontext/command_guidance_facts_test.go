@@ -88,7 +88,7 @@ func TestCommandGuidanceFactsMatchExecutionSurface(t *testing.T) {
 				shared = []string{"/private/tmp"}
 			}
 			vars := prompts.AgentPromptSurfaceTemplateVars(prompts.AgentPromptSurface{
-				PrivateTemp: tc.platformOS == "linux", SharedTempLocations: shared,
+				SharedTempLocations:   shared,
 				SessionScratchDir:     "/scratch/sess-1",
 				Posture:               tc.posture,
 				CommandExternalHidden: tc.externalHidden,
@@ -141,7 +141,6 @@ func TestCommandGuidanceFactsMatchExecutionSurface(t *testing.T) {
 
 			facts := prompts.ExtractCommandGuidanceFacts(vars)
 			for key, want := range map[string]bool{
-				"private_temp":             tc.platformOS == "linux",
 				"shared_temp_writable":     len(shared) > 0,
 				"profile_command_mutation": !tc.readOnly,
 				"command_output_files":     true,

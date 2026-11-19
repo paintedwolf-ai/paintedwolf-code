@@ -169,10 +169,9 @@ type fsRule struct {
 // FilesystemRules is the ordered filesystem policy the profile renders. The
 // same list answers host verdicts, so the two cannot disagree.
 type FilesystemRules struct {
-	privateTemp PrivateTemp
-	sharedTemp  []string
-	rules       []fsRule
-	patterns    map[string]*regexp.Regexp
+	sharedTemp []string
+	rules      []fsRule
+	patterns   map[string]*regexp.Regexp
 	// roots are the invocation's project roots, which agent-policy grants
 	// resolve against.
 	roots []string
@@ -256,23 +255,6 @@ func (m fsMatch) render(b *strings.Builder) {
 // Verdict answers whether the boundary permits access to path, reading the
 // rules in profile order so the last matching block decides.
 func (r FilesystemRules) Verdict(access FilesystemAccess, path string) FloorVerdict {
-	path, backed := r.HostPath(path)
-	if !backed {
-		return FloorVerdict{Allowed: true}
-	}
-	return r.hostVerdict(access, path)
-}
-
-// HostPath resolves an operand in the mounted view. Launch-local tmpfs has no host path.
-func (r FilesystemRules) HostPath(path string) (string, bool) {
-	if mapped, ok := r.privateTemp.Resolve(path); ok {
-		return mapped, true
-	}
-	_, local := r.privateTemp.relative(path)
-	return path, !local
-}
-
-func (r FilesystemRules) hostVerdict(access FilesystemAccess, path string) FloorVerdict {
 	path = fspath.CanonicalPath(strings.TrimSpace(path))
 	if path == "" || !filepath.IsAbs(path) {
 		return FloorVerdict{Allowed: true}

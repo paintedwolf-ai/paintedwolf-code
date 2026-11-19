@@ -54,7 +54,7 @@ func (e *Boundary) expandPlanOperands(
 	if dir, ok := commandDir(plan, *tc); ok {
 		confReq := e.actionConfineRequest(ctx, *tc)
 		stages, expanded, err = commandsurface.ExpandGlobs(ctx, stages, commandsurface.GlobScope{
-			Dir: dir, ReadPath: globReadable(confReq),
+			Dir: dir, Readable: globReadable(confReq),
 		})
 		if err != nil {
 			if reject := toolcommand.ArgvShapeObservation(tool, err); reject != nil {
@@ -109,7 +109,7 @@ func sessionOperandReject(err error) *toolrejection.ToolReject {
 		if operandErr != nil && operandErr.Area == projectroot.VirtualOutputLabel {
 			code = tools.SessionOutputUnavailableCode
 		}
-		return &toolrejection.ToolReject{Code: code, Data: map[string]any{"path": operand, "private_temp": confine.Enforcing() && len(confine.PrivateTempFor("").Paths) > 0}}
+		return &toolrejection.ToolReject{Code: code, Data: map[string]any{"path": operand}}
 	}
 	if errors.Is(err, projectroot.ErrPathEscape) {
 		return &toolrejection.ToolReject{Code: "SURVEY_PATH_ESCAPE", Data: map[string]any{"path": operand, "reason": err.Error()}}
@@ -118,12 +118,11 @@ func sessionOperandReject(err error) *toolrejection.ToolReject {
 }
 
 // globReadable is the read verdict of the boundary the command launches under.
-func globReadable(confReq confine.Request) func(string) (string, bool) {
+func globReadable(confReq confine.Request) func(string) bool {
 	confinement, _ := confine.DefaultConfinement(confReq)
 	rules := confine.BoundaryOf(confinement).Filesystem
-	return func(abs string) (string, bool) {
-		path, backed := rules.HostPath(abs)
-		return path, backed && !confine.ControlPlanePathDenied(path, false, confReq.SessionScratchRoot, confReq.SessionOutputRoot) &&
+	return func(abs string) bool {
+		return !confine.ControlPlanePathDenied(abs, false, confReq.SessionScratchRoot, confReq.SessionOutputRoot) &&
 			rules.Verdict(confine.AccessRead, abs).Allowed
 	}
 }

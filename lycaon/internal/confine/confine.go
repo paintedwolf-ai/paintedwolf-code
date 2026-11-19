@@ -404,9 +404,8 @@ func writeFilesystemRules(b *strings.Builder, c Confinement, deny string) error 
 // Later rules override earlier decisions.
 func filesystemRules(c Confinement) (FilesystemRules, error) {
 	rules := FilesystemRules{
-		roots:       slices.Clone(c.Roots),
-		privateTemp: ProjectPrivateTemp(c.ProjectID, c.SessionScratchRoot, c.Roots, c.GrantedWriteRoots, c.ReadRoots),
-		sharedTemp:  SharedTempLocations(),
+		roots:      slices.Clone(c.Roots),
+		sharedTemp: SharedTempLocations(),
 	}
 	writeRoots, err := WriteRootsForBoundary(c.ProjectID, c.Roots, c.GrantedWriteRoots, c.SessionScratchRoot)
 	if err != nil {

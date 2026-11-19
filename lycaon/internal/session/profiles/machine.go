@@ -113,7 +113,6 @@ func (m *Service) promptSurface(ctx context.Context, sess *api.Session, loaded [
 	if m == nil || sess == nil {
 		return out
 	}
-	out.PrivateTemp = confine.Enforcing() && len(confine.PrivateTempFor("").Paths) > 0
 	var grants []string
 	if m.SessionWriteRoots != nil {
 		grants = m.SessionWriteRoots(ctx, sess.ID, sess.ParentSessionID)

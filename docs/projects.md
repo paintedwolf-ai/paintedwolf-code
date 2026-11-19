@@ -195,7 +195,7 @@ rewrite.
 `TMPDIR`, `TMP`, `TEMP` and `SCRATCH_DIR` name the same real session scratch
 directory for native utilities (`echo $TMPDIR`, `cd $TMPDIR`) and for external
 processes, and `mktemp` creates there, so a file passes between them under one
-absolute path. In a confined Linux session, `/tmp` and `/var/tmp` resolve to session scratch, with explicitly mounted folders retaining their identity. On macOS they name shared locations and writes use the approval policy.
+absolute path. Literal `/tmp` and `/var/tmp` keep their machine identity on Linux and macOS. Writes there require an attached folder or a reviewed grant.
 Individual temporary file creation and mutation publication retain their
 existing operation authority and write-door responsibilities.
 

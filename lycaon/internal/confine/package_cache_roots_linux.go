@@ -61,7 +61,7 @@ func preparePackageCacheDataRoots(c Confinement, mkdir func(fseffect.Location, o
 			continue
 		}
 		path := fspath.CanonicalPath(candidate)
-		if path == "" || !rules.hostVerdict(AccessWrite, path).Allowed {
+		if path == "" || !rules.Verdict(AccessWrite, path).Allowed {
 			continue
 		}
 		_, err := mkdir(fseffect.Location{Root: string(filepath.Separator), Rel: strings.TrimPrefix(path, string(filepath.Separator))}, 0o700)
