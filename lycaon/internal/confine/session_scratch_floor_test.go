@@ -83,7 +83,8 @@ func TestBoundaryLetsSessionReadBackItsOwnScratch(t *testing.T) {
 
 func TestPrivateTempResolution(t *testing.T) {
 	scratch := t.TempDir()
-	alias := t.TempDir()
+	alias, err := filepath.EvalSymlinks(t.TempDir())
+	testutil.FailErr(t, "resolve temp alias", err)
 	link := filepath.Join(t.TempDir(), "temp-link")
 	testutil.FailErr(t, "link to temp", os.Symlink(alias, link))
 	pinned := filepath.Join(alias, "attached")

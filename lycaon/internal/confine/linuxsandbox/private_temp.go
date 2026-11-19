@@ -1,7 +1,7 @@
 package linuxsandbox
 
 import (
-	"path/filepath"
+	"path"
 	"slices"
 	"strings"
 )
@@ -22,12 +22,12 @@ func (m *PrivateTempMounts) validate() error {
 		return nil
 	}
 	if !slices.Equal(m.Paths, PrivateTempPaths()) ||
-		(m.Scratch != "" && (!filepath.IsAbs(m.Scratch) || filepath.Clean(m.Scratch) != m.Scratch || m.Scratch == "/" || slices.Contains(m.Paths, m.Scratch))) {
+		(m.Scratch != "" && (!path.IsAbs(m.Scratch) || path.Clean(m.Scratch) != m.Scratch || m.Scratch == "/" || slices.Contains(m.Paths, m.Scratch))) {
 		return &Unsupported{Code: UnsupportedFilesystemRule, Detail: "invalid private temp mapping"}
 	}
 	for _, p := range m.Retained {
 		inside := slices.ContainsFunc(m.Paths, func(alias string) bool { return strings.HasPrefix(p, alias+"/") })
-		if filepath.Clean(p) != p || !inside {
+		if path.Clean(p) != p || !inside {
 			return &Unsupported{Code: UnsupportedFilesystemRule, Detail: "invalid private temp subtree"}
 		}
 	}
@@ -35,22 +35,22 @@ func (m *PrivateTempMounts) validate() error {
 }
 
 // The performer judges a pinned name against its backing folder's floors.
-func (m *PrivateTempMounts) policyPath(path string) string {
+func (m *PrivateTempMounts) policyPath(name string) string {
 	if m == nil || m.Scratch == "" {
-		return path
+		return name
 	}
 	for _, root := range m.Retained {
-		if path == root || strings.HasPrefix(path, root+"/") {
-			return path
+		if name == root || strings.HasPrefix(name, root+"/") {
+			return name
 		}
 	}
 	for _, alias := range m.Paths {
-		if path == alias {
+		if name == alias {
 			return m.Scratch
 		}
-		if rel, inside := strings.CutPrefix(path, alias+"/"); inside {
-			return filepath.Join(m.Scratch, rel)
+		if rel, inside := strings.CutPrefix(name, alias+"/"); inside {
+			return path.Join(m.Scratch, rel)
 		}
 	}
-	return path
+	return name
 }
