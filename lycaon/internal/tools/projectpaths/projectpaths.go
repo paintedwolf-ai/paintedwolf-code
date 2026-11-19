@@ -351,9 +351,8 @@ func UnionDiscoveryRoots(ctx context.Context, tctx tools.ToolContext, modelPath 
 					if err != nil {
 						continue
 					}
-					refs = append(refs, projectroot.RootRef{
-						ID: r.ID, Path: filepath.Join(branch, dir), Label: r.Label, IsPrimary: r.IsPrimary,
-					})
+					r.Path = filepath.Join(branch, dir)
+					refs = append(refs, r)
 				}
 				if len(refs) > 0 {
 					return refs, nil

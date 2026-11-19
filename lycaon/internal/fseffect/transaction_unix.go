@@ -416,11 +416,6 @@ func Rename(root, fromRel, toRel string) error {
 	return renameEntry(root, fromRel, toRel, true, "")
 }
 
-// RenameNoReplace publishes an entry without overwriting a concurrent occupant.
-func RenameNoReplace(root, fromRel, toRel string) error {
-	return renameEntry(root, fromRel, toRel, false, "")
-}
-
 // RenameGuarded refuses replacement and checks the source through its held parent.
 func RenameGuarded(root, fromRel, toRel, expected string) error {
 	if expected == "" {
