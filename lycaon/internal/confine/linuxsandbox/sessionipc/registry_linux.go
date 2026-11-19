@@ -58,17 +58,7 @@ func (r *Registry) Channel(root string) (*os.File, error) {
 
 func (r *Registry) serve(channel int, session object) {
 	owned := make(map[object]int)
-	defer func() {
-		r.mu.Lock()
-		defer r.mu.Unlock()
-		for id, fd := range owned {
-			delete(r.endpoints[session], id)
-			unix.Close(fd)
-		}
-		if len(r.endpoints[session]) == 0 {
-			delete(r.endpoints, session)
-		}
-	}()
+	defer r.release(session, owned)
 	for {
 		var data [1]byte
 		control := make([]byte, unix.CmsgSpace(2*4))
@@ -108,27 +98,7 @@ func (r *Registry) request(session object, owned map[object]int, op byte, fd int
 		if errno != 0 {
 			return false
 		}
-		bound := int(handle)
-		id, err := identify(bound, unix.S_IFSOCK)
-		if err != nil {
-			unix.Close(bound)
-			return false
-		}
-		r.mu.Lock()
-		defer r.mu.Unlock()
-		if r.endpoints == nil {
-			r.endpoints = make(map[object]map[object]struct{})
-		}
-		if r.endpoints[session] == nil {
-			r.endpoints[session] = make(map[object]struct{})
-		}
-		if _, exists := r.endpoints[session][id]; exists {
-			unix.Close(bound)
-			return false
-		}
-		r.endpoints[session][id] = struct{}{}
-		owned[id] = bound
-		return true
+		return r.retain(session, owned, int(handle))
 	}
 	if op != lookup {
 		return false
@@ -141,4 +111,39 @@ func (r *Registry) request(session object, owned map[object]int, op byte, fd int
 	defer r.mu.Unlock()
 	_, admitted := r.endpoints[session][id]
 	return admitted
+}
+
+func (r *Registry) retain(session object, owned map[object]int, fd int) bool {
+	id, err := identify(fd, unix.S_IFSOCK)
+	if err != nil {
+		unix.Close(fd)
+		return false
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.endpoints == nil {
+		r.endpoints = make(map[object]map[object]struct{})
+	}
+	if r.endpoints[session] == nil {
+		r.endpoints[session] = make(map[object]struct{})
+	}
+	if _, exists := r.endpoints[session][id]; exists {
+		unix.Close(fd)
+		return false
+	}
+	r.endpoints[session][id] = struct{}{}
+	owned[id] = fd
+	return true
+}
+
+func (r *Registry) release(session object, owned map[object]int) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	for id, fd := range owned {
+		delete(r.endpoints[session], id)
+		unix.Close(fd)
+	}
+	if len(r.endpoints[session]) == 0 {
+		delete(r.endpoints, session)
+	}
 }
