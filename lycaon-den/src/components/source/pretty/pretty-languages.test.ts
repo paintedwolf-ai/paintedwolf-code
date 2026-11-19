@@ -1,5 +1,7 @@
-import { indentUnit } from "@codemirror/language";
+// @vitest-environment jsdom
+import { forceParsing, indentUnit } from "@codemirror/language";
 import { EditorState, type Extension } from "@codemirror/state";
+import { EditorView } from "@codemirror/view";
 import { describe, expect, it } from "vitest";
 import { languageExtensionForPath, prettyLayoutCatalog } from "../editor/codemirror-lang.ts";
 import { createPrettyExtension, prettyOutcomeOf } from "./pretty-layout.ts";
@@ -8,7 +10,15 @@ import { PrettyBreakWidget, prettyLayoutDecorations } from "./pretty-view.ts";
 function open(doc: string, path: string): EditorState {
   const language = languageExtensionForPath(path);
   const extensions: Extension[] = [indentUnit.of("  "), EditorState.tabSize.of(4), createPrettyExtension({ enabled: true, path })];
-  return EditorState.create({ doc, extensions: language ? [language, ...extensions] : extensions });
+  const state = EditorState.create({ doc, extensions: language ? [language, ...extensions] : extensions });
+  if (!language) return state;
+  const view = new EditorView({ state });
+  try {
+    expect(forceParsing(view, doc.length, 5_000), path).toBe(true);
+    return view.state;
+  } finally {
+    view.destroy();
+  }
 }
 
 function breaks(state: EditorState): number[] {
