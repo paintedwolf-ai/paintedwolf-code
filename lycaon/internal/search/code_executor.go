@@ -24,8 +24,6 @@ const (
 	fileScoreExactName = 0.95
 	fileScoreBasename  = 0.6
 	fileScorePath      = 0.5
-
-	codeGenerationJoinGrace = 250 * time.Millisecond
 )
 
 // CodeExecutor runs the live code search leg over catalog generations.
@@ -35,8 +33,6 @@ type CodeExecutor struct {
 	rerank decide.Reranker
 	// wallBudget overrides the budget's wall clock; zero uses the budget's.
 	wallBudget time.Duration
-	// generationJoinGrace overrides the cold-generation wait.
-	generationJoinGrace time.Duration
 }
 
 func (e *CodeExecutor) legWallBudget(leg *CodePlanLeg) time.Duration {
@@ -49,13 +45,6 @@ func (e *CodeExecutor) legWallBudget(leg *CodePlanLeg) time.Duration {
 	return leg.Budget.Wall()
 }
 
-func (e *CodeExecutor) generationWaitBudget() time.Duration {
-	if e.generationJoinGrace > 0 {
-		return e.generationJoinGrace
-	}
-	return codeGenerationJoinGrace
-}
-
 // NewCodeExecutor returns a CodeExecutor on the process catalog.
 func NewCodeExecutor(rerank decide.Reranker) *CodeExecutor {
 	return &CodeExecutor{catalog: sourcecatalog.Process(), rerank: rerank}
@@ -63,8 +52,8 @@ func NewCodeExecutor(rerank decide.Reranker) *CodeExecutor {
 
 func (e *CodeExecutor) Source() string { return ExecutorCode }
 
-// Run scans each root's generation under the leg's wall-clock budget. Cold
-// generations get a short join before continuing in the background.
+// Run scans each root's generation under the leg's wall-clock budget. A cold
+// root's build is joined for whatever remains of that budget.
 func (e *CodeExecutor) Run(ctx context.Context, leg PlanLeg) (ExecutorReport, error) {
 	if leg.Code == nil {
 		return ExecutorReport{}, fmt.Errorf("code leg missing")
@@ -105,6 +94,7 @@ func (e *CodeExecutor) Run(ctx context.Context, leg PlanLeg) (ExecutorReport, er
 	}
 	legCtx, cancel := context.WithTimeout(ctx, e.legWallBudget(leg.Code))
 	defer cancel()
+	wallEnd, _ := legCtx.Deadline()
 
 	report := ExecutorReport{}
 	stats := &report.Code
@@ -120,23 +110,22 @@ roots:
 				break roots
 			}
 			started := time.Now()
-			gen, err := resolveRequestedCodeGeneration(legCtx, e.catalog, root, e.generationWaitBudget(), selection.include, selection.paths...)
+			gen, err := resolveRequestedCodeGeneration(legCtx, e.catalog, root, wallEnd, selection.include, selection.paths...)
 			stats.GenerationWait += time.Since(started)
-			if errors.Is(err, errCodeCatalogWarming) {
+			warming := errors.Is(err, errCodeCatalogWarming)
+			if warming {
 				stats.WarmingRoots++
-				continue
-			}
-			if err == nil {
+			} else if err == nil {
 				err = e.scanGeneration(legCtx, gen, paths.withDependencies(legCtx, e.catalog, root.Path, leg.Code.IncludeDependencies), &spec, &report)
 			}
 			if ctx.Err() != nil {
 				return report, ctx.Err()
 			}
-			if legCtx.Err() != nil {
+			if legCtx.Err() != nil || !time.Now().Before(wallEnd) {
 				report.TimedOut = true
 				break roots
 			}
-			if err != nil {
+			if err != nil && !warming {
 				report.Issues = append(report.Issues, Issue{Executor: ExecutorCode, Reason: IssueExecutorError, Message: err.Error()})
 			}
 		}

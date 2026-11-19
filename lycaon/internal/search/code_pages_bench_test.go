@@ -26,7 +26,7 @@ func BenchmarkPagedCodeSearch(b *testing.B) {
 	var before, after runtime.MemStats
 	runtime.ReadMemStats(&before)
 	started := time.Now()
-	gen, err := resolveCodeGeneration(b.Context(), catalog, codeRoot, 10*time.Minute)
+	gen, err := resolveCodeGeneration(b.Context(), catalog, codeRoot, time.Now().Add(10*time.Minute))
 	if err != nil {
 		b.Fatalf("discover metadata: %v", err)
 	}

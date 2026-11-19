@@ -3,6 +3,7 @@ package search
 import (
 	"context"
 	"errors"
+	"time"
 
 	"github.com/lycaon/lycaon/internal/repochange"
 	"github.com/lycaon/lycaon/internal/sourcecatalog"
@@ -26,6 +27,7 @@ func (e *CodeExecutor) discoverCandidates(ctx context.Context, leg *CodePlanLeg,
 	}
 	scanCtx, cancel := context.WithTimeout(ctx, e.legWallBudget(leg))
 	defer cancel()
+	wallEnd, _ := scanCtx.Deadline()
 	report := ExecutorReport{}
 	// Each candidate nominates a whole file, so a line cap cannot strand a
 	// continuation in the middle of a file full of references.
@@ -39,9 +41,10 @@ func (e *CodeExecutor) discoverCandidates(ctx context.Context, leg *CodePlanLeg,
 			continue
 		}
 		selection := selections[progress.Selection]
-		gen, err := resolveRequestedCodeGeneration(scanCtx, e.catalog, root, e.generationWaitBudget(), selection.include, selection.paths...)
+		gen, err := resolveRequestedCodeGeneration(scanCtx, e.catalog, root, wallEnd, selection.include, selection.paths...)
 		if errors.Is(err, errCodeCatalogWarming) {
 			report.Code.WarmingRoots++
+			report.TimedOut = !time.Now().Before(wallEnd)
 			break
 		}
 		if err != nil {
