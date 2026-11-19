@@ -501,9 +501,9 @@ A native tool that dials a socket itself takes the same authority. The catalog's
 
 Cookies issued by a local socket carry that retained object's issuer receipt in their protected jar. A replacement listener receives their bytes only after disclosure approval for that invocation. Denial withholds the cookies while the request continues; saved values remain intact, and only an actual response reissuing a cookie changes its issuer receipt. Cookie references follow the same rule.
 
-### Task-local SSH host keys
+### Project SSH host keys
 
-When an isolated task needs SSH, host-key state is task-local and explicit (`confine/ssh_known_hosts.go`). It does not modify the user's global SSH configuration or inherit ambient trust without declaration.
+Mediated Git SSH records newly accepted host keys in one private file per project under the host’s scratch directory. The launcher creates the file and grants the confined process write access to that exact path. Existing host keys are available through the read-only mirror. A different project uses its own file.
 
 ---
 
