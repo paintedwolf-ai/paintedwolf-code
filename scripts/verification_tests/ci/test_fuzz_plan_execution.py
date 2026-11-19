@@ -22,7 +22,7 @@ import "testing"
 func Fuzz{title}(f *testing.F) {{
 	f.Add("seed")
 	f.Fuzz(func(t *testing.T, s string) {{
-		if s == "{crash}" {{
+		if {condition} {{
 			t.Fatal("crasher")
 		}}
 	}})
@@ -49,10 +49,10 @@ class FuzzPlanTests(unittest.TestCase):
             self.addCleanup(patcher.stop)
         os.environ.pop("GITHUB_STEP_SUMMARY", None)
 
-    def package(self, name, title, build="", crash="never"):
+    def package(self, name, title, build="", condition='s == "never"'):
         directory = self.module / name
         directory.mkdir(parents=True, exist_ok=True)
-        (directory / f"{name}_test.go").write_text(build + TARGET.format(name=name, title=title, crash=crash))
+        (directory / f"{name}_test.go").write_text(build + TARGET.format(name=name, title=title, condition=condition))
 
     def run_main(self, *argv):
         """Exit code and stderr; go test's own output is kept out of this runner's
@@ -85,10 +85,30 @@ class FuzzPlanTests(unittest.TestCase):
         self.assertIn("| `./tagged` | `FuzzTagged` | 2 | passed |", summary.read_text())
 
     def test_a_crasher_fails_the_run(self):
-        self.package("plain", "Plain", crash="seed")
+        self.package("plain", "Plain", condition='s == "seed"')
         code, err = self.run_main("run", "./plain")
         self.assertEqual(code, 1, err)
         self.assertIn("| `./plain` | `FuzzPlain` | 1 | failed |", err)
+
+    def test_only_a_crasher_fails_an_exploration(self):
+        self.package("plain", "Plain", condition='s != "seed"')
+        self.plan["fuzz"]["targets"]["./plain"]["FuzzPlain"] = 600
+        code, err = self.run_main("run", "./plain")
+        self.assertEqual(code, 1, err)
+        self.assertEqual(len(list((self.module / "plain" / "testdata" / "fuzz" / "FuzzPlain").iterdir())), 1)
+        # A fuzzing go test that fails without writing a crasher, as when -fuzztime
+        # ends during baseline coverage, is a clean end of the declared time.
+        self.package("plain", "Plain")
+        real = fuzz_plan.go
+
+        def fuzzing_fails(*args, capture=True):
+            if any(arg.startswith("-fuzz=") for arg in args):
+                return subprocess.CompletedProcess(args, 1)
+            return real(*args, capture=capture)
+
+        with patch.object(fuzz_plan, "go", side_effect=fuzzing_fails):
+            code, err = self.run_main("run", "./plain")
+        self.assertEqual(code, 0, err)
 
     def test_source_and_plan_must_name_the_same_targets(self):
         self.package("extra", "Extra")

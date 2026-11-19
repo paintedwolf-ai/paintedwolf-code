@@ -2,13 +2,14 @@
 
 Every target is declared in the plan's fuzz section with the seconds of
 exploration it is given. That time is what the fuzzer gets, never a limit
-that fails a run: a target fails only on a crasher. A target the source
+that fails a run: a target fails only when its seeds or committed corpus
+fail, or exploration writes a crasher. A target the source
 declares and the plan does not, or the reverse, fails the run before any
 fuzzing, so the plan stays the one list of targets.
 
 `run` explores the declared targets of the requested packages for their
 declared time. `smoke` explores, for the plan's smoke seconds, every target in
-a package the change touches directly; seeds and committed corpus run first.
+a package the change touches directly.
 """
 
 import argparse
@@ -114,9 +115,17 @@ def schedule(mode, packages, plan=None):
 
 
 def explore(package, target, seconds, tags, workers):
-    command = ["test", f"-tags={','.join(tags)}", "-timeout=0", f"-p={workers}", f"-parallel={workers}", "-run=^$",
-               f"-fuzz=^{target}$", f"-fuzztime={seconds}s", package]
-    return go(*command, capture=False).returncode
+    """1 when the seeds or committed corpus fail, or exploration writes a crasher; otherwise 0."""
+    flags = [f"-tags={','.join(tags)}", "-timeout=0", f"-p={workers}", f"-parallel={workers}"]
+    replay = go("test", *flags, f"-run=^{target}$", package, capture=False).returncode
+    if replay:
+        return replay
+    # go test also fails when -fuzztime runs out before exploring, as during
+    # baseline coverage on a slow runner; a crasher is the file Go writes for it.
+    crashers = GO_MODULE / package / "testdata" / "fuzz" / target
+    before = set(crashers.iterdir()) if crashers.is_dir() else set()
+    go("test", *flags, "-run=^$", f"-fuzz=^{target}$", f"-fuzztime={seconds}s", package, capture=False)
+    return 1 if crashers.is_dir() and set(crashers.iterdir()) - before else 0
 
 
 def summary(results):
