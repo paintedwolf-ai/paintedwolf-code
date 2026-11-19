@@ -215,8 +215,7 @@ export function toolPartDisplayStatus(
   return live.running ? "running" : "completed";
 }
 
-/** One-line label for collapsed group hints and card summaries. */
-export function toolPartSummaryTitle(part: ToolPartView): string {
+function toolPartSummaryTitle(part: ToolPartView): string {
   // The host-stamped skill identifies the activation reliably.
   const activated = part.skill?.name?.trim();
   const resource = skillReadResource(part);
