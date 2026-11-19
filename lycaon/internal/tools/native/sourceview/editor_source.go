@@ -105,10 +105,6 @@ func LoadText(ctx context.Context, tool string, access Access, tctx tools.ToolCo
 	return st, nil
 }
 
-type outsideReadRecorder interface {
-	TrackChatFile(context.Context, sourceledger.TrackInput, string, sourceledger.ChatFileRelation) (sourceledger.TrackedFile, error)
-}
-
 // RecordOutsideRead places a read file in the chat's locations.
 func RecordOutsideRead(ctx context.Context, tctx tools.ToolContext, resolved projectpaths.Resolved, sha256 string, size int64) {
 	if !resolved.External || resolved.ToolOutput || resolved.Compressed || tctx.Identity.ProjectID == "" || tctx.Identity.SessionID == "" {
@@ -118,8 +114,8 @@ func RecordOutsideRead(ctx context.Context, tctx tools.ToolContext, resolved pro
 	if !ok || !root.Outside {
 		return
 	}
-	recorder, ok := tctx.Source.SourceLedger.(outsideReadRecorder)
-	if !ok {
+	recorder := tctx.Source.OutsideReads
+	if recorder == nil {
 		return
 	}
 	if _, err := recorder.TrackChatFile(ctx, sourceledger.TrackInput{
