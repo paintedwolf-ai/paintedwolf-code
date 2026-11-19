@@ -1,6 +1,6 @@
 import { Show, type Accessor } from "solid-js";
 import type { ProviderMeta } from "../../../api/types.ts";
-import { localGenerationView } from "../../../settings/providers/local-generation-model.ts";
+import { localGenerationView, localModelDisplayName } from "../../../settings/providers/local-generation-model.ts";
 import { providerDisplayName } from "../../../settings/providers/models-editor-model.ts";
 import { MODELS_SETTINGS_COPY } from "../../../settings/providers/models-settings-copy.ts";
 import { DenButton } from "../../primitives/DenButton.tsx";
@@ -42,7 +42,7 @@ export function LocalGenerationCard(props: Props) {
       <div class="den-activity-span" data-testid={`provider-included-summary-${props.provider().id}`}>
         <div class="den-activity-span-chicklet">
           <span class="den-activity-span-chip">
-            <span class="den-activity-span-name">{status()?.available_models?.find(t => t.id === status()?.selected_model)?.display_name ?? "Local generation"}</span>
+            <span class="den-activity-span-name">{localModelDisplayName(props.provider(), status()?.selected_model) ?? "Local generation"}</span>
           </span>
           <span class="den-activity-span-hint">{MODELS_SETTINGS_COPY.includedProviderHint}</span>
         </div>

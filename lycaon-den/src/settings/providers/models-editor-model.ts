@@ -1,4 +1,4 @@
-import { localGenerationView } from "./local-generation-model.ts";
+import { localGenerationView, localModelDisplayName } from "./local-generation-model.ts";
 import type {
   ModelPolicy,
   ModelPolicyPatch,
@@ -347,7 +347,7 @@ export function modelAssignmentOptions(
       out.push({
         provider_id: provider.id,
         model: model.id,
-        title: `${providerDisplayName(provider)} — ${shortModelId(model.id)}`,
+        title: `${providerDisplayName(provider)} — ${localModelDisplayName(provider, model.id) ?? shortModelId(model.id)}`,
         rates: modelTokenRatesLabel(model),
         disabled: filter ? !modelEligibilityForSlot(model, filter.slot).selectable : false,
         reason: filter ? modelEligibilityForSlot(model, filter.slot).reason : undefined,
@@ -395,8 +395,14 @@ export function modelAssignmentOptionGroupsForPicker(
   ) {
     return base;
   }
-  const orphan = orphanModelAssignmentOption(value);
   const provider = providers.find((p) => p.id === value.provider_id);
+  const modelName = localModelDisplayName(provider, value.model);
+  const orphan: ModelAssignmentOption = {
+    ...value,
+    title: modelName && provider ? `${providerDisplayName(provider)} — ${modelName}` : formatModelAssignmentLabel(value),
+    disabled: true,
+    reason: "This assignment is no longer available for this role.",
+  };
   const group = provider
     ? providerPickerGroup(provider)
     : providerPickerGroupForKind(value.provider_id, true, "");
@@ -410,16 +416,6 @@ export function modelAssignmentOptionGroupsForPicker(
     );
   }
   return [{ group, label, options: [orphan] }, ...base];
-}
-
-function orphanModelAssignmentOption(value: ModelRef): ModelAssignmentOption {
-  return {
-    provider_id: value.provider_id,
-    model: value.model,
-    title: formatModelAssignmentLabel(value),
-    disabled: true,
-    reason: "This assignment is no longer available for this role.",
-  };
 }
 
 export function formatModelAssignmentLabel(ref: ModelRef): string {

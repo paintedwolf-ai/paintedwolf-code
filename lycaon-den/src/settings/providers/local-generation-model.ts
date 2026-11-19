@@ -26,3 +26,7 @@ export function localGenerationView(provider: Pick<ProviderMeta, "local_runtime"
     busy: state === "loading" || state === "repairing" || state === "downloading",
   };
 }
+
+export function localModelDisplayName(provider: ProviderMeta | undefined, model?: string) {
+  return provider?.local_runtime?.available_models?.find(tier => tier.id === model)?.display_name;
+}
