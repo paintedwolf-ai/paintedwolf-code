@@ -133,9 +133,10 @@ export function createCommandActivityProjection() {
       for (const [index, fact] of facts.entries()) {
         const identity = `${program.id}:${fact.id}`;
         if (fact.phase !== "inspect" || fact.job_handle) lastRow = undefined;
-        const preceding = index === 0 && !assignments.has(identity) &&
+        let assigned = assignments.get(identity);
+        const preceding = index === 0 && !assigned &&
           lastRow?.commandActivity?.fact.group === fact.group ? lastRow.id : undefined;
-        const foldTarget = callAssignments.get(identity)?.row ?? preceding;
+        const foldTarget = callAssignments.get(identity)?.row ?? assigned?.key ?? preceding;
         const target = foldTarget ? rows.get(foldTarget) : undefined;
         if (target?.commandActivity) {
           if (!assignments.has(identity)) assignments.set(identity, { program: program.id, key: target.id, label: fact.label, group: fact.group, subject: fact.subject });
@@ -150,7 +151,6 @@ export function createCommandActivityProjection() {
           if (status(fact) === "error") target.status = "error";
           continue;
         }
-        let assigned = assignments.get(identity);
         if (!assigned) {
           assigned = { program: program.id, key: index === 0 && ![...assignments.values()].some(value => value.key === entry.part.id)
             ? entry.part.id : `${entry.part.id}:activity:${fact.id}`, label: fact.label, group: fact.group, subject: fact.subject };

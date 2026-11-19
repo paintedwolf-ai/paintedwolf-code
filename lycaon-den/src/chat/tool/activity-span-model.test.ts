@@ -221,21 +221,22 @@ describe("activity span membership", () => {
     expect(projected.map((item) => item.key)).toEqual(["r1", "pu-delta-1", "r2"]);
   });
 
-  it("keeps a command that ran below the diff card above it once it edits a file", () => {
-    const edit = (id: string, path: string) =>
+  it("keeps a live command below the earlier diff once the command edits a file", () => {
+    const edit = (id: string, path: string, shownInFlight?: true) =>
       tool(
         part(id, "command", `edit ${path}`, {
           kind: "command",
+          shownInFlight,
           workflowRunId: "workflow-1",
           fileEdits: [fileEditPreviewFixture({ path, before: "old", after: "new" })],
         }),
       );
     const running = tool(
-      part("c2", "command", "edit b.go", { kind: "command", workflowRunId: "workflow-1", status: "running" }),
+      part("c2", "command", "edit b.go", { kind: "command", workflowRunId: "workflow-1", status: "running", shownInFlight: true }),
     );
 
     const whileRunning = projectActivitySpans([edit("c1", "a.go"), running]);
-    const settled = projectActivitySpans([edit("c1", "a.go"), edit("c2", "b.go")]);
+    const settled = projectActivitySpans([edit("c1", "a.go"), edit("c2", "b.go", true)]);
 
     expect(whileRunning.map((item) => item.key)).toEqual(["c1", "file-edit:c1:0", "c2"]);
     expect(settled.map((item) => item.key)).toEqual(["c1", "file-edit:c1:0", "c2", "file-edit:c2:0"]);
