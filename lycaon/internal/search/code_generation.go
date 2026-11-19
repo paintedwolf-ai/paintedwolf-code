@@ -33,7 +33,9 @@ type codeGeneration struct {
 	ephemeral bool
 }
 
-func resolveCodeGeneration(ctx context.Context, catalog *sourcecatalog.Catalog, root CodeRoot, wait time.Duration) (codeGeneration, error) {
+// resolveCodeGeneration joins a cold root's build until a generation is
+// readable or wallEnd passes; a root with nothing readable then is warming.
+func resolveCodeGeneration(ctx context.Context, catalog *sourcecatalog.Catalog, root CodeRoot, wallEnd time.Time) (codeGeneration, error) {
 	rootPath := strings.TrimSpace(root.Path)
 	rootID := strings.TrimSpace(root.RootID)
 	if rootID == "" {
@@ -41,8 +43,13 @@ func resolveCodeGeneration(ctx context.Context, catalog *sourcecatalog.Catalog, 
 	}
 	catalogRoot := sourcecatalog.Root{ID: rootID, Path: rootPath}
 	reader, status, err := catalog.Trees.OpenIndex(ctx, root.ProjectID, catalogRoot, 0)
-	if err == nil && reader == nil && wait > 0 {
+	if wait := time.Until(wallEnd); err == nil && reader == nil && wait > 0 {
 		reader, status, err = catalog.Trees.OpenIndex(ctx, root.ProjectID, catalogRoot, wait)
+	}
+	// The wall ends the join through its own timer or through ctx; either way
+	// nothing was readable in time.
+	if errors.Is(err, context.DeadlineExceeded) && !time.Now().Before(wallEnd) {
+		return codeGeneration{}, errCodeCatalogWarming
 	}
 	if err != nil {
 		return codeGeneration{}, err
@@ -84,9 +91,9 @@ func codeIndexIncludeKey(excludes dependencyDirs, maxBytes int64) string {
 	}, "\x00")
 }
 
-func resolveRequestedCodeGeneration(ctx context.Context, catalog *sourcecatalog.Catalog, root CodeRoot, wait time.Duration, includeDependencies bool, selectedPaths ...string) (codeGeneration, error) {
+func resolveRequestedCodeGeneration(ctx context.Context, catalog *sourcecatalog.Catalog, root CodeRoot, wallEnd time.Time, includeDependencies bool, selectedPaths ...string) (codeGeneration, error) {
 	if !includeDependencies && len(selectedPaths) == 0 {
-		return resolveCodeGeneration(ctx, catalog, root, wait)
+		return resolveCodeGeneration(ctx, catalog, root, wallEnd)
 	}
 	reader, err := catalog.Trees.OpenDependencyIndex(ctx, root.ProjectID, sourcecatalog.Root{ID: root.RootID, Path: root.Path}, selectedPaths...)
 	if err != nil {

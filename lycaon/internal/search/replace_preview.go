@@ -5,6 +5,7 @@ import (
 	"errors"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/lycaon/lycaon/internal/sourcecatalog"
 )
@@ -38,6 +39,8 @@ func previewReplace(ctx context.Context, catalog *sourcecatalog.Catalog, req Rep
 	result := ReplacePreviewResult{State: ReplacePreviewReady, Files: []ReplaceFilePreview{}, Issues: []Issue{}}
 	report := ExecutorReport{}
 	totalHunk := 0
+	// Cold roots share one complete-budget wall for their builds.
+	wallEnd := time.Now().Add(BudgetComplete.Wall())
 roots:
 	for _, root := range req.Roots {
 		if strings.TrimSpace(root.Path) == "" {
@@ -52,7 +55,7 @@ roots:
 				result.Truncated = true
 				break roots
 			}
-			gen, genErr := resolveRequestedCodeGeneration(ctx, catalog, root, codeGenerationJoinGrace, selection.include, selection.paths...)
+			gen, genErr := resolveRequestedCodeGeneration(ctx, catalog, root, wallEnd, selection.include, selection.paths...)
 			if errors.Is(genErr, errCodeCatalogWarming) {
 				report.Code.WarmingRoots++
 				continue
