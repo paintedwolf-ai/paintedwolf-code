@@ -4,14 +4,14 @@
   "kind": "module",
   "workstream": "local-model-store",
   "disposition": "retain",
-  "reason": "Keep the content-addressed store, signed bundle sources, activation journal and cross-process leases together. Each source supplies artifacts to the same verified publication transaction. The store package tests exercise directory and archive input, the resumable bucket origin, recovery, collection and capacity admission across that boundary.",
-  "reviewed_commit": "e7f685d6debd7c68264e4d88e2d2c3fa18d36e08",
+  "reason": "The package contains verified model publication, activation history and lease management. The restart test exercises exclusive selection and role-binding acknowledgement against a reopened store.",
+  "reviewed_commit": "58bb29474edfa457a9d649ec9ff11c65afffad2d",
   "reviewed_shape": "229e0dbaea6c556c711372e9dd2e57376885a05c7189f401cd03baf74633eb63",
   "ceiling": 26,
   "boundaries": {
     "lycaon/internal/modelstore/capacity_test.go": "943e757dad6a36bfd81697613d6aae76bf21c00aefeeac790b4e974d67c7f2b5",
     "lycaon/internal/modelstore/interrupted_test.go": "6ca16d24c30443fc00216401d73379eb145facba6e9da9e4570bcba9bdcb78d8",
-    "lycaon/internal/modelstore/provision_test.go": "55a165854290bf5cac42c4a0e3409c3c48c76ab88d5b4f791036d0d534f45f65",
+    "lycaon/internal/modelstore/provision_test.go": "95c52490606c4fd825b18e19e1e727b0b80749c10d4323d505bc413ff4cbeeca",
     "lycaon/internal/modelstore/lifetime_test.go": "17084815f37662d3f1b72f2ecb0620d7e1a98fc56602eea9b769d259a33d61c7",
     "lycaon/internal/modelstore/publication_test.go": "edf6c6187f26ad8d8f3fe2bc74aa8f302e5345199a9bbe5c343574f4c105ffd5"
   }
