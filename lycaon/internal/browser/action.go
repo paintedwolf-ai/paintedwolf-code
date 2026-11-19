@@ -14,10 +14,12 @@ const (
 	MaxCaptureActions = 20
 	DefaultWaitIdle   = "idle"
 	NavTimeout        = 30 * time.Second
-	ActionTimeout     = 15 * time.Second
+	// ActionTimeout bounds one driver call; it outlasts the longest step
+	// deadline, so the step's own deadline decides when it gives up.
+	ActionTimeout = 45 * time.Second
 	// targetTimeoutMS bounds a step finding and reaching its target.
 	targetTimeoutMS = 10000
-	// waitForTimeoutMS bounds a wait_for step and the idle settle.
+	// waitForTimeoutMS bounds a wait_for step.
 	waitForTimeoutMS = 30000
 	// MaxTypedRunes bounds one type or fill value.
 	MaxTypedRunes = 4096
@@ -64,7 +66,9 @@ type CaptureAction struct {
 	HoldMS    int            `json:"hold_ms,omitempty"`
 	Routes    []RouteRule    `json:"routes,omitempty"`
 	Gone      bool           `json:"gone,omitempty"`
-	Wait      string         `json:"wait,omitempty"`
+	// TimeoutMS is the deadline the host gives the step's driver call.
+	TimeoutMS int    `json:"-"`
+	Wait      string `json:"wait,omitempty"`
 }
 
 func (a CaptureAction) kind() string {
@@ -107,33 +111,45 @@ func dispatchAction(page *rod.Page, drive *pageDrive, act CaptureAction) (json.R
 	case "select":
 		opts := act.driverArgs()
 		opts["value"] = act.Value
-		return driverCall(page, "select", withTimeout(opts, targetTimeoutMS))
+		return driverCall(page, "select", withTimeout(opts, act.TimeoutMS))
 	case "press":
 		return pressAction(page, act)
 	case "route":
 		return routeAction(drive, act)
 	case "wait_for":
-		return driverCall(page, "waitFor", withTimeout(map[string]any{"selector": act.Selector, "text": act.Text, "gone": act.Gone}, waitForTimeoutMS))
+		return driverCall(page, "waitFor", withTimeout(map[string]any{"selector": act.Selector, "text": act.Text, "gone": act.Gone}, act.TimeoutMS))
 	case "wait":
-		return driverCall(page, "waitIdle", map[string]any{})
+		return waitAction(page, act)
 	default:
 		return nil, fmt.Errorf("unknown action type %q", act.Type)
 	}
 }
 
+// stepTimeoutMS is the deadline the host gives a step's driver call; zero
+// for a step that waits on no target.
+func stepTimeoutMS(kind string) int {
+	switch kind {
+	case "wait_for":
+		return waitForTimeoutMS
+	case "click", "hover", "drag", "scroll", "fill", "type", "select":
+		return targetTimeoutMS
+	}
+	return 0
+}
+
 func withTimeout(opts map[string]any, timeoutMS int) map[string]any {
-	opts["timeout_ms"] = timeoutMS
+	if timeoutMS > 0 {
+		opts["timeout_ms"] = timeoutMS
+	}
 	return opts
 }
 
-// driverBudget outlasts the deadline the driver call runs under, so that
-// deadline, not the host's call budget, decides when the step gives up.
-func driverBudget(args map[string]any) time.Duration {
-	deadline, _ := args["timeout_ms"].(int)
-	if deadline <= 0 {
-		deadline = waitForTimeoutMS
+func waitAction(page *rod.Page, act CaptureAction) (json.RawMessage, error) {
+	wait := strings.TrimSpace(act.Wait)
+	if wait == "" || wait == DefaultWaitIdle {
+		return driverCall(page, "waitIdle", map[string]any{})
 	}
-	return ActionTimeout + time.Duration(deadline)*time.Millisecond
+	return nil, fmt.Errorf("wait action requires wait=idle")
 }
 
 func pause(page *rod.Page, d time.Duration) error {

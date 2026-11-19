@@ -4,64 +4,48 @@ import (
 	"encoding/json"
 	"testing"
 	"time"
-
-	"github.com/lycaon/lycaon/internal/testutil"
 )
 
-// A step's driver call runs under the deadline the host gives it, and the
-// host's own call budget outlasts that deadline or the driver's default.
-func TestStepDeadlineIsOutlastedByTheDriverBudget(t *testing.T) {
-	for _, tc := range []struct {
-		args map[string]any
-		step time.Duration
-	}{
-		{args: withTimeout(map[string]any{}, targetTimeoutMS), step: targetTimeoutMS * time.Millisecond},
-		{args: withTimeout(map[string]any{}, waitForTimeoutMS), step: waitForTimeoutMS * time.Millisecond},
-		{args: map[string]any{}, step: waitForTimeoutMS * time.Millisecond},
-	} {
-		if budget := driverBudget(tc.args); budget <= tc.step {
-			t.Fatalf("driver budget %v does not outlast step deadline %v for %v", budget, tc.step, tc.args)
+// Each step's driver call runs under the deadline the host gives its kind,
+// and one driver call's budget outlasts the longest of them.
+func TestActionBatchGivesEachStepItsDeadline(t *testing.T) {
+	actions := []CaptureAction{
+		{Type: "click", ActionLocator: ActionLocator{Selector: "#save"}},
+		{Type: "wait_for", ActionLocator: ActionLocator{Selector: "#toast"}, Gone: true},
+		{Type: "press", Key: "Enter"},
+		{Type: "wait"},
+	}
+	var got []int
+	_, err := runActionBatch(actions, func(act CaptureAction) (json.RawMessage, error) {
+		got = append(got, act.TimeoutMS)
+		return json.RawMessage(`{"ok":true}`), nil
+	}, nil)
+	if err != nil {
+		t.Fatalf("run batch: %v", err)
+	}
+	want := []int{targetTimeoutMS, waitForTimeoutMS, 0, 0}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("step deadlines %v, want %v", got, want)
 		}
+	}
+	if ActionTimeout <= waitForTimeoutMS*time.Millisecond {
+		t.Fatalf("driver call budget %v does not outlast the %d ms wait_for deadline", ActionTimeout, waitForTimeoutMS)
 	}
 }
 
-// A failed driver call reports the deadline it ran under, how long it ran and
-// whether the deadline ran out; a succeeded call or one without a deadline is
-// returned as the driver answered.
-func TestDriverResultReportsTheDeadlineOfAFailedCall(t *testing.T) {
-	failed := func() map[string]any {
-		return map[string]any{"ok": false, "error": "timed out waiting for selector #ready"}
+// A failed step reports the deadline its driver call ran under, how long it
+// ran and that the deadline ran out, as the driver measured them.
+func TestActionFailureReportsTheDriversDeadline(t *testing.T) {
+	res := json.RawMessage(`{"ok":false,"error":"timed out after 30000ms waiting for selector #ready","deadline_ms":30000,"elapsed_ms":30012,"deadline_expired":true}`)
+	data := actionFailedData(1, CaptureAction{Type: "wait_for", ActionLocator: ActionLocator{Selector: "#ready"}}, res, nil)
+	for key, want := range map[string]any{"step_timeout_ms": float64(30000), "elapsed_ms": float64(30012), "step_deadline_expired": true} {
+		if data[key] != want {
+			t.Fatalf("%s = %#v, want %#v; data %v", key, data[key], want, data)
+		}
 	}
-	for _, tc := range []struct {
-		name    string
-		value   map[string]any
-		args    map[string]any
-		elapsed time.Duration
-		want    map[string]any
-	}{
-		{name: "expired", value: failed(), args: withTimeout(map[string]any{}, waitForTimeoutMS), elapsed: 30012 * time.Millisecond,
-			want: map[string]any{"deadline_ms": float64(waitForTimeoutMS), "elapsed_ms": float64(30012), "deadline_expired": true}},
-		{name: "failed early", value: failed(), args: withTimeout(map[string]any{}, targetTimeoutMS), elapsed: 40 * time.Millisecond,
-			want: map[string]any{"deadline_ms": float64(targetTimeoutMS), "elapsed_ms": float64(40), "deadline_expired": false}},
-		{name: "succeeded", value: map[string]any{"ok": true}, args: withTimeout(map[string]any{}, targetTimeoutMS), elapsed: time.Second},
-		{name: "no deadline", value: failed(), args: map[string]any{}, elapsed: time.Second},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			body, err := driverResult("waitFor", tc.value, tc.args, tc.elapsed)
-			testutil.FailErr(t, "encode driver result", err)
-			var got map[string]any
-			testutil.FailErr(t, "decode driver result", json.Unmarshal(body, &got))
-			for _, key := range []string{"deadline_ms", "elapsed_ms", "deadline_expired"} {
-				if got[key] != tc.want[key] {
-					t.Fatalf("%s = %#v, want %#v; result %s", key, got[key], tc.want[key], body)
-				}
-			}
-			data := actionFailedData(0, CaptureAction{Type: "wait_for", ActionLocator: ActionLocator{Selector: "#ready"}}, body, nil)
-			for from, to := range map[string]string{"deadline_ms": "step_timeout_ms", "elapsed_ms": "elapsed_ms", "deadline_expired": "step_deadline_expired"} {
-				if data[to] != tc.want[from] {
-					t.Fatalf("failure %s = %#v, want %#v", to, data[to], tc.want[from])
-				}
-			}
-		})
+	early := actionFailedData(0, CaptureAction{Type: "select"}, json.RawMessage(`{"ok":false,"error":"no matching option"}`), nil)
+	if _, reported := early["step_deadline_expired"]; reported {
+		t.Fatalf("a failure before the deadline reported one: %v", early)
 	}
 }
