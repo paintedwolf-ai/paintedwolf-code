@@ -1,5 +1,6 @@
 import { Composer, typeDraft } from "../../test/composer-view-fixture.tsx";
 import { stubClient } from "../../test/client-fixture.ts";
+import { sha256Hex } from "../../test/sha256.ts";
 import { describe, expect, it, vi } from "vitest";
 import { render, fireEvent, waitFor } from "@solidjs/testing-library";
 import { setLycaonClientForTest } from "../../platform/connection/app-connection.ts";
@@ -225,6 +226,14 @@ describe("Composer", () => {
   });
 
   it("keeps the message field on its own row beside the chip rail", async () => {
+    const fixtures = new Map(Array.from({ length: 5 }, (_, i) => [`f${i}.txt`, `line ${i}\n`]));
+    setLycaonClientForTest(stubClient({
+      uploadAttachment: async (_projectId, filename, mime, body) => {
+        const text = fixtures.get(filename);
+        if (text === undefined) throw new Error(`Unexpected attachment: ${filename}`);
+        return { blob_id: sha256Hex(text), filename, mime, kind: "text", bytes: body.size };
+      },
+    }));
     const { getByTestId, findByTestId } = render(() => (
       <Composer
         sidecarStatus="connected"
@@ -234,11 +243,7 @@ describe("Composer", () => {
       />
     ));
     const input = getByTestId("composer-file-input") as HTMLInputElement;
-    const files = Array.from({ length: 5 }, (_, i) =>
-      new File([new TextEncoder().encode(`line ${i}\n`)], `f${i}.txt`, {
-        type: "text/plain",
-      }),
-    );
+    const files = Array.from(fixtures, ([filename, text]) => new File([text], filename, { type: "text/plain" }));
     Object.defineProperty(input, "files", { value: files, configurable: true });
     fireEvent.change(input);
 
