@@ -17,6 +17,8 @@ from typing import NamedTuple
 UNMOUNT_TIMEOUT_SECONDS = 15
 OWNER_RELEASE_SECONDS = 15
 HOLDERS_EXIT_SECONDS = 5
+
+
 def fixture_root(kind: str) -> Path:
     if sys.platform == "linux":
         import pwd

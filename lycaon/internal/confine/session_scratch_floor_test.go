@@ -84,11 +84,15 @@ func TestBoundaryLetsSessionReadBackItsOwnScratch(t *testing.T) {
 func TestPrivateTempResolution(t *testing.T) {
 	scratch := t.TempDir()
 	alias := t.TempDir()
-	mapping := confine.PrivateTemp{Paths: []string{alias}, ScratchRoot: scratch}
+	pinned := filepath.Join(alias, "attached")
+	mapping := confine.PrivateTemp{Paths: []string{alias}, ScratchRoot: scratch, Retained: []string{pinned}}
 	for _, tc := range []struct{ path, want string }{
 		{alias, scratch},
 		{filepath.Join(alias, "a", "b"), filepath.Join(scratch, "a", "b")},
 		{alias + "-sibling", ""},
+		{pinned, ""},
+		{filepath.Join(pinned, "note"), ""},
+		{filepath.Join(alias, "attached-neighbor"), filepath.Join(scratch, "attached-neighbor")},
 		{"relative", ""},
 	} {
 		got, ok := mapping.Resolve(tc.path)

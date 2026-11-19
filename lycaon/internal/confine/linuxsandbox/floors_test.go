@@ -66,3 +66,24 @@ func TestAtOrUnderFoldComparesWholeComponents(t *testing.T) {
 		}
 	}
 }
+
+func TestTempAliasesFollowTheBackingDirectoryFloors(t *testing.T) {
+	floors := newCreationFloors(Filesystem{
+		PrivateTemp:   &PrivateTempMounts{Paths: PrivateTempPaths(), Scratch: "/session", Retained: []string{"/tmp/project"}},
+		ReadOnly:      []string{"/session/held", "/tmp/project/original"},
+		ReadOnlyNames: []NamedFloor{{Below: "/session", Name: "AGENTS.md"}},
+	})
+	for _, alias := range PrivateTempPaths() {
+		for _, name := range []string{"/held", "/deep/agents.md"} {
+			if !floors.refuses(createEntry, alias+name) {
+				t.Errorf("create %s%s dropped its floor", alias, name)
+			}
+		}
+		if floors.crossesNamedFloor("/session/from", alias+"/to") || !floors.crossesNamedFloor("/outside", alias) {
+			t.Errorf("rename across %s disagrees with its backing", alias)
+		}
+	}
+	if !floors.refuses(createEntry, "/tmp/project/original") || floors.refuses(createEntry, "/var/tmp/project/original") {
+		t.Error("project floor failed to follow its retained mount")
+	}
+}

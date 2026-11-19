@@ -138,3 +138,23 @@ func TestValidateNamesWhatTheHelperCannotExpress(t *testing.T) {
 		t.Fatal("version 0 validated")
 	}
 }
+
+func TestPrivateTempMountPlanValidation(t *testing.T) {
+	for _, tc := range []struct {
+		mounts PrivateTempMounts
+		ok     bool
+	}{
+		{PrivateTempMounts{Paths: PrivateTempPaths()}, true},
+		{PrivateTempMounts{Paths: PrivateTempPaths(), Scratch: "/session", Retained: []string{"/tmp/attached", "/var/tmp/output"}}, true},
+		{PrivateTempMounts{Paths: []string{"/tmp", "/home"}}, false},
+		{PrivateTempMounts{Paths: PrivateTempPaths(), Scratch: "/"}, false},
+		{PrivateTempMounts{Paths: PrivateTempPaths(), Scratch: "/tmp"}, false},
+		{PrivateTempMounts{Paths: PrivateTempPaths(), Retained: []string{"/tmp/../host"}}, false},
+		{PrivateTempMounts{Paths: PrivateTempPaths(), Retained: []string{"/var/tmp"}}, false},
+	} {
+		err := (Plan{Version: PlanVersion, Network: Network{Mode: NetworkDeny}, Filesystem: Filesystem{PrivateTemp: &tc.mounts}}).Validate()
+		if (err == nil) != tc.ok {
+			t.Errorf("validate %+v = %v, want valid %t", tc.mounts, err, tc.ok)
+		}
+	}
+}

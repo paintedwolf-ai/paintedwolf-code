@@ -260,3 +260,27 @@ func TestLinuxLaunchLocalTempIsBounded(t *testing.T) {
 		t.Fatalf("private temp capacity: exit %d: %s", status.ExitStatus(), out)
 	}
 }
+
+func TestLinuxPrivateTempKeepsExplicitHostSubtrees(t *testing.T) {
+	self := requireLinuxSandbox(t)
+	host, err := os.MkdirTemp("/tmp", "pw-attached-temp-")
+	testutil.FailErr(t, "create host temp attachment", err)
+	t.Cleanup(func() { _ = os.RemoveAll(host) })
+	attached := filepath.Join(host, "project")
+	readOnly := filepath.Join(host, "reviewed")
+	testutil.FailErr(t, "create attached directory", os.Mkdir(attached, 0o700))
+	testutil.FailErr(t, "seed read-only path", os.WriteFile(readOnly, []byte("original"), 0o600))
+	session := denyConfinement(attached)
+	session.ReadRoots = []string{readOnly}
+	session.SessionScratchRoot = t.TempDir()
+	status, out := linuxConfinedRun(t, self, session, nil, "/bin/sh", "-ec",
+		`printf updated > "$1/file"; test "$(cat "$2")" = original; if (printf change > "$2"); then exit 1; fi`, "sh", attached, readOnly)
+	if status.ExitStatus() != 0 {
+		t.Fatalf("retained paths: exit %d: %s", status.ExitStatus(), out)
+	}
+	got, err := os.ReadFile(filepath.Join(attached, "file"))
+	testutil.FailErr(t, "read retained attachment", err)
+	if string(got) != "updated" {
+		t.Fatalf("attached file = %q", got)
+	}
+}
