@@ -15654,6 +15654,8 @@ export interface components {
         LocalModelTier: {
             id: string;
             display_name: string;
+            /** @description Short guidance for choosing this tier. */
+            description: string;
             download_bytes: number;
             min_memory_bytes: number;
             eligible: boolean;
@@ -15679,6 +15681,11 @@ export interface components {
             context_tokens?: number;
             selected_model?: string;
             target_model?: string;
+            /**
+             * @description Current phase of an active model installation.
+             * @enum {string}
+             */
+            transfer_phase?: "preparing" | "downloading" | "importing" | "activating";
             downloaded_bytes?: number;
             total_bytes?: number;
             /** @description This installation was packaged with an explicitly selected offline tier. */

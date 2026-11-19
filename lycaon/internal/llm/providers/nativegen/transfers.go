@@ -20,6 +20,7 @@ type transfer struct {
 	cancel       context.CancelFunc
 	done         chan struct{}
 	target       string
+	phase        string
 	bytes, total int64
 }
 
@@ -48,6 +49,7 @@ func (p *Runtime) SelectionStatus(status *api.LocalGenerationStatus) {
 		status.RecoveryAction = "none"
 		status.Detail = ""
 		status.TargetModel = job.target
+		status.TransferPhase = job.phase
 		status.DownloadedBytes = int(job.bytes)
 		status.TotalBytes = int(job.total)
 	}
@@ -87,7 +89,10 @@ func (p *Runtime) StartSelection(req api.LocalModelSelectionRequest, installed f
 		return errors.New("a model transfer is in progress")
 	}
 	ctx, cancel := context.WithCancel(p.lifetime)
-	job := &transfer{cancel: cancel, done: make(chan struct{}), target: req.Model}
+	job := &transfer{cancel: cancel, done: make(chan struct{}), target: req.Model, phase: "preparing"}
+	if req.BundlePath == "" {
+		job.total = pin.TotalBytes
+	}
 	p.transfers.active = job
 	go func() {
 		defer cancel()
@@ -115,7 +120,15 @@ func (p *Runtime) importSelection(ctx context.Context, req api.LocalModelSelecti
 	defer release()
 	p.unload()
 	p.publishReadiness("idle", "none")
-	progress := func(done, total int64) { p.transfers.Lock(); job.bytes, job.total = done, total; p.transfers.Unlock() }
+	phase := "downloading"
+	if req.BundlePath != "" {
+		phase = "importing"
+	}
+	progress := func(done, total int64) {
+		p.transfers.Lock()
+		job.phase, job.bytes, job.total = phase, done, total
+		p.transfers.Unlock()
+	}
 	if req.BundlePath != "" {
 		err = p.config.ModelStore.ImportFromBundlePath(ctx, req.BundlePath, modelstore.Slot{Model: req.Model, Device: p.config.Backend}, progress)
 	} else {
@@ -124,6 +137,9 @@ func (p *Runtime) importSelection(ctx context.Context, req api.LocalModelSelecti
 	if err != nil {
 		return err
 	}
+	p.transfers.Lock()
+	job.phase = "activating"
+	p.transfers.Unlock()
 	return p.ensureLoaded(ctx, req.Model)
 }
 

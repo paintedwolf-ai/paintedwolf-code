@@ -9,7 +9,7 @@ import (
 )
 
 const (
-	// DefaultModelID identifies the bundled Gemma 4 E4B model.
+	// DefaultModelID identifies Plain Bialy in signed artifacts and settings.
 	DefaultModelID = "gemma4-e4b-paintedwolf"
 	// DefaultContextWindowTokens caps the artifact context window.
 	DefaultContextWindowTokens = 65536
@@ -22,7 +22,6 @@ const (
 // ErrContextCapacityExceeded includes the requested output reserve.
 var ErrContextCapacityExceeded = errors.New("native generation: request exceeds admitted context capacity")
 
-// DefaultModelEntry returns the catalog descriptor for the bundled Gemma 4 E4B model.
 func DefaultModelEntry() modelinfo.Entry {
 	return modelinfo.Entry{
 		Thinking:      &modelinfo.ThinkingCapabilities{State: "unsupported", Source: "nativegen"},

@@ -39032,6 +39032,7 @@ components:
       required:
         - id
         - display_name
+        - description
         - download_bytes
         - min_memory_bytes
         - eligible
@@ -39043,6 +39044,9 @@ components:
           pattern: ^[a-zA-Z0-9_.-]+$
         display_name:
           type: string
+        description:
+          type: string
+          description: Short guidance for choosing this tier.
         download_bytes:
           type: integer
         min_memory_bytes:
@@ -39097,6 +39101,14 @@ components:
           type: string
         target_model:
           type: string
+        transfer_phase:
+          type: string
+          enum:
+            - preparing
+            - downloading
+            - importing
+            - activating
+          description: Current phase of an active model installation.
         downloaded_bytes:
           type: integer
         total_bytes:
