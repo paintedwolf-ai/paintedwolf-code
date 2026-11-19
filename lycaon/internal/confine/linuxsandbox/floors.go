@@ -18,7 +18,8 @@ type NamedFloor struct {
 // not exist yet is held here by name. Names and paths fold case, as the
 // loaders do, so a case-insensitive directory cannot alias one.
 type creationFloors struct {
-	temp *PrivateTempMounts
+	sharedTemp []string
+	temp       *PrivateTempMounts
 	// protected are write- and read-floor locations, existing or not.
 	protected []string
 	// names are basenames protected at any depth below a directory.
@@ -31,7 +32,7 @@ type creationFloors struct {
 }
 
 func newCreationFloors(fs Filesystem) creationFloors {
-	f := creationFloors{temp: fs.PrivateTemp, names: fs.ReadOnlyNames, sensitive: map[string]bool{}}
+	f := creationFloors{sharedTemp: fs.SharedTemp, temp: fs.PrivateTemp, names: fs.ReadOnlyNames, sensitive: map[string]bool{}}
 	f.protected = append(append(f.protected, fs.ReadOnly...), fs.Hidden...)
 	f.grants = append(append(append(f.grants, fs.Restored...), fs.WriteFiles...), fs.WriteRoots...)
 	for _, p := range f.protected {

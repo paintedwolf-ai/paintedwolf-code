@@ -86,10 +86,11 @@ func probeHelper() (string, error) {
 		return "", err
 	}
 	plan := linuxsandbox.Plan{
-		Version: linuxsandbox.PlanVersion,
-		Probe:   true,
-		Attest:  linuxsandbox.Attest{HostNamespaces: linuxsandbox.HostNamespaces()},
-		Network: linuxsandbox.Network{Mode: linuxsandbox.NetworkDeny},
+		Version:    linuxsandbox.PlanVersion,
+		Probe:      true,
+		Filesystem: linuxsandbox.Filesystem{PrivateTemp: &linuxsandbox.PrivateTempMounts{Paths: linuxsandbox.PrivateTempPaths()}},
+		Attest:     linuxsandbox.Attest{HostNamespaces: linuxsandbox.HostNamespaces()},
+		Network:    linuxsandbox.Network{Mode: linuxsandbox.NetworkDeny},
 	}
 	raw, err := plan.Encode()
 	if err != nil {
@@ -751,5 +752,10 @@ func linuxFilesystem(c Confinement, rules FilesystemRules) (linuxsandbox.Filesys
 	}
 	mapping := ProjectPrivateTemp(c.ProjectID, c.SessionScratchRoot, c.Roots, c.GrantedWriteRoots, c.ReadRoots)
 	fs.PrivateTemp = &linuxsandbox.PrivateTempMounts{Paths: mapping.Paths, Scratch: mapping.ScratchRoot, Retained: mapping.Retained}
+	for _, location := range SharedTempLocations() {
+		if !slices.ContainsFunc(mapping.Paths, func(alias string) bool { return PathAtOrUnder(location, alias) }) {
+			fs.SharedTemp = append(fs.SharedTemp, location)
+		}
+	}
 	return fs, nil
 }

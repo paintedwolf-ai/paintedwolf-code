@@ -284,3 +284,18 @@ func TestLinuxPrivateTempKeepsExplicitHostSubtrees(t *testing.T) {
 		t.Fatalf("attached file = %q", got)
 	}
 }
+
+func TestLinuxObservedCustomTempRefusalNamesSharedLocation(t *testing.T) {
+	self := requireLiveBoundary(t)
+	project, custom := t.TempDir(), outsideTemporaryWriteRoots(t)
+	t.Setenv("TMPDIR", custom)
+	target := filepath.Join(custom, "output")
+	refusals, out := refusalsOf(t, self, liveBoundaryRoots(project), "/bin/sh", "-c", `printf x > "$1"`, "sh", target)
+	refused, ok := findRefusal(refusals, "file-write-create", target)
+	if !ok || refused.Layer != confine.FloorSharedTemp || refused.Recovery != confine.RecoverWriteRoot || refused.Grant != custom {
+		t.Fatalf("shared temp write: refusals=%+v, output=%q", refusals, out)
+	}
+	if _, err := os.Lstat(target); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("refused file exists: %v", err)
+	}
+}

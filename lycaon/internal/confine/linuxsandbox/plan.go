@@ -66,6 +66,7 @@ const (
 // Landlock grants are positive; mounts express the denials inside them.
 type Filesystem struct {
 	PrivateTemp *PrivateTempMounts `json:"private_temp,omitempty"`
+	SharedTemp  []string           `json:"shared_temp,omitempty"`
 	// WriteRoots are directories the process may read and change.
 	WriteRoots []string `json:"write_roots"`
 	// WriteFiles are exact files the process may read and change.

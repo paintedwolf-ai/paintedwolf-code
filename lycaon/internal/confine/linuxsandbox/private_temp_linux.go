@@ -132,3 +132,19 @@ func tempFileMountpoint(dir int, name string) (int, error) {
 	}
 	return fd, err
 }
+
+// Report only a kernel-denied write whose pinned parent lies on a read-only
+// shared temp mount. A permission error from the file itself needs no grant.
+func (f creationFloors) tempWriteResult(err error, operation string, parents ...parent) pathResult {
+	result := errnoResult(err)
+	if !errors.Is(err, unix.EROFS) {
+		return result
+	}
+	for _, p := range parents {
+		if underAny(p.path, f.sharedTemp) && readOnlyMount(p.fd, "") {
+			result.Refusal = &Refusal{Operation: operation, Target: p.path}
+			break
+		}
+	}
+	return result
+}

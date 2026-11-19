@@ -25,8 +25,10 @@ func (f creationFloors) perform(call pathCall, dirs []int) (pathResult, int) {
 		return unix.AT_FDCWD
 	}
 	unix.Umask(int(call.Umask & 0o777))
-	if result, opened, done := f.createPlainName(dir(0), call); done {
-		return result, opened
+	if len(f.sharedTemp) == 0 {
+		if result, opened, done := f.createPlainName(dir(0), call); done {
+			return result, opened
+		}
 	}
 	switch call.Op {
 	case callOpen:
@@ -251,7 +253,7 @@ func (f creationFloors) open(dirfd int, call pathCall) (pathResult, int) {
 	// fails rather than redirecting the open.
 	final := unix.OpenHow{Flags: call.Flags | unix.O_NOFOLLOW, Mode: uint64(call.Mode), Resolve: call.Resolve & unix.RESOLVE_NO_XDEV}
 	fd, err := unix.Openat2(p.fd, p.base, &final)
-	return errnoResult(err), fd
+	return f.tempWriteResult(err, refusalCreate, p), fd
 }
 
 func (f creationFloors) create(dirfd int, call pathCall) pathResult {
@@ -272,11 +274,11 @@ func (f creationFloors) create(dirfd int, call pathCall) pathResult {
 	}
 	switch call.Op {
 	case callMkdir:
-		return errnoResult(unix.Mkdirat(p.fd, p.base, call.Mode))
+		return f.tempWriteResult(unix.Mkdirat(p.fd, p.base, call.Mode), refusalCreate, p)
 	case callMknod:
-		return errnoResult(unix.Mknodat(p.fd, p.base, call.Mode, int(call.Dev)))
+		return f.tempWriteResult(unix.Mknodat(p.fd, p.base, call.Mode, int(call.Dev)), refusalCreate, p)
 	default:
-		return errnoResult(unix.Symlinkat(call.Content, p.fd, p.base))
+		return f.tempWriteResult(unix.Symlinkat(call.Content, p.fd, p.base), refusalCreate, p)
 	}
 }
 
@@ -347,7 +349,7 @@ func (f creationFloors) link(olddir, newdir int, call pathCall) pathResult {
 	if f.refuses(createEntry, p.path) {
 		return refusal(refusalCreate, p)
 	}
-	return errnoResult(unix.Linkat(linkDir, linkName, p.fd, p.base, linkFlags))
+	return f.tempWriteResult(unix.Linkat(linkDir, linkName, p.fd, p.base, linkFlags), refusalCreate, p)
 }
 
 func (f creationFloors) rename(olddir, newdir int, call pathCall) pathResult {
@@ -382,7 +384,8 @@ func (f creationFloors) rename(olddir, newdir int, call pathCall) pathResult {
 	case exchange && f.dirHoldsNamedFloor(target):
 		return refusal(refusalCreate, target)
 	}
-	return errnoResult(unix.Renameat2(old.fd, old.base, target.fd, target.base, uint(call.Flags)))
+	err = unix.Renameat2(old.fd, old.base, target.fd, target.base, uint(call.Flags))
+	return f.tempWriteResult(err, refusalCreate, target, old)
 }
 
 // dirHoldsNamedFloor reports whether p names an existing directory containing
@@ -461,7 +464,7 @@ func (f creationFloors) unlink(dirfd int, call pathCall) pathResult {
 	if f.refuses(renameSource, p.path) {
 		return refusal(refusalUnlink, p)
 	}
-	return errnoResult(unix.Unlinkat(p.fd, p.base, int(call.Flags)))
+	return f.tempWriteResult(unix.Unlinkat(p.fd, p.base, int(call.Flags)), refusalUnlink, p)
 }
 
 func (f creationFloors) truncate(dirfd int, call pathCall) pathResult {
@@ -481,8 +484,8 @@ func (f creationFloors) truncate(dirfd int, call pathCall) pathResult {
 	}
 	fd, err := unix.Openat(p.fd, p.base, unix.O_WRONLY|unix.O_NOFOLLOW|unix.O_CLOEXEC, 0)
 	if err != nil {
-		return errnoResult(err)
+		return f.tempWriteResult(err, refusalCreate, p)
 	}
 	defer func() { _ = unix.Close(fd) }()
-	return errnoResult(unix.Ftruncate(fd, int64(call.Dev)))
+	return f.tempWriteResult(unix.Ftruncate(fd, int64(call.Dev)), refusalCreate, p)
 }
