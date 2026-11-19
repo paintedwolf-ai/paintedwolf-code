@@ -207,8 +207,9 @@ describe("session mode intent", () => {
   });
 
   it.each([
-    new LycaonApiError("Timed out", 408, "invalid_request"),
+    new LycaonApiError("Timed out", 408, "internal_error"),
     new LycaonApiError("Proxy reply", 404, "internal_error"),
+    new LycaonApiError("Unavailable", 503, "session_mode_unavailable"),
   ])("retains an ambiguous HTTP result for reconciliation", async (error) => {
     const store = createAppStore();
     store.actions.setCurrentSession(session);
@@ -219,10 +220,12 @@ describe("session mode intent", () => {
     expect(sessionModeView(store, session.id).upgrade).toBe("reconciling");
   });
 
-  it("clears pending after a confirmed rejection and surfaces the host error", async () => {
+  it.each([
+    new LycaonApiError("Denied", 403, "forbidden"),
+    new LycaonApiError("Locked", undefined, "session_mode_locked"),
+  ])("clears pending after a confirmed rejection and surfaces the host error", async (error) => {
     const store = createAppStore();
     store.actions.setCurrentSession(session);
-    const error = new LycaonApiError("Denied", 403, "forbidden");
     const client = stubClient({ updateSession: async () => { throw error; } });
     await expect(upgradeSessionMode(store, client, session.id)).rejects.toBe(error);
     expect(sessionModeView(store, session.id)).toMatchObject({ mode: "ask", upgrade: undefined, show: true });

@@ -1,14 +1,20 @@
 import type { LycaonClient } from "../../api/client.ts";
-import { LycaonApiError } from "../../api/http.ts";
+import { isApiErrorCode } from "../../api/http.ts";
 import { beginSessionSnapshotRead, refreshSessionSnapshot } from "../../api/session-snapshot-refresh.ts";
 import type { AppStore } from "../../store/app-state-model.ts";
 import { confirmSessionModeAdmission, sessionModeView, setSessionModeUpgrade } from "./session-mode-state.ts";
 
-function isConfirmedRefusal(error: unknown): boolean {
-  return error instanceof LycaonApiError &&
-    error.status !== undefined && error.status >= 400 && error.status < 500 &&
-    error.status !== 408 && error.code !== "internal_error";
-}
+const MODE_UPGRADE_REFUSALS = [
+  "body_too_large",
+  "forbidden",
+  "invalid_json",
+  "invalid_request",
+  "rate_limited",
+  "session_mode_locked",
+  "session_not_found",
+  "unauthorized",
+  "unsupported_media_type",
+] as const;
 
 async function requestSessionModeUpgrade(appStore: AppStore, client: LycaonClient, sessionId: string): Promise<boolean> {
   const view = sessionModeView(appStore, sessionId);
@@ -28,7 +34,7 @@ async function requestSessionModeUpgrade(appStore: AppStore, client: LycaonClien
   } catch (error) {
     if (!connection.isSameBackend()) return false;
     if (sessionModeView(appStore, sessionId).mode === "agent") return true;
-    if (isConfirmedRefusal(error)) {
+    if (isApiErrorCode(error, MODE_UPGRADE_REFUSALS)) {
       setSessionModeUpgrade(appStore, sessionId, undefined);
       throw error;
     }
