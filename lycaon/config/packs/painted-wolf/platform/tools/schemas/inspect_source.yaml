@@ -5,7 +5,7 @@ schema:
     operation:
       type: string
       enum: [read, list, search, query_json, query_yaml, git_head]
-      description: Source inspection to perform. Use git_head for the current Git branch and commit.
+      description: Selects the argument and result shape. Choose the query form that matches the input format.
     path:
       type: string
       description: Project-relative path or @label/path. Required for read and query operations. List, search, and git_head default to the session folder.
