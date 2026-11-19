@@ -16,6 +16,7 @@ import (
 // recoveryStore is what both the boot and the per-session recovery read.
 type recoveryStore interface {
 	RecoveryStore
+	StatusStore
 	transcript.Store
 	Create(context.Context, api.CreateSessionRequest, string) (*api.Session, error)
 	BeginTurn(context.Context, store.TurnStart) (store.TurnExecution, error)
