@@ -1,0 +1,67 @@
+@utility local-model-option {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: start;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid var(--den-border);
+  border-radius: var(--den-radius-lg);
+  line-height: 1.35;
+
+  & .den-radio {
+    margin-top: 1px;
+  }
+  &:has(.den-radio:checked) {
+    border-color: var(--den-accent-signal);
+    background: color-mix(in srgb, var(--den-accent-signal) 5%, var(--den-background));
+  }
+}
+
+@utility local-model-recommendation {
+  color: var(--den-accent-signal);
+  font-size: var(--text-den-caption);
+  font-weight: 600;
+}
+
+@utility local-model-resources {
+  display: block;
+  margin-top: 4px;
+  color: var(--den-text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+@utility local-model-transfer {
+  display: grid;
+  gap: 14px;
+  padding: 16px;
+  border: 1px solid var(--den-border);
+  border-radius: var(--den-radius-lg);
+  background: var(--den-surface-offset);
+}
+
+@utility local-model-progress {
+  display: block;
+  width: 100%;
+  height: 8px;
+  overflow: hidden;
+  border: none;
+  border-radius: 999px;
+  accent-color: var(--den-accent-signal);
+
+  &:not(:indeterminate) {
+    appearance: none;
+    background: var(--den-border);
+  }
+  &::-webkit-progress-bar {
+    border-radius: inherit;
+    background: var(--den-border);
+  }
+  &::-webkit-progress-value {
+    border-radius: inherit;
+    background: var(--den-accent-signal);
+  }
+  &::-moz-progress-bar {
+    border-radius: inherit;
+    background: var(--den-accent-signal);
+  }
+}

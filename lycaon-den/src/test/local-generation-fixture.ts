@@ -2,7 +2,7 @@ import type { LocalGenerationStatus, LocalModelTier, ProviderMeta } from "../api
 import { providerModel } from "./provider-fixtures.ts";
 
 export const publishedTier: LocalModelTier = {
-  id: "gemma4-e4b-paintedwolf", display_name: "E4B", download_bytes: 1024,
+  id: "gemma4-e4b-paintedwolf", display_name: "Plain Bialy", description: "The smallest model. Leaves the most memory for other apps.", download_bytes: 1024,
   min_memory_bytes: 8192, eligible: true, recommended: true, download_available: true,
 };
 

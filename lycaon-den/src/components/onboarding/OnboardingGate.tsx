@@ -163,7 +163,7 @@ export function OnboardingGate(props: Props) {
             <OnboardingStepPage data-testid="onboarding-local-model" aria-labelledby="onboarding-local_model-title">
               <header class="onboarding-gate__header">
                 <h1 class="onboarding-gate__title" id="onboarding-local_model-title" {...chromeProps()}>Choose a local model</h1>
-                <p class="onboarding-gate__lede">Run a model on this device. You can change your choice in Settings.</p>
+                <p class="onboarding-gate__lede">Choose a model to download and run on this device.</p>
               </header>
               <div class="onboarding-gate__card">
                 <ShowLatest when={modelSetup()} fallback={

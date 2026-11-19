@@ -1,10 +1,13 @@
-import { For, Show, createEffect, createSignal, onCleanup } from "solid-js";
+import { Show, createEffect, createSignal, onCleanup } from "solid-js";
 import type { SettingsClient } from "../../../api/http-capabilities/settings.ts";
-import type { LocalGenerationStatus, ProviderMeta } from "../../../api/types.ts";
+import type { LocalGenerationStatus, LocalModelSelectionRequest, ProviderMeta } from "../../../api/types.ts";
 import { hostSharesDevice } from "../../../platform/connection/host-identity.ts";
-import { OfflineModelImport } from "./OfflineModelImport.tsx";
-import { DenRadio } from "../../primitives/DenRadio.tsx";
+import { ShowLatest } from "../../primitives/ShowLatest.tsx";
 import { DenButton } from "../../primitives/DenButton.tsx";
+import { LocalModelChoices } from "./LocalModelChoices.tsx";
+import { LocalModelTransfer } from "./LocalModelTransfer.tsx";
+import { OfflineModelImport } from "./OfflineModelImport.tsx";
+import { formatModelBytes } from "./model-size.ts";
 
 type Props = {
   client: SettingsClient;
@@ -13,16 +16,21 @@ type Props = {
   onContinue?: () => void;
 };
 
-const NONE = "";
-const gibibytes = (bytes: number) =>
-  `${(bytes / 2 ** 30).toLocaleString(undefined, { maximumFractionDigits: 2 })} GiB`;
+function usable(status?: LocalGenerationStatus) {
+  return status?.state === "ready" || status?.state === "idle";
+}
 
 export function LocalModelSelector(props: Props) {
   const [snapshot, setSnapshot] = createSignal<LocalGenerationStatus>();
   const [choice, setChoice] = createSignal<string>();
   const [working, setWorking] = createSignal(false);
   const [error, setError] = createSignal("");
-  const [pendingModel, setPendingModel] = createSignal<string>();
+  const [retry, setRetry] = createSignal<LocalModelSelectionRequest>();
+  let pending: LocalModelSelectionRequest | undefined;
+  let version = 0;
+  let alive = true;
+  onCleanup(() => { alive = false; version++; });
+
   const status = () => snapshot() ?? props.provider.local_runtime;
   const tiers = () => status()?.available_models ?? [];
   const suggested = () => {
@@ -31,48 +39,66 @@ export function LocalModelSelector(props: Props) {
       const published = tiers().find(t => t.eligible && t.download_available);
       if (published) return published.id;
     }
-    return recommended?.id ?? NONE;
+    return recommended?.id ?? "";
   };
   const selected = () => choice() ?? status()?.selected_model
-    ?? (status()?.state === "opted_out" ? NONE : suggested());
+    ?? (status()?.state === "opted_out" ? "" : suggested());
   const tier = () => tiers().find(t => t.id === selected());
   const seedTier = () => status()?.seed_available ? tiers().find(t => t.id === status()?.seed_model) : undefined;
-  const downloading = () => status()?.state === "downloading";
-  const current = () => !!selected() && selected() === status()?.selected_model;
+  const transfer = () => status()?.state === "downloading" ? status() : undefined;
+  const installed = () => !!selected() && selected() === status()?.selected_model;
+  const current = () => installed() && usable(status());
+  const retryImport = () => !!(retry()?.bundle_path || retry()?.packaged_seed);
   const canApply = () => {
     if (working()) return false;
+    if (retryImport()) return !!tier()?.eligible;
     if (current() || (!selected() && status()?.state === "opted_out")) return !!props.onContinue;
     return !selected() || (tier()?.eligible && tier()?.download_available);
   };
   const applyLabel = () => {
+    if (retryImport()) return "Retry import";
     if (current()) return props.onContinue ? "Continue with installed model" : "Installed";
-    if (selected()) return props.onContinue ? "Download and continue" : "Download model";
+    if (selected()) {
+      if (!tier()?.download_available) return "Download unavailable";
+      const size = tier()?.download_bytes;
+      const action = retry() ? "Retry download" : "Download";
+      return action + (size ? ` ${formatModelBytes(size)}` : "") + (props.onContinue ? " and continue" : "");
+    }
     if (status()?.selected_model) return "Remove local model";
     return props.onContinue ? "Continue without a local model" : "Use no local model";
   };
-  let alive = true;
-  let version = 0;
-  onCleanup(() => { alive = false; version++; });
 
-  const accept = async (next: LocalGenerationStatus) => {
-    if (!alive) return;
+  const choose = (id: string) => { setChoice(id); setError(""); setRetry(undefined); };
+
+  const accept = async (next: LocalGenerationStatus, ticket: number) => {
+    if (!alive || version !== ticket) return;
     setSnapshot(next);
     if (next.state === "downloading") return;
-    const target = pendingModel();
-    setPendingModel(undefined);
-    await props.onRefresh();
-    if (!alive) return;
-    setSnapshot(undefined);
-    const selectedTarget = next.selected_model === target && (next.state === "ready" || next.state === "idle");
-    if (target !== undefined && selectedTarget) {
-      props.onContinue?.();
-    } else if (target !== undefined) {
-      setError(next.detail || "The requested model change did not finish.");
+    const request = pending;
+    pending = undefined;
+    setWorking(true);
+    try {
+      await props.onRefresh();
+      if (!alive || version !== ticket) return;
+      // Retain the confirmed result until the provider list catches up.
+      const refreshed = props.provider.local_runtime;
+      if (refreshed?.state === next.state && refreshed.selected_model === next.selected_model) setSnapshot(undefined);
+      if (!request) return;
+      if (next.selected_model === request.model && usable(next)) {
+        setRetry(undefined);
+        setChoice(undefined);
+        props.onContinue?.();
+      } else {
+        setRetry(request);
+        setError(next.detail || "Installation did not finish. Try again.");
+      }
+    } finally {
+      if (alive && version === ticket) setWorking(false);
     }
   };
 
   createEffect(() => {
-    if (!downloading()) return;
+    if (!transfer()) return;
     let stopped = false;
     let timer: ReturnType<typeof setTimeout>;
     const poll = async () => {
@@ -81,7 +107,7 @@ export function LocalModelSelector(props: Props) {
         const next = await props.client.getLocalModelStatus(props.provider.id);
         if (!stopped && ticket === version && !working()) {
           setError("");
-          await accept(next);
+          await accept(next, ticket);
         }
       } catch (err) {
         if (!stopped && ticket === version) setError(err instanceof Error ? err.message : String(err));
@@ -97,13 +123,19 @@ export function LocalModelSelector(props: Props) {
     const seed = seedTier();
     if (action === "seed" && !seed?.eligible) return;
     const model = action === "seed" && seed ? seed.id : selected();
-    version++;
+    const ticket = ++version;
     setWorking(true);
     setError("");
     try {
       if (action === "cancel") {
-        setPendingModel(undefined);
-        await accept(await props.client.cancelLocalModelTransfer(props.provider.id));
+        const interrupted = pending;
+        const next = await props.client.cancelLocalModelTransfer(props.provider.id);
+        pending = undefined;
+        if (next.state !== "downloading") {
+          setRetry(interrupted);
+          setChoice(interrupted?.model);
+        }
+        await accept(next, ticket);
         return;
       }
       if (action === "apply" && (current() || (!model && status()?.state === "opted_out"))) {
@@ -116,41 +148,26 @@ export function LocalModelSelector(props: Props) {
         if (alive) props.onContinue?.();
         return;
       }
-      setPendingModel(model);
-      const selection = action === "seed" ? { model, packaged_seed: true } : { model, bundle_path: path };
-      await accept(await props.client.selectLocalModel(props.provider.id, selection));
+      pending = action === "seed" ? { model, packaged_seed: true }
+        : action === "import" ? { model, bundle_path: path } : retry() ?? { model };
+      choose(model);
+      await accept(await props.client.selectLocalModel(props.provider.id, pending), ticket);
     } catch (err) {
-      if (alive) { setPendingModel(undefined); setError(err instanceof Error ? err.message : String(err)); }
+      if (alive) {
+        if (action !== "cancel" && pending) { setRetry(pending); pending = undefined; }
+        setError(err instanceof Error ? err.message : String(err));
+      }
     } finally {
-      if (alive) setWorking(false);
+      if (alive && version === ticket) setWorking(false);
     }
   };
 
   return (
     <div class="onboarding-gate__card--stack">
-      <fieldset class="m-0 grid gap-2 border-0 p-0" disabled={working() || downloading()}>
-        <legend class="sr-only">Local model for this device</legend>
-        <For each={tiers()}>{model => (
-          <DenRadio class="items-baseline py-1" name="local-model-tier" checked={selected() === model.id}
-            disabled={!model.eligible} onChange={() => setChoice(model.id)}>
-            <strong>{model.display_name}</strong>
-              <Show when={model.recommended}> · Recommended for this device</Show>
-              <small class="block text-[var(--den-text-muted)]">{gibibytes(model.min_memory_bytes)} memory required
-                <Show when={model.download_bytes > 0}> · {gibibytes(model.download_bytes)} download</Show>
-                <Show when={!model.eligible}> · Insufficient device memory</Show>
-              </small>
-          </DenRadio>
-        )}</For>
-        <DenRadio class="items-baseline py-1" name="local-model-tier" checked={!selected()} onChange={() => setChoice(NONE)}>
-          Use no local model
-        </DenRadio>
-      </fieldset>
-      <Show when={downloading()} fallback={
+      <ShowLatest when={transfer()} fallback={
         <>
-          <Show when={tier() && !current() && !tier()?.download_available}>
-            <p class="den-settings-hint">A download for this tier is not available yet.</p>
-          </Show>
-          <Show when={status()?.selected_model && !current()}>
+          <LocalModelChoices tiers={tiers()} selected={selected()} installed={status()?.selected_model} busy={working()} onChoose={choose} />
+          <Show when={status()?.selected_model && !installed()}>
             <p class="den-settings-hint">{selected() ? "Switching replaces your installed local model." : "Continuing removes your installed local model."}</p>
           </Show>
           <Show when={tier()?.eligible && hostSharesDevice()}>
@@ -161,17 +178,12 @@ export function LocalModelSelector(props: Props) {
               <DenButton variant="secondary" disabled={working() || !seed.eligible}
                 onClick={() => void run("seed")}>Install packaged {seed.display_name}</DenButton>
             )}</Show>
-            <DenButton variant="primary" disabled={!canApply()} onClick={() => void run("apply")}>
-              {applyLabel()}
-            </DenButton>
+            <DenButton variant="primary" disabled={!canApply()} onClick={() => void run("apply")}>{applyLabel()}</DenButton>
           </div>
         </>
-      }>
-        <p role="status">Installing {tiers().find(t => t.id === status()?.target_model)?.display_name ?? "local model"}…</p>
-        <progress aria-label="Model transfer" value={status()?.downloaded_bytes ?? 0} max={status()?.total_bytes || 1} />
-        <small>{gibibytes(status()?.downloaded_bytes ?? 0)} of {gibibytes(status()?.total_bytes ?? 0)}</small>
-        <DenButton variant="secondary" disabled={working()} onClick={() => void run("cancel")}>Cancel transfer</DenButton>
-      </Show>
+      }>{active =>
+        <LocalModelTransfer status={active()} busy={working()} onCancel={() => void run("cancel")} />
+      }</ShowLatest>
       <Show when={error()}><p role="alert" class="den-settings-warn">{error()}</p></Show>
     </div>
   );

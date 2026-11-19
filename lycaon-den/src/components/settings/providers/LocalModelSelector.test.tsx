@@ -13,7 +13,7 @@ vi.mock("../../../platform/files/native-path-dialog.ts", () => ({ nativePathDial
 afterEach(() => { cleanup(); vi.clearAllMocks(); vi.mocked(hostSharesDevice).mockReturnValue(true); vi.mocked(isTauriRuntime).mockReturnValue(true); });
 
 const tiers: LocalModelTier[] = ["Small", "Medium", "Large"].map((display_name, i) => ({
-  id: display_name.toLowerCase(), display_name, eligible: i < 2, recommended: i === 1,
+  id: display_name.toLowerCase(), display_name, description: `Description of ${display_name}`, eligible: i < 2, recommended: i === 1,
   download_bytes: 2 ** 30, min_memory_bytes: 8 * 2 ** 30, download_available: true,
 }));
 const initial: LocalGenerationStatus = { state: "idle", recovery_action: "none", available_models: tiers };
@@ -63,34 +63,52 @@ describe("Local model selection", () => {
   it("waits for the accepted transfer to finish before advancing", async () => {
     const { client, done } = mount();
     client.selectLocalModel.mockResolvedValue(progress);
-    fireEvent.click(screen.getByRole("button", { name: "Download and continue" }));
+    fireEvent.click(screen.getByRole("button", { name: "Download 1 GiB and continue" }));
     expect((await screen.findByRole("progressbar")).getAttribute("value")).toBe("100");
+    expect(screen.getByText("50%")).toBeTruthy();
+    expect(screen.getByText("100 B of 200 B")).toBeTruthy();
     expect(done).not.toHaveBeenCalled();
     await waitFor(() => expect(done).toHaveBeenCalledOnce(), { timeout: 3000 });
-    expect(client.selectLocalModel).toHaveBeenCalledWith("nativegen", { model: "medium", bundle_path: undefined });
+    expect(client.selectLocalModel).toHaveBeenCalledWith("nativegen", { model: "medium" });
   });
 
   it("keeps setup open when installation finishes but the model cannot load", async () => {
     const { client, done } = mount();
     client.selectLocalModel.mockResolvedValue({ ...installed, state: "unavailable", detail: "The runtime could not load the model." });
-    fireEvent.click(screen.getByRole("button", { name: "Download and continue" }));
+    fireEvent.click(screen.getByRole("button", { name: "Download 1 GiB and continue" }));
     expect((await screen.findByRole("alert")).textContent).toBe("The runtime could not load the model.");
     expect(done).not.toHaveBeenCalled();
+    expect(screen.queryByRole("button", {name: "Continue with installed model"})).toBeNull();
+    client.selectLocalModel.mockResolvedValue(installed);
+    fireEvent.click(screen.getByRole("button", {name: "Retry download 1 GiB and continue"}));
+    await waitFor(() => expect(done).toHaveBeenCalledOnce());
   });
 
   it("cancels without opting out or advancing", async () => {
     const { client, done } = mount();
     client.selectLocalModel.mockResolvedValue(progress);
-    fireEvent.click(screen.getByRole("button", { name: "Download and continue" }));
+    fireEvent.click(screen.getByRole("button", { name: "Download 1 GiB and continue" }));
     fireEvent.click(await screen.findByRole("button", { name: "Cancel transfer" }));
     await waitFor(() => expect(client.cancelLocalModelTransfer).toHaveBeenCalledWith("nativegen"));
     expect(client.deleteLocalModel).not.toHaveBeenCalled();
     expect(done).not.toHaveBeenCalled();
+    expect(await screen.findByRole("button", {name: "Retry download 1 GiB and continue"})).toBeTruthy();
+  });
+
+  it("shows an indeterminate import and protects activation from cancellation", async () => {
+    mount({...progress, transfer_phase: "importing", total_bytes: 0});
+    expect(screen.getByText("Importing Medium…")).toBeTruthy();
+    expect(screen.getByText("100 B transferred")).toBeTruthy();
+    expect(screen.getByRole("progressbar").hasAttribute("value")).toBe(false);
+    cleanup();
+    mount({...progress, transfer_phase: "activating"});
+    expect(screen.getByText("Activating Medium…")).toBeTruthy();
+    expect(screen.queryByRole("button", {name:"Cancel transfer"})).toBeNull();
   });
 
   it("allows signed offline imports when the tier has no download", async () => {
     const { client, done } = mount({ ...initial, available_models: tiers.map(t => ({ ...t, download_available: false })) });
-    expect((screen.getByRole("button", { name: "Download and continue" }) as HTMLButtonElement).disabled).toBe(true);
+    expect((screen.getByRole("button", { name: "Download unavailable" }) as HTMLButtonElement).disabled).toBe(true);
     vi.mocked(nativePathDialog).mockResolvedValue({ path: "/models/test.pwmodel", grant: null });
     fireEvent.click(screen.getByText("Import offline bundle"));
     fireEvent.click(screen.getByRole("button", { name: "Choose archive…" }));
