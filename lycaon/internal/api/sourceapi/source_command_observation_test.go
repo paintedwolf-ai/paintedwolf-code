@@ -28,12 +28,13 @@ func TestCommandObservationReadsTheAuthorizedChatWindowAfterSettlement(t *testin
 	})
 	p := sourceViewFixtureProject(t, server)
 	ctx := testdbseed.OwnerCaller(t, t.Context(), conn)
-	makeChat := func() string {
-		chat, err := sessions.Create(ctx, wire.CreateSessionRequest{Posture: wire.SessionPostureBuild}, p.ID)
+	makeChat := func(projectID string) string {
+		chat, err := sessions.Create(ctx, wire.CreateSessionRequest{Posture: wire.SessionPostureBuild}, projectID)
 		testutil.FailErr(t, "create chat", err)
 		return chat.ID
 	}
-	chat, other := makeChat(), makeChat()
+	chat, other := makeChat(p.ID), makeChat(p.ID)
+	foreign := makeChat(sourceViewFixtureProject(t, server).ID)
 	window := uuid.NewString()
 	q := db.New(conn)
 	testutil.FailErr(t, "insert command window", q.InsertSourceCommandWindow(ctx, db.InsertSourceCommandWindowParams{
@@ -52,10 +53,13 @@ func TestCommandObservationReadsTheAuthorizedChatWindowAfterSettlement(t *testin
 		var state wire.CommandObservationStatus
 		if want == http.StatusOK {
 			testutil.FailErr(t, "decode observation", json.Unmarshal(res.Body.Bytes(), &state))
+		} else if code := sourceViewErrorCode(t, res, want); code != wire.ApiErrorCodeNotFound {
+			t.Fatalf("unavailable observation code = %q, want not_found", code)
 		}
 		return state
 	}
 	read(other, http.StatusNotFound)
+	read(foreign, http.StatusNotFound)
 	if before := read(chat, http.StatusOK); !before.Settling || len(before.Coverage) != 0 {
 		t.Fatalf("running observation = %+v", before)
 	}

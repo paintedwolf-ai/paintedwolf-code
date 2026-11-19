@@ -46,7 +46,8 @@ var outboxSilentMutators = map[string]string{
 	"lycaon/internal/contentblob/density.go:densifyProject":         "marks a densified project's storage tier cold; the tier is storage bookkeeping, not on the project wire",
 	"lycaon/internal/project/sql_registry.go:SetCover":              "moves the project cover reference; session.Manager publishes the project update after visual.DesignateCover",
 	"lycaon/internal/sourceledger/gittrack.go:commitGitTransitions": "records observed git ref transitions; its projects write only allocates their source-history ordinals",
-	"lycaon/internal/sourceledger/commandwindow.go:insertWindow":    "opens a command window; its projects write only allocates the window's source-history ordinal, which is off the project wire",
+
+	"lycaon/internal/sourceledger/commandwindow_retention.go:pin": "pins private before-images until the window settles",
 
 	// The session plan is published through progress write observers.
 

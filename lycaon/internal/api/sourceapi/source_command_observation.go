@@ -23,7 +23,7 @@ func (s *History) HandleGetProjectSourceCommandObservation(w http.ResponseWriter
 		return
 	}
 	if chat.ProjectID != p.ID || chat.OwnerPersonID != requestscope.Caller(r).ID {
-		s.responses.Fail(w, wire.ApiErrorCodeSessionNotFound, "Chat not found.")
+		s.responses.Fail(w, wire.ApiErrorCodeNotFound, "Command observation not found.")
 		return
 	}
 	windowID := chi.URLParam(r, "window_id")
