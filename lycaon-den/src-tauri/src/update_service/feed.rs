@@ -378,7 +378,7 @@ mod tests {
     fn feed_requests_carry_no_identifying_header_or_query() {
         let client = crate::http_transport::client_builder().build().unwrap();
         for channel in [UpdateChannel::Stable, UpdateChannel::Preview] {
-            let endpoint = channel.endpoint();
+            let endpoint = Trust::embedded().endpoint(channel);
             for url in [endpoint.clone(), format!("{endpoint}.sig")] {
                 let request = feed_request(&client, &url).build().unwrap();
                 assert_eq!(request.method(), reqwest::Method::GET);
