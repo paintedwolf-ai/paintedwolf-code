@@ -4,6 +4,7 @@ import {
   type Json,
   type PointerReach,
   type TargetOpts,
+  deadlineReport,
   describeElement,
   findTarget,
   isDisabled,
@@ -363,7 +364,8 @@ async function aimAt(
   pick: (el: HTMLElement) => HTMLElement | null,
 ): Promise<Json> {
   const timeoutMs = opts.timeout_ms ?? DEFAULT_AIM_TIMEOUT_MS;
-  const deadline = Date.now() + timeoutMs;
+  const start = Date.now();
+  const deadline = start + timeoutMs;
   let last: Json = { error: "target not found" };
   while (Date.now() < deadline) {
     const found = findTarget(opts);
@@ -393,7 +395,7 @@ async function aimAt(
     }
     await sleep(100);
   }
-  return { ok: false, ...last, locators: locatorView(opts), state: readCompactState() };
+  return { ok: false, ...last, ...deadlineReport(timeoutMs, start), locators: locatorView(opts), state: readCompactState() };
 }
 
 export function installLycaonDriver(): LycaonDriverApi {
@@ -445,7 +447,8 @@ export function installLycaonDriver(): LycaonDriverApi {
       });
       const target = findTarget(opts);
       if (!found.ok || !target) {
-        return { ok: false, error: "select target not found", locators: locatorView(opts), state: readCompactState() };
+        const { deadline_ms, elapsed_ms, deadline_expired } = found;
+        return { ok: false, error: "select target not found", deadline_ms, elapsed_ms, deadline_expired, locators: locatorView(opts), state: readCompactState() };
       }
       const el = target instanceof HTMLSelectElement ? target : target.querySelector("select");
       if (!(el instanceof HTMLSelectElement)) {

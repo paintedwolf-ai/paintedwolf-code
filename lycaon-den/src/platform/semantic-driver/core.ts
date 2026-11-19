@@ -151,6 +151,11 @@ export function findTarget(opts: TargetOpts): HTMLElement | null {
   return null;
 }
 
+/** The deadline a step ran out on, as the host reports it for a failed step. */
+export function deadlineReport(timeoutMs: number, start: number): Json {
+  return { deadline_ms: timeoutMs, elapsed_ms: Date.now() - start, deadline_expired: true };
+}
+
 export async function waitUntil(
   predicate: () => boolean,
   {
@@ -171,7 +176,7 @@ export async function waitUntil(
     }
     await sleep(100);
   }
-  return { ok: false, error: `timed out after ${timeoutMs}ms waiting for ${label}` };
+  return { ok: false, error: `timed out after ${timeoutMs}ms waiting for ${label}`, ...deadlineReport(timeoutMs, start) };
 }
 
 function passesPointerThrough(el: Element): boolean {
