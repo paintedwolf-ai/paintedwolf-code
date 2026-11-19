@@ -12,12 +12,8 @@ export function recordOutsideRoot(projectId: string, rootId: string): void {
   setOutsideRoots(next);
 }
 
-export function outsideRootId(projectId: string): string | undefined {
-  return outsideRoots().get(projectId);
-}
-
 export function isOutsideRoot(projectId: string, rootId: string | undefined): boolean {
-  return !!rootId && outsideRootId(projectId) === rootId;
+  return !!rootId && outsideRoots().get(projectId) === rootId;
 }
 
 export function outsideHostPath(path: string): string {

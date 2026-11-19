@@ -1,11 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { isOutsideRoot, outsideHostDirectory, outsideHostPath, outsideRootId, recordOutsideRoot } from "./outside-namespace.ts";
+import { isOutsideRoot, outsideHostDirectory, outsideHostPath, recordOutsideRoot } from "./outside-namespace.ts";
 
 describe("outside namespace", () => {
   it("knows each project's outside root separately", () => {
     recordOutsideRoot("project-a", "outside-a");
     recordOutsideRoot("project-b", "outside-b");
-    expect(outsideRootId("project-a")).toBe("outside-a");
     expect(isOutsideRoot("project-a", "outside-a")).toBe(true);
     expect(isOutsideRoot("project-a", "outside-b")).toBe(false);
     expect(isOutsideRoot("project-c", undefined)).toBe(false);
