@@ -1,19 +1,23 @@
-import { readFileSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import { homedir } from "node:os";
 import path from "node:path";
 import { expect } from "@playwright/test";
-import type { OpenedOutsideFile } from "../../src/api/types.ts";
+import type { CheckpointListResponse, OpenedOutsideFile } from "../../src/api/types.ts";
 import {
   apiConfig,
   apiJson,
+  apiPostPrompt,
   bootstrapActiveProject,
   e2eTempDir,
   e2eUniqueLabel,
   liveChatStage,
+  openNewChatSession,
   sendChatPrompt,
   settledChatSessionId,
   waitForChatComposerReady,
   webE2e,
 } from "../helpers.ts";
+import { manualHarnessTools } from "../manual-harness-tools.ts";
 
 webE2e("Outside locations follow the chat while a dirty file stays open", async ({ page, request }) => {
   const filename = "outside-notes.txt";
@@ -46,9 +50,7 @@ webE2e("Outside locations follow the chat while a dirty file stays open", async 
   const save = page.getByTestId("files-editor-save");
   await expect(save).toBeEnabled();
 
-  await page.getByTestId("new-chat-btn").click();
-  await waitForChatComposerReady(page);
-  expect(await settledChatSessionId(page)).not.toBe(first);
+  expect(await openNewChatSession(page)).not.toBe(first);
   await page.getByTestId("project-files-entry").click();
   await expect(tree.getByTestId("files-tree-file").filter({ hasText: "project.txt" })).toBeVisible();
   await expect(outsideLocation).toHaveCount(0);
@@ -64,4 +66,62 @@ webE2e("Outside locations follow the chat while a dirty file stays open", async 
 
   await save.click();
   await expect.poll(() => readFileSync(outside, "utf8")).toBe("Unsaved notes");
+});
+
+webE2e("An outside text edit opens the recorded file from chat", async ({ page, request }) => {
+  const folder = realpathSync(process.env.LYCAON_E2E_DOCKER_STACK === "1"
+    ? e2eTempDir(request, "outside-diff-path")
+    : mkdtempSync(path.join(process.env.PW_TEST_HOST_HOME ?? homedir(), "paintedwolf-outside-diff-")));
+  const destination = path.join(folder, "outside-report.txt");
+  try {
+    writeFileSync(destination, "Original report\n");
+    const root = e2eTempDir(request, "outside-diff-project");
+    const project = await bootstrapActiveProject(page, request, root, e2eUniqueLabel("Outside edit link"));
+    await waitForChatComposerReady(page);
+    const sessionId = await settledChatSessionId(page);
+    await apiJson(request, "POST", "/harness/llm/auto", { enabled: false });
+    try {
+      const prompt = await apiPostPrompt(request, sessionId, { text: "Update the report." });
+      expect(prompt.ok(), await prompt.text()).toBe(true);
+      const driver = manualHarnessTools(request, sessionId);
+      await driver.loadTools("command");
+      const quoted = "'" + destination.replaceAll("'", "'\\''") + "'";
+      const call = await driver.invoke("command", {
+        command: `cat > ${quoted} <<'REPORT'\nUpdated report\nREPORT`,
+      });
+      const checkpoints = `/v1/sessions/${sessionId}/checkpoints`;
+      let approval: CheckpointListResponse["checkpoints"][number] | undefined;
+      await expect.poll(async () => {
+        const response = await apiJson<CheckpointListResponse>(request, "GET", `${checkpoints}?kind=tool_approval`);
+        approval = response.checkpoints.find((item) =>
+          item.tool_approval?.plan?.reasons.includes("outside_roots_write"));
+        return approval?.tool_approval?.plan?.recommended_option_id;
+      }, { timeout: 30_000 }).toBeTruthy();
+      await apiJson(request, "POST", `${checkpoints}/${approval!.id}`, {
+        kind: "tool_approval", action: "approve", option_id: approval!.tool_approval!.plan!.recommended_option_id,
+      });
+      await driver.completed(call);
+    } finally {
+      await apiJson(request, "POST", "/harness/llm/auto", { enabled: true, text: "The report is updated." });
+    }
+
+    const group = liveChatStage(page).getByTestId("diff-group");
+    await group.getByTestId("diff-group-files").click();
+    const card = group.getByTestId("file-edit-diff").filter({ hasText: destination });
+    const disclosure = card.getByTestId("file-edit-diff-toggle");
+    await expect(disclosure).toHaveAttribute("aria-expanded", "true");
+    await disclosure.click();
+    await expect(disclosure).toHaveAttribute("aria-expanded", "false");
+    const open = page.waitForResponse((response) => {
+      const request = response.request();
+      return new URL(response.url()).pathname === `/v1/projects/${project.id}/editor-documents` &&
+        request.method() === "POST" && Boolean(request.postDataJSON().file_id);
+    });
+    await card.getByTestId("source-path-link").click();
+    expect((await open).ok()).toBe(true);
+    const editor = page.getByTestId("files-editor-host").filter({ visible: true }).locator(".cm-content");
+    await expect(editor).toContainText("Updated report");
+  } finally {
+    rmSync(folder, { recursive: true, force: true });
+  }
 });
