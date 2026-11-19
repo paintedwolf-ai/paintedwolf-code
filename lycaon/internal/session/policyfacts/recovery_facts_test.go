@@ -95,6 +95,9 @@ func TestSharedTempRefusalsKeepEveryOtherCapability(t *testing.T) {
 		{Operation: "network-outbound", Target: "/socket", Recovery: confine.RecoverSocketPath, Grant: "/socket"},
 		{Operation: "signal", Target: "pid", Recovery: confine.RecoverProcessControl},
 		{Operation: "mount", Target: "device", Recovery: confine.RecoverHostExecution},
+		{Operation: "network-bind", Target: "local:127.0.0.1:5301", Recovery: confine.RecoverLocalListen},
+		{Operation: "network-outbound", Target: "remote:127.0.0.1:5302", Recovery: confine.RecoverOutboundPort},
+		{Operation: "file-read-data", Target: "/state/store", Layer: confine.FloorReadControlPlane, Recovery: confine.RecoverNone},
 	}
 	for mask := 1; mask < 1<<len(items); mask++ {
 		var subset confine.SandboxRefusals
@@ -105,9 +108,9 @@ func TestSharedTempRefusalsKeepEveryOtherCapability(t *testing.T) {
 		}
 		gc := oar.NewGuardContext()
 		ObserveConfine(gc, confine.Observation{Applied: true, Refusals: subset})
-		groups := [][]string{gc.Refusals.RefusedReadGrants, gc.Refusals.RefusedWriteGrants, nil, gc.Refusals.RefusedTerminalWritePaths, gc.Refusals.RefusedCredentialStorePaths, gc.Refusals.RefusedSocketPaths, gc.Refusals.RefusedSignals, gc.Refusals.UnsandboxedRefusals}
+		groups := [][]string{gc.Refusals.RefusedReadGrants, gc.Refusals.RefusedWriteGrants, subset.SharedTempRoots(), gc.Refusals.RefusedTerminalWritePaths, gc.Refusals.RefusedCredentialStorePaths, gc.Refusals.RefusedSocketPaths, gc.Refusals.RefusedSignals, gc.Refusals.UnsandboxedRefusals, gc.Refusals.RefusedListenPorts, gc.Refusals.RefusedConnectPorts, gc.Refusals.RefusedTerminalReadPaths}
 		for i, group := range groups {
-			if i != 2 && (len(group) > 0) != (mask&(1<<i) != 0) {
+			if (len(group) > 0) != (mask&(1<<i) != 0) {
 				t.Fatalf("subset %b group %d=%v", mask, i, group)
 			}
 		}
