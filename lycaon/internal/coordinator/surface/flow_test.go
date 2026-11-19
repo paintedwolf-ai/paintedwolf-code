@@ -1,8 +1,6 @@
 package surface
 
 import (
-	"github.com/lycaon/lycaon/internal/toolcontract"
-
 	"strings"
 	"testing"
 
@@ -11,6 +9,7 @@ import (
 	"github.com/lycaon/lycaon/internal/coordinator/surfacecatalog"
 	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -92,95 +91,101 @@ type ruleReachabilityCase struct {
 
 var ruleReachabilityCases = []ruleReachabilityCase{
 	{
+		name:     "ask_takes_precedence_over_compose_and_promotion",
+		facts:    SurfaceFacts{Mode: api.SessionModeAsk, HasComposeDraft: true, OverlayPromotePending: 1},
+		wantSurf: "observe_investigate",
+		wantRule: 0,
+	},
+	{
 		name:     "compose_draft",
 		facts:    SurfaceFacts{HasComposeDraft: true},
 		wantSurf: "workflow_compose",
-		wantRule: 0,
+		wantRule: 1,
 	},
 	{
 		name:     "overlay_promote",
 		facts:    SurfaceFacts{OverlayPromotePending: 2},
 		wantSurf: SurfaceImplementOverlayPromote,
-		wantRule: 1,
+		wantRule: 2,
 	},
 	{
 		name:     "worker_delivered",
 		facts:    SurfaceFacts{WorkersDelivered: 1, WorkersInFlight: 1},
 		wantSurf: SurfaceImplementOverlayPromote,
-		wantRule: 2,
+		wantRule: 3,
 	},
 	{
 		name:     "host_held_person_turn",
 		facts:    SurfaceFacts{PhaseHostHeld: true, VisibleUserTurn: true, ManifestBoundSurface: "observe_investigate"},
 		wantSurf: toolcontract.SurfaceAwaitHost,
-		wantRule: 3,
+		wantRule: 4,
 	},
 	{
 		name:     "host_held_host_turn_keeps_manifest_surface",
 		facts:    SurfaceFacts{PhaseHostHeld: true, HostCycleTurn: true, ManifestBoundSurface: "observe_investigate"},
 		wantSurf: "observe_investigate",
-		wantRule: 4,
+		wantRule: 5,
 	},
 	{
 		name:     "manifest_bound",
 		facts:    SurfaceFacts{ManifestBoundSurface: "plan_research"},
 		wantSurf: "plan_research",
-		wantRule: 4,
+		wantRule: 5,
 	},
 	{
 		name:     "child_subroutine_visible_user",
 		facts:    SurfaceFacts{ChildSubroutineBlocksInvestigate: true, VisibleUserTurn: true},
 		wantSurf: SurfaceImplementDispatch,
-		wantRule: 5,
+		wantRule: 6,
 	},
 	{
 		name:     "declared_orchestrate_visible_user",
 		facts:    SurfaceFacts{WorkflowDeclaredMode: ExecutionModeFamilyOrchestrate, VisibleUserTurn: true},
 		wantSurf: SurfaceImplementDispatch,
-		wantRule: 6,
+		wantRule: 7,
 	},
 	{
 		// A later call of the same request, after a refused dispatch, keeps `task`.
 		name:     "declared_orchestrate_continuation_before_dispatch",
 		facts:    SurfaceFacts{WorkflowDeclaredMode: ExecutionModeFamilyOrchestrate},
 		wantSurf: SurfaceImplementDispatch,
-		wantRule: 6,
+		wantRule: 7,
 	},
 	{
 		name:     "declared_orchestrate_workers_park",
 		facts:    SurfaceFacts{WorkflowDeclaredMode: ExecutionModeFamilyOrchestrate, WorkersInFlight: 1},
 		wantSurf: SurfaceImplementPark,
-		wantRule: 7,
+		wantRule: 8,
 	},
 	{
 		name:     "declared_investigate",
 		facts:    SurfaceFacts{WorkflowDeclaredMode: ExecutionModeFamilyInvestigate, InvestigateHardBlock: false},
 		wantSurf: toolcontract.SurfaceImplementInvestigate,
-		wantRule: 8,
+		wantRule: 9,
 	},
 	{
 		name:     "investigate_default_eligible",
 		facts:    SurfaceFacts{InvestigateDefaultEligible: true, InvestigateHardBlock: false},
 		wantSurf: toolcontract.SurfaceImplementInvestigate,
-		wantRule: 9,
+		wantRule: 10,
 	},
 	{
 		name:     "worker_finished_dispatch",
 		facts:    SurfaceFacts{WorkerTaskFinishedTurn: true, WorkersInFlight: 2},
 		wantSurf: SurfaceImplementDispatch,
-		wantRule: 10,
+		wantRule: 11,
 	},
 	{
 		name:     "workers_park",
 		facts:    SurfaceFacts{WorkersInFlight: 1},
 		wantSurf: SurfaceImplementPark,
-		wantRule: 11,
+		wantRule: 12,
 	},
 	{
 		name:     "open_repair",
 		facts:    SurfaceFacts{WrapupGatesLoaded: true, OpenRepairSinceUserIntent: true},
 		wantSurf: toolcontract.SurfaceImplementInvestigate,
-		wantRule: 12,
+		wantRule: 13,
 	},
 	{
 		name: "plan_missing_after_dispatch",
@@ -191,38 +196,38 @@ var ruleReachabilityCases = []ruleReachabilityCase{
 			ProgressGatedToolAttemptedSinceIntent: true,
 		},
 		wantSurf: toolcontract.SurfaceImplementInvestigate,
-		wantRule: 13,
+		wantRule: 14,
 	},
 	{
 		name:     "batch_ready",
 		facts:    SurfaceFacts{WrapupGatesLoaded: true, BatchReadyForSynthesis: true},
 		wantSurf: "implement_synthesis",
-		wantRule: 14,
+		wantRule: 15,
 	},
 	{
 		// A returned batch with plan steps still open: the next wave stays dispatchable.
 		name:     "host_cycle_open_plan_orchestrate_declared",
 		facts:    SurfaceFacts{HostCycleTurn: true, ProgressHasOpenSteps: true, WorkflowDeclaredMode: ExecutionModeFamilyOrchestrate, BatchReadyForSynthesis: true},
 		wantSurf: SurfaceImplementDispatch,
-		wantRule: 15,
+		wantRule: 16,
 	},
 	{
 		name:     "host_cycle_open_plan_read_scout",
 		facts:    SurfaceFacts{HostCycleTurn: true, ProgressHasOpenSteps: true},
 		wantSurf: toolcontract.SurfaceImplementInvestigate,
-		wantRule: 16,
+		wantRule: 17,
 	},
 	{
 		name:     "host_cycle",
 		facts:    SurfaceFacts{HostCycleTurn: true},
 		wantSurf: toolcontract.SurfaceImplementInvestigate,
-		wantRule: 16,
+		wantRule: 17,
 	},
 	{
 		name:     "visible_user_investigate",
 		facts:    SurfaceFacts{VisibleUserTurn: true, InvestigateDefaultEligible: true, InvestigateHardBlock: false},
 		wantSurf: toolcontract.SurfaceImplementInvestigate,
-		wantRule: 9,
+		wantRule: 10,
 	},
 	{
 		name:     "default_investigate",
@@ -247,6 +252,29 @@ func TestEvaluateFlow_eachRuleReachable(t *testing.T) {
 				t.Fatalf("matched rule = %d want %d", ev.MatchedRuleIdx, tc.wantRule)
 			}
 		})
+	}
+}
+
+func TestResolveAskTurnProfileUsesReadOnlyCatalog(t *testing.T) {
+	runCtx := api.CoordinatorRunContext{
+		HasComposeDraft:         true,
+		PhaseCoordinatorSurface: SurfaceImplementDispatch,
+		PhaseModeRefs:           []string{"implement-dispatch"},
+	}
+	profile := ResolveTurnProfile(runCtx, &api.Session{
+		Mode: api.SessionModeAsk, Posture: api.SessionPostureBuild,
+	}, nil)
+	if profile.SessionMode != api.SessionModeAsk || profile.SurfaceID != "observe_investigate" ||
+		profile.SurfaceTemplate != "agents/coordinator-surface-ask.md" {
+		t.Fatalf("Ask profile = %+v", profile)
+	}
+	if len(profile.ModeRefs) != 1 || profile.ModeRefs[0] != "observe-investigate" {
+		t.Fatalf("Ask mode refs = %v", profile.ModeRefs)
+	}
+	plan, err := CompileToolPlan(profile, 1)
+	testutil.FailErr(t, "compile Ask tool plan", err)
+	if !plan.Immediate("inspect_source") || plan.Addressable("command") || plan.Addressable("promote_overlay") {
+		t.Fatalf("Ask tool plan = %v", plan.AddressableNames())
 	}
 }
 
