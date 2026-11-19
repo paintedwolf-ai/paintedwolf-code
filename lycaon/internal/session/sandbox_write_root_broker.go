@@ -117,13 +117,22 @@ func (b *WriteRootCheckpointBroker) authorizeWriteRoot(ctx context.Context, in c
 	if projectDir != "" {
 		roots = []string{projectDir}
 	}
-	// Effective roots include durable and chat-scoped grants.
-	writeRoots, err := confine.WriteRootsForBoundary(in.ProjectID, roots, nil, in.SessionScratchRoot)
-	if err != nil {
-		return out, err
+	shared := overlapsSharedTemp(proposed)
+	grants := b.Runtime.SessionWriteRoots(rootSessionID)
+	var inRoots bool
+	if shared {
+		root, err := confine.NativeFilesystemRootForPath(in.ProjectID, roots, grants, in.SessionScratchRoot, proposed, true)
+		if err != nil {
+			return out, err
+		}
+		inRoots = root != ""
+	} else {
+		writeRoots, err := confine.WriteRootsForBoundary(in.ProjectID, roots, grants, in.SessionScratchRoot)
+		if err != nil {
+			return out, err
+		}
+		inRoots = confine.PathWithinRoots(proposed, writeRoots)
 	}
-	writeRoots = append(writeRoots, b.Runtime.SessionWriteRoots(rootSessionID)...)
-	inRoots := confine.PathWithinRoots(proposed, writeRoots)
 	if subject.Kind == confine.WriteSubjectOrdinary {
 		// Ordinary paths can use a covering chat grant.
 		if covering := sessionOverlayCovering(b.Runtime, rootSessionID, proposed); covering != "" {
@@ -182,7 +191,7 @@ func (b *WriteRootCheckpointBroker) authorizeWriteRoot(ctx context.Context, in c
 	verdict, decision := gate.Evaluate(facts, b.posture(projectDir))
 
 	autoGrant := verdict != gate.Ask || (b.ApprovalsDisabled != nil && b.ApprovalsDisabled(projectDir))
-	if autoGrant && !isSharedTempRoot(proposed) {
+	if autoGrant && !shared {
 		b.Runtime.GrantSessionWriteRoot(rootSessionID, proposed)
 		return command.SandboxWriteRootResult{
 			Authorized:        true,

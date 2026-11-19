@@ -493,6 +493,9 @@ func TestSharedTempOccurrencePreservesOtherRecovery(t *testing.T) {
 		{guidance.SharedTempSettlement{Refused: []string{"/tmp"}, Running: true}, "SANDBOX_SHARED_TEMP_REFUSED"},
 	} {
 		_, facts := mgr.ToolPolicy.AfterTool(t.Context(), &api.Session{ID: "chat"}, "command", map[string]any{"command": "build"}, "output", 1, guidance.ToolResultFacts{Confine: obs, SharedTemp: &tc.settled})
+		if tc.settled.Tolerated && facts.FeedbackFor(tc.code).Details["refused_shared_temp"] == nil {
+			t.Fatalf("missing reported locations in persisted feedback: %+v", facts)
+		}
 		if !facts.HasCode(tc.code) || !facts.HasCode("SANDBOX_TRY_WRITE_ROOT") || !facts.Succeeded() {
 			t.Fatalf("settlement %+v -> %+v", tc.settled, facts)
 		}

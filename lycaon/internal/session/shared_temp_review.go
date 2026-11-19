@@ -19,6 +19,17 @@ func isSharedTempRoot(path string) bool {
 	return root != "" && confine.PathEqual(root, fspath.CanonicalPath(path))
 }
 
+// A covering ancestor grants shared temp just as a descendant grants part of it.
+func overlapsSharedTemp(path string) bool {
+	path = fspath.CanonicalPath(path)
+	for _, location := range confine.SharedTempLocations() {
+		if confine.PathAtOrUnder(path, location) || confine.PathAtOrUnder(location, path) {
+			return true
+		}
+	}
+	return false
+}
+
 // ReviewSharedTemp settles all eligible locations before returning the original result.
 func (b *WriteRootCheckpointBroker) ReviewSharedTemp(ctx context.Context, in command.SandboxWriteRootAsk, roots []string, failed bool) guidance.SharedTempSettlement {
 	result := guidance.SharedTempSettlement{}
@@ -49,13 +60,14 @@ func (b *WriteRootCheckpointBroker) ReviewSharedTemp(ctx context.Context, in com
 			continue
 		}
 		result.Refused = append(result.Refused, root)
-		if history.Declined[root] && sessionOverlayCovering(b.Runtime, chat, root) == "" {
-			result.Declined = append(result.Declined, root)
-			continue
-		}
 		in.ProposedWriteRoot = root
 		prior := len(reviews)
-		verdict, err := b.authorizeWriteRoot(ctx, in, reviews.prepare)
+		verdict, err := b.authorizeWriteRoot(ctx, in, func(ctx context.Context, req sandboxAskRequest) (sandboxAskResolution, error) {
+			if history.Declined[root] {
+				return sandboxAskResolution{Answered: true, Denied: true}, nil
+			}
+			return reviews.prepare(ctx, req)
+		})
 		switch {
 		case err != nil:
 			result.Unanswered = append(result.Unanswered, root)

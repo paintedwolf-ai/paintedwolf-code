@@ -638,3 +638,22 @@ func TestSharedTempToleratedOnceAndLightAuthorization(t *testing.T) {
 		t.Fatalf("light review=%+v cards=%d", result, len(cards.cards))
 	}
 }
+
+func TestSharedTempRelatedRootsNeedReviewWithApprovalsDisabled(t *testing.T) {
+	location := t.TempDir()
+	t.Setenv("TMPDIR", location)
+	broker := &WriteRootCheckpointBroker{
+		Runtime: approvalstate.NewSandboxPathGrantRuntime(), Checkpoints: &tempDecisionFixture{},
+		ApprovalsDisabled: func(string) bool { return true },
+	}
+	for _, path := range []string{location, filepath.Join(location, "build"), filepath.Dir(location)} {
+		built := false
+		result, err := broker.authorizeWriteRoot(t.Context(), command.SandboxWriteRootAsk{SessionID: "chat", ProposedWriteRoot: path}, func(context.Context, sandboxAskRequest) (sandboxAskResolution, error) {
+			built = true
+			return sandboxAskResolution{Answered: true, Denied: true}, nil
+		})
+		if err != nil || !built || result.Authorized || !result.Denied {
+			t.Fatalf("root %s result=%+v built=%t error=%v", path, result, built, err)
+		}
+	}
+}

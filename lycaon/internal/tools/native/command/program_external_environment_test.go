@@ -160,6 +160,17 @@ func TestProgramExternalOutsideWriteAndSessionTemp(t *testing.T) {
 		t.Fatalf("launch marker=%q error=%v", data, readErr)
 	}
 
+	f.Runtime.Executor.Boundary.SetSessionWriteRootOverlay(func(context.Context, string, string) []string {
+		return []string{confine.SharedTempLocation(hostTarget)}
+	})
+	t.Cleanup(func() { _ = os.Remove(hostTarget) })
+	out, err = f.call(t, t.Context(), "external -- /bin/sh -c 'printf ok > \"$1\"' sh "+hostTarget)
+	testutil.FailErr(t, "run remaining write with the grant", err)
+	sharedBytes, readErr := os.ReadFile(hostTarget)
+	if approved := decodeOutcome(t, out); approved.Status != 0 || string(sharedBytes) != "ok" || readErr != nil {
+		t.Fatalf("approved write status=%d bytes=%q err=%v", approved.Status, sharedBytes, readErr)
+	}
+
 	outsideTarget := filepath.Join(outsideDir, "refused.txt")
 	out, err = f.call(t, t.Context(), "external -- /bin/sh -c 'printf nope > \"$1\"' sh "+outsideTarget)
 	testutil.FailErr(t, "run confined outside write", err)
