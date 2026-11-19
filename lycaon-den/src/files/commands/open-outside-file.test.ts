@@ -6,7 +6,7 @@ import { seedStockFrame } from "../../contributions/stock-frame-test.ts";
 import { stubClient } from "../../test/client-fixture.ts";
 import { projectFilesState } from "../documents/files-buffer-state.ts";
 import { resetProjectFilesForTests } from "../documents/project-files-buffer-lifecycle.ts";
-import { isOutsideRoot, resetOutsideRootsForTests } from "../source/outside-namespace.ts";
+import { isOutsideRoot } from "../source/outside-namespace.ts";
 import { openOutsideFile } from "./open-outside-file.ts";
 
 const platform = vi.hoisted(() => ({
@@ -24,7 +24,6 @@ vi.mock("../../platform/files/native-path-dialog.ts", () => ({ nativePathDialog:
 afterEach(() => {
   resetContributionStoreForTest();
   resetProjectFilesForTests();
-  resetOutsideRootsForTests();
   vi.resetAllMocks();
 });
 
@@ -39,6 +38,7 @@ it("offers outside opening only in Files when a chat and native picker are avail
 });
 
 it("uses the native-picked path and opens the returned file identity", async () => {
+  const project = "picked-project";
   platform.desktop.mockReturnValue(true);
   platform.platform.mockReturnValue("linux");
   platform.pick.mockResolvedValue({ path: "/home/me/outside.txt", grant: null });
@@ -50,11 +50,11 @@ it("uses the native-picked path and opens the returned file identity", async () 
     },
   });
   const client = stubClient({ openOutsideFile: open });
-  await openOutsideFile(client, "project", "chat");
-  expect(open).toHaveBeenCalledExactlyOnceWith("project", { session_id: "chat", path: "/home/me/outside.txt" });
-  const state = projectFilesState("project");
+  await openOutsideFile(client, project, "chat");
+  expect(open).toHaveBeenCalledExactlyOnceWith(project, { session_id: "chat", path: "/home/me/outside.txt" });
+  const state = projectFilesState(project);
   expect(state.byKey[state.activeKey!]).toMatchObject({ rootId: "outside", path: "home/me/outside.txt", fileId: "file" });
-  expect(isOutsideRoot("project", "outside")).toBe(true);
+  expect(isOutsideRoot(project, "outside")).toBe(true);
 });
 
 it("leaves the picker closed in the browser, on Windows, or without a chat", async () => {

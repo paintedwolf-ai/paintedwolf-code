@@ -1,7 +1,7 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { describe, expect, it } from "vitest";
 import type { SourceCommandWindow } from "../../api/types.ts";
 import { commandWindowCoverageNotices, commandWindowHasGaps } from "./source-command-window.ts";
-import { recordOutsideRoot, resetOutsideRootsForTests } from "./outside-namespace.ts";
+import { recordOutsideRoot } from "./outside-namespace.ts";
 
 const window = (coverage: SourceCommandWindow["coverage"]): SourceCommandWindow => ({
   id: "w1",
@@ -16,8 +16,6 @@ const window = (coverage: SourceCommandWindow["coverage"]): SourceCommandWindow 
 });
 
 describe("command window coverage", () => {
-  afterEach(resetOutsideRootsForTests);
-
   it("says nothing for folders compared in full", () => {
     const complete = window([{ root_id: "r1", path: "", coverage: "complete" }]);
     expect(commandWindowCoverageNotices(complete)).toEqual([]);
@@ -25,10 +23,11 @@ describe("command window coverage", () => {
   });
 
   it("names a folder that was not observed and why, never as no changes", () => {
-    recordOutsideRoot("p1", "outside");
+    const root = "r-command-outside";
+    recordOutsideRoot("p-command-observation", root);
     const notices = commandWindowCoverageNotices(window([
-      { root_id: "outside", path: "Users/me/shared", coverage: "not_observed", reason: "time_budget" },
-      { root_id: "outside", path: "", coverage: "not_observed", reason: "unconfined" },
+      { root_id: root, path: "Users/me/shared", coverage: "not_observed", reason: "time_budget" },
+      { root_id: root, path: "", coverage: "not_observed", reason: "unconfined" },
     ]));
     expect(notices.map((notice) => notice.text)).toEqual([
       "/Users/me/shared was not observed: the observation ran out of time.",

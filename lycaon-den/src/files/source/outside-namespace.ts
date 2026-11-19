@@ -38,7 +38,3 @@ export function outsideHostDirectory(path: string): string {
   const slash = host.lastIndexOf("/");
   return slash <= 0 ? "/" : host.slice(0, slash);
 }
-
-export function resetOutsideRootsForTests(): void {
-  setOutsideRoots(new Map());
-}
