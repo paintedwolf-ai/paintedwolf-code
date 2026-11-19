@@ -5,7 +5,8 @@ import { type ActivitySpanEntry, type TranscriptItem } from "./transcript-item-m
 import { createTranscriptDisplayProjector } from "./transcript-display-projection.ts";
 import { activityDecision, activityFact, activityProgram, activityTool, outputRead } from "../../../test/command-activity-fixtures.ts";
 import { foldActionEntries } from "../../action/part-action.ts";
-import { createCommandActivityProjection, FORM_PROGRAM_TOOLS } from "../../tool/command-activity-model.ts";
+import { FORM_PROGRAM_TOOLS } from "../../tool/command-activity-facts.ts";
+import { createCommandActivityProjection } from "../../tool/command-activity-model.ts";
 import { taskCardStatus } from "../../task/task-card-model.ts";
 import { isTaskToolName } from "../../tool/tool-part-model.ts";
 import { LONG_RUNNING_COORDINATOR_TOOLS } from "../../tool/tool-presentation.generated.ts";

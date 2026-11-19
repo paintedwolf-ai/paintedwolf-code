@@ -4,6 +4,8 @@ import type { ActivitySpanEntry } from "../transcript/projection/transcript-item
 import { commandProgramActive, preferredCommandProgram } from "./command-activity-snapshots.ts";
 import type { ToolPartView, ToolPartStatus } from "./tool-part-model.ts";
 
+export const FORM_PROGRAM_TOOLS: ReadonlySet<string> = new Set(["command", "summarize", "survey_repo", "code_rewrite"]);
+
 export type CommandActivityView = {
   fact: CommandActivity;
   calls: ToolPartView[];

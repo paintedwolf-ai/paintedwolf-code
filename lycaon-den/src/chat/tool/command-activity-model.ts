@@ -1,10 +1,8 @@
 import type { CommandActivity, CommandProgramReceipt } from "../../api/types.ts";
 import { activitySpanEntryKey, type ActivitySpanEntry } from "../transcript/projection/transcript-item-model.ts";
 import type { ToolPartView } from "./tool-part-model.ts";
-import { addReceiptScope, commandActivityStatus, programActivityFacts, receiptScope, resolveCommandActivityProgram } from "./command-activity-facts.ts";
+import { addReceiptScope, commandActivityStatus, FORM_PROGRAM_TOOLS, programActivityFacts, receiptScope, resolveCommandActivityProgram } from "./command-activity-facts.ts";
 import { createCommandActivityMemory, type ActivityCallMemory, type CommandActivityMemory } from "./command-activity-memory.ts";
-
-export const FORM_PROGRAM_TOOLS: ReadonlySet<string> = new Set(["command", "summarize", "survey_repo", "code_rewrite"]);
 
 /** Groups rank within their host phase. */
 const ACTIVITY_PHASE_RANK: Readonly<Record<string, number>> = { inspect: 10, execute: 20, mutate: 30 };

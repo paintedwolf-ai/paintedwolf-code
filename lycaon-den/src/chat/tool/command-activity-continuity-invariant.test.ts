@@ -4,7 +4,8 @@ import { activityDecision, activityFact, activityProgram, activityTool, outputRe
 import { partAction } from "../action/part-action.ts";
 import { activitySpanEntryKey, type ActivitySpanEntry } from "../transcript/projection/transcript-item-model.ts";
 import { commandActivityMemoryFor } from "./command-activity-memory.ts";
-import { createCommandActivityProjection, FORM_PROGRAM_TOOLS } from "./command-activity-model.ts";
+import { FORM_PROGRAM_TOOLS } from "./command-activity-facts.ts";
+import { createCommandActivityProjection } from "./command-activity-model.ts";
 
 const keys = (rows: readonly ActivitySpanEntry[]) => rows.map(activitySpanEntryKey);
 const parts = (rows: readonly ActivitySpanEntry[]) => rows.flatMap(row => row.kind === "tool" ? [row.part] : []);
