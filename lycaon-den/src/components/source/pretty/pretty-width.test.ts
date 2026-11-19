@@ -1,7 +1,9 @@
+// @vitest-environment jsdom
 import { indentUnit } from "@codemirror/language";
 import { EditorState } from "@codemirror/state";
 import { describe, expect, it } from "vitest";
 import { languageExtensionForPath } from "../editor/codemirror-lang.ts";
+import { finishFixtureParsing } from "../../../test/codemirror-parsing-fixture.ts";
 import { createPrettyExtension } from "./pretty-layout.ts";
 import type { PrettyConfig } from "./pretty-rescan.ts";
 import { PrettyBreakWidget, prettyLayoutDecorations } from "./pretty-view.ts";
@@ -9,10 +11,10 @@ import { PrettyBreakWidget, prettyLayoutDecorations } from "./pretty-view.ts";
 function open(doc: string, lineWidth?: number, path = "a.ts"): EditorState {
   const config: PrettyConfig = { enabled: true, path, ...(lineWidth ? { lineWidth } : {}) };
   const lang = languageExtensionForPath(path);
-  return EditorState.create({
+  return finishFixtureParsing(EditorState.create({
     doc,
     extensions: [...(lang ? [lang] : []), indentUnit.of("  "), EditorState.tabSize.of(4), createPrettyExtension(config)],
-  });
+  }));
 }
 
 function layout(state: EditorState): { breaks: number[]; lines: Array<[number, number, number]> } {
@@ -84,11 +86,11 @@ describe("declared line width", () => {
     const fresh = (s: EditorState) => layout(open(s.doc.toString(), 60));
     // Quoting the arguments leaves too little code to lay out, and unquoting restores it.
     for (const change of [{ from: 4, insert: '"' }, { from: call.length - 2, insert: '"' }]) {
-      state = state.update({ changes: change }).state;
+      state = finishFixtureParsing(state.update({ changes: change }).state);
       expect(layout(state)).toEqual(fresh(state));
     }
     expect(layout(state).breaks.every((pos) => pos > call.length + 1)).toBe(true);
-    state = state.update({ changes: { from: 4, to: 5 } }).state;
+    state = finishFixtureParsing(state.update({ changes: { from: 4, to: 5 } }).state);
     expect(layout(state)).toEqual(fresh(state));
   });
 
