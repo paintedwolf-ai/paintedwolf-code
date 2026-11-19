@@ -94,17 +94,7 @@ func (c *SimpleCompactor) summarizePrefix(ctx context.Context, info SessionInfo,
 			}
 			next.SourceContext = sourceref.ForResponse(input.Messages, raw)
 			summary = appendSummaryPage(summary, next)
-			for _, segment := range segments[position : position+input.Consumed] {
-				remaining[segment.ID]--
-				for i := range sources {
-					if sources[i].MessageID == segment.ID {
-						sources[i].Disposition = "partial_summary_and_reference"
-						if remaining[segment.ID] == 0 {
-							sources[i].Disposition = "summary_and_reference"
-						}
-					}
-				}
-			}
+			acceptSummarySegments(sources, remaining, segments[position:position+input.Consumed])
 			position += input.Consumed
 			accepted, err = true, nil
 			break
@@ -117,6 +107,21 @@ func (c *SimpleCompactor) summarizePrefix(ctx context.Context, info SessionInfo,
 		err = fmt.Errorf("summary work budget exhausted; remaining sources are referenced")
 	}
 	return summary, sources, err
+}
+
+func acceptSummarySegments(sources []messageview.ContinuationSource, remaining map[string]int, accepted []ContextMessage) {
+	for _, segment := range accepted {
+		remaining[segment.ID]--
+		disposition := "partial_summary_and_reference"
+		if remaining[segment.ID] == 0 {
+			disposition = "summary_and_reference"
+		}
+		for i := range sources {
+			if sources[i].MessageID == segment.ID {
+				sources[i].Disposition = disposition
+			}
+		}
+	}
 }
 
 func continuationSegments(rows []ContextMessage, tokens int) ([]messageview.ContinuationSource, []ContextMessage, error) {

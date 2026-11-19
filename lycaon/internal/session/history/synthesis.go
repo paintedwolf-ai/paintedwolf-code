@@ -67,7 +67,7 @@ func (m *Service) runSynthesis(ctx context.Context, token lifecycle.Turn, sc *co
 	var err error
 	defer func() { logSynthesisOutcome(ctx, info.ID, snapshot.Generation, source, calls, err) }()
 	beforeCall := func(callCtx context.Context) error {
-		if err := m.checkSynthesisSnapshot(callCtx, info, snapshot); err != nil {
+		if err := checkSynthesisSnapshot(callCtx, m.store, m.Model, info, snapshot); err != nil {
 			return err
 		}
 		if calls == 0 {
@@ -112,19 +112,19 @@ func logSynthesisOutcome(ctx context.Context, id string, generation int, source 
 		"through_ord", source.through, "source_first_ord", source.first.ord, "source_last_ord", source.last.ord, "model_calls", calls)
 }
 
-func (m *Service) checkSynthesisSnapshot(ctx context.Context, info compaction.SessionInfo, snapshot store.CompactionView) error {
-	sess, err := m.store.Get(ctx, info.ID)
+func checkSynthesisSnapshot(ctx context.Context, st Store, receiver func(context.Context, *api.Session) (string, string), info compaction.SessionInfo, snapshot store.CompactionView) error {
+	sess, err := st.Get(ctx, info.ID)
 	if err != nil {
 		return err
 	}
 	if sess.CompactionGeneration != snapshot.Generation {
 		return synthesisStale
 	}
-	provider, model := m.Model(ctx, sess)
+	provider, model := receiver(ctx, sess)
 	if provider != info.ProviderID || model != info.Model {
 		return synthesisModelChanged
 	}
-	current, err := m.store.CompactionViewCurrent(ctx, info.ID, snapshot.CoveredThroughOrd, snapshot.CoveredThroughID, snapshot.SourceSeq)
+	current, err := st.CompactionViewCurrent(ctx, info.ID, snapshot.CoveredThroughOrd, snapshot.CoveredThroughID, snapshot.SourceSeq)
 	if err == nil && !current {
 		return synthesisStale
 	}
@@ -132,7 +132,7 @@ func (m *Service) checkSynthesisSnapshot(ctx context.Context, info compaction.Se
 }
 
 func (m *Service) publishSynthesis(ctx context.Context, info compaction.SessionInfo, snapshot store.CompactionView, enriched *messageview.Continuation) error {
-	if err := m.checkSynthesisSnapshot(ctx, info, snapshot); err != nil {
+	if err := checkSynthesisSnapshot(ctx, m.store, m.Model, info, snapshot); err != nil {
 		return err
 	}
 	view, ok, err := m.store.GetCompactionView(ctx, info.ID)
@@ -148,17 +148,25 @@ func (m *Service) publishSynthesis(ctx context.Context, info compaction.SessionI
 	if view.Continuation.ThroughOrd != enriched.ThroughOrd || view.Continuation.SummaryThroughOrd >= enriched.SummaryThroughOrd {
 		return synthesisNoAdvance
 	}
-	messages := append([]api.Message(nil), view.Messages...)
-	for i, row := range messages {
-		if len(row.ContentParts) != 1 || row.ContentParts[0].Source != "compaction_summary" {
-			continue
-		}
-		return m.replaceContinuation(ctx, info, view, messages, i, enriched)
+	if err := fitSynthesisProjection(ctx, info, view, enriched); err != nil {
+		return err
 	}
-	return synthesisNoSummaryPart
+	return m.store.PutCompactionView(ctx, info.ID, *view)
 }
 
-func (m *Service) replaceContinuation(ctx context.Context, info compaction.SessionInfo, view *store.CompactionView, messages []api.Message, index int, enriched *messageview.Continuation) error {
+// fitSynthesisProjection builds the replacement on a detached view.
+func fitSynthesisProjection(ctx context.Context, info compaction.SessionInfo, view *store.CompactionView, enriched *messageview.Continuation) error {
+	index := -1
+	for i, row := range view.Messages {
+		if len(row.ContentParts) == 1 && row.ContentParts[0].Source == "compaction_summary" {
+			index = i
+			break
+		}
+	}
+	if index < 0 {
+		return synthesisNoSummaryPart
+	}
+	messages := append([]api.Message(nil), view.Messages...)
 	row := messages[index]
 	budget := compaction.EstimateMessagesTokens(compaction.ContextMessagesFromAPI([]api.Message{row}))
 	enriched.RenderTokens = max(1, budget)
@@ -181,5 +189,5 @@ func (m *Service) replaceContinuation(ctx context.Context, info compaction.Sessi
 	view.Continuation = enriched
 	view.Generation++
 	view.TokensAfter = compaction.EstimateMessagesTokens(compaction.ContextMessagesFromAPI(messages))
-	return m.store.PutCompactionView(ctx, info.ID, *view)
+	return nil
 }

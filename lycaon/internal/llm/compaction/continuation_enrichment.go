@@ -17,6 +17,10 @@ func (c *SimpleCompactor) EnrichContinuation(ctx context.Context, info SessionIn
 	info.PriorContinuation = record
 	prefix := ContextMessagesFromAPI(rows)
 	summary, sources, err := c.summarizePrefix(ctx, info, prefix, beforeCall)
+	return applySynthesisResult(record, summary, sources, err)
+}
+
+func applySynthesisResult(record *messageview.Continuation, summary compactionSummary, sources []messageview.ContinuationSource, err error) (*messageview.Continuation, error) {
 	enriched := messageview.CloneContinuation(record)
 	dispositions := make(map[string]string)
 	for _, source := range sources {
