@@ -225,15 +225,13 @@ func (r *ProgramRuntime) recordParkedRun(ctx context.Context, run *programRun) {
 	r.SourceRuns.RecordSourceRunEvidence(ctx, sess.ID, sess, run.tool, *capture)
 }
 
-// recordDetachedEffects hands the file edits a program made after its call
-// returned to that call's stored result. The call took what came before, so
-// each edit is recorded once.
+// recordDetachedEffects publishes effects the original call did not take.
 func (r *ProgramRuntime) recordDetachedEffects(ctx context.Context, run *programRun) {
 	late := run.tc.Effects.Out.TakeCommitted()
 	if r.Effects == nil {
 		return
 	}
-	r.Effects.AppendProgramEffects(ctx, run.tc.Identity.SessionID, run.tc.Identity.ToolCallID, late.FileEdits, late.FileEditsOmitted)
+	r.Effects.AppendProgramEffects(ctx, run.tc.Identity.SessionID, run.tc.Identity.ToolCallID, late.FileEdits, late.FileEditsOmitted, late.SourceContext)
 }
 
 // ReceiptResult is a program's result as its durable receipts record it, for

@@ -189,12 +189,17 @@ type recordedEffects struct {
 	calls []string
 }
 
-func (r *recordedEffects) AppendProgramEffects(_ context.Context, sessionID, toolCallID string, edits []api.FileEditSnapshot, _ int) {
+func (r *recordedEffects) AppendProgramEffects(_ context.Context, sessionID, toolCallID string, edits []api.FileEditSnapshot, _ int, sourceContext *api.SourceContext) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	paths := make([]string, 0, len(edits))
 	for _, edit := range edits {
 		paths = append(paths, edit.Path)
+	}
+	if sourceContext != nil {
+		for _, target := range sourceContext.Locations {
+			paths = append(paths, target.Path)
+		}
 	}
 	r.calls = append(r.calls, sessionID+"/"+toolCallID+":"+strings.Join(paths, ","))
 }
@@ -205,8 +210,7 @@ func (r *recordedEffects) recorded() []string {
 	return append([]string(nil), r.calls...)
 }
 
-// What a program does after its call returned goes to the call's stored
-// result: file edits only, once, under the call that started the program.
+// Late edits and their source locations reach the originating call once.
 func TestBackgroundedProgramHandsItsLaterEditsToTheCallsStoredResult(t *testing.T) {
 	entered, release := make(chan struct{}), make(chan struct{})
 	f, out := effectFixture(t, func(call int, tc tools.ToolContext) error {
@@ -238,7 +242,7 @@ func TestBackgroundedProgramHandsItsLaterEditsToTheCallsStoredResult(t *testing.
 	_, _, err := f.Background.Lifecycle.Wait(t.Context(), f.Session, running.Handle)
 	testutil.FailErr(t, "join program", err)
 	// The second stage rewrote a.go and wrote late.go after the call returned.
-	if want := []string{f.Session + "/model-call-1:a.go,late.go"}; !slices.Equal(effects.recorded(), want) {
+	if want := []string{f.Session + "/model-call-1:a.go,late.go,a.go"}; !slices.Equal(effects.recorded(), want) {
 		t.Fatalf("stored result received %v, want %v", effects.recorded(), want)
 	}
 	if editedPath(out) != "a.go" || out.Listener != nil || len(out.SourceReads) != 0 {
