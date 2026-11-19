@@ -130,6 +130,7 @@ type captureTail struct {
 	path    string
 	offset  int64
 	partial []byte
+	pending []observability.PerformanceRecord
 }
 
 // next returns the records written since the last call.
@@ -185,16 +186,22 @@ func (c *captureTail) gauges(ctx context.Context, engine *scaleEngine, ready fun
 	})
 }
 
+// await consumes records through the first match; later records stay pending.
 func (c *captureTail) await(ctx context.Context, engine *scaleEngine, match func(observability.PerformanceRecord) (map[string]int64, bool)) (map[string]int64, error) {
 	for {
+		for i, record := range c.pending {
+			if values, ok := match(record); ok {
+				c.pending = c.pending[i+1:]
+				return values, nil
+			}
+		}
 		records, err := c.next()
 		if err != nil {
 			return nil, err
 		}
-		for _, record := range records {
-			if values, ok := match(record); ok {
-				return values, nil
-			}
+		c.pending = records
+		if len(records) > 0 {
+			continue
 		}
 		if err := engine.waitStep(ctx, 200*time.Millisecond); err != nil {
 			return nil, err
