@@ -17,7 +17,7 @@ export function outsideRootId(projectId: string): string | undefined {
 }
 
 export function isOutsideRoot(projectId: string, rootId: string | undefined): boolean {
-  return !!rootId && outsideRoots().get(projectId) === rootId;
+  return !!rootId && outsideRootId(projectId) === rootId;
 }
 
 export function outsideHostPath(path: string): string {
