@@ -117,6 +117,15 @@ records capacity, cancellation or unavailable rendering with typed capacity fact
 when present; its feedback and details remain empty. Authority failures propagate
 as errors rather than publishing a result under a changed frame.
 
+Invocation receipt settlement is `bundle` wire and an `agent-public` contract
+where the model sees the status, invocation flag and refusal code. For newly
+settled command programs, a refusal reports the existing `rejected` status and
+its stop code. The `invoked` flag records whether any operation started, so a
+refusal before execution has `invoked: false` and a refusal after execution began
+has `invoked: true`. Review this behavior change from `completed` for refused
+programs at release. The enum and wire shape are unchanged. Stored receipts
+retain their recorded values and remain readable.
+
 | Artifact | Class and retention | Owner |
 |---|---|---|
 | Immutable language/operation version, identity and catalog digest | Internal compiled facts; snapshot frozen for each invocation. Public operation/rejection meanings are `agent-public` and cannot be reused. | Compiled catalog and typed utility operations |
