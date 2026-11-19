@@ -57,8 +57,8 @@ func TestLocalModelManagementRoutes(t *testing.T) {
 	}{
 		{http.MethodGet, "nativegen", "", "", http.StatusOK},
 		{http.MethodGet, "absent", "", "", http.StatusNotFound},
-		{http.MethodPut, "nativegen", "", "{}", http.StatusBadRequest},
-		{http.MethodPut, "nativegen", "", "{", http.StatusBadRequest},
+		{http.MethodPost, "nativegen", "/select", "{}", http.StatusBadRequest},
+		{http.MethodPost, "nativegen", "/select", "{", http.StatusBadRequest},
 		{http.MethodDelete, "nativegen", "", "", http.StatusBadRequest},
 		{http.MethodPost, "nativegen", "/cancel", "", http.StatusOK},
 	} {

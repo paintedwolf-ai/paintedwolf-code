@@ -57,7 +57,7 @@ func (p *Runtime) ModelTiers() []api.LocalModelTier {
 		if p != nil && p.config.Backend == "vulkan" && !p.config.UnifiedMemory {
 			minimum, recommended = t.discreteMinimum, t.discreteRecommended
 		}
-		row := api.LocalModelTier{ID: t.id, DisplayName: t.name, MinMemoryBytes: int(minimum)}
+		row := api.LocalModelTier{ID: t.id, DisplayName: t.name, MinMemoryBytes: int(minimum)} // #nosec G115 -- Tier constants fit the supported 64-bit hosts.
 		if p != nil {
 			pin, ok := p.pin(t.id)
 			row.DownloadBytes = int(pin.TotalBytes)

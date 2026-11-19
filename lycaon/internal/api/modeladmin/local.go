@@ -2,11 +2,11 @@ package modeladmin
 
 import (
 	"context"
-	"github.com/lycaon/lycaon/internal/llm"
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/lycaon/lycaon/internal/api/httpio"
+	"github.com/lycaon/lycaon/internal/llm"
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -62,7 +62,7 @@ func (s *Handler) SelectLocalModel(w http.ResponseWriter, r *http.Request) {
 
 func (s *Handler) selectLocalModel(ctx context.Context, req wire.LocalModelSelectionRequest) error {
 	ctx = context.WithoutCancel(ctx)
-	return s.service.SelectLocalModel(req, func() {
+	return s.service.SelectLocalModel(req, func() { //nolint:contextcheck // Accepted transfers continue after the request returns.
 		s.publishProviderEvent(ctx, "models_refreshed", llm.IncludedProviderID)
 	})
 }
@@ -73,11 +73,15 @@ func (s *Handler) CancelLocalModelTransfer(w http.ResponseWriter, r *http.Reques
 	}
 }
 
-func (s *Handler) RemoveLocalModel(w http.ResponseWriter, r *http.Request) {
+func (s *Handler) DeleteLocalModel(w http.ResponseWriter, r *http.Request) {
 	if !s.localProvider(w, r) {
 		return
 	}
-	s.modelOperationResponse(w, s.OptOutLocalModel(r.Context()))
+	if err := s.OptOutLocalModel(r.Context()); err != nil {
+		s.responses.Fail(w, wire.ApiErrorCodeInvalidRequest, err.Error())
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
 }
 
 func (s *Handler) OptOutLocalModel(ctx context.Context) error {

@@ -76,6 +76,7 @@ var (
 	operationDeleteExtensionPack                = generatedOperation{ID: "deleteExtensionPack", Method: "DELETE", Path: "/v1/extensions/packs/{pack_id}", Params: []string{"pack_id"}, RecordsPersonAction: true}
 	operationDeleteGitWorktree                  = generatedOperation{ID: "deleteGitWorktree", Method: "DELETE", Path: "/v1/sessions/{id}/git-worktree", Params: []string{"id"}, RecordsPersonAction: true}
 	operationDeleteHistoryProtection            = generatedOperation{ID: "deleteHistoryProtection", Method: "DELETE", Path: "/v1/history-storage/protections/{protection_id}", Params: []string{"protection_id"}, RecordsPersonAction: true}
+	operationDeleteLocalModel                   = generatedOperation{ID: "deleteLocalModel", Method: "DELETE", Path: "/v1/providers/{provider_id}/local-model", Params: []string{"provider_id"}, RecordsPersonAction: true}
 	operationDeleteMcpProvider                  = generatedOperation{ID: "deleteMcpProvider", Method: "DELETE", Path: "/v1/mcp/providers/{provider_id}", Params: []string{"provider_id"}, RecordsPersonAction: true}
 	operationDeleteProjectArtifact              = generatedOperation{ID: "deleteProjectArtifact", Method: "DELETE", Path: "/v1/projects/{id}/artifacts/{artifact_id}", Params: []string{"id", "artifact_id"}, RecordsPersonAction: true}
 	operationDeleteProjectFindingIgnore         = generatedOperation{ID: "deleteProjectFindingIgnore", Method: "DELETE", Path: "/v1/projects/{id}/findings/ignores/{entry_id}", Params: []string{"id", "entry_id"}, RecordsPersonAction: true}
@@ -264,7 +265,6 @@ var (
 	operationReleaseSourceViewportInterest      = generatedOperation{ID: "releaseSourceViewportInterest", Method: "DELETE", Path: "/v1/projects/{id}/source/views/{view_id}/interests/{interest_id}", Params: []string{"id", "view_id", "interest_id"}}
 	operationReloadEditorDocument               = generatedOperation{ID: "reloadEditorDocument", Method: "POST", Path: "/v1/projects/{id}/editor-documents/{document_id}/reload", Params: []string{"id", "document_id"}, RecordsPersonAction: true}
 	operationReloadExtensionPack                = generatedOperation{ID: "reloadExtensionPack", Method: "POST", Path: "/v1/extensions/packs/{pack_id}/reload", Params: []string{"pack_id"}, RecordsPersonAction: true}
-	operationRemoveLocalModel                   = generatedOperation{ID: "removeLocalModel", Method: "DELETE", Path: "/v1/providers/{provider_id}/local-model", Params: []string{"provider_id"}, RecordsPersonAction: true}
 	operationRenameProjectSource                = generatedOperation{ID: "renameProjectSource", Method: "POST", Path: "/v1/projects/{id}/source/rename", Params: []string{"id"}, RecordsPersonAction: true}
 	operationRepairLocalGeneration              = generatedOperation{ID: "repairLocalGeneration", Method: "POST", Path: "/v1/providers/{provider_id}/repair", Params: []string{"provider_id"}, RecordsPersonAction: true}
 	operationReplaceEditorDocument              = generatedOperation{ID: "replaceEditorDocument", Method: "PUT", Path: "/v1/projects/{id}/editor-documents/{document_id}", Params: []string{"id", "document_id"}}
@@ -308,7 +308,7 @@ var (
 	operationSearchContributionSource           = generatedOperation{ID: "searchContributionSource", Method: "POST", Path: "/v1/projects/{id}/contribution-search/{source_id}", Params: []string{"id", "source_id"}}
 	operationSearchProjectSource                = generatedOperation{ID: "searchProjectSource", Method: "GET", Path: "/v1/projects/{id}/source/search", Params: []string{"id"}}
 	operationSearchSourceView                   = generatedOperation{ID: "searchSourceView", Method: "GET", Path: "/v1/projects/{id}/source/views/{view_id}/presentations/{presentation_id}/search", Params: []string{"id", "view_id", "presentation_id"}}
-	operationSelectLocalModel                   = generatedOperation{ID: "selectLocalModel", Method: "PUT", Path: "/v1/providers/{provider_id}/local-model", Params: []string{"provider_id"}, RecordsPersonAction: true}
+	operationSelectLocalModel                   = generatedOperation{ID: "selectLocalModel", Method: "POST", Path: "/v1/providers/{provider_id}/local-model/select", Params: []string{"provider_id"}, RecordsPersonAction: true}
 	operationSendPrompt                         = generatedOperation{ID: "sendPrompt", Method: "POST", Path: "/v1/sessions/{id}/prompts", Params: []string{"id"}, RecordsPersonAction: true}
 	operationStartFullScan                      = generatedOperation{ID: "startFullScan", Method: "POST", Path: "/v1/projects/{id}/scans", Params: []string{"id"}, RecordsPersonAction: true}
 	operationStartMcpOAuth                      = generatedOperation{ID: "startMcpOAuth", Method: "POST", Path: "/v1/mcp/providers/{provider_id}/oauth/start", Params: []string{"provider_id"}}
@@ -420,6 +420,7 @@ var allGeneratedOperations = []generatedOperation{
 	operationDeleteExtensionPack,
 	operationDeleteGitWorktree,
 	operationDeleteHistoryProtection,
+	operationDeleteLocalModel,
 	operationDeleteMcpProvider,
 	operationDeleteProjectArtifact,
 	operationDeleteProjectFindingIgnore,
@@ -608,7 +609,6 @@ var allGeneratedOperations = []generatedOperation{
 	operationReleaseSourceViewportInterest,
 	operationReloadEditorDocument,
 	operationReloadExtensionPack,
-	operationRemoveLocalModel,
 	operationRenameProjectSource,
 	operationRepairLocalGeneration,
 	operationReplaceEditorDocument,

@@ -107,7 +107,7 @@ func (s *Server) setupRoutes() {
 		s.registerV1Operation(r, operationRefreshProviderModels, s.Admin.Models.RefreshModels)
 		s.registerV1Operation(r, operationGetLocalModelStatus, s.Admin.Models.GetLocalModelStatus)
 		s.registerV1Operation(r, operationSelectLocalModel, s.Admin.Models.SelectLocalModel)
-		s.registerV1Operation(r, operationRemoveLocalModel, s.Admin.Models.RemoveLocalModel)
+		s.registerV1Operation(r, operationDeleteLocalModel, s.Admin.Models.DeleteLocalModel)
 		s.registerV1Operation(r, operationCancelLocalModelTransfer, s.Admin.Models.CancelLocalModelTransfer)
 		s.registerV1Operation(r, operationRepairLocalGeneration, s.Admin.Models.RepairLocalGeneration)
 		s.registerV1Operation(r, operationGetModelPolicySettings, s.Admin.Models.GetPolicy)

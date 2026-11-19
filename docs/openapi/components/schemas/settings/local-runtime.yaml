@@ -65,6 +65,7 @@ components:
       properties:
         id:
           type: string
+          pattern: "^[a-zA-Z0-9_.-]+$"
         display_name:
           type: string
         download_bytes:

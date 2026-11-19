@@ -481,6 +481,8 @@ paths:
     $ref: paths/providers.yaml#/paths/~1v1~1providers~1{provider_id}~1test
   /v1/providers/{provider_id}/local-model:
     $ref: paths/providers.yaml#/paths/~1v1~1providers~1{provider_id}~1local-model
+  /v1/providers/{provider_id}/local-model/select:
+    $ref: paths/providers.yaml#/paths/~1v1~1providers~1{provider_id}~1local-model~1select
   /v1/providers/{provider_id}/local-model/cancel:
     $ref: paths/providers.yaml#/paths/~1v1~1providers~1{provider_id}~1local-model~1cancel
   /v1/providers/{provider_id}/repair:
