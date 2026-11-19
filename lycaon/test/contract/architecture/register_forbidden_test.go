@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/lycaon/lycaon/internal/conditions"
+	"github.com/lycaon/lycaon/internal/vocabulary"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 )
 
@@ -32,7 +32,7 @@ func TestRegisterCallsUseAllowedNames(t *testing.T) {
 			if name == "" {
 				return true
 			}
-			if conditions.IsForbidden(name) {
+			if vocabulary.IsForbidden(name) {
 				pos := corpus.Fset.Position(call.Pos())
 				violations = append(violations, pos.Filename+":"+strconv.Itoa(pos.Line)+": forbidden Register name "+name)
 			}

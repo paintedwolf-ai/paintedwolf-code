@@ -118,3 +118,31 @@ func TestSessionWorkflowSQLStoreGetNotFound(t *testing.T) {
 		t.Fatalf("err = %v want ErrNotFound", err)
 	}
 }
+
+func TestPublicationKeepsSupersedingDraft(t *testing.T) {
+	database := testdbfixture.Open(t, "published.db")
+	ctx := t.Context()
+	testdbseed.InsertSession(t, database, "publish", testdbseed.DefaultProjectID)
+	for _, store := range []Store{NewSQL(database), NewMemory()} {
+		put := func(body string) *Record {
+			t.Helper()
+			testutil.FailErr(t, "compose draft", store.Upsert(ctx, "publish", []byte(testSessionManifest), Coordinator, &Composition{AuthoredYAML: body}))
+			r, err := store.Get(ctx, "publish", "hotfix-session", "1.0.0")
+			testutil.FailErr(t, "read draft", err)
+			return r
+		}
+		original := put("original")
+		next := put("revised")
+		testutil.FailErr(t, "consume original", store.DeletePublished(ctx, *original))
+		got, err := store.Get(ctx, "publish", "hotfix-session", "1.0.0")
+		testutil.FailErr(t, "recover newer draft", err)
+		if got.AuthoredYAML != next.AuthoredYAML {
+			t.Fatalf("draft source = %q", got.AuthoredYAML)
+		}
+		testutil.FailErr(t, "consume current draft", store.DeletePublished(ctx, *next))
+		testutil.FailErr(t, "retry consumption", store.DeletePublished(ctx, *next))
+		if _, err := store.Get(ctx, "publish", "hotfix-session", "1.0.0"); !errors.Is(err, ErrNotFound) {
+			t.Fatalf("consumed draft = %v", err)
+		}
+	}
+}

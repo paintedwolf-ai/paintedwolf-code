@@ -305,7 +305,11 @@ func (m *Admission) initializeWorkflowStart(
 		messages = append(messages, boundary)
 	}
 	run.StartMessageID = api.SpanScrollAnchor(messages, startMessage)
-	mutation := runstate.StartMutation{ProjectDir: sess.WorkspacePath, Vars: vars, Messages: messages,
+	snapshot, err := workflowdef.EncodeRunManifest(manifest)
+	if err != nil {
+		return nil, err
+	}
+	mutation := runstate.StartMutation{ManifestYAML: snapshot, ProjectDir: sess.WorkspacePath, Vars: vars, Messages: messages,
 		Posture: runstate.MutationPosture(run, vars, workflowdef.StartPosture(manifest, run.CurrentPhase))}
 	return &initializedWorkflowStart{Run: run, Vars: vars, Mutation: mutation}, nil
 }

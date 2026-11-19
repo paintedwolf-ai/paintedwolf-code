@@ -1,13 +1,13 @@
 package phases_test
 
 import (
-	workflow "github.com/lycaon/lycaon/internal/workflow"
-
 	"context"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/conditions"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/vocabulary"
+	workflow "github.com/lycaon/lycaon/internal/workflow"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -41,7 +41,7 @@ func obligationTestManifest() workflowdef.Manifest {
 		PhaseDefs: []workflowdef.PhaseDef{
 			{
 				ID:           "ingest",
-				CompleteWhen: workflowdef.CompleteWhenGatesSatisfied,
+				CompleteWhen: vocabulary.CompleteWhenGatesSatisfied,
 				Gates:        []string{workflowdef.ObligationGateLeaf("scan")},
 				OnEnter: workflowdef.PhaseOnEnter{Obligations: []workflowdef.ObligationDef{{
 					Kind: "scan", Params: map[string]any{"categories": []any{"security"}},

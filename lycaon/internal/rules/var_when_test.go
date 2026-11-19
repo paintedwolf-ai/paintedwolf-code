@@ -5,6 +5,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/conditions"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/vocabulary"
 )
 
 func TestMatchWhenVarEquals(t *testing.T) {
@@ -20,7 +21,7 @@ func TestMatchWhenVarEquals(t *testing.T) {
 }
 
 func TestValidateRejectsVarSetInWhenKey(t *testing.T) {
-	if !conditions.IsHostOnlyCondition("var_set:plan.status") {
+	if !vocabulary.IsHostOnlyCondition("var_set:plan.status") {
 		t.Fatal("var_set must be host-only")
 	}
 }

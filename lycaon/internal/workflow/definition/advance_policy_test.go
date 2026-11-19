@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/vocabulary"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -103,7 +104,7 @@ func TestResolveAdvanceTargetLoopExitSelf(t *testing.T) {
 		Version: "1.0.0",
 		PhaseDefs: []workflowdef.PhaseDef{{
 			ID:           "work",
-			CompleteWhen: workflowdef.CompleteWhenGatesSatisfied,
+			CompleteWhen: vocabulary.CompleteWhenGatesSatisfied,
 			Gates:        []string{"worker_cycle_ready"},
 			Next:         "done",
 			LoopExit:     workflowdef.LoopExitSelf,
@@ -136,7 +137,7 @@ func TestImplementWorkPhaseAdvanceTargetParity(t *testing.T) {
 		t.Fatalf("shipped work loop.exit = %q want default next", work.LoopExit)
 	}
 	rootDef, ok := m.PhaseForRun(&api.WorkflowRun{}, "work")
-	if !ok || rootDef.CompleteWhen != workflowdef.CompleteWhenGatesSatisfied || len(rootDef.Gates) != 1 || rootDef.Gates[0] != "worker_cycle_ready" {
+	if !ok || rootDef.CompleteWhen != vocabulary.CompleteWhenGatesSatisfied || len(rootDef.Gates) != 1 || rootDef.Gates[0] != "worker_cycle_ready" {
 		t.Fatalf("root work contract = complete_when %q gates %v", rootDef.CompleteWhen, rootDef.Gates)
 	}
 	childDef, ok := m.PhaseForRun(&api.WorkflowRun{ParentRunID: &parentID}, "work")

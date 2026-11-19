@@ -221,3 +221,11 @@ func (s *Runs) ListPageBySession(ctx context.Context, sessionID string, limit in
 	}
 	return page, nil
 }
+
+func (s *Runs) RunManifest(ctx context.Context, id string) (string, error) {
+	data, err := s.transactions.queries.GetRunManifest(ctx, id)
+	if db.IsNoRows(err) {
+		return "", nil
+	}
+	return data, err
+}

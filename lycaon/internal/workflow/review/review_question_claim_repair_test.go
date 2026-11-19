@@ -14,9 +14,9 @@ import (
 )
 
 func TestMissingClaimOutcomeReturnsExactClaimIDsWithoutInventingWork(t *testing.T) {
-	mgr, run, manifest := reviewAssignmentFixture(t)
-	manifest.PhaseDefs[0].ReviewLoop.VerdictSchema["claims"] = workflowdef.VerdictClaimsType
-	mgr.Resolver.Overlay = workflowdef.NewRegistry(map[string]workflowdef.Manifest{"rltest@1.0.0": manifest})
+	mgr, run, manifest, _ := reviewAssignmentDatabaseFixture(t, func(m *workflowdef.Manifest) {
+		m.PhaseDefs[0].ReviewLoop.VerdictSchema["claims"] = workflowdef.VerdictClaimsType
+	})
 	dir := t.TempDir()
 	mgr.Verdicts.EvidenceStore = inspector.NewJSONLStore(inspector.DefaultEvidenceDir)
 	mgr.Verdicts.EvidenceProjectDir = func(context.Context, string) (string, error) { return dir, nil }

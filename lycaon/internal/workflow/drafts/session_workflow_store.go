@@ -21,6 +21,7 @@ type Record struct {
 	WorkflowID           string
 	Version              string
 	ManifestYAML         string
+	AuthoredYAML         string
 	EffectiveSummaryJSON string
 	EffectiveSummary     api.ComposeEffectiveSummary
 	CreatedAt            time.Time
@@ -42,10 +43,16 @@ func composingPerson(ctx context.Context, createdBy Actor) (string, error) {
 	return person.ID, nil
 }
 
+type Composition struct {
+	AuthoredYAML string
+	Summary      api.ComposeEffectiveSummary
+}
+
 // Store persists ephemeral session-tier workflow manifests.
 type Store interface {
-	Upsert(ctx context.Context, sessionID string, manifestYAML []byte, createdBy Actor, summary *api.ComposeEffectiveSummary) error
+	Upsert(ctx context.Context, sessionID string, manifestYAML []byte, createdBy Actor, composition *Composition) error
 	Delete(ctx context.Context, sessionID, workflowID, version string) error
+	DeletePublished(ctx context.Context, draft Record) error
 	ListBySession(ctx context.Context, sessionID string) ([]Record, error)
 	Get(ctx context.Context, sessionID, workflowID, version string) (*Record, error)
 }
@@ -61,7 +68,7 @@ func NewSQL(database db.Handle) *SQL {
 }
 
 // Upsert inserts or replaces a session manifest (minimum schema validation at parse).
-func (s *SQL) Upsert(ctx context.Context, sessionID string, manifestYAML []byte, createdBy Actor, summary *api.ComposeEffectiveSummary) error {
+func (s *SQL) Upsert(ctx context.Context, sessionID string, manifestYAML []byte, createdBy Actor, composition *Composition) error {
 	if s == nil || s.queries == nil {
 		return fmt.Errorf("session workflow store not configured")
 	}
@@ -80,7 +87,7 @@ func (s *SQL) Upsert(ctx context.Context, sessionID string, manifestYAML []byte,
 	if err != nil {
 		return err
 	}
-	summaryJSON, err := marshalEffectiveSummary(summary)
+	summaryJSON, authored, err := composition.encode()
 	if err != nil {
 		return err
 	}
@@ -89,6 +96,7 @@ func (s *SQL) Upsert(ctx context.Context, sessionID string, manifestYAML []byte,
 		WorkflowID:           m.ID,
 		Version:              m.Version,
 		ManifestYaml:         string(manifestYAML),
+		AuthoredYaml:         authored,
 		EffectiveSummaryJson: summaryJSON,
 		CreatedAt:            timelayout.Format(time.Now().UTC()),
 		CreatedBy:            string(createdBy),
@@ -186,15 +194,12 @@ func EffectiveSummaryByKey(records []Record, key string) (api.ComposeEffectiveSu
 	return api.ComposeEffectiveSummary{}, false
 }
 
-func marshalEffectiveSummary(summary *api.ComposeEffectiveSummary) (string, error) {
-	if summary == nil {
-		return "{}", nil
+func (c *Composition) encode() (string, string, error) {
+	if c == nil {
+		return "{}", "", nil
 	}
-	raw, err := json.Marshal(summary)
-	if err != nil {
-		return "", err
-	}
-	return string(raw), nil
+	raw, err := json.Marshal(c.Summary)
+	return string(raw), c.AuthoredYAML, err
 }
 
 func parseEffectiveSummaryJSON(raw string) (api.ComposeEffectiveSummary, error) {
@@ -216,6 +221,7 @@ func sessionWorkflowFromRow(r db.SessionWorkflows) (Record, error) {
 		WorkflowID:           r.WorkflowID,
 		Version:              r.Version,
 		ManifestYAML:         r.ManifestYaml,
+		AuthoredYAML:         r.AuthoredYaml,
 		EffectiveSummaryJSON: r.EffectiveSummaryJson,
 		CreatedBy:            Actor(r.CreatedBy),
 		CreatedByPersonID:    db.StringFromNull(r.CreatedByPersonID),
@@ -244,7 +250,7 @@ func NewMemory() *Memory {
 }
 
 // Upsert stores or replaces a session manifest.
-func (s *Memory) Upsert(ctx context.Context, sessionID string, manifestYAML []byte, createdBy Actor, summary *api.ComposeEffectiveSummary) error {
+func (s *Memory) Upsert(ctx context.Context, sessionID string, manifestYAML []byte, createdBy Actor, composition *Composition) error {
 	if s == nil {
 		return fmt.Errorf("session workflow store not configured")
 	}
@@ -259,7 +265,7 @@ func (s *Memory) Upsert(ctx context.Context, sessionID string, manifestYAML []by
 	if err != nil {
 		return err
 	}
-	summaryJSON, err := marshalEffectiveSummary(summary)
+	summaryJSON, authored, err := composition.encode()
 	if err != nil {
 		return err
 	}
@@ -273,6 +279,7 @@ func (s *Memory) Upsert(ctx context.Context, sessionID string, manifestYAML []by
 		WorkflowID:           m.ID,
 		Version:              m.Version,
 		ManifestYAML:         string(manifestYAML),
+		AuthoredYAML:         authored,
 		EffectiveSummaryJSON: summaryJSON,
 		EffectiveSummary:     parsed,
 		CreatedAt:            time.Now().UTC(),

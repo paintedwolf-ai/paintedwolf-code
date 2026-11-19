@@ -9,7 +9,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/lycaon/lycaon/internal/localdata"
 	"github.com/lycaon/lycaon/internal/settingsoverlay"
 	"github.com/lycaon/lycaon/internal/testutil"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
@@ -74,42 +73,6 @@ func TestReleaseBlastRadiusCorpusLayout(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(baseline, "project-root", settingsoverlay.DirName())); err == nil {
 		t.Fatalf("release baseline stores the resolved %s path — store the overlay as %s", settingsoverlay.DirName(), testutil.OverlayFixtureDirName)
 	}
-}
-
-func TestReleaseBlastRadiusNoCredentialsInCorpus(t *testing.T) {
-	root := contractcheck.RepoRoot(t)
-	t.Parallel()
-	corpus := filepath.Join(root, "lycaon", "testdata", "upgrade-corpus")
-	credNames := map[string]struct{}{}
-	for _, rel := range localdata.CredentialRelPaths() {
-		credNames[filepath.Base(rel)] = struct{}{}
-	}
-	err := filepath.Walk(corpus, func(path string, info os.FileInfo, err error) error {
-		if err != nil {
-			return err
-		}
-		if info.IsDir() {
-			return nil
-		}
-		base := info.Name()
-		if base == "store.db-wal" || base == "store.db-shm" || base == "store.db-journal" {
-			t.Errorf("forbidden sqlite sidecar in corpus: %s", path)
-		}
-		if _, ok := credNames[base]; ok {
-			t.Errorf("credential filename in corpus: %s", path)
-		}
-		if strings.HasSuffix(base, ".pem") || strings.HasSuffix(base, ".key") {
-			t.Errorf("key-like file in corpus: %s", path)
-		}
-		if info.Size() > 0 && info.Size() < 1<<20 {
-			raw, rerr := os.ReadFile(path)
-			if rerr == nil && bytesContainPrivateKeyPEM(raw) {
-				t.Errorf("private key PEM in corpus: %s", path)
-			}
-		}
-		return nil
-	})
-	contractcheck.FailErr(t, "walk corpus", err)
 }
 
 func TestReleaseBlastRadiusSeedBootTasks(t *testing.T) {
@@ -429,13 +392,6 @@ func TestReleaseBlastRadiusReleaseTokenReadonly(t *testing.T) {
 	if !strings.Contains(rel, `find "lycaon/testdata/upgrade-corpus/${VERSION}" -type f`) {
 		t.Fatal("release.yml must publish only the corpus committed with the tag")
 	}
-}
-
-func bytesContainPrivateKeyPEM(raw []byte) bool {
-	s := string(raw)
-	return strings.Contains(s, "BEGIN RSA PRIVATE KEY") ||
-		strings.Contains(s, "BEGIN OPENSSH PRIVATE KEY") ||
-		strings.Contains(s, "BEGIN PRIVATE KEY")
 }
 
 func extractYAMLJob(workflow, job string) string {

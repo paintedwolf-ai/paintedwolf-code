@@ -56,6 +56,22 @@ func (r Resolver) ForRun(ctx context.Context, run *api.WorkflowRun) (workflowdef
 	if run == nil {
 		return workflowdef.Manifest{}, fmt.Errorf("workflow run required")
 	}
+	if r.Runs != nil {
+		data, err := r.Runs.RunManifest(ctx, run.ID)
+		if err != nil {
+			return workflowdef.Manifest{}, err
+		}
+		if data != "" {
+			m, err := workflowdef.DecodeRunManifest(data)
+			if err != nil {
+				return workflowdef.Manifest{}, fmt.Errorf("read stored workflow: %w", err)
+			}
+			if workflowdef.ManifestKey(m.ID, m.Version) != workflowdef.ManifestKey(run.WorkflowID, run.WorkflowVersion) {
+				return workflowdef.Manifest{}, fmt.Errorf("stored workflow differs from run %s", run.ID)
+			}
+			return m, nil
+		}
+	}
 	manifest, err := r.ForSession(ctx, r.ProjectDirForRun(ctx, run), run.SessionID, run.WorkflowID, run.WorkflowVersion)
 	if errors.Is(err, workflowdef.ErrUnknownWorkflow) {
 		return workflowdef.Manifest{}, &runstate.WorkflowVersionUnavailableError{WorkflowID: run.WorkflowID, Version: run.WorkflowVersion}

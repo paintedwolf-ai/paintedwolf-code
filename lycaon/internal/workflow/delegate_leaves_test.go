@@ -2,8 +2,6 @@ package workflow
 
 import (
 	"testing"
-
-	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 )
 
 func TestSetWorkerCycleEvalVars(t *testing.T) {
@@ -31,18 +29,5 @@ func TestDelegateHostVarWriters(t *testing.T) {
 	cr, _ := child["child_run"].(map[string]any)
 	if cr["status"] != "complete" {
 		t.Fatalf("child_run = %v", cr)
-	}
-}
-
-func TestRegisteredGateLeafIDsIncludesDelegateLeaves(t *testing.T) {
-	ids := workflowdef.RegisteredGateLeafIDs()
-	found := map[string]bool{}
-	for _, id := range ids {
-		found[id] = true
-	}
-	for _, id := range workflowdef.DelegateSubroutineGateLeafIDs() {
-		if !found[id] {
-			t.Fatalf("RegisteredGateLeafIDs missing %q", id)
-		}
 	}
 }

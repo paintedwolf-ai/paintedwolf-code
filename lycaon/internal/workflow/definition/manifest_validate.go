@@ -5,8 +5,8 @@ import (
 	"strings"
 	"unicode/utf8"
 
-	"github.com/lycaon/lycaon/internal/conditions"
 	"github.com/lycaon/lycaon/internal/coordinator/surface"
+	"github.com/lycaon/lycaon/internal/vocabulary"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -35,6 +35,9 @@ func validateManifestSchema(m Manifest) error {
 	}
 	knownProfiles, err := surface.LoadSurfaceProfiles("")
 	if err != nil {
+		return err
+	}
+	if err := m.checkPredicates(m.WorkflowFormat == ProjectWorkflowFormat); err != nil {
 		return err
 	}
 	return validateManifestSurfaceBinding(m, knownSurfaces, knownProfiles)
@@ -105,11 +108,7 @@ func validatePhaseTransitions(m Manifest) error {
 			if _, ok := byID[t.To]; !ok {
 				return fmt.Errorf("workflow manifest %s: phase %q transition %q: unknown to %q", m.ID, p.ID, t.ID, t.To)
 			}
-			if when := strings.TrimSpace(t.When); when != "" {
-				if conditions.IsCatalogStub(when) {
-					return fmt.Errorf("workflow manifest %s: phase %q transition %q: when %q is catalog-only", m.ID, p.ID, t.ID, when)
-				}
-			}
+
 		}
 	}
 	return nil
@@ -132,7 +131,7 @@ func validateVerifyLoopManifest(m Manifest) error {
 
 func validateGatesSatisfiedPhases(m Manifest) error {
 	for _, p := range m.PhaseDefs {
-		if p.CompleteWhen == CompleteWhenGatesSatisfied && len(p.Gates) == 0 {
+		if p.CompleteWhen == vocabulary.CompleteWhenGatesSatisfied && len(p.Gates) == 0 {
 			return fmt.Errorf("workflow manifest %s: phase %q gates_satisfied requires gates", m.ID, p.ID)
 		}
 	}
@@ -140,27 +139,11 @@ func validateGatesSatisfiedPhases(m Manifest) error {
 }
 
 func validatePhaseDef(p PhaseDef) error {
-	if ew := strings.TrimSpace(p.EntryWhen); ew != "" {
-		if conditions.IsCatalogStub(ew) {
-			return fmt.Errorf("phase %q entry_when %q is catalog-only", p.ID, ew)
-		}
-		if !IsKnownCompleteWhen(ew) {
-			return fmt.Errorf("phase %q entry_when %q is not a known condition", p.ID, ew)
-		}
-	}
-	for _, g := range p.Gates {
-		if strings.TrimSpace(g) == "" {
-			return fmt.Errorf("phase %q: empty gates entry", p.ID)
-		}
-	}
-	if p.CompleteWhen == CompleteWhenGatesSatisfied && len(p.Gates) == 0 {
+	if p.CompleteWhen == vocabulary.CompleteWhenGatesSatisfied && len(p.Gates) == 0 {
 		return fmt.Errorf("phase %q: gates_satisfied requires non-empty gates", p.ID)
 	}
 	if childWhen := strings.TrimSpace(p.ChildCompleteWhen); childWhen != "" {
-		if !IsKnownCompleteWhen(childWhen) {
-			return fmt.Errorf("phase %q: child_complete_when %q is not a known condition", p.ID, childWhen)
-		}
-		if childWhen == CompleteWhenGatesSatisfied && len(p.ChildGates) == 0 {
+		if childWhen == vocabulary.CompleteWhenGatesSatisfied && len(p.ChildGates) == 0 {
 			return fmt.Errorf("phase %q: child_complete_when gates_satisfied requires child_gates", p.ID)
 		}
 	} else if len(p.ChildGates) > 0 {
@@ -275,7 +258,7 @@ func validatePhaseInvoke(p PhaseDef) error {
 	if p.InvokeWorkflow != nil && strings.TrimSpace(p.EntryWhen) != "" {
 		return fmt.Errorf("phase %q: entry_when cannot combine with invoke_workflow (child handles entry)", p.ID)
 	}
-	if p.CompleteWhen != CompleteWhenGatesSatisfied {
+	if p.CompleteWhen != vocabulary.CompleteWhenGatesSatisfied {
 		return fmt.Errorf("phase %q: invoke_workflow phases must use complete_when: gates_satisfied", p.ID)
 	}
 	hasChildComplete := false

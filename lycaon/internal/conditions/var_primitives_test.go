@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/vocabulary"
 )
 
 func TestVarEqualsDotPath(t *testing.T) {
@@ -31,10 +32,10 @@ func TestVarTruthyDotPath(t *testing.T) {
 }
 
 func TestIsHostOnlyCondition(t *testing.T) {
-	if !IsHostOnlyCondition("var_set:plan.status") {
+	if !vocabulary.IsHostOnlyCondition("var_set:plan.status") {
 		t.Fatal("var_set must be host-only")
 	}
-	if IsHostOnlyCondition("var_equals:plan.status,approved") {
+	if vocabulary.IsHostOnlyCondition("var_equals:plan.status,approved") {
 		t.Fatal("var_equals is readable in rules")
 	}
 }

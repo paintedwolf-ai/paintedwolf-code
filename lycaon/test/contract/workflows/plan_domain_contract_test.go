@@ -5,8 +5,10 @@ import (
 
 	"github.com/lycaon/lycaon/internal/conditions"
 	"github.com/lycaon/lycaon/internal/rules"
+	"github.com/lycaon/lycaon/internal/testutil/vocabularytest"
 	"github.com/lycaon/lycaon/internal/vocabulary"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
+	workflowvalidation "github.com/lycaon/lycaon/internal/workflow/validation"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 )
 
@@ -14,7 +16,7 @@ func TestPlanDomainIDsRegisteredOnBoot(t *testing.T) {
 	t.Parallel()
 	reg, err := conditions.NewDefaultRegistry(conditions.RegistryDeps{})
 	contractcheck.FailErr(t, "build conditions registry", err)
-	for _, id := range conditions.ShippedPlanDomainIDs() {
+	for _, id := range vocabularytest.DomainIDs("plan", "shipped") {
 		if !reg.Has(id) {
 			t.Fatalf("shipped plan domain id %q not registered", id)
 		}
@@ -29,7 +31,7 @@ func TestVocabularyExportPlanCatalogStatus(t *testing.T) {
 			seen[row.ID] = row
 		}
 	}
-	for _, id := range conditions.ShippedPlanDomainIDs() {
+	for _, id := range vocabularytest.DomainIDs("plan", "shipped") {
 		row, ok := seen[id]
 		if !ok {
 			t.Fatalf("missing plan domain catalog row for %q", id)
@@ -50,8 +52,8 @@ func TestBundledWorkflowsOnlyReferenceImplementedPlanPredicates(t *testing.T) {
 	}
 	ruleConfigs, err := rules.LoadBundledRuleConfigs()
 	contractcheck.FailErr(t, "rules.LoadBundledRuleConfigs failed", err)
-	if diags := vocabulary.ValidateBundled(reg, manifests, ruleConfigs); len(diags) > 0 {
-		t.Fatalf("vocabulary.ValidateBundled failed: %v", diags)
+	if diags := workflowvalidation.ValidateBundled(reg, manifests, ruleConfigs); len(diags) > 0 {
+		t.Fatalf("workflowvalidation.ValidateBundled failed: %v", diags)
 	}
 }
 
@@ -68,7 +70,7 @@ func TestValidateBundledAcceptsParameterizedPhasePredicate(t *testing.T) {
 			},
 		}),
 	})
-	if diags := vocabulary.ValidateBundled(reg, manifests, nil); len(diags) > 0 {
+	if diags := workflowvalidation.ValidateBundled(reg, manifests, nil); len(diags) > 0 {
 		t.Fatalf("parameterized phase predicate should validate: %v", diags)
 	}
 }

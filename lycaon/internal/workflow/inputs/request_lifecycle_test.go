@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/vocabulary"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 	"github.com/lycaon/lycaon/internal/workflow/runstate"
 	"github.com/lycaon/lycaon/pkg/api"
@@ -16,7 +17,7 @@ func requestTestManifest(id string, cadence workflowdef.RequestCadence, fallback
 		ID: id, Version: "1.0.0",
 		Request: &workflowdef.ManifestRequest{Cadence: cadence, Question: "What should this workflow do?", Default: fallback},
 		PhaseDefs: []workflowdef.PhaseDef{{
-			ID: "work", ActivityLabel: "Working", CompleteWhen: workflowdef.CompleteWhenGatesSatisfied, Gates: []string{"research_satisfied"}, Next: "done",
+			ID: "work", ActivityLabel: "Working", CompleteWhen: vocabulary.CompleteWhenGatesSatisfied, Gates: []string{"research_satisfied"}, Next: "done",
 		}, {ID: "done", ActivityLabel: "Done", Terminal: true, CompleteWhen: "orchestration_complete"}},
 	})
 }
@@ -137,7 +138,7 @@ func TestRequiredRequestPrecedesInitialPhaseFeedback(t *testing.T) {
 		Request: &workflowdef.ManifestRequest{Cadence: workflowdef.RequestCadenceOnce, Question: "What should this workflow do?"},
 		PhaseDefs: []workflowdef.PhaseDef{{
 			ID: "clarify", OnEnter: workflowdef.PhaseOnEnter{RequestUserFeedback: &workflowdef.UserFeedbackPrompt{Prompt: "Which API?"}},
-			CompleteWhen: workflowdef.CompleteWhenGatesSatisfied, Gates: []string{"user_feedback_received:clarify"}, Next: "done",
+			CompleteWhen: vocabulary.CompleteWhenGatesSatisfied, Gates: []string{"user_feedback_received:clarify"}, Next: "done",
 		}, {ID: "done", Terminal: true, CompleteWhen: "orchestration_complete"}},
 	})
 	mgr.Resolver.Overlay = workflowdef.NewRegistry(map[string]workflowdef.Manifest{"ordered-request@1.0.0": manifest})

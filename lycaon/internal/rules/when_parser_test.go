@@ -50,8 +50,8 @@ func TestWhenParserUnknownIdentifierFailsAtEval(t *testing.T) {
 
 func TestMatchWhenExprViaRegistry(t *testing.T) {
 	reg := conditions.NewRegistry()
-	_ = reg.Register("leaf_a", func(_ conditions.EvalContext) (bool, error) { return true, nil })
-	ok, err := MatchWhenExpr(reg, "leaf_a and leaf_a", EvalContext{})
+	_ = reg.Register("workflow_active", func(_ conditions.EvalContext) (bool, error) { return true, nil })
+	ok, err := MatchWhenExpr(reg, "workflow_active and workflow_active", EvalContext{})
 	if err != nil || !ok {
 		t.Fatalf("ok=%v err=%v", ok, err)
 	}
@@ -61,23 +61,23 @@ func TestMatchWhenExprViaRegistry(t *testing.T) {
 // canonical form carries no operator to scan for.
 func TestMatchWhenSingleFalsyKeyNegates(t *testing.T) {
 	reg := conditions.NewRegistry()
-	_ = reg.Register("leaf_a", func(_ conditions.EvalContext) (bool, error) { return true, nil })
-	_ = reg.Register("leaf_b", func(_ conditions.EvalContext) (bool, error) { return false, nil })
+	_ = reg.Register("workflow_active", func(_ conditions.EvalContext) (bool, error) { return true, nil })
+	_ = reg.Register("workflow_paused", func(_ conditions.EvalContext) (bool, error) { return false, nil })
 
-	ok, err := MatchWhen(reg, map[string]any{"leaf_a": false}, EvalContext{})
+	ok, err := MatchWhen(reg, map[string]any{"workflow_active": false}, EvalContext{})
 	if err != nil {
 		t.Fatalf("negated true condition errored: %v", err)
 	}
 	if ok {
-		t.Fatal("when {leaf_a: false} must not match while leaf_a holds")
+		t.Fatal("when {workflow_active: false} must not match while workflow_active holds")
 	}
 
-	ok, err = MatchWhen(reg, map[string]any{"leaf_b": false}, EvalContext{})
+	ok, err = MatchWhen(reg, map[string]any{"workflow_paused": false}, EvalContext{})
 	if err != nil {
 		t.Fatalf("negated false condition errored: %v", err)
 	}
 	if !ok {
-		t.Fatal("when {leaf_b: false} must match while leaf_b is false")
+		t.Fatal("when {workflow_paused: false} must match while workflow_paused is false")
 	}
 }
 
@@ -112,10 +112,10 @@ func TestMatchWhenUnknownConditionIsAnError(t *testing.T) {
 // error: the leaf reads false and the tool call is not rejected.
 func TestMatchWhenOperationalConditionErrorDoesNotReject(t *testing.T) {
 	reg := conditions.NewRegistry()
-	_ = reg.Register("flaky", func(_ conditions.EvalContext) (bool, error) {
+	_ = reg.Register("approval_denied", func(_ conditions.EvalContext) (bool, error) {
 		return false, errNotAvailable
 	})
-	ok, err := MatchWhen(reg, map[string]any{"flaky": true}, EvalContext{})
+	ok, err := MatchWhen(reg, map[string]any{"approval_denied": true}, EvalContext{})
 	if err != nil {
 		t.Fatalf("operational failure must not become a rule error: %v", err)
 	}

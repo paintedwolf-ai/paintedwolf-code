@@ -2259,6 +2259,11 @@ CREATE INDEX IF NOT EXISTS idx_landed_changes_delegation_created
 CREATE INDEX IF NOT EXISTS idx_landed_changes_path_created
     ON landed_changes(canonical_path, created_at DESC);
 
+CREATE TABLE IF NOT EXISTS workflow_run_manifests (
+    run_id TEXT PRIMARY KEY REFERENCES workflow_runs(id) ON DELETE CASCADE,
+    manifest_yaml TEXT NOT NULL CHECK (length(manifest_yaml) > 0)
+) STRICT, WITHOUT ROWID;
+
 -- Workflows attached to sessions.
 CREATE TABLE IF NOT EXISTS session_workflows (
     session_id TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
@@ -2269,6 +2274,7 @@ CREATE TABLE IF NOT EXISTS session_workflows (
     created_at TEXT NOT NULL,
     created_by TEXT NOT NULL CHECK (created_by IN ('user', 'coordinator')),
     created_by_person_id TEXT REFERENCES people(id),
+    authored_yaml TEXT NOT NULL DEFAULT '',
     CHECK ((created_by = 'user') = (created_by_person_id IS NOT NULL)),
     PRIMARY KEY (session_id, workflow_id, version)
 ) STRICT, WITHOUT ROWID;

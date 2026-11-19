@@ -4,12 +4,13 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/lycaon/lycaon/internal/workflow/runstate"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/conditions"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/vocabulary"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
+	"github.com/lycaon/lycaon/internal/workflow/runstate"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -42,7 +43,7 @@ func obligationTestManifest() workflowdef.Manifest {
 		PhaseDefs: []workflowdef.PhaseDef{
 			{
 				ID:           "ingest",
-				CompleteWhen: workflowdef.CompleteWhenGatesSatisfied,
+				CompleteWhen: vocabulary.CompleteWhenGatesSatisfied,
 				Gates:        []string{workflowdef.ObligationGateLeaf("scan")},
 				OnEnter: workflowdef.PhaseOnEnter{Obligations: []workflowdef.ObligationDef{{
 					Kind: "scan", Params: map[string]any{"categories": []any{"security"}},
@@ -135,14 +136,14 @@ func TestAdvanceConvergesAcrossSettledObligation(t *testing.T) {
 		PhaseDefs: []workflowdef.PhaseDef{
 			{
 				ID:                 "plan",
-				CompleteWhen:       workflowdef.CompleteWhenGatesSatisfied,
+				CompleteWhen:       vocabulary.CompleteWhenGatesSatisfied,
 				Gates:              []string{"fanout_planned"},
 				AdvanceWhenGateMet: workflowdef.AdvanceWhenGateMetCoordinator,
 				Next:               "ingest",
 			},
 			{
 				ID:           "ingest",
-				CompleteWhen: workflowdef.CompleteWhenGatesSatisfied,
+				CompleteWhen: vocabulary.CompleteWhenGatesSatisfied,
 				Gates:        []string{workflowdef.ObligationGateLeaf("scan")},
 				OnEnter: workflowdef.PhaseOnEnter{Obligations: []workflowdef.ObligationDef{{
 					Kind: "scan", Params: map[string]any{"categories": []any{"security"}},
@@ -150,7 +151,7 @@ func TestAdvanceConvergesAcrossSettledObligation(t *testing.T) {
 				Next: "execute",
 			},
 			{
-				ID: "execute", CompleteWhen: workflowdef.CompleteWhenGatesSatisfied,
+				ID: "execute", CompleteWhen: vocabulary.CompleteWhenGatesSatisfied,
 				Gates: []string{"worker_cycle_ready"}, Next: "done",
 			},
 			{ID: "done", Terminal: true, CompleteWhen: "orchestration_complete"},

@@ -50,7 +50,7 @@ func ValidateWhen(reg *conditions.ConditionRegistry, when map[string]any) error 
 		return err
 	}
 	for _, leaf := range leaves {
-		if err := validateLeafName(reg, leaf.Name); err != nil {
+		if err := reg.Resolve(leaf.Name); err != nil {
 			return fmt.Errorf("when %q: %w", renderLeaves(leaves), err)
 		}
 	}
@@ -65,16 +65,6 @@ func renderLeaves(leaves []WhenLeaf) string {
 	return strings.Join(parts, " and ")
 }
 
-func validateLeafName(reg *conditions.ConditionRegistry, name string) error {
-	if conditions.IsForbidden(name) {
-		return fmt.Errorf("%w: %s", conditions.ErrForbiddenCondition, name)
-	}
-	if !reg.Has(name) {
-		return fmt.Errorf("%w: %s", conditions.ErrUnknownCondition, name)
-	}
-	return nil
-}
-
 // MatchWhenExpr evaluates a boolean when expression string via the registry.
 // Every expression is parsed; a lone condition name is a one-node tree.
 func MatchWhenExpr(reg *conditions.ConditionRegistry, expr string, eval EvalContext) (bool, error) {
@@ -85,7 +75,7 @@ func MatchWhenExpr(reg *conditions.ConditionRegistry, expr string, eval EvalCont
 	if reg == nil {
 		return false, fmt.Errorf("nil condition registry")
 	}
-	node, err := boolexpr.Parse(expr)
+	node, err := reg.ParseExpression(expr)
 	if err != nil {
 		return false, fmt.Errorf("parse when %q: %w", expr, err)
 	}
@@ -108,16 +98,8 @@ func ValidateWhenExpr(reg *conditions.ConditionRegistry, expr string) error {
 	if reg == nil {
 		return fmt.Errorf("nil condition registry")
 	}
-	node, err := boolexpr.Parse(expr)
-	if err != nil {
-		return fmt.Errorf("parse when %q: %w", expr, err)
-	}
-	for _, key := range boolexpr.CollectIdents(node) {
-		if err := validateLeafName(reg, key); err != nil {
-			return fmt.Errorf("when %q: %w", expr, err)
-		}
-	}
-	return nil
+	_, err := reg.ParseExpression(expr)
+	return err
 }
 
 // registryEnv adapts the condition registry to boolexpr's name→bool environment.

@@ -39,7 +39,7 @@ coordinator_profile: coordinator
 phases:
   - id: stub
     activity_label: Stub phase
-    complete_when: always
+    complete_when: orchestration_complete
 `)
 	contractcheck.FailErr(t, "write overlay workflow", os.WriteFile(filepath.Join(overlayDir, "workflow.yaml"), wfYAML, 0o600))
 
@@ -74,7 +74,7 @@ coordinator_profile: coordinator
 phases:
   - id: stub
     activity_label: Stub phase
-    complete_when: always
+    complete_when: orchestration_complete
 `)
 	contractcheck.FailErr(t, "write flat overlay", os.WriteFile(filepath.Join(overlayDir, "flat-overlay-test.yaml"), wfYAML, 0o600))
 

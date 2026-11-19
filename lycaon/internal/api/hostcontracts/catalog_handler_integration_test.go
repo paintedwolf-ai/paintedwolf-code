@@ -146,7 +146,7 @@ request:
 phases:
   - id: only
     activity_label: Running
-    complete_when: always
+    complete_when: orchestration_complete
     terminal: true
 `
 	testutil.FailErr(t, "write valid", os.WriteFile(filepath.Join(validDir, "workflow.yaml"), []byte(validYAML), 0o644))

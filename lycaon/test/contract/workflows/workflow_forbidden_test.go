@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/lycaon/lycaon/internal/conditions"
+	"github.com/lycaon/lycaon/internal/vocabulary"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 )
 
@@ -42,7 +42,7 @@ func TestBundledConfigHasNoForbiddenPredicateIDs(t *testing.T) {
 func TestForbiddenIDsAreRejectedByRegistry(t *testing.T) {
 	t.Parallel()
 	for _, sample := range forbiddenConfigSamples {
-		if !conditions.IsForbidden(sample.id) {
+		if !vocabulary.IsForbidden(sample.id) {
 			t.Fatalf("sample id %q must be forbidden", sample.id)
 		}
 	}

@@ -2,13 +2,14 @@ package workflow
 
 import (
 	"context"
-	workflowgates "github.com/lycaon/lycaon/internal/workflow/gates"
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/boolexpr"
 	"github.com/lycaon/lycaon/internal/conditions"
 	"github.com/lycaon/lycaon/internal/observability"
+	"github.com/lycaon/lycaon/internal/vocabulary"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
+	workflowgates "github.com/lycaon/lycaon/internal/workflow/gates"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -40,7 +41,7 @@ func (e RegistryGateEvaluator) PhaseGateMet(ctx context.Context, manifest workfl
 		gates, _ := vars["gates"].(map[string]any)
 		committed, _ := gates[gate].(bool)
 		if !committed {
-			return false, workflowgates.GateCheckResult{Reason: workflowdef.CompleteWhenGatesSatisfied, FailedGate: gate, FailedLeaves: []string{gate}}, nil
+			return false, workflowgates.GateCheckResult{Reason: vocabulary.CompleteWhenGatesSatisfied, FailedGate: gate, FailedLeaves: []string{gate}}, nil
 		}
 	}
 	okPrimary, result, err := e.evaluatePrimaryGate(ctx, def, run, vars)
@@ -53,13 +54,13 @@ func (e RegistryGateEvaluator) PhaseGateMet(ctx context.Context, manifest workfl
 func (e RegistryGateEvaluator) evaluatePrimaryGate(ctx context.Context, def workflowdef.PhaseDef, run *api.WorkflowRun, vars map[string]any) (bool, workflowgates.GateCheckResult, error) {
 	cw := strings.TrimSpace(def.CompleteWhen)
 	switch cw {
-	case workflowdef.CompleteWhenGatesSatisfied:
-		return e.evaluateGateList(ctx, def, run, vars, def.Gates, workflowdef.CompleteWhenGatesSatisfied)
+	case vocabulary.CompleteWhenGatesSatisfied:
+		return e.evaluateGateList(ctx, def, run, vars, def.Gates, vocabulary.CompleteWhenGatesSatisfied)
 	case "":
 		return true, workflowgates.GateCheckResult{}, nil
 	default:
-		if strings.HasPrefix(cw, workflowdef.CompleteWhenGateSatisfied) {
-			gate := strings.TrimPrefix(cw, workflowdef.CompleteWhenGateSatisfied)
+		if strings.HasPrefix(cw, vocabulary.CompleteWhenGateSatisfied) {
+			gate := strings.TrimPrefix(cw, vocabulary.CompleteWhenGateSatisfied)
 			return e.evaluateGateList(ctx, def, run, vars, []string{gate}, cw)
 		}
 		return e.ExpressionMet(ctx, cw, def, run, vars)
@@ -101,15 +102,15 @@ func (e RegistryGateEvaluator) ExpressionMet(ctx context.Context, expr string, d
 	ec := e.buildEvalContext(ctx, def, run, vars)
 
 	// A bare gate leaf parses to a one-node tree, so there is no second path.
-	node, err := boolexpr.Parse(expr)
+	node, err := reg.ParseExpression(expr)
 	if err != nil {
 		return false, workflowgates.GateCheckResult{Reason: "invalid complete_when: " + expr, FailedGate: expr, FailedLeaves: []string{expr}}, nil //nolint:nilerr // parse failure becomes a structured gate-deny reason rather than a fatal error
 	}
-	env := func(name string) bool {
-		ok, err := reg.Evaluate(name, ec)
-		return err == nil && ok
+	matched, err := reg.EvaluateExpression(node, ec)
+	if err != nil {
+		return false, workflowgates.GateCheckResult{}, err
 	}
-	if boolexpr.Eval(node, env) {
+	if matched {
 		return true, workflowgates.GateCheckResult{}, nil
 	}
 	failed, err := collectFailedLeavesFromExpr(reg, ec, node)

@@ -4,7 +4,7 @@ A workflow is a validated manifest that turns an open-ended session into explici
 
 **See also:** [Session](session.md) · [Coordination](coordination.md) · [Grounding](grounding.md) · [Extend](extend.md) · [Agent prompt template](agent-prompt-template.md)
 
-**Machine truth:** shipped manifests under `lycaon/config/packs/painted-wolf/*/workflows/<id>/workflow.yaml` · manifest shape and load-time validation in `lycaon/internal/workflow/definition/manifest_yaml_types.go` · the gate and `complete_when` vocabulary in `schemas/workflow_vocabulary.json`, generated from the shipped registries by `lycaon/internal/vocabulary/export.go` · overlay checks in `lycaon/internal/workflowvalidate/`
+**Machine truth:** shipped manifests under `lycaon/config/packs/painted-wolf/*/workflows/<id>/workflow.yaml` · manifest shape and load-time validation in `lycaon/internal/workflow/definition/manifest_yaml_types.go` · the gate and `complete_when` vocabulary in `schemas/workflow_vocabulary.json`, exported from the declarations in `lycaon/internal/vocabulary/` · overlay checks in `lycaon/internal/workflowvalidate/`
 
 ---
 
@@ -199,9 +199,13 @@ Project workflows use one feature directory, and the same shape moves into an ex
 
 A project workflow is user-repo content. It may compose the public phase, gate, agent, prompt, and tool-surface vocabulary, but it cannot register a new host fact or bypass effect approval. Unknown gates fail closed rather than degrading to an always-open phase.
 
-The gate vocabulary is split, because not every leaf a bundled workflow evaluates is a fact a project can meaningfully assert. The **generic gate kit** (`gates_satisfied`, `orchestration_complete`, `child_run_complete`, `child_run_failed`, `choice_transition_required`, `human_approval`, plus the parameterized prefixes `var_equals:`, `var_truthy:`, `user_decision:`, `user_decision_received:`, `user_feedback_received:`, `hitl_consulted:`, `evidence_passed:`, `phase_is:`, `phase_skipped:`, `gate_passed:`, and the obligation prefix) is composable in a project overlay. **Domain leaves** such as `plan_stub_valid`, `topology_stage_complete`, `worker_cycle_ready`, or `delegation_closeout_complete` name state that bundled machinery owns and are refused in an overlay with diagnostic `domain_leaf_on_overlay`. Extension-pack workflows are trusted content and may use domain leaves.
+The `overlay` field in [the workflow vocabulary](../schemas/workflow_vocabulary.json) identifies the generic gate kit. Project workflows can use leaves such as `evidence_passed:verify` and `obligation_settled:scan`. The same restriction applies inside boolean expressions, named gate wrappers, child phases, transition conditions, and approval readiness. A bundled-only leaf such as `plan_stub_valid` produces `domain_leaf_on_overlay`.
 
-`IsGenericGateKitLeaf` in `internal/workflow/gate_kit.go` is the enforcing source. The rule to author against: if the leaf describes something the project itself declares (a variable, a human answer, a phase position, an evidence receipt) the overlay may use it; if it describes host orchestration internals, it belongs to a bundled or extension workflow.
+The catalog distinguishes evaluator-backed predicates, completion forms, host-only names, and reserved names. Each executable exact name or family binds to a Go evaluator. The catalog reserves `permission_denied`. Use `approval_denied` to test whether the host recorded a denied approval for the session.
+
+New project files published by the host declare `workflow_format: 2`. The host checks the predicates written in that file before resolving `extends`, so a project can inherit a bundled phase and override another phase with a generic gate. Session drafts retain both the authored YAML and the resolved definition. A failed publication leaves the draft available for correction. Unversioned project files and resolved-only drafts follow the released grammar.
+
+Each new root or child run stores its resolved definition in the same transaction that admits the run. Later edits to a workflow apply to future admissions. Runs created before snapshot storage resolve their recorded workflow ID and version through the catalog.
 
 Session composition is bounded to one-off sequencing. Reusable behavior belongs in a project or extension workflow where it can be validated and reviewed as content.
 

@@ -6,28 +6,6 @@ import (
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
-// ShippedDelegateLeafIDs returns recipe-agnostic delegate step_kind gate leaves.
-func ShippedDelegateLeafIDs() []string {
-	return append([]string(nil), shippedDelegateLeafIDs...)
-}
-
-var shippedDelegateLeafIDs = []string{
-	"recon_or_board_ready",
-	"worker_cycle_ready",
-	"topology_report_delivered",
-	"fanout_planned",
-}
-
-// ShippedSubroutineLeafIDs returns subroutine invoke gate leaves.
-func ShippedSubroutineLeafIDs() []string {
-	return append([]string(nil), shippedSubroutineLeafIDs...)
-}
-
-var shippedSubroutineLeafIDs = []string{
-	"child_run_complete",
-	"child_run_failed",
-}
-
 // WorkerCycleIdle reports whether no pending/running jobs remain (excluding completingJobID).
 type WorkerCycleIdle func(projectID, sessionID, completingJobID string) (bool, error)
 

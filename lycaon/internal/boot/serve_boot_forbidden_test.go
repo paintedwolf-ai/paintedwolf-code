@@ -7,8 +7,8 @@ import (
 	"github.com/lycaon/lycaon/internal/conditions"
 	"github.com/lycaon/lycaon/internal/rules"
 	"github.com/lycaon/lycaon/internal/testutil"
-	"github.com/lycaon/lycaon/internal/vocabulary"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
+	workflowvalidation "github.com/lycaon/lycaon/internal/workflow/validation"
 	"github.com/lycaon/lycaon/internal/workflowdiag"
 )
 
@@ -23,7 +23,7 @@ func TestServeBootFailsOnForbiddenBundledRule(t *testing.T) {
 	ruleConfigs, err := rules.LoadBundledRuleConfigs()
 	testutil.FailErr(t, "rules.LoadBundledRuleConfigs failed", err)
 	cfgs := append([]*rules.RulesConfig(nil), ruleConfigs...)
-	if diags := vocabulary.ValidateBundled(reg, manifests, cfgs); len(diags) > 0 {
+	if diags := workflowvalidation.ValidateBundled(reg, manifests, cfgs); len(diags) > 0 {
 		t.Fatalf("bundled config should validate: %v", diags)
 	}
 
@@ -37,7 +37,7 @@ func TestServeBootFailsOnForbiddenBundledRule(t *testing.T) {
 			"deny": map[string]any{"code": "X", "message": "y"},
 		},
 	}}}
-	diags := vocabulary.ValidateBundled(reg, manifests, []*rules.RulesConfig{bad})
+	diags := workflowvalidation.ValidateBundled(reg, manifests, []*rules.RulesConfig{bad})
 	if len(diags) == 0 {
 		t.Fatal("expected boot validation failure for forbidden when leaf")
 	}

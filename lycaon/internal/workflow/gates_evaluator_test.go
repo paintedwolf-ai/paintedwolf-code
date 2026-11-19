@@ -8,6 +8,7 @@ import (
 	"github.com/lycaon/lycaon/internal/conditions"
 	"github.com/lycaon/lycaon/internal/settingsoverlay"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/vocabulary"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 	"github.com/lycaon/lycaon/internal/workflow/runstate"
 	"github.com/lycaon/lycaon/pkg/api"
@@ -20,7 +21,7 @@ func TestRegistryGateEvaluatorGatesList(t *testing.T) {
 	manifest := workflowdef.Manifest{
 		PhaseDefs: []workflowdef.PhaseDef{{
 			ID:           "ship",
-			CompleteWhen: workflowdef.CompleteWhenGatesSatisfied,
+			CompleteWhen: vocabulary.CompleteWhenGatesSatisfied,
 			Gates: []string{
 				"human_approval",
 				"delegation_closeout_complete",
@@ -99,7 +100,7 @@ func TestReviewGateRequiresCommittedWorkflowAcceptance(t *testing.T) {
 	reg, err := conditions.NewDefaultRegistry(conditions.TestRegistryDepsWithEvidence())
 	testutil.FailErr(t, "create successful evidence registry", err)
 	run := &api.WorkflowRun{SessionID: "session", CurrentPhase: "review"}
-	manifest := workflowdef.Manifest{PhaseDefs: []workflowdef.PhaseDef{{ID: "review", CompleteWhen: workflowdef.CompleteWhenGatesSatisfied, Gates: []string{"evidence_passed:rl_key"}, ReviewLoop: &workflowdef.ReviewLoopDef{EvidenceKey: "rl_key"}}}}
+	manifest := workflowdef.Manifest{PhaseDefs: []workflowdef.PhaseDef{{ID: "review", CompleteWhen: vocabulary.CompleteWhenGatesSatisfied, Gates: []string{"evidence_passed:rl_key"}, ReviewLoop: &workflowdef.ReviewLoopDef{EvidenceKey: "rl_key"}}}}
 	evaluator := RegistryGateEvaluator{Registry: reg}
 	var vars map[string]any
 	passed, _, err := evaluator.PhaseGateMet(t.Context(), manifest, run, vars)

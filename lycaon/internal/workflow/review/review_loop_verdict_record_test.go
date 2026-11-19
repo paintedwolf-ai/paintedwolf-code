@@ -2,15 +2,16 @@ package review_test
 
 import (
 	"context"
-	workflow "github.com/lycaon/lycaon/internal/workflow"
-	runstate "github.com/lycaon/lycaon/internal/workflow/runstate"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/conditions"
 	"github.com/lycaon/lycaon/internal/evidence"
 	"github.com/lycaon/lycaon/internal/inspector"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/vocabulary"
+	workflow "github.com/lycaon/lycaon/internal/workflow"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
+	runstate "github.com/lycaon/lycaon/internal/workflow/runstate"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -23,7 +24,7 @@ func reviewLoopTestManifest() workflowdef.Manifest {
 		PhaseDefs: []workflowdef.PhaseDef{
 			{
 				ID:           "judge",
-				CompleteWhen: workflowdef.CompleteWhenGatesSatisfied,
+				CompleteWhen: vocabulary.CompleteWhenGatesSatisfied,
 				Gates:        []string{"evidence_passed:rl_key"},
 				Next:         "done",
 				ReviewLoop: &workflowdef.ReviewLoopDef{
@@ -67,7 +68,7 @@ func TestRecordReviewLoopVerdictPersistsAnchoredEvidence(t *testing.T) {
 		PhaseDefs: []workflowdef.PhaseDef{
 			{
 				ID:           "claims",
-				CompleteWhen: workflowdef.CompleteWhenGatesSatisfied,
+				CompleteWhen: vocabulary.CompleteWhenGatesSatisfied,
 				Gates:        []string{"evidence_passed:survey_claims"},
 				Next:         "done",
 				ReviewLoop: &workflowdef.ReviewLoopDef{
@@ -290,7 +291,7 @@ func TestRecordReviewLoopVerdictRequiresSucceededAgent(t *testing.T) {
 		PhaseDefs: []workflowdef.PhaseDef{
 			{
 				ID:           "judge",
-				CompleteWhen: workflowdef.CompleteWhenGatesSatisfied,
+				CompleteWhen: vocabulary.CompleteWhenGatesSatisfied,
 				Gates:        []string{"evidence_passed:rl_key"},
 				Next:         "done",
 				ReviewLoop: &workflowdef.ReviewLoopDef{
@@ -358,7 +359,7 @@ func ifSpawnableReviewManifest() workflowdef.Manifest {
 		PhaseDefs: []workflowdef.PhaseDef{
 			{
 				ID:           "challenge",
-				CompleteWhen: workflowdef.CompleteWhenGatesSatisfied,
+				CompleteWhen: vocabulary.CompleteWhenGatesSatisfied,
 				Gates:        []string{"evidence_passed:survey_challenged"},
 				Next:         "done",
 				ReviewLoop: &workflowdef.ReviewLoopDef{

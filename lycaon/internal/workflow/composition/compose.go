@@ -83,6 +83,9 @@ func (c *Composer) Compose(ctx context.Context, req ComposeRequest) (*ComposeRes
 	}
 	raw, err := workflowdef.ParseManifestYAML(req.ManifestYAML)
 	if err != nil {
+		if issues := workflowvalidation.PredicateLoadErrors(err, ""); len(issues) > 0 {
+			return nil, &ComposeValidationFailed{Errors: issues}
+		}
 		return nil, &ComposeValidationFailed{Errors: []api.ComposeValidationError{{
 			Field: "manifest", Code: "parse_error", Message: err.Error(),
 		}}}
@@ -139,7 +142,7 @@ func (c *Composer) Compose(ctx context.Context, req ComposeRequest) (*ComposeRes
 		if !workflowdrafts.IsActor(req.CreatedBy) {
 			return nil, fmt.Errorf("invalid compose actor %q", req.CreatedBy)
 		}
-		if err := c.SessionStore.Upsert(ctx, sessionID, []byte(effectiveYAML), req.CreatedBy, &effSummary); err != nil {
+		if err := c.SessionStore.Upsert(ctx, sessionID, []byte(effectiveYAML), req.CreatedBy, &workflowdrafts.Composition{AuthoredYAML: string(req.ManifestYAML), Summary: effSummary}); err != nil {
 			return nil, err
 		}
 	}
@@ -160,6 +163,9 @@ func (c *Composer) validateBody(data []byte) []api.ComposeValidationError {
 	}
 	raw, err := workflowdef.ParseManifestYAML(data)
 	if err != nil {
+		if issues := workflowvalidation.PredicateLoadErrors(err, ""); len(issues) > 0 {
+			return issues
+		}
 		out = append(out, api.ComposeValidationError{
 			Field: "manifest", Code: "parse_error", Message: err.Error(),
 		})

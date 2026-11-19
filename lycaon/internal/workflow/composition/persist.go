@@ -2,7 +2,6 @@ package composition
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -13,6 +12,7 @@ import (
 	"github.com/lycaon/lycaon/internal/fseffect"
 	"github.com/lycaon/lycaon/internal/orchestration"
 	"github.com/lycaon/lycaon/internal/settingsoverlay"
+	workflowcatalog "github.com/lycaon/lycaon/internal/workflow/catalog"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 	workflowdrafts "github.com/lycaon/lycaon/internal/workflow/drafts"
 	workflowvalidation "github.com/lycaon/lycaon/internal/workflow/validation"
@@ -97,8 +97,15 @@ func (p *Persister) Persist(ctx context.Context, req PersistRequest) (*PersistRe
 	if err := p.checkApproval(req); err != nil {
 		return nil, err
 	}
-	raw, err := workflowdef.ParseManifestYAML([]byte(rec.ManifestYAML))
+	source := rec.ManifestYAML
+	if rec.AuthoredYAML != "" {
+		source = rec.AuthoredYAML
+	}
+	raw, err := workflowdef.ParseManifestYAML([]byte(source))
 	if err != nil {
+		if issues := workflowvalidation.PredicateLoadErrors(err, ""); len(issues) > 0 {
+			return nil, &ComposeValidationFailed{Errors: issues}
+		}
 		return nil, &ComposeValidationFailed{Errors: []api.ComposeValidationError{{
 			Field: "manifest", Code: "parse_error", Message: err.Error(),
 		}}}
@@ -137,9 +144,17 @@ func (p *Persister) Persist(ctx context.Context, req PersistRequest) (*PersistRe
 			return nil, collision
 		}
 	}
-	yamlOut, err := workflowdef.MarshalManifestYAML(effective)
+	yamlOut, err := projectManifestYAML(rec.AuthoredYAML, triggerOverride, effective)
 	if err != nil {
 		return nil, err
+	}
+	path := ProjectWorkflowOverlayPath(featureDir)
+	issues, err := workflowcatalog.ValidatePublication(projectDir, path, []byte(yamlOut))
+	if err != nil {
+		return nil, err
+	}
+	if len(issues) > 0 {
+		return nil, &ComposeValidationFailed{Errors: issues}
 	}
 	overlayDir := filepath.Join(projectDir, settingsoverlay.DirName(), "workflows", featureDir)
 	if err := os.MkdirAll(overlayDir, 0o750); err != nil {
@@ -153,13 +168,13 @@ func (p *Persister) Persist(ctx context.Context, req PersistRequest) (*PersistRe
 	}); err != nil {
 		return nil, err
 	}
-	if err := p.SessionStore.Delete(ctx, sessionID, workflowID, version); err != nil && !errors.Is(err, workflowdrafts.ErrNotFound) {
+	if err := p.SessionStore.DeletePublished(ctx, *rec); err != nil {
 		return nil, err
 	}
 	summary := effective.Summary()
 	summary.Scope = api.WorkflowScopeProject
 	return &PersistResult{
-		Path:    ProjectWorkflowOverlayPath(featureDir),
+		Path:    path,
 		Summary: summary,
 	}, nil
 }

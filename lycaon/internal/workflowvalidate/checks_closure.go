@@ -17,7 +17,7 @@ import (
 	"github.com/lycaon/lycaon/internal/progress"
 	"github.com/lycaon/lycaon/internal/settingsoverlay"
 	"github.com/lycaon/lycaon/internal/spawn"
-	"github.com/lycaon/lycaon/internal/workflow"
+	"github.com/lycaon/lycaon/internal/vocabulary"
 	workflowcomposition "github.com/lycaon/lycaon/internal/workflow/composition"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 	workflowvalidation "github.com/lycaon/lycaon/internal/workflow/validation"
@@ -27,7 +27,6 @@ import (
 
 func checkClosure(
 	opts CatalogValidateOptions,
-	condReg *conditions.ConditionRegistry,
 	path string,
 	m workflowdef.Manifest,
 	overlayRules bool,
@@ -36,7 +35,6 @@ func checkClosure(
 	out = append(out, checkInvoke(opts, path, m)...)
 	out = append(out, checkPrompts(opts, path, m)...)
 	out = append(out, checkKicks(opts, path, m)...)
-	out = append(out, checkReadiness(condReg, path, m)...)
 	out = append(out, checkEvidenceKeys(path, m)...)
 	// Review-loop fixtures exist only in bundled source trees.
 	if opts.Mode == ModeBundled && !overlayRules {
@@ -47,20 +45,8 @@ func checkClosure(
 
 func checkOverlayGateKit(path string, m workflowdef.Manifest) []api.ComposeValidationError {
 	var out []api.ComposeValidationError
-	for _, p := range m.PhaseDefs {
-		for _, id := range collectLeaves(p) {
-			if id == workflowdef.CompleteWhenGatesSatisfied {
-				continue
-			}
-			if strings.HasPrefix(id, workflowdef.CompleteWhenGateSatisfied) {
-				continue
-			}
-			if !workflow.IsGenericGateKitLeaf(id) {
-				out = append(out, workflowdiag.EmitDefault(workflowdiag.MustCode("domain_leaf_on_overlay"),
-					fmt.Sprintf("%s: phases[%s]", path, p.ID),
-					map[string]any{"leaf": id}))
-			}
-		}
+	for _, phase := range m.PhaseDefs {
+		out = append(out, phase.PredicateDiagnostics(fmt.Sprintf("%s: phases[%s]", path, phase.ID), vocabulary.IsPredicate, true)...)
 	}
 	return out
 }
@@ -299,25 +285,6 @@ func renderTemplateExistsAny(dirs []extpacks.Source, render string) bool {
 	return false
 }
 
-func checkReadiness(condReg *conditions.ConditionRegistry, path string, m workflowdef.Manifest) []api.ComposeValidationError {
-	var out []api.ComposeValidationError
-	for _, p := range m.PhaseDefs {
-		if p.HumanApproval == nil {
-			continue
-		}
-		leaf := strings.TrimSpace(p.HumanApproval.Readiness)
-		if leaf == "" {
-			continue
-		}
-		if condReg != nil && !condReg.Has(leaf) && !workflowdef.IsKnownGateLeaf(leaf) {
-			out = append(out, workflowdiag.EmitDefault(workflowdiag.MustCode("unknown_readiness"),
-				fmt.Sprintf("%s: phases[%s].human_approval.readiness", path, p.ID),
-				map[string]any{"leaf": leaf}))
-		}
-	}
-	return out
-}
-
 func checkEvidenceKeys(path string, m workflowdef.Manifest) []api.ComposeValidationError {
 	known := knownEvidenceKeys()
 	var out []api.ComposeValidationError
@@ -445,7 +412,7 @@ func checkGateFeedbackCoverage(opts CatalogValidateOptions, reg *workflowdef.Reg
 		}
 		for _, p := range m.PhaseDefs {
 			for _, leaf := range collectLeaves(p) {
-				if !workflowdef.IsKnownGateLeaf(leaf) && !workflowdef.IsKnownCompleteWhen(leaf) {
+				if !vocabulary.IsPredicate(leaf) {
 					continue
 				}
 				if !fbCat.Has(leaf) {
@@ -517,25 +484,9 @@ func checkTemplates(opts CatalogValidateOptions, condReg *conditions.ConditionRe
 }
 
 func collectLeaves(p workflowdef.PhaseDef) []string {
-	var exprs []string
-	if cw := strings.TrimSpace(p.CompleteWhen); cw != "" && cw != workflowdef.CompleteWhenGatesSatisfied {
-		exprs = append(exprs, cw)
-	}
-	if ew := strings.TrimSpace(p.EntryWhen); ew != "" {
-		exprs = append(exprs, ew)
-	}
-	for _, g := range p.Gates {
-		if g = strings.TrimSpace(g); g != "" {
-			exprs = append(exprs, g)
-		}
-	}
-	seen := map[string]struct{}{}
 	var out []string
-	for _, e := range exprs {
-		seen[e] = struct{}{}
-	}
-	for id := range seen {
-		out = append(out, id)
+	for _, field := range p.PredicateFields() {
+		out = append(out, field.Leaves...)
 	}
 	return out
 }

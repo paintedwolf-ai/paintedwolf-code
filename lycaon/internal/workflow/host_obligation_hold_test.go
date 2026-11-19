@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/vocabulary"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 	workflowvalidation "github.com/lycaon/lycaon/internal/workflow/validation"
 	"github.com/lycaon/lycaon/pkg/api"
@@ -132,12 +133,12 @@ func TestValidateHostObligationWakeRejectsSilentSuccessor(t *testing.T) {
 		PhaseDefs: []workflowdef.PhaseDef{
 			{
 				ID:           "ingest",
-				CompleteWhen: workflowdef.CompleteWhenGatesSatisfied,
+				CompleteWhen: vocabulary.CompleteWhenGatesSatisfied,
 				Gates:        []string{workflowdef.ObligationGateLeaf("scan")},
 				OnEnter:      workflowdef.PhaseOnEnter{Obligations: []workflowdef.ObligationDef{{Kind: "scan"}}},
 				Next:         "work",
 			},
-			{ID: "work", CompleteWhen: workflowdef.CompleteWhenGatesSatisfied, Next: "done"},
+			{ID: "work", CompleteWhen: vocabulary.CompleteWhenGatesSatisfied, Next: "done"},
 			{ID: "done", Terminal: true, CompleteWhen: "orchestration_complete"},
 		},
 	})
@@ -158,11 +159,11 @@ func TestValidateHostObligationWakeRejectsSilentSuccessor(t *testing.T) {
 // reachable wake and loads clean.
 func TestValidateHostObligationWakeAcceptsReachableWakes(t *testing.T) {
 	successors := map[string]workflowdef.PhaseDef{
-		"prompts":  {ID: "next", CompleteWhen: workflowdef.CompleteWhenGatesSatisfied, OnEnter: workflowdef.PhaseOnEnter{PromptCoordinator: true}},
+		"prompts":  {ID: "next", CompleteWhen: vocabulary.CompleteWhenGatesSatisfied, OnEnter: workflowdef.PhaseOnEnter{PromptCoordinator: true}},
 		"terminal": {ID: "next", Terminal: true, CompleteWhen: "orchestration_complete"},
 		"chained": {
 			ID:           "next",
-			CompleteWhen: workflowdef.CompleteWhenGatesSatisfied,
+			CompleteWhen: vocabulary.CompleteWhenGatesSatisfied,
 			Gates:        []string{workflowdef.ObligationGateLeaf("scan")},
 			OnEnter:      workflowdef.PhaseOnEnter{Obligations: []workflowdef.ObligationDef{{Kind: "scan"}}},
 		},
@@ -176,7 +177,7 @@ func TestValidateHostObligationWakeAcceptsReachableWakes(t *testing.T) {
 				PhaseDefs: []workflowdef.PhaseDef{
 					{
 						ID:           "ingest",
-						CompleteWhen: workflowdef.CompleteWhenGatesSatisfied,
+						CompleteWhen: vocabulary.CompleteWhenGatesSatisfied,
 						Gates:        []string{workflowdef.ObligationGateLeaf("scan")},
 						OnEnter:      workflowdef.PhaseOnEnter{Obligations: []workflowdef.ObligationDef{{Kind: "scan"}}},
 						Next:         "next",

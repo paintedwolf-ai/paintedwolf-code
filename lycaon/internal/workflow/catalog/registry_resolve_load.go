@@ -7,11 +7,12 @@ import (
 
 	"github.com/lycaon/lycaon/internal/settingsoverlay"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
+	workflowvalidation "github.com/lycaon/lycaon/internal/workflow/validation"
 	"github.com/lycaon/lycaon/internal/workflowdiag"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
-func collectProjectManifests(projectDir string, candidates manifestCandidates, excluded *[]api.ExcludedWorkflow) error {
+func collectProjectManifests(projectDir, replacingPath string, candidates manifestCandidates, excluded *[]api.ExcludedWorkflow) error {
 	dir := filepath.Join(projectDir, settingsoverlay.DirName(), "workflows")
 	entries, err := os.ReadDir(dir)
 	if os.IsNotExist(err) {
@@ -25,6 +26,9 @@ func collectProjectManifests(projectDir string, candidates manifestCandidates, e
 			continue
 		}
 		path := filepath.Join(settingsoverlay.DirName(), "workflows", entry.Name(), "workflow.yaml")
+		if path == replacingPath {
+			continue
+		}
 		data, err := os.ReadFile(filepath.Join(projectDir, path))
 		if os.IsNotExist(err) {
 			continue
@@ -47,7 +51,11 @@ func manifestLoadFailure(path string, err error) api.ExcludedWorkflow {
 func (c manifestCandidates) parse(data []byte, path, scope string, excluded *[]api.ExcludedWorkflow) {
 	m, err := workflowdef.ParseManifestYAML(data)
 	if err != nil {
-		*excluded = append(*excluded, manifestLoadFailure(path, err))
+		if ds := workflowvalidation.PredicateLoadErrors(err, path); len(ds) > 0 {
+			*excluded = append(*excluded, newExcludedWorkflow("", "", path, ds))
+		} else {
+			*excluded = append(*excluded, manifestLoadFailure(path, err))
+		}
 		return
 	}
 	if diags := validateUntrustedManifest(path, m); len(diags) > 0 {
