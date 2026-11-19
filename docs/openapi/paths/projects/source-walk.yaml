@@ -21,6 +21,8 @@ paths:
             application/json:
               schema:
                 $ref: ../../components/schemas/session/actions.yaml#/components/schemas/CommandObservationStatus
+        '400':
+          $ref: ../../components/responses.yaml#/components/responses/BadRequest
         '401':
           $ref: ../../components/responses.yaml#/components/responses/Unauthorized
         '404':

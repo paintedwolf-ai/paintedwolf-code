@@ -6013,6 +6013,8 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/CommandObservationStatus'
+        '400':
+          $ref: '#/components/responses/BadRequest'
         '401':
           $ref: '#/components/responses/Unauthorized'
         '404':

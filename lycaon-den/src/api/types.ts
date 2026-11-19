@@ -23817,6 +23817,7 @@ export interface operations {
                     "application/json": components["schemas"]["CommandObservationStatus"];
                 };
             };
+            400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             404: components["responses"]["NotFound"];
             default: components["responses"]["Error"];
