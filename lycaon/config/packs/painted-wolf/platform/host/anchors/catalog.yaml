@@ -414,6 +414,15 @@ anchors:
 
   # ── In-loop landing advisories (rendered immediately into turn history) ──────
 
+  - id: session.mode.agent_enabled
+    title: Agent mode enabled
+    description: The next coordinator round sees the user-approved switch from Ask to Agent.
+    trigger_class: host_api
+    surface: coordinator
+    planes: [inform]
+    envelope:
+      vars: {}
+
   - id: turn.closeout
     title: Turn closeout
     description: Host limit forces a final prose-only turn on a non-closeout coordinator surface.
@@ -798,15 +807,6 @@ anchors:
     envelope:
       vars:
         tool: { type: string, required: true }
-
-  - id: session.mode.agent_enabled
-    title: Agent mode enabled
-    description: The next coordinator round sees the user-approved switch from Ask to Agent.
-    trigger_class: host_api
-    surface: coordinator
-    planes: [inform]
-    envelope:
-      vars: {}
 
   - id: session.pre_invoke
     title: Session pre-invoke policy
