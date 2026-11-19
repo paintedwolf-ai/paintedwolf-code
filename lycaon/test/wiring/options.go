@@ -34,6 +34,7 @@ type options struct {
 	storeCommitObserver     db.CommitObserver
 	globalApprovalPosture   gate.Posture
 	configRoot              *string
+	modelFeedFixture        bool
 }
 
 // A scripted model calls surface tools outright, so the default decider
@@ -112,6 +113,12 @@ func WithProductionCostPricer() Option {
 	return func(o *options) {
 		o.productionCostPricer = true
 	}
+}
+
+// WithModelFeedFixture serves the bundled models.dev fixture as the shared
+// model feed, so a feed refresh reads no network.
+func WithModelFeedFixture() Option {
+	return func(o *options) { o.modelFeedFixture = true }
 }
 
 // WithManifestRegistry replaces the bundled workflow manifest registry.
