@@ -47,6 +47,11 @@ describe("Local model selection", () => {
     expect(screen.getByRole("radio", {name: /Medium/}).parentElement?.textContent).toContain(`Requires 8 GiB of ${label}`);
   });
 
+  it("rounds a fractional memory floor upward", () => {
+    mount({...initial, memory_kind:"gpu", available_models: tiers.map(t => ({...t, min_memory_bytes:16 * 2 ** 30 + 1}))});
+    expect(screen.getByRole("radio", {name: /Medium/}).parentElement?.textContent).toContain("Requires 16.01 GiB of GPU memory");
+  });
+
   it("preselects an eligible download when the recommended tier is unpublished", () => {
     const partial = {...initial, available_models: tiers.map(t => ({...t, download_available: !t.recommended}))};
     const {client} = mount(partial);

@@ -39,7 +39,7 @@ export function LocalModelChoices(props: Props) {
                 </Show>
               }>Installed</Show>
               <Show when={props.memoryKind} keyed>{kind =>
-                <> · Requires {formatModelBytes(model.min_memory_bytes)} of {memoryLabels[kind]}</>
+                <> · Requires {formatModelBytes(model.min_memory_bytes, "up")} of {memoryLabels[kind]}</>
               }</Show>
               <Show when={!model.eligible}> · Exceeds this device’s memory budget</Show>
             </small>

@@ -22,8 +22,11 @@ export function needsOnboardingConfig(input: {
 
 export function localModelSetup(runtime?: LocalGenerationStatus) {
   if (runtime?.offline_installer) return "packaged";
+  const decision = runtime?.selection_state;
+  if (decision === "selected" || decision === "opted_out") return "decided";
+  if (!decision && (runtime?.selected_model || runtime?.state === "opted_out")) return "decided";
   if (!runtime?.available_models) return "unknown";
-  return runtime.available_models.some(tier => tier.download_available) ? "available" : "unpublished";
+  return runtime.available_models.some(tier => tier.eligible && tier.download_available) ? "available" : "deferred";
 }
 
 export function shouldShowOnboardingHardGate(input: {
@@ -35,8 +38,7 @@ export function shouldShowOnboardingHardGate(input: {
   if (!input.prefsReady) return false;
   if (!input.firstRunSetupCompleted) return true;
   if (input.localModelOnboardingCompleted) return false;
-  const setup = localModelSetup(input.runtime);
-  return setup === "available" || setup === "packaged";
+  return localModelSetup(input.runtime) === "available";
 }
 
 export function onboardingGateStep(page: OnboardingGatePage): number {

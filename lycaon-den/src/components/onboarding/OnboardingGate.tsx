@@ -63,9 +63,9 @@ export function OnboardingGate(props: Props) {
     const setup = localModelSetup(localProvider()?.local_runtime);
     if (setup === "unknown") return;
     entryResolved = true;
-    if (setup === "packaged") {
+    if (setup === "packaged" || setup === "decided") {
       void finishModelStep();
-    } else if (setup === "unpublished") {
+    } else if (setup === "deferred") {
       modelStepDeferred = true;
       setPage("layout");
     } else {

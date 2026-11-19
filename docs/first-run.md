@@ -10,7 +10,7 @@ The hard gate a new install shows before the home stage, and how a missing provi
 
 ## The gate
 
-Fresh installations from normal downloads open on local model selection when the release offers a model download. Normal application downloads contain no generation weights. The host detects available hardware locally and recommends a tier. Setup preselects that tier when published. If another eligible tier has a download, setup can preselect it instead. The user can choose another eligible model, import a signed offline bundle, or continue without a local model. Each tier shows its resource tradeoff and download size. The download button starts the transfer. Setup shows the target model, bytes received, and activation progress before it continues. Canceling keeps setup open so the user can retry or choose another tier.
+Fresh installations from normal downloads open on local model selection when the host has an eligible model download and no recorded selection or opt-out. Normal application downloads contain no generation weights. The host detects available hardware locally and recommends a tier. Setup preselects that tier when published. If another eligible tier has a download, setup can preselect it instead. The user can choose another eligible model, import a signed offline bundle, or continue without a local model. Each tier shows its resource tradeoff and download size. The download button starts the transfer. Setup shows the target model, bytes received, and activation progress before it continues. Canceling keeps setup open so the user can retry or choose another tier.
 
 | Page | Choice |
 |------|--------|
@@ -20,7 +20,7 @@ Fresh installations from normal downloads open on local model selection when the
 
 An offline installer includes the selected model. The host imports it locally, and fresh setup starts at the layout page, including when the seed needs repair. Previously configured installations skip the model-only gate. Existing model choices and opt-outs survive. Settings offers recovery when the packaged model cannot load.
 
-When the host reports that no release tier has a download, fresh setup starts at layout and returning users enter the workspace. Skipping the page preserves the model decision for a later release that offers a download. Users can import a signed bundle at any time in Settings → AI providers.
+When the host reports no eligible downloadable tier, fresh setup starts at layout and returning users enter the workspace. Skipping the page preserves the model decision for a later release that offers a download. A model imported in Settings or through the CLI satisfies the model step, as does a recorded opt-out. Setup honors that decision even when the runtime needs repair. Users can import a signed bundle at any time in Settings → AI providers.
 
 After a model decision, interrupted fresh setup resumes at layout. An existing normal installation sees just the local model page once. Returning users keep their existing provider configuration. Settings → AI providers remains available for later model downloads, offline imports, replacement, and removal.
 

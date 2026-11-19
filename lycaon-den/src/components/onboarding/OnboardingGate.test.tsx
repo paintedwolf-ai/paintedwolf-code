@@ -65,7 +65,7 @@ const readyProvider: ProviderMeta = {
   models: [providerModel("llama3.1")],
 };
 
-const normalProvider = includedProvider({state: "opted_out", recovery_action: "none", offline_installer: false, available_models: [publishedTier]});
+const normalProvider = includedProvider({state: "idle", recovery_action: "none", offline_installer: false, available_models: [publishedTier]});
 
 const policyWithDefault: ModelPolicy = {
   coordinator: { provider_id: "local", model: "llama3.1" },
@@ -78,7 +78,9 @@ const policyWithDefault: ModelPolicy = {
 
 function mockClient(overrides: Partial<LycaonClient> = {}): LycaonClient {
   return {
-    listProviders: vi.fn().mockResolvedValue([readyProvider]),
+    listProviders: vi.fn().mockResolvedValue([normalProvider, readyProvider]),
+    deleteLocalModel: vi.fn().mockResolvedValue(undefined),
+    selectLocalModel: vi.fn(),
     listProviderKinds: vi.fn().mockResolvedValue([
       {
         kind: "ollama",
@@ -108,6 +110,7 @@ function mockClient(overrides: Partial<LycaonClient> = {}): LycaonClient {
 }
 
 async function advanceToLayout(): Promise<void> {
+  fireEvent.click(screen.getByRole("radio", {name: "Use no local model"}));
   fireEvent.click(screen.getByRole("button", { name: "Continue without a local model" }));
   await waitFor(() => {
     expect(screen.getByTestId("onboarding-layout")).toBeTruthy();
@@ -187,13 +190,13 @@ describe("Local model setup", () => {
 
   it("defers the model decision while every download is unpublished", async () => {
     const store = createSettingsStore({providers: [includedProvider({
-      state: "ready", recovery_action: "none", selected_model: "existing",
+      state: "idle", recovery_action: "none",
     })]});
     const client = mockClient();
     render(() => <OnboardingGate client={client} settingsStore={store} settingsChecked={true} />);
     expect(screen.getByTestId("onboarding-waiting")).toBeTruthy();
     store.actions.setProviders([includedProvider({
-      state: "ready", recovery_action: "none", selected_model: "existing",
+      state: "idle", recovery_action: "none",
       available_models: [{...publishedTier, download_available: false}],
     })]);
     expect(screen.getByTestId("onboarding-progress").textContent).toBe("1 / 2");
@@ -203,7 +206,21 @@ describe("Local model setup", () => {
     fireEvent.click(screen.getByTestId("onboarding-welcome-dismiss"));
     expect(completeFirstRunSetup).toHaveBeenCalledWith({deferModelStep: true});
     expect(completeModelStep).not.toHaveBeenCalled();
-    expect(store.state.providers[0]?.local_runtime?.selected_model).toBe("existing");
+    expect(client.deleteLocalModel).not.toHaveBeenCalled();
+  });
+
+  it.each(["selected", "opted_out"] as const)("honors a %s host journal entry on a fresh Den profile", async selection_state => {
+    const client = mockClient();
+    const store = createSettingsStore({providers: [includedProvider({
+      state: "unavailable", recovery_action: "none", selection_state, available_models: [publishedTier],
+    })]});
+    render(() => <OnboardingGate client={client} settingsStore={store} settingsChecked={true} />);
+    expect(await screen.findByTestId("onboarding-layout")).toBeTruthy();
+    expect(screen.queryByTestId("onboarding-local-model")).toBeNull();
+    expect(screen.queryByTestId("onboarding-layout-back")).toBeNull();
+    expect(completeModelStep).toHaveBeenCalledOnce();
+    expect(client.selectLocalModel).not.toHaveBeenCalled();
+    expect(client.deleteLocalModel).not.toHaveBeenCalled();
   });
 
   it("finishes the outstanding model step on a returning offline installation", async () => {
@@ -215,12 +232,13 @@ describe("Local model setup", () => {
     expect(screen.queryByTestId("onboarding-layout")).toBeNull();
   });
 
-  it("opens just one page on an existing installation", () => {
+  it("opens just one page on an existing installation", async () => {
     firstRunComplete = true;
     render(() => <OnboardingGate client={mockClient()} settingsStore={createSettingsStore({providers: [normalProvider]})} settingsChecked={true} />);
     expect(screen.getByTestId("onboarding-progress").textContent).toBe("1 / 1");
+    fireEvent.click(screen.getByRole("radio", {name: "Use no local model"}));
     fireEvent.click(screen.getByRole("button", {name: "Continue without a local model"}));
-    expect(completeModelStep).toHaveBeenCalledOnce();
+    await waitFor(() => expect(completeModelStep).toHaveBeenCalledOnce());
     expect(completeFirstRunSetup).not.toHaveBeenCalled();
   });
 });
@@ -362,6 +380,7 @@ describe("Setup navigation and accessibility", () => {
         settingsChecked={true}
       />
     ));
+    fireEvent.click(screen.getByRole("radio", {name: "Use no local model"}));
     fireEvent.click(screen.getByRole("button", {name: "Continue without a local model"}));
     expect(await screen.findByTestId("onboarding-layout")).toBeTruthy();
     pressEscape();

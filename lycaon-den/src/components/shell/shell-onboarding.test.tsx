@@ -45,6 +45,12 @@ describe("shell onboarding authority", () => {
     expect(screen.getByTestId("workspace")).toBeTruthy();
     settingsStore.actions.setProviders([includedProvider({...runtime, available_models: [{...publishedTier, download_available: false}]})]);
     expect(screen.queryByTestId("setup-gate")).toBeNull();
+    settingsStore.actions.setProviders([includedProvider({...runtime, available_models: [{...publishedTier, eligible:false}]})]);
+    expect(screen.getByTestId("workspace")).toBeTruthy();
+    settingsStore.actions.setProviders([includedProvider({...runtime, selected_model: "from-cli", available_models: [publishedTier]})]);
+    expect(screen.queryByTestId("setup-gate")).toBeNull();
+    settingsStore.actions.setProviders([includedProvider({...runtime, state:"unavailable", selection_state:"opted_out", available_models:[publishedTier]})]);
+    expect(screen.queryByTestId("setup-gate")).toBeNull();
     settingsStore.actions.setProviders([includedProvider({...runtime, available_models: [publishedTier]})]);
     expect(screen.getByTestId("setup-gate")).toBeTruthy();
   });
