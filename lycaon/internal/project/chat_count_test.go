@@ -1,13 +1,13 @@
 package project
 
 import (
-	"database/sql"
-	"github.com/lycaon/lycaon/internal/timelayout"
 	"testing"
 	"time"
 
 	"github.com/lycaon/lycaon/internal/testdbfixture"
+	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/timelayout"
 )
 
 func TestProjectChatCountTracksRootLifecycleWithoutWorkers(t *testing.T) {
@@ -18,14 +18,10 @@ func TestProjectChatCountTracksRootLifecycleWithoutWorkers(t *testing.T) {
 	other, err := CreateWithRoot(t.Context(), reg, t.TempDir())
 	testutil.FailErr(t, "create other project", err)
 	now := timelayout.Format(time.Now().UTC())
-	insert := func(id, projectID, parent string, archived bool) {
+	archive := func(id string) {
 		t.Helper()
-		archive := sql.NullString{String: now, Valid: archived}
-		_, err := sqlDB.ExecContext(t.Context(), `INSERT INTO sessions
-			(id, project_id, owner_person_id, parent_session_id, posture, status, archived_at, created_at, activity_at, updated_at, root_session_id, mode)
-			VALUES (?, ?, (SELECT id FROM people WHERE role = 'owner'), ?, 'build', 'idle', ?, ?, ?, ?, COALESCE(?3, ?1), CASE WHEN ?3 IS NULL THEN 'agent' END)`,
-			id, projectID, sql.NullString{String: parent, Valid: parent != ""}, archive, now, now, now)
-		testutil.FailErr(t, "insert session", err)
+		_, err := sqlDB.ExecContext(t.Context(), `UPDATE sessions SET archived_at = ? WHERE id = ?`, now, id)
+		testutil.FailErr(t, "archive session", err)
 	}
 	assertCount := func(want int) {
 		t.Helper()
@@ -43,16 +39,17 @@ func TestProjectChatCountTracksRootLifecycleWithoutWorkers(t *testing.T) {
 		}
 	}
 	assertCount(0)
-	insert("chat-a", p.ID, "", false)
-	insert("chat-b", p.ID, "", true)
-	insert("other-chat", other.ID, "", false)
+	testdbseed.InsertSession(t, sqlDB, "chat-a", p.ID)
+	testdbseed.InsertSession(t, sqlDB, "chat-b", p.ID)
+	archive("chat-b")
+	testdbseed.InsertSession(t, sqlDB, "other-chat", other.ID)
 	assertCount(2)
-	insert("worker-a", p.ID, "chat-a", false)
-	insert("worker-b", p.ID, "chat-a", true)
-	insert("nested-worker", p.ID, "worker-a", false)
+	testdbseed.InsertChildSession(t, sqlDB, "worker-a", "chat-a")
+	testdbseed.InsertChildSession(t, sqlDB, "worker-b", "chat-a")
+	archive("worker-b")
+	testdbseed.InsertChildSession(t, sqlDB, "nested-worker", "worker-a")
 	assertCount(2)
-	_, err = sqlDB.ExecContext(t.Context(), `UPDATE sessions SET archived_at = ? WHERE id = 'chat-a'`, now)
-	testutil.FailErr(t, "archive chat", err)
+	archive("chat-a")
 	assertCount(2)
 	_, err = sqlDB.ExecContext(t.Context(), `UPDATE sessions SET archived_at = NULL WHERE id = 'chat-b'`)
 	testutil.FailErr(t, "unarchive chat", err)
