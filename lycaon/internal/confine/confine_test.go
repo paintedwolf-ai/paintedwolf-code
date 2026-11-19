@@ -362,8 +362,8 @@ func TestBuildProfileDeniesWritingSecretStoresEvenWhenHomeIsGranted(t *testing.T
 	allowWrite, _ := profileBlock(t, p, blockAllowWrite, 0)
 	assertBlockCoversPath(t, allowWrite, resolvedHome, "write-root allow (reviewed home)")
 
-	// Protected descendants remain in the deny block.
-	denyWrite, _ := profileBlock(t, p, blockDenyWrite, 0)
+	// Find the protected-store rule among the applied write floors.
+	denyWrite, _ := profileBlockContaining(t, p, blockDenyWrite, filepath.Join(resolvedHome, ".ssh"))
 	for _, rel := range []string{
 		".ssh", ".aws", ".gnupg", ".kube", ".config/gcloud", ".azure",
 		".docker/config.json", ".docker/contexts", ".docker/cli-plugins",
