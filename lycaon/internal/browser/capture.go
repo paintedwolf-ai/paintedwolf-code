@@ -432,38 +432,19 @@ func driverCall(page *rod.Page, method string, args map[string]any) ([]byte, err
 	if res == nil {
 		return []byte("null"), nil
 	}
-	return driverResult(method, res.Value, args, time.Since(started))
+	return driverResult(method, res.Value.Val(), args, time.Since(started))
 }
 
-// driverResult encodes a driver call's value with the deadline a failed call
-// ran under.
+// driverResult encodes a driver call's value; a failed call also reports the
+// deadline it ran under, how long it ran and whether the deadline ran out.
 func driverResult(method string, value any, args map[string]any, elapsed time.Duration) ([]byte, error) {
-	body, err := marshalDriverResult(method, value)
-	if err != nil {
-		return nil, err
-	}
-	return withDriverDeadline(body, args, elapsed), nil
-}
-
-// withDriverDeadline adds to a failed driver result the deadline the call ran
-// under, how long it ran and whether the deadline ran out.
-func withDriverDeadline(body []byte, args map[string]any, elapsed time.Duration) []byte {
 	deadline, _ := args["timeout_ms"].(int)
-	if deadline <= 0 || driverOK(body) {
-		return body
+	if failed, ok := value.(map[string]any); ok && failed["ok"] == false && deadline > 0 {
+		failed["deadline_ms"] = deadline
+		failed["elapsed_ms"] = elapsed.Milliseconds()
+		failed["deadline_expired"] = elapsed >= time.Duration(deadline)*time.Millisecond
 	}
-	var parsed map[string]any
-	if json.Unmarshal(body, &parsed) != nil || parsed == nil {
-		return body
-	}
-	parsed["deadline_ms"] = deadline
-	parsed["elapsed_ms"] = elapsed.Milliseconds()
-	parsed["deadline_expired"] = elapsed >= time.Duration(deadline)*time.Millisecond
-	annotated, err := surveyjson.Marshal(parsed)
-	if err != nil {
-		return body
-	}
-	return annotated
+	return marshalDriverResult(method, value)
 }
 
 func marshalDriverResult(method string, value any) ([]byte, error) {

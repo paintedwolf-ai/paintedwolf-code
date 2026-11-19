@@ -29,7 +29,9 @@ func TestStepDeadlineIsOutlastedByTheDriverBudget(t *testing.T) {
 // whether the deadline ran out; a succeeded call or one without a deadline is
 // returned as the driver answered.
 func TestDriverResultReportsTheDeadlineOfAFailedCall(t *testing.T) {
-	failed := map[string]any{"ok": false, "error": "timed out waiting for selector #ready"}
+	failed := func() map[string]any {
+		return map[string]any{"ok": false, "error": "timed out waiting for selector #ready"}
+	}
 	for _, tc := range []struct {
 		name    string
 		value   map[string]any
@@ -37,12 +39,12 @@ func TestDriverResultReportsTheDeadlineOfAFailedCall(t *testing.T) {
 		elapsed time.Duration
 		want    map[string]any
 	}{
-		{name: "expired", value: failed, args: withTimeout(map[string]any{}, waitForTimeoutMS), elapsed: 30012 * time.Millisecond,
+		{name: "expired", value: failed(), args: withTimeout(map[string]any{}, waitForTimeoutMS), elapsed: 30012 * time.Millisecond,
 			want: map[string]any{"deadline_ms": float64(waitForTimeoutMS), "elapsed_ms": float64(30012), "deadline_expired": true}},
-		{name: "failed early", value: failed, args: withTimeout(map[string]any{}, targetTimeoutMS), elapsed: 40 * time.Millisecond,
+		{name: "failed early", value: failed(), args: withTimeout(map[string]any{}, targetTimeoutMS), elapsed: 40 * time.Millisecond,
 			want: map[string]any{"deadline_ms": float64(targetTimeoutMS), "elapsed_ms": float64(40), "deadline_expired": false}},
 		{name: "succeeded", value: map[string]any{"ok": true}, args: withTimeout(map[string]any{}, targetTimeoutMS), elapsed: time.Second},
-		{name: "no deadline", value: failed, args: map[string]any{}, elapsed: time.Second},
+		{name: "no deadline", value: failed(), args: map[string]any{}, elapsed: time.Second},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			body, err := driverResult("waitFor", tc.value, tc.args, tc.elapsed)

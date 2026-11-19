@@ -115,7 +115,7 @@ func dispatchAction(page *rod.Page, drive *pageDrive, act CaptureAction) (json.R
 	case "wait_for":
 		return driverCall(page, "waitFor", withTimeout(map[string]any{"selector": act.Selector, "text": act.Text, "gone": act.Gone}, waitForTimeoutMS))
 	case "wait":
-		return waitAction(page)
+		return driverCall(page, "waitIdle", map[string]any{})
 	default:
 		return nil, fmt.Errorf("unknown action type %q", act.Type)
 	}
@@ -134,11 +134,6 @@ func driverBudget(args map[string]any) time.Duration {
 		deadline = waitForTimeoutMS
 	}
 	return ActionTimeout + time.Duration(deadline)*time.Millisecond
-}
-
-// waitAction settles until the page is network-quiet and DOM-stable.
-func waitAction(page *rod.Page) (json.RawMessage, error) {
-	return driverCall(page, "waitIdle", map[string]any{})
 }
 
 func pause(page *rod.Page, d time.Duration) error {
