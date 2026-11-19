@@ -183,7 +183,6 @@ export function createFilesTreeInteraction(options: TreeInteraction) {
     untrack(() => {
       setRequestedTreeReveal(null);
       if (!request.current()) return;
-      // An outside file reveals in the chat location holding it, when one does.
       const address = treeAddress(props.projectId, outsideRootId(props.projectId), request.rootId, request.path);
       if (address) tree?.revealPath(address.rootId, address.path, request.isDir);
     });

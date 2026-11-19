@@ -173,8 +173,7 @@ func serializeEOL(content, eol string) string {
 	return content
 }
 
-// documentProject is p with its outside namespace as a root when rootID
-// names it, so source reads and writes resolve an outside document.
+// Expose the outside namespace only for outside documents.
 func documentProject(p *project.Project, rootID string) *project.Project {
 	if p != nil && rootID != "" && rootID == p.Outside.ID {
 		return project.WithOutside(p)

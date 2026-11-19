@@ -94,7 +94,7 @@ type sourceViewNavigation struct {
 	treeIntent          wire.SourceTreeIntent
 	treeNavigationBasis string
 	roots               []wire.ProjectRoot
-	// outside are the view's chat locations, listed as roots after roots.
+	// Chat locations follow the attached roots.
 	outside []wire.SourceChatLocation
 }
 
