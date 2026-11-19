@@ -2,6 +2,9 @@ package confine
 
 import (
 	"bytes"
+	"crypto/sha256"
+	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -10,7 +13,65 @@ import (
 	"github.com/lycaon/lycaon/internal/configdir"
 	"github.com/lycaon/lycaon/internal/enginepaths"
 	"github.com/lycaon/lycaon/internal/fseffect"
+	"github.com/lycaon/lycaon/internal/fspath"
 )
+
+// sshKnownHostsPath names the single writable key file for this mediated project.
+func sshKnownHostsPath(c Confinement) (string, error) {
+	if c.Network != NetworkProxyOnly || c.ProjectID == "" {
+		return "", nil
+	}
+	stateRoot, err := configdir.UserConfigDir()
+	if err != nil {
+		return "", err
+	}
+	id := sha256.Sum256([]byte(c.ProjectID))
+	return filepath.Join(fspath.CanonicalPath(enginepaths.ScratchRootUnder(stateRoot)), "ssh-known-hosts", fmt.Sprintf("%x", id), "known_hosts"), nil
+}
+
+// PrepareSSHKnownHosts creates the file before Linux binds it into the namespace.
+func PrepareSSHKnownHosts(c Confinement) (string, error) {
+	path, err := sshKnownHostsPath(c)
+	if err != nil || path == "" {
+		return path, err
+	}
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+		return "", err
+	}
+	dir, err := os.OpenRoot(filepath.Dir(path))
+	if err != nil {
+		return "", err
+	}
+	defer dir.Close()
+	f, err := dir.OpenFile("known_hosts", os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o600)
+	if errors.Is(err, os.ErrExist) {
+		info, statErr := dir.Lstat("known_hosts")
+		if statErr != nil {
+			return "", statErr
+		}
+		if !info.Mode().IsRegular() {
+			return "", fmt.Errorf("expected regular SSH host key file at %s", path)
+		}
+		return path, nil
+	}
+	if err != nil {
+		return "", err
+	}
+	return path, f.Close()
+}
+
+func addSSHKnownHostsAccess(rules *FilesystemRules, c Confinement) error {
+	path, err := sshKnownHostsPath(c)
+	if err != nil || path == "" {
+		return err
+	}
+	file := []fsMatch{{literal: path}}
+	rules.add(fsRule{op: opRead, allow: true, matches: file})
+	rules.add(fsRule{op: opWrite, allow: true, matches: file})
+	parents := traversalAncestors(controlPlaneReadDenyRootsResolved(), []string{path})
+	rules.add(fsRule{op: opReadMetadata, allow: true, matches: literalMatches(parents, "")})
+	return nil
+}
 
 // userKnownHostsSources are user SSH host-key stores.
 var userKnownHostsSources = []string{

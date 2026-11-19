@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"net"
 	"os"
-	"path/filepath"
 	"sort"
 	"strings"
 	"sync"
@@ -18,17 +17,6 @@ import (
 	"github.com/lycaon/lycaon/internal/gate"
 	"github.com/lycaon/lycaon/internal/scopedstore"
 )
-
-// SSHKnownHostsPath returns the project's known_hosts scratch path. Keying it by
-// project keeps the value a command reads the same on every invocation; keys
-// accepted here are already inside the project's trust domain.
-func SSHKnownHostsPath(c Confinement) string {
-	project := strings.TrimSpace(c.ProjectID)
-	if project == "" {
-		return ""
-	}
-	return filepath.Join(os.TempDir(), "lycaon-ssh-known-"+project)
-}
 
 // EgressCommand attributes a broker connection to its command.
 type EgressCommand struct {

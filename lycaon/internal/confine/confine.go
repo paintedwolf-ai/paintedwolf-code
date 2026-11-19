@@ -452,7 +452,7 @@ func filesystemRules(c Confinement) (FilesystemRules, error) {
 		}
 	}
 	addControlPlaneReadFloor(&rules, c)
-	// Writes confined to the project plus temp and the standard device sinks.
+	// Device sinks complement ordinary write roots.
 	sinks := subpathMatches(writeRoots, "")
 	sinks = append(sinks,
 		fsMatch{literal: "/dev/null"},
@@ -484,6 +484,9 @@ func filesystemRules(c Confinement) (FilesystemRules, error) {
 		{regex: "^/dev/disk", layer: FloorControlPlane},
 		{regex: "^/dev/rdisk", layer: FloorControlPlane},
 	}})
+	if err := addSSHKnownHostsAccess(&rules, c); err != nil {
+		return rules, err
+	}
 	closeViewStorage(&rules, c.View)
 	if err := rules.checkStringLengths(); err != nil {
 		return rules, err

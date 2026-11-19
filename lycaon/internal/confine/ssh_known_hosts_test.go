@@ -39,3 +39,36 @@ func TestBuildKnownHostsMirrorWritesCollectedMaterial(t *testing.T) {
 		t.Fatalf("mirror mode = %v, want 0600", info.Mode().Perm())
 	}
 }
+
+func TestMediatedProjectUsesExactHostKeyFile(t *testing.T) {
+	t.Setenv(configdir.EnvConfigDir, t.TempDir())
+	c := Confinement{Network: NetworkProxyOnly, ProjectID: "project-1"}
+	path, err := PrepareSSHKnownHosts(c)
+	testutil.FailErr(t, "prepare project keys", err)
+	testutil.FailErr(t, "save key", os.WriteFile(path, []byte("fixture"), 0600))
+	again, err := PrepareSSHKnownHosts(c)
+	testutil.FailErr(t, "reopen project keys", err)
+	data, err := os.ReadFile(again)
+	testutil.FailErr(t, "read project key", err)
+	if again != path || string(data) != "fixture" {
+		t.Fatalf("key file %q contains %q", again, data)
+	}
+	for _, access := range []FilesystemAccess{AccessRead, AccessWrite} {
+		fs, err := filesystemRules(c)
+		testutil.FailErr(t, "compile project rules", err)
+		if !fs.Verdict(access, path).Allowed || fs.Verdict(access, path+"2").Allowed {
+			t.Errorf("%s grant includes wrong files", access)
+		}
+	}
+	c.ProjectID = "project-2"
+	fs, err := filesystemRules(c)
+	testutil.FailErr(t, "compile other project rules", err)
+	if fs.Verdict(AccessWrite, path).Allowed {
+		t.Fatal("another project can write the key file")
+	}
+	c.Network = NetworkDeny
+	path, err = PrepareSSHKnownHosts(c)
+	if path != "" || err != nil {
+		t.Fatalf("offline key file = %q, %v", path, err)
+	}
+}
