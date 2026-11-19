@@ -56,7 +56,9 @@ func TestScratchWriteAsksOnlyAtStrict(t *testing.T) {
 		t.Run(string(tc.posture), func(t *testing.T) {
 			approvalGate, project := scratchGate(t, tc.posture)
 			scratch := filepath.Join(t.TempDir(), "probe")
-			result, err := approvalGate.Evaluate(t.Context(), scratchAction("mkdir", project, scratch))
+			action := scratchAction("mkdir", project, scratch)
+			action.Scope.SessionScratchRoot = filepath.Dir(scratch)
+			result, err := approvalGate.Evaluate(t.Context(), action)
 			testutil.FailErr(t, "evaluate", err)
 			if asksOutsideRoots(result) != tc.asks {
 				t.Fatalf("%s asks=%v, want %v: %+v", tc.posture, asksOutsideRoots(result), tc.asks, result)
@@ -72,7 +74,9 @@ func TestScratchWriteAsksOnlyAtStrict(t *testing.T) {
 func TestScratchReadStaysSilentAtStrict(t *testing.T) {
 	approvalGate, project := scratchGate(t, gate.PostureStrict)
 	scratch := filepath.Join(t.TempDir(), "probe")
-	result, err := approvalGate.Evaluate(t.Context(), scratchAction("read", project, scratch))
+	action := scratchAction("read", project, scratch)
+	action.Scope.SessionScratchRoot = filepath.Dir(scratch)
+	result, err := approvalGate.Evaluate(t.Context(), action)
 	testutil.FailErr(t, "evaluate", err)
 	if result.Required() {
 		t.Fatalf("scratch read asked at strict: %+v", result)
