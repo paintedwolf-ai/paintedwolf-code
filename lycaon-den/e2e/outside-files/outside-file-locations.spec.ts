@@ -2,7 +2,7 @@ import { mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "
 import { homedir } from "node:os";
 import path from "node:path";
 import { expect } from "@playwright/test";
-import type { CheckpointListResponse, OpenedOutsideFile } from "../../src/api/types.ts";
+import type { CheckpointListResponse, OpenedOutsideFile, SessionTranscriptPage } from "../../src/api/types.ts";
 import {
   apiConfig,
   apiJson,
@@ -11,7 +11,6 @@ import {
   e2eTempDir,
   e2eUniqueLabel,
   liveChatStage,
-  openNewChatSession,
   sendChatPrompt,
   settledChatSessionId,
   waitForChatComposerReady,
@@ -50,7 +49,8 @@ webE2e("Outside locations follow the chat while a dirty file stays open", async 
   const save = page.getByTestId("files-editor-save");
   await expect(save).toBeEnabled();
 
-  expect(await openNewChatSession(page)).not.toBe(first);
+  await page.getByTestId("new-chat-btn").click();
+  await expect.poll(() => settledChatSessionId(page), { timeout: 90_000 }).not.toBe(first);
   await page.getByTestId("project-files-entry").click();
   await expect(tree.getByTestId("files-tree-file").filter({ hasText: "project.txt" })).toBeVisible();
   await expect(outsideLocation).toHaveCount(0);
@@ -87,20 +87,25 @@ webE2e("An outside text edit opens the recorded file from chat", async ({ page, 
       await driver.loadTools("command");
       const quoted = "'" + destination.replaceAll("'", "'\\''") + "'";
       const call = await driver.invoke("command", {
-        command: `cat > ${quoted} <<'REPORT'\nUpdated report\nREPORT`,
+        command: `edit --path ${quoted} --old-string 'Original report' --new-string 'Updated report'`,
       });
       const checkpoints = `/v1/sessions/${sessionId}/checkpoints`;
       let approval: CheckpointListResponse["checkpoints"][number] | undefined;
       await expect.poll(async () => {
+        const transcript = await apiJson<SessionTranscriptPage>(request, "GET", `/v1/sessions/${sessionId}/messages`);
+        if (transcript.messages.some((message) => message.tool_result?.tool_call_id === call)) return true;
         const response = await apiJson<CheckpointListResponse>(request, "GET", `${checkpoints}?kind=tool_approval`);
         approval = response.checkpoints.find((item) =>
           item.tool_approval?.plan?.reasons.includes("outside_roots_write"));
-        return approval?.tool_approval?.plan?.recommended_option_id;
-      }, { timeout: 30_000 }).toBeTruthy();
-      await apiJson(request, "POST", `${checkpoints}/${approval!.id}`, {
-        kind: "tool_approval", action: "approve", option_id: approval!.tool_approval!.plan!.recommended_option_id,
-      });
+        return Boolean(approval?.tool_approval?.plan?.recommended_option_id);
+      }, { timeout: 30_000 }).toBe(true);
+      if (approval) {
+        await apiJson(request, "POST", `${checkpoints}/${approval.id}`, {
+          kind: "tool_approval", action: "approve", option_id: approval.tool_approval?.plan?.recommended_option_id,
+        });
+      }
       await driver.completed(call);
+      expect(readFileSync(destination, "utf8")).toBe("Updated report\n");
     } finally {
       await apiJson(request, "POST", "/harness/llm/auto", { enabled: true, text: "The report is updated." });
     }
