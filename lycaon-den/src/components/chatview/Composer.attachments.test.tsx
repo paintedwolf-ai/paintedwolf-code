@@ -228,7 +228,7 @@ describe("Composer", () => {
   it("keeps the message field on its own row beside the chip rail", async () => {
     const fixtures = new Map(Array.from({ length: 5 }, (_, i) => [`f${i}.txt`, `line ${i}\n`]));
     setLycaonClientForTest(stubClient({
-      uploadAttachment: async (_projectId, filename, mime, body) => {
+      uploadAttachment: async (_projectId: string, filename: string, mime: string, body: Blob): Promise<AttachmentUploadResponse> => {
         const text = fixtures.get(filename);
         if (text === undefined) throw new Error(`Unexpected attachment: ${filename}`);
         return { blob_id: sha256Hex(text), filename, mime, kind: "text", bytes: body.size };
