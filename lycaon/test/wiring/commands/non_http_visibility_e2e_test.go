@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/authzcontext"
+	"github.com/lycaon/lycaon/internal/confine"
 	"github.com/lycaon/lycaon/internal/hitl"
 	"github.com/lycaon/lycaon/internal/testutil"
 	wire "github.com/lycaon/lycaon/pkg/api"
@@ -71,21 +72,27 @@ func TestNonHTTPContractMandatoryAuthzDetailForSocket(t *testing.T) {
 	}
 }
 
-// directIPCommandSession starts a session whose one command asks for direct
-// network access; with quieted false it revokes the harness quiets so the
-// direct-IP ask reaches a card.
+// directIPCommandSession starts a confined session whose one command asks for
+// direct network access. Quieted, the session quiets the direct-IP ask;
+// otherwise it revokes the harness quiets so the ask reaches a card.
 func directIPCommandSession(t *testing.T, quieted bool) *commandProgramSession {
 	t.Helper()
-	s := newProgramHost(t).programWithArgs(t, map[string]any{
+	p := newProgramHost(t)
+	// Direct IP is a confinement mode; an unconfined host applies none.
+	confine.TestingSetAutoConfine(t)
+	t.Setenv("LYCAON_SANDBOX", "on")
+	s := p.programWithArgs(t, map[string]any{
 		"command":            "go version",
 		"capability_request": map[string]any{"direct_ip": true},
 	}, wire.CreateSessionRequest{}, "")
-	if !quieted {
-		gate := s.h.Server.Admin.Capabilities.Access.Gate
-		for _, q := range gate.ListAskQuiets(s.session) {
-			if !gate.RevokeAskQuiet(q.ID) {
-				t.Fatalf("revoke quiet %+v", q)
-			}
+	gate := s.h.Server.Admin.Capabilities.Access.Gate
+	if quieted {
+		gate.PutAskQuiet(hitl.AskQuiet{ChatSessionID: s.session, Key: string(wire.GateUnobservedChannel) + ":direct_ip"}, 0)
+		return s
+	}
+	for _, q := range gate.ListAskQuiets(s.session) {
+		if !gate.RevokeAskQuiet(q.ID) {
+			t.Fatalf("revoke quiet %+v", q)
 		}
 	}
 	return s
