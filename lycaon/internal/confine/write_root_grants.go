@@ -204,13 +204,46 @@ func (t PrivateTemp) Resolve(path string) (string, bool) {
 }
 
 func (t PrivateTemp) relative(path string) (string, bool) {
+	if len(t.Paths) == 0 || !filepath.IsAbs(path) {
+		return "", false
+	}
+	sep := string(filepath.Separator)
 	for _, alias := range t.Paths {
 		if path == alias {
 			return "", true
 		}
-		if suffix, inside := strings.CutPrefix(path, alias+string(filepath.Separator)); inside {
+		if suffix, inside := strings.CutPrefix(path, alias+sep); inside {
 			return suffix, !underAny(path, t.Retained)
 		}
+	}
+	// Resolve only the prefix. Once we enter a mount, its links belong to scratch.
+	root := filepath.VolumeName(path) + sep
+	prefix, rest := root, strings.TrimPrefix(path, root)
+	for hops := 0; rest != "" && hops < 40; {
+		part, tail, _ := strings.Cut(rest, sep)
+		rest = tail
+		if part == "" || part == "." {
+			continue
+		}
+		if part == ".." {
+			prefix = filepath.Dir(prefix)
+			continue
+		}
+		next := filepath.Join(prefix, part)
+		if slices.Contains(t.Paths, next) {
+			return rest, !underAny(filepath.Join(next, rest), t.Retained)
+		}
+		target, err := os.Readlink(next)
+		if err != nil {
+			prefix = next
+			continue
+		}
+		if filepath.IsAbs(target) {
+			prefix = root
+			target = strings.TrimPrefix(target, root)
+		}
+		rest = target + sep + rest
+		hops++
 	}
 	return "", false
 }
