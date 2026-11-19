@@ -55,6 +55,7 @@ func TestSharedTempCacheOverlap(t *testing.T) {
 	nestedCache := filepath.Join(temp, "nested-cache")
 	attached := filepath.Join(temp, "attached")
 	t.Setenv("XDG_CACHE_HOME", cache)
+	t.Setenv("LYCAON_CONFIG_DIR", t.TempDir())
 	t.Setenv("HOME", nestedCache)
 	t.Setenv("TMPDIR", temp)
 	rules, err := filesystemRules(Confinement{Roots: []string{attached}})
@@ -65,8 +66,8 @@ func TestSharedTempCacheOverlap(t *testing.T) {
 		}
 	}
 	for _, path := range []string{filepath.Join(cache, "index"), filepath.Join(attached, "out")} {
-		if !rules.Verdict(AccessWrite, path).Allowed {
-			t.Errorf("write refused: %s", path)
+		if got := rules.Verdict(AccessWrite, path); !got.Allowed {
+			t.Errorf("write refused at %s: %+v", path, got)
 		}
 	}
 }
