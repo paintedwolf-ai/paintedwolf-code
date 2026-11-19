@@ -1,3 +1,4 @@
+import { FORM_PROGRAM_TOOLS } from "./tool-transcript-visibility.ts";
 import type { CommandActivity, CommandProgramReceipt } from "../../api/types.ts";
 import type { ActivitySpanEntry } from "../transcript/projection/transcript-item-model.ts";
 import type { ToolPartView } from "./tool-part-model.ts";
@@ -16,9 +17,6 @@ export type CommandActivityView = {
 
 type Assignment = { program: string; key: string; label: string; group: string; subject: string };
 type CallAssignment = { row: string; program: string };
-
-/** Tools whose calls run host command programs and take part in activity projection. */
-const FORM_PROGRAM_TOOLS = new Set(["command", "summarize", "survey_repo", "code_rewrite"]);
 
 /** Wire phase base rank (mechanics §3.1); group sub-tiers offset 0..2 within the phase. */
 const ACTIVITY_PHASE_RANK: Readonly<Record<string, number>> = { inspect: 10, execute: 20, mutate: 30 };
@@ -65,7 +63,7 @@ function addReceiptScope(scopes: CommandReceiptScope[], scope: CommandReceiptSco
 
 function status(fact: CommandActivity): ToolPartView["status"] {
   if (fact.state === "running" || fact.state === "waiting") return "running";
-  if (fact.state === "failed" || fact.state === "refused" || fact.state === "interrupted" || (fact.status_code ?? 0) !== 0) return "error";
+  if (fact.state === "failed" || fact.state === "refused" || fact.state === "interrupted") return "error";
   return "completed";
 }
 
@@ -88,7 +86,8 @@ export function createCommandActivityProjection() {
       if (!FORM_PROGRAM_TOOLS.has(entry.part.tool) || !entry.part.commandProgram) lastRow = undefined;
       let program = preferredCommandProgram(entry.part.commandProgram, live(entry.part));
       const previous = remembered.get(entry.part.toolCallId);
-      if (program && previous?.id === program.id && !program.activities && previous.activities?.length) {
+      const missingFacts = !program?.activities || (entry.part.shownInFlight && program.activities.length === 0);
+      if (program && previous?.id === program.id && missingFacts && previous.activities?.length) {
         program = { ...program, activities: previous.activities.map(fact =>
           fact.state === "running" || fact.state === "waiting"
             ? { ...fact, state: "unknown" as const, outcome: "Outcome unavailable", status_code: undefined }
@@ -134,9 +133,10 @@ export function createCommandActivityProjection() {
       for (const [index, fact] of facts.entries()) {
         const identity = `${program.id}:${fact.id}`;
         if (fact.phase !== "inspect" || fact.job_handle) lastRow = undefined;
-        const foldTarget = index === 0
-          ? callAssignments.get(identity)?.row ?? (lastRow && lastRow.commandActivity?.fact.group === fact.group ? lastRow.id : undefined)
-          : undefined;
+        let assigned = assignments.get(identity);
+        const preceding = index === 0 && !assigned &&
+          lastRow?.commandActivity?.fact.group === fact.group ? lastRow.id : undefined;
+        const foldTarget = callAssignments.get(identity)?.row ?? assigned?.key ?? preceding;
         const target = foldTarget ? rows.get(foldTarget) : undefined;
         if (target?.commandActivity) {
           if (!assignments.has(identity)) assignments.set(identity, { program: program.id, key: target.id, label: fact.label, group: fact.group, subject: fact.subject });
@@ -151,7 +151,6 @@ export function createCommandActivityProjection() {
           if (status(fact) === "error") target.status = "error";
           continue;
         }
-        let assigned = assignments.get(identity);
         if (!assigned) {
           assigned = { program: program.id, key: index === 0 && ![...assignments.values()].some(value => value.key === entry.part.id)
             ? entry.part.id : `${entry.part.id}:activity:${fact.id}`, label: fact.label, group: fact.group, subject: fact.subject };
@@ -202,9 +201,14 @@ export function commandActivityHeadline(entries: readonly ActivitySpanEntry[], f
  return headline;
 }
 
-/** Activity groups in first-appearance order. */
-export function commandActivityGroups(entries: readonly ActivitySpanEntry[]): string[] {
-  return [...new Set(activityFacts(entries).map(fact => fact.group))];
+const MAX_SEQUENCE_LABELS = 3;
+
+export function commandActivitySequence(entries: readonly ActivitySpanEntry[]): string {
+  const groups = [...new Set(activityFacts(entries).map(fact => fact.group).filter(Boolean))];
+  if (groups.length < 2) return "";
+  const sequence = groups.slice(0, MAX_SEQUENCE_LABELS).join(" → ");
+  const remaining = groups.length - MAX_SEQUENCE_LABELS;
+  return remaining > 0 ? `${sequence} · +${remaining}` : sequence;
 }
 
 /** Receipts without an activity snapshot use the same card and retain all operations. */

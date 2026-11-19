@@ -1,19 +1,17 @@
+import { toolDrawsWhileRunning } from "./tool-transcript-visibility.ts";
 import { partHasFileEdits } from "../file-edit/file-edit-model.ts";
 import { collectSegmentFolds } from "../file-edit/file-edit-fold.ts";
-import { indexWarmingChickletTitle } from "../transcript/projection/index-warming-copy.ts";
 import {
   isLoopbackTarget,
   isTaskToolName,
-  toolDrawsWhileRunning,
   toolPartDisplayStatus,
-  toolPartSummaryTitle,
 } from "./tool-part-model.ts";
 import { ACTIVITY_ROLE_TIERS, TOOL_ACTIVITY_PRESENTATION } from "./tool-presentation.generated.ts";
 import type { ToolActivityRole } from "./tool-presentation.generated.ts";
 import type { ToolPartStatus, ToolPartView } from "./tool-part-model.ts";
 import type { ActivitySpanEntry, DisplayTranscriptItem, RawTranscriptItem } from "../transcript/projection/transcript-item-model.ts";
 import type { TranscriptLayout } from "../transcript/layout/transcript-layout.ts";
-import { LOCAL_AI_LABEL, turnLoadRowSummary } from "../turnload/turn-load-rows.ts";
+import { LOCAL_AI_LABEL } from "../turnload/turn-load-rows.ts";
 
 const INDEX_WARMING_ACTIVITY = { headline: "researching", weight: 1, role: "research" as const } as const;
 /** A decision row joins its span the way request_tools does: it never names the work. */
@@ -128,7 +126,7 @@ function activityCandidate(
     headline,
     weight,
     role,
-    drawnBeforeResult: toolDrawsWhileRunning(toolName, {
+    drawnBeforeResult: item.part.shownInFlight || toolDrawsWhileRunning(toolName, {
       verboseMode: opts?.verboseMode ?? false,
       layout: opts?.layout,
     }),
@@ -396,37 +394,4 @@ export function projectActivitySpans(
   flushRun();
   flushWorkerRun();
   return out;
-}
-
-function entryHintTitle(entry: ActivitySpanEntry): string {
-  if (entry.kind === "index_warming") {
-    return indexWarmingChickletTitle(entry.meta);
-  }
-  if (entry.kind === "turn_load") return turnLoadRowSummary(entry.row).title;
-  return toolPartSummaryTitle(entry.part);
-}
-
-/** Collapsed context lists failures first. */
-export function activitySpanHint(
-  entries: readonly ActivitySpanEntry[],
-  label: string,
-  sessionId?: string,
-): string {
-  const failed = (entry: ActivitySpanEntry): boolean =>
-    entry.kind === "tool" &&
-    toolPartDisplayStatus(entry.part, sessionId) === "error";
-  const ordered = [...entries].sort(
-    (a, b) => Number(failed(b)) - Number(failed(a)),
-  );
-  const unique = [
-    ...new Set(
-      ordered
-        .map((entry) => entryHintTitle(entry))
-        .filter((title) => title && title !== label),
-    ),
-  ];
-  const [first, ...rest] = unique;
-  if (!first) return "";
-  if (rest.length === 0) return first;
-  return `${first}, +${rest.length}`;
 }

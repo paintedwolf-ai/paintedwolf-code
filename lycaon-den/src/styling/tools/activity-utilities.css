@@ -26,11 +26,14 @@ display: grid;
   max-width: 100%;
   overflow: hidden;
   white-space: nowrap;
-  min-height: max(48px, calc(var(--text-den-compact) * 2.7 + 1em));
   padding: 8px 12px;
   border-radius: 0;
   background: transparent;
   box-shadow: none;
+
+  &:has(> .den-activity-span-hint) {
+    min-height: max(48px, calc(var(--text-den-compact) * 2.7 + 1em));
+  }
 }
 
 
@@ -62,8 +65,9 @@ flex: 0 0 auto;
 
 
 @utility den-activity-span-hint {
-grid-column: 1 / -1;
-width: 100%;
+  grid-column: 1 / -1;
+  block-size: 1lh;
+  width: 100%;
   min-width: 0;
   font-size: var(--text-den-compact);
   font-weight: 400;

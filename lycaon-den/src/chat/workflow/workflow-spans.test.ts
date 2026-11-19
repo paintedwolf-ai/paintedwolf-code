@@ -4,7 +4,9 @@ import type { Message, WorkerTask, WorkflowRun } from "../../api/types.ts";
 import {
   buildChatTranscriptBlocks,
   isCatalogSpan,
+  type ChatSpanBuildOptions,
 } from "./workflow-spans.ts";
+import { clearCommandActivities, observeCommandActivity } from "../tool/command-activity-live.ts";
 import { workflowBoundaryLabel } from "./workflow-boundary-label.ts";
 import {
   approvalOptionFixture,
@@ -893,26 +895,23 @@ describe("workflow-spans", () => {
       },
     ];
 
-    const blocks = buildChatTranscriptBlocks(
-      messages,
-      [],
-      undefined,
-      {
-        pendingCheckpoints: [
-          {
-            checkpointId: "chk-plain",
-            sessionId: "s-plain",
-            kind: "tool_approval",
-            status: "pending",
-            issuedAt: "t",
-            tool_approval: {
-              ...toolApprovalFixture({ command: "cargo build" }),
-              tool_call_id: "call-plain",
-            },
+    const options: ChatSpanBuildOptions = {
+      sessionId: "s-plain",
+      pendingCheckpoints: [
+        {
+          checkpointId: "chk-plain",
+          sessionId: "s-plain",
+          kind: "tool_approval",
+          status: "pending",
+          issuedAt: "t",
+          tool_approval: {
+            ...toolApprovalFixture({ command: "cargo build" }),
+            tool_call_id: "call-plain",
           },
-        ],
-      },
-    );
+        },
+      ],
+    };
+    const blocks = buildChatTranscriptBlocks(messages, [], undefined, options);
 
     expect(blocks).toHaveLength(1);
     expect(blocks[0]?.runId).toBe("");
@@ -930,9 +929,30 @@ describe("workflow-spans", () => {
       },
     });
 
-    // Ordinal sequence places the pending checkpoint after its causing tool call.
-    const kinds = blocks[0]?.items.map((item) => item.kind);
-    expect(kinds).toEqual(["user", "assistant", "tool", "checkpoint"]);
+    expect(blocks[0]?.items.map((item) => item.kind)).toEqual(["user", "assistant", "checkpoint"]);
+
+    observeCommandActivity({
+      session_id: "s-plain", tool_call_id: "call-plain", tool_name: "command",
+      activity_id: "approval", kind: "running_tool", status: "active", started_at: "t",
+      progress: {
+        phase: "executing", files_searched: 0, files_skipped: 0, matches: 0,
+        command_program: {
+          id: "program", parent_receipt_id: "invocation", language_version: 1,
+          catalog_digest: "catalog", source_digest: "source", source_ref: "source-ref",
+          state: "waiting", detail_ref: "detail", progress_state: "unchanged", started_at: "t",
+          activities: [{
+            id: "build", label: "Run process", subject: "cargo build", group: "Running programs",
+            state: "waiting", outcome: "Waiting", spans: [], execution_ids: [],
+          }],
+        },
+      },
+    });
+    try {
+      const [admitted] = buildChatTranscriptBlocks(messages, [], undefined, options);
+      expect(admitted?.items.map((item) => item.kind)).toEqual(["user", "assistant", "tool", "checkpoint"]);
+    } finally {
+      clearCommandActivities("s-plain");
+    }
   });
 
   it("extracts rich metadata including location, causing command, and grant title onto pending checkpoints", () => {

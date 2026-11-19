@@ -190,6 +190,7 @@ export type DisplayTranscriptItem = Exclude<
 >;
 
 export type TranscriptBuildOptions = {
+  sessionId?: string;
   /** Shows benign tool activity when enabled. */
   verboseMode?: boolean;
   /** Controls tool visibility by transcript surface. */

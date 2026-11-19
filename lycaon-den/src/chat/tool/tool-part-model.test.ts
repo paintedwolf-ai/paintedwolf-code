@@ -1,17 +1,14 @@
+import { isCoordinatorInternalTool, shouldOmitToolPartFromTranscript } from "./tool-transcript-visibility.ts";
 import { beforeEach, describe, expect, it } from "vitest";
 import { at, keyAt } from "../../test/at.ts";
 import fixtures from "../fixtures/tool-messages.json";
 import type { CommandActivity, CommandActivityStep, CommandProgramReceipt, Message } from "../../api/types.ts";
 import {
   classifyToolKind,
-  isBenignToolResult,
-  isCoordinatorInternalTool,
-  shouldHideCoordinatorInternalTool,
-  shouldOmitToolPartFromTranscript,
   toolPartDisplayStatus,
   toolPartFromCall,
   toolCompletionLabel,
-  toolPartSummaryTitle,
+  toolSummaryFields,
 } from "./tool-part-model.ts";
 import {
   applyBackgroundProcessEvent,
@@ -121,12 +118,13 @@ describe("tool-part-model", () => {
   });
 
   it("hides orientation tools in parent chat only", () => {
-    expect(shouldHideCoordinatorInternalTool("git_status", "chat")).toBe(true);
-    expect(shouldHideCoordinatorInternalTool("git_status", "worker")).toBe(false);
-    expect(shouldHideCoordinatorInternalTool("find", "chat")).toBe(false);
+    const chat = { verboseMode: true, layout: "chat" as const };
+    expect(shouldOmitToolPartFromTranscript(undefined, "git_status", chat)).toBe(true);
+    expect(shouldOmitToolPartFromTranscript(undefined, "git_status", { verboseMode: false, layout: "worker" })).toBe(false);
+    expect(shouldOmitToolPartFromTranscript(undefined, "find", chat)).toBe(false);
   });
 
-  it("toolPartSummaryTitle includes the count of additional array targets", () => {
+  it("the summary title includes the count of additional array targets", () => {
     const part: ToolPartView = {
       id: "tc-stat",
       toolCallId: "tc-stat",
@@ -140,7 +138,7 @@ describe("tool-part-model", () => {
       output: "{}",
       error: null,
     };
-    expect(toolPartSummaryTitle(part)).toBe("internal/foo.go +1 more");
+    expect(toolSummaryFields(part).title).toBe("internal/foo.go +1 more");
   });
 
   it("projects typed lifecycle completion without reading result text", () => {
@@ -197,7 +195,6 @@ describe("tool-part-model", () => {
       "msg-asst",
     );
     expect(benignCompleted.status).toBe("completed");
-    expect(isBenignToolResult(benignResultMsg)).toBe(true);
 
     const rejected = toolPartFromCall(
       { id: "tc-read", name: "read", args: { path: "x" } },
@@ -319,7 +316,7 @@ describe("tool-part-model", () => {
     ).toBe(false);
   });
 
-  it("shows only long-running tools in chat before a result", () => {
+  it("waits for host activity before showing program tools in quiet chat", () => {
     const chat = { verboseMode: false, layout: "chat" as const };
     expect(shouldOmitToolPartFromTranscript(undefined, "read", chat)).toBe(
       true,
@@ -328,15 +325,11 @@ describe("tool-part-model", () => {
     expect(
       shouldOmitToolPartFromTranscript(undefined, "delegate_dispatch", chat),
     ).toBe(true);
-    expect(
-      shouldOmitToolPartFromTranscript(undefined, "summarize", chat),
-    ).toBe(false);
-    expect(
-      shouldOmitToolPartFromTranscript(undefined, "command", chat),
-    ).toBe(false);
-    expect(
-      shouldOmitToolPartFromTranscript(undefined, "verify", chat),
-    ).toBe(false);
+    expect(shouldOmitToolPartFromTranscript(undefined, "instruct_worker", chat)).toBe(false);
+    for (const name of ["summarize", "command", "verify"]) {
+      expect(shouldOmitToolPartFromTranscript(undefined, name, chat)).toBe(true);
+      expect(shouldOmitToolPartFromTranscript(undefined, name, { ...chat, shownInFlight: true })).toBe(false);
+    }
     expect(
       shouldOmitToolPartFromTranscript(undefined, "read", {
         verboseMode: true,
@@ -380,14 +373,9 @@ describe("tool-part-model", () => {
       }),
     ).toBe(false);
 
-    // Long-running tools stay visible for any settled outcome.
-    expect(
-      shouldOmitToolPartFromTranscript(benignRejected, "summarize", chat),
-    ).toBe(false);
-    expect(
-      shouldOmitToolPartFromTranscript(benignRejected, "survey_repo", chat),
-    ).toBe(false);
-    // Worker cards follow ui_visibility after settle — benign hides.
+    expect(shouldOmitToolPartFromTranscript(benignRejected, "instruct_worker", chat)).toBe(false);
+    expect(shouldOmitToolPartFromTranscript(benignRejected, "summarize", chat)).toBe(true);
+    expect(shouldOmitToolPartFromTranscript(benignRejected, "survey_repo", { ...chat, shownInFlight: true })).toBe(false);
     expect(shouldOmitToolPartFromTranscript(benignRejected, "task", chat)).toBe(
       true,
     );
@@ -410,16 +398,8 @@ describe("tool-part-model", () => {
       },
       created_at: "t",
     };
-    expect(
-      shouldOmitToolPartFromTranscript(benignCompletedDoomLoop, "summarize", chat),
-    ).toBe(false);
-    expect(
-      shouldOmitToolPartFromTranscript(
-        benignCompletedDoomLoop,
-        "survey_repo",
-        chat,
-      ),
-    ).toBe(false);
+    expect(shouldOmitToolPartFromTranscript(benignCompletedDoomLoop, "summarize", chat)).toBe(true);
+    expect(shouldOmitToolPartFromTranscript(benignCompletedDoomLoop, "survey_repo", { ...chat, shownInFlight: true })).toBe(false);
     // Non-long-running completed+benign still hides when verbose is off.
     expect(
       shouldOmitToolPartFromTranscript(benignCompletedDoomLoop, "read", chat),

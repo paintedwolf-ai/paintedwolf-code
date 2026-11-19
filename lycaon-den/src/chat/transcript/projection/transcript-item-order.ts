@@ -1,6 +1,6 @@
 import type { Message } from "../../../api/types.ts";
 import { activitySpanToolParts } from "../../tool/activity-span-model.ts";
-import { toolDrawsWhileRunning } from "../../tool/tool-part-model.ts";
+import { PROGRAM_ACTIVITY_TOOLS, toolDrawsWhileRunning } from "../../tool/tool-transcript-visibility.ts";
 import type { ToolPartView } from "../../tool/tool-part-model.ts";
 import type { RawTranscriptItem, TranscriptBuildOptions, TranscriptItem } from "./transcript-item-model.ts";
 
@@ -60,7 +60,7 @@ const UNORDERED = Number.MAX_SAFE_INTEGER;
 
 /** A call's row sits at its assistant row when drawn while running, otherwise at its result. */
 function callOrd(part: ToolPartView, order: TranscriptOrder): number {
-  const id = order.drawsWhileRunning(part.tool) ? part.assistantMessageId : part.messageId;
+  const id = part.shownInFlight || order.drawsWhileRunning(part.tool) ? part.assistantMessageId : part.messageId;
   return order.ordById.get(id) ?? UNORDERED;
 }
 
@@ -88,7 +88,9 @@ function transcriptItemOrdKey(item: RawTranscriptItem, order: TranscriptOrder): 
     case "checkpoint": {
       const call = item.call;
       if (!call) return at(item.parentMessageId, TIER.call, 1);
-      const atResult = call.resultMessageId !== undefined && !order.drawsWhileRunning(call.tool);
+      // A command approval may appear before the program has activity.
+      const atResult = call.resultMessageId !== undefined &&
+        !PROGRAM_ACTIVITY_TOOLS.has(call.tool.toLowerCase()) && !order.drawsWhileRunning(call.tool);
       return at(atResult ? call.resultMessageId! : item.parentMessageId, TIER.call, 2 * call.index + 1);
     }
     case "turn_load":

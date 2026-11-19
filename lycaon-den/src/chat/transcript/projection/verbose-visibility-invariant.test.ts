@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
-import type { Message, ToolResultUiVisibility } from "../../../api/types.ts";
-import { shouldOmitToolPartFromTranscript } from "../../tool/tool-part-model.ts";
+import type { CommandActivity, CommandProgramReceipt, Message, ToolResultUiVisibility } from "../../../api/types.ts";
+import { clearCommandActivities, observeCommandActivity } from "../../tool/command-activity-live.ts";
+import { activitySpanToolParts } from "../../tool/activity-span-model.ts";
+import { PROGRAM_ACTIVITY_TOOLS, shouldOmitToolPartFromTranscript } from "../../tool/tool-transcript-visibility.ts";
+import { buildChatTranscriptBlocks } from "../../workflow/workflow-spans.ts";
+import { visibleRowContinuity, withdrawnRows } from "../presentation/row-withdrawal-watch.ts";
+import { createTranscriptDisplayProjector } from "./transcript-display-projection.ts";
 import { TOOL_CHICKLET_TITLE_KEYS } from "../../tool/tool-presentation.generated.ts";
 import {
   loadVisibilityFixture,
@@ -66,7 +71,8 @@ describe("verbose visibility is monotone", () => {
         "either keep them visible for the whole lifecycle, or wait for the result",
     ).toEqual([]);
     // Verify the catalog includes both visibility modes.
-    expect(inFlight).toContain("command");
+    expect(inFlight).toContain("instruct_worker");
+    expect(inFlight).not.toContain("command");
     expect(inFlight).not.toContain("task");
   });
 
@@ -92,4 +98,85 @@ describe("recorded frames withdraw no step in either presentation", () => {
       expect(withdrawn).toEqual([]);
     });
   }
+});
+
+function observeProgram(sessionId: string, tool: string, activities: CommandActivity[]): void {
+  observeCommandActivity({
+    session_id: sessionId,
+    tool_call_id: `call-${tool}`,
+    tool_name: tool,
+    activity_id: "lease",
+    kind: "running_tool",
+    status: "active",
+    started_at: "t0",
+    progress: {
+      phase: "executing",
+      files_searched: 0,
+      files_skipped: 0,
+      matches: 0,
+      command_program: { id: "program", state: "running", activities } as CommandProgramReceipt,
+    },
+  });
+}
+
+const admittedActivity: CommandActivity = {
+  id: "execution",
+  label: "Read files",
+  subject: "README.md",
+  group: "Reading files",
+  state: "running",
+  outcome: "Running",
+  execution_ids: [],
+  spans: [],
+};
+
+const scenarios = [
+  { name: "unadmitted benign refusal", progress: false, visibility: "benign", quiet: [0, 0, 0, 0] },
+  { name: "normal settlement without progress", progress: false, visibility: "normal", quiet: [0, 0, 0, 1] },
+  { name: "admitted normal settlement", progress: true, visibility: "normal", quiet: [0, 1, 1, 1] },
+  { name: "admitted settlement stamped benign", progress: true, visibility: "benign", quiet: [0, 1, 1, 1] },
+] as const;
+
+describe.each([...PROGRAM_ACTIVITY_TOOLS])("%s command program", (tool) => {
+  it.each(scenarios)("preserves call identity through $name", ({ name, progress, visibility, quiet }) => {
+    for (const verboseMode of [false, true]) {
+      const sessionId = `session-${tool}-${name}-${verboseMode}`;
+      const options = { sessionId, verboseMode };
+      const assistant: Message = {
+        id: "assistant-1", ord: 1, role: "assistant", origin: "model", authority: "none",
+        trust_tier: "trusted", visibility: "transcript", content: "", created_at: "t0",
+        tool_calls: [{ id: `call-${tool}`, name: tool, args: {} }],
+      };
+      const result = { ...settledResult(tool, visibility, "rejected"), ord: 2 };
+      const project = createTranscriptDisplayProjector();
+      const counts: number[] = [];
+      let previous = new Map<string, string>();
+      const frame = (messages: Message[]) => {
+        const spans = buildChatTranscriptBlocks(messages, [], undefined, options);
+        const items = project(messages, spans.map((span) => span.items), options).flat();
+        const continuity = visibleRowContinuity(items);
+        expect(withdrawnRows(previous, continuity, new Set([assistant.id]))).toEqual([]);
+        previous = continuity;
+        const keys = items.flatMap((item) => item.kind === "tool" ? [item.part.id] :
+          item.kind === "activity_span" ? activitySpanToolParts(item.entries).map((part) => part.id) : []);
+        expect(keys.every((key) => key === `${assistant.id}:call-${tool}`)).toBe(true);
+        counts.push(keys.length);
+      };
+      try {
+        observeProgram(sessionId, tool, []);
+        frame([assistant]);
+        if (progress) observeProgram(sessionId, tool, [admittedActivity]);
+        const internal = { ...assistant, visibility: "internal" } as const;
+        const privateRows = project([internal], undefined, options)[0]!;
+        expect(privateRows.some((item) => item.kind === "tool" || item.kind === "activity_span")).toBe(false);
+        frame([assistant]);
+        clearCommandActivities(sessionId);
+        frame([assistant]);
+        frame([assistant, result]);
+        expect(counts).toEqual(verboseMode ? [1, 1, 1, 1] : quiet);
+      } finally {
+        clearCommandActivities(sessionId);
+      }
+    }
+  });
 });

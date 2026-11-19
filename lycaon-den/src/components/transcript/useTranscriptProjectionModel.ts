@@ -118,6 +118,7 @@ export function useTranscriptProjectionModel(options: UseTranscriptProjectionMod
           (transcriptItems ? [transcriptItems] : undefined);
         const projected = projectTranscript(messages, spans, {
           ...common,
+          sessionId: options.sessionId() ?? undefined,
           verboseMode: verboseModePref(),
           turnLoads: options.turnLoads(),
         });
