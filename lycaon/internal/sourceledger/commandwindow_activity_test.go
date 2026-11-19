@@ -474,24 +474,6 @@ func (g *gatedInventory) EnsureInventory(ctx context.Context, req InventoryReque
 	return g.commandsInventoryPort.EnsureInventory(ctx, req)
 }
 
-// settableClock is the ledger's injected clock.
-type settableClock struct{ now atomic.Pointer[time.Time] }
-
-func (c *settableClock) read() time.Time { return *c.now.Load() }
-
-func (c *settableClock) advance(d time.Duration) {
-	next := c.now.Load().Add(d)
-	c.now.Store(&next)
-}
-
-func manualLedgerClock(store *Store) *settableClock {
-	clock := &settableClock{}
-	start := time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC)
-	clock.now.Store(&start)
-	store.Commands.now = clock.read
-	return clock
-}
-
 // Retention running out costs a file's before-image and not its attribution: a
 // rewrite of an unretained file reports no captured content and cannot restore,
 // and a retained one diffs exactly.

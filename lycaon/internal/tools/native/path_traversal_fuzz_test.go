@@ -2,6 +2,8 @@ package native
 
 import (
 	"context"
+	"fmt"
+	"math/rand/v2"
 	"os"
 	"path/filepath"
 	"strings"
@@ -60,8 +62,8 @@ func TestNativePathRefusalsNameNoProjectRoot(t *testing.T) {
 	// The absolute target lies outside the project, scratch and every default write root.
 	home, err := os.UserHomeDir()
 	testutil.FailErr(t, "read home directory", err)
-	absOutside, err := os.MkdirTemp(home, ".pw-native-refusal-")
-	testutil.FailErr(t, "create home folder", err)
+	absOutside := filepath.Join(home, fmt.Sprintf(".pw-%s-%d", t.Name(), rand.Int64()))
+	testutil.FailErr(t, "create home folder", os.Mkdir(absOutside, 0o755))
 	t.Cleanup(func() { _ = os.RemoveAll(absOutside) })
 	absTarget := filepath.Join(absOutside, "secret.txt")
 	testutil.FailErr(t, "write home target", os.WriteFile(absTarget, []byte("outside"), 0o644))
