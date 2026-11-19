@@ -44,7 +44,7 @@ func (e *CodeExecutor) discoverCandidates(ctx context.Context, leg *CodePlanLeg,
 		gen, err := resolveRequestedCodeGeneration(scanCtx, e.catalog, root, wallEnd, selection.include, selection.paths...)
 		if errors.Is(err, errCodeCatalogWarming) {
 			report.Code.WarmingRoots++
-			report.TimedOut = !time.Now().Before(wallEnd)
+			report.TimedOut = !time.Now().Before(wallEnd) && (progress.Selection < len(selections)-1 || progress.Root < len(leg.PathRoots)-1)
 			break
 		}
 		if err != nil {

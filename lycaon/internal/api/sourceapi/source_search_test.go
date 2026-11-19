@@ -10,6 +10,7 @@ import (
 	"github.com/lycaon/lycaon/internal/backgroundwork"
 	"github.com/lycaon/lycaon/internal/pagecursor"
 	"github.com/lycaon/lycaon/internal/projectsource"
+	"github.com/lycaon/lycaon/internal/search"
 	"github.com/lycaon/lycaon/internal/sourcecatalog"
 	catalogtest "github.com/lycaon/lycaon/internal/testsetup/sourcecatalog"
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -77,7 +78,9 @@ func TestDeclarationSearchReportsColdCatalogAsPartial(t *testing.T) {
 	})
 	testutil.FailErr(t, "hold discovery admission", err)
 	defer release()
-	hits, partial, err := searchDeclarations(t.Context(), declarationQuery("Target", "cold-definition", root, projectsource.DeclarationMatchWholeWord, 3))
+	query := declarationQuery("Target", "cold-definition", root, projectsource.DeclarationMatchWholeWord, 3)
+	query.Wall = search.BudgetInteractive.Wall()
+	hits, partial, err := searchDeclarations(t.Context(), query)
 	testutil.FailErr(t, "search cold definition", err)
 	if len(hits) != 0 || partial.Limited || !partial.Incomplete() || len(partial.Gaps) != 1 || partial.Gaps[0].Reason != projectsource.DeclarationCatalogWarming || partial.Gaps[0].Count != 1 {
 		t.Fatalf("cold definition hits=%d partial=%+v", len(hits), partial)
