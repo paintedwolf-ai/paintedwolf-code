@@ -62,6 +62,9 @@ func (s *Lifecycle) HandleUpdateSession(w http.ResponseWriter, r *http.Request) 
 		sess, err = s.Sessions.Chats.MovePinned(r.Context(), id, *req.PinPosition)
 	}
 	if err != nil {
+		if req.Mode != nil && requestscope.WriteSessionModeError(s.responses, w, err) {
+			return
+		}
 		s.writeSessionLifecycleError(w, r, err)
 		return
 	}
@@ -80,9 +83,6 @@ func (s *Lifecycle) HandleDeleteSession(w http.ResponseWriter, r *http.Request) 
 }
 
 func (s *Lifecycle) writeSessionLifecycleError(w http.ResponseWriter, r *http.Request, err error) {
-	if requestscope.WriteSessionModeError(s.responses, w, err) {
-		return
-	}
 	switch {
 	case errors.Is(err, naming.ErrInvalidDisplayTitle):
 		s.responses.Fail(w, wire.ApiErrorCodeInvalidRequest, "title must be 1–80 characters without control characters")

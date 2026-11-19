@@ -292,6 +292,8 @@ paths:
           $ref: ../components/responses.yaml#/components/responses/ContentTooLarge
         '422':
           $ref: ../components/responses.yaml#/components/responses/UnprocessableContent
+        '503':
+          $ref: ../components/responses.yaml#/components/responses/ServiceUnavailable
   /v1/sessions/{id}/workflow-runs/active:
     get:
       tags:
@@ -477,6 +479,8 @@ paths:
           $ref: ../components/responses.yaml#/components/responses/ContentTooLarge
         '422':
           $ref: ../components/responses.yaml#/components/responses/UnprocessableContent
+        '503':
+          $ref: ../components/responses.yaml#/components/responses/ServiceUnavailable
   /v1/workflow-runs/{id}/cancel:
     post:
       tags:
@@ -524,6 +528,8 @@ paths:
           $ref: ../components/responses.yaml#/components/responses/ContentTooLarge
         '422':
           $ref: ../components/responses.yaml#/components/responses/UnprocessableContent
+        '503':
+          $ref: ../components/responses.yaml#/components/responses/ServiceUnavailable
   /v1/workflow-runs/{id}/exit:
     post:
       tags:
@@ -571,6 +577,8 @@ paths:
           $ref: ../components/responses.yaml#/components/responses/ContentTooLarge
         '422':
           $ref: ../components/responses.yaml#/components/responses/UnprocessableContent
+        '503':
+          $ref: ../components/responses.yaml#/components/responses/ServiceUnavailable
   /v1/workflow-runs/{id}/advance:
     post:
       tags:
@@ -618,6 +626,8 @@ paths:
           $ref: ../components/responses.yaml#/components/responses/ContentTooLarge
         '422':
           $ref: ../components/responses.yaml#/components/responses/UnprocessableContent
+        '503':
+          $ref: ../components/responses.yaml#/components/responses/ServiceUnavailable
   /v1/workflow-runs/{id}/transitions/{transition_id}:
     post:
       tags:
@@ -671,6 +681,8 @@ paths:
           $ref: ../components/responses.yaml#/components/responses/ContentTooLarge
         '422':
           $ref: ../components/responses.yaml#/components/responses/UnprocessableContent
+        '503':
+          $ref: ../components/responses.yaml#/components/responses/ServiceUnavailable
   /v1/workflow-runs/{id}/decisions/{phase_id}:
     post:
       tags:

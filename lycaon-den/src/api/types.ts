@@ -99,7 +99,7 @@ export interface paths {
         delete: operations["deleteSession"];
         options?: never;
         head?: never;
-        /** Mutate session lifecycle state (title, archived, pinned, pin position) */
+        /** Mutate session lifecycle state (title, archived, pinned, pin position, mode) */
         patch: operations["updateSession"];
         trace?: never;
     };
@@ -17943,6 +17943,15 @@ export interface components {
                 "application/json": components["schemas"]["Error"];
             };
         };
+        /** @description A subsystem the operation needs is not available yet; `code` names it. */
+        ServiceUnavailable: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["Error"];
+            };
+        };
         /** @description Policy or confinement refuses the operation; `code` says which. */
         Forbidden: {
             headers: {
@@ -17954,15 +17963,6 @@ export interface components {
         };
         /** @description The request is well formed but its content cannot be processed; `code` says why. */
         UnprocessableContent: {
-            headers: {
-                [name: string]: unknown;
-            };
-            content: {
-                "application/json": components["schemas"]["Error"];
-            };
-        };
-        /** @description A subsystem the operation needs is not available yet; `code` names it. */
-        ServiceUnavailable: {
             headers: {
                 [name: string]: unknown;
             };
@@ -18235,6 +18235,7 @@ export interface operations {
             413: components["responses"]["ContentTooLarge"];
             415: components["responses"]["UnsupportedMediaType"];
             429: components["responses"]["TooManyRequests"];
+            503: components["responses"]["ServiceUnavailable"];
             default: components["responses"]["Error"];
         };
     };
@@ -19352,6 +19353,7 @@ export interface operations {
             413: components["responses"]["ContentTooLarge"];
             415: components["responses"]["UnsupportedMediaType"];
             429: components["responses"]["TooManyRequests"];
+            503: components["responses"]["ServiceUnavailable"];
             default: components["responses"]["Error"];
         };
     };
@@ -24837,6 +24839,7 @@ export interface operations {
             415: components["responses"]["UnsupportedMediaType"];
             422: components["responses"]["UnprocessableContent"];
             429: components["responses"]["TooManyRequests"];
+            503: components["responses"]["ServiceUnavailable"];
             default: components["responses"]["Error"];
         };
     };
@@ -25091,6 +25094,7 @@ export interface operations {
             415: components["responses"]["UnsupportedMediaType"];
             422: components["responses"]["UnprocessableContent"];
             429: components["responses"]["TooManyRequests"];
+            503: components["responses"]["ServiceUnavailable"];
             default: components["responses"]["Error"];
         };
     };
@@ -25248,6 +25252,7 @@ export interface operations {
             415: components["responses"]["UnsupportedMediaType"];
             422: components["responses"]["UnprocessableContent"];
             429: components["responses"]["TooManyRequests"];
+            503: components["responses"]["ServiceUnavailable"];
             default: components["responses"]["Error"];
         };
     };
@@ -25284,6 +25289,7 @@ export interface operations {
             415: components["responses"]["UnsupportedMediaType"];
             422: components["responses"]["UnprocessableContent"];
             429: components["responses"]["TooManyRequests"];
+            503: components["responses"]["ServiceUnavailable"];
             default: components["responses"]["Error"];
         };
     };
@@ -25320,6 +25326,7 @@ export interface operations {
             415: components["responses"]["UnsupportedMediaType"];
             422: components["responses"]["UnprocessableContent"];
             429: components["responses"]["TooManyRequests"];
+            503: components["responses"]["ServiceUnavailable"];
             default: components["responses"]["Error"];
         };
     };
@@ -25356,6 +25363,7 @@ export interface operations {
             415: components["responses"]["UnsupportedMediaType"];
             422: components["responses"]["UnprocessableContent"];
             429: components["responses"]["TooManyRequests"];
+            503: components["responses"]["ServiceUnavailable"];
             default: components["responses"]["Error"];
         };
     };
@@ -25393,6 +25401,7 @@ export interface operations {
             415: components["responses"]["UnsupportedMediaType"];
             422: components["responses"]["UnprocessableContent"];
             429: components["responses"]["TooManyRequests"];
+            503: components["responses"]["ServiceUnavailable"];
             default: components["responses"]["Error"];
         };
     };

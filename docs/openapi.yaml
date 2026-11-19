@@ -195,7 +195,7 @@ paths:
         - sessions
       operationId: updateSession
       x-person-action: record
-      summary: Mutate session lifecycle state (title, archived, pinned, pin position)
+      summary: Mutate session lifecycle state (title, archived, pinned, pin position, mode)
       parameters:
         - $ref: '#/components/parameters/SessionId'
       requestBody:
@@ -225,6 +225,8 @@ paths:
           $ref: '#/components/responses/UnsupportedMediaType'
         '429':
           $ref: '#/components/responses/TooManyRequests'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
         default:
           $ref: '#/components/responses/Error'
     delete:
@@ -1591,6 +1593,8 @@ paths:
           $ref: '#/components/responses/UnsupportedMediaType'
         '429':
           $ref: '#/components/responses/TooManyRequests'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
         default:
           $ref: '#/components/responses/Error'
   /v1/sessions/{id}/coordinator-context:
@@ -7595,6 +7599,8 @@ paths:
           $ref: '#/components/responses/UnprocessableContent'
         '429':
           $ref: '#/components/responses/TooManyRequests'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
         default:
           $ref: '#/components/responses/Error'
   /v1/workflows:
@@ -7888,6 +7894,8 @@ paths:
           $ref: '#/components/responses/UnprocessableContent'
         '429':
           $ref: '#/components/responses/TooManyRequests'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
         default:
           $ref: '#/components/responses/Error'
   /v1/sessions/{id}/workflow-runs/active:
@@ -8073,6 +8081,8 @@ paths:
           $ref: '#/components/responses/UnprocessableContent'
         '429':
           $ref: '#/components/responses/TooManyRequests'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
         default:
           $ref: '#/components/responses/Error'
   /v1/workflow-runs/{id}/cancel:
@@ -8120,6 +8130,8 @@ paths:
           $ref: '#/components/responses/UnprocessableContent'
         '429':
           $ref: '#/components/responses/TooManyRequests'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
         default:
           $ref: '#/components/responses/Error'
   /v1/workflow-runs/{id}/exit:
@@ -8167,6 +8179,8 @@ paths:
           $ref: '#/components/responses/UnprocessableContent'
         '429':
           $ref: '#/components/responses/TooManyRequests'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
         default:
           $ref: '#/components/responses/Error'
   /v1/workflow-runs/{id}/advance:
@@ -8214,6 +8228,8 @@ paths:
           $ref: '#/components/responses/UnprocessableContent'
         '429':
           $ref: '#/components/responses/TooManyRequests'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
         default:
           $ref: '#/components/responses/Error'
   /v1/workflow-runs/{id}/transitions/{transition_id}:
@@ -8267,6 +8283,8 @@ paths:
           $ref: '#/components/responses/UnprocessableContent'
         '429':
           $ref: '#/components/responses/TooManyRequests'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
         default:
           $ref: '#/components/responses/Error'
   /v1/workflow-runs/{id}/decisions/{phase_id}:
@@ -14695,6 +14713,12 @@ components:
         application/json:
           schema:
             $ref: '#/components/schemas/Error'
+    ServiceUnavailable:
+      description: A subsystem the operation needs is not available yet; `code` names it.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
     Forbidden:
       description: Policy or confinement refuses the operation; `code` says which.
       content:
@@ -14703,12 +14727,6 @@ components:
             $ref: '#/components/schemas/Error'
     UnprocessableContent:
       description: The request is well formed but its content cannot be processed; `code` says why.
-      content:
-        application/json:
-          schema:
-            $ref: '#/components/schemas/Error'
-    ServiceUnavailable:
-      description: A subsystem the operation needs is not available yet; `code` names it.
       content:
         application/json:
           schema:

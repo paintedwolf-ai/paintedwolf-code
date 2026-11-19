@@ -281,3 +281,5 @@ paths:
           $ref: ../../components/responses.yaml#/components/responses/Conflict
         '413':
           $ref: ../../components/responses.yaml#/components/responses/ContentTooLarge
+        '503':
+          $ref: ../../components/responses.yaml#/components/responses/ServiceUnavailable
