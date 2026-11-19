@@ -157,6 +157,7 @@ describe("ChatView composer", () => {
     setWorkflows({ catalog: [{ ...planWorkflow, requires_agent: true }] });
     const group = screen.getByRole("radiogroup", { name: "Session mode" });
     const attach = screen.getByTestId("composer-attach");
+    expect(composer().placeholder).toBe("What would you like to work on?");
     expect(group.parentElement).toBe(attach.parentElement);
     expect(group.compareDocumentPosition(attach) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
 

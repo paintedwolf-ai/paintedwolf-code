@@ -11,7 +11,13 @@ import { createChatViewMode } from "./chat-view-mode.tsx";
 import { ComposerChromeStack } from "./ComposerChromeStack.tsx";
 import { APPROVALS_COPY } from "../../settings/security/approvals-copy.ts";
 import { SessionWorkflowLauncher } from "./SessionWorkflowLauncher.tsx";
-import { ASK_INPUT_HINT, WORKFLOW_NEEDS_AGENT, WORKFLOW_NEEDS_AGENT_HINT, WORKFLOW_NEEDS_AGENT_NOTICE } from "./session-mode-copy.ts";
+import {
+  ASK_INPUT_HINT,
+  NEW_CHAT_AGENT_INPUT_HINT,
+  WORKFLOW_NEEDS_AGENT,
+  WORKFLOW_NEEDS_AGENT_HINT,
+  WORKFLOW_NEEDS_AGENT_NOTICE,
+} from "./session-mode-copy.ts";
 import { CheckpointCards } from "../checkpoint/CheckpointCards.tsx";
 import { AskUserDock } from "../workflow/AskUserDock.tsx";
 import type { AskUserDockSubmitFn } from "../workflow/AskUserDock.tsx";
@@ -373,6 +379,7 @@ export function createChatViewComposer(props: ChatViewProps, options: ComposerOp
                 visionSupport={props.visionSupport}
                 placeholder={(() => {
                   const armed = workflow.armed();
+                  const modeView = mode.view();
                   return (
                     (approvalRedirectCheckpoint()
                       ? APPROVALS_COPY.card.composerRedirect.placeholder
@@ -384,7 +391,8 @@ export function createChatViewComposer(props: ChatViewProps, options: ComposerOp
                       pendingAskMeta(),
                     ) ??
                     activeRun()?.ui?.request?.question ??
-                    (mode.view().workflowNeedsAgent ? ASK_INPUT_HINT : undefined)
+                    (modeView.workflowNeedsAgent ? ASK_INPUT_HINT : undefined) ??
+                    (modeView.show && !modeView.started ? NEW_CHAT_AGENT_INPUT_HINT : undefined)
                   );
                 })()}
                 emptySubmitEnabled={

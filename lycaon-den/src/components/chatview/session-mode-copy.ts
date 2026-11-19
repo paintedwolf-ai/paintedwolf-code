@@ -1,3 +1,4 @@
+export const NEW_CHAT_AGENT_INPUT_HINT = "What would you like to work on?";
 export const ASK_INPUT_HINT = "Ask a question…";
 
 export const SESSION_MODE_DESCRIPTION = {
