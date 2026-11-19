@@ -127,11 +127,13 @@ class ProviderPreflightTests(unittest.TestCase):
                 receipt=self.receipt if len(calls)>1 else {**self.receipt,'accepted':False,'retryable':True,'code':'provider_rate_limited'}
                 save(destination/'result.json',receipt)
                 return {'kind':'exited','returncode':0}
-            with patch('provider_preflight.execute',side_effect=execute):
+            # A fixed clock makes the scheduled backoff the whole wait.
+            with patch('provider_preflight.execute',side_effect=execute), \
+                    patch('provider_preflight.time.time', return_value=1_000.0):
                 self.assertTrue(probe(root,root,self.model,cancelled)['accepted'])
             self.assertEqual(len(calls),2)
             self.assertEqual(cancelled.wait.call_count, 1)
-            self.assertAlmostEqual(cancelled.wait.call_args.args[0], 5, delta=0.1)
+            self.assertEqual(cancelled.wait.call_args.args[0], 5)
 
     def test_unavailable_support_model_blocks_its_dependents(self):
         with tempfile.TemporaryDirectory() as tmp:
