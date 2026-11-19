@@ -25,8 +25,19 @@ func (f creationFloors) perform(call pathCall, dirs []int) (pathResult, int) {
 		return unix.AT_FDCWD
 	}
 	unix.Umask(int(call.Umask & 0o777))
-	if len(f.sharedTemp) == 0 {
+	if len(f.sharedTemp) == 0 || !strings.ContainsRune(call.Path, '/') {
 		if result, opened, done := f.createPlainName(dir(0), call); done {
+			if result.Errno == int(unix.EROFS) && len(f.sharedTemp) > 0 {
+				// A single component was resolved on the caller's pinned directory.
+				where, err := os.Readlink("/proc/self/fd/" + strconv.Itoa(dir(0)))
+				if err == nil {
+					op := refusalCreate
+					if call.Op == callUnlink {
+						op = refusalUnlink
+					}
+					result = f.tempWriteResult(unix.EROFS, op, parent{fd: dir(0), base: call.Path, path: joinName(where, call.Path)})
+				}
+			}
 			return result, opened
 		}
 	}

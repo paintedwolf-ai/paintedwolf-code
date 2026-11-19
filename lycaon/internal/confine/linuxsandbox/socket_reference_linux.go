@@ -187,7 +187,11 @@ func (f creationFloors) bindSessionSocket(call pathCall, dirs []int) pathResult 
 	if err := unix.Fchdir(p.fd); err != nil {
 		return errnoResult(err)
 	}
-	err = unix.Bind(dirs[0], &unix.SockaddrUnix{Name: p.base})
+	name := p.base
+	if name[0] == '@' {
+		name = "./" + name
+	}
+	err = unix.Bind(dirs[0], &unix.SockaddrUnix{Name: name})
 	if err := unix.Fchdir(cwd); err != nil {
 		return errnoResult(err)
 	}

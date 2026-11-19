@@ -235,6 +235,9 @@ func (p Plan) Validate() error {
 			return &Unsupported{Code: UnsupportedFilesystemRule, Detail: "protected name " + named.Name + " below " + named.Below}
 		}
 	}
+	if root := n.SessionSocketRoot; root != "" && (!filepath.IsAbs(root) || filepath.Clean(root) != root || root == "/" || strings.ContainsRune(root, 0)) {
+		return &Unsupported{Code: UnsupportedNetworkGrant, Detail: "invalid session socket root"}
+	}
 	if len(n.SocketGrants) > 8 {
 		return &Unsupported{Code: UnsupportedNetworkGrant, Detail: "too many socket references"}
 	}
@@ -242,7 +245,7 @@ func (p Plan) Validate() error {
 	seenFDs := make(map[int]bool)
 	credentialRead := false
 	for _, grant := range n.SocketGrants {
-		if !filepath.IsAbs(grant.Path) || strings.ContainsRune(grant.Path, 0) || grant.FD < SocketReferenceFD || grant.FD >= SocketReferenceFD+8 || seenSockets[grant.Path] || seenFDs[grant.FD] {
+		if !filepath.IsAbs(grant.Path) || strings.ContainsRune(grant.Path, 0) || grant.FD < SocketReferenceFD || grant.FD >= SocketReferenceFD+8 || seenSockets[grant.Path] || seenFDs[grant.FD] || (n.SessionSocketRoot != "" && grant.FD == SocketReferenceFD+len(n.SocketGrants)) {
 			return &Unsupported{Code: UnsupportedNetworkGrant, Detail: "invalid or repeated socket reference"}
 		}
 		if grant.Delegated != "" && grant.Delegated != DelegatedNixDaemon {
