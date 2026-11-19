@@ -1,6 +1,6 @@
 import { createEffect, createMemo, createSignal, onCleanup, type Accessor } from "solid-js";
 import type { LycaonClient } from "../../api/client.ts";
-import { LycaonApiError } from "../../api/http.ts";
+import { isApiErrorCode } from "../../api/http.ts";
 import type { ActionFact } from "../../api/types.ts";
 import { subscribeSourceInvalidation } from "../../files/source/source-invalidation.ts";
 import { BOUNDARY_REASONS, GAP_REASONS } from "../../files/source/source-command-window.ts";
@@ -44,7 +44,7 @@ export function useActionCoverage(
             if (!state.settling) pending.delete(id);
           } catch (error) {
             // Settled windows with no history or gaps are pruned.
-            if (error instanceof LycaonApiError && error.status === 404) pending.delete(id);
+            if (isApiErrorCode(error, ["not_found", "session_not_found"])) pending.delete(id);
           }
         }));
         if (controller.signal.aborted) return;

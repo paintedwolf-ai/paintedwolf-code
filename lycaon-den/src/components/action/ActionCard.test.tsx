@@ -2,6 +2,7 @@ import { createSignal } from "solid-js";
 import { fireEvent, render, waitFor } from "@solidjs/testing-library";
 import { describe, expect, it, vi } from "vitest";
 import type { ActionDescriptor } from "../../api/types.ts";
+import { LycaonApiError } from "../../api/http.ts";
 import { ACTION_FACT_LABELS, formatActionRow, formatFact } from "../../chat/action/action-format.ts";
 import { pendingAction } from "../../chat/action/part-action.ts";
 import { retiredToolNames } from "../../chat/tool/tool-catalog-tools.ts";
@@ -86,6 +87,22 @@ describe("ActionCard", () => {
     expect(get).toHaveBeenCalledTimes(2);
     open(container);
     expect(container.querySelector('[data-kind="source_observation"] dd')?.textContent).toContain("/srv/shared was not observed");
+  });
+
+  it("stops refreshing when the host reports a pruned window", async () => {
+    const get = vi.fn().mockRejectedValue(new LycaonApiError("Window pruned", undefined, "not_found"));
+    const client = stubClient({ getProjectSourceCommandObservation: get });
+    const action: ActionDescriptor = {
+      ...descriptor,
+      facts: [{ kind: "source_observation", source_windows: ["window"] }],
+      row: [],
+      opener: undefined,
+    };
+    const { container } = render(() => <ActionCard part={part()} action={action} layout="chat" sessionId="chat" projectId="project" client={client} />);
+    await get.mock.results[0]?.value.catch(() => {});
+    invalidateSourceQueries({ projectId: "project" });
+    expect(get).toHaveBeenCalledTimes(1);
+    expect(container.textContent).not.toContain("File observation incomplete");
   });
 
   it("opens to what ran, the summary, facts, preview and records, in that order and nothing else", () => {
