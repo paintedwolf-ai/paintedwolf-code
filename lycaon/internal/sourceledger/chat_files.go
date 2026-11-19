@@ -98,7 +98,7 @@ func (s *Store) referenceChatFile(ctx context.Context, q *db.Queries, projectID,
 
 // HeldFileAddress follows an outside file through address changes.
 func (s *Store) HeldFileAddress(ctx context.Context, projectID, fileID string) (rootID, path string, err error) {
-	head, err := s.queries.GetSourceBranchHeadByFile(ctx, db.GetSourceBranchHeadByFileParams{ProjectID: projectID, FileID: fileID})
+	head, err := s.queries.GetSourceBranchHeadByFile(ctx, db.GetSourceBranchHeadByFileParams{ProjectID: projectID, BranchID: string(sourcebranch.Trunk), FileID: fileID})
 	if errors.Is(err, sql.ErrNoRows) {
 		return "", "", ErrHistoryNotFound
 	}
