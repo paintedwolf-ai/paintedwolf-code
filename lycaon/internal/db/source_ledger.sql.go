@@ -127,8 +127,10 @@ DELETE FROM source_command_windows
 WHERE id = ?
   AND NOT EXISTS (SELECT 1 FROM source_operations o WHERE o.command_window_id = source_command_windows.id)
   AND NOT EXISTS (SELECT 1 FROM source_git_transitions g WHERE g.command_window_id = source_command_windows.id)
+  AND NOT EXISTS (SELECT 1 FROM source_command_window_coverage c WHERE c.window_id = source_command_windows.id AND c.coverage != 'complete')
 `
 
+// A window that left part of a folder uncompared stays to say so.
 func (q *Queries) DeleteSourceCommandWindowIfUnreferenced(ctx context.Context, id string) (int64, error) {
 	result, err := q.db.ExecContext(ctx, deleteSourceCommandWindowIfUnreferenced, id)
 	if err != nil {
@@ -182,8 +184,13 @@ DELETE FROM source_command_windows
 WHERE state != 'running'
   AND NOT EXISTS (SELECT 1 FROM source_operations o WHERE o.command_window_id = source_command_windows.id)
   AND NOT EXISTS (SELECT 1 FROM source_git_transitions g WHERE g.command_window_id = source_command_windows.id)
+  AND NOT (
+    EXISTS (SELECT 1 FROM source_command_window_coverage c WHERE c.window_id = source_command_windows.id AND c.coverage != 'complete')
+    AND EXISTS (SELECT 1 FROM sessions s WHERE s.id = source_command_windows.session_id)
+  )
 `
 
+// A coverage notice outlives its window only while its chat does.
 func (q *Queries) DeleteUnreferencedEndedSourceCommandWindows(ctx context.Context) (int64, error) {
 	result, err := q.db.ExecContext(ctx, deleteUnreferencedEndedSourceCommandWindows)
 	if err != nil {
@@ -2116,6 +2123,50 @@ func (q *Queries) ListSourceCheckpointGitStatesForCheckpoints(ctx context.Contex
 	return items, nil
 }
 
+const listSourceCommandWindowCoverage = `-- name: ListSourceCommandWindowCoverage :many
+WITH page AS (
+    SELECT CAST(?1 AS TEXT) AS ids
+), requested(id) AS (
+    SELECT CAST(entry.value AS TEXT) FROM page, json_each(page.ids) AS entry
+)
+SELECT c.window_id, c.root_id, c.path, c.coverage, c.reason, c.boundaries_json, c.omitted_boundaries
+FROM requested
+JOIN source_command_window_coverage c ON c.window_id = requested.id
+ORDER BY c.window_id, c.root_id, c.path
+`
+
+// ids is a JSON array of window ids.
+func (q *Queries) ListSourceCommandWindowCoverage(ctx context.Context, ids string) ([]SourceCommandWindowCoverage, error) {
+	rows, err := q.db.QueryContext(ctx, listSourceCommandWindowCoverage, ids)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []SourceCommandWindowCoverage
+	for rows.Next() {
+		var i SourceCommandWindowCoverage
+		if err := rows.Scan(
+			&i.WindowID,
+			&i.RootID,
+			&i.Path,
+			&i.Coverage,
+			&i.Reason,
+			&i.BoundariesJson,
+			&i.OmittedBoundaries,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listSourceCommandWindowsByIDs = `-- name: ListSourceCommandWindowsByIDs :many
 WITH page AS (
     SELECT CAST(?1 AS TEXT) AS ids
@@ -2156,6 +2207,59 @@ func (q *Queries) ListSourceCommandWindowsByIDs(ctx context.Context, ids string)
 			return nil, err
 		}
 		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listSourceCommandWindowsWithGaps = `-- name: ListSourceCommandWindowsWithGaps :many
+SELECT w.id
+FROM source_command_windows w
+WHERE w.project_id = ?1
+  AND (CAST(?2 AS TEXT) = '' OR w.session_id = ?2)
+  AND (CAST(?3 AS INTEGER) = 0 OR w.turn = ?3)
+  AND w.ordinal >= ?4 AND w.ordinal < ?5
+  AND EXISTS (SELECT 1 FROM source_command_window_coverage c WHERE c.window_id = w.id AND c.coverage != 'complete')
+ORDER BY w.ordinal DESC
+LIMIT ?6
+`
+
+type ListSourceCommandWindowsWithGapsParams struct {
+	ProjectID     string `json:"project_id"`
+	SessionID     string `json:"session_id"`
+	Turn          int64  `json:"turn"`
+	FromOrdinal   int64  `json:"from_ordinal"`
+	BeforeOrdinal int64  `json:"before_ordinal"`
+	RowLimit      int64  `json:"row_limit"`
+}
+
+// Windows with a folder left uncompared, in a walk page's ordinal span, for
+// one chat or turn when session_id is set.
+func (q *Queries) ListSourceCommandWindowsWithGaps(ctx context.Context, arg ListSourceCommandWindowsWithGapsParams) ([]string, error) {
+	rows, err := q.db.QueryContext(ctx, listSourceCommandWindowsWithGaps,
+		arg.ProjectID,
+		arg.SessionID,
+		arg.Turn,
+		arg.FromOrdinal,
+		arg.BeforeOrdinal,
+		arg.RowLimit,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []string
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
 	}
 	if err := rows.Close(); err != nil {
 		return nil, err
@@ -4859,6 +4963,38 @@ func (q *Queries) UpsertSourceBlobObject(ctx context.Context, arg UpsertSourceBl
 		arg.StorageRelpath,
 		arg.GitOidSha1,
 		arg.GitOidSha256,
+	)
+	return err
+}
+
+const upsertSourceCommandWindowCoverage = `-- name: UpsertSourceCommandWindowCoverage :exec
+INSERT INTO source_command_window_coverage (
+    window_id, root_id, path, coverage, reason, boundaries_json, omitted_boundaries
+) VALUES (?, ?, ?, ?, ?, ?, ?)
+ON CONFLICT(window_id, root_id, path) DO UPDATE SET
+    coverage = excluded.coverage, reason = excluded.reason,
+    boundaries_json = excluded.boundaries_json, omitted_boundaries = excluded.omitted_boundaries
+`
+
+type UpsertSourceCommandWindowCoverageParams struct {
+	WindowID          string `json:"window_id"`
+	RootID            string `json:"root_id"`
+	Path              string `json:"path"`
+	Coverage          string `json:"coverage"`
+	Reason            string `json:"reason"`
+	BoundariesJson    string `json:"boundaries_json"`
+	OmittedBoundaries int64  `json:"omitted_boundaries"`
+}
+
+func (q *Queries) UpsertSourceCommandWindowCoverage(ctx context.Context, arg UpsertSourceCommandWindowCoverageParams) error {
+	_, err := q.db.ExecContext(ctx, upsertSourceCommandWindowCoverage,
+		arg.WindowID,
+		arg.RootID,
+		arg.Path,
+		arg.Coverage,
+		arg.Reason,
+		arg.BoundariesJson,
+		arg.OmittedBoundaries,
 	)
 	return err
 }

@@ -2292,6 +2292,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/projects/{id}/source/command-windows/{window_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Read a chat command window's observation gaps */
+        get: operations["getProjectSourceCommandObservation"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/projects/{id}/source/git-changes/{git_change_id}/review": {
         parameters: {
             query?: never;
@@ -8397,10 +8414,14 @@ export interface components {
             redaction?: components["schemas"]["HostSecretRedactionMeta"];
         };
         /** @enum {string} */
-        ActionFactKind: "result" | "changed" | "found" | "took" | "steps" | "stopped_by" | "network" | "worker" | "budget" | "process" | "captured" | "containment" | "loaded_by";
+        ActionFactKind: "result" | "source_observation" | "changed" | "found" | "took" | "steps" | "stopped_by" | "network" | "worker" | "budget" | "process" | "captured" | "containment" | "loaded_by";
         /** @description One typed fact. The fields a kind uses are listed on each field; Den formats the values and owns the label for each kind. */
         ActionFact: {
             kind: components["schemas"]["ActionFactKind"];
+            /** @description source_observation: gaps in a command's before-and-after comparison. */
+            source_coverage?: components["schemas"]["CommandFolderCoverage"][];
+            /** @description source_observation: windows still settling when the result was published. */
+            source_windows?: string[];
             /**
              * @description result: how the action ended.
              * @enum {string}
@@ -10968,6 +10989,26 @@ export interface components {
         /** @description Host-recorded provenance for spans replaced in this message copy. Presence is authoritative; literal marker text in content is not a redaction signal. Every replacement in this copy is listed, so a client renders from the list rather than by searching content, and the list describes this copy alone rather than accumulating across projections of one message. */
         HostSecretRedactionMeta: {
             spans: components["schemas"]["RedactedSpan"][];
+        };
+        /** @enum {string} */
+        SourceWindowCoverage: "complete" | "partial" | "not_observed";
+        /** @enum {string} */
+        SourceWindowGapReason: "unconfined" | "baseline_incomplete" | "canceled" | "io_error" | "settlement_failed" | "time_budget";
+        /** @enum {string} */
+        SourceWindowBoundaryReason: "scope" | "directory_cap" | "subtree_cap" | "walk_budget" | "unreadable";
+        /** @description One folder a partial observation did not enter. */
+        SourceWindowBoundary: {
+            /** @description Slash-separated, relative to the covered folder; "." is the folder itself. */
+            path: string;
+            reason: components["schemas"]["SourceWindowBoundaryReason"];
+        };
+        CommandFolderCoverage: {
+            /** @description The covered folder's host path. A slash alone with unconfined coverage denotes all folders outside the project. */
+            folder: string;
+            coverage: components["schemas"]["SourceWindowCoverage"];
+            reason?: components["schemas"]["SourceWindowGapReason"];
+            boundaries?: components["schemas"]["SourceWindowBoundary"][];
+            omitted_boundaries?: number;
         };
         ChatContentRow: {
             index: number;
@@ -14389,6 +14430,10 @@ export interface components {
         SourceWalkSummary: {
             turns: components["schemas"]["SourceWalkTurnSummary"][];
         };
+        CommandObservationStatus: {
+            settling: boolean;
+            coverage: components["schemas"]["CommandFolderCoverage"][];
+        };
         /** @enum {string} */
         SourceGitChangeKind: "checkout" | "commit" | "amend" | "merge" | "rebase" | "pull" | "reset" | "cherry_pick" | "revert" | "clone" | "repo_appeared" | "repo_gone" | "other" | "unknown";
         /**
@@ -14660,6 +14705,25 @@ export interface components {
         /** @enum {string} */
         SourceCommandWindowState: "running" | "ended" | "interrupted";
         /**
+         * @description How much of one folder the window compared. root_id is an attached
+         *     root, with an empty path for its whole tree, or the project's outside
+         *     namespace, where path is the folder's host path without its leading
+         *     slash and an empty path stands for every host folder beyond the
+         *     project. Partial and not observed never mean no changes.
+         */
+        SourceWindowFolderCoverage: {
+            /** Format: uuid */
+            root_id: string;
+            path: string;
+            coverage: components["schemas"]["SourceWindowCoverage"];
+            /** @description Why nothing can be said about the folder; present only when not observed. */
+            reason?: components["schemas"]["SourceWindowGapReason"];
+            /** @description The folders a partial observation did not enter; empty otherwise. */
+            boundaries?: components["schemas"]["SourceWindowBoundary"][];
+            /** @description Boundaries past the listed ones; zero when the list is whole. */
+            omitted_boundaries?: number;
+        };
+        /**
          * @description One host-run command's observation window: the span of a command or
          *     verify tool call during which reconcile passes attribute the file
          *     changes they observe to that command, and admit files the window's
@@ -14697,6 +14761,12 @@ export interface components {
              * @description When the window ended; omitted while running.
              */
             ended_at?: string;
+            /**
+             * @description One entry per folder the window covered: its attached roots and the
+             *     command's write roots beyond the project. A folder appears once its
+             *     observation is decided.
+             */
+            coverage?: components["schemas"]["SourceWindowFolderCoverage"][];
         };
         SourceWalkResponse: {
             /**
@@ -14722,8 +14792,9 @@ export interface components {
             git_changes: components["schemas"]["SourceGitChange"][];
             /**
              * @description Every command observation window an effect on this page references
-             *     by command_id, newest first. A window that observed nothing has no
-             *     row, so there is no bare command to list.
+             *     by command_id, and every window in the page's span that left a
+             *     folder uncompared, newest first. A window that observed nothing and
+             *     compared every folder has no row, so there is no bare command to list.
              */
             commands: components["schemas"]["SourceCommandWindow"][];
             /** @description Explanation target for each step on this page, keyed by the step's rail key (an effect id, git:<change id>, command:<window id> or outside:<first effect id>). Den reads targets from here rather than inventing them. */
@@ -23723,6 +23794,35 @@ export interface operations {
             default: components["responses"]["Error"];
         };
     };
+    getProjectSourceCommandObservation: {
+        parameters: {
+            query: {
+                session_id: string;
+            };
+            header?: never;
+            path: {
+                id: components["parameters"]["ProjectId"];
+                window_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Observation gaps currently recorded for this window */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CommandObservationStatus"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+            default: components["responses"]["Error"];
+        };
+    };
     getProjectSourceGitReview: {
         parameters: {
             query?: {
@@ -31554,6 +31654,11 @@ export type RedactionKind = components["schemas"]["RedactionKind"];
 export type RedactionSource = components["schemas"]["RedactionSource"];
 export type RedactedSpan = components["schemas"]["RedactedSpan"];
 export type HostSecretRedactionMeta = components["schemas"]["HostSecretRedactionMeta"];
+export type SourceWindowCoverage = components["schemas"]["SourceWindowCoverage"];
+export type SourceWindowGapReason = components["schemas"]["SourceWindowGapReason"];
+export type SourceWindowBoundaryReason = components["schemas"]["SourceWindowBoundaryReason"];
+export type SourceWindowBoundary = components["schemas"]["SourceWindowBoundary"];
+export type CommandFolderCoverage = components["schemas"]["CommandFolderCoverage"];
 export type ChatContentRow = components["schemas"]["ChatContentRow"];
 export type ChatContentReference = components["schemas"]["ChatContentReference"];
 export type CommandActivity = components["schemas"]["CommandActivity"];
@@ -31855,6 +31960,7 @@ export type SourceSymbol = components["schemas"]["SourceSymbol"];
 export type SourceSymbolsResponse = components["schemas"]["SourceSymbolsResponse"];
 export type SourceWalkTurnSummary = components["schemas"]["SourceWalkTurnSummary"];
 export type SourceWalkSummary = components["schemas"]["SourceWalkSummary"];
+export type CommandObservationStatus = components["schemas"]["CommandObservationStatus"];
 export type SourceGitChangeKind = components["schemas"]["SourceGitChangeKind"];
 export type SourceGitChange = components["schemas"]["SourceGitChange"];
 export type SourceGitCommitDetails = components["schemas"]["SourceGitCommitDetails"];
@@ -31873,6 +31979,7 @@ export type SourceContributor = components["schemas"]["SourceContributor"];
 export type SourceWalkEffect = components["schemas"]["SourceWalkEffect"];
 export type SourceWalkFile = components["schemas"]["SourceWalkFile"];
 export type SourceCommandWindowState = components["schemas"]["SourceCommandWindowState"];
+export type SourceWindowFolderCoverage = components["schemas"]["SourceWindowFolderCoverage"];
 export type SourceCommandWindow = components["schemas"]["SourceCommandWindow"];
 export type SourceWalkResponse = components["schemas"]["SourceWalkResponse"];
 export type SourceFileVersion = components["schemas"]["SourceFileVersion"];

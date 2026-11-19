@@ -34,6 +34,8 @@ type CommandWindowInput struct {
 	ToolCallID  string
 	ToolName    string
 	CommandLine string
+	// Outside are the command's write roots beyond the project.
+	Outside []OutsideRootSpec
 }
 
 type CommandWindow struct {
@@ -49,6 +51,7 @@ type CommandWindow struct {
 	Ordinal       int64
 	StartedTS     time.Time
 	EndedTS       time.Time
+	Coverage      []FolderCoverage
 }
 
 type CommandWindowOpener interface {
@@ -77,11 +80,20 @@ type openCommandWindow struct {
 	startSnapshotID string
 	// settled closes once settlement has finished, successfully or not.
 	settled chan struct{}
+	outside *outsideObservation
+	// retained is what the window's before-images hold across all its folders.
+	retained *retainedSet
 
 	mu            sync.Mutex
 	startChecked  bool
 	startMissing  bool
 	admissionMode string
+	// attachedBoundaries are the folders the last claiming pass did not enter.
+	attachedBoundaries []sourcesnapshot.Boundary
+	// missedLaunch means a process of the window's program ran unwatched.
+	missedLaunch bool
+	// coverage is the attached roots' coverage once settlement decides it.
+	coverage []FolderCoverage
 
 	// The fields below are guarded by Commands.windowsMu.
 
@@ -162,7 +174,12 @@ func (s *Commands) OpenCommandWindow(ctx context.Context, in CommandWindowInput)
 	if err != nil {
 		return nil, err
 	}
+	outsideID, err := s.outsideNamespace(ctx, in.ProjectID)
+	if err != nil {
+		return nil, err
+	}
 	window := &openCommandWindow{
+		outside: &outsideObservation{rootID: outsideID, joins: make(chan struct{}, 1)}, retained: newRetainedSet(),
 		id: newID(), projectID: in.ProjectID,
 		roots: append([]RootSpec(nil), in.Roots...), sessionID: strings.TrimSpace(in.SessionID),
 		turn: in.Turn, toolCallID: strings.TrimSpace(in.ToolCallID), toolName: in.ToolName,
@@ -174,9 +191,10 @@ func (s *Commands) OpenCommandWindow(ctx context.Context, in CommandWindowInput)
 	if err := s.insertWindow(ctx, window, in.CommandLine); err != nil {
 		return nil, err
 	}
-	if err := s.retention.Retain(ctx, window.id, snapshotID); err != nil {
+	starts := append([]string{snapshotID}, s.baselineOutside(ctx, window, in.Outside)...)
+	if err := s.retention.Retain(ctx, window.id, window.retained, starts...); err != nil {
 		// No window opens, so nothing else would end the row.
-		return nil, errors.Join(err, s.finishWindow(context.WithoutCancel(ctx), window.id, "", time.Now().UTC()))
+		return nil, errors.Join(err, s.finishWindow(context.WithoutCancel(ctx), window, "", nil, time.Now().UTC()))
 	}
 	s.windowsMu.Lock()
 	s.openWindows[in.ProjectID] = append(s.openWindows[in.ProjectID], window)
@@ -397,6 +415,8 @@ func (s *Commands) closeCommandWindow(ctx context.Context, w *openCommandWindow)
 		case <-ctx.Done():
 		}
 	}
+	// The process has exited, so its outside folders hold their final state now.
+	s.settleOutside(ctx, w)
 	if !sourcesnapshot.ChangeTokenTrusted(snapshotRoots(w.roots)) {
 		return s.settleCommandWindow(ctx, w, ended)
 	}
@@ -474,12 +494,14 @@ func (s *Commands) settleCommandWindow(ctx context.Context, w *openCommandWindow
 	s.windowsMu.Lock()
 	w.active = false
 	s.windowsMu.Unlock()
+	attached := w.attachedCoverage(passErr)
+	w.mu.Lock()
+	w.coverage = attached
+	admission := w.admissionMode
+	w.mu.Unlock()
 	var finishErr error
 	if lockErr == nil {
-		w.mu.Lock()
-		admission := w.admissionMode
-		w.mu.Unlock()
-		finishErr = s.finishWindow(ctx, w.id, admission, ended)
+		finishErr = s.finishWindow(ctx, w, admission, append(attached, w.outside.decided()...), ended)
 	}
 	s.windowsMu.Lock()
 	defer s.windowsMu.Unlock()
@@ -524,30 +546,6 @@ func (s *Commands) notePassCompleted(projectID string, roots []RootSpec) {
 			s.forgetWindow(window)
 		}
 	}
-}
-
-// finishWindow ends the row and keeps it while file or Git history names it.
-func (s *Commands) finishWindow(ctx context.Context, id, admissionMode string, ended time.Time) error {
-	s.recordMu.Lock()
-	defer s.recordMu.Unlock()
-	tx, err := s.sqlDB.BeginTx(ctx, nil)
-	if err != nil {
-		return err
-	}
-	defer func() { _ = tx.Rollback() }()
-	q := s.queries.WithTx(tx)
-	if err := q.EndSourceCommandWindow(ctx, db.EndSourceCommandWindowParams{
-		AdmissionMode: admissionMode, EndedTs: ended.Format(time.RFC3339Nano), ID: id,
-	}); err != nil {
-		return err
-	}
-	if err := q.DeleteSourceCommandWindowObjects(ctx, id); err != nil {
-		return err
-	}
-	if _, err := q.DeleteSourceCommandWindowIfUnreferenced(ctx, id); err != nil {
-		return err
-	}
-	return tx.Commit()
 }
 
 // RecoverInterruptedWindows settles rows an earlier process left running:
@@ -662,9 +660,15 @@ func (s *Commands) CommandWindows(ctx context.Context, ids []string) (map[string
 	if err != nil {
 		return nil, err
 	}
+	coverage, err := s.windowCoverage(ctx, string(raw))
+	if err != nil {
+		return nil, err
+	}
 	out := make(map[string]CommandWindow, len(rows))
 	for _, row := range rows {
-		out[row.ID] = commandWindowFromRow(row)
+		window := commandWindowFromRow(row)
+		window.Coverage = coverage[row.ID]
+		out[row.ID] = window
 	}
 	return out, nil
 }
@@ -721,6 +725,8 @@ type Commands struct {
 	windowsMu    sync.Mutex
 	git          commandsGitPort
 	inventory    commandsInventoryPort
+	// outsideSnapshots captures the write roots beyond the project.
+	outsideSnapshots outsideSnapshotPort
 	// windowIdled, when set, observes each window whose grace ended.
 	windowIdled func(id string)
 }
@@ -728,6 +734,7 @@ type Commands struct {
 type commandsInventoryPort interface {
 	EnsureInventory(ctx context.Context, req InventoryRequest) error
 	InventoryState(ctx context.Context, projectID string, branch sourcebranch.ID, rootsGeneration int) (InventoryState, error)
+	recordOutsideChanges(ctx context.Context, w *openCommandWindow, rootID string, comparison outsideComparison) error
 }
 
 type commandsGitPort interface {

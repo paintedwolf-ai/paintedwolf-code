@@ -133,6 +133,7 @@ export const API_OPERATIONS = {
   getProjectSecurity: { method: "GET", path: "/v1/projects/{id}/security" },
   getProjectSource: { method: "GET", path: "/v1/projects/{id}/source" },
   getProjectSourceAttribution: { method: "GET", path: "/v1/projects/{id}/source/attribution" },
+  getProjectSourceCommandObservation: { method: "GET", path: "/v1/projects/{id}/source/command-windows/{window_id}" },
   getProjectSourceComparison: { method: "GET", path: "/v1/projects/{id}/source/comparison" },
   getProjectSourceFormatSettings: { method: "GET", path: "/v1/projects/{id}/source/format-settings" },
   getProjectSourceGitReview: { method: "GET", path: "/v1/projects/{id}/source/git-changes/{git_change_id}/review" },
@@ -483,6 +484,7 @@ export type OperationPathParameters = {
   getProjectSecurity: { id: string | number; };
   getProjectSource: { id: string | number; };
   getProjectSourceAttribution: { id: string | number; };
+  getProjectSourceCommandObservation: { id: string | number; window_id: string | number; };
   getProjectSourceComparison: { id: string | number; };
   getProjectSourceFormatSettings: { id: string | number; };
   getProjectSourceGitReview: { id: string | number; git_change_id: string | number; };

@@ -3201,8 +3201,8 @@ CREATE INDEX idx_source_git_transitions_command_window
 -- One host-run command's observation window on the project's source clock.
 -- Reconcile passes attribute drift observed while it is open to it and admit
 -- untracked files its start snapshot did not hold. A window that observed
--- nothing is removed when it ends. State is the SourceCommandWindowState wire
--- vocabulary (docs/openapi/vocab).
+-- nothing and compared every folder it covered is removed when it ends. State
+-- is the SourceCommandWindowState wire vocabulary (docs/openapi/vocab).
 -- Only the project's own tree has observation windows: a worker's branch
 -- commands mutate an overlay whose promotion records the change.
 CREATE TABLE IF NOT EXISTS source_command_windows (
@@ -3223,6 +3223,24 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_source_command_windows_project_ordinal
     ON source_command_windows(project_id, ordinal);
 CREATE INDEX IF NOT EXISTS idx_source_command_windows_session
     ON source_command_windows(project_id, session_id, turn);
+
+-- How much of each folder a command observation window compared: complete,
+-- partial with the folders it did not enter, or not observed with one reason.
+-- path is the folder within root_id: empty for an attached root's whole tree,
+-- the outside-namespace path of an outside write root, and empty under the
+-- outside namespace for every host folder beyond the project.
+CREATE TABLE IF NOT EXISTS source_command_window_coverage (
+    window_id TEXT NOT NULL REFERENCES source_command_windows(id) ON DELETE CASCADE,
+    root_id TEXT NOT NULL,
+    path TEXT NOT NULL,
+    coverage TEXT NOT NULL CHECK (coverage IN ('complete', 'partial', 'not_observed')),
+    reason TEXT NOT NULL DEFAULT '' CHECK (reason IN ('', 'unconfined', 'baseline_incomplete', 'canceled', 'io_error', 'settlement_failed', 'time_budget')),
+    boundaries_json TEXT NOT NULL DEFAULT '[]' CHECK (json_valid(boundaries_json)),
+    omitted_boundaries INTEGER NOT NULL DEFAULT 0 CHECK (omitted_boundaries >= 0),
+    CHECK ((coverage = 'not_observed') = (reason != '')),
+    CHECK (coverage = 'partial' OR (boundaries_json = '[]' AND omitted_boundaries = 0)),
+    PRIMARY KEY (window_id, root_id, path)
+) STRICT, WITHOUT ROWID;
 
 -- Causal actions with ordered effects. branch_id is where the action landed;
 -- job_id is who authored it. An overlay promotion lands on the trunk while

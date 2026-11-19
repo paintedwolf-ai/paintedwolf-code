@@ -189,15 +189,15 @@ type recordedEffects struct {
 	calls []string
 }
 
-func (r *recordedEffects) AppendProgramEffects(_ context.Context, sessionID, toolCallID string, edits []api.FileEditSnapshot, _ int, sourceContext *api.SourceContext) {
+func (r *recordedEffects) AppendProgramEffects(_ context.Context, sessionID, toolCallID string, effects tools.ProgramEffects) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	paths := make([]string, 0, len(edits))
-	for _, edit := range edits {
+	paths := make([]string, 0, len(effects.FileEdits))
+	for _, edit := range effects.FileEdits {
 		paths = append(paths, edit.Path)
 	}
-	if sourceContext != nil {
-		for _, target := range sourceContext.Locations {
+	if effects.SourceContext != nil {
+		for _, target := range effects.SourceContext.Locations {
 			paths = append(paths, target.Path)
 		}
 	}

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { ActionDescriptor } from "../../api/types.ts";
+import type { ActionDescriptor, ActionFact, CommandActivity } from "../../api/types.ts";
 import type { ActivitySpanEntry } from "../transcript/projection/transcript-item-model.ts";
 import type { ToolPartView } from "../tool/tool-part-model.ts";
 import { mergeActions } from "./action-merge.ts";
@@ -89,5 +89,26 @@ describe("folds and part actions", () => {
     } };
     expect(partAction(row)?.status).toBe("error");
     expect(partAction(row)?.facts.find((fact) => fact.kind === "steps")?.count).toBe(2);
+  });
+
+  it("keeps the recorded observation when a live activity supplies the descriptor", () => {
+    const observation: ActionFact = {
+      kind: "source_observation",
+      source_coverage: [{ folder: "/shared", coverage: "not_observed", reason: "io_error" }],
+    };
+    const fact: CommandActivity = {
+      id: "live", group: "Running commands", label: "Run command", subject: "go",
+      outcome: "Passed", state: "completed", execution_ids: [], spans: [], action: action(),
+    };
+    const row: ToolPartView = { ...part("row"), tool: "command", commandActivity: {
+      fact,
+      calls: [{ ...part("call"), sourceObservation: observation }],
+      members: [fact],
+      receiptScopes: [],
+    } };
+    const view = partAction(row);
+    expect(view?.row).toEqual(["result", "source_observation"]);
+    expect(view?.facts).toContainEqual(expect.objectContaining(observation));
+    expect(view?.facts).toContainEqual(fact.action!.facts[0]);
   });
 });

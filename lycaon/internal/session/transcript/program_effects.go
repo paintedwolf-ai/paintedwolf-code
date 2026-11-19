@@ -4,31 +4,25 @@ import (
 	"context"
 	"errors"
 	"log/slog"
+	"slices"
 	"sync"
 
 	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/sourceref"
+	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
-type lateProgramEffects struct {
-	edits         []api.FileEditSnapshot
-	omitted       int
-	sourceContext *api.SourceContext
-}
-
-// programEffects holds effects until their tool result is stored.
-type programEffects struct {
+// Pending effects wait for the original result when the program ends first.
+type pendingProgramEffects struct {
 	mu   sync.Mutex
-	held map[string]map[string]lateProgramEffects
+	held map[string]map[string]tools.ProgramEffects
 }
 
-// AppendProgramEffects publishes late effects on the result that started the program.
-func (m *Service) AppendProgramEffects(ctx context.Context, sessionID, toolCallID string, edits []api.FileEditSnapshot, omitted int, sourceContext *api.SourceContext) {
-	if m == nil || m.store == nil || (len(edits) == 0 && omitted == 0 && sourceContext == nil) {
+func (m *Service) AppendProgramEffects(ctx context.Context, sessionID, toolCallID string, late tools.ProgramEffects) {
+	if m == nil || m.store == nil || (len(late.FileEdits) == 0 && late.Omitted == 0 && late.Observation == nil && late.SourceContext == nil) {
 		return
 	}
-	late := lateProgramEffects{edits: edits, omitted: omitted, sourceContext: sourceContext}
 	// The lookup and the hold are one step, so a row stored meanwhile finds the hold.
 	m.programEffects.mu.Lock()
 	messageID, err := m.store.ToolResultMessageID(ctx, sessionID, toolCallID)
@@ -37,28 +31,28 @@ func (m *Service) AppendProgramEffects(ctx context.Context, sessionID, toolCallI
 	}
 	m.programEffects.mu.Unlock()
 	if err == nil {
-		err = m.appendProgramEffects(ctx, sessionID, messageID, late)
+		err = m.applyProgramEffects(ctx, sessionID, messageID, late)
 	}
 	if err != nil && !errors.Is(err, store.ErrMessageNotFound) {
 		slog.WarnContext(ctx, "program effects not recorded", "session_id", sessionID, "tool_call_id", toolCallID, "error", err)
 	}
 }
 
-func (p *programEffects) hold(sessionID, toolCallID string, late lateProgramEffects) {
+func (p *pendingProgramEffects) hold(sessionID, toolCallID string, late tools.ProgramEffects) {
 	if p.held == nil {
-		p.held = make(map[string]map[string]lateProgramEffects)
+		p.held = make(map[string]map[string]tools.ProgramEffects)
 	}
 	if p.held[sessionID] == nil {
-		p.held[sessionID] = make(map[string]lateProgramEffects)
+		p.held[sessionID] = make(map[string]tools.ProgramEffects)
 	}
 	p.held[sessionID][toolCallID] = late
 }
 
-// A person's message releases effects whose result was never stored.
+// A person's next message releases effects for a result that never arrived.
 func (m *Service) applyHeldProgramEffects(ctx context.Context, sessionID string, stored []api.Message) {
 	type ready struct {
 		messageID string
-		late      lateProgramEffects
+		late      tools.ProgramEffects
 	}
 	var apply []ready
 	m.programEffects.mu.Lock()
@@ -82,13 +76,13 @@ func (m *Service) applyHeldProgramEffects(ctx context.Context, sessionID string,
 	}
 	m.programEffects.mu.Unlock()
 	for _, item := range apply {
-		if err := m.appendProgramEffects(ctx, sessionID, item.messageID, item.late); err != nil {
+		if err := m.applyProgramEffects(ctx, sessionID, item.messageID, item.late); err != nil {
 			slog.WarnContext(ctx, "held program effects not recorded", "session_id", sessionID, "message_id", item.messageID, "error", err)
 		}
 	}
 }
 
-func (m *Service) appendProgramEffects(ctx context.Context, sessionID, messageID string, late lateProgramEffects) error {
+func (m *Service) applyProgramEffects(ctx context.Context, sessionID, messageID string, late tools.ProgramEffects) error {
 	message, err := m.store.GetMessage(ctx, sessionID, messageID)
 	if err != nil {
 		return err
@@ -98,16 +92,22 @@ func (m *Service) appendProgramEffects(ctx context.Context, sessionID, messageID
 	}
 	result := *message.ToolResult
 	result.FileEdits = append([]api.FileEditSnapshot(nil), result.FileEdits...)
-	result.FileEditsOmitted += late.omitted
-	for _, edit := range late.edits {
+	result.FileEditsOmitted += late.Omitted
+	for _, edit := range late.FileEdits {
 		var held bool
 		if result.FileEdits, held = api.RecordFileEdit(result.FileEdits, edit); !held {
 			result.FileEditsOmitted++
 		}
 	}
+	if late.Observation != nil {
+		result.CardFacts = slices.DeleteFunc(slices.Clone(result.CardFacts), func(fact api.ActionFact) bool {
+			return fact.Kind == api.ActionFactSourceObservation
+		})
+		result.CardFacts = append(result.CardFacts, *late.Observation)
+	}
 	message.ToolResult = &result
-	if late.sourceContext != nil {
-		merged := sourceref.Merge(message.SourceContext, late.sourceContext)
+	if late.SourceContext != nil {
+		merged := sourceref.Merge(message.SourceContext, late.SourceContext)
 		if message.SourceContext != nil {
 			merged.View = message.SourceContext.View
 		}

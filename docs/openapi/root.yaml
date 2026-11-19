@@ -319,6 +319,8 @@ paths:
     $ref: paths/projects/source-index.yaml#/paths/~1v1~1projects~1{id}~1source~1symbols
   /v1/projects/{id}/source/walk-summary:
     $ref: paths/projects/source-walk.yaml#/paths/~1v1~1projects~1{id}~1source~1walk-summary
+  /v1/projects/{id}/source/command-windows/{window_id}:
+    $ref: paths/projects/source-walk.yaml#/paths/~1v1~1projects~1{id}~1source~1command-windows~1{window_id}
   /v1/projects/{id}/source/git-changes/{git_change_id}/review:
     $ref: paths/projects/source-comparison.yaml#/paths/~1v1~1projects~1{id}~1source~1git-changes~1{git_change_id}~1review
   /v1/projects/{id}/source/revisions:

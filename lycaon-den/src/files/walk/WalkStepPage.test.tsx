@@ -189,6 +189,28 @@ describe("WalkStepPage", () => {
     expect(screen.getByTestId("walk-page-meta").textContent).toContain("Turn");
   });
 
+  it("shows skipped folders and the remaining count on a command with no observed files", () => {
+    const step = commandStep([]);
+    step.command = {
+      ...step.command,
+      state: "ended",
+      coverage: [{
+        root_id: "r1",
+        path: "generated",
+        coverage: "partial",
+        boundaries: [{ path: "generated/large", reason: "directory_cap" }],
+        omitted_boundaries: 3,
+      }],
+    };
+    mount(step);
+
+    const coverage = screen.getByTestId("walk-page-coverage");
+    expect(coverage.textContent).toContain("Changes in these folders are unknown");
+    expect(coverage.textContent).toContain("generated/large · too many entries in one folder");
+    expect(coverage.textContent).toContain("3 more");
+    expect(screen.queryByTestId("walk-page-file")).toBeNull();
+  });
+
   it("presents an outside run with what it claims and no more", () => {
     mount(outsideStep([effectOf("o1", "gen/x.ts"), effectOf("o2", "gen/y.ts", { ordinal: 6 })]));
     expect(screen.getByTestId("walk-page-title").textContent).toBe("Outside the app");

@@ -45,6 +45,30 @@ func (p *Provider) Capture(ctx context.Context, root string) *Scope {
 	return New(root, Options{Plane: plane, Floor: p.floor, Declared: declared})
 }
 
+// Outside applies the floor and outside budgets without reading ignore files.
+func (p *Provider) Outside(root string, omit []string) *Scope {
+	var plane Plane
+	var floor []string
+	if p != nil {
+		plane, floor = p.config.Outside, p.floor
+	}
+	plane.IgnoreFiles = false
+	return New(root, Options{Plane: plane, Floor: floor, Omit: relativeFolders(root, omit)})
+}
+
+// relativeFolders keeps the folders strictly under root, relative to it.
+func relativeFolders(root string, folders []string) []string {
+	var out []string
+	for _, folder := range folders {
+		rel, err := filepath.Rel(root, folder)
+		if err != nil || rel == "." || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+			continue
+		}
+		out = append(out, filepath.ToSlash(rel))
+	}
+	return out
+}
+
 // Catalog applies budgets and traversal priority without exclusions.
 func (p *Provider) Catalog(ctx context.Context, root string) *Scope {
 	if p == nil {

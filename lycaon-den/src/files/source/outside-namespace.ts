@@ -20,6 +20,11 @@ export function isOutsideRoot(projectId: string, rootId: string | undefined): bo
   return !!rootId && outsideRootId(projectId) === rootId;
 }
 
+export function isKnownOutsideRoot(rootId: string): boolean {
+  for (const id of outsideRoots().values()) if (id === rootId) return true;
+  return false;
+}
+
 export function outsideFileId(projectId: string, file: { rootId: string; fileId?: string | null }): string | undefined {
   return isOutsideRoot(projectId, file.rootId) ? file.fileId ?? undefined : undefined;
 }

@@ -3,6 +3,7 @@ import type { ActionDescriptor, ActionFact, ActionFactKind } from "../../api/typ
 /** The label each fact kind shows; the host sends only the kind. */
 export const ACTION_FACT_LABELS: Readonly<Record<ActionFactKind, string>> = {
   result: "Result",
+  source_observation: "File observation",
   changed: "Changed",
   found: "Found",
   took: "Took",
@@ -103,6 +104,7 @@ function stoppedBy(fact: ActionFact): string {
 export function formatFact(fact: ActionFact): string {
   switch (fact.kind) {
     case "result": return outcome(fact);
+    case "source_observation": return "File observation incomplete";
     case "changed": return changed(fact);
     case "found": return found(fact);
     case "took": return formatDuration(fact.duration_ms ?? 0);

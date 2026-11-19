@@ -9,6 +9,9 @@ type ActionFactKind string
 const (
 	// ActionFactResult How the action ended.
 	ActionFactResult ActionFactKind = "result"
+	// ActionFactSourceObservation Folders a command observation could not fully
+	// compare.
+	ActionFactSourceObservation ActionFactKind = "source_observation"
 	// ActionFactChanged Files and lines the action changed.
 	ActionFactChanged ActionFactKind = "changed"
 	// ActionFactFound What the action found or listed.
@@ -37,6 +40,7 @@ const (
 
 var allActionFactKindValues = []ActionFactKind{
 	ActionFactResult,
+	ActionFactSourceObservation,
 	ActionFactChanged,
 	ActionFactFound,
 	ActionFactTook,

@@ -46,7 +46,14 @@ type ParkedProgram interface {
 	Settle(ctx context.Context, result string, err error)
 }
 
-// ProgramEffectSink publishes late edits and source locations on the program's result.
+type ProgramEffects struct {
+	FileEdits     []api.FileEditSnapshot
+	Omitted       int
+	Observation   *api.ActionFact
+	SourceContext *api.SourceContext
+}
+
+// ProgramEffectSink applies deferred facts to the original call's result.
 type ProgramEffectSink interface {
-	AppendProgramEffects(ctx context.Context, sessionID, toolCallID string, edits []api.FileEditSnapshot, omitted int, sourceContext *api.SourceContext)
+	AppendProgramEffects(ctx context.Context, sessionID, toolCallID string, effects ProgramEffects)
 }

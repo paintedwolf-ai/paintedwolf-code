@@ -143,6 +143,7 @@ var (
 	operationGetProjectSecurity                 = generatedOperation{ID: "getProjectSecurity", Method: "GET", Path: "/v1/projects/{id}/security", Params: []string{"id"}}
 	operationGetProjectSource                   = generatedOperation{ID: "getProjectSource", Method: "GET", Path: "/v1/projects/{id}/source", Params: []string{"id"}}
 	operationGetProjectSourceAttribution        = generatedOperation{ID: "getProjectSourceAttribution", Method: "GET", Path: "/v1/projects/{id}/source/attribution", Params: []string{"id"}}
+	operationGetProjectSourceCommandObservation = generatedOperation{ID: "getProjectSourceCommandObservation", Method: "GET", Path: "/v1/projects/{id}/source/command-windows/{window_id}", Params: []string{"id", "window_id"}}
 	operationGetProjectSourceComparison         = generatedOperation{ID: "getProjectSourceComparison", Method: "GET", Path: "/v1/projects/{id}/source/comparison", Params: []string{"id"}}
 	operationGetProjectSourceFormatSettings     = generatedOperation{ID: "getProjectSourceFormatSettings", Method: "GET", Path: "/v1/projects/{id}/source/format-settings", Params: []string{"id"}}
 	operationGetProjectSourceGitReview          = generatedOperation{ID: "getProjectSourceGitReview", Method: "GET", Path: "/v1/projects/{id}/source/git-changes/{git_change_id}/review", Params: []string{"id", "git_change_id"}}
@@ -486,6 +487,7 @@ var allGeneratedOperations = []generatedOperation{
 	operationGetProjectSecurity,
 	operationGetProjectSource,
 	operationGetProjectSourceAttribution,
+	operationGetProjectSourceCommandObservation,
 	operationGetProjectSourceComparison,
 	operationGetProjectSourceFormatSettings,
 	operationGetProjectSourceGitReview,

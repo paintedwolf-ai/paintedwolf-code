@@ -258,6 +258,7 @@ func (s *Server) registerProjectRoutes(r chi.Router) {
 	s.registerV1Operation(r, operationResolveProjectSourceDefinition, s.Sources.Analysis.HandleResolveProjectSourceDefinition)
 	s.registerV1Operation(r, operationListProjectSourceSymbols, s.Sources.Analysis.HandleListProjectSourceSymbols)
 	s.registerV1Operation(r, operationListProjectSourceWalk, s.Sources.History.HandleListProjectSourceWalk)
+	s.registerV1Operation(r, operationGetProjectSourceCommandObservation, s.Sources.History.HandleGetProjectSourceCommandObservation)
 	s.registerV1Operation(r, operationGetProjectSourceGitReview, s.Sources.Review.HandleGetProjectSourceGitReview)
 	s.registerV1Operation(r, operationResolveProjectSourceRevisions, s.Sources.Review.HandleResolveProjectSourceRevisions)
 	s.registerV1Operation(r, operationGetProjectSourceRevisionReview, s.Sources.Review.HandleGetProjectSourceRevisionReview)

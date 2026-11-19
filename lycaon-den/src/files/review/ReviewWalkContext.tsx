@@ -10,11 +10,13 @@ import {
 } from "./review-walk-details.ts";
 import {
   commandWindowAdmissionLabel,
+  commandWindowCoverageNotices,
   commandWindowLine,
   commandWindowObservation,
   commandWindowStateNote,
 } from "../source/source-command-window.ts";
 import { gitChangeRefs } from "../source/source-git-change.ts";
+import { CommandCoverageNotices } from "../source/CommandCoverageNotices.tsx";
 import { lineCountLabel, lineCounts } from "./review-walk-counts.ts";
 import { WalkSummaryLine, type WalkStepBriefing } from "../walk/walk-briefing.tsx";
 import {
@@ -108,6 +110,11 @@ export function ReviewWalkContext(props: Props) {
           </p>
         )}
       </Show>
+      <CommandCoverageNotices
+        notices={commandWindowCoverageNotices(command().command)}
+        class="den-review-detail__summary"
+        testId="review-walk-command-coverage"
+      />
       <div class="den-review-detail__meta">
         <span>
           Command

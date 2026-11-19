@@ -9,6 +9,7 @@ import (
 	"github.com/lycaon/lycaon/internal/argv"
 	"github.com/lycaon/lycaon/internal/confine"
 	"github.com/lycaon/lycaon/internal/exec"
+	"github.com/lycaon/lycaon/pkg/api"
 )
 
 // Request runs one or more host command stages in projectDir.
@@ -90,21 +91,19 @@ func StagePlaceholders(stages []exec.Stage) []StageResult {
 	return out
 }
 
-// SourceWindow is the command's source observation window. Until Settled, the
-// window may not have recorded all of the command's changes. Unobserved means a
-// process ran with no window watching it; with no ID, none ever opened.
+// SourceWindow reports decided folder coverage. A missing ID means the window never opened.
 type SourceWindow struct {
-	ID         string `json:"id,omitempty"`
-	Settled    bool   `json:"settled"`
-	Unobserved bool   `json:"unobserved,omitempty"`
+	ID       string                      `json:"id,omitempty"`
+	Settled  bool                        `json:"settled"`
+	Coverage []api.CommandFolderCoverage `json:"coverage,omitempty"`
 }
 
 // MarshalJSON states settlement only for a window that exists.
 func (w SourceWindow) MarshalJSON() ([]byte, error) {
 	if w.ID == "" {
 		return json.Marshal(struct {
-			Unobserved bool `json:"unobserved"`
-		}{w.Unobserved})
+			Coverage []api.CommandFolderCoverage `json:"coverage"`
+		}{w.Coverage})
 	}
 	type plain SourceWindow
 	return json.Marshal(plain(w))

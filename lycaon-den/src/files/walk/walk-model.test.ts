@@ -545,6 +545,19 @@ describe("command steps", () => {
     expect(walk.steps.map((s) => s.key)).toEqual(["c1"]);
   });
 
+  it("stands a window alone when it left a folder uncompared", () => {
+    const walk = buildWalk(
+      "s1",
+      [file("a.ts", [change({ id: "c1", path: "a.ts", ordinal: 2 })])],
+      [],
+      [build({ id: "blind", coverage: [{ root_id: "outside", path: "", coverage: "not_observed", reason: "unconfined" }] })],
+    );
+    expect(walk.steps.map((s) => s.key)).toEqual(["c1", "command:blind"]);
+    const command = walk.steps[1]!;
+    if (command.kind !== "command") throw new Error("invariant: expected a command step");
+    expect(command.effects).toEqual([]);
+  });
+
   it("keeps an effect naming an unresolved window as a plain command-observed step", () => {
     const walk = buildWalk(
       "s1",

@@ -220,3 +220,28 @@ func TestProgramWithoutActivitiesUsesItsOwnState(t *testing.T) {
 		t.Fatalf("stopped by %+v", stopped)
 	}
 }
+
+func TestCoverageGapAppearsOnCommandCardAndActivity(t *testing.T) {
+	result := commandCall("touch notes.md")
+	result.CardFacts = []api.ActionFact{{
+		Kind: api.ActionFactSourceObservation,
+		SourceCoverage: []api.CommandFolderCoverage{{
+			Folder: "/srv/shared", Coverage: api.SourceWindowCoverageNotObserved, Reason: api.SourceWindowGapIoError,
+		}},
+	}}
+	activity := api.CommandActivity{ID: "a", State: "completed", StatusCode: intPtr(0)}
+	for name, card := range map[string]api.ActionDescriptor{
+		"result":   *ForResult(result, nil),
+		"activity": ForActivity(program(time.Now(), nil, activity), activity, result, nil),
+	} {
+		t.Run(name, func(t *testing.T) {
+			gap, ok := fact(card.Facts, api.ActionFactSourceObservation)
+			if !ok || !reflect.DeepEqual(gap, result.CardFacts[0]) {
+				t.Fatalf("card facts = %+v, want the command's typed coverage", card.Facts)
+			}
+			if got := card.Row[len(card.Row)-1]; got != gap.Kind {
+				t.Fatalf("row = %v, want coverage in the summary", card.Row)
+			}
+		})
+	}
+}

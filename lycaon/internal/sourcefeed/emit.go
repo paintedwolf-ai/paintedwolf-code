@@ -135,27 +135,44 @@ func EmitProjectSignal(ctx context.Context, projectID string, roots []projectroo
 	return emitProjectSignal(ctx, projectID, sourceworkspace.ID(projectID, roots), false, false)
 }
 
+// EmitProjectSignalTx stages a projection invalidation with the ledger write.
+func EmitProjectSignalTx(ctx context.Context, tx *sql.Tx, projectID string, roots []projectroot.RootRef) (*StagedDelivery, error) {
+	event, err := projectSignal(projectID, sourceworkspace.ID(projectID, roots), false, false)
+	if err != nil {
+		return nil, err
+	}
+	return stageDelivery(ctx, tx, preparedChanges{event: event})
+}
+
 // EmitGitSignal publishes a recorded ref movement without manufacturing file changes.
 func EmitGitSignal(ctx context.Context, projectID string, roots []projectroot.RootRef) error {
 	return emitProjectSignal(ctx, projectID, sourceworkspace.ID(projectID, roots), false, true)
 }
 
 func emitProjectSignal(ctx context.Context, projectID, workspaceID string, resync, gitChanged bool) error {
-	projectID, workspaceID = strings.TrimSpace(projectID), strings.TrimSpace(workspaceID)
-	if projectID == "" || workspaceID == "" {
-		return fmt.Errorf("sourcefeed: project_id and workspace_id are required")
+	event, err := projectSignal(projectID, workspaceID, resync, gitChanged)
+	if err != nil {
+		return err
 	}
 	binding := bound.Load()
 	if binding != nil {
-		if err := binding.sink.SourceChanged(ctx, api.SourceChangesEvent{
-			ProjectID: projectID, WorkspaceID: workspaceID, WorkspaceKind: api.SourceWorkspaceKindProject,
-			Changes: []api.SourceChange{}, Resync: resync, GitChanged: gitChanged,
-		}); err != nil {
+		if err := binding.sink.SourceChanged(ctx, event); err != nil {
 			return err
 		}
 	}
-	notifySourceObservers(projectID, workspaceID, Notice{})
+	notifySourceObservers(event.ProjectID, event.WorkspaceID, Notice{})
 	return nil
+}
+
+func projectSignal(projectID, workspaceID string, resync, gitChanged bool) (api.SourceChangesEvent, error) {
+	projectID, workspaceID = strings.TrimSpace(projectID), strings.TrimSpace(workspaceID)
+	if projectID == "" || workspaceID == "" {
+		return api.SourceChangesEvent{}, fmt.Errorf("sourcefeed: project_id and workspace_id are required")
+	}
+	return api.SourceChangesEvent{
+		ProjectID: projectID, WorkspaceID: workspaceID, WorkspaceKind: api.SourceWorkspaceKindProject,
+		Changes: []api.SourceChange{}, Resync: resync, GitChanged: gitChanged,
+	}, nil
 }
 
 // EmitTx stages one source event in the caller's transaction.
@@ -172,6 +189,10 @@ func EmitBatchTx(ctx context.Context, tx *sql.Tx, changes []Change) (*StagedDeli
 	if len(prepared.event.Changes) == 0 {
 		return nil, nil
 	}
+	return stageDelivery(ctx, tx, prepared)
+}
+
+func stageDelivery(ctx context.Context, tx *sql.Tx, prepared preparedChanges) (*StagedDelivery, error) {
 	delivery := &StagedDelivery{project: prepared.event.ProjectID, workspace: prepared.event.WorkspaceID, writePaths: prepared.writePaths, notice: changeNotice(prepared.event)}
 	binding := bound.Load()
 	if binding != nil {

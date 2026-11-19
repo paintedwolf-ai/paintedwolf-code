@@ -20,6 +20,7 @@ import { ReviewFileRow as ReviewFileRowView } from "./ReviewFileRow.tsx";
 import { isOutsideRoot } from "../source/outside-namespace.ts";
 import { ThemeIcon } from "../../components/primitives/ThemeIcon.tsx";
 import { ReviewWalkContext } from "./ReviewWalkContext.tsx";
+import { CommandCoverageNotices } from "../source/CommandCoverageNotices.tsx";
 import { LycaonApiError } from "../../api/http.ts";
 import type { ChatAttachmentRef } from "../../chat/composer/add-to-chat.ts";
 import { requestFirstTimeTip } from "../../first-time-tips/first-time-tips-service.ts";
@@ -445,6 +446,7 @@ export function ReviewLens(props: Props) {
                 </div>
               </Show>
 
+              <CommandCoverageNotices notices={record().coverage} class="den-review-detail__summary" testId="review-command-coverage" />
               <div
                 class="den-review-lens__list"
                 data-testid="review-lens-list"
@@ -452,11 +454,11 @@ export function ReviewLens(props: Props) {
                 tabindex={allRows().length > 0 ? 0 : undefined}
                 onKeyDown={onListKeyDown}
               >
-                {/* An unresolved scope claims nothing; only a settled read says "nothing new". */}
+                {/* Only a settled, covered comparison can claim an empty result. */}
                 <Show
                   when={allRows().length > 0}
                   fallback={
-                    <Show when={held() && !error()}>
+                    <Show when={held() && !error() && record().coverage.length === 0}>
                       <p
                         class="den-review-lens__empty"
                         classList={{ "den-review-lens__empty--above-seen": seenRows().length > 0 }}

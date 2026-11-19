@@ -28,8 +28,10 @@ type rootCapture struct {
 }
 
 func (s *Store) converge(ctx context.Context, req Request) (Snapshot, error) {
-	for _, root := range req.Roots {
-		repochange.EnsureRoot(ctx, root.Path)
+	if !req.Unwatched {
+		for _, root := range req.Roots {
+			repochange.EnsureRoot(ctx, root.Path)
+		}
 	}
 	rootRelease, err := s.acquireRootStorage(ctx, req.Roots, true)
 	if err != nil {
@@ -47,7 +49,7 @@ func (s *Store) converge(ctx context.Context, req Request) (Snapshot, error) {
 	for _, root := range req.Roots {
 		var plan deltaPlan
 		// Content verification reads every file; incremental capture waits for events.
-		if req.Verify == VerifyContent {
+		if req.Verify == VerifyContent || req.Unwatched {
 			plan = deltaPlan{upTo: s.deltas.sequence()}
 		} else {
 			repochange.WaitQuiet(ctx, root.Path, deltaQuietGrace, deltaQuietWait)
@@ -70,7 +72,7 @@ func (s *Store) converge(ctx context.Context, req Request) (Snapshot, error) {
 			switch {
 			case c.unstableFiles():
 				moved = true
-			case !repochange.Coverage(root.Path).Complete:
+			case req.Unwatched || !repochange.Coverage(root.Path).Complete:
 				// Incomplete watcher coverage requires a confirming survey.
 				if c.surveyed && !c.confirmed {
 					reads, err := s.confirm(ctx, req, c)
@@ -114,7 +116,7 @@ func (s *Store) converge(ctx context.Context, req Request) (Snapshot, error) {
 	for _, capture := range captures {
 		c := capture.candidate
 		unstable += len(c.unstable)
-		if len(c.unstable) > 0 || !repochange.Coverage(c.root.Path).Complete {
+		if len(c.unstable) > 0 || req.Unwatched || !repochange.Coverage(c.root.Path).Complete {
 			quality = CaptureObserved
 		}
 	}
@@ -347,14 +349,16 @@ func (s *Store) publishCandidates(ctx context.Context, req Request, captures []r
 	if err != nil {
 		return Snapshot{}, err
 	}
-	_, storedManifests, err := s.load(ctx, snapshot.ID)
-	if err != nil {
-		return Snapshot{}, err
-	}
-	for i, capture := range captures {
-		c := capture.candidate
-		exact := quality == CaptureExact && repochange.Coverage(c.root.Path).Complete
-		s.deltas.coveredBy(c.root.Path, storedManifests[i], roots[i].boundaries, c.scope.Identity(), capture.plan.upTo, exact)
+	if !req.Unwatched {
+		_, storedManifests, err := s.load(ctx, snapshot.ID)
+		if err != nil {
+			return Snapshot{}, err
+		}
+		for i, capture := range captures {
+			c := capture.candidate
+			exact := quality == CaptureExact && repochange.Coverage(c.root.Path).Complete
+			s.deltas.coveredBy(c.root.Path, storedManifests[i], roots[i].boundaries, c.scope.Identity(), capture.plan.upTo, exact)
+		}
 	}
 	slog.InfoContext(ctx, "source snapshot published",
 		"roots_key", snapshot.RootsKey, "snapshot_id", snapshot.ID, "files", snapshot.FileCount,

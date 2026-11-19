@@ -882,17 +882,57 @@ DELETE FROM source_command_window_objects WHERE window_id = ?;
 DELETE FROM source_command_window_objects
 WHERE window_id IN (SELECT id FROM source_command_windows WHERE state != 'running');
 
+-- A window that left part of a folder uncompared stays to say so.
 -- name: DeleteSourceCommandWindowIfUnreferenced :execrows
 DELETE FROM source_command_windows
 WHERE id = ?
   AND NOT EXISTS (SELECT 1 FROM source_operations o WHERE o.command_window_id = source_command_windows.id)
-  AND NOT EXISTS (SELECT 1 FROM source_git_transitions g WHERE g.command_window_id = source_command_windows.id);
+  AND NOT EXISTS (SELECT 1 FROM source_git_transitions g WHERE g.command_window_id = source_command_windows.id)
+  AND NOT EXISTS (SELECT 1 FROM source_command_window_coverage c WHERE c.window_id = source_command_windows.id AND c.coverage != 'complete');
 
+-- A coverage notice outlives its window only while its chat does.
 -- name: DeleteUnreferencedEndedSourceCommandWindows :execrows
 DELETE FROM source_command_windows
 WHERE state != 'running'
   AND NOT EXISTS (SELECT 1 FROM source_operations o WHERE o.command_window_id = source_command_windows.id)
-  AND NOT EXISTS (SELECT 1 FROM source_git_transitions g WHERE g.command_window_id = source_command_windows.id);
+  AND NOT EXISTS (SELECT 1 FROM source_git_transitions g WHERE g.command_window_id = source_command_windows.id)
+  AND NOT (
+    EXISTS (SELECT 1 FROM source_command_window_coverage c WHERE c.window_id = source_command_windows.id AND c.coverage != 'complete')
+    AND EXISTS (SELECT 1 FROM sessions s WHERE s.id = source_command_windows.session_id)
+  );
+
+-- name: UpsertSourceCommandWindowCoverage :exec
+INSERT INTO source_command_window_coverage (
+    window_id, root_id, path, coverage, reason, boundaries_json, omitted_boundaries
+) VALUES (?, ?, ?, ?, ?, ?, ?)
+ON CONFLICT(window_id, root_id, path) DO UPDATE SET
+    coverage = excluded.coverage, reason = excluded.reason,
+    boundaries_json = excluded.boundaries_json, omitted_boundaries = excluded.omitted_boundaries;
+
+-- ids is a JSON array of window ids.
+-- name: ListSourceCommandWindowCoverage :many
+WITH page AS (
+    SELECT CAST(sqlc.arg(ids) AS TEXT) AS ids
+), requested(id) AS (
+    SELECT CAST(entry.value AS TEXT) FROM page, json_each(page.ids) AS entry
+)
+SELECT c.window_id, c.root_id, c.path, c.coverage, c.reason, c.boundaries_json, c.omitted_boundaries
+FROM requested
+JOIN source_command_window_coverage c ON c.window_id = requested.id
+ORDER BY c.window_id, c.root_id, c.path;
+
+-- Windows with a folder left uncompared, in a walk page's ordinal span, for
+-- one chat or turn when session_id is set.
+-- name: ListSourceCommandWindowsWithGaps :many
+SELECT w.id
+FROM source_command_windows w
+WHERE w.project_id = sqlc.arg(project_id)
+  AND (CAST(sqlc.arg(session_id) AS TEXT) = '' OR w.session_id = sqlc.arg(session_id))
+  AND (CAST(sqlc.arg(turn) AS INTEGER) = 0 OR w.turn = sqlc.arg(turn))
+  AND w.ordinal >= sqlc.arg(from_ordinal) AND w.ordinal < sqlc.arg(before_ordinal)
+  AND EXISTS (SELECT 1 FROM source_command_window_coverage c WHERE c.window_id = w.id AND c.coverage != 'complete')
+ORDER BY w.ordinal DESC
+LIMIT sqlc.arg(row_limit);
 
 -- name: GetSourceCommandWindow :one
 SELECT id, project_id, session_id, turn, tool_call_id, tool_name,

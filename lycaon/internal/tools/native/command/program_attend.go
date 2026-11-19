@@ -118,6 +118,7 @@ func (r *ProgramRuntime) attend(callCtx context.Context, e *programEvaluation) (
 		out.MergeChild(program, tools.MergeProgram)
 		out.CommandProgram, out.SourceRun = program.CommandProgram, program.SourceRun
 	}
+	stateObservation(e.callTC, e.run.window.fact())
 	stateGitNoRepository(e)
 	return ending.result, ending.err
 }
@@ -225,13 +226,16 @@ func (r *ProgramRuntime) recordParkedRun(ctx context.Context, run *programRun) {
 	r.SourceRuns.RecordSourceRunEvidence(ctx, sess.ID, sess, run.tool, *capture)
 }
 
-// recordDetachedEffects publishes effects the original call did not take.
+// Commit effects recorded after the program's tool result was published.
 func (r *ProgramRuntime) recordDetachedEffects(ctx context.Context, run *programRun) {
 	late := run.tc.Effects.Out.TakeCommitted()
 	if r.Effects == nil {
 		return
 	}
-	r.Effects.AppendProgramEffects(ctx, run.tc.Identity.SessionID, run.tc.Identity.ToolCallID, late.FileEdits, late.FileEditsOmitted, late.SourceContext)
+	r.Effects.AppendProgramEffects(ctx, run.tc.Identity.SessionID, run.tc.Identity.ToolCallID, tools.ProgramEffects{
+		FileEdits: late.FileEdits, Omitted: late.FileEditsOmitted,
+		SourceContext: late.SourceContext, Observation: observationFact(run.window.fact()),
+	})
 }
 
 // ReceiptResult is a program's result as its durable receipts record it, for

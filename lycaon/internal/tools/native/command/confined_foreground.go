@@ -35,6 +35,9 @@ func (c ConfinedForeground) Run(
 	}
 	window := openCommandWindow(ctx, tctx, c.ToolName, CanonicalCommandKey(tctx, args))
 	outcome, err := c.dispatch(ctx, args, tctx)
+	if err == nil {
+		window.noteBoundary(outcome.Boundary)
+	}
 	switch {
 	case err != nil || outcome.Finished:
 		window.closeNow(ctx)
@@ -42,6 +45,7 @@ func (c ConfinedForeground) Run(
 		window.closeOnExit(ctx, c.Background, tctx.Identity.SessionID, outcome.Handle)
 	}
 	outcome.SourceWindow = window.fact()
+	stateObservation(tctx, outcome.SourceWindow)
 	if err != nil || !outcome.Finished {
 		return nil, outcome, err
 	}

@@ -12,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/lycaon/lycaon/internal/hostcmd"
 	"github.com/lycaon/lycaon/internal/programtest"
 	"github.com/lycaon/lycaon/internal/repochange"
 	"github.com/lycaon/lycaon/internal/sourceledger"
@@ -119,6 +120,12 @@ func TestProgramWindowACCW01UntrustedTokenSettlesBeforeTheResult(t *testing.T) {
 
 func TestProgramWindowACCW02TrustedTokenSettlesAfterTheResult(t *testing.T) {
 	f := newWindowFixture(t)
+	out := &tools.ToolInvocationOut{}
+	configure := f.Configure
+	f.Configure = func(tc *tools.ToolContext) {
+		configure(tc)
+		tc.Effects.Out = out
+	}
 	repochange.MarkCoverageCompleteForTest(f.Dir)
 	t.Cleanup(func() { repochange.CloseRoot(f.Dir) })
 	gate := make(chan time.Time)
@@ -126,6 +133,10 @@ func TestProgramWindowACCW02TrustedTokenSettlesAfterTheResult(t *testing.T) {
 	outcome := f.run(t, writeGen)
 	if outcome.SourceWindow == nil || outcome.SourceWindow.Settled {
 		t.Fatalf("outcome = %+v, want an unsettled source window", outcome)
+	}
+	if facts := out.CardFacts; len(facts) != 1 || facts[0].Kind != api.ActionFactSourceObservation ||
+		len(facts[0].SourceWindows) != 1 || facts[0].SourceWindows[0] != outcome.SourceWindow.ID {
+		t.Fatalf("tool result facts = %+v, want pending window %q", facts, outcome.SourceWindow.ID)
 	}
 	listed := f.ledger.Commands.OpenSessionWindows(testdbseed.DefaultProjectID, f.Session)
 	if len(listed) != 1 || listed[0].ID != outcome.SourceWindow.ID || !listed[0].Closing {
@@ -272,7 +283,7 @@ func TestProgramWindowACCW05OpenFailureRunsUnobservedOnce(t *testing.T) {
 	f := newWindowFixture(t)
 	f.opener.before = func(context.Context) error { return errors.New("reconcile unavailable") }
 	outcome := f.run(t, writeGen+`; external -- /bin/sh -c 'echo second > second.txt'`)
-	if outcome.Status != 0 || outcome.SourceWindow == nil || outcome.SourceWindow.ID != "" || !outcome.SourceWindow.Unobserved {
+	if outcome.Status != 0 || outcome.SourceWindow == nil || outcome.SourceWindow.ID != "" || !everyFolderMissed(outcome.SourceWindow) {
 		t.Fatalf("outcome = %+v, want the program run with an unobserved fact and no window", outcome)
 	}
 	for _, name := range []string{"gen.txt", "second.txt"} {
@@ -451,7 +462,7 @@ func TestTimeoutDoesNotReportExpiryForALaunchTheOpenDelayed(t *testing.T) {
 	if !strings.Contains(outcome.Stdout, "status=0") {
 		t.Fatalf("stdout = %q, want the launch's own status", outcome.Stdout)
 	}
-	if outcome.SourceWindow == nil || outcome.SourceWindow.ID == "" || !outcome.SourceWindow.Unobserved {
+	if outcome.SourceWindow == nil || outcome.SourceWindow.ID == "" || !everyFolderMissed(outcome.SourceWindow) {
 		t.Fatalf("source window = %+v, want the later window and the unobserved launch", outcome.SourceWindow)
 	}
 	if opens := f.opener.opens.Load(); opens != 1 {
@@ -470,8 +481,14 @@ func TestProgramResultStatesWhenObservationNeverStarted(t *testing.T) {
 		SourceWindow map[string]any `json:"source_window"`
 	}
 	testutil.FailErr(t, "decode result", json.Unmarshal([]byte(raw), &result))
-	if len(result.SourceWindow) != 1 || result.SourceWindow["unobserved"] != true {
-		t.Fatalf("source_window = %v, want only unobserved", result.SourceWindow)
+	folders, _ := result.SourceWindow["coverage"].([]any)
+	if len(result.SourceWindow) != 1 || len(folders) == 0 {
+		t.Fatalf("source_window = %v, want only coverage", result.SourceWindow)
+	}
+	for _, folder := range folders {
+		if entry, _ := folder.(map[string]any); entry["coverage"] != "not_observed" || entry["reason"] != "baseline_incomplete" {
+			t.Fatalf("source_window = %v, want every folder not observed", result.SourceWindow)
+		}
 	}
 }
 
@@ -702,7 +719,7 @@ func TestLaunchAfterAGapDoesNotClaimTheGap(t *testing.T) {
 	result := testutil.Receive(t, "program result", done)
 	testutil.FailErr(t, "run program", result.err)
 	outcome := decodeOutcome(t, result.content)
-	if outcome.SourceWindow == nil || outcome.SourceWindow.ID != windowID || outcome.SourceWindow.Unobserved {
+	if outcome.SourceWindow == nil || outcome.SourceWindow.ID != windowID || anyFolderNotObserved(outcome.SourceWindow) {
 		t.Fatalf("outcome = %+v", outcome)
 	}
 	f.wantWindowEffect(t, "second.txt", windowID)
@@ -712,4 +729,27 @@ func TestLaunchAfterAGapDoesNotClaimTheGap(t *testing.T) {
 	if opens := f.opener.opens.Load(); opens != 1 {
 		t.Fatalf("window opens = %d, want the one window re-anchored", opens)
 	}
+}
+
+// everyFolderMissed reports whether a fact states each folder it lists as not
+// observed for want of a baseline, as after a launch the window did not watch.
+func everyFolderMissed(fact *hostcmd.SourceWindow) bool {
+	if fact == nil || len(fact.Coverage) == 0 {
+		return false
+	}
+	for _, folder := range fact.Coverage {
+		if folder.Coverage != "not_observed" || folder.Reason != "baseline_incomplete" {
+			return false
+		}
+	}
+	return true
+}
+
+func anyFolderNotObserved(fact *hostcmd.SourceWindow) bool {
+	for _, folder := range fact.Coverage {
+		if folder.Coverage == "not_observed" {
+			return true
+		}
+	}
+	return false
 }

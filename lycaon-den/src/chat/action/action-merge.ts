@@ -4,11 +4,29 @@ import type { ActionDescriptor, ActionFact, ActionFactKind, ActionLink, ActionRe
 export type CardAction = ActionDescriptor & { more?: number };
 
 const FACT_ORDER: readonly ActionFactKind[] = [
-  "result", "changed", "found", "took", "steps", "stopped_by", "network", "worker", "budget", "process", "captured", "containment", "loaded_by",
+  "result", "source_observation", "changed", "found", "took", "steps", "stopped_by", "network", "worker", "budget", "process", "captured", "containment", "loaded_by",
 ];
 
 function ordered(facts: readonly ActionFact[]): ActionFact[] {
   return FACT_ORDER.flatMap((kind) => facts.find((fact) => fact.kind === kind) ?? []).slice(0, 4);
+}
+
+export function combineSourceObservations(observations: readonly ActionFact[]): ActionFact | undefined {
+  const coverage = observations.flatMap((fact) => fact.source_coverage ?? []);
+  const windows = [...new Set(observations.flatMap((fact) => fact.source_windows ?? []))];
+  if (!coverage.length && !windows.length) return undefined;
+  return { kind: "source_observation", source_coverage: coverage, source_windows: windows };
+}
+
+export function withSourceObservation(action: CardAction, fact: ActionFact | undefined): CardAction {
+  const facts = action.facts.filter((entry) => entry.kind !== "source_observation");
+  const row = action.row.filter((kind) => kind !== "source_observation");
+  if (fact) facts.push(fact);
+  return {
+    ...action,
+    facts: ordered(facts),
+    row: fact?.source_coverage?.length ? [...row.slice(0, 1), "source_observation"] : row,
+  };
 }
 
 function receipts(actions: readonly ActionDescriptor[], pick: (action: ActionDescriptor) => readonly ActionReceiptScope[] | undefined): ActionReceiptScope[] {
@@ -39,22 +57,28 @@ export function mergeActions(actions: readonly ActionDescriptor[]): CardAction |
   const steps: ActionFact = sequence.length
     ? { kind: "steps", count: actions.length, unit: "actions", sequence: sequence.slice(-8) }
     : { kind: "steps", count: actions.length, failed: actions.filter((action) => action.status === "error").length || undefined, unit: "calls" };
-  const facts = ordered([steps, ...last.facts.filter((fact) => fact.kind !== "steps")]);
+  const observations = actions.flatMap((action) => action.facts.filter((fact) => fact.kind === "source_observation"));
+  const facts = [
+    steps,
+    ...last.facts.filter((fact) => fact.kind !== "steps" && fact.kind !== "source_observation"),
+  ];
+  const lastRow = last.row.filter((kind) => kind !== "source_observation");
+  const row = lastRow.includes("steps") ? lastRow : [...lastRow.slice(0, 1), "steps" as const];
   const texts = new Set(actions.map((action) => action.ran.text));
   const scopes = receipts(actions, (action) => action.links.find((link) => link.kind === "receipt")?.receipts);
   const links: ActionLink[] = scopes.length ? [{ kind: "receipt", receipts: scopes }] : [];
   const output = receipts(actions, (action) => action.preview?.receipts);
   const preview = last.preview?.kind === "output" && output.length ? { ...last.preview, receipts: output } : last.preview;
-  return {
+  return withSourceObservation({
     ...last,
     label: first.label,
     status,
     ran: first.ran,
     more: texts.size - 1 || undefined,
     facts,
-    row: last.row.includes("steps") ? last.row : [...last.row.slice(0, 1), "steps"],
+    row,
     preview,
     links: sequence.length ? last.links : links,
     opener: [...actions].reverse().find((action) => action.opener)?.opener,
-  };
+  }, combineSourceObservations(observations));
 }

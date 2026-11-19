@@ -2,6 +2,7 @@ import { createSignal } from "solid-js";
 import { fireEvent, render, waitFor } from "@solidjs/testing-library";
 import { describe, expect, it, vi } from "vitest";
 import type { ActionDescriptor } from "../../api/types.ts";
+import { LycaonApiError } from "../../api/http.ts";
 import { ACTION_FACT_LABELS, formatActionRow, formatFact } from "../../chat/action/action-format.ts";
 import { pendingAction } from "../../chat/action/part-action.ts";
 import { retiredToolNames } from "../../chat/tool/tool-catalog-tools.ts";
@@ -9,6 +10,7 @@ import { searchToolPart, toolPartFindCorpus } from "../../chat/tool/tool-part-fi
 import type { ToolPartView } from "../../chat/tool/tool-part-model.ts";
 import type { CardAction } from "../../chat/action/action-merge.ts";
 import { NetworkActionContext } from "../../chat/network-action-context.ts";
+import { invalidateSourceQueries } from "../../files/source/source-invalidation.ts";
 import { stubClient } from "../../test/client-fixture.ts";
 import { ActionCard } from "./ActionCard.tsx";
 
@@ -43,6 +45,64 @@ describe("ActionCard", () => {
     expect(row.textContent).toContain(descriptor.label);
     expect(row.textContent).toContain(formatActionRow(descriptor));
     expect(container.querySelector('[data-testid="action-card"]')?.getAttribute("data-status")).toBe("done");
+  });
+
+  it("shows incomplete file observation on the row and explains the covered folder in the card", () => {
+    const action: ActionDescriptor = {
+      ...descriptor,
+      facts: [{ kind: "source_observation", source_coverage: [{ folder: "/srv/shared", coverage: "not_observed", reason: "time_budget" }] }],
+      row: ["source_observation"],
+    };
+    const { container } = render(() => <ActionCard part={part()} action={action} layout="chat" />);
+    const row = container.querySelector('[data-testid="action-card"] > button')!;
+    expect(row.textContent).toContain("File observation incomplete");
+    open(container);
+    const coverage = container.querySelector('[data-kind="source_observation"] dd');
+    expect(coverage?.textContent).toContain("/srv/shared was not observed: the observation ran out of time.");
+  });
+
+  it("refreshes a pending command window when its observation settles", async () => {
+    const get = vi.fn()
+      .mockResolvedValueOnce({ settling: true, coverage: [] })
+      .mockResolvedValueOnce({
+        settling: false,
+        coverage: [{ folder: "/srv/shared", coverage: "not_observed", reason: "io_error" }],
+      });
+    const client = stubClient({ getProjectSourceCommandObservation: get });
+    const action: ActionDescriptor = {
+      ...descriptor,
+      facts: [{ kind: "source_observation", source_windows: ["window"] }],
+      row: [],
+      opener: undefined,
+    };
+    const { container } = render(() => <ActionCard part={part()} action={action} layout="chat" sessionId="chat" projectId="project" client={client} />);
+    const row = container.querySelector('[data-testid="action-card"] > button')!;
+    expect(row.textContent).not.toContain("File observation incomplete");
+    expect(get).toHaveBeenCalledWith("project", "chat", "window", expect.any(AbortSignal));
+    invalidateSourceQueries({ projectId: "other" });
+    expect(get).toHaveBeenCalledTimes(1);
+    invalidateSourceQueries({ projectId: "project" });
+    await waitFor(() => expect(row.textContent).toContain("File observation incomplete"));
+    invalidateSourceQueries({ projectId: "project" });
+    expect(get).toHaveBeenCalledTimes(2);
+    open(container);
+    expect(container.querySelector('[data-kind="source_observation"] dd')?.textContent).toContain("/srv/shared was not observed");
+  });
+
+  it("stops refreshing when the host reports a pruned window", async () => {
+    const get = vi.fn().mockRejectedValue(new LycaonApiError("Window pruned", undefined, "not_found"));
+    const client = stubClient({ getProjectSourceCommandObservation: get });
+    const action: ActionDescriptor = {
+      ...descriptor,
+      facts: [{ kind: "source_observation", source_windows: ["window"] }],
+      row: [],
+      opener: undefined,
+    };
+    const { container } = render(() => <ActionCard part={part()} action={action} layout="chat" sessionId="chat" projectId="project" client={client} />);
+    await get.mock.results[0]?.value.catch(() => {});
+    invalidateSourceQueries({ projectId: "project" });
+    expect(get).toHaveBeenCalledTimes(1);
+    expect(container.textContent).not.toContain("File observation incomplete");
   });
 
   it("opens to what ran, the summary, facts, preview and records, in that order and nothing else", () => {
