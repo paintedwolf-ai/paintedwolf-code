@@ -16,7 +16,10 @@ func TestAskWorkflowParksBeforeAgentPhase(t *testing.T) {
 	manifest := workflowdef.FinalizeManifest(workflowdef.Manifest{
 		ID: "read-then-work", Version: "1.0.0",
 		PhaseDefs: []workflowdef.PhaseDef{
-			{ID: "read", CompleteWhen: "gates_satisfied", Next: "work"},
+			{
+				ID: "read", CompleteWhen: "gates_satisfied", Next: "work",
+				AdvanceWhenGateMet: workflowdef.AdvanceWhenGateMetAuto,
+			},
 			{
 				ID: "work", CompleteWhen: "gates_satisfied",
 				ParallelTask: &workflowdef.ParallelTask{MaxWorkers: 1, MaxWriteWorkers: 1},
