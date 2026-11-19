@@ -29,6 +29,11 @@ func sshKnownHostsPath(c Confinement) (string, error) {
 	return filepath.Join(fspath.CanonicalPath(enginepaths.ScratchRootUnder(stateRoot)), "ssh-known-hosts", fmt.Sprintf("%x", id), "known_hosts"), nil
 }
 
+// OpenSSH parses each file name after the shell has split its arguments.
+func sshConfigPath(path string) string {
+	return `"` + strings.NewReplacer(`\`, `\\`, `"`, `\"`, "%", "%%").Replace(path) + `"`
+}
+
 // PrepareSSHKnownHosts creates the file before Linux binds it into the namespace.
 func PrepareSSHKnownHosts(c Confinement) (string, error) {
 	path, err := sshKnownHostsPath(c)

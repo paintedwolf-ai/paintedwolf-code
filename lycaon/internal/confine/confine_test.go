@@ -523,7 +523,7 @@ func TestGitSSHEnvQuotesAppBundleExecutablePath(t *testing.T) {
 	}
 	env := confine.GitSSHEnv(c, "/Applications/Painted Wolf Code.app/Contents/MacOS/painted-wolf", "/tmp/known hosts")
 	joined := strings.Join(env, "\n")
-	if !strings.Contains(joined, "UserKnownHostsFile=/tmp/known hosts") {
+	if !strings.Contains(joined, `UserKnownHostsFile="/tmp/known hosts"`) {
 		t.Fatalf("known-hosts option missing: %s", joined)
 	}
 	sshCommand := strings.TrimPrefix(env[0], "GIT_SSH_COMMAND=")
@@ -537,7 +537,7 @@ func TestGitSSHEnvQuotesAppBundleExecutablePath(t *testing.T) {
 			continue
 		}
 		knownHostsArgs++
-		if !strings.HasPrefix(arg, "UserKnownHostsFile=/tmp/known hosts") {
+		if !strings.HasPrefix(arg, `UserKnownHostsFile="/tmp/known hosts"`) {
 			t.Fatalf("outer shell split known-hosts path: %q", args)
 		}
 	}

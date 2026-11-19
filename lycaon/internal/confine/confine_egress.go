@@ -880,9 +880,9 @@ func GitSSHEnv(c Confinement, selfPath, knownHosts string) []string {
 	// Each shell layer receives its own quoting.
 	proxyCmd := shellQuote(selfPath) + " ssh-proxy-command %h %p"
 	// The host mirror supplies read-only key verification.
-	knownHostsFiles := knownHosts
+	knownHostsFiles := sshConfigPath(knownHosts)
 	if mirror := hostKnownHostsMirror(); mirror != "" {
-		knownHostsFiles = knownHosts + " " + mirror
+		knownHostsFiles += " " + sshConfigPath(mirror)
 	}
 	sshCmd := strings.Join([]string{
 		"ssh",

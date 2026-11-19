@@ -2,9 +2,9 @@ package profiles
 
 import (
 	"context"
-	"github.com/lycaon/lycaon/internal/confine"
 	"strings"
 
+	"github.com/lycaon/lycaon/internal/confine"
 	"github.com/lycaon/lycaon/internal/coordinator/inject"
 	"github.com/lycaon/lycaon/internal/extpacks"
 	"github.com/lycaon/lycaon/internal/gate"
