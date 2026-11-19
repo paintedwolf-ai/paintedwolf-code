@@ -1,27 +1,27 @@
 {
   "app_version": "1.0.3-rc2",
-  "artifact_id": "9e5e055a-c4cb-4b5e-a999-40c6b7f194e9",
-  "backup_sha256": "1c1d892748833a9731d146a69900ed41cb5c26ab1bb5f897986cbec4ba8967c0",
-  "created_at": "2026-11-18T23:13:56Z",
+  "artifact_id": "f4ea7b8b-7d6d-478a-a607-a26711c3e40c",
+  "backup_sha256": "4e243b2c5fc0058e79277b801c0a7e086efcfd2516f24ea54bbf9795e6d185b3",
+  "created_at": "2026-11-19T02:42:35Z",
   "editor_history": {
-    "accepted_operation_id": "0bfa2e2d-8f50-48c3-ab3a-baa372b3a2c4",
+    "accepted_operation_id": "30d26749-6f55-4ba7-81f9-8bba6565673c",
     "accepted_text": "editor base\nsaved window edit\nunsaved host edit\n",
     "client_id": "window:upgrade-fixture",
-    "document_id": "b022c1c6-1557-4935-ac98-0cf32753ea4c",
+    "document_id": "5cd8a916-96fb-42fb-9485-6618efb1b335",
     "epoch": 1,
     "history_sha256": "b855afd75def2a12331d76e85d7b8a42d1e324e72b9c9ab7c4d2dc655878c062",
     "local_text": "editor base\nsaved window edit\nunsaved host edit\noffline window edit\n",
-    "outbox_path": "document-outbox/6fbdbad6c5fc54407516f76b381ea1f22a80492eaaeea820fe335d37ac5982d0/records-1.log",
-    "outbox_sha256": "a816e8be02633babacabb17f622db53898665fbbaf6c71c78b1195cbd22308c1",
-    "pending_operation_id": "0c1f39d5-2604-48f5-b87d-6cefba16b185",
-    "pending_save_operation_id": "acaffcdd-14f0-4741-a722-c4551fcfd286",
+    "outbox_path": "document-outbox/8079dbc765b2d25a8dd468270fbb2e72116ebb64c695599a0619ca17f8ddd265/records-1.log",
+    "outbox_sha256": "f6e40d85577237feafb65c7a581da13aa6f6105fea6ed56efb2edb8d919fabee",
+    "pending_operation_id": "4dcb8efc-9e3a-4977-8e31-ec2226c97dcf",
+    "pending_save_operation_id": "2a5d9bde-724d-42db-bc6a-ee621080d74d",
     "pending_save_revision": 4,
-    "save_operation_id": "18b6b8b1-feb3-40dd-a0f1-dd4f7292ef77",
+    "save_operation_id": "34bc3ad3-d0d7-4beb-93d7-6443eff01860",
     "save_revision": 2,
     "saved_text": "editor base\nsaved window edit\n"
   },
   "grant_id": "grant_vZryNRplPGGrAtV-Z93HbKuK3SxTPEYb3EnTg_rEkU0",
-  "project_id": "ab88fd5c-0b0d-482b-839e-1eeb8cff060e",
+  "project_id": "99f5e442-4a85-4e32-a7a6-03b089526da2",
   "recipe": "retained-history-v1",
   "schema_identity": {
     "revision": 5,
@@ -29,28 +29,28 @@
   },
   "schema_version": 5,
   "seeded_secondary": "tool_result",
-  "semantics_sha256": "303a26ca8526549bb6576fecf2dc2c788650059613022be70d8aafe08c200471",
-  "session_id": "1f0e91c2-f205-4df7-ad99-ca1a58e9fe13",
+  "semantics_sha256": "563fdd0e1e1806dfbc4f79dd39e0b2f7078627c0eff49033dbdde2f7c20ed875",
+  "session_id": "b8eec39a-60ed-4dd8-87fe-56092d935e75",
   "source_history": {
     "body_sha256": "c0e260b9905a67a0316311638aca3fd31627a1140e5425345d12d3084775ced9",
-    "checkpoint_anchor_id": "26e230b6-e2bd-4ac9-a417-b349f66e3f43",
-    "checkpoint_root_key": "ef6703def7a56919",
-    "current_version_id": "01a1f0f0-2c32-7bea-9dcb-ec4054cb4c0a",
-    "source_file_id": "01a1f0f0-2c0b-70ee-99d7-034366452b41",
-    "source_version_id": "01a1f0f0-2c0b-736b-9123-4836d161b102"
+    "checkpoint_anchor_id": "f1ff49a1-3b3c-4b0d-a6f1-a0dbe3cdaf36",
+    "checkpoint_root_key": "2ced4cb469c88e78",
+    "current_version_id": "01a1f1af-3652-7459-a416-2a3f4794a6d8",
+    "source_file_id": "01a1f1af-3642-77f3-8750-4683aa3e0695",
+    "source_version_id": "01a1f1af-3642-79b4-900c-9e791b913dcf"
   },
-  "store_sha256": "4b96d5bda63d85ff5c4bad7b3f2ee5485d6af76f8a84637a87b4335c94b4f9be",
-  "tool_result_message_id": "81e830f2-a95d-4050-836e-c192a07abf69",
+  "store_sha256": "cf30397b245812fd662d3f9081115897a662d5712d68cded06ebd60774ef0ab5",
+  "tool_result_message_id": "acb33326-0fed-45c9-be84-d5a377ee4bf6",
   "worker_history": {
     "baseline": {
       "README.md": "a3029032e8aa0af8caaa19eb98dec67afc16681ce76987b5b323b0c232dbcc13"
     },
-    "child_session_id": "762694a7-8fce-4bd3-a5b4-85d83d0996f8",
-    "job_id": "756cb036-e401-4ebd-8068-aa3a7afdb524",
+    "child_session_id": "f50a7548-b373-4714-b5f0-3a650d608d06",
+    "job_id": "c569ab49-9b91-44d3-a94a-50df361e6024",
     "overlay": {
       "README.md": "2a0126e186199bedb9257b7b497a02d47bd362a5d7eee5874f662bd0af6504a3",
       "worker-note.txt": "8496db272afc947125ca66b8c48d2c7151f1fba438a821ae3f77aad9b35f63ea"
     },
-    "parent_session_id": "32509bb8-e2fa-4544-bdf4-6c582db95a23"
+    "parent_session_id": "548af865-0b3d-4b51-a00d-259ed9445b2e"
   }
 }
