@@ -132,7 +132,6 @@ func TestSomeoneElsesEditEndsAWindowsClaimOnTheFile(t *testing.T) {
 	closeAndSettle(t, ctx, window)
 }
 
-
 // arrivalsAtPass notes how many events had arrived when the first pass was asked for.
 type arrivalsAtPass struct {
 	commandsInventoryPort

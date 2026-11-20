@@ -11,7 +11,6 @@ import (
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 )
 
-
 func TestAltitudeInvariantNoCommissionMatchedOnly(t *testing.T) {
 	guidance.SetGuidanceRenderer(promptstest.GuidanceRenderer(t))
 	snapshot := snapshotFromReadLine(t, "pkg/a.go", "10| func entry() {}", 10)

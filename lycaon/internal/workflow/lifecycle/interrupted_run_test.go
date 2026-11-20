@@ -14,7 +14,6 @@ import (
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
-
 // Ambient implement@ survives the post-create reconcile, so the first user
 // prompt is stamped with its workflow_run_id.
 func TestReconcileOrphanedRunsSkipsAmbientSessionCreate(t *testing.T) {
@@ -113,7 +112,6 @@ func TestReconcileOrphanedRunsInterruptsChildImplement(t *testing.T) {
 		t.Fatalf("child_run vars = %+v want interrupted", childRun)
 	}
 }
-
 
 func TestReconcileOrphanedRunsPreservesHumanApproval(t *testing.T) {
 	mgr, _, blueprintMgr, _ := testManagerWithRegistry(t)

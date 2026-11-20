@@ -13,7 +13,6 @@ import (
 	"github.com/lycaon/lycaon/internal/testutil"
 )
 
-
 // refusalsOf collects kernel reports for one confined action.
 func refusalsOf(t *testing.T, self string, roots []string, name string, args ...string) (confine.SandboxRefusals, string) {
 	t.Helper()

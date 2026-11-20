@@ -10,9 +10,9 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/lycaon/lycaon/internal/db"
-	"github.com/lycaon/lycaon/internal/timelayout"
 	scancatalog "github.com/lycaon/lycaon/internal/scan/catalog"
 	scanoutput "github.com/lycaon/lycaon/internal/scan/output"
+	"github.com/lycaon/lycaon/internal/timelayout"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 

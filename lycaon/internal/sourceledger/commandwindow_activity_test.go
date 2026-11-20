@@ -473,7 +473,6 @@ func (g *gatedInventory) EnsureInventory(ctx context.Context, req InventoryReque
 	return g.commandsInventoryPort.EnsureInventory(ctx, req)
 }
 
-
 // Retention running out costs a file's before-image and not its attribution: a
 // rewrite of an unretained file reports no captured content and cannot restore,
 // and a retained one diffs exactly.

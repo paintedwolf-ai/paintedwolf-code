@@ -738,7 +738,6 @@ func TestLFSAbsentDegradesGracefully(t *testing.T) {
 	testutil.FailErr(t, "resolve staged Git", err)
 	f := buildFixture(t, ref, fixPlain)
 
-
 	compareReadOps(t, ref, f, gitexec.Opts{}, [][]string{
 		{"status", "--porcelain=v2"},
 		{"log", "--format=%H%x09%s", "-n", "5"},

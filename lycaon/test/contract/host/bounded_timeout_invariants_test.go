@@ -13,7 +13,6 @@ import (
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 )
 
-
 func findFuncOrMethod(f *ast.File, receiver, name string) *ast.FuncDecl {
 	for _, decl := range f.Decls {
 		fn, ok := decl.(*ast.FuncDecl)
