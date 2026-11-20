@@ -1,13 +1,12 @@
-import { SETUP_REVISION } from "../../../shared/app-state-types.ts";
 import { createSignal } from "solid-js";
-import {
-  getAppStateSnapshot,
-} from "../../store/app-state-snapshot.ts";
+import { SETUP_REVISION } from "../../../shared/app-state-types.ts";
+import { getAppStateSnapshot } from "../../store/app-state-snapshot.ts";
 import { persistAppStateInBackground } from "../../store/app-state-background-write.ts";
 
 const [firstRunSetupCompleted, setFirstRunSetupCompleted] = createSignal(false);
 const [localModelOnboardingCompleted, setLocalModelOnboardingCompleted] = createSignal(false);
 const [postponed, setPostponed] = createSignal(false);
+const [prefsReady, setPrefsReady] = createSignal(false);
 
 export function localModelPromptHandled(): boolean {
   return postponed() || localModelOnboardingCompleted();
@@ -16,8 +15,6 @@ export function localModelPromptHandled(): boolean {
 export function postponeLocalModelPrompt(): void {
   setPostponed(true);
 }
-
-const [prefsReady, setPrefsReady] = createSignal(false);
 
 export function firstRunSetupCompletedPref(): boolean {
   return firstRunSetupCompleted();

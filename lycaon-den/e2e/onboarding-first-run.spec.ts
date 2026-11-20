@@ -196,7 +196,7 @@ webE2e.describe("onboarding first-run", () => {
 
   webE2e("an existing installation sees only the model choice", async ({ page }) => {
     await serveCatalog(page, true);
-    await seedAppState(page, {onboarding: {firstRunSetupCompleted: true, localModelOnboardingCompleted: false}});
+    await seedAppState(page, {onboarding: {completedSetupRevision: 2}});
     await page.goto("/");
     await expect(page.getByTestId("onboarding-local-model")).toBeVisible({timeout: 60_000});
     await expect(page.getByTestId("onboarding-progress")).toHaveText("1 / 1");
@@ -208,9 +208,7 @@ webE2e.describe("onboarding first-run", () => {
     "den:harness — latch + cleared config → provider card only (W8/W12)",
     async ({ page, request }) => {
       await apiEnsureDefaultModel(request);
-      await seedAppState(page, {
-        onboarding: { firstRunSetupCompleted: true },
-      });
+      await seedAppState(page);
       await apiClearDefaultModel(request);
       await page.goto("/");
 
@@ -347,7 +345,7 @@ webE2e("v1.0.2 users complete the current walkthrough once and keep their settin
     await route.continue();
   });
   await serveCatalog(page, true);
-  await seedAppState(page, {onboarding: "v1.0.2", layout: {startupCompanion: "files"}});
+  await seedAppState(page, {onboarding: {firstRunSetupCompleted: true}, layout: {startupCompanion: "files"}});
   await page.goto("/");
   await expect(page.getByTestId("onboarding-local-model")).toBeVisible({timeout: 60_000});
   expect(await page.evaluate(key => JSON.parse(localStorage.getItem(key)!), ONBOARDING_STATE_KEY)).toEqual({firstRunSetupCompleted:true});
@@ -367,7 +365,7 @@ webE2e("v1.0.2 users complete the current walkthrough once and keep their settin
 
 webE2e("Escape defers a pre-1.1 model choice without persisting a host decision", async ({page}) => {
   await serveCatalog(page, true);
-  await seedAppState(page, {onboarding:"v1.0.2"});
+  await seedAppState(page, {onboarding: {firstRunSetupCompleted: true}});
   await page.goto("/");
   await expect(page.getByTestId("onboarding-local-model")).toBeVisible({timeout: 60_000});
   await page.keyboard.press("Escape");

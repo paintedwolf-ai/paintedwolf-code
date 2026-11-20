@@ -122,7 +122,6 @@ webE2e.describe("feedback + what's new den", () => {
       });
 
       await seedAppState(page, {
-        onboarding: { firstRunSetupCompleted: true },
         whatsNew: { lastSeenVersion: "0.9.0" },
       });
       await page.goto("/");
@@ -161,7 +160,6 @@ webE2e.describe("feedback + what's new den", () => {
     "unset What's New latch shows nothing on first run seed",
     async ({ page }) => {
       await seedAppState(page, {
-        onboarding: { firstRunSetupCompleted: true },
         // An absent acknowledgement seeds the running version.
       });
       await page.goto("/");

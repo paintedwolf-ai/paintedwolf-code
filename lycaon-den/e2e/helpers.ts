@@ -1,4 +1,3 @@
-import { SETUP_REVISION, type DenLayoutPrefs } from "../shared/app-state-types.ts";
 import path from "node:path";
 import { createHash } from "node:crypto";
 import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
@@ -7,6 +6,9 @@ import { fileURLToPath } from "node:url";
 import { expect, test, type APIRequestContext, type Locator, type Page } from "@playwright/test";
 import {
   DEFAULT_CONTEXT_NAV_VISIBLE,
+  SETUP_REVISION,
+  type DenLayoutPrefs,
+  type DenOnboardingPrefs,
   type ContextNavItemId,
 } from "../shared/app-state-types.ts";
 import {
@@ -289,7 +291,7 @@ export async function seedAppState(
     /** Device context navigation pins. */
     contextNav?: { visible?: string[] };
     /** Defaults to completed for shell tests. */
-    onboarding?: "v1.0.2" | { firstRunSetupCompleted?: boolean; localModelOnboardingCompleted?: boolean };
+    onboarding?: DenOnboardingPrefs | { firstRunSetupCompleted: true };
     layout?: Pick<DenLayoutPrefs, "startupCompanion">;
     /** Optional What's New latch. */
     whatsNew?: { lastSeenVersion?: string };
@@ -299,10 +301,9 @@ export async function seedAppState(
     debug?: { verboseMode?: boolean };
   },
 ) {
-  const setup = partial?.onboarding;
-  const onboarding = setup === "v1.0.2" ? {firstRunSetupCompleted: true} : {
-    completedSetupRevision: (setup?.firstRunSetupCompleted ?? true) ? SETUP_REVISION : undefined,
-    completedLocalModelStepRevision: (setup?.localModelOnboardingCompleted ?? setup?.firstRunSetupCompleted ?? true) ? SETUP_REVISION : undefined,
+  const onboarding = partial?.onboarding ?? {
+    completedSetupRevision: SETUP_REVISION,
+    completedLocalModelStepRevision: SETUP_REVISION,
   };
   const firstTimeTips = {
     enabled: partial?.firstTimeTips?.enabled ?? false,
@@ -386,7 +387,7 @@ export const CONTEXT_NAV_WITH = (...extra: ContextNavItemId[]) => {
 
 export async function seedFirstRunUnset(page: Page) {
   await seedAppState(page, {
-    onboarding: { firstRunSetupCompleted: false },
+    onboarding: {},
   });
 }
 
