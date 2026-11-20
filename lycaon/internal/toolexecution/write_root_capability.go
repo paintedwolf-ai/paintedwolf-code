@@ -1,15 +1,14 @@
 package toolexecution
 
 import (
-	"github.com/lycaon/lycaon/internal/capabilityrequest"
-
 	"context"
-	"github.com/lycaon/lycaon/internal/toolrejection"
-	"github.com/lycaon/lycaon/internal/tools"
 
+	"github.com/lycaon/lycaon/internal/capabilityrequest"
 	"github.com/lycaon/lycaon/internal/confine"
 	"github.com/lycaon/lycaon/internal/isolation"
 	"github.com/lycaon/lycaon/internal/toolcontract"
+	"github.com/lycaon/lycaon/internal/toolrejection"
+	"github.com/lycaon/lycaon/internal/tools"
 )
 
 func (e *Boundary) preflightWriteRoot(ctx context.Context, tool string, args map[string]any, tc *tools.ToolContext) error {

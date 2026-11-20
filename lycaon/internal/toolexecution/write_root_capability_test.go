@@ -2,14 +2,14 @@ package toolexecution
 
 import (
 	"context"
-	"github.com/lycaon/lycaon/internal/toolrejection"
-	"github.com/lycaon/lycaon/internal/tools"
 	"path/filepath"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/toolcontract"
+	"github.com/lycaon/lycaon/internal/toolrejection"
+	"github.com/lycaon/lycaon/internal/tools"
 )
 
 func TestWriteRootPreflightUsesCompiledCapability(t *testing.T) {
@@ -70,5 +70,21 @@ func TestTerminalWriteRootCannotAuthorizeInstructionChanges(t *testing.T) {
 	}
 	if len(tc.Files.PolicyWriteGrants) != 0 {
 		t.Fatal("refused terminal received policy-write authority")
+	}
+}
+
+func TestRedirectReviewRefreshesAnExistingNarrowGrant(t *testing.T) {
+	parent := t.TempDir()
+	target := filepath.Join(parent, "result")
+	e := NewExecutor(nil, nil, "")
+	e.Boundary.SetSessionWriteRootOverlay(func(context.Context, string, string) []string { return []string{target} })
+	e.Boundary.SetWriteRootPreflight(func(context.Context, string, map[string]any, tools.ToolContext, string) (bool, bool, string, error) {
+		t.Fatal("redirect asked for a broader root")
+		return false, false, "", nil
+	})
+	tc, err := e.Boundary.ReviewRedirectRoot(t.Context(), tools.ToolContext{}, ">", target, parent)
+	testutil.FailErr(t, "refresh grant", err)
+	if len(tc.Files.GrantedWriteRoots) != 1 || tc.Files.GrantedWriteRoots[0] != target {
+		t.Fatalf("refreshed grants = %v", tc.Files.GrantedWriteRoots)
 	}
 }
