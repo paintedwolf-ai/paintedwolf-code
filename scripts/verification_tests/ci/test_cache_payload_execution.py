@@ -17,6 +17,7 @@ class CachePayloadTests(unittest.TestCase):
         root = Path(__file__).resolve().parents[3]
         for family, workspace in (("rust", "lycaon-den/src-tauri"),
                                   ("decide", "lycaon/internal/decide/native"),
+                                  ("generation", "lycaon/internal/generation/native"),
                                   ("document-core", "lycaon/internal/documentcore/native")):
             action = yaml.safe_load((root / f".github/actions/cache-{family}/action.yml").read_text())
             steps = action["runs"]["steps"]

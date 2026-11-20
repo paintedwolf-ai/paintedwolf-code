@@ -28,7 +28,7 @@ runs:
         path: |
           ${{ steps.paths.outputs.target }}
           !${{ steps.paths.outputs.target }}/**/incremental
-        key: ${{ steps.paths.outputs.prefix }}${{ hashFiles('rust-toolchain.toml', 'lycaon/internal/generation/native/Cargo.toml', 'lycaon/internal/generation/native/Cargo.lock', 'lycaon/internal/generation/native/build.rs', 'lycaon/internal/platformfloor/macos_floor.txt', 'scripts/generation/sources.json', 'scripts/generation/runtime.py', 'scripts/toolchain/rust-path-remap.sh', 'scripts/ci_policy/cache_payload.py', 'scripts/warm-workspace-build.sh') }}
+        key: ${{ steps.paths.outputs.prefix }}${{ hashFiles('rust-toolchain.toml', '.cargo/config.toml', 'lycaon/internal/generation/native/Cargo.toml', 'lycaon/internal/generation/native/Cargo.lock', 'lycaon/internal/generation/native/build.rs', 'lycaon/internal/decide/native/vendor/mlx-sys/**', 'lycaon/internal/platformfloor/macos_floor.txt', 'third_party/mlx/pin.json', 'third_party/mlx/*.patch', 'scripts/generation/sources.json', 'scripts/generation/runtime.py', 'scripts/toolchain/mlx-offline.cmake', 'scripts/toolchain/rust-path-remap.sh', 'scripts/ci_policy/cache_payload.py', 'scripts/warm-workspace-build.sh') }}
         lookup-only: ${{ inputs.lookup-only == 'true' || inputs.save == 'true' }}
         restore-keys: ${{ inputs.save != 'true' && inputs.lookup-only != 'true' && steps.paths.outputs.prefix || '' }}
     - if: ${{ inputs.save == 'true' && github.ref == 'refs/heads/main' && steps.restore.outputs.cache-hit != 'true' }}
@@ -38,7 +38,7 @@ runs:
         path: |
           ${{ steps.paths.outputs.target }}
           !${{ steps.paths.outputs.target }}/**/incremental
-        key: ${{ steps.paths.outputs.prefix }}${{ hashFiles('rust-toolchain.toml', 'lycaon/internal/generation/native/Cargo.toml', 'lycaon/internal/generation/native/Cargo.lock', 'lycaon/internal/generation/native/build.rs', 'lycaon/internal/platformfloor/macos_floor.txt', 'scripts/generation/sources.json', 'scripts/generation/runtime.py', 'scripts/toolchain/rust-path-remap.sh', 'scripts/ci_policy/cache_payload.py', 'scripts/warm-workspace-build.sh') }}
+        key: ${{ steps.paths.outputs.prefix }}${{ hashFiles('rust-toolchain.toml', '.cargo/config.toml', 'lycaon/internal/generation/native/Cargo.toml', 'lycaon/internal/generation/native/Cargo.lock', 'lycaon/internal/generation/native/build.rs', 'lycaon/internal/decide/native/vendor/mlx-sys/**', 'lycaon/internal/platformfloor/macos_floor.txt', 'third_party/mlx/pin.json', 'third_party/mlx/*.patch', 'scripts/generation/sources.json', 'scripts/generation/runtime.py', 'scripts/toolchain/mlx-offline.cmake', 'scripts/toolchain/rust-path-remap.sh', 'scripts/ci_policy/cache_payload.py', 'scripts/warm-workspace-build.sh') }}
     - if: ${{ steps.save.outcome == 'success' }}
       uses: ./.github/actions/cache-prune
       with:

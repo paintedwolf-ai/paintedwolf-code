@@ -76,7 +76,8 @@ pub fn configure(source: &Path) -> cmake::Config {
     let staged_toolchain = inputs.join("mlx-offline.cmake");
     copy_file(&toolchain, &staged_toolchain).expect("stage persistent MLX CMake toolchain");
     let mut config = cmake::Config::new(&staged_source);
-    config.define("CMAKE_TOOLCHAIN_FILE", staged_toolchain);
+    config.define("CMAKE_TOOLCHAIN_FILE", &staged_toolchain);
+    config.env("CMAKE_TOOLCHAIN_FILE", &staged_toolchain);
     config.define("PW_MLX_VENDOR_ROOT", &vendor);
     config.define("PW_MLX_SYS_MANIFEST", manifest.join("Cargo.toml"));
     config
