@@ -1,0 +1,166 @@
+// Package linuxruntime activates the packaged service userland under the caller's resource limits.
+package linuxruntime
+
+import (
+	"errors"
+	"fmt"
+	"net"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"runtime"
+	"strconv"
+	"strings"
+	"syscall"
+
+	"golang.org/x/sys/unix"
+)
+
+const hierarchy = "/sys/fs/cgroup"
+
+func processGroup(pid string) (string, error) {
+	raw, err := os.ReadFile(filepath.Join("/proc", pid, "cgroup"))
+	if err != nil {
+		return "", err
+	}
+	return unifiedGroup(string(raw))
+}
+
+func unifiedGroup(raw string) (string, error) {
+	for _, line := range strings.Split(raw, "\n") {
+		if path, ok := strings.CutPrefix(line, "0::"); ok && filepath.IsAbs(path) && filepath.Clean(path) == path {
+			return filepath.Join(hierarchy, path), nil
+		}
+	}
+	return "", errors.New("unified cgroup unavailable")
+}
+
+func limits() map[string]int64 { return map[string]int64{"memory.max": 512 << 20, "pids.max": 256} }
+
+// Acquire selects the resource boundary before submitting any workload.
+func Acquire(image string) error {
+	runtime.LockOSThread()
+	defer runtime.UnlockOSThread()
+	origin, err := processGroup("self")
+	if err != nil {
+		return err
+	}
+	leaf, err := delegatedLeaf(origin)
+	if err != nil {
+		return err
+	}
+	if leaf != "" {
+		defer os.Remove(leaf)
+		return startLeaf(image, leaf)
+	}
+	if manager := nestedManager(origin); manager != "" {
+		return managerScope(image, manager, origin)
+	}
+	return runVM(image)
+}
+
+func delegatedLeaf(origin string) (string, error) {
+	raw, err := os.ReadFile(filepath.Join(origin, "cgroup.subtree_control"))
+	if errors.Is(err, os.ErrNotExist) || errors.Is(err, os.ErrPermission) {
+		return "", nil
+	}
+	if err != nil {
+		return "", err
+	}
+	var memory, pids bool
+	for _, c := range strings.Fields(string(raw)) {
+		memory = memory || c == "memory"
+		pids = pids || c == "pids"
+	}
+	if !memory || !pids {
+		return "", nil
+	}
+	leaf, err := os.MkdirTemp(origin, "pw-session-")
+	if errors.Is(err, unix.EACCES) || errors.Is(err, unix.EROFS) || errors.Is(err, unix.EPERM) {
+		return "", nil
+	}
+	return leaf, err
+}
+
+func startLeaf(image, leaf string) error {
+	for file, limit := range limits() {
+		if err := os.WriteFile(filepath.Join(leaf, file), []byte(strconv.FormatInt(limit, 10)), 0600); err != nil {
+			return err
+		}
+	}
+	group, err := os.Open(leaf)
+	if err != nil {
+		return err
+	}
+	defer group.Close()
+	cmd := exec.Command(image, "--launch-native")
+	cmd.Dir = "/"
+	cmd.Env = []string{}
+	cmd.Stdin, cmd.Stderr = os.Stdin, os.Stderr
+	cmd.SysProcAttr = &syscall.SysProcAttr{UseCgroupFD: true, CgroupFD: int(group.Fd()), Pdeathsig: syscall.SIGKILL}
+	return cmd.Run()
+}
+
+func nestedManager(origin string) string {
+	manager := "/usr/bin/systemd-run"
+	if _, err := os.Stat(manager); errors.Is(err, os.ErrNotExist) {
+		manager = "/run/current-system/sw/bin/systemd-run"
+	}
+	if _, err := os.Stat(manager); err != nil {
+		return ""
+	}
+	path := "/run/user/" + strconv.Itoa(os.Getuid()) + "/systemd/private"
+	conn, err := net.DialUnix("unix", nil, &net.UnixAddr{Name: path, Net: "unix"})
+	if err != nil {
+		return ""
+	}
+	defer conn.Close()
+	raw, err := conn.SyscallConn()
+	if err != nil {
+		return ""
+	}
+	var peer *unix.Ucred
+	if err := raw.Control(func(fd uintptr) { peer, _ = unix.GetsockoptUcred(int(fd), unix.SOL_SOCKET, unix.SO_PEERCRED) }); err != nil || peer == nil || peer.Uid != uint32(os.Getuid()) {
+		return ""
+	}
+	group, err := processGroup(strconv.Itoa(int(peer.Pid)))
+	if err != nil || !contained(origin, group) {
+		return ""
+	}
+	return manager
+}
+
+func contained(parent, path string) bool {
+	return parent == path || strings.HasPrefix(path, parent+"/")
+}
+
+func managerScope(image, manager, origin string) error {
+	cmd := exec.Command(manager, "--user", "--scope", "--quiet", "--collect", "--property=TasksMax=256", "--property=MemoryMax=512M", "--", image, "--launch-native")
+	cmd.Stdin, cmd.Stderr = os.Stdin, os.Stderr
+	cmd.Dir = "/"
+	cmd.SysProcAttr = &syscall.SysProcAttr{Pdeathsig: syscall.SIGKILL}
+	cmd.Env = []string{"XDG_RUNTIME_DIR=/run/user/" + strconv.Itoa(os.Getuid()), "PW_SERVICE_RESOURCE_PARENT=" + origin}
+	return cmd.Run()
+}
+
+// Verify confirms that the kernel placed the controller inside its granted resource domain.
+func Verify() error {
+	group, err := processGroup("self")
+	if err != nil {
+		return err
+	}
+	if parent := os.Getenv("PW_SERVICE_RESOURCE_PARENT"); parent != "" && !contained(parent, group) {
+		return errors.New("private service left its resource domain")
+	}
+	for file, max := range limits() {
+		data, err := os.ReadFile(filepath.Join(group, file))
+		if err != nil {
+			return err
+		}
+		limit, err := strconv.ParseInt(strings.TrimSpace(string(data)), 10, 64)
+		if err != nil || limit <= 0 || limit > max {
+			return fmt.Errorf("invalid private service %s limit", file)
+		}
+	}
+	return nil
+}

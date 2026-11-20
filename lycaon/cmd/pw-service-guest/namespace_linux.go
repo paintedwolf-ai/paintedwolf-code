@@ -10,7 +10,7 @@ import (
 	"runtime"
 	"syscall"
 
-	"github.com/lycaon/lycaon/internal/launchguard/servicescope"
+	"github.com/lycaon/lycaon/internal/confine/privateguesthost/linuxruntime"
 	"github.com/lycaon/lycaon/internal/serviceguest"
 	"golang.org/x/sys/unix"
 )
@@ -24,7 +24,7 @@ func runNative(mode string) error {
 		if err != nil {
 			return err
 		}
-		return servicescope.Acquire(image)
+		return linuxruntime.Acquire(image)
 	}
 	if mode == "--launch-native" {
 		return launchNamespace()
@@ -69,7 +69,7 @@ func launchNamespace() error {
 		}
 	}
 
-	if err := servicescope.Verify(); err != nil {
+	if err := linuxruntime.Verify(); err != nil {
 		return err
 	}
 	image, err := os.Executable()

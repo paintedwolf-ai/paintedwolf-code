@@ -5,12 +5,10 @@ package launchguard
 import (
 	"errors"
 	"os"
-	"path/filepath"
 	"syscall"
 	"unsafe"
 
 	"github.com/lycaon/lycaon/internal/launchbroker"
-	"github.com/lycaon/lycaon/internal/launchguard/servicescope"
 	"golang.org/x/sys/unix"
 )
 
@@ -59,6 +57,10 @@ func runBrokerAgent(frame, broker, ready *os.File) error {
 		_ = broker.Close()
 		return err
 	}
+	if err := sealBrokerAgentIdentity(spec); err != nil {
+		_ = broker.Close()
+		return err
+	}
 	if err := initialUserNamespace(); err != nil {
 		_ = broker.Close()
 		return err
@@ -66,17 +68,6 @@ func runBrokerAgent(frame, broker, ready *os.File) error {
 	if peer, err := launchbroker.CheckSocket(int(broker.Fd())); err != nil || peer.Uid != trustedOwner || int(peer.Pid) != spec.SupervisorPID {
 		_ = broker.Close()
 		return errors.New("broker agent socket is not the launch supervisor")
-	}
-	if os.Geteuid() == 0 {
-		image := filepath.Join(spec.Generation.LogicalInstallRoot, "engine-root", "service-guest", "rootfs", "init")
-		if file, err := openRootControlled(image, false); err == nil {
-			_ = file.Close()
-			_ = servicescope.DelegateForBroker(int(spec.UID))
-		}
-	}
-	if err := sealBrokerAgentIdentity(spec); err != nil {
-		_ = broker.Close()
-		return err
 	}
 	unix.CloseOnExec(int(broker.Fd()))
 	if ready == nil {

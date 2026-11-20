@@ -5,8 +5,13 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/confine/privateguesthost/linuxruntime"
 	"io"
 	"os"
+	"path/filepath"
+	"slices"
+	"strings"
+	"time"
 
 	"github.com/lycaon/lycaon/internal/serviceguest"
 	"golang.org/x/sys/unix"
@@ -45,6 +50,13 @@ func run() error {
 }
 
 func hostChannel() (*os.File, error) {
+	cmdline, err := os.ReadFile("/proc/cmdline")
+	if err != nil {
+		return nil, err
+	}
+	if slices.Contains(strings.Fields(string(cmdline)), linuxruntime.ConsoleArgument) {
+		return privateConsole()
+	}
 	fd, err := unix.Socket(unix.AF_VSOCK, unix.SOCK_STREAM|unix.SOCK_CLOEXEC, 0)
 	if err != nil {
 		return nil, err
@@ -68,5 +80,28 @@ func hostChannel() (*os.File, error) {
 			return os.NewFile(uintptr(peer), "private host channel"), nil
 		}
 		_ = unix.Close(peer)
+	}
+}
+
+func privateConsole() (*os.File, error) {
+	deadline := time.Now().Add(15 * time.Second)
+	for {
+		entries, err := os.ReadDir("/sys/class/virtio-ports")
+		if err != nil && !errors.Is(err, os.ErrNotExist) {
+			return nil, err
+		}
+		for _, entry := range entries {
+			name, err := os.ReadFile(filepath.Join("/sys/class/virtio-ports", entry.Name(), "name"))
+			if err != nil {
+				return nil, err
+			}
+			if strings.TrimSpace(string(name)) == linuxruntime.ConsoleName {
+				return os.OpenFile(filepath.Join("/dev", entry.Name()), os.O_RDWR|unix.O_NOCTTY, 0)
+			}
+		}
+		if time.Now().After(deadline) {
+			return nil, errors.New("private controller port unavailable")
+		}
+		time.Sleep(20 * time.Millisecond)
 	}
 }
