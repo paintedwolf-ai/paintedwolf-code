@@ -73,7 +73,7 @@ func MakeScratch(ctx context.Context, pattern string) (string, error) {
 	launch, _ := AgentLaunchFrom(ctx)
 	root := launch.Workspace.Path()
 	if root == "" && plan.Kind == exec.LaunchAgentCommand {
-		return "", errors.New("Git operation workspace unavailable")
+		return "", errors.New("git operation workspace unavailable")
 	}
 	return os.MkdirTemp(root, pattern)
 }
