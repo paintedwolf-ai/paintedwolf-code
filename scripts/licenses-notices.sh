@@ -124,7 +124,8 @@ if [[ "${GOOS:-$(go env GOOS)}" == darwin ]]; then
   GOOS=linux CGO_ENABLED=0 audit_go guest ./cmd/pw-service-guest
   LC_ALL=C sort -u "${TMP}/go.csv" "${TMP}/guest.csv" >"${TMP}/combined.csv"
   mv "${TMP}/combined.csv" "${TMP}/go.csv"
-  cp -R "${TMP}/guest-save/." "${TMP}/go-save/"
+  # Modules shared by the host and guest already have a saved license.
+  cp -Rn "${TMP}/guest-save/." "${TMP}/go-save/"
 fi
 
 
