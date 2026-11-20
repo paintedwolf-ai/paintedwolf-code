@@ -77,9 +77,9 @@ func TestHistoricalEvidenceRetainsUntrustedExposureAfterReload(t *testing.T) {
 	if !untrusted {
 		t.Fatal("retrieval did not record untrusted-content exposure")
 	}
-	testutil.FailErr(t, "replace path binding", markSuperseded(ctx, store.core.queries.queries, sess.ID, "web#1", "read#1"))
+	testutil.FailErr(t, "replace path binding", markSuperseded(ctx, store.core.queries, sess.ID, "web#1", "read#1"))
 	loaded := NewSQL(db)
-	untrusted, err = loaded.SessionUntrustedContentResult(ctx, sess.ID)
+	untrusted, err = loaded.Evidence.SessionUntrustedContentResult(ctx, sess.ID)
 	testutil.FailErr(t, "reload exposure", err)
 	if !untrusted {
 		t.Fatal("supersession erased historical untrusted-content exposure")

@@ -195,7 +195,7 @@ func TestSyntaxOverrideFeedbackRecordsExplicitChoice(t *testing.T) {
 
 // ordStoreFixture binds the repository to one fresh session.
 type ordStoreFixture struct {
-	store     Store
+	store     *store.Repositories
 	sessionID string
 }
 

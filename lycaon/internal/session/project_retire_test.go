@@ -124,9 +124,9 @@ func TestChatDeleteDisposesItsResourceScope(t *testing.T) {
 		return nil
 	}))
 	ctx := context.Background()
-	kept, err := st.Create(ctx, api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
+	kept, err := st.Sessions.Create(ctx, api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create kept chat", err)
-	deleted, err := st.Create(ctx, api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
+	deleted, err := st.Sessions.Create(ctx, api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create deleted chat", err)
 
 	testutil.FailErr(t, "delete chat", mgr.Chats.Delete(ctx, deleted.ID))
@@ -134,10 +134,10 @@ func TestChatDeleteDisposesItsResourceScope(t *testing.T) {
 	if len(disposed) != 1 || disposed[0] != deleted.ID {
 		t.Fatalf("disposed scopes = %v, want [%s]", disposed, deleted.ID)
 	}
-	if _, err := st.Get(ctx, deleted.ID); !errors.Is(err, store.ErrSessionNotFound) {
+	if _, err := st.Sessions.Get(ctx, deleted.ID); !errors.Is(err, store.ErrSessionNotFound) {
 		t.Fatalf("deleted chat lookup err = %v, want ErrSessionNotFound", err)
 	}
-	if _, err := st.Get(ctx, kept.ID); err != nil {
+	if _, err := st.Sessions.Get(ctx, kept.ID); err != nil {
 		t.Fatalf("kept chat lookup: %v", err)
 	}
 }

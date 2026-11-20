@@ -97,6 +97,11 @@ func (s *Repositories) SetEventOutbox(outbox *eventoutbox.Outbox) {
 	s.core.outbox = outbox
 }
 
+// MutationEventsOutboxed reports whether session mutations commit events through the outbox.
+func (s *Repositories) MutationEventsOutboxed() bool {
+	return s != nil && s.core != nil && s.core.outbox != nil
+}
+
 // SetArtifactRecords lets evidence commits stamp handles onto artifact rows.
 func (s *Repositories) SetArtifactRecords(records *visual.Records) {
 	s.core.artifacts = records

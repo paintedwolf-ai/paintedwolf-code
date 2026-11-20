@@ -73,7 +73,7 @@ func FuzzScreenBytesRedactsAcrossChunkSplits(f *testing.F) {
 		}
 		overlap := referenceContextBytes + int(profile%64)
 		window := overlap + 1 + int(profile>>6)
-		m := NewInertMatcher()
+		m := &Matcher{}
 		m.SetScreenWindow(window, overlap)
 		m.SetHarvestSource(func(context.Context) []HarvestedValue {
 			return []HarvestedValue{managedValue(secret, testReference)}

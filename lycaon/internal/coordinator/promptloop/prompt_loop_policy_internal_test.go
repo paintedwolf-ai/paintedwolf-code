@@ -198,7 +198,7 @@ func TestBuildTurnRequestSendsOnlyTrimmedFunctionRoots(t *testing.T) {
 			if profile != prompts.CoordinatorProfileID {
 				sess.ParentSessionID = "parent"
 			}
-			turn, err := loop.Model.buildTurnRequest(t.Context(), sess, sess.ID, history, profile, "inspect", 0, 20, false, &promptLoopTurnState{})
+			turn, err := loop.Model.buildTurnRequest(t.Context(), sess, sess.ID, history, profile, 0, 20, false, &promptLoopTurnState{})
 			testutil.FailErr(t, "build provider request", err)
 			if len(turn.Req.Tools) == 0 {
 				t.Fatal("request offered no tools")

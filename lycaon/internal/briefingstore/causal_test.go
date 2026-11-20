@@ -18,7 +18,6 @@ import (
 const workerRunA = "11111111-1111-4111-8111-111111111111"
 
 type sessionWriter interface {
-	Create(context.Context, api.CreateSessionRequest, string) (*api.Session, error)
 	AppendMessages(context.Context, string, ...api.Message) error
 }
 
@@ -31,7 +30,7 @@ func TestActionCause(t *testing.T) {
 	_, err = database.ExecContext(t.Context(), `INSERT INTO worker_jobs (id, project_id, child_session_id, agent_type, status, prompt, brief, created_at)
 		VALUES (?, ?, ?, 'repo-researcher', 'complete', 'fixture', 'fixture', ?)`, workerRunA, testdbseed.DefaultProjectID, session.ID, time.Now().UTC().Format(time.RFC3339Nano))
 	testutil.FailErr(t, "insert worker run", err)
-	assertActionCause(t, sessions, NewCausal(database), session.ID)
+	assertActionCause(t, sessions.Transcript, NewCausal(database), session.ID)
 }
 
 func call(id string) []api.ToolCall { return []api.ToolCall{{ID: id, Name: "command"}} }

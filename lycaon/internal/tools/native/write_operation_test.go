@@ -39,11 +39,10 @@ func TestWriteInterfacesShareNativeOwnerAndReview(t *testing.T) {
 			if structured {
 				_, err = registry.Run(t.Context(), "write", map[string]any{"path": "AGENTS.md", "content": "after\n"}, tctx)
 			} else {
-				binding := commandprogram.Binding[WriteInput, WriteResult]{Definition: definition.Operation, InvokeOwner: func(ctx context.Context, _ toolcontract.OperationInvocation, input WriteInput) (WriteResult, error) {
-					return write.Apply(ctx, input, tctx)
-				}}
 				invocation := toolcontract.OperationInvocation{Kind: toolcontract.ProgramChildInvocation, Identity: toolcontract.ExecutionIdentity{ProgramID: "program", NodeID: "node", ExecutionID: "child"}, ActorID: "actor", SessionID: "test-session", Scope: toolcontract.OperationScope{Kind: toolcontract.ProjectOperationScope, ProjectID: "project"}, SourceUnitID: "source", Span: toolcontract.SourceSpan{Line: 1, Column: 1}, CatalogDigest: toolcontract.LanguageCatalogDigest()}
-				_, err = commandprogram.Invoke(t.Context(), commandprogram.Offer(definition.Operation), binding, invocation, WriteInput{Path: "AGENTS.md", Content: "after\n"})
+				if err = commandprogram.Offer(definition.Operation).Validate(definition.Operation, invocation); err == nil {
+					_, err = write.Apply(t.Context(), WriteInput{Path: "AGENTS.md", Content: "after\n"}, tctx)
+				}
 			}
 			if !errors.Is(err, refusal) || reviews != 1 {
 				t.Fatalf("review=%d err=%v", reviews, err)

@@ -131,7 +131,7 @@ func TestAgesSurviveCompactionAndRestartInTheStore_ACEXEC04(t *testing.T) {
 			tool(receiptMessage(receiptSpec{batch: id, call: "call-" + id, tool: "read", digest: id}))))
 	}
 	for age := 1; age <= MaxRejectedOperationStepAge; age++ {
-		appendBatch(st, age)
+		appendBatch(st.Transcript, age)
 		rows, err := st.Transcript.GetMessages(t.Context(), sess.ID)
 		testutil.FailErr(t, "read canonical", err)
 		last := rows[len(rows)-1]

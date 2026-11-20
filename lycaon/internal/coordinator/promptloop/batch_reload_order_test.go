@@ -20,13 +20,13 @@ func TestParallelBatchLiveHistoryMatchesReload(t *testing.T) {
 	mem := storetest.New(t, testdbseed.DefaultProjectID)
 	deps := StoreDeps(mem)
 	deps.Tools.CommitEvidenceToolResult = func(ctx context.Context, sessionID string, sess *api.Session, toolName string, args map[string]any, content, artifactID string) (string, string, error) {
-		return mem.CommitVisualEvidenceToolResult(ctx, sessionID, sess.WorkspacePath, toolName, args, content, artifactID)
+		return mem.Evidence.CommitVisualEvidenceToolResult(ctx, sessionID, sess.WorkspacePath, toolName, args, content, artifactID)
 	}
 	loop := NewPromptLoopForTest(deps)
-	sess, err := mem.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
+	sess, err := mem.Sessions.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
 	prompt := api.Message{ID: "prompt", Role: api.MessageRoleUser, Content: "survey"}
-	testutil.FailErr(t, "append prompt", mem.AppendMessages(ctx, sess.ID, prompt))
+	testutil.FailErr(t, "append prompt", mem.Transcript.AppendMessages(ctx, sess.ID, prompt))
 
 	paths := []string{"a.go", "b.go", "c.go"}
 	calls := make([]api.ToolCall, len(paths))
@@ -47,7 +47,7 @@ func TestParallelBatchLiveHistoryMatchesReload(t *testing.T) {
 	}
 	testutil.FailErr(t, "finish batch", loop.Batch.finishParallelToolOutcomes(ctx, commit, outcomes))
 
-	reloaded, err := mem.GetMessages(ctx, sess.ID)
+	reloaded, err := mem.Transcript.GetMessages(ctx, sess.ID)
 	testutil.FailErr(t, "reload", err)
 	ids := func(history []api.Message) []string {
 		out := make([]string, len(history))
