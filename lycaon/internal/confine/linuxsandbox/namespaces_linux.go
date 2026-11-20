@@ -10,19 +10,11 @@ import (
 	"golang.org/x/sys/unix"
 )
 
-// Inside identifies the namespace relay before it replaces the inherited proc mount.
+// Inside identifies the PID 1 relay in the workspace's private user namespace.
 func Inside(plan Plan) bool {
-	if os.Getpid() != 1 {
-		return false
-	}
-	for _, kind := range []string{NamespaceUser, NamespaceMount} {
-		host := plan.Attest.HostNamespaces[kind]
-		own, err := os.Readlink("/proc/self/ns/" + kind)
-		if err != nil || host == "" || own == host {
-			return false
-		}
-	}
-	return true
+	host := plan.Attest.HostNamespaces[NamespaceUser]
+	own, err := os.Readlink("/proc/self/ns/" + NamespaceUser)
+	return os.Getpid() == 1 && err == nil && host != "" && own != host
 }
 
 // mountProc gives the new PID namespace its own process table first, so any

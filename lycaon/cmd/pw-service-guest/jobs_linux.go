@@ -135,8 +135,8 @@ func (s *jobs) launch(ctx context.Context, j *job, argv []string, input []byte) 
 		attrs.UseCgroupFD = true
 		attrs.CgroupFD = int(j.group.Fd())
 	} else {
-		// The kernel reclaims the job's descendants when its namespace init exits.
-		attrs.Cloneflags = unix.CLONE_NEWUSER | unix.CLONE_NEWPID
+		// The relay creates and reaps the workload PID namespace.
+		attrs.Cloneflags = unix.CLONE_NEWUSER
 		attrs.UidMappings = []syscall.SysProcIDMap{{ContainerID: workUID, HostID: 0, Size: 1}}
 		attrs.GidMappings = []syscall.SysProcIDMap{{ContainerID: workGID, HostID: 0, Size: 1}}
 	}
