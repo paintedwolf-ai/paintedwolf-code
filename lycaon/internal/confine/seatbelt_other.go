@@ -2,7 +2,12 @@
 
 package confine
 
-import "fmt"
+import (
+	"context"
+	"fmt"
+
+	"github.com/lycaon/lycaon/internal/serviceguest"
+)
 
 // Available reports whether per-command confinement is enforced.
 func Available() bool { return false }
@@ -14,4 +19,9 @@ func renderProfile(Confinement) (string, error) {
 // applyAndExec fails on unsupported platforms.
 func applyAndExec([]byte, string, []string) error {
 	return fmt.Errorf("per-command sandbox not implemented on this platform")
+}
+
+// OpenPrivateGuest reports an unavailable private service runtime.
+func OpenPrivateGuest(context.Context) (*serviceguest.Client, error) {
+	return nil, fmt.Errorf("private service runtime is unavailable on this platform")
 }
