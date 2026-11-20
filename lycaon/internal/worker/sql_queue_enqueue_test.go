@@ -51,7 +51,6 @@ func TestSQLQueuePublishEnqueuedWakesClaimer(t *testing.T) {
 	}
 }
 
-
 func TestSQLQueuePersistsOutcomeDeliveryAcknowledgement(t *testing.T) {
 	database := testdbfixture.Open(t, "store.db")
 	testdbseed.InsertSession(t, database, "parent-1", testdbseed.DefaultProjectID)

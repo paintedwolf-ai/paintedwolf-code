@@ -9,7 +9,6 @@ import (
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 )
 
-
 func TestCloudflareWorkersAIReportsToolCallCapability(t *testing.T) {
 	t.Parallel()
 	catalog := liveCatalogForShipIDs(t, "cloudflare-workers-ai")

@@ -9,9 +9,9 @@ import (
 	"time"
 
 	"github.com/lycaon/lycaon/internal/db"
-	"github.com/lycaon/lycaon/internal/timelayout"
 	"github.com/lycaon/lycaon/internal/projectignore"
 	scanignore "github.com/lycaon/lycaon/internal/scan/ignores"
+	"github.com/lycaon/lycaon/internal/timelayout"
 )
 
 // SyncIgnores refreshes cached verdicts when the declaration digest changes.
