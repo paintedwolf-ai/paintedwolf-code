@@ -60,7 +60,7 @@ func TestGuestNamespaceActivation(t *testing.T) {
 	cmd.Env = []string{"PW_GUEST_TEST_NAMESPACE=1"}
 	var output bytes.Buffer
 	cmd.Stdin, cmd.Stdout, cmd.Stderr = child, &output, &output
-	if directory := os.Getenv("PW_GO_CHILD_COVERDIR"); directory != "" {
+	if directory := guestTestCoverageDir(); directory != "" {
 		counters, err := os.Open(directory)
 		testutil.FailErr(t, "open child counter directory", err)
 		defer counters.Close()
@@ -120,7 +120,7 @@ func TestGuestCLIRequiresActivation(t *testing.T) {
 	for mode, want := range map[string]int{"--unexpected": 2, "--acquire-native": 1, "--launch-native": 1, "--enter-native": 1} {
 		cmd := exec.CommandContext(t.Context(), self, "-test.run=^TestGuestCLIRequiresActivation$")
 		cmd.Env = []string{"PW_GUEST_TEST_MODE=" + mode}
-		if counters := os.Getenv("PW_GO_CHILD_COVERDIR"); counters != "" {
+		if counters := guestTestCoverageDir(); counters != "" {
 			cmd.Env = append(cmd.Env, "GOCOVERDIR="+counters)
 		}
 		var exit *exec.ExitError
@@ -146,4 +146,14 @@ func TestGuestSelectsOneAvailableCPU(t *testing.T) {
 			t.Fatalf("selected CPU outside inherited affinity: %v", after)
 		}
 	}
+}
+
+func guestTestCoverageDir() string {
+	if testing.CoverMode() == "" {
+		return ""
+	}
+	if dir := os.Getenv("PW_GO_CHILD_COVERDIR"); dir != "" {
+		return dir
+	}
+	return os.Getenv("GOCOVERDIR")
 }
