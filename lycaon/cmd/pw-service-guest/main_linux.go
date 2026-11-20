@@ -13,7 +13,14 @@ import (
 )
 
 func main() {
-	if os.Getpid() != 1 || os.Geteuid() != 0 {
+	if len(os.Args) == 2 && (os.Args[1] == "--launch-native" || os.Args[1] == "--enter-native") {
+		if err := runNative(os.Args[1]); err != nil && !errors.Is(err, io.EOF) {
+			fmt.Fprintln(os.Stderr, "private service environment:", err)
+			os.Exit(1)
+		}
+		return
+	}
+	if len(os.Args) != 1 || os.Getpid() != 1 || os.Geteuid() != 0 {
 		fmt.Fprintln(os.Stderr, "private service controller requires guest PID 1")
 		os.Exit(2)
 	}

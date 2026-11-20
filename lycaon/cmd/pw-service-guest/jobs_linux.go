@@ -84,19 +84,21 @@ func (s *jobs) Start(ctx context.Context, id string, argv []string, input []byte
 			break
 		}
 	}
-	path := filepath.Join(s.config.groups, id)
-	if err := os.Mkdir(path, 0700); err != nil {
-		return serviceguest.Job{}, err
+	j := &job{id: id, done: make(chan struct{})}
+	if s.config.groups != "" {
+		path := filepath.Join(s.config.groups, id)
+		if err := os.Mkdir(path, 0700); err != nil {
+			return serviceguest.Job{}, err
+		}
+		file, err := os.Open(path)
+		if err != nil {
+			_ = os.Remove(path)
+			return serviceguest.Job{}, err
+		}
+		j.group = file
 	}
-	group, err := os.Open(path)
-	if err != nil {
-		_ = os.Remove(path)
-		return serviceguest.Job{}, err
-	}
-	j := &job{id: id, group: group, done: make(chan struct{})}
 	if err := s.launch(ctx, j, argv, input); err != nil {
-		_ = group.Close()
-		_ = os.Remove(path)
+		j.releaseGroup()
 		return serviceguest.Job{}, err
 	}
 	s.records[id] = j
@@ -109,12 +111,10 @@ func (s *jobs) Start(ctx context.Context, id string, argv []string, input []byte
 		}
 		j.mu.Lock()
 		_ = j.killGroup()
-		_ = j.group.Close()
-		j.group = nil
+		j.releaseGroup()
 		j.result.ExitCode = code
 		close(j.done)
 		j.mu.Unlock()
-		_ = os.Remove(path)
 	}()
 	return j.snapshot(), nil
 }
@@ -131,7 +131,17 @@ func (s *jobs) launch(ctx context.Context, j *job, argv []string, input []byte) 
 	cmd.Dir = s.config.scratch
 	cmd.Env = []string{"PATH=/usr/local/bin:/usr/bin:/bin", "HOME=/work/home", "TMPDIR=/work/tmp", "TEMP=/work/tmp", "TMP=/work/tmp", "XDG_CACHE_HOME=/work/cache", "XDG_DATA_HOME=/work/data", "LANG=C", "LC_ALL=C"}
 	cmd.Stdout, cmd.Stderr = &j.stdout, &j.stderr
-	cmd.SysProcAttr = &syscall.SysProcAttr{Credential: &syscall.Credential{Uid: workUID, Gid: workGID}, Setpgid: true, UseCgroupFD: true, CgroupFD: int(j.group.Fd())}
+	attrs := &syscall.SysProcAttr{Credential: &syscall.Credential{Uid: workUID, Gid: workGID, NoSetGroups: true}, Setpgid: true, Pdeathsig: syscall.SIGKILL}
+	if j.group != nil {
+		attrs.UseCgroupFD = true
+		attrs.CgroupFD = int(j.group.Fd())
+	} else {
+		// The kernel reclaims the job's descendants when its namespace init exits.
+		attrs.Cloneflags = unix.CLONE_NEWUSER | unix.CLONE_NEWPID
+		attrs.UidMappings = []syscall.SysProcIDMap{{ContainerID: workUID, HostID: 0, Size: 1}}
+		attrs.GidMappings = []syscall.SysProcIDMap{{ContainerID: workGID, HostID: 0, Size: 1}}
+	}
+	cmd.SysProcAttr = attrs
 	if err := cmd.Start(); err != nil {
 		return err
 	}
@@ -139,8 +149,23 @@ func (s *jobs) launch(ctx context.Context, j *job, argv []string, input []byte) 
 	return nil
 }
 
+func (j *job) releaseGroup() {
+	if j.group != nil {
+		path := j.group.Name()
+		_ = j.group.Close()
+		j.group = nil
+		_ = os.Remove(path)
+	}
+}
+
 func (j *job) killGroup() error {
 	if j.group == nil {
+		if j.cmd != nil {
+			err := j.cmd.Process.Kill()
+			if !errors.Is(err, os.ErrProcessDone) {
+				return err
+			}
+		}
 		return nil
 	}
 	fd, err := unix.Openat(int(j.group.Fd()), "cgroup.kill", unix.O_WRONLY|unix.O_CLOEXEC|unix.O_NOFOLLOW, 0)

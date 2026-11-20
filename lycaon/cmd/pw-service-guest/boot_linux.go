@@ -44,31 +44,9 @@ func prepareVM() (configuration, error) {
 	if err := loadBootModules(); err != nil {
 		return configuration{}, err
 	}
-	for key, value := range map[string]string{"HOME": workBase, "PATH": "/usr/local/bin:/usr/bin:/bin", "LANG": "C", "LC_ALL": "C"} {
-		if err := os.Setenv(key, value); err != nil {
-			return configuration{}, err
-		}
-	}
-	state, err := configdir.UserConfigDir()
+	scratch, err := prepareWork(workUID)
 	if err != nil {
 		return configuration{}, err
-	}
-	scratch := enginepaths.SessionScratchUnder(state, "session")
-	for _, p := range []string{filepath.Dir(state), state, filepath.Dir(scratch), scratch, filepath.Join(scratch, "home"), filepath.Join(scratch, "tmp"), filepath.Join(scratch, "cache"), filepath.Join(scratch, "data")} {
-		if err := os.MkdirAll(p, 0700); err != nil {
-			return configuration{}, err
-		}
-		if err := os.Chown(p, workUID, workGID); err != nil {
-			return configuration{}, err
-		}
-	}
-	if err := os.Symlink(scratch, "/work"); err != nil {
-		return configuration{}, fmt.Errorf("create guest work path: %w", err)
-	}
-	for key, value := range map[string]string{"XDG_CACHE_HOME": filepath.Join(scratch, "cache"), "XDG_DATA_HOME": filepath.Join(scratch, "data")} {
-		if err := os.Setenv(key, value); err != nil {
-			return configuration{}, err
-		}
 	}
 	if err := os.WriteFile("/sys/fs/cgroup/cgroup.subtree_control", []byte("+cpu +memory +pids"), 0600); err != nil {
 		return configuration{}, err
@@ -108,4 +86,34 @@ func loadBootModules() error {
 		}
 	}
 	return nil
+}
+
+func prepareWork(uid int) (string, error) {
+	for key, value := range map[string]string{"HOME": workBase, "PATH": "/usr/local/bin:/usr/bin:/bin", "LANG": "C", "LC_ALL": "C"} {
+		if err := os.Setenv(key, value); err != nil {
+			return "", err
+		}
+	}
+	state, err := configdir.UserConfigDir()
+	if err != nil {
+		return "", err
+	}
+	scratch := enginepaths.SessionScratchUnder(state, "session")
+	for _, p := range []string{filepath.Dir(state), state, filepath.Dir(scratch), scratch, filepath.Join(scratch, "home"), filepath.Join(scratch, "tmp"), filepath.Join(scratch, "cache"), filepath.Join(scratch, "data")} {
+		if err := os.MkdirAll(p, 0700); err != nil {
+			return "", err
+		}
+		if err := os.Chown(p, uid, uid); err != nil {
+			return "", err
+		}
+	}
+	if target, err := os.Readlink("/work"); err != nil || target != scratch {
+		return "", errors.New("invalid guest work path")
+	}
+	for key, value := range map[string]string{"XDG_CACHE_HOME": filepath.Join(scratch, "cache"), "XDG_DATA_HOME": filepath.Join(scratch, "data")} {
+		if err := os.Setenv(key, value); err != nil {
+			return "", err
+		}
+	}
+	return scratch, nil
 }
