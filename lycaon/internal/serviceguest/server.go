@@ -68,7 +68,7 @@ func Serve(ctx context.Context, channel io.ReadWriteCloser, executor Executor) e
 			<-limit
 		}
 		id, err := hex.DecodeString(req.ID)
-		if err != nil || len(id) != 16 || req.ID != hex.EncodeToString(id) || (req.Op == "start") != validArgv(req.Argv) || len(req.Input) > MaxInput || (req.Op != "start" && (len(req.Argv) > 0 || len(req.Input) > 0)) {
+		if err != nil || len(id) != 16 || req.ID != hex.EncodeToString(id) || (req.Op == "start") != ValidArgv(req.Argv) || len(req.Input) > MaxInput || (req.Op != "start" && (len(req.Argv) > 0 || len(req.Input) > 0)) {
 			respond(Job{}, errors.New("invalid private service request"))
 			continue
 		}

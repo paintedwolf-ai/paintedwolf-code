@@ -1,4 +1,4 @@
-// Package serviceguest runs private service jobs over one VM-owned connection.
+// Package serviceguest runs private service jobs over a retained session channel.
 package serviceguest
 
 import (
@@ -61,7 +61,8 @@ type response struct {
 	Error     string `json:"error,omitempty"`
 }
 
-func validArgv(argv []string) bool {
+// ValidArgv checks the executable and argument budget before starting a job.
+func ValidArgv(argv []string) bool {
 	if len(argv) == 0 || len(argv) > 256 || argv[0] == "" {
 		return false
 	}

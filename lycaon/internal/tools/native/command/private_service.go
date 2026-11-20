@@ -145,7 +145,7 @@ func (s *privateServiceSession) execute(ctx context.Context, req commandprogram.
 	if len(args) == 2 && args[1] == "release" {
 		return s.releaseIdle()
 	}
-	if len(args) < 3 || args[1] != "--" || args[2] == "" {
+	if len(args) < 3 || args[1] != "--" || !serviceguest.ValidArgv(args[2:]) {
 		const code = "COMMAND_OPERAND_INVALID"
 		return refusedResult(code), toolrejection.RejectInvalidArguments(code, map[string]any{"command": "private-service", "expected": "-- PROGRAM [ARG ...]"})
 	}

@@ -111,6 +111,7 @@ func TestPrivateServiceRejectsInvalidInputBeforeAcquiringRuntime(t *testing.T) {
 		code  string
 	}{
 		{"missing executable", commandprogram.Fields{{Value: "private-service"}, {Value: "--"}}, "", "COMMAND_OPERAND_INVALID"},
+		{"oversized argument", commandprogram.Fields{{Value: "private-service"}, {Value: "--"}, {Value: strings.Repeat("p", 1<<17)}}, "", "COMMAND_OPERAND_INVALID"},
 		{"input exceeds limit", commandprogram.Fields{{Value: "private-service"}, {Value: "--"}, {Value: "program"}}, strings.Repeat("x", serviceguest.MaxInput+1), "COMMAND_LIMIT_EXCEEDED"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {

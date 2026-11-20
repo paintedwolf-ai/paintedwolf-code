@@ -119,7 +119,7 @@ func (c *Client) Start(ctx context.Context, argv []string) (Job, error) {
 }
 
 func (c *Client) start(ctx context.Context, argv []string, input []byte) (Job, error) {
-	if !validArgv(argv) || len(input) > MaxInput {
+	if !ValidArgv(argv) || len(input) > MaxInput {
 		return Job{}, errors.New("invalid private service arguments")
 	}
 	var id [16]byte
