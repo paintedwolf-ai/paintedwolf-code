@@ -12,25 +12,25 @@ import (
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 )
 
-// WriteRootsForBoundary and BuildProfile share the same write-root union.
 func TestInvariantWriteRootSSOTSharedByGateAndConfine(t *testing.T) {
 	t.Setenv("LYCAON_CONFIG_DIR", "/opt/paintedwolf-fixture-state")
-	proj := t.TempDir()
-	writeRoots, err := confine.WriteRootsForBoundary("", []string{proj}, nil, "")
+	proj, scratch := t.TempDir(), t.TempDir()
+	writeRoots, err := confine.WriteRootsForBoundary("", []string{proj}, nil, scratch)
 	contractcheck.FailErr(t, "admit write roots", err)
 	if len(writeRoots) == 0 {
 		t.Fatal("WriteRootsForBoundary returned no roots")
 	}
 
-	// /tmp survives EvalSymlinks (→ /private/tmp on darwin) and is in the union.
-	if !confine.PathWithinRoots("/tmp/scratch", writeRoots) {
-		t.Fatalf("/tmp/scratch must be within write roots: %v", writeRoots)
+	for _, root := range []string{proj, scratch} {
+		if !confine.PathWithinRoots(filepath.Join(root, "result"), writeRoots) {
+			t.Fatalf("expected %q to admit writes: %v", root, writeRoots)
+		}
 	}
-	// A path outside every write root is not.
-	if confine.PathWithinRoots("/etc/lycaon-probe", writeRoots) {
-		t.Fatalf("/etc must not be within write roots: %v", writeRoots)
+	for _, outside := range []string{"/tmp/scratch", "/var/tmp/result", "/etc/lycaon-probe"} {
+		if confine.PathWithinRoots(outside, writeRoots) {
+			t.Fatalf("unexpected write authority for %q: %v", outside, writeRoots)
+		}
 	}
-
 }
 
 // Contained is stamped from DefaultConfinement onto ProposedAction.

@@ -11,7 +11,6 @@ import (
 	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/hitl"
 	"github.com/lycaon/lycaon/internal/tools/native/command"
-	"github.com/lycaon/lycaon/pkg/api"
 )
 
 func isSharedTempRoot(path string) bool {
@@ -112,11 +111,7 @@ func (reviews *sharedTempReviews) prepare(ctx context.Context, req sandboxAskReq
 	}
 	card, err := req.BuildCard()
 	if err == nil {
-		*reviews = append(*reviews, &hitl.PreparedApproval{Request: hitl.CheckpointRequest{
-			SessionID: req.InvokingSessionID, Kind: api.CheckpointKindToolApproval, ToolCallID: req.ToolCallID, ProjectID: req.ProjectID,
-			Title: card.Title, Type: hitl.DecisionTypeApprove, ProposedAction: &card.Action, ApprovalPlan: card.Plan,
-			Decision: card.Decision, ApprovalMatches: card.ApprovalMatches, ReviewKeys: []string{key},
-		}})
+		*reviews = append(*reviews, &hitl.PreparedApproval{Request: req.checkpoint(card)})
 	}
 	return sandboxAskResolution{}, err
 }

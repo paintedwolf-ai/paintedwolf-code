@@ -19,6 +19,7 @@ import (
 	"github.com/lycaon/lycaon/internal/api"
 	"github.com/lycaon/lycaon/internal/confine"
 	"github.com/lycaon/lycaon/internal/egressproxy"
+	"github.com/lycaon/lycaon/internal/enginepaths"
 	"github.com/lycaon/lycaon/internal/project"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/testutil/rootfacts"
@@ -247,19 +248,21 @@ func foreignTemporaryTree(t *testing.T) string {
 func TestConfinementIntegrityForeignTemporaryTreeWriteDenied(t *testing.T) {
 	self := requireLiveBoundary(t)
 	proj := t.TempDir()
-	c := confine.Confinement{Roots: []string{proj}}
+	state := t.TempDir()
+	t.Setenv("LYCAON_CONFIG_DIR", state)
+	scratch := enginepaths.SessionScratchUnder(state, "temp-boundary")
+	testutil.FailErr(t, "create session scratch", os.MkdirAll(scratch, 0700))
+	c := confine.Confinement{Roots: []string{proj}, SessionScratchRoot: scratch}
 
-	tmp := os.TempDir()
-	probe := filepath.Join(foreignTemporaryTree(t), "escape.txt")
-	if code := confinedEscapeExit(t, self, c, "/usr/bin/touch", probe); code == 0 {
-		t.Fatal("write under a foreign temporary subtree must be denied")
+	for _, dir := range []string{foreignTemporaryTree(t), t.TempDir()} {
+		probe := filepath.Join(dir, "escape.txt")
+		if code := confinedEscapeExit(t, self, c, "/usr/bin/touch", probe); code == 0 {
+			t.Fatalf("write outside session roots succeeded at %q", probe)
+		}
 	}
 	assertInProjectWriteOK(t, self, c, proj)
-	ownTmp := filepath.Join(tmp, "lycaon-escape-f6-own.txt")
-	_ = os.Remove(ownTmp)
-	t.Cleanup(func() { _ = os.Remove(ownTmp) })
-	if code := confinedEscapeExit(t, self, c, "/usr/bin/touch", ownTmp); code != 0 {
-		t.Fatalf("positive control: os.TempDir() write must succeed, exit=%d", code)
+	if code := confinedEscapeExit(t, self, c, "/usr/bin/touch", filepath.Join(scratch, "result")); code != 0 {
+		t.Fatalf("session scratch write exited %d", code)
 	}
 }
 

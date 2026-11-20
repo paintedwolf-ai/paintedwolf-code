@@ -91,8 +91,8 @@ func awaitSandboxAsk(ctx context.Context, req sandboxAskRequest) (sandboxAskReso
 	if err != nil {
 		return out, err
 	}
-	reviewKeys := hitl.ApprovalReviewKeys(hitl.CheckpointRequest{ReviewKeys: append(req.ReviewKeys, "sandbox:"+req.AskFamily+":"+req.Key)})
-	for _, key := range reviewKeys {
+	checkpoint := req.checkpoint(card)
+	for _, key := range checkpoint.ReviewKeys {
 		suppressed, err := req.Checkpoints.ApprovalReviewSuppressed(ctx, req.InvokingSessionID, key)
 		if err != nil {
 			return out, err
@@ -114,12 +114,6 @@ func awaitSandboxAsk(ctx context.Context, req sandboxAskRequest) (sandboxAskReso
 		return out, nil
 	}
 
-	checkpoint := hitl.CheckpointRequest{
-		SessionID: req.InvokingSessionID, Kind: api.CheckpointKindToolApproval, Title: card.Title,
-		ToolCallID: req.ToolCallID, ProjectID: req.ProjectID, Type: hitl.DecisionTypeApprove,
-		ProposedAction: &card.Action, ApprovalPlan: card.Plan, Decision: card.Decision,
-		ApprovalMatches: card.ApprovalMatches, ReviewKeys: reviewKeys,
-	}
 	if err := hitl.PrepareApproval(ctx, checkpoint); err != nil {
 		req.Gate.AbortMint(req.InvokingSessionID, req.ToolCallID)
 		return out, err
@@ -131,6 +125,16 @@ func awaitSandboxAsk(ctx context.Context, req sandboxAskRequest) (sandboxAskReso
 	}
 	req.Gate.RegisterPending(req.InvokingSessionID, req.Key, resp.CheckpointID)
 	return settleSandboxAsk(ctx, req, resp.CheckpointID, true)
+}
+
+func (req sandboxAskRequest) checkpoint(card sandboxAskCard) hitl.CheckpointRequest {
+	keys := hitl.ApprovalReviewKeys(hitl.CheckpointRequest{ReviewKeys: append(req.ReviewKeys, "sandbox:"+req.AskFamily+":"+req.Key)})
+	return hitl.CheckpointRequest{
+		SessionID: req.InvokingSessionID, Kind: api.CheckpointKindToolApproval, Title: card.Title,
+		ToolCallID: req.ToolCallID, ProjectID: req.ProjectID, Type: hitl.DecisionTypeApprove,
+		ProposedAction: &card.Action, ApprovalPlan: card.Plan, Decision: card.Decision,
+		ApprovalMatches: card.ApprovalMatches, ReviewKeys: keys,
+	}
 }
 
 // settleSandboxAsk clears the guard only for the minting request.
