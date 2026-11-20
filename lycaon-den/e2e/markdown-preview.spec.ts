@@ -6,15 +6,19 @@ import { largeMarkdownPreviewFixture, MARKDOWN_PREVIEW_TITLE } from "./markdown-
 
 modelIndependentWebE2e("large Markdown preview waits behind the retained editor and bounds mounted content", async ({ page, request }, testInfo) => {
   await page.setViewportSize({ width: 1440, height: 900 });
+  // Preparation is held until the waiting state has been inspected.
   await page.addInitScript(() => {
+    const held: (() => void)[] = [];
+    let released = false;
+    Object.assign(window, { __releasePreviewPrepare: () => { released = true; for (const send of held.splice(0)) send(); } });
     const NativeWorker = window.Worker;
     window.Worker = class extends NativeWorker {
       override postMessage(message: unknown, options?: StructuredSerializeOptions | Transferable[]) {
         const send = () => Array.isArray(options)
           ? super.postMessage(message, options)
           : super.postMessage(message, options);
-        if (typeof message === "object" && message !== null && "type" in message && message.type === "prepare") {
-          setTimeout(send, 1000);
+        if (!released && typeof message === "object" && message !== null && "type" in message && message.type === "prepare") {
+          held.push(send);
         } else send();
       }
     };
@@ -72,6 +76,7 @@ modelIndependentWebE2e("large Markdown preview waits behind the retained editor 
   await expect(retainedEditor).toHaveAttribute("data-retained", "true");
   await expect(retainedEditor).toHaveAttribute("inert", "");
   await page.screenshot({ path: path.resolve("../.task/markdown-preview-waiting-qa.png") });
+  await page.evaluate(() => (window as unknown as { __releasePreviewPrepare(): void }).__releasePreviewPrepare());
   const samples = await sampling;
   expect(samples.mounted).toBeGreaterThan(0);
   expect(samples.mounted).toBeLessThan(20);

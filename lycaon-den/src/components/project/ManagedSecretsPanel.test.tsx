@@ -1,5 +1,6 @@
 import { assertNamedControl } from "../../test/controls.ts";
 import { stubClient } from "../../test/client-fixture.ts";
+import { startElapsableClock, stopElapsableClock } from "../../test/elapse.ts";
 import { fireEvent, render, screen, waitFor } from "@solidjs/testing-library";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { LycaonClient } from "../../api/client.ts";
@@ -104,7 +105,7 @@ async function openDetail(id: string) {
 }
 
 afterEach(() => {
-  vi.useRealTimers();
+  stopElapsableClock();
   revealManagedSecret.mockReset();
   clipboard.read.mockReset();
   clipboard.read.mockResolvedValue({ readable: true, text: "" });
@@ -271,7 +272,7 @@ describe("ManagedSecretsPanel", () => {
   });
 
   it("remasks when the reveal deadline passes", async () => {
-    vi.useFakeTimers({ shouldAdvanceTime: true });
+    startElapsableClock();
     revealResolves(30);
 
     await revealValue();
@@ -302,7 +303,7 @@ describe("ManagedSecretsPanel", () => {
   });
 
   it("restarts the countdown when the value is revealed a second time", async () => {
-    vi.useFakeTimers({ shouldAdvanceTime: true });
+    startElapsableClock();
     revealResolves(30);
 
     await revealValue();
@@ -369,7 +370,7 @@ describe("ManagedSecretsPanel", () => {
   });
 
   it("keeps a copy usable after remasking and expires only its receipt", async () => {
-    vi.useFakeTimers({ shouldAdvanceTime: true });
+    startElapsableClock();
     revealResolves();
     await revealValue();
 

@@ -52,6 +52,7 @@ function Fixture() {
  onCleanup(registerOpenFilesSurfaceSink(request => { if(request.kind === "chat-content") { applyOpenFilesSurfaceRequest(request,[]); setDocument(request.document); } }));
  const getRows: LycaonClient["getChatContent"]=async (_session,_message,reference,position,signal)=>{
   setRequests(value=>value+1);
+  // injected latency: rows arrive while the reader scrolls
   await new Promise(resolve=>setTimeout(resolve,30));
   if (signal?.aborted) throw new DOMException("Canceled","AbortError");
   if (!("row" in position) && !("locate" in position)) throw new Error("Unexpected byte range read");

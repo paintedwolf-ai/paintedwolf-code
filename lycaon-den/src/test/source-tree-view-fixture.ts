@@ -1,6 +1,7 @@
 import { createSourceViewsClient } from "../api/source-views-client.ts";
 import type { ProjectRoot, SourceTreeCommand, SourceTreeRow, SourceTreeView, SourceTreeViewUpdate } from "../api/types.ts";
 import { receiveSourceViewEvent } from "../ui/paged-view/source-view-session.ts";
+import { heldLeaseExpiry } from "./source-view-lease.ts";
 
 export const TREE_ROOTS: ProjectRoot[] = [{ id: "r1", path: "/repo", label: "repo", is_primary: true,
   kind: "attached", admitted: true, admission_code: null, added_at: "2026-01-01T00:00:00Z" }];
@@ -12,6 +13,7 @@ export function treeRow(path: string, kind: "file" | "directory" = "file", expan
 /** Scripted host frames keep DOM tests independent of filesystem traversal. */
 export function treeViewFixture(initial = [treeRow(".", "directory", true), treeRow("README.md")]) {
   let id = crypto.randomUUID();
+  const expiresAt = heldLeaseExpiry();
   // The host answers an expired handle as no longer retained.
   const expired = new Set<string>();
   let rows = initial;
@@ -37,7 +39,7 @@ export function treeViewFixture(initial = [treeRow(".", "directory", true), tree
     intent_revision: `intent-${intentRevision}`, projection_revision: `projection-${revision}`,
     state: failure ? "failed" : complete ? "ready" : "preparing", extent: { rows: total, complete },
     ...(failure ? { failure: { code: "preparation_failed" as const, message: failure } } : {}),
-    expires_at: "2026-09-15T23:00:00Z", intent, loading_directories: loadingDirectories });
+    expires_at: expiresAt, intent, loading_directories: loadingDirectories });
   // Each projection revision identifies one row sequence.
   const keep = () => {
     const key = `projection-${revision}`;

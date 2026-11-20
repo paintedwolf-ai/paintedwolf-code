@@ -6,6 +6,9 @@ import { FilesTreeSession } from "./files-tree-paged-session.ts";
 import { buildPagedTreeModel, UNKNOWN_SUBTREE_END } from "./files-tree-paged-model.ts";
 import { treeLayoutRange } from "./files-tree-sticky.ts";
 import { TREE_ROOTS, treeRow, treeViewFixture } from "../../test/source-tree-view-fixture.ts";
+import { heldLeaseExpiry } from "../../test/source-view-lease.ts";
+
+const LEASE_EXPIRY = heldLeaseExpiry();
 
 vi.mock("./files-tree-intent-state.ts", () => ({ saveFilesTreeIntent: vi.fn(async () => {}) }));
 
@@ -56,7 +59,7 @@ it.each(["expand", "folder"])("recovers an expired view for %s commands", async 
       creates.push(request);
       current = { kind: "tree", id: `view-${creates.length}`, workspace_id: "workspace", roots: [], intent: request.intent,
         intent_revision: "intent", projection_revision: "projection", state: "ready",
-        extent: { rows: 0, complete: true }, loading_directories: 0, expires_at: "2026-09-16T23:00:00Z" };
+        extent: { rows: 0, complete: true }, loading_directories: 0, expires_at: LEASE_EXPIRY };
     }
     if (expired && path.includes("/views/view-1")) throw Object.assign(new Error("Expired view"), { code: "source_view_not_found" });
     if (init?.method === "POST" && path.endsWith("/apply")) expansions.push({ path, body: JSON.parse(String(init.body)) });
@@ -87,7 +90,7 @@ function scriptedHost(options: { command?: (path: string) => void } = {}) {
       const request = JSON.parse(String(init.body)) as SourceTreeViewCreate;
       const created: SourceTreeView = { kind: "tree", id: `view-${views.size + 1}`, workspace_id: "workspace", roots: [], intent: request.intent,
         intent_revision: "intent", projection_revision: "projection", state: "ready", extent: { rows: 0, complete: true },
-        loading_directories: 0, expires_at: "2026-09-16T23:00:00Z" };
+        loading_directories: 0, expires_at: LEASE_EXPIRY };
       views.set(created.id, created);
       return created as T;
     }
@@ -209,7 +212,7 @@ it("keeps a strict read in its declared coordinates while the head publishes beh
     first = false;
     declared = host.state().projection_revision;
     host.notify();
-    await new Promise(resolve => setTimeout(resolve, 20));
+    await expect.poll(() => session.state()?.projection_revision).toBe(host.state().projection_revision);
     expect(signal?.aborted).toBe(false);
   });
   const session = new FilesTreeSession(host.client, "project", "ws1", undefined, {});
@@ -240,7 +243,7 @@ it.each([false, true])("recovers failed preparation and preserves recursive disc
       current = { kind: "tree", id: `view-${creates.length}`, workspace_id: "workspace", roots: [], intent: request.intent,
         intent_revision: "intent", projection_revision: "projection", state: creates.length === 1 ? "failed" : "ready",
         failure: creates.length === 1 ? { code: "unavailable", message: "Saved expansion is unavailable." } : undefined,
-        extent: { rows: 0, complete: true }, loading_directories: 0, expires_at: "2026-09-16T23:00:00Z" };
+        extent: { rows: 0, complete: true }, loading_directories: 0, expires_at: LEASE_EXPIRY };
     }
     if (init?.method === "DELETE") released.push(path);
     return current as T;

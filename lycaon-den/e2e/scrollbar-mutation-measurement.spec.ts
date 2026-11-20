@@ -1,9 +1,38 @@
-import { expect } from "@playwright/test";
+import { expect, type Page } from "@playwright/test";
 import { modelIndependentWebE2e } from "./helpers.ts";
 
+type Probe = {
+  host: HTMLElement;
+  content: HTMLElement;
+  instance: {
+    state(): { overflowAmount: { y: number }; overflowEdge: { x: number } };
+    update(): void;
+    sleep(on: boolean): void;
+    destroy(): void;
+  };
+  counting: boolean;
+  reads: number;
+};
+
+/**
+ * Lets the layout observers deliver at a real rendering step, then runs the scrollbar's
+ * debounce on the page clock.
+ */
+async function settle(page: Page, ms: number) {
+  await page.evaluate(() => new Promise<void>((resolve) => {
+    const marker = document.createElement("div");
+    marker.style.cssText = "position:fixed;width:1px;height:1px";
+    document.body.append(marker);
+    const observer = new ResizeObserver(() => { observer.disconnect(); marker.remove(); resolve(); });
+    observer.observe(marker);
+  }));
+  await page.clock.runFor(ms);
+}
+
 modelIndependentWebE2e("scrollbar mutation bursts defer geometry and publish the final extent", async ({ page }) => {
+  await page.clock.install();
   await page.goto("/");
-  const result = await page.evaluate(async () => {
+  await page.evaluate(async () => {
     const moduleUrl = "/node_modules/overlayscrollbars/overlayscrollbars.esm.js";
     const { OverlayScrollbars } = await import(/* @vite-ignore */ moduleUrl);
     const host = document.createElement("div");
@@ -16,66 +45,94 @@ modelIndependentWebE2e("scrollbar mutation bursts defer geometry and publish the
     const instance = OverlayScrollbars({ target: host, elements: { viewport: host } }, {
       update: { debounce: { mutation: [80, 160], resize: 0, env: [80, 160] } },
     });
-    const wait = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
-    await wait(200);
+    const state: Probe = { host, content, instance, counting: false, reads: 0 };
     const height = Object.getOwnPropertyDescriptor(Element.prototype, "scrollHeight")!;
-    let reads = 0;
     Object.defineProperty(host, "scrollHeight", {
       configurable: true,
-      get() { reads++; return height.get!.call(host); },
+      get() { if (state.counting) state.reads++; return height.get!.call(host); },
     });
-    try {
+    Object.assign(window, { __scrollbarProbe: state });
+  });
+  try {
+    await settle(page, 200);
+    const duringMutations = await page.evaluate(async () => {
+      const state = (window as unknown as { __scrollbarProbe: Probe }).__scrollbarProbe;
+      const { content } = state;
+      state.counting = true;
       for (let i = 0; i < 12; i++) {
         content.style.height = `${400 + i * 100}px`;
         await Promise.resolve();
         await Promise.resolve();
       }
-      const duringMutations = reads;
-      await wait(250);
-      const afterBatch = reads;
+      return state.reads;
+    });
+    await settle(page, 250);
+    const batch = await page.evaluate(async () => {
+      const state = (window as unknown as { __scrollbarProbe: Probe }).__scrollbarProbe;
+      const { host, content, instance } = state;
+      const afterBatch = state.reads;
       const extent = instance.state().overflowAmount.y;
       content.style.height = "1700px";
       instance.update();
       const explicitExtent = instance.state().overflowAmount.y;
-      const beforeResize = reads;
+      const beforeResize = state.reads;
       for (let i = 0; i < 12; i++) {
         host.style.width = `${240 + i}px`;
         window.dispatchEvent(new Event("resize"));
         await Promise.resolve();
       }
-      const duringResize = reads - beforeResize;
-      await wait(250);
+      return { afterBatch, extent, explicitExtent, duringResize: state.reads - beforeResize };
+    });
+    await settle(page, 250);
+    const beforeSleepingMutation = await page.evaluate(() => {
+      const state = (window as unknown as { __scrollbarProbe: Probe }).__scrollbarProbe;
+      const { content, instance } = state;
       const resizedWidth = instance.state().overflowEdge.x;
       instance.sleep(true);
-      const beforeSleepingMutation = reads;
+      const before = state.reads;
       content.style.height = "1900px";
       window.dispatchEvent(new Event("resize"));
-      await wait(250);
-      const whileSleeping = reads - beforeSleepingMutation;
+      return { resizedWidth, before };
+    });
+    await settle(page, 250);
+    const wake = await page.evaluate((before) => {
+      const state = (window as unknown as { __scrollbarProbe: Probe }).__scrollbarProbe;
+      const { content, instance } = state;
+      const whileSleeping = state.reads - before;
       instance.sleep(false);
       const afterWake = instance.state().overflowAmount.y;
       content.style.height = "2100px";
-      await wait(250);
+      return { whileSleeping, afterWake };
+    }, beforeSleepingMutation.before);
+    await settle(page, 250);
+    const atDestroy = await page.evaluate(async () => {
+      const state = (window as unknown as { __scrollbarProbe: Probe }).__scrollbarProbe;
+      const { content, instance } = state;
       const afterWakeMutation = instance.state().overflowAmount.y;
       content.style.height = "2300px";
       await Promise.resolve();
       instance.destroy();
-      const atDestroy = reads;
-      await wait(250);
-      return { duringMutations, afterBatch, extent, explicitExtent, duringResize, resizedWidth, whileSleeping, afterWake, afterWakeMutation, afterDestroy: reads - atDestroy };
-    } finally {
+      return { afterWakeMutation, reads: state.reads };
+    });
+    await settle(page, 250);
+    const afterDestroy = await page.evaluate((reads) => (window as unknown as { __scrollbarProbe: Probe }).__scrollbarProbe.reads - reads, atDestroy.reads);
+    const result = { duringMutations, ...batch, resizedWidth: beforeSleepingMutation.resizedWidth, ...wake,
+      afterWakeMutation: atDestroy.afterWakeMutation, afterDestroy };
+    expect(result.duringMutations).toBe(0);
+    expect(result.afterBatch).toBeGreaterThan(0);
+    expect(result.extent).toBe(1400);
+    expect(result.explicitExtent).toBe(1600);
+    expect(result.duringResize, JSON.stringify(result)).toBe(0);
+    expect(result.resizedWidth).toBe(251);
+    expect(result.whileSleeping, JSON.stringify(result)).toBe(0);
+    expect(result.afterWake).toBe(1800);
+    expect(result.afterWakeMutation).toBe(2000);
+    expect(result.afterDestroy).toBe(0);
+  } finally {
+    await page.evaluate(() => {
+      const { host, instance } = (window as unknown as { __scrollbarProbe: Probe }).__scrollbarProbe;
       instance.destroy();
       host.remove();
-    }
-  });
-  expect(result.duringMutations).toBe(0);
-  expect(result.afterBatch).toBeGreaterThan(0);
-  expect(result.extent).toBe(1400);
-  expect(result.explicitExtent).toBe(1600);
-  expect(result.duringResize, JSON.stringify(result)).toBe(0);
-  expect(result.resizedWidth).toBe(251);
-  expect(result.whileSleeping, JSON.stringify(result)).toBe(0);
-  expect(result.afterWake).toBe(1800);
-  expect(result.afterWakeMutation).toBe(2000);
-  expect(result.afterDestroy).toBe(0);
+    });
+  }
 });

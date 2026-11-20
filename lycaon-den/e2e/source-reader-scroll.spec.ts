@@ -124,6 +124,7 @@ modelIndependentWebE2e("switching summarized historical diffs never paints the f
   await expect(history.locator(".cm-content")).toContainText("version 0");
   await expect(history.locator(".cm-content")).not.toContainText("unchanged top marker");
   await page.route("**/source/views/*/presentations/*/rows?*", async route => {
+    // injected latency: the reader scrolls while this response is in flight
     await new Promise(resolve => setTimeout(resolve, 150));
     await route.continue();
   });
@@ -248,6 +249,7 @@ modelIndependentWebE2e("switching editable Review diffs publishes only their con
   await expect(editor.locator(".cm-foldPlaceholder").first()).toBeVisible();
   await expect(editor.locator(".cm-content")).not.toContainText("unchanged review prefix");
   await page.route("**/source/comparison?*", async route => {
+    // injected latency: the reader scrolls while this response is in flight
     await new Promise(resolve => setTimeout(resolve, 150));
     await route.continue();
   });

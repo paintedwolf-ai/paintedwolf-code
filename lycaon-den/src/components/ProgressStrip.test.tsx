@@ -225,19 +225,19 @@ describe("ProgressStrip", () => {
   });
 
   it("adds the live span to banked time while running", () => {
-    const since = new Date(Date.now() - 5_000).toISOString();
-    render(() => (
-      <ProgressStrip
-        steps={[{ state: "pending", label: "a" }]}
-        activeMs={60_000}
-        running
-        runningSince={since}
-      />
-    ));
-    // Allow one second for test execution.
-    expect(screen.getByTestId("progress-strip-elapsed").textContent).toMatch(
-      /^1m [45]s$/,
-    );
+    vi.useFakeTimers({ toFake: ["Date"] });
+    try {
+      const since = new Date(Date.now() - 5_000).toISOString();
+      render(() => (
+        <ProgressStrip
+          steps={[{ state: "pending", label: "a" }]}
+          activeMs={60_000}
+          running
+          runningSince={since}
+        />
+      ));
+      expect(screen.getByTestId("progress-strip-elapsed").textContent).toBe("1m 5s");
+    } finally { vi.useRealTimers(); }
   });
 
   it("renders the context meter with the window percentage and tooltip", () => {

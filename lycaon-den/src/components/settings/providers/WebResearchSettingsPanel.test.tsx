@@ -62,7 +62,8 @@ describe("WebResearchSettingsPanel", () => {
     await waitFor(() =>
       expect(getByTestId("web-research-enabled-toggle")).toBeTruthy()
     );
-    await new Promise((resolve) => setTimeout(resolve, 350));
+    // Preference writes run on a promise queue; one task drains it.
+    await new Promise((resolve) => setTimeout(resolve, 0));
     expect(put).not.toHaveBeenCalled();
   });
 

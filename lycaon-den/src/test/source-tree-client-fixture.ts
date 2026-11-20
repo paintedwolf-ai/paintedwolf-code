@@ -3,6 +3,7 @@ import type { LycaonClient } from "../api/client.ts";
 import type { SourceViewsClient } from "../api/source-views-client.ts";
 import type { ProjectRoot, SourceTreeFrame, SourceTreeRow, SourceTreeView, SourceWorkspace } from "../api/types.ts";
 import { SourceWorkspaceMismatchError } from "../files/source/source-workspace-identity.ts";
+import { heldLeaseExpiry } from "./source-view-lease.ts";
 
 /** Stage fixtures share directory data between browsing controls and host tree frames. */
 export function sourceTreeClientFixture(client: () => LycaonClient, workspaceReader?: LycaonClient["getSourceWorkspace"]) {
@@ -55,7 +56,7 @@ export function sourceTreeClientFixture(client: () => LycaonClient, workspaceRea
       const workspace = workspaces.get(request.workspace_id);
       const roots: ProjectRoot[] = (workspace?.roots ?? []).map((root, index) => ({ ...root, label: root.path.split("/").at(-1) ?? "", is_primary: index === 0, kind: "attached", admitted: true, admission_code: null, added_at: "2026-01-01T00:00:00Z" }));
       const view: SourceTreeView = { kind: "tree", id: crypto.randomUUID(), workspace_id: request.workspace_id, roots,
-        intent: request.intent, state: "ready", intent_revision: "1", projection_revision: "1", expires_at: "2027-01-01T00:00:00Z",
+        intent: request.intent, state: "ready", intent_revision: "1", projection_revision: "1", expires_at: heldLeaseExpiry(),
         extent: { rows: 0, complete: true }, loading_directories: 0 };
       const held = { view, rows: [], project, session: request.session_id };
       await populate(held);

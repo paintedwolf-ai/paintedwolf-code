@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from "vitest";
-import { render, screen } from "@solidjs/testing-library";
+import { render, screen, waitFor } from "@solidjs/testing-library";
 import {
   findController,
   findEverywhereSeed,
@@ -12,6 +12,9 @@ import { FIND_MARK_ATTR } from "./find-match.ts";
 import { createAppStore } from "../store/app-state.ts";
 import { WorkerTranscript } from "../components/worker/WorkerTranscript.tsx";
 import type { Message, WorkerTask } from "../api/types.ts";
+import { useElapsableClock } from "../test/elapse.ts";
+
+useElapsableClock();
 
 afterEach(() => {
   resetFindControllerForTests();
@@ -114,8 +117,7 @@ describe("worker transcript findable adapter", () => {
     activity.dispatchEvent(new FocusEvent("focusin", { bubbles: true }));
     openFind();
     setFindQuery("VIRTUAL_TOOL_NEEDLE");
-    await new Promise((resolve) => setTimeout(resolve, 160));
-    expect(findController.matches().length).toBeGreaterThanOrEqual(1);
+    await waitFor(() => expect(findController.matches().length).toBeGreaterThanOrEqual(1));
     findNext();
     await Promise.resolve();
   });

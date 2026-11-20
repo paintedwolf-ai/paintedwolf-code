@@ -166,10 +166,11 @@ for (const reducedMotion of ["no-preference", "reduce"] as const) {
       const summary = host.querySelector<HTMLElement>('[data-testid="activity-span-card"] > .den-transcript-disclosure-header')!;
       const read = () => ({ offset: host.scrollTop, summaryTop: summary.getBoundingClientRect().top });
       const samples = [read()];
-      const until = performance.now() + 1800;
-      while (performance.now() < until) {
+      // Sampling runs until the test marks the expansion and append done, then 60 more frames.
+      for (let after = 0; after < 60;) {
         await new Promise<void>(resolve => requestAnimationFrame(() => resolve()));
         samples.push(read());
+        if ((window as unknown as { __stopSampling?: boolean }).__stopSampling) after++;
       }
       return samples;
     });
@@ -183,7 +184,7 @@ for (const reducedMotion of ["no-preference", "reduce"] as const) {
       ]));
       await expect(page.getByText("Arriving while reading expanded content.", { exact: false }).first()).toBeAttached();
     };
-    const [samples] = await Promise.all([sample, expandAndAppend()]);
+    const [samples] = await Promise.all([sample, expandAndAppend().then(() => page.evaluate(() => { Object.assign(window, { __stopSampling: true }); }))]);
     expect(await stream.evaluate(host => host.scrollHeight - host.clientHeight)).toBeGreaterThan(300);
     expect(Math.max(...samples.map(s => Math.abs(s.offset)))).toBeLessThan(2);
     expect(Math.max(...samples.map(s => Math.abs(s.summaryTop - samples[0]!.summaryTop)))).toBeLessThan(2);
@@ -203,11 +204,12 @@ modelIndependentWebE2e("activity expansion holds the reading position until End 
     const summary = host.querySelector<HTMLElement>('[data-testid="activity-span-card"] > .den-transcript-disclosure-header')!;
     const read = () => ({ offset: host.scrollTop, summaryTop: summary.getBoundingClientRect().top, height: host.scrollHeight, viewport: host.clientHeight });
     const samples = [read()];
-    const until = performance.now() + 1000;
-    while (performance.now() < until) {
+    // Tracing runs until the test marks the expansion settled, then 60 more frames.
+    for (let after = 0; after < 60;) {
       await new Promise<void>(resolve => requestAnimationFrame(() => resolve()));
       const sample = read();
       if (JSON.stringify(sample) !== JSON.stringify(samples.at(-1))) samples.push(sample);
+      if ((window as unknown as { __stopSampling?: boolean }).__stopSampling) after++;
     }
     return samples;
   });
@@ -216,6 +218,7 @@ modelIndependentWebE2e("activity expansion holds the reading position until End 
     await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
     await expect(activity).toHaveAttribute("data-expanded", "true");
     await expect(activity).not.toHaveAttribute("data-animating", "true");
+    await page.evaluate(() => { Object.assign(window, { __stopSampling: true }); });
   })()]);
   expect(Math.max(...samples.map(sample => Math.abs(sample.summaryTop - before))), JSON.stringify(samples)).toBeLessThan(2);
   await apiSeedSessionTranscript(request, sessionId, transcriptMessages([
@@ -257,8 +260,7 @@ modelIndependentWebE2e("idle virtualized history stays on the same visible row",
       return { key: row?.dataset.msgId, offset: row ? row.getBoundingClientRect().top - top : 0, scroll: host.scrollTop };
     };
     const samples = [read()];
-    const until = performance.now() + 3000;
-    while (performance.now() < until) {
+    for (let frame = 0; frame < 180; frame++) {
       await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
       samples.push(read());
     }

@@ -28,10 +28,14 @@ for (const automatic of [true, false]) {
       const origin = scroll.scrollTop;
       await navigation.openSourceLocation({ projectId, intent: "permanent", rootId, path: "file-089.ts" });
       const samples: { offset: number; pending: boolean }[] = [];
-      const started = performance.now();
-      while (performance.now() - started < 900) {
+      // An automatic reveal ends at rest away from the origin; a manual one rests where it began.
+      for (let still = 0; still < 8;) {
         await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
-        samples.push({ offset: scroll.scrollTop - origin, pending: pane.dataset.pending === "true" });
+        const sample = { offset: scroll.scrollTop - origin, pending: pane.dataset.pending === "true" };
+        const previous = samples.at(-1);
+        samples.push(sample);
+        const resting = !sample.pending && previous?.offset === sample.offset && (!automatic || sample.offset > 0);
+        still = resting ? still + 1 : 0;
       }
       return samples;
     }, { projectId: project.id, rootId: project.roots[0]!.id, automatic });
@@ -112,10 +116,9 @@ modelIndependentWebE2e("chat path actions reselect an active file after a folder
     const scroll = document.querySelector<HTMLElement>('[data-testid="files-tree-scroll"]')!;
     const origin = scroll.scrollTop;
     const samples: { offset: number; pending: boolean }[] = [];
-    const started = performance.now();
     let stableFrames = 0;
     let previous = origin;
-    while (performance.now() - started < 5000) {
+    for (;;) {
       await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
       const selected = document.querySelector('.den-files-tree__label--file[data-path="nested/destination.ts"][aria-current="true"]');
       const pending = document.querySelector<HTMLElement>('[data-testid="files-pane-presentation"]')?.dataset.pending === "true";

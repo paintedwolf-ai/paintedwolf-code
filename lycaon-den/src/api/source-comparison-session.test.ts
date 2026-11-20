@@ -2,6 +2,7 @@ import { expect, it } from "vitest";
 import { createSourceViewsClient } from "./source-views-client.ts";
 import { SourceComparisonSession } from "./source-comparison-session.ts";
 import type { SourceComparisonView, SourceComparisonViewCreate, SourceComparisonViewUpdate, SourceReaderRow } from "./types.ts";
+import { heldLeaseExpiry } from "../test/source-view-lease.ts";
 
 function fixture(count = 501, rowText = (index: number) => `${index}\n`) {
   const views = new Map<string, SourceComparisonView>();
@@ -30,7 +31,7 @@ function fixture(count = 501, rowText = (index: number) => `${index}\n`) {
       created.push(request);
       const id = `view-${created.length}`;
       const state: SourceComparisonView = { id, kind: "comparison", state: "ready", intent: request.intent,
-        intent_revision: "one", projection_revision: "one", expires_at: "2026-09-16T23:00:00Z",
+        intent_revision: "one", projection_revision: "one", expires_at: heldLeaseExpiry(),
         extent: { rows: count, complete: true }, comparison: { in_range: true, location_changed: false,
           summary: { before: { path: "a.ts", lines: count, sha256: "a", availability: "available" },
             after: { path: "a.ts", lines: count, sha256: "b", availability: "available" }, rows: count,

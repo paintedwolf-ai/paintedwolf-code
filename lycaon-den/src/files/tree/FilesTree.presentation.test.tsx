@@ -72,7 +72,7 @@ describe("Files presentation lifecycle", () => {
     await waitFor(() => expect(fixture.requests.slice(requestsBeforeUpdate).some(request => request.path.includes("/rows?"))).toBe(true));
     const pending = fixture.requests.slice(requestsBeforeUpdate).find(request => request.path.includes("/rows?"))!;
     scroll.scrollTop = 286; fireEvent.scroll(scroll);
-    await new Promise<void>(resolve => requestAnimationFrame(() => resolve()));
+    await elapse(16);
     expect(pending.signal?.aborted).toBe(false);
     release();
     await waitFor(() => expect(document.querySelector('[data-display-key="pending:11"]')).toBeNull());
@@ -393,7 +393,7 @@ it("reads one destination at a time while the thumb drags and lands at its lates
   Object.defineProperty(handle, "clientHeight", { configurable: true, value: 30 });
   const pointer = (type: string, clientY: number) => Object.assign(new Event(type, { bubbles: true, cancelable: true }),
     { isPrimary: true, button: 0, pointerId: 7, clientY });
-  const nextFrame = () => new Promise<void>(resolve => requestAnimationFrame(() => resolve()));
+  const nextFrame = () => elapse(16);
   // Every row read blocks here, so a destination read stays in flight until released.
   const holds: (() => void)[] = [];
   fixture.read(() => new Promise<void>(resolve => { holds.push(resolve); }));
@@ -482,7 +482,7 @@ it("lets prepared rows scroll natively and holds only an unprepared destination"
   await findFileRow("file-1.ts");
   const scroll = document.querySelector<HTMLElement>(".den-files-tree-scroll")!;
   const inner = document.querySelector<HTMLElement>(".den-files-tree-virtual__inner")!;
-  const nextFrame = () => new Promise<void>(resolve => requestAnimationFrame(() => resolve()));
+  const nextFrame = () => elapse(16);
   // The mounted window (rows 0 to 29) covers this movement, so the scroll event holds nothing.
   scroll.scrollTop = 5 * 26; fireEvent.scroll(scroll);
   expect(inner.style.transform).toBe("");

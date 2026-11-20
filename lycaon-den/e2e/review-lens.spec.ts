@@ -53,14 +53,17 @@ async function captureSelectionTravel(page: Page, targetTestId: string) {
     const positions: number[] = [];
     let observedAnimation = false;
     target.click();
-    const startedAt = performance.now();
+    const targetX = target.getBoundingClientRect().x;
+    // Sampling ends once the thumb rests: its travel has run, or it never left the target.
     await new Promise<void>((resolve) => {
-      const sample = (now: number) => {
-        positions.push(thumb.getBoundingClientRect().x);
-        observedAnimation ||= thumb.getAnimations().some(
+      const sample = () => {
+        const x = thumb.getBoundingClientRect().x;
+        positions.push(x);
+        const running = thumb.getAnimations().some(
           (animation) => animation.playState === "running",
         );
-        if (now - startedAt >= 260) {
+        observedAnimation ||= running;
+        if (!running && (observedAnimation || Math.abs(x - targetX) < 0.5)) {
           resolve();
           return;
         }

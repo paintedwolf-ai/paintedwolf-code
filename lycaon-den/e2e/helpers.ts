@@ -40,41 +40,23 @@ import type {
 const tier = process.env.PLAYWRIGHT_E2E;
 const runWeb = tier === "web" || tier === "desktop";
 
-const RENDERER_LIVENESS_TIMEOUT_MS = 5_000;
 let appStateSeedSequence = 0;
 const createdProjects = new WeakMap<APIRequestContext, Set<string>>();
 const createdTempDirs = new WeakMap<APIRequestContext, Set<string>>();
 
+/** A renderer held by a synchronous or microtask loop never yields; the fixture timeout ends that run. */
 async function assertRendererYields(page: Page): Promise<void> {
-  let timeout: ReturnType<typeof setTimeout> | undefined;
-  try {
-    await Promise.race([
-      page.evaluate(
-        () =>
-          new Promise<"hidden" | "yielded">((resolve) => {
-            // Background pages may throttle animation frames.
-            if (document.visibilityState !== "visible") {
-              resolve("hidden");
-              return;
-            }
-            requestAnimationFrame(() => requestAnimationFrame(() => resolve("yielded")));
-          }),
-      ),
-      new Promise<never>((_, reject) => {
-        timeout = setTimeout(
-          () =>
-            reject(
-              new Error(
-                "Renderer did not yield two animation frames; a synchronous or microtask loop is blocking the UI.",
-              ),
-            ),
-          RENDERER_LIVENESS_TIMEOUT_MS,
-        );
+  await page.evaluate(
+    () =>
+      new Promise<"hidden" | "yielded">((resolve) => {
+        // Background pages may throttle animation frames.
+        if (document.visibilityState !== "visible") {
+          resolve("hidden");
+          return;
+        }
+        requestAnimationFrame(() => requestAnimationFrame(() => resolve("yielded")));
       }),
-    ]);
-  } finally {
-    if (timeout !== undefined) clearTimeout(timeout);
-  }
+  );
 }
 
 const livenessE2e = test.extend<{ rendererLiveness: void }>({
@@ -577,10 +559,12 @@ export async function waitForProjectButton(page: Page, name: string) {
 /** Open a project from the home grid by clicking its card. */
 export async function activateProject(page: Page, projectId: string) {
   const card = page.getByTestId(`project-card-${projectId}`);
-  const recentCardReady = await card
-    .waitFor({ state: "visible", timeout: 10_000 })
-    .then(() => true, () => false);
-  if (recentCardReady) {
+  if (await page.getByTestId("home-view").isVisible()) {
+    // The grid shows each loaded project as a card until it passes its cap; the All section is a table.
+    await expect(card.or(page.getByTestId("home-grid-overflow")).or(page.getByTestId("home-list")).first())
+      .toBeVisible({ timeout: 60_000 });
+  }
+  if (await card.isVisible()) {
     await card.getByRole("button").first().click();
   } else {
     const row = await findProjectListRow(page, projectId);
@@ -924,9 +908,13 @@ export async function apiEnsureDefaultModel(
       model: currentCoordinator.model,
     };
   }
-  let diagnostic = "no provider snapshot";
-  const deadline = Date.now() + 60_000;
-  for (let attempt = 0; Date.now() < deadline; attempt += 1) {
+  let diagnostic = "";
+  const note = (next: string) => {
+    if (next !== diagnostic) console.log(`harness default model: ${next}`);
+    diagnostic = next;
+  };
+  // Provider readiness is the host's own progress; the test timeout ends a host that never gets there.
+  for (let attempt = 0; ; attempt += 1) {
     const providers = await apiListProviders(request);
     const ready = providers
       .filter((p) => p.ready_to_assign && (p.models?.length ?? 0) > 0)
@@ -935,12 +923,12 @@ export async function apiEnsureDefaultModel(
     const preferred =
       ready.find((p) => p.requires_api_key === false) ??
       ready[0];
-    diagnostic = providers
+    note(providers
       .map(
         (p) =>
           `${p.id}[ready=${p.ready_to_assign === true},models=${p.models?.length ?? 0}]`,
       )
-      .join(", ");
+      .join(", "));
     if (preferred) {
       const providerId = preferred.id;
       const model = [...preferred.models!]
@@ -967,14 +955,13 @@ export async function apiEnsureDefaultModel(
             model: savedCoordinator.model,
           };
         }
-        diagnostic = `policy write did not stick for ${providerId}/${model}`;
+        note(`policy write did not stick for ${providerId}/${model}`);
       } catch (error) {
-        diagnostic = `${providerId}/${model}: ${error instanceof Error ? error.message : String(error)}`;
+        note(`${providerId}/${model}: ${error instanceof Error ? error.message : String(error)}`);
       }
     }
     await new Promise((resolve) => setTimeout(resolve, Math.min(1000, 250 * (attempt + 1))));
   }
-  throw new Error(`harness could not establish a default model: ${diagnostic}`);
 }
 
 /** Clears the global model policy. */

@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it, onTestFinished, vi } from "vitest";
 import {
   navigateProjectJumpBack,
   pushProjectJump,
@@ -15,6 +15,8 @@ describe("knowing gutter jump history", () => {
   it("pushes the editor location before opening a finding", () => {
     resetProjectJumpHistoryForTests();
     resetOpenFindingForTests();
+    vi.useFakeTimers({ toFake: ["Date"], now: 10_000 });
+    onTestFinished(() => { vi.useRealTimers(); });
     const sink = vi.fn();
     registerOpenFindingSink(sink);
 

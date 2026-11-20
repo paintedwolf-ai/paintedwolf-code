@@ -14,11 +14,9 @@ async function sampleNativeWheel(page: Page, preview: Locator, deltaY: number) {
       return;
     }
     const before = viewport.scrollTop;
-    const deadline = performance.now() + 15_000;
     const measure = () => {
       if (viewport.scrollTop === before) {
-        if (performance.now() >= deadline) reject(new Error("Native wheel did not move the preview"));
-        else requestAnimationFrame(measure);
+        requestAnimationFrame(measure);
         return;
       }
       const box = viewport.getBoundingClientRect();
@@ -55,6 +53,7 @@ modelIndependentWebE2e("large Markdown preview retains text and scroll direction
         const send = () => Array.isArray(options)
           ? super.postMessage(message, options)
           : super.postMessage(message, options);
+        // injected latency: block parses land after the preview has scrolled
         if (typeof message === "object" && message !== null && "type" in message && message.type === "block") setTimeout(send, 80);
         else send();
       }
