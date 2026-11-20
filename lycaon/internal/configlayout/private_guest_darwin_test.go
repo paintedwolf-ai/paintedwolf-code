@@ -6,6 +6,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -16,6 +17,7 @@ func TestPrivateGuestSnapshotsHoldOneGeneration(t *testing.T) {
 	for _, name := range []string{"pw-service-vm", "manifest.json", "kernel", "initramfs.gz"} {
 		testutil.FailErr(t, "seed asset", os.WriteFile(filepath.Join(bundle, name), []byte(name), 0600))
 	}
+	testutil.FailErr(t, "seed helper identity", os.WriteFile(filepath.Join(bundle, "pw-service-vm.cdhash"), []byte(strings.Repeat("a", 40)), 0600))
 	p, err := privateGuestPayload(bundle, state, "")
 	testutil.FailErr(t, "stage runtime", err)
 	defer p.Close()
@@ -48,6 +50,7 @@ func TestPrivateGuestRefusesSymlinkAndUnsealedManifest(t *testing.T) {
 	}
 	testutil.FailErr(t, "remove fixture link", os.Remove(ramdisk))
 	testutil.FailErr(t, "seed ramdisk", os.WriteFile(ramdisk, []byte("ramdisk"), 0600))
+	testutil.FailErr(t, "seed helper identity", os.WriteFile(filepath.Join(bundle, "pw-service-vm.cdhash"), []byte(strings.Repeat("a", 40)), 0600))
 	if _, err := privateGuestPayload(bundle, state, bundle); err == nil {
 		t.Fatal("accepted an unsigned production package")
 	}

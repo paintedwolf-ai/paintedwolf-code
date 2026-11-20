@@ -23,11 +23,18 @@ static OSStatus pw_verify_guest_code(const char *path, CFStringRef team, CFStrin
     return status;
 }
 
-static OSStatus pw_verify_guest_runtime(const char *app, const char *helper, const UInt8 *manifest, CFIndex length) {
+static OSStatus pw_guest_resource(SecStaticCodeRef outer, const char *resource, const UInt8 *bytes, CFIndex length) {
+    CFStringRef path = CFStringCreateWithCString(NULL, resource, kCFStringEncodingUTF8);
+    CFDataRef data = CFDataCreate(NULL, bytes, length);
+    OSStatus status = path && data ? SecCodeValidateFileResource(outer, path, data, kSecCSDefaultFlags) : errSecAllocate;
+    if (data) CFRelease(data);
+    if (path) CFRelease(path);
+    return status;
+}
+static OSStatus pw_verify_guest_runtime(const char *app, const char *helper, SecStaticCodeRef *result) {
     SecCodeRef running = NULL;
     SecStaticCodeRef engine = NULL, outer = NULL, child = NULL;
     CFDictionaryRef info = NULL;
-    CFDataRef data = NULL;
     OSStatus status = SecCodeCopySelf(kSecCSDefaultFlags, &running);
     if (status != errSecSuccess) goto done;
     status = SecCodeCopyStaticCode(running, kSecCSDefaultFlags, &engine);
@@ -42,18 +49,22 @@ static OSStatus pw_verify_guest_runtime(const char *app, const char *helper, con
     status = pw_verify_guest_code(app, team, CFSTR("dev.paintedwolf.code"),
                                   kSecCSStrictValidate | kSecCSDoNotValidateResources, &outer);
     if (status != errSecSuccess) goto done;
-    data = CFDataCreate(NULL, manifest, length);
-    status = data ? SecCodeValidateFileResource(outer, CFSTR("Resources/service-guest/manifest.json"), data,
-                                               kSecCSDefaultFlags) : errSecAllocate;
-    if (status != errSecSuccess) goto done;
     status = pw_verify_guest_code(helper, team, CFSTR("dev.paintedwolf.code.service-vm"),
                                   kSecCSStrictValidate, &child);
+    if (status == errSecSuccess) { *result = outer; outer = NULL; }
 done:
     if (child) CFRelease(child);
     if (outer) CFRelease(outer);
-    if (data) CFRelease(data);
     if (info) CFRelease(info);
     if (engine) CFRelease(engine);
     if (running) CFRelease(running);
+    return status;
+}
+
+static OSStatus pw_open_resource_envelope(const char *app, SecStaticCodeRef *code) {
+    CFURLRef url = CFURLCreateFromFileSystemRepresentation(NULL, (const UInt8 *)app, strlen(app), true);
+    if (!url) return errSecAllocate;
+    OSStatus status = SecStaticCodeCreateWithPath(url, kSecCSDefaultFlags, code);
+    CFRelease(url);
     return status;
 }

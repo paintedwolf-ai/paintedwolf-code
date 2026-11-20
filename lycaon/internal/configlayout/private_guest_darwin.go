@@ -3,11 +3,13 @@
 package configlayout
 
 import (
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/lycaon/lycaon/internal/configdir"
 	"golang.org/x/sys/unix"
@@ -16,6 +18,7 @@ import (
 // PrivateGuestPayload holds immutable boot files until the VM helper inherits them.
 type PrivateGuestPayload struct {
 	Helper   string
+	CDHash   string
 	Boot     []*os.File
 	snapshot string
 }
@@ -24,7 +27,11 @@ func (p *PrivateGuestPayload) Close() {
 	for _, file := range p.Boot {
 		_ = file.Close()
 	}
-	_ = os.RemoveAll(p.snapshot)
+	p.Boot = nil
+	if p.snapshot != "" {
+		_ = os.RemoveAll(p.snapshot)
+		p.snapshot = ""
+	}
 }
 
 // OpenPrivateGuestPayload resolves the runtime from the running installation.
@@ -87,12 +94,26 @@ func privateGuestPayload(bundle, root, app string) (_ *PrivateGuestPayload, err 
 			return nil, err
 		}
 	}
+	id, err := os.Open(filepath.Join(bundle, "pw-service-vm.cdhash"))
+	if err != nil {
+		return nil, err
+	}
+	defer id.Close()
+	raw, err := io.ReadAll(io.LimitReader(id, 42))
+	if err != nil {
+		return nil, err
+	}
+	p.CDHash = strings.TrimSuffix(string(raw), "\n")
+	digest, err := hex.DecodeString(p.CDHash)
+	if err != nil || len(digest) != 20 {
+		return nil, errors.New("invalid private service helper code identity")
+	}
 	if app != "" {
 		manifest, err := io.ReadAll(io.LimitReader(p.Boot[0], 64<<10))
 		if err != nil {
 			return nil, err
 		}
-		if err := verifyPrivateGuestSeal(app, p.Helper, manifest); err != nil {
+		if err := verifyPrivateGuestSeal(app, p.Helper, manifest, raw); err != nil {
 			return nil, err
 		}
 		if _, err := p.Boot[0].Seek(0, io.SeekStart); err != nil {
