@@ -138,3 +138,20 @@ func TestValidateNamesWhatTheHelperCannotExpress(t *testing.T) {
 		t.Fatal("version 0 validated")
 	}
 }
+
+func TestSessionSocketPlanRequiresAnAbsoluteRootAndDedicatedDescriptor(t *testing.T) {
+	for _, root := range []string{"/", "relative", "/tmp/../scratch", "/scratch/", "/scratch/\x00entry"} {
+		plan := Plan{Version: PlanVersion, Network: Network{Mode: NetworkDeny, SessionSocketRoot: root}}
+		if err := plan.Validate(); err == nil {
+			t.Errorf("accepted session root %q", root)
+		}
+	}
+	network := Network{Mode: NetworkDeny, SessionSocketRoot: "/scratch/one", SocketGrants: []SocketGrant{{Path: "/run/service", FD: SocketReferenceFD + 1}}}
+	if err := (Plan{Version: PlanVersion, Network: network}).Validate(); err == nil {
+		t.Fatal("session channel overlaps a socket reference")
+	}
+	network.SocketGrants[0].FD = SocketReferenceFD
+	if err := (Plan{Version: PlanVersion, Network: network}).Validate(); err != nil {
+		t.Fatal(err)
+	}
+}
