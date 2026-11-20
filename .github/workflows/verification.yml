@@ -157,6 +157,8 @@ jobs:
           # Admission runs with loopback networking only, where the runner can isolate it.
           OFFLINE: ${{ (inputs.profile == 'fast' || inputs.profile == 'integration') && runner.os == 'Linux' }}
           PW_CI_PACKAGE_TIMINGS: ${{ needs.plan.outputs.package-timings }}
+          # A lane sharded by its selection runs the packages its row names.
+          PW_CI_SHARD_PACKAGES: ${{ toJSON(matrix.packages) }}
           PROFILE: ${{ inputs.profile }}
           PYTHONPATH: scripts
         run: |

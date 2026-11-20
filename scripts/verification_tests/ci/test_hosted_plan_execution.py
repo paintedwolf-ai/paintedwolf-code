@@ -2,6 +2,7 @@
 import json
 from pathlib import Path
 import unittest
+import unittest.mock
 
 from ci_policy import hosted_plan as ci
 from verification_tests.ci.fixture_plan import lane, lanes, plan
@@ -215,3 +216,60 @@ class LiveCatalogTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class SelectionShardTests(unittest.TestCase):
+    """A lane scoped to the change's own packages fans out with its selection."""
+
+    SIZED = {"shard_seconds": 1000, "package_seconds": 100}
+
+    def test_a_small_selection_is_one_shard_holding_every_package(self):
+        packages = ["./internal/a", "./internal/b"]
+        self.assertEqual(ci.selection_shards(self.SIZED, packages, None, 12), [packages])
+
+    def test_a_large_selection_fans_out_and_its_shards_partition_it_exactly(self):
+        packages = [f"./internal/p{index:02d}" for index in range(45)]
+        shards = ci.selection_shards(self.SIZED, packages, None, 12)
+        # 45 packages of 100 s each fill five shards of 1000 s.
+        self.assertEqual(len(shards), 5)
+        self.assertTrue(all(shards))
+        flat = [package for share in shards for package in share]
+        self.assertEqual(sorted(flat), packages)
+        self.assertEqual(len(flat), len(set(flat)))
+
+    def test_measured_race_durations_size_and_balance_the_shards(self):
+        timings = {"race_packages": {f"{ci.MODULE}/internal/slow": 900, f"{ci.MODULE}/internal/a": 300,
+                                     f"{ci.MODULE}/internal/b": 300, f"{ci.MODULE}/internal/c": 300}}
+        packages = ["./internal/a", "./internal/b", "./internal/c", "./internal/slow"]
+        shards = ci.selection_shards(self.SIZED, packages, timings, 12)
+        self.assertEqual(len(shards), 2)
+        self.assertIn(["./internal/slow"], shards)
+        # An unmeasured package counts as the median measured one.
+        self.assertEqual(len(ci.selection_shards(self.SIZED, ["./internal/new"] * 1 + packages, timings, 12)), 3)
+
+    def test_shards_never_exceed_the_profile_capacity_or_the_package_count(self):
+        many = [f"./internal/p{index:03d}" for index in range(200)]
+        self.assertEqual(len(ci.selection_shards(self.SIZED, many, None, 12)), 12)
+        self.assertEqual(len(ci.selection_shards({**self.SIZED, "package_seconds": 5000}, ["./a", "./b"], None, 12)), 2)
+
+    def test_the_matrix_gives_each_row_its_share(self):
+        sized = lane("test:race", profiles=("integration",), changes=["go-code"], phases="changed-packages",
+                     **{**self.SIZED, "minutes": 60})
+        with plan(ci=lanes(race=sized)), \
+                unittest.mock.patch("ci_policy.impact.changed_packages",
+                                    return_value=[f"./internal/p{index:02d}" for index in range(25)]):
+            rows = [row for row in ci.matrix("integration", scope={"full": False, "paths": ["lycaon/x.go"]})["include"]
+                    if row["lane"] == "race"]
+        self.assertEqual([row["shard"] for row in rows], ["1/3", "2/3", "3/3"])
+        self.assertEqual(sorted(package for row in rows for package in row["packages"]),
+                         [f"./internal/p{index:02d}" for index in range(25)])
+
+    def test_selection_sizing_belongs_to_the_changed_package_lane(self):
+        for fields in ({"shard_seconds": 1000}, {**self.SIZED, "shards": 2}, {**self.SIZED, "shard_seconds": 3600},
+                       {**self.SIZED, "package_seconds": 0}):
+            with self.subTest(fields=fields), self.assertRaises(ValueError), \
+                    plan(ci=lanes(race=lane("test:race", profiles=("integration",), changes=["go-code"],
+                                            phases="changed-packages", **{"minutes": 60, **fields}))):
+                ci.lanes()
+        with self.assertRaises(ValueError), plan(ci=lanes(tests={**lane("test:short", minutes=60), **self.SIZED})):
+            ci.lanes()

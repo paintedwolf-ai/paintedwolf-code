@@ -1586,7 +1586,9 @@
       "changes": [
         "go-code"
       ],
-      "phases": "changed-packages"
+      "phases": "changed-packages",
+      "shard_seconds": 2400,
+      "package_seconds": 40
     },
     "browser-smoke": {
       "targets": [

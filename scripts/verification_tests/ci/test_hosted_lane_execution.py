@@ -153,6 +153,20 @@ class HostedExecutionTests(unittest.TestCase):
             self.assertEqual(ci.run_lane(lane), 2)
             run.assert_not_called()
 
+    def test_a_planned_share_replaces_local_selection_and_is_not_resharded(self):
+        lane = live(phase="changed-packages")
+        target = hosted_plan.lanes()[lane]["targets"]
+        share = '["./internal/confine", "./internal/egressclass"]'
+        with tempfile.TemporaryDirectory() as directory, \
+                patch.dict(ci.os.environ, {"PW_CI_SHARD_PACKAGES": share}), \
+                patch.object(ci, "artifact_root", return_value=Path(directory)), \
+                patch.object(ci.subprocess, "call", return_value=0) as run:
+            self.assertEqual(ci.run_lane(lane, "2/5"), 0)
+            self.assertEqual(run.call_args.args[0], ["./task", *target, "--", "./internal/confine", "./internal/egressclass"])
+            self.assertNotIn("PW_GO_SHARD", run.call_args.kwargs["env"])
+        with self.assertRaises(ValueError):
+            ci.run_lane(lane, "two")
+
     def test_lane_worker_cap_reaches_admission(self):
         with tempfile.TemporaryDirectory() as directory, \
                 patch.object(ci, "artifact_root", return_value=Path(directory)), \
