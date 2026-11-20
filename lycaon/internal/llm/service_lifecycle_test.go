@@ -11,6 +11,8 @@ import (
 
 	"github.com/lycaon/lycaon/internal/configdir"
 	providercredentials "github.com/lycaon/lycaon/internal/llm/credentials"
+	"github.com/lycaon/lycaon/internal/llm/providers/nativegen"
+	"github.com/lycaon/lycaon/internal/modelstore"
 	"github.com/lycaon/lycaon/internal/testutil"
 )
 
@@ -143,4 +145,41 @@ func TestServiceCloseReportsCanceledJoinAndCanFinishAfterRefreshExits(t *testing
 	}
 	close(done)
 	testutil.FailErr(t, "finish service shutdown after refresh exits", service.Close(t.Context()))
+}
+
+func TestGenerationStoreFailureKeepsExternalProviderAccessible(t *testing.T) {
+	t.Setenv(configdir.EnvConfigDir, t.TempDir())
+	defer SetHostProductPlatformForTest(PlatformLinux)()
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"models":[{"name":"fixture-model"}]}`))
+	}))
+	t.Cleanup(server.Close)
+	yaml := "providers:\n  - id: external\n    kind: ollama\n    base_url: " + server.URL + "/v1\n    models: []\n" + MinimalShipHTTPRetryYAML
+	stageShipProviders(t, yaml)
+	path, err := userProvidersLocalPath()
+	testutil.FailErr(t, "find saved providers", err)
+	writeProvidersLocal(t, path, []byte(yaml))
+	dir := t.TempDir()
+	testutil.FailErr(t, "damage selection journal", os.WriteFile(filepath.Join(dir, "journal.jsonl"), []byte("invalid journal\n"), 0600))
+	store := modelstore.New(dir, nil)
+	local := nativegen.Availability{Store: store, Runtime: nativegen.NewRuntime(nativegen.RuntimeConfig{ModelStore: store})}
+	t.Cleanup(func() { _ = local.Runtime.Close() })
+	svc, err := NewService(t.Context(), nil, &local)
+	testutil.FailErr(t, "start configured providers", err)
+	t.Cleanup(func() { _ = svc.Close(t.Context()) })
+	if status := svc.Registry.LocalGenerationStatus(); status.State != "unavailable" || status.Detail == "" {
+		t.Fatalf("local status: %+v", status)
+	}
+	provider, err := svc.Registry.Get("external")
+	testutil.FailErr(t, "resolve external provider", err)
+	if provider.ID() != "external" {
+		t.Fatalf("resolved provider %q", provider.ID())
+	}
+	for _, entry := range svc.Registry.List(t.Context()) {
+		if entry.ID == "external" && entry.Configured {
+			return
+		}
+	}
+	t.Fatal("configured external provider missing from Settings")
 }

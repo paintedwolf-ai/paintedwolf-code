@@ -147,10 +147,17 @@ func (p *Runtime) importSelection(ctx context.Context, req api.LocalModelSelecti
 	if err != nil {
 		return err
 	}
+	// Once the store commits, activation belongs to the installed revision.
 	p.transfers.Lock()
-	job.phase = "activating"
+	if p.transfers.removing {
+		p.transfers.Unlock()
+		return context.Canceled
+	}
+	activation, cancel := context.WithCancel(p.lifetime)
+	job.phase, job.cancel = "activating", cancel
 	p.transfers.Unlock()
-	return p.ensureLoaded(ctx, req.Model)
+	defer cancel()
+	return p.ensureLoaded(activation, req.Model)
 }
 
 func (p *Runtime) CancelTransfer(ctx context.Context) error {
@@ -159,6 +166,10 @@ func (p *Runtime) CancelTransfer(ctx context.Context) error {
 	}
 	p.transfers.Lock()
 	job := p.transfers.active
+	if job != nil && job.phase == "activating" && !p.transfers.removing && p.lifetime.Err() == nil {
+		p.transfers.Unlock()
+		return nil
+	}
 	if job != nil {
 		job.cancel()
 	}

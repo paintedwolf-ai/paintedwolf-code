@@ -119,3 +119,18 @@ func TestBuildRetainsRecoveryWhenSeedIsInvalid(t *testing.T) {
 		t.Fatal("seed failure discarded the shared decision partition")
 	}
 }
+
+func TestGenerationStoreFailureKeepsDecisionResources(t *testing.T) {
+	options := installedFixture(t)
+	testutil.FailErr(t, "create model store", os.MkdirAll(options.StoreRoot, 0700))
+	testutil.FailErr(t, "damage journal", os.WriteFile(filepath.Join(options.StoreRoot, "journal.jsonl"), []byte("invalid journal\n"), 0600))
+	r, err := localmodels.Build(t.Context(), options)
+	testutil.FailErr(t, "allocate decision and generation resources", err)
+	t.Cleanup(func() { _ = r.Generation.Close(); r.Resources.Close() })
+	if r.Decision.Resources == nil || r.Decision.Resources != r.Resources.Decision {
+		t.Fatal("generation failure discarded decision admission")
+	}
+	if status := r.Generation.Readiness(); status.State != "unavailable" || status.Detail == "" {
+		t.Fatalf("generation store failure: %+v", status)
+	}
+}

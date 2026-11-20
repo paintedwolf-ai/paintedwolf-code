@@ -36,7 +36,7 @@ func Start(ctx context.Context, fixture bool) Startup {
 	binary := configlayout.SiblingExecutable("nativegen")
 	root := configlayout.EngineRoot()
 	if root != "" {
-		marker, err := os.ReadFile(filepath.Join(root, "generation", "offline-model"))
+		marker, err := readPackagedMetadata(filepath.Join(root, "generation", "offline-model"), 128)
 		result.OfflineInstaller = !errors.Is(err, os.ErrNotExist)
 		if err != nil && result.OfflineInstaller {
 			result.Issue = err
