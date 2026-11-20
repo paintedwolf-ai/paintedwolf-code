@@ -39,7 +39,13 @@ int pw_guest_spawn(const char *path, const char *cdhash, const int *fds, pid_t *
         return error;
     }
     error = posix_spawnattr_setflags(&attrs, POSIX_SPAWN_CLOEXEC_DEFAULT | POSIX_SPAWN_START_SUSPENDED);
-    if (!error) error = posix_spawn_file_actions_addchdir_np(&files, "/");
+    if (!error) {
+#if __MAC_OS_X_VERSION_MAX_ALLOWED >= 260000
+        if (__builtin_available(macOS 26, *)) error = posix_spawn_file_actions_addchdir(&files, "/");
+        else
+#endif
+            error = posix_spawn_file_actions_addchdir_np(&files, "/");
+    }
     if (!error) error = posix_spawn_file_actions_addopen(&files, 0, "/dev/null", O_RDONLY, 0);
     if (!error) error = posix_spawn_file_actions_addopen(&files, 1, "/dev/null", O_WRONLY, 0);
     if (!error) error = posix_spawn_file_actions_addinherit_np(&files, STDERR_FILENO);
