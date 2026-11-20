@@ -10,7 +10,6 @@ import (
 )
 
 func TestNoteCompletionTurnBudget(t *testing.T) {
-	t.Cleanup(ResetTurnBudgetForTest)
 	for _, tc := range []struct {
 		name                string
 		cap, total, visible int
@@ -23,9 +22,11 @@ func TestNoteCompletionTurnBudget(t *testing.T) {
 		{"unknown cap", 0, 16384, 0, false},
 		{"unknown usage", 16384, 0, 0, false},
 	} {
-		NoteCompletionTurnBudget(tc.name, tc.cap, tc.total, tc.visible)
-		if SessionReasoningRecovery(tc.name) != tc.strict {
-			t.Errorf("%s: strict=%v", tc.name, SessionReasoningRecovery(tc.name))
+		sessionID := t.Name() + "/" + tc.name
+		t.Cleanup(func() { ClearSessionReasoningRecovery(sessionID) })
+		NoteCompletionTurnBudget(sessionID, tc.cap, tc.total, tc.visible)
+		if SessionReasoningRecovery(sessionID) != tc.strict {
+			t.Errorf("%s: strict=%v", tc.name, SessionReasoningRecovery(sessionID))
 		}
 	}
 }

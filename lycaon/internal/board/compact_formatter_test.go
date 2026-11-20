@@ -41,6 +41,35 @@ func TestCompactFormatterInjectBudget(t *testing.T) {
 	_ = truncated
 }
 
+// A snapshot whose orientation lines exceed the inject budget is cut to the
+// budget exactly, with the sentinel kept ahead of the body.
+func TestInjectFormatterFitsOversizedSnapshotInBudget(t *testing.T) {
+	langs := make([]string, 0, 50)
+	for range 50 {
+		langs = append(langs, strings.Repeat("x", 20))
+	}
+	snap := api.BoardSnapshot{
+		Repo:        api.RepoBrief{Languages: langs, FileCount: 9999},
+		DetailLevel: api.BoardDetailLevelCompact,
+	}
+	now := time.Date(2026, 5, 31, 14, 0, 0, 0, time.UTC)
+	full := strings.Join(packboard.BuildOrientationLines(snap, packboard.OrientOpts{Now: now}), "\n")
+	if len(full) <= api.MaxBoardInjectChars {
+		t.Fatalf("fixture must exceed the budget before fitting: len=%d", len(full))
+	}
+	text, ok := DefaultInjectFormatter().FormatBoardInject(snap, false, now)
+	if !ok {
+		t.Fatal("oversized snapshot produced no inject")
+	}
+	body, found := strings.CutPrefix(text, packboard.PackBoardSentinel+"\n")
+	if !found {
+		t.Fatalf("missing sentinel: %q", text)
+	}
+	if len(body) > api.MaxBoardInjectChars {
+		t.Fatalf("body len=%d want <=%d", len(body), api.MaxBoardInjectChars)
+	}
+}
+
 func TestCompactFormatterOmitsEmptyRepo(t *testing.T) {
 	snap := fixtureSnapshot()
 	snap.Repo = api.RepoBrief{}

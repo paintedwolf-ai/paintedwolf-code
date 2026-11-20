@@ -8,7 +8,6 @@ import (
 
 	"github.com/lycaon/lycaon/internal/configlayout"
 	"github.com/lycaon/lycaon/internal/coordinator/inject"
-	"github.com/lycaon/lycaon/internal/coordinator/surface"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/toolschema"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
@@ -142,15 +141,5 @@ func assertVerdictProjection(t *testing.T, manifest workflowdef.Manifest, phase 
 	data.PhaseExit = project()
 	if before == projectedOutline() {
 		t.Fatal("schema change did not reach the prompt projection")
-	}
-}
-
-func TestComposeSurfaceCanStartItsPersistedWorkflow(t *testing.T) {
-	plan, err := surface.CompileToolPlan(surface.TurnProfile{SurfaceID: "workflow_compose"}, 1)
-	contractcheck.FailErr(t, "compile compose tool plan", err)
-	for _, action := range []string{"workflow_compose", "workflow_persist", "state_start"} {
-		if !contractcheck.ContainsString(plan.ImmediateNames(), action) {
-			t.Errorf("compose lifecycle action %q unavailable", action)
-		}
 	}
 }

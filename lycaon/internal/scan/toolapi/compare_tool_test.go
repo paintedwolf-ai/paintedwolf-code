@@ -3,12 +3,14 @@ package toolapi_test
 import (
 	"context"
 	"encoding/json"
+	"github.com/lycaon/lycaon/internal/scan/findings/findingstest"
+	"github.com/lycaon/lycaon/internal/scan/scantest"
 	"testing"
 
 	scanbase "github.com/lycaon/lycaon/internal/scan"
 	scancadence "github.com/lycaon/lycaon/internal/scan/cadence"
 	scancfg "github.com/lycaon/lycaon/internal/scan/configuration"
-	scanfindings "github.com/lycaon/lycaon/internal/scan/findings"
+
 	scantoolapi "github.com/lycaon/lycaon/internal/scan/toolapi"
 	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -26,7 +28,7 @@ func TestScanCompareToolDiffsFindings(t *testing.T) {
 	oldID := seedCompareScan(t, store, compareSeedOpts{
 		projectDir: projectDir,
 		findings: []api.SecurityFinding{
-			scanfindings.FixtureFinding("gone", api.FindingLevelHigh, "", "a.go", 1),
+			findingstest.Finding("gone", api.FindingLevelHigh, "", "a.go", 1),
 		},
 	})
 	newID := seedCompareScan(t, store, compareSeedOpts{
@@ -34,7 +36,7 @@ func TestScanCompareToolDiffsFindings(t *testing.T) {
 	})
 
 	reg := tools.NewDefaultRegistry()
-	testutil.FailErr(t, "RegisterScanTools", scantoolapi.RegisterScanTools(reg, coord, &scanbase.MockRegistry{Scanner: &scanbase.MockScanner{}}, scancadence.New(scanbase.StoreFromCoordinator(coord), coord, &scanbase.MockRegistry{Scanner: &scanbase.MockScanner{}}, nil, scancfg.DefaultGatesConfig(), nil), nil, nil, nil))
+	testutil.FailErr(t, "RegisterScanTools", scantoolapi.RegisterScanTools(reg, coord, &scantest.MockRegistry{Scanner: &scantest.MockScanner{}}, scancadence.New(scanbase.StoreFromCoordinator(coord), coord, &scantest.MockRegistry{Scanner: &scantest.MockScanner{}}, nil, scancfg.DefaultGatesConfig(), nil), nil, nil, nil))
 
 	raw, err := reg.Run(context.Background(), "scan_compare", map[string]any{
 		"old_scan_id": oldID,
@@ -61,7 +63,7 @@ func TestScanCompareToolAcceptsShortBoardIDs(t *testing.T) {
 	oldID := seedCompareScan(t, store, compareSeedOpts{
 		projectDir: projectDir,
 		findings: []api.SecurityFinding{
-			scanfindings.FixtureFinding("gone", api.FindingLevelHigh, "", "a.go", 1),
+			findingstest.Finding("gone", api.FindingLevelHigh, "", "a.go", 1),
 		},
 	})
 	newID := seedCompareScan(t, store, compareSeedOpts{
@@ -69,7 +71,7 @@ func TestScanCompareToolAcceptsShortBoardIDs(t *testing.T) {
 	})
 
 	reg := tools.NewDefaultRegistry()
-	testutil.FailErr(t, "RegisterScanTools", scantoolapi.RegisterScanTools(reg, coord, &scanbase.MockRegistry{Scanner: &scanbase.MockScanner{}}, scancadence.New(scanbase.StoreFromCoordinator(coord), coord, &scanbase.MockRegistry{Scanner: &scanbase.MockScanner{}}, nil, scancfg.DefaultGatesConfig(), nil), nil, nil, nil))
+	testutil.FailErr(t, "RegisterScanTools", scantoolapi.RegisterScanTools(reg, coord, &scantest.MockRegistry{Scanner: &scantest.MockScanner{}}, scancadence.New(scanbase.StoreFromCoordinator(coord), coord, &scantest.MockRegistry{Scanner: &scantest.MockScanner{}}, nil, scancfg.DefaultGatesConfig(), nil), nil, nil, nil))
 
 	raw, err := reg.Run(context.Background(), "scan_compare", map[string]any{
 		"old_scan_id": oldID[:8],
@@ -96,7 +98,7 @@ func TestScanCompareToolAutoBaselineOmitsOldScanID(t *testing.T) {
 	oldID := seedCompareScan(t, store, compareSeedOpts{
 		projectDir: projectDir,
 		findings: []api.SecurityFinding{
-			scanfindings.FixtureFinding("gone", api.FindingLevelHigh, "", "a.go", 1),
+			findingstest.Finding("gone", api.FindingLevelHigh, "", "a.go", 1),
 		},
 	})
 	newID := seedCompareScan(t, store, compareSeedOpts{
@@ -104,7 +106,7 @@ func TestScanCompareToolAutoBaselineOmitsOldScanID(t *testing.T) {
 	})
 
 	reg := tools.NewDefaultRegistry()
-	testutil.FailErr(t, "RegisterScanTools", scantoolapi.RegisterScanTools(reg, coord, &scanbase.MockRegistry{Scanner: &scanbase.MockScanner{}}, scancadence.New(scanbase.StoreFromCoordinator(coord), coord, &scanbase.MockRegistry{Scanner: &scanbase.MockScanner{}}, nil, scancfg.DefaultGatesConfig(), nil), nil, nil, nil))
+	testutil.FailErr(t, "RegisterScanTools", scantoolapi.RegisterScanTools(reg, coord, &scantest.MockRegistry{Scanner: &scantest.MockScanner{}}, scancadence.New(scanbase.StoreFromCoordinator(coord), coord, &scantest.MockRegistry{Scanner: &scantest.MockScanner{}}, nil, scancfg.DefaultGatesConfig(), nil), nil, nil, nil))
 
 	raw, err := reg.Run(context.Background(), "scan_compare", map[string]any{
 		"new_scan_id": newID,

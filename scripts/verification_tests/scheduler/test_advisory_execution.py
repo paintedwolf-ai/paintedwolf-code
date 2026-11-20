@@ -1,6 +1,9 @@
-"""Advisory queue observations: backlog, runtime history, and superseded source."""
+"""Advisory queue observations: backlog, runtime history, and superseded source; completed-stage
+evidence separates admission wait from execution history, which keeps only passing whole-target
+runs."""
 
 import contextlib
+from contextlib import nullcontext
 import json
 from pathlib import Path
 import tempfile
@@ -9,7 +12,9 @@ import unittest
 from unittest.mock import patch
 
 import verification_advisories as advisories
+import verification_execute as execution
 import verification_history as history
+from verification_plan import expand
 from verification_state import read_state
 
 
@@ -37,7 +42,7 @@ class AdvisoryTests(unittest.TestCase):
         self.temporary = tempfile.TemporaryDirectory()
         self.addCleanup(self.temporary.cleanup)
         self.root = Path(self.temporary.name)
-        self.queue = SimpleNamespace(root=self.root, locked=contextlib.nullcontext)
+        self.queue = SimpleNamespace(root=self.root, history=self.root, locked=contextlib.nullcontext)
         advisories._announced.clear()
 
     def status(self, runs=(), operations=(), **fields):
@@ -254,6 +259,44 @@ class AdvisoryTests(unittest.TestCase):
                                              {"locks": ["dev-engine", "scanners"], "workers": 3})
         self.assertEqual(notice, "test execution: build:lycaon-dev runs outside a shared batch: it holds "
                                  "dev-engine, scanners and 3 workers for its whole run; other work continues")
+
+
+WHOLE = expand(["comments:check"])[0]
+SELECTED = expand(["test:runner"], ["-k", "fixture"])[0]
+
+
+class StageRuntimeTests(unittest.TestCase):
+    def publish(self, root, entry, code=0, stage=WHOLE):
+        queue = SimpleNamespace(root=root, history=root, locked=nullcontext)
+        log = root / 'stage.log'
+        log.write_text('')
+        executor = SimpleNamespace(queue=queue, directory=root, running={'request': {0}},
+                                   cache={}, finished=set(), stages=[])
+        job = {'first': stage, 'key': 'fixture', 'packages': [],
+               'result': {'stage_id': 'stage-001', 'names': [stage['name']], 'started_at': 100,
+                          'consumers': ['request'], 'log': str(log)},
+               'result_path': root / 'stage.json', 'consumers': ['request'],
+               'future': SimpleNamespace(result=lambda: code),
+               'reservation': SimpleNamespace(entry=entry),
+               'needs': [({'ticket': 'request'}, 0, {}, [])]}
+        with patch.object(execution.time, 'time', return_value=204):
+            execution.Executor.publish_stage(executor, job)
+        return json.loads((root / 'stages.json').read_text())[0], history.read_history(queue)
+
+    def test_queue_wait_never_inflates_the_completed_runtime_sample(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            result, measured = self.publish(Path(temporary), {'started_at': 200})
+        self.assertEqual((result['queued_at'], result['started_at'], result['finished_at']), (100, 200, 204))
+        self.assertEqual(history.samples(measured, WHOLE['name']), [4])
+
+    def test_failed_selected_unadmitted_and_canceled_stages_never_create_runtime_samples(self):
+        admitted = {'started_at': 200}
+        for entry, code, stage in ((admitted, 1, WHOLE), (admitted, 0, SELECTED), ({}, 0, WHOLE),
+                                   ({}, 130, WHOLE), ({}, 2, WHOLE), (admitted, 143, WHOLE)):
+            with self.subTest(entry=entry, code=code, stage=stage['name']), tempfile.TemporaryDirectory() as temporary:
+                _, measured = self.publish(Path(temporary), entry, code, stage)
+                self.assertEqual(measured, {})
+
 
 if __name__ == "__main__":
     unittest.main()

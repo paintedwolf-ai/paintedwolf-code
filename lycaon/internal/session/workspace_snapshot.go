@@ -98,11 +98,11 @@ func walkSnapshotDir(projectDir string, out map[string]WorkspaceFileFingerprint)
 		if err != nil {
 			return oswalk.Skip(err)
 		}
-		recordFingerprint(projectDir, out, relSlash, info)
+		recordFingerprint(out, relSlash, info)
 		return nil
 	})
 }
-func recordFingerprint(projectDir string, out map[string]WorkspaceFileFingerprint, rel string, info fs.FileInfo) {
+func recordFingerprint(out map[string]WorkspaceFileFingerprint, rel string, info fs.FileInfo) {
 	rel = strings.TrimSpace(filepath.ToSlash(rel))
 	if rel == "" || info == nil || info.IsDir() {
 		return

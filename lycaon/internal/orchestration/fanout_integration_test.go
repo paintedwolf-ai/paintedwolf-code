@@ -10,12 +10,14 @@ import (
 
 	"github.com/lycaon/lycaon/internal/llm"
 	"github.com/lycaon/lycaon/internal/orchestration"
+	"github.com/lycaon/lycaon/internal/orchestration/orchestrationtest"
 	"github.com/lycaon/lycaon/internal/session"
 	"github.com/lycaon/lycaon/internal/session/store"
+	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
-	"github.com/lycaon/lycaon/internal/tools"
+	"github.com/lycaon/lycaon/internal/tools/toolstest"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -32,11 +34,11 @@ func fanOutSpec(subtasks ...string) orchestration.TopologySpec {
 	}
 }
 
-func newFanOutTestOrchestrator(t *testing.T, rec *recordingWorkers) (*orchestration.OrchestratorImpl, *orchestration.MemoryTopologyWorkers, *session.Host, *store.Memory) {
+func newFanOutTestOrchestrator(t *testing.T, rec *recordingWorkers) (*orchestration.OrchestratorImpl, *orchestration.MemoryTopologyWorkers, *session.Host, *store.SQL) {
 	t.Helper()
 	mem := orchestration.NewMemoryTopologyWorkers()
-	sessStore := store.NewMemory()
-	sessMgr := session.NewHost(sessStore, session.Models{Client: llm.NewMockProvider(nil), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
+	sessStore := storetest.New(t, testdbseed.DefaultProjectID)
+	sessMgr := session.NewHost(sessStore, session.Models{Client: llm.NewMockProvider(nil), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, toolstest.NewRegistry())
 	if rec == nil {
 		rec = &recordingWorkers{}
 	}
@@ -44,7 +46,7 @@ func newFanOutTestOrchestrator(t *testing.T, rec *recordingWorkers) (*orchestrat
 	if rec.order == nil {
 		rec.order = make([]string, 0, 8)
 	}
-	reg := orchestration.NewMemoryAgentRegistryForTest()
+	reg := orchestrationtest.Registry(t)
 	orch := orchestration.NewOrchestratorImpl(orchestration.OrchestratorDeps{
 		Workers: rec,
 		Agents:  reg,
@@ -58,7 +60,7 @@ func TestFanOutUnknownProfileFails(t *testing.T) {
 
 	sess, err := sessMgr.Chats.CreateForProject(ctx, testdbseed.DefaultProjectID, api.SessionPostureOrchestrate)
 	testutil.FailErr(t, "sessMgr.Create failed", err)
-	projectDir := testdbseed.OrchestrationWorkspace(t, sessStore, sess)
+	projectDir := testdbseed.OrchestrationWorkspace(t, sessStore.DB(), sess.ID)
 
 	_, err = orch.Run(ctx, orchestration.RunRequest{
 		SessionID: sess.ID,
@@ -86,7 +88,7 @@ func TestFanOutParallelDispatch(t *testing.T) {
 
 	sess, err := sessMgr.Chats.CreateForProject(ctx, testdbseed.DefaultProjectID, api.SessionPostureOrchestrate)
 	testutil.FailErr(t, "sessMgr.Create failed", err)
-	projectDir := testdbseed.OrchestrationWorkspace(t, sessStore, sess)
+	projectDir := testdbseed.OrchestrationWorkspace(t, sessStore.DB(), sess.ID)
 
 	_, err = orch.Run(ctx, orchestration.RunRequest{
 		SessionID: sess.ID,
@@ -111,7 +113,7 @@ func TestFanOutReconYamlMockRun(t *testing.T) {
 
 	sess, err := sessMgr.Chats.CreateForProject(ctx, testdbseed.DefaultProjectID, api.SessionPostureOrchestrate)
 	testutil.FailErr(t, "sessMgr.Create failed", err)
-	projectDir := testdbseed.OrchestrationWorkspace(t, sessStore, sess)
+	projectDir := testdbseed.OrchestrationWorkspace(t, sessStore.DB(), sess.ID)
 
 	result, err := orch.Run(ctx, orchestration.RunRequest{
 		SessionID: sess.ID,
@@ -136,7 +138,7 @@ func TestFanOutLateCancelPreservesCompletedBatch(t *testing.T) {
 
 	sess, err := sessMgr.Chats.CreateForProject(ctx, testdbseed.DefaultProjectID, api.SessionPostureOrchestrate)
 	testutil.FailErr(t, "sessMgr.Create failed", err)
-	projectDir := testdbseed.OrchestrationWorkspace(t, sessStore, sess)
+	projectDir := testdbseed.OrchestrationWorkspace(t, sessStore.DB(), sess.ID)
 
 	result, err := orch.Run(ctx, orchestration.RunRequest{
 		SessionID: sess.ID,
@@ -175,7 +177,7 @@ func TestFanOutCancelAbortsActiveBatch(t *testing.T) {
 	orch, mem, sessMgr, sessStore := newFanOutTestOrchestrator(t, rec)
 	sess, err := sessMgr.Chats.CreateForProject(ctx, testdbseed.DefaultProjectID, api.SessionPostureOrchestrate)
 	testutil.FailErr(t, "create orchestration session", err)
-	projectDir := testdbseed.OrchestrationWorkspace(t, sessStore, sess)
+	projectDir := testdbseed.OrchestrationWorkspace(t, sessStore.DB(), sess.ID)
 	finished := make(chan error, 1)
 	go func() {
 		_, runErr := orch.Run(ctx, orchestration.RunRequest{
@@ -239,7 +241,7 @@ func TestFanOutCancelAfterSettlementBeforeReturnPreservesDone(t *testing.T) {
 	orch, mem, sessMgr, sessStore := newFanOutTestOrchestrator(t, rec)
 	sess, err := sessMgr.Chats.CreateForProject(ctx, testdbseed.DefaultProjectID, api.SessionPostureOrchestrate)
 	testutil.FailErr(t, "create session", err)
-	projectDir := testdbseed.OrchestrationWorkspace(t, sessStore, sess)
+	projectDir := testdbseed.OrchestrationWorkspace(t, sessStore.DB(), sess.ID)
 	finished := make(chan error, 1)
 	go func() {
 		_, runErr := orch.Run(ctx, orchestration.RunRequest{SessionID: sess.ID, Topology: fanOutSpec("a", "b"), Input: map[string]any{"project_dir": projectDir, "project_id": testdbseed.DefaultProjectID}})
@@ -293,10 +295,10 @@ func TestFanOutCancellationDuringSetupAbortsBeforeDispatch(t *testing.T) {
 	var once sync.Once
 	release := func() { once.Do(func() { close(blocked.release) }) }
 	defer release()
-	orch := orchestration.NewOrchestratorImpl(orchestration.OrchestratorDeps{Workers: blocked, Agents: orchestration.NewMemoryAgentRegistryForTest()})
+	orch := orchestration.NewOrchestratorImpl(orchestration.OrchestratorDeps{Workers: blocked, Agents: orchestrationtest.Registry(t)})
 	sess, err := sessMgr.Chats.CreateForProject(ctx, testdbseed.DefaultProjectID, api.SessionPostureOrchestrate)
 	testutil.FailErr(t, "create session", err)
-	projectDir := testdbseed.OrchestrationWorkspace(t, sessStore, sess)
+	projectDir := testdbseed.OrchestrationWorkspace(t, sessStore.DB(), sess.ID)
 	finished := make(chan error, 1)
 	go func() {
 		_, runErr := orch.Run(ctx, orchestration.RunRequest{SessionID: sess.ID, Topology: fanOutSpec("a", "b"), Input: map[string]any{"project_dir": projectDir, "project_id": testdbseed.DefaultProjectID}})

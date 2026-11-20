@@ -13,6 +13,7 @@ import (
 	"github.com/lycaon/lycaon/internal/invocation"
 	"github.com/lycaon/lycaon/internal/session/approvalstate"
 	"github.com/lycaon/lycaon/internal/session/store"
+	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/sourceledger"
 	"github.com/lycaon/lycaon/internal/testdbfixture"
@@ -20,25 +21,26 @@ import (
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/tools"
+	"github.com/lycaon/lycaon/internal/tools/toolstest"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
 func TestRecoverOrphanedTurnsClearsStuckBusy(t *testing.T) {
 	ctx := context.Background()
-	mem := store.NewMemory()
+	sessionStore := storetest.New(t, testdbseed.DefaultProjectID)
 	hub := events.NewMemoryHub()
-	mgr := NewHost(mem, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
+	mgr := NewHost(sessionStore, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
 	mgr.SetEventPublisher(&events.Publisher{Hub: hub})
-	sess, err := mem.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
+	sess, err := sessionStore.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "Create", err)
-	testutil.FailErr(t, "busy", mem.SetSessionStatus(ctx, sess.ID, api.SessionStatusBusy))
+	testutil.FailErr(t, "busy", sessionStore.SetSessionStatus(ctx, sess.ID, api.SessionStatusBusy))
 
 	ch, unsub, err := hub.Subscribe(ctx, events.Subscription{Project: sess.ProjectID, Viewer: testutil.HostOwner()})
 	testutil.FailErr(t, "Subscribe", err)
 	t.Cleanup(unsub)
 
 	testutil.FailErr(t, "RecoverOrphanedTurns", mgr.Stops.Recovery.RecoverOrphanedTurns(ctx))
-	got, err := mem.Get(ctx, sess.ID)
+	got, err := sessionStore.Get(ctx, sess.ID)
 	testutil.FailErr(t, "Get", err)
 	if got.Status != api.SessionStatusIdle {
 		t.Fatalf("status = %s want idle", got.Status)
@@ -156,7 +158,7 @@ func (r *reviewCheckpointRecorder) CreateStructuralCheckpoint(
 
 func TestReviewCheckpointOnlyOpensForRealUserIntent(t *testing.T) {
 	ctx := t.Context()
-	sessions := store.NewMemory()
+	sessions := storetest.New(t, testdbseed.DefaultProjectID)
 	mgr := NewHost(sessions, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
 	recorder := &reviewCheckpointRecorder{}
 	mgr.SetSourceLedger(recorder, tools.SourceHistory{}, nil, nil, recorder, nil)
@@ -200,7 +202,7 @@ func TestReviewGuidanceFollowsLiveVerdictGate(t *testing.T) {
 		for _, pending := range []bool{false, true} {
 			for _, staged := range []bool{false, true} {
 				t.Run(fmt.Sprintf("%s/pending=%v/staged=%v", id, pending, staged), func(t *testing.T) {
-					mgr := NewHost(store.NewMemory(), Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
+					mgr := NewHost(storetest.New(t, testdbseed.DefaultProjectID), Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, toolstest.NewRegistry())
 					mgr.SetWorkflowDomains(workflowDomainFixture(verdictPendingView{pending: true}))
 					kicks := mgr.Coordinator.Runtime.Kicks()
 					review := anchor.InformRender(id)
@@ -362,5 +364,50 @@ func TestListenDayGrantExpires(t *testing.T) {
 	granted, ports := rt.SessionPorts("chat")
 	if !granted || len(ports) != 1 || ports[0] != 8000 {
 		t.Fatalf("live day grant: granted=%v ports=%v", granted, ports)
+	}
+}
+
+// A live draft whose model output never settled holds no reply; recovery
+// withdraws it from prompt history and keeps a draft whose output settled.
+func TestRecoverOrphanedTurnsWithdrawsUnsettledLiveDrafts(t *testing.T) {
+	for _, fixture := range []struct {
+		name string
+		open func(*testing.T) Store
+	}{
+		{name: "sql", open: func(t *testing.T) Store {
+			database := testdbfixture.Open(t, "recover-drafts.db")
+			testdbseed.InsertProjectRoot(t, database, testdbseed.DefaultProjectID, t.TempDir())
+			return store.NewSQL(database)
+		}},
+	} {
+		t.Run(fixture.name, func(t *testing.T) {
+			ctx := t.Context()
+			st := fixture.open(t)
+			mgr := NewHost(st, Models{Limits: settings.DefaultSessionLimits()}, nil)
+			sess, err := st.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
+			testutil.FailErr(t, "create session", err)
+			turn, err := st.BeginTurn(ctx, store.TurnStart{SessionID: sess.ID, ProjectID: sess.ProjectID, Origin: store.TurnOriginUser, InputJSON: "{}"})
+			testutil.FailErr(t, "begin turn", err)
+			live := func(id string) api.Message {
+				return api.Message{ID: id, Role: api.MessageRoleAssistant, DraftStatus: api.DraftStatusLive, Visibility: api.MessageVisibilityInternal}
+			}
+			testutil.FailErr(t, "append drafts", st.AppendMessages(ctx, sess.ID, live("settled"), live("unsettled")))
+			_, err = st.SettleModelOutput(ctx, store.ModelOutput{
+				ID: "output-1", TurnAttemptID: turn.Attempt.ID, SessionID: sess.ID, Iteration: 1,
+				MessageID: "settled", Content: "Reading.", ToolCallsJSON: "[]", ReasoningJSON: "null", CreatedAt: time.Now().UTC(),
+			})
+			testutil.FailErr(t, "settle output", err)
+
+			for range 2 {
+				testutil.FailErr(t, "recover", mgr.Stops.Recovery.RecoverOrphanedTurns(ctx))
+			}
+			for id, wantPrompt := range map[string]bool{"settled": true, "unsettled": false} {
+				msg, err := st.GetMessage(ctx, sess.ID, id)
+				testutil.FailErr(t, "read "+id, err)
+				if api.IsPromptHistoryMessage(msg) != wantPrompt {
+					t.Errorf("draft %s in prompt history = %v, want %v (status %q)", id, !wantPrompt, wantPrompt, msg.DraftStatus)
+				}
+			}
+		})
 	}
 }

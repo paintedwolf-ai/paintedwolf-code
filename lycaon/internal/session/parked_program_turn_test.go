@@ -3,12 +3,11 @@ package session
 import (
 	"context"
 	"testing"
-	"time"
 
 	awaitstore "github.com/lycaon/lycaon/internal/await"
 	"github.com/lycaon/lycaon/internal/coordinator/loopwake"
 	"github.com/lycaon/lycaon/internal/llm"
-	"github.com/lycaon/lycaon/internal/session/store"
+	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/testdbseed"
@@ -16,18 +15,19 @@ import (
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/testutil/oartest"
 	"github.com/lycaon/lycaon/internal/tools"
+	"github.com/lycaon/lycaon/internal/tools/toolstest"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
 // User input interrupts a parked command; the user's turn opens with the
 // program's interrupted result, ahead of the user's message.
 func TestUserTurnOpensWithTheInterruptedParkedProgram(t *testing.T) {
-	memory := store.NewMemory()
-	registry := tools.NewStubRegistry()
-	mgr := NewHost(memory, Models{Client: llm.NewMockProvider(testMockConfig(t)), Limits: settings.DefaultSessionLimits()}, registry)
+	sessionStore := storetest.New(t, testdbseed.DefaultProjectID)
+	registry := toolstest.NewRegistry()
+	mgr := NewHost(sessionStore, Models{Client: llm.NewMockProvider(testMockConfig(t)), Limits: settings.DefaultSessionLimits()}, registry)
 	oartest.InstallCloseoutPolicy(t, mgr)
 	mgr.Coordinator.Guards.SetToolMetadata(testtool.RegistryInvoker{Registry: registry})
-	sess, err := memory.Create(t.Context(), api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
+	sess, err := sessionStore.Create(t.Context(), api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
 	database := testdbfixture.Open(t, "waits.db")
 	testdbseed.InsertSession(t, database, sess.ID, testdbseed.DefaultProjectID)
@@ -42,7 +42,7 @@ func TestUserTurnOpensWithTheInterruptedParkedProgram(t *testing.T) {
 	// render. Production parks always carry the program's own deadline.
 	_, err = loopwake.ProgramParking{Subscriptions: loop.Subscriptions}.ParkProgram(t.Context(),
 		tools.ToolContext{Identity: tools.InvocationIdentity{SessionID: sess.ID, ProjectID: testdbseed.DefaultProjectID, ToolCallID: "call-1"}},
-		tools.ProgramPark{ProgramID: "program-1", Reason: "sleep 600", Deadline: time.Now().UTC().Add(time.Minute), Claim: func() bool { return true }, Interrupt: func(context.Context) string { return partial }})
+		tools.ProgramPark{ProgramID: "program-1", Reason: "sleep 600", Claim: func() bool { return true }, Interrupt: func(context.Context) string { return partial }})
 	testutil.FailErr(t, "park program", err)
 
 	_, err = mgr.Submissions.Prompt(t.Context(), sess.ID, "stop waiting")

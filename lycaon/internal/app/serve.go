@@ -9,6 +9,7 @@ import (
 	"github.com/lycaon/lycaon/internal/app/sessions"
 	"github.com/lycaon/lycaon/internal/app/workerruntime"
 	"github.com/lycaon/lycaon/internal/app/workflows"
+	"github.com/lycaon/lycaon/internal/bootrecovery"
 	"github.com/lycaon/lycaon/internal/clisocket"
 	"github.com/lycaon/lycaon/internal/configdir"
 	"github.com/lycaon/lycaon/internal/coordinator"
@@ -69,6 +70,8 @@ type ServeApp struct {
 	decider decide.Decider
 
 	runners runnerState
+	// recovery holds every registered startup recovery entry.
+	recovery *bootrecovery.Registry
 
 	projects clisocket.Projects
 	eventPub *events.Publisher

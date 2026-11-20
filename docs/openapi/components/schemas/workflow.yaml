@@ -294,9 +294,11 @@ components:
       additionalProperties: false
       properties:
         run:
-          x-go-pointer: true
-          nullable: true
-          $ref: workflow.yaml#/components/schemas/WorkflowRun
+          description: The chat's active run; null when it has none.
+          x-go-type: "*WorkflowRun"
+          anyOf:
+          - $ref: workflow.yaml#/components/schemas/WorkflowRun
+          - type: 'null'
     PendingFeedback:
       x-go-generate: true
       x-go-field-order: ["phase_id", "prompt", "response_type", "options", "allow_other", "artifact_id", "artifact_ids", "purpose", "issued_revision", "secret"]

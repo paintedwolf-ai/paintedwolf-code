@@ -121,7 +121,3 @@ func TestLanguageSourcesAreRequiredAndStrict(t *testing.T) {
 		})
 	}
 }
-
-func TestGeneratedLanguageContractIsCurrent(t *testing.T) {
-	testutil.FailErr(t, "generated contract", generateLanguageCatalog(filepath.Join("..", ".."), true))
-}

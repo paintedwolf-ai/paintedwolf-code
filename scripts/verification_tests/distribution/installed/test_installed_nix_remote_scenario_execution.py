@@ -243,7 +243,6 @@ class ScenarioTests(unittest.TestCase):
             command = shlex.split(delegation.arguments(index)['command'])
             self.assertTrue(command[1].endswith('nix-remote.py'))
             self.assertEqual(command[3], mode)
-            self.assertEqual(delegation.arguments(index)['timeout_ms'], 240000)
         delegation.mocks[7].assert_called_once_with(delegation.turns[1], delegation.arguments(1))
         delegation.mocks[9].assert_called_once_with(ORDINARY, APPROVED, delegation.builder, 11)
         self.assertEqual(delegation.mocks[0].call_count, 2)

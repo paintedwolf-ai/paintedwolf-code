@@ -15,30 +15,7 @@ func TestPatchSessionTitle(t *testing.T) {
 	t.Setenv("LYCAON_LLM_MOCK", "1")
 	srv := contractfixture.NewTestServer(t)
 
-	createProj := contractfixture.NewAuthedRequest(http.MethodPost, "/v1/projects", strings.NewReader(`{"roots":[]}`))
-	projRec := httptest.NewRecorder()
-	srv.ServeHTTP(projRec, createProj)
-	if projRec.Code != http.StatusCreated {
-		t.Fatalf("create project status = %d body = %s", projRec.Code, projRec.Body.String())
-	}
-	var proj wire.Project
-	if err := json.Unmarshal(projRec.Body.Bytes(), &proj); err != nil {
-		t.Fatalf("decode project: %v", err)
-	}
-
-	createSess := contractfixture.NewAuthedRequest(http.MethodPost, "/v1/sessions", strings.NewReader(
-		`{"project_id":"`+proj.ID+`","posture":"build"}`,
-	))
-	sessRec := httptest.NewRecorder()
-	srv.ServeHTTP(sessRec, createSess)
-	if sessRec.Code != http.StatusAccepted {
-		t.Fatalf("create session status = %d body = %s", sessRec.Code, sessRec.Body.String())
-	}
-	var sess wire.Session
-	if err := json.Unmarshal(sessRec.Body.Bytes(), &sess); err != nil {
-		t.Fatalf("decode session: %v", err)
-	}
-	contractfixture.DrainBackground(t, srv)
+	sess := contractfixture.CreateSessionAtPathOnServer(t, srv, t.TempDir(), wire.SessionPostureBuild)
 
 	patch := contractfixture.NewAuthedRequest(http.MethodPatch, "/v1/sessions/"+sess.ID, strings.NewReader(
 		`{"title":"  Ship readiness checklist  "}`,
@@ -77,24 +54,7 @@ func TestPatchSessionRejectsCompoundCommandWithoutMutation(t *testing.T) {
 	t.Setenv("LYCAON_LLM_MOCK", "1")
 	srv := contractfixture.NewTestServer(t)
 
-	createProj := contractfixture.NewAuthedRequest(http.MethodPost, "/v1/projects", strings.NewReader(`{"roots":[]}`))
-	projRec := httptest.NewRecorder()
-	srv.ServeHTTP(projRec, createProj)
-	var proj wire.Project
-	if err := json.Unmarshal(projRec.Body.Bytes(), &proj); err != nil {
-		t.Fatalf("decode project: %v", err)
-	}
-
-	createSess := contractfixture.NewAuthedRequest(http.MethodPost, "/v1/sessions", strings.NewReader(
-		`{"project_id":"`+proj.ID+`","posture":"build"}`,
-	))
-	sessRec := httptest.NewRecorder()
-	srv.ServeHTTP(sessRec, createSess)
-	var sess wire.Session
-	if err := json.Unmarshal(sessRec.Body.Bytes(), &sess); err != nil {
-		t.Fatalf("decode session: %v", err)
-	}
-	contractfixture.DrainBackground(t, srv)
+	sess := contractfixture.CreateSessionAtPathOnServer(t, srv, t.TempDir(), wire.SessionPostureBuild)
 
 	compound := contractfixture.NewAuthedRequest(http.MethodPatch, "/v1/sessions/"+sess.ID, strings.NewReader(
 		`{"title":"Must not land","archived":true}`,

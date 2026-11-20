@@ -168,7 +168,7 @@ func (o *OpenGrepScanner) scanTargetBatch(ctx context.Context, projectDir, bin s
 	if err != nil {
 		return nil, err
 	}
-	confinement, err := scan.BundledScannerConfinement(projectDir, runFiles.dir())
+	launch, err := opengrepLaunch(projectDir, runFiles)
 	if err != nil {
 		return nil, err
 	}
@@ -177,7 +177,7 @@ func (o *OpenGrepScanner) scanTargetBatch(ctx context.Context, projectDir, bin s
 		return nil, fmt.Errorf("opengrep clear prior batch output: %w", err)
 	}
 	output, console, exitCode, err := exec.RunSeparate(ctx, bin, args, exec.ExecOpts{
-		Launch:          exec.BundledScannerLaunch("opengrep", confinement),
+		Launch:          launch,
 		Dir:             projectDir,
 		Timeout:         time.Duration(o.runtimePolicy.HardLimitSec) * time.Second,
 		NoTimeout:       o.runtimePolicy.HardLimitSec == 0,
@@ -299,4 +299,13 @@ func filterNonCode(ctx context.Context, result *scanoutput.Result, project strin
 	result.Findings = filtered
 	result.FindingsCount = len(filtered)
 	return nil
+}
+
+// opengrepLaunch confines OpenGrep to reading the project and writing its run files.
+func opengrepLaunch(projectDir string, runFiles opengrepRunFiles) (exec.LaunchPlan, error) {
+	confinement, err := scan.BundledScannerConfinement(projectDir, runFiles.dir())
+	if err != nil {
+		return exec.LaunchPlan{}, err
+	}
+	return exec.BundledScannerLaunch("opengrep", confinement), nil
 }

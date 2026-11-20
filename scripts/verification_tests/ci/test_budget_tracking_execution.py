@@ -1,6 +1,9 @@
-"""Source-bound budget snapshots and issue lifecycle decisions."""
+"""Source-bound budget snapshots and issue lifecycle decisions, independent of reporter intake and
+stale closure."""
 import html
 import json
+from pathlib import Path
+import subprocess
 import unittest
 from urllib.parse import quote
 
@@ -106,6 +109,15 @@ class SnapshotTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             snapshot.validate(value, 'a' * 40, 'b' * 40)
 
+    def test_a_warning_only_category_carries_no_limit_or_cap(self):
+        warning_only = {**row(category='test_files', measured=5000), 'limit': None, 'effective_cap': None}
+        _, artifacts = snapshot.validate(report([warning_only]), 'a' * 40, 'b' * 40)
+        self.assertIsNone(next(iter(artifacts.values()))['limit'])
+        for change in ({'effective_cap': 900}, {'limit': 0}, {'measured': 300}):
+            value = report([{**warning_only, **change}])
+            with self.subTest(change=change), self.assertRaises(ValueError):
+                snapshot.validate(value, 'a' * 40, 'b' * 40)
+
     def test_stable_identity_excludes_measurement_and_pr(self):
         self.assertEqual(snapshot.key('source_files', 'pkg/server.go'), snapshot.key(row()['category'], row()['id']))
         self.assertNotEqual(snapshot.key('source_files', 'pkg/server.go'), snapshot.key('test_files', 'pkg/server.go'))
@@ -118,6 +130,16 @@ class WorkstreamTests(unittest.TestCase):
 
     def artifacts(self, *rows):
         return {snapshot.key(r['category'], r['id']): r for r in rows}
+
+    def test_a_warning_only_artifact_counts_as_no_hard_limit_breach(self):
+        bounded = row(measured=950)
+        warning_only = {**row(artifact='pkg/long_test.go', category='test_files', measured=5000),
+                        'limit': None, 'effective_cap': None}
+        self.assertTrue(self.groups.past_hard_limit(bounded, 'limit'))
+        self.assertFalse(self.groups.past_hard_limit(warning_only, 'limit'))
+        self.assertFalse(self.groups.past_hard_limit(warning_only, 'effective_cap'))
+        body = self.groups.block('pkg', [warning_only], observation())
+        self.assertIn('| 5000 | 300 | none | none |', body)
 
     def test_structural_grouping_grows_without_a_module_catalog(self):
         for path, expected in [('lycaon/internal/newmodule/nested/service.go', 'lycaon/internal'),
@@ -299,3 +321,28 @@ class WorkstreamTests(unittest.TestCase):
         # A touch the frozen area cannot record waits for a later report.
         ops, _ = self.groups.plan([dismissed], self.artifacts(changed), observation(), held=lambda _: True)
         self.assertEqual(ops, [{'action': 'hold', 'key': 'pkg', 'artifacts': [{'category': 'source_files', 'id': 'pkg/server.go'}]}])
+
+
+class IssuePolicyTests(unittest.TestCase):
+    def test_only_bot_authored_budget_markers_bypass_reporter_lifecycle(self):
+        source = r'''
+const assert = require("node:assert/strict");
+const { isExempt, markStale } = require("./.github/scripts/issue-policy.cjs");
+const tracked = { number: 1, user: { login: "github-actions[bot]" },
+  body: "<!-- paintedwolf-maintainability:v1 -->", labels: [],
+  updated_at: "2000-01-01T00:00:00Z" };
+assert.equal(isExempt(tracked), true);
+assert.equal(isExempt({ ...tracked, body: "<!-- paintedwolf-maintainability:v2 -->" }), true);
+assert.equal(isExempt({ ...tracked, user: { login: "someone" } }), false);
+assert.equal(isExempt({ ...tracked, body: "ordinary automated report" }), false);
+const writes = [];
+const github = { paginate: async () => [tracked], rest: { issues: {
+  listForRepo: {}, addLabels: async (...args) => writes.push(args),
+  createComment: async (...args) => writes.push(args),
+} } };
+markStale({ github, context: { repo: { owner: "owner", repo: "repo" } },
+  core: { info: () => {} } }).then(() => assert.deepEqual(writes, []));
+'''
+        result = subprocess.run(['node', '-e', source], cwd=Path(__file__).resolve().parents[3],
+                                capture_output=True, text=True)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)

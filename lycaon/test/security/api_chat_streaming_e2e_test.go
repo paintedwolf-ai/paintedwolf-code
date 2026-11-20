@@ -27,13 +27,13 @@ func TestChatStreamingTwoChannelE2E(t *testing.T) {
 	projectDir := t.TempDir()
 
 	// Create the project before subscribing.
-	project := createAPIProjectAtPath(t, base, projectDir)
+	project := CreateAPIProjectAtPath(t, base, projectDir)
 	if project.ID == "" {
 		t.Fatal("open project returned empty id")
 	}
 
 	// Create a session under the project.
-	sess := openAPIPostJSON[wire.Session](t, base, "/v1/sessions", nil,
+	sess := OpenAPIPostJSON[wire.Session](t, base, "/v1/sessions", nil,
 		`{"project_id":"`+project.ID+`","posture":"build"}`, http.StatusAccepted)
 
 	// Subscribe before prompt admission.

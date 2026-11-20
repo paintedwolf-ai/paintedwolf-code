@@ -1,9 +1,14 @@
 package wiring
 
 import (
+	"context"
+	"time"
+
 	"github.com/lycaon/lycaon/internal/decide"
 	"github.com/lycaon/lycaon/internal/decide/decidetest"
+	"github.com/lycaon/lycaon/internal/fileops"
 	"github.com/lycaon/lycaon/internal/gate"
+	"github.com/lycaon/lycaon/internal/llm"
 	"github.com/lycaon/lycaon/internal/llm/modelcall"
 	"github.com/lycaon/lycaon/internal/mcp"
 	"github.com/lycaon/lycaon/internal/secretmatch"
@@ -14,6 +19,7 @@ type options struct {
 	llmClient               modelcall.LLMClient
 	decider                 decide.Decider
 	recording               bool
+	recordedScript          *llm.MockConfig
 	autoCompleteLegs        bool
 	replaceManifests        map[string]workflowdef.Manifest
 	useBundledScanners      bool
@@ -22,7 +28,10 @@ type options struct {
 	secretMatcher           *secretmatch.Matcher
 	mcpConnector            mcp.SessionConnector
 	installedPackDirs       []string
+	changeDebounce          time.Duration
+	fileOperationHold       func(context.Context, fileops.Request)
 	globalApprovalPosture   gate.Posture
+	configRoot              *string
 }
 
 // A scripted model calls surface tools outright, so the default decider
@@ -43,19 +52,23 @@ func WithDecider(d decide.Decider) Option {
 // Option configures BuildForTest.
 type Option func(*options)
 
-func withGlobalApprovalPosture(posture gate.Posture) Option {
-	return func(o *options) { o.globalApprovalPosture = posture }
-}
-
 // Packs are installed into the isolated extension cache before app construction.
 func WithInstalledPack(dirs ...string) Option {
 	return func(o *options) { o.installedPackDirs = append(o.installedPackDirs, dirs...) }
 }
 
-// WithRecordingLLM wraps the mock provider in a RecordingClient exposed on Harness.Recording.
+// WithRecordingLLM wraps the mock provider in a RecordingClient exposed on
+// Harness.Recording. It records each request after the outbound secret screen.
 func WithRecordingLLM() Option {
 	return func(o *options) {
 		o.recording = true
+	}
+}
+
+// WithRecordedScript records like WithRecordingLLM with script as the model.
+func WithRecordedScript(script *llm.MockConfig) Option {
+	return func(o *options) {
+		o.recording, o.recordedScript = true, script
 	}
 }
 
@@ -71,6 +84,12 @@ func WithSecretMatcher(m *secretmatch.Matcher) Option {
 	return func(o *options) {
 		o.secretMatcher = m
 	}
+}
+
+// WithFileOperationHold runs hold before each file operation's work, while it
+// is still cancelable.
+func WithFileOperationHold(hold func(context.Context, fileops.Request)) Option {
+	return func(o *options) { o.fileOperationHold = hold }
 }
 
 // WithMCPConnector replaces the default MockConnector used by BuildForTest.
@@ -113,4 +132,23 @@ func WithoutCoordinatorLoop() Option {
 	return func(o *options) {
 		o.coordinatorLoopDisabled = true
 	}
+}
+
+// WithChangeDebounce sets the process coalesce window for worktree changes
+// while the host runs. A test that waits for every change to be delivered
+// settles in about this window instead of the production one.
+func WithChangeDebounce(delay time.Duration) Option {
+	return func(o *options) {
+		o.changeDebounce = delay
+	}
+}
+
+// withGlobalApprovalPosture sets the global approval posture once the host is built.
+func withGlobalApprovalPosture(posture gate.Posture) Option {
+	return func(o *options) { o.globalApprovalPosture = posture }
+}
+
+// withConfigRoot boots with dir as the configuration root in place of the checkout.
+func withConfigRoot(dir string) Option {
+	return func(o *options) { o.configRoot = &dir }
 }

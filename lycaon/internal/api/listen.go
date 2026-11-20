@@ -1,6 +1,7 @@
 package api
 
 import (
+	"errors"
 	"fmt"
 	"net"
 	"os"
@@ -9,6 +10,12 @@ import (
 )
 
 const DefaultListenAddr = "127.0.0.1:8787"
+
+// Bind refusals for addresses that need LYCAON_BIND_ALL=1.
+var (
+	ErrWildcardBindNeedsOptIn    = errors.New("wildcard bind requires LYCAON_BIND_ALL=1")
+	ErrNonLoopbackBindNeedsOptIn = errors.New("non-loopback bind requires LYCAON_BIND_ALL=1")
+)
 
 // ResolveListenAddr returns the sidecar bind address from LYCAON_ADDR or the default.
 // Non-loopback and wildcard binds require LYCAON_BIND_ALL=1.
@@ -24,10 +31,10 @@ func ResolveListenAddr() (string, error) {
 	}
 
 	if isWildcardBind(host) && !allowBindAll() {
-		return "", fmt.Errorf("binding to %q requires LYCAON_BIND_ALL=1", host)
+		return "", fmt.Errorf("binding to %q: %w", host, ErrWildcardBindNeedsOptIn)
 	}
 	if !allowBindAll() && !egress.SyntacticLoopback(host) {
-		return "", fmt.Errorf("bind address must be loopback, got %q", host)
+		return "", fmt.Errorf("binding to %q: %w", host, ErrNonLoopbackBindNeedsOptIn)
 	}
 	return addr, nil
 }

@@ -2,8 +2,9 @@
 
 Files in a Go package's tree, CI tooling, and documentation prose are narrowed.
 Generated contracts, configuration, dependencies, build inputs, and unknown paths
-widen the gate. Test imports participate in reverse reachability; contracts and
-smoke tests run unconditionally.
+widen the gate. Test imports participate in reverse reachability; repository contracts
+and smoke tests run unconditionally. The machinery's Go tests run when what they import
+changes or when CI tooling changes.
 """
 
 import json
@@ -14,10 +15,13 @@ import subprocess
 from ci_policy.native_impact import dependencies as native_dependencies
 
 ROOT = Path(__file__).resolve().parents[2]
-SHARED = (".github/", "scripts/", "dependencies/", "schemas/", "docs/openapi",
-          "lycaon/config/", "lycaon/pkg/", "lycaon/vulndb")
-# CI's own logic and tests: no product test reads them, and the repository contracts and runner lane check them.
+SHARED = (".github/", "scripts/", "dependencies/", "schemas/", "docs/openapi", "lycaon/vulndb",
+          # Pins of the bundled Git and scanner engines that every lane runs.
+          "lycaon/config/gitengine/", "lycaon/config/runtime/scanners/bundled-manifest.yaml")
+# CI's own logic and tests: no product test reads them, and the runner lane and machinery tests check them.
 TOOLING = (".github/workflows/", "scripts/ci_policy/", "scripts/verification_tests/")
+# Go tests of the verification and release machinery: they execute its scripts and read its workflows.
+MACHINERY = ("lycaon/test/contract/runner", "lycaon/test/contract/hosted", "lycaon/test/contract/release")
 # These decide how the lanes themselves run, so a change must exercise every lane.
 TOOLING_EXCEPTIONS = {".github/workflows/ci.yml", ".github/workflows/verification.yml",
                       "scripts/ci_policy/hosted_execution.py", "scripts/ci_policy/hosted_plan.py"}
@@ -28,10 +32,23 @@ PROSE = {"AGENTS.md", "CODE_OF_CONDUCT.md", "CONTRIBUTING.md", "README.md", "REP
 # What the script suites read: their own sources, the workflows and actions, packaging, and the task runner.
 SCRIPT_INPUTS = ("scripts/", ".github/", "packaging/")
 SCRIPT_FILES = {"Taskfile.yml", "task"}
-# What the Den suite builds from: its tree, the wire contract it generates types from, the changelog it
-# embeds, and its runtime pins.
-FRONTEND_INPUTS = ("lycaon-den/", "docs/openapi/")
+# What the Den suite builds from: its tree, the wire contract it generates types from, the host
+# configuration its tests read, the changelog it embeds, and its runtime pins.
+FRONTEND_INPUTS = ("lycaon-den/", "docs/openapi/", "lycaon/config/")
 FRONTEND_FILES = {"CHANGELOG.md", ".bun-version", ".node-version"}
+# Den's own suites outside its source: the browser journeys and their fixtures.
+DEN_TESTS = "lycaon-den/e2e/"
+# What the vulnerability scan and the third-party notices read: the dependency graphs, the vulnerability
+# database and its allowlist, the bundled-binary licensing catalog, and the scripts themselves.
+DEPENDENCY_NAMES = {"go.mod", "go.sum", "Cargo.lock", "bun.lock", "package.json"}
+DEPENDENCY_INPUTS = ("lycaon/vulndb", "lycaon/govulncheck-allowlist.yaml", "licensing/",
+                     "lycaon/config/runtime/scanners/bundled-manifest.yaml", "scripts/lint-vuln.sh",
+                     "scripts/govulncheck-gate.py", "scripts/licenses-")
+# Packages whose allocation and byte budgets and scale tests the command-scale lane runs.
+COMMAND_SCALE_SOURCES = ("lycaon/internal/tools/native/command/", "lycaon/internal/toolhost/",
+                         "lycaon/internal/tools/native/jq/")
+# The race lane's package exclusions: the database's race run takes about 40 minutes, so it stays nightly.
+RACE_EXCLUDED = {"./internal/db"}
 
 
 def git(*args):
@@ -72,6 +89,10 @@ def prose(path):
     return path in PROSE or path.startswith("docs/") and path.endswith(".md") and not path.startswith(SHARED)
 
 
+def machinery(directory):
+    return directory in MACHINERY or directory.startswith(tuple(root + "/" for root in MACHINERY))
+
+
 def tooling(path):
     return path.startswith(TOOLING) and path not in TOOLING_EXCEPTIONS
 
@@ -94,7 +115,7 @@ def module_tree(path):
     Nested modules, such as the harness projects, are read by other lanes rather than compiled here;
     native trees declare their own dependencies.
     """
-    if not path.startswith(("lycaon/internal/", "lycaon/cmd/", "lycaon/test/")):
+    if not path.startswith(("lycaon/internal/", "lycaon/cmd/", "lycaon/test/", "lycaon/config/", "lycaon/pkg/")):
         return False
     if Path(path).name in {"go.mod", "go.sum"}:
         return False
@@ -110,6 +131,7 @@ def broad_scope(paths):
             continue
         ordinary = (module_tree(path)
                     or path.startswith("lycaon-den/src/") and path.endswith((".ts", ".tsx", ".css"))
+                    or path.startswith(DEN_TESTS) and Path(path).name not in DEPENDENCY_NAMES
                     or prose(path) or native_dependencies(path) is not None)
         if path.startswith(SHARED) or not ordinary:
             reasons.append(path)
@@ -119,45 +141,81 @@ def broad_scope(paths):
 def fast_lanes(scope, lanes):
     """A pull request's lanes. Prose alone leaves the static job, which checks its links, the only check;
     the Den suite runs when its inputs change. A scope without a base runs every lane."""
+    from ci_policy.hosted_plan import lanes_of
     paths = scope.get("paths", [])
     if docs_only(paths):
         return set()
     if paths and not frontend_change(paths):
-        return set(lanes) - {"frontend"}
+        return set(lanes) - (lanes_of(lanes, {"den"}) - lanes_of(lanes, {"always"}))
     return set(lanes)
 
 
 def selected_lanes(scope, lanes):
+    """The merge queue's lanes for a change: those declaring an area the change touches."""
+    from ci_policy.hosted_plan import lanes_of
+    return lanes_of(lanes, change_areas(scope))
+
+
+def change_areas(scope):
+    """The change areas, as lanes declare them in `changes`, that a scope touches. A broad change
+    touches every area but those its paths must reach: the scripts, the dependencies, and changed Go code."""
+    from ci_policy.hosted_plan import AREAS
     if scope["full"]:
         paths = scope.get("paths", [])
-        return set(lanes) if not paths or script_change(paths) else set(lanes) - {"runner"}
+        if not paths:
+            return set(AREAS)
+        return AREAS - {"scripts", "dependencies", "go-code"} | path_areas(paths)
     paths = [path for path in scope["paths"] if not prose(path) and not tooling(path)]
     native = [native_dependencies(path) for path in paths if native_dependencies(path) is not None]
     ordinary = [path for path in paths if native_dependencies(path) is None]
-    areas = {"go" if p.startswith("lycaon/") else "den" for p in ordinary}
-    # Repository contracts read source outside the package/import graph.
-    chosen = {"build", "behavior"}
-    for dependency in native:
-        chosen |= dependency["lanes"]
-    if script_change(scope["paths"]):
-        chosen.add("runner")
-    if "go" in areas:
-        chosen |= {"behavior", "lint", "vulnerabilities", "command-scale"}
-    if "den" in areas:
-        # Any Den source can change the DOM that WebKitGTK answers screen reader queries about.
-        chosen |= {"frontend", "webkit-gtk"}
+    # Repository contracts read source outside the package/import graph, so some lanes always run.
+    areas = {"always", *(dependency["area"] for dependency in native)}
+    for path in ordinary:
+        if path.startswith("lycaon/"):
+            areas.add("go")
+        if path.startswith(("lycaon/config/", DEN_TESTS)):
+            areas.add("den-tests")
+        elif not path.startswith("lycaon/"):
+            areas.add("den")
+    # Seccomp filters, syscall numbers and argument layouts differ by architecture.
     if any(confinement_source(p) for p in paths):
-        # Seccomp filters, syscall numbers and argument layouts differ by architecture.
-        chosen.add("confinement-arm64")
+        areas.add("confinement")
+    # The live differential compares the command language with the reference userlands.
     if any(command_language_source(p) for p in paths):
-        # The live differential compares the command language with the reference userlands.
-        chosen.add("reference-userlands")
-    return chosen & set(lanes)
+        areas.add("command-language")
+    if any(p.startswith(COMMAND_SCALE_SOURCES) for p in paths):
+        areas.add("command-scale")
+    return areas | path_areas(scope["paths"])
+
+
+def path_areas(paths):
+    """Areas only particular paths reach, however broad the change."""
+    areas = set()
+    if script_change(paths):
+        areas.add("scripts")
+    if any(dependency_input(path) for path in paths):
+        areas.add("dependencies")
+    if changed_packages({"paths": paths}):
+        areas.add("go-code")
+    return areas
+
+
+def dependency_input(path):
+    return Path(path).name in DEPENDENCY_NAMES or path.startswith(DEPENDENCY_INPUTS)
+
+
+def changed_packages(scope):
+    """The Go packages whose own source a change edits, for checks too costly for the reverse closure."""
+    directories = {Path(path).parent for path in scope["paths"] if path.endswith(".go") and module_tree(path)}
+    # A deleted package has nothing left to run.
+    packages = {"./" + directory.relative_to("lycaon").as_posix() for directory in directories
+                if any((ROOT / directory).glob("*.go"))}
+    return sorted(packages - RACE_EXCLUDED)
 
 
 def confinement_source(path):
-    """The sandbox, its helper, and the command supervisor's Linux process handling."""
-    if path.startswith("lycaon/internal/confine/"):
+    """The sandbox, its helper and sandbox marks, and the command supervisor's Linux process handling."""
+    if path.startswith(("lycaon/internal/confine/", "lycaon/internal/sandboxmark/")):
         return True
     name = path.removeprefix("lycaon/internal/exec/")
     return name != path and "/" not in name and (name.startswith("supervisor") or "_linux" in name)
@@ -213,6 +271,8 @@ def go_scope(scope):
     directories = {Path(r["Dir"]).relative_to(ROOT).as_posix(): r["ImportPath"] for r in records}
     seeds = set()
     for path in scope["paths"]:
+        if tooling(path):
+            seeds |= {name for directory, name in directories.items() if machinery(directory)}
         if not path.startswith("lycaon/") or prose(path):
             continue
         dependency = native_dependencies(path)
@@ -230,6 +290,7 @@ def go_scope(scope):
         seeds.add(package)
     reached = reverse_closure(graph, seeds)
     reached |= {name for directory, name in directories.items()
-                if directory.startswith(("lycaon/test/contract/", "lycaon/test/smoke"))}
+                if directory.startswith(("lycaon/test/contract/", "lycaon/test/smoke"))
+                and not machinery(directory)}
     return sorted("./" + directory.removeprefix("lycaon/") for directory, name in directories.items()
                   if name in reached)

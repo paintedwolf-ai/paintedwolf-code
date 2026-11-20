@@ -45,7 +45,7 @@ func TestInspectionDeliveryDoesNotRequireSelectedCheck(t *testing.T) {
 	testutil.FailErr(t, "allow fixture write", os.WriteFile(filepath.Join(overlay, "approvals.yaml"), []byte("rules:\n  - category: tool\n    pattern: write\n    effect: allow\n"), 0o600))
 	sess, err := h.CreateHarnessSession(t, api.CreateSessionRequest{}, root)
 	testutil.FailErr(t, "create session", err)
-	h.Sessions.Manager.Verification.SetVerifyConfig(fixedVerifyConfig("project-check"))
+	h.Sessions.Manager.Verification.SetVerifyConfig(FixedVerifyConfig("project-check"))
 	AttachDefaultAmbient(t, h, ctx, sess.ID)
 	h.SeedProgress(t, ctx, sess.ID)
 	_, err = h.Sessions.Manager.Submissions.Prompt(ctx, sess.ID, "Update the guide and inspect the resulting text.")

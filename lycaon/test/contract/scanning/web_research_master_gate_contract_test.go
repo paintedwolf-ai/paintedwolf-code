@@ -13,48 +13,42 @@ import (
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 )
 
+const webResearcherAgent = "web-researcher"
+
+// The web search switch is the master gate: the same surface carries the web
+// tools and the researcher when it is on and none of them when it is off.
 func TestCapabilitySurfaceOmitsWebToolsWhenSearchDisabled(t *testing.T) {
 	t.Parallel()
 	profiles, err := sandbox.LoadToolProfiles()
 	contractcheck.FailErr(t, "LoadToolProfiles", err)
-	off := false
-	surf, err := capability.Resolve(capability.ResolveInput{
-		Profile:          surface.TurnProfile{SurfaceID: spawn.SurfaceImplementRouting},
-		ToolProfiles:     profiles,
-		RootCount:        1,
-		SpawnAllowlist:   inject.ResolveAgentRoster(spawn.SurfaceImplementRouting, spawn.AmbientAllowedAgents(), 1, false, false).Effective,
-		WebSearchEnabled: &off,
-	})
-	contractcheck.FailErr(t, "Resolve disabled", err)
-	if slices.Contains(surf.ResolvedTools, webresearch.SearchToolName) {
-		t.Fatalf("resolved tools still contain web_search: %v", surf.ResolvedTools)
+	if !slices.Contains(spawn.AmbientAllowedAgents(), webResearcherAgent) {
+		t.Fatalf("ambient agents %v lack %s", spawn.AmbientAllowedAgents(), webResearcherAgent)
 	}
-	if slices.Contains(surf.ResolvedTools, webresearch.FetchURLToolName) {
-		t.Fatalf("resolved tools still contain fetch_url: %v", surf.ResolvedTools)
-	}
-	if slices.Contains(surf.SpawnAllowlist, "web-researcher") {
-		t.Fatalf("spawn allowlist still contains web-researcher: %v", surf.SpawnAllowlist)
-	}
-	if surf.Flags.CanSpawnWebResearch {
-		t.Fatal("CanSpawnWebResearch must be false when search disabled")
+	resolve := func(enabled bool) capability.CapabilitySurface {
+		t.Helper()
+		surf, err := capability.Resolve(capability.ResolveInput{
+			Profile:          surface.TurnProfile{SurfaceID: spawn.SurfaceImplementRouting},
+			ToolProfiles:     profiles,
+			RootCount:        1,
+			SpawnAllowlist:   inject.ResolveAgentRoster(spawn.SurfaceImplementRouting, spawn.AmbientAllowedAgents(), 1, false, enabled).Effective,
+			WebSearchEnabled: &enabled,
+		})
+		contractcheck.FailErr(t, "resolve capability surface", err)
+		return surf
 	}
 
-	on := true
-	surfOn, err := capability.Resolve(capability.ResolveInput{
-		Profile:          surface.TurnProfile{SurfaceID: spawn.SurfaceImplementRouting},
-		ToolProfiles:     profiles,
-		RootCount:        1,
-		SpawnAllowlist:   inject.ResolveAgentRoster(spawn.SurfaceImplementRouting, spawn.AmbientAllowedAgents(), 1, false, true).Effective,
-		WebSearchEnabled: &on,
-	})
-	contractcheck.FailErr(t, "Resolve enabled", err)
-	if !slices.Contains(surfOn.ResolvedTools, webresearch.SearchToolName) &&
-		!slices.Contains(surfOn.ResolvedTools, webresearch.FetchURLToolName) {
-		// Surface may omit tools for other policy reasons; still require researcher
-		// spawn restoration when the default agent list includes it.
-		if !slices.Contains(surfOn.SpawnAllowlist, "web-researcher") &&
-			slices.Contains(spawn.AmbientAllowedAgents(), "web-researcher") {
-			t.Fatalf("enabled search should restore web-researcher when in session agents; got %v", surfOn.SpawnAllowlist)
+	on := resolve(true)
+	if !slices.Contains(on.SpawnAllowlist, webResearcherAgent) || !on.Flags.CanSpawnWebResearch {
+		t.Fatalf("search enabled: spawn allowlist %v, can spawn web research %t; want the researcher", on.SpawnAllowlist, on.Flags.CanSpawnWebResearch)
+	}
+
+	off := resolve(false)
+	for _, tool := range []string{webresearch.SearchToolName, webresearch.FetchURLToolName} {
+		if slices.Contains(off.ResolvedTools, tool) {
+			t.Errorf("search disabled: resolved tools still contain %s: %v", tool, off.ResolvedTools)
 		}
+	}
+	if slices.Contains(off.SpawnAllowlist, webResearcherAgent) || off.Flags.CanSpawnWebResearch {
+		t.Errorf("search disabled: spawn allowlist %v, can spawn web research %t; want no researcher", off.SpawnAllowlist, off.Flags.CanSpawnWebResearch)
 	}
 }

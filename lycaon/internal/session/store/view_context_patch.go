@@ -70,28 +70,3 @@ func (s *sqlTranscript) PatchMessageViewContext(ctx context.Context, sessionID, 
 	core.outbox.Notify()
 	return msg, nil
 }
-
-func (s *memoryTranscript) PatchMessageViewContext(ctx context.Context, sessionID, messageID string, view api.ViewContext) (api.Message, error) {
-	if err := ctx.Err(); err != nil {
-		return api.Message{}, err
-	}
-	core := s.core
-	core.mu.Lock()
-	defer core.mu.Unlock()
-	if _, ok := core.sessions[sessionID]; !ok {
-		return api.Message{}, ErrSessionNotFound
-	}
-	for i, msg := range core.messages[sessionID] {
-		if msg.ID != messageID {
-			continue
-		}
-		if hasView(msg) {
-			return msg, nil
-		}
-		msg.SourceContext = withView(msg, view)
-		msg.Seq = nextSeqLocked(core, sessionID)
-		core.messages[sessionID][i] = msg
-		return msg, nil
-	}
-	return api.Message{}, ErrMessageNotFound
-}

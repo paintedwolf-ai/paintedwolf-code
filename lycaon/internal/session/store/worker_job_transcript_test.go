@@ -1,13 +1,13 @@
 package store
 
 import (
-	"context"
+	"testing"
+	"time"
+
 	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/pkg/api"
-	"testing"
-	"time"
 )
 
 const (
@@ -15,21 +15,7 @@ const (
 	workerRunB = "22222222-2222-4222-8222-222222222222"
 )
 
-type workerTranscriptStore interface {
-	Create(context.Context, api.CreateSessionRequest, string) (*api.Session, error)
-	AppendMessages(context.Context, string, ...api.Message) error
-	GetWorkerJobMessages(context.Context, string, string) ([]api.Message, error)
-	GetTranscriptPage(context.Context, string, api.TranscriptPageQuery) (api.SessionTranscriptPage, error)
-}
-
-func TestMemoryWorkerJobTranscriptPagination(t *testing.T) {
-	store := NewMemory()
-	session, err := store.Create(t.Context(), api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
-	testutil.FailErr(t, "create session", err)
-	assertWorkerJobTranscriptPagination(t, store, session.ID)
-}
-
-func TestSQLWorkerJobTranscriptPagination(t *testing.T) {
+func TestWorkerJobTranscriptPagination(t *testing.T) {
 	database := testdbfixture.Open(t, "worker-transcript.db")
 	testdbseed.InsertProjectRoot(t, database, testdbseed.DefaultProjectID, t.TempDir())
 	store := NewSQL(database)
@@ -46,7 +32,7 @@ func TestSQLWorkerJobTranscriptPagination(t *testing.T) {
 	assertWorkerJobTranscriptPagination(t, store, session.ID)
 }
 
-func assertWorkerJobTranscriptPagination(t *testing.T, store workerTranscriptStore, sessionID string) {
+func assertWorkerJobTranscriptPagination(t *testing.T, store *SQL, sessionID string) {
 	t.Helper()
 	if _, err := store.GetWorkerJobMessages(t.Context(), sessionID, ""); err == nil {
 		t.Fatal("empty worker job id was accepted")

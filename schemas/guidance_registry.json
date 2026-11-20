@@ -198,7 +198,7 @@
       "branch_instruction": "Branch on Code CAPTURE_ACTION_FAILED; fix the failing action",
       "category": "recoverable",
       "emit": "guard:visual_capture",
-      "summary": "{% if paintedwolf.type %}actions[{{ paintedwolf.index }}] ({{ paintedwolf.type }}){% else %}An actions[] step{% endif %} failed{% if paintedwolf.error %} — {{ paintedwolf.error }}{% endif %}."
+      "summary": "{% if paintedwolf.type %}actions[{{ paintedwolf.index }}] ({{ paintedwolf.type }}){% else %}An actions[] step{% endif %} failed{% if paintedwolf.error %} — {{ paintedwolf.error }}{% endif %}.{% if paintedwolf.step_deadline_expired %} The step gave up after {{ paintedwolf.elapsed_ms }} ms, at its {{ paintedwolf.step_timeout_ms }} ms limit.{% endif %}"
     },
     "CAPTURE_ACTION_FIELDS_UNUSED": {
       "branch_instruction": "Branch on Code CAPTURE_ACTION_FIELDS_UNUSED; correct the step and retry the same call",
@@ -547,7 +547,7 @@
     "COMMAND_REVISION_CONFLICT": {
       "category": "recoverable",
       "emit": "guard:command_revision_pin",
-      "summary": "{% if paintedwolf.unsaved_draft %}{{ paintedwolf.path }} has unsaved editor changes.{% else %}{% if paintedwolf.revision_change_observed %}{{ paintedwolf.path }} no longer matches its captured revision.{% else %}The captured revision could not be used{% if paintedwolf.path %} at {{ paintedwolf.path }}{% endif %}.{% endif %}{% endif %} Publication at this path was refused."
+      "summary": "{% if paintedwolf.revision_change_observed %}{{ paintedwolf.path }} no longer matches its captured revision.{% else %}The captured revision could not be used{% if paintedwolf.path %} at {{ paintedwolf.path }}{% endif %}.{% endif %} Publication at this path was refused."
     },
     "COMMAND_SYNTAX_INVALID": {
       "branch_instruction": "{% if paintedwolf.diagnostic_top_level %}Resubmit the complete corrected command.{% else %}Inspect completed and uncertain operations before submitting the remaining work.{% endif %}",
@@ -1565,6 +1565,12 @@
       "category": "recoverable",
       "emit": "guard:message_coordinator",
       "summary": "reply_to names no message in your history with the coordinator."
+    },
+    "METADATA_TARGET_HARD_LINKED": {
+      "branch_instruction": "Branch on Code; replace the link with a copy before changing metadata",
+      "category": "recoverable",
+      "emit": "guard:metadata",
+      "summary": "The metadata change to {{ paintedwolf.path }} was refused because the file has other hard links."
     },
     "MID_TURN_NOTE_ARTIFACT_UNKNOWN": {
       "branch_instruction": "Branch on Code MID_TURN_NOTE_ARTIFACT_UNKNOWN; continue from the tool results above and use an observed artifact id or omit the directive",
@@ -3297,7 +3303,7 @@
     "TOOL_OWNER_INTERRUPTED": {
       "category": "recoverable",
       "emit": "guard:tool_owner",
-      "summary": "The operation was interrupted."
+      "summary": "The operation was interrupted.{% if paintedwolf.jobs_stopped %} Background jobs it started ended with it: {{ paintedwolf.jobs_stopped }}.{% endif %}"
     },
     "TOOL_PROFILE_DENIED": {
       "branch_instruction": "Preserve the profile boundary and report unavailable work",

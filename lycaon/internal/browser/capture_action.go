@@ -37,6 +37,12 @@ func actionFailedData(index int, act CaptureAction, res json.RawMessage, runErr 
 		if errStr, ok := parsed["error"].(string); ok && strings.TrimSpace(errStr) != "" {
 			data["error"] = errStr
 		}
+		// The driver call that failed reports the deadline it ran under.
+		for from, to := range map[string]string{"deadline_ms": "step_timeout_ms", "elapsed_ms": "elapsed_ms", "deadline_expired": "step_deadline_expired"} {
+			if value, ok := parsed[from]; ok {
+				data[to] = value
+			}
+		}
 		if state, ok := parsed["state"].(map[string]any); ok {
 			controls, truncated := actionControls(state["interactive"])
 			if len(controls) > 0 {

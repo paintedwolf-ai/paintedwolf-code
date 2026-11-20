@@ -18,6 +18,7 @@ import (
 )
 
 func TestProjectReasoningSurvivesRelocatedBackupRestore(t *testing.T) {
+	t.Parallel()
 	source := t.TempDir()
 	sourcePath := filepath.Join(source, "store.db")
 	database := testdbfixture.OpenPath(t, sourcePath)

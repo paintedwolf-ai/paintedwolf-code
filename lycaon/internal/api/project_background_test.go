@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"context"
 	"encoding/json"
+	"github.com/lycaon/lycaon/internal/tools/toolstest"
 	"net/http"
 	"net/http/httptest"
 	"net/netip"
@@ -31,7 +32,6 @@ import (
 	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/testtool"
 	"github.com/lycaon/lycaon/internal/testutil"
-	"github.com/lycaon/lycaon/internal/tools"
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -53,7 +53,7 @@ func newProjectBackgroundTestEnv(t *testing.T) *projectBackgroundTestEnv {
 	hub := events.NewMemoryHub()
 	publisher := &events.Publisher{Hub: hub}
 
-	reg := tools.NewStubRegistry()
+	reg := toolstest.NewRegistry()
 	mock := llm.NewMockProvider(testMockConfig(t))
 	mgr := session.NewHost(st, session.Models{
 		Client:   mock,

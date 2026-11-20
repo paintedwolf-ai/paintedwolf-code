@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"github.com/lycaon/lycaon/internal/tools/toolstest"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -20,7 +21,6 @@ import (
 	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
-	"github.com/lycaon/lycaon/internal/tools"
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -123,7 +123,7 @@ func TestMarkingAProjectSecretRescreensExistingTaskHistory(t *testing.T) {
 			if cancelOnCommit {
 				b.Capabilities.AddScreeningInvalidationObserver(func(context.Context, string) { cancel() })
 			}
-			mgr := session.NewHost(store, session.Models{Client: nil, Limits: settings.DefaultSessionLimits()}, tools.NewStubRegistry())
+			mgr := session.NewHost(store, session.Models{Client: nil, Limits: settings.DefaultSessionLimits()}, toolstest.NewRegistry())
 			b.BindTranscript(matcher, func(redactor func(context.Context, wire.Message) (wire.Message, bool)) {
 				mgr.Runner.Transcript.SetRedactor(redactor)
 			}, mgr.Runner.Transcript.SweepSessionTree)

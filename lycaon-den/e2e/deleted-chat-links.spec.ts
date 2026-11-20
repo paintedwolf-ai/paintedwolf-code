@@ -47,6 +47,11 @@ modelIndependentWebE2e("chat links open known deletions and follow recreated pat
   const link = prose.getByRole("button", { name: `${path}:2`, exact: true });
   await expect(link).toBeVisible();
   await expect(prose.getByRole("button", { name: unseenPath, exact: true })).toHaveCount(0);
+  // The link opens the deletion the host has retained.
+  await expect.poll(async () => {
+    const read = await request.get(base, { headers, params: { root_id: rootId, path, include_deleted: true } });
+    return ((await read.json()) as ProjectSourceReadResponse).deleted?.previous?.availability;
+  }).toBe("available");
   await link.click();
   const document = page.getByTestId("file-deletion-document").filter({ visible: true });
   await expect(document).toContainText("Retained before deletion");

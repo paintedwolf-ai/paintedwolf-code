@@ -72,6 +72,7 @@ func newPlacedJob(t *testing.T) placedJob {
 }
 
 func TestBackupCarriesAPlacedUnsealedTreeToItsLogicalAddress(t *testing.T) {
+	t.Parallel()
 	job := newPlacedJob(t)
 	archive := filepath.Join(t.TempDir(), "placed.zip")
 	manifest, err := backup.Create(t.Context(), job.opts, archive)
@@ -101,6 +102,7 @@ func TestBackupCarriesAPlacedUnsealedTreeToItsLogicalAddress(t *testing.T) {
 }
 
 func TestAbsentVolumeFailsBackupButNotUpgradeReadiness(t *testing.T) {
+	t.Parallel()
 	job := newPlacedJob(t)
 	testutil.FailErr(t, "lose the volume", os.Rename(job.folder, job.folder+"-away"))
 	_, err := backup.Create(t.Context(), job.opts, filepath.Join(t.TempDir(), "absent.zip"))
@@ -111,6 +113,7 @@ func TestAbsentVolumeFailsBackupButNotUpgradeReadiness(t *testing.T) {
 }
 
 func TestRecoveryPointLeavesAPlacedTreeWhereItIs(t *testing.T) {
+	t.Parallel()
 	job := newPlacedJob(t)
 	testbackup.Recovery(t, job.database, filepath.Join(job.root, "store.db"))
 	_, err := backup.StageLatestUpgradeRecovery(t.Context(), backup.StageOpts{ConfigDir: job.root, SchemaVersion: db.SchemaVersion})

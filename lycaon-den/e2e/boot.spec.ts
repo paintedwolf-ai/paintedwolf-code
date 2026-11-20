@@ -6,6 +6,7 @@ webE2e.describe("boot", () => {
   webE2e("sidecar connected with stable E2E state and no token field", async ({ page }) => {
     await page.goto("/");
     await expectShellReady(page);
+    await expect(page.getByTestId("critical-stop")).toHaveCount(0);
     const state = await page.evaluate((prefix) => {
       const slices: Record<string, unknown> = {};
       for (let index = 0; index < localStorage.length; index += 1) {

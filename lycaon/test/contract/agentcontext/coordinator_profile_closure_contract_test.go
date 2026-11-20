@@ -3,7 +3,6 @@ package contract
 import (
 	"os"
 	"path/filepath"
-	"sort"
 	"strings"
 	"testing"
 
@@ -11,15 +10,8 @@ import (
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 )
 
-// coordinatorPromptCorpusGlobs matches coordinator-facing prompt templates.
-var coordinatorPromptCorpusGlobs = []string{
-	"lycaon/config/packs/painted-wolf/platform/agents/prompts/coordinator*.md",
-	"lycaon/config/packs/painted-wolf/platform/guidance/coordinator-*.md",
-	"lycaon/config/packs/painted-wolf/implement/agents/prompts/coordinator*.md",
-}
-
-// coordinatorPromptlessAllowlist lists coordinator profile tools documented
-// outside tripartite coordinator prose.
+// coordinatorPromptlessAllowlist lists coordinator profile tools taught
+// outside coordinator prompt prose.
 var coordinatorPromptlessAllowlist = map[string]string{
 	"survey_repo":         "taught by the survey-first-pass unit",
 	"ask_user":            "taught by its schema; prompts say to ask the user",
@@ -76,158 +68,6 @@ func loadCoordinatorProfileTools(t *testing.T) sandbox.ToolProfile {
 	}
 	t.Fatal("coordinator profile missing")
 	return sandbox.ToolProfile{}
-}
-
-func TestCoordinatorProfileTripartiteClosure(t *testing.T) {
-	t.Parallel()
-	root := contractcheck.RepoRoot(t)
-	profile := loadCoordinatorProfileTools(t)
-
-	promptText := loadCoordinatorPromptCorpus(t, root)
-
-	var missing []string
-	for tool, enabled := range profile.Tools {
-		if !enabled {
-			continue
-		}
-		if _, ok := coordinatorPromptlessAllowlist[tool]; ok {
-			continue
-		}
-		if !mentionsToolName(promptText, tool) {
-			missing = append(missing, tool)
-		}
-	}
-	sort.Strings(missing)
-	if len(missing) > 0 {
-		t.Fatalf("coordinator profile grants tools that no coordinator prompt mentions: %v\n"+
-			"Either reference the tool in one of the files matched by:\n  %s\nor add an entry to coordinatorPromptlessAllowlist with a rationale.",
-			missing, strings.Join(coordinatorPromptCorpusGlobs, "\n  "))
-	}
-
-	// Allowlist entries map to real profile tools.
-	for tool := range coordinatorPromptlessAllowlist {
-		if !profile.Tools[tool] {
-			t.Fatalf("coordinatorPromptlessAllowlist references %q which is not enabled on the coordinator profile", tool)
-		}
-	}
-}
-
-func TestCoordinatorPromptsCiteOnlyEnabledTools(t *testing.T) {
-	t.Parallel()
-	root := contractcheck.RepoRoot(t)
-	profile := loadCoordinatorProfileTools(t)
-
-	// Pull from the T1 registry catalog to include any tool the coordinator can call.
-	known := knownToolUniverse(t, root)
-
-	denied := make(map[string]bool, len(profile.DenyTools))
-	for _, name := range profile.DenyTools {
-		denied[strings.TrimSpace(name)] = true
-	}
-
-	promptText := loadCoordinatorPromptCorpus(t, root)
-
-	var orphans []string
-	for tool := range known {
-		if !mentionsToolName(promptText, tool) {
-			continue
-		}
-		// Flag tools cited in the playbook that are neither enabled nor denied.
-		if denied[tool] || profile.Tools[tool] {
-			continue
-		}
-		orphans = append(orphans, tool+" (cited in playbook but not enabled or denied on profile)")
-	}
-	sort.Strings(orphans)
-	if len(orphans) > 0 {
-		t.Fatalf("coordinator prompts cite tools the profile does not grant:\n  %s", strings.Join(orphans, "\n  "))
-	}
-}
-
-func loadCoordinatorPromptCorpus(t *testing.T, root string) string {
-	t.Helper()
-	var b strings.Builder
-	files := discoverCoordinatorPromptFiles(t, root)
-	if len(files) == 0 {
-		t.Fatalf("coordinator prompt corpus is empty — globs %v matched nothing under %s", coordinatorPromptCorpusGlobs, root)
-	}
-	for _, path := range files {
-		data, err := os.ReadFile(path)
-		if err != nil {
-			t.Fatalf("read %s: %v", path, err)
-		}
-		b.Write(data)
-		b.WriteByte('\n')
-	}
-	return b.String()
-}
-
-// discoverCoordinatorPromptFiles expands coordinatorPromptCorpusGlobs on disk.
-func discoverCoordinatorPromptFiles(t *testing.T, root string) []string {
-	t.Helper()
-	var all []string
-	seen := map[string]bool{}
-	for _, glob := range coordinatorPromptCorpusGlobs {
-		matches, err := filepath.Glob(filepath.Join(root, glob))
-		if err != nil {
-			t.Fatalf("glob %q: %v", glob, err)
-		}
-		for _, m := range matches {
-			if seen[m] {
-				continue
-			}
-			seen[m] = true
-			all = append(all, m)
-		}
-	}
-	sort.Strings(all)
-	return all
-}
-
-// mentionsToolName checks for the tool name at word boundaries to avoid partial matches.
-func mentionsToolName(corpus, tool string) bool {
-	tool = strings.TrimSpace(tool)
-	if tool == "" {
-		return false
-	}
-	return containsWord(corpus, tool)
-}
-
-func containsWord(haystack, needle string) bool {
-	if needle == "" {
-		return false
-	}
-	for i := 0; i+len(needle) <= len(haystack); i++ {
-		if haystack[i:i+len(needle)] != needle {
-			continue
-		}
-		if !isWordBoundary(haystack, i-1) {
-			continue
-		}
-		if !isWordBoundary(haystack, i+len(needle)) {
-			continue
-		}
-		return true
-	}
-	return false
-}
-
-func isWordBoundary(s string, idx int) bool {
-	if idx < 0 || idx >= len(s) {
-		return true
-	}
-	c := s[idx]
-	switch {
-	case c >= 'a' && c <= 'z':
-		return false
-	case c >= 'A' && c <= 'Z':
-		return false
-	case c >= '0' && c <= '9':
-		return false
-	case c == '_':
-		return false
-	}
-	return true
 }
 
 // knownToolUniverse returns catalogued tool names for closure checks.

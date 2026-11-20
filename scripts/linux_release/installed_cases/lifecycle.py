@@ -196,7 +196,7 @@ def scenario(binding: dict, cancel: bool, host_execution: bool = False) -> tuple
                 script.write_text(SCRIPT)
                 command = shlex.join([str(Path(sys.executable).resolve()), str(script), mode])
                 arguments = {'command': command, 'background': index == 0 or cancel, 'wait_ms': 1,
-                             'allow_concurrent': True, 'timeout_ms': 90000}
+                             'allow_concurrent': True}
                 if host_execution and index == 1:
                     arguments['capability_request'] = {'host_execution': True}
                 provider = stack.enter_context(ProviderFixture([{'name': 'command', 'arguments': arguments}]))

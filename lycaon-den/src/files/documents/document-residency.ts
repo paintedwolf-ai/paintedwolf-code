@@ -41,6 +41,7 @@ export class DocumentResidency {
   private acquisitions = 0;
   private background = 0;
   private protections = new Map<string, Set<symbol>>();
+  private unprotectedWaiters = new Map<string, (() => void)[]>();
   private readonly defaultProtection = Symbol();
 
   constructor(private budget: number, private readonly changed = () => {}) {}
@@ -66,6 +67,8 @@ export class DocumentResidency {
     this.queue = [];
     this.entries.clear();
     this.protections.clear();
+    for (const waiters of this.unprotectedWaiters.values()) for (const resolve of waiters) resolve();
+    this.unprotectedWaiters.clear();
   }
 
   setBudget(bytes: number): void {
@@ -78,7 +81,12 @@ export class DocumentResidency {
     if (protectedValue) tokens.add(token);
     else tokens.delete(token);
     if (tokens.size) this.protections.set(key, tokens);
-    else this.protections.delete(key);
+    else {
+      this.protections.delete(key);
+      const waiters = this.unprotectedWaiters.get(key);
+      this.unprotectedWaiters.delete(key);
+      for (const resolve of waiters ?? []) resolve();
+    }
     const entry = this.entries.get(key);
     if (entry) {
       entry.protected = tokens.size > 0;
@@ -98,6 +106,16 @@ export class DocumentResidency {
   }
 
   isProtected(key: string): boolean { return this.protections.has(key); }
+
+  /** Settles once no presentation protects the key. */
+  whenUnprotected(key: string): Promise<void> {
+    if (!this.protections.has(key)) return Promise.resolve();
+    return new Promise(resolve => {
+      const waiters = this.unprotectedWaiters.get(key) ?? [];
+      waiters.push(resolve);
+      this.unprotectedWaiters.set(key, waiters);
+    });
+  }
 
   acquire(key: string, bytes: number, priority: ResidencyPriority, current = () => true): Promise<DocumentReservation | null> {
     return new Promise((resolve, reject) => {

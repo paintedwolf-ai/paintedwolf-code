@@ -1,6 +1,7 @@
 package contractfixture
 
 import (
+	"github.com/lycaon/lycaon/internal/tools/toolstest"
 	"os"
 	"path/filepath"
 	"testing"
@@ -14,19 +15,20 @@ import (
 	"github.com/lycaon/lycaon/internal/rules"
 	"github.com/lycaon/lycaon/internal/session"
 	"github.com/lycaon/lycaon/internal/session/profiles"
-	"github.com/lycaon/lycaon/internal/session/store"
+	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/settingsoverlay"
 	"github.com/lycaon/lycaon/internal/testtool"
 	"github.com/lycaon/lycaon/internal/testutil"
-	"github.com/lycaon/lycaon/internal/tools"
 )
 
-func NewProjectOverlayTestServer(t *testing.T, opts ...TestDeps) (*hostapi.Server, *project.MemoryRegistry) {
+func NewProjectOverlayTestServer(t *testing.T, opts ...TestDeps) (*hostapi.Server, *project.SQLRegistry) {
+	sessionFixture := storetest.New(t)
+
 	t.Helper()
 
-	sessionStore := store.NewMemory()
-	projects := project.NewMemoryRegistry()
+	sessionStore := sessionFixture
+	projects := project.NewSQLRegistry(sessionFixture.DB())
 	mock := llm.NewMockProvider(&llm.MockConfig{
 		Responses: []llm.MockResponseEntry{{
 			Pattern: "write.*file",
@@ -38,7 +40,7 @@ func NewProjectOverlayTestServer(t *testing.T, opts ...TestDeps) (*hostapi.Serve
 			FollowUpText: "written",
 		}},
 	})
-	toolRegistry := tools.NewStubRegistry()
+	toolRegistry := toolstest.NewRegistry()
 	mgr := session.NewHost(sessionStore, session.Models{Client: mock, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, toolRegistry)
 	mgr.Coordinator.Guards.SetToolMetadata(testtool.RegistryInvoker{Registry: toolRegistry})
 
@@ -80,6 +82,8 @@ func NewProjectOverlayTestServer(t *testing.T, opts ...TestDeps) (*hostapi.Serve
 }
 
 func TrustSettingsServer(t *testing.T, opts ...TestDeps) *hostapi.Server {
+	sessionFixture := storetest.New(t)
+
 	t.Helper()
 	cfg := t.TempDir()
 	t.Setenv("LYCAON_CONFIG_DIR", cfg)
@@ -88,7 +92,8 @@ func TrustSettingsServer(t *testing.T, opts ...TestDeps) *hostapi.Server {
 	testutil.FailErr(t, "settings.NewService", err)
 
 	return NewServerForTest(t, hostapi.Dependencies{Core: hostapi.CoreDependencies{
-		Store: store.NewMemory(), Projects: project.NewMemoryRegistry(), Settings: svc}, Storage: hostapi.StorageDependencies{
+
+		Store: sessionFixture, Projects: project.NewSQLRegistry(sessionFixture.DB()), Settings: svc}, Storage: hostapi.StorageDependencies{
 		ModuleRoot: configlayout.FindModuleRoot()}}, append([]TestDeps{WithExtensionOwner(t)}, opts...)...)
 }
 

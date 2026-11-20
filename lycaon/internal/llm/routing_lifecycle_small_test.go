@@ -35,6 +35,23 @@ func TestBundledRoleExclusionsAllowGeneralModels(t *testing.T) {
 	}
 }
 
+// Live and image-generation interfaces are restricted from the conversation
+// roles; a general model of the same provider is not.
+func TestBundledRoleExclusionsRestrictSpecialtyInterfaces(t *testing.T) {
+	doc, err := LoadRoleExclusions()
+	testutil.FailErr(t, "load exclusions", err)
+	for _, role := range []string{PolicySlotCoordinator, PolicySlotLite} {
+		for _, id := range []string{"gemini-3.1-flash-live-preview", "gemini-3-pro-image"} {
+			if doc.Match("gemini", id, role) == nil {
+				t.Fatalf("no restriction for %s/%s", id, role)
+			}
+		}
+		if rule := doc.Match("gemini", "gemini-2.0-flash", role); rule != nil {
+			t.Fatalf("general model restricted for %s by %+v", role, rule)
+		}
+	}
+}
+
 func TestRoleEligibilityRequiresPositiveEvidence(t *testing.T) {
 	for _, tc := range []struct {
 		tools       modelinfo.CapabilityState

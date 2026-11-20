@@ -1,23 +1,17 @@
+//go:build live_web
+
 package webresearch
 
 import (
 	"context"
-	"os"
 	"testing"
 )
 
 // TestVerticalProvidersLive runs one real query per keyless vertical provider.
 //
-//	LYCAON_LIVE_KEYLESS_VERTICALS=1 ./task test:digest -- ./internal/webresearch \
-//	  -run VerticalProvidersLive -count=1 -timeout=5m
+//	./task test:digest -- ./internal/webresearch -tags live_web -run VerticalProvidersLive -count=1
 func TestVerticalProvidersLive(t *testing.T) {
 	t.Parallel()
-	if testing.Short() {
-		t.Skip("live provider calls")
-	}
-	if os.Getenv("LYCAON_LIVE_KEYLESS_VERTICALS") == "" {
-		t.Skip("set LYCAON_LIVE_KEYLESS_VERTICALS=1 to run")
-	}
 	reg := testRegistry(t)
 	s := DefaultSettings(nil, nil, reg.Catalog())
 	// Exercise every configured keyless provider.

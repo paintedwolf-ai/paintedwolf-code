@@ -73,3 +73,26 @@ func TestUnmaskedMessageGainsNoMeta(t *testing.T) {
 		t.Errorf("meta = %+v, want none", out.HostSecretRedaction)
 	}
 }
+
+// The observer copy masks terminal input at its own index; the calls the
+// executor runs keep their arguments.
+func TestRedactToolCallArgsMasksACopy(t *testing.T) {
+	secret := "fixture-terminal-input"
+	calls := []api.ToolCall{
+		{Name: "command", ID: "tc1", Args: map[string]any{"command": "echo hi"}},
+		{Name: "terminal_send", ID: "tc2", Args: map[string]any{"id": "pty-1", "input": secret}},
+	}
+	out, spans := RedactToolCallArgs(calls)
+	if len(spans) != 1 || spans[0].Kind != api.RedactionKindObserverMask || spans[0].Field != "tool_calls.1.args.input" {
+		t.Fatalf("spans = %+v, want one observer mask on the second call", spans)
+	}
+	if out[1].Args["input"] != RedactedToolArgPlaceholder || out[1].Args["id"] != "pty-1" {
+		t.Fatalf("terminal_send args = %v", out[1].Args)
+	}
+	if out[0].Args["command"] != "echo hi" {
+		t.Fatalf("command args = %v", out[0].Args)
+	}
+	if calls[1].Args["input"] != secret {
+		t.Fatalf("execution args mutated: %v", calls[1].Args)
+	}
+}

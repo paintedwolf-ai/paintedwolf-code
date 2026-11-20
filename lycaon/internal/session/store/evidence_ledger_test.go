@@ -121,8 +121,8 @@ func TestEvidenceLedgerStore_markSuperseded(t *testing.T) {
 	}
 }
 
-func TestMemoryStoreCommitEvidenceSequentialOrdinals(t *testing.T) {
-	store := NewMemory()
+func TestStoreCommitEvidenceSequentialOrdinals(t *testing.T) {
+	store := newSQLTestStore(t)
 	ctx := context.Background()
 	dir := t.TempDir()
 	sess, err := store.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
@@ -137,8 +137,8 @@ func TestMemoryStoreCommitEvidenceSequentialOrdinals(t *testing.T) {
 	}
 }
 
-func TestMemoryStoreCommitEvidenceOrdinalSurvivesCrossKindSupersession(t *testing.T) {
-	store := NewMemory()
+func TestStoreCommitEvidenceOrdinalSurvivesCrossKindSupersession(t *testing.T) {
+	store := newSQLTestStore(t)
 	ctx := context.Background()
 	dir := t.TempDir()
 	sess, err := store.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
@@ -157,9 +157,11 @@ func TestMemoryStoreCommitEvidenceOrdinalSurvivesCrossKindSupersession(t *testin
 	if first != "read#1" || second != "read#2" {
 		t.Fatalf("read handles = %q, %q want read#1, read#2", first, second)
 	}
-	row, ok := store.evidence[sess.ID]["read#1"]
-	if !ok || row.supersededBy != "write#1" {
-		t.Fatalf("historical read#1 = %+v ok=%v", row, ok)
+	var supersededBy string
+	err = store.DB().QueryRowContext(ctx, `SELECT superseded_by FROM evidence_records WHERE session_id = ? AND handle = ?`, sess.ID, "read#1").Scan(&supersededBy)
+	testutil.FailErr(t, "read historical evidence", err)
+	if supersededBy != "write#1" {
+		t.Fatalf("historical read superseded by %q", supersededBy)
 	}
 }
 
@@ -363,9 +365,8 @@ func TestCommitEvidenceToolResult_reReadPreservesMutation(t *testing.T) {
 	}
 }
 
-// Memory store parity for reReadPreservesMutation.
-func TestMemoryStoreCommitEvidence_reReadPreservesMutation(t *testing.T) {
-	store := NewMemory()
+func TestStoreCommitEvidence_reReadPreservesMutation(t *testing.T) {
+	store := newSQLTestStore(t)
 	ctx := context.Background()
 	dir := t.TempDir()
 	sess, err := store.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
@@ -380,7 +381,7 @@ func TestMemoryStoreCommitEvidence_reReadPreservesMutation(t *testing.T) {
 	ev, err := store.LoadLedger(ctx, sess.ID)
 	testutil.FailErr(t, "LoadLedger", err)
 	if _, ok := evidence.ResolveHandle(ev, "write#1"); !ok {
-		t.Fatal("read of a written path must not supersede the write mutation handle (memory store)")
+		t.Fatal("read of a written path must not supersede the write mutation handle")
 	}
 }
 
@@ -471,68 +472,53 @@ func TestCommitEvidenceToolResult_externalFileCustodyAndModelIngestion(t *testin
 		t.Fatalf("read record = %+v urls=%v, want UntrustedContent=true and propagated ObservedURLs", gotRead, gotURLs)
 	}
 
-	// An edit keeps external custody and a full write clears it, in SQL and memory alike.
-	// clears it; verify SQL and Memory parity.
-	for _, backend := range []struct {
-		name string
-		s    interface {
-			Create(context.Context, api.CreateSessionRequest, string) (*api.Session, error)
-			CommitEvidenceToolResult(context.Context, string, string, string, map[string]any, string) (string, string, error)
-			LoadLedger(context.Context, string) (evidence.Ledger, error)
-		}
-	}{
-		{"sql", store},
-		{"memory", NewMemory()},
-	} {
-		t.Run(backend.name+"_partial_vs_full_replacement", func(t *testing.T) {
-			s2, err := backend.s.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
-			testutil.FailErr(t, "Create", err)
-			_, _, err = backend.s.CommitEvidenceToolResult(
-				ctx, s2.ID, dir, "http_request",
-				map[string]any{"url": "https://api.external.example/v1/item.txt", "response_path": "item.txt"},
-				`{"status":200,"url":"https://api.external.example/v1/item.txt","response_path":"item.txt","written":true}`,
-			)
-			testutil.FailErr(t, "download item.txt", err)
+	// An edit keeps external custody; a full write clears it.
+	s2, err := store.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
+	testutil.FailErr(t, "Create", err)
+	_, _, err = store.CommitEvidenceToolResult(
+		ctx, s2.ID, dir, "http_request",
+		map[string]any{"url": "https://api.external.example/v1/item.txt", "response_path": "item.txt"},
+		`{"status":200,"url":"https://api.external.example/v1/item.txt","response_path":"item.txt","written":true}`,
+	)
+	testutil.FailErr(t, "download item.txt", err)
 
-			// Partial edit preserves external custody.
-			_, _, err = backend.s.CommitEvidenceToolResult(
-				ctx, s2.ID, dir, "edit",
-				map[string]any{"path": "item.txt"},
-				`{"path":"item.txt","applied":true}`,
-			)
-			testutil.FailErr(t, "edit item.txt", err)
-			r1Handle, _, err := backend.s.CommitEvidenceToolResult(
-				ctx, s2.ID, dir, "read",
-				map[string]any{"path": "item.txt"},
-				`{"path":"item.txt","content":"1|edited payload\n","offset":1,"end_line":1}`,
-			)
-			testutil.FailErr(t, "read after edit", err)
+	// Partial edit preserves external custody.
+	_, _, err = store.CommitEvidenceToolResult(
+		ctx, s2.ID, dir, "edit",
+		map[string]any{"path": "item.txt"},
+		`{"path":"item.txt","applied":true}`,
+	)
+	testutil.FailErr(t, "edit item.txt", err)
+	r1Handle, _, err := store.CommitEvidenceToolResult(
+		ctx, s2.ID, dir, "read",
+		map[string]any{"path": "item.txt"},
+		`{"path":"item.txt","content":"1|edited payload\n","offset":1,"end_line":1}`,
+	)
+	testutil.FailErr(t, "read after edit", err)
 
-			// A full write replaces external custody, so a later read inherits nothing stale.
-			_, _, err = backend.s.CommitEvidenceToolResult(
-				ctx, s2.ID, dir, "write",
-				map[string]any{"path": "item.txt"},
-				`{"path":"item.txt","bytes_written":10}`,
-			)
-			testutil.FailErr(t, "full write item.txt", err)
-			r2Handle, _, err := backend.s.CommitEvidenceToolResult(
-				ctx, s2.ID, dir, "read",
-				map[string]any{"path": "item.txt"},
-				`{"path":"item.txt","content":"1|clean local\n","offset":1,"end_line":1}`,
-			)
-			testutil.FailErr(t, "read after full write", err)
+	// A full write replaces external custody, so a later read inherits nothing stale.
+	_, _, err = store.CommitEvidenceToolResult(
+		ctx, s2.ID, dir, "write",
+		map[string]any{"path": "item.txt"},
+		`{"path":"item.txt","bytes_written":10}`,
+	)
+	testutil.FailErr(t, "full write item.txt", err)
+	r2Handle, _, err := store.CommitEvidenceToolResult(
+		ctx, s2.ID, dir, "read",
+		map[string]any{"path": "item.txt"},
+		`{"path":"item.txt","content":"1|clean local\n","offset":1,"end_line":1}`,
+	)
+	testutil.FailErr(t, "read after full write", err)
 
-			ev2, err := backend.s.LoadLedger(ctx, s2.ID)
-			testutil.FailErr(t, "LoadLedger", err)
-			rec1, ok1 := evidence.ResolveHandle(ev2, r1Handle)
-			rec2, ok2 := evidence.ResolveHandle(ev2, r2Handle)
-			if !ok1 || !rec1.UntrustedContent {
-				t.Fatalf("%s: read after partial edit must retain UntrustedContent: %+v", backend.name, rec1)
-			}
-			if !ok2 || rec2.UntrustedContent || rec2.HasExternalCustody() {
-				t.Fatalf("%s: read after full local write must not inherit stale external custody: %+v", backend.name, rec2)
-			}
-		})
+	ev2, err := store.LoadLedger(ctx, s2.ID)
+	testutil.FailErr(t, "LoadLedger", err)
+	rec1, ok1 := evidence.ResolveHandle(ev2, r1Handle)
+	rec2, ok2 := evidence.ResolveHandle(ev2, r2Handle)
+	if !ok1 || !rec1.UntrustedContent {
+		t.Fatalf("read after partial edit must retain UntrustedContent: %+v", rec1)
+	}
+	if !ok2 || rec2.UntrustedContent || rec2.HasExternalCustody() {
+		t.Fatalf("read after full local write must not inherit stale external custody: %+v", rec2)
 	}
 
 	// Rows without custody are skipped, not retained.
@@ -779,48 +765,22 @@ func TestEvidenceLedgerStore_ExternalCustodyAndMetadataLookupBoundedWork(t *test
 	}
 }
 
-// chronologyBackend is the store surface exercised by the chronology-skew parity test.
-type chronologyBackend interface {
-	Create(context.Context, api.CreateSessionRequest, string) (*api.Session, error)
-	CommitEvidenceToolResult(context.Context, string, string, string, map[string]any, string) (string, string, error)
-	CommitProgramHTTPProvenance(context.Context, string, string, evidence.ProgramHTTPProvenance) (string, error)
-	ExternalCustodyURLsForPaths(context.Context, string, string, []string) ([]string, error)
-	SessionUntrustedContentResult(context.Context, string) (bool, error)
-	LoadLedger(context.Context, string) (evidence.Ledger, error)
-}
-
-func TestEvidenceLedgerStore_CrossKindChronologySkewAndReloadParity(t *testing.T) {
+func TestEvidenceLedgerStore_CrossKindChronologySkewAndReload(t *testing.T) {
 	ctx := context.Background()
 	dir := t.TempDir()
 
 	sqlDB := testdbfixture.OpenPath(t, filepath.Join(dir, "chronology_skew.db"))
 	testdbseed.InsertProjectRoot(t, sqlDB, testdbseed.DefaultProjectID, dir)
-	memStore := NewMemory()
 
-	for _, tc := range []struct {
-		name   string
-		reopen func() chronologyBackend
-	}{
-		{
-			name:   "sql_with_reopen",
-			reopen: func() chronologyBackend { return NewSQL(sqlDB) },
-		},
-		{
-			name:   "memory",
-			reopen: func() chronologyBackend { return memStore },
-		},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			s := tc.reopen()
-			chronologySkewCaseA(t, ctx, s, tc.reopen, dir)
-			chronologySkewCaseB(t, ctx, s, tc.reopen, dir)
-		})
-	}
+	reopen := func() *SQL { return NewSQL(sqlDB) }
+	s := reopen()
+	chronologySkewCaseA(t, ctx, s, reopen, dir)
+	chronologySkewCaseB(t, ctx, s, reopen, dir)
 }
 
 // chronologySkewCaseA covers a high write ordinal (write#4) followed by a fresh external
 // download with a lower http_response ordinal (http_response#2).
-func chronologySkewCaseA(t *testing.T, ctx context.Context, s chronologyBackend, reopen func() chronologyBackend, dir string) {
+func chronologySkewCaseA(t *testing.T, ctx context.Context, s *SQL, reopen func() *SQL, dir string) {
 	sessA, err := s.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "Create sessA", err)
 
@@ -913,7 +873,7 @@ func chronologySkewCaseA(t *testing.T, ctx context.Context, s chronologyBackend,
 // chronologySkewCaseB covers high download ordinals (http_response#3 on beta.txt,
 // http_response#4 on gamma.txt) followed by whole-file local writes with lower write ordinals
 // (write#1 on beta.txt, write#2 on gamma.txt), plus unrelated path other_dl.txt.
-func chronologySkewCaseB(t *testing.T, ctx context.Context, s chronologyBackend, reopen func() chronologyBackend, dir string) {
+func chronologySkewCaseB(t *testing.T, ctx context.Context, s *SQL, reopen func() *SQL, dir string) {
 	sessB, err := s.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "Create sessB", err)
 

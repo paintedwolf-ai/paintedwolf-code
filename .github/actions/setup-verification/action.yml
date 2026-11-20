@@ -27,6 +27,9 @@ inputs:
   browser:
     description: Provision the pinned browser before an offline lane runs test:confine:linux
     default: 'false'
+  playwright:
+    description: Install the Playwright browsers before an offline lane runs the harness journeys
+    default: 'false'
   linux-launch:
     description: Provision GTK and display dependencies for protected launch tests
     default: 'false'
@@ -312,6 +315,12 @@ runs:
       if: inputs.lookup-only != 'true' && (inputs.browser == 'true')
       shell: bash
       run: ./task test:confine:linux -- --prepare
+
+    - name: Install Playwright browsers
+      if: inputs.lookup-only != 'true' && (inputs.playwright == 'true')
+      shell: bash
+      working-directory: lycaon-den
+      run: bunx playwright install chromium webkit --with-deps
 
     - name: Provision pinned Nix and locked inputs
       if: inputs.lookup-only != 'true' && (inputs.nix == 'true')

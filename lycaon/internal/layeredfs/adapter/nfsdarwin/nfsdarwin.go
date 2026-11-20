@@ -202,14 +202,6 @@ func (a *Adapter) Name() adapter.AdapterID { return adapter.AdapterNFSDarwin }
 // Facts returns the static capability and coherence facts for nfsdarwin.
 func (a *Adapter) Facts() adapter.AdapterFacts { return a.facts }
 
-// SetConfigCallbacksForTest updates the fault-injection callbacks for client file sync and runtime directory cleanup.
-func (a *Adapter) SetConfigCallbacksForTest(clientSyncFn func(string) error, removeAllFn func(string) error) {
-	a.mu.Lock()
-	a.cfg.ClientSyncFn = clientSyncFn
-	a.cfg.RemoveAllFn = removeAllFn
-	a.mu.Unlock()
-}
-
 // TrackDirtyClientPath registers a relative path under (viewID, rootID) to be synced on the next barrier flush.
 func (a *Adapter) TrackDirtyClientPath(viewID, rootID, relPath string) {
 	a.mu.RLock()

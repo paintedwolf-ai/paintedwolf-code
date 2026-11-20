@@ -14,8 +14,9 @@ import (
 	"github.com/lycaon/lycaon/internal/hostcmd"
 	"github.com/lycaon/lycaon/internal/secretmatch"
 	"github.com/lycaon/lycaon/internal/session"
-	"github.com/lycaon/lycaon/internal/session/store"
+	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"github.com/lycaon/lycaon/internal/settings"
+	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
 )
 
@@ -23,7 +24,7 @@ func TestBackgroundRecoveryPreservesSessionOwnershipAndCompletedOutput(t *testin
 	registry := bgprocess.NewRegistry(bgprocess.DefaultConfig(), bgprocess.Hooks{})
 	registry.Output.SetCaptureProjector(captureprojection.New(secretmatch.NewInertMatcher(), nil))
 	t.Cleanup(func() { _ = registry.Lifecycle.Close(t.Context()) })
-	manager := session.NewHost(store.NewMemory(), session.Models{Limits: settings.DefaultSessionLimits()}, nil)
+	manager := session.NewHost(storetest.New(t, testdbseed.DefaultProjectID), session.Models{Limits: settings.DefaultSessionLimits()}, nil)
 	manager.SetBackgroundRegistry(registry)
 	handle, err := registry.StartPipeline(t.Context(), bgprocess.PipelineSpec{
 		SessionID: "owner", ProjectID: "project", Mode: bgprocess.JobModeBackground,

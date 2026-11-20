@@ -30,7 +30,24 @@ class E2EShardsTests(unittest.TestCase):
             {"file": "c.ts"},
             {"file": "d.ts", "specs": [{"file": "journey.ts"}]},
         ]}
-        self.assertEqual(shards.deal(listing, 3), [["a.ts"], ["b.ts", "d.ts", "journey.ts"], ["c.ts"]])
+        self.assertEqual(shards.deal(listing, 3), [["b.ts", "d.ts", "journey.ts"], ["a.ts"], ["c.ts"]])
+        measured = {"a.ts": 50, "b.ts": 10, "c.ts": 40, "d.ts": 10}
+        self.assertEqual(shards.deal(listing, 2, measured), [["a.ts"], ["c.ts", "b.ts", "d.ts", "journey.ts"]])
+
+    def test_longest_specs_are_dealt_first_onto_the_least_loaded_shard(self):
+        listing = {"suites": [{"file": name} for name in ["a.ts", "b.ts", "c.ts", "d.ts", "e.ts"]]}
+        measured = {"a.ts": 10, "b.ts": 70, "c.ts": 30, "d.ts": 40, "e.ts": 20}
+        self.assertEqual(shards.deal(listing, 2, measured), [["b.ts", "e.ts"], ["d.ts", "c.ts", "a.ts"]])
+
+    def test_an_unmeasured_spec_is_weighed_at_the_median_and_still_dealt(self):
+        listing = {"suites": [{"file": name} for name in ["new.ts", "slow.ts", "mid.ts", "quick.ts"]]}
+        measured = {"slow.ts": 100, "mid.ts": 30, "quick.ts": 10, "deleted.ts": 500, "broken.ts": float("nan"), "zero.ts": 0}
+        selection = shards.deal(listing, 2, measured)
+        # The median of the usable history (10, 30, 100, 500) weighs new.ts at 65.
+        self.assertEqual(selection, [["slow.ts"], ["new.ts", "mid.ts", "quick.ts"]])
+        for unusable in [None, [], {"x.ts": "60"}]:
+            with self.subTest(measured=unusable):
+                self.assertEqual(shards.deal(listing, 2, unusable), shards.deal(listing, 2))
 
     def test_invalid_listings_cannot_report_partitioned_coverage(self):
         for listing, count in [

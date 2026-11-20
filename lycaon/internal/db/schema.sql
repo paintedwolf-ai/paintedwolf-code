@@ -3842,6 +3842,7 @@ BEGIN
     DELETE FROM source_blob_reclaim_queue WHERE sha256 = NEW.content_sha256;
 END;
 
+-- Naming the partial index's predicate lets each probe search it, not scan.
 CREATE TRIGGER IF NOT EXISTS queue_deleted_source_version_blob
 AFTER DELETE ON source_versions
 WHEN OLD.content_sha256 != ''
@@ -3849,7 +3850,7 @@ BEGIN
     INSERT OR IGNORE INTO source_blob_reclaim_queue (sha256)
     SELECT OLD.content_sha256
     WHERE EXISTS (SELECT 1 FROM source_blob_objects WHERE sha256 = OLD.content_sha256)
-      AND NOT EXISTS (SELECT 1 FROM source_versions WHERE content_sha256 = OLD.content_sha256);
+      AND NOT EXISTS (SELECT 1 FROM source_versions WHERE content_sha256 = OLD.content_sha256 AND content_sha256 != '');
 END;
 
 -- Scope boundaries record policy exclusions; budget and I/O boundaries record coverage gaps.

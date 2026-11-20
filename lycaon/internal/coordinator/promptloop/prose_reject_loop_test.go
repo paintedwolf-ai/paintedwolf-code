@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/tools/toolstest"
 	"slices"
 	"strings"
 	"testing"
@@ -13,7 +14,8 @@ import (
 	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/llm/modelcall"
 	"github.com/lycaon/lycaon/internal/promptresult"
-	"github.com/lycaon/lycaon/internal/session/store"
+	"github.com/lycaon/lycaon/internal/session/store/storetest"
+	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/pkg/api"
@@ -38,13 +40,13 @@ func (c *repeatedProseClient) Stream(ctx context.Context, req modelcall.Completi
 }
 
 func TestRepeatedProseRejectionEndsWithBoundedHandoff(t *testing.T) {
-	messages := store.NewMemory()
-	sess, err := messages.Create(t.Context(), api.CreateSessionRequest{Posture: api.SessionPostureBuild}, "")
+	messages := storetest.New(t, testdbseed.DefaultProjectID)
+	sess, err := messages.Create(t.Context(), api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
 	client := &repeatedProseClient{}
 	deps := promptloop.StoreDeps(messages)
 	deps.Model.LLM = client
-	deps.Context.Tools = tools.NewStubRegistry()
+	deps.Context.Tools = toolstest.NewRegistry()
 	deps.Context.Policy = &recordingToolPolicy{}
 	deps.Closeout.BeforeFinishNoToolTurn = func(_ context.Context, _ *api.Session, _ []api.Message, _, _ string, _ guidance.CloseoutDraft, _ string, _ bool, _ []string, _ bool) (*guidance.Refusal, bool) {
 		return guidance.NewRefusal("SOURCE_EVIDENCE_UNMET_BEFORE_CLOSEOUT", "Required check is unresolved."), true
@@ -74,11 +76,11 @@ func TestGatedCloseoutGetsOneActingRepairRound(t *testing.T) {
 	for _, barrier := range []bool{false, true} {
 		for _, repaired := range []bool{false, true} {
 			t.Run(fmt.Sprintf("barrier=%t/repaired=%t", barrier, repaired), func(t *testing.T) {
-				messages := store.NewMemory()
-				sess, err := messages.Create(t.Context(), api.CreateSessionRequest{Posture: api.SessionPostureBuild}, "")
+				messages := storetest.New(t, testdbseed.DefaultProjectID)
+				sess, err := messages.Create(t.Context(), api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 				testutil.FailErr(t, "create session", err)
 				gateOpen := true
-				registry := tools.NewStubRegistry()
+				registry := toolstest.NewRegistry()
 				calls := 0
 				testutil.FailErr(t, "register command", registry.Register("command", func(context.Context, map[string]any, tools.ToolContext) (string, error) {
 					calls++
@@ -170,10 +172,10 @@ func TestGatedCloseoutGetsOneActingRepairRound(t *testing.T) {
 func TestGatedCloseoutPathsSettleAsCloseoutBlocked(t *testing.T) {
 	for _, path := range []string{"normal", "prose_finish", "completion_barrier"} {
 		t.Run(path, func(t *testing.T) {
-			messages := store.NewMemory()
-			sess, err := messages.Create(t.Context(), api.CreateSessionRequest{Posture: api.SessionPostureBuild}, "")
+			messages := storetest.New(t, testdbseed.DefaultProjectID)
+			sess, err := messages.Create(t.Context(), api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 			testutil.FailErr(t, "create session", err)
-			registry := tools.NewStubRegistry()
+			registry := toolstest.NewRegistry()
 			testutil.FailErr(t, "register read", registry.Register("read", func(context.Context, map[string]any, tools.ToolContext) (string, error) {
 				return "partial evidence", nil
 			}))

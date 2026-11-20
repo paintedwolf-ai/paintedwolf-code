@@ -1,0 +1,5 @@
+go test fuzz v1
+string("00,00\n\x890\n00")
+byte('-')
+bool(false)
+bool(true)

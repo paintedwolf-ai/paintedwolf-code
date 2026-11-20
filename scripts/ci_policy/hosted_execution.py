@@ -68,7 +68,7 @@ def combined_exit(current, result):
     return 1 if 1 in (current, result) else current or result
 
 
-def run_lane(name, shard="", merge_group=False, clock=time.monotonic):
+def run_lane(name, shard="", clock=time.monotonic):
     lane = hosted_plan.lanes()[name]
     # The lane's minutes are its one time limit, counted from here across every phase.
     deadline = clock() + lane["minutes"] * 60
@@ -120,28 +120,31 @@ def run_lane(name, shard="", merge_group=False, clock=time.monotonic):
     try:
         code = 0
         record["phases"] = []
-        packages = None
-        if scope and name == "behavior":
+        phases = lane.get("phases")
+        if scope and phases == "affected-packages":
             from ci_policy.impact import go_scope
             packages = go_scope(scope)
             if packages:
                 command += ["--", *packages]
                 record["packages"] = packages
-        # Admission reports every failure, so repairs need not rediscover them one run at a time.
-        complete = merge_group or name in {"ready", "ready-tests", "frontend"}
+        if phases == "changed-packages":
+            from ci_policy.impact import changed_packages
+            # The planner selects this lane only for a change that edits Go source, so no scope is a fault.
+            packages = changed_packages(scope or {"paths": []})
+            if not packages:
+                raise ValueError(f"CI lane {name} found no changed Go package to run")
+            command += ["--", *packages]
+            record["packages"] = packages
+        # Every phase runs, so one run reports every failure and repairs need not rediscover them one at a time.
+        environment["PW_TEST_KEEP_GOING"] = "1"
         commands = [command]
-        if complete:
-            environment["PW_TEST_KEEP_GOING"] = "1"
-        if name == "ready":
-            commands = ready_scope.check_phases(hosted_plan.invocation(targets), scope, lane.get("early_targets", []))
-        elif name == "ready-tests":
+        if phases == "admission":
+            commands = ready_scope.check_phases(hosted_plan.invocation(targets), scope)
+        elif phases == "admission-tests":
             commands, record["packages"] = ready_scope.test_phases(scope)
-        if merge_group:
-            from ci_policy.merge_preflight import commands as ordered_commands
-            commands = ordered_commands(lane, hosted_plan.invocation(targets), packages)
         for command in commands:
             # A signal is the job being torn down, not a check's result, so nothing further can report.
-            if code < 0 or (code != 0 and not complete):
+            if code < 0:
                 break
             phase = {"command": command, "started_at": time.time()}
             record["phases"].append(phase)

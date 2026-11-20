@@ -1,6 +1,7 @@
 package integration
 
 import (
+	"github.com/lycaon/lycaon/internal/scan/findings/findingstest"
 	"path/filepath"
 	"testing"
 
@@ -18,7 +19,7 @@ func TestScanHintResolverMapsRuleIDs(t *testing.T) {
 	testutil.FailErr(t, "hints.Load failed", err)
 	resolver := scan.NewScanHintResolver(cfg)
 	out := resolver.Resolve([]api.SecurityFinding{
-		scanfindings.FixtureFinding("lycaon.ruby.sql-string-concat", api.FindingLevelHigh, "sql concat", "", 0),
+		findingstest.Finding("lycaon.ruby.sql-string-concat", api.FindingLevelHigh, "sql concat", "", 0),
 	})
 	if len(out) != 1 || out[0].Code != "SCAN_SQL_INJECTION" {
 		t.Fatalf("guidance = %#v", out)
@@ -60,7 +61,7 @@ func TestScanHintResolverNamespacePrefixPrecedence(t *testing.T) {
 			// Repetition exposes order-dependent resolution.
 			for i := 0; i < 32; i++ {
 				out := resolver.Resolve([]api.SecurityFinding{
-					scanfindings.FixtureFinding(tc.ruleID, api.FindingLevelHigh, "finding", "", 0),
+					findingstest.Finding(tc.ruleID, api.FindingLevelHigh, "finding", "", 0),
 				})
 				if len(out) != 1 || out[0].Code != tc.want {
 					t.Fatalf("guidance = %#v, want code %s", out, tc.want)

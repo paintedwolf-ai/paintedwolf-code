@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/url"
 	"strings"
+	"time"
 
 	"github.com/go-rod/rod"
 	"github.com/go-rod/rod/lib/proto"
@@ -411,7 +412,7 @@ func injectDriver(page *rod.Page) error {
 }
 
 func driverCall(page *rod.Page, method string, args map[string]any) ([]byte, error) {
-	ctx, cancel := pageOperationContext(page.GetContext(), page, ActionTimeout)
+	ctx, cancel := pageOperationContext(page.GetContext(), page, driverBudget(args))
 	defer cancel()
 	page = page.Context(ctx)
 	js, evalArgs, err := driverCallScript(method, args)
@@ -423,6 +424,7 @@ func driverCall(page *rod.Page, method string, args map[string]any) ([]byte, err
 	if err := page.WaitLoad(); err != nil {
 		return nil, err
 	}
+	started := time.Now()
 	res, err := page.Eval(js, evalArgs...)
 	if err != nil {
 		return nil, err
@@ -430,7 +432,32 @@ func driverCall(page *rod.Page, method string, args map[string]any) ([]byte, err
 	if res == nil {
 		return []byte("null"), nil
 	}
-	return marshalDriverResult(method, res.Value)
+	body, err := marshalDriverResult(method, res.Value)
+	if err != nil {
+		return nil, err
+	}
+	return withDriverDeadline(body, args, time.Since(started)), nil
+}
+
+// withDriverDeadline adds to a failed driver result the deadline the call ran
+// under, how long it ran and whether the deadline ran out.
+func withDriverDeadline(body []byte, args map[string]any, elapsed time.Duration) []byte {
+	deadline, _ := args["timeout_ms"].(int)
+	if deadline <= 0 || driverOK(body) {
+		return body
+	}
+	var parsed map[string]any
+	if json.Unmarshal(body, &parsed) != nil || parsed == nil {
+		return body
+	}
+	parsed["deadline_ms"] = deadline
+	parsed["elapsed_ms"] = elapsed.Milliseconds()
+	parsed["deadline_expired"] = elapsed >= time.Duration(deadline)*time.Millisecond
+	annotated, err := surveyjson.Marshal(parsed)
+	if err != nil {
+		return body
+	}
+	return annotated
 }
 
 func marshalDriverResult(method string, value any) ([]byte, error) {

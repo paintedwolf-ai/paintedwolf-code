@@ -17,10 +17,18 @@ SCRIPT = Path(__file__).resolve().parents[2].joinpath("test-execution.py")
 spec = importlib.util.spec_from_file_location("test_execution", SCRIPT)
 execution = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(execution)
-import verification_resources as resources  # importable once test-execution.py extends the path
+import verification_history as history  # importable once test-execution.py extends the path
+import verification_resources as resources
 
 
 class TaskAdmissionTests(unittest.TestCase):
+    def setUp(self):
+        # A host's configured capacity replaces the derived budget these tests measure.
+        environment = patch.dict(os.environ)
+        environment.start()
+        self.addCleanup(environment.stop)
+        os.environ.pop("PW_TEST_CAPACITY", None)
+
     def test_task_option_values_cannot_bypass_admission(self):
         self.assertTrue(execution.scheduled_task(["--output-group-begin", "--dry", "check"]))
         self.assertTrue(execution.scheduled_task(["-n", "--dry=false", "check"]))
@@ -69,14 +77,18 @@ class TaskAdmissionTests(unittest.TestCase):
                 execution.validate_task_selection(args)
 
     def test_declared_selection_targets_keep_their_grammar(self):
-        for args in (["test:digest", "--", "./internal/db", "-run", "TestFixture"],
-                     ["den:test:digest", "--", "src/shell-contract.test.ts"],
-                     ["den:harness:test", "--", "--grep", "fixture"],
-                     ["lint:full", "--", "--timeout=40m"],
-                     ["oar:conformance", "--", "--json"],
+        for target, accepted, refused in (
+                ("test:digest", ["./internal/db", "-run", "TestFixture"], ["./internal/missing-fixture"]),
+                ("den:test:digest", ["src/shell-contract.test.ts"], ["src/missing-fixture.test.ts"]),
+                ("den:harness:test", ["--grep", "fixture"], ["missing-fixture.spec.ts"])):
+            with self.subTest(target=target):
+                execution.validate_task_selection([target, "--", *accepted])
+                with self.assertRaises(ValueError):
+                    execution.validate_task_selection([target, "--", *refused])
+        for args in (["lint:full", "--", "--timeout=40m"], ["oar:conformance", "--", "--json"],
                      ["den:bundle", "--", "--debug"]):
             with self.subTest(args=args):
-                execution.validate_task_selection(args)
+                self.assertIsNone(execution.validate_task_selection(args))
 
     def test_heavy_tasks_queue(self):
         for args in ([], ["check"], ["check-fast"], ["test:digest", "--", "./internal/db"],
@@ -278,9 +290,9 @@ class ExecutionLifecycleTests(unittest.TestCase):
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
         self.root = Path(self.temp.name)
-        self.queue = execution.Queue(self.root / "queue")
+        self.queue = execution.Queue(self.root / "queue", self.root / "user-cache/paintedwolf/verification")
         self.env = {**os.environ, "PW_TEST_EXECUTION_ROOT": str(self.queue.root), "PW_TEST_WORKERS": "1",
-                    "GOCACHE": str(self.root / "go-cache")}
+                    "GOCACHE": str(self.root / "go-cache"), "XDG_CACHE_HOME": str(self.root / "user-cache")}
         self.env.pop("PW_TEST_EXECUTION_TICKET", None)
 
     def start(self, name, body):
@@ -356,6 +368,22 @@ while True: time.sleep(.1)
                     return False
         self.await_state(released)
 
+    def test_only_a_passing_whole_target_invocation_records_its_duration(self):
+        task = self.root / "task.py"
+        task.write_text("import os, sys\n"
+                        "if '--dry' in sys.argv: print(' '.join(sys.argv)); sys.exit(0)\n"
+                        "sys.exit(int(os.environ['FIXTURE_STATUS']))\n")
+        for arguments, status in ((["build:lycaon-dev"], 1), (["lint:fast", "--", "--fix"], 0),
+                                  (["build:lycaon-dev"], 0)):
+            with self.subTest(arguments=arguments, status=status):
+                result = subprocess.run(
+                    [sys.executable, str(SCRIPT), "task", "--", sys.executable, str(task), *arguments],
+                    env={**self.env, "FIXTURE_STATUS": str(status)}, capture_output=True, text=True, timeout=60)
+                self.assertEqual(result.returncode, status, result.stderr)
+        recorded = history.read_history(self.queue)
+        self.assertEqual(list(recorded), ["build:lycaon-dev"])
+        self.assertEqual(len(history.samples(recorded, "build:lycaon-dev")), 1)
+
     def test_app_build_runs_while_queue_is_paused(self):
         self.queue.pause("fixture pause")
         task = self.root / "task.py"
@@ -392,6 +420,7 @@ while True: time.sleep(.1)
         task = self.root / "fixture-task"
         task.write_text('#!/usr/bin/env bash\nset -eu\nshift 2\n'
                         'if [[ "${1:-}" == "--dry" ]]; then echo "task: [den:harness] fixture $*" >&2; exit 0; fi\n'
+                        'if [[ "${1:-}" == "--force" ]]; then shift; fi\n'
                         'if [[ "${1:-}" == "--concurrency" ]]; then shift 2; fi\n'
                         '[[ "$1" == "den:harness" ]]\nshift\n'
                         'if [[ "${1:-}" == "--" ]]; then shift; else set -- --supervised; fi\n'
@@ -454,7 +483,7 @@ while True: time.sleep(.1)
         process = self.start("paused", "print('ran')")
         self.await_state(lambda: len(self.queue.status()["runs"]) == 1)
         self.assertIsNone(process.poll())
-        other = execution.Queue(self.queue.root)
+        other = execution.Queue(self.queue.root, self.queue.history)
         self.assertEqual(other.status()["paused"]["reason"], "fixture pause")
         other.resume()
         out, err = process.communicate(timeout=5)

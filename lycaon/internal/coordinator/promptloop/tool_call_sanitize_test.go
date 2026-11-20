@@ -7,6 +7,7 @@ import (
 	"github.com/lycaon/lycaon/internal/llm/modelcall"
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/tools/toolstest"
 	"strings"
 	"testing"
 
@@ -222,7 +223,7 @@ func TestTextActionRecoveryThroughLoop(t *testing.T) {
 		{"bounded retry", `{"tool":"read","args":{}}`, 20, false, BlockedLoopRejectCap + 1, 0},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			reg := tools.NewStubRegistry()
+			reg := toolstest.NewRegistry()
 			executed, rejected, nudges := 0, 0, 0
 			testutil.FailErr(t, "register", reg.Register("read", func(context.Context, map[string]any, tools.ToolContext) (string, error) {
 				executed++
@@ -286,7 +287,7 @@ func TestTextActionRecoveryThroughLoop(t *testing.T) {
 // closing; the blocked text is not assembled into an answer.
 func TestBlockedTextActionIsNotTheFinalAnswer(t *testing.T) {
 	fenced := "I will read it now.\n\n```read\n{\"path\":\"x\"}\n```"
-	reg := tools.NewStubRegistry()
+	reg := toolstest.NewRegistry()
 	testutil.FailErr(t, "register", reg.Register("read", func(context.Context, map[string]any, tools.ToolContext) (string, error) {
 		t.Fatal("a written call ran")
 		return "", nil

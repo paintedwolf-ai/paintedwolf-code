@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"github.com/lycaon/lycaon/internal/tools/toolstest"
 	"testing"
 	"time"
 
@@ -18,7 +19,6 @@ import (
 	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
-	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -61,7 +61,7 @@ func lastSessionEvent(t *testing.T, published []api.SessionEvent) api.SessionEve
 }
 
 // observePendingPrompts wires a publisher that reads session state from mgr.
-func observePendingPrompts(t *testing.T, mgr *Host, st *store.Memory) (*events.MemoryHub, *api.Session, <-chan api.EventEnvelope) {
+func observePendingPrompts(t *testing.T, mgr *Host, st *store.SQL) (*events.MemoryHub, *api.Session, <-chan api.EventEnvelope) {
 	t.Helper()
 	hub := events.NewMemoryHub()
 	mgr.SetEventPublisher(&events.Publisher{Hub: hub, SessionState: mgr.Runner.SubmissionState})
@@ -242,7 +242,7 @@ func TestQueuedPromptDispatchesWhenRoundCompletesAfterTurnEndCheck(t *testing.T)
 	sess, err := st.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
 	dir := t.TempDir()
-	testdbseed.BindSessionWorkspace(t, st, sess.ID, dir)
+	testdbseed.BindSessionWorkspace(t, st.DB(), sess.ID, dir)
 	workers := &queueRoundWorkerQueue{jobs: []api.WorkerTask{{
 		ID: "job-1", ParentSessionID: sess.ID, ProjectID: testdbseed.DefaultProjectID,
 		WorkspacePath: dir, Status: api.WorkerStatusRunning,
@@ -305,7 +305,7 @@ func TestQueuedReceiptClaimDoesNotDeadlockSessionSeenPublication(t *testing.T) {
 	testdbseed.InsertProjectRoot(t, database, testdbseed.DefaultProjectID, t.TempDir())
 	st := store.NewSQL(database)
 	st.SetEventOutbox(eventoutbox.New(database, events.NewMemoryHub()))
-	manager := NewHost(st, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
+	manager := NewHost(st, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, toolstest.NewRegistry())
 	sess, err := st.Create(t.Context(), api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
 	row, _, err := manager.Submissions.AdmitPrompt(t.Context(), sess.ID, uuid.NewString(), "queued", promptinput.Input{Text: "queued"})

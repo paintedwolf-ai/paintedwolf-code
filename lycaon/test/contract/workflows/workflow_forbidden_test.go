@@ -1,99 +1,46 @@
 package contract
 
 import (
-	"os"
-	"path/filepath"
-	"strings"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/conditions"
+	"github.com/lycaon/lycaon/internal/rules"
+	"github.com/lycaon/lycaon/internal/vocabulary"
+	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 )
 
-// forbiddenConfigSamples must never appear in bundled lycaon/config/.
-var forbiddenConfigSamples = []struct {
-	id          string
-	yamlSnippet string
-}{
-	{"stage_plan_complete", "complete_when: stage_plan_complete"},
-	{"verify_evidence_passed", "verify_evidence_passed: true"},
-	{"user_input_clarify", "complete_when: user_input_clarify"},
-	{"request_user_input", "when:\n  request_user_input: true"},
-	{"mode_is", "when:\n  mode_is: spec"},
-}
-
-func TestBundledConfigHasNoForbiddenPredicateIDs(t *testing.T) {
-	t.Parallel()
-	root := contractcheck.RepoRoot(t)
-	configRoot := filepath.Join(root, "lycaon", "config")
-	entries, err := os.ReadDir(configRoot)
-	contractcheck.FailErr(t, "read directory entries", err)
-	for _, e := range entries {
-		if e.IsDir() {
-			scanConfigDir(t, filepath.Join(configRoot, e.Name()))
-			continue
-		}
-		if strings.HasSuffix(e.Name(), ".yaml") || strings.HasSuffix(e.Name(), ".yml") {
-			checkNoForbiddenSubstrings(t, filepath.Join(configRoot, e.Name()), forbiddenConfigSamples)
-		}
-	}
-}
-
+// Each forbidden id is refused by catalog load wherever an author can write it:
+// a phase complete_when and a posture rule when key.
 func TestForbiddenIDsAreRejectedByRegistry(t *testing.T) {
 	t.Parallel()
-	for _, sample := range forbiddenConfigSamples {
-		if !conditions.IsForbidden(sample.id) {
-			t.Fatalf("sample id %q must be forbidden", sample.id)
-		}
-	}
-}
-
-func TestProjectOverlayFixturesHaveNoForbiddenIDs(t *testing.T) {
-	t.Parallel()
-	root := contractcheck.RepoRoot(t)
-	overlayRoot := filepath.Join(root, "lycaon", "test", "contract", "testdata", "project-tier")
-	if _, err := os.Stat(overlayRoot); os.IsNotExist(err) {
-		t.Skip("no project-tier overlay fixtures")
-	}
-	scanConfigDir(t, overlayRoot)
-}
-
-func scanConfigDir(t *testing.T, dir string) {
-	t.Helper()
-	_ = filepath.WalkDir(dir, func(path string, d os.DirEntry, err error) error {
-		if err != nil {
-			t.Errorf("walk %s: %v", path, err)
-			return nil
-		}
-		if d.IsDir() {
-			return nil
-		}
-		if strings.HasSuffix(path, ".yaml") || strings.HasSuffix(path, ".yml") {
-			checkNoForbiddenSubstrings(t, path, forbiddenConfigSamples)
-		}
-		return nil
-	})
-}
-
-func checkNoForbiddenSubstrings(t *testing.T, path string, samples []struct {
-	id          string
-	yamlSnippet string
-}) {
-	t.Helper()
-	data, err := os.ReadFile(path)
-	contractcheck.FailErr(t, "read file", err)
-	text := string(data)
-	for _, sample := range samples {
-		if strings.Contains(text, sample.id) {
-			for _, line := range strings.Split(text, "\n") {
-				trim := strings.TrimSpace(line)
-				if strings.Contains(trim, "#") && strings.Index(trim, "#") < strings.Index(trim, sample.id) {
-					continue
-				}
-				if strings.Contains(line, sample.id) {
-					t.Errorf("%s contains forbidden id %q in: %s", path, sample.id, strings.TrimSpace(line))
+	reg, err := conditions.NewDefaultRegistry(conditions.RegistryDeps{})
+	contractcheck.FailErr(t, "build conditions registry", err)
+	for _, id := range []string{"stage_plan_complete", "verify_evidence_passed", "user_input_clarify", "request_user_input", "mode_is"} {
+		t.Run(id, func(t *testing.T) {
+			t.Parallel()
+			manifests := workflowdef.NewRegistry(map[string]workflowdef.Manifest{
+				"forbidden@1.0.0": workflowdef.FinalizeManifest(workflowdef.Manifest{
+					ID: "forbidden", Version: "1.0.0",
+					PhaseDefs: []workflowdef.PhaseDef{{ID: "x", CompleteWhen: id}},
+				}),
+			})
+			ruleConfig := &rules.RulesConfig{Rules: []rules.RuleEntry{{ID: "forbidden-rule", When: map[string]any{id: true}}}}
+			diags := vocabulary.ValidateBundled(reg, manifests, []*rules.RulesConfig{ruleConfig})
+			want := map[string]bool{
+				"workflow[forbidden@1.0.0].phases[x].complete_when": false,
+				"rules[0].forbidden-rule.when":                      false,
+			}
+			for _, d := range diags {
+				if _, ok := want[d.Field]; ok && d.Code == "forbidden_predicate" {
+					want[d.Field] = true
 				}
 			}
-		}
+			for field, seen := range want {
+				if !seen {
+					t.Errorf("%s: no forbidden_predicate diagnostic; diagnostics = %+v", field, diags)
+				}
+			}
+		})
 	}
 }

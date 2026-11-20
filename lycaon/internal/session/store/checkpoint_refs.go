@@ -93,83 +93,8 @@ func (r *sqlRewind) DropCheckpoint(ctx context.Context, session, anchor string) 
 	return r.core.queries.DeleteCheckpointAnchors(ctx, db.DeleteCheckpointAnchorsParams{SessionID: session, AnchorID: anchor})
 }
 
-func (r *memoryRewind) PutCheckpoint(ctx context.Context, root, session, anchor, _, manifest string, _ []CheckpointObject) error {
-	s := r.core
-	if err := ctx.Err(); err != nil {
-		return err
-	}
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	if s.checkpoints == nil {
-		s.checkpoints = make(map[string]map[string]memoryCheckpoint)
-	}
-	if s.checkpoints[session] == nil {
-		s.checkpoints[session] = make(map[string]memoryCheckpoint)
-	}
-	if previous, exists := s.checkpoints[session][anchor]; exists && previous.root != root {
-		return fmt.Errorf("checkpoint belongs to another source root")
-	}
-	var projectID string
-	if owner := s.sessions[session]; owner != nil {
-		projectID = owner.ProjectID
-	}
-	s.checkpoints[session][anchor] = memoryCheckpoint{root: root, manifest: manifest, projectID: projectID}
-	return nil
-}
-
-func (r *memoryRewind) ReadCheckpoint(ctx context.Context, root, session, anchor string) (string, error) {
-	s := r.core
-	if err := ctx.Err(); err != nil {
-		return "", err
-	}
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	manifest, ok := s.checkpoints[session][anchor]
-	if !ok || manifest.root != root {
-		return "", ErrCheckpointMissing
-	}
-	return manifest.manifest, nil
-}
-
-func (r *memoryRewind) DropCheckpoint(ctx context.Context, session, anchor string) error {
-	s := r.core
-	if err := ctx.Err(); err != nil {
-		return err
-	}
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	if anchor == "" {
-		delete(s.checkpoints, session)
-	} else {
-		delete(s.checkpoints[session], anchor)
-	}
-	return nil
-}
-
-type memoryCheckpoint struct{ root, manifest, projectID string }
-
 func (r *sqlRewind) DropRootCheckpoints(ctx context.Context, projectID, root string) error {
 	return r.core.queries.DeleteRootCheckpointAnchors(ctx, db.DeleteRootCheckpointAnchorsParams{ProjectID: projectID, RootKey: root})
-}
-
-func (r *memoryRewind) DropRootCheckpoints(ctx context.Context, projectID, root string) error {
-	s := r.core
-	if err := ctx.Err(); err != nil {
-		return err
-	}
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	for sessionID, anchors := range s.checkpoints {
-		for anchorID, checkpoint := range anchors {
-			if checkpoint.projectID == projectID && checkpoint.root == root {
-				delete(anchors, anchorID)
-			}
-		}
-		if len(anchors) == 0 {
-			delete(s.checkpoints, sessionID)
-		}
-	}
-	return nil
 }
 
 // ReadCheckpointForRewind reads metadata by its durable session and anchor,
@@ -182,18 +107,4 @@ func (r *sqlRewind) ReadCheckpointForRewind(ctx context.Context, session, anchor
 		return "", ErrCheckpointMissing
 	}
 	return raw, err
-}
-
-func (r *memoryRewind) ReadCheckpointForRewind(ctx context.Context, session, anchor string) (string, error) {
-	s := r.core
-	if err := ctx.Err(); err != nil {
-		return "", err
-	}
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	checkpoint, ok := s.checkpoints[session][anchor]
-	if !ok {
-		return "", ErrCheckpointMissing
-	}
-	return checkpoint.manifest, nil
 }

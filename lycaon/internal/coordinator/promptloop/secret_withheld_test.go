@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/tools/toolstest"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -17,6 +18,7 @@ import (
 	"github.com/lycaon/lycaon/internal/llm/providers/openaicompat"
 	"github.com/lycaon/lycaon/internal/promptresult"
 	"github.com/lycaon/lycaon/internal/session/store"
+	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/tools"
@@ -51,7 +53,7 @@ func (c *withholdingLLMClient) Stream(ctx context.Context, req modelcall.Complet
 	return ch, nil
 }
 
-func withheldNudgeDeps(st *store.Memory, client modelcall.LLMClient) promptloop.PromptLoopDeps {
+func withheldNudgeDeps(st *store.SQL, client modelcall.LLMClient) promptloop.PromptLoopDeps {
 	deps := promptloop.StoreDeps(st)
 	deps.Model.LLM = client
 	deps.Context.Policy = &recordingToolPolicy{}
@@ -62,7 +64,7 @@ func withheldNudgeDeps(st *store.Memory, client modelcall.LLMClient) promptloop.
 }
 
 func TestSecretWithheldTurnTellsModelAndContinues(t *testing.T) {
-	st := store.NewMemory()
+	st := storetest.New(t, testdbseed.DefaultProjectID)
 	client := &withholdingLLMClient{refusals: 1, reply: "carried on without the key"}
 	loop := promptloop.NewPromptLoopForTest(withheldNudgeDeps(st, client))
 	ctx := context.Background()
@@ -102,7 +104,7 @@ func TestSecretWithheldTurnTellsModelAndContinues(t *testing.T) {
 
 // Retained user text can trigger the same secret approval on each retry.
 func TestSecretWithheldRepeatedRefusalEndsRunWithoutError(t *testing.T) {
-	st := store.NewMemory()
+	st := storetest.New(t, testdbseed.DefaultProjectID)
 	client := &withholdingLLMClient{refusals: 5, reply: "unreachable"}
 	loop := promptloop.NewPromptLoopForTest(withheldNudgeDeps(st, client))
 	ctx := context.Background()
@@ -142,7 +144,7 @@ func (c *ceilingFixtureClient) Stream(ctx context.Context, req modelcall.Complet
 }
 
 func TestLengthTruncatedToolCallRecoversOnceWithHostNotice(t *testing.T) {
-	st := store.NewMemory()
+	st := storetest.New(t, testdbseed.DefaultProjectID)
 	truncatedCall := api.ToolCall{
 		ID:            "call_trunc_1",
 		Name:          "write",
@@ -177,7 +179,7 @@ func TestLengthTruncatedToolCallRecoversOnceWithHostNotice(t *testing.T) {
 	}
 
 	var writeInvocations int
-	reg := tools.NewStubRegistry()
+	reg := toolstest.NewRegistry()
 	testutil.FailErr(t, "register write", reg.Register("write", func(_ context.Context, _ map[string]any, _ tools.ToolContext) (string, error) {
 		writeInvocations++
 		return "ok", nil
@@ -245,7 +247,7 @@ func TestLengthTruncatedToolCallRecoversOnceWithHostNotice(t *testing.T) {
 }
 
 func TestSecondLengthTruncationEndsTurnWithTypedOutcomeAndVisibleNotice(t *testing.T) {
-	st := store.NewMemory()
+	st := storetest.New(t, testdbseed.DefaultProjectID)
 	truncatedCall := api.ToolCall{
 		ID:            "call_trunc_1",
 		Name:          "write",
@@ -378,7 +380,7 @@ func TestOpenAICompatSSEStreamLengthTruncatedToolCallRecoversInPromptLoop(t *tes
 		MaxTokens:         4096,
 		ProviderMaxTokens: 16384,
 	}})
-	st := store.NewMemory()
+	st := storetest.New(t, testdbseed.DefaultProjectID)
 	deps := promptloop.StoreDeps(st)
 	deps.Model.LLM = provider
 	deps.Context.Policy = &recordingToolPolicy{}

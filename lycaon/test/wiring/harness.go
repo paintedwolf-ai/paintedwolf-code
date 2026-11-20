@@ -2,7 +2,9 @@ package wiring
 
 import (
 	"context"
+	"errors"
 	"github.com/lycaon/lycaon/internal/progress"
+	scannerfixture "github.com/lycaon/lycaon/internal/scan/scantest"
 	"github.com/lycaon/lycaon/internal/toolrejection"
 	"io/fs"
 	"os"
@@ -12,21 +14,18 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/lycaon/lycaon/config"
-	"github.com/lycaon/lycaon/config/configtest"
-	"github.com/lycaon/lycaon/internal/api"
 	"github.com/lycaon/lycaon/internal/app"
 	"github.com/lycaon/lycaon/internal/app/configuration"
 	"github.com/lycaon/lycaon/internal/configlayout"
 	"github.com/lycaon/lycaon/internal/cost"
-	"github.com/lycaon/lycaon/internal/db"
 	"github.com/lycaon/lycaon/internal/events"
 	"github.com/lycaon/lycaon/internal/llm"
+	"github.com/lycaon/lycaon/internal/llm/modelcall"
 	"github.com/lycaon/lycaon/internal/mcp"
 	"github.com/lycaon/lycaon/internal/orchestration"
 	"github.com/lycaon/lycaon/internal/project"
 	"github.com/lycaon/lycaon/internal/projectroot"
-	"github.com/lycaon/lycaon/internal/scan"
+
 	scanoutput "github.com/lycaon/lycaon/internal/scan/output"
 	"github.com/lycaon/lycaon/internal/session"
 	"github.com/lycaon/lycaon/internal/session/store"
@@ -41,14 +40,6 @@ import (
 	sdkmcp "github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
-// Each test supplies its own server catalog.
-func stageFakeMCPDistro(t *testing.T) {
-	t.Helper()
-	configtest.Overlay(t, map[config.Rel]string{
-		config.DistroMCP: "providers:\n  - id: svca\n    command: \"true\"\n    args: []\n    enabled: false\n",
-	})
-}
-
 // Harness holds a production-wired ServeApp for E2E tests.
 type Harness struct {
 	*app.ServeApp
@@ -58,17 +49,20 @@ type Harness struct {
 	dbPath    string
 }
 
-// BuildForTest constructs a production-parity server via app.Build with test defaults.
+// BuildForTest assembles a host in a temporary directory.
 func BuildForTest(t *testing.T, opts ...Option) *Harness {
 	t.Helper()
-	t.Setenv("LYCAON_LLM_MOCK", "1")
-	t.Setenv("LYCAON_API_TOKEN", api.TestAPIToken)
-	t.Setenv("LYCAON_TEST", "1")
-	t.Setenv("LYCAON_LOG_LEVEL", "error")
-	// Isolate device configuration for deterministic tests.
-	t.Setenv("LYCAON_CONFIG_DIR", t.TempDir())
-	// The process source catalog caches trees under <config>/cache; its builds
-	// outlive the app, so finish and retire them before TempDir removal.
+	return BuildForTestAt(t, t.TempDir(), opts...)
+}
+
+// BuildForTestAt boots on a caller-owned directory, including an existing store.
+func BuildForTestAt(t *testing.T, dir string, opts ...Option) *Harness {
+	t.Helper()
+	requirePreparedHostProcess(t)
+	configDir := filepath.Join(dir, "config")
+	testutil.FailErr(t, "create device configuration", os.MkdirAll(configDir, 0o700))
+	t.Setenv("LYCAON_CONFIG_DIR", configDir)
+	// Retire process-wide cached trees before removing their directory.
 	t.Cleanup(func() {
 		ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 		defer cancel()
@@ -79,19 +73,22 @@ func BuildForTest(t *testing.T, opts ...Option) *Harness {
 	for _, opt := range opts {
 		opt(&o)
 	}
-	if o.globalApprovalPosture != "" {
-		testutil.FailErr(t, "write global approvals", os.WriteFile(filepath.Join(os.Getenv("LYCAON_CONFIG_DIR"), "approvals.yaml"), []byte("approval_posture: "+string(o.globalApprovalPosture)+"\n"), 0o600))
-	}
-
-	cfg := configuration.Config{}
+	cfg := configuration.Config{TestChangeDebounce: o.changeDebounce, TestFileOperationHold: o.fileOperationHold}
 	cfg.ConfigRoot = configlayout.FindModuleRoot()
+	if o.configRoot != nil {
+		cfg.ConfigRoot = *o.configRoot
+	}
 	// Install packs before the builder resolves the catalog.
 	installHarnessPacks(t, o.installedPackDirs)
-	testDir := t.TempDir()
-	// Restore read-only snapshots before TempDir cleanup.
+	testDir := dir
+	// Restore read-only snapshots before the directory is removed.
 	t.Cleanup(func() { restoreTreePermissions(filepath.Join(testDir, "source-snapshots")) })
 	dbPath := filepath.Join(testDir, "wiring-test.db")
-	cloneDatabaseBaseline(t, dbPath)
+	if _, err := os.Stat(dbPath); errors.Is(err, fs.ErrNotExist) {
+		cloneDatabaseBaseline(t, dbPath)
+	} else {
+		testutil.FailErr(t, "inspect store", err)
+	}
 	cfg.DBPath = dbPath
 	cfg.ListenAddr = "127.0.0.1:0"
 	cfg.MockLLMPath = mockLLMConfigPath(t)
@@ -103,7 +100,6 @@ func BuildForTest(t *testing.T, opts ...Option) *Harness {
 			"svca": {{Name: "do", Description: "do"}},
 		}}
 	}
-	stageFakeMCPDistro(t)
 	if o.secretMatcher != nil {
 		cfg.TestSecretMatcher = o.secretMatcher
 	}
@@ -120,7 +116,7 @@ func BuildForTest(t *testing.T, opts ...Option) *Harness {
 	if o.useBundledScanners {
 		cfg.TestAdvisoryDatabase = scantest.OSVExport(t)
 	} else {
-		cfg.TestScanRegistry = &scan.MockRegistry{Scanner: &scan.MockScanner{
+		cfg.TestScanRegistry = &scannerfixture.MockRegistry{Scanner: &scannerfixture.MockScanner{
 			// Match the bundled secret scanner categories.
 			CategoryList: []wire.ScanCategory{wire.ScanCategorySecret, wire.ScanCategorySecurity, wire.ScanCategorySCA},
 			Result:       &scanoutput.Result{FindingsCount: 0},
@@ -133,25 +129,35 @@ func BuildForTest(t *testing.T, opts ...Option) *Harness {
 		cfg.TestOrchestrator = autoCompleteOrchestrator
 	}
 	var recording *llm.RecordingClient
+	var sa *app.ServeApp
 	switch {
 	case o.llmClient != nil:
 		cfg.TestLLMClient = o.llmClient
 	case o.recording:
-		recording = llm.NewRecordingClient(llm.NewMockProvider(loadMockConfig(t)))
-		cfg.TestLLMClient = recording
+		// Mock routing bypasses the provider registry, so the recorder sits behind
+		// the registry's outbound screen as a provider request would.
+		script := o.recordedScript
+		if script == nil {
+			script = loadMockConfig(t)
+		}
+		recording = llm.NewRecordingClient(llm.NewMockProvider(script))
+		cfg.TestLLMClient = &screenedClient{next: recording, registry: func() *llm.Registry {
+			return sa.Sessions.Manager.Coordinator.Model.LLMService.Registry
+		}}
 	default:
 		cfg.TestLLMClient = llm.NewMockProvider(loadMockConfig(t))
 	}
 
-	sa, err := app.Build(t.Context(), cfg)
+	var err error
+	sa, err = app.Build(t.Context(), cfg)
 	testutil.FailErr(t, "build app", err)
-	t.Cleanup(func() {
-		testutil.FailErr(t, "close test app", sa.Close())
-		_ = db.RemoveStore(dbPath)
-	})
+	t.Cleanup(func() { testutil.FailErr(t, "close test app", sa.Close()) })
 
 	if o.replaceManifests != nil {
 		sa.Workflows.Manager.Resolver.Overlay = workflowdef.NewRegistry(o.replaceManifests)
+	}
+	if o.globalApprovalPosture != "" {
+		testutil.FailErr(t, "set approval posture", sa.Server.Admin.Settings.Service.Approvals.PutGlobal(settings.ApprovalConfig{Posture: o.globalApprovalPosture}))
 	}
 
 	trackHost(t.Name(), sa)
@@ -335,15 +341,6 @@ func mockLLMConfigPath(t *testing.T) string {
 	return filepath.Join(configlayout.FindModuleRoot(), "config", "fixtures", "mock_llm.yaml")
 }
 
-func loadMockConfig(t *testing.T) *llm.MockConfig {
-	t.Helper()
-	cfg, err := llm.LoadMockConfig()
-	if err != nil {
-		t.Fatalf("load mock config: %v", err)
-	}
-	return cfg
-}
-
 type testCostPricer struct{}
 
 // NoCharge: the fixture prices every provider, so none is local-free.
@@ -378,4 +375,30 @@ func restoreTreePermissions(root string) {
 		}
 		return nil
 	})
+}
+
+// screenedClient screens each request with the built host's outbound screen
+// before the next client sees it.
+type screenedClient struct {
+	next     modelcall.LLMClient
+	registry func() *llm.Registry
+}
+
+// mockDestination is the screen destination the harness model stands for.
+var mockDestination = llm.ScreenDestination{ID: "mock", Label: "Mock model"}
+
+func (c *screenedClient) Complete(ctx context.Context, req modelcall.CompletionRequest) (*modelcall.Completion, error) {
+	screened, err := c.registry().ScreenOutbound(ctx, mockDestination, req)
+	if err != nil {
+		return nil, err
+	}
+	return c.next.Complete(ctx, screened)
+}
+
+func (c *screenedClient) Stream(ctx context.Context, req modelcall.CompletionRequest) (<-chan modelcall.StreamChunk, error) {
+	screened, err := c.registry().ScreenOutbound(ctx, mockDestination, req)
+	if err != nil {
+		return nil, err
+	}
+	return c.next.Stream(ctx, screened)
 }

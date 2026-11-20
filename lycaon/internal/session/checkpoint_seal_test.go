@@ -23,6 +23,7 @@ import (
 	"github.com/lycaon/lycaon/internal/session/checkpointcontrol"
 	"github.com/lycaon/lycaon/internal/session/lifecycle"
 	sessionstore "github.com/lycaon/lycaon/internal/session/store"
+	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"github.com/lycaon/lycaon/internal/session/workeroutcomes"
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/sourceblob"
@@ -429,7 +430,7 @@ func TestManualCompactionDoesNotHoldSessionStopAdmission(t *testing.T) {
 }
 
 func TestToolPolicyWithoutOptionalDependencies(t *testing.T) {
-	mgr := NewHost(sessionstore.NewMemory(), Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
+	mgr := NewHost(storetest.New(t, testdbseed.DefaultProjectID), Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
 	if mgr.Coordinator.Guards.Policy() == nil {
 		t.Fatal("expected policy without optional dependencies")
 	}

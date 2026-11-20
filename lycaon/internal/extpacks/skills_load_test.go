@@ -49,10 +49,17 @@ func TestKindRootIncludesSkills(t *testing.T) {
 }
 
 func TestProjectScopeCoversEveryKindRoot(t *testing.T) {
-	for _, root := range UnitKindRoots() {
+	roots := UnitKindRoots()
+	if len(roots) == 0 {
+		t.Fatal("no unit kind roots")
+	}
+	for _, root := range roots {
 		if ProjectScope(root) == 0 {
 			t.Fatalf("kind root %q has no ProjectScope class", root)
 		}
+	}
+	if ProjectScope("tools") != ScopeDeviceOnly {
+		t.Fatalf("tools scope = %v want ScopeDeviceOnly", ProjectScope("tools"))
 	}
 }
 

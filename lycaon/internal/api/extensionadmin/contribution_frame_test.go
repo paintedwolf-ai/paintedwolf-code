@@ -175,3 +175,17 @@ func TestHostFactLookupBindsTypedState(t *testing.T) {
 		t.Fatal("absent session and target must read false")
 	}
 }
+
+func TestReleasedContributionFramesAreGone(t *testing.T) {
+	srv := &Contributions{}
+	frame := contributionTestFrame(t, "cat-released", "mcp-1", true)
+	srv.rememberContributionFrame(frame)
+	srv.ReleaseFrames()
+	if _, ok := srv.contributionFrameByRevision(frame.Revision); ok {
+		t.Fatal("a released frame is still retained")
+	}
+	srv.rememberContributionFrame(frame)
+	if _, ok := srv.contributionFrameByRevision(frame.Revision); !ok {
+		t.Fatal("a frame remembered after release is not retained")
+	}
+}

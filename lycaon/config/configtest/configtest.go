@@ -29,11 +29,17 @@ const stagingGuardEnv = "LYCAON_CONFIG_STAGED"
 // change one file without reconstructing the catalog.
 func Overlay(t *testing.T, files map[config.Rel]string) {
 	t.Helper()
+	Use(t, OverlayFS(files))
+}
+
+// OverlayFS layers files over the current bundled source, for a test process
+// that stages them once before any test runs.
+func OverlayFS(files map[config.Rel]string) fs.FS {
 	over := fstest.MapFS{}
 	for rel, body := range files {
 		over[rel.String()] = &fstest.MapFile{Data: []byte(body), Mode: 0o644}
 	}
-	Use(t, layered{over: over, base: config.Source()})
+	return layered{over: over, base: config.Source()}
 }
 
 type layered struct {

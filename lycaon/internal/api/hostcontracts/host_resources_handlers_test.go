@@ -15,8 +15,9 @@ import (
 	contractfixture "github.com/lycaon/lycaon/internal/api/contractfixture"
 	"github.com/lycaon/lycaon/internal/hostresources"
 	"github.com/lycaon/lycaon/internal/llm"
-	sessionstore "github.com/lycaon/lycaon/internal/session/store"
+	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"github.com/lycaon/lycaon/internal/settings"
+	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
@@ -38,7 +39,7 @@ resources:
         connections:
           - mode: none
 `)
-	deps := contractfixture.RequiredTestDeps(t, hostapi.Dependencies{Core: hostapi.CoreDependencies{Store: sessionstore.NewMemory()}})
+	deps := contractfixture.RequiredTestDeps(t, hostapi.Dependencies{Core: hostapi.CoreDependencies{Store: storetest.New(t, testdbseed.DefaultProjectID)}})
 	configtest.Only(t, map[config.Rel]string{config.HostResources: string(catalog)})
 	configDir := t.TempDir()
 	service, err := hostresources.NewService(configDir)
@@ -81,7 +82,7 @@ resources:
           environment: {names: [LYCAON_HOST_RESOURCE_API_POLICY_TEST]}
 `)
 	// The required test services load bundled config before it is replaced.
-	deps := contractfixture.RequiredTestDeps(t, hostapi.Dependencies{Core: hostapi.CoreDependencies{Store: sessionstore.NewMemory()}})
+	deps := contractfixture.RequiredTestDeps(t, hostapi.Dependencies{Core: hostapi.CoreDependencies{Store: storetest.New(t, testdbseed.DefaultProjectID)}})
 	// Both the resource catalog and the approvals floor are bundled config, so
 	// they stage together — a second Only call would replace the first.
 	configtest.Only(t, map[config.Rel]string{
@@ -137,5 +138,21 @@ rules:
 	cfg := approvalStore.Get(llm.SettingsScopeGlobal, settings.ProjectRef{})
 	if cfg.NeverAsk == nil || !*cfg.NeverAsk || len(cfg.Rules) != 2 {
 		t.Fatalf("lossless approval mutation failed: %+v", cfg)
+	}
+
+	// A patch without access merges nothing and answers the current state.
+	recorder = httptest.NewRecorder()
+	server.ServeHTTP(recorder, contractfixture.NewAuthedRequest(
+		http.MethodPatch, "/v1/host-resources/local-db", bytes.NewBufferString(`{}`),
+	))
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("empty patch status=%d body=%s", recorder.Code, recorder.Body.String())
+	}
+	testutil.FailErr(t, "decode empty patch response", json.Unmarshal(recorder.Body.Bytes(), &response))
+	if len(response.Resources) != 1 || response.Resources[0].AccessSetting != wire.HostResourceAccessSettingAsk {
+		t.Fatalf("empty patch response = %+v", response)
+	}
+	if after := approvalStore.Get(llm.SettingsScopeGlobal, settings.ProjectRef{}); len(after.Rules) != 2 {
+		t.Fatalf("an empty patch changed the approval rules: %+v", after)
 	}
 }

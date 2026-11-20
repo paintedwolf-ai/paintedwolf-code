@@ -15,10 +15,10 @@ import (
 const formToolSource = "package audit\n\n// Alpha adds one.\nfunc Alpha(n int) int {\n\treturn n + 1\n}\n\n// Beta is unrelated.\nfunc Beta() {}\n\n// Gamma calls Alpha.\nfunc Gamma() int {\n\treturn Alpha(1)\n}\n"
 
 // runFormToolCitation calls one step, then cites the window it delivered.
-func runFormToolCitation(t *testing.T, step citableStep) (result string, tags [][]string, closeout wire.Message, ledgerKinds map[string]int) {
+func runFormToolCitation(t *testing.T, step CitableStep) (result string, tags [][]string, closeout wire.Message, ledgerKinds map[string]int) {
 	t.Helper()
 	t.Setenv("LYCAON_BYPASS_APPROVALS", "1")
-	script := &citableScriptLLM{steps: []citableStep{step, {text: func(req modelcall.CompletionRequest) string {
+	script := &CitableScriptLLM{Steps: []CitableStep{step, {Text: func(req modelcall.CompletionRequest) string {
 		result = newestToolContent(req)
 		tags = deliveryTagRE.FindAllStringSubmatch(result, -1)
 		if len(tags) == 0 {
@@ -55,8 +55,8 @@ func runFormToolCitation(t *testing.T, step citableStep) (result string, tags []
 // One call through the tool records what the same call through command records,
 // once, and a coordinate from it is traced without an excerpt.
 func TestSummarizeToolRecordsOneCitableSetOfWindows(t *testing.T) {
-	_, viaCommand, _, commandKinds := runFormToolCitation(t, citableStep{command: "summarize --path audit.go --focus Alpha"})
-	result, viaTool, closeout, toolKinds := runFormToolCitation(t, citableStep{tool: "summarize", args: map[string]any{"path": "audit.go", "task": "Alpha"}})
+	_, viaCommand, _, commandKinds := runFormToolCitation(t, CitableStep{Command: "summarize --path audit.go --focus Alpha"})
+	result, viaTool, closeout, toolKinds := runFormToolCitation(t, CitableStep{Tool: "summarize", Args: map[string]any{"path": "audit.go", "task": "Alpha"}})
 	if len(viaTool) == 0 {
 		t.Fatalf("the tool delivered no window: %.600s", result)
 	}
@@ -84,7 +84,7 @@ func TestSummarizeToolRecordsOneCitableSetOfWindows(t *testing.T) {
 
 // Separate pattern hits must not lose their citation for being apart.
 func TestSummarizePatternHitsStayCitable(t *testing.T) {
-	result, tags, closeout, _ := runFormToolCitation(t, citableStep{tool: "summarize", args: map[string]any{"path": "audit.go", "pattern": "Alpha", "task": "Alpha"}})
+	result, tags, closeout, _ := runFormToolCitation(t, CitableStep{Tool: "summarize", Args: map[string]any{"path": "audit.go", "pattern": "Alpha", "task": "Alpha"}})
 	if len(tags) == 0 {
 		t.Fatalf("pattern hits delivered no citable window: %.900s", result)
 	}

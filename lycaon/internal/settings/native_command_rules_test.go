@@ -44,3 +44,32 @@ func TestNativeCommandRulesFollowReachedArgv(t *testing.T) {
 		})
 	}
 }
+
+// A tool rule naming a program entry judges every native child that entry reaches.
+func TestToolRulesJudgeTheProgramEntry(t *testing.T) {
+	for _, effect := range []settings.ApprovalEffect{settings.ApprovalEffectAsk, settings.ApprovalEffectDeny} {
+		t.Run(string(effect), func(t *testing.T) {
+			stageBundledApprovals(t, []settings.ApprovalRule{{
+				Category: settings.ApprovalCategoryTool, Pattern: "verify", Effect: effect,
+			}})
+			store, err := settings.NewApprovalStoreAt(filepath.Join(t.TempDir(), "global.yaml"))
+			testutil.FailErr(t, "create approval store", err)
+			approval := settings.NewRuleApprovalGate(store, settings.NoSources())
+			child := hitl.ProposedAction{Invocation: hitl.ActionInvocation{
+				Tool: "go", EntryTool: "verify",
+				BoundStages: []toolcontract.ExecutionStage{{Argv: []string{"go", "mod", "init", "example.com/x"}}},
+			}}
+			result, err := approval.Evaluate(t.Context(), child)
+			testutil.FailErr(t, "evaluate entry child", err)
+			if result.Denied != (effect == settings.ApprovalEffectDeny) || !result.Denied && !result.Required() {
+				t.Fatalf("entry %s rule was missed: %+v", effect, result)
+			}
+			child.Invocation.EntryTool = "command"
+			result, err = approval.Evaluate(t.Context(), child)
+			testutil.FailErr(t, "evaluate other entry", err)
+			if result.Denied || len(result.MatchedRules) != 0 {
+				t.Fatalf("a verify rule judged a command child: %+v", result)
+			}
+		})
+	}
+}

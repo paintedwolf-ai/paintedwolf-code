@@ -29,14 +29,23 @@ func TestLoadPathScopes(t *testing.T) {
 func TestCheckWriteInScopeCoordinatorProductWrite(t *testing.T) {
 	reg, err := LoadPathScopes()
 	testutil.FailErr(t, "LoadPathScopes", err)
-	scope := reg["coordinator_product_write"]
-	// Overlay paths are in scope; the approval gate reviews the ones a trust
-	// surface loads.
+	scope, ok := reg["coordinator_product_write"]
+	if !ok {
+		t.Fatal("missing coordinator_product_write scope")
+	}
+	if len(scope.Deny) != 0 {
+		t.Fatalf("coordinator_product_write deny globs = %v, want none", scope.Deny)
+	}
+	// Overlay paths and dependency trees are in scope; the approval gate
+	// reviews the ones a trust surface loads.
 	allowed := []string{
 		"src/main.go",
 		settingsoverlay.Rel("blueprints/note.md"),
 		settingsoverlay.Rel("rules/x.yaml"),
+		settingsoverlay.Rel("ignores.yaml"),
 		settingsoverlay.Rel("scratch.md"),
+		"node_modules/pkg/index.js",
+		"vendor/pkg/foo.go",
 	}
 	for _, path := range allowed {
 		if err := CheckWriteInScope(scope, "coordinator_product_write", path); err != nil {

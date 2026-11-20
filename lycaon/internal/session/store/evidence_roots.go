@@ -10,11 +10,8 @@ import (
 	"github.com/lycaon/lycaon/internal/projectroot"
 )
 
-// evidenceCitationRoots resolves the session's folder roots for evidence
-// identity and citation keys. Roots come from the session's project; the
-// active root is the session's workspace_root_id, falling back to the
-// project's primary root. ProjectDir keeps the legacy single-directory
-// anchor (primary root path) for tokens that resolve under no attached root.
+// evidenceCitationRoots resolves project roots and the session's active root.
+// Unrooted path tokens use the primary root directory.
 func evidenceCitationRoots(ctx context.Context, q *db.Queries, sessionID string) (evidence.CitationRoots, error) {
 	sess, err := q.GetSession(ctx, sessionID)
 	if err != nil {

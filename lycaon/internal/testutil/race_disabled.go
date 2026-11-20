@@ -2,4 +2,4 @@
 
 package testutil
 
-const raceEnabled = false
+const RaceEnabled = false

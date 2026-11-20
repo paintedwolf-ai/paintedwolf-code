@@ -1,6 +1,7 @@
 package api
 
 import (
+	"encoding/base64"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -18,26 +19,6 @@ func TestGenerateAPIToken(t *testing.T) {
 		if !((r >= 'A' && r <= 'Z') || (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9') || r == '-' || r == '_') {
 			t.Fatalf("token contains invalid char %q", r)
 		}
-	}
-}
-
-func TestResolveAPIToken(t *testing.T) {
-	t.Setenv("LYCAON_API_TOKEN", "env-token-123")
-	tok, err := ResolveAPIToken()
-	if err != nil {
-		t.Fatalf("ResolveAPIToken error: %v", err)
-	}
-	if tok != "env-token-123" {
-		t.Fatalf("token = %q, want env-token-123", tok)
-	}
-
-	t.Setenv("LYCAON_API_TOKEN", "")
-	tok2, err := ResolveAPIToken()
-	if err != nil {
-		t.Fatalf("ResolveAPIToken error: %v", err)
-	}
-	if len(tok2) == 0 {
-		t.Fatal("expected generated token when env is empty")
 	}
 }
 
@@ -134,4 +115,32 @@ func TestRequireClientAuthWithTestToken(t *testing.T) {
 	if w.Code != http.StatusOK {
 		t.Fatalf("status = %d, want 200", w.Code)
 	}
+}
+
+func TestResolveAPIToken(t *testing.T) {
+	t.Run("environment token wins, trimmed", func(t *testing.T) {
+		t.Setenv("LYCAON_API_TOKEN", "  env-token-123\n")
+		got, err := ResolveAPIToken()
+		if err != nil || got != "env-token-123" {
+			t.Fatalf("ResolveAPIToken() = %q, %v; want env-token-123", got, err)
+		}
+	})
+	t.Run("blank environment generates a fresh token", func(t *testing.T) {
+		t.Setenv("LYCAON_API_TOKEN", "   ")
+		first, err := ResolveAPIToken()
+		if err != nil {
+			t.Fatalf("ResolveAPIToken: %v", err)
+		}
+		second, err := ResolveAPIToken()
+		if err != nil {
+			t.Fatalf("ResolveAPIToken: %v", err)
+		}
+		raw, err := base64.RawURLEncoding.DecodeString(first)
+		if err != nil || len(raw) != 32 {
+			t.Fatalf("token %q decodes to %d bytes (err %v), want 32", first, len(raw), err)
+		}
+		if first == second {
+			t.Fatal("two generated tokens are equal")
+		}
+	})
 }

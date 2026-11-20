@@ -89,13 +89,17 @@ var refusalWatch = &refusalWatchT{
 // before the stream is live report an incomplete witness; a host that cannot
 // read the reports gives every action an unavailable one. Where each launch's
 // supervisor reports instead, the watch is live at once.
-func StartRefusalWatch(ctx context.Context, stateRoot string) {
+func StartRefusalWatch(ctx context.Context, stateRoot string, track ProcessTracker) {
 	if supervisedRefusalReports() {
 		refusalWatch.startSupervised()
 		return
 	}
-	refusalWatch.start(ctx, newRefusalSource(stateRoot))
+	refusalWatch.start(ctx, newRefusalSource(stateRoot, track))
 }
+
+// ProcessTracker registers a child that must not outlive the engine, even when
+// the engine dies outright; the returned func forgets it once it has exited.
+type ProcessTracker func(pid int) (forget func())
 
 // startSupervised marks the watch live for launch-reported refusals.
 func (w *refusalWatchT) startSupervised() {

@@ -11,10 +11,10 @@ components:
       x-go-generate: true
       type: object
       additionalProperties: false
-      required: [root_id, path, from_path, operation_id, complete, state, phase, operation, cancelable, entries_processed, bytes_processed, created_at]
+      required: [path, from_path, operation_id, complete, state, phase, operation, cancelable, entries_processed, bytes_processed, created_at]
       description: Durable file operation identified by its mutation operation_id. Disconnects leave accepted work running; terminal results survive restart.
       properties:
-        root_id: {type: string, format: uuid}
+        root_id: {type: string, format: uuid, description: "The root the request named; absent when it named none."}
         path: {type: string}
         from_path: {type: string}
         expected_entry_id:

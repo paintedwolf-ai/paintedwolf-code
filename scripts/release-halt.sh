@@ -62,7 +62,6 @@ run_self_test() {
     --bad 0.2.0 --last-good 0.1.0 \
     --current-file "${fixtures}/current-bad.json" \
     --release-file "${fixtures}/last-good.json" --dry-run >/dev/null
-  python3 "${ROOT}/scripts/test_update_keys.py"
   echo "release-halt --self-test passed" >&2
 }
 

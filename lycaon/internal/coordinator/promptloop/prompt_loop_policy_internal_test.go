@@ -7,7 +7,8 @@ import (
 	"github.com/lycaon/lycaon/internal/coordinator/inject"
 	"github.com/lycaon/lycaon/internal/coordinator/surface"
 	"github.com/lycaon/lycaon/internal/llm"
-	"github.com/lycaon/lycaon/internal/session/store"
+	"github.com/lycaon/lycaon/internal/prompts"
+	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/toolsurface"
@@ -15,10 +16,10 @@ import (
 )
 
 func TestRunLoadsOneCoordinatorFramePerModelTurn(t *testing.T) {
-	memory := store.NewMemory()
+	sessionStore := storetest.New(t, "project")
 	source := &countingCoordinatorFrameSource{}
 	buildCalls := 0
-	deps := StoreDeps(memory)
+	deps := StoreDeps(sessionStore)
 	deps.Model.LLM = llm.NewMockProvider(&llm.MockConfig{Responses: []llm.MockResponseEntry{{Pattern: ".", Text: "done"}}})
 	deps.Context.CoordinatorFrame = source
 	deps.Context.BuildMessages = func(_ context.Context, _ *api.Session, history []api.Message, frame *inject.CoordinatorTurnFrame) ([]api.Message, error) {
@@ -28,7 +29,7 @@ func TestRunLoadsOneCoordinatorFramePerModelTurn(t *testing.T) {
 		}
 		return history, nil
 	}
-	sess, err := memory.Create(t.Context(), api.CreateSessionRequest{Posture: api.SessionPostureBuild}, "project")
+	sess, err := sessionStore.Create(t.Context(), api.CreateSessionRequest{Posture: api.SessionPostureBuild}, "project")
 	testutil.FailErr(t, "create session", err)
 	_, err = NewPromptLoopForTest(deps).Run(t.Context(), PromptRunInput{
 		SessionID: sess.ID,
@@ -43,9 +44,9 @@ func TestRunLoadsOneCoordinatorFramePerModelTurn(t *testing.T) {
 }
 
 func TestRunBindsCoordinatorPolicySnapshotToPromptToolSchema(t *testing.T) {
-	memory := store.NewMemory()
+	sessionStore := storetest.New(t, "project")
 	policy := &frameCheckingToolPolicy{}
-	deps := StoreDeps(memory)
+	deps := StoreDeps(sessionStore)
 	deps.Model.LLM = llm.NewMockProvider(&llm.MockConfig{Responses: []llm.MockResponseEntry{{Pattern: ".", Text: "done"}}})
 	deps.Context.CoordinatorFrame = staticCoordinatorFrameSource{frame: inject.CoordinatorTurnFrame{
 		RunContext:    api.CoordinatorRunContext{WorkflowID: "implement", RunID: "run-1", CurrentPhase: "verify"},
@@ -56,7 +57,7 @@ func TestRunBindsCoordinatorPolicySnapshotToPromptToolSchema(t *testing.T) {
 		return []string{"postures/build.yaml"}, nil
 	}
 	deps.Context.Policy = policy
-	sess, err := memory.Create(t.Context(), api.CreateSessionRequest{Posture: api.SessionPostureBuild}, "project")
+	sess, err := sessionStore.Create(t.Context(), api.CreateSessionRequest{Posture: api.SessionPostureBuild}, "project")
 	testutil.FailErr(t, "create session", err)
 	_, err = NewPromptLoopForTest(deps).Run(t.Context(), PromptRunInput{
 		SessionID: sess.ID,
@@ -129,9 +130,10 @@ func TestSurfaceGatedInvokeAllowsOnSurfaceDeniesOff(t *testing.T) {
 	}
 }
 
-func TestCoordinatorToolsForTurnTrimsEveryDiscoveredProfile(t *testing.T) {
-	dirty := tools.ToolMeta{
-		Name: "probe_rewrite",
+// rootAnyOfMeta carries a schema root that provider function declarations reject.
+func rootAnyOfMeta(name string) tools.ToolMeta {
+	return tools.ToolMeta{
+		Name: name,
 		ArgsSchema: map[string]any{
 			"type":  "object",
 			"anyOf": []any{map[string]any{"required": []any{"path"}}},
@@ -140,9 +142,12 @@ func TestCoordinatorToolsForTurnTrimsEveryDiscoveredProfile(t *testing.T) {
 			},
 		},
 	}
+}
+
+func TestCoordinatorToolsForTurnTrimsEveryDiscoveredProfile(t *testing.T) {
 	loop := NewPromptLoopForTest(PromptLoopDeps{
 		Context: ContextDeps{
-			Policy: registryTestPolicy{metas: []tools.ToolMeta{dirty}},
+			Policy: registryTestPolicy{metas: []tools.ToolMeta{rootAnyOfMeta("probe_rewrite"), rootAnyOfMeta("command")}},
 		},
 	})
 	ids := discoveredPromptProfileIDs(t)
@@ -172,5 +177,37 @@ func TestCoordinatorToolsForTurnTrimsEveryDiscoveredProfile(t *testing.T) {
 	}
 	if offered == 0 {
 		t.Fatalf("no discovered profile offered tools; ids=%v", ids)
+	}
+}
+
+// The provider request carries only function roots the provider accepts, for
+// the coordinator and for a worker profile alike.
+func TestBuildTurnRequestSendsOnlyTrimmedFunctionRoots(t *testing.T) {
+	loop := NewPromptLoopForTest(PromptLoopDeps{
+		Context: ContextDeps{
+			Policy: registryTestPolicy{metas: []tools.ToolMeta{rootAnyOfMeta("command"), rootAnyOfMeta("probe_rewrite")}},
+			BuildMessages: func(_ context.Context, _ *api.Session, history []api.Message, _ *inject.CoordinatorTurnFrame) ([]api.Message, error) {
+				return history, nil
+			},
+		},
+	})
+	history := []api.Message{{Role: api.MessageRoleUser, Content: "inspect the project"}}
+	for _, profile := range []string{prompts.CoordinatorProfileID, "code-reviewer"} {
+		t.Run(profile, func(t *testing.T) {
+			sess := &api.Session{ID: "roots-" + profile, AgentType: profile, WorkspacePath: "/tmp/repo", Posture: api.SessionPostureBuild}
+			if profile != prompts.CoordinatorProfileID {
+				sess.ParentSessionID = "parent"
+			}
+			turn, err := loop.Model.buildTurnRequest(t.Context(), sess, sess.ID, history, profile, "inspect", 0, 20, false, &promptLoopTurnState{})
+			testutil.FailErr(t, "build provider request", err)
+			if len(turn.Req.Tools) == 0 {
+				t.Fatal("request offered no tools")
+			}
+			for _, meta := range turn.Req.Tools {
+				if err := tools.ValidateFunctionParametersRoot(meta.ArgsSchema); err != nil {
+					t.Fatalf("tool %q reached the provider untrimmed: %v", meta.Name, err)
+				}
+			}
+		})
 	}
 }

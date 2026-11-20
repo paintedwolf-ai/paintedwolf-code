@@ -18,11 +18,11 @@ func TestPlanWorkflowJourneyE2E(t *testing.T) {
 	blueprintMgr := h.Workflows.Blueprints
 
 	projectDir := t.TempDir()
-	project := createAPIProjectAtPath(t, base, projectDir)
-	sess := openAPIPostJSON[wire.Session](t, base, "/v1/sessions", nil,
+	project := CreateAPIProjectAtPath(t, base, projectDir)
+	sess := OpenAPIPostJSON[wire.Session](t, base, "/v1/sessions", nil,
 		`{"project_id":"`+project.ID+`","posture":"spec"}`, http.StatusAccepted)
 
-	run := openAPIPostJSON[wire.WorkflowRun](t, base,
+	run := OpenAPIPostJSON[wire.WorkflowRun](t, base,
 		"/v1/sessions/{id}/workflow-runs", map[string]string{"id": sess.ID},
 		planStartBody, http.StatusCreated)
 	if run.BlueprintPath == "" {
@@ -35,7 +35,7 @@ func TestPlanWorkflowJourneyE2E(t *testing.T) {
 		t.Fatalf("current_phase = %q want research", run.CurrentPhase)
 	}
 
-	seedPlanStub(t, blueprintMgr, run.ProjectID, run.BlueprintPath)
+	SeedPlanStub(t, blueprintMgr, run.ProjectID, run.BlueprintPath)
 	run = advancePlanRunToExecuteHTTP(t, h, srv, blueprintMgr, sess, run)
 	if run.Status != wire.WorkflowRunStatusPausedOnChild {
 		t.Fatalf("status = %q want paused_on_child", run.Status)

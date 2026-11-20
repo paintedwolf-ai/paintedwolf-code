@@ -11,6 +11,7 @@ import (
 	"github.com/lycaon/lycaon/internal/backup"
 	"github.com/lycaon/lycaon/internal/db"
 	"github.com/lycaon/lycaon/internal/db/migrations"
+	"github.com/lycaon/lycaon/internal/observability"
 	"github.com/lycaon/lycaon/internal/startupprotocol"
 	"github.com/lycaon/lycaon/internal/version"
 )
@@ -54,9 +55,17 @@ func (b *Runtime) openUpgradeableStore(ctx context.Context, path string) (*db.St
 	hooks.BeforeCurrentOpen = func(ctx context.Context, source *sql.DB, plan migrations.Plan) error {
 		return b.captureVersionRecovery(ctx, source, plan, hooks)
 	}
-	database, err := db.OpenWithOptions(ctx, path, hooks, db.StoreOptions{})
+	var work db.WorkTally
+	upgraded := false
+	hooks.After = func(context.Context, migrations.Plan) error { upgraded = true; return nil }
+	database, err := db.OpenWithOptions(db.WithWorkTally(ctx, &work), path, hooks, db.StoreOptions{})
 	if err != nil {
 		return nil, err
+	}
+	if upgraded {
+		counters := work.Work().Counters()
+		counters["peak_resident_bytes"] = observability.PeakResidentBytes()
+		observability.RecordWork("store.upgrade", counters)
 	}
 	if err := b.prepareUpgradeReadiness(ctx, database, path); err != nil {
 		_ = database.Shutdown(ctx)

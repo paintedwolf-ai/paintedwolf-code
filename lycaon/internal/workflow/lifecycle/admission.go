@@ -270,9 +270,6 @@ func (m *Admission) initializeWorkflowStart(
 		vars = runstate.ApplyPhaseContentReviewVars(vars, workflowdef.PhaseDef{ContentReview: manifest.Controls.ContentReview})
 	}
 	vars = runstate.SaveBaselinePosture(vars, baselinePosture)
-	if presetID != "" {
-		vars = runstate.SetHostVar(vars, "workflow.preset_id", presetID)
-	}
 	if m.Resolver.SessionScoped(ctx, sess.WorkspacePath, sess.ID, workflowID, version) {
 		vars = runstate.SetHostVar(vars, "workflow_compose_summary_id", workflowdef.ManifestKey(workflowID, version))
 	}

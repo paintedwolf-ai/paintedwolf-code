@@ -3,11 +3,13 @@
 package launchguard
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -161,10 +163,39 @@ func nestedRolesAlive(pins *fixtureLifecyclePins) error {
 			return err
 		}
 		if polls[0].Revents != 0 {
-			return fmt.Errorf("captured nested role ended: role=%s pid=%d start=%d revents=%d", pins.roles[index].Role, pins.roles[index].PID, pins.roles[index].Start, polls[0].Revents)
+			role := pins.roles[index]
+			return fmt.Errorf("captured nested role ended: role=%s pid=%d start=%d revents=%d %s", role.Role, role.PID, role.Start, polls[0].Revents, endedRoleExit(role))
 		}
 	}
 	return nil
+}
+
+// endedRoleExit reads the wait status an ended role left in its zombie, which
+// its guardian may already have reaped. The intake's exit code is its typed
+// MountIntakeExitStatus; only the captured start time names the process.
+func endedRoleExit(role lifecycleRole) string {
+	raw, err := os.ReadFile(fmt.Sprintf("/proc/%d/stat", role.PID))
+	if err != nil {
+		return "exit=reaped-before-read"
+	}
+	end := bytes.LastIndexByte(raw, ')')
+	if end < 0 {
+		return "exit=unreadable"
+	}
+	// Fields after the command start at field 3: start time is 22, exit code 52.
+	fields := strings.Fields(string(raw[end+1:]))
+	if len(fields) < 50 || fields[19] != strconv.FormatUint(role.Start, 10) {
+		return "exit=unreadable"
+	}
+	status, err := strconv.Atoi(fields[49])
+	if err != nil {
+		return "exit=unreadable"
+	}
+	wait := unix.WaitStatus(status)
+	if wait.Signaled() {
+		return fmt.Sprintf("exit=signal:%d wait_status=%d", wait.Signal(), status)
+	}
+	return fmt.Sprintf("exit=%d wait_status=%d", wait.ExitStatus(), status)
 }
 
 func nestedRolesEnded(pins *fixtureLifecyclePins) bool {

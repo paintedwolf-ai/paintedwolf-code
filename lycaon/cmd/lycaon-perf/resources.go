@@ -152,9 +152,7 @@ func uint64Delta(current, baseline uint64) int64 {
 	return -int64(delta)
 }
 
-func currentRSSBytes(parent context.Context, pid int) (int64, error) {
-	ctx, cancel := context.WithTimeout(parent, 5*time.Second)
-	defer cancel()
+func currentRSSBytes(ctx context.Context, pid int) (int64, error) {
 	out, err := exec.CommandContext(ctx, "ps", "-o", "rss=", "-p", strconv.Itoa(pid)).Output() //nolint:gosec // PID belongs to the runner's child.
 	if err != nil {
 		return 0, fmt.Errorf("measure process RSS: %w", err)
@@ -170,12 +168,10 @@ func parseRSSBytes(value string) (int64, error) {
 	return kib * 1024, nil
 }
 
-func currentFDCount(parent context.Context, pid int) (int, error) {
+func currentFDCount(ctx context.Context, pid int) (int, error) {
 	if runtime.GOOS != "darwin" {
 		return 0, fmt.Errorf("process descriptor measurement is unsupported on %s", runtime.GOOS)
 	}
-	ctx, cancel := context.WithTimeout(parent, 5*time.Second)
-	defer cancel()
 	out, err := exec.CommandContext(ctx, "lsof", "-a", "-p", strconv.Itoa(pid), "-Fn").Output() //nolint:gosec // PID belongs to the runner's child.
 	if err != nil {
 		return 0, fmt.Errorf("measure process descriptors: %w", err)

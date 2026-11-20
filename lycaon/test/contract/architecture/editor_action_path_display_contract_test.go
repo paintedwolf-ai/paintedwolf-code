@@ -93,36 +93,40 @@ func TestEditorActionPathDisplayMatchesAttachmentFence(t *testing.T) {
 	}
 
 	for _, tc := range []struct {
-		name       string
-		action     string
-		rootID     string
-		path       string
-		wantPrompt string
-		wantFence  string
+		name      string
+		action    string
+		rootID    string
+		path      string
+		wantPath  string
+		otherPath string
+		wantFence string
 	}{
 		{
-			name:       "summarize answers from attached selection on other root",
-			action:     "summarize",
-			rootID:     libRootID,
-			path:       "parse.go",
-			wantPrompt: "Give a concise overview of the code at @lib/parse.go lines 3–4.",
-			wantFence:  "[User attached file: @lib/parse.go:3-4]",
+			name:      "summarize answers from attached selection on other root",
+			action:    "summarize",
+			rootID:    libRootID,
+			path:      "parse.go",
+			wantPath:  "@lib/parse.go",
+			otherPath: libDir,
+			wantFence: "[User attached file: @lib/parse.go:3-4]",
 		},
 		{
-			name:       "explain answers from attached selection on other root",
-			action:     "explain",
-			rootID:     libRootID,
-			path:       "parse.go",
-			wantPrompt: "Define and explain the code at @lib/parse.go lines 3–4 in its repository context.",
-			wantFence:  "[User attached file: @lib/parse.go:3-4]",
+			name:      "explain answers from attached selection on other root",
+			action:    "explain",
+			rootID:    libRootID,
+			path:      "parse.go",
+			wantPath:  "@lib/parse.go",
+			otherPath: libDir,
+			wantFence: "[User attached file: @lib/parse.go:3-4]",
 		},
 		{
-			name:       "summarize on session folder stays bare",
-			action:     "summarize",
-			rootID:     sess.WorkspaceRootID,
-			path:       "run.go",
-			wantPrompt: "Give a concise overview of the code at run.go lines 3–4.",
-			wantFence:  "[User attached file: run.go:3-4]",
+			name:      "summarize on session folder stays bare",
+			action:    "summarize",
+			rootID:    sess.WorkspaceRootID,
+			path:      "run.go",
+			wantPath:  "run.go",
+			otherPath: "@app/run.go",
+			wantFence: "[User attached file: run.go:3-4]",
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -143,22 +147,34 @@ func TestEditorActionPathDisplayMatchesAttachmentFence(t *testing.T) {
 				t.Fatal("invoke accepted without a message id")
 			}
 
-			contractfixture.WaitForSessionIdle(t, baseURL, sess.ID)
-			msgs := contractfixture.ListMessagesAtURL(t, baseURL, sess.ID)
+			// An accepted invoke admits its prompt asynchronously, so the session can
+			// still read idle from the previous turn: wait for this prompt's answer.
+			var msgs []wire.Message
 			var prompt *wire.Message
-			for i := range msgs {
-				if msgs[i].ID == accepted.MessageID {
-					prompt = &msgs[i]
+			testutil.WaitFor(t, "the admitted prompt is answered", func() bool {
+				contractfixture.WaitForSessionIdle(t, baseURL, sess.ID)
+				msgs = contractfixture.ListMessagesAtURL(t, baseURL, sess.ID)
+				prompt = nil
+				for i := range msgs {
+					if msgs[i].ID == accepted.MessageID {
+						prompt = &msgs[i]
+					} else if prompt != nil && msgs[i].Role == wire.MessageRoleAssistant {
+						return true
+					}
 				}
-			}
-			if prompt == nil {
-				t.Fatalf("admitted prompt %s missing from transcript", accepted.MessageID)
-			}
-			if !strings.Contains(prompt.Content, tc.wantPrompt) {
-				t.Fatalf("prompt text missing canonical spelling %q:\n%s", tc.wantPrompt, prompt.Content)
-			}
+				return false
+			})
+			// The fence is the host marker; the request text outside it names the
+			// same selection with the same display spelling.
 			if !strings.Contains(prompt.Content, tc.wantFence) {
 				t.Fatalf("attachment fence missing %q:\n%s", tc.wantFence, prompt.Content)
+			}
+			request := strings.ReplaceAll(prompt.Content, tc.wantFence, "")
+			if !strings.Contains(request, tc.wantPath) {
+				t.Fatalf("request text does not name %q:\n%s", tc.wantPath, prompt.Content)
+			}
+			if strings.Contains(request, tc.otherPath) {
+				t.Fatalf("request text spells the selection as %q:\n%s", tc.otherPath, prompt.Content)
 			}
 			// The read-only actions answer from the attached selection; the mock
 			// model replies text-only, so any tool call means the prompt drove

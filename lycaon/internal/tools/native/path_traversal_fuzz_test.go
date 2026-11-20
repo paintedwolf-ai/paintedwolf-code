@@ -4,7 +4,6 @@ import (
 	"context"
 	"os"
 	"path/filepath"
-	"runtime"
 	"strings"
 	"testing"
 
@@ -13,72 +12,6 @@ import (
 	"github.com/lycaon/lycaon/internal/tools"
 	nativefixture "github.com/lycaon/lycaon/internal/tools/native/internal/testfixture"
 )
-
-// TestNativePathArgsRejectTraversal checks path rejection and error redaction.
-func TestNativePathArgsRejectTraversal(t *testing.T) {
-	projectDir := t.TempDir()
-	boundary := nativefixture.Boundary(t)
-
-	type tool interface {
-		Name() string
-		Run(ctx context.Context, args map[string]any, tctx tools.ToolContext) (string, error)
-	}
-
-	allTools := []tool{
-		&WriteTool{Boundary: boundary},
-		&ChmodTool{Boundary: boundary},
-		&DeleteTool{Boundary: boundary},
-	}
-
-	type evil struct {
-		label string
-		path  string
-	}
-	evilPaths := []evil{
-		{"parent escape", "../secret.txt"},
-		{"deep parent escape", "../../../etc/passwd"},
-		{"absolute outside", "/etc/passwd"},
-		{"nested escape", "src/../../secret.txt"},
-		{"null byte", "good.txt\x00../../etc/passwd"},
-	}
-	if runtime.GOOS == "windows" {
-		evilPaths = append(evilPaths,
-			evil{"windows drive", "C:\\Windows\\System32\\config\\SAM"},
-		)
-	}
-
-	ctx := context.Background()
-
-	for _, tl := range allTools {
-		t.Run(tl.Name(), func(t *testing.T) {
-			for _, e := range evilPaths {
-				t.Run(e.label, func(t *testing.T) {
-					args := map[string]any{"path": e.path}
-					switch tl.Name() {
-					case "write":
-						args["content"] = "x"
-					case "grep":
-						args["pattern"] = "x"
-					case "stat", "wc", "delete":
-						args = map[string]any{"paths": []any{e.path}}
-					case "chmod":
-						args = map[string]any{"paths": []any{e.path}, "mode": "+x"}
-					}
-					out, err := tl.Run(ctx, args, nativefixture.AgentContext(projectDir, "implement"))
-					if err == nil {
-						t.Fatalf("%s accepted evil path %q (out=%q) — boundary bypass?", tl.Name(), e.path, out)
-					}
-					// Errors must not expose the absolute project root.
-					msg := err.Error()
-					if strings.Contains(msg, projectDir) {
-						t.Fatalf("%s error for %q leaks project_dir %q: %s",
-							tl.Name(), e.path, projectDir, msg)
-					}
-				})
-			}
-		})
-	}
-}
 
 func TestMultiRootResolveAbsNeverEscapesUnion(t *testing.T) {
 	base := t.TempDir()
@@ -106,5 +39,50 @@ func TestMultiRootResolveAbsNeverEscapesUnion(t *testing.T) {
 	}
 	if !strings.HasPrefix(abs, secondary) {
 		t.Fatalf("abs = %q want under secondary", abs)
+	}
+}
+
+// A refused native path names no absolute project root, for escapes spelled
+// over a real tree whose outside target exists.
+func TestNativePathRefusalsNameNoProjectRoot(t *testing.T) {
+	base := t.TempDir()
+	projectDir, outside := filepath.Join(base, "proj"), filepath.Join(base, "outside")
+	for _, dir := range []string{projectDir, outside} {
+		testutil.FailErr(t, "create directory", os.MkdirAll(dir, 0o755))
+	}
+	target := filepath.Join(outside, "secret.txt")
+	testutil.FailErr(t, "write outside", os.WriteFile(target, []byte("outside"), 0o644))
+	testutil.FailErr(t, "link outside", os.Symlink(outside, filepath.Join(projectDir, "link")))
+	boundary := nativefixture.Boundary(t)
+	type tool interface {
+		Run(ctx context.Context, args map[string]any, tctx tools.ToolContext) (string, error)
+	}
+	for _, path := range []string{filepath.Join("..", "outside", "secret.txt"), filepath.Join("link", "secret.txt"), target} {
+		for name, run := range map[string]func() error{
+			"write": func() error {
+				_, err := (&WriteTool{Boundary: boundary}).Run(t.Context(), map[string]any{"path": path, "content": "x"}, nativefixture.AgentContext(projectDir, "implement"))
+				return err
+			},
+			"chmod": func() error {
+				_, err := tool(&ChmodTool{Boundary: boundary}).Run(t.Context(), map[string]any{"paths": []any{path}, "mode": "+x"}, nativefixture.AgentContext(projectDir, "implement"))
+				return err
+			},
+			"delete": func() error {
+				_, err := tool(&DeleteTool{Boundary: boundary}).Run(t.Context(), map[string]any{"paths": []any{path}}, nativefixture.AgentContext(projectDir, "implement"))
+				return err
+			},
+		} {
+			err := run()
+			if err == nil {
+				t.Errorf("%s accepted %q outside the project", name, path)
+				continue
+			}
+			if strings.Contains(err.Error(), projectDir) {
+				t.Errorf("%s refusal for %q names the project root: %v", name, path, err)
+			}
+		}
+	}
+	if data, err := os.ReadFile(target); err != nil || string(data) != "outside" {
+		t.Fatalf("outside file = %q, %v", data, err)
 	}
 }

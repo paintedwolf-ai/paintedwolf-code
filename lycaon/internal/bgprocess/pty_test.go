@@ -121,7 +121,7 @@ func TestRunPTYCaptureReturnsSettledScreenWithoutHandle(t *testing.T) {
 	result, err := reg.Terminal.RunPTYCapture(t.Context(), "s1", "", "p1", hostcmd.Request{
 		Launch: lycexec.HostLaunch("sealed pty capture test"), ProjectDir: t.TempDir(),
 		Stages: []lycexec.Stage{{Name: "sh", Args: []string{"-c", "printf 'READY\\n'"}}},
-	}, hostcmd.NewRunner(), lycexec.WinSize{Cols: 80, Rows: 24}, confine.SpawnFacts{}, 5*time.Second)
+	}, hostcmd.NewRunner(), lycexec.WinSize{Cols: 80, Rows: 24}, confine.SpawnFacts{})
 	testutil.FailErr(t, "RunPTYCapture", err)
 	if result.ExitCode != 0 || result.TimedOut || !strings.Contains(strings.Join(result.Screen.Lines, "\n"), "READY") {
 		t.Fatalf("capture = %+v", result)

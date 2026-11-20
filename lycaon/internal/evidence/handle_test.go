@@ -289,3 +289,25 @@ func TestBuildLedgerFromTranscript_goldenFingerprint(t *testing.T) {
 		t.Fatalf("handles not stable: %v vs %v", evidence.HandlesSorted(ev1), evidence.HandlesSorted(ev2))
 	}
 }
+
+// A kind with no verification code of its own verifies through its shape.
+func TestVerifyHandleUsesTheShapeVerifierForAnyKind(t *testing.T) {
+	ev := evidence.Ledger{
+		Handles: map[string]evidence.Record{
+			"board_page#1": {
+				Handle:     "board_page#1",
+				Kind:       "board_page",
+				Shape:      evidence.ShapeFileRegion,
+				Path:       "docs/notes.md",
+				Body:       []string{hostmarker.FormatNumberedLines([]string{"verbatim finding from read tool"}, 7)},
+				LineRanges: []evidence.LineRange{{Start: 7, End: 7}},
+			},
+		},
+	}
+	if ok, reason := evidence.VerifyHandle(ev, "board_page#1", evidence.Claim{Line: 7, Excerpt: "verbatim finding"}); !ok {
+		t.Fatalf("verbatim excerpt rejected: %q", reason)
+	}
+	if ok, _ := evidence.VerifyHandle(ev, "board_page#1", evidence.Claim{Line: 7, Excerpt: "invented text"}); ok {
+		t.Fatal("fabricated excerpt accepted")
+	}
+}

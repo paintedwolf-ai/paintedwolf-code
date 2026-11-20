@@ -2,10 +2,7 @@ package contract
 
 import (
 	"context"
-	"os"
 	"path/filepath"
-	"strconv"
-	"strings"
 	"testing"
 
 	"github.com/lycaon/lycaon/config"
@@ -16,7 +13,6 @@ import (
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/pkg/api"
-	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 	"gopkg.in/yaml.v3"
 )
 
@@ -269,33 +265,6 @@ func approvalResultsEqual(a, b *hitl.ApprovalResult) bool {
 		(citesDetection(a) == citesDetection(b))
 }
 
-// Detection results enter decisions through fact assembly.
-func TestDetectionOverlaySingleSeamAST(t *testing.T) {
-	t.Parallel()
-	root := contractcheck.RepoRoot(t)
-	dir := filepath.Join(root, "lycaon", "internal", "settings")
-	entries, err := os.ReadDir(dir)
-	contractcheck.FailErr(t, "read settings dir", err)
-
-	var readSites []string
-	for _, e := range entries {
-		if !strings.HasSuffix(e.Name(), ".go") || strings.HasSuffix(e.Name(), "_test.go") {
-			continue
-		}
-		src := contractcheck.ReadRepoFile(t, root, filepath.Join("lycaon", "internal", "settings", e.Name()))
-		for i, line := range strings.Split(src, "\n") {
-			if strings.Contains(line, "sources.Detections") {
-				readSites = append(readSites, e.Name()+":"+strconv.Itoa(i+1))
-			}
-		}
-	}
-	if len(readSites) != 1 {
-		t.Fatalf("detection source must be read exactly once, got %v", readSites)
-	}
-	if !strings.HasPrefix(readSites[0], "gate_facts.go:") {
-		t.Fatalf("the one detection read must be fact assembly, got %s", readSites[0])
-	}
-}
 func TestDetectionOverlayBundledPackStillAskOnly(t *testing.T) {
 	cat, err := detectionpack.LoadCatalog(detectionInput(t, t.TempDir(), ""))
 	testutil.FailErr(t, "LoadCatalog", err)

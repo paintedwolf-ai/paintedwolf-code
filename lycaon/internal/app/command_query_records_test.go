@@ -22,19 +22,20 @@ func queryFields(words ...string) commandprogram.Fields {
 	return out
 }
 
-// requireDiskPin confirms capture alone grants no conversational read basis.
-func requireDiskPin(t *testing.T, f *revisionFixture) {
+// requireDocumentPin confirms the read pinned the person's document, and that
+// capture alone grants no conversational read basis.
+func requireDocumentPin(t *testing.T, f *revisionFixture) {
 	t.Helper()
 	pins, err := f.recorder.RevisionPins(t.Context(), f.session, f.execution)
 	testutil.FailErr(t, "recorded pins", err)
-	if len(pins) != 1 || pins[0].Mode != toolcontract.PublishedDiskRevision {
-		t.Fatalf("disk pins=%+v", pins)
+	if len(pins) != 1 || pins[0].Mode != toolcontract.AcceptedDocumentRevision || pins[0].DocumentID == "" {
+		t.Fatalf("document pins=%+v", pins)
 	}
 	f.noReadBases(t)
 }
 
-// TestCommandJqReadsSavedDisk: a value query reads published disk and leaves human drafts untouched.
-func TestCommandJqReadsSavedDisk(t *testing.T) {
+// A value query reads the person's unsaved text and leaves it unsaved.
+func TestCommandJqReadsThePersonsDraft(t *testing.T) {
 	f := newRevisionFixture(t, map[string]string{"config.json": `{"replicas":1}` + "\n"})
 	ctx := t.Context()
 	f.personTypes(t, ctx, "config.json", `{"replicas":3}`+"\n")
@@ -48,15 +49,18 @@ func TestCommandJqReadsSavedDisk(t *testing.T) {
 			Invocation: toolcontract.OperationInvocation{Kind: toolcontract.ProgramChildInvocation, Identity: toolcontract.ExecutionIdentity{ProgramID: f.program, ExecutionID: f.execution}}},
 		commandprogram.Streams{Input: io.NopCloser(strings.NewReader("")), Output: &out, Error: io.Discard})
 	testutil.FailErr(t, "jq over draft", err)
-	if out.String() != "1\n" || result.Status != 0 {
-		t.Fatalf("jq read %q %+v, want saved disk", out.String(), result)
+	if out.String() != "3\n" || result.Status != 0 {
+		t.Fatalf("jq read %q %+v, want the draft", out.String(), result)
 	}
-	requireDiskPin(t, f)
+	if f.disk(t, "config.json") != `{"replicas":1}`+"\n" {
+		t.Fatal("a value query saved the draft")
+	}
+	requireDocumentPin(t, f)
 }
 
-// TestCommandAwkRecordsReadSavedDisk: a field and record query on
-// the shared awk owner reads disk and pins the published revision.
-func TestCommandAwkRecordsReadSavedDisk(t *testing.T) {
+// A field and record query on the shared awk owner reads the person's
+// unsaved text and pins its document revision.
+func TestCommandAwkRecordsReadThePersonsDraft(t *testing.T) {
 	f := newRevisionFixture(t, map[string]string{"load.csv": "api,1\ndb,2\n"})
 	ctx := t.Context()
 	f.personTypes(t, ctx, "load.csv", "api,1\ndb,2\nweb,4\n")
@@ -72,11 +76,11 @@ func TestCommandAwkRecordsReadSavedDisk(t *testing.T) {
 			Invocation: toolcontract.OperationInvocation{Kind: toolcontract.ProgramChildInvocation, Identity: toolcontract.ExecutionIdentity{ProgramID: f.program, ExecutionID: f.execution}}},
 		commandprogram.Streams{Input: io.NopCloser(strings.NewReader("")), Output: &out, Error: io.Discard})
 	testutil.FailErr(t, "awk over draft", err)
-	if out.String() != "2 3\n" || result.Status != 0 {
-		t.Fatalf("awk read %q %+v, want saved disk", out.String(), result)
+	if out.String() != "3 7\n" || result.Status != 0 {
+		t.Fatalf("awk read %q %+v, want the draft", out.String(), result)
 	}
 	if f.disk(t, "load.csv") != "api,1\ndb,2\n" {
 		t.Fatal("record query published the draft")
 	}
-	requireDiskPin(t, f)
+	requireDocumentPin(t, f)
 }

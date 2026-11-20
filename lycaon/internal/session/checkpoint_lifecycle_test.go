@@ -6,9 +6,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/lycaon/lycaon/internal/toolreach"
-	"github.com/lycaon/lycaon/internal/toolsurface"
-
 	"github.com/lycaon/lycaon/internal/coordinator/batch"
 	"github.com/lycaon/lycaon/internal/coordinator/guard"
 	"github.com/lycaon/lycaon/internal/coordinator/kick"
@@ -23,25 +20,29 @@ import (
 	sessionstore "github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/toolreach"
 	"github.com/lycaon/lycaon/internal/tools"
+	"github.com/lycaon/lycaon/internal/toolsurface"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
 // Orphan checkpoints retain file copies without a live session.
 func TestRemoveOrphanCheckpointsKeepsLiveSessionsOnly(t *testing.T) {
-	// Memory storage permits an orphan fixture; SQL rejects its publication.
 	mgr, sessions := newTestManager(t)
 	dir := t.TempDir()
 	ctx := t.Context()
-	live, err := sessions.Create(ctx, api.CreateSessionRequest{}, "project")
+	live, err := sessions.Create(ctx, api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create live session", err)
 	liveSessionID := live.ID
 
 	store := sessioncheckpoint.New(mgr.Workspace.DataDir, dir, mgr.Coordinator.Context.Sessions.(Store))
 	_, err = store.Open(t.Context(), liveSessionID, "anchor-live")
 	testutil.FailErr(t, "open live anchor", err)
-	_, err = store.Open(t.Context(), "deleted-session", "anchor-dead")
-	testutil.FailErr(t, "open orphan anchor", err)
+	dead, err := sessions.Create(ctx, api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
+	testutil.FailErr(t, "create retiring session", err)
+	_, err = store.Open(ctx, dead.ID, "anchor-dead")
+	testutil.FailErr(t, "open retiring anchor", err)
+	testutil.FailErr(t, "delete session rows", sessions.Delete(ctx, dead.ID))
 
 	if removed := mgr.Chats.Captures.RemoveOrphanCheckpoints(ctx, dir); removed != 1 {
 		t.Fatalf("removed = %d, want 1", removed)
@@ -49,7 +50,7 @@ func TestRemoveOrphanCheckpointsKeepsLiveSessionsOnly(t *testing.T) {
 	if _, err := store.Load(t.Context(), liveSessionID, "anchor-live"); err != nil {
 		t.Fatalf("removed a checkpoint whose session is still live: %v", err)
 	}
-	if _, err := store.Load(t.Context(), "deleted-session", "anchor-dead"); !errors.Is(err, sessionstore.ErrCheckpointMissing) {
+	if _, err := store.Load(t.Context(), dead.ID, "anchor-dead"); !errors.Is(err, sessionstore.ErrCheckpointMissing) {
 		t.Fatal("orphan checkpoint survived cleanup")
 	}
 }

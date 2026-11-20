@@ -15,7 +15,7 @@ import (
 	"github.com/lycaon/lycaon/internal/hitl"
 	"github.com/lycaon/lycaon/internal/sensitivepath"
 	"github.com/lycaon/lycaon/internal/session/approvalstate"
-	sessionstore "github.com/lycaon/lycaon/internal/session/store"
+	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -149,7 +149,7 @@ func TestWriteRootAuthorizeSkipsCardWhenOverlayCovers(t *testing.T) {
 // A worker uses the write roots its chat approved without asking again.
 func TestWorkerUsesItsChatsApprovedWriteRoot(t *testing.T) {
 	t.Parallel()
-	store := sessionstore.NewMemory()
+	store := storetest.New(t, testdbseed.DefaultProjectID)
 	parent, err := store.Create(t.Context(), api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create chat", err)
 	child, err := store.CreateChild(t.Context(), parent, api.SpawnChildRequest{AgentType: "implementer"})
@@ -537,5 +537,25 @@ func TestWriteRootBrokerRejectsInvalidAttachedAuthority(t *testing.T) {
 	var refusal *confine.WriteRootRefusalError
 	if !errors.As(err, &refusal) || refusal.Code != confine.WriteRootCodeContainsState || result.Authorized || result.Raised {
 		t.Fatalf("invalid attached authority reached approval: result=%+v error=%v", result, err)
+	}
+}
+
+// The broker grants only what the boundary's granted lane admits: a proposed
+// root that holds host state is refused without a card and leaves no grant.
+func TestWriteRootBrokerRefusesGrantedLaneRootWithoutAsking(t *testing.T) {
+	ancestor := t.TempDir()
+	t.Setenv("LYCAON_CONFIG_DIR", filepath.Join(ancestor, "state"))
+	if refused, code := confine.GrantedWriteRootRefused(ancestor); !refused || code != confine.WriteRootCodeContainsState {
+		t.Fatalf("fixture root granted-lane verdict = %v %q, want %q", refused, code, confine.WriteRootCodeContainsState)
+	}
+	runtime := approvalstate.NewSandboxPathGrantRuntime()
+	broker := &WriteRootCheckpointBroker{Checkpoints: unusedWriteRootCheckpoints{t: t}, Runtime: runtime}
+	result, err := broker.Authorize(t.Context(), command.SandboxWriteRootAsk{SessionID: "session", ProposedWriteRoot: ancestor})
+	testutil.FailErr(t, "refuse granted-lane root", err)
+	if result.Authorized || result.Raised {
+		t.Fatalf("state-holding root acquired authority: %+v", result)
+	}
+	if roots := runtime.SessionWriteRoots("session"); len(roots) != 0 {
+		t.Fatalf("refusal left session write roots %v", roots)
 	}
 }

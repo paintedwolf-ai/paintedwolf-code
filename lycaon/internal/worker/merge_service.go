@@ -4,7 +4,6 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
-	"github.com/lycaon/lycaon/internal/toolrejection"
 	"os"
 	"strings"
 
@@ -18,6 +17,7 @@ import (
 	"github.com/lycaon/lycaon/internal/session/workercompletion"
 	"github.com/lycaon/lycaon/internal/sourcefeed"
 	"github.com/lycaon/lycaon/internal/sourceledger"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -162,8 +162,7 @@ func (s *MergeService) previewForSession(ctx context.Context, sessionID, jobID, 
 			"merge_status": string(task.MergeStatus),
 		})
 	}
-	eng := s.engine()
-	lease, err := eng.holdBranch(ctx, jobID)
+	lease, err := s.holdBranch(ctx, jobID)
 	if err != nil {
 		return api.WorkerMergeResult{}, err
 	}
@@ -174,7 +173,7 @@ func (s *MergeService) previewForSession(ctx context.Context, sessionID, jobID, 
 		AgentType: task.AgentType,
 	}
 	opts := promoteOutputOpts{Detail: detail}
-	mergePaths, err := eng.resolvePreviewMergePaths(ctx, jobID, task, paths)
+	mergePaths, err := s.resolvePreviewMergePaths(ctx, jobID, task, paths)
 	if err != nil {
 		return api.WorkerMergeResult{}, err
 	}
@@ -182,22 +181,22 @@ func (s *MergeService) previewForSession(ctx context.Context, sessionID, jobID, 
 	if session.CheckpointStoreDirForTask(task) != "" {
 		session.MarkTaskCheckpointPreviewBindIntent(jobID)
 	}
-	assessment, err := eng.assessMerge(ctx, sessionID, task, mergePaths)
+	assessment, err := s.assessMerge(ctx, sessionID, task, mergePaths)
 	if err != nil {
 		return api.WorkerMergeResult{}, err
 	}
 	fillMergeResult(&out, assessment, opts)
 	s.attachPromoteSpill(s.hostDataDirFor(task), jobID, &out, assessment)
-	eng.registerReconcilePaths(sessionID, assessment)
+	s.registerReconcilePaths(sessionID, assessment)
 	enrichMergeChangedPaths(&out, *task, s.reports(), ctx)
 	EnrichOverlayIntent(&out, task)
 	out.Status = api.WorkerMergeStatusPending
-	eng.attachSourceEvidence(ctx, task, &out)
-	eng.recordPromoteOutput(sessionID, jobID, &out)
+	s.attachSourceEvidence(ctx, task, &out)
+	s.recordPromoteOutput(sessionID, jobID, &out)
 	return out, nil
 }
 
-func (s mergeEngine) resolvePreviewMergePaths(ctx context.Context, jobID string, task *api.WorkerTask, paths []string) ([]string, error) {
+func (s *MergeService) resolvePreviewMergePaths(ctx context.Context, jobID string, task *api.WorkerTask, paths []string) ([]string, error) {
 	roots := s.taskRootRefs(ctx, task)
 	changed, err := session.InspectOverlayChanges(ctx, task, roots)
 	if err != nil {
@@ -217,16 +216,8 @@ func (s mergeEngine) resolvePreviewMergePaths(ctx context.Context, jobID string,
 	return mergePaths, nil
 }
 
-type mergeEngine struct {
-	*MergeService
-}
-
-func (s *MergeService) engine() mergeEngine {
-	return mergeEngine{MergeService: s}
-}
-
-func (s mergeEngine) overlayMessages(ctx context.Context, task *api.WorkerTask) []api.Message {
-	if s.MergeService == nil || task == nil || s.Reports.Messages == nil {
+func (s *MergeService) overlayMessages(ctx context.Context, task *api.WorkerTask) []api.Message {
+	if s == nil || task == nil || s.Reports.Messages == nil {
 		return nil
 	}
 	childID := strings.TrimSpace(task.ChildSessionID)
@@ -240,8 +231,8 @@ func (s mergeEngine) overlayMessages(ctx context.Context, task *api.WorkerTask) 
 	return msgs
 }
 
-func (s mergeEngine) attachSourceEvidence(ctx context.Context, task *api.WorkerTask, out *api.WorkerMergeResult) {
-	if s.MergeService == nil || out == nil || task == nil {
+func (s *MergeService) attachSourceEvidence(ctx context.Context, task *api.WorkerTask, out *api.WorkerMergeResult) {
+	if s == nil || out == nil || task == nil {
 		return
 	}
 	if s.Evidence.Workspaces == nil {
@@ -273,14 +264,14 @@ func (s mergeEngine) attachSourceEvidence(ctx context.Context, task *api.WorkerT
 	out.SourceEvidence = ev
 }
 
-func (s mergeEngine) assessMerge(ctx context.Context, sessionID string, task *api.WorkerTask, mergePaths []string) (PromoteAssessment, error) {
+func (s *MergeService) assessMerge(ctx context.Context, sessionID string, task *api.WorkerTask, mergePaths []string) (PromoteAssessment, error) {
 	if task == nil {
 		return PromoteAssessment{}, nil
 	}
-	if assessment, ok, err := assessCheckpointTask(ctx, s.MergeService, sessionID, task, mergePaths); ok || err != nil {
+	if assessment, ok, err := assessCheckpointTask(ctx, s, sessionID, task, mergePaths); ok || err != nil {
 		return assessment, err
 	}
-	return AssessPromotePaths3Way(ctx, s.MergeService, sessionID, task, mergePaths)
+	return AssessPromotePaths3Way(ctx, s, sessionID, task, mergePaths)
 }
 
 func (s *MergeService) hostDataDirFor(task *api.WorkerTask) string {

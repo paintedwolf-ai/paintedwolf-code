@@ -7,24 +7,6 @@ import (
 	"github.com/lycaon/lycaon/internal/evidence"
 )
 
-func (ev *memoryEvidence) SessionUntrustedContent(sessionID string) bool {
-	s := ev.core
-	sessionID = strings.TrimSpace(sessionID)
-	if sessionID == "" {
-		return false
-	}
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	return s.untrustedRecords[sessionID] > 0
-}
-
-func (ev *memoryEvidence) SessionUntrustedContentResult(ctx context.Context, sessionID string) (bool, error) {
-	if err := ctx.Err(); err != nil {
-		return false, err
-	}
-	return ev.SessionUntrustedContent(sessionID), nil
-}
-
 // untrustedCount tracks the cached count and initialization state.
 type untrustedCount struct {
 	n    int
@@ -67,16 +49,6 @@ func countUntrustedRecords(ctx context.Context, s *sqlCore, sessionID string) (i
 	return 1, nil
 }
 
-func bumpUntrustedLocked(s *memoryCore, sessionID string, rec evidence.Record) {
-	if !evidence.RecordMarksUntrustedContent(rec) {
-		return
-	}
-	if s.untrustedRecords == nil {
-		s.untrustedRecords = make(map[string]int)
-	}
-	s.untrustedRecords[sessionID]++
-}
-
 func bumpUntrusted(s *sqlCore, sessionID string, rec evidence.Record) {
 	if !evidence.RecordMarksUntrustedContent(rec) {
 		return
@@ -98,11 +70,6 @@ func invalidateUntrusted(s *sqlCore, sessionID string) {
 	s.untrustedRecords.Delete(sessionID)
 }
 
-// SeedUntrustedContent records inherited untrusted content.
-func (ev *memoryEvidence) SeedUntrustedContent(ctx context.Context, sessionID string) error {
-	return upsertEvidenceRecordMemory(ctx, ev.core, sessionID, inheritUntrustedRecord())
-}
-
 func (ev *sqlEvidence) SeedUntrustedContent(ctx context.Context, sessionID string) error {
 	return upsertEvidenceRecordSQL(ctx, ev.core, sessionID, inheritUntrustedRecord())
 }
@@ -114,18 +81,6 @@ func inheritUntrustedRecord() evidence.Record {
 		Shape:    evidence.ShapeURL,
 		Fidelity: evidence.FidelityStructured,
 	}
-}
-
-func (ev *memoryEvidence) SessionContacts(sessionID string) map[string]evidence.Contact {
-	sessionID = strings.TrimSpace(sessionID)
-	if sessionID == "" {
-		return nil
-	}
-	ledger, err := loadLedgerMemory(context.Background(), ev.core, sessionID)
-	if err != nil {
-		return nil
-	}
-	return evidence.ContactsFromLedger(ledger)
 }
 
 func (ev *sqlEvidence) SessionContacts(sessionID string) map[string]evidence.Contact {
@@ -140,20 +95,6 @@ func (ev *sqlEvidence) SessionContacts(sessionID string) map[string]evidence.Con
 	return evidence.ContactsFromLedger(ledger)
 }
 
-// SessionURLStanding reports how the session's evidence knows exactly this
-// address. An unreadable ledger knows nothing.
-func (ev *memoryEvidence) SessionURLStanding(sessionID, rawURL string) evidence.URLStanding {
-	sessionID = strings.TrimSpace(sessionID)
-	if sessionID == "" {
-		return evidence.URLUnknown
-	}
-	ledger, err := loadLedgerMemory(context.Background(), ev.core, sessionID)
-	if err != nil {
-		return evidence.URLUnknown
-	}
-	return evidence.StandingOfURL(ledger, rawURL)
-}
-
 func (ev *sqlEvidence) SessionURLStanding(sessionID, rawURL string) evidence.URLStanding {
 	sessionID = strings.TrimSpace(sessionID)
 	if sessionID == "" {
@@ -164,16 +105,6 @@ func (ev *sqlEvidence) SessionURLStanding(sessionID, rawURL string) evidence.URL
 		return evidence.URLUnknown
 	}
 	return evidence.StandingOfURL(ledger, rawURL)
-}
-
-// RecordContact adds an allowed dial to the chat's contacts. The record carries
-// no content tool, so it does not mark the session untrusted.
-func (ev *memoryEvidence) RecordContact(ctx context.Context, sessionID, host string, contact evidence.Contact) error {
-	rec, ok := contactRecord(host, contact)
-	if !ok || strings.TrimSpace(sessionID) == "" {
-		return nil
-	}
-	return upsertEvidenceRecordMemory(ctx, ev.core, sessionID, rec)
 }
 
 // RecordContact adds an allowed dial to the chat's contacts.

@@ -6,12 +6,8 @@ import (
 
 // SkillVars builds the template variables one skill read renders with from the
 // reader's facts plus spawn policy and sizing.
-func SkillVars(reader Reader) map[string]any {
+func SkillVars(reader Reader) (map[string]any, error) {
 	occ := spawn.PolicyTemplateVars()
 	spawn.RefreshSizingHintVars(occ)
-	vars, err := Vars(reader, occ)
-	if err != nil {
-		return reader.Facts()
-	}
-	return vars
+	return Vars(reader, occ)
 }

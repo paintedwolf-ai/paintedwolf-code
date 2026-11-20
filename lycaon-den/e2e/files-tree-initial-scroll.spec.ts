@@ -20,6 +20,7 @@ webE2e("tree browsing keeps focus; the editor focus command transfers scrolling"
   page,
   request,
 }) => {
+  await page.setViewportSize({ width: 1600, height: 1000 });
   await openProjectFilesFixture(page, request, {
     prefix: "files-editor-keyboard-focus",
     name: "Editor keyboard focus",
@@ -49,6 +50,29 @@ webE2e("tree browsing keeps focus; the editor focus command transfers scrolling"
   const scroller = page.getByTestId("files-editor-host").locator(".cm-scroller");
   await expect.poll(() => scroller.evaluate((element) => element.scrollTop))
     .toBeGreaterThan(0);
+
+  const grip = page.getByTestId("files-tree-resize");
+  const pane = page.getByTestId("files-tree-pane");
+  await grip.press("Enter");
+  const defaultWidth = (await pane.boundingBox())!.width;
+  const box = (await grip.boundingBox())!;
+  const x = box.x + box.width / 2;
+  const y = box.y + box.height / 2;
+
+  await page.mouse.move(x, y);
+  await page.mouse.down();
+  await page.mouse.move(x + 48, y);
+  await page.mouse.up();
+  await expect.poll(async () => (await pane.boundingBox())!.width).toBe(defaultWidth + 48);
+
+  // Exercise the window-listener fallback when capture cannot be acquired.
+  await grip.evaluate((el) => {
+    el.setPointerCapture = () => {
+      throw new DOMException("Pointer capture unavailable", "NotFoundError");
+    };
+  });
+  await grip.dblclick();
+  await expect.poll(async () => (await pane.boundingBox())!.width).toBe(defaultWidth);
 });
 
 webE2e("files tree scrolls before a file is opened", async ({

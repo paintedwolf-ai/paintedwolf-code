@@ -161,7 +161,7 @@ def exercise(binding: dict, mode: str) -> tuple[str, dict, dict]:
                 nonce = uuid.uuid4().hex
                 arguments = {'command': shlex.join([str(Path(sys.executable).resolve()), str(script),
                              str(program), SOCKET, nonce, mode, target,
-                             binding['artifact']['identity']['store_path']]), 'timeout_ms': 180000}
+                             binding['artifact']['identity']['store_path']])}
                 if approved:
                     arguments['capability_request'] = {'host_execution': True}
                 with ProviderFixture([{'name': 'command', 'arguments': arguments}]) as provider:

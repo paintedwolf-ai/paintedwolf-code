@@ -11,6 +11,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/coordinator/kick"
 	"github.com/lycaon/lycaon/internal/coordinator/surface"
+	"github.com/lycaon/lycaon/internal/db"
 	"github.com/lycaon/lycaon/internal/enginepaths"
 	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/inspector"
@@ -18,19 +19,20 @@ import (
 	"github.com/lycaon/lycaon/internal/layeredfs"
 	"github.com/lycaon/lycaon/internal/layeredfs/observation"
 	"github.com/lycaon/lycaon/internal/llm"
+	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/repochange"
 	"github.com/lycaon/lycaon/internal/session"
 	"github.com/lycaon/lycaon/internal/session/decisions/decisionstest"
 	"github.com/lycaon/lycaon/internal/session/promptinput"
 	"github.com/lycaon/lycaon/internal/session/store"
+	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"github.com/lycaon/lycaon/internal/session/verification"
 	"github.com/lycaon/lycaon/internal/session/workercompletion"
 	"github.com/lycaon/lycaon/internal/session/workercontext"
 	"github.com/lycaon/lycaon/internal/session/workeroutcomes"
 	"github.com/lycaon/lycaon/internal/session/workerworkspace"
 	"github.com/lycaon/lycaon/internal/settings"
-	"github.com/lycaon/lycaon/internal/settingsoverlay"
-	"github.com/lycaon/lycaon/internal/testbaseline"
+	"github.com/lycaon/lycaon/internal/sourceblob"
 	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -38,15 +40,18 @@ import (
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/tools/native/sourceview"
 	"github.com/lycaon/lycaon/internal/tools/projectpaths"
+	"github.com/lycaon/lycaon/internal/tools/toolstest"
 	"github.com/lycaon/lycaon/internal/worker"
+	"github.com/lycaon/lycaon/internal/worker/workertest"
 	"github.com/lycaon/lycaon/internal/workspace"
+	"github.com/lycaon/lycaon/internal/workspacebaseline"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
-func overlaySourceFixture(t *testing.T) (primary, overlay string, scope api.TaskScope, baseline string) {
+func overlaySourceFixture(t *testing.T, database db.Handle) (primary, overlay string, scope api.TaskScope) {
 	t.Helper()
 	primary = t.TempDir()
-	overlay = filepath.Join(primary, settingsoverlay.DirName(), "overlays", "job-source")
+	overlay = workertest.NewBranch(t, database)
 	testutil.FailErr(t, "MkdirAll overlay", os.MkdirAll(filepath.Join(overlay, "pkg"), 0o755))
 	testutil.FailErr(t, "MkdirAll primary pkg", os.MkdirAll(filepath.Join(primary, "pkg"), 0o755))
 	testutil.FailErr(t, "WriteFile primary game", os.WriteFile(filepath.Join(primary, "game.py"), []byte("print(0)\n"), 0o644))
@@ -62,8 +67,7 @@ func overlaySourceFixture(t *testing.T) (primary, overlay string, scope api.Task
 		Roots:            []workspace.JobMetaRoot{{ID: "primary", Label: "primary", Path: primary, IsPrimary: true}},
 	}))
 	scope = api.TaskScope{Mode: api.TaskScopeModeWrite, Paths: []string{"game.py", "dirty_upper.py", "pkg/dep.py"}}
-	snap := testbaseline.Capture(t, primary)
-	return primary, overlay, scope, snap
+	return primary, overlay, scope
 }
 
 func currentVerifyPassedMessage(root string) api.Message {
@@ -85,41 +89,45 @@ func currentVerifyPassedMessage(root string) api.Message {
 
 func TestBuildImplementSessionStateListsLedgerPendingOverlays(t *testing.T) {
 	ctx := context.Background()
-	mem := store.NewMemory()
-	mgr := session.NewHost(mem, session.Models{Client: llm.NewMockProvider(&llm.MockConfig{}), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
+	database := testdbfixture.Open(t, "session-workers.db")
+	testdbseed.InsertProjectRoot(t, database, testdbseed.DefaultProjectID, t.TempDir())
+	sessionStore := store.NewSQL(database)
+	mgr := session.NewHost(sessionStore, session.Models{Client: llm.NewMockProvider(&llm.MockConfig{}), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, toolstest.NewRegistry())
 	t.Cleanup(mgr.BeginEngineShutdown)
-	q := worker.NewInMemoryQueue(4)
+	q := workertest.OnDatabase(t, database, 4)
 	mgr.SetWorkerQueue(q)
-	parent, err := mem.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
+	parent, err := sessionStore.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create parent", err)
 
-	primary, overlay, scope, baseline := overlaySourceFixture(t)
-	child, err := mem.CreateChild(ctx, parent, api.SpawnChildRequest{AgentType: "implementer"})
+	primary, overlay, scope := overlaySourceFixture(t, sessionStore.DB())
+	child, err := sessionStore.CreateChild(ctx, parent, api.SpawnChildRequest{AgentType: "implementer"})
 	testutil.FailErr(t, "CreateChild", err)
-	testutil.FailErr(t, "AppendMessages", mem.AppendMessages(ctx, child.ID, currentVerifyPassedMessage(overlay)))
+	testutil.FailErr(t, "AppendMessages", sessionStore.AppendMessages(ctx, child.ID, currentVerifyPassedMessage(overlay)))
 
-	uncheckedPrimary, uncheckedOverlay, uncheckedScope, uncheckedBaseline := overlaySourceFixture(t)
-	uncheckedChild, err := mem.CreateChild(ctx, parent, api.SpawnChildRequest{AgentType: "implementer"})
+	uncheckedPrimary, uncheckedOverlay, uncheckedScope := overlaySourceFixture(t, sessionStore.DB())
+	uncheckedChild, err := sessionStore.CreateChild(ctx, parent, api.SpawnChildRequest{AgentType: "implementer"})
 	testutil.FailErr(t, "CreateChild unchecked", err)
 
-	_, err = q.EnqueueWithProjectID(ctx, testdbseed.DefaultProjectID, api.WorkerTask{
+	checkedID, err := q.EnqueueWithProjectID(ctx, testdbseed.DefaultProjectID, api.WorkerTask{
 		Prompt:          "fixture",
 		Brief:           "fixture",
 		ParentSessionID: parent.ID, ProjectID: testdbseed.DefaultProjectID,
 		WorkspacePath: primary, WorkspaceRoot: overlay, ChildSessionID: child.ID,
 		AgentType: "implementer", Status: api.WorkerStatusComplete,
-		MergeStatus: api.WorkerMergeStatusPending, Scope: &scope, WorkspaceBaselinePath: baseline,
+		MergeStatus: api.WorkerMergeStatusPending, Scope: &scope,
 	})
 	testutil.FailErr(t, "enqueue checked", err)
-	_, err = q.EnqueueWithProjectID(ctx, testdbseed.DefaultProjectID, api.WorkerTask{
+	bindWorkerFixture(t, sessionStore.DB(), checkedID, overlay, primary, api.WorkerMergeStatusPending)
+	uncheckedID, err := q.EnqueueWithProjectID(ctx, testdbseed.DefaultProjectID, api.WorkerTask{
 		Prompt:          "fixture",
 		Brief:           "fixture",
 		ParentSessionID: parent.ID, ProjectID: testdbseed.DefaultProjectID,
 		WorkspacePath: uncheckedPrimary, WorkspaceRoot: uncheckedOverlay, ChildSessionID: uncheckedChild.ID,
 		AgentType: "implementer", Status: api.WorkerStatusComplete,
-		MergeStatus: api.WorkerMergeStatusPending, Scope: &uncheckedScope, WorkspaceBaselinePath: uncheckedBaseline,
+		MergeStatus: api.WorkerMergeStatusPending, Scope: &uncheckedScope,
 	})
 	testutil.FailErr(t, "enqueue unchecked", err)
+	bindWorkerFixture(t, sessionStore.DB(), uncheckedID, uncheckedOverlay, uncheckedPrimary, api.WorkerMergeStatusPending)
 
 	state := mgr.Workers.State.ForSession(ctx, parent)
 	if len(state.PendingOverlayIDs) != 2 {
@@ -129,24 +137,27 @@ func TestBuildImplementSessionStateListsLedgerPendingOverlays(t *testing.T) {
 
 func TestCompleteWriteWorkerThenHostCycleSelectsOverlayPromote(t *testing.T) {
 	ctx := context.Background()
-	mem := store.NewMemory()
-	mgr := session.NewHost(mem, session.Models{Client: llm.NewMockProvider(&llm.MockConfig{}), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
+	database := testdbfixture.Open(t, "session-workers.db")
+	testdbseed.InsertProjectRoot(t, database, testdbseed.DefaultProjectID, t.TempDir())
+	sessionStore := store.NewSQL(database)
+	mgr := session.NewHost(sessionStore, session.Models{Client: llm.NewMockProvider(&llm.MockConfig{}), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, toolstest.NewRegistry())
 	t.Cleanup(mgr.BeginEngineShutdown)
-	q := worker.NewInMemoryQueue(4)
+	q := workertest.OnDatabase(t, database, 4)
 	mgr.SetWorkerQueue(q)
-	parent, err := mem.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
+	parent, err := sessionStore.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create parent", err)
 
-	primary, overlay, scope, baseline := overlaySourceFixture(t)
+	primary, overlay, scope := overlaySourceFixture(t, sessionStore.DB())
 	jobID, err := q.EnqueueWithProjectID(ctx, testdbseed.DefaultProjectID, api.WorkerTask{
 		Prompt:          "fixture",
 		Brief:           "fixture",
 		ParentSessionID: parent.ID, ProjectID: testdbseed.DefaultProjectID,
 		WorkspacePath: primary, WorkspaceRoot: overlay,
 		AgentType: "implementer", Status: api.WorkerStatusPending,
-		Scope: &scope, WorkspaceBaselinePath: baseline,
+		Scope: &scope,
 	})
 	testutil.FailErr(t, "enqueue worker", err)
+	bindWorkerFixture(t, sessionStore.DB(), jobID, overlay, primary, "")
 	claimed, err := q.ClaimNext(ctx, worker.ClaimRequest{ClaimedBy: "test", ExecutionTarget: api.ExecutionTargetLocal})
 	testutil.FailErr(t, "claim worker", err)
 	won, err := q.Complete(ctx, claimed, api.WorkerResult{Status: "partial", Summary: "unmet verify"})
@@ -185,7 +196,7 @@ func TestCompleteWriteWorkerThenHostCycleSelectsOverlayPromote(t *testing.T) {
 	}
 }
 
-type failingSecretInheritanceStore struct{ *store.Memory }
+type failingSecretInheritanceStore struct{ *store.SQL }
 
 func (*failingSecretInheritanceStore) SeedSecretExposure(context.Context, string) error {
 	return errors.New("evidence store unavailable")
@@ -193,22 +204,22 @@ func (*failingSecretInheritanceStore) SeedSecretExposure(context.Context, string
 
 func TestReadSensitivePathSetsSecretExposure(t *testing.T) {
 	ctx := context.Background()
-	mem := store.NewMemory()
-	sess, err := mem.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
+	sessionStore := storetest.New(t, testdbseed.DefaultProjectID)
+	sess, err := sessionStore.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create", err)
 
 	dir := t.TempDir()
-	_, _, err = mem.CommitEvidenceToolResult(ctx, sess.ID, dir, "read", map[string]any{"path": "main.go"}, `{"path":"main.go","content":"package main"}`)
+	_, _, err = sessionStore.CommitEvidenceToolResult(ctx, sess.ID, dir, "read", map[string]any{"path": "main.go"}, `{"path":"main.go","content":"package main"}`)
 	testutil.FailErr(t, "read main.go", err)
-	exposed, err := mem.SessionSecretExposure(ctx, sess.ID)
+	exposed, err := sessionStore.SessionSecretExposure(ctx, sess.ID)
 	testutil.FailErr(t, "read secret exposure after source read", err)
 	if exposed {
 		t.Fatal("reading main.go must not set secret exposure")
 	}
 
-	_, _, err = mem.CommitEvidenceToolResult(ctx, sess.ID, dir, "read", map[string]any{"path": ".env"}, `{"path":".env","content":"KEY=x"}`)
+	_, _, err = sessionStore.CommitEvidenceToolResult(ctx, sess.ID, dir, "read", map[string]any{"path": ".env"}, `{"path":".env","content":"KEY=x"}`)
 	testutil.FailErr(t, "read .env", err)
-	exposed, err = mem.SessionSecretExposure(ctx, sess.ID)
+	exposed, err = sessionStore.SessionSecretExposure(ctx, sess.ID)
 	testutil.FailErr(t, "read secret exposure after credential read", err)
 	if !exposed {
 		t.Fatal("reading .env must set secret exposure")
@@ -217,12 +228,12 @@ func TestReadSensitivePathSetsSecretExposure(t *testing.T) {
 
 func TestSecretExposureInheritAndMerge(t *testing.T) {
 	ctx := context.Background()
-	mem := store.NewMemory()
-	mgr := session.NewHost(mem, session.Models{Client: llm.NewMockProvider(&llm.MockConfig{}), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
-	parent, err := mem.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
+	sessionStore := storetest.New(t, testdbseed.DefaultProjectID)
+	mgr := session.NewHost(sessionStore, session.Models{Client: llm.NewMockProvider(&llm.MockConfig{}), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, toolstest.NewRegistry())
+	parent, err := sessionStore.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create parent", err)
-	testutil.FailErr(t, "seed parent", mem.SeedSecretExposure(ctx, parent.ID))
-	exposed, err := mem.SessionSecretExposure(ctx, parent.ID)
+	testutil.FailErr(t, "seed parent", sessionStore.SeedSecretExposure(ctx, parent.ID))
+	exposed, err := sessionStore.SessionSecretExposure(ctx, parent.ID)
 	testutil.FailErr(t, "read parent exposure", err)
 	if !exposed {
 		t.Fatal("parent should be secret-exposed after seed")
@@ -230,19 +241,19 @@ func TestSecretExposureInheritAndMerge(t *testing.T) {
 
 	child, err := mgr.Workers.SpawnChild(ctx, parent.ID, api.SpawnChildRequest{AgentType: "implementer", Prompt: "do work"})
 	testutil.FailErr(t, "SpawnChild", err)
-	exposed, err = mem.SessionSecretExposure(ctx, child.ID)
+	exposed, err = sessionStore.SessionSecretExposure(ctx, child.ID)
 	testutil.FailErr(t, "read child exposure", err)
 	if !exposed {
 		t.Fatal("spawned child must inherit secret exposure")
 	}
 
-	parent2, err := mem.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
+	parent2, err := sessionStore.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create parent2", err)
-	child2, err := mem.CreateChild(ctx, parent2, api.SpawnChildRequest{AgentType: "implementer", Prompt: "x"})
+	child2, err := sessionStore.CreateChild(ctx, parent2, api.SpawnChildRequest{AgentType: "implementer", Prompt: "x"})
 	testutil.FailErr(t, "create child2", err)
-	testutil.FailErr(t, "seed child2", mem.SeedSecretExposure(ctx, child2.ID))
-	testutil.FailErr(t, "merge", workeroutcomes.MergeWorkerSecretExposureIntoParent(ctx, mem, parent2.ID, child2.ID))
-	exposed, err = mem.SessionSecretExposure(ctx, parent2.ID)
+	testutil.FailErr(t, "seed child2", sessionStore.SeedSecretExposure(ctx, child2.ID))
+	testutil.FailErr(t, "merge", workeroutcomes.MergeWorkerSecretExposureIntoParent(ctx, sessionStore, parent2.ID, child2.ID))
+	exposed, err = sessionStore.SessionSecretExposure(ctx, parent2.ID)
 	testutil.FailErr(t, "read merged parent exposure", err)
 	if !exposed {
 		t.Fatal("parent must pick up child secret exposure on merge")
@@ -251,17 +262,17 @@ func TestSecretExposureInheritAndMerge(t *testing.T) {
 
 func TestSpawnChildRollsBackWhenSecurityInheritanceFails(t *testing.T) {
 	ctx := t.Context()
-	mem := store.NewMemory()
-	parent, err := mem.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
+	sessionStore := storetest.New(t, testdbseed.DefaultProjectID)
+	parent, err := sessionStore.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create parent", err)
-	testutil.FailErr(t, "seed parent", mem.SeedSecretExposure(ctx, parent.ID))
-	failing := &failingSecretInheritanceStore{Memory: mem}
-	mgr := session.NewHost(failing, session.Models{Client: llm.NewMockProvider(&llm.MockConfig{}), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
+	testutil.FailErr(t, "seed parent", sessionStore.SeedSecretExposure(ctx, parent.ID))
+	failing := &failingSecretInheritanceStore{SQL: sessionStore}
+	mgr := session.NewHost(failing, session.Models{Client: llm.NewMockProvider(&llm.MockConfig{}), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, toolstest.NewRegistry())
 
 	if _, err := mgr.Workers.SpawnChild(ctx, parent.ID, api.SpawnChildRequest{AgentType: "implementer"}); err == nil {
 		t.Fatal("SpawnChild succeeded without inheriting secret exposure")
 	}
-	sessions, err := mem.List(ctx)
+	sessions, err := sessionStore.List(ctx)
 	testutil.FailErr(t, "list sessions", err)
 	if len(sessions) != 1 || sessions[0].ID != parent.ID {
 		t.Fatalf("sessions after failed spawn = %+v", sessions)
@@ -287,8 +298,8 @@ func TestSessionSecretExposureSQLRebuild(t *testing.T) {
 
 func TestAppendWorkerSummaryCarriesStructuredDecisionRequest(t *testing.T) {
 	ctx := context.Background()
-	store := store.NewMemory()
-	mgr := session.NewHost(store, session.Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
+	store := storetest.New(t, testdbseed.DefaultProjectID)
+	mgr := session.NewHost(store, session.Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, toolstest.NewRegistry())
 	parent, err := store.Create(ctx, api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create parent", err)
 	child, err := store.CreateChild(ctx, parent, api.SpawnChildRequest{AgentType: "implementer"})
@@ -373,9 +384,11 @@ func TestWorkerProjectionWaitsForOriginalDispatchResponse(t *testing.T) {
 	for _, tool := range []string{"task"} {
 		t.Run(tool, func(t *testing.T) {
 			ctx := context.Background()
-			messages := store.NewMemory()
+			database := testdbfixture.Open(t, "session-workers.db")
+			testdbseed.InsertProjectRoot(t, database, testdbseed.DefaultProjectID, t.TempDir())
+			messages := store.NewSQL(database)
 			mgr := session.NewHost(messages, session.Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
-			queue := worker.NewInMemoryQueue(2)
+			queue := workertest.OnDatabase(t, database, 2)
 			mgr.SetWorkerQueue(queue)
 			parent, err := messages.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 			testutil.FailErr(t, "create parent", err)
@@ -415,19 +428,19 @@ func TestWorkerProjectionWaitsForOriginalDispatchResponse(t *testing.T) {
 
 func TestHostEndToEndWorkerWorkspaceObservationVerificationAndNextTurnNotice(t *testing.T) {
 	ctx := context.Background()
-	mem, reg, mgr, q := newObservationHost(t)
+	sessionStore, reg, mgr, q := newObservationHost(t)
 
-	parent, err := mem.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
+	parent, err := sessionStore.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create parent", err)
 
-	primary, overlay, scope, baseline := overlaySourceFixture(t)
+	primary, overlay, scope := overlaySourceFixture(t, sessionStore.DB())
 	rev, rootDigest := invocation.SourceRevisionForRoot(overlay)
 	curRev := workercompletion.SourceRevision{Revision: rev, RootDigest: rootDigest}
 	mgr.Verification.SetRevisionSource(func(context.Context, string) (string, string) {
 		return rev, rootDigest
 	})
 
-	child, err := mem.CreateChild(ctx, parent, api.SpawnChildRequest{AgentType: "implementer"})
+	child, err := sessionStore.CreateChild(ctx, parent, api.SpawnChildRequest{AgentType: "implementer"})
 	testutil.FailErr(t, "CreateChild", err)
 	child.WorkspacePath = primary
 	child.ProjectID = testdbseed.DefaultProjectID
@@ -435,16 +448,17 @@ func TestHostEndToEndWorkerWorkspaceObservationVerificationAndNextTurnNotice(t *
 	jobID, err := q.EnqueueWithProjectID(ctx, testdbseed.DefaultProjectID, api.WorkerTask{
 		Prompt: "fixture", Brief: "fixture", ParentSessionID: parent.ID, ProjectID: testdbseed.DefaultProjectID,
 		WorkspacePath: primary, WorkspaceRoot: overlay, ChildSessionID: child.ID,
-		AgentType: "implementer", Status: api.WorkerStatusRunning, Scope: &scope, WorkspaceBaselinePath: baseline,
+		AgentType: "implementer", Status: api.WorkerStatusRunning, Scope: &scope,
 	})
 	testutil.FailErr(t, "EnqueueWithProjectID", err)
+	bindWorkerFixture(t, sessionStore.DB(), jobID, overlay, primary, "")
 	task, ok := q.Get(jobID)
 	if !ok || task == nil {
 		t.Fatalf("expected task %s in queue", jobID)
 	}
 
 	// A second worker on an unrelated root verifies repochange root isolation.
-	other := provisionUnrelatedWorker(t, ctx, mem, mgr, q, reg, parent, rev, rootDigest)
+	other := provisionUnrelatedWorker(t, ctx, sessionStore, mgr, q, reg, parent, rev, rootDigest)
 
 	workerCtx := workercontext.WithJob(ctx, jobID)
 	tctx, err := mgr.Workers.Workspaces.Enrich(workerCtx, child, tools.ToolContext{
@@ -486,7 +500,7 @@ func TestHostEndToEndWorkerWorkspaceObservationVerificationAndNextTurnNotice(t *
 
 	// Record passing verification evidence on the host's Verification service.
 	verifyMsg := currentVerifyPassedMessage(overlay)
-	testutil.FailErr(t, "AppendMessages", mem.AppendMessages(ctx, child.ID, verifyMsg))
+	testutil.FailErr(t, "AppendMessages", sessionStore.AppendMessages(ctx, child.ID, verifyMsg))
 	mgr.Verification.RecordSourceRunTerminal(workerCtx, child, parent.ID, verification.ProducerVerify, tools.SourceRunCapture{
 		CheckID:          "check-verify-1",
 		IsCheck:          true,
@@ -498,7 +512,7 @@ func TestHostEndToEndWorkerWorkspaceObservationVerificationAndNextTurnNotice(t *
 		SourceRootDigest: rootDigest,
 	}, time.Now().UTC())
 
-	childHistory, err := mem.GetMessages(ctx, child.ID)
+	childHistory, err := sessionStore.GetMessages(ctx, child.ID)
 	testutil.FailErr(t, "GetMessages", err)
 
 	// 1. Unobserved lower source change via real repochange.Notify keeps GateState and the source proof valid.
@@ -583,13 +597,15 @@ type unrelatedWorker struct {
 	primary string
 }
 
-func newObservationHost(t *testing.T) (*store.Memory, *tools.StubRegistry, *session.Host, *worker.InMemoryQueue) {
+func newObservationHost(t *testing.T) (*store.SQL, *toolstest.Registry, *session.Host, *worker.SQLQueue) {
 	t.Helper()
-	mem := store.NewMemory()
-	reg := tools.NewStubRegistry()
+	database := testdbfixture.Open(t, "session-workers.db")
+	testdbseed.InsertProjectRoot(t, database, testdbseed.DefaultProjectID, t.TempDir())
+	sessionStore := store.NewSQL(database)
+	reg := toolstest.NewRegistry()
 
 	mgr := session.NewHost(
-		mem,
+		sessionStore,
 		session.Models{
 			Client:   llm.NewMockProvider(&llm.MockConfig{}),
 			Provider: nil,
@@ -603,34 +619,35 @@ func newObservationHost(t *testing.T) (*store.Memory, *tools.StubRegistry, *sess
 	mgr.Verification.SetDataDir(dataDir)
 	mgr.Verification.SetEvidenceStore(inspector.NewJSONLStore(inspector.DefaultEvidenceDir))
 
-	q := worker.NewInMemoryQueue(4)
+	q := workertest.OnDatabase(t, database, 4)
 	mgr.SetWorkerQueue(q)
 
-	return mem, reg, mgr, q
+	return sessionStore, reg, mgr, q
 }
 
 func provisionUnrelatedWorker(
 	t *testing.T,
 	ctx context.Context,
-	mem *store.Memory,
+	sessionStore *store.SQL,
 	mgr *session.Host,
-	q *worker.InMemoryQueue,
-	reg *tools.StubRegistry,
+	q *worker.SQLQueue,
+	reg *toolstest.Registry,
 	parent *api.Session,
 	rev, rootDigest string,
 ) unrelatedWorker {
 	t.Helper()
-	otherPrimary, otherOverlay, otherScope, otherBaseline := overlaySourceFixture(t)
-	otherChild, err := mem.CreateChild(ctx, parent, api.SpawnChildRequest{AgentType: "implementer"})
+	otherPrimary, otherOverlay, otherScope := overlaySourceFixture(t, sessionStore.DB())
+	otherChild, err := sessionStore.CreateChild(ctx, parent, api.SpawnChildRequest{AgentType: "implementer"})
 	testutil.FailErr(t, "CreateChild other", err)
 	otherChild.WorkspacePath = otherPrimary
 	otherChild.ProjectID = testdbseed.DefaultProjectID
 	otherJobID, err := q.EnqueueWithProjectID(ctx, testdbseed.DefaultProjectID, api.WorkerTask{
 		Prompt: "other", Brief: "other", ParentSessionID: parent.ID, ProjectID: testdbseed.DefaultProjectID,
 		WorkspacePath: otherPrimary, WorkspaceRoot: otherOverlay, ChildSessionID: otherChild.ID,
-		AgentType: "implementer", Status: api.WorkerStatusRunning, Scope: &otherScope, WorkspaceBaselinePath: otherBaseline,
+		AgentType: "implementer", Status: api.WorkerStatusRunning, Scope: &otherScope,
 	})
 	testutil.FailErr(t, "EnqueueWithProjectID other", err)
+	bindWorkerFixture(t, sessionStore.DB(), otherJobID, otherOverlay, otherPrimary, "")
 	otherTask, _ := q.Get(otherJobID)
 	otherCtx := workercontext.WithJob(ctx, otherJobID)
 	_, err = mgr.Workers.Workspaces.BindViewCapabilities(
@@ -645,12 +662,12 @@ func provisionUnrelatedWorker(
 	_, err = reg.Run(otherCtx, "read", map[string]any{"path": "pkg/dep.py"}, otherTctx)
 	testutil.FailErr(t, "ordinary ReadTool other", err)
 	otherVerifyMsg := currentVerifyPassedMessage(otherOverlay)
-	testutil.FailErr(t, "AppendMessages other", mem.AppendMessages(ctx, otherChild.ID, otherVerifyMsg))
+	testutil.FailErr(t, "AppendMessages other", sessionStore.AppendMessages(ctx, otherChild.ID, otherVerifyMsg))
 	mgr.Verification.RecordSourceRunTerminal(otherCtx, otherChild, parent.ID, verification.ProducerVerify, tools.SourceRunCapture{
 		CheckID: "check-verify-other", IsCheck: true, Command: "selected-check", Cwd: ".",
 		Verdict: api.SourceVerdictPassed, SourceRevision: rev, SourceRootDigest: rootDigest,
 	}, time.Now().UTC())
-	otherHistory, err := mem.GetMessages(ctx, otherChild.ID)
+	otherHistory, err := sessionStore.GetMessages(ctx, otherChild.ID)
 	testutil.FailErr(t, "GetMessages other", err)
 	return unrelatedWorker{ctx: otherCtx, child: otherChild, task: otherTask, history: otherHistory, primary: otherPrimary}
 }
@@ -777,5 +794,22 @@ func TestWorkerReadAndWriteStructuredFactsWithoutSecondReadAndUnknownEvidence(t 
 	freshness := tr.EvaluateReceiptFreshness(binding, "ckpt-1")
 	if !freshness.Stale {
 		t.Fatalf("expected receipt bound to uncertain unknown-digest observation to refuse freshness certification, got %+v", freshness)
+	}
+}
+
+func bindWorkerFixture(t *testing.T, database db.Handle, jobID, branch, primary string, merge api.WorkerMergeStatus) {
+	t.Helper()
+	root := db.DataDir(database)
+	baselines := workspacebaseline.New(database, sourceblob.New(filepath.Join(root, "source-content")), filepath.Join(root, "worker-baselines"))
+	baseline, err := baselines.Capture(t.Context(), jobID, workspacebaseline.Branch([]projectroot.RootRef{{ID: "primary", Label: "primary", Path: primary, IsPrimary: true}}, primary))
+	testutil.FailErr(t, "capture baseline", err)
+	jobs := worker.NewSQLStore(database)
+	bound, err := jobs.SetWorkerWorkspace(t.Context(), jobID, branch, baseline)
+	testutil.FailErr(t, "bind worker baseline", err)
+	if !bound {
+		t.Fatal("worker baseline was not bound")
+	}
+	if merge != "" {
+		testutil.FailErr(t, "set fixture merge status", jobs.SetMergeStatus(t.Context(), jobID, merge))
 	}
 }

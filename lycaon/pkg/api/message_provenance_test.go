@@ -52,3 +52,47 @@ func TestMessageUserInstructionContentExcludesAttachmentParts(t *testing.T) {
 		t.Fatalf("user instruction = %q", got)
 	}
 }
+
+// Marking reads one axis: whether somebody outside this machine wrote the bytes.
+// A local tool result is untrusted for instruction purposes but carries no marker.
+func TestExternalAuthorshipIsOneAxis(t *testing.T) {
+	for origin, want := range map[MessageOrigin]bool{
+		MessageOriginRetrieval:  true,
+		MessageOriginPeerAgent:  true,
+		MessageOriginAttachment: true,
+		MessageOriginHost:       false,
+		MessageOriginUser:       false,
+		MessageOriginModel:      false,
+		MessageOriginProject:    false,
+		MessageOriginTool:       false,
+		MessageOriginUnknown:    false,
+		"":                      false,
+	} {
+		if got := ExternallyAuthored(origin); got != want {
+			t.Errorf("ExternallyAuthored(%q) = %t, want %t", origin, got, want)
+		}
+	}
+}
+
+// Trust never increases under transformation: a summary of untrusted content
+// is not trusted, and nothing consumed is unknown rather than trusted.
+func TestTrustNeverIncreasesUnderTransformation(t *testing.T) {
+	trusted, unknown, untrusted := ContentTrustTierTrusted, ContentTrustTierUnknown, ContentTrustTierUntrusted
+	for _, tc := range []struct {
+		in   []ContentTrustTier
+		want ContentTrustTier
+	}{
+		{nil, unknown},
+		{[]ContentTrustTier{trusted}, trusted},
+		{[]ContentTrustTier{trusted, trusted}, trusted},
+		{[]ContentTrustTier{trusted, untrusted}, untrusted},
+		{[]ContentTrustTier{untrusted, trusted}, untrusted},
+		{[]ContentTrustTier{trusted, unknown}, unknown},
+		{[]ContentTrustTier{unknown, untrusted}, untrusted},
+		{[]ContentTrustTier{trusted, unknown, untrusted}, untrusted},
+	} {
+		if got := FloorTrustTier(tc.in...); got != tc.want {
+			t.Errorf("FloorTrustTier(%v) = %q, want %q", tc.in, got, tc.want)
+		}
+	}
+}

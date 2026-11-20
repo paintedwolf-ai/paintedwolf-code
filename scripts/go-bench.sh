@@ -64,6 +64,11 @@ cleanup() {
 trap cleanup EXIT
 
 cd "${ROOT}/lycaon"
+# Benchmarks that measure a source tree read the scale fixture's 500,000 files.
+if [[ -z "${PW_BENCH_ROOT:-}" ]]; then
+  export PW_BENCH_ROOT="${RUN_DIR}/scale-tree"
+  go run ./cmd/lycaon-perf tree --root "${PW_BENCH_ROOT}"
+fi
 LYCAON_LLM_MOCK=1 go test -run '^$' -bench . -benchmem -count "${COUNT}" -timeout 0 "${PACKAGES[@]}" | tee "${RAW}"
 
 ARGS=(--input "${RAW}" --output "${OUTPUT}")

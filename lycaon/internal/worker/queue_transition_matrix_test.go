@@ -13,24 +13,11 @@ import (
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
-type allowAllRuns struct{}
-
-func (allowAllRuns) AssertRunnable(context.Context, string) error { return nil }
-
-func (allowAllRuns) AssertWorkerTask(context.Context, *api.WorkerTask) error { return nil }
-
-var matrixQueueBackends = map[string]func(t *testing.T) worker.WorkerQueue{
-	"memory": func(*testing.T) worker.WorkerQueue {
-		q := worker.NewInMemoryQueue(1)
-		q.SetWorkflowDomains(&worker.WorkflowDomains{Runs: allowAllRuns{}, Tasks: allowAllRuns{}})
-		return q
-	},
-	"sql": func(t *testing.T) worker.WorkerQueue {
-		database := testdbfixture.Open(t, "matrix.db")
-		testdbseed.InsertSession(t, database, "parent-1", testdbseed.DefaultProjectID)
-		testdbseed.InsertSession(t, database, "child-1", testdbseed.DefaultProjectID)
-		return worker.NewSQLQueue(database, 1)
-	},
+func newMatrixQueue(t *testing.T) *worker.SQLQueue {
+	database := testdbfixture.Open(t, "matrix.db")
+	testdbseed.InsertSession(t, database, "parent-1", testdbseed.DefaultProjectID)
+	testdbseed.InsertSession(t, database, "child-1", testdbseed.DefaultProjectID)
+	return worker.NewSQLQueue(database, 1)
 }
 
 var matrixClaim = worker.ClaimRequest{ClaimedBy: "fixture", ExecutionTarget: api.ExecutionTargetLocal}
@@ -132,10 +119,10 @@ func TestQueueStatusTransitionsCoverWorkerQueue(t *testing.T) {
 }
 
 // seedTaskWithStatus brings one job into status through queue transitions.
-func seedTaskWithStatus(t *testing.T, backend string, status api.WorkerStatus) (worker.WorkerQueue, string) {
+func seedTaskWithStatus(t *testing.T, status api.WorkerStatus) (worker.WorkerQueue, string) {
 	t.Helper()
 	ctx := t.Context()
-	queue := matrixQueueBackends[backend](t)
+	queue := newMatrixQueue(t)
 	jobID, err := queue.Enqueue(ctx, api.WorkerTask{
 		ParentSessionID: "parent-1",
 		ProjectID:       testdbseed.DefaultProjectID,
@@ -194,40 +181,40 @@ func matrixTask(t *testing.T, queue worker.WorkerQueue, jobID string) *api.Worke
 }
 
 func TestTerminalWorkerStatusesRejectEveryTransition(t *testing.T) {
-	for backend := range matrixQueueBackends {
-		for _, status := range api.AllWorkerStatuses() {
-			if !status.IsTerminal() {
-				continue
-			}
-			for method, transition := range queueStatusTransitions {
-				t.Run(backend+"/"+string(status)+"/"+method, func(t *testing.T) {
-					queue, jobID := seedTaskWithStatus(t, backend, status)
-					won, _ := transition(t.Context(), queue, jobID, matrixTask(t, queue, jobID))
-					if won {
-						t.Fatalf("%s won on terminal status %s", method, status)
-					}
-					if got := matrixTask(t, queue, jobID).Status; got != status {
-						t.Fatalf("%s moved terminal status %s to %s", method, status, got)
-					}
-				})
-			}
-		}
-	}
-}
 
-func TestNonTerminalWorkerStatusesCancel(t *testing.T) {
-	for backend := range matrixQueueBackends {
-		for _, status := range api.AllWorkerStatuses() {
-			if status.IsTerminal() {
-				continue
-			}
-			t.Run(backend+"/"+string(status), func(t *testing.T) {
-				queue, jobID := seedTaskWithStatus(t, backend, status)
-				testutil.FailErr(t, "cancel", queue.Cancel(t.Context(), jobID, &api.WorkerResult{Status: "canceled"}))
-				if got := matrixTask(t, queue, jobID).Status; got != api.WorkerStatusCanceled {
-					t.Fatalf("cancel left %s at %s", status, got)
+	for _, status := range api.AllWorkerStatuses() {
+		if !status.IsTerminal() {
+			continue
+		}
+		for method, transition := range queueStatusTransitions {
+			t.Run(string(status)+"/"+method, func(t *testing.T) {
+				queue, jobID := seedTaskWithStatus(t, status)
+				won, _ := transition(t.Context(), queue, jobID, matrixTask(t, queue, jobID))
+				if won {
+					t.Fatalf("%s won on terminal status %s", method, status)
+				}
+				if got := matrixTask(t, queue, jobID).Status; got != status {
+					t.Fatalf("%s moved terminal status %s to %s", method, status, got)
 				}
 			})
 		}
 	}
+
+}
+
+func TestNonTerminalWorkerStatusesCancel(t *testing.T) {
+
+	for _, status := range api.AllWorkerStatuses() {
+		if status.IsTerminal() {
+			continue
+		}
+		t.Run(string(status), func(t *testing.T) {
+			queue, jobID := seedTaskWithStatus(t, status)
+			testutil.FailErr(t, "cancel", queue.Cancel(t.Context(), jobID, &api.WorkerResult{Status: "canceled"}))
+			if got := matrixTask(t, queue, jobID).Status; got != api.WorkerStatusCanceled {
+				t.Fatalf("cancel left %s at %s", status, got)
+			}
+		})
+	}
+
 }

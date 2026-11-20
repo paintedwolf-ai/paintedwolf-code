@@ -19,24 +19,30 @@ SETUPS = {"verification", "shell", "harness", "frontend", "analysis"}
 # A platform lane runs a check that only its platform can run, so the cross-platform check gate,
 # which every development host runs, leaves it out; the merge queue runs it beside that gate.
 # Each platform names the runners it may use: architecture-specific code needs each architecture.
-PLATFORMS = {"linux": {"ubuntu-24.04", "ubuntu-24.04-arm"}}
-# Runs its probe in container images that an offline lane must find already provisioned.
-CONTAINER_TARGET = "den:webkit:atspi"
-# Runs the pinned browser, which an offline lane must find already provisioned.
-BROWSER_TARGET = "test:confine:linux"
-# Drives the native repository tools against committed distribution fixtures.
-REPOSITORY_TOOLS_TARGET = "test:runner"
-# Runs the reference userland images, which an offline lane must find already built and verified.
-USERLANDS_TARGET = "test:userlands"
-# The protected launch leg builds and runs a GTK desktop under a display.
-LAUNCH_PACKAGE = "./internal/launchguard"
-# Go runs that select their packages in their own scripts, outside the catalog's `go` recipes,
-# and reach the protected launch leg.
-LAUNCH_SCRIPT_TARGETS = {"test:confine:linux", "coverage:changes", "test:integration:changes"}
+PLATFORMS = {"linux": {"ubuntu-24.04", "ubuntu-24.04-arm"}, "macos": {"macos-15"}}
+# Stages of the check gate the merge queue leaves to the pull request, which runs each against the change's
+# base: lint findings, comment and failure-message rules, and changed-statement coverage. A combination of
+# changes that each pass them is judged by the nightly.
+QUEUE_LEAVES = {"lint:full", "arch-lint:changes", "comments:check", "test:fail-messages:check", "coverage:changes"}
+# The setup inputs a lane can need, as the catalog's `provisions` declares them; `engine_free` names
+# targets that run without the runtime engines every other target needs.
+# Change areas a lane declares in `changes`; the change planner selects the lanes of each area it finds.
+AREAS = {"always", "go", "go-code", "den", "den-tests", "scripts", "dependencies", "confinement", "command-language",
+         "command-scale", "shell-native", "updater-native", "decide-native",
+         "documentcore-native"}
+# Execution a lane declares in `phases`: admission's check phases, admission's test phases, the Go packages
+# a change affects, or the Go packages whose source it edits. Each belongs to one lane.
+PHASES = {"admission", "admission-tests", "affected-packages", "changed-packages"}
+INPUTS = ("containers", "browser", "playwright", "userlands", "repository_tools", "nix", "linux_launch", "notices",
+          "analysis_lint", "analysis_vulnerabilities")
+# The check gate's own platform: a lane there repeating a gate stage would run it twice.
+GATE_PLATFORM = "linux"
 
 
 def supplemental(lane):
-    return "platform" in lane or lane["suite"] == "performance" and "integration" in lane["profiles"]
+    """A lane beside the check gate: the merge queue or a release runs it, and the gate every development
+    host runs does not."""
+    return GATE not in lane["profiles"] and bool({"integration", "release"} & set(lane["profiles"]))
 
 
 def lanes():
@@ -47,29 +53,26 @@ def lanes():
         if not re.fullmatch(r"[a-z][a-z0-9-]*", name):
             raise ValueError(f"invalid CI lane: {name}")
         if set(lane) - {"targets", "minutes", "profiles", "suite", "setup", "runner", "workers", "shards", "priority",
-                        "platform", "arguments", "early_targets", "contract_first", "admission_checks", "runtime_engines"}:
+                        "platform", "arguments", "admission_checks", "changes", "phases"}:
             raise ValueError(f"unknown CI lane fields: {name}")
-        if "arguments" in lane and (len(lane["targets"]) != 1 or not lane["arguments"]
+        # Every target of the lane receives its arguments.
+        if "arguments" in lane and (not lane["arguments"]
                                     or not all(isinstance(value, str) and value for value in lane["arguments"])):
-            raise ValueError(f"CI lane {name} arguments belong to exactly one target")
-        if 'runtime_engines' in lane and (lane['runtime_engines'] is not False
-                or lane['targets'] not in (['den:test:rust', 'decide:test'], ['scripts:coverage:changes'])):
-            raise ValueError(f"CI lane {name} requires runtime engines for host checks")
-        if supplemental(lane) and "platform" not in lane:
-            if (lane["targets"] != ["test:stress"] or not lane.get("arguments")
-                    or not {"integration", "nightly", "release"}.issubset(lane["profiles"])):
+            raise ValueError(f"CI lane {name} arguments must be non-empty strings")
+        if supplemental(lane) and "test:stress" in lane["targets"]:
+            if not lane.get("arguments") or not {"integration", "nightly", "release"}.issubset(lane["profiles"]):
                 raise ValueError(f"CI lane {name} requires explicit scale scope and complete qualification profiles")
+        changes = lane.get("changes", [])
+        if (not isinstance(changes, list) or not set(changes) <= AREAS or len(set(changes)) != len(changes)
+                or not changes and set(lane["profiles"]) & {"fast", "integration"}):
+            raise ValueError(f"CI lane {name} needs the change areas that select it")
+        if lane.get("phases", "admission") not in PHASES:
+            raise ValueError(f"CI lane {name} has unknown phases")
         admission = lane.get('admission_checks', [])
-        if ('admission_checks' in lane and name != 'ready'
+        if ('admission_checks' in lane and lane.get('phases') != 'admission'
                 or not isinstance(admission, list)
                 or admission not in ([], [['test:confine:linux', '--', 'supervisor']])):
             raise ValueError(f'CI lane {name} has invalid early native checks')
-        early = lane.get("early_targets", [])
-        if (not isinstance(early, list) or len(set(early)) != len(early)
-                or not set(early).issubset(lane["targets"])):
-            raise ValueError(f"CI lane {name} early targets must partition its declared targets")
-        if "contract_first" in lane and (lane["contract_first"] is not True or lane["targets"] != ["test:full"]):
-            raise ValueError(f"CI lane {name} contract ordering requires the complete Go recipe")
 
         if lane.get("priority", "normal") not in PRIORITIES:
             raise ValueError(f"CI lane {name} has an invalid scheduling priority")
@@ -99,6 +102,10 @@ def lanes():
                                    or lane.get("runner", "ubuntu-24.04") not in PLATFORMS[lane["platform"]]
                                    or set(lane["profiles"]) & {"fast", GATE}):
             raise ValueError(f"CI lane {name} is a platform lane on its platform's runners, outside the fast and {GATE} tiers")
+    for phase in PHASES:
+        if sum(lane.get("phases") == phase for lane in values.values()) > 1:
+            raise ValueError(f"CI phases {phase} belong to one lane")
+    validate_provisions(values, targets)
     expected = Counter(stage["name"] for stage in expand([GATE]))
     actual = Counter(stage["name"] for lane in values.values() if GATE in lane["profiles"]
                      for stage in expand(lane["targets"]))
@@ -111,12 +118,17 @@ def lanes():
                             if stage['name'] != 'licenses:notices' and stage['name'] not in STATIC_STAGES)
     if fast != expected_fast:
         raise ValueError(f"CI fast tier must run stages of {FAST_GATE} once each: {dict(fast)}")
-    expected = Counter(stage["name"] for stage in expand([GATE]))
+    expected_check = Counter(stage["name"] for stage in expand([GATE]))
+    expected = Counter({name: count for name, count in expected_check.items() if name not in QUEUE_LEAVES})
     actual = Counter(stage["name"] for lane in values.values() if "integration" in lane["profiles"] and not supplemental(lane)
                      for stage in expand(lane["targets"]))
     if actual != expected:
         raise ValueError(f"integration partition differs from check: {expected - actual}, {actual - expected}")
-    platform = {stage["name"] for lane in values.values() if "platform" in lane for stage in expand(lane["targets"])}
+    unjudged = QUEUE_LEAVES & set(expected_check) - set(fast) - STATIC_STAGES
+    if unjudged:
+        raise ValueError(f"the merge queue leaves stages no pull request runs: {sorted(unjudged)}")
+    platform = {stage["name"] for lane in values.values() if lane.get("platform") == GATE_PLATFORM
+                for stage in expand(lane["targets"])}
     repeated = platform & {stage["name"] for stage in expand([GATE])}
     if repeated:
         raise ValueError(f"platform lanes repeat {GATE} stages: {sorted(repeated)}")
@@ -124,12 +136,17 @@ def lanes():
         if ("check" in lane["profiles"] or "release" in lane["profiles"] and supplemental(lane)) and "nightly" not in lane["profiles"]:
             raise ValueError(f"nightly must include qualification lane {name}")
     stress = Counter(package for lane in values.values()
-                     if "nightly" in lane["profiles"] and lane["targets"] == ["test:stress"]
+                     if "nightly" in lane["profiles"] and "test:stress" in lane["targets"]
                      for package in lane.get("arguments", catalog()["go"]["test:stress"]["packages"]))
     expected_stress = Counter(catalog()["go"]["test:stress"]["packages"])
     if stress != expected_stress:
         raise ValueError(f"nightly stress partition differs: {expected_stress - stress}, {stress - expected_stress}")
     return values
+
+
+def lanes_of(values, areas):
+    """The lanes a change in any of `areas` selects."""
+    return {name for name, lane in values.items() if set(lane.get("changes", [])) & set(areas)}
 
 
 def max_parallel(profile):
@@ -142,15 +159,6 @@ def max_parallel(profile):
     return caps[profile]
 
 
-def runs_protected_launch(target):
-    """Whether a target's Go run reaches the protected launch leg: its catalog recipe selects
-    the launch package, or its script selects packages that include it."""
-    recipe = catalog()["go"].get(target)
-    if recipe is None:
-        return target in LAUNCH_SCRIPT_TARGETS
-    return any(selects_package(pattern, LAUNCH_PACKAGE) for pattern in recipe["packages"])
-
-
 def selects_package(pattern, package):
     """Whether a Go package pattern names package, directly or through a `/...` tree."""
     if pattern.endswith("/..."):
@@ -159,10 +167,57 @@ def selects_package(pattern, package):
     return pattern == package
 
 
-def analysis_set(targets):
-    lint = bool(set(targets) & {"lint:fast", "lint:full", "lint:deadcode", "arch-lint:changes"})
-    vulnerabilities = bool(set(targets) & {"lint:vuln", "lint:vuln:fresh"})
-    return "all" if lint and vulnerabilities else "lint" if lint else "vulnerabilities" if vulnerabilities else "none"
+def stages_of(targets):
+    """A lane's stages; a Task target the catalog does not plan runs as itself."""
+    declared = set(catalog()["groups"]) | set(catalog()["go"]) | set(catalog()["tasks"])
+    return [stage for target in targets
+            for stage in (expand([target]) if target in declared else [{"kind": "task", "name": target}])]
+
+
+def provisioned(lane):
+    """The setup inputs a lane needs, derived from the targets and Go packages it runs.
+    A target's provision may apply only to some of its arguments, such as one leg of a script."""
+    stages = stages_of(lane["targets"])
+    names = set(lane["targets"]) | {stage["name"] for stage in stages}
+    arguments = lane.get("arguments", [])
+    packages = [package for stage in stages if stage["kind"] == "go"
+                for package in (arguments or stage["packages"])]
+
+    def needs(provision):
+        if any(target in names and (not legs or not arguments or set(legs) & set(arguments))
+               for target, legs in provision["targets"].items()):
+            return True
+        return any(selects_package(pattern, needed) for pattern in packages for needed in provision.get("packages", []))
+
+    provisions = catalog()["provisions"]
+    result = {name: name in provisions and needs(provisions[name]) for name in INPUTS}
+    result["runtime_engines"] = not names <= set(provisions.get("engine_free", {"targets": {}})["targets"])
+    return result
+
+
+def validate_provisions(values, targets):
+    """Each provision names real targets and packages, and some lane needs it."""
+    declared = targets | set(catalog()["groups"]) | set(catalog()["go"]) | set(catalog()["tasks"])
+    unknown = sorted(set(catalog()["provisions"]) - {*INPUTS, "engine_free"})
+    if unknown:
+        raise ValueError(f"no setup input is named {', '.join(unknown)}")
+    needed = {name: False for name in catalog()["provisions"]}
+    for name, provision in catalog()["provisions"].items():
+        missing = sorted(set(provision["targets"]) - declared)
+        missing += [package for package in provision.get("packages", [])
+                    if not (ROOT / "lycaon" / package.removeprefix("./")).is_dir()]
+        if missing:
+            raise ValueError(f"provision {name} names what nothing declares: {', '.join(missing)}")
+    for lane in values.values():
+        for name, used in provisioned({**lane, "arguments": []}).items():
+            if name in needed:
+                needed[name] = needed[name] or used
+        if "engine_free" in needed:
+            # The engine-free declaration serves a lane that runs without the engines.
+            needed["engine_free"] = needed["engine_free"] or not provisioned(lane)["runtime_engines"]
+    unused = sorted(name for name, used in needed.items() if not used)
+    if unused:
+        raise ValueError(f"no lane runs what these provisions serve: {', '.join(unused)}")
 
 
 def matrix(profile, suite="all", scope=None, platform=False, timings=None):
@@ -171,8 +226,6 @@ def matrix(profile, suite="all", scope=None, platform=False, timings=None):
         raise ValueError(f"unsupported CI selection: {profile}/{suite}")
     values = lanes()
     selected = {name for name, lane in values.items() if supplemental(lane)} if platform else set(values)
-    # A broad change runs the whole check gate and every platform lane of the merge queue.
-    broad = profile == "integration" and scope is not None and scope["full"]
     prose = False
     if profile in {"fast", "integration"} and scope is not None:
         from ci_policy.impact import docs_only, fast_lanes, selected_lanes
@@ -182,31 +235,32 @@ def matrix(profile, suite="all", scope=None, platform=False, timings=None):
     for name, lane in values.items():
         if name not in selected:
             continue
-        tier = GATE if broad and not supplemental(lane) else profile
-        if tier not in lane["profiles"] or suite != "all" and lane["suite"] not in {"all", suite}:
+        if profile not in lane["profiles"] or suite != "all" and lane["suite"] not in {"all", suite}:
             continue
         if profile == "nightly" and suite != "all" and lane["suite"] == "all" and GATE in lane["profiles"]:
             continue
         count = lane.get("shards", 1)
+        needs = provisioned(lane)
         for index in range(1, count + 1):
             result.append({"lane": name,
                            "timing_row": row_key(name, f"{index}/{count}" if count > 1 else ""),
                            "shard": f"{index}/{count}" if count > 1 else "",
                            "minutes": lane["minutes"], "step_minutes": lane["minutes"] + 1, "job_minutes": lane["minutes"] + 30,
                            "setup": lane["setup"],
-                           "runtime_engines": lane.get("runtime_engines", True),
-                           "notices": "licenses:notices" in lane["targets"],
-                           "containers": CONTAINER_TARGET in lane["targets"],
-                           "browser": BROWSER_TARGET in lane["targets"]
-                           and "browser" in lane.get("arguments", ["browser"]),
-                           "userlands": USERLANDS_TARGET in lane["targets"],
-                           "linux_launch": any(runs_protected_launch(target) for target in lane["targets"]),
-                           "repository_tools": REPOSITORY_TOOLS_TARGET in lane["targets"]
-                           or "scripts:coverage:changes" in lane["targets"]
-                           or (name == "ready" and (runs_package_metadata(scope) or runs_script_coverage(scope))),
-                           "nix": any(target.startswith("nix:") for target in lane["targets"])
-                           or "nix" in lane.get("arguments", []),
-                           "analysis": analysis_set(lane["targets"]),
+                           "runtime_engines": needs["runtime_engines"],
+                           "notices": needs["notices"],
+                           "containers": needs["containers"],
+                           "browser": needs["browser"],
+                           "playwright": needs["playwright"],
+                           "userlands": needs["userlands"],
+                           "linux_launch": needs["linux_launch"],
+                           # Admission runs package metadata and script coverage in the ready lane when the change needs them.
+                           "repository_tools": needs["repository_tools"]
+                           or (lane.get("phases") == "admission"
+                               and (runs_package_metadata(scope) or runs_script_coverage(scope))),
+                           "nix": needs["nix"],
+                           "analysis": {(True, True): "all", (True, False): "lint", (False, True): "vulnerabilities",
+                                        (False, False): "none"}[needs["analysis_lint"], needs["analysis_vulnerabilities"]],
                            "runner": lane.get("runner", "ubuntu-24.04")})
     # Only a pull request of prose alone has no lane: the static job verifies it.
     if not result and not prose:

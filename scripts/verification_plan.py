@@ -14,8 +14,7 @@ DEN = CATALOG.parent.parent / "lycaon-den"
 # The scheduler's own descriptors and per-operation paths; a nested request never forwards them.
 SCHEDULER_ENV = {"PW_TEST_EXECUTION_TICKET", "PW_TEST_EXECUTION_FD", "PW_TEST_RESOURCE_FD", "PW_TEST_COMPLETION_FD",
                  "PW_TEST_STAGE_RESULT", "PW_TEST_STAGE_RAW", "PW_TEST_STAGE_EVENTS", "PW_TEST_STAGE_PROGRESS",
-                 "PW_TEST_STAGE_ID", "PW_TEST_BATCH_DIRECTORY", "PW_TEST_REUSE_STORE", "PW_TEST_ENVIRONMENT_IDENTITY",
-                 "PW_TEST_PACKAGE_IDENTITIES", "PW_TEST_SCRATCH_ROOT", "PW_TEST_SOURCE_ROOT", "PW_TEST_MODULE_ROOT",
+                 "PW_TEST_STAGE_ID", "PW_TEST_BATCH_DIRECTORY", "PW_TEST_SCRATCH_ROOT", "PW_TEST_MODULE_ROOT",
                  "PW_REPO_SNAPSHOT_TOKEN", "PW_TEST_KEEP_GOING"}
 # Verification is offline and fixtures are repository-local, so proxy routes stay
 # out of a shared, replayable stage.
@@ -72,7 +71,7 @@ def execution_environment(environment, declaration=None):
 
     Every declared value must be a function of the checkout rather than of the call that
     submitted it. A per-invocation value would give each request its own compatibility
-    digest, which silently ends batch sharing and result reuse."""
+    digest, which silently ends batch sharing."""
     declaration = declaration or catalog()["environment"]
     return {key: value for key, value in environment.items()
             if key not in SCHEDULER_ENV and key not in NETWORK_ENV
@@ -90,8 +89,15 @@ def backstop_seconds(name):
 def catalog():
     value = json.loads(CATALOG.read_text())
     if set(value) != {"groups", "go", "tasks", "private", "selection", "resources", "environment", "ci",
-                      "capacity"}:
+                      "capacity", "fuzz", "provisions", "not_run"}:
         raise ValueError("invalid verification catalog")
+    for name, provision in value["provisions"].items():
+        targets, packages = provision.get("targets"), provision.get("packages", [])
+        if (set(provision) - {"targets", "packages"} or not isinstance(targets, dict) or not targets and not packages
+                or not all(isinstance(legs, list) and all(isinstance(leg, str) and leg for leg in legs)
+                           for legs in targets.values())
+                or not isinstance(packages, list) or not all(isinstance(p, str) and p.startswith("./") for p in packages)):
+            raise ValueError(f"provision {name} needs targets mapped to the arguments that need them, or packages")
     names = set()
     for section in ("groups", "go", "tasks"):
         if not isinstance(value[section], dict) or names.intersection(value[section]):
@@ -131,6 +137,15 @@ def catalog():
             or not all(isinstance(items, list) and all(isinstance(item, str) and item for item in items)
                        for items in environment.values())):
         raise ValueError("the verification environment declares names and prefixes")
+    if not valid_fuzz(value["fuzz"]):
+        raise ValueError("the fuzz section declares tags, smoke_seconds and seconds per ./package target")
+    not_run = value["not_run"]
+    if (not isinstance(not_run, dict) or set(not_run) != {"tags", "tests"}
+            or not all(isinstance(reason, str) and reason for reason in not_run["tags"].values())
+            or not all(isinstance(group, dict) and set(group) - {"go", "rust"} == {"reason"} and group["reason"]
+                       and all(isinstance(group.get(kind, []), list) for kind in ("go", "rust"))
+                       for group in not_run["tests"])):
+        raise ValueError("the not-run set declares build tags and test groups, each with its reason")
     for name, spec in value["resources"].items():
         # Catalog stages and invocations outside the catalog declare resources by Task name.
         if name in value["groups"] or name in value["go"]:
@@ -164,8 +179,21 @@ def unknown_flag(target, flag, allowed):
                      "No verification was queued")
 
 
+def valid_fuzz(fuzz):
+    """Exploration seconds are positive integers; packages are ./relative and targets go test names."""
+    def seconds(value):
+        return type(value) is int and value > 0
+    return (isinstance(fuzz, dict) and set(fuzz) == {"tags", "smoke_seconds", "targets"}
+            and isinstance(fuzz["tags"], list) and all(isinstance(tag, str) and tag for tag in fuzz["tags"])
+            and seconds(fuzz["smoke_seconds"]) and isinstance(fuzz["targets"], dict) and fuzz["targets"]
+            and all(isinstance(package, str) and package.startswith("./") and isinstance(targets, dict) and targets
+                    and all(FUZZ_TARGET.fullmatch(target) and seconds(time)
+                            for target, time in targets.items())
+                    for package, targets in fuzz["targets"].items()))
+
+
 def go_selection(arguments, target):
-    """Validate flags; `shareable` records whether the resulting package outcomes can be reused."""
+    """Validate flags; `shareable` records whether the package outcomes can serve other requests in a batch."""
     packages, flags = [], []
     shareable = True
     index = 0
@@ -236,6 +264,8 @@ def missing_go_paths(requested):
 VITEST_FLAGS = {"-t", "--testNamePattern"}
 PLAYWRIGHT_FLAGS = {"-g", "--grep", "--grep-invert", "--retries", "--timeout", "--global-timeout", "--repeat-each"}
 LINE_SUFFIX = re.compile(r"(:\d+){1,2}$")
+# go test runs a function as a fuzz target when its name is Fuzz or Fuzz then a non-lowercase rune.
+FUZZ_TARGET = re.compile(r"Fuzz(?![a-z])\w*")
 
 
 def selection_filters(arguments, allowed, target):
@@ -434,6 +464,24 @@ def compatibility(root, binary, environment):
                      "python": [sys.executable, sys.version], "environment": environment,
                      "planner": {p.relative_to(directory).as_posix(): hashlib.sha256(p.read_bytes()).hexdigest()
                                  for p in files}})
+
+
+def unscoped(stage):
+    """Whether a stage runs its whole catalog recipe, not a selection from it."""
+    return expand([stage["name"]]) == [stage]
+
+
+def flag_tags(options, flags):
+    """Build tags named by a Go recipe's options and flags."""
+    tags = set()
+    for index, option in enumerate(options):
+        if option == "--tags" and index + 1 < len(options):
+            tags.update(t for t in re.split(r"[\s,]+", options[index + 1]) if t)
+    for flag in flags:
+        name, _, value = flag.partition("=")
+        if name == "-tags":
+            tags.update(t for t in re.split(r"[\s,]+", value) if t)
+    return tags
 
 
 def stage_key(stage):

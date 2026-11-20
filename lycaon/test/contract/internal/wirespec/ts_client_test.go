@@ -25,7 +25,7 @@ export interface Second extends Shared { second(): void; }`,
 	for name, body := range files {
 		testutil.FailErr(t, "write client contract fixture", os.WriteFile(filepath.Join(root, name), []byte(body), 0o600))
 	}
-	methods, err := ParseTSClientMethods(filepath.Join(root, "client.ts"))
+	methods, err := ParseTSClientMethods(os.ReadFile, filepath.Join(root, "client.ts"))
 	testutil.FailErr(t, "parse composed client", err)
 	want := map[string]struct{}{"own": {}, "first": {}, "second": {}, "shared": {}}
 	if !reflect.DeepEqual(methods, want) {
@@ -42,7 +42,7 @@ func TestClientMethodsRejectMissingOrCyclicBases(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			path := filepath.Join(t.TempDir(), "client.ts")
 			testutil.FailErr(t, "write invalid client fixture", os.WriteFile(path, []byte(body), 0o600))
-			if methods, err := ParseTSClientMethods(path); err == nil {
+			if methods, err := ParseTSClientMethods(os.ReadFile, path); err == nil {
 				t.Fatalf("accepted invalid interface with methods %v", methods)
 			}
 		})

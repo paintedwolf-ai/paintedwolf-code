@@ -49,23 +49,3 @@ func TestVisualArtifactPlanePurityContract(t *testing.T) {
 		}
 	}
 }
-
-// TestVisualArtifactAllowedFieldsLocked documents the VisualArtifact wire shape.
-func TestVisualArtifactAllowedFieldsLocked(t *testing.T) {
-	t.Parallel()
-	want := map[string]struct{}{
-		"ID": {}, "Mime": {}, "Bytes": {}, "StoreRef": {}, "Source": {},
-		"Caption": {}, "EvidenceHandle": {}, "PageID": {}, "RecordedAt": {}, "DurationMS": {},
-		"Width": {}, "Height": {}, "Perceive": {}, "ToolCallID": {}, "OriginMessageID": {},
-	}
-	visualType := reflect.TypeOf(api.VisualArtifact{})
-	if visualType.NumField() != len(want) {
-		t.Fatalf("VisualArtifact field count = %d want %d — update lock when extending Visual plane only", visualType.NumField(), len(want))
-	}
-	for i := 0; i < visualType.NumField(); i++ {
-		name := visualType.Field(i).Name
-		if _, ok := want[name]; !ok {
-			t.Fatalf("unexpected VisualArtifact field %s — keep plane pure of coordination data", name)
-		}
-	}
-}

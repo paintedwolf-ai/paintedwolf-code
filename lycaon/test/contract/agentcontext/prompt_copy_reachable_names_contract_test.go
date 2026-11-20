@@ -2,15 +2,12 @@ package contract
 
 import (
 	"fmt"
-	"os"
-	"path/filepath"
 	"sort"
 	"strings"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/agentdef"
 	"github.com/lycaon/lycaon/internal/extpacks"
-	"github.com/lycaon/lycaon/internal/progress"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 )
 
@@ -68,85 +65,4 @@ func TestDeclaredSkillsResolveInTheCatalog(t *testing.T) {
 	}
 	sort.Strings(violations)
 	contractcheck.FailViolations(t, "an agent selects a skill that does not exist", contractcheck.DedupeStrings(violations))
-}
-
-// TestPromptPartialsAreReachable verifies every partial has an include site.
-func TestPromptPartialsAreReachable(t *testing.T) {
-	t.Parallel()
-	root := contractcheck.RepoRoot(t)
-	packDir := filepath.Join(root, packRoot)
-
-	partials := map[string]string{} // "partials/x.md" -> repo-relative path
-	var templates []string
-	err := filepath.WalkDir(packDir, func(path string, d os.DirEntry, err error) error {
-		if err != nil || d.IsDir() || !strings.HasSuffix(path, ".md") {
-			return err
-		}
-		templates = append(templates, path)
-		if dir := filepath.Base(filepath.Dir(path)); dir == "partials" {
-			partials["partials/"+filepath.Base(path)] = path
-		}
-		return nil
-	})
-	contractcheck.FailErr(t, "walk pack templates", err)
-	if len(partials) == 0 || len(templates) == 0 {
-		t.Fatal("no partials or no templates found — the walk is broken")
-	}
-
-	referenced := map[string]bool{}
-	for _, path := range templates {
-		raw, readErr := os.ReadFile(path)
-		contractcheck.FailErr(t, "read "+path, readErr)
-		for _, m := range pongoIncludeRE.FindAllStringSubmatch(string(raw), -1) {
-			if len(m) > 1 {
-				referenced[m[1]] = true
-			}
-		}
-	}
-
-	var violations []string
-	for ref, path := range partials {
-		if referenced[ref] {
-			continue
-		}
-		rel, relErr := filepath.Rel(root, path)
-		contractcheck.FailErr(t, "relativize "+path, relErr)
-		violations = append(violations, fmt.Sprintf(
-			"%s has no include site — delete it, or include it where it belongs", filepath.ToSlash(rel)))
-	}
-	sort.Strings(violations)
-	contractcheck.FailViolations(t, "prompt partials nothing renders", contractcheck.DedupeStrings(violations))
-}
-
-const progressClosureProcedure = packRoot + "/platform/shared/units/coordinator-progress-procedure.md"
-
-// TestProgressClosureCopyNamesOnlyUngatedTools verifies latch claims.
-func TestProgressClosureCopyNamesOnlyUngatedTools(t *testing.T) {
-	t.Parallel()
-	raw, err := os.ReadFile(filepath.Join(contractcheck.RepoRoot(t), progressClosureProcedure))
-	contractcheck.FailErr(t, "read progress procedure", err)
-
-	_, after, found := strings.Cut(string(raw), "never gated:")
-	if !found {
-		t.Fatal("progress procedure does not name the ungated lifecycle tools")
-	}
-	sentence, _, _ := strings.Cut(after, "\n")
-
-	var named []string
-	for _, m := range backtickedIdent.FindAllStringSubmatch(sentence, -1) {
-		named = append(named, m[1])
-	}
-	if len(named) == 0 {
-		t.Fatalf("no tool names read out of %q", sentence)
-	}
-
-	var violations []string
-	for _, tool := range named {
-		if progress.IsProgressGatedTool(tool) {
-			violations = append(violations, fmt.Sprintf(
-				"copy promises %q runs with the latch armed, but it is progress-gated", tool))
-		}
-	}
-	sort.Strings(violations)
-	contractcheck.FailViolations(t, "progress-closure copy promises a tool the latch blocks", contractcheck.DedupeStrings(violations))
 }

@@ -46,8 +46,10 @@ modelIndependentWebE2e("Walk publishes a delayed file selection and can reselect
   const { id: sessionId } = await sessionResponse.json() as { id: string };
   const walkResponse = await request.get(`${base}/walk`, { headers, params: { baseline: `pin:${pinId}`, limit: 500 } });
   expect(walkResponse.ok(), await walkResponse.text()).toBeTruthy();
-  const secondEffectId = ((await walkResponse.json()) as SourceWalkResponse).files
-    .find((file) => file.path === "b.ts")?.effects[0]?.id;
+  const walkFiles = ((await walkResponse.json()) as SourceWalkResponse).files;
+  const firstEffectId = walkFiles.find((file) => file.path === "a.ts")?.effects[0]?.id;
+  const secondEffectId = walkFiles.find((file) => file.path === "b.ts")?.effects[0]?.id;
+  expect(firstEffectId).toBeTruthy();
   expect(secondEffectId).toBeTruthy();
 
   // Walk warms neighboring comparisons as source views on entry, so the hold precedes it.
@@ -68,6 +70,13 @@ modelIndependentWebE2e("Walk publishes a delayed file selection and can reselect
   await page.route("**/source?*", async (route) => {
     if (route.request().method() === "GET") await sourcesReady;
     await route.continue();
+  });
+  // The first step's document is drawn from its comparison view.
+  const firstComparison = page.waitForResponse((response) => {
+    const sent = response.request();
+    if (sent.method() !== "POST" || !new URL(response.url()).pathname.endsWith("/source/views") || !response.ok()) return false;
+    const create = sent.postDataJSON() as SourceViewCreate;
+    return create.kind === "comparison" && create.source.kind === "effect" && create.source.effect_id === firstEffectId;
   });
   try {
     await page.evaluate(async ({ projectId, rootId, sessionId, pinId }) => {
@@ -105,6 +114,7 @@ modelIndependentWebE2e("Walk publishes a delayed file selection and can reselect
     })).toBeLessThan(0.5);
     const selected = page.locator('[data-testid="files-tab"][aria-selected="true"]');
     await expect(selected).toHaveAttribute("data-path", "a.ts");
+    await firstComparison;
     await expect(page.getByTestId("file-version-document").filter({ visible: true })).toContainText('"a.ts"');
 
     const selectSecond = async () => page.evaluate(async (projectId) => {

@@ -40,4 +40,10 @@ func TestNavigationPatchPreservesMessageAndRejectsStaleResults(t *testing.T) {
 	if !errors.Is(err, ErrNavigationContentChanged) {
 		t.Fatalf("content guard: %v", err)
 	}
+	// Navigation alone stores no source context, and the row reads back with none.
+	read, err := s.GetMessage(t.Context(), sess.ID, "m")
+	testutil.FailErr(t, "read patched message", err)
+	if read.SourceContext != nil {
+		t.Fatalf("navigation-only row reads a source context: %+v", read.SourceContext)
+	}
 }

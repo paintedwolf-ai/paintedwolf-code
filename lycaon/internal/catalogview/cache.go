@@ -58,6 +58,19 @@ func (c *Cache) AttemptCount() int {
 	return c.attempts
 }
 
+// Clear drops every cached view, so a closed host keeps none; a build in
+// flight still answers the callers that wait on it.
+func (c *Cache) Clear() {
+	if c == nil {
+		return
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.entries = map[string]*cacheEntry{}
+	c.order = nil
+	c.failLog = map[string]struct{}{}
+}
+
 // Len returns how many views are currently cached.
 func (c *Cache) Len() int {
 	c.mu.Lock()

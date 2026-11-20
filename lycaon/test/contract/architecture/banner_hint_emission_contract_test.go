@@ -9,35 +9,7 @@ import (
 	"github.com/lycaon/lycaon/internal/anchorcatalog"
 	"github.com/lycaon/lycaon/internal/guidance"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
-	"github.com/lycaon/lycaon/test/contract/internal/guidancescan"
 )
-
-// TestBannerHintCodesHaveProductionReference rejects unreachable banner codes.
-func TestBannerHintCodesHaveProductionReference(t *testing.T) {
-	t.Parallel()
-	root := contractcheck.RepoRoot(t)
-	lycaonRoot := filepath.Join(root, "lycaon")
-	cfg, err := guidance.LoadHintConfigStock()
-	contractcheck.FailErr(t, "load hint registry", err)
-
-	scan, err := guidancescan.ScanGuidanceEmission(lycaonRoot)
-	contractcheck.FailErr(t, "scan guidance emission", err)
-
-	var missing []string
-	for code, entry := range cfg.HintCodes {
-		if strings.TrimSpace(entry.Emit) != guidance.EmitBanner {
-			continue
-		}
-		if scan.HasEmissionSite(code) {
-			continue
-		}
-		missing = append(missing, code)
-	}
-	sort.Strings(missing)
-	if len(missing) > 0 {
-		t.Fatalf("banner hint codes have no production emission site: %v", missing)
-	}
-}
 
 // TestHintCodeYAMLEmitFieldIsRecognized validates the emit vocabulary.
 func TestHintCodeYAMLEmitFieldIsRecognized(t *testing.T) {

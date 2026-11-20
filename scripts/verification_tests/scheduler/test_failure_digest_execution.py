@@ -1,3 +1,4 @@
+import io
 import json
 import os
 from pathlib import Path
@@ -174,13 +175,18 @@ class DigestBounds(unittest.TestCase):
         preview = digest.PreviewFilter()
         self.assertEqual(preview.feed(b"progress"), b"progress")
 
-    def test_delivery_failure_does_not_replace_the_result(self):
+    def test_delivery_writes_the_block_and_survives_a_closed_reader(self):
+        class Open:
+            buffer = io.BytesIO()
+        digest.deliver("block \u2713", Open)
+        self.assertEqual(Open.buffer.getvalue(), "block \u2713".encode())
+
         class Closed:
             class buffer:
                 @staticmethod
                 def write(_):
                     raise BrokenPipeError()
-        digest.deliver("block", Closed)
+        self.assertIsNone(digest.deliver("block", Closed))
 
 
 class DigestDelivery(support.BatchFixture):

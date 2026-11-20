@@ -146,6 +146,7 @@ providers:
   - id: mwmbl
     kind: keyless
     label: Mwmbl
+    hint: Mwmbl fixture
     default_endpoint: https://mwmbl.org
     test_query: test
     pacing:

@@ -3,12 +3,14 @@ package execution
 import (
 	"context"
 	"database/sql"
+	"github.com/lycaon/lycaon/internal/scan/findings/findingstest"
+	"github.com/lycaon/lycaon/internal/scan/scantest"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/events"
 	scanbase "github.com/lycaon/lycaon/internal/scan"
 	scancfg "github.com/lycaon/lycaon/internal/scan/configuration"
-	scanfindings "github.com/lycaon/lycaon/internal/scan/findings"
+
 	scanoutput "github.com/lycaon/lycaon/internal/scan/output"
 	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -25,10 +27,10 @@ func (o *completionOutbox) Notify() { o.committed() }
 
 func TestRunnerCompletionSurvivesLeaseRetirementAfterCommit(t *testing.T) {
 	store := scanbase.NewSQLStore(testdbfixture.Open(t, "scan.db"))
-	finding := scanfindings.FixtureFinding("new-rule", api.FindingLevelHigh, "new finding", "main.go", 1)
-	scanner := &scanbase.MockScanner{Result: &scanoutput.Result{FindingsCount: 1, Findings: []api.SecurityFinding{finding}}}
+	finding := findingstest.Finding("new-rule", api.FindingLevelHigh, "new finding", "main.go", 1)
+	scanner := &scantest.MockScanner{Result: &scanoutput.Result{FindingsCount: 1, Findings: []api.SecurityFinding{finding}}}
 	ingester := &scanbase.IngesterImpl{Module: scancfg.DefaultModuleConfig()}
-	runner := NewRunner(store, &scanbase.MockRegistry{Scanner: scanner}, ingester, scancfg.DefaultRunnerConfig(), nil)
+	runner := NewRunner(store, &scantest.MockRegistry{Scanner: scanner}, ingester, scancfg.DefaultRunnerConfig(), nil)
 	runner.Snapshots = testSnapshots(t, store)
 	root := t.TempDir()
 	writeScanSource(t, root, "main.go", "package main\n")

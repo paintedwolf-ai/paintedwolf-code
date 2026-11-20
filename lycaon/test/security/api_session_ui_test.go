@@ -28,7 +28,7 @@ func TestGetSessionPendingWorkflowStartOpenAPI(t *testing.T) {
 		t.Fatalf("NoteWorkflowStartProposal: %v", err)
 	}
 
-	req := authedRequest(t, http.MethodGet, "/v1/sessions/"+sess.ID, nil)
+	req := AuthedRequest(t, http.MethodGet, "/v1/sessions/"+sess.ID, nil)
 	w := httptest.NewRecorder()
 	srv.ServeHTTP(w, req)
 	if w.Code != http.StatusOK {
@@ -55,7 +55,7 @@ func TestGetActiveWorkflowRunHumanApprovalAwaitingOpenAPI(t *testing.T) {
 	sess := createSessionHTTP(t, srv, t.TempDir())
 
 	startBody := planStartBody
-	req := authedRequest(t, http.MethodPost, "/v1/sessions/"+sess.ID+"/workflow-runs", strings.NewReader(startBody))
+	req := AuthedRequest(t, http.MethodPost, "/v1/sessions/"+sess.ID+"/workflow-runs", strings.NewReader(startBody))
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
 	srv.ServeHTTP(w, req)
@@ -66,7 +66,7 @@ func TestGetActiveWorkflowRunHumanApprovalAwaitingOpenAPI(t *testing.T) {
 	if err := json.Unmarshal(w.Body.Bytes(), &run); err != nil {
 		t.Fatalf("decode workflow run: %v", err)
 	}
-	seedPlanStub(t, blueprintMgr, run.ProjectID, run.BlueprintPath)
+	SeedPlanStub(t, blueprintMgr, run.ProjectID, run.BlueprintPath)
 	run = advancePlanToExpandHTTP(t, h, run)
 	run = advancePlanRunHTTP(t, srv, run.ID)
 	if run.CurrentPhase == "review" {
@@ -76,7 +76,7 @@ func TestGetActiveWorkflowRunHumanApprovalAwaitingOpenAPI(t *testing.T) {
 		t.Fatalf("phase = %q want approve before UI assertion", run.CurrentPhase)
 	}
 
-	req = authedRequest(t, http.MethodGet, "/v1/sessions/"+sess.ID+"/workflow-runs/active", nil)
+	req = AuthedRequest(t, http.MethodGet, "/v1/sessions/"+sess.ID+"/workflow-runs/active", nil)
 	w = httptest.NewRecorder()
 	srv.ServeHTTP(w, req)
 	if w.Code != http.StatusOK {

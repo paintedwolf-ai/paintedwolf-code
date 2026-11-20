@@ -2,6 +2,7 @@ package ignores
 
 import (
 	"errors"
+	"github.com/lycaon/lycaon/internal/scan/findings/findingstest"
 	"os"
 	"path/filepath"
 	"strings"
@@ -9,7 +10,7 @@ import (
 	"time"
 
 	"github.com/lycaon/lycaon/internal/projectignore"
-	scanfindings "github.com/lycaon/lycaon/internal/scan/findings"
+
 	scanfixture "github.com/lycaon/lycaon/internal/scan/testfixture"
 	"github.com/lycaon/lycaon/internal/settingsoverlay"
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -17,7 +18,7 @@ import (
 )
 
 func ignoreFinding(rule, path string) api.SecurityFinding {
-	finding := scanfindings.FixtureFinding(rule, api.FindingLevelHigh, rule+" message", path, 3)
+	finding := findingstest.Finding(rule, api.FindingLevelHigh, rule+" message", path, 3)
 	finding.Tool.DriverID = "opengrep-sast"
 	return finding
 }

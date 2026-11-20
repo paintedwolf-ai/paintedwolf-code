@@ -15,6 +15,7 @@ import (
 type Store interface {
 	PatchMessageNavigation(context.Context, string, string, string, []api.NavigationReference, []api.NavigationReference) (api.Message, error)
 	ListPendingModelOutputProjections(context.Context) ([]store.PendingModelOutputProjection, error)
+	ListUnsettledLiveDrafts(context.Context, string) ([]string, error)
 	MarkModelOutputProjected(context.Context, string) error
 	people.OwnerSource
 	stream.ProjectionStore

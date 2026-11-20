@@ -171,7 +171,7 @@ func clickAction(page *rod.Page, drive *pageDrive, act CaptureAction) (json.RawM
 	if count > maxClickCount {
 		return nil, fmt.Errorf("click count %d exceeds %d", count, maxClickCount)
 	}
-	aimed, report, err := aim(page, act.ActionLocator, "receive", act.TimeoutMS)
+	aimed, report, err := aim(page, act.ActionLocator, "receive", targetTimeoutMS)
 	if err != nil || !aimed.OK {
 		return report, err
 	}
@@ -199,7 +199,7 @@ func clickAction(page *rod.Page, drive *pageDrive, act CaptureAction) (json.RawM
 }
 
 func hoverAction(page *rod.Page, drive *pageDrive, act CaptureAction) (json.RawMessage, error) {
-	aimed, report, err := aim(page, act.ActionLocator, "receive", act.TimeoutMS)
+	aimed, report, err := aim(page, act.ActionLocator, "receive", targetTimeoutMS)
 	if err != nil || !aimed.OK {
 		return report, err
 	}
@@ -216,7 +216,7 @@ func dragAction(page *rod.Page, drive *pageDrive, act CaptureAction) (json.RawMe
 	if (act.To == nil || act.To.empty()) == (act.By == nil) {
 		return nil, fmt.Errorf("drag requires exactly one of to or by")
 	}
-	from, report, err := aim(page, act.ActionLocator, "receive", act.TimeoutMS)
+	from, report, err := aim(page, act.ActionLocator, "receive", targetTimeoutMS)
 	if err != nil || !from.OK {
 		return report, err
 	}
@@ -240,7 +240,7 @@ func dragAction(page *rod.Page, drive *pageDrive, act CaptureAction) (json.RawMe
 		dest = proto.Point{X: from.Point.X + act.By.X, Y: from.Point.Y + act.By.Y}
 	} else {
 		// The dragged element may cover its drop target, so the target only needs to be visible.
-		to, toReport, toErr := aim(page, *act.To, "visible", act.TimeoutMS)
+		to, toReport, toErr := aim(page, *act.To, "visible", targetTimeoutMS)
 		if toErr != nil || !to.OK {
 			_ = release(drive.position())
 			return toReport, toErr
@@ -274,7 +274,7 @@ func scrollAction(page *rod.Page, drive *pageDrive, act CaptureAction) (json.Raw
 		var report json.RawMessage
 		var err error
 		// A wheel scrolls whatever sits under the pointer, so the target needs only to be visible.
-		aimed, report, err = aim(page, act.ActionLocator, "visible", act.TimeoutMS)
+		aimed, report, err = aim(page, act.ActionLocator, "visible", targetTimeoutMS)
 		if err != nil || !aimed.OK {
 			return report, err
 		}

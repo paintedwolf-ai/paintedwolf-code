@@ -101,9 +101,7 @@ func TestProfileDeniesMountingAndUnmounting(t *testing.T) {
 // A view's boundary is a live host fact: it stays out of the reviewed digest.
 func TestViewBoundaryRequestReachesTheConfinement(t *testing.T) {
 	confine.TestingSetAutoConfine(t)
-	if !confine.Available() {
-		t.Skip("confinement unavailable on this host")
-	}
+	testutil.RequireConfinement(t, confine.Available())
 	root := t.TempDir()
 	box, ok := confine.DefaultConfinement(confine.Request{
 		Roots: []string{root}, Egress: confine.EgressDeny,

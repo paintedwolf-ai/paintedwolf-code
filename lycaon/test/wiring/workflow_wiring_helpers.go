@@ -8,6 +8,8 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/lycaon/lycaon/config"
+	"github.com/lycaon/lycaon/internal/coordinator/anchor"
+	"github.com/lycaon/lycaon/internal/coordinator/surface"
 	"github.com/lycaon/lycaon/internal/evidence"
 	"github.com/lycaon/lycaon/internal/extpacks"
 	"github.com/lycaon/lycaon/internal/orchestration"
@@ -35,7 +37,7 @@ func waitTopologyStageComplete(t *testing.T, mgr *workflow.RunManager, runID, st
 	})
 }
 
-func waitWorkflowPhase(t *testing.T, ctx context.Context, mgr *workflow.RunManager, runID, phase string) {
+func WaitWorkflowPhase(t *testing.T, ctx context.Context, mgr *workflow.RunManager, runID, phase string) {
 	t.Helper()
 	got := ""
 	testutil.WaitFor(t, "the workflow reaches the phase", func() bool {
@@ -204,7 +206,7 @@ func satisfyFanoutPlannedAndAdvance(t *testing.T, h *Harness, ctx context.Contex
 	}
 }
 
-func settleScanObligationAndAdvance(t *testing.T, h *Harness, ctx context.Context, runID, wantPhase string) {
+func SettleScanObligationAndAdvance(t *testing.T, h *Harness, ctx context.Context, runID, wantPhase string) {
 	t.Helper()
 	run, err := h.Workflows.Manager.Store.Runs.Get(ctx, runID)
 	testutil.FailErr(t, "get run", err)
@@ -358,4 +360,47 @@ func coverageReviewFixture(facts reviewcoverage.Facts) *api.CoverageReview {
 	}
 
 	return &review
+}
+
+func RoutingTurnHistory(history []api.Message, prompt string) []api.Message {
+	out := append([]api.Message(nil), history...)
+	msg := api.Message{
+		Role:       api.MessageRoleUser,
+		Origin:     api.MessageOriginUser,
+		Visibility: api.MessageVisibilityTranscript,
+		Content:    prompt,
+	}
+	if prompt == surface.HostLoopWakeSentinel {
+		msg.Origin = api.MessageOriginHost
+		msg.Visibility = api.MessageVisibilityInternal
+		msg.Kind = api.MessageKindHostLoopWake
+	}
+	return append(out, msg)
+}
+
+func RunSource(run *api.WorkflowRun) anchor.RunSource {
+	if run == nil {
+		return nil
+	}
+	return testRunSource{
+		workflowID:      run.WorkflowID,
+		workflowVersion: run.WorkflowVersion,
+	}
+}
+
+type testRunSource struct {
+	workflowID      string
+	workflowVersion string
+}
+
+func (s testRunSource) WorkflowIdentity() (string, string) {
+	return s.workflowID, s.workflowVersion
+}
+
+func CompleteCoverageReview(facts reviewcoverage.Facts, citation api.CitationGroundingCitedEvidence) *api.CoverageReview {
+	review := &api.CoverageReview{Revision: facts.Revision}
+	for _, fact := range facts.Obligations {
+		review.Assessments = append(review.Assessments, api.CoverageAssessment{ID: fact.ID, Disposition: reviewcoverage.Satisfied, Reason: "Required source scope and recorded outcomes were independently reviewed.", CitedEvidence: []api.CitationGroundingCitedEvidence{citation}})
+	}
+	return review
 }

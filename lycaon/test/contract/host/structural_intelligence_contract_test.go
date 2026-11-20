@@ -1,88 +1,43 @@
 package contract
 
 import (
-	"path/filepath"
+	"errors"
+	"slices"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/guidance"
-	"github.com/lycaon/lycaon/internal/toolschema"
+	"github.com/lycaon/lycaon/internal/toolrejection"
+	"github.com/lycaon/lycaon/internal/tools/native/sourceview"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 )
 
-// TestStructuralIntelligenceStructuralHintsPointAtStructuralTools verifies the
-// shared STRUCTURAL_* hints route through the structural guard and cover both
-// surfaces: grep (structural search) and code_rewrite (codemod).
+// The structural rejects grep and code_rewrite return resolve to shipped copy
+// selectable for both tools, so neither surfaces a bare code.
 func TestStructuralIntelligenceStructuralHintsPointAtStructuralTools(t *testing.T) {
 	t.Parallel()
 	cfg, err := guidance.LoadHintConfigStock()
 	contractcheck.FailErr(t, "load hint registry", err)
-	for _, code := range []string{"STRUCTURAL_PATTERN_INVALID", "STRUCTURAL_LANG_UNKNOWN"} {
-		entry, ok := cfg.HintCodes[code]
+	for _, rejectErr := range []error{
+		sourceview.PatternInvalid("a.go", errors.New("bad pattern")),
+		sourceview.LanguageUnknown("a.go", "not-a-grammar"),
+	} {
+		var reject *toolrejection.ToolReject
+		if !errors.As(rejectErr, &reject) || reject.Code == "" {
+			t.Fatalf("structural reject = %T %v, want a coded tool reject", rejectErr, rejectErr)
+		}
+		entry, ok := cfg.HintCodes[reject.Code]
 		if !ok {
-			t.Fatalf("missing shipped hint %q", code)
+			t.Fatalf("reject %q has no shipped hint", reject.Code)
 		}
-		if entry.Emit != "guard:structural" {
-			t.Fatalf("hint %q emit=%q want guard:structural", code, entry.Emit)
+		view := guidance.NormalizeRejectCodeView(reject.Code, entry)
+		if view.What == view.ID || (view.Fix == "" && view.Instead == "") {
+			t.Fatalf("reject %q renders bare copy: %+v", reject.Code, view)
 		}
-		want := map[string]bool{"grep": true, "code_rewrite": true}
-		selected := append(append([]string(nil), entry.Tools...), entry.Operations()...)
-		if len(selected) != len(want) {
-			t.Fatalf("hint %q tools=%v want %v", code, selected, want)
-		}
-		for _, tool := range selected {
-			if !want[tool] {
-				t.Fatalf("hint %q lists unexpected tool %q (want grep + code_rewrite)", code, tool)
+		selectable := append(append([]string(nil), entry.Tools...), entry.Operations()...)
+		for _, tool := range []string{"grep", "code_rewrite"} {
+			if !slices.Contains(selectable, tool) {
+				t.Errorf("reject %q copy is not selectable for %s (selects %v)", reject.Code, tool, selectable)
 			}
-		}
-	}
-}
-
-func TestStructuralIntelligenceSchemaExtensions(t *testing.T) {
-	t.Parallel()
-	root := contractcheck.RepoRoot(t)
-	schemas, err := toolschema.LoadSchemaDirWithOperations(filepath.Join(root, "lycaon", "config", "packs", "painted-wolf", "platform", "tools", "schemas"))
-	contractcheck.FailErr(t, "LoadSchemaDir", err)
-
-	codeRewrite, ok := schemas.Tools["code_rewrite"]
-	if !ok {
-		t.Fatal("tools/schemas missing code_rewrite")
-	}
-	crProps, _ := codeRewrite.Schema["properties"].(map[string]any)
-	for _, key := range []string{"path", "pattern", "paths", "recursive", "rewrite", "lang", "dry_run"} {
-		if _, ok := crProps[key]; !ok {
-			t.Fatalf("code_rewrite schema missing property %q", key)
-		}
-	}
-
-	grep, ok := schemas.Tools["grep"]
-	if !ok {
-		t.Fatal("tools/schemas missing grep")
-	}
-	grepProps, _ := grep.Schema["properties"].(map[string]any)
-	for _, key := range []string{"structural", "lang"} {
-		if _, ok := grepProps[key]; !ok {
-			t.Fatalf("grep schema missing structural property %q", key)
-		}
-	}
-
-	readEntry := schemas.Tools["read"]
-	readProps, _ := readEntry.Schema["properties"].(map[string]any)
-	for _, key := range []string{"symbol", "kind"} {
-		if _, ok := readProps[key]; !ok {
-			t.Fatalf("read schema missing property %q", key)
-		}
-	}
-
-	editEntry := schemas.Tools["edit"]
-	editProps, _ := editEntry.Schema["properties"].(map[string]any)
-	for _, key := range []string{"path", "old_string", "new_string"} {
-		if _, ok := editProps[key]; !ok {
-			t.Fatalf("edit schema missing property %q", key)
-		}
-	}
-	for _, key := range []string{"symbol", "kind", "insert_before", "insert_after"} {
-		if _, ok := editProps[key]; ok {
-			t.Fatalf("edit schema must not publish %q", key)
 		}
 	}
 }

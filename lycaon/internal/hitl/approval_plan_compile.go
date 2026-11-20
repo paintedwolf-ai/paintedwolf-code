@@ -10,6 +10,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/confine"
 	"github.com/lycaon/lycaon/internal/observability"
+	"github.com/lycaon/lycaon/internal/secretmatch"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -464,7 +465,7 @@ func secretEvidenceLabel(secret *SecretScreen) string {
 		return rule
 	}
 	provenance := "the value of " + name + " from " + container
-	if rule == "" || strings.HasPrefix(rule, "A value from ") {
+	if rule == "" || secret.RuleID == secretmatch.HarvestRuleID {
 		return provenance
 	}
 	return rule + " · " + provenance

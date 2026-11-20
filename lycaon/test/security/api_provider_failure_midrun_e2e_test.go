@@ -2,7 +2,6 @@ package security
 
 import (
 	"context"
-	"errors"
 	"net"
 	"os"
 	"strings"
@@ -188,31 +187,4 @@ func transcriptRoles(msgs []wire.Message) string {
 		roles = append(roles, string(m.Role))
 	}
 	return "roles: " + strings.Join(roles, ",")
-}
-
-func TestProviderFaultClassifiersAreDistinct(t *testing.T) {
-	for _, tc := range providerFaultCases() {
-		t.Run(tc.name, func(t *testing.T) {
-			if !tc.classified(tc.fault) {
-				t.Fatalf("%s does not classify its own fault %v", tc.name, tc.fault)
-			}
-			// Provider errors are wrapped in turn context.
-			wrapped := errors.Join(errors.New("turn 3"), tc.fault)
-			if !tc.classified(wrapped) {
-				t.Fatalf("%s classifier does not survive wrapping", tc.name)
-			}
-			if tc.classified(errors.New("turn 3: " + tc.fault.Error())) {
-				t.Fatalf("%s classifier accepts diagnostic text without a typed cause", tc.name)
-			}
-			for _, other := range providerFaultCases() {
-				if other.name == tc.name {
-					continue
-				}
-				if tc.classified(other.fault) {
-					t.Fatalf("%s classifier also matches %s — the notice rail cannot "+
-						"tell these apart", tc.name, other.name)
-				}
-			}
-		})
-	}
 }

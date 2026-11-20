@@ -375,6 +375,11 @@ func (e *Capabilities) awaitDirectIPCapability(
 	}
 	switch {
 	case hitl.CheckpointAuthorizes(final):
+		// An approval with no card (a live quiet) chose no option, so nothing
+		// installed the once-permit the answer grants.
+		if final.CheckpointID == "" && e.directIPRuntime != nil {
+			e.directIPRuntime.IssuePermit(tc.PermitIdentity(), actionDigest, requestDigest, lease.ConfinementDigest)
+		}
 		approveCapabilitySecretPermission(ctx, tc, permission)
 		e.emitDirectIPLifecycle(tools.DirectIPLifecycleEvent{
 			Phase:                tools.DirectIPLifecycleApproved,

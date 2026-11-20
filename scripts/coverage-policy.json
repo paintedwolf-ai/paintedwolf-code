@@ -35,6 +35,11 @@
         "pattern": "test_[!rc]*.py",
         "requirements": "scripts/generation/requirements-test.txt"
       },
+      "generation conversion": {
+        "start": "scripts/generation",
+        "pattern": "test_[rc]*.py",
+        "requirements": "scripts/generation/requirements-conversion-test.txt"
+      },
       "harness": {
         "start": "scripts/harness",
         "pattern": "test_*.py"

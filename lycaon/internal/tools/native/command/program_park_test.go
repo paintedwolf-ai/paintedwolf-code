@@ -13,6 +13,7 @@ import (
 	"github.com/lycaon/lycaon/internal/commandprogram"
 	"github.com/lycaon/lycaon/internal/programtest"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/tools/native/command"
@@ -138,41 +139,6 @@ func (f *parkFixture) settledProgram(t *testing.T, parked *recordedPark) command
 	return decodeOutcome(t, settled.result)
 }
 
-// The bound a single wait must end within: the call's timeout_ms, or the
-// catalog's program lifetime when the call names none.
-func TestProgramParkRefusesAWaitPastTheCallBound(t *testing.T) {
-	for _, tc := range []struct {
-		name     string
-		args     map[string]any
-		wait     time.Duration
-		limit    string
-		maximum  int64
-		observed int64
-	}{
-		{name: "call timeout", args: map[string]any{"command": "sleep 120", "timeout_ms": 60000}, wait: 120 * time.Second, limit: "timeout_ms", maximum: 60000, observed: 120000},
-		{name: "default envelope", args: map[string]any{"command": "sleep 7200"}, wait: 7200 * time.Second, limit: "program_lifetime_ms", maximum: 3600000, observed: 7200000},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			f := newParkFixture(t, programtest.NewWaitingProgram(programtest.NewManualClock(), programtest.SleepState(tc.wait)))
-			content, err := f.CallArgs(t, t.Context(), tc.args)
-			testutil.FailErr(t, "run refused wait", err)
-			outcome := decodeOutcome(t, content)
-			if outcome.Refusal == nil || outcome.Refusal.Code != "COMMAND_LIMIT_EXCEEDED" || outcome.Stdout != "start\n" {
-				t.Fatalf("refused wait outcome %s", content)
-			}
-			details := outcome.Refusal.Details
-			maximum, _ := details["maximum"].(float64)
-			observed, _ := details["observed"].(float64)
-			if details["limit_id"] != tc.limit || details["resource_unit"] != "milliseconds" || int64(maximum) != tc.maximum || int64(observed) != tc.observed {
-				t.Fatalf("refusal details %v", details)
-			}
-			if f.parking.count() != 0 {
-				t.Fatal("a refused wait parked")
-			}
-		})
-	}
-}
-
 func TestProgramParkKeepsAShortWaitInline(t *testing.T) {
 	program := programtest.NewWaitingProgram(programtest.NewManualClock(), func(now time.Time) commandprogram.WaitState {
 		return commandprogram.WaitState{Statement: "sleep 0.2", Until: now.Add(200 * time.Millisecond)}
@@ -200,7 +166,7 @@ func TestProgramParkKeepsThresholdWaitInlineAfterStartupOverhead(t *testing.T) {
 		clock.Advance(25 * time.Millisecond)
 		return commandprogram.WaitState{
 			Statement: "timeout 10 cmd",
-			Until:     clock.Now().Add(command.DefaultParkThreshold),
+			Until:     clock.Now().Add(toolcontract.ProgramParkThreshold),
 		}
 	})
 	f := newParkFixture(t, program)
@@ -241,7 +207,7 @@ func TestProgramParkSettlesWithTheCompleteResult(t *testing.T) {
 	if parked.State != "parked" || parked.Reason != "sleep 120" || parked.LeaseID != recorded.LeaseID() || parked.WakeAt != clock.Now().Add(120*time.Second).Format(time.RFC3339) {
 		t.Fatalf("parked result %s", result.content)
 	}
-	if recorded.park.Reason != "sleep 120" || recorded.park.ProgramID != parked.ProgramID || recorded.park.Deadline.IsZero() {
+	if recorded.park.Reason != "sleep 120" || recorded.park.ProgramID != parked.ProgramID {
 		t.Fatalf("park request %+v", recorded.park)
 	}
 	if programs := f.Programs(t); len(programs) != 1 || programs[0] != "running" {
@@ -278,7 +244,7 @@ func TestProgramParkParksAJobWaitWhenTheInlineBudgetEnds(t *testing.T) {
 	f := newParkFixture(t, program)
 	done := f.start(t, map[string]any{"command": "long_job & wait %1"})
 	<-program.Blocked
-	clock.Advance(command.DefaultParkThreshold - time.Second)
+	clock.Advance(toolcontract.ProgramParkThreshold - time.Second)
 	if f.parking.count() != 0 || clock.Pending() != 2 {
 		t.Fatalf("job wait parked early: %d parks, %d timers", f.parking.count(), clock.Pending())
 	}

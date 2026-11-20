@@ -35,6 +35,27 @@ func TestOpenGrepUsesPackagedSidecarAuthority(t *testing.T) {
 	}
 }
 
+func TestOpenGrepAcceptsABundleNamedByARelativePath(t *testing.T) {
+	app, err := filepath.EvalSymlinks(buildFakeApp(t, defaultAppOptions()))
+	testutil.FailErr(t, "resolve fixture bundle", err)
+	runner := signedOK()
+	// The packaged sidecar always answers with an absolute path.
+	runner.stdout[filepath.Join(app, sidecarRelPath)] = []byte(filepath.Join(app, fakeOpenGrepRelPath) + "\n")
+	t.Chdir(filepath.Dir(app))
+	report := runVerifyOptions(t, Options{AppPath: filepath.Base(app), RequireSigned: true, Runner: runner})
+	requireNoCode(t, report, CodeOpenGrepInvalid)
+}
+
+func TestARelativeBundlePathNeedsAWorkingDirectory(t *testing.T) {
+	gone := filepath.Join(t.TempDir(), "removed")
+	testutil.FailErr(t, "create working directory", os.Mkdir(gone, 0o700))
+	t.Chdir(gone)
+	testutil.FailErr(t, "remove working directory", os.Remove(gone))
+	if _, err := Verify(context.Background(), Options{AppPath: "Painted Wolf Code.app"}); err == nil {
+		t.Fatal("a relative bundle path without a working directory was accepted")
+	}
+}
+
 func TestOpenGrepRequiresBundledSourcePayload(t *testing.T) {
 	for _, name := range []string{"opengrep", "opengrep-source.tar.gz", "source-lock.json", "provenance.json", "LICENSE"} {
 		t.Run(name, func(t *testing.T) {

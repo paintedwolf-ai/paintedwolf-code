@@ -33,6 +33,7 @@ async function openKeyboardSettings(page: Page) {
     timeout: 10_000,
   });
   await activateByKeyboard(page, "shortcut-help-open-settings");
+  await expect(page.getByTestId("shortcut-help-overlay")).toBeHidden();
   await expect(page.getByTestId("keyboard-settings-panel")).toBeVisible({
     timeout: 15_000,
   });
@@ -176,6 +177,7 @@ webE2e("den:harness — leader key row in Keyboard Settings", async ({ page }) =
     timeout: 10_000,
   });
   await activateByKeyboard(page, "shortcut-help-open-settings");
+  await expect(page.getByTestId("shortcut-help-overlay")).toBeHidden();
   await expect(page.getByTestId("keyboard-settings-panel")).toBeVisible({
     timeout: 15_000,
   });

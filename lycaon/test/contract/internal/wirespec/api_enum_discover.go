@@ -1,6 +1,7 @@
 package wirespec
 
 import (
+	"fmt"
 	"go/ast"
 	"go/parser"
 	"go/token"
@@ -10,28 +11,19 @@ import (
 	"strings"
 )
 
+// DiscoverAPIStringEnums parses lycaon/pkg/api in a checkout and returns its
+// string enums.
 func DiscoverAPIStringEnums(repoRoot string) (map[string][]string, error) {
-	apiDir := filepath.Join(repoRoot, "lycaon", "pkg", "api")
-	entries, err := os.ReadDir(apiDir)
+	files, err := parseAPIPackage(repoRoot)
 	if err != nil {
 		return nil, err
 	}
+	return APIStringEnums(files), nil
+}
 
-	fset := token.NewFileSet()
-	var files []*ast.File
-	for _, ent := range entries {
-		name := ent.Name()
-		if !strings.HasSuffix(name, ".go") || strings.HasSuffix(name, "_test.go") {
-			continue
-		}
-		path := filepath.Join(apiDir, name)
-		f, err := parser.ParseFile(fset, path, nil, 0)
-		if err != nil {
-			return nil, err
-		}
-		files = append(files, f)
-	}
-
+// APIStringEnums returns the values of each string-typed constant set
+// declared in the pkg/api files.
+func APIStringEnums(files []*ast.File) map[string][]string {
 	stringTypes := make(map[string]bool)
 	for _, f := range files {
 		for _, decl := range f.Decls {
@@ -93,7 +85,7 @@ func DiscoverAPIStringEnums(repoRoot string) (map[string][]string, error) {
 	for k := range values {
 		sort.Strings(values[k])
 	}
-	return values, nil
+	return values
 }
 
 func constEnumType(vs *ast.ValueSpec) string {
@@ -120,4 +112,30 @@ func GoEnumValues[T ~string](values ...T) []string {
 		out[i] = string(v)
 	}
 	return out
+}
+
+// parseAPIPackage parses the production files of lycaon/pkg/api.
+func parseAPIPackage(repoRoot string) ([]*ast.File, error) {
+	apiDir := filepath.Join(repoRoot, "lycaon", "pkg", "api")
+	entries, err := os.ReadDir(apiDir)
+	if err != nil {
+		return nil, err
+	}
+	fset := token.NewFileSet()
+	var files []*ast.File
+	for _, ent := range entries {
+		name := ent.Name()
+		if !strings.HasSuffix(name, ".go") || strings.HasSuffix(name, "_test.go") {
+			continue
+		}
+		f, err := parser.ParseFile(fset, filepath.Join(apiDir, name), nil, 0)
+		if err != nil {
+			return nil, err
+		}
+		files = append(files, f)
+	}
+	if len(files) == 0 {
+		return nil, fmt.Errorf("no Go files in %s", apiDir)
+	}
+	return files, nil
 }

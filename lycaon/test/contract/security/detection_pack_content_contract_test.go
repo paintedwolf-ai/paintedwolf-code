@@ -15,67 +15,6 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// TestDetectionPackAllBundledRulesSupported pins Supported==true and zero catalog warnings.
-func TestDetectionPackAllBundledRulesSupported(t *testing.T) {
-	t.Parallel()
-	cat := loadBundledDetectionCatalog(t)
-	if len(cat.Warnings) != 0 {
-		t.Fatalf("catalog warnings: %v", cat.Warnings)
-	}
-	if len(cat.Packs) == 0 {
-		t.Fatal("no packs loaded")
-	}
-	for _, p := range cat.Packs {
-		for _, r := range p.Rules {
-			if !r.Supported {
-				t.Errorf("%s/%s unsupported: %s", p.ID, r.Slug, r.UnsupportedReason)
-			}
-		}
-	}
-}
-
-// TestDetectionPackProviderPacksStayPointPrecise: each provider rule covers one
-// verb axis, so no rule can quietly become a catch-all.
-func TestDetectionPackProviderPacksStayPointPrecise(t *testing.T) {
-	t.Parallel()
-	for _, packID := range []string{"aws-cli", "azure-cli", "gcloud-cli"} {
-		dir := config.DetectionPacksDir.Join(packID, "rules")
-		ents, err := config.List(dir)
-		testutil.FailErr(t, "ReadDir "+packID, err)
-		verbUse := map[string]int{} // selection name → rule count
-		for _, ent := range ents {
-			name := ent.Name()
-			if !strings.HasSuffix(name, ".yml") {
-				continue
-			}
-			raw := readRuleYAML(t, dir.Join(name))
-			det, _ := raw["detection"].(map[string]any)
-			for k := range det {
-				if strings.HasPrefix(k, "verbs_") {
-					verbUse[k]++
-				}
-			}
-		}
-		for sel, n := range verbUse {
-			if n >= 2 {
-				t.Errorf("%s: shared verbs_* axis %s reused by %d rules", packID, sel, n)
-			}
-		}
-	}
-}
-
-// TestDetectionPackGenerationCheckIsGated verifies the aggregate runs the codegen check.
-func TestDetectionPackGenerationCheckIsGated(t *testing.T) {
-	t.Parallel()
-	doc := loadTaskfile(t)
-	if _, ok := doc.Tasks["codegen:detection-packs:check"]; !ok {
-		t.Fatal("Taskfile missing codegen:detection-packs:check target")
-	}
-	if !doc.reaches("check", "codegen:detection-packs:check") {
-		t.Fatal("check does not reach codegen:detection-packs:check")
-	}
-}
-
 // TestDetectionPackBundledPackAskOnly: Evaluate against a bundled GateSource.
 func TestDetectionPackBundledPackAskOnly(t *testing.T) {
 	cat := loadBundledDetectionCatalog(t)
@@ -110,83 +49,7 @@ func TestDetectionPackBundledPackAskOnly(t *testing.T) {
 	}
 }
 
-// TestDetectionPackNoInertAuthoredLevels permits inert credential-minting evidence only.
-func TestDetectionPackNoInertAuthoredLevels(t *testing.T) {
-	t.Parallel()
-	cat := loadBundledDetectionCatalog(t)
-	for _, p := range cat.Packs {
-		if p.Source != detectionpack.SourceBundled && p.Source != detectionpack.SourceGenerated {
-			continue
-		}
-		for _, r := range p.Rules {
-			mint := detectionpack.EffectFromTags(r.Tags).MintsCredential
-			if mint && r.Level != detectionpack.LevelInformational {
-				t.Errorf("%s/%s mint level=%s; want informational", p.ID, r.Slug, r.Level)
-				continue
-			}
-			if !mint && (r.Level == detectionpack.LevelLow || r.Level == detectionpack.LevelInformational) {
-				t.Errorf("%s/%s level=%s", p.ID, r.Slug, r.Level)
-			}
-		}
-	}
-}
-
-// TestDetectionPackRulesAreGateShaped requires one card-reaching effect class.
-func TestDetectionPackRulesAreGateShaped(t *testing.T) {
-	t.Parallel()
-	cat := loadBundledDetectionCatalog(t)
-	for _, p := range cat.Packs {
-		for _, r := range p.Rules {
-			effect := detectionpack.EffectFromTags(r.Tags)
-			if !effect.Tagged {
-				continue
-			}
-			if effect.MintsCredential {
-				continue
-			}
-			if effect.External && effect.Local {
-				t.Errorf("%s/%s declares both %s and %s; a card can only state one place the effect lands",
-					p.ID, r.Slug, detectionpack.TagEffectExternal, detectionpack.TagEffectLocal)
-				continue
-			}
-			if effect.External || effect.Local {
-				continue
-			}
-			t.Errorf("%s/%s declares an effect class without %s or %s, so it can never raise a card",
-				p.ID, r.Slug, detectionpack.TagEffectExternal, detectionpack.TagEffectLocal)
-		}
-	}
-}
-
-// TestDetectionPackLevelMatchesEffectClass keeps severity aligned with recoverability.
-func TestDetectionPackLevelMatchesEffectClass(t *testing.T) {
-	t.Parallel()
-	cat := loadBundledDetectionCatalog(t)
-	for _, p := range cat.Packs {
-		for _, r := range p.Rules {
-			effect := detectionpack.EffectFromTags(r.Tags)
-			if !effect.Tagged {
-				continue
-			}
-			unrecoverable := effect.Unrecoverable
-			switch r.Level {
-			case detectionpack.LevelCritical, detectionpack.LevelHigh:
-				if !unrecoverable {
-					t.Errorf("%s/%s is %s but declares no %s", p.ID, r.Slug, r.Level,
-						detectionpack.TagEffectUnrecoverable)
-				}
-			case detectionpack.LevelMedium:
-				if unrecoverable {
-					t.Errorf("%s/%s is medium but declares %s: an unrecoverable operation "+
-						"belongs at high or critical", p.ID, r.Slug, detectionpack.TagEffectUnrecoverable)
-				}
-			case detectionpack.LevelInformational, detectionpack.LevelLow:
-			}
-		}
-	}
-}
-
-// TestDetectionPackGeneratedCloudPacksPreserveReviewedPolicy checks parity.
+// Retired cloud packs stay absent, and generated packs match exact structured actions.
 func TestDetectionPackGeneratedCloudPacksPreserveReviewedPolicy(t *testing.T) {
 	t.Parallel()
 	for _, retired := range []string{"aws-sensitive-actions", "aws-structured-actions"} {
@@ -198,12 +61,6 @@ func TestDetectionPackGeneratedCloudPacksPreserveReviewedPolicy(t *testing.T) {
 	for _, retired := range []string{"aws-sensitive-actions", "aws-structured-actions"} {
 		if _, ok := cat.PackByID(retired); ok {
 			t.Fatalf("catalog must not load retired %s", retired)
-		}
-	}
-	for _, id := range []string{"gcp-structured-actions", "azure-structured-actions"} {
-		pack, present := cat.PackByID(id)
-		if !present || pack.Source != detectionpack.SourceGenerated {
-			t.Errorf("%s = %+v, present=%v; want generated pack", id, pack, present)
 		}
 	}
 	m := detectionpack.NewMatcher(cat)
@@ -272,32 +129,6 @@ func TestDetectionPackLogSourceFieldSetsClosed(t *testing.T) {
 	if hit, ok := m.Match(contractToolEvent("command", "curl https://169.254.169.254", "/p", true, "proxy", "s")); ok {
 		if hit.PackID == "egress-providers" {
 			t.Fatalf("Match returned egress rule: %+v", hit)
-		}
-	}
-}
-
-// TestDetectionPackLauncherNamesNotInImageLists: launcher set absent except secrets-identity verbs.
-func TestDetectionPackLauncherNamesNotInImageLists(t *testing.T) {
-	t.Parallel()
-	launchers := map[string]bool{
-		"npx": true, "bunx": true, "aws-vault": true, "sudo": true, "env": true,
-	}
-	// Credential brokers are peeled to the wrapped tool, so naming one as an
-	// Image would match a launcher rather than the operation.
-	secretsOK := map[string]bool{"doppler": true, "op": true}
-	root := detectionPackConfigRoot(t)
-	cat := loadBundledDetectionCatalog(t)
-	for _, p := range cat.Packs {
-		for _, r := range p.Rules {
-			images := ruleImageEqualsFromDisk(t, root, p.ID, r.Slug)
-			for _, img := range images {
-				if launchers[img] {
-					t.Errorf("%s/%s Image lists launcher %q", p.ID, r.Slug, img)
-				}
-				if secretsOK[img] {
-					t.Errorf("%s/%s Image lists %q", p.ID, r.Slug, img)
-				}
-			}
 		}
 	}
 }

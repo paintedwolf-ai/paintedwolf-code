@@ -26,7 +26,9 @@ pub fn root(candidate: &Candidate) -> Result<PathBuf, UpdateError> {
         .join("staging")
         .join(&candidate.release_id))
 }
+/// Records the bundle prepared beside `target` as ready to activate.
 pub fn publish(
+    target: &std::path::Path,
     candidate: &Candidate,
     identity: super::installer::PreparedIdentity,
     offer_confirmed_at: Option<u64>,
@@ -34,7 +36,7 @@ pub fn publish(
     let _lock = lock()?;
     write_ready(&Staged {
         format_version: 2,
-        prepared_bundle: super::installer::prepared_path(&super::installer::bundle()?, candidate)?,
+        prepared_bundle: super::installer::prepared_path(target, candidate)?,
         candidate: candidate.clone(),
         verified_at: super::now(),
         offer_confirmed_at,

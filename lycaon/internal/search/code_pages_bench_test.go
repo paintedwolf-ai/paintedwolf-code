@@ -2,29 +2,19 @@ package search
 
 import (
 	"context"
-	"fmt"
-	"os"
-	"path/filepath"
 	"runtime"
 	"testing"
 	"time"
 
 	"github.com/lycaon/lycaon/internal/scan/rules"
 	"github.com/lycaon/lycaon/internal/sourcecatalog"
+	"github.com/lycaon/lycaon/internal/testutil"
 )
 
-// BenchmarkPagedCodeSearch uses PW_SEARCH_BENCH_ROOT to measure an existing checkout read-only.
+// BenchmarkPagedCodeSearch searches the benchmark tree read-only.
 func BenchmarkPagedCodeSearch(b *testing.B) {
 	b.Setenv("LYCAON_CONFIG_DIR", b.TempDir())
-	root := os.Getenv("PW_SEARCH_BENCH_ROOT")
-	if root == "" {
-		root = b.TempDir()
-		for i := range 4096 {
-			if err := os.WriteFile(filepath.Join(root, fmt.Sprintf("source-%04d.go", i)), []byte("package source\n// searchable content\n"), 0o600); err != nil {
-				b.Fatalf("write fixture: %v", err)
-			}
-		}
-	}
+	root := testutil.BenchRoot(b)
 	catalog := sourcecatalog.New()
 	b.Cleanup(func() {
 		if err := catalog.Drain(context.Background()); err != nil {

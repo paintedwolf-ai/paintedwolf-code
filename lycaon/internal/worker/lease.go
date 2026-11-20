@@ -103,10 +103,6 @@ func setQueueActiveExecution(queue WorkerQueue, fn func(jobID string) bool) {
 		q.mu.Lock()
 		q.activeExecution = fn
 		q.mu.Unlock()
-	case *InMemoryQueue:
-		q.mu.Lock()
-		q.activeExecution = fn
-		q.mu.Unlock()
 	}
 }
 
@@ -119,27 +115,12 @@ func queueHasActiveExecution(queue WorkerQueue, jobID string) bool {
 			fn = q.activeExecution
 			q.mu.Unlock()
 		}
-	case *InMemoryQueue:
-		if q != nil {
-			q.mu.Lock()
-			fn = q.activeExecution
-			q.mu.Unlock()
-		}
 	}
 	return fn != nil && fn(jobID)
 }
 
 func isJobCancellationRequested(ctx context.Context, queue WorkerQueue, jobID string) bool {
 	switch q := queue.(type) {
-	case *InMemoryQueue:
-		if q == nil {
-			return false
-		}
-		q.mu.Lock()
-		job, ok := q.jobs[jobID]
-		requested := ok && (job.cancelRequested || job.task.Status == api.WorkerStatusCanceled)
-		q.mu.Unlock()
-		return requested
 	case *SQLQueue:
 		if q == nil || q.store == nil {
 			return false

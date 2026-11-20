@@ -1,6 +1,7 @@
 package contract
 
 import (
+	"slices"
 	"testing"
 
 	workflowcomposition "github.com/lycaon/lycaon/internal/workflow/composition"
@@ -43,7 +44,8 @@ phases:
 		ManifestYAML: []byte(manifest),
 		CreatedBy:    "coordinator",
 	})
-	if err == nil {
-		t.Fatal("expected compose validation failure")
+	codes := composeErrorCodes(t, err)
+	if !slices.Contains(codes, "feedback_gate_phase_mismatch") && !slices.Contains(codes, "feedback_gate_phase_missing") {
+		t.Fatalf("compose codes = %v want a feedback gate phase code", codes)
 	}
 }

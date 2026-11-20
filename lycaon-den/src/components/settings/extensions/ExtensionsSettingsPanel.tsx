@@ -2,7 +2,7 @@ import { createExtensionActions } from "./extension-actions.ts";
 import { SurfaceDeck } from "../../primitives/SurfaceDeck.tsx";
 import { createSurfaceQuery } from "../../../ui/surface-query.ts";
 import { ThemeIcon } from "../../primitives/ThemeIcon.tsx";
-import { For, Show, Switch, Match, createEffect, createMemo, createSignal } from "solid-js";
+import { For, Show, Switch, Match, createEffect, createMemo, createSignal, createUniqueId } from "solid-js";
 import type { LycaonClient } from "../../../api/client.ts";
 import type { ExtensionsWriteTarget } from "../../../api/http-capabilities/extensions.ts";
 import type {
@@ -100,6 +100,8 @@ export function ExtensionsSettingsPanel(props: Props) {
   const [selectedPackId, setSelectedPackId] = createSignal<string | undefined>();
   const [selectedUnitId, setSelectedUnitId] = createSignal<string | undefined>();
   const [unitDetail, setUnitDetail] = createSignal<ExtensionUnitDetail | undefined>();
+  // The project and device panels can both be mounted, so tab ids are per instance.
+  const idPrefix = `ext-${createUniqueId()}`;
   const [detailRevision, setDetailRevision] = createSignal(0);
   const [kindFilter, setKindFilter] = createSignal<string>("all");
   const [unitQuery, setUnitQuery] = createSignal("");
@@ -451,9 +453,9 @@ export function ExtensionsSettingsPanel(props: Props) {
             <button
               type="button"
               role="tab"
-              id={`ext-tab-${t.id}`}
+              id={`${idPrefix}-tab-${t.id}`}
               aria-selected={tab() === t.id}
-              aria-controls={`ext-panel-${t.id}`}
+              aria-controls={`${idPrefix}-panel-${t.id}`}
               class="den-underline-tab"
               data-active={tab() === t.id}
               data-testid={`extensions-tab-${t.id}`}
@@ -477,6 +479,7 @@ export function ExtensionsSettingsPanel(props: Props) {
           <Switch>
             <Match when={section === "packs" && !isProject()}>
               <ExtensionPacksSection
+                idPrefix={idPrefix}
                 catalogLoaded={catalogQuery.value() !== undefined}
                 packs={packs()}
                 packGrouping={packGrouping()}
@@ -507,6 +510,7 @@ export function ExtensionsSettingsPanel(props: Props) {
 
             <Match when={section === "units"}>
               <ExtensionUnitsSection
+                idPrefix={idPrefix}
                 catalogLoaded={catalogQuery.value() !== undefined}
                 isProject={isProject()}
                 actionsDisabled={actionsDisabled()}
@@ -533,9 +537,9 @@ export function ExtensionsSettingsPanel(props: Props) {
 
             <Match when={section === "settings" && !isProject()}>
               <div
-                id="ext-panel-settings"
+                id={`${idPrefix}-panel-settings`}
                 role="tabpanel"
-                aria-labelledby="ext-tab-settings"
+                aria-labelledby={`${idPrefix}-tab-settings`}
                 class="den-settings-section"
                 data-testid="extensions-panel-settings"
               >
@@ -553,11 +557,11 @@ export function ExtensionsSettingsPanel(props: Props) {
             </Match>
 
             <Match when={section === "desired"}>
-              <ExtensionDesiredSection isProject={isProject()} desired={desired()} />
+              <ExtensionDesiredSection idPrefix={idPrefix} isProject={isProject()} desired={desired()} />
             </Match>
 
             <Match when={section === "model"}>
-              <ExtensionModelSection />
+              <ExtensionModelSection idPrefix={idPrefix} />
             </Match>
           </Switch>
         )}

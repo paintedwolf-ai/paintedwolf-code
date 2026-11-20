@@ -54,7 +54,7 @@ func copyRetainedRows(ctx context.Context, source, destination string, plan migr
 	if boundedRetainedRoute(plan) {
 		query += "&_pragma=journal_mode(off)"
 	}
-	copyDB, err := sql.Open("sqlite", fileDSN(destination, query))
+	copyDB, err := openCounted(fileDSN(destination, query))
 	if err != nil {
 		return err
 	}

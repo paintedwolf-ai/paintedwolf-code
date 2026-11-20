@@ -3,4 +3,4 @@
 package confine
 
 // newRefusalSource reports no source where no kernel adapter reports refusals.
-func newRefusalSource(string) refusalSource { return nil }
+func newRefusalSource(string, ProcessTracker) refusalSource { return nil }
