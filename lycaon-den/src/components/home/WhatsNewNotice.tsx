@@ -3,7 +3,7 @@ import type { JSX } from "solid-js";
 import { lastSeenHealth } from "../../platform/connection/health.ts";
 import {
   firstRunSetupCompletedPref,
-  localModelOnboardingCompletedPref,
+  localModelPromptHandled,
   onboardingPrefsReady,
 } from "../../settings/system/onboarding-prefs.ts";
 import {
@@ -55,7 +55,7 @@ export function WhatsNewNotice(props: WhatsNewNoticeProps): JSX.Element {
         prefsReady: onboardingPrefsReady(),
         runtime: props.localRuntime,
         firstRunSetupCompleted: firstRunSetupCompletedPref(),
-        localModelOnboardingCompleted: localModelOnboardingCompletedPref(),
+        localModelOnboardingCompleted: localModelPromptHandled(),
       }),
     });
 

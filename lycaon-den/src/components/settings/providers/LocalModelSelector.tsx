@@ -14,6 +14,7 @@ type Props = {
   provider: ProviderMeta;
   onRefresh: () => Promise<void>;
   onContinue?: () => void;
+  onPostpone?: () => void;
 };
 
 function usable(status?: LocalGenerationStatus) {
@@ -193,8 +194,8 @@ export function LocalModelSelector(props: Props) {
         <LocalModelTransfer status={active()} busy={working()} onCancel={() => void run("cancel")} />
       }</ShowLatest>
       <Show when={problem()}><p role="alert" class="den-settings-warn">{problem()}</p></Show>
-      <Show when={props.onContinue && (problem() || transfer() || working())}>
-        <DenButton variant="secondary" onClick={() => props.onContinue?.()}>Finish model setup later</DenButton>
+      <Show when={props.onPostpone && (problem() || transfer() || working())}>
+        <DenButton variant="secondary" onClick={() => props.onPostpone?.()}>Finish model setup later</DenButton>
       </Show>
     </div>
   );

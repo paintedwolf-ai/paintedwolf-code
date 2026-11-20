@@ -33,7 +33,7 @@ vi.mock("./platform/connection/app-connection.ts", async (importOriginal) => {
 });
 
 vi.mock("./settings/system/onboarding-prefs.ts", () => ({
-  localModelOnboardingCompletedPref: () => true, firstRunSetupCompletedPref: () => true,
+  localModelPromptHandled: () => true, firstRunSetupCompletedPref: () => true,
   onboardingPrefsReady: () => true,
   syncOnboardingPrefsFromSnapshot: () => undefined,
   completeFirstRunSetup: async () => undefined,

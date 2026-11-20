@@ -29,7 +29,7 @@ vi.mock("../../platform/runtime.ts", async (original) => ({ ...(await original<t
 vi.mock("../../platform/connection/app-connection.ts", async (original) => ({ ...(await original<typeof import("../../platform/connection/app-connection.ts")>()),
   getLycaonClient: () => null, onCLIOpenEvent: () => () => undefined, noticeReporterFor: () => ({ reportError: vi.fn(), publish: vi.fn() }) }));
 vi.mock("../../contributions/contribution-store.ts", async (original) => ({ ...(await original<typeof import("../../contributions/contribution-store.ts")>()), contributionFrameReady: () => true }));
-vi.mock("../../settings/system/onboarding-prefs.ts", () => ({ localModelOnboardingCompletedPref: () => true, firstRunSetupCompletedPref: () => true, onboardingPrefsReady: () => true }));
+vi.mock("../../settings/system/onboarding-prefs.ts", () => ({ localModelPromptHandled: () => true, firstRunSetupCompletedPref: () => true, onboardingPrefsReady: () => true }));
 vi.mock("../../platform/windows/window-chrome.ts", async (original) => ({ ...(await original<typeof import("../../platform/windows/window-chrome.ts")>()), windowFocused: () => true, widenWindowBy: vi.fn(async () => "claimed") }));
 
 async function mountShell() {

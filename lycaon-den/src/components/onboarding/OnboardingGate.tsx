@@ -5,7 +5,7 @@ import type { SettingsStore } from "../../store/settings-store.ts";
 import { isIncludedProvider } from "../../settings/providers/models-editor-model.ts";
 import { MODELS_SETTINGS_COPY } from "../../settings/providers/models-settings-copy.ts";
 import { LocalModelSelector } from "../settings/providers/LocalModelSelector.tsx";
-import { completeFirstRunSetup, completeLocalModelOnboarding, firstRunSetupCompletedPref, localModelOnboardingCompletedPref } from "../../settings/system/onboarding-prefs.ts";
+import { completeFirstRunSetup, completeLocalModelOnboarding, postponeLocalModelPrompt, firstRunSetupCompletedPref, localModelOnboardingCompletedPref } from "../../settings/system/onboarding-prefs.ts";
 import { ChromeDragSurface } from "../shell/ChromeDragSurface.tsx";
 import { soleWindowControls } from "../shell/WindowControls.tsx";
 import { chromeProps } from "../../styling/ui-chrome.ts";
@@ -54,7 +54,11 @@ export function OnboardingGate(props: Props) {
     setCheckedHere(true);
   };
   let entryResolved = false;
-  let modelStepDeferred = false;
+  const postponeModel = () => {
+    entryResolved = true;
+    postponeLocalModelPrompt();
+    if (!upgrade) setPage("layout");
+  };
 
   const finishModelStep = async () => {
     if (dismissing()) return;
@@ -76,7 +80,6 @@ export function OnboardingGate(props: Props) {
     if (setup === "packaged" || setup === "decided") {
       void finishModelStep();
     } else if (setup === "deferred") {
-      modelStepDeferred = true;
       setPage("layout");
     } else {
       setIncludesModel(true);
@@ -91,7 +94,7 @@ export function OnboardingGate(props: Props) {
     if (dismissing()) return;
     setDismissing(true);
     try {
-      await completeFirstRunSetup({ deferModelStep: modelStepDeferred });
+      await completeFirstRunSetup();
     } finally {
       setDismissing(false);
     }
@@ -101,7 +104,10 @@ export function OnboardingGate(props: Props) {
     const current = page();
     const target = current === "waiting" ? "finish" : onboardingEscapeTarget(current);
     setOnboardingWelcomeDismissSink(() => {
-      if (target === "finish") void finishOnboarding();
+      if (target === "finish") {
+        if (current === "waiting" || current === "local_model") postponeLocalModelPrompt();
+        void finishOnboarding();
+      }
       else setPage(target);
     });
     onCleanup(() => setOnboardingWelcomeDismissSink(null));
@@ -164,7 +170,7 @@ export function OnboardingGate(props: Props) {
             <OnboardingStepPage data-testid="onboarding-waiting" aria-labelledby="onboarding-waiting-title">
               <h1 id="onboarding-waiting-title" class="onboarding-gate__title" {...chromeProps()}>Preparing setup</h1>
               <ModelSetupConnection connected={!!props.client} checked={props.settingsChecked || checkedHere()}
-                onRetry={refreshProviders} onContinue={() => void finishModelStep()} />
+                onRetry={refreshProviders} onContinue={postponeModel} />
             </OnboardingStepPage>
           </Show>
           <Show when={page() === "local_model"}>
@@ -176,11 +182,11 @@ export function OnboardingGate(props: Props) {
               <div class="onboarding-gate__card">
                 <ShowLatest when={modelSetup()} fallback={
                   <ModelSetupConnection connected={!!props.client} checked={props.settingsChecked}
-                    onRetry={refreshProviders} onContinue={() => void finishModelStep()} />
+                    onRetry={refreshProviders} onContinue={postponeModel} />
                 }>
                   {setup => <LocalModelSelector client={setup().client} provider={setup().provider}
                     onRefresh={refreshProviders}
-                    onContinue={() => void finishModelStep()} />}
+                    onContinue={() => void finishModelStep()} onPostpone={postponeModel} />}
                 </ShowLatest>
               </div>
             </OnboardingStepPage>

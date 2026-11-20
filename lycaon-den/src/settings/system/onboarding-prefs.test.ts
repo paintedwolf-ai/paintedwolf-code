@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const state = vi.hoisted(() => ({
+  onboarding: {} as {completedSetupRevision?: number; completedLocalModelStepRevision?: number},
   resolveWrite: undefined as (() => void) | undefined,
 }));
 
@@ -17,7 +18,7 @@ vi.mock("../../store/app-state-snapshot.ts", () => ({
   getAppStateSnapshot: () => ({
     version: 1,
     recents: [],
-    onboarding: { firstRunSetupCompleted: false },
+    onboarding: state.onboarding,
   }),
   persistAppState,
 }));
@@ -32,6 +33,7 @@ import {
 
 describe("onboarding prefs durability", () => {
   beforeEach(() => {
+    state.onboarding = {};
     state.resolveWrite = undefined;
     persistAppState.mockClear();
     syncOnboardingPrefsFromSnapshot();
@@ -49,18 +51,18 @@ describe("onboarding prefs durability", () => {
   });
 
   it("completes layout and welcome without recording an unpublished model decision", async () => {
-    const saving = completeFirstRunSetup({deferModelStep: true});
+    const saving = completeFirstRunSetup();
     state.resolveWrite?.();
     await saving;
     expect(firstRunSetupCompletedPref()).toBe(true);
     expect(localModelOnboardingCompletedPref()).toBe(false);
     expect(persistAppState).toHaveBeenCalledWith({
-      onboarding: {firstRunSetupCompleted: true, localModelOnboardingCompleted: false},
+      onboarding: {completedSetupRevision: 2},
     });
   });
 
   it("does not dismiss the hard gate before the completion latch is durable", async () => {
-    const saving = completeFirstRunSetup({deferModelStep: false});
+    const saving = completeFirstRunSetup();
 
     expect(firstRunSetupCompletedPref()).toBe(false);
     expect(persistAppState).toHaveBeenCalledOnce();
@@ -68,6 +70,6 @@ describe("onboarding prefs durability", () => {
     state.resolveWrite?.();
     await saving;
     expect(firstRunSetupCompletedPref()).toBe(true);
-    expect(localModelOnboardingCompletedPref()).toBe(true);
+    expect(localModelOnboardingCompletedPref()).toBe(false);
   });
 });

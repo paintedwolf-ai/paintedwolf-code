@@ -2,7 +2,7 @@
 
 The hard gate a new install shows before the home stage, and how a missing provider is reported once that gate is done.
 
-**Implementation:** [`components/onboarding/`](../lycaon-den/src/components/onboarding) — `OnboardingGate.tsx`, `onboarding-gate-model.ts` (page order and the show / page / continue / layout predicates), `OnboardingStepPage.tsx`, `OnboardingLayoutChoices.tsx` and `OnboardingLayoutPreview.tsx` (the starting layout page). Styles: [`onboarding-domain.css`](../lycaon-den/src/onboarding-domain.css). Post-latch recovery: [`notices/no-provider-card.ts`](../lycaon-den/src/notices/no-provider-card.ts). Den persists `firstRunSetupCompleted` and `localModelOnboardingCompleted` in `AppState.onboarding`.
+**Implementation:** [`components/onboarding/`](../lycaon-den/src/components/onboarding) — `OnboardingGate.tsx`, `onboarding-gate-model.ts` (page order and the show / page / continue / layout predicates), `OnboardingStepPage.tsx`, `OnboardingLayoutChoices.tsx` and `OnboardingLayoutPreview.tsx` (the starting layout page). Styles: [`onboarding-domain.css`](../lycaon-den/src/onboarding-domain.css). Post-latch recovery: [`notices/no-provider-card.ts`](../lycaon-den/src/notices/no-provider-card.ts). Den persists `completedSetupRevision` and `completedLocalModelStepRevision` in `AppState.onboarding`.
 
 **See also:** [Providers](providers.md) · [Den](den.md#notifications) · [Naming](naming.md)
 
@@ -18,11 +18,11 @@ Fresh installations from normal downloads open on local model selection when the
 | **Starting layout** | Open to the conversation alone or with a context view beside it. |
 | **Welcome** | Find additional providers in Settings → AI providers and enter the workspace. |
 
-An offline installer includes the selected model. The host imports it locally, and fresh setup starts at the layout page, including when the seed needs repair. Previously configured installations skip the model-only gate. Existing model choices and opt-outs survive. Settings offers recovery when the packaged model cannot load.
+An offline installer includes the selected model. The host imports it locally, and fresh setup starts at the layout page, including when the seed needs repair. Installations with a recorded model decision skip the local model page. Existing model choices and opt-outs survive. Settings offers recovery when the packaged model cannot load.
 
 When the host reports no eligible downloadable tier, fresh setup starts at layout and returning users enter the workspace. Skipping the page preserves the model decision for a later release that offers a download. A model imported in Settings or through the CLI satisfies the model step, as does a recorded opt-out. Setup honors that decision even when the runtime needs repair. Users can import a signed bundle at any time in Settings → AI providers.
 
-After a model decision, interrupted fresh setup resumes at layout. An existing normal installation sees just the local model page once. Returning users keep their existing provider configuration. Settings → AI providers remains available for later model downloads, offline imports, replacement, and removal.
+Everyone upgrading from a pre-1.1 installation sees the current walkthrough once. It follows the same host facts as a fresh install and opens the layout page with the saved layout selected. Provider configuration and model assignments are preserved. After the model decision, interrupted setup resumes at layout. Completing welcome records the walkthrough revision. If someone postponed the model decision, a later launch can offer just the model page when an eligible download is available. Escape can dismiss setup without recording a model decision. Settings → AI providers remains available for later model downloads, offline imports, replacement, and removal.
 
 ### Starting layout
 

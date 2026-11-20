@@ -1,3 +1,4 @@
+import { SETUP_REVISION } from "../../../shared/app-state-types.ts";
 import { createSignal } from "solid-js";
 import {
   getAppStateSnapshot,
@@ -6,6 +7,16 @@ import { persistAppStateInBackground } from "../../store/app-state-background-wr
 
 const [firstRunSetupCompleted, setFirstRunSetupCompleted] = createSignal(false);
 const [localModelOnboardingCompleted, setLocalModelOnboardingCompleted] = createSignal(false);
+const [postponed, setPostponed] = createSignal(false);
+
+export function localModelPromptHandled(): boolean {
+  return postponed() || localModelOnboardingCompleted();
+}
+
+export function postponeLocalModelPrompt(): void {
+  setPostponed(true);
+}
+
 const [prefsReady, setPrefsReady] = createSignal(false);
 
 export function firstRunSetupCompletedPref(): boolean {
@@ -21,31 +32,24 @@ export function onboardingPrefsReady(): boolean {
 }
 
 export function syncOnboardingPrefsFromSnapshot(): void {
-  setLocalModelOnboardingCompleted(getAppStateSnapshot().onboarding?.localModelOnboardingCompleted === true);
-  setFirstRunSetupCompleted(
-    getAppStateSnapshot().onboarding?.firstRunSetupCompleted === true,
-  );
+  const saved = getAppStateSnapshot().onboarding;
+  setLocalModelOnboardingCompleted((saved?.completedLocalModelStepRevision ?? 0) >= SETUP_REVISION);
+  setFirstRunSetupCompleted((saved?.completedSetupRevision ?? 0) >= SETUP_REVISION);
   setPrefsReady(true);
 }
 
 export async function completeLocalModelOnboarding(): Promise<void> {
   if (localModelOnboardingCompleted()) return;
   await persistAppStateInBackground({
-    onboarding: { ...getAppStateSnapshot().onboarding, localModelOnboardingCompleted: true },
+    onboarding: { ...getAppStateSnapshot().onboarding, completedLocalModelStepRevision: SETUP_REVISION },
   });
   setLocalModelOnboardingCompleted(true);
 }
 
-export async function completeFirstRunSetup(options: { deferModelStep: boolean }): Promise<void> {
-  setPrefsReady(true);
-  const modelCompleted = localModelOnboardingCompleted() || !options.deferModelStep;
+export async function completeFirstRunSetup(): Promise<void> {
+  if (firstRunSetupCompleted()) return;
   await persistAppStateInBackground({
-    onboarding: {
-      ...getAppStateSnapshot().onboarding,
-      firstRunSetupCompleted: true,
-      localModelOnboardingCompleted: modelCompleted,
-    },
+    onboarding: { ...getAppStateSnapshot().onboarding, completedSetupRevision: SETUP_REVISION },
   });
-  setLocalModelOnboardingCompleted(modelCompleted);
   setFirstRunSetupCompleted(true);
 }

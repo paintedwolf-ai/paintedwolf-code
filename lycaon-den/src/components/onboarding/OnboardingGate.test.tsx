@@ -45,6 +45,7 @@ vi.mock("../../settings/system/onboarding-prefs.ts", () => ({
   completeLocalModelOnboarding: () => completeModelStep(),
   firstRunSetupCompletedPref: () => firstRunComplete,
   completeFirstRunSetup,
+  postponeLocalModelPrompt: vi.fn(),
 }));
 
 
@@ -216,7 +217,7 @@ describe("Local model setup", () => {
     fireEvent.click(screen.getByTestId("onboarding-layout-continue"));
     expect(screen.getByTestId("onboarding-welcome").textContent).toContain("AI providers");
     fireEvent.click(screen.getByTestId("onboarding-welcome-dismiss"));
-    expect(completeFirstRunSetup).toHaveBeenCalledWith({deferModelStep: true});
+    expect(completeFirstRunSetup).toHaveBeenCalledOnce();
     expect(completeModelStep).not.toHaveBeenCalled();
     expect(client.deleteLocalModel).not.toHaveBeenCalled();
   });

@@ -144,11 +144,11 @@ export type DenContextNavPrefs = {
   runningPinnedMigrated?: boolean;
 };
 
-/** First-run provider setup latch. */
+export const SETUP_REVISION = 2;
+
 export type DenOnboardingPrefs = {
-  /** Set true when the OnboardingGate welcome page is dismissed. */
-  firstRunSetupCompleted?: boolean;
-  localModelOnboardingCompleted?: boolean;
+  completedSetupRevision?: number;
+  completedLocalModelStepRevision?: number;
 };
 
 /** What's New dismiss latch — version whose notes the user acknowledged. */

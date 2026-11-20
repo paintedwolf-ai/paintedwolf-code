@@ -5,6 +5,8 @@ import { appStateStorageSliceKey } from "../shared/app-state-storage.ts";
 import {
   apiClearDefaultModel,
   apiEnsureDefaultModel,
+  apiJson,
+  apiListProviders,
   seedAppState,
   seedFirstRunUnset,
   webE2e,
@@ -78,9 +80,9 @@ webE2e.describe("onboarding first-run", () => {
         const raw = localStorage.getItem(key);
         if (!raw) return null;
         const onboarding = JSON.parse(raw) as {
-          firstRunSetupCompleted?: boolean;
+          completedSetupRevision?: number;
         };
-        return onboarding.firstRunSetupCompleted === true;
+        return onboarding.completedSetupRevision === 2;
       }, ONBOARDING_STATE_KEY);
       expect(latch).toBe(true);
 
@@ -114,9 +116,9 @@ webE2e.describe("onboarding first-run", () => {
         const raw = localStorage.getItem(key);
         if (!raw) return false;
         const onboarding = JSON.parse(raw) as {
-          firstRunSetupCompleted?: boolean;
+          completedSetupRevision?: number;
         };
-        return onboarding.firstRunSetupCompleted === true;
+        return onboarding.completedSetupRevision === 2;
       }, ONBOARDING_STATE_KEY);
       expect(latchAfterSkip).toBe(false);
 
@@ -129,9 +131,9 @@ webE2e.describe("onboarding first-run", () => {
         const raw = localStorage.getItem(key);
         if (!raw) return false;
         const onboarding = JSON.parse(raw) as {
-          firstRunSetupCompleted?: boolean;
+          completedSetupRevision?: number;
         };
-        return onboarding.firstRunSetupCompleted === true;
+        return onboarding.completedSetupRevision === 2;
       }, ONBOARDING_STATE_KEY);
       expect(latch).toBe(true);
     },
@@ -332,4 +334,46 @@ webE2e("failed model requests allow retry or workspace entry with external provi
   expect(starts).toBe(2);
   expect(removals).toBe(0);
   expect(cancellations).toBe(1);
+});
+
+
+webE2e("v1.0.2 users complete the current walkthrough once and keep their settings", async ({page, request}) => {
+  await apiEnsureDefaultModel(request);
+  const policyBefore = await apiJson(request, "GET", "/v1/settings/model-policy");
+  const providerIds = (await apiListProviders(request)).map(p => p.id);
+  let mutations = 0;
+  await page.route("**/v1/providers/nativegen/local-model**", async route => {
+    if (route.request().method() !== "GET") mutations++;
+    await route.continue();
+  });
+  await serveCatalog(page, true);
+  await seedAppState(page, {onboarding: "v1.0.2", layout: {startupCompanion: "files"}});
+  await page.goto("/");
+  await expect(page.getByTestId("onboarding-local-model")).toBeVisible({timeout: 60_000});
+  expect(await page.evaluate(key => JSON.parse(localStorage.getItem(key)!), ONBOARDING_STATE_KEY)).toEqual({firstRunSetupCompleted:true});
+  await page.getByRole("radio", {name: "Use no local model"}).check();
+  await page.getByRole("button", {name:"Continue without a local model"}).click();
+  await expect(page.getByTestId("onboarding-layout-split-radio")).toBeChecked();
+  await page.getByTestId("onboarding-layout-continue").click();
+  await page.getByTestId("onboarding-welcome-dismiss").click();
+  await expect(page.getByTestId("home-view")).toBeVisible();
+  await page.reload();
+  await expect(page.getByTestId("home-view")).toBeVisible({timeout: 60_000});
+  await expect(page.getByTestId("onboarding-gate")).toHaveCount(0);
+  expect(mutations).toBe(1);
+  expect(await apiJson(request, "GET", "/v1/settings/model-policy")).toEqual(policyBefore);
+  expect((await apiListProviders(request)).map(p => p.id)).toEqual(providerIds);
+});
+
+webE2e("Escape defers a pre-1.1 model choice without persisting a host decision", async ({page}) => {
+  await serveCatalog(page, true);
+  await seedAppState(page, {onboarding:"v1.0.2"});
+  await page.goto("/");
+  await expect(page.getByTestId("onboarding-local-model")).toBeVisible({timeout: 60_000});
+  await page.keyboard.press("Escape");
+  await expect(page.getByTestId("home-view")).toBeVisible();
+  expect(await page.evaluate(key => JSON.parse(localStorage.getItem(key)!), ONBOARDING_STATE_KEY)).toEqual({completedSetupRevision:2});
+  await page.reload();
+  await expect(page.getByTestId("onboarding-local-model")).toBeVisible({timeout: 60_000});
+  await expect(page.getByTestId("onboarding-progress")).toHaveText("1 / 1");
 });

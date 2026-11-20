@@ -25,7 +25,7 @@ from webkit_atspi_scenarios import HOME_OVERFLOW, diagnostic_scenario
 
 # A person who finished first-run setup and turned tips off, so nothing covers the window.
 FIRST_RUN_DONE = """
-localStorage.setItem("paintedwolf.app-state.v1.onboarding", JSON.stringify({ firstRunSetupCompleted: true, localModelOnboardingCompleted: true }));
+localStorage.setItem("paintedwolf.app-state.v1.onboarding", JSON.stringify({ completedSetupRevision: 2, completedLocalModelStepRevision: 2 }));
 localStorage.setItem("paintedwolf.app-state.v1.firstTimeTips", JSON.stringify({ enabled: false }));
 """
 

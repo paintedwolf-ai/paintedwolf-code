@@ -1,3 +1,4 @@
+import { SETUP_REVISION, type DenLayoutPrefs } from "../shared/app-state-types.ts";
 import path from "node:path";
 import { createHash } from "node:crypto";
 import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
@@ -288,7 +289,8 @@ export async function seedAppState(
     /** Device context navigation pins. */
     contextNav?: { visible?: string[] };
     /** Defaults to completed for shell tests. */
-    onboarding?: { firstRunSetupCompleted?: boolean; localModelOnboardingCompleted?: boolean };
+    onboarding?: "v1.0.2" | { firstRunSetupCompleted?: boolean; localModelOnboardingCompleted?: boolean };
+    layout?: Pick<DenLayoutPrefs, "startupCompanion">;
     /** Optional What's New latch. */
     whatsNew?: { lastSeenVersion?: string };
     /** Contextual tips default off. */
@@ -297,10 +299,10 @@ export async function seedAppState(
     debug?: { verboseMode?: boolean };
   },
 ) {
-  const onboarding = {
-    localModelOnboardingCompleted: partial?.onboarding?.localModelOnboardingCompleted ?? partial?.onboarding?.firstRunSetupCompleted ?? true,
-    firstRunSetupCompleted:
-      partial?.onboarding?.firstRunSetupCompleted ?? true,
+  const setup = partial?.onboarding;
+  const onboarding = setup === "v1.0.2" ? {firstRunSetupCompleted: true} : {
+    completedSetupRevision: (setup?.firstRunSetupCompleted ?? true) ? SETUP_REVISION : undefined,
+    completedLocalModelStepRevision: (setup?.localModelOnboardingCompleted ?? setup?.firstRunSetupCompleted ?? true) ? SETUP_REVISION : undefined,
   };
   const firstTimeTips = {
     enabled: partial?.firstTimeTips?.enabled ?? false,
@@ -334,6 +336,7 @@ export async function seedAppState(
       const state = {
         recents: [],
         onboarding: onboardingState,
+        ...(partialState?.layout ? {layout: partialState.layout} : {}),
         firstTimeTips: firstTimeTipsState,
         ...(whatsNewState ? { whatsNew: whatsNewState } : {}),
         ...(partialState?.lastActiveProjectId
@@ -359,6 +362,7 @@ export async function seedAppState(
       partialState: {
         lastActiveProjectId: partial?.lastActiveProjectId,
         contextNav: partial?.contextNav,
+        layout: partial?.layout,
       },
       onboardingState: onboarding,
       whatsNewState: partial?.whatsNew,

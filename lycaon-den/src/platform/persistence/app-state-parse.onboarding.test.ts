@@ -2,17 +2,17 @@ import { describe, expect, it } from "vitest";
 import { parseAppState } from "./app-state-parse.ts";
 
 describe("parseAppState onboarding", () => {
-  it("preserves firstRunSetupCompleted", () => {
+  it("reads completion from the released first-run walkthrough", () => {
     const state = parseAppState({
       version: 1,
       recents: [],
       onboarding: { firstRunSetupCompleted: true },
     });
-    expect(state.onboarding).toEqual({ firstRunSetupCompleted: true });
+    expect(state.onboarding).toEqual({ completedSetupRevision: 1 });
   });
 
   it("preserves the local model choice latch", () => {
-    const onboarding = {firstRunSetupCompleted: true, localModelOnboardingCompleted: true};
+    const onboarding = {completedSetupRevision: 2, completedLocalModelStepRevision: 2};
     expect(parseAppState({version: 1, recents: [], onboarding}).onboarding).toEqual(onboarding);
   });
 
@@ -20,7 +20,7 @@ describe("parseAppState onboarding", () => {
     const state = parseAppState({
       version: 1,
       recents: [],
-      onboarding: { firstRunSetupCompleted: "yes" },
+      onboarding: { firstRunSetupCompleted: "yes", completedSetupRevision: -1, completedLocalModelStepRevision: 0.5 },
     });
     expect(state.onboarding).toBeUndefined();
   });
