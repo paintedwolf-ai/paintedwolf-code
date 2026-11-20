@@ -250,7 +250,7 @@ func routeOperation(rules FilesystemRules, operation, target string) SandboxRefu
 	case operation == "network-outbound":
 		r.Recovery = RecoverOutboundPort
 	case operation == "network-bind" && strings.HasPrefix(target, "/"):
-		// No capability grants a unix-socket listener inside the sandbox.
+		// Pathname listeners are confined to session scratch.
 		r.Recovery = RecoverHostExecution
 	case operation == "network-bind", operation == "network-inbound":
 		r.Recovery = RecoverLocalListen

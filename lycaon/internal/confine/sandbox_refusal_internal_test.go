@@ -186,8 +186,6 @@ func TestRefusedAgentPolicyNamesTheLoaderTreeGrant(t *testing.T) {
 	}
 }
 
-// Each operation outside the filesystem routes to the capability whose rule
-// admits it; no capability admits a unix-socket listener.
 func TestNetworkAndProcessRefusalsRouteToTheirCapability(t *testing.T) {
 	rules, _ := projectRules(t)
 	for _, tc := range []struct {
