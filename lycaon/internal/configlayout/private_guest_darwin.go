@@ -17,10 +17,9 @@ import (
 
 // PrivateGuestPayload holds immutable boot files until the VM helper inherits them.
 type PrivateGuestPayload struct {
-	Helper   string
-	CDHash   string
-	Boot     []*os.File
-	snapshot string
+	Helper string
+	CDHash string
+	Boot   []*os.File
 }
 
 func (p *PrivateGuestPayload) Close() {
@@ -28,10 +27,6 @@ func (p *PrivateGuestPayload) Close() {
 		_ = file.Close()
 	}
 	p.Boot = nil
-	if p.snapshot != "" {
-		_ = os.RemoveAll(p.snapshot)
-		p.snapshot = ""
-	}
 }
 
 // OpenPrivateGuestPayload resolves the runtime from the running installation.
@@ -65,7 +60,8 @@ func privateGuestPayload(bundle, root, app string) (_ *PrivateGuestPayload, err 
 	if err != nil {
 		return nil, err
 	}
-	p := &PrivateGuestPayload{Helper: filepath.Join(dir, "pw-service-vm"), snapshot: dir}
+	defer os.RemoveAll(dir)
+	p := &PrivateGuestPayload{Helper: filepath.Join(bundle, "pw-service-vm")}
 	defer func() {
 		if err != nil {
 			p.Close()
@@ -74,16 +70,10 @@ func privateGuestPayload(bundle, root, app string) (_ *PrivateGuestPayload, err 
 	for _, spec := range []struct {
 		name  string
 		limit int64
-	}{{"pw-service-vm", 8 << 20}, {"manifest.json", 64 << 10}, {"kernel", 1 << 30}, {"initramfs.gz", 1 << 30}} {
+	}{{"manifest.json", 64 << 10}, {"kernel", 1 << 30}, {"initramfs.gz", 1 << 30}} {
 		dest := filepath.Join(dir, spec.name)
 		if err := snapshotGuestFile(filepath.Join(bundle, spec.name), dest, spec.limit); err != nil {
 			return nil, fmt.Errorf("stage private service %s: %w", spec.name, err)
-		}
-		if spec.name == "pw-service-vm" {
-			if err := os.Chmod(dest, 0500); err != nil {
-				return nil, err
-			}
-			continue
 		}
 		file, err := os.Open(dest)
 		if err != nil {
@@ -97,12 +87,7 @@ func privateGuestPayload(bundle, root, app string) (_ *PrivateGuestPayload, err 
 			return nil, err
 		}
 	}
-	id, err := os.Open(filepath.Join(bundle, "pw-service-vm.cdhash"))
-	if err != nil {
-		return nil, err
-	}
-	defer id.Close()
-	raw, err := io.ReadAll(io.LimitReader(id, 42))
+	raw, err := readGuestResource(filepath.Join(bundle, "pw-service-vm.cdhash"), 41)
 	if err != nil {
 		return nil, err
 	}
@@ -126,12 +111,42 @@ func privateGuestPayload(bundle, root, app string) (_ *PrivateGuestPayload, err 
 	return p, nil
 }
 
-func snapshotGuestFile(source, dest string, limit int64) error {
+func openGuestResource(source string) (*os.File, error) {
 	fd, err := unix.Open(source, unix.O_RDONLY|unix.O_CLOEXEC|unix.O_NOFOLLOW|unix.O_NONBLOCK, 0)
+	if err != nil {
+		return nil, err
+	}
+	return os.NewFile(uintptr(fd), source), nil
+}
+
+func readGuestResource(source string, limit int64) ([]byte, error) {
+	file, err := openGuestResource(source)
+	if err != nil {
+		return nil, err
+	}
+	defer file.Close()
+	info, err := file.Stat()
+	if err != nil {
+		return nil, err
+	}
+	if !info.Mode().IsRegular() || info.Size() < 1 || info.Size() > limit {
+		return nil, errors.New("invalid private service resource")
+	}
+	bytes, err := io.ReadAll(io.LimitReader(file, limit+1))
+	if err != nil {
+		return nil, err
+	}
+	if int64(len(bytes)) != info.Size() {
+		return nil, errors.New("private service resource changed during capture")
+	}
+	return bytes, nil
+}
+
+func snapshotGuestFile(source, dest string, limit int64) error {
+	file, err := openGuestResource(source)
 	if err != nil {
 		return err
 	}
-	file := os.NewFile(uintptr(fd), source)
 	defer file.Close()
 	info, err := file.Stat()
 	if err != nil {
@@ -140,7 +155,7 @@ func snapshotGuestFile(source, dest string, limit int64) error {
 	if !info.Mode().IsRegular() || info.Size() == 0 || info.Size() > limit {
 		return errors.New("invalid boot resource")
 	}
-	err = unix.Fclonefileat(fd, unix.AT_FDCWD, dest, unix.CLONE_NOOWNERCOPY)
+	err = unix.Fclonefileat(int(file.Fd()), unix.AT_FDCWD, dest, unix.CLONE_NOOWNERCOPY)
 	if err == nil {
 		return nil
 	}

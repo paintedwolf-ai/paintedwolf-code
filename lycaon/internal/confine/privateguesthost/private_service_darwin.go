@@ -33,7 +33,7 @@ func OpenPrivateGuest(ctx context.Context) (*serviceguest.Client, error) {
 	}
 	client, err := serviceguest.Open(ctx, transport)
 	if err != nil && ctx.Err() == nil {
-		return nil, errors.Join(serviceguest.ErrUnavailable, err)
+		return nil, errors.Join(serviceguest.ErrUnavailable, err, transport.Close())
 	}
 	return client, err
 }

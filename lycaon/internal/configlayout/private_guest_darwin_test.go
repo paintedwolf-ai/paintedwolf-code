@@ -29,15 +29,20 @@ func TestPrivateGuestSnapshotsHoldOneGeneration(t *testing.T) {
 	if string(data) != "kernel" {
 		t.Fatalf("staged boot image = %q", data)
 	}
-	items, err := os.ReadDir(filepath.Dir(p.Helper))
-	testutil.FailErr(t, "inspect snapshot", err)
-	if len(items) != 1 || items[0].Name() != "pw-service-vm" {
-		t.Fatalf("named snapshot files = %v", items)
+	items, err := os.ReadDir(state)
+	testutil.FailErr(t, "inspect capture directory", err)
+	if len(items) != 0 {
+		t.Fatalf("named boot snapshots: %v", items)
 	}
+	if p.Helper != filepath.Join(bundle, "pw-service-vm") {
+		t.Fatalf("helper left signed package: %s", p.Helper)
+	}
+	held := p.Boot[1]
 	p.Close()
-	if _, err := os.Stat(p.Helper); !os.IsNotExist(err) {
-		t.Fatalf("released helper still reachable: %v", err)
+	if _, err := held.Stat(); err == nil {
+		t.Fatal("released boot file remained open")
 	}
+
 }
 
 func TestPrivateGuestRefusesSymlinkAndUnsealedManifest(t *testing.T) {

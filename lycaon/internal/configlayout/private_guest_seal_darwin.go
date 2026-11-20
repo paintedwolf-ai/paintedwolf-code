@@ -12,14 +12,15 @@ import "C"
 import (
 	"errors"
 	"fmt"
-	"golang.org/x/sys/unix"
 	"os"
 	"syscall"
 	"unsafe"
+
+	"golang.org/x/sys/unix"
 )
 
 func verifyPrivateGuestSeal(app, helper string, manifest, cdhash []byte) error {
-	executable, err := os.ReadFile(helper)
+	executable, err := readGuestResource(helper, 8<<20)
 	if err != nil {
 		return err
 	}
