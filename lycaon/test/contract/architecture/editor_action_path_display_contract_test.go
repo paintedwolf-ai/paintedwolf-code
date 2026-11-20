@@ -13,6 +13,7 @@ import (
 	"github.com/google/uuid"
 	contractfixture "github.com/lycaon/lycaon/internal/api/contractfixture"
 	"github.com/lycaon/lycaon/internal/contribution"
+	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/testutil"
 	wire "github.com/lycaon/lycaon/pkg/api"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
@@ -143,7 +144,14 @@ func TestEditorActionPathDisplayMatchesAttachmentFence(t *testing.T) {
 				t.Fatal("invoke accepted without a message id")
 			}
 
-			contractfixture.WaitForSessionIdle(t, baseURL, sess.ID)
+			testutil.WaitFor(t, "editor action "+accepted.MessageID+" completes", func() bool {
+				row, err := h.Store.GetPromptSubmission(t.Context(), accepted.MessageID)
+				testutil.FailErr(t, "read editor action submission", err)
+				if row.Status.Terminal() && row.Status != store.PromptSubmissionComplete {
+					t.Fatalf("editor action %s ended %s: %s", row.ID, row.Status, row.Error)
+				}
+				return row.Status == store.PromptSubmissionComplete
+			})
 			msgs := contractfixture.ListMessagesAtURL(t, baseURL, sess.ID)
 			var prompt *wire.Message
 			for i := range msgs {
