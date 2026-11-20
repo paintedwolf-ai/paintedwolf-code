@@ -83,6 +83,13 @@ describe("Local model selection", () => {
     expect((screen.getByRole("radio", {name: "Use no local model"}) as HTMLInputElement).checked).toBe(true);
   });
 
+  it("preserves the saved opt-out when the runtime is unavailable", () => {
+    const {client} = mount({...initial, state: "unavailable", selection_state: "opted_out"}, false);
+    expect((screen.getByRole("radio", {name: "Use no local model"}) as HTMLInputElement).checked).toBe(true);
+    expect((screen.getByRole("button", {name: "Use no local model"}) as HTMLButtonElement).disabled).toBe(true);
+    expect(client.deleteLocalModel).not.toHaveBeenCalled();
+  });
+
   it("offers no model by default when the only published tier exceeds device capacity", () => {
     const {client} = mount({...initial, available_models: tiers.map(t => ({...t, download_available: !t.eligible}))});
     expect((screen.getByRole("radio", {name: "Use no local model"}) as HTMLInputElement).checked).toBe(true);

@@ -41,8 +41,9 @@ export function LocalModelSelector(props: Props) {
     }
     return recommended?.id ?? "";
   };
+  const optedOut = () => status()?.selection_state === "opted_out" || status()?.state === "opted_out";
   const selected = () => choice() ?? status()?.selected_model
-    ?? (status()?.state === "opted_out" ? "" : suggested());
+    ?? (optedOut() ? "" : suggested());
   const tier = () => tiers().find(t => t.id === selected());
   const seedTier = () => status()?.seed_available ? tiers().find(t => t.id === status()?.seed_model) : undefined;
   const transfer = () => status()?.state === "downloading" ? status() : undefined;
@@ -53,7 +54,7 @@ export function LocalModelSelector(props: Props) {
   const canApply = () => {
     if (working()) return false;
     if (retryImport()) return !!tier()?.eligible;
-    if (current() || (!selected() && status()?.state === "opted_out")) return !!props.onContinue;
+    if (current() || (!selected() && optedOut())) return !!props.onContinue;
     return !selected() || (tier()?.eligible && tier()?.download_available);
   };
   const applyLabel = () => {
@@ -144,7 +145,7 @@ export function LocalModelSelector(props: Props) {
         await accept(next, ticket);
         return;
       }
-      if (action === "apply" && (current() || (!model && status()?.state === "opted_out"))) {
+      if (action === "apply" && (current() || (!model && optedOut()))) {
         props.onContinue?.();
         return;
       }
