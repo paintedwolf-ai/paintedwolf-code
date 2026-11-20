@@ -87,7 +87,11 @@ func TestFilesystemMountOrderingPreservesExactAllowBacks(t *testing.T) {
 	args := []string{"-test.run=^TestFilesystemMountOrderingPreservesExactAllowBacks$"}
 	// A coverage build emits counters at exit, so the sealed root view keeps
 	// that directory writable and the child never creates a temporary one.
-	if dir := os.Getenv("GOCOVERDIR"); dir != "" {
+	coverDir := os.Getenv("PW_GO_CHILD_COVERDIR")
+	if coverDir == "" {
+		coverDir = os.Getenv("GOCOVERDIR")
+	}
+	if dir := coverDir; dir != "" {
 		fs.WriteRoots = append(fs.WriteRoots, dir)
 		args = append(args, "-test.gocoverdir="+dir)
 	}
@@ -101,6 +105,9 @@ func TestFilesystemMountOrderingPreservesExactAllowBacks(t *testing.T) {
 	}
 	cmd := exec.Command(self, args...)
 	cmd.Env = append(os.Environ(), "PW_METADATA_MOUNT_PLAN="+string(raw), "PW_METADATA_ALLOW_BACKS="+strings.Join(paths, "\n"))
+	if coverDir != "" {
+		cmd.Env = append(cmd.Env, "GOCOVERDIR="+coverDir)
+	}
 	cmd.SysProcAttr = &syscall.SysProcAttr{Cloneflags: unix.CLONE_NEWUSER | unix.CLONE_NEWNS,
 		UidMappings: []syscall.SysProcIDMap{{ContainerID: os.Getuid(), HostID: os.Getuid(), Size: 1}},
 		GidMappings: []syscall.SysProcIDMap{{ContainerID: os.Getgid(), HostID: os.Getgid(), Size: 1}}, GidMappingsEnableSetgroups: false, AmbientCaps: []uintptr{unix.CAP_SYS_ADMIN}}
