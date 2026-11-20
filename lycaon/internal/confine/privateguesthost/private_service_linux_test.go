@@ -28,12 +28,12 @@ func TestPrivateServiceBundle(t *testing.T) {
 		}
 	}
 	dir := t.TempDir()
-	if _, err := openPrivateGuestFrom(t.Context(), filepath.Join(dir, "missing")); !errors.Is(err, serviceguest.ErrUnavailable) {
+	if _, err := launchServiceBundle(t.Context(), filepath.Join(dir, "missing")); !errors.Is(err, serviceguest.ErrUnavailable) {
 		t.Fatal(err)
 	}
 	ctx, cancel := context.WithCancel(t.Context())
 	cancel()
-	if _, err := openPrivateGuestFrom(ctx, dir); !errors.Is(err, context.Canceled) {
+	if _, err := launchServiceBundle(ctx, dir); !errors.Is(err, context.Canceled) {
 		t.Fatal(err)
 	}
 }

@@ -1,4 +1,3 @@
-// Package privateguesthost launches a session's packaged service environment.
 package privateguesthost
 
 import (
@@ -18,8 +17,7 @@ import (
 	"golang.org/x/sys/unix"
 )
 
-// OpenPrivateGuest activates the service userland attached to this engine.
-func OpenPrivateGuest(ctx context.Context) (*serviceguest.Client, error) {
+func launchService(ctx context.Context) (net.Conn, error) {
 	host, err := os.Executable()
 	if err != nil {
 		return nil, errors.Join(serviceguest.ErrUnavailable, err)
@@ -32,7 +30,7 @@ func OpenPrivateGuest(ctx context.Context) (*serviceguest.Client, error) {
 	if err != nil {
 		return nil, err
 	}
-	return openPrivateGuestFrom(ctx, bundle)
+	return launchServiceBundle(ctx, bundle)
 }
 func serviceBundle(host string, layout *nixgeneration.Layout, development bool) (string, error) {
 	root := configlayout.LinuxInstallRoot
@@ -48,7 +46,7 @@ func serviceBundle(host string, layout *nixgeneration.Layout, development bool) 
 	return "", errors.Join(serviceguest.ErrUnavailable, errors.New("private service package is missing"))
 }
 
-func openPrivateGuestFrom(ctx context.Context, bundle string) (*serviceguest.Client, error) {
+func launchServiceBundle(ctx context.Context, bundle string) (net.Conn, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
@@ -59,31 +57,19 @@ func openPrivateGuestFrom(ctx context.Context, bundle string) (*serviceguest.Cli
 	if info, err := os.Stat(image); err != nil || !info.Mode().IsRegular() || info.Mode().Perm()&0111 == 0 {
 		return nil, errors.Join(serviceguest.ErrUnavailable, fmt.Errorf("invalid private service executable %q", image), err)
 	}
-	pair, err := unix.Socketpair(unix.AF_UNIX, unix.SOCK_STREAM|unix.SOCK_CLOEXEC, 0)
+	transport, child, err := activationChannel()
 	if err != nil {
 		return nil, err
 	}
-	parent := os.NewFile(uintptr(pair[0]), "service host")
-	child := os.NewFile(uintptr(pair[1]), "service activation")
 	defer child.Close()
-	transport, err := net.FileConn(parent)
-	_ = parent.Close()
-	if err != nil {
-		return nil, err
-	}
 	cmd, err := hostexec.StartPrivateService(image, child)
 	if err != nil {
 		_ = transport.Close()
 		return nil, errors.Join(serviceguest.ErrUnavailable, err)
 	}
-	_ = child.Close()
 	channel := &linuxServiceConnection{Conn: transport, done: make(chan struct{})}
 	go func() { channel.status = cmd.Wait(); close(channel.done); _ = channel.Conn.Close() }()
-	client, err := serviceguest.Open(ctx, channel)
-	if err != nil {
-		return nil, errors.Join(serviceguest.ErrUnavailable, err)
-	}
-	return client, nil
+	return channel, nil
 }
 
 // The launcher waits for namespace PID 1 and the kernel's descendant teardown.
@@ -97,4 +83,8 @@ func (c *linuxServiceConnection) Close() error {
 	_ = c.Conn.Close()
 	<-c.done
 	return c.status
+}
+
+func activationDescriptors() ([2]int, error) {
+	return unix.Socketpair(unix.AF_UNIX, unix.SOCK_STREAM|unix.SOCK_CLOEXEC, 0)
 }

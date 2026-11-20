@@ -4,7 +4,6 @@ package privateguesthost
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"net"
 	"os"
@@ -13,48 +12,17 @@ import (
 	"time"
 
 	"github.com/lycaon/lycaon/internal/configlayout"
-	"github.com/lycaon/lycaon/internal/serviceguest"
 	"golang.org/x/sys/unix"
 )
 
-// OpenPrivateGuest starts an ephemeral VM and verifies its private agent channel.
-func OpenPrivateGuest(ctx context.Context) (*serviceguest.Client, error) {
-	if err := ctx.Err(); err != nil {
-		return nil, err
-	}
+func launchService(_ context.Context) (net.Conn, error) {
 	payload, err := configlayout.OpenPrivateGuestPayload()
 	if err != nil {
-		return nil, errors.Join(serviceguest.ErrUnavailable, err)
-	}
-	transport, err := launchPrivateGuest(payload)
-	payload.Close()
-	if err != nil {
-		return nil, errors.Join(serviceguest.ErrUnavailable, err)
-	}
-	client, err := serviceguest.Open(ctx, transport)
-	if err != nil && ctx.Err() == nil {
-		return nil, errors.Join(serviceguest.ErrUnavailable, err, transport.Close())
-	}
-	return client, err
-}
-
-func launchPrivateGuest(payload *configlayout.PrivateGuestPayload) (net.Conn, error) {
-	syscall.ForkLock.RLock()
-	pair, err := unix.Socketpair(unix.AF_UNIX, unix.SOCK_STREAM, 0)
-	if err == nil {
-		unix.CloseOnExec(pair[0])
-		unix.CloseOnExec(pair[1])
-	}
-	syscall.ForkLock.RUnlock()
-	if err != nil {
 		return nil, err
 	}
-	parent := os.NewFile(uintptr(pair[0]), "private guest host channel")
-	child := os.NewFile(uintptr(pair[1]), "private guest activation")
-	conn, err := net.FileConn(parent)
-	_ = parent.Close()
+	defer payload.Close()
+	conn, child, err := activationChannel()
 	if err != nil {
-		_ = child.Close()
 		return nil, err
 	}
 	process, err := spawnGuest(payload.Helper, payload.CDHash, append([]*os.File{child}, payload.Boot...))
@@ -94,4 +62,15 @@ func (c *privateGuestChannel) Close() error {
 		}
 	})
 	return c.status
+}
+
+func activationDescriptors() ([2]int, error) {
+	syscall.ForkLock.RLock()
+	pair, err := unix.Socketpair(unix.AF_UNIX, unix.SOCK_STREAM, 0)
+	if err == nil {
+		unix.CloseOnExec(pair[0])
+		unix.CloseOnExec(pair[1])
+	}
+	syscall.ForkLock.RUnlock()
+	return pair, err
 }

@@ -4,11 +4,11 @@ package privateguesthost
 
 import (
 	"context"
+	"net"
 
 	"github.com/lycaon/lycaon/internal/serviceguest"
 )
 
-// OpenPrivateGuest reports an unavailable private service runtime.
-func OpenPrivateGuest(context.Context) (*serviceguest.Client, error) {
+func launchService(context.Context) (net.Conn, error) {
 	return nil, serviceguest.ErrUnavailable
 }
