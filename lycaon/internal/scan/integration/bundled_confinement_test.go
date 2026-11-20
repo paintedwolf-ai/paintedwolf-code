@@ -30,7 +30,7 @@ func TestBundledScannerConfinementDeniesNetwork(t *testing.T) {
 	if box == nil || box.Network != confine.NetworkDeny || box.ProxyAddr != "" || box.LineageID != "" {
 		t.Fatalf("bundled scanner confinement = %+v, want offline boundary", box)
 	}
-	if box.Workspaces.Action != workspace || !reflect.DeepEqual(box.Roots, []string{outputDir}) {
+	if box.Workspaces.Action != workspace || len(box.Roots) != 0 {
 		t.Fatalf("bundled scanner write roots = %v, want only %q", box.Roots, outputDir)
 	}
 	if !reflect.DeepEqual(box.ReadRoots, []string{projectDir}) {

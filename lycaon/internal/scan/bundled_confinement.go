@@ -16,13 +16,10 @@ func BundledScannerConfinement(projectDir string, workspace confine.ActionWorksp
 		return nil, fmt.Errorf("bundled scanner output root is required")
 	}
 	box, applied := confine.DefaultConfinement(confine.Request{
-		Roots: []string{workspace.Path()}, ReadRoots: []string{projectDir}, Egress: confine.EgressDeny,
+		ActionWorkspace: workspace, ReadRoots: []string{projectDir}, Egress: confine.EgressDeny,
 	})
 	if err := confine.RequireApplied(applied); err != nil {
 		return nil, err
-	}
-	if box != nil {
-		box.Workspaces.Action = workspace
 	}
 	return box, nil
 }

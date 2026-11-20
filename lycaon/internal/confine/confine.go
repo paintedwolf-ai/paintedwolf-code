@@ -206,7 +206,7 @@ func DefaultConfinement(req Request) (*Confinement, bool) {
 		logConfinementPrepareError(err)
 		return nil, false
 	}
-	if !confinementRequired() || !Available() || len(prepared.Roots) == 0 {
+	if !confinementRequired() || !Available() || (len(prepared.Roots) == 0 && req.ActionWorkspace.Path() == "") {
 		return nil, false
 	}
 	c := &Confinement{
@@ -215,7 +215,7 @@ func DefaultConfinement(req Request) (*Confinement, bool) {
 		ProjectID:                   req.ProjectID,
 		Roots:                       prepared.Roots,
 		GrantedWriteRoots:           append([]string(nil), prepared.GrantedWriteRoots...),
-		Workspaces:                  WorkspaceRoots{SessionScratch: prepared.SessionScratchRoot},
+		Workspaces:                  WorkspaceRoots{SessionScratch: prepared.SessionScratchRoot, Action: req.ActionWorkspace},
 		ReadRoots:                   prepared.ReadRoots,
 		ReadDenyPaths:               prepared.ReadDenyPaths,
 		View:                        prepared.View,
