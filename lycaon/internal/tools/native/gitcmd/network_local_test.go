@@ -9,9 +9,11 @@ import (
 	"testing"
 
 	lycexec "github.com/lycaon/lycaon/internal/exec"
+	"github.com/lycaon/lycaon/internal/hitl"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/tools"
+	"github.com/lycaon/lycaon/internal/tools/projectpaths"
 )
 
 // launchRecorder keeps the file authority each confined launch was bound with.
@@ -37,6 +39,16 @@ func (r *launchRecorder) reset() {
 	r.mu.Lock()
 	r.reads, r.writes = nil, nil
 	r.mu.Unlock()
+}
+
+func (h *harness) approveWrite(paths ...string) {
+	h.t.Helper()
+	for _, path := range paths {
+		h.tc.Files.ApprovedFileAccess = append(h.tc.Files.ApprovedFileAccess, hitl.GrantedPathDelta{Path: path, Write: true})
+	}
+	bound, err := projectpaths.NewProgramPaths(h.t.Context(), h.owners.Boundary, h.tc, "")
+	testutil.FailErr(h.t, "bind approved Git targets", err)
+	h.paths = bound
 }
 
 func (h *harness) bareRemote(t *testing.T, name string) string {
@@ -65,6 +77,8 @@ func TestLocalRemotesAdmitEveryDirectoryGitOpens(t *testing.T) {
 	testutil.FailErr(t, "write alternates", os.WriteFile(filepath.Join(origin, "objects", "info", "alternates"), []byte(filepath.Join(alternate, "objects")+"\n"), 0o644))
 	h.git("remote", "add", "origin", "file://localhost"+filepath.ToSlash(origin))
 
+	h.exec("git", "push", "origin", "main").refused(t, "unapproved local remote", "SURVEY_PATH_ESCAPE")
+	h.approveWrite(origin)
 	if push := h.exec("git", "push", "origin", "main"); push.err != nil || push.result.Status != 0 {
 		t.Fatalf("push: %+v %v %s", push.result, push.err, push.stderr)
 	}
@@ -113,6 +127,7 @@ func TestRejectedPushSettlesUnknown(t *testing.T) {
 	h.write("behind.txt", "behind\n")
 	h.git("add", "behind.txt")
 	h.git("commit", "-q", "-m", "behind")
+	h.approveWrite(origin)
 	push := h.exec("git", "push", "origin", "main")
 	if push.result.Status == 0 || push.result.EffectCertainty != toolcontract.EffectUnknown {
 		t.Fatalf("rejected push settled %+v, want a failure with unknown effect", push.result)
@@ -129,21 +144,24 @@ func TestTargetFormsLaunchWithTheirTarget(t *testing.T) {
 	outside, err := filepath.EvalSymlinks(t.TempDir())
 	testutil.FailErr(t, "outside", err)
 
-	if r := h.exec("git", "init", "-q", filepath.Join(outside, "fresh")); r.err != nil || r.result.Status != 0 {
+	fresh, side := filepath.Join(outside, "fresh"), filepath.Join(outside, "side")
+	h.exec("git", "init", "-q", fresh).refused(t, "unapproved init target", "SURVEY_PATH_ESCAPE")
+	h.approveWrite(fresh, side)
+	if r := h.exec("git", "init", "-q", fresh); r.err != nil || r.result.Status != 0 {
 		t.Fatalf("init: %+v %v %s", r.result, r.err, r.stderr)
 	}
 	if !slices.Contains(recorder.writes, outside) {
 		t.Fatalf("init launch writes %v, want %s", recorder.writes, outside)
 	}
 	recorder.reset()
-	if r := h.exec("git", "worktree", "add", "-b", "side", filepath.Join(outside, "side")); r.err != nil || r.result.Status != 0 {
+	if r := h.exec("git", "worktree", "add", "-b", "side", side); r.err != nil || r.result.Status != 0 {
 		t.Fatalf("worktree add: %+v %v %s", r.result, r.err, r.stderr)
 	}
 	if !slices.Contains(recorder.writes, outside) {
 		t.Fatalf("worktree launch writes %v, want %s", recorder.writes, outside)
 	}
 	recorder.reset()
-	if r := h.exec("git", "worktree", "remove", filepath.Join(outside, "side")); r.err != nil || r.result.Status != 0 {
+	if r := h.exec("git", "worktree", "remove", side); r.err != nil || r.result.Status != 0 {
 		t.Fatalf("worktree remove: %+v %v %s", r.result, r.err, r.stderr)
 	}
 	if !slices.Contains(recorder.writes, outside) {

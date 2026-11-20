@@ -77,6 +77,7 @@ func TestNetworkCommandsOverLocalFileRemote(t *testing.T) {
 	if out, stderr, status := h.direct(bareParent, "init", "--bare", "-q", "-b", "main", bareDir); status != 0 {
 		t.Fatalf("init bare: %d %s %s", status, out, stderr)
 	}
+	h.approveWrite(bareDir)
 	fileURL := "file://" + filepath.ToSlash(bareDir)
 	h.git("remote", "add", "origin", fileURL)
 
