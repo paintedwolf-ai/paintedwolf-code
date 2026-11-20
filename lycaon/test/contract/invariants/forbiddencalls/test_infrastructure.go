@@ -172,7 +172,6 @@ var surveyTools = []invariants.Invariant{{
 		"internal/tools/native/survey/grep.go",
 		"internal/tools/native/jq/decode.go",
 	}), invariants.Package("internal/tools/safecmd")),
-	Exempt: []invariants.Exemption{{Key: "internal/tools/native/survey/grep.go:hostGrepMaxFileBytes", Reason: "a package variable tests lower to exercise the clamp"}},
 	Check: func(r *invariants.Run) {
 		banned := map[string]string{
 			"github.com/lycaon/lycaon/internal/tools/projectpaths": "ResolveRead",

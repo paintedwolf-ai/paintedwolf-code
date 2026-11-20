@@ -51,7 +51,7 @@ func openFileWrites(f *invariants.GoFile, call *ast.CallExpr) bool {
 // isDoorTestSupport identifies fixture writers whose scratch trees are discarded.
 func isDoorTestSupport(f *invariants.GoFile) bool {
 	return strings.HasPrefix(f.Rel, "cmd/codegen-") || strings.HasSuffix(f.Rel, "_testsupport.go") ||
-		invariants.Under(f, "internal/testutil", "internal/api/contractfixture", "internal/testbaseline")
+		invariants.Under(f, "internal/testutil", "internal/api/contractfixture", "internal/testbaseline", "internal/testvolume")
 }
 
 // doorExemptions are writes whose lifetime lies outside a replacement transaction,
@@ -153,7 +153,6 @@ var doorExemptions = []invariants.Exemption{
 
 	// Maintenance commands write generated checkout artifacts.
 	{Key: "internal/approvalregistry/registry.go", Reason: "generated registry artifact written by ./task codegen:approval-explanations"},
-	{Key: "internal/oar/corpus.go", Reason: "seeds the conformance fixture corpus into a caller-named output directory"},
 	{Key: "internal/oar/integrity.go", Reason: "generated guidance registry written by ./task codegen:guidance-registry"},
 
 	// CLI output failures are returned to the operator.

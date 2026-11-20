@@ -19,7 +19,7 @@ var processLaunch = []invariants.Invariant{{
 			aliases := importAliases(f.AST)
 			prepared := preparedCommandNames(f.AST, aliases)
 			emptyErrorReturns := emptyOptionsErrorReturns(f.AST)
-			nativeStart := invariants.Under(f, "internal/exec", "internal/confine")
+			nativeStart := invariants.Under(f, "internal/exec", "internal/confine", "internal/testutil/processfixture")
 			allowLowLevel := nativeStart || invariants.Under(f, "internal/launchguard")
 			ast.Inspect(f.AST, func(n ast.Node) bool {
 				switch node := n.(type) {

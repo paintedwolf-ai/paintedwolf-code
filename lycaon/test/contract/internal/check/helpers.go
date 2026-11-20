@@ -61,9 +61,8 @@ func IsErrorCodeShape(s string) bool {
 func ActivateStockCatalog(t *testing.T) {
 	t.Helper()
 	eff := StockCatalog(t)
-	previous := extpacks.Active()
 	extpacks.SetActive(eff)
-	t.Cleanup(func() { extpacks.SetActive(previous) })
+	t.Cleanup(func() { extpacks.SetActive(nil) })
 }
 
 func StockCatalog(t *testing.T) *extpacks.EffectiveCatalog {

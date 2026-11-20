@@ -127,7 +127,7 @@ var parsingTaggerMethods = []string{"Tag", "TagUTF16", "TagUTF16Bytes", "TagIncr
 // deadline, as their contextcheck exemptions say.
 var timeoutClaims = []struct{ dir, name string }{
 	{"internal/project", "gitRemoteHash"},
-	{"internal/worker", "sqlQueueCore.Get"},
+	{"internal/worker", "SQLQueue.Get"},
 	{"internal/llm", "fetchDiscoveredModels"},
 }
 
