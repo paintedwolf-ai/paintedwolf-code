@@ -142,7 +142,7 @@ func (s *supervisor) performSessionSocket(target *targetProcess, req SocketReque
 	if err != nil {
 		return 0, unix.EACCES
 	}
-	defer channel.Close()
+	defer func() { _ = channel.Close() }()
 	if req.Op == OpBind {
 		if s.performer == nil {
 			return 0, unix.EACCES
@@ -158,7 +158,7 @@ func (s *supervisor) performSessionSocket(target *targetProcess, req SocketReque
 	if err != nil {
 		return 0, errnoOf(err, unix.EACCES)
 	}
-	defer unix.Close(root)
+	defer func() { _ = unix.Close(root) }()
 	if !target.valid() {
 		return 0, unix.EINTR
 	}
@@ -166,7 +166,7 @@ func (s *supervisor) performSessionSocket(target *targetProcess, req SocketReque
 	if err != nil {
 		return 0, errnoOf(err, unix.EACCES)
 	}
-	defer unix.Close(destination)
+	defer func() { _ = unix.Close(destination) }()
 	if !sessionipc.Admits(int(channel.Fd()), destination) {
 		s.refusals.report(Refusal{Operation: "network-outbound", Target: req.Unix, Process: target.comm()})
 		return 0, unix.EACCES
@@ -193,7 +193,7 @@ func (f creationFloors) bindSessionSocket(call pathCall, dirs []int) pathResult 
 	if err != nil {
 		return errnoResult(err)
 	}
-	defer unix.Close(cwd)
+	defer func() { _ = unix.Close(cwd) }()
 	if errno := sessionipc.Reserve(dirs[1], dirs[0]); errno != 0 {
 		return errnoResult(errno)
 	}

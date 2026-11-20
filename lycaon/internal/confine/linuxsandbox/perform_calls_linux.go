@@ -528,7 +528,7 @@ func (f creationFloors) metadata(dir int, call pathCall) pathResult {
 		if err != nil {
 			return pathResult{}
 		}
-		defer unix.Close(handle)
+		defer func() { _ = unix.Close(handle) }()
 		fd = handle
 	}
 	if !readOnlyMount(fd, "") {

@@ -42,25 +42,25 @@ func (r *Registry) Channel(root string) (*os.File, error) {
 	}
 	session, err := identify(dir, unix.S_IFDIR)
 	if err != nil {
-		unix.Close(dir)
+		_ = unix.Close(dir)
 		return nil, err
 	}
 	pair, err := socketPair()
 	if err != nil {
-		unix.Close(dir)
+		_ = unix.Close(dir)
 		return nil, err
 	}
 	file := os.NewFile(uintptr(pair[0]), "session socket registry")
 	channel, err := net.FileConn(file)
 	_ = file.Close()
 	if err != nil {
-		unix.Close(dir)
-		unix.Close(pair[1])
+		_ = unix.Close(dir)
+		_ = unix.Close(pair[1])
 		return nil, err
 	}
 	go func() {
-		defer unix.Close(dir)
-		defer channel.Close()
+		defer func() { _ = unix.Close(dir) }()
+		defer func() { _ = channel.Close() }()
 		r.serve(channel.(*net.UnixConn), session)
 	}()
 	return os.NewFile(uintptr(pair[1]), "session sockets"), nil
@@ -90,7 +90,7 @@ func (r *Registry) serve(channel *net.UnixConn, session object) {
 			_ = unix.Sendmsg(fds[1], binary.LittleEndian.AppendUint32(nil, uint32(errno)), nil, nil, unix.MSG_NOSIGNAL)
 		}
 		for _, fd := range fds {
-			unix.Close(fd)
+			_ = unix.Close(fd)
 		}
 	}
 }
@@ -179,7 +179,7 @@ func (g *group) prune() {
 		if unix.Fstat(e.fd, &stat) == nil && stat.Nlink == 0 {
 			delete(e.owner.pins, id)
 			delete(g.pins, id)
-			unix.Close(e.fd)
+			_ = unix.Close(e.fd)
 		}
 	}
 }
@@ -196,18 +196,18 @@ func (r *Registry) cancel(session object, owner *launch) {
 func (r *Registry) retain(session object, owner *launch, fd int) unix.Errno {
 	id, err := identify(fd, unix.S_IFSOCK)
 	if err != nil {
-		unix.Close(fd)
+		_ = unix.Close(fd)
 		return unix.EINVAL
 	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	g := r.groups[session]
 	if g == nil || !owner.reserved {
-		unix.Close(fd)
+		_ = unix.Close(fd)
 		return unix.EINVAL
 	}
 	if _, exists := g.pins[id]; exists {
-		unix.Close(fd)
+		_ = unix.Close(fd)
 		return unix.EEXIST
 	}
 	g.reservations--
@@ -229,7 +229,7 @@ func (r *Registry) release(session object, owner *launch) {
 	}
 	for id, fd := range owner.pins {
 		delete(g.pins, id)
-		unix.Close(fd)
+		_ = unix.Close(fd)
 	}
 	if len(g.pins) == 0 && g.reservations == 0 {
 		delete(r.groups, session)

@@ -350,7 +350,7 @@ func (s *supervisor) observeMetadata(t *targetProcess, o metadatacall.Operand) (
 		if err != nil {
 			return 0, errMetadataContinue, true
 		}
-		defer unix.Close(fd)
+		defer func() { _ = unix.Close(fd) }()
 		dirs = []int{fd}
 		call.Dirs = 1
 	}
