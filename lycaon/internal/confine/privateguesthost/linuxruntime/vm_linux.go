@@ -53,12 +53,10 @@ func runVM(image string) error {
 	}
 	defer initrd.Close()
 	args := vmArguments(runtime.GOARCH, hasKVM())
-	cmd := exec.Command("/proc/self/fd/4", args...)
+	cmd := ControllerCommand("/proc/self/fd/4", args...)
 	cmd.Args[0] = manifest.QEMU
-	cmd.Dir = "/"
 	cmd.Env = []string{"LANG=C"}
 	cmd.ExtraFiles = []*os.File{os.Stdin, binary, kernel, initrd}
-	cmd.Stderr = os.Stderr
 	cmd.SysProcAttr = &syscall.SysProcAttr{Pdeathsig: syscall.SIGKILL}
 	if err := unix.Prctl(unix.PR_SET_NO_NEW_PRIVS, 1, 0, 0, 0); err != nil {
 		return err

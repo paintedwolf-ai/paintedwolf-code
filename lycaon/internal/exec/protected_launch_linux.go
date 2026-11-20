@@ -15,6 +15,7 @@ import (
 	"golang.org/x/sys/unix"
 
 	"github.com/lycaon/lycaon/internal/confine"
+	"github.com/lycaon/lycaon/internal/confine/privateguesthost/linuxruntime"
 	"github.com/lycaon/lycaon/internal/launchbroker"
 )
 
@@ -237,11 +238,8 @@ func relayedCommand(cmd *exec.Cmd) bool {
 
 // StartPrivateService activates the installed controller outside the protected desktop.
 func StartPrivateService(image string, control *os.File) (*exec.Cmd, error) {
-	cmd := exec.Command(image, "--acquire-native")
-	cmd.Dir = "/"
-	cmd.Env = []string{}
+	cmd := linuxruntime.ControllerCommand(image, "--acquire-native")
 	cmd.Stdin = control
-	cmd.Stderr = os.Stderr
 	if err := relayThroughBroker(cmd); err != nil {
 		return nil, err
 	}

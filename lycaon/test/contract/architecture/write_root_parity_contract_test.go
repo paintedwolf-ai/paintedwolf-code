@@ -130,6 +130,7 @@ func isConfinementType(expr ast.Expr) bool {
 
 // confinementProducerInventory records each root producer and provenance.
 var confinementProducerInventory = map[string]string{
+	"internal/confine/write_roots.go":                       "PrivateServiceBoundary admits the host-selected session scratch under the isolated guest root",
 	"internal/tools/native/command/program_external.go":     "programEnvironment — DefaultConfinement from ActionConfineInputsForContext; host-derived roots and grants for the shared launch environment",
 	"internal/tools/native/command/command_exec.go":         "commandConfineRoots(tctx, extraWriteRoots) — host-selected root + attached roots + approved chat write-root overlay",
 	"internal/tools/native/terminal/session_open.go":        "tools.ConfineRootsForAction(tctx) — host provenance only",

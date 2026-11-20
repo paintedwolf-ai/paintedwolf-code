@@ -88,6 +88,15 @@ func delegatedLeaf(origin string) (string, error) {
 	return leaf, err
 }
 
+// ControllerCommand prepares private infrastructure with a fixed root and empty environment.
+func ControllerCommand(image string, args ...string) *exec.Cmd {
+	cmd := exec.Command(image, args...)
+	cmd.Dir = "/"
+	cmd.Env = []string{}
+	cmd.Stderr = os.Stderr
+	return cmd
+}
+
 func startLeaf(image, leaf string) error {
 	for file, limit := range limits() {
 		if err := os.WriteFile(filepath.Join(leaf, file), []byte(strconv.FormatInt(limit, 10)), 0600); err != nil {
@@ -99,10 +108,8 @@ func startLeaf(image, leaf string) error {
 		return err
 	}
 	defer group.Close()
-	cmd := exec.Command(image, "--launch-native")
-	cmd.Dir = "/"
-	cmd.Env = []string{}
-	cmd.Stdin, cmd.Stderr = os.Stdin, os.Stderr
+	cmd := ControllerCommand(image, "--launch-native")
+	cmd.Stdin = os.Stdin
 	cmd.SysProcAttr = &syscall.SysProcAttr{UseCgroupFD: true, CgroupFD: int(group.Fd()), Pdeathsig: syscall.SIGKILL}
 	return cmd.Run()
 }
@@ -162,11 +169,10 @@ func managerScope(image, manager, origin string) error {
 		return err
 	}
 	defer file.Close()
-	cmd := exec.Command("/proc/self/fd/3", "--user", "--scope", "--quiet", "--collect", "--property=TasksMax=256", "--property=MemoryMax=512M", "--", image, "--launch-native")
+	cmd := ControllerCommand("/proc/self/fd/3", "--user", "--scope", "--quiet", "--collect", "--property=TasksMax=256", "--property=MemoryMax=512M", "--", image, "--launch-native")
 	cmd.Args[0] = manager
 	cmd.ExtraFiles = []*os.File{file}
-	cmd.Stdin, cmd.Stderr = os.Stdin, os.Stderr
-	cmd.Dir = "/"
+	cmd.Stdin = os.Stdin
 	cmd.SysProcAttr = &syscall.SysProcAttr{Pdeathsig: syscall.SIGKILL}
 	cmd.Env = []string{"XDG_RUNTIME_DIR=/run/user/" + strconv.Itoa(os.Getuid()), "PW_SERVICE_RESOURCE_PARENT=" + origin}
 	return cmd.Run()

@@ -3,6 +3,7 @@ package linuxruntime
 import (
 	"os"
 	"path/filepath"
+	"slices"
 	"testing"
 )
 
@@ -37,5 +38,12 @@ func TestResourceSelection(t *testing.T) {
 	leaf, err = delegatedLeaf(origin)
 	if err != nil || filepath.Dir(leaf) != origin {
 		t.Fatalf("workspace resource leaf %q %v", leaf, err)
+	}
+}
+
+func TestControllerStartsFromSystemRoot(t *testing.T) {
+	cmd := ControllerCommand("/fixture/controller", "--launch-native")
+	if cmd.Dir != "/" || cmd.Env == nil || len(cmd.Env) != 0 || cmd.Stderr != os.Stderr || !slices.Equal(cmd.Args, []string{"/fixture/controller", "--launch-native"}) {
+		t.Fatalf("controller path=%q dir=%q env=%v args=%q", cmd.Path, cmd.Dir, cmd.Env, cmd.Args)
 	}
 }

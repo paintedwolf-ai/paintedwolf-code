@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"runtime"
 	"syscall"
@@ -89,10 +88,8 @@ func launchNamespace() error {
 		return err
 	}
 	defer root.Close()
-	cmd := exec.Command("/proc/self/exe", "--enter-native")
-	cmd.Stdin, cmd.Stderr = os.Stdin, os.Stderr
-	cmd.Dir = "/"
-	cmd.Env = []string{}
+	cmd := linuxruntime.ControllerCommand("/proc/self/exe", "--enter-native")
+	cmd.Stdin = os.Stdin
 	cmd.ExtraFiles = []*os.File{root}
 	cmd.SysProcAttr = &syscall.SysProcAttr{
 		Cloneflags:  unix.CLONE_NEWUSER | unix.CLONE_NEWNS | unix.CLONE_NEWPID | unix.CLONE_NEWNET | unix.CLONE_NEWIPC | unix.CLONE_NEWUTS,
