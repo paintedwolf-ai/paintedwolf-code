@@ -1,11 +1,18 @@
 { lib, stdenv, buildGoModule, callPackage, fetchurl, python3, gnumake
-, perl, bison, flex, bash, libarchive, qemu_kvm, source }:
+, perl, bison, flex, bash, libarchive, qemu, source }:
 let
   tools = callPackage ./toolchains.nix { inherit source; };
   lock = builtins.fromJSON (builtins.readFile (source + "/packaging/service-guest/inputs.json"));
   host = stdenv.hostPlatform.parsed.cpu.name;
   arch = { aarch64 = "arm64"; x86_64 = "amd64"; }.${host};
   version = lib.strings.trim (builtins.readFile (source + "/VERSION"));
+  emulator = qemu.override {
+    minimal = true;
+    hostCpuTargets = [ "${host}-softmmu" ];
+    enableBlobs = true;
+    seccompSupport = true;
+    pluginsSupport = false;
+  };
   supervisor = (buildGoModule.override { go = tools.go; }) {
     pname = "pw-service-guest";
     inherit version;
@@ -26,14 +33,14 @@ in stdenv.mkDerivation {
   dontUnpack = true;
   dontFixup = true;
   nativeBuildInputs = [ python3 gnumake perl bison flex bash libarchive ];
-  passthru.runtimeQemu = qemu_kvm;
+  passthru.runtimeQemu = emulator;
   installPhase = ''
     export HOME="$TMPDIR/home"
     mkdir -p "$HOME" "$TMPDIR/cache"
     ${lib.concatMapStringsSep "\n" stage inputs}
     python3 ${source}/scripts/service-guest/assemble.py \
       --system linux --arch ${arch} --cache "$TMPDIR/cache" \
-      --driver-tool ${supervisor}/bin/service-guest-drivers --qemu-path ${qemu_kvm}/bin/qemu-system-${host} \
+      --driver-tool ${supervisor}/bin/service-guest-drivers --qemu-path ${emulator}/bin/qemu-system-${host} \
       --guest-binary ${supervisor}/bin/pw-service-guest --output "$TMPDIR/service-guest"
     mkdir -p "$out"
     cp -a "$TMPDIR/service-guest" "$out/"

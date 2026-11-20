@@ -40,6 +40,7 @@ Painted Wolf Code bundles or links these open-source components at build time. E
 | [gitleaks](https://github.com/gitleaks/gitleaks) | Secrets (Go library) | **MIT** | [`scan-supply-chain.md`](scan-supply-chain.md) |
 | [osv-scalibr](https://github.com/google/osv-scalibr) | SCA (Go library) | **Apache-2.0** | [`scan-supply-chain.md`](scan-supply-chain.md) |
 | Alpine Linux kernel, BusyBox and musl | Private service environment | **GPL-2.0-only**, **GPL-2.0-only** and **MIT** | [Pinned guest inputs](../packaging/service-guest/inputs.json) · [bundled license catalog](../licensing/bundled-binaries.yaml) |
+| QEMU | On-demand Linux private service VM | **GPL-2.0** and component licenses | Native distributions supply the executable. The Nix closure catalog records its package, licenses and sources. |
 | PostgreSQL | Database server and client commands in the private service environment | **PostgreSQL** | [Source and license text](../licensing/bundled-binaries.yaml) |
 | [git](https://github.com/git/git) | Version control engine (bundled binary) | **GPL-2.0** | [`git.md`](git.md) · [`dependencies.md`](dependencies.md) |
 | [git-lfs](https://github.com/git-lfs/git-lfs) | Large-file filter for the bundled git (bundled binary) | **MIT** | [`git.md`](git.md) · [`dependencies.md`](dependencies.md) |
