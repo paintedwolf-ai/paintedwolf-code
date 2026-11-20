@@ -49,13 +49,26 @@ elif sys.argv[1] == "list":
     print("fixture/cmd/logs")
     if os.environ["GOOS"] == "linux":
         print("fixture/cmd/linux-only")
+        if "./cmd/pw-service-guest" in sys.argv:
+            print("fixture/cmd/private-guest")
 else:
     raise SystemExit("unexpected go operation")
 ''',
                     "go-licenses": '''#!/usr/bin/env python3
 import json, os, pathlib, sys
-pathlib.Path(os.environ["NOTICE_TEST_ROOT"], "checked.json").write_text(json.dumps(sys.argv[1:]))
-raise SystemExit(37)
+root = pathlib.Path(os.environ["NOTICE_TEST_ROOT"])
+if sys.argv[1] == "check":
+    if "./cmd/pw-service-guest" in sys.argv:
+        (root / "guest_checked.json").write_text(json.dumps([os.environ["GOOS"], os.environ["CGO_ENABLED"]]))
+        raise SystemExit(37)
+    (root / "checked.json").write_text(json.dumps(sys.argv[1:]))
+    if os.environ["GOOS"] != "darwin":
+        raise SystemExit(37)
+elif sys.argv[1] == "csv":
+    print("fixture/module,https://example.com,MIT")
+elif sys.argv[1] == "save":
+    path = next(arg.split("=", 1)[1] for arg in sys.argv if arg.startswith("--save_path="))
+    pathlib.Path(path).mkdir()
 ''',
                     "cargo-about": "#!/bin/sh\nexit 0\n",
                     "bun": "#!/bin/sh\nexit 0\n",
@@ -75,5 +88,7 @@ raise SystemExit(37)
                 packages = [arg for arg in checked[1:] if not arg.startswith("--")]
                 expected = ["fixture/cmd/engine", "fixture/cmd/logs"]
                 if platform == "linux":
-                    expected.append("fixture/cmd/linux-only")
+                    expected.extend(["fixture/cmd/linux-only", "fixture/cmd/private-guest"])
+                if platform == "darwin":
+                    self.assertEqual(json.loads((root / "guest_checked.json").read_text()), ["linux", "0"])
                 self.assertEqual(packages, expected)

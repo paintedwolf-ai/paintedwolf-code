@@ -78,9 +78,8 @@ GO_IGNORE_DUAL_LICENSED=(
   --ignore=github.com/spdx/tools-golang
 )
 # This package list matches the staged executables.
-SHIPPED_GO_PACKAGES=(./cmd/lycaon ./cmd/pw-logs ./cmd/pw-vault-identity ./cmd/pw-launch ./cmd/pw-launch-entry ./cmd/pw-generations)
-# Select entrypoints from Go's platform/build-tag facts. Linux launch helpers
-# have no source files on macOS or Windows and are not shipped there.
+SHIPPED_GO_PACKAGES=(./cmd/lycaon ./cmd/pw-logs ./cmd/pw-vault-identity ./cmd/pw-launch ./cmd/pw-launch-entry ./cmd/pw-generations ./cmd/pw-service-guest)
+# Go selects the host entrypoints available on this target.
 (
   cd "${GO_DIR}"
   go list -e -f '{{if or .GoFiles .CgoFiles}}{{.ImportPath}}{{end}}' "${SHIPPED_GO_PACKAGES[@]}" >"${TMP}/go-packages"
@@ -95,28 +94,39 @@ if [[ ${#NOTICE_GO_PACKAGES[@]} -eq 0 ]]; then
   echo "error: no shipped Go entrypoints are available for this target" >&2
   exit 1
 fi
-(
+audit_go() (
+  local scope="$1"
+  shift
   cd "${GO_DIR}"
-  "${GO_LICENSES}" check "${NOTICE_GO_PACKAGES[@]}" \
+  "${GO_LICENSES}" check "$@" \
     "${GO_IGNORE_FIRST_PARTY[@]}" \
     "${GO_IGNORE_UNCLASSIFIED[@]}" \
     "${GO_IGNORE_DUAL_LICENSED[@]}" \
     --disallowed_types=forbidden,restricted,unknown
   # Warnings/classifier misses go to stderr; CSV rows (including Unknown) to stdout.
-  "${GO_LICENSES}" csv "${NOTICE_GO_PACKAGES[@]}" \
+  "${GO_LICENSES}" csv "$@" \
     "${GO_IGNORE_FIRST_PARTY[@]}" \
-    >"${TMP}/go.csv" 2>"${TMP}/go-csv.err"
-  if [[ ! -s "${TMP}/go.csv" ]]; then
+    >"${TMP}/${scope}.csv" 2>"${TMP}/${scope}-csv.err"
+  if [[ ! -s "${TMP}/${scope}.csv" ]]; then
     echo "error: go-licenses csv produced no output" >&2
-    cat "${TMP}/go-csv.err" >&2 || true
+    cat "${TMP}/${scope}-csv.err" >&2 || true
     exit 1
   fi
-  "${GO_LICENSES}" save "${NOTICE_GO_PACKAGES[@]}" \
+  "${GO_LICENSES}" save "$@" \
     "${GO_IGNORE_FIRST_PARTY[@]}" \
     "${GO_IGNORE_UNCLASSIFIED[@]}" \
-    --save_path="${TMP}/go-save" \
+    --save_path="${TMP}/${scope}-save" \
     --force
 )
+
+audit_go go "${NOTICE_GO_PACKAGES[@]}"
+if [[ "${GOOS:-$(go env GOOS)}" == darwin ]]; then
+  GOOS=linux CGO_ENABLED=0 audit_go guest ./cmd/pw-service-guest
+  LC_ALL=C sort -u "${TMP}/go.csv" "${TMP}/guest.csv" >"${TMP}/combined.csv"
+  mv "${TMP}/combined.csv" "${TMP}/go.csv"
+  cp -R "${TMP}/guest-save/." "${TMP}/go-save/"
+fi
+
 
 # The fixture requires assembly to reject an unknown license.
 if [[ "${LICENSES_NOTICES_FIXTURE:-}" == "1" ]]; then
