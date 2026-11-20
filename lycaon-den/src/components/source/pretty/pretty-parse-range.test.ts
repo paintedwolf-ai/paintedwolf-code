@@ -2,7 +2,7 @@
 import { forceParsing, indentUnit, syntaxTree } from "@codemirror/language";
 import { EditorState } from "@codemirror/state";
 import { EditorView } from "@codemirror/view";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { languageExtensionForPath } from "../editor/codemirror-lang.ts";
 import { applyPrettyConfig, createPrettyExtension, prettyWorkOf } from "./pretty-layout.ts";
 import { PRETTY_CHECKPOINT_INTERVAL } from "./pretty-scan-state.ts";
@@ -34,6 +34,9 @@ describe("layout over the parsed range", () => {
     ];
 
     for (const { path, unit, line } of cases) {
+      // Every clock read jumps a second, so each parse time slice ends after one step: the slowest host.
+      let clock = 0;
+      const starved = vi.spyOn(Date, "now").mockImplementation(() => (clock += 1_000));
       const doc = Array.from({ length: 6_000 }, (_, i) => line(i)).join("\n");
       const parent = document.createElement("div");
       document.body.appendChild(parent);
@@ -49,8 +52,8 @@ describe("layout over the parsed range", () => {
         }),
       });
       try {
-        // The initial parse stops on a time slice. Parsing to a fixed point with no time limit makes
-        // the starting tree the same on any host; past the viewport, later updates parse nothing more.
+        // Parsing to a fixed point with no time limit gives every host the same starting tree; past the
+        // viewport, later updates parse nothing more.
         const start = Math.max(syntaxTree(view.state).length, view.viewport.to, view.state.doc.line(400).to);
         expect(forceParsing(view, start, Infinity), path).toBe(true);
         const parsedBefore = syntaxTree(view.state).length;
@@ -76,6 +79,7 @@ describe("layout over the parsed range", () => {
         expect(lastDecoration(view), path).toBeLessThan(reached);
       } finally {
         view.destroy();
+        starved.mockRestore();
         parent.remove();
       }
     }
