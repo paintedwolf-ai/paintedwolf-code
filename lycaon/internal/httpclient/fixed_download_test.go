@@ -50,7 +50,11 @@ func TestFixedModelDownloadUsesPinnedAddressThroughProxy(t *testing.T) {
 	}
 	req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, origin+"/manifest.json", nil)
 	testutil.FailErr(t, "prepare download", err)
-	if _, err := client.Do(req); !errors.Is(err, hostproxy.ProxyRejected) {
+	resp, err := client.Do(req)
+	if resp != nil {
+		defer resp.Body.Close()
+	}
+	if !errors.Is(err, hostproxy.ProxyRejected) {
 		t.Fatalf("proxy outcome: %v", err)
 	}
 	if got := <-seen; got != "CONNECT 8.8.8.8:443" || lookups != 1 {
