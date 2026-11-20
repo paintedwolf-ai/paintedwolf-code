@@ -59,8 +59,7 @@ func writePlanFlowBlueprint(t *testing.T, projectDir, blueprintPath string) {
 
 func TestPlanFlowPrimitivesWorkflow(t *testing.T) {
 	h := BuildForTest(t)
-	cancel := h.StartBackgroundWorkers(t, context.Background())
-	t.Cleanup(cancel)
+	h.Start(t)
 
 	ctx := h.OwnerCtx(t, context.Background())
 	dir := h.ProjectDir(t, "plan-flow-primitives")

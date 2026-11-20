@@ -7,10 +7,8 @@ import (
 	"github.com/lycaon/lycaon/internal/sandbox"
 )
 
-// PathIdentity is the resolved root identity of an observed path token:
-// the owning root's ID plus the path relative to that root. RootID is empty
-// for legacy tokens that resolve outside every attached root (or when no
-// roots are configured); ScopeRel then carries the legacy normalized token.
+// PathIdentity pairs an attached root with a root-relative path.
+// Unrooted paths retain a normalized token and an empty RootID.
 type PathIdentity struct {
 	RootID   string
 	ScopeRel string
@@ -20,8 +18,7 @@ type PathIdentity struct {
 // using the session-folder rule: @label/ tokens resolve to the named root,
 // absolute paths to the most specific containing root, and bare tokens to
 // the session's active root. Tokens that resolve under no attached root —
-// including approved external roots — keep the legacy normalized spelling
-// with an empty RootID so external and unresolvable paths behave as before.
+// including approved external roots — retain a normalized token and empty RootID.
 func ResolvePathIdentity(roots CitationRoots, token string) PathIdentity {
 	token = NormalizeLedgerPath(token)
 	if token == "" || sandbox.HasParentTraversal(token) {
@@ -46,7 +43,7 @@ func ResolvePathIdentity(roots CitationRoots, token string) PathIdentity {
 
 // CustodyKey maps a path token to the ledger key custody is indexed under:
 // the session-folder display key for a path in an attached root, else the
-// legacy normalized token.
+// normalized unrooted token.
 func CustodyKey(roots CitationRoots, token string) string {
 	id := ResolvePathIdentity(roots, token)
 	if id.RootID != "" {
@@ -59,7 +56,7 @@ func CustodyKey(roots CitationRoots, token string) string {
 }
 
 // resolveScopeRel maps a token to its durable ledger key: the root-relative
-// path when it resolves under an attached root, else the legacy normalized
+// path when it resolves under an attached root, else the normalized
 // token. The second result reports whether the token is a ledger key at all.
 func resolveScopeRel(roots CitationRoots, token string) (string, bool) {
 	id := ResolvePathIdentity(roots, token)
@@ -69,7 +66,7 @@ func resolveScopeRel(roots CitationRoots, token string) (string, bool) {
 	return id.ScopeRel, true
 }
 
-// pathRootID returns the owning root of a stored path key on rec: the
+// pathRootID returns the root ID for a stored path key on rec: the
 // per-path override when present, else the record's primary root.
 func (rec Record) pathRootID(key string) string {
 	if id, ok := rec.rooted.owners[key]; ok {
@@ -99,7 +96,7 @@ func StampDisplayKeys(roots CitationRoots, rec *Record) {
 }
 
 // displayKeyForStoredPath renders a stored path key in the session folder.
-// Legacy keys (empty root) display as stored; rooted keys render bare off
+// Unrooted keys display as stored; rooted keys render bare off
 // the active root and @label-qualified off any other attached root.
 func displayKeyForStoredPath(roots CitationRoots, rec Record, key string) string {
 	rootID := rec.pathRootID(key)

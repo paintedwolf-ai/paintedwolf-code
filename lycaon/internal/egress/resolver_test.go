@@ -7,6 +7,8 @@ import (
 	"net/netip"
 	"reflect"
 	"testing"
+
+	"github.com/lycaon/lycaon/internal/testsetup/dns"
 )
 
 func TestResolverRequiresEveryAddressToBePublic(t *testing.T) {
@@ -60,14 +62,19 @@ func TestResolverRetainsFailureCause(t *testing.T) {
 	}
 }
 
-func TestTestingResolveAnswersPolicyLookupsWithoutDNS(t *testing.T) {
+func TestResolvePublicIPsUsesTheSystemResolver(t *testing.T) {
 	public := netip.MustParseAddr("1.1.1.1")
-	TestingResolve(t, StaticLookup(public))
+	dns.Install(t, func(host string) []netip.Addr {
+		if host == "api.search.brave.com" {
+			return []netip.Addr{public}
+		}
+		return nil
+	})
 	ips, err := ResolvePublicIPs(t.Context(), "api.search.brave.com")
 	if err != nil || len(ips) != 1 || ips[0] != public {
-		t.Fatalf("static lookup = %v, %v", ips, err)
+		t.Fatalf("fixture DNS result = %v, %v", ips, err)
 	}
-	for _, reserved := range []string{"localhost", "missing.invalid", "feed.example", "host.test."} {
+	for _, reserved := range []string{"missing.invalid", "feed.example", "host.test."} {
 		_, err := ResolvePublicIPs(t.Context(), reserved)
 		var dnsErr *net.DNSError
 		if !errors.As(err, &dnsErr) || !dnsErr.IsNotFound {

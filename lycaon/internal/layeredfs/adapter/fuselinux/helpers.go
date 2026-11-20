@@ -139,7 +139,7 @@ func (a *Adapter) syncClientPath(ctx context.Context, mountRoot, targetPath stri
 		}
 		return mode.IsDir(), false, err
 	}
-	syncErr := fssync.Always(f)
+	syncErr := fssync.File(f)
 	closeErr := f.Close()
 	if syncErr != nil {
 		return mode.IsDir(), false, syncErr

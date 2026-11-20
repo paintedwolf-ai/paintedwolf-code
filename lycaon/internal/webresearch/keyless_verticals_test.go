@@ -8,7 +8,7 @@ import (
 )
 
 func TestProviderStackExchange(t *testing.T) {
-	srv := withMockProviderHTTP(t, func(w http.ResponseWriter, r *http.Request) {
+	srv := withProviderHTTP(t, func(w http.ResponseWriter, r *http.Request) {
 		if got := r.URL.Query().Get("site"); got != "serverfault" {
 			t.Fatalf("site = %q", got)
 		}
@@ -24,7 +24,7 @@ func TestProviderStackExchange(t *testing.T) {
 	spec.BuildURL = func(s Settings, query string, max int) (string, error) {
 		return srv.URL + "?site=serverfault&q=" + query, nil
 	}
-	out := NewRESTSearchProvider(spec, KindKeyless).Search(context.Background(), Settings{
+	out := NewRESTSearchProvider(spec, KindKeyless, srv.exchange).Search(context.Background(), Settings{
 		Config:                map[string]map[string]string{"stackexchange_serverfault": {"endpoint": srv.URL}},
 		PerProviderTimeoutSec: 5,
 	}, "foo", 5)
@@ -34,7 +34,7 @@ func TestProviderStackExchange(t *testing.T) {
 }
 
 func TestProviderStackExchangeAppleSiteBaked(t *testing.T) {
-	srv := withMockProviderHTTP(t, func(w http.ResponseWriter, r *http.Request) {
+	srv := withProviderHTTP(t, func(w http.ResponseWriter, r *http.Request) {
 		if got := r.URL.Query().Get("site"); got != "apple" {
 			t.Fatalf("site = %q", got)
 		}
@@ -50,7 +50,7 @@ func TestProviderStackExchangeAppleSiteBaked(t *testing.T) {
 	spec.BuildURL = func(s Settings, query string, max int) (string, error) {
 		return srv.URL + "?site=apple&q=" + query, nil
 	}
-	out := NewRESTSearchProvider(spec, KindKeyless).Search(context.Background(), Settings{
+	out := NewRESTSearchProvider(spec, KindKeyless, srv.exchange).Search(context.Background(), Settings{
 		Config:                map[string]map[string]string{"stackexchange_apple": {"endpoint": srv.URL}},
 		PerProviderTimeoutSec: 5,
 	}, "macos", 5)
@@ -78,7 +78,7 @@ func TestStackExchangeVariantUsesResolvedSharedCredential(t *testing.T) {
 }
 
 func TestStackExchangeVariantsSharePacingGate(t *testing.T) {
-	reg := testRegistry(t)
+	reg := testRegistry(t, nil)
 	var shared *providerGate
 	for _, id := range []string{
 		"stackexchange",
@@ -111,7 +111,7 @@ func TestStackExchangeVariantsSharePacingGate(t *testing.T) {
 }
 
 func TestProviderMicrosoftLearnMCP(t *testing.T) {
-	srv := withMockProviderHTTP(t, func(w http.ResponseWriter, r *http.Request) {
+	srv := withProviderHTTP(t, func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
 			t.Fatalf("method = %q", r.Method)
 		}
@@ -126,7 +126,7 @@ data: {"jsonrpc":"2.0","id":1,"result":{"content":[{"type":"text","text":"{\"res
 	spec.BuildURL = func(s Settings, query string, max int) (string, error) {
 		return srv.URL, nil
 	}
-	out := NewRESTSearchProvider(spec, KindKeyless).Search(context.Background(), Settings{
+	out := NewRESTSearchProvider(spec, KindKeyless, srv.exchange).Search(context.Background(), Settings{
 		Config:                map[string]map[string]string{"microsoft_learn": {"endpoint": srv.URL}},
 		PerProviderTimeoutSec: 5,
 	}, "azure functions timeout", 5)
@@ -158,7 +158,7 @@ func TestStackExchangeGateRecordStatus(t *testing.T) {
 }
 
 func TestProviderArxivAtom(t *testing.T) {
-	srv := withMockProviderHTTP(t, func(w http.ResponseWriter, _ *http.Request) {
+	srv := withProviderHTTP(t, func(w http.ResponseWriter, _ *http.Request) {
 		_, _ = w.Write([]byte(`<?xml version="1.0"?>
 <feed xmlns="http://www.w3.org/2005/Atom">
   <entry>
@@ -172,7 +172,7 @@ func TestProviderArxivAtom(t *testing.T) {
 	spec.BuildURL = func(s Settings, query string, max int) (string, error) {
 		return srv.URL + "/api/query?search_query=all:" + query, nil
 	}
-	out := NewRESTSearchProvider(spec, KindKeyless).Search(context.Background(), Settings{
+	out := NewRESTSearchProvider(spec, KindKeyless, srv.exchange).Search(context.Background(), Settings{
 		Config:                map[string]map[string]string{"arxiv": {"endpoint": srv.URL}},
 		PerProviderTimeoutSec: 5,
 	}, "paper", 5)
@@ -188,7 +188,7 @@ func TestParseAtomHitsMalformed(t *testing.T) {
 }
 
 func TestProviderGithubKeyless(t *testing.T) {
-	srv := withMockProviderHTTP(t, func(w http.ResponseWriter, r *http.Request) {
+	srv := withProviderHTTP(t, func(w http.ResponseWriter, r *http.Request) {
 		if r.Header.Get("Authorization") != "" {
 			t.Fatal("unexpected auth on keyless github search")
 		}
@@ -203,7 +203,7 @@ func TestProviderGithubKeyless(t *testing.T) {
 	spec.BuildURL = func(s Settings, query string, max int) (string, error) {
 		return srv.URL + "/search/issues?q=" + query, nil
 	}
-	out := NewRESTSearchProvider(spec, KindKeyless).Search(context.Background(), Settings{
+	out := NewRESTSearchProvider(spec, KindKeyless, srv.exchange).Search(context.Background(), Settings{
 		PerProviderTimeoutSec: 5,
 	}, "bug", 5)
 	if !out.ok || out.hits[0].URL != "https://github.com/o/r/issues/1" {

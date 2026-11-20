@@ -116,7 +116,6 @@ func probeGitRemote(ctx context.Context, remote string, out io.Writer) error {
 	if err := gitargv.ValidateCloneURL(remote); err != nil {
 		return err
 	}
-	gitexec.SetHostConfig(gitexec.HostConfigResolver())
 	plan, err := gitexec.NetworkProxyPlan(remote)
 	if err != nil {
 		return err

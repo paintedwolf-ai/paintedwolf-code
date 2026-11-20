@@ -658,11 +658,11 @@ func TestBackendLogViewAndAllToggle(t *testing.T) {
 	if m.level != levelLog {
 		t.Fatalf("expected the backend log, got %v", m.level)
 	}
-	if got := len(m.visibleLogs()); got != 1 {
+	if got := len(m.filter().visibleLogs()); got != 1 {
 		t.Errorf("warn/err filter should show 1 line, got %d", got)
 	}
 	m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("a")})
-	if got := len(m.visibleLogs()); got != 2 {
+	if got := len(m.filter().visibleLogs()); got != 2 {
 		t.Errorf("show-all should reveal the DEBUG line too, got %d", got)
 	}
 	if !strings.Contains(m.View(), "heads up") {

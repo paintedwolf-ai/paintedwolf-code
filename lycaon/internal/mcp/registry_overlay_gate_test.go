@@ -11,6 +11,7 @@ import (
 	sdkmcp "github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"github.com/lycaon/lycaon/internal/mcp"
+	"github.com/lycaon/lycaon/internal/mcp/mcptest"
 	"github.com/lycaon/lycaon/internal/settingsoverlay"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/tools"
@@ -28,7 +29,7 @@ type overlayFixture struct {
 }
 
 type overlayRecordingConnector struct {
-	inner *mcp.MockConnector
+	inner *mcptest.Connector
 	mu    sync.Mutex
 	seen  []mcp.MCPProviderEntry
 }
@@ -65,7 +66,7 @@ func newOverlayFixture(t *testing.T, distro, user, project string, providerTools
 
 	applies := true
 	calls := map[string]map[string]int{}
-	connector := &overlayRecordingConnector{inner: &mcp.MockConnector{Tools: providerTools, Calls: calls}}
+	connector := &overlayRecordingConnector{inner: &mcptest.Connector{Tools: providerTools, Calls: calls}}
 	reg, err := mcp.NewRuntime(mcp.RuntimeOptions{
 		StatePath:          t.TempDir(),
 		GlobalOverridePath: globalPath,

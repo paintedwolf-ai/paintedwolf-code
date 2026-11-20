@@ -9,8 +9,9 @@ import (
 )
 
 func gitConfig(t *testing.T, dir string, args ...string) {
+	e := productionExecution()
 	t.Helper()
-	if out, code, err := Run(t.Context(), dir, append([]string{"config"}, args...), Opts{}); err != nil || code != 0 {
+	if out, code, err := e.run(t.Context(), dir, append([]string{"config"}, args...), Opts{}, nil); err != nil || code != 0 {
 		t.Fatalf("git config %v: code=%d err=%v out=%s", args, code, err, out)
 	}
 }
@@ -18,10 +19,11 @@ func gitConfig(t *testing.T, dir string, args ...string) {
 // Every URL a network command contacts resolves through Git's own selection
 // and rewriting, so admission and credentials cover what Git will dial.
 func TestResolveRemoteURLsFollowsGitSelectionAndRewrites(t *testing.T) {
+	e := productionExecution()
 	useBundledGit(t)
 	dir := t.TempDir()
 	initRepo(t, dir)
-	if out, code, err := Run(t.Context(), dir, []string{"checkout", "-q", "-b", "main"}, Opts{}); err != nil || code != 0 {
+	if out, code, err := e.run(t.Context(), dir, []string{"checkout", "-q", "-b", "main"}, Opts{}, nil); err != nil || code != 0 {
 		t.Fatalf("checkout: code=%d err=%v out=%s", code, err, out)
 	}
 	gitConfig(t, dir, "remote.origin.url", "https://fetch.example.test/repo.git")

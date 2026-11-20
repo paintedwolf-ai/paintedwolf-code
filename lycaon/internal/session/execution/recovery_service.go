@@ -6,31 +6,21 @@ import (
 
 	"github.com/lycaon/lycaon/internal/invocation"
 	"github.com/lycaon/lycaon/internal/session/checkpointcontrol"
-	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/session/transcript"
-	"github.com/lycaon/lycaon/pkg/api"
 )
-
-type RecoveryStore interface {
-	Get(context.Context, string) (*api.Session, error)
-	SetSessionStatus(context.Context, string, api.SessionStatus) error
-	RecoverTurns(context.Context) ([]store.Turn, error)
-	SettleAbandonedTurnClocks(context.Context) (int, error)
-	RecoverTurnsForSession(context.Context, string) ([]store.Turn, error)
-	ListBusySessionIDs(context.Context, int) ([]string, error)
-}
 
 // Recovery fences interrupted turns and restores missing tool projections.
 type Recovery struct {
-	store       RecoveryStore
-	transcript  *transcript.Service
-	status      *Status
-	rewinds     *checkpointcontrol.Rewinds
-	invocations invocation.Recorder
+	sessionStore Sessions
+	turnStore    Turns
+	transcript   *transcript.Service
+	status       *Status
+	rewinds      *checkpointcontrol.Rewinds
+	invocations  invocation.Recorder
 }
 
-func NewRecovery(store RecoveryStore, transcript *transcript.Service, status *Status, rewinds *checkpointcontrol.Rewinds) *Recovery {
-	return &Recovery{store: store, transcript: transcript, status: status, rewinds: rewinds}
+func NewRecovery(sessionStore Sessions, turnStore Turns, transcript *transcript.Service, status *Status, rewinds *checkpointcontrol.Rewinds) *Recovery {
+	return &Recovery{sessionStore: sessionStore, turnStore: turnStore, transcript: transcript, status: status, rewinds: rewinds}
 }
 func (m *Recovery) SetRecorder(recorder invocation.Recorder) { m.invocations = recorder }
 func (m *Recovery) InterruptTools(ctx context.Context, id string) error {

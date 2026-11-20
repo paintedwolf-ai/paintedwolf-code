@@ -25,6 +25,7 @@ import (
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/testutil/extpackstest"
+	"github.com/lycaon/lycaon/internal/testutil/llmtest"
 	"github.com/lycaon/lycaon/internal/testutil/oartest"
 	"github.com/lycaon/lycaon/internal/testutil/prompttest"
 	"github.com/lycaon/lycaon/internal/toolhost"
@@ -69,14 +70,14 @@ func TestManagerPromptUsesCoordinatorAssembly(t *testing.T) {
 	t.Setenv("LYCAON_LLM_MOCK", "1")
 	root := sessionIntegrationRoot(t)
 	ctx := context.Background()
-	rec := llm.NewRecordingClient(llm.NewMockProvider(&llm.MockConfig{Responses: []llm.MockResponseEntry{{Pattern: ".", Text: "ok"}}}))
+	rec := llmtest.NewRecordingClient(llm.NewMockProvider(&llm.MockConfig{Responses: []llm.MockResponseEntry{{Pattern: ".", Text: "ok"}}}))
 	store := storetest.New(t, testdbseed.DefaultProjectID)
 	mgr := session.NewHost(store, session.Models{Client: rec, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, toolstest.NewRegistry())
 	wireManagerPromptPolicy(t, mgr, root)
 	mgr.SetPromptEngine(prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{ModuleRoot: root}))
 	mgr.SetCoordinatorTurnFrameSource(&phaseStubCoordinator{phase: "plan", brief: "Coordinate."})
 
-	sess, err := store.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureSpec}, testdbseed.DefaultProjectID)
+	sess, err := store.Sessions.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureSpec}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session in store", err)
 	if _, err := mgr.Submissions.Prompt(ctx, sess.ID, "start"); err != nil {
 		testutil.FailErr(t, "mgr.Submissions.Prompt failed", err)
@@ -95,13 +96,13 @@ func TestManagerKickNudgeViaRuntime(t *testing.T) {
 	root := sessionIntegrationRoot(t)
 	ctx := context.Background()
 	store := storetest.New(t, testdbseed.DefaultProjectID)
-	rec := llm.NewRecordingClient(llm.NewMockProvider(&llm.MockConfig{Responses: []llm.MockResponseEntry{{Pattern: ".", Text: "ok"}}}))
+	rec := llmtest.NewRecordingClient(llm.NewMockProvider(&llm.MockConfig{Responses: []llm.MockResponseEntry{{Pattern: ".", Text: "ok"}}}))
 	mgr := session.NewHost(store, session.Models{Client: rec, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, toolstest.NewRegistry())
 	wireManagerPromptPolicy(t, mgr, root)
 	testutil.FailErr(t, "install anchor registry", mgr.Coordinator.Guidance.InstallAnchorRegistry())
 	mgr.SetPromptEngine(prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{ModuleRoot: root}))
 
-	sess, err := store.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureSpec}, testdbseed.DefaultProjectID)
+	sess, err := store.Sessions.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureSpec}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session in store", err)
 	mgr.Coordinator.Guidance.Emit(context.Background(), sess.ID, anchor.ComposeDone, anchor.Envelope{})
 	if _, err := mgr.Submissions.Prompt(ctx, sess.ID, "continue"); err != nil {

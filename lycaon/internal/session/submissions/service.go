@@ -17,16 +17,22 @@ import (
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
-type Store interface {
-	people.OwnerSource
-	Get(context.Context, string) (*api.Session, error)
-	GetPromptSubmission(context.Context, string) (*store.PromptSubmission, error)
-	PutPromptSubmission(context.Context, store.PromptSubmission) (*store.PromptSubmission, bool, error)
-	ListQueuedUserPromptSubmissions(context.Context, string) ([]store.PromptSubmission, error)
-	ClaimPromptSubmission(context.Context, string) (*store.PromptSubmission, bool, error)
-	ClaimPromptSubmissions(context.Context, []string) ([]store.PromptSubmission, bool, error)
-	FinishPromptSubmission(context.Context, string, string, store.PromptSubmissionStatus, string, store.PromptSubmissionFailure) error
-	RecoverPromptSubmissions(context.Context) ([]string, error)
+type Sessions interface {
+	Get(ctx context.Context, id string) (*api.Session, error)
+}
+
+type Submissions interface {
+	ClaimPromptSubmission(ctx context.Context, id string) (*store.PromptSubmission, bool, error)
+	ClaimPromptSubmissions(ctx context.Context, ids []string) ([]store.PromptSubmission, bool, error)
+	FinishPromptSubmission(ctx context.Context, id, claimToken string, status store.PromptSubmissionStatus, resultJSON string, failure store.PromptSubmissionFailure) error
+	GetPromptSubmission(ctx context.Context, id string) (*store.PromptSubmission, error)
+	ListQueuedUserPromptSubmissions(ctx context.Context, sessionID string) ([]store.PromptSubmission, error)
+	PutPromptSubmission(ctx context.Context, in store.PromptSubmission) (*store.PromptSubmission, bool, error)
+	RecoverPromptSubmissions(ctx context.Context) ([]string, error)
+}
+
+type People interface {
+	HostOwner(context.Context) (people.Person, error)
 }
 
 type Execute func(context.Context, string, promptinput.Input, *promptstate.Lock) (*promptresult.Result, error)
@@ -36,7 +42,9 @@ type HostBlocked func(context.Context, string) bool
 
 // Service owns receipt admission, ordered dispatch, and atomic draft settlement.
 type Service struct {
-	store           Store
+	sessionStore    Sessions
+	submissionStore Submissions
+	people          People
 	queue           *queue.Store
 	Gate            *lifecycle.State
 	Recovery        *recovery.Service
@@ -53,8 +61,8 @@ type Service struct {
 	hostBlocked     HostBlocked
 }
 
-func New(st Store, q *queue.Store, gate *lifecycle.State, recovery *recovery.Service, spend *spendguard.Service, drafts *draftqueue.Service, state *submissionstate.Service, locks *promptstate.MutexRegistry, execute Execute, continuation ContinueUser, round RoundComplete, blocked HostBlocked) *Service {
-	return &Service{store: st, queue: q, Gate: gate, Recovery: recovery, Spend: spend, Drafts: drafts, SubmissionState: state, promptLocks: locks, execute: execute, continueUser: continuation, roundComplete: round, hostBlocked: blocked}
+func New(sessionStore Sessions, submissionStore Submissions, people People, q *queue.Store, gate *lifecycle.State, recovery *recovery.Service, spend *spendguard.Service, drafts *draftqueue.Service, state *submissionstate.Service, locks *promptstate.MutexRegistry, execute Execute, continuation ContinueUser, round RoundComplete, blocked HostBlocked) *Service {
+	return &Service{sessionStore: sessionStore, submissionStore: submissionStore, people: people, queue: q, Gate: gate, Recovery: recovery, Spend: spend, Drafts: drafts, SubmissionState: state, promptLocks: locks, execute: execute, continueUser: continuation, roundComplete: round, hostBlocked: blocked}
 }
 
 func (m *Service) lockAdmission(sessionID string) func() {

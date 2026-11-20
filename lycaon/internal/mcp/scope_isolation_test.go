@@ -1,9 +1,8 @@
-package mcp
+package mcp_test
 
 import (
 	"context"
 	"errors"
-	"github.com/lycaon/lycaon/internal/toolrejection"
 	"path/filepath"
 	"sync"
 	"testing"
@@ -12,20 +11,25 @@ import (
 
 	"github.com/lycaon/lycaon/config"
 	"github.com/lycaon/lycaon/config/configtest"
+	"github.com/lycaon/lycaon/internal/mcp"
+	"github.com/lycaon/lycaon/internal/mcp/mcptest"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/internal/tools"
 )
 
-// rootRecordingConnector records the roots each connect was handed, per scope.
+const scopeBreakerThreshold = 3
+
+// rootRecordingConnector records the roots passed to each connection.
 type rootRecordingConnector struct {
 	mu       sync.Mutex
-	inner    *MockConnector
+	inner    *mcptest.Connector
 	roots    [][]string
 	connects int
 	notify   []func()
 }
 
-func (c *rootRecordingConnector) Connect(ctx context.Context, entry MCPProviderEntry, opts ConnectOpts) (ProviderSession, error) {
+func (c *rootRecordingConnector) Connect(ctx context.Context, entry mcp.MCPProviderEntry, opts mcp.ConnectOpts) (mcp.ProviderSession, error) {
 	c.mu.Lock()
 	c.roots = append(c.roots, append([]string(nil), opts.Roots...))
 	c.connects++
@@ -42,7 +46,7 @@ func (c *rootRecordingConnector) snapshot() ([][]string, int) {
 	return append([][]string(nil), c.roots...), c.connects
 }
 
-func newScopedRegistry(t *testing.T, conn SessionConnector) *Runtime {
+func newScopedRegistry(t *testing.T, conn mcp.SessionConnector) *mcp.Runtime {
 	t.Helper()
 	dir := t.TempDir()
 	configtest.Overlay(t, map[config.Rel]string{config.DistroMCP: `providers:
@@ -50,12 +54,13 @@ func newScopedRegistry(t *testing.T, conn SessionConnector) *Runtime {
     url: http://127.0.0.1:8765/mcp
     enabled: true
 `})
-	reg, err := NewRuntime(RuntimeOptions{
+	reg, err := mcp.NewRuntime(mcp.RuntimeOptions{
 		StatePath:          dir,
 		GlobalOverridePath: filepath.Join(dir, "mcp.yaml"),
 		Connector:          conn,
+		BreakerThreshold:   scopeBreakerThreshold,
 	})
-	testutil.FailErr(t, "NewRuntime", err)
+	testutil.FailErr(t, "mcp.NewRuntime", err)
 	reg.Tools.SetToolRegistry(tools.NewDefaultRegistry())
 	reg.Connections.SetDeviceProbeRoots(func() []string { return []string{filepath.Join(dir, "probe")} })
 	t.Cleanup(func() { _ = reg.Close(t.Context()) })
@@ -63,24 +68,22 @@ func newScopedRegistry(t *testing.T, conn SessionConnector) *Runtime {
 	return reg
 }
 
-// A server reached on behalf of one project must not be handed to another: the process
-// is confined to the roots it was spawned with, so reusing it across projects would let
-// a call from B run inside A's box.
+// Each project connects with its own confined roots.
 func TestSessionsAreNotSharedAcrossProjects(t *testing.T) {
-	conn := &rootRecordingConnector{inner: &MockConnector{
+	conn := &rootRecordingConnector{inner: &mcptest.Connector{
 		Tools: map[string][]*sdkmcp.Tool{"svc": {{Name: "query"}}},
 		Calls: map[string]map[string]int{},
 	}}
 	reg := newScopedRegistry(t, conn)
 
-	projA := ProjectScope("proj-a", "/tmp/a", []string{"/tmp/a"})
-	projB := ProjectScope("proj-b", "/tmp/b", []string{"/tmp/b"})
+	projA := mcp.ProjectScope("proj-a", "/tmp/a", []string{"/tmp/a"})
+	projB := mcp.ProjectScope("proj-b", "/tmp/b", []string{"/tmp/b"})
 
 	testutil.FailErr(t, "call from A", callErr(reg, projA))
 	testutil.FailErr(t, "call from A again", callErr(reg, projA))
 	testutil.FailErr(t, "call from B", callErr(reg, projB))
 
-	roots, _ := conn.snapshot()
+	roots, connects := conn.snapshot()
 	var sawA, sawB bool
 	for _, r := range roots {
 		switch {
@@ -97,15 +100,14 @@ func TestSessionsAreNotSharedAcrossProjects(t *testing.T) {
 		t.Fatalf("roots per connect = %v want one connect confined to each project", roots)
 	}
 	// Two projects, one server: exactly one session each, plus the sync-time probe.
-	if got := reg.Connections.sessionCount(); got != 3 {
+	if got := connects; got != 3 {
 		t.Fatalf("sessions = %d want one per project plus the discovery probe", got)
 	}
 }
 
-// Only host-initiated discovery falls back to the device probe roots. That is the one
-// session that is not on behalf of a project, and it never serves a tool call.
+// Device probe roots are reserved for discovery.
 func TestDeviceProbeRootsOnlyReachDiscovery(t *testing.T) {
-	conn := &rootRecordingConnector{inner: &MockConnector{
+	conn := &rootRecordingConnector{inner: &mcptest.Connector{
 		Tools: map[string][]*sdkmcp.Tool{"svc": {{Name: "query"}}},
 		Calls: map[string]map[string]int{},
 	}}
@@ -119,7 +121,7 @@ func TestDeviceProbeRootsOnlyReachDiscovery(t *testing.T) {
 		t.Fatalf("discovery roots = %v want the device probe roots", roots[0])
 	}
 
-	testutil.FailErr(t, "call", callErr(reg, ProjectScope("proj-a", "/tmp/a", []string{"/tmp/a"})))
+	testutil.FailErr(t, "call", callErr(reg, mcp.ProjectScope("proj-a", "/tmp/a", []string{"/tmp/a"})))
 	roots, _ = conn.snapshot()
 	last := roots[len(roots)-1]
 	if len(last) != 1 || last[0] != "/tmp/a" {
@@ -127,10 +129,9 @@ func TestDeviceProbeRootsOnlyReachDiscovery(t *testing.T) {
 	}
 }
 
-// The breaker refusing to dial is the one failure meaning "stop retrying for a while".
-// It has to reach the agent as a machine code like every other MCP failure.
+// Breaker rejection preserves the structured transport code.
 func TestBreakerOpenSurfacesStructuredReject(t *testing.T) {
-	conn := &MockConnector{
+	conn := &mcptest.Connector{
 		Tools: map[string][]*sdkmcp.Tool{"svc": {{Name: "query"}}},
 		Err:   map[string]error{},
 	}
@@ -139,24 +140,23 @@ func TestBreakerOpenSurfacesStructuredReject(t *testing.T) {
 	// connect faults.
 	conn.Err["svc"] = errors.New("dial tcp: connection refused")
 
-	scope := ProjectScope("proj-a", "/tmp/a", []string{"/tmp/a"})
+	scope := mcp.ProjectScope("proj-a", "/tmp/a", []string{"/tmp/a"})
 	var last error
-	for i := 0; i < int(defaultBreakerThreshold)+2; i++ {
+	for i := 0; i < int(scopeBreakerThreshold)+2; i++ {
 		_, last = reg.Calls.CallTool(context.Background(), scope, "svc", "query", nil)
 	}
 	reject := toolrejection.AsToolReject(last)
-	if reject == nil || reject.Code != MCPTransportUnavailableCode {
-		t.Fatalf("after the breaker opened, err = %v want %s", last, MCPTransportUnavailableCode)
+	if reject == nil || reject.Code != mcp.MCPTransportUnavailableCode {
+		t.Fatalf("after the breaker opened, err = %v want %s", last, mcp.MCPTransportUnavailableCode)
 	}
 	if reject.Data["provider"] != "svc" {
 		t.Fatalf("reject data = %+v want the provider named", reject.Data)
 	}
 }
 
-// A server that revises its tool list mid-session must be re-listed, so definitions
-// are not frozen at what it presented at connect.
+// Tool-list notifications refresh the registered definitions.
 func TestToolListChangedTriggersResync(t *testing.T) {
-	inner := &MockConnector{
+	inner := &mcptest.Connector{
 		Tools: map[string][]*sdkmcp.Tool{"svc": {{Name: "query"}}},
 		Calls: map[string]map[string]int{},
 	}
@@ -188,7 +188,7 @@ func TestToolListChangedTriggersResync(t *testing.T) {
 	}
 }
 
-func callErr(reg *Runtime, scope CallScope) error {
+func callErr(reg *mcp.Runtime, scope mcp.CallScope) error {
 	_, err := reg.Calls.CallTool(context.Background(), scope, "svc", "query", nil)
 	return err
 }

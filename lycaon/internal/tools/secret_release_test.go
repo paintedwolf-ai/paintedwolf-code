@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/authzcontext"
+	"github.com/lycaon/lycaon/internal/authzcontext/authztest"
 	"github.com/lycaon/lycaon/internal/authzledger"
 	"github.com/lycaon/lycaon/internal/hitl"
 	"github.com/lycaon/lycaon/internal/secretcap"
@@ -98,7 +99,7 @@ func TestActiveSecretReleaseSkipsCheckpoint(t *testing.T) {
 	gate := &secretReleaseGateStub{covered: true}
 	exec := toolexecution.NewExecutor(nil, tools.NewDefaultRegistry(), "implement")
 	exec.Approvals.SetCheckpointManager(t.Context(), mgr, gate)
-	ledger := authzcontext.NewMemoryStore()
+	ledger := authztest.NewStore(t, "worker", "sess")
 	exec.Approvals.SetAuthzRecorder(authzcontext.LedgerRecorder{Ledger: &authzcontext.Ledger{Store: ledger}})
 	got, askErr := exec.Secrets.AskSecretScreen(context.Background(), secretmatch.Alert{
 		SessionID: "worker", RootSessionID: "sess", ProjectID: "project-id", ProjectDir: "/project", Surface: secretmatch.SurfaceMCP,

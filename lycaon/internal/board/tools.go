@@ -43,21 +43,6 @@ func RegisterBoardTools(reg *tools.DefaultRegistry, deps ToolDeps) error {
 		return err
 	}
 	if err := reg.Register("pack_board", func(ctx context.Context, args map[string]any, tctx tools.ToolContext) (string, error) {
-		if args["finding_id"] != nil || args["findings_after"] != nil {
-			field := "finding_id"
-			if args["finding_id"] == nil {
-				field = "findings_after"
-			}
-			return "", &toolrejection.ToolReject{
-				Code: "TOOL_ARGS_INVALID",
-				Data: map[string]any{
-					"tool":             "pack_board",
-					"field":            field,
-					"reason":           "moved_to_read_findings",
-					"replacement_tool": "read_findings",
-				},
-			}
-		}
 		offset, err := parseBoardWorkerCursor(args["cursor"])
 		if err != nil {
 			return "", err

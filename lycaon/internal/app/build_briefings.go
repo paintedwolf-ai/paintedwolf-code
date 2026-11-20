@@ -42,7 +42,7 @@ func registerBriefingProfiles(b *serveBuilder) error {
 		return fmt.Errorf("tool activity briefings need program activity reads")
 	}
 	cause := briefingstore.NewCausal(b.storage.Database)
-	if err := b.providers.Briefings.Registry.Register(activitybriefing.New(b.storage.Sessions, programs, cause)); err != nil {
+	if err := b.providers.Briefings.Registry.Register(activitybriefing.New(b.storage.Sessions.Sessions, programs, cause)); err != nil {
 		return err
 	}
 	if b.workerRuntime != nil && b.workerRuntime.Queue != nil {

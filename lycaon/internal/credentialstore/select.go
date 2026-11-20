@@ -99,7 +99,3 @@ func selectVault(path string) (*vaultFile, error) {
 	provider := selectIdentityProvider(path, isolatedProcess(), releaseBuild())
 	return sharedVault(path, provider), nil
 }
-
-func newDevelopmentBackend(path, namespace string) Backend {
-	return newNamespaceBackend(path, namespace, newDevelopmentIdentityProvider(path))
-}

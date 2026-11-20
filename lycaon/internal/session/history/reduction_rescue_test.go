@@ -21,7 +21,7 @@ func TestSynthesisCanPublishWithoutAnAcceptedBaseline(t *testing.T) {
 		svc.Runner.Stop()
 		testutil.FailErr(t, "drain synthesis", svc.Runner.WaitContext(t.Context()))
 	}()
-	sess, err := sqlStore.Create(t.Context(), api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
+	sess, err := sqlStore.Sessions.Create(t.Context(), api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
 	prior := &messageview.Continuation{Format: 1, Window: cfg.ModelContextWindow, ThroughOrd: 1, SummaryThroughOrd: 1}
 	for range 8 {
@@ -29,13 +29,13 @@ func TestSynthesisCanPublishWithoutAnAcceptedBaseline(t *testing.T) {
 	}
 	text, err := compaction.RenderContinuation(t.Context(), prior, false, 0)
 	testutil.FailErr(t, "render previous continuation", err)
-	testutil.FailErr(t, "append captured page", sqlStore.AppendMessages(t.Context(), sess.ID,
+	testutil.FailErr(t, "append captured page", sqlStore.Transcript.AppendMessages(t.Context(), sess.ID,
 		api.Message{ID: "previous", Role: "assistant", Content: text, ContentParts: []api.MessageContentPart{{Source: "compaction_summary", Content: text}}},
 		api.Message{ID: "observation", Role: "assistant", Content: strings.Repeat("new clue ", 12)},
 		api.Message{ID: "request", Role: "user", Content: "Continue.", ContextPinned: true}))
-	rows, err := sqlStore.GetMessages(t.Context(), sess.ID)
+	rows, err := sqlStore.Transcript.GetMessages(t.Context(), sess.ID)
 	testutil.FailErr(t, "read captured page", err)
-	info := compaction.SessionInfo{ID: sess.ID, PriorContinuation: prior, Attempts: sqlStore, LatestUserRequestID: "request"}
+	info := compaction.SessionInfo{ID: sess.ID, PriorContinuation: prior, Attempts: sqlStore.Compaction, LatestUserRequestID: "request"}
 	prepared := compaction.ContextMessagesFromAPI(rows)
 	sc := svc.Compactor.(*compaction.SimpleCompactor)
 	_, baseline, err := sc.Baseline().Compact(t.Context(), info, prepared, 1)
@@ -47,7 +47,7 @@ func TestSynthesisCanPublishWithoutAnAcceptedBaseline(t *testing.T) {
 	snapshot := store.CompactionView{CoveredThroughOrd: last.Ord, CoveredThroughID: last.ID, SourceSeq: last.Seq}
 	svc.scheduleProjectionSynthesis(t.Context(), sc, info, rows, prepared, baseline, snapshot, attemptPass{})
 	testutil.FailErr(t, "wait for optional synthesis", svc.Runner.Synthesis.WaitContext(t.Context()))
-	view, ok, err := sqlStore.GetCompactionView(t.Context(), sess.ID)
+	view, ok, err := sqlStore.Compaction.GetCompactionView(t.Context(), sess.ID)
 	testutil.FailErr(t, "read synthesized projection", err)
 	if !ok || view.Continuation == nil || view.Continuation.SummaryThroughOrd < rows[1].Ord || view.TokensAfter >= view.TokensBefore {
 		t.Fatalf("synthesis did not publish a useful captured page: %+v", view)

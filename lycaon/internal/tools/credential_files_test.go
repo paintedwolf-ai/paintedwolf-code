@@ -7,6 +7,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/secretcap"
+	"github.com/lycaon/lycaon/internal/testsecret"
 	"github.com/lycaon/lycaon/internal/testutil"
 )
 
@@ -46,14 +47,13 @@ func credentialFilesContext(t *testing.T, files CredentialFiles) (ToolContext, s
 func TestRecordModelAuthoredCredentialsKeepsOnlyArgumentBytes(t *testing.T) {
 	files := &recordedCredentialFiles{}
 	tc, root := credentialFilesContext(t, files)
-	const reference = "{{paintedwolf-secret:6f0c7f3e-0d59-4a55-9d64-1b2a3c4d5e6f}}"
+	fixture := testsecret.New(t, "project", "root-session", "session")
+	reference := fixture.Put(t, "session secret", "a0VBKPXTbWzsjo2Il49ko0ng", secretcap.ScopeChat, secretcap.OriginGenerated).Reference
 	tc.Effects.CanonicalArgs = map[string]any{
 		"path":    ".env",
 		"content": "OIDC_CLIENT_ID=todo-web-client\nSESSION_SECRET=" + reference + "\n",
 	}
-	tc.Effects.Secrets = secretcap.NewResolutionForTest(tc.Effects.CanonicalArgs, []secretcap.TestResolvedValue{
-		{ID: "6f0c7f3e-0d59-4a55-9d64-1b2a3c4d5e6f", Name: "session secret", Value: "a0VBKPXTbWzsjo2Il49ko0ng", Path: "/content"},
-	})
+	tc.Effects.Secrets = fixture.Resolve(t, tc.Effects.CanonicalArgs)
 	landed := "OIDC_CLIENT_ID=todo-web-client\nSESSION_SECRET=a0VBKPXTbWzsjo2Il49ko0ng\n"
 	tc.RecordModelAuthoredCredentials(context.Background(), filepath.Join(root, ".env"), []byte(landed))
 	if len(files.authored) != 1 {

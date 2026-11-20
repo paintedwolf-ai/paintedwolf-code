@@ -15,8 +15,10 @@ import (
 	"github.com/lycaon/lycaon/internal/people"
 	"github.com/lycaon/lycaon/internal/platform"
 	"github.com/lycaon/lycaon/internal/progress"
+	"github.com/lycaon/lycaon/internal/progress/progresstest"
 	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/settings"
+	"github.com/lycaon/lycaon/internal/settings/settingstest"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/toolfeedback"
@@ -27,7 +29,7 @@ import (
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
-type nativeProgressFixture struct{ store *progress.MemoryStore }
+type nativeProgressFixture struct{ store progress.Store }
 
 func (p nativeProgressFixture) ProgramProgressState(ctx context.Context, id string) (progress.PrerequisiteState, error) {
 	return progress.PrerequisiteState{SessionID: id, RootSessionID: id, Content: p.store.Get(ctx, id)}, nil
@@ -75,7 +77,7 @@ func nativeReadAdmissionFixture(t *testing.T, inputPath, modelTool string) {
 	child.Identity.ParentExecutionID = "parent"
 	bound, err := toolcontract.BindOperation(definition, child, "cat", definition.Facts().Commands[0].Effects[0].Mode, nil)
 	testutil.FailErr(t, "bind native read", err)
-	owner := progress.NewMemoryStore()
+	owner := progresstest.New(t, parent.SessionID)
 	testutil.FailErr(t, "set actual progress", owner.Set(parent.SessionID, "- [ ] Inspect"))
 	args := map[string]any{"path": inputPath}
 	prepared, invoked := false, false
@@ -178,7 +180,7 @@ func testNativeOwnerPolicyAfterRecorder(t *testing.T, phases []string) {
 	testutil.FailErr(t, "configure quiet policy", store.PutGlobal(settings.ApprovalConfig{NeverAsk: &neverAsk}))
 	classes, _ := toolcontract.NewCommandEffects(toolcontract.CommandReadOnly)
 	boundary := sandbox.NewBoundary(sandbox.Config{ProjectRootRequired: true, RejectSymlinkEscape: true}, []sandbox.ToolProfile{{ID: "fixture", CommandEffects: classes}})
-	gate := settings.NewRuleApprovalGate(store, settings.NoSources())
+	gate := settings.NewRuleApprovalGate(store, settingstest.EmptySources())
 	executor := NewExecutor(NewApprovalPolicyEngine(toolprofiles.NewProfilePolicyEngine(boundary), gate), tools.NewDefaultRegistry(), "fixture")
 	definition := nativeDefinition(t, "read")
 	surface, err := executor.Metadata.FreezeProgramSurface(t.Context(), platform.ToolFilter{ProfileID: "fixture"}, []toolcontract.OperationDefinition{definition})
@@ -186,7 +188,7 @@ func testNativeOwnerPolicyAfterRecorder(t *testing.T, phases []string) {
 	frame, err := FreezeProgramFrame(t.Context(), parent, tc, ProgramModelInvocation{ToolName: "command", Arguments: map[string]any{"command": "cat input"}}, stageMemory(t, 64<<20))
 	testutil.FailErr(t, "capture native frame", err)
 	t.Cleanup(frame.Close)
-	progressStore := progress.NewMemoryStore()
+	progressStore := progresstest.New(t, parent.SessionID)
 	testutil.FailErr(t, "set current progress", progressStore.Set(parent.SessionID, "- [ ] Inspect"))
 	for _, phase := range phases {
 		t.Run(phase, func(t *testing.T) {
@@ -327,7 +329,7 @@ func TestNativePreparationRechecksAuthorityAfterApproval(t *testing.T) {
 			store, err := settings.NewApprovalStoreAt(filepath.Join(t.TempDir(), "approvals.yaml"))
 			testutil.FailErr(t, "create policy store", err)
 			testutil.FailErr(t, "require read review", store.PutProject(tc.ActiveRootPath(), settings.ApprovalConfig{Rules: []settings.ApprovalRule{{Category: settings.ApprovalCategoryTool, Pattern: "read", Effect: settings.ApprovalEffectAsk}}}))
-			gate := settings.NewRuleApprovalGate(store, settings.NoSources())
+			gate := settings.NewRuleApprovalGate(store, settingstest.EmptySources())
 			executor := NewExecutor(NewApprovalPolicyEngine(toolprofiles.NewProfilePolicyEngine(boundary), gate), tools.NewDefaultRegistry(), "fixture")
 			definition := nativeDefinition(t, "read")
 			surface, err := executor.Metadata.FreezeProgramSurface(ctx, platform.ToolFilter{ProfileID: "fixture"}, []toolcontract.OperationDefinition{definition})
@@ -396,7 +398,7 @@ func TestNativePreparationRechecksAuthorityAfterApproval(t *testing.T) {
 					return toolcontract.ProducerResult{Terminal: toolcontract.ProducerCompleted, Complete: true, PublicationEligible: true, EffectCertainty: toolcontract.NoEffect}, err
 				}}, nil
 			}
-			owner := progress.NewMemoryStore()
+			owner := progresstest.New(t, parent.SessionID)
 			testutil.FailErr(t, "seed progress", owner.Set(parent.SessionID, "- [ ] Inspect"))
 			memory := stageMemory(t, 64<<20)
 			result, err := executor.InvokeNative(ctx, frame, surface, memory, nativeProgressFixture{owner}, nativeStartFunc(func(context.Context, toolcontract.BoundOperation, string, toolcontract.ReviewedOperationInputs) error {

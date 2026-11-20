@@ -2,13 +2,13 @@ package review_test
 
 import (
 	"context"
-	workflow "github.com/lycaon/lycaon/internal/workflow"
-	workflowreview "github.com/lycaon/lycaon/internal/workflow/review"
-	runstate "github.com/lycaon/lycaon/internal/workflow/runstate"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
+	workflow "github.com/lycaon/lycaon/internal/workflow"
+	workflowreview "github.com/lycaon/lycaon/internal/workflow/review"
+	runstate "github.com/lycaon/lycaon/internal/workflow/runstate"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -18,7 +18,7 @@ func startSecuritySurveyRun(t *testing.T) (*workflow.RunManager, string) {
 	mgr, _, sessions, sqlDB := newRunManagerForEvents(t, "review-evidence-carry.db")
 	ctx := context.Background()
 	testdbseed.InsertProjectRoot(t, sqlDB, testdbseed.DefaultProjectID, t.TempDir())
-	sess, err := sessions.Create(ctx, api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
+	sess, err := sessions.Sessions.Create(ctx, api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
 	_, err = mgr.Starts.StartHuman(ctx, sess.ID, api.StartWorkflowRunRequest{
 		OperationID:     "op-" + sess.ID,
@@ -95,7 +95,7 @@ func TestStampedReviewVerdictsIsInertWithoutARun(t *testing.T) {
 	mgr, _, sessions, sqlDB := newRunManagerForEvents(t, "review-evidence-carry-inert.db")
 	ctx := context.Background()
 	testdbseed.InsertProjectRoot(t, sqlDB, testdbseed.DefaultProjectID, t.TempDir())
-	sess, err := sessions.Create(ctx, api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
+	sess, err := sessions.Sessions.Create(ctx, api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
 	if got := mgr.Verdicts.StampedReviewVerdicts(ctx, sess.ID); got != nil {
 		t.Fatalf("got %+v, want nil", got)

@@ -152,7 +152,7 @@ func TestWorkflowTemplateMissingRequiredParam(t *testing.T) {
 }
 
 func TestComposeFromTemplateClarifySummary(t *testing.T) {
-	c := testComposer(t)
+	c := testComposer(t, "sess-1")
 	c.Templates = testTemplates(t)
 	result, err := c.ComposeFromTemplate(context.Background(), workflowcomposition.ComposeFromTemplateRequest{
 		SessionID:  "sess-1",
@@ -175,7 +175,7 @@ func TestComposeFromTemplateClarifySummary(t *testing.T) {
 }
 
 func TestComposeFromTemplateDecisionSummary(t *testing.T) {
-	c := testComposer(t)
+	c := testComposer(t, "sess-1")
 	c.Templates = testTemplates(t)
 	result, err := c.ComposeFromTemplate(context.Background(), workflowcomposition.ComposeFromTemplateRequest{
 		SessionID:  "sess-1",

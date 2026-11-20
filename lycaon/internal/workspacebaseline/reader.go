@@ -40,7 +40,7 @@ type File struct {
 }
 
 // Entry is one manifest row with its structured identity. RootID and ScopeRel
-// key the entry; Path is the display spelling kept for legacy readers.
+// key the entry; Path is its captured display spelling.
 type Entry struct {
 	RootID   string
 	ScopeRel string
@@ -89,6 +89,19 @@ func Open(ctx context.Context, path string, blobs *sourceblob.Store) (*Reader, e
 		_ = d.Close()
 		return nil, fmt.Errorf("invalid workspace manifest shape: %w", err)
 	}
+	if format == 2 {
+		var invalid bool
+		// The primary-key probe keeps opening independent of manifest size.
+		err := d.QueryRowContext(ctx, "SELECT EXISTS(SELECT 1 FROM files WHERE root_id = '')").Scan(&invalid)
+		if err != nil {
+			_ = d.Close()
+			return nil, fmt.Errorf("validate workspace manifest identities: %w", err)
+		}
+		if invalid {
+			_ = d.Close()
+			return nil, fmt.Errorf("workspace manifest contains an entry without a root identity")
+		}
+	}
 	return &Reader{db: d, blobs: blobs, format: format}, nil
 }
 
@@ -118,15 +131,13 @@ func (r *Reader) Lookup(ctx context.Context, path string) (File, bool, error) {
 // out the way capture wrote it.
 func (r *Reader) LookupIdentity(ctx context.Context, roots []projectroot.RootRef, rootID, scopeRel string) (File, bool, error) {
 	if r.format == 2 {
+		if err := validateIdentity(rootID, scopeRel); err != nil {
+			return File{}, false, err
+		}
 		var f File
 		row := r.db.QueryRowContext(ctx, "SELECT "+fileColumns+" FROM files WHERE root_id = ? AND scope_rel = ?", rootID, scopeRel)
 		err := scanFile(row.Scan, &f)
 		if errors.Is(err, sql.ErrNoRows) {
-			// Capture and read can disagree about root attribution, so fall
-			// back to the display spelling the way format 1 rows are read.
-			if display, derr := displayPathFor(roots, rootID, scopeRel); derr == nil {
-				return r.Lookup(ctx, display)
-			}
 			return File{}, false, nil
 		}
 		return f, err == nil, err
@@ -172,14 +183,8 @@ func (r *Reader) EachIdentity(ctx context.Context, roots []projectroot.RootRef, 
 			if err := rows.Scan(&entry.RootID, &entry.ScopeRel, &entry.Path, &entry.File.Size, &entry.File.MtimeNano, &entry.File.SHA256, &entry.File.Opaque, &entry.File.Mode, &entry.File.LinkTarget, &entry.File.Deleted); err != nil {
 				return err
 			}
-			if entry.RootID == "" && len(roots) > 0 {
-				// Rows captured without root identity are read the way format
-				// 1 rows are: their display path names the root they belong to.
-				rootID, scopeRel, err := parseDisplayPath(roots, entry.Path)
-				if err != nil {
-					return err
-				}
-				entry.RootID, entry.ScopeRel = rootID, scopeRel
+			if err := validateIdentity(entry.RootID, entry.ScopeRel); err != nil {
+				return err
 			}
 			if err := visit(entry); err != nil {
 				return err
@@ -202,6 +207,10 @@ func (r *Reader) Content(ctx context.Context, path string) (string, bool, error)
 	if err != nil || !exists {
 		return "", exists, err
 	}
+	return r.content(ctx, path, f)
+}
+
+func (r *Reader) content(ctx context.Context, path string, f File) (string, bool, error) {
 	if f.Deleted {
 		return "", false, nil
 	}
@@ -219,10 +228,7 @@ func (r *Reader) Content(ctx context.Context, path string) (string, bool, error)
 	return doc.Text(), true, nil
 }
 
-// parseDisplayPath splits a legacy display spelling into the root holding it
-// and the path relative to that root. Bare paths are primary-relative; other
-// roots are qualified with @label. Unlabeled roots spelled bare are ambiguous
-// by construction; format 1 recorded them under the primary.
+// parseDisplayPath reads Format-1 labels; bare paths belong to the primary root.
 func parseDisplayPath(roots []projectroot.RootRef, path string) (rootID, scopeRel string, err error) {
 	if len(roots) > 1 {
 		primary, err := projectroot.PrimaryRoot(roots)
@@ -279,4 +285,16 @@ func (b *boundedBody) Write(p []byte) (int, error) {
 		return 0, fmt.Errorf("workspace baseline content exceeds limit")
 	}
 	return b.Buffer.Write(p)
+}
+
+// lookupPath resolves current display labels before reading a structured manifest.
+func (r *Reader) lookupPath(ctx context.Context, roots []projectroot.RootRef, path string) (File, bool, error) {
+	if r.format == 1 {
+		return r.Lookup(ctx, path)
+	}
+	root, rel, err := manifestRoot(roots, path)
+	if err != nil {
+		return File{}, false, err
+	}
+	return r.LookupIdentity(ctx, roots, root.ID, rel)
 }

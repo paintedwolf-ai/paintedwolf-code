@@ -24,7 +24,7 @@ func TestEveryReaderReportsTheWorkspacePathsThatWereBound(t *testing.T) {
 	testutil.FailErr(t, "link state folder", os.Symlink(t.TempDir(), state))
 	sqlDB := testdbfixture.OpenPath(t, filepath.Join(state, "store.db"))
 	testdbseed.InsertProjectRoot(t, sqlDB, testdbseed.DefaultProjectID, t.TempDir())
-	queue := NewSQLQueue(sqlDB, 1)
+	queue := NewSQLServices(sqlDB, 1).Queue
 	queue.SetEventOutbox(eventoutbox.New(sqlDB, nil))
 	testutil.FailErr(t, "insert", queue.store.InsertTask(t.Context(), api.WorkerTask{
 		ID: "job-1", ProjectID: testdbseed.DefaultProjectID, AgentType: "implement",
@@ -38,7 +38,7 @@ func TestEveryReaderReportsTheWorkspacePathsThatWereBound(t *testing.T) {
 	}
 	first := claim()
 	root := filepath.Join(state, "worker-branches", "worker-branch")
-	baseline := testbaseline.Durable(t, sqlDB, first.ID, t.TempDir())
+	baseline := testbaseline.Durable(t, "root", sqlDB, first.ID, t.TempDir())
 	bound, err := queue.store.SetWorkerWorkspace(t.Context(), first.ID, root, baseline)
 	testutil.FailErr(t, "bind worker workspace", err)
 	if !bound {
@@ -81,13 +81,13 @@ func TestEveryReaderReportsTheWorkspacePathsThatWereBound(t *testing.T) {
 func TestWorkspaceOutsideTheInstallationIsNotBound(t *testing.T) {
 	sqlDB := testdbfixture.Open(t, "store.db")
 	testdbseed.InsertProjectRoot(t, sqlDB, testdbseed.DefaultProjectID, t.TempDir())
-	queue := NewSQLQueue(sqlDB, 1)
+	queue := NewSQLServices(sqlDB, 1).Queue
 	testutil.FailErr(t, "insert", queue.store.InsertTask(t.Context(), api.WorkerTask{
 		ID: "job-1", ProjectID: testdbseed.DefaultProjectID, AgentType: "implement",
 		Prompt: "fixture", Brief: "fixture", ExecutionTarget: api.ExecutionTargetLocal, Status: api.WorkerStatusPending,
 	}))
 	inside := filepath.Join(testbaseline.DataDir(t, sqlDB), "worker-branches", "worker-branch")
-	baseline := testbaseline.Durable(t, sqlDB, "job-1", t.TempDir())
+	baseline := testbaseline.Durable(t, "root", sqlDB, "job-1", t.TempDir())
 	elsewhere := t.TempDir()
 	cases := map[string]struct {
 		store          *SQLStore
@@ -122,7 +122,7 @@ func TestBoundWorkspaceIsNotReadWithoutADataDirectory(t *testing.T) {
 		Prompt: "fixture", Brief: "fixture", ExecutionTarget: api.ExecutionTargetLocal, Status: api.WorkerStatusPending,
 	}))
 	root := filepath.Join(testbaseline.DataDir(t, sqlDB), "worker-branches", "worker-branch")
-	_, err := store.SetWorkerWorkspace(t.Context(), "job-1", root, testbaseline.Durable(t, sqlDB, "job-1", t.TempDir()))
+	_, err := store.SetWorkerWorkspace(t.Context(), "job-1", root, testbaseline.Durable(t, "root", sqlDB, "job-1", t.TempDir()))
 	testutil.FailErr(t, "bind worker workspace", err)
 	if _, err := NewSQLStoreIn(sqlDB, "").List(t.Context(), testdbseed.DefaultProjectID); !errors.Is(err, jobstate.ErrNoDataDir) {
 		t.Fatalf("list without a data directory: err = %v, want %v", err, jobstate.ErrNoDataDir)

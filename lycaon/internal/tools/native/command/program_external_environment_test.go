@@ -16,7 +16,8 @@ import (
 
 	"github.com/lycaon/lycaon/internal/bgprocess"
 	"github.com/lycaon/lycaon/internal/confine"
-	"github.com/lycaon/lycaon/internal/egressproxy"
+	"github.com/lycaon/lycaon/internal/confine/admissiontest"
+	"github.com/lycaon/lycaon/internal/confine/confinetest"
 	"github.com/lycaon/lycaon/internal/programtest"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/tools"
@@ -125,7 +126,7 @@ func requireAppliedBoundary(t *testing.T) {
 
 func TestProgramExternalOutsideWriteRefusedWhileTempWriteAllowed(t *testing.T) {
 	requireAppliedBoundary(t)
-	confine.TestingSetAutoConfine(t)
+	admissiontest.Enable(t)
 	t.Setenv("LYCAON_SANDBOX_NETWORK", "deny")
 
 	account, err := user.LookupId(strconv.Itoa(os.Getuid()))
@@ -196,7 +197,7 @@ func TestProgramExternalOutsideWriteRefusedWhileTempWriteAllowed(t *testing.T) {
 
 func TestProgramExternalSystemToolsRunWithoutStderr(t *testing.T) {
 	requireAppliedBoundary(t)
-	confine.TestingSetAutoConfine(t)
+	admissiontest.Enable(t)
 	t.Setenv("LYCAON_SANDBOX_NETWORK", "deny")
 	t.Setenv("TMPDIR", t.TempDir())
 
@@ -215,8 +216,7 @@ func TestProgramExternalSystemToolsRunWithoutStderr(t *testing.T) {
 }
 
 func TestProgramEnvNeverLeaksEngineOrSecretVarsAndMatchesExternalChild(t *testing.T) {
-	restoreBroker := confine.SetBrokerForTest(nil, egressproxy.Addrs{HTTP: "127.0.0.1:18472", SOCKS: "127.0.0.1:18473"})
-	t.Cleanup(restoreBroker)
+	confinetest.StartBroker(t)
 	t.Setenv("LYCAON_SANDBOX_NETWORK", "")
 	envBin, err := exec.LookPath("env")
 	if err != nil {

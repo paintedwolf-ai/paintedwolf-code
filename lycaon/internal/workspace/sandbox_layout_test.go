@@ -2,15 +2,16 @@ package workspace_test
 
 import (
 	"context"
-	"github.com/lycaon/lycaon/internal/enginepaths"
-	"github.com/lycaon/lycaon/internal/layeredfs/adapter/platform"
 	"os"
 	"path/filepath"
 	"runtime"
 	"sync"
 	"testing"
 
+	"github.com/lycaon/lycaon/internal/enginepaths"
 	"github.com/lycaon/lycaon/internal/layeredfs/adapter"
+	"github.com/lycaon/lycaon/internal/layeredfs/adapter/adaptertest"
+	"github.com/lycaon/lycaon/internal/layeredfs/adapter/platform"
 	"github.com/lycaon/lycaon/internal/layeredfs/claim"
 	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -30,7 +31,7 @@ func TestCreateWorkerWorkspaceFromSourcesMultiRoot(t *testing.T) {
 		{ID: "p", Label: "a", Path: primary, IsPrimary: true},
 		{ID: "s", Label: "b", Path: secondary, IsPrimary: false},
 	}
-	mgr := workspace.NewManager(filepath.Join(base, "branches"), platform.NewSelector(platform.Config{}))
+	mgr := workspace.NewManager(filepath.Join(base, "branches"), platform.NewSelector(platform.Config{}), workspace.Filesystem{})
 	binding, layout, err := mgr.CreateWorkerWorkspaceFromSources(context.Background(), roots, roots, "p", "job-mr")
 	testutil.FailErr(t, "CreateWorkerWorkspaceFromSources", err)
 	primaryDir, err := projectroot.BranchDirForID(layout.Roots[0].ID)
@@ -66,7 +67,7 @@ func TestConcurrentClaimsReuseOneCompleteBranch(t *testing.T) {
 	testutil.FailErr(t, "mkdir project", os.MkdirAll(primary, 0o755))
 	testutil.FailErr(t, "write source", os.WriteFile(filepath.Join(primary, "main.go"), []byte("package main\n"), 0o644))
 	roots := []projectroot.RootRef{{ID: "p", Label: "app", Path: primary, IsPrimary: true}}
-	mgr := workspace.NewManager(filepath.Join(base, "branches"), platform.NewSelector(platform.Config{}))
+	mgr := workspace.NewManager(filepath.Join(base, "branches"), platform.NewSelector(platform.Config{}), workspace.Filesystem{})
 
 	type result struct {
 		binding *workspace.Binding
@@ -105,7 +106,7 @@ func TestCreateWorkerWorkspaceFromSourcesSingleRootFlat(t *testing.T) {
 	testutil.FailErr(t, "mkdir project", os.MkdirAll(dir, 0o755))
 	testutil.FailErr(t, "write", os.WriteFile(filepath.Join(dir, "only.txt"), []byte("x"), 0o644))
 	roots := []projectroot.RootRef{{ID: "p", Label: "root", Path: dir, IsPrimary: true}}
-	mgr := workspace.NewManager(filepath.Join(base, "branches"), platform.NewSelector(platform.Config{}))
+	mgr := workspace.NewManager(filepath.Join(base, "branches"), platform.NewSelector(platform.Config{}), workspace.Filesystem{})
 	binding, _, err := mgr.CreateWorkerWorkspaceFromSources(context.Background(), roots, roots, "p", "job-1")
 	testutil.FailErr(t, "CreateWorkerWorkspaceFromSources", err)
 	if _, err := os.Stat(filepath.Join(binding.Root, "only.txt")); err != nil {
@@ -129,7 +130,7 @@ func TestCreateWorkerWorkspaceFromSourcesMountedClaimZeroLowerWalksAndFormatV2Me
 		{ID: "s", Label: "secondary", Path: secondary, IsPrimary: false},
 	}
 
-	mountedAdp := adapter.NewMountedAdapter(adapter.MountedAdapterConfig{
+	mountedAdp := adaptertest.NewMounted(adaptertest.MountedConfig{
 		AdapterID: adapter.AdapterNFSDarwin,
 		TargetOS:  runtime.GOOS,
 		MountProbeFn: func(_ context.Context, _, _ string) (adapter.ReasonCode, string, error) {
@@ -137,9 +138,9 @@ func TestCreateWorkerWorkspaceFromSourcesMountedClaimZeroLowerWalksAndFormatV2Me
 		},
 	})
 	sel := adapter.NewSelector(runtime.GOOS, mountedAdp, mountedAdp, adapter.NewEagerCopyAdapter())
-	sel.BudgetFor = adapter.ZeroBudget
+	sel.BudgetFor = adaptertest.ZeroBudget
 	sel.Confinement = fixtureConfinement{}
-	mgr := workspace.NewManager(filepath.Join(base, "branches"), sel)
+	mgr := workspace.NewManager(filepath.Join(base, "branches"), sel, workspace.Filesystem{})
 
 	binding, _, err := mgr.CreateWorkerWorkspaceSelected(
 		t.Context(),

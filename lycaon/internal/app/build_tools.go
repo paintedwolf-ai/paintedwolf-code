@@ -51,17 +51,7 @@ func (b *serveBuilder) wireCoordinatorRuntime() error {
 	}); err != nil {
 		return fmt.Errorf("wait tool: %w", err)
 	}
-	if commands := b.execution.Host.Commands; commands != nil {
-		commands.SetProgramParking(loopwake.ProgramParking{Subscriptions: subscriptions})
-		commands.SetProgramEffects(b.sessions.Manager.Runner.Transcript)
-		subscriptions.SetLostProgramResult(commands.ProgramReceiptResult)
-	}
-	if err := b.registerRecovery(bootrecovery.Entry{
-		Name: "agent-wait-leases", Kind: bootrecovery.KindReconcile, Phase: bootrecovery.PhaseServe,
-		Run: func(ctx context.Context) error {
-			return loopwake.RecoverWaitLeases(ctx, b.server.Coordinator.CoordinatorLoop().Waits.Subscriptions, waitStore)
-		},
-	}); err != nil {
+	if err := b.wireWaitRecovery(subscriptions, waitStore); err != nil {
 		return err
 	}
 
@@ -86,7 +76,7 @@ func (b *serveBuilder) registerCoordinatorTools() error {
 		return fmt.Errorf("parse tools: %w", err)
 	}
 	if err := workflowstatetools.RegisterStateTools(b.execution.Host.Registry, workflowstatetools.StateToolDeps{Runs: b.workflows.Store.Runs, Vars: b.workflows.Manager.Phases.Vars, Journal: b.workflows.Manager.Phases.Journal, Resolver: &b.workflows.Manager.Resolver, Starts: b.workflows.Manager.Starts, Controls: b.workflows.Manager.Controls, Scaffold: b.workflows.Manager.Blueprints.Scaffold,
-		Sessions: b.storage.Sessions,
+		Sessions: b.storage.Sessions.Sessions,
 	}); err != nil {
 		return fmt.Errorf("state tools: %w", err)
 	}
@@ -131,9 +121,9 @@ func (b *serveBuilder) registerCoordinatorTools() error {
 	if b.workerRuntime.Recovery != nil {
 		lanes.Checkpoints = b.workerRuntime.Recovery
 	}
-	b.workerRuntime.Queue.SetWorkerLanes(lanes)
+	b.workerRuntime.Queue.Branches.SetWorkerLanes(lanes)
 	workerMergeSvc := &worker.MergeService{
-		Lanes: lanes, Queue: b.workerRuntime.Queue, Store: b.workerRuntime.Queue, Workspace: b.workerRuntime.Workspace,
+		Lanes: lanes, Queue: b.workerRuntime.Queue, Branches: b.workerRuntime.Queue.Branches, Store: b.workerRuntime.Promotions, Workspace: b.workerRuntime.Workspace,
 		Reject: b.execution.Rejections, Names: b.boards.WorkerRecords, Sessions: b.workerRuntime.Queue,
 		Reconcile: b.sessions.Manager.Promotion, Captures: b.sessions.Manager.Chats.Captures,
 		Coord:      b.sessions.Manager.Workers.Workspaces,
@@ -143,7 +133,7 @@ func (b *serveBuilder) registerCoordinatorTools() error {
 		Reports: worker.ChangeReportDeps{
 			SourceRuns: b.sessions.Manager.Verification.WorkerSourceRuns,
 			Messages: func(ctx context.Context, childSessionID string) ([]wire.Message, error) {
-				return b.storage.Sessions.GetMessages(ctx, childSessionID)
+				return b.storage.Sessions.Transcript.GetMessages(ctx, childSessionID)
 			},
 		},
 	}
@@ -279,7 +269,8 @@ func (b *serveBuilder) wireMCP() error {
 			}
 			if err := b.execution.Host.Commands.SetProgramServices(toolhost.ProgramServices{
 				Recorder: recorder, Blobs: blobstore.Store{Root: b.storage.Directory}, Projector: captureProjector,
-				Progress: b.sessions.Manager.Coordinator.Guards, Sessions: b.storage.Sessions,
+				Progress: b.sessions.Manager.Coordinator.Guards, Sessions: b.storage.Sessions.Sessions,
+				Provenance: b.storage.Sessions.Evidence, SourceObserver: b.storage.Sessions.Evidence,
 				SourceRuns: b.sessions.Manager.Verification, ExternalHidden: programSettings.ExternalHidden(),
 			}); err != nil {
 				return err

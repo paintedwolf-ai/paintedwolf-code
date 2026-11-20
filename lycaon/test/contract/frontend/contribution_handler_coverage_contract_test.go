@@ -8,7 +8,6 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/catalogview"
-	"github.com/lycaon/lycaon/internal/contribution"
 	"github.com/lycaon/lycaon/internal/extpacks"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 )
@@ -31,7 +30,7 @@ func TestNativeHandlerInventoryCoverage(t *testing.T) {
 	denInventory, err := denNativeUIHandlerIDs(root)
 	contractcheck.FailErr(t, "read Den handler inventory", err)
 
-	errs := contribution.ValidateHandlerCoverage(view.Contributions, contribution.HandlerInventories{
+	errs := validateHandlerCoverage(view.Contributions, handlerInventories{
 		Den: denInventory,
 	})
 	for _, err := range errs {

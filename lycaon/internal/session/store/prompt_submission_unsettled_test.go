@@ -14,19 +14,19 @@ import (
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
-func openUnsettledPromptStore(t *testing.T) *SQL {
+func openUnsettledPromptStore(t *testing.T) *Repositories {
 	handle := testdbfixture.Open(t, "unsettled.db")
 	testdbseed.InsertProjectRoot(t, handle, testdbseed.DefaultProjectID, t.TempDir())
 	return NewSQL(handle)
 }
 
-func admitTestPrompt(t *testing.T, st *SQL, sess *api.Session, origin PromptSubmissionOrigin) *PromptSubmission {
+func admitTestPrompt(t *testing.T, st *Repositories, sess *api.Session, origin PromptSubmissionOrigin) *PromptSubmission {
 	t.Helper()
 	sender := ""
 	if origin == PromptSubmissionOriginUser {
 		sender = sess.OwnerPersonID
 	}
-	row, _, err := st.PutPromptSubmission(t.Context(), PromptSubmission{
+	row, _, err := st.Submissions.PutPromptSubmission(t.Context(), PromptSubmission{
 		ID: uuid.NewString(), SessionID: sess.ID, ProjectID: sess.ProjectID,
 		InputDigest: "digest", InputJSON: `{}`, Origin: origin, SubmittedBy: sender,
 	})
@@ -36,7 +36,7 @@ func admitTestPrompt(t *testing.T, st *SQL, sess *api.Session, origin PromptSubm
 
 func TestUnsettledUserPromptsAreQueuedOrRunningInAdmissionOrder(t *testing.T) {
 	st := openUnsettledPromptStore(t)
-	sess, err := st.Create(t.Context(), api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
+	sess, err := st.Sessions.Create(t.Context(), api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
 
 	running := admitTestPrompt(t, st, sess, PromptSubmissionOriginUser)
@@ -45,18 +45,18 @@ func TestUnsettledUserPromptsAreQueuedOrRunningInAdmissionOrder(t *testing.T) {
 	admitTestPrompt(t, st, sess, PromptSubmissionOriginLoopWake)
 	queued := admitTestPrompt(t, st, sess, PromptSubmissionOriginUser)
 
-	_, claimed, err := st.ClaimPromptSubmission(t.Context(), running.ID)
+	_, claimed, err := st.Submissions.ClaimPromptSubmission(t.Context(), running.ID)
 	testutil.FailErr(t, "claim running prompt", err)
 	if !claimed {
 		t.Fatal("running prompt was not claimable")
 	}
-	done, _, err := st.ClaimPromptSubmission(t.Context(), completed.ID)
+	done, _, err := st.Submissions.ClaimPromptSubmission(t.Context(), completed.ID)
 	testutil.FailErr(t, "claim completed prompt", err)
-	testutil.FailErr(t, "complete prompt", st.FinishPromptSubmission(t.Context(), done.ID, done.ClaimToken,
+	testutil.FailErr(t, "complete prompt", st.Submissions.FinishPromptSubmission(t.Context(), done.ID, done.ClaimToken,
 		PromptSubmissionComplete, "", PromptSubmissionFailure{}))
-	testutil.FailErr(t, "cancel prompt", st.CancelQueuedPromptSubmissions(t.Context(), []string{canceled.ID}))
+	testutil.FailErr(t, "cancel prompt", st.Submissions.CancelQueuedPromptSubmissions(t.Context(), []string{canceled.ID}))
 
-	got, err := st.ListUnsettledUserPromptSubmissionIDs(t.Context(), sess.ID)
+	got, err := st.Submissions.ListUnsettledUserPromptSubmissionIDs(t.Context(), sess.ID)
 	testutil.FailErr(t, "list unsettled prompts", err)
 	if want := []string{running.ID, queued.ID}; !slices.Equal(got, want) {
 		t.Fatalf("unsettled = %v, want the running and queued human prompts %v", got, want)
@@ -76,14 +76,14 @@ func (r *recordingPromptPending) PromptPendingAmong(sessionID string, unsettled 
 // A status commit's outbox event states prompt_pending from the same
 // transaction, so the relay can never deliver a status without it.
 func TestSQLSessionEventStatesPromptPendingFromItsTransaction(t *testing.T) {
-	database := testdbfixture.Open(t, "store.db")
+	database := testdbfixture.Open(t, "store.core.db.db")
 	testdbseed.InsertProjectRoot(t, database, testdbseed.DefaultProjectID, t.TempDir())
 	st := NewSQL(database)
 	st.SetEventOutbox(eventoutbox.New(database, events.NewMemoryHub()))
 	pending := &recordingPromptPending{}
 	st.SetPromptPending(pending)
 
-	sess, err := st.Create(t.Context(), api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
+	sess, err := st.Sessions.Create(t.Context(), api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
 	prompt := admitTestPrompt(t, st, sess, PromptSubmissionOriginUser)
 
@@ -99,7 +99,7 @@ func TestSQLSessionEventStatesPromptPendingFromItsTransaction(t *testing.T) {
 		return event
 	}
 
-	testutil.FailErr(t, "mark busy", st.SetSessionStatus(t.Context(), sess.ID, api.SessionStatusBusy))
+	testutil.FailErr(t, "mark busy", st.Sessions.SetSessionStatus(t.Context(), sess.ID, api.SessionStatusBusy))
 	if event := latestEvent(); !event.PromptPending || event.Status != api.SessionStatusBusy {
 		t.Fatalf("busy event = %+v, want prompt_pending while the prompt is unsettled", event)
 	}
@@ -107,11 +107,11 @@ func TestSQLSessionEventStatesPromptPendingFromItsTransaction(t *testing.T) {
 		t.Fatalf("source saw %s %v, want %s [%s]", pending.sessionID, pending.unsettled, sess.ID, prompt.ID)
 	}
 
-	claimed, _, err := st.ClaimPromptSubmission(t.Context(), prompt.ID)
+	claimed, _, err := st.Submissions.ClaimPromptSubmission(t.Context(), prompt.ID)
 	testutil.FailErr(t, "claim prompt", err)
-	testutil.FailErr(t, "complete prompt", st.FinishPromptSubmission(t.Context(), claimed.ID, claimed.ClaimToken,
+	testutil.FailErr(t, "complete prompt", st.Submissions.FinishPromptSubmission(t.Context(), claimed.ID, claimed.ClaimToken,
 		PromptSubmissionComplete, "", PromptSubmissionFailure{}))
-	testutil.FailErr(t, "mark idle", st.SetSessionStatus(t.Context(), sess.ID, api.SessionStatusIdle))
+	testutil.FailErr(t, "mark idle", st.Sessions.SetSessionStatus(t.Context(), sess.ID, api.SessionStatusIdle))
 	if event := latestEvent(); event.PromptPending {
 		t.Fatalf("idle event = %+v, want no prompt pending once the receipt closed", event)
 	}

@@ -50,16 +50,6 @@ func Multi(instructions string, options map[string]string) Question {
 	return Question{Kind: KindMulti, Instructions: instructions, Options: options}
 }
 
-// Score declares an ordinal rubric.
-func Score(instructions string, levels ...string) Question {
-	return Question{Kind: KindScore, Instructions: instructions, Levels: levels}
-}
-
-// Noul declares a yes/no question.
-func Noul(instructions string) Question {
-	return Question{Kind: KindNoul, Instructions: instructions}
-}
-
 // Answer is one typed answer with its probability distribution.
 type Answer struct {
 	Kind Kind `json:"type"`

@@ -15,7 +15,7 @@ import (
 
 // fetchPageProbe GETs a bounded window of the page and extracts title, meta
 // description, headings, and a declared publish date.
-func fetchPageProbe(ctx context.Context, rawURL string) pageProbe {
+func (crawler *Crawler) fetchPageProbe(ctx context.Context, rawURL string) pageProbe {
 	u, err := normalizeFetchURL(rawURL)
 	if err != nil {
 		return pageProbe{}
@@ -23,7 +23,7 @@ func fetchPageProbe(ctx context.Context, rawURL string) pageProbe {
 	// The deadline bounds the probe's I/O, not any approval wait before it.
 	fetchCtx, cancel := context.WithTimeout(ctx, verifyFetchTimeout)
 	defer cancel()
-	resp, finalURL, err := politeGuardedGet(fetchCtx, u, researchAcceptHeader, verifyBodyByteLimit, true)
+	resp, finalURL, err := crawler.politeGuardedGet(fetchCtx, u, researchAcceptHeader, verifyBodyByteLimit, true)
 	if err != nil {
 		if errors.Is(err, errRobotsBlocked) {
 			return pageProbe{robotsBlocked: true}

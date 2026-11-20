@@ -10,7 +10,8 @@ import (
 
 	"github.com/google/uuid"
 	contractfixture "github.com/lycaon/lycaon/internal/api/contractfixture"
-	"github.com/lycaon/lycaon/internal/project"
+
+	"github.com/lycaon/lycaon/internal/project/projecttest"
 	"github.com/lycaon/lycaon/internal/projectignore"
 	"github.com/lycaon/lycaon/internal/testutil"
 	wire "github.com/lycaon/lycaon/pkg/api"
@@ -18,7 +19,7 @@ import (
 
 func TestProjectSecretIgnoreWritesReviewedFileOnly(t *testing.T) {
 	srv := contractfixture.NewTestServer(t)
-	p, err := project.CreateWithRoot(t.Context(), srv.Sources.Workspace.ProjectRegistry, t.TempDir())
+	p, err := projecttest.CreateWithRoot(t.Context(), srv.Sources.Workspace.ProjectRegistry, t.TempDir())
 	testutil.FailErr(t, "create project", err)
 	svc := &projectignore.SecretService{Roots: func(_ context.Context, id string) ([]projectignore.Root, error) {
 		if id != p.ID {
@@ -55,7 +56,7 @@ func TestProjectSecretIgnoreWritesReviewedFileOnly(t *testing.T) {
 
 func TestProjectSecretIgnoreRemovalAnswersWithCurrentDeclarations(t *testing.T) {
 	srv := contractfixture.NewTestServer(t)
-	p, err := project.CreateWithRoot(t.Context(), srv.Sources.Workspace.ProjectRegistry, t.TempDir())
+	p, err := projecttest.CreateWithRoot(t.Context(), srv.Sources.Workspace.ProjectRegistry, t.TempDir())
 	testutil.FailErr(t, "create project", err)
 	root := p.Roots[0]
 	svc := &projectignore.SecretService{Roots: func(_ context.Context, id string) ([]projectignore.Root, error) {

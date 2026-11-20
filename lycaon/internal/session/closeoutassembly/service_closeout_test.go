@@ -50,6 +50,16 @@ func TestAssemblyRecoversCompletedLegsWithoutInventingCitations(t *testing.T) {
 		{Role: api.MessageRoleTool, WorkerSummary: &api.WorkerSummaryMeta{WorkerID: "job", LegID: "duplicate", AgentType: "Review", Status: api.WorkerSummaryStatusComplete, Envelope: dupEnv}},
 		{Role: api.MessageRoleTool, WorkerSummary: &api.WorkerSummaryMeta{WorkerID: "job-pending", LegID: "pending", AgentType: "Review", Status: api.WorkerSummaryStatusPartial, Envelope: unfinishedEnv}},
 		{Role: api.MessageRoleTool, WorkerSummary: &api.WorkerSummaryMeta{WorkerID: "job-empty", LegID: "empty", AgentType: "Review", Status: api.WorkerSummaryStatusComplete}},
+	}}, closeoutSession{msgs: []api.Message{
+		{Role: api.MessageRoleTool, WorkerSummary: &api.WorkerSummaryMeta{WorkerID: "job", LegID: "leg", AgentType: "Review", Status: api.WorkerSummaryStatusComplete, Envelope: completeEnv}},
+		{Role: api.MessageRoleTool, WorkerSummary: &api.WorkerSummaryMeta{WorkerID: "job", LegID: "duplicate", AgentType: "Review", Status: api.WorkerSummaryStatusComplete, Envelope: dupEnv}},
+		{Role: api.MessageRoleTool, WorkerSummary: &api.WorkerSummaryMeta{WorkerID: "job-pending", LegID: "pending", AgentType: "Review", Status: api.WorkerSummaryStatusPartial, Envelope: unfinishedEnv}},
+		{Role: api.MessageRoleTool, WorkerSummary: &api.WorkerSummaryMeta{WorkerID: "job-empty", LegID: "empty", AgentType: "Review", Status: api.WorkerSummaryStatusComplete}},
+	}}, closeoutSession{msgs: []api.Message{
+		{Role: api.MessageRoleTool, WorkerSummary: &api.WorkerSummaryMeta{WorkerID: "job", LegID: "leg", AgentType: "Review", Status: api.WorkerSummaryStatusComplete, Envelope: completeEnv}},
+		{Role: api.MessageRoleTool, WorkerSummary: &api.WorkerSummaryMeta{WorkerID: "job", LegID: "duplicate", AgentType: "Review", Status: api.WorkerSummaryStatusComplete, Envelope: dupEnv}},
+		{Role: api.MessageRoleTool, WorkerSummary: &api.WorkerSummaryMeta{WorkerID: "job-pending", LegID: "pending", AgentType: "Review", Status: api.WorkerSummaryStatusPartial, Envelope: unfinishedEnv}},
+		{Role: api.MessageRoleTool, WorkerSummary: &api.WorkerSummaryMeta{WorkerID: "job-empty", LegID: "empty", AgentType: "Review", Status: api.WorkerSummaryStatusComplete}},
 	}}, closeoutRoots{t.TempDir()}, nil, nil)
 	report, grounding := s.Assemble(t.Context(), "parent", "implement_synthesis", nil, guidance.CloseoutDraft{}, 0)
 	if !strings.Contains(report.Synthesis, "Review: Checked access controls.") || strings.Contains(report.Synthesis, "Duplicate") || strings.Contains(report.Synthesis, "Unfinished") {

@@ -1,7 +1,6 @@
 package anchor
 
 import (
-	"fmt"
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/anchorcatalog"
@@ -78,16 +77,6 @@ const (
 	InjectWorkerTaskPreamble      ID = "inject.worker_task_preamble"
 	InjectScanGuidance            ID = "inject.scan_guidance"
 )
-
-// MustAnchor returns ID or panics if id is not in the installed catalog or
-// is not a current Binding.render identifier.
-func MustAnchor(id string) ID {
-	a, ok := ParseID(id)
-	if !ok {
-		panic(fmt.Sprintf("anchor: unknown id %q", id))
-	}
-	return a
-}
 
 // ParseID accepts a catalog dotted id or a current Binding.render identifier.
 // Requires anchorcatalog.InstallFile.

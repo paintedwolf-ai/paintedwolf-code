@@ -35,18 +35,18 @@ type ScannerCheckReport struct {
 }
 
 // CheckCatalog evaluates merged scanner entries for CLI/API check output.
-func CheckCatalog(cfg *ScannerConfig, moduleRoot, projectDir string) []ScannerCheckReport {
+func CheckCatalog(cfg *ScannerConfig, projectDir string) []ScannerCheckReport {
 	if cfg == nil {
 		return nil
 	}
 	out := make([]ScannerCheckReport, 0, len(cfg.Scanners))
 	for _, entry := range cfg.Scanners {
-		out = append(out, checkEntry(entry, moduleRoot, projectDir))
+		out = append(out, checkEntry(entry, projectDir))
 	}
 	return out
 }
 
-func checkEntry(entry ScannerEntry, moduleRoot, projectDir string) ScannerCheckReport {
+func checkEntry(entry ScannerEntry, projectDir string) ScannerCheckReport {
 	report := ScannerCheckReport{
 		ID:         entry.ID,
 		Driver:     strings.TrimSpace(entry.Driver),
@@ -106,8 +106,8 @@ func (r *ScannerCheckReport) addIssue(code, detail string) {
 }
 
 // ListCatalogEntries returns merged catalog metadata for list output.
-func ListCatalogEntries(cfg *ScannerConfig, moduleRoot, projectDir string) []ScannerCheckReport {
-	reports := CheckCatalog(cfg, moduleRoot, projectDir)
+func ListCatalogEntries(cfg *ScannerConfig, projectDir string) []ScannerCheckReport {
+	reports := CheckCatalog(cfg, projectDir)
 	for i := range reports {
 		reports[i].ExpandedCommand = nil
 	}

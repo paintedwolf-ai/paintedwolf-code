@@ -3,6 +3,7 @@ package webresearch
 import (
 	"context"
 	"errors"
+	"fmt"
 	"github.com/lycaon/lycaon/pkg/api"
 	"net/url"
 	"path"
@@ -31,6 +32,7 @@ func registerFetchTool(reg *tools.DefaultRegistry, deps ToolDeps) error {
 		ctx = withToolEgressGate(ctx, deps, tctx, dial, contest, screenDestination{})
 		defer confine.ForgetEgressAction(tctx.Identity.SessionID, tctx.Identity.ToolCallID)
 		out, fetched, err := fetchURLTool(ctx, fetchURLToolArgs{
+			Crawler:      deps.Crawler,
 			URL:          rawURL,
 			Offset:       offset,
 			Limit:        limit,
@@ -74,6 +76,7 @@ func (d ToolDeps) addressOrigin(tctx tools.ToolContext, rawURL string) confine.A
 }
 
 type fetchURLToolArgs struct {
+	Crawler      *Crawler
 	URL          string
 	Offset       int
 	Limit        int
@@ -137,7 +140,7 @@ func fetchURLTextTool(ctx context.Context, a fetchURLToolArgs, rawURL string) (s
 		if err != nil {
 			return "", nil, err
 		}
-		body, err := fetchBytes(ctx, FetchOptions{URL: rawURL})
+		body, err := a.Crawler.fetchBytes(ctx, FetchOptions{URL: rawURL})
 		release()
 		if err != nil {
 			return "", nil, err
@@ -234,7 +237,7 @@ func mapFetchToolErr(err error) error {
 func acquireFetchBudget(ctx context.Context, a fetchURLToolArgs, rawURL string) (func(), error) {
 	b := a.Budget
 	if b == nil {
-		b = GlobalFetchBudget()
+		return nil, fmt.Errorf("fetch budget required")
 	}
 	return b.Acquire(ctx, a.Tctx.Identity.SessionID, rawURL)
 }

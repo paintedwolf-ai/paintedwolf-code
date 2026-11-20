@@ -69,13 +69,14 @@ type LoopbackConnectAuthority func(lineage string, port uint16) bool
 // rechecks it around waits, because an approval can outlive the action.
 type LeaseCheck func(lineage string) bool
 
-// ListenFunc binds a listener for tests.
+// ListenFunc binds a listener.
 type ListenFunc func(network, address string) (net.Listener, error)
 
-// Options configures listener factories and the preferred stable ports.
+// Options configures listeners and upstream dialing.
 type Options struct {
-	ListenHTTP  ListenFunc
-	ListenSOCKS ListenFunc
+	ListenHTTP   ListenFunc
+	ListenSOCKS  ListenFunc
+	DialEndpoint DialEndpoint
 	// HTTPPort and SOCKSPort are the recorded ports. Zero, or a port another
 	// process holds, binds a fresh one.
 	HTTPPort  uint16
@@ -107,7 +108,6 @@ type Broker struct {
 	dialEndpoint          DialEndpoint
 	reportDial            DialReporter
 	reportHTTP            HTTPReporter
-	httpLn                net.Listener
 	socksLn               net.Listener
 	server                *http.Server
 	serveCtx              context.Context
@@ -166,9 +166,6 @@ func (b *Broker) SetRefusalReporter(fn RefusalReporter) {
 	}
 }
 
-// SetDialEndpointForTest overrides upstream dialing in tests.
-func (b *Broker) SetDialEndpointForTest(d DialEndpoint) { b.dialEndpoint = d }
-
 // Start binds both front doors and serves them until Close, preferring the
 // recorded ports so an already-running descendant keeps reaching them.
 func (b *Broker) Start(opts ...Options) (Addrs, error) {
@@ -195,7 +192,7 @@ func (b *Broker) Start(opts ...Options) (Addrs, error) {
 		return Addrs{}, fmt.Errorf("socks listen: %w", err)
 	}
 
-	b.httpLn = httpLn
+	b.dialEndpoint = o.DialEndpoint
 	b.socksLn = socksLn
 	b.serveCtx, b.cancel = context.WithCancel(context.Background())
 	b.server = &http.Server{
@@ -227,14 +224,6 @@ func listenPreferred(listen ListenFunc, port uint16) (net.Listener, error) {
 		}
 	}
 	return listen("tcp", "127.0.0.1:0")
-}
-
-// Addr returns the loopback host:port commands point HTTP(S)_PROXY at.
-func (b *Broker) Addr() string {
-	if b == nil || b.httpLn == nil {
-		return ""
-	}
-	return b.httpLn.Addr().String()
 }
 
 // Close stops both listeners and waits for active connections and serve loops.

@@ -305,7 +305,7 @@ func TestCoordinatorEnqueueSharesCompleteScanAcrossRuns(t *testing.T) {
 	})
 	testutil.FailErr(t, "first run enqueue", err)
 	claimed := claimScan(t, store, first.ID)
-	_, err = store.MarkComplete(ctx, claimed, &scanoutput.Result{})
+	_, err = store.Runs.MarkComplete(ctx, claimed, &scanoutput.Result{})
 	testutil.FailErr(t, "MarkComplete", err)
 
 	reused, err := coord.Enqueue(ctx, scan.EnqueueRequest{
@@ -329,7 +329,7 @@ func TestCoordinatorEnqueueSharesCompleteScanAcrossRuns(t *testing.T) {
 	if reused.AssessmentID != "assessment-b" {
 		t.Fatalf("reused assessment_id = %q", reused.AssessmentID)
 	}
-	view, err := store.AssessmentView(ctx, []string{dir})
+	view, err := store.Findings.AssessmentView(ctx, []string{dir})
 	testutil.FailErr(t, "assessment view", err)
 	if view.CurrentID != "assessment-b" || view.PreviousID != "assessment-a" {
 		t.Fatalf("assessment view ids = current %q previous %q", view.CurrentID, view.PreviousID)
@@ -354,7 +354,7 @@ func TestCoordinatorEnqueueDoesNotAdoptFailedUnboundScan(t *testing.T) {
 		Trigger:    api.ScanTriggerManual,
 	})
 	testutil.FailErr(t, "project_open enqueue", err)
-	_, err = store.FinalizePendingFailure(ctx, failed.ID, "SCAN_ENGINE_FAILED", "engine crashed")
+	_, err = store.Runs.FinalizePendingFailure(ctx, failed.ID, "SCAN_ENGINE_FAILED", "engine crashed")
 	testutil.FailErr(t, "MarkFailed", err)
 
 	fresh, err := coord.Enqueue(ctx, scan.EnqueueRequest{

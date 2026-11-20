@@ -74,8 +74,8 @@ func TestExplicitArgumentObservationsRemainSeparateFromDiagnostics(t *testing.T)
 	}
 }
 
-func TestPortableVocabularyAccessors(t *testing.T) {
-	if !slices.Contains(RequiredCoreFacts(), "breaker_count") || !slices.Contains(RequiredCoreFunctions(), "fire_count_of") {
+func TestPortableVocabulary(t *testing.T) {
+	if !IsPortableFact("breaker_count") || !IsPortableFact("fire_count_of") {
 		t.Fatal("missing core facts or functions")
 	}
 	profiles := StandardProfileFacts()

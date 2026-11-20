@@ -35,7 +35,7 @@ func newExternalFixture(t *testing.T, files map[string]string) externalFixture {
 	}
 	p := &project.Project{ID: projectID, Roots: []project.Root{{ID: rootID, ProjectID: projectID, Path: root, IsPrimary: true}}}
 	store := NewStore(sqlDB)
-	sourceHistory11 := sourceledger.New(sqlDB, "")
+	sourceHistory11 := sourceledger.New(sqlDB, "", sourceledger.Timing{})
 	service := New(store, sourceHistory11, sourceHistory11.History, fixedRoots{p: p})
 	closeServiceAtCleanup(t, service)
 	changes := &[]Change{}

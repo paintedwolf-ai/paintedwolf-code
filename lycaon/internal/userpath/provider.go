@@ -31,7 +31,7 @@ func NewProvider(cfg Config) *Provider {
 		cfg:          cfg,
 		lookupEnv:    os.LookupEnv,
 		environ:      os.Environ,
-		stat:         defaultStat,
+		stat:         os.Stat,
 		run:          defaultRun,
 		prepare:      execpkg.PrepareCommand,
 		accountShell: defaultAccountShell,

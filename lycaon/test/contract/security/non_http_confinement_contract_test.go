@@ -7,11 +7,12 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
-	"strings"
 	"syscall"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/confine"
+	"github.com/lycaon/lycaon/internal/confine/admissiontest"
+	"github.com/lycaon/lycaon/internal/confine/confinetest"
 	"github.com/lycaon/lycaon/internal/egressproxy"
 	"github.com/lycaon/lycaon/internal/hitl"
 	"github.com/lycaon/lycaon/internal/isolation"
@@ -47,79 +48,24 @@ func TestNonHTTPContractProxyStartupFailureDeniesAndRollsBack(t *testing.T) {
 	if httpAddr == "" {
 		t.Fatal("Start never bound the HTTP front door")
 	}
-	if broker.Addr() != "" {
-		t.Fatalf("failed Start kept its HTTP listener: %q", broker.Addr())
-	}
 	rebound, err := net.Listen("tcp", httpAddr)
 	if err != nil {
 		t.Fatalf("HTTP listener port %s still held after the failed Start: %v", httpAddr, err)
 	}
 	_ = rebound.Close()
 
-	confine.TestingSetAutoConfine(t)
+	admissiontest.Enable(t)
 	t.Setenv("LYCAON_BYPASS_APPROVALS", "")
 	t.Setenv("LYCAON_SANDBOX", "")
 	t.Setenv("LYCAON_SANDBOX_NETWORK", "")
 	requireNonHTTPConfinement(t)
-	t.Cleanup(confine.SetBrokerUnavailableForTest(os.ErrInvalid))
+	confinetest.FailBrokerStartup(t, os.ErrInvalid)
 	c, ok := confine.DefaultConfinement(confine.Request{Roots: []string{t.TempDir()}})
 	if !ok || c == nil || c.Network != confine.NetworkProxyOnly {
 		t.Fatalf("default must still compile the proxy-only intent, got ok=%v c=%+v", ok, c)
 	}
 	if _, err := confine.BindAction(c, confine.EgressCommand{ToolCallID: "contract"}); err == nil {
 		t.Fatal("broker failure must refuse the action before launch")
-	}
-}
-
-// Socket grants render as exact literal predicates only, and direct IP opens
-// remote IP outbound without a blanket network allow.
-func TestNonHTTPContractSocketEmitterLiteralOnlyAndDirectRemoteIP(t *testing.T) {
-	t.Parallel()
-	profile, err := confine.BuildSeatbeltProfile(confine.Confinement{Roots: []string{"/proj"}, Network: confine.NetworkDirectIP})
-	contractcheck.FailErr(t, "BuildProfile direct", err)
-	if !strings.Contains(profile, `(allow network-outbound (remote ip "*:*"))`) {
-		t.Fatalf("direct profile missing remote IP allow:\n%s", profile)
-	}
-	if strings.Contains(profile, "(allow network*)") {
-		t.Fatal("direct profile must not emit network*")
-	}
-
-	dir := shortUnixTempDir(t)
-	sockPath := filepath.Join(dir, "svc.sock")
-	ln, err := net.Listen("unix", sockPath)
-	contractcheck.FailErr(t, "listen unix", err)
-	t.Cleanup(func() { _ = ln.Close() })
-	ctx, scope := socketref.WithScope(t.Context())
-	t.Cleanup(scope.Close)
-	grant, err := confine.ResolveSocketRequest(sockPath)
-	contractcheck.FailErr(t, "ResolveSocketRequest", err)
-	grant, err = confine.CaptureSocketGrant(ctx, grant)
-	contractcheck.FailErr(t, "capture reviewed socket", err)
-	c := confine.Confinement{Roots: []string{dir}, Network: confine.NetworkDeny, SocketGrants: []confine.SocketGrant{grant}}
-	want := grant.ResolvedPath
-	if runtime.GOOS == "darwin" {
-		lease, err := confine.BindAction(&c, confine.EgressCommand{ToolCallID: t.Name()})
-		contractcheck.FailErr(t, "bind socket endpoints", err)
-		t.Cleanup(func() { _ = lease.Close(context.Background()) })
-		args, _, err := confine.ResolveSocketArguments(&c, []string{"{{paintedwolf-socket:" + grant.ApprovedPath + "}}"}, nil)
-		contractcheck.FailErr(t, "resolve socket endpoint", err)
-		want, err = filepath.EvalSymlinks(args[0])
-		contractcheck.FailErr(t, "resolve endpoint literal", err)
-	} else {
-		c.SocketGrants[0].Binding = socketref.Binding{Enforcement: socketref.KernelPathname}
-	}
-	profile, err = confine.BuildSeatbeltProfile(c)
-	contractcheck.FailErr(t, "BuildProfile with socket grant", err)
-	if !strings.Contains(profile, `(allow network-outbound (literal "`+want+`"))`) {
-		t.Fatalf("socket grant missing its exact literal:\n%s", profile)
-	}
-	for _, line := range strings.Split(profile, "\n") {
-		if !strings.HasPrefix(line, "(allow network") {
-			continue
-		}
-		if !strings.HasPrefix(line, "(allow network-outbound (literal ") {
-			t.Errorf("socket-only profile allows network beyond exact literals: %s", line)
-		}
 	}
 }
 

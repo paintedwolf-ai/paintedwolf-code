@@ -1,0 +1,16 @@
+{
+  "category": "source_directories",
+  "artifact": "lycaon/internal/mcp",
+  "kind": "module",
+  "workstream": "credential-fixture-boundaries",
+  "disposition": "retain",
+  "reason": "Retain the MCP protocol module at 38 immediate source files. Catalog, credentials, connection lifetime, tool discovery and calls have explicit components; this change only makes OAuth store construction use the configured encrypted slot. The test fixture lives in a separate test-support package. Further source membership changes require review.",
+  "reviewed_commit": "d771f280c226a3a8412f7aca8a5a2b7d9647b9fb",
+  "ceiling": 38,
+  "boundaries": {
+    "lycaon/internal/mcp/oauth_token_store_test.go": "5e3ef7a5147d94bbabd806584e3cf3b38f02fc32dc9be6b77496f56179ec8762",
+    "lycaon/internal/mcp/oauth_store_failure_test.go": "8ae08639dc9ae29d6b9352e612cfc9176f70c0b37c8a3a718c481f8912b4c03e",
+    "lycaon/internal/mcp/registry_test.go": "0f50842fb21a4a598f368ada389a9609fba3d7c5daf3e66e2039f6f720ed04e8"
+  },
+  "reviewed_shape": "ab55ef13685db9bf69a7ee4cc3ae40281960d8c22beac4b2b97f4ab749674990"
+}

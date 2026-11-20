@@ -1177,6 +1177,10 @@ Requesting `command` does not automatically load `http_request`; `curl` in a pro
 
 Direct search uses a catalogued set of keyless sources with declared roles, pacing, and normalization; user-configured providers join the effective set according to settings. Provider ids, endpoints, and enablement live in the generated catalog (`lycaon/config/packs/painted-wolf/web-research/host/web-research-providers.yaml`), not this page.
 
+Web research opens its preferences and credential namespace from explicit storage resources. Missing preferences use defaults; unreadable or malformed preferences fail opening without replacing the file. Credential opening loads existing encrypted values and reports vault errors. Runtime composition selects platform paths; isolated tests use temporary resources through the same constructors.
+
+Each web research runtime constructs a provider Registry, a Discovery scheduler, a Crawler, and a fetch budget. Interactive searches and warming share its discovery admission, crawl pacing, robots cache, and site indexes; independent runtimes have separate provider, search, and crawl caches and limits. Provider repair invalidates only that runtime’s affected state. Production exchanges use the bounded outbound HTTP door with per-operation egress and secret screening. Active host gates survive cache eviction, and canceled requests release their exact reservations. Tests construct isolated resources instead of replacing process transport or resetting shared state.
+
 Search results are untrusted inbound content. Provider text is normalized at one fan-in, provenance is retained, and fetched bodies are marked as data before entering model context. Outbound destination and secret policy still apply. Caching and pacing are explicit and bounded: a cached result states that it is a repeat, and provider cooldown does not turn one failure into a permanent absence. Privacy behavior and the outbound inventory are in [Privacy](privacy.md).
 
 ### Shared operation invocation contracts
@@ -1220,6 +1224,12 @@ The current command entry parses and admits ordinary bash programs, dispatches c
 | Approvals | Host decisions use structured operation and effect facts. Balanced cards and recommended options follow [authorization](authorization.md) and [security usability](security.md#security-usability); this cutover does not change their frequency. |
 | Guidance and workflow | The command schema, per-call prompt, OAR policies, and workflow consumers use the current tool surface. The final live request capture must confirm rendered wording and model selection on the rebuilt composition. |
 | Routine tools | `command` is on the routine floor. Routine file, search, query, Git inspection and HTTP operations have no callable registration or profile offer. Their contracts remain available for command admission, receipts, approvals and historical decoding. Domain tools and conversational edits keep their structured surfaces. |
+
+### Command output publication
+
+The host screens aggregate output and retained child diagnostics before storing them. It seals the custody facts for the program and commits both session and chat provenance in one transaction before publishing output. Source observations record the ranges actually delivered. A child can finish with visible effects while final output publication is still pending.
+
+If the host restarts after the publication is sealed, recovery uses the retained bytes and the recorded facts to finish publishing. It does not run the program again. Live background process streams follow the separate process observation contract.
 
 ### Source-index behavior
 

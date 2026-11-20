@@ -102,7 +102,7 @@ func openWindowsParent(loc Location, create, write bool) (*windowsParent, error)
 			created = openErr == nil
 		}
 		if created {
-			if syncErr := flushHandle(handle); syncErr != nil {
+			if syncErr := windows.FlushFileBuffers(handle); syncErr != nil {
 				_ = windows.CloseHandle(next)
 				_ = windows.CloseHandle(handle)
 				return nil, syncErr
@@ -330,7 +330,7 @@ func stageReplace(req ReplaceRequest, inject func(stage) error) (*Replacement, R
 		if err := injectAt(inject, stageRenamed); err != nil {
 			return result, err
 		}
-		if err := flushHandle(parent.handle); err != nil {
+		if err := windows.FlushFileBuffers(parent.handle); err != nil {
 			return result, fmt.Errorf("sync replacement directory: %w", err)
 		}
 		result.Publication = PublicationDurable
@@ -494,7 +494,7 @@ func Remove(req RemoveRequest) error {
 	if err := windows.CloseHandle(handle); err != nil {
 		return err
 	}
-	return flushHandle(parent.handle)
+	return windows.FlushFileBuffers(parent.handle)
 }
 
 // Rename moves a target through held source and destination parent handles.
@@ -554,10 +554,10 @@ func relocateEntry(source, destination Location, replace bool, expected string) 
 	if err := renameWindowsEntry(handle, to.handle, to.name, replace); err != nil {
 		return err
 	}
-	if err := flushHandle(from.handle); err != nil {
+	if err := windows.FlushFileBuffers(from.handle); err != nil {
 		return err
 	}
-	return flushHandle(to.handle)
+	return windows.FlushFileBuffers(to.handle)
 }
 
 // UpdateMode applies a guarded permission transition without reparse traversal.

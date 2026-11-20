@@ -53,7 +53,7 @@ func TestStressStructuralDirectoryMetadataBeyondResidentThreshold(t *testing.T) 
 	store.initializeStructureLocked()
 	store.installStructureLocked(generation)
 	store.mu.Unlock()
-	navigation, err := openNavigation(t.Context(), store, headGeneration)
+	navigation, err := openNavigation(t.Context(), store)
 	testutil.FailErr(t, "open spilled published navigation", err)
 	defer func() { testutil.FailErr(t, "close spilled navigation", navigation.Close()) }()
 	if generation.directories.Len() != directories+1 {

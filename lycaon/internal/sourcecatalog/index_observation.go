@@ -139,7 +139,7 @@ func (w *indexWalk) directoryObservation(ctx context.Context, dir string, limit 
 
 // Each page reads one structural snapshot, then releases it before metadata I/O.
 func (w *indexWalk) observedIndexNodes(ctx context.Context, dir string, sequence int64, after string) ([]indexNode, string, error) {
-	navigation, err := openNavigation(ctx, w.store, headGeneration)
+	navigation, err := openNavigation(ctx, w.store)
 	if err != nil {
 		return nil, "", err
 	}

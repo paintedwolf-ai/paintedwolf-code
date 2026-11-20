@@ -1,0 +1,17 @@
+version: 1
+resources:
+- id: aws-cli
+  family: cloud
+  label: AWS CLI
+  category: Cloud
+  description: AWS command-line client available on this device.
+  docs_url: https://docs.aws.amazon.com/cli/
+  surfaces:
+  - process_exec
+  realizations:
+  - discover:
+      executable:
+        names:
+        - aws
+    connections:
+    - mode: proxy

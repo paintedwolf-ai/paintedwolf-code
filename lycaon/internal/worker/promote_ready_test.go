@@ -57,14 +57,14 @@ func TestNotifyMergeWorktreeChanged(t *testing.T) {
 
 	var mu sync.Mutex
 	var kinds []repochange.Kind
-	repochange.RegisterObserver(func(_ context.Context, ev repochange.Event) {
+	t.Cleanup(repochange.RegisterObserver(func(_ context.Context, ev repochange.Event) {
 		if ev.ProjectDir != abs {
 			return
 		}
 		mu.Lock()
 		kinds = append(kinds, ev.Kind)
 		mu.Unlock()
-	})
+	}))
 
 	notifyMergeWorktreeChanged(t.Context(), &api.WorkerTask{WorkspacePath: dir}, []projectroot.RootRef{{Path: dir}})
 	mu.Lock()

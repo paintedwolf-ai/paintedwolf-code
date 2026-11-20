@@ -106,7 +106,7 @@ func TestProjectManagedSecretRevealRequiresNativeProofAndAuditsSuccess(t *testin
 	testutil.FailErr(t, "generate native reveal key", err)
 	broker := presence.NewBroker()
 	testutil.FailErr(t, "configure native reveal key", broker.Configure(base64.RawURLEncoding.EncodeToString(publicKey)))
-	secrets.SetPresence(broker)
+	secrets.Reveals.SetPresence(broker)
 	base := "/v1/projects/" + testdbseed.DefaultProjectID + "/secrets"
 	created := contractfixture.DecodeSecret(t, contractfixture.CallSecrets(t, srv, http.MethodPost, base, map[string]any{
 		"operation_id": uuid.NewString(),

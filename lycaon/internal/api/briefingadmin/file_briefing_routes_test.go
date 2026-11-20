@@ -18,6 +18,7 @@ import (
 	"github.com/lycaon/lycaon/internal/api/httpio"
 	"github.com/lycaon/lycaon/internal/filebriefing"
 	"github.com/lycaon/lycaon/internal/project"
+	"github.com/lycaon/lycaon/internal/project/projecttest"
 	"github.com/lycaon/lycaon/internal/testutil"
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
@@ -45,12 +46,12 @@ func newBriefingRoutes(t *testing.T, setting *switchable) briefingRoutes {
 	testutil.FailErr(t, "write source", os.WriteFile(filepath.Join(root, "main.go"),
 		[]byte("package main\n\nfunc Build() error {\n\treturn nil\n}\n"), 0o600))
 	testutil.FailErr(t, "write binary source", os.WriteFile(filepath.Join(root, "blob.bin"), []byte{0, 1, 2, 0, 3}, 0o600))
-	p, err := project.CreateWithRoot(t.Context(), deps.Core.Projects, root)
+	p, err := projecttest.CreateWithRoot(t.Context(), deps.Core.Projects, root)
 	testutil.FailErr(t, "create project", err)
 
 	cfg, err := filebriefing.LoadConfig()
 	testutil.FailErr(t, "load file briefing config", err)
-	fileDeps := filebriefing.Dependencies{Store: filebriefing.NewMemory(), Config: cfg}
+	fileDeps := filebriefing.Dependencies{Store: filebriefing.NewSQL(deps.Core.Database), Config: cfg}
 	if setting != nil {
 		fileDeps.Settings = setting
 	}
@@ -59,7 +60,7 @@ func newBriefingRoutes(t *testing.T, setting *switchable) briefingRoutes {
 
 	h := briefingadmin.New(&httpio.Responder{Logger: slog.Default()}, briefingadmin.Dependencies{
 		EditorDocuments: deps.Source.EditorDocuments, Briefings: briefingadmin.Services{Files: briefings},
-		ProjectRegistry: deps.Core.Projects, SessionStore: deps.Core.Store, SourceLedger: deps.Source.SourceLedger,
+		ProjectRegistry: deps.Core.Projects, SessionStore: deps.Core.Store.Sessions, SourceLedger: deps.Source.SourceLedger,
 		WorkerBranchRoot: func(context.Context, string, string) (string, func()) { return "", func() {} },
 	})
 	r := chi.NewRouter()

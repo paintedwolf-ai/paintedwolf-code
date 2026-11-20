@@ -60,9 +60,9 @@ func reservedHandoff(t *testing.T) handoffReservation {
 	_, err = h.Workers.Queue.Enqueue(ctx, taskB)
 	testutil.FailErr(t, "enqueue b", err)
 
-	childA, err := h.Store.CreateChild(ctx, parent, wire.SpawnChildRequest{AgentType: "implementer", Prompt: "Timer leg"})
+	childA, err := h.Store.Sessions.CreateChild(ctx, parent, wire.SpawnChildRequest{AgentType: "implementer", Prompt: "Timer leg"})
 	testutil.FailErr(t, "create child a", err)
-	childB, err := h.Store.CreateChild(ctx, parent, wire.SpawnChildRequest{AgentType: "implementer", Prompt: "Parser leg"})
+	childB, err := h.Store.Sessions.CreateChild(ctx, parent, wire.SpawnChildRequest{AgentType: "implementer", Prompt: "Parser leg"})
 	testutil.FailErr(t, "create child b", err)
 	testutil.FailErr(t, "link a", h.Workers.Queue.SetChildSessionID(ctx, taskA.ID, childA.ID))
 	testutil.FailErr(t, "link b", h.Workers.Queue.SetChildSessionID(ctx, taskB.ID, childB.ID))
@@ -125,7 +125,7 @@ func TestBoardInjectReachesCoordinatorAndWorkerTurnsWiring(t *testing.T) {
 
 	// The second leg gets a real private branch; its board resolves the
 	// branch roots for the job its request runs.
-	_, err := f.h.Workers.Queue.ClaimWorkerBranch(ctx, f.jobB)
+	_, err := f.h.Workers.Queue.Branches.ClaimWorkerBranch(ctx, f.jobB)
 	testutil.FailErr(t, "claim worker branch", err)
 	workerBlock, ok := engine.WorkerBoard(workercontext.WithJob(ctx, f.jobB), f.childB)
 	if !ok {

@@ -46,7 +46,7 @@ func newSearchFixture(t *testing.T) *searchFixture {
 	t.Helper()
 	database := testdbfixture.Open(t, "store.db")
 	f := &searchFixture{database: database, projects: project.NewSQLRegistry(database)}
-	ledger := sourceledger.New(database, t.TempDir())
+	ledger := sourceledger.New(database, t.TempDir(), sourceledger.Timing{})
 	responses := &httpio.Responder{Logger: slog.New(slog.DiscardHandler)}
 	f.handler = New(responses, Dependencies{
 		Database:        database,

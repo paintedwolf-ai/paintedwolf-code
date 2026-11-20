@@ -43,8 +43,8 @@ func TestOpenBumpStoreRevisionMatchesBootSequence(t *testing.T) {
 	testutil.FailErr(t, "Open", err)
 	t.Cleanup(func() { _ = sqlDB.Close() })
 
-	if _, err := RunRetention(ctx, sqlDB, DefaultRetention()); err != nil {
-		t.Fatalf("RunRetention: %v", err)
+	if _, err := RunMaintenancePass(ctx, sqlDB, DefaultRetention(), true); err != nil {
+		t.Fatalf("maintenance pass: %v", err)
 	}
 	rev, err := BumpStoreRevision(ctx, sqlDB)
 	testutil.FailErr(t, "BumpStoreRevision", err)

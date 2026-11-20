@@ -4,6 +4,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/lycaon/lycaon/internal/contribution"
 )
 
 func contributionFixtureFiles(provider string) map[string]string {
@@ -126,10 +128,35 @@ func TestOwnRefusedForContributionUnits(t *testing.T) {
 	}
 }
 
-func TestContributionKindsAreDeviceOnly(t *testing.T) {
-	for _, root := range ContributionKindRoots() {
+// Contribution kinds and inventory roots form one closed vocabulary.
+func TestContributionKindsMatchInventoryRoots(t *testing.T) {
+	t.Parallel()
+
+	var roots []string
+	for _, root := range inventoryKindRoots {
+		if strings.HasPrefix(root, ContributionRootPrefix) {
+			roots = append(roots, root)
+		}
+	}
+	kinds := contribution.Kinds()
+	if len(roots) != len(kinds) {
+		t.Fatalf("inventory roots %v vs kinds %v", roots, kinds)
+	}
+	rootSet := map[string]bool{}
+	for _, root := range roots {
+		rootSet[root] = true
+	}
+	for _, kind := range kinds {
+		if !rootSet[kind.UnitRoot()] {
+			t.Fatalf("kind %s has no inventory root %s in extpacks", kind, kind.UnitRoot())
+		}
+		if got, ok := contribution.KindForUnitRoot(kind.UnitRoot()); !ok || got != kind {
+			t.Fatalf("kind %s does not round-trip its unit root", kind)
+		}
+	}
+	for _, root := range roots {
 		if ProjectScope(root) != ScopeDeviceOnly {
-			t.Fatalf("%s project scope = %v want ScopeDeviceOnly", root, ProjectScope(root))
+			t.Fatalf("root %s must be device-only", root)
 		}
 	}
 }

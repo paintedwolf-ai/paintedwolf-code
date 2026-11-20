@@ -8,7 +8,6 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
-
 	"github.com/lycaon/lycaon/internal/api/httpio"
 	"github.com/lycaon/lycaon/internal/api/requestscope"
 	"github.com/lycaon/lycaon/internal/pagedview"
@@ -53,7 +52,7 @@ func (s *Views) createSourceView(w http.ResponseWriter, r *http.Request, p *proj
 		return true
 	}
 	operationID, clientID, sessionID := sourceViewCreateIdentity(request)
-	scoped, err := requestscope.ResolveSessionProject(s.SessionStore, r.Context(), p, sessionID)
+	scoped, err := requestscope.ResolveSessionProject(s.SessionQueries, r.Context(), p, sessionID)
 	if err != nil {
 		s.writeSourceViewError(w, r, err)
 		return true

@@ -16,8 +16,7 @@ func TestStreamedTurnRecordsCompactionTokenObservation(t *testing.T) {
 		Responses: []llm.MockResponseEntry{{Pattern: ".", Text: "ok"}},
 	})}
 	h := BuildForTest(t, WithLLMClient(mock))
-	cancel := h.StartBackgroundWorkers(t, context.Background())
-	t.Cleanup(cancel)
+	h.Start(t)
 	ctx := context.Background()
 	// The session names the receiver the mock client answers as.
 	sess, err := h.CreateHarnessSession(t, wire.CreateSessionRequest{ProviderID: "mock", Model: "mock"}, t.TempDir())
@@ -29,7 +28,7 @@ func TestStreamedTurnRecordsCompactionTokenObservation(t *testing.T) {
 
 	_, err = h.Sessions.Manager.Submissions.Prompt(ctx, sess.ID, "hello")
 	testutil.FailErr(t, "Prompt", err)
-	reloaded, err := h.Store.Get(h.OwnerCtx(t, ctx), sess.ID)
+	reloaded, err := h.Store.Sessions.Get(h.OwnerCtx(t, ctx), sess.ID)
 	testutil.FailErr(t, "reload session", err)
 	cal := history.Calibration(ctx, reloaded)
 	if cal.ReportedPromptTokens != 100 || cal.TranscriptEstimate <= 0 {

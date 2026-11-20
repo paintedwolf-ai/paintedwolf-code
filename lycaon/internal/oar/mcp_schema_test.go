@@ -2,26 +2,15 @@ package oar
 
 import (
 	"context"
-	"path/filepath"
-	"runtime"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/mcp/bindings"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/testutil/extpackstest"
 )
 
-func bindingsTestdata(t *testing.T) string {
-	t.Helper()
-	_, file, _, ok := runtime.Caller(0)
-	if !ok {
-		t.Fatal("runtime.Caller failed")
-	}
-	return filepath.Join(filepath.Dir(file), "..", "mcp", "bindings", "testdata", "mcp_bindings")
-}
-
 func TestMCPFieldAccessors(t *testing.T) {
-	list, err := bindings.LoadDir(bindingsTestdata(t))
-	testutil.FailErr(t, "LoadDir", err)
+	list := extpackstest.MCPBindings(t)
 
 	gc := NewGuardContext()
 	gc.MCP.MCPServerID = "fixture"
@@ -43,8 +32,7 @@ func TestMCPFieldAccessors(t *testing.T) {
 }
 
 func TestLazyMCPSchemaApplyOnPost(t *testing.T) {
-	list, err := bindings.LoadDir(bindingsTestdata(t))
-	testutil.FailErr(t, "LoadDir", err)
+	list := extpackstest.MCPBindings(t)
 
 	when := `mcp_schema_matched && mcp_result.issue_id == "ISSUE-1"`
 	rs := NewRuleSet([]*Rule{{
@@ -90,8 +78,7 @@ func TestLazyMCPSchemaApplyOnPost(t *testing.T) {
 }
 
 func TestLazyMCPSchemaSkippedWithoutRefs(t *testing.T) {
-	list, err := bindings.LoadDir(bindingsTestdata(t))
-	testutil.FailErr(t, "LoadDir", err)
+	list := extpackstest.MCPBindings(t)
 
 	when := `mcp_server_id == "fixture" && mcp_call_ok`
 	rs := NewRuleSet([]*Rule{{
@@ -116,7 +103,7 @@ func TestLazyMCPSchemaSkippedWithoutRefs(t *testing.T) {
 	gc.MCP.MCPCallOK = true
 	gc.MCP.MCPResultText = `{"id":"ISSUE-1","count":1,"state":{"type":"started","name":"x"}}`
 
-	_, err = pipeline.EvaluateBlock(context.Background(), AnchorToolPost, gc)
+	_, err := pipeline.EvaluateBlock(context.Background(), AnchorToolPost, gc)
 	testutil.FailErr(t, "EvaluateBlock", err)
 	if calls != 0 {
 		t.Fatalf("Apply should be skipped, calls=%d", calls)
@@ -127,8 +114,7 @@ func TestLazyMCPSchemaSkippedWithoutRefs(t *testing.T) {
 }
 
 func TestLazyMCPSchemaNeverOnPreInvoke(t *testing.T) {
-	list, err := bindings.LoadDir(bindingsTestdata(t))
-	testutil.FailErr(t, "LoadDir", err)
+	list := extpackstest.MCPBindings(t)
 
 	when := `mcp_schema_matched`
 	rs := NewRuleSet([]*Rule{{
@@ -151,7 +137,7 @@ func TestLazyMCPSchemaNeverOnPreInvoke(t *testing.T) {
 	gc.MCP.MCPToolName = "echo"
 	gc.MCP.MCPResultText = `{"id":"x"}`
 
-	_, err = pipeline.EvaluateBlock(context.Background(), AnchorToolPreInvoke, gc)
+	_, err := pipeline.EvaluateBlock(context.Background(), AnchorToolPreInvoke, gc)
 	testutil.FailErr(t, "EvaluateBlock", err)
 	if calls != 0 {
 		t.Fatalf("pre-invoke must not Apply, calls=%d", calls)
@@ -159,8 +145,7 @@ func TestLazyMCPSchemaNeverOnPreInvoke(t *testing.T) {
 }
 
 func TestGoldenFixtureWidgetCondition(t *testing.T) {
-	list, err := bindings.LoadDir(bindingsTestdata(t))
-	testutil.FailErr(t, "LoadDir", err)
+	list := extpackstest.MCPBindings(t)
 	matched, fields, err := bindings.Apply(list, "fixture", "widget", `{"status":"ready","count":2}`)
 	testutil.FailErr(t, "Apply", err)
 	if !matched {

@@ -15,13 +15,13 @@ import (
 	"github.com/google/uuid"
 	"github.com/lycaon/lycaon/internal/bgprocess"
 	"github.com/lycaon/lycaon/internal/blueprint"
-	"github.com/lycaon/lycaon/internal/conditions"
 	"github.com/lycaon/lycaon/internal/contribution"
 	"github.com/lycaon/lycaon/internal/exec"
 	"github.com/lycaon/lycaon/internal/hitl"
 	"github.com/lycaon/lycaon/internal/hostcmd"
 	"github.com/lycaon/lycaon/internal/secretmatch"
 	sessionstore "github.com/lycaon/lycaon/internal/session/store"
+	"github.com/lycaon/lycaon/internal/testutil/conditionstest"
 	"github.com/lycaon/lycaon/internal/testutil/gittest"
 	"github.com/lycaon/lycaon/internal/workerrecords"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
@@ -312,7 +312,7 @@ func sessionPrepareRunReport(ctx context.Context, s *conformanceSweep, _ *confor
 		}); err != nil {
 			return "", err
 		}
-		if err := s.host.Sessions.Store.AppendMessages(ctx, run.session, wire.Message{
+		if err := s.host.Store.Transcript.AppendMessages(ctx, run.session, wire.Message{
 			ID: uuid.NewString(), Role: wire.MessageRoleAssistant, Origin: wire.MessageOriginModel,
 			Kind: wire.MessageKindCompletionReport, Content: "The fixture change is complete.",
 			CompletionReport: &wire.CompletionReportMeta{Scope: wire.CompletionReportScopeRun, Phase: "done", Headline: "Fixture change complete"},
@@ -518,7 +518,7 @@ func sessionDrivePlanToApproval(ctx context.Context, s *conformanceSweep, runID 
 			if err != nil {
 				return err
 			}
-			if _, err := s.host.Workflows.Blueprints.Store.UpdateContent(ctx, run.ProjectID, run.BlueprintPath, conditions.TestPlanContentWithTasks, blueprint.ContentDigest(plan.Content)); err != nil {
+			if _, err := s.host.Workflows.Blueprints.Store.UpdateContent(ctx, run.ProjectID, run.BlueprintPath, conditionstest.PlanWithTasks, blueprint.ContentDigest(plan.Content)); err != nil {
 				return err
 			}
 		default:
@@ -714,7 +714,7 @@ type sessionAssistantMessage struct{ id, content string }
 func sessionReply(ctx context.Context, s *conformanceSweep) (sessionAssistantMessage, error) {
 	return sessionOnce(s, "assistant-reply", func() (sessionAssistantMessage, error) {
 		msg := sessionAssistantMessage{id: uuid.NewString(), content: "The fixture is described in README.md."}
-		err := s.host.Sessions.Store.AppendMessages(ctx, s.fixture.session.ID, wire.Message{
+		err := s.host.Store.Transcript.AppendMessages(ctx, s.fixture.session.ID, wire.Message{
 			ID: msg.id, Role: wire.MessageRoleAssistant, Origin: wire.MessageOriginModel,
 			Content: msg.content, Visibility: wire.MessageVisibilityTranscript,
 		})
@@ -909,7 +909,7 @@ func sessionPrepareStopProjectProcess(ctx context.Context, s *conformanceSweep, 
 func sessionPrepareRecording(ctx context.Context, s *conformanceSweep, _ *conformanceOp) (successInputs, error) {
 	chat := s.fixture.session.ID
 	messageID, callID := uuid.NewString(), "conformance-call-"+sessionSuffix()
-	if err := s.host.Sessions.Store.AppendMessages(ctx, chat,
+	if err := s.host.Store.Transcript.AppendMessages(ctx, chat,
 		wire.Message{
 			ID: messageID, Role: wire.MessageRoleAssistant, Origin: wire.MessageOriginModel,
 			ToolCalls: []wire.ToolCall{{ID: callID, Name: "page_act", Args: map[string]any{}}},
@@ -1074,11 +1074,11 @@ func sessionPrepareWorkerHistory(ctx context.Context, s *conformanceSweep, _ *co
 // coordinator message, on the chat's roster, as a coordinator's spawn does,
 // and returns its name.
 func sessionRosterWorker(ctx context.Context, s *conformanceSweep, chat string) (string, error) {
-	parent, err := s.host.Sessions.Store.Get(ctx, chat)
+	parent, err := s.host.Store.Sessions.Get(ctx, chat)
 	if err != nil {
 		return "", err
 	}
-	child, err := s.host.Sessions.Store.CreateChild(ctx, parent, wire.SpawnChildRequest{AgentType: "implementer"})
+	child, err := s.host.Store.Sessions.CreateChild(ctx, parent, wire.SpawnChildRequest{AgentType: "implementer"})
 	if err != nil {
 		return "", err
 	}

@@ -7,6 +7,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/lycaon/lycaon/internal/commandsurface"
+	"github.com/lycaon/lycaon/internal/commandsurface/commandsurfacetest"
 )
 
 func TestParserDiagnosticsDescribeStateAcrossSourceUnits(t *testing.T) {
@@ -30,7 +31,7 @@ func TestParserDiagnosticsDescribeStateAcrossSourceUnits(t *testing.T) {
 				if tc.kind == "utf8_bom" && prefix != "" {
 					continue
 				}
-				p, err := commandsurface.ParseProgram([]byte(source), commandsurface.ParseOptions{SourceName: "unit", Sourced: sourced})
+				p, err := commandsurfacetest.Admit(t, []byte(source), commandsurface.ParseOptions{SourceName: "unit", Sourced: sourced})
 				var d *commandsurface.SyntaxDiagnostic
 				if p != nil || !errors.As(err, &d) || d.Parser == nil {
 					t.Fatalf("%q: program=%v diagnostic=%#v err=%v", source, p, d, err)
@@ -56,7 +57,7 @@ func TestParserDiagnosticsDescribeStateAcrossSourceUnits(t *testing.T) {
 func TestParserContextPreservesBoundedOriginalBytes(t *testing.T) {
 	for _, prefix := range []string{"", "# prior line\n", strings.Repeat("é", 200)} {
 		source := prefix + "printf '%s' 'open"
-		_, err := commandsurface.ParseProgram([]byte(source), commandsurface.ParseOptions{})
+		_, err := commandsurfacetest.Admit(t, []byte(source), commandsurface.ParseOptions{})
 		var d *commandsurface.SyntaxDiagnostic
 		if !errors.As(err, &d) || d.Parser == nil {
 			t.Fatalf("missing diagnostic: %v", err)

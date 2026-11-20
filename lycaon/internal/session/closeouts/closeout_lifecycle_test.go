@@ -11,7 +11,6 @@ import (
 	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/scopedstore"
 	"github.com/lycaon/lycaon/internal/session/promptinput"
-	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -55,11 +54,11 @@ func TestCloseoutPromptBoundary(t *testing.T) {
 		{name: "worker retry", input: promptinput.Input{Text: "retry", HostSignal: &promptinput.HostSignal{}}, worker: true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			mgr, root := newSynthesisDelayManager(t)
+			mgr, root, repositories := newSynthesisDelayManager(t)
 			sess := root
 			if tc.worker {
 				var err error
-				sess, err = mgr.store.(*store.SQL).CreateChild(t.Context(), root, api.SpawnChildRequest{AgentType: "implementer"})
+				sess, err = repositories.Sessions.CreateChild(t.Context(), root, api.SpawnChildRequest{AgentType: "implementer"})
 				testutil.FailErr(t, "create worker", err)
 				seedCloseoutState(mgr, root.ID, root.ID)
 			}
@@ -197,7 +196,7 @@ func TestCloseoutRetentionIsBoundedByLifetime(t *testing.T) {
 }
 
 func TestClearStallPreservesBudgetsAndSnapshotIsolation(t *testing.T) {
-	m, sess := newSynthesisDelayManager(t)
+	m, sess, _ := newSynthesisDelayManager(t)
 	seedCloseoutState(m, sess.ID, sess.ID)
 	beforePrompt, beforeCycle := closeoutState(m, sess.ID, sess.ID)
 	codes := m.CloseoutStallState(t.Context(), sess.ID).ForcedBy

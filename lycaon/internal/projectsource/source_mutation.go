@@ -229,14 +229,14 @@ func (s *SourceMutationService) execute(ctx context.Context, operationID, projec
 	if s.recovery.objects != nil {
 		defer func() {
 			if err := s.recovery.objects.SweepBlobs(context.WithoutCancel(ctx)); err != nil && !errors.Is(err, sourceledger.ErrBlobMaintenanceDeferred) {
-				// Best-effort sweep for legacy retained recovery objects.
+				// Sweep retained recovery objects without blocking the mutation.
 				_ = err
 			}
 		}()
 		release := s.recovery.objects.HoldRecoveryReferences()
 		defer release()
 	}
-	row, err := s.prepareExecution(ctx, operationID, projectID, inputDigest, prepare)
+	row, err := s.prepareExecution(ctx, operationID, inputDigest, prepare)
 	if row != nil {
 		row.memory = memory
 	}
@@ -258,7 +258,7 @@ func (s *SourceMutationService) execute(ctx context.Context, operationID, projec
 	return s.resume(ctx, row)
 }
 
-func (s *SourceMutationService) prepareExecution(ctx context.Context, operationID, projectID, inputDigest string, prepare func() (*sourceMutationPlan, error)) (*sourceMutationRow, error) {
+func (s *SourceMutationService) prepareExecution(ctx context.Context, operationID, inputDigest string, prepare func() (*sourceMutationPlan, error)) (*sourceMutationRow, error) {
 	row, found, err := s.Journal.load(ctx, operationID)
 	if err != nil {
 		return nil, err

@@ -26,7 +26,7 @@ type WorktreeBinding struct {
 }
 
 // GetWorktreeBinding returns the session's worktree binding; ok=false when unbound.
-func (s *sqlSessionViews) GetWorktreeBinding(ctx context.Context, sessionID string) (*WorktreeBinding, bool, error) {
+func (s *sqlSessions) GetWorktreeBinding(ctx context.Context, sessionID string) (*WorktreeBinding, bool, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, false, err
 	}
@@ -59,7 +59,7 @@ func (s *sqlSessionViews) GetWorktreeBinding(ctx context.Context, sessionID stri
 }
 
 // PutWorktreeBinding inserts or replaces the session's binding.
-func (s *sqlSessionViews) PutWorktreeBinding(ctx context.Context, b WorktreeBinding) error {
+func (s *sqlSessions) PutWorktreeBinding(ctx context.Context, b WorktreeBinding) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
@@ -96,7 +96,7 @@ func (s *sqlSessionViews) PutWorktreeBinding(ctx context.Context, b WorktreeBind
 }
 
 // DeleteWorktreeBinding removes a session binding.
-func (s *sqlSessionViews) DeleteWorktreeBinding(ctx context.Context, sessionID string) error {
+func (s *sqlSessions) DeleteWorktreeBinding(ctx context.Context, sessionID string) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}

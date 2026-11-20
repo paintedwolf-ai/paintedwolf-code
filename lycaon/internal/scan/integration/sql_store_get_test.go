@@ -14,7 +14,7 @@ func TestSQLStoreGetMissingReturnsNilNil(t *testing.T) {
 	sqlDB := testdbfixture.Open(t, "scan-get.db")
 
 	store := scan.NewSQLStore(sqlDB)
-	rec, err := store.Get(context.Background(), "missing-id")
+	rec, err := store.Reads.Get(context.Background(), "missing-id")
 	testutil.FailErr(t, "Get missing", err)
 	if rec != nil {
 		t.Fatalf("Get missing = %+v, want nil", rec)

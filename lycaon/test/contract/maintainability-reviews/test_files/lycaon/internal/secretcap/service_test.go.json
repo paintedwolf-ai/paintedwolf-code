@@ -1,0 +1,13 @@
+{
+  "category": "test_files",
+  "artifact": "lycaon/internal/secretcap/service_test.go",
+  "kind": "test_suite",
+  "workstream": "credential-fixture-boundaries",
+  "disposition": "retain",
+  "reason": "Retain the persisted capability lifecycle suite at 457 lines. Creation, scoped resolution, revocation, recovery and screening share the production credential store. Jar, reveal and resolution retain focused suites.",
+  "reviewed_commit": "d771f280c226a3a8412f7aca8a5a2b7d9647b9fb",
+  "ceiling": 457,
+  "boundaries": {
+    "lycaon/internal/secretcap/service_test.go": "75f462ba3a869e4670feea334a75372638e0356c49b8756e79341a51c566a660"
+  }
+}

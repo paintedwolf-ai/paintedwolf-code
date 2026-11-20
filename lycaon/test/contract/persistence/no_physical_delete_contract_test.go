@@ -5,8 +5,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/lycaon/lycaon/internal/tools/toolstest"
-
 	"github.com/lycaon/lycaon/internal/db"
 	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/llm"
@@ -18,7 +16,9 @@ import (
 	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/testutil/llmtest"
 	"github.com/lycaon/lycaon/internal/testutil/oartest"
+	"github.com/lycaon/lycaon/internal/tools/toolstest"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -43,11 +43,11 @@ func TestSessionCompactionAndAbortKeepEveryMessageRow(t *testing.T) {
 	cfg.ChunkStrategyDefault = "truncate"
 	cfg.ChunkMinSavingsTokens = 100
 	cfg.ChunkTargetTokens = 30
-	host.Runner.History.SetCompactor(compaction.NewSimpleCompactor(cfg, compaction.MockSummarizer{Text: "summary"}))
+	host.Runner.History.SetCompactor(compaction.NewSimpleCompactor(cfg, llmtest.Summarizer{Structured: compaction.SummaryFormatRequested, Text: "summary"}))
 
-	sess, err := st.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
+	sess, err := st.Sessions.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
-	testutil.FailErr(t, "append transcript", st.AppendMessages(ctx, sess.ID,
+	testutil.FailErr(t, "append transcript", st.Transcript.AppendMessages(ctx, sess.ID,
 		api.Message{ID: "detail", Role: api.MessageRoleAssistant, Content: strings.Repeat("x\n", 4000)},
 		api.Message{ID: "request", Role: api.MessageRoleUser, Content: "continue"},
 	))
@@ -63,9 +63,9 @@ func TestSessionCompactionAndAbortKeepEveryMessageRow(t *testing.T) {
 	}
 	requireMessageRowsKept(t, ctx, database, sess.ID, before, "compaction")
 
-	testutil.FailErr(t, "mark busy", st.SetSessionStatus(ctx, sess.ID, api.SessionStatusBusy))
+	testutil.FailErr(t, "mark busy", st.Sessions.SetSessionStatus(ctx, sess.ID, api.SessionStatusBusy))
 	testutil.FailErr(t, "abort", host.Stops.Abort(ctx, sess.ID, ""))
-	got, err := st.Get(ctx, sess.ID)
+	got, err := st.Sessions.Get(ctx, sess.ID)
 	testutil.FailErr(t, "read session", err)
 	if got.Status != api.SessionStatusIdle {
 		t.Fatalf("status after abort = %q, want idle", got.Status)

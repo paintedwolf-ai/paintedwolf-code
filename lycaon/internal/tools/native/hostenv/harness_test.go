@@ -14,6 +14,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/commandprogram"
 	"github.com/lycaon/lycaon/internal/commandsurface"
+	"github.com/lycaon/lycaon/internal/commandsurface/commandsurfacetest"
 	"github.com/lycaon/lycaon/internal/exec"
 	"github.com/lycaon/lycaon/internal/hostos"
 	"github.com/lycaon/lycaon/internal/projectroot"
@@ -114,9 +115,9 @@ func newHarness(t *testing.T, host HostFacts) *harness {
 // under an invocation frame and dispatches the first command's builtin.
 func (h *harness) run(source string) run {
 	h.t.Helper()
-	parsed, err := commandsurface.ParseProgram([]byte(source), commandsurface.ParseOptions{SourceName: "inline"})
+	parsed, err := commandsurfacetest.Admit(h.t, []byte(source), commandsurface.ParseOptions{SourceName: "inline"})
 	testutil.FailErr(h.t, "parse "+source, err)
-	statement := parsed.Snapshot().Statements[0]
+	statement := parsed.View(h.t).Statements[0]
 	command := statement.Command.(commandsurface.SimpleCommand)
 	limits, err := toolcontract.CatalogProgramMemoryLimits()
 	testutil.FailErr(h.t, "memory limits", err)

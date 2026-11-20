@@ -26,7 +26,7 @@ func buildSecurityOverview(ctx context.Context, c *Service, projectDir string, l
 		return out, err
 	}
 	reconcileUnavailable(ctx, c)
-	series, err := c.Store.ListSeriesForPath(ctx, canonical)
+	series, err := c.series.ListSeriesForPath(ctx, canonical)
 	if err != nil {
 		return out, err
 	}
@@ -34,7 +34,7 @@ func buildSecurityOverview(ctx context.Context, c *Service, projectDir string, l
 	for _, row := range series {
 		byScanner[row.ScannerID] = row
 	}
-	open, err := c.Store.OpenScansForPath(ctx, canonical)
+	open, err := c.reads.OpenScansForPath(ctx, canonical)
 	if err != nil {
 		return out, err
 	}
@@ -42,7 +42,7 @@ func buildSecurityOverview(ctx context.Context, c *Service, projectDir string, l
 	for _, scan := range open {
 		activeScanners[scan.ScannerID] = true
 	}
-	passes, err := c.Store.FullPassesForPath(ctx, canonical)
+	passes, err := c.fullPasses.FullPassesForPath(ctx, canonical)
 	if err != nil {
 		return out, err
 	}
@@ -99,7 +99,7 @@ func buildSecurityOverview(ctx context.Context, c *Service, projectDir string, l
 		if out.LastFull != nil && out.LastFull.CompletedAt != nil && out.LastFull.CompletedAt.After(since) {
 			since = *out.LastFull.CompletedAt
 		}
-		introduced, fixed, err := c.Store.FindingChangesSince(ctx, canonical, since)
+		introduced, fixed, err := c.findings.FindingChangesSince(ctx, canonical, since)
 		if err == nil {
 			out.IntroducedSinceBaseline = introduced
 			out.FixedSinceBaseline = fixed

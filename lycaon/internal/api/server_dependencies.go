@@ -1,9 +1,7 @@
 package api
 
 import (
-	workflowcatalog "github.com/lycaon/lycaon/internal/workflow/catalog"
-	workflowcomposition "github.com/lycaon/lycaon/internal/workflow/composition"
-	runstate "github.com/lycaon/lycaon/internal/workflow/runstate"
+	"time"
 
 	"github.com/lycaon/lycaon/internal/agentpresence"
 	"github.com/lycaon/lycaon/internal/api/briefingadmin"
@@ -53,6 +51,7 @@ import (
 	"github.com/lycaon/lycaon/internal/secretspan"
 	"github.com/lycaon/lycaon/internal/session"
 	"github.com/lycaon/lycaon/internal/session/approvalstate"
+	sessionstore "github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/sourceledger"
 	"github.com/lycaon/lycaon/internal/usernotice"
@@ -62,6 +61,9 @@ import (
 	"github.com/lycaon/lycaon/internal/webresearch"
 	"github.com/lycaon/lycaon/internal/worker"
 	"github.com/lycaon/lycaon/internal/workflow"
+	workflowcatalog "github.com/lycaon/lycaon/internal/workflow/catalog"
+	workflowcomposition "github.com/lycaon/lycaon/internal/workflow/composition"
+	runstate "github.com/lycaon/lycaon/internal/workflow/runstate"
 )
 
 // Dependencies are the host-supplied services the API routes over.
@@ -81,7 +83,7 @@ type Dependencies struct {
 
 type CoreDependencies struct {
 	Database      db.Handle
-	Store         session.Store
+	Store         *sessionstore.Repositories
 	PersonActions *personactions.Store
 	Projects      project.Registry
 	Sessions      *session.Host
@@ -99,16 +101,17 @@ type ProvidersDependencies struct {
 }
 
 type HostDependencies struct {
-	Events         events.ReplayHub
-	EventPublisher *events.Publisher
-	Presence       *events.Presence
-	HostIdentity   hostidentity.Identity
-	HostResources  *hostresources.Service
-	HostPower      *hostpower.Controller
-	Pricing        *settings.PricingHost
-	Preview        *preview.Controller
-	PreflightEnv   preflight.Env
-	Attention      *attention.Source
+	Events                 events.ReplayHub
+	EventHeartbeatInterval time.Duration
+	EventPublisher         *events.Publisher
+	Presence               *events.Presence
+	HostIdentity           hostidentity.Identity
+	HostResources          *hostresources.Service
+	HostPower              *hostpower.Controller
+	Pricing                *settings.PricingHost
+	Preview                *preview.Controller
+	PreflightEnv           preflight.Env
+	Attention              *attention.Source
 }
 
 type StorageDependencies struct {
@@ -139,6 +142,7 @@ type ScansDependencies struct {
 }
 
 type WorkflowDependencies struct {
+	Branches          *worker.BranchService
 	Workflows         *workflow.RunManager
 	WorkflowCatalog   workflowcatalog.Resolver
 	WorkflowRuns      *runstate.Repository

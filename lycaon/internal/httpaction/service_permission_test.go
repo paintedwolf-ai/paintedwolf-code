@@ -13,6 +13,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/hitl"
 	"github.com/lycaon/lycaon/internal/settings"
+	"github.com/lycaon/lycaon/internal/settings/settingstest"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/tools"
@@ -82,7 +83,7 @@ func TestSetupPermissionCoversRepeatedAuthenticatedServiceUse(t *testing.T) {
 	defer server.Close()
 	store, err := settings.NewApprovalStoreAt(filepath.Join(t.TempDir(), "approvals.yaml"))
 	testutil.FailErr(t, "open approvals", err)
-	authority := settings.NewRuleApprovalGate(store, settings.NoSources())
+	authority := settings.NewRuleApprovalGate(store, settingstest.EmptySources())
 	review := &servicePermissionReview{t: t, authority: authority}
 	registry := tools.NewDefaultRegistry()
 	executor := toolexecution.NewExecutor(nil, registry, "implement")
@@ -102,7 +103,7 @@ func TestSetupPermissionCoversRepeatedAuthenticatedServiceUse(t *testing.T) {
 		}
 		return "service configured", nil
 	}))
-	testutil.FailErr(t, "register HTTP consumer", Register(registry, Deps{Boundary: testBoundary(), SecretMatcher: matcher, SecretAsk: executor.Secrets.AskSecretScreen, Secrets: service}))
+	testutil.FailErr(t, "register HTTP consumer", Register(registry, Deps{Boundary: testBoundary(), SecretMatcher: matcher, SecretAsk: executor.Secrets.AskSecretScreen, Secrets: service, Jars: service.Jars}))
 	tc := tools.ToolContext{
 		Identity: tools.InvocationIdentity{ProjectID: testdbseed.DefaultProjectID,
 			SessionID:  "task",

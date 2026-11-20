@@ -25,21 +25,6 @@ const (
 	WaitTriggerProgramDone WaitTrigger = "program_done"
 )
 
-// AllWaitTriggers is every trigger a wait call may subscribe to. Profile
-// wait_conditions and the conditions.kind schema publish the role-specific subset.
-func AllWaitTriggers() []WaitTrigger {
-	return []WaitTrigger{
-		WaitTriggerTimer,
-		WaitTriggerNextWorkerDone,
-		WaitTriggerAllWorkersIdle,
-		WaitTriggerOverlayPromote,
-		WaitTriggerScanDone,
-		WaitTriggerProcessDone,
-		WaitTriggerHTTPReady,
-		WaitTriggerPortReady,
-	}
-}
-
 // DefaultCoordinatorWaitTriggers selects implicit coordinator subscriptions.
 func DefaultCoordinatorWaitTriggers(overlayPromoteDue bool) []WaitTrigger {
 	out := []WaitTrigger{

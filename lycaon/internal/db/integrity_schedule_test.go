@@ -76,7 +76,7 @@ func TestAuditTurnPreservesWritesAndYieldsToReclamationPressure(t *testing.T) {
 	testutil.FailErr(t, "save while audit owns background turn", err)
 	canceled, cancel := context.WithCancel(t.Context())
 	cancel()
-	if _, err := RunRetention(canceled, store, DefaultRetention()); !errors.Is(err, context.Canceled) {
+	if _, err := RunMaintenancePass(canceled, store, DefaultRetention(), true); !errors.Is(err, context.Canceled) {
 		t.Fatalf("waiting maintenance cancellation = %v", err)
 	}
 	store.audit.mu.Lock()
@@ -91,7 +91,7 @@ func TestAuditTurnPreservesWritesAndYieldsToReclamationPressure(t *testing.T) {
 	}
 	finish()
 	release()
-	_, err = RunRetention(t.Context(), store, DefaultRetention())
+	_, err = RunMaintenancePass(t.Context(), store, DefaultRetention(), true)
 	testutil.FailErr(t, "maintenance takes released turn", err)
 	testutil.FailErr(t, "audit completes after maintenance", AuditIntegrity(t.Context(), store))
 	var value string

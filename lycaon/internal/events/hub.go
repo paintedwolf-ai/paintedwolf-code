@@ -16,9 +16,6 @@ import (
 var ErrReplayUnavailable = errors.New("event replay unavailable")
 
 const (
-	// HeartbeatInterval is the SSE idle ping interval.
-	HeartbeatInterval = 20 * time.Second
-
 	// SubscriberBufferSize is the per-subscriber event channel capacity.
 	SubscriberBufferSize = 256
 

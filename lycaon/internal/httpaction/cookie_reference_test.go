@@ -43,7 +43,7 @@ func csrfServer(t *testing.T) (*httptest.Server, *[]string) {
 func TestCookieReferenceEchoesATokenTheModelNeverSees(t *testing.T) {
 	secrets, _ := testSecrets(t)
 	server, accepted := csrfServer(t)
-	deps := Deps{Boundary: testBoundary(), Secrets: secrets}
+	deps := Deps{Boundary: testBoundary(), Secrets: secrets, Jars: secrets.Jars}
 	root := t.TempDir()
 
 	primed, err := runRequest(t, deps, map[string]any{
@@ -96,7 +96,7 @@ func TestCookieReferenceInABodyIsPlacedToo(t *testing.T) {
 	server := httptest.NewServer(mux)
 	t.Cleanup(server.Close)
 
-	deps := Deps{Boundary: testBoundary(), Secrets: secrets}
+	deps := Deps{Boundary: testBoundary(), Secrets: secrets, Jars: secrets.Jars}
 	root := t.TempDir()
 	_, err := runRequest(t, deps, map[string]any{
 		"url": server.URL + "/form", "cookie_jar": "app",
@@ -118,7 +118,7 @@ func TestCookieReferenceInABodyIsPlacedToo(t *testing.T) {
 func TestUnheldCookieReferenceIsRefusedNotSentLiterally(t *testing.T) {
 	secrets, _ := testSecrets(t)
 	server, _ := csrfServer(t)
-	deps := Deps{Boundary: testBoundary(), Secrets: secrets}
+	deps := Deps{Boundary: testBoundary(), Secrets: secrets, Jars: secrets.Jars}
 	root := t.TempDir()
 	_, err := runRequest(t, deps, map[string]any{
 		"url": server.URL + "/form", "cookie_jar": "app",
@@ -162,7 +162,7 @@ func TestJarThatCannotBePersistedDoesNotDiscardTheExchange(t *testing.T) {
 	}))
 	t.Cleanup(server.Close)
 
-	out, err := runRequest(t, Deps{Boundary: testBoundary(), Secrets: secrets}, map[string]any{
+	out, err := runRequest(t, Deps{Boundary: testBoundary(), Secrets: secrets, Jars: secrets.Jars}, map[string]any{
 		"url": server.URL + "/orders", "method": "POST", "body_text": "item=1", "cookie_jar": "app",
 		"capability_request": loopbackCapability(t, server.URL),
 	}, sessionContext(t.TempDir(), "call-1"))
@@ -197,7 +197,7 @@ func TestJarIsWrittenBackWhenTheExchangeFails(t *testing.T) {
 	}))
 	t.Cleanup(server.Close)
 
-	deps := Deps{Boundary: testBoundary(), Secrets: secrets}
+	deps := Deps{Boundary: testBoundary(), Secrets: secrets, Jars: secrets.Jars}
 	root := t.TempDir()
 	_, err := runRequest(t, deps, map[string]any{
 		"url": server.URL + "/login", "method": "POST", "body_text": "u=1", "cookie_jar": "app",

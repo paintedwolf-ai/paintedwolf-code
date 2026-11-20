@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"github.com/lycaon/lycaon/internal/tools/toolstest"
 	"strconv"
 	"strings"
 	"testing"
@@ -19,6 +18,7 @@ import (
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/tools"
+	"github.com/lycaon/lycaon/internal/tools/toolstest"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -64,7 +64,7 @@ func TestBlockedLoopClosesOutInsteadOfSpinning(t *testing.T) {
 	args := map[string]any{"path": "README.md"}
 	guard := loopguard.NewMemoryDoomLoopGuard()
 	msgStore := storetest.New(t, testdbseed.DefaultProjectID)
-	sess, err := msgStore.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
+	sess, err := msgStore.Sessions.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
 
 	// Put the guard past its threshold so every attempt is blocked from the start.
@@ -155,7 +155,7 @@ func TestBlockedLoopFinalTurnToolCallIsReportedAsTheModelsMiss(t *testing.T) {
 	args := map[string]any{"path": "a.go"}
 	guard := loopguard.NewMemoryDoomLoopGuard()
 	msgStore := storetest.New(t, testdbseed.DefaultProjectID)
-	sess, err := msgStore.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
+	sess, err := msgStore.Sessions.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
 	for i := 0; i < loopguard.DoomLoopMaxAttempts; i++ {
 		testutil.FailErr(t, "seed doom loop attempt", guard.RecordAttempt(ctx, sess.ID, uuid.NewString(), "read", args, nil, false))
@@ -205,7 +205,7 @@ func TestBlockedLoopEarlyCloseoutAssemblesWhenFinishBlocked(t *testing.T) {
 	args := map[string]any{"path": "README.md"}
 	guard := loopguard.NewMemoryDoomLoopGuard()
 	msgStore := storetest.New(t, testdbseed.DefaultProjectID)
-	sess, err := msgStore.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
+	sess, err := msgStore.Sessions.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
 
 	for i := 0; i < loopguard.DoomLoopMaxAttempts; i++ {
@@ -240,7 +240,7 @@ func TestBlockedLoopEarlyCloseoutAssemblesWhenFinishBlocked(t *testing.T) {
 	deps.Closeout.TurnCloseoutNudge = func(_ context.Context, _ *api.Session, _ string, cause promptloop.TurnCloseoutCause) promptloop.HostNudge {
 		return promptloop.HostNudge{Content: "final turn: " + cause.Text()}
 	}
-	deps.Closeout.BeforeFinishNoToolTurn = func(_ context.Context, _ *api.Session, _ []api.Message, _, _ string, _ guidance.CloseoutDraft, _ string, _ bool, _ []string, _ bool) (*guidance.Refusal, bool) {
+	deps.Closeout.BeforeFinishNoToolTurn = func(_ context.Context, _ *api.Session, _ []api.Message, _ string, _ guidance.CloseoutDraft, _ string, _ bool, _ []string, _ bool) (*guidance.Refusal, bool) {
 		return guidance.NewRefusal("PROGRESS_OPEN_BEFORE_CLOSEOUT", "Rejected: held\n\nCode: PROGRESS_OPEN_BEFORE_CLOSEOUT\n"), true
 	}
 	deps.Closeout.AssembleLedgerCloseout = func(_ context.Context, _, _ string, _ []string, drafted guidance.CloseoutDraft, _ int) (guidance.CoordinatorCompletionReport, *api.CitationGrounding) {
@@ -310,7 +310,7 @@ func TestBlockedLoopStreakResetsOnProgress(t *testing.T) {
 	}
 	ctx := context.Background()
 	msgStore := storetest.New(t, testdbseed.DefaultProjectID)
-	sess, err := msgStore.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
+	sess, err := msgStore.Sessions.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
 
 	// No doom-loop guard: every batch runs, so the streak never advances and the
@@ -351,7 +351,7 @@ func TestBlockedLoopStreakResetsOnProgress(t *testing.T) {
 func TestSchemaRejectsDoNotForceBlockedLoopCloseout(t *testing.T) {
 	ctx := context.Background()
 	msgStore := storetest.New(t, testdbseed.DefaultProjectID)
-	sess, err := msgStore.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
+	sess, err := msgStore.Sessions.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
 
 	reg := toolstest.NewRegistry()
@@ -442,7 +442,7 @@ func TestPreInvokeRejectAccruesCodeTotalAndEscalates(t *testing.T) {
 	ctx := context.Background()
 	guard := loopguard.NewMemoryDoomLoopGuard()
 	msgStore := storetest.New(t, testdbseed.DefaultProjectID)
-	sess, err := msgStore.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
+	sess, err := msgStore.Sessions.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
 
 	// Vary args every call — the way a model rewords a brief after each reject —
@@ -464,7 +464,7 @@ func TestPreInvokeRejectAccruesCodeTotalAndEscalates(t *testing.T) {
 			"PROGRESS_RECONCILIATION_REQUIRED": {Message: "reconcile the checklist"},
 		},
 	})
-	deps.Tools.BeforeToolRun = func(context.Context, *api.Session, []api.Message, string, string, map[string]any) (string, bool, error) {
+	deps.Tools.BeforeToolRun = func(context.Context, *api.Session, []api.Message, string, map[string]any) (string, bool, error) {
 		return "", false, guidance.NewRefusal("PROGRESS_RECONCILIATION_REQUIRED", "Rejected: reconcile the checklist first")
 	}
 	deps.Nudges.EscalateRepeatedCode = func(_ context.Context, sessionID, tool string, original *guidance.Refusal) *guidance.Refusal {
@@ -499,7 +499,7 @@ func TestPreInvokeRejectAccruesCodeTotalAndEscalates(t *testing.T) {
 	if escalateCalls == 0 {
 		t.Fatal("expected the per-Code escalation to fire for repeated pre-invoke rejects")
 	}
-	msgs, err := msgStore.GetMessages(ctx, sess.ID)
+	msgs, err := msgStore.Transcript.GetMessages(ctx, sess.ID)
 	testutil.FailErr(t, "get messages", err)
 	sawEscalation := false
 	for _, m := range msgs {

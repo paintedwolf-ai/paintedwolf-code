@@ -248,7 +248,7 @@ func (s *Secrets) HandleBeginProjectManagedSecretReveal(w http.ResponseWriter, r
 	if !ok {
 		return
 	}
-	challenge, err := s.ManagedSecrets.BeginReveal(
+	challenge, err := s.Reveals.BeginReveal(
 		r.Context(), p.ID, secretReference(r), strings.TrimSpace(body.WindowLabel), requestscope.Caller(r).ID,
 	)
 	if err != nil {
@@ -279,7 +279,7 @@ func (s *Secrets) HandleCompleteProjectManagedSecretReveal(w http.ResponseWriter
 	if !ok {
 		return
 	}
-	result, err := s.ManagedSecrets.CompleteReveal(r.Context(), p.ID, secretReference(r), requestscope.Caller(r).ID, presence.Proof{
+	result, err := s.Reveals.CompleteReveal(r.Context(), p.ID, secretReference(r), requestscope.Caller(r).ID, presence.Proof{
 		ChallengeID:   strings.TrimSpace(chi.URLParam(r, "challenge_id")),
 		Authenticator: strings.TrimSpace(string(body.Authenticator)), Signature: strings.TrimSpace(body.Signature),
 	})

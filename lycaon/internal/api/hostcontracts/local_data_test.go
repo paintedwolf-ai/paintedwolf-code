@@ -17,6 +17,8 @@ import (
 	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/testutil/extpackstest"
+	"github.com/lycaon/lycaon/internal/testutil/localdatatest"
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -27,9 +29,10 @@ func TestLocalDataGetAndClear(t *testing.T) {
 	fetchDir := filepath.Join(base, "fetch-cache")
 	testutil.FailErr(t, "mkdir fetch", os.MkdirAll(fetchDir, 0o700))
 	testutil.FailErr(t, "write fetch", os.WriteFile(filepath.Join(fetchDir, "a"), []byte("body"), 0o600))
-	testutil.FailErr(t, "seed durable", localdata.SeedDurableMarkers(base))
 
 	srv := hostapi.NewServer(contractfixture.RequiredTestDeps(t, hostapi.Dependencies{Core: hostapi.CoreDependencies{Store: storetest.New(t, testdbseed.DefaultProjectID)}, Storage: hostapi.StorageDependencies{DataDir: base}}), nil, hostapi.TestAPIToken)
+	// Construct readers before installing opaque preservation canaries.
+	protected := localdatatest.SeedProtected(t, base)
 
 	req := httptest.NewRequest(http.MethodGet, "/v1/local-data", nil)
 	w := httptest.NewRecorder()
@@ -80,7 +83,7 @@ func TestLocalDataGetAndClear(t *testing.T) {
 	if len(entries) != 0 {
 		t.Fatalf("fetch-cache not cleared: %v", entries)
 	}
-	for _, p := range localdata.DurableAbsPaths(base) {
+	for _, p := range protected {
 		data, err := os.ReadFile(p)
 		testutil.FailErr(t, "durable", err)
 		if string(data) != "keep\n" {
@@ -99,10 +102,16 @@ func TestExtensionCacheClearReplacesDerivedCatalog(t *testing.T) {
 	deps := hostapi.Dependencies{Core: hostapi.CoreDependencies{Store: storetest.New(t, testdbseed.DefaultProjectID)}, Storage: hostapi.StorageDependencies{DataDir: base}}
 	contractfixture.WithExtensionOwner(t)(&deps)
 	srv := hostapi.NewServer(contractfixture.RequiredTestDeps(t, deps), nil, hostapi.TestAPIToken)
-	extpacks.SetActive(&extpacks.EffectiveCatalog{Desired: extpacks.DesiredState{
-		Disabled: []string{"sentinel/stale-catalog"},
-	}})
-	t.Cleanup(extpacks.ClearActive)
+	desired := extpacks.EmptyDesired()
+	unit := extpacks.GuidanceUnitID("coordinator-gate-blocked")
+	desired.Disabled = []string{unit}
+	previous, err := extpackstest.Resolve(t.Context(), desired, nil)
+	testutil.FailErr(t, "resolve previous catalog", err)
+	testutil.FailErr(t, "validate previous catalog", previous.BootError())
+	if previous.HasLoaded(unit) {
+		t.Fatal("previous catalog must exclude the disabled guidance")
+	}
+	extpacks.SetActive(previous)
 
 	body, err := json.Marshal(wire.LocalDataClearRequest{
 		Buckets: []wire.LocalDataBucketId{wire.LocalDataBucketExtensionCache},
@@ -116,7 +125,7 @@ func TestExtensionCacheClearReplacesDerivedCatalog(t *testing.T) {
 		t.Fatalf("clear status=%d body=%s", w.Code, w.Body.String())
 	}
 	active := extpacks.Active()
-	if active == nil || len(active.Desired.Disabled) != 0 {
+	if active == nil || len(active.Desired.Disabled) != 0 || !active.HasLoaded(unit) {
 		t.Fatalf("cache clear left stale active catalog: %+v", active)
 	}
 	entries, readErr := os.ReadDir(cache)

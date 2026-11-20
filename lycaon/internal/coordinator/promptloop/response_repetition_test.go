@@ -30,7 +30,7 @@ func TestBatchRejectionsEscalateOnlyAcrossResponses(t *testing.T) {
 			ctx := t.Context()
 			guard := loopguard.NewMemoryDoomLoopGuard()
 			messages := storetest.New(t, testdbseed.DefaultProjectID)
-			sess, err := messages.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
+			sess, err := messages.Sessions.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 			testutil.FailErr(t, "create session", err)
 			client := &varyingArgsToolClient{batchSize: 5, stopAfter: 3}
 			deps := promptloop.StoreDeps(messages)
@@ -39,7 +39,7 @@ func TestBatchRejectionsEscalateOnlyAcrossResponses(t *testing.T) {
 				return guidance.NewRefusal("TOOL_NOT_OFFERED", "schema not loaded").WithCause(&toolrejection.ToolReject{Code: "TOOL_NOT_OFFERED", FailureClass: api.FailureClassPolicyRejection})
 			}
 			if beforeInvoke {
-				deps.Tools.BeforeToolRun = func(context.Context, *api.Session, []api.Message, string, string, map[string]any) (string, bool, error) {
+				deps.Tools.BeforeToolRun = func(context.Context, *api.Session, []api.Message, string, map[string]any) (string, bool, error) {
 					return "", false, refusal()
 				}
 			} else {
@@ -72,7 +72,7 @@ func TestOfferedSchemaResolvesEarlierLoadingRejections(t *testing.T) {
 	ctx := t.Context()
 	guard := loopguard.NewMemoryDoomLoopGuard()
 	messages := storetest.New(t, testdbseed.DefaultProjectID)
-	sess, err := messages.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
+	sess, err := messages.Sessions.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
 	args := map[string]any{"path": "portrait.svg", "old_string": "a", "new_string": "b"}
 	for response := range loopguard.DoomLoopMaxAttempts {
@@ -109,7 +109,7 @@ func TestToolPreflightResolvesOnlyItsFrozenReadPrerequisite(t *testing.T) {
 			ctx := t.Context()
 			guard := loopguard.NewMemoryDoomLoopGuard()
 			messages := storetest.New(t, testdbseed.DefaultProjectID)
-			sess, err := messages.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
+			sess, err := messages.Sessions.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 			testutil.FailErr(t, "create chat", err)
 			args := map[string]any{"path": "a.txt", "old_string": "base", "new_string": "changed"}
 			for response := range loopguard.DoomLoopMaxSameCodeRejects {

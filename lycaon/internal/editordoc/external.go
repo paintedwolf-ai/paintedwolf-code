@@ -110,7 +110,7 @@ func (r externalReconciler) reconcileDocumentDisk(ctx context.Context, p *projec
 		}
 		fileID = tracked.FileID
 	}
-	return s.reconcileObservedDocument(ctx, d, read, unsupported != nil, observerClientID, fileID)
+	return s.reconcileObservedDocument(ctx, d, read, unsupported != nil, fileID)
 }
 
 // markAbsent records that the path has no file; the draft and saved base stay.
@@ -132,7 +132,7 @@ func (r externalReconciler) markAbsent(ctx context.Context, d *Document) error {
 
 // reconcileObservedDocument folds one observed file into the document. A
 // recreated path rebinds the document to fileID and imports its bytes.
-func (r externalReconciler) reconcileObservedDocument(ctx context.Context, d *Document, read *projectsource.SourceReadResult, unsupported bool, observerClientID, fileID string) error {
+func (r externalReconciler) reconcileObservedDocument(ctx context.Context, d *Document, read *projectsource.SourceReadResult, unsupported bool, fileID string) error {
 	s := r.s
 	previous := d.Revision
 	reappeared := d.Absent

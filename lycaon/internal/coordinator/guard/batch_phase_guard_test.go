@@ -9,12 +9,13 @@ import (
 	"github.com/lycaon/lycaon/internal/coordinator/surface"
 	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/oar"
+	"github.com/lycaon/lycaon/internal/testutil/guardtest"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
 func TestObserveHostNoToolTurn_batchAlreadyClosedInTurnLatch(t *testing.T) {
 	fmt := coordinatorRejectFmt(t)
-	reject, block := guard.FormatHostNoToolTurnReject(
+	reject, block := guardtest.FormatHostNoToolTurnReject(t,
 		&api.Session{ID: "s1", AgentType: "coordinator"}, hostLoopHistory(
 
 			nil),
@@ -34,7 +35,7 @@ func TestObserveHostNoToolTurn_batchAlreadyClosedInTurnLatch(t *testing.T) {
 
 func TestObserveHostNoToolTurn_batchAlreadyClosedPhase(t *testing.T) {
 	fmt := coordinatorRejectFmt(t)
-	reject, block := guard.FormatHostNoToolTurnReject(
+	reject, block := guardtest.FormatHostNoToolTurnReject(t,
 		&api.Session{ID: "s1", AgentType: "coordinator"}, hostLoopHistory(
 
 			nil),
@@ -54,7 +55,7 @@ func TestObserveHostNoToolTurn_batchAlreadyClosedPhase(t *testing.T) {
 
 func TestObserveHostNoToolTurn_allowsFirstSynthesis(t *testing.T) {
 	fmt := coordinatorRejectFmt(t)
-	reject, block := guard.FormatHostNoToolTurnReject(
+	reject, block := guardtest.FormatHostNoToolTurnReject(t,
 		&api.Session{ID: "s1", AgentType: "coordinator"}, hostLoopHistory(
 
 			nil),
@@ -84,7 +85,7 @@ func TestObserveCoordinatorBatchPhaseTool_synthesizePackBoard(t *testing.T) {
 		guard.BatchTurnGuard{},
 		gc,
 	)
-	if !observeHasCode(gc, guard.CoordinatorBatchWrongPhaseCode) {
+	if !observeHasCode(t, gc, guard.CoordinatorBatchWrongPhaseCode) {
 		t.Fatalf("want %s in %v", guard.CoordinatorBatchWrongPhaseCode, gc.Invocation.ArgValidationErrors)
 	}
 }
@@ -99,7 +100,7 @@ func TestObserveCoordinatorBatchPhaseTool_closedPackBoard(t *testing.T) {
 		guard.BatchTurnGuard{},
 		gc,
 	)
-	if !observeHasCode(gc, guard.CoordinatorBatchAlreadyClosedCode) {
+	if !observeHasCode(t, gc, guard.CoordinatorBatchAlreadyClosedCode) {
 		t.Fatalf("want %s in %v", guard.CoordinatorBatchAlreadyClosedCode, gc.Invocation.ArgValidationErrors)
 	}
 }
@@ -114,7 +115,7 @@ func TestObserveCoordinatorBatchPhaseTool_latchBlocksPackBoard(t *testing.T) {
 		guard.BatchTurnGuard{SynthesisAcceptedThisTurn: true},
 		gc,
 	)
-	if !observeHasCode(gc, guard.CoordinatorBatchAlreadyClosedCode) {
+	if !observeHasCode(t, gc, guard.CoordinatorBatchAlreadyClosedCode) {
 		t.Fatalf("want %s in %v", guard.CoordinatorBatchAlreadyClosedCode, gc.Invocation.ArgValidationErrors)
 	}
 }
@@ -126,7 +127,7 @@ func TestFormatHostNoToolTurnReject_secondProseAfterLatchWithPriorTools(t *testi
 	prose := coordinatorReportMarkdown("Summary for the user.", []guidance.CoordinatorCitedEvidence{{
 		Path: "internal/retention.go", Line: 1, Excerpt: "package retention",
 	}})
-	reject, block := guard.FormatHostNoToolTurnReject(
+	reject, block := guardtest.FormatHostNoToolTurnReject(t,
 		sess, hostLoopHistory(
 
 			history),

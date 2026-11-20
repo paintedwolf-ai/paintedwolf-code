@@ -72,7 +72,7 @@ func (r *TurnLoadReceipt) normalize() error {
 }
 
 // PutTurnLoadReceipt appends one receipt and returns it with its id.
-func (t *sqlTurnTelemetry) PutTurnLoadReceipt(ctx context.Context, r TurnLoadReceipt) (TurnLoadReceipt, error) {
+func (t *sqlTurns) PutTurnLoadReceipt(ctx context.Context, r TurnLoadReceipt) (TurnLoadReceipt, error) {
 	s := t.core
 	if err := r.normalize(); err != nil {
 		return TurnLoadReceipt{}, err
@@ -116,7 +116,7 @@ func (t *sqlTurnTelemetry) PutTurnLoadReceipt(ctx context.Context, r TurnLoadRec
 
 // ListTurnLoadReceiptsForTurns returns the receipts of the turns the given
 // user messages opened, in the order they were recorded.
-func (t *sqlTurnTelemetry) ListTurnLoadReceiptsForTurns(ctx context.Context, openingMessageIDs []string) ([]TurnLoadReceipt, error) {
+func (t *sqlTurns) ListTurnLoadReceiptsForTurns(ctx context.Context, openingMessageIDs []string) ([]TurnLoadReceipt, error) {
 	ids := trimmedIDs(openingMessageIDs)
 	if len(ids) == 0 {
 		return []TurnLoadReceipt{}, nil
@@ -134,7 +134,7 @@ func (t *sqlTurnTelemetry) ListTurnLoadReceiptsForTurns(ctx context.Context, ope
 
 // LatestTurnLoadReceipt returns the session's most recent receipt, whose
 // loads are the chat's loaded set when it was recorded.
-func (t *sqlTurnTelemetry) LatestTurnLoadReceipt(ctx context.Context, sessionID string) (TurnLoadReceipt, bool, error) {
+func (t *sqlTurns) LatestTurnLoadReceipt(ctx context.Context, sessionID string) (TurnLoadReceipt, bool, error) {
 	rows, err := t.core.queries.LatestTurnLoadReceiptForSession(ctx, strings.TrimSpace(sessionID))
 	if err != nil || len(rows) == 0 {
 		return TurnLoadReceipt{}, false, err

@@ -9,20 +9,20 @@ import (
 
 // PreviousComplete returns the prior authoritative run whose scanner execution
 // and finding identity are comparable with latest.
-func (s *sqlFindingStore) PreviousComplete(ctx context.Context, latest api.CodeScan) (*api.CodeScan, error) {
+func (s *ReadStore) PreviousComplete(ctx context.Context, latest api.CodeScan) (*api.CodeScan, error) {
 	if s == nil {
 		return nil, nil
 	}
 	if latest.ID == "" {
 		return nil, nil
 	}
-	rows, err := s.queries.ListScansByCanonicalPath(ctx, latest.CanonicalPath)
+	rows, err := s.tx.queries.ListScansByCanonicalPath(ctx, latest.CanonicalPath)
 	if err != nil {
 		return nil, err
 	}
 	scans := codeScansFromRows(rows)
 	for index := range scans {
-		if err := hydrateScanFacts(ctx, s.db, &scans[index]); err != nil {
+		if err := hydrateScanFacts(ctx, s.tx.db, &scans[index]); err != nil {
 			return nil, err
 		}
 	}

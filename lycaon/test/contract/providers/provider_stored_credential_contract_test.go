@@ -8,6 +8,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/llm"
 	providercredentials "github.com/lycaon/lycaon/internal/llm/credentials"
+	"github.com/lycaon/lycaon/internal/llm/credentials/credentialstest"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 )
 
@@ -51,7 +52,7 @@ func TestKeyRequiringBundledProvidersNeedStoredCredential(t *testing.T) {
 			catalog, err := llm.NewProviderCatalogAt(local)
 			contractcheck.FailErr(t, "llm.NewProviderCatalogAt failed", err)
 
-			creds := providercredentials.NewAt(filepath.Join(t.TempDir(), "credential-vault.age"))
+			creds := credentialstest.Open(t, filepath.Join(t.TempDir(), "credential-vault.age"))
 			if configuredWith(t, catalog, creds, entry.ID) {
 				t.Fatalf("%s configured from its environment variable without a stored credential", entry.ID)
 			}

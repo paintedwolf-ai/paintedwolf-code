@@ -19,7 +19,7 @@ func TestAnalyzeRootsUsesProviderCache(t *testing.T) {
 	}
 	provider := repotest.NewProvider(t)
 	ctx := context.Background()
-	brief, err := repoinfo.AwaitBrief(ctx, provider, dir)
+	brief, err := repotest.AwaitBrief(ctx, provider, dir)
 	testutil.FailErr(t, "AwaitBrief", err)
 	if !brief.Materialized || brief.FileCount == 0 {
 		t.Fatalf("brief = %+v want materialized", brief)

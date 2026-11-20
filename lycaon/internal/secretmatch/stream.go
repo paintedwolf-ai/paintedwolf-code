@@ -120,7 +120,7 @@ func (m *Matcher) ScreenBytes(ctx context.Context, src io.Reader, dst io.Writer,
 			}
 			continue
 		}
-		if err := state.advance(ctx, dst, window, overlap, longest, eof); err != nil {
+		if err := state.advance(ctx, dst, window, overlap, eof); err != nil {
 			return state.result, err
 		}
 		if eof && state.emit == state.base+int64(len(state.buffer)) {
@@ -162,7 +162,7 @@ func (s *streamScreen) grow(n int) error {
 	return nil
 }
 
-func (s *streamScreen) advance(ctx context.Context, dst io.Writer, window, overlap, longest int, eof bool) error {
+func (s *streamScreen) advance(ctx context.Context, dst io.Writer, window, overlap int, eof bool) error {
 	// Reserve string copies, reference masking and bounded index capacities before
 	// invoking the shared whole-input token mask over this retained segment.
 	maskCharge := int64(len(s.buffer))*5 + int64(len(s.buffer)/referenceContextBytes+1)*256

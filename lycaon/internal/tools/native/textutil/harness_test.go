@@ -17,6 +17,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/commandprogram"
 	"github.com/lycaon/lycaon/internal/commandsurface"
+	"github.com/lycaon/lycaon/internal/commandsurface/commandsurfacetest"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/toolrejection"
@@ -198,9 +199,9 @@ func (h *harness) runWith(ports Ports, source, stdin string) run {
 // bind owns the actual parsed command and its expansion frame.
 func (h *harness) bind(source string) (commandprogram.OperationRequest, func()) {
 	h.t.Helper()
-	parsed, err := commandsurface.ParseProgram([]byte(source), commandsurface.ParseOptions{SourceName: "inline"})
+	parsed, err := commandsurfacetest.Admit(h.t, []byte(source), commandsurface.ParseOptions{SourceName: "inline"})
 	testutil.FailErr(h.t, "parse "+source, err)
-	statement := parsed.Snapshot().Statements[0]
+	statement := parsed.View(h.t).Statements[0]
 	command := statement.Command.(commandsurface.SimpleCommand)
 	frame, err := commandprogram.NewVariables(h.t.Context(), h.memory, "inline", h.env, nil)
 	testutil.FailErr(h.t, "frame", err)

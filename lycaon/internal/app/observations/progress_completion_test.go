@@ -3,17 +3,17 @@ package observations
 import (
 	"context"
 	"encoding/json"
-	"github.com/lycaon/lycaon/internal/events"
-	"github.com/lycaon/lycaon/internal/testdbfixture"
-	"github.com/lycaon/lycaon/internal/testutil"
 	"testing"
 	"time"
 
 	"github.com/lycaon/lycaon/internal/db"
 	"github.com/lycaon/lycaon/internal/eventoutbox"
+	"github.com/lycaon/lycaon/internal/events"
 	"github.com/lycaon/lycaon/internal/progress"
 	"github.com/lycaon/lycaon/internal/session/store"
+	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/testdbseed"
+	"github.com/lycaon/lycaon/internal/testutil"
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -26,7 +26,7 @@ func TestProgressCompleteRetriesAfterSkippedWrite(t *testing.T) {
 	seedWorkflowRun(t, sqlDB, sessionID, runID)
 	emitProgressCompletion(context.Background(), st, &events.Publisher{}, prog, fixedActiveRun(runID), sessionID)
 
-	msgs, err := st.GetMessages(context.Background(), sessionID)
+	msgs, err := st.Transcript.GetMessages(context.Background(), sessionID)
 	testutil.FailErr(t, "GetMessages", err)
 	var completes int
 	for _, m := range msgs {
@@ -54,7 +54,7 @@ func TestProgressCompleteOutboxPublishesOnce(t *testing.T) {
 
 	st := store.NewSQL(sqlDB)
 	st.SetEventOutbox(outbox)
-	sess, err := st.Create(context.Background(), wire.CreateSessionRequest{}, testdbseed.DefaultProjectID)
+	sess, err := st.Sessions.Create(context.Background(), wire.CreateSessionRequest{}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "store.Create", err)
 	waitProgressOutboxEmpty(t, sqlDB)
 	hub.FlushDebounced()
@@ -92,7 +92,7 @@ done:
 	if len(appends) != 1 {
 		t.Fatalf("progress_complete SSE appends = %d want 1 (outbox delivers events)", len(appends))
 	}
-	msgs, err := st.GetMessages(context.Background(), sess.ID)
+	msgs, err := st.Transcript.GetMessages(context.Background(), sess.ID)
 	testutil.FailErr(t, "GetMessages", err)
 	var rows int
 	for _, m := range msgs {

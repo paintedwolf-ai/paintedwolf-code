@@ -29,11 +29,6 @@ func ApprovalGrantID(scope ApprovalGrantScope, category, pattern, chatSessionID,
 	return "grant_" + base64.RawURLEncoding.EncodeToString(sum[:])
 }
 
-// ExactActionSetOffer leases an enumerated canonical action set for the chat.
-func ExactActionSetOffer(action ProposedAction, exactActions []string) ApprovalGrantOffer {
-	return ExactActionSetOfferAtScope(action, exactActions, ApprovalGrantScopeChat)
-}
-
 // ExactActionOffer leases one canonical action and boundary for the chat.
 func ExactActionOffer(action ProposedAction) ApprovalGrantOffer {
 	return ExactActionOfferAtScope(action, ApprovalGrantScopeChat)

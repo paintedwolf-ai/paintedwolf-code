@@ -3,8 +3,6 @@ package session
 import (
 	"context"
 	"fmt"
-	"github.com/lycaon/lycaon/internal/toolexecution"
-	"github.com/lycaon/lycaon/internal/tools/native/command"
 	"net"
 	"os"
 	"path/filepath"
@@ -14,16 +12,20 @@ import (
 
 	"github.com/lycaon/lycaon/internal/confine"
 	"github.com/lycaon/lycaon/internal/credentialstore"
+	"github.com/lycaon/lycaon/internal/credentialstore/credentialstoretest"
 	"github.com/lycaon/lycaon/internal/hitl"
 	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/secretcap"
 	"github.com/lycaon/lycaon/internal/secretmatch"
 	"github.com/lycaon/lycaon/internal/session/approvalstate"
 	"github.com/lycaon/lycaon/internal/settings"
+	"github.com/lycaon/lycaon/internal/settings/settingstest"
 	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/toolexecution"
 	"github.com/lycaon/lycaon/internal/tools"
+	"github.com/lycaon/lycaon/internal/tools/native/command"
 )
 
 type capabilityReviewCheckpoints struct {
@@ -117,7 +119,7 @@ func newCapabilityReviewFixture(t *testing.T, approve bool) *capabilityReviewFix
 	read := filepath.Join(t.TempDir(), "protected-config")
 	store, err := settings.NewApprovalStoreAt(filepath.Join(t.TempDir(), "approvals.yaml"))
 	testutil.FailErr(t, "create fixture approval store", err)
-	authority := settings.NewRuleApprovalGate(store, settings.NoSources())
+	authority := settings.NewRuleApprovalGate(store, settingstest.EmptySources())
 	c := &capabilityReviewCheckpoints{
 		cannedWriteRootCheckpoints: cannedWriteRootCheckpoints{approve: approve},
 		write:                      approvalstate.NewSandboxPathGrantRuntime(), read: approvalstate.NewSandboxPathGrantRuntime(), sockets: approvalstate.NewSocketCapabilityRuntime(),
@@ -291,7 +293,7 @@ func TestInvocationCapabilityOnceKeepsSecretReviewStable(t *testing.T) {
 	database := testdbfixture.Open(t, "store.db")
 	testdbseed.InsertProject(t, database, f.context.Identity.ProjectID)
 	testdbseed.InsertSession(t, database, f.context.Identity.SessionID, f.context.Identity.ProjectID)
-	values := credentialstore.NewEmpty(credentialstore.Slot{
+	values := credentialstoretest.Open(t, credentialstore.Slot{
 		Path:      filepath.Join(t.TempDir(), credentialstore.VaultBasename),
 		Namespace: credentialstore.NamespaceManagedSecrets, Context: "capability review test",
 	}, func(string) bool { return true })

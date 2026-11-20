@@ -1,0 +1,13 @@
+{
+  "category": "test_files",
+  "artifact": "lycaon/internal/llm/registry_test.go",
+  "kind": "test_suite",
+  "workstream": "credential-fixture-boundaries",
+  "disposition": "retain",
+  "reason": "Retain 634 lines of provider registry composition contracts. Credential resolution, configured serving providers, catalog mutation and stale discovery invalidation exercise one registry boundary with independent fixture resources. The fixture now opens the encrypted store and preserves failure reporting. Keep the current scenarios together without further size allowance.",
+  "reviewed_commit": "d771f280c226a3a8412f7aca8a5a2b7d9647b9fb",
+  "ceiling": 634,
+  "boundaries": {
+    "lycaon/internal/llm/registry_test.go": "9f6b66b476682eff0f48509c806ef4ea57c111a09f02218f674b65c3a4bb56bb"
+  }
+}

@@ -30,7 +30,7 @@ func (s *Lifecycle) HandleAbortSession(w http.ResponseWriter, r *http.Request) {
 	s.Prompt.MaybeDrainQueue(context.WithoutCancel(r.Context()), id)
 	// Complete the response lookup after client disconnect.
 	readCtx := context.WithoutCancel(r.Context())
-	sess, err := s.Store.Get(readCtx, id)
+	sess, err := s.SessionStore.Get(readCtx, id)
 	if err != nil {
 		s.responses.InternalError(w, r, err)
 		return

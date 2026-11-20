@@ -18,9 +18,7 @@ type WorkflowRunScanLister interface {
 	ListByWorkflowRunID(ctx context.Context, workflowRunID string) ([]api.CodeScan, error)
 }
 
-// WorkflowRunLedger also reads the full passes a workflow run asked for.
-type WorkflowRunLedger interface {
-	WorkflowRunScanLister
+type WorkflowRunPassLister interface {
 	FullPassesForWorkflowRun(ctx context.Context, workflowRunID string) ([]FullPass, error)
 }
 
@@ -31,7 +29,8 @@ type ProjectDirLookup func(ctx context.Context, projectID string) (string, error
 
 type WorkflowObligation struct {
 	Triggers *TriggerService
-	Ledger   WorkflowRunLedger
+	Reads    WorkflowRunScanLister
+	Passes   WorkflowRunPassLister
 	Settings *settings.SecurityScannersStore
 	Full     FullScanRequester
 	Runs     WorkflowRunLookup
@@ -113,7 +112,7 @@ func (o *WorkflowObligation) OnPhaseEnter(ctx context.Context, run *api.Workflow
 // ExplainFullPass names the run's newest full pass: the one its latest phase
 // entry requested or joined.
 func (o *WorkflowObligation) ExplainFullPass(ctx context.Context, run *api.WorkflowRun, params map[string]any) (*api.WorkflowExplainFullPass, error) {
-	if o == nil || o.Ledger == nil || run == nil {
+	if o == nil || o.Passes == nil || run == nil {
 		return nil, nil
 	}
 	parsed, err := parseObligationParams(params)
@@ -124,7 +123,7 @@ func (o *WorkflowObligation) ExplainFullPass(ctx context.Context, run *api.Workf
 	if !parsed.Full || projectID == "" {
 		return nil, nil
 	}
-	passes, err := o.Ledger.FullPassesForWorkflowRun(ctx, run.ID)
+	passes, err := o.Passes.FullPassesForWorkflowRun(ctx, run.ID)
 	if err != nil || len(passes) == 0 {
 		return nil, err
 	}
@@ -138,7 +137,7 @@ func (o *WorkflowObligation) Status(ctx context.Context, workflowRunID, phase st
 		out.Status = api.ObligationStatusOff
 		return out, nil
 	}
-	if o == nil || o.Ledger == nil {
+	if o == nil || o.Reads == nil || o.Passes == nil {
 		return out, fmt.Errorf("scan ledger unavailable")
 	}
 	if o.Params == nil {
@@ -166,11 +165,11 @@ func (o *WorkflowObligation) Status(ctx context.Context, workflowRunID, phase st
 
 func (o *WorkflowObligation) fullStatus(ctx context.Context, workflowRunID, gate string) (api.WorkflowRunObligation, error) {
 	out := api.WorkflowRunObligation{Kind: WorkflowObligationKind}
-	scans, err := o.Ledger.ListByWorkflowRunID(ctx, strings.TrimSpace(workflowRunID))
+	scans, err := o.Reads.ListByWorkflowRunID(ctx, strings.TrimSpace(workflowRunID))
 	if err != nil {
 		return out, err
 	}
-	passes, err := o.Ledger.FullPassesForWorkflowRun(ctx, strings.TrimSpace(workflowRunID))
+	passes, err := o.Passes.FullPassesForWorkflowRun(ctx, strings.TrimSpace(workflowRunID))
 	if err != nil {
 		return out, err
 	}

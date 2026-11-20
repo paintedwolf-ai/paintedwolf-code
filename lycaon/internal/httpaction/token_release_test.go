@@ -64,7 +64,7 @@ func TestTokenIssuedElsewhereIsReviewedBeforePlacement(t *testing.T) {
 			var seen string
 			relying := relyingServer(t, &seen)
 			var asked []secretmatch.Alert
-			deps := Deps{Boundary: testBoundary(), Secrets: secrets, SecretMatcher: testSecretMatcher(t),
+			deps := Deps{Boundary: testBoundary(), Secrets: secrets, Jars: secrets.Jars, SecretMatcher: testSecretMatcher(t),
 				SecretAsk: func(_ context.Context, alert secretmatch.Alert) (secretmatch.Resolution, error) {
 					asked = append(asked, alert)
 					return secretmatch.Resolution{Decision: tc.decision, ReceiptToken: "receipt-1"}, nil
@@ -134,7 +134,7 @@ func TestTokenReturnsToItsIssuerWithoutReview(t *testing.T) {
 		w.WriteHeader(http.StatusNoContent)
 	}))
 	t.Cleanup(server.Close)
-	deps := Deps{Boundary: testBoundary(), Secrets: secrets, SecretMatcher: testSecretMatcher(t),
+	deps := Deps{Boundary: testBoundary(), Secrets: secrets, Jars: secrets.Jars, SecretMatcher: testSecretMatcher(t),
 		SecretAsk: func(context.Context, secretmatch.Alert) (secretmatch.Resolution, error) {
 			t.Fatal("a same-service placement was reviewed")
 			return secretmatch.Resolution{}, nil
@@ -161,7 +161,7 @@ func TestTokenIssuedElsewhereWithoutAScreenIsAFault(t *testing.T) {
 	issuer := issuerServer(t)
 	var seen string
 	relying := relyingServer(t, &seen)
-	deps := Deps{Boundary: testBoundary(), Secrets: secrets}
+	deps := Deps{Boundary: testBoundary(), Secrets: secrets, Jars: secrets.Jars}
 	root := t.TempDir()
 	captureIssuedToken(t, deps, issuer, root)
 	_, err := runRequest(t, deps, map[string]any{

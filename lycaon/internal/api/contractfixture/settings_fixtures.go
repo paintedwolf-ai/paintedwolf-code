@@ -19,6 +19,7 @@ import (
 	"github.com/lycaon/lycaon/internal/hitl"
 	"github.com/lycaon/lycaon/internal/llm"
 	"github.com/lycaon/lycaon/internal/project"
+	"github.com/lycaon/lycaon/internal/project/projecttest"
 	"github.com/lycaon/lycaon/internal/session"
 	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"github.com/lycaon/lycaon/internal/settings"
@@ -29,7 +30,7 @@ import (
 func ApprovalsFixture(t *testing.T) (base, query string) {
 	t.Helper()
 	_, base, reg := NewSettingsTestServer(t)
-	proj, err := project.CreateWithRoot(t.Context(), reg, t.TempDir())
+	proj, err := projecttest.CreateWithRoot(t.Context(), reg, t.TempDir())
 	testutil.FailErr(t, "reg.Create failed", err)
 	PutApprovals(t, base, "", `{"approval_posture":"balanced","ai_rationale_enabled":false}`, http.StatusOK)
 	return base, "project_id=" + proj.ID
@@ -86,7 +87,7 @@ func NewSettingsTestServer(t *testing.T, opts ...TestDeps) (*hostapi.Server, str
 	mgr.Limits.SetProvider(settings.ProjectLimitsAdapter{Store: svc.Limits})
 	reg := project.NewSQLRegistry(sessionFixture.DB())
 	hub := events.NewMemoryHub()
-	deps := hostapi.Dependencies{Core: hostapi.CoreDependencies{Store: store, Projects: reg, Sessions: mgr, Settings: svc}, Host: hostapi.HostDependencies{Events: hub}}
+	deps := hostapi.Dependencies{Core: hostapi.CoreDependencies{Database: sessionFixture.DB(), Store: store, Projects: reg, Sessions: mgr, Settings: svc}, Host: hostapi.HostDependencies{Events: hub}}
 	for _, opt := range opts {
 		opt(&deps)
 	}
@@ -105,7 +106,7 @@ func PutApprovals(t *testing.T, base, query, body string, want int) {
 		url, strings.NewReader(body))
 	testutil.FailErr(t, "build approvals PUT", err)
 	req.Header.Set("Content-Type", "application/json")
-	hostapi.WithTestAuth(req)
+	req.Header.Set("Authorization", "Bearer "+hostapi.TestAPIToken)
 	resp, err := fixtureClient.Do(req)
 	testutil.FailErr(t, "approvals PUT", err)
 	_ = resp.Body.Close()

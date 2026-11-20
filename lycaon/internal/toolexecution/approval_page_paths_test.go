@@ -7,6 +7,7 @@ import (
 	"github.com/lycaon/lycaon/internal/platform"
 	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/settings"
+	"github.com/lycaon/lycaon/internal/settings/settingstest"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/tools"
 	"path/filepath"
@@ -96,7 +97,7 @@ func TestPageApprovalRetainsEntryDenials(t *testing.T) {
 			configtest.Overlay(t, map[config.Rel]string{config.SecurityApprovals: "rules:\n  - category: path\n    pattern: " + tc.pattern + "\n    effect: deny\n"})
 			store, err := settings.NewApprovalStoreAt(filepath.Join(t.TempDir(), "approvals.yaml"))
 			testutil.FailErr(t, "load approval store", err)
-			gate := settings.NewRuleApprovalGate(store, settings.NoSources())
+			gate := settings.NewRuleApprovalGate(store, settingstest.EmptySources())
 			for _, tool := range []string{"page_open", "capture_page", "measure_page"} {
 				for _, entry := range tc.entries {
 					action := proposedActionFromPolicy(platform.PolicyContext{ToolName: tool, ToolArgs: map[string]any{"project_dir": ".", "path": entry}})

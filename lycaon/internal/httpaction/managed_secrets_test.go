@@ -4,8 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"github.com/lycaon/lycaon/internal/toolprofiles"
-	"github.com/lycaon/lycaon/internal/toolrejection"
 	"io"
 	"net"
 	"net/http"
@@ -20,6 +18,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/confine"
 	"github.com/lycaon/lycaon/internal/credentialstore"
+	"github.com/lycaon/lycaon/internal/credentialstore/credentialstoretest"
 	"github.com/lycaon/lycaon/internal/egressproxy"
 	"github.com/lycaon/lycaon/internal/httpcookies"
 	"github.com/lycaon/lycaon/internal/presence"
@@ -29,6 +28,8 @@ import (
 	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/toolprofiles"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/internal/tools"
 )
 
@@ -37,7 +38,7 @@ func managedRequestService(t *testing.T) (*secretcap.Service, string) {
 	t.Helper()
 	database := testdbfixture.Open(t, "store.db")
 	testdbseed.InsertProject(t, database, testdbseed.DefaultProjectID)
-	values := credentialstore.NewEmpty(credentialstore.Slot{
+	values := credentialstoretest.Open(t, credentialstore.Slot{
 		Path:      filepath.Join(t.TempDir(), credentialstore.VaultBasename),
 		Namespace: credentialstore.NamespaceManagedSecrets, Context: "request test",
 	}, func(string) bool { return true })
@@ -301,8 +302,8 @@ func TestHeldSecretLockedDuringHopWaitDisclosesNothing(t *testing.T) {
 		"capability_request": loopbackCapability(t, server.URL),
 	}
 	deps := Deps{
-		Boundary:      testBoundary(),
-		Secrets:       service,
+		Boundary: testBoundary(),
+		Secrets:  service, Jars: service.Jars,
 		SecretMatcher: matcher,
 		SecretAsk: func(ctx context.Context, alert secretmatch.Alert) (secretmatch.Resolution, error) {
 			secretcap.ResolutionFrom(ctx).ApproveRelease(secretcap.Release{
@@ -384,8 +385,8 @@ func TestRefusalBeforeSendKeepsUnlockAndNothingDispatched(t *testing.T) {
 				"capability_request": loopbackCap,
 			}
 			deps := Deps{
-				Boundary:      testBoundary(),
-				Secrets:       service,
+				Boundary: testBoundary(),
+				Secrets:  service, Jars: service.Jars,
 				SecretMatcher: matcher,
 				SecretAsk: func(ctx context.Context, alert secretmatch.Alert) (secretmatch.Resolution, error) {
 					secretcap.ResolutionFrom(ctx).ApproveRelease(secretcap.Release{
@@ -488,8 +489,8 @@ func TestRefusalBeforeContinueDispatchesHeadersOnly(t *testing.T) {
 		"capability_request": loopbackCapability(t, rawURL),
 	}
 	deps := Deps{
-		Boundary:      testBoundary(),
-		Secrets:       service,
+		Boundary: testBoundary(),
+		Secrets:  service, Jars: service.Jars,
 		SecretMatcher: matcher,
 		SecretAsk: func(ctx context.Context, alert secretmatch.Alert) (secretmatch.Resolution, error) {
 			secretcap.ResolutionFrom(ctx).ApproveRelease(secretcap.Release{
@@ -587,8 +588,8 @@ func TestBodyReceivedWithoutResponseIsHandedOffAndUnknown(t *testing.T) {
 		"capability_request": loopbackCapability(t, rawURL),
 	}
 	deps := Deps{
-		Boundary:      testBoundary(),
-		Secrets:       service,
+		Boundary: testBoundary(),
+		Secrets:  service, Jars: service.Jars,
 		SecretMatcher: matcher,
 		SecretAsk: func(ctx context.Context, alert secretmatch.Alert) (secretmatch.Resolution, error) {
 			secretcap.ResolutionFrom(ctx).ApproveRelease(secretcap.Release{
@@ -679,8 +680,8 @@ func TestCompletedFirstHopCommitsOnceWhenRedirectDenied(t *testing.T) {
 		"capability_request": bothCap,
 	}
 	deps := Deps{
-		Boundary:      testBoundary(),
-		Secrets:       service,
+		Boundary: testBoundary(),
+		Secrets:  service, Jars: service.Jars,
 		SecretMatcher: matcher,
 		SecretAsk: func(ctx context.Context, alert secretmatch.Alert) (secretmatch.Resolution, error) {
 			secretcap.ResolutionFrom(ctx).ApproveRelease(secretcap.Release{
@@ -754,8 +755,8 @@ func TestCookieWithholdContinuesWhileHeaderWithholdRefuses(t *testing.T) {
 		"capability_request": loopbackCapability(t, server.URL),
 	}
 	deps := Deps{
-		Boundary:      testBoundary(),
-		Secrets:       service,
+		Boundary: testBoundary(),
+		Secrets:  service, Jars: service.Jars,
 		SecretMatcher: matcher,
 		SecretAsk: func(ctx context.Context, alert secretmatch.Alert) (secretmatch.Resolution, error) {
 			if alert.SourcePath == "cookies" {
@@ -800,8 +801,8 @@ func TestCookieWithholdContinuesWhileHeaderWithholdRefuses(t *testing.T) {
 		"capability_request": loopbackCapability(t, server.URL),
 	}
 	deps2 := Deps{
-		Boundary:      testBoundary(),
-		Secrets:       service2,
+		Boundary: testBoundary(),
+		Secrets:  service2, Jars: service2.Jars,
 		SecretMatcher: matcher2,
 		SecretAsk: func(_ context.Context, _ secretmatch.Alert) (secretmatch.Resolution, error) {
 			return secretmatch.Resolution{Decision: secretmatch.Withhold}, nil
@@ -852,7 +853,7 @@ func TestRotationDuringWaitKeepsFrozenBytes(t *testing.T) {
 	defer relying.Close()
 
 	root := t.TempDir()
-	captureDeps := Deps{Boundary: testBoundary(), Secrets: service, SecretMatcher: matcher}
+	captureDeps := Deps{Boundary: testBoundary(), Secrets: service, Jars: service.Jars, SecretMatcher: matcher}
 	captureIssuedToken(t, captureDeps, issuer, root)
 
 	t.Cleanup(func() {
@@ -870,10 +871,10 @@ func TestRotationDuringWaitKeepsFrozenBytes(t *testing.T) {
 		jarReq := secretcap.TokenJarRequest{
 			ProjectID: testdbseed.DefaultProjectID, ChatSessionID: "root-1", SessionID: "rot-session", OperationID: "rot-op", Name: "jar",
 		}
-		openedJar, openErr := service.OpenTokenJar(t.Context(), jarReq)
+		openedJar, openErr := service.Jars.OpenTokenJar(t.Context(), jarReq)
 		testutil.FailErr(t, "open token jar for rotation", openErr)
 		openedJar.Set("api", secretcap.Token{Value: "rotated-issued-token-v2", Origin: issuer.URL, OriginLabel: issuer.URL})
-		_, saveErr := service.SaveTokenJar(t.Context(), jarReq, openedJar)
+		_, saveErr := service.Jars.SaveTokenJar(t.Context(), jarReq, openedJar)
 		testutil.FailErr(t, "rotate token jar during wait", saveErr)
 		return true
 	})
@@ -889,8 +890,8 @@ func TestRotationDuringWaitKeepsFrozenBytes(t *testing.T) {
 	}
 	asks := 0
 	deps := Deps{
-		Boundary:      testBoundary(),
-		Secrets:       service,
+		Boundary: testBoundary(),
+		Secrets:  service, Jars: service.Jars,
 		SecretMatcher: matcher,
 		SecretAsk: func(ctx context.Context, alert secretmatch.Alert) (secretmatch.Resolution, error) {
 			asks++
@@ -946,9 +947,9 @@ func TestRevocationDuringWaitFailsClosed(t *testing.T) {
 			defer relying.Close()
 
 			root := t.TempDir()
-			captureDeps := Deps{Boundary: testBoundary(), Secrets: service, SecretMatcher: matcher}
+			captureDeps := Deps{Boundary: testBoundary(), Secrets: service, Jars: service.Jars, SecretMatcher: matcher}
 			captureIssuedToken(t, captureDeps, issuer, root)
-			openedJar, err := service.OpenTokenJar(t.Context(), secretcap.TokenJarRequest{
+			openedJar, err := service.Jars.OpenTokenJar(t.Context(), secretcap.TokenJarRequest{
 				ProjectID: testdbseed.DefaultProjectID, ChatSessionID: "root-1", SessionID: "lookup", OperationID: "lookup-op", Name: "jar",
 			})
 			testutil.FailErr(t, "open seeded token jar", err)
@@ -1000,8 +1001,8 @@ func TestRevocationDuringWaitFailsClosed(t *testing.T) {
 				"capability_request": loopbackCapability(t, relying.URL),
 			}
 			deps := Deps{
-				Boundary:      testBoundary(),
-				Secrets:       service,
+				Boundary: testBoundary(),
+				Secrets:  service, Jars: service.Jars,
 				SecretMatcher: matcher,
 				SecretAsk: func(ctx context.Context, alert secretmatch.Alert) (secretmatch.Resolution, error) {
 					secretcap.ResolutionFrom(ctx).ApproveRelease(secretcap.Release{

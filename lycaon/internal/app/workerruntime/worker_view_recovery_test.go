@@ -454,7 +454,7 @@ func TestRetentionEvictsVerifiedCheckpointAndLeaseRebuildsIt(t *testing.T) {
 	if _, err := os.Stat(task.WorkspaceRoot); !errors.Is(err, os.ErrNotExist) {
 		t.Fatalf("tree survives eviction: %v", err)
 	}
-	_, lease, err := engine.Queue.EnsureWorkerBranch(t.Context(), task.ID)
+	_, lease, err := engine.Queue.Branches.EnsureWorkerBranch(t.Context(), task.ID)
 	testutil.FailErr(t, "rebuild from checkpoint", err)
 	defer lease.Release()
 	if got := f.readBranch(task.WorkspaceRoot, "app.txt"); got != "checkpoint-A\n" {
@@ -644,6 +644,7 @@ func TestRebuiltMountedViewPublishesAndSettlesLikeAClaimedOne(t *testing.T) {
 func TestSettlingALiveViewWithdrawsItsEngine(t *testing.T) {
 	f := newEngineFixture(t)
 	task := f.claimMountedWorker()
+	viewID := f.liveView(task.WorkspaceRoot).ViewID
 	if _, ok := consumer.LookupBranchEngine(task.WorkspaceRoot); !ok {
 		t.Fatal("claim registered no engine")
 	}
@@ -651,7 +652,7 @@ func TestSettlingALiveViewWithdrawsItsEngine(t *testing.T) {
 	if _, ok := consumer.LookupBranchEngine(task.WorkspaceRoot); ok {
 		t.Fatal("settlement left the engine registered")
 	}
-	if _, live := workspace.LookupBranchClaimedView(task.WorkspaceRoot); live {
-		t.Fatal("settlement left the claim record")
+	if _, _, live := f.views.AdapterForView(viewID); live {
+		t.Fatal("settlement left the view registered")
 	}
 }

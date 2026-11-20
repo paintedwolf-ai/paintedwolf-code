@@ -57,7 +57,7 @@ type GitEntry struct {
 func (c *Corpus) GitFiles(dir string) []GitEntry {
 	cmd := exec.Command("git", "ls-files", "-s", "--", dir)
 	cmd.Dir = c.root
-	cmd.Env = lyexec.LocalGitEnv()
+	cmd.Env = lyexec.InheritedEnviron()
 	out, err := cmd.Output()
 	if err != nil {
 		panic(abort{fmt.Errorf("git ls-files %s: %w", dir, err)})

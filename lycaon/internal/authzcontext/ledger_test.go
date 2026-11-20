@@ -11,6 +11,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/approvaloutcome"
 	"github.com/lycaon/lycaon/internal/authzcontext"
+	"github.com/lycaon/lycaon/internal/authzcontext/authztest"
 	"github.com/lycaon/lycaon/internal/authzledger"
 	"github.com/lycaon/lycaon/internal/db"
 	"github.com/lycaon/lycaon/internal/testdbfixture"
@@ -18,7 +19,9 @@ import (
 )
 
 func TestLedger_appendGateFailClosed(t *testing.T) {
-	ledger := &authzcontext.Ledger{Store: authzcontext.FailStore{}}
+	database := testdbfixture.Open(t, "authorization.db")
+	insertSession(t, database, "sess", time.Now().UTC())
+	ledger := authztest.RejectEvents(t, database).Ledger
 	err := ledger.AppendGate(context.Background(), authzcontext.RecordInput{
 		SessionID:  "sess",
 		Action:     authzcontext.EventActionApprovalDecision,
@@ -35,7 +38,7 @@ func TestLedger_appendGateFailClosed(t *testing.T) {
 func TestLedgerApprovalDecisionCarriesApprovalRuleProvenance(t *testing.T) {
 	sqlDB := testdbfixture.Open(t, "store.db")
 	insertSession(t, sqlDB, "sess-policy", time.Now().UTC())
-	recorder := authzcontext.SQLRecorder(sqlDB)
+	recorder := authzcontext.LedgerRecorder{Ledger: &authzcontext.Ledger{Store: authzcontext.NewSQLStore(sqlDB)}}
 	tx, err := sqlDB.BeginTx(t.Context(), nil)
 	testutil.FailErr(t, "begin", err)
 	testutil.FailErr(t, "append gate tx", recorder.AppendApprovalGateTx(t.Context(), tx, authzledger.ApprovalDecisionRecord{
@@ -75,9 +78,9 @@ func TestLedgerApprovalDecisionCarriesApprovalRuleProvenance(t *testing.T) {
 }
 
 func TestLedger_chainAndRedaction(t *testing.T) {
-	mem := authzcontext.NewMemoryStore()
+	ledgerStore := authztest.NewStore(t, "sess-chain")
 	ledger := &authzcontext.Ledger{
-		Store: mem,
+		Store: ledgerStore,
 		Audit: authzcontext.AuditConfig{CaptureRawArgv: false},
 	}
 	action := struct {
@@ -99,7 +102,7 @@ func TestLedger_chainAndRedaction(t *testing.T) {
 		RejectCode: approvaloutcome.CodeApprovalDenied,
 		Detail:     detailIn,
 	})
-	rows, err := mem.ListEvents(context.Background(), "sess-chain")
+	rows, err := ledgerStore.ListEvents(context.Background(), "sess-chain")
 	if err != nil || len(rows) != 1 {
 		t.Fatalf("events = %d err = %v", len(rows), err)
 	}
@@ -126,7 +129,7 @@ func TestLedger_chainAndRedaction(t *testing.T) {
 			Args: action.args,
 		},
 	})
-	rows, err = mem.ListEvents(context.Background(), "sess-chain")
+	rows, err = ledgerStore.ListEvents(context.Background(), "sess-chain")
 	if err != nil || len(rows) != 2 {
 		t.Fatalf("events = %d err = %v", len(rows), err)
 	}

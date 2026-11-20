@@ -16,12 +16,13 @@ import (
 	"time"
 
 	"github.com/lycaon/lycaon/internal/confine"
+	"github.com/lycaon/lycaon/internal/confine/admissiontest"
 	"github.com/lycaon/lycaon/internal/testutil"
 )
 
 func TestBrowserProcessUsesOwnedNativeDoorInBothPostures(t *testing.T) {
 	t.Setenv("LYCAON_SANDBOX", "off")
-	confine.TestingSetAutoConfine(t)
+	admissiontest.Enable(t)
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		_ = json.NewEncoder(w).Encode(map[string]string{"webSocketDebuggerUrl": "ws://" + r.Host + "/devtools/browser/synthetic-fixture"})
 	}))
@@ -69,7 +70,7 @@ func TestBrowserProcessUsesOwnedNativeDoorInBothPostures(t *testing.T) {
 
 func TestBrowserProcessCancellationSettlesBeforeReturning(t *testing.T) {
 	t.Setenv("LYCAON_SANDBOX", "off")
-	confine.TestingSetAutoConfine(t)
+	admissiontest.Enable(t)
 	root := t.TempDir()
 	entry := filepath.Join(root, "native-no-url-browser")
 	testutil.FailErr(t, "write blocked native browser", os.WriteFile(entry, []byte("#!/bin/sh\nprintf ready > \"$0.ready\"\nsleep 30\n"), 0700))

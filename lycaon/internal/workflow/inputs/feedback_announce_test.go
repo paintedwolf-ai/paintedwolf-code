@@ -31,7 +31,7 @@ func TestStartAnnouncesFeedbackToTranscript(t *testing.T) {
 	})
 	testutil.FailErr(t, "StartHuman", err)
 
-	msgs, err := sessStore.GetMessages(ctx, "sess-1")
+	msgs, err := sessStore.Transcript.GetMessages(ctx, "sess-1")
 	testutil.FailErr(t, "GetMessages", err)
 	feedback := feedbackMessages(msgs)
 	if len(feedback) != 1 {
@@ -52,7 +52,7 @@ func TestStartAnnouncesFeedbackToTranscript(t *testing.T) {
 	testutil.FailErr(t, "GetScaffoldVars", err)
 	_, card := runstate.StampFeedbackAnnouncement(run, runstate.WorkflowRequestFeedbackID, &workflowdef.UserFeedbackPrompt{Prompt: "q"}, vars)
 	mgr.Feedback.Cards.AppendAnnouncement(ctx, "sess-1", card)
-	msgs, err = sessStore.GetMessages(ctx, "sess-1")
+	msgs, err = sessStore.Transcript.GetMessages(ctx, "sess-1")
 	testutil.FailErr(t, "GetMessages", err)
 	if got := len(feedbackMessages(msgs)); got != 1 {
 		t.Fatalf("re-announce should be idempotent, got %d feedback messages", got)

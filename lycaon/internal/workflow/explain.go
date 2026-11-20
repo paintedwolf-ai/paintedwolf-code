@@ -8,14 +8,17 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/lycaon/lycaon/internal/session"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 	"github.com/lycaon/lycaon/internal/workflow/publication"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
+type SessionReader interface {
+	Get(context.Context, string) (*api.Session, error)
+}
+
 type Explanations struct {
-	Sessions    session.Store
+	Sessions    SessionReader
 	Transcript  *publication.Messages
 	Obligations *Obligations
 }

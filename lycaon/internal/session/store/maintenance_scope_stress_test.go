@@ -31,7 +31,7 @@ func TestStressMaintenanceScopesAcrossYearsOfSessionHistory(t *testing.T) {
 			seen, pages := 0, 0
 			pageStarted := time.Now()
 			for {
-				ids, err := s.WorkspaceNotificationIDs(t.Context(), root, after)
+				ids, err := s.Sessions.WorkspaceNotificationIDs(t.Context(), root, after)
 				testutil.FailErr(t, "page metadata without reading evidence", err)
 				if len(ids) == 0 {
 					break
@@ -45,7 +45,7 @@ func TestStressMaintenanceScopesAcrossYearsOfSessionHistory(t *testing.T) {
 			}
 			pageElapsed := time.Since(pageStarted)
 			trustStarted := time.Now()
-			untrusted, err := s.SessionUntrustedContentResult(t.Context(), "session-000001")
+			untrusted, err := s.Evidence.SessionUntrustedContentResult(t.Context(), "session-000001")
 			testutil.FailErr(t, "read indexed trust metadata without body", err)
 			if !untrusted {
 				t.Fatal("lost durable untrusted-content metadata")

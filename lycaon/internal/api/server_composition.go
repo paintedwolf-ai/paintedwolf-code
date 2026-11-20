@@ -6,7 +6,6 @@ import (
 	"strings"
 
 	"github.com/go-chi/chi/v5"
-
 	"github.com/lycaon/lycaon/internal/api/capabilityadmin"
 	"github.com/lycaon/lycaon/internal/api/extensionadmin"
 	"github.com/lycaon/lycaon/internal/api/gitadmin"
@@ -38,9 +37,9 @@ func NewServer(deps Dependencies, logger *slog.Logger, token string) *Server {
 	}
 	requireDependencies(deps)
 	s := &Server{
-		responses:      httpio.Responder{Logger: logger, Notices: deps.Core.UserNotices},
-		apiToken:       strings.TrimSpace(token),
-		sessionStore:   deps.Core.Store,
+		responses:    httpio.Responder{Logger: logger, Notices: deps.Core.UserNotices},
+		apiToken:     strings.TrimSpace(token),
+		sessionStore: deps.Core.Store.Sessions, peopleStore: deps.Core.Store.People,
 		personActions:  deps.Core.PersonActions,
 		sessions:       deps.Core.Sessions,
 		fileBriefings:  deps.Source.Briefings.Files,
@@ -59,14 +58,14 @@ func NewServer(deps Dependencies, logger *slog.Logger, token string) *Server {
 			minDenVersion:      strings.TrimSpace(deps.Storage.MinDenVersion),
 		},
 	}
-	s.Admin.SessionView = sessionview.New(sessionview.Projector{Workflows: deps.Workflow.Workflows, Store: deps.Core.Store, Sessions: deps.Core.Sessions, Projects: deps.Core.Projects})
+	s.Admin.SessionView = sessionview.New(sessionview.Projector{Workflows: deps.Workflow.Workflows, Evidence: deps.Core.Store.Evidence, Sessions: deps.Core.Sessions, Projects: deps.Core.Projects})
 	s.Admin.Git = gitadmin.New(&s.responses, gitadmin.Deps{
 		Board: deps.Workflow.Board, CommitDrafter: deps.Providers.CommitDrafter, LLMService: deps.Providers.LLM, ProjectRegistry: deps.Core.Projects,
 		RepoSetCache: deps.Workflow.RepoSetCache, SessionStore: deps.Core.Store, Sessions: deps.Core.Sessions, DataDir: s.dataDir,
 	})
 	var attachmentStore func(context.Context, string) (blobstore.Store, bool)
 	var tryRunPromotion func(context.Context, string)
-	s.Sources = sourceapi.New(&s.responses, &s.background, sourceOperations, sourceapi.Deps{
+	s.Sources = sourceapi.New(&s.responses, &s.background, sourceOperations, sourceapi.Deps{Branches: deps.Workflow.Branches,
 		Git: &s.Admin.Git, MutationGate: deps.Core.MutationGate,
 		CatalogSnapshot: deps.Source.CatalogSnapshot, WatchNeedsSeed: deps.Source.WatchNeedsSeed,
 		EditorClients: deps.Source.EditorClients, EditorDocuments: deps.Source.EditorDocuments, ProjectViews: deps.Source.ProjectViews, Events: deps.Host.Events,
@@ -83,7 +82,7 @@ func NewServer(deps Dependencies, logger *slog.Logger, token string) *Server {
 		VisualStore: deps.Source.VisualStore, Sources: &s.Sources, Video: deps.Source.Video,
 		GrantedPaths: deps.Approvals.Authority.GrantedPaths,
 	})
-	s.Admin.SessionAdmin = sessionadmin.New(&s.responses, &s.background, sessionadmin.Deps{
+	s.Admin.SessionAdmin = sessionadmin.New(&s.responses, &s.background, sessionadmin.Deps{Branches: deps.Workflow.Branches,
 		Checkpoints: deps.Approvals.Checkpoints, EventPublisher: deps.Host.EventPublisher, Events: deps.Host.Events,
 		Invocations: deps.Core.Invocations, LLMService: deps.Providers.LLM, Preview: deps.Host.Preview,
 		ProgressStore: deps.Source.ProgressStore, Projects: deps.Core.Projects, ProjectRules: deps.Source.ProjectRules, Store: deps.Core.Store,
@@ -105,7 +104,7 @@ func NewServer(deps Dependencies, logger *slog.Logger, token string) *Server {
 	s.Admin.Extensions = extensionadmin.New(&s.responses, &s.background, extensionadmin.Deps{
 		Owner: &extensionstate.Owner{Views: deps.Extensions.ExtensionViews, Scanners: deps.Extensions.ExtensionScanners,
 			Journal: deps.Extensions.ExtensionJournal}, Runtime: deps.Extensions.Contributions, Events: deps.Host.Events, MCPRegistry: deps.External.MCP,
-		ModuleRoot: deps.Storage.ModuleRoot, Projects: deps.Core.Projects, Store: deps.Core.Store, Sessions: deps.Core.Sessions,
+		ModuleRoot: deps.Storage.ModuleRoot, Projects: deps.Core.Projects, Store: deps.Core.Store.Sessions, Sessions: deps.Core.Sessions,
 		Settings: deps.Core.Settings, Workflow: &s.Admin.Workflow, Prompt: &s.Admin.Prompt, Scan: &s.Admin.Scan,
 	})
 	s.Admin.Project = projectadmin.New(&s.responses, &s.background, projectadmin.Deps{
@@ -165,6 +164,7 @@ func requireDependencies(deps Dependencies) {
 		httpio.Required{Name: "VisualStore", Present: deps.Source.VisualStore != nil},
 		httpio.Required{Name: "WorkerCancel", Present: deps.Workflow.WorkerCancel != nil},
 		httpio.Required{Name: "Workers", Present: deps.Workflow.Workers != nil},
+		httpio.Required{Name: "WorkerBranches", Present: deps.Workflow.Branches != nil},
 	)
 }
 

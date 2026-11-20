@@ -17,8 +17,8 @@ type ResolvedSurfaceBinding struct {
 }
 
 // ResolveSurfaceBinding resolves per-phase surface binding from manifest fields and profile defaults.
-func ResolveSurfaceBinding(m Manifest, phaseID, workflowID, configRoot string) (ResolvedSurfaceBinding, error) {
-	profiles, err := surface.LoadSurfaceProfiles(configRoot)
+func ResolveSurfaceBinding(m Manifest, phaseID, workflowID string) (ResolvedSurfaceBinding, error) {
+	profiles, err := surface.LoadSurfaceProfiles()
 	if err != nil {
 		return ResolvedSurfaceBinding{}, err
 	}

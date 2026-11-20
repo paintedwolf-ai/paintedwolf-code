@@ -7,12 +7,13 @@ import (
 	"testing"
 	"time"
 
-	"github.com/lycaon/lycaon/internal/mcp"
+	sdkmcp "github.com/modelcontextprotocol/go-sdk/mcp"
+
+	"github.com/lycaon/lycaon/internal/mcp/mcptest"
 	"github.com/lycaon/lycaon/internal/secretmatch"
 	"github.com/lycaon/lycaon/internal/testutil"
 	wire "github.com/lycaon/lycaon/pkg/api"
 	"github.com/lycaon/lycaon/test/wiring"
-	sdkmcp "github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
 func TestOutboundSecretFloorJ1WebSearchDeny(t *testing.T) {
@@ -22,8 +23,8 @@ func TestOutboundSecretFloorJ1WebSearchDeny(t *testing.T) {
 		toolStep("Searching.", call("ws1", "web_search", map[string]any{"query": query})),
 		textStep("Stopped."),
 	)
-	h := wiring.BuildForTest(t, wiring.WithLLMClient(script), wiring.WithoutCoordinatorLoop())
-	rec := installRecordingProviderHTTP(t)
+	rec := &recordingProviderExchange{}
+	h := wiring.BuildForTest(t, wiring.WithWebResearchExchange(rec.Exchange), wiring.WithLLMClient(script), wiring.WithoutCoordinatorLoop())
 	enableBraveSearchOnly(t, h.Server)
 
 	dir := h.ProjectDir(t, "j1")
@@ -42,7 +43,7 @@ func TestOutboundSecretFloorJ1WebSearchDeny(t *testing.T) {
 		t.Fatalf("provider HTTP called %d times: %+v", len(got), got)
 	}
 	assertToolMessageContains(t, h, sess.ID, "OUTBOUND_SECRET_DENIED")
-	msgs, err := h.Store.GetMessages(context.Background(), sess.ID)
+	msgs, err := h.Store.Transcript.GetMessages(context.Background(), sess.ID)
 	testutil.FailErr(t, "GetMessages", err)
 	var toolContents []string
 	for _, m := range msgs {
@@ -79,7 +80,7 @@ func TestOutboundSecretFloorJ2FetchURLDeny(t *testing.T) {
 func TestOutboundSecretFloorJ3MCPDeny(t *testing.T) {
 	calls := map[string]map[string]int{}
 	callArgs := map[string]map[string]map[string]any{}
-	conn := &mcp.MockConnector{
+	conn := &mcptest.Connector{
 		Tools: map[string][]*sdkmcp.Tool{
 			"svca": {{Name: "do", Description: "do"}},
 		},
@@ -122,8 +123,8 @@ func TestOutboundSecretFloorJ4WebSearchApprove(t *testing.T) {
 		toolStep("Searching.", call("ws1", "web_search", map[string]any{"query": query})),
 		textStep("Sent."),
 	)
-	h := wiring.BuildForTest(t, wiring.WithLLMClient(script), wiring.WithoutCoordinatorLoop())
-	rec := installRecordingProviderHTTP(t)
+	rec := &recordingProviderExchange{}
+	h := wiring.BuildForTest(t, wiring.WithWebResearchExchange(rec.Exchange), wiring.WithLLMClient(script), wiring.WithoutCoordinatorLoop())
 	enableBraveSearchOnly(t, h.Server)
 
 	dir := h.ProjectDir(t, "j4")
@@ -156,8 +157,8 @@ func TestOutboundSecretFloorJ5ReadAloneDoesNotAsk(t *testing.T) {
 		toolStep("Searching.", call("ws1", "web_search", map[string]any{"query": "weather today"})),
 		textStep("Done."),
 	)
-	h := wiring.BuildForTest(t, wiring.WithLLMClient(script), wiring.WithoutCoordinatorLoop())
-	rec := installRecordingProviderHTTP(t)
+	rec := &recordingProviderExchange{}
+	h := wiring.BuildForTest(t, wiring.WithWebResearchExchange(rec.Exchange), wiring.WithLLMClient(script), wiring.WithoutCoordinatorLoop())
 	enableBraveSearchOnly(t, h.Server)
 	setGlobalApprovalPosture(t, h.Server, "light")
 
@@ -199,8 +200,8 @@ func TestOutboundSecretFloorJ5SendingTheValueAsks(t *testing.T) {
 		toolStep("Searching.", call("ws1", "web_search", map[string]any{"query": "what is " + outboundSecretCanary})),
 		textStep("Done."),
 	)
-	h := wiring.BuildForTest(t, wiring.WithLLMClient(script), wiring.WithoutCoordinatorLoop())
-	rec := installRecordingProviderHTTP(t)
+	rec := &recordingProviderExchange{}
+	h := wiring.BuildForTest(t, wiring.WithWebResearchExchange(rec.Exchange), wiring.WithLLMClient(script), wiring.WithoutCoordinatorLoop())
 	enableBraveSearchOnly(t, h.Server)
 	setGlobalApprovalPosture(t, h.Server, "light")
 
@@ -236,8 +237,8 @@ func TestOutboundSecretFloorJ5HarvestedValueAsks(t *testing.T) {
 		toolStep("Searching.", call("ws1", "web_search", map[string]any{"query": "what is " + outboundHarvestCanary})),
 		textStep("Done."),
 	)
-	h := wiring.BuildForTest(t, wiring.WithLLMClient(script), wiring.WithSecretMatcher(secretmatch.NewInertMatcher()), wiring.WithoutCoordinatorLoop())
-	rec := installRecordingProviderHTTP(t)
+	rec := &recordingProviderExchange{}
+	h := wiring.BuildForTest(t, wiring.WithWebResearchExchange(rec.Exchange), wiring.WithLLMClient(script), wiring.WithSecretMatcher(&secretmatch.Matcher{}), wiring.WithoutCoordinatorLoop())
 	enableBraveSearchOnly(t, h.Server)
 	setGlobalApprovalPosture(t, h.Server, "light")
 
@@ -276,12 +277,12 @@ func TestOutboundSecretFloorJ6InertMatcherParity(t *testing.T) {
 		toolStep("Searching.", call("ws1", "web_search", map[string]any{"query": query})),
 		textStep("Sent."),
 	)
-	h := wiring.BuildForTest(t,
+	rec := &recordingProviderExchange{}
+	h := wiring.BuildForTest(t, wiring.WithWebResearchExchange(rec.Exchange),
 		wiring.WithLLMClient(script),
-		wiring.WithSecretMatcher(secretmatch.NewInertMatcher()),
+		wiring.WithSecretMatcher(&secretmatch.Matcher{}),
 		wiring.WithoutCoordinatorLoop(),
 	)
-	rec := installRecordingProviderHTTP(t)
 	enableBraveSearchOnly(t, h.Server)
 
 	// No evidence is seeded: an inert pattern detector still screens harvested values.
@@ -329,8 +330,8 @@ func TestOutboundSecretFloorJ1OffPostureStillAsks(t *testing.T) {
 		toolStep("Searching.", call("ws1", "web_search", map[string]any{"query": query})),
 		textStep("Stopped."),
 	)
-	h := wiring.BuildForTest(t, wiring.WithLLMClient(script), wiring.WithoutCoordinatorLoop())
-	rec := installRecordingProviderHTTP(t)
+	rec := &recordingProviderExchange{}
+	h := wiring.BuildForTest(t, wiring.WithWebResearchExchange(rec.Exchange), wiring.WithLLMClient(script), wiring.WithoutCoordinatorLoop())
 	enableBraveSearchOnly(t, h.Server)
 	setGlobalApprovalPosture(t, h.Server, "light")
 

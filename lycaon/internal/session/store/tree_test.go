@@ -15,20 +15,20 @@ import (
 func TestSessionTreeMembers(t *testing.T) {
 
 	dir := t.TempDir()
-	database := testdbfixture.OpenPath(t, filepath.Join(dir, "store.db"))
+	database := testdbfixture.OpenPath(t, filepath.Join(dir, "store.core.db.db"))
 	testdbseed.InsertProjectRoot(t, database, testdbseed.DefaultProjectID, dir)
 	s := NewSQL(database)
 
 	ctx := t.Context()
-	root, err := s.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
+	root, err := s.Sessions.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create root", err)
-	_, err = s.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
+	_, err = s.Sessions.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create unrelated session", err)
-	child, err := s.CreateChild(ctx, root, api.SpawnChildRequest{AgentType: "implementer"})
+	child, err := s.Sessions.CreateChild(ctx, root, api.SpawnChildRequest{AgentType: "implementer"})
 	testutil.FailErr(t, "create child", err)
-	grandchild, err := s.CreateChild(ctx, child, api.SpawnChildRequest{AgentType: "implementer"})
+	grandchild, err := s.Sessions.CreateChild(ctx, child, api.SpawnChildRequest{AgentType: "implementer"})
 	testutil.FailErr(t, "create grandchild", err)
-	members, err := s.SessionTreeMembers(ctx, root.ID)
+	members, err := s.Sessions.SessionTreeMembers(ctx, root.ID)
 	testutil.FailErr(t, "load tree", err)
 	if len(members) != 3 {
 		t.Fatalf("tree has %d members, want 3", len(members))
@@ -38,13 +38,13 @@ func TestSessionTreeMembers(t *testing.T) {
 			t.Fatalf("member %d = %+v, want identity of %+v", i, members[i], want)
 		}
 	}
-	_, err = s.SessionTreeMembers(ctx, "missing")
+	_, err = s.Sessions.SessionTreeMembers(ctx, "missing")
 	if !errors.Is(err, ErrSessionNotFound) {
 		t.Fatalf("missing root error = %v", err)
 	}
 	canceled, cancel := context.WithCancel(ctx)
 	cancel()
-	_, err = s.SessionTreeMembers(canceled, root.ID)
+	_, err = s.Sessions.SessionTreeMembers(canceled, root.ID)
 	if !errors.Is(err, context.Canceled) {
 		t.Fatalf("canceled query error = %v", err)
 	}

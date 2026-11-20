@@ -127,9 +127,9 @@ func TestLoadEffectiveBindingsDuplicateKey(t *testing.T) {
 		Packs:   []extpacks.PackContent{a, b},
 		Desired: enabledExtensionPacks("acme/bindings-a", "acme/bindings-b"),
 	})
-	_, diags, err := extpacks.LoadEffectiveBindings(eff)
-	if err == nil {
-		t.Fatal("expected duplicate key error")
+	list, diags, err := extpacks.LoadEffectiveBindings(eff)
+	if err == nil || list != nil {
+		t.Fatalf("duplicate key must reject the full binding set: list=%v, err=%v", list, err)
 	}
 	found := false
 	for _, d := range diags {

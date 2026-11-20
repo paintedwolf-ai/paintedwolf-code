@@ -9,7 +9,6 @@ import (
 )
 
 func TestBoardHostUsesRuntimePlatform(t *testing.T) {
-	platform.SetBoardHostOverride(nil)
 	host := platform.BoardHost(api.ExecutionTargetLocal)
 	if host == nil {
 		t.Fatal("expected host facts")
@@ -25,22 +24,14 @@ func TestBoardHostUsesRuntimePlatform(t *testing.T) {
 	}
 }
 
-func TestBoardHostOverride(t *testing.T) {
-	t.Cleanup(func() { platform.SetBoardHostOverride(nil) })
-	platform.SetBoardHostOverride(&api.BoardHostSlice{
-		OS:              "linux",
-		Arch:            "amd64",
-		ExecutionTarget: api.ExecutionTargetRunner,
-		Shell:           false,
-	})
-	host := platform.BoardHost(api.ExecutionTargetLocal)
-	if host.OS != "linux" || host.Arch != "amd64" {
-		t.Fatalf("override not applied: %+v", host)
-	}
-	if host.ExecutionTarget != api.ExecutionTargetRunner {
-		t.Fatalf("execution_target = %q", host.ExecutionTarget)
-	}
-	if host.Shell {
-		t.Fatal("expected shell=false from override")
+func TestBoardHostExecutionTarget(t *testing.T) {
+	for _, target := range []api.ExecutionTarget{api.ExecutionTargetLocal, api.ExecutionTargetRunner, ""} {
+		want := target
+		if want == "" {
+			want = api.ExecutionTargetLocal
+		}
+		if got := platform.BoardHost(target).ExecutionTarget; got != want {
+			t.Errorf("execution target %q produced %q, want %q", target, got, want)
+		}
 	}
 }

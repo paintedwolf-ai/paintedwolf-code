@@ -3,10 +3,12 @@ package egressproxy_test
 import (
 	"context"
 	"encoding/binary"
+	"errors"
 	"io"
 	"net"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/lycaon/lycaon/internal/egressproxy"
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -58,11 +60,11 @@ func TestSocksRefusesAfterTheLeaseEnds(t *testing.T) {
 		return true
 	}, leasedPeer("live"))
 	p.SetLeaseCheck(func(string) bool { return live.Load() })
-	p.SetDialEndpointForTest(func(context.Context, egressproxy.Endpoint) (net.Conn, error) {
+	dialEndpoint := func(context.Context, egressproxy.Endpoint) (net.Conn, error) {
 		dialed = true
 		return nil, io.EOF
-	})
-	addrs, err := p.Start()
+	}
+	addrs, err := p.Start(egressproxy.Options{DialEndpoint: dialEndpoint})
 	testutil.FailErr(t, "Start", err)
 	defer func() { _ = p.Close() }()
 
@@ -93,11 +95,11 @@ func TestSocksRechecksTheLeaseAfterAParkedDecision(t *testing.T) {
 		return true
 	}, leasedPeer("live"))
 	p.SetLeaseCheck(func(string) bool { return live.Load() })
-	p.SetDialEndpointForTest(func(context.Context, egressproxy.Endpoint) (net.Conn, error) {
+	dialEndpoint := func(context.Context, egressproxy.Endpoint) (net.Conn, error) {
 		dialed = true
 		return nil, io.EOF
-	})
-	addrs, err := p.Start()
+	}
+	addrs, err := p.Start(egressproxy.Options{DialEndpoint: dialEndpoint})
 	testutil.FailErr(t, "Start", err)
 	defer func() { _ = p.Close() }()
 
@@ -168,13 +170,13 @@ func TestSocksConnectDomainAfterAllow(t *testing.T) {
 		resolved.Store(true)
 		return true
 	}, leasedPeer("tok"))
-	p.SetDialEndpointForTest(func(context.Context, egressproxy.Endpoint) (net.Conn, error) {
+	dialEndpoint := func(context.Context, egressproxy.Endpoint) (net.Conn, error) {
 		if !resolved.Load() {
 			t.Fatal("dial before allow decision")
 		}
 		return net.Dial("tcp", upstream.Addr().String())
-	})
-	addrs, err := p.Start()
+	}
+	addrs, err := p.Start(egressproxy.Options{DialEndpoint: dialEndpoint})
 	testutil.FailErr(t, "Start", err)
 	defer func() { _ = p.Close() }()
 
@@ -197,11 +199,11 @@ func TestSocksConnectDomainAfterAllow(t *testing.T) {
 func TestSocksDenySkipsDial(t *testing.T) {
 	dialed := false
 	p := brokerWith(func(context.Context, string, egressproxy.Endpoint) bool { return false }, leasedPeer("tok"))
-	p.SetDialEndpointForTest(func(context.Context, egressproxy.Endpoint) (net.Conn, error) {
+	dialEndpoint := func(context.Context, egressproxy.Endpoint) (net.Conn, error) {
 		dialed = true
 		return nil, io.EOF
-	})
-	addrs, err := p.Start()
+	}
+	addrs, err := p.Start(egressproxy.Options{DialEndpoint: dialEndpoint})
 	testutil.FailErr(t, "Start", err)
 	defer func() { _ = p.Close() }()
 
@@ -220,11 +222,11 @@ func TestSocksRejectsBindAndUDPAssociate(t *testing.T) {
 		t.Fatal("policy must not run for unsupported commands")
 		return true
 	}, leasedPeer("tok"))
-	p.SetDialEndpointForTest(func(context.Context, egressproxy.Endpoint) (net.Conn, error) {
+	dialEndpoint := func(context.Context, egressproxy.Endpoint) (net.Conn, error) {
 		t.Fatal("dial must not run for unsupported commands")
 		return nil, io.EOF
-	})
-	addrs, err := p.Start()
+	}
+	addrs, err := p.Start(egressproxy.Options{DialEndpoint: dialEndpoint})
 	testutil.FailErr(t, "Start", err)
 	defer func() { _ = p.Close() }()
 
@@ -255,25 +257,32 @@ func TestSocksRejectsBindAndUDPAssociate(t *testing.T) {
 
 func TestStartRollbackOnSocksFailure(t *testing.T) {
 	p := egressproxy.New(nil)
+	var httpListener net.Listener
 	calls := 0
-	_, err := p.Start(egressproxy.Options{
-		ListenHTTP: net.Listen,
+	addrs, err := p.Start(egressproxy.Options{
+		ListenHTTP: func(network, address string) (net.Listener, error) {
+			listener, err := net.Listen(network, address)
+			if err == nil {
+				httpListener = listener
+				t.Cleanup(func() { _ = listener.Close() })
+			}
+			return listener, err
+		},
 		ListenSOCKS: func(network, address string) (net.Listener, error) {
 			calls++
 			return nil, io.EOF
 		},
 	})
+	if !errors.Is(err, io.EOF) || addrs != (egressproxy.Addrs{}) {
+		t.Fatalf("failed start published endpoint or lost its error: addrs=%+v err=%v", addrs, err)
+	}
+	if calls != 1 || httpListener == nil {
+		t.Fatalf("HTTP must start before the failed SOCKS listen: calls=%d listener=%v", calls, httpListener)
+	}
+	conn, err := net.DialTimeout("tcp", httpListener.Addr().String(), time.Second)
 	if err == nil {
-		t.Fatal("expected socks failure")
-	}
-	if calls != 1 {
-		t.Fatalf("socks listen calls=%d", calls)
-	}
-	if p.Addr() != "" {
-		t.Fatal("http listener must not remain published")
-	}
-	if p.SocksAddr() != "" {
-		t.Fatal("socks listener must not remain published")
+		_ = conn.Close()
+		t.Fatal("HTTP listener accepted a connection after start rolled back")
 	}
 }
 

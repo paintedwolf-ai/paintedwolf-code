@@ -17,7 +17,7 @@ func TestEnqueueReplaysSourceToolCallAndRejectsDifferentArguments(t *testing.T) 
 	database := testdbfixture.Open(t, "store.db")
 	root := t.TempDir()
 	testdbseed.InsertSessionWithRoot(t, database, "parent-1", testdbseed.DefaultProjectID, root)
-	queue := NewSQLQueue(database, 2)
+	queue := NewSQLServices(database, 2).Queue
 	task := api.WorkerTask{
 		ParentSessionID: "parent-1", SourceToolCallID: "call-1", SourceArgsDigest: "digest-a",
 		ProjectID: testdbseed.DefaultProjectID, WorkspacePath: root, AgentType: "implementer",

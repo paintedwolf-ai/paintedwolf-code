@@ -13,6 +13,7 @@ import (
 	"github.com/lycaon/lycaon/internal/messageview"
 	"github.com/lycaon/lycaon/internal/prompts/promptstest"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/testutil/llmtest"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -93,7 +94,7 @@ func TestSessionCompactionRecordCarriesRemovedHandles(t *testing.T) {
 	for i := range msgs {
 		msgs[i].Ord = int64(i + 1)
 	}
-	c := NewSimpleCompactor(cfg, MockSummarizer{Text: "compacted context"})
+	c := NewSimpleCompactor(cfg, llmtest.Summarizer{Structured: SummaryFormatRequested, Text: "compacted context"})
 	out, report, err := c.Compact(context.Background(), SessionInfo{ID: "s1", RecallAvailable: true}, msgs, 100)
 	testutil.FailErr(t, "Compact", err)
 	if !report.SessionCompacted {
@@ -121,7 +122,7 @@ func TestShrunkChunkBannerNamesRecallHandle(t *testing.T) {
 	cfg := testCompactionConfig()
 	cfg.ChunkTokenThreshold = 100
 	cfg.ChunkTargetTokens = 200
-	compactor := NewChunkCompactor(cfg, MockSummarizer{Text: "errors in main.go"})
+	compactor := NewChunkCompactor(cfg, llmtest.Summarizer{Structured: SummaryFormatRequested, Text: "errors in main.go"})
 	content := strings.Repeat("line\n", 500)
 	chunk := ContentChunk{Class: testChunkDiet("command", ""), MessageIndex: 0, Kind: ChunkKindToolResult, ToolName: "command", EvidenceHandles: []string{"command#3"}, Tokens: 500}
 	out, _, err := compactor.CompactChunk(context.Background(), chunk, content)
@@ -151,7 +152,7 @@ func TestChunkPassForwardsRowHandlesToBanner(t *testing.T) {
 		{ID: "t1", Role: string(api.MessageRoleTool), ToolName: "git_diff", Content: strings.Repeat("line\n", 4000), EvidenceHandles: []string{"git_diff#12"}},
 		{ID: "a2", Role: string(api.MessageRoleAssistant), Content: "aged past hot"},
 	}
-	c := NewSimpleCompactor(cfg, MockSummarizer{Text: "orientation summary"})
+	c := NewSimpleCompactor(cfg, llmtest.Summarizer{Structured: SummaryFormatRequested, Text: "orientation summary"})
 	out, n := c.CompactOversizedChunksOnly(context.Background(), SessionInfo{}, msgs)
 	if n == 0 {
 		t.Fatal("aged oversized tool result must shrink")

@@ -11,6 +11,7 @@ import (
 	"github.com/lycaon/lycaon/internal/orchestration"
 	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/testutil/llmtest"
 	"github.com/lycaon/lycaon/pkg/api"
 	"github.com/lycaon/lycaon/test/wiring"
 )
@@ -57,20 +58,19 @@ func workerL1s(reqs []modelcall.CompletionRequest) []string {
 
 type personaHarness struct {
 	h      *wiring.Harness
-	rec    *llm.RecordingClient
+	rec    *llmtest.RecordingClient
 	parent api.Session
 	dir    string
 }
 
 func newPersonaHarness(t *testing.T) personaHarness {
 	t.Helper()
-	rec := llm.NewRecordingClient(llm.NewMockProvider(&llm.MockConfig{Responses: []llm.MockResponseEntry{{
+	rec := llmtest.NewRecordingClient(llm.NewMockProvider(&llm.MockConfig{Responses: []llm.MockResponseEntry{{
 		Pattern: ".",
 		Text:    "implementation complete",
 	}}}))
 	h := wiring.BuildForTest(t, wiring.WithLLMClient(rec))
-	cancel := h.StartBackgroundWorkers(t, context.Background())
-	t.Cleanup(cancel)
+	h.Start(t)
 	dir := t.TempDir()
 	parent, err := h.CreateHarnessSession(t, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, dir)
 	testutil.FailErr(t, "CreateHarnessSession failed", err)

@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/progress"
+	"github.com/lycaon/lycaon/internal/progress/progresstest"
 )
 
 var progressKeySeq atomic.Uint64
@@ -169,8 +170,8 @@ func TestCloseCounts(t *testing.T) {
 	}
 }
 
-func TestMemoryStore_roundtrip(t *testing.T) {
-	s := progress.NewMemoryStore()
+func TestProgressStoreRoundTrip(t *testing.T) {
+	s := progresstest.New(t, "root-1")
 	s.Set("root-1", "- [ ] a")
 	if got := s.Get(t.Context(), "root-1"); got != "- [ ] a" {
 		t.Fatalf("Get = %q", got)

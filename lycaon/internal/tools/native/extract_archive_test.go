@@ -256,7 +256,7 @@ func TestExtractEntryLimitPrecedesCommit(t *testing.T) {
 			tc.write(t, filepath.Join(tmpDir, name), map[string]string{"one.txt": "x", "two.txt": "x"})
 			tctx := nativefixture.Context(tmpDir)
 			tool := &ExtractArchiveTool{Boundary: extractTestBoundary(t)}
-			archive, _, _, err := tool.loadArchive(t.Context(), tctx, name, tctx.ProfileID())
+			archive, _, _, err := tool.loadArchive(t.Context(), tctx, name)
 			testutil.FailErr(t, "load archive", err)
 			dest, _, err := tool.prepareDest(t.Context(), tctx, "out", tctx.ProfileID())
 			testutil.FailErr(t, "prepare destination", err)

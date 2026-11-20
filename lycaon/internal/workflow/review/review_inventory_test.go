@@ -3,13 +3,13 @@ package review_test
 import (
 	"encoding/json"
 	"errors"
+	"github.com/lycaon/lycaon/internal/testutil/conditionstest"
 	"github.com/lycaon/lycaon/internal/toolrejection"
 	workflow "github.com/lycaon/lycaon/internal/workflow"
 	workflowreview "github.com/lycaon/lycaon/internal/workflow/review"
 	runstate "github.com/lycaon/lycaon/internal/workflow/runstate"
 	"testing"
 
-	"github.com/lycaon/lycaon/internal/conditions"
 	"github.com/lycaon/lycaon/internal/testutil"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 	"github.com/lycaon/lycaon/pkg/api"
@@ -18,7 +18,7 @@ import (
 func startInventoryReview(t *testing.T) (*workflow.RunManager, *api.WorkflowRun, string) {
 	t.Helper()
 	mgr, _, blueprints, dir := testManager(t)
-	setTestRegistry(t, mgr, blueprints, conditions.TestRegistryDeps())
+	setTestRegistry(t, mgr, blueprints, conditionstest.Dependencies())
 	manifest := reviewLoopTestManifest()
 	manifest.PhaseDefs[0].ActivityLabel = "Reviewing inventory"
 	manifest.PhaseDefs[1].ActivityLabel = "Done"

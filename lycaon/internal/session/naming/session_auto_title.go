@@ -9,14 +9,14 @@ import (
 )
 
 func (m *Service) SessionFromPrompt(ctx context.Context, sess *wire.Session, promptText string) {
-	if m == nil || m.store == nil || sess == nil {
+	if m == nil || m.sessionStore == nil || sess == nil {
 		return
 	}
 	text := strings.TrimSpace(promptText)
 	if text == "" || sess.IsWorkerChild() {
 		return
 	}
-	current, err := m.store.Get(ctx, sess.ID)
+	current, err := m.sessionStore.Get(ctx, sess.ID)
 	if err != nil || current == nil || strings.TrimSpace(current.Title) != "" {
 		return
 	}
@@ -25,7 +25,7 @@ func (m *Service) SessionFromPrompt(ctx context.Context, sess *wire.Session, pro
 	if title == "" {
 		return
 	}
-	updated, err := m.store.UpdateTitleIfUnset(ctx, sess.ID, title)
+	updated, err := m.sessionStore.UpdateTitleIfUnset(ctx, sess.ID, title)
 	if err != nil || !updated {
 		return
 	}
@@ -43,13 +43,13 @@ func (m *Service) PublishSession(ctx context.Context, sess *wire.Session, title 
 	if m.publisher == nil || m.publisher.Hub == nil {
 		return
 	}
-	if m.store.MutationEventsOutboxed() {
+	if m.sessionStore.SessionEventsOutboxed() {
 		return
 	}
 	status := sess.Status
 	// Use the stored status when the turn snapshot is stale.
-	if m.store != nil {
-		if fresh, err := m.store.Get(ctx, sess.ID); err == nil && fresh != nil {
+	if m.sessionStore != nil {
+		if fresh, err := m.sessionStore.Get(ctx, sess.ID); err == nil && fresh != nil {
 			status = fresh.Status
 		}
 	}
@@ -60,7 +60,7 @@ func (m *Service) PublishSession(ctx context.Context, sess *wire.Session, title 
 		Title:            title,
 		Status:           status,
 		LastMessage:      m.lastMessage(ctx, sess.ID),
-		UntrustedContent: m.store.SessionUntrustedContent(sess.ID),
+		UntrustedContent: m.evidenceStore.SessionUntrustedContent(sess.ID),
 	}
 	key := events.PublishKey{Project: strings.TrimSpace(sess.ProjectID)}
 	_ = m.publisher.Hub.Publish(ctx, wire.EventTopicSession, key, ev)

@@ -20,11 +20,11 @@ func TestLiveRunnerRescuesItsClaimBeforeExpirySweep(t *testing.T) {
 	testdbseed.InsertProjectRoot(t, sqlDB, testdbseed.DefaultProjectID, projectDir)
 	store := scanbase.NewSQLStore(sqlDB)
 	store.SetEventOutbox(eventoutbox.New(sqlDB, nil))
-	testutil.FailErr(t, "insert", store.Insert(t.Context(), api.CodeScan{
+	testutil.FailErr(t, "insert", store.Runs.Insert(t.Context(), api.CodeScan{
 		ID: "scan-resume", CanonicalPath: projectDir, Categories: []api.ScanCategory{api.ScanCategorySAST},
 		Status: api.CodeScanStatusPending, SourceSnapshotID: "snapshot-1",
 	}, nil, ""))
-	claimed, err := store.ClaimNext(t.Context())
+	claimed, err := store.Runs.ClaimNext(t.Context())
 	testutil.FailErr(t, "claim", err)
 	_, err = sqlDB.ExecContext(t.Context(), `UPDATE code_scans SET lease_expires_at = ? WHERE id = ?`, timelayout.Format(time.Now().Add(-time.Minute)), claimed.ID)
 	testutil.FailErr(t, "expire", err)
@@ -33,7 +33,7 @@ func TestLiveRunnerRescuesItsClaimBeforeExpirySweep(t *testing.T) {
 	_, execution := runner.registerExecution(t.Context(), claimed)
 	defer runner.unregisterExecution(claimed.ID, execution)
 	runner.renewActiveClaims(t.Context())
-	recovered, err := store.RecoverExpiredClaims(t.Context())
+	recovered, err := store.Runs.RecoverExpiredClaims(t.Context())
 	testutil.FailErr(t, "recover after rescue", err)
 	if len(recovered) != 0 {
 		t.Fatalf("recovered live claim = %+v", recovered)

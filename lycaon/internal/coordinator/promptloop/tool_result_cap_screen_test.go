@@ -42,7 +42,7 @@ func TestCappedToolResultLeavesNoSecretFragmentAnywhere(t *testing.T) {
 	sqlDB := testdbfixture.OpenPath(t, dbPath)
 	testdbseed.InsertProjectRoot(t, sqlDB, testdbseed.DefaultProjectID, dir)
 	sqlStore := storepkg.NewSQL(sqlDB)
-	sess, err := sqlStore.Create(context.Background(), api.CreateSessionRequest{
+	sess, err := sqlStore.Sessions.Create(context.Background(), api.CreateSessionRequest{
 		Posture:   api.SessionPostureBuild,
 		ProjectID: testdbseed.DefaultProjectID,
 	}, testdbseed.DefaultProjectID)
@@ -61,10 +61,10 @@ func TestCappedToolResultLeavesNoSecretFragmentAnywhere(t *testing.T) {
 			RedactMessageForStorage: testStorageRedactor,
 			AppendMessages: func(ctx context.Context, sessionID string, msgs ...api.Message) error {
 				appended = append(appended, msgs...)
-				return sqlStore.AppendMessages(ctx, sessionID, msgs...)
+				return sqlStore.Transcript.AppendMessages(ctx, sessionID, msgs...)
 			},
 			UpdateMessage: func(ctx context.Context, sessionID, messageID string, msg api.Message) error {
-				_, updateErr := sqlStore.UpdateMessage(ctx, sessionID, messageID, msg)
+				_, updateErr := sqlStore.Transcript.UpdateMessage(ctx, sessionID, messageID, msg)
 				return updateErr
 			},
 		},
@@ -78,7 +78,7 @@ func TestCappedToolResultLeavesNoSecretFragmentAnywhere(t *testing.T) {
 	rawArgs := map[string]any{"path": ".env"}
 	projection := loop.Projection.projectToolResultForStorage(context.Background(), rawContent, rawArgs)
 	projected := loop.Tools.truncateToolResultForSession(
-		context.Background(), "read", "", projection, rawContent, maxBytes, 0, sess,
+		context.Background(), "read", projection, rawContent, maxBytes, 0, sess,
 	)
 	if !strings.Contains(projected.content, "Code: TOOL_OUTPUT_TRUNCATED") {
 		t.Fatalf("test does not exercise the inline cap: %q", projected.content[:min(len(projected.content), 200)])

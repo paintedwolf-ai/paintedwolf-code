@@ -5,16 +5,16 @@ import (
 	"sync/atomic"
 	"testing"
 
-	"github.com/lycaon/lycaon/internal/llm"
 	"github.com/lycaon/lycaon/internal/llm/modelcall"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/testutil/llmtest"
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
 
 func TestContextDietRoutingToTaskDispatch(t *testing.T) {
 	var stage atomic.Int32
-	mock := llm.NewKickDrivenMock(llm.KickDrivenConfig{
-		Fallback: func(_ context.Context, _ llm.Snapshot) modelcall.Completion {
+	mock := llmtest.NewKickDrivenMock(llmtest.KickDrivenConfig{
+		Fallback: func(_ context.Context, _ llmtest.Snapshot) modelcall.Completion {
 			if stage.Load() == 0 {
 				stage.Store(1)
 				return modelcall.Completion{

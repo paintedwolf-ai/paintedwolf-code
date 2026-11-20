@@ -222,7 +222,7 @@ func (m *Service) ObserveMintedCredential(ctx context.Context, sess *api.Session
 	if len(values) == 0 {
 		return
 	}
-	m.rememberSecrets(sessiontree.RootID(ctx, m.store, sess.ID), values)
+	m.rememberSecrets(sessiontree.RootID(ctx, m.sessionStore, sess.ID), values)
 }
 
 // ObserveEditorConfigMismatch publishes a tool-stated mismatch and its details

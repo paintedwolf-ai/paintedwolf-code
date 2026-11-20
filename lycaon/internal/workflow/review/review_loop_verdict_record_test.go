@@ -2,15 +2,15 @@ package review_test
 
 import (
 	"context"
-	workflow "github.com/lycaon/lycaon/internal/workflow"
-	runstate "github.com/lycaon/lycaon/internal/workflow/runstate"
 	"testing"
 
-	"github.com/lycaon/lycaon/internal/conditions"
 	"github.com/lycaon/lycaon/internal/evidence"
 	"github.com/lycaon/lycaon/internal/inspector"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/testutil/conditionstest"
+	workflow "github.com/lycaon/lycaon/internal/workflow"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
+	runstate "github.com/lycaon/lycaon/internal/workflow/runstate"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -53,7 +53,7 @@ func startReviewLoopRun(ctx context.Context, t *testing.T, mgr *workflow.RunMana
 
 func TestRecordReviewLoopVerdictPersistsAnchoredEvidence(t *testing.T) {
 	mgr, _, blueprintMgr, _ := testManager(t)
-	setTestRegistry(t, mgr, blueprintMgr, conditions.TestRegistryDeps())
+	setTestRegistry(t, mgr, blueprintMgr, conditionstest.Dependencies())
 	ctx := context.Background()
 
 	hostDir := t.TempDir()
@@ -124,7 +124,7 @@ func TestRecordReviewLoopVerdictPersistsAnchoredEvidence(t *testing.T) {
 
 func TestRecordReviewLoopVerdictPersistsNonTerminal(t *testing.T) {
 	mgr, _, blueprintMgr, _ := testManager(t)
-	setTestRegistry(t, mgr, blueprintMgr, conditions.TestRegistryDeps())
+	setTestRegistry(t, mgr, blueprintMgr, conditionstest.Dependencies())
 	ctx := context.Background()
 
 	hostDir := t.TempDir()
@@ -151,7 +151,7 @@ func TestRecordReviewLoopVerdictPersistsNonTerminal(t *testing.T) {
 
 func TestRecordReviewLoopVerdictSkipsUngroundedAndInvalid(t *testing.T) {
 	mgr, _, blueprintMgr, _ := testManager(t)
-	setTestRegistry(t, mgr, blueprintMgr, conditions.TestRegistryDeps())
+	setTestRegistry(t, mgr, blueprintMgr, conditionstest.Dependencies())
 	ctx := context.Background()
 
 	hostDir := t.TempDir()
@@ -185,7 +185,7 @@ func TestRecordReviewLoopVerdictSkipsUngroundedAndInvalid(t *testing.T) {
 
 func TestRecordReviewLoopVerdictInvalidHolds(t *testing.T) {
 	mgr, _, blueprintMgr, _ := testManager(t)
-	setTestRegistry(t, mgr, blueprintMgr, conditions.TestRegistryDeps())
+	setTestRegistry(t, mgr, blueprintMgr, conditionstest.Dependencies())
 	ctx := context.Background()
 	run := startReviewLoopRun(ctx, t, mgr)
 
@@ -222,7 +222,7 @@ func TestRecordReviewLoopVerdictInvalidHolds(t *testing.T) {
 
 func TestRecordReviewLoopVerdictIterationCap(t *testing.T) {
 	mgr, _, blueprintMgr, _ := testManager(t)
-	setTestRegistry(t, mgr, blueprintMgr, conditions.TestRegistryDeps())
+	setTestRegistry(t, mgr, blueprintMgr, conditionstest.Dependencies())
 	ctx := context.Background()
 	run := startReviewLoopRun(ctx, t, mgr) // rltest judge: iteration_cap 2
 
@@ -281,7 +281,7 @@ func TestRecordReviewLoopVerdictIterationCap(t *testing.T) {
 
 func TestRecordReviewLoopVerdictRequiresSucceededAgent(t *testing.T) {
 	mgr, _, blueprintMgr, _ := testManager(t)
-	setTestRegistry(t, mgr, blueprintMgr, conditions.TestRegistryDeps())
+	setTestRegistry(t, mgr, blueprintMgr, conditionstest.Dependencies())
 	ctx := context.Background()
 	manifest := workflowdef.FinalizeManifest(workflowdef.Manifest{
 		ID:       "rlagents",
@@ -322,7 +322,7 @@ func TestRecordReviewLoopVerdictRequiresSucceededAgent(t *testing.T) {
 		t.Fatalf("phase = %q want judge", held.CurrentPhase)
 	}
 
-	testutil.FailErr(t, "AppendMessages", mgr.Verdicts.Sessions.AppendMessages(ctx, "sess-1", api.Message{
+	testutil.FailErr(t, "AppendMessages", mgr.Transcript.TranscriptStore.AppendMessages(ctx, "sess-1", api.Message{
 		Role: api.MessageRoleTool,
 		WorkerSummary: &api.WorkerSummaryMeta{
 			WorkerID:  "job-skeptic",
@@ -376,7 +376,7 @@ func ifSpawnableReviewManifest() workflowdef.Manifest {
 
 func TestRecordReviewLoopVerdictIfSpawnableEmptySnapshot(t *testing.T) {
 	mgr, _, blueprintMgr, _ := testManager(t)
-	setTestRegistry(t, mgr, blueprintMgr, conditions.TestRegistryDeps())
+	setTestRegistry(t, mgr, blueprintMgr, conditionstest.Dependencies())
 	ctx := context.Background()
 	mgr.Phases.ReviewSpawnFilter = func(_ context.Context, _, _ string, _ []string) []string {
 		return nil
@@ -385,7 +385,7 @@ func TestRecordReviewLoopVerdictIfSpawnableEmptySnapshot(t *testing.T) {
 	run, err := startRun(ctx, mgr, "sess-1", "rlspawn", "1.0.0")
 	testutil.FailErr(t, "startRun", err)
 
-	testutil.FailErr(t, "AppendMessages skeptic", mgr.Verdicts.Sessions.AppendMessages(ctx, "sess-1", api.Message{
+	testutil.FailErr(t, "AppendMessages skeptic", mgr.Transcript.TranscriptStore.AppendMessages(ctx, "sess-1", api.Message{
 		Role: api.MessageRoleTool,
 		WorkerSummary: &api.WorkerSummaryMeta{
 			WorkerID:  "job-skeptic",
@@ -414,13 +414,13 @@ func TestRecordReviewLoopVerdictIfSpawnableEmptySnapshot(t *testing.T) {
 
 func TestRecordReviewLoopVerdictIfSpawnableRequiresResearcher(t *testing.T) {
 	mgr, _, blueprintMgr, _ := testManager(t)
-	setTestRegistry(t, mgr, blueprintMgr, conditions.TestRegistryDeps())
+	setTestRegistry(t, mgr, blueprintMgr, conditionstest.Dependencies())
 	ctx := context.Background()
 	mgr.Resolver.Overlay = workflowdef.NewRegistry(map[string]workflowdef.Manifest{"rlspawn@1.0.0": ifSpawnableReviewManifest()})
 	run, err := startRun(ctx, mgr, "sess-1", "rlspawn", "1.0.0")
 	testutil.FailErr(t, "startRun", err)
 
-	testutil.FailErr(t, "AppendMessages skeptic", mgr.Verdicts.Sessions.AppendMessages(ctx, "sess-1", api.Message{
+	testutil.FailErr(t, "AppendMessages skeptic", mgr.Transcript.TranscriptStore.AppendMessages(ctx, "sess-1", api.Message{
 		Role: api.MessageRoleTool,
 		WorkerSummary: &api.WorkerSummaryMeta{
 			WorkerID:  "job-skeptic",
@@ -441,7 +441,7 @@ func TestRecordReviewLoopVerdictIfSpawnableRequiresResearcher(t *testing.T) {
 		t.Fatalf("outcome = %+v want missing web-researcher", out)
 	}
 
-	testutil.FailErr(t, "AppendMessages researcher", mgr.Verdicts.Sessions.AppendMessages(ctx, "sess-1", api.Message{
+	testutil.FailErr(t, "AppendMessages researcher", mgr.Transcript.TranscriptStore.AppendMessages(ctx, "sess-1", api.Message{
 		Role: api.MessageRoleTool,
 		WorkerSummary: &api.WorkerSummaryMeta{
 			WorkerID:  "job-research",
@@ -471,7 +471,7 @@ func TestRecordReviewLoopVerdictIfSpawnableRequiresResearcher(t *testing.T) {
 func TestRecordReviewLoopVerdictRequiresCapturedOptionalRoster(t *testing.T) {
 	for _, malformed := range []any{nil, true, []any{"web-researcher", 7}} {
 		mgr, _, blueprintMgr, _ := testManager(t)
-		setTestRegistry(t, mgr, blueprintMgr, conditions.TestRegistryDeps())
+		setTestRegistry(t, mgr, blueprintMgr, conditionstest.Dependencies())
 		ctx := context.Background()
 		mgr.Resolver.Overlay = workflowdef.NewRegistry(map[string]workflowdef.Manifest{"rlspawn@1.0.0": ifSpawnableReviewManifest()})
 		run, err := startRun(ctx, mgr, "sess-1", "rlspawn", "1.0.0")

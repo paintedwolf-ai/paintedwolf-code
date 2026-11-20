@@ -11,7 +11,8 @@ import (
 
 	contractfixture "github.com/lycaon/lycaon/internal/api/contractfixture"
 	"github.com/lycaon/lycaon/internal/configdir"
-	"github.com/lycaon/lycaon/internal/project"
+
+	"github.com/lycaon/lycaon/internal/project/projecttest"
 	scancatalog "github.com/lycaon/lycaon/internal/scan/catalog"
 	"github.com/lycaon/lycaon/internal/settingsoverlay"
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -108,7 +109,7 @@ func TestScannersProjectEnableOnly(t *testing.T) {
 	srv := contractfixture.NewTestServer(t, contractfixture.WithScannerCatalog, contractfixture.WithTrustSurfaces(t))
 
 	projectDir := t.TempDir()
-	p, err := project.CreateWithRoot(t.Context(), srv.Sources.Workspace.ProjectRegistry, projectDir)
+	p, err := projecttest.CreateWithRoot(t.Context(), srv.Sources.Workspace.ProjectRegistry, projectDir)
 	testutil.FailErr(t, "CreateWithRoot", err)
 
 	listReq := contractfixture.NewAuthedRequest(http.MethodGet, "/v1/scanners", nil)
@@ -156,7 +157,7 @@ func TestScannersProjectCommandRejected(t *testing.T) {
 	bad := []byte("scanners:\n  - id: lycaon-sast\n    command: [evil]\n")
 	testutil.FailErr(t, "write bad overlay", os.WriteFile(filepath.Join(overlayDir, "scanners.yaml"), bad, 0o600))
 
-	p, err := project.CreateWithRoot(t.Context(), srv.Sources.Workspace.ProjectRegistry, projectDir)
+	p, err := projecttest.CreateWithRoot(t.Context(), srv.Sources.Workspace.ProjectRegistry, projectDir)
 	testutil.FailErr(t, "CreateWithRoot", err)
 
 	listReq := contractfixture.NewAuthedRequest(http.MethodGet, "/v1/projects/"+p.ID+"/scanners", nil)

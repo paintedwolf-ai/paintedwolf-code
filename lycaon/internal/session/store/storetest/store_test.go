@@ -13,7 +13,7 @@ import (
 func TestFixturesPersistSessionsInIsolatedDatabases(t *testing.T) {
 	first := storetest.New(t, "project")
 	second := storetest.New(t, "project")
-	session, err := first.Create(t.Context(), api.CreateSessionRequest{}, "project")
+	session, err := first.Sessions.Create(t.Context(), api.CreateSessionRequest{}, "project")
 	testutil.FailErr(t, "create session", err)
 	if session.WorkspaceRootID == "" || session.WorkspacePath == "" {
 		t.Fatal("fixture has no attached workspace")
@@ -25,7 +25,7 @@ func TestFixturesPersistSessionsInIsolatedDatabases(t *testing.T) {
 		t.Fatal("workspace binding was not persisted")
 	}
 
-	if _, err := second.Get(t.Context(), session.ID); !errors.Is(err, store.ErrSessionNotFound) {
+	if _, err := second.Sessions.Get(t.Context(), session.ID); !errors.Is(err, store.ErrSessionNotFound) {
 		t.Fatalf("other fixture read session: %v", err)
 	}
 }

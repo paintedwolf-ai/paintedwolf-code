@@ -73,11 +73,8 @@ func ThreeWayMergeLines(base, target, worker []byte) ([]byte, bool) {
 	tLines := splitLinesKeepTerm(string(target))
 	wLines := splitLinesKeepTerm(string(worker))
 
-	tEdits, tOK := diffLineAnchored(bLines, tLines)
-	wEdits, wOK := diffLineAnchored(bLines, wLines)
-	if !tOK || !wOK {
-		return nil, false
-	}
+	tEdits := diffLineAnchored(bLines, tLines)
+	wEdits := diffLineAnchored(bLines, wLines)
 	return combineLineEdits(bLines, tEdits, wEdits)
 }
 
@@ -87,12 +84,12 @@ type lineEdit struct {
 	repl     []string
 }
 
-func diffLineAnchored(base, mod []string) ([]lineEdit, bool) {
+func diffLineAnchored(base, mod []string) []lineEdit {
 	if len(base) == 0 {
 		if len(mod) == 0 {
-			return nil, true
+			return nil
 		}
-		return []lineEdit{{startIdx: 0, endIdx: 0, repl: mod}}, true
+		return []lineEdit{{startIdx: 0, endIdx: 0, repl: mod}}
 	}
 	// Map unique anchor lines in base and mod for clean non-overlapping hunk extraction.
 	bAnchors, mAnchors := findSharedUniqueAnchors(base, mod)
@@ -109,7 +106,7 @@ func diffLineAnchored(base, mod []string) ([]lineEdit, bool) {
 	if ed, ok := trimmedLineEdit(base, mod, bPos, len(base), mPos, len(mod)); ok {
 		edits = append(edits, ed)
 	}
-	return edits, true
+	return edits
 }
 
 func trimmedLineEdit(base, mod []string, bStart, bEnd, mStart, mEnd int) (lineEdit, bool) {

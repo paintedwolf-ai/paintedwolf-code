@@ -1,6 +1,7 @@
 package evidence_test
 
 import (
+	"slices"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/evidence"
@@ -48,7 +49,7 @@ func TestGroundingSubstrateGolden(t *testing.T) {
 			t.Fatalf("handles = %v want %v", gotHandles, goldenExpectedHandles)
 		}
 	}
-	if !evidence.PathObserved(ev, "pkg/main.go") {
+	if !slices.Contains(evidence.ObservedPathsSorted(ev), "pkg/main.go") {
 		t.Fatalf("paths = %v", evidence.ObservedPathsSorted(ev))
 	}
 

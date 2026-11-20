@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/testutil/conditionstest"
 	"github.com/lycaon/lycaon/internal/workflow/runstate"
 	"testing"
 
@@ -57,7 +58,7 @@ func obligationTestManifest() workflowdef.Manifest {
 func wireTestObligation(t *testing.T, mgr *RunManager, obligation *stubWorkflowObligation) {
 	t.Helper()
 	mgr.Obligations.Register(obligation)
-	deps := conditions.TestRegistryDeps()
+	deps := conditionstest.Dependencies()
 	deps.ObligationResolvers = map[string]conditions.ObligationStatusReader{"scan": obligation}
 	reg, err := conditions.NewDefaultRegistry(deps)
 	testutil.FailErr(t, "conditions registry", err)

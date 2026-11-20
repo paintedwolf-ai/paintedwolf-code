@@ -16,13 +16,13 @@ import (
 func TestNativeCoverageQuerySummarizesFullScopeAndPagesLocations(t *testing.T) {
 	reg, _, store, dir := registerNativeScanTools(t)
 	for _, id := range []string{"scan-a", "scan-b"} {
-		testutil.FailErr(t, "insert scan", store.Insert(t.Context(), api.CodeScan{ID: id, CanonicalPath: dir, ScannerID: "scanner", Status: api.CodeScanStatusComplete, CreatedAt: time.Now().UTC()}, nil, ""))
+		testutil.FailErr(t, "insert scan", store.Runs.Insert(t.Context(), api.CodeScan{ID: id, CanonicalPath: dir, ScannerID: "scanner", Status: api.CodeScanStatusComplete, CreatedAt: time.Now().UTC()}, nil, ""))
 		var warnings []api.ScanWarning
 		for i := range 25 {
 			warnings = append(warnings, api.ScanWarning{Kind: "file_partial_semantics", File: fmt.Sprintf("service/src/f%02d.go", i), StartLine: i + 1, Construct: "indirect", Message: strings.Repeat("large diagnostic ", 100)})
 		}
 		warnings = append(warnings, api.ScanWarning{Kind: "file_partial_semantics", File: "service-extra/outside.go", Construct: "other"})
-		testutil.FailErr(t, "save warnings", store.SaveIngest(t.Context(), id, evidence.Record{Artifacts: map[string]any{"warnings": warnings}}))
+		testutil.FailErr(t, "save warnings", store.Findings.SaveIngest(t.Context(), id, evidence.Record{Artifacts: map[string]any{"warnings": warnings}}))
 	}
 	args := map[string]any{"scan_ids": []string{"scan-b", "scan-a"}, "view": "coverage", "path": "service", "warning_kind": "file_partial_semantics", "construct": "indirect", "limit": 7}
 	seen := map[string]bool{}

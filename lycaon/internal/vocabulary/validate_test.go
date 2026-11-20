@@ -8,6 +8,7 @@ import (
 	"github.com/lycaon/lycaon/config"
 	"github.com/lycaon/lycaon/internal/conditions"
 	"github.com/lycaon/lycaon/internal/rules"
+	"github.com/lycaon/lycaon/internal/rules/rulestest"
 	"github.com/lycaon/lycaon/internal/testutil"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 	"github.com/lycaon/lycaon/internal/workflowdiag"
@@ -83,7 +84,7 @@ func TestBundledSpecRulesResolveViaRegistry(t *testing.T) {
 	if diags := ValidateBundled(reg, nil, []*rules.RulesConfig{cfg}); len(diags) > 0 {
 		t.Fatalf("ValidateBundled failed: %v", diags)
 	}
-	engine := rules.NewSimpleEngine(cfg, reg)
+	engine := rulestest.BundledEngine(t, reg)
 	out, err := engine.Evaluate(t.Context(), rules.EvalContext{EvalContext: conditions.EvalContext{SessionPosture: api.SessionPostureSpec, ToolName: "plan_from_blueprint"}})
 	testutil.FailErr(t, "engine.Evaluate failed", err)
 	if out.Allowed {

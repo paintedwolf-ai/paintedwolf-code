@@ -3,6 +3,7 @@ package session
 import (
 	"context"
 	"encoding/json"
+	"github.com/lycaon/lycaon/internal/llm/policytest"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/events"
@@ -52,7 +53,7 @@ func TestAutoTitleSessionIdempotentOnReplay(t *testing.T) {
 	mgr.Chats.Naming.SessionFromPrompt(ctx, sess, userText)
 	hub.FlushDebounced()
 
-	got, err := store.Get(ctx, sess.ID)
+	got, err := store.Sessions.Get(ctx, sess.ID)
 	testutil.FailErr(t, "get session", err)
 	want := naming.NameSession(ctx, nil, userText)
 	if got.Title != want {
@@ -100,7 +101,7 @@ func TestPublishSessionTitleUsesStoreStatus(t *testing.T) {
 
 	sess, err := mgr.Chats.CreateForProject(ctx, p.ID, api.SessionPostureBuild)
 	testutil.FailErr(t, "create session", err)
-	if err := store.SetSessionStatus(ctx, sess.ID, api.SessionStatusBusy); err != nil {
+	if err := store.Sessions.SetSessionStatus(ctx, sess.ID, api.SessionStatusBusy); err != nil {
 		testutil.FailErr(t, "set session busy", err)
 	}
 
@@ -222,7 +223,7 @@ func TestKickPromptCurationDoesNotBlockOnNaming(t *testing.T) {
 	testutil.FailErr(t, "register naming provider", providers.Register(blocker))
 	svc := &llm.Service{
 		Registry: providers,
-		Policy: llm.NewInMemoryPolicyStore(llm.ModelPolicy{
+		Policy: policytest.New(t, llm.ModelPolicy{
 			Lite: llm.ModelRef{ProviderID: blocker.ID(), Model: "naming-model"},
 		}),
 		Utility: llm.NewUtilityPlane(),
@@ -265,7 +266,7 @@ func TestKickPromptCurationDoesNotBlockOnNaming(t *testing.T) {
 		t.Fatal("naming LLM never started")
 	}
 
-	got, err := sessionStore.Get(ctx, sess.ID)
+	got, err := sessionStore.Sessions.Get(ctx, sess.ID)
 	testutil.FailErr(t, "get session mid-name", err)
 	if got.Title != "" {
 		t.Fatalf("title set before naming finished: %q", got.Title)
@@ -278,7 +279,7 @@ func TestKickPromptCurationDoesNotBlockOnNaming(t *testing.T) {
 		t.Fatal("naming work did not finish after provider release")
 	}
 
-	got, err = sessionStore.Get(ctx, sess.ID)
+	got, err = sessionStore.Sessions.Get(ctx, sess.ID)
 	testutil.FailErr(t, "get session after name", err)
 	if got.Title != "Background title" {
 		t.Fatalf("title = %q want %q", got.Title, "Background title")
@@ -289,7 +290,7 @@ func TestCurationSharesLocalCoordinator(t *testing.T) {
 	ctx := context.Background()
 	registry := &llm.Registry{}
 	testutil.FailErr(t, "register ollama", registry.Register(ollamaprovider.New("ollama-1", "http://localhost:11434/v1", "", nil)))
-	policy := llm.NewInMemoryPolicyStore(llm.ModelPolicy{
+	policy := policytest.New(t, llm.ModelPolicy{
 		Coordinator: llm.ModelRef{ProviderID: "ollama-1", Model: "gemma4:e2b"},
 		Lite:        llm.ModelRef{ProviderID: "ollama-1", Model: "gemma4:e2b"},
 	})
@@ -312,24 +313,24 @@ func TestWorkflowRequestCurationPreservesManualTitlesAndExcludesWorkers(t *testi
 	t.Setenv("LYCAON_LLM_MOCK", "1")
 	sessionStore := storetest.New(t, "project-1")
 	mgr := NewHost(sessionStore, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, toolstest.NewRegistry())
-	parent, err := sessionStore.Create(t.Context(), api.CreateSessionRequest{Posture: api.SessionPostureBuild}, "project-1")
+	parent, err := sessionStore.Sessions.Create(t.Context(), api.CreateSessionRequest{Posture: api.SessionPostureBuild}, "project-1")
 	testutil.FailErr(t, "create root chat", err)
 	_, err = mgr.Chats.Naming.SetTitle(t.Context(), parent.ID, "Manual orchard title")
 	testutil.FailErr(t, "set manual title", err)
-	child, err := sessionStore.CreateChild(t.Context(), parent, api.SpawnChildRequest{AgentType: "researcher"})
+	child, err := sessionStore.Sessions.CreateChild(t.Context(), parent, api.SpawnChildRequest{AgentType: "researcher"})
 	testutil.FailErr(t, "create worker", err)
-	before, err := sessionStore.Get(t.Context(), child.ID)
+	before, err := sessionStore.Sessions.Get(t.Context(), child.ID)
 	testutil.FailErr(t, "get worker title", err)
 	mgr.Runner.Curation.AcceptedWorkflowRequest(t.Context(), parent.ID, "A different workflow request")
 	mgr.Runner.Curation.AcceptedWorkflowRequest(t.Context(), child.ID, "A worker request")
 	mgr.Runner.Curation.AcceptedWorkflowRequest(t.Context(), "missing-session", "A missing request")
 	mgr.Runner.Curation.Wait(t.Context())
-	got, err := sessionStore.Get(t.Context(), parent.ID)
+	got, err := sessionStore.Sessions.Get(t.Context(), parent.ID)
 	testutil.FailErr(t, "get root title", err)
 	if got.Title != "Manual orchard title" {
 		t.Fatalf("manual title changed to %q", got.Title)
 	}
-	worker, err := sessionStore.Get(t.Context(), child.ID)
+	worker, err := sessionStore.Sessions.Get(t.Context(), child.ID)
 	testutil.FailErr(t, "get worker after curation", err)
 	if worker.Title != before.Title {
 		t.Fatalf("worker title changed from %q to %q", before.Title, worker.Title)
@@ -340,14 +341,14 @@ func TestAcceptedWorkflowRequestCurationSurvivesInitiatingTurnCancellation(t *te
 	t.Setenv("LYCAON_LLM_MOCK", "1")
 	sessionStore := storetest.New(t, "project-1")
 	mgr := NewHost(sessionStore, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, toolstest.NewRegistry())
-	sess, err := sessionStore.Create(t.Context(), api.CreateSessionRequest{Posture: api.SessionPostureBuild}, "project-1")
+	sess, err := sessionStore.Sessions.Create(t.Context(), api.CreateSessionRequest{Posture: api.SessionPostureBuild}, "project-1")
 	testutil.FailErr(t, "create chat", err)
 	ctx, cancel := context.WithCancel(t.Context())
 	cancel()
 	text := "Review the orchard irrigation choices"
 	mgr.Runner.Curation.AcceptedWorkflowRequest(ctx, sess.ID, text)
 	mgr.Runner.Curation.Wait(t.Context())
-	got, err := sessionStore.Get(t.Context(), sess.ID)
+	got, err := sessionStore.Sessions.Get(t.Context(), sess.ID)
 	testutil.FailErr(t, "get named chat", err)
 	if got.Title != naming.NameSession(t.Context(), nil, text) {
 		t.Fatalf("accepted workflow title = %q", got.Title)
@@ -367,7 +368,7 @@ func TestEngineShutdownCancelsAndDrainsDetachedNaming(t *testing.T) {
 	providers := &llm.Registry{}
 	providers.SetOutboundSecretScreen(llm.NewModelSecretScreen(nil, nil))
 	testutil.FailErr(t, "register naming provider", providers.Register(blocker))
-	svc := &llm.Service{Registry: providers, Policy: llm.NewInMemoryPolicyStore(llm.ModelPolicy{Lite: llm.ModelRef{ProviderID: blocker.ID(), Model: "naming-model"}}), Utility: llm.NewUtilityPlane()}
+	svc := &llm.Service{Registry: providers, Policy: policytest.New(t, llm.ModelPolicy{Lite: llm.ModelRef{ProviderID: blocker.ID(), Model: "naming-model"}}), Utility: llm.NewUtilityPlane()}
 	mgr := NewHost(sessionStore, Models{Client: blocker, Provider: svc, Limits: settings.DefaultSessionLimits(), Cost: nil}, toolstest.NewRegistry())
 	mgr.SetProjectRegistry(reg)
 	sess, err := mgr.Chats.CreateForProject(ctx, p.ID, api.SessionPostureBuild)
@@ -387,7 +388,7 @@ func TestEngineShutdownCancelsAndDrainsDetachedNaming(t *testing.T) {
 	}
 	mgr.BeginEngineShutdown()
 	testutil.FailErr(t, "drain engine naming", mgr.WaitForEngineShutdown(ctx))
-	got, err := sessionStore.Get(ctx, sess.ID)
+	got, err := sessionStore.Sessions.Get(ctx, sess.ID)
 	testutil.FailErr(t, "read settled session", err)
 	if got.Title != "" {
 		t.Fatalf("cancelled naming published title %q", got.Title)

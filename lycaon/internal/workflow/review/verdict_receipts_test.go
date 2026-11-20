@@ -3,6 +3,7 @@ package review_test
 import (
 	"github.com/lycaon/lycaon/internal/blueprint/blueprinttest"
 	testdbseed "github.com/lycaon/lycaon/internal/testdbseed"
+	"github.com/lycaon/lycaon/internal/testutil/conditionstest"
 	workflow "github.com/lycaon/lycaon/internal/workflow"
 	workflowreview "github.com/lycaon/lycaon/internal/workflow/review"
 
@@ -22,14 +23,13 @@ import (
 
 	"testing"
 
-	"github.com/lycaon/lycaon/internal/conditions"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/workflow/runstate"
 )
 
 func TestVerdictReceiptsPreserveSubmittedValuesAndPhaseIdentity(t *testing.T) {
 	manager, blueprints, sqlDB := receiptManager(t)
-	setTestRegistry(t, manager, blueprints, conditions.TestRegistryDeps())
+	setTestRegistry(t, manager, blueprints, conditionstest.Dependencies())
 	run := startReviewLoopRun(t.Context(), t, manager)
 	before := map[string]string{"verdict": "NEEDS_REVISION", "winner": "east"}
 	after := map[string]string{"verdict": "SELECTED", "winner": "west"}
@@ -70,7 +70,7 @@ func TestVerdictReceiptsPreserveIncompleteOperations(t *testing.T) {
 	for _, status := range []string{"prepared", "evidence_applied", "diverged"} {
 		t.Run(status, func(t *testing.T) {
 			manager, blueprints, sqlDB := receiptManager(t)
-			setTestRegistry(t, manager, blueprints, conditions.TestRegistryDeps())
+			setTestRegistry(t, manager, blueprints, conditionstest.Dependencies())
 			run := startReviewLoopRun(t.Context(), t, manager)
 			store := manager.Store
 			_, _, err := store.Verdicts.PrepareVerdictOperation(t.Context(), runstate.VerdictOperation{
@@ -111,7 +111,7 @@ func receiptManager(t *testing.T) (*workflow.RunManager, *blueprint.Manager, db.
 	testutil.FailErr(t, "RegistryFromDirs failed", err)
 	blueprintStore := blueprinttest.NewFileStore(projectDir)
 	blueprintMgr := blueprint.NewManager(blueprintStore)
-	blueprintMgr.Approvals = blueprint.NewApprovalStore(sqlDB, authzcontext.SQLRecorder(sqlDB))
+	blueprintMgr.Approvals = blueprint.NewApprovalStore(sqlDB, authzcontext.LedgerRecorder{Ledger: &authzcontext.Ledger{Store: authzcontext.NewSQLStore(sqlDB)}})
 	mgr := workflow.NewManager(testRunStore(t, sqlDB), sessStore, manifestRegistry, nil)
 	mgr.Blueprints.Scaffold.Store = workflowpersistence.NewSessionScaffoldSQLStore(sqlDB)
 	blueprintMgr.AfterRetarget = mgr.Blueprints.RebindBlueprintPath

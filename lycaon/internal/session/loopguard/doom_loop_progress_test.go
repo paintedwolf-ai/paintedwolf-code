@@ -9,6 +9,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/lycaon/lycaon/internal/progress"
+	"github.com/lycaon/lycaon/internal/progress/progresstest"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -76,7 +77,7 @@ func TestTerminalProgressKeepsDistinctFinishAcknowledgements(t *testing.T) {
 func TestHostIssuedRevisionRecoversAnExhaustedTerminalBucket(t *testing.T) {
 	for _, mode := range []string{"missing", "stale"} {
 		t.Run(mode, func(t *testing.T) {
-			store := progress.NewMemoryStore()
+			store := progresstest.New(t, "session")
 			testutil.FailErr(t, "seed current work", store.Set("session", "- [ ] Deliver"))
 			current, err := store.Snapshot(t.Context(), "session")
 			testutil.FailErr(t, "observe current revision", err)

@@ -129,7 +129,7 @@ func (r *Resolution) recordDelivery(ctx context.Context, delivery string, includ
 				params.UnlockID = sql.NullString{String: unlockID, Valid: unlockID != ""}
 			}
 		}
-		if err := r.service.queries.UpdateManagedSecretDelivery(ctx, params); err != nil {
+		if err := r.service.repository.queries.UpdateManagedSecretDelivery(ctx, params); err != nil {
 			slog.WarnContext(ctx, "managed secret delivery history write failed", "secret_id", v.id, "tool_call_id", r.access.ToolCallID)
 		}
 	}

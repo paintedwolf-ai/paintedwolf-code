@@ -1,10 +1,12 @@
 package contract
 
 import (
+	"path/filepath"
 	"slices"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/agentdef"
+	"github.com/lycaon/lycaon/internal/catalogview"
 	"github.com/lycaon/lycaon/internal/editorturn"
 	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/nativemanifest"
@@ -117,8 +119,15 @@ func profilesBySessionShape(t *testing.T) (worker, addressed map[string]bool) {
 			}
 		}
 	}
-	for _, id := range editorturn.ToolProfileIDs() {
-		addressed[id] = true
+	catalog := contractcheck.StockCatalog(t)
+	view, err := catalogview.Build(t.Context(), filepath.Join(contractcheck.RepoRoot(t), "lycaon"), catalog)
+	contractcheck.FailErr(t, "build stock view", err)
+	for _, action := range view.Contributions.EditorActions() {
+		boundary, ok := editorturn.PresetBoundaryFor(action.Execution.Preset)
+		if !ok || boundary.ToolProfile == "" {
+			t.Fatalf("editor action %s has no tool profile", action.ID)
+		}
+		addressed[boundary.ToolProfile] = true
 	}
 	if len(worker) == 0 || len(addressed) == 0 {
 		t.Fatalf("no profiles resolved: worker=%v addressed=%v", sortedKeys(worker), sortedKeys(addressed))

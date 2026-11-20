@@ -9,14 +9,14 @@ import (
 func TestFeedPreservesExplicitZeroAndMissingPrices(t *testing.T) {
 	for _, parse := range []struct {
 		name  string
-		parse func([]byte) (RateTable, error)
+		parse func(*testing.T, []byte) (RateTable, error)
 		body  string
 	}{
-		{"models-dev", parseModelFeedFixture, `{"openai":{"models":{"free":{"cost":{"input":0,"output":0,"cache_read":0}},"partial":{"cost":{"input":1}}}}}`},
-		{"litellm", ParseLitellm, `{"free":{"litellm_provider":"openai","input_cost_per_token":0,"output_cost_per_token":0,"cache_read_input_token_cost":0},"partial":{"litellm_provider":"openai","input_cost_per_token":1}}`},
+		{"models-dev", fixtureRateTable, `{"openai":{"models":{"free":{"cost":{"input":0,"output":0,"cache_read":0}},"partial":{"cost":{"input":1}}}}}`},
+		{"litellm", func(_ *testing.T, body []byte) (RateTable, error) { return ParseLitellm(body) }, `{"free":{"litellm_provider":"openai","input_cost_per_token":0,"output_cost_per_token":0,"cache_read_input_token_cost":0},"partial":{"litellm_provider":"openai","input_cost_per_token":1}}`},
 	} {
 		t.Run(parse.name, func(t *testing.T) {
-			table, err := parse.parse([]byte(parse.body))
+			table, err := parse.parse(t, []byte(parse.body))
 			testutil.FailErr(t, "parse rate presence", err)
 			free := table.Rates[RateKey{Kind: "openai", ModelID: "free"}]
 			partial := table.Rates[RateKey{Kind: "openai", ModelID: "partial"}]

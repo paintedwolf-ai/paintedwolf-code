@@ -33,7 +33,7 @@ func (s *Topology) StartOrchestratedTopologyForRun(ctx context.Context, sessionI
 		return
 	}
 
-	sess, err := s.Store.Get(ctx, sessionID)
+	sess, err := s.SessionStore.Get(ctx, sessionID)
 	if err != nil || sess == nil {
 		return
 	}

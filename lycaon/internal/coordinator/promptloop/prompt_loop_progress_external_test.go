@@ -2,7 +2,6 @@ package promptloop_test
 
 import (
 	"context"
-	"github.com/lycaon/lycaon/internal/tools/toolstest"
 	"strings"
 	"testing"
 
@@ -14,6 +13,7 @@ import (
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/tools"
+	"github.com/lycaon/lycaon/internal/tools/toolstest"
 	"github.com/lycaon/lycaon/internal/workerprogress"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -24,18 +24,18 @@ func TestStreamProgressBuffersContentUntilSettle(t *testing.T) {
 	var live, updates int
 	deps.Projection.Streams = &observedMessageStreams{MessageStreams: deps.Projection.Streams, project: func(ctx context.Context, sessionID string, msg api.Message) error {
 		live++
-		return st.PatchLiveProjection(ctx, sessionID, msg.ID, msg.Content, msg.ToolCalls)
+		return st.Transcript.PatchLiveProjection(ctx, sessionID, msg.ID, msg.Content, msg.ToolCalls)
 	}}
 	deps.Projection.UpdateMessage = func(ctx context.Context, sessionID, messageID string, msg api.Message) error {
 		updates++
-		_, err := st.UpdateMessage(ctx, sessionID, messageID, msg)
+		_, err := st.Transcript.UpdateMessage(ctx, sessionID, messageID, msg)
 		return err
 	}
 	deps.Model.LLM = tokenStreamingLLM{tokens: []string{"Hel", "lo", " ", "world"}}
 	deps.Context.Policy = &recordingToolPolicy{}
 	loop := promptloop.NewPromptLoopForTest(deps)
 	ctx := context.Background()
-	sess, err := st.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
+	sess, err := st.Sessions.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
 	result, err := loop.Run(ctx, promptloop.PromptRunInput{
 		SessionID: sess.ID,
@@ -70,7 +70,7 @@ func TestStreamProgressBuffersAllToolCalls(t *testing.T) {
 				t.Fatal("live projection must not carry deferred read tool_calls")
 			}
 		}
-		return st.PatchLiveProjection(ctx, sessionID, msg.ID, msg.Content, msg.ToolCalls)
+		return st.Transcript.PatchLiveProjection(ctx, sessionID, msg.ID, msg.Content, msg.ToolCalls)
 	}}
 	deps.Model.LLM = &toolStreamingLLM{calls: []api.ToolCall{
 		{ID: "tc-sum", Name: "summarize", Args: map[string]any{"path": "pkg"}},
@@ -88,7 +88,7 @@ func TestStreamProgressBuffersAllToolCalls(t *testing.T) {
 	deps.Context.Limits = loopTestLimits(2)
 	loop := promptloop.NewPromptLoopForTest(deps)
 	ctx := context.Background()
-	sess, err := st.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
+	sess, err := st.Sessions.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
 	_, err = loop.Run(ctx, promptloop.PromptRunInput{
 		SessionID: sess.ID,
@@ -118,7 +118,7 @@ func TestLoopPublishesWorkerProgress(t *testing.T) {
 	}
 	loop := promptloop.NewPromptLoopForTest(deps)
 	ctx := context.Background()
-	sess, err := store.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
+	sess, err := store.Sessions.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session in store", err)
 	sess.ParentSessionID = "parent-1"
 	_, err = loop.Run(ctx, promptloop.PromptRunInput{
@@ -186,7 +186,7 @@ func TestLoopPublishesAnEdgePerSettledToolCall(t *testing.T) {
 	}
 	loop := promptloop.NewPromptLoopForTest(deps)
 	ctx := context.Background()
-	sess, err := store.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
+	sess, err := store.Sessions.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session in store", err)
 	sess.AgentType = orchestration.ProfilePathExplorer
 	sess.ParentSessionID = "parent-1"

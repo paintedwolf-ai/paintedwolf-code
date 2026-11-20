@@ -3,7 +3,6 @@ package execution
 import (
 	"context"
 	"errors"
-	"github.com/lycaon/lycaon/internal/scan/scantest"
 	"path/filepath"
 	"testing"
 	"time"
@@ -12,6 +11,7 @@ import (
 	scancatalog "github.com/lycaon/lycaon/internal/scan/catalog"
 	scancfg "github.com/lycaon/lycaon/internal/scan/configuration"
 	scanoutput "github.com/lycaon/lycaon/internal/scan/output"
+	"github.com/lycaon/lycaon/internal/scan/scantest"
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -34,8 +34,8 @@ func TestRunnerMainOffCancelsPendingScans(t *testing.T) {
 		ID: "scan-pending", CanonicalPath: t.TempDir(), Categories: []api.ScanCategory{api.ScanCategorySAST},
 		Status: api.CodeScanStatusPending, CreatedAt: time.Now().UTC(), SourceSnapshotID: "snapshot-1",
 	}
-	testutil.FailErr(t, "Insert", store.Insert(t.Context(), rec, nil, ""))
-	runner := NewRunner(store, &scantest.MockRegistry{Scanner: &scantest.MockScanner{}}, scanbase.NoopIngester{}, scancfg.DefaultRunnerConfig(), nil)
+	testutil.FailErr(t, "Insert", store.Runs.Insert(t.Context(), rec, nil, ""))
+	runner := NewRunner(store, &scantest.MockRegistry{Scanner: &scantest.MockScanner{}}, scantest.DiscardIngester{}, scancfg.DefaultRunnerConfig(), nil)
 	runner.Settings = disabledScannerSettings(t)
 	terminal := make(chan api.CodeScan, 1)
 	runner.OnTerminal = func(_ context.Context, rec api.CodeScan) { terminal <- rec }
@@ -49,7 +49,7 @@ func TestRunnerMainOffCancelsPendingScans(t *testing.T) {
 	default:
 		t.Fatal("main cancellation did not notify waiters")
 	}
-	got, err := store.Get(t.Context(), rec.ID)
+	got, err := store.Reads.Get(t.Context(), rec.ID)
 	testutil.FailErr(t, "Get", err)
 	if got == nil || got.Status != api.CodeScanStatusCanceled || got.Error != "security scanners disabled" {
 		t.Fatalf("pending scan after main off = %#v", got)
@@ -58,7 +58,7 @@ func TestRunnerMainOffCancelsPendingScans(t *testing.T) {
 	testutil.FailErr(t, "PutGlobal on", runner.Settings.PutGlobal(settings.SecurityScannersUserOverlay{Enabled: &on}))
 	runner.MaxRunning = 0
 	testutil.FailErr(t, "service scan work", runner.serviceWork(t.Context()))
-	got, err = store.Get(t.Context(), rec.ID)
+	got, err = store.Reads.Get(t.Context(), rec.ID)
 	testutil.FailErr(t, "Get after re-enable", err)
 	if got == nil || got.Status != api.CodeScanStatusCanceled || got.Error != "security scanners disabled" {
 		t.Fatalf("terminal cancellation was mutated after main on = %#v", got)
@@ -96,14 +96,14 @@ func TestRunnerClaimsOnlyAvailableCapacity(t *testing.T) {
 	}
 	now := time.Now().UTC()
 	for i, id := range []string{"scan-1", "scan-2"} {
-		testutil.FailErr(t, "insert "+id, store.Insert(t.Context(), api.CodeScan{
+		testutil.FailErr(t, "insert "+id, store.Runs.Insert(t.Context(), api.CodeScan{
 			ID: id, CanonicalPath: projectDirs[i], Categories: []api.ScanCategory{api.ScanCategorySAST},
 			ScannerID: "cancel-probe", Status: api.CodeScanStatusPending, CreatedAt: now,
 			SourceSnapshotID: snapshotIDs[i],
 		}, nil, ""))
 	}
 	probe := &cancellationProbeScanner{started: make(chan struct{}), stopped: make(chan struct{})}
-	runner := NewRunner(store, &scantest.MockRegistry{Scanner: probe}, scanbase.NoopIngester{}, scancfg.DefaultRunnerConfig(), nil)
+	runner := NewRunner(store, &scantest.MockRegistry{Scanner: probe}, scantest.DiscardIngester{}, scancfg.DefaultRunnerConfig(), nil)
 	runner.MaxRunning = 1
 	runner.Snapshots = snapshots
 	ctx, cancel := context.WithCancel(t.Context())
@@ -115,7 +115,7 @@ func TestRunnerClaimsOnlyAvailableCapacity(t *testing.T) {
 		t.Fatal("scanner did not start")
 	}
 
-	second, err := store.Get(t.Context(), "scan-2")
+	second, err := store.Reads.Get(t.Context(), "scan-2")
 	testutil.FailErr(t, "load second scan", err)
 	if second == nil || second.Status != api.CodeScanStatusPending {
 		t.Fatalf("second scan status = %q want pending", second.Status)
@@ -134,11 +134,11 @@ func TestRunnerMainOffCancelsRunningScannerContext(t *testing.T) {
 		ScannerID: "cancel-probe", Status: api.CodeScanStatusRunning, CreatedAt: time.Now().UTC(),
 		SourceSnapshotID: publishTestSnapshot(t, snapshots, projectDir), ClaimToken: "claim-scan-running",
 	}
-	testutil.FailErr(t, "Insert", store.Insert(t.Context(), rec, nil, ""))
+	testutil.FailErr(t, "Insert", store.Runs.Insert(t.Context(), rec, nil, ""))
 	settingsStore, err := settings.NewSecurityScannersStoreAt(filepath.Join(t.TempDir(), "security.yaml"))
 	testutil.FailErr(t, "NewSecurityScannersStoreAt", err)
 	probe := &cancellationProbeScanner{started: make(chan struct{}), stopped: make(chan struct{})}
-	runner := NewRunner(store, &scantest.MockRegistry{Scanner: probe}, scanbase.NoopIngester{}, scancfg.DefaultRunnerConfig(), nil)
+	runner := NewRunner(store, &scantest.MockRegistry{Scanner: probe}, scantest.DiscardIngester{}, scancfg.DefaultRunnerConfig(), nil)
 	runner.Snapshots = snapshots
 	runner.Settings = settingsStore
 
@@ -160,7 +160,7 @@ func TestRunnerMainOffCancelsRunningScannerContext(t *testing.T) {
 		t.Fatal("main switch did not cancel scanner context")
 	}
 	<-done
-	got, err := store.Get(t.Context(), rec.ID)
+	got, err := store.Reads.Get(t.Context(), rec.ID)
 	testutil.FailErr(t, "Get", err)
 	if got == nil || got.Status != api.CodeScanStatusCanceled {
 		t.Fatalf("running scan after main off = %#v", got)
@@ -186,13 +186,13 @@ func TestRunnerInterruptedExecutionCommitsTerminalState(t *testing.T) {
 				Categories: []api.ScanCategory{api.ScanCategorySAST}, Status: api.CodeScanStatusPending,
 				CreatedAt: time.Now().UTC(), SourceSnapshotID: publishTestSnapshot(t, snapshots, projectDir),
 			}
-			testutil.FailErr(t, "insert scan", store.Insert(t.Context(), rec, nil, ""))
+			testutil.FailErr(t, "insert scan", store.Runs.Insert(t.Context(), rec, nil, ""))
 			probe := &cancellationProbeScanner{started: make(chan struct{}), stopped: make(chan struct{}), returnSuccess: tc.success}
 			registry := &scantest.MockRegistry{Scanner: probe}
 			if !tc.shutdown {
 				registry.Runtime = scancatalog.RuntimePolicy{SoftLimitSec: 1, HardLimitSec: 1, CPUUnits: 1, Parallelism: 1}
 			}
-			runner := NewRunner(store, registry, scanbase.NoopIngester{}, scancfg.DefaultRunnerConfig(), nil)
+			runner := NewRunner(store, registry, scantest.DiscardIngester{}, scancfg.DefaultRunnerConfig(), nil)
 			runner.Snapshots = snapshots
 			type notification struct {
 				scan       api.CodeScan
@@ -243,7 +243,7 @@ func TestRunnerInterruptedExecutionCommitsTerminalState(t *testing.T) {
 			if notified.contextErr != nil || !notified.bounded {
 				t.Fatalf("terminal context: error=%v bounded=%v", notified.contextErr, notified.bounded)
 			}
-			got, err := store.Get(t.Context(), rec.ID)
+			got, err := store.Reads.Get(t.Context(), rec.ID)
 			testutil.FailErr(t, "load terminal scan", err)
 			wantStatus, wantCode := api.CodeScanStatusTimedOut, scanbase.FailureTimeout
 			if tc.shutdown {

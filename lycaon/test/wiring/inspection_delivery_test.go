@@ -9,17 +9,17 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/decide"
-	"github.com/lycaon/lycaon/internal/llm"
 	"github.com/lycaon/lycaon/internal/llm/modelcall"
 	"github.com/lycaon/lycaon/internal/settingsoverlay"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/testutil/llmtest"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
 func TestInspectionDeliveryDoesNotRequireSelectedCheck(t *testing.T) {
 	var calls atomic.Int32
-	mock := llm.NewKickDrivenMock(llm.KickDrivenConfig{
-		Fallback: func(_ context.Context, _ llm.Snapshot) modelcall.Completion {
+	mock := llmtest.NewKickDrivenMock(llmtest.KickDrivenConfig{
+		Fallback: func(_ context.Context, _ llmtest.Snapshot) modelcall.Completion {
 			switch calls.Add(1) {
 			case 1:
 				return modelcall.Completion{ToolCalls: []api.ToolCall{{ID: "offer-write", Name: "request_tools", Args: map[string]any{"need": "command"}}}}
@@ -36,8 +36,7 @@ func TestInspectionDeliveryDoesNotRequireSelectedCheck(t *testing.T) {
 	})
 	h := BuildForTest(t, WithLLMClient(mock), WithDecider(decide.Absent{}))
 	ctx := t.Context()
-	cancel := h.StartBackgroundWorkers(t, ctx)
-	t.Cleanup(cancel)
+	h.Start(t)
 	root := t.TempDir()
 	testutil.FailErr(t, "create docs", os.MkdirAll(filepath.Join(root, "docs"), 0o700))
 	overlay := filepath.Join(root, settingsoverlay.DirName())
@@ -58,7 +57,7 @@ func TestInspectionDeliveryDoesNotRequireSelectedCheck(t *testing.T) {
 	if string(body) != "Updated operating instructions.\n" {
 		t.Fatalf("delivered material = %q", body)
 	}
-	messages, err := h.Store.GetMessages(ctx, sess.ID)
+	messages, err := h.Store.Transcript.GetMessages(ctx, sess.ID)
 	testutil.FailErr(t, "read transcript", err)
 	completed := false
 	for _, msg := range messages {

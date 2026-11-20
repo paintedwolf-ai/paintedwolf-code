@@ -19,7 +19,7 @@ func TestToolResultRecallByLedgerHandle(t *testing.T) {
 	st := store.NewSQL(f.db)
 	st.SetDataDir(f.dataDir)
 	body := []string{" M Taskfile.yml", " M docs/architecture.md", "?? scripts/new.py"}
-	testutil.FailErr(t, "store observation", st.UpsertEvidenceRecord(t.Context(), coordinatorSession, evidence.Record{
+	testutil.FailErr(t, "store observation", st.Evidence.UpsertEvidenceRecord(t.Context(), coordinatorSession, evidence.Record{
 		Handle: "command#2", Kind: "command", Body: body,
 	}))
 	msg := api.Message{
@@ -55,7 +55,7 @@ func TestToolAndPathRecallIncludesTheOriginalObservation(t *testing.T) {
 	st := store.NewSQL(f.db)
 	st.SetDataDir(f.dataDir)
 	body := []string{"row 731 checksum=original-cypress"}
-	testutil.FailErr(t, "store original observation", st.UpsertEvidenceRecord(t.Context(), coordinatorSession, evidence.Record{
+	testutil.FailErr(t, "store original observation", st.Evidence.UpsertEvidenceRecord(t.Context(), coordinatorSession, evidence.Record{
 		Handle:     "read#1",
 		Kind:       "read",
 		SourceTool: "read",
@@ -124,7 +124,7 @@ func TestRecallInlinesBodyOnceWhenDuplicateRowsShareOneHandle(t *testing.T) {
 	st := store.NewSQL(f.db)
 	st.SetDataDir(f.dataDir)
 	body := []string{"line 1", "line 2"}
-	testutil.FailErr(t, "store observation", st.UpsertEvidenceRecord(t.Context(), workerSession, evidence.Record{
+	testutil.FailErr(t, "store observation", st.Evidence.UpsertEvidenceRecord(t.Context(), workerSession, evidence.Record{
 		Handle: "read#1", Kind: "read", SourceTool: "read", Path: "pkg/a.go",
 		LineRanges: []evidence.LineRange{{Start: 10, End: 25}},
 		Body:       body,
@@ -174,11 +174,11 @@ func TestEmbeddedChildHandleRecallResolvesAnchorAndFrameRecords(t *testing.T) {
 	st := store.NewSQL(f.db)
 	st.SetDataDir(f.dataDir)
 	anchorBody := []string{"12: func Route() {", "13: serve()", "14: }"}
-	testutil.FailErr(t, "store anchor record", st.UpsertEvidenceRecord(t.Context(), coordinatorSession, evidence.Record{
+	testutil.FailErr(t, "store anchor record", st.Evidence.UpsertEvidenceRecord(t.Context(), coordinatorSession, evidence.Record{
 		Handle: "summarize#1", Kind: "summarize", Path: "source.go", Body: anchorBody,
 	}))
 	parentBody := []string{"Overview of source.go"}
-	testutil.FailErr(t, "store parent record", st.UpsertEvidenceRecord(t.Context(), coordinatorSession, evidence.Record{
+	testutil.FailErr(t, "store parent record", st.Evidence.UpsertEvidenceRecord(t.Context(), coordinatorSession, evidence.Record{
 		Handle: "summarize#2", Kind: "summarize", Path: "source.go", Body: parentBody,
 	}))
 	msg := api.Message{

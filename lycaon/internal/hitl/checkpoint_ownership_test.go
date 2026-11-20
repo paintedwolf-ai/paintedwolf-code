@@ -39,7 +39,7 @@ func assertCheckpointLifecycleRouting(t *testing.T, transport string, status api
 		t.Cleanup(func() { testutil.FailErr(t, "close outbox", outbox.Close()) })
 	}
 	publisher := &events.Publisher{Hub: hub}
-	manager := hitl.NewCheckpoints(store, publisher, authzcontext.SQLRecorder(database))
+	manager := hitl.NewCheckpoints(store, publisher, authzcontext.LedgerRecorder{Ledger: &authzcontext.Ledger{Store: authzcontext.NewSQLStore(database)}})
 	response, err := requestExplicitApprovalCheckpoint(t, testdbseed.OwnerCaller(t, t.Context(), database), manager, hitl.CheckpointRequest{
 		SessionID: sid, Kind: api.CheckpointKindToolApproval,
 		ProposedAction: &hitl.ProposedAction{
@@ -59,7 +59,7 @@ func assertCheckpointLifecycleRouting(t *testing.T, transport string, status api
 		t.Fatal("checkpoint payload duplicates project ownership")
 	}
 	assertCheckpointEvent(t, stream, response.CheckpointID, api.CheckpointStatusPending)
-	manager = hitl.NewCheckpoints(store, publisher, authzcontext.SQLRecorder(database))
+	manager = hitl.NewCheckpoints(store, publisher, authzcontext.LedgerRecorder{Ledger: &authzcontext.Ledger{Store: authzcontext.NewSQLStore(database)}})
 	testutil.FailErr(t, "restore pending checkpoint", manager.RestorePending(testdbseed.OwnerCaller(t, t.Context(), database)))
 	if status == api.CheckpointStatusApproved {
 		approveCurrentOption(t, testdbseed.OwnerCaller(t, t.Context(), database), manager, sid, response.CheckpointID)

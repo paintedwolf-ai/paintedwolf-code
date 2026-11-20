@@ -808,14 +808,14 @@ func hostRecipeReplaceSlot(ctx context.Context, s *conformanceSweep, _ *conforma
 func hostRecipeDrainScans(ctx context.Context, s *conformanceSweep) error {
 	store := scan.NewSQLStore(s.host.DB)
 	for range 64 {
-		claimed, err := store.ClaimNext(ctx)
+		claimed, err := store.Runs.ClaimNext(ctx)
 		if errors.Is(err, scan.ErrNoPendingScans) {
 			return nil
 		}
 		if err != nil {
 			return err
 		}
-		if _, err := store.MarkComplete(ctx, claimed, &scanoutput.Result{}); err != nil {
+		if _, err := store.Runs.MarkComplete(ctx, claimed, &scanoutput.Result{}); err != nil {
 			return err
 		}
 	}

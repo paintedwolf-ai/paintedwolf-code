@@ -18,11 +18,11 @@ import (
 // SecretIgnoreSource supplies active exact-value declarations for an attributed scan root.
 type SecretIgnoreSource func(context.Context, string) map[string]projectignore.SecretEntry
 
-func (s *sqlIgnoreStore) SaveSecretIdentities(ctx context.Context, scanID string, result *scanoutput.Result) error {
+func (s *IgnoreStore) SaveSecretIdentities(ctx context.Context, scanID string, result *scanoutput.Result) error {
 	if result == nil {
 		return nil
 	}
-	return s.inTx(ctx, func(q *db.Queries, _ *sql.Tx) error {
+	return s.tx.inTx(ctx, func(q *db.Queries, _ *sql.Tx) error {
 		if err := q.DeleteScanSecretIdentities(ctx, scanID); err != nil {
 			return err
 		}

@@ -3,6 +3,7 @@ package repoinfo_test
 import (
 	"context"
 	"fmt"
+	repotest "github.com/lycaon/lycaon/internal/testsetup/repoinfo"
 	"os"
 	"path/filepath"
 	"testing"
@@ -37,7 +38,7 @@ func TestBoundedBriefSettlesWithoutEstablishingAnEmptyRepository(t *testing.T) {
 	defer func() { _ = provider.Close() }()
 	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
 	defer cancel()
-	brief, err := repoinfo.AwaitBrief(ctx, provider, root)
+	brief, err := repotest.AwaitBrief(ctx, provider, root)
 	testutil.FailErr(t, "await bounded brief", err)
 	if brief.FileCount != 0 || !brief.Partial || brief.Refreshing {
 		t.Fatalf("bounded brief: %+v", brief)
@@ -66,7 +67,7 @@ func TestCatalogProviderProjectsSharedGeneration(t *testing.T) {
 	}, "")
 	defer func() { _ = provider.Close() }()
 	ctx := t.Context()
-	brief, err := repoinfo.AwaitBrief(ctx, provider, root)
+	brief, err := repotest.AwaitBrief(ctx, provider, root)
 	testutil.FailErr(t, "await brief", err)
 	if brief.FileCount != 1 || len(brief.Languages) != 1 || brief.Languages[0] != "Go" {
 		t.Fatalf("brief = %+v", brief)
@@ -84,7 +85,7 @@ func TestBriefRevokesEmptyClaimWhenItsIndexRefreshFails(t *testing.T) {
 	defer func() { _ = provider.Close() }()
 	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
 	defer cancel()
-	brief, err := repoinfo.AwaitBrief(ctx, provider, root)
+	brief, err := repotest.AwaitBrief(ctx, provider, root)
 	testutil.FailErr(t, "measure empty repository", err)
 	if brief.Partial || brief.FileCount != 0 {
 		t.Fatalf("initial brief: %+v", brief)
@@ -118,9 +119,9 @@ func TestSharedProviderMeasuresEachRootIndependently(t *testing.T) {
 	ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
 	defer cancel()
 
-	branchBrief, err := repoinfo.AwaitBrief(ctx, provider, branch)
+	branchBrief, err := repotest.AwaitBrief(ctx, provider, branch)
 	testutil.FailErr(t, "measure branch", err)
-	mainBrief, err := repoinfo.AwaitBrief(ctx, provider, primary)
+	mainBrief, err := repotest.AwaitBrief(ctx, provider, primary)
 	testutil.FailErr(t, "measure primary", err)
 	if branchBrief.FileCount != 2 || mainBrief.FileCount != 1 {
 		t.Fatalf("branch=%+v primary=%+v", branchBrief, mainBrief)

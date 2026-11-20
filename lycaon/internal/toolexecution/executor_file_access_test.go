@@ -19,6 +19,7 @@ import (
 	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/settings"
+	"github.com/lycaon/lycaon/internal/settings/settingstest"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/tools/native"
@@ -36,7 +37,7 @@ func TestAllowOnceWritesExternalFileWithoutReusableAccess(t *testing.T) {
 	t.Cleanup(func() { testutil.FailErr(t, "remove external fixture", os.RemoveAll(outside)) })
 	store, err := settings.NewApprovalStoreAt(filepath.Join(t.TempDir(), "global.yaml"))
 	testutil.FailErr(t, "create approval store", err)
-	gate := settings.NewRuleApprovalGate(store, settings.NoSources())
+	gate := settings.NewRuleApprovalGate(store, settingstest.EmptySources())
 	boundary := sandbox.NewBoundary(fixtureSandboxConfig(), fixtureToolProfiles(t))
 	reg := tools.NewDefaultRegistry()
 	writer := &native.WriteTool{Boundary: boundary}
@@ -105,7 +106,7 @@ func TestWriteToSessionScratchPassesFileChangeReview(t *testing.T) {
 	testutil.FailErr(t, "create session scratch", os.MkdirAll(scratch, 0o700))
 	store, err := settings.NewApprovalStoreAt(filepath.Join(t.TempDir(), "global.yaml"))
 	testutil.FailErr(t, "create approval store", err)
-	gate := settings.NewRuleApprovalGate(store, settings.NoSources())
+	gate := settings.NewRuleApprovalGate(store, settingstest.EmptySources())
 	boundary := sandbox.NewBoundary(fixtureSandboxConfig(), fixtureToolProfiles(t))
 	reg := tools.NewDefaultRegistry()
 	writer := &native.WriteTool{Boundary: boundary}
@@ -147,7 +148,7 @@ func TestControlPlanePathDeniedBeforeAnyCheckpoint(t *testing.T) {
 	project := t.TempDir()
 	store, err := settings.NewApprovalStoreAt(filepath.Join(t.TempDir(), "global.yaml"))
 	testutil.FailErr(t, "create approval store", err)
-	gate := settings.NewRuleApprovalGate(store, settings.NoSources())
+	gate := settings.NewRuleApprovalGate(store, settingstest.EmptySources())
 	boundary := sandbox.NewBoundary(fixtureSandboxConfig(), fixtureToolProfiles(t))
 	reg := tools.NewDefaultRegistry()
 	invoked := false

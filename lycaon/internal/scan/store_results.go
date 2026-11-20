@@ -13,12 +13,12 @@ import (
 )
 
 // SaveIngest persists bounded guidance and the normalized ingest record.
-func (s *sqlFindingStore) SaveIngest(ctx context.Context, id string, rec evidence.Record) error {
+func (s *FindingStore) SaveIngest(ctx context.Context, id string, rec evidence.Record) error {
 	guidanceJSON, ingestJSON, err := marshalIngest(rec)
 	if err != nil {
 		return err
 	}
-	return s.inTx(ctx, func(qtx *db.Queries, tx *sql.Tx) error {
+	return s.tx.inTx(ctx, func(qtx *db.Queries, tx *sql.Tx) error {
 		if err := qtx.SaveScanIngest(ctx, db.SaveScanIngestParams{
 			GuidanceJson: db.NullString(guidanceJSON),
 			IngestJson:   db.NullString(ingestJSON),
@@ -26,13 +26,13 @@ func (s *sqlFindingStore) SaveIngest(ctx context.Context, id string, rec evidenc
 		}); err != nil {
 			return err
 		}
-		return s.emitScanTx(ctx, tx, id)
+		return s.tx.emitScanTx(ctx, tx, id)
 	})
 }
 
 // LoadPaths reads paths_json for a scan id.
-func (s *sqlFindingStore) LoadPaths(ctx context.Context, id string) ([]string, error) {
-	pathsJSON, err := s.queries.GetScanPathsJSON(ctx, id)
+func (s *ReadStore) LoadPaths(ctx context.Context, id string) ([]string, error) {
+	pathsJSON, err := s.tx.queries.GetScanPathsJSON(ctx, id)
 	if db.IsNoRows(err) {
 		return nil, nil
 	}

@@ -43,7 +43,7 @@ func TestProgramSmallInputIsDurableInlineAndRecoversWithoutBlobClaim(t *testing.
 	outputs, err := invocation.NewProgramOutputRetention(t.Context(), f.recorder, store, f.session, quota)
 	testutil.FailErr(t, "admit output lifetime", err)
 	testutil.FailErr(t, "restore output lifetime", outputs.Restore(t.Context()))
-	capture := invocation.ProgramInputCapture{Outputs: outputs, State: quota, Projector: captureprojection.New(secretmatch.NewInertMatcher(), nil), ProgramID: f.program, Scope: captureprojection.Scope{RootSessionID: f.session, SessionID: f.session}, Screening: captureprojection.StreamOptions{WorkingMemory: quota, Bounds: secretmatch.StreamBounds{InputBytes: 1 << 20, OutputBytes: 1 << 20, MemoryBytes: 32 << 20, DetectorWork: 1 << 30}}, MaximumNodes: 1024, MaximumDepth: 64}
+	capture := invocation.ProgramInputCapture{Outputs: outputs, State: quota, Projector: captureprojection.New(&secretmatch.Matcher{}, nil), ProgramID: f.program, Scope: captureprojection.Scope{RootSessionID: f.session, SessionID: f.session}, Screening: captureprojection.StreamOptions{WorkingMemory: quota, Bounds: secretmatch.StreamBounds{InputBytes: 1 << 20, OutputBytes: 1 << 20, MemoryBytes: 32 << 20, DetectorWork: 1 << 30}}, MaximumNodes: 1024, MaximumDepth: 64}
 	var firstInlineReference string
 	for _, value := range []string{"small", "tiny", strings.Repeat("x", 17<<10)} {
 		stateBefore, memoryBefore, spillBefore := quota.stateCalls, quota.memoryCalls, quota.spillCalls

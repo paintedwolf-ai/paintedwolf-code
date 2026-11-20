@@ -20,6 +20,7 @@ import (
 	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/session/approvalstate"
 	"github.com/lycaon/lycaon/internal/settings"
+	"github.com/lycaon/lycaon/internal/settings/settingstest"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/pkg/api"
@@ -159,7 +160,7 @@ func TestExecutorCoalesceIdenticalPendingSharesCheckpoint(t *testing.T) {
 	stageApprovals(t, settings.ApprovalEffectAsk)
 	store, err := settings.NewApprovalStoreAt(filepath.Join(tmp, "global.yaml"))
 	testutil.FailErr(t, "approval store", err)
-	gate := settings.NewRuleApprovalGate(store, settings.NoSources())
+	gate := settings.NewRuleApprovalGate(store, settingstest.EmptySources())
 	boundary := sandbox.NewBoundary(fixtureSandboxConfig(), fixtureToolProfiles(t))
 	reg := tools.NewDefaultRegistry()
 	if err := reg.Register("write", func(ctx context.Context, args map[string]any, tc tools.ToolContext) (string, error) {
@@ -237,7 +238,7 @@ func TestExecutorCoalesceDifferentArgsMintTwo(t *testing.T) {
 	stageApprovals(t, settings.ApprovalEffectAsk)
 	store, err := settings.NewApprovalStoreAt(filepath.Join(tmp, "global.yaml"))
 	testutil.FailErr(t, "approval store", err)
-	gate := settings.NewRuleApprovalGate(store, settings.NoSources())
+	gate := settings.NewRuleApprovalGate(store, settingstest.EmptySources())
 	boundary := sandbox.NewBoundary(fixtureSandboxConfig(), fixtureToolProfiles(t))
 	reg := tools.NewDefaultRegistry()
 	if err := reg.Register("write", func(ctx context.Context, args map[string]any, tc tools.ToolContext) (string, error) {
@@ -301,7 +302,7 @@ func TestExecutorCoalesceAbortMintAllowsRetry(t *testing.T) {
 	stageApprovals(t, settings.ApprovalEffectAsk)
 	store, err := settings.NewApprovalStoreAt(filepath.Join(tmp, "global.yaml"))
 	testutil.FailErr(t, "approval store", err)
-	gate := settings.NewRuleApprovalGate(store, settings.NoSources())
+	gate := settings.NewRuleApprovalGate(store, settingstest.EmptySources())
 	boundary := sandbox.NewBoundary(fixtureSandboxConfig(), fixtureToolProfiles(t))
 	reg := tools.NewDefaultRegistry()
 	if err := reg.Register("write", func(ctx context.Context, args map[string]any, tc tools.ToolContext) (string, error) {
@@ -423,7 +424,7 @@ func TestExactLeaseSilencesDetection(t *testing.T) {
 			Contained: hitl.Contained{FSJailed: true, Egress: hitl.ContainedEgressProxy, Roots: []string{tmp}},
 		},
 	}
-	offer := hitl.ExactActionSetOffer(action, []string{hitl.GrantKey(action)})
+	offer := hitl.ExactActionSetOfferAtScope(action, []string{hitl.GrantKey(action)}, hitl.ApprovalGrantScopeChat)
 	_, err = approvals.ApplyGrant(offer.Grant)
 	testutil.FailErr(t, "ApplyGrant", err)
 	res, err := approvals.Evaluate(context.Background(), action)

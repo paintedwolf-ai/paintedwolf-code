@@ -11,6 +11,6 @@ import (
 func newTestBackgroundRegistry(t *testing.T) *bgprocess.Registry {
 	t.Helper()
 	registry := bgprocess.NewRegistry(bgprocess.DefaultConfig(), bgprocess.Hooks{})
-	registry.Output.SetCaptureProjector(captureprojection.New(secretmatch.NewInertMatcher(), nil))
+	registry.Output.SetCaptureProjector(captureprojection.New(&secretmatch.Matcher{}, nil))
 	return registry
 }

@@ -64,7 +64,6 @@ func SeedRewrittenReadme(t *testing.T, srv *hostapi.Server) (wire.Project, strin
 	}
 	dir := t.TempDir()
 	p := CreateProjectForTest(t, srv, dir)
-	MirrorLedgerProject(t, ledger.LedgerDB(), p)
 	testutil.FailErr(t, "write README", os.WriteFile(filepath.Join(dir, "README.md"), []byte(DiffReadmeV3), 0o600))
 
 	rootID := p.Roots[0].ID

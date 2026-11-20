@@ -12,7 +12,8 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/lycaon/lycaon/internal/api/httpio"
 	"github.com/lycaon/lycaon/internal/api/taskgroup"
-	"github.com/lycaon/lycaon/internal/project"
+
+	"github.com/lycaon/lycaon/internal/project/projecttest"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/testutil/apitestdeps"
 	wire "github.com/lycaon/lycaon/pkg/api"
@@ -28,16 +29,16 @@ func newSessionRoutes(t *testing.T) sessionRoutes {
 	t.Helper()
 	var deps apitestdeps.Deps
 	apitestdeps.Fill(t, &deps)
-	p, err := project.CreateWithRoot(t.Context(), deps.Projects, t.TempDir())
+	p, err := projecttest.CreateWithRoot(t.Context(), deps.Projects, t.TempDir())
 	testutil.FailErr(t, "create project", err)
-	sess, err := deps.Store.Create(t.Context(), wire.CreateSessionRequest{ProjectID: p.ID, Posture: wire.SessionPostureBuild}, p.ID)
+	sess, err := deps.Store.Sessions.Create(t.Context(), wire.CreateSessionRequest{ProjectID: p.ID, Posture: wire.SessionPostureBuild}, p.ID)
 	testutil.FailErr(t, "create session", err)
 
 	responses := &httpio.Responder{Logger: slog.Default()}
-	content := &Content{Sessions: deps.Sessions, Store: deps.Store, responses: responses}
+	content := &Content{Sessions: deps.Sessions, SessionQueries: deps.Store.Sessions, TranscriptQueries: deps.Store.Transcript, responses: responses}
 	background := &taskgroup.Group{}
 	t.Cleanup(func() { background.Stop(); background.Wait(context.Background()) })
-	queue := &Queue{Sessions: deps.Sessions, Store: deps.Store, background: background, responses: responses}
+	queue := &Queue{Sessions: deps.Sessions, SessionQueries: deps.Store.Sessions, background: background, responses: responses}
 	r := chi.NewRouter()
 	r.Post("/v1/sessions/{id}/compact", content.HandleSessionCompact)
 	r.Get("/v1/sessions/{id}/context", content.HandleSessionContext)

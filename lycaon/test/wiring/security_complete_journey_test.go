@@ -14,7 +14,6 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
-	"github.com/lycaon/lycaon/internal/llm"
 	"github.com/lycaon/lycaon/internal/llm/modelcall"
 	"github.com/lycaon/lycaon/internal/progress"
 	"github.com/lycaon/lycaon/internal/report"
@@ -22,6 +21,7 @@ import (
 	scanoutput "github.com/lycaon/lycaon/internal/scan/output"
 	"github.com/lycaon/lycaon/internal/session/workercontext"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/testutil/llmtest"
 	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/internal/workflow"
 	workflowreview "github.com/lycaon/lycaon/internal/workflow/review"
@@ -34,7 +34,7 @@ func TestSecuritySurveyCompletesWithFullCoverageWithoutRepeatingWork(t *testing.
 	calls := map[string]int{}
 	reportBody := ""
 	parentID := ""
-	mock := llm.NewKickDrivenMock(llm.KickDrivenConfig{Fallback: func(ctx context.Context, _ llm.Snapshot) modelcall.Completion {
+	mock := llmtest.NewKickDrivenMock(llmtest.KickDrivenConfig{Fallback: func(ctx context.Context, _ llmtest.Snapshot) modelcall.Completion {
 		jobID := workercontext.Job(ctx)
 		mu.Lock()
 		calls[jobID]++
@@ -77,15 +77,15 @@ func TestSecuritySurveyCompletesWithFullCoverageWithoutRepeatingWork(t *testing.
 	run, err := h.Workflows.Manager.Starts.StartHuman(ctx, sess.ID, api.StartWorkflowRunRequest{WorkflowID: "security-survey", WorkflowVersion: "2.0.1", Request: "Review each trust boundary."})
 	testutil.FailErr(t, "start survey", err)
 	scans := scan.NewSQLStore(h.DB)
-	inventory, err := scans.ListByWorkflowRunID(ctx, run.ID)
+	inventory, err := scans.Reads.ListByWorkflowRunID(ctx, run.ID)
 	testutil.FailErr(t, "read scan obligations", err)
 	if len(inventory) == 0 {
 		t.Fatal("scan inventory missing")
 	}
 	for range inventory {
-		claimed, err := scans.ClaimNext(ctx)
+		claimed, err := scans.Runs.ClaimNext(ctx)
 		testutil.FailErr(t, "claim scan", err)
-		won, err := scans.MarkComplete(ctx, claimed, &scanoutput.Result{ScannedPaths: []string{"audit.go"}, Categories: claimed.Categories})
+		won, err := scans.Runs.MarkComplete(ctx, claimed, &scanoutput.Result{ScannedPaths: []string{"audit.go"}, Categories: claimed.Categories})
 		testutil.FailErr(t, "complete scan", err)
 		if !won {
 			t.Fatal("scan claim lost")

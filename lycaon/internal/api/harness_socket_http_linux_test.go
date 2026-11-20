@@ -36,7 +36,7 @@ func TestHarnessSocketHTTPUsesActualTargetAndRejectsChangedIdentity(t *testing.T
 	p, err := projects.Create(t.Context(), project.CreateParams{Draft: true, Name: "Socket approval fixture"})
 	testutil.FailErr(t, "create project", err)
 	sessions := sessionFixture
-	chat, err := sessions.Create(t.Context(), wire.CreateSessionRequest{}, p.ID)
+	chat, err := sessions.Sessions.Create(t.Context(), wire.CreateSessionRequest{}, p.ID)
 	testutil.FailErr(t, "create chat", err)
 	deps := requiredTestDeps(t, Dependencies{Core: CoreDependencies{Projects: projects, Store: sessions}})
 	server := NewServer(deps, nil, "harness-test-token")

@@ -101,7 +101,7 @@ func treeChanges(pairs ...string) []workspacebaseline.Change {
 }
 
 func TestSourceHistoryOverviewACOV18TreeChangesBecomeUnrecordedRows(t *testing.T) {
-	h := newHistoryHarness(t)
+	h := newHistoryHarness(t, sourceledger.Timing{})
 	h.recordOnWorker(effectSeed{path: "native.go", content: "native\n"})
 	tree := &fakeTree{changes: treeChanges("@docs/guide.md", "modified", "gen.txt", "created", "obsolete.go", "deleted")}
 	worker := h.workerWith(tree)
@@ -131,7 +131,7 @@ func TestSourceHistoryOverviewACOV19ComparisonFailureListsLedgerRowsAndSaysSo(t 
 		"reader is unset": nil,
 	} {
 		t.Run(name, func(t *testing.T) {
-			h := newHistoryHarness(t)
+			h := newHistoryHarness(t, sourceledger.Timing{})
 			h.recordOnWorker(effectSeed{path: "native.go", content: "native\n"})
 			result := runOverviewCall(t, h.tool, h.workerWith(tree))
 			if !result.Recorded || len(result.Files) != 1 || result.Files[0].Path != "native.go" || result.Files[0].Unrecorded {
@@ -145,7 +145,7 @@ func TestSourceHistoryOverviewACOV19ComparisonFailureListsLedgerRowsAndSaysSo(t 
 }
 
 func TestSourceHistoryOverviewACOV19StalledComparisonEndsAtTheBudget(t *testing.T) {
-	h := newHistoryHarness(t)
+	h := newHistoryHarness(t, sourceledger.Timing{})
 	h.tool.treeBudget = time.Millisecond
 	h.recordOnWorker(effectSeed{path: "native.go", content: "native\n"})
 	tree := &fakeTree{stall: make(chan struct{}), changes: treeChanges("late.go", "created")}
@@ -165,7 +165,7 @@ func TestSourceHistoryOverviewACOV19StalledComparisonEndsAtTheBudget(t *testing.
 }
 
 func TestSourceHistoryDiffACOV19StalledComparisonEndsAtTheBudget(t *testing.T) {
-	h := newHistoryHarness(t)
+	h := newHistoryHarness(t, sourceledger.Timing{})
 	h.tool.treeBudget = time.Millisecond
 	h.writeFile("gen.txt", "on disk\n")
 	tree := &fakeTree{stall: make(chan struct{})}
@@ -185,7 +185,7 @@ func TestSourceHistoryDiffACOV19StalledComparisonEndsAtTheBudget(t *testing.T) {
 }
 
 func TestSourceHistoryOverviewACOV19EmptyComparisonKeepsTheEmptyListNote(t *testing.T) {
-	h := newHistoryHarness(t)
+	h := newHistoryHarness(t, sourceledger.Timing{})
 	result := runOverviewCall(t, h.tool, h.workerWith(&fakeTree{}))
 	if len(result.Files) != 0 || result.Note != overviewNoRowsNote {
 		t.Fatalf("result = %+v, want no rows and the empty-list note", result)
@@ -193,7 +193,7 @@ func TestSourceHistoryOverviewACOV19EmptyComparisonKeepsTheEmptyListNote(t *test
 }
 
 func TestSourceHistoryOverviewACOV20LedgerPathsAreNotDuplicated(t *testing.T) {
-	h := newHistoryHarness(t)
+	h := newHistoryHarness(t, sourceledger.Timing{})
 	h.recordOnWorker(effectSeed{path: "edited.go", content: "edited\n"})
 	h.recordOnWorker(effectSeed{path: "old.go", content: "moved\n"})
 	h.recordOnWorker(effectSeed{path: "new.go", fromPath: "old.go", content: "moved\n", op: api.SourceChangeOpRename})
@@ -218,7 +218,7 @@ func TestSourceHistoryOverviewACOV20LedgerPathsAreNotDuplicated(t *testing.T) {
 }
 
 func TestSourceHistoryOverviewACOV21MoveCoversOnlyUnchangedDescendants(t *testing.T) {
-	h := newHistoryHarness(t)
+	h := newHistoryHarness(t, sourceledger.Timing{})
 	h.recordOnWorker(effectSeed{path: "b", fromPath: "a", kind: sourceledger.EntryKindDirectory, op: api.SourceChangeOpRename})
 	h.recordOnWorker(effectSeed{path: "c", fromPath: "b", kind: sourceledger.EntryKindDirectory, op: api.SourceChangeOpRename})
 	same := workspacebaseline.PathMove{From: "a/same.go", To: "c/same.go"}
@@ -241,7 +241,7 @@ func TestSourceHistoryOverviewACOV21MoveCoversOnlyUnchangedDescendants(t *testin
 }
 
 func TestSourceHistoryOverviewACOV21FailedMoveCheckIsStated(t *testing.T) {
-	h := newHistoryHarness(t)
+	h := newHistoryHarness(t, sourceledger.Timing{})
 	h.recordOnWorker(effectSeed{path: "b", fromPath: "a", kind: sourceledger.EntryKindDirectory, op: api.SourceChangeOpRename})
 	worker := h.workerWith(failingMoves{&fakeTree{changes: treeChanges("a/x.go", "deleted", "b/x.go", "created")}})
 	result := runOverviewCall(t, h.tool, worker)
@@ -257,7 +257,7 @@ func (failingMoves) TreeMovesUnchanged(context.Context, tools.SourceTree, []work
 }
 
 func TestSourceHistoryOverviewACOV18ReusesTheRowCapAndTruncationNote(t *testing.T) {
-	h := newHistoryHarness(t)
+	h := newHistoryHarness(t, sourceledger.Timing{})
 	var changes []workspacebaseline.Change
 	for i := range overviewEffectCap + 1 {
 		changes = append(changes, workspacebaseline.Change{Path: fmt.Sprintf("gen/%04d.txt", i), Kind: workspacebaseline.ChangeCreated})
@@ -271,7 +271,7 @@ func TestSourceHistoryOverviewACOV18ReusesTheRowCapAndTruncationNote(t *testing.
 // A truncated page may omit a path's effects, so that path is checked in the
 // ledger before it claims to have no row.
 func TestSourceHistoryOverviewACOV20TruncatedPageDoesNotInventUnrecordedRows(t *testing.T) {
-	h := newHistoryHarness(t)
+	h := newHistoryHarness(t, sourceledger.Timing{})
 	h.recordOnWorker(effectSeed{path: "oldest.go", content: "first\n"})
 	h.recordOnWorker(effectSeed{root: "r2", path: "oldest.md", content: "first\n"})
 	for i := range overviewEffectCap {
@@ -292,7 +292,7 @@ func TestSourceHistoryOverviewACOV20TruncatedPageDoesNotInventUnrecordedRows(t *
 }
 
 func TestSourceHistoryOverviewACOV18TrunkSessionIsUnchanged(t *testing.T) {
-	h := newHistoryHarness(t)
+	h := newHistoryHarness(t, sourceledger.Timing{})
 	h.beginSession(historySession)
 	tree := &fakeTree{changes: treeChanges("gen.txt", "created")}
 	h.tctx.Source.History.Tree = tree
@@ -340,7 +340,7 @@ func TestSourceHistoryDiffACDF15UnrecordedFileComparesBaselineWithTheTree(t *tes
 		},
 	} {
 		t.Run(c.name, func(t *testing.T) {
-			h := newHistoryHarness(t)
+			h := newHistoryHarness(t, sourceledger.Timing{})
 			result := runTreeDiff(t, h, &fakeTree{path: c.compared}, "gen.txt")
 			if result.Recorded || !result.Unrecorded || result.VersionID != "" || result.BaseVersionID != "" || result.State != c.state || result.Since == nil {
 				t.Fatalf("result = %+v, want an unrecorded diff with no versions and state %q", result, c.state)
@@ -354,7 +354,7 @@ func TestSourceHistoryDiffACDF15UnrecordedFileComparesBaselineWithTheTree(t *tes
 }
 
 func TestSourceHistoryDiffACDF15ANoTextSideSaysSoInsteadOfDiffing(t *testing.T) {
-	h := newHistoryHarness(t)
+	h := newHistoryHarness(t, sourceledger.Timing{})
 	result := runTreeDiff(t, h, &fakeTree{path: workspacebaseline.PathComparison{Kind: workspacebaseline.ChangeModified, HasAfter: true, After: "new\n"}}, "big.bin")
 	if !result.Unrecorded || result.Diff != "" || result.Note != treeDiffNoTextNote {
 		t.Fatalf("result = %+v, want no diff and the no-text note", result)
@@ -377,7 +377,7 @@ func TestSourceHistoryDiffACDF22EmptyDiffStatesWhatIsKnown(t *testing.T) {
 		{"deleted empty", workspacebaseline.ChangeDeleted, "", "", treeDiffDeletedEmptyNote},
 	} {
 		t.Run(c.name, func(t *testing.T) {
-			h := newHistoryHarness(t)
+			h := newHistoryHarness(t, sourceledger.Timing{})
 			compared := workspacebaseline.PathComparison{Kind: c.kind, Before: c.before, After: c.after, HasBefore: true, HasAfter: true}
 			result := runTreeDiff(t, h, &fakeTree{path: compared}, "f.txt")
 			if result.Diff != "" || result.Note != c.note {
@@ -388,7 +388,7 @@ func TestSourceHistoryDiffACDF22EmptyDiffStatesWhatIsKnown(t *testing.T) {
 }
 
 func TestSourceHistoryDiffACDF22FinalNewlineChangeInTheLedgerIsStated(t *testing.T) {
-	h := newHistoryHarness(t)
+	h := newHistoryHarness(t, sourceledger.Timing{})
 	h.beginSession(historySession)
 	h.record(effectSeed{path: "f.txt", content: "a", before: "a\n"})
 	if result := h.sessionDiff("f.txt"); result.Diff != "" || result.Note != diffFinalNewlineNote {
@@ -402,7 +402,7 @@ func TestSourceHistoryDiffACDF22FinalNewlineChangeInTheLedgerIsStated(t *testing
 }
 
 func TestSourceHistoryDiffACDF15UnchangedPathKeepsTheLedgerAnswer(t *testing.T) {
-	h := newHistoryHarness(t)
+	h := newHistoryHarness(t, sourceledger.Timing{})
 	result := runTreeDiff(t, h, &fakeTree{}, "untouched.go")
 	if result.Unrecorded || result.Diff != "" || result.Note != sourceHistoryNoRecordNote {
 		t.Fatalf("result = %+v, want the no-record note", result)
@@ -412,7 +412,7 @@ func TestSourceHistoryDiffACDF15UnchangedPathKeepsTheLedgerAnswer(t *testing.T) 
 // A generator rewrote the file after the agent's last recorded write, so the live
 // side is the generator's and no version holds it.
 func TestSourceHistoryDiffACDF16LiveFileWinsOverTheRecord(t *testing.T) {
-	h := newHistoryHarness(t)
+	h := newHistoryHarness(t, sourceledger.Timing{})
 	h.recordOnWorker(effectSeed{path: "native.go", content: "native\n", before: "before\n"})
 	tree := &fakeTree{path: workspacebaseline.PathComparison{Kind: workspacebaseline.ChangeModified, Before: "before\n", After: "generated\n", HasBefore: true, HasAfter: true}}
 	result := runTreeDiff(t, h, tree, "native.go")
@@ -426,7 +426,7 @@ func TestSourceHistoryDiffACDF16LiveFileWinsOverTheRecord(t *testing.T) {
 }
 
 func TestSourceHistoryDiffACDF16LiveFileAtItsRecordNamesTheVersions(t *testing.T) {
-	h := newHistoryHarness(t)
+	h := newHistoryHarness(t, sourceledger.Timing{})
 	h.recordOnWorker(effectSeed{path: "native.go", content: "native\n", before: "before\n"})
 	tree := &fakeTree{path: workspacebaseline.PathComparison{Kind: workspacebaseline.ChangeModified, Before: "before\n", After: "native\n", HasBefore: true, HasAfter: true}}
 	result := runTreeDiff(t, h, tree, "native.go")
@@ -436,7 +436,7 @@ func TestSourceHistoryDiffACDF16LiveFileAtItsRecordNamesTheVersions(t *testing.T
 }
 
 func TestSourceHistoryDiffACDF16BaselineTheLedgerCannotVouchForNamesNoVersion(t *testing.T) {
-	h := newHistoryHarness(t)
+	h := newHistoryHarness(t, sourceledger.Timing{})
 	h.recordOnWorker(effectSeed{path: "native.go", content: "native\n", before: "before\n"})
 	tree := &fakeTree{path: workspacebaseline.PathComparison{Kind: workspacebaseline.ChangeModified, Before: "older\n", After: "native\n", HasBefore: true, HasAfter: true}}
 	result := runTreeDiff(t, h, tree, "native.go")
@@ -446,7 +446,7 @@ func TestSourceHistoryDiffACDF16BaselineTheLedgerCannotVouchForNamesNoVersion(t 
 }
 
 func TestSourceHistoryDiffACDF16PathMatchingItsBaselineKeepsTheLedgerAnswer(t *testing.T) {
-	h := newHistoryHarness(t)
+	h := newHistoryHarness(t, sourceledger.Timing{})
 	h.recordOnWorker(effectSeed{path: "native.go", content: "native\n", before: "before\n"})
 	result := runTreeDiff(t, h, &fakeTree{}, "native.go")
 	if !result.Recorded || result.Unrecorded || result.VersionID == "" || result.Diff == "" {
@@ -457,7 +457,7 @@ func TestSourceHistoryDiffACDF16PathMatchingItsBaselineKeepsTheLedgerAnswer(t *t
 // A file created natively and removed by a program is gone: its record is not
 // the answer, and neither is the whole file as added.
 func TestSourceHistoryDiffACDF20PathInNeitherBaselineNorTreeIsAbsent(t *testing.T) {
-	h := newHistoryHarness(t)
+	h := newHistoryHarness(t, sourceledger.Timing{})
 	h.recordOnWorker(effectSeed{path: "tmp.txt", content: "scratch\n", op: api.SourceChangeOpCreate})
 	result := runTreeDiff(t, h, &fakeTree{path: workspacebaseline.PathComparison{Absent: true}}, "tmp.txt")
 	if !result.Recorded || result.Unrecorded || result.State != "absent" || result.Diff != "" || result.VersionID != "" || result.BaseVersionID != "" || result.Note != treeDiffAbsentNote {
@@ -465,7 +465,7 @@ func TestSourceHistoryDiffACDF20PathInNeitherBaselineNorTreeIsAbsent(t *testing.
 	}
 
 	// With no record either, the honest answer is still that nothing is known.
-	h = newHistoryHarness(t)
+	h = newHistoryHarness(t, sourceledger.Timing{})
 	result = runTreeDiff(t, h, &fakeTree{path: workspacebaseline.PathComparison{Absent: true}}, "never.txt")
 	if result.Recorded || result.State != "" || result.Note != sourceHistoryNoRecordNote {
 		t.Fatalf("result = %+v, want the no-record note", result)
@@ -487,7 +487,7 @@ func TestSourceHistoryDiffACDF21FileMoveDiffsFromTheLedgersPredecessor(t *testin
 		{name: "rename then a program's edit", live: "changed\n", removed: []string{"body"}, kept: []string{"changed"}, note: treeDiffPastRecordNote},
 	} {
 		t.Run(c.name, func(t *testing.T) {
-			h := newHistoryHarness(t)
+			h := newHistoryHarness(t, sourceledger.Timing{})
 			h.record(effectSeed{path: "old.go", content: "body\n", session: "s0", op: api.SourceChangeOpCreate})
 			h.recordOnWorker(effectSeed{path: "new.go", fromPath: "old.go", content: "body\n", op: api.SourceChangeOpRename})
 			tree := &fakeTree{path: created(c.live), source: map[string]workspacebaseline.PathComparison{
@@ -522,7 +522,7 @@ func TestSourceHistoryDiffACDF21BaselineAtTheSourceOutranksTheLedger(t *testing.
 		{name: "source reads as matching its baseline", source: workspacebaseline.PathComparison{}, note: treeDiffMovedNote},
 	} {
 		t.Run(c.name, func(t *testing.T) {
-			h := newHistoryHarness(t)
+			h := newHistoryHarness(t, sourceledger.Timing{})
 			h.record(effectSeed{path: "old.go", content: "body\n", session: "s0", op: api.SourceChangeOpCreate})
 			h.recordOnWorker(effectSeed{path: "new.go", fromPath: "old.go", content: "body\n", op: api.SourceChangeOpRename})
 			tree := &fakeTree{path: created("body\n"), source: map[string]workspacebaseline.PathComparison{"old.go": c.source}}
@@ -552,7 +552,7 @@ func TestSourceHistoryDiffACDF21DescendantOfAMoveDiffsFromTheBaseline(t *testing
 		{name: "source reads as matching its baseline", source: workspacebaseline.PathComparison{}, live: "body\n", note: treeDiffNoTextNote},
 	} {
 		t.Run(c.name, func(t *testing.T) {
-			h := newHistoryHarness(t)
+			h := newHistoryHarness(t, sourceledger.Timing{})
 			h.recordOnWorker(effectSeed{path: "b", fromPath: "a", kind: sourceledger.EntryKindDirectory, op: api.SourceChangeOpRename})
 			testutil.FailErr(t, "mkdir", os.MkdirAll(filepath.Join(h.dir, "b"), 0o755))
 			tree := &fakeTree{path: created(c.live), source: map[string]workspacebaseline.PathComparison{"a/x.go": c.source}}
@@ -566,7 +566,7 @@ func TestSourceHistoryDiffACDF21DescendantOfAMoveDiffsFromTheBaseline(t *testing
 }
 
 func TestSourceHistoryDiffACDF21OldNameOfAMoveIsAbsentAndRecorded(t *testing.T) {
-	h := newHistoryHarness(t)
+	h := newHistoryHarness(t, sourceledger.Timing{})
 	h.recordOnWorker(effectSeed{path: "dir/old.go", content: "body\n", op: api.SourceChangeOpCreate})
 	h.recordOnWorker(effectSeed{path: "dir/new.go", fromPath: "dir/old.go", op: api.SourceChangeOpRename})
 	gone := workspacebaseline.PathComparison{Kind: workspacebaseline.ChangeDeleted, Before: "body\n", HasBefore: true, HasAfter: true}
@@ -582,7 +582,7 @@ func TestSourceHistoryDiffACDF21OldNameOfAMoveIsAbsentAndRecorded(t *testing.T) 
 }
 
 func TestSourceHistoryDiffACDF21FollowsAChainOfDirectoryMoves(t *testing.T) {
-	h := newHistoryHarness(t)
+	h := newHistoryHarness(t, sourceledger.Timing{})
 	h.recordOnWorker(effectSeed{path: "b", fromPath: "a", kind: sourceledger.EntryKindDirectory, op: api.SourceChangeOpRename})
 	h.recordOnWorker(effectSeed{path: "c", fromPath: "b", kind: sourceledger.EntryKindDirectory, op: api.SourceChangeOpRename})
 	tree := &fakeTree{path: created("body\n"), source: map[string]workspacebaseline.PathComparison{
@@ -598,7 +598,7 @@ func TestSourceHistoryDiffACDF21FollowsAChainOfDirectoryMoves(t *testing.T) {
 
 // Lost bytes say nothing about whether the live file moved past its record.
 func TestSourceHistoryDiffACDF23LostRecordIsNotCalledAChange(t *testing.T) {
-	h := newHistoryHarness(t)
+	h := newHistoryHarness(t, sourceledger.Timing{})
 	h.recordOnWorker(effectSeed{path: "native.go", content: "native\n", before: "before\n"})
 	testutil.FailErr(t, "drop stored content", os.RemoveAll(h.blobs))
 	tree := &fakeTree{path: workspacebaseline.PathComparison{Kind: workspacebaseline.ChangeModified, Before: "before\n", After: "native\n", HasBefore: true, HasAfter: true}}
@@ -615,7 +615,7 @@ func TestSourceHistoryDiffACDF16LedgerRejectionYieldsToTheTree(t *testing.T) {
 		h.recordOnWorker(effectSeed{path: "native.go", content: "native\n", before: "before\n"})
 		testutil.FailErr(t, "drop stored content", os.RemoveAll(h.blobs))
 	}
-	h := newHistoryHarness(t)
+	h := newHistoryHarness(t, sourceledger.Timing{})
 	seed(h)
 	tree := &fakeTree{path: workspacebaseline.PathComparison{Kind: workspacebaseline.ChangeModified, Before: "before\n", After: "generated\n", HasBefore: true, HasAfter: true}}
 	result := runTreeDiff(t, h, tree, "native.go")
@@ -623,7 +623,7 @@ func TestSourceHistoryDiffACDF16LedgerRejectionYieldsToTheTree(t *testing.T) {
 		t.Fatalf("result = %+v, want the tree's diff with no versions", result)
 	}
 
-	h = newHistoryHarness(t)
+	h = newHistoryHarness(t, sourceledger.Timing{})
 	seed(h)
 	h.writeFile("native.go", "on disk\n")
 	if out, err := h.tool.Run(t.Context(), map[string]any{"path": "native.go", "mode": "diff"}, h.workerWith(&fakeTree{})); err == nil {
@@ -637,7 +637,7 @@ func TestSourceHistoryDiffACOV19ComparisonFailureAddsANote(t *testing.T) {
 		"reader is unset": nil,
 	} {
 		t.Run(name, func(t *testing.T) {
-			h := newHistoryHarness(t)
+			h := newHistoryHarness(t, sourceledger.Timing{})
 			result := runTreeDiff(t, h, tree, "gen.txt")
 			if result.Unrecorded || result.Diff != "" || !strings.Contains(result.Note, overviewTreeUnknownNote) || !strings.Contains(result.Note, sourceHistoryNoRecordNote) {
 				t.Fatalf("result = %+v, want both notes and no diff", result)
@@ -653,7 +653,7 @@ func (failingPathLookup) OldestPathEffectAfterOnBranch(context.Context, string, 
 }
 
 func TestSourceHistoryOverviewACOV19LedgerLookupFailureIsStated(t *testing.T) {
-	h := newHistoryHarness(t)
+	h := newHistoryHarness(t, sourceledger.Timing{})
 	for i := range overviewEffectCap + 1 {
 		h.recordOnWorker(effectSeed{path: "busy.go", content: fmt.Sprintf("v%d\n", i)})
 	}
@@ -691,7 +691,7 @@ func TestSourceHistoryDiffACDF18LargeRewriteAnswersWithANote(t *testing.T) {
 	before, after := manyLines("old", lines), manyLines("new", lines)
 
 	t.Run("live file on a write leg", func(t *testing.T) {
-		h := newHistoryHarness(t)
+		h := newHistoryHarness(t, sourceledger.Timing{})
 		tree := &fakeTree{path: workspacebaseline.PathComparison{Kind: workspacebaseline.ChangeModified, Before: before, After: after, HasBefore: true, HasAfter: true}}
 		var result diffResult
 		if allocated := allocatedBy(func() { result = runTreeDiff(t, h, tree, "gen.txt") }); allocated > largeDiffAllocationLimit {
@@ -702,7 +702,7 @@ func TestSourceHistoryDiffACDF18LargeRewriteAnswersWithANote(t *testing.T) {
 		}
 	})
 	t.Run("default diff from the ledger", func(t *testing.T) {
-		h := newHistoryHarness(t)
+		h := newHistoryHarness(t, sourceledger.Timing{})
 		h.beginSession(historySession)
 		h.record(effectSeed{path: "gen.txt", content: after, before: before})
 		var result diffResult
@@ -715,7 +715,7 @@ func TestSourceHistoryDiffACDF18LargeRewriteAnswersWithANote(t *testing.T) {
 		}
 	})
 	t.Run("explicit version", func(t *testing.T) {
-		h := newHistoryHarness(t)
+		h := newHistoryHarness(t, sourceledger.Timing{})
 		h.record(effectSeed{path: "gen.txt", content: after, before: before})
 		version := h.head("gen.txt").VersionID
 		var result diffResult
@@ -739,7 +739,7 @@ func TestSourceHistoryDiffACDF18CeilingAdmitsOrdinaryFiles(t *testing.T) {
 		"gone file of 50,000 lines": {Kind: workspacebaseline.ChangeDeleted, Before: manyLines("old", 50_000), HasBefore: true, HasAfter: true},
 	} {
 		t.Run(name, func(t *testing.T) {
-			h := newHistoryHarness(t)
+			h := newHistoryHarness(t, sourceledger.Timing{})
 			var result diffResult
 			if allocated := allocatedBy(func() { result = runTreeDiff(t, h, &fakeTree{path: compared}, "gen.txt") }); allocated > largeDiffAllocationLimit {
 				t.Fatalf("allocated %d bytes, limit %d", allocated, int64(largeDiffAllocationLimit))
@@ -753,7 +753,7 @@ func TestSourceHistoryDiffACDF18CeilingAdmitsOrdinaryFiles(t *testing.T) {
 
 // A move's base text keeps its origin: its exposure is recorded at the old name.
 func TestSourceHistoryACDF19MovedCredentialFileOnAWriteLeg(t *testing.T) {
-	h := newHistoryHarness(t)
+	h := newHistoryHarness(t, sourceledger.Timing{})
 	h.record(effectSeed{path: ".env", content: "TOKEN=old\n", session: "s0", op: api.SourceChangeOpCreate})
 	h.recordOnWorker(effectSeed{path: "settings.txt", fromPath: ".env", content: "TOKEN=old\n", op: api.SourceChangeOpRename})
 	h.writeFile("settings.txt", "TOKEN=new\n")

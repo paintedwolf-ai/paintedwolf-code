@@ -7,13 +7,14 @@ import (
 
 	"github.com/lycaon/lycaon/internal/hitl"
 	"github.com/lycaon/lycaon/internal/settings"
+	"github.com/lycaon/lycaon/internal/settings/settingstest"
 	"github.com/lycaon/lycaon/internal/testutil"
 )
 
 func TestCommandApprovalDependsOnAppliedContainmentNotCommandText(t *testing.T) {
 	store, err := settings.NewApprovalStoreAt(filepath.Join(t.TempDir(), "approvals.yaml"))
 	testutil.FailErr(t, "load approval store", err)
-	gate := settings.NewRuleApprovalGate(store, settings.NoSources())
+	gate := settings.NewRuleApprovalGate(store, settingstest.EmptySources())
 	proj := t.TempDir()
 
 	commands := []string{

@@ -49,10 +49,11 @@ const sourceDeclaredPage = "declared_page"
 
 // Warmer builds and records the web index off the search path.
 type Warmer struct {
-	index    *webindex.Store
-	registry *llm.Registry
-	policy   *llm.PolicyStore
-	cfg      *ConfigStore
+	discovery *Discovery
+	index     *webindex.Store
+	registry  *llm.Registry
+	policy    *llm.PolicyStore
+	cfg       *ConfigStore
 	// Plane limits utility-model concurrency.
 	Plane *llm.UtilityPlane
 	Cost  cost.CostTracker
@@ -71,10 +72,11 @@ type warmWork struct {
 }
 
 // NewWarmer builds a warmer from shared stores.
-func NewWarmer(index *webindex.Store, registry *llm.Registry, policy *llm.PolicyStore, cfg *ConfigStore) *Warmer {
+func NewWarmer(discovery *Discovery, index *webindex.Store, registry *llm.Registry, policy *llm.PolicyStore, cfg *ConfigStore) *Warmer {
 	ctx, cancel := context.WithCancel(context.Background())
 	return &Warmer{
-		index: index, registry: registry, policy: policy, cfg: cfg, ctx: ctx, cancel: cancel,
+		discovery: discovery,
+		index:     index, registry: registry, policy: policy, cfg: cfg, ctx: ctx, cancel: cancel,
 		sessionWork: make(map[string]map[*warmWork]struct{}),
 	}
 }
@@ -377,15 +379,16 @@ func (w *Warmer) warmQuery(ctx context.Context, req warmRequest) api.IndexWarmin
 	topic := clipTopic(req.query)
 	meta := api.IndexWarmingMeta{Trigger: req.trigger, Topic: topic}
 
-	if !tryAcquireDirectSlot() {
+	release, acquired := w.discovery.tryAcquire()
+	if !acquired {
 		w.index.QueueActivity(ctx, webindex.WarmActivity{Trigger: req.trigger, Topic: topic, SkipReason: warmSkipBusy, SessionID: req.sessionID, ToolCallID: req.toolCallID})
 		meta.SkipReason = warmSkipBusy
 		return meta
 	}
-	defer releaseDirectSlot()
+	defer release()
 
 	caps := w.caps()
-	d := &directDiscoverer{index: w.index, origin: webindex.OriginWarmed, taskHint: req.taskHint, seedOrigin: searchOriginWarm}
+	d := &directDiscoverer{discovery: w.discovery, index: w.index, origin: webindex.OriginWarmed, taskHint: req.taskHint, seedOrigin: searchOriginWarm}
 
 	crawlHosts, crawlResult := w.warmCrawlTier(ctx, d, req, caps)
 	crawlPages := crawlResult.pages
@@ -405,7 +408,7 @@ func (w *Warmer) warmQuery(ctx context.Context, req warmRequest) api.IndexWarmin
 	underfilled := req.directParticipated && req.maxResults > 0 && req.strongHits*2 < req.maxResults
 	seedEligible := w.mode() == WarmingFull &&
 		req.trigger == warmTriggerSearch && underfilled
-	if seedEligible && interactiveSearchActive() && w.summarizerSharesCoordinator(req.projectDir) {
+	if seedEligible && w.discovery.interactiveSearchActive() && w.summarizerSharesCoordinator(req.projectDir) {
 		seedTrigger := req.trigger
 		if req.trigger == warmTriggerSearch {
 			seedTrigger = warmTriggerSearchSeed
@@ -515,7 +518,7 @@ func (w *Warmer) warmSiteBases(ctx context.Context, d *directDiscoverer, query s
 	if (len(bases) == 0 && len(extra) == 0) || probeBudget <= 0 {
 		return warmProbeResult{}
 	}
-	crawler := newHostCrawlerPreSlotted(ctx)
+	crawler := newHostCrawlerPreSlotted(ctx, w.discovery)
 	defer crawler.wait()
 	phrases := append([]string{strings.ToLower(query)}, queryTokens(query)...)
 	for _, base := range bases {
@@ -552,7 +555,7 @@ func (w *Warmer) warmSeed(ctx context.Context, d *directDiscoverer, query, proje
 	if probeBudget <= 0 {
 		return nil, warmProbeResult{}, ""
 	}
-	crawler := newHostCrawlerPreSlotted(ctx)
+	crawler := newHostCrawlerPreSlotted(ctx, w.discovery)
 	defer crawler.wait()
 	plan, err := d.pickSeedsCached(ctx, query, CurrentPeriod(), probeBudget, crawler.launch, func(ctx context.Context) (bool, error) {
 		return w.index.ReserveSeedWarm(ctx, time.Now(), time.Hour, caps.SeedWarmsPerHour)

@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/progress"
+	"github.com/lycaon/lycaon/internal/progress/progresstest"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/toolexecution"
 	"github.com/lycaon/lycaon/internal/toolrejection"
@@ -44,7 +45,7 @@ func TestUpdateProgress_rejectsNoOpenStepInitial(t *testing.T) {
 }
 
 func TestUpdateProgress_acceptsAllTerminalWhenPrevHasRows(t *testing.T) {
-	store := progress.NewMemoryStore()
+	store := progresstest.New(t, "sess-1")
 	reg := tools.NewDefaultRegistry()
 	scope := func(_ context.Context, id string) string { return id }
 	testutil.FailErr(t, "register update_progress", native.RegisterUpdateProgressTool(reg, store, scope, nil))
@@ -65,7 +66,7 @@ func TestUpdateProgress_acceptsAllTerminalWhenPrevHasRows(t *testing.T) {
 }
 
 func TestUpdateProgress_acceptsOverlongLabel(t *testing.T) {
-	store := progress.NewMemoryStore()
+	store := progresstest.New(t, "sess-1")
 	reg := tools.NewDefaultRegistry()
 	scope := func(_ context.Context, id string) string { return id }
 	testutil.FailErr(t, "register update_progress", native.RegisterUpdateProgressTool(reg, store, scope, nil))
@@ -84,7 +85,7 @@ func TestUpdateProgress_acceptsOverlongLabel(t *testing.T) {
 }
 
 func TestUpdateProgress_unchangedContentNoops(t *testing.T) {
-	store := progress.NewMemoryStore()
+	store := progresstest.New(t, "sess-1")
 	reg := tools.NewDefaultRegistry()
 	scope := func(_ context.Context, id string) string { return id }
 	testutil.FailErr(t, "register update_progress", native.RegisterUpdateProgressTool(reg, store, scope, nil))
@@ -130,7 +131,7 @@ func TestUpdateProgress_unchangedContentNoops(t *testing.T) {
 }
 
 func TestUpdateProgress_acceptsValidPlan(t *testing.T) {
-	store := progress.NewMemoryStore()
+	store := progresstest.New(t, "sess-1")
 	reg := tools.NewDefaultRegistry()
 	scope := func(_ context.Context, id string) string { return id }
 	testutil.FailErr(t, "register update_progress", native.RegisterUpdateProgressTool(reg, store, scope, nil))
@@ -152,7 +153,7 @@ func TestUpdateProgress_acceptsValidPlan(t *testing.T) {
 
 func assertUpdateProgressReject(t *testing.T, code, content string) {
 	t.Helper()
-	store := progress.NewMemoryStore()
+	store := progresstest.New(t, "sess-1")
 	reg := tools.NewDefaultRegistry()
 	scope := func(_ context.Context, id string) string { return id }
 	testutil.FailErr(t, "register update_progress", native.RegisterUpdateProgressTool(reg, store, scope, nil))
@@ -180,7 +181,7 @@ func assertUpdateProgressReject(t *testing.T, code, content string) {
 }
 
 func TestUpdateProgressRequiresObservedRevisionForExistingChecklist(t *testing.T) {
-	store := progress.NewMemoryStore()
+	store := progresstest.New(t, "session")
 	testutil.FailErr(t, "seed current checklist", store.Set("session", "- [ ] Preserve"))
 	before, err := store.Snapshot(t.Context(), "session")
 	testutil.FailErr(t, "observe current checklist", err)
@@ -200,7 +201,7 @@ func TestUpdateProgressRequiresObservedRevisionForExistingChecklist(t *testing.T
 }
 
 func TestProgressHandlerPublishesAdvancementFromTheCommittedResult(t *testing.T) {
-	store := progress.NewMemoryStore()
+	store := progresstest.New(t, "session")
 	handler := reporting.ProgressHandler(store, func(_ context.Context, id string) string { return id }, nil)
 	for _, tc := range []struct {
 		content  string

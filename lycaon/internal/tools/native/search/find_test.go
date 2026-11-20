@@ -207,7 +207,7 @@ func TestFindExecDispatchesOrdinaryChildren(t *testing.T) {
 func TestFindExecWithoutDispatcherRefuses(t *testing.T) {
 	h := newHarness(t, findTree)
 	request := requestFor(h, "find", "tree", "-exec", "printf", "{}", ";")
-	result, err := h.owners.Invoke(t.Context(), h.tc, mustPaths(t, h), nil, request, streamsFor())
+	result, err := invokeSearch(h.owners, t.Context(), h.tc, mustPaths(t, h), nil, request, streamsFor())
 	if reject := toolrejection.AsToolReject(err); reject == nil || reject.Code != "COMMAND_NATIVE_FORM_UNSUPPORTED" || result.Terminal != toolcontract.ProducerRefused {
 		t.Fatalf("no dispatcher: %+v %v", result, err)
 	}

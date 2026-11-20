@@ -130,7 +130,7 @@ func (r *conformanceRunner) runCaseWithRecommendedApprovals(t *testing.T, c comm
 	dir := r.seedWorkspace(t, c)
 	projectID := uuid.NewString()
 	testdbseed.InsertProjectRoot(t, r.h.DB, projectID, dir)
-	sess, err := r.h.Store.Create(t.Context(), wire.CreateSessionRequest{ProjectID: projectID}, projectID)
+	sess, err := r.h.Store.Sessions.Create(t.Context(), wire.CreateSessionRequest{ProjectID: projectID}, projectID)
 	testutil.FailErr(t, "create session", err)
 	testutil.FailErr(t, "set implementer agent", r.h.Sessions.Manager.Chats.SetAgentType(t.Context(), sess.ID, "implementer"))
 	r.h.SeedProgress(t, t.Context(), sess.ID)
@@ -278,7 +278,7 @@ func (r *conformanceRunner) joinRunningProgram(t *testing.T, projectID, sessionI
 
 func (r *conformanceRunner) toolResult(t *testing.T, sessionID, callID string) string {
 	t.Helper()
-	msgs, err := r.h.Store.GetMessages(t.Context(), sessionID)
+	msgs, err := r.h.Store.Transcript.GetMessages(t.Context(), sessionID)
 	testutil.FailErr(t, "read session messages", err)
 	for _, raw := range msgs {
 		msg := messageview.RedactMessage(raw)

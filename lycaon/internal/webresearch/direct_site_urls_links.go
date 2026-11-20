@@ -125,8 +125,8 @@ var (
 	h2Re            = regexp.MustCompile(`(?m)^##\s+(.+)\s*$`)
 )
 
-func fetchLLMsTxtLinks(ctx context.Context, llmsURL string) []siteIndexLink {
-	body, err := fetchTextURL(ctx, llmsURL)
+func (crawler *Crawler) fetchLLMsTxtLinks(ctx context.Context, llmsURL string) []siteIndexLink {
+	body, err := crawler.fetchTextURL(ctx, llmsURL)
 	if err != nil {
 		return nil
 	}

@@ -7,25 +7,12 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/lycaon/lycaon/internal/confine"
+	confinefixture "github.com/lycaon/lycaon/internal/testsetup/confine"
 	"github.com/lycaon/lycaon/internal/testutil"
 )
 
-// An empty state root prevents reclamation of concurrent test streams.
-func requireRefusalWatch(t *testing.T) {
-	t.Helper()
-	confine.StartRefusalWatch(t.Context(), "", nil)
-	ctx, cancel := context.WithTimeout(t.Context(), 15*time.Second)
-	defer cancel()
-	for !confine.RefusalWatchLive() {
-		if ctx.Err() != nil {
-			t.Skip("kernel sandbox reports are not readable on this host")
-		}
-		time.Sleep(50 * time.Millisecond)
-	}
-}
 
 // refusalsOf collects kernel reports for one confined action.
 func refusalsOf(t *testing.T, self string, roots []string, name string, args ...string) (confine.SandboxRefusals, string) {
@@ -53,7 +40,7 @@ func findRefusal(refusals confine.SandboxRefusals, operation, target string) (co
 
 func TestKernelRefusalOfAWriteReachesItsAction(t *testing.T) {
 	self := requireLiveBoundary(t)
-	requireRefusalWatch(t)
+	confinefixture.RequireRefusalReports(t)
 	outside, err := filepath.EvalSymlinks(outsideTemporaryWriteRoots(t))
 	testutil.FailErr(t, "resolve outside dir", err)
 	target := filepath.Join(outside, "escape")
@@ -77,7 +64,7 @@ func TestKernelRefusalOfAWriteReachesItsAction(t *testing.T) {
 // A write a floor refuses reaches the action on every platform.
 func TestFloorRefusalOfAWriteReachesItsAction(t *testing.T) {
 	self := requireLiveBoundary(t)
-	requireRefusalWatch(t)
+	confinefixture.RequireRefusalReports(t)
 	project, err := filepath.EvalSymlinks(t.TempDir())
 	testutil.FailErr(t, "resolve project", err)
 	target := filepath.Join(project, "AGENTS.md")
@@ -93,7 +80,7 @@ func TestFloorRefusalOfAWriteReachesItsAction(t *testing.T) {
 
 func TestKernelRefusalOfAUnixListenerNeedsHostExecution(t *testing.T) {
 	self := requireLiveBoundary(t)
-	requireRefusalWatch(t)
+	confinefixture.RequireRefusalReports(t)
 	nc, err := exec.LookPath("nc")
 	if err != nil {
 		t.Skip("nc is required to open a unix-socket listener")
@@ -114,7 +101,7 @@ func TestKernelRefusalOfAUnixListenerNeedsHostExecution(t *testing.T) {
 
 func TestDiskSpaceQueriesAreNotRefused(t *testing.T) {
 	self := requireLiveBoundary(t)
-	requireRefusalWatch(t)
+	confinefixture.RequireRefusalReports(t)
 	project, err := filepath.EvalSymlinks(t.TempDir())
 	testutil.FailErr(t, "resolve project", err)
 	refusals, out := refusalsOf(t, self, []string{project}, "/bin/df", "-k", "/")
@@ -125,7 +112,7 @@ func TestDiskSpaceQueriesAreNotRefused(t *testing.T) {
 
 func TestOrdinaryToolchainsStartWithoutRefusals(t *testing.T) {
 	self := requireLiveBoundary(t)
-	requireRefusalWatch(t)
+	confinefixture.RequireRefusalReports(t)
 	project, err := filepath.EvalSymlinks(t.TempDir())
 	testutil.FailErr(t, "resolve project", err)
 	probes := [][]string{

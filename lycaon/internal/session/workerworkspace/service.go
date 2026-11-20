@@ -22,6 +22,8 @@ type Workspace interface {
 }
 type Tasks interface {
 	Get(string) (*api.WorkerTask, bool)
+}
+type Branches interface {
 	ClaimWorkerBranch(context.Context, string) (*api.WorkerTask, error)
 	// ReviewsWorker reports a read job that reviews a sealed result.
 	ReviewsWorker(context.Context, *api.WorkerTask) bool
@@ -37,6 +39,7 @@ type Service struct {
 	store                  Sessions
 	workspace              Workspace
 	tasks                  Tasks
+	branches               Branches
 	calls                  Calls
 	events                 *events.Publisher
 	Touches                *TouchLedger
@@ -66,3 +69,5 @@ func (m *Service) Close() {
 }
 func (m *Service) SetTasks(tasks Tasks)                     { m.tasks = tasks }
 func (m *Service) SetPublisher(publisher *events.Publisher) { m.events = publisher }
+
+func (m *Service) SetBranches(branches Branches) { m.branches = branches }

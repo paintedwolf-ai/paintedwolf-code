@@ -8,6 +8,7 @@ import (
 	"github.com/lycaon/lycaon/config"
 	"github.com/lycaon/lycaon/config/configtest"
 	"github.com/lycaon/lycaon/internal/llm/providerretry"
+	"github.com/lycaon/lycaon/pkg/api"
 	"gopkg.in/yaml.v3"
 )
 
@@ -106,4 +107,15 @@ func TestProviderCatalogCreatesPrivateConfigDirectory(t *testing.T) {
 	if info.Mode().Perm() != privateConfigDirMode {
 		t.Fatalf("config directory mode = %o, want %o", info.Mode().Perm(), privateConfigDirMode)
 	}
+}
+
+func providerMetaByID(t *testing.T, providers []api.ProviderMeta, id string) api.ProviderMeta {
+	t.Helper()
+	for _, provider := range providers {
+		if provider.ID == id {
+			return provider
+		}
+	}
+	t.Fatalf("provider %q missing from list", id)
+	return api.ProviderMeta{}
 }

@@ -1,6 +1,7 @@
 package workflow
 
 import (
+	"github.com/lycaon/lycaon/internal/progress/progresstest"
 	"github.com/lycaon/lycaon/internal/workflow/runstate"
 	"strings"
 	"testing"
@@ -10,7 +11,7 @@ import (
 )
 
 func TestFanoutPlanSeedsAnEmptyChecklistOnly(t *testing.T) {
-	store := progress.NewMemoryStore()
+	store := progresstest.New(t, "sess")
 	plan := runstate.FanoutPlan{Legs: []runstate.FanoutPlanLeg{{ID: "leg-1", Subject: "Auth boundary"}, {ID: "leg-2", Subject: "Parser"}}}
 	seedFanoutProgress(t.Context(), store, "sess", "run", plan)
 	content := store.Get(t.Context(), "sess")

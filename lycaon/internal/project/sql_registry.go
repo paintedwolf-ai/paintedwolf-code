@@ -59,26 +59,22 @@ func (r *SQLRegistry) Create(ctx context.Context, params CreateParams) (*Project
 	}); err != nil {
 		return nil, fmt.Errorf("insert project: %w", err)
 	}
-	p := &Project{
-		ID:           id,
-		Name:         name.String,
-		IsDraft:      params.Draft,
-		LastOpenedAt: now,
-		CreatedAt:    now,
-	}
+	roots := make([]Root, 0, len(params.Roots))
 	for _, rootIn := range params.Roots {
-		if _, err := attachRootTx(ctx, q, p, rootIn, RootKindAttached); err != nil {
+		root, err := attachRootTx(ctx, q, id, roots, rootIn, RootKindAttached)
+		if err != nil {
 			return nil, err
 		}
+		roots = append(roots, root)
 	}
 	if params.Draft && len(params.Roots) == 0 {
 		if err := ensureDraftScratchRoot(ctx, id, func(in AttachRootParams) (Root, error) {
-			return attachRootTx(ctx, q, p, in, RootKindDraft)
+			return attachRootTx(ctx, q, id, nil, in, RootKindDraft)
 		}); err != nil {
 			return nil, err
 		}
 	}
-	p, err = loadProject(ctx, q, id)
+	p, err := loadProject(ctx, q, id)
 	if err != nil {
 		return nil, err
 	}

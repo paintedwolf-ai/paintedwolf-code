@@ -12,36 +12,36 @@ import (
 
 func TestUserContinuationKeepsCurrentTurn(t *testing.T) {
 	ctx := t.Context()
-	database := testdbfixture.Open(t, "store.db")
+	database := testdbfixture.Open(t, "store.core.db.db")
 	testdbseed.InsertProjectRoot(t, database, testdbseed.DefaultProjectID, t.TempDir())
 
 	st := NewSQL(database)
-	sess, err := st.Create(ctx, api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
+	sess, err := st.Sessions.Create(ctx, api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
-	testutil.FailErr(t, "append user messages", st.AppendMessages(ctx, sess.ID,
+	testutil.FailErr(t, "append user messages", st.Transcript.AppendMessages(ctx, sess.ID,
 		api.Message{ID: uuid.NewString(), Role: api.MessageRoleUser, Origin: api.MessageOriginUser, Content: "start"},
 		api.Message{ID: uuid.NewString(), Role: api.MessageRoleUser, Origin: api.MessageOriginUser, Kind: api.MessageKindUserContinuation, Content: "adjust"},
 	))
-	turnSource, err := st.ReadSourceTurn(ctx, sess.ID, 0)
+	turnSource, err := st.Transcript.ReadSourceTurn(ctx, sess.ID, 0)
 	turn := turnSource.Number
 	testutil.FailErr(t, "read user turn ordinal", err)
 	if turn != 1 {
 		t.Fatalf("user turn ordinal = %d want 1", turn)
 	}
-	testutil.FailErr(t, "append assistant observation", st.AppendMessages(ctx, sess.ID,
+	testutil.FailErr(t, "append assistant observation", st.Transcript.AppendMessages(ctx, sess.ID,
 		api.Message{ID: uuid.NewString(), Role: api.MessageRoleAssistant, Content: "observed"},
 		api.Message{ID: uuid.NewString(), Role: api.MessageRoleUser, Content: "second instruction"}))
-	second, err := st.ReadSourceTurn(ctx, sess.ID, 2)
+	second, err := st.Transcript.ReadSourceTurn(ctx, sess.ID, 2)
 	testutil.FailErr(t, "resolve source turn identity", err)
-	opener, err := st.GetMessage(ctx, sess.ID, second.OpeningMessageID)
+	opener, err := st.Transcript.GetMessage(ctx, sess.ID, second.OpeningMessageID)
 	testutil.FailErr(t, "resolve source turn opener", err)
 	if opener.Content != "second instruction" || opener.Ord != 4 {
 		t.Fatal("source turn identity was treated as a transcript ordinal")
 	}
-	if _, err := st.ReadSourceTurn(ctx, sess.ID, -1); err == nil {
+	if _, err := st.Transcript.ReadSourceTurn(ctx, sess.ID, -1); err == nil {
 		t.Fatal("negative source turn accepted")
 	}
-	missing, err := st.ReadSourceTurn(ctx, sess.ID, 999)
+	missing, err := st.Transcript.ReadSourceTurn(ctx, sess.ID, 999)
 	testutil.FailErr(t, "read absent source turn", err)
 	if missing.OpeningMessageID != "" {
 		t.Fatal("absent source turn returned an opener")
@@ -53,22 +53,22 @@ func TestTurnNumbersAreNotReusedAfterTranscriptTruncation(t *testing.T) {
 	testdbseed.InsertProjectRoot(t, database, testdbseed.DefaultProjectID, t.TempDir())
 	st := NewSQL(database)
 	ctx := t.Context()
-	sess, err := st.Create(ctx, api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
+	sess, err := st.Sessions.Create(ctx, api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
 	first := api.Message{ID: uuid.NewString(), Role: api.MessageRoleUser, Origin: api.MessageOriginUser, Content: "first"}
 	second := first
 	second.ID = uuid.NewString()
-	testutil.FailErr(t, "append turns", st.AppendMessages(ctx, sess.ID, first, second))
+	testutil.FailErr(t, "append turns", st.Transcript.AppendMessages(ctx, sess.ID, first, second))
 	rewindFrom(t, st, sess.ID, first.ID)
-	empty, err := st.Get(ctx, sess.ID)
+	empty, err := st.Sessions.Get(ctx, sess.ID)
 	testutil.FailErr(t, "read rewound session", err)
 	if empty.CurrentTurn != 0 {
 		t.Fatalf("empty current turn=%d", empty.CurrentTurn)
 	}
 	next := first
 	next.ID = uuid.NewString()
-	testutil.FailErr(t, "append next turn", st.AppendMessages(ctx, sess.ID, next))
-	currentSource, err := st.ReadSourceTurn(ctx, sess.ID, 0)
+	testutil.FailErr(t, "append next turn", st.Transcript.AppendMessages(ctx, sess.ID, next))
+	currentSource, err := st.Transcript.ReadSourceTurn(ctx, sess.ID, 0)
 	current := currentSource.Number
 	testutil.FailErr(t, "read permanent turn", err)
 	if current != 3 {

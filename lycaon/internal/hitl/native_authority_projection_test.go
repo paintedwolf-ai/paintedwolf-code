@@ -126,7 +126,7 @@ type nativeAuthorityHost struct {
 func startNativeAuthorityHost(t *testing.T, path string) nativeAuthorityHost {
 	t.Helper()
 	database := testdbfixture.OpenPath(t, path)
-	manager := hitl.NewCheckpoints(hitl.NewSQLStore(database), &events.Publisher{Hub: events.NewMemoryHub()}, authzcontext.SQLRecorder(database))
+	manager := hitl.NewCheckpoints(hitl.NewSQLStore(database), &events.Publisher{Hub: events.NewMemoryHub()}, authzcontext.LedgerRecorder{Ledger: &authzcontext.Ledger{Store: authzcontext.NewSQLStore(database)}})
 	t.Cleanup(func() {
 		testutil.FailErr(t, "stop checkpoint expiries", manager.StopExpiryTimers(context.Background()))
 	})

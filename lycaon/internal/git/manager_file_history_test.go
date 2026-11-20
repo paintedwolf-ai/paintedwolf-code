@@ -22,7 +22,7 @@ func fileHistoryRepo(t *testing.T) (dir string, run func(args ...string) string)
 	run = func(args ...string) string {
 		t.Helper()
 		cmd := osexec.CommandContext(context.Background(), "git", append([]string{"-C", dir}, args...)...)
-		cmd.Env = exec.LocalGitEnv()
+		cmd.Env = exec.InheritedEnviron()
 		out, err := cmd.CombinedOutput()
 		if err != nil {
 			t.Fatalf("git %v: %v %s", args, err, out)

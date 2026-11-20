@@ -68,7 +68,7 @@ func TestProviderRequestProceduresUseActualToolSet(t *testing.T) {
 		if activated {
 			active["verify"] = true
 		}
-		turn, err := loop.Model.buildTurnRequest(t.Context(), sess, sess.ID, history, prompts.CoordinatorProfileID, "inspect", 0, 20, false, &promptLoopTurnState{})
+		turn, err := loop.Model.buildTurnRequest(t.Context(), sess, sess.ID, history, prompts.CoordinatorProfileID, 0, 20, false, &promptLoopTurnState{})
 		testutil.FailErr(t, "build provider request", err)
 		wireNames := namesOf(turn.Req.Tools)
 		if !slices.Equal(delivered, wireNames) {
@@ -134,7 +134,7 @@ func TestCloseoutRepairToolUseFollowsTurnFinality(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			retained = tc.retained
 			st := &promptLoopTurnState{proseFinish: tc.final}
-			turn, err := loop.Model.buildTurnRequest(t.Context(), sess, sess.ID, history, prompts.CoordinatorProfileID, "report", 0, 20, false, st)
+			turn, err := loop.Model.buildTurnRequest(t.Context(), sess, sess.ID, history, prompts.CoordinatorProfileID, 0, 20, false, st)
 			testutil.FailErr(t, "build provider request", err)
 			if got := turn.Req.ToolsCallable(); got != tc.wantTools {
 				t.Fatalf("callable = %v, want %v", got, tc.wantTools)
@@ -171,7 +171,7 @@ func TestProseFinishTurnForbidsCoordinatorToolUse(t *testing.T) {
 	sess := &api.Session{ID: "closeout", AgentType: prompts.CoordinatorProfileID, WorkspacePath: "/tmp/repo", Posture: api.SessionPostureBuild}
 	history := []api.Message{{Role: api.MessageRoleSystem, Content: "charter", ContextPinned: true}, {Role: api.MessageRoleUser, Content: "survey"}}
 	st := &promptLoopTurnState{proseFinish: true}
-	turn, err := loop.Model.buildTurnRequest(t.Context(), sess, sess.ID, history, prompts.CoordinatorProfileID, "survey", 3, 20, false, st)
+	turn, err := loop.Model.buildTurnRequest(t.Context(), sess, sess.ID, history, prompts.CoordinatorProfileID, 3, 20, false, st)
 	testutil.FailErr(t, "build closeout request", err)
 	if turn.Req.ToolUse != modelcall.ToolUseForbidden || len(turn.Req.Tools) == 0 {
 		t.Fatalf("closeout tool use = %d with %d tools, want forbidden with definitions kept", turn.Req.ToolUse, len(turn.Req.Tools))

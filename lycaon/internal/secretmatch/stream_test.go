@@ -65,7 +65,7 @@ func TestScreenBytesRejectsNilContextBeforeReadingOrWriting(t *testing.T) {
 func TestStreamCursorStaysPastAMatchCrossingTheWindowStop(t *testing.T) {
 	secret := "FFFF"
 	raw := "0" + secret + "F" + strings.Repeat("0", 68)
-	m := NewInertMatcher()
+	m := &Matcher{}
 	m.SetScreenWindow(72, 71)
 	m.SetHarvestSource(func(context.Context) []HarvestedValue {
 		return []HarvestedValue{managedValue(secret, testReference)}

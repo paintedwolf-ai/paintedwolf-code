@@ -37,7 +37,7 @@ func TestOpenThenDeletedFileNeverReachesTheChangeSet(t *testing.T) {
 	if _, err := f.WriteString("data"); err != nil {
 		t.Fatalf("write: %v", err)
 	}
-	if err := fssync.Always(f); err != nil {
+	if err := fssync.File(f); err != nil {
 		t.Fatalf("fsync: %v", err)
 	}
 	if err := os.Remove(p); err != nil {
@@ -457,7 +457,7 @@ func runOneSlotWorkflow() int {
 	if _, err := f.WriteString("data"); err != nil {
 		return fail("write", err)
 	}
-	if err := fssync.Always(f); err != nil {
+	if err := fssync.File(f); err != nil {
 		return fail("fsync", err)
 	}
 	if err := f.Close(); err != nil {

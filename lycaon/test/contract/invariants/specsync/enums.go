@@ -14,6 +14,7 @@ import (
 	scancatalog "github.com/lycaon/lycaon/internal/scan/catalog"
 	"github.com/lycaon/lycaon/internal/toolschema"
 	"github.com/lycaon/lycaon/pkg/api"
+	"github.com/lycaon/lycaon/pkg/api/apitest"
 	"github.com/lycaon/lycaon/test/contract/internal/wirespec"
 	"github.com/lycaon/lycaon/test/contract/invariants"
 )
@@ -46,16 +47,16 @@ func apiEnums(r *invariants.Run) map[string][]string {
 func enumRegistriesAreExhaustive(r *invariants.Run) {
 	declared := apiEnums(r)
 	for name, registry := range map[string][]string{
-		"CheckpointStatus":      wirespec.GoEnumValues(api.AllCheckpointStatuses()...),
-		"CompletionReportScope": wirespec.GoEnumValues(api.AllCompletionReportScopes()...),
-		"DraftStatus":           wirespec.GoEnumValues(api.AllDraftStatuses()...),
-		"MessageKind":           wirespec.GoEnumValues(api.AllMessageKinds()...),
-		"MessageLiveStatus":     wirespec.GoEnumValues(api.AllMessageLiveStatuses()...),
-		"MessageVisibility":     wirespec.GoEnumValues(api.AllMessageVisibilities()...),
-		"NavigationEntryKind":   wirespec.GoEnumValues(api.AllNavigationEntryKinds()...),
-		"WorkerStatus":          wirespec.GoEnumValues(api.AllWorkerStatuses()...),
-		"WorkerSummaryStatus":   wirespec.GoEnumValues(api.AllWorkerSummaryStatuses()...),
-		"WorkflowBoundaryKind":  wirespec.GoEnumValues(api.AllWorkflowBoundaryKinds()...),
+		"CheckpointStatus":      wirespec.GoEnumValues(apitest.AllCheckpointStatuses()...),
+		"CompletionReportScope": wirespec.GoEnumValues(apitest.AllCompletionReportScopes()...),
+		"DraftStatus":           wirespec.GoEnumValues(apitest.AllDraftStatuses()...),
+		"MessageKind":           wirespec.GoEnumValues(apitest.AllMessageKinds()...),
+		"MessageLiveStatus":     wirespec.GoEnumValues(apitest.AllMessageLiveStatuses()...),
+		"MessageVisibility":     wirespec.GoEnumValues(apitest.AllMessageVisibilities()...),
+		"NavigationEntryKind":   wirespec.GoEnumValues(apitest.AllNavigationEntryKinds()...),
+		"WorkerStatus":          wirespec.GoEnumValues(apitest.AllWorkerStatuses()...),
+		"WorkerSummaryStatus":   wirespec.GoEnumValues(apitest.AllWorkerSummaryStatuses()...),
+		"WorkflowBoundaryKind":  wirespec.GoEnumValues(apitest.AllWorkflowBoundaryKinds()...),
 		"WorkflowRunStatus":     wirespec.GoEnumValues(api.AllWorkflowRunStatuses()...),
 	} {
 		if len(declared[name]) == 0 {
@@ -162,9 +163,9 @@ func waitTriggersAgree(r *invariants.Run) {
 	schema := unit.Schema.Properties["conditions"].Items.Properties["kind"].Enum
 	r.Expect(len(schema), "wait condition kinds")
 	var host []string
-	for _, trigger := range loopwake.AllWaitTriggers() {
-		if trigger != loopwake.WaitTriggerTimer {
-			host = append(host, string(trigger))
+	for _, trigger := range stringConsts(r, "internal/coordinator/loopwake", "WaitTrigger") {
+		if trigger != string(loopwake.WaitTriggerTimer) {
+			host = append(host, trigger)
 		}
 	}
 	r.Diff("wait condition kinds vs loopwake triggers", schema, host)

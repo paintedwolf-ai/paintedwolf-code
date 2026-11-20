@@ -1,24 +1,24 @@
 package scans
 
 import (
-	"context"
 	"io"
 	"os"
 	"path/filepath"
 	"testing"
 
-	"github.com/lycaon/lycaon/internal/configlayout"
-	"github.com/lycaon/lycaon/test/security"
+	sdkmcp "github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"github.com/lycaon/lycaon/internal/api"
 	"github.com/lycaon/lycaon/internal/app"
 	"github.com/lycaon/lycaon/internal/app/configuration"
 	"github.com/lycaon/lycaon/internal/configdir"
-	"github.com/lycaon/lycaon/internal/mcp"
+	"github.com/lycaon/lycaon/internal/configlayout"
+	"github.com/lycaon/lycaon/internal/mcp/mcptest"
 	"github.com/lycaon/lycaon/internal/scan/bundled"
 	"github.com/lycaon/lycaon/internal/testutil"
 	wire "github.com/lycaon/lycaon/pkg/api"
-	sdkmcp "github.com/modelcontextprotocol/go-sdk/mcp"
+	"github.com/lycaon/lycaon/test/security"
+	"github.com/lycaon/lycaon/test/wiring"
 )
 
 func TestAPIScanServePathSASTE2E(t *testing.T) {
@@ -41,27 +41,29 @@ func TestAPIScanServePathSASTE2E(t *testing.T) {
 	t.Chdir(moduleRoot)
 
 	t.Setenv("LYCAON_LLM_MOCK", "1")
-	t.Setenv("LYCAON_API_TOKEN", api.TestAPIToken)
+	token, err := api.GenerateAPIToken()
+	testutil.FailErr(t, "generate scanner host bearer", err)
+	t.Setenv("LYCAON_API_TOKEN", token)
+	t.Setenv("LYCAON_CONFIG_DIR", t.TempDir())
 	t.Setenv("LYCAON_TEST", "")
 
-	cfg := configuration.Config{}
+	startup := wiring.NewServeStartup()
+	cfg := configuration.Config{Startup: startup}
 	cfg.DBPath = filepath.Join(t.TempDir(), "serve-path-scan.db")
 	cfg.ListenAddr = "127.0.0.1:0"
-	cfg.TestMCPConnector = &mcp.MockConnector{Tools: map[string][]*sdkmcp.Tool{
+	cfg.TestMCPConnector = &mcptest.Connector{Tools: map[string][]*sdkmcp.Tool{
 		"svca": {{Name: "do", Description: "do"}},
 	}}
 	cfg.TestMCPGlobalOverridePath = filepath.Join(t.TempDir(), "mcp-override.yaml")
 
 	serveApp, err := app.Build(t.Context(), cfg)
 	testutil.FailErr(t, "app.Build serve path", err)
-	t.Cleanup(func() { _ = serveApp.Close() })
+	t.Cleanup(func() { testutil.FailErr(t, "close scanner host", serveApp.Close()) })
 	if !filepath.IsAbs(serveApp.ConfigRoot) {
 		t.Fatalf("ConfigRoot = %q, want absolute path after ResolveModuleRoot", serveApp.ConfigRoot)
 	}
 
-	cancel, err := serveApp.StartBackgroundWorkers(context.Background())
-	testutil.FailErr(t, "start background workers", err)
-	t.Cleanup(cancel)
+	startup.Start(t, serveApp)
 
 	created := security.EnqueueCodeScan(t, serveApp.Server, projectDir, []wire.ScanCategory{wire.ScanCategorySAST})
 	got := security.WaitScanComplete(t, serveApp.Server, created.ProjectID, created.ID)

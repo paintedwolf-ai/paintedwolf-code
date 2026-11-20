@@ -2,7 +2,6 @@ package linuxsandbox
 
 import (
 	"encoding/json"
-	"errors"
 	"strings"
 )
 
@@ -128,15 +127,6 @@ func ParseUnavailable(stderr string) (Unavailability, bool) {
 		}
 	}
 	return Unavailability{}, false
-}
-
-// AsUnavailable extracts a typed unavailability from err.
-func AsUnavailable(err error) (*Unavailability, bool) {
-	var u *Unavailability
-	if errors.As(err, &u) {
-		return u, true
-	}
-	return nil, false
 }
 
 // RecordRun folds the outcome of a probe run of the helper into the facts:

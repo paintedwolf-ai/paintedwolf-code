@@ -13,9 +13,9 @@ type workflowScanInventory struct {
 }
 
 func (i workflowScanInventory) RunScans(ctx context.Context, runID string) ([]api.CodeScan, error) {
-	return i.store.ListByWorkflowRunID(ctx, runID)
+	return i.store.Reads.ListByWorkflowRunID(ctx, runID)
 }
 
 func (i workflowScanInventory) Scan(ctx context.Context, scanID string) (*api.CodeScan, error) {
-	return i.store.Get(ctx, scanID)
+	return i.store.Reads.Get(ctx, scanID)
 }

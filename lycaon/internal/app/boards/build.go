@@ -6,8 +6,6 @@ import (
 	"path/filepath"
 	"strings"
 
-	sessiontree "github.com/lycaon/lycaon/internal/session/tree"
-
 	"github.com/lycaon/lycaon/internal/app/configuration"
 	"github.com/lycaon/lycaon/internal/app/decisions"
 	"github.com/lycaon/lycaon/internal/app/eventing"
@@ -31,6 +29,7 @@ import (
 	"github.com/lycaon/lycaon/internal/projectcontrib"
 	"github.com/lycaon/lycaon/internal/repoinfo"
 	"github.com/lycaon/lycaon/internal/secretmatch"
+	sessiontree "github.com/lycaon/lycaon/internal/session/tree"
 	"github.com/lycaon/lycaon/internal/sourcecatalog"
 	workertools "github.com/lycaon/lycaon/internal/tools/native/workercontrol"
 	"github.com/lycaon/lycaon/internal/visualscreen"
@@ -41,6 +40,7 @@ import (
 
 // Dependencies holds the domain runtimes and services needed by boards.
 type Dependencies struct {
+	WebResearchExchange      webresearch.Exchange
 	Storage                  persistence.Runtime
 	Sessions                 *sessions.Runtime
 	Workers                  *workerruntime.Runtime
@@ -132,19 +132,19 @@ func (r *Runtime) WireBoardAndResearch(ctx context.Context) error {
 	r.deps.Sessions.Manager.Coordinator.Loading.SetDecider(r.deps.Decisions.Decider)
 	r.deps.Sessions.Manager.Coordinator.Loading.SetSkillBodyRenderer(r.deps.Execution.Host.Skills.RenderSkillBody)
 
-	r.WebRuntime, err = webresearch.WireRuntime(ctx)
+	r.WebRuntime, err = webresearch.WireRuntime(ctx, r.deps.WebResearchExchange)
 	if err != nil {
 		return fmt.Errorf("web research runtime: %w", err)
 	}
 	r.WebCreds = r.WebRuntime.Creds
 	webCat, webCfg, webReg := r.WebRuntime.Catalog, r.WebRuntime.Config, r.WebRuntime.Registry
 	llmReg, llmPol := r.deps.Providers.RegistryPolicy()
-	r.WebDiscoverer = webresearch.NewDirectDiscovererFactory(r.deps.Storage.WebIndex, webReg, r.WebCreds, webCfg, webCat, r.deps.Decisions.Rerank)
+	r.WebDiscoverer = webresearch.NewDirectDiscovererFactory(r.WebRuntime.Discovery, r.deps.Storage.WebIndex, webReg, r.WebCreds, webCfg, webCat, r.deps.Decisions.Rerank)
 	r.deps.Execution.Host.Web.SetDirectDiscovererFactory(r.WebDiscoverer)
 
 	if r.deps.Storage.WebIndex != nil {
 		webReg.AttachQuotaStore(r.deps.Storage.WebIndex)
-		r.WebWarmer = webresearch.NewWarmer(r.deps.Storage.WebIndex, llmReg, llmPol, webCfg)
+		r.WebWarmer = webresearch.NewWarmer(r.WebRuntime.Discovery, r.deps.Storage.WebIndex, llmReg, llmPol, webCfg)
 		warmer := r.WebWarmer
 		r.deps.Resources.Track("web-warmer", 90, func(context.Context) error { warmer.Close(); return nil })
 		r.WebWarmer.Cost = r.deps.Providers.Costs
@@ -159,12 +159,15 @@ func (r *Runtime) WireBoardAndResearch(ctx context.Context) error {
 	}
 
 	deps := webresearch.ToolDeps{
-		Creds:    r.WebCreds,
-		Config:   webCfg,
-		Catalog:  webCat,
-		Registry: webReg,
-		Index:    r.deps.Storage.WebIndex,
-		Rerank:   r.deps.Decisions.Rerank,
+		Crawler:     r.WebRuntime.Crawler,
+		Discovery:   r.WebRuntime.Discovery,
+		FetchBudget: r.WebRuntime.FetchBudget,
+		Creds:       r.WebCreds,
+		Config:      webCfg,
+		Catalog:     webCat,
+		Registry:    webReg,
+		Index:       r.deps.Storage.WebIndex,
+		Rerank:      r.deps.Decisions.Rerank,
 		SearchWarmHook: func(ctx context.Context, sessionID, toolCallID, query, projectDir string, hitURLs, residualURLs []string, strongHits, maxResults int, directParticipated bool) {
 			r.deps.Sessions.Manager.Chats.Research.Search(ctx, sessionID, toolCallID, query, projectDir, hitURLs, residualURLs, strongHits, maxResults, directParticipated)
 		},
@@ -175,7 +178,7 @@ func (r *Runtime) WireBoardAndResearch(ctx context.Context) error {
 
 	if sessions := r.deps.Storage.Sessions; sessions != nil {
 		deps.AddressOrigin = func(sessionID, rawURL string) confine.AddressOrigin {
-			return addressOrigin(sessions.SessionURLStanding(sessionID, rawURL))
+			return addressOrigin(sessions.Evidence.SessionURLStanding(sessionID, rawURL))
 		}
 	}
 
@@ -195,10 +198,11 @@ func (r *Runtime) WireBoardAndResearch(ctx context.Context) error {
 	if err := webresearch.RegisterToolsWithFactory(r.deps.Execution.Host.Registry, deps, r.deps.Execution.Host.Web.DirectFactoryGetter()); err != nil {
 		return fmt.Errorf("web research tools: %w", err)
 	}
-	if err := r.deps.Execution.Host.RegisterHTTP(httpaction.Deps{
-		Boundary: r.deps.Execution.Host.Boundary, SecretMatcher: deps.SecretMatcher, SecretAsk: deps.SecretAsk,
-		Secrets: r.deps.Security.Capabilities,
-	}); err != nil {
+	httpDeps := httpaction.Deps{Boundary: r.deps.Execution.Host.Boundary, SecretMatcher: deps.SecretMatcher, SecretAsk: deps.SecretAsk}
+	if capabilities := r.deps.Security.Capabilities; capabilities != nil {
+		httpDeps.Secrets, httpDeps.Jars = capabilities, capabilities.Jars
+	}
+	if err := r.deps.Execution.Host.RegisterHTTP(httpDeps); err != nil {
 		return fmt.Errorf("http request tool: %w", err)
 	}
 
@@ -261,7 +265,7 @@ func (r *Runtime) ProjectRootPaths(ctx context.Context) ([]string, error) {
 }
 
 func (r *Runtime) rootSessionKey(ctx context.Context, sessionID string) string {
-	return sessiontree.RootID(ctx, r.deps.Storage.Sessions, sessionID)
+	return sessiontree.RootID(ctx, r.deps.Storage.Sessions.Sessions, sessionID)
 }
 
 // addressOrigin maps how evidence knows an address onto what a retrieval

@@ -1,6 +1,6 @@
 package sizebudget
 
-// EvaluateGrowth permits unchanged or shrinking legacy excess, preserving explicit caps.
+// EvaluateGrowth permits unchanged or shrinking excess, preserving explicit caps.
 // New artifacts and growth above the limit remain failures, including renamed artifacts.
 func EvaluateGrowth(policy Policy, base, head Measurements, touched Touched) []Finding {
 	findings := Evaluate(policy, head, touched)

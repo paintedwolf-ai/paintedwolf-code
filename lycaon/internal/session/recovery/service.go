@@ -11,14 +11,26 @@ import (
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
-type Store interface {
-	ReadExecutionState(context.Context, string) (store.ExecutionState, error)
-	GetMessages(context.Context, string) ([]api.Message, error)
-	GetPromptSubmission(context.Context, string) (*store.PromptSubmission, error)
+type Sessions interface {
+	ReadExecutionState(ctx context.Context, root string) (store.ExecutionState, error)
 }
-type Service struct{ store Store }
 
-func New(store Store) *Service { return &Service{store: store} }
+type Transcript interface {
+	GetMessages(ctx context.Context, id string) ([]api.Message, error)
+}
+
+type Submissions interface {
+	GetPromptSubmission(ctx context.Context, id string) (*store.PromptSubmission, error)
+}
+type Service struct {
+	sessionStore    Sessions
+	transcriptStore Transcript
+	submissionStore Submissions
+}
+
+func New(sessionStore Sessions, transcriptStore Transcript, submissionStore Submissions) *Service {
+	return &Service{sessionStore: sessionStore, transcriptStore: transcriptStore, submissionStore: submissionStore}
+}
 
 // ErrStale identifies recovery whose transcript premise no longer holds.
 var ErrStale = errors.New("prompt recovery is stale")
@@ -56,7 +68,7 @@ func (m *Service) Prepare(ctx context.Context, sessionID string, in promptinput.
 	if len(in.ArtifactIDs) != 0 || len(in.ContentParts) != 0 || in.SourceContext != nil {
 		return in, fmt.Errorf("%w: recovery cannot add attachments, references, or source context", ErrInvalid)
 	}
-	state, err := m.store.ReadExecutionState(ctx, sessionID)
+	state, err := m.sessionStore.ReadExecutionState(ctx, sessionID)
 	if err != nil {
 		return in, err
 	}
@@ -80,7 +92,7 @@ func (m *Service) Prepare(ctx context.Context, sessionID string, in promptinput.
 	if !recoverable {
 		return in, staleRecovery(TurnCompleted, "The last turn finished on its own; send a new message to carry on")
 	}
-	history, err := m.store.GetMessages(ctx, sessionID)
+	history, err := m.transcriptStore.GetMessages(ctx, sessionID)
 	if err != nil {
 		return in, err
 	}
@@ -107,7 +119,7 @@ func (m *Service) Prepare(ctx context.Context, sessionID string, in promptinput.
 				return in, staleRecovery(RetryHasProgress, "The interrupted turn already made progress; use Keep going instead of Retry")
 			}
 		}
-		original, err := m.store.GetPromptSubmission(ctx, history[boundary-1].ID)
+		original, err := m.submissionStore.GetPromptSubmission(ctx, history[boundary-1].ID)
 		if err != nil {
 			return in, err
 		}

@@ -13,6 +13,7 @@ import (
 	"github.com/lycaon/lycaon/internal/coordinator/promptloop"
 	"github.com/lycaon/lycaon/internal/enginepaths"
 	"github.com/lycaon/lycaon/internal/project"
+	"github.com/lycaon/lycaon/internal/project/projecttest"
 	"github.com/lycaon/lycaon/internal/settingsoverlay"
 	"github.com/lycaon/lycaon/internal/testbaseline"
 	"github.com/lycaon/lycaon/internal/testdbseed"
@@ -84,13 +85,13 @@ func writeScope() *api.TaskScope {
 
 func TestTaskRootRefsUsesBranchSnapshotAfterProjectRename(t *testing.T) {
 	ctx := t.Context()
-	reg := project.NewMemoryRegistry()
+	reg := projecttest.NewRegistry(t)
 	p, err := reg.Create(ctx, project.CreateParams{Roots: []project.AttachRootParams{
 		{Path: t.TempDir(), Label: "app"}, {Path: t.TempDir(), Label: "docs"},
 	}})
 	testutil.FailErr(t, "create project", err)
 	roots := project.RootRefsFrom(p)
-	mgr := workspace.NewManager(filepath.Join(t.TempDir(), "branches"), platform.NewSelector(platform.Config{}))
+	mgr := workspace.NewManager(filepath.Join(t.TempDir(), "branches"), platform.NewSelector(platform.Config{}), workspace.Filesystem{})
 	binding, _, err := mgr.CreateWorkerWorkspaceFromSources(ctx, roots, roots, roots[0].ID, "job-1")
 	testutil.FailErr(t, "create workspace", err)
 	renamed := "manuals"
@@ -150,7 +151,8 @@ func TestPromoteOverlayDoesNotInferSatisfiedEditsFromLinePresence(t *testing.T) 
 				MergeStatus: api.WorkerMergeStatusPending, Status: api.WorkerStatusComplete,
 				Scope: &api.TaskScope{Mode: api.TaskScopeModeWrite, Paths: []string{path}},
 			}
-			svc := &worker.MergeService{Queue: &mergeQueueStub{task: task}, Store: &mergeStoreStub{}, Reject: mergeRejectFmt(t), DataDir: t.TempDir()}
+			testbaseline.RecordBranch(t, "root", task.WorkspacePath, task.WorkspaceRoot)
+			svc := &worker.MergeService{Queue: &mergeQueueStub{task: task}, Branches: &mergeQueueStub{task: task}, Store: &mergeStoreStub{}, Reject: mergeRejectFmt(t), DataDir: t.TempDir()}
 			out, err := svc.PromoteOverlay(t.Context(), "parent", task.ID, api.PromoteOverlayInput{})
 			if err == nil || len(out.Conflicts) != 1 || out.OverlayPromotion != nil {
 				t.Fatalf("overlapping structural edit accepted: result=%+v error=%v", out, err)
@@ -173,7 +175,7 @@ func TestAssessPromoteSafeWithPrimaryContentBaselineDespiteOverlayMtime(t *testi
 	branchPath := filepath.Join(branchRoot, "f.go")
 	testutil.FailErr(t, "WriteFile branch", os.WriteFile(branchPath, append(content, '\n', '/'), 0o644))
 
-	primaryBaseline := testbaseline.Capture(t, dir)
+	primaryBaseline := testbaseline.Capture(t, "root", dir)
 
 	raw := primaryBaseline
 	task := &api.WorkerTask{
@@ -182,6 +184,7 @@ func TestAssessPromoteSafeWithPrimaryContentBaselineDespiteOverlayMtime(t *testi
 		WorkspaceRoot:         branchRoot,
 		WorkspaceBaselinePath: raw,
 	}
+	testbaseline.RecordBranch(t, "root", task.WorkspacePath, task.WorkspaceRoot)
 	assessment, err := worker.AssessPromotePaths3Way(context.Background(), nil, "sess", task, []string{"f.go"})
 	testutil.FailErr(t, "AssessPromotePaths3Way", err)
 	if len(assessment.CleanPaths) != 1 || assessment.CleanPaths[0] != "f.go" {
@@ -198,7 +201,7 @@ func TestAssessPromotePaths3WayDetectsDeletedBranchFile(t *testing.T) {
 	baseline := map[string]testbaseline.File{
 		"main.go": {MtimeNano: 1, Content: baseBody},
 	}
-	raw := testbaseline.FromFiles(t, baseline)
+	raw := testbaseline.FromFiles(t, "root", baseline)
 	testutil.FailErr(t, "write metadata", workspace.WriteJobMeta(enginepaths.MetaDirForBranchRoot(branchRoot), workspace.JobMeta{
 		Roots:            []workspace.JobMetaRoot{{ID: "root", Label: "root", Path: primary, IsPrimary: true}},
 		SnapshotComplete: true,
@@ -215,6 +218,7 @@ func TestAssessPromotePaths3WayDetectsDeletedBranchFile(t *testing.T) {
 		WorkspaceBaselinePath: raw,
 		Status:                api.WorkerStatusComplete,
 	}
+	testbaseline.RecordBranch(t, "root", task.WorkspacePath, task.WorkspaceRoot)
 
 	got, err := worker.AssessPromotePaths3Way(context.Background(), nil, "sess-1", task, []string{"main.go"})
 	testutil.FailErr(t, "assess deletion", err)

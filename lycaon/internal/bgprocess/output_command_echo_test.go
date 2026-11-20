@@ -16,7 +16,7 @@ func commandEchoHarness(t *testing.T, size int) *projectionHarness {
 	t.Helper()
 	h := newProjectionHarness(t, size)
 	h.proc.originTool = "command"
-	matcher := secretmatch.NewInertMatcher()
+	matcher := &secretmatch.Matcher{}
 	matcher.SetHarvestSource(func(context.Context) []secretmatch.HarvestedValue {
 		return []secretmatch.HarvestedValue{{Secret: projectionSecret, RuleID: secretmatch.ManagedRuleID,
 			Title: secretmatch.ManagedRuleTitle, Source: secretmatch.SourceRememberedMatch,

@@ -8,8 +8,11 @@ import (
 )
 
 type Sessions interface {
-	Get(context.Context, string) (*api.Session, error)
-	LoadLedger(context.Context, string) (evidence.Ledger, error)
+	Get(ctx context.Context, id string) (*api.Session, error)
+}
+
+type Evidence interface {
+	LoadLedger(ctx context.Context, sessionID string) (evidence.Ledger, error)
 }
 type Workers interface {
 	ListBySession(context.Context, string, string, ...api.WorkerStatus) ([]api.WorkerTask, error)
@@ -18,11 +21,14 @@ type Workflow interface {
 	ActiveBySession(context.Context, string) (*api.WorkflowRun, error)
 }
 type Service struct {
-	store     Sessions
-	workers   Workers
-	workflows Workflow
+	sessionStore  Sessions
+	evidenceStore Evidence
+	workers       Workers
+	workflows     Workflow
 }
 
-func New(store Sessions) *Service                 { return &Service{store: store} }
+func New(sessionStore Sessions, evidenceStore Evidence) *Service {
+	return &Service{sessionStore: sessionStore, evidenceStore: evidenceStore}
+}
 func (m *Service) SetWorkers(workers Workers)     { m.workers = workers }
 func (m *Service) SetWorkflow(workflows Workflow) { m.workflows = workflows }

@@ -3,7 +3,6 @@ package turnguards
 import (
 	"context"
 	"errors"
-	"github.com/lycaon/lycaon/internal/toolreach"
 	"path/filepath"
 	"testing"
 
@@ -19,6 +18,7 @@ import (
 	"github.com/lycaon/lycaon/internal/session/promptinput"
 	sessionverification "github.com/lycaon/lycaon/internal/session/verification"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/toolreach"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/workerplan"
 	"github.com/lycaon/lycaon/internal/workerrecords"
@@ -82,7 +82,7 @@ func TestBeforeToolObservesWaitVisibility(t *testing.T) {
 	pipeline.EnableAnchor(oar.AnchorCoordinatorPreInvoke)
 
 	policy := policyfacts.New(stubProfiles{})
-	policy.SetSources(nil, nil, stubFeedback{}, nil)
+	policy.SetSources(nil, nil, nil, stubFeedback{}, nil)
 	policy.SetPipeline(pipeline)
 
 	svc := New(nil, policy, nil, nil, stubState{}, nil, nil, nil, nil, nil, nil, nil)
@@ -96,7 +96,7 @@ func TestBeforeToolObservesWaitVisibility(t *testing.T) {
 	}}
 
 	ctx := tools.WithCallReach(t.Context(), toolreach.Offered([]string{"wait"}))
-	_, _, err = svc.BeforeTool(ctx, sess, history, "", "wait", map[string]any{"timeout_ms": 60000})
+	_, _, err = svc.BeforeTool(ctx, sess, history, "wait", map[string]any{"timeout_ms": 60000})
 	refusal, rejected := guidance.RefusalFromError(err)
 	if !rejected || refusal.Code() != guard.WaitHiddenTextCode {
 		t.Fatalf("expected %s refusal, got %v", guard.WaitHiddenTextCode, err)
@@ -111,6 +111,7 @@ func (s unreadableLedger) LoadLedger(context.Context, string) (evidence.Ledger, 
 }
 
 func TestMidTurnEvidenceUnreadable(t *testing.T) {
+	offline := unreadableLedger{err: errors.New("offline")}
 	for _, tc := range []struct {
 		name string
 		svc  *Service
@@ -118,8 +119,8 @@ func TestMidTurnEvidenceUnreadable(t *testing.T) {
 	}{
 		{name: "no ledger wired", svc: &Service{}},
 		{name: "no evidence service", svc: &Service{Verification: &sessionverification.Service{}}},
-		{name: "readable", svc: &Service{Verification: &sessionverification.Service{Evidence: closeoutevidence.New(unreadableLedger{})}}},
-		{name: "read fails", svc: &Service{Verification: &sessionverification.Service{Evidence: closeoutevidence.New(unreadableLedger{err: errors.New("offline")})}}, want: true},
+		{name: "readable", svc: &Service{Verification: &sessionverification.Service{Evidence: closeoutevidence.New(unreadableLedger{}, unreadableLedger{})}}},
+		{name: "read fails", svc: &Service{Verification: &sessionverification.Service{Evidence: closeoutevidence.New(offline, offline)}}, want: true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			if got := tc.svc.midTurnEvidenceUnreadable(t.Context(), "coord-1", nil); got != tc.want {
@@ -139,7 +140,7 @@ func TestBeforeFinishSkipsHostNoToolTurnWhenInvokeDisallowed(t *testing.T) {
 	pipeline.EnableAnchor(oar.AnchorCoordinatorCloseoutCheck)
 
 	policy := policyfacts.New(stubProfiles{})
-	policy.SetSources(nil, nil, stubFeedback{}, nil)
+	policy.SetSources(nil, nil, nil, stubFeedback{}, nil)
 	policy.SetPipeline(pipeline)
 
 	sess := &api.Session{ID: "coord-1", Posture: api.SessionPostureBuild}
@@ -147,7 +148,7 @@ func TestBeforeFinishSkipsHostNoToolTurnWhenInvokeDisallowed(t *testing.T) {
 	svc := New(stubSessions{sess: sess}, policy, nil, nil, state, nil, nil, nil, nil, closeouts.New(stubSessions{sess: sess}), nil, nil)
 
 	reject, blocked := svc.BeforeFinish(
-		t.Context(), sess, nil, "", "Final summary.", guidance.CloseoutDraft{}, surface.SurfaceImplementDispatch, false, nil, false,
+		t.Context(), sess, nil, "Final summary.", guidance.CloseoutDraft{}, surface.SurfaceImplementDispatch, false, nil, false,
 	)
 	if blocked || reject != nil {
 		t.Fatalf("BeforeFinish with invokeAllowed=false blocked: blocked=%v reject=%v", blocked, reject)
@@ -164,7 +165,7 @@ func TestBeforeFinishPrioritizesOpenProgressAndWaivesAfterRetryCap(t *testing.T)
 	pipeline.EnableAnchor(oar.AnchorCoordinatorCloseoutCheck)
 
 	policy := policyfacts.New(stubProfiles{})
-	policy.SetSources(nil, nil, stubFeedback{}, nil)
+	policy.SetSources(nil, nil, nil, stubFeedback{}, nil)
 	policy.SetPipeline(pipeline)
 
 	sess := &api.Session{ID: "coord-1", Posture: api.SessionPostureBuild}
@@ -183,14 +184,14 @@ func TestBeforeFinishPrioritizesOpenProgressAndWaivesAfterRetryCap(t *testing.T)
 	}
 	for i := 0; i < synthesisDelayMaxPerPrompt; i++ {
 		reject, blocked := svc.BeforeFinish(
-			t.Context(), sess, history, "", "Final summary.", guidance.CloseoutDraft{}, "implement_routing", true, nil, true,
+			t.Context(), sess, history, "Final summary.", guidance.CloseoutDraft{}, "implement_routing", true, nil, true,
 		)
 		if !blocked || reject == nil || reject.Code() != progressOpenBeforeCloseoutCode {
 			t.Fatalf("attempt %d: got blocked=%v reject=%v, want %s", i+1, blocked, reject, progressOpenBeforeCloseoutCode)
 		}
 	}
 	reject, blocked := svc.BeforeFinish(
-		t.Context(), sess, history, "", "Final summary.", guidance.CloseoutDraft{}, "implement_routing", true, nil, true,
+		t.Context(), sess, history, "Final summary.", guidance.CloseoutDraft{}, "implement_routing", true, nil, true,
 	)
 	if blocked || reject != nil {
 		t.Fatalf("after %d retries: got blocked=%v reject=%v, want waiver", synthesisDelayMaxPerPrompt, blocked, reject)
@@ -198,7 +199,7 @@ func TestBeforeFinishPrioritizesOpenProgressAndWaivesAfterRetryCap(t *testing.T)
 
 	closeoutSvc.BeginPrompt(t.Context(), sess, promptinput.Input{Text: "next user prompt"})
 	reject, blocked = svc.BeforeFinish(
-		t.Context(), sess, history, "", "Next turn summary.", guidance.CloseoutDraft{}, "implement_routing", true, nil, true,
+		t.Context(), sess, history, "Next turn summary.", guidance.CloseoutDraft{}, "implement_routing", true, nil, true,
 	)
 	if blocked || reject != nil {
 		t.Fatalf("unchanged waived checklist on subsequent prompt: got blocked=%v reject=%v, want waiver preserved", blocked, reject)
@@ -206,7 +207,7 @@ func TestBeforeFinishPrioritizesOpenProgressAndWaivesAfterRetryCap(t *testing.T)
 
 	progressStore.content = "- [x] Done\n- [ ] Newly added item\n"
 	reject, blocked = svc.BeforeFinish(
-		t.Context(), sess, history, "", "Updated checklist summary.", guidance.CloseoutDraft{}, "implement_routing", true, nil, true,
+		t.Context(), sess, history, "Updated checklist summary.", guidance.CloseoutDraft{}, "implement_routing", true, nil, true,
 	)
 	if !blocked || reject == nil || reject.Code() != progressOpenBeforeCloseoutCode {
 		t.Fatalf("updated checklist after waiver: got blocked=%v reject=%v, want %s", blocked, reject, progressOpenBeforeCloseoutCode)
@@ -239,7 +240,7 @@ func TestPlanCloseoutBlocksUnmetCriteriaAndAssertCompletion(t *testing.T) {
 	pipeline.EnableAnchor(oar.AnchorCoordinatorCloseoutCheck)
 
 	policy := policyfacts.New(stubProfiles{})
-	policy.SetSources(nil, nil, stubFeedback{}, nil)
+	policy.SetSources(nil, nil, nil, stubFeedback{}, nil)
 	policy.SetPipeline(pipeline)
 
 	sess := &api.Session{ID: "coord-plan", ProjectID: "proj-1", Posture: api.SessionPostureBuild}

@@ -52,8 +52,6 @@ func TestCommandSchemaOffersExternalOnlyWhenNotHidden(t *testing.T) {
 	content, err := extpacks.DiscoverStockContent()
 	testutil.FailErr(t, "DiscoverStockContent", err)
 	eff := extpacks.Resolve(t.Context(), extpacks.ResolveInput{Packs: content, Desired: extpacks.EmptyDesired()})
-	extpacks.SetActive(eff)
-	t.Cleanup(extpacks.ClearActive)
 	rt, err := toolhost.NewRuntime(toolhost.RuntimeConfig{ConfigRoot: filepath.Join(filepath.Dir(file), "..", ".."), Catalog: eff})
 	testutil.FailErr(t, "toolhost.NewRuntime", err)
 	parts := func() []string {

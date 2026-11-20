@@ -64,7 +64,7 @@ func (l *HostTurns) runPromptSync(ctx context.Context, sessionID string, pending
 	if l.Subscriptions.routeWaitWake(ctx, sessionID, pending) {
 		return true
 	}
-	allow, busy := l.Admission.evaluate(ctx, sessionID, wake)
+	allow, busy := l.Admission.evaluate(ctx, sessionID)
 	if busy {
 		l.Nudges.deferPromptWake(ctx, sessionID, pending)
 		return false

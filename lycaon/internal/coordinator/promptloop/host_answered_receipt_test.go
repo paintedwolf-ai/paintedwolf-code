@@ -95,7 +95,7 @@ func (r *recordingRecorder) only(t *testing.T) (invocation.Start, invocation.Set
 }
 
 // readCallDeps wires one `read` call the mock model makes, against a ledger.
-func readCallDeps(t *testing.T, rec *recordingRecorder) (promptloop.PromptLoopDeps, *store.SQL) {
+func readCallDeps(t *testing.T, rec *recordingRecorder) (promptloop.PromptLoopDeps, *store.Repositories) {
 	t.Helper()
 	reg := toolstest.NewRegistry()
 	_ = reg.Register("read", func(context.Context, map[string]any, tools.ToolContext) (string, error) {
@@ -113,11 +113,11 @@ func readCallDeps(t *testing.T, rec *recordingRecorder) (promptloop.PromptLoopDe
 	return deps, sessionStore
 }
 
-func runReadCall(t *testing.T, deps promptloop.PromptLoopDeps, sessionStore *store.SQL) {
+func runReadCall(t *testing.T, deps promptloop.PromptLoopDeps, sessionStore *store.Repositories) {
 	t.Helper()
 	loop := promptloop.NewPromptLoopForTest(deps)
 	ctx := context.Background()
-	sess, err := sessionStore.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
+	sess, err := sessionStore.Sessions.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
 	_, err = loop.Run(ctx, promptloop.PromptRunInput{
 		SessionID: sess.ID, Session: sess,
@@ -130,7 +130,7 @@ func runReadCall(t *testing.T, deps promptloop.PromptLoopDeps, sessionStore *sto
 func TestHostAnsweredToolCallSettlesOnTheLedger(t *testing.T) {
 	rec := newRecordingRecorder()
 	deps, sessionStore := readCallDeps(t, rec)
-	deps.Tools.BeforeToolRun = func(context.Context, *api.Session, []api.Message, string, string, map[string]any) (string, bool, error) {
+	deps.Tools.BeforeToolRun = func(context.Context, *api.Session, []api.Message, string, map[string]any) (string, bool, error) {
 		return "answered by the host", true, nil
 	}
 	runReadCall(t, deps, sessionStore)
@@ -155,7 +155,7 @@ func TestHostAnsweredToolCallSettlesOnTheLedger(t *testing.T) {
 func TestPreInvokeRefusalSettlesOnTheLedger(t *testing.T) {
 	rec := newRecordingRecorder()
 	deps, sessionStore := readCallDeps(t, rec)
-	deps.Tools.BeforeToolRun = func(context.Context, *api.Session, []api.Message, string, string, map[string]any) (string, bool, error) {
+	deps.Tools.BeforeToolRun = func(context.Context, *api.Session, []api.Message, string, map[string]any) (string, bool, error) {
 		return "", false, errors.New("refused before the subsystem owner")
 	}
 	runReadCall(t, deps, sessionStore)
@@ -253,13 +253,13 @@ func TestOwnerWithoutSourceRunSettlesNoVerdict(t *testing.T) {
 func TestGuidanceRejectedCallCarriesItsReceiptToTheCard(t *testing.T) {
 	rec := newRecordingRecorder()
 	deps, sessionStore := readCallDeps(t, rec)
-	deps.Tools.BeforeToolRun = func(context.Context, *api.Session, []api.Message, string, string, map[string]any) (string, bool, error) {
+	deps.Tools.BeforeToolRun = func(context.Context, *api.Session, []api.Message, string, map[string]any) (string, bool, error) {
 		return "", false, guidance.NewRefusal("TOOL_TEST_REFUSED", "Rejected: no.\nCode: TOOL_TEST_REFUSED")
 	}
 
 	loop := promptloop.NewPromptLoopForTest(deps)
 	ctx := context.Background()
-	sess, err := sessionStore.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
+	sess, err := sessionStore.Sessions.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
 	_, err = loop.Run(ctx, promptloop.PromptRunInput{
 		SessionID: sess.ID, Session: sess,
@@ -272,7 +272,7 @@ func TestGuidanceRejectedCallCarriesItsReceiptToTheCard(t *testing.T) {
 		t.Fatalf("status = %q, want rejected", settlement.Status)
 	}
 
-	msgs, err := sessionStore.GetMessages(ctx, sess.ID)
+	msgs, err := sessionStore.Transcript.GetMessages(ctx, sess.ID)
 	testutil.FailErr(t, "read transcript", err)
 	for _, msg := range msgs {
 		if msg.Role != api.MessageRoleTool || msg.ToolResult == nil {

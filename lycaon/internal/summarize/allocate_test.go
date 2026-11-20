@@ -577,11 +577,7 @@ func TestRollupRowPrimitive(t *testing.T) {
 		Path: "pkg/auth", Kind: SubtreeKindDir,
 		Material: Material{Defs: 5, SourceFiles: 2},
 	}
-	scoped := []StructureCandidate{
-		fileCand("pkg/auth/a.go", 3, "go"),
-		fileCand("pkg/auth/b.go", 2, "go"),
-	}
-	row := rollupRow(child, scoped)
+	row := rollupRow(child)
 	if row.Kind != KindDirectoryRollup {
 		t.Fatalf("kind=%q", row.Kind)
 	}
@@ -591,11 +587,8 @@ func TestRollupRowPrimitive(t *testing.T) {
 	if !strings.Contains(row.Name, "2 files") {
 		t.Fatalf("detail missing file count: %q", row.Name)
 	}
-	if !strings.Contains(row.Name, "go") {
-		t.Fatalf("detail missing lang: %q", row.Name)
-	}
-	if !strings.Contains(row.Name, "top:") {
-		t.Fatalf("detail missing top symbols: %q", row.Name)
+	if !strings.Contains(row.Name, "5 defs") {
+		t.Fatalf("detail missing definition count: %q", row.Name)
 	}
 	caps := DefaultCaps()
 	cost := caps.EstimateTokens(rollupSkeletonLine(row))

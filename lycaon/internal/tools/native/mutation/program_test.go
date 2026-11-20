@@ -13,6 +13,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/commandprogram"
 	"github.com/lycaon/lycaon/internal/commandsurface"
+	"github.com/lycaon/lycaon/internal/commandsurface/commandsurfacetest"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/toolrejection"
@@ -76,14 +77,14 @@ func (h *harness) evaluate(program string) (commandprogram.ProgramOutcome, error
 // evaluateTo runs a program with its standard output bound to stdout.
 func (h *harness) evaluateTo(program string, stdout io.Writer) (commandprogram.ProgramOutcome, error) {
 	h.t.Helper()
-	parsed, err := commandsurface.ParseProgram([]byte(program), commandsurface.ParseOptions{SourceName: "program"})
+	parsed, err := commandsurfacetest.Admit(h.t, []byte(program), commandsurface.ParseOptions{SourceName: "program"})
 	testutil.FailErr(h.t, "parse", err)
 	limits, err := toolcontract.CatalogProgramMemoryLimits()
 	testutil.FailErr(h.t, "memory limits", err)
 	memory, err := toolcontract.NewProgramMemory(limits)
 	testutil.FailErr(h.t, "memory", err)
 	publication := h.publication()
-	return commandprogram.Evaluate(h.t.Context(), parsed.Snapshot(), commandprogram.EvaluationPorts{Invocation: h.invocation(), Dispatch: programDispatch{h}, Binder: commandprogram.CatalogBinder{},
+	return commandprogram.Evaluate(h.t.Context(), parsed.View(h.t), commandprogram.EvaluationPorts{Invocation: h.invocation(), Dispatch: programDispatch{h}, Binder: commandprogram.CatalogBinder{},
 		Files: noGlobs{}, Publication: publication, Input: publication, Memory: memory, Streams: commandprogram.Streams{Output: stdout, Error: io.Discard}})
 }
 

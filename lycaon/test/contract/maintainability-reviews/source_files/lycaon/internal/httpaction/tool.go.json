@@ -4,11 +4,13 @@
   "kind": "runtime_service",
   "workstream": "unix-socket-grants",
   "disposition": "retain",
-  "reason": "One parsed native HTTP request carries its reviewed recipient through final secret screening and dispatch. The private binding is the authority consumed by the Unix transport; it cannot be reconstructed from either pathname. Retain the request shape so recipient and connection cannot diverge. The handler composes the reviewed cookie delivery with the existing before-hop egress boundary so redirects review newly eligible cookies; the delivery decision itself lives in cookie_release.go. Freeze this reviewed shape at 485 lines; further growth requires renewed architectural review.",
-  "reviewed_commit": "1772e0db4dd2874e06dacd128581133cd59da2fe",
-  "ceiling": 485,
+  "reason": "Retain the complete native HTTP exchange flow: parsing produces one request plan whose loopback authority, redirect recipients, cookie delivery, secret screening, and dispatch remain coordinated. The former 485-line review was already stale before this change; the current 829-line flow remains below its 900-line hard limit. This review is renewed because the jar/metadata dependency split changes the declaration and its pinned socket fixture. Separate jar operations and release-metadata admission have focused contracts; no transport authority is moved or forwarded.",
+  "reviewed_commit": "fcf69720eebf79b42b21637347a59d5863416764",
+  "ceiling": 829,
   "boundaries": {
-    "lycaon/internal/api/capabilityadmin/socket_http_owner_test.go": "0d67abcdebe8e95734874e2726f03b5ba07073798e83803bc041d238e2355fac",
-    "lycaon/internal/httpaction/unix_socket_test.go": "7f6c3cd6c52357e88d12ff4e54a9e30ed953c84cf0ad053cc3345553214e0335"
+    "lycaon/internal/api/capabilityadmin/socket_http_owner_test.go": "43828757fbfa3145a40051b2432dbaf3e262b8e8760457459daf890e987064ba",
+    "lycaon/internal/httpaction/unix_socket_test.go": "e74c12a7d25c63506e345f5b0119e6b81c6954217dd9ef336b217ff62aa794ca",
+    "lycaon/internal/httpaction/jar_dependencies_test.go": "74bf50bfd3690740da6bb958e3084e0ef9a717ebbbaa3b9eeb441c107ac3ac07",
+    "lycaon/internal/httpaction/cookie_release_test.go": "d9fdcf78837e68f6bd83c189b3ae2248a5396c5f43e3a85593f1a19a0860a5fc"
   }
 }

@@ -37,12 +37,7 @@ func ruleConditions(r *invariants.Run) *conditions.ConditionRegistry {
 
 // knownWhenKey reports a when key the rules engine fixes or a condition implements.
 func knownWhenKey(reg *conditions.ConditionRegistry, key string) bool {
-	for _, k := range rules.RuleWhenKeys() {
-		if k == key {
-			return true
-		}
-	}
-	return reg.Has(key)
+	return key == "posture_is" || (!conditions.IsHostOnlyCondition(key) && reg.Has(key))
 }
 
 // legacyPostures are retired posture values.
@@ -56,6 +51,9 @@ var rulesConfig = []invariants.Invariant{{
 		reg := ruleConditions(r)
 		for name, cfg := range postureRules(r) {
 			for _, rule := range cfg.Rules {
+				if err := rules.ValidateWhen(reg, rule.When); err != nil {
+					r.Report("%s rule %s: %v", name, rule.ID, err)
+				}
 				for key, raw := range rule.When {
 					if !knownWhenKey(reg, key) {
 						r.Report("%s rule %s: unknown when key %s", name, rule.ID, key)
@@ -71,16 +69,25 @@ var rulesConfig = []invariants.Invariant{{
 	// A rule's canonical when string parses, stays in the whitelist and
 	// names only known keys.
 	Name:    "rule-canonical-when-matches-the-when-keys",
-	Anchors: []invariants.Anchor{invariants.Func("internal/rules", "CanonicalWhenString"), invariants.Func("internal/boolexpr", "ValidateWhitelist")},
+	Anchors: []invariants.Anchor{invariants.Func("internal/rules", "CanonicalWhenLeaves"), invariants.Func("internal/boolexpr", "ValidateWhitelist")},
 	Check: func(r *invariants.Run) {
 		reg := ruleConditions(r)
 		for name, cfg := range postureRules(r) {
 			for _, rule := range cfg.Rules {
-				canon, err := rules.CanonicalWhenString(rule.When)
+				leaves, err := rules.CanonicalWhenLeaves(rule.When)
 				if err != nil {
 					r.Report("%s rule %s: %v", name, rule.ID, err)
 					continue
 				}
+				rendered := make([]string, 0, len(leaves))
+				for _, leaf := range leaves {
+					if leaf.Negated {
+						rendered = append(rendered, "not "+leaf.Name)
+					} else {
+						rendered = append(rendered, leaf.Name)
+					}
+				}
+				canon := strings.Join(rendered, " and ")
 				tree, err := boolexpr.Parse(canon)
 				if err != nil {
 					r.Report("%s rule %s: parse %q: %v", name, rule.ID, canon, err)

@@ -88,7 +88,7 @@ func Build(ctx context.Context, deps Dependencies) (*Runtime, error) {
 	gatesCfg := scancfg.DefaultGatesConfig()
 	store := scan.NewSQLStore(deps.Database)
 	store.SetEventOutbox(deps.Events)
-	store.SecretIgnores = deps.ScanIgnores
+	store.Ignores.SecretIgnores = deps.ScanIgnores
 
 	coord := scan.NewCoordinator(store, deps.GitMgr, deps.Snapshots)
 	if deps.Settings != nil {
@@ -104,8 +104,9 @@ func Build(ctx context.Context, deps Dependencies) (*Runtime, error) {
 	}
 
 	obligation := &scan.WorkflowObligation{
-		Ledger:  store,
-		History: store,
+		Reads:   store.Reads,
+		Passes:  store.FullPasses,
+		History: store.Findings,
 		Runs:    deps.WorkflowRunsGet,
 		Params:  deps.WorkflowRunParams,
 		Projects: func(c context.Context, projectID string) (string, error) {
@@ -170,7 +171,7 @@ func Build(ctx context.Context, deps Dependencies) (*Runtime, error) {
 	var cadence *scancadence.Service
 	if deps.Settings != nil {
 		cadence = scancadence.New(store, coord, scannerReg, deps.Settings.SecurityScanners, gatesCfg, triggers)
-		cadence.OverlayRootsApply = filterPaths
+		cadence.Ignores.OverlayRootsApply = filterPaths
 		cadence.Preempt = runner.Preempt
 		cadence.Scopes = scopes
 		releaseCadence := cadence.ObserveRepochange()

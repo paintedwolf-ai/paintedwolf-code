@@ -139,7 +139,7 @@ func (c *SimpleCompactor) Compact(ctx context.Context, info SessionInfo, message
 	return
 }
 
-func compactionReplacement(info SessionInfo, out, tail []ContextMessage, structured compactionSummary, summary string) []ContextMessage {
+func compactionReplacement(out, tail []ContextMessage, structured compactionSummary, summary string) []ContextMessage {
 	checkpoint := ContextMessage{
 		ID:           uuid.NewString(),
 		Role:         string(api.MessageRoleUser),
@@ -363,26 +363,6 @@ type UnavailableSummarizer struct{}
 // Summarize returns ErrNoLiteProvider.
 func (UnavailableSummarizer) Summarize(context.Context, string, string, int) (string, error) {
 	return "", ErrNoLiteProvider
-}
-
-// MockSummarizer returns fixed summary text for tests.
-type MockSummarizer struct {
-	Text string
-	Err  error
-}
-
-// Summarize returns configured mock text.
-func (m MockSummarizer) Summarize(ctx context.Context, _, _ string, _ int) (string, error) {
-	if m.Err != nil {
-		return "", m.Err
-	}
-	if SummaryFormatRequested(ctx) {
-		return mockCompactionSummary(m.Text)
-	}
-	if m.Text != "" {
-		return m.Text, nil
-	}
-	return "Continue coordinator work from compacted context.", nil
 }
 
 // compactedTrustFloor preserves the least-trusted tier of absorbed content.

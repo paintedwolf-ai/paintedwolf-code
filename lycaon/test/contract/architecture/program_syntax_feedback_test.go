@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/commandsurface"
+	"github.com/lycaon/lycaon/internal/commandsurface/commandsurfacetest"
 	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/internal/toolcommand"
@@ -30,7 +31,7 @@ func TestProgramSyntaxFeedbackUsesTypedSpansWithoutGuessedRepairs(t *testing.T) 
 			{"oversized", oversized, "COMMAND_LIMIT_EXCEEDED", 0, 0, 1, 1},
 		} {
 			t.Run(tc.name, func(t *testing.T) {
-				_, err := commandsurface.ParseProgram([]byte(tc.source), commandsurface.ParseOptions{SourceName: "fixture.pw", Sourced: sourced})
+				_, err := commandsurfacetest.Admit(t, []byte(tc.source), commandsurface.ParseOptions{SourceName: "fixture.pw", Sourced: sourced})
 				rejection := toolcommand.ProgramSyntaxObservation("command", err)
 				if rejection == nil || rejection.Code != tc.code {
 					t.Fatalf("sourced=%t: rejection = %+v, want %s (parse error %v)", sourced, rejection, tc.code, err)

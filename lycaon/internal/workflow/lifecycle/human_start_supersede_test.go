@@ -13,7 +13,7 @@ import (
 )
 
 func TestHumanStartSupersedesActiveNonAmbientRun(t *testing.T) {
-	mgr, sessionID, _ := testWorkflowManager(t)
+	mgr, sessionID, _, _ := testWorkflowManager(t)
 	ctx := context.Background()
 
 	first, err := mgr.Starts.StartHuman(ctx, sessionID, api.StartWorkflowRunRequest{
@@ -49,7 +49,7 @@ func TestHumanStartSupersedesActiveNonAmbientRun(t *testing.T) {
 }
 
 func TestHumanStartSupersedesAcrossWorkflows(t *testing.T) {
-	mgr, sessionID, _ := testWorkflowManager(t)
+	mgr, sessionID, _, _ := testWorkflowManager(t)
 	ctx := context.Background()
 
 	first, err := mgr.Starts.StartHuman(ctx, sessionID, api.StartWorkflowRunRequest{
@@ -70,7 +70,7 @@ func TestHumanStartSupersedesAcrossWorkflows(t *testing.T) {
 }
 
 func TestFailedHumanStartLeavesActiveRunUntouched(t *testing.T) {
-	mgr, sessionID, _ := testWorkflowManager(t)
+	mgr, sessionID, _, _ := testWorkflowManager(t)
 	ctx := context.Background()
 
 	active, err := mgr.Starts.StartHuman(ctx, sessionID, api.StartWorkflowRunRequest{
@@ -92,7 +92,7 @@ func TestFailedHumanStartLeavesActiveRunUntouched(t *testing.T) {
 }
 
 func TestHumanReplacementRequiresReviewedActiveRevision(t *testing.T) {
-	mgr, sessionID, _ := testWorkflowManager(t)
+	mgr, sessionID, _, _ := testWorkflowManager(t)
 	ctx := context.Background()
 	active, err := mgr.Starts.StartHuman(ctx, sessionID, api.StartWorkflowRunRequest{
 		WorkflowID: "plan", WorkflowVersion: "1.0.1",
@@ -120,7 +120,7 @@ func TestHumanReplacementRequiresReviewedActiveRevision(t *testing.T) {
 }
 
 func TestCoordinatorStartRequiresHumanActionWhenActive(t *testing.T) {
-	mgr, sessionID, _ := testWorkflowManager(t)
+	mgr, sessionID, _, _ := testWorkflowManager(t)
 	ctx := context.Background()
 
 	_, err := mgr.Starts.StartHuman(ctx, sessionID, api.StartWorkflowRunRequest{
@@ -136,8 +136,8 @@ func TestCoordinatorStartRequiresHumanActionWhenActive(t *testing.T) {
 }
 
 func TestPlanEmptyStartWaitsForWorkflowRequest(t *testing.T) {
-	mgr, sessionID, _ := testWorkflowManager(t)
-	ctx := workflowCaller(t, mgr)
+	mgr, sessionID, _, repositories := testWorkflowManager(t)
+	ctx := workflowCaller(t, repositories)
 	run, err := mgr.Starts.StartHuman(ctx, sessionID, api.StartWorkflowRunRequest{
 		WorkflowID: "plan", WorkflowVersion: "1.0.1",
 	})
@@ -164,7 +164,7 @@ func TestPlanEmptyStartWaitsForWorkflowRequest(t *testing.T) {
 }
 
 func TestPlanExplicitRequestStartsWithoutAsk(t *testing.T) {
-	mgr, sessionID, _ := testWorkflowManager(t)
+	mgr, sessionID, _, _ := testWorkflowManager(t)
 	ctx := context.Background()
 	run, err := mgr.Starts.StartHuman(ctx, sessionID, api.StartWorkflowRunRequest{
 		WorkflowID: "plan", WorkflowVersion: "1.0.1", Request: "weather CLI",

@@ -9,7 +9,7 @@ import (
 )
 
 // UserIntentBefore reads the latest human opener at a worker's creation boundary.
-func (t *sqlTurnTelemetry) UserIntentBefore(ctx context.Context, sessionID string, before time.Time) (time.Time, error) {
+func (t *sqlTranscript) UserIntentBefore(ctx context.Context, sessionID string, before time.Time) (time.Time, error) {
 	value, err := t.core.queries.UserIntentBefore(ctx, db.UserIntentBeforeParams{SessionID: sessionID, Ts: timelayout.Format(before)})
 	if db.IsNoRows(err) {
 		return before, nil

@@ -4,9 +4,10 @@ import (
 	"context"
 	"crypto/tls"
 	"errors"
+	"github.com/lycaon/lycaon/internal/credentialstore"
+	"github.com/lycaon/lycaon/internal/outboundhttp"
 	"github.com/lycaon/lycaon/internal/testutil/exposure"
 	"net"
-	"net/http"
 	"path/filepath"
 	"strings"
 	"syscall"
@@ -17,25 +18,17 @@ import (
 
 const sentinelKeySecret = "SECRET_SENTINEL_VAL_DO_NOT_LEAK_12345"
 
-type keyLeakMockTransport struct {
-	err error
-}
-
-func (m *keyLeakMockTransport) RoundTrip(req *http.Request) (*http.Response, error) {
-	return nil, m.err
-}
-
 func TestWebResearchKeyLeakInvariant(t *testing.T) {
 	cat, err := LoadCatalog()
 	testutil.FailErr(t, "LoadCatalog", err)
-	reg := NewRegistry(cat)
-	testutil.FailErr(t, "RegisterCatalogProviders", RegisterCatalogProviders(t.Context(), reg))
 
 	cfgPath := filepath.Join(t.TempDir(), "config.yaml")
-	cfg := NewConfigStoreAt(cfgPath)
+	cfg, openErr := OpenConfigStore(cfgPath)
+	testutil.FailErr(t, "open web research store", openErr)
 
 	credPath := filepath.Join(t.TempDir(), "creds.age")
-	creds := NewCredentialStoreAt(credPath, cat)
+	creds, openErr := OpenCredentialStore(credentialstore.Slot{Path: credPath, Namespace: credentialstore.NamespaceWebResearch, Context: "web research"}, cat)
+	testutil.FailErr(t, "open web research store", openErr)
 
 	for _, entry := range cat.Entries() {
 		if entry.CredentialSlot != "" {
@@ -54,13 +47,6 @@ func TestWebResearchKeyLeakInvariant(t *testing.T) {
 			configMap[field.Name] = "test-extra-" + field.Name
 		}
 		testutil.FailErr(t, "set config", cfg.SetProviderConfig(entry.ID, configMap))
-	}
-
-	rt := Runtime{
-		Catalog:  cat,
-		Registry: reg,
-		Config:   cfg,
-		Creds:    creds,
 	}
 
 	failureCases := []struct {
@@ -91,10 +77,12 @@ func TestWebResearchKeyLeakInvariant(t *testing.T) {
 
 	for _, fc := range failureCases {
 		t.Run(fc.name, func(t *testing.T) {
-			client := &http.Client{
-				Transport: &keyLeakMockTransport{err: fc.err},
+			exchange := func(context.Context, outboundhttp.Request) (outboundhttp.Response, error) {
+				return outboundhttp.Response{}, fc.err
 			}
-			injectProviderHTTPClient(t, client)
+			reg := NewRegistry(cat, exchange)
+			testutil.FailErr(t, "register providers", RegisterCatalogProviders(t.Context(), reg))
+			rt := Runtime{Catalog: cat, Registry: reg, Config: cfg, Creds: creds}
 
 			for _, entry := range cat.Entries() {
 				if isDirectProvider(entry.ID) {
@@ -114,7 +102,7 @@ func TestWebResearchKeyLeakInvariant(t *testing.T) {
 					// 2. High-level Search
 					settings := DefaultSettings(creds, cfg, cat)
 					settings.Keys[entry.ID] = sentinelKeySecret
-					searchRes := Search(t.Context(), SearchOptions{
+					searchRes := Search(t.Context(), SearchOptions{Discovery: NewDiscovery(newTestCrawler()),
 						Query:           "test query",
 						Limit:           5,
 						Provider:        entry.ID,

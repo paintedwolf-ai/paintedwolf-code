@@ -48,8 +48,10 @@ func testSeedSettings(enabled ...string) Settings {
 }
 
 func TestWarmOriginSkipsProviderChannels(t *testing.T) {
-	reg := testRegistry(t)
-	d := &directDiscoverer{
+	discovery := NewDiscovery(newTestCrawler())
+
+	reg := testRegistry(t, nil)
+	d := &directDiscoverer{discovery: discovery,
 		registry:   reg,
 		settings:   testSeedSettings("hn", "wikipedia"),
 		seedOrigin: searchOriginWarm,
@@ -66,8 +68,10 @@ func TestWarmOriginSkipsProviderChannels(t *testing.T) {
 }
 
 func TestUserOriginConstructsProviderChannels(t *testing.T) {
-	reg := testRegistry(t)
-	d := &directDiscoverer{
+	discovery := NewDiscovery(newTestCrawler())
+
+	reg := testRegistry(t, nil)
+	d := &directDiscoverer{discovery: discovery,
 		registry:   reg,
 		settings:   testSeedSettings("hn"),
 		seedOrigin: searchOriginUser,
@@ -99,11 +103,11 @@ func channelIDs(chs []seedChannel) []string {
 }
 
 func TestProviderBackedSearchWithoutModel(t *testing.T) {
-	allowLoopbackFetch(t)
-	resetDirectState(1)
+	discovery := NewDiscovery(newTestCrawler())
+	discovery.slots = make(chan struct{}, 1)
 
 	srv := widgetReviewSite(t)
-	d := providerBackedDiscoverer(t, "hn", "Widget frobnicator review", srv.URL+"/guide")
+	d := providerBackedDiscoverer(t, discovery, "hn", "Widget frobnicator review", srv.URL+"/guide")
 	hits, err := d.Search(context.Background(), DirectRequest{Query: "widget frobnicator review", MaxResults: 1})
 	if err != nil {
 		t.Fatalf("Search: %v", err)
@@ -117,8 +121,8 @@ func TestProviderBackedSearchWithoutModel(t *testing.T) {
 }
 
 func TestProviderSeedChannelDedupesURL(t *testing.T) {
-	allowLoopbackFetch(t)
-	resetDirectState(1)
+	discovery := NewDiscovery(newTestCrawler())
+	discovery.slots = make(chan struct{}, 1)
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/html")
@@ -129,7 +133,7 @@ func TestProviderSeedChannelDedupesURL(t *testing.T) {
 	t.Cleanup(srv.Close)
 
 	pageURL := srv.URL + "/guide"
-	reg := NewRegistry(testCatalog(t))
+	reg := NewRegistry(testCatalog(t), nil)
 	reg.Register(&stubSeedProvider{
 		id: "hn",
 		hits: []WebHit{{
@@ -145,7 +149,7 @@ func TestProviderSeedChannelDedupesURL(t *testing.T) {
 	store.QueuePage(t.Context(), webindex.Page{URL: pageURL + "/", Title: "Widget frobnicator review", Verified: true})
 	store.Flush()
 
-	d := &directDiscoverer{
+	d := &directDiscoverer{discovery: discovery,
 		summarizer: &failIfCalledSummarizer{},
 		index:      store,
 		registry:   reg,
@@ -162,7 +166,8 @@ func TestProviderSeedChannelDedupesURL(t *testing.T) {
 }
 
 func TestAPISnippetFallbackAdmitsRobotsBlocked(t *testing.T) {
-	allowLoopbackFetch(t)
+	crawler := newTestCrawler()
+
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/robots.txt" {
 			fmt.Fprint(w, "User-agent: *\nDisallow: /\n")
@@ -173,7 +178,7 @@ func TestAPISnippetFallbackAdmitsRobotsBlocked(t *testing.T) {
 	t.Cleanup(srv.Close)
 
 	scorer := newQueryScorer("github issue widget frobnicator", nil, false, CurrentPeriod())
-	hits, _, _ := verifyHits(context.Background(), []indexCandidate{
+	hits, _, _ := crawler.verifyHits(context.Background(), []indexCandidate{
 		{
 			Title:         "Widget frobnicator issue",
 			URL:           srv.URL + "/issues/1",
@@ -194,7 +199,8 @@ func TestAPISnippetFallbackAdmitsRobotsBlocked(t *testing.T) {
 }
 
 func TestAPISnippetFallbackRejects404WithoutRobots(t *testing.T) {
-	allowLoopbackFetch(t)
+	crawler := newTestCrawler()
+
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/robots.txt" {
 			fmt.Fprint(w, "User-agent: *\nAllow: /\n")
@@ -205,7 +211,7 @@ func TestAPISnippetFallbackRejects404WithoutRobots(t *testing.T) {
 	t.Cleanup(srv.Close)
 
 	scorer := newQueryScorer("widget frobnicator missing", nil, false, CurrentPeriod())
-	hits, _, dead := verifyHits(context.Background(), []indexCandidate{
+	hits, _, dead := crawler.verifyHits(context.Background(), []indexCandidate{
 		{
 			Title:      "Missing page",
 			URL:        srv.URL + "/missing",
@@ -222,8 +228,8 @@ func TestAPISnippetFallbackRejects404WithoutRobots(t *testing.T) {
 }
 
 func TestProviderHitIngestedToIndex(t *testing.T) {
-	allowLoopbackFetch(t)
-	resetDirectState(1)
+	discovery := NewDiscovery(newTestCrawler())
+	discovery.slots = make(chan struct{}, 1)
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/html")
@@ -233,7 +239,7 @@ func TestProviderHitIngestedToIndex(t *testing.T) {
 	}))
 	t.Cleanup(srv.Close)
 
-	reg := NewRegistry(testCatalog(t))
+	reg := NewRegistry(testCatalog(t), nil)
 	reg.Register(&stubSeedProvider{
 		id: "hn",
 		hits: []WebHit{{
@@ -247,7 +253,7 @@ func TestProviderHitIngestedToIndex(t *testing.T) {
 	testutil.FailErr(t, "open index", err)
 	t.Cleanup(func() { _ = store.Close() })
 
-	d := &directDiscoverer{
+	d := &directDiscoverer{discovery: discovery,
 		index:      store,
 		registry:   reg,
 		settings:   testSeedSettings("hn"),
@@ -299,7 +305,7 @@ func TestPacedProviderSeedChannelSoftSkips(t *testing.T) {
 }
 
 func TestResolveSeedProvidersCatalogDriven(t *testing.T) {
-	reg := testRegistry(t)
+	reg := testRegistry(t, nil)
 	ids := resolveSeedProviders(Settings{}, reg)
 	if len(ids) == 0 {
 		t.Fatal("expected default_enabled seed providers from the catalog")

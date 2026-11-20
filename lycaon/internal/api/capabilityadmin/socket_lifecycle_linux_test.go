@@ -22,6 +22,7 @@ import (
 	"github.com/lycaon/lycaon/internal/people"
 	"github.com/lycaon/lycaon/internal/session/approvalstate"
 	"github.com/lycaon/lycaon/internal/settings"
+	"github.com/lycaon/lycaon/internal/settings/settingstest"
 	"github.com/lycaon/lycaon/internal/socketref"
 	"github.com/lycaon/lycaon/internal/testutil"
 	wire "github.com/lycaon/lycaon/pkg/api"
@@ -46,7 +47,7 @@ func socketLifecycleFixture(t *testing.T) (*Handler, confine.SocketGrant) {
 	testutil.FailErr(t, "create approval store", err)
 	runtime := approvalstate.NewSocketCapabilityRuntime()
 	t.Cleanup(runtime.Close)
-	handler := New(&httpio.Responder{Logger: slog.Default()}, withHost(t, Deps{Settings: &settings.Service{Approvals: saved}, Gate: settings.NewRuleApprovalGate(saved, settings.NoSources()), Authority: Authority{Sockets: runtime}}))
+	handler := New(&httpio.Responder{Logger: slog.Default()}, withHost(t, Deps{Settings: &settings.Service{Approvals: saved}, Gate: settings.NewRuleApprovalGate(saved, settingstest.EmptySources()), Authority: Authority{Sockets: runtime}}))
 	return &handler, resolved
 }
 

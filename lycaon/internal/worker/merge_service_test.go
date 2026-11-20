@@ -3,7 +3,6 @@ package worker_test
 import (
 	"context"
 	"errors"
-	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -139,7 +138,7 @@ func mergeRejectFmt(t *testing.T) *guidance.StaticRejectFormatter {
 
 func workspaceBaselinePath(t *testing.T, dir string) string {
 	t.Helper()
-	snap := testbaseline.Capture(t, dir)
+	snap := testbaseline.Capture(t, "root", dir)
 	raw := snap
 	return raw
 }
@@ -167,8 +166,9 @@ func verifiedOverlayService(t *testing.T, workspaces *workerworkspace.Service) *
 		WorkspaceBaselinePath: workspaceBaselinePath(t, dir),
 		Status:                api.WorkerStatusComplete,
 	}
+	testbaseline.RecordBranch(t, "root", task.WorkspacePath, task.WorkspaceRoot)
 	svc := &worker.MergeService{
-		Queue:  &mergeQueueStub{task: task},
+		Queue: &mergeQueueStub{task: task}, Branches: &mergeQueueStub{task: task},
 		Reject: mergeRejectFmt(t),
 		Reports: worker.ChangeReportDeps{
 			Messages: func(context.Context, string) ([]api.Message, error) {
@@ -240,8 +240,9 @@ func TestPreviewForSessionPublishesUnmetEvidence(t *testing.T) {
 		WorkspaceBaselinePath: workspaceBaselinePath(t, dir),
 		Status:                api.WorkerStatusComplete,
 	}
+	testbaseline.RecordBranch(t, "root", task.WorkspacePath, task.WorkspaceRoot)
 	svc := &worker.MergeService{
-		Queue:    &mergeQueueStub{task: task},
+		Queue: &mergeQueueStub{task: task}, Branches: &mergeQueueStub{task: task},
 		Reject:   mergeRejectFmt(t),
 		Evidence: worker.SourceEvidenceContext{Workspaces: workerworkspace.New(nil, nil, nil)},
 	}
@@ -272,9 +273,10 @@ func TestPromoteOverlayPromotesAndClears(t *testing.T) {
 		WorkspaceBaselinePath: workspaceBaselinePath(t, dir),
 		Status:                api.WorkerStatusComplete,
 	}
+	testbaseline.RecordBranch(t, "root", task.WorkspacePath, task.WorkspaceRoot)
 	store := &mergeStoreStub{}
 	svc := &worker.MergeService{
-		Queue: &mergeQueueStub{task: task},
+		Queue: &mergeQueueStub{task: task}, Branches: &mergeQueueStub{task: task},
 
 		Store:  store,
 		Reject: mergeRejectFmt(t),
@@ -320,9 +322,10 @@ func TestPromoteOverlayRemovesDeletedPath(t *testing.T) {
 		WorkspaceBaselinePath: baseline,
 		Status:                api.WorkerStatusComplete,
 	}
+	testbaseline.RecordBranch(t, "root", task.WorkspacePath, task.WorkspaceRoot)
 	store := &mergeStoreStub{}
 	svc := &worker.MergeService{
-		Queue: &mergeQueueStub{task: task},
+		Queue: &mergeQueueStub{task: task}, Branches: &mergeQueueStub{task: task},
 
 		Store:  store,
 		Reject: mergeRejectFmt(t),
@@ -345,7 +348,7 @@ func TestPromoteOverlayAppliesExplicitConflictResolution(t *testing.T) {
 	testutil.FailErr(t, "WriteFile", os.WriteFile(filepath.Join(branch, "c.go"), []byte("branch\n"), 0o644))
 	testutil.FailErr(t, "WriteFile", os.WriteFile(filepath.Join(dir, "c.go"), []byte("primary-changed\n"), 0o644))
 
-	baseline := testbaseline.FromFiles(t, map[string]testbaseline.File{"c.go": {Content: "original\n"}})
+	baseline := testbaseline.FromFiles(t, "root", map[string]testbaseline.File{"c.go": {Content: "original\n"}})
 	task := &api.WorkerTask{
 		ID:                    "job-conflict",
 		ParentSessionID:       "parent-1",
@@ -358,8 +361,9 @@ func TestPromoteOverlayAppliesExplicitConflictResolution(t *testing.T) {
 		WorkspaceBaselinePath: baseline,
 		Status:                api.WorkerStatusComplete,
 	}
+	testbaseline.RecordBranch(t, "root", task.WorkspacePath, task.WorkspaceRoot)
 	svc := &worker.MergeService{
-		Queue: &mergeQueueStub{task: task},
+		Queue: &mergeQueueStub{task: task}, Branches: &mergeQueueStub{task: task},
 
 		Store:  &mergeStoreStub{},
 		Reject: mergeRejectFmt(t),
@@ -379,7 +383,7 @@ func TestPromoteOverlayWritesResolvedContent(t *testing.T) {
 	testutil.FailErr(t, "WriteFile", os.WriteFile(filepath.Join(branch, "e.go"), []byte("branch\n"), 0o644))
 	testutil.FailErr(t, "WriteFile", os.WriteFile(filepath.Join(dir, "e.go"), []byte("primary-changed\n"), 0o644))
 
-	baseline := testbaseline.FromFiles(t, map[string]testbaseline.File{"e.go": {Content: "primary\n"}})
+	baseline := testbaseline.FromFiles(t, "root", map[string]testbaseline.File{"e.go": {Content: "primary\n"}})
 	task := &api.WorkerTask{
 		ID:                    "job-resolve",
 		ParentSessionID:       "parent-1",
@@ -392,8 +396,9 @@ func TestPromoteOverlayWritesResolvedContent(t *testing.T) {
 		WorkspaceBaselinePath: baseline,
 		Status:                api.WorkerStatusComplete,
 	}
+	testbaseline.RecordBranch(t, "root", task.WorkspacePath, task.WorkspaceRoot)
 	svc := &worker.MergeService{
-		Queue: &mergeQueueStub{task: task},
+		Queue: &mergeQueueStub{task: task}, Branches: &mergeQueueStub{task: task},
 
 		Store:  &mergeStoreStub{},
 		Reject: mergeRejectFmt(t),
@@ -421,7 +426,7 @@ func TestPromoteOverlayAppliesCleanAndResolvedPathsTogether(t *testing.T) {
 	testutil.FailErr(t, "WriteFile", os.WriteFile(filepath.Join(branch, "conflict.go"), []byte("branch\n"), 0o644))
 	testutil.FailErr(t, "WriteFile", os.WriteFile(filepath.Join(dir, "conflict.go"), []byte("primary-changed\n"), 0o644))
 
-	baseline := testbaseline.FromFiles(t, map[string]testbaseline.File{"safe.go": {Content: ""}, "conflict.go": {Content: "original\n"}})
+	baseline := testbaseline.FromFiles(t, "root", map[string]testbaseline.File{"safe.go": {Content: ""}, "conflict.go": {Content: "original\n"}})
 	task := &api.WorkerTask{
 		ID:                    "job-partial",
 		ParentSessionID:       "parent-1",
@@ -434,9 +439,10 @@ func TestPromoteOverlayAppliesCleanAndResolvedPathsTogether(t *testing.T) {
 		WorkspaceBaselinePath: baseline,
 		Status:                api.WorkerStatusComplete,
 	}
+	testbaseline.RecordBranch(t, "root", task.WorkspacePath, task.WorkspaceRoot)
 	store := &mergeStoreStub{}
 	svc := &worker.MergeService{
-		Queue: &mergeQueueStub{task: task},
+		Queue: &mergeQueueStub{task: task}, Branches: &mergeQueueStub{task: task},
 
 		Store:  store,
 		Reject: mergeRejectFmt(t),
@@ -470,11 +476,12 @@ func TestPreviewForSessionReportsConflicts(t *testing.T) {
 		WorkspaceRoot:         branch,
 		MergeStatus:           api.WorkerMergeStatusPending,
 		Scope:                 &api.TaskScope{Mode: api.TaskScopeModeWrite, Paths: []string{"d.go"}},
-		WorkspaceBaselinePath: testbaseline.FromFiles(t, map[string]testbaseline.File{"d.go": {Content: "original\n"}}),
+		WorkspaceBaselinePath: testbaseline.FromFiles(t, "root", map[string]testbaseline.File{"d.go": {Content: "original\n"}}),
 		Status:                api.WorkerStatusComplete,
 	}
+	testbaseline.RecordBranch(t, "root", task.WorkspacePath, task.WorkspaceRoot)
 	svc := &worker.MergeService{
-		Queue: &mergeQueueStub{task: task},
+		Queue: &mergeQueueStub{task: task}, Branches: &mergeQueueStub{task: task},
 
 		Reject: mergeRejectFmt(t),
 	}
@@ -496,7 +503,7 @@ func TestPromoteOverlayRejectsWrongSession(t *testing.T) {
 		Scope:           &api.TaskScope{Mode: api.TaskScopeModeWrite, Paths: []string{"x.go"}},
 	}
 	svc := &worker.MergeService{
-		Queue: &mergeQueueStub{task: task},
+		Queue: &mergeQueueStub{task: task}, Branches: &mergeQueueStub{task: task},
 
 		Reject: mergeRejectFmt(t),
 	}
@@ -528,9 +535,10 @@ func TestPromoteOverlayMergesVacuousBranch(t *testing.T) {
 		WorkspaceBaselinePath: workspaceBaselinePath(t, dir),
 		Status:                api.WorkerStatusComplete,
 	}
+	testbaseline.RecordBranch(t, "root", task.WorkspacePath, task.WorkspaceRoot)
 	store := &mergeStoreStub{}
 	svc := &worker.MergeService{
-		Queue: &mergeQueueStub{task: task},
+		Queue: &mergeQueueStub{task: task}, Branches: &mergeQueueStub{task: task},
 
 		Store:  store,
 		Reject: mergeRejectFmt(t),
@@ -559,7 +567,7 @@ func lineShiftMergeFixture(t *testing.T) (context.Context, string, *api.WorkerTa
 	testutil.FailErr(t, "WriteFile shifted.py branch", os.WriteFile(filepath.Join(branch, "shifted.py"), []byte(branchBody), 0o644))
 	testutil.FailErr(t, "WriteFile shifted.py primary", os.WriteFile(filepath.Join(dir, "shifted.py"), []byte(primary), 0o644))
 
-	baseline := fmt.Sprintf(`{"safe.go":{"content":""},"shifted.py":{"content":%q}}`, base)
+	baseline := testbaseline.FromFiles(t, "root", map[string]testbaseline.File{"shifted.py": {Content: base}})
 	task := &api.WorkerTask{
 		ID:                    "job-shift",
 		ParentSessionID:       "parent-1",
@@ -572,6 +580,7 @@ func lineShiftMergeFixture(t *testing.T) (context.Context, string, *api.WorkerTa
 		WorkspaceBaselinePath: baseline,
 		Status:                api.WorkerStatusComplete,
 	}
+	testbaseline.RecordBranch(t, "root", task.WorkspacePath, task.WorkspaceRoot)
 	return ctx, dir, task
 }
 
@@ -579,7 +588,7 @@ func TestPromoteOverlayInvalidResolutionLeavesCleanPathsUntouched(t *testing.T) 
 	ctx, dir, task := lineShiftMergeFixture(t)
 	dataDir := t.TempDir()
 	svc := &worker.MergeService{
-		Queue: &mergeQueueStub{task: task},
+		Queue: &mergeQueueStub{task: task}, Branches: &mergeQueueStub{task: task},
 
 		Reject:  mergeRejectFmt(t),
 		DataDir: dataDir,
@@ -594,8 +603,13 @@ func TestPromoteOverlayInvalidResolutionLeavesCleanPathsUntouched(t *testing.T) 
 			}},
 		}},
 	})
-	if err == nil {
-		t.Fatal("expected invalid resolution to fail")
+	var reject *toolrejection.ToolReject
+	if !errors.As(err, &reject) || reject.Code != worker.OverlayPromoteResolutionsRequiredCode {
+		t.Fatalf("expected resolution rejection, got %v", err)
+	}
+	reason, _ := reject.Data["reason"].(string)
+	if !strings.Contains(reason, "hunk range 1000000-1000000") {
+		t.Fatalf("expected invalid hunk range, got %+v", reject.Data)
 	}
 	if _, statErr := os.Stat(filepath.Join(dir, "safe.go")); !os.IsNotExist(statErr) {
 		t.Fatalf("clean path changed before conflict resolution: %v", statErr)
@@ -613,7 +627,7 @@ func (n mergeNamesStub) NamesByJob(_ context.Context, jobID string) (workerrecor
 func TestRejectOverlayNotPendingNamesTheResult(t *testing.T) {
 	task := &api.WorkerTask{ID: "job-9", ParentSessionID: "parent-1", MergeStatus: api.WorkerMergeStatusMerged}
 	svc := &worker.MergeService{
-		Queue:  &mergeQueueStub{task: task},
+		Queue: &mergeQueueStub{task: task}, Branches: &mergeQueueStub{task: task},
 		Reject: mergeRejectFmt(t),
 		Names:  mergeNamesStub{"job-9": {Worker: "parser-fix", Handle: "result-9"}},
 	}

@@ -61,7 +61,7 @@ func runScanEnginesList(moduleRoot, projectDir string) error {
 	if err != nil {
 		return err
 	}
-	for _, entry := range scancatalog.ListCatalogEntries(cfg, moduleRoot, projectDir) {
+	for _, entry := range scancatalog.ListCatalogEntries(cfg, projectDir) {
 		binaryFound := "n/a"
 		if entry.Driver == scancatalog.DriverExternal {
 			if entry.BinaryFound {
@@ -88,7 +88,7 @@ func runScanEnginesCheck(moduleRoot, projectDir string, args []string) error {
 		return err
 	}
 	ok := true
-	for _, report := range scancatalog.CheckCatalog(cfg, moduleRoot, projectDir) {
+	for _, report := range scancatalog.CheckCatalog(cfg, projectDir) {
 		status := "ok"
 		if !report.CheckOK {
 			status = "fail"

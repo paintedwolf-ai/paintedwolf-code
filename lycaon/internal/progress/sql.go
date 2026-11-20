@@ -2,7 +2,6 @@ package progress
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"github.com/lycaon/lycaon/internal/timelayout"
 	"strings"
@@ -34,7 +33,7 @@ func (s *SQLStore) Set(sessionID, content string) error {
 	}
 	runID := s.BoundRunID(key)
 	clamped := clampContent(content)
-	itemIDsJSON, err := json.Marshal(mintItemIDs(clamped))
+	itemIDsJSON, err := marshalItemIDs(mintItemIDs(clamped))
 	if err != nil {
 		return err
 	}

@@ -38,7 +38,7 @@ type untrustedContentSeeder interface {
 }
 
 func (s *HarnessPreparation) requireHarnessServices() *harnessServices {
-	seeder, _ := s.sessionStore.(untrustedContentSeeder)
+	seeder := s.evidenceStore
 	preparation, _ := s.llmSvc.Preparation.(*harnessfixture.PreludeController)
 	httpio.RequireDependencies("harness",
 		httpio.Required{Name: "HarnessWorkers", Present: s.harnessWorkers != nil},

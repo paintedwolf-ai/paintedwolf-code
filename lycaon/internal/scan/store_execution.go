@@ -5,25 +5,25 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
-	"github.com/lycaon/lycaon/internal/timelayout"
 	"strings"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/lycaon/lycaon/internal/db"
+	"github.com/lycaon/lycaon/internal/timelayout"
 	scancatalog "github.com/lycaon/lycaon/internal/scan/catalog"
 	scanoutput "github.com/lycaon/lycaon/internal/scan/output"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
 // ClaimNext atomically claims the oldest pending scan for the runner.
-func (s *sqlRunStore) ClaimNext(ctx context.Context) (*api.CodeScan, error) {
-	tx, err := s.db.BeginTx(ctx, nil)
+func (s *RunStore) ClaimNext(ctx context.Context) (*api.CodeScan, error) {
+	tx, err := s.tx.db.BeginTx(ctx, nil)
 	if err != nil {
 		return nil, err
 	}
 	defer func() { _ = tx.Rollback() }()
-	qtx := s.queries.WithTx(tx)
+	qtx := s.tx.queries.WithTx(tx)
 
 	// Prioritize SCA and secrets when scan concurrency is limited.
 	id, err := qtx.NextPendingScanID(ctx)
@@ -45,7 +45,7 @@ func (s *sqlRunStore) ClaimNext(ctx context.Context) (*api.CodeScan, error) {
 	if n == 0 {
 		return nil, ErrNoPendingScans
 	}
-	if err := s.emitScanTx(ctx, tx, id); err != nil {
+	if err := s.tx.emitScanTx(ctx, tx, id); err != nil {
 		return nil, err
 	}
 	row, err := qtx.GetCodeScan(ctx, id)
@@ -59,17 +59,17 @@ func (s *sqlRunStore) ClaimNext(ctx context.Context) (*api.CodeScan, error) {
 	if err := tx.Commit(); err != nil {
 		return nil, err
 	}
-	s.notify()
+	s.tx.notify()
 	return claimed, nil
 }
 
 // CountRunning returns the number of in-flight scans.
-func (s *sqlRunStore) CountRunning(ctx context.Context) (int, error) {
-	n, err := s.queries.CountRunningScans(ctx)
+func (s *RunStore) CountRunning(ctx context.Context) (int, error) {
+	n, err := s.tx.queries.CountRunningScans(ctx)
 	return int(n), err
 }
 
-func (s *sqlRunStore) SetExecutionPolicy(ctx context.Context, claimed *api.CodeScan, policy scancatalog.RuntimePolicy, startedAt time.Time) (bool, error) {
+func (s *RunStore) SetExecutionPolicy(ctx context.Context, claimed *api.CodeScan, policy scancatalog.RuntimePolicy, startedAt time.Time) (bool, error) {
 	if claimed == nil || strings.TrimSpace(claimed.ID) == "" || strings.TrimSpace(claimed.ClaimToken) == "" {
 		return false, fmt.Errorf("scan claim token required")
 	}
@@ -84,7 +84,7 @@ func (s *sqlRunStore) SetExecutionPolicy(ctx context.Context, claimed *api.CodeS
 	if err != nil {
 		return false, err
 	}
-	return s.casInTx(ctx, claimed.ID, func(qtx *db.Queries) (int64, error) {
+	return s.tx.casInTx(ctx, claimed.ID, func(qtx *db.Queries) (int64, error) {
 		return qtx.SetScanExecutionPolicy(ctx, db.SetScanExecutionPolicyParams{
 			RuntimeJson: string(raw), StartedAt: db.NullString(timelayout.Format(startedAt.UTC())),
 			ID: claimed.ID, ClaimToken: db.NullString(claimed.ClaimToken),
@@ -92,11 +92,11 @@ func (s *sqlRunStore) SetExecutionPolicy(ctx context.Context, claimed *api.CodeS
 	})
 }
 
-func (s *sqlRunStore) MarkLongRunning(ctx context.Context, claimed *api.CodeScan, at time.Time) (bool, error) {
+func (s *RunStore) MarkLongRunning(ctx context.Context, claimed *api.CodeScan, at time.Time) (bool, error) {
 	if claimed == nil || strings.TrimSpace(claimed.ID) == "" || strings.TrimSpace(claimed.ClaimToken) == "" {
 		return false, fmt.Errorf("scan claim token required")
 	}
-	return s.casInTx(ctx, claimed.ID, func(qtx *db.Queries) (int64, error) {
+	return s.tx.casInTx(ctx, claimed.ID, func(qtx *db.Queries) (int64, error) {
 		return qtx.MarkScanLongRunning(ctx, db.MarkScanLongRunningParams{
 			LongRunningAt: db.NullString(timelayout.Format(at.UTC())), ID: claimed.ID,
 			ClaimToken: db.NullString(claimed.ClaimToken),
@@ -105,7 +105,7 @@ func (s *sqlRunStore) MarkLongRunning(ctx context.Context, claimed *api.CodeScan
 }
 
 // MarkProgress commits progress, summary, and event only for the active claim.
-func (s *sqlRunStore) MarkProgress(ctx context.Context, claimed *api.CodeScan, progress api.ScanProgress) error {
+func (s *RunStore) MarkProgress(ctx context.Context, claimed *api.CodeScan, progress api.ScanProgress) error {
 	if claimed == nil || strings.TrimSpace(claimed.ID) == "" || strings.TrimSpace(claimed.ClaimToken) == "" {
 		return fmt.Errorf("scan claim token required")
 	}
@@ -113,7 +113,7 @@ func (s *sqlRunStore) MarkProgress(ctx context.Context, claimed *api.CodeScan, p
 	if err != nil {
 		return err
 	}
-	won, err := s.casInTx(ctx, claimed.ID, func(qtx *db.Queries) (int64, error) {
+	won, err := s.tx.casInTx(ctx, claimed.ID, func(qtx *db.Queries) (int64, error) {
 		return qtx.SetScanProgress(ctx, db.SetScanProgressParams{
 			ProgressJson: string(raw), ID: claimed.ID, ClaimToken: db.NullString(claimed.ClaimToken),
 		})
@@ -125,7 +125,7 @@ func (s *sqlRunStore) MarkProgress(ctx context.Context, claimed *api.CodeScan, p
 }
 
 // MarkDelta records what a path-scoped scan changed against its base.
-func (s *sqlRunStore) MarkDelta(ctx context.Context, claimed *api.CodeScan, delta api.ScanDelta) error {
+func (s *RunStore) MarkDelta(ctx context.Context, claimed *api.CodeScan, delta api.ScanDelta) error {
 	if claimed == nil || strings.TrimSpace(claimed.ID) == "" || strings.TrimSpace(claimed.ClaimToken) == "" {
 		return fmt.Errorf("scan claim token required")
 	}
@@ -133,7 +133,7 @@ func (s *sqlRunStore) MarkDelta(ctx context.Context, claimed *api.CodeScan, delt
 	if err != nil {
 		return err
 	}
-	_, err = s.queries.SetScanDelta(ctx, db.SetScanDeltaParams{
+	_, err = s.tx.queries.SetScanDelta(ctx, db.SetScanDeltaParams{
 		DeltaJson: string(raw), ID: claimed.ID, ClaimToken: db.NullString(claimed.ClaimToken),
 	})
 	if err == nil {
@@ -144,8 +144,8 @@ func (s *sqlRunStore) MarkDelta(ctx context.Context, claimed *api.CodeScan, delt
 
 // BaseSnapshotID is the generation a path-scoped scan's targets were diffed
 // from; empty for a full pass or a caller-supplied path list.
-func (s *sqlRunStore) BaseSnapshotID(ctx context.Context, scanID string) (string, error) {
-	base, err := s.queries.GetScanBaseSnapshot(ctx, strings.TrimSpace(scanID))
+func (s *RunStore) BaseSnapshotID(ctx context.Context, scanID string) (string, error) {
+	base, err := s.tx.queries.GetScanBaseSnapshot(ctx, strings.TrimSpace(scanID))
 	if db.IsNoRows(err) {
 		return "", nil
 	}
@@ -153,7 +153,7 @@ func (s *sqlRunStore) BaseSnapshotID(ctx context.Context, scanID string) (string
 }
 
 // MarkComplete atomically commits a result for the active claim.
-func (s *sqlRunStore) MarkComplete(ctx context.Context, claimed *api.CodeScan, result *scanoutput.Result) (bool, error) {
+func (s *RunStore) MarkComplete(ctx context.Context, claimed *api.CodeScan, result *scanoutput.Result) (bool, error) {
 	if claimed == nil || strings.TrimSpace(claimed.ID) == "" || strings.TrimSpace(claimed.ClaimToken) == "" {
 		return false, fmt.Errorf("scan claim token required")
 	}
@@ -175,7 +175,7 @@ func (s *sqlRunStore) MarkComplete(ctx context.Context, claimed *api.CodeScan, r
 }
 
 // MarkPendingSuperseded redirects consumers to compatible evidence.
-func (s *sqlRunStore) MarkPendingSuperseded(ctx context.Context, id, replacementScanID string) (bool, error) {
+func (s *RunStore) MarkPendingSuperseded(ctx context.Context, id, replacementScanID string) (bool, error) {
 	id = strings.TrimSpace(id)
 	if id == "" {
 		return false, fmt.Errorf("scan id required")
@@ -185,7 +185,7 @@ func (s *sqlRunStore) MarkPendingSuperseded(ctx context.Context, id, replacement
 		return false, fmt.Errorf("replacement scan id required")
 	}
 	won := false
-	err := s.inTx(ctx, func(qtx *db.Queries, tx *sql.Tx) error {
+	err := s.tx.inTx(ctx, func(qtx *db.Queries, tx *sql.Tx) error {
 		source, err := qtx.GetCodeScan(ctx, id)
 		if err != nil {
 			return err
@@ -247,10 +247,10 @@ func (s *sqlRunStore) MarkPendingSuperseded(ctx context.Context, id, replacement
 			return err
 		}
 		won = true
-		if err := s.emitScanTx(ctx, tx, replacementScanID); err != nil {
+		if err := s.tx.emitScanTx(ctx, tx, replacementScanID); err != nil {
 			return err
 		}
-		return s.emitScanTx(ctx, tx, id)
+		return s.tx.emitScanTx(ctx, tx, id)
 	})
 	return won && err == nil, err
 }

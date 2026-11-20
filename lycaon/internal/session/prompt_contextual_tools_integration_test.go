@@ -15,6 +15,7 @@ import (
 	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/testutil/llmtest"
 	"github.com/lycaon/lycaon/internal/tools"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 	"github.com/lycaon/lycaon/internal/workflow/runstate"
@@ -22,7 +23,7 @@ import (
 )
 
 func TestMockLLMReceivesWorkflowFilteredTools(t *testing.T) {
-	rec := llm.NewRecordingClient(llm.NewMockProvider(&llm.MockConfig{Responses: []llm.MockResponseEntry{{Pattern: ".", Text: "ok"}}}))
+	rec := llmtest.NewRecordingClient(llm.NewMockProvider(&llm.MockConfig{Responses: []llm.MockResponseEntry{{Pattern: ".", Text: "ok"}}}))
 	specFix := setupContextualToolsFixtureWithLLM(t, api.SessionPostureSpec, rec)
 	specManifest := workflowdef.FinalizeManifest(workflowdef.Manifest{
 		ID: "spec-tools", Version: "1.0.0", InitialPosture: "spec",
@@ -46,7 +47,7 @@ func TestMockLLMReceivesWorkflowFilteredTools(t *testing.T) {
 		}
 	}
 
-	buildRec := llm.NewRecordingClient(llm.NewMockProvider(&llm.MockConfig{Responses: []llm.MockResponseEntry{{Pattern: ".", Text: "ok"}}}))
+	buildRec := llmtest.NewRecordingClient(llm.NewMockProvider(&llm.MockConfig{Responses: []llm.MockResponseEntry{{Pattern: ".", Text: "ok"}}}))
 	buildFix := setupContextualToolsFixtureWithLLM(t, api.SessionPostureSpec, buildRec)
 	buildFix.Mgr.Coordinator.Loading.SetLedger(turnload.NewLedger())
 	buildFix.Mgr.SetPromptEngine(prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{}))
@@ -71,7 +72,7 @@ func TestMockLLMReceivesWorkflowFilteredTools(t *testing.T) {
 }
 
 func TestMockLLMInvestigateCoordinatorReceivesEndToEndHostContract(t *testing.T) {
-	rec := llm.NewRecordingClient(llm.NewMockProvider(&llm.MockConfig{Responses: []llm.MockResponseEntry{{Pattern: ".", Text: "ok"}}}))
+	rec := llmtest.NewRecordingClient(llm.NewMockProvider(&llm.MockConfig{Responses: []llm.MockResponseEntry{{Pattern: ".", Text: "ok"}}}))
 	fix := setupContextualToolsFixtureWithLLM(t, api.SessionPostureBuild, rec)
 	investigateEligible := true
 	fix.Mgr.SetCoordinatorTurnFrameSource(stubCoordinatorContext{ctx: api.CoordinatorRunContext{
@@ -122,7 +123,7 @@ func TestMockLLMInvestigateCoordinatorReceivesEndToEndHostContract(t *testing.T)
 }
 
 func TestPromptLoopParitySpecPosture(t *testing.T) {
-	rec := llm.NewRecordingClient(llm.NewMockProvider(&llm.MockConfig{
+	rec := llmtest.NewRecordingClient(llm.NewMockProvider(&llm.MockConfig{
 		Responses: []llm.MockResponseEntry{{Pattern: ".", Text: "ok"}},
 	}))
 	fix := setupContextualToolsFixtureWithLLM(t, api.SessionPostureSpec, rec)
@@ -216,7 +217,7 @@ func TestWorkerChildPromptUsesToolPolicy(t *testing.T) {
 }
 
 func TestMockLLMRecoversPersistedToolSchemas(t *testing.T) {
-	recorder := llm.NewRecordingClient(llm.NewMockProvider(&llm.MockConfig{
+	recorder := llmtest.NewRecordingClient(llm.NewMockProvider(&llm.MockConfig{
 		Responses: []llm.MockResponseEntry{{Pattern: ".", Text: "ready"}},
 	}))
 	fixture := setupContextualToolsFixtureWithLLM(t, api.SessionPostureBuild, recorder)

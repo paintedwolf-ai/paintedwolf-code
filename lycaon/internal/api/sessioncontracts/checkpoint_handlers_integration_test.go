@@ -22,10 +22,12 @@ import (
 	"github.com/lycaon/lycaon/internal/gate"
 	"github.com/lycaon/lycaon/internal/hitl"
 	"github.com/lycaon/lycaon/internal/project"
+	"github.com/lycaon/lycaon/internal/project/projecttest"
 	"github.com/lycaon/lycaon/internal/session"
 	"github.com/lycaon/lycaon/internal/session/approvalstate"
 	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/settings"
+	"github.com/lycaon/lycaon/internal/settings/settingstest"
 	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/testutil"
 	wire "github.com/lycaon/lycaon/pkg/api"
@@ -36,11 +38,11 @@ func TestCheckpointHandlersListAndResolve(t *testing.T) {
 
 	reg := project.NewSQLRegistry(sqlDB)
 	dir := t.TempDir()
-	p, err := project.CreateWithRoot(t.Context(), reg, dir)
+	p, err := projecttest.CreateWithRoot(t.Context(), reg, dir)
 	testutil.FailErr(t, "reg.Create failed", err)
 
 	store := store.NewSQL(sqlDB)
-	sess, err := store.Create(t.Context(), wire.CreateSessionRequest{
+	sess, err := store.Sessions.Create(t.Context(), wire.CreateSessionRequest{
 		Posture:   wire.SessionPostureBuild,
 		ProjectID: p.ID,
 	}, p.ID)
@@ -48,7 +50,7 @@ func TestCheckpointHandlersListAndResolve(t *testing.T) {
 
 	hub := events.NewMemoryHub()
 	pub := &events.Publisher{Hub: hub}
-	mgr := hitl.NewCheckpoints(hitl.NewSQLStore(sqlDB), pub, authzcontext.SQLRecorder(sqlDB))
+	mgr := hitl.NewCheckpoints(hitl.NewSQLStore(sqlDB), pub, authzcontext.LedgerRecorder{Ledger: &authzcontext.Ledger{Store: authzcontext.NewSQLStore(sqlDB)}})
 
 	srv := api.NewServer(apitest.Dependencies(t, api.Dependencies{Core: api.CoreDependencies{
 		Store: store, Projects: reg, Sessions: session.NewHost(store, session.Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)}, Approvals: api.ApprovalsDependencies{Checkpoints: mgr}}), nil, api.TestAPIToken)
@@ -65,7 +67,7 @@ func TestCheckpointHandlersListAndResolve(t *testing.T) {
 	testutil.FailErr(t, "mgr.RequestCheckpoint failed", err)
 
 	req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/v1/sessions/"+sess.ID+"/checkpoints", nil)
-	api.WithTestAuth(req)
+	req.Header.Set("Authorization", "Bearer "+api.TestAPIToken)
 	w := httptest.NewRecorder()
 	srv.ServeHTTP(w, req)
 	if w.Code != http.StatusOK {
@@ -87,7 +89,7 @@ func TestCheckpointHandlersListAndResolve(t *testing.T) {
 
 	body := `{"kind":"tool_approval","action":"approve","option_id":"approve_current_action"}`
 	req = httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/v1/sessions/"+sess.ID+"/checkpoints/"+dec.CheckpointID, strings.NewReader(body))
-	api.WithTestAuth(req)
+	req.Header.Set("Authorization", "Bearer "+api.TestAPIToken)
 	req.Header.Set("Content-Type", "application/json")
 	w = httptest.NewRecorder()
 	srv.ServeHTTP(w, req)
@@ -96,7 +98,7 @@ func TestCheckpointHandlersListAndResolve(t *testing.T) {
 	}
 
 	req = httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/v1/sessions/"+sess.ID+"/checkpoints/unknown", strings.NewReader(body))
-	api.WithTestAuth(req)
+	req.Header.Set("Authorization", "Bearer "+api.TestAPIToken)
 	req.Header.Set("Content-Type", "application/json")
 	w = httptest.NewRecorder()
 	srv.ServeHTTP(w, req)
@@ -122,7 +124,7 @@ func TestCheckpointHandlersRejectWithGuidance(t *testing.T) {
 
 	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/v1/sessions/"+sess.ID+"/checkpoints/"+dec.CheckpointID,
 		strings.NewReader(`{"kind":"tool_approval","action":"reject","guidance":"Use the read tool instead."}`))
-	api.WithTestAuth(req)
+	req.Header.Set("Authorization", "Bearer "+api.TestAPIToken)
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
 	srv.ServeHTTP(w, req)
@@ -173,7 +175,7 @@ func TestCheckpointHandlersValidationErrors(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/v1/sessions/"+sess.ID+"/checkpoints/"+dec.CheckpointID, strings.NewReader(tc.body))
-			api.WithTestAuth(req)
+			req.Header.Set("Authorization", "Bearer "+api.TestAPIToken)
 			req.Header.Set("Content-Type", "application/json")
 			w := httptest.NewRecorder()
 			srv.ServeHTTP(w, req)
@@ -203,7 +205,7 @@ func TestCheckpointHandlersResolveExactReplay(t *testing.T) {
 	testutil.FailErr(t, "mgr.RequestCheckpoint failed", err)
 	body := `{"kind":"tool_approval","action":"approve","option_id":"approve_current_action"}`
 	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/v1/sessions/"+sess.ID+"/checkpoints/"+dec.CheckpointID, strings.NewReader(body))
-	api.WithTestAuth(req)
+	req.Header.Set("Authorization", "Bearer "+api.TestAPIToken)
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
 	srv.ServeHTTP(w, req)
@@ -212,7 +214,7 @@ func TestCheckpointHandlersResolveExactReplay(t *testing.T) {
 	}
 
 	req = httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/v1/sessions/"+sess.ID+"/checkpoints/"+dec.CheckpointID, strings.NewReader(body))
-	api.WithTestAuth(req)
+	req.Header.Set("Authorization", "Bearer "+api.TestAPIToken)
 	req.Header.Set("Content-Type", "application/json")
 	w = httptest.NewRecorder()
 	srv.ServeHTTP(w, req)
@@ -231,10 +233,10 @@ func TestCheckpointGrantOfferCreatesProjectLease(t *testing.T) {
 
 	reg := project.NewSQLRegistry(sqlDB)
 	dir := t.TempDir()
-	p, err := project.CreateWithRoot(t.Context(), reg, dir)
+	p, err := projecttest.CreateWithRoot(t.Context(), reg, dir)
 	testutil.FailErr(t, "CreateWithRoot", err)
 	store := store.NewSQL(sqlDB)
-	sess, err := store.Create(t.Context(), wire.CreateSessionRequest{
+	sess, err := store.Sessions.Create(t.Context(), wire.CreateSessionRequest{
 		Posture:   wire.SessionPostureBuild,
 		ProjectID: p.ID,
 	}, p.ID)
@@ -242,9 +244,9 @@ func TestCheckpointGrantOfferCreatesProjectLease(t *testing.T) {
 
 	hub := events.NewMemoryHub()
 	pub := &events.Publisher{Hub: hub}
-	chkMgr := hitl.NewCheckpoints(hitl.NewSQLStore(sqlDB), pub, authzcontext.SQLRecorder(sqlDB))
+	chkMgr := hitl.NewCheckpoints(hitl.NewSQLStore(sqlDB), pub, authzcontext.LedgerRecorder{Ledger: &authzcontext.Ledger{Store: authzcontext.NewSQLStore(sqlDB)}})
 
-	approvals := settings.NewRuleApprovalGate(svc.Approvals, settings.NoSources())
+	approvals := settings.NewRuleApprovalGate(svc.Approvals, settingstest.EmptySources())
 	srv := api.NewServer(apitest.Dependencies(t, api.Dependencies{Core: api.CoreDependencies{
 		Store: store, Projects: reg, Sessions: session.NewHost(store, session.Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil),
 		Settings: svc}, Host: api.HostDependencies{Events: hub}, Approvals: api.ApprovalsDependencies{Checkpoints: chkMgr, ApprovalGate: approvals}}), nil, api.TestAPIToken)
@@ -288,7 +290,7 @@ func TestCheckpointGrantOfferCreatesProjectLease(t *testing.T) {
 
 	body := `{"kind":"tool_approval","action":"approve","option_id":"` + selected.ID + `"}`
 	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/v1/sessions/"+sess.ID+"/checkpoints/"+dec.CheckpointID, strings.NewReader(body))
-	api.WithTestAuth(req)
+	req.Header.Set("Authorization", "Bearer "+api.TestAPIToken)
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
 	srv.ServeHTTP(w, req)
@@ -297,7 +299,7 @@ func TestCheckpointGrantOfferCreatesProjectLease(t *testing.T) {
 	}
 
 	listReq := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/v1/approval-grants?session_id="+sess.ID, nil)
-	api.WithTestAuth(listReq)
+	listReq.Header.Set("Authorization", "Bearer "+api.TestAPIToken)
 	listW := httptest.NewRecorder()
 	srv.ServeHTTP(listW, listReq)
 	if listW.Code != http.StatusOK {
@@ -328,10 +330,10 @@ func TestWriteRootPlanAtomicallyCreatesTaskAndDeviceAuthority(t *testing.T) {
 
 	reg := project.NewSQLRegistry(sqlDB)
 	projectDir := t.TempDir()
-	p, err := project.CreateWithRoot(t.Context(), reg, projectDir)
+	p, err := projecttest.CreateWithRoot(t.Context(), reg, projectDir)
 	testutil.FailErr(t, "CreateWithRoot", err)
 	store := store.NewSQL(sqlDB)
-	sess, err := store.Create(t.Context(), wire.CreateSessionRequest{
+	sess, err := store.Sessions.Create(t.Context(), wire.CreateSessionRequest{
 		Posture:   wire.SessionPostureBuild,
 		ProjectID: p.ID,
 	}, p.ID)
@@ -339,9 +341,9 @@ func TestWriteRootPlanAtomicallyCreatesTaskAndDeviceAuthority(t *testing.T) {
 
 	hub := events.NewMemoryHub()
 	pub := &events.Publisher{Hub: hub}
-	chkMgr := hitl.NewCheckpoints(hitl.NewSQLStore(sqlDB), pub, authzcontext.SQLRecorder(sqlDB))
+	chkMgr := hitl.NewCheckpoints(hitl.NewSQLStore(sqlDB), pub, authzcontext.LedgerRecorder{Ledger: &authzcontext.Ledger{Store: authzcontext.NewSQLStore(sqlDB)}})
 
-	approvals := settings.NewRuleApprovalGate(svc.Approvals, settings.NoSources())
+	approvals := settings.NewRuleApprovalGate(svc.Approvals, settingstest.EmptySources())
 	writeRootRT := approvalstate.NewSandboxPathGrantRuntime()
 	srv := api.NewServer(apitest.Dependencies(t, api.Dependencies{Core: api.CoreDependencies{
 		Store: store, Projects: reg, Sessions: session.NewHost(store, session.Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil),
@@ -410,7 +412,7 @@ func TestWriteRootPlanAtomicallyCreatesTaskAndDeviceAuthority(t *testing.T) {
 
 	body := `{"kind":"tool_approval","action":"approve","option_id":"` + selected.ID + `"}`
 	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/v1/sessions/"+sess.ID+"/checkpoints/"+dec.CheckpointID, strings.NewReader(body))
-	api.WithTestAuth(req)
+	req.Header.Set("Authorization", "Bearer "+api.TestAPIToken)
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
 	srv.ServeHTTP(w, req)
@@ -427,7 +429,7 @@ func TestWriteRootPlanAtomicallyCreatesTaskAndDeviceAuthority(t *testing.T) {
 	}
 
 	listReq := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/v1/approval-grants", nil)
-	api.WithTestAuth(listReq)
+	listReq.Header.Set("Authorization", "Bearer "+api.TestAPIToken)
 	listW := httptest.NewRecorder()
 	srv.ServeHTTP(listW, listReq)
 	if listW.Code != http.StatusOK {
@@ -452,7 +454,7 @@ func TestWriteRootPlanAtomicallyCreatesTaskAndDeviceAuthority(t *testing.T) {
 
 	revokeBody := `{"ids":["` + chatGrant.ID + `","` + selected.ID + `"]}`
 	revokeReq := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/v1/approval-grants/revoke", strings.NewReader(revokeBody))
-	api.WithTestAuth(revokeReq)
+	revokeReq.Header.Set("Authorization", "Bearer "+api.TestAPIToken)
 	revokeReq.Header.Set("Content-Type", "application/json")
 	revokeW := httptest.NewRecorder()
 	srv.ServeHTTP(revokeW, revokeReq)
@@ -484,7 +486,7 @@ func TestCheckpointRejectsClientAuthoredGrantPredicate(t *testing.T) {
 
 	body := `{"kind":"tool_approval","action":"approve","grant":{"predicate":{"category":"tool","pattern":"*"}}}`
 	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/v1/sessions/"+sess.ID+"/checkpoints/"+dec.CheckpointID, strings.NewReader(body))
-	api.WithTestAuth(req)
+	req.Header.Set("Authorization", "Bearer "+api.TestAPIToken)
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
 	srv.ServeHTTP(w, req)

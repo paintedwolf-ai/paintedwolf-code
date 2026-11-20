@@ -240,7 +240,8 @@ func TestMergeServiceCheckpointExactBaseConflictSurface(t *testing.T) {
 	ctx := t.Context()
 	sqlDB := testdbfixture.Open(t, "store.db")
 	sqlStore := NewSQLStore(sqlDB)
-	q := NewSQLQueue(sqlDB, 8)
+	qServices := NewSQLServices(sqlDB, 8)
+	q := qServices.Queue
 	primary := t.TempDir()
 	testdbseed.InsertSessionWithRoot(t, sqlDB, "parent-cp-conf", testdbseed.DefaultProjectID, primary)
 
@@ -308,11 +309,11 @@ func TestMergeServiceCheckpointExactBaseConflictSurface(t *testing.T) {
 	testutil.FailErr(t, "Publish", err)
 	bindRecoveryCheckpoint(t, overlay, primary, cpStore, "chk-conf-1")
 
-	_, err = sqlStore.SetWorkerWorkspace(ctx, jobID, overlay, testbaseline.Durable(t, sqlDB, jobID, primary))
+	_, err = sqlStore.SetWorkerWorkspace(ctx, jobID, overlay, testbaseline.Durable(t, "root", sqlDB, jobID, primary))
 	testutil.FailErr(t, "SetWorkerWorkspace", err)
-	testutil.FailErr(t, "SetMergeStatus", q.SetMergeStatus(ctx, jobID, api.WorkerMergeStatusPending))
+	testutil.FailErr(t, "SetMergeStatus", qServices.Promotions.SetMergeStatus(ctx, jobID, api.WorkerMergeStatusPending))
 
-	svc := &MergeService{Queue: q, Store: q, DataDir: t.TempDir()}
+	svc := &MergeService{Queue: q, Branches: q.Branches, Store: qServices.Promotions, DataDir: t.TempDir()}
 	previewOut, err := svc.PreviewForSession(ctx, "parent-cp-conf", jobID, "full", nil)
 	testutil.FailErr(t, "PreviewForSession", err)
 	if len(previewOut.Conflicts) != 2 {

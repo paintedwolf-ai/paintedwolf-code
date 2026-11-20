@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"io"
+	"path/filepath"
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/commandprogram"
@@ -95,7 +96,7 @@ func (p *ProgramPaths) commandOutput(ctx context.Context, name string, argv comm
 		if len(args) != 1 {
 			return 0, usage("expected one PATH")
 		}
-		_, err := io.WriteString(output, PathDir(args[0])+"\n")
+		_, err := io.WriteString(output, filepath.Dir(args[0])+"\n")
 		return 0, err
 	case "pwd":
 		if len(args) != 0 {

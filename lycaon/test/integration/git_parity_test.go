@@ -22,7 +22,9 @@ const envGitReference = "LYCAON_GIT_REFERENCE"
 const envParityRequired = "LYCAON_GIT_PARITY_REQUIRED"
 
 func TestMain(m *testing.M) {
-	gittestsetup.Enable()
+	if os.Getenv(stagedGitFixture) == "" {
+		gittestsetup.Enable()
+	}
 	os.Exit(m.Run())
 }
 
@@ -618,14 +620,9 @@ func TestLFSSmudgeWithoutInstall(t *testing.T) {
 // Git filter values require quoting when the bundled engine path contains spaces.
 func TestLFSFromEnginePathWithSpaces(t *testing.T) {
 	skipIfShort(t)
-	requireBundledEngine(t)
-	realLFS := requireBundledLFS(t)
-
-	spaced := filepath.Join(t.TempDir(), "Painted Wolf Code.app", "bin")
-	testutil.FailErr(t, "mkdir spaced engine dir", os.MkdirAll(spaced, 0o755))
-	stagedLFS := filepath.Join(spaced, "git-lfs")
-	testutil.FailErr(t, "stage git-lfs", os.WriteFile(stagedLFS, readFileBytes(t, realLFS), 0o755))
-	t.Cleanup(gitexec.TestingUseLFSPath(stagedLFS))
+	if stagedInstallation(t, true) {
+		return
+	}
 
 	dir := t.TempDir()
 	out, code, err := gitexec.Run(t.Context(), dir, []string{"init"}, gitexec.Opts{})
@@ -734,13 +731,13 @@ func TestLargeFileWithinCaps(t *testing.T) {
 // really absent: an lfs-attributed file stages as raw bytes, not as a pointer.
 func TestLFSAbsentDegradesGracefully(t *testing.T) {
 	skipIfShort(t)
-	ref := requireReferenceGit(t)
-	requireBundledEngine(t)
-
+	if stagedInstallation(t, false) {
+		return
+	}
+	ref, err := gitengine.BinaryPath()
+	testutil.FailErr(t, "resolve staged Git", err)
 	f := buildFixture(t, ref, fixPlain)
-	t.Setenv("HOME", f.home)
-	t.Setenv(gitengine.EnvTest, "1")
-	t.Setenv(gitexec.EnvLFSForceAbsent, "1")
+
 
 	compareReadOps(t, ref, f, gitexec.Opts{}, [][]string{
 		{"status", "--porcelain=v2"},

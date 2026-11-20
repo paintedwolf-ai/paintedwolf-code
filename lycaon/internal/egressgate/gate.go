@@ -9,7 +9,6 @@ import (
 	"strconv"
 	"strings"
 	"sync/atomic"
-	"time"
 
 	"github.com/lycaon/lycaon/internal/confine"
 	"github.com/lycaon/lycaon/internal/egressproxy"
@@ -139,13 +138,6 @@ func refused(ctx, reviewCtx context.Context, state *State, host string) error {
 	}
 	state.denied.Store(host)
 	return &HostDeniedError{Host: host}
-}
-
-func IOContext(ctx context.Context, timeout time.Duration) (context.Context, context.CancelFunc) {
-	if timeout <= 0 {
-		timeout = 30 * time.Second
-	}
-	return hitl.IOContext(ctx, timeout)
 }
 
 func Denied(ctx context.Context) (string, bool) {

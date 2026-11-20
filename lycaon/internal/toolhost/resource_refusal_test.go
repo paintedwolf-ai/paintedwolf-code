@@ -11,6 +11,7 @@ import (
 	"github.com/lycaon/lycaon/internal/commandprogram"
 	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/testutil/guidancetest"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/tooloutput"
 	"github.com/lycaon/lycaon/internal/toolrejection"
@@ -45,8 +46,8 @@ func TestCommandResourceRefusalPreservesFactsAndEarlierEffects(t *testing.T) {
 	env := newPipeSemanticsEnv(t)
 	hints, err := guidance.LoadHintConfigStock()
 	testutil.FailErr(t, "guidance.LoadHintConfigStock failed", err)
-	if err = guidance.ValidateHintConfig(hints); err != nil {
-		testutil.FailErr(t, "guidance.ValidateHintConfig failed", err)
+	if err = guidancetest.ValidateHints(hints); err != nil {
+		testutil.FailErr(t, "guidancetest.ValidateHints failed", err)
 	}
 	env.Runtime.Executor.Rejections.SetRejectFormatter(guidance.NewStaticRejectFormatter(hints))
 	if err := os.WriteFile(filepath.Join(env.Dir, "record"), bytes.Repeat([]byte{'x'}, (4<<20)+1), 0o600); err != nil {

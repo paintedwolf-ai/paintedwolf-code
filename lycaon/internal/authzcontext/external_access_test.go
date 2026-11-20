@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/authzcontext"
+	"github.com/lycaon/lycaon/internal/authzcontext/authztest"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -88,8 +89,8 @@ func TestBuildExternalAccess_roundTripAndSeal(t *testing.T) {
 		t.Fatalf("round-trip = %+v", round.ExternalAccess)
 	}
 
-	mem := authzcontext.NewMemoryStore()
-	ledger := &authzcontext.Ledger{Store: mem}
+	ledgerStore := authztest.NewStore(t, "sess-ea")
+	ledger := &authzcontext.Ledger{Store: ledgerStore}
 	ledger.AppendRecord(context.Background(), authzcontext.RecordInput{
 		SessionID:  "sess-ea",
 		Action:     authzcontext.EventActionCapabilityApplied,
@@ -102,7 +103,7 @@ func TestBuildExternalAccess_roundTripAndSeal(t *testing.T) {
 			ExternalAccess:      ea,
 		},
 	})
-	rows, err := mem.ListEvents(context.Background(), "sess-ea")
+	rows, err := ledgerStore.ListEvents(context.Background(), "sess-ea")
 	testutil.FailErr(t, "list", err)
 	if br := authzcontext.VerifyEvents("sess-ea", rows); br != nil {
 		t.Fatalf("verify: %+v", br)
@@ -234,8 +235,8 @@ func TestBuildExternalAccess_emptyUnknownAndAffirmativeNone(t *testing.T) {
 }
 
 func TestEventDetailWithoutExternalAccessStillVerifies(t *testing.T) {
-	mem := authzcontext.NewMemoryStore()
-	ledger := &authzcontext.Ledger{Store: mem}
+	ledgerStore := authztest.NewStore(t, "sess-no-access")
+	ledger := &authzcontext.Ledger{Store: ledgerStore}
 	ledger.AppendRecord(context.Background(), authzcontext.RecordInput{
 		SessionID:  "sess-no-access",
 		Action:     authzcontext.EventActionToolDenied,
@@ -244,7 +245,7 @@ func TestEventDetailWithoutExternalAccessStillVerifies(t *testing.T) {
 		ToolName:   "command",
 		Detail:     authzcontext.DetailInput{Tool: "command", RejectCode: "approval_denied"},
 	})
-	rows, err := mem.ListEvents(context.Background(), "sess-no-access")
+	rows, err := ledgerStore.ListEvents(context.Background(), "sess-no-access")
 	testutil.FailErr(t, "list", err)
 	var detail authzcontext.EventDetail
 	if err := json.Unmarshal([]byte(rows[0].DetailJSON), &detail); err != nil {

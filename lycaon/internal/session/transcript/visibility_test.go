@@ -46,9 +46,9 @@ func TestStampUserMessageVisibilityLeavesNormalUserTranscript(t *testing.T) {
 
 func TestAppendAndAppendContinuationStampCanonicalOrdinals(t *testing.T) {
 	sessionStore := storetest.New(t, testdbseed.DefaultProjectID)
-	sess, err := sessionStore.Create(t.Context(), api.CreateSessionRequest{ProviderID: "fixture", Model: "large"}, testdbseed.DefaultProjectID)
+	sess, err := sessionStore.Sessions.Create(t.Context(), api.CreateSessionRequest{ProviderID: "fixture", Model: "large"}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
-	svc := New(sessionStore, nil)
+	svc := New(sessionStore.Sessions, sessionStore.Transcript, sessionStore.Turns, sessionStore.People, nil)
 
 	rows := []api.Message{{ID: "m1", Role: api.MessageRoleUser, Content: "first"}}
 	testutil.FailErr(t, "append slice", svc.Append(t.Context(), sess.ID, rows...))

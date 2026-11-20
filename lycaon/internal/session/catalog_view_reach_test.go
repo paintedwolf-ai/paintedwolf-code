@@ -14,6 +14,7 @@ import (
 	"github.com/lycaon/lycaon/internal/extpacks"
 	"github.com/lycaon/lycaon/internal/oar"
 	"github.com/lycaon/lycaon/internal/project"
+	"github.com/lycaon/lycaon/internal/project/projecttest"
 	"github.com/lycaon/lycaon/internal/projectcontrib"
 	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/internal/session"
@@ -65,17 +66,17 @@ func TestW10ReachMatrix(t *testing.T) {
 	}
 
 	m, _ := newViewManager(t, root, surfaces)
-	reg := project.NewMemoryRegistry()
+	reg := projecttest.NewRegistry(t)
 	m.SetProjectRegistry(reg)
 
 	projA := t.TempDir()
 	writeProjectExtensions(t, projA, "disabled:\n  - guidance/coordinator-gate-blocked\n")
-	pA, err := project.CreateWithRoot(ctx, reg, projA)
+	pA, err := projecttest.CreateWithRoot(ctx, reg, projA)
 	testutil.FailErr(t, "CreateWithRoot A", err)
 
 	projB := t.TempDir()
 	writeProjectExtensions(t, projB, "disabled: []\n")
-	pB, err := project.CreateWithRoot(ctx, reg, projB)
+	pB, err := projecttest.CreateWithRoot(ctx, reg, projB)
 	testutil.FailErr(t, "CreateWithRoot B", err)
 
 	viewA := m.Catalog.ViewForProject(ctx, pA.ID)
@@ -129,11 +130,11 @@ func TestW11GateMatrix(t *testing.T) {
 				testutil.FailErr(t, "PutEnabled", err)
 			}
 			m, _ := newViewManager(t, root, surfaces)
-			reg := project.NewMemoryRegistry()
+			reg := projecttest.NewRegistry(t)
 			m.SetProjectRegistry(reg)
 			projDir := t.TempDir()
 			writeProjectExtensions(t, projDir, "disabled:\n  - guidance/coordinator-gate-blocked\n")
-			p, err := project.CreateWithRoot(ctx, reg, projDir)
+			p, err := projecttest.CreateWithRoot(ctx, reg, projDir)
 			testutil.FailErr(t, "CreateWithRoot", err)
 			if !tc.projectOn {
 				if _, err := reg.SetTrustEnabled(ctx, p.ID, map[string]bool{projectcontrib.SurfaceExtensionConfig: false}); err != nil {
@@ -202,8 +203,6 @@ func TestW12PersonaTemplateIsolation(t *testing.T) {
 	if a.Layers().Catalog.Revision == b.Layers().Catalog.Revision {
 		t.Fatal("derived engines must keep distinct catalogs")
 	}
-	// Persona cache keys by catalog fingerprint.
-	prompts.ResetPersonaContractCache()
 	rA, err := prompts.NewReader(prompts.ReaderInput{
 		ProfileID: "implement",
 		Profiles:  v1.ToolProfiles,
@@ -242,7 +241,7 @@ func TestW13NoSharedMutation(t *testing.T) {
 		testutil.FailErr(t, "PutEnabled", err)
 	}
 	m, _ := newViewManager(t, root, surfaces)
-	reg := project.NewMemoryRegistry()
+	reg := projecttest.NewRegistry(t)
 	m.SetProjectRegistry(reg)
 
 	makeProj := func(disable string) *project.Project {
@@ -252,7 +251,7 @@ func TestW13NoSharedMutation(t *testing.T) {
 			body = "disabled:\n  - " + disable + "\n"
 		}
 		writeProjectExtensions(t, dir, body)
-		p, err := project.CreateWithRoot(ctx, reg, dir)
+		p, err := projecttest.CreateWithRoot(ctx, reg, dir)
 		testutil.FailErr(t, "CreateWithRoot", err)
 		return p
 	}
@@ -324,11 +323,11 @@ func TestW14FailureDegradesToDevice(t *testing.T) {
 		t.Fatalf("fallback fingerprint %s want %s", got.Catalog.Revision, device.Catalog.Revision)
 	}
 	// Later valid projects still build.
-	reg := project.NewMemoryRegistry()
+	reg := projecttest.NewRegistry(t)
 	m.SetProjectRegistry(reg)
 	dir := t.TempDir()
 	writeProjectExtensions(t, dir, "disabled: []\n")
-	p, err := project.CreateWithRoot(ctx, reg, dir)
+	p, err := projecttest.CreateWithRoot(ctx, reg, dir)
 	testutil.FailErr(t, "CreateWithRoot", err)
 	good := m.Catalog.ViewForProject(ctx, p.ID)
 	if good == nil {

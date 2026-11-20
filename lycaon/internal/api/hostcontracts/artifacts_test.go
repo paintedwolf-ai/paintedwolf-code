@@ -32,12 +32,12 @@ import (
 func TestHandleUploadLiveToolRecordingRejectsInvalidInput(t *testing.T) {
 	sessionStore := storetest.New(t)
 	projects, projectID := contractfixture.ArtifactProject(t, sessionStore.DB())
-	sess, err := sessionStore.Create(t.Context(), api.CreateSessionRequest{
+	sess, err := sessionStore.Sessions.Create(t.Context(), api.CreateSessionRequest{
 		ProjectID: projectID,
 		Posture:   api.SessionPostureBuild,
 	}, projectID)
 	testutil.FailErr(t, "create session", err)
-	testutil.FailErr(t, "append recording origin", sessionStore.AppendMessages(t.Context(), sess.ID, contractfixture.RecordingMessage("message-1", "call-1")))
+	testutil.FailErr(t, "append recording origin", sessionStore.Transcript.AppendMessages(t.Context(), sess.ID, contractfixture.RecordingMessage("message-1", "call-1")))
 	srv := hostapi.NewServer(apitest.Dependencies(t, hostapi.Dependencies{Core: hostapi.CoreDependencies{Projects: projects, Store: sessionStore}, Source: hostapi.SourceDependencies{VisualStore: visual.NewMemoryStore()}}), nil, hostapi.TestAPIToken)
 	router := chi.NewRouter()
 	router.Post("/v1/sessions/{id}/artifacts", srv.Routes.Artifacts.HandleCreateSessionArtifact)
@@ -86,12 +86,12 @@ func TestHandleUploadLiveToolRecordingRejectsInvalidInput(t *testing.T) {
 func TestHandleUploadLiveToolRecordingPersistsMP4(t *testing.T) {
 	sessionStore := storetest.New(t)
 	projects, projectID := contractfixture.ArtifactProject(t, sessionStore.DB())
-	sess, err := sessionStore.Create(t.Context(), api.CreateSessionRequest{
+	sess, err := sessionStore.Sessions.Create(t.Context(), api.CreateSessionRequest{
 		ProjectID: projectID,
 		Posture:   api.SessionPostureBuild,
 	}, projectID)
 	testutil.FailErr(t, "create session", err)
-	testutil.FailErr(t, "append recording origins", sessionStore.AppendMessages(t.Context(), sess.ID,
+	testutil.FailErr(t, "append recording origins", sessionStore.Transcript.AppendMessages(t.Context(), sess.ID,
 		contractfixture.RecordingMessage("message-1", "call-1"),
 		contractfixture.RecordingMessage("message-2", "call-2"),
 	))
@@ -163,7 +163,7 @@ func TestHandleUploadLiveToolRecordingPersistsMP4(t *testing.T) {
 func TestHandleSessionArtifact_roundTrip(t *testing.T) {
 	store := storetest.New(t)
 	projects, projectID := contractfixture.ArtifactProject(t, store.DB())
-	sess, err := store.Create(t.Context(), api.CreateSessionRequest{
+	sess, err := store.Sessions.Create(t.Context(), api.CreateSessionRequest{
 		ProjectID: projectID,
 		Posture:   api.SessionPostureBuild,
 	}, projectID)
@@ -199,7 +199,7 @@ func TestHandleSessionArtifact_roundTrip(t *testing.T) {
 func TestHandleSessionArtifactUnavailable(t *testing.T) {
 	store := storetest.New(t)
 	projects, projectID := contractfixture.ArtifactProject(t, store.DB())
-	sess, err := store.Create(t.Context(), api.CreateSessionRequest{
+	sess, err := store.Sessions.Create(t.Context(), api.CreateSessionRequest{
 		ProjectID: projectID,
 		Posture:   api.SessionPostureBuild,
 	}, projectID)
@@ -233,12 +233,12 @@ func TestHandleSessionArtifactUnavailable(t *testing.T) {
 func TestHandleSessionArtifact_childSessionResolvesTreeStore(t *testing.T) {
 	store := storetest.New(t)
 	projects, projectID := contractfixture.ArtifactProject(t, store.DB())
-	parent, err := store.Create(t.Context(), api.CreateSessionRequest{
+	parent, err := store.Sessions.Create(t.Context(), api.CreateSessionRequest{
 		ProjectID: projectID,
 		Posture:   api.SessionPostureBuild,
 	}, projectID)
 	testutil.FailErr(t, "create session in store", err)
-	child, err := store.CreateChild(t.Context(), parent, api.SpawnChildRequest{AgentType: "implementer"})
+	child, err := store.Sessions.CreateChild(t.Context(), parent, api.SpawnChildRequest{AgentType: "implementer"})
 	testutil.FailErr(t, "store.CreateChild failed", err)
 	visualStore := visual.NewMemoryStore()
 	wireArt, err := visualStore.Put(t.Context(), parent.ID, visual.Entry{
@@ -276,12 +276,12 @@ func newListArtifactsFixture(t *testing.T) listArtifactsFixture {
 	proj, err := reg.Create(t.Context(), project.CreateParams{Draft: true, Name: "list-scope"})
 	testutil.FailErr(t, "reg.Create failed", err)
 	sessStore := sessionFixture
-	sessA, err := sessStore.Create(t.Context(), api.CreateSessionRequest{
+	sessA, err := sessStore.Sessions.Create(t.Context(), api.CreateSessionRequest{
 		ProjectID: proj.ID,
 		Posture:   api.SessionPostureBuild,
 	}, proj.ID)
 	testutil.FailErr(t, "sessStore.Create failed", err)
-	sessB, err := sessStore.Create(t.Context(), api.CreateSessionRequest{
+	sessB, err := sessStore.Sessions.Create(t.Context(), api.CreateSessionRequest{
 		ProjectID: proj.ID,
 		Posture:   api.SessionPostureBuild,
 	}, proj.ID)
@@ -478,7 +478,7 @@ func TestHandleArtifacts_durableRestartFetchAndGallery(t *testing.T) {
 	}
 
 	sessStore := sessionFixture
-	sess, err := sessStore.Create(t.Context(), api.CreateSessionRequest{
+	sess, err := sessStore.Sessions.Create(t.Context(), api.CreateSessionRequest{
 		ProjectID: proj.ID,
 		Posture:   api.SessionPostureBuild,
 	}, proj.ID)
@@ -560,7 +560,7 @@ func TestHandleDeleteProjectArtifact_tombstonesAndReportsImpact(t *testing.T) {
 	proj, err := reg.Create(t.Context(), project.CreateParams{Draft: true, Name: "delete-artifact"})
 	testutil.FailErr(t, "reg.Create failed", err)
 	sessStore := sessionFixture
-	sess, err := sessStore.Create(t.Context(), api.CreateSessionRequest{
+	sess, err := sessStore.Sessions.Create(t.Context(), api.CreateSessionRequest{
 		ProjectID: proj.ID,
 		Posture:   api.SessionPostureBuild,
 	}, proj.ID)
@@ -622,7 +622,7 @@ func TestHandleDeleteProjectArtifact_tombstonesAndReportsImpact(t *testing.T) {
 func TestSessionArtifactAbsenceCodes(t *testing.T) {
 	sessStore := storetest.New(t)
 	projects, projectID := contractfixture.ArtifactProject(t, sessStore.DB())
-	sess, err := sessStore.Create(t.Context(), api.CreateSessionRequest{
+	sess, err := sessStore.Sessions.Create(t.Context(), api.CreateSessionRequest{
 		ProjectID: projectID,
 		Posture:   api.SessionPostureBuild,
 	}, projectID)

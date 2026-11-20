@@ -16,7 +16,7 @@ func TestRecallPreservesOriginalSourceWorkspace(t *testing.T) {
 	f := newFixture(t)
 	target := api.NavigationTarget{ProjectID: projectID, RootID: "original-root", WorkerID: "original-worker", Path: ".ignored/main.go", EntryKind: api.NavigationEntryKindFile}
 	context := &api.SourceContext{Locations: []api.NavigationTarget{target, {ProjectID: projectID, RootID: "other-root", Path: "other/main.go", EntryKind: api.NavigationEntryKindFile}}}
-	testutil.FailErr(t, "append original source message", sessionstore.NewSQL(f.db).AppendMessages(t.Context(), workerSession, api.Message{ID: "source-message", Role: api.MessageRoleTool, Content: ".ignored/main.go and other/main.go", SourceContext: context, CreatedAt: time.Now()}))
+	testutil.FailErr(t, "append original source message", sessionstore.NewSQL(f.db).Transcript.AppendMessages(t.Context(), workerSession, api.Message{ID: "source-message", Role: api.MessageRoleTool, Content: ".ignored/main.go and other/main.go", SourceContext: context, CreatedAt: time.Now()}))
 	row := evidenceRow("source-hit", workerSession, "read#9", target.Path, "navigation source lookup")
 	row.MessageID = "source-message"
 	f.seed(t, row)
@@ -46,7 +46,7 @@ func TestRecallCitationUsesOriginalRecordSourceContext(t *testing.T) {
 			later.RootID = "later-root"
 			later.WorkerID = "later-worker"
 			store := sessionstore.NewSQL(f.db)
-			testutil.FailErr(t, "append original and citing contexts", store.AppendMessages(t.Context(), observedSession,
+			testutil.FailErr(t, "append original and citing contexts", store.Transcript.AppendMessages(t.Context(), observedSession,
 				api.Message{ID: "original-observation", Role: api.MessageRoleTool, Content: "original.go observed", EvidenceHandles: []string{"read#1"}, SourceContext: &api.SourceContext{Locations: []api.NavigationTarget{original}}, CreatedAt: time.Now()},
 				api.Message{ID: "later-citation", Role: api.MessageRoleAssistant, Content: "original.go cited", SourceContext: &api.SourceContext{Locations: []api.NavigationTarget{later}}, CreatedAt: time.Now()}))
 			source := evidenceRow("raw-observation", observedSession, "read#1", "original.go", "original observation")

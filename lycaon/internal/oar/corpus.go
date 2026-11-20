@@ -14,8 +14,6 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/lycaon/lycaon/internal/anchorcatalog"
-	"github.com/lycaon/lycaon/internal/extpacks"
 	"github.com/lycaon/lycaon/internal/oarcopy"
 	"github.com/lycaon/lycaon/internal/oarcore"
 )
@@ -655,79 +653,3 @@ func (d corpusDetector) Inspect(*GuardContext) ([]Finding, error) {
 	}
 	return nil, nil
 }
-
-// SeedFixturesFromScenarios writes one fixture per listed rule: its own
-// document, an occurrence at its anchor, and the decision it produces.
-func SeedFixturesFromScenarios(policyDir, outDir string, codes []string) error {
-	if err := os.MkdirAll(outDir, 0o700); err != nil {
-		return err
-	}
-	if strings.TrimSpace(policyDir) == "" {
-		if err := anchorcatalog.InstallBundled(); err != nil {
-			return fmt.Errorf("install catalog: %w", err)
-		}
-	} else {
-		catalogPath := filepath.Join(policyDir, "..", "..", "platform", "host", "anchors", "catalog.yaml")
-		if err := anchorcatalog.InstallFile(catalogPath); err != nil {
-			return fmt.Errorf("install catalog: %w", err)
-		}
-	}
-	l, err := NewLoader("")
-	if err != nil {
-		return err
-	}
-	var rs *RuleSet
-	if strings.TrimSpace(policyDir) == "" {
-		rs, err = l.LoadEffectivePolicy()
-	} else {
-		rs, err = l.LoadDir(extpacks.OnDisk(policyDir))
-	}
-	if err != nil {
-		return err
-	}
-	for _, code := range codes {
-		r, ok := rs.Get(code)
-		if !ok || r.When == "" || r.raw == nil {
-			continue
-		}
-		doc, err := json.Marshal(r.raw)
-		if err != nil {
-			return err
-		}
-		facts := map[string]any{"tool": firstTool(r), oarcopy.HostFactNamespace + ".session_posture": "spec"}
-		if r.Anchor == AnchorToolRejected {
-			facts[oarcopy.HostFactNamespace+".rejection_code"] = code
-		}
-		decision, err := json.Marshal(string(r.Effect))
-		if err != nil {
-			return err
-		}
-		ruleCode, err := json.Marshal(r.ID)
-		if err != nil {
-			return err
-		}
-		fx := ConformanceFixture{
-			ID: code, Rule: doc,
-			Input:    FixtureInput{Anchor: r.Anchor, Facts: facts},
-			Expected: map[string]json.RawMessage{"decision": decision, "code": ruleCode},
-		}
-		raw, err := json.MarshalIndent(fx, "", "  ")
-		if err != nil {
-			return err
-		}
-		if err := os.WriteFile(filepath.Join(outDir, code+".json"), append(raw, '\n'), 0o600); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-func firstTool(r *Rule) string {
-	if tools := r.Selector["tools"]; len(tools) > 0 {
-		return tools[0]
-	}
-	return ""
-}
-
-// ErrRuleNotEligible marks a document the loader skipped as not an OAR rule.
-var ErrRuleNotEligible = errors.New("not OAR-eligible")

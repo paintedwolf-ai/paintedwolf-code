@@ -14,7 +14,7 @@ import (
 
 func (s *Queue) HandleGetQueue(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
-	if !requestscope.SessionExists(s.Store, s.responses, w, r, id) {
+	if !requestscope.SessionExists(s.SessionQueries, s.responses, w, r, id) {
 		return
 	}
 	httpio.WriteJSON(w, http.StatusOK, s.Sessions.Chats.Drafts.Snapshot(id))
@@ -27,7 +27,7 @@ func (s *Queue) HandleUpdateSessionQueue(w http.ResponseWriter, r *http.Request)
 		s.responses.DecodeError(w, r, err)
 		return
 	}
-	if !requestscope.SessionExists(s.Store, s.responses, w, r, id) {
+	if !requestscope.SessionExists(s.SessionQueries, s.responses, w, r, id) {
 		return
 	}
 

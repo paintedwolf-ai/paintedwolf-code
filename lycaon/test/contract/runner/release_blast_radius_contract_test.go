@@ -10,7 +10,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/lycaon/lycaon/internal/localdata"
+	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/testutil/localdatatest"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 	_ "modernc.org/sqlite"
 )
@@ -46,7 +47,7 @@ func TestReleaseBlastRadiusNoCredentialsInCorpus(t *testing.T) {
 	t.Parallel()
 	corpus := filepath.Join(root, "lycaon", "testdata", "upgrade-corpus")
 	credNames := map[string]struct{}{}
-	for _, rel := range localdata.CredentialRelPaths() {
+	for _, rel := range localdatatest.SecretFiles() {
 		credNames[filepath.Base(rel)] = struct{}{}
 	}
 	err := filepath.Walk(corpus, func(path string, info os.FileInfo, err error) error {
@@ -60,7 +61,7 @@ func TestReleaseBlastRadiusNoCredentialsInCorpus(t *testing.T) {
 		if base == "store.db-wal" || base == "store.db-shm" || base == "store.db-journal" {
 			t.Errorf("forbidden sqlite sidecar in corpus: %s", path)
 		}
-		if _, ok := credNames[base]; ok {
+		if _, ok := credNames[base]; ok && !emptyProjectMCPCorpusFile(corpus, path) {
 			t.Errorf("credential filename in corpus: %s", path)
 		}
 		if strings.HasSuffix(base, ".pem") || strings.HasSuffix(base, ".key") {
@@ -75,6 +76,19 @@ func TestReleaseBlastRadiusNoCredentialsInCorpus(t *testing.T) {
 		return nil
 	})
 	contractcheck.FailErr(t, "walk corpus", err)
+}
+
+func emptyProjectMCPCorpusFile(corpus, path string) bool {
+	rel, err := filepath.Rel(corpus, path)
+	if err != nil {
+		return false
+	}
+	_, projectPath, ok := strings.Cut(filepath.ToSlash(rel), "/")
+	if !ok || projectPath != "project-root/"+testutil.OverlayFixtureDirName+"/mcp.yaml" {
+		return false
+	}
+	content, err := os.ReadFile(path)
+	return err == nil && string(content) == "providers: []\n"
 }
 
 // Upgrade rehearsal resolves the prior release through the public feed resolver

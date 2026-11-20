@@ -18,8 +18,8 @@ import (
 // earlier search is findable when provider seeds only name an unrelated host —
 // memory widens discovery past the live seed channels.
 func TestDirectIndexMemoryAnswersWhenProviderMissesHost(t *testing.T) {
-	allowLoopbackFetch(t)
-	resetDirectState(1)
+	discovery := NewDiscovery(newTestCrawler())
+	discovery.slots = make(chan struct{}, 1)
 
 	target := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/html")
@@ -39,7 +39,7 @@ func TestDirectIndexMemoryAnswersWhenProviderMissesHost(t *testing.T) {
 	})
 	store.Flush()
 
-	d := &directDiscoverer{
+	d := &directDiscoverer{discovery: discovery,
 		summarizer: &failIfCalledSummarizer{},
 		index:      store,
 	}
@@ -61,8 +61,8 @@ func TestDirectIndexMemoryAnswersWhenProviderMissesHost(t *testing.T) {
 // TestDirectMemoryAnswersWithoutModel verifies phase 1 returns from index
 // memory without invoking the Summarizer when strong hits meet the budget.
 func TestDirectMemoryAnswersWithoutModel(t *testing.T) {
-	allowLoopbackFetch(t)
-	resetDirectState(1)
+	discovery := NewDiscovery(newTestCrawler())
+	discovery.slots = make(chan struct{}, 1)
 
 	target := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/html")
@@ -82,7 +82,7 @@ func TestDirectMemoryAnswersWithoutModel(t *testing.T) {
 	})
 	store.Flush()
 
-	d := &directDiscoverer{
+	d := &directDiscoverer{discovery: discovery,
 		summarizer: &failIfCalledSummarizer{},
 		index:      store,
 	}
@@ -98,8 +98,8 @@ func TestDirectMemoryAnswersWithoutModel(t *testing.T) {
 // TestDirectSearchIngestsIntoIndex verifies the write path: hits and anchor
 // observations from a search land in the persistent index.
 func TestDirectSearchIngestsIntoIndex(t *testing.T) {
-	allowLoopbackFetch(t)
-	resetDirectState(1)
+	discovery := NewDiscovery(newTestCrawler())
+	discovery.slots = make(chan struct{}, 1)
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/llms.txt" {
@@ -114,7 +114,7 @@ func TestDirectSearchIngestsIntoIndex(t *testing.T) {
 	testutil.FailErr(t, "open index", err)
 	t.Cleanup(func() { _ = store.Close() })
 
-	d := discovererSeedingURLsWithIndex(t, store, srv.URL)
+	d := discovererSeedingURLsWithIndex(t, discovery, store, srv.URL)
 	hits, err := d.Search(context.Background(), DirectRequest{Query: "widget frobnicator guide", MaxResults: 2})
 	if err != nil || len(hits) == 0 {
 		t.Fatalf("Search: hits=%v err=%v", hits, err)
@@ -131,8 +131,8 @@ func TestDirectSearchIngestsIntoIndex(t *testing.T) {
 // a remembered URL that probes dead is deleted from the index so it never
 // wastes another probe.
 func TestDirectDeadIndexMemoryURLEvicted(t *testing.T) {
-	allowLoopbackFetch(t)
-	resetDirectState(1)
+	discovery := NewDiscovery(newTestCrawler())
+	discovery.slots = make(chan struct{}, 1)
 
 	live := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/llms.txt" {
@@ -154,7 +154,7 @@ func TestDirectDeadIndexMemoryURLEvicted(t *testing.T) {
 	store.QueuePage(t.Context(), webindex.Page{URL: deadURL, Title: "widget frobnicator review", Verified: true})
 	store.Flush()
 
-	d := discovererSeedingURLsWithIndex(t, store, live.URL)
+	d := discovererSeedingURLsWithIndex(t, discovery, store, live.URL)
 	if _, err := d.Search(context.Background(), DirectRequest{Query: "widget frobnicator guide", MaxResults: 3}); err != nil {
 		t.Fatalf("Search: %v", err)
 	}
@@ -171,9 +171,10 @@ func TestDirectDeadIndexMemoryURLEvicted(t *testing.T) {
 // TestDirectMemoryAnswersFromWarmIndex: a warm index fills the hit budget
 // without any provider seed or Summarizer.
 func TestDirectMemoryAnswersFromWarmIndex(t *testing.T) {
+	discovery := NewDiscovery(newTestCrawler())
+
 	testutil.SkipIfShort(t, "memory-only search with multi-second budget")
-	allowLoopbackFetch(t)
-	resetDirectState(1)
+	discovery.slots = make(chan struct{}, 1)
 	page := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/html")
 		fmt.Fprint(w, `<html><head><title>Widget frobnicator review</title>
@@ -188,7 +189,7 @@ func TestDirectMemoryAnswersFromWarmIndex(t *testing.T) {
 	store.QueuePage(t.Context(), webindex.Page{URL: page.URL + "/", Title: "Widget frobnicator review", Verified: true})
 	store.Flush()
 
-	d := &directDiscoverer{
+	d := &directDiscoverer{discovery: discovery,
 		summarizer: &failIfCalledSummarizer{},
 		index:      store,
 	}
@@ -210,9 +211,10 @@ func TestDirectMemoryAnswersFromWarmIndex(t *testing.T) {
 // TestDirectStragglerHostDoesNotBlockResults: one responsive host fills the
 // budget while another host's crawl hangs — no barrier waits for it.
 func TestDirectStragglerHostDoesNotBlockResults(t *testing.T) {
+	discovery := NewDiscovery(newTestCrawler())
+
 	testutil.SkipIfShort(t, "straggler host crawl with multi-second budget")
-	allowLoopbackFetch(t)
-	resetDirectState(1)
+	discovery.slots = make(chan struct{}, 1)
 	fast := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/llms.txt" {
 			fmt.Fprintf(w, "- [Guide](%s/guide.md): widget frobnicator guide with benchmarks\n", srvURL(r))
@@ -230,7 +232,7 @@ func TestDirectStragglerHostDoesNotBlockResults(t *testing.T) {
 	}))
 	t.Cleanup(slow.Close)
 
-	d := discovererSeedingURLs(t, fast.URL, slow.URL)
+	d := discovererSeedingURLs(t, discovery, fast.URL, slow.URL)
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 	hits, err := d.Search(ctx, DirectRequest{Query: "widget frobnicator guide", MaxResults: 1})

@@ -1,14 +1,15 @@
 package secretmatch
 
 import (
-	"github.com/lycaon/lycaon/internal/testutil/exposure"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/credentialstore"
+	"github.com/lycaon/lycaon/internal/credentialstore/credentialstoretest"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/testutil/exposure"
 )
 
 func TestFingerprinterStableAndDeviceKeyed(t *testing.T) {
@@ -33,11 +34,11 @@ func TestFingerprintKeyPersistsInPrivateCredentialStore(t *testing.T) {
 	slot := credentialstore.Slot{
 		Path: path, Namespace: credentialstore.NamespaceSecretFingerprint, Context: fingerprintKeyContext,
 	}
-	firstStore := credentialstore.NewEmpty(slot, validFingerprintKeyID)
+	firstStore := credentialstoretest.Open(t, slot, validFingerprintKeyID)
 	first, err := loadOrCreateFingerprinter(firstStore)
 	testutil.FailErr(t, "create fingerprint key", err)
 
-	reloadedStore, err := credentialstore.OpenFile(slot, validFingerprintKeyID)
+	reloadedStore, err := credentialstore.Open(slot, validFingerprintKeyID)
 	testutil.FailErr(t, "reopen fingerprint key store", err)
 	reloaded, err := loadOrCreateFingerprinter(reloadedStore)
 	testutil.FailErr(t, "reload fingerprint key", err)

@@ -31,7 +31,7 @@ func TestCheckpointEventsFollowWorkerRegistration(t *testing.T) {
 	}))
 	store := hitl.NewSQLStore(database)
 	store.SetEventOutbox(outbox)
-	manager := hitl.NewCheckpoints(store, &events.Publisher{Hub: hub}, authzcontext.SQLRecorder(database))
+	manager := hitl.NewCheckpoints(store, &events.Publisher{Hub: hub}, authzcontext.LedgerRecorder{Ledger: &authzcontext.Ledger{Store: authzcontext.NewSQLStore(database)}})
 	response, err := requestExplicitApprovalCheckpoint(t, testdbseed.OwnerCaller(t, t.Context(), database), manager, hitl.CheckpointRequest{
 		SessionID: "child", Kind: api.CheckpointKindToolApproval, ProposedAction: &hitl.ProposedAction{
 			Invocation: hitl.ActionInvocation{
@@ -82,7 +82,7 @@ func TestCheckpointMutationRollsBackWhenEventCannotBeCommitted(t *testing.T) {
 	insertSession(t, database, sid)
 	store := hitl.NewSQLStore(database)
 	store.SetEventOutbox(eventoutbox.New(database, events.NewMemoryHub()))
-	manager := hitl.NewCheckpoints(store, nil, authzcontext.SQLRecorder(database))
+	manager := hitl.NewCheckpoints(store, nil, authzcontext.LedgerRecorder{Ledger: &authzcontext.Ledger{Store: authzcontext.NewSQLStore(database)}})
 	req := hitl.CheckpointRequest{SessionID: sid, Kind: api.CheckpointKindToolApproval, ProposedAction: &hitl.ProposedAction{
 		Invocation: hitl.ActionInvocation{
 			Tool: "command",

@@ -20,6 +20,7 @@ type releasePlatform struct {
 	UpdaterKey   string   `json:"updater_key"`
 	ArtifactArch string   `json:"artifact_arch"`
 	GOOS         string   `json:"goos"`
+	GOARCH       string   `json:"goarch"`
 	Publication  string   `json:"publication"`
 	PackageExts  []string `json:"package_extensions"`
 	// UpdaterExt is nil for package-managed platforms, which publish no updater artifact.

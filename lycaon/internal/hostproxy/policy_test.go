@@ -3,39 +3,38 @@ package hostproxy
 import (
 	"context"
 	"errors"
-	"github.com/lycaon/lycaon/internal/systemproxy"
-	"github.com/lycaon/lycaon/internal/testutil"
 	"net"
 	"net/http"
 	"net/url"
 	"strings"
 	"testing"
+
+	"github.com/lycaon/lycaon/internal/systemproxy"
+	"github.com/lycaon/lycaon/internal/testutil"
 )
 
-func useSystemProxy(t *testing.T, raw string) {
+func testSystemProxy(t *testing.T, raw string) resolver {
 	t.Helper()
 	proxy, err := url.Parse(raw)
 	testutil.FailErr(t, "parse proxy", err)
-	previous := systemConfiguration
-	systemConfiguration = func(context.Context) (systemproxy.Configuration, error) {
+	return resolver{system: func(context.Context) (systemproxy.Configuration, error) {
 		return systemproxy.Configuration{Source: systemproxy.SourceGSettings, Mode: systemproxy.ModeManual, HTTP: proxy, HTTPS: proxy}, nil
-	}
-	t.Cleanup(func() { systemConfiguration = previous })
+	}}
 }
 
-func transportProxy(t *testing.T, raw string) *url.URL {
+func transportProxy(t *testing.T, policy resolver, raw string) *url.URL {
 	t.Helper()
 	request, err := http.NewRequest(http.MethodGet, raw, nil)
 	testutil.FailErr(t, "new request", err)
-	got, err := ForRequest(request)
+	got, err := policy.resolve(request.Context(), request.URL)
 	testutil.FailErr(t, "resolve proxy", err)
 	return got
 }
 
 func TestSystemProxyUsedWithoutEnvironmentOverride(t *testing.T) {
 	clearProxyEnvironment(t)
-	useSystemProxy(t, "http://system-proxy.example:8080")
-	if got := transportProxy(t, "https://api.example.com/v1"); got == nil || got.String() != "http://system-proxy.example:8080" {
+	policy := testSystemProxy(t, "http://system-proxy.example:8080")
+	if got := transportProxy(t, policy, "https://api.example.com/v1"); got == nil || got.String() != "http://system-proxy.example:8080" {
 		t.Fatalf("proxy = %v", got)
 	}
 }
@@ -43,11 +42,11 @@ func TestSystemProxyUsedWithoutEnvironmentOverride(t *testing.T) {
 func TestEnvironmentProxyOverridesSystemProxy(t *testing.T) {
 	clearProxyEnvironment(t)
 	t.Setenv("HTTPS_PROXY", "http://environment-proxy.example:9090")
-	useSystemProxy(t, "http://system-proxy.example:8080")
-	if got := transportProxy(t, "https://api.example.com/v1"); got == nil || got.String() != "http://environment-proxy.example:9090" {
+	policy := testSystemProxy(t, "http://system-proxy.example:8080")
+	if got := transportProxy(t, policy, "https://api.example.com/v1"); got == nil || got.String() != "http://environment-proxy.example:9090" {
 		t.Fatalf("proxy = %v", got)
 	}
-	if got := transportProxy(t, "http://api.example.com/v1"); got == nil || got.String() != "http://system-proxy.example:8080" {
+	if got := transportProxy(t, policy, "http://api.example.com/v1"); got == nil || got.String() != "http://system-proxy.example:8080" {
 		t.Fatalf("http proxy = %v, want the system proxy for a scheme without an environment proxy", got)
 	}
 }
@@ -55,19 +54,19 @@ func TestEnvironmentProxyOverridesSystemProxy(t *testing.T) {
 func TestNoProxyBypassesSystemProxy(t *testing.T) {
 	clearProxyEnvironment(t)
 	t.Setenv("NO_PROXY", ".example.com")
-	useSystemProxy(t, "http://system-proxy.example:8080")
-	if got := transportProxy(t, "https://api.example.com/v1"); got != nil {
+	policy := testSystemProxy(t, "http://system-proxy.example:8080")
+	if got := transportProxy(t, policy, "https://api.example.com/v1"); got != nil {
 		t.Fatalf("proxy = %v, want NO_PROXY bypass", got)
 	}
-	if got := transportProxy(t, "https://example.com/v1"); got == nil {
+	if got := transportProxy(t, policy, "https://example.com/v1"); got == nil {
 		t.Fatal("a leading-dot NO_PROXY entry exempted the name itself")
 	}
 }
 
 func TestLoopbackNeverUsesSystemProxy(t *testing.T) {
 	clearProxyEnvironment(t)
-	useSystemProxy(t, "http://system-proxy.example:8080")
-	if got := transportProxy(t, "http://127.0.0.1:8787/health"); got != nil {
+	policy := testSystemProxy(t, "http://system-proxy.example:8080")
+	if got := transportProxy(t, policy, "http://127.0.0.1:8787/health"); got != nil {
 		t.Fatalf("proxy = %v, want direct loopback", got)
 	}
 }
@@ -75,12 +74,10 @@ func TestLoopbackNeverUsesSystemProxy(t *testing.T) {
 func TestUnreadableSystemConfigurationFailsOnlyResolutionsThatNeedIt(t *testing.T) {
 	clearProxyEnvironment(t)
 	t.Setenv("HTTPS_PROXY", "proxy.example:3128")
-	previous := systemConfiguration
-	systemConfiguration = func(context.Context) (systemproxy.Configuration, error) {
+	policy := resolver{system: func(context.Context) (systemproxy.Configuration, error) {
 		return systemproxy.Configuration{}, errors.New("settings tool failed")
-	}
-	t.Cleanup(func() { systemConfiguration = previous })
-	config := Current()
+	}}
+	config := policy.configuration(t.Context())
 	if got, err := config.ProxyFor(mustURL(t, "https://api.example/")); err != nil || got == nil || got.String() != "http://proxy.example:3128" {
 		t.Fatalf("explicit environment proxy = %v, %v", got, err)
 	}

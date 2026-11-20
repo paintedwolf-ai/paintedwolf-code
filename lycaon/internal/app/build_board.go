@@ -6,6 +6,7 @@ import (
 
 func (b *serveBuilder) wireBoardAndResearch() error {
 	b.boards = boards.New(boards.Dependencies{
+		WebResearchExchange:      b.startup.cfg.WebResearchExchange,
 		Storage:                  b.storage,
 		Sessions:                 b.sessions,
 		Workers:                  b.workerRuntime,

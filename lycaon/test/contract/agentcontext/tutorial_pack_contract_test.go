@@ -13,6 +13,7 @@ import (
 	"github.com/lycaon/lycaon/internal/oar"
 	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/internal/testutil/extstatetest"
+	"github.com/lycaon/lycaon/internal/testutil/guidancetest"
 	"github.com/lycaon/lycaon/internal/workflowvalidate"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 )
@@ -112,8 +113,9 @@ func TestTutorialPackRuleLoadsAndConforms(t *testing.T) {
 
 func TestTutorialPackRuleCopyRenders(t *testing.T) {
 	packRoot := tutorialPackRoot(t)
-	cfg, err := guidance.LoadValidatedHintConfig(extpacks.OnDisk(filepath.Join(packRoot, "policy")))
+	cfg, err := guidance.LoadHintConfig(extpacks.OnDisk(filepath.Join(packRoot, "policy")))
 	contractcheck.FailErr(t, "load rule copy", err)
+	contractcheck.FailErr(t, "validate hint config", guidancetest.ValidateHints(cfg))
 	engine := prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{})
 	guidance.SetGuidanceRenderer(prompts.NewGuidanceRenderer(engine))
 	formatter := guidance.NewStaticRejectFormatter(cfg)

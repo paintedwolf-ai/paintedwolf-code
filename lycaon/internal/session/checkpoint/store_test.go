@@ -24,7 +24,7 @@ func newTestCheckpointStore(t *testing.T) (*Store, string) {
 	dir := t.TempDir()
 	sessions := storetest.New(t)
 	testdbseed.InsertSessionWithRoot(t, sessions.DB(), "session", testdbseed.DefaultProjectID, dir)
-	store := New(t.TempDir(), dir, sessions)
+	store := New(t.TempDir(), dir, sessions.Rewind)
 	if store == nil {
 		t.Fatal("NewCheckpointStore returned nil for a real state root and dir")
 	}
@@ -158,7 +158,7 @@ func TestReconcileCheckpointRootsKeepsAttachedRoots(t *testing.T) {
 	liveRoot := t.TempDir()
 	orphanRoot := t.TempDir()
 	for _, projectDir := range []string{liveRoot, orphanRoot} {
-		store := New(stateRoot, projectDir, storetest.New(t, testdbseed.DefaultProjectID))
+		store := New(stateRoot, projectDir, storetest.New(t, testdbseed.DefaultProjectID).Rewind)
 		testutil.FailErr(t, "seed checkpoint root", os.MkdirAll(store.root, 0o700))
 	}
 	removed, err := ReconcileRoots(stateRoot, []string{liveRoot})
@@ -166,10 +166,10 @@ func TestReconcileCheckpointRootsKeepsAttachedRoots(t *testing.T) {
 	if removed != 1 {
 		t.Fatalf("removed = %d, want 1", removed)
 	}
-	if _, err := os.Stat(New(stateRoot, liveRoot, storetest.New(t, testdbseed.DefaultProjectID)).root); err != nil {
+	if _, err := os.Stat(New(stateRoot, liveRoot, storetest.New(t, testdbseed.DefaultProjectID).Rewind).root); err != nil {
 		t.Fatalf("live checkpoint root removed: %v", err)
 	}
-	if _, err := os.Stat(New(stateRoot, orphanRoot, storetest.New(t, testdbseed.DefaultProjectID)).root); !os.IsNotExist(err) {
+	if _, err := os.Stat(New(stateRoot, orphanRoot, storetest.New(t, testdbseed.DefaultProjectID).Rewind).root); !os.IsNotExist(err) {
 		t.Fatalf("orphan checkpoint root survived: %v", err)
 	}
 }

@@ -54,15 +54,11 @@ func preparePromoteResolution(promote PromoteRoots, task *api.WorkerTask, res ap
 	if path == "" {
 		return promoteMutation{}, false, nil
 	}
-	primaryAbs, branchAbs, err := promote.fileAbs(task, path)
-	if err != nil {
-		return promoteMutation{}, false, err
-	}
 	identity, err := promote.locateIdentity(task, path)
 	if err != nil {
 		return promoteMutation{}, false, err
 	}
-	original, originalExists, originalMode, err := readOptionalPromoteFile(primaryAbs)
+	original, originalExists, originalMode, err := readOptionalPromoteFile(identity.Primary)
 	if err != nil {
 		return promoteMutation{}, false, err
 	}
@@ -74,7 +70,7 @@ func preparePromoteResolution(promote PromoteRoots, task *api.WorkerTask, res ap
 	case api.WorkerPromoteResolutionActionDrop, api.WorkerPromoteResolutionActionKeepOurs:
 		return promoteMutation{}, false, nil
 	case api.WorkerPromoteResolutionActionKeepTheirs:
-		plan.target, err = readPromoteFile(branchAbs)
+		plan.target, err = readPromoteFile(identity.Branch)
 	case "", api.WorkerPromoteResolutionActionKeepBoth:
 		plan.target, err = resolvedPrimaryBytes(original, originalExists, path, res)
 	default:

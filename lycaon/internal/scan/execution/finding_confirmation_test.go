@@ -18,7 +18,7 @@ func TestRunnerConfirmsAbsenceOnlyWithSufficientCoverage(t *testing.T) {
 				t.Run(fmt.Sprintf("%s/%s/%s", prior, target, coverage), func(t *testing.T) {
 					root := ledgerRoot(t)
 					store := ledgerFixture(t, root, "sast", "execution-1")
-					runner := &Runner{Store: store}
+					runner := &Runner{reads: store.Reads, runs: store.Runs, findings: store.Findings, ignores: store.Ignores, database: store.DB()}
 					finding := findingstest.Finding("rule-a", api.FindingLevelHigh, "a", "a.go", 1)
 					first := ledgerScan(t, store, "first", root, "sast", api.ScanTargetFull, api.ScanCoverageComplete, finding)
 					first.ExecutionFingerprint = "execution-1"
@@ -38,7 +38,7 @@ func TestRunnerConfirmsAbsenceOnlyWithSufficientCoverage(t *testing.T) {
 					if got := ledgerStates(t, store, root)["rule-a"]; got != want {
 						t.Fatalf("state = %q, want %q", got, want)
 					}
-					page, err := store.FindingLedger(t.Context(), root, api.FindingLedgerQueryRequest{})
+					page, err := store.Ignores.FindingLedger(t.Context(), root, api.FindingLedgerQueryRequest{})
 					testutil.FailErr(t, "read confirmation count", err)
 					wantObservations := 2
 					if want == api.FindingLedgerFixed {
@@ -58,7 +58,7 @@ func TestRunnerConfirmationPreservesScopeAndReopening(t *testing.T) {
 		t.Run(fmt.Sprintf("empty_scope_%t", emptyScope), func(t *testing.T) {
 			root := ledgerRoot(t)
 			store := ledgerFixture(t, root, "sast", "execution-1")
-			runner := &Runner{Store: store}
+			runner := &Runner{reads: store.Reads, runs: store.Runs, findings: store.Findings, ignores: store.Ignores, database: store.DB()}
 			findings := []api.SecurityFinding{
 				findingstest.Finding("returns", api.FindingLevelHigh, "returns", "a.go", 1),
 				findingstest.Finding("absent", api.FindingLevelHigh, "absent", "a.go", 2),
@@ -91,7 +91,7 @@ func TestRunnerConfirmationPreservesScopeAndReopening(t *testing.T) {
 func TestRunnerConfirmationTraversesLedgerPagesAndExecutionChanges(t *testing.T) {
 	root := ledgerRoot(t)
 	store := ledgerFixture(t, root, "sast", "execution-1")
-	runner := &Runner{Store: store}
+	runner := &Runner{reads: store.Reads, runs: store.Runs, findings: store.Findings, ignores: store.Ignores, database: store.DB()}
 	findings := make([]api.SecurityFinding, scanbase.MaxLedgerPageSize+1)
 	for i := range findings {
 		findings[i] = findingstest.Finding(fmt.Sprintf("rule-%04d", i), api.FindingLevelHigh, "a", "a.go", i+1)
@@ -114,13 +114,13 @@ func TestRunnerConfirmationTraversesLedgerPagesAndExecutionChanges(t *testing.T)
 		runner.recordFindingHistory(t.Context(), &job)
 	}
 	// Confirmation uses the completing job before the series projection advances.
-	testutil.FailErr(t, "advance scanner identity", store.UpsertSeries(t.Context(), scanbase.SeriesRow{
+	testutil.FailErr(t, "advance scanner identity", store.Series.UpsertSeries(t.Context(), scanbase.SeriesRow{
 		CanonicalPath: root, ScannerID: "sast", LastCoveredExecutionFingerprint: "execution-2",
 	}))
 	cursor := ""
 	count := 0
 	for {
-		page, err := store.FindingLedger(t.Context(), root, api.FindingLedgerQueryRequest{Limit: scanbase.MaxLedgerPageSize, Cursor: cursor})
+		page, err := store.Ignores.FindingLedger(t.Context(), root, api.FindingLedgerQueryRequest{Limit: scanbase.MaxLedgerPageSize, Cursor: cursor})
 		testutil.FailErr(t, "read confirmed page", err)
 		if page.TotalMatch != len(findings) || len(page.Entries) == 0 {
 			t.Fatalf("missing ledger page: %#v", page)
@@ -145,11 +145,11 @@ func TestFindingConfirmationSeparatesScannerAndRoot(t *testing.T) {
 	root := ledgerRoot(t)
 	otherRoot := ledgerRoot(t)
 	store := ledgerFixture(t, root, "sast", "execution-1")
-	runner := &Runner{Store: store}
+	runner := &Runner{reads: store.Reads, runs: store.Runs, findings: store.Findings, ignores: store.Ignores, database: store.DB()}
 	for i, series := range []struct{ root, scanner string }{
 		{root, "sast"}, {root, "other-scanner"}, {otherRoot, "sast"},
 	} {
-		testutil.FailErr(t, "select scanner series", store.UpsertSeries(t.Context(), scanbase.SeriesRow{
+		testutil.FailErr(t, "select scanner series", store.Series.UpsertSeries(t.Context(), scanbase.SeriesRow{
 			CanonicalPath: series.root, ScannerID: series.scanner, LastCoveredExecutionFingerprint: "execution-1",
 		}))
 		finding := findingstest.Finding(fmt.Sprintf("rule-%d", i), api.FindingLevelHigh, "a", "a.go", 1)

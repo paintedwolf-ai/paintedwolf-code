@@ -12,13 +12,13 @@ func TestTurnLoadReceiptsListByTheTurnsThatOpenedThem(t *testing.T) {
 
 	ctx := t.Context()
 	st := newSQLTestStore(t)
-	sess, err := st.Create(ctx, api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
+	sess, err := st.Sessions.Create(ctx, api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
 	first := appendUserPrompt(t, st, sess.ID, "first")
 	second := appendUserPrompt(t, st, sess.ID, "second")
 
 	put := func(opening, trigger, call string) TurnLoadReceipt {
-		stored, err := st.PutTurnLoadReceipt(ctx, TurnLoadReceipt{
+		stored, err := st.Turns.PutTurnLoadReceipt(ctx, TurnLoadReceipt{
 			SessionID: sess.ID, OpeningMessageID: opening, ToolCallID: call, Trigger: trigger,
 			Decisions: "{}", Standing: "{}", StateJSON: "{}",
 		})
@@ -33,17 +33,17 @@ func TestTurnLoadReceiptsListByTheTurnsThatOpenedThem(t *testing.T) {
 		t.Fatalf("receipt ids must increase in recording order: %d %d %d", turn1.ID, request1.ID, turn2.ID)
 	}
 
-	rows, err := st.ListTurnLoadReceiptsForTurns(ctx, []string{first})
+	rows, err := st.Turns.ListTurnLoadReceiptsForTurns(ctx, []string{first})
 	testutil.FailErr(t, "list first turn", err)
 	if len(rows) != 2 || rows[0].ID != turn1.ID || rows[1].ID != request1.ID || rows[1].ToolCallID != "call-1" {
 		t.Fatalf("first turn receipts = %+v", rows)
 	}
-	rows, err = st.ListTurnLoadReceiptsForTurns(ctx, []string{second, first, " "})
+	rows, err = st.Turns.ListTurnLoadReceiptsForTurns(ctx, []string{second, first, " "})
 	testutil.FailErr(t, "list both turns", err)
 	if len(rows) != 3 || rows[2].ID != turn2.ID || rows[2].OpeningMessageID != second {
 		t.Fatalf("both turns = %+v", rows)
 	}
-	rows, err = st.ListTurnLoadReceiptsForTurns(ctx, nil)
+	rows, err = st.Turns.ListTurnLoadReceiptsForTurns(ctx, nil)
 	testutil.FailErr(t, "list no turns", err)
 	if len(rows) != 0 {
 		t.Fatalf("no turns must list nothing, got %+v", rows)

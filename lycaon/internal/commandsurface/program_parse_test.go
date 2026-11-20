@@ -7,14 +7,15 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/commandsurface"
+	"github.com/lycaon/lycaon/internal/commandsurface/commandsurfacetest"
 	"github.com/lycaon/lycaon/internal/testutil"
 )
 
 func parseProgram(t *testing.T, source string) commandsurface.ProgramSnapshot {
 	t.Helper()
-	p, err := commandsurface.ParseProgram([]byte(source), commandsurface.ParseOptions{SourceName: "fixture.pw"})
+	p, err := commandsurfacetest.Admit(t, []byte(source), commandsurface.ParseOptions{SourceName: "fixture.pw"})
 	testutil.FailErr(t, "parse program", err)
-	return p.Snapshot()
+	return p.View(t)
 }
 
 func TestVersionOneGrammarIsLoweredWithoutExecution(t *testing.T) {
@@ -83,7 +84,7 @@ func TestWholeUnitRefusesMalformedOrExcludedLaterSyntax(t *testing.T) {
 	}
 	for _, source := range cases {
 		t.Run(source, func(t *testing.T) {
-			p, err := commandsurface.ParseProgram([]byte(source), commandsurface.ParseOptions{})
+			p, err := commandsurfacetest.Admit(t, []byte(source), commandsurface.ParseOptions{})
 			var diagnostic *commandsurface.SyntaxDiagnostic
 			if p != nil || !errors.As(err, &diagnostic) {
 				t.Fatalf("program=%#v error=%v", p, err)
@@ -97,10 +98,10 @@ func TestWholeUnitRefusesMalformedOrExcludedLaterSyntax(t *testing.T) {
 
 func TestSnapshotsAndDeferredSubstitutionsAreDetached(t *testing.T) {
 	source := []byte("if false; then echo $(printf invisible); else echo visible; fi")
-	p, err := commandsurface.ParseProgram(source, commandsurface.ParseOptions{SourceName: "fixture.pw"})
+	p, err := commandsurfacetest.Admit(t, source, commandsurface.ParseOptions{SourceName: "fixture.pw"})
 	testutil.FailErr(t, "parse deferred branches", err)
-	baseline := p.Snapshot()
-	first := p.Snapshot()
+	baseline := p.View(t)
+	first := p.View(t)
 	branch := first.Statements[0].Command.(commandsurface.Conditional)
 	call := branch.Then[0].Command.(commandsurface.SimpleCommand)
 	sub := call.Words[1].Parts[0].(commandsurface.SubstitutionPart)
@@ -108,7 +109,7 @@ func TestSnapshotsAndDeferredSubstitutionsAreDetached(t *testing.T) {
 	branch.Then[0].Background = true
 	first.Statements[0].Command = commandsurface.SimpleCommand{}
 	source[0] = 'x'
-	if !reflect.DeepEqual(p.Snapshot(), baseline) {
+	if !reflect.DeepEqual(p.View(t), baseline) {
 		t.Fatal("caller mutation changed frozen syntax")
 	}
 	if !reflect.DeepEqual(parseProgram(t, string([]byte("if false; then echo $(printf invisible); else echo visible; fi"))), baseline) {
@@ -117,34 +118,34 @@ func TestSnapshotsAndDeferredSubstitutionsAreDetached(t *testing.T) {
 }
 
 func TestEncodingVersionsAndAdmissionCeilings(t *testing.T) {
-	if _, err := commandsurface.ParseProgram([]byte(":"), commandsurface.ParseOptions{CatalogDigest: "different-catalog"}); err == nil {
+	if _, err := commandsurfacetest.Admit(t, []byte(":"), commandsurface.ParseOptions{CatalogDigest: "different-catalog"}); err == nil {
 		t.Fatal("mislabeled frozen catalog")
 	}
 
 	for _, source := range [][]byte{{0xff}, {'e', 'c', 'h', 'o', 0}, {0xef, 0xbb, 0xbf, '#'}} {
-		if p, err := commandsurface.ParseProgram(source, commandsurface.ParseOptions{}); p != nil || err == nil {
+		if p, err := commandsurfacetest.Admit(t, source, commandsurface.ParseOptions{}); p != nil || err == nil {
 			t.Fatalf("accepted invalid bytes: %x", source)
 		}
 	}
-	if _, err := commandsurface.ParseProgram([]byte(":"), commandsurface.ParseOptions{Version: 2}); err == nil {
+	if _, err := commandsurfacetest.Admit(t, []byte(":"), commandsurface.ParseOptions{Version: 2}); err == nil {
 		t.Fatal("accepted unknown version")
 	}
 	for _, source := range []string{strings.Repeat(" ", 65537), strings.Repeat("( ", 100) + ":" + strings.Repeat(" )", 100), "printf " + strings.Repeat("a ", 8500)} {
-		_, err := commandsurface.ParseProgram([]byte(source), commandsurface.ParseOptions{})
+		_, err := commandsurfacetest.Admit(t, []byte(source), commandsurface.ParseOptions{})
 		var diagnostic *commandsurface.SyntaxDiagnostic
 		if !errors.As(err, &diagnostic) || diagnostic.Code != "COMMAND_LIMIT_EXCEEDED" {
 			t.Fatalf("expected ceiling, got %v", err)
 		}
 	}
 	source := []byte("#" + strings.Repeat("x", 65536))
-	if _, err := commandsurface.ParseProgram(source, commandsurface.ParseOptions{Sourced: true}); err != nil {
+	if _, err := commandsurfacetest.Admit(t, source, commandsurface.ParseOptions{Sourced: true}); err != nil {
 		t.Fatalf("source ceiling confused with submitted ceiling: %v", err)
 	}
 }
 
 func TestSourceUnitFailureDoesNotReclassifyParent(t *testing.T) {
 	parent := parseProgram(t, "printf retained > ./parent; source -- ./script.pw")
-	_, err := commandsurface.ParseProgram([]byte("printf forbidden > ./child; if"), commandsurface.ParseOptions{Sourced: true, SourceName: "script.pw"})
+	_, err := commandsurfacetest.Admit(t, []byte("printf forbidden > ./child; if"), commandsurface.ParseOptions{Sourced: true, SourceName: "script.pw"})
 	if err == nil || len(parent.Statements) != 2 {
 		t.Fatalf("source refusal changed parent plan: %v %#v", err, parent)
 	}
@@ -157,11 +158,11 @@ func FuzzParseProgramNeverExecutes(f *testing.F) {
 		f.Add(source)
 	}
 	f.Fuzz(func(t *testing.T, source string) {
-		p, err := commandsurface.ParseProgram([]byte(source), commandsurface.ParseOptions{})
+		p, err := commandsurfacetest.Admit(t, []byte(source), commandsurface.ParseOptions{})
 		if err != nil {
 			return
 		}
-		one, two := p.Snapshot(), p.Snapshot()
+		one, two := p.View(t), p.View(t)
 		if !reflect.DeepEqual(one, two) {
 			t.Fatal("non-deterministic snapshot")
 		}
@@ -175,7 +176,7 @@ func FuzzParseProgramNeverExecutes(f *testing.F) {
 
 func TestEncodingDiagnosticsAddressOriginalOffendingBytes(t *testing.T) {
 	for _, source := range [][]byte{append([]byte("#α\n  "), 0), append([]byte("#α\n  "), 0xff)} {
-		_, err := commandsurface.ParseProgram(source, commandsurface.ParseOptions{})
+		_, err := commandsurfacetest.Admit(t, source, commandsurface.ParseOptions{})
 		var diagnostic *commandsurface.SyntaxDiagnostic
 		if !errors.As(err, &diagnostic) || diagnostic.Span.StartByte != len(source)-1 || diagnostic.Span.EndByte != len(source) || diagnostic.Span.Line != 2 || diagnostic.Span.Column != 3 {
 			t.Fatalf("encoding span=%#v err=%v", diagnostic, err)
@@ -193,7 +194,7 @@ func TestHereDocumentExpansionAndRedirectOrderStayStructured(t *testing.T) {
 		t.Fatalf("quoted here-document executed expansions: %#v", parts)
 	}
 	for _, source := range []string{"echo ~fixture-user/path", "VALUE=~fixture-user/path"} {
-		if _, err := commandsurface.ParseProgram([]byte(source), commandsurface.ParseOptions{}); err == nil {
+		if _, err := commandsurfacetest.Admit(t, []byte(source), commandsurface.ParseOptions{}); err == nil {
 			t.Fatalf("named-user lookup admitted: %s", source)
 		}
 	}
@@ -205,7 +206,7 @@ func TestTestExpressionBracesAreDeferredPatternAndRegexData(t *testing.T) {
 		parseProgram(t, source)
 	}
 	for _, source := range []string{`[[ ~fixtureUser == x ]]`, `[[ aaa =~ $(echo {1..a}) ]]`} {
-		if plan, err := commandsurface.ParseProgram([]byte(source), commandsurface.ParseOptions{}); plan != nil || err == nil {
+		if plan, err := commandsurfacetest.Admit(t, []byte(source), commandsurface.ParseOptions{}); plan != nil || err == nil {
 			t.Fatalf("unsupported expansion admitted: %s", source)
 		}
 	}
@@ -213,7 +214,7 @@ func TestTestExpressionBracesAreDeferredPatternAndRegexData(t *testing.T) {
 
 func TestForeignDialectRefusalPreservesItsActualLaterSpan(t *testing.T) {
 	source := `printf ok; echo ${(q)name}`
-	plan, err := commandsurface.ParseProgram([]byte(source), commandsurface.ParseOptions{})
+	plan, err := commandsurfacetest.Admit(t, []byte(source), commandsurface.ParseOptions{})
 	var diagnostic *commandsurface.SyntaxDiagnostic
 	if plan != nil || !errors.As(err, &diagnostic) || diagnostic.Code != "COMMAND_SYNTAX_UNSUPPORTED" || diagnostic.Span.StartByte < strings.Index(source, "${") || diagnostic.Span.Line != 1 || diagnostic.Span.Column != diagnostic.Span.StartByte+1 {
 		t.Fatalf("foreign dialect diagnostic lost offending span: %+v %v", diagnostic, err)
@@ -223,7 +224,7 @@ func TestForeignDialectRefusalPreservesItsActualLaterSpan(t *testing.T) {
 func TestLiteralExcludedCommandsUseShellQuoteRemovalBeforeAdmission(t *testing.T) {
 	for _, name := range []string{`tr\ap`, `tr"ap"`, `'trap'`, `sh\opt`} {
 		source := "printf changed > ./output; " + name + " data"
-		plan, err := commandsurface.ParseProgram([]byte(source), commandsurface.ParseOptions{})
+		plan, err := commandsurfacetest.Admit(t, []byte(source), commandsurface.ParseOptions{})
 		var diagnostic *commandsurface.SyntaxDiagnostic
 		if plan != nil || !errors.As(err, &diagnostic) || diagnostic.Code != "COMMAND_SYNTAX_UNSUPPORTED" || diagnostic.Span.StartByte != strings.Index(source, name) {
 			t.Fatalf("excluded literal bypassed complete-unit admission: %q %+v %v", name, diagnostic, err)
@@ -235,7 +236,7 @@ func TestLiteralExcludedCommandsUseShellQuoteRemovalBeforeAdmission(t *testing.T
 func TestReservedEvaluatorNamesCannotDeclareFunctions(t *testing.T) {
 	for _, name := range []string{"exit", "return", "break", "continue", "set", "read"} {
 		source := "printf changed > output; " + name + "() { printf bypass; }"
-		plan, err := commandsurface.ParseProgram([]byte(source), commandsurface.ParseOptions{})
+		plan, err := commandsurfacetest.Admit(t, []byte(source), commandsurface.ParseOptions{})
 		var diagnostic *commandsurface.SyntaxDiagnostic
 		if plan != nil || !errors.As(err, &diagnostic) || diagnostic.Code != "COMMAND_SYNTAX_UNSUPPORTED" {
 			t.Fatalf("name=%s plan=%v error=%v", name, plan, err)

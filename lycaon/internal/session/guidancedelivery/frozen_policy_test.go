@@ -40,9 +40,9 @@ func TestCopy1QueuesFrozenExtensionAdvisories(t *testing.T) {
 
 func TestAppendHostKickMessageStampsCanonicalOrdinal(t *testing.T) {
 	sessionStore := storetest.New(t, testdbseed.DefaultProjectID)
-	sess, err := sessionStore.Create(t.Context(), api.CreateSessionRequest{ProviderID: "fixture", Model: "large"}, testdbseed.DefaultProjectID)
+	sess, err := sessionStore.Sessions.Create(t.Context(), api.CreateSessionRequest{ProviderID: "fixture", Model: "large"}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
-	svc := &Service{store: sessionStore, transcript: transcript.New(sessionStore, nil), kicks: &kick.KickEngine{}}
+	svc := &Service{sessionStore: sessionStore.Sessions, transcriptStore: sessionStore.Transcript, transcript: transcript.New(sessionStore.Sessions, sessionStore.Transcript, sessionStore.Turns, sessionStore.People, nil), kicks: &kick.KickEngine{}}
 	msg, err := svc.appendHostKickMessage(t.Context(), sess.ID, "coordinator.phase.entered", "Phase entered: act")
 	testutil.FailErr(t, "append host kick message", err)
 	if msg.Ord != 1 || msg.Seq != 1 {

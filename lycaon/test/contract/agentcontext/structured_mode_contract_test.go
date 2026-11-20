@@ -3,23 +3,20 @@ package contract
 import (
 	"github.com/lycaon/lycaon/internal/toolcontract"
 
-	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/coordinator/surface"
 	"github.com/lycaon/lycaon/pkg/api"
-	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 )
 
 func TestTurnProfileActiveVsInactivePlan(t *testing.T) {
 	t.Parallel()
-	root := filepath.Join(contractcheck.RepoRoot(t), "lycaon")
-	inactive := surface.ResolveTurnProfile(surface.EnrichRunContextForWorkflow(api.CoordinatorRunContext{}, root), &api.Session{Posture: api.SessionPostureBuild}, coordinatorTurnHistory(nil, "Hello"))
-	active := surface.ResolveTurnProfile(surface.EnrichRunContextForWorkflow(api.CoordinatorRunContext{
+	inactive := surface.ResolveTurnProfile(bindFixturePhase(t, api.CoordinatorRunContext{}), &api.Session{Posture: api.SessionPostureBuild}, coordinatorTurnHistory(nil, "Hello"))
+	active := surface.ResolveTurnProfile(bindFixturePhase(t, api.CoordinatorRunContext{
 		WorkflowID: "plan", WorkflowVersion: "1.0.0", SurfaceProfile: "plan",
 		RunID: "run-1", CurrentPhase: "expand",
-	}, root), &api.Session{Posture: api.SessionPostureSpec}, coordinatorTurnHistory(nil, surface.HostLoopWakeSentinel))
+	}), &api.Session{Posture: api.SessionPostureSpec}, coordinatorTurnHistory(nil, surface.HostLoopWakeSentinel))
 
 	if inactive.SurfaceID == active.SurfaceID && strings.Join(inactive.ModeRefs, "+") == strings.Join(active.ModeRefs, "+") {
 		t.Fatalf("profiles must differ: inactive=%+v active=%+v", inactive, active)

@@ -19,7 +19,8 @@ import (
 	"github.com/lycaon/lycaon/internal/api/sourceapi"
 	"github.com/lycaon/lycaon/internal/events"
 	"github.com/lycaon/lycaon/internal/fileops"
-	"github.com/lycaon/lycaon/internal/project"
+
+	"github.com/lycaon/lycaon/internal/project/projecttest"
 	"github.com/lycaon/lycaon/internal/testutil"
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
@@ -37,7 +38,7 @@ func TestSourceRequestStatusRetainsHistoryHead(t *testing.T) {
 func TestSourceRequestSurvivesDisconnectAndReturnsOriginalResult(t *testing.T) {
 	srv := contractfixture.NewTestServerWithWorkflows(t)
 	root := t.TempDir()
-	p, err := project.CreateWithRoot(t.Context(), srv.Sources.Workspace.ProjectRegistry, root)
+	p, err := projecttest.CreateWithRoot(t.Context(), srv.Sources.Workspace.ProjectRegistry, root)
 	testutil.FailErr(t, "create project", err)
 	testutil.FailErr(t, "seed source", os.WriteFile(filepath.Join(root, "file"), []byte("kept"), 0o600))
 	started, release := make(chan struct{}), make(chan struct{})
@@ -111,7 +112,7 @@ func TestSourceRequestSurvivesDisconnectAndReturnsOriginalResult(t *testing.T) {
 func TestSourceRequestRetryRestoresJSONBodyMetadata(t *testing.T) {
 	srv := contractfixture.NewTestServerWithWorkflows(t)
 	root := t.TempDir()
-	p, err := project.CreateWithRoot(t.Context(), srv.Sources.Workspace.ProjectRegistry, root)
+	p, err := projecttest.CreateWithRoot(t.Context(), srv.Sources.Workspace.ProjectRegistry, root)
 	testutil.FailErr(t, "create project", err)
 	id := uuid.NewString()
 	body, err := json.Marshal(map[string]string{"operation_id": id, "root_id": p.Roots[0].ID, "from": "source", "to": "copy"})
@@ -140,7 +141,7 @@ func TestSourceRequestPublishesEveryPersistedState(t *testing.T) {
 	hub := events.NewMemoryHub()
 	srv := contractfixture.NewTestServerWithWorkflows(t, func(d *hostapi.Dependencies) { d.Host.Events = hub })
 	root := t.TempDir()
-	p, err := project.CreateWithRoot(t.Context(), srv.Sources.Workspace.ProjectRegistry, root)
+	p, err := projecttest.CreateWithRoot(t.Context(), srv.Sources.Workspace.ProjectRegistry, root)
 	testutil.FailErr(t, "create project", err)
 	testutil.FailErr(t, "seed source", os.WriteFile(filepath.Join(root, "file"), []byte("kept"), 0o600))
 	stream, unsubscribe, err := hub.Subscribe(t.Context(), events.Subscription{Project: p.ID, Viewer: testutil.HostOwner()})

@@ -13,10 +13,12 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/confine"
+	"github.com/lycaon/lycaon/internal/confine/admissiontest"
 	"github.com/lycaon/lycaon/internal/enginepaths"
 	lexec "github.com/lycaon/lycaon/internal/exec"
 	"github.com/lycaon/lycaon/internal/gitexec"
 	"github.com/lycaon/lycaon/internal/layeredfs/adapter"
+	"github.com/lycaon/lycaon/internal/layeredfs/adapter/adaptertest"
 	"github.com/lycaon/lycaon/internal/layeredfs/adapter/platform"
 	"github.com/lycaon/lycaon/internal/layeredfs/adapter/viewconfine"
 	"github.com/lycaon/lycaon/internal/layeredfs/privategit"
@@ -43,7 +45,7 @@ func TestSelectionRefusesOverLimitWorkWithoutEnforcement(t *testing.T) {
 	} {
 		t.Run(name, func(t *testing.T) {
 			selector := platform.NewSelector(cfg)
-			selector.BudgetFor = adapter.ZeroBudget
+			selector.BudgetFor = adaptertest.ZeroBudget
 			choice, err := selector.Choose(t.Context(), adapter.ChooseRequest{
 				Probe:  adapter.ProbeConfig{RuntimeDir: t.TempDir()},
 				Grants: []adapter.RootGrant{{RootID: "primary", SourcePath: t.TempDir(), IsPrimary: true}},
@@ -63,7 +65,7 @@ func TestSelectionRefusesOverLimitWorkWithoutEnforcement(t *testing.T) {
 // The real enforcer selects a mount only after proving denial against one, and a view it verifies
 // stays mounted and usable afterward.
 func TestRealEnforcerSelectsAndVerifiesAMountedView(t *testing.T) {
-	confine.TestingSetAutoConfine(t)
+	admissiontest.Enable(t)
 	testutil.RequireConfinement(t, confine.Available())
 	base, err := filepath.EvalSymlinks(t.TempDir())
 	testutil.FailErr(t, "resolve base", err)
@@ -99,7 +101,7 @@ func TestRealEnforcerSelectsAndVerifiesAMountedView(t *testing.T) {
 // case a mount exists for.
 func overBudgetChoice(t *testing.T, selector *adapter.Selector, probeDir, source string) (adapter.Adapter, adapter.ProbeResult) {
 	t.Helper()
-	selector.BudgetFor = adapter.ZeroBudget
+	selector.BudgetFor = adaptertest.ZeroBudget
 	choice, err := selector.Choose(t.Context(), adapter.ChooseRequest{
 		Probe:  adapter.ProbeConfig{RuntimeDir: probeDir},
 		Grants: []adapter.RootGrant{{RootID: "primary", SourcePath: source, IsPrimary: true}},
@@ -158,7 +160,7 @@ func TestEngineStartersEnterAMountUnderForcedGC(t *testing.T) {
 	testutil.FailErr(t, "mkdir on mount", os.MkdirAll(sub, 0o755))
 	testutil.FailErr(t, "write tool on mount", os.WriteFile(filepath.Join(mount, "tool"), []byte("#!/bin/sh\nexit 0\n"), 0o755))
 	executor := privategit.NewGitExecutor(mgr, view.ViewID, privategit.RemotePolicy{})
-	_, err = executor.Status(t.Context())
+	_, err = executor.Run(t.Context(), ".", "status")
 	testutil.FailErr(t, "initialize private Git", err)
 
 	starters := map[string]func(ctx context.Context) error{
@@ -169,7 +171,7 @@ func TestEngineStartersEnterAMountUnderForcedGC(t *testing.T) {
 			return exitOK(gitexec.Run(ctx, sub, []string{"--version"}, gitexec.Opts{}))
 		},
 		"private Git executor": func(ctx context.Context) error {
-			_, err := executor.Status(ctx)
+			_, err := executor.Run(ctx, ".", "status")
 			return err
 		},
 		"launch with a working directory on the mount": func(ctx context.Context) error {
@@ -354,7 +356,7 @@ func TestDestroyRefusesARootStillMountedWhateverItsRecordsSay(t *testing.T) {
 	result := filepath.Join(view.PrimaryWorkPath, "result.txt")
 	testutil.FailErr(t, "write result", os.WriteFile(result, []byte("result\n"), 0o644))
 
-	stranger := workspace.NewManager(t.TempDir(), platform.NewSelector(platform.Config{}))
+	stranger := workspace.NewManager(t.TempDir(), platform.NewSelector(platform.Config{}), workspace.Filesystem{})
 	err = stranger.DestroyWorkerWorkspace(t.Context(), &workspace.Binding{ID: view.ViewID, Root: view.PrimaryWorkPath})
 	if !errors.Is(err, workspace.ErrBranchMounted) {
 		t.Fatalf("destroy through a live mount = %v, want ErrBranchMounted", err)

@@ -39,7 +39,7 @@ func (m *Service) Assemble(ctx context.Context, sess *api.Session, history []api
 
 // Reload loads canonical messages and returns the dieted projection.
 func (m *Service) Reload(ctx context.Context, sessionID string, sess *api.Session, surfaceID string) ([]api.Message, error) {
-	if m == nil || m.store == nil {
+	if m == nil || (m.sessionStore == nil || m.transcriptStore == nil || m.compactionStore == nil) {
 		return nil, fmt.Errorf("session store not configured")
 	}
 	if sess == nil {

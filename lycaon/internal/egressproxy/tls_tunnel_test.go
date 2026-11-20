@@ -22,10 +22,10 @@ func TestConnectPreservesOriginCertificateAndTLSVerification(t *testing.T) {
 	defer origin.Close()
 	p := brokerWith(func(context.Context, string, egressproxy.Endpoint) bool { return true }, leasedPeer("cmd"))
 	p.SetLoopbackConnectAuthority(func(_ string, port uint16) bool { return port == serverPort(t, origin.URL) })
-	_, err := p.Start()
+	addrs, err := p.Start()
 	testutil.FailErr(t, "start proxy", err)
 	defer func() { _ = p.Close() }()
-	proxyURL, err := url.Parse("http://" + p.Addr())
+	proxyURL, err := url.Parse("http://" + addrs.HTTP)
 	testutil.FailErr(t, "parse proxy URL", err)
 	for _, trustOrigin := range []bool{true, false} {
 		t.Run(strconv.FormatBool(trustOrigin), func(t *testing.T) {

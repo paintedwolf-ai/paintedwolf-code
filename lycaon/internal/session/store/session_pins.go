@@ -18,7 +18,7 @@ import (
 
 // PinSession appends a chat to its project's pinned order; pinning a pinned
 // chat changes nothing.
-func (s *sqlSessionViews) PinSession(ctx context.Context, id string) error {
+func (s *sqlSessions) PinSession(ctx context.Context, id string) error {
 	return writePins(ctx, s.core, id, func(ctx context.Context, qtx *db.Queries, state db.GetSessionPinStateRow) ([]string, error) {
 		if err := pinnable(state); err != nil {
 			return nil, err
@@ -40,7 +40,7 @@ func (s *sqlSessionViews) PinSession(ctx context.Context, id string) error {
 }
 
 // UnpinSession removes a chat from its project's pinned order.
-func (s *sqlSessionViews) UnpinSession(ctx context.Context, id string) error {
+func (s *sqlSessions) UnpinSession(ctx context.Context, id string) error {
 	return writePins(ctx, s.core, id, func(ctx context.Context, qtx *db.Queries, state db.GetSessionPinStateRow) ([]string, error) {
 		if !state.PinRank.Valid {
 			return nil, nil
@@ -56,7 +56,7 @@ func (s *sqlSessionViews) UnpinSession(ctx context.Context, id string) error {
 
 // MovePinnedSession places a pinned chat at a 1-based position in its
 // project's pinned order and renumbers the project's pins 1…n.
-func (s *sqlSessionViews) MovePinnedSession(ctx context.Context, id string, position int) error {
+func (s *sqlSessions) MovePinnedSession(ctx context.Context, id string, position int) error {
 	return writePins(ctx, s.core, id, func(ctx context.Context, qtx *db.Queries, state db.GetSessionPinStateRow) ([]string, error) {
 		if !state.PinRank.Valid {
 			return nil, ErrSessionNotPinned

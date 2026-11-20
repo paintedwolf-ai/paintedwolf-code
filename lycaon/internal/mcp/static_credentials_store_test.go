@@ -38,7 +38,7 @@ func TestVaultFirstScrubSecondMigrationAndHydration(t *testing.T) {
 	reg, err := NewRuntime(RuntimeOptions{
 		StatePath:          stateDir,
 		GlobalOverridePath: globalPath,
-		Connector:          &MockConnector{},
+		Connector:          catalogConnector{},
 	})
 	testutil.FailErr(t, "NewRuntime", err)
 	testutil.FailErr(t, "Catalog.Load", reg.Catalog.Load(ctx))
@@ -76,7 +76,7 @@ func TestVaultFirstScrubSecondMigrationAndHydration(t *testing.T) {
 	restarted, err := NewRuntime(RuntimeOptions{
 		StatePath:          stateDir,
 		GlobalOverridePath: globalPath,
-		Connector:          &MockConnector{},
+		Connector:          catalogConnector{},
 	})
 	testutil.FailErr(t, "NewRuntime restart", err)
 	testutil.FailErr(t, "Catalog.Load restart", restarted.Catalog.Load(ctx))
@@ -110,7 +110,7 @@ func TestMigrationFailurePreservesInlineYAML(t *testing.T) {
 	reg, err := NewRuntime(RuntimeOptions{
 		StatePath:          stateDir,
 		GlobalOverridePath: globalPath,
-		Connector:          &MockConnector{},
+		Connector:          catalogConnector{},
 	})
 	testutil.FailErr(t, "NewRuntime", err)
 	if err := reg.Catalog.Load(ctx); err == nil {
@@ -148,7 +148,7 @@ func TestStaleYAMLRetryAfterClearDeleteAndRestart(t *testing.T) {
 	reg, err := NewRuntime(RuntimeOptions{
 		StatePath:          stateDir,
 		GlobalOverridePath: globalPath,
-		Connector:          &MockConnector{},
+		Connector:          catalogConnector{},
 	})
 	testutil.FailErr(t, "NewRuntime", err)
 	testutil.FailErr(t, "initial Load", reg.Catalog.Load(ctx))
@@ -173,7 +173,7 @@ func TestStaleYAMLRetryAfterClearDeleteAndRestart(t *testing.T) {
 	restarted, err := NewRuntime(RuntimeOptions{
 		StatePath:          stateDir,
 		GlobalOverridePath: globalPath,
-		Connector:          &MockConnector{},
+		Connector:          catalogConnector{},
 	})
 	testutil.FailErr(t, "NewRuntime after clear", err)
 	testutil.FailErr(t, "Load after clear with stale YAML", restarted.Catalog.Load(ctx))
@@ -210,7 +210,7 @@ func TestStaleYAMLRetryAfterClearDeleteAndRestart(t *testing.T) {
 	restartedAfterDel, err := NewRuntime(RuntimeOptions{
 		StatePath:          stateDir,
 		GlobalOverridePath: globalPath,
-		Connector:          &MockConnector{},
+		Connector:          catalogConnector{},
 	})
 	testutil.FailErr(t, "NewRuntime after delete", err)
 	testutil.FailErr(t, "Load after delete with stale YAML", restartedAfterDel.Catalog.Load(ctx))
@@ -230,7 +230,7 @@ func TestHydrationBeforeTrustMergeBlocksProjectRepoint(t *testing.T) {
 	reg, err := NewRuntime(RuntimeOptions{
 		StatePath:          stateDir,
 		GlobalOverridePath: globalPath,
-		Connector:          &MockConnector{},
+		Connector:          catalogConnector{},
 	})
 	testutil.FailErr(t, "NewRuntime", err)
 	reg.Catalog.SetProjectOverlayGate(func(context.Context, string) bool { return true })
@@ -286,7 +286,7 @@ func TestConcurrentAdminUpdatesAndLoadsPreserveLockOrderAndUpdates(t *testing.T)
 	reg, err := NewRuntime(RuntimeOptions{
 		StatePath:          stateDir,
 		GlobalOverridePath: globalPath,
-		Connector:          &MockConnector{},
+		Connector:          catalogConnector{},
 	})
 	testutil.FailErr(t, "NewRuntime", err)
 	testutil.FailErr(t, "Load", reg.Catalog.Load(ctx))
@@ -386,7 +386,7 @@ func TestStaticCredentialStoreRejectsCorruptUnknownAndConflictingRecords(t *test
 			reg, err := NewRuntime(RuntimeOptions{
 				StatePath:          stateDir,
 				GlobalOverridePath: globalPath,
-				Connector:          &MockConnector{},
+				Connector:          catalogConnector{},
 			})
 			testutil.FailErr(t, "NewRuntime", err)
 			if loadErr := reg.Catalog.Load(ctx); loadErr == nil {

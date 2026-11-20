@@ -4,14 +4,12 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"github.com/lycaon/lycaon/internal/tools/toolstest"
 	"reflect"
 	"slices"
 	"strings"
 	"testing"
 
 	"github.com/google/uuid"
-
 	"github.com/lycaon/lycaon/internal/cost"
 	"github.com/lycaon/lycaon/internal/cost/costtest"
 	"github.com/lycaon/lycaon/internal/llm"
@@ -25,6 +23,7 @@ import (
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/tools/toolstest"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -33,17 +32,17 @@ func TestPromptRecoveryPreservesIntentAndRejectsStaleActions(t *testing.T) {
 		t.Run(string(posture), func(t *testing.T) {
 			mgr, st := newTestManager(t)
 			ctx := t.Context()
-			sess, err := st.Create(ctx, api.CreateSessionRequest{Posture: posture}, testdbseed.DefaultProjectID)
+			sess, err := st.Sessions.Create(ctx, api.CreateSessionRequest{Posture: posture}, testdbseed.DefaultProjectID)
 			testutil.FailErr(t, "create chat", err)
 			original, _, err := mgr.Submissions.AdmitPrompt(ctx, sess.ID, uuid.NewString(), "review", promptinput.Input{Text: "Review the project"})
 			testutil.FailErr(t, "admit original", err)
-			claimed, _, err := st.ClaimPromptSubmission(ctx, original.ID)
+			claimed, _, err := st.Submissions.ClaimPromptSubmission(ctx, original.ID)
 			testutil.FailErr(t, "claim original", err)
 			_, err = mgr.Runner.Instructions.Apply(ctx, sess.ID, promptinput.Input{Text: "Review the project", SubmissionID: original.ID})
 			testutil.FailErr(t, "append original", err)
 			progressID := uuid.NewString()
-			testutil.FailErr(t, "append progress", st.AppendMessages(ctx, sess.ID, api.Message{ID: progressID, Role: api.MessageRoleAssistant, Content: "Survey completed", Visibility: api.MessageVisibilityTranscript}))
-			testutil.FailErr(t, "fail provider", st.FinishPromptSubmission(ctx, original.ID, claimed.ClaimToken, store.PromptSubmissionFailed, "", store.PromptSubmissionFailure{Message: "provider disconnected"}))
+			testutil.FailErr(t, "append progress", st.Transcript.AppendMessages(ctx, sess.ID, api.Message{ID: progressID, Role: api.MessageRoleAssistant, Content: "Survey completed", Visibility: api.MessageVisibilityTranscript}))
+			testutil.FailErr(t, "fail provider", st.Submissions.FinishPromptSubmission(ctx, original.ID, claimed.ClaimToken, store.PromptSubmissionFailed, "", store.PromptSubmissionFailure{Message: "provider disconnected"}))
 			action := &api.PromptRecovery{Action: "continue", AfterMessageID: progressID}
 			input := promptinput.Input{Text: "Keep going", Recovery: action}
 			operation := uuid.NewString()
@@ -68,7 +67,7 @@ func TestPromptRecoveryPreservesIntentAndRejectsStaleActions(t *testing.T) {
 			}
 			_, err = mgr.Runner.Instructions.Apply(ctx, sess.ID, saved)
 			testutil.FailErr(t, "append continuation", err)
-			history, err := st.GetMessages(ctx, sess.ID)
+			history, err := st.Transcript.GetMessages(ctx, sess.ID)
 			testutil.FailErr(t, "read history", err)
 			if userIntentCount(history) != 1 || history[len(history)-1].Kind != api.MessageKindUserContinuation {
 				t.Fatalf("recovery opened another intent: %+v", history)
@@ -80,17 +79,17 @@ func TestPromptRecoveryPreservesIntentAndRejectsStaleActions(t *testing.T) {
 func TestPromptRetryRestoresOriginalInputFromReceipt(t *testing.T) {
 	mgr, st := newTestManager(t)
 	ctx := t.Context()
-	sess, err := st.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
+	sess, err := st.Sessions.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create chat", err)
 	originalInput := promptinput.Input{Text: "Implement the attached specification", ArtifactIDs: []string{uuid.NewString()}}
 	original, _, err := mgr.Submissions.AdmitPrompt(ctx, sess.ID, uuid.NewString(), originalInput, originalInput)
 	testutil.FailErr(t, "admit original", err)
-	claimed, _, err := st.ClaimPromptSubmission(ctx, original.ID)
+	claimed, _, err := st.Submissions.ClaimPromptSubmission(ctx, original.ID)
 	testutil.FailErr(t, "claim original", err)
 	originalInput.SubmissionID = original.ID
 	_, err = mgr.Runner.Instructions.Apply(ctx, sess.ID, originalInput)
 	testutil.FailErr(t, "append original", err)
-	testutil.FailErr(t, "interrupt original", st.FinishPromptSubmission(ctx, original.ID, claimed.ClaimToken, store.PromptSubmissionInterrupted, "", store.PromptSubmissionFailure{Message: "provider disconnected"}))
+	testutil.FailErr(t, "interrupt original", st.Submissions.FinishPromptSubmission(ctx, original.ID, claimed.ClaimToken, store.PromptSubmissionInterrupted, "", store.PromptSubmissionFailure{Message: "provider disconnected"}))
 	restarted := NewHost(st, Models{Client: llm.NewMockProvider(testMockConfig(t)), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, toolstest.NewRegistry())
 	input := promptinput.Input{Text: "client text is not the retry authority", Recovery: &api.PromptRecovery{Action: "retry", AfterMessageID: original.ID}}
 	resumed, _, err := restarted.Submissions.AdmitPrompt(ctx, sess.ID, uuid.NewString(), input, input)
@@ -105,17 +104,17 @@ func TestPromptRetryRestoresOriginalInputFromReceipt(t *testing.T) {
 func TestPromptRetryRejectsProgressAndChangedTranscript(t *testing.T) {
 	mgr, st := newTestManager(t)
 	ctx := t.Context()
-	sess, err := st.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
+	sess, err := st.Sessions.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create chat", err)
 	original, _, err := mgr.Submissions.AdmitPrompt(ctx, sess.ID, uuid.NewString(), "implement", promptinput.Input{Text: "Implement"})
 	testutil.FailErr(t, "admit original", err)
-	claimed, _, err := st.ClaimPromptSubmission(ctx, original.ID)
+	claimed, _, err := st.Submissions.ClaimPromptSubmission(ctx, original.ID)
 	testutil.FailErr(t, "claim original", err)
 	_, err = mgr.Runner.Instructions.Apply(ctx, sess.ID, promptinput.Input{Text: "Implement", SubmissionID: original.ID})
 	testutil.FailErr(t, "append original", err)
 	progress := api.Message{ID: uuid.NewString(), Role: api.MessageRoleAssistant, Content: "Work started", Visibility: api.MessageVisibilityTranscript}
-	testutil.FailErr(t, "append progress", st.AppendMessages(ctx, sess.ID, progress))
-	testutil.FailErr(t, "fail provider", st.FinishPromptSubmission(ctx, original.ID, claimed.ClaimToken, store.PromptSubmissionFailed, "", store.PromptSubmissionFailure{Message: "provider disconnected"}))
+	testutil.FailErr(t, "append progress", st.Transcript.AppendMessages(ctx, sess.ID, progress))
+	testutil.FailErr(t, "fail provider", st.Submissions.FinishPromptSubmission(ctx, original.ID, claimed.ClaimToken, store.PromptSubmissionFailed, "", store.PromptSubmissionFailure{Message: "provider disconnected"}))
 	for _, action := range []*api.PromptRecovery{{Action: "retry", AfterMessageID: progress.ID}, {Action: "continue", AfterMessageID: original.ID}} {
 		input := promptinput.Input{Text: "Keep going", Recovery: action}
 		_, _, err := mgr.Submissions.AdmitPrompt(ctx, sess.ID, uuid.NewString(), input, input)
@@ -140,7 +139,7 @@ func TestPromptRoutingKeepsQueuedSlashCommands(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			mgr, st := newTestManager(t)
-			sess, err := st.Create(t.Context(), api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
+			sess, err := st.Sessions.Create(t.Context(), api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 			testutil.FailErr(t, "create chat", err)
 			view := &recoveryRoutingView{}
 			mgr.SetWorkflowDomains(workflowDomainFixture(view))
@@ -174,7 +173,7 @@ func (v *recoveryRoutingView) AssertSessionRunnable(context.Context, string) err
 func TestSpendingBlockedInputPreservesAttachmentAuthorityAndSkipsHostTurns(t *testing.T) {
 	tracker := costtest.NewTracker(t, stubSpendPricer{})
 	manager, sqlStore := spendRunwayHost(t, tracker, 5, true)
-	sess, err := sqlStore.Create(t.Context(), api.CreateSessionRequest{}, "project")
+	sess, err := sqlStore.Sessions.Create(t.Context(), api.CreateSessionRequest{}, "project")
 	testutil.FailErr(t, "create session", err)
 	parts := []api.MessageContentPart{
 		{Content: "Explain this attachment", Origin: api.MessageOriginUser, Authority: api.ContentAuthorityUser, TrustTier: api.ContentTrustTierTrusted},
@@ -195,7 +194,7 @@ func TestSpendingBlockedInputPreservesAttachmentAuthorityAndSkipsHostTurns(t *te
 	if !errors.Is(err, spendguard.ErrCeiling) {
 		t.Fatalf("direct execution after ceiling = %v", err)
 	}
-	msgs, err := sqlStore.GetMessages(t.Context(), sess.ID)
+	msgs, err := sqlStore.Transcript.GetMessages(t.Context(), sess.ID)
 	testutil.FailErr(t, "read retained attachment", err)
 	if len(msgs) != 1 || !reflect.DeepEqual(msgs[0].ContentParts, parts) {
 		t.Fatalf("blocked attachment authority changed or host prompt became visible: %+v", msgs)
@@ -207,7 +206,7 @@ func TestAcceptedPromptsSurviveCeilingReachedBeforeExecution(t *testing.T) {
 		t.Run(mode, func(t *testing.T) {
 			tracker := costtest.NewTracker(t, stubSpendPricer{})
 			manager, sqlStore := spendRunwayHost(t, tracker, 5, true)
-			sess, err := sqlStore.Create(t.Context(), api.CreateSessionRequest{}, "project")
+			sess, err := sqlStore.Sessions.Create(t.Context(), api.CreateSessionRequest{}, "project")
 			testutil.FailErr(t, "create session", err)
 			texts := []string{"Keep the café water log.\nSummarize only the requested checks."}
 			if mode == "linked" {
@@ -240,14 +239,14 @@ func TestAcceptedPromptsSurviveCeilingReachedBeforeExecution(t *testing.T) {
 				}
 			}
 			for _, row := range rows {
-				stored, err := sqlStore.GetPromptSubmission(t.Context(), row.ID)
+				stored, err := sqlStore.Submissions.GetPromptSubmission(t.Context(), row.ID)
 				testutil.FailErr(t, "read blocked receipt", err)
 				if stored.Status != store.PromptSubmissionFailed {
 					t.Fatalf("blocked receipt status = %s", stored.Status)
 				}
 				_, _ = manager.Submissions.RunPromptSubmission(t.Context(), row.ID)
 			}
-			messages, err := sqlStore.GetMessages(t.Context(), sess.ID)
+			messages, err := sqlStore.Transcript.GetMessages(t.Context(), sess.ID)
 			testutil.FailErr(t, "read retained input", err)
 			if len(messages) != 1 || messages[0].ID != rows[0].ID || messages[0].Content != strings.Join(texts, "\n\n") {
 				t.Fatalf("accepted input lost, duplicated, or changed: %+v", messages)
@@ -274,7 +273,7 @@ func TestPromptAdmissionRejectsReachedCeilingBeforeTakingDraftOwnership(t *testi
 		t.Run(tc.name, func(t *testing.T) {
 			tracker := costtest.NewTracker(t, stubSpendPricer{unpriced: tc.unpriced})
 			manager, sqlStore := spendRunwayHost(t, tracker, 5, tc.enabled)
-			sess, err := sqlStore.Create(t.Context(), api.CreateSessionRequest{}, "project")
+			sess, err := sqlStore.Sessions.Create(t.Context(), api.CreateSessionRequest{}, "project")
 			testutil.FailErr(t, "create session", err)
 			testutil.FailErr(t, "record usage", tracker.RecordUsage(t.Context(), cost.UsageEvent{
 				SessionID: sess.ID, Caller: cost.CallerCoordinator, PromptTokens: 10,
@@ -286,7 +285,7 @@ func TestPromptAdmissionRejectsReachedCeilingBeforeTakingDraftOwnership(t *testi
 				if !errors.Is(err, spendguard.ErrCeiling) || row != nil || created {
 					t.Fatalf("reached ceiling admission = row=%+v created=%v error=%v", row, created, err)
 				}
-				if _, err := sqlStore.GetPromptSubmission(t.Context(), id); !errors.Is(err, store.ErrPromptSubmissionNotFound) {
+				if _, err := sqlStore.Submissions.GetPromptSubmission(t.Context(), id); !errors.Is(err, store.ErrPromptSubmissionNotFound) {
 					t.Fatalf("rejected draft left an accepted receipt: %v", err)
 				}
 			} else {
@@ -302,7 +301,7 @@ func TestPromptAdmissionRejectsReachedCeilingBeforeTakingDraftOwnership(t *testi
 func TestPromptReplaySurvivesLaterSpendCeiling(t *testing.T) {
 	tracker := costtest.NewTracker(t, stubSpendPricer{})
 	manager, sqlStore := spendRunwayHost(t, tracker, 5, true)
-	sess, err := sqlStore.Create(t.Context(), api.CreateSessionRequest{}, "project")
+	sess, err := sqlStore.Sessions.Create(t.Context(), api.CreateSessionRequest{}, "project")
 	testutil.FailErr(t, "create session", err)
 	id := uuid.NewString()
 	first, created, err := manager.Submissions.AdmitPrompt(t.Context(), sess.ID, id, "original", promptinput.Input{Text: "original"})

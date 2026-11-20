@@ -9,6 +9,7 @@ import (
 	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/settings"
+	"github.com/lycaon/lycaon/internal/settings/settingstest"
 	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/toolexecution"
@@ -27,7 +28,7 @@ func authzEventsReadThroughRuleGate(t *testing.T, profiles []sandbox.ToolProfile
 
 	store, err := settings.NewApprovalStoreAt(filepath.Join(t.TempDir(), "global.yaml"))
 	contractcheck.FailErr(t, "approval store", err)
-	gate := settings.NewRuleApprovalGate(store, settings.NoSources())
+	gate := settings.NewRuleApprovalGate(store, settingstest.EmptySources())
 	boundary := sandbox.NewBoundary(sandbox.Config{ProjectRootRequired: true, RejectSymlinkEscape: true}, profiles)
 	policy := toolexecution.NewApprovalPolicyEngine(toolprofiles.NewProfilePolicyEngine(boundary), gate)
 	reg := tools.NewDefaultRegistry()
@@ -35,7 +36,7 @@ func authzEventsReadThroughRuleGate(t *testing.T, profiles []sandbox.ToolProfile
 		return "ok", nil
 	}))
 	exec := toolexecution.NewExecutor(policy, reg, "implement")
-	exec.Approvals.SetAuthzRecorder(authzcontext.SQLRecorder(sqlDB))
+	exec.Approvals.SetAuthzRecorder(authzcontext.LedgerRecorder{Ledger: &authzcontext.Ledger{Store: authzcontext.NewSQLStore(sqlDB)}})
 
 	root := t.TempDir()
 	_, _ = exec.Invoke(t.Context(), "read", map[string]any{"path": filepath.Join(root, "a.go")}, tools.ToolContext{

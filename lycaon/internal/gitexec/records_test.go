@@ -11,6 +11,7 @@ import (
 )
 
 func TestRunRecordsBeyondCaptureBudget(t *testing.T) {
+	e := productionExecution()
 	useBundledGit(t)
 	dir := t.TempDir()
 	initRepo(t, dir)
@@ -19,7 +20,7 @@ func TestRunRecordsBeyondCaptureBudget(t *testing.T) {
 		writeFile(t, dir, name, "body")
 	}
 	args := []string{"ls-files", "-z", "--others", "--exclude-standard"}
-	_, code, err := Run(t.Context(), dir, args, Opts{MaxOutput: 8})
+	_, code, err := e.run(t.Context(), dir, args, Opts{MaxOutput: 8}, nil)
 	if code != 0 || !errors.Is(err, command.ErrOutputTruncated) {
 		t.Fatalf("bounded capture: code=%d err=%v", code, err)
 	}

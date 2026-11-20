@@ -61,9 +61,9 @@ func IsErrorCodeShape(s string) bool {
 func ActivateStockCatalog(t *testing.T) {
 	t.Helper()
 	eff := StockCatalog(t)
+	previous := extpacks.Active()
 	extpacks.SetActive(eff)
-	t.Cleanup(extpacks.ClearActive)
-	prompts.ResetPersonaContractCache()
+	t.Cleanup(func() { extpacks.SetActive(previous) })
 }
 
 func StockCatalog(t *testing.T) *extpacks.EffectiveCatalog {

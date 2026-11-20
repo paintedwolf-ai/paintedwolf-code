@@ -25,18 +25,18 @@ func TestSupersedeWorkerReportPreservesRowInPlace(t *testing.T) {
 	ctx := context.Background()
 	store := storetest.New(t, testdbseed.DefaultProjectID)
 	mgr := session.NewHost(store, session.Models{Client: llm.NewMockProvider(&llm.MockConfig{}), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, toolstest.NewRegistry())
-	sess, err := store.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
+	sess, err := store.Sessions.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
 
 	reportID := "rejected-report"
-	if err := store.AppendMessages(ctx, sess.ID, api.Message{
+	if err := store.Transcript.AppendMessages(ctx, sess.ID, api.Message{
 		ID:      reportID,
 		Role:    api.MessageRoleAssistant,
 		Content: `{"leg_status":"complete","brief":"ungrounded survey"}`,
 	}); err != nil {
 		testutil.FailErr(t, "AppendMessages", err)
 	}
-	before, err := store.GetMessages(ctx, sess.ID)
+	before, err := store.Transcript.GetMessages(ctx, sess.ID)
 	testutil.FailErr(t, "GetMessages before", err)
 	var beforeOrd int64
 	for _, m := range before {
@@ -49,7 +49,7 @@ func TestSupersedeWorkerReportPreservesRowInPlace(t *testing.T) {
 		testutil.FailErr(t, "SupersedeWorkerReport", err)
 	}
 
-	after, err := store.GetMessages(ctx, sess.ID)
+	after, err := store.Transcript.GetMessages(ctx, sess.ID)
 	testutil.FailErr(t, "GetMessages after", err)
 	if len(after) != len(before) {
 		t.Fatalf("message count = %d want %d (no physical delete on retract)", len(after), len(before))
@@ -79,9 +79,9 @@ func TestCanceledWorkerProjectionPreservesProofOnRetry(t *testing.T) {
 	s := store.NewSQL(sqlDB)
 	mgr := session.NewHost(s, session.Models{Client: llm.NewMockProvider(&llm.MockConfig{}), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, toolstest.NewRegistry())
 	testdbseed.InsertProjectRoot(t, sqlDB, testdbseed.DefaultProjectID, t.TempDir())
-	parent, err := s.Create(t.Context(), api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
+	parent, err := s.Sessions.Create(t.Context(), api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create cancellation parent", err)
-	child, err := s.CreateChild(t.Context(), parent, api.SpawnChildRequest{AgentType: "implementer"})
+	child, err := s.Sessions.CreateChild(t.Context(), parent, api.SpawnChildRequest{AgentType: "implementer"})
 	testutil.FailErr(t, "create cancellation child", err)
 	task := workeroutcomes.SummaryInput{JobID: "job-cancel", ChildSessionID: child.ID, ParentSessionID: parent.ID, AgentType: "implementer"}
 	result := api.WorkerResult{Status: "canceled", Response: "canceled", Summary: "Canceled after a bounded edit", ChangeReport: &api.WorkerChangeReport{
@@ -94,7 +94,7 @@ func TestCanceledWorkerProjectionPreservesProofOnRetry(t *testing.T) {
 			t.Fatalf("status=%s", status)
 		}
 	}
-	messages, err := s.GetMessages(t.Context(), parent.ID)
+	messages, err := s.Transcript.GetMessages(t.Context(), parent.ID)
 	testutil.FailErr(t, "read cancellation projection", err)
 	if len(messages) != 2 || messages[1].WorkerSummary == nil {
 		t.Fatalf("expected one call/result pair after retry: %+v", messages)
@@ -117,9 +117,9 @@ func TestAppendWorkerSummarySQLStoreToolEnvelope(t *testing.T) {
 	ctx := context.Background()
 	dir := t.TempDir()
 	testdbseed.InsertProjectRoot(t, sqlDB, testdbseed.DefaultProjectID, dir)
-	parent, err := store.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
+	parent, err := store.Sessions.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
-	child, err := store.CreateChild(ctx, parent, api.SpawnChildRequest{AgentType: "implementer"})
+	child, err := store.Sessions.CreateChild(ctx, parent, api.SpawnChildRequest{AgentType: "implementer"})
 	testutil.FailErr(t, "create child", err)
 
 	if _, err := mgr.Workers.Summaries.Append(ctx, parent.ID, workeroutcomes.SummaryInput{
@@ -133,7 +133,7 @@ func TestAppendWorkerSummarySQLStoreToolEnvelope(t *testing.T) {
 		testutil.FailErr(t, "AppendWorkerSummary", err)
 	}
 
-	msgs, err := store.GetMessages(ctx, parent.ID)
+	msgs, err := store.Transcript.GetMessages(ctx, parent.ID)
 	testutil.FailErr(t, "GetMessages", err)
 	if len(msgs) != 2 || msgs[1].Role != api.MessageRoleTool {
 		t.Fatalf("msgs = %d want task call/result envelope: %+v", len(msgs), msgs)

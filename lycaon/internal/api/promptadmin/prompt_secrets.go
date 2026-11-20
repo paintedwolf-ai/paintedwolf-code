@@ -13,7 +13,7 @@ func (s *Submission) ingestPromptSecrets(
 	sess *wire.Session,
 	refs []wire.PromptSecretReferencePart,
 ) (string, []wire.MessageContentPart, error) {
-	lines, err := secretview.ReferenceLines(s.Store, s.ManagedSecrets, ctx, sess, refs)
+	lines, err := secretview.ReferenceLines(s.SessionQueries, s.ManagedSecrets, ctx, sess, refs)
 	if err != nil || len(lines) == 0 {
 		return "", nil, err
 	}

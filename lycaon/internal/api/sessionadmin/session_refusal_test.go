@@ -13,6 +13,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/lycaon/lycaon/internal/api/httpio"
 	"github.com/lycaon/lycaon/internal/project"
+	"github.com/lycaon/lycaon/internal/project/projecttest"
 	"github.com/lycaon/lycaon/internal/session/chats"
 	"github.com/lycaon/lycaon/internal/session/checkpointcontrol"
 	"github.com/lycaon/lycaon/internal/session/naming"
@@ -142,10 +143,10 @@ func TestSessionReadsAndAbortRefuseMissingChatBeforeProjection(t *testing.T) {
 	deps := apitestdeps.Deps{}
 	apitestdeps.Fill(t, &deps)
 	responses := &httpio.Responder{Logger: slog.New(slog.DiscardHandler)}
-	bootstrap := &Bootstrap{Store: deps.Store, responses: responses}
-	transcript := &Transcript{Store: deps.Store, Invocations: deps.Invocations, responses: responses}
+	bootstrap := &Bootstrap{SessionStore: deps.Store.Sessions, responses: responses}
+	transcript := &Transcript{SessionStore: deps.Store.Sessions, Invocations: deps.Invocations, responses: responses}
 	lifecycle := &Lifecycle{Sessions: deps.Sessions, responses: responses}
-	navigation := &Navigation{Store: deps.Store, responses: responses}
+	navigation := &Navigation{SessionStore: deps.Store.Sessions, responses: responses}
 	for _, tc := range []struct {
 		handle http.HandlerFunc
 		body   string
@@ -159,9 +160,9 @@ func TestSessionReadsAndAbortRefuseMissingChatBeforeProjection(t *testing.T) {
 		tc.handle(rec, req)
 		assertSessionRefusal(t, rec, wire.ApiErrorCodeSessionNotFound)
 	}
-	p, err := project.CreateWithRoot(t.Context(), deps.Projects, t.TempDir())
+	p, err := projecttest.CreateWithRoot(t.Context(), deps.Projects, t.TempDir())
 	testutil.FailErr(t, "create session project", err)
-	sess, err := deps.Store.CreateWithStatus(t.Context(), wire.CreateSessionRequest{ProjectID: p.ID, Posture: wire.SessionPostureBuild}, p.ID, wire.SessionStatusIdle)
+	sess, err := deps.Store.Sessions.CreateWithStatus(t.Context(), wire.CreateSessionRequest{ProjectID: p.ID, Posture: wire.SessionPostureBuild}, p.ID, wire.SessionStatusIdle)
 	testutil.FailErr(t, "create session for program receipt refusal", err)
 	for _, tc := range []struct {
 		target      string
@@ -178,10 +179,10 @@ func TestSessionReadsAndAbortRefuseMissingChatBeforeProjection(t *testing.T) {
 		route.URLParams.Add("program_id", "missing")
 		req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, route))
 		rec := httptest.NewRecorder()
-		(&Transcript{Store: deps.Store, Invocations: deps.Invocations, responses: responses}).HandleGetCommandProgramReceipt(rec, req)
+		(&Transcript{SessionStore: deps.Store.Sessions, Invocations: deps.Invocations, responses: responses}).HandleGetCommandProgramReceipt(rec, req)
 		if tc.invocations == nil {
 			rec = httptest.NewRecorder()
-			(&Transcript{Store: deps.Store, responses: responses}).HandleGetCommandProgramReceipt(rec, req)
+			(&Transcript{SessionStore: deps.Store.Sessions, responses: responses}).HandleGetCommandProgramReceipt(rec, req)
 		}
 		if rec.Code != tc.wantStatus {
 			t.Fatalf("target=%s status=%d want=%d", tc.target, rec.Code, tc.wantStatus)

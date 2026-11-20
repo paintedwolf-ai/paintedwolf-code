@@ -25,10 +25,8 @@ type LimitsStore struct {
 func NewLimitsStoreAt(globalPath string) (*LimitsStore, error) {
 	s := &LimitsStore{
 		globalPath:   globalPath,
+		bundled:      DefaultSessionLimits(),
 		projectCache: make(map[string]SessionLimits),
-	}
-	if err := s.reloadBundled(); err != nil {
-		return nil, err
 	}
 	if data, err := os.ReadFile(globalPath); err == nil {
 		var lim SessionLimits
@@ -64,11 +62,6 @@ func loadLimitsFile(path string) (SessionLimits, error) {
 	return lim, nil
 }
 
-func (s *LimitsStore) reloadBundled() error {
-	s.bundled = DefaultSessionLimits()
-	return nil
-}
-
 // Get returns effective limits for scope.
 func (s *LimitsStore) Get(scope llm.SettingsScope, projectDir string) SessionLimits {
 	s.mu.RLock()
@@ -101,12 +94,7 @@ func (s *LimitsStore) ProjectRejected(projectDir string) []ProjectRejection {
 	return rejections(rejected)
 }
 
-// SessionLimits returns merged limits for project scope.
-func (s *LimitsStore) SessionLimits(scope llm.SettingsScope, projectDir string) SessionLimits {
-	return s.Get(scope, projectDir)
-}
-
-// ProjectLimitsAdapter adapts LimitsStore for session.Manager dynamic limits.
+// ProjectLimitsAdapter serves resolved project limits.
 type ProjectLimitsAdapter struct {
 	Store *LimitsStore
 }
@@ -116,7 +104,7 @@ func (a ProjectLimitsAdapter) SessionLimits(projectDir string) SessionLimits {
 	if a.Store == nil {
 		return DefaultSessionLimits()
 	}
-	return a.Store.SessionLimits(llm.SettingsScopeProject, projectDir)
+	return a.Store.Get(llm.SettingsScopeProject, projectDir)
 }
 
 // MergedFrom reports which layers contributed.

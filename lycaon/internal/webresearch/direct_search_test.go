@@ -39,9 +39,11 @@ func TestSearchDirectMultipleHits(t *testing.T) {
 }
 
 func TestDirectSearchWithoutPersistentIndexDoesNotPanic(t *testing.T) {
+	discovery := NewDiscovery(newTestCrawler())
+
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
-	d := &directDiscoverer{seedOrigin: searchOriginUser}
+	d := &directDiscoverer{discovery: discovery, seedOrigin: searchOriginUser}
 	_, err := d.Search(ctx, DirectRequest{Query: "react hooks", MaxResults: 1})
 	if err == nil {
 		t.Fatal("expected canceled search to fail")
@@ -49,8 +51,8 @@ func TestDirectSearchWithoutPersistentIndexDoesNotPanic(t *testing.T) {
 }
 
 func TestDirectIndexFirstFastPath(t *testing.T) {
-	allowLoopbackFetch(t)
-	resetDirectState(1)
+	discovery := NewDiscovery(newTestCrawler())
+	discovery.slots = make(chan struct{}, 1)
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/llms.txt" {
 			fmt.Fprintf(w, "- [Hooks](%s/hooks.md): useEffect runs after render in React\n- [Memo](%s/memo.md): memoizes child renders in React\n", srvURL(r), srvURL(r))
@@ -60,7 +62,7 @@ func TestDirectIndexFirstFastPath(t *testing.T) {
 	}))
 	t.Cleanup(srv.Close)
 
-	d := discovererSeedingURLs(t, srv.URL)
+	d := discovererSeedingURLs(t, discovery, srv.URL)
 	hits, err := d.Search(context.Background(), DirectRequest{Query: "useEffect memo react", MaxResults: 5})
 	if err != nil {
 		t.Fatalf("Search: %v", err)
@@ -71,8 +73,8 @@ func TestDirectIndexFirstFastPath(t *testing.T) {
 }
 
 func TestDirectFrontierProbesIndexCandidatesWithoutExtraModelCall(t *testing.T) {
-	allowLoopbackFetch(t)
-	resetDirectState(1)
+	discovery := NewDiscovery(newTestCrawler())
+	discovery.slots = make(chan struct{}, 1)
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/llms.txt" {
 			fmt.Fprintf(w, "- [Ref](%s/ref.md): useEffect guide for react hooks\n", srvURL(r))
@@ -82,7 +84,7 @@ func TestDirectFrontierProbesIndexCandidatesWithoutExtraModelCall(t *testing.T) 
 	}))
 	t.Cleanup(srv.Close)
 
-	d := discovererSeedingURLs(t, srv.URL)
+	d := discovererSeedingURLs(t, discovery, srv.URL)
 	hits, err := d.Search(context.Background(), DirectRequest{Query: "useEffect react hooks", MaxResults: 1})
 	if err != nil {
 		t.Fatalf("Search: %v", err)
@@ -96,8 +98,8 @@ func TestDirectFrontierProbesIndexCandidatesWithoutExtraModelCall(t *testing.T) 
 // page is in no site index and was never named by the model — the frontier
 // reaches it through an anchor on a page the crawl did find.
 func TestDirectFrontierFollowsAnchors(t *testing.T) {
-	allowLoopbackFetch(t)
-	resetDirectState(1)
+	discovery := NewDiscovery(newTestCrawler())
+	discovery.slots = make(chan struct{}, 1)
 	mux := http.NewServeMux()
 	srv := httptest.NewServer(mux)
 	t.Cleanup(srv.Close)
@@ -116,7 +118,7 @@ func TestDirectFrontierFollowsAnchors(t *testing.T) {
 	})
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(http.StatusOK) })
 
-	d := discovererSeedingURLs(t, srv.URL)
+	d := discovererSeedingURLs(t, discovery, srv.URL)
 	hits, err := d.Search(context.Background(), DirectRequest{Query: "widget frobnicator review", MaxResults: 5})
 	if err != nil {
 		t.Fatalf("Search: %v", err)
@@ -133,15 +135,15 @@ func TestDirectFrontierFollowsAnchors(t *testing.T) {
 }
 
 func TestDirectDirectSeedURLFastPath(t *testing.T) {
-	allowLoopbackFetch(t)
-	resetDirectState(1)
+	discovery := NewDiscovery(newTestCrawler())
+	discovery.slots = make(chan struct{}, 1)
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	}))
 	t.Cleanup(srv.Close)
 
 	seedURL := srv.URL + "/hooks-useEffect-react.md"
-	d := discovererSeedingURLs(t, seedURL)
+	d := discovererSeedingURLs(t, discovery, seedURL)
 	hits, err := d.Search(context.Background(), DirectRequest{Query: "useEffect react hooks", MaxResults: 1})
 	if err != nil {
 		t.Fatalf("Search: %v", err)
@@ -338,7 +340,7 @@ func TestRobotsDisallow(t *testing.T) {
 
 func TestSearchFanOutDirectWhenNoKeys(t *testing.T) {
 	d := &FakeDirectDiscoverer{Hits: []WebHit{{Title: "Doc", URL: "https://example.com/doc", Snippet: "guide", Provider: "direct"}}}
-	result := Search(context.Background(), SearchOptions{
+	result := Search(context.Background(), SearchOptions{Discovery: NewDiscovery(newTestCrawler()),
 		Query:      "useEffect react",
 		Settings:   Settings{EnabledProviders: []string{"direct"}},
 		Discoverer: d,
@@ -350,7 +352,7 @@ func TestSearchFanOutDirectWhenNoKeys(t *testing.T) {
 
 func TestSearchDirectRunsEvenWhenBraveKeyPresent(t *testing.T) {
 	d := &FakeDirectDiscoverer{Hits: []WebHit{{URL: "https://example.com", Provider: "direct"}}}
-	result := Search(context.Background(), SearchOptions{
+	result := Search(context.Background(), SearchOptions{Discovery: NewDiscovery(newTestCrawler()),
 		Query: "test",
 		Settings: Settings{
 			EnabledProviders: []string{"direct"},
@@ -403,7 +405,8 @@ func (f *failIfCalledSummarizer) Summarize(_ context.Context, _, _ string, _ int
 var _ compaction.Summarizer = (*failIfCalledSummarizer)(nil)
 
 func TestVerifyHitsDropsDeadPages(t *testing.T) {
-	allowLoopbackFetch(t)
+	crawler := newTestCrawler()
+
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/ok" {
 			fmt.Fprint(w, "<html><title>Live dead-or-alive guide</title><body>dead live page</body></html>")
@@ -412,7 +415,7 @@ func TestVerifyHitsDropsDeadPages(t *testing.T) {
 		http.NotFound(w, r)
 	}))
 	t.Cleanup(srv.Close)
-	hits, _, _ := verifyHits(context.Background(), []indexCandidate{
+	hits, _, _ := crawler.verifyHits(context.Background(), []indexCandidate{
 		{Title: "Dead", URL: srv.URL + "/dead", Source: "sitemap"},
 		{Title: "Live", URL: srv.URL + "/ok", Source: "sitemap"},
 	}, newQueryScorer("dead live", nil, false, CurrentPeriod()), 5, maxHitsPerHost)
@@ -425,7 +428,8 @@ func TestVerifyHitsDropsDeadPages(t *testing.T) {
 }
 
 func TestVerifyHitsUsesPageMetadata(t *testing.T) {
-	allowLoopbackFetch(t)
+	crawler := newTestCrawler()
+
 	page := `<html><head>
 <title>Dark Mode — Tailwind CSS</title>
 <meta name="description" content="Using variants to style your site in dark mode.">
@@ -437,7 +441,7 @@ func TestVerifyHitsUsesPageMetadata(t *testing.T) {
 	}))
 	t.Cleanup(srv.Close)
 
-	hits, _, _ := verifyHits(context.Background(), []indexCandidate{
+	hits, _, _ := crawler.verifyHits(context.Background(), []indexCandidate{
 		{URL: srv.URL + "/docs/dark-mode", Source: "sitemap"},
 	}, newQueryScorer("tailwind dark mode", nil, false, CurrentPeriod()), 1, maxHitsPerHost)
 	if len(hits) != 1 {
@@ -460,7 +464,8 @@ func TestVerifyHitsUsesPageMetadata(t *testing.T) {
 }
 
 func TestVerifyHitsDropsIrrelevantGuessedPages(t *testing.T) {
-	allowLoopbackFetch(t)
+	crawler := newTestCrawler()
+
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "text/html")
 		fmt.Fprint(w, "<html><title>premium domain for sale</title><body>Buy this domain today.</body></html>")
@@ -470,7 +475,7 @@ func TestVerifyHitsDropsIrrelevantGuessedPages(t *testing.T) {
 	// LLM-guessed URL, live page, but the content never mentions the query:
 	// the wildcard-200 parked-domain case.
 	scorer := newQueryScorer("quantum flux capacitors", nil, false, CurrentPeriod())
-	hits, _, _ := verifyHits(context.Background(), []indexCandidate{
+	hits, _, _ := crawler.verifyHits(context.Background(), []indexCandidate{
 		{URL: srv.URL + "/guides/dark-mode", Source: "llm_seed", Title: "Dark mode", Notes: "dark mode guide"},
 	}, scorer, 1, maxHitsPerHost)
 	if len(hits) != 0 {
@@ -478,7 +483,7 @@ func TestVerifyHitsDropsIrrelevantGuessedPages(t *testing.T) {
 	}
 
 	// Same page with index-published provenance still drops when content is irrelevant.
-	hits, _, _ = verifyHits(context.Background(), []indexCandidate{
+	hits, _, _ = crawler.verifyHits(context.Background(), []indexCandidate{
 		{URL: srv.URL + "/guides/dark-mode", Source: "sitemap"},
 	}, scorer, 1, maxHitsPerHost)
 	if len(hits) != 0 {
@@ -487,7 +492,8 @@ func TestVerifyHitsDropsIrrelevantGuessedPages(t *testing.T) {
 }
 
 func TestVerifyHitsContentRerank(t *testing.T) {
-	allowLoopbackFetch(t)
+	crawler := newTestCrawler()
+
 	// The hub page mentions "wal" once in the body; the specific page carries
 	// it in title and headings. Crawl rank puts the hub first (better URL
 	// match) — the content re-rank must flip them.
@@ -504,7 +510,7 @@ func TestVerifyHitsContentRerank(t *testing.T) {
 	}))
 	t.Cleanup(srv.Close)
 
-	hits, _, _ := verifyHits(context.Background(), []indexCandidate{
+	hits, _, _ := crawler.verifyHits(context.Background(), []indexCandidate{
 		{URL: srv.URL + "/wal-docs-index", Source: "sitemap"},
 		{URL: srv.URL + "/write-ahead-log", Source: "sitemap"},
 	}, newQueryScorer("wal checkpoint", nil, false, CurrentPeriod()), 2, maxHitsPerHost)
@@ -517,7 +523,8 @@ func TestVerifyHitsContentRerank(t *testing.T) {
 }
 
 func TestVerifyHitsHostDiversityCap(t *testing.T) {
-	allowLoopbackFetch(t)
+	crawler := newTestCrawler()
+
 	page := func(title string) string {
 		return fmt.Sprintf("<html><title>%s</title><body>widget guide content</body></html>", title)
 	}
@@ -538,7 +545,7 @@ func TestVerifyHitsHostDiversityCap(t *testing.T) {
 	}
 	picks = append(picks, indexCandidate{URL: other.URL + "/guide", Source: "sitemap"})
 
-	hits, _, _ := verifyHits(context.Background(), picks, newQueryScorer("widget guide", nil, false, CurrentPeriod()), 4, maxHitsPerHost)
+	hits, _, _ := crawler.verifyHits(context.Background(), picks, newQueryScorer("widget guide", nil, false, CurrentPeriod()), 4, maxHitsPerHost)
 	if len(hits) != 4 {
 		t.Fatalf("hits = %+v", hits)
 	}
@@ -554,7 +561,8 @@ func TestVerifyHitsHostDiversityCap(t *testing.T) {
 }
 
 func TestVerifyHitsHostCapDropsNotBackfills(t *testing.T) {
-	allowLoopbackFetch(t)
+	crawler := newTestCrawler()
+
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/html")
 		fmt.Fprintf(w, "<html><title>Widget guide %s</title><body>widget guide content</body></html>", r.URL.Path)
@@ -567,21 +575,22 @@ func TestVerifyHitsHostCapDropsNotBackfills(t *testing.T) {
 	}
 	// One host, room for five: the cap must shrink the result set, not defer
 	// the excess into it.
-	hits, _, _ := verifyHits(context.Background(), picks, newQueryScorer("widget guide", nil, false, CurrentPeriod()), 5, maxHitsPerHost)
+	hits, _, _ := crawler.verifyHits(context.Background(), picks, newQueryScorer("widget guide", nil, false, CurrentPeriod()), 5, maxHitsPerHost)
 	if len(hits) != maxHitsPerHost {
 		t.Fatalf("hits = %d want %d (capped, no backfill)", len(hits), maxHitsPerHost)
 	}
 }
 
 func TestVerifyHitsAnnotatesThinJSPage(t *testing.T) {
-	allowLoopbackFetch(t)
+	crawler := newTestCrawler()
+
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "text/html")
 		fmt.Fprint(w, `<html><head><title>Widget guide</title></head><body><div id="app"></div></body></html>`)
 	}))
 	t.Cleanup(srv.Close)
 
-	hits, _, _ := verifyHits(context.Background(), []indexCandidate{
+	hits, _, _ := crawler.verifyHits(context.Background(), []indexCandidate{
 		{URL: srv.URL + "/app", Source: "sitemap"},
 	}, newQueryScorer("widget guide", nil, false, CurrentPeriod()), 1, maxHitsPerHost)
 	if len(hits) != 1 {
@@ -593,7 +602,8 @@ func TestVerifyHitsAnnotatesThinJSPage(t *testing.T) {
 }
 
 func TestProbeUsesReadabilityContentNotChrome(t *testing.T) {
-	allowLoopbackFetch(t)
+	crawler := newTestCrawler()
+
 	// Nav chrome carries a query token and a wordy promo anchor; only the
 	// article's sentence and the article's anchor may surface.
 	page := `<html><head><title>Widget frobnicator review</title></head><body>
@@ -612,7 +622,7 @@ func TestProbeUsesReadabilityContentNotChrome(t *testing.T) {
 	t.Cleanup(srv.Close)
 
 	scorer := newQueryScorer("widget frobnicator review", nil, false, CurrentPeriod())
-	hits, expand, _ := verifyHits(context.Background(), []indexCandidate{
+	hits, expand, _ := crawler.verifyHits(context.Background(), []indexCandidate{
 		{URL: srv.URL + "/review", Source: "sitemap"},
 	}, scorer, 1, maxHitsPerHost)
 	if len(hits) != 1 {
@@ -637,8 +647,8 @@ func TestProbeUsesReadabilityContentNotChrome(t *testing.T) {
 }
 
 func TestDirectSitePinnedQueryUsesMemoryOnlyChannels(t *testing.T) {
-	allowLoopbackFetch(t)
-	resetDirectState(1)
+	discovery := NewDiscovery(newTestCrawler())
+	discovery.slots = make(chan struct{}, 1)
 
 	var llms strings.Builder
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -654,7 +664,7 @@ func TestDirectSitePinnedQueryUsesMemoryOnlyChannels(t *testing.T) {
 		fmt.Fprintf(&llms, "- [Guide %d](%s/guide%d.md): widget guide part %d\n", i, srv.URL, i, i)
 	}
 
-	d := &directDiscoverer{summarizer: &failIfCalledSummarizer{}}
+	d := &directDiscoverer{discovery: discovery, summarizer: &failIfCalledSummarizer{}}
 	hits, err := d.Search(context.Background(), DirectRequest{Query: fmt.Sprintf("site:%s widget guide", srv.URL), MaxResults: 5})
 	if err != nil {
 		t.Fatalf("Search: %v", err)
@@ -666,8 +676,8 @@ func TestDirectSitePinnedQueryUsesMemoryOnlyChannels(t *testing.T) {
 }
 
 func TestDirectLinkExpansionReachesUnseededHost(t *testing.T) {
-	allowLoopbackFetch(t)
-	resetDirectState(1)
+	discovery := NewDiscovery(newTestCrawler())
+	discovery.slots = make(chan struct{}, 1)
 
 	review := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "text/html")
@@ -692,7 +702,7 @@ widget frobnicator review coverage.
 	}))
 	t.Cleanup(news.Close)
 
-	d := discovererSeedingURLs(t, news.URL)
+	d := discovererSeedingURLs(t, discovery, news.URL)
 	hits, err := d.Search(context.Background(), DirectRequest{Query: "widget frobnicator review", MaxResults: 3})
 	if err != nil {
 		t.Fatalf("Search: %v", err)
@@ -711,10 +721,12 @@ widget frobnicator review coverage.
 }
 
 func TestSeedPlanCacheSkipsRepeatLLMCalls(t *testing.T) {
-	resetDirectState(1)
+	discovery := NewDiscovery(newTestCrawler())
+
+	discovery.slots = make(chan struct{}, 1)
 
 	first := &scriptedSummarizer{responses: []string{`{"seeds":["https://example.com"]}`}}
-	d := &directDiscoverer{summarizer: first, seedSharedProvider: true}
+	d := &directDiscoverer{discovery: discovery, summarizer: first, seedSharedProvider: true}
 	plan, err := d.pickSeedsCached(context.Background(), "useEffect hooks cache", CurrentPeriod(), 8, nil, nil)
 	if err != nil {
 		t.Fatalf("first pickSeedsCached: %v", err)
@@ -729,7 +741,7 @@ func TestSeedPlanCacheSkipsRepeatLLMCalls(t *testing.T) {
 	// Same query modulo case/whitespace, fresh discoverer with nothing
 	// scripted: only the plan cache can produce seeds.
 	second := &scriptedSummarizer{}
-	d2 := &directDiscoverer{summarizer: second, seedSharedProvider: true}
+	d2 := &directDiscoverer{discovery: discovery, summarizer: second, seedSharedProvider: true}
 	plan2, err := d2.pickSeedsCached(context.Background(), "useEffect Hooks   cache", CurrentPeriod(), 8, nil, nil)
 	if err != nil {
 		t.Fatalf("second pickSeedsCached: %v", err)
@@ -743,11 +755,12 @@ func TestSeedPlanCacheSkipsRepeatLLMCalls(t *testing.T) {
 }
 
 func TestSeenMemoryPenalizesRepeats(t *testing.T) {
-	resetDirectMemory()
-	recordSeen("scope-a", []WebHit{{URL: "https://ex.com/seen"}})
+	discovery := NewDiscovery(newTestCrawler())
+
+	discovery.recordSeen("scope-a", []WebHit{{URL: "https://ex.com/seen"}})
 
 	scorer := newQueryScorer("widget guide", nil, false, CurrentPeriod())
-	scorer.markSeen(seenURLs("scope-a"))
+	scorer.markSeen(discovery.seenURLs("scope-a"))
 	ranked := rankCandidates([]indexCandidate{
 		{Title: "Widget guide", URL: "https://ex.com/seen"},
 		{Title: "Widget guide", URL: "https://ex.com/fresh"},
@@ -756,14 +769,14 @@ func TestSeenMemoryPenalizesRepeats(t *testing.T) {
 		t.Fatalf("ranked = %+v want the unseen page first", ranked)
 	}
 	// Other scopes are unaffected.
-	if urls := seenURLs("scope-b"); len(urls) != 0 {
+	if urls := discovery.seenURLs("scope-b"); len(urls) != 0 {
 		t.Fatalf("scope-b seen = %+v want empty", urls)
 	}
 }
 
 func TestSiteIndexCacheReusedAcrossQueries(t *testing.T) {
-	allowLoopbackFetch(t)
-	resetDirectState(1)
+	discovery := NewDiscovery(newTestCrawler())
+	discovery.slots = make(chan struct{}, 1)
 
 	llmsFetches := 0
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -777,7 +790,7 @@ func TestSiteIndexCacheReusedAcrossQueries(t *testing.T) {
 	t.Cleanup(srv.Close)
 
 	for i := 0; i < 3; i++ {
-		d := discovererSeedingURLs(t, srv.URL)
+		d := discovererSeedingURLs(t, discovery, srv.URL)
 		hits, err := d.Search(context.Background(), DirectRequest{Query: "useEffect react", MaxResults: 3})
 		if err != nil || len(hits) == 0 {
 			t.Fatalf("query %d: hits = %+v err = %v", i, hits, err)
@@ -792,8 +805,8 @@ func TestSiteIndexCacheReusedAcrossQueries(t *testing.T) {
 // ends with fewer content-bearing hits than asked records its outcome, which
 // queues the query for the scheduled starved re-warm.
 func TestDirectSearchRecordsOutcomeForStarvedQuery(t *testing.T) {
-	allowLoopbackFetch(t)
-	resetDirectState(1)
+	discovery := NewDiscovery(newTestCrawler())
+	discovery.slots = make(chan struct{}, 1)
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/llms.txt" {
 			fmt.Fprintf(w, "- [Hooks](%s/hooks.md): useEffect runs after render in React\n", srvURL(r))
@@ -804,7 +817,7 @@ func TestDirectSearchRecordsOutcomeForStarvedQuery(t *testing.T) {
 	t.Cleanup(srv.Close)
 
 	index := testIndex(t)
-	d := discovererSeedingURLsWithIndex(t, index, srv.URL)
+	d := discovererSeedingURLsWithIndex(t, discovery, index, srv.URL)
 	if _, err := d.Search(context.Background(), DirectRequest{Query: "useEffect react hooks", MaxResults: 10}); err != nil {
 		t.Fatalf("Search: %v", err)
 	}

@@ -6,7 +6,6 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/lycaon/lycaon/internal/repoinfo"
 	"github.com/lycaon/lycaon/internal/settingsoverlay"
 	"github.com/lycaon/lycaon/internal/testutil"
 )
@@ -25,7 +24,7 @@ func TestAnalyzeSkipsLycaonSandboxes(t *testing.T) {
 	}
 
 	p := repotest.NewProvider(t)
-	brief, err := repoinfo.AwaitBrief(t.Context(), p, dir)
+	brief, err := repotest.AwaitBrief(t.Context(), p, dir)
 	testutil.FailErr(t, "AwaitBrief", err)
 	if brief.FileCount != 1 {
 		t.Fatalf("FileCount = %d want 1 (overlay sandboxes skipped)", brief.FileCount)

@@ -10,6 +10,7 @@ import (
 	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/prompts/promptstest"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/testutil/llmtest"
 	"github.com/lycaon/lycaon/internal/tokenest"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -27,7 +28,7 @@ func TestCompactUnderBudget(t *testing.T) {
 	cfg := testCompactionConfig()
 	cfg.HardCeilingTokens = 10000
 	cfg.TargetTokens = 8000
-	c := NewSimpleCompactor(cfg, MockSummarizer{Text: "summary"})
+	c := NewSimpleCompactor(cfg, llmtest.Summarizer{Structured: SummaryFormatRequested, Text: "summary"})
 	msgs := []ContextMessage{{ID: "1", Role: string(api.MessageRoleUser), Content: "short"}}
 	out, report, err := c.Compact(context.Background(), SessionInfo{ID: "s1"}, msgs, cfg.TargetTokens)
 	testutil.FailErr(t, "c.Compact failed", err)
@@ -62,7 +63,7 @@ func TestFindOversizedChunks(t *testing.T) {
 func TestChunkCompactPreservesOverlayPromoteAssessment(t *testing.T) {
 	cfg := testCompactionConfig()
 	cfg.ChunkTargetTokens = 50
-	compactor := NewChunkCompactor(cfg, MockSummarizer{Text: "summarized away"})
+	compactor := NewChunkCompactor(cfg, llmtest.Summarizer{Structured: SummaryFormatRequested, Text: "summarized away"})
 	payload := `{"job_id":"job-1","spill_path":"promote-spills/job-1.json","conflict_digest":[{"path":"a.go","summary":["` + strings.Repeat("L1-2: primary: p | branch: b; ", 400) + `"]}]}`
 	chunk := ContentChunk{
 		MessageIndex: 0,
@@ -88,7 +89,7 @@ func TestChunkCompactInPlace(t *testing.T) {
 	guidance.SetGuidanceRenderer(promptstest.GuidanceRenderer(t))
 	cfg := testCompactionConfig()
 	cfg.ChunkTokenThreshold = 100
-	compactor := NewChunkCompactor(cfg, MockSummarizer{Text: "errors in main.go"})
+	compactor := NewChunkCompactor(cfg, llmtest.Summarizer{Structured: SummaryFormatRequested, Text: "errors in main.go"})
 	content := strings.Repeat("line\n", 500)
 	chunk := ContentChunk{Class: testChunkDiet("", ""), MessageIndex: 0, Kind: ChunkKindUserPaste, Tokens: tokenest.EstimateDefault(content)}
 	out, meta, err := compactor.CompactChunk(context.Background(), chunk, content)
@@ -114,7 +115,7 @@ func TestChunkPassAvoidsSessionSummary(t *testing.T) {
 		{ID: "a1", Role: string(api.MessageRoleAssistant), Content: "ack"},
 		{ID: "u2", Role: string(api.MessageRoleUser), Content: "next"},
 	}
-	c := NewSimpleCompactor(cfg, MockSummarizer{Text: "short summary"})
+	c := NewSimpleCompactor(cfg, llmtest.Summarizer{Structured: SummaryFormatRequested, Text: "short summary"})
 	out, report, err := c.Compact(context.Background(), SessionInfo{ID: "s1"}, msgs, cfg.TargetTokens)
 	testutil.FailErr(t, "c.Compact failed", err)
 	if report.SessionCompacted {
@@ -141,7 +142,7 @@ func TestChunkOrderLargestFirst(t *testing.T) {
 		{ID: "small", Role: string(api.MessageRoleUser), Content: small},
 		{ID: "large", Role: string(api.MessageRoleUser), Content: large},
 	}
-	c := NewSimpleCompactor(cfg, MockSummarizer{Text: "x"})
+	c := NewSimpleCompactor(cfg, llmtest.Summarizer{Structured: SummaryFormatRequested, Text: "x"})
 	out, report, err := c.Compact(context.Background(), SessionInfo{ID: "s1"}, msgs, cfg.TargetTokens)
 	testutil.FailErr(t, "c.Compact failed", err)
 	if report.ChunksCompacted != 1 {
@@ -220,7 +221,7 @@ func TestWorkerChildPromptTailChunkCompaction(t *testing.T) {
 		{ID: "t3", Role: string(api.MessageRoleTool), ToolName: "git_diff", Content: readB},
 		{ID: "a2", Role: string(api.MessageRoleAssistant), Content: "aged past hot"},
 	}
-	c := NewSimpleCompactor(cfg, MockSummarizer{Text: "orientation summary"})
+	c := NewSimpleCompactor(cfg, llmtest.Summarizer{Structured: SummaryFormatRequested, Text: "orientation summary"})
 	out, n := c.CompactOversizedChunksOnly(context.Background(), SessionInfo{}, msgs)
 	if n == 0 {
 		t.Fatal("worker-shaped history must compact aged oversized tool results")
@@ -237,7 +238,7 @@ func TestWorkerChildSessionCompaction(t *testing.T) {
 		{ID: "u1", Role: string(api.MessageRoleUser), Content: strings.Repeat("evidence line\n", 6000)},
 		{ID: "a1", Role: string(api.MessageRoleAssistant), Content: strings.Repeat("anchored output\n", 6000)},
 	}
-	c := NewSimpleCompactor(cfg, MockSummarizer{Text: "compacted worker context"})
+	c := NewSimpleCompactor(cfg, llmtest.Summarizer{Structured: SummaryFormatRequested, Text: "compacted worker context"})
 	out, report, err := c.Compact(context.Background(), SessionInfo{}, msgs, 100)
 	testutil.FailErr(t, "Compact", err)
 	if !report.SessionCompacted && report.ChunksCompacted == 0 && len(out) == len(msgs) && out[0].Content == msgs[0].Content {
@@ -286,7 +287,7 @@ func TestCoordinatorSpillIndexKeepsLiteralExcerpt(t *testing.T) {
 	}
 	// The summarizer must never run for a literal tool result — a paraphrase is the
 	// one transform the model can't invert.
-	c := NewSimpleCompactor(cfg, MockSummarizer{Text: "PARAPHRASE THAT MUST NOT APPEAR"})
+	c := NewSimpleCompactor(cfg, llmtest.Summarizer{Structured: SummaryFormatRequested, Text: "PARAPHRASE THAT MUST NOT APPEAR"})
 	out, n := c.CompactOversizedChunksOnly(context.Background(), SessionInfo{ID: "coord-1"}, msgs)
 	if n != 1 {
 		t.Fatalf("compacted = %d want 1", n)
@@ -324,7 +325,7 @@ func TestCompactSessionSummaryAlignsToolBoundary(t *testing.T) {
 		{ID: "5", Role: string(api.MessageRoleAssistant), Content: "recent", ToolCalls: []api.ToolCall{{ID: "tc2", Name: "web_search"}}},
 		{ID: "6", ToolCallID: "tc2", Role: string(api.MessageRoleTool), Content: `{"ok":true}`},
 	}
-	c := NewSimpleCompactor(cfg, MockSummarizer{Text: "compacted summary"})
+	c := NewSimpleCompactor(cfg, llmtest.Summarizer{Structured: SummaryFormatRequested, Text: "compacted summary"})
 	out, report, err := c.Compact(context.Background(), SessionInfo{ID: "s1"}, msgs, cfg.TargetTokens)
 	testutil.FailErr(t, "c.Compact failed", err)
 	if !report.SessionCompacted {
@@ -376,7 +377,7 @@ func TestSummaryFailurePublishesRecoverableReferences(t *testing.T) {
 	}
 }
 
-var _ ContextCompactor = NewSimpleCompactor(DefaultCompactionConfig(), MockSummarizer{})
+var _ ContextCompactor = NewSimpleCompactor(DefaultCompactionConfig(), llmtest.Summarizer{Structured: SummaryFormatRequested})
 
 type failSessionSummarizer struct{}
 
@@ -438,7 +439,7 @@ func TestCompactionCheckpointKeepsCurrentRequestCanonical(t *testing.T) {
 		t.Fatalf("checkpoint duplicated the pinned user request: %q", got)
 	}
 	messages := []ContextMessage{{ID: "request-1", Role: string(api.MessageRoleUser), Content: "Review these logs exactly as scoped."}}
-	compacted, _, err := NewSimpleCompactor(testCompactionConfig(), MockSummarizer{}).Compact(t.Context(), info, messages, 10000)
+	compacted, _, err := NewSimpleCompactor(testCompactionConfig(), llmtest.Summarizer{Structured: SummaryFormatRequested}).Compact(t.Context(), info, messages, 10000)
 	testutil.FailErr(t, "pin the current user request", err)
 	if len(compacted) != 1 || !compacted[0].ContextPinned || compacted[0].Content != messages[0].Content || messages[0].ContextPinned {
 		t.Fatalf("request pin changed transcript content or input: %+v / %+v", compacted, messages)
@@ -547,7 +548,7 @@ func testChunkDiet(tool, source string) MessageDietClass {
 func TestCompactChunkRequiresEligibleClassification(t *testing.T) {
 	cfg := testCompactionConfig()
 	cfg.ChunkTargetTokens = 10
-	compactor := NewChunkCompactor(cfg, MockSummarizer{Err: errors.New("unexpected summary")})
+	compactor := NewChunkCompactor(cfg, llmtest.Summarizer{Structured: SummaryFormatRequested, Err: errors.New("unexpected summary")})
 	content := strings.Repeat("protected instructions\n", 100)
 	for _, eligibility := range []string{"", DietEligibilityHot, DietEligibilityPinned} {
 		t.Run(eligibility, func(t *testing.T) {

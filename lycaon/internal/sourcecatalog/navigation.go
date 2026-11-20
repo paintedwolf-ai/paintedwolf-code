@@ -35,14 +35,14 @@ func (c *Directories) OpenNavigation(ctx context.Context, projectID string, root
 	if err != nil {
 		return nil, err
 	}
-	return openNavigation(ctx, store, headGeneration)
+	return openNavigation(ctx, store)
 }
 
-func openNavigation(ctx context.Context, store *indexStore, ceiling int64) (*Navigation, error) {
+func openNavigation(ctx context.Context, store *indexStore) (*Navigation, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
-	pin, err := store.retainGeneration(ceiling, ceiling == headGeneration)
+	pin, err := store.retainGeneration(headGeneration, true)
 	if err != nil {
 		return nil, err
 	}

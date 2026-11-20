@@ -132,7 +132,7 @@ func (s *Transcript) messageAnchorOrd(w http.ResponseWriter, r *http.Request, se
 		s.responses.InvalidQueryParam(w, param, "must be a UUID")
 		return 0, false
 	}
-	msg, err := s.Store.GetMessage(r.Context(), sessionID, messageID)
+	msg, err := s.TranscriptStore.GetMessage(r.Context(), sessionID, messageID)
 	switch {
 	case errors.Is(err, store.ErrMessageNotFound):
 		s.responses.Fail(w, wire.ApiErrorCodeMessageNotFound, "That message is not in this chat.")

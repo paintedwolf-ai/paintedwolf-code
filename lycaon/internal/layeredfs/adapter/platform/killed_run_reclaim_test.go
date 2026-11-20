@@ -16,6 +16,7 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/layeredfs/adapter"
+	"github.com/lycaon/lycaon/internal/layeredfs/adapter/adaptertest"
 	"github.com/lycaon/lycaon/internal/layeredfs/adapter/platform"
 	"github.com/lycaon/lycaon/internal/testutil"
 )
@@ -96,7 +97,7 @@ func holdMountUntilKilled(t *testing.T, base string) {
 func selectMountedAdapter(t *testing.T) adapter.Adapter {
 	t.Helper()
 	selector := platform.NewSelector(platform.Config{Confinement: availableConfinement{}})
-	selector.BudgetFor = adapter.ZeroBudget
+	selector.BudgetFor = adaptertest.ZeroBudget
 	choice, err := selector.Choose(t.Context(), adapter.ChooseRequest{Probe: adapter.ProbeConfig{RuntimeDir: t.TempDir()}})
 	testutil.FailErr(t, "select adapter", err)
 	if choice.Adapter.Facts().PreparationKind != adapter.PreparationMounted {

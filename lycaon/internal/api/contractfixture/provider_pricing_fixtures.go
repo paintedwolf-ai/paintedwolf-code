@@ -11,30 +11,17 @@ import (
 	"github.com/lycaon/lycaon/internal/configlayout"
 	"github.com/lycaon/lycaon/internal/cost"
 	"github.com/lycaon/lycaon/internal/cost/costtest"
-	"github.com/lycaon/lycaon/internal/modelfeed"
+	"github.com/lycaon/lycaon/internal/modelfeed/modelfeedtest"
 	"github.com/lycaon/lycaon/internal/pricing"
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/testutil"
 )
 
-type ApiStubFeed struct {
-	Doc *modelfeed.Document
-}
-
-func (s *ApiStubFeed) Document(context.Context) (*modelfeed.Document, error) { return s.Doc, nil }
-
-func (s *ApiStubFeed) Refresh(context.Context) (*modelfeed.Document, error) { return s.Doc, nil }
-
-func (s *ApiStubFeed) Snapshot() (*modelfeed.Document, string, bool) {
-	return s.Doc, string(pricing.StatusOK), s.Doc != nil
-}
-
 func PricingNoNetworkFetch(context.Context, string) ([]byte, error) {
 	return nil, errors.New("no network in pricing settings tests")
 }
 
-// withTestPricingHost serves pricing through a host over the settings pricing store.
-
+// WithTestPricingHost serves pricing through the settings store.
 func WithTestPricingHost(t *testing.T) TestDeps {
 	t.Helper()
 	return func(d *hostapi.Dependencies) {
@@ -44,15 +31,13 @@ func WithTestPricingHost(t *testing.T) TestDeps {
 		mem := costtest.NewTracker(t, cost.NoopPricer{})
 		body, err := os.ReadFile(filepath.Join(configlayout.FindModuleRoot(), "internal", "pricing", "testdata", "models-dev", "api.json"))
 		testutil.FailErr(t, "read models-dev fixture", err)
-		doc, err := modelfeed.ParseDocument(body)
-		testutil.FailErr(t, "ParseDocument", err)
 		host := &settings.PricingHost{
 			Store:     d.Core.Settings.Pricing,
 			Catalog:   pricing.SourcesConfig{},
 			CacheDir:  filepath.Join(t.TempDir(), "pricing-cache"),
 			Tracker:   mem,
 			GetBytes:  PricingNoNetworkFetch,
-			ModelFeed: &ApiStubFeed{Doc: doc},
+			ModelFeed: modelfeedtest.Publish(t, body),
 		}
 		// Catalog rows come from the store; registry only needs Sources when tracking turns on.
 		for _, ent := range d.Core.Settings.Pricing.Catalog() {

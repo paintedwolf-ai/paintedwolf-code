@@ -2,6 +2,7 @@ package conditions_test
 
 import (
 	"context"
+	"github.com/lycaon/lycaon/internal/testutil/conditionstest"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/conditions"
@@ -10,7 +11,7 @@ import (
 )
 
 func TestCoreWorkflowRunPredicates(t *testing.T) {
-	reg, err := conditions.NewDefaultRegistry(conditions.TestRegistryDeps())
+	reg, err := conditions.NewDefaultRegistry(conditionstest.Dependencies())
 	testutil.FailErr(t, "build conditions registry", err)
 	run := &api.WorkflowRun{Status: api.WorkflowRunStatusRunning, CurrentPhase: "research"}
 	vars := map[string]any{}
@@ -34,7 +35,7 @@ func TestCoreWorkflowRunPredicates(t *testing.T) {
 }
 
 func TestCoreUserFeedbackPredicates(t *testing.T) {
-	reg, err := conditions.NewDefaultRegistry(conditions.TestRegistryDeps())
+	reg, err := conditions.NewDefaultRegistry(conditionstest.Dependencies())
 	testutil.FailErr(t, "build conditions registry", err)
 	vars := map[string]any{
 		"user_feedback": map[string]any{
@@ -59,7 +60,7 @@ func TestCoreUserFeedbackPredicates(t *testing.T) {
 }
 
 func TestCoreUserDecisionPredicates(t *testing.T) {
-	reg, err := conditions.NewDefaultRegistry(conditions.TestRegistryDeps())
+	reg, err := conditions.NewDefaultRegistry(conditionstest.Dependencies())
 	testutil.FailErr(t, "build conditions registry", err)
 	vars := map[string]any{
 		"user_decision": map[string]any{
@@ -88,7 +89,7 @@ func TestCoreUserDecisionPredicates(t *testing.T) {
 }
 
 func TestTopologyStageCompleteBind(t *testing.T) {
-	reg, err := conditions.NewDefaultRegistry(conditions.TestRegistryDeps())
+	reg, err := conditions.NewDefaultRegistry(conditionstest.Dependencies())
 	testutil.FailErr(t, "build conditions registry", err)
 	vars := map[string]any{
 		"topology_stages": map[string]any{
@@ -111,7 +112,7 @@ func TestTopologyStageCompleteBind(t *testing.T) {
 }
 
 func TestParallelStagesCompleteBind(t *testing.T) {
-	reg, err := conditions.NewDefaultRegistry(conditions.TestRegistryDeps())
+	reg, err := conditions.NewDefaultRegistry(conditionstest.Dependencies())
 	testutil.FailErr(t, "build conditions registry", err)
 	vars := map[string]any{
 		"topology_stages": map[string]any{
@@ -130,7 +131,7 @@ func TestParallelStagesCompleteBind(t *testing.T) {
 }
 
 func TestAgentIsParameterized(t *testing.T) {
-	reg, err := conditions.NewDefaultRegistry(conditions.TestRegistryDeps())
+	reg, err := conditions.NewDefaultRegistry(conditionstest.Dependencies())
 	testutil.FailErr(t, "build conditions registry", err)
 	ec := conditions.EvalContext{
 		ToolName: "task",
@@ -143,7 +144,7 @@ func TestAgentIsParameterized(t *testing.T) {
 }
 
 func TestPostureIsParameterized(t *testing.T) {
-	reg, err := conditions.NewDefaultRegistry(conditions.TestRegistryDeps())
+	reg, err := conditions.NewDefaultRegistry(conditionstest.Dependencies())
 	testutil.FailErr(t, "build conditions registry", err)
 	ec := conditions.EvalContext{SessionPosture: api.SessionPostureSpec}
 	ok, err := reg.Evaluate("posture_is:spec", ec)

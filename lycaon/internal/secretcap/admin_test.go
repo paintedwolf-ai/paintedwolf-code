@@ -76,7 +76,7 @@ func TestAgentUseDeadlineIsSetClearedAndRevivable(t *testing.T) {
 	})
 	testutil.FailErr(t, "generate", err)
 
-	service.now = func() time.Time { return time.Date(2026, 8, 31, 12, 5, 0, 0, time.UTC) }
+	service.repository.now = func() time.Time { return time.Date(2026, 8, 31, 12, 5, 0, 0, time.UTC) }
 	listed, err := service.ListProject(t.Context(), testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "list after lapse", err)
 	if len(listed) != 1 || listed[0].State != StateAgentUseExpired {

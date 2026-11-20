@@ -7,7 +7,6 @@ import (
 	"github.com/lycaon/lycaon/config"
 	"github.com/lycaon/lycaon/internal/extpacks"
 	"github.com/lycaon/lycaon/internal/hostctx"
-	"github.com/lycaon/lycaon/internal/session"
 	"github.com/lycaon/lycaon/internal/workflow/catalog"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 	"github.com/lycaon/lycaon/internal/workflow/lifecycle"
@@ -17,7 +16,7 @@ import (
 
 type Ambient struct {
 	Runs     runstate.RunsRepository
-	Sessions session.Store
+	Sessions SessionReader
 	Resolver *catalog.Resolver
 	Starts   *lifecycle.Admission
 }

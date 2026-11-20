@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/commandsurface"
+	"github.com/lycaon/lycaon/internal/commandsurface/commandsurfacetest"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 )
@@ -45,7 +46,7 @@ func TestGeneratedProgramsAreDeterministicAndBounded(t *testing.T) {
 				t.Fatal("program exceeds catalog byte limit")
 			}
 			testutil.FailErr(t, "validate generated case", Validate([]Case{c}))
-			parsed, err := commandsurface.ParseProgram([]byte(c.Program), commandsurface.ParseOptions{SourceName: c.ID})
+			parsed, err := commandsurfacetest.Admit(t, []byte(c.Program), commandsurface.ParseOptions{SourceName: c.ID})
 			testutil.FailErr(t, "parse generated program "+c.ID+" ("+c.Program+")", err)
 			testutil.FailErr(t, "close generated program", parsed.Close())
 			for _, reduced := range p.ReductionCandidates() {

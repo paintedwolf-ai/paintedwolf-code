@@ -6,6 +6,7 @@ import (
 	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/llm/failure"
 	"github.com/lycaon/lycaon/internal/llm/modelcall"
+	"github.com/lycaon/lycaon/internal/llm/policytest"
 	"github.com/lycaon/lycaon/internal/llm/providerprofile"
 	"github.com/lycaon/lycaon/internal/prompts/promptstest"
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -30,7 +31,7 @@ func (answeringDecider) Available() bool { return true }
 
 func TestPreflightReportsMissingConfiguredRoleProvidersWithoutDiscovery(t *testing.T) {
 	t.Setenv(configdir.EnvConfigDir, t.TempDir())
-	policy := llm.NewInMemoryPolicyStore(llm.ModelPolicy{
+	policy := policytest.New(t, llm.ModelPolicy{
 		Coordinator: llm.ModelRef{ProviderID: "removed-coordinator", Model: "fixture"},
 		Lite:        llm.ModelRef{ProviderID: "removed-lite", Model: "fixture"},
 		AgentPool:   llm.AgentPool{Models: []llm.ModelRef{{ProviderID: "removed-worker", Model: "fixture"}}},
@@ -94,7 +95,7 @@ func TestPreflightReflectsObservedUtilityFailureAndRecoveryWithoutChangingProvid
 	registry.SetOutboundSecretScreen(llm.NewModelSecretScreen(nil, nil))
 	testutil.FailErr(t, "register scripted utility transport", registry.Register(silentUtilityProvider{}))
 	ref := llm.ModelRef{ProviderID: "scripted-utility", Model: "scripted-model"}
-	service := &llm.Service{Registry: registry, Policy: llm.NewInMemoryPolicyStore(llm.ModelPolicy{Coordinator: ref, Lite: ref}), Utility: llm.NewUtilityPlane()}
+	service := &llm.Service{Registry: registry, Policy: policytest.New(t, llm.ModelPolicy{Coordinator: ref, Lite: ref}), Utility: llm.NewUtilityPlane()}
 	probes := New(service, answeringDecider{}, userpath.Snapshot{}).Environment()
 	if probes.ProviderCount() != 1 || probes.MissingRoleProviders() != nil {
 		t.Fatal("configured utility provider was reported missing")

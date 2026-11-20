@@ -26,7 +26,7 @@ func TestCommitBlueprintApprovalSealsEvent(t *testing.T) {
 	testdbseed.InsertSessionWithRoot(t, sqlDB, "sess-1", testdbseed.DefaultProjectID, projectDir)
 
 	store := workflowpersistence.New(sqlDB)
-	store.Transactions.SetAuthzRecorder(authzcontext.SQLRecorder(sqlDB))
+	store.Transactions.SetAuthzRecorder(authzcontext.LedgerRecorder{Ledger: &authzcontext.Ledger{Store: authzcontext.NewSQLStore(sqlDB)}})
 	run := &api.WorkflowRun{
 		SessionID: "sess-1", ProjectID: testdbseed.DefaultProjectID,
 		WorkflowID: "implement", WorkflowVersion: "1",
@@ -79,7 +79,7 @@ func TestCommitBlueprintApprovalClearsPriorEndOfGrant(t *testing.T) {
 	testdbseed.InsertSessionWithRoot(t, sqlDB, "sess-1", testdbseed.DefaultProjectID, projectDir)
 
 	store := workflowpersistence.New(sqlDB)
-	store.Transactions.SetAuthzRecorder(authzcontext.SQLRecorder(sqlDB))
+	store.Transactions.SetAuthzRecorder(authzcontext.LedgerRecorder{Ledger: &authzcontext.Ledger{Store: authzcontext.NewSQLStore(sqlDB)}})
 	run := &api.WorkflowRun{
 		SessionID: "sess-1", ProjectID: testdbseed.DefaultProjectID,
 		WorkflowID: "implement", WorkflowVersion: "1",

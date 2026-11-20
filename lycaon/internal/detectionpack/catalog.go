@@ -249,32 +249,7 @@ const maxRulesPerPack = 200
 // maxRuleBytes bounds one rule document.
 const maxRuleBytes = 64 * 1024
 
-// ShippedPacks gathers detection packs from the stock pack tree without consulting the catalog.
-func ShippedPacks() ([]Pack, []string, error) {
-	ents, err := config.List(config.DetectionPacksDir)
-	if err != nil {
-		return nil, nil, fmt.Errorf("list shipped detection packs: %w", err)
-	}
-	var packs []Pack
-	var warnings []string
-	for _, ent := range ents {
-		if !ent.IsDir() {
-			continue
-		}
-		p, packWarnings := ParsePack(bundledPackFiles(config.DetectionPacksDir.Join(ent.Name())))
-		warnings = append(warnings, packWarnings...)
-		if p == nil {
-			continue
-		}
-		packs = append(packs, *p)
-	}
-	sort.Slice(packs, func(i, j int) bool { return packs[i].ID < packs[j].ID })
-	return packs, warnings, nil
-}
-
-// bundledPackFiles reads one shipped pack out of bundled config. The runtime
-// catalog reaches shipped packs through their resolved catalog units; this
-// gather serves ShippedPacks, the floor readers, and rehearsal.
+// bundledPackFiles reads one pack from bundled config.
 func bundledPackFiles(dir config.Rel) PackFiles {
 	files := PackFiles{DirName: dir.Base(), Source: SourceBundled}
 	data, err := config.Read(dir.Join(PackManifestFile))
@@ -534,18 +509,6 @@ func markDuplicateRuleIDs(packs []Pack) []string {
 		}
 	}
 	return warnings
-}
-
-// SupportedFields returns the closed field vocabulary for one synthetic source.
-// The authoring schema contract compares its projection to this runtime list.
-func SupportedFields(source LogSource) []string {
-	fields := fieldsForSource(source)
-	out := make([]string, 0, len(fields))
-	for field := range fields {
-		out = append(out, field)
-	}
-	sort.Strings(out)
-	return out
 }
 
 // PackByID returns the pack with the given id, or false.

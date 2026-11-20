@@ -1,4 +1,4 @@
-package adapter
+package adapter_test
 
 import (
 	"context"
@@ -10,6 +10,8 @@ import (
 	"time"
 
 	"github.com/lycaon/lycaon/internal/layeredfs"
+	"github.com/lycaon/lycaon/internal/layeredfs/adapter"
+	"github.com/lycaon/lycaon/internal/layeredfs/adapter/adaptertest"
 	"github.com/lycaon/lycaon/internal/testutil"
 )
 
@@ -17,18 +19,18 @@ func TestSelectorSupportedAndUnsupportedFixtures(t *testing.T) {
 	ctx := context.Background()
 	tmp := t.TempDir()
 
-	fuseSupported := NewMountedAdapter(MountedAdapterConfig{
-		AdapterID: AdapterFUSELinux,
+	fuseSupported := adaptertest.NewMounted(adaptertest.MountedConfig{
+		AdapterID: adapter.AdapterFUSELinux,
 		TargetOS:  "linux",
-		MountProbeFn: func(ctx context.Context, probeDir, backingDir string) (ReasonCode, string, error) {
-			return ReasonNone, "", nil
+		MountProbeFn: func(ctx context.Context, probeDir, backingDir string) (adapter.ReasonCode, string, error) {
+			return adapter.ReasonNone, "", nil
 		},
 	})
-	darwinSupported := NewMountedAdapter(MountedAdapterConfig{
-		AdapterID: AdapterNFSDarwin,
+	darwinSupported := adaptertest.NewMounted(adaptertest.MountedConfig{
+		AdapterID: adapter.AdapterNFSDarwin,
 		TargetOS:  "darwin",
-		MountProbeFn: func(ctx context.Context, probeDir, backingDir string) (ReasonCode, string, error) {
-			return ReasonNone, "", nil
+		MountProbeFn: func(ctx context.Context, probeDir, backingDir string) (adapter.ReasonCode, string, error) {
+			return adapter.ReasonNone, "", nil
 		},
 	})
 
@@ -39,44 +41,44 @@ func TestSelectorSupportedAndUnsupportedFixtures(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(source, "f.txt"), []byte("f"), 0o644); err != nil {
 		testutil.FailErr(t, "write file", err)
 	}
-	overBudget := func(sel *Selector) ChooseRequest {
-		sel.BudgetFor = ZeroBudget
-		return ChooseRequest{Probe: ProbeConfig{RuntimeDir: tmp}, Grants: []RootGrant{{RootID: "r", SourcePath: source, IsPrimary: true}}}
+	overBudget := func(sel *adapter.Selector) adapter.ChooseRequest {
+		sel.BudgetFor = adaptertest.ZeroBudget
+		return adapter.ChooseRequest{Probe: adapter.ProbeConfig{RuntimeDir: tmp}, Grants: []adapter.RootGrant{{RootID: "r", SourcePath: source, IsPrimary: true}}}
 	}
-	selLinux := NewSelector("linux", fuseSupported, darwinSupported, NewEagerCopyAdapter())
+	selLinux := adapter.NewSelector("linux", fuseSupported, darwinSupported, adapter.NewEagerCopyAdapter())
 	linuxChoice, err := selLinux.Choose(ctx, overBudget(selLinux))
 	adp, res := linuxChoice.Adapter, linuxChoice.Probe
-	if err != nil || !res.Supported || adp.ID() != AdapterFUSELinux {
+	if err != nil || !res.Supported || adp.ID() != adapter.AdapterFUSELinux {
 		t.Fatalf("expected fuselinux supported, got id=%s supported=%v err=%v", adp.ID(), res.Supported, err)
 	}
 	if !res.MountExercised || !res.ReadExercised || !res.WriteExercised || !res.BackingDenialVerified || !res.CleanedUp {
 		t.Fatalf("incomplete probe steps: %+v", res)
 	}
 	facts := adp.Facts()
-	if facts.PreparationKind != PreparationMounted || facts.UntouchedSourceVisibility != VisibilityLive || !facts.SupportsPrivateGit || !facts.SupportsCheckpointBarrier {
+	if facts.PreparationKind != adapter.PreparationMounted || facts.UntouchedSourceVisibility != adapter.VisibilityLive || !facts.SupportsPrivateGit || !facts.SupportsCheckpointBarrier {
 		t.Fatalf("unexpected mounted facts: %+v", facts)
 	}
 
-	selDarwin := NewSelector("darwin", fuseSupported, darwinSupported, NewEagerCopyAdapter())
+	selDarwin := adapter.NewSelector("darwin", fuseSupported, darwinSupported, adapter.NewEagerCopyAdapter())
 	darwinChoice, err := selDarwin.Choose(ctx, overBudget(selDarwin))
 	adpD, resD := darwinChoice.Adapter, darwinChoice.Probe
-	if err != nil || !resD.Supported || adpD.ID() != AdapterNFSDarwin {
+	if err != nil || !resD.Supported || adpD.ID() != adapter.AdapterNFSDarwin {
 		t.Fatalf("expected nfsdarwin supported, got id=%s supported=%v err=%v", adpD.ID(), resD.Supported, err)
 	}
 
 	var deniedCalls atomic.Int32
-	mountDeniedAdp := NewMountedAdapter(MountedAdapterConfig{
-		AdapterID: AdapterFUSELinux,
+	mountDeniedAdp := adaptertest.NewMounted(adaptertest.MountedConfig{
+		AdapterID: adapter.AdapterFUSELinux,
 		TargetOS:  "linux",
-		MountProbeFn: func(ctx context.Context, probeDir, backingDir string) (ReasonCode, string, error) {
+		MountProbeFn: func(ctx context.Context, probeDir, backingDir string) (adapter.ReasonCode, string, error) {
 			deniedCalls.Add(1)
-			return ReasonMountDenied, "sandbox blocked mount", errors.New("EPERM")
+			return adapter.ReasonMountDenied, "sandbox blocked mount", errors.New("EPERM")
 		},
 	})
-	selDenied := NewSelector("linux", mountDeniedAdp, darwinSupported, NewEagerCopyAdapter())
+	selDenied := adapter.NewSelector("linux", mountDeniedAdp, darwinSupported, adapter.NewEagerCopyAdapter())
 	deniedChoice, err := selDenied.Choose(ctx, overBudget(selDenied))
-	var denied *AdapterError
-	if !errors.As(err, &denied) || denied.ReasonCode != ReasonMountDenied || deniedChoice.Adapter != nil {
+	var denied *adapter.AdapterError
+	if !errors.As(err, &denied) || denied.ReasonCode != adapter.ReasonMountDenied || deniedChoice.Adapter != nil {
 		t.Fatalf("permission denial must refuse over-limit preparation: choice=%+v err=%v", deniedChoice, err)
 	}
 	if deniedCalls.Load() != 1 || deniedChoice.Probe.Attempts != 1 {
@@ -89,14 +91,14 @@ func TestSelectorTransientRetryOnce(t *testing.T) {
 	tmp := t.TempDir()
 
 	var transientRecoveredCalls atomic.Int32
-	recoveringAdp := NewMountedAdapter(MountedAdapterConfig{
-		AdapterID: AdapterNFSDarwin,
+	recoveringAdp := adaptertest.NewMounted(adaptertest.MountedConfig{
+		AdapterID: adapter.AdapterNFSDarwin,
 		TargetOS:  "darwin",
-		MountProbeFn: func(ctx context.Context, probeDir, backingDir string) (ReasonCode, string, error) {
+		MountProbeFn: func(ctx context.Context, probeDir, backingDir string) (adapter.ReasonCode, string, error) {
 			if transientRecoveredCalls.Add(1) == 1 {
-				return ReasonTransientStartupFailure, "nfsd loopback warm-up timeout", errors.New("timeout")
+				return adapter.ReasonTransientStartupFailure, "nfsd loopback warm-up timeout", errors.New("timeout")
 			}
-			return ReasonNone, "", nil
+			return adapter.ReasonNone, "", nil
 		},
 	})
 	source := filepath.Join(tmp, "source")
@@ -106,38 +108,38 @@ func TestSelectorTransientRetryOnce(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(source, "f.txt"), []byte("f"), 0o644); err != nil {
 		testutil.FailErr(t, "write file", err)
 	}
-	overBudget := func(sel *Selector) ChooseRequest {
-		sel.BudgetFor = ZeroBudget
-		return ChooseRequest{Probe: ProbeConfig{RuntimeDir: tmp}, Grants: []RootGrant{{RootID: "r", SourcePath: source, IsPrimary: true}}}
+	overBudget := func(sel *adapter.Selector) adapter.ChooseRequest {
+		sel.BudgetFor = adaptertest.ZeroBudget
+		return adapter.ChooseRequest{Probe: adapter.ProbeConfig{RuntimeDir: tmp}, Grants: []adapter.RootGrant{{RootID: "r", SourcePath: source, IsPrimary: true}}}
 	}
-	selRecover := NewSelector("darwin", nil, recoveringAdp, NewEagerCopyAdapter())
+	selRecover := adapter.NewSelector("darwin", nil, recoveringAdp, adapter.NewEagerCopyAdapter())
 	recovered, err := selRecover.Choose(ctx, overBudget(selRecover))
 	adp, res := recovered.Adapter, recovered.Probe
-	if err != nil || !res.Supported || adp.ID() != AdapterNFSDarwin || res.Attempts != 2 {
+	if err != nil || !res.Supported || adp.ID() != adapter.AdapterNFSDarwin || res.Attempts != 2 {
 		t.Fatalf("expected transient retry to succeed on attempt 2, got id=%s supported=%v attempts=%d err=%v", adp.ID(), res.Supported, res.Attempts, err)
 	}
 
 	var persistentTransientCalls atomic.Int32
-	failingTransientAdp := NewMountedAdapter(MountedAdapterConfig{
-		AdapterID: AdapterNFSDarwin,
+	failingTransientAdp := adaptertest.NewMounted(adaptertest.MountedConfig{
+		AdapterID: adapter.AdapterNFSDarwin,
 		TargetOS:  "darwin",
-		MountProbeFn: func(ctx context.Context, probeDir, backingDir string) (ReasonCode, string, error) {
+		MountProbeFn: func(ctx context.Context, probeDir, backingDir string) (adapter.ReasonCode, string, error) {
 			persistentTransientCalls.Add(1)
-			return ReasonTransientStartupFailure, "persistent port bind contention", errors.New("timeout")
+			return adapter.ReasonTransientStartupFailure, "persistent port bind contention", errors.New("timeout")
 		},
 	})
-	selFail := NewSelector("darwin", nil, failingTransientAdp, NewEagerCopyAdapter())
+	selFail := adapter.NewSelector("darwin", nil, failingTransientAdp, adapter.NewEagerCopyAdapter())
 	failed, err := selFail.Choose(ctx, overBudget(selFail))
 	if persistentTransientCalls.Load() != 2 || failed.Probe.Attempts != 2 {
 		t.Fatalf("expected exactly 2 attempts (1 retry), got calls=%d attempts=%d", persistentTransientCalls.Load(), failed.Probe.Attempts)
 	}
-	var aErr *AdapterError
-	if !errors.As(err, &aErr) || aErr.ReasonCode != ReasonTransientStartupFailure || failed.Adapter != nil {
+	var aErr *adapter.AdapterError
+	if !errors.As(err, &aErr) || aErr.ReasonCode != adapter.ReasonTransientStartupFailure || failed.Adapter != nil {
 		t.Fatalf("a transient failure must start no copy: choice=%+v err=%v", failed, err)
 	}
 }
 
-func TestMountedPrepareCommandAccessBarrierAndRelease(t *testing.T) {
+func TestMountedFixturePrepareCommandAccessBarrierAndRelease(t *testing.T) {
 	ctx := context.Background()
 	tmp := t.TempDir()
 	srcRoot := filepath.Join(tmp, "repo")
@@ -149,22 +151,22 @@ func TestMountedPrepareCommandAccessBarrierAndRelease(t *testing.T) {
 	}
 
 	var mountCalls atomic.Int32
-	adp := NewMountedAdapter(MountedAdapterConfig{
-		AdapterID: AdapterNFSDarwin,
+	adp := adaptertest.NewMounted(adaptertest.MountedConfig{
+		AdapterID: adapter.AdapterNFSDarwin,
 		TargetOS:  "darwin",
-		MountProbeFn: func(ctx context.Context, probeDir, backingDir string) (ReasonCode, string, error) {
-			return ReasonNone, "", nil
+		MountProbeFn: func(ctx context.Context, probeDir, backingDir string) (adapter.ReasonCode, string, error) {
+			return adapter.ReasonNone, "", nil
 		},
-		MountViewFn: func(ctx context.Context, viewID string, roots []PreparedRoot) error {
+		MountViewFn: func(ctx context.Context, viewID string, roots []adapter.PreparedRoot) error {
 			mountCalls.Add(1)
 			return nil
 		},
 	})
 
-	view, err := adp.Prepare(ctx, PrepareRequest{
+	view, err := adp.Prepare(ctx, adapter.PrepareRequest{
 		ViewID:     "view-mounted-1",
 		RuntimeDir: filepath.Join(tmp, "runtime"),
-		Grants: []RootGrant{
+		Grants: []adapter.RootGrant{
 			{RootID: "main", Label: "main", SourcePath: srcRoot, IsPrimary: true},
 		},
 	})
@@ -218,21 +220,12 @@ func TestBarrierFailureReleasesBarrierAndCleanupFailureHonesty(t *testing.T) {
 	srcRoot := filepath.Join(tmp, "src")
 	_ = os.MkdirAll(srcRoot, 0o755)
 
-	adp := NewMountedAdapter(MountedAdapterConfig{
-		AdapterID: AdapterFUSELinux,
-		TargetOS:  "linux",
-		MountProbeFn: func(ctx context.Context, probeDir, backingDir string) (ReasonCode, string, error) {
-			return ReasonNone, "", nil
-		},
-		UnmountViewFn: func(ctx context.Context, viewID string, runtimeDir string) error {
-			return errors.New("device or resource busy")
-		},
-	})
+	adp := adapter.NewEagerCopyAdapter()
 
-	view, err := adp.Prepare(ctx, PrepareRequest{
+	view, err := adp.Prepare(ctx, adapter.PrepareRequest{
 		ViewID:     "view-barrier-fail",
 		RuntimeDir: filepath.Join(tmp, "rt"),
-		Grants:     []RootGrant{{RootID: "r1", SourcePath: srcRoot, IsPrimary: true}},
+		Grants:     []adapter.RootGrant{{RootID: "r1", SourcePath: srcRoot, IsPrimary: true}},
 		FlushClientHook: func(ctx context.Context, viewID string) error {
 			return errors.New("mmap msync EIO")
 		},
@@ -254,7 +247,7 @@ func TestBarrierFailureReleasesBarrierAndCleanupFailureHonesty(t *testing.T) {
 	expiredCtx, cancel := context.WithDeadline(ctx, time.Now().Add(-time.Second))
 	defer cancel()
 	relReceipt, rErr := adp.Release(expiredCtx, view.ViewID)
-	if rErr == nil || relReceipt.Settled || relReceipt.ReasonCode != ReasonCleanupFailed {
+	if rErr == nil || relReceipt.Settled || relReceipt.ReasonCode != adapter.ReasonCleanupFailed {
 		t.Fatalf("expected unsettled release on expired deadline, got receipt=%+v err=%v", relReceipt, rErr)
 	}
 }
@@ -266,21 +259,21 @@ func TestActiveWorkerDataSurvivesAdapterFailure(t *testing.T) {
 	_ = os.MkdirAll(srcRoot, 0o755)
 	_ = os.WriteFile(filepath.Join(srcRoot, "tracked.txt"), []byte("original"), 0o644)
 
-	primaryAdp := NewMountedAdapter(MountedAdapterConfig{
-		AdapterID: AdapterNFSDarwin,
+	primaryAdp := adaptertest.NewMounted(adaptertest.MountedConfig{
+		AdapterID: adapter.AdapterNFSDarwin,
 		TargetOS:  "darwin",
-		MountProbeFn: func(ctx context.Context, probeDir, backingDir string) (ReasonCode, string, error) {
-			return ReasonNone, "", nil
+		MountProbeFn: func(ctx context.Context, probeDir, backingDir string) (adapter.ReasonCode, string, error) {
+			return adapter.ReasonNone, "", nil
 		},
 	})
-	sel := NewSelector("darwin", nil, primaryAdp, NewEagerCopyAdapter())
-	sel.BudgetFor = ZeroBudget
-	grants := []RootGrant{{RootID: "root", SourcePath: srcRoot, IsPrimary: true}}
-	choice, err := sel.Choose(ctx, ChooseRequest{Probe: ProbeConfig{RuntimeDir: tmp}, Grants: grants})
-	if err != nil || choice.Adapter.ID() != AdapterNFSDarwin {
+	sel := adapter.NewSelector("darwin", nil, primaryAdp, adapter.NewEagerCopyAdapter())
+	sel.BudgetFor = adaptertest.ZeroBudget
+	grants := []adapter.RootGrant{{RootID: "root", SourcePath: srcRoot, IsPrimary: true}}
+	choice, err := sel.Choose(ctx, adapter.ChooseRequest{Probe: adapter.ProbeConfig{RuntimeDir: tmp}, Grants: grants})
+	if err != nil || choice.Adapter.ID() != adapter.AdapterNFSDarwin {
 		t.Fatalf("Choose failed: %v", err)
 	}
-	view, err := choice.Adapter.Prepare(ctx, PrepareRequest{ViewID: "active-worker-1", RuntimeDir: filepath.Join(tmp, "runtime"), Grants: grants})
+	view, err := choice.Adapter.Prepare(ctx, adapter.PrepareRequest{ViewID: "active-worker-1", RuntimeDir: filepath.Join(tmp, "runtime"), Grants: grants})
 	if err != nil {
 		t.Fatalf("Prepare failed: %v", err)
 	}
@@ -293,12 +286,12 @@ func TestActiveWorkerDataSurvivesAdapterFailure(t *testing.T) {
 	}
 
 	// Silent transition without checkpoint reconstruction must be refused and preserve data.
-	recovery, recErr := sel.Registry.RecoverOrTransition(ctx, view.ViewID, ReasonCleanupFailed, nil, false)
+	recovery, recErr := sel.Registry.RecoverOrTransition(ctx, view.ViewID, adapter.ReasonCleanupFailed, nil, false)
 	if recErr == nil {
 		t.Fatalf("expected RecoverOrTransition without checkpoint reconstruction to return error")
 	}
-	var aErr *AdapterError
-	if !errors.As(recErr, &aErr) || aErr.ReasonCode != ReasonActiveViewMutated {
+	var aErr *adapter.AdapterError
+	if !errors.As(recErr, &aErr) || aErr.ReasonCode != adapter.ReasonActiveViewMutated {
 		t.Fatalf("expected ReasonActiveViewMutated, got %v", recErr)
 	}
 	if !recovery.Mutated || !recovery.RequiresCheckpointReconstruction || len(recovery.PreservedChanges) != 1 {
@@ -306,14 +299,14 @@ func TestActiveWorkerDataSurvivesAdapterFailure(t *testing.T) {
 	}
 
 	// Unsupported replacement adapter must not erase active worker data.
-	unsupportedReplacement := NewMountedAdapter(MountedAdapterConfig{
-		AdapterID: AdapterFUSELinux,
+	unsupportedReplacement := adaptertest.NewMounted(adaptertest.MountedConfig{
+		AdapterID: adapter.AdapterFUSELinux,
 		TargetOS:  "linux",
-		MountProbeFn: func(ctx context.Context, probeDir, backingDir string) (ReasonCode, string, error) {
-			return ReasonUnsupportedKernel, "no fuse", errors.New("enosys")
+		MountProbeFn: func(ctx context.Context, probeDir, backingDir string) (adapter.ReasonCode, string, error) {
+			return adapter.ReasonUnsupportedKernel, "no fuse", errors.New("enosys")
 		},
 	})
-	rec2, recErr2 := sel.Registry.RecoverOrTransition(ctx, view.ViewID, ReasonCleanupFailed, unsupportedReplacement, true)
+	rec2, recErr2 := sel.Registry.RecoverOrTransition(ctx, view.ViewID, adapter.ReasonCleanupFailed, unsupportedReplacement, true)
 	if recErr2 == nil || len(rec2.PreservedChanges) != 1 {
 		t.Fatalf("expected unsupported replacement error with preserved changes, got rec=%+v err=%v", rec2, recErr2)
 	}

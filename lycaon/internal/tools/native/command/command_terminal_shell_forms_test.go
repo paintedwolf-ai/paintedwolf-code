@@ -31,7 +31,7 @@ func TestCommandTerminalCaptureMissingProgramUsesShellStatus(t *testing.T) {
 
 func TestCommandTerminalCaptureExitedNonzeroReportsFailure(t *testing.T) {
 	cmd, registry := newCommandTool(t)
-	registry.Output.SetCaptureProjector(captureprojection.New(secretmatch.NewInertMatcher(), nil))
+	registry.Output.SetCaptureProjector(captureprojection.New(&secretmatch.Matcher{}, nil))
 	out, err := cmd.Run(context.Background(), map[string]any{
 		"command":          "/bin/sh -c 'exit 7'",
 		"terminal_capture": map[string]any{},

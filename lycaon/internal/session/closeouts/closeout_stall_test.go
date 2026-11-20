@@ -14,7 +14,7 @@ func draftOf(markdown string) guidance.CloseoutDraft {
 }
 
 func TestCloseoutStallSeedsAndPersists(t *testing.T) {
-	mgr, sess := newSynthesisDelayManager(t)
+	mgr, sess, _ := newSynthesisDelayManager(t)
 	ctx := context.Background()
 
 	attempt, prev := mgr.NoteCloseoutGroundingReject(ctx, sess.ID, guidance.InvestCitationsRequiredCode, guidance.InvestCitationsRequiredCode, draftOf("The workflow system routes …"), nil)
@@ -42,7 +42,7 @@ func TestCloseoutStallSeedsAndPersists(t *testing.T) {
 }
 
 func TestCloseoutWorkRetiresDraftWithoutReplenishingBudgets(t *testing.T) {
-	mgr, sess := newSynthesisDelayManager(t)
+	mgr, sess, _ := newSynthesisDelayManager(t)
 	ctx := t.Context()
 	mgr.RecordGroundingFriction(ctx, sess.ID)
 	mgr.NoteCloseoutGroundingReject(ctx, sess.ID, guidance.InvestHandleNotObservedCode, "old", draftOf("old conclusion"), nil)
@@ -66,7 +66,7 @@ func TestCloseoutWorkRetiresDraftWithoutReplenishingBudgets(t *testing.T) {
 }
 
 func TestCloseoutStallClearedOnCommitAndCycle(t *testing.T) {
-	mgr, sess := newSynthesisDelayManager(t)
+	mgr, sess, _ := newSynthesisDelayManager(t)
 	ctx := context.Background()
 
 	mgr.NoteCloseoutGroundingReject(ctx, sess.ID, guidance.InvestCitationsRequiredCode, guidance.InvestCitationsRequiredCode, draftOf("draft"), nil)
@@ -85,7 +85,7 @@ func TestCloseoutStallClearedOnCommitAndCycle(t *testing.T) {
 // Document refusals keep their own count, and the latest refused draft's
 // unread members stay with the cycle until a refusal without them.
 func TestCloseoutStallKeepsDocumentRepairApart(t *testing.T) {
-	mgr, sess := newSynthesisDelayManager(t)
+	mgr, sess, _ := newSynthesisDelayManager(t)
 	ctx := context.Background()
 	unread := []jsonshape.Issue{{Path: "findings[0].ask", Pattern: "findings[].ask", Parent: "findings[]", Name: "ask", Kind: jsonshape.Unknown}}
 
@@ -107,7 +107,7 @@ func TestCloseoutStallKeepsDocumentRepairApart(t *testing.T) {
 // A presentation refusal asks for the body back: only the draft answering it may
 // replace the pinned narrative, and any later refusal pins again.
 func TestCloseoutStallReplacesBodyAfterPresentationRepair(t *testing.T) {
-	mgr, sess := newSynthesisDelayManager(t)
+	mgr, sess, _ := newSynthesisDelayManager(t)
 	ctx := context.Background()
 	opts := citationmd.Options{}
 	mgr.NoteCloseoutGroundingReject(ctx, sess.ID, guidance.PresentImageUnobservedCode, "k1", guidance.ParseCloseoutDraft("![x](https://placeholder.example/1.png)\n\nBody.", opts), nil)

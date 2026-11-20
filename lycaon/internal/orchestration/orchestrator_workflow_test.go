@@ -2,6 +2,7 @@ package orchestration_test
 
 import (
 	"context"
+	"github.com/lycaon/lycaon/internal/testutil/conditionstest"
 	"github.com/lycaon/lycaon/internal/tools/toolstest"
 	"github.com/lycaon/lycaon/internal/workflow/workflowtest"
 	"strings"
@@ -21,6 +22,7 @@ import (
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/testutil/extpackstest"
+	"github.com/lycaon/lycaon/internal/testutil/workertopologytest"
 	"github.com/lycaon/lycaon/internal/worker"
 	"github.com/lycaon/lycaon/internal/workerrecords"
 	"github.com/lycaon/lycaon/internal/workertopology"
@@ -64,17 +66,17 @@ func newWorkflowOrchestrator(t *testing.T, rec *recordingWorkers, spy *spyWorkfl
 	sessStore := store.NewSQL(sqlDB)
 	sessMgr := session.NewHost(sessStore, session.Models{Client: llm.NewMockProvider(mockCfg), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, toolstest.NewRegistry())
 	records := workerrecords.New(sqlDB)
-	queue := worker.NewSQLQueue(sqlDB, 10)
+	queue := worker.NewSQLServices(sqlDB, 10).Queue
 
 	manifests, err := workflowdef.RegistryFromDirs("")
 	testutil.FailErr(t, "workflow.RegistryFromDirs failed", err)
 	runStore := workflowpersistence.New(sqlDB)
-	runStore.Transactions.SetAuthzRecorder(authzcontext.SQLRecorder(sqlDB))
+	runStore.Transactions.SetAuthzRecorder(authzcontext.LedgerRecorder{Ledger: &authzcontext.Ledger{Store: authzcontext.NewSQLStore(sqlDB)}})
 	wfMgr := workflow.NewManager(runStore, sessStore, manifests, nil)
 	projectDir := t.TempDir()
 	blueprintMgr := workflowtest.WireBlueprintDeps(wfMgr, projectDir)
-	blueprintMgr.Approvals = blueprint.NewApprovalStore(sqlDB, authzcontext.SQLRecorder(sqlDB))
-	deps := conditions.TestRegistryDeps()
+	blueprintMgr.Approvals = blueprint.NewApprovalStore(sqlDB, authzcontext.LedgerRecorder{Ledger: &authzcontext.Ledger{Store: authzcontext.NewSQLStore(sqlDB)}})
+	deps := conditionstest.Dependencies()
 	deps.BlueprintContent = func(_ context.Context, projectDir, relPath string) (string, error) {
 		return workflowblueprintfiles.ReadBlueprintFile(projectDir, relPath)
 	}
@@ -94,6 +96,10 @@ func newWorkflowOrchestrator(t *testing.T, rec *recordingWorkers, spy *spyWorkfl
 		rec = &recordingWorkers{TopologyWorkers: topoRuntime, order: make([]string, 0, 8)}
 	} else {
 		rec.TopologyWorkers = topoRuntime
+	}
+
+	rec.dispatchAndSettle = func(ctx context.Context, batchID, unitID string, result api.WorkerResult) (*orchestration.TopologyUnit, error) {
+		return workertopologytest.DispatchAndSettle(ctx, topoRuntime, queue, batchID, unitID, result)
 	}
 
 	regAgents := loadAgentRegistryFromConfig(t)

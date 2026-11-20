@@ -238,7 +238,7 @@ func (r *SQLRecorder) ReadProgramOutputMappings(ctx context.Context, sessionID, 
 		return nil, err
 	}
 	defer func() { _ = tx.Rollback() }()
-	const selection = ` FROM invocation_program_outputs o JOIN invocation_programs p ON p.id=o.program_id JOIN invocation_receipts rec ON rec.id=p.parent_receipt_id WHERE o.program_id=? AND o.reference=? AND rec.session_id=?`
+	const selection = ` FROM invocation_program_outputs o JOIN invocation_programs p ON p.id=o.program_id JOIN invocation_receipts rec ON rec.id=p.parent_receipt_id WHERE o.program_id=? AND o.reference=? AND rec.session_id=?` + publishedProgramOutput
 	var size int64
 	if err := tx.QueryRowContext(ctx, `SELECT length(CAST(o.blob_json AS BLOB))+length(CAST(o.mappings_json AS BLOB))`+selection, programID, reference, sessionID).Scan(&size); err != nil {
 		return nil, err

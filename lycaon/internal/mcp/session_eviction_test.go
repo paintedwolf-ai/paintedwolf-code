@@ -5,16 +5,18 @@ import (
 	"net/http"
 	"testing"
 
-	"github.com/lycaon/lycaon/internal/mcp"
-	"github.com/lycaon/lycaon/internal/testutil"
 	sdkmcp "github.com/modelcontextprotocol/go-sdk/mcp"
+
+	"github.com/lycaon/lycaon/internal/mcp"
+	"github.com/lycaon/lycaon/internal/mcp/mcptest"
+	"github.com/lycaon/lycaon/internal/testutil"
 )
 
 // TestMCPAuthFailureEvictsSessionForFreshReconnect: once a provider's session
 // reports 401/403, the next tool call reconnects instead of replaying the stale
 // session.
 func TestMCPAuthFailureEvictsSessionForFreshReconnect(t *testing.T) {
-	conn := &mcp.MockConnector{
+	conn := &mcptest.Connector{
 		Tools:        map[string][]*sdkmcp.Tool{"svca": {{Name: "query", Description: "query"}}},
 		ConnectCount: map[string]int{},
 	}

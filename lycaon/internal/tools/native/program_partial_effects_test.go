@@ -23,7 +23,7 @@ import (
 	"github.com/lycaon/lycaon/internal/invocation"
 	"github.com/lycaon/lycaon/internal/outboundhttp"
 	"github.com/lycaon/lycaon/internal/platform"
-	"github.com/lycaon/lycaon/internal/progress"
+	"github.com/lycaon/lycaon/internal/progress/progresstest"
 	"github.com/lycaon/lycaon/internal/projectsource"
 	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/testdbseed"
@@ -69,7 +69,7 @@ func TestProgramPartialEffectsSurviveSupervisorLossWithoutReplay(t *testing.T) {
 	t.Cleanup(frame.Close)
 	surface, err := executor.Metadata.FreezeProgramSurface(t.Context(), platform.ToolFilter{ProfileID: "fixture"}, []toolcontract.OperationDefinition{writeDefinition, httpDefinition})
 	testutil.FailErr(t, "capture actual profile", err)
-	owner := progress.NewMemoryStore()
+	owner := progresstest.New(t, "s1")
 	testutil.FailErr(t, "set actual progress owner", owner.Set("s1", "- [ ] Create fixture"))
 	retention := partialEffectsCapture(t, recorder, database, programID, "s1", "p1")
 	observer := &invocation.ProgramAdmissionRecorder{Recorder: recorder, Inputs: retention}

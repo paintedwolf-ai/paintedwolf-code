@@ -3,7 +3,6 @@ package worker
 import (
 	"context"
 	"errors"
-	"github.com/lycaon/lycaon/internal/layeredfs/adapter/platform"
 	"io/fs"
 	"os"
 	osexec "os/exec"
@@ -13,6 +12,7 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/confine"
+	"github.com/lycaon/lycaon/internal/confine/admissiontest"
 	"github.com/lycaon/lycaon/internal/confine/denialprobe"
 	"github.com/lycaon/lycaon/internal/db"
 	"github.com/lycaon/lycaon/internal/enginepaths"
@@ -21,6 +21,8 @@ import (
 	"github.com/lycaon/lycaon/internal/hitl"
 	"github.com/lycaon/lycaon/internal/layeredfs"
 	"github.com/lycaon/lycaon/internal/layeredfs/adapter"
+	"github.com/lycaon/lycaon/internal/layeredfs/adapter/adaptertest"
+	"github.com/lycaon/lycaon/internal/layeredfs/adapter/platform"
 	"github.com/lycaon/lycaon/internal/layeredfs/adapter/viewconfine"
 	"github.com/lycaon/lycaon/internal/layeredfs/checkpoint"
 	"github.com/lycaon/lycaon/internal/layeredfs/claim"
@@ -65,11 +67,13 @@ func differentDevice(path string) (bool, error) {
 }
 
 type layeredWorkerFixture struct {
-	db       *db.Store
-	queue    *SQLQueue
-	manager  *workspace.Manager
-	source   string
-	branches string
+	db         *db.Store
+	queue      *SQLQueue
+	promotions *PromotionStore
+	manager    *workspace.Manager
+	views      *adapter.ActiveViewRegistry
+	source     string
+	branches   string
 }
 
 func newLayeredWorkerFixture(t *testing.T, selector *adapter.Selector) *layeredWorkerFixture {
@@ -87,11 +91,12 @@ func newLayeredWorkerFixture(t *testing.T, selector *adapter.Selector) *layeredW
 	if selector == nil {
 		selector = platform.NewSelector(platform.Config{})
 	}
-	manager := workspace.NewManager(branches, selector).WithPrivateGit(privateGit)
-	queue := NewSQLQueue(sqlDB, 4)
-	queue.SetBaselineStore(sourceledger.New(sqlDB, filepath.Join(testbaseline.DataDir(t, sqlDB), "source-content")).Baselines)
-	queue.SetWorkerWorkspaceManager(manager)
-	return &layeredWorkerFixture{db: sqlDB, queue: queue, manager: manager, source: source, branches: branches}
+	manager := workspace.NewManager(branches, selector, workspace.Filesystem{}).WithPrivateGit(privateGit)
+	services := NewSQLServices(sqlDB, 4)
+	queue := services.Queue
+	queue.Branches.SetBaselineStore(sourceledger.New(sqlDB, filepath.Join(testbaseline.DataDir(t, sqlDB), "source-content"), sourceledger.Timing{}).Baselines)
+	queue.Branches.SetWorkerWorkspaceManager(manager)
+	return &layeredWorkerFixture{db: sqlDB, queue: queue, promotions: services.Promotions, manager: manager, views: selector.Registry, source: source, branches: branches}
 }
 
 // claim runs the ordinary production path: enqueue, ClaimNext, ClaimWorkerBranch.
@@ -105,7 +110,7 @@ func (f *layeredWorkerFixture) claim(t *testing.T) *api.WorkerTask {
 	testutil.FailErr(t, "Enqueue", err)
 	next, err := f.queue.ClaimNext(t.Context(), ClaimRequest{ProjectID: testdbseed.DefaultProjectID, ClaimedBy: "test", ExecutionTarget: api.ExecutionTargetLocal})
 	testutil.FailErr(t, "ClaimNext", err)
-	claimed, err := f.queue.ClaimWorkerBranch(t.Context(), id)
+	claimed, err := f.queue.Branches.ClaimWorkerBranch(t.Context(), id)
 	testutil.FailErr(t, "ClaimWorkerBranch", err)
 	claimed.ClaimToken = next.ClaimToken
 	return claimed
@@ -125,14 +130,14 @@ func surveyedPaths(t *testing.T, branchRoot string) map[string]bool {
 // Fixture evidence for the mounted sequence: the adapter has no kernel mount. It runs on every host,
 // and pins what a claim hands consumers and what settlement takes back.
 func TestOrdinaryWorkerClaimRegistersAndSettlesItsConsumerEngine(t *testing.T) {
-	mounted := adapter.NewMountedAdapter(adapter.MountedAdapterConfig{
+	mounted := adaptertest.NewMounted(adaptertest.MountedConfig{
 		AdapterID: adapter.AdapterFUSELinux,
 		MountProbeFn: func(context.Context, string, string) (adapter.ReasonCode, string, error) {
 			return adapter.ReasonNone, "", nil
 		},
 	})
 	selector := adapter.NewSelector("linux", mounted, nil, adapter.NewEagerCopyAdapter())
-	selector.BudgetFor = adapter.ZeroBudget
+	selector.BudgetFor = adaptertest.ZeroBudget
 	selector.RequireConfinement, selector.Confinement = true, fixtureConfinement{}
 	fixture := newLayeredWorkerFixture(t, selector)
 	task := fixture.claim(t)
@@ -212,7 +217,7 @@ func TestUnderBudgetMaterializedWorkerRetainsGitAndCheckpointBases(t *testing.T)
 	if completed.WorkspaceOverlayPath != "" {
 		t.Fatalf("a checkpoint worker sealed an overlay too: %s", completed.WorkspaceOverlayPath)
 	}
-	store, manifest, published, err := session.OpenTaskCheckpointStore(completed)
+	store, manifest, published, err := session.OpenTaskCheckpointStore(completed, "")
 	testutil.FailErr(t, "open task checkpoint", err)
 	if !published || manifest.WorkerID != task.ID || len(manifest.Entries) != 2 {
 		t.Fatalf("published=%v manifest=%+v", published, manifest)
@@ -240,7 +245,7 @@ func TestUnderBudgetMaterializedWorkerRetainsGitAndCheckpointBases(t *testing.T)
 // The materialized path is the default selector's: a worker reads its pristine base and never writes
 // it, its own tree stays writable, and the branches and object store beside it stay out of reach.
 func TestMaterializedWorkerReachesOnlyItsOwnBranch(t *testing.T) {
-	confine.TestingSetAutoConfine(t)
+	admissiontest.Enable(t)
 	testutil.RequireConfinement(t, confine.Available())
 	fixture := newLayeredWorkerFixture(t, nil)
 	t.Setenv("LYCAON_CONFIG_DIR", filepath.Dir(fixture.branches))
@@ -296,10 +301,10 @@ func TestMaterializedWorkerReachesOnlyItsOwnBranch(t *testing.T) {
 // Runs on a real kernel mount through the host's selector, its production enforcer and real services.
 // Only a host with no way to mount skips; a host that mounts but does not enforce fails here.
 func TestOrdinaryWorkerClaimThroughARealMountedViewToCompletion(t *testing.T) {
-	confine.TestingSetAutoConfine(t)
+	admissiontest.Enable(t)
 	testutil.RequireConfinement(t, confine.Available())
 	selector := workspace.HostSelector()
-	selector.BudgetFor = adapter.ZeroBudget
+	selector.BudgetFor = adaptertest.ZeroBudget
 	skipWithoutMount(t, selector)
 	fixture := newLayeredWorkerFixture(t, selector)
 	// Worker storage sits under the engine's state root, as it does in production.
@@ -331,13 +336,10 @@ func TestOrdinaryWorkerClaimThroughARealMountedViewToCompletion(t *testing.T) {
 	if !ok {
 		t.Fatal("claim registered no consumer engine")
 	}
-	view, cvOK := workspace.LookupBranchClaimedView(root)
-	if !cvOK {
-		t.Fatal("claim recorded no claimed view")
-	}
-	rootID := view.Prepared.PrimaryRootID
+	view := requireMountedView(t, fixture.views, root)
+	rootID := view.PrimaryRootID
 	for name, path := range map[string]string{
-		"backing store": filepath.Join(view.Prepared.BackingDir, "journal"),
+		"backing store": filepath.Join(view.BackingDir, "journal"),
 		"source tree":   filepath.Join(fixture.source, "main.go"),
 	} {
 		if err := engine.GuardLiveConsumerPath(rootID, path); !errors.Is(err, consumer.ErrDirectBackingAccessForbidden) {
@@ -345,7 +347,7 @@ func TestOrdinaryWorkerClaimThroughARealMountedViewToCompletion(t *testing.T) {
 		}
 	}
 
-	assertWorkerProcessIsDenied(t, root, fixture.source, view.Prepared)
+	assertWorkerProcessIsDenied(t, root, fixture.source, view)
 
 	testutil.FailErr(t, "create on mount", os.WriteFile(filepath.Join(root, "added.go"), []byte("package added\n"), 0o644))
 	testutil.FailErr(t, "edit on mount", os.WriteFile(filepath.Join(root, "main.go"), []byte("package changed\n"), 0o644))
@@ -383,7 +385,7 @@ func TestOrdinaryWorkerClaimThroughARealMountedViewToCompletion(t *testing.T) {
 	if !ok || completed.MergeStatus != api.WorkerMergeStatusPending {
 		t.Fatalf("changed worker is not pending review: %+v", completed)
 	}
-	_, manifest, published, err := session.OpenTaskCheckpointStore(completed)
+	_, manifest, published, err := session.OpenTaskCheckpointStore(completed, "")
 	testutil.FailErr(t, "open task checkpoint store", err)
 	captured := map[string]bool{}
 	for _, entry := range manifest.Entries {
@@ -508,26 +510,36 @@ func openFixtureRecovery(t *testing.T, branches string) *recovery.Coordinator {
 }
 
 func fixtureMountedSelector() *adapter.Selector {
-	mounted := adapter.NewMountedAdapter(adapter.MountedAdapterConfig{
+	mounted := adaptertest.NewMounted(adaptertest.MountedConfig{
 		AdapterID: adapter.AdapterFUSELinux,
 		MountProbeFn: func(context.Context, string, string) (adapter.ReasonCode, string, error) {
 			return adapter.ReasonNone, "", nil
 		},
 	})
 	selector := adapter.NewSelector("linux", mounted, nil, adapter.NewEagerCopyAdapter())
-	selector.BudgetFor = adapter.ZeroBudget
+	selector.BudgetFor = adaptertest.ZeroBudget
 	selector.RequireConfinement, selector.Confinement = true, fixtureConfinement{}
 	return selector
 }
 
-func writeThroughClaimedView(t *testing.T, task *api.WorkerTask, rel, content string) {
+func requireMountedView(t *testing.T, views *adapter.ActiveViewRegistry, root string) *adapter.PreparedView {
 	t.Helper()
-	view, ok := workspace.LookupBranchClaimedView(task.WorkspaceRoot)
+	state, _, ok := workspace.BranchWorkspaceState(root)
 	if !ok {
-		t.Fatalf("no claimed view for %s", task.ID)
+		t.Fatalf("no workspace state for %s", root)
 	}
-	path := layeredfs.QualifiedPath{RootID: view.Prepared.PrimaryRootID, Rel: rel}
-	_, err := view.Prepared.Core.WriteFile(path, []byte(content), 0o644)
+	_, view, ok := views.AdapterForView(state.Identity.ViewID)
+	if !ok || view == nil {
+		t.Fatalf("no registered view for %s", root)
+	}
+	return view
+}
+
+func writeThroughClaimedView(t *testing.T, views *adapter.ActiveViewRegistry, task *api.WorkerTask, rel, content string) {
+	t.Helper()
+	view := requireMountedView(t, views, task.WorkspaceRoot)
+	path := layeredfs.QualifiedPath{RootID: view.PrimaryRootID, Rel: rel}
+	_, err := view.Core.WriteFile(path, []byte(content), 0o644)
 	testutil.FailErr(t, "write through view", err)
 }
 
@@ -537,8 +549,8 @@ func TestCompletionPublishesEachWorkerIntoTheRecoveryStoreAndDestroyDropsItsRete
 	fixture := newLayeredWorkerFixture(t, fixtureMountedSelector())
 	first := fixture.claim(t)
 	second := fixture.claim(t)
-	writeThroughClaimedView(t, first, "first.go", "package first\n")
-	writeThroughClaimedView(t, second, "second.go", "package second\n")
+	writeThroughClaimedView(t, fixture.views, first, "first.go", "package first\n")
+	writeThroughClaimedView(t, fixture.views, second, "second.go", "package second\n")
 	for _, task := range []*api.WorkerTask{first, second} {
 		if won, err := fixture.queue.Complete(t.Context(), task, api.WorkerResult{Status: "complete"}); err != nil || !won {
 			t.Fatalf("Complete %s: won=%v err=%v", task.ID, won, err)
@@ -551,7 +563,7 @@ func TestCompletionPublishesEachWorkerIntoTheRecoveryStoreAndDestroyDropsItsRete
 		if !ok || completed.MergeStatus != api.WorkerMergeStatusPending {
 			t.Fatalf("worker %s is not pending review: %+v", task.ID, completed)
 		}
-		store, manifest, published, err := session.OpenTaskCheckpointStore(completed)
+		store, manifest, published, err := session.OpenTaskCheckpointStore(completed, "")
 		testutil.FailErr(t, "open task checkpoint store", err)
 		if !published || store.RootDir() != coordinator.CheckpointStore().RootDir() {
 			t.Fatalf("worker %s published=%v store=%v", task.ID, published, store)
@@ -642,10 +654,7 @@ func TestEngineLaunchesInAViewAreRecordedLikeCommands(t *testing.T) {
 	t.Cleanup(func() {
 		_ = fixture.manager.DestroyWorkerWorkspace(t.Context(), &workspace.Binding{ID: task.ID, Root: task.WorkspaceRoot})
 	})
-	view, ok := workspace.LookupBranchClaimedView(task.WorkspaceRoot)
-	if !ok {
-		t.Fatal("no claimed view")
-	}
+	view := requireMountedView(t, fixture.views, task.WorkspaceRoot)
 	coordinator := openFixtureRecovery(t, fixture.branches)
 	recorded := func() []adapter.ProcessIdentity {
 		identity, found, err := coordinator.LoadMountIdentity(task.ID, task.ID)
@@ -668,7 +677,7 @@ func TestEngineLaunchesInAViewAreRecordedLikeCommands(t *testing.T) {
 		t.Fatalf("a launch outside the view was recorded: %+v", recorded())
 	}
 
-	_, code, err = gitexec.Run(t.Context(), view.Prepared.PrimaryWorkPath, []string{"--version"}, gitexec.Opts{Profile: gitexec.ProfileHermetic})
+	_, code, err = gitexec.Run(t.Context(), view.PrimaryWorkPath, []string{"--version"}, gitexec.Opts{Profile: gitexec.ProfileHermetic})
 	if err != nil || code != 0 {
 		t.Fatalf("git in the view: code=%d err=%v", code, err)
 	}
@@ -677,7 +686,7 @@ func TestEngineLaunchesInAViewAreRecordedLikeCommands(t *testing.T) {
 	}
 
 	server, cleanup, err := lexec.PrepareCommand(t.Context(), "/usr/bin/true", nil, lexec.ExecOpts{
-		Launch: lexec.AgentLaunch(lexec.LaunchLocalMCP, "fixture", nil), Dir: view.Prepared.PrimaryWorkPath,
+		Launch: lexec.AgentLaunch(lexec.LaunchLocalMCP, "fixture", nil), Dir: view.PrimaryWorkPath,
 	})
 	testutil.FailErr(t, "prepare MCP", err)
 	defer cleanup()
@@ -693,23 +702,20 @@ func TestEngineLaunchesInAViewAreRecordedLikeCommands(t *testing.T) {
 func TestAWorkerRepositoryIsPrivateAndLeavesTheCheckpoint(t *testing.T) {
 	fixture := newLayeredWorkerFixture(t, fixtureMountedSelector())
 	task := fixture.claim(t)
-	view, ok := workspace.LookupBranchClaimedView(task.WorkspaceRoot)
-	if !ok {
-		t.Fatal("no claimed view")
-	}
-	core, rootID := view.Prepared.Core, view.Prepared.PrimaryRootID
+	view := requireMountedView(t, fixture.views, task.WorkspaceRoot)
+	core, rootID := view.Core, view.PrimaryRootID
 	_, err := core.Mkdir(layeredfs.QualifiedPath{RootID: rootID, Rel: "nested"}, 0o755)
 	testutil.FailErr(t, "mkdir nested", err)
 	_, err = core.Mkdir(layeredfs.QualifiedPath{RootID: rootID, Rel: "nested/.git"}, 0o755)
 	testutil.FailErr(t, "mkdir nested .git", err)
 	_, err = core.WriteFile(layeredfs.QualifiedPath{RootID: rootID, Rel: "nested/.git/HEAD"}, []byte("ref: refs/heads/main\n"), 0o644)
 	testutil.FailErr(t, "write nested HEAD", err)
-	writeThroughClaimedView(t, task, "nested/file.go", "package nested\n")
+	writeThroughClaimedView(t, fixture.views, task, "nested/file.go", "package nested\n")
 	if won, err := fixture.queue.Complete(t.Context(), task, api.WorkerResult{Status: "complete"}); err != nil || !won {
 		t.Fatalf("Complete: won=%v err=%v", won, err)
 	}
 	completed, _ := fixture.queue.Get(task.ID)
-	_, manifest, published, err := session.OpenTaskCheckpointStore(completed)
+	_, manifest, published, err := session.OpenTaskCheckpointStore(completed, "")
 	testutil.FailErr(t, "open checkpoint", err)
 	captured := map[string]bool{}
 	for _, entry := range manifest.Entries {

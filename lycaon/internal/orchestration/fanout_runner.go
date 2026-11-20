@@ -89,7 +89,7 @@ func (o *OrchestratorImpl) runFanOut(ctx context.Context, req RunRequest, wf *wo
 	for i, unit := range settled {
 		key := fanOutSubtaskKey(i)
 		if unit.Status == api.LegStatusFailed || unit.Status == api.LegStatusCanceled {
-			return nil, newRunFailure(RunFailureCodeStageFailed, TopologyBindStageFanOut, false, fmt.Errorf("fan_out unit %q failed", key))
+			return nil, newRunFailure(RunFailureCodeStageFailed, TopologyBindStageFanOut, fmt.Errorf("fan_out unit %q failed", key))
 		}
 		output := key + " complete"
 		if strings.TrimSpace(unit.Summary) != "" {

@@ -6,7 +6,6 @@ import (
 	"io"
 	"regexp"
 	"strings"
-	"sync/atomic"
 	"time"
 	"unicode"
 
@@ -105,52 +104,6 @@ func searchDirect(ctx context.Context, discoverer DirectDiscoverer, query string
 	return providerOutcome{providerID: providerID, ok: true, reason: "ok", hits: hits}
 }
 
-// directDiscoverSem bounds concurrent direct searches' network activity. A
-// search holds one slot from its first phase-2 host crawl through frontier end.
-var directDiscoverSem = make(chan struct{}, directDiscoverMaxParallel)
-
-// activeUserSearches counts in-flight user-origin direct searches. The warm
-// engine consults it to keep background Summarizer traffic out of interactive
-// storms.
-var activeUserSearches atomic.Int64
-
-// interactiveSearchActive reports whether any user-origin direct search is in
-// flight right now.
-func interactiveSearchActive() bool {
-	return activeUserSearches.Load() > 0
-}
-
-func acquireDirectSlot(ctx context.Context) error {
-	select {
-	case directDiscoverSem <- struct{}{}:
-		return nil
-	case <-ctx.Done():
-		return ctx.Err()
-	}
-}
-
-// tryAcquireDirectSlot takes a discovery slot only if one is free — the warm
-// engine's priority floor: background warming never waits on (or delays) a
-// live search.
-func tryAcquireDirectSlot() bool {
-	select {
-	case directDiscoverSem <- struct{}{}:
-		return true
-	default:
-		return false
-	}
-}
-
-func releaseDirectSlot() {
-	select {
-	case <-directDiscoverSem:
-	default:
-		// An unbalanced release, or resetDirectState swapping the semaphore
-		// under an in-flight test search; warn rather than panic.
-		wrlog.Warn("unbalanced direct-search slot release")
-	}
-}
-
 // seedLead supplies a host to crawl and title words to rank discovered URLs.
 type seedLead struct {
 	title string
@@ -224,8 +177,8 @@ func (p *seedPlan) mergeLeadHosts() {
 	}
 }
 
-func fetchTextURL(ctx context.Context, rawURL string) (string, error) {
-	body, status, err := fetchIndexBody(ctx, rawURL)
+func (crawler *Crawler) fetchTextURL(ctx context.Context, rawURL string) (string, error) {
+	body, status, err := crawler.fetchIndexBody(ctx, rawURL)
 	if err != nil {
 		return "", err
 	}
@@ -238,7 +191,7 @@ func fetchTextURL(ctx context.Context, rawURL string) (string, error) {
 // indexBodyByteLimit is the index or robots page prefix discovery reads.
 const indexBodyByteLimit = 1 << 20
 
-func fetchIndexBody(ctx context.Context, rawURL string) (body string, status int, err error) {
+func (crawler *Crawler) fetchIndexBody(ctx context.Context, rawURL string) (body string, status int, err error) {
 	u, err := normalizeFetchURL(rawURL)
 	if err != nil {
 		return "", 0, err
@@ -267,7 +220,7 @@ func fetchIndexBody(ctx context.Context, rawURL string) (body string, status int
 			FetchMs:  elapsed.Milliseconds(),
 		})
 	}()
-	resp, _, err := politeGuardedGet(ctx, u, researchAcceptHeader, indexBodyByteLimit, false)
+	resp, _, err := crawler.politeGuardedGet(ctx, u, researchAcceptHeader, indexBodyByteLimit, false)
 	if err != nil {
 		return "", 0, err
 	}
@@ -280,8 +233,8 @@ func fetchIndexBody(ctx context.Context, rawURL string) (body string, status int
 	return string(raw), resp.StatusCode, nil
 }
 
-func fetchRobotsTxt(ctx context.Context, siteBase string) string {
-	body, status, err := fetchIndexBody(ctx, siteBase+"/robots.txt")
+func (crawler *Crawler) fetchRobotsTxt(ctx context.Context, siteBase string) string {
+	body, status, err := crawler.fetchIndexBody(ctx, siteBase+"/robots.txt")
 	if err != nil || status < 200 || status >= 300 {
 		return ""
 	}

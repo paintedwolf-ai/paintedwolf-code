@@ -2,17 +2,17 @@ package workflow
 
 import (
 	"errors"
-	"github.com/lycaon/lycaon/internal/toolrejection"
-	workflowphases "github.com/lycaon/lycaon/internal/workflow/phases"
-	workflowstatetools "github.com/lycaon/lycaon/internal/workflow/statetools"
 	"reflect"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/internal/tools"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
+	workflowphases "github.com/lycaon/lycaon/internal/workflow/phases"
 	"github.com/lycaon/lycaon/internal/workflow/runstate"
+	workflowstatetools "github.com/lycaon/lycaon/internal/workflow/statetools"
 )
 
 func TestStateUpdateCannotForgeHostWorkflowProof(t *testing.T) {
@@ -20,7 +20,7 @@ func TestStateUpdateCannotForgeHostWorkflowProof(t *testing.T) {
 	run, err := startRun(t.Context(), mgr, "sess-1", "plan", "1.0.1")
 	testutil.FailErr(t, "start run", err)
 	reg := tools.NewDefaultRegistry()
-	testutil.FailErr(t, "register state tools", workflowstatetools.RegisterStateTools(reg, workflowstatetools.StateToolDeps{Runs: mgr.Store.Runs, Vars: mgr.Phases.Vars, Journal: mgr.Phases.Journal, Resolver: &mgr.Resolver, Starts: mgr.Starts, Controls: mgr.Controls, Scaffold: mgr.Blueprints.Scaffold, Sessions: sessions}))
+	testutil.FailErr(t, "register state tools", workflowstatetools.RegisterStateTools(reg, workflowstatetools.StateToolDeps{Runs: mgr.Store.Runs, Vars: mgr.Phases.Vars, Journal: mgr.Phases.Journal, Resolver: &mgr.Resolver, Starts: mgr.Starts, Controls: mgr.Controls, Scaffold: mgr.Blueprints.Scaffold, Sessions: sessions.Sessions}))
 	before, err := mgr.Store.Runs.GetScaffoldVars(t.Context(), run.ID)
 	testutil.FailErr(t, "read initial variables", err)
 	tctx := tools.ToolContext{Identity: tools.InvocationIdentity{SessionID: "sess-1"},

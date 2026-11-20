@@ -26,7 +26,7 @@ func (s *Transcript) HandleExportSessionTranscript(w http.ResponseWriter, r *htt
 		return
 	}
 
-	sess, err := s.Store.Get(r.Context(), id)
+	sess, err := s.SessionStore.Get(r.Context(), id)
 	if err != nil {
 		if errors.Is(err, store.ErrSessionNotFound) {
 			s.responses.Fail(w, wire.ApiErrorCodeSessionNotFound, "chat not found")

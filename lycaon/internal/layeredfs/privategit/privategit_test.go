@@ -73,17 +73,17 @@ func TestOperationSuiteMountedAndMaterialized(t *testing.T) {
 			exec := NewGitExecutor(mgr, viewID, RemotePolicy{})
 
 			// 1. status & diff: verify staged and unstaged source changes are preserved.
-			statusOut, err := exec.Status(t.Context(), "--porcelain")
+			statusOut, err := exec.Run(t.Context(), ".", "status", "--porcelain")
 			testutil.FailErr(t, "git status --porcelain", err)
 			if !strings.Contains(statusOut, "M  staged.txt") || !strings.Contains(statusOut, " M unstaged.txt") {
 				t.Fatalf("expected staged and unstaged distinction preserved, got:\n%s", statusOut)
 			}
-			unstagedDiff, err := exec.Diff(t.Context())
+			unstagedDiff, err := exec.Run(t.Context(), ".", "diff")
 			testutil.FailErr(t, "git diff", err)
 			if !strings.Contains(unstagedDiff, "+unstaged-user-edit") {
 				t.Fatalf("expected unstaged diff, got:\n%s", unstagedDiff)
 			}
-			stagedDiff, err := exec.Diff(t.Context(), "--cached")
+			stagedDiff, err := exec.Run(t.Context(), ".", "diff", "--cached")
 			testutil.FailErr(t, "git diff --cached", err)
 			if !strings.Contains(stagedDiff, "+staged-user-edit") {
 				t.Fatalf("expected staged diff, got:\n%s", stagedDiff)
@@ -109,18 +109,18 @@ func TestOperationSuiteMountedAndMaterialized(t *testing.T) {
 			}
 
 			// 2. log & commit (commits the pre-staged change without touching unstaged.txt).
-			logBefore, err := exec.Log(t.Context(), "--oneline", "-n", "3")
+			logBefore, err := exec.Run(t.Context(), ".", "log", "--oneline", "-n", "3")
 			testutil.FailErr(t, "git log", err)
 			if !strings.Contains(logBefore, "add submodule sub") {
 				t.Fatalf("unexpected log output:\n%s", logBefore)
 			}
-			_, err = exec.Commit(t.Context(), "worker commits staged file")
+			_, err = exec.Run(t.Context(), ".", "commit", "-m", "worker commits staged file")
 			testutil.FailErr(t, "git commit", err)
 
 			// 3. stash push & pop (stashes unstaged.txt and restores it).
-			_, err = exec.Stash(t.Context(), "push", "-m", "worker-stash")
+			_, err = exec.Run(t.Context(), ".", "stash", "push", "-m", "worker-stash")
 			testutil.FailErr(t, "git stash push", err)
-			_, err = exec.Stash(t.Context(), "pop")
+			_, err = exec.Run(t.Context(), ".", "stash", "pop")
 			testutil.FailErr(t, "git stash pop", err)
 
 			// 4. revert HEAD (reverts the worker commit and updates staged.txt in Core).
@@ -139,9 +139,9 @@ func TestOperationSuiteMountedAndMaterialized(t *testing.T) {
 			testutil.FailErr(t, "write feature.txt", err)
 			_, err = exec.Run(t.Context(), ".", "add", "feature.txt")
 			testutil.FailErr(t, "git add feature.txt", err)
-			_, err = exec.Commit(t.Context(), "add feature.txt")
+			_, err = exec.Run(t.Context(), ".", "commit", "-m", "add feature.txt")
 			testutil.FailErr(t, "git commit feature.txt", err)
-			_, err = exec.Checkout(t.Context(), "main")
+			_, err = exec.Run(t.Context(), ".", "checkout", "main")
 			testutil.FailErr(t, "git checkout main", err)
 			_, err = exec.Run(t.Context(), ".", "switch", "worker-feature")
 			testutil.FailErr(t, "git switch worker-feature", err)
@@ -166,7 +166,7 @@ func TestOperationSuiteMountedAndMaterialized(t *testing.T) {
 			// 7. Linked worktree initialization & operation.
 			wtCore := newMountedViewWithManager(t, mgr, viewID+"-linkedwt", fix.linkedWTDir, fix.trunkDir)
 			wtExec := NewGitExecutor(mgr, viewID+"-linkedwt", RemotePolicy{})
-			wtStatus, err := wtExec.Status(t.Context(), "--short", "--branch")
+			wtStatus, err := wtExec.Run(t.Context(), ".", "status", "--short", "--branch")
 			testutil.FailErr(t, "linked worktree git status", err)
 			if !strings.Contains(wtStatus, "wt-branch") {
 				t.Fatalf("expected linked worktree on wt-branch, got %q", wtStatus)

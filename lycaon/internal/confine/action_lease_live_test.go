@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"context"
 	"io"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -21,7 +22,7 @@ import (
 func liveBroker(t *testing.T) egressproxy.Addrs {
 	t.Helper()
 	testutil.RequireLineage(t, lineage.Supported())
-	addrs, err := confine.StartEgressBroker(t.TempDir())
+	addrs, err := confine.StartEgressBroker(t.TempDir(), net.Listen)
 	testutil.FailErr(t, "start egress broker", err)
 	t.Cleanup(func() { _ = confine.StopEgressBroker() })
 	return addrs

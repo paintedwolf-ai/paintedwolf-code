@@ -15,7 +15,7 @@ import (
 )
 
 func configurePreviewProjection(c *Controller) {
-	c.SetCaptureProjector(captureprojection.New(secretmatch.NewInertMatcher(), nil))
+	c.SetCaptureProjector(captureprojection.New(&secretmatch.Matcher{}, nil))
 	c.projectFrame = func(
 		_ context.Context, _ *captureprojection.Projector, _ captureprojection.Scope,
 		_ browser.PageRegions, _ string, raw []byte,
@@ -169,7 +169,7 @@ func TestSnapshotProjectsMetadataInTheAttachmentProject(t *testing.T) {
 	var primedProject string
 	c := NewController(DefaultConfig(), nil)
 	c.SetCaptureProjector(captureprojection.New(
-		secretmatch.NewInertMatcher(),
+		&secretmatch.Matcher{},
 		func(_ context.Context, projectID, _ string) error {
 			primedProject = projectID
 			return nil
@@ -267,7 +267,7 @@ func TestPendingFrameIsMaskedAgainstItsOwnPageState(t *testing.T) {
 		cfg := DefaultConfig()
 		cfg.MaxFPS = 2
 		c := NewController(cfg, func(context.Context, string, string, api.PreviewEvent) {})
-		c.SetCaptureProjector(captureprojection.New(secretmatch.NewInertMatcher(), nil))
+		c.SetCaptureProjector(captureprojection.New(&secretmatch.Matcher{}, nil))
 		var mu sync.Mutex
 		var seen []browser.PageRegions
 		c.projectFrame = func(

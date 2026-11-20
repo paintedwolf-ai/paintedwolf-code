@@ -11,6 +11,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/commandprogram"
 	"github.com/lycaon/lycaon/internal/commandsurface"
+	"github.com/lycaon/lycaon/internal/commandsurface/commandsurfacetest"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 )
@@ -110,12 +111,12 @@ func FuzzParseProgramSafetyAndCeilings(f *testing.F) {
 func checkWordExpansionInvariants(t *testing.T, expr string, globRoot string, limits toolcontract.ProgramMemoryLimits) {
 	t.Helper()
 	source := ": " + expr
-	parsed, err := commandsurface.ParseProgram([]byte(source), commandsurface.ParseOptions{SourceName: "fuzz-exp"})
+	parsed, err := commandsurfacetest.Admit(t, []byte(source), commandsurface.ParseOptions{SourceName: "fuzz-exp"})
 	if err != nil {
 		return
 	}
 	defer func() { _ = parsed.Close() }()
-	stmts := parsed.Snapshot().Statements
+	stmts := parsed.View(t).Statements
 	if len(stmts) != 1 {
 		return
 	}

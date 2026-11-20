@@ -58,7 +58,6 @@ func checkBannedMention(t *testing.T, mention *regexp.Regexp, label, corpus stri
 // rendered copy presents a fully retired tool name as a call.
 func TestRenderedStockCopyNeverNamesFullyRetiredTools(t *testing.T) {
 	retired := retiredToolMention(t)
-	root := contractcheck.RepoRoot(t)
 
 	for _, rootCount := range []int{0, 1, 2} {
 		plans, err := surface.CompileToolPlans(rootCount)
@@ -70,7 +69,7 @@ func TestRenderedStockCopyNeverNamesFullyRetiredTools(t *testing.T) {
 			t.Run(fmt.Sprintf("coordinator/%s/%d-roots", id, rootCount), func(t *testing.T) {
 				checkBannedMention(t, retired,
 					fmt.Sprintf("coordinator surface %s at %d roots", id, rootCount),
-					renderCoordinatorTripartiteAtRootCount(t, root, rootCount, id))
+					renderCoordinatorTripartiteAtRootCount(t, rootCount, id))
 			})
 		}
 	}

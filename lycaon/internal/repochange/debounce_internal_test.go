@@ -11,11 +11,10 @@ import (
 )
 
 func TestDebouncerOverflowBecomesStructuralResync(t *testing.T) {
-	t.Cleanup(ResetObserversForTest)
 	t.Cleanup(func() { ResetDebouncerForTest(context.Background()) })
 	var got Event
-	RegisterObserver(func(_ context.Context, ev Event) { got = ev })
-	d := NewDebouncer(time.Hour)
+	t.Cleanup(RegisterObserver(func(_ context.Context, ev Event) { got = ev }))
+	d := newDebouncer(time.Hour)
 	dir := t.TempDir()
 	for i := range maxDebouncePaths + 1 {
 		d.NotifyWorktreeChanges(context.Background(), dir, []WorktreeChange{{Path: fmt.Sprintf("p-%05d/file", i), Kind: WorktreeChangeContent}}, SourceWatcher)
@@ -47,14 +46,13 @@ func TestClassifyWatcherWriteUsesStatFacts(t *testing.T) {
 }
 
 func TestUseDebounceDeliversPendingBurstsAcrossTheSwap(t *testing.T) {
-	t.Cleanup(ResetObserversForTest)
 	var delivered []string
-	RegisterObserver(func(_ context.Context, ev Event) { delivered = append(delivered, ev.ProjectDir) })
-	previous := globalDebounce.currentDelay()
+	t.Cleanup(RegisterObserver(func(_ context.Context, ev Event) { delivered = append(delivered, ev.ProjectDir) }))
+	previous := processWatchers().debounce.currentDelay()
 	dir := t.TempDir()
 
 	restore := UseDebounce(t.Context(), time.Hour)
-	if got := globalDebounce.currentDelay(); got != time.Hour {
+	if got := processWatchers().debounce.currentDelay(); got != time.Hour {
 		t.Fatalf("delay = %v, want the hour set for the test", got)
 	}
 	NotifyWorktreeDebounced(t.Context(), dir, []string{"a.txt"}, SourceWatcher)
@@ -65,7 +63,7 @@ func TestUseDebounceDeliversPendingBurstsAcrossTheSwap(t *testing.T) {
 	if len(delivered) != 1 {
 		t.Fatalf("restoring the window delivered %d bursts, want the one pending", len(delivered))
 	}
-	if got := globalDebounce.currentDelay(); got != previous {
+	if got := processWatchers().debounce.currentDelay(); got != previous {
 		t.Fatalf("restored delay = %v, want %v", got, previous)
 	}
 }

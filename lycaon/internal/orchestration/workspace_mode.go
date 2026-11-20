@@ -26,7 +26,7 @@ func validateWorkspaceMode(mode WorkspaceMode) error {
 	}
 }
 
-// TopologyRequiresIsolation reports whether each leg gets an isolated copy.
+// TopologyRequiresIsolation reports whether a topology binds separate worker workspaces.
 func TopologyRequiresIsolation(spec TopologySpec) bool {
 	switch spec.Pattern {
 	case TopologyPack, TopologyFanOut:

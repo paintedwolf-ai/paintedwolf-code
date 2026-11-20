@@ -10,7 +10,6 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
-	"github.com/lycaon/lycaon/internal/api"
 	"github.com/lycaon/lycaon/internal/testutil"
 	wire "github.com/lycaon/lycaon/pkg/api"
 	"github.com/lycaon/lycaon/test/wiring"
@@ -71,7 +70,7 @@ func TestAPIErrorContractsMatrix(t *testing.T) {
 	runAPIErrorRows(t, base, apiErrorSourceMutationRows(fixture))
 	runAPIErrorRows(t, base, apiErrorProjectStateRows(fixture))
 	// Empty prompts are valid when an active workflow declares a request.
-	requestless, err := h.Store.Create(t.Context(), wire.CreateSessionRequest{ProjectID: project.ID}, project.ID)
+	requestless, err := h.Store.Sessions.Create(t.Context(), wire.CreateSessionRequest{ProjectID: project.ID}, project.ID)
 	testutil.FailErr(t, "create session without a workflow request", err)
 	manifest, err := h.Workflows.Manager.Resolver.Overlay.Get("implement", "1.0.0")
 	testutil.FailErr(t, "load empty-prompt fixture workflow", err)
@@ -594,7 +593,7 @@ func runAPIErrorRows(t *testing.T, base string, rows []apiErrorMatrixRow) {
 			case "none":
 				// Omit authorization.
 			case "":
-				req.Header.Set("Authorization", api.TestAuthHeader())
+				req.Header.Set("Authorization", fixtureAuthorization())
 			default:
 				req.Header.Set("Authorization", "Bearer "+row.auth)
 			}

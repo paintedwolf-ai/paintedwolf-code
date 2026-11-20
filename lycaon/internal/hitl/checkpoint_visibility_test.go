@@ -41,7 +41,7 @@ func TestCheckpointCreationReadParity(t *testing.T) {
 			}
 			for _, restart := range []bool{false, true} {
 				if restart {
-					mgr = hitl.NewCheckpoints(hitl.NewSQLStore(database), nil, authzcontext.SQLRecorder(database))
+					mgr = hitl.NewCheckpoints(hitl.NewSQLStore(database), nil, authzcontext.LedgerRecorder{Ledger: &authzcontext.Ledger{Store: authzcontext.NewSQLStore(database)}})
 					testutil.FailErr(t, "restore pending approvals", mgr.RestorePending(testdbseed.OwnerCaller(t, t.Context(), database)))
 				}
 				direct, err := mgr.ListPending(testdbseed.OwnerCaller(t, t.Context(), database), sid, nil)
@@ -87,7 +87,7 @@ func TestChildCheckpointAttention(t *testing.T) {
 			if len(combined) != 1 {
 				t.Fatalf("combined approvals = %d, want 1", len(combined))
 			}
-			source := attention.Source{Sessions: sessionstore.NewSQL(database), Checkpoints: mgr}
+			source := attention.Source{Sessions: sessionstore.NewSQL(database).Sessions, Checkpoints: mgr}
 			view, err := source.BuildView(testdbseed.OwnerCaller(t, t.Context(), database))
 			testutil.FailErr(t, "build attention view", err)
 			if len(view.Rows) != 1 || view.Rows[0].SessionID != parent || view.Rows[0].Class != api.AttentionClassNeedsYou {

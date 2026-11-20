@@ -15,7 +15,7 @@ import (
 
 // IgnoreService serves finding ledger queries and project ignore rules.
 type IgnoreService struct {
-	Store *scanbase.SQLStore
+	Store *scanbase.IgnoreStore
 	// OverlayRootsApply selects trusted roots whose scan settings apply; nil disables overlays.
 	OverlayRootsApply func(ctx context.Context, rootPaths []string) []string
 }

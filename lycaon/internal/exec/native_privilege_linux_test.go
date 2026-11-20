@@ -16,14 +16,14 @@ import (
 	"time"
 
 	"github.com/lycaon/lycaon/internal/confine"
-	"github.com/lycaon/lycaon/internal/osprocess"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/testutil/proccredentials"
 )
 
 const privilegePayloadMarker = "PW_NATIVE_PRIVILEGE_PAYLOAD=1"
 
 type nativePrivilegeFacts struct {
-	Credentials               osprocess.ProcessSecurity
+	Credentials               proccredentials.ProcessSecurity
 	Arguments                 []string
 	Directory, KernelFilename string
 }
@@ -33,7 +33,7 @@ func TestLinuxNativePrivilegeQualification(t *testing.T) {
 	if os.Getenv("GITHUB_ACTIONS") != "true" || os.Getenv("PW_NATIVE_PRIVILEGE_QUALIFICATION") != "ci" {
 		t.Fatal("NATIVE_PRIVILEGE_SETUP_UNAVAILABLE: explicit ephemeral CI privilege setup is absent")
 	}
-	initial, err := osprocess.ProcessCredentials(os.Getpid())
+	initial, err := proccredentials.ReadSelf()
 	testutil.FailErr(t, "observe initiating native credentials", err)
 	if initial.EffectiveUID == 0 || initial.EffectiveGID == 0 || initial.Linux == nil || initial.Linux.NoNewPrivileges || initial.Linux.Effective&(1<<10) != 0 {
 		t.Fatal("NATIVE_PRIVILEGE_SETUP_UNAVAILABLE: baseline must be unprivileged and permit a native transition")
@@ -144,7 +144,7 @@ func nativePrivilegeBaseline(t *testing.T, entry, root, effect string) nativePri
 	return facts
 }
 
-func requireNativePrivilegeGain(t *testing.T, kind string, initial, actual osprocess.ProcessSecurity) {
+func requireNativePrivilegeGain(t *testing.T, kind string, initial, actual proccredentials.ProcessSecurity) {
 	t.Helper()
 	qualified := false
 	switch kind {

@@ -1,8 +1,8 @@
 package worker
 
 import (
-	"github.com/lycaon/lycaon/internal/timelayout"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -14,6 +14,7 @@ import (
 	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/timelayout"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -38,7 +39,7 @@ func TestSQLDecisionResolverRollsBackEveryWrite(t *testing.T) {
 	messages := sessionstore.NewSQL(database)
 	outbox := eventoutbox.New(database, nil)
 	messages.SetEventOutbox(outbox)
-	queue := NewSQLQueue(database, 1)
+	queue := NewSQLServices(database, 1).Queue
 	queue.SetEventOutbox(outbox)
 	resolver := NewSQLDecisionResolver(messages, queue)
 	decision, ok, err := decisions.Get(t.Context(), "child-1")
@@ -67,7 +68,7 @@ func TestSQLDecisionResolverRequeuesSameWorkerWithBranchContinuity(t *testing.T)
 	testdbseed.InsertSession(t, database, "parent-1", testdbseed.DefaultProjectID)
 	testdbseed.InsertSession(t, database, "child-1", testdbseed.DefaultProjectID)
 
-	queue := NewSQLQueue(database, 1)
+	queue := NewSQLServices(database, 1).Queue
 	store := queue.store
 	testutil.FailErr(t, "insert worker", store.InsertTask(t.Context(), api.WorkerTask{
 		ID: "job-1", ProjectID: testdbseed.DefaultProjectID,
@@ -77,7 +78,7 @@ func TestSQLDecisionResolverRequeuesSameWorkerWithBranchContinuity(t *testing.T)
 		OverlayID: "job-1",
 	}))
 	workspaceRoot := filepath.Join(testbaseline.DataDir(t, database), "worker-branches", "job-1")
-	baseline := testbaseline.Durable(t, database, "job-1", t.TempDir())
+	baseline := testbaseline.Durable(t, "root", database, "job-1", t.TempDir())
 	bound, err := store.SetWorkerWorkspace(t.Context(), "job-1", workspaceRoot, baseline)
 	testutil.FailErr(t, "bind worker workspace", err)
 	if !bound {
@@ -143,5 +144,24 @@ func TestSQLDecisionResolverRequeuesSameWorkerWithBranchContinuity(t *testing.T)
 	).Scan(&delivered))
 	if delivered != 0 {
 		t.Fatalf("stale checkpoint deliveries = %d want 0", delivered)
+	}
+}
+
+func TestSQLDecisionResolverRequiresSharedDatabase(t *testing.T) {
+	database := testdbfixture.Open(t, "workers.db")
+	otherDatabase := testdbfixture.Open(t, "messages.db")
+	messages := sessionstore.NewSQL(database)
+	queue := NewSQLServices(database, 1).Queue
+	for name, resolver := range map[string]*SQLDecisionResolver{
+		"missing repositories": NewSQLDecisionResolver(nil, queue),
+		"missing queue":        NewSQLDecisionResolver(messages, nil),
+		"different database":   NewSQLDecisionResolver(sessionstore.NewSQL(otherDatabase), queue),
+	} {
+		t.Run(name, func(t *testing.T) {
+			err := resolver.Resolve(t.Context(), api.WorkerDecisionRequest{}, api.Message{})
+			if err == nil || !strings.Contains(err.Error(), "not configured") {
+				t.Fatalf("invalid transaction dependencies = %v", err)
+			}
+		})
 	}
 }

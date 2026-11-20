@@ -1,0 +1,16 @@
+{
+  "category": "go_receiver_lines",
+  "artifact": "lycaon/internal/webresearch/webresearch.directDiscoverer",
+  "kind": "algorithm",
+  "workstream": "web-research-runtime",
+  "disposition": "retain",
+  "reason": "Retain the 402-line invocation pipeline for seed selection, frontier verification and final result settlement. Discovery supplies reusable memory and admission, while Crawler handles network policy and Registry handles providers. The invocation retains its query, ranking, context and result counters together; focused direct-search and frontier tests verify early completion and cancellation.",
+  "reviewed_commit": "07ad83d4a386172877e6221d2ed1feffb7f6900f",
+  "ceiling": 402,
+  "boundaries": {
+    "lycaon/internal/webresearch/direct_search_test.go": "aa7a4baaf0a0c70f86c824dbd411f575fb423ad91fb1271b9489fab1e6cd15aa",
+    "lycaon/internal/webresearch/direct_frontier_test.go": "f4dc30de224355d2376f3c52358e7a5b0c5801538d4c1b9554632e28d3f66201",
+    "lycaon/internal/webresearch/runtime_resources_test.go": "96e4a128bff2d6172940f6175fd0219f6ceaa62865254eefb6db430752e52e1e"
+  },
+  "reviewed_shape": "9c5db0ce3deb9cad8f4d699f8d50a407646c7c11062ae9f5ab8b805ac8b330e2"
+}

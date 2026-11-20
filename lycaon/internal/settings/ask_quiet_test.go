@@ -7,6 +7,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/hitl"
 	"github.com/lycaon/lycaon/internal/settings"
+	"github.com/lycaon/lycaon/internal/settings/settingstest"
 	"github.com/lycaon/lycaon/internal/testutil"
 )
 
@@ -14,7 +15,7 @@ func TestAskQuietDayExpiresAndChatSurvives(t *testing.T) {
 	t.Parallel()
 	store, err := settings.NewApprovalStoreAt(filepath.Join(t.TempDir(), "approvals.yaml"))
 	testutil.FailErr(t, "NewApprovalStore", err)
-	gate := settings.NewRuleApprovalGate(store, settings.NoSources())
+	gate := settings.NewRuleApprovalGate(store, settingstest.EmptySources())
 
 	day, created := gate.PutAskQuiet(hitl.AskQuiet{
 		ChatSessionID: "chat-1",
@@ -72,7 +73,7 @@ func TestAskQuietActiveDuplicatePreservesOwnerAndExpiry(t *testing.T) {
 	t.Parallel()
 	store, err := settings.NewApprovalStoreAt(filepath.Join(t.TempDir(), "approvals.yaml"))
 	testutil.FailErr(t, "NewApprovalStore", err)
-	gate := settings.NewRuleApprovalGate(store, settings.NoSources())
+	gate := settings.NewRuleApprovalGate(store, settingstest.EmptySources())
 	first, _ := gate.PutAskQuiet(hitl.AskQuiet{
 		ChatSessionID: "chat", Key: "authority_misuse:pack/rule", Label: "first", OwnerOperationID: "operation-1",
 	}, 60)

@@ -13,7 +13,7 @@ import (
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
-func checkLeaveability(opts CatalogValidateOptions, path string, m workflowdef.Manifest) []api.ComposeValidationError {
+func checkLeaveability(path string, m workflowdef.Manifest) []api.ComposeValidationError {
 	var out []api.ComposeValidationError
 	surfaces, err := surface.CompileToolPlans(1)
 	if err != nil {
@@ -35,7 +35,7 @@ func checkLeaveability(opts CatalogValidateOptions, path string, m workflowdef.M
 	}
 
 	for _, p := range m.PhaseDefs {
-		binding, err := workflowdef.ResolveSurfaceBinding(m, p.ID, m.ID, opts.ConfigRoot)
+		binding, err := workflowdef.ResolveSurfaceBinding(m, p.ID, m.ID)
 		if err != nil {
 			continue
 		}

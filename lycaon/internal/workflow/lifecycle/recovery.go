@@ -13,17 +13,18 @@ import (
 
 // Recovery preserves durable waits while settling inactive runs from a prior boot.
 type Recovery struct {
-	Runs       RunReader
-	Sessions   Sessions
-	Resolver   *workflowcatalog.Resolver
-	Journal    *runstate.Journal
-	Cleanup    *Cleanup
-	Requests   RequestRecovery
-	Approvals  Approvals
-	Settlement Settlement
-	Reports    Reports
-	Busy       func(context.Context, string) bool
-	Before     time.Time
+	Runs         RunReader
+	SessionStore Sessions
+	TurnStore    Turns
+	Resolver     *workflowcatalog.Resolver
+	Journal      *runstate.Journal
+	Cleanup      *Cleanup
+	Requests     RequestRecovery
+	Approvals    Approvals
+	Settlement   Settlement
+	Reports      Reports
+	Busy         func(context.Context, string) bool
+	Before       time.Time
 }
 
 // ReconcileOrphanedRuns closes inactive catalog and child runs.
@@ -36,8 +37,8 @@ func (m *Recovery) ReconcileOrphanedRuns(ctx context.Context, sessionID string) 
 	}
 	// Turn progress since boot keeps the session's runs active.
 	cut := m.Before
-	if !cut.IsZero() && m.Sessions != nil {
-		progressed, err := m.Sessions.LatestTurnProgress(ctx, sessionID)
+	if !cut.IsZero() && (m.SessionStore != nil && m.TurnStore != nil) {
+		progressed, err := m.TurnStore.LatestTurnProgress(ctx, sessionID)
 		if err != nil {
 			return err
 		}

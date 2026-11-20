@@ -16,7 +16,7 @@ func BindMovedFiles(ctx context.Context, store *scan.SQLStore, runs []api.Workfl
 	}
 	var errs []error
 	for _, run := range runs {
-		bound, err := store.ListByWorkflowRunID(ctx, run.ID)
+		bound, err := store.Reads.ListByWorkflowRunID(ctx, run.ID)
 		if err != nil {
 			errs = append(errs, err)
 			continue
@@ -24,7 +24,7 @@ func BindMovedFiles(ctx context.Context, store *scan.SQLStore, runs []api.Workfl
 		if len(bound) == 0 || bound[0].CanonicalPath != completed.CanonicalPath || !scan.ClosesMovedFiles(bound, completed) {
 			continue
 		}
-		if err := store.BindWorkflowRun(ctx, completed.ID, run.ID); err != nil {
+		if err := store.Runs.BindWorkflowRun(ctx, completed.ID, run.ID); err != nil {
 			errs = append(errs, fmt.Errorf("bind scan %s to run %s: %w", completed.ID, run.ID, err))
 		}
 	}
@@ -36,7 +36,7 @@ func ReconcileTerminals(ctx context.Context, store *scan.SQLStore, scanID string
 	if store == nil || recordTerminal == nil {
 		return nil
 	}
-	bindings, err := store.PendingTerminalWorkflowBindings(ctx, scanID, 256)
+	bindings, err := store.Runs.PendingTerminalWorkflowBindings(ctx, scanID, 256)
 	if err != nil {
 		return err
 	}
@@ -46,7 +46,7 @@ func ReconcileTerminals(ctx context.Context, store *scan.SQLStore, scanID string
 			errs = append(errs, fmt.Errorf("scan %s workflow %s: %w", binding.ScanID, binding.WorkflowRunID, err))
 			continue
 		}
-		if err := store.MarkWorkflowTerminalNotified(ctx, binding.ScanID, binding.WorkflowRunID); err != nil {
+		if err := store.Runs.MarkWorkflowTerminalNotified(ctx, binding.ScanID, binding.WorkflowRunID); err != nil {
 			errs = append(errs, fmt.Errorf("acknowledge scan %s workflow %s: %w", binding.ScanID, binding.WorkflowRunID, err))
 		}
 	}

@@ -1,7 +1,10 @@
 package contract
 
 import (
-	"fmt"
+	"context"
+	"encoding/json"
+	"os"
+	"path/filepath"
 	"sync"
 	"testing"
 
@@ -11,6 +14,7 @@ import (
 	"github.com/lycaon/lycaon/internal/gate"
 	"github.com/lycaon/lycaon/internal/hitl"
 	"github.com/lycaon/lycaon/internal/testutil"
+	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 	"gopkg.in/yaml.v3"
 )
 
@@ -32,31 +36,19 @@ func contractToolEvent(
 	})
 }
 
-var (
-	bundledDetectionCatalogOnce sync.Once
-	bundledDetectionCatalog     *detectionpack.Catalog
-	bundledDetectionCatalogErr  error
-)
+var bundledDetectionCatalog = sync.OnceValues(func() (*detectionpack.Catalog, error) {
+	packs, err := resolveStockDetectionPacks(context.Background())
+	if err != nil {
+		return nil, err
+	}
+	return detectionpack.LoadCatalog(detectionpack.Input{Contributed: packs})
+})
 
 func loadBundledDetectionCatalog(t *testing.T) *detectionpack.Catalog {
 	t.Helper()
-	bundledDetectionCatalogOnce.Do(func() {
-		configDir := t.TempDir()
-		packs, warnings, err := detectionpack.ShippedPacks()
-		if err != nil {
-			bundledDetectionCatalogErr = err
-			return
-		}
-		if len(warnings) != 0 {
-			bundledDetectionCatalogErr = fmt.Errorf("shipped detection warnings: %v", warnings)
-			return
-		}
-		bundledDetectionCatalog, bundledDetectionCatalogErr = detectionpack.LoadCatalog(detectionpack.Input{
-			ConfigDir: configDir, Contributed: packs,
-		})
-	})
-	testutil.FailErr(t, "LoadCatalog", bundledDetectionCatalogErr)
-	return bundledDetectionCatalog
+	catalog, err := bundledDetectionCatalog()
+	testutil.FailErr(t, "load bundled detection catalog", err)
+	return catalog
 }
 
 func contractFixtureMatchesRule(
@@ -156,6 +148,17 @@ func yamlStringList(v any) []string {
 	default:
 		return nil
 	}
+}
+
+func detectionSchemaFields(t *testing.T) map[string][]string {
+	t.Helper()
+	raw, err := os.ReadFile(filepath.Join(contractcheck.RepoRoot(t), "schemas", "detection-rule.schema.json"))
+	contractcheck.FailErr(t, "read detection rule schema", err)
+	var doc struct {
+		Fields map[string][]string `json:"x-paintedwolf-fields-by-service"`
+	}
+	contractcheck.FailErr(t, "decode detection rule schema", json.Unmarshal(raw, &doc))
+	return doc.Fields
 }
 
 func fieldSet(fields []string) map[string]struct{} {

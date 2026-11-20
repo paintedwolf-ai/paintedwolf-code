@@ -55,7 +55,7 @@ func runSelfEmbed(pass *analysis.Pass) (any, error) {
 }
 
 // CopyDrop reports a struct literal built from several fields of one value of
-// a same-named type, such as a twin in another package, that omits a field
+// another type, such as an adapter in another package, that omits a field
 // both types share with the same type.
 var CopyDrop = &analysis.Analyzer{
 	Name: "copydrop",
@@ -101,7 +101,7 @@ func runCopyDrop(pass *analysis.Pass) (any, error) {
 					continue
 				}
 				source := namedOf(v.Type())
-				if source == nil || source.Obj().Name() != target.Obj().Name() {
+				if source == nil {
 					continue
 				}
 				sourceStruct, ok := source.Underlying().(*types.Struct)
@@ -121,8 +121,8 @@ func runCopyDrop(pass *analysis.Pass) (any, error) {
 						}
 					}
 				}
-				// A literal that sets most shared fields and drops a few loses
-				// values; one that sets a few seeds a new value on purpose.
+				// Report mostly copied shapes; partial seeds stay outside this
+				// structural check. Callers review whether omissions are intentional.
 				if len(omitted) > 0 && 2*(len(shared)-len(omitted)) > len(shared) {
 					pass.Reportf(lit.Pos(), "%s built from %s (%s) omits shared %s",
 						target.Obj().Name(), v.Name(), source.Obj().Name(), fieldList(omitted))

@@ -24,7 +24,6 @@ func MergeCoordinatorPromptVars(
 
 // ExecutionModePromptTransition carries execution-mode template data.
 type ExecutionModePromptTransition struct {
-	ExecutionMode         string
 	ExecutionModePrevious string
 	ExecutionModeEntered  string
 	ExecutionModeLeft     string

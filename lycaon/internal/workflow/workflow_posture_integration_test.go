@@ -4,6 +4,7 @@ package workflow
 
 import (
 	"context"
+	"github.com/lycaon/lycaon/internal/testutil/conditionstest"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/conditions"
@@ -19,14 +20,14 @@ import (
 
 func TestWorkflowModeIntegrationImplementOnEnter(t *testing.T) {
 	mgr, sessStore, blueprintMgr, projectDir := testManagerWithRegistry(t)
-	setTestRegistry(t, mgr, blueprintMgr, conditions.TestRegistryDeps())
+	setTestRegistry(t, mgr, blueprintMgr, conditionstest.Dependencies())
 	ctx := context.Background()
 
 	run, err := startRun(ctx, mgr, "sess-1", "plan", "1.0.1")
 	testutil.FailErr(t, "startRun failed", err)
 	run = completePlanIntakeT(ctx, t, mgr, run)
 	seedValidPlanContent(t, blueprintMgr, run.BlueprintPath)
-	sess, err := sessStore.Get(ctx, "sess-1")
+	sess, err := sessStore.Sessions.Get(ctx, "sess-1")
 	testutil.FailErr(t, "sessStore.Get failed", err)
 	if sess.Posture != api.SessionPostureSpec {
 		t.Fatalf("start posture = %q want spec", sess.Posture)
@@ -34,12 +35,12 @@ func TestWorkflowModeIntegrationImplementOnEnter(t *testing.T) {
 
 	run, err = advancePlanToApprovePhase(ctx, mgr, run)
 	testutil.FailErr(t, "advancePlanToApprovePhase", err)
-	run, err = mgr.Approvals.SyncHumanApproval(workflowCaller(t, mgr), run.ID, projectDir)
+	run, err = mgr.Approvals.SyncHumanApproval(workflowCaller(t, sessStore), run.ID, projectDir)
 	testutil.FailErr(t, "SyncHumanApproval", err)
 	if run.CurrentPhase != "execute" {
 		t.Fatalf("phase = %q want execute", run.CurrentPhase)
 	}
-	sess, err = sessStore.Get(ctx, "sess-1")
+	sess, err = sessStore.Sessions.Get(ctx, "sess-1")
 	testutil.FailErr(t, "sessStore.Get failed", err)
 	if sess.Posture != api.SessionPostureBuild {
 		t.Fatalf("implement posture = %q", sess.Posture)

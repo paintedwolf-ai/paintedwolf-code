@@ -179,10 +179,10 @@ loop:
 			closeoutNudgeSent = true
 		}
 
-		assistantMsg, completion, _, err := l.Model.runAssistantStreamTurn(turnCtx, id, sess, st.history, st, profileID, userPrompt, step, maxIter, in.HostTurn)
+		assistantMsg, completion, err := l.Model.runAssistantStreamTurn(turnCtx, id, sess, st.history, st, profileID, step, maxIter, in.HostTurn)
 		if err != nil {
 			if finalTurnGaveNoAnswer(turnCtx, err, st) && l.Closeout.canCloseWithoutAnswer(sess) {
-				if _, cerr := l.Closeout.endWithClosing(turnCtx, sess, id, userPrompt, surfaceID, st); cerr != nil {
+				if _, cerr := l.Closeout.endWithClosing(turnCtx, sess, id, surfaceID, st); cerr != nil {
 					return nil, cerr
 				}
 				loopExit = loopExitCompleted
@@ -218,7 +218,7 @@ loop:
 			return nil, sendErr
 		} else if sent {
 			if withdrawErr := l.Nudges.withdrawCoordinatorDraft(
-				context.WithoutCancel(turnCtx), sess, id, st, assistantMsg.Content,
+				context.WithoutCancel(turnCtx), id, st, assistantMsg.Content,
 			); withdrawErr != nil {
 				return nil, withdrawErr
 			}

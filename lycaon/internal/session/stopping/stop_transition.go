@@ -7,7 +7,7 @@ import (
 // WithSessionTreeStop commits a reviewed exit before draining its runtime.
 func (m *Service) WithSessionTreeStop(ctx context.Context, sessionID, reason string, transition func(context.Context) error) error {
 	stopCtx := context.WithoutCancel(ctx)
-	if _, err := m.store.Get(stopCtx, sessionID); err != nil {
+	if _, err := m.sessionStore.Get(stopCtx, sessionID); err != nil {
 		return err
 	}
 	rootID := m.gate.RootID(stopCtx, sessionID)

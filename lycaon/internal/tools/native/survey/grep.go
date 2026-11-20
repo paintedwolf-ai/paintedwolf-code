@@ -16,13 +16,9 @@ import (
 	"github.com/lycaon/lycaon/internal/tools/native/sourceview"
 	"github.com/lycaon/lycaon/internal/tools/native/toolkit"
 	"github.com/lycaon/lycaon/internal/tools/projectpaths"
-	"github.com/lycaon/lycaon/internal/tools/readcaps"
 	"github.com/lycaon/lycaon/internal/tools/safecmd"
 	"github.com/lycaon/lycaon/internal/tsparse"
 )
-
-// hostGrepMaxFileBytes is mutable for small cap tests.
-var hostGrepMaxFileBytes = readcaps.MaxFileBytes
 
 var (
 	errGrepMatchCap = errors.New("grep match cap reached")

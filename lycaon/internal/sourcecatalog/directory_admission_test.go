@@ -59,7 +59,7 @@ func TestDirectoryReaderReadmitsBorrowedMembershipBetweenBatches(t *testing.T) {
 	if observation.Complete || observation.Failure == "" || observation.Entries != 1 {
 		t.Fatalf("denied observation=%+v", observation)
 	}
-	navigation, err := openNavigation(t.Context(), reader.store, headGeneration)
+	navigation, err := openNavigation(t.Context(), reader.store)
 	testutil.FailErr(t, "open preserved namespace", err)
 	defer navigation.Close()
 	children, err := navigation.Children(t.Context(), "dir")

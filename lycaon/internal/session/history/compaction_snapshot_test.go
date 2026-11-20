@@ -16,6 +16,7 @@ import (
 	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/testutil/llmtest"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -26,7 +27,7 @@ func TestSynthesisKeepsRecoveryAddressesOutsideItsCapturedPage(t *testing.T) {
 			{MessageID: "original-result", Ord: 1, Tool: "read", Handles: []string{"read#1"}, Disposition: "summary_and_reference"},
 			{MessageID: "new-observation", Ord: 11, Disposition: "reference"},
 		}}
-	sc := compaction.NewSimpleCompactor(compaction.DefaultCompactionConfig(), compaction.MockSummarizer{Text: "New observation"})
+	sc := compaction.NewSimpleCompactor(compaction.DefaultCompactionConfig(), llmtest.Summarizer{Structured: compaction.SummaryFormatRequested, Text: "New observation"})
 	enriched, err := sc.EnrichContinuation(t.Context(), compaction.SessionInfo{PriorContinuation: record},
 		[]api.Message{{ID: "new-observation", Ord: 11, Role: api.MessageRoleAssistant, Content: "New observation"}}, record)
 	testutil.FailErr(t, "enrich captured page", err)
@@ -40,12 +41,12 @@ func TestDelayedSynthesisPreservesNewerCoverage(t *testing.T) {
 	for _, newerSummary := range []bool{false, true} {
 		t.Run(fmt.Sprint(newerSummary), func(t *testing.T) {
 			sessionStore := storetest.New(t, testdbseed.DefaultProjectID)
-			sess, err := sessionStore.Create(t.Context(), api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
+			sess, err := sessionStore.Sessions.Create(t.Context(), api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
 			testutil.FailErr(t, "create session", err)
-			testutil.FailErr(t, "append sources", sessionStore.AppendMessages(t.Context(), sess.ID,
+			testutil.FailErr(t, "append sources", sessionStore.Transcript.AppendMessages(t.Context(), sess.ID,
 				api.Message{ID: "one", Role: api.MessageRoleTool, Content: "first observation"},
 				api.Message{ID: "two", Role: api.MessageRoleTool, Content: "second observation"}))
-			rows, err := sessionStore.GetMessages(t.Context(), sess.ID)
+			rows, err := sessionStore.Transcript.GetMessages(t.Context(), sess.ID)
 			testutil.FailErr(t, "read sources", err)
 			snapshot := store.CompactionView{CoveredThroughOrd: rows[0].Ord, CoveredThroughID: rows[0].ID, SourceSeq: rows[0].Seq}
 			record := &messageview.Continuation{Format: messageview.ContinuationFormat, ThroughOrd: rows[1].Ord, Window: 8192,
@@ -54,16 +55,16 @@ func TestDelayedSynthesisPreservesNewerCoverage(t *testing.T) {
 				record.SummaryThroughOrd = rows[1].Ord
 				record.Summary.Facts = []string{"newer accepted clue"}
 			}
-			testutil.FailErr(t, "publish newer baseline", sessionStore.PutCompactionView(t.Context(), sess.ID, store.CompactionView{
+			testutil.FailErr(t, "publish newer baseline", sessionStore.Compaction.PutCompactionView(t.Context(), sess.ID, store.CompactionView{
 				Generation: 1, CoveredThroughOrd: rows[1].Ord, CoveredThroughID: rows[1].ID, SourceSeq: rows[1].Seq, Continuation: record,
 				Messages: []api.Message{{ID: "summary", Role: api.MessageRoleAssistant, Content: strings.Repeat("Earlier continuation. ", 100),
 					ContentParts: []api.MessageContentPart{{Source: "compaction_summary", Content: strings.Repeat("Earlier continuation. ", 100)}}}},
 			}))
 			enriched := &messageview.Continuation{ThroughOrd: rows[0].Ord, SummaryThroughOrd: rows[0].Ord,
 				Summary: messageview.ContinuationSummary{Facts: []string{"delayed clue"}}}
-			history := &Service{store: sessionStore}
+			history := &Service{sessionStore: sessionStore.Sessions, transcriptStore: sessionStore.Transcript, compactionStore: sessionStore.Compaction}
 			testutil.FailErr(t, "publish delayed synthesis", history.publishSynthesis(t.Context(), compaction.SessionInfo{ID: sess.ID}, snapshot, enriched))
-			view, _, err := sessionStore.GetCompactionView(t.Context(), sess.ID)
+			view, _, err := sessionStore.Compaction.GetCompactionView(t.Context(), sess.ID)
 			testutil.FailErr(t, "read enriched view", err)
 			if view.CoveredThroughOrd != rows[1].Ord || view.Continuation.Sources[0].MessageID != "two" {
 				t.Fatal("delayed synthesis replaced newer recovery coordinates")
@@ -81,30 +82,30 @@ func TestDelayedSynthesisPreservesNewerCoverage(t *testing.T) {
 
 func TestDelayedSynthesisRejectsChangedCanonicalSource(t *testing.T) {
 	sessionStore := storetest.New(t, testdbseed.DefaultProjectID)
-	sess, err := sessionStore.Create(t.Context(), api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
+	sess, err := sessionStore.Sessions.Create(t.Context(), api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
-	testutil.FailErr(t, "append source", sessionStore.AppendMessages(t.Context(), sess.ID,
+	testutil.FailErr(t, "append source", sessionStore.Transcript.AppendMessages(t.Context(), sess.ID,
 		api.Message{ID: "source", Role: api.MessageRoleAssistant, Content: "original fact"}))
-	rows, err := sessionStore.GetMessages(t.Context(), sess.ID)
+	rows, err := sessionStore.Transcript.GetMessages(t.Context(), sess.ID)
 	testutil.FailErr(t, "read source", err)
 	source := rows[0]
 	snapshot := store.CompactionView{Generation: 1, CoveredThroughOrd: source.Ord,
 		CoveredThroughID: source.ID, SourceSeq: source.Seq,
 		Continuation: &messageview.Continuation{ThroughOrd: source.Ord}}
-	testutil.FailErr(t, "publish baseline", sessionStore.PutCompactionView(t.Context(), sess.ID, snapshot))
+	testutil.FailErr(t, "publish baseline", sessionStore.Compaction.PutCompactionView(t.Context(), sess.ID, snapshot))
 	source.Content = "corrected fact"
-	_, err = sessionStore.UpdateMessage(t.Context(), sess.ID, source.ID, source)
+	_, err = sessionStore.Transcript.UpdateMessage(t.Context(), sess.ID, source.ID, source)
 	testutil.FailErr(t, "correct source", err)
 	enriched := &messageview.Continuation{ThroughOrd: source.Ord, SummaryThroughOrd: source.Ord,
 		Summary: messageview.ContinuationSummary{Facts: []string{"original fact"}}}
-	testutil.FailErr(t, "reject stale synthesis", (&Service{store: sessionStore}).publishSynthesis(t.Context(),
+	testutil.FailErr(t, "reject stale synthesis", (&Service{sessionStore: sessionStore.Sessions, transcriptStore: sessionStore.Transcript, compactionStore: sessionStore.Compaction}).publishSynthesis(t.Context(),
 		compaction.SessionInfo{ID: sess.ID}, snapshot, enriched))
-	current, err := sessionStore.Get(t.Context(), sess.ID)
+	current, err := sessionStore.Sessions.Get(t.Context(), sess.ID)
 	testutil.FailErr(t, "read generation", err)
 	if current.CompactionGeneration != 1 {
 		t.Fatal("stale synthesis published after canonical correction")
 	}
-	canonical, err := sessionStore.GetMessages(t.Context(), sess.ID)
+	canonical, err := sessionStore.Transcript.GetMessages(t.Context(), sess.ID)
 	testutil.FailErr(t, "read correction", err)
 	if canonical[0].Content != "corrected fact" {
 		t.Fatal("synthesis replaced the canonical correction")
@@ -112,41 +113,41 @@ func TestDelayedSynthesisRejectsChangedCanonicalSource(t *testing.T) {
 }
 
 type compactionInterleavedStore struct {
-	Store
+	Transcript
 	beforeSuffix func()
 }
 
 func (s *compactionInterleavedStore) ReadMessageWindow(ctx context.Context, id string, window messageview.MessageWindow) ([]api.Message, error) {
 	s.beforeSuffix()
-	return s.Store.ReadMessageWindow(ctx, id, window)
+	return s.Transcript.ReadMessageWindow(ctx, id, window)
 }
 
 func TestCompactionSuffixCannotMaskConcurrentPrefixEdit(t *testing.T) {
 	sessionStore := storetest.New(t, testdbseed.DefaultProjectID)
-	sess, err := sessionStore.Create(t.Context(), api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
+	sess, err := sessionStore.Sessions.Create(t.Context(), api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
-	testutil.FailErr(t, "append prefix", sessionStore.AppendMessages(t.Context(), sess.ID,
+	testutil.FailErr(t, "append prefix", sessionStore.Transcript.AppendMessages(t.Context(), sess.ID,
 		api.Message{ID: "original", Role: api.MessageRoleAssistant, Content: "original fact"}))
-	rows, err := sessionStore.GetMessages(t.Context(), sess.ID)
+	rows, err := sessionStore.Transcript.GetMessages(t.Context(), sess.ID)
 	testutil.FailErr(t, "read prefix", err)
 	last := rows[len(rows)-1]
-	testutil.FailErr(t, "publish initial view", sessionStore.PutCompactionView(t.Context(), sess.ID, store.CompactionView{
+	testutil.FailErr(t, "publish initial view", sessionStore.Compaction.PutCompactionView(t.Context(), sess.ID, store.CompactionView{
 		Generation: 1, CoveredThroughOrd: last.Ord, CoveredThroughID: last.ID, SourceSeq: last.Seq,
 		Messages: []api.Message{{ID: "summary", Role: api.MessageRoleAssistant, Content: "original fact summarized"}},
 	}))
-	sess, err = sessionStore.Get(t.Context(), sess.ID)
+	sess, err = sessionStore.Sessions.Get(t.Context(), sess.ID)
 	testutil.FailErr(t, "read generation", err)
-	history := &Service{store: &compactionInterleavedStore{Store: sessionStore, beforeSuffix: func() {
+	history := &Service{sessionStore: sessionStore.Sessions, compactionStore: sessionStore.Compaction, transcriptStore: &compactionInterleavedStore{Transcript: sessionStore.Transcript, beforeSuffix: func() {
 		last.Content = "corrected fact"
-		_, err := sessionStore.UpdateMessage(t.Context(), sess.ID, last.ID, last)
+		_, err := sessionStore.Transcript.UpdateMessage(t.Context(), sess.ID, last.ID, last)
 		testutil.FailErr(t, "edit covered prefix", err)
-		testutil.FailErr(t, "append newer suffix", sessionStore.AppendMessages(t.Context(), sess.ID,
+		testutil.FailErr(t, "append newer suffix", sessionStore.Transcript.AppendMessages(t.Context(), sess.ID,
 			api.Message{ID: "suffix", Role: api.MessageRoleUser, Content: "continue with the correction"}))
 	}}}
 	if _, _, _, _, _, err := history.loadCompactionPage(t.Context(), sess); err == nil {
 		t.Fatal("accepted stale prefix because the newer suffix advanced the source sequence")
 	}
-	current, err := sessionStore.Get(t.Context(), sess.ID)
+	current, err := sessionStore.Sessions.Get(t.Context(), sess.ID)
 	testutil.FailErr(t, "read final generation", err)
 	if current.CompactionGeneration != 1 {
 		t.Fatalf("stale snapshot advanced generation to %d", current.CompactionGeneration)
@@ -157,24 +158,24 @@ func TestPersistedCompactionViewRestoresRetainedReasoning(t *testing.T) {
 	database := testdbfixture.Open(t, "reasoning-view.db")
 	testdbseed.InsertProjectRoot(t, database, testdbseed.DefaultProjectID, t.TempDir())
 	st := store.NewSQL(database)
-	sess, err := st.Create(t.Context(), api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
+	sess, err := st.Sessions.Create(t.Context(), api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
-	testutil.FailErr(t, "append continuation", st.AppendMessages(t.Context(), sess.ID,
+	testutil.FailErr(t, "append continuation", st.Transcript.AppendMessages(t.Context(), sess.ID,
 		api.Message{ID: "call", Role: api.MessageRoleAssistant, Content: "read", ToolCalls: []api.ToolCall{{ID: "tool", Name: "read"}}, ModelReasoning: &api.ModelReasoning{ProviderID: "p", Model: "m", Text: "private"}},
 		api.Message{ID: "result", Role: api.MessageRoleTool, ToolResult: &api.ToolResult{ToolCallID: "tool", Tool: "read", Content: "source"}}))
-	canonical, err := st.GetMessages(t.Context(), sess.ID)
+	canonical, err := st.Transcript.GetMessages(t.Context(), sess.ID)
 	testutil.FailErr(t, "read canonical continuation", err)
 	last := canonical[len(canonical)-1]
-	testutil.FailErr(t, "store compacted view", st.PutCompactionView(t.Context(), sess.ID, store.CompactionView{Generation: 1, CoveredThroughOrd: last.Ord, CoveredThroughID: last.ID, SourceSeq: last.Seq, Messages: canonical}))
+	testutil.FailErr(t, "store compacted view", st.Compaction.PutCompactionView(t.Context(), sess.ID, store.CompactionView{Generation: 1, CoveredThroughOrd: last.Ord, CoveredThroughID: last.ID, SourceSeq: last.Seq, Messages: canonical}))
 	st = store.NewSQL(database)
-	view, ok, err := st.GetCompactionView(t.Context(), sess.ID)
+	view, ok, err := st.Compaction.GetCompactionView(t.Context(), sess.ID)
 	testutil.FailErr(t, "reload request view", err)
 	if !ok || view.Messages[0].ModelReasoning != nil {
 		t.Fatal("view duplicated private replay storage")
 	}
-	sess, err = st.Get(t.Context(), sess.ID)
+	sess, err = st.Sessions.Get(t.Context(), sess.ID)
 	testutil.FailErr(t, "reload generation", err)
-	history := &Service{store: st}
+	history := &Service{sessionStore: st.Sessions, transcriptStore: st.Transcript, compactionStore: st.Compaction}
 	sess.CompactionGeneration = 0
 	loaded, err := history.Load(t.Context(), sess)
 	testutil.FailErr(t, "load retained canonical replay", err)
@@ -193,7 +194,7 @@ func TestContextScaledCanonicalPagingAndTokenBounds(t *testing.T) {
 	largeCfg.HardCeilingTokens = 200000
 	largeCfg.TargetTokens = 100000
 	svc, sessionStore := newCompactionManager(t, largeCfg)
-	sess, err := sessionStore.Create(t.Context(), api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
+	sess, err := sessionStore.Sessions.Create(t.Context(), api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
 	rows := make([]api.Message, 320)
 	for i := range rows {
@@ -203,8 +204,8 @@ func TestContextScaledCanonicalPagingAndTokenBounds(t *testing.T) {
 		}
 		rows[i] = api.Message{ID: fmt.Sprintf("msg-%d", i), Role: role, Content: "short observation"}
 	}
-	testutil.FailErr(t, "append 320 rows", sessionStore.AppendMessages(t.Context(), sess.ID, rows...))
-	sess, err = sessionStore.Get(t.Context(), sess.ID)
+	testutil.FailErr(t, "append 320 rows", sessionStore.Transcript.AppendMessages(t.Context(), sess.ID, rows...))
+	sess, err = sessionStore.Sessions.Get(t.Context(), sess.ID)
 	testutil.FailErr(t, "get session", err)
 	loaded, err := svc.Load(t.Context(), sess)
 	testutil.FailErr(t, "load 320 rows on large receiver", err)
@@ -216,7 +217,7 @@ func TestContextScaledCanonicalPagingAndTokenBounds(t *testing.T) {
 	tightCfg.ModelContextWindow = 16384
 	tightCfg.HardCeilingTokens = 600
 	tightCfg.TargetTokens = 400
-	svc.SetCompactor(compaction.NewSimpleCompactor(tightCfg, compaction.MockSummarizer{Text: "summary"}))
+	svc.SetCompactor(compaction.NewSimpleCompactor(tightCfg, llmtest.Summarizer{Structured: compaction.SummaryFormatRequested, Text: "summary"}))
 	bounded, err := svc.Load(t.Context(), sess)
 	testutil.FailErr(t, "load token-bounded tail on small receiver", err)
 	if len(bounded) >= 320 || len(bounded) == 0 || bounded[0].ID != "host-history-coverage" {
@@ -234,7 +235,7 @@ func TestSmallToLargeReceiverRestoresCanonicalHistory(t *testing.T) {
 	smallCfg.ChunkTokenThreshold = 100000
 	svc, sessionStore := newCompactionManager(t, smallCfg)
 
-	sess, err := sessionStore.Create(t.Context(), api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
+	sess, err := sessionStore.Sessions.Create(t.Context(), api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
 	block := strings.Repeat("word ", 120) // ~150 tokens each
 	var seed []api.Message
@@ -249,16 +250,16 @@ func TestSmallToLargeReceiverRestoresCanonicalHistory(t *testing.T) {
 			Content: fmt.Sprintf("canonical message %d: %s", i, block),
 		})
 	}
-	testutil.FailErr(t, "append seed", sessionStore.AppendMessages(t.Context(), sess.ID, seed...))
+	testutil.FailErr(t, "append seed", sessionStore.Transcript.AppendMessages(t.Context(), sess.ID, seed...))
 	_, err = svc.ForceCompact(t.Context(), sess.ID)
 	testutil.FailErr(t, "force compact on small receiver", err)
 	// Scheduled synthesis enriches the published view asynchronously; drain it
 	// so the projections below compare against one settled view.
 	testutil.FailErr(t, "drain scheduled synthesis", svc.Runner.WaitContext(t.Context()))
 
-	sess, err = sessionStore.Get(t.Context(), sess.ID)
+	sess, err = sessionStore.Sessions.Get(t.Context(), sess.ID)
 	testutil.FailErr(t, "get compacted session", err)
-	smallView := appliedView(t, svc, sessionStore, sess.ID)
+	smallView := appliedView(t, svc, sessionStore.Sessions, sessionStore.Transcript, sessionStore.Compaction, sess.ID)
 	if len(smallView) >= len(seed) {
 		t.Fatalf("expected small receiver view to be compacted, got %d rows", len(smallView))
 	}
@@ -280,7 +281,7 @@ func TestSmallToLargeReceiverRestoresCanonicalHistory(t *testing.T) {
 	midCfg.ModelContextWindow = 32000
 	midCfg.HardCeilingTokens = 16000
 	midCfg.TargetTokens = 1800
-	svc.SetCompactor(compaction.NewSimpleCompactor(midCfg, compaction.MockSummarizer{Text: "summary"}))
+	svc.SetCompactor(compaction.NewSimpleCompactor(midCfg, llmtest.Summarizer{Structured: compaction.SummaryFormatRequested, Text: "summary"}))
 	midLoaded, err := svc.Load(t.Context(), sess)
 	testutil.FailErr(t, "load on medium receiver", err)
 	midView := svc.ApplyView(t.Context(), sess, midLoaded)
@@ -293,7 +294,7 @@ func TestSmallToLargeReceiverRestoresCanonicalHistory(t *testing.T) {
 	largeCfg.ModelContextWindow = 200000
 	largeCfg.HardCeilingTokens = 150000
 	largeCfg.TargetTokens = 50000
-	svc.SetCompactor(compaction.NewSimpleCompactor(largeCfg, compaction.MockSummarizer{Text: "summary"}))
+	svc.SetCompactor(compaction.NewSimpleCompactor(largeCfg, llmtest.Summarizer{Structured: compaction.SummaryFormatRequested, Text: "summary"}))
 	largeLoaded, err := svc.Load(t.Context(), sess)
 	testutil.FailErr(t, "load on large receiver", err)
 	largeView := svc.ApplyView(t.Context(), sess, largeLoaded)
@@ -311,7 +312,7 @@ func TestBackgroundCompactionSkipsUnsettledLiveDraftTail(t *testing.T) {
 	cfg.KeepRecentMessages = 2
 	svc, sessionStore := newCompactionManager(t, cfg)
 
-	sess, err := sessionStore.Create(t.Context(), api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
+	sess, err := sessionStore.Sessions.Create(t.Context(), api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
 	block := strings.Repeat("word ", 120)
 	var rows []api.Message
@@ -344,13 +345,13 @@ func TestBackgroundCompactionSkipsUnsettledLiveDraftTail(t *testing.T) {
 			HostSignalID: "draft-recovery:live-draft:invest-citations",
 		},
 	)
-	testutil.FailErr(t, "append rows with live draft", sessionStore.AppendMessages(t.Context(), sess.ID, rows...))
+	testutil.FailErr(t, "append rows with live draft", sessionStore.Transcript.AppendMessages(t.Context(), sess.ID, rows...))
 
 	svc.Schedule(t.Context(), sess)
 	svc.Wait()
 	testutil.FailErr(t, "drain scheduled synthesis", svc.Runner.WaitContext(t.Context()))
 
-	view, ok, err := sessionStore.GetCompactionView(t.Context(), sess.ID)
+	view, ok, err := sessionStore.Compaction.GetCompactionView(t.Context(), sess.ID)
 	testutil.FailErr(t, "get compaction view before draft settles", err)
 	if !ok || view == nil {
 		t.Fatal("expected compaction view to be published")
@@ -367,15 +368,15 @@ func TestBackgroundCompactionSkipsUnsettledLiveDraftTail(t *testing.T) {
 		Visibility:  api.MessageVisibilityTranscript,
 		DraftStatus: api.DraftStatusCommitted,
 	}
-	_, err = sessionStore.UpdateMessage(t.Context(), sess.ID, committed.ID, committed)
+	_, err = sessionStore.Transcript.UpdateMessage(t.Context(), sess.ID, committed.ID, committed)
 	testutil.FailErr(t, "commit live draft", err)
 
-	viewAfter, okAfter, err := sessionStore.GetCompactionView(t.Context(), sess.ID)
+	viewAfter, okAfter, err := sessionStore.Compaction.GetCompactionView(t.Context(), sess.ID)
 	testutil.FailErr(t, "get compaction view after draft settles", err)
 	if !okAfter || viewAfter == nil {
 		t.Fatal("committing the trailing live draft invalidated the published compaction view")
 	}
-	current, err := sessionStore.CompactionViewCurrent(t.Context(), sess.ID, viewAfter.CoveredThroughOrd, viewAfter.CoveredThroughID, viewAfter.SourceSeq)
+	current, err := sessionStore.Compaction.CompactionViewCurrent(t.Context(), sess.ID, viewAfter.CoveredThroughOrd, viewAfter.CoveredThroughID, viewAfter.SourceSeq)
 	testutil.FailErr(t, "check compaction view current after draft settles", err)
 	if !current {
 		t.Fatal("expected compaction view to remain current after settling trailing live draft")

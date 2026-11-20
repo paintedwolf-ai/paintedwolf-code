@@ -46,12 +46,12 @@ func TestSARIFExportRoundTripOpenGrepIngest(t *testing.T) {
 		ScannerID:  "opengrep-sast",
 	})
 	contractcheck.FailErr(t, "enqueue", err)
-	claimed, err := store.ClaimNext(t.Context())
+	claimed, err := store.Runs.ClaimNext(t.Context())
 	contractcheck.FailErr(t, "claim scan", err)
 	if claimed.ID != created.ID {
 		t.Fatalf("claimed scan %q want %q", claimed.ID, created.ID)
 	}
-	if _, err := store.MarkComplete(context.Background(), claimed, parsed); err != nil {
+	if _, err := store.Runs.MarkComplete(context.Background(), claimed, parsed); err != nil {
 		testutil.FailErr(t, "MarkComplete", err)
 	}
 	rec := evidence.Record{
@@ -62,11 +62,11 @@ func TestSARIFExportRoundTripOpenGrepIngest(t *testing.T) {
 			"findings_stored": len(parsed.Findings),
 		},
 	}
-	if err := store.SaveIngest(context.Background(), created.ID, rec); err != nil {
+	if err := store.Findings.SaveIngest(context.Background(), created.ID, rec); err != nil {
 		testutil.FailErr(t, "SaveIngest", err)
 	}
 
-	got, err := store.Get(context.Background(), created.ID)
+	got, err := store.Reads.Get(context.Background(), created.ID)
 	contractcheck.FailErr(t, "Get scan", err)
 	data, err := scanoutput.ExportScanSARIF(got)
 	contractcheck.FailErr(t, "ExportScanSARIF", err)

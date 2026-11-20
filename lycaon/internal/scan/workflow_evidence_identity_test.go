@@ -20,19 +20,19 @@ func TestWorkflowInventoryKeepsBoundEmptyScanDespiteNewAmbientFindings(t *testin
 	bound := authorityScan("bound", "bound-assessment", root, "snapshot-before", "sca", api.ScanTargetFull, nil)
 	bound.WorkflowRunID = "review-run"
 	bound.CreatedAt = time.Now().Add(-time.Hour)
-	testutil.FailErr(t, "insert bound scan", ledger.Insert(t.Context(), bound, nil, ""))
+	testutil.FailErr(t, "insert bound scan", ledger.Runs.Insert(t.Context(), bound, nil, ""))
 	completeNextScan(t, ledger)
 	ambient := authorityScan("ambient", "ambient-assessment", root, "snapshot-after", "sca", api.ScanTargetFull, nil)
-	testutil.FailErr(t, "insert newer ambient scan", ledger.Insert(t.Context(), ambient, nil, ""))
+	testutil.FailErr(t, "insert newer ambient scan", ledger.Runs.Insert(t.Context(), ambient, nil, ""))
 	finding := scanfindings.BuildSecurityFinding(scanfindings.FindingBuildOpts{DriverID: "sca", RuleID: "advisory", Kind: api.FindingKindSCA, Level: api.FindingLevelUnknown})
 	completeNextScan(t, ledger, finding)
-	stored, err := ledger.Get(t.Context(), ambient.ID)
+	stored, err := ledger.Reads.Get(t.Context(), ambient.ID)
 	testutil.FailErr(t, "load ambient evidence control", err)
 	if stored == nil || len(scanfindings.GroupFindings(stored.Findings, 3)) != 1 {
 		t.Fatal("ambient control must contain a persisted finding group")
 	}
 	for _, runID := range []string{"review-run", "absent-run"} {
-		raw, err := WorkflowAdvisoryInventory(t.Context(), ledger, runID)
+		raw, err := WorkflowAdvisoryInventory(t.Context(), ledger.Reads, runID)
 		testutil.FailErr(t, "project run inventory", err)
 		var inventory struct {
 			ScanIDs     []string `json:"scan_ids"`

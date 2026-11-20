@@ -128,7 +128,7 @@ func TestFindConsumerCloseStopsSiblingMetadataAndReleasesParents(t *testing.T) {
 	output := &closedAfterLine{}
 	streams := streamsFor()
 	streams.Output = output
-	_, err := h.owners.Invoke(t.Context(), h.tc, mustPaths(t, h), h.dispatch, request, streams)
+	_, err := invokeSearch(h.owners, t.Context(), h.tc, mustPaths(t, h), h.dispatch, request, streams)
 	if want := fmt.Sprintf("./"+name+"\n", 0); !errors.Is(err, io.ErrClosedPipe) || output.output != want {
 		t.Fatalf("output=%q err=%v", output.output, err)
 	}

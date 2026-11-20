@@ -8,7 +8,7 @@ import (
 )
 
 func TestProviderWikidata(t *testing.T) {
-	srv := withMockProviderHTTP(t, func(w http.ResponseWriter, r *http.Request) {
+	srv := withProviderHTTP(t, func(w http.ResponseWriter, r *http.Request) {
 		if got := r.URL.Query().Get("action"); got != "wbsearchentities" {
 			t.Fatalf("action = %q", got)
 		}
@@ -27,7 +27,7 @@ func TestProviderWikidata(t *testing.T) {
 	spec.BuildURL = func(s Settings, query string, max int) (string, error) {
 		return srv.URL + "?action=wbsearchentities&search=" + query, nil
 	}
-	out := NewRESTSearchProvider(spec, KindKeyless).Search(context.Background(), Settings{
+	out := NewRESTSearchProvider(spec, KindKeyless, srv.exchange).Search(context.Background(), Settings{
 		Config:                map[string]map[string]string{"wikidata": {"endpoint": srv.URL}},
 		PerProviderTimeoutSec: 5,
 	}, "lovelace", 5)
@@ -40,7 +40,7 @@ func TestProviderWikidata(t *testing.T) {
 }
 
 func TestProviderWiktionary(t *testing.T) {
-	srv := withMockProviderHTTP(t, func(w http.ResponseWriter, r *http.Request) {
+	srv := withProviderHTTP(t, func(w http.ResponseWriter, r *http.Request) {
 		_ = json.NewEncoder(w).Encode(map[string]any{
 			"pages": []map[string]any{{
 				"title": "ephemeral", "key": "ephemeral", "excerpt": "lasting a <span>short</span> time",
@@ -51,7 +51,7 @@ func TestProviderWiktionary(t *testing.T) {
 	spec.BuildURL = func(s Settings, query string, max int) (string, error) {
 		return srv.URL + "/w/rest.php/v1/search/page?q=" + query, nil
 	}
-	out := NewRESTSearchProvider(spec, KindKeyless).Search(context.Background(), Settings{
+	out := NewRESTSearchProvider(spec, KindKeyless, srv.exchange).Search(context.Background(), Settings{
 		Config:                map[string]map[string]string{"wiktionary": {"endpoint": srv.URL}},
 		PerProviderTimeoutSec: 5,
 	}, "ephemeral", 5)
@@ -64,7 +64,7 @@ func TestProviderWiktionary(t *testing.T) {
 }
 
 func TestProviderCrossref(t *testing.T) {
-	srv := withMockProviderHTTP(t, func(w http.ResponseWriter, r *http.Request) {
+	srv := withProviderHTTP(t, func(w http.ResponseWriter, r *http.Request) {
 		if got := r.URL.Query().Get("mailto"); got != politeContactMailto {
 			t.Fatalf("mailto = %q", got)
 		}
@@ -83,7 +83,7 @@ func TestProviderCrossref(t *testing.T) {
 	spec.BuildURL = func(s Settings, query string, max int) (string, error) {
 		return srv.URL + "?query=" + query + "&mailto=" + politeContactMailto, nil
 	}
-	out := NewRESTSearchProvider(spec, KindKeyless).Search(context.Background(), Settings{
+	out := NewRESTSearchProvider(spec, KindKeyless, srv.exchange).Search(context.Background(), Settings{
 		Config:                map[string]map[string]string{"crossref": {"endpoint": srv.URL}},
 		PerProviderTimeoutSec: 5,
 	}, "crispr", 5)
@@ -96,7 +96,7 @@ func TestProviderCrossref(t *testing.T) {
 }
 
 func TestProviderEuropePMC(t *testing.T) {
-	srv := withMockProviderHTTP(t, func(w http.ResponseWriter, r *http.Request) {
+	srv := withProviderHTTP(t, func(w http.ResponseWriter, r *http.Request) {
 		_ = json.NewEncoder(w).Encode(map[string]any{
 			"resultList": map[string]any{
 				"result": []map[string]any{{
@@ -110,7 +110,7 @@ func TestProviderEuropePMC(t *testing.T) {
 	spec.BuildURL = func(s Settings, query string, max int) (string, error) {
 		return srv.URL + "?query=" + query, nil
 	}
-	out := NewRESTSearchProvider(spec, KindKeyless).Search(context.Background(), Settings{
+	out := NewRESTSearchProvider(spec, KindKeyless, srv.exchange).Search(context.Background(), Settings{
 		Config:                map[string]map[string]string{"europepmc": {"endpoint": srv.URL}},
 		PerProviderTimeoutSec: 5,
 	}, "malaria", 5)
@@ -120,7 +120,7 @@ func TestProviderEuropePMC(t *testing.T) {
 }
 
 func TestProviderInternetArchive(t *testing.T) {
-	srv := withMockProviderHTTP(t, func(w http.ResponseWriter, r *http.Request) {
+	srv := withProviderHTTP(t, func(w http.ResponseWriter, r *http.Request) {
 		// description arrives as an array here; identifier/title as strings.
 		_ = json.NewEncoder(w).Encode(map[string]any{
 			"response": map[string]any{
@@ -135,7 +135,7 @@ func TestProviderInternetArchive(t *testing.T) {
 	spec.BuildURL = func(s Settings, query string, max int) (string, error) {
 		return srv.URL + "?q=" + query, nil
 	}
-	out := NewRESTSearchProvider(spec, KindKeyless).Search(context.Background(), Settings{
+	out := NewRESTSearchProvider(spec, KindKeyless, srv.exchange).Search(context.Background(), Settings{
 		Config:                map[string]map[string]string{"internetarchive": {"endpoint": srv.URL}},
 		PerProviderTimeoutSec: 5,
 	}, "apollo", 5)
@@ -148,7 +148,7 @@ func TestProviderInternetArchive(t *testing.T) {
 }
 
 func TestProviderOpenLibrary(t *testing.T) {
-	srv := withMockProviderHTTP(t, func(w http.ResponseWriter, r *http.Request) {
+	srv := withProviderHTTP(t, func(w http.ResponseWriter, r *http.Request) {
 		_ = json.NewEncoder(w).Encode(map[string]any{
 			"docs": []map[string]any{{
 				"key": "/works/OL61982W", "title": "The Odyssey",
@@ -160,7 +160,7 @@ func TestProviderOpenLibrary(t *testing.T) {
 	spec.BuildURL = func(s Settings, query string, max int) (string, error) {
 		return srv.URL + "/search.json?q=" + query, nil
 	}
-	out := NewRESTSearchProvider(spec, KindKeyless).Search(context.Background(), Settings{
+	out := NewRESTSearchProvider(spec, KindKeyless, srv.exchange).Search(context.Background(), Settings{
 		Config:                map[string]map[string]string{"openlibrary": {"endpoint": srv.URL}},
 		PerProviderTimeoutSec: 5,
 	}, "odyssey", 5)

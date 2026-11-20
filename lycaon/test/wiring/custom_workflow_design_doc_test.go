@@ -57,8 +57,7 @@ func assertManifestBoundSurface(t *testing.T, h *Harness, ctx context.Context, s
 // TestCustomDesignDocWorkflowLiveGolden drives an overlay workflow through its child run.
 func TestCustomDesignDocWorkflowLiveGolden(t *testing.T) {
 	h := BuildForTest(t)
-	cancel := h.StartBackgroundWorkers(t, context.Background())
-	t.Cleanup(cancel)
+	h.Start(t)
 
 	ctx := h.OwnerCtx(t, context.Background())
 	dir := t.TempDir()

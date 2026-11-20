@@ -385,36 +385,6 @@ func (b *Binding) IsMutationKind(kind string) bool {
 	return ok
 }
 
-// MutationKinds returns mutation kind ids sorted for stable iteration.
-func (b *Binding) MutationKinds() []string {
-	if b == nil {
-		return nil
-	}
-	b.mu.RLock()
-	defer b.mu.RUnlock()
-	out := make([]string, 0, len(b.mutationKinds))
-	for kind := range b.mutationKinds {
-		out = append(out, kind)
-	}
-	sort.Strings(out)
-	return out
-}
-
-// SurveyKinds returns survey kind ids sorted for stable iteration.
-func (b *Binding) SurveyKinds() []string {
-	if b == nil {
-		return nil
-	}
-	b.mu.RLock()
-	defer b.mu.RUnlock()
-	out := make([]string, 0, len(b.surveyKinds))
-	for kind := range b.surveyKinds {
-		out = append(out, kind)
-	}
-	sort.Strings(out)
-	return out
-}
-
 // DeclaredToolNames returns the tool names declared as evidence producers, sorted.
 func (b *Binding) DeclaredToolNames() []string {
 	if b == nil {

@@ -7,18 +7,18 @@ import (
 	"testing"
 	"time"
 
-	"github.com/lycaon/lycaon/internal/llm"
 	"github.com/lycaon/lycaon/internal/llm/modelcall"
 	"github.com/lycaon/lycaon/internal/scaffoldvars"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/testutil/llmtest"
 	"github.com/lycaon/lycaon/internal/workflow/runstate"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
 func TestFollowUpAfterCompletedWorkflowCanAskAndReceiveAnswer(t *testing.T) {
 	var calls atomic.Int32
-	mock := llm.NewKickDrivenMock(llm.KickDrivenConfig{
-		Fallback: func(context.Context, llm.Snapshot) modelcall.Completion {
+	mock := llmtest.NewKickDrivenMock(llmtest.KickDrivenConfig{
+		Fallback: func(context.Context, llmtest.Snapshot) modelcall.Completion {
 			if calls.Add(1) > 1 {
 				return modelcall.Completion{Content: MockCoordinatorCloseoutMarkdown("Question was not parked.", "")}
 			}
@@ -90,7 +90,7 @@ func TestFollowUpAfterCompletedWorkflowCanAskAndReceiveAnswer(t *testing.T) {
 
 func assertFollowUpAskResult(t *testing.T, h *Harness, sessionID, status, response string) {
 	t.Helper()
-	messages, err := h.Store.GetMessages(t.Context(), sessionID)
+	messages, err := h.Store.Transcript.GetMessages(t.Context(), sessionID)
 	testutil.FailErr(t, "load question result", err)
 	for _, message := range messages {
 		result := message.ToolResult
@@ -112,7 +112,7 @@ func assertFollowUpAskResult(t *testing.T, h *Harness, sessionID, status, respon
 
 func assertFollowUpAskCard(t *testing.T, h *Harness, sessionID, runID, phaseID string) {
 	t.Helper()
-	messages, err := h.Store.GetMessages(t.Context(), sessionID)
+	messages, err := h.Store.Transcript.GetMessages(t.Context(), sessionID)
 	testutil.FailErr(t, "load question card", err)
 	for _, message := range messages {
 		if card := message.WorkflowFeedback; card != nil && card.PhaseID == phaseID {

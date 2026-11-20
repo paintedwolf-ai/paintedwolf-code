@@ -1,6 +1,7 @@
 package contract
 
 import (
+	"github.com/lycaon/lycaon/internal/tools/toolstest"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/tools"
@@ -12,10 +13,9 @@ import (
 // composition and requires every allowlisted tool to be registered on it.
 func TestCatalogAllowlistRegistrySync(t *testing.T) {
 	h := wiring.BuildForTest(t)
-	registered, err := tools.BootRegisteredToolSet(h.ToolRegistry)
-	contractcheck.FailErr(t, "tools.BootRegisteredToolSet", err)
+	registered := tools.RegisteredToolSet(h.ToolRegistry)
 	if len(registered) == 0 {
 		t.Fatal("production composition registered no tools")
 	}
-	contractcheck.FailErr(t, "tools.ValidateCatalogAllowlistSync", tools.ValidateCatalogAllowlistSync(registered))
+	contractcheck.FailErr(t, "toolstest.ValidateCatalogAllowlistSync", toolstest.ValidateCatalogAllowlistSync(registered))
 }

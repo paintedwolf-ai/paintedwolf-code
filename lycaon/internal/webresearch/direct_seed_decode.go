@@ -186,11 +186,11 @@ func scrapeURLs(raw string) []string {
 
 // providerSeedGraceTimeout bounds how long direct search waits for more catalog
 // provider seed probes once other seed work has already landed (candidates or hits).
-var providerSeedGraceTimeout = 1 * time.Second
+const providerSeedGraceTimeout = 1 * time.Second
 
 // providerSeedZeroHitTimeout caps provider seed fan-out when nothing has
 // contributed yet, so dead backends don't hold the full per-provider window.
-var providerSeedZeroHitTimeout = 3 * time.Second
+const providerSeedZeroHitTimeout = 3 * time.Second
 
 // discoveryWait is the search loop's blocking edge: it decides whether the
 // search is finished, whether to wait for more contributions, and when to cut

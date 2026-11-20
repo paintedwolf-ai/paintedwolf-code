@@ -18,7 +18,7 @@ func stageDistro(t *testing.T, body string) {
 // stageFakeDistro stages a distro catalog holding exactly providerIDs.
 //
 // providerIDs become disabled entries with command "true"; unit tests inject a
-// MockConnector, so the command never runs.
+// mcptest.Connector, so the command never runs.
 func stageFakeDistro(t *testing.T, providerIDs ...string) {
 	t.Helper()
 	if len(providerIDs) == 0 {

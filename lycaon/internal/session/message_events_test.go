@@ -3,7 +3,6 @@ package session_test
 import (
 	"context"
 	"encoding/json"
-	"github.com/lycaon/lycaon/internal/tools/toolstest"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/events"
@@ -14,6 +13,7 @@ import (
 	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/tools/toolstest"
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -31,9 +31,9 @@ func TestAppendMessagesPublishesMessageSSE(t *testing.T) {
 
 	testdbseed.InsertProjectRoot(t, sqlDB, testdbseed.DefaultProjectID, dir)
 
-	sess, err := store.Create(ctx, wire.CreateSessionRequest{}, testdbseed.DefaultProjectID)
+	sess, err := store.Sessions.Create(ctx, wire.CreateSessionRequest{}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session failed", err)
-	child, err := store.CreateChild(ctx, sess, wire.SpawnChildRequest{AgentType: "implementer"})
+	child, err := store.Sessions.CreateChild(ctx, sess, wire.SpawnChildRequest{AgentType: "implementer"})
 	testutil.FailErr(t, "create child", err)
 
 	subCtx, cancel := context.WithCancel(ctx)

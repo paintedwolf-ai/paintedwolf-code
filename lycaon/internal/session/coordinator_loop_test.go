@@ -4,14 +4,13 @@ package session_test
 
 import (
 	"context"
-	"github.com/lycaon/lycaon/internal/blueprint/blueprinttest"
-	"github.com/lycaon/lycaon/internal/tools/toolstest"
 	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/lycaon/lycaon/internal/blueprint"
+	"github.com/lycaon/lycaon/internal/blueprint/blueprinttest"
 	"github.com/lycaon/lycaon/internal/conditions"
 	"github.com/lycaon/lycaon/internal/configlayout"
 	"github.com/lycaon/lycaon/internal/coordinator/anchor"
@@ -29,6 +28,8 @@ import (
 	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/testutil/llmtest"
+	"github.com/lycaon/lycaon/internal/tools/toolstest"
 	"github.com/lycaon/lycaon/internal/worker"
 	"github.com/lycaon/lycaon/internal/workflow"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
@@ -108,10 +109,10 @@ func setImplementRunPhase(t *testing.T, wfStore *runstate.Repository, run *wire.
 }
 
 type loopFixture struct {
-	rec   *llm.RecordingClient
+	rec   *llmtest.RecordingClient
 	mgr   *session.Host
 	wfMgr *workflow.RunManager
-	store *store.SQL
+	store *store.Repositories
 	sess  *wire.Session
 }
 
@@ -121,7 +122,7 @@ func setupLoopFixture(t *testing.T, cfg settings.SessionLimits) loopFixture {
 	sqlDB := testdbfixture.Open(t, "loop wake.db")
 
 	store := store.NewSQL(sqlDB)
-	rec := llm.NewRecordingClient(llm.NewMockProvider(&llm.MockConfig{Responses: []llm.MockResponseEntry{{Pattern: ".", Text: "ack"}}}))
+	rec := llmtest.NewRecordingClient(llm.NewMockProvider(&llm.MockConfig{Responses: []llm.MockResponseEntry{{Pattern: ".", Text: "ack"}}}))
 	mgr := session.NewHost(store, session.Models{Client: rec, Provider: nil, Limits: cfg, Cost: nil}, toolstest.NewRegistry())
 	agents := orchestration.NewMemoryAgentRegistry()
 	_ = orchestration.LoadRequiredAgentRegistry(context.Background(), agents)
@@ -149,7 +150,7 @@ func setupLoopFixture(t *testing.T, cfg settings.SessionLimits) loopFixture {
 
 	testdbseed.InsertProjectRoot(t, sqlDB, testdbseed.DefaultProjectID, dir)
 
-	sess, err := store.Create(ctx, wire.CreateSessionRequest{}, testdbseed.DefaultProjectID)
+	sess, err := store.Sessions.Create(ctx, wire.CreateSessionRequest{}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session in store", err)
 	plan, ok := manifestRegistry.FindTriggerMatch("/plan")
 	if !ok {
@@ -223,7 +224,7 @@ func TestShouldLoopWakeIgnoresApprovePhaseName(t *testing.T) {
 func TestShouldLoopWakeDeniesWhenBusy(t *testing.T) {
 	fix := setupLoopFixture(t, settings.DefaultSessionLimits())
 	ctx := context.Background()
-	if err := fix.store.SetSessionStatus(ctx, fix.sess.ID, wire.SessionStatusBusy); err != nil {
+	if err := fix.store.Sessions.SetSessionStatus(ctx, fix.sess.ID, wire.SessionStatusBusy); err != nil {
 		testutil.FailErr(t, "fix.store.SetSessionStatus failed", err)
 	}
 	finishExecution := fix.mgr.Runner.Coordinator.CoordinatorLoop().Admission.BeginPromptExecution(t.Context(), fix.sess.ID)
@@ -284,7 +285,7 @@ func TestShouldLoopWakeDeniesPendingDecision(t *testing.T) {
 func TestLoopDefersUntilIdle(t *testing.T) {
 	fix := setupLoopFixture(t, settings.DefaultSessionLimits())
 	ctx := context.Background()
-	if err := fix.store.SetSessionStatus(ctx, fix.sess.ID, wire.SessionStatusBusy); err != nil {
+	if err := fix.store.Sessions.SetSessionStatus(ctx, fix.sess.ID, wire.SessionStatusBusy); err != nil {
 		testutil.FailErr(t, "fix.store.SetSessionStatus failed", err)
 	}
 	finishExecution := fix.mgr.Runner.Coordinator.CoordinatorLoop().Admission.BeginPromptExecution(t.Context(), fix.sess.ID)
@@ -293,13 +294,13 @@ func TestLoopDefersUntilIdle(t *testing.T) {
 	if _, ok := fix.mgr.Runner.Coordinator.CoordinatorLoop().Nudges.Pending(fix.sess.ID); !ok {
 		t.Fatal("expected deferred loop wake")
 	}
-	if err := fix.store.SetSessionStatus(ctx, fix.sess.ID, wire.SessionStatusIdle); err != nil {
+	if err := fix.store.Sessions.SetSessionStatus(ctx, fix.sess.ID, wire.SessionStatusIdle); err != nil {
 		testutil.FailErr(t, "fix.store.SetSessionStatus failed", err)
 	}
 	finishExecution()
 	fix.mgr.Runner.Coordinator.CoordinatorLoop().Nudges.DrainPending(ctx, fix.sess.ID)
 	testutil.WaitFor(t, "the loop wake message is stored", func() bool {
-		msgs, err := fix.store.GetMessages(ctx, fix.sess.ID)
+		msgs, err := fix.store.Transcript.GetMessages(ctx, fix.sess.ID)
 		if err != nil {
 			return false
 		}
@@ -317,7 +318,7 @@ func TestImplementWorkerSummaryLoopWakesWithCompletingJobStillRunning(t *testing
 	sqlDB := testdbfixture.Open(t, "implement-autocontinue-running.db")
 
 	store := store.NewSQL(sqlDB)
-	rec := llm.NewRecordingClient(llm.NewMockProvider(&llm.MockConfig{Responses: []llm.MockResponseEntry{{Pattern: ".", Text: "traced"}}}))
+	rec := llmtest.NewRecordingClient(llm.NewMockProvider(&llm.MockConfig{Responses: []llm.MockResponseEntry{{Pattern: ".", Text: "traced"}}}))
 	mgr := session.NewHost(store, session.Models{Client: rec, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, toolstest.NewRegistry())
 	agents := orchestration.NewMemoryAgentRegistry()
 	_ = orchestration.LoadRequiredAgentRegistry(context.Background(), agents)
@@ -330,8 +331,8 @@ func TestImplementWorkerSummaryLoopWakesWithCompletingJobStillRunning(t *testing
 	manifestRegistry, err := workflowdef.RegistryFromDirs("")
 	testutil.FailErr(t, "RegistryFromDirs", err)
 	wfMgr := workflow.NewManager(wfStore, store, manifestRegistry, nil)
-	q := worker.NewSQLQueue(sqlDB, 4)
-	mgr.SetWorkerQueue(q)
+	q := worker.NewSQLServices(sqlDB, 4).Queue
+	mgr.SetWorkerQueue(q, q.Branches)
 	wireImplementConvergenceHooks(t, mgr, wfMgr, q)
 	mgr.SetWorkflowDomains(&session.WorkflowDomains{Runs: wfMgr.Store.Runs, Policy: wfMgr.Policy, Ambient: wfMgr.Ambient, Blueprints: wfMgr.Blueprints, Batch: wfMgr.Batch, Slash: wfMgr.Slash, Requests: wfMgr.Requests, Feedback: wfMgr.Feedback, Transcript: wfMgr.Transcript, Asks: wfMgr.Asks, Fanout: wfMgr.Fanout, Phases: wfMgr.Phases, Reports: wfMgr.Reports, Recovery: wfMgr.Recovery, Cleanup: wfMgr})
 	mgr.SetLoopWorkflowSource(&loopwake.WorkflowDomains{Runs: wfMgr.Store.Runs, Approvals: wfMgr.Policy, Obligations: wfMgr.Obligations})
@@ -341,7 +342,7 @@ func TestImplementWorkerSummaryLoopWakesWithCompletingJobStillRunning(t *testing
 
 	testdbseed.InsertProjectRoot(t, sqlDB, testdbseed.DefaultProjectID, dir)
 
-	sess, err := store.Create(ctx, wire.CreateSessionRequest{}, testdbseed.DefaultProjectID)
+	sess, err := store.Sessions.Create(ctx, wire.CreateSessionRequest{}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session in store", err)
 	drainCoordinatorAsyncTurnsOnCleanup(t, mgr)
 	ref, err := workflowdef.LoadRegistryConfig(extpacks.OnDisk(bundledDir))
@@ -349,7 +350,7 @@ func TestImplementWorkerSummaryLoopWakesWithCompletingJobStillRunning(t *testing
 	run, err := wfMgr.Ambient.StartAmbient(ctx, sess.ID, ref.ID, ref.Version)
 	testutil.FailErr(t, "StartAmbient", err)
 	setImplementRunPhase(t, wfStore, run, sess.WorkspacePath, "work")
-	child, err := store.CreateChild(ctx, sess, wire.SpawnChildRequest{AgentType: orchestration.ProfilePathExplorer})
+	child, err := store.Sessions.CreateChild(ctx, sess, wire.SpawnChildRequest{AgentType: orchestration.ProfilePathExplorer})
 	testutil.FailErr(t, "create child", err)
 
 	jobID, err := q.Enqueue(ctx, wire.WorkerTask{
@@ -380,7 +381,7 @@ func TestImplementWorkerSummaryLoopWakesWithCompletingJobStillRunning(t *testing
 	simulateWorkerJobComplete(t, mgr, q, jobID)
 
 	testutil.WaitFor(t, "the loop wake message is stored", func() bool {
-		msgs, err := store.GetMessages(ctx, sess.ID)
+		msgs, err := store.Transcript.GetMessages(ctx, sess.ID)
 		if err != nil {
 			return false
 		}
@@ -398,7 +399,7 @@ func TestImplementWorkerCompleteFiresSingleLoopWake(t *testing.T) {
 	sqlDB := testdbfixture.Open(t, "implement-single-autocontinue.db")
 
 	store := store.NewSQL(sqlDB)
-	rec := llm.NewRecordingClient(llm.NewMockProvider(&llm.MockConfig{Responses: []llm.MockResponseEntry{{Pattern: ".", Text: "synthesized"}}}))
+	rec := llmtest.NewRecordingClient(llm.NewMockProvider(&llm.MockConfig{Responses: []llm.MockResponseEntry{{Pattern: ".", Text: "synthesized"}}}))
 	mgr := session.NewHost(store, session.Models{Client: rec, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, toolstest.NewRegistry())
 	agents := orchestration.NewMemoryAgentRegistry()
 	_ = orchestration.LoadRequiredAgentRegistry(context.Background(), agents)
@@ -411,8 +412,8 @@ func TestImplementWorkerCompleteFiresSingleLoopWake(t *testing.T) {
 	manifestRegistry, err := workflowdef.RegistryFromDirs("")
 	testutil.FailErr(t, "RegistryFromDirs", err)
 	wfMgr := workflow.NewManager(wfStore, store, manifestRegistry, nil)
-	q := worker.NewSQLQueue(sqlDB, 4)
-	mgr.SetWorkerQueue(q)
+	q := worker.NewSQLServices(sqlDB, 4).Queue
+	mgr.SetWorkerQueue(q, q.Branches)
 	wireImplementConvergenceHooks(t, mgr, wfMgr, q)
 	mgr.SetWorkflowDomains(&session.WorkflowDomains{Runs: wfMgr.Store.Runs, Policy: wfMgr.Policy, Ambient: wfMgr.Ambient, Blueprints: wfMgr.Blueprints, Batch: wfMgr.Batch, Slash: wfMgr.Slash, Requests: wfMgr.Requests, Feedback: wfMgr.Feedback, Transcript: wfMgr.Transcript, Asks: wfMgr.Asks, Fanout: wfMgr.Fanout, Phases: wfMgr.Phases, Reports: wfMgr.Reports, Recovery: wfMgr.Recovery, Cleanup: wfMgr})
 	mgr.SetLoopWorkflowSource(&loopwake.WorkflowDomains{Runs: wfMgr.Store.Runs, Approvals: wfMgr.Policy, Obligations: wfMgr.Obligations})
@@ -422,7 +423,7 @@ func TestImplementWorkerCompleteFiresSingleLoopWake(t *testing.T) {
 
 	testdbseed.InsertProjectRoot(t, sqlDB, testdbseed.DefaultProjectID, dir)
 
-	sess, err := store.Create(ctx, wire.CreateSessionRequest{}, testdbseed.DefaultProjectID)
+	sess, err := store.Sessions.Create(ctx, wire.CreateSessionRequest{}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session in store", err)
 	drainCoordinatorAsyncTurnsOnCleanup(t, mgr)
 	ref, err := workflowdef.LoadRegistryConfig(extpacks.OnDisk(bundledDir))
@@ -430,7 +431,7 @@ func TestImplementWorkerCompleteFiresSingleLoopWake(t *testing.T) {
 	run, err := wfMgr.Ambient.StartAmbient(ctx, sess.ID, ref.ID, ref.Version)
 	testutil.FailErr(t, "StartAmbient", err)
 	setImplementRunPhase(t, wfStore, run, sess.WorkspacePath, "work")
-	child, err := store.CreateChild(ctx, sess, wire.SpawnChildRequest{AgentType: orchestration.ProfilePathExplorer})
+	child, err := store.Sessions.CreateChild(ctx, sess, wire.SpawnChildRequest{AgentType: orchestration.ProfilePathExplorer})
 	testutil.FailErr(t, "create child", err)
 
 	jobID, err := q.Enqueue(ctx, wire.WorkerTask{
@@ -461,7 +462,7 @@ func TestImplementWorkerCompleteFiresSingleLoopWake(t *testing.T) {
 	simulateWorkerJobComplete(t, mgr, q, jobID)
 
 	testutil.WaitFor(t, "one loop wake message is stored", func() bool {
-		msgs, err := store.GetMessages(ctx, sess.ID)
+		msgs, err := store.Transcript.GetMessages(ctx, sess.ID)
 		if err != nil {
 			return false
 		}
@@ -478,7 +479,7 @@ func TestImplementWorkerCompleteFiresSingleLoopWake(t *testing.T) {
 	defer cancel()
 	mgr.Coordinator.WaitForTurns(drainCtx)
 
-	msgs, err := store.GetMessages(ctx, sess.ID)
+	msgs, err := store.Transcript.GetMessages(ctx, sess.ID)
 	testutil.FailErr(t, "GetMessages", err)
 	autoCount := 0
 	for _, msg := range msgs {
@@ -489,7 +490,7 @@ func TestImplementWorkerCompleteFiresSingleLoopWake(t *testing.T) {
 	if autoCount != 1 {
 		t.Fatalf("host loop wake turns = %d want 1", autoCount)
 	}
-	settled, err := store.Get(ctx, sess.ID)
+	settled, err := store.Sessions.Get(ctx, sess.ID)
 	testutil.FailErr(t, "read session after worker synthesis", err)
 	if settled.Status != wire.SessionStatusIdle {
 		t.Fatalf("status after worker synthesis = %q want idle", settled.Status)
@@ -501,7 +502,7 @@ func TestImplementWorkerSummaryLoopWakesCoordinator(t *testing.T) {
 	sqlDB := testdbfixture.Open(t, "implement-autocontinue.db")
 
 	store := store.NewSQL(sqlDB)
-	rec := llm.NewRecordingClient(llm.NewMockProvider(&llm.MockConfig{Responses: []llm.MockResponseEntry{{Pattern: ".", Text: "traced"}}}))
+	rec := llmtest.NewRecordingClient(llm.NewMockProvider(&llm.MockConfig{Responses: []llm.MockResponseEntry{{Pattern: ".", Text: "traced"}}}))
 	mgr := session.NewHost(store, session.Models{Client: rec, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, toolstest.NewRegistry())
 	agents := orchestration.NewMemoryAgentRegistry()
 	_ = orchestration.LoadRequiredAgentRegistry(context.Background(), agents)
@@ -514,8 +515,8 @@ func TestImplementWorkerSummaryLoopWakesCoordinator(t *testing.T) {
 	manifestRegistry, err := workflowdef.RegistryFromDirs("")
 	testutil.FailErr(t, "RegistryFromDirs", err)
 	wfMgr := workflow.NewManager(wfStore, store, manifestRegistry, nil)
-	q := worker.NewSQLQueue(sqlDB, 4)
-	mgr.SetWorkerQueue(q)
+	q := worker.NewSQLServices(sqlDB, 4).Queue
+	mgr.SetWorkerQueue(q, q.Branches)
 	wireImplementConvergenceHooks(t, mgr, wfMgr, q)
 	mgr.SetWorkflowDomains(&session.WorkflowDomains{Runs: wfMgr.Store.Runs, Policy: wfMgr.Policy, Ambient: wfMgr.Ambient, Blueprints: wfMgr.Blueprints, Batch: wfMgr.Batch, Slash: wfMgr.Slash, Requests: wfMgr.Requests, Feedback: wfMgr.Feedback, Transcript: wfMgr.Transcript, Asks: wfMgr.Asks, Fanout: wfMgr.Fanout, Phases: wfMgr.Phases, Reports: wfMgr.Reports, Recovery: wfMgr.Recovery, Cleanup: wfMgr})
 	mgr.SetLoopWorkflowSource(&loopwake.WorkflowDomains{Runs: wfMgr.Store.Runs, Approvals: wfMgr.Policy, Obligations: wfMgr.Obligations})
@@ -525,7 +526,7 @@ func TestImplementWorkerSummaryLoopWakesCoordinator(t *testing.T) {
 
 	testdbseed.InsertProjectRoot(t, sqlDB, testdbseed.DefaultProjectID, dir)
 
-	sess, err := store.Create(ctx, wire.CreateSessionRequest{}, testdbseed.DefaultProjectID)
+	sess, err := store.Sessions.Create(ctx, wire.CreateSessionRequest{}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session in store", err)
 	drainCoordinatorAsyncTurnsOnCleanup(t, mgr)
 	ref, err := workflowdef.LoadRegistryConfig(extpacks.OnDisk(bundledDir))
@@ -533,9 +534,9 @@ func TestImplementWorkerSummaryLoopWakesCoordinator(t *testing.T) {
 	run, err := wfMgr.Ambient.StartAmbient(ctx, sess.ID, ref.ID, ref.Version)
 	testutil.FailErr(t, "StartAmbient", err)
 	setImplementRunPhase(t, wfStore, run, sess.WorkspacePath, "work")
-	child, err := store.CreateChild(ctx, sess, wire.SpawnChildRequest{AgentType: orchestration.ProfileImplementer, Prompt: "build game.py"})
+	child, err := store.Sessions.CreateChild(ctx, sess, wire.SpawnChildRequest{AgentType: orchestration.ProfileImplementer, Prompt: "build game.py"})
 	testutil.FailErr(t, "store.CreateChild failed", err)
-	if err := store.AppendMessages(ctx, child.ID,
+	if err := store.Transcript.AppendMessages(ctx, child.ID,
 		wire.Message{
 			Role: wire.MessageRoleAssistant,
 			ToolCalls: []wire.ToolCall{
@@ -575,7 +576,7 @@ func TestImplementWorkerSummaryLoopWakesCoordinator(t *testing.T) {
 	simulateWorkerJobComplete(t, mgr, q, jobID)
 
 	testutil.WaitFor(t, "the coordinator answers the loop wake", func() bool {
-		msgs, err := store.GetMessages(ctx, sess.ID)
+		msgs, err := store.Transcript.GetMessages(ctx, sess.ID)
 		if err != nil {
 			return false
 		}
@@ -622,7 +623,7 @@ func TestImplementWorkerSummaryPartialSkipsLoopWake(t *testing.T) {
 	sqlDB := testdbfixture.Open(t, "implement-autocontinue-partial.db")
 
 	store := store.NewSQL(sqlDB)
-	rec := llm.NewRecordingClient(llm.NewMockProvider(&llm.MockConfig{Responses: []llm.MockResponseEntry{{Pattern: ".", Text: "ack"}}}))
+	rec := llmtest.NewRecordingClient(llm.NewMockProvider(&llm.MockConfig{Responses: []llm.MockResponseEntry{{Pattern: ".", Text: "ack"}}}))
 	mgr := session.NewHost(store, session.Models{Client: rec, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, toolstest.NewRegistry())
 	mgr.SetOARPipeline(sessionTestOARPipeline(t), oar.NewRenderer(nil, nil))
 	agents := orchestration.NewMemoryAgentRegistry()
@@ -634,18 +635,19 @@ func TestImplementWorkerSummaryPartialSkipsLoopWake(t *testing.T) {
 	wfMgr := workflow.NewManager(wfStore, store, nil, nil)
 	mgr.SetWorkflowDomains(&session.WorkflowDomains{Runs: wfMgr.Store.Runs, Policy: wfMgr.Policy, Ambient: wfMgr.Ambient, Blueprints: wfMgr.Blueprints, Batch: wfMgr.Batch, Slash: wfMgr.Slash, Requests: wfMgr.Requests, Feedback: wfMgr.Feedback, Transcript: wfMgr.Transcript, Asks: wfMgr.Asks, Fanout: wfMgr.Fanout, Phases: wfMgr.Phases, Reports: wfMgr.Reports, Recovery: wfMgr.Recovery, Cleanup: wfMgr})
 	mgr.SetLoopWorkflowSource(&loopwake.WorkflowDomains{Runs: wfMgr.Store.Runs, Approvals: wfMgr.Policy, Obligations: wfMgr.Obligations})
-	mgr.SetWorkerQueue(worker.NewSQLQueue(sqlDB, 4))
+	queue := worker.NewSQLServices(sqlDB, 4).Queue
+	mgr.SetWorkerQueue(queue, queue.Branches)
 
 	ctx := context.Background()
 	dir := t.TempDir()
 
 	testdbseed.InsertProjectRoot(t, sqlDB, testdbseed.DefaultProjectID, dir)
 
-	sess, err := store.Create(ctx, wire.CreateSessionRequest{}, testdbseed.DefaultProjectID)
+	sess, err := store.Sessions.Create(ctx, wire.CreateSessionRequest{}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session in store", err)
-	child, err := store.CreateChild(ctx, sess, wire.SpawnChildRequest{AgentType: orchestration.ProfileImplementer, Prompt: "touch game.py"})
+	child, err := store.Sessions.CreateChild(ctx, sess, wire.SpawnChildRequest{AgentType: orchestration.ProfileImplementer, Prompt: "touch game.py"})
 	testutil.FailErr(t, "store.CreateChild failed", err)
-	if err := store.AppendMessages(ctx, child.ID,
+	if err := store.Transcript.AppendMessages(ctx, child.ID,
 		wire.Message{
 			Role: wire.MessageRoleAssistant,
 			ToolCalls: []wire.ToolCall{
@@ -673,7 +675,7 @@ func TestImplementWorkerSummaryPartialSkipsLoopWake(t *testing.T) {
 	defer cancel()
 	mgr.Coordinator.WaitForTurns(drainCtx)
 
-	msgs, err := store.GetMessages(ctx, sess.ID)
+	msgs, err := store.Transcript.GetMessages(ctx, sess.ID)
 	testutil.FailErr(t, "store.GetMessages failed", err)
 	for _, msg := range msgs {
 		if msg.Kind == wire.MessageKindHostLoopWake {

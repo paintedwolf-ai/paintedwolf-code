@@ -49,7 +49,7 @@ func TestRunnerIngestUsesExactLandingAttributionAndStablePaths(t *testing.T) {
 		DelegationID: "dep-1", SourceSnapshotID: publishTestSnapshot(t, snapshots, projectDir), Trigger: api.ScanTriggerLandedChange,
 		ClaimToken: "claim-scan-1",
 	}
-	testutil.FailErr(t, "insert scan", store.Insert(t.Context(), rec, []string{filepath.Join(projectDir, "src")}, ""))
+	testutil.FailErr(t, "insert scan", store.Runs.Insert(t.Context(), rec, []string{filepath.Join(projectDir, "src")}, ""))
 	_, err = sqlDB.ExecContext(t.Context(), `
 		INSERT INTO landed_changes(
 			id, worker_job_id, canonical_path, delegation_id, changed_paths_json,

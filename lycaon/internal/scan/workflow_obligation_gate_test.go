@@ -49,7 +49,7 @@ func TestWorkflowNoNewGateWaitsForFullCoverage(t *testing.T) {
 			history := &obligationFindingHistory{introduced: tc.introduced}
 			projectDir := t.TempDir()
 			obligation := &WorkflowObligation{
-				Ledger: stubWorkflowScanLedger{scans: scans}, History: history,
+				Reads: stubWorkflowScanLedger{scans: scans}, Passes: stubWorkflowScanLedger{scans: scans}, History: history,
 				Params: func(context.Context, string, string, string) (map[string]any, error) {
 					return map[string]any{"categories": []any{"security"}, "full": !tc.incremental, "gate": "no_new"}, nil
 				},

@@ -27,7 +27,7 @@ func TestStartSessionTierWorkflow(t *testing.T) {
 
 	testdbseed.InsertProjectRoot(t, sqlDB, testdbseed.DefaultProjectID, dir)
 
-	sess, err := sessStore.Create(context.Background(), api.CreateSessionRequest{
+	sess, err := sessStore.Sessions.Create(context.Background(), api.CreateSessionRequest{
 		Posture: api.SessionPostureSpec,
 	}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "sessStore.Create failed", err)

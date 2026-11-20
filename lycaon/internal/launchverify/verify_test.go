@@ -10,7 +10,6 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
-	"runtime"
 	"sort"
 	"strconv"
 	"strings"
@@ -18,7 +17,6 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/pkgmanifest"
-	"github.com/lycaon/lycaon/internal/platformfloor"
 	"github.com/lycaon/lycaon/internal/testutil"
 )
 
@@ -113,10 +111,7 @@ func (f *fakeProc) stageGeneration(version string, desktop, engine []byte, extra
 		payload = append(payload, row)
 	}
 	sort.Slice(payload, func(i, j int) bool { return payload[i].Path < payload[j].Path })
-	arch, ok := platformfloor.ELFArchForGoArch(runtime.GOARCH)
-	if !ok {
-		arch = "x86_64"
-	}
+	const arch = "x86_64"
 	manifest := &pkgmanifest.Manifest{
 		FormatVersion: pkgmanifest.FormatVersion,
 		Package:       "painted-wolf-code",

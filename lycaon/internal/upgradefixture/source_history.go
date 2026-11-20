@@ -56,7 +56,7 @@ func SeedSourceHistory(ctx context.Context, database db.Handle, dataDir, project
 	if err := writeSourceFixture(projectDir, body); err != nil {
 		return SourceEvidence{}, err
 	}
-	ledger := sourceledger.New(database, filepath.Join(dataDir, enginepaths.SourceContentDirName))
+	ledger := sourceledger.New(database, filepath.Join(dataDir, enginepaths.SourceContentDirName), sourceledger.Timing{})
 	defer func() { _ = ledger.Snapshots.Close() }()
 	if err := ledger.Record(ctx, sourceledger.RecordInput{
 		RecordLocation: sourceledger.RecordLocation{RootID: rootID, Path: sourceHistoryPath},
@@ -73,7 +73,7 @@ func SeedSourceHistory(ctx context.Context, database db.Handle, dataDir, project
 		CheckpointAnchorID: uuid.NewString(), CheckpointRootKey: enginepaths.ProjectKey(projectDir),
 		SourceFileID: fileID, SourceVersionID: versionID, BodySHA256: sourceblob.ContentSHA(body),
 	}
-	checkpoints := sessioncheckpoint.New(dataDir, projectDir, checkpointRepository(database))
+	checkpoints := sessioncheckpoint.New(dataDir, projectDir, checkpointRepository(database).Rewind)
 	if _, err := checkpoints.Open(ctx, sessionID, evidence.CheckpointAnchorID); err != nil {
 		return SourceEvidence{}, fmt.Errorf("open fixture checkpoint: %w", err)
 	}
@@ -108,7 +108,7 @@ func VerifySourceHistory(ctx context.Context, database db.Handle, dataDir, proje
 		return fmt.Errorf("source fixture has no independent historical version")
 	}
 	contentDir := filepath.Join(dataDir, enginepaths.SourceContentDirName)
-	ledger := sourceledger.New(database, contentDir)
+	ledger := sourceledger.New(database, contentDir, sourceledger.Timing{})
 	defer func() { _ = ledger.Snapshots.Close() }()
 	version, err := ledger.History.ReadRestorableVersion(ctx, projectID, evidence.SourceVersionID)
 	if err != nil {
@@ -124,7 +124,7 @@ func VerifySourceHistory(ctx context.Context, database db.Handle, dataDir, proje
 	if current.FileID != version.FileID || string(current.Content) != currentSourceBody {
 		return fmt.Errorf("source fixture lost its historical boundary")
 	}
-	raw, err := checkpointRepository(database).ReadCheckpoint(ctx, evidence.CheckpointRootKey, sessionID, evidence.CheckpointAnchorID)
+	raw, err := checkpointRepository(database).Rewind.ReadCheckpoint(ctx, evidence.CheckpointRootKey, sessionID, evidence.CheckpointAnchorID)
 	if err != nil {
 		return fmt.Errorf("read retained checkpoint: %w", err)
 	}
@@ -152,7 +152,7 @@ func (h fixtureReadHandle) BeginReadTx(ctx context.Context) (*sql.Tx, error) {
 	return h.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
 }
 
-func checkpointRepository(database db.Handle) *store.SQL {
+func checkpointRepository(database db.Handle) *store.Repositories {
 	if reader, ok := database.(db.ReadHandle); ok {
 		return store.NewSQL(reader)
 	}

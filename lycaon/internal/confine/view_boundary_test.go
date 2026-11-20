@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/confine"
+	"github.com/lycaon/lycaon/internal/confine/admissiontest"
 	"github.com/lycaon/lycaon/internal/testutil"
 )
 
@@ -100,7 +101,7 @@ func TestProfileDeniesMountingAndUnmounting(t *testing.T) {
 
 // A view's boundary is a live host fact: it stays out of the reviewed digest.
 func TestViewBoundaryRequestReachesTheConfinement(t *testing.T) {
-	confine.TestingSetAutoConfine(t)
+	admissiontest.Enable(t)
 	testutil.RequireConfinement(t, confine.Available())
 	root := t.TempDir()
 	box, ok := confine.DefaultConfinement(confine.Request{

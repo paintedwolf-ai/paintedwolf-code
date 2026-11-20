@@ -2,7 +2,6 @@ package session
 
 import (
 	"context"
-	"github.com/lycaon/lycaon/internal/tools/toolstest"
 	"testing"
 	"time"
 
@@ -13,6 +12,7 @@ import (
 	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/tools/toolstest"
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -27,7 +27,7 @@ func TestAgentNotePairSSEAndHydration(t *testing.T) {
 
 	ctx := context.Background()
 	testdbseed.InsertProjectRoot(t, sqlDB, testdbseed.DefaultProjectID, t.TempDir())
-	sess, err := sqlStore.Create(ctx, wire.CreateSessionRequest{}, testdbseed.DefaultProjectID)
+	sess, err := sqlStore.Sessions.Create(ctx, wire.CreateSessionRequest{}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
 
 	ch, unsub, err := hub.Subscribe(ctx, events.Subscription{Project: sess.ProjectID, Viewer: testutil.HostOwner()})
@@ -73,7 +73,7 @@ func TestAgentNotePairSSEAndHydration(t *testing.T) {
 		t.Fatalf("SSE kind = %q", noteEv.Message.Kind)
 	}
 
-	hydrated, err := sqlStore.GetMessages(ctx, sess.ID)
+	hydrated, err := sqlStore.Transcript.GetMessages(ctx, sess.ID)
 	testutil.FailErr(t, "GetMessages", err)
 	var toolRow, noteRow *wire.Message
 	for i := range hydrated {

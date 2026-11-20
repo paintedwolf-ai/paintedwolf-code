@@ -9,8 +9,8 @@ import (
 )
 
 // metadata reads lifecycle and authority facts without raw results or findings.
-func (s *sqlFindingStore) metadata(ctx context.Context, ids []string) ([]api.CodeScan, error) {
-	rows, err := s.queries.ScanMetadata(ctx, ids)
+func (s *FindingStore) metadata(ctx context.Context, ids []string) ([]api.CodeScan, error) {
+	rows, err := s.tx.queries.ScanMetadata(ctx, ids)
 	if err != nil {
 		return nil, err
 	}

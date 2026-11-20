@@ -9,7 +9,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/configdir"
 	"github.com/lycaon/lycaon/internal/configlayout"
-	"github.com/lycaon/lycaon/internal/confine"
+	"github.com/lycaon/lycaon/internal/confine/admissiontest"
 	"github.com/lycaon/lycaon/internal/scan"
 	"github.com/lycaon/lycaon/internal/scan/bundled"
 	bundleddriver "github.com/lycaon/lycaon/internal/scan/drivers/bundled"
@@ -20,7 +20,7 @@ import (
 // Rule paths stay absolute because the subprocess runs from the project root.
 func TestOpenGrepScopesExcludesToProjectNotAncestorDirectories(t *testing.T) {
 	testutil.SkipIfShort(t, "runs real opengrep over the scan fixture")
-	confine.TestingSetAutoConfine(t)
+	admissiontest.Enable(t)
 	root := configlayout.FindModuleRoot()
 	corpus := filepath.Join(t.TempDir(), "build", "project")
 	testutil.FailErr(t, "create project under excluded ancestor", os.MkdirAll(corpus, 0o700))

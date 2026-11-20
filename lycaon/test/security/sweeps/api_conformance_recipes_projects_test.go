@@ -18,6 +18,7 @@ import (
 	"github.com/lycaon/lycaon/internal/presence"
 	"github.com/lycaon/lycaon/internal/secretcap"
 	"github.com/lycaon/lycaon/internal/secretmatch"
+	"github.com/lycaon/lycaon/internal/testutil/llmtest"
 )
 
 // projectRecipes covers projects, roots, Git repositories, managed secrets,
@@ -75,7 +76,7 @@ var projectRecipes = map[string]successRecipe{
 		}
 		// Mock mode turns off utility model calls, so the drafter stands in
 		// for the lite model; the handler and its diff are unchanged.
-		s.host.Server.Admin.Git.CommitDrafter = compaction.MockSummarizer{Text: "Add the conformance draft file"}
+		s.host.Server.Admin.Git.CommitDrafter = llmtest.Summarizer{Structured: compaction.SummaryFormatRequested, Text: "Add the conformance draft file"}
 		return successInputs{params: map[string]string{"repo_id": repoID}}, nil
 	}},
 

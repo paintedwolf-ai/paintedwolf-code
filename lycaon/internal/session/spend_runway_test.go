@@ -66,7 +66,7 @@ func spendRunwayMgr(t *testing.T, tracker cost.CostTracker, ceilingUSD float64, 
 	return mgr
 }
 
-func spendRunwayHost(t *testing.T, tracker cost.CostTracker, ceilingUSD float64, enabled bool) (*Host, *store.SQL) {
+func spendRunwayHost(t *testing.T, tracker cost.CostTracker, ceilingUSD float64, enabled bool) (*Host, *store.Repositories) {
 	t.Helper()
 	lim := settings.DefaultSessionLimits()
 	lim.SpendCeilingEnabled = enabled

@@ -31,7 +31,7 @@ func packTopologySpec(count int, merge orchestration.MergeStrategy) orchestratio
 	}
 }
 
-func newPackTestOrchestrator(t *testing.T, rec *recordingWorkers) (*orchestration.OrchestratorImpl, *orchestration.MemoryTopologyWorkers, *session.Host, *store.SQL) {
+func newPackTestOrchestrator(t *testing.T, rec *recordingWorkers) (*orchestration.OrchestratorImpl, *orchestration.MemoryTopologyWorkers, *session.Host, *store.Repositories) {
 	t.Helper()
 	mem := orchestration.NewMemoryTopologyWorkers()
 	sessStore := storetest.New(t, testdbseed.DefaultProjectID)

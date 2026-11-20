@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"testing"
+	"time"
 )
 
 func TestFeedKeyMapMatchesFixture(t *testing.T) {
@@ -17,7 +18,7 @@ func TestFeedKeyMapMatchesFixture(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read fixture: %v", err)
 	}
-	doc, err := ParseDocument(raw)
+	doc, err := parseDocument(raw, time.Time{}, DefaultURL)
 	if err != nil {
 		t.Fatalf("parse: %v", err)
 	}

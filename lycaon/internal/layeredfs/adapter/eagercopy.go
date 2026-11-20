@@ -19,6 +19,9 @@ type eagerViewState struct {
 	view            *PreparedView
 	capture         *statCapture
 	syncMu          sync.Mutex
+	releaseMu       sync.Mutex
+	releasing       atomic.Bool
+	settled         bool
 	denySourcePaths []string
 	gitStore        *privategit.RetainedObjectStore
 	gitLeases       []string
@@ -30,8 +33,6 @@ type eagerViewState struct {
 // EagerCopyAdapter materializes a working tree and a pristine tree as its exact base.
 type EagerCopyAdapter struct {
 	facts     AdapterFacts
-	mu        sync.RWMutex
-	views     map[string]*eagerViewState
 	gitStores *gitStoreRegistry
 }
 
@@ -64,7 +65,6 @@ func NewEagerCopyAdapter() *EagerCopyAdapter {
 			BarrierHoldBound:          layeredfs.DefaultBarrierHoldBound,
 			OtherUserAccess:           OtherUserAccessFileModes,
 		},
-		views:     make(map[string]*eagerViewState),
 		gitStores: newGitStoreRegistry(),
 	}
 }
@@ -204,7 +204,7 @@ func (a *EagerCopyAdapter) Prepare(ctx context.Context, req PrepareRequest) (*Pr
 	}
 	// A materialized view's workers never reach its core, so its backing stays closed until used.
 	core.ParkBacking()
-	a.adopt(view, &eagerViewState{
+	sharedEagerViews.Store(view.ViewID, &eagerViewState{
 		view:            view,
 		capture:         capture,
 		denySourcePaths: outcome.denyPaths,
@@ -214,13 +214,6 @@ func (a *EagerCopyAdapter) Prepare(ctx context.Context, req PrepareRequest) (*Pr
 		flushHook:       req.FlushClientHook,
 	})
 	return view, nil
-}
-
-func (a *EagerCopyAdapter) adopt(view *PreparedView, st *eagerViewState) {
-	a.mu.Lock()
-	a.views[view.ViewID] = st
-	a.mu.Unlock()
-	sharedEagerViews.Store(view.ViewID, st)
 }
 
 func manifestRootsOf(roots []PreparedRoot) []manifestRoot {
@@ -300,13 +293,13 @@ func (a *EagerCopyAdapter) Reopen(ctx context.Context, req ReopenRequest) (*Prep
 		PrimaryWorkPath: primaryPath, BackingDir: backingDir, RuntimeViewDir: runtimeViewDir, Core: core,
 	}
 	core.ParkBacking()
-	a.adopt(view, &eagerViewState{view: view, capture: capture, denySourcePaths: deny})
+	sharedEagerViews.Store(view.ViewID, &eagerViewState{view: view, capture: capture, denySourcePaths: deny})
 	return view, nil
 }
 
 // LoadedView returns a view this process already holds.
 func (a *EagerCopyAdapter) LoadedView(viewID string) (*PreparedView, bool) {
-	st, ok := a.lookupViewState(viewID)
+	st, ok := lookupEagerViewState(viewID)
 	if !ok {
 		return nil, false
 	}
@@ -315,12 +308,15 @@ func (a *EagerCopyAdapter) LoadedView(viewID string) (*PreparedView, bool) {
 
 // ChangedPaths lists what differs from the exact base now, reading only files whose stat differs.
 func (a *EagerCopyAdapter) ChangedPaths(ctx context.Context, viewID string) ([]layeredfs.QualifiedPath, CaptureStats, error) {
-	st, ok := a.lookupViewState(viewID)
+	st, ok := lookupEagerViewState(viewID)
 	if !ok {
 		return nil, CaptureStats{}, &AdapterError{AdapterID: AdapterEagerCopy, Op: "changed_paths", ReasonCode: ReasonViewNotFound, Diagnostic: viewID}
 	}
 	st.syncMu.Lock()
 	defer st.syncMu.Unlock()
+	if err := st.checkAdmission("changed_paths"); err != nil {
+		return nil, CaptureStats{}, err
+	}
 	paths, err := st.capture.changedPaths(ctx, st.view.Roots)
 	st.view.Core.ParkBacking()
 	return paths, st.capture.stats, err
@@ -328,7 +324,7 @@ func (a *EagerCopyAdapter) ChangedPaths(ctx context.Context, viewID string) ([]l
 
 // IsDirectoryBase reports that the view's manifest names path as a directory.
 func (a *EagerCopyAdapter) IsDirectoryBase(viewID string, path layeredfs.QualifiedPath) bool {
-	st, ok := a.lookupViewState(viewID)
+	st, ok := lookupEagerViewState(viewID)
 	if !ok {
 		return false
 	}
@@ -340,7 +336,7 @@ func (a *EagerCopyAdapter) IsDirectoryBase(viewID string, path layeredfs.Qualifi
 
 // LastCaptureStats reports what the view's most recent capture or change listing did.
 func (a *EagerCopyAdapter) LastCaptureStats(viewID string) (CaptureStats, bool) {
-	st, ok := a.lookupViewState(viewID)
+	st, ok := lookupEagerViewState(viewID)
 	if !ok {
 		return CaptureStats{}, false
 	}
@@ -349,13 +345,7 @@ func (a *EagerCopyAdapter) LastCaptureStats(viewID string) (CaptureStats, bool) 
 	return st.capture.stats, true
 }
 
-func (a *EagerCopyAdapter) lookupViewState(viewID string) (*eagerViewState, bool) {
-	a.mu.RLock()
-	st, ok := a.views[viewID]
-	a.mu.RUnlock()
-	if ok {
-		return st, true
-	}
+func lookupEagerViewState(viewID string) (*eagerViewState, bool) {
 	if v, ok := sharedEagerViews.Load(viewID); ok {
 		return v.(*eagerViewState), true
 	}
@@ -364,9 +354,12 @@ func (a *EagerCopyAdapter) lookupViewState(viewID string) (*eagerViewState, bool
 
 // CommandAccess returns the seeded private paths and confinement facts without re-copying.
 func (a *EagerCopyAdapter) CommandAccess(viewID string) (CommandAccessSpec, error) {
-	st, ok := a.lookupViewState(viewID)
+	st, ok := lookupEagerViewState(viewID)
 	if !ok {
 		return CommandAccessSpec{}, &AdapterError{AdapterID: AdapterEagerCopy, Op: "command_access", ReasonCode: ReasonViewNotFound, Diagnostic: viewID}
+	}
+	if err := st.checkAdmission("command_access"); err != nil {
+		return CommandAccessSpec{}, err
 	}
 	count := st.accessCount.Add(1)
 	rootPaths := make(map[string]string, len(st.view.Roots))
@@ -388,9 +381,12 @@ func (a *EagerCopyAdapter) CommandAccess(viewID string) (CommandAccessSpec, erro
 
 // CheckpointBarrier quiesces writers, captures the tree by stat, and acquires the Core barrier.
 func (a *EagerCopyAdapter) CheckpointBarrier(ctx context.Context, viewID string) (BarrierReceipt, func() error, error) {
-	st, ok := a.lookupViewState(viewID)
+	st, ok := lookupEagerViewState(viewID)
 	if !ok {
 		return BarrierReceipt{}, nil, &AdapterError{AdapterID: AdapterEagerCopy, Op: "checkpoint_barrier", ReasonCode: ReasonViewNotFound, Diagnostic: viewID}
+	}
+	if err := st.checkAdmission("checkpoint_barrier"); err != nil {
+		return BarrierReceipt{}, nil, err
 	}
 	quiesceAndSync := func(cCtx context.Context, id string) error {
 		if st.quiesceHook != nil {
@@ -400,6 +396,9 @@ func (a *EagerCopyAdapter) CheckpointBarrier(ctx context.Context, viewID string)
 		}
 		st.syncMu.Lock()
 		defer st.syncMu.Unlock()
+		if err := st.checkAdmission("checkpoint_barrier"); err != nil {
+			return err
+		}
 		return st.capture.capture(cCtx, st.view)
 	}
 	receipt, release, err := executeCheckpointBarrier(ctx, AdapterEagerCopy, st.view.Core, quiesceAndSync, st.flushHook)
@@ -411,27 +410,4 @@ func (a *EagerCopyAdapter) CheckpointBarrier(ctx context.Context, viewID string)
 		st.view.Core.ParkBacking()
 		return err
 	}, nil
-}
-
-// Release retires handles and cleans up the materialized view's runtime resources.
-func (a *EagerCopyAdapter) Release(ctx context.Context, viewID string) (ReleaseReceipt, error) {
-	a.mu.Lock()
-	st, ok := a.views[viewID]
-	if ok {
-		delete(a.views, viewID)
-	}
-	a.mu.Unlock()
-	if !ok {
-		if v, loaded := sharedEagerViews.LoadAndDelete(viewID); loaded {
-			st, ok = v.(*eagerViewState), true
-		}
-	} else {
-		sharedEagerViews.Delete(viewID)
-	}
-	if !ok {
-		return ReleaseReceipt{ViewID: viewID, AdapterID: AdapterEagerCopy, Settled: false, ReasonCode: ReasonViewNotFound},
-			&AdapterError{AdapterID: AdapterEagerCopy, Op: "release", ReasonCode: ReasonViewNotFound, Diagnostic: viewID}
-	}
-	releaseGitLeases(st.gitStore, st.gitLeases)
-	return settleViewRelease(ctx, AdapterEagerCopy, st.view, nil)
 }

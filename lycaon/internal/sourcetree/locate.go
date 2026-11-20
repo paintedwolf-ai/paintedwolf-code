@@ -128,7 +128,7 @@ func (p *Projection) Ancestors(ctx context.Context, row Row) ([]Ancestor, error)
 		if err != nil {
 			return nil, err
 		}
-		children, _, err := p.children(ctx, paths[i])
+		children, err := p.children(ctx, paths[i])
 		if err != nil {
 			return nil, err
 		}

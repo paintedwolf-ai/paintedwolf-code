@@ -37,7 +37,7 @@ func TestBaseComparisonAvailabilityPreservesCurrentFindings(t *testing.T) {
 			entries, err := snapshots.EntriesUnder(ctx, base.ID, root, ".")
 			testutil.FailErr(t, "read base", err)
 			scanner := &scantest.MockScanner{Result: &scanoutput.Result{ScannedPaths: []string{"a.go", "b.go"}}}
-			runner := &Runner{Store: store, Snapshots: snapshots, Registry: &scantest.MockRegistry{Scanner: scanner}, DataDir: t.TempDir()}
+			runner := &Runner{reads: store.Reads, runs: store.Runs, findings: store.Findings, ignores: store.Ignores, database: store.DB(), Snapshots: snapshots, Registry: &scantest.MockRegistry{Scanner: scanner}, DataDir: t.TempDir()}
 			if scenario == "cached clean" {
 				runner.cacheFileFindings(ctx, "execution", entries, scanner.Result)
 			}
@@ -53,12 +53,12 @@ func TestBaseComparisonAvailabilityPreservesCurrentFindings(t *testing.T) {
 			if scenario == "missing snapshot" {
 				baseID = "missing"
 			}
-			testutil.FailErr(t, "insert scan", store.Insert(ctx, api.CodeScan{
+			testutil.FailErr(t, "insert scan", store.Runs.Insert(ctx, api.CodeScan{
 				ID: "comparison", CanonicalPath: root, Status: api.CodeScanStatusPending,
 				ScannerID: scanner.ID(), SourceSnapshotID: base.ID, ExecutionFingerprint: "execution",
 				TargetKind: api.ScanTargetPaths,
 			}, []string{"a.go", "b.go"}, baseID))
-			job, err := store.ClaimNext(ctx)
+			job, err := store.Runs.ClaimNext(ctx)
 			testutil.FailErr(t, "claim scan", err)
 			finding := findingstest.Finding("rule", api.FindingLevelHigh, "current finding", "a.go", 1)
 			current := &scanoutput.Result{ScannedPaths: []string{"a.go", "b.go"}, Findings: []api.SecurityFinding{finding}}
@@ -68,7 +68,7 @@ func TestBaseComparisonAvailabilityPreservesCurrentFindings(t *testing.T) {
 			before, err := json.Marshal(current)
 			testutil.FailErr(t, "encode current result", err)
 			delta := runner.compareWithBase(ctx, job, scancatalog.ScannerContract{}, current)
-			stored, err := store.Get(ctx, job.ID)
+			stored, err := store.Reads.Get(ctx, job.ID)
 			testutil.FailErr(t, "read comparison", err)
 			if stored.Delta == nil {
 				t.Fatal("comparison was not recorded")
@@ -115,7 +115,7 @@ func TestBaseStagingCancellationDoesNotBecomeUnavailableHistory(t *testing.T) {
 	testutil.FailErr(t, "capture base", err)
 	entries, err := snapshots.EntriesUnder(t.Context(), base.ID, root, ".")
 	testutil.FailErr(t, "read base", err)
-	runner := &Runner{Store: store, Snapshots: snapshots, DataDir: t.TempDir()}
+	runner := &Runner{reads: store.Reads, runs: store.Runs, findings: store.Findings, ignores: store.Ignores, database: store.DB(), Snapshots: snapshots, DataDir: t.TempDir()}
 	ctx, cancel := context.WithCancel(t.Context())
 	cancel()
 	staged, err := runner.stageBaseVersions(ctx, &api.CodeScan{ID: "canceled", CanonicalPath: root}, entries)

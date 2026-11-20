@@ -41,10 +41,10 @@ func (m *Service) SetExecutionCheckpoints(source ExecutionCheckpointSource) {
 // Observe separates runtime occupancy from unfinished task obligations.
 func (m *Service) Observe(ctx context.Context, sessionID, submissionID string) (ExecutionObservation, error) {
 	result := ExecutionObservation{SessionID: sessionID, SubmissionID: submissionID, Blockers: []ExecutionBlocker{}, Failures: []store.ExecutionSubmission{}}
-	if m == nil || m.store == nil {
+	if m == nil || (m.sessionStore == nil || m.submissionStore == nil) {
 		return result, fmt.Errorf("session observation unavailable")
 	}
-	admission, err := m.store.GetPromptSubmission(ctx, submissionID)
+	admission, err := m.submissionStore.GetPromptSubmission(ctx, submissionID)
 	if err != nil {
 		return result, err
 	}
@@ -64,10 +64,10 @@ func (m *Service) Observe(ctx context.Context, sessionID, submissionID string) (
 // Tree reads occupancy without requiring a prompt admission.
 func (m *Service) Tree(ctx context.Context, sessionID string) (ExecutionObservation, error) {
 	result := ExecutionObservation{SessionID: sessionID, Blockers: []ExecutionBlocker{}, Failures: []store.ExecutionSubmission{}}
-	if m == nil || m.store == nil {
+	if m == nil || (m.sessionStore == nil || m.submissionStore == nil) {
 		return result, fmt.Errorf("session observation unavailable")
 	}
-	state, err := m.store.ReadExecutionState(ctx, sessionID)
+	state, err := m.sessionStore.ReadExecutionState(ctx, sessionID)
 	if err != nil {
 		return result, err
 	}

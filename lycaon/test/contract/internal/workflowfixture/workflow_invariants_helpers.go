@@ -13,7 +13,7 @@ import (
 	"github.com/lycaon/lycaon/internal/orchestration"
 	workflowcomposition "github.com/lycaon/lycaon/internal/workflow/composition"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
-	workflowdrafts "github.com/lycaon/lycaon/internal/workflow/drafts"
+	"github.com/lycaon/lycaon/internal/workflow/drafts/draftstest"
 	"github.com/lycaon/lycaon/pkg/api"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 )
@@ -31,7 +31,7 @@ func ContractWorkflowComposer(t *testing.T) *workflowcomposition.Composer {
 	contractcheck.FailErr(t, "workflowcomposition.LoadComposePolicy failed", err)
 	return &workflowcomposition.Composer{
 		ModuleRoot:   moduleRoot,
-		SessionStore: workflowdrafts.NewMemory(),
+		SessionStore: draftstest.NewStore(t, "contract-session"),
 		Registry:     reg,
 		Agents:       agents,
 		Policy:       policy,

@@ -21,10 +21,10 @@ func TestPreparedReductionPublicationRequiresItsCapturedState(t *testing.T) {
 	for _, changed := range []string{"none", "chunk_only", "source", "projection", "model", "cancellation"} {
 		t.Run(changed, func(t *testing.T) {
 			sessionStore := storetest.New(t, testdbseed.DefaultProjectID)
-			sess, err := sessionStore.Create(t.Context(), api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
+			sess, err := sessionStore.Sessions.Create(t.Context(), api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
 			testutil.FailErr(t, "create session", err)
-			testutil.FailErr(t, "append source", sessionStore.AppendMessages(t.Context(), sess.ID, api.Message{ID: "source", Role: "assistant", Content: strings.Repeat("original observation ", 100)}))
-			rows, err := sessionStore.GetMessages(t.Context(), sess.ID)
+			testutil.FailErr(t, "append source", sessionStore.Transcript.AppendMessages(t.Context(), sess.ID, api.Message{ID: "source", Role: "assistant", Content: strings.Repeat("original observation ", 100)}))
+			rows, err := sessionStore.Transcript.GetMessages(t.Context(), sess.ID)
 			testutil.FailErr(t, "read source", err)
 			source := rows[0]
 			snapshot := store.CompactionView{CoveredThroughOrd: source.Ord, CoveredThroughID: source.ID, SourceSeq: source.Seq}
@@ -33,13 +33,13 @@ func TestPreparedReductionPublicationRequiresItsCapturedState(t *testing.T) {
 			switch changed {
 			case "source":
 				source.Content = "corrected observation"
-				_, err = sessionStore.UpdateMessage(t.Context(), sess.ID, source.ID, source)
+				_, err = sessionStore.Transcript.UpdateMessage(t.Context(), sess.ID, source.ID, source)
 			case "projection":
 				newer := snapshot
 				newer.Generation = 1
-				err = sessionStore.PutCompactionView(t.Context(), sess.ID, newer)
+				err = sessionStore.Compaction.PutCompactionView(t.Context(), sess.ID, newer)
 			case "model":
-				err = sessionStore.UpdateSession(t.Context(), sess.ID, func(s *api.Session) { s.ProviderID = "test-provider"; s.Model = "different-model" })
+				err = sessionStore.Sessions.UpdateSession(t.Context(), sess.ID, func(s *api.Session) { s.ProviderID = "test-provider"; s.Model = "different-model" })
 			case "cancellation":
 				cancel()
 			}
@@ -49,7 +49,7 @@ func TestPreparedReductionPublicationRequiresItsCapturedState(t *testing.T) {
 			if changed == "chunk_only" {
 				report.SessionCompacted, report.ChunksCompacted, report.Continuation = false, 1, nil
 			}
-			svc := &Service{store: sessionStore}
+			svc := &Service{sessionStore: sessionStore.Sessions, transcriptStore: sessionStore.Transcript, compactionStore: sessionStore.Compaction}
 			_, err = svc.publishReductionSynthesis(ctx, compaction.SessionInfo{ID: sess.ID}, rows, snapshot,
 				[]compaction.ContextMessage{{ID: "summary", Role: "assistant", Content: "A concise observation."}}, report)
 			if changed == "cancellation" {
@@ -59,7 +59,7 @@ func TestPreparedReductionPublicationRequiresItsCapturedState(t *testing.T) {
 			} else {
 				testutil.FailErr(t, "publish prepared reduction", err)
 			}
-			current, err := sessionStore.Get(t.Context(), sess.ID)
+			current, err := sessionStore.Sessions.Get(t.Context(), sess.ID)
 			testutil.FailErr(t, "read current generation", err)
 			want := 0
 			if changed == "none" || changed == "projection" || changed == "chunk_only" {
@@ -75,22 +75,22 @@ func TestPreparedReductionPublicationRequiresItsCapturedState(t *testing.T) {
 func TestOptionalEnrichmentCannotExpandTheAcceptedProjection(t *testing.T) {
 	guidance.SetGuidanceRenderer(promptstest.GuidanceRenderer(t))
 	sessionStore := storetest.New(t, testdbseed.DefaultProjectID)
-	sess, err := sessionStore.Create(t.Context(), api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
+	sess, err := sessionStore.Sessions.Create(t.Context(), api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
-	testutil.FailErr(t, "append source", sessionStore.AppendMessages(t.Context(), sess.ID, api.Message{ID: "source", Role: "assistant", Content: "recorded observation"}))
-	rows, err := sessionStore.GetMessages(t.Context(), sess.ID)
+	testutil.FailErr(t, "append source", sessionStore.Transcript.AppendMessages(t.Context(), sess.ID, api.Message{ID: "source", Role: "assistant", Content: "recorded observation"}))
+	rows, err := sessionStore.Transcript.GetMessages(t.Context(), sess.ID)
 	testutil.FailErr(t, "read source", err)
 	source := rows[0]
 	record := &messageview.Continuation{Format: 1, ThroughOrd: source.Ord, Window: 8192}
 	snapshot := store.CompactionView{Generation: 1, CoveredThroughOrd: source.Ord, CoveredThroughID: source.ID, SourceSeq: source.Seq, Continuation: record,
 		Messages: []api.Message{{ID: "summary", Role: "assistant", Content: "small", ContentParts: []api.MessageContentPart{{Source: "compaction_summary", Content: "small"}}}}}
-	testutil.FailErr(t, "publish compact baseline", sessionStore.PutCompactionView(t.Context(), sess.ID, snapshot))
+	testutil.FailErr(t, "publish compact baseline", sessionStore.Compaction.PutCompactionView(t.Context(), sess.ID, snapshot))
 	enriched := messageview.CloneContinuation(record)
 	enriched.SummaryThroughOrd = source.Ord
 	enriched.Summary.Facts = []string{strings.Repeat("larger generated continuation ", 100)}
-	svc := &Service{store: sessionStore}
+	svc := &Service{sessionStore: sessionStore.Sessions, transcriptStore: sessionStore.Transcript, compactionStore: sessionStore.Compaction}
 	testutil.FailErr(t, "reject growing enrichment", svc.publishSynthesis(t.Context(), compaction.SessionInfo{ID: sess.ID}, snapshot, enriched))
-	current, _, err := sessionStore.GetCompactionView(t.Context(), sess.ID)
+	current, _, err := sessionStore.Compaction.GetCompactionView(t.Context(), sess.ID)
 	testutil.FailErr(t, "read preserved baseline", err)
 	if current.Generation != 1 || current.Messages[0].Content != "small" {
 		t.Fatal("optional enrichment expanded an accepted projection")

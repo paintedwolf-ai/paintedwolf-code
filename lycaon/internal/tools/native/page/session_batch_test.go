@@ -25,7 +25,7 @@ func TestActHandlerRetainsOriginalIndexAndCompletedEffects(t *testing.T) {
 	root := t.TempDir()
 	testutil.FailErr(t, "write page fixture", os.WriteFile(filepath.Join(root, "index.html"), []byte(`<button id="save" onclick="this.textContent='Saved'">Save</button>`), 0o600))
 	pool := browser.NewPool("")
-	pool.SetCaptureProjector(captureprojection.New(secretmatch.NewInertMatcher(), nil))
+	pool.SetCaptureProjector(captureprojection.New(&secretmatch.Matcher{}, nil))
 	t.Cleanup(pool.Close)
 	pages := pagesession.NewRegistry(pagesession.DefaultConfig())
 	t.Cleanup(func() { pages.Close(t.Context()) })

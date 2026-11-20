@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/sourceledger"
 	"path/filepath"
 	"testing"
 
@@ -20,7 +21,7 @@ const (
 
 // Text a file held under a credential name stays credential text after a move.
 func TestSourceHistoryACDF19MovedCredentialFileRecordsWhereItsTextCameFrom(t *testing.T) {
-	h := newHistoryHarness(t)
+	h := newHistoryHarness(t, sourceledger.Timing{})
 	h.record(effectSeed{path: ".env", content: oldToken, session: "s0", op: api.SourceChangeOpCreate})
 	h.beginSession(historySession)
 	h.record(effectSeed{path: "settings.txt", fromPath: ".env", op: api.SourceChangeOpRename})
@@ -94,7 +95,7 @@ func TestSourceHistoryACDF19CredentialTextRecordsItsDeliveryOnEveryPath(t *testi
 		},
 	} {
 		t.Run(c.name, func(t *testing.T) {
-			h := newHistoryHarness(t)
+			h := newHistoryHarness(t, sourceledger.Timing{})
 			h.writeFile(".env", newToken)
 			tctx, args := c.setup(h)
 			recorder := &deliveredRecorder{}
@@ -132,7 +133,7 @@ func TestSourceHistoryACDF19AnswerWithNoTextRecordsNothing(t *testing.T) {
 		"identical sides":     {Kind: workspacebaseline.ChangeModified, Before: oldToken, After: oldToken, HasBefore: true, HasAfter: true},
 	} {
 		t.Run(name, func(t *testing.T) {
-			h := newHistoryHarness(t)
+			h := newHistoryHarness(t, sourceledger.Timing{})
 			h.writeFile(".env", newToken)
 			compared.Abs = filepath.Join(h.dir, ".env")
 			worker := h.workerWith(&fakeTree{path: compared})

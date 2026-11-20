@@ -8,14 +8,15 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/api/httpio"
-	"github.com/lycaon/lycaon/internal/project"
+
+	"github.com/lycaon/lycaon/internal/project/projecttest"
 	"github.com/lycaon/lycaon/internal/search"
 	"github.com/lycaon/lycaon/internal/testutil"
 )
 
 func TestReplacementRejectsFileOnlyQueries(t *testing.T) {
-	registry := project.NewMemoryRegistry()
-	p, err := project.CreateWithRoot(t.Context(), registry, t.TempDir())
+	registry := projecttest.NewRegistry(t)
+	p, err := projecttest.CreateWithRoot(t.Context(), registry, t.TempDir())
 	testutil.FailErr(t, "create project", err)
 	server := &Handler{projectRegistry: registry, responses: &httpio.Responder{}}
 	for _, endpoint := range []struct {
@@ -43,10 +44,10 @@ func TestReplacementRejectsFileOnlyQueries(t *testing.T) {
 }
 
 func TestReplaceRootsIntersectsQueryAndOrigin(t *testing.T) {
-	registry := project.NewMemoryRegistry()
-	a, err := project.CreateWithRoot(t.Context(), registry, t.TempDir())
+	registry := projecttest.NewRegistry(t)
+	a, err := projecttest.CreateWithRoot(t.Context(), registry, t.TempDir())
 	testutil.FailErr(t, "create origin project", err)
-	b, err := project.CreateWithRoot(t.Context(), registry, t.TempDir())
+	b, err := projecttest.CreateWithRoot(t.Context(), registry, t.TempDir())
 	testutil.FailErr(t, "create other project", err)
 	aRoot := search.CodeRoot{ProjectID: a.ID, RootID: a.Roots[0].ID, Path: a.Roots[0].Path}
 	bRoot := search.CodeRoot{ProjectID: b.ID, RootID: b.Roots[0].ID, Path: b.Roots[0].Path}

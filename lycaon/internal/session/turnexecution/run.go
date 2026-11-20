@@ -29,7 +29,7 @@ var RunTurnBusyWindowFaultForTest func()
 func (m *Service) Run(ctx context.Context, id string, in promptinput.Input) (resp *promptresult.Result, runErr error) {
 	ctx = m.Execution.Attach(ctx, id)
 	defer m.Execution.Cancel(id)
-	sess, err := m.store.Get(ctx, id)
+	sess, err := m.sessionStore.Get(ctx, id)
 	if err != nil {
 		return nil, err
 	}
@@ -73,7 +73,7 @@ func (m *Service) Run(ctx context.Context, id string, in promptinput.Input) (res
 			return workflowResp, nil
 		}
 		// Workflow attachment can change the session posture.
-		sess, err = m.store.Get(ctx, id)
+		sess, err = m.sessionStore.Get(ctx, id)
 		if err != nil {
 			return nil, err
 		}
@@ -106,7 +106,7 @@ func (m *Service) Run(ctx context.Context, id string, in promptinput.Input) (res
 	}
 	turnWasIdle := sess.Status != api.SessionStatusBusy
 	if turnWasIdle {
-		if err := m.store.SetSessionStatus(ctx, id, api.SessionStatusBusy); err != nil {
+		if err := m.sessionStore.SetSessionStatus(ctx, id, api.SessionStatusBusy); err != nil {
 			return nil, err
 		}
 	}
@@ -172,7 +172,7 @@ func (m *Service) Run(ctx context.Context, id string, in promptinput.Input) (res
 	if newUserTurn {
 		m.Clocks.Anchor(ctx, id, openingMessageID)
 	}
-	if err := m.store.CheckpointTurn(ctx, turnExecution.Turn.ID, turnExecution.Attempt.ID, store.TurnPhaseModel, "{}"); err != nil {
+	if err := m.turnStore.CheckpointTurn(ctx, turnExecution.Turn.ID, turnExecution.Attempt.ID, store.TurnPhaseModel, "{}"); err != nil {
 		return nil, err
 	}
 	if !hostTurn {
@@ -249,7 +249,7 @@ func (m *Service) executePromptRun(
 	if err != nil {
 		return execution, err
 	}
-	if err := m.store.SealTurnCloseout(ctx, store.TurnCloseoutCommit{
+	if err := m.turnStore.SealTurnCloseout(ctx, store.TurnCloseoutCommit{
 		TurnID: turn.Turn.ID, AttemptID: turn.Attempt.ID, OutputID: result.LastOutputID,
 		Message: result.Closeout, CheckpointJSON: checkpointJSON,
 	}); err != nil {

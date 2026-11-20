@@ -14,7 +14,7 @@ type SessionTreeMember struct {
 
 // SessionTreeMembers returns descendants before their ancestors, without
 // hydrating transcripts, workspace paths, or presentation state.
-func (s *sqlSessionViews) SessionTreeMembers(ctx context.Context, rootID string) ([]SessionTreeMember, error) {
+func (s *sqlSessions) SessionTreeMembers(ctx context.Context, rootID string) ([]SessionTreeMember, error) {
 	rows, err := s.core.queries.ListSessionTreeMembers(ctx, rootID)
 	if err != nil {
 		return nil, err

@@ -27,7 +27,7 @@ func TestWorkerCancellationCoversEveryActiveState(t *testing.T) {
 					testdbseed.InsertSession(t, database, "parent-1", testdbseed.DefaultProjectID)
 				}
 				testdbseed.InsertSession(t, database, "child-1", testdbseed.DefaultProjectID)
-				q := NewSQLQueue(database, 1)
+				q := NewSQLServices(database, 1).Queue
 				q.SetRunningCancel(onCancel)
 				q.SetWorkflowDomains(&WorkflowDomains{Runs: &workflowAdmissionProbe{}, Tasks: &workflowAdmissionProbe{}})
 				queue = q

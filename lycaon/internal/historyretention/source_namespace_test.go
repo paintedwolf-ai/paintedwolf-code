@@ -12,7 +12,7 @@ import (
 
 func TestDirectoryTombstoneDoesNotPermanentlyPinChildContent(t *testing.T) {
 	s := newTestService(t)
-	ledger := sourceledger.New(s.Database, t.TempDir())
+	ledger := sourceledger.New(s.Database, t.TempDir(), sourceledger.Timing{})
 	project := testdbseed.DefaultProjectID
 	testdbseed.InsertProjectRootWithID(t, s.Database, project, "root", t.TempDir())
 	testutil.FailErr(t, "record child", ledger.Record(t.Context(), sourceledger.RecordInput{
