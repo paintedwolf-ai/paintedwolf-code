@@ -35,7 +35,8 @@ class PacmanCandidateTests(unittest.TestCase):
             (root / "lycaon/internal/platformfloor/linux_floor.txt").write_text("GLIBC 2.35\n")
             (root / "packaging/linux").mkdir(parents=True)
             (root / "packaging/linux/dependencies.json").write_text(json.dumps({
-                "pacman": {"depends": ["glibc>={GLIBC}"], "recommends": []}}))
+                "pacman": {"depends": ["glibc>={GLIBC}"], "recommends": [],
+                           "architecture_depends": {"x86_64": ["qemu-system-x86"]}}}))
             (root / "RELEASE_BUILD").write_text("2\n")
             package = work / "candidate.pkg.tar.zst"
             package.write_bytes(b"selected native package")
@@ -55,14 +56,14 @@ class PacmanCandidateTests(unittest.TestCase):
                         output.addfile(member, io.BytesIO(encoded))
                 return result.getvalue()
 
-            expected = "pkgname = painted-wolf-code\npkgver = 1.2.3-2\narch = x86_64\ndepend = glibc>=2.35\n"
+            expected = "pkgname = painted-wolf-code\npkgver = 1.2.3-2\narch = x86_64\ndepend = glibc>=2.35\ndepend = qemu-system-x86\n"
             with patch("linux_release.arch_stage.subprocess.Popen", return_value=Decoder(archive_bytes(expected))):
                 fields = extract(package, work / "installed", root, "x86_64", "1.2.3")
-            self.assertEqual(fields["depend"], ["glibc>=2.35"])
+            self.assertEqual(fields["depend"], ["glibc>=2.35", "qemu-system-x86"])
             self.assertEqual((work / "installed/usr/bin/pw").read_text(), "sealed bytes")
             self.assertEqual((work / "installed/usr/libexec/painted-wolf-code/pw-launch").stat().st_mode & 0o7777, 0o4755)
             with patch("linux_release.arch_stage.subprocess.Popen", return_value=Decoder(archive_bytes(
-                    expected.replace("glibc>=2.35", "glibc>=2.34")))), self.assertRaisesRegex(ValueError, "dependencies"):
+                    expected.replace("qemu-system-x86", "qemu-system-aarch64")))), self.assertRaisesRegex(ValueError, "dependencies"):
                 extract(package, work / "wrong-dependency", root, "x86_64", "1.2.3")
             with patch("linux_release.arch_stage.subprocess.Popen", return_value=Decoder(archive_bytes(
                     expected.replace("pkgver = 1.2.3-2", "pkgver = 1.2.3-1")))), self.assertRaisesRegex(ValueError, "selected release"):
