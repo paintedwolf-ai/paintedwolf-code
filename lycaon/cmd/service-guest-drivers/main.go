@@ -99,8 +99,28 @@ func extract(image, output string) error {
 		seen[name] = true
 		return os.WriteFile(filepath.Join(output, fmt.Sprintf("%02d-%s", len(seen), path.Base(name))), data, 0644)
 	}
-	for _, name := range []string{"virtio_console.ko", "virtio-rng.ko", "vmw_vsock_virtio_transport.ko"} {
-		if err := write(names[name]); err != nil {
+	builtin, err := tree.OpenFile(path.Join(root, "modules.builtin"), os.O_RDONLY)
+	if err != nil {
+		return err
+	}
+	defer builtin.Close()
+	compiled := map[string]bool{}
+	lines = bufio.NewScanner(builtin)
+	for lines.Scan() {
+		compiled[path.Base(lines.Text())] = true
+	}
+	if err := lines.Err(); err != nil {
+		return err
+	}
+	for _, name := range []string{"virtio_pci.ko", "virtio_console.ko", "virtio-rng.ko", "vmw_vsock_virtio_transport.ko"} {
+		if compiled[name] {
+			continue
+		}
+		module, ok := names[name]
+		if !ok {
+			return fmt.Errorf("boot driver %s is absent from kernel and module tree", name)
+		}
+		if err := write(module); err != nil {
 			return err
 		}
 	}
