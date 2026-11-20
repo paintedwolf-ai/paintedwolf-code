@@ -9,10 +9,10 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/llm/compaction"
-	"github.com/lycaon/lycaon/internal/llm/llmtest"
 	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/testutil/llmtest"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
