@@ -9,12 +9,10 @@ import (
 	"net"
 	"os"
 	"os/exec"
-	"path/filepath"
 	"sync"
 	"syscall"
 	"time"
 
-	"github.com/lycaon/lycaon/internal/configdir"
 	"github.com/lycaon/lycaon/internal/configlayout"
 	"github.com/lycaon/lycaon/internal/serviceguest"
 	"golang.org/x/sys/unix"
@@ -46,25 +44,26 @@ func applyAndExec(profile []byte, resolved string, target []string) error {
 
 // OpenPrivateGuest starts an ephemeral VM and verifies its private agent channel.
 func OpenPrivateGuest(ctx context.Context) (*serviceguest.Client, error) {
-	host, err := os.Executable()
-	if err != nil {
-		return nil, err
-	}
-	var bundle string
-	if contents := configlayout.MacOSAppContents(host); contents != "" {
-		bundle = filepath.Join(contents, "Resources", "service-guest")
-	} else if configdir.IsDevelopmentBuild() {
-		bundle = filepath.Join(filepath.Dir(host), "service-guest")
-	} else {
-		return nil, errors.New("private service runtime is missing from the application bundle")
-	}
-	return openPrivateGuestFrom(ctx, bundle)
-}
-
-func openPrivateGuestFrom(ctx context.Context, bundle string) (*serviceguest.Client, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
+	payload, err := configlayout.OpenPrivateGuestPayload()
+	if err != nil {
+		return nil, errors.Join(serviceguest.ErrUnavailable, err)
+	}
+	transport, err := launchPrivateGuest(payload)
+	payload.Close()
+	if err != nil {
+		return nil, errors.Join(serviceguest.ErrUnavailable, err)
+	}
+	client, err := serviceguest.Open(ctx, transport)
+	if err != nil && ctx.Err() == nil {
+		return nil, errors.Join(serviceguest.ErrUnavailable, err)
+	}
+	return client, err
+}
+
+func launchPrivateGuest(payload *configlayout.PrivateGuestPayload) (net.Conn, error) {
 	syscall.ForkLock.RLock()
 	pair, err := unix.Socketpair(unix.AF_UNIX, unix.SOCK_STREAM, 0)
 	if err == nil {
@@ -77,28 +76,29 @@ func openPrivateGuestFrom(ctx context.Context, bundle string) (*serviceguest.Cli
 	}
 	parent := os.NewFile(uintptr(pair[0]), "private guest host channel")
 	child := os.NewFile(uintptr(pair[1]), "private guest activation")
-	defer child.Close()
 	conn, err := net.FileConn(parent)
 	_ = parent.Close()
 	if err != nil {
+		_ = child.Close()
 		return nil, err
 	}
-	cmd := exec.Command(filepath.Join(bundle, "pw-service-vm"))
+	cmd := exec.Command(payload.Helper)
 	cmd.Dir = "/"
 	cmd.Env = []string{}
-	cmd.ExtraFiles = []*os.File{child}
+	cmd.ExtraFiles = append([]*os.File{child}, payload.Boot...)
 	cmd.Stderr = os.Stderr
-	if err := cmd.Start(); err != nil {
+	err = cmd.Start()
+	_ = child.Close()
+	if err != nil {
 		_ = conn.Close()
 		return nil, fmt.Errorf("start private service helper: %w", err)
 	}
-	_ = child.Close()
 	channel := &privateGuestChannel{Conn: conn, process: cmd.Process, done: make(chan struct{})}
 	go func() {
 		channel.status = cmd.Wait()
 		close(channel.done)
 	}()
-	return serviceguest.Open(ctx, channel)
+	return channel, nil
 }
 
 type privateGuestChannel struct {

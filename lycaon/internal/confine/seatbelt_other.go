@@ -23,5 +23,5 @@ func applyAndExec([]byte, string, []string) error {
 
 // OpenPrivateGuest reports an unavailable private service runtime.
 func OpenPrivateGuest(context.Context) (*serviceguest.Client, error) {
-	return nil, fmt.Errorf("private service runtime is unavailable on this platform")
+	return nil, serviceguest.ErrUnavailable
 }
