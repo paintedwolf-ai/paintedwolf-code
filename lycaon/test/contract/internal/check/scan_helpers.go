@@ -6,13 +6,6 @@ import (
 	"strings"
 )
 
-// Marker fallbacks contain no template prose.
-var ForbiddenWorkerKickFallbackProsePatterns = []*regexp.Regexp{
-	regexp.MustCompile(`Stop calling tools`),
-	regexp.MustCompile(`Your survey is %d characters`),
-	regexp.MustCompile(`\bworkerProseOnlyTurnFallback\b`),
-}
-
 // Survey tool orderings that do not lead with find.
 var LaneSSurveyStaleCopyPatterns = []*regexp.Regexp{
 	regexp.MustCompile(`read, grep, glob`),

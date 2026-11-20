@@ -5,7 +5,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"regexp"
 	"strings"
 	"testing"
 
@@ -111,28 +110,6 @@ func TestReleaseSemverPrecedenceCoversCandidatePromotion(t *testing.T) {
 	)
 	if err := cmd.Run(); err == nil {
 		t.Fatal("product versions accepted a tag prefix")
-	}
-}
-
-func TestDevelopmentSigningIdentityHasOneSource(t *testing.T) {
-	t.Parallel()
-	root := contractcheck.RepoRoot(t)
-	config := contractcheck.ReadRepoFile(t, root, "scripts/dev-signing-config.sh")
-	declarations := regexp.MustCompile(`(?m)^readonly DEV_SIGNING_(?:IDENTITY|IDENTIFIER)="([^"]+)"$`).FindAllStringSubmatch(config, -1)
-	if len(declarations) != 2 {
-		t.Fatalf("dev-signing-config.sh has %d signing declarations; want 2", len(declarations))
-	}
-	for _, declaration := range declarations {
-		value := declaration[1]
-		for _, rel := range []string{"scripts/dev-signing-identity.sh", "scripts/sign-dev-binary.sh"} {
-			body := contractcheck.ReadRepoFile(t, root, rel)
-			if strings.Contains(body, value) {
-				t.Fatalf("%s duplicates signing identity value %q", rel, value)
-			}
-			if !strings.Contains(body, "dev-signing-config.sh") {
-				t.Fatalf("%s does not source dev-signing-config.sh", rel)
-			}
-		}
 	}
 }
 

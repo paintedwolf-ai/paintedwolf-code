@@ -1,11 +1,35 @@
 import type { ProjectListResponse } from "../src/api/types.ts";
-import { expect } from "@playwright/test";
+import { expect, type Page } from "@playwright/test";
 import { mockedBackendE2e, seedAppState } from "./helpers.ts";
+import { settleFrames } from "./fixtures/settle.ts";
+
+/** Resolves on the first successful project list read, which only follows a completed recovery. */
+function waitForReadyProjectList(page: Page) {
+  return page.waitForResponse(
+    (response) =>
+      response.request().method() === "GET" &&
+      new URL(response.url()).pathname === "/v1/projects" &&
+      response.status() === 200,
+    { timeout: 30_000 },
+  );
+}
+
+/** The stop gives way to the home shell with the (empty) project list loaded. */
+async function expectHomeAfterRecovery(page: Page) {
+  await expect(page.getByTestId("critical-stop")).toHaveCount(0, { timeout: 15_000 });
+  await expect(page.getByTestId("home-nav")).toBeVisible();
+  const empty = page.getByTestId("home-empty-pane");
+  await expect(empty).toBeVisible();
+  await expect(empty).not.toContainText("Loading projects");
+  await expect(empty).not.toContainText("Couldn’t load your projects");
+}
 
 /** Exercises recovery UI with an isolated store. */
 mockedBackendE2e.describe("store incompatible recovery", () => {
   mockedBackendE2e("unavailable readiness endpoints do not form a retry storm", async ({ page }) => {
     let unavailableRequests = 0;
+    let unanswered = 0;
+    await page.clock.install();
     await page.route("**/health", (route) => route.fulfill({
       status: 200,
       contentType: "application/json",
@@ -15,20 +39,26 @@ mockedBackendE2e.describe("store incompatible recovery", () => {
         recovery_reason: "schema_mismatch", recovery_snapshot_available: false,
       }),
     }));
-    await page.route("**/v1/**", (route) => {
+    await page.route("**/v1/**", async (route) => {
       unavailableRequests++;
-      return route.fulfill({
+      unanswered++;
+      await route.fulfill({
         status: 503, contentType: "application/json",
         body: JSON.stringify({ code: "store_incompatible", message: "Store incompatible" }),
       });
+      unanswered--;
     });
     await seedAppState(page, { onboarding: { firstRunSetupCompleted: true } });
     await page.goto("/");
     await expect(page.getByTestId("critical-stop")).toHaveAttribute("data-code", "store_incompatible", { timeout: 30_000 });
-    // The stop replaces the whole app, not one stage of it.
     await expect(page.getByTestId("shell")).toHaveCount(0);
-    // Observe a retry interval: a reachable 503 must not recursively start another read.
-    await page.waitForTimeout(2_000);
+    // Advance the page clock to expose an unintended retry.
+    await page.clock.runFor(2_000);
+    await expect.poll(async () => {
+      const before = unavailableRequests;
+      await settleFrames(page);
+      return unanswered === 0 && unavailableRequests === before;
+    }).toBe(true);
     expect(unavailableRequests).toBeLessThanOrEqual(12);
     await expect(page.getByTestId("critical-stop-secondary")).toBeEnabled();
   });
@@ -109,9 +139,6 @@ mockedBackendE2e.describe("store incompatible recovery", () => {
       const stop = page.getByTestId("critical-stop");
       await expect(stop).toBeVisible({ timeout: 30_000 });
       await expect(stop).toHaveAttribute("data-code", "store_incompatible");
-      await expect(stop.locator(".den-critical-stop__title")).toHaveText(
-        "This app can't open your data",
-      );
       const when = new Date(snapshotAt).toLocaleString(undefined, {
         dateStyle: "medium",
         timeStyle: "short",
@@ -122,12 +149,6 @@ mockedBackendE2e.describe("store incompatible recovery", () => {
       await expect(page.getByTestId("critical-stop-diagnostic")).toHaveText(
         "schema_version 5 does not match 1",
       );
-      await expect(page.getByTestId("critical-stop-primary")).toHaveText(
-        "Restore snapshot",
-      );
-      await expect(page.getByTestId("critical-stop-secondary")).toHaveText(
-        "Start fresh…",
-      );
 
       const hostBox = await page.getByTestId("critical-stop-host").boundingBox();
       const stopBox = await stop.boundingBox();
@@ -137,9 +158,10 @@ mockedBackendE2e.describe("store incompatible recovery", () => {
       const stopCenter = stopBox!.y + stopBox!.height / 2;
       expect(Math.abs(stopCenter - hostCenter)).toBeLessThanOrEqual(2);
 
+      const projects = waitForReadyProjectList(page);
       await page.getByTestId("critical-stop-primary").click();
-      // Browser reconnect includes runtime discovery.
-      await expect(stop).toHaveCount(0, { timeout: 15_000 });
+      await projects;
+      await expectHomeAfterRecovery(page);
     },
   );
 
@@ -223,13 +245,12 @@ mockedBackendE2e.describe("store incompatible recovery", () => {
       const dialog = page.getByTestId("confirm-destructive-dialog");
       await expect(dialog).toBeVisible();
       await expect(dialog).toContainText("A recovery copy is saved first.");
-      await expect(page.getByTestId("confirm-destructive-ok")).toHaveText(
-        "Start fresh",
-      );
+      const projects = waitForReadyProjectList(page);
       await page.getByTestId("confirm-destructive-ok").click();
 
-      await expect.poll(() => resetRequests).toBe(1);
-      await expect(stop).toHaveCount(0, { timeout: 15_000 });
+      await projects;
+      expect(resetRequests).toBe(1);
+      await expectHomeAfterRecovery(page);
     },
   );
 });

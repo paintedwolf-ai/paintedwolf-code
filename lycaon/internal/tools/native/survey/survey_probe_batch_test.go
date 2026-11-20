@@ -7,8 +7,10 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/lycaon/lycaon/internal/sourcebranch"
 	"github.com/lycaon/lycaon/internal/sourcecatalog"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/tools"
 	nativefixture "github.com/lycaon/lycaon/internal/tools/native/internal/testfixture"
 )
 
@@ -35,6 +37,40 @@ func TestProbeGrepBatchReadsEachCandidateOnce(t *testing.T) {
 	}
 	if stats.FilesOpened != len(files) {
 		t.Fatalf("files opened = %d want %d (one shared pass)", stats.FilesOpened, len(files))
+	}
+}
+
+type surveyDrafts struct {
+	tools.EditorDocuments
+}
+
+func (surveyDrafts) DirtyDocuments(context.Context, string, sourcebranch.ID) ([]tools.EditorDocumentPath, error) {
+	return []tools.EditorDocumentPath{{RootID: "r1", Path: "notes.txt", Text: "draft狼 beyond"}}, nil
+}
+
+func TestProbeGrepBatchReadsTheBoundedDraftInsteadOfDisk(t *testing.T) {
+	root, err := filepath.EvalSymlinks(t.TempDir())
+	testutil.FailErr(t, "resolve fixture root", err)
+	testutil.FailErr(t, "write saved note", os.WriteFile(filepath.Join(root, "notes.txt"), []byte("saved\n"), 0o644))
+	tc := nativefixture.Context(root)
+	tc.Identity.ProjectID = "draft-project"
+	tc.Source.EditorDocuments = surveyDrafts{}
+	before := hostGrepMaxFileBytes
+	hostGrepMaxFileBytes = 6
+	t.Cleanup(func() { hostGrepMaxFileBytes = before })
+
+	results, stats, err := ProbeGrepBatchRecords(t.Context(), nativefixture.Boundary(t), sourcecatalog.New(), tc,
+		"notes.txt", []SurveyGrepSpec{
+			{Label: "draft", Pattern: "^draft$"},
+			{Label: "saved", Pattern: "saved"},
+			{Label: "beyond", Pattern: "beyond"},
+		}, 5)
+	testutil.FailErr(t, "scan draft", err)
+	if len(results) != 3 || results[0].MatchCount != 1 || results[1].MatchCount != 0 || results[2].MatchCount != 0 {
+		t.Fatalf("results = %#v, want only the bounded draft match", results)
+	}
+	if stats.FilesOpened != 1 || stats.FilesBytesTruncated != 1 {
+		t.Fatalf("stats = %+v, want one truncated source", stats)
 	}
 }
 

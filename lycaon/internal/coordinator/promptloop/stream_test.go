@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/tools/toolstest"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -124,7 +125,7 @@ func TestLoopRecoversOllamaDroppedToolCall(t *testing.T) {
 			}))
 			defer srv.Close()
 
-			reg := tools.NewStubRegistry()
+			reg := toolstest.NewRegistry()
 			executed := 0
 			testutil.FailErr(t, "register", reg.Register("read", func(context.Context, map[string]any, tools.ToolContext) (string, error) {
 				executed++
@@ -420,7 +421,7 @@ func TestLoopAnthropicOmittedThinkingMultiTurnToolContinuation(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	reg := tools.NewStubRegistry()
+	reg := toolstest.NewRegistry()
 	executed := 0
 	testutil.FailErr(t, "register", reg.Register("read", func(context.Context, map[string]any, tools.ToolContext) (string, error) {
 		executed++

@@ -11,11 +11,12 @@ import {
 } from "./helpers.ts";
 import { harnessSocketPath, listenHarnessSocket } from "./fixtures/harness-socket.ts";
 
-const SOCKET_PATH = harnessSocketPath(`painted-wolf-harness-approval-${process.pid}.sock`);
+let socketPath: string;
 let closeSocket: () => Promise<void>;
 
 webE2e.beforeAll(async () => {
-  closeSocket = await listenHarnessSocket(SOCKET_PATH);
+  socketPath = harnessSocketPath("grants.sock");
+  closeSocket = await listenHarnessSocket(socketPath);
 });
 webE2e.afterAll(() => closeSocket());
 
@@ -65,8 +66,8 @@ webE2e(
         data: {
           session_id: sessionId,
           command: "install helper",
-          approved_path: SOCKET_PATH,
-          resolved_path: SOCKET_PATH,
+          approved_path: socketPath,
+          resolved_path: socketPath,
         },
       },
     );
@@ -86,7 +87,7 @@ webE2e(
           request,
           apiUrl,
           auth,
-          SOCKET_PATH,
+          socketPath,
           sessionId,
         );
         return grantId;
@@ -102,7 +103,7 @@ webE2e(
     await page.getByTestId("settings-nav-approvals").click();
     await page.getByTestId("approvals-tab-saved").click();
     await expect(page.getByTestId("saved-approvals-panel")).toBeVisible();
-    await fillSolidControl(page.getByTestId("saved-approvals-search"), SOCKET_PATH);
+    await fillSolidControl(page.getByTestId("saved-approvals-search"), socketPath);
 
     const row = page.locator(
       `[data-testid="saved-approvals-row"][data-grant-id="${grantId}"]`,
@@ -123,7 +124,7 @@ webE2e(
 
     await expect
       .poll(() =>
-        grantIDForPattern(request, apiUrl, auth, SOCKET_PATH, sessionId),
+        grantIDForPattern(request, apiUrl, auth, socketPath, sessionId),
       )
       .toBe("");
     await expect(row).toHaveCount(0);

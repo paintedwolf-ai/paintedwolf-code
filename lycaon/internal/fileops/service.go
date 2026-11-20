@@ -19,6 +19,8 @@ type Service struct {
 	workers   chan struct{}
 	projects  keylock.Group
 	observers []func(Request)
+	// holdBeforeWork lets a test host hold a cancelable run; nil in the product.
+	holdBeforeWork func(context.Context, Request)
 }
 
 // Observe receives every persisted request state in order, outside the service's locks.
@@ -55,6 +57,10 @@ type Outcome struct {
 func NewService(store *Store) *Service {
 	return &Service{store: store, active: make(map[string]*Run), workers: make(chan struct{}, 4)}
 }
+
+// HoldBeforeWorkForTest runs hold before each run's work, while it is still
+// cancelable; only isolated test hosts set it.
+func (s *Service) HoldBeforeWorkForTest(hold func(context.Context, Request)) { s.holdBeforeWork = hold }
 
 func (s *Service) Recover(ctx context.Context, reconcile func(context.Context, Request) (Outcome, bool, error)) error {
 	return s.store.Recover(ctx, reconcile)
@@ -237,6 +243,9 @@ func (r *Run) Execute(parent context.Context, work func(context.Context) Outcome
 	r.request.State = "running"
 	r.mu.Unlock()
 	r.Report(ctx, "preparing", 0, 0)
+	if hold := r.service.holdBeforeWork; hold != nil {
+		hold(ctx, r.Snapshot())
+	}
 	outcome = work(ctx)
 }
 

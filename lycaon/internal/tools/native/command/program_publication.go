@@ -169,3 +169,12 @@ func preparationFailure(err error, certainty toolcontract.EffectCertainty) error
 	}
 	return &publicationFailure{cause: err, certainty: certainty, reject: &toolrejection.ToolReject{Code: toolrejection.ToolOwnerFailedCode, FailureClass: "owner_error", Data: map[string]any{"tool": "write", "preparation_kind": "accepted_document_publication"}}}
 }
+
+// commandDocumentBudgetError reports an exhausted program state budget as the command limit it is.
+func commandDocumentBudgetError(err error) error {
+	var limit *toolcontract.ProgramMemoryLimitError
+	if errors.As(err, &limit) {
+		return toolrejection.RejectInvalidArguments("COMMAND_LIMIT_EXCEEDED", map[string]any{"limit_id": "program_state_bytes", "resource_unit": "bytes", "maximum": limit.Maximum, "observed": limit.Observed})
+	}
+	return err
+}

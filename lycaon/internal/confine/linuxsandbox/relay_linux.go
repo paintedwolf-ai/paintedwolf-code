@@ -225,7 +225,8 @@ func Supervise(path string, argv, env []string, files []uintptr, afterStart func
 	if events == nil {
 		events = notifyForwarded()
 	}
-	defer signal.Stop(events)
+	// The forwarded signals stay held until this PID 1 exits: one arriving
+	// after the target ends would otherwise reach Go's handler, which exits 2.
 	code, sig, _ = relay(pid, func() error { return reapUntil(pid) }, events, nil)
 	return code, sig, nil
 }

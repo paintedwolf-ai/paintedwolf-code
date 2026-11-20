@@ -131,16 +131,16 @@ func TestGrowingDirectoryReturnsWatcherBudgetAtCeiling(t *testing.T) {
 	if w == nil || !w.watchesForTest(root) {
 		t.Fatal("narrow root was not watched")
 	}
-	before := reg.budget.Remaining()
+	if reg.budget.Take(4096) {
+		t.Fatal("watcher did not reserve descriptors")
+	}
 	if w.repriceDir(root, watchfd.Cost(watchfd.MaxDirEntries+1)) {
 		t.Fatal("directory remained watched after growing beyond the entry ceiling")
 	}
 	if w.watchesForTest(root) {
 		t.Fatal("over-wide directory remained in the filesystem watcher")
 	}
-	if after := reg.budget.Remaining(); after <= before {
-		t.Fatalf("budget did not recover after dropping wide directory: %d -> %d", before, after)
-	}
+	assertAvailableWatchBudget(t, reg.budget, 4096)
 }
 
 func TestWatcherStaysWithinDescriptorBudget(t *testing.T) {
@@ -157,9 +157,7 @@ func TestWatcherStaysWithinDescriptorBudget(t *testing.T) {
 	if spent := reg.spentForTest(); spent > budget {
 		t.Fatalf("watcher spent %d descriptors, budget is %d", spent, budget)
 	}
-	if reg.budget.Remaining() < 0 {
-		t.Fatal("budget went negative")
-	}
+	assertAvailableWatchBudget(t, reg.budget, budget-reg.spentForTest())
 }
 
 func TestWatcherRegistersRootFirst(t *testing.T) {
@@ -190,14 +188,12 @@ func TestWatcherReturnsBudgetOnClose(t *testing.T) {
 
 	reg := newBudgetedRegistry(budget)
 	reg.Ensure(t.Context(), root)
-	if reg.budget.Remaining() == budget {
+	if reg.budget.Take(budget) {
 		t.Fatal("watcher took nothing from the budget")
 	}
 
 	reg.CloseAll()
-	if got := reg.budget.Remaining(); got != budget {
-		t.Fatalf("budget after close = %d, want %d", got, budget)
-	}
+	assertAvailableWatchBudget(t, reg.budget, budget)
 }
 
 func TestWatcherDescendsThroughWideDirectories(t *testing.T) {
@@ -453,5 +449,17 @@ func TestWatchCoverageSeparatesLazyPolicyFromTruncation(t *testing.T) {
 	if coverage.Truncated != 0 {
 		t.Fatalf("lazy policy reported as missing registrations: %+v", coverage)
 
+	}
+}
+
+func assertAvailableWatchBudget(t *testing.T, budget *watchfd.Budget, want int) {
+	t.Helper()
+	if !budget.Take(want) {
+		t.Fatalf("cannot reserve %d available descriptors", want)
+	}
+	defer budget.Give(want)
+	if budget.Take(1) {
+		budget.Give(1)
+		t.Fatalf("budget admitted more than %d descriptors", want)
 	}
 }

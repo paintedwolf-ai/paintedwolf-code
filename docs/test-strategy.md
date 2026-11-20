@@ -12,11 +12,11 @@ How Painted Wolf Code proves v1 behavior.
 |-------|----------|------|
 | Unit and component | `lycaon/internal/<pkg>/*_test.go` | Parsers, registries, evaluators, merge rules, and domain logic |
 | Integration | `*_integration_test.go` (the `integration` build tag), `lycaon/test/wiring/` | SQLite, assembled managers, and the real application graph |
-| Contract | `lycaon/test/contract/<domain>/` | OpenAPI, generated artifacts, catalog invariants, package boundaries, and forbidden shapes |
+| Contract | `lycaon/test/contract/<domain>/` | OpenAPI, generated artifacts, catalog invariants, package boundaries, and forbidden shapes; cross-tree invariants as table rows in `lycaon/test/contract/invariants/` |
 | HTTP journey | `lycaon/test/security/` | Authenticated routes, project policy, sessions, workflows, tools, and recovery |
 | Den | `lycaon-den/src/**/*.test.*` | Stores, components, projections, accessibility, and client behavior |
 | Browser and desktop | `lycaon-den/e2e/` | Complete user journeys through the web harness and Tauri shell |
-| Performance | `cmd/lycaon-perf`, Go benchmarks | Release-channel boot and mixed workloads, latency distributions, resource stability, restart/replay recovery, and focused hot paths |
+| Performance | `cmd/lycaon-perf`, Go benchmarks | Release-channel boot and mixed workloads, latency distributions (reported), resource stability, restart/replay recovery, bounded work at scale, and focused hot paths |
 | Release | release workflow targets | Full Go behavior, race detection, scanner corpora, and Go and Den coverage floors |
 | Reference userlands | `lycaon/test/referenceuserland/` | Pinned GNU, BSD and busybox container images and the runner command conformance compares with ([Reference userlands](#reference-userlands)) |
 | Command conformance | `lycaon/test/commandconformance/`, `lycaon/test/wiring/conformance/` | Shell programs run through the `command` entry and compared with the reference userlands' results ([Command conformance](#command-conformance)) |
@@ -58,8 +58,9 @@ truncating the WAL.
 
 `./task oar:verify` runs `test:oar` (engine, declared facts, copy rendering,
 tool vocabulary, full catalog construction, and rejection delivery) without
-`-short`, so catalog-wide walks that `test:short` skips still run, then the
-vendored standard corpus through `oar:conformance`. The full `check` gate
+`-short`, so catalog-wide walks that `test:short` skips still run, the walk of
+every intrinsic catalog rejection through the evaluator (`oar:rejection-walk`),
+then the vendored standard corpus through `oar:conformance`. The full `check` gate
 includes it. `oar:conformance --json` is the machine-readable standard report
 for comparison with other implementations.
 
@@ -73,7 +74,9 @@ observable behavior; they do not freeze prompt wording.
 
 ## Test rules
 
-- Tests make no real LLM calls. Use fixtures, stub providers, fake MCP servers, and `LYCAON_LLM_MOCK=1`. Live provider smoke tests require the `live_llm` build tag in addition to credentials; they never run in normal, full, race, or coverage suites and still require separate authorization for paid calls.
+- Tests make no real LLM calls. Use fixtures, stub providers, fake MCP servers, and `LYCAON_LLM_MOCK=1`. Live provider runs belong to the coordinator benchmark under `scripts/coordinator-benchmark`, which requires separate authorization for paid calls.
+- Every test runs in a scheduled tier or is named in the declared not-run set (`not_run` in `scripts/verification-plan.json`): the `live_llm`, `live_web` and `live_scanners` tags, which a person runs, and the tests that build only for Windows or for systems the product does not ship on, each group with its reason. The static job's tier check (`scripts/ci_policy/tier_reach`) reads the catalog lanes, the `./task` steps of tier workflows and the digest calls of scripted tasks, and fails on a test whose build tags, platform, `-short` skip, environment gate or name filter no run satisfies; it also fails on a not-run entry that some run reaches or that names no test. Environment gates count only through the variables the scheduler passes on, so a gate variable is declared in the catalog's environment list.
+- Tests that build only for macOS run in the platform job's macOS step; Rust tests that do run in the `native-macos` lane, nightly and in the merge queue when the updater changes. Source-transport outages are rehearsed there under the `fieldfixture` tag, against a loopback NFS volume the tests mount and cut (`internal/testutil/sourceoutage`).
 - Invalid manifests, unknown vocabulary ids, and forbidden ids fail at load or transition time.
 - New HTTP routes carry a contract test and an authenticated HTTP journey.
 - Durable encoding tests compare exact bytes, BOM state, line endings, and raw hashes.
@@ -82,7 +85,7 @@ observable behavior; they do not freeze prompt wording.
 - Race failures are product failures. Fix the synchronization boundary; do not skip, retry, or sleep around them.
 - Each E2E tier starts and stops its own dependencies.
 - Fixture corpora are committed. A test keyed to a path outside the repository runs on one machine and skips on every other.
-- A suite that needs a provisioned host — applied Seatbelt, a staged scanner engine — derives its gated inventory from source and fails when the declared CI scope does not reach a member. Where a job promises the suite, its `*_REQUIRED` flag makes a missing dependency fatal instead of a skip.
+- A suite that needs a provisioned host — applied Seatbelt, a staged scanner engine — derives its gated inventory from source and fails when the declared CI scope does not reach a member. Where a job promises the suite, its `*_REQUIRED` flag makes a missing dependency fatal instead of a skip. A test that needs confinement or process lineage calls `testutil.RequireConfinement` or `RequireLineage`; hosted lanes set `PW_CONFINE_REQUIRED=1`, so an unconfined runner fails rather than passing by covering nothing. Digests name every skipped test with its message.
   Applied Seatbelt recipes live in `scripts/verification-plan.json`: the complete confinement package, the exact packages owning gated consumers with their integration build tag, and the scanner stress suite. The existing source-derived inventory checks these declarations. Each stage enters through `./task test:seatbelt` and retains its own captured-source evidence.
 - A test belongs in the cheapest layer that can prove its promise. Unit/component tests exercise one domain boundary with in-process collaborators; repository contracts prove a durable cross-tree invariant; wiring tests prove assembled managers; HTTP and browser tiers prove a user-visible journey. Do not use a repository scan to stand in for behavior, or an end-to-end journey to prove a parser branch.
 - `test:short` is only the unit/component feedback loop. Repository contracts run beside it as their own `test:contract` stage of `check-fast`, because they are cheap and are the boundary changes most often cross. `test:integration:changes` runs the integration-tagged tests of the packages a change edits directly; the merge queue runs the packages that import them. External integration, wiring, process smoke tests, and HTTP journeys remain mandatory but run as named closeout/release tiers, where their failure names the boundary rather than making every edit wait on a source-tree crawl.
@@ -105,6 +108,15 @@ and an explicit non-empty assertion. Contract tests share cached loaders in
 Den source contracts use the matching snapshot API in
 `lycaon-den/src/test/source-corpus.ts`.
 
+The invariants repository contract, `lycaon/test/contract/invariants/`, runs
+in `test:contract` as one test binary over one fail-closed corpus that loads
+the Go tree, its type-checked program, `schema.sql` and the catalogs once.
+Each invariant is a row in its family's table, reported as `family/name`: it
+names anchors that must exist, exemptions that must each match, and
+selections that must not be empty. Every family carries a fixture self-test
+that seeds a violation, renames an anchor, adds a stale exemption, empties
+the selection and breaks a source file, and each must fail.
+
 Use the narrow fixture at the boundary being exercised:
 
 | Need | Fixture |
@@ -114,9 +126,18 @@ Use the narrow fixture at the boundary being exercised:
 | Temporary Git repository and commits | `internal/testutil/gittest` |
 | Go module or checkout root | `configlayout.FindModuleRoot` or `testutil.CheckoutRoot` |
 | Process-wide Anchor, guidance, Git, or browser setup | the corresponding `internal/testsetup/*` package, called explicitly from `TestMain` |
+| Production-wired host for an integration or HTTP journey | `lycaon/test/wiring`: `BuildForTest`, or `BuildForTestAt` to boot again on a directory a closed host left; the package's `TestMain` calls `wiring.Main` |
 | Partial Den API client | `lycaon-den/src/test/client-fixture.ts`; undeclared method access fails immediately |
 | E2E connection, workflow, project-file, or session synchronization | `lycaon-den/e2e/helpers.ts` |
 | Rust temporary directory lifecycle | `lycaon-den/src-tauri/src/test_support.rs` |
+
+Host tests are split by family so no one package bounds a behavior shard:
+`test/wiring` (the harness and the remaining wiring tests), `test/wiring/commands`,
+`test/wiring/workflows`, `test/wiring/workers`, `test/security` (journeys and
+their HTTP helpers), `test/security/scans` and `test/security/sweeps`. A host
+reads process-wide state, so tests in one package run one at a time; a test
+that asks the same host many questions builds it once and gives each question
+its own session.
 
 The shared fixtures centralize lifecycle and failure labeling without hiding the
 state relevant to a scenario. Tests of database recovery, backup, Git plumbing,
@@ -132,7 +153,14 @@ Contract suites live in domain packages under `lycaon/test/contract/`:
 `host`, `hosted`, `maintainability`, `persistence`, `prompts`, `providers`, `release`,
 `runner`, `scanning`, `security`, `sessions`, `tools`, `wire`, and `workflows`.
 The root package keeps the source-snapshot tests. The `test:contract` target
-discovers the complete subtree. Shared support lives under `internal/`: `check`
+discovers the subtree except `hosted`, `release` and `runner`, which execute the
+verification and release scripts against stub tools: they run where what they import
+changes, where CI tooling changes, and in every full profile. The structure laws of
+workflows, the Taskfile and the verification plan (custody, job ancestry, artifact
+flow, gated inventories, references that must resolve) are Python tests in
+`scripts/verification_tests/ci` that parse the YAML and JSON, evaluate workflow
+expressions and run scripts on stub hosts; none asserts on workflow text. Shared
+support lives under `internal/`: `check`
 (failure labels, repository root, source and Go AST corpora), `wirespec` (OpenAPI
 and client parsing), and the `catalogfixture`, `toolfixture`, `workflowfixture`,
 and `guidancescan` fixtures. Keep a scanner with the contract it proves and use
@@ -276,8 +304,9 @@ join the permanent corpus.
 Agents write code and prompt copy fast. These checks shape it through
 feedback an agent meets while it works: a warning as something approaches
 its limit, then a stop for a change that leaves a touched artifact past it.
-Both gates enforce size budgets. `check` and exact-landing CI enforce changed
-coverage; focused ready checks run before queue admission.
+Both gates enforce size budgets. `check` and the pull request enforce changed Go
+coverage, which measures a change against its base; exact-landing CI enforces
+changed frontend and script coverage.
 
 ### Size budgets
 
@@ -288,9 +317,11 @@ coverage; focused ready checks run before queue admission.
 | Maintainability (`test/contract/maintainability`) | Code-bearing lines per production and test file; handwritten files per production and test directory; Go struct fields; Go receiver methods and receiver lines summed across files and platform variants, so splitting a file cannot hide concentration; distinct local TypeScript imports per module. Generated and vendored files are classified from generator inventories. | [`maintainability-budgets.yaml`](../lycaon/test/contract/maintainability-budgets.yaml) |
 | Prompts (`test/contract/agentcontext`) | UTF-8 bytes of every rendered worker persona, coordinator tripartite fixture, inject, agent template, kick, and instruction unit; the tools each coordinator surface and worker profile sends upfront, limited as two classes; and each turn kind's widest static prompt against the model window | `sizes` and `absolute_maximums` in [`prompt-budgets.yaml`](../lycaon/config/packs/painted-wolf/platform/host/prompt-budgets.yaml) |
 
-Each maintainability category has a review threshold (`warn`) and a hard limit
-(`limit`). Warnings permit admission and request architectural review after merge; hard
-limits reject new or growing excess. Maintainability measures both the change
+Each maintainability category has a review threshold (`warn`) and, except test
+files, a hard limit (`limit`). Warnings permit admission and request architectural
+review after merge; hard limits reject new or growing excess. Test files only warn,
+so a scenario is written for the reader rather than compressed to fit a line count;
+a category without a hard limit takes no exceptions. Maintainability measures both the change
 base and current source using the same rules. An artifact that must stay
 larger can have an explicit cap and reason in its own file under
 [`maintainability-exceptions`](../lycaon/test/contract/maintainability-exceptions/).
@@ -434,7 +465,7 @@ change the artifact identity or create new runtime authority boundaries.
 A `refactor` decision classifies work without prescribing extraction: simplifying,
 consolidating fragments, and moving a genuine boundary are all valid outcomes.
 It does not suppress the warning. A `retain` decision requires a numeric `ceiling`
-above the warning threshold and at or below the hard limit, plus `boundaries`: a
+above the warning threshold and at or below the hard limit, if the category has one, plus `boundaries`: a
 map of repository-relative files to their SHA-256 digests. Select the contract
 tests and declarations that support the rationale. Pin only boundaries whose
 changes invalidate the decision; avoid whole implementation files when structural
@@ -652,7 +683,7 @@ Shared execution receives only the environment variables the catalog's
 control sockets, and credentials never reach tests or separate otherwise
 identical requests. Every declared value must be a function of the checkout
 rather than of the call that submitted it: a per-invocation value gives each
-request its own digest, which ends batch sharing and result reuse with no
+request its own digest, which ends batch sharing with no
 visible failure; `scripts/verification_tests/scheduler/test_environment_identity_execution.py`
 asserts that rule against the catalog. Verification is offline: no network route
 is declared or passed through, so a stage that dials is denied by the boundary.
@@ -668,21 +699,12 @@ already proven packages and execute the remainder afterward. Within a batch,
 package results are reusable with identical execution options; full, short,
 race, tags, and filters are not interchangeable.
 
-Across batches, a passing Go package result is reused when nothing it depended
-on changed: its build identity (the content of every file compiled or embedded
-across the test binary's dependency closure, module versions, tags, race mode,
-and the toolchain, independent of the snapshot slot's path), the arguments that
-choose tests, the Go runtime settings the binary reads directly, the declared
-environment, and every input the Go test log observed (files opened or statted,
-compared by content, and environment variables read). Worker counts and timeout
-scale are not inputs. A test process that starts another process is never
-recorded, because the child's inputs are unobservable; fork observation uses
-kernel process events, available on macOS, and elsewhere every package runs.
-The per-run scratch home and temporary directories start empty and are not
-inputs. Receipts name the batch and stage that recorded a reused result.
-Results live under the user cache directory in `paintedwolf/verification-results`,
-limited to 2 GiB and 14 days since last use. Selections with explicit repeat
-counts run outside batches and never reuse.
+Across batches nothing is reused: every Go package executes, with `-count=1`,
+because Go's result cache cannot see what a test's child processes read. Each
+snapshot slot keeps its own Rust targets and compiler caches, because Cargo
+judges freshness by file times and a target another source built later would
+pass for this one; a hosted runner, which verifies only its job's source, keeps
+the checkout's restored targets.
 
 Unsupported selection flags reject before admission, as do arguments for a
 target that declares no selection grammar and information flags that would run
@@ -691,7 +713,9 @@ package and flag grammar narrowed to its own declared packages, so a scoped
 invocation keeps the target's recipe and shares outcomes with the unscoped one.
 Supported Go repeat, shuffle, and benchmark modes, fixture refreshes, and replay
 run outside a shared batch, holding what their targets declare; so does Go
-`-failfast`, whether passed on the command line or through `GOFLAGS`.
+`-failfast`, whether passed on the command line or through `GOFLAGS`. Such a
+target runs with Task's `--force`, because Task's `sources:` checksum ignores
+arguments and unlisted inputs.
 
 Every requester receives its own receipt and exit status. A gate ends at its
 first failed or unverified stage, and stages only it still needed stop;
@@ -701,8 +725,8 @@ the package while the stage is still running, and the receipt links that
 package's output. A Go recipe declaring `report_all_failures` (`test:short` and
 `test:contract`) instead finishes its packages before answering, so its receipt
 names every failing package; a known failure stays failed even if the stage is
-later interrupted. A request submitted with `PW_TEST_KEEP_GOING=1`, as the hosted
-`ready` lane does, runs all of its stages before answering. Neither changes
+later interrupted. A request submitted with `PW_TEST_KEEP_GOING=1`, as every hosted
+lane does, runs all of its stages before answering. Neither changes
 admission, resource limits, or the exit status, and cancellation still stops the
 work. A package may pass despite an unrelated package failure only
 when its terminal Go event and the completed digest establish that result.
@@ -716,8 +740,7 @@ identify the source commit/tree and link to the stage logs and reports in
 [artifact root](dev-tasks.md#build-outputs-caches-and-locks). Retention keeps
 up to 20 completed batches and 512 MiB, pruning artifacts and source refs
 together; the newest batch and active batches/subscribers are protected even
-when they exceed the budget. No receipt is reused across batches; recorded Go
-package results are.
+when they exceed the budget. No receipt or result is reused across batches.
 
 `./task test:status` shows active batches and stages, sharing and queued
 requests, global worker capacity, reserved and available slots, each operation's
@@ -822,10 +845,16 @@ one-million-, and ten-million-row source trees, the 50,000-message session
 tree, and a working year of 25,000 real editor saves with retained source
 history and three recovery captures. Its catalog recipe keeps packages and tests
 serial and allows 90 minutes per package before host-load scaling. The nightly
-workflow includes this tier. Active fuzz exploration runs through
-`./task test:fuzz` in nightly verification, separately from
-`check`; ordinary Go tests still execute saved fuzz seed cases. Den suites,
-transcript scale included, assert memory, DOM and row bounds, never elapsed time. SQL query and OpenAPI bundle generation drift are
+workflow includes this tier. Every Go fuzz target is declared in the `fuzz`
+section of `scripts/verification-plan.json` with its exploration seconds: five
+minutes for parsers, encoders and the property targets that guard secrets,
+root containment, archive extraction and Git arguments, thirty seconds for the
+rest. `./task test:fuzz` gives each target that time in nightly verification,
+and `./task test:fuzz:smoke` in the ready tier replays seeds and committed
+corpus, then explores briefly, for targets in the packages a change touches.
+Minimized corpora live under each package's `testdata/fuzz/`, so ordinary Go
+tests replay them too. Den suites, transcript scale included, assert memory,
+DOM and row bounds, never elapsed time. SQL query and OpenAPI bundle generation drift are
 checked once through `db:sqlc:check` and `openapi:bundle:check` in
 `check:drift`; Go contracts inspect the generated surfaces without launching the
 generators again.
@@ -857,8 +886,8 @@ Run every task from the repository root through `./task`.
 | `./task e2e:den` | Browser user journeys |
 | `./task e2e:den:desktop` | Tauri desktop journeys |
 | `./task perf:bench` | Repeated Go microbenchmarks and an optional baseline comparison |
-| `./task perf:sidecar` | Representative isolated sidecar workload with enforced latency/resource/correctness budgets |
-| `./task perf:soak` | Long mixed workload with graceful restart, task recovery, SSE cursor reset, and leak checks |
+| `./task perf:sidecar` | Representative isolated sidecar workload; latency reported, resource and correctness limits enforced |
+| `./task perf:soak` | Long mixed workload with graceful restart, task recovery, SSE cursor reset, and leak checks; then work counts for boot, project delete, vacuum and upgrade on the scale fixture at two sizes |
 | `./task budgets` | Prompt and code size budgets for what the change touches |
 | `./task coverage:changes` / `./task den:coverage:changes` / `./task scripts:coverage:changes` | Coverage of the Go, Den, and scripts Python statements a change adds or modifies |
 | `./task check-fast` | Local handoff gate: build and cross-platform build, lint:full, size budgets, changed coverage, unit/component Go suite, integration tests of edited packages, repository contracts, Den typecheck, lint and complete suite, notices, comment and failure-message checks, and documentation links |
@@ -880,19 +909,32 @@ allocation before claiming an end-to-end speedup.
 | Task | Proof |
 |------|-------|
 | `./task test:full` | Complete Go behavior, wiring, smoke, HTTP, and required bundled scanner suites |
-| `./task test:race` | Go race detector with integration scenarios and no `-short`; the dedicated `test/security` HTTP journeys remain in `test:full`, and so does `internal/launchguard`: its identity transitions use `syscall.AllThreadsSyscall`, which Go refuses in a binary that links cgo, as every race-instrumented binary does |
+| `./task test:race` | Go race detector with integration scenarios and six nightly shards. Wiring and HTTP suites select concurrent worker, workflow, and event journeys by default. The shell reference corpus runs in `test:full`. The protected launch suite runs in `test:full` because its identity transitions require a binary built without cgo. |
 | `./task den:test:rust` | Tauri Rust tests |
 | `./task upgrade:rehearse -- --bundle …` | Signed macOS automatic update discovery, staging, activation, startup confirmation, retained history, and another restart |
 | `./task test:scanners` | Bundled scanners against the committed corpus, with a staged engine |
 | `./task perf:sidecar` | Sidecar service-level objectives and integrity invariants |
-| `./task perf:soak` | Steady-state resource growth and restart/replay recovery |
+| `./task perf:soak` | Steady-state resource growth, restart/replay recovery, and bounded work at realistic size |
 
 The [desktop self-upgrade gate](dev-tasks.md#desktop-self-upgrade-release-gate)
 runs after signed packaging and before immutable publication. Harness tests prove
 fixture verification, isolation, and failure evidence; an actual released-app
-upgrade requires the protected run with the exact signed candidate. The separate
-sidecar/store rehearsal retains migration and backup-restore coverage, including
-clients that require manual installation.
+upgrade to the candidate requires the protected run with the exact signed
+candidate, because a shipped build trusts only its compiled-in keys. Nightly runs
+the gate's cases from the published release before the newest to the newest,
+which exercises the harness every night and says nothing about the current source.
+The separate sidecar/store rehearsal retains migration and backup-restore coverage,
+including clients that require manual installation.
+
+Nightly also runs the release's scripts through
+[`release-rehearsal.yml`](../.github/workflows/release-rehearsal.yml) on tiny
+payloads signed with disposable keys: Debian and RPM
+metadata lint, upload limits, manifest, public set and cask assembly, package and
+repository signing for apt, dnf and pacman, and on macOS an unsigned `den:bundle`
+with `bundle:verify`, its updater archive checks and a cask install. Each check
+requires a seeded fault the release once shipped to be refused, so a check that
+stops refusing fails like one that breaks. Notarization, stapling and production
+signatures stay in the release.
 
 ### Hosted admission and qualification
 
@@ -940,11 +982,20 @@ Native Rust compilation and execution occur together in the landing native lane;
 ready admission does not repeat a compile-only copy. Standalone compile-only
 selection remains available for focused local diagnosis.
 
-The merge queue measures changed coverage on its exact source and executes the
-complete affected integration selection. Frontend and scripts assertions execute
-once through their coverage stages; distinct short-covered and integration-tagged
-Go recipes retain their separate modes. Every lane runs to the end, so one failed group reports all its failures.
-Budgets and changed coverage are the first stages of the build lane.
+The merge queue executes the complete affected integration selection on its exact
+source. It leaves to the pull request the stages that judge a change against its
+base: lint findings, comment and failure-message rules, and changed Go coverage
+(`QUEUE_LEAVES` in [`hosted_plan.py`](../scripts/ci_policy/hosted_plan.py); the plan
+refuses to leave a stage no pull request runs). Two changes that each pass them can
+still fail together; the nightly reports that. Size budgets stay in the queue's
+build lane, because two changes that each fit a limit can exceed it together.
+Changed Den and script coverage, and unused-export analysis, measure a change
+against its base, so only the pull request and the check profile run them
+(`CHANGE_GATES` in [`hosted_plan.py`](../scripts/ci_policy/hosted_plan.py)). The
+queue, the nightly and a release run the suites they measure without the
+measurement: the frontend lane runs the Den suite, and the runner lane runs every
+script suite (`test:runner -- --every-suite`). Distinct short-covered and
+integration-tagged Go recipes retain their separate modes. Every lane runs to the end, so one failed group reports all its failures.
 
 Pull requests no longer run the integration gate themselves. Running it for
 the pull request and again for its merge group doubled demand on the
@@ -956,6 +1007,15 @@ adds it once the fast tier's `check` passes. Auto-merge is enabled with the
 author's own credentials. No workflow enables it, because a merge enabled with
 a workflow's `GITHUB_TOKEN` would not start main's cache warming workflow.
 
+Lanes are named once, in `scripts/verification-plan.json`. Each declares in
+`changes` the change areas that select it (`always`, `go`, `go-code`, `den`,
+`den-tests`, `scripts`, `dependencies`, `confinement`, `command-language`,
+`command-scale`, and one area per native source tree) and in `phases` any
+execution of its own: admission's check phases, admission's test phases, the Go
+packages a change affects, or the Go packages whose source it edits. The planner maps changed paths to
+areas and selects the lanes that declare them, so no script names a lane and a
+rename touches only the plan.
+
 The integration gate uses a conservative change planner. It always compiles
 the host and runs repository contracts and smoke tests. Go changes add integration-enabled reverse import
 closure, including test imports; Den changes run the complete frontend suite.
@@ -965,13 +1025,16 @@ Markdown under `docs/` and the repository's policy and community files, adds
 nothing to that baseline; `CHANGELOG.md`, which Den embeds, and OpenAPI
 documentation are build inputs and widen the gate. CI's own logic and tests under
 `scripts/ci_policy/` and `scripts/verification_tests/`, and workflows, add only the
-runner lane, because no product test reads them. The files that decide how every
+runner lane and the machinery's Go tests, because no product test reads them. The files that decide how every
 lane runs (`ci.yml`, `verification.yml`, lane planning and execution) still widen.
-Any file in a Go package's tree under `internal/`, `cmd/`, or `test/`, whether
+Any file in a Go package's tree under `internal/`, `cmd/`, `test/`, `config/` or `pkg/`, whether
 source, embedded data, or a test fixture, seeds the nearest package's reverse import
-closure, including test imports. Contract and smoke packages remain mandatory.
-Unknown paths, dependencies, build inputs, generated contracts, shipped
-configuration, verification policy, public package contracts, and nested modules
+closure, including test imports. Contract and smoke packages remain mandatory;
+the machinery's Go tests join through that closure.
+Den's browser journeys under `lycaon-den/e2e/` and the host configuration under
+`lycaon/config/`, which Den's tests read, also select the frontend lane.
+Unknown paths, dependencies, build inputs, generated contracts, the bundled
+engines' pins, verification policy, and nested modules
 such as the harness fixture projects expand to the full `check` profile. A missing
 Git base fails planning; an unresolved Go graph runs the full Go recipe.
 Changes to command or test source do not select unrelated native or frontend
@@ -998,7 +1061,7 @@ Partial receipts from a cancelled run cannot
 mix short measured times with large timeout fallbacks. Shards share their lane's
 longest estimate because package balancing changes which packages each shard runs.
 The catalog orders lanes by explicit priority: `reject` for build, lint and runner,
-`critical` for both behavior shards, and `normal` for remaining work, longest
+`critical` for the behavior shards, and `normal` for remaining work, longest
 first. Timing estimates are advisory; the model is not a guarantee of hosted runtime.
 
 Lanes and shards are planned from measured durations. Each lane of main's
@@ -1021,12 +1084,19 @@ starts first and the shards finish together. A selection smaller than the split
 repeats packages rather than leave a shard empty. Without measurements, such as
 for a token that cannot read Actions, shards deal the sorted selection in turn.
 
+Browser specs follow the same rule. Each `e2e:den` stack reduces Playwright's
+JSON report to seconds per spec file in `ci/e2e-specs-<shard>.json`, and the
+nightly merge publishes them as `specs` beside the lanes. One job of
+`e2e-verification.yml` reads them once and hands the same map to every web job,
+so their deals agree. Groups of specs that share a helper module go longest
+first to the least loaded stack; a spec with no measurement weighs the median.
+
 The planner in [`scripts/ci_policy/impact.py`](../scripts/ci_policy/impact.py)
 uses the pull request merge base or the merge group's explicit `base_sha`, not
 the moving `origin/main` tip. That same base reaches changed coverage and budget
 checks. [`verification-plan.json`](../scripts/verification-plan.json) owns the
-recipes and partitions. The integration partition covers `check` except Windows
-cross compilation; broad changes include that too. Ordinary source changes
+recipes and partitions. The integration partition covers `check` but for the
+stages the queue leaves to the pull request. Ordinary source changes
 select only relevant lanes. Each lane still enters through `./task`, capturing
 source and producing normal receipts.
 
@@ -1039,6 +1109,24 @@ Den source change; changes to the check, its probe, or the harness fixtures are
 broad. Like every lane, it fails when the check reports unverified: an image
 that cannot be built, a missing container runtime, or a harness that does not
 start leaves the change unverified, never admitted.
+
+The `browser-smoke` lane runs `den:harness:canary`, eight browser journeys on the
+harness stack (boot, a prompt, the first run, a project switch, a tool approval,
+a busy-queue send and the sidecar's CORS), for any change under `lycaon/` or
+`lycaon-den/`. Setup installs the Playwright browsers before the lane goes
+offline. The `race-changes` lane runs `test:race` over the packages whose Go
+source the change edits, with the host-level journeys `test/wiring` and
+`test/security` select under the race detector; `internal/db`, whose race run
+takes about 40 minutes, stays nightly. The `dependencies` lane runs the
+vulnerability scan and the third-party notices when a dependency graph, the
+vulnerability database or allowlist, the licensing catalog or their scripts
+change, and nightly. `command-scale` runs the scale tests and the allocation- and
+byte-gated benchmarks of the command entry, `toolhost` and `jq` when those
+packages change. `confinement-macos` runs the applied Seatbelt confinement suites on
+`macos-15` for the same sources as `confinement-arm64`, in the merge queue;
+nightly and dispatched checks run every applied Seatbelt suite in their platform
+job instead. macOS
+runners cannot isolate the network, so it runs online.
 
 Linux confinement compiles per architecture: seccomp filters name the audit
 architecture and syscall numbers, arm64 has no legacy calls such as `open`,
@@ -1071,26 +1159,38 @@ tier for a pull request whose events start no CI, such as the dependency
 inventory's. A pull request's checks leave out dispatch runs, so the
 dispatch's `dispatched-check` job reports its gate as the required `check`
 commit status on the dispatched commit. [`qualification.yml`](../.github/workflows/qualification.yml)
-runs only on manual dispatch for an exact release candidate on main. It runs the
-complete check, then platform confinement and upgrade corpus beside the release
-profile's platform lanes, then browser and desktop journeys. One qualification
-runs at a time. Its `queue: max` concurrency queue retains up to 100 pending
+runs only on manual dispatch for an exact release candidate on main. It holds no
+lane list of its own: it calls the reusable
+[`nightly-verification.yml`](../.github/workflows/nightly-verification.yml) that
+nightly calls, so a lane added to nightly is added to qualification. A static job
+runs first (release metadata, published stable compatibility), then the
+credential probe; nothing compiles until both pass. The unsigned preparation then
+runs for the candidate, the macOS release custody test runs against the sidecar
+it prepared, and only then the nightly lane set runs, unless a green full
+nightly ran on exactly the candidate's commit and tree. A green or red nightly on
+any other commit, including the parent, is never read. One qualification runs at
+a time. Its `queue: max` concurrency queue retains up to 100 pending
 requests; GitHub cancels additional requests when it is full.
 
 A request selects a full `source-sha` from main's history, or the dispatch commit
 when omitted. The main workflow remains the controller; each verification,
-platform, and E2E checkout uses the selected source. The final aggregate requires
-every stage and publishes `qualification-source-<attempt>`, binding the source
-commit/tree, controller commit, repository, run, and attempt. A skipped or canceled
+platform, and E2E checkout uses the selected source. A full nightly binds its
+source in `nightly-source-<attempt>`; qualification accepts a nightly only when
+that record names the candidate's commit and tree and the run succeeded. The
+final aggregate requires every stage and publishes `qualification-source-<attempt>`,
+binding the source commit/tree, controller commit, repository, run, attempt, the
+nightly run that verified the source and the preparation run. A skipped or canceled
 request cannot qualify a source. Release admission requires a successful manual
 Qualification aggregate and its unexpired exact-source receipt. A failed-job
 rerun may reuse its successful source binding; the receipt identifies the attempt
-that completed the aggregate. Candidate qualification holds at most three runners.
+that completed the aggregate. The cheap path is to qualify the commit the last
+scheduled nightly ran on.
 
 Nightly qualifies main daily with every check and release-platform catalog lane,
 platform confinement and upgrade corpus, and complete web and desktop journeys.
 It also runs race, fuzz, WebKit, stress, and performance checks, every declared
-Python suite, plus the prior-release upgrade rehearsal. A first job binds the
+Python suite, plus the candidate corpus check and prior-release upgrade rehearsal
+in the macOS confinement job, after its one engine build. A first job binds the
 source: the scheduled commit, or the exact commit a dispatch names in
 `source-sha`, which must carry the dispatched commit's CI tooling. The catalog
 matrix, the platform jobs, the browser journeys, and the upgrade rehearsal
@@ -1123,6 +1223,14 @@ notices, and decision heads; host admission and behavior checks retain their
 runtime engines. Only
 main publishes archives, after successful installation. Package candidates still
 follow the runner's distribution repositories.
+
+A lane's setup inputs (container images, the pinned browser, the reference userlands,
+repository tools, Nix, the protected-launch display and native libraries, notices
+tools, analysis tool sets, and whether it needs the runtime engines) are derived
+from what it runs. `provisions` in `scripts/verification-plan.json` names, once, the
+targets (and, where a script runs legs, the arguments) and the Go packages that
+need each input; the plan refuses a provision naming a target or package that does
+not exist or that no lane runs, so an input cannot drift from the lane that needs it.
 
 Pinned Go, Cargo, frontend, scanner, and generator inputs are provisioned first;
 Go and Cargo offline modes reject missing inputs during execution. Dependency
@@ -1256,10 +1364,7 @@ the daily nightly. Platform-sensitive changes still select their relevant
 platform checks immediately. Do not remove architecture or data-integrity
 coverage to shorten admission.
 
-Local Go result reuse already binds to build dependencies, observed inputs,
-toolchain, test options, and declared environment. Extending that reuse to
-hosted or native test results needs equally complete input accounting; compiler
-cache hits alone do not establish a test pass. Existing recovery retains first
+Compiler cache hits alone do not establish a test pass. Existing recovery retains first
 failures and retries only demonstrated infrastructure faults. Product assertions
 and races remain blocking; there is no assertion retry policy.
 
@@ -1267,8 +1372,10 @@ and races remain blocking; there is no assertion retry policy.
 
 Ready admission runs focused Go tests and frontend seam canaries after repository
 contracts. Changed Go coverage also runs early in admission; all changed-statement
-coverage and native compilation execute at the exact landing source. Frontend and script coverage stages supply the complete
-assertion suites, avoiding a second uncovered execution in the same qualification.
+coverage and native compilation execute at the exact landing source. In the pull
+request, frontend and script coverage stages supply the complete assertion suites,
+avoiding a second uncovered execution; the landing source runs those suites once,
+unmeasured.
 The failed/unverified/previously-passed frontier changes order, never the complete
 successful-path inventory. Unknown source scope still selects the complete recipe.
 
@@ -1285,8 +1392,9 @@ introduced. Compiler cache hits never substitute for executed test receipts.
 ##### Integration capacity
 
 A group's runtime lower bound is `max(total runner-minutes / lane cap, longest job
-duration)`. The cap of six keeps that near the longest job. Extra lanes cannot
-shorten the longest job, so compare preparation costs before raising it further.
+duration)`. The queue builds one group at a time with a cap of twelve lanes, so
+no lane waits for a slot. A second speculative group was cancelled whenever the
+first failed and halved each group's cap.
 
 Apply queue settings only after this workflow is available on main:
 `GITHUB_REPOSITORY=paintedwolf-ai/paintedwolf-code PYTHONPATH=scripts python3 -m ci_policy.queue_settings 24657984`
@@ -1296,9 +1404,7 @@ not something feature CI performs.
 
 ### Merge-group early checks and throughput
 
-The first integration slots run limits, lint, and the two Go behavior shards.
-On the exact merge-group source, lint completes comment and failure-message checks
-before analysis. Each Go shard runs repository contracts with the full integration
+The first integration slots run build and the Go behavior shards. Each Go shard runs repository contracts with the full integration
 recipe before its remaining affected packages. The two phases are disjoint and
 retain the same shard, worker cap, and package measurements. A failed first phase
 never starts its second phase; the matrix cancels siblings on failure. Other
@@ -1328,7 +1434,7 @@ exhausting the runner while leaving room for the toolchain. A package that needs
 more declares its own ceiling with a tracking issue. A race build gets
 `race_scale` times its ceiling: the detector's
 shadow memory and instrumented heap are overhead the ordinary ceiling does not
-describe, and the largest contract packages reach 1.1 times it under the detector.
+describe, and the largest contract packages reach 1.6 times it under the detector.
 Unless a run sets `GOMEMLIMIT`, the test binary gets a soft limit at 80% of its
 ceiling, so the collector reclaims garbage before the ceiling instead of letting
 the heap reach twice its live size, and the guard measures retained memory
@@ -1352,8 +1458,10 @@ only their own platform and compiler inputs.
 A running warmer finishes before the next push starts warming, so frequent
 merges cannot repeatedly cancel cold preparation before it saves; a newer push
 replaces a warmer still pending, so only main's newest commit waits to warm.
-Its Linux and macOS jobs and the release compile run one after another, on one
-runner at a time.
+Its Linux and macOS jobs run side by side, the macOS job including the release
+compile; an arm64 job then warms the native package archives arm64 lanes restore.
+Each family is probed by its exact key, so a new runner image re-prepares native
+package archives on its first warming run.
 Release builds restore the shared Go cache; their separate cache retains only
 Tauri release builds. The cache actions enforce the main-ref write boundary
 themselves. Pinned Go analyzers have separate lint and vulnerability caches; their module versions
@@ -1371,24 +1479,6 @@ lane durations, and unsuccessful merge-group runs. Three distinct runs sharing
 one failure signature appear in the report without opening issues. Missing artifacts
 remain a coverage gap; cancellation is reported separately from an attributed test failure.
 
-### Reusing completed source verification
-
-Qualification reuses complete source lanes from successful merge-group CI runs
-(including recovered `workflow_dispatch` runs on `gh-readonly-queue/main/`)
-whose Git tree exactly matches the selected landed source. Each compact proof
-binds repository, source commit and tree, workflow run and attempt, lane recipe,
-runner label, shard, and successful full-scope execution. The lookup considers
-up to forty recent successful CI runs within fourteen days. PR-only results,
-partial package selections, missing evidence, and failed runs grant no reuse.
-
-All shards of a lane must have matching proofs from one run attempt. Qualification
-retains its own plan listing every reused proof and every lane it executes.
-Change-relative budget and coverage reports always execute against the current
-qualification context. Platform, end-to-end, signed-package, and upgrade checks
-retain their separate gates. Pinned source and toolchains define source-lane
-identity; hosted image versions are recorded as provenance. Native platform
-qualification continues to exercise the current hosted environment.
-
 ### Browser qualification capacity
 
 Web qualification partitions the complete suite across two hosted jobs with two
@@ -1401,7 +1491,10 @@ one shard. Per-job concurrency does not increase. The execution deadline allows
 ### Compiler cache lifecycle
 
 Only the serialized main warmer publishes compiler caches. Native cache identity
-includes the declared paths and compression format as well as the key. The warmer
+includes the declared paths and compression format as well as the key. Rust
+compiler keys name the runner's OS release, architecture and toolchain, not its
+image build: hosted runners of one release serve several image builds at once, and
+a key per build would leave most runners without a warm cache. The warmer
 probes exact identities without restoring payloads; prefix matches remain misses.
 Every run reports each applicable family as an exact hit or miss. An all-hit push
 skips preparation, compilation, publication, and lint diagnostics. Native package
@@ -1464,9 +1557,10 @@ Concurrency is bounded by construction: each class of work holds a
 fixed number of runners, through one run at a time and capped matrices. The
 merge queue's own settings budget its class: groups built at once times the
 gate's cap. The `capacity` table in
-[`verification-plan.json`](../scripts/verification-plan.json) declares each
-verification profile's
-`max_parallel`. The reusable verification workflow's plan job reads that cap
+[`verification-plan.json`](../scripts/verification-plan.json) declares those
+`hosted` ceilings and each verification profile's `max_parallel`. A workflow law
+follows nightly and qualification through every workflow they call and requires
+the heaviest set of jobs no `needs` chain orders to fit the ceilings. The reusable verification workflow's plan job reads that cap
 from the catalog and orders the matrix: lanes the catalog marks `first`, the
 cheap ones that fail most often, then the rest longest first. Complete measured
 coverage uses each lane's longest shard duration; incomplete coverage uses catalog
@@ -1474,15 +1568,10 @@ budgets for the whole selected matrix. Runner caps do not depend on timing data.
 
 | Class | Workflows | One run at a time | Runners (macOS) |
 |---|---|---|---|
-| Qualification | `qualification.yml` | `qualification` | 3 (1): the `check` profile capped at three, then platform's two jobs beside the `release` platform lanes one at a time, then two browser shards beside the desktop journey |
-| Cache warming | `build-caches.yml` | `build-caches` | 1 (1): Linux, then macOS including release compilation |
-<<<<<<< HEAD
-| Nightly | `nightly.yml` | `nightly` | 2 (1): the `nightly` profile capped at two, then the two platform jobs, then one browser shard beside the desktop journey, then the upgrade rehearsal beside quarantine observation |
-| Releases | publishing runs of `release.yml`, `release-halt.yml` | `release-static-update` | 2 (2): source validation beside one signed build; later desktop rehearsal or protected fixture preparation beside Linux packaging |
-=======
-| Nightly | `nightly.yml` | `nightly` | 12 (4): the `nightly` profile capped at six, beside the two platform jobs, two browser shards with the desktop journey, and the upgrade rehearsal |
-| Releases | `release.yml`, `release-halt.yml` | `release-static-update` | 2 (2): source validation beside one signed build; later desktop rehearsal or protected fixture preparation beside Linux packaging |
->>>>>>> e4985d4fee
+| Qualification | `qualification.yml` | `qualification` | the unsigned preparation and custody, then the nightly lane set, each within the `hosted` ceilings |
+| Cache warming | `build-caches.yml` | `build-caches` | 2 (1): Linux beside macOS including release compilation, then arm64 native package archives |
+| Nightly | `nightly.yml` | `nightly` | within the `hosted` 20 (5): six verification runners, two platform jobs, two browser shards, the desktop journey, the five release rehearsal jobs and the installed upgrade's preparation, then its cases one at a time |
+| Releases | publishing runs of `release.yml`, `release-halt.yml` | `release-static-update` | 4 (2): the macOS signing job beside a Linux signing or import job, then installed upgrade cases two at a time beside repository assembly; a source without a retained preparation adds its five unsigned builds |
 | DCO certification | `dco.yml` | one queue per pull request or merge group | 1 per pull request or group |
 | Maintainability tracking | `maintainability-issues.yml` | `maintainability-issues` | 1 |
 | Queue batching | `queue-batching.yml` | `queue-batching` | 1 |
@@ -1497,19 +1586,14 @@ workflows share one group across workflows and stagger their schedules. Issue
 intake, an issue's lifecycle nudge, and verification recovery handle one event
 per run instead: each run is a single job bounded to fifteen minutes.
 
-Linux package construction is a reusable workflow. Release calls consume the
-release class's existing two-runner footprint without entering maintenance.
-Weekly, manual, and ready packaging pull requests into `main` share the
-maintenance class's single runner through `linux-candidate-requests.yml`. Its
-path filter includes packaging, native setup, release builders, and toolchain
-inputs. Queue entry compares these inputs between the retained candidate source
-and the current merge source; changed or uncertain inputs build again. The
-read-only selection job and native builds run in turn. Pull requests into
-another branch build only by explicit dispatch. Queue batching serializes
-independently so maintenance cannot replace its pending reconciliation. Pending
-standalone
-requests can be replaced by later maintenance requests; an explicit dispatch
-restores a needed candidate without affecting a selected release.
+Unsigned release artifacts are prepared once per source by a reusable
+workflow whose package, closure and macOS jobs start together; a retained
+receipt for the same commit and tree is reused instead
+([release preparation](dev-tasks.md#release-preparation)). Weekly, manual, and
+ready packaging pull requests into `main` call it through
+`linux-candidates.yml`, in a concurrency group per pull request. Queue batching
+serializes independently so maintenance cannot replace its pending
+reconciliation.
 
 These caps are maxima, not reservations. Hosted runners start waiting jobs in
 the order they were queued, and nothing reorders or preempts runs, so when every
@@ -1519,24 +1603,23 @@ average occupancy does not change with it. Recorded occupancy averages about eig
 of the twenty runners, and jobs without a matrix cap start within seconds. Raising a
 cap is worthwhile while lanes wait on the cap rather than on a runner; check that
 before changing one. Caps do not establish queue latency guarantees.
-On macOS, qualification and warming hold one runner each, nightly four, and a
-release two. Nightly is scheduled outside the hours releases and qualification
+On macOS, warming holds one runner, nightly four (as does a qualification that
+runs the lane set), and a release two. Nightly is scheduled outside the hours releases and qualification
 run; when they do overlap, macOS jobs wait for one of the five runners. The
 merge queue and the admission tier run on Linux.
 
 ### Upgrade rehearsal preparation and startup evidence
 
-Release source validation runs preflight and the store upgrade rehearsal in one
-checkout on one runner. Both managed targets retain their build validation;
-unchanged compiler inputs and development outputs stay available between them.
-Each phase retains its own evidence, and either failure blocks publication.
-Signing remains isolated in its protected packaging job.
-
-Nightly upgrade rehearsal uses the shared verification setup for the pinned
-Node/Bun runtimes and frontend semantic fixture dependencies, then installs the
-public feed verifier. The managed rehearsal task owns its development sidecar
-build. Bundle execution restores the shared Go compiler cache and consumes the
-prepared signed fixture artifact.
+The candidate corpus check and the store upgrade rehearsal run in the macOS
+confinement job after its engine build and reuse that sidecar, nightly and in
+every qualification; the release reads them through the exact-source
+qualification and builds no development engine. Signing remains isolated in its
+protected packaging job. Nightly bundle execution installs the published release before the newest
+and lets it update itself to the newest, from fixtures that a Linux job prepares
+from public signed bytes alone; no key is used. It exercises the harness on
+known-good inputs and shows nothing about the current source. In a release,
+bundle execution consumes the fixture artifact the protected preparation signs
+for the candidate.
 
 Every bundle case retains `startup-observation.json` before cleanup. It records
 the expected version, captured process identities, daemon PID/port, and the last

@@ -46,10 +46,26 @@ func TestCommandRefusesMisuseBeforeReachingDocker(t *testing.T) {
 }
 
 func TestCommandDriverAnswersOrFailsOnItsRequest(t *testing.T) {
-	var stderr bytes.Buffer
-	if got := Command(t.Context(), []string{"driver"}, strings.NewReader("{"), &bytes.Buffer{}, &stderr); got != exitFailed ||
-		!strings.Contains(stderr.String(), "decode request") {
-		t.Fatalf("driver = %d with %q, want a decode failure", got, stderr.String())
+	refused, err := json.Marshal(request{Shell: "/bin/sh", Cases: []Case{
+		{Program: "true"},
+		{Program: "true", Workspace: map[string]Entry{"../escape": {}}},
+	}})
+	testutil.FailErr(t, "encode refused request", err)
+	for _, tc := range []struct {
+		name, request string
+		want          int
+	}{
+		{"empty batch", `{"shell":"/bin/sh"}`, 0},
+		{"malformed", "{", exitFailed},
+		{"refused case", string(refused), exitFailed},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var stdout, stderr bytes.Buffer
+			got := Command(t.Context(), []string{"driver"}, strings.NewReader(tc.request), &stdout, &stderr)
+			if got != tc.want || stdout.Len() != 0 || (got == 0) != (stderr.Len() == 0) {
+				t.Fatalf("driver = %d with stdout %q, stderr %q; want %d and no answer", got, stdout.String(), stderr.String(), tc.want)
+			}
+		})
 	}
 }
 

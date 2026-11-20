@@ -36,6 +36,10 @@ func (s *BlueprintRoutes) HandleApproveBlueprint(w http.ResponseWriter, r *http.
 			s.responses.Fail(w, wire.ApiErrorCodeBlueprintNotFound, "blueprint not found")
 			return
 		}
+		if errors.Is(err, runstate.ErrNotFound) {
+			s.responses.Fail(w, wire.ApiErrorCodeWorkflowRunNotFound, "workflow run not found")
+			return
+		}
 		if errors.Is(err, runstate.ErrHumanApprovalNotReady) {
 			s.responses.Fail(w, wire.ApiErrorCodeHumanApprovalNotReady, "human approval is not ready")
 			return

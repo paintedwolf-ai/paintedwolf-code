@@ -135,12 +135,12 @@ preserve_fuzz_failures() {
 
 # VARIABLE=pathspec entries identify fixture refreshes to retain after snapshot cleanup.
 FIXTURE_REFRESHES=(
-  "UPDATE_SCHEMA_LOCK=lycaon/internal/db/schema.sql.lock.json"
   "UPDATE_REPORT_GOLDEN=lycaon/internal/report/testdata/golden"
   "UPDATE_ANCHOR_KICK_GOLDEN=lycaon/internal/coordinator/anchor/testdata/golden/kicks"
   "UPDATE_CITATION_GROUNDING_PARITY_GOLDENS=lycaon/test/fixtures/citation-grounding-parity"
   "UPDATE_CORPUS_BASELINE=lycaon/internal/oar/testdata/corpus_baseline.json"
   "UPDATE_RUST_HOST_WIRE_FIXTURES=lycaon-den/src-tauri/tests/host_wire_fixtures.json"
+  "UPDATE_HOST_CORPUS=lycaon-den/src/api/testdata/host-corpus.json"
 )
 
 # Refreshes preserve checkout edits made after capture and omit snapshot deletions.
@@ -245,7 +245,14 @@ run_commit() {
     /*|[A-Za-z]:/*|[A-Za-z]:\\*) ;;
     *) export OPENGREP_CACHE_DIR="$PWD/$OPENGREP_CACHE_DIR" ;;
   esac
-  export CARGO_TARGET_DIR="${CARGO_TARGET_DIR:-$ROOT/lycaon-den/target}"
+  # Cargo judges freshness by file times, so a target another source built later passes for this
+  # one. A hosted runner verifies only its job's source; elsewhere each slot keeps its own targets.
+  if [[ "${GITHUB_ACTIONS:-}" == true ]]; then
+    export CARGO_TARGET_DIR="${CARGO_TARGET_DIR:-$ROOT/lycaon-den/target}"
+  else
+    export PW_COMPILER_CACHE_DIR="${PW_COMPILER_CACHE_DIR}/slots/$(basename "$SNAPSHOT_DIR")"
+    export CARGO_TARGET_DIR="${PW_COMPILER_CACHE_DIR}/den"
+  fi
   cd "$SNAPSHOT_DIR"
   set +e
   "$@"

@@ -5,7 +5,6 @@ import io
 import json
 import os
 from pathlib import Path
-import re
 import subprocess
 import tempfile
 import unittest
@@ -207,6 +206,7 @@ class ProvisionTests(unittest.TestCase):
         self.assertEqual(installed, [coverage_changes.python_coverage.REQUIREMENTS,
                                      coverage_changes.ROOT / "scripts/workflow_lint/requirements.txt",
                                      ROOT / "scripts/generation/requirements-test.txt",
+                                     ROOT / "scripts/generation/requirements-conversion-test.txt",
                                      ROOT / "scripts/coordinator-benchmark/requirements.txt",
                                      ROOT / "scripts/bialy/custom_model/requirements-test.txt"])
         with patch("sys.stderr"), self.assertRaises(SystemExit):
@@ -216,8 +216,6 @@ class ProvisionTests(unittest.TestCase):
 class DeclaredSuiteTests(unittest.TestCase):
     def test_runner_suite_is_the_test_runner_discovery(self):
         suite = coverage_policy.python_suites()["test:runner"]
-        body = re.search(r"^  test:runner:\n(?:    .*\n)+", (ROOT / "Taskfile.yml").read_text(), re.M).group(0)
-        self.assertIn("python3 {{.SCRIPTS_DIR}}/ci_policy/runner_tests.py {{.CLI_ARGS}}", body)
         self.assertEqual(runner_tests.discovery_arguments([]),
                          ["unittest", "discover", "-s", str(ROOT / suite["start"]), "-p", suite["pattern"]])
 
@@ -238,6 +236,19 @@ class DeclaredSuiteTests(unittest.TestCase):
         self.assertEqual([c.kwargs["env"]["PYTHONPATH"] for c in call.call_args_list],
                          ["scripts", os.pathsep.join(["/tools/runner.txt", "scripts"])])
         self.assertEqual({c.kwargs["cwd"] for c in call.call_args_list}, {ROOT})
+
+    def test_the_runner_runs_every_declared_suite_unmeasured_on_request(self):
+        for failed, exits in (([], False), (["harness"], True)):
+            with self.subTest(failed=failed), \
+                    patch.object(runner_tests.python_coverage, "run", return_value=failed) as run, \
+                    patch.object(runner_tests.unittest, "main") as discovery:
+                if exits:
+                    with self.assertRaisesRegex(SystemExit, "harness"):
+                        runner_tests.main([runner_tests.EVERY_SUITE])
+                else:
+                    runner_tests.main([runner_tests.EVERY_SUITE])
+            run.assert_called_once_with(ROOT, coverage_policy.python_suites())
+            discovery.assert_not_called()
 
     def test_suites_need_a_start_and_pattern(self):
         with tempfile.TemporaryDirectory() as directory:

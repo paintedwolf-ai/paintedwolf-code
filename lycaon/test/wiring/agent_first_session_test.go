@@ -2,7 +2,6 @@ package wiring
 
 import (
 	"context"
-	"strings"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/llm"
@@ -53,18 +52,17 @@ func TestNoWorkflowStartNudgeOnCasualPrompt(t *testing.T) {
 	if _, err := h.Sessions.Manager.Submissions.Prompt(ctx, sess.ID, prompt); err != nil {
 		testutil.FailErr(t, "h.Sessions.Manager.Submissions.Prompt failed", err)
 	}
-	msgs, err := h.Sessions.Manager.Runner.Transcript.GetMessages(ctx, sess.ID)
-	testutil.FailErr(t, "h.Sessions.Manager.GetMessages failed", err)
-	for _, msg := range msgs {
-		if strings.Contains(msg.Content, "[host:workflow-start]") {
-			t.Fatalf("casual build prompt must not inject workflow-start nudge, message=%q", msg.Content)
-		}
+	if len(rec.AllRequests()) == 0 {
+		t.Fatal("the casual prompt reached no model request")
 	}
-	for _, req := range rec.AllRequests() {
-		for _, msg := range req.Messages {
-			if strings.Contains(msg.Content, "[host:workflow-start]") {
-				t.Fatalf("LLM prompt must not contain workflow-start nudge, message=%q", msg.Content)
-			}
-		}
+	workflowID, version, _, proposed, err := h.Workflows.Manager.Blueprints.Scaffold.ProposedStart(ctx, sess.ID)
+	testutil.FailErr(t, "read proposed workflow start", err)
+	if proposed {
+		t.Fatalf("casual prompt proposed starting workflow %s@%s", workflowID, version)
+	}
+	run, err := h.Workflows.Manager.Store.Runs.ActiveBySession(ctx, sess.ID)
+	testutil.FailErr(t, "read active workflow", err)
+	if run != nil && !runstate.IsAmbientRun(run) {
+		t.Fatalf("casual prompt started workflow %+v", run)
 	}
 }

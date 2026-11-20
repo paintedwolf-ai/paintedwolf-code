@@ -13,6 +13,7 @@ let
       (sourcePath + "/VERSION")
       (sourcePath + "/lycaon/internal/backup/archive-limits.json")
       (sourcePath + "/lycaon/internal/editoroutbox/format.json")
+      (sourcePath + "/lycaon/internal/presence/unlock-lifetime.json")
       (sourcePath + "/packaging/update-limits.json")
       (sourcePath + "/packaging/update-keys.json")
       (sourcePath + "/packaging/release-platforms.json")

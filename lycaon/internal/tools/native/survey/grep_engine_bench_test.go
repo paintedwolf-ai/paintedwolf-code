@@ -4,7 +4,6 @@ import (
 	"context"
 	"os"
 	"path/filepath"
-	"strconv"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/toolprofiles"
@@ -17,16 +16,10 @@ import (
 
 // BenchmarkGrepFileCost splits one searched file's cost into the host read
 // through a call's read session, the session's path resolution alone, the
-// resolution a one-off read pays, and a plain read of the same bytes. It
-// replays PW_GREP_BENCH_ROOT read-only when set.
+// resolution a one-off read pays, and a plain read of the same bytes, over the
+// benchmark tree.
 func BenchmarkGrepFileCost(b *testing.B) {
-	dir := os.Getenv("PW_GREP_BENCH_ROOT")
-	if dir == "" {
-		dir = b.TempDir()
-		for i := range 500 {
-			testutil.FailErr(b, "write text fixture", os.WriteFile(filepath.Join(dir, "file_"+strconv.Itoa(i)+".go"), make([]byte, 6000), 0o644))
-		}
-	}
+	dir := testutil.BenchRoot(b)
 	var files []string
 	testutil.FailErr(b, "list fixture", filepath.WalkDir(dir, func(p string, d os.DirEntry, err error) error {
 		if err != nil || (d.IsDir() && p != dir && d.Name()[0] == '.') {

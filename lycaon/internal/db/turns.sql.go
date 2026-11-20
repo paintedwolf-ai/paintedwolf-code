@@ -620,6 +620,41 @@ func (q *Queries) ListSessionModelOutputs(ctx context.Context, sessionID string)
 	return items, nil
 }
 
+const listUnsettledLiveDrafts = `-- name: ListUnsettledLiveDrafts :many
+SELECT message.id
+FROM messages message
+WHERE message.session_id = ? AND message.draft_status = 'live'
+  AND NOT EXISTS (
+    SELECT 1 FROM model_outputs output
+    WHERE output.session_id = message.session_id AND output.message_id = message.id
+  )
+ORDER BY message.ord
+`
+
+// A live draft without a settled model output holds no response.
+func (q *Queries) ListUnsettledLiveDrafts(ctx context.Context, sessionID string) ([]string, error) {
+	rows, err := q.db.QueryContext(ctx, listUnsettledLiveDrafts, sessionID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []string
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const markModelOutputProjected = `-- name: MarkModelOutputProjected :execrows
 INSERT INTO model_output_projections (model_output_id, message_seq, projected_at)
 SELECT output.id, message.seq, ?

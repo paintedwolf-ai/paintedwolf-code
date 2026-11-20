@@ -3,6 +3,7 @@ package api
 import (
 	"encoding/json"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/tools/toolstest"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -20,7 +21,6 @@ import (
 	"github.com/lycaon/lycaon/internal/testtool"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/timelayout"
-	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/worker"
 	"github.com/lycaon/lycaon/internal/workerrecords"
 	wire "github.com/lycaon/lycaon/pkg/api"
@@ -47,7 +47,7 @@ func newWorkerHistoryTestEnv(t *testing.T) *workerHistoryTestEnv {
 	queue := worker.NewSQLQueue(sqlDB, 1)
 	records := workerrecords.New(sqlDB)
 
-	reg := tools.NewStubRegistry()
+	reg := toolstest.NewRegistry()
 	mock := llm.NewMockProvider(testMockConfig(t))
 	mgr := session.NewHost(st, session.Models{
 		Client: mock,

@@ -7,6 +7,7 @@ import {
   settledChatSessionId,
   transcriptMessages,
 } from "../helpers.ts";
+import { scrollSettled } from "../fixtures/settle.ts";
 
 type Box = { top: number; right: number; bottom: number; left: number; width: number; height: number };
 
@@ -248,7 +249,7 @@ test.describe("message actions layout", () => {
 
     // 2. Disengage live tail-follow with PageUp so mid-stream reading position stays anchored.
     await stream.press("PageUp");
-    await page.waitForTimeout(250);
+    await scrollSettled(stream);
     await stream.evaluate(async (host) => {
       host.scrollTop = Math.floor(host.scrollHeight * 0.45);
       for (let frame = 0; frame < 4; frame += 1) await new Promise(requestAnimationFrame);

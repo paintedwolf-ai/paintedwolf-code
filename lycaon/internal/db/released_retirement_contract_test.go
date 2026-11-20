@@ -139,6 +139,7 @@ func rawDropTargets(text string) []string {
 // fixture must hold the rows, and after the upgrade Rebuild returns exactly
 // what Capture read before it.
 func TestRegisteredRetirementsReproduceReleasedCorpusRows(t *testing.T) {
+	testutil.SkipIfRace(t, "single-goroutine corpus replay; test:full runs it")
 	for step, retirements := range migrations.RegisteredRetirements() {
 		for _, r := range retirements {
 			t.Run(step+"/"+r.Table+"/"+r.Column, func(t *testing.T) {

@@ -60,7 +60,7 @@ func TestReviewAcceptanceRenewsOnGrowthAndBoundaryChanges(t *testing.T) {
 			if got := report.Artifacts[0].Review; got == nil || got.State != tc.state {
 				t.Fatalf("review state: %+v, want %s", got, tc.state)
 			}
-			if report.Artifacts[0].EffectiveCap != 30 {
+			if cap := report.Artifacts[0].EffectiveCap; cap == nil || *cap != 30 {
 				t.Fatal("review changed admission cap")
 			}
 		})

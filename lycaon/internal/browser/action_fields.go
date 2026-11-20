@@ -10,8 +10,8 @@ import (
 // locatorFields name an element; every targeted step reads them.
 var locatorFields = []string{"testid", "selector", "role", "label", "text"}
 
-// stepFields lists, per step type, the fields beyond timeout_ms and wait that
-// the step reads. timeout_ms and wait apply to every step.
+// stepFields lists, per step type, the fields beyond wait that the step
+// reads. wait applies to every step.
 var stepFields = map[string][]string{
 	"click":    append(append([]string(nil), locatorFields...), "button", "count", "modifiers"),
 	"hover":    append(append([]string(nil), locatorFields...), "hold_ms"),
@@ -22,7 +22,7 @@ var stepFields = map[string][]string{
 	"select":   append(append([]string(nil), locatorFields...), "value"),
 	"press":    {"key"},
 	"route":    {"routes"},
-	"wait_for": {"selector", "text"},
+	"wait_for": {"selector", "text", "gone"},
 	"wait":     nil,
 }
 
@@ -48,6 +48,7 @@ func (a CaptureAction) setFields() []string {
 	add("by", a.By != nil)
 	add("hold_ms", a.HoldMS != 0)
 	add("routes", len(a.Routes) > 0)
+	add("gone", a.Gone)
 	return out
 }
 
@@ -75,7 +76,7 @@ func validateActions(actions []CaptureAction) error {
 			"index":         strconv.Itoa(i),
 			"type":          act.kind(),
 			"unused_fields": strings.Join(unused, ", "),
-			"step_fields":   strings.Join(append(append([]string(nil), reads...), "timeout_ms", "wait"), ", "),
+			"step_fields":   strings.Join(append(append([]string(nil), reads...), "wait"), ", "),
 		})
 	}
 	return nil

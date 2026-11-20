@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/tools/toolstest"
 	"strings"
 	"testing"
 
@@ -66,7 +67,7 @@ func TestCloseoutToolRecoveryRetiresBeforeEveryOutcome(t *testing.T) {
 	for _, outcome := range []string{"completed", "failed", "rejected", "blocked", "checkpoint failure"} {
 		t.Run(outcome, func(t *testing.T) {
 			retained := guidance.RetainedCloseout{Active: true, Attempt: 2, DocumentAttempt: 1, Draft: markdownRead("stale success", false).Draft, ForcedBy: []string{"citation"}}
-			reg := tools.NewStubRegistry()
+			reg := toolstest.NewRegistry()
 			executed := 0
 			defer func() {
 				want := 0
@@ -270,7 +271,7 @@ func TestRetainedAnswerSurvivesObservingToolsOnly(t *testing.T) {
 		{"unknown tool", []string{"no_such_tool"}, nil, false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			reg := tools.NewStubRegistry()
+			reg := toolstest.NewRegistry()
 			for _, name := range []string{"recall", "update_progress", "command"} {
 				_ = reg.Register(name, func(context.Context, map[string]any, tools.ToolContext) (string, error) { return "", nil })
 			}

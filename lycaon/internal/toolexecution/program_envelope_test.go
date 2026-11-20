@@ -7,12 +7,14 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/lycaon/lycaon/internal/people"
 	"github.com/lycaon/lycaon/internal/progress"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/toolschema"
+	"github.com/lycaon/lycaon/pkg/api"
 )
 
 // This exercises the structural consumer contract. Actual parser-seal lifecycle
@@ -69,7 +71,7 @@ func TestProgramEnvelopeValidatesBeforeProgressAndSeparatesCommittedOutcome(t *t
 	defer prepared.Close()
 	update.Arguments["content"] = "- [x] Caller tampering"
 	starts := 0
-	marker := progressStartFunc(func(_ context.Context, id toolcontract.ProgramProgressIdentity, model string, args toolcontract.ReviewedOperationInputs) error {
+	marker := progressStartFunc(func(ctx context.Context, id toolcontract.ProgramProgressIdentity, model string, args toolcontract.ReviewedOperationInputs) error {
 		starts++
 		if id.ExecutionID != "progress-execution" || id.ProgramID != "program" || id.RootSessionID != "session" || model != "actual-model-call" || !strings.Contains(args.CanonicalArguments(), "Create fixture") {
 			t.Fatalf("wrong progress attribution: %+v %s %s", id, model, args.CanonicalArguments())
@@ -77,9 +79,14 @@ func TestProgramEnvelopeValidatesBeforeProgressAndSeparatesCommittedOutcome(t *t
 		if store.Get(t.Context(), parent.SessionID) != "" {
 			t.Fatal("store updated before marker")
 		}
+		if _, ok := people.Caller(ctx); ok {
+			t.Fatal("progress owner saw the request caller")
+		}
 		return nil
 	})
-	outcome, err := executor.ApplyProgramProgress(t.Context(), prepared, store, nativeProgressFixture{store}, nil, marker, tc)
+	// The request that started the turn had a caller; the agent's effect does not.
+	callerCtx := people.WithCaller(t.Context(), people.Person{ID: "person-1", Role: api.PersonRoleOwner})
+	outcome, err := executor.ApplyProgramProgress(callerCtx, prepared, store, nativeProgressFixture{store}, nil, marker, tc)
 	testutil.FailErr(t, "apply existing typed progress store", err)
 	if !outcome.OwnerInvoked || !outcome.Outcome.Updated || starts != 1 || store.Get(t.Context(), parent.SessionID) != "- [ ] Create fixture" {
 		t.Fatalf("lost separate progress outcome: %+v", outcome)

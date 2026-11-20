@@ -2,11 +2,13 @@ package integration
 
 import (
 	"context"
+	"github.com/lycaon/lycaon/internal/scan"
+	"github.com/lycaon/lycaon/internal/scan/findings/findingstest"
+	"github.com/lycaon/lycaon/internal/scan/scantest"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/evidence"
-	"github.com/lycaon/lycaon/internal/scan"
-	scanfindings "github.com/lycaon/lycaon/internal/scan/findings"
+
 	scanoutput "github.com/lycaon/lycaon/internal/scan/output"
 	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -44,8 +46,8 @@ func TestScanQueryFiltersFindingsByLevel(t *testing.T) {
 	store := scan.NewSQLStore(sqlDB)
 	coord := newTestCoordinator(t, store, nil)
 	scanID := seedScanWithFindings(t, store, []api.SecurityFinding{
-		scanfindings.FixtureFinding("r-high", api.FindingLevelHigh, "high", "a.go", 1),
-		scanfindings.FixtureFinding("r-low", api.FindingLevelLow, "low", "b.go", 2),
+		findingstest.Finding("r-high", api.FindingLevelHigh, "high", "a.go", 1),
+		findingstest.Finding("r-low", api.FindingLevelLow, "low", "b.go", 2),
 	})
 
 	resp, err := coord.Query(context.Background(), scan.QueryRequest{
@@ -157,8 +159,8 @@ func TestScanQueryDoesNotRunScanner(t *testing.T) {
 	sqlDB := testdbfixture.Open(t, "store.db")
 
 	store := scan.NewSQLStore(sqlDB)
-	mock := &scan.MockScanner{}
-	reg := &scan.MockRegistry{Scanner: mock}
+	mock := &scantest.MockScanner{}
+	reg := &scantest.MockRegistry{Scanner: mock}
 	coord := newTestCoordinator(t, store, nil)
 	scanID := seedScanWithGuidance(t, store, "", []api.ScanGuidanceSummary{
 		{Code: "SCAN_FINDING_UNMAPPED", Message: "x", RuleID: "r1"},

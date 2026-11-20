@@ -415,7 +415,6 @@ type Inventory struct {
 	inventoryReconcile func(context.Context, string, []RootSpec) (int, error)
 	inventorySerial    uint64
 	inventorySuspended map[string]int
-	observationBudget  time.Duration
 	queries            *db.Queries
 	recordMu           *sync.Mutex
 	snapshots          *sourcesnapshot.Store

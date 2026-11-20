@@ -1,12 +1,15 @@
 package configuration
 
 import (
+	"context"
 	"fmt"
-	"github.com/lycaon/lycaon/internal/decide"
+	"time"
 
 	"github.com/lycaon/lycaon/internal/api"
 	"github.com/lycaon/lycaon/internal/cost"
 	"github.com/lycaon/lycaon/internal/db"
+	"github.com/lycaon/lycaon/internal/decide"
+	"github.com/lycaon/lycaon/internal/fileops"
 	"github.com/lycaon/lycaon/internal/llm/modelcall"
 	"github.com/lycaon/lycaon/internal/mcp"
 	"github.com/lycaon/lycaon/internal/orchestration"
@@ -43,10 +46,20 @@ type Config struct {
 	// TestAdvisoryDatabase, when set, is the OSV export bundled dependency
 	// scanners match against without contacting the advisory endpoint.
 	TestAdvisoryDatabase string
+	// TestModelFeedDocument, when set, is the models.dev document the shared
+	// model feed serves without contacting models.dev.
+	TestModelFeedDocument string
 	// TestCostPricer, when set, replaces NoopPricer in tests.
 	TestCostPricer cost.Pricer
 	// TestSessionLimits supplies session limits in tests.
 	TestSessionLimits *settings.SessionLimits
+	// TestChangeDebounce overrides the process coalesce window for an isolated host.
+	TestChangeDebounce time.Duration
+	// TestFileOperationHold runs before each file operation's work, while it
+	// is still cancelable.
+	TestFileOperationHold func(context.Context, fileops.Request)
+	// TestStoreCommitObserver sees each store write transaction as it commits.
+	TestStoreCommitObserver db.CommitObserver
 	// TestSecretMatcher supplies outbound secret matching in tests.
 	TestSecretMatcher *secretmatch.Matcher
 	// TestOrchestrator, when set, builds the workflow orchestrator from the

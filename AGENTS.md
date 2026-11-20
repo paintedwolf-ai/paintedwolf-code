@@ -121,7 +121,7 @@ failures to get green. Test conventions: [backend](lycaon/AGENTS.md#testing) and
 
 **Both gates enforce size budgets and changed Go statement coverage; exact-landing qualification also enforces frontend and script coverage.** Files,
 directories, and Go types must not grow above category limits without justified
-exceptions. Warnings create architectural review obligations after merge; hard limits block new or
+exceptions; test files have a warning line and no hard limit. Warnings create architectural review obligations after merge; hard limits block new or
 growing excess. Unchanged legacy excess is tracked; explicit caps and prompt
 limits remain absolute. Before editing large code, run
 `PW_BUDGETS_INSPECT="<path>" ./task budgets`. Above the warning line, review cohesion before adding behavior; choose a real

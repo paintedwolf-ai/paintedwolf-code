@@ -46,11 +46,17 @@ func TestRegisterRejectsForbiddenPattern(t *testing.T) {
 		"verify_evidence_passed",
 		"user_input_clarify",
 		"mode_is",
+		"security_gate_passed",
+		"security_gate_failed",
+		"security_gate_missing",
 	}
 	for _, id := range cases {
 		err := reg.Register(id, func(_ EvalContext) (bool, error) { return false, nil })
 		if err == nil || !errors.Is(err, ErrForbiddenCondition) {
 			t.Fatalf("Register(%q) = %v want forbidden", id, err)
+		}
+		if reg.Has(id) {
+			t.Fatalf("refused id %q is registered", id)
 		}
 	}
 }

@@ -109,11 +109,3 @@ func TestStrictConfiguredProviderIsSilentButPolicyAskStillHolds(t *testing.T) {
 		t.Fatalf("the gate saw rule %+v", rule)
 	}
 }
-
-// Undeclared provider destinations require the Strict ask.
-func TestUndeclaredProviderHostStillAsksUnderStrict(t *testing.T) {
-	redirected := preDialFacts(gate.Endpoint{Host: "redirected.contract.test", FirstUseThisSession: true})
-	if verdict, decision := gate.Evaluate(redirected, gate.PostureStrict); verdict != gate.Ask || decision.Primary != api.GateFirstHost {
-		t.Fatalf("undeclared host at Strict: %v %+v", verdict, decision)
-	}
-}

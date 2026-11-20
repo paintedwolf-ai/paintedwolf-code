@@ -19,7 +19,6 @@ type ParallelWorkersReplayFixture struct {
 	NoteSummary         string `json:"note_summary"`
 	NoteRef             string `json:"note_ref"`
 	PriorRunNoteSummary string `json:"prior_run_note_summary"`
-	OverlayReadPath     string `json:"overlay_read_path"`
 	PromoteOverlayID    string `json:"promote_overlay_id"`
 	WorkerA             struct {
 		JobID          string `json:"job_id"`

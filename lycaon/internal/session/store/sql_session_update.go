@@ -4,11 +4,11 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
-	"github.com/lycaon/lycaon/internal/timelayout"
 	"strings"
 	"time"
 
 	"github.com/lycaon/lycaon/internal/db"
+	"github.com/lycaon/lycaon/internal/timelayout"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -157,95 +157,6 @@ func (s *sqlSessions) SetSessionStatus(ctx context.Context, id string, status ap
 	return s.UpdateSession(ctx, id, func(sess *api.Session) {
 		sess.Status = status
 	})
-}
-
-// UpdateSession mutates session fields under store lock.
-func (s *memorySessions) UpdateSession(ctx context.Context, id string, fn func(*api.Session)) error {
-	if err := ctx.Err(); err != nil {
-		return err
-	}
-	core := s.core
-	core.mu.Lock()
-	defer core.mu.Unlock()
-	sess, ok := core.sessions[id]
-	if !ok {
-		return ErrSessionNotFound
-	}
-	updated := *sess
-	fn(&updated)
-	if !api.CanTransitionSessionStatus(sess.Status, updated.Status) {
-		return &SessionStatusTransitionError{From: sess.Status, To: updated.Status}
-	}
-	// Pins and activity have their own writers; archiving or moving project clears the pin.
-	updated.ActivityAt = sess.ActivityAt
-	updated.PinRank = sess.PinRank
-	if updated.ProjectID != sess.ProjectID || updated.ArchivedAt != nil {
-		updated.PinRank = nil
-	}
-	updated.UpdatedAt = time.Now().UTC()
-	if updated.Status != sess.Status {
-		core.statusChangedAt[id] = updated.UpdatedAt
-	}
-	*sess = updated
-	return nil
-}
-
-// UpdateTitleIfUnset sets title when still blank; reports whether a row was updated.
-func (s *memorySessions) UpdateTitleIfUnset(ctx context.Context, id, title string) (bool, error) {
-	title = strings.TrimSpace(title)
-	if title == "" {
-		return false, nil
-	}
-	if err := ctx.Err(); err != nil {
-		return false, err
-	}
-	core := s.core
-	core.mu.Lock()
-	defer core.mu.Unlock()
-	sess, ok := core.sessions[id]
-	if !ok {
-		return false, ErrSessionNotFound
-	}
-	if strings.TrimSpace(sess.Title) != "" {
-		return false, nil
-	}
-	sess.Title = title
-	sess.UpdatedAt = time.Now().UTC()
-	return true, nil
-}
-
-// SetSessionStatusEvent updates status; the memory store publishes no events, so
-// the host error is dropped.
-func (s *memorySessions) SetSessionStatusEvent(
-	ctx context.Context,
-	id string,
-	status api.SessionStatus,
-	_ *api.SessionHostError,
-) error {
-	return s.SetSessionStatus(ctx, id, status)
-}
-
-// SetSessionStatus updates session status and updated_at.
-func (s *memorySessions) SetSessionStatus(ctx context.Context, id string, status api.SessionStatus) error {
-	if err := ctx.Err(); err != nil {
-		return err
-	}
-	core := s.core
-	core.mu.Lock()
-	defer core.mu.Unlock()
-	sess, ok := core.sessions[id]
-	if !ok {
-		return ErrSessionNotFound
-	}
-	if !api.CanTransitionSessionStatus(sess.Status, status) {
-		return &SessionStatusTransitionError{From: sess.Status, To: status}
-	}
-	sess.UpdatedAt = time.Now().UTC()
-	if status != sess.Status {
-		core.statusChangedAt[id] = sess.UpdatedAt
-	}
-	sess.Status = status
-	return nil
 }
 
 // sessionFromRow maps the shared session query shape.

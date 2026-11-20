@@ -29,7 +29,7 @@ func TestListProvidersIncludesFireworks(t *testing.T) {
 	t.Cleanup(mockBackend.Close)
 
 	createBody := `{"id":"fireworks","base_url":` + jsonString(mockBackend.URL) + `,"kind":"fireworks"}`
-	createReq := authedRequest(t, http.MethodPost, "/v1/providers", strings.NewReader(createBody))
+	createReq := AuthedRequest(t, http.MethodPost, "/v1/providers", strings.NewReader(createBody))
 	createReq.Header.Set("Content-Type", "application/json")
 	pw := httptest.NewRecorder()
 	srv.ServeHTTP(pw, createReq)
@@ -39,7 +39,7 @@ func TestListProvidersIncludesFireworks(t *testing.T) {
 
 	// Discovery only runs for a configured provider, and the fireworks kind
 	// requires a key — without one the meta carries no models to check.
-	credReq := authedRequest(t, http.MethodPut, "/v1/providers/fireworks/credential",
+	credReq := AuthedRequest(t, http.MethodPut, "/v1/providers/fireworks/credential",
 		strings.NewReader(`{"api_key":"fw-test-key"}`))
 	credReq.Header.Set("Content-Type", "application/json")
 	cw := httptest.NewRecorder()
@@ -48,7 +48,7 @@ func TestListProvidersIncludesFireworks(t *testing.T) {
 		t.Fatalf("put credential status = %d body = %s", cw.Code, cw.Body.String())
 	}
 
-	req := authedRequest(t, http.MethodGet, "/v1/providers", nil)
+	req := AuthedRequest(t, http.MethodGet, "/v1/providers", nil)
 	w := httptest.NewRecorder()
 	srv.ServeHTTP(w, req)
 	if w.Code != http.StatusOK {
@@ -96,7 +96,7 @@ func TestFireworksProviderTestWithMockBackend(t *testing.T) {
 
 	modelID := "accounts/fireworks/models/llama-v3p1-8b-instruct"
 	createBody := `{"id":"fireworks","base_url":` + jsonString(mockBackend.URL) + `,"models":[{"id":` + jsonString(modelID) + `}]}`
-	createReq := authedRequest(t, http.MethodPost, "/v1/providers", strings.NewReader(createBody))
+	createReq := AuthedRequest(t, http.MethodPost, "/v1/providers", strings.NewReader(createBody))
 	createReq.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
 	srv.ServeHTTP(w, createReq)
@@ -104,7 +104,7 @@ func TestFireworksProviderTestWithMockBackend(t *testing.T) {
 		t.Fatalf("create provider status = %d body = %s", w.Code, w.Body.String())
 	}
 
-	credReq := authedRequest(t, http.MethodPut, "/v1/providers/fireworks/credential",
+	credReq := AuthedRequest(t, http.MethodPut, "/v1/providers/fireworks/credential",
 		strings.NewReader(`{"api_key":"fw-test-key"}`))
 	credReq.Header.Set("Content-Type", "application/json")
 	w = httptest.NewRecorder()
@@ -113,7 +113,7 @@ func TestFireworksProviderTestWithMockBackend(t *testing.T) {
 		t.Fatalf("put credential status = %d body = %s", w.Code, w.Body.String())
 	}
 
-	testReq := authedRequest(t, http.MethodPost, "/v1/providers/fireworks/test",
+	testReq := AuthedRequest(t, http.MethodPost, "/v1/providers/fireworks/test",
 		strings.NewReader(`{"model":`+jsonString(modelID)+`}`))
 	testReq.Header.Set("Content-Type", "application/json")
 	w = httptest.NewRecorder()

@@ -1,8 +1,9 @@
-package vocabulary
+package vocabulary_test
 
 import (
 	"encoding/json"
 	"github.com/lycaon/lycaon/internal/configlayout"
+	"github.com/lycaon/lycaon/internal/vocabulary/vocabularytest"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -20,12 +21,12 @@ func TestExportCatalogMatchesCommittedFile(t *testing.T) {
 	data, err := os.ReadFile(path)
 	testutil.FailErr(t, "read file", err)
 	var committed struct {
-		Entries []CatalogEntry `json:"entries"`
+		Entries []vocabularytest.CatalogEntry `json:"entries"`
 	}
 	if err := json.Unmarshal(data, &committed); err != nil {
 		testutil.FailErr(t, "unmarshal JSON document", err)
 	}
-	got := ExportCatalog()
+	got := vocabularytest.ExportCatalog()
 	if !reflect.DeepEqual(committed.Entries, got) {
 		t.Fatalf("export drift: committed %d entries, got %d — regenerate schemas/workflow_vocabulary.json", len(committed.Entries), len(got))
 	}
@@ -35,7 +36,7 @@ func writeExportCatalog(t *testing.T, path string) {
 	t.Helper()
 	out := map[string]any{
 		"$schema": "./workflow_vocabulary.schema.json",
-		"entries": ExportCatalog(),
+		"entries": vocabularytest.ExportCatalog(),
 	}
 	b, err := json.MarshalIndent(out, "", "  ")
 	testutil.FailErr(t, "json.MarshalIndent failed", err)

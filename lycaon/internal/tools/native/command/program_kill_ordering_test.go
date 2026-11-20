@@ -4,7 +4,6 @@ import (
 	"context"
 	"sync"
 	"testing"
-	"time"
 
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -25,7 +24,6 @@ func TestProgramKillRightAfterBackgroundReportsItsSignal(t *testing.T) {
 			fixtures := make([]*windowFixture, concurrentPrograms)
 			for i := range fixtures {
 				fixtures[i] = newWindowFixture(t)
-				fixtures[i].Runtime.ParkThreshold = time.Hour
 			}
 			outcomes := make([]string, concurrentPrograms)
 			var wg sync.WaitGroup
@@ -55,7 +53,6 @@ func TestProgramKillRightAfterBackgroundReportsItsSignal(t *testing.T) {
 // signal yet. Its stop still has to decide the status, and no process may start after.
 func TestProgramKillBeforeTheProcessStartsReportsItsSignal(t *testing.T) {
 	f := newWindowFixture(t)
-	f.Runtime.ParkThreshold = time.Hour
 	release := make(chan struct{})
 	var once sync.Once
 	open := func() { once.Do(func() { close(release) }) }

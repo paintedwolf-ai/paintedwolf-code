@@ -3,6 +3,7 @@ package promptloop
 import (
 	"context"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/tools/toolstest"
 	"testing"
 	"time"
 
@@ -14,7 +15,7 @@ import (
 
 func TestExecuteToolCallsInTurnCommitsAssistantBeforeFirstTool(t *testing.T) {
 	var commitBeforeAppend bool
-	reg := tools.NewStubRegistry()
+	reg := toolstest.NewRegistry()
 	_ = reg.Register("answer_decision", func(_ context.Context, _ map[string]any, _ tools.ToolContext) (string, error) {
 		return `{"status":"resumed"}`, nil
 	})
@@ -191,7 +192,7 @@ func TestAnsweredToolCallsNeverReturnsNil(t *testing.T) {
 func TestDispatchRejectionsPreserveIndependentPeersAndHistory(t *testing.T) {
 	for _, rejected := range [][]int{{0}, {1}, {0, 2, 5}} {
 		t.Run(fmt.Sprint(rejected), func(t *testing.T) {
-			reg := tools.NewStubRegistry()
+			reg := toolstest.NewRegistry()
 			var ran []int
 			testutil.FailErr(t, "register task", reg.Register("task", func(_ context.Context, args map[string]any, tctx tools.ToolContext) (string, error) {
 				index := args["index"].(int)

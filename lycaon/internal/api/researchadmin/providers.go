@@ -109,6 +109,7 @@ func (s *Handler) publishWebResearchEvent(ctx context.Context, action, id string
 	}
 	_ = s.Events.Publish(ctx, wire.EventTopicSettings, events.PublishKey{Facet: string(wire.SettingsAreaWebResearch)}, wire.SettingsEvent{
 		Area:   wire.SettingsAreaWebResearch,
+		Scope:  wire.SettingsScopeGlobal,
 		Action: payload,
 	})
 }

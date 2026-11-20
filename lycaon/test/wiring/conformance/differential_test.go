@@ -79,7 +79,9 @@ func TestCatalogCoverageInConformanceCorpus(t *testing.T) {
 }
 
 // TestPortableCommandDifferentialConformance runs every corpus program through the
-// command entry and compares it with the stored reference snapshots.
+// command entry and compares it with the stored reference snapshots. A status
+// case runs one source of each kind of job owner: the evaluator's table covers
+// every source, and TestLiveReferenceDifferential runs the whole corpus here.
 func TestPortableCommandDifferentialConformance(t *testing.T) {
 	cases := corpus(t)
 	stored, err := commandconformance.LoadSnapshots()
@@ -89,6 +91,12 @@ func TestPortableCommandDifferentialConformance(t *testing.T) {
 		t.Run(c.ID, func(t *testing.T) {
 			refs, err := stored.For(c, runner.seed)
 			testutil.FailErr(t, "stored snapshots", err)
+			if status, ok := commandconformance.OwnerKindStatusOf(c); ok {
+				c = status.Case
+				for id, ref := range refs {
+					refs[id] = status.Reference(ref)
+				}
+			}
 			assertMatchesReference(t, c, runner.runCase(t, c), refs)
 		})
 	}

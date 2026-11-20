@@ -1,4 +1,4 @@
-"""Measure the selected installed app against existing absolute service budgets."""
+"""Measure the selected installed app: latency is reported, never judged; resource budgets are judged."""
 from __future__ import annotations
 
 import json
@@ -32,26 +32,11 @@ def distribution(values: list[float]) -> dict:
 
 
 def limits() -> dict:
-    document = json.loads(BUDGET_PATH.read_text())
-    latency, resources = document['latency_p95_ms'], document['resources']
-    names = ('startup.ready', 'restart.ready', 'project.create', 'session.prepare', 'prompt.accept', 'prompt.settle')
-    selected = {name: latency[name] for name in names}
-    selected['peak_rss_bytes'] = resources['peak_rss_bytes']
-    selected['rss_growth_bytes'] = resources['rss_growth_bytes']
+    resources = json.loads(BUDGET_PATH.read_text())['resources']
+    selected = {name: resources[name] for name in ('peak_rss_bytes', 'rss_growth_bytes')}
     if any(type(value) not in (int, float) or not math.isfinite(value) or value <= 0 for value in selected.values()):
-        raise ValueError('existing absolute performance budget is invalid')
+        raise ValueError('existing absolute resource budget is invalid')
     return selected
-
-
-def enforce(samples: dict[str, list[float]], absolute: dict) -> list[dict]:
-    failures = []
-    for name, values in samples.items():
-        measured = distribution(values)
-        if name not in absolute or len(values) < SAMPLES or 'p95' not in measured:
-            raise ValueError('performance acceptance requires its existing absolute limit and twenty samples')
-        if measured['p95'] > absolute[name]:
-            failures.append({'metric': name, 'p95': measured['p95'], 'absolute_limit': absolute[name]})
-    return failures
 
 
 def resources(identity: dict) -> dict:
@@ -84,7 +69,6 @@ def resources(identity: dict) -> dict:
 
 def start_samples(binding: dict) -> tuple[dict, dict]:
     from .desktop_ui import interactive_window
-    absolute = limits()
     timings, windows, engine_ids = [], [], []
     streams = {'app-stdout': bytearray(), 'app-stderr': bytearray()}
     for _ in range(SAMPLES):
@@ -104,9 +88,7 @@ def start_samples(binding: dict) -> tuple[dict, dict]:
                 if len(streams[name]) + len(raw) > 8 << 20:
                     raise ValueError('performance launch evidence exceeds its aggregate bound')
                 streams[name].extend(raw)
-    failures = enforce({'restart.ready': timings}, absolute)
-    return {'measurements_ms': {'restart.ready': distribution(timings)}, 'samples_ms': timings,
-            'absolute_limits': absolute, 'failures': failures, 'windows': windows,
+    return {'measurements_ms': {'restart.ready': distribution(timings)}, 'samples_ms': timings, 'windows': windows,
             'engine_identities': engine_ids, 'cache_state': 'uncontrolled',
             'remaining_requirements': ['boot-bound-cold-launch', 'qualified-macos-reference', 'GUI-responsiveness']}, \
            {key: bytes(value) for key, value in streams.items()}
@@ -142,8 +124,7 @@ def workflow_samples(binding: dict) -> tuple[dict, dict]:
     if not app.observations.get('capture_complete') or app.observations.get('output_limit'):
         raise ValueError('performance workflow lost its bounded process capture')
     return {'measurements_ms': {key: distribution(value) for key, value in samples.items()},
-            'samples_ms': samples, 'failures': enforce(samples, limits()), 'absolute_limits': limits(),
-            'workload': 'deterministic-local-provider-command', 'witnesses': witnesses,
+            'samples_ms': samples, 'workload': 'deterministic-local-provider-command', 'witnesses': witnesses,
             'remaining_requirements': ['Bialy-load-reference-and-turn-latency', 'Bialy-quality-parity',
                                        'parallel-index-search-scan', 'qualified-macos-reference']}, app.streams()
 

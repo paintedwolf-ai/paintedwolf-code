@@ -1,16 +1,17 @@
 package scan
 
 import (
+	"github.com/lycaon/lycaon/internal/scan/findings/findingstest"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/projectignore"
-	scanfindings "github.com/lycaon/lycaon/internal/scan/findings"
+
 	scanoutput "github.com/lycaon/lycaon/internal/scan/output"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
 func TestSecretExceptionRequiresEveryValueBehindFinding(t *testing.T) {
-	finding := scanfindings.FixtureFinding("fixture", api.FindingLevelHigh, "fixture", "fixture.env", 1)
+	finding := findingstest.Finding("fixture", api.FindingLevelHigh, "fixture", "fixture.env", 1)
 	finding.Properties.Lycaon.Kind = api.FindingKindSecret
 	result := &scanoutput.Result{Findings: []api.SecurityFinding{finding, finding}, SecretIdentities: []scanoutput.SecretIdentity{{FindingIndex: 0, ValueFingerprint: "accepted"}}}
 	decisions := map[string]projectignore.SecretEntry{"accepted": {Value: "fixture", Reason: "example"}}

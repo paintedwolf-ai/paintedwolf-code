@@ -11,7 +11,6 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
-	"time"
 
 	"github.com/lycaon/lycaon/internal/egressclass"
 	"github.com/lycaon/lycaon/internal/httpclient"
@@ -109,7 +108,7 @@ func fetchFile(ctx context.Context, model Model, f ModelFile, target string, pro
 	if err != nil {
 		return err
 	}
-	client := httpclient.Download(egressclass.DecideModelDownload, 30*time.Minute)
+	client := httpclient.Download(egressclass.DecideModelDownload)
 	resp, err := client.Do(req)
 	if err != nil {
 		return err

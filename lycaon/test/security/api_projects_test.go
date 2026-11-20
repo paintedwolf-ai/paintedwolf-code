@@ -23,7 +23,7 @@ func TestCreateProjectNormalizesRelativePath(t *testing.T) {
 	}
 
 	dirty := filepath.Join(root, "sub", "..", "sub")
-	req := authedRequest(t, http.MethodPost, "/v1/projects", strings.NewReader(
+	req := AuthedRequest(t, http.MethodPost, "/v1/projects", strings.NewReader(
 		`{"roots":[{"path":"`+dirty+`"}]}`,
 	))
 	req.Header.Set("Content-Type", "application/json")
@@ -42,7 +42,7 @@ func TestCreateProjectNormalizesRelativePath(t *testing.T) {
 	if resolved, err := filepath.EvalSymlinks(want); err == nil {
 		want = resolved
 	}
-	projPath := primaryRootPath(proj)
+	projPath := PrimaryRootPath(proj)
 	if projPath != want {
 		t.Fatalf("path = %q, want %q", projPath, want)
 	}
@@ -58,7 +58,7 @@ func TestCreateProjectRejectsFilePath(t *testing.T) {
 		testutil.FailErr(t, "write file", err)
 	}
 
-	req := authedRequest(t, http.MethodPost, "/v1/projects", strings.NewReader(
+	req := AuthedRequest(t, http.MethodPost, "/v1/projects", strings.NewReader(
 		`{"roots":[{"path":"`+file+`"}]}`,
 	))
 	req.Header.Set("Content-Type", "application/json")
@@ -67,7 +67,7 @@ func TestCreateProjectRejectsFilePath(t *testing.T) {
 	if w.Code != http.StatusBadRequest {
 		t.Fatalf("status = %d body = %s", w.Code, w.Body.String())
 	}
-	errResp := decodeAPIError(t, w)
+	errResp := DecodeAPIError(t, w)
 	if errResp.Code != "invalid_path" {
 		t.Fatalf("code = %q, want invalid_path", errResp.Code)
 	}
@@ -77,7 +77,7 @@ func TestCreateProjectMissingPathNotFound(t *testing.T) {
 	srv := wiring.BuildForTest(t).Server
 	missing := filepath.Join(t.TempDir(), "does-not-exist")
 
-	req := authedRequest(t, http.MethodPost, "/v1/projects", strings.NewReader(
+	req := AuthedRequest(t, http.MethodPost, "/v1/projects", strings.NewReader(
 		`{"roots":[{"path":"`+missing+`"}]}`,
 	))
 	req.Header.Set("Content-Type", "application/json")
@@ -86,21 +86,8 @@ func TestCreateProjectMissingPathNotFound(t *testing.T) {
 	if w.Code != http.StatusNotFound {
 		t.Fatalf("status = %d body = %s", w.Code, w.Body.String())
 	}
-	errResp := decodeAPIError(t, w)
+	errResp := DecodeAPIError(t, w)
 	if errResp.Code != "path_not_found" {
 		t.Fatalf("code = %q, want path_not_found", errResp.Code)
 	}
-}
-
-// primaryRootPath mirrors the primary-or-first root selection Den applies to wire projects.
-func primaryRootPath(p wire.Project) string {
-	for _, r := range p.Roots {
-		if r.IsPrimary {
-			return r.Path
-		}
-	}
-	if len(p.Roots) > 0 {
-		return p.Roots[0].Path
-	}
-	return ""
 }

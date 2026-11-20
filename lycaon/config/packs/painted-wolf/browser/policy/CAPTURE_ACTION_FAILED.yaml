@@ -3,16 +3,16 @@ id: CAPTURE_ACTION_FAILED
 kind: schema
 on: tool.rejected
 selector: {}
-requires_facts: [paintedwolf.error, paintedwolf.index, paintedwolf.interactive, paintedwolf.locators, paintedwolf.next_steps, paintedwolf.rejection_code, paintedwolf.type]
+requires_facts: [paintedwolf.elapsed_ms, paintedwolf.error, paintedwolf.index, paintedwolf.interactive, paintedwolf.locators, paintedwolf.next_steps, paintedwolf.rejection_code, paintedwolf.step_deadline_expired, paintedwolf.step_timeout_ms, paintedwolf.type]
 when: paintedwolf.rejection_code == "CAPTURE_ACTION_FAILED"
 effect: block
 x-paintedwolf-category: recoverable
 x-paintedwolf-emit: guard:visual_capture
 message: A capture_page drive action failed
-what: '{% if paintedwolf.type %}actions[{{ paintedwolf.index }}] ({{ paintedwolf.type }}){% else %}An actions[] step{% endif %} failed{% if paintedwolf.error %} — {{ paintedwolf.error }}{% endif %}.'
+what: '{% if paintedwolf.type %}actions[{{ paintedwolf.index }}] ({{ paintedwolf.type }}){% else %}An actions[] step{% endif %} failed{% if paintedwolf.error %} — {{ paintedwolf.error }}{% endif %}.{% if paintedwolf.step_deadline_expired %} The step gave up after {{ paintedwolf.elapsed_ms }} ms, at its {{ paintedwolf.step_timeout_ms }} ms limit.{% endif %}'
 cause: '{% if paintedwolf.locators %}The step targeting {{ paintedwolf.locators }} could not complete.{% else %}The browser action or its settling step could not complete.{% endif %} {% if paintedwolf.interactive %}Visible interactive: {{ paintedwolf.interactive }}.{% endif %}'
 why: Structured actions must succeed before the final assertable snapshot.
-fix: 'Inspect completed_actions in the rejection details and the current state before retrying: completed steps remain applied, and the failing action may also have taken effect before a navigation or settling failure. For a missing control, retarget from the interactive inventory (testid, selector, or role + label/text as accessible name), or add wait_for / wait=idle. label and text match accessible name (button text, aria-label, labelled-by, or an associated form label). Input is sent where a reader''s pointer would land, so an obscured or clipped target is one a reader could not reach either. {{ paintedwolf.next_steps }} A recorded drive still returns its recording: the rejection carries the timeline and the archive is attached, so what the page did before the step failed remains readable.'
+fix: '{% if paintedwolf.step_deadline_expired %}If the page was still loading, add a wait_for step before it. {% endif %}Inspect completed_actions in the rejection details and the current state before retrying: completed steps remain applied, and the failing action may also have taken effect before a navigation or settling failure. For a missing control, retarget from the interactive inventory (testid, selector, or role + label/text as accessible name), or add wait_for / wait=idle. label and text match accessible name (button text, aria-label, labelled-by, or an associated form label). Input is sent where a reader''s pointer would land, so an obscured or clipped target is one a reader could not reach either. {{ paintedwolf.next_steps }} A recorded drive still returns its recording: the rejection carries the timeline and the archive is attached, so what the page did before the step failed remains readable.'
 instead: Branch on Code CAPTURE_ACTION_FAILED; fix the failing action
 x-paintedwolf-scenarios:
   - id: default
@@ -29,3 +29,13 @@ x-paintedwolf-scenarios:
       locators: role=button label="Check configuration"
       interactive: button "Check configuration"
       tool: capture_page
+  - id: step_deadline_expired
+    vars:
+      index: 1
+      type: wait_for
+      error: "timed out waiting for selector #ready"
+      locators: selector=#ready
+      step_timeout_ms: 30000
+      elapsed_ms: 30012
+      step_deadline_expired: true
+      tool: page_act

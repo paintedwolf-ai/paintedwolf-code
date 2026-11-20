@@ -15,9 +15,7 @@ import (
 // boundary to every agent subprocess.
 func enforceConfinement(t *testing.T) {
 	t.Helper()
-	if !confine.Available() {
-		t.Skip("this host applies no command confinement")
-	}
+	testutil.RequireConfinement(t, confine.Available())
 	t.Setenv("LYCAON_SANDBOX", "")
 	t.Setenv("LYCAON_BYPASS_APPROVALS", "")
 	confine.TestingSetAutoConfine(t)
@@ -39,6 +37,28 @@ func TestBrowserBoundaryRefusesWhenConfinementCannotBeBuilt(t *testing.T) {
 	}
 	if reason, _ := rej.Data["reason"].(string); reason != "confinement_unavailable" {
 		t.Fatalf("reason = %v, want confinement_unavailable", rej.Data["reason"])
+	}
+}
+
+// An enforced launch hands the browser door the browser boundary: jailed to
+// the roots, no proxy, direct network denied, local reach only.
+func TestBrowserBoundaryAppliesBrowserConfinement(t *testing.T) {
+	enforceConfinement(t)
+	t.Setenv("LYCAON_SANDBOX_NETWORK", "")
+	root := t.TempDir()
+	conf, confined, err := browserBoundary([]string{root})
+	testutil.FailErr(t, "browser boundary", err)
+	if !confined || conf == nil {
+		t.Fatalf("enforced launch returned no boundary: conf=%v confined=%v", conf, confined)
+	}
+	if !conf.Browser || conf.Network != confine.NetworkDeny || conf.EgressOff != confine.EgressOffBrowser || !conf.LoopbackConnect {
+		t.Fatalf("browser boundary = network %v egress_off %v browser %v loopback %v, want the browser posture", conf.Network, conf.EgressOff, conf.Browser, conf.LoopbackConnect)
+	}
+	if conf.ProxyAddr != "" || conf.SocksProxyAddr != "" || conf.SocksProxyEnv {
+		t.Fatalf("browser boundary carries proxy reach: %+v", conf)
+	}
+	if len(conf.Roots) != 1 {
+		t.Fatalf("browser boundary roots = %v, want the one launch root", conf.Roots)
 	}
 }
 

@@ -106,7 +106,7 @@ func enableBraveSearchOnly(t *testing.T, srv *internalapi.Server) {
 
 func putJSON(t *testing.T, srv *internalapi.Server, method, path, body string) {
 	t.Helper()
-	req := authedRequest(t, method, path, strings.NewReader(body))
+	req := AuthedRequest(t, method, path, strings.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
 	srv.ServeHTTP(w, req)
@@ -122,7 +122,7 @@ func enableMCPProvider(t *testing.T, srv *internalapi.Server, id string) {
 		Enabled: &enabled,
 	})
 	testutil.FailErr(t, "marshal mcp enable", err)
-	req := authedRequest(t, http.MethodPatch, "/v1/mcp/providers/"+id, bytes.NewReader(body))
+	req := AuthedRequest(t, http.MethodPatch, "/v1/mcp/providers/"+id, bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
 	srv.ServeHTTP(w, req)
@@ -212,7 +212,7 @@ func resolveApproval(t *testing.T, srv *internalapi.Server, sessionID, checkpoin
 
 func resolveCheckpointHTTP(t *testing.T, srv *internalapi.Server, sessionID, checkpointID, body string) {
 	t.Helper()
-	req := authedRequest(t, http.MethodPost, "/v1/sessions/"+sessionID+"/checkpoints/"+checkpointID, strings.NewReader(body))
+	req := AuthedRequest(t, http.MethodPost, "/v1/sessions/"+sessionID+"/checkpoints/"+checkpointID, strings.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
 	srv.ServeHTTP(w, req)

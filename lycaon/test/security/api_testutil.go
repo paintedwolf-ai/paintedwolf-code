@@ -18,7 +18,7 @@ import (
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
 
-func authedRequest(t *testing.T, method, path string, body io.Reader) *http.Request {
+func AuthedRequest(t *testing.T, method, path string, body io.Reader) *http.Request {
 	t.Helper()
 	if body != nil {
 		raw, err := io.ReadAll(body)
@@ -81,10 +81,10 @@ func loadMockConfig(t *testing.T) *llm.MockConfig {
 	return cfg
 }
 
-func createProjectHTTP(t *testing.T, srv *api.Server, projectDir string) wire.Project {
+func CreateProjectHTTP(t *testing.T, srv *api.Server, projectDir string) wire.Project {
 	t.Helper()
 	body := fmt.Sprintf(`{"roots":[{"path":%q}]}`, projectDir)
-	req := authedRequest(t, http.MethodPost, "/v1/projects", strings.NewReader(body))
+	req := AuthedRequest(t, http.MethodPost, "/v1/projects", strings.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
 	srv.ServeHTTP(w, req)
@@ -100,12 +100,12 @@ func createProjectHTTP(t *testing.T, srv *api.Server, projectDir string) wire.Pr
 
 func createSessionWithPostureHTTP(t *testing.T, srv *api.Server, projectDir string, posture wire.SessionPosture) wire.Session {
 	t.Helper()
-	proj := createProjectHTTP(t, srv, projectDir)
-	return createSessionForProjectHTTP(t, srv, proj.ID, posture)
+	proj := CreateProjectHTTP(t, srv, projectDir)
+	return CreateSessionForProjectHTTP(t, srv, proj.ID, posture)
 }
 
-// createSessionForProjectHTTP binds a session to an existing project.
-func createSessionForProjectHTTP(t *testing.T, srv *api.Server, projectID string, posture wire.SessionPosture) wire.Session {
+// CreateSessionForProjectHTTP binds a session to an existing project.
+func CreateSessionForProjectHTTP(t *testing.T, srv *api.Server, projectID string, posture wire.SessionPosture) wire.Session {
 	t.Helper()
 	return createSessionForProjectHandlerHTTP(t, srv, projectID, posture)
 }
@@ -113,7 +113,7 @@ func createSessionForProjectHTTP(t *testing.T, srv *api.Server, projectID string
 func createSessionForProjectHandlerHTTP(t *testing.T, serve http.Handler, projectID string, posture wire.SessionPosture) wire.Session {
 	t.Helper()
 	body := fmt.Sprintf(`{"project_id":%q,"posture":%q}`, projectID, posture)
-	req := authedRequest(t, http.MethodPost, "/v1/sessions", strings.NewReader(body))
+	req := AuthedRequest(t, http.MethodPost, "/v1/sessions", strings.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
 	serve.ServeHTTP(w, req)
@@ -131,7 +131,7 @@ func createSessionForProjectHandlerHTTP(t *testing.T, serve http.Handler, projec
 func waitSessionPreparedHTTP(t *testing.T, serve http.Handler, sess wire.Session) wire.Session {
 	t.Helper()
 	testutil.WaitFor(t, "session "+sess.ID+" is prepared", func() bool {
-		req := authedRequest(t, http.MethodGet, "/v1/sessions/"+sess.ID, nil)
+		req := AuthedRequest(t, http.MethodGet, "/v1/sessions/"+sess.ID, nil)
 		w := httptest.NewRecorder()
 		serve.ServeHTTP(w, req)
 		if w.Code != http.StatusOK {
@@ -166,7 +166,7 @@ func exitAmbientRunHTTP(t *testing.T, srv *api.Server, sessionID string) {
 // workflowExitRequest builds the exit request for the session's active run.
 func workflowExitRequest(t *testing.T, srv *api.Server, sessionID, reason string) *http.Request {
 	t.Helper()
-	req := authedRequest(t, http.MethodGet, "/v1/sessions/"+sessionID+"/workflow-runs/active", nil)
+	req := AuthedRequest(t, http.MethodGet, "/v1/sessions/"+sessionID+"/workflow-runs/active", nil)
 	w := httptest.NewRecorder()
 	srv.ServeHTTP(w, req)
 	if w.Code != http.StatusOK {
@@ -182,7 +182,7 @@ func workflowExitRequest(t *testing.T, srv *api.Server, sessionID, reason string
 	}
 	raw, err := json.Marshal(payload)
 	testutil.FailErr(t, "encode workflow exit", err)
-	exit := authedRequest(t, http.MethodPost, "/v1/workflow-runs/"+run.ID+"/exit", strings.NewReader(string(raw)))
+	exit := AuthedRequest(t, http.MethodPost, "/v1/workflow-runs/"+run.ID+"/exit", strings.NewReader(string(raw)))
 	exit.Header.Set("Content-Type", "application/json")
 	return exit
 }
@@ -203,7 +203,7 @@ type workflowValidationFailure struct {
 	Details wire.ComposeValidationDetails `json:"details"`
 }
 
-func decodeAPIError(t *testing.T, w *httptest.ResponseRecorder) wire.ErrorResponse {
+func DecodeAPIError(t *testing.T, w *httptest.ResponseRecorder) wire.ErrorResponse {
 	t.Helper()
 	var resp wire.ErrorResponse
 	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
@@ -224,7 +224,7 @@ func assertBodyExcludes(t *testing.T, body string, forbidden ...string) {
 func acceptPromptHTTP(t *testing.T, srv *api.Server, sessionID, text string) wire.PromptAcceptedResponse {
 	t.Helper()
 	body := fmt.Sprintf(`{"operation_id":%q,"text":%q}`, uuid.NewString(), text)
-	req := authedRequest(t, http.MethodPost, "/v1/sessions/"+sessionID+"/prompts", strings.NewReader(body))
+	req := AuthedRequest(t, http.MethodPost, "/v1/sessions/"+sessionID+"/prompts", strings.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
 	srv.ServeHTTP(w, req)
@@ -249,7 +249,7 @@ func acceptPromptHTTP(t *testing.T, srv *api.Server, sessionID, text string) wir
 
 func getSessionHTTP(t *testing.T, srv *api.Server, sessionID string) wire.Session {
 	t.Helper()
-	req := authedRequest(t, http.MethodGet, "/v1/sessions/"+sessionID, nil)
+	req := AuthedRequest(t, http.MethodGet, "/v1/sessions/"+sessionID, nil)
 	w := httptest.NewRecorder()
 	srv.ServeHTTP(w, req)
 	if w.Code != http.StatusOK {
@@ -264,7 +264,7 @@ func getSessionHTTP(t *testing.T, srv *api.Server, sessionID string) wire.Sessio
 
 func listMessagesHTTP(t *testing.T, srv *api.Server, sessionID string) []wire.Message {
 	t.Helper()
-	req := authedRequest(t, http.MethodGet, "/v1/sessions/"+sessionID+"/messages", nil)
+	req := AuthedRequest(t, http.MethodGet, "/v1/sessions/"+sessionID+"/messages", nil)
 	w := httptest.NewRecorder()
 	srv.ServeHTTP(w, req)
 	if w.Code != http.StatusOK {
@@ -350,7 +350,7 @@ func waitToolFeedbackHTTP(t *testing.T, srv *api.Server, sessionID, code string)
 func waitWorkflowRunCountHTTP(t *testing.T, srv *api.Server, sessionID string, wantCount int) {
 	t.Helper()
 	testutil.WaitFor(t, fmt.Sprintf("session %s has %d workflow runs", sessionID, wantCount), func() bool {
-		req := authedRequest(t, http.MethodGet, "/v1/sessions/"+sessionID+"/workflow-runs", nil)
+		req := AuthedRequest(t, http.MethodGet, "/v1/sessions/"+sessionID+"/workflow-runs", nil)
 		w := httptest.NewRecorder()
 		srv.ServeHTTP(w, req)
 		var page wire.WorkflowRunPage
@@ -363,7 +363,7 @@ func waitActiveWorkflowRunHTTP(t *testing.T, srv *api.Server, sessionID, wantWor
 	t.Helper()
 	var active wire.WorkflowRun
 	testutil.WaitFor(t, fmt.Sprintf("session %s runs workflow %q", sessionID, wantWorkflowID), func() bool {
-		req := authedRequest(t, http.MethodGet, "/v1/sessions/"+sessionID+"/workflow-runs/active", nil)
+		req := AuthedRequest(t, http.MethodGet, "/v1/sessions/"+sessionID+"/workflow-runs/active", nil)
 		w := httptest.NewRecorder()
 		srv.ServeHTTP(w, req)
 		if w.Code != http.StatusOK {
@@ -381,16 +381,16 @@ func waitActiveWorkflowRunHTTP(t *testing.T, srv *api.Server, sessionID, wantWor
 
 const (
 	testProviderID    = "test-provider"
-	testProviderModel = "test-model"
+	TestProviderModel = "test-model"
 )
 
-// seedTestProvider creates an assignable local provider.
-func seedTestProvider(t *testing.T, base string, requiresAPIKey bool) (string, string) {
+// SeedTestProvider creates an assignable local provider.
+func SeedTestProvider(t *testing.T, base string, requiresAPIKey bool) (string, string) {
 	t.Helper()
 	backend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		if strings.HasSuffix(r.URL.Path, "/models") {
-			_, _ = fmt.Fprintf(w, `{"object":"list","data":[{"id":%q,"object":"model"}]}`, testProviderModel)
+			_, _ = fmt.Fprintf(w, `{"object":"list","data":[{"id":%q,"object":"model"}]}`, TestProviderModel)
 			return
 		}
 		_, _ = w.Write([]byte(`{"choices":[{"message":{"content":"pong"}}],"usage":{"prompt_tokens":1,"completion_tokens":1}}`))
@@ -399,9 +399,9 @@ func seedTestProvider(t *testing.T, base string, requiresAPIKey bool) (string, s
 
 	body := fmt.Sprintf(
 		`{"id":%q,"base_url":%q,"requires_api_key":%t,"models":[{"id":%q,"capabilities":{"chat":{"state":"supported"},"streaming":{"state":"unknown"},"tools":{"state":"supported"},"vision":{"state":"unknown"},"reasoning":{"state":"unknown"},"structured_output":{"state":"unknown"},"prompt_caching":{"state":"unknown"}}}]}`,
-		testProviderID, backend.URL, requiresAPIKey, testProviderModel,
+		testProviderID, backend.URL, requiresAPIKey, TestProviderModel,
 	)
-	openAPIPostJSON[wire.ProviderMeta](t, base, "/v1/providers", nil, body, http.StatusCreated)
+	OpenAPIPostJSON[wire.ProviderMeta](t, base, "/v1/providers", nil, body, http.StatusCreated)
 	return testProviderID, backend.URL
 }
 
@@ -422,7 +422,7 @@ func settingsPut(t *testing.T, base, path, body string) (status int, out []byte)
 	return resp.StatusCode, out
 }
 
-func settingsPutJSON[T any](t *testing.T, base, path, body string, wantStatus int) T {
+func SettingsPutJSON[T any](t *testing.T, base, path, body string, wantStatus int) T {
 	t.Helper()
 	status, out := settingsPut(t, base, path, body)
 	if status != wantStatus {
@@ -452,7 +452,7 @@ func settingsPatch(t *testing.T, base, path, body string) (status int, out []byt
 	return resp.StatusCode, out
 }
 
-func settingsPatchJSON[T any](t *testing.T, base, path, body string, wantStatus int) T {
+func SettingsPatchJSON[T any](t *testing.T, base, path, body string, wantStatus int) T {
 	t.Helper()
 	status, out := settingsPatch(t, base, path, body)
 	if status != wantStatus {
@@ -463,4 +463,90 @@ func settingsPatchJSON[T any](t *testing.T, base, path, body string, wantStatus 
 		t.Fatalf("decode PATCH %s: %v body=%s", path, err, out)
 	}
 	return v
+}
+
+func CreateTestProjectHTTP(t *testing.T, srv http.Handler, dir string) wire.Project {
+	t.Helper()
+	body := `{"roots":[{"path":"` + dir + `"}]}`
+	req := AuthedRequest(t, http.MethodPost, "/v1/projects", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	srv.ServeHTTP(w, req)
+	if w.Code != http.StatusCreated {
+		t.Fatalf("create project status = %d body = %s", w.Code, w.Body.String())
+	}
+	var out wire.Project
+	if err := json.Unmarshal(w.Body.Bytes(), &out); err != nil {
+		t.Fatalf("decode project: %v", err)
+	}
+	return out
+}
+
+// PrimaryRootPath mirrors the primary-or-first root selection Den applies to wire projects.
+func PrimaryRootPath(p wire.Project) string {
+	for _, r := range p.Roots {
+		if r.IsPrimary {
+			return r.Path
+		}
+	}
+	if len(p.Roots) > 0 {
+		return p.Roots[0].Path
+	}
+	return ""
+}
+
+func JourneyPostJSON[T any](t *testing.T, base, path, body string, wantStatus int) T {
+	t.Helper()
+	status, out := journeyPost(t, base, path, body)
+	if status != wantStatus {
+		t.Fatalf("POST %s status = %d, want %d; body = %s", path, status, wantStatus, out)
+	}
+	var v T
+	if err := json.Unmarshal(out, &v); err != nil {
+		t.Fatalf("decode POST %s: %v body=%s", path, err, out)
+	}
+	return v
+}
+
+func JourneyGetJSON[T any](t *testing.T, base, path string, wantStatus int) T {
+	t.Helper()
+	status, out := journeyGet(t, base, path)
+	if status != wantStatus {
+		t.Fatalf("GET %s status = %d, want %d; body = %s", path, status, wantStatus, out)
+	}
+	var v T
+	if err := json.Unmarshal(out, &v); err != nil {
+		t.Fatalf("decode GET %s: %v body=%s", path, err, out)
+	}
+	return v
+}
+
+func journeyPost(t *testing.T, base, path, body string) (status int, out []byte) {
+	t.Helper()
+	body = string(mutationRequestBody(t, http.MethodPost, path, body))
+	req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, base+path, strings.NewReader(body))
+	testutil.FailErr(t, "http.NewRequest failed", err)
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", api.TestAuthHeader())
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("POST %s: %v", path, err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	out, _ = io.ReadAll(resp.Body)
+	return resp.StatusCode, out
+}
+
+func journeyGet(t *testing.T, base, path string) (status int, out []byte) {
+	t.Helper()
+	req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, base+path, nil)
+	testutil.FailErr(t, "http.NewRequest failed", err)
+	req.Header.Set("Authorization", api.TestAuthHeader())
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("GET %s: %v", path, err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	out, _ = io.ReadAll(resp.Body)
+	return resp.StatusCode, out
 }

@@ -178,6 +178,19 @@ mod tests {
         assert!(verify_feed(&manifest, signature, other_key, "latest-stable-key-1.json").is_err());
     }
     #[test]
+    fn artifact_signatures_bind_the_offered_version() {
+        let fixture = fixture();
+        let manifest = STANDARD.decode(fixture["manifest"].as_str().unwrap()).unwrap();
+        let signature = fixture["signature"].as_str().unwrap();
+        let key = fixture["feed_public_key"].as_str().unwrap();
+        let dir = crate::test_support::TempDir::new("artifact-version-binding");
+        let artifact = dir.join("artifact");
+        std::fs::write(&artifact, &manifest).unwrap();
+        verify(&artifact, signature, key, "1.2.3").unwrap();
+        assert!(verify(&artifact, signature, key, "1.2.4").is_err());
+        assert!(verify(&artifact, signature, key, "").is_err());
+    }
+    #[test]
     fn signed_comments_always_bind_a_version_and_feeds_need_a_file_and_timestamp() {
         let fixture = fixture();
         let signature = decode_signature(fixture["signature"].as_str().unwrap()).unwrap();

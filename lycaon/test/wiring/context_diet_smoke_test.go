@@ -20,7 +20,7 @@ func TestContextDietRoutingToTaskDispatch(t *testing.T) {
 				return modelcall.Completion{
 					ToolCalls: []wire.ToolCall{{
 						ID: "t-route", Name: "task",
-						Args: TaskToolArgs("path-explorer", "Map the repo layout."),
+						Args: TaskToolArgs("implementer", "Map the repo layout into docs/layout.md."),
 					}},
 				}
 			}
@@ -33,11 +33,22 @@ func TestContextDietRoutingToTaskDispatch(t *testing.T) {
 	dir := t.TempDir()
 	sess, err := h.CreateHarnessSession(t, wire.CreateSessionRequest{}, dir)
 	testutil.FailErr(t, "Create session", err)
+	AttachDefaultAmbient(t, h, ctx, sess.ID)
+	h.SeedProgress(t, ctx, sess.ID)
+	testutil.FailErr(t, "board orient", h.Workflows.Manager.Fanout.RecordBoardOrientReady(ctx, sess.ID, "diet-board"))
 
 	if _, err := h.Sessions.Manager.Submissions.Prompt(ctx, sess.ID, "Map this codebase"); err != nil {
 		testutil.FailErr(t, "Prompt", err)
 	}
-	if stage.Load() != 1 {
-		t.Fatal("expected routing turn to dispatch task()")
+	queued, err := h.Workers.Queue.ListBySession(ctx, sess.ProjectID, sess.ID)
+	testutil.FailErr(t, "list session workers", err)
+	if len(queued) != 1 || queued[0].AgentType != "implementer" {
+		var results []any
+		for _, msg := range mustMessages(t, h, ctx, sess.ID) {
+			if msg.ToolResult != nil {
+				results = append(results, msg.ToolResult.Tool, msg.ToolResult.Outcome, msg.ToolResult.Feedback)
+			}
+		}
+		t.Fatalf("routing turn dispatched %+v, want one implementer worker; tool results %v", queued, results)
 	}
 }

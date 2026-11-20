@@ -2,6 +2,7 @@ package promptloop
 
 import (
 	"context"
+	"github.com/lycaon/lycaon/internal/tools/toolstest"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -27,7 +28,7 @@ func TestExecuteToolCallsInTurnHostDecoratedCycleTerminator(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			reg := tools.NewStubRegistry()
+			reg := toolstest.NewRegistry()
 			err := reg.Register(tt.tool, func(_ context.Context, _ map[string]any, tctx tools.ToolContext) (string, error) {
 				if tt.tool == "wait" && tctx.Effects.Out != nil {
 					tctx.Effects.Out.Completion = &api.ToolCompletion{Operation: "wait", State: "parked", ResourceKind: "wait"}
@@ -95,7 +96,7 @@ func TestExecuteToolCallsInTurnHostDecoratedCycleTerminator(t *testing.T) {
 }
 
 func TestExecuteToolCallsInTurnHumanApprovalEndsCycle(t *testing.T) {
-	reg := tools.NewStubRegistry()
+	reg := toolstest.NewRegistry()
 	awaiting := false
 	err := reg.Register("write", func(_ context.Context, _ map[string]any, _ tools.ToolContext) (string, error) {
 		awaiting = true
@@ -165,7 +166,7 @@ func TestExecuteToolCallsInTurnEnteringHostHoldEndsCycle(t *testing.T) {
 
 func runHostHoldBatch(t *testing.T, held *atomic.Bool, surfaceID string, onCall func()) bool {
 	t.Helper()
-	reg := tools.NewStubRegistry()
+	reg := toolstest.NewRegistry()
 	err := reg.Register("scan_list", func(_ context.Context, _ map[string]any, _ tools.ToolContext) (string, error) {
 		onCall()
 		return `{"scans":[{"status":"pending"}]}`, nil
@@ -207,7 +208,7 @@ func runHostHoldBatch(t *testing.T, held *atomic.Bool, surfaceID string, onCall 
 }
 
 func TestExecuteToolCallsInTurnWriteContinuesWhenNotAwaiting(t *testing.T) {
-	reg := tools.NewStubRegistry()
+	reg := toolstest.NewRegistry()
 	err := reg.Register("write", func(_ context.Context, _ map[string]any, _ tools.ToolContext) (string, error) {
 		return `{"ok":true}`, nil
 	})
@@ -243,7 +244,7 @@ func TestExecuteToolCallsInTurnWriteContinuesWhenNotAwaiting(t *testing.T) {
 }
 
 func TestWorkerDecisionSettlesUnattemptedCompletion(t *testing.T) {
-	reg := tools.NewStubRegistry()
+	reg := toolstest.NewRegistry()
 	testutil.FailErr(t, "register decision", reg.Register("request_decision", func(context.Context, map[string]any, tools.ToolContext) (string, error) {
 		return `{ "status": "decision_requested" }`, nil
 	}))

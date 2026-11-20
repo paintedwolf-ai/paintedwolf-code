@@ -2,17 +2,15 @@ package session_test
 
 import (
 	"context"
-	"github.com/lycaon/lycaon/internal/db"
-	"github.com/lycaon/lycaon/internal/workerops"
-	"github.com/lycaon/lycaon/internal/workerplan/plantest"
-	"github.com/lycaon/lycaon/internal/workerrecords"
 	"path/filepath"
 	"testing"
 
 	"github.com/lycaon/lycaon/config"
 	"github.com/lycaon/lycaon/internal/blueprint"
+	"github.com/lycaon/lycaon/internal/blueprint/blueprinttest"
 	"github.com/lycaon/lycaon/internal/conditions"
 	"github.com/lycaon/lycaon/internal/configlayout"
+	"github.com/lycaon/lycaon/internal/db"
 	"github.com/lycaon/lycaon/internal/extpacks"
 	"github.com/lycaon/lycaon/internal/llm/modelcall"
 	"github.com/lycaon/lycaon/internal/orchestration"
@@ -22,6 +20,7 @@ import (
 	sessionposture "github.com/lycaon/lycaon/internal/session/posture"
 	"github.com/lycaon/lycaon/internal/session/profiles"
 	"github.com/lycaon/lycaon/internal/session/store"
+	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/testdbseed"
@@ -30,8 +29,12 @@ import (
 	"github.com/lycaon/lycaon/internal/toolexecution"
 	"github.com/lycaon/lycaon/internal/toolhost"
 	"github.com/lycaon/lycaon/internal/tools"
+	"github.com/lycaon/lycaon/internal/tools/toolstest"
 	"github.com/lycaon/lycaon/internal/worker"
+	"github.com/lycaon/lycaon/internal/workerops"
 	"github.com/lycaon/lycaon/internal/workerplan"
+	"github.com/lycaon/lycaon/internal/workerplan/plantest"
+	"github.com/lycaon/lycaon/internal/workerrecords"
 	"github.com/lycaon/lycaon/internal/workflow"
 	workflowcatalog "github.com/lycaon/lycaon/internal/workflow/catalog"
 	workflowcomposition "github.com/lycaon/lycaon/internal/workflow/composition"
@@ -73,7 +76,7 @@ func setupContextualToolsFixtureFull(t *testing.T, posture api.SessionPosture, c
 
 	store := store.NewSQL(sqlDB)
 	rt := newContextualToolsRuntime(t, configRoot)
-	mgr := session.NewHost(store, session.Models{Client: client, Provider: nil, Limits: cfg, Cost: nil}, tools.NewStubRegistry())
+	mgr := session.NewHost(store, session.Models{Client: client, Provider: nil, Limits: cfg, Cost: nil}, toolstest.NewRegistry())
 	oartest.InstallCloseoutPolicy(t, mgr)
 	mgr.SetProjectRegistry(project.NewSQLRegistry(sqlDB))
 	mgr.Coordinator.Guards.SetToolMetadata(rt.Executor.Metadata)
@@ -93,7 +96,7 @@ func setupContextualToolsFixtureFull(t *testing.T, posture api.SessionPosture, c
 	workflowMgr.Resolver.SessionStore = sessionWF
 	workflowMgr.Blueprints.Scaffold.Store = workflowpersistence.NewSessionScaffoldSQLStore(sqlDB)
 	projectDir := t.TempDir()
-	blueprintStore := blueprint.NewFileStoreForTest(projectDir)
+	blueprintStore := blueprinttest.NewFileStore(projectDir)
 	blueprintMgr := blueprint.NewManager(blueprintStore)
 	workflowMgr.Blueprints.Creator = blueprint.WorkflowBlueprintCreator{Manager: blueprintMgr}
 	workflowMgr.Blueprints.Getter = blueprintMgr
@@ -206,7 +209,7 @@ func registerContextualToolsCoordinatorExtras(
 	bundledDir string,
 ) {
 	t.Helper()
-	queue := worker.NewInMemoryQueue(4)
+	queue := worker.NewSQLQueue(sqlDB, 4)
 	if err := worker.RegisterTaskTool(reg, worker.TaskToolDeps{
 		Queue:         queue,
 		Agents:        agents,
@@ -266,7 +269,7 @@ func hasTool(metas []tools.ToolMeta, name string) bool {
 
 func TestStampMessageLiveStatusStreamingOnlyForActiveRow(t *testing.T) {
 	ctx := t.Context()
-	store := store.NewMemory()
+	store := storetest.New(t, "p1")
 	mgr := session.NewHost(store, session.Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
 	sess, err := store.Create(ctx, api.CreateSessionRequest{
 		ProjectID: "p1",
@@ -312,7 +315,7 @@ func TestStampMessageLiveStatusStreamingOnlyForActiveRow(t *testing.T) {
 
 func TestHydrationYieldsCompleteWhenNoActiveTurn(t *testing.T) {
 	ctx := t.Context()
-	store := store.NewMemory()
+	store := storetest.New(t, "p1")
 	mgr := session.NewHost(store, session.Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
 	sess, err := store.Create(ctx, api.CreateSessionRequest{
 		ProjectID: "p1",

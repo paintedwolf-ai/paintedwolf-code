@@ -23,6 +23,7 @@ def main():
     run = commands.add_parser("run")
     run.add_argument("lane")
     run.add_argument("--shard", default="")
+    run.add_argument("--profile", default=hosted_plan.GATE, choices=sorted(hosted_plan.PROFILES))
     gate = commands.add_parser("gate")
     gate.add_argument("--skipped", type=lambda value: [name for name in value.split(",") if name], default=[],
                       help="comma-separated jobs this tier skips on purpose")
@@ -68,12 +69,12 @@ def main():
     elif args.command == "max-parallel":
         print(hosted_plan.max_parallel(args.profile))
     elif args.command == "run":
-        return hosted_execution.run_lane(args.lane, args.shard, (os.environ.get("GITHUB_EVENT_NAME") == "merge_group" or
-            os.environ.get("GITHUB_REF", "").startswith("refs/heads/gh-readonly-queue/main/")))
+        return hosted_execution.run_lane(args.lane, args.shard, profile=args.profile)
     elif args.command == "gate":
         verification_verdict.require_success(json.loads(os.environ["NEEDS_JSON"]), args.skipped, args.draft == "true")
     elif args.command == "verified":
-        verification_verdict.require_qualification(os.environ["GITHUB_REPOSITORY"], args.sha)
+        run = verification_verdict.require_qualification(os.environ["GITHUB_REPOSITORY"], args.sha)
+        print(f"preparation_run_id={run['receipt']['preparation_run_id']}")
     elif args.command == "release":
         # Cleanup still runs; a request that would not release is reported, not fatal.
         unreleased = hosted_execution.release_leftover_requests(args.step)

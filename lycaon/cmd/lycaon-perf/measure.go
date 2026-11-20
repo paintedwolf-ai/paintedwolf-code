@@ -63,7 +63,7 @@ func percentile(ordered []float64, fraction float64) float64 {
 	return ordered[index]
 }
 
-func writeReport(path string, value report) error {
+func writeJSON(path string, value any) error {
 	data, err := json.MarshalIndent(value, "", "  ")
 	if err != nil {
 		return err

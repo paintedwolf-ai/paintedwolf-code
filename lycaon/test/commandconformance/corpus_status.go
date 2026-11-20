@@ -2,21 +2,27 @@ package commandconformance
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
 )
 
 // statusSources settle with distinct statuses through each kind of owner. They
 // write nothing, because a job's output goes to its own streams in the command
-// entry and a shell's job writes to the shell's.
-var statusSources = []string{
-	`true`,
-	`false`,
-	`(exit 3)`,
-	`test -f missing.txt`,
-	`grep -q absent notes.txt`,
-	`cat missing.txt 2>/dev/null`,
-	`git status >/dev/null 2>&1`,
-	`sh -c 'exit 5'`,
+// entry and a shell's job writes to the shell's. ownerKind marks the first
+// source of each kind of job owner; the others repeat a kind with another
+// command.
+var statusSources = []struct {
+	text      string
+	ownerKind bool
+}{
+	{`true`, true}, // builtin
+	{`false`, false},
+	{`(exit 3)`, true}, // subshell
+	{`test -f missing.txt`, false},
+	{`grep -q absent notes.txt`, true}, // native utility
+	{`cat missing.txt 2>/dev/null`, false},
+	{`git status >/dev/null 2>&1`, true}, // native Git
+	{`sh -c 'exit 5'`, true},             // external program
 }
 
 // statusCompositions place each source, written {s}, in every construct that
@@ -75,25 +81,73 @@ var statusCompositions = []struct {
 	}},
 }
 
-// statusCases compares the status algebra with bash exhaustively, so a construct
+// StatusCases compares the status algebra with bash exhaustively, so a construct
 // is covered whichever commands other cases happen to pair it with. A wait after
 // each report keeps the program within the host's concurrent job limit.
-func statusCases() []Case {
+func StatusCases() []Case {
 	cases := make([]Case, 0, len(statusCompositions))
 	for _, composition := range statusCompositions {
-		var program strings.Builder
-		for t, template := range composition.templates {
-			for s, source := range statusSources {
-				fmt.Fprintf(&program, "%s\nprintf '%d.%d status=%%s pipe=%%s\\n' \"$?\" \"${PIPESTATUS[*]}\"\nwait\n", strings.ReplaceAll(template, "{s}", source), t, s)
-			}
-		}
-		program.WriteString("wait\nprintf 'end status=%s\\n' \"$?\"\n")
 		cases = append(cases, Case{
-			ID:          "status-" + composition.id,
+			ID:          statusCaseID(composition.id),
 			Description: composition.description,
-			Program:     program.String(),
+			Program:     statusProgram(composition.templates, func(int) bool { return true }),
 			References:  gnuUserland,
 		})
 	}
 	return cases
+}
+
+func statusCaseID(composition string) string { return "status-" + composition }
+
+// statusProgram reports every kept source in every template. A report names
+// its template and source by their places in the full corpus, so a reduced
+// program's output is a subset of the full program's.
+func statusProgram(templates []string, keep func(source int) bool) string {
+	var program strings.Builder
+	for t, template := range templates {
+		for s, source := range statusSources {
+			if !keep(s) {
+				continue
+			}
+			fmt.Fprintf(&program, "%s\nprintf '%d.%d status=%%s pipe=%%s\\n' \"$?\" \"${PIPESTATUS[*]}\"\nwait\n", strings.ReplaceAll(template, "{s}", source.text), t, s)
+		}
+	}
+	program.WriteString("wait\nprintf 'end status=%s\\n' \"$?\"\n")
+	return program.String()
+}
+
+// OwnerKindStatus is a status case cut to one source of each kind of job
+// owner. The host runs it where the evaluator's table already covers every
+// source, and compares it with the same cut of the full case's reference.
+type OwnerKindStatus struct {
+	Case Case
+}
+
+// OwnerKindStatusOf reduces a status case; ok is false for any other case.
+func OwnerKindStatusOf(c Case) (reduced OwnerKindStatus, ok bool) {
+	for _, composition := range statusCompositions {
+		if statusCaseID(composition.id) != c.ID {
+			continue
+		}
+		c.Program = statusProgram(composition.templates, func(s int) bool { return statusSources[s].ownerKind })
+		return OwnerKindStatus{Case: c}, true
+	}
+	return OwnerKindStatus{}, false
+}
+
+// Reference keeps the full reference's reports of owner-kind sources and its
+// final status line.
+func (OwnerKindStatus) Reference(full Snapshot) Snapshot {
+	var kept strings.Builder
+	for _, line := range strings.SplitAfter(string(full.Stdout), "\n") {
+		place, _, _ := strings.Cut(line, " ")
+		_, source, found := strings.Cut(place, ".")
+		index, err := strconv.Atoi(source)
+		if found && err == nil && index < len(statusSources) && !statusSources[index].ownerKind {
+			continue
+		}
+		kept.WriteString(line)
+	}
+	full.Stdout = Text(kept.String())
+	return full
 }

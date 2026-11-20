@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/lycaon/lycaon/internal/exec"
 	"github.com/lycaon/lycaon/internal/scan"
 	scancatalog "github.com/lycaon/lycaon/internal/scan/catalog"
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -47,21 +48,12 @@ func TestCancellationTerminatesEngineTree(t *testing.T) {
 	cancelAt := time.Now()
 	cancel()
 
-	var runErr error
-	select {
-	case runErr = <-errCh:
-	case <-t.Context().Done():
-		obs.finish()
-		t.Fatal("Run did not return within 2m after cancellation")
-	}
+	runErr := <-errCh
 	returnLatency := time.Since(cancelAt)
 	samples := obs.finish()
 
-	if runErr == nil {
-		t.Error("canceled scan returned a nil error; an interrupted scan must not read as a completed one")
-	}
 	if !errors.Is(runErr, context.Canceled) {
-		reportf(t, "cancel error does not wrap context.Canceled: %v", runErr)
+		t.Errorf("canceled scan returned %v; an interrupted scan must report context.Canceled", runErr)
 	}
 	drain := awaitNoEngineProcesses(t)
 	owned := obs.seenRunDirs()
@@ -88,8 +80,12 @@ func TestHardLimitTimeoutTerminatesEngineTree(t *testing.T) {
 	elapsed := time.Since(start)
 	samples := obs.finish()
 
-	if err == nil {
-		t.Fatalf("scan completed in %s under a %ds hard limit; the limit did not bind", elapsed, hard)
+	var timeout *exec.TimeoutError
+	if !errors.As(err, &timeout) || !timeout.CommandDeadline {
+		t.Fatalf("scan under a %ds hard limit returned %v after %s; want the engine's own deadline", hard, err, elapsed)
+	}
+	if elapsed < time.Duration(hard)*time.Second {
+		t.Fatalf("hard limit of %ds fired after %s", hard, elapsed)
 	}
 	// The engine must have been doing work when the limit fired.
 	sawEngine := false

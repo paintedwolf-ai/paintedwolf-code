@@ -8,7 +8,11 @@ in rust.buildRustPackage {
   version = lib.strings.trim (builtins.readFile (source + "/VERSION"));
   src = lib.fileset.toSource {
     root = sourcePath;
-    fileset = sourcePath + "/lycaon-den/src-tauri";
+    # The observer's tests open the shared native manifest corpus.
+    fileset = lib.fileset.unions [
+      (sourcePath + "/lycaon-den/src-tauri")
+      (sourcePath + "/packaging/linux/manifest/testdata")
+    ];
   };
   cargoLock.lockFileContents = builtins.readFile (source + "/lycaon-den/src-tauri/Cargo.lock");
   cargoRoot = "lycaon-den/src-tauri";

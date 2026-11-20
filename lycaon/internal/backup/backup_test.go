@@ -24,6 +24,7 @@ import (
 )
 
 func TestCreateArchiveIncludesVacuumedStoreAndManifest(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	configDir := t.TempDir()
 	dbPath := filepath.Join(configDir, "store.db")
@@ -160,6 +161,7 @@ func TestCreateLeavesExistingDestinationUntouched(t *testing.T) {
 }
 
 func TestCreateNeverArchivesSecretStores(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	configDir := t.TempDir()
 	dbPath := filepath.Join(configDir, "store.db")
@@ -196,6 +198,7 @@ func TestCreateNeverArchivesSecretStores(t *testing.T) {
 }
 
 func TestStageRejectsCorruptAndTooNew(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	configDir := t.TempDir()
 	dbPath := filepath.Join(configDir, "store.db")
@@ -241,6 +244,7 @@ func TestStageRejectsCorruptAndTooNew(t *testing.T) {
 }
 
 func TestStageRejectsUnmanifestedZipEntry(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	configDir := t.TempDir()
 	dbPath := filepath.Join(configDir, "store.db")
@@ -264,6 +268,7 @@ func TestStageRejectsUnmanifestedZipEntry(t *testing.T) {
 }
 
 func TestStageAndApplyRoundTrip(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	configDir := t.TempDir()
 	dbPath := filepath.Join(configDir, "store.db")
@@ -343,6 +348,7 @@ func TestStageAndApplyRoundTrip(t *testing.T) {
 }
 
 func TestRoundTripPreservesNestedHistoryDraftModesAndSymlinks(t *testing.T) {
+	t.Parallel()
 	ctx := t.Context()
 	configDir := t.TempDir()
 	dbPath := filepath.Join(configDir, "store.db")
@@ -421,6 +427,7 @@ func TestRoundTripPreservesNestedHistoryDraftModesAndSymlinks(t *testing.T) {
 }
 
 func TestHistoryOnlyRestoreKeepsLocalCredentials(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	configDir := t.TempDir()
 	dbPath := filepath.Join(configDir, "store.db")
@@ -469,6 +476,7 @@ func TestHistoryOnlyRestoreKeepsLocalCredentials(t *testing.T) {
 }
 
 func TestFullRestoreDeletesAbsentManagedFiles(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	configDir := t.TempDir()
 	dbPath := filepath.Join(configDir, "store.db")
@@ -505,6 +513,7 @@ func TestFullRestoreDeletesAbsentManagedFiles(t *testing.T) {
 }
 
 func TestApplyClearsSidecarsLeftByTheOutgoingStore(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	configDir := t.TempDir()
 	dbPath := filepath.Join(configDir, "store.db")
@@ -561,6 +570,7 @@ func TestApplyClearsSidecarsLeftByTheOutgoingStore(t *testing.T) {
 }
 
 func TestStageSnapshotsEveryFileTheRestoreReplaces(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	configDir := t.TempDir()
 	dbPath := filepath.Join(configDir, "store.db")

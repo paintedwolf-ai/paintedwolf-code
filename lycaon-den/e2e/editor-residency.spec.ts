@@ -134,12 +134,13 @@ modelIndependentWebE2e("a huge current file uses paged reading and restores its 
   expect(await reader.locator(".cm-line").count()).toBeLessThan(200);
   const number = reader.locator(".files-line-gutter__number").filter({ hasText: /^190000$/ });
   await expect(number).toBeVisible();
-  expect(await number.evaluate(element => {
+  // The gutter widens once the six-digit labels arrive.
+  await expect.poll(() => number.evaluate(element => {
     const column = element.closest(".cm-gutter")?.getBoundingClientRect();
     const label = element.getBoundingClientRect();
     return !!column && label.left >= column.left && label.right <= column.right;
   })).toBe(true);
-  expect(await reader.evaluate(element => {
+  await expect.poll(() => reader.evaluate(element => {
     const actions = element.querySelector(".den-source-reader__actions")?.getBoundingClientRect();
     const scroller = element.querySelector(".cm-scroller")?.getBoundingClientRect();
     return !!actions && !!scroller && actions.bottom <= scroller.top;

@@ -21,7 +21,7 @@ runs:
         set -euo pipefail
         toolchain=system
         if [[ "${RUNNER_OS}" == macOS ]]; then toolchain="${DEVELOPER_DIR:-system}"; fi
-        printf 'prefix=decide-v5-%s-%s-%s-%s-%s-\n' "${RUNNER_OS}" "${RUNNER_ARCH}" "${ImageOS:-}" "${ImageVersion:-}" "${toolchain}" >> "${GITHUB_OUTPUT}"
+        printf 'prefix=decide-v5-%s-%s-%s-%s-\n' "${RUNNER_OS}" "${RUNNER_ARCH}" "${ImageOS:-}" "${toolchain}" >> "${GITHUB_OUTPUT}"
         printf 'target=%s/decide\n' "$(python3 scripts/artifact_paths.py compiler-cache "${GITHUB_WORKSPACE}")" >> "${GITHUB_OUTPUT}"
         printf 'metal=%s/mlx-metal\n' "$(python3 scripts/artifact_paths.py bin "${GITHUB_WORKSPACE}")" >> "${GITHUB_OUTPUT}"
 

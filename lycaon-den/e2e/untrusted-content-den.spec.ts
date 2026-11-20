@@ -1,6 +1,8 @@
 import { expect, type Page } from "@playwright/test";
+import type { Session } from "../src/api/types.ts";
 import {
   apiConfig,
+  apiJson,
   apiSeedUntrustedContent,
   apiSeedSessionTranscript,
   bootstrapActiveProject,
@@ -22,12 +24,6 @@ async function sessionIdFromChat(page: Page): Promise<string> {
 }
 
 webE2e.describe("untrusted content den render", () => {
-  webE2e("fresh session has no External content badge", async ({ page, request }) => {
-    await bootstrapActiveProject(page, request);
-    await openNewChatSession(page);
-    await expect(page.getByTestId("external-content-badge")).toHaveCount(0);
-  });
-
   webE2e(
     "den:harness — External content badge when untrusted_content is true",
     async ({ page, request }) => {
@@ -58,19 +54,14 @@ webE2e.describe("untrusted content den render", () => {
       await openNewChatSession(page);
       const foregrounded = await sessionIdFromChat(page);
       expect(foregrounded).not.toBe(sessionId);
+      await expect(liveChatStage(page).getByTestId("external-content-badge")).toHaveCount(0);
       await openSessionRow(page, sessionId);
 
       await expect(page.getByTestId("external-content-badge")).toBeVisible({
         timeout: 30_000,
       });
-      await expect(page.getByTestId("external-content-badge")).toHaveAttribute(
-        "data-tip",
-        /External content in this session/i,
-      );
-      await expect(page.getByTestId("external-content-badge")).toHaveAttribute(
-        "data-tip",
-        /click to search/i,
-      );
+      const flagged = await apiJson<Session>(request, "GET", `/v1/sessions/${sessionId}`);
+      expect(flagged.untrusted_content).toBe(true);
     },
   );
 });

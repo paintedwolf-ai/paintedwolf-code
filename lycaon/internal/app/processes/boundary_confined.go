@@ -7,6 +7,7 @@ import (
 	"fmt"
 
 	"github.com/lycaon/lycaon/internal/confine"
+	"github.com/lycaon/lycaon/internal/exec"
 )
 
 func (b *Runtime) StartEgress(dataDir string) error {
@@ -26,7 +27,7 @@ func (b *Runtime) StartRefusalWatch(ctx context.Context, dataDir string) error {
 	if !confine.Available() {
 		return nil
 	}
-	confine.StartRefusalWatch(ctx, dataDir)
+	confine.StartRefusalWatch(ctx, dataDir, exec.TrackProcess)
 	b.resources.Track("refusal-watch", 55, func(context.Context) error { confine.StopRefusalWatch(); return nil })
 	return nil
 }

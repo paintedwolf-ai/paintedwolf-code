@@ -89,6 +89,9 @@ facts:
   - name: progress_gated_tools
     type: "[]string"
     states: Offered tools gated on an active progress checklist item.
+  - name: progress_ungated_lifecycle_tools
+    type: "[]string"
+    states: Offered worker-lifecycle tools that run without an active progress checklist item.
   - name: read_globs
     type: "[]string"
     states: Readable path globs for this coordinator surface.
@@ -104,6 +107,12 @@ facts:
   - name: root_count
     type: int
     states: Workspace roots attached to the session.
+  - name: runner_inline_wait_seconds
+    type: int
+    states: Seconds a command call waits for running work before returning its handle.
+  - name: runner_park_seconds
+    type: int
+    states: Seconds a command call holds a waiting program before parking it in the background.
   - name: runner_direct_ip_tools
     type: "[]string"
     states: Offered host-runner tools that can dial direct IP literals.

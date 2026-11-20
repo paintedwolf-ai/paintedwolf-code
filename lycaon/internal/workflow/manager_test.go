@@ -3,6 +3,7 @@ package workflow
 import (
 	"context"
 	"errors"
+	"github.com/lycaon/lycaon/internal/blueprint/blueprinttest"
 	workflowblueprintfiles "github.com/lycaon/lycaon/internal/workflow/blueprintfiles"
 	workflowinputs "github.com/lycaon/lycaon/internal/workflow/inputs"
 	workflowlifecycle "github.com/lycaon/lycaon/internal/workflow/lifecycle"
@@ -42,7 +43,7 @@ func testManager(t *testing.T) (*RunManager, session.Store, *blueprint.Manager, 
 	sessStore := store.NewSQL(sqlDB)
 	manifestRegistry, err := workflowdef.RegistryFromDirs("")
 	testutil.FailErr(t, "RegistryFromDirs failed", err)
-	blueprintStore := blueprint.NewFileStoreForTest(projectDir)
+	blueprintStore := blueprinttest.NewFileStore(projectDir)
 	blueprintMgr := blueprint.NewManager(blueprintStore)
 	blueprintMgr.Approvals = blueprint.NewApprovalStore(sqlDB, authzcontext.SQLRecorder(sqlDB))
 	mgr := NewManager(testRunStore(t, sqlDB), sessStore, manifestRegistry, nil)

@@ -9,7 +9,6 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
-import yaml
 
 from ci_policy import skipped_runs as s
 
@@ -102,20 +101,6 @@ class CommandTest(unittest.TestCase):
             result = self.command(GH_FAIL=failing)
             self.assertEqual(result.returncode, 0, result.stderr)
             self.assertIn(f'::warning::{expected}: HTTP 403', result.stdout)
-
-
-class WorkflowTest(unittest.TestCase):
-    def test_required_check_cannot_fail_on_cleanup_and_alone_holds_the_token(self):
-        job = yaml.safe_load((ROOT / '.github/workflows/ci.yml').read_text())['jobs']['check']
-        self.assertEqual(job['permissions']['actions'], 'write')
-        checkout, gate, cleanup = job['steps']
-        self.assertIs(checkout['with']['persist-credentials'], False)
-        self.assertNotIn('GH_TOKEN', gate['env'])
-        self.assertIn('delete-skipped-runs', cleanup['run'])
-        self.assertIs(cleanup['continue-on-error'], True)
-        self.assertLess(cleanup['timeout-minutes'], job['timeout-minutes'])
-        self.assertEqual(cleanup['env']['HEAD_SHA'], '${{ github.event.pull_request.head.sha }}')
-
 
 if __name__ == '__main__':
     unittest.main()

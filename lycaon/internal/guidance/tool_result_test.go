@@ -186,10 +186,41 @@ func TestApplyInstructWorkerDispatchMetadata(t *testing.T) {
 	}
 }
 
+// Dispatch comes only from the producer's fact, never from a body shaped like
+// a dispatch envelope.
 func TestApplyTaskDispatchMetadataIgnoresMissingDispatch(t *testing.T) {
-	tr := &api.ToolResult{Content: "No dispatch"}
+	body := `{"agent_type":"implementer","job_id":"550e8400-e29b-41d4-a716-446655440000","status":"enqueued"}
+Code: BANNER_TASK_QUEUED`
+	tr := ComposeToolResult(body, ToolResultFacts{}, nil)
 	ApplyTaskDispatchMetadata("task", tr, nil)
 	if tr.Dispatch != nil {
-		t.Fatalf("dispatch = %+v", tr.Dispatch)
+		t.Fatalf("dispatch inferred from the body: %+v", tr.Dispatch)
+	}
+}
+
+func TestApplyTaskDispatchMetadataIgnoresNonDispatchTools(t *testing.T) {
+	for _, tool := range []string{"read", "grep", "write"} {
+		tr := ComposeToolResult("result", ToolResultFacts{}, nil)
+		ApplyTaskDispatchMetadata(tool, tr, &api.WorkerDispatch{WorkerID: "job-abc"})
+		if tr.Dispatch != nil {
+			t.Fatalf("%s took a dispatch: %+v", tool, tr.Dispatch)
+		}
+	}
+}
+
+// A refusal's outcome and code come from its facts with the stock hint
+// registry, whatever its body says.
+func TestRefusalComposesRejectedWithItsCode(t *testing.T) {
+	hints, err := LoadHintConfigStock()
+	testutil.FailErr(t, "load hint registry", err)
+	for _, code := range []string{"DISALLOWED_AGENT", "COORDINATOR_READ_OUTSIDE_SCOPE", "SPEC_POSTURE_STUB_REQUIRED"} {
+		refusal := NewRefusal(code, "refusal body")
+		tr := ComposeToolResult(refusal.Body, refusal.Facts, hints)
+		if tr == nil {
+			t.Fatalf("%s: no tool result", code)
+		}
+		if tr.Outcome != api.ToolResultOutcomeRejected || len(tr.Codes) != 1 || tr.PrimaryCode() != code {
+			t.Fatalf("%s: outcome = %q codes = %v", code, tr.Outcome, tr.Codes)
+		}
 	}
 }

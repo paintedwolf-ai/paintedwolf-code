@@ -2,7 +2,7 @@ package orchestration
 
 import (
 	"context"
-	"fmt"
+	"errors"
 
 	"github.com/lycaon/lycaon/internal/workspace"
 	"github.com/lycaon/lycaon/pkg/api"
@@ -14,12 +14,16 @@ type WorkspaceBinder interface {
 	DestroyWorkerWorkspace(ctx context.Context, binding *workspace.Binding) error
 }
 
+// ErrIsolationUnavailable refuses an isolated topology on an orchestrator
+// without a WorkspaceBinder, before any batch is written.
+var ErrIsolationUnavailable = errors.New("workspace_mode isolated requires a workspace binder")
+
 func (o *OrchestratorImpl) ensureWorkspaceManager(mode WorkspaceMode) error {
 	if effectiveWorkspaceMode(mode) != WorkspaceIsolated {
 		return nil
 	}
 	if o == nil || o.workspaces == nil {
-		return fmt.Errorf("workspace_mode isolated requires WorkspaceManager")
+		return ErrIsolationUnavailable
 	}
 	return nil
 }

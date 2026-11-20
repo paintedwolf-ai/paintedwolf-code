@@ -1,12 +1,13 @@
 package integration
 
 import (
+	"github.com/lycaon/lycaon/internal/scan/findings/findingstest"
 	"path/filepath"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/inspector"
 	"github.com/lycaon/lycaon/internal/scan"
-	scanfindings "github.com/lycaon/lycaon/internal/scan/findings"
+
 	scanoutput "github.com/lycaon/lycaon/internal/scan/output"
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/testdbfixture"
@@ -53,7 +54,7 @@ func TestSecurityCloseoutFailedEvidenceBlocks(t *testing.T) {
 	completeSecurityEvidence(t, store, evidenceStore, projectDir, obligation, &scanoutput.Result{
 		FindingsCount: 1,
 		Findings: []api.SecurityFinding{
-			scanfindings.FixtureFinding("lycaon.ruby.sql-string-concat", api.FindingLevelHigh, "", "main.go", 1),
+			findingstest.Finding("lycaon.ruby.sql-string-concat", api.FindingLevelHigh, "", "main.go", 1),
 		},
 	})
 

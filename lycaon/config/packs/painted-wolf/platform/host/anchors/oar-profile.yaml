@@ -1160,8 +1160,6 @@ host_facts:
    type: string
  - name: paintedwolf.pending
    type: string
- - name: paintedwolf.unsaved_draft
-   type: bool
  - name: paintedwolf.pending_count
    type: string
  - name: paintedwolf.period
@@ -1306,6 +1304,14 @@ host_facts:
    type: bool
  - name: paintedwolf.limit_observation_known
    type: bool
+ - name: paintedwolf.jobs_stopped
+   type: int
+ - name: paintedwolf.step_timeout_ms
+   type: int
+ - name: paintedwolf.step_deadline_expired
+   type: bool
+ - name: paintedwolf.elapsed_ms
+   type: int
  - name: paintedwolf.glob_limit_known
    type: bool
  - name: paintedwolf.background_limit_known

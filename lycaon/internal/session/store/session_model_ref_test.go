@@ -1,44 +1,36 @@
 package store
 
 import (
-	"context"
 	"database/sql"
 	"errors"
-	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"path/filepath"
 	"testing"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/lycaon/lycaon/internal/db"
+	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
-func TestSessionStoresRequireCompleteModelRef(t *testing.T) {
+func TestSessionStoreRequiresCompleteModelRef(t *testing.T) {
 	dir := t.TempDir()
 	sqlDB := testdbfixture.OpenPath(t, filepath.Join(dir, "store.db"))
 	testdbseed.InsertProjectRoot(t, sqlDB, testdbseed.DefaultProjectID, dir)
 
-	stores := map[string]interface {
-		Create(context.Context, api.CreateSessionRequest, string) (*api.Session, error)
-	}{
-		"memory": NewMemory(),
-		"sql":    NewSQL(sqlDB),
-	}
+	sessionStore := NewSQL(sqlDB)
 	requests := map[string]api.CreateSessionRequest{
 		"provider only": {ProviderID: "provider"},
 		"model only":    {Model: "model"},
 	}
-	for storeName, sessionStore := range stores {
-		for requestName, req := range requests {
-			t.Run(storeName+"/"+requestName, func(t *testing.T) {
-				_, err := sessionStore.Create(t.Context(), req, testdbseed.DefaultProjectID)
-				if !errors.Is(err, ErrSessionModelRefIncomplete) {
-					t.Fatalf("Create error = %v, want %v", err, ErrSessionModelRefIncomplete)
-				}
-			})
-		}
+	for requestName, req := range requests {
+		t.Run(requestName, func(t *testing.T) {
+			_, err := sessionStore.Create(t.Context(), req, testdbseed.DefaultProjectID)
+			if !errors.Is(err, ErrSessionModelRefIncomplete) {
+				t.Fatalf("Create error = %v, want %v", err, ErrSessionModelRefIncomplete)
+			}
+		})
 	}
 }
 

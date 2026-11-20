@@ -7,7 +7,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/llm/compaction"
 	"github.com/lycaon/lycaon/internal/llm/modelcall"
-	"github.com/lycaon/lycaon/internal/session/store"
+	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/pkg/api"
@@ -20,10 +20,10 @@ func (f failedMeasurement) RequestBudget(context.Context, string, modelcall.Comp
 }
 
 func TestRequestFitPreservesMeasurementFailure(t *testing.T) {
-	memory := store.NewMemory()
-	session, err := memory.Create(t.Context(), api.CreateSessionRequest{ProviderID: "local", Model: "e4b"}, testdbseed.DefaultProjectID)
+	sessionStore := storetest.New(t, testdbseed.DefaultProjectID)
+	session, err := sessionStore.Create(t.Context(), api.CreateSessionRequest{ProviderID: "local", Model: "e4b"}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
-	service := &Service{store: memory, Compactor: compaction.NewSimpleCompactor(compaction.DefaultCompactionConfig(), nil)}
+	service := &Service{store: sessionStore, Compactor: compaction.NewSimpleCompactor(compaction.DefaultCompactionConfig(), nil)}
 	failure := errors.New("fixture tokenizer unavailable")
 	request := modelcall.CompletionRequest{Messages: []api.Message{{Role: api.MessageRoleUser, Content: "Question"}}}
 	_, err = service.FitRequest(t.Context(), session, nil, request, failedMeasurement{failure}, nil)

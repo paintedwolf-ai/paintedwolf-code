@@ -44,16 +44,7 @@ func AssertSessionLifecycleEvent(
 
 func CreateLifecycleFixture(t *testing.T, srv *hostapi.Server, titles []string) (string, []wire.Session) {
 	t.Helper()
-	createProj := NewAuthedRequest(http.MethodPost, "/v1/projects", strings.NewReader(`{"roots":[]}`))
-	projRec := httptest.NewRecorder()
-	srv.ServeHTTP(projRec, createProj)
-	if projRec.Code != http.StatusCreated {
-		t.Fatalf("create project status = %d body = %s", projRec.Code, projRec.Body.String())
-	}
-	var proj wire.Project
-	if err := json.Unmarshal(projRec.Body.Bytes(), &proj); err != nil {
-		t.Fatalf("decode project: %v", err)
-	}
+	proj := CreateProjectForTest(t, srv, t.TempDir())
 	sessions := make([]wire.Session, 0, len(titles))
 	for _, title := range titles {
 		createSess := NewAuthedRequest(http.MethodPost, "/v1/sessions", strings.NewReader(

@@ -6,7 +6,6 @@ import os
 from pathlib import Path
 import subprocess
 import tempfile
-import time
 import unittest
 from unittest.mock import patch
 
@@ -18,6 +17,27 @@ SPEC.loader.exec_module(NATIVE)
 PAYLOAD = b"cached archive"
 DIGEST = hashlib.sha256(PAYLOAD).hexdigest()
 PLAN = f"'http://mirror/pool/a.deb' a_1_amd64.deb {len(PAYLOAD)} SHA256:{DIGEST}\n"
+
+
+class Response:
+    """A fake mirror response: each read returns the next chunk or raises the next error."""
+
+    def __init__(self, reads):
+        self.reads = list(reads)
+
+    def read(self, _size):
+        if not self.reads:
+            return b""
+        value = self.reads.pop(0)
+        if isinstance(value, Exception):
+            raise value
+        return value
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *_):
+        return False
 
 
 class LinuxNativePackagesTests(unittest.TestCase):
@@ -70,7 +90,7 @@ elif 'install' in sys.argv:
                        "ImageOS": "ubuntu24", "ImageVersion": "20261022.1", "RUNNER_ARCH": "X64",
                        "GITHUB_OUTPUT": str(root / "output"), "NATIVE_CALLS": str(calls), "NATIVE_PLAN": PLAN,
                        "NATIVE_RESTORED": str(restored).lower(), "PATH": str(root) + os.pathsep + os.environ["PATH"]}
-                def transfer(_uri, path, _row, _deadline):
+                def transfer(_uri, path, _row):
                     path.write_bytes(PAYLOAD)
 
                 with patch.object(NATIVE, "ROOT", root), patch.dict(os.environ, env), \
@@ -108,7 +128,7 @@ elif 'install' in sys.argv:
             link.symlink_to(path)
             self.assertFalse(NATIVE.verified(link, row))
 
-    def test_slow_origin_falls_back_without_changing_package_identity(self):
+    def test_a_stalled_mirror_falls_back_and_is_named_in_the_report(self):
         plan = PLAN.replace("http://mirror/pool/a.deb", "http://azure.archive.ubuntu.com/ubuntu/pool/a.deb")
         row = NATIVE.archives(plan)[0]
         with tempfile.TemporaryDirectory() as directory:
@@ -116,18 +136,18 @@ elif 'install' in sys.argv:
             (root / "partial").mkdir()
             calls = []
 
-            def transfer(uri, path, received, deadline):
+            def transfer(uri, path, received):
                 calls.append(uri)
                 self.assertEqual(received, row)
-                self.assertGreater(deadline, time.monotonic())
                 if len(calls) == 1:
                     path.write_bytes(b"partial")
-                    raise TimeoutError("slow origin")
+                    raise NATIVE.Stalled("stalled: no bytes for 60 s after 7 of 14 bytes")
                 path.write_bytes(PAYLOAD)
 
-            with patch.object(NATIVE, "transfer", side_effect=transfer):
-                self.assertEqual(NATIVE.fetch(row, root, time.monotonic() + 60), "downloaded")
+            with patch.object(NATIVE, "transfer", side_effect=transfer), patch("builtins.print") as report:
+                self.assertEqual(NATIVE.fetch(row, root), "downloaded")
             self.assertEqual(calls, [row["uri"], "https://archive.ubuntu.com/ubuntu/pool/a.deb"])
+            self.assertIn("azure.archive.ubuntu.com: stalled", " ".join(str(call.args[0]) for call in report.call_args_list))
             self.assertTrue(NATIVE.verified(root / row["name"], row))
             self.assertFalse((root / "partial" / row["name"]).exists())
         self.assertEqual(NATIVE.apt_origins.fallback_uris("https://packages.example.test/pool/a.deb"),
@@ -140,54 +160,60 @@ elif 'install' in sys.argv:
             (root / "partial").mkdir()
             calls = []
 
-            def transfer(uri, path, received, deadline):
+            def transfer(uri, path, received):
                 calls.append(uri)
                 if len(calls) == 1:
                     raise OSError("truncated response")
                 path.write_bytes(PAYLOAD)
 
             with patch.object(NATIVE, "transfer", side_effect=transfer):
-                self.assertEqual(NATIVE.fetch(row, root, time.monotonic() + 60), "downloaded")
+                self.assertEqual(NATIVE.fetch(row, root), "downloaded")
             self.assertEqual(calls, [row["uri"], row["uri"]])
             (root / row["name"]).unlink()
-            with patch.object(NATIVE, "transfer", side_effect=OSError("unavailable")) as transfer:
-                with self.assertRaises(ValueError):
-                    NATIVE.fetch(row, root, time.monotonic() + 60)
+            with patch.object(NATIVE, "transfer", side_effect=NATIVE.Stalled("stalled")) as transfer:
+                with self.assertRaisesRegex(ValueError, "mirror: stalled; mirror: stalled"):
+                    NATIVE.fetch(row, root)
             self.assertEqual(transfer.call_count, 2)
 
-    def test_download_refuses_corruption_oversize_and_expired_deadline(self):
+    def test_download_refuses_corruption_and_oversize(self):
         row = NATIVE.archives(PLAN)[0]
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / row["name"]
             for payload, accepted in [(b"wrong", False), (PAYLOAD + b"extra", False),
                                       (b"x" * len(PAYLOAD), False), (PAYLOAD, True)]:
-                def download(command, **options):
-                    Path(command[command.index("--output") + 1]).write_bytes(payload)
-                    self.assertIn("--max-filesize", command)
-                    self.assertEqual(command[-2:], ["--", row["uri"]])
-                    self.assertLessEqual(options["timeout"], 5)
-
-                with self.subTest(payload=payload), patch.object(NATIVE.subprocess, "run", side_effect=download):
+                with self.subTest(payload=payload), patch.object(NATIVE, "open_uri", return_value=Response([payload])):
                     if accepted:
-                        NATIVE.transfer(row["uri"], path, row, time.monotonic() + 5)
+                        NATIVE.transfer(row["uri"], path, row)
                     else:
                         with self.assertRaises(ValueError):
-                            NATIVE.transfer(row["uri"], path, row, time.monotonic() + 5)
-            with patch.object(NATIVE.subprocess, "run") as download, self.assertRaises(TimeoutError):
-                NATIVE.transfer(row["uri"], path, row, time.monotonic() - 1)
-            download.assert_not_called()
+                            NATIVE.transfer(row["uri"], path, row)
             self.assertTrue(NATIVE.verified(path, row))
 
-    def test_transfer_deadline_bounds_a_continuously_slow_download_process(self):
+    def test_a_download_that_keeps_delivering_bytes_never_fails_for_elapsed_time(self):
         row = NATIVE.archives(PLAN)[0]
-        for error, expected in [(subprocess.TimeoutExpired("curl", 30), TimeoutError),
-                                (subprocess.CalledProcessError(22, "curl"), OSError)]:
-            with self.subTest(error=error), patch.object(NATIVE.time, "monotonic", return_value=10), \
-                    patch.object(NATIVE.subprocess, "run", side_effect=error) as download, self.assertRaises(expected):
-                NATIVE.transfer(row["uri"], Path("archive.deb"), row, 40)
-            command = download.call_args.args[0]
-            self.assertEqual(command[command.index("--max-time") + 1], "30")
-            self.assertEqual(download.call_args.kwargs["timeout"], 30)
+        hours = iter(range(0, 10 ** 6, 3600))
+        with tempfile.TemporaryDirectory() as directory, \
+                patch.object(NATIVE, "open_uri", return_value=Response([bytes([b]) for b in PAYLOAD])) as opened, \
+                patch.object(NATIVE.time, "monotonic", side_effect=lambda: next(hours)):
+            path = Path(directory) / row["name"]
+            NATIVE.transfer(row["uri"], path, row)
+            self.assertTrue(NATIVE.verified(path, row))
+        self.assertEqual(opened.call_args.args, (row["uri"], NATIVE.STALL_SECONDS))
+
+    def test_a_download_that_stops_delivering_bytes_fails_as_stalled(self):
+        row = NATIVE.archives(PLAN)[0]
+        with tempfile.TemporaryDirectory() as directory, \
+                patch.object(NATIVE, "open_uri", return_value=Response([PAYLOAD[:5], TimeoutError("timed out")])):
+            with self.assertRaisesRegex(NATIVE.Stalled, f"after 5 of {len(PAYLOAD)} bytes"):
+                NATIVE.transfer(row["uri"], Path(directory) / row["name"], row)
+
+    def test_redirects_stay_on_http(self):
+        handler = NATIVE.HTTPOnlyRedirects()
+        request = NATIVE.urllib.request.Request("https://mirror/pool/a.deb")
+        with self.assertRaisesRegex(OSError, "refused"):
+            handler.redirect_request(request, None, 302, "Found", {}, "file:///etc/passwd")
+        self.assertEqual(handler.redirect_request(request, None, 302, "Found", {}, "https://other/pool/a.deb").full_url,
+                         "https://other/pool/a.deb")
 
     def test_manifest_refuses_unsafe_paths_duplicate_archives_and_credentials(self):
         for plan in (PLAN.replace(" a_1_amd64.deb ", " ../a.deb "), PLAN + PLAN,

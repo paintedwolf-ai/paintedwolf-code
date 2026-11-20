@@ -2,6 +2,8 @@ package orchestration_test
 
 import (
 	"context"
+	"github.com/lycaon/lycaon/internal/tools/toolstest"
+	"github.com/lycaon/lycaon/internal/workflow/workflowtest"
 	"strings"
 	"testing"
 
@@ -19,7 +21,6 @@ import (
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/testutil/extpackstest"
-	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/worker"
 	"github.com/lycaon/lycaon/internal/workerrecords"
 	"github.com/lycaon/lycaon/internal/workertopology"
@@ -61,7 +62,7 @@ func newWorkflowOrchestrator(t *testing.T, rec *recordingWorkers, spy *spyWorkfl
 	sqlDB := testdbfixture.Open(t, "wf.db")
 
 	sessStore := store.NewSQL(sqlDB)
-	sessMgr := session.NewHost(sessStore, session.Models{Client: llm.NewMockProvider(mockCfg), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
+	sessMgr := session.NewHost(sessStore, session.Models{Client: llm.NewMockProvider(mockCfg), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, toolstest.NewRegistry())
 	records := workerrecords.New(sqlDB)
 	queue := worker.NewSQLQueue(sqlDB, 10)
 
@@ -71,7 +72,7 @@ func newWorkflowOrchestrator(t *testing.T, rec *recordingWorkers, spy *spyWorkfl
 	runStore.Transactions.SetAuthzRecorder(authzcontext.SQLRecorder(sqlDB))
 	wfMgr := workflow.NewManager(runStore, sessStore, manifests, nil)
 	projectDir := t.TempDir()
-	blueprintMgr := workflow.WireBlueprintDepsForTest(wfMgr, projectDir)
+	blueprintMgr := workflowtest.WireBlueprintDeps(wfMgr, projectDir)
 	blueprintMgr.Approvals = blueprint.NewApprovalStore(sqlDB, authzcontext.SQLRecorder(sqlDB))
 	deps := conditions.TestRegistryDeps()
 	deps.BlueprintContent = func(_ context.Context, projectDir, relPath string) (string, error) {

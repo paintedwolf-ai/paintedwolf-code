@@ -3,9 +3,10 @@ package integration
 import (
 	"context"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/scan"
+	"github.com/lycaon/lycaon/internal/scan/scantest"
 	"testing"
 
-	"github.com/lycaon/lycaon/internal/scan"
 	scancatalog "github.com/lycaon/lycaon/internal/scan/catalog"
 	scanoutput "github.com/lycaon/lycaon/internal/scan/output"
 	"github.com/lycaon/lycaon/internal/testdbfixture"
@@ -96,9 +97,9 @@ func TestEnqueueMatchingScannersFansOutPackCategories(t *testing.T) {
 	store := scan.NewSQLStore(sqlDB)
 	coord := newTestCoordinator(t, store, staticHead{sha: "deadbeef"})
 	reg := &fanOutMockRegistry{scanners: []scan.CodeScanner{
-		&scan.MockScanner{IDVal: "lycaon-sca", CategoryList: []api.ScanCategory{api.ScanCategorySCA, api.ScanCategorySecurity}},
-		&scan.MockScanner{IDVal: "lycaon-secrets", CategoryList: []api.ScanCategory{api.ScanCategorySecret, api.ScanCategorySecurity}},
-		&scan.MockScanner{IDVal: "lycaon-sast", CategoryList: []api.ScanCategory{api.ScanCategorySAST, api.ScanCategorySecurity}},
+		&scantest.MockScanner{IDVal: "lycaon-sca", CategoryList: []api.ScanCategory{api.ScanCategorySCA, api.ScanCategorySecurity}},
+		&scantest.MockScanner{IDVal: "lycaon-secrets", CategoryList: []api.ScanCategory{api.ScanCategorySecret, api.ScanCategorySecurity}},
+		&scantest.MockScanner{IDVal: "lycaon-sast", CategoryList: []api.ScanCategory{api.ScanCategorySAST, api.ScanCategorySecurity}},
 	}}
 
 	recs, err := scan.EnqueueMatchingScanners(context.Background(), coord, reg, scan.EnqueueRequest{

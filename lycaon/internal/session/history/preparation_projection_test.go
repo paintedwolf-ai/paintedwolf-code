@@ -11,7 +11,7 @@ import (
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
-type stalePreparationHistory struct{ *store.Memory }
+type stalePreparationHistory struct{ *store.SQL }
 
 func (s stalePreparationHistory) GetCompactionView(context.Context, string) (*store.CompactionView, bool, error) {
 	return &store.CompactionView{Generation: 1}, true, nil

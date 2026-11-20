@@ -132,41 +132,6 @@ func TestSomeoneElsesEditEndsAWindowsClaimOnTheFile(t *testing.T) {
 	closeAndSettle(t, ctx, window)
 }
 
-// A launch after a gap pays its own anchor even where a slow pass just finished,
-// because that pass predates the gap.
-func TestReanchorDoesNotReuseASlowPassOverTheGap(t *testing.T) {
-	repochange.DisableWatchersForTest()
-	t.Cleanup(repochange.ResetWatchersForTest)
-	store, ctx, root := openLedgerOnDisk(t)
-	clock := manualLedgerClock(store)
-	writeRootFile(t, root, "seed.txt", "seed\n")
-	idled := idleObserver(store)
-	window, first := programWindow(t, store, ctx, root)
-
-	real := store.Commands.inventory
-	released := make(chan struct{})
-	close(released)
-	store.Commands.inventory = &gatedInventory{commandsInventoryPort: real, release: released, during: func() {
-		clock.advance(store.Commands.observationBudget + time.Second)
-	}}
-	first()
-	testutil.Receive(t, "the slow grace pass ends", idled)
-	store.Commands.inventory = real
-
-	writeRootFile(t, root, "notes.md", "a person's save\n")
-	second, err := window.Hold(ctx)
-	testutil.FailErr(t, "hold after the gap", err)
-	writeRootFile(t, root, "second.txt", "second\n")
-	second()
-	testutil.Receive(t, "the window goes idle again", idled)
-	effects := newestEffects(t, store, ctx)
-	wantOutsideEffect(t, effects, "notes.md")
-	if effects["second.txt"].CommandWindowID != window.ID {
-		t.Fatalf("second process's output = %+v, want the window", effects["second.txt"])
-	}
-	closeAndSettle(t, ctx, window)
-}
-
 // arrivalsAtPass notes how many events had arrived when the first pass was asked for.
 type arrivalsAtPass struct {
 	commandsInventoryPort

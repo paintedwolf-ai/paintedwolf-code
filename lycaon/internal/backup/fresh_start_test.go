@@ -15,6 +15,7 @@ import (
 )
 
 func TestFreshStartPreservesARecoveryCopyAndDeviceConfiguration(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	configDir := t.TempDir()
 	dbPath := filepath.Join(configDir, "store.db")
@@ -81,6 +82,7 @@ func TestFreshStartPreservesARecoveryCopyAndDeviceConfiguration(t *testing.T) {
 }
 
 func TestFreshStartCanReplaceAnIncompatibleStore(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	configDir := t.TempDir()
 	dbPath := filepath.Join(configDir, "store.db")

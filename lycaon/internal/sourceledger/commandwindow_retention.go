@@ -6,7 +6,6 @@ import (
 	"errors"
 	"log/slog"
 	"sync"
-	"time"
 
 	"github.com/lycaon/lycaon/internal/db"
 	"github.com/lycaon/lycaon/internal/sourceblob"
@@ -20,17 +19,15 @@ const (
 )
 
 // startRetention keeps the before-images a window's admissions may need, bounded
-// by its file limit, windowRetainBytes and its budget. A file left unretained loses
-// its before-image, not its attribution, so running out of time keeps the window;
-// stored objects carry over, so later opens resume cheaply.
+// by its file limit and windowRetainBytes. A file left unretained loses its
+// before-image, not its attribution; stored objects carry over, so later opens
+// resume cheaply.
 type startRetention struct {
 	objects   *sourceblob.Store
 	queries   *db.Queries
 	recordMu  *sync.Mutex
 	snapshots *sourcesnapshot.Store
 	sqlDB     db.Handle
-	// budget is the share of an open spent keeping before-images.
-	budget time.Duration
 	// files bounds how many before-images one window keeps.
 	files int
 }
@@ -40,18 +37,12 @@ func (r *startRetention) Retain(ctx context.Context, windowID, snapshotID string
 	if snapshotID == "" || r.snapshots == nil {
 		return nil
 	}
-	budget, cancel := context.WithTimeout(ctx, r.budget)
-	defer cancel()
 	// New objects are reclaimable until pinned, so the lease spans the pin.
 	release := r.objects.AcquireReferenceLease()
 	defer release()
-	pins, err := r.storeObjects(budget, windowID, snapshotID)
-	if err != nil && budget.Err() == nil {
-		return err
-	}
+	pins, err := r.storeObjects(ctx, windowID, snapshotID)
 	if err != nil {
-		slog.InfoContext(ctx, "command window start retention bounded by time",
-			"window_id", windowID, "retained_files", len(pins), "limit", r.budget)
+		return err
 	}
 	return r.pin(context.WithoutCancel(ctx), windowID, pins)
 }

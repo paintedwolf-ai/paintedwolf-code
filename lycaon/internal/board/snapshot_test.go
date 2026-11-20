@@ -19,6 +19,7 @@ import (
 	repotest "github.com/lycaon/lycaon/internal/testsetup/repoinfo"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/worker"
+	"github.com/lycaon/lycaon/internal/worker/workertest"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -53,7 +54,7 @@ func TestSnapshotBuilderWithholdsProgressiveRepoBrief(t *testing.T) {
 
 func TestSnapshotBuilderBuild_Empty(t *testing.T) {
 	b := &SnapshotBuilder{
-		Workers: worker.NewInMemoryQueue(10),
+		Workers: workertest.NewQueue(t, 10, testdbseed.DefaultProjectID),
 		Repo:    repotest.NewProvider(t),
 	}
 	ctx := context.Background()
@@ -106,7 +107,7 @@ func TestSnapshotBuilderBuild_DefaultDetailLevel(t *testing.T) {
 }
 
 func TestSnapshotBuilderBuild_IncludesWorkers(t *testing.T) {
-	queue := worker.NewInMemoryQueue(10)
+	queue := workertest.NewQueue(t, 10, testdbseed.DefaultProjectID, "sess-1", "sess-2")
 	b := &SnapshotBuilder{Workers: queue, Repo: repotest.NewProvider(t)}
 	ctx := context.Background()
 	dir := t.TempDir()
@@ -154,7 +155,7 @@ func TestSnapshotBuilderBuild_IncludesWorkers(t *testing.T) {
 }
 
 func TestSnapshotBuilderBuild_WorkersScopedToSession(t *testing.T) {
-	queue := worker.NewInMemoryQueue(10)
+	queue := workertest.NewQueue(t, 10, testdbseed.DefaultProjectID, "sess-a", "sess-b")
 	b := &SnapshotBuilder{Workers: queue, Repo: repotest.NewProvider(t)}
 	ctx := context.Background()
 	dir := t.TempDir()
@@ -243,7 +244,7 @@ func TestSnapshotBuilderBuild_WorkflowRunScopedToSession(t *testing.T) {
 
 func TestSnapshotBuilderBuild_CanceledContext(t *testing.T) {
 	b := &SnapshotBuilder{
-		Workers: worker.NewInMemoryQueue(10),
+		Workers: workertest.NewQueue(t, 10, testdbseed.DefaultProjectID),
 		Repo:    repotest.NewProvider(t),
 	}
 	ctx, cancel := context.WithCancel(context.Background())
@@ -423,7 +424,7 @@ func TestSnapshotBuilderLoadScansSkipsCompareWhenRunning(t *testing.T) {
 func TestSnapshotBuilderBuildEnrichesActiveReservations(t *testing.T) {
 	ctx := context.Background()
 	dir := t.TempDir()
-	queue := worker.NewInMemoryQueue(10)
+	queue := workertest.NewQueue(t, 10, testdbseed.DefaultProjectID, "sess-1")
 	task := api.WorkerTask{
 		Prompt: "fixture",
 		Brief:  "fixture",

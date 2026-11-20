@@ -70,7 +70,9 @@ func (s *Presentation) HandleReplaceSourceViewportInterest(w http.ResponseWriter
 				return
 			}
 		}
-	}, release)
+	}, release, func(run func()) {
+		s.Views.background.Go(view.ctx, func(context.Context) { run() })
+	})
 	if err != nil {
 		s.Views.writeSourceViewError(w, r, err)
 		return

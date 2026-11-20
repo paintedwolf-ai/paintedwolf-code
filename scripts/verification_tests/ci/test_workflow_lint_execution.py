@@ -41,6 +41,25 @@ class WorkflowLintTests(unittest.TestCase):
                     self.assertEqual(workflow_lint.validate(root, self.binary), 0)
                     workflow.unlink()
 
+    def test_names_the_runner_overwrites_are_refused_at_every_scope(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            workflows = root / ".github/workflows"
+            workflows.mkdir(parents=True)
+            workflow = workflows / "environment.yml"
+            for name, expected in (("RUNNER_NAME", 1), ("GITHUB_SHA", 1), ("CI", 1), ("EXPECTED_RUNNER", 0), ("GITHUB_TOKEN", 0)):
+                for scope in ("workflow", "job", "step"):
+                    with self.subTest(name=name, scope=scope):
+                        value = {"workflow": f"env:\n  {name}: value\n", "job": "", "step": ""}
+                        source = "on: workflow_dispatch\n" + value["workflow"] + "jobs:\n  observe:\n    runs-on: ubuntu-latest\n"
+                        if scope == "job":
+                            source += f"    env:\n      {name}: value\n"
+                        source += "    steps:\n      - run: echo ok\n"
+                        if scope == "step":
+                            source += f"        env:\n          {name}: value\n"
+                        workflow.write_text(source)
+                        self.assertEqual(workflow_lint.validate(root, self.binary), expected)
+
     def test_missing_workflows_refuse_validation(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

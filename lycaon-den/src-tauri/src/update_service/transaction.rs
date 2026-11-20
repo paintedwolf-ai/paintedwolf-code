@@ -58,7 +58,7 @@ enum Recheck {
     Refused(UpdateError),
 }
 async fn recheck(candidate: &Candidate, running: &str) -> Recheck {
-    match feed::fetch_with_deadline(candidate.channel, running, RECHECK_DEADLINE).await {
+    match feed::fetch_with_deadline(candidate.channel, running, &super::Trust::embedded(), RECHECK_DEADLINE).await {
         Err(feed::FeedFailure::Transient(error)) => Recheck::Unavailable(error),
         Err(error) => Recheck::Refused(error.error()),
         Ok(Some(offer)) if offer.candidate.release_id == candidate.release_id => Recheck::Confirmed,

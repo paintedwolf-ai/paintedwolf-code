@@ -2,24 +2,21 @@ package contract
 
 import (
 	"context"
-	"io/fs"
-	"os"
-	"path/filepath"
-	"regexp"
-	"sort"
+	"errors"
 	"strings"
 	"testing"
 
+	"github.com/lycaon/lycaon/internal/orchestration"
 	"github.com/lycaon/lycaon/internal/projectroot"
+	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/tools"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 	"github.com/lycaon/lycaon/test/contract/internal/toolfixture"
 )
 
-// coordinatorOnlyTools is the set of tools whose handler bodies guard
-// access with isCoordinatorAgent. The set must match the set of call
-// sites in non-test source — TestCoordinatorOnlyGuardInventory keeps
-// the table honest.
+// coordinatorOnlyTools are the tools whose handlers refuse every agent but the
+// coordinator. TestCoordinatorOnlyGuardInventory holds them to the profiles'
+// grants: only the coordinator profile may offer them.
 var coordinatorOnlyTools = []string{
 	"workflow_advance",
 	"workflow_transition",
@@ -71,67 +68,33 @@ func TestCoordinatorOnlyToolsRejectNonCoordinatorAgents(t *testing.T) {
 	}
 }
 
-// TestCoordinatorOnlyGuardInventory matches guarded tool names to the table.
+// TestCoordinatorOnlyGuardInventory holds the guarded tools to the declared
+// role: the coordinator profile grants each one and every other profile is
+// refused it by the sandbox boundary.
 func TestCoordinatorOnlyGuardInventory(t *testing.T) {
 	t.Parallel()
-	root := contractcheck.RepoRoot(t)
-	workflowDir := filepath.Join(root, "lycaon", "internal", "workflow")
-	var sources []string
-	err := filepath.WalkDir(workflowDir, func(path string, ent fs.DirEntry, err error) error {
-		if err != nil {
-			return err
+	profiles, err := sandbox.LoadToolProfiles()
+	contractcheck.FailErr(t, "load tool profiles", err)
+	boundary := loadBundledSandboxBoundary(t)
+	others := 0
+	for _, prof := range profiles {
+		if prof.ID != orchestration.ProfileCoordinator {
+			others++
 		}
-		if !ent.IsDir() && strings.HasSuffix(ent.Name(), ".go") && !strings.HasSuffix(ent.Name(), "_test.go") {
-			sources = append(sources, path)
-		}
-		return nil
-	})
-	contractcheck.FailErr(t, "enumerate workflow sources", err)
-
-	// A tool is guarded when the guard call appears between its Register("X",
-	// and the next Register( call.
-	registerRE := regexp.MustCompile(`reg\.Register\("([a-z_][a-z0-9_]*)",`)
-	const guard = "toolguard.IsCoordinatorAgent(tctx.Identity.Agent)"
-
-	guarded := map[string]bool{}
-	for _, path := range sources {
-		data, err := os.ReadFile(path)
-		contractcheck.FailErr(t, "read file", err)
-		text := string(data)
-		matches := registerRE.FindAllStringSubmatchIndex(text, -1)
-		for i, m := range matches {
-			toolName := text[m[2]:m[3]]
-			end := len(text)
-			if i+1 < len(matches) {
-				end = matches[i+1][0]
+	}
+	if others == 0 {
+		t.Fatal("no non-coordinator tool profiles loaded")
+	}
+	for _, tool := range coordinatorOnlyTools {
+		contractcheck.FailErr(t, "coordinator grant of "+tool,
+			boundary.AssertToolAllowed(t.Context(), orchestration.ProfileCoordinator, tool, sandbox.ToolAccessProfile))
+		for _, prof := range profiles {
+			if prof.ID == orchestration.ProfileCoordinator {
+				continue
 			}
-			if strings.Contains(text[m[0]:end], guard) {
-				guarded[toolName] = true
+			if err := boundary.AssertToolAllowed(t.Context(), prof.ID, tool, sandbox.ToolAccessProfile); !errors.Is(err, sandbox.ErrToolNotAllowedByProfile) {
+				t.Errorf("profile %s and coordinator-only tool %s: err = %v, want ErrToolNotAllowedByProfile", prof.ID, tool, err)
 			}
 		}
-	}
-
-	expected := map[string]bool{}
-	for _, name := range coordinatorOnlyTools {
-		expected[name] = true
-	}
-
-	var missing []string
-	for name := range expected {
-		if !guarded[name] {
-			missing = append(missing, name)
-		}
-	}
-	var extra []string
-	for name := range guarded {
-		if !expected[name] {
-			extra = append(extra, name)
-		}
-	}
-	if len(missing) > 0 || len(extra) > 0 {
-		sort.Strings(missing)
-		sort.Strings(extra)
-		t.Fatalf("coordinatorOnlyTools out of sync with isCoordinatorAgent guards:\n  table-but-not-guarded: %v\n  guarded-but-not-in-table: %v",
-			missing, extra)
 	}
 }

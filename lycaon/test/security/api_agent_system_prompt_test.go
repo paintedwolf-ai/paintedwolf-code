@@ -2,7 +2,6 @@ package security
 
 import (
 	"context"
-	"strings"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/llm"
@@ -55,10 +54,11 @@ func TestWorkerSpawnUsesAgentSystemPrompt(t *testing.T) {
 			break
 		}
 	}
-	if sysContent == "" {
-		t.Fatal("expected system message on worker prompt")
+	implementer := workerPersona(t, orchestration.ProfileImplementer)
+	if !carriesPersona(sysContent, implementer) {
+		t.Fatalf("worker system prompt lacks the implementer title and focus %q:\n%s", implementer.Focus, sysContent)
 	}
-	if !strings.Contains(sysContent, "Implementer") {
-		t.Fatalf("system prompt = %q want rendered implementer persona", sysContent)
+	if reviewer := workerPersona(t, "plan-reviewer"); carriesPersona(sysContent, reviewer) {
+		t.Fatalf("implementer worker received the plan-reviewer persona:\n%s", sysContent)
 	}
 }

@@ -58,27 +58,29 @@ webE2e.describe("context menus + reveal", () => {
     await expect(page.getByTestId("open-in-menu")).toBeVisible();
   });
 
-  webE2e("folder root Reveal/Copy menu", async ({ page, request }) => {
-    await bootstrapChatSession(page, request);
+  webE2e("folder root menu copies the root's path", async ({ page, request, browserName }) => {
+    if (browserName === "chromium") {
+      await page.context().grantPermissions(["clipboard-read", "clipboard-write"]);
+    }
+    const project = await bootstrapChatSession(page, request);
+    const root = project.roots[0]!;
     await expect(page.getByTestId("project-folder-zone")).toBeVisible({
       timeout: 30_000,
     });
     await page.getByTestId("project-folder-summary").click();
-    const folderRow = page
-      .getByTestId("project-folder-zone")
-      .locator("[data-testid^=project-folder-row-]")
-      .first();
+    const folderRow = page.getByTestId(`project-folder-row-${root.id}`);
     await openContextMenu(page, folderRow);
     const menu = page.getByTestId("context-menu");
-    await expect(menu.getByTestId("open-in-menu")).toBeVisible();
-    await expect(menu.getByTestId("path-menu-copy-path")).toBeVisible();
+    await menu.getByTestId("path-menu-copy-path").click();
+    await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toBe(root.path);
+    await openContextMenu(page, folderRow);
     await menu.getByTestId("open-in-menu").click();
     await expect(page.getByTestId("open-in-file-manager")).toBeVisible();
     await expect(page.getByTestId("open-in-editor")).toBeVisible();
     await expect(page.getByTestId("open-in-browser")).toHaveCount(0);
   });
 
-  webE2e("session list opens shared ContextMenu", async ({ page, request }) => {
+  webE2e("session list menu starts a rename", async ({ page, request }) => {
     await bootstrapChatSession(page, request);
     const sessionList = page.getByTestId("focused-session-list");
     await expect(sessionList).toBeVisible({ timeout: 30_000 });
@@ -89,12 +91,12 @@ webE2e.describe("context menus + reveal", () => {
     const sessionRow = sessionList.locator(".focused-session-list__row").first();
     await openContextMenu(page, sessionRow);
     const menu = page.getByTestId("context-menu");
-    // Snapshot item labels in one read so dismiss-on-scroll cannot flake mid-assert.
     await expect(menu).toContainText("Open");
-    await expect(menu).toContainText("Rename");
     await expect(menu).toContainText("Copy title");
     await expect(menu).toContainText("Copy session ID");
     await expect(menu).toContainText("Archive chat");
     await expect(menu).toContainText("Delete chat…");
+    await menu.getByTestId("session-menu-rename").click();
+    await expect(page.getByTestId("session-rename-input")).toBeVisible();
   });
 });

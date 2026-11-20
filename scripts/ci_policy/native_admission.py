@@ -3,6 +3,9 @@ from ci_policy.impact import script_change
 from verification_plan import catalog
 
 
+SCRIPT_COVERAGE = 'scripts:coverage:changes'
+
+
 def runs_script_coverage(scope):
     """A change to what the script suites read gets those suites before the queue; a scope without a base
     runs them too."""
@@ -25,9 +28,10 @@ def commands(scope):
     if scope is None or scope['full'] or any(
             path.endswith('.go') or path in {'lycaon/go.mod', 'lycaon/go.sum', 'Taskfile.yml', 'task'}
             or path.startswith(('.github/', 'scripts/')) for path in scope['paths']):
-        result.extend(['./task', *check] for check in catalog()['ci']['ready'].get('admission_checks', []))
+        admission = next((lane for lane in catalog()['ci'].values() if lane.get('phases') == 'admission'), {})
+        result.extend(['./task', *check] for check in admission.get('admission_checks', []))
     if runs_package_metadata(scope):
         result.extend(['./task', target] for target in PACKAGE_METADATA_TARGETS)
     if runs_script_coverage(scope):
-        result.append(['./task', 'scripts:coverage:changes'])
+        result.append(['./task', SCRIPT_COVERAGE])
     return result

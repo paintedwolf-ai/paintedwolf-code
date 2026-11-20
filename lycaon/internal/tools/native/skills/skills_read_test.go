@@ -504,7 +504,9 @@ func TestSkillsReadUsesCallerAgentProfile(t *testing.T) {
 				TemplateVars: func(_ context.Context, _ tools.ToolContext) map[string]any {
 					reader, err := prompts.NewReader(tc.input)
 					testutil.FailErr(t, "new reader", err)
-					return prompts.SkillVars(reader)
+					vars, err := prompts.SkillVars(reader)
+					testutil.FailErr(t, "skill vars", err)
+					return vars
 				},
 				PackConfiguration: func(context.Context, tools.ToolContext, string) map[string]any {
 					return nil

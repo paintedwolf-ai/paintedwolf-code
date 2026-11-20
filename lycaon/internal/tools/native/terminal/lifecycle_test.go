@@ -2,11 +2,13 @@ package terminal
 
 import (
 	"errors"
-	"github.com/lycaon/lycaon/internal/toolrejection"
+	"fmt"
 	"reflect"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/bgprocess"
+	lycexec "github.com/lycaon/lycaon/internal/exec"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 )
 
 func TestLifecycleRejectionRetainsProcessKindAndCapacity(t *testing.T) {
@@ -28,5 +30,15 @@ func TestLifecycleRejectionRetainsProcessKindAndCapacity(t *testing.T) {
 		if errors.Is(tc.err, capacity) && (reject.Data["background_limit"] != capacity.Limit || !reflect.DeepEqual(reject.Data["live_terminal_ids"], capacity.TerminalIDs) || !reflect.DeepEqual(reject.Data["live_command_handles"], capacity.CommandHandles)) {
 			t.Fatalf("capacity observation lost admission state: %+v", reject.Data)
 		}
+	}
+}
+
+// A platform without a PTY backend wraps ErrPTYUnsupported; every lifecycle
+// path maps it to one typed refusal on any build OS.
+func TestLifecycleRejectionMapsMissingPTYBackend(t *testing.T) {
+	err := fmt.Errorf("start: %w", lycexec.ErrPTYUnsupported)
+	reject := toolrejection.AsToolReject(mapTerminalLifecycleReject(err, "fixture-id"))
+	if reject == nil || reject.Code != "TERMINAL_UNSUPPORTED" || reject.Data["reason"] != "pty_unsupported" {
+		t.Fatalf("missing PTY backend: %+v", reject)
 	}
 }

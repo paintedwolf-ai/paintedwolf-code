@@ -18,13 +18,13 @@ func TestWorkflowPersistJourneyE2E(t *testing.T) {
 	base := httpSrv.URL
 
 	projectDir := t.TempDir()
-	project := createAPIProjectAtPath(t, base, projectDir)
+	project := CreateAPIProjectAtPath(t, base, projectDir)
 	// The helper waits for workspace preparation after the accepted response.
-	sess := openAPIPostJSON[wire.Session](t, base, "/v1/sessions", nil,
+	sess := OpenAPIPostJSON[wire.Session](t, base, "/v1/sessions", nil,
 		`{"project_id":"`+project.ID+`","posture":"spec"}`, http.StatusAccepted)
 
 	composeBody := `{"template_id":"hotfix-template","params":{"workflow_id":"persist-journey-1"}}`
-	composed := journeyPostJSON[wire.ComposeWorkflowResponse](t, base,
+	composed := JourneyPostJSON[wire.ComposeWorkflowResponse](t, base,
 		"/v1/sessions/"+sess.ID+"/workflows/compose-from-template",
 		composeBody, http.StatusCreated)
 	if composed.Summary.ID != "persist-journey-1" {
@@ -53,7 +53,7 @@ func TestWorkflowPersistJourneyE2E(t *testing.T) {
 		t.Fatalf("first error code = %q, want trigger_collision; errors=%+v", gotCode, errResp.Details.Errors)
 	}
 
-	persistResp := openAPIPostJSON[wire.PersistWorkflowResponse](t, base,
+	persistResp := OpenAPIPostJSON[wire.PersistWorkflowResponse](t, base,
 		"/v1/sessions/{id}/workflows/{workflow_id}/persist",
 		map[string]string{"id": sess.ID, "workflow_id": "persist-journey-1"},
 		`{"version":"1.0.0","confirm":true,"trigger":"/persist-journey-1"}`,
@@ -69,7 +69,7 @@ func TestWorkflowPersistJourneyE2E(t *testing.T) {
 		t.Fatalf("persist summary trigger = %q, want /persist-journey-1", persistResp.Summary.Trigger)
 	}
 
-	catalog := openAPIGetJSON[wire.WorkflowListResponse](t, base,
+	catalog := OpenAPIGetJSON[wire.WorkflowListResponse](t, base,
 		"/v1/workflows?session_id="+sess.ID, nil, http.StatusOK).Workflows
 	var found *wire.WorkflowSummary
 	for i := range catalog {
@@ -96,7 +96,7 @@ func TestWorkflowPersistJourneyE2E(t *testing.T) {
 		t.Fatalf("re-persist after promote status = %d, want 404; body=%s", status2, body2)
 	}
 
-	run := journeyPostJSON[wire.WorkflowRun](t, base,
+	run := JourneyPostJSON[wire.WorkflowRun](t, base,
 		"/v1/sessions/"+sess.ID+"/workflow-runs",
 		`{"workflow_id":"persist-journey-1","workflow_version":"1.0.0"}`,
 		http.StatusCreated)

@@ -4,6 +4,7 @@ package scanstress
 
 import (
 	"context"
+	"errors"
 	"os"
 	"os/exec"
 	"runtime"
@@ -53,7 +54,7 @@ func TestRepeatedInterruptsStayBounded(t *testing.T) {
 	scanner := newScanner(t, "stress-repeat", scancatalog.RuntimePolicy{})
 	project := writeCorpus(t, corpusSpec{Files: corpusFiles(), VulnPerFile: 3})
 
-	// One completed run first, so steady-state resources are already allocated.
+	// One interrupted run first, so lazily allocated resources exist before the baseline.
 	warmCtx, warmCancel := context.WithCancel(t.Context())
 	warmObs := startObserver(t, 200*time.Millisecond)
 	go func() {
@@ -80,14 +81,8 @@ func TestRepeatedInterruptsStayBounded(t *testing.T) {
 		awaitEngineRunning(t)
 		awaitEngineWorking(t, os.Getpid())
 		cancel()
-		select {
-		case err := <-done:
-			if err == nil {
-				t.Errorf("iteration %d: canceled scan returned nil error", i)
-			}
-		case <-t.Context().Done():
-			obs.finish()
-			t.Fatalf("iteration %d: Run did not return after cancellation", i)
+		if err := <-done; !errors.Is(err, context.Canceled) {
+			t.Errorf("iteration %d: canceled scan returned %v, want context.Canceled", i, err)
 		}
 		awaitNoEngineProcesses(t)
 		allRunDirs = append(allRunDirs, obs.seenRunDirs()...)
@@ -102,14 +97,15 @@ func TestRepeatedInterruptsStayBounded(t *testing.T) {
 		return endGoroutines-baseGoroutines < repeatCount() && endFDs-baseFDs < repeatCount()
 	})
 
-	if leaked := survivingDirs(allRunDirs); len(leaked) > 0 {
+	leaked := survivingDirs(allRunDirs)
+	if len(leaked) > 0 {
 		t.Errorf("run directories accumulated across %d interrupted scans: %v", repeatCount(), leaked)
 	}
 	// Sampling goroutines are transient; a per-iteration slope is what matters.
 	goroutineSlope := float64(endGoroutines-baseGoroutines) / float64(repeatCount())
 	fdSlope := float64(endFDs-baseFDs) / float64(repeatCount())
-	reportf(t, "repeats=%d goroutines %d->%d (slope %.2f/run) fds %d->%d (slope %.2f/run) run_dirs_seen=%d leaked=0",
-		repeatCount(), baseGoroutines, endGoroutines, goroutineSlope, baseFDs, endFDs, fdSlope, len(allRunDirs))
+	reportf(t, "repeats=%d goroutines %d->%d (slope %.2f/run) fds %d->%d (slope %.2f/run) run_dirs_seen=%d leaked=%d",
+		repeatCount(), baseGoroutines, endGoroutines, goroutineSlope, baseFDs, endFDs, fdSlope, len(allRunDirs), len(leaked))
 	if goroutineSlope >= 1 {
 		t.Errorf("goroutines grew by %.2f per interrupted scan (%d -> %d)", goroutineSlope, baseGoroutines, endGoroutines)
 	}

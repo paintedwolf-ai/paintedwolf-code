@@ -19,7 +19,7 @@ import (
 	"github.com/lycaon/lycaon/internal/session"
 	"github.com/lycaon/lycaon/internal/session/approvalstate"
 	"github.com/lycaon/lycaon/internal/session/protection"
-	sessionstore "github.com/lycaon/lycaon/internal/session/store"
+	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"github.com/lycaon/lycaon/internal/session/workeradmission"
 	"github.com/lycaon/lycaon/internal/session/workercloseout"
 	"github.com/lycaon/lycaon/internal/session/workercompletion"
@@ -65,7 +65,12 @@ func TestBuildProtectionStateUnknownVsActive(t *testing.T) {
 		ToolCallID: "call-direct-1",
 	})
 	testutil.FailErr(t, "start", err)
-	t.Cleanup(func() { _, _ = reg.Lifecycle.Stop("sess-prot", handle, bgprocess.TerminationStoppedByAgent) })
+	t.Cleanup(func() {
+		_, _ = reg.Lifecycle.Stop("sess-prot", handle, bgprocess.TerminationStoppedByAgent)
+		if _, _, err := reg.Lifecycle.Wait(context.Background(), "sess-prot", handle); err != nil {
+			t.Errorf("wait for background command: %v", err)
+		}
+	})
 
 	prot := protection.BuildProtectionState("sess-prot", reg)
 	if prot == nil || len(prot.BackgroundDirect) != 1 {
@@ -103,9 +108,14 @@ func TestProtectionStateReconstructEmitsOnceWithoutDestinations(t *testing.T) {
 		Mode:   bgprocess.JobModeBackground, ToolCallID: "call-9",
 	})
 	testutil.FailErr(t, "start", err)
-	t.Cleanup(func() { _, _ = reg.Lifecycle.Stop("sess-rec", handle, bgprocess.TerminationStoppedByAgent) })
+	t.Cleanup(func() {
+		_, _ = reg.Lifecycle.Stop("sess-rec", handle, bgprocess.TerminationStoppedByAgent)
+		if _, _, err := reg.Lifecycle.Wait(context.Background(), "sess-rec", handle); err != nil {
+			t.Errorf("wait for background command: %v", err)
+		}
+	})
 
-	mgr := session.NewHost(sessionstore.NewMemory(), session.Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
+	mgr := session.NewHost(storetest.New(t, testdbseed.DefaultProjectID), session.Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
 	mgr.SetBackgroundRegistry(reg)
 	var emits atomic.Int32
 	mgr.Chats.Protection.SetDirectIPReconstructHook(func(sessionID, gotHandle, toolCallID string) {
@@ -149,7 +159,12 @@ func TestRevokeChatGrantAfterRecoveryKeepsBackgroundWarning(t *testing.T) {
 		Mode:   bgprocess.JobModeBackground,
 	})
 	testutil.FailErr(t, "start", err)
-	t.Cleanup(func() { _, _ = reg.Lifecycle.Stop("sess-rev", handle, bgprocess.TerminationStoppedByAgent) })
+	t.Cleanup(func() {
+		_, _ = reg.Lifecycle.Stop("sess-rev", handle, bgprocess.TerminationStoppedByAgent)
+		if _, _, err := reg.Lifecycle.Wait(context.Background(), "sess-rev", handle); err != nil {
+			t.Errorf("wait for background command: %v", err)
+		}
+	})
 
 	rt := approvalstate.NewSocketCapabilityRuntime()
 	t.Cleanup(rt.Close)

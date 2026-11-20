@@ -37,6 +37,21 @@ class TestRunPruneExecution(unittest.TestCase):
         patcher.start()
         self.addCleanup(patcher.stop)
 
+    def test_a_root_named_through_a_link_accepts_its_resolved_children_only(self):
+        self.without_mounts()
+        alias = Path(tempfile.mkdtemp()) / "alias"
+        self.addCleanup(alias.parent.rmdir)
+        alias.symlink_to(self.root)
+        self.addCleanup(alias.unlink)
+        run = self.run_dir("go-test.lease.linked")
+        self.lease.prune(alias, run)
+        self.assertFalse(run.exists())
+        nested = self.run_dir("go-test.lease.outer") / "go-test.lease.inner"
+        nested.mkdir()
+        for candidate in (nested, alias.parent / "go-test.lease.elsewhere"):
+            with self.subTest(candidate=candidate), self.assertRaisesRegex(ValueError, "immediate child"):
+                self.lease.prune(alias, candidate)
+
     def test_unleased_runs_are_removed_silently(self):
         self.without_mounts()
         run = self.run_dir("go-test.lease.a")

@@ -101,7 +101,7 @@ class CacheTests(unittest.TestCase):
         self.assertEqual(result["removed_entries"], 0)
 
     def test_scan_cooldown_is_shared_and_budget_changes_force_recheck(self):
-        queue = execution.Queue(Path(self.temporary.name) / "queue")
+        queue = execution.Queue(Path(self.temporary.name) / "queue", Path(self.temporary.name) / "history")
         environment = {"GOCACHE": str(self.root)}
         maintenance = cache.Maintenance(queue, environment)
         with patch.object(cache, "trim", wraps=cache.trim) as trim:
@@ -113,7 +113,7 @@ class CacheTests(unittest.TestCase):
         self.assertEqual(len(list(queue.root.glob("go-cache-*.json"))), 2)
 
     def test_failed_cleanup_has_no_success_stamp_and_can_retry(self):
-        queue = execution.Queue(Path(self.temporary.name) / "queue")
+        queue = execution.Queue(Path(self.temporary.name) / "queue", Path(self.temporary.name) / "history")
         maintenance = cache.Maintenance(queue, {"GOCACHE": str(self.root)})
         with patch.object(cache, "trim", side_effect=OSError("fixture failure")):
             maintenance.admitted()
@@ -124,7 +124,7 @@ class CacheTests(unittest.TestCase):
 
     def test_maintenance_waits_for_active_builds_to_drain(self):
         old = self.entry(10000)
-        queue = execution.Queue(Path(self.temporary.name) / "queue")
+        queue = execution.Queue(Path(self.temporary.name) / "queue", Path(self.temporary.name) / "history")
         maintenance = cache.Maintenance(queue, {"GOCACHE": str(self.root)})
         with Reservation(queue, execution.lock_file, "fixture", "Active build",
                          {"locks": ["go"], "shared_locks": ["go"], "workers": 1}, 1) as active:
@@ -139,7 +139,7 @@ class CacheTests(unittest.TestCase):
 
     def test_maintenance_skips_instead_of_waiting_when_not_admissible(self):
         old = self.entry(10000)
-        queue = execution.Queue(Path(self.temporary.name) / "queue")
+        queue = execution.Queue(Path(self.temporary.name) / "queue", Path(self.temporary.name) / "history")
         maintenance = cache.Maintenance(queue, {"GOCACHE": str(self.root)})
         with Reservation(queue, execution.lock_file, "fixture", "Explicit trim", cache.MAINTENANCE, 1) as active:
             self.assertTrue(active.try_acquire())
@@ -161,7 +161,7 @@ class CacheTests(unittest.TestCase):
 
     def test_maintenance_skips_when_worker_capacity_is_full(self):
         old = self.entry(10000)
-        queue = execution.Queue(Path(self.temporary.name) / "queue")
+        queue = execution.Queue(Path(self.temporary.name) / "queue", Path(self.temporary.name) / "history")
         maintenance = cache.Maintenance(queue, {"GOCACHE": str(self.root)})
         with patch("verification_resources.capacity", return_value=1), \
                 Reservation(queue, execution.lock_file, "fixture", "Finished stage", {"locks": [], "workers": 1}, 1) as active:
@@ -172,7 +172,7 @@ class CacheTests(unittest.TestCase):
 
     def test_under_budget_measurement_does_not_block_an_active_build(self):
         self.entry(10000)
-        queue = execution.Queue(Path(self.temporary.name) / "queue")
+        queue = execution.Queue(Path(self.temporary.name) / "queue", Path(self.temporary.name) / "history")
         maintenance = cache.Maintenance(queue, {"GOCACHE": str(self.root)})
         with Reservation(queue, execution.lock_file, "fixture", "Active build",
                          {"locks": [], "workers": 1}, 1) as active:

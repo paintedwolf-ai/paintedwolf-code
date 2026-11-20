@@ -1,13 +1,10 @@
 // Ollama discovery for mock E2E runs: one tool-capable model, no inference.
-// Writes the bound port to MODEL_FIXTURE_PORT_FILE once it is listening.
-const portFile = process.env.MODEL_FIXTURE_PORT_FILE;
-if (!portFile) {
-  throw new Error("MODEL_FIXTURE_PORT_FILE is required");
-}
-
+// Listens on MODEL_FIXTURE_HOST (loopback unless set) and MODEL_FIXTURE_PORT
+// (any free port unless set), and writes the bound port to
+// MODEL_FIXTURE_PORT_FILE when one is named.
 const server = Bun.serve({
-  hostname: "127.0.0.1",
-  port: Number(process.env.MODEL_FIXTURE_PORT ?? 0),
+  hostname: process.env.MODEL_FIXTURE_HOST || "127.0.0.1",
+  port: Number(process.env.MODEL_FIXTURE_PORT || 0),
   fetch(request) {
     const path = new URL(request.url).pathname;
     if (request.method === "GET" && path === "/api/tags") {
@@ -23,4 +20,5 @@ const server = Bun.serve({
   },
 });
 
-await Bun.write(portFile, `${server.port}\n`);
+const portFile = process.env.MODEL_FIXTURE_PORT_FILE;
+if (portFile) await Bun.write(portFile, `${server.port}\n`);

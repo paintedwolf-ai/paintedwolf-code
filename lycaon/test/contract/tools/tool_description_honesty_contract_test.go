@@ -19,6 +19,9 @@ func TestToolDescriptionsCiteOnlyRegisteredTools(t *testing.T) {
 	for _, meta := range reg.List() {
 		registered[meta.Name] = true
 	}
+	if len(registered) == 0 {
+		t.Fatal("serve boot registry lists no tools")
+	}
 
 	// snake_case token inside `…` backticks; minimum 2 chars to dodge
 	// single-letter false positives.
@@ -60,6 +63,7 @@ func TestToolDescriptionsCiteOnlyRegisteredTools(t *testing.T) {
 		description string
 	}
 	var found []violation
+	resolved := 0
 	checkProse := func(toolName, desc string) {
 		if strings.TrimSpace(desc) == "" {
 			return
@@ -67,6 +71,7 @@ func TestToolDescriptionsCiteOnlyRegisteredTools(t *testing.T) {
 		for _, m := range tokenRE.FindAllStringSubmatch(desc, -1) {
 			token := m[1]
 			if registered[token] {
+				resolved++
 				continue
 			}
 			if _, ok := notATool[token]; ok {
@@ -94,6 +99,9 @@ func TestToolDescriptionsCiteOnlyRegisteredTools(t *testing.T) {
 	for _, meta := range reg.List() {
 		checkProse(meta.Name, meta.Description)
 		walkSchema(meta.Name, meta.ArgsSchema)
+	}
+	if resolved == 0 {
+		t.Fatal("no description cites a registered tool; the citation scan matched nothing")
 	}
 	if len(found) > 0 {
 		sort.Slice(found, func(i, j int) bool {

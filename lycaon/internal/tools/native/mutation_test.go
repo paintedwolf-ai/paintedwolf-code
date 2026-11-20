@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/lycaon/lycaon/internal/toolrejection"
 	"os"
 	"path/filepath"
 	"strings"
@@ -14,6 +13,7 @@ import (
 	"github.com/lycaon/lycaon/internal/fseffect"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/toolcontract"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	nativefixture "github.com/lycaon/lycaon/internal/tools/native/internal/testfixture"
 )
 
@@ -34,8 +34,8 @@ func TestChmodToolSymbolicPlusX(t *testing.T) {
 	}
 	info, err := os.Stat(script)
 	testutil.FailErr(t, "stat script", err)
-	if info.Mode().Perm()&0o111 == 0 {
-		t.Fatalf("expected execute bit, mode=%o", info.Mode().Perm())
+	if info.Mode().Perm() != 0o755 {
+		t.Fatalf("mode after +x = %o, want 755", info.Mode().Perm())
 	}
 }
 
@@ -68,6 +68,11 @@ func TestChmodToolRejects777(t *testing.T) {
 	var reject *toolrejection.ToolReject
 	if !errors.As(err, &reject) || reject.Code != "CHMOD_MODE_DENIED" {
 		t.Fatalf("err = %v want CHMOD_MODE_DENIED", err)
+	}
+	info, err := os.Stat(filepath.Join(tmpDir, "a.txt"))
+	testutil.FailErr(t, "stat refused file", err)
+	if info.Mode().Perm() != 0o644 {
+		t.Fatalf("refused chmod changed mode to %v", info.Mode().Perm())
 	}
 }
 
@@ -284,6 +289,32 @@ func TestDeleteToolRejectsGitPath(t *testing.T) {
 	if !errors.As(err, &reject) || reject.Code != "GIT_INTERNALS_WRITE_DENIED" || reject.Data["class"] != "metadata" {
 		t.Fatalf("err = %v want GIT_INTERNALS_WRITE_DENIED for repository metadata", err)
 	}
+	head, err := os.ReadFile(filepath.Join(tmpDir, ".git", "HEAD"))
+	testutil.FailErr(t, "read refused HEAD", err)
+	if string(head) != "ref: refs/heads/main\n" {
+		t.Fatalf("refused delete changed HEAD to %q", head)
+	}
+}
+
+func TestDeleteToolRejectsPathOutsideRoot(t *testing.T) {
+	parent := t.TempDir()
+	root := filepath.Join(parent, "root")
+	testutil.FailErr(t, "mkdir root", os.Mkdir(root, 0o755))
+	outside := filepath.Join(parent, "outside.txt")
+	testutil.FailErr(t, "write outside file", os.WriteFile(outside, []byte("outside"), 0o644))
+	tool := &DeleteTool{Boundary: nativefixture.Boundary(t)}
+	_, err := tool.Run(context.Background(), map[string]any{
+		"paths": []any{"../outside.txt"},
+	}, nativefixture.Context(root))
+	var reject *toolrejection.ToolReject
+	if !errors.As(err, &reject) || reject.Code != "DELETE_PATH_DENIED" {
+		t.Fatalf("err = %v want DELETE_PATH_DENIED", err)
+	}
+	data, err := os.ReadFile(outside)
+	testutil.FailErr(t, "read outside file", err)
+	if string(data) != "outside" {
+		t.Fatalf("refused delete changed the outside file: %q", data)
+	}
 }
 
 func TestChmodRecoveryModesMatchAcceptedPermissions(t *testing.T) {
@@ -315,5 +346,24 @@ func TestOctalPermissionParsingRejectsPartialInput(t *testing.T) {
 	for _, spec := range []string{"755", "0755", "644", "0644"} {
 		_, err := parseOctalChmodMode(spec)
 		testutil.FailErr(t, "parse complete octal mode", err)
+	}
+}
+
+// A hard-linked file's metadata is shared with names outside review, so chmod
+// refuses it and leaves every name's mode unchanged.
+func TestChmodToolRefusesHardLinkedFile(t *testing.T) {
+	project, elsewhere := t.TempDir(), t.TempDir()
+	other := filepath.Join(elsewhere, "shared.txt")
+	testutil.FailErr(t, "write file", os.WriteFile(other, []byte("x"), 0o644))
+	testutil.FailErr(t, "hard link", os.Link(other, filepath.Join(project, "linked.txt")))
+	tool := &ChmodTool{Boundary: nativefixture.Boundary(t)}
+	_, err := tool.Run(context.Background(), map[string]any{"paths": []any{"linked.txt"}, "mode": "600"}, nativefixture.Context(project))
+	if reject := toolrejection.AsToolReject(err); reject == nil || reject.Code != "METADATA_TARGET_HARD_LINKED" {
+		t.Fatalf("chmod of a hard-linked file = %v", err)
+	}
+	info, err := os.Stat(other)
+	testutil.FailErr(t, "stat other name", err)
+	if info.Mode().Perm() != 0o644 {
+		t.Fatalf("other name's mode = %v", info.Mode().Perm())
 	}
 }

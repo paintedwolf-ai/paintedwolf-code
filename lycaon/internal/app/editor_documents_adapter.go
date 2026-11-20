@@ -34,6 +34,16 @@ func (a editorDocumentsAdapter) VisitUnsavedDocuments(ctx context.Context, proje
 	})
 }
 
+func (a editorDocumentsAdapter) RetainRevision(ctx context.Context, projectID, documentID string, revision int64) error {
+	_, err := a.service.Pin(ctx, projectID, documentID, revision)
+	return documentEditError(err)
+}
+
+func (a editorDocumentsAdapter) SaveForAgentOperation(ctx context.Context, projectID string, branch sourcebranch.ID, rootID, path string, descendants bool, call tools.EditorAgentCall) error {
+	return documentEditError(a.service.SaveForAgentOperation(ctx, projectID, branch, rootID, path, descendants,
+		editordoc.AgentCall{SessionID: call.SessionID, Turn: call.Turn, ToolCallID: call.ToolCallID, ToolName: call.ToolName}))
+}
+
 func (a editorDocumentsAdapter) DirtyDocuments(ctx context.Context, projectID string, branch sourcebranch.ID) ([]tools.EditorDocumentPath, error) {
 	documents, err := a.service.DirtyDocuments(ctx, projectID, branch)
 	if err != nil {
@@ -61,12 +71,15 @@ func executionPin(pin *tools.EditorDocumentPin) *editordoc.ExecutionPin {
 	return &editordoc.ExecutionPin{Revision: pin.Revision, DiskSHA256: pin.BaseSHA256, Absent: pin.Absent}
 }
 
-// documentEditError keeps a pinned program conflict distinct from the moved
-// sentinel conversational edits retry on.
+// documentEditError names a file changed outside its document, distinct from
+// the moved sentinel conversational edits retry on.
 func documentEditError(err error) error {
+	var changed *editordoc.ExecutionConflict
 	switch {
-	case errors.Is(err, editordoc.ErrExecutionConflict):
-		return errors.Join(tools.ErrEditorExecutionConflict, err)
+	case errors.As(err, &changed):
+		return &tools.EditorFileChanged{RootID: changed.RootID, Path: changed.Path,
+			BaseSHA256: changed.Pinned.DiskSHA256, BaseAbsent: changed.Pinned.Absent,
+			DiskSHA256: changed.Current.DiskSHA256, DiskAbsent: changed.Current.Absent}
 	case errors.Is(err, editordoc.ErrRevisionConflict):
 		return tools.ErrEditorDocumentMoved
 	}

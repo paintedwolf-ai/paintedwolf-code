@@ -292,6 +292,15 @@ func TestFailureIsTotal(t *testing.T) {
 	if cache.Len() != 1 || cache.BuildCount() != 1 {
 		t.Fatalf("good catalog: len=%d builds=%d", cache.Len(), cache.BuildCount())
 	}
+
+	// A cache without a module root cannot build even a good catalog.
+	rootless := catalogview.NewCache("", nil)
+	if _, err := rootless.For(t.Context(), good); err == nil {
+		t.Fatal("empty module root must fail Build")
+	}
+	if rootless.Len() != 0 || rootless.BuildCount() != 0 {
+		t.Fatalf("rootless failure cached: len=%d builds=%d", rootless.Len(), rootless.BuildCount())
+	}
 }
 
 func TestForNilCatalogErrors(t *testing.T) {
@@ -407,4 +416,22 @@ func inventoryPack(t *testing.T, root, id string) extpacks.PackContent {
 	testutil.FailErr(t, "InventoryPack", err)
 	pc.Kind = extpacks.PackKindPath
 	return pc
+}
+
+// A cleared cache holds no view, and the next request builds afresh.
+func TestCacheClearDropsEveryView(t *testing.T) {
+	content, desired, root := cacheFixtureCatalog(t)
+	eff := extpacks.Resolve(t.Context(), extpacks.ResolveInput{Packs: content, Desired: desired})
+	cache := catalogview.NewCache(root, nil)
+	_, err := cache.For(t.Context(), eff)
+	testutil.FailErr(t, "For before clear", err)
+	cache.Clear()
+	if cache.Len() != 0 {
+		t.Fatalf("cleared cache holds %d views", cache.Len())
+	}
+	_, err = cache.For(t.Context(), eff)
+	testutil.FailErr(t, "For after clear", err)
+	if cache.BuildCount() != 2 {
+		t.Fatalf("builds = %d, want a fresh build after clear", cache.BuildCount())
+	}
 }

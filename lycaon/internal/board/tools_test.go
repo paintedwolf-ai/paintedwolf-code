@@ -9,18 +9,19 @@ import (
 
 	"github.com/lycaon/lycaon/internal/packboard"
 	"github.com/lycaon/lycaon/internal/projectroot"
+	"github.com/lycaon/lycaon/internal/testdbseed"
 	repotest "github.com/lycaon/lycaon/internal/testsetup/repoinfo"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/internal/tools"
-	"github.com/lycaon/lycaon/internal/worker"
+	"github.com/lycaon/lycaon/internal/worker/workertest"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
 func TestPackBoardToolReturnsSnapshot(t *testing.T) {
 	reg := tools.NewDefaultRegistry()
 	builder := &SnapshotBuilder{
-		Workers: worker.NewInMemoryQueue(10),
+		Workers: workertest.NewQueue(t, 10, testdbseed.DefaultProjectID),
 		Repo:    repotest.NewProvider(t),
 	}
 	if err := RegisterBoardTools(reg, ToolDeps{Builder: builder}); err != nil {
@@ -49,7 +50,7 @@ func TestPackBoardToolReturnsSnapshot(t *testing.T) {
 func TestPackBoardToolFiltersWorkersByPlan(t *testing.T) {
 	reg := tools.NewDefaultRegistry()
 	builder := &SnapshotBuilder{
-		Workers: worker.NewInMemoryQueue(10),
+		Workers: workertest.NewQueue(t, 10, testdbseed.DefaultProjectID),
 		Repo:    repotest.NewProvider(t),
 		NamedWorkers: func(_ context.Context, _ string) ([]api.BoardWorker, error) {
 			return []api.BoardWorker{
@@ -126,7 +127,7 @@ func TestPackBoardToolPagesFiftyWorkersAndFiltersBeforePaging(t *testing.T) {
 	reg := tools.NewDefaultRegistry()
 	testutil.FailErr(t, "register board tools", RegisterBoardTools(reg, ToolDeps{
 		Builder: &SnapshotBuilder{
-			Workers:      worker.NewInMemoryQueue(10),
+			Workers:      workertest.NewQueue(t, 10, testdbseed.DefaultProjectID),
 			Repo:         repotest.NewProvider(t),
 			NamedWorkers: func(_ context.Context, _ string) ([]api.BoardWorker, error) { return all, nil },
 		},

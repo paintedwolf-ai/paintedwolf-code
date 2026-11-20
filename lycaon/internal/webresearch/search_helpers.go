@@ -184,12 +184,6 @@ func releaseSeedCallSlot(providerID string, sharedWithCoordinator bool) {
 	}
 }
 
-func resetSeedCallSems() {
-	seedSemMu.Lock()
-	seedSems = map[string]chan struct{}{}
-	seedSemMu.Unlock()
-}
-
 // rrfK is the standard Reciprocal Rank Fusion damping constant; higher
 // values flatten the score gap between adjacent ranks.
 const rrfK = 60

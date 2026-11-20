@@ -57,6 +57,7 @@ var rejectCodeObservation = map[string]string{
 	"CHMOD_SPECIAL_BIT_DENIED":                  "policy_denied",
 	"CHMOD_SYMLINK_ESCAPE":                      "path_escape",
 	"CHOWN_BULK_DENIED":                         "bulk_denied",
+	"METADATA_TARGET_HARD_LINKED":               "path_escape",
 	"CHOWN_GROUP_UNKNOWN":                       "group_unknown",
 	"CHOWN_NOT_FOUND":                           "not_found",
 	"CHOWN_PATH_DENIED":                         "path_denied",

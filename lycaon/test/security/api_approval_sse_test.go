@@ -23,7 +23,7 @@ func TestApprovalHITLSSEPendingAndResolved(t *testing.T) {
 	decisionID := h.waitPending(t, done)
 	assertCheckpointSSE(t, ch, decisionID, wire.CheckpointStatusPending)
 
-	req := authedRequest(t, http.MethodPost, "/v1/sessions/"+h.sess.ID+"/checkpoints/"+decisionID,
+	req := AuthedRequest(t, http.MethodPost, "/v1/sessions/"+h.sess.ID+"/checkpoints/"+decisionID,
 		strings.NewReader(`{"kind":"tool_approval","action":"approve","option_id":"approve_current_action"}`))
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()

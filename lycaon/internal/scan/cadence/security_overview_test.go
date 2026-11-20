@@ -2,6 +2,7 @@ package cadence
 
 import (
 	"context"
+	"github.com/lycaon/lycaon/internal/scan/scantest"
 	"testing"
 
 	scanbase "github.com/lycaon/lycaon/internal/scan"
@@ -107,14 +108,14 @@ func TestSecurityOverviewInvalidatesCoverageAfterScannerChanges(t *testing.T) {
 			_, err := cadence.RequestFull(t.Context(), dir, nil, api.ScanTriggerManual, scanbase.FullScanContext{})
 			testutil.FailErr(t, "request initial full scan", err)
 			completeCadenceScans(t, cadence, store)
-			registry := cadence.Registry.(*scanbase.MockRegistry)
+			registry := cadence.Registry.(*scantest.MockRegistry)
 			switch change {
 			case "replace":
-				registry.Scanners[0] = &scanbase.MockScanner{IDVal: "replacement", CategoryList: []api.ScanCategory{api.ScanCategorySCA}}
+				registry.Scanners[0] = &scantest.MockScanner{IDVal: "replacement", CategoryList: []api.ScanCategory{api.ScanCategorySCA}}
 			case "engine":
 				registry.Command = []string{"changed-engine"}
 			case "add":
-				registry.Scanners = append(registry.Scanners, &scanbase.MockScanner{IDVal: "additional", CategoryList: []api.ScanCategory{api.ScanCategorySAST}})
+				registry.Scanners = append(registry.Scanners, &scantest.MockScanner{IDVal: "additional", CategoryList: []api.ScanCategory{api.ScanCategorySAST}})
 			case "remove":
 				registry.Scanners = nil
 			}

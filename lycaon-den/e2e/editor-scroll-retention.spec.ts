@@ -2,6 +2,7 @@ import { writeFileSync } from "node:fs";
 import path from "node:path";
 import { expect } from "@playwright/test";
 import { modelIndependentWebE2e, openProjectFilesFixture } from "./helpers.ts";
+import { directInputSettled, scrollSettled } from "./fixtures/settle.ts";
 
 modelIndependentWebE2e("file navigation retains the editor and its observed scroll position", async ({ page, request }) => {
   await page.emulateMedia({ reducedMotion: "reduce" });
@@ -78,14 +79,15 @@ for (const selection of ["caret", "forward", "backward"] as const) {
     const scroller = page.getByTestId("files-editor-host").locator(".cm-scroller");
     await scroller.hover();
     // The initial caret reveal settles before the wheel gesture.
-    await page.waitForTimeout(400);
+    await scrollSettled(scroller);
     const before = await snapshot();
     for (const delta of [5_000, -10_000, 5_000]) {
       const start = await snapshot();
       await page.mouse.wheel(0, delta);
       await expect.poll(async () => Math.abs((await snapshot()).offset - start.offset))
         .toBeGreaterThan(2_000);
-      await page.waitForTimeout(700);
+      await directInputSettled(scroller);
+      await scrollSettled(scroller);
       const current = await snapshot();
       expect(current.selection, JSON.stringify({ before, current })).toEqual(before.selection);
     }

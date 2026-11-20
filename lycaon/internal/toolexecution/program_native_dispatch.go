@@ -182,7 +182,7 @@ func (e *Executor) InvokeNative(ctx context.Context, frame ProgramFrame, surface
 	if err := validateNativeSecretSlots(facts.Contract, arguments.values); err != nil {
 		return result, err
 	}
-	secretUse, err := parseSecretUse(facts.Contract, arguments.values)
+	secretUse, err := parseSecretUse(facts.Identity, facts.Contract, arguments.values)
 	if err != nil {
 		return result, err
 	}

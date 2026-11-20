@@ -177,7 +177,9 @@ func resolveProviderConfig(entry CatalogEntry, cfg *ConfigStore) map[string]stri
 	return out
 }
 
-func providerConfigured(id string, kind ProviderKind, s Settings) bool {
+// providerConfigured reports whether settings hold what kind needs; required
+// names the catalog extra fields a keyed_extra provider must have set.
+func providerConfigured(id string, kind ProviderKind, required []string, s Settings) bool {
 	key := strings.TrimSpace(s.Keys[id])
 	switch kind {
 	case KindKeyed:
@@ -187,7 +189,7 @@ func providerConfigured(id string, kind ProviderKind, s Settings) bool {
 			return false
 		}
 		cfg := s.Config[id]
-		for _, field := range requiredExtraFields(id) {
+		for _, field := range required {
 			if strings.TrimSpace(cfg[field]) == "" {
 				return false
 			}
@@ -200,15 +202,6 @@ func providerConfigured(id string, kind ProviderKind, s Settings) bool {
 		return true
 	default:
 		return false
-	}
-}
-
-func requiredExtraFields(id string) []string {
-	switch id {
-	case "google_cse":
-		return []string{"search_engine_id"}
-	default:
-		return nil
 	}
 }
 

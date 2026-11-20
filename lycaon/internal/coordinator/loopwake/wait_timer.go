@@ -91,7 +91,7 @@ func (l *Waits) armSleepTimerLocked(st *sessionSleep, wakeCtx context.Context, s
 		// The deadline also retires the activity lease.
 		expired, hadLease := closeWaitLeaseLocked(st, sessionID)
 		st.mu.Unlock()
-		// A parked program past its own bound stops; this wake's turn receives its result.
+		// A parked program in this session stops; this wake's turn receives its result.
 		l.Subscriptions.interruptParkedProgram(wakeCtx, sessionID, true)
 		if store := l.Subscriptions.durableWaitStore(); store != nil {
 			winner := awaitstore.Condition{Kind: "timer", Outcome: "timed_out"}

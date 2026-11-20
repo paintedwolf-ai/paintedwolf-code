@@ -8,6 +8,7 @@ import (
 	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"os"
 	"path/filepath"
+	"strconv"
 	"testing"
 	"time"
 
@@ -410,5 +411,38 @@ func TestDraftRootRejectsGenericLifecycleRoutes(t *testing.T) {
 	_, err = reg.PatchRoot(t.Context(), p.ID, p.Roots[0].ID, project.PatchRootParams{Label: &label})
 	if !errors.Is(err, project.ErrDraftRootImmutable) {
 		t.Fatalf("patch error = %v", err)
+	}
+}
+
+func TestSQLForcedDeleteRemovesABusyProjectAndItsHistory(t *testing.T) {
+	ctx := t.Context()
+	sqlDB := testdbfixture.Open(t, "forced-delete.db")
+	reg := project.NewSQLRegistry(sqlDB)
+	p, err := reg.Create(ctx, project.CreateParams{Roots: []project.AttachRootParams{{Path: t.TempDir()}}})
+	testutil.FailErr(t, "create project", err)
+	_, err = sqlDB.ExecContext(ctx, `
+		INSERT INTO sessions (
+			id, project_id, owner_person_id, workspace_root_id, posture, status, created_at, activity_at, updated_at
+		) VALUES ('busy-session', ?, (SELECT id FROM people WHERE role = 'owner'), ?, 'build', 'busy', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z')
+	`, p.ID, p.Roots[0].ID)
+	testutil.FailErr(t, "insert busy session", err)
+	for i := range 3 {
+		_, err := sqlDB.ExecContext(ctx, `INSERT INTO source_files (id, project_id, entry_kind, created_ts) VALUES (?, ?, 'file', '2026-01-01T00:00:00Z')`,
+			"file-"+strconv.Itoa(i), p.ID)
+		testutil.FailErr(t, "insert source file", err)
+	}
+
+	testutil.FailErr(t, "forced delete", reg.Delete(project.WithForcedLifecycle(ctx), p.ID))
+	var remaining int
+	testutil.FailErr(t, "count project rows", sqlDB.QueryRowContext(ctx,
+		`SELECT (SELECT count(*) FROM sessions WHERE project_id = ?) + (SELECT count(*) FROM source_files WHERE project_id = ?)`, p.ID, p.ID).Scan(&remaining))
+	if remaining != 0 {
+		t.Fatalf("forced delete left %d project rows", remaining)
+	}
+	if _, err := reg.Get(ctx, p.ID); !errors.Is(err, project.ErrNotFound) {
+		t.Fatalf("get deleted project = %v want ErrNotFound", err)
+	}
+	if err := reg.Delete(ctx, p.ID); !errors.Is(err, project.ErrNotFound) {
+		t.Fatalf("delete again = %v want ErrNotFound", err)
 	}
 }

@@ -14,8 +14,10 @@ import (
 )
 
 func TestRecoveryMaterializationRefusesIncompleteSourcesWithoutPublishing(t *testing.T) {
+	t.Parallel()
 	for _, failure := range []string{"canceled", "blocked parent", "missing source"} {
 		t.Run(failure, func(t *testing.T) {
+			t.Parallel()
 			root := t.TempDir()
 			source := filepath.Join(root, "source")
 			testutil.FailErr(t, "seed original payload", os.WriteFile(source, []byte("original bytes"), 0o600))
@@ -44,6 +46,7 @@ func TestRecoveryMaterializationRefusesIncompleteSourcesWithoutPublishing(t *tes
 }
 
 func TestRecoverySymlinkCapturesOnlyItsTargetText(t *testing.T) {
+	t.Parallel()
 	root := t.TempDir()
 	link := filepath.Join(root, "link")
 	target := filepath.Join(root, "unrelated-user-data")
@@ -63,6 +66,7 @@ func TestRecoverySymlinkCapturesOnlyItsTargetText(t *testing.T) {
 }
 
 func TestRecoveryUsageSeparatesCopiedAndSharedPayloadFromDatabase(t *testing.T) {
+	t.Parallel()
 	root := t.TempDir()
 	copied, shared := filepath.Join(root, "copied"), filepath.Join(root, "shared")
 	testutil.FailErr(t, "seed copied payload", os.WriteFile(copied, []byte("copy"), 0o600))
@@ -76,6 +80,7 @@ func TestRecoveryUsageSeparatesCopiedAndSharedPayloadFromDatabase(t *testing.T) 
 }
 
 func TestRecoveryCaptureRefusesAnOccupiedDestination(t *testing.T) {
+	t.Parallel()
 	path := filepath.Join(t.TempDir(), "retained-recovery")
 	testutil.FailErr(t, "seed existing recovery", os.WriteFile(path, []byte("retained bytes"), 0o600))
 	if _, _, err := captureRecoveryDirectory(t.Context(), CreateOpts{}, path); !os.IsExist(err) {
@@ -89,6 +94,7 @@ func TestRecoveryCaptureRefusesAnOccupiedDestination(t *testing.T) {
 }
 
 func TestRecoverySharingSelectsOnlyImmutableCanonicalSourceBodies(t *testing.T) {
+	t.Parallel()
 	root := t.TempDir()
 	canonical := filepath.ToSlash(filepath.Join(enginepaths.SourceContentDirName, "aa", strings.Repeat("b", 62)+".zst"))
 	for _, item := range []struct {
@@ -116,6 +122,7 @@ func TestRecoverySharingSelectsOnlyImmutableCanonicalSourceBodies(t *testing.T) 
 }
 
 func TestRecoveryCapturePreservesSourceBodiesAfterLiveCollection(t *testing.T) {
+	t.Parallel()
 	root := t.TempDir()
 	input := filepath.Join(t.TempDir(), "source.txt")
 	testutil.FailErr(t, "write source", os.WriteFile(input, []byte("retained source bytes"), 0o600))
@@ -155,6 +162,7 @@ func TestRecoveryCapturePreservesSourceBodiesAfterLiveCollection(t *testing.T) {
 }
 
 func TestRecoverySpaceEstimateExcludesOnlySameVolumeSharedBodies(t *testing.T) {
+	t.Parallel()
 	root := t.TempDir()
 	immutable := filepath.Join(root, enginepaths.SourceContentDirName, "aa", strings.Repeat("b", 62)+".zst")
 	mutable := filepath.Join(root, "drafts", "body")
@@ -176,6 +184,7 @@ func TestRecoverySpaceEstimateExcludesOnlySameVolumeSharedBodies(t *testing.T) {
 }
 
 func TestRecoveryBodyLinksPreserveModesAndFallBackAcrossVolumes(t *testing.T) {
+	t.Parallel()
 	root := t.TempDir()
 	path := filepath.Join(root, "body")
 	testutil.FailErr(t, "seed immutable body", os.WriteFile(path, []byte("retained"), 0o400))

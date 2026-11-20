@@ -17,7 +17,7 @@ def manifest(version):
                                             "signature": rehearsal_signature(version)}}}
 
 
-class PreparationTests(unittest.TestCase):
+class PreparationFixture(unittest.TestCase):
     def setUp(self):
         temporary = tempfile.TemporaryDirectory()
         self.addCleanup(temporary.cleanup)
@@ -57,6 +57,8 @@ class PreparationTests(unittest.TestCase):
     def prepare(self):
         return preparation.prepare(self.pointer, self.archives, self.source, self.output)
 
+
+class PreparationTests(PreparationFixture):
     def test_exact_archives_are_verified_before_offers_are_signed(self):
         events = []
         def sign(pointer, *_):
@@ -139,3 +141,51 @@ class PreparationTests(unittest.TestCase):
         self.assertEqual(preparation.case_matrix({"cases": [{"id": "1.0.2-stable"}, {"id": "1.0.2-preview"}]}),
                          {"include": [{"case_id": "1.0.2-stable"}, {"case_id": "1.0.2-preview"}]})
         self.assertEqual(preparation.case_matrix({"cases": []}), {"include": [{"case_id": "not_applicable"}]})
+
+
+class PublishedPreparationTests(PreparationFixture):
+    """Published fixtures reuse every public signature and sign nothing."""
+
+    def setUp(self):
+        super().setUp()
+        self.plan["candidate_source"] = "published"
+        self.plan["feeds"].append({"channel": "preview", "generation": 1, "path": "updates/preview/key-1/latest.json",
+                                   "manifest": self.candidate})
+        self.published = json.dumps(self.candidate, separators=(",", ":")).encode()
+        def capture(_origin, _source, destination):
+            pointer = destination / "updates/preview/key-1/latest.json"
+            pointer.parent.mkdir(parents=True)
+            pointer.write_bytes(self.published)
+            pointer.with_suffix(".json.sig").write_bytes(b"production feed signature")
+            return copy.deepcopy(self.plan)
+        published = patch.object(preparation, "capture_published", side_effect=capture)
+        published.start()
+        self.addCleanup(published.stop)
+        (self.source / "lycaon/testdata/upgrade-corpus/1.1.0/MANIFEST.json").write_text('{"app_version": "1.1.0", "schema_version": 4}')
+
+    def test_the_published_pointer_is_served_byte_for_byte_and_nothing_is_signed(self):
+        fetched = []
+        with patch.object(preparation, "verify"), patch.object(preparation, "sign") as signer, \
+             patch.object(preparation, "fetch_archive", side_effect=lambda manifest, path: (fetched.append(manifest["version"]), path.write_bytes(b"public"))):
+            result = preparation.prepare_published(self.source, self.output)
+        signer.assert_not_called()
+        self.assertEqual(sorted(fetched), ["1.0.2", "1.1.0"])
+        offered = self.output / "offers/preview/key-1/latest.json"
+        self.assertEqual(offered.read_bytes(), self.published)
+        self.assertEqual(offered.with_suffix(".json.sig").read_bytes(), b"production feed signature")
+        # The candidate's schema is its own sealed corpus, not the source's.
+        self.assertEqual(result["schema_version"], 4)
+        self.assertEqual(result["candidate_source"], "published")
+
+    def test_feed_credentials_are_refused_before_anything_is_written(self):
+        with patch.dict(preparation.os.environ, {"FEED_SIGNING_KEYS_JSON": "{}"}):
+            with self.assertRaisesRegex(ValueError, "must not receive feed signing credentials"):
+                preparation.prepare_published(self.source, self.output)
+        self.assertFalse(self.output.exists())
+
+    def test_a_pointer_with_other_artifacts_than_the_planned_step_is_refused(self):
+        self.plan["feeds"][-1]["manifest"] = {**self.candidate, "platforms": {}}
+        with patch.object(preparation, "verify"), patch.object(preparation, "sign") as signer:
+            with self.assertRaisesRegex(ValueError, "differs from its authenticated source pointer"):
+                preparation.prepare_published(self.source, self.output)
+        signer.assert_not_called()

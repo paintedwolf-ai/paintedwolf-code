@@ -5,11 +5,14 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"slices"
 	"testing"
+	"time"
 
 	"github.com/lycaon/lycaon/internal/configdir"
 	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/timelayout"
 )
 
 func TestSQLRegistryPersistence(t *testing.T) {
@@ -207,5 +210,41 @@ func TestRegistriesAllowAnyExistingDirectoryAndPreserveStructuralChecks(t *testi
 				t.Fatalf("file CreateWithRoot err = %v, want ErrNotDirectory", err)
 			}
 		})
+	}
+}
+
+// List orders by last open, newest first, with creation order breaking ties
+// between projects opened within one clock tick.
+func TestSQLRegistryListRecentFirstAndReadModel(t *testing.T) {
+	ctx := t.Context()
+	sqlDB := testdbfixture.Open(t, "projects-list.db")
+	reg := NewSQLRegistry(sqlDB)
+	older, err := reg.Create(ctx, CreateParams{})
+	testutil.FailErr(t, "create older", err)
+	newer, err := reg.Create(ctx, CreateParams{})
+	testutil.FailErr(t, "create newer", err)
+	name := "named"
+	_, err = reg.Patch(ctx, newer.ID, PatchParams{Name: &name})
+	testutil.FailErr(t, "rename newer", err)
+
+	listed := func() []Project {
+		t.Helper()
+		list, err := reg.List(ctx)
+		testutil.FailErr(t, "list projects", err)
+		return slices.DeleteFunc(list, func(p Project) bool { return p.ID != older.ID && p.ID != newer.ID })
+	}
+	got := listed()
+	if len(got) != 2 || got[0].ID != newer.ID || got[1].ID != older.ID {
+		t.Fatalf("listed = %+v, want newer %s then older %s", got, newer.ID, older.ID)
+	}
+	if got[0].Name != name || got[0].SessionCount != 0 || got[1].SessionCount != 0 {
+		t.Fatalf("read model = %+v", got)
+	}
+
+	reopened := timelayout.Format(time.Now().UTC().Add(time.Hour))
+	_, err = sqlDB.ExecContext(ctx, `UPDATE projects SET last_opened_at = ? WHERE id = ?`, reopened, older.ID)
+	testutil.FailErr(t, "reopen older", err)
+	if got := listed(); len(got) != 2 || got[0].ID != older.ID {
+		t.Fatalf("listed after reopening older = %+v, want %s first", got, older.ID)
 	}
 }

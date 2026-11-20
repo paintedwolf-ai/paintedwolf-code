@@ -1,7 +1,6 @@
 package worker
 
 import (
-	"github.com/lycaon/lycaon/internal/timelayout"
 	"path/filepath"
 	"testing"
 	"time"
@@ -11,6 +10,7 @@ import (
 	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/timelayout"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -123,8 +123,8 @@ func TestLivePollerRescuesItsClaimBeforeExpirySweep(t *testing.T) {
 	}
 }
 
-func TestInMemoryExpiredClaimRetryWakesClaimer(t *testing.T) {
-	queue := NewInMemoryQueue(1)
+func TestExpiredClaimRetryWakesClaimer(t *testing.T) {
+	queue := newTestQueue(t, 1, testdbseed.DefaultProjectID)
 	jobID, err := queue.EnqueueWithProjectID(t.Context(), testdbseed.DefaultProjectID, api.WorkerTask{
 		ProjectID: testdbseed.DefaultProjectID, Prompt: "fixture", Brief: "fixture",
 		AgentType: "implement", ExecutionTarget: api.ExecutionTargetLocal,
@@ -137,9 +137,8 @@ func TestInMemoryExpiredClaimRetryWakesClaimer(t *testing.T) {
 	claimed, err := queue.ClaimNext(t.Context(), ClaimRequest{ClaimedBy: "poller"})
 	testutil.FailErr(t, "claim", err)
 	past := time.Now().Add(-time.Minute)
-	queue.mu.Lock()
-	queue.jobs[jobID].task.LeaseExpiresAt = &past
-	queue.mu.Unlock()
+	_, err = queue.db.ExecContext(t.Context(), "UPDATE worker_jobs SET lease_expires_at=? WHERE id=?", past.UTC().Format(time.RFC3339Nano), jobID)
+	testutil.FailErr(t, "expire claim", err)
 
 	recovered, err := queue.RecoverExpiredClaims(t.Context())
 	testutil.FailErr(t, "recover", err)

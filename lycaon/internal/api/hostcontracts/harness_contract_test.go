@@ -11,7 +11,8 @@ import (
 	contractfixture "github.com/lycaon/lycaon/internal/api/contractfixture"
 	"github.com/lycaon/lycaon/internal/configdir"
 	"github.com/lycaon/lycaon/internal/harnessfixture"
-	sessionstore "github.com/lycaon/lycaon/internal/session/store"
+	"github.com/lycaon/lycaon/internal/session/store/storetest"
+	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/version"
 )
@@ -21,7 +22,7 @@ func TestHarnessContractRequiresIsolatedAuthenticatedChannel(t *testing.T) {
 		t.Run(map[bool]string{false: "ordinary", true: "harness"}[enabled], func(t *testing.T) {
 			t.Setenv(configdir.EnvDev, "1")
 			t.Setenv(configdir.EnvHarness, map[bool]string{false: "", true: "1"}[enabled])
-			server := hostapi.NewServer(contractfixture.RequiredTestDeps(t, hostapi.Dependencies{Core: hostapi.CoreDependencies{Store: sessionstore.NewMemory()}}), nil, hostapi.TestAPIToken)
+			server := hostapi.NewServer(contractfixture.RequiredTestDeps(t, hostapi.Dependencies{Core: hostapi.CoreDependencies{Store: storetest.New(t, testdbseed.DefaultProjectID)}}), nil, hostapi.TestAPIToken)
 			for _, authenticated := range []bool{false, true} {
 				request := httptest.NewRequest(http.MethodGet, "/harness/contract", nil)
 				if authenticated {

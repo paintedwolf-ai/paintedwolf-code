@@ -8,17 +8,18 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/session/store"
+	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
-func programEffectsFixture(t *testing.T) (*Service, *store.Memory, string) {
+func programEffectsFixture(t *testing.T) (*Service, *store.SQL, string) {
 	t.Helper()
-	mem := store.NewMemory()
-	sess, err := mem.Create(t.Context(), api.CreateSessionRequest{ProviderID: "fixture", Model: "large"}, testdbseed.DefaultProjectID)
+	sessionStore := storetest.New(t, testdbseed.DefaultProjectID)
+	sess, err := sessionStore.Create(t.Context(), api.CreateSessionRequest{ProviderID: "fixture", Model: "large"}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
-	return New(mem, nil), mem, sess.ID
+	return New(sessionStore, nil), sessionStore, sess.ID
 }
 
 func commandRow(callID string, edits ...api.FileEditSnapshot) api.Message {
@@ -30,9 +31,9 @@ func textEdit(path, before, after string) api.FileEditSnapshot {
 }
 
 // storedEdits renders a stored row's edits as path:before>after.
-func storedEdits(t *testing.T, mem *store.Memory, sessionID, callID string) (string, int) {
+func storedEdits(t *testing.T, sessionStore *store.SQL, sessionID, callID string) (string, int) {
 	t.Helper()
-	msg, err := mem.GetMessage(t.Context(), sessionID, "row-"+callID)
+	msg, err := sessionStore.GetMessage(t.Context(), sessionID, "row-"+callID)
 	testutil.FailErr(t, "read stored row", err)
 	var parts []string
 	for _, edit := range msg.ToolResult.FileEdits {
@@ -46,10 +47,10 @@ func storedEdits(t *testing.T, mem *store.Memory, sessionID, callID string) (str
 }
 
 func TestProgramEffectsJoinTheStoredResultOfTheirCall(t *testing.T) {
-	svc, mem, sessionID := programEffectsFixture(t)
+	svc, sessionStore, sessionID := programEffectsFixture(t)
 	testutil.FailErr(t, "store result", svc.Append(t.Context(), sessionID, commandRow("c1", textEdit("a.go", "1", "2"))))
 	svc.AppendProgramEffects(t.Context(), sessionID, "c1", []api.FileEditSnapshot{textEdit("a.go", "2", "3"), {RootID: "r1", Path: "b.go", After: "new"}}, 2)
-	if got, omitted := storedEdits(t, mem, sessionID, "c1"); got != "a.go:1>3 b.go:->new" || omitted != 2 {
+	if got, omitted := storedEdits(t, sessionStore, sessionID, "c1"); got != "a.go:1>3 b.go:->new" || omitted != 2 {
 		t.Fatalf("stored %q with %d omitted, want the composed edit, the new file and 2", got, omitted)
 	}
 }
@@ -66,14 +67,14 @@ func TestProgramEffectsWaitForTheirResultRow(t *testing.T) {
 		},
 	} {
 		t.Run(name, func(t *testing.T) {
-			svc, mem, sessionID := programEffectsFixture(t)
+			svc, sessionStore, sessionID := programEffectsFixture(t)
 			svc.AppendProgramEffects(t.Context(), sessionID, "c1", []api.FileEditSnapshot{textEdit("late.go", "1", "2")}, 0)
 			testutil.FailErr(t, "store another result", appendRow(svc, t.Context(), sessionID, commandRow("c0")))
 			testutil.FailErr(t, "store result", appendRow(svc, t.Context(), sessionID, commandRow("c1")))
-			if got, _ := storedEdits(t, mem, sessionID, "c1"); got != "late.go:1>2" {
+			if got, _ := storedEdits(t, sessionStore, sessionID, "c1"); got != "late.go:1>2" {
 				t.Fatalf("stored %q, want the edit that waited", got)
 			}
-			if got, _ := storedEdits(t, mem, sessionID, "c0"); got != "" {
+			if got, _ := storedEdits(t, sessionStore, sessionID, "c0"); got != "" {
 				t.Fatalf("another call's result took %q", got)
 			}
 			if len(svc.programEdits.held) != 0 {
@@ -84,7 +85,7 @@ func TestProgramEffectsWaitForTheirResultRow(t *testing.T) {
 }
 
 func TestProgramEffectsForAResultNeverStoredEndAtThePersonsNextMessage(t *testing.T) {
-	svc, mem, sessionID := programEffectsFixture(t)
+	svc, sessionStore, sessionID := programEffectsFixture(t)
 	svc.AppendProgramEffects(t.Context(), sessionID, "c1", []api.FileEditSnapshot{textEdit("late.go", "1", "2")}, 0)
 	// A host prompt is not the person's message.
 	testutil.FailErr(t, "store host prompt", svc.Append(t.Context(), sessionID, api.Message{Role: api.MessageRoleUser, Content: "wake", Visibility: api.MessageVisibilityInternal}))
@@ -93,7 +94,7 @@ func TestProgramEffectsForAResultNeverStoredEndAtThePersonsNextMessage(t *testin
 	}
 	testutil.FailErr(t, "store user message", svc.Append(t.Context(), sessionID, api.Message{Role: api.MessageRoleUser, Content: "next"}))
 	testutil.FailErr(t, "store result", svc.Append(t.Context(), sessionID, commandRow("c1")))
-	if got, _ := storedEdits(t, mem, sessionID, "c1"); got != "" || len(svc.programEdits.held) != 0 {
+	if got, _ := storedEdits(t, sessionStore, sessionID, "c1"); got != "" || len(svc.programEdits.held) != 0 {
 		t.Fatalf("stored %q and holding %+v after the person's next message", got, svc.programEdits.held)
 	}
 }
@@ -107,7 +108,7 @@ func TestProgramEffectsWithNothingToRecordHoldNothing(t *testing.T) {
 }
 
 func TestProgramEffectsAreScreenedLikeTheRowTheyJoin(t *testing.T) {
-	svc, mem, sessionID := programEffectsFixture(t)
+	svc, sessionStore, sessionID := programEffectsFixture(t)
 	svc.SetRedactor(func(_ context.Context, msg api.Message) (api.Message, bool) {
 		if msg.ToolResult == nil {
 			return msg, false
@@ -122,7 +123,7 @@ func TestProgramEffectsAreScreenedLikeTheRowTheyJoin(t *testing.T) {
 	})
 	testutil.FailErr(t, "store result", svc.Append(t.Context(), sessionID, commandRow("c1")))
 	svc.AppendProgramEffects(t.Context(), sessionID, "c1", []api.FileEditSnapshot{{RootID: "r1", Path: ".env", After: "TOKEN=hunter2"}}, 0)
-	if got, _ := storedEdits(t, mem, sessionID, "c1"); got != ".env:->TOKEN=[redacted]" {
+	if got, _ := storedEdits(t, sessionStore, sessionID, "c1"); got != ".env:->TOKEN=[redacted]" {
 		t.Fatalf("stored %q, want the appended text screened", got)
 	}
 }
@@ -130,7 +131,7 @@ func TestProgramEffectsAreScreenedLikeTheRowTheyJoin(t *testing.T) {
 // Whichever of the program's end and the row's storing comes first, each edit
 // is recorded once.
 func TestProgramEffectsAreRecordedOnceWhateverTheOrder(t *testing.T) {
-	svc, mem, sessionID := programEffectsFixture(t)
+	svc, sessionStore, sessionID := programEffectsFixture(t)
 	const calls = 48
 	var wg sync.WaitGroup
 	for i := range calls {
@@ -149,7 +150,7 @@ func TestProgramEffectsAreRecordedOnceWhateverTheOrder(t *testing.T) {
 	}
 	wg.Wait()
 	for i := range calls {
-		if got, _ := storedEdits(t, mem, sessionID, fmt.Sprintf("c%d", i)); got != "late.go:1>2" {
+		if got, _ := storedEdits(t, sessionStore, sessionID, fmt.Sprintf("c%d", i)); got != "late.go:1>2" {
 			t.Fatalf("call %d stored %q, want its one edit", i, got)
 		}
 	}

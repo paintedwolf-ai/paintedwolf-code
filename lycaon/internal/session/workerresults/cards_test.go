@@ -4,19 +4,20 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/lycaon/lycaon/internal/citationmd"
 	"testing"
 
+	"github.com/lycaon/lycaon/internal/citationmd"
 	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/session/closeouts"
 	"github.com/lycaon/lycaon/internal/session/store"
+	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"github.com/lycaon/lycaon/internal/session/workercompletion"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
-type memoryTranscript struct{ messages *store.Memory }
+type memoryTranscript struct{ messages *store.SQL }
 
 func (m memoryTranscript) Append(ctx context.Context, session string, messages ...api.Message) error {
 	return m.messages.AppendMessages(ctx, session, messages...)
@@ -27,7 +28,7 @@ func (m memoryTranscript) Update(ctx context.Context, session, id string, messag
 }
 
 func TestCardsRetainDispatchIdentityAcrossCompletionRetries(t *testing.T) {
-	messages := store.NewMemory()
+	messages := storetest.New(t, testdbseed.DefaultProjectID)
 	parent, err := messages.Create(t.Context(), api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create parent", err)
 	cards := NewCards(messages, memoryTranscript{messages}, nil, nil)
@@ -50,7 +51,7 @@ func TestCardsRetainDispatchIdentityAcrossCompletionRetries(t *testing.T) {
 // A round an instruction started completes onto that instruction's result;
 // an instruction that reached a running round started nothing to complete.
 func TestInstructedRoundCompletesOntoItsInstruction(t *testing.T) {
-	messages := store.NewMemory()
+	messages := storetest.New(t, testdbseed.DefaultProjectID)
 	parent, err := messages.Create(t.Context(), api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create parent", err)
 	instruct := func(callID string, dispatch *api.WorkerDispatch) []api.Message {
@@ -82,7 +83,7 @@ func (f fakeTaskLookup) Get(id string) (*api.WorkerTask, bool) {
 }
 
 func TestCardsRejectMismatchedEnvelopeBeforeChangingTranscript(t *testing.T) {
-	messages := store.NewMemory()
+	messages := storetest.New(t, testdbseed.DefaultProjectID)
 	parent, err := messages.Create(t.Context(), api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create parent", err)
 	cards := NewCards(messages, memoryTranscript{messages}, nil, nil)
@@ -116,7 +117,7 @@ func TestTerminalWorkerPublicationRetiresPinnedCloseoutBeforeWake(t *testing.T) 
 	for _, status := range []string{"complete", "failed", "canceled"} {
 		for _, fails := range []bool{false, true} {
 			t.Run(status+fmt.Sprint(fails), func(t *testing.T) {
-				messages := store.NewMemory()
+				messages := storetest.New(t, testdbseed.DefaultProjectID)
 				parent, err := messages.Create(t.Context(), api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 				testutil.FailErr(t, "create parent", err)
 				other, err := messages.Create(t.Context(), api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)

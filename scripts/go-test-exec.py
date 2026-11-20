@@ -1,32 +1,32 @@
 #!/usr/bin/env python3
 """`go test -exec` program for shared verification stages.
 
-Reports each package's outcome the moment its test binary exits, replays a recorded pass for an
-identical build and identical observed inputs, and records new passes. Outside a shared stage it only
-runs the binary.
+Reports each package's outcome the moment its test binary exits, holds it to its memory budget, and fails
+it for processes it leaves behind. Outside a shared stage it only runs the binary.
 """
 
+import json
 import os
 from pathlib import Path
 import re
 import select
 import signal
 import sys
+import tempfile
 import time
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-import verification_reuse as reuse  # noqa: E402
+from verification_lifecycle import custody  # noqa: E402
 from ci_policy.resources import Monitor, budget, runtime_environment  # noqa: E402
 
-CONTROL_ENV = ("PW_TEST_STAGE_EVENTS", "PW_TEST_REUSE_STORE", "PW_TEST_ENVIRONMENT_IDENTITY", "PW_TEST_PACKAGE_IDENTITIES",
-               "PW_TEST_RACE",
-               "PW_TEST_SCRATCH_ROOT", "PW_TEST_SOURCE_ROOT", "PW_TEST_MODULE_ROOT", "PW_TEST_STAGE_ID",
-               "PW_TEST_BATCH_DIRECTORY")
-# A test that leaks a process holding its output open cannot delay the package's outcome for long.
-OUTPUT_GRACE_SECONDS = 5
+CONTROL_ENV = ("PW_TEST_STAGE_EVENTS", "PW_TEST_RACE", "PW_TEST_SCRATCH_ROOT", "PW_TEST_MODULE_ROOT",
+               "PW_TEST_STAGE_ID", "PW_TEST_BATCH_DIRECTORY")
+# Every process a package starts inherits this entry unless it clears its environment.
+OWNER_ENV = "PW_TEST_PACKAGE_OWNER"
 # A test the watchdog found waiting is as much the failure as one that reported it.
 FAILED_TEST = re.compile(r"^\s*--- FAIL: (\S+)|^pending wait: (\S+): ")
 MAX_FAILED_TESTS = 20
+MAX_OUTPUT_BYTES = 64 << 20
 
 
 def write_all(data):
@@ -35,8 +35,12 @@ def write_all(data):
         view = view[os.write(1, view):]
 
 
-def execute(binary, arguments, env, observe_forks, resource_limit=None):
-    """Run the binary with combined output streamed through; returns (wait status, output, forked, resource violation)."""
+def execute(binary, arguments, env, owner, observe_forks, settle, resource_limit=None):
+    """Run the binary with combined output streamed through.
+
+    Returns (wait status, output, forked, resource violation, leaked processes). Once the binary exits, settle
+    removes what it left behind, so a leaked holder of the output cannot delay the outcome.
+    """
     output_read, output_write = os.pipe()
     ready_read, ready_write = os.pipe()
     pid = os.fork()
@@ -48,6 +52,8 @@ def execute(binary, arguments, env, observe_forks, resource_limit=None):
             os.read(ready_read, 1)
             os.dup2(output_write, 1)
             os.dup2(output_write, 2)
+            # An inherited file identifies descendants even after they leave the group.
+            os.set_inheritable(owner.fileno(), True)
             os.execve(binary, [binary, *arguments], env)
         finally:
             os._exit(127)
@@ -70,7 +76,7 @@ def execute(binary, arguments, env, observe_forks, resource_limit=None):
         signal.signal(signum, forward)
     os.write(ready_write, b"x")
     os.close(ready_write)
-    captured, forked, status, exited, open_output = bytearray(), False, None, None, True
+    captured, forked, status, open_output = bytearray(), False, None, True
 
     def drain_forks():
         nonlocal forked
@@ -78,7 +84,17 @@ def execute(binary, arguments, env, observe_forks, resource_limit=None):
             for event in watch.control(None, 16, 0):
                 forked = forked or bool(event.fflags & select.KQ_NOTE_FORK)
 
-    while open_output or status is None:
+    def read_output():
+        nonlocal open_output
+        chunk = os.read(output_read, 1 << 16)
+        if not chunk:
+            open_output = False
+            return
+        write_all(chunk)
+        if len(captured) <= MAX_OUTPUT_BYTES:
+            captured.extend(chunk)
+
+    while status is None:
         sources = [output_read] if open_output else []
         if watch is not None:
             sources.append(watch.fileno())
@@ -89,25 +105,66 @@ def execute(binary, arguments, env, observe_forks, resource_limit=None):
         if watch is not None and watch.fileno() in readable:
             drain_forks()
         if open_output and output_read in readable:
-            chunk = os.read(output_read, 1 << 16)
-            if chunk:
-                write_all(chunk)
-                if len(captured) <= reuse.MAX_OUTPUT_BYTES:
-                    captured.extend(chunk)
-            else:
-                open_output = False
-        if status is None:
-            if monitor and monitor.sample():
-                # The PID was forked above and has not been reaped, so it cannot have been reused.
-                os.kill(pid, signal.SIGKILL)
-            finished, code = os.waitpid(pid, os.WNOHANG)
-            if finished:
-                status, exited, running = code, time.monotonic(), False
-        if status is not None and open_output and time.monotonic() - exited > OUTPUT_GRACE_SECONDS:
-            open_output = False
-    os.close(output_read)
+            read_output()
+        if monitor and monitor.sample():
+            # The PID was forked above and has not been reaped, so it cannot have been reused.
+            os.kill(pid, signal.SIGKILL)
+        finished, code = os.waitpid(pid, os.WNOHANG)
+        if finished:
+            status, running = code, False
     drain_forks()
-    return status, bytes(captured), (forked if watch is not None else None), monitor.violation if monitor else None
+    observed = forked if watch is not None else None
+    leaked = settle() if observed is not False else {}
+    # What the binary wrote is already in the pipe; anything still holding it open is not waited for.
+    while open_output and select.select([output_read], [], [], 0)[0]:
+        read_output()
+    os.close(output_read)
+    return status, bytes(captured), observed, monitor.violation if monitor else None, leaked
+
+
+def settle_package_children(owner, entry):
+    """Kill and name every live process that kept the package's file or environment entry."""
+    stat = os.fstat(owner.fileno())
+    expected = (stat.st_dev, stat.st_ino)
+    found = (custody.lease_holders(owner.name) | custody.carriers(entry)) - {os.getpid()}
+    births = {pid: custody.birth(pid) for pid in found}
+    names = custody.commands(found)
+    leaked = {}
+    for pid, created in births.items():
+        # A process gone by the time it is named exited on its own.
+        if created is None or pid not in names or custody.birth(pid) != created:
+            continue
+        leaked[pid] = names[pid]
+        if custody.carries(pid, entry) and custody.birth(pid) == created:
+            try:
+                os.kill(pid, signal.SIGKILL)
+            except ProcessLookupError:
+                pass
+        else:
+            custody.signal_holder(pid, created, owner.name, expected, signal.SIGKILL)
+    return leaked
+
+
+def fork_observable():
+    """Kernel process events report forks on macOS; elsewhere every package's children are scanned."""
+    return sys.platform == "darwin"
+
+
+def emit(events, value):
+    line = (json.dumps(value, separators=(",", ":")) + "\n").encode()
+    descriptor = os.open(events, os.O_WRONLY | os.O_APPEND | os.O_CREAT, 0o600)
+    try:
+        os.write(descriptor, line)
+    finally:
+        os.close(descriptor)
+
+
+def package_name(directory, module_root):
+    """Import path of the package whose test binary runs in `directory`."""
+    module = next((line.split()[1] for line in (Path(module_root) / "go.mod").read_text().splitlines()
+                   if line.startswith("module ")), None)
+    relative = Path(os.path.realpath(directory)).relative_to(os.path.realpath(module_root)).as_posix()
+    return module if relative == "." else f"{module}/{relative}"
 
 
 def failure_report(events, package, output):
@@ -131,29 +188,24 @@ def main():
     events = environment.get("PW_TEST_STAGE_EVENTS")
     if not events:
         os.execve(binary, [binary, *arguments], child_environment)
-    context = reuse.Context.from_environment(environment)
-    package = context.package(os.getcwd())
-    store = Path(environment["PW_TEST_REUSE_STORE"]) if environment.get("PW_TEST_REUSE_STORE") else None
+    package = package_name(os.getcwd(), environment["PW_TEST_MODULE_ROOT"])
     race = environment.get("PW_TEST_RACE") == "1"
-    environment["PW_PACKAGE_RESOURCE_IDENTITY"] = str(budget(package, race))
-    key = reuse.result_key(arguments, package, environment) if store and reuse.fork_observable() else None
     started = time.monotonic()
-    if key:
-        hit = reuse.lookup(store, key, context, environment)
-        if hit:
-            output, provenance = hit
-            write_all(output)
-            reuse.emit(events, {"package": package, "exit_code": 0, "elapsed": round(time.monotonic() - started, 3),
-                                "reused": provenance or {"recorded": True}})
-            return 0
-    log = None
-    if key:
-        log = Path(environment["PW_TEST_SCRATCH_ROOT"]) / "test-logs" / f"{os.getpid()}.log"
-        log.parent.mkdir(exist_ok=True)
-        arguments = [f"-test.testlogfile={log}", *arguments]
     limit = budget(package, race)
-    status, output, forked, resource_limit = execute(binary, arguments, runtime_environment(child_environment, limit),
-                                                     reuse.fork_observable(), limit)
+    entry = f"{OWNER_ENV}={os.getpid()}-{os.urandom(8).hex()}"
+    scan = {}
+
+    def settle():
+        scan_started = time.monotonic()
+        try:
+            return settle_package_children(owner, entry)
+        finally:
+            scan["seconds"] = round(time.monotonic() - scan_started, 3)
+
+    with tempfile.NamedTemporaryFile(prefix="package-child-", dir=environment["PW_TEST_SCRATCH_ROOT"]) as owner:
+        status, output, forked, resource_limit, leaked = execute(
+            binary, arguments, {**runtime_environment(child_environment, limit), OWNER_ENV: entry.partition("=")[2]},
+            owner, fork_observable(), settle, limit)
     elapsed = time.monotonic() - started
     code = os.waitstatus_to_exitcode(status)
     if resource_limit:
@@ -162,23 +214,20 @@ def main():
                       f"{resource_limit['measured_bytes']} bytes RSS > {resource_limit['limit_bytes']}\n").encode()
         output += diagnostic
         write_all(diagnostic)
-    event = {"package": package, "exit_code": code, "elapsed": round(elapsed, 3), "reused": False,
-             "forked": forked, "recorded": False}
+    if leaked:
+        code = 1
+        leaked_names = ", ".join(f"{name} (pid {pid})" for pid, name in leaked.items())
+        diagnostic = f"\npackage left child processes: {package}: {leaked_names}\n".encode()
+        output += diagnostic
+        write_all(diagnostic)
+    event = {"package": package, "exit_code": code, "elapsed": round(elapsed, 3), "forked": forked}
+    if scan:
+        event["child_scan_seconds"] = scan["seconds"]
     if resource_limit:
         event["resource_limit"] = resource_limit
     if code != 0:
         event.update(failure_report(events, package, output))
-    elif key and forked is False and log is not None and log.is_file():
-        inputs = reuse.observed_inputs(log.read_text(errors="replace"), os.getcwd(), context)
-        if inputs is not None:
-            provenance = {"batch_id": Path(environment.get("PW_TEST_BATCH_DIRECTORY", "")).name,
-                          "stage_id": environment.get("PW_TEST_STAGE_ID", ""), "recorded_at": time.time()}
-            event["recorded"] = reuse.record(store, key, package, inputs, context, environment, output, elapsed,
-                                             provenance)
-            event["inputs"] = len(inputs)
-    if log is not None:
-        log.unlink(missing_ok=True)
-    reuse.emit(events, event)
+    emit(events, event)
     if code < 0:
         signal.signal(-code, signal.SIG_DFL)
         os.kill(os.getpid(), -code)

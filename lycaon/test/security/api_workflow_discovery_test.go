@@ -17,7 +17,7 @@ func TestWorkflowCatalogIncludesPlan(t *testing.T) {
 	srv := h.Server
 	_ = createSessionHTTP(t, srv, t.TempDir())
 
-	req := authedRequest(t, http.MethodGet, "/v1/workflows", nil)
+	req := AuthedRequest(t, http.MethodGet, "/v1/workflows", nil)
 	w := httptest.NewRecorder()
 	srv.ServeHTTP(w, req)
 	if w.Code != http.StatusOK {
@@ -46,7 +46,7 @@ func TestPlanSlashReplacesActivePlanRun(t *testing.T) {
 	sess := createSessionHTTP(t, srv, t.TempDir())
 
 	startBody := planStartBody
-	req := authedRequest(t, http.MethodPost, "/v1/sessions/"+sess.ID+"/workflow-runs", strings.NewReader(startBody))
+	req := AuthedRequest(t, http.MethodPost, "/v1/sessions/"+sess.ID+"/workflow-runs", strings.NewReader(startBody))
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
 	srv.ServeHTTP(w, req)
@@ -54,7 +54,7 @@ func TestPlanSlashReplacesActivePlanRun(t *testing.T) {
 		t.Fatalf("start run status = %d body = %s", w.Code, w.Body.String())
 	}
 
-	req = authedRequest(t, http.MethodGet, "/v1/sessions/"+sess.ID+"/workflow-runs", nil)
+	req = AuthedRequest(t, http.MethodGet, "/v1/sessions/"+sess.ID+"/workflow-runs", nil)
 	w = httptest.NewRecorder()
 	srv.ServeHTTP(w, req)
 	if w.Code != http.StatusOK {
@@ -73,7 +73,7 @@ func TestPlanSlashReplacesActivePlanRun(t *testing.T) {
 	acceptPromptHTTP(t, srv, sess.ID, "/plan")
 	waitWorkflowRunCountHTTP(t, srv, sess.ID, len(history)+1)
 
-	req = authedRequest(t, http.MethodGet, "/v1/sessions/"+sess.ID+"/workflow-runs", nil)
+	req = AuthedRequest(t, http.MethodGet, "/v1/sessions/"+sess.ID+"/workflow-runs", nil)
 	w = httptest.NewRecorder()
 	srv.ServeHTTP(w, req)
 	if w.Code != http.StatusOK {

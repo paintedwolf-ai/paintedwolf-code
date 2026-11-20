@@ -51,17 +51,16 @@ VALUES(?,0,'/root',?,?,'index',1,420,1)`, chunk.id, chunk.path, chunk.oid)
 	insert, err := prepareLayoutEntryInsert(t.Context(), tx, layoutInsertRows)
 	testutil.FailErr(t, "prepare target entries", err)
 	defer func() { _ = insert.Close() }()
-	read, err := tx.PrepareContext(t.Context(), `SELECT root_path,path,sha256,git_oid,identity,size,mode,modified_ns FROM legacy_source_manifest_entries WHERE chunk_id = ?`)
-	testutil.FailErr(t, "prepare legacy chunk read", err)
-	defer func() { _ = read.Close() }()
-	converter := newLegacyManifestConverter(tx, insert, read)
-	converter.chunks.limit, converter.manifests.limit, converter.writtenChunks.limit = 1, 1, 1
+	converter, err := newLegacyManifestConverter(t.Context(), tx, insert)
+	testutil.FailErr(t, "prepare converter", err)
+	defer func() { _ = converter.close() }()
+	converter.manifests.limit, converter.writtenChunks.limit = 1, 1
 	var identities []string
 	for _, chunks := range [][]string{{"shared", "a"}, {"shared", "b"}, {"shared", "a"}} {
 		id, err := converter.convertRoot(t.Context(), "/root", chunks)
 		testutil.FailErr(t, "convert with evicted memos", err)
 		identities = append(identities, id)
-		if converter.chunks.used > 1 || converter.manifests.used > 1 || converter.writtenChunks.used > 1 {
+		if converter.manifests.used > 1 || converter.writtenChunks.used > 1 {
 			t.Fatal("conversion widened a memo's retention allowance")
 		}
 	}

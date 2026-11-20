@@ -7,13 +7,12 @@ import unittest
 from unittest.mock import patch
 
 import verification_plan as planning
-from verification_reuse import environment_identity
 
 
 # Values a host stamps per invocation: a fresh address, a boot's capture paths,
 # a session's own directory. Any of these inside the declared environment gives
-# every request a different compatibility digest, which ends batch sharing and
-# result reuse without any visible failure.
+# every request a different compatibility digest, which ends batch sharing
+# without any visible failure.
 PER_INVOCATION = {
     "PW_TEST_COMPLETION_FD": ("204", "211"),
     "HTTP_PROXY": ("http://127.0.0.1:51526", "http://127.0.0.1:51845"),
@@ -42,7 +41,7 @@ CHECKOUT_ENV = {
 
 class EnvironmentIdentityTests(unittest.TestCase):
     def test_two_invocations_of_one_checkout_share_a_digest(self):
-        """Batch sharing and Go result reuse both key on this digest."""
+        """Batch sharing keys on this environment."""
         first = dict(CHECKOUT_ENV)
         second = dict(CHECKOUT_ENV)
         for name, (a, b) in PER_INVOCATION.items():
@@ -57,7 +56,6 @@ class EnvironmentIdentityTests(unittest.TestCase):
             "the declared environment differs between two calls in one checkout; "
             "a per-invocation value reached it",
         )
-        self.assertEqual(environment_identity(first_declared), environment_identity(second_declared))
 
     def test_each_private_lifecycle_owner_participates_in_batch_source_identity(self):
         with tempfile.TemporaryDirectory() as directory:

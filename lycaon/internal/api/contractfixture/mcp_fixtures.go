@@ -15,7 +15,7 @@ import (
 	"github.com/lycaon/lycaon/internal/mcp"
 	"github.com/lycaon/lycaon/internal/project"
 	"github.com/lycaon/lycaon/internal/session"
-	"github.com/lycaon/lycaon/internal/session/store"
+	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/tools"
@@ -55,6 +55,8 @@ func NewMCPProvider(t *testing.T, opts ...TestDeps) (*hostapi.Server, *mcp.Runti
 // project overlay is permitted to enable, with the project MCP layer open.
 
 func NewMCPProviderWithDistro(t *testing.T, distroBody string, projectMCP bool, opts ...TestDeps) (*hostapi.Server, *mcp.Runtime) {
+	sessionFixture := storetest.New(t)
+
 	t.Helper()
 	globalPath := filepath.Join(t.TempDir(), "mcp.yaml")
 	toolReg := tools.NewDefaultRegistry()
@@ -75,9 +77,9 @@ func NewMCPProviderWithDistro(t *testing.T, distroBody string, projectMCP bool, 
 		testutil.FailErr(t, "reg.Catalog.Load failed", err)
 	}
 	t.Cleanup(func() { _ = reg.Close(t.Context()) })
-	store := store.NewMemory()
+	store := sessionFixture
 	deps := hostapi.Dependencies{Core: hostapi.CoreDependencies{
-		Store: store, Projects: project.NewMemoryRegistry(),
+		Store: store, Projects: project.NewSQLRegistry(sessionFixture.DB()),
 		Sessions: session.NewHost(store, session.Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, toolReg)}, External: hostapi.ExternalDependencies{MCP: reg}}
 	if projectMCP {
 		WithProjectMCP(t, reg)(&deps)

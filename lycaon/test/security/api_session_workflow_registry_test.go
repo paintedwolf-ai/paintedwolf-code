@@ -35,7 +35,7 @@ phases:
     complete_when: gates_satisfied
     gates: [child_run_complete]
 `
-	req := authedRequest(t, http.MethodPost, "/v1/sessions/"+sess.ID+"/workflows/compose", strings.NewReader(manifestYAML))
+	req := AuthedRequest(t, http.MethodPost, "/v1/sessions/"+sess.ID+"/workflows/compose", strings.NewReader(manifestYAML))
 	req.Header.Set("Content-Type", "application/yaml")
 	w := httptest.NewRecorder()
 	srv.ServeHTTP(w, req)
@@ -43,7 +43,7 @@ phases:
 		t.Fatalf("compose status = %d body = %s", w.Code, w.Body.String())
 	}
 
-	req = authedRequest(t, http.MethodGet, "/v1/workflows?session_id="+sess.ID, nil)
+	req = AuthedRequest(t, http.MethodGet, "/v1/workflows?session_id="+sess.ID, nil)
 	w = httptest.NewRecorder()
 	srv.ServeHTTP(w, req)
 	if w.Code != http.StatusOK {
@@ -66,7 +66,7 @@ phases:
 	}
 
 	startBody := `{"workflow_id":"hotfix-session","workflow_version":"1.0.0"}`
-	req = authedRequest(t, http.MethodPost, "/v1/sessions/"+sess.ID+"/workflow-runs", strings.NewReader(startBody))
+	req = AuthedRequest(t, http.MethodPost, "/v1/sessions/"+sess.ID+"/workflow-runs", strings.NewReader(startBody))
 	req.Header.Set("Content-Type", "application/json")
 	w = httptest.NewRecorder()
 	srv.ServeHTTP(w, req)
@@ -96,7 +96,7 @@ phases:
 		t.Fatalf("session_workflows rows after cascade = %d", len(rows))
 	}
 
-	req = authedRequest(t, http.MethodGet, "/v1/workflows?session_id="+sess.ID, nil)
+	req = AuthedRequest(t, http.MethodGet, "/v1/workflows?session_id="+sess.ID, nil)
 	w = httptest.NewRecorder()
 	srv.ServeHTTP(w, req)
 	if w.Code != http.StatusNotFound {

@@ -32,10 +32,18 @@ webE2e("interrupted tool settles after restart and preserves the unsent draft", 
   });
   pending = await apiJson<Pending>(request, "GET", pendingPath);
   expect(pending.session_id).toBe(sessionId);
+  // The draft is saved while the model is held, so the command is interrupted as soon as it runs.
+  const draft = "Unsent recovery draft — café 🌱";
+  await composer.fill(draft);
+  await page.evaluate(async () => {
+    const state = await import(/* @vite-ignore */ "/src/chat/composer/" + "composer-document-store.ts");
+    await state.flushComposerDocumentsToDisk();
+  });
   await apiJson(request, "POST", "/harness/llm/respond", {
     id: pending.id, tool_calls: [{ id: "bounded-command", name: "command", args: {
-      command: "printf 'recovery started\\n'; sleep 90; printf 'recovery finished\\n'",
-      timeout_ms: 120000,
+      // Each wait stays inside the inline budget, so the call runs instead of parking.
+      command: "printf 'recovery started\\n'; sleep 9; sleep 9; sleep 9; printf 'recovery finished\\n'",
+      timeout_ms: 60000,
     } }],
   });
   try {
@@ -47,12 +55,6 @@ webE2e("interrupted tool settles after restart and preserves the unsent draft", 
     });
     throw error;
   }
-  const draft = "Unsent recovery draft — café 🌱";
-  await composer.fill(draft);
-  await page.evaluate(async () => {
-    const state = await import(/* @vite-ignore */ "/src/chat/composer/" + "composer-document-store.ts");
-    await state.flushComposerDocumentsToDisk();
-  });
   await page.close();
   const restart = fileURLToPath(new URL("../../scripts/harness/crash-restart.sh", import.meta.url));
   await promisify(execFile)("bash", [restart], { timeout: 300_000 });

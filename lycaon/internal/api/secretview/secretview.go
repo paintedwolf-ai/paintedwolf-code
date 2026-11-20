@@ -39,6 +39,8 @@ func WriteError(responses *httpio.Responder, w http.ResponseWriter, r *http.Requ
 		responses.Fail(w, wire.ApiErrorCodeManagedSecretValueUnavailable, "this secret has no readable current value")
 	case errors.Is(err, secretcap.ErrValueChanged):
 		responses.Fail(w, wire.ApiErrorCodeManagedSecretValueChanged, "the secret changed while you were confirming; try again")
+	case errors.Is(err, secretcap.ErrOperationReused):
+		responses.Fail(w, wire.ApiErrorCodeIdempotencyConflict, "operation_id was already used for a different secret")
 	case errors.Is(err, secretcap.ErrInvalidUpdate), errors.Is(err, secretcap.ErrInvalidPut):
 		responses.Fail(w, wire.ApiErrorCodeInvalidRequest, managedSecretRefusal(err))
 	default:

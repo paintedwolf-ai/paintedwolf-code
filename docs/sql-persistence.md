@@ -81,17 +81,11 @@ These steps migrate SQL only. Every non-SQL durable format retains its explicit 
 
 Unknown shapes, including earlier development shapes with revision 1, remain untouched and enter recovery. Development may explicitly recreate its store with `LYCAON_DB_FRESH=1` or `./task db:wipe`; an upgrade failure never triggers that reset. Credentials, configuration and unrelated preferences remain outside the database reset boundary.
 
-### Locks
+### Schema version lock
 
-**Two locks travel with the baseline, and both are committed.** [`lycaon/internal/db/schema.sql.lock.json`](../lycaon/internal/db/schema.sql.lock.json) hashes `schema.sql` statement by statement in order, verified during release qualification (`PW_RELEASE_QUALIFICATION=1` or release-tagged builds) so an edit that reorders or silently rewrites an existing statement fails instead of landing as an appended change. [`lycaon/internal/db/schema_version_lock.json`](../lycaon/internal/db/schema_version_lock.json) carries the declared `schema_version` that the bundle smoke test, the upgrade corpus boot, and the upgrade rehearsal read back from a real store, which lets those checks assert a version rather than trust one.
+**The schema version lock is committed with the baseline.** [`lycaon/internal/db/schema_version_lock.json`](../lycaon/internal/db/schema_version_lock.json) carries the declared `schema_version` that the bundle smoke test, the upgrade corpus boot, and the upgrade rehearsal read back from a real store, which lets those checks assert a version rather than trust one. `TestReleaseSchemaLockMatchesHost` holds it equal to `SchemaVersion`.
 
-During release qualification, an intentional `schema.sql` edit turns `TestSchemaSQLLock` red until you record the new statement hashes:
-
-```bash
-UPDATE_SCHEMA_LOCK=1 ./task test:digest -- ./test/contract/persistence -run TestSchemaSQLLock
-```
-
-Run that only when the schema change is deliberate; the environment variable is the whole review boundary. The digest runs in a scratch snapshot, and the lock reaches the checkout through the same write-back as every other fixture refresh ([Dev tasks § Digest captures and locking](dev-tasks.md#digest-captures-and-locking)). Review the lock diff with the schema diff, and regenerate typed queries with `./task db:sqlc` in the same change.
+An edit that rewrites a released statement instead of registering a migration is caught by behaviour, not by hashing `schema.sql`: `TestReleasedCorpusUpgradesToCurrentAndRetainsUserData` (`lycaon/internal/db/released_corpus_upgrade_test.go`) upgrades every sealed release store to the current baseline and requires its rows to survive, and `./task upgrade:corpus:boot` boots those stores against the current sidecar. Regenerate typed queries with `./task db:sqlc` in the same change as any schema edit.
 
 ### Marker versus shape
 

@@ -60,7 +60,7 @@ func (inv *invocation) decodeLimit(n int64) int64 {
 // readBound reads one operand's bytes under read authority, refusing more
 // than maximum without retaining them.
 func (inv *invocation) readBound(operand string, maximum int64, limit string) ([]byte, os.FileInfo, error) {
-	bound, err := inv.bind(operand, false)
+	bound, err := inv.bindInput(operand)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -141,7 +141,7 @@ func (inv *invocation) collect(base string, operands []string, rule collectRule,
 		if base != "" && !filepath.IsAbs(name) {
 			operand = filepath.Join(base, name)
 		}
-		bound, err := inv.bind(operand, false)
+		bound, err := inv.bindInput(operand)
 		if err != nil {
 			return err
 		}

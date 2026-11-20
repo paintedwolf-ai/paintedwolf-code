@@ -279,24 +279,9 @@ func Validate(cfg *Config) error {
 	return nil
 }
 
-// WorkerFailureCodes returns sorted codes registered for SSE worker.failure.
-func WorkerFailureCodes(cfg *Config) []string {
-	return surfaceCodes(cfg, "worker_failure")
-}
-
 // HostErrorCodes returns sorted codes registered for SSE session.host_error.
 func HostErrorCodes(cfg *Config) []string {
 	return surfaceCodes(cfg, "host_error")
-}
-
-// HTTPCodes returns sorted codes registered for HTTP ErrorResponse rendering.
-func HTTPCodes(cfg *Config) []string {
-	return surfaceCodes(cfg, "http")
-}
-
-// PreflightCodes returns sorted codes registered for GET /v1/preflight results.
-func PreflightCodes(cfg *Config) []string {
-	return surfaceCodes(cfg, "preflight")
 }
 
 func surfaceCodes(cfg *Config, surface string) []string {

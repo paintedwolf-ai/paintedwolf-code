@@ -2,8 +2,6 @@ package contract
 
 import (
 	"context"
-	"os"
-	"path/filepath"
 	"testing"
 
 	"github.com/lycaon/lycaon/config"
@@ -11,90 +9,9 @@ import (
 	"github.com/lycaon/lycaon/internal/orchestration"
 	workflowcatalog "github.com/lycaon/lycaon/internal/workflow/catalog"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
-	"github.com/lycaon/lycaon/pkg/api"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
-	"github.com/lycaon/lycaon/test/contract/internal/wirespec"
 	"github.com/lycaon/lycaon/test/contract/internal/workflowfixture"
 )
-
-func TestBugbashInWorkflowCatalog(t *testing.T) {
-	t.Parallel()
-	catalog, err := workflowfixture.LoadMergedWorkflowCatalog(t)
-	contractcheck.FailErr(t, "loadMergedWorkflowCatalog failed", err)
-	m, ok := catalog["bugbash@1.1.0"]
-	if !ok {
-		t.Fatal("bugbash@1.1.0 missing from bundled catalog")
-	}
-	if m.Topology != "bugbash" {
-		t.Fatalf("topology = %q want bugbash", m.Topology)
-	}
-	if !m.IsCatalogVisible() {
-		t.Fatal("bugbash must be catalog-visible")
-	}
-	summary := m.Summary()
-	if summary.Topology != "bugbash" {
-		t.Fatalf("summary topology = %q", summary.Topology)
-	}
-	if summary.Trigger != "/bugbash" {
-		t.Fatalf("summary trigger = %q want /bugbash", summary.Trigger)
-	}
-
-	resolver := workflowcatalog.Resolver{}
-	summaries, err := resolver.ListResolved(context.Background(), "", "")
-	contractcheck.FailErr(t, "resolver.ListResolved failed", err)
-	hasBugbash, hasOptions := false, false
-	for _, row := range summaries {
-		if row.ID == "implement" {
-			t.Fatal("implement (attach.policy session_create) must not appear in product catalog API")
-		}
-		switch row.ID {
-		case "bugbash":
-			hasBugbash = true
-			if row.Trigger != "/bugbash" {
-				t.Fatalf("bugbash trigger = %q want /bugbash", row.Trigger)
-			}
-		case "options":
-			hasOptions = true
-			if row.Trigger != "/options" {
-				t.Fatalf("options trigger = %q want /options", row.Trigger)
-			}
-		}
-	}
-	if !hasBugbash || !hasOptions {
-		t.Fatalf("product catalog missing launch workflows: bugbash=%v options=%v", hasBugbash, hasOptions)
-	}
-	for _, id := range []string{"plan"} {
-		found := false
-		for _, row := range summaries {
-			if row.ID == id {
-				found = true
-				break
-			}
-		}
-		if !found {
-			t.Fatalf("product catalog missing %q", id)
-		}
-	}
-}
-
-func TestWorkflowManifestTopologyFieldSync(t *testing.T) {
-	t.Parallel()
-	root := contractcheck.RepoRoot(t)
-	if err := wirespec.SyncDTOFields(root, wirespec.DtoSyncSpec{
-		GoValue:       api.WorkflowSummary{},
-		OpenAPISchema: "WorkflowSummary",
-		TSInterface:   "WorkflowSummary",
-	}); err != nil {
-		contractcheck.FailErr(t, "wirespec.SyncDTOFields failed", err)
-	}
-	if err := wirespec.SyncDTOFields(root, wirespec.DtoSyncSpec{
-		GoValue:       api.WorkflowPresetSummary{},
-		OpenAPISchema: "WorkflowPresetSummary",
-		TSInterface:   "WorkflowPresetSummary",
-	}); err != nil {
-		contractcheck.FailErr(t, "wirespec.SyncDTOFields failed", err)
-	}
-}
 
 func TestProductCatalogDemoSKUs(t *testing.T) {
 	t.Parallel()
@@ -143,26 +60,6 @@ func TestProductCatalogDemoSKUs(t *testing.T) {
 		if match.Manifest.ID != wantID {
 			t.Fatalf("FindTriggerMatch(%q) manifest = %q want %q", trigger, match.Manifest.ID, wantID)
 		}
-	}
-}
-
-func TestBundledDefaultPipelineTopologyYAMLExists(t *testing.T) {
-	t.Parallel()
-	root := contractcheck.RepoRoot(t)
-	// default-pipeline ships as a topology file with no workflow manifest.
-	topologyPath := filepath.Join(root, "lycaon", "config", "packs", "painted-wolf", "platform", "workflows", "_topologies", "default-pipeline.yaml")
-	if _, err := os.Stat(topologyPath); err != nil {
-		t.Fatalf("topology file: %v", err)
-	}
-	bugbashPath := filepath.Join(root, "lycaon", "config", "packs", "painted-wolf", "bugbash", "workflows", "bugbash", "workflow.yaml")
-	m, err := workflowdef.LoadManifestFromFile(bugbashPath)
-	contractcheck.FailErr(t, "workflow.LoadManifestFromFile failed", err)
-	if m.Topology != "bugbash" {
-		t.Fatalf("topology = %q", m.Topology)
-	}
-	bugbashTopo := filepath.Join(root, "lycaon", "config", "packs", "painted-wolf", "platform", "workflows", "_topologies", m.Topology+".yaml")
-	if _, err := os.Stat(bugbashTopo); err != nil {
-		t.Fatalf("bugbash topology file: %v", err)
 	}
 }
 

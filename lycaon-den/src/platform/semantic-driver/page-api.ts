@@ -49,7 +49,7 @@ export interface LycaonDriverApi {
   /** Streams timeline telemetry through a host binding until stopped or the document unloads. */
   startRecording(opts: RecordOptions): Json;
   stopRecording(): Json;
-  waitFor(opts: { selector?: string; text?: string; timeout_ms?: number }): Promise<Json>;
+  waitFor(opts: { selector?: string; text?: string; gone?: boolean; timeout_ms?: number }): Promise<Json>;
   waitIdle(opts?: { timeout_ms?: number; settle_ms?: number }): Promise<Json>;
 }
 
@@ -363,7 +363,8 @@ async function aimAt(
   pick: (el: HTMLElement) => HTMLElement | null,
 ): Promise<Json> {
   const timeoutMs = opts.timeout_ms ?? DEFAULT_AIM_TIMEOUT_MS;
-  const deadline = Date.now() + timeoutMs;
+  const start = Date.now();
+  const deadline = start + timeoutMs;
   let last: Json = { error: "target not found" };
   while (Date.now() < deadline) {
     const found = findTarget(opts);
@@ -393,7 +394,7 @@ async function aimAt(
     }
     await sleep(100);
   }
-  return { ok: false, ...last, locators: locatorView(opts), state: readCompactState() };
+  return { ok: false, ...last, deadline_ms: timeoutMs, elapsed_ms: Date.now() - start, deadline_expired: true, locators: locatorView(opts), state: readCompactState() };
 }
 
 export function installLycaonDriver(): LycaonDriverApi {
@@ -445,7 +446,8 @@ export function installLycaonDriver(): LycaonDriverApi {
       });
       const target = findTarget(opts);
       if (!found.ok || !target) {
-        return { ok: false, error: "select target not found", locators: locatorView(opts), state: readCompactState() };
+        const { deadline_ms, elapsed_ms, deadline_expired } = found;
+        return { ok: false, error: "select target not found", deadline_ms, elapsed_ms, deadline_expired, locators: locatorView(opts), state: readCompactState() };
       }
       const el = target instanceof HTMLSelectElement ? target : target.querySelector("select");
       if (!(el instanceof HTMLSelectElement)) {
@@ -497,16 +499,21 @@ export function installLycaonDriver(): LycaonDriverApi {
 
     async waitFor(opts) {
       const timeoutMs = opts.timeout_ms ?? 30_000;
+      let present: () => boolean;
+      let label: string;
       if (opts.selector) {
-        return waitUntil(() => !!resolve(opts.selector!), { timeoutMs, label: `selector ${opts.selector}` });
+        present = () => !!resolve(opts.selector!);
+        label = `selector ${opts.selector}`;
+      } else if (opts.text) {
+        present = () => (document.body.innerText ?? "").includes(opts.text!);
+        label = `text "${opts.text}"`;
+      } else {
+        return { ok: false, error: "wait_for requires selector or text" };
       }
-      if (opts.text) {
-        return waitUntil(() => (document.body.innerText ?? "").includes(opts.text!), {
-          timeoutMs,
-          label: `text "${opts.text}"`,
-        });
+      if (opts.gone) {
+        return waitUntil(() => !present(), { timeoutMs, label: `${label} to be gone` });
       }
-      return { ok: false, error: "wait_for requires selector or text" };
+      return waitUntil(present, { timeoutMs, label });
     },
 
     async waitIdle(opts = {}) {

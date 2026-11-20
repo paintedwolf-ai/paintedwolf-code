@@ -66,17 +66,11 @@ type ExecOpts struct {
 	Child confine.ProcessAttributes
 }
 
-// DefaultVerifyTimeout is the default verify subprocess timeout.
-const DefaultVerifyTimeout = 10 * time.Minute
-
 // DefaultCommandWait bounds an inline foreground wait.
 const DefaultCommandWait = 30 * time.Second
 
 // MaxCommandWait caps an inline wait override.
 const MaxCommandWait = 30 * time.Second
-
-// MaxCommandTimeout bounds an agent-selected process deadline.
-const MaxCommandTimeout = 2 * time.Hour
 
 // DefaultGitTimeout is the default git subprocess timeout.
 const DefaultGitTimeout = 2 * time.Minute

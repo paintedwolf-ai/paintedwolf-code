@@ -14,11 +14,13 @@ import (
 	contractfixture "github.com/lycaon/lycaon/internal/api/contractfixture"
 	"github.com/lycaon/lycaon/internal/configlayout"
 	"github.com/lycaon/lycaon/internal/project"
-	"github.com/lycaon/lycaon/internal/session/store"
+	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"github.com/lycaon/lycaon/internal/testutil"
 )
 
 func TestDiagnosticsExportRouteReturnsRedactedArchive(t *testing.T) {
+	sessionFixture := storetest.New(t)
+
 	dataDir := t.TempDir()
 	const configSecret = "route-config-provider-secret"
 	const logSecret = "route-log-provider-secret"
@@ -32,7 +34,8 @@ func TestDiagnosticsExportRouteReturnsRedactedArchive(t *testing.T) {
 	}
 
 	srv := hostapi.NewServer(contractfixture.RequiredTestDeps(t, hostapi.Dependencies{Core: hostapi.CoreDependencies{
-		Store: store.NewMemory(), Projects: project.NewMemoryRegistry()}, Storage: hostapi.StorageDependencies{
+
+		Store: sessionFixture, Projects: project.NewSQLRegistry(sessionFixture.DB())}, Storage: hostapi.StorageDependencies{
 		ModuleRoot: configlayout.FindModuleRoot(), DataDir: dataDir}}), nil, hostapi.TestAPIToken)
 	req := contractfixture.NewAuthedRequest(http.MethodGet, "/v1/diagnostics/export", nil)
 	rec := httptest.NewRecorder()

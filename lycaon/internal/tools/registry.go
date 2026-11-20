@@ -510,6 +510,7 @@ type Invocation struct {
 	NativeInputs    *hitl.NativeActionInputs
 	NativeOperation *toolcontract.BoundOperation
 	NativeStages    []toolcontract.ExecutionStage
+	EntryTool       string // the program entry, such as verify, that reached this child
 	ID              string
 	ProjectID       string
 	SessionID       string
