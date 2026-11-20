@@ -250,10 +250,7 @@ const downloadAttempts = 3
 func downloadArchive(ctx context.Context, url string, file *os.File) error {
 	var failures []string
 	for attempt := 1; attempt <= downloadAttempts; attempt++ {
-		if err := file.Truncate(0); err != nil {
-			return err
-		}
-		if _, err := file.Seek(0, io.SeekStart); err != nil {
+		if err := rewind(file); err != nil {
 			return err
 		}
 		err := downloadFile(ctx, url, file)
@@ -267,6 +264,14 @@ func downloadArchive(ctx context.Context, url string, file *os.File) error {
 		}
 	}
 	return fmt.Errorf("download %s: %s", url, strings.Join(failures, "; "))
+}
+
+func rewind(file *os.File) error {
+	if err := file.Truncate(0); err != nil {
+		return err
+	}
+	_, err := file.Seek(0, io.SeekStart)
+	return err
 }
 
 func downloadFile(ctx context.Context, url string, w io.Writer) error {
