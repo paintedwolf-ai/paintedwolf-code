@@ -107,7 +107,7 @@ func prepareWork(uid int) (string, error) {
 			return "", err
 		}
 	}
-	if target, err := os.Readlink("/work"); err != nil || target != scratch {
+	if target, err := os.Readlink("/work"); err != nil || filepath.Clean(filepath.Join("/", target)) != scratch {
 		return "", errors.New("invalid guest work path")
 	}
 	for key, value := range map[string]string{"XDG_CACHE_HOME": filepath.Join(scratch, "cache"), "XDG_DATA_HOME": filepath.Join(scratch, "data")} {

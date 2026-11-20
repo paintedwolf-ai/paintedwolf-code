@@ -10,15 +10,19 @@ import (
 	"golang.org/x/sys/unix"
 )
 
-// Inside reports whether this process is the helper the outer helper
-// relaunched: the first process of the fresh PID namespace, whose user
-// namespace also differs from the engine's. The outer helper is never PID 1,
-// and its own user namespace need not be the engine's: under the protected
-// launch the broker starts it outside the engine's namespace.
+// Inside identifies the namespace relay before it replaces the inherited proc mount.
 func Inside(plan Plan) bool {
-	host := plan.Attest.HostNamespaces[NamespaceUser]
-	own, err := os.Readlink("/proc/self/ns/" + NamespaceUser)
-	return os.Getpid() == 1 && err == nil && host != "" && own != host
+	if os.Getpid() != 1 {
+		return false
+	}
+	for _, kind := range []string{NamespaceUser, NamespaceMount} {
+		host := plan.Attest.HostNamespaces[kind]
+		own, err := os.Readlink("/proc/self/ns/" + kind)
+		if err != nil || host == "" || own == host {
+			return false
+		}
+	}
+	return true
 }
 
 // mountProc gives the new PID namespace its own process table first, so any
