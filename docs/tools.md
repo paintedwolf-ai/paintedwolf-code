@@ -524,6 +524,12 @@ publishes the result through the pinned write door at its captured destination
 revision. A rewrite that would drop comments, tags or literals refuses with
 `JQ_EDIT_LOSSY`.
 
+### Private service commands
+
+`private-service -- PROGRAM ARG...` runs a packaged Linux executable in the invoking session’s private service environment. On both supported platforms, commands start in `/work`, temporary files go in `/work/tmp`, and later commands can use the same files and verified service endpoints. Host project paths, environment variables, credentials and external network access are unavailable inside this environment. Use ordinary `command` for host toolchains.
+
+A trailing `&` returns a normal session job handle. Subsequent calls can run a client in the same environment. Use `kill` or `command_stop` with the saved handle to stop the server. When the private files can be discarded, `private-service release` closes the idle environment and releases its capacity. Session disposal also shuts it down. Host interruption ends live work without replay.
+
 ### Platform adapter evidence
 
 `fseffect.Replace` reports whether replacement, directory durability and byte

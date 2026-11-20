@@ -310,6 +310,17 @@ On Linux an action settles when every launch's report pipe has closed, which hap
 
 A refusal is a fact about the boundary, not a verdict on the command. Recovery guidance appears only when the invocation failed or is still running; a successful command lists the refusals it absorbed without a card. A running job the kernel refuses ends a wait on it with the refusal, the same way a denied readiness destination ends a wait: a process waiting on a refused operation may never finish, and the wait must not run to its deadline in silence.
 
+### Private service isolation
+
+The Go host binds a private service environment to one session. The process subsystem owns the job lifetime. The confinement adapter provisions the environment and returns a retained channel. Opening the environment, running a client and stopping a job use the same command contract on both platforms. A host path supplied by a command cannot select another session’s controller.
+
+| Adapter | Execution boundary |
+|---|---|
+| Linux | The private userland runs under Linux kernel isolation. Workload sockets use the Linux supervisor’s bound-inode checks. |
+| macOS | A separate virtualization-entitled helper runs the private Linux userland in an ephemeral VM. A dedicated virtio socket device connects the host to the guest supervisor. The VM has no host directory share or network interface. |
+
+The guest supervisor launches unprivileged workloads in the private environment. The workload cannot inherit the management channel. The helper has no vault access. Existing human approval rules govern connections to host services and writes to host temporary directories.
+
 ### Platform coverage
 
 The intended policy is platform-independent; enforcement adapters differ. macOS and Linux have adapters; macOS reads the kernel's refusals of every kind, and Linux reports the socket calls its supervisor refuses. Where the host enforces, a capability the adapter cannot represent fails that launch rather than running unconfined. When confinement is required, an unavailable adapter or missing kernel capability refuses the affected launch before target execution. Explicitly approved host execution and explicit process-level sandbox switches retain their separate authority. Managed helpers with no host-execution approval path stay unavailable until their boundary can apply. User-installed scanner executables and app network clients have separately documented boundaries. “Runs on the device” does not imply “runs inside the agent subprocess sandbox.”
