@@ -125,6 +125,7 @@ func TestOpengrepSubprocessEnvKeepsCLIStateInRunFiles(t *testing.T) {
 	testutil.FailErr(t, "newOpengrepRunFiles", err)
 	defer cleanup()
 
+	t.Setenv("XDG_CACHE_HOME", filepath.Join(os.TempDir(), "xdg-cache"))
 	for _, key := range []string{"TMPDIR", "TMP", "TEMP"} {
 		t.Setenv(key, t.TempDir())
 	}
@@ -136,6 +137,7 @@ func TestOpengrepSubprocessEnvKeepsCLIStateInRunFiles(t *testing.T) {
 		}
 	}
 	want := map[string]string{
+		"XDG_CACHE_HOME":             files.dir(),
 		"TMPDIR":                     files.dir(),
 		"TMP":                        files.dir(),
 		"TEMP":                       files.dir(),

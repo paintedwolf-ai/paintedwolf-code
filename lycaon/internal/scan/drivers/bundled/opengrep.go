@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/lycaon/lycaon/internal/configlayout"
+	"github.com/lycaon/lycaon/internal/confine"
 	"github.com/lycaon/lycaon/internal/exec"
 	"github.com/lycaon/lycaon/internal/scan"
 	"github.com/lycaon/lycaon/internal/scan/bundled"
@@ -244,6 +245,10 @@ func opengrepSubprocessEnv(files opengrepRunFiles) []string {
 		"SEMGREP_SETTINGS_FILE":      files.settingsPath,
 		"SEMGREP_VERSION_CACHE_PATH": files.versionCachePath,
 		"SEMGREP_SEND_METRICS":       "off",
+	}
+	// The packaged launcher extracts its executable under XDG_CACHE_HOME.
+	if confine.SharedTempLocation(os.Getenv("XDG_CACHE_HOME")) != "" {
+		pins["XDG_CACHE_HOME"] = files.dir()
 	}
 	for k, v := range pins {
 		prefix := k + "="
