@@ -1458,8 +1458,10 @@ only their own platform and compiler inputs.
 A running warmer finishes before the next push starts warming, so frequent
 merges cannot repeatedly cancel cold preparation before it saves; a newer push
 replaces a warmer still pending, so only main's newest commit waits to warm.
-Its Linux and macOS jobs and the release compile run one after another, on one
-runner at a time.
+Its Linux and macOS jobs run side by side, the macOS job including the release
+compile; an arm64 job then warms the native package archives arm64 lanes restore.
+Each family is probed by its exact key, so a new runner image re-prepares native
+package archives on its first warming run.
 Release builds restore the shared Go cache; their separate cache retains only
 Tauri release builds. The cache actions enforce the main-ref write boundary
 themselves. Pinned Go analyzers have separate lint and vulnerability caches; their module versions
@@ -1567,7 +1569,7 @@ budgets for the whole selected matrix. Runner caps do not depend on timing data.
 | Class | Workflows | One run at a time | Runners (macOS) |
 |---|---|---|---|
 | Qualification | `qualification.yml` | `qualification` | the unsigned preparation and custody, then the nightly lane set, each within the `hosted` ceilings |
-| Cache warming | `build-caches.yml` | `build-caches` | 1 (1): Linux, then macOS including release compilation |
+| Cache warming | `build-caches.yml` | `build-caches` | 2 (1): Linux beside macOS including release compilation, then arm64 native package archives |
 | Nightly | `nightly.yml` | `nightly` | within the `hosted` 20 (5): six verification runners, two platform jobs, two browser shards, the desktop journey, the five release rehearsal jobs and the installed upgrade's preparation, then its cases one at a time |
 | Releases | publishing runs of `release.yml`, `release-halt.yml` | `release-static-update` | 4 (2): the macOS signing job beside a Linux signing or import job, then installed upgrade cases two at a time beside repository assembly; a source without a retained preparation adds its five unsigned builds |
 | DCO certification | `dco.yml` | one queue per pull request or merge group | 1 per pull request or group |

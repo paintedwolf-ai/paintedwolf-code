@@ -1,6 +1,9 @@
 name: Set up Linux native dependencies
 description: Reuse the resolved APT archives needed by native verification
 inputs:
+  lookup-only:
+    description: Resolve the archive plan and report whether its cache exists, installing nothing
+    default: 'false'
   save:
     description: Publish prepared package archives from trusted main
     default: 'false'
@@ -14,13 +17,14 @@ runs:
     - name: Resolve native package archive identity
       id: packages
       shell: bash
-      run: timeout --kill-after=10s 10m python3 "$GITHUB_ACTION_PATH/provision.py" plan
+      run: python3 "$GITHUB_ACTION_PATH/provision.py" plan
 
     - id: cache
       uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
       with:
         path: ${{ steps.packages.outputs.archives }}/*.deb
         key: ${{ steps.packages.outputs.key }}
+        lookup-only: ${{ inputs.lookup-only }}
 
     - name: Report native archive lookup
       shell: bash
@@ -32,11 +36,12 @@ runs:
         printf '\nNative package archives: %s.\n' "$result" >> "$GITHUB_STEP_SUMMARY"
 
     - name: Install resolved native packages
+      if: inputs.lookup-only != 'true'
       shell: bash
-      run: timeout --kill-after=10s 9m python3 "$GITHUB_ACTION_PATH/provision.py" install
+      run: python3 "$GITHUB_ACTION_PATH/provision.py" install
 
     - uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-      if: inputs.save == 'true' && github.ref == 'refs/heads/main' && steps.cache.outputs.cache-hit != 'true'
+      if: inputs.lookup-only != 'true' && inputs.save == 'true' && github.ref == 'refs/heads/main' && steps.cache.outputs.cache-hit != 'true'
       with:
         path: ${{ steps.packages.outputs.archives }}/*.deb
         key: ${{ steps.packages.outputs.key }}

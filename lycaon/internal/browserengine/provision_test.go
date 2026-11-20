@@ -9,7 +9,9 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
+	"sync/atomic"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/configlayout"
@@ -66,6 +68,38 @@ func TestEnsureManagedDownloads(t *testing.T) {
 	testutil.FailErr(t, "EnsureBinary failed", err)
 	if resolved.Source != SourceManaged {
 		t.Fatalf("source=%s", resolved.Source)
+	}
+}
+
+// A transfer that fails mid-archive is retried from an empty file.
+func TestEnsureManagedRetriesAFailedTransfer(t *testing.T) {
+	plat, err := cftPlatform()
+	if err != nil {
+		t.Skip(err)
+	}
+
+	zipBytes := buildFakeHeadlessZip(t)
+	pinFixtureHash(t, plat, zipBytes)
+	var requests atomic.Int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		if requests.Add(1) == 1 {
+			w.Header().Set("Content-Length", strconv.Itoa(len(zipBytes)))
+			_, _ = w.Write(zipBytes[:len(zipBytes)/2])
+			return
+		}
+		_, _ = w.Write(zipBytes)
+	}))
+	t.Cleanup(srv.Close)
+	prev := chromeForTestingBase
+	chromeForTestingBase = srv.URL + "/chrome-for-testing-public"
+	t.Cleanup(func() { chromeForTestingBase = prev })
+	t.Setenv(EnvBrowserBin, "")
+	t.Setenv(EnvBrowserSkipDownload, "0")
+
+	path, err := ensureManaged(context.Background(), t.TempDir())
+	testutil.FailErr(t, "ensureManaged failed", err)
+	if !isExecutable(path) || requests.Load() != 2 {
+		t.Fatalf("provisioned %s after %d requests, want an executable after 2", path, requests.Load())
 	}
 }
 

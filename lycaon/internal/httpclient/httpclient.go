@@ -59,15 +59,13 @@ func StreamingWithHeaderTimeout(class egressclass.ID, header time.Duration) *htt
 	return &http.Client{Transport: tr}
 }
 
-// Download bounds response headers and the full artifact transfer.
-func Download(class egressclass.ID, total time.Duration) *http.Client {
+// Download bounds connection setup and response headers, then fails a body only
+// when it stalls: a transfer that keeps delivering bytes never fails because time passed.
+func Download(class egressclass.ID) *http.Client {
 	egressclass.RequireTransport(class, egressclass.HTTPDownload)
 	tr := baseTransport()
 	tr.ResponseHeaderTimeout = 30 * time.Second
-	return &http.Client{
-		Transport: tr,
-		Timeout:   total,
-	}
+	return &http.Client{Transport: &stallTransport{base: tr, stall: DownloadStall, after: afterTimer}}
 }
 
 // WithTransport returns a copy of c using base as its transport.

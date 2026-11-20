@@ -109,7 +109,7 @@ func TestProfilesFailFastOnClosedPort(t *testing.T) {
 	for name, client := range map[string]*http.Client{
 		"bounded":   Bounded(egressclass.ProviderModelDiscovery, 5*time.Second),
 		"streaming": Streaming(egressclass.LLMProviderRequest),
-		"download":  Download(egressclass.BrowserEngineDownload, time.Minute),
+		"download":  Download(egressclass.BrowserEngineDownload),
 	} {
 		t.Run(name, func(t *testing.T) {
 			if _, err := client.Get(url); err == nil || isTimeout(err) { //nolint:bodyclose // the request is expected to fail
@@ -123,10 +123,14 @@ func TestProfilesPreserveProxySupport(t *testing.T) {
 	for name, client := range map[string]*http.Client{
 		"bounded":   Bounded(egressclass.ProviderModelDiscovery, time.Second),
 		"streaming": Streaming(egressclass.LLMProviderRequest),
-		"download":  Download(egressclass.BrowserEngineDownload, time.Minute),
+		"download":  Download(egressclass.BrowserEngineDownload),
 	} {
 		t.Run(name, func(t *testing.T) {
-			tr, ok := client.Transport.(*http.Transport)
+			base := client.Transport
+			if stall, ok := base.(*stallTransport); ok {
+				base = stall.base
+			}
+			tr, ok := base.(*http.Transport)
 			if !ok {
 				t.Fatalf("transport is %T, want *http.Transport", client.Transport)
 			}

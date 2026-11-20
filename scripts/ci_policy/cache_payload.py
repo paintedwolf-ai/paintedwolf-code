@@ -28,9 +28,6 @@ def report_status():
         for name, row in records.items():
             if row["active"] is True:
                 summary.write(f"| {name} | {'exact hit' if row.get('hit') == 'true' else 'miss'} |\n")
-            elif row.get("deferred") is True:
-                reason = "deferred to preparation" if state["prepare"] else "not needed"
-                summary.write(f"| {name} | {reason}; not probed |\n")
 
 
 def prune_workspace(manifest, target=None):
