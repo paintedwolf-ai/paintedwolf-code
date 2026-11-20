@@ -69,6 +69,9 @@ func confinedRun(t *testing.T, self string, c confine.Confinement, name string, 
 	cmd, cleanup, err := confine.Command(context.Background(), self, name, args, c)
 	testutil.FailErr(t, "confine.Command failed", err)
 	defer cleanup()
+	if scratch := c.SessionScratchRoot; scratch != "" {
+		cmd.Env = append(cmd.Environ(), "TMPDIR="+scratch, "TMP="+scratch, "TEMP="+scratch)
+	}
 	out, _ := cmd.CombinedOutput()
 	return cmd.ProcessState.ExitCode(), string(out)
 }
@@ -572,7 +575,8 @@ func TestBoundaryDraftWorkspaceVenvInterpreterExecutes(t *testing.T) {
 	testutil.FailErr(t, "project.DraftWorkspaceDir failed", err)
 	testutil.FailErr(t, "mkdir draft", os.MkdirAll(draft, 0o700))
 	venv := filepath.Join(draft, ".venv")
-	confinement := confine.Confinement{Roots: []string{draft}}
+	scratch := outsideTemporaryWriteRoots(t)
+	confinement := confine.Confinement{Roots: []string{draft}, SessionScratchRoot: scratch}
 	code, out := confinedRun(t, self, confinement, python, "-m", "venv", venv)
 	if code != 0 {
 		t.Fatalf("create draft venv under confinement, exit=%d out=%s", code, out)

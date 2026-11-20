@@ -53,8 +53,9 @@ func TestMediatedProjectUsesExactHostKeyFile(t *testing.T) {
 	for _, access := range []FilesystemAccess{AccessRead, AccessWrite} {
 		fs, err := filesystemRules(c)
 		testutil.FailErr(t, "compile project rules", err)
-		if !fs.Verdict(access, path).Allowed || fs.Verdict(access, path+"2").Allowed {
-			t.Errorf("%s grant includes wrong files", access)
+		exact, sibling := fs.Verdict(access, path), fs.Verdict(access, path+"2")
+		if !exact.Allowed || sibling.Allowed {
+			t.Errorf("%s project key verdict %+v, sibling verdict %+v", access, exact, sibling)
 		}
 	}
 	c.ProjectID = "project-2"

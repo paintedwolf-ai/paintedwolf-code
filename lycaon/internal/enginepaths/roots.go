@@ -163,7 +163,6 @@ func AgentWorkspaceRootsUnder(stateRoot string) []string {
 		WorkerBranchesRootUnder(stateRoot),
 		SessionWorktreesRootUnder(stateRoot),
 		BrowserCacheRootUnder(stateRoot),
-		// Confined commands read the host-key mirror.
-		SSHRootUnder(stateRoot),
+		SSHKnownHostsMirrorUnder(stateRoot),
 	}
 }
