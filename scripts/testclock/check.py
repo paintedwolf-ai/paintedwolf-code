@@ -302,8 +302,15 @@ def typescript_findings(path, text):
     fake = bool(TS_FAKE_CLOCK.search(code))
     findings = [f"{path}:{line_of(code, m.start())}: {kind}" for pattern, kind in (
         (TS_RACE, "races a real timer"), (TS_HYBRID, "fake clock follows real time"),
-        (None if fake else TS_DEADLINE, "deadline on the real clock")) if pattern for m in pattern.finditer(code)]
+        (None if fake else TS_DEADLINE, "deadline on the real clock")) if pattern for m in pattern.finditer(code)
+        if not (pattern is TS_DEADLINE and is_timestamp(code, m.end()))]
     return findings + timer_findings(path, text, code, fake)
+
+
+def is_timestamp(code, offset):
+    """A time written into a fixture, such as an expiry relative to whichever clock is running."""
+    end = min((i for i in (code.find(";", offset), code.find("\n", offset)) if i >= 0), default=len(code))
+    return ".toISOString(" in code[offset:end]
 
 
 def marked_latency(lines, number):

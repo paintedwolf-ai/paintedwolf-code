@@ -107,6 +107,7 @@ async function respond(route) {
 it("races", async () => {
   await Promise.race([work(), new Promise((resolve) => setTimeout(resolve, 5000))]); // flagged: race
   const deadline = Date.now() + 1000; // flagged: deadline
+  const expiresAt = new Date(Date.now() + 86_400_000).toISOString();
 });
 '''
 
