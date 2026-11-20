@@ -34,7 +34,7 @@ func prepareVM() (configuration, error) {
 		{workBase, "tmpfs", "size=256M,mode=0700,uid=65534,gid=65534", unix.MS_NOSUID | unix.MS_NODEV},
 		{"/sys/fs/cgroup", "cgroup2", "", unix.MS_NOSUID | unix.MS_NOEXEC | unix.MS_NODEV},
 	} {
-		if err := os.MkdirAll(mount.path, 0755); err != nil {
+		if err := os.MkdirAll(mount.path, 0700); err != nil {
 			return configuration{}, err
 		}
 		if err := unix.Mount(mount.kind, mount.path, mount.kind, mount.flags, mount.options); err != nil && !errors.Is(err, unix.EBUSY) {
@@ -74,7 +74,7 @@ func loadBootModules(base string) error {
 		if !entry.Type().IsRegular() || !strings.HasSuffix(entry.Name(), ".ko") {
 			return fmt.Errorf("invalid guest module %q", entry.Name())
 		}
-		file, err := os.Open(filepath.Join(base, entry.Name()))
+		file, err := os.OpenInRoot(base, entry.Name())
 		if err != nil {
 			return err
 		}

@@ -87,7 +87,7 @@ func launchNamespace() error {
 	if err != nil {
 		return err
 	}
-	defer root.Close()
+	defer func() { _ = root.Close() }()
 	cmd := linuxruntime.ControllerCommand("/proc/self/exe", "--enter-native")
 	cmd.Stdin = os.Stdin
 	cmd.ExtraFiles = []*os.File{root}
@@ -132,7 +132,7 @@ func isolateRoot() error {
 			return err
 		}
 	}
-	if err := os.Mkdir(filepath.Join(dev, "shm"), 0755); err != nil {
+	if err := os.Mkdir(filepath.Join(dev, "shm"), 0700); err != nil {
 		return err
 	}
 	if err := unix.Mount("tmpfs", filepath.Join(dev, "shm"), "tmpfs", unix.MS_NOSUID|unix.MS_NODEV, "size=32M,mode=1777"); err != nil {
@@ -156,7 +156,7 @@ func isolateRoot() error {
 // The inherited pin names the original mount. Bind the same directory from this mount namespace.
 func bindPackagedRoot(target string) error {
 	const pin = 3
-	defer unix.Close(pin)
+	defer func() { _ = unix.Close(pin) }()
 	path, err := os.Readlink("/proc/self/fd/3")
 	if err != nil {
 		return err
@@ -168,7 +168,7 @@ func bindPackagedRoot(target string) error {
 	if err != nil {
 		return err
 	}
-	defer unix.Close(fd)
+	defer func() { _ = unix.Close(fd) }()
 	var expected, actual unix.Stat_t
 	if err := unix.Fstat(pin, &expected); err != nil {
 		return err

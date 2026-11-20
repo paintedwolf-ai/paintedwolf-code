@@ -62,10 +62,10 @@ func hostChannel() (*os.File, error) {
 		return nil, err
 	}
 	defer func() { _ = unix.Close(fd) }()
-	if err = unix.Bind(fd, &unix.SockaddrVM{CID: unix.VMADDR_CID_ANY, Port: serviceguest.Port}); err != nil {
+	if err := unix.Bind(fd, &unix.SockaddrVM{CID: unix.VMADDR_CID_ANY, Port: serviceguest.Port}); err != nil {
 		return nil, err
 	}
-	if err = unix.Listen(fd, 1); err != nil {
+	if err := unix.Listen(fd, 1); err != nil {
 		return nil, err
 	}
 	for {
@@ -90,12 +90,12 @@ func privateConsole(ports, devices string, deadline time.Time) (*os.File, error)
 			return nil, err
 		}
 		for _, entry := range entries {
-			name, err := os.ReadFile(filepath.Join(ports, entry.Name(), "name"))
+			name, err := os.ReadFile(filepath.Join(ports, entry.Name(), "name")) // #nosec G304 -- Sysfs supplies the port entry.
 			if err != nil {
 				return nil, err
 			}
 			if strings.TrimSpace(string(name)) == linuxruntime.ConsoleName {
-				return os.OpenFile(filepath.Join(devices, entry.Name()), os.O_RDWR|unix.O_NOCTTY, 0)
+				return os.OpenFile(filepath.Join(devices, entry.Name()), os.O_RDWR|unix.O_NOCTTY, 0) // #nosec G304 -- Sysfs identifies the private controller device.
 			}
 		}
 		if time.Now().After(deadline) {

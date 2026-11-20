@@ -90,7 +90,7 @@ func (s *jobs) Start(ctx context.Context, id string, argv []string, input []byte
 		if err := os.Mkdir(path, 0700); err != nil {
 			return serviceguest.Job{}, err
 		}
-		file, err := os.Open(path)
+		file, err := os.OpenInRoot(s.config.groups, id)
 		if err != nil {
 			_ = os.Remove(path)
 			return serviceguest.Job{}, err

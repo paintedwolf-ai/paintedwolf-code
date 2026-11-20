@@ -41,17 +41,17 @@ func runVM(image string) error {
 	if err != nil {
 		return err
 	}
-	defer binary.Close()
+	defer func() { _ = binary.Close() }()
 	kernel, err := sealedBootFile(filepath.Join(bundle, "kernel"), manifest.Kernel)
 	if err != nil {
 		return err
 	}
-	defer kernel.Close()
+	defer func() { _ = kernel.Close() }()
 	initrd, err := sealedBootFile(filepath.Join(bundle, "initramfs.gz"), manifest.Initramfs)
 	if err != nil {
 		return err
 	}
-	defer initrd.Close()
+	defer func() { _ = initrd.Close() }()
 	args := vmArguments(runtime.GOARCH, hasKVM())
 	cmd := ControllerCommand("/proc/self/fd/4", args...)
 	cmd.Args[0] = manifest.QEMU
@@ -85,7 +85,7 @@ func hasKVM() bool {
 	if err != nil {
 		return false
 	}
-	defer unix.Close(fd)
+	defer func() { _ = unix.Close(fd) }()
 	version, err := unix.IoctlRetInt(fd, 0xae00)
 	return err == nil && version == 12
 }
@@ -110,7 +110,7 @@ func readBootManifest(path string) (bootManifest, error) {
 	if err != nil {
 		return manifest, err
 	}
-	defer file.Close()
+	defer func() { _ = file.Close() }()
 	raw, err := io.ReadAll(io.LimitReader(file, (64<<10)+1))
 	if err != nil {
 		return manifest, err
@@ -209,7 +209,7 @@ func sealedBootFile(path, digest string) (*os.File, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer source.Close()
+	defer func() { _ = source.Close() }()
 	info, err := source.Stat()
 	if err != nil {
 		return nil, err
@@ -253,7 +253,7 @@ func superviseVM(cmd *exec.Cmd) error {
 	if err != nil {
 		return err
 	}
-	defer read.Close()
+	defer func() { _ = read.Close() }()
 	if err := cmd.Start(); err != nil {
 		_ = write.Close()
 		return err

@@ -35,7 +35,7 @@ func TestBootImageIsPinnedAndSealed(t *testing.T) {
 	if err != nil || !slices.Equal(got, bytes) {
 		t.Fatalf("pinned image = %q, %v", got, err)
 	}
-	if _, err := file.Write([]byte("change")); !errors.Is(err, unix.EPERM) {
+	if _, err := file.WriteString("change"); !errors.Is(err, unix.EPERM) {
 		t.Fatalf("sealed image write = %v", err)
 	}
 	if _, err := sealedBootFile(path, digest); err == nil {
