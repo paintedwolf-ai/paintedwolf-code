@@ -2,6 +2,7 @@ package oar
 
 import (
 	"encoding/json"
+	"slices"
 	"strings"
 	"testing"
 
@@ -85,5 +86,26 @@ func TestSocketReferencesFollowTheRefusedSockets(t *testing.T) {
 	}
 	if got, want := facts["paintedwolf.socket_url_references"], strings.Join(urls, "`, `"); got != want {
 		t.Errorf("socket_url_references = %#v, want %q", got, want)
+	}
+}
+
+func TestPublishedWriteRefusalsPreserveSharedTempObservations(t *testing.T) {
+	gc := NewGuardContext()
+	gc.Refusals.RefusedWritePaths = []string{"/data/output", "/tmp/result"}
+	gc.Refusals.RefusedWriteGrants = []string{"/data", "/tmp"}
+	gc.Refusals.OrdinaryWritePaths = []string{"/data/output"}
+	gc.Refusals.OrdinaryWriteGrants = []string{"/data"}
+
+	facts := activation(gc)
+	for name, want := range map[string][]string{
+		"paintedwolf.refused_write_paths":   {"/data/output", "/tmp/result"},
+		"paintedwolf.refused_write_grants":  {"/data", "/tmp"},
+		"paintedwolf.ordinary_write_paths":  {"/data/output"},
+		"paintedwolf.ordinary_write_grants": {"/data"},
+	} {
+		got, ok := facts[name].([]string)
+		if !ok || !slices.Equal(got, want) {
+			t.Errorf("%s = %#v, want %v", name, facts[name], want)
+		}
 	}
 }
