@@ -261,16 +261,20 @@ func TestReaperHelperProcess(t *testing.T) {
 	os.Exit(0)
 }
 
-// The reaper deletes only directories inside the temp root.
 func TestReaperDirPathStaysInsideTheTempRoot(t *testing.T) {
+	t.Setenv("LYCAON_CONFIG_DIR", "/fixture/state")
 	root := filepath.Clean(os.TempDir())
 	for path, want := range map[string]bool{
-		filepath.Join(root, "scan-run"):   true,
-		root:                              false,
-		filepath.Dir(root):                false,
-		"/usr/bin":                        false,
-		filepath.Join(root, "..", "else"): false,
-		"relative/scan-run":               false,
+		filepath.Join(root, "scan-run"):               true,
+		root:                                          false,
+		filepath.Dir(root):                            false,
+		"/usr/bin":                                    false,
+		filepath.Join(root, "..", "else"):             false,
+		"relative/scan-run":                           false,
+		"/fixture/state/action-work/action-42":        true,
+		"/fixture/state/action-work/other":            false,
+		"/fixture/state/action-work":                  false,
+		"/fixture/state/action-work/action-42/nested": false,
 	} {
 		if got := reaperDirPath(path); got != want {
 			t.Errorf("reaperDirPath(%q) = %v, want %v", path, got, want)

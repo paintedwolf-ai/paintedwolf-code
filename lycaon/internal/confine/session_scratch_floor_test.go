@@ -80,3 +80,41 @@ func TestBoundaryLetsSessionReadBackItsOwnScratch(t *testing.T) {
 		t.Fatal("other session scratch read exit = 0, want denied")
 	}
 }
+
+func TestKernelLimitsStagingToTheAdmittedGitLaunch(t *testing.T) {
+	self := requireLiveBoundary(t)
+	other, _, _, _ := sessionScratchFixture(t)
+	current := other
+	work, err := confine.NewActionWorkspace()
+	testutil.FailErr(t, "create private stage", err)
+	current.ActionWorkspace = work
+	index := filepath.Join(work.Path(), "index")
+	if code, out := confinedRun(t, self, current, "/bin/sh", "-c", `echo staged > "$1" && cat "$1"`, "sh", index); code != 0 || out != "staged\n" {
+		t.Fatalf("Git launch could not use its stage: %d, %q", code, out)
+	}
+	if code, _ := confinedRun(t, self, other, "/bin/cat", index); code == 0 {
+		t.Fatal("another command in the same session read the stage")
+	}
+	if code := confinedExit(t, self, other, "/bin/sh", "-c", `echo changed > "$1"`, "sh", index); code == 0 {
+		t.Fatal("another command in the same session wrote the stage")
+	}
+}
+
+func TestActionWorkspaceIsPrivateToItsLaunch(t *testing.T) {
+	shared, _, own, _ := sessionScratchFixture(t)
+	work, err := confine.NewActionWorkspace()
+	testutil.FailErr(t, "create action workspace", err)
+	private := shared
+	private.ActionWorkspace = work
+	file := filepath.Join(work.Path(), "index")
+	writeFixtureFile(t, file)
+	for _, access := range []confine.FilesystemAccess{confine.AccessRead, confine.AccessWrite} {
+		if verdict := confine.BoundaryOf(&shared).Filesystem.Verdict(access, file); verdict.Allowed {
+			t.Fatalf("other command in this session can %s %s", access, file)
+		}
+		fs := confine.BoundaryOf(&private).Filesystem
+		if !fs.Verdict(access, file).Allowed || !fs.Verdict(access, filepath.Join(own, "file")).Allowed || fs.Verdict(access, filepath.Dir(work.Path())).Allowed {
+			t.Fatalf("action workspace or session %s scope differs from admission", access)
+		}
+	}
+}

@@ -280,6 +280,7 @@ type InvocationHost struct {
 	HostDataDir string
 	// SessionScratchDir contains writable session-scoped scratch data.
 	SessionScratchDir string
+	ActionWorkspace   confine.ActionWorkspace `json:"-"`
 	// SessionOutputDir contains host-published session output, never a command write root.
 	SessionOutputDir string
 	// MaxToolSpillBytes shares the retention bound with recovery reads.

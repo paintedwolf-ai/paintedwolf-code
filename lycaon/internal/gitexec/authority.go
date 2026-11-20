@@ -3,8 +3,10 @@ package gitexec
 import (
 	"context"
 	"errors"
+	"os"
 	"strings"
 
+	"github.com/lycaon/lycaon/internal/confine"
 	"github.com/lycaon/lycaon/internal/exec"
 )
 
@@ -22,7 +24,8 @@ type authority struct {
 
 // AgentLaunch is one agent Git command's admitted launch.
 type AgentLaunch struct {
-	Plan exec.LaunchPlan
+	Plan      exec.LaunchPlan
+	Workspace confine.ActionWorkspace
 	// Credentials serves a network command's Git; nil leaves it without any.
 	Credentials *AgentCredentials
 }
@@ -59,6 +62,20 @@ func AgentLaunchFrom(ctx context.Context) (AgentLaunch, bool) {
 		return AgentLaunch{}, false
 	}
 	return *a.agent, true
+}
+
+// MakeScratch creates a private staging directory for Git and its host-side preparation.
+func MakeScratch(ctx context.Context, pattern string) (string, error) {
+	plan, err := launchPlan(ctx, "git_staging")
+	if err != nil {
+		return "", err
+	}
+	launch, _ := AgentLaunchFrom(ctx)
+	root := launch.Workspace.Path()
+	if root == "" && plan.Kind == exec.LaunchAgentCommand {
+		return "", errors.New("Git operation workspace unavailable")
+	}
+	return os.MkdirTemp(root, pattern)
 }
 
 // launchPlan selects the process authority for one Git subprocess.

@@ -100,7 +100,7 @@ func WritableSharedTempLocations(projectID string, grants []string) []string {
 
 // A cache grant can overlap shared temp in either direction.
 func (r *FilesystemRules) closeSharedTempInCaches(c Confinement, roots []string) {
-	explicit := resolveEach(slices.Concat(c.Roots, c.GrantedWriteRoots, grantedWriteRoots(c.ProjectID), environmentWriteRoots(), []string{c.SessionScratchRoot}))
+	explicit := resolveEach(slices.Concat(c.Roots, c.GrantedWriteRoots, grantedWriteRoots(c.ProjectID), environmentWriteRoots(), c.privateWorkRoots()))
 	for _, location := range r.sharedTemp {
 		if underAny(location, explicit) {
 			continue

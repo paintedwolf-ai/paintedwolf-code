@@ -1,11 +1,15 @@
 package confine
 
 import (
+	"os"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"sort"
 	"strings"
 
+	"github.com/lycaon/lycaon/internal/configdir"
+	"github.com/lycaon/lycaon/internal/enginepaths"
 	"github.com/lycaon/lycaon/internal/fspath"
 )
 
@@ -25,11 +29,43 @@ func PrivateServiceBoundary(scratch string, process ProcessAttributes) Confineme
 	return Confinement{privateUserland: true, SessionScratchRoot: scratch, Process: process, Network: NetworkDeny, EgressOff: EgressOffOverride}
 }
 
+// ActionWorkspace holds a private working directory for one tool invocation.
+type ActionWorkspace struct{ path string }
+
+func NewActionWorkspace() (ActionWorkspace, error) {
+	root, err := configdir.UserConfigDir()
+	if err != nil {
+		return ActionWorkspace{}, err
+	}
+	parent := enginepaths.ActionWorkRootUnder(root)
+	if err := os.MkdirAll(parent, 0700); err != nil {
+		return ActionWorkspace{}, err
+	}
+	path, err := os.MkdirTemp(parent, "action-")
+	return ActionWorkspace{path: path}, err
+}
+
+func (w ActionWorkspace) Path() string { return w.path }
+
+func (c Confinement) privateWorkRoots() []string {
+	var paths []string
+	for _, dir := range []string{c.SessionScratchRoot, c.ActionWorkspace.Path()} {
+		if dir != "" {
+			paths = append(paths, fspath.CanonicalPath(dir))
+		}
+	}
+	return paths
+}
+
 func (c Confinement) writeRoots() ([]string, error) {
 	if c.privateUserland {
 		return filesystemRoots("", nil, nil, c.SessionScratchRoot, nil)
 	}
-	return WriteRootsForBoundary(c.ProjectID, c.Roots, c.GrantedWriteRoots, c.SessionScratchRoot)
+	granted := c.GrantedWriteRoots
+	if c.ActionWorkspace.Path() != "" {
+		granted = append(slices.Clone(granted), c.ActionWorkspace.Path())
+	}
+	return WriteRootsForBoundary(c.ProjectID, c.Roots, granted, c.SessionScratchRoot)
 }
 
 // WriteRootsForBoundary is the write profile for one confinement: attached

@@ -94,7 +94,7 @@ func bindTargetLaunch(ctx context.Context, p Prepared, tc tools.ToolContext, wri
 	if err != nil {
 		return ctx, nil, err
 	}
-	return gitexec.WithAgentLaunch(ctx, gitexec.AgentLaunch{Plan: plan}), func(failed bool) {
+	return gitexec.WithAgentLaunch(ctx, gitexec.AgentLaunch{Plan: plan, Workspace: tc.Host.ActionWorkspace}), func(failed bool) {
 		release(context.WithoutCancel(ctx), tools.AgentLaunchOutcome{Failed: failed})
 	}, nil
 }
@@ -286,6 +286,15 @@ func (p Prepared) InvokeOwner(ctx context.Context, tc tools.ToolContext, streams
 	// Network forms bind their launch once their remotes are admitted, and
 	// target forms once the path they create is bound, so the confinement
 	// carries exactly those recipients and paths.
+	name := p.command.spec.Name
+	if _, mutates := mutateForms[name]; mutates && !bisectReads[name] && !targetForms[name] && (!networkForms[name] || name == "git pull") {
+		workspace, err := confine.NewActionWorkspace()
+		if err != nil {
+			return settle(0, err, p.command.spec.Name)
+		}
+		defer exec.TrackScratchDir(workspace.Path())()
+		tc.Host.ActionWorkspace = workspace
+	}
 	if !networkForms[p.command.spec.Name] && !targetForms[p.command.spec.Name] {
 		plan, release, launchErr := p.owners.Launch(ctx, tc, "git", p.commandLine(), nil)
 		if launchErr != nil {
@@ -294,7 +303,7 @@ func (p Prepared) InvokeOwner(ctx context.Context, tc tools.ToolContext, streams
 		defer func() {
 			release(context.WithoutCancel(ctx), tools.AgentLaunchOutcome{Failed: err != nil || result.Status != 0})
 		}()
-		ctx = gitexec.WithAgentLaunch(ctx, gitexec.AgentLaunch{Plan: plan})
+		ctx = gitexec.WithAgentLaunch(ctx, gitexec.AgentLaunch{Plan: plan, Workspace: tc.Host.ActionWorkspace})
 	}
 	ctx = reportRepositoryRead(ctx, p.commandDir())
 	if _, ok := mutateForms[p.command.spec.Name]; ok {

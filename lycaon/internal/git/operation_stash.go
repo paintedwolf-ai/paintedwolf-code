@@ -16,7 +16,7 @@ func (p *operationPlan) runStash(ctx context.Context, dir string) ([]byte, int, 
 	if err != nil {
 		return nil, -1, err
 	}
-	scratch, err := os.MkdirTemp("", "git-stash-index-*")
+	scratch, err := gitexec.MakeScratch(ctx, "git-stash-index-*")
 	if err != nil {
 		return nil, -1, err
 	}

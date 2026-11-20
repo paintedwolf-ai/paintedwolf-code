@@ -139,6 +139,7 @@ type Confinement struct {
 	GrantedWriteRoots []string
 	// SessionScratchRoot is the session-owned scratch root for this execution.
 	SessionScratchRoot string
+	ActionWorkspace    ActionWorkspace `json:"-"`
 	// ReadRoots are read-only carve-outs.
 	ReadRoots []string
 	// ReadDenyPaths are per-action read exclusions.
@@ -425,9 +426,7 @@ func filesystemRules(c Confinement) (FilesystemRules, error) {
 		rules.add(fsRule{op: opRead, matches: deny})
 		allow := workspaceReadAllowBacks(c)
 		allow = append(allow, resolveEach(c.ReadRoots)...)
-		if c.SessionScratchRoot != "" {
-			allow = append(allow, fspath.CanonicalPath(c.SessionScratchRoot))
-		}
+		allow = append(allow, c.privateWorkRoots()...)
 		addManagedReadRoots(&rules, deny, allow)
 		// An approved read grant also lifts the denials beneath it.
 		var subtrees, literals []string
@@ -555,9 +554,7 @@ func workspaceAllowBacks(c Confinement) []string {
 	}
 	var backs []string
 	candidates := append(append([]string(nil), c.Roots...), c.GrantedWriteRoots...)
-	if c.SessionScratchRoot != "" {
-		candidates = append(candidates, c.SessionScratchRoot)
-	}
+	candidates = append(candidates, c.privateWorkRoots()...)
 	for _, r := range candidates {
 		if r = strings.TrimSpace(r); r == "" {
 			continue

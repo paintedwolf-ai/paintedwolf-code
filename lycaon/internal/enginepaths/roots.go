@@ -134,6 +134,9 @@ func ProjectCheckpointDir(checkpointRoot, projectDir string) string {
 	return filepath.Join(strings.TrimSpace(checkpointRoot), ProjectKey(projectDir))
 }
 
+// ActionWorkRootUnder holds private staging directories for active tool invocations.
+func ActionWorkRootUnder(stateRoot string) string { return filepath.Join(stateRoot, "action-work") }
+
 // ScratchRootUnder returns the parent of every session's scratch folder. Only
 // the engine writes it, so no agent can replace another session's folder.
 func ScratchRootUnder(stateRoot string) string {
