@@ -2521,7 +2521,7 @@
     "SANDBOX_TRY_WRITE_ROOT": {
       "category": "recoverable",
       "emit": "guard:sandbox",
-      "summary": "In `{{ tool }}`, the sandbox refused writes to {{ paintedwolf.refused_write_paths }}{% if paintedwolf.process_running %} while the job runs{% endif %}."
+      "summary": "In `{{ tool }}`, the sandbox refused writes to {{ paintedwolf.ordinary_write_paths }}{% if paintedwolf.process_running %} while the job runs{% endif %}."
     },
     "SANDBOX_WORKTREE_BEHIND_INDEX": {
       "category": "recoverable",
