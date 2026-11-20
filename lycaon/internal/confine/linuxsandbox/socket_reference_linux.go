@@ -192,7 +192,11 @@ func (f creationFloors) bindSessionSocket(call pathCall, dirs []int) pathResult 
 		return errnoResult(err)
 	}
 	defer unix.Close(cwd)
+	if errno := sessionipc.Reserve(dirs[1], dirs[0]); errno != 0 {
+		return errnoResult(errno)
+	}
 	if err := unix.Fchdir(p.fd); err != nil {
+		sessionipc.Discard(dirs[1], dirs[0])
 		return errnoResult(err)
 	}
 	name := p.base
@@ -201,9 +205,11 @@ func (f creationFloors) bindSessionSocket(call pathCall, dirs []int) pathResult 
 	}
 	err = unix.Bind(dirs[0], &unix.SockaddrUnix{Name: name})
 	if err := unix.Fchdir(cwd); err != nil {
+		sessionipc.Discard(dirs[1], dirs[0])
 		return errnoResult(err)
 	}
 	if err != nil {
+		sessionipc.Discard(dirs[1], dirs[0])
 		return errnoResult(err)
 	}
 	if errno := sessionipc.Register(dirs[1], dirs[0]); errno != 0 {

@@ -28,8 +28,8 @@ func identify(fd int, kind uint32) (object, error) {
 
 // Registry holds socket inodes while their creating commands are active.
 type Registry struct {
-	mu        sync.Mutex
-	endpoints map[object]map[object]endpoint
+	mu     sync.Mutex
+	groups map[object]*group
 }
 
 // Channel pins the session directory and ties registrations to the launch.
@@ -67,7 +67,7 @@ func (r *Registry) Channel(root string) (*os.File, error) {
 }
 
 func (r *Registry) serve(channel *net.UnixConn, session object) {
-	owned := make(map[object]int)
+	owned := &launch{pins: make(map[object]int)}
 	defer r.release(session, owned)
 	var data [1]byte
 	control := make([]byte, unix.CmsgSpace(2*4))
@@ -95,39 +95,104 @@ func (r *Registry) serve(channel *net.UnixConn, session object) {
 	}
 }
 
-func (r *Registry) request(session object, owned map[object]int, op byte, fd int) unix.Errno {
-	if op == register {
+func (r *Registry) request(session object, owned *launch, op byte, fd int) unix.Errno {
+	switch op {
+	case reserve:
+		return r.reserve(session, owned)
+	case discard:
+		r.cancel(session, owned)
+		return 0
+	case register:
+		if !owned.reserved {
+			return unix.EINVAL
+		}
+		defer r.cancel(session, owned)
 		// SIOCUNIXFILE returns the actual bound filesystem socket.
 		handle, _, errno := unix.Syscall(unix.SYS_IOCTL, uintptr(fd), 0x89e0, 0)
 		if errno != 0 {
 			return errno
 		}
 		return r.retain(session, owned, int(handle))
-	}
-	if op != lookup {
-		return unix.EINVAL
-	}
-	id, err := identify(fd, unix.S_IFSOCK)
-	if err != nil {
-		return unix.EINVAL
-	}
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	if _, admitted := r.endpoints[session][id]; !admitted {
+	case lookup:
+		id, err := identify(fd, unix.S_IFSOCK)
+		if err != nil {
+			return unix.EINVAL
+		}
+		r.mu.Lock()
+		defer r.mu.Unlock()
+		if g := r.groups[session]; g != nil {
+			if _, ok := g.pins[id]; ok {
+				return 0
+			}
+		}
 		return unix.EACCES
+	default:
+		return unix.EINVAL
 	}
-	return 0
 }
 
 // One session may keep this many named socket inodes pinned in the engine.
 const maxSessionSockets = 256
 
+type group struct {
+	pins         map[object]endpoint
+	reservations int
+}
+type launch struct {
+	pins     map[object]int
+	reserved bool
+}
 type endpoint struct {
 	fd    int
-	owner map[object]int
+	owner *launch
 }
 
-func (r *Registry) retain(session object, owned map[object]int, fd int) unix.Errno {
+func (r *Registry) reserve(session object, owner *launch) unix.Errno {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if owner.reserved {
+		return unix.EBUSY
+	}
+	if r.groups == nil {
+		r.groups = make(map[object]*group)
+	}
+	g := r.groups[session]
+	if g == nil {
+		g = &group{pins: make(map[object]endpoint)}
+		r.groups[session] = g
+	}
+	if len(g.pins)+g.reservations >= maxSessionSockets {
+		g.prune()
+		if len(g.pins)+g.reservations >= maxSessionSockets {
+			return unix.ENOSPC
+		}
+	}
+	g.reservations++
+	owner.reserved = true
+	return 0
+}
+
+func (g *group) prune() {
+	for id, e := range g.pins {
+		var stat unix.Stat_t
+		if unix.Fstat(e.fd, &stat) == nil && stat.Nlink == 0 {
+			delete(e.owner.pins, id)
+			delete(g.pins, id)
+			unix.Close(e.fd)
+		}
+	}
+}
+
+func (r *Registry) cancel(session object, owner *launch) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if owner.reserved {
+		r.groups[session].reservations--
+		owner.reserved = false
+	}
+}
+
+func (r *Registry) retain(session object, owner *launch, fd int) unix.Errno {
 	id, err := identify(fd, unix.S_IFSOCK)
 	if err != nil {
 		unix.Close(fd)
@@ -135,45 +200,35 @@ func (r *Registry) retain(session object, owned map[object]int, fd int) unix.Err
 	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	if r.endpoints == nil {
-		r.endpoints = make(map[object]map[object]endpoint)
+	g := r.groups[session]
+	if g == nil || !owner.reserved {
+		unix.Close(fd)
+		return unix.EINVAL
 	}
-	group := r.endpoints[session]
-	if group == nil {
-		group = make(map[object]endpoint)
-		r.endpoints[session] = group
-	}
-	if _, exists := group[id]; exists {
+	if _, exists := g.pins[id]; exists {
 		unix.Close(fd)
 		return unix.EEXIST
 	}
-	if len(group) >= maxSessionSockets {
-		for id, e := range group {
-			var stat unix.Stat_t
-			if unix.Fstat(e.fd, &stat) == nil && stat.Nlink == 0 {
-				delete(e.owner, id)
-				delete(group, id)
-				unix.Close(e.fd)
-			}
-		}
-		if len(group) >= maxSessionSockets {
-			unix.Close(fd)
-			return unix.ENOSPC
-		}
-	}
-	group[id] = endpoint{fd: fd, owner: owned}
-	owned[id] = fd
+	g.pins[id] = endpoint{fd: fd, owner: owner}
+	owner.pins[id] = fd
 	return 0
 }
 
-func (r *Registry) release(session object, owned map[object]int) {
+func (r *Registry) release(session object, owner *launch) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	for id, fd := range owned {
-		delete(r.endpoints[session], id)
+	g := r.groups[session]
+	if g == nil {
+		return
+	}
+	if owner.reserved {
+		g.reservations--
+	}
+	for id, fd := range owner.pins {
+		delete(g.pins, id)
 		unix.Close(fd)
 	}
-	if len(r.endpoints[session]) == 0 {
-		delete(r.endpoints, session)
+	if len(g.pins) == 0 && g.reservations == 0 {
+		delete(r.groups, session)
 	}
 }

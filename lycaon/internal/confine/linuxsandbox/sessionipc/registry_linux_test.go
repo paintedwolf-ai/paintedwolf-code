@@ -26,6 +26,10 @@ func TestRegistryTiesEndpointsToTheirDirectoryAndSocket(t *testing.T) {
 	fd, err := unix.Open(name, unix.O_PATH|unix.O_CLOEXEC, 0)
 	testutil.FailErr(t, "pin endpoint", err)
 	defer unix.Close(fd)
+	if errno := Reserve(int(channel.Fd()), fd); errno != 0 {
+		t.Fatal(errno)
+	}
+	Discard(int(channel.Fd()), fd)
 	if Admits(int(channel.Fd()), fd) || Register(int(channel.Fd()), fd) == 0 || ask(int(channel.Fd()), fd, 0) != unix.EINVAL {
 		t.Fatal("an unregistered pathname was admitted")
 	}
@@ -61,10 +65,11 @@ func TestRegistryRetainsTheBoundObjectUntilLaunchExit(t *testing.T) {
 	original := listen()
 	defer original.Close()
 	var reg Registry
-	owned := make(map[object]int)
-	if reg.retain(session, owned, pin()) != 0 {
+	owned := &launch{pins: make(map[object]int)}
+	if reg.reserve(session, owned) != 0 || reg.retain(session, owned, pin()) != 0 {
 		t.Fatal("socket registration failed")
 	}
+	reg.cancel(session, owned)
 	client, err := reg.Channel(root)
 	testutil.FailErr(t, "open client", err)
 	defer client.Close()
@@ -98,7 +103,7 @@ func TestRegistryPrunesUnlinkedSocketsAtCapacity(t *testing.T) {
 	testutil.FailErr(t, "create short socket directory", err)
 	t.Cleanup(func() { _ = os.RemoveAll(root) })
 	var reg Registry
-	scope, owned := object{ino: 1}, make(map[object]int)
+	scope, owned := object{ino: 1}, &launch{pins: make(map[object]int)}
 	defer reg.release(scope, owned)
 	path := filepath.Join(root, "socket")
 	for i := 0; i <= maxSessionSockets; i++ {
@@ -107,11 +112,15 @@ func TestRegistryPrunesUnlinkedSocketsAtCapacity(t *testing.T) {
 		fd, err := unix.Open(path, unix.O_PATH|unix.O_CLOEXEC, 0)
 		testutil.FailErr(t, "pin endpoint", err)
 		testutil.FailErr(t, "remove endpoint", ln.Close())
+		if errno := reg.reserve(scope, owned); errno != 0 {
+			t.Fatal(errno)
+		}
 		if errno := reg.retain(scope, owned, fd); errno != 0 {
 			t.Fatalf("register %d: %v", i, errno)
 		}
+		reg.cancel(scope, owned)
 	}
-	if len(owned) != 1 {
-		t.Fatalf("retained %d endpoints, want 1", len(owned))
+	if len(owned.pins) != 1 {
+		t.Fatalf("retained %d endpoints, want 1", len(owned.pins))
 	}
 }

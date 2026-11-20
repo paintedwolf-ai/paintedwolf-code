@@ -8,11 +8,19 @@ import (
 const (
 	register byte = 1
 	lookup   byte = 2
+	reserve  byte = 3
+	discard  byte = 4
 )
 
 func socketPair() ([2]int, error) {
 	return unix.Socketpair(unix.AF_UNIX, unix.SOCK_SEQPACKET|unix.SOCK_CLOEXEC, 0)
 }
+
+// Reserve acquires capacity before bind creates a filesystem entry.
+func Reserve(channel, socket int) unix.Errno { return ask(channel, socket, reserve) }
+
+// Discard releases the reservation for an unsuccessful bind.
+func Discard(channel, socket int) { _ = ask(channel, socket, discard) }
 
 // Register records the socket just bound by the restricted performer.
 func Register(channel, bound int) unix.Errno { return ask(channel, bound, register) }
