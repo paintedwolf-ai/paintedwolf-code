@@ -21,7 +21,6 @@ var doorExemptions = map[string]string{
 	"lycaon/cmd/pw-service-guest/namespace_linux.go":                       "creates empty bind targets on the private device tmpfs",
 	"lycaon/internal/confine/privateguesthost/linuxruntime/scope_linux.go": "writes resource limits to the delegated kernel cgroup",
 	"lycaon/internal/configlayout/private_guest_darwin.go":                 "exclusively creates a session-private kernel or initramfs snapshot when cloning is unavailable",
-	"lycaon/cmd/service-guest-drivers/main.go":                             "extracts boot modules into a disposable package-build staging directory",
 
 	"lycaon/internal/fileclone/probe.go":       "O_EXCL volume-capability probe in a private temporary directory; its fsynced input and clone are removed before return, never published as durable content",
 	"lycaon/internal/scan/installed/verify.go": "ephemeral installed-scanner fixtures in an owned temporary directory removed before return",
