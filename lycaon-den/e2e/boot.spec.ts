@@ -18,6 +18,7 @@ webE2e.describe("boot", () => {
     }, APP_STATE_STORAGE_SLICE_PREFIX);
     expect(JSON.stringify(state)).not.toMatch(/api_token|apiToken/i);
     expect(state).toMatchObject({
+      onboarding: {completedSetupRevision: 2, completedLocalModelStepRevision: 2},
       firstTimeTips: { enabled: false },
     });
   });

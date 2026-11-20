@@ -38,6 +38,7 @@ vi.mock("../../store/app-state-snapshot.ts", () => ({
 
 let firstRunComplete = false;
 let modelStepComplete = false;
+const postponePrompt = vi.hoisted(() => vi.fn());
 const completeModelStep = vi.fn(async () => { modelStepComplete = true; });
 const completeFirstRunSetup = vi.hoisted(() => vi.fn().mockResolvedValue(undefined));
 vi.mock("../../settings/system/onboarding-prefs.ts", () => ({
@@ -45,7 +46,7 @@ vi.mock("../../settings/system/onboarding-prefs.ts", () => ({
   completeLocalModelOnboarding: () => completeModelStep(),
   firstRunSetupCompletedPref: () => firstRunComplete,
   completeFirstRunSetup,
-  postponeLocalModelPrompt: vi.fn(),
+  postponeLocalModelPrompt: postponePrompt,
 }));
 
 
@@ -375,6 +376,15 @@ describe("Setup navigation and accessibility", () => {
     });
     expect(queryByTestId("onboarding-setup-back")).toBeNull();
     expect(completeFirstRunSetup).not.toHaveBeenCalled();
+  });
+
+  it("dismisses setup with Escape while host facts are unavailable", async () => {
+    render(() => <OnboardingGate client={null} settingsStore={createSettingsStore()} settingsChecked={false} />);
+    expect(screen.getByTestId("onboarding-waiting")).toBeTruthy();
+    expect(tryDismissOnboardingWelcome()).toBe(true);
+    await waitFor(() => expect(completeFirstRunSetup).toHaveBeenCalledOnce());
+    expect(postponePrompt).toHaveBeenCalled();
+    expect(completeModelStep).not.toHaveBeenCalled();
   });
 
   it("Escape steps layout → welcome without latching", async () => {
