@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/invocation"
+	"github.com/lycaon/lycaon/internal/isolation"
 	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -67,5 +68,18 @@ func TestSQLRecorderSettlesCommandWithTerminalObservedFeedback(t *testing.T) {
 	testutil.FailErr(t, "settle receipt with terminal feedback", err)
 	if settled.Isolation != nil {
 		t.Fatalf("settled.Isolation = %+v, want nil", settled.Isolation)
+	}
+}
+
+func TestSharedTempObservationsPreserveCommandSettlement(t *testing.T) {
+	for _, code := range []string{isolation.CodeSharedTempRefused, isolation.CodeSharedTempTolerated} {
+		t.Run(code, func(t *testing.T) {
+			if got := invocation.SettlementIsolation(nil, []string{code}); got != nil {
+				t.Fatalf("observation supplied receipt isolation: %+v", got)
+			}
+			if got := invocation.SettlementIsolation(nil, []string{code, isolation.CodeTryReadPath}); got == nil || got.Code != isolation.CodeTryReadPath {
+				t.Fatalf("independent recovery was lost: %+v", got)
+			}
+		})
 	}
 }

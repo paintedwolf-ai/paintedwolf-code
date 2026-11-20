@@ -39,7 +39,7 @@ func CompleteFailureMetadata(reject *ToolReject, tool, owner string) *ToolReject
 	if reject == nil {
 		return nil
 	}
-	outcome, isolationReject := isolation.Lookup(strings.TrimSpace(reject.Code))
+	outcome, isolationReject := isolation.LookupRejection(strings.TrimSpace(reject.Code))
 	if isolationReject {
 		reject.FailureClass = api.FailureClassIsolationRejection
 		reject.Retryable = outcome.Retryable()

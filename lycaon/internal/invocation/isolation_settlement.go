@@ -16,12 +16,12 @@ import (
 // structured result feedback and never binds the receipt.
 func SettlementIsolation(failure *api.InvocationFailure, observed []string) *api.InvocationIsolation {
 	if failure != nil && failure.Class == api.FailureClassIsolationRejection {
-		if outcome, ok := isolation.Lookup(strings.TrimSpace(failure.Code)); ok {
+		if outcome, ok := isolation.LookupRejection(strings.TrimSpace(failure.Code)); ok {
 			return receiptIsolation(outcome)
 		}
 	}
 	for _, code := range observed {
-		if outcome, ok := isolation.Lookup(strings.TrimSpace(code)); ok && outcome.Retryable() {
+		if outcome, ok := isolation.LookupRejection(strings.TrimSpace(code)); ok && outcome.Retryable() {
 			return receiptIsolation(outcome)
 		}
 	}
@@ -35,7 +35,7 @@ func receiptIsolation(outcome isolation.Outcome) *api.InvocationIsolation {
 func validateIsolationSettlement(in Settlement) error {
 	var boundary *isolation.Outcome
 	if in.Isolation != nil {
-		outcome, ok := isolation.Lookup(strings.TrimSpace(in.Isolation.Code))
+		outcome, ok := isolation.LookupRejection(strings.TrimSpace(in.Isolation.Code))
 		if !ok || string(outcome.Disposition) != strings.TrimSpace(in.Isolation.Disposition) {
 			return fmt.Errorf("isolation settlement has unregistered code/disposition: code=%q disposition=%q", in.Isolation.Code, in.Isolation.Disposition)
 		}
@@ -44,7 +44,7 @@ func validateIsolationSettlement(in Settlement) error {
 	var rejection isolation.Outcome
 	registered := false
 	if in.Failure != nil {
-		rejection, registered = isolation.Lookup(strings.TrimSpace(in.Failure.Code))
+		rejection, registered = isolation.LookupRejection(strings.TrimSpace(in.Failure.Code))
 		if registered != (in.Failure.Class == api.FailureClassIsolationRejection) {
 			return fmt.Errorf("isolation settlement code/class mismatch: code=%q class=%q", in.Failure.Code, in.Failure.Class)
 		}

@@ -32,6 +32,7 @@ func TestIsolationOutcomesAreApprovalTripwires(t *testing.T) {
 
 	wantCategory := map[isolation.Disposition]string{
 		isolation.DispositionRetry:         "recoverable",
+		isolation.DispositionObservation:   "informational",
 		isolation.DispositionHumanDecision: "user-decision",
 		isolation.DispositionControlPlane:  "control-plane",
 	}

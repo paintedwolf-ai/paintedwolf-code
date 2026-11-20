@@ -7,7 +7,7 @@ selector:
 requires_facts: [paintedwolf.process_running, paintedwolf.refused_shared_temp, paintedwolf.session_scratch_available, paintedwolf.shared_temp_allowed, paintedwolf.shared_temp_declined, paintedwolf.shared_temp_tolerated, paintedwolf.shared_temp_unanswered]
 when: size(paintedwolf.refused_shared_temp) > 0 && !paintedwolf.shared_temp_tolerated
 effect: warn
-x-paintedwolf-category: recoverable
+x-paintedwolf-category: informational
 x-paintedwolf-emit: guard:sandbox
 message: a program encountered a shared temporary directory write restriction
 what: 'The sandbox refused writes under {{ paintedwolf.refused_shared_temp }}.{% if paintedwolf.process_running %} The job is still running. A new grant would apply only to a later launch.{% endif %}'

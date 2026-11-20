@@ -7,7 +7,7 @@ selector:
 requires_facts: [paintedwolf.refused_shared_temp, paintedwolf.shared_temp_tolerated]
 when: size(paintedwolf.refused_shared_temp) > 0 && paintedwolf.shared_temp_tolerated
 effect: warn
-x-paintedwolf-category: recoverable
+x-paintedwolf-category: informational
 x-paintedwolf-emit: guard:sandbox
 message: a program tolerated a refused temporary file write
 what: 'The program exited successfully after the sandbox refused a write under {{ paintedwolf.refused_shared_temp }}.'

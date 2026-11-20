@@ -1,10 +1,12 @@
 // Package isolation defines the closed outcome vocabulary for agent isolation.
 package isolation
 
-// Disposition says who or what can move past an isolation stop.
+// Disposition distinguishes observations from isolation stop conditions.
 type Disposition string
 
 const (
+	// DispositionObservation reports an effect after a command has run.
+	DispositionObservation Disposition = "observation"
 	// DispositionRetry allows a corrected invocation to reach approval.
 	DispositionRetry Disposition = "retry"
 	// DispositionHumanDecision means the person declined the exact authority.
@@ -42,6 +44,8 @@ const (
 	CodeLocalNetworkDenied                 = "SANDBOX_LOCAL_NETWORK_DENIED"
 	CodeLoopbackConnectDenied              = "SANDBOX_LOOPBACK_CONNECT_DENIED"
 	CodeLoopbackConnectRequestInvalid      = "SANDBOX_LOOPBACK_CONNECT_REQUEST_INVALID"
+	CodeSharedTempRefused                  = "SANDBOX_SHARED_TEMP_REFUSED"
+	CodeSharedTempTolerated                = "SANDBOX_SHARED_TEMP_TOLERATED"
 	CodeReadPathDenied                     = "SANDBOX_READ_PATH_DENIED"
 	CodeSocketPathDenied                   = "SANDBOX_SOCKET_PATH_DENIED"
 	CodeSocketPermitRequired               = "SANDBOX_SOCKET_PERMIT_REQUIRED"
@@ -85,6 +89,8 @@ var outcomes = [...]Outcome{
 	{CodeLocalNetworkDenied, DispositionHumanDecision},
 	{CodeLoopbackConnectDenied, DispositionHumanDecision},
 	{CodeLoopbackConnectRequestInvalid, DispositionRetry},
+	{CodeSharedTempRefused, DispositionObservation},
+	{CodeSharedTempTolerated, DispositionObservation},
 	{CodeReadPathDenied, DispositionHumanDecision},
 	{CodeSocketPathDenied, DispositionHumanDecision},
 	{CodeSocketPathChanged, DispositionRetry},
@@ -124,4 +130,13 @@ func Lookup(code string) (Outcome, bool) {
 		}
 	}
 	return Outcome{}, false
+}
+
+// LookupRejection excludes observations from failure and receipt classification.
+func LookupRejection(code string) (Outcome, bool) {
+	outcome, ok := Lookup(code)
+	if outcome.Disposition == DispositionObservation {
+		return Outcome{}, false
+	}
+	return outcome, ok
 }
