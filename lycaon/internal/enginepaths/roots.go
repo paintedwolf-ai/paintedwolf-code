@@ -163,6 +163,5 @@ func AgentWorkspaceRootsUnder(stateRoot string) []string {
 		WorkerBranchesRootUnder(stateRoot),
 		SessionWorktreesRootUnder(stateRoot),
 		BrowserCacheRootUnder(stateRoot),
-		SSHKnownHostsMirrorUnder(stateRoot),
 	}
 }

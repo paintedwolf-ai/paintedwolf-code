@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/configdir"
+	"github.com/lycaon/lycaon/internal/enginepaths"
 	"github.com/lycaon/lycaon/internal/testutil"
 )
 
@@ -61,8 +62,12 @@ func TestMediatedProjectUsesExactHostKeyFile(t *testing.T) {
 	c.ProjectID = "project-2"
 	fs, err := filesystemRules(c)
 	testutil.FailErr(t, "compile other project rules", err)
-	if fs.Verdict(AccessWrite, path).Allowed {
-		t.Fatal("another project can write the key file")
+	if fs.Verdict(AccessWrite, path).Allowed || fs.Verdict(AccessRead, path).Allowed {
+		t.Fatal("another project can access the key file")
+	}
+	mirror := enginepaths.SSHKnownHostsMirrorUnder(os.Getenv(configdir.EnvConfigDir))
+	if !fs.Verdict(AccessRead, mirror).Allowed || fs.Verdict(AccessRead, mirror+"2").Allowed || fs.Verdict(AccessWrite, mirror).Allowed {
+		t.Fatal("host mirror must allow only exact-file reads")
 	}
 	c.Network = NetworkDeny
 	path, err = PrepareSSHKnownHosts(c)

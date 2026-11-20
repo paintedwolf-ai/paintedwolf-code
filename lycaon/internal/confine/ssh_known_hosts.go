@@ -66,14 +66,22 @@ func PrepareSSHKnownHosts(c Confinement) (string, error) {
 }
 
 func addSSHKnownHostsAccess(rules *FilesystemRules, c Confinement) error {
-	path, err := sshKnownHostsPath(c)
-	if err != nil || path == "" {
+	state, err := configdir.Root()
+	if err != nil {
 		return err
 	}
-	file := []fsMatch{{literal: path}}
-	rules.add(fsRule{op: opRead, allow: true, matches: file})
-	rules.add(fsRule{op: opWrite, allow: true, matches: file})
-	parents := traversalAncestors(controlPlaneReadDenyRootsResolved(), []string{path})
+	mirror := fspath.CanonicalPath(enginepaths.SSHKnownHostsMirrorUnder(state))
+	readable := []string{mirror}
+	path, err := sshKnownHostsPath(c)
+	if err != nil {
+		return err
+	}
+	if path != "" {
+		readable = append(readable, path)
+		rules.add(fsRule{op: opWrite, allow: true, matches: literalMatches([]string{path}, "")})
+	}
+	rules.add(fsRule{op: opRead, allow: true, matches: literalMatches(readable, "")})
+	parents := traversalAncestors(controlPlaneReadDenyRootsResolved(), readable)
 	rules.add(fsRule{op: opReadMetadata, allow: true, matches: literalMatches(parents, "")})
 	return nil
 }
