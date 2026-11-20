@@ -41,7 +41,11 @@ in stdenv.mkDerivation {
     python3 ${source}/scripts/service-guest/assemble.py \
       --system linux --arch ${arch} --cache "$TMPDIR/cache" \
       --driver-tool ${supervisor}/bin/service-guest-drivers --qemu-path ${emulator}/bin/qemu-system-${host} \
-      --guest-binary ${supervisor}/bin/pw-service-guest --output "$TMPDIR/service-guest"
+      --guest-binary ${supervisor}/bin/pw-service-guest --output "$TMPDIR/service-guest" || {
+        log="$TMPDIR/cache/postgres-build-${host}.log"
+        if test -f "$log"; then cat "$log" >&2; fi
+        exit 1
+      }
     mkdir -p "$out"
     cp -a "$TMPDIR/service-guest" "$out/"
   '';
