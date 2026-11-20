@@ -3,6 +3,7 @@ package confine
 import (
 	"fmt"
 	"net"
+	"path/filepath"
 	"strconv"
 	"strings"
 
@@ -10,7 +11,13 @@ import (
 )
 
 func writeNetworkRules(b *strings.Builder, c Confinement) error {
-	// Direct IP and Browser carry local listen; otherwise only an explicit grant.
+	if c.SessionScratchRoot != "" {
+		root := fspath.CanonicalPath(c.SessionScratchRoot)
+		if root == "" || !filepath.IsAbs(root) || filepath.Dir(root) == root {
+			return fmt.Errorf("invalid private service directory %q", c.SessionScratchRoot)
+		}
+		b.WriteString("(allow network-bind network-inbound (subpath " + sbplString(root) + "))\n")
+	}
 	if c.Network == NetworkDirectIP || c.Browser {
 		writeLocalListenRules(b)
 	} else if c.LocalListen {
