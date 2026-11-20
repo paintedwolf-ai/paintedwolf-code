@@ -53,7 +53,7 @@ func sessionSocketRoot(c Confinement) string {
 	if c.HostExecution || c.SessionScratchRoot == "" {
 		return ""
 	}
-	state, err := configdir.UserConfigDir()
+	state, err := configdir.Root()
 	if err != nil {
 		return ""
 	}
