@@ -138,7 +138,10 @@ func BuildCommandGuidanceSnapshot(in CommandGuidanceSnapshotInput) ([]string, ma
 		templates = append(templates, "tools/schemas/command.yaml")
 	}
 	if hasCommandAny {
-		templates = append(templates, "partials/command-surface.md")
+		if !in.IsCoordinator {
+			templates = append(templates, "partials/command-surface.md")
+		}
+		templates = append(templates, "partials/temporary-storage.md")
 	}
 	if strings.TrimSpace(in.AgentType) == "implementer" {
 		templates = append(templates, "partials/sandbox-confinement.md")

@@ -1,0 +1,4 @@
+{% if session_scratch_dir %}`@scratch` is this session’s private temporary directory. Programs receive its path in `TMPDIR`.
+{% endif %}{% if profile_command_mutation != false %}Literal `/tmp` names shared machine storage.{% if shared_temp_writable %} Shared temp grants cover {% for location in shared_temp_locations %}`{{ location }}`{% if not forloop.Last %}, {% endif %}{% endfor %}.{% else %} Shared writes outside attached folders and grants require approval.{% endif %}
+{% endif %}
+{% if profile_command_mutation != false %}{% if profile_command_external_exec != false %}External programs run in a sandbox unless the person approves host access.{% if not command_external_hidden %} For a native-name collision, use `external -- NAME` or `external -p PATH -- NAME`.{% endif %}{% else %}Only native programs run on this surface; external programs are refused.{% endif %}
