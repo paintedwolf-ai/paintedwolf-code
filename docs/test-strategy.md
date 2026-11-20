@@ -1117,7 +1117,12 @@ a busy-queue send and the sidecar's CORS), for any change under `lycaon/` or
 offline. The `race-changes` lane runs `test:race` over the packages whose Go
 source the change edits, with the host-level journeys `test/wiring` and
 `test/security` select under the race detector; `internal/db`, whose race run
-takes about 40 minutes, stays nightly. The `dependencies` lane runs the
+takes about 40 minutes, stays nightly. The plan deals those packages into as
+many jobs as their race durations fill at `shard_seconds` each, longest first,
+up to the queue's parallel cap; each job runs exactly its share. Nightly's race
+lane measures each package's race duration, and a package it has not measured
+counts as the median measured one, or as the lane's `package_seconds` before
+any measurement. A small change stays one job. The `dependencies` lane runs the
 vulnerability scan and the third-party notices when a dependency graph, the
 vulnerability database or allowlist, the licensing catalog or their scripts
 change, and nightly. `command-scale` runs the scale tests and the allocation- and

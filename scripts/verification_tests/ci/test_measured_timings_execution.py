@@ -52,7 +52,7 @@ class MeasuredTimingsTests(unittest.TestCase):
             (root / 'ci').mkdir()
             run = {'lane': NATIVE, 'shard': '', 'status': 'passed', 'exit_code': 0, 'started_at': 100, 'finished_at': 150}
             timings.record(root, run)
-            self.assertEqual(timings.merge([root / 'ci/timings.json']), {'lanes': {}, 'packages': {}, 'tests': []})
+            self.assertEqual(timings.merge([root / 'ci/timings.json']), {'lanes': {}, 'packages': {}, 'race_packages': {}, 'tests': []})
             timings.record(root, {**run, 'job_started_at': 200})
             self.assertEqual(timings.merge([root / 'ci/timings.json'])['lanes'], {})
             timings.record(root, {**run, 'job_started_at': 50})
@@ -72,7 +72,7 @@ class MeasuredTimingsTests(unittest.TestCase):
                 path.write_text(json.dumps({"basis": "setup-and-execution", **row}))
                 paths.append(path)
             self.assertEqual(timings.merge(paths), {"lanes": {f"{BEHAVIOR} 1/2": 900, f"{BEHAVIOR} 2/2": 300, BENCHMARKS: 1500},
-                                                    "packages": {"a": 1, "b": 2}, "tests": []})
+                                                    "packages": {"a": 1, "b": 2}, "race_packages": {"a": 25}, "tests": []})
 
     def test_a_lane_ended_by_a_signal_is_not_a_finished_measurement(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -95,7 +95,7 @@ class MeasuredTimingsTests(unittest.TestCase):
                                                              "infinite": float("inf"), "boolean": True},
                                                 "tests": [{"package": "p", "test": "TestSlow", "seconds": seconds}]}))
                     self.assertEqual(timings.merge([path]),
-                                     {"lanes": {}, "packages": {"valid": 2, "zero": 0}, "tests": []})
+                                     {"lanes": {}, "packages": {"valid": 2, "zero": 0}, "race_packages": {}, "tests": []})
 
     def test_lane_records_its_slowest_top_level_tests(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -145,7 +145,7 @@ class MeasuredTimingsTests(unittest.TestCase):
                 self.assertEqual(timings.main([str(root / "receipts"), str(root / "timings.json")]), 0)
             published = json.loads((root / "timings.json").read_text())
         self.assertEqual(published, {"run": 77, "source_sha": "a" * 40, "source_tree": "b" * 40,
-                                     "lanes": {LINT: 600, f"{BEHAVIOR} 1/2": 900}, "packages": {"a": 3},
+                                     "lanes": {LINT: 600, f"{BEHAVIOR} 1/2": 900}, "packages": {"a": 3}, "race_packages": {},
                                      "specs": {"boot.spec.ts": 12.5, "files.spec.ts": 40, "prompt.spec.ts": 7},
                                      "tests": [{"package": "q", "test": "TestSlower", "seconds": 12},
                                                {"package": "p", "test": "TestSlow", "seconds": 9}]})

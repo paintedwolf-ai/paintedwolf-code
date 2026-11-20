@@ -9,6 +9,7 @@ from ci_policy.native_admission import SCRIPT_COVERAGE, runs_package_metadata, r
 from verification_plan import EVERY_SUITE, catalog, expand
 
 ROOT = Path(__file__).resolve().parents[2]
+MODULE = "github.com/lycaon/lycaon"
 PROFILES = {"fast", "check", "nightly", "release", "integration"}
 GATE = "check"
 FAST_GATE = "check-fast"
@@ -70,7 +71,8 @@ def lanes():
         if not re.fullmatch(r"[a-z][a-z0-9-]*", name):
             raise ValueError(f"invalid CI lane: {name}")
         if set(lane) - {"targets", "minutes", "profiles", "suite", "setup", "runner", "workers", "shards", "priority",
-                        "platform", "arguments", "admission_checks", "changes", "phases"}:
+                        "platform", "arguments", "admission_checks", "changes", "phases", "shard_seconds",
+                        "package_seconds"}:
             raise ValueError(f"unknown CI lane fields: {name}")
         # Every target of the lane receives its arguments.
         if "arguments" in lane and (not lane["arguments"]
@@ -85,6 +87,14 @@ def lanes():
             raise ValueError(f"CI lane {name} needs the change areas that select it")
         if lane.get("phases", "admission") not in PHASES:
             raise ValueError(f"CI lane {name} has unknown phases")
+        # A lane scoped to the change's own packages is sharded by its selection, so it declares the
+        # work one shard holds and the estimate for a package nightly has not measured.
+        sized = {"shard_seconds", "package_seconds"} & set(lane)
+        if (lane.get("phases") == "changed-packages") != bool(sized) or sized and (
+                "shards" in lane or not all(type(lane[key]) is int and lane[key] >= 1 for key in sized)
+                or len(sized) != 2 or lane["shard_seconds"] >= lane["minutes"] * 60):
+            raise ValueError(f"CI lane {name} sizes shards from its selection only with shard and package seconds "
+                             "within its minutes")
         admission = lane.get('admission_checks', [])
         if ('admission_checks' in lane and lane.get('phases') != 'admission'
                 or not isinstance(admission, list)
@@ -271,9 +281,15 @@ def matrix(profile, suite="all", scope=None, platform=False, timings=None):
         if not profile_invocations(lane, profile):
             continue
         count = lane.get("shards", 1)
+        shares = [[]] * count
+        if lane.get("phases") == "changed-packages" and scope is not None:
+            from ci_policy.impact import changed_packages
+            shares = selection_shards(lane, changed_packages({"paths": scope.get("paths", [])}), timings,
+                                      max_parallel(profile))
+            count = len(shares)
         needs = provisioned(lane, profile)
         for index in range(1, count + 1):
-            result.append({"lane": name,
+            result.append({"lane": name, "packages": shares[index - 1],
                            "timing_row": row_key(name, f"{index}/{count}" if count > 1 else ""),
                            "shard": f"{index}/{count}" if count > 1 else "",
                            "minutes": lane["minutes"], "step_minutes": lane["minutes"] + 1, "job_minutes": lane["minutes"] + 30,
@@ -297,6 +313,24 @@ def matrix(profile, suite="all", scope=None, platform=False, timings=None):
     if not result and not prose:
         raise ValueError("CI selection contains no verification")
     return {"include": order(result, values, timings)}
+
+
+def selection_shards(lane, packages, timings, limit):
+    """The lane's packages dealt into as many shards as their race durations fill, each within the lane's
+    shard seconds and no more than `limit`. Nightly's race measurements weigh each package; one it has not
+    measured counts as the median measured one, or as the lane's package seconds before any measurement."""
+    from verification_execute import shard_packages
+    measured = {name.removeprefix(MODULE + "/"): seconds
+                for name, seconds in ((timings or {}).get("race_packages") or {}).items()
+                if type(seconds) in (int, float) and seconds >= 0}
+    weights = {"./" + name: seconds for name, seconds in measured.items()}
+    default = sorted(measured.values())[len(measured) // 2] if measured else lane["package_seconds"]
+    total = sum(weights.get(package, default) for package in packages)
+    count = max(1, min(len(packages), limit, -(-int(total) // lane["shard_seconds"])))
+    if count == 1:
+        return [list(packages)]
+    durations = {package: weights.get(package, default) for package in packages}
+    return [shard_packages(packages, f"{index}/{count}", durations) for index in range(1, count + 1)]
 
 
 def invocation(targets):

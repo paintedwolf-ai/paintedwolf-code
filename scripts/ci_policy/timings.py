@@ -24,6 +24,13 @@ def package_lanes():
     return {name for name, lane in catalog()["ci"].items() if lane.get("phases") == "affected-packages"}
 
 
+def race_lanes():
+    """Nightly lanes that run the race recipe, so they measure each package under the race detector."""
+    from verification_plan import catalog
+    return {name for name, lane in catalog()["ci"].items()
+            if "test:race" in lane["targets"] and "nightly" in lane["profiles"]}
+
+
 def row_key(lane, shard):
     return f"{lane} {shard}" if shard else lane
 
@@ -114,20 +121,21 @@ def merge_specs(paths):
 def merge(paths):
     """Durations of lanes that finished, whatever their verdict, by matrix row; every package duration the
     uninstrumented lane measured; and the slowest tests across lanes."""
-    lanes, packages, tests = {}, {}, {}
+    lanes, packages, race, tests = {}, {}, {}, {}
     for path in paths:
         measured = json.loads(path.read_text())
         if (measured.get("basis") == "setup-and-execution" and measured.get("finished") is True
                 and valid_seconds(measured["seconds"])):
             lanes[row_key(measured["lane"], measured["shard"])] = measured["seconds"]
-        if measured.get("lane") in package_lanes():
-            packages.update({name: seconds for name, seconds in measured["packages"].items()
-                             if valid_seconds(seconds, allow_zero=True)})
+        for lanes_of, durations in ((package_lanes(), packages), (race_lanes(), race)):
+            if measured.get("lane") in lanes_of:
+                durations.update({name: seconds for name, seconds in measured["packages"].items()
+                                  if valid_seconds(seconds, allow_zero=True)})
         for row in measured.get("tests", []):
             if valid_seconds(row.get("seconds")) and isinstance(row.get("package"), str) and isinstance(row.get("test"), str):
                 key = (row["package"], row["test"])
                 tests[key] = max(tests.get(key, 0), row["seconds"])
-    return {"lanes": lanes, "packages": packages,
+    return {"lanes": lanes, "packages": packages, "race_packages": race,
             "tests": slowest([{"package": package, "test": name, "seconds": seconds}
                               for (package, name), seconds in tests.items()])}
 
