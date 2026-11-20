@@ -94,6 +94,27 @@ class ServiceGuestStaging(unittest.TestCase):
         )
         self.assertEqual((root / "bin/busybox").stat().st_mode & 0o222, 0)
 
+    def test_guest_files_ignore_build_account_and_private_umask(self):
+        src = self.dir / "private-build.tar"
+        with tarfile.open(src, "w") as source:
+            for name, kind, mode in (
+                ("share", tarfile.DIRTYPE, 0o700),
+                ("share/extension.sql", tarfile.REGTYPE, 0o600),
+                ("bin/psql", tarfile.REGTYPE, 0o700),
+            ):
+                member = tarfile.TarInfo(name)
+                member.type = kind
+                member.mode = mode
+                member.uid = 501
+                member.gid = 20
+                source.addfile(member)
+        tree = {}
+        collect_tar(tree, src, lambda name: name)
+        self.assertEqual(tree["share"].mode, stat.S_IFDIR | 0o755)
+        self.assertEqual(tree["share/extension.sql"].mode, stat.S_IFREG | 0o644)
+        self.assertEqual(tree["bin/psql"].mode, stat.S_IFREG | 0o755)
+        self.assertTrue(all(entry.uid == entry.gid == 0 for entry in tree.values()))
+
     def test_guest_preparation_refuses_unsafe_parents_and_incomplete_inputs(self):
         src = self.dir / "base.tar"
         archive(src, [("../outside", tarfile.REGTYPE, b"no")])

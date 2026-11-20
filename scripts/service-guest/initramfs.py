@@ -30,14 +30,14 @@ def collect_tar(tree, archive, select):
             path = select(guest_path(item.name))
             if not path or path == ".":
                 continue
-            mode = item.mode & 0o777
+            mode = 0o755 if item.isdir() or item.mode & 0o111 else 0o644
             if item.isdir():
                 entry = Entry(stat.S_IFDIR | mode)
             elif item.issym():
                 entry = Entry(stat.S_IFLNK | 0o777, os.fsencode(item.linkname))
             elif item.isfile():
                 with source.extractfile(item) as data:
-                    entry = Entry(stat.S_IFREG | mode, data.read(), item.uid, item.gid)
+                    entry = Entry(stat.S_IFREG | mode, data.read())
             elif item.islnk():
                 hardlinks.append((path, select(guest_path(item.linkname))))
                 continue
