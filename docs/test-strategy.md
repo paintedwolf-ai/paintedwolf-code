@@ -1113,8 +1113,9 @@ start leaves the change unverified, never admitted.
 The `browser-smoke` lane runs `den:harness:canary`, eight browser journeys on the
 harness stack (boot, a prompt, the first run, a project switch, a tool approval,
 a busy-queue send and the sidecar's CORS), for any change under `lycaon/` or
-`lycaon-den/`. Setup installs the Playwright browsers before the lane goes
-offline. The `race-changes` lane runs `test:race` over the packages whose Go
+`lycaon-den/`. Setup installs the Playwright browsers and warms the development
+browser cache the harness sidecar resolves its browser from, before the lane goes
+offline: offline, name resolution fails and nothing can be downloaded. The `race-changes` lane runs `test:race` over the packages whose Go
 source the change edits, with the host-level journeys `test/wiring` and
 `test/security` select under the race detector; `internal/db`, whose race run
 takes about 40 minutes, stays nightly. The `dependencies` lane runs the
@@ -1224,7 +1225,8 @@ runtime engines. Only
 main publishes archives, after successful installation. Package candidates still
 follow the runner's distribution repositories.
 
-A lane's setup inputs (container images, the pinned browser, the reference userlands,
+A lane's setup inputs (container images, the pinned confinement browser, the
+development browser cache, the reference userlands,
 repository tools, Nix, the protected-launch display and native libraries, notices
 tools, analysis tool sets, and whether it needs the runtime engines) are derived
 from what it runs. `provisions` in `scripts/verification-plan.json` names, once, the

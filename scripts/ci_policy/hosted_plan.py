@@ -39,8 +39,8 @@ AREAS = {"always", "go", "go-code", "den", "den-tests", "scripts", "dependencies
 # Execution a lane declares in `phases`: admission's check phases, admission's test phases, the Go packages
 # a change affects, or the Go packages whose source it edits. Each belongs to one lane.
 PHASES = {"admission", "admission-tests", "affected-packages", "changed-packages"}
-INPUTS = ("containers", "browser", "playwright", "userlands", "repository_tools", "nix", "linux_launch", "notices",
-          "analysis_lint", "analysis_vulnerabilities")
+INPUTS = ("containers", "browser", "managed_browser", "playwright", "userlands", "repository_tools", "nix", "linux_launch",
+          "notices", "analysis_lint", "analysis_vulnerabilities")
 # The check gate's own platform: a lane there repeating a gate stage would run it twice.
 GATE_PLATFORM = "linux"
 
@@ -282,6 +282,7 @@ def matrix(profile, suite="all", scope=None, platform=False, timings=None):
                            "notices": needs["notices"],
                            "containers": needs["containers"],
                            "browser": needs["browser"],
+                           "managed_browser": needs["managed_browser"],
                            "playwright": needs["playwright"],
                            "userlands": needs["userlands"],
                            "linux_launch": needs["linux_launch"],

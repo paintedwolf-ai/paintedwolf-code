@@ -1731,10 +1731,15 @@
     },
     "browser": {
       "targets": {
-        "den:harness:canary": [],
         "test:confine:linux": [
           "browser"
         ]
+      }
+    },
+    "managed_browser": {
+      "targets": {
+        "den:harness:canary": [],
+        "den:harness:test": []
       }
     },
     "userlands": {
