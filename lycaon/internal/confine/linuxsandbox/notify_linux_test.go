@@ -42,6 +42,14 @@ func TestRelativeSocketPathsResolveAgainstTheTargetDirectory(t *testing.T) {
 	if resolved, ok := resolveSocketPath(path, &targetProcess{pid: -1}); !ok || resolved != want {
 		t.Fatalf("absolute path: got %q %v", resolved, ok)
 	}
+	child := filepath.Join(root, "nested", "child")
+	testutil.FailErr(t, "make nested socket directory", os.MkdirAll(child, 0700))
+	testutil.FailErr(t, "link nested directory", os.Symlink(child, filepath.Join(root, "linked")))
+	entry := filepath.Join(root, "nested", "entry")
+	testutil.FailErr(t, "create nested endpoint fixture", os.WriteFile(entry, nil, 0600))
+	if resolved, ok := resolveSocketPath(root+"/linked/../entry", &targetProcess{pid: -1}); !ok || resolved != entry {
+		t.Fatalf("directory-relative traversal = %q,%v, want %q", resolved, ok, entry)
+	}
 	// A name that does not exist yet keeps its resolved directory.
 	for _, missing := range []string{"socket.missing", filepath.Join("absent", "deeper", "socket")} {
 		got, ok := resolveSocketPath(filepath.Join(root, missing), &targetProcess{pid: -1})

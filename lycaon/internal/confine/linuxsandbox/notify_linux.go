@@ -311,7 +311,12 @@ func resolveSocketPath(path string, target *targetProcess) (string, bool) {
 		if err != nil || !filepath.IsAbs(cwd) {
 			return "", false
 		}
-		path = filepath.Join(cwd, path)
+		path = cwd + "/" + path
+	}
+	if resolved, err := filepath.EvalSymlinks(path); err == nil {
+		return resolved, true
+	} else if !errors.Is(err, os.ErrNotExist) || slices.Contains(strings.Split(path, "/"), "..") {
+		return "", false
 	}
 	// A name that does not exist yet is still a name the plan can decide: a
 	// bind creates one, and a connect to it refuses like any ungranted path.
