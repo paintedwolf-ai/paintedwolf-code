@@ -394,6 +394,7 @@ Each area has one home. The sidecar's import rules are in [Package layering](pac
 | Models | `lycaon/internal/llm`, with one package per provider protocol ([LLM packages](package-layering.md#llm-packages)) |
 | Scanning | `lycaon/internal/scan` and its subpackages ([scan packages](package-layering.md#scan-packages)) |
 | Tools | `lycaon/internal/tools` (invocation contracts and registry), `internal/toolexecution` (execution domains), `internal/toolrejection` and `internal/toolfeedback` (refusals), `tools/native` and its families, and `internal/toolhost` (tool service composition) |
+| Private service jobs | `internal/tools/native/command` (job lifecycle), `internal/confine/privateguesthost` (Linux and macOS launch adapters), `internal/serviceguest` (shared protocol), `cmd/pw-service-guest` (workload supervisor). See [private service isolation](security.md#private-service-isolation). |
 | Wire DTOs | `lycaon/pkg/api` |
 | Contract tests | `lycaon/test/contract/<domain>/` ([Test strategy](test-strategy.md#contract-organization)) |
 | Den | `lycaon-den/src/`: shell, `files/`, `platform/`, `api/`, and feature components |
