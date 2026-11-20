@@ -19,7 +19,7 @@ type offlineBundle interface {
 type bundleDirectory struct{ *os.Root }
 
 func (d bundleDirectory) open(name string, size int64) (io.ReadCloser, error) {
-	return openBundleFile(d.Root, name, size)
+	return openBoundedFile(d.Root, name, size)
 }
 
 type tarMember struct{ offset, size int64 }
@@ -86,7 +86,7 @@ func openOfflineBundle(ctx context.Context, path string) (offlineBundle, error) 
 	if err != nil {
 		return nil, err
 	}
-	f, openErr := openBundleFile(root, filepath.Base(path), 66*MaxArtifactBytes)
+	f, openErr := openBoundedFile(root, filepath.Base(path), 66*MaxArtifactBytes)
 	if err = errors.Join(openErr, root.Close()); err != nil {
 		if f != nil {
 			err = errors.Join(err, f.Close())

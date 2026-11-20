@@ -43,12 +43,12 @@ func (s *Store) importBundle(ctx context.Context, directory string, target Slot,
 		return fmt.Errorf("modelstore: bundle does not match target slot %q/%q", target.Model, target.Device)
 	}
 	return s.importRevision(ctx, signed, func(_ context.Context, a Artifact) (io.ReadCloser, error) {
-		return openBundleFile(root, a.Name, a.Bytes)
+		return openBoundedFile(root, a.Name, a.Bytes)
 	}, repair)
 }
 
 func readBundleManifest(root *os.Root) (signed SignedManifest, resultErr error) {
-	f, err := openBundleFile(root, "manifest.json", maxBundleManifestBytes)
+	f, err := openBoundedFile(root, "manifest.json", maxBundleManifestBytes)
 	if err != nil {
 		return signed, err
 	}
@@ -76,13 +76,13 @@ func decodeBundleManifest(r io.Reader) (signed SignedManifest, err error) {
 	return signed, nil
 }
 
-func openBundleFile(root *os.Root, name string, maxBytes int64) (*os.File, error) {
+func openBoundedFile(root *os.Root, name string, maxBytes int64) (*os.File, error) {
 	info, err := root.Lstat(name)
 	if err != nil {
 		return nil, err
 	}
 	if !info.Mode().IsRegular() || info.Size() > maxBytes {
-		return nil, fmt.Errorf("modelstore: invalid bundle file %s", name)
+		return nil, fmt.Errorf("modelstore: invalid regular file %s", name)
 	}
 	f, err := openBundlePayload(root, name)
 	if err != nil {
@@ -90,7 +90,7 @@ func openBundleFile(root *os.Root, name string, maxBytes int64) (*os.File, error
 	}
 	opened, err := f.Stat()
 	if err != nil || !os.SameFile(info, opened) {
-		return nil, errors.Join(fmt.Errorf("modelstore: bundle file changed while opening %s", name), err, f.Close())
+		return nil, errors.Join(fmt.Errorf("modelstore: file changed while opening %s", name), err, f.Close())
 	}
 	return f, nil
 }

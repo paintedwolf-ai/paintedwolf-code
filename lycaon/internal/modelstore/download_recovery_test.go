@@ -109,3 +109,21 @@ func TestExplicitReinstallRepairsLeasedRevisionAfterRelease(t *testing.T) {
 	defer repaired.Release()
 	testutil.FailErr(t, "audit repaired model", repaired.Audit(t.Context()))
 }
+
+func TestSelectionRejectsIndirectMetadata(t *testing.T) {
+	s, dir, signed := bundleFixture(t)
+	m := signed.Manifest
+	testutil.FailErr(t, "install signed revision", s.ImportFromBundlePath(t.Context(), dir, Slot{m.Model, m.Device}, nil))
+	for _, path := range []string{filepath.Join(s.RevisionDir(m), ".manifest.json"), s.journalPath()} {
+		target := path + ".moved"
+		testutil.FailErr(t, "move metadata", os.Rename(path, target))
+		testutil.FailErr(t, "link metadata", os.Symlink(filepath.Base(target), path))
+		if path == s.journalPath() {
+			if _, err := s.Selection(); err == nil {
+				t.Fatal("accepted indirect journal")
+			}
+		} else if _, err := s.checkRevision(m); err == nil {
+			t.Fatal("accepted indirect revision seal")
+		}
+	}
+}
