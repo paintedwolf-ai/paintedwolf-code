@@ -28,7 +28,7 @@ static OSStatus verify_process(pid_t pid, const char *cdhash) {
     return status;
 }
 
-int pw_guest_spawn(const char *path, const char *cdhash, const int *fds, pid_t *pid) {
+int pw_spawn_verified_child(const char *path, const char *cdhash, const int *fds, int count, pid_t *pid) {
     posix_spawnattr_t attrs;
     posix_spawn_file_actions_t files;
     int error = posix_spawnattr_init(&attrs);
@@ -49,7 +49,7 @@ int pw_guest_spawn(const char *path, const char *cdhash, const int *fds, pid_t *
     if (!error) error = posix_spawn_file_actions_addopen(&files, 0, "/dev/null", O_RDONLY, 0);
     if (!error) error = posix_spawn_file_actions_addopen(&files, 1, "/dev/null", O_WRONLY, 0);
     if (!error) error = posix_spawn_file_actions_addinherit_np(&files, STDERR_FILENO);
-    for (int i = 0; i < 4 && !error; i++) error = posix_spawn_file_actions_adddup2(&files, fds[i], 3+i);
+    for (int i = 0; i < count && !error; i++) error = posix_spawn_file_actions_adddup2(&files, fds[i], 3+i);
     char *argv[] = {(char *)path, NULL}, *env[] = {NULL};
     if (!error) error = posix_spawn(pid, path, &files, &attrs, argv, env);
     posix_spawn_file_actions_destroy(&files);

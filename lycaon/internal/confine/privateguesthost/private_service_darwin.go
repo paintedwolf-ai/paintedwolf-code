@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/lycaon/lycaon/internal/configlayout"
+	"github.com/lycaon/lycaon/internal/osprocess"
 	"golang.org/x/sys/unix"
 )
 
@@ -25,7 +26,7 @@ func launchService(_ context.Context) (net.Conn, error) {
 	if err != nil {
 		return nil, err
 	}
-	process, err := spawnGuest(payload.Helper, payload.CDHash, append([]*os.File{child}, payload.Boot...))
+	process, err := osprocess.SpawnVerifiedChild(payload.Helper, payload.CDHash, append([]*os.File{child}, payload.Boot...))
 	_ = child.Close()
 	if err != nil {
 		_ = conn.Close()
