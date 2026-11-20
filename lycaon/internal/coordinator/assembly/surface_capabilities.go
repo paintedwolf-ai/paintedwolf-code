@@ -76,6 +76,8 @@ func (e *promptSurface) mergeEffectivePromptSurface(ctx context.Context, sess *a
 	}
 	for key, value := range prompts.AgentPromptSurfaceTemplateVars(surface) {
 		switch value := value.(type) {
+		case []string:
+			vars[key] = value
 		case []map[string]any:
 			if len(value) > 0 {
 				vars[key] = value

@@ -180,3 +180,21 @@ func batchTestRegistry(t *testing.T, names ...string) *tools.DefaultRegistry {
 	}
 	return reg
 }
+
+func TestPromptFrameRefreshesChatTempGrants(t *testing.T) {
+	var grants []string
+	loop := NewPromptLoop(PromptLoopDeps{Context: ContextDeps{WritableSharedTemp: func(context.Context, *api.Session) []string { return grants }}})
+	state := &promptLoopTurnState{}
+	state.machine.ProfileID = "worker"
+	var previous string
+	for _, next := range [][]string{nil, {"/tmp"}, {"/var/tmp"}, nil} {
+		grants = next
+		_, err := loop.Context.refreshCoordinatorSurface(t.Context(), &api.Session{ID: "chat"}, "chat", "worker", state, "")
+		testutil.FailErr(t, "refresh frame", err)
+		surface := state.coordinatorFrame.Machine.Surface
+		if !slices.Equal(surface.SharedTempLocations, next) || surface.Fingerprint == previous {
+			t.Fatalf("frame failed to follow grant change: locations=%v fingerprint=%s", surface.SharedTempLocations, surface.Fingerprint)
+		}
+		previous = surface.Fingerprint
+	}
+}

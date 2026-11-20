@@ -332,6 +332,11 @@ func (l *promptContext) refreshCoordinatorSurface(
 	st *promptLoopTurnState,
 	current string,
 ) (string, error) {
+	if l.Deps.WritableSharedTemp != nil && st.machine.Compiled() {
+		surface := &st.machine.Surface
+		surface.SharedTempLocations = l.Deps.WritableSharedTemp(ctx, sess)
+		surface.Fingerprint = surface.CacheFingerprint()
+	}
 	if !guard.IsCoordinatorProfile(profileID) {
 		st.coordinatorFrame = inject.CoordinatorTurnFrame{}
 		inject.StampMachine(&st.coordinatorFrame, st.machine)
