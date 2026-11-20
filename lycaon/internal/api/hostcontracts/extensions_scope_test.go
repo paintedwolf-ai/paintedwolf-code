@@ -13,7 +13,8 @@ import (
 
 	contractfixture "github.com/lycaon/lycaon/internal/api/contractfixture"
 	"github.com/lycaon/lycaon/internal/extpacks"
-	"github.com/lycaon/lycaon/internal/project"
+
+	"github.com/lycaon/lycaon/internal/project/projecttest"
 	"github.com/lycaon/lycaon/internal/projectcontrib"
 	"github.com/lycaon/lycaon/internal/settingsoverlay"
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -24,7 +25,7 @@ import (
 func TestExtensionsUnitDisableProjectScope(t *testing.T) {
 	srv, reg := contractfixture.ExtensionsScopeServer(t)
 	projectDir := t.TempDir()
-	p, err := project.CreateWithRoot(t.Context(), reg, projectDir)
+	p, err := projecttest.CreateWithRoot(t.Context(), reg, projectDir)
 	testutil.FailErr(t, "create project", err)
 
 	disabled := false
@@ -99,7 +100,7 @@ func TestExtensionsProjectScopeRequiresProjectID(t *testing.T) {
 func TestExtensionsProjectDisableRejectsDeviceUnit(t *testing.T) {
 	srv, reg := contractfixture.ExtensionsScopeServer(t)
 	projectDir := t.TempDir()
-	p, err := project.CreateWithRoot(t.Context(), reg, projectDir)
+	p, err := projecttest.CreateWithRoot(t.Context(), reg, projectDir)
 	testutil.FailErr(t, "create project", err)
 	before := contractfixture.ExtensionRevision(t, extstatetest.Owner(t), projectDir)
 	disabled := false
@@ -149,7 +150,7 @@ func TestExtensionsMutationsStayOpenWhenSuggestionsOff(t *testing.T) {
 
 func TestExtensionSuggestionAcceptRequiresTrust(t *testing.T) {
 	srv, reg := contractfixture.ExtensionsScopeServer(t)
-	p, err := project.CreateWithRoot(t.Context(), reg, t.TempDir())
+	p, err := projecttest.CreateWithRoot(t.Context(), reg, t.TempDir())
 	testutil.FailErr(t, "create project", err)
 	_, err = reg.SetTrustEnabled(t.Context(), p.ID, map[string]bool{
 		projectcontrib.SurfaceExtensionSuggestions: false,
@@ -169,7 +170,7 @@ func TestExtensionSuggestionAcceptRequiresTrust(t *testing.T) {
 func TestExtensionSuggestionAcceptIsBoundToReviewedContribution(t *testing.T) {
 	srv, reg := contractfixture.ExtensionsScopeServer(t)
 	projectDir := t.TempDir()
-	p, err := project.CreateWithRoot(t.Context(), reg, projectDir)
+	p, err := projecttest.CreateWithRoot(t.Context(), reg, projectDir)
 	testutil.FailErr(t, "create project", err)
 	overlayDir := filepath.Join(projectDir, settingsoverlay.DirName())
 	testutil.FailErr(t, "create overlay", os.MkdirAll(overlayDir, 0o755))
@@ -213,7 +214,7 @@ func TestExtensionSuggestionAcceptIsBoundToReviewedContribution(t *testing.T) {
 func TestExtensionSuggestionAcceptValidatesWholeSelectionBeforeMutation(t *testing.T) {
 	srv, reg := contractfixture.ExtensionsScopeServer(t)
 	projectDir := t.TempDir()
-	p, err := project.CreateWithRoot(t.Context(), reg, projectDir)
+	p, err := projecttest.CreateWithRoot(t.Context(), reg, projectDir)
 	testutil.FailErr(t, "create project", err)
 	overlayDir := filepath.Join(projectDir, settingsoverlay.DirName())
 	testutil.FailErr(t, "create overlay", os.MkdirAll(overlayDir, 0o755))

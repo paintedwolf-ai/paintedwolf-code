@@ -10,19 +10,18 @@ import (
 	"time"
 	"weak"
 
-	"github.com/lycaon/lycaon/internal/app/configuration"
-	"github.com/lycaon/lycaon/internal/timelayout"
+	sdkmcp "github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"github.com/lycaon/lycaon/config"
 	"github.com/lycaon/lycaon/config/configtest"
-
+	"github.com/lycaon/lycaon/internal/app/configuration"
 	"github.com/lycaon/lycaon/internal/app/persistence"
 	"github.com/lycaon/lycaon/internal/configdir"
 	"github.com/lycaon/lycaon/internal/configlayout"
 	"github.com/lycaon/lycaon/internal/coordinator/anchor"
 	"github.com/lycaon/lycaon/internal/coordinator/loopwake"
 	"github.com/lycaon/lycaon/internal/db"
-	"github.com/lycaon/lycaon/internal/mcp"
+	"github.com/lycaon/lycaon/internal/mcp/mcptest"
 	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/repochange"
 	"github.com/lycaon/lycaon/internal/session"
@@ -30,11 +29,11 @@ import (
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/timelayout"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/worker"
 	"github.com/lycaon/lycaon/internal/workerrecords"
 	wire "github.com/lycaon/lycaon/pkg/api"
-	sdkmcp "github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
 func testBuildConfig(t *testing.T, configRoot string) configuration.Config {
@@ -47,7 +46,7 @@ func testBuildConfig(t *testing.T, configRoot string) configuration.Config {
 		DBPath:                    filepath.Join(t.TempDir(), "app-test.db"),
 		ListenAddr:                "127.0.0.1:0",
 		ConfigRoot:                configRoot,
-		TestMCPConnector:          &mcp.MockConnector{Tools: map[string][]*sdkmcp.Tool{"svca": {{Name: "do"}}}},
+		TestMCPConnector:          &mcptest.Connector{Tools: map[string][]*sdkmcp.Tool{"svca": {{Name: "do"}}}},
 		TestMCPGlobalOverridePath: filepath.Join(t.TempDir(), "mcp-test.yaml"),
 	}
 }
@@ -152,7 +151,7 @@ func TestBuildWithSeparateStoreDirectorySupportsWorkers(t *testing.T) {
 		ProjectID: testdbseed.DefaultProjectID, ClaimedBy: "store-root-test", ExecutionTarget: wire.ExecutionTargetLocal,
 	})
 	testutil.FailErr(t, "claim worker", err)
-	job, err := app.Workers.Queue.ClaimWorkerBranch(t.Context(), jobID)
+	job, err := app.Workers.Queue.Branches.ClaimWorkerBranch(t.Context(), jobID)
 	testutil.FailErr(t, "claim worker branch under active store", err)
 	rel, err := filepath.Rel(filepath.Dir(cfg.DBPath), job.WorkspaceRoot)
 	testutil.FailErr(t, "resolve branch against active store", err)
@@ -226,7 +225,7 @@ func closeBuiltHostWithArmedWait(t *testing.T) weak.Pointer[session.Host] {
 	testutil.FailErr(t, "build with armed wait", err)
 	projectDir := t.TempDir()
 	testdbseed.InsertProjectRoot(t, app.DB, testdbseed.DefaultProjectID, projectDir)
-	sess, err := app.Sessions.Store.Create(t.Context(), wire.CreateSessionRequest{ProjectID: testdbseed.DefaultProjectID, Posture: wire.SessionPostureBuild}, testdbseed.DefaultProjectID)
+	sess, err := sessionstore.NewSQL(app.DB).Sessions.Create(t.Context(), wire.CreateSessionRequest{ProjectID: testdbseed.DefaultProjectID, Posture: wire.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create waiting session", err)
 	host := app.Sessions.Manager
 	waits := host.Coordinator.Runtime.CoordinatorLoop().Waits
@@ -323,7 +322,7 @@ func TestQuietRoundsReadsQueueProgressAndPendingApprovals(t *testing.T) {
 	}
 	projectDir := t.TempDir()
 	testdbseed.InsertProjectRoot(t, store, testdbseed.DefaultProjectID, projectDir)
-	child, err := app.Sessions.Store.Create(t.Context(), wire.CreateSessionRequest{
+	child, err := sessionstore.NewSQL(app.DB).Sessions.Create(t.Context(), wire.CreateSessionRequest{
 		ProjectID: testdbseed.DefaultProjectID, Posture: wire.SessionPostureBuild,
 	}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create child session", err)
@@ -380,11 +379,11 @@ func TestQuietRoundsReadsQueueProgressAndPendingApprovals(t *testing.T) {
 		t.Fatal("expected no pending approval on fresh session")
 	}
 
-	parentSess, err := app.Sessions.Store.Create(t.Context(), wire.CreateSessionRequest{
+	parentSess, err := sessionstore.NewSQL(app.DB).Sessions.Create(t.Context(), wire.CreateSessionRequest{
 		ProjectID: testdbseed.DefaultProjectID, Posture: wire.SessionPostureBuild,
 	}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create parent session", err)
-	workerChild, err := app.Sessions.Store.Create(t.Context(), wire.CreateSessionRequest{
+	workerChild, err := sessionstore.NewSQL(app.DB).Sessions.Create(t.Context(), wire.CreateSessionRequest{
 		ProjectID: testdbseed.DefaultProjectID, Posture: wire.SessionPostureBuild,
 	}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create worker child", err)

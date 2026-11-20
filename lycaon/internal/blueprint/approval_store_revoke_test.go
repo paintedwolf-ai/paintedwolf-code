@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/authzcontext"
+	"github.com/lycaon/lycaon/internal/authzcontext/authztest"
 	"github.com/lycaon/lycaon/internal/db"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -54,7 +55,7 @@ func TestRevokeKeepsApprovalIdentityAndSealsEvent(t *testing.T) {
 	const path = ".paintedwolf/blueprints/auth.md"
 	sessionID := seedApprovedBlueprint(t, sqlDB, path)
 
-	store := NewApprovalStore(sqlDB, authzcontext.SQLRecorder(sqlDB))
+	store := NewApprovalStore(sqlDB, authzcontext.LedgerRecorder{Ledger: &authzcontext.Ledger{Store: authzcontext.NewSQLStore(sqlDB)}})
 	testutil.FailErr(t, "revoke", store.Revoke(ctx, testdbseed.DefaultProjectID, path))
 
 	var status, approvedAt, approvedVia, cause string
@@ -105,7 +106,7 @@ func TestRevokeSealsWithUnlinkedWorkflowRun(t *testing.T) {
 		t.Fatalf("workflow_run_id = %q, want NULL after run delete", runID.String)
 	}
 
-	store := NewApprovalStore(sqlDB, authzcontext.SQLRecorder(sqlDB))
+	store := NewApprovalStore(sqlDB, authzcontext.LedgerRecorder{Ledger: &authzcontext.Ledger{Store: authzcontext.NewSQLStore(sqlDB)}})
 	testutil.FailErr(t, "revoke", store.Revoke(ctx, testdbseed.DefaultProjectID, path))
 
 	status, _, _ := readApprovalRow(t, sqlDB, path)
@@ -126,7 +127,7 @@ func TestSupersedeSealsContentChanged(t *testing.T) {
 	const path = ".paintedwolf/blueprints/auth.md"
 	sessionID := seedApprovedBlueprint(t, sqlDB, path)
 
-	store := NewApprovalStore(sqlDB, authzcontext.SQLRecorder(sqlDB))
+	store := NewApprovalStore(sqlDB, authzcontext.LedgerRecorder{Ledger: &authzcontext.Ledger{Store: authzcontext.NewSQLStore(sqlDB)}})
 	testutil.FailErr(t, "supersede", store.Supersede(ctx, testdbseed.DefaultProjectID, path))
 
 	status, cause, revokedAt := readApprovalRow(t, sqlDB, path)
@@ -174,7 +175,7 @@ func TestEndOfGrantFailsClosedWhenLedgerAppendFails(t *testing.T) {
 			const path = ".paintedwolf/blueprints/auth.md"
 			seedApprovedBlueprint(t, sqlDB, path)
 
-			store := NewApprovalStore(sqlDB, authzcontext.LedgerRecorder{Ledger: &authzcontext.Ledger{Store: authzcontext.FailStore{}}})
+			store := NewApprovalStore(sqlDB, authztest.RejectEvents(t, sqlDB))
 			if err := tc.end(store, ctx, path); err == nil {
 				t.Fatal("transition must fail when the ledger append fails")
 			}

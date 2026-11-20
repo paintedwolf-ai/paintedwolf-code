@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/confine"
+	"github.com/lycaon/lycaon/internal/confine/admissiontest"
 	"github.com/lycaon/lycaon/internal/fspath"
 	"github.com/lycaon/lycaon/internal/hitl"
 	"github.com/lycaon/lycaon/internal/isolation"
@@ -78,7 +79,7 @@ func TestReviewedHostExecutionPreservesPhysicalBoundaryFacts(t *testing.T) {
 // command is the projection of the request the handler's spawn finalizes, and
 // it carries the attached root under a jailed, mediated boundary.
 func TestGateContainedIsTheAppliedSpawnBoundary(t *testing.T) {
-	confine.TestingSetAutoConfine(t)
+	admissiontest.Enable(t)
 	t.Setenv("LYCAON_BYPASS_APPROVALS", "")
 	t.Setenv("LYCAON_SANDBOX", "")
 	t.Setenv("LYCAON_SANDBOX_NETWORK", "")
@@ -134,7 +135,7 @@ func TestGateContainedIsTheAppliedSpawnBoundary(t *testing.T) {
 // part of the applied boundary: the spawn refuses it with the typed socket
 // code before anything launches.
 func TestSpawnRefusesASocketTheBoundaryLacks(t *testing.T) {
-	confine.TestingSetAutoConfine(t)
+	admissiontest.Enable(t)
 	setSocketReferenceState(t)
 	t.Setenv("LYCAON_BYPASS_APPROVALS", "")
 	t.Setenv("LYCAON_SANDBOX", "")

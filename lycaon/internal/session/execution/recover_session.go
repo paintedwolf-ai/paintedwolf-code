@@ -9,7 +9,7 @@ import (
 // RecoverSession repairs one session in the live process. Repeated calls are idempotent.
 func (m *Recovery) RecoverSession(ctx context.Context, sessionID string) error {
 	sessionID = strings.TrimSpace(sessionID)
-	if m == nil || m.store == nil || sessionID == "" {
+	if m == nil || (m.sessionStore == nil) || sessionID == "" {
 		return nil
 	}
 	turnErr := m.RecoverOrphanedTurnsForSession(ctx, sessionID)

@@ -12,12 +12,9 @@ import (
 	"golang.org/x/sys/unix"
 )
 
-// folderOwnerUID is who a placement folder must belong to.
-var folderOwnerUID = os.Geteuid
-
 // openPrivateFolder opens path without following a link and proves through the
 // held descriptor that it is a directory this user owns with no other access.
-func openPrivateFolder(path string) (int, error) {
+func openPrivateFolder(path string, uid int) (int, error) {
 	fd, err := unix.Open(path, unix.O_RDONLY|unix.O_DIRECTORY|unix.O_NOFOLLOW|unix.O_CLOEXEC, 0)
 	if err != nil {
 		if errors.Is(err, unix.ENOENT) {
@@ -34,7 +31,7 @@ func openPrivateFolder(path string) (int, error) {
 		_ = unix.Close(fd)
 		return -1, err
 	}
-	if int(stat.Uid) != folderOwnerUID() || stat.Mode&0o077 != 0 {
+	if int(stat.Uid) != uid || stat.Mode&0o077 != 0 {
 		_ = unix.Close(fd)
 		return -1, fmt.Errorf("%w: %s: owner %d, mode %o", ErrFolderNotPrivate, filepath.Base(path), stat.Uid, stat.Mode&0o777)
 	}
@@ -42,7 +39,7 @@ func openPrivateFolder(path string) (int, error) {
 }
 
 func verifyPrivateFolder(path string) error {
-	fd, err := openPrivateFolder(path)
+	fd, err := openPrivateFolder(path, os.Geteuid())
 	if err != nil {
 		return err
 	}
@@ -52,7 +49,7 @@ func verifyPrivateFolder(path string) error {
 // readPrivateFile reads through the descriptor that passed the check, so a swap
 // of the folder's name cannot change what is read.
 func readPrivateFile(folder, name string) ([]byte, error) {
-	fd, err := openPrivateFolder(folder)
+	fd, err := openPrivateFolder(folder, os.Geteuid())
 	if err != nil {
 		return nil, err
 	}

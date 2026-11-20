@@ -4,12 +4,12 @@
   "kind": "runtime_service",
   "workstream": "unix-socket-grants",
   "disposition": "retain",
-  "reason": "Saved-grant creation and revocation share person and host authorization, exact target capture and the authoritative store. The socket reference is acquired before persistence and released on every handler exit; the store owns committed authority. Keep these mutations together rather than introduce another grant writer. Freeze this reviewed shape at 363 lines; further growth requires renewed architectural review.",
-  "reviewed_commit": "df84f982a200c4a6b1dd80a55ef119b0465a2e55",
-  "ceiling": 363,
+  "reason": "Retain saved-grant creation and revocation at 360 receiver lines. Person and host authorization, exact target capture, durable commit, and runtime revocation remain one operation. Calling the approval gate directly removes a forwarding method without changing authority or ordering. Socket lifetime and approval-revocation contracts cover committed grants and their projections.",
+  "reviewed_commit": "14725b25ec62673da30a613e4982cd7f57f55aa7",
+  "ceiling": 360,
   "boundaries": {
     "lycaon/internal/settings/socket_grant_ownership_test.go": "b35151153c449b1e0eff5e19651fb5e6eea613bbc2df0ba8382c2e4e6d0e7e14",
     "lycaon/internal/api/capabilityadmin/approval_revocation_test.go": "d39295d8e562e2b626d07828b1a03d90252a73c1943436212508ae3b722b059b"
   },
-  "reviewed_shape": "ef0d113064697c5121dced70758e5fb256bae0d684b5c173b761c4af54b55cfd"
+  "reviewed_shape": "779724af55c676f7da9dd54a431dede01cdd001d4cf2fa435fd2ab211d00ec5a"
 }

@@ -17,7 +17,6 @@ import (
 	"github.com/lycaon/lycaon/internal/decide"
 	"github.com/lycaon/lycaon/internal/events"
 	"github.com/lycaon/lycaon/internal/hostlock"
-	"github.com/lycaon/lycaon/internal/mcp"
 	"github.com/lycaon/lycaon/internal/observability"
 	"github.com/lycaon/lycaon/internal/orchestration"
 	"github.com/lycaon/lycaon/internal/projectliveness"
@@ -75,22 +74,6 @@ type ServeApp struct {
 
 	projects clisocket.Projects
 	eventPub *events.Publisher
-}
-
-// StartBackgroundWorkers starts registered runners and returns their stop function.
-func (a *ServeApp) StartBackgroundWorkers(ctx context.Context) (context.CancelFunc, error) {
-	if err := a.startRunners(ctx); err != nil {
-		return nil, err
-	}
-	return a.stopRunners, nil
-}
-
-// MCPRegistry returns the MCP registry when wired.
-func (a *ServeApp) MCPRegistry() *mcp.Runtime {
-	if a == nil || a.resources == nil {
-		return nil
-	}
-	return a.resources.mcpRegistry
 }
 
 const (

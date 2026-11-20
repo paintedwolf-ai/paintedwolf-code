@@ -449,7 +449,6 @@ func (e *hostEffects) since(ctx context.Context, mark int64) ([]string, error) {
 func (e *hostEffects) quiesce(ctx context.Context) {
 	version, _ := e.dataVersion(ctx)
 	for pass := 0; pass < settlePasses; pass++ {
-		repochange.ResetDebouncerForTest(ctx)
 		repochange.WaitQuiet(ctx, e.projectDir, e.quietGrace, watcherQuietBound)
 		e.settle(ctx)
 		var pending int64

@@ -509,9 +509,8 @@ func runBootChild(t *testing.T, dir string) {
 	boot := func(name, dump string) {
 		t.Run(name, func(t *testing.T) {
 			h := BuildForTestAt(t, dir, WithLLMClient(crashTurnScript()))
-			stop := h.StartBackgroundWorkers(t, t.Context())
+			h.Start(t)
 			waitForOutboxDrained(t, h)
-			stop()
 			if dump == crashBoot2 {
 				writeCrashJSON(t, filepath.Join(dir, crashPrompt), assembledPrompt(t, h, dir))
 			}
@@ -538,9 +537,9 @@ func assembledPrompt(t *testing.T, h *Harness, dir string) []promptLine {
 	t.Helper()
 	raw, err := os.ReadFile(filepath.Join(dir, crashSession))
 	testutil.FailErr(t, "read session id", err)
-	sess, err := h.Store.Get(t.Context(), string(raw))
+	sess, err := h.Store.Sessions.Get(t.Context(), string(raw))
 	testutil.FailErr(t, "read session", err)
-	history, err := h.Store.GetMessages(t.Context(), sess.ID)
+	history, err := h.Store.Transcript.GetMessages(t.Context(), sess.ID)
 	testutil.FailErr(t, "read history", err)
 	assembled, _ := promptassembly.Assemble(sess, history, promptassembly.Config{})
 	lines := make([]promptLine, len(assembled))

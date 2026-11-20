@@ -12,7 +12,8 @@ import (
 
 	contractfixture "github.com/lycaon/lycaon/internal/api/contractfixture"
 	"github.com/lycaon/lycaon/internal/git"
-	"github.com/lycaon/lycaon/internal/project"
+
+	"github.com/lycaon/lycaon/internal/project/projecttest"
 	sessionstore "github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/testutil"
 	wire "github.com/lycaon/lycaon/pkg/api"
@@ -21,10 +22,10 @@ import (
 func TestProjectAgentContextUsesSessionWorktree(t *testing.T) {
 	srv := contractfixture.TrustSettingsServer(t)
 	root := contractfixture.InitCommittedRepoDir(t)
-	p, err := project.CreateWithRoot(t.Context(), srv.Sources.Workspace.ProjectRegistry, root)
+	p, err := projecttest.CreateWithRoot(t.Context(), srv.Sources.Workspace.ProjectRegistry, root)
 	testutil.FailErr(t, "CreateWithRoot", err)
 	root = p.Roots[0].Path
-	sess, err := srv.Sources.Workspace.SessionStore.Create(t.Context(), wire.CreateSessionRequest{ProjectID: p.ID}, p.ID)
+	sess, err := srv.Admin.SessionAdmin.Lifecycle.SessionStore.Create(t.Context(), wire.CreateSessionRequest{ProjectID: p.ID}, p.ID)
 	testutil.FailErr(t, "create session", err)
 
 	branch, err := git.NewManager().Branch(t.Context(), root)
@@ -34,7 +35,7 @@ func TestProjectAgentContextUsesSessionWorktree(t *testing.T) {
 	testutil.FailErr(t, "add worktree", git.NewManager().AddWorktree(
 		t.Context(), root, worktree, worktreeBranch, branch,
 	))
-	testutil.FailErr(t, "bind worktree", srv.Sources.Workspace.SessionStore.PutWorktreeBinding(
+	testutil.FailErr(t, "bind worktree", srv.Admin.SessionAdmin.Lifecycle.SessionStore.PutWorktreeBinding(
 		t.Context(),
 		sessionstore.WorktreeBinding{
 			SessionID:    sess.ID,

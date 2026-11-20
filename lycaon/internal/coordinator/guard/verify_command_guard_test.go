@@ -6,6 +6,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/coordinator/guard"
 	"github.com/lycaon/lycaon/internal/oar"
+	"github.com/lycaon/lycaon/internal/testutil/oartest"
 )
 
 func TestPrepareVerifyCallInjectsDeclaredWhenBare(t *testing.T) {
@@ -21,7 +22,7 @@ func TestObserveVerifyCommandUndeclared_bare(t *testing.T) {
 	guard.PrepareVerifyCall("verify", "  ", args)
 	gc := oar.NewGuardContext()
 	guard.ObserveVerifyCommandUndeclared("verify", "  ", args, gc)
-	if !guard.EvaluateObserveHasCode(gc, oar.AnchorCoordinatorPreInvoke, guard.VerifyCommandUndeclaredCode) {
+	if !oartest.EvaluateHasCode(t, gc, oar.AnchorCoordinatorPreInvoke, guard.VerifyCommandUndeclaredCode) {
 		t.Fatalf("want VERIFY_COMMAND_UNDECLARED Decision, facts verify_has_command=%v verify_declared=%v",
 			gc.Progress.VerifyHasCommand, gc.Progress.VerifyDeclared)
 	}
@@ -38,7 +39,7 @@ func TestPrepareVerifyCallPassesThroughExplicitCommand(t *testing.T) {
 	}
 	gc := oar.NewGuardContext()
 	guard.ObserveVerifyCommandUndeclared("verify", "./task check-fast", args, gc)
-	if guard.EvaluateObserveHasCode(gc, oar.AnchorCoordinatorPreInvoke, guard.VerifyCommandUndeclaredCode) {
+	if oartest.EvaluateHasCode(t, gc, oar.AnchorCoordinatorPreInvoke, guard.VerifyCommandUndeclaredCode) {
 		t.Fatalf("explicit command must not observe VERIFY_COMMAND_UNDECLARED")
 	}
 }

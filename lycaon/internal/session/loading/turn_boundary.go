@@ -60,14 +60,14 @@ func (m *Service) nextRoutePolicy(ctx context.Context, sess *api.Session) (provi
 // historyEpoch identifies the compaction view the session's prompt history
 // reads; empty when uncompacted. This is receipt provenance, not standing-cache state.
 func (m *Service) HistoryEpoch(ctx context.Context, sess *api.Session) string {
-	if m == nil || m.store == nil || sess == nil {
+	if m == nil || (m.sessionStore == nil || m.compactionStore == nil || m.turnStore == nil) || sess == nil {
 		return ""
 	}
-	view, ok, err := m.store.GetCompactionView(ctx, sess.ID)
+	view, ok, err := m.compactionStore.GetCompactionView(ctx, sess.ID)
 	if err != nil || !ok || view.Generation != sess.CompactionGeneration {
 		return ""
 	}
-	current, err := m.store.CompactionViewCurrent(ctx, sess.ID, view.CoveredThroughOrd, view.CoveredThroughID, view.SourceSeq)
+	current, err := m.compactionStore.CompactionViewCurrent(ctx, sess.ID, view.CoveredThroughOrd, view.CoveredThroughID, view.SourceSeq)
 	if err != nil || !current {
 		return ""
 	}

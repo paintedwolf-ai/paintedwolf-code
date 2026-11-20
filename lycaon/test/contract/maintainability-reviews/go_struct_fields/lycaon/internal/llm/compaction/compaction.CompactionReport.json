@@ -2,15 +2,18 @@
   "category": "go_struct_fields",
   "artifact": "lycaon/internal/llm/compaction/compaction.CompactionReport",
   "kind": "data_record",
-  "workstream": "bounded-compaction-reduction",
+  "workstream": "llm-test-support",
   "disposition": "retain",
-  "reason": "Retain the 14-field compaction result. It carries the continuation, measured outcomes, and the exact bounded source page needed by asynchronous enrichment. The source page is ephemeral and independent of persisted recovery hints; reconstructing it from hints can omit observations. The explicit API response mapping excludes this internal capture.",
-  "reviewed_commit": "515c793b129a749bbdcc5716ff59e46531e0e71c",
-  "ceiling": 14,
+  "reason": "Retain the compaction result carrying continuation, measured outcomes and the exact source page for asynchronous enrichment. SummaryFailure separates synthesis failure from accepted recoverable reduction. Source capture remains ephemeral; the explicit API mapping excludes internal capture and provider errors.",
+  "reviewed_commit": "0473416229b25af53d57c638e972fcfaf0904c3f",
+  "ceiling": 15,
   "boundaries": {
-    "lycaon/internal/llm/compaction/reduction_coverage_test.go": "49b19425a18631c14122d1d6818555aeec02251fc054172342c8e27073d8b95e",
+    "lycaon/internal/api/promptadmin/compaction.go": "a9c22ef35e3503e28096880cf7f6154af19d6fd291b0ab5124cb60b5436b67ed",
+    "lycaon/internal/llm/compaction/draft_recovery_compaction_test.go": "64d0abf6c02b460385b317ee5624d66fe4851c3d726cd5029b0fb1a9c80afa82",
+    "lycaon/internal/llm/compaction/execution_record_test.go": "f9d8ff88f6c20a217c5b8ebb4ab4b538d911a7f4f4c9a549d18bec09330cef37",
     "lycaon/internal/llm/compaction/projection_measure_test.go": "756b80cc66d6b241c18b31b27fc0de6b09f17c6aa46e43feba23366dd317cc83",
-    "lycaon/internal/api/promptadmin/compaction.go": "a9c22ef35e3503e28096880cf7f6154af19d6fd291b0ab5124cb60b5436b67ed"
+    "lycaon/internal/llm/compaction/reduction_coverage_test.go": "74fcf29f9227f7ae12e0fe1d32a7e633a11b30926c000eac21e4d0da81d08acd",
+    "lycaon/internal/llm/compaction/source_data_test.go": "a35ba82cc9ab5b7dedf71ab6acea85f786f907f1eb7331b9d7214aaf74a7b410"
   },
-  "reviewed_shape": "a9a9d32f92cb053b0e003c316c7041ad6a6b088bd856ddcd41fd67e2fc527cf8"
+  "reviewed_shape": "fdfae3035015f3fe608e0eecc865cff3097219b7f6b97c9b7c94b5a68ca85445"
 }

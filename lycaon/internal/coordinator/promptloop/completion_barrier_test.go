@@ -19,7 +19,7 @@ func TestNoToolTurnAndCompletionBarrierCarryFrozenCallReach(t *testing.T) {
 	loop := NewPromptLoopForTest(PromptLoopDeps{
 		Closeout: CloseoutDeps{
 			CloseoutTrackingDeps: CloseoutTrackingDeps{
-				BeforeFinishNoToolTurn: func(ctx context.Context, _ *api.Session, _ []api.Message, _, _ string, _ guidance.CloseoutDraft, _ string, _ bool, _ []string, _ bool) (*guidance.Refusal, bool) {
+				BeforeFinishNoToolTurn: func(ctx context.Context, _ *api.Session, _ []api.Message, _ string, _ guidance.CloseoutDraft, _ string, _ bool, _ []string, _ bool) (*guidance.Refusal, bool) {
 					seenNoTool = tools.CallReach(ctx)
 					return nil, false
 				},
@@ -44,13 +44,13 @@ func TestNoToolTurnAndCompletionBarrierCarryFrozenCallReach(t *testing.T) {
 			offeredToolNames: []string{"update_progress", "promote_overlay"},
 		},
 	}
-	if _, _, _, err := loop.Tools.tryRejectNoToolTurn(t.Context(), &api.Session{ID: "session"}, store.All(), "", draft.Content, guidance.CloseoutDraft{}, "implement_investigate", nil, "session", "draft", st, true, nil); err != nil {
+	if _, _, _, err := loop.Tools.tryRejectNoToolTurn(t.Context(), &api.Session{ID: "session"}, store.All(), draft.Content, guidance.CloseoutDraft{}, "implement_investigate", nil, "session", "draft", st, true, nil); err != nil {
 		t.Fatalf("tryRejectNoToolTurn: %v", err)
 	}
 	if seenNoTool.Status("update_progress") != toolreach.Callable {
 		t.Fatalf("BeforeFinishNoToolTurn reach = %+v", seenNoTool)
 	}
-	if _, err := loop.Closeout.emitAssembledCloseout(t.Context(), &api.Session{ID: "session"}, "session", "", "implement_investigate", markdownRead(draft.Content, false).Draft, nil, st, store.All()); err != nil {
+	if _, err := loop.Closeout.emitAssembledCloseout(t.Context(), &api.Session{ID: "session"}, "session", "implement_investigate", markdownRead(draft.Content, false).Draft, nil, st, store.All()); err != nil {
 		t.Fatalf("emitAssembledCloseout: %v", err)
 	}
 	if seenCompletion.Status("promote_overlay") != toolreach.Callable {
@@ -82,9 +82,9 @@ func TestCompletionBarrierRejectsOrdinaryAndAssembledProse(t *testing.T) {
 			var err error
 			if assembled {
 				st := &promptLoopTurnState{draftSlotID: "draft", draftSlotAppended: true}
-				_, err = loop.Closeout.emitAssembledCloseout(t.Context(), &api.Session{ID: "session"}, "session", "", "implement_investigate", markdownRead(draft.Content, false).Draft, nil, st, store.All())
+				_, err = loop.Closeout.emitAssembledCloseout(t.Context(), &api.Session{ID: "session"}, "session", "implement_investigate", markdownRead(draft.Content, false).Draft, nil, st, store.All())
 			} else {
-				_, err = loop.Projection.commitGuardedAssistantTurn(t.Context(), &api.Session{ID: "session"}, "session", store.All(), "", "", draft)
+				_, err = loop.Projection.commitGuardedAssistantTurn(t.Context(), &api.Session{ID: "session"}, "session", store.All(), "", draft)
 			}
 			if !errors.Is(err, guidance.ErrCloseoutStopped) {
 				t.Fatalf("completion error=%v", err)

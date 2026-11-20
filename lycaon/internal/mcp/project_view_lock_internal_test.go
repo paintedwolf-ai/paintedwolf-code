@@ -25,7 +25,7 @@ func TestProjectViewNeverObservesRollbackTransient(t *testing.T) {
 	r, err := NewRuntime(RuntimeOptions{
 		StatePath:          statePath,
 		GlobalOverridePath: t.TempDir() + "/mcp.yaml",
-		Connector:          &MockConnector{},
+		Connector:          catalogConnector{},
 	})
 	testutil.FailErr(t, "NewRuntime", err)
 	t.Cleanup(func() { _ = r.Close(t.Context()) })

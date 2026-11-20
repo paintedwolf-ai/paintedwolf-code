@@ -89,7 +89,7 @@ func TestSaveReplayAfterRetentionDoesNotPublishAgain(t *testing.T) {
 	testutil.FailErr(t, "complete save with lost acknowledgement", err)
 	_, err = f.store.db.ExecContext(t.Context(), `UPDATE editor_mutations SET created_at='2000-01-01T00:00:00Z' WHERE id=?`, operation)
 	testutil.FailErr(t, "age completed response", err)
-	_, err = db.RunRetention(t.Context(), f.store.db, db.DefaultRetention())
+	_, err = db.RunMaintenancePass(t.Context(), f.store.db, db.DefaultRetention(), true)
 	testutil.FailErr(t, "compact old response", err)
 	receipt, err := f.store.Mutation(t.Context(), operation)
 	testutil.FailErr(t, "read durable operation receipt", err)

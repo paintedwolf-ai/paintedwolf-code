@@ -17,7 +17,7 @@ import (
 func TestExpiredWorkerClaimRetriesAvailableAttempt(t *testing.T) {
 	sqlDB := testdbfixture.Open(t, "store.db")
 	testdbseed.InsertProjectRoot(t, sqlDB, testdbseed.DefaultProjectID, t.TempDir())
-	queue := NewSQLQueue(sqlDB, 1)
+	queue := NewSQLServices(sqlDB, 1).Queue
 	queue.SetEventOutbox(eventoutbox.New(sqlDB, nil))
 	testutil.FailErr(t, "insert", queue.store.InsertTask(t.Context(), api.WorkerTask{
 		ID: "job-1", ProjectID: testdbseed.DefaultProjectID, AgentType: "implement",
@@ -31,7 +31,7 @@ func TestExpiredWorkerClaimRetriesAvailableAttempt(t *testing.T) {
 	testdbseed.InsertSession(t, sqlDB, "child-1", testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "bind child session", queue.SetChildSessionID(t.Context(), claimed.ID, "child-1"))
 	branchRoot := filepath.Join(testbaseline.DataDir(t, sqlDB), "worker-branches", "worker-branch")
-	bound, err := queue.store.SetWorkerWorkspace(t.Context(), claimed.ID, branchRoot, testbaseline.Durable(t, sqlDB, claimed.ID, t.TempDir()))
+	bound, err := queue.store.SetWorkerWorkspace(t.Context(), claimed.ID, branchRoot, testbaseline.Durable(t, "root", sqlDB, claimed.ID, t.TempDir()))
 	testutil.FailErr(t, "bind worker workspace", err)
 	if !bound {
 		t.Fatal("worker workspace was not bound")
@@ -63,7 +63,7 @@ func TestExpiredWorkerClaimRetriesAvailableAttempt(t *testing.T) {
 func TestExpiredWorkerClaimFailsAfterAttemptBudget(t *testing.T) {
 	sqlDB := testdbfixture.Open(t, "store.db")
 	testdbseed.InsertProjectRoot(t, sqlDB, testdbseed.DefaultProjectID, t.TempDir())
-	queue := NewSQLQueue(sqlDB, 1)
+	queue := NewSQLServices(sqlDB, 1).Queue
 	queue.SetEventOutbox(eventoutbox.New(sqlDB, nil))
 	testutil.FailErr(t, "insert", queue.store.InsertTask(t.Context(), api.WorkerTask{
 		ID: "job-exhausted", ProjectID: testdbseed.DefaultProjectID, AgentType: "implement",
@@ -101,7 +101,7 @@ func TestExpiredWorkerClaimFailsAfterAttemptBudget(t *testing.T) {
 func TestLivePollerRescuesItsClaimBeforeExpirySweep(t *testing.T) {
 	sqlDB := testdbfixture.Open(t, "store.db")
 	testdbseed.InsertProjectRoot(t, sqlDB, testdbseed.DefaultProjectID, t.TempDir())
-	queue := NewSQLQueue(sqlDB, 1)
+	queue := NewSQLServices(sqlDB, 1).Queue
 	queue.SetEventOutbox(eventoutbox.New(sqlDB, nil))
 	testutil.FailErr(t, "insert", queue.store.InsertTask(t.Context(), api.WorkerTask{
 		ID: "job-resume", ProjectID: testdbseed.DefaultProjectID, AgentType: "implement",

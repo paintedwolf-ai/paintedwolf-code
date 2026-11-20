@@ -7,7 +7,7 @@ import (
 	"github.com/lycaon/lycaon/internal/testdbseed"
 )
 
-func newSQLTestStore(t *testing.T, projectIDs ...string) *SQL {
+func newSQLTestStore(t *testing.T, projectIDs ...string) *Repositories {
 	t.Helper()
 	database := testdbfixture.Open(t, "sessions.db")
 	if len(projectIDs) == 0 {

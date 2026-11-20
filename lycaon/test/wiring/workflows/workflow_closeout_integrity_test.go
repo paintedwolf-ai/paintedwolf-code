@@ -10,11 +10,11 @@ import (
 	"github.com/lycaon/lycaon/test/wiring"
 
 	"github.com/lycaon/lycaon/internal/events"
-	"github.com/lycaon/lycaon/internal/llm"
 	"github.com/lycaon/lycaon/internal/llm/modelcall"
 	"github.com/lycaon/lycaon/internal/promptresult"
 	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/testutil/llmtest"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -26,7 +26,7 @@ func TestWorkflowCloseoutCannotPromiseUncommittedAdvancement(t *testing.T) {
 		}
 		t.Run(name, func(t *testing.T) {
 			var calls atomic.Int32
-			mock := llm.NewKickDrivenMock(llm.KickDrivenConfig{Fallback: func(context.Context, llm.Snapshot) modelcall.Completion {
+			mock := llmtest.NewKickDrivenMock(llmtest.KickDrivenConfig{Fallback: func(context.Context, llmtest.Snapshot) modelcall.Completion {
 				calls.Add(1)
 				return modelcall.Completion{Content: "The gates passed. The host will advance the workflow."}
 			}})
@@ -64,7 +64,7 @@ func TestWorkflowCloseoutCannotPromiseUncommittedAdvancement(t *testing.T) {
 			if current.CurrentPhase != "plan" || current.Status == api.WorkflowRunStatusComplete || current.Status == api.WorkflowRunStatusFailed {
 				t.Fatalf("closeout_blocked altered or failed workflow: %+v", current)
 			}
-			messages, readErr := h.Store.GetMessages(ctx, sess.ID)
+			messages, readErr := h.Store.Transcript.GetMessages(ctx, sess.ID)
 			testutil.FailErr(t, "read transcript", readErr)
 			var hostNoticeFound bool
 			for _, msg := range messages {
@@ -132,7 +132,7 @@ func TestWorkflowCloseoutCannotPromiseUncommittedAdvancement(t *testing.T) {
 			if calls.Load() <= beforeResumeCalls {
 				t.Fatal("resumed prompt made no model calls")
 			}
-			resumedMessages, readErr := h.Store.GetMessages(ctx, sess.ID)
+			resumedMessages, readErr := h.Store.Transcript.GetMessages(ctx, sess.ID)
 			testutil.FailErr(t, "read resumed transcript", readErr)
 			var sawOpenGateContext bool
 			for _, msg := range resumedMessages {

@@ -9,7 +9,6 @@ import (
 
 	"github.com/lycaon/lycaon/internal/configdir"
 	"github.com/lycaon/lycaon/internal/configlayout"
-	"github.com/lycaon/lycaon/internal/enginepaths"
 )
 
 // EnvBrowserBin selects an executable with the required sibling resources.
@@ -52,93 +51,39 @@ func ResolveBinary(opts ResolveOptions) (ResolvedBrowser, bool) {
 			return ResolvedBrowser{Path: path, Source: SourceEnv}, true
 		}
 	}
-	for _, cand := range bundleCandidates() {
-		if installReady(cand) {
-			return ResolvedBrowser{Path: cand, Source: SourceBundle}, true
+	for _, root := range bundleRoots() {
+		if bin := BundledBinary(root); bin != "" {
+			return ResolvedBrowser{Path: bin, Source: SourceBundle}, true
 		}
 	}
-	if managed := managedBinaryPath(opts.CacheDir); managed != "" && installReady(managed) {
+	if managed := ManagedBinary(opts.CacheDir); managed != "" {
 		return ResolvedBrowser{Path: managed, Source: SourceManaged}, true
 	}
 	return ResolvedBrowser{}, false
 }
 
-// EnvTestHostHome is the developer's home directory, exported by test isolation before it
-// replaces HOME, so a test can use the browser the developer already provisioned.
-const EnvTestHostHome = "PW_TEST_HOST_HOME"
-
-// TestingEnableBundledBinary points tests at a staged browser, or else at the pinned browser
-// provisioned in the developer's own cache.
-func TestingEnableBundledBinary() {
-	if strings.TrimSpace(os.Getenv(EnvBrowserBin)) != "" {
-		return
-	}
-	bin := findStagedHeadlessShell()
-	if bin == "" {
-		bin = hostProvisionedHeadlessShell()
-	}
-	if bin == "" {
-		return
-	}
-	_ = os.Setenv(EnvBrowserBin, bin)
-}
-
-// hostProvisionedHeadlessShell is the pinned, hash-verified browser `browser:ensure`
-// installed under the developer's home, when isolation reports that home.
-func hostProvisionedHeadlessShell() string {
-	home := strings.TrimSpace(os.Getenv(EnvTestHostHome))
-	if home == "" {
+// BundledBinary returns a runnable browser in an engine resource root.
+func BundledBinary(root string) string {
+	if root == "" {
 		return ""
 	}
-	bin := managedBinaryPath(enginepaths.BrowserCacheRootUnder(configdir.ChannelConfigRoot(home)))
-	if bin == "" || !installReady(bin) {
-		return ""
+	bin := filepath.Join(root, "browser", headlessShellName())
+	if installReady(bin) {
+		return bin
 	}
-	return bin
+	return ""
 }
 
-func findStagedHeadlessShell() string {
-	dir, err := os.Getwd()
-	if err != nil {
-		return ""
-	}
-	for {
-		candidate := filepath.Join(dir, "lycaon-den", "src-tauri", "engine-root", "browser", headlessShellName())
-		if installReady(candidate) {
-			return candidate
-		}
-		if _, err := os.Stat(filepath.Join(dir, "Taskfile.yml")); err == nil {
-			return ""
-		}
-		parent := filepath.Dir(dir)
-		if parent == dir {
-			return ""
-		}
-		dir = parent
-	}
-}
-
-func bundleCandidates() []string {
-	name := headlessShellName()
-	var cands []string
-	if root := configlayout.EngineRoot(); root != "" {
-		cands = append(cands, filepath.Join(root, "browser", name))
-	}
+func bundleRoots() []string {
+	roots := []string{configlayout.EngineRoot()}
 	exe, err := os.Executable()
 	if err != nil {
-		return cands
+		return roots
 	}
-	exe, err = filepath.EvalSymlinks(exe)
-	if err != nil {
-		return cands
+	if exe, err := filepath.EvalSymlinks(exe); err == nil {
+		roots = append(roots, filepath.Dir(exe))
 	}
-	dir := filepath.Dir(exe)
-	cands = append(cands, filepath.Join(dir, "browser", name))
-	out := make([]string, 0, len(cands))
-	for _, c := range cands {
-		out = append(out, filepath.Clean(c))
-	}
-	return out
+	return roots
 }
 
 func headlessShellName() string {

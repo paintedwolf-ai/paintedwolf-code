@@ -12,6 +12,7 @@ import (
 	"github.com/lycaon/lycaon/internal/enginepaths"
 	"github.com/lycaon/lycaon/internal/layeredfs"
 	"github.com/lycaon/lycaon/internal/layeredfs/adapter"
+	"github.com/lycaon/lycaon/internal/layeredfs/adapter/adaptertest"
 	"github.com/lycaon/lycaon/internal/layeredfs/checkpoint"
 	"github.com/lycaon/lycaon/internal/layeredfs/privategit"
 	"github.com/lycaon/lycaon/internal/layeredfs/recovery"
@@ -56,7 +57,7 @@ func (f *layeredWorkerFixture) claimChild(t *testing.T, baseID string) *api.Work
 	t.Helper()
 	id, err := f.enqueueStacked(t, baseID)
 	testutil.FailErr(t, "claim next stacked", err)
-	child, err := f.queue.ClaimWorkerBranch(t.Context(), id)
+	child, err := f.queue.Branches.ClaimWorkerBranch(t.Context(), id)
 	testutil.FailErr(t, "claim stacked branch", err)
 	next, ok := f.queue.Get(id)
 	if !ok {
@@ -87,7 +88,7 @@ func TestMaterializedStackedWorkerStartsFromItsParentsSealedResult(t *testing.T)
 		testutil.FailErr(t, "edit parent", os.WriteFile(filepath.Join(parent.WorkspaceRoot, "main.go"), []byte("package parent\n"), 0o644))
 		testutil.FailErr(t, "remove in parent", os.Remove(filepath.Join(parent.WorkspaceRoot, "gone.go")))
 	})
-	_, parentManifest, published, err := session.OpenTaskCheckpointStore(completed)
+	_, parentManifest, published, err := session.OpenTaskCheckpointStore(completed, "")
 	testutil.FailErr(t, "open parent checkpoint", err)
 	if !published || parentManifest.WorkerID != parent.ID {
 		t.Fatal("parent published no checkpoint")
@@ -115,7 +116,7 @@ func TestMaterializedStackedWorkerStartsFromItsParentsSealedResult(t *testing.T)
 	childCompleted := fixture.completeWithChange(t, child, func() {
 		testutil.FailErr(t, "edit child", os.WriteFile(filepath.Join(child.WorkspaceRoot, "main.go"), []byte("package child\n"), 0o644))
 	})
-	store, manifest, published, err := session.OpenTaskCheckpointStore(childCompleted)
+	store, manifest, published, err := session.OpenTaskCheckpointStore(childCompleted, "")
 	testutil.FailErr(t, "open child checkpoint", err)
 	if !published {
 		t.Fatal("child published no checkpoint")
@@ -166,7 +167,7 @@ func TestStackedWorkerRefusesAParentWithNoImmutableResult(t *testing.T) {
 	running := fixture.claim(t)
 	id, err := fixture.enqueueStacked(t, running.ID)
 	testutil.FailErr(t, "claim next", err)
-	if _, err := fixture.queue.ClaimWorkerBranch(t.Context(), id); !errors.Is(err, ErrWorkerBranchClaimFailed) {
+	if _, err := fixture.queue.Branches.ClaimWorkerBranch(t.Context(), id); !errors.Is(err, ErrWorkerBranchClaimFailed) {
 		t.Fatalf("claim over a running parent = %v", err)
 	}
 	if task, ok := fixture.queue.Get(id); !ok || task.WorkspaceRoot != "" {
@@ -198,7 +199,7 @@ func testStackedWorkerPromotion(t *testing.T, selector *adapter.Selector, write 
 		_ = fixture.manager.DestroyWorkerWorkspace(t.Context(), &workspace.Binding{ID: parent.ID, Root: parent.WorkspaceRoot})
 	})
 	completed := fixture.completeWithChange(t, parent, func() { write(t, parent, "main.go", "package parent\n") })
-	_, parentManifest, published, err := session.OpenTaskCheckpointStore(completed)
+	_, parentManifest, published, err := session.OpenTaskCheckpointStore(completed, "")
 	testutil.FailErr(t, "open parent checkpoint", err)
 	if !published {
 		t.Fatal("parent published no checkpoint")
@@ -210,11 +211,8 @@ func testStackedWorkerPromotion(t *testing.T, selector *adapter.Selector, write 
 	t.Cleanup(func() {
 		_ = fixture.manager.DestroyWorkerWorkspace(t.Context(), &workspace.Binding{ID: child.ID, Root: child.WorkspaceRoot})
 	})
-	view, ok := workspace.LookupBranchClaimedView(child.WorkspaceRoot)
-	if !ok {
-		t.Fatal("child has no claimed view")
-	}
-	seen, err := view.Prepared.Core.ReadFile(layeredfs.QualifiedPath{RootID: view.Prepared.PrimaryRootID, Rel: "main.go"})
+	view := requireMountedView(t, fixture.views, child.WorkspaceRoot)
+	seen, err := view.Core.ReadFile(layeredfs.QualifiedPath{RootID: view.PrimaryRootID, Rel: "main.go"})
 	testutil.FailErr(t, "read through child view", err)
 	if string(seen) != "package parent\n" {
 		t.Fatalf("child view holds %q, not its parent's checkpoint", seen)
@@ -222,7 +220,7 @@ func testStackedWorkerPromotion(t *testing.T, selector *adapter.Selector, write 
 	assertFileHolds(t, filepath.Join(fixture.source, "main.go"), "package main\n")
 
 	childDone := fixture.completeWithChange(t, child, func() { write(t, child, "child.go", "package child\n") })
-	_, childManifest, published, err := session.OpenTaskCheckpointStore(childDone)
+	_, childManifest, published, err := session.OpenTaskCheckpointStore(childDone, "")
 	testutil.FailErr(t, "open child checkpoint", err)
 	if !published || len(childManifest.ParentCheckpoints) == 0 || childManifest.ParentCheckpoints[0] != parentManifest.CheckpointID {
 		t.Fatalf("child checkpoint parents = %v, want %s", childManifest.ParentCheckpoints, parentManifest.CheckpointID)
@@ -230,7 +228,7 @@ func testStackedWorkerPromotion(t *testing.T, selector *adapter.Selector, write 
 
 	hook := &stackedPromotionHook{}
 	dataDir := t.TempDir()
-	svc := &MergeService{Queue: fixture.queue, Store: fixture.queue, DataDir: dataDir, Workspace: fixture.manager, Scans: hook}
+	svc := &MergeService{Queue: fixture.queue, Branches: fixture.queue.Branches, Store: fixture.promotions, DataDir: dataDir, Workspace: fixture.manager, Scans: hook}
 	coordinator, err := fixture.manager.CheckpointCoordinator()
 	testutil.FailErr(t, "coordinator", err)
 	assertOriginalTarget := func(t *testing.T) {
@@ -266,7 +264,7 @@ func testStackedWorkerPromotion(t *testing.T, selector *adapter.Selector, write 
 	hook.crash = false
 	_, err = fixture.db.ExecContext(t.Context(), `UPDATE worker_jobs SET merge_lease_expires_at = '2000-01-01T00:00:00Z' WHERE id = ?`, child.ID)
 	testutil.FailErr(t, "expire crashed lease", err)
-	restarted := &MergeService{Queue: fixture.queue, Store: fixture.queue, DataDir: dataDir, Workspace: fixture.manager, Scans: hook}
+	restarted := &MergeService{Queue: fixture.queue, Branches: fixture.queue.Branches, Store: fixture.promotions, DataDir: dataDir, Workspace: fixture.manager, Scans: hook}
 	testutil.FailErr(t, "startup recovery", restarted.RecoverOrphanedMergeApplies(t.Context()))
 	assertOriginalTarget(t)
 
@@ -292,13 +290,15 @@ func testStackedWorkerPromotion(t *testing.T, selector *adapter.Selector, write 
 }
 
 func TestStackedWorkerClaimsAndPromotesThroughTheOneTransaction(t *testing.T) {
-	writeCore := func(t *testing.T, task *api.WorkerTask, rel, content string) {
-		writeThroughClaimedView(t, task, rel, content)
-	}
-	t.Run("fixture view", func(t *testing.T) { testStackedWorkerPromotion(t, fixtureMountedSelector(), writeCore) })
+	t.Run("fixture view", func(t *testing.T) {
+		selector := fixtureMountedSelector()
+		testStackedWorkerPromotion(t, selector, func(t *testing.T, task *api.WorkerTask, rel, content string) {
+			writeThroughClaimedView(t, selector.Registry, task, rel, content)
+		})
+	})
 	t.Run("real mount", func(t *testing.T) {
 		selector := workspace.HostSelector()
-		selector.BudgetFor = adapter.ZeroBudget
+		selector.BudgetFor = adaptertest.ZeroBudget
 		skipWithoutMount(t, selector)
 		testStackedWorkerPromotion(t, selector, func(t *testing.T, task *api.WorkerTask, rel, content string) {
 			testutil.FailErr(t, "write through the mount", os.WriteFile(filepath.Join(task.WorkspaceRoot, rel), []byte(content), 0o644))
@@ -325,9 +325,9 @@ func TestNonPrimaryRootRefsReachPromotionAndRollBack(t *testing.T) {
 	privateGit, err := workspace.OpenPrivateGit(branches)
 	testutil.FailErr(t, "open private Git", err)
 	selector := workspace.HostSelector()
-	selector.BudgetFor = adapter.ZeroBudget
+	selector.BudgetFor = adaptertest.ZeroBudget
 	skipWithoutMount(t, selector)
-	manager := workspace.NewManager(branches, selector).WithPrivateGit(privateGit)
+	manager := workspace.NewManager(branches, selector, workspace.Filesystem{}).WithPrivateGit(privateGit)
 	binding, _, err := manager.CreateWorkerBranch(workspace.WithWorkspaceProject(t.Context(), testdbseed.DefaultProjectID), roots, "p", "job-roots")
 	testutil.FailErr(t, "create branch", err)
 	t.Cleanup(func() { _ = manager.DestroyWorkerWorkspace(t.Context(), binding) })
@@ -347,7 +347,7 @@ func TestNonPrimaryRootRefsReachPromotionAndRollBack(t *testing.T) {
 	gitExec := privategit.NewGitExecutor(privateGit, privategit.SecondaryViewID(binding.ID, "s"), privategit.RemotePolicy{})
 	_, err = gitExec.Run(t.Context(), ".", "add", "added.txt")
 	testutil.FailErr(t, "add", err)
-	_, err = gitExec.Commit(t.Context(), "worker commit")
+	_, err = gitExec.Run(t.Context(), ".", "commit", "-m", "worker commit")
 	testutil.FailErr(t, "commit", err)
 	out, err := gitExec.Run(t.Context(), ".", "rev-parse", "HEAD")
 	testutil.FailErr(t, "rev-parse", err)
@@ -363,7 +363,7 @@ func TestNonPrimaryRootRefsReachPromotionAndRollBack(t *testing.T) {
 		t.Fatal("mounted branch was not published")
 	}
 	task := &api.WorkerTask{ID: binding.ID, ProjectID: testdbseed.DefaultProjectID, WorkspacePath: roots[0].Path, WorkspaceRoot: binding.Root}
-	_, manifest, published, err := session.OpenTaskCheckpointStore(task)
+	_, manifest, published, err := session.OpenTaskCheckpointStore(task, "")
 	testutil.FailErr(t, "open checkpoint", err)
 	if !published {
 		t.Fatal("no checkpoint published")
@@ -378,7 +378,7 @@ func TestNonPrimaryRootRefsReachPromotionAndRollBack(t *testing.T) {
 
 	txn, err := checkpoint.BeginTransaction(checkpoint.TransactionConfig{Dir: filepath.Join(base, "tx"), ID: "roots"})
 	testutil.FailErr(t, "begin", err)
-	testutil.FailErr(t, "apply", session.ApplyTaskCheckpoint(t.Context(), txn, task, roots))
+	testutil.FailErr(t, "apply", session.ApplyTaskCheckpoint(t.Context(), txn, task, roots, ""))
 	imported := gittest.Run(t, roots[1].Path, "for-each-ref", "--format=%(objectname)", "refs/lycaon/workers/"+binding.ID)
 	if !strings.Contains(imported, commit) {
 		t.Fatalf("secondary ref not imported: %q", imported)

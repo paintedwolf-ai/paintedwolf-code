@@ -13,7 +13,7 @@ import (
 func TestResumeParentAfterChildExitEmitsResumedBoundary(t *testing.T) {
 	mgr, store, _, _ := testManager(t)
 	ctx := context.Background()
-	sess, err := store.Create(ctx, api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
+	sess, err := store.Sessions.Create(ctx, api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
 
 	parent := &api.WorkflowRun{
@@ -34,7 +34,7 @@ func TestResumeParentAfterChildExitEmitsResumedBoundary(t *testing.T) {
 	if gotParent == nil || gotParent.Status != api.WorkflowRunStatusRunning {
 		t.Fatalf("parent status = %v want running", gotParent)
 	}
-	msgs, err := store.GetMessages(ctx, sess.ID)
+	msgs, err := store.Transcript.GetMessages(ctx, sess.ID)
 	testutil.FailErr(t, "messages", err)
 	for _, msg := range msgs {
 		if msg.WorkflowBoundary != nil && msg.WorkflowBoundary.Event == "resumed" {

@@ -26,6 +26,15 @@ func TestBundledCatalogIsHostDefinedOnBothPlatforms(t *testing.T) {
 			configtest.Overlay(t, map[config.Rel]string{config.ModelPolicy: emptyModelPolicyYAML})
 			catalog, err := NewProviderCatalog()
 			testutil.FailErr(t, "load host catalog", err)
+			explicit, err := NewProviderCatalogAt(catalog.localPath)
+			testutil.FailErr(t, "load explicit catalog", err)
+			if _, ok := explicit.Get(IncludedProviderID); !ok {
+				t.Fatal("explicit catalog omitted bundled transport")
+			}
+			testutil.FailErr(t, "reload explicit catalog", explicit.Reload())
+			if _, ok := explicit.Get(IncludedProviderID); !ok {
+				t.Fatal("explicit catalog reload lost bundled transport")
+			}
 			entry, ok := catalog.Get(IncludedProviderID)
 			if !ok || entry.Kind != IncludedProviderID || entry.RequiresAPIKey || !entry.LocalFree || len(entry.Models) != 0 {
 				t.Fatalf("incorrect bundled transport: %+v", entry)
@@ -50,7 +59,7 @@ func TestBundledCatalogIsHostDefinedOnBothPlatforms(t *testing.T) {
 func TestScopedRoutersObserveCurrentLocalAvailability(t *testing.T) {
 	var available atomic.Bool
 	remote := ModelRef{ProviderID: "remote", Model: "selected"}
-	router := NewStaticModelRouter(NewInMemoryPolicyStore(ModelPolicy{Coordinator: remote})).WithLocalDefault(func(context.Context) bool { return available.Load() })
+	router := NewStaticModelRouter(newPolicyFixture(t, ModelPolicy{Coordinator: remote})).WithLocalDefault(func(context.Context) bool { return available.Load() })
 	scoped := router.WithScope(SettingsScopeProject, t.TempDir())
 	for _, present := range []bool{false, true, false} {
 		available.Store(present)

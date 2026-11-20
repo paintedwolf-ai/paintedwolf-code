@@ -8,6 +8,7 @@ import (
 	"github.com/lycaon/lycaon/internal/hitl"
 	"github.com/lycaon/lycaon/internal/sensitivepath"
 	"github.com/lycaon/lycaon/internal/settings"
+	"github.com/lycaon/lycaon/internal/settings/settingstest"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -20,7 +21,7 @@ func TestCommandRedirectReviewAsksForProtectedTargets(t *testing.T) {
 	testutil.FailErr(t, "load approval store", err)
 	locations, err := sensitivepath.Load(sensitivepath.Bundled())
 	testutil.FailErr(t, "load sensitive locations", err)
-	sources := settings.NoSources()
+	sources := settingstest.EmptySources()
 	sources.Locations = locations
 	gate := settings.NewRuleApprovalGate(store, sources)
 	proj := t.TempDir()

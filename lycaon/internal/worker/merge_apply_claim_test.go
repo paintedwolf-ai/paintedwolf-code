@@ -12,11 +12,11 @@ import (
 	"github.com/lycaon/lycaon/internal/db"
 	"github.com/lycaon/lycaon/internal/layeredfs"
 	"github.com/lycaon/lycaon/internal/layeredfs/checkpoint"
-	"github.com/lycaon/lycaon/internal/session"
 	"github.com/lycaon/lycaon/internal/testbaseline"
 	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/testutil/gittest"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -24,7 +24,8 @@ func TestBeginMergeApplyClaimsPendingOnce(t *testing.T) {
 	ctx := context.Background()
 	sqlDB := testdbfixture.Open(t, "store.db")
 	store := NewSQLStore(sqlDB)
-	q := NewSQLQueue(sqlDB, 8)
+	qServices := NewSQLServices(sqlDB, 8)
+	q := qServices.Queue
 	dir := t.TempDir()
 	testdbseed.InsertSessionWithRoot(t, sqlDB, "parent-1", testdbseed.DefaultProjectID, dir)
 	id, err := q.Enqueue(ctx, api.WorkerTask{
@@ -37,19 +38,19 @@ func TestBeginMergeApplyClaimsPendingOnce(t *testing.T) {
 		Scope:           &api.TaskScope{Mode: api.TaskScopeModeWrite, Paths: []string{"a.go"}},
 	})
 	testutil.FailErr(t, "Enqueue", err)
-	bound, err := store.SetWorkerWorkspace(ctx, id, filepath.Join(testbaseline.DataDir(t, sqlDB), "worker-branches", id), testbaseline.Durable(t, sqlDB, id, t.TempDir()))
+	bound, err := store.SetWorkerWorkspace(ctx, id, filepath.Join(testbaseline.DataDir(t, sqlDB), "worker-branches", id), testbaseline.Durable(t, "root", sqlDB, id, t.TempDir()))
 	testutil.FailErr(t, "SetWorkerWorkspace", err)
 	if !bound {
 		t.Fatal("expected workspace root CAS to win on an unbound job")
 	}
-	testutil.FailErr(t, "SetMergeStatus", q.SetMergeStatus(ctx, id, api.WorkerMergeStatusPending))
+	testutil.FailErr(t, "SetMergeStatus", qServices.Promotions.SetMergeStatus(ctx, id, api.WorkerMergeStatusPending))
 
-	token, ok, err := q.BeginMergeApply(ctx, id)
+	token, ok, err := qServices.Promotions.BeginMergeApply(ctx, id)
 	testutil.FailErr(t, "BeginMergeApply first", err)
 	if !ok || token == "" {
 		t.Fatalf("expected first claim with token, got ok=%v token=%q", ok, token)
 	}
-	_, ok, err = q.BeginMergeApply(ctx, id)
+	_, ok, err = qServices.Promotions.BeginMergeApply(ctx, id)
 	testutil.FailErr(t, "BeginMergeApply second", err)
 	if ok {
 		t.Fatal("expected second claim to fail while applying")
@@ -134,14 +135,25 @@ func TestMergeServicePreviewAndPromoteFromPublishedCheckpoint(t *testing.T) {
 			trunkUpdated := "package app\n\nfunc A() int { return 10 }\n\nfunc B() int { return 2 }\n"
 			testutil.FailErr(t, "write trunk update", os.WriteFile(filepath.Join(primary, "app.go"), []byte(trunkUpdated), 0o644))
 
-			svc := &MergeService{Queue: q, Store: q, DataDir: t.TempDir()}
+			svc := &MergeService{Queue: q, Branches: q.Branches, Store: fixture.promotions, DataDir: t.TempDir()}
 			previewOut, err := svc.PreviewForSession(ctx, "parent-cp", jobID, "summary", nil)
 			testutil.FailErr(t, "PreviewForSession", err)
 			if len(previewOut.CleanPaths) != 3 {
 				t.Fatalf("preview CleanPaths = %v, want 3 clean paths", previewOut.CleanPaths)
 			}
 
-			// Mutate trunk after PreviewForSession to verify stale preview detection.
+			review := svc.reviews.get(jobID)
+			other := &MergeService{}
+			if review == nil || review.CheckpointID != manifest.CheckpointID || other.reviews.get(jobID) != nil {
+				t.Fatalf("checkpoint review binding = %+v", review)
+			}
+			if _, err := svc.PreviewForSession(ctx, "parent-cp", jobID, "summary", []string{"outside-review.txt"}); err == nil {
+				t.Fatal("preview accepted an unlisted file")
+			}
+			if svc.reviews.get(jobID) != review {
+				t.Fatal("failed preview replaced the existing review")
+			}
+
 			trunkStale := "package app\n\nfunc A() int { return 99 }\n\nfunc B() int { return 2 }\n"
 			testutil.FailErr(t, "write stale trunk", os.WriteFile(filepath.Join(primary, "app.go"), []byte(trunkStale), 0o644))
 			if _, err := svc.PromoteOverlay(ctx, "parent-cp", jobID, api.PromoteOverlayInput{}); !errors.Is(err, checkpoint.ErrStalePreviewTargetChanged) {
@@ -152,7 +164,7 @@ func TestMergeServicePreviewAndPromoteFromPublishedCheckpoint(t *testing.T) {
 			_, err = svc.PreviewForSession(ctx, "parent-cp", jobID, "summary", nil)
 			testutil.FailErr(t, "PreviewForSession refresh", err)
 			if publishLater {
-				_, err = checkpoint.WriteLooseGitObject(checkpoint.CheckpointGitObjectsDir(fixture.store.RootDir(), "chk-promote-later", ""), "blob", []byte("feature-snapshot\n"))
+				_, err = gittest.WriteLooseObject(checkpoint.CheckpointGitObjectsDir(fixture.store.RootDir(), "chk-promote-later", ""), "blob", []byte("feature-snapshot\n"))
 				testutil.FailErr(t, "export later checkpoint objects", err)
 				laterContent := strings.Replace(workerContent, "return 22", "return 33", 1)
 				_, err = core.WriteFile(lp, []byte(laterContent), 0o644)
@@ -191,6 +203,9 @@ func TestMergeServicePreviewAndPromoteFromPublishedCheckpoint(t *testing.T) {
 			}
 			promoteOut, err := svc.PromoteOverlay(ctx, "parent-cp", jobID, api.PromoteOverlayInput{})
 			testutil.FailErr(t, "PromoteOverlay", err)
+			if svc.reviews.get(jobID) != nil {
+				t.Fatal("terminal promotion retained its checkpoint review")
+			}
 			wantStatus := api.WorkerMergeStatusMerged
 			if promoteOut.Status != wantStatus {
 				t.Fatalf("PromoteOverlay status = %q, want %q", promoteOut.Status, wantStatus)
@@ -247,6 +262,9 @@ func requireFailedCompletionRollsBack(t *testing.T, svc *MergeService, fixture p
 	if task, ok := q.Get(jobID); !ok || task.MergeStatus != api.WorkerMergeStatusPending {
 		t.Fatalf("failed completion status=%+v", task)
 	}
+	if review := svc.reviews.get(jobID); review == nil || review.CheckpointID != checkpointID {
+		t.Fatalf("failed completion lost the reviewed checkpoint: %+v", review)
+	}
 	if _, found, err := cpStore.LoadPromotionRecord("tx-" + manifest.CheckpointID); err != nil || found {
 		t.Fatalf("failed completion retained component record: found=%t err=%v", found, err)
 	}
@@ -296,6 +314,7 @@ func requirePromotedEffects(t *testing.T, fixture publishedCheckpointWorker, che
 }
 
 type publishedCheckpointWorker struct {
+	promotions                                *PromotionStore
 	db                                        *db.Store
 	queue                                     *SQLQueue
 	primary, jobID, workerContent, featureOID string
@@ -312,7 +331,8 @@ func newPublishedCheckpointWorker(t *testing.T) publishedCheckpointWorker {
 	ctx := t.Context()
 	sqlDB := testdbfixture.Open(t, "store.db")
 	sqlStore := NewSQLStore(sqlDB)
-	q := NewSQLQueue(sqlDB, 8)
+	qServices := NewSQLServices(sqlDB, 8)
+	q := qServices.Queue
 	primary := t.TempDir()
 	testdbseed.InsertSessionWithRoot(t, sqlDB, "parent-cp", testdbseed.DefaultProjectID, primary)
 
@@ -331,11 +351,10 @@ func newPublishedCheckpointWorker(t *testing.T) publishedCheckpointWorker {
 		Scope:           &api.TaskScope{Mode: api.TaskScopeModeWrite},
 	})
 	testutil.FailErr(t, "Enqueue", err)
-	t.Cleanup(func() { session.ClearTaskCheckpointPreview(jobID) })
 
 	overlay := filepath.Join(testbaseline.DataDir(t, sqlDB), "worker-branches", jobID)
 	testutil.FailErr(t, "MkdirAll overlay", os.MkdirAll(overlay, 0o755))
-	baselinePath := testbaseline.Durable(t, sqlDB, jobID, primary)
+	baselinePath := testbaseline.Durable(t, "root", sqlDB, jobID, primary)
 	cpStore := openRecoveryCheckpointStore(t)
 	cpStoreDir := cpStore.RootDir()
 
@@ -361,8 +380,8 @@ func newPublishedCheckpointWorker(t *testing.T) publishedCheckpointWorker {
 	testutil.FailErr(t, "Symlink link.txt", err)
 
 	testutil.FailErr(t, "MkdirAll primary .git/objects", os.MkdirAll(filepath.Join(primary, ".git", "objects"), 0o755))
-	featureOID, err := checkpoint.WriteLooseGitObject(checkpoint.CheckpointGitObjectsDir(cpStoreDir, "chk-promote-1", ""), "blob", []byte("feature-snapshot\n"))
-	testutil.FailErr(t, "WriteLooseGitObject", err)
+	featureOID, err := gittest.WriteLooseObject(checkpoint.CheckpointGitObjectsDir(cpStoreDir, "chk-promote-1", ""), "blob", []byte("feature-snapshot\n"))
+	testutil.FailErr(t, "write loose object", err)
 
 	pub, err := checkpoint.NewPublisher(checkpoint.PublisherConfig{
 		WorkerID:         jobID,
@@ -388,10 +407,21 @@ func newPublishedCheckpointWorker(t *testing.T) publishedCheckpointWorker {
 
 	_, err = sqlStore.SetWorkerWorkspace(ctx, jobID, overlay, baselinePath)
 	testutil.FailErr(t, "SetWorkerWorkspace", err)
-	testutil.FailErr(t, "SetMergeStatus", q.SetMergeStatus(ctx, jobID, api.WorkerMergeStatusPending))
+	testutil.FailErr(t, "SetMergeStatus", qServices.Promotions.SetMergeStatus(ctx, jobID, api.WorkerMergeStatusPending))
 
 	// Tear down the active worker view directory completely after checkpoint publication.
 	testutil.FailErr(t, "RemoveAll overlay view", os.RemoveAll(overlay))
 
-	return publishedCheckpointWorker{overlay: overlay, db: sqlDB, queue: q, primary: primary, jobID: jobID, workerContent: workerContent, featureOID: featureOID, store: cpStore, core: core, path: lp, publisher: pub, manifest: manifest}
+	return publishedCheckpointWorker{overlay: overlay, db: sqlDB, queue: q, promotions: qServices.Promotions, primary: primary, jobID: jobID, workerContent: workerContent, featureOID: featureOID, store: cpStore, core: core, path: lp, publisher: pub, manifest: manifest}
+}
+
+func TestPromotionMutationsRequirePersistence(t *testing.T) {
+	for _, store := range []*PromotionStore{nil, {}} {
+		if err := store.SetMergeStatus(t.Context(), "job", api.WorkerMergeStatusRejected); err == nil {
+			t.Fatal("promotion state mutation accepted absent persistence")
+		}
+		if err := store.ClearWorkerWorkspace(t.Context(), "job"); err == nil {
+			t.Fatal("workspace metadata mutation accepted absent persistence")
+		}
+	}
 }

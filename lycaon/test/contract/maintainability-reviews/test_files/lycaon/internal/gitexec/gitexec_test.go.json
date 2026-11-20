@@ -1,0 +1,13 @@
+{
+  "category": "test_files",
+  "artifact": "lycaon/internal/gitexec/gitexec_test.go",
+  "kind": "test_suite",
+  "workstream": "shim-audit",
+  "disposition": "retain",
+  "reason": "Keep the shared real Git suite for invocation environments, hook neutralization, tool paths, metadata and host configuration. TestMain selects staged Git once. Each test isolates user configuration and repository contents.",
+  "reviewed_commit": "8568866534616465f7947804a4db22645cfb9895",
+  "ceiling": 489,
+  "boundaries": {
+    "lycaon/internal/gitexec/gitexec_test.go": "48c5597da63a2ebaf1cc2f306d1825573c107b3070ec3cd2ffc015fb4f4927fb"
+  }
+}

@@ -39,11 +39,9 @@ func brokerWith(decide egressproxy.EndpointDecider, resolve egressproxy.PeerReso
 	return b
 }
 
-func allowLocalDial(p *egressproxy.Broker) {
-	p.SetDialEndpointForTest(func(ctx context.Context, ep egressproxy.Endpoint) (net.Conn, error) {
-		var d net.Dialer
-		return d.DialContext(ctx, "tcp", ep.DialAddr())
-	})
+func dialLocalEndpoint(ctx context.Context, ep egressproxy.Endpoint) (net.Conn, error) {
+	var d net.Dialer
+	return d.DialContext(ctx, "tcp", ep.DialAddr())
 }
 
 func TestProxyAllowsAndDeniesByHost(t *testing.T) {
@@ -57,13 +55,11 @@ func TestProxyAllowsAndDeniesByHost(t *testing.T) {
 		asked = append(asked, endpoint.Host)
 		return endpoint.Host == "127.0.0.1"
 	}, leasedPeer("cmd"))
-	allowLocalDial(p)
-	if _, err := p.Start(); err != nil {
-		testutil.FailErr(t, "p.Start failed", err)
-	}
+	addrs, err := p.Start(egressproxy.Options{DialEndpoint: dialLocalEndpoint})
+	testutil.FailErr(t, "start HTTP broker", err)
 	defer func() { _ = p.Close() }()
 
-	client := clientVia(p.Addr())
+	client := clientVia(addrs.HTTP)
 
 	resp, err := client.Get(upstream.URL)
 	if err != nil {
@@ -104,17 +100,15 @@ func TestBrokerRefusesCallersItCannotAttribute(t *testing.T) {
 		deciderCalled = true
 		return true
 	}, unresolvable)
-	allowLocalDial(p)
 	var refused []egressproxy.Refusal
 	p.SetRefusalReporter(func(_ egressproxy.Peer, _ egressproxy.Endpoint, r egressproxy.Refusal) {
 		refused = append(refused, r)
 	})
-	if _, err := p.Start(); err != nil {
-		testutil.FailErr(t, "p.Start failed", err)
-	}
+	addrs, err := p.Start(egressproxy.Options{DialEndpoint: dialLocalEndpoint})
+	testutil.FailErr(t, "start HTTP broker", err)
 	defer func() { _ = p.Close() }()
 
-	resp, err := clientVia(p.Addr()).Get(upstream.URL)
+	resp, err := clientVia(addrs.HTTP).Get(upstream.URL)
 	if err != nil {
 		t.Fatalf("request should reach the proxy: %v", err)
 	}
@@ -143,12 +137,11 @@ func TestBrokerNamesTheActionThatLeftAProcessRunning(t *testing.T) {
 	p.SetRefusalReporter(func(peer egressproxy.Peer, _ egressproxy.Endpoint, r egressproxy.Refusal) {
 		got, refusal = peer, r
 	})
-	if _, err := p.Start(); err != nil {
-		testutil.FailErr(t, "p.Start failed", err)
-	}
+	addrs, err := p.Start()
+	testutil.FailErr(t, "start HTTP broker", err)
 	defer func() { _ = p.Close() }()
 
-	resp, err := clientVia(p.Addr()).Get("http://vuln.go.dev/index.json")
+	resp, err := clientVia(addrs.HTTP).Get("http://vuln.go.dev/index.json")
 	if err != nil {
 		t.Fatalf("request should reach the proxy: %v", err)
 	}
@@ -183,14 +176,12 @@ func TestBrokerPassesTheResolvedLineageToTheDecider(t *testing.T) {
 		gotLineage = lineage
 		return true
 	}, leasedPeer("action-lineage-123"))
-	allowLocalDial(p)
-	if _, err := p.Start(); err != nil {
-		testutil.FailErr(t, "p.Start failed", err)
-	}
+	addrs, err := p.Start(egressproxy.Options{DialEndpoint: dialLocalEndpoint})
+	testutil.FailErr(t, "start HTTP broker", err)
 	defer func() { _ = p.Close() }()
 
 	// A caller-supplied credential is ignored; identity comes from the peer.
-	pu, _ := url.Parse("http://forged:x@" + p.Addr())
+	pu, _ := url.Parse("http://forged:x@" + addrs.HTTP)
 	client := &http.Client{Transport: &http.Transport{Proxy: http.ProxyURL(pu)}}
 	req, err := http.NewRequest(http.MethodGet, upstream.URL, nil)
 	testutil.FailErr(t, "NewRequest", err)
@@ -222,16 +213,15 @@ func TestHTTPRechecksTheLeaseAfterAParkedDecision(t *testing.T) {
 		return true
 	}, leasedPeer("live"))
 	p.SetLeaseCheck(func(string) bool { return live.Load() })
-	p.SetDialEndpointForTest(func(context.Context, egressproxy.Endpoint) (net.Conn, error) {
+	dialEndpoint := func(context.Context, egressproxy.Endpoint) (net.Conn, error) {
 		dialed = true
 		return nil, io.EOF
-	})
-	if _, err := p.Start(); err != nil {
-		t.Fatalf("Start: %v", err)
 	}
+	addrs, err := p.Start(egressproxy.Options{DialEndpoint: dialEndpoint})
+	testutil.FailErr(t, "start HTTP broker", err)
 	defer func() { _ = p.Close() }()
 
-	client := clientVia(p.Addr())
+	client := clientVia(addrs.HTTP)
 	result := make(chan int, 1)
 	go func() {
 		resp, _ := client.Get("http://parked.example/")
@@ -262,18 +252,17 @@ func TestHTTPClosesConnectionWhenTheLeaseEndsDuringDial(t *testing.T) {
 	live.Store(true)
 	p := brokerWith(func(context.Context, string, egressproxy.Endpoint) bool { return true }, leasedPeer("live"))
 	p.SetLeaseCheck(func(string) bool { return live.Load() })
-	p.SetDialEndpointForTest(func(context.Context, egressproxy.Endpoint) (net.Conn, error) {
+	dialEndpoint := func(context.Context, egressproxy.Endpoint) (net.Conn, error) {
 		client, server := net.Pipe()
 		_ = server.Close()
 		live.Store(false)
 		return client, nil
-	})
-	if _, err := p.Start(); err != nil {
-		t.Fatalf("Start: %v", err)
 	}
+	addrs, err := p.Start(egressproxy.Options{DialEndpoint: dialEndpoint})
+	testutil.FailErr(t, "start HTTP broker", err)
 	defer func() { _ = p.Close() }()
 
-	resp, err := clientVia(p.Addr()).Get("http://dial-race.example/")
+	resp, err := clientVia(addrs.HTTP).Get("http://dial-race.example/")
 	if err != nil {
 		t.Fatalf("Get: %v", err)
 	}
@@ -285,12 +274,11 @@ func TestHTTPClosesConnectionWhenTheLeaseEndsDuringDial(t *testing.T) {
 
 func TestHTTPDefaultDialBlocksPrivateLANLiteral(t *testing.T) {
 	p := brokerWith(func(context.Context, string, egressproxy.Endpoint) bool { return true }, leasedPeer("cmd"))
-	if _, err := p.Start(); err != nil {
-		t.Fatalf("Start: %v", err)
-	}
+	addrs, err := p.Start()
+	testutil.FailErr(t, "start HTTP broker", err)
 	defer func() { _ = p.Close() }()
 
-	resp, err := clientVia(p.Addr()).Get("http://10.0.0.1:1/")
+	resp, err := clientVia(addrs.HTTP).Get("http://10.0.0.1:1/")
 	if err != nil {
 		t.Fatalf("Get: %v", err)
 	}
@@ -324,12 +312,11 @@ func TestProxyRefusesLoopbackWithoutTheLoopbackConnectGrant(t *testing.T) {
 		decided = true
 		return true
 	}, leasedPeer("cmd"))
-	if _, err := p.Start(); err != nil {
-		t.Fatalf("Start: %v", err)
-	}
+	addrs, err := p.Start()
+	testutil.FailErr(t, "start HTTP broker", err)
 	defer func() { _ = p.Close() }()
 
-	resp, err := clientVia(p.Addr()).Get(upstream.URL)
+	resp, err := clientVia(addrs.HTTP).Get(upstream.URL)
 	if err != nil {
 		t.Fatalf("Get: %v", err)
 	}
@@ -352,12 +339,11 @@ func TestProxyRefusesLoopbackConnectTunnelWithoutTheGrant(t *testing.T) {
 	upstream := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}))
 	defer upstream.Close()
 	p := brokerWith(func(context.Context, string, egressproxy.Endpoint) bool { return true }, leasedPeer("cmd"))
-	if _, err := p.Start(); err != nil {
-		t.Fatalf("Start: %v", err)
-	}
+	addrs, err := p.Start()
+	testutil.FailErr(t, "start HTTP broker", err)
 	defer func() { _ = p.Close() }()
 
-	conn, err := net.Dial("tcp", p.Addr())
+	conn, err := net.Dial("tcp", addrs.HTTP)
 	testutil.FailErr(t, "dial proxy", err)
 	defer func() { _ = conn.Close() }()
 	target := fmt.Sprintf("127.0.0.1:%d", serverPort(t, upstream.URL))
@@ -384,12 +370,11 @@ func TestProxyMediatesLoopbackWithinTheGrantedPorts(t *testing.T) {
 	granted := serverPort(t, upstream.URL)
 	p := brokerWith(func(context.Context, string, egressproxy.Endpoint) bool { return true }, leasedPeer("cmd"))
 	p.SetLoopbackConnectAuthority(func(_ string, port uint16) bool { return port == granted })
-	if _, err := p.Start(); err != nil {
-		t.Fatalf("Start: %v", err)
-	}
+	addrs, err := p.Start()
+	testutil.FailErr(t, "start HTTP broker", err)
 	defer func() { _ = p.Close() }()
 
-	resp, err := clientVia(p.Addr()).Get(upstream.URL)
+	resp, err := clientVia(addrs.HTTP).Get(upstream.URL)
 	if err != nil {
 		t.Fatalf("Get: %v", err)
 	}
@@ -399,7 +384,7 @@ func TestProxyMediatesLoopbackWithinTheGrantedPorts(t *testing.T) {
 		t.Fatalf("granted port status=%d body=%q", resp.StatusCode, body)
 	}
 
-	resp2, err := clientVia(p.Addr()).Get(other.URL)
+	resp2, err := clientVia(addrs.HTTP).Get(other.URL)
 	if err != nil {
 		t.Fatalf("Get: %v", err)
 	}

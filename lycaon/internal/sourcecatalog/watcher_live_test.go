@@ -11,6 +11,7 @@ import (
 	"github.com/lycaon/lycaon/internal/fspath"
 	"github.com/lycaon/lycaon/internal/litprefilter"
 	"github.com/lycaon/lycaon/internal/repochange"
+	"github.com/lycaon/lycaon/internal/repochange/repochangetest"
 	"github.com/lycaon/lycaon/internal/testutil"
 )
 
@@ -23,8 +24,7 @@ func liveTestCatalog(t *testing.T, root string) *Catalog {
 		}
 	})
 	t.Cleanup(unbind)
-	repochange.EnsureRoot(t.Context(), root)
-	t.Cleanup(func() { repochange.CloseRoot(root) })
+	repochangetest.Watch(t, root)
 	if !repochange.Coverage(root).Watching {
 		t.Fatal("live source watcher did not start")
 	}

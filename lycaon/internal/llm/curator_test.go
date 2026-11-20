@@ -68,7 +68,7 @@ func (s *stubCuratorProvider) Profile() providerprofile.Profile {
 func newTestRegistrySummarizer(t *testing.T, provider modelcall.Provider) *RegistrySummarizer {
 	t.Helper()
 	guidance.SetGuidanceRenderer(promptstest.GuidanceRenderer(t))
-	policy := NewInMemoryPolicyStore(ModelPolicy{
+	policy := newPolicyFixture(t, ModelPolicy{
 		Lite: ModelRef{ProviderID: "lite", Model: "lite"},
 	})
 
@@ -275,7 +275,8 @@ func TestRegistrySummarizerCurate_usesLiteProvider(t *testing.T) {
 // newTestRegistry wires the inert model screen a registry needs before it
 // dispatches; an unset screen rejects every request.
 func newTestRegistry() *Registry {
-	reg := newEmptyRegistry()
+	reg := &Registry{}
+	reg.snapshot.Store(newProviderRegistrySnapshot(providerRegistrySnapshotInput{}))
 	reg.SetOutboundSecretScreen(NewModelSecretScreen(nil, nil))
 	return reg
 }

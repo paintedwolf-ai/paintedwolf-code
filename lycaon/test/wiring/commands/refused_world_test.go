@@ -23,7 +23,6 @@ import (
 	"github.com/lycaon/lycaon/internal/configdir"
 	"github.com/lycaon/lycaon/internal/db"
 	"github.com/lycaon/lycaon/internal/events"
-	"github.com/lycaon/lycaon/internal/gitengine"
 	"github.com/lycaon/lycaon/internal/hitl"
 	"github.com/lycaon/lycaon/internal/llm"
 	"github.com/lycaon/lycaon/internal/nativemanifest"
@@ -412,7 +411,6 @@ func TestRefusedOperationsLeaveTheWorldUnchanged(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { _, _ = w.Write([]byte("fetched\n")) }))
 	t.Cleanup(server.Close)
 	witnesses := mutatingWitnesses(t, server.URL)
-	gitengine.TestingEnableBundledBinary()
 	covered := map[string]bool{"command": true}
 	for _, w := range witnesses {
 		covered[w.covers] = true
@@ -580,7 +578,7 @@ func programEntry(tool string) bool { return tool == "command" || tool == "verif
 
 func findWitnessResult(t *testing.T, s *commandProgramSession) (*wire.ToolResult, bool) {
 	t.Helper()
-	msgs, err := s.h.Store.GetMessages(t.Context(), s.session)
+	msgs, err := s.h.Store.Transcript.GetMessages(t.Context(), s.session)
 	testutil.FailErr(t, "read transcript", err)
 	for i := len(msgs) - 1; i >= 0; i-- {
 		if msgs[i].Role == wire.MessageRoleTool && msgs[i].ToolResult != nil && msgs[i].ToolResult.ToolCallID == "witness-1" {
@@ -753,7 +751,6 @@ func escapeSpellings(t *testing.T, p refusalProject, hardLink bool) []escapeSpel
 }
 
 func TestRefusedPathsStayInsideTheRoots(t *testing.T) {
-	gitengine.TestingEnableBundledBinary()
 	templates := pathTemplates()
 	covered := map[string]bool{}
 	for _, tpl := range templates {
@@ -857,7 +854,7 @@ func runPathCell(t *testing.T, host *programHost, template refusalProject, tpl p
 	if gitDigest(t, project.outside) != beforeGit {
 		changed = append(changed, "git state")
 	}
-	msgs, err := s.h.Store.GetMessages(t.Context(), s.session)
+	msgs, err := s.h.Store.Transcript.GetMessages(t.Context(), s.session)
 	testutil.FailErr(t, "read transcript", err)
 	// Only results deliver: the call's own arguments name the outside path.
 	for _, msg := range msgs {

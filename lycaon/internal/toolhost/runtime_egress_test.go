@@ -10,6 +10,7 @@ import (
 	"github.com/lycaon/lycaon/internal/configlayout"
 
 	"github.com/lycaon/lycaon/internal/authzcontext"
+	"github.com/lycaon/lycaon/internal/authzcontext/authztest"
 	"github.com/lycaon/lycaon/internal/confine"
 	"github.com/lycaon/lycaon/internal/egressproxy"
 	"github.com/lycaon/lycaon/internal/gate"
@@ -56,7 +57,7 @@ func TestEgressUsesEffectiveProjectApprovalConfig(t *testing.T) {
 	runtime, err := toolhost.NewRuntime(toolhost.RuntimeConfig{ConfigRoot: root, Approvals: store, Catalog: extpackstest.StockCatalog(t)})
 	testutil.FailErr(t, "toolhost.NewRuntime failed", err)
 	runtime.Authority.SetApprovalRuleSource(extensionRuleSource{})
-	authzStore := authzcontext.NewMemoryStore()
+	authzStore := authztest.NewStore(t, "global-balanced", "project-strict")
 	runtime.Authority.SetAuthzRecorder(authzcontext.LedgerRecorder{Ledger: &authzcontext.Ledger{Store: authzStore}})
 	t.Cleanup(func() {
 		confine.SetEgressRuleEvaluator(nil)

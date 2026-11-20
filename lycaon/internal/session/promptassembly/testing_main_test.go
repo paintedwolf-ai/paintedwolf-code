@@ -1,12 +1,13 @@
 package promptassembly
 
 import (
+	"github.com/lycaon/lycaon/internal/repochange/repochangetest"
+
 	"context"
 	"fmt"
 	"testing"
 	"time"
 
-	"github.com/lycaon/lycaon/internal/repochange"
 	"github.com/lycaon/lycaon/internal/sourcecatalog"
 	anchortestsetup "github.com/lycaon/lycaon/internal/testsetup/anchor"
 	gittestsetup "github.com/lycaon/lycaon/internal/testsetup/git"
@@ -16,11 +17,12 @@ import (
 
 // TestMain installs the shared git, guidance, and anchor fixtures and checks for leaks.
 func TestMain(m *testing.M) {
+	releaseWatchers := repochangetest.Suite()
 	gittestsetup.Enable()
 	guidancetestsetup.Install()
 	anchortestsetup.Install()
 	testutil.VerifyNoLeaks(m, func() {
-		repochange.ResetWatchersForTest()
+		releaseWatchers()
 		ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 		defer cancel()
 		if err := sourcecatalog.Process().Drain(ctx); err != nil {

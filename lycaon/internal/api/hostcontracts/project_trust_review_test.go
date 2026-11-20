@@ -12,6 +12,7 @@ import (
 	hostapi "github.com/lycaon/lycaon/internal/api"
 	contractfixture "github.com/lycaon/lycaon/internal/api/contractfixture"
 	"github.com/lycaon/lycaon/internal/project"
+	"github.com/lycaon/lycaon/internal/project/projecttest"
 	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/testutil"
 	wire "github.com/lycaon/lycaon/pkg/api"
@@ -23,7 +24,7 @@ func TestTrustReviewCapturesBeforeClearingAndRetainsDeletedText(t *testing.T) {
 	root := t.TempDir()
 	path := filepath.Join(root, "AGENTS.md")
 	testutil.FailErr(t, "write initial instructions", os.WriteFile(path, []byte("first\n"), 0o600))
-	p, err := project.CreateWithRoot(t.Context(), registry, root)
+	p, err := projecttest.CreateWithRoot(t.Context(), registry, root)
 	testutil.FailErr(t, "create project", err)
 	url := "/v1/projects/" + p.ID + "/trust"
 	read := func() wire.ProjectTrust {
@@ -94,7 +95,7 @@ func TestTrustReviewFailedCapturePreservesBaseline(t *testing.T) {
 	root := t.TempDir()
 	path := filepath.Join(root, "AGENTS.md")
 	testutil.FailErr(t, "write instructions", os.WriteFile(path, []byte("read me"), 0o600))
-	p, err := project.CreateWithRoot(t.Context(), registry, root)
+	p, err := projecttest.CreateWithRoot(t.Context(), registry, root)
 	testutil.FailErr(t, "create project", err)
 	url := "/v1/projects/" + p.ID + "/trust/review"
 	Open := func() *httptest.ResponseRecorder {

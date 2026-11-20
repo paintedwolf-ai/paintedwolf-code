@@ -10,14 +10,14 @@ import (
 const maintenanceSessionBatch = 256
 
 // WorkspaceNotificationIDs returns one page without hydrating history.
-func (s *sqlSessionViews) WorkspaceNotificationIDs(ctx context.Context, root, after string) ([]string, error) {
+func (s *sqlSessions) WorkspaceNotificationIDs(ctx context.Context, root, after string) ([]string, error) {
 	return s.core.queries.ListWorkspaceNotificationSessionIDs(ctx, db.ListWorkspaceNotificationSessionIDsParams{
 		RootPath: root, AfterID: after, PageLimit: maintenanceSessionBatch,
 	})
 }
 
 // ExistingSessionIDs checks one bounded set, including archived owners.
-func (s *sqlSessionViews) ExistingSessionIDs(ctx context.Context, ids []string) (map[string]bool, error) {
+func (s *sqlSessions) ExistingSessionIDs(ctx context.Context, ids []string) (map[string]bool, error) {
 	result := make(map[string]bool)
 	for start := 0; start < len(ids); start += maintenanceSessionBatch {
 		page, err := json.Marshal(ids[start:min(start+maintenanceSessionBatch, len(ids))])

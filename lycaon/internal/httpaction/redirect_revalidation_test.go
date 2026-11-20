@@ -46,7 +46,7 @@ func TestRedirectReplayRevalidatesTheRelease(t *testing.T) {
 		"capability_request": loopbackCapability(t, server.URL),
 	}
 	deps := Deps{
-		Boundary: testBoundary(), Secrets: service, SecretMatcher: matcher,
+		Boundary: testBoundary(), Secrets: service, Jars: service.Jars, SecretMatcher: matcher,
 		SecretAsk: func(ctx context.Context, alert secretmatch.Alert) (secretmatch.Resolution, error) {
 			secretcap.ResolutionFrom(ctx).ApproveRelease(secretcap.Release{
 				Fingerprints: alert.Fingerprints,
@@ -84,8 +84,8 @@ func TestRedirectReplayRechecksTheJarAndClassification(t *testing.T) {
 			*now = opened.Add(time.Minute)
 			issuer := issuerServer(t)
 			root := t.TempDir()
-			captureIssuedToken(t, Deps{Boundary: testBoundary(), Secrets: service, SecretMatcher: matcher}, issuer, root)
-			openedJar, err := service.OpenTokenJar(t.Context(), secretcap.TokenJarRequest{
+			captureIssuedToken(t, Deps{Boundary: testBoundary(), Secrets: service, Jars: service.Jars, SecretMatcher: matcher}, issuer, root)
+			openedJar, err := service.Jars.OpenTokenJar(t.Context(), secretcap.TokenJarRequest{
 				ProjectID: testdbseed.DefaultProjectID, ChatSessionID: "root-1", SessionID: "lookup", OperationID: "lookup-op", Name: "jar",
 			})
 			testutil.FailErr(t, "open seeded token jar", err)
@@ -130,7 +130,7 @@ func TestRedirectReplayRechecksTheJarAndClassification(t *testing.T) {
 				"capability_request": loopbackCapability(t, relying.URL),
 			}
 			deps := Deps{
-				Boundary: testBoundary(), Secrets: service, SecretMatcher: matcher,
+				Boundary: testBoundary(), Secrets: service, Jars: service.Jars, SecretMatcher: matcher,
 				SecretAsk: func(ctx context.Context, alert secretmatch.Alert) (secretmatch.Resolution, error) {
 					secretcap.ResolutionFrom(ctx).ApproveRelease(secretcap.Release{
 						Fingerprints: alert.Fingerprints,

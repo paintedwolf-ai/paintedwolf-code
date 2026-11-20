@@ -50,7 +50,7 @@ export function useChatContentLineWidth(
     const path = current.path?.trim() || "";
     const tools = formatters();
     setLineWidth(undefined);
-    if (!apiClient || !pid || !path || typeof apiClient.getProjectSourceFormatSettings !== "function") {
+    if (!apiClient || !pid || !path) {
       return;
     }
     let cancelled = false;

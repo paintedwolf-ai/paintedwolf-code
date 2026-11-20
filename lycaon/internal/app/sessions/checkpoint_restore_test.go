@@ -22,7 +22,7 @@ func TestCheckpointRestartRestoresJoinedApproval(t *testing.T) {
 	} {
 		testutil.FailErr(t, "persist approval before restart", saved.Insert(t.Context(), row))
 	}
-	checkpoints := hitl.NewCheckpoints(saved, nil, authzcontext.SQLRecorder(database))
+	checkpoints := hitl.NewCheckpoints(saved, nil, authzcontext.LedgerRecorder{Ledger: &authzcontext.Ledger{Store: authzcontext.NewSQLStore(database)}})
 	checkpoints.SetCheckpointExpiry(func() time.Duration { return 0 })
 	coalesce := approvalstate.NewToolApprovalCoalesce()
 	testutil.FailErr(t, "restore approval checkpoint hooks", wireToolApprovalCheckpointHooks(t.Context(), checkpoints, coalesce))

@@ -69,9 +69,3 @@ func (m *Lock) release() {
 		delete(r.entries, m.id)
 	}
 }
-
-func (r *MutexRegistry) len() int {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	return len(r.entries)
-}

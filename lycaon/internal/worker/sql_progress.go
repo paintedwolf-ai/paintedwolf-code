@@ -7,7 +7,6 @@ import (
 
 	"github.com/lycaon/lycaon/internal/db"
 	"github.com/lycaon/lycaon/internal/workerprogress"
-	"github.com/lycaon/lycaon/pkg/api"
 )
 
 // SetProgress checkpoints a worker's lifetime progress counters on its job row.
@@ -36,17 +35,17 @@ func (s *SQLStore) SetProgress(ctx context.Context, workerJobID string, snap wor
 }
 
 // SetChildSessionID binds the spawned child session to a worker job.
-func (q *sqlQueuePromotion) SetChildSessionID(ctx context.Context, jobID, childSessionID string) error {
+func (q *SQLQueue) SetChildSessionID(ctx context.Context, jobID, childSessionID string) error {
 	if err := q.store.SetChildSessionID(ctx, jobID, childSessionID); err != nil {
 		return err
 	}
-	q.refreshBoardByID(ctx, jobID)
+	q.changes.byID(ctx, jobID)
 	return nil
 }
 
 // PublishWorkerProgress checkpoints round boundaries.
-func (q *sqlQueuePromotion) PublishWorkerProgress(ctx context.Context, workerJobID string, snap workerprogress.Snapshot, checkpoint bool) error {
-	if q == nil || q.sqlQueueCore == nil || q.store == nil {
+func (q *SQLQueue) PublishWorkerProgress(ctx context.Context, workerJobID string, snap workerprogress.Snapshot, checkpoint bool) error {
+	if q == nil || q.store == nil {
 		return nil
 	}
 	workerJobID = strings.TrimSpace(workerJobID)
@@ -63,24 +62,6 @@ func (q *sqlQueuePromotion) PublishWorkerProgress(ctx context.Context, workerJob
 			return err
 		}
 	}
-	q.refreshBoard(ctx, *task, task.ProjectID)
+	q.changes.board(ctx, *task, task.ProjectID)
 	return nil
-}
-
-// refreshBoard rebuilds the session board after a job transition.
-func (q *sqlQueueCore) refreshBoard(ctx context.Context, task api.WorkerTask, projectID string) {
-	if q.events == nil {
-		return
-	}
-	key := strings.TrimSpace(task.ProjectID)
-	if key == "" {
-		key = strings.TrimSpace(projectID)
-	}
-	q.events.PublishBoard(ctx, key, strings.TrimSpace(task.ParentSessionID))
-}
-
-func (q *sqlQueueCore) refreshBoardByID(ctx context.Context, jobID string) {
-	if task, ok := q.Get(jobID); ok { //nolint:contextcheck // Get has internal sqlQueueGetTimeout
-		q.refreshBoard(ctx, *task, task.ProjectID)
-	}
 }

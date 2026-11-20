@@ -43,7 +43,7 @@ func TestSSESubscriberOverflowIsFullyRecoverableFromStore(t *testing.T) {
 			Origin:  wire.MessageOriginModel,
 		}
 		testutil.FailErr(t, "append message",
-			h.Store.AppendMessages(ctx, sess.ID, msg))
+			h.Store.Transcript.AppendMessages(ctx, sess.ID, msg))
 		testutil.FailErr(t, "publish append",
 			h.Events.Publish(ctx, wire.EventTopicMessage,
 				events.PublishKey{Project: proj, Session: sess.ID},
@@ -100,7 +100,7 @@ func TestSSESubscriberOverflowIsFullyRecoverableFromStore(t *testing.T) {
 		Origin:  wire.MessageOriginModel,
 	}
 	testutil.FailErr(t, "append post-reconnect",
-		h.Store.AppendMessages(ctx, sess.ID, after))
+		h.Store.Transcript.AppendMessages(ctx, sess.ID, after))
 	testutil.FailErr(t, "publish post-reconnect",
 		h.Events.Publish(ctx, wire.EventTopicMessage,
 			events.PublishKey{Project: proj, Session: sess.ID},

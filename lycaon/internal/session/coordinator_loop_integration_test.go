@@ -31,10 +31,10 @@ func TestLoopSkippedInApprovePhase(t *testing.T) {
 	vars = runstate.StampHumanApprovalPhase(vars, &workflowdef.HumanApprovalConfig{}, run.BlueprintPath)
 	vars = runstate.SetHumanApprovalReady(vars, true)
 	testutil.FailErr(t, "UpdateVars", fix.wfMgr.Store.State.UpdateVars(ctx, run, t.TempDir(), vars))
-	before, _ := fix.store.GetMessages(ctx, fix.sess.ID)
+	before, _ := fix.store.Transcript.GetMessages(ctx, fix.sess.ID)
 	fix.mgr.Coordinator.Runtime.CoordinatorLoop().Nudges.Nudge(ctx, fix.sess.ID, anchor.LegFinished, anchor.LegFinished, "leg-1", anchor.Envelope{})
 	fix.mgr.Coordinator.WaitForTurns(t.Context())
-	after, err := fix.store.GetMessages(ctx, fix.sess.ID)
+	after, err := fix.store.Transcript.GetMessages(ctx, fix.sess.ID)
 	testutil.FailErr(t, "fix.store.GetMessages failed", err)
 	if len(after) != len(before) {
 		t.Fatalf("expected no auto-prompt in approve; before=%d after=%d", len(before), len(after))
@@ -46,7 +46,7 @@ func TestLoopNoKickPlusSentinel(t *testing.T) {
 	ctx := context.Background()
 	fix.mgr.Coordinator.Runtime.CoordinatorLoop().Nudges.Nudge(ctx, fix.sess.ID, anchor.LegFinished, anchor.LegFinished, "leg-1", anchor.Envelope{})
 	fix.mgr.Coordinator.WaitForTurns(t.Context())
-	msgs, err := fix.store.GetMessages(ctx, fix.sess.ID)
+	msgs, err := fix.store.Transcript.GetMessages(ctx, fix.sess.ID)
 	testutil.FailErr(t, "fix.store.GetMessages failed", err)
 	for _, msg := range msgs {
 		if msg.Role != api.MessageRoleUser {

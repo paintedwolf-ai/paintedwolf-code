@@ -6,9 +6,7 @@ import (
 	"unicode/utf8"
 )
 
-// GrammarPCRECommonV1 names the bounded PCRE-compatible grammar of P01's
-// regex contract. It is a declared subset of PCRE2 pattern syntax, executed
-// by the bounded backtracking engine; it is never RE2.
+// GrammarPCRECommonV1 names the declared PCRE2 subset executed by the bounded backtracking engine.
 const GrammarPCRECommonV1 = "pcre-common-v1"
 
 // perlPattern is one validated pcre-common-v1 pattern rewritten into the

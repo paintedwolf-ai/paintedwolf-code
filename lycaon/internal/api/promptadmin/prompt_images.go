@@ -32,7 +32,7 @@ func (s *Submission) ingestPromptImages(ctx context.Context, sessionID, operatio
 			}
 		}
 	}
-	root := sessiontree.RootID(ctx, s.Store, sessionID)
+	root := sessiontree.RootID(ctx, s.SessionQueries, sessionID)
 	ids := make([]string, 0, len(images))
 	for i, img := range images {
 		artifactID := uuid.NewSHA1(uuid.NameSpaceOID, []byte(operationID+":"+group+":"+fmt.Sprint(i))).String()

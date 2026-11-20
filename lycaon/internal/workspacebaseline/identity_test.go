@@ -93,7 +93,7 @@ func TestReaderReadsLegacyDisplayManifest(t *testing.T) {
 	defer func() { _ = current.Close() }()
 
 	// Rebuild the same manifest in the legacy display-keyed shape.
-	legacyPath := filepath.Join(root, "legacy.db")
+	legacyPath := filepath.Join(root, "manifests", "legacy.db")
 	database, err := sql.Open("sqlite", legacyPath)
 	testutil.FailErr(t, "open legacy fixture", err)
 	_, err = database.ExecContext(t.Context(), `CREATE TABLE manifest(version INTEGER PRIMARY KEY CHECK(version=1)) STRICT;
@@ -140,6 +140,12 @@ func TestReaderReadsLegacyDisplayManifest(t *testing.T) {
 	if fmt.Sprint(got) != fmt.Sprint(want) {
 		t.Fatalf("legacy change set = %+v, want %+v", got, want)
 	}
+	compared, err := legacy.ComparePath(t.Context(), roots, branch, "same.txt")
+	testutil.FailErr(t, "compare released manifest", err)
+	if compared.Before != "app" || compared.After != "changed\n" {
+		t.Fatalf("released comparison = %+v", compared)
+	}
+
 }
 
 func TestSingleRootCaptureCarriesRootIdentity(t *testing.T) {

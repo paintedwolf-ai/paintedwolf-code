@@ -33,7 +33,7 @@ func TestMessageNavigationEndpointResolvesStoredDestinations(t *testing.T) {
 	testutil.FailErr(t, "project", err)
 	content := "See [local](.local.txt)"
 	refs := []wire.NavigationReference{{Mention: ".local.txt", ProjectID: project.ID, RootID: project.Roots[0].ID, Path: ".local.txt", Explicit: true, ID: "ref-0", Syntax: "link", Status: wire.NavigationPending}}
-	testutil.FailErr(t, "assistant message", srv.Sources.Workspace.SessionStore.AppendMessages(t.Context(), sess.ID, wire.Message{ID: "navigation-message", Role: wire.MessageRoleAssistant, Content: content, Visibility: wire.MessageVisibilityTranscript, NavigationRefs: refs}))
+	testutil.FailErr(t, "assistant message", srv.Admin.SessionAdmin.Transcript.TranscriptStore.AppendMessages(t.Context(), sess.ID, wire.Message{ID: "navigation-message", Role: wire.MessageRoleAssistant, Content: content, Visibility: wire.MessageVisibilityTranscript, NavigationRefs: refs}))
 	request := wire.ResolveMessageNavigationRequest{MessageID: "navigation-message", ContentSHA256: store.NavigationContentHash(content)}
 	raw, err := json.Marshal(request)
 	testutil.FailErr(t, "encode request", err)
@@ -66,7 +66,7 @@ func TestMessageNavigationUsesWorkerTree(t *testing.T) {
 	testutil.FailErr(t, "branch metadata", workspace.WriteJobMeta(enginepaths.MetaDirForBranchRoot(branch), workspace.JobMeta{
 		Roots: []workspace.JobMetaRoot{{ID: "r", Label: "r", Path: primary, IsPrimary: true}}, SnapshotComplete: true,
 	}))
-	queue := worker.NewSQLQueue(database, 1)
+	queue := worker.NewSQLServices(database, 1).Queue
 	jobID := contractfixture.EnqueueBranchJob(t, queue, database, "p", branch)
 	server := contractfixture.NewTestServer(t, func(d *hostapi.Dependencies) { d.Workflow.Workers = queue }).Admin.SessionAdmin.Navigation
 	p := &project.Project{ID: "p", Roots: []project.Root{{ID: "r", Path: primary, IsPrimary: true}}}

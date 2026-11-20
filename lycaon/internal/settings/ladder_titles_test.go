@@ -9,6 +9,7 @@ import (
 	"github.com/lycaon/lycaon/internal/gate"
 	"github.com/lycaon/lycaon/internal/hitl"
 	"github.com/lycaon/lycaon/internal/settings"
+	"github.com/lycaon/lycaon/internal/settings/settingstest"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -28,7 +29,7 @@ var frozenNonSecretTitles = map[string]bool{
 // TestPlanOptionTitlesAreFrozen sweeps every ordinary ladder mint site.
 func TestPlanOptionTitlesAreFrozen(t *testing.T) {
 	store := ladderTitleStore(t)
-	approvals := settings.NewRuleApprovalGate(store, settings.NoSources())
+	approvals := settings.NewRuleApprovalGate(store, settingstest.EmptySources())
 	action := hitl.ProposedAction{
 		Invocation: hitl.ActionInvocation{
 			Tool: "network",
@@ -119,7 +120,7 @@ func TestPlanOptionTitlesAreFrozen(t *testing.T) {
 
 // TestTwoSubjectCardsCarryGroups pins absorbed and host-resource second ladders.
 func TestTwoSubjectCardsCarryGroups(t *testing.T) {
-	approvals := settings.NewRuleApprovalGate(ladderTitleStore(t), settings.NoSources())
+	approvals := settings.NewRuleApprovalGate(ladderTitleStore(t), settingstest.EmptySources())
 	action := hitl.ProposedAction{
 		Invocation: hitl.ActionInvocation{
 			Tool: "network",

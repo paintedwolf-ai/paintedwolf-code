@@ -38,8 +38,8 @@ func TestSessionSelectionPreservesNativeSessionFacts(t *testing.T) {
 		})
 	}
 	abstract := SocketAddress{Path: "name", Abstract: true}
-	if abstract.dialAddress() != "\x00name" || abstract.String() != "abstract:name" || (SocketAddress{Path: "/p"}).String() != "/p" {
-		t.Fatal("socket address rendering changed")
+	if abstract.dialAddress() != "\x00name" || (SocketAddress{Path: "/p"}).dialAddress() != "/p" {
+		t.Fatal("socket dial address changed")
 	}
 }
 

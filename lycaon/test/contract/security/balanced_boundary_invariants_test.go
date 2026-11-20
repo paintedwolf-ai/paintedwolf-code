@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/confine"
+	"github.com/lycaon/lycaon/internal/confine/admissiontest"
 	"github.com/lycaon/lycaon/internal/hitl"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 )
@@ -15,7 +16,7 @@ import (
 // root are writable and run without a card, a path outside every root is
 // refused by the profile and gated.
 func TestInvariantWriteRootSSOTSharedByGateAndConfine(t *testing.T) {
-	confine.TestingSetAutoConfine(t)
+	admissiontest.Enable(t)
 	t.Setenv("LYCAON_BYPASS_APPROVALS", "")
 	t.Setenv("LYCAON_SANDBOX", "")
 	t.Setenv("LYCAON_SANDBOX_NETWORK", "")

@@ -23,7 +23,7 @@ func TestBaselineCaptureIsImmutableAndIncludesIgnoredFiles(t *testing.T) {
 	for path, body := range map[string]string{".gitignore": "ignored.txt\n", "ignored.txt": "original\n", "empty.txt": "", "binary.dat": "\x00binary"} {
 		testutil.FailErr(t, "write fixture", os.WriteFile(filepath.Join(branch, path), []byte(body), 0o600))
 	}
-	ref, err := store.Capture(t.Context(), "job", workspacebaseline.Branch(nil, branch))
+	ref, err := store.Capture(t.Context(), "job", workspacebaseline.Branch(singleRoots(), branch))
 	testutil.FailErr(t, "capture", err)
 	testutil.FailErr(t, "rewrite branch", os.WriteFile(filepath.Join(branch, "ignored.txt"), []byte("changed\n"), 0o600))
 	reader, err := workspacebaseline.Open(t.Context(), ref, workspacebaseline.ContentStore(ref))
@@ -58,7 +58,7 @@ func TestCanceledBaselineLeavesNoPublishedManifest(t *testing.T) {
 	store := workspacebaseline.New(nil, sourceblob.New(filepath.Join(root, "source-content")), filepath.Join(root, "manifests"))
 	ctx, cancel := context.WithCancel(t.Context())
 	cancel()
-	_, err := store.Capture(ctx, "job", workspacebaseline.Branch(nil, t.TempDir()))
+	_, err := store.Capture(ctx, "job", workspacebaseline.Branch(singleRoots(), t.TempDir()))
 	if !errors.Is(err, context.Canceled) {
 		t.Fatalf("capture error=%v", err)
 	}

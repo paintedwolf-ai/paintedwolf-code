@@ -7,8 +7,8 @@ import (
 
 	"gopkg.in/yaml.v3"
 
-	"github.com/lycaon/lycaon/internal/conditions"
 	scancatalog "github.com/lycaon/lycaon/internal/scan/catalog"
+	"github.com/lycaon/lycaon/internal/testutil/conditionstest"
 	"github.com/lycaon/lycaon/internal/toolschema"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 	"github.com/lycaon/lycaon/pkg/api"
@@ -84,9 +84,9 @@ var scanning = []invariants.Invariant{{
 	// Bundled workflows complete on implemented conditions, never a
 	// deferred scan stub.
 	Name:    "bundled-workflows-avoid-deferred-scan-stubs",
-	Anchors: []invariants.Anchor{invariants.Func("internal/conditions", "ScanCatalogStubIDs")},
+	Anchors: []invariants.Anchor{invariants.Decl("internal/testutil/conditionstest", "DeferredScanIDs")},
 	Check: func(r *invariants.Run) {
-		stubs := conditions.ScanCatalogStubIDs()
+		stubs := conditionstest.DeferredScanIDs
 		r.Expect(len(stubs), "deferred scan stubs")
 		reg, err := workflowdef.RegistryFromDirs("")
 		r.Must(err)

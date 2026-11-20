@@ -39,9 +39,9 @@ func TestBearerTokenAdmission(t *testing.T) {
 		{name: "no token on a session matches the declared error", method: http.MethodGet, path: "/v1/sessions/" + sessID,
 			status: http.StatusUnauthorized, code: wire.ApiErrorCodeUnauthorized, openAPIPath: "/v1/sessions/{id}", params: map[string]string{"id": sessID}},
 		{name: "wrong token", method: http.MethodGet, path: "/v1/projects", authorization: "Bearer wrong-token", status: http.StatusUnauthorized, code: wire.ApiErrorCodeUnauthorized},
-		{name: "valid token", method: http.MethodGet, path: "/v1/projects", authorization: api.TestAuthHeader(), status: http.StatusOK},
+		{name: "valid token", method: http.MethodGet, path: "/v1/projects", authorization: "Bearer " + os.Getenv("LYCAON_API_TOKEN"), status: http.StatusOK},
 		{name: "health needs no token", method: http.MethodGet, path: "/health", status: http.StatusOK},
-		{name: "a session names no project directory", method: http.MethodPost, path: "/v1/sessions", authorization: api.TestAuthHeader(),
+		{name: "a session names no project directory", method: http.MethodPost, path: "/v1/sessions", authorization: "Bearer " + os.Getenv("LYCAON_API_TOKEN"),
 			body: `{"project_dir":"/tmp","posture":"build"}`, status: http.StatusBadRequest, code: wire.ApiErrorCodeInvalidJson},
 	} {
 		t.Run(tc.name, func(t *testing.T) {

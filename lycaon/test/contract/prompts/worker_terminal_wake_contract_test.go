@@ -15,6 +15,7 @@ import (
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/worker"
 	"github.com/lycaon/lycaon/pkg/api"
+	"github.com/lycaon/lycaon/pkg/api/apitest"
 )
 
 // wakeCounter stands in for the parent session behind SessionOutcomeBridge and
@@ -58,7 +59,7 @@ func (w *wakeCounter) bridge() *worker.SessionOutcomeBridge {
 func TestOutcomeProjectionNudgesOnEveryMethod(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
-	statuses := api.AllWorkerSummaryStatuses()
+	statuses := apitest.AllWorkerSummaryStatuses()
 	if len(statuses) == 0 {
 		t.Fatal("no worker summary statuses")
 	}
@@ -128,9 +129,9 @@ func TestWorkerPollerTerminalQueueOpsNotifyOutcomes(t *testing.T) {
 	ctx := context.Background()
 	sqlDB := testdbfixture.Open(t, "poller-outcomes.db")
 	testdbseed.InsertProjectRoot(t, sqlDB, testdbseed.DefaultProjectID, t.TempDir())
-	parent, err := store.NewSQL(sqlDB).Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
+	parent, err := store.NewSQL(sqlDB).Sessions.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create parent", err)
-	queue := worker.NewSQLQueue(sqlDB, 3)
+	queue := worker.NewSQLServices(sqlDB, 3).Queue
 	log := outcomeLog{events: make(chan outcomeEvent, 3)}
 	cfg := worker.DefaultWorkersConfig()
 	poller := worker.NewLocalWorkerPoller(queue, terminalExecutor{}, cfg, log)

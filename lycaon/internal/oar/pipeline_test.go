@@ -195,7 +195,7 @@ func (stubFmt) FormatNudge(ctx context.Context, code string, data map[string]any
 
 func TestDetectorDispatchSecretMatch(t *testing.T) {
 	reg := NewDetectorRegistry()
-	reg.Register(SecretMatchDetector{Matcher: secretmatch.NewInertMatcher()})
+	reg.Register(SecretMatchDetector{Matcher: &secretmatch.Matcher{}})
 	findings, err := reg.Dispatch("detector://secretmatch", NewGuardContext())
 	testutil.FailErr(t, "dispatch", err)
 	if len(findings) != 1 || findings[0].Fact != "secret_matches" {

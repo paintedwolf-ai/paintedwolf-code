@@ -168,7 +168,7 @@ func TestProjectProviderToolMetaKeepsDirectIPUnion(t *testing.T) {
 
 func TestProjectProviderToolMetaDropsEveryRootForbiddenKey(t *testing.T) {
 	t.Parallel()
-	for _, key := range FunctionParametersRootForbiddenKeys() {
+	for _, key := range functionParametersRootForbiddenKeys {
 		t.Run(key, func(t *testing.T) {
 			t.Parallel()
 			out := ProjectProviderToolMeta(ToolMeta{

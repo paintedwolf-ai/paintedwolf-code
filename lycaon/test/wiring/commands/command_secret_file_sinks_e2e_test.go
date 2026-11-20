@@ -13,7 +13,6 @@ import (
 	"github.com/lycaon/lycaon/test/wiring"
 
 	"github.com/google/uuid"
-	"github.com/lycaon/lycaon/internal/api"
 	"github.com/lycaon/lycaon/internal/hitl"
 	"github.com/lycaon/lycaon/internal/secretcap"
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -47,7 +46,7 @@ func (r *secretSinkRun) suppliedReference(t *testing.T, sess *wire.Session) stri
 	body, err := json.Marshal(wire.CreateManagedSecretRequest{OperationID: uuid.NewString(), Name: "sink token", Purpose: "file sink test", SecretValue: sinkSentinel})
 	testutil.FailErr(t, "encode secret", err)
 	request := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/v1/projects/"+sess.ProjectID+"/secrets", bytes.NewReader(body))
-	request.Header.Set("Authorization", "Bearer "+api.TestAPIToken)
+	request.Header.Set("Authorization", "Bearer "+r.h.APIToken)
 	request.Header.Set("Content-Type", "application/json")
 	response := httptest.NewRecorder()
 	r.h.Server.ServeHTTP(response, request)
@@ -87,7 +86,7 @@ func (r *secretSinkRun) file(t *testing.T, path string) string {
 
 func (r *secretSinkRun) logResults(t *testing.T) {
 	t.Helper()
-	messages, err := r.h.Store.GetMessages(t.Context(), r.session)
+	messages, err := r.h.Store.Transcript.GetMessages(t.Context(), r.session)
 	testutil.FailErr(t, "messages", err)
 	for _, message := range messages {
 		if message.Role == wire.MessageRoleTool {
@@ -102,7 +101,7 @@ type programOutcome struct{ state, stopCode string }
 // the supplied value reached the transcript in any form.
 func (r *secretSinkRun) outcomes(t *testing.T) []programOutcome {
 	t.Helper()
-	messages, err := r.h.Store.GetMessages(t.Context(), r.session)
+	messages, err := r.h.Store.Transcript.GetMessages(t.Context(), r.session)
 	testutil.FailErr(t, "messages", err)
 	for _, message := range messages {
 		if strings.Contains(message.Content, sinkSentinel) {

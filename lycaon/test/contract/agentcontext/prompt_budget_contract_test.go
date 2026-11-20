@@ -164,7 +164,7 @@ func measurePromptBudgets(t *testing.T, root string, reg *PromptBudgetRegistry) 
 		if row.SurfaceID == toolcontract.SurfaceImplementInvestigate {
 			forced = row.SurfaceID
 		}
-		rendered := renderCoordinatorTripartiteForRunContext(t, root, row.RunCtx, row.Sess, row.UserPrompt, row.History, forced, row.State)
+		rendered := renderCoordinatorTripartiteForRunContext(t, row.RunCtx, row.Sess, row.UserPrompt, row.History, forced, row.State)
 		// Investigate surfaces include the skill-reading procedure.
 		if row.SurfaceID == toolcontract.SurfaceImplementInvestigate && !strings.Contains(rendered, "## Skills") {
 			t.Fatalf("%s measured without the skill-reading procedure", row.Name)

@@ -24,11 +24,10 @@ func TestProjectSourceReadAnswersNonEditableContentWithoutBytes(t *testing.T) {
 		{name: "unsupported encoding refusal", path: "latin1.txt", content: []byte("caf\xe9\n"), wantStatus: http.StatusUnsupportedMediaType},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			_, ledgerDB, withLedger := contractfixture.TestSourceLedger(t)
+			_, _, withLedger := contractfixture.TestSourceLedger(t)
 			srv := contractfixture.NewTestServer(t, withLedger)
 			rootPath := t.TempDir()
 			p := contractfixture.CreateProjectForTest(t, srv, rootPath)
-			contractfixture.MirrorLedgerProject(t, ledgerDB, p)
 			testutil.FailErr(t, "write fixture", os.WriteFile(filepath.Join(rootPath, tc.path), tc.content, 0o644))
 
 			req := contractfixture.NewAuthedRequest(http.MethodGet,

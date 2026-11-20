@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/browserengine"
+	browsertestsetup "github.com/lycaon/lycaon/internal/testsetup/browser"
 )
 
 const noBrowserMessage = "no hermetic chrome-headless-shell: run ./task browser:ensure, " +
@@ -15,7 +16,7 @@ const noBrowserMessage = "no hermetic chrome-headless-shell: run ./task browser:
 // SkipIfNoBrowser applies the browser integration policy to a test.
 func SkipIfNoBrowser(t testing.TB) {
 	t.Helper()
-	browserengine.TestingEnableBundledBinary()
+	browsertestsetup.Enable()
 	cacheDir := browserengine.ManagedCacheDir()
 	if _, ok := browserengine.ResolveBinary(browserengine.ResolveOptions{CacheDir: cacheDir}); ok {
 		return

@@ -32,7 +32,7 @@ func TestTrunkBranchDeleteAndPruneDoesNotBreakWorkerCheckpointOrImport(t *testin
 	exec := NewGitExecutor(mgr, "view-prune", RemotePolicy{})
 
 	// Initialize worker and switch worker onto ephemeral-branch.
-	_, err := exec.Checkout(t.Context(), "ephemeral-branch")
+	_, err := exec.Run(t.Context(), ".", "checkout", "ephemeral-branch")
 	testutil.FailErr(t, "worker checkout ephemeral-branch", err)
 
 	// Force-delete ephemeral-branch in trunk and prune all unreachable objects immediately!
@@ -46,7 +46,7 @@ func TestTrunkBranchDeleteAndPruneDoesNotBreakWorkerCheckpointOrImport(t *testin
 	}
 
 	// Prove worker history, fsck, and new commit on top of pruned history still succeed!
-	logOut, err := exec.Log(t.Context(), "--oneline", "-n", "2")
+	logOut, err := exec.Run(t.Context(), ".", "log", "--oneline", "-n", "2")
 	testutil.FailErr(t, "worker git log after trunk prune", err)
 	if !strings.Contains(logOut, "ephemeral commit") {
 		t.Fatalf("expected worker to retain pruned commit, got:\n%s", logOut)
@@ -58,7 +58,7 @@ func TestTrunkBranchDeleteAndPruneDoesNotBreakWorkerCheckpointOrImport(t *testin
 	testutil.FailErr(t, "write worker_child.txt", err)
 	_, err = exec.Run(t.Context(), ".", "add", "worker_child.txt")
 	testutil.FailErr(t, "git add worker_child.txt", err)
-	_, err = exec.Commit(t.Context(), "worker commit on top of pruned trunk branch")
+	_, err = exec.Run(t.Context(), ".", "commit", "-m", "worker commit on top of pruned trunk branch")
 	testutil.FailErr(t, "worker commit on ephemeral-branch", err)
 
 	// Capture checkpoint before releasing view.
@@ -106,7 +106,7 @@ func TestTwoWorkersReuseObjectsConcurrentInitFailedImportAndGC(t *testing.T) {
 	// Worker 1 initializes and creates a private commit.
 	core1 := newMountedViewWithManager(t, mgr, "view-w1", fix.trunkDir)
 	exec1 := NewGitExecutor(mgr, "view-w1", RemotePolicy{})
-	_, err := exec1.Status(t.Context())
+	_, err := exec1.Run(t.Context(), ".", "status")
 	testutil.FailErr(t, "w1 status", err)
 	m1, _ := mgr.RepoMetrics("view-w1", ".")
 	if m1.BytesImported == 0 {
@@ -116,7 +116,7 @@ func TestTwoWorkersReuseObjectsConcurrentInitFailedImportAndGC(t *testing.T) {
 	// Worker 2 initializes over the same repo and reuses objects!
 	core2 := newMountedViewWithManager(t, mgr, "view-w2", fix.trunkDir)
 	exec2 := NewGitExecutor(mgr, "view-w2", RemotePolicy{})
-	_, err = exec2.Status(t.Context())
+	_, err = exec2.Run(t.Context(), ".", "status")
 	testutil.FailErr(t, "w2 status", err)
 	m2, _ := mgr.RepoMetrics("view-w2", ".")
 	if m2.BytesReused == 0 || m2.ObjectsReused == 0 {
@@ -129,7 +129,7 @@ func TestTwoWorkersReuseObjectsConcurrentInitFailedImportAndGC(t *testing.T) {
 	_, err = core1.WriteFile(layeredfs.QualifiedPath{RootID: "primary", Rel: "w1.txt"}, []byte("w1-only\n"), 0o644)
 	testutil.FailErr(t, "w1 write w1.txt", err)
 	_, _ = exec1.Run(t.Context(), ".", "add", "w1.txt")
-	_, err = exec1.Commit(t.Context(), "w1 private commit")
+	_, err = exec1.Run(t.Context(), ".", "commit", "-m", "w1 private commit")
 	testutil.FailErr(t, "w1 commit", err)
 
 	w2Branches, err := exec2.Run(t.Context(), ".", "branch", "--list")

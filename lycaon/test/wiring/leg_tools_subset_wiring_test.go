@@ -11,6 +11,7 @@ import (
 	"github.com/lycaon/lycaon/internal/project"
 	"github.com/lycaon/lycaon/internal/session/workercontext"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/testutil/llmtest"
 	"github.com/lycaon/lycaon/internal/worker"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -25,7 +26,7 @@ var exploreAgents = []string{
 func TestExploreLegToolsMatchExploreProfile(t *testing.T) {
 	for _, agentType := range exploreAgents {
 		t.Run(agentType, func(t *testing.T) {
-			rec := llm.NewRecordingClient(llm.NewMockProvider(&llm.MockConfig{Responses: []llm.MockResponseEntry{
+			rec := llmtest.NewRecordingClient(llm.NewMockProvider(&llm.MockConfig{Responses: []llm.MockResponseEntry{
 				{Pattern: ".", Text: MockWorkerCompletionJSON("complete", "Surveyed.", []string{"survey"})},
 			}}))
 			h := BuildForTest(t, WithLLMClient(rec))
@@ -60,7 +61,7 @@ func TestExploreLegToolsMatchExploreProfile(t *testing.T) {
 			if len(offered) == 0 {
 				t.Fatalf("no provider request offered tools to child %s", stored.ChildSessionID)
 			}
-			child, err := h.Store.Get(ctx, stored.ChildSessionID)
+			child, err := h.Store.Sessions.Get(ctx, stored.ChildSessionID)
 			testutil.FailErr(t, "load child", err)
 			leg, err := h.Workers.ContextLoader.BuildWorkerPromptContext(workercontext.WithJob(ctx, task.ID), child.ID, child)
 			testutil.FailErr(t, "BuildWorkerPromptContext", err)

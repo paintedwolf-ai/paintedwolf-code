@@ -31,6 +31,11 @@ var hostProcessPrepared atomic.Bool
 
 // PrepareHostProcess keeps the bundled catalog generation stable across host boots.
 func PrepareHostProcess() {
+	token, err := api.GenerateAPIToken()
+	if err != nil {
+		panic("generate harness bearer: " + err.Error())
+	}
+	hostProcessEnvironment["LYCAON_API_TOKEN"] = token
 	for key, value := range hostProcessEnvironment {
 		if err := os.Setenv(key, value); err != nil {
 			panic("set " + key + ": " + err.Error())

@@ -215,7 +215,7 @@ func TestTurnBriefRowsGroundAnAnswerOnTheRealStack(t *testing.T) {
 				rows = append(rows, row.Handle)
 			}
 		}
-		ledger, err := h.Store.LoadLedger(ctx, sess.ID)
+		ledger, err := h.Store.Evidence.LoadLedger(ctx, sess.ID)
 		testutil.FailErr(t, "load ledger", err)
 		var records []string
 		for handle, rec := range ledger.Handles {

@@ -18,9 +18,10 @@ import (
 	"github.com/lycaon/lycaon/internal/browserengine"
 	"github.com/lycaon/lycaon/internal/browserengine/browsertest"
 	"github.com/lycaon/lycaon/internal/captureprojection"
-	"github.com/lycaon/lycaon/internal/confine"
 	"github.com/lycaon/lycaon/internal/secretmatch"
 	"github.com/lycaon/lycaon/internal/testutil"
+
+	"github.com/lycaon/lycaon/internal/confine/admissiontest"
 )
 
 func fixtureDir(t *testing.T, name string) string {
@@ -35,7 +36,7 @@ func fixtureDir(t *testing.T, name string) string {
 
 func newCaptureTestPool(cacheDir string) *Pool {
 	pool := NewPool(cacheDir)
-	pool.SetCaptureProjector(captureprojection.New(secretmatch.NewInertMatcher(), nil))
+	pool.SetCaptureProjector(captureprojection.New(&secretmatch.Matcher{}, nil))
 	return pool
 }
 
@@ -166,7 +167,7 @@ func TestCapturePreservesCanvasAfterTextGeometryIsInvalidated(t *testing.T) {
 		  ctx.fillRect(0, 0, 400, 140);
 		</script></body>`
 	testutil.FailErr(t, "write invalidated canvas fixture", os.WriteFile(filepath.Join(dir, "index.html"), []byte(html), 0o600))
-	m := secretmatch.NewInertMatcher()
+	m := &secretmatch.Matcher{}
 	m.SetHarvestSource(func(context.Context) []secretmatch.HarvestedValue {
 		return []secretmatch.HarvestedValue{{
 			Secret: secret, RuleID: secretmatch.ManagedRuleID, Title: secretmatch.ManagedRuleTitle,
@@ -230,7 +231,7 @@ func captureSecretCanvasFixture(t *testing.T, secret string) (CaptureResult, Pag
 		  console.log("` + secret + `");
 		</script></body></html>`
 	testutil.FailErr(t, "write capture fixture", os.WriteFile(filepath.Join(dir, "index.html"), []byte(html), 0o600))
-	m := secretmatch.NewInertMatcher()
+	m := &secretmatch.Matcher{}
 	m.SetHarvestSource(func(context.Context) []secretmatch.HarvestedValue {
 		return []secretmatch.HarvestedValue{{
 			Secret: secret, RuleID: secretmatch.ManagedRuleID, Title: secretmatch.ManagedRuleTitle,
@@ -545,7 +546,7 @@ func TestCaptureURLReachesHostLoopback(t *testing.T) {
 		t.Skip("browser capture")
 	}
 	browsertest.SkipIfNoBrowser(t)
-	confine.TestingSetAutoConfine(t)
+	admissiontest.Enable(t)
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
@@ -583,7 +584,7 @@ func TestSameOrigin(t *testing.T) {
 
 func TestConsoleLineIsScreenedBeforeTheLineCapClipsIt(t *testing.T) {
 	const secret = "capture-secret-value"
-	m := secretmatch.NewInertMatcher()
+	m := &secretmatch.Matcher{}
 	m.SetHarvestSource(func(context.Context) []secretmatch.HarvestedValue {
 		return []secretmatch.HarvestedValue{{
 			Secret: secret, RuleID: secretmatch.ManagedRuleID, Title: secretmatch.ManagedRuleTitle,

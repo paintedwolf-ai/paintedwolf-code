@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/oar"
+	"github.com/lycaon/lycaon/internal/testutil/oartest"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -12,7 +13,7 @@ func TestObserveProgressReconciliationBeforeDispatch_blocksWhenArmed(t *testing.
 	content := "## Progress\n- [ ] ship\n- [ ] verify\n"
 	gc := oar.NewGuardContext()
 	ObserveProgressReconciliationBeforeDispatch(sess, content, "task", ProgressClosureBaseline{}, true, gc)
-	if !hasRejectCode(gc, ProgressReconciliationRequiredCode) {
+	if !hasRejectCode(t, gc, ProgressReconciliationRequiredCode) {
 		t.Fatalf("want %s in %v", ProgressReconciliationRequiredCode, gc.Invocation.ArgValidationErrors)
 	}
 }
@@ -22,7 +23,7 @@ func TestObserveProgressReconciliationBeforeDispatch_allowsWhenUnarmed(t *testin
 	content := "## Progress\n- [ ] ship\n"
 	gc := oar.NewGuardContext()
 	ObserveProgressReconciliationBeforeDispatch(sess, content, "task", ProgressClosureBaseline{}, false, gc)
-	if hasRejectCode(gc, ProgressReconciliationRequiredCode) {
+	if hasRejectCode(t, gc, ProgressReconciliationRequiredCode) {
 		t.Fatal("unarmed latch must not observe reject")
 	}
 }
@@ -32,7 +33,7 @@ func TestObserveProgressReconciliationBeforeDispatch_allowsRead(t *testing.T) {
 	content := "## Progress\n- [ ] ship\n"
 	gc := oar.NewGuardContext()
 	ObserveProgressReconciliationBeforeDispatch(sess, content, "read", ProgressClosureBaseline{}, true, gc)
-	if hasRejectCode(gc, ProgressReconciliationRequiredCode) {
+	if hasRejectCode(t, gc, ProgressReconciliationRequiredCode) {
 		t.Fatal("read must not observe reject")
 	}
 }
@@ -42,7 +43,7 @@ func TestObserveProgressReconciliationBeforeDispatch_terminalDocumentStillNeedsA
 	content := "## Progress\n- [x] ship\n- [ ] verify\n"
 	gc := oar.NewGuardContext()
 	ObserveProgressReconciliationBeforeDispatch(sess, content, "task", ProgressClosureBaseline{}, true, gc)
-	if !hasRejectCode(gc, ProgressReconciliationRequiredCode) {
+	if !hasRejectCode(t, gc, ProgressReconciliationRequiredCode) {
 		t.Fatal("document transition bypassed worker acknowledgement")
 	}
 }
@@ -52,7 +53,7 @@ func TestObserveProgressReconciliationBeforeDispatch_relabelDoesNotAcknowledgeWo
 	current := "- [x] survey with more detail\n- [ ] challenge claims\n- [ ] report"
 	gc := oar.NewGuardContext()
 	ObserveProgressReconciliationBeforeDispatch(sess, current, "task", ProgressClosureBaseline{}, true, gc)
-	if !hasRejectCode(gc, ProgressReconciliationRequiredCode) {
+	if !hasRejectCode(t, gc, ProgressReconciliationRequiredCode) {
 		t.Fatal("label rewrite acknowledged a worker result")
 	}
 }
@@ -62,7 +63,7 @@ func TestObserveProgressReconciliationBeforeDispatch_blocksOnIdenticalChecklist(
 	content := "## Progress\n- [x] survey\n- [ ] challenge claims\n"
 	gc := oar.NewGuardContext()
 	ObserveProgressReconciliationBeforeDispatch(sess, content, "task", ProgressClosureBaseline{}, true, gc)
-	if !hasRejectCode(gc, ProgressReconciliationRequiredCode) {
+	if !hasRejectCode(t, gc, ProgressReconciliationRequiredCode) {
 		t.Fatal("identical checklist since arm must observe reject")
 	}
 }
@@ -72,19 +73,19 @@ func TestObserveProgressReconciliationBeforeDispatch_skipsWorkerChild(t *testing
 	content := "## Progress\n- [ ] ship\n"
 	gc := oar.NewGuardContext()
 	ObserveProgressReconciliationBeforeDispatch(sess, content, "task", ProgressClosureBaseline{}, true, gc)
-	if hasRejectCode(gc, ProgressReconciliationRequiredCode) {
+	if hasRejectCode(t, gc, ProgressReconciliationRequiredCode) {
 		t.Fatal("worker child must not observe reject")
 	}
 }
 
-func hasRejectCode(gc *oar.GuardContext, code string) bool {
-	return EvaluateObserveHasCode(gc, oar.AnchorCoordinatorPreInvoke, code) ||
-		EvaluateObserveHasCode(gc, oar.AnchorToolPreInvoke, code) ||
-		EvaluateObserveHasCode(gc, oar.AnchorCoordinatorCloseoutCheck, code)
+func hasRejectCode(t *testing.T, gc *oar.GuardContext, code string) bool {
+	return oartest.EvaluateHasCode(t, gc, oar.AnchorCoordinatorPreInvoke, code) ||
+		oartest.EvaluateHasCode(t, gc, oar.AnchorToolPreInvoke, code) ||
+		oartest.EvaluateHasCode(t, gc, oar.AnchorCoordinatorCloseoutCheck, code)
 }
 
 func TestProgressReconciliationSuccessorSelectsFromCurrentFacts(t *testing.T) {
-	pipeline := hostFinishOARPipeline()
+	pipeline := oartest.NewCoordinatorGuardPipeline(t)
 	if pipeline == nil {
 		t.Fatal("stock progress rules failed to load")
 	}
@@ -120,7 +121,7 @@ func TestProgressReconciliationSuccessorSelectsFromCurrentFacts(t *testing.T) {
 			if tc.blocked && selected != ProgressReconciliationRequiredCode || !tc.blocked && selected != "" {
 				t.Fatalf("selected=%q blocked=%v", selected, tc.blocked)
 			}
-			if resultHasCode(result, "PROGRESS_ITEM_NOT_CLOSED") {
+			if result != nil && result.Decision != nil && result.Decision.Code == "PROGRESS_ITEM_NOT_CLOSED" {
 				t.Fatal("deprecated checklist-change rule resurfaced")
 			}
 		})

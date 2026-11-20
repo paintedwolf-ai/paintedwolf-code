@@ -13,8 +13,10 @@ import (
 
 	"github.com/lycaon/lycaon/internal/layeredfs"
 	"github.com/lycaon/lycaon/internal/layeredfs/adapter"
+	"github.com/lycaon/lycaon/internal/layeredfs/adapter/adaptertest"
 	"github.com/lycaon/lycaon/internal/layeredfs/checkpoint"
 	"github.com/lycaon/lycaon/internal/layeredfs/consumer"
+	"github.com/lycaon/lycaon/internal/layeredfs/consumer/consumertest"
 	"github.com/lycaon/lycaon/internal/layeredfs/observation"
 )
 
@@ -91,7 +93,7 @@ func TestPrivateCreateDeleteRenameAndDirectoryReplacementConsistency(t *testing.
 		MountedRootPaths: map[string]string{"code": filepath.Join(tmp, "mount", "code")},
 		BackingDir:       filepath.Join(tmp, "backing"),
 		Core:             core,
-		Index: consumer.SourceIndexFunc(func(_ context.Context, _ consumer.SourceIndexQuery) (consumer.SourceIndexResult, error) {
+		Index: consumertest.IndexFunc(func(_ context.Context, _ consumer.SourceIndexQuery) (consumer.SourceIndexResult, error) {
 			return consumer.SourceIndexResult{Entries: idxEntries, Coverage: consumer.CoverageComplete}, nil
 		}),
 	})
@@ -200,7 +202,7 @@ func TestCheckpointSurveyAndInspectionStabilityDuringLiveEdits(t *testing.T) {
 	eng, err := consumer.NewEngine(consumer.EngineConfig{
 		ViewID: "view-ckpt", Roots: roots, MountedRootPaths: map[string]string{"code": filepath.Join(tmp, "mount", "code")},
 		Core: core, CheckpointStore: ckptStore,
-		Index: consumer.SourceIndexFunc(func(_ context.Context, _ consumer.SourceIndexQuery) (consumer.SourceIndexResult, error) {
+		Index: consumertest.IndexFunc(func(_ context.Context, _ consumer.SourceIndexQuery) (consumer.SourceIndexResult, error) {
 			return consumer.SourceIndexResult{Entries: idxEntries, Coverage: consumer.CoverageComplete}, nil
 		}),
 	})
@@ -300,7 +302,7 @@ func TestMountedAndMaterializedAdaptersProduceIdenticalLogicalConsumerResults(t 
 
 		eng, err := consumer.NewEngine(consumer.EngineConfig{
 			ViewID: view.ViewID, Roots: roots, PreparedView: view, Core: view.Core, Adapter: adp,
-			Index: consumer.SourceIndexFunc(func(_ context.Context, _ consumer.SourceIndexQuery) (consumer.SourceIndexResult, error) {
+			Index: consumertest.IndexFunc(func(_ context.Context, _ consumer.SourceIndexQuery) (consumer.SourceIndexResult, error) {
 				return consumer.SourceIndexResult{Entries: idxEntries, Coverage: consumer.CoverageComplete}, nil
 			}),
 		})
@@ -329,7 +331,7 @@ func TestMountedAndMaterializedAdaptersProduceIdenticalLogicalConsumerResults(t 
 		return orient, search, ev, div
 	}
 
-	mountedAdp := adapter.NewMountedAdapter(adapter.MountedAdapterConfig{AdapterID: adapter.AdapterFUSELinux})
+	mountedAdp := adaptertest.NewMounted(adaptertest.MountedConfig{AdapterID: adapter.AdapterFUSELinux})
 	copyAdp := adapter.NewEagerCopyAdapter()
 
 	mOrient, mSearch, mEv, mDiv := runWithAdapter("mounted", mountedAdp)

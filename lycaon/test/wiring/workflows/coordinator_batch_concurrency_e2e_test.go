@@ -17,6 +17,7 @@ import (
 	"github.com/lycaon/lycaon/internal/session/workeradmission"
 	"github.com/lycaon/lycaon/internal/spawn"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/testutil/llmtest"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/tools/native/command"
 	"github.com/lycaon/lycaon/pkg/api"
@@ -94,7 +95,7 @@ func messageContains(msgs []api.Message, substr string) bool {
 }
 
 func TestCoordinatorBatchThreeTasksAndFollowUpE2E(t *testing.T) {
-	rec := llm.NewRecordingClient(batchThreeTaskMock())
+	rec := llmtest.NewRecordingClient(batchThreeTaskMock())
 	h := wiring.BuildForTest(t, wiring.WithLLMClient(rec))
 	ctx := context.Background()
 	dir := t.TempDir()
@@ -138,7 +139,7 @@ func TestCoordinatorBatchThreeTasksAndFollowUpE2E(t *testing.T) {
 }
 
 func TestCoordinatorBatchTaskAndReadFollowUpE2E(t *testing.T) {
-	rec := llm.NewRecordingClient(batchTaskAndReadMock())
+	rec := llmtest.NewRecordingClient(batchTaskAndReadMock())
 	h := wiring.BuildForTest(t, wiring.WithLLMClient(rec))
 	ctx := context.Background()
 	dir := t.TempDir()
@@ -217,7 +218,7 @@ func TestCoordinatorBatchOverCapRejectedInSameTurnE2E(t *testing.T) {
 // After a batched dispatch, the next request's worker roster names every
 // worker the batch started.
 func TestCoordinatorBatchWorkersOnNextRequestRosterE2E(t *testing.T) {
-	rec := llm.NewRecordingClient(batchThreeTaskMock())
+	rec := llmtest.NewRecordingClient(batchThreeTaskMock())
 	h := wiring.BuildForTest(t, wiring.WithLLMClient(rec))
 	ctx := context.Background()
 	dir := t.TempDir()
@@ -294,7 +295,7 @@ func TestCoordinatorPackBoardShowsInFlightRosterE2E(t *testing.T) {
 
 func TestCoordinatorBatchEnqueuesBeforeTurnEndsNotSerialFirstOnlyE2E(t *testing.T) {
 	// One turn may enqueue several tasks.
-	rec := llm.NewRecordingClient(batchThreeTaskMock())
+	rec := llmtest.NewRecordingClient(batchThreeTaskMock())
 	h := wiring.BuildForTest(t, wiring.WithLLMClient(rec))
 	ctx := context.Background()
 	dir := t.TempDir()

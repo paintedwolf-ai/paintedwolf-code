@@ -61,7 +61,7 @@ func commitSecurityLanding(t *testing.T, sqlDB db.Handle, projectDir, delegation
 		Status: wire.WorkerStatusComplete,
 	}))
 	branch := enginepaths.JobBranchDir(enginepaths.WorkerBranchesRootUnder(testbaseline.DataDir(t, sqlDB)), projectDir, jobID)
-	bound, err := workerStore.SetWorkerWorkspace(t.Context(), jobID, branch, testbaseline.Durable(t, sqlDB, jobID, t.TempDir()))
+	bound, err := workerStore.SetWorkerWorkspace(t.Context(), jobID, branch, testbaseline.Durable(t, "root", sqlDB, jobID, t.TempDir()))
 	testutil.FailErr(t, "SetWorkerWorkspace", err)
 	if !bound {
 		t.Fatal("expected workspace root CAS to win on a fresh job")
@@ -86,7 +86,7 @@ func commitSecurityLanding(t *testing.T, sqlDB db.Handle, projectDir, delegation
 	testutil.FailErr(t, "CommitPromotion", workerStore.CommitPromotion(t.Context(), jobID, token, worker.PromotionCommit{Plan: plan}))
 	store := scan.NewSQLStore(sqlDB)
 	testutil.FailErr(t, "PublishPending", scantest.Coordinator(t, store, staticHeadSHA{sha: "closeout-head"}).PublishPending(t.Context(), plan.ScanID))
-	rec, err := store.Get(t.Context(), plan.ScanID)
+	rec, err := store.Reads.Get(t.Context(), plan.ScanID)
 	testutil.FailErr(t, "Get scan", err)
 	if rec == nil {
 		t.Fatal("scan obligation missing")
@@ -97,17 +97,17 @@ func commitSecurityLanding(t *testing.T, sqlDB db.Handle, projectDir, delegation
 func completeSecurityLanding(t *testing.T, store *scan.SQLStore, evidenceStore inspector.EvidenceStore, projectDir string, rec wire.CodeScan) {
 	t.Helper()
 	result := &scanoutput.Result{}
-	claimed, err := store.ClaimNext(t.Context())
+	claimed, err := store.Runs.ClaimNext(t.Context())
 	testutil.FailErr(t, "claim scan", err)
 	if claimed.ID != rec.ID {
 		t.Fatalf("claimed scan %q want %q", claimed.ID, rec.ID)
 	}
-	won, err := store.MarkComplete(t.Context(), claimed, result)
+	won, err := store.Runs.MarkComplete(t.Context(), claimed, result)
 	testutil.FailErr(t, "MarkComplete", err)
 	if !won {
 		t.Fatalf("scan %s was not open for completion", rec.ID)
 	}
-	completed, err := store.Get(t.Context(), rec.ID)
+	completed, err := store.Reads.Get(t.Context(), rec.ID)
 	testutil.FailErr(t, "get completed scan", err)
 	ins := inspector.NewSimpleInspector(evidenceStore)
 	ins.ProjectDir = func(context.Context, string) (string, error) { return projectDir, nil }
@@ -123,7 +123,7 @@ func completeSecurityLanding(t *testing.T, store *scan.SQLStore, evidenceStore i
 		TaskID: wire.ScanTaskID(rec.ID), Scanner: securityScannerContract(rec.ScannerID), Categories: rec.Categories,
 	})
 	testutil.FailErr(t, "Ingest", err)
-	testutil.FailErr(t, "SaveIngest", store.SaveIngest(t.Context(), rec.ID, evidenceRec))
+	testutil.FailErr(t, "SaveIngest", store.Findings.SaveIngest(t.Context(), rec.ID, evidenceRec))
 }
 
 func securityScannerContract(id string) scancatalog.ScannerContract {

@@ -7,12 +7,13 @@ import (
 	"time"
 
 	"github.com/lycaon/lycaon/internal/mcp"
+	"github.com/lycaon/lycaon/internal/mcp/mcptest"
 	"github.com/lycaon/lycaon/internal/testutil"
 )
 
 func seedExpiredGrant(t *testing.T, tokenURL string) *mcp.OAuthTokenStore {
 	t.Helper()
-	store := mcp.NewOAuthTokenStoreAt(t.TempDir() + "/oauth.yaml")
+	store := mcptest.OpenOAuthStore(t, t.TempDir()+"/oauth.yaml")
 	testutil.FailErr(t, "seed token", store.Put("remote", mcp.OAuthTokenRecord{
 		AccessToken:  "access-1",
 		RefreshToken: "refresh-1",

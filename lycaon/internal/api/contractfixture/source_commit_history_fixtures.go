@@ -89,7 +89,6 @@ func NewMergedHistoryFixture(t *testing.T) MergedHistoryFixture {
 	repo, nested := NestedRootRepo(t) // init commit: nested/src/app.ts "committed\n"
 
 	p := CreateProjectForTest(t, srv, nested)
-	MirrorLedgerProject(t, ledgerDB, p)
 	rootID := p.Roots[0].ID
 	appPath := filepath.Join(nested, "src", "app.ts")
 

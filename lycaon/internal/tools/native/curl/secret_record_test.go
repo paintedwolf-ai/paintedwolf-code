@@ -2,7 +2,6 @@ package curl
 
 import (
 	"context"
-	"maps"
 	"slices"
 	"strings"
 	"testing"
@@ -12,6 +11,7 @@ import (
 	"github.com/lycaon/lycaon/internal/commandprogram"
 	"github.com/lycaon/lycaon/internal/secretcap"
 	"github.com/lycaon/lycaon/internal/secretmatch"
+	"github.com/lycaon/lycaon/internal/testsecret"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/toolrejection"
 )
@@ -73,12 +73,12 @@ func TestCurlReferencesReachOnlyRequestPlacements(t *testing.T) {
 // record's own paths; nothing else in the request changes.
 func TestCurlSendsTheResolvedRecord(t *testing.T) {
 	h := newHarness(t)
-	ref := secretmatch.ReferenceToken(uuid.NewString())
+	fixture := testsecret.New(t, "project", "chat", "session")
+	ref := fixture.Put(t, "request token", "resolved-value", secretcap.ScopeProject, secretcap.OriginGenerated).Reference
 	prepared, _, err := h.prepare("-H", "Authorization: Bearer "+ref, "-H", "X-Plain: kept", "-u", "user:"+ref, "-d", "token="+ref, "-A", "agent", "http://127.0.0.1:9/api")
 	testutil.FailErr(t, "prepare", err)
-	resolved := replaceReference(prepared.Review.Arguments(), ref, "resolved-value")
 	tc := h.tc
-	tc.Effects.Secrets = secretcap.NewResolutionForTest(resolved.(map[string]any), nil)
+	tc.Effects.Secrets = fixture.Resolve(t, prepared.Review.Arguments())
 	inv := newInvocation(t.Context(), prepared, tc, commandprogram.Streams{})
 	args, err := inv.requestArgs("")
 	testutil.FailErr(t, "request args", err)
@@ -100,27 +100,6 @@ func TestCurlSendsTheResolvedRecord(t *testing.T) {
 	}
 }
 
-func replaceReference(value any, ref, with string) any {
-	switch typed := value.(type) {
-	case string:
-		return strings.ReplaceAll(typed, ref, with)
-	case []any:
-		out := make([]any, len(typed))
-		for i, item := range typed {
-			out[i] = replaceReference(item, ref, with)
-		}
-		return out
-	case map[string]any:
-		out := maps.Clone(typed)
-		for k, v := range typed {
-			out[k] = replaceReference(v, ref, with)
-		}
-		return out
-	}
-	return value
-}
-
-// Every file curl reads or writes is a reviewed path target.
 func TestCurlPathTargetsNameEveryFileItTouches(t *testing.T) {
 	h := newHarness(t)
 	prepared, _, err := h.prepare("--cacert", "ca.pem", "--capath", "cas", "-E", "client.pem", "--key", "client.key",
@@ -181,8 +160,9 @@ func TestCurlReviewsAReferencedPassphrase(t *testing.T) {
 	for _, decision := range []secretmatch.Decision{secretmatch.SendUnchanged, secretmatch.Withhold} {
 		t.Run(string(decision), func(t *testing.T) {
 			h := newHarness(t)
-			id := uuid.NewString()
-			ref := secretmatch.ReferenceToken(id)
+			fixture := testsecret.New(t, "project", "chat", "session")
+			fixture.Service.SetFingerprinter(fingerprinter)
+			ref := fixture.Put(t, "key-pass", "held-passphrase", secretcap.ScopeProject, secretcap.OriginGenerated).Reference
 			var asked []secretmatch.Alert
 			h.owners.HTTP.SecretMatcher = matcher
 			h.owners.HTTP.SecretAsk = func(_ context.Context, alert secretmatch.Alert) (secretmatch.Resolution, error) {
@@ -191,11 +171,8 @@ func TestCurlReviewsAReferencedPassphrase(t *testing.T) {
 			}
 			prepared, _, err := h.prepare("--cert", "client.pem", "--key", "client.key", "--pass", ref, "https://mtls.example.test/api")
 			testutil.FailErr(t, "prepare", err)
-			resolved := replaceReference(prepared.Review.Arguments(), ref, "held-passphrase")
 			tc := h.tc
-			tc.Effects.Secrets = secretcap.NewResolutionForTest(resolved.(map[string]any), []secretcap.TestResolvedValue{
-				{ID: id, Name: "key-pass", Value: "held-passphrase", Path: passphrasePath},
-			})
+			tc.Effects.Secrets = fixture.Resolve(t, prepared.Review.Arguments())
 			inv := newInvocation(t.Context(), prepared, tc, commandprogram.Streams{})
 			got, err := inv.passphrase()
 			if len(asked) != 1 || asked[0].DestinationLabel != "https://mtls.example.test:443" || len(asked[0].Fingerprints) != 1 {

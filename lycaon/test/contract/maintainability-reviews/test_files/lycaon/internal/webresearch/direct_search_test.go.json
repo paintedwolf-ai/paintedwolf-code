@@ -1,0 +1,13 @@
+{
+  "category": "test_files",
+  "artifact": "lycaon/internal/webresearch/direct_search_test.go",
+  "kind": "test_suite",
+  "workstream": "web-research-runtime",
+  "disposition": "retain",
+  "reason": "Retain the 716-line direct-search behavior suite covering query parsing, seed/cache reuse, seen-memory ranking, metadata and result settlement. Tests construct explicit Discovery and Crawler resources so cross-query reuse and independent searches are intentional.",
+  "reviewed_commit": "07ad83d4a386172877e6221d2ed1feffb7f6900f",
+  "ceiling": 716,
+  "boundaries": {
+    "lycaon/internal/webresearch/direct_search_test.go": "aa7a4baaf0a0c70f86c824dbd411f575fb423ad91fb1271b9489fab1e6cd15aa"
+  }
+}

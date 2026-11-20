@@ -207,7 +207,7 @@ func (l *toolBatch) executeToolCallsInTurn(
 			return nil
 		}
 		var err error
-		result.history, err = l.Projection.commitProvisionalAssistantInHistory(ctx, sess, sessionID, result.history, userPrompt, turnSurfaceID, assistantMessageID)
+		result.history, err = l.Projection.commitProvisionalAssistantInHistory(ctx, sess, sessionID, result.history, turnSurfaceID, assistantMessageID)
 		if err != nil {
 			return err
 		}
@@ -504,7 +504,7 @@ func (l *toolBatch) executeOneToolCall(
 	if run.facts.Resolution() == api.ToolResultOutcomeRejected {
 		return l.settleRejectedInvocation(ctx, sess, sessionID, tc, assistantMessageID, run)
 	}
-	projected := l.fitToolOutput(ctx, sess, tc.Name, run.captures.ownerRef, tc.Args, run.content, run.succeeded())
+	projected := l.fitToolOutput(ctx, sess, tc.Name, tc.Args, run.content, run.succeeded())
 	if projected.reject != nil {
 		run = l.Tools.refuseOutputDelivery(ctx, sess, tc, toolCtx, run, projected.reject.Code, projected.reject.Data)
 		return l.settleRejectedInvocation(ctx, sess, sessionID, tc, assistantMessageID, run)

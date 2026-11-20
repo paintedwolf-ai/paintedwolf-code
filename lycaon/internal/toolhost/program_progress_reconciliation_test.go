@@ -22,7 +22,7 @@ func (p reconciledProgramProgress) ProgramProgressState(ctx context.Context, id 
 
 func TestComposedMutationRequiresAcknowledgementOfKnownWorkerFinishes(t *testing.T) {
 	fixture := newComposedProgramFixture(t)
-	store := progress.NewMemoryStore()
+	store := progress.NewSQLStore(fixture.Database)
 	testutil.FailErr(t, "seed valid pending plan", store.Set(fixture.Session, "- [ ] Deliver\n- [ ] Verify"))
 	closure := progressclosure.New()
 	closure.SetProgress(store)

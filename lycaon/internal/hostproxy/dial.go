@@ -32,6 +32,10 @@ func (failure Failure) Error() string { return "host proxy: " + string(failure) 
 // DialPinned applies policy for target but tunnels only the address the caller
 // already authorized. Proxy discovery never resolves or grants a destination.
 func DialPinned(ctx context.Context, target *url.URL, network string, address netip.AddrPort) (net.Conn, error) {
+	return hostResolver.dialPinned(ctx, target, network, address)
+}
+
+func (r resolver) dialPinned(ctx context.Context, target *url.URL, network string, address netip.AddrPort) (net.Conn, error) {
 	if target == nil || target.Hostname() == "" || !address.IsValid() || address.Port() == 0 || network != "tcp" && network != "tcp4" && network != "tcp6" {
 		return nil, EndpointInvalid
 	}
@@ -47,7 +51,7 @@ func DialPinned(ctx context.Context, target *url.URL, network string, address ne
 		reached.Host = net.JoinHostPort(address.Addr().Unmap().String(), strconv.Itoa(int(address.Port())))
 		policyTarget = &reached
 	}
-	selected, err := ResolveContext(ctx, policyTarget)
+	selected, err := r.resolve(ctx, policyTarget)
 	if err != nil {
 		return nil, PolicyUnavailable
 	}

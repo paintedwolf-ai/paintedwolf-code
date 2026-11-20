@@ -10,8 +10,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/lycaon/lycaon/internal/confine"
+	"github.com/lycaon/lycaon/internal/confine/admissiontest"
 	"github.com/lycaon/lycaon/internal/layeredfs/adapter"
+	"github.com/lycaon/lycaon/internal/layeredfs/adapter/adaptertest"
 	"github.com/lycaon/lycaon/internal/layeredfs/adapter/platform"
 	"github.com/lycaon/lycaon/internal/layeredfs/checkpoint"
 	"github.com/lycaon/lycaon/internal/layeredfs/recovery"
@@ -114,10 +115,10 @@ func runWorkerLifecyclePhase(t *testing.T, root, phase string, mounted, sourceCo
 		return adapter.BudgetFact{Class: class, Limit: 1 << 20, EntryCost: 1}
 	}
 	if mounted {
-		confine.TestingSetAutoConfine(t)
+		admissiontest.Enable(t)
 		t.Setenv("LYCAON_CONFIG_DIR", filepath.Dir(branches))
 		selector = workspace.HostSelector()
-		selector.BudgetFor = adapter.ZeroBudget
+		selector.BudgetFor = adaptertest.ZeroBudget
 	}
 	recoveryRoot := filepath.Join(branches, ".adapter", "recovery")
 	checkpointStore, err := checkpoint.NewStore(filepath.Join(recoveryRoot, "checkpoints"))
@@ -133,10 +134,11 @@ func runWorkerLifecyclePhase(t *testing.T, root, phase string, mounted, sourceCo
 		MountReconciler: recovery.ConnectionReconciler{Recoveries: platform.ConnectionRecoveries()},
 	})
 	testutil.FailErr(t, "open recovery coordinator", err)
-	manager := workspace.NewManager(branches, selector).WithPrivateGit(gitManager).WithRecovery(coordinator)
-	queue := NewSQLQueue(database, 4)
-	queue.SetBaselineStore(sourceledger.New(database, filepath.Join(root, "source-content")).Baselines)
-	queue.SetWorkerWorkspaceManager(manager)
+	manager := workspace.NewManager(branches, selector, workspace.Filesystem{}).WithPrivateGit(gitManager).WithRecovery(coordinator)
+	queueServices := NewSQLServices(database, 4)
+	queue := queueServices.Queue
+	queue.Branches.SetBaselineStore(sourceledger.New(database, filepath.Join(root, "source-content"), sourceledger.Timing{}).Baselines)
+	queue.Branches.SetWorkerWorkspaceManager(manager)
 	fixture := &layeredWorkerFixture{db: database, queue: queue, manager: manager, source: source, branches: branches}
 	if phase == "prepare" {
 		runPrepareLifecyclePhase(t, fixture, root, mounted, trace)
@@ -172,7 +174,7 @@ func runWorkerLifecyclePhase(t *testing.T, root, phase string, mounted, sourceCo
 	if !ok {
 		t.Fatal("restart lost worker")
 	}
-	task, lease, err := queue.EnsureWorkerBranch(t.Context(), fields[0])
+	task, lease, err := queue.Branches.EnsureWorkerBranch(t.Context(), fields[0])
 	testutil.FailErr(t, "lease recovered worker branch", err)
 	cleaned := false
 	t.Cleanup(func() {
@@ -185,7 +187,7 @@ func runWorkerLifecyclePhase(t *testing.T, root, phase string, mounted, sourceCo
 	if got := strings.TrimSpace(gittest.Run(t, task.WorkspaceRoot, "rev-parse", "HEAD")); got != fields[1] {
 		t.Fatalf("restart changed worker Git history: got %s want %s", got, fields[1])
 	}
-	store, manifest, published, err := session.OpenTaskCheckpointStore(task)
+	store, manifest, published, err := session.OpenTaskCheckpointStore(task, "")
 	testutil.FailErr(t, "reopen checkpoint", err)
 	if !published || manifest.CheckpointID != recoveredCheckpoint || len(manifest.Entries) != 1 {
 		t.Fatalf("restart lost checkpoint: %+v", manifest)
@@ -195,7 +197,7 @@ func runWorkerLifecyclePhase(t *testing.T, root, phase string, mounted, sourceCo
 	if string(base) != "package main\n" {
 		t.Fatalf("retained base = %q", base)
 	}
-	service := &MergeService{Queue: queue, Store: queue, DataDir: testbaseline.DataDir(t, database), Workspace: manager}
+	service := &MergeService{Queue: queue, Branches: queue.Branches, Store: queueServices.Promotions, DataDir: testbaseline.DataDir(t, database), Workspace: manager}
 	testutil.FailErr(t, "recover merge transactions", service.RecoverOrphanedMergeApplies(t.Context()))
 	if sourceConflict {
 		assertRecoveredSourceConflict(t, service, task, source, manifest.CheckpointID, fields[1])
@@ -248,7 +250,7 @@ func runPrepareLifecyclePhase(t *testing.T, fixture *layeredWorkerFixture, root 
 	trace("git-commit-complete")
 	completed := fixture.completeWithChange(t, task, func() {})
 	trace("checkpoint-complete")
-	_, manifest, published, err := session.OpenTaskCheckpointStore(completed)
+	_, manifest, published, err := session.OpenTaskCheckpointStore(completed, "")
 	testutil.FailErr(t, "checkpoint", err)
 	if !published || manifest.WorkerID != task.ID {
 		t.Fatal("completion published no checkpoint")

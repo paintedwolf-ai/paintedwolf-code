@@ -18,6 +18,7 @@ import (
 	"github.com/lycaon/lycaon/internal/settingsoverlay"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/testutil/llmtest"
 	"github.com/lycaon/lycaon/internal/tools/toolstest"
 	"github.com/lycaon/lycaon/pkg/api"
 	"gopkg.in/yaml.v3"
@@ -57,7 +58,7 @@ func TestSessionWarmIncludesAgentsMDIndex(t *testing.T) {
 	const freshPolicy = "Apply the refreshed scoped guidance marker."
 	testutil.FailErr(t, "write initial guidance", os.WriteFile(policyPath, []byte(firstPolicy), 0o644))
 
-	rec := llm.NewRecordingClient(llm.NewMockProvider(&llm.MockConfig{Responses: []llm.MockResponseEntry{{
+	rec := llmtest.NewRecordingClient(llm.NewMockProvider(&llm.MockConfig{Responses: []llm.MockResponseEntry{{
 		Pattern: ".",
 		Text:    "ok",
 	}}}))
@@ -70,7 +71,7 @@ func TestSessionWarmIncludesAgentsMDIndex(t *testing.T) {
 
 	// AGENTS.md follows the project trust switch.
 	projectID := session.RegisterProjectContextForTest(t, mgr, store.DB(), projectDir)
-	sess, err := store.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, projectID)
+	sess, err := store.Sessions.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, projectID)
 	testutil.FailErr(t, "create session", err)
 	sess.WorkspacePath = projectDir
 	mgr.Coordinator.PolicyIndex.Warm(t.Context(), sess)

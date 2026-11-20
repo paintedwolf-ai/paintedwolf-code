@@ -1,0 +1,18 @@
+{
+  "category": "go_receiver_lines",
+  "artifact": "lycaon/internal/gitexec/gitexec.execution",
+  "kind": "runtime_service",
+  "workstream": "shim-audit",
+  "disposition": "retain",
+  "reason": "Retain the invocation boundary that resolves installation and host transport resources, prepares hardened arguments and environment, audits repository configuration, and binds and closes the real credential service around execution. Its eight private resources cannot replace launch authorization, confinement, credential release or helper ancestry verification. Splitting the resource value across forwarding services would obscure the single invocation lifetime.",
+  "reviewed_commit": "e774bb7cfd2a9f5d9633a7e65e2def02d647d0d5",
+  "ceiling": 379,
+  "boundaries": {
+    "lycaon/internal/gitexec/execution_test.go": "c7c80fd612eda65d485b187eff30a55ec337a77d58391c502364075fb86ca827",
+    "lycaon/internal/gitexec/authority_test.go": "2d3638fe25c98067a11ea3e2a9cd61f5694f8db45d4ec12c9cbb009d489f27c5",
+    "lycaon/internal/gitexec/agent_credentials_test.go": "f823c0a038f155ed75e26dc406942b92aab0a921dfd11dfc54b67fda87affe62",
+    "lycaon/internal/gitexec/credential_helper_test.go": "d4cdef258a961447b1dbd7b39bc9c7f82301a5d6a0aa18bb4fabfa7c524259c2",
+    "lycaon/internal/gitexec/hardening_test.go": "ca2cf9fbf327a2eb4ac204371b5e2def85cd38903cab443a62952931b313f564"
+  },
+  "reviewed_shape": "3129515721278ff870ba67f1643ad8842f6157e6994f28004e75a7a3bd220847"
+}

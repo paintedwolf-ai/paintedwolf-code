@@ -7,8 +7,6 @@ import (
 	"github.com/lycaon/lycaon/internal/layeredfs"
 )
 
-// A barrier gates its view until released, refuses a second barrier meanwhile, and leaves no gate state
-// behind; a closed server reports itself gone.
 func TestBarrierDrainGatesItsViewUntilReleased(t *testing.T) {
 	env := newTestEnv(t, nil)
 	env.createViewAndExport(t, "view-a", true)
@@ -20,7 +18,7 @@ func TestBarrierDrainGatesItsViewUntilReleased(t *testing.T) {
 	if err != nil {
 		t.Fatalf("begin barrier: %v", err)
 	}
-	if gated, inFlight, _ := env.Server.GateStateForTest(); gated != 1 || inFlight != 0 {
+	if gated, inFlight, _ := env.Server.BarrierState(); gated != 1 || inFlight != 0 {
 		t.Fatalf("gate state during a barrier: gated=%d inFlight=%d", gated, inFlight)
 	}
 	if _, err := env.Server.BeginBarrierDrain(t.Context(), "view-a"); !errors.Is(err, layeredfs.ErrBarrierActive) {
@@ -28,7 +26,7 @@ func TestBarrierDrainGatesItsViewUntilReleased(t *testing.T) {
 	}
 	release()
 	release()
-	if gated, inFlight, _ := env.Server.GateStateForTest(); gated != 0 || inFlight != 0 {
+	if gated, inFlight, _ := env.Server.BarrierState(); gated != 0 || inFlight != 0 {
 		t.Fatalf("gate state after release: gated=%d inFlight=%d", gated, inFlight)
 	}
 
@@ -40,5 +38,8 @@ func TestBarrierDrainGatesItsViewUntilReleased(t *testing.T) {
 	}
 	if env.Server.IsAlive() {
 		t.Fatal("a closed server reports itself alive")
+	}
+	if gated, inFlight, handshakes := env.Server.BarrierState(); gated != 0 || inFlight != 0 || handshakes != 0 {
+		t.Fatalf("barrier state after close = %d, %d, %d", gated, inFlight, handshakes)
 	}
 }

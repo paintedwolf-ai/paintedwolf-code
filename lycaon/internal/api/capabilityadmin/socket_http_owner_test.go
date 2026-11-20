@@ -19,6 +19,7 @@ import (
 	"github.com/lycaon/lycaon/internal/authzcontext"
 	"github.com/lycaon/lycaon/internal/confine"
 	"github.com/lycaon/lycaon/internal/credentialstore"
+	"github.com/lycaon/lycaon/internal/credentialstore/credentialstoretest"
 	"github.com/lycaon/lycaon/internal/db"
 	"github.com/lycaon/lycaon/internal/events"
 	"github.com/lycaon/lycaon/internal/gate"
@@ -30,6 +31,7 @@ import (
 	"github.com/lycaon/lycaon/internal/secretmatch"
 	"github.com/lycaon/lycaon/internal/session/approvalstate"
 	"github.com/lycaon/lycaon/internal/settings"
+	"github.com/lycaon/lycaon/internal/settings/settingstest"
 	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -146,10 +148,10 @@ func testUnixSocketRecipientLifetime(t *testing.T, tokens bool) {
 	approvals, err := settings.NewApprovalStoreAt(filepath.Join(root, "approvals.yaml"))
 	testutil.FailErr(t, "approval store", err)
 	defer approvals.Close()
-	authority := settings.NewRuleApprovalGate(approvals, settings.NoSources())
+	authority := settings.NewRuleApprovalGate(approvals, settingstest.EmptySources())
 	runtime := approvalstate.NewSocketCapabilityRuntime()
 	defer runtime.Close()
-	checkpoints := hitl.NewCheckpoints(hitl.NewSQLStore(database), &events.Publisher{Hub: events.NewMemoryHub()}, authzcontext.SQLRecorder(database))
+	checkpoints := hitl.NewCheckpoints(hitl.NewSQLStore(database), &events.Publisher{Hub: events.NewMemoryHub()}, authzcontext.LedgerRecorder{Ledger: &authzcontext.Ledger{Store: authzcontext.NewSQLStore(database)}})
 	defer func() {
 		testutil.FailErr(t, "stop socket checkpoint owners", checkpoints.StopExpiryTimers(context.Background()))
 	}()
@@ -159,7 +161,7 @@ func testUnixSocketRecipientLifetime(t *testing.T, tokens bool) {
 	registry := tools.NewDefaultRegistry()
 	executor := toolexecution.NewExecutor(nil, registry, "implement")
 	executor.Approvals.SetCheckpointManager(ctx, review, authority)
-	executor.Approvals.SetAuthzRecorder(authzcontext.SQLRecorder(database))
+	executor.Approvals.SetAuthzRecorder(authzcontext.LedgerRecorder{Ledger: &authzcontext.Ledger{Store: authzcontext.NewSQLStore(database)}})
 	defer confine.SetEgressResolver(nil)
 	executor.Network.SetEgressPostureSource(func(string) gate.Posture { return gate.PostureStrict })
 	executor.Capabilities.SetSocketCapabilityRuntime(runtime)
@@ -168,7 +170,7 @@ func testUnixSocketRecipientLifetime(t *testing.T, tokens bool) {
 	boundary := sandbox.NewBoundary(sandbox.Config{ProjectRootRequired: true, RejectSymlinkEscape: true}, []sandbox.ToolProfile{{ID: "implement", Tools: map[string]bool{"http_request": true}}})
 	var decoy *net.UnixListener
 	swapped := false
-	testutil.FailErr(t, "register retained HTTP consumer", httpaction.Register(registry, httpaction.Deps{Boundary: boundary, Secrets: service, SecretMatcher: matcher, SecretAsk: func(ctx context.Context, alert secretmatch.Alert) (secretmatch.Resolution, error) {
+	testutil.FailErr(t, "register retained HTTP consumer", httpaction.Register(registry, httpaction.Deps{Boundary: boundary, Secrets: service, Jars: service.Jars, SecretMatcher: matcher, SecretAsk: func(ctx context.Context, alert secretmatch.Alert) (secretmatch.Resolution, error) {
 		if !swapped {
 			// ClaimDeclaredSocket has consumed the real permit before this final screen.
 			if err := os.Rename(path, path+"-original"); err != nil {
@@ -206,7 +208,7 @@ func testUnixSocketRecipientLifetime(t *testing.T, tokens bool) {
 		t.Fatal("same live binding did not reuse recipient permission")
 	}
 	jarRequest := secretcap.TokenJarRequest{ProjectID: testdbseed.DefaultProjectID, ChatSessionID: "root-1", SessionID: "root-1", OperationID: "inspect", Name: "service-tokens"}
-	jar, err := service.OpenTokenJar(ctx, jarRequest)
+	jar, err := service.Jars.OpenTokenJar(ctx, jarRequest)
 	testutil.FailErr(t, "read retained token jar", err)
 	originalToken := jar.Tokens["api"]
 	if originalToken.Value != issuedToken || originalToken.Origin == "" {
@@ -236,7 +238,7 @@ func testUnixSocketRecipientLifetime(t *testing.T, tokens bool) {
 	}
 	assertNoUnixAccept(t, decoy)
 	assertSocketCredentialPreserved(t, ctx, service, credentialReference)
-	preserved, err := service.OpenTokenJar(ctx, jarRequest)
+	preserved, err := service.Jars.OpenTokenJar(ctx, jarRequest)
 	testutil.FailErr(t, "preserve original token jar", err)
 	if preserved.Tokens["api"] != originalToken {
 		t.Fatal("changed recipient rewrote or discarded token data")
@@ -246,7 +248,7 @@ func testUnixSocketRecipientLifetime(t *testing.T, tokens bool) {
 		testutil.FailErr(t, "stop old checkpoint owners", checkpoints.StopExpiryTimers(context.Background()))
 		restartedRuntime := approvalstate.NewSocketCapabilityRuntime()
 		defer restartedRuntime.Close()
-		restarted := hitl.NewCheckpoints(hitl.NewSQLStore(database), &events.Publisher{Hub: events.NewMemoryHub()}, authzcontext.SQLRecorder(database))
+		restarted := hitl.NewCheckpoints(hitl.NewSQLStore(database), &events.Publisher{Hub: events.NewMemoryHub()}, authzcontext.LedgerRecorder{Ledger: &authzcontext.Ledger{Store: authzcontext.NewSQLStore(database)}})
 		defer func() {
 			testutil.FailErr(t, "stop restarted token checkpoint owners", restarted.StopExpiryTimers(context.Background()))
 		}()
@@ -266,7 +268,7 @@ func testUnixSocketRecipientLifetime(t *testing.T, tokens bool) {
 			t.Fatalf("restart reused stale token recipient authority: %v", err)
 		}
 		assertNoUnixAccept(t, decoy)
-		restored, err := service.OpenTokenJar(ctx, jarRequest)
+		restored, err := service.Jars.OpenTokenJar(ctx, jarRequest)
 		testutil.FailErr(t, "token data survives restart", err)
 		if restored.Tokens["api"] != originalToken {
 			t.Fatal("engine restart discarded or rebound token data")
@@ -292,7 +294,7 @@ func assertNoUnixAccept(t *testing.T, listener *net.UnixListener) {
 
 func newSocketRecipientSecret(t *testing.T, ctx context.Context, database db.Handle, root, secret string) (*secretcap.Service, *secretmatch.Matcher, string) {
 	t.Helper()
-	values := credentialstore.NewEmpty(credentialstore.Slot{Path: filepath.Join(root, credentialstore.VaultBasename), Namespace: credentialstore.NamespaceManagedSecrets, Context: "socket owner fixture"}, func(string) bool { return true })
+	values := credentialstoretest.Open(t, credentialstore.Slot{Path: filepath.Join(root, credentialstore.VaultBasename), Namespace: credentialstore.NamespaceManagedSecrets, Context: "socket owner fixture"}, func(string) bool { return true })
 	service := secretcap.NewWithStore(database, values, nil)
 	matcher, err := secretmatch.BuildMatcher(secretmatch.Bundled())
 	testutil.FailErr(t, "socket matcher", err)

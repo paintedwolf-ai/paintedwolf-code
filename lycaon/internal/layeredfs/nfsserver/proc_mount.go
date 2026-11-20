@@ -64,16 +64,6 @@ func (g *serverBarrierGate) closeAll() {
 	g.mu.Unlock()
 }
 
-// GateStateForTest returns the counts of gated views, in-flight views, and mount handshakes on s.
-func (s *Server) GateStateForTest() (gatedViews, inFlightViews, handshakes int) {
-	if s == nil || s.gate == nil {
-		return 0, 0, 0
-	}
-	s.gate.mu.Lock()
-	defer s.gate.mu.Unlock()
-	return len(s.gate.gatedVH), len(s.gate.inFlightByVH), len(s.gate.handshakes)
-}
-
 // BeginBarrierDrain gates new mutating NFSv3 RPCs for viewID on s, waits for in-flight mutating
 // RPCs on viewID to finish (with context cancellation wakeups), and flushes all staged UNSTABLE writes.
 func (s *Server) BeginBarrierDrain(ctx context.Context, viewID ViewID) (func(), error) {

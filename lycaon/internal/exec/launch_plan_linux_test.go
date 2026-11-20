@@ -13,6 +13,7 @@ import (
 	"golang.org/x/sys/unix"
 
 	"github.com/lycaon/lycaon/internal/confine"
+	"github.com/lycaon/lycaon/internal/confine/admissiontest"
 	"github.com/lycaon/lycaon/internal/confine/linuxsandbox"
 	"github.com/lycaon/lycaon/internal/testutil"
 )
@@ -51,11 +52,11 @@ func rejectLaunchPlansWithoutLandlock(t *testing.T) {
 	}
 	t.Setenv("LYCAON_SANDBOX", "")
 	t.Setenv("LYCAON_BYPASS_APPROVALS", "")
-	confine.TestingSetAutoConfine(t)
+	admissiontest.Enable(t)
 	for _, kind := range []LaunchKind{LaunchAgentCommand, LaunchBundledScanner, LaunchManagedBrowser, LaunchLocalMCP, LaunchDocumentCore, LaunchOCREngine} {
 		err := AgentLaunch(kind, "required boundary fixture", nil).validate()
-		u, typed := linuxsandbox.AsUnavailable(err)
-		if !errors.Is(err, confine.ErrNotConfined) || !typed || u.Code != linuxsandbox.UnavailableLandlock {
+		var unavailable *linuxsandbox.Unavailability
+		if !errors.Is(err, confine.ErrNotConfined) || !errors.As(err, &unavailable) || unavailable.Code != linuxsandbox.UnavailableLandlock {
 			t.Fatalf("launch kind %s lost required boundary refusal: %v", kind, err)
 		}
 	}

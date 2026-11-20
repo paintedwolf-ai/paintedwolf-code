@@ -8,7 +8,8 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/lycaon/lycaon/internal/api/httpio"
-	"github.com/lycaon/lycaon/internal/project"
+
+	"github.com/lycaon/lycaon/internal/project/projecttest"
 	"github.com/lycaon/lycaon/internal/session/contextpreparation"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/testutil/apitestdeps"
@@ -18,9 +19,9 @@ import (
 func TestSessionSeenOffersPreparationAfterSuccessfulLookup(t *testing.T) {
 	deps := apitestdeps.Deps{}
 	apitestdeps.Fill(t, &deps)
-	proj, err := project.CreateWithRoot(t.Context(), deps.Projects, t.TempDir())
+	proj, err := projecttest.CreateWithRoot(t.Context(), deps.Projects, t.TempDir())
 	testutil.FailErr(t, "create preparation project", err)
-	sess, err := deps.Store.CreateWithStatus(t.Context(), api.CreateSessionRequest{ProjectID: proj.ID}, proj.ID, api.SessionStatusIdle)
+	sess, err := deps.Store.Sessions.CreateWithStatus(t.Context(), api.CreateSessionRequest{ProjectID: proj.ID}, proj.ID, api.SessionStatusIdle)
 	testutil.FailErr(t, "create preparation chat", err)
 	offered := make(chan string, 1)
 	preparation := contextpreparation.New(func(ctx context.Context, id string) (contextpreparation.Candidate, error) {
@@ -33,7 +34,7 @@ func TestSessionSeenOffersPreparationAfterSuccessfulLookup(t *testing.T) {
 		preparation.Stop()
 		testutil.FailErr(t, "join preparation", preparation.Wait(context.Background()))
 	})
-	handler := &Transcript{Store: deps.Store, Sessions: deps.Sessions, Projects: deps.Projects, responses: &httpio.Responder{}}
+	handler := &Transcript{SessionStore: deps.Store.Sessions, Sessions: deps.Sessions, Projects: deps.Projects, responses: &httpio.Responder{}}
 	req := httptest.NewRequest(http.MethodPost, "/v1/sessions/"+sess.ID+"/seen", nil)
 	route := chi.NewRouteContext()
 	route.URLParams.Add("id", sess.ID)

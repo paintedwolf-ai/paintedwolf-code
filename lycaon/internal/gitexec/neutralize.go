@@ -6,8 +6,8 @@ import (
 )
 
 // neutralizeArgs disables repository-owned execution hooks.
-func neutralizeArgs(sshCommand string) ([]string, error) {
-	hooksDir, err := emptyHooksDirFn()
+func (e execution) neutralizeArgs(sshCommand string) ([]string, error) {
+	hooksDir, err := e.emptyHooksDir()
 	if err != nil {
 		return nil, err
 	}

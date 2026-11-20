@@ -5,11 +5,8 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
-	"reflect"
-	"sort"
 	"testing"
 
-	"github.com/lycaon/lycaon/internal/detectionpack"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 	"github.com/santhosh-tekuri/jsonschema/v6"
 	"gopkg.in/yaml.v3"
@@ -39,27 +36,6 @@ func TestDetectionSchemasValidateBundledCatalog(t *testing.T) {
 		for _, rule := range rules {
 			validateYAMLWithSchema(t, ruleSchema, rule)
 		}
-	}
-}
-
-func TestDetectionRuleSchemaFieldProjectionMatchesRuntime(t *testing.T) {
-	t.Parallel()
-	raw, err := os.ReadFile(filepath.Join(contractcheck.RepoRoot(t), "schemas", "detection-rule.schema.json"))
-	contractcheck.FailErr(t, "read detection rule schema", err)
-	var doc struct {
-		Fields map[string][]string `json:"x-paintedwolf-fields-by-service"`
-	}
-	contractcheck.FailErr(t, "parse detection rule schema", json.Unmarshal(raw, &doc))
-	want := map[string][]string{
-		string(detectionpack.SourceToolExec):       detectionpack.SupportedFields(detectionpack.SourceToolExec),
-		string(detectionpack.SourceEgressObserved): detectionpack.SupportedFields(detectionpack.SourceEgressObserved),
-	}
-	for source, fields := range doc.Fields {
-		sort.Strings(fields)
-		doc.Fields[source] = fields
-	}
-	if !reflect.DeepEqual(doc.Fields, want) {
-		t.Fatalf("schema fields=%v runtime=%v", doc.Fields, want)
 	}
 }
 

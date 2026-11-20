@@ -6,10 +6,12 @@ import (
 	"path/filepath"
 	"testing"
 
+	sdkmcp "github.com/modelcontextprotocol/go-sdk/mcp"
+
 	"github.com/lycaon/lycaon/internal/mcp"
+	"github.com/lycaon/lycaon/internal/mcp/mcptest"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/tools"
-	sdkmcp "github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
 // TestMCPCorruptToolPinsIsolatesUnaffectedProviders: a corrupt
@@ -29,7 +31,7 @@ func TestMCPCorruptToolPinsIsolatesUnaffectedProviders(t *testing.T) {
     args: []
     enabled: true
 `)
-	conn := &mcp.MockConnector{
+	conn := &mcptest.Connector{
 		Tools: map[string][]*sdkmcp.Tool{
 			"web-a":   {{Name: "query", Description: "query"}},
 			"local-b": {{Name: "query", Description: "query"}},

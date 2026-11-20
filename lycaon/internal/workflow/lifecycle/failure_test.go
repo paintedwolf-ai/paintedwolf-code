@@ -43,7 +43,7 @@ func TestFailCommitsStructuredTerminalState(t *testing.T) {
 	if len(running) != 0 {
 		t.Fatalf("running runs = %+v", running)
 	}
-	msgs, err := sessions.GetMessages(t.Context(), run.SessionID)
+	msgs, err := sessions.Transcript.GetMessages(t.Context(), run.SessionID)
 	testutil.FailErr(t, "load failure boundary", err)
 	for _, msg := range msgs {
 		if msg.WorkflowBoundary != nil && msg.WorkflowBoundary.Event == string(api.WorkflowBoundaryKindFailed) {

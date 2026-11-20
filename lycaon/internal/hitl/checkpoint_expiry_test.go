@@ -127,7 +127,7 @@ func TestRestorePendingExpiresFromOriginalCreationTime(t *testing.T) {
 	_, err = sqlDB.ExecContext(ctx, "UPDATE checkpoints SET created_at = ? WHERE id = ?", timelayout.Format(time.Now().UTC().Add(-time.Hour)), resp.CheckpointID)
 	testutil.FailErr(t, "age pending checkpoint", err)
 
-	restarted := hitl.NewCheckpoints(hitl.NewSQLStore(sqlDB), nil, authzcontext.SQLRecorder(sqlDB))
+	restarted := hitl.NewCheckpoints(hitl.NewSQLStore(sqlDB), nil, authzcontext.LedgerRecorder{Ledger: &authzcontext.Ledger{Store: authzcontext.NewSQLStore(sqlDB)}})
 	restarted.SetCheckpointExpiry(func() time.Duration { return 15 * time.Minute })
 	restored := 0
 	restarted.Authority.SetToolApprovalRestoreHook(func(hitl.StoredCheckpoint) { restored++ })
@@ -160,7 +160,7 @@ func TestRestorePendingRebuildsCoalescingBeforeExpiry(t *testing.T) {
 	})
 	testutil.FailErr(t, "create pending checkpoint", err)
 
-	restarted := hitl.NewCheckpoints(hitl.NewSQLStore(sqlDB), nil, authzcontext.SQLRecorder(sqlDB))
+	restarted := hitl.NewCheckpoints(hitl.NewSQLStore(sqlDB), nil, authzcontext.LedgerRecorder{Ledger: &authzcontext.Ledger{Store: authzcontext.NewSQLStore(sqlDB)}})
 	restarted.SetCheckpointExpiry(func() time.Duration { return 2 * time.Second })
 	order := make(chan string, 2)
 	restarted.Authority.SetToolApprovalRestoreHook(func(row hitl.StoredCheckpoint) {
@@ -207,7 +207,7 @@ func TestStoppedCheckpointsPreservePendingRowsForRestart(t *testing.T) {
 	}
 	_, err = database.ExecContext(ctx, "UPDATE checkpoints SET created_at = ? WHERE id = ?", timelayout.Format(time.Now().UTC().Add(-2*time.Hour)), response.CheckpointID)
 	testutil.FailErr(t, "age original deadline", err)
-	restarted := hitl.NewCheckpoints(hitl.NewSQLStore(database), nil, authzcontext.SQLRecorder(database))
+	restarted := hitl.NewCheckpoints(hitl.NewSQLStore(database), nil, authzcontext.LedgerRecorder{Ledger: &authzcontext.Ledger{Store: authzcontext.NewSQLStore(database)}})
 	t.Cleanup(func() {
 		testutil.FailErr(t, "stop restored checkpoint expiries", restarted.StopExpiryTimers(context.WithoutCancel(ctx)))
 	})
@@ -268,7 +268,7 @@ func TestApprovalReviewIntentSurvivesRestartAndRejectsLateDenials(t *testing.T) 
 			reject("worker-a", denied, "")
 			assertSuppressed(checkpoints, "worker-b", key, true)
 			assertSuppressed(checkpoints, chat, "other-path", false)
-			restarted := hitl.NewCheckpoints(hitl.NewSQLStore(database), nil, authzcontext.SQLRecorder(database))
+			restarted := hitl.NewCheckpoints(hitl.NewSQLStore(database), nil, authzcontext.LedgerRecorder{Ledger: &authzcontext.Ledger{Store: authzcontext.NewSQLStore(database)}})
 			assertSuppressed(restarted, chat, key, true)
 			switch renewal {
 			case "message", "continuation":
@@ -290,7 +290,7 @@ func TestApprovalReviewIntentSurvivesRestartAndRejectsLateDenials(t *testing.T) 
 			}
 			reject("worker-a", late, "")
 			assertSuppressed(checkpoints, chat, "late-review", false)
-			restarted = hitl.NewCheckpoints(hitl.NewSQLStore(database), nil, authzcontext.SQLRecorder(database))
+			restarted = hitl.NewCheckpoints(hitl.NewSQLStore(database), nil, authzcontext.LedgerRecorder{Ledger: &authzcontext.Ledger{Store: authzcontext.NewSQLStore(database)}})
 			assertSuppressed(restarted, "worker-b", key, false)
 			assertSuppressed(restarted, chat, "late-review", false)
 			restoredIntent, err := restarted.ApprovalReviewIntent(ctx, "worker-b")

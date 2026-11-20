@@ -35,16 +35,19 @@ func TestCapturedSourceUnitUsesExactOwnerBytesAndPreservesIdentity(t *testing.T)
 	p, captured, err := LoadSourceUnit(t.Context(), capture, sourceInvocation(), "./script.pw", fixtureScratch(t))
 	testutil.FailErr(t, "capture and validate source", err)
 	defer p.Close()
+	want := sha256.Sum256(raw)
 	raw[0] = 'x'
-	if string(p.Source()) != "printf '%s' \"$1\"\n" || captured.Pin.Revision != "revision-2" || p.Snapshot().SourceDigest != captured.Pin.SHA256 {
+	if string(captured.Bytes) != "printf '%s' \"$1\"\n" || captured.Pin.Revision != "revision-2" {
 		t.Fatalf("captured different source: %+v", captured.Pin)
 	}
 	captured.Bytes[0] = 'y'
-	if p.Source()[0] != 'p' {
-		t.Fatal("retained parser bytes were mutable through capture")
+	sourceDigest, catalogDigest, err := p.ValidatedProgramIdentity(t.Context())
+	testutil.FailErr(t, "read admitted source identity", err)
+	if sourceDigest != hex.EncodeToString(want[:]) || sourceDigest != captured.Pin.SHA256 {
+		t.Fatal("capture mutation changed the validated source identity")
 	}
-	if p.Snapshot().CatalogDigest != toolcontract.LanguageCatalogDigest() {
-		t.Fatal("source silently refreshed frozen catalog")
+	if catalogDigest != toolcontract.LanguageCatalogDigest() {
+		t.Fatal("source silently refreshed the compiled catalog")
 	}
 }
 func TestCapturedSourceRejectsIncompleteIdentityAndUnsupportedRepresentation(t *testing.T) {

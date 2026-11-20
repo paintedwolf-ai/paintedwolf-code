@@ -12,11 +12,11 @@ import (
 
 const ietfRFCProviderID = "ietf_rfc"
 
-func newIETFRFCProvider() *ietfRFCProvider {
-	return &ietfRFCProvider{}
+func newIETFRFCProvider(exchange Exchange) *ietfRFCProvider {
+	return &ietfRFCProvider{exchange: exchange}
 }
 
-type ietfRFCProvider struct{}
+type ietfRFCProvider struct{ exchange Exchange }
 
 func (p *ietfRFCProvider) ID() string { return ietfRFCProviderID }
 
@@ -75,7 +75,7 @@ func (p *ietfRFCProvider) Search(ctx context.Context, s Settings, query string, 
 			}
 			req.Header.Set("User-Agent", providerSearchUserAgent)
 			req.Header.Set("Accept", "application/json")
-			body, status, err := doProviderHTTP(ctx, req, s.PerProviderTimeoutSec, false)
+			body, status, err := doProviderHTTP(ctx, req, s.PerProviderTimeoutSec, false, p.exchange)
 			results <- fetchResult{body: body, status: status, err: err}
 		}(rawURL)
 	}

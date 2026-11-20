@@ -53,7 +53,7 @@ func TestSequentialPlanRunsE2E(t *testing.T) {
 	var accepted wire.PromptAcceptedResponse
 	testutil.FailErr(t, "decode admitted prompt", json.Unmarshal(w.Body.Bytes(), &accepted))
 	testutil.WaitFor(t, "the admitted prompt settles", func() bool {
-		submission, err := sessionStore.GetPromptSubmission(ctx, accepted.OperationID)
+		submission, err := sessionStore.Submissions.GetPromptSubmission(ctx, accepted.OperationID)
 		testutil.FailErr(t, "read admitted prompt", err)
 		if !submission.Status.Terminal() {
 			return false
@@ -76,7 +76,7 @@ func TestSequentialPlanRunsE2E(t *testing.T) {
 		t.Fatalf("plan ids A=%q B=%q", runA.BlueprintPath, runB.BlueprintPath)
 	}
 
-	msgs, err := sessionStore.GetMessages(ctx, sess.ID)
+	msgs, err := sessionStore.Transcript.GetMessages(ctx, sess.ID)
 	testutil.FailErr(t, "store.GetMessages failed", err)
 	var runAMsgs, runBMsgs, boundaries int
 	planAPromptFound := false

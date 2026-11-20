@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/lycaon/lycaon/internal/authzcontext"
+	"github.com/lycaon/lycaon/internal/authzcontext/authztest"
 	"github.com/lycaon/lycaon/internal/authzledger"
 	"github.com/lycaon/lycaon/internal/db"
 	"github.com/lycaon/lycaon/internal/events"
@@ -93,7 +94,7 @@ func TestDetectionResolvedSurvivesRestart(t *testing.T) {
 	resp, err := requestExplicitApprovalCheckpoint(t, ctx, mgr, detectionCheckpointRequest(sessionID))
 	testutil.FailErr(t, "RequestCheckpoint", err)
 
-	restarted := hitl.NewCheckpoints(hitl.NewSQLStore(sqlDB), nil, authzcontext.SQLRecorder(sqlDB))
+	restarted := hitl.NewCheckpoints(hitl.NewSQLStore(sqlDB), nil, authzcontext.LedgerRecorder{Ledger: &authzcontext.Ledger{Store: authzcontext.NewSQLStore(sqlDB)}})
 	restarted.SetCheckpointExpiry(func() time.Duration { return time.Nanosecond })
 	testutil.FailErr(t, "RestorePending", restarted.RestorePending(ctx))
 
@@ -145,7 +146,7 @@ func TestRejectFailsClosedWhenLedgerAppendFails(t *testing.T) {
 	sessionID := "sess-hitl-1"
 	insertSession(t, sqlDB, sessionID)
 	mgr := hitl.NewCheckpoints(hitl.NewSQLStore(sqlDB), &events.Publisher{Hub: events.NewMemoryHub()},
-		authzcontext.LedgerRecorder{Ledger: &authzcontext.Ledger{Store: authzcontext.FailStore{}}})
+		authztest.RejectEvents(t, sqlDB))
 	resp, err := requestExplicitApprovalCheckpoint(t, ctx, mgr, hitl.CheckpointRequest{
 		SessionID: sessionID,
 		Kind:      api.CheckpointKindToolApproval,

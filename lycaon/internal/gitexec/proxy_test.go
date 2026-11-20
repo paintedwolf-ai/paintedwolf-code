@@ -207,12 +207,13 @@ func TestPolicyOutsideTheSharedGrammarKeepsThePerRemoteDecision(t *testing.T) {
 }
 
 func TestGitLFSReachesItsOwnHostThroughTheProxyWhenTheRemoteIsExcepted(t *testing.T) {
+	e := productionExecution()
 	git := useBundledGit(t)
 	lfs := filepath.Join(filepath.Dir(git), "git-lfs")
 	if _, err := os.Stat(lfs); err != nil {
 		t.Skip("bundled git-lfs missing — run ./task gitengine:fetch")
 	}
-	lfsPathFn = func() (string, error) { return lfs, nil }
+	e.lfsPath = func() (string, error) { return lfs, nil }
 	var mu sync.Mutex
 	var hosts []string
 	seen := func() []string {
@@ -227,7 +228,7 @@ func TestGitLFSReachesItsOwnHostThroughTheProxyWhenTheRemoteIsExcepted(t *testin
 		http.NotFound(w, r)
 	}))
 	t.Cleanup(proxy.Close)
-	proxyConfigurationFn = func() hostproxy.Configuration {
+	e.proxyConfiguration = func() hostproxy.Configuration {
 		return hostproxy.Configuration{System: desktop(t, proxy.URL, "git.invalid")}
 	}
 
@@ -235,7 +236,7 @@ func TestGitLFSReachesItsOwnHostThroughTheProxyWhenTheRemoteIsExcepted(t *testin
 	initRepo(t, dir)
 	remote := "http://git.invalid/r.git"
 	opts := Opts{Profile: ProfileNetwork, RemoteURL: remote, ExtraConfig: []string{"lfs.url=http://lfs.invalid/r.git/info/lfs"}}
-	if _, _, err := Run(t.Context(), dir, []string{"ls-remote", "--", remote}, opts); err != nil {
+	if _, _, err := e.run(t.Context(), dir, []string{"ls-remote", "--", remote}, opts, nil); err != nil {
 		t.Fatalf("ls-remote: %v", err)
 	}
 	if slices.Contains(seen(), "git.invalid") {
@@ -249,12 +250,12 @@ func TestGitLFSReachesItsOwnHostThroughTheProxyWhenTheRemoteIsExcepted(t *testin
 	testutil.FailErr(t, "write pointer", os.WriteFile(filepath.Join(dir, "object.bin"), []byte(pointer), 0o600))
 	commit := Opts{Identity: &Identity{Name: "t", Email: "t@example.com"}}
 	for _, args := range [][]string{{"add", "--", ".gitattributes", "object.bin"}, {"commit", "-q", "-m", "pointer"}} {
-		if output, code, err := Run(t.Context(), dir, args, commit); err != nil || code != 0 {
+		if output, code, err := e.run(t.Context(), dir, args, commit, nil); err != nil || code != 0 {
 			t.Fatalf("%v: code=%d err=%v %s", args, code, err, output)
 		}
 	}
 	testutil.FailErr(t, "remove worktree file", os.Remove(filepath.Join(dir, "object.bin")))
-	output, _, err := Run(t.Context(), dir, []string{"checkout", "--", "object.bin"}, opts)
+	output, _, err := e.run(t.Context(), dir, []string{"checkout", "--", "object.bin"}, opts, nil)
 	if err != nil {
 		t.Fatalf("checkout: %v", err)
 	}
@@ -264,6 +265,7 @@ func TestGitLFSReachesItsOwnHostThroughTheProxyWhenTheRemoteIsExcepted(t *testin
 }
 
 func TestNetworkInvocationReachesRemoteThroughResolvedProxy(t *testing.T) {
+	e := productionExecution()
 	useBundledGit(t)
 	var mu sync.Mutex
 	var seen []string
@@ -279,13 +281,13 @@ func TestNetworkInvocationReachesRemoteThroughResolvedProxy(t *testing.T) {
 		http.NotFound(w, r)
 	}))
 	t.Cleanup(proxy.Close)
-	proxyConfigurationFn = func() hostproxy.Configuration {
+	e.proxyConfiguration = func() hostproxy.Configuration {
 		return hostproxy.Configuration{System: desktop(t, proxy.URL)}
 	}
 
 	remote := "http://git.invalid/r.git"
 	lsRemote := func() error {
-		_, _, err := Run(t.Context(), t.TempDir(), []string{"ls-remote", "--", remote}, Opts{Profile: ProfileNetwork, RemoteURL: remote})
+		_, _, err := e.run(t.Context(), t.TempDir(), []string{"ls-remote", "--", remote}, Opts{Profile: ProfileNetwork, RemoteURL: remote}, nil)
 		return err
 	}
 	if err := lsRemote(); err != nil {
@@ -295,7 +297,7 @@ func TestNetworkInvocationReachesRemoteThroughResolvedProxy(t *testing.T) {
 		t.Fatalf("proxy saw %q, want the remote's ref advertisement", requests())
 	}
 
-	proxyConfigurationFn = func() hostproxy.Configuration {
+	e.proxyConfiguration = func() hostproxy.Configuration {
 		return hostproxy.Configuration{System: systemproxy.Configuration{Source: systemproxy.SourceGSettings, Mode: systemproxy.ModeAuto}}
 	}
 	before := len(requests())

@@ -12,12 +12,14 @@ import (
 	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/llm"
 	"github.com/lycaon/lycaon/internal/project"
+	"github.com/lycaon/lycaon/internal/project/projecttest"
 	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/internal/session"
 	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/testutil/llmtest"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/tools/toolstest"
 	"github.com/lycaon/lycaon/pkg/api"
@@ -38,7 +40,7 @@ func TestRunContextInjectsEveryIteration(t *testing.T) {
 
 	t.Setenv("LYCAON_LLM_MOCK", "1")
 	ctx := context.Background()
-	rec := llm.NewRecordingClient(llm.NewMockProvider(&llm.MockConfig{Responses: []llm.MockResponseEntry{{
+	rec := llmtest.NewRecordingClient(llm.NewMockProvider(&llm.MockConfig{Responses: []llm.MockResponseEntry{{
 		Pattern: "multi-iter",
 		ToolCalls: []llm.MockToolCall{{
 			Name: "command",
@@ -55,7 +57,7 @@ func TestRunContextInjectsEveryIteration(t *testing.T) {
 	}
 	mgr := session.NewHost(store, session.Models{Client: rec, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, reg)
 	projects := project.NewSQLRegistry(sessionFixture.DB())
-	p, err := project.CreateWithRoot(ctx, projects, t.TempDir())
+	p, err := projecttest.CreateWithRoot(ctx, projects, t.TempDir())
 	testutil.FailErr(t, "create project", err)
 	mgr.SetProjectRegistry(projects)
 	// Reserve one iteration for prose closeout.
@@ -68,7 +70,7 @@ func TestRunContextInjectsEveryIteration(t *testing.T) {
 		surface: "implement_investigate",
 	})
 
-	sess, err := store.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, p.ID)
+	sess, err := store.Sessions.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, p.ID)
 	testutil.FailErr(t, "create session in store", err)
 	resp, err := mgr.Submissions.Prompt(ctx, sess.ID, "multi-iter start")
 	if err != nil {
@@ -77,7 +79,7 @@ func TestRunContextInjectsEveryIteration(t *testing.T) {
 
 	reqs := rec.AllRequests()
 	if len(reqs) < 2 {
-		msgs, _ := store.GetMessages(ctx, sess.ID)
+		msgs, _ := store.Transcript.GetMessages(ctx, sess.ID)
 		var offered []string
 		if len(reqs) > 0 {
 			offered = toolNames(reqs[0].Tools)
@@ -94,7 +96,7 @@ func TestRunContextInjectsEveryIteration(t *testing.T) {
 func TestSecondPromptStillGetsRunContextAfterAdvance(t *testing.T) {
 	t.Setenv("LYCAON_LLM_MOCK", "1")
 	ctx := context.Background()
-	rec := llm.NewRecordingClient(llm.NewMockProvider(&llm.MockConfig{Responses: []llm.MockResponseEntry{
+	rec := llmtest.NewRecordingClient(llm.NewMockProvider(&llm.MockConfig{Responses: []llm.MockResponseEntry{
 		{Pattern: ".", Text: "ok"},
 		{Pattern: ".", Text: "ok"},
 	}}))
@@ -106,7 +108,7 @@ func TestSecondPromptStillGetsRunContextAfterAdvance(t *testing.T) {
 	coord := &phaseStubCoordinator{phase: "expand", brief: "phase expand brief"}
 	mgr.SetCoordinatorTurnFrameSource(coord)
 
-	sess, err := store.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureSpec}, testdbseed.DefaultProjectID)
+	sess, err := store.Sessions.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureSpec}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session in store", err)
 	if _, err := mgr.Submissions.Prompt(ctx, sess.ID, "turn one"); err != nil {
 		testutil.FailErr(t, "mgr.Submissions.Prompt failed", err)
@@ -133,7 +135,7 @@ func TestSecondPromptStillGetsRunContextAfterAdvance(t *testing.T) {
 func TestWorkerLegInjectsEveryIteration(t *testing.T) {
 	t.Setenv("LYCAON_LLM_MOCK", "1")
 	ctx := context.Background()
-	rec := llm.NewRecordingClient(llm.NewMockProvider(&llm.MockConfig{Responses: []llm.MockResponseEntry{{
+	rec := llmtest.NewRecordingClient(llm.NewMockProvider(&llm.MockConfig{Responses: []llm.MockResponseEntry{{
 		Pattern: "worker-multi",
 		ToolCalls: []llm.MockToolCall{{
 			Name: "command",
@@ -189,7 +191,7 @@ func TestWorkerLegInjectsEveryIteration(t *testing.T) {
 func TestGateBlockedSingleImperativeChannel(t *testing.T) {
 	t.Setenv("LYCAON_LLM_MOCK", "1")
 	ctx := context.Background()
-	rec := llm.NewRecordingClient(llm.NewMockProvider(&llm.MockConfig{Responses: []llm.MockResponseEntry{{Pattern: ".", Text: "ok"}}}))
+	rec := llmtest.NewRecordingClient(llm.NewMockProvider(&llm.MockConfig{Responses: []llm.MockResponseEntry{{Pattern: ".", Text: "ok"}}}))
 	store := storetest.New(t, testdbseed.DefaultProjectID)
 	mgr := session.NewHost(store, session.Models{Client: rec, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, toolstest.NewRegistry())
 	wirePromptTestManager(t, mgr)
@@ -204,7 +206,7 @@ func TestGateBlockedSingleImperativeChannel(t *testing.T) {
 	})
 	testutil.FailErr(t, "install anchor registry", mgr.Coordinator.Guidance.InstallAnchorRegistry())
 
-	sess, err := store.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureSpec}, testdbseed.DefaultProjectID)
+	sess, err := store.Sessions.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureSpec}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session in store", err)
 	mgr.Coordinator.Guidance.Emit(context.Background(), sess.ID, anchor.GateBlocked, anchor.Envelope{})
 	if _, err := mgr.Submissions.Prompt(ctx, sess.ID, "why blocked"); err != nil {

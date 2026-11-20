@@ -220,11 +220,6 @@ func registerSeedBaseIfCore(
 	})
 }
 
-func copyWorkingTreeFile(src, dst string, mode fs.FileMode) error {
-	_, err := copyAndHashWorkingFile(src, dst, mode)
-	return err
-}
-
 func copyAndHashWorkingFile(src, dst string, mode fs.FileMode) (string, error) {
 	in, err := os.Open(src)
 	if err != nil {

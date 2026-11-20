@@ -1,26 +1,22 @@
-package fssync
+package fssync_test
 
 import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/lycaon/lycaon/internal/fssync"
+	"github.com/lycaon/lycaon/internal/testutil"
 )
 
-func TestAlwaysFlushesAndFileHonorsRelaxation(t *testing.T) {
+func TestFileFlushesAndReportsClosedFiles(t *testing.T) {
 	f, err := os.Create(filepath.Join(t.TempDir(), "f"))
-	if err != nil {
-		t.Fatalf("create: %v", err)
-	}
-	if err := Always(f); err != nil {
-		t.Fatalf("flush open file: %v", err)
-	}
-	if err := File(f); err != nil {
-		t.Fatalf("flush through File: %v", err)
-	}
-	if err := f.Close(); err != nil {
-		t.Fatalf("close: %v", err)
-	}
-	if err := Always(f); err == nil {
+	testutil.FailErr(t, "create file", err)
+	_, err = f.WriteString("durable content")
+	testutil.FailErr(t, "write file", err)
+	testutil.FailErr(t, "flush open file", fssync.File(f))
+	testutil.FailErr(t, "close file", f.Close())
+	if err := fssync.File(f); err == nil {
 		t.Fatal("flushing a closed file must fail")
 	}
 }

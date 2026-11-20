@@ -70,7 +70,7 @@ func (q SessionPageQuery) page(tasks []api.WorkerTask, p sessionWorkerPosition) 
 	return page, err
 }
 
-func (q *sqlQueuePromotion) ListSessionPage(ctx context.Context, query SessionPageQuery) (SessionPage, error) {
+func (q *SQLQueue) ListSessionPage(ctx context.Context, query SessionPageQuery) (SessionPage, error) {
 	if query.Limit < 1 || query.Limit > MaxSessionPageSize {
 		return SessionPage{}, ErrInvalidPageLimit
 	}
@@ -94,7 +94,7 @@ func (q *sqlQueuePromotion) ListSessionPage(ctx context.Context, query SessionPa
 		}
 		tasks = append(tasks, *task)
 	}
-	q.decorateWorkspacePreparations(tasks)
+	q.Branches.decorateWorkspacePreparations(tasks)
 	return query.page(tasks, p)
 }
 

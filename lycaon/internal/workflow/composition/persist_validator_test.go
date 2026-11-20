@@ -14,15 +14,16 @@ import (
 	"github.com/lycaon/lycaon/internal/testutil"
 	workflowcomposition "github.com/lycaon/lycaon/internal/workflow/composition"
 	workflowdrafts "github.com/lycaon/lycaon/internal/workflow/drafts"
+	"github.com/lycaon/lycaon/internal/workflow/drafts/draftstest"
 )
 
-func testPersister(t *testing.T) (*workflowcomposition.Persister, *workflowdrafts.Memory) {
+func testPersister(t *testing.T) (*workflowcomposition.Persister, *workflowdrafts.SQL) {
 	t.Helper()
 	reg, err := conditions.NewDefaultRegistry(conditions.RegistryDeps{})
 	testutil.FailErr(t, "build conditions registry", err)
 	agents := orchestration.NewMemoryAgentRegistry()
 	_ = orchestration.LoadRequiredAgentRegistry(context.Background(), agents)
-	store := workflowdrafts.NewMemory()
+	store := draftstest.NewStore(t, "sess-1")
 	return &workflowcomposition.Persister{
 		SessionStore: store,
 		Registry:     reg,

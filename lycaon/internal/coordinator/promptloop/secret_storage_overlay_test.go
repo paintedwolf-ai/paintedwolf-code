@@ -3,7 +3,6 @@ package promptloop
 import (
 	"bytes"
 	"context"
-	"github.com/lycaon/lycaon/internal/testutil/exposure"
 	"os"
 	"path/filepath"
 	"strings"
@@ -17,6 +16,7 @@ import (
 	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/testutil/exposure"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -95,7 +95,7 @@ func TestToolResultSpillUsesStorageProjection(t *testing.T) {
 	projection := loop.Projection.projectToolResultForStorage(context.Background(), rawContent, rawArgs)
 	preview := loop.Tools.truncateToolResultForSession(
 		t.Context(),
-		"read", "",
+		"read",
 		projection,
 		rawContent,
 		512,
@@ -181,7 +181,7 @@ func TestToolResultSecretIsRedactedBeforeEveryDurableConsumer(t *testing.T) {
 	sqlDB := testdbfixture.OpenPath(t, dbPath)
 	testdbseed.InsertProjectRoot(t, sqlDB, testdbseed.DefaultProjectID, dir)
 	sqlStore := storepkg.NewSQL(sqlDB)
-	sess, err := sqlStore.Create(context.Background(), api.CreateSessionRequest{
+	sess, err := sqlStore.Sessions.Create(context.Background(), api.CreateSessionRequest{
 		Posture:   api.SessionPostureBuild,
 		ProjectID: testdbseed.DefaultProjectID,
 	}, testdbseed.DefaultProjectID)
@@ -195,10 +195,10 @@ func TestToolResultSecretIsRedactedBeforeEveryDurableConsumer(t *testing.T) {
 			RedactMessageForStorage: testStorageRedactor,
 			AppendMessages: func(ctx context.Context, sessionID string, msgs ...api.Message) error {
 				appended = append(appended, msgs...)
-				return sqlStore.AppendMessages(ctx, sessionID, msgs...)
+				return sqlStore.Transcript.AppendMessages(ctx, sessionID, msgs...)
 			},
 			UpdateMessage: func(ctx context.Context, sessionID, messageID string, msg api.Message) error {
-				_, err := sqlStore.UpdateMessage(ctx, sessionID, messageID, msg)
+				_, err := sqlStore.Transcript.UpdateMessage(ctx, sessionID, messageID, msg)
 				return err
 			},
 		},
@@ -206,7 +206,7 @@ func TestToolResultSecretIsRedactedBeforeEveryDurableConsumer(t *testing.T) {
 			CommitEvidenceToolResult: func(ctx context.Context, sessionID string, _ *api.Session, toolName string, args map[string]any, content, _ string) (string, string, error) {
 				evidence = content
 				evidenceArg, _ = args["token"].(string)
-				return sqlStore.CommitEvidenceToolResult(ctx, sessionID, dir, toolName, args, content)
+				return sqlStore.Evidence.CommitEvidenceToolResult(ctx, sessionID, dir, toolName, args, content)
 			},
 			CompactToolWire: func(_ context.Context, _ *api.Session, _ string, content string, _ compaction.CompactToolWireOpts) (string, *api.CompactedChunkMeta) {
 				compacted = content
@@ -346,9 +346,9 @@ func TestSecretStorageOverlayIsVisibleToExactlyOneModelRequest(t *testing.T) {
 		},
 	})
 	sess := &api.Session{ID: "sess", ParentSessionID: "parent"}
-	_, _, err := loop.Model.completeStream(context.Background(), sess, sess.ID, st.history, "worker", "", 0, 2, false, st, nil)
+	_, _, err := loop.Model.completeStream(context.Background(), sess, sess.ID, st.history, "worker", 0, 2, false, st, nil)
 	testutil.FailErr(t, "first model request", err)
-	_, _, err = loop.Model.completeStream(context.Background(), sess, sess.ID, st.history, "worker", "", 1, 2, false, st, nil)
+	_, _, err = loop.Model.completeStream(context.Background(), sess, sess.ID, st.history, "worker", 1, 2, false, st, nil)
 	testutil.FailErr(t, "second model request", err)
 	if len(client.requests) != 2 {
 		t.Fatalf("requests = %d want 2", len(client.requests))
@@ -408,8 +408,8 @@ func TestAssistantToolCallSecretIsStoredRedactedAndSentOnce(t *testing.T) {
 	})
 	st := &promptLoopTurnState{}
 	sess := &api.Session{ID: "sess", ParentSessionID: "parent"}
-	assistant, completion, _, err := loop.Model.runAssistantStreamTurn(
-		context.Background(), sess.ID, sess, nil, st, "worker", "", 0, 3, false,
+	assistant, completion, err := loop.Model.runAssistantStreamTurn(
+		context.Background(), sess.ID, sess, nil, st, "worker", 0, 3, false,
 	)
 	testutil.FailErr(t, "assistant tool-call turn", err)
 	if len(completion.ToolCalls) != 1 || !messageCarriesStorageSecret(assistant) {
@@ -428,9 +428,9 @@ func TestAssistantToolCallSecretIsStoredRedactedAndSentOnce(t *testing.T) {
 		t.Fatalf("reloaded assistant overlay lost canonical metadata or raw args: %+v", st.history[0])
 	}
 
-	_, _, err = loop.Model.completeStream(context.Background(), sess, sess.ID, st.history, "worker", "", 1, 3, false, st, nil)
+	_, _, err = loop.Model.completeStream(context.Background(), sess, sess.ID, st.history, "worker", 1, 3, false, st, nil)
 	testutil.FailErr(t, "first follow-up request", err)
-	_, _, err = loop.Model.completeStream(context.Background(), sess, sess.ID, st.history, "worker", "", 2, 3, false, st, nil)
+	_, _, err = loop.Model.completeStream(context.Background(), sess, sess.ID, st.history, "worker", 2, 3, false, st, nil)
 	testutil.FailErr(t, "second follow-up request", err)
 	if len(client.requests) != 3 {
 		t.Fatalf("requests = %d want 3", len(client.requests))

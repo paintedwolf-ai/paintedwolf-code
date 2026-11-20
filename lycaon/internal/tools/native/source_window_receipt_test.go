@@ -1,11 +1,12 @@
 package native
 
 import (
+	"github.com/lycaon/lycaon/internal/repochange/repochangetest"
+
 	"encoding/json"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/hostcmd"
-	"github.com/lycaon/lycaon/internal/repochange"
 	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/tools/native/command"
@@ -27,8 +28,8 @@ func decodeSourceWindowReceipt(t *testing.T, raw string) sourceWindowReceipt {
 }
 
 func TestCaptureResultStatesItsWindowACCW07(t *testing.T) {
-	repochange.DisableWatchersForTest()
-	t.Cleanup(repochange.ResetWatchersForTest)
+
+	repochangetest.Acquire(t)
 	f := newNativeWalkFixture(t)
 	boundary := sandbox.NewBoundary(sandbox.Config{ProjectRootRequired: true}, []sandbox.ToolProfile{{ID: f.tc.Identity.Agent, Tools: map[string]bool{"command": true}}})
 	tool := &command.CommandTool{Runner: hostcmd.NewRunner(), Boundary: boundary, Background: newTestBackgroundRegistry(t)}

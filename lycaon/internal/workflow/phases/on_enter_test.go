@@ -2,7 +2,6 @@ package phases_test
 
 import (
 	"context"
-	workflowphases "github.com/lycaon/lycaon/internal/workflow/phases"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/conditions"
@@ -11,7 +10,9 @@ import (
 	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/testutil/conditionstest"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
+	workflowphases "github.com/lycaon/lycaon/internal/workflow/phases"
 	"github.com/lycaon/lycaon/internal/workflow/runstate"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -27,16 +28,16 @@ func TestApplyPhaseOnEnterKeepsPostureAsPostCommitEffect(t *testing.T) {
 			{ID: "implement", OnEnter: workflowdef.PhaseOnEnter{SetPosture: "build"}},
 		},
 	}
-	before, err := sessStore.Get(context.Background(), "s1")
+	before, err := sessStore.Sessions.Get(context.Background(), "s1")
 	testutil.FailErr(t, "sessStore.Get before", err)
 	vars, err := workflowphases.ApplyPhaseOnEnter(context.Background(), workflowphases.PhaseEnterRequest{
-		Sessions: sessStore, SessionID: "s1", Manifest: manifest, PhaseID: "implement",
+		Sessions: sessStore.Sessions, SessionID: "s1", Manifest: manifest, PhaseID: "implement",
 	})
 	testutil.FailErr(t, "workflowphases.ApplyPhaseOnEnter failed", err)
 	if vars == nil {
 		t.Fatal("expected vars map")
 	}
-	sess, err := sessStore.Get(context.Background(), "s1")
+	sess, err := sessStore.Sessions.Get(context.Background(), "s1")
 	testutil.FailErr(t, "sessStore.Get failed", err)
 	if sess.Posture != before.Posture {
 		t.Fatalf("pure phase preparation changed posture from %q to %q", before.Posture, sess.Posture)
@@ -144,7 +145,7 @@ func TestApplyPhaseOnEnterInvalidExecutionMode(t *testing.T) {
 
 func TestRefreshHumanApprovalReadyStubOnly(t *testing.T) {
 	const lockedReadiness = "plan_stub_valid"
-	planBody := conditions.TestPlanContentStubOnly
+	planBody := conditionstest.PlanStub
 	reg, err := conditions.NewDefaultRegistry(conditions.RegistryDeps{
 		BlueprintGet: func(_ context.Context, planID string) (*api.Blueprint, error) {
 			if planID == "empty-plan" {

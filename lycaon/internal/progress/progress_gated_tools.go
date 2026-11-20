@@ -16,14 +16,14 @@ var (
 )
 
 // InitProgressGatedTools loads the progress-gated tool catalog.
-func InitProgressGatedTools(configRoot string) error {
+func InitProgressGatedTools() error {
 	progressGatedOnce.Do(func() {
-		progressGatedOrder, progressGatedTools, progressGatedErr = loadProgressGatedTools(configRoot)
+		progressGatedOrder, progressGatedTools, progressGatedErr = loadProgressGatedTools()
 	})
 	return progressGatedErr
 }
 
-func loadProgressGatedTools(configRoot string) ([]string, map[string]struct{}, error) {
+func loadProgressGatedTools() ([]string, map[string]struct{}, error) {
 	data, err := readProgressGatedToolsBytes()
 	if err != nil {
 		return nil, nil, err
@@ -71,7 +71,7 @@ func progressGatedToolSet() map[string]struct{} {
 	if progressGatedTools != nil {
 		return progressGatedTools
 	}
-	_, set, err := loadProgressGatedTools("")
+	_, set, err := loadProgressGatedTools()
 	if err != nil {
 		panic(err)
 	}
@@ -83,7 +83,7 @@ func GatedToolOrder() []string {
 	if progressGatedOrder != nil {
 		return append([]string(nil), progressGatedOrder...)
 	}
-	order, _, err := loadProgressGatedTools("")
+	order, _, err := loadProgressGatedTools()
 	if err != nil {
 		panic(err)
 	}

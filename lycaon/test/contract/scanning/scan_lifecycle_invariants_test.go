@@ -36,7 +36,7 @@ func TestMultiRootScanLifecycleInvariantI12(t *testing.T) {
 	coord := scantest.Coordinator(t, store, nil)
 	insert := func(path, id, scanner string) {
 		t.Helper()
-		if err := store.Insert(ctx, api.CodeScan{
+		if err := store.Runs.Insert(ctx, api.CodeScan{
 			ID:            id,
 			CanonicalPath: path,
 			Categories:    []api.ScanCategory{api.ScanCategorySecurity},
@@ -87,7 +87,7 @@ func TestMultiRootScanLifecycleInvariantI12(t *testing.T) {
 		t.Fatalf("scans after detach = %v, want %v", got, want)
 	}
 	for _, id := range []string{"s2", "s2-dup"} {
-		retained, err := store.Get(ctx, id)
+		retained, err := store.Reads.Get(ctx, id)
 		contractcheck.FailErr(t, "Get retained "+id, err)
 		if retained == nil || retained.CanonicalPath != secondary {
 			t.Fatalf("detach must retain scan row %s, got %+v", id, retained)
@@ -125,8 +125,8 @@ func TestScanRetentionDefaultKeepsOrphanedRows(t *testing.T) {
 
 	cfg := db.DefaultRetention()
 	cfg.IncrementalVacuumMinFreelistPages = 9999
-	_, err = db.RunRetention(ctx, sqlDB, cfg)
-	contractcheck.FailErr(t, "RunRetention", err)
+	_, err = db.RunMaintenancePass(ctx, sqlDB, cfg, true)
+	contractcheck.FailErr(t, "maintenance pass", err)
 	var count int
 	err = sqlDB.QueryRowContext(ctx, `SELECT COUNT(*) FROM code_scans WHERE id = 'orphan-scan'`).Scan(&count)
 	contractcheck.FailErr(t, "count retained scan", err)

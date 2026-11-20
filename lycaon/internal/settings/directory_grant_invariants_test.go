@@ -9,6 +9,7 @@ import (
 	"github.com/lycaon/lycaon/internal/hitl"
 	"github.com/lycaon/lycaon/internal/sensitivepath"
 	"github.com/lycaon/lycaon/internal/settings"
+	"github.com/lycaon/lycaon/internal/settings/settingstest"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -59,7 +60,7 @@ func TestBroadAttachedRootsRetainSensitiveReadReview(t *testing.T) {
 	testutil.FailErr(t, "use balanced posture", store.PutGlobal(settings.ApprovalConfig{Posture: gate.PostureBalanced}))
 	locations, err := sensitivepath.Load(sensitivepath.Bundled())
 	testutil.FailErr(t, "load locations", err)
-	sources := settings.NoSources()
+	sources := settingstest.EmptySources()
 	sources.Locations = locations
 	review := settings.NewRuleApprovalGate(store, sources)
 	for _, root := range []string{home(t), filepath.VolumeName(home(t)) + string(filepath.Separator)} {

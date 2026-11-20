@@ -10,7 +10,7 @@ import (
 )
 
 // WaitForScanID blocks until scanID is terminal or ctx ends.
-func WaitForScanID(ctx context.Context, store *SQLStore, scanID string, poll time.Duration) (*api.CodeScan, error) {
+func WaitForScanID(ctx context.Context, store *ReadStore, scanID string, poll time.Duration) (*api.CodeScan, error) {
 	if store == nil {
 		return nil, fmt.Errorf("scan store not configured")
 	}
@@ -49,14 +49,6 @@ func WaitForScanID(ctx context.Context, store *SQLStore, scanID string, poll tim
 		case <-ticker.C:
 		}
 	}
-}
-
-// StoreFromCoordinator returns the SQL store when c is a wired CoordinatorImpl.
-func StoreFromCoordinator(c ScanCoordinator) *SQLStore {
-	if impl, ok := c.(*CoordinatorImpl); ok && impl != nil {
-		return impl.Store
-	}
-	return nil
 }
 
 // StatusTerminal reports whether a scan has stopped for good.

@@ -56,7 +56,7 @@ func (m *Service) RecordSourceRunEvidence(
 	if strings.TrimSpace(run.Command) == "" {
 		return
 	}
-	runID := sessiontree.RootID(ctx, m.store, sessionID)
+	runID := sessiontree.RootID(ctx, m.sessionStore, sessionID)
 	if strings.TrimSpace(runID) == "" {
 		runID = sessionID
 	}
@@ -210,7 +210,7 @@ func (m *Service) GateState(ctx context.Context, sess *api.Session, history []ap
 	if m == nil || m.evidenceStore == nil || sess == nil {
 		return false, false, false
 	}
-	runID := strings.TrimSpace(sessiontree.RootID(ctx, m.store, sess.ID))
+	runID := strings.TrimSpace(sessiontree.RootID(ctx, m.sessionStore, sess.ID))
 	if runID == "" {
 		return false, false, false
 	}

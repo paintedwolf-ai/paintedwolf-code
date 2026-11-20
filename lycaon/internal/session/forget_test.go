@@ -1,6 +1,8 @@
 package session
 
 import (
+	"github.com/lycaon/lycaon/internal/repochange/repochangetest"
+
 	"context"
 	"fmt"
 	"os"
@@ -21,7 +23,7 @@ import (
 	"github.com/lycaon/lycaon/internal/orchestration"
 	"github.com/lycaon/lycaon/internal/orchestration/orchestrationtest"
 	"github.com/lycaon/lycaon/internal/progress"
-	"github.com/lycaon/lycaon/internal/repochange"
+	"github.com/lycaon/lycaon/internal/progress/progresstest"
 	"github.com/lycaon/lycaon/internal/session/approvalstate"
 	sessioncheckpoint "github.com/lycaon/lycaon/internal/session/checkpoint"
 	"github.com/lycaon/lycaon/internal/session/profiles"
@@ -57,7 +59,7 @@ func TestForgetSessionClearsEveryReleasedStore(t *testing.T) {
 	}))
 
 	const sid = "sess-1"
-	progressStore := progress.NewMemoryStore()
+	progressStore := progresstest.New(t, sid)
 	progressStore.Set(sid, "- [ ] task")
 	m.SetProgressStore(progressStore)
 	m.Coordinator.ProgressClosure.Arm(t.Context(), sid, "job-closure")
@@ -67,7 +69,7 @@ func TestForgetSessionClearsEveryReleasedStore(t *testing.T) {
 	checkpointSessions := storetest.New(t)
 	checkpointRoot := t.TempDir()
 	testdbseed.InsertSessionWithRoot(t, checkpointSessions.DB(), sid, testdbseed.DefaultProjectID, checkpointRoot)
-	checkpoints := sessioncheckpoint.New(t.TempDir(), checkpointRoot, checkpointSessions)
+	checkpoints := sessioncheckpoint.New(t.TempDir(), checkpointRoot, checkpointSessions.Rewind)
 	testutil.FailErr(t, "open checkpoint capture", m.Chats.Captures.Capture.Open(t.Context(), checkpoints, sid, "anchor"))
 	m.Promotion.SetMergeReconcilePaths(sid, []string{"a.go"})
 	calibrationSession := &api.Session{ID: sid}
@@ -175,11 +177,12 @@ func TestForgetJobClearsUnclaimedWakePayloads(t *testing.T) {
 }
 
 func TestMain(m *testing.M) {
+	releaseWatchers := repochangetest.Suite()
 	gittestsetup.Enable()
 	guidancetestsetup.Install()
 	anchortestsetup.Install()
 	testutil.VerifyNoLeaks(m, func() {
-		repochange.ResetWatchersForTest()
+		releaseWatchers()
 		ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 		defer cancel()
 		if err := sourcecatalog.Process().Drain(ctx); err != nil {

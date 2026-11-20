@@ -2,9 +2,6 @@ package security
 
 import (
 	"encoding/json"
-	"github.com/lycaon/lycaon/config"
-	"github.com/lycaon/lycaon/config/configtest"
-	"github.com/lycaon/lycaon/internal/configlayout"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -12,13 +9,17 @@ import (
 	"strings"
 	"testing"
 
+	sdkmcp "github.com/modelcontextprotocol/go-sdk/mcp"
+
+	"github.com/lycaon/lycaon/config"
+	"github.com/lycaon/lycaon/config/configtest"
 	"github.com/lycaon/lycaon/internal/api"
 	"github.com/lycaon/lycaon/internal/app"
 	"github.com/lycaon/lycaon/internal/app/configuration"
-	"github.com/lycaon/lycaon/internal/mcp"
+	"github.com/lycaon/lycaon/internal/configlayout"
+	"github.com/lycaon/lycaon/internal/mcp/mcptest"
 	"github.com/lycaon/lycaon/internal/testutil"
 	wire "github.com/lycaon/lycaon/pkg/api"
-	sdkmcp "github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
 const mockLLMCatchphrase = "I understand. How can I help you further?"
@@ -50,7 +51,7 @@ func buildNoMockServeApp(t *testing.T) *app.ServeApp {
 		ConfigRoot:                configlayout.FindModuleRoot(),
 		DBPath:                    filepath.Join(t.TempDir(), "no-mock.db"),
 		ListenAddr:                "127.0.0.1:0",
-		TestMCPConnector:          &mcp.MockConnector{Tools: map[string][]*sdkmcp.Tool{"svca": {{Name: "do"}}}},
+		TestMCPConnector:          &mcptest.Connector{Tools: map[string][]*sdkmcp.Tool{"svca": {{Name: "do"}}}},
 		TestMCPGlobalOverridePath: filepath.Join(t.TempDir(), "mcp-test.yaml"),
 	}
 	serveApp, err := app.Build(t.Context(), cfg)

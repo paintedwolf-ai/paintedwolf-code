@@ -214,7 +214,7 @@ func TestTargetedCheckDoesNotSatisfyDifferentProjectCheck(t *testing.T) {
 }
 
 func TestVerificationAttemptBudgetSurvivesConcurrentEdits(t *testing.T) {
-	mgr, sess, history := verifyGateHarness(t, "project-check")
+	mgr, sess, history, _ := verifyGateHarness(t, "project-check")
 	for range sessionverification.MaxAttemptsPerRun {
 		recordCommand(t, mgr, sess, "project-check", 1)
 		repochange.Advance(sess.WorkspacePath)
@@ -233,7 +233,7 @@ func TestBeforeFinishReadsVerificationFromTheDraft(t *testing.T) {
 	mgr.SetWorkflowDomains(workflowDomainFixture(verifyWorkflowStub{required: true}))
 	finish := func(markdown string) (string, bool) {
 		draft := guidance.ParseCloseoutDraft(markdown, citationmd.Options{})
-		reject, blocked := mgr.Coordinator.Guards.BeforeFinish(t.Context(), sess, history, "", markdown, draft, "implement_investigate", true, nil, true)
+		reject, blocked := mgr.Coordinator.Guards.BeforeFinish(t.Context(), sess, history, markdown, draft, "implement_investigate", true, nil, true)
 		if reject != nil {
 			return reject.Code(), blocked
 		}

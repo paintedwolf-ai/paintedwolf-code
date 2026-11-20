@@ -3,7 +3,6 @@ package workerruntime
 import (
 	"context"
 	"errors"
-	"github.com/lycaon/lycaon/internal/layeredfs/adapter/platform"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -14,6 +13,8 @@ import (
 	"github.com/lycaon/lycaon/internal/enginepaths"
 	"github.com/lycaon/lycaon/internal/layeredfs"
 	"github.com/lycaon/lycaon/internal/layeredfs/adapter"
+	"github.com/lycaon/lycaon/internal/layeredfs/adapter/adaptertest"
+	"github.com/lycaon/lycaon/internal/layeredfs/adapter/platform"
 	"github.com/lycaon/lycaon/internal/layeredfs/checkpoint"
 	"github.com/lycaon/lycaon/internal/layeredfs/recovery"
 	"github.com/lycaon/lycaon/internal/sourceledger"
@@ -77,6 +78,7 @@ type engineFixture struct {
 	writeHook func(dir, name string, raw []byte) error
 	faults    recovery.FaultInjector
 	engine    *Runtime
+	views     *adapter.ActiveViewRegistry
 	// selector is the next boot's workspace selector; nil means this host's unenforced selector.
 	selector *adapter.Selector
 }
@@ -120,7 +122,7 @@ func (f *engineFixture) boot() *Runtime {
 	engine.Recovery = coordinator
 	f.engine = engine
 	f.bindWorkspace(f.selector)
-	engine.Queue.SetBaselineStore(sourceledger.New(f.database, filepath.Join(f.dataRoot, "source-content")).Baselines)
+	engine.Queue.Branches.SetBaselineStore(sourceledger.New(f.database, filepath.Join(f.dataRoot, "source-content"), sourceledger.Timing{}).Baselines)
 	return engine
 }
 
@@ -129,13 +131,14 @@ func (f *engineFixture) bindWorkspace(selector *adapter.Selector) {
 	if selector == nil {
 		selector = platform.NewSelector(platform.Config{})
 	}
-	f.engine.Workspace = workspace.NewManager(f.engine.BranchRoot, selector).WithRecovery(f.engine.Recovery)
-	f.engine.Queue.SetWorkerWorkspaceManager(f.engine.Workspace)
+	f.views = selector.Registry
+	f.engine.Workspace = workspace.NewManager(f.engine.BranchRoot, selector, workspace.Filesystem{}).WithRecovery(f.engine.Recovery)
+	f.engine.Queue.Branches.SetWorkerWorkspaceManager(f.engine.Workspace)
 }
 
 // mountedSelector makes the ordinary claim path prepare a mounted view without a kernel mount.
 func mountedSelector() *adapter.Selector {
-	mounted := adapter.NewMountedAdapter(adapter.MountedAdapterConfig{
+	mounted := adaptertest.NewMounted(adaptertest.MountedConfig{
 		AdapterID: adapter.AdapterFUSELinux, TargetOS: runtime.GOOS,
 		MountProbeFn: func(context.Context, string, string) (adapter.ReasonCode, string, error) {
 			return adapter.ReasonNone, "", nil
@@ -143,7 +146,7 @@ func mountedSelector() *adapter.Selector {
 		MountViewFn: func(context.Context, string, []adapter.PreparedRoot) error { return nil },
 	})
 	selector := adapter.NewSelector(runtime.GOOS, mounted, mounted, adapter.NewEagerCopyAdapter())
-	selector.BudgetFor = adapter.ZeroBudget
+	selector.BudgetFor = adaptertest.ZeroBudget
 	selector.Confinement = fixtureConfinement{}
 	return selector
 }
@@ -162,7 +165,7 @@ func (f *engineFixture) claimMountedWorker() *api.WorkerTask {
 	testutil.FailErr(f.t, "enqueue", err)
 	claimed, err := f.engine.Queue.ClaimNext(ctx, worker.ClaimRequest{ProjectID: testdbseed.DefaultProjectID, ClaimedBy: "test", ExecutionTarget: api.ExecutionTargetLocal})
 	testutil.FailErr(f.t, "claim next", err)
-	claimed, err = f.engine.Queue.ClaimWorkerBranch(ctx, claimed.ID)
+	claimed, err = f.engine.Queue.Branches.ClaimWorkerBranch(ctx, claimed.ID)
 	testutil.FailErr(f.t, "claim branch", err)
 	if claimed.ID != id || claimed.WorkspaceRoot == "" {
 		f.t.Fatalf("claimed %+v", claimed)
@@ -177,14 +180,17 @@ func (f *engineFixture) claimMountedWorker() *api.WorkerTask {
 	return claimed
 }
 
-// liveView returns the view the ordinary claim recorded for this branch.
 func (f *engineFixture) liveView(root string) *adapter.PreparedView {
 	f.t.Helper()
-	claimed, ok := workspace.LookupBranchClaimedView(root)
-	if !ok || claimed.Prepared == nil {
-		f.t.Fatalf("no claimed view for %s", root)
+	state, _, ok := workspace.BranchWorkspaceState(root)
+	if !ok {
+		f.t.Fatalf("no workspace state for %s", root)
 	}
-	return claimed.Prepared
+	_, view, ok := f.views.AdapterForView(state.Identity.ViewID)
+	if !ok || view == nil {
+		f.t.Fatalf("no registered view for %s", root)
+	}
+	return view
 }
 
 // publish captures view as a complete checkpoint, journaled as production publication is.
@@ -258,7 +264,7 @@ func (f *engineFixture) claimDefaultWorker() *api.WorkerTask {
 	testutil.FailErr(f.t, "enqueue", err)
 	claimed, err := f.engine.Queue.ClaimNext(ctx, worker.ClaimRequest{ProjectID: testdbseed.DefaultProjectID, ClaimedBy: "test", ExecutionTarget: api.ExecutionTargetLocal})
 	testutil.FailErr(f.t, "claim next", err)
-	claimed, err = f.engine.Queue.ClaimWorkerBranch(ctx, claimed.ID)
+	claimed, err = f.engine.Queue.Branches.ClaimWorkerBranch(ctx, claimed.ID)
 	testutil.FailErr(f.t, "claim branch", err)
 	return claimed
 }

@@ -1,22 +1,6 @@
 package events
 
-import (
-	"sync"
-	"time"
-)
-
-var (
-	heartbeatInterval   = HeartbeatInterval
-	heartbeatIntervalMu sync.RWMutex
-)
-
-// HeartbeatTicker returns a ticker for SSE idle pings.
-func HeartbeatTicker() *time.Ticker {
-	heartbeatIntervalMu.RLock()
-	interval := heartbeatInterval
-	heartbeatIntervalMu.RUnlock()
-	return time.NewTicker(interval)
-}
+import "time"
 
 // BurstEndComment closes a burst of SSE events; readers ignore it like any comment.
 const BurstEndComment = ": idle\n\n"
@@ -65,17 +49,4 @@ func (b *BurstEnd) Ended() {
 // Stop releases the timer.
 func (b *BurstEnd) Stop() {
 	b.timer.Stop()
-}
-
-// SetHeartbeatIntervalForTests overrides the SSE ping interval; returns a restore func.
-func SetHeartbeatIntervalForTests(d time.Duration) func() {
-	heartbeatIntervalMu.Lock()
-	prev := heartbeatInterval
-	heartbeatInterval = d
-	heartbeatIntervalMu.Unlock()
-	return func() {
-		heartbeatIntervalMu.Lock()
-		heartbeatInterval = prev
-		heartbeatIntervalMu.Unlock()
-	}
 }

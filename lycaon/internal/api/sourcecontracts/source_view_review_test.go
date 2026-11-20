@@ -17,10 +17,9 @@ import (
 )
 
 func TestSourceViewTreeReviewAndScopeReplacement(t *testing.T) {
-	ledger, ledgerDB, withLedger := contractfixture.TestSourceLedger(t)
+	ledger, _, withLedger := contractfixture.TestSourceLedger(t)
 	server := contractfixture.NewTestServer(t, withLedger)
 	p := contractfixture.CreateProjectForTest(t, server, t.TempDir())
-	contractfixture.MirrorLedgerProject(t, ledgerDB, p)
 	physical, err := server.Sources.Workspace.ProjectRegistry.Get(t.Context(), p.ID)
 	testutil.FailErr(t, "resolve physical project", err)
 	testutil.FailErr(t, "record deleted review path", ledger.Record(t.Context(), sourceledger.RecordInput{

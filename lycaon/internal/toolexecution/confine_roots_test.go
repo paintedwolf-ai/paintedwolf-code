@@ -12,6 +12,7 @@ import (
 	"github.com/lycaon/lycaon/internal/confine"
 	"github.com/lycaon/lycaon/internal/hitl"
 	"github.com/lycaon/lycaon/internal/project"
+	"github.com/lycaon/lycaon/internal/project/projecttest"
 	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/testutil"
 )
@@ -222,15 +223,8 @@ func TestValidateAttachedRootsForActionStillRefusesProtectedAndControlPlaneRoots
 
 	cfgRoot, err := configdir.Root()
 	testutil.FailErr(t, "resolve configdir root", err)
-	previousKeys := confine.KeyMaterialHomeRelPaths()
-	confine.SetKeyMaterialPathsSource(func() []string { return []string{"~/.ssh/"} })
-	t.Cleanup(func() {
-		if len(previousKeys) == 0 {
-			confine.SetKeyMaterialPathsSource(nil)
-			return
-		}
-		confine.SetKeyMaterialPathsSource(func() []string { return previousKeys })
-	})
+	previousKeys := confine.SetKeyMaterialPathsSource(func() []string { return []string{"~/.ssh/"} })
+	t.Cleanup(func() { confine.SetKeyMaterialPathsSource(previousKeys) })
 
 	cases := []struct {
 		name       string
@@ -264,10 +258,10 @@ func TestValidateAttachedRootsForActionStillRefusesProtectedAndControlPlaneRoots
 		},
 	}
 
-	reg := project.NewMemoryRegistry()
+	reg := projecttest.NewRegistry(t)
 	for _, tc := range cases {
 		testutil.FailErr(t, "mkdir "+tc.name, os.MkdirAll(tc.dir, 0o700))
-		p, err := project.CreateWithRoot(t.Context(), reg, tc.dir)
+		p, err := projecttest.CreateWithRoot(t.Context(), reg, tc.dir)
 		if err != nil {
 			t.Fatalf("%s: project registration should succeed, got %v", tc.name, err)
 		}
@@ -283,7 +277,7 @@ func TestValidateAttachedRootsForActionStillRefusesProtectedAndControlPlaneRoots
 		}
 	}
 
-	if _, err := project.CreateWithRoot(t.Context(), reg, string(filepath.Separator)); err != nil {
+	if _, err := projecttest.CreateWithRoot(t.Context(), reg, string(filepath.Separator)); err != nil {
 		t.Fatalf("filesystem root project registration should succeed, got %v", err)
 	}
 	if reject := tools.ValidateAttachedRootsForAction([]string{string(filepath.Separator)}); reject == nil ||

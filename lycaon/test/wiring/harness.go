@@ -3,9 +3,6 @@ package wiring
 import (
 	"context"
 	"errors"
-	"github.com/lycaon/lycaon/internal/progress"
-	scannerfixture "github.com/lycaon/lycaon/internal/scan/scantest"
-	"github.com/lycaon/lycaon/internal/toolrejection"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -14,6 +11,8 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	sdkmcp "github.com/modelcontextprotocol/go-sdk/mcp"
+
 	"github.com/lycaon/lycaon/internal/app"
 	"github.com/lycaon/lycaon/internal/app/configuration"
 	"github.com/lycaon/lycaon/internal/configlayout"
@@ -21,32 +20,36 @@ import (
 	"github.com/lycaon/lycaon/internal/events"
 	"github.com/lycaon/lycaon/internal/llm"
 	"github.com/lycaon/lycaon/internal/llm/modelcall"
-	"github.com/lycaon/lycaon/internal/mcp"
+	"github.com/lycaon/lycaon/internal/mcp/mcptest"
 	"github.com/lycaon/lycaon/internal/orchestration"
+	"github.com/lycaon/lycaon/internal/progress"
 	"github.com/lycaon/lycaon/internal/project"
 	"github.com/lycaon/lycaon/internal/projectroot"
-
 	scanoutput "github.com/lycaon/lycaon/internal/scan/output"
-	"github.com/lycaon/lycaon/internal/session"
+	scannerfixture "github.com/lycaon/lycaon/internal/scan/scantest"
 	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/sourcecatalog"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/testutil/llmtest"
 	"github.com/lycaon/lycaon/internal/testutil/scantest"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/internal/tools"
+	"github.com/lycaon/lycaon/internal/workertopology"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 	wire "github.com/lycaon/lycaon/pkg/api"
-	sdkmcp "github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
 // Harness holds a production-wired ServeApp for E2E tests.
 type Harness struct {
 	*app.ServeApp
-	Recording *llm.RecordingClient
-	Store     session.Store
-	testDir   string
-	dbPath    string
+	Recording       *llmtest.RecordingClient
+	Store           *store.Repositories
+	testDir         string
+	dbPath          string
+	settlesTopology bool
+	startup         *ServeStartup
 }
 
 // BuildForTest assembles a host in a temporary directory.
@@ -73,7 +76,14 @@ func BuildForTestAt(t *testing.T, dir string, opts ...Option) *Harness {
 	for _, opt := range opts {
 		opt(&o)
 	}
-	cfg := configuration.Config{TestChangeDebounce: o.changeDebounce, TestFileOperationHold: o.fileOperationHold, TestStoreCommitObserver: o.storeCommitObserver}
+	startup := NewServeStartup()
+	cfg := configuration.Config{
+		Startup:                 startup,
+		WebResearchExchange:     o.webResearchExchange,
+		TestChangeDebounce:      o.changeDebounce,
+		TestFileOperationHold:   o.fileOperationHold,
+		TestStoreCommitObserver: o.storeCommitObserver,
+	}
 	cfg.ConfigRoot = configlayout.FindModuleRoot()
 	if o.configRoot != nil {
 		cfg.ConfigRoot = *o.configRoot
@@ -96,7 +106,7 @@ func BuildForTestAt(t *testing.T, dir string, opts ...Option) *Harness {
 	if o.mcpConnector != nil {
 		cfg.TestMCPConnector = o.mcpConnector
 	} else {
-		cfg.TestMCPConnector = &mcp.MockConnector{Tools: map[string][]*sdkmcp.Tool{
+		cfg.TestMCPConnector = &mcptest.Connector{Tools: map[string][]*sdkmcp.Tool{
 			"svca": {{Name: "do", Description: "do"}},
 		}}
 	}
@@ -131,7 +141,7 @@ func BuildForTestAt(t *testing.T, dir string, opts ...Option) *Harness {
 	if o.autoCompleteLegs {
 		cfg.TestOrchestrator = autoCompleteOrchestrator
 	}
-	var recording *llm.RecordingClient
+	var recording *llmtest.RecordingClient
 	var sa *app.ServeApp
 	switch {
 	case o.llmClient != nil:
@@ -143,7 +153,7 @@ func BuildForTestAt(t *testing.T, dir string, opts ...Option) *Harness {
 		if script == nil {
 			script = loadMockConfig(t)
 		}
-		recording = llm.NewRecordingClient(llm.NewMockProvider(script))
+		recording = llmtest.NewRecordingClient(llm.NewMockProvider(script))
 		cfg.TestLLMClient = &screenedClient{next: recording, registry: func() *llm.Registry {
 			return sa.Sessions.Manager.Coordinator.Model.LLMService.Registry
 		}}
@@ -169,11 +179,13 @@ func BuildForTestAt(t *testing.T, dir string, opts ...Option) *Harness {
 	// Seeded and runtime evidence share the same content directory.
 	harnessStore.SetDataDir(testDir)
 	h := &Harness{
-		ServeApp:  sa,
-		Recording: recording,
-		Store:     harnessStore,
-		testDir:   testDir,
-		dbPath:    dbPath,
+		ServeApp:        sa,
+		Recording:       recording,
+		Store:           harnessStore,
+		testDir:         testDir,
+		dbPath:          dbPath,
+		settlesTopology: o.autoCompleteLegs,
+		startup:         startup,
 	}
 	return h
 }
@@ -230,7 +242,7 @@ func (h *Harness) CreateHarnessSession(t *testing.T, req wire.CreateSessionReque
 	if strings.TrimSpace(req.ProjectID) == "" {
 		req.ProjectID = testdbseed.DefaultProjectID
 	}
-	return h.Store.Create(t.Context(), req, testdbseed.DefaultProjectID)
+	return h.Store.Sessions.Create(t.Context(), req, testdbseed.DefaultProjectID)
 }
 
 // OwnerCtx binds the harness host owner to ctx as the deciding caller.
@@ -309,17 +321,6 @@ func (h *Harness) ProgressUpdateArgs(t *testing.T, ctx context.Context, sessionI
 	return args
 }
 
-// StartBackgroundWorkers runs worker and scan pollers until cancellation.
-func (h *Harness) StartBackgroundWorkers(t *testing.T, ctx context.Context) context.CancelFunc {
-	t.Helper()
-	if h == nil || h.ServeApp == nil {
-		t.Fatal("harness serve app missing")
-	}
-	cancel, err := h.ServeApp.StartBackgroundWorkers(ctx)
-	testutil.FailErr(t, "start background workers", err)
-	return cancel
-}
-
 // MemoryHub returns the event hub when backed by MemoryHub, unwrapping publishers.
 func (h *Harness) MemoryHub() *events.MemoryHub {
 	if h == nil {
@@ -365,7 +366,8 @@ func (testCostPricer) EstimateCost(_, _ string, usage cost.TokenUsage) (cost.Cos
 
 // autoCompleteOrchestrator dispatches legs that complete immediately in mock workspaces.
 func autoCompleteOrchestrator(deps orchestration.OrchestratorDeps) orchestration.Orchestrator {
-	deps.Workers = &autoCompleteTopologyWorkers{TopologyWorkers: deps.Workers}
+	runtime := deps.Workers.(*workertopology.Runtime)
+	deps.Workers = &autoCompleteTopologyWorkers{TopologyWorkers: runtime, queue: runtime.Queue}
 	deps.Workspaces = &mockWorkspaceBinder{}
 	return orchestration.NewOrchestratorImpl(deps)
 }

@@ -30,7 +30,7 @@ func openLedger(t *testing.T) (*Store, context.Context) {
 		VALUES ('r1', 'p1', '/tmp/source-ledger-test', 'source-ledger-test', 1, ?, 'attached')
 	`, timelayout.Format(time.Now().UTC()))
 	testutil.FailErr(t, "insert root", err)
-	return New(sqlDB, t.TempDir()), context.Background()
+	return New(sqlDB, t.TempDir(), Timing{}), context.Background()
 }
 
 func TestNamedPinsRemainUntilExplicitDeletion(t *testing.T) {

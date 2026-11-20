@@ -2,17 +2,19 @@ package mcp_test
 
 import (
 	"context"
-	"github.com/lycaon/lycaon/internal/toolrejection"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
+	sdkmcp "github.com/modelcontextprotocol/go-sdk/mcp"
+
 	"github.com/lycaon/lycaon/internal/mcp"
+	"github.com/lycaon/lycaon/internal/mcp/mcptest"
 	"github.com/lycaon/lycaon/internal/secretmatch"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/internal/tools"
-	sdkmcp "github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
 // mcpDestinationID returns a screened destination identity.
@@ -21,7 +23,7 @@ func mcpDestinationID(t *testing.T, catalog string) string {
 	globalPath := filepath.Join(t.TempDir(), "mcp.yaml")
 	testutil.FailErr(t, "write global", os.WriteFile(globalPath, []byte(catalog), 0o600))
 
-	conn := &mcp.MockConnector{
+	conn := &mcptest.Connector{
 		Tools: map[string][]*sdkmcp.Tool{"fixture": {{Name: "query", Description: "query"}}},
 		Calls: map[string]map[string]int{},
 	}

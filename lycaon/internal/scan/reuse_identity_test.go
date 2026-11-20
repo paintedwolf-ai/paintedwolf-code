@@ -14,11 +14,11 @@ func TestCompletedScanReuseDoesNotCrossAChangedObservation(t *testing.T) {
 			store := authorityTestStore(t)
 			first := authorityScan("first", "first-assessment", t.TempDir(), "snapshot-a", "sast", api.ScanTargetFull, nil)
 			first.CreatedAt = time.Now().Add(-time.Hour).UTC()
-			testutil.FailErr(t, "insert original scan", store.Insert(t.Context(), first, nil, ""))
+			testutil.FailErr(t, "insert original scan", store.Runs.Insert(t.Context(), first, nil, ""))
 			completeNextScan(t, store)
 			key, err := scanReuseKey(first, "")
 			testutil.FailErr(t, "original reuse identity", err)
-			before, err := store.FindReusableByPathScanner(t.Context(), first.CanonicalPath, first.SourceSnapshotID, first.ScannerID, key)
+			before, err := store.Reads.FindReusableByPathScanner(t.Context(), first.CanonicalPath, first.SourceSnapshotID, first.ScannerID, key)
 			testutil.FailErr(t, "reuse original", err)
 			if before == nil {
 				t.Fatal("unchanged complete scan was not reusable")
@@ -41,9 +41,9 @@ func TestCompletedScanReuseDoesNotCrossAChangedObservation(t *testing.T) {
 				next.ScannerID = "other"
 				next.ExecutionManifest.ScannerID = "other"
 			}
-			testutil.FailErr(t, "insert intervening scan", store.Insert(t.Context(), next, paths, ""))
+			testutil.FailErr(t, "insert intervening scan", store.Runs.Insert(t.Context(), next, paths, ""))
 			completeNextScan(t, store)
-			got, err := store.FindReusableByPathScanner(t.Context(), first.CanonicalPath, first.SourceSnapshotID, first.ScannerID, key)
+			got, err := store.Reads.FindReusableByPathScanner(t.Context(), first.CanonicalPath, first.SourceSnapshotID, first.ScannerID, key)
 			testutil.FailErr(t, "reuse after observation", err)
 			reject := changed == "source" || changed == "execution" || changed == "target"
 			if (got == nil) != reject {

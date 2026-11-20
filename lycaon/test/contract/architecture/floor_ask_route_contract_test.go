@@ -31,13 +31,16 @@ var refusedGrantFact = map[string]string{
 func TestEveryFloorLayerReachesAnAskOrIsTheControlPlane(t *testing.T) {
 	t.Parallel()
 	rules := stockPostInvokeRules(t)
-	for _, layer := range confine.FloorLayers() {
+	for _, layer := range declaredFloorLayers(t) {
 		recovery := layer.Recovery()
 		if recovery.Terminal() {
 			if layer != confine.FloorControlPlane && layer != confine.FloorReadControlPlane {
 				t.Errorf("%s refuses without an ask route and is not the control plane", layer)
 			}
 			continue
+		}
+		if recovery.Grant == "" {
+			t.Errorf("%s names capability %q without a grant shape", layer, recovery.Capability)
 		}
 		if !toolcontract.IsCapabilityRequestField(recovery.Capability) {
 			t.Errorf("%s recovers through %q, which no tool can declare", layer, recovery.Capability)
@@ -69,15 +72,12 @@ func TestWorktreeFactsReachARetryRule(t *testing.T) {
 	}
 }
 
-// FloorLayers must list every declared layer, or a new layer would escape
-// the route check above.
-func TestFloorLayersListsEveryDeclaredLayer(t *testing.T) {
-	t.Parallel()
+func declaredFloorLayers(t *testing.T) []confine.FloorLayer {
+	t.Helper()
 	root := contractcheck.RepoRoot(t)
 	corpus, err := contractcheck.LoadGoASTCorpus(filepath.Join(root, "lycaon", "internal", "confine"))
 	contractcheck.FailErr(t, "load confine corpus", err)
-	listed := confine.FloorLayers()
-	found := 0
+	var layers []confine.FloorLayer
 	for _, file := range corpus.Files() {
 		if file.IsTest {
 			continue
@@ -94,23 +94,19 @@ func TestFloorLayersListsEveryDeclaredLayer(t *testing.T) {
 			for _, value := range spec.Values {
 				lit, ok := value.(*ast.BasicLit)
 				if !ok || lit.Kind != token.STRING {
-					continue
+					t.Fatalf("filesystem floor layer must have a string declaration: %v", value)
 				}
-				layer, unquoteErr := strconv.Unquote(lit.Value)
-				if unquoteErr != nil {
-					continue
-				}
-				found++
-				if !slices.Contains(listed, confine.FloorLayer(layer)) {
-					t.Errorf("layer %q is declared but missing from FloorLayers", layer)
-				}
+				layer, err := strconv.Unquote(lit.Value)
+				contractcheck.FailErr(t, "decode floor layer", err)
+				layers = append(layers, confine.FloorLayer(layer))
 			}
 			return true
 		})
 	}
-	if found == 0 {
-		t.Fatal("no FloorLayer constants found; the corpus scan is stale")
+	if len(layers) == 0 {
+		t.Fatal("no FloorLayer declarations found")
 	}
+	return layers
 }
 
 func stockPostInvokeRules(t *testing.T) []*oar.Rule {

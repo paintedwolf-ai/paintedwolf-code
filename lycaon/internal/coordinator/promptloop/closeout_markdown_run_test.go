@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/lycaon/lycaon/internal/tools/toolstest"
 	"strings"
 	"testing"
 	"time"
@@ -23,6 +22,7 @@ import (
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/tools"
+	"github.com/lycaon/lycaon/internal/tools/toolstest"
 	"github.com/lycaon/lycaon/internal/workflow"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 	"github.com/lycaon/lycaon/pkg/api"
@@ -39,7 +39,7 @@ func (markdownRunLedger) WorkerLegs(context.Context, string, time.Time) ([]guida
 }
 
 type markdownRun struct {
-	store    *store.SQL
+	store    *store.Repositories
 	session  *api.Session
 	deps     promptloop.PromptLoopDeps
 	outputs  []string
@@ -52,7 +52,7 @@ type markdownRun struct {
 func newMarkdownRun(t *testing.T, completions ...*modelcall.Completion) *markdownRun {
 	t.Helper()
 	r := &markdownRun{store: storetest.New(t, "project")}
-	session, err := r.store.Create(t.Context(), api.CreateSessionRequest{Posture: api.SessionPostureBuild}, "project")
+	session, err := r.store.Sessions.Create(t.Context(), api.CreateSessionRequest{Posture: api.SessionPostureBuild}, "project")
 	testutil.FailErr(t, "create session", err)
 	r.session = session
 	testdbseed.InsertSessionWorkflowRun(t, r.store.DB(), "run-1", session.ID, "running")
@@ -61,7 +61,7 @@ func newMarkdownRun(t *testing.T, completions ...*modelcall.Completion) *markdow
 		for i := range messages {
 			messages[i].WorkflowRunID = "run-1"
 		}
-		return r.store.AppendMessages(ctx, sessionID, messages...)
+		return r.store.Transcript.AppendMessages(ctx, sessionID, messages...)
 	}
 	deps.Model.LLM = &sequentialLLMClient{completions: completions}
 	deps.Context.Tools = toolstest.NewRegistry()
@@ -77,11 +77,11 @@ func newMarkdownRun(t *testing.T, completions ...*modelcall.Completion) *markdow
 	}
 	deps.Projection.SettleModelOutput = func(ctx context.Context, out store.ModelOutput) (store.ModelOutput, error) {
 		r.outputs = append(r.outputs, out.Content)
-		return r.store.SettleModelOutput(ctx, out)
+		return r.store.Turns.SettleModelOutput(ctx, out)
 	}
 	deps.Projection.AppendDraftVersion = func(ctx context.Context, sessionID, messageID, body, code string) (int, error) {
 		r.versions = append(r.versions, body)
-		return r.store.AppendDraftVersion(ctx, sessionID, messageID, body, code)
+		return r.store.Transcript.AppendDraftVersion(ctx, sessionID, messageID, body, code)
 	}
 	hints, err := guidance.LoadHintConfigStock()
 	testutil.FailErr(t, "load hints", err)
@@ -120,7 +120,7 @@ func newMarkdownRun(t *testing.T, completions ...*modelcall.Completion) *markdow
 func (r *markdownRun) run(t *testing.T, history []api.Message) (*promptloop.PromptRunResult, api.Message) {
 	t.Helper()
 	ctx := t.Context()
-	execution, err := r.store.BeginTurn(ctx, store.TurnStart{SessionID: r.session.ID, ProjectID: r.session.ProjectID, Origin: store.TurnOriginUser, InputJSON: "{}"})
+	execution, err := r.store.Turns.BeginTurn(ctx, store.TurnStart{SessionID: r.session.ID, ProjectID: r.session.ProjectID, Origin: store.TurnOriginUser, InputJSON: "{}"})
 	testutil.FailErr(t, "begin turn", err)
 	result, err := promptloop.NewPromptLoopForTest(r.deps).Run(ctx, promptloop.PromptRunInput{
 		SessionID: r.session.ID, Session: r.session, TurnID: execution.Turn.ID, AttemptID: execution.Attempt.ID,
@@ -128,7 +128,7 @@ func (r *markdownRun) run(t *testing.T, history []api.Message) (*promptloop.Prom
 		ToolCtx: tools.ToolContext{Identity: tools.InvocationIdentity{SessionID: r.session.ID}},
 	})
 	testutil.FailErr(t, "run the turn", err)
-	stored, err := r.store.GetMessages(ctx, r.session.ID)
+	stored, err := r.store.Transcript.GetMessages(ctx, r.session.ID)
 	testutil.FailErr(t, "read messages", err)
 	for _, message := range stored {
 		if message.ID == result.LastAssistantID {

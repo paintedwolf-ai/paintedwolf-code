@@ -10,8 +10,8 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/lycaon/lycaon/internal/scan/rules"
-	"github.com/lycaon/lycaon/internal/secretmint"
+	"github.com/lycaon/lycaon/config"
+	"github.com/lycaon/lycaon/internal/testutil/scantest"
 	"github.com/lycaon/lycaon/test/contract/invariants"
 )
 
@@ -24,17 +24,17 @@ var Family = invariants.Family{Name: "vendor-pin", Invariants: []invariants.Inva
 	{Name: "scan-rule-vendors-carry-rule-files", Anchors: []invariants.Anchor{provenance}, Check: scanRuleVendorsCarryRuleFiles},
 	{Name: "scan-rule-trees-hold-only-regular-files", Anchors: []invariants.Anchor{invariants.Dir(rulesDir + "/vendor")}, Check: scanRuleTreesHoldOnlyRegularFiles},
 	{Name: "scan-rule-files-are-tracked", Anchors: []invariants.Anchor{invariants.Dir(rulesDir + "/vendor")}, Check: scanRuleFilesAreTracked},
-	{Name: "zxcvbn-passwords-are-pinned", Anchors: []invariants.Anchor{invariants.Func("internal/secretmint", "LoadProvenance")}, Check: zxcvbnPasswordsArePinned},
+	{Name: "zxcvbn-passwords-are-pinned", Anchors: []invariants.Anchor{invariants.Decl("config", "SecretMintProvenance")}, Check: zxcvbnPasswordsArePinned},
 }}
 
 var (
-	provenance = invariants.Func("internal/scan/rules", "LoadRulesProvenance")
+	provenance = invariants.Func("internal/testutil/scantest", "LoadRulesProvenance")
 	commitSHA  = regexp.MustCompile(`^[0-9a-f]{40}$`)
 	treeSHA    = regexp.MustCompile(`^[0-9a-f]{64}$`)
 )
 
-func vendors(r *invariants.Run) []rules.VendorRulesProvenance {
-	prov, err := rules.LoadRulesProvenance()
+func vendors(r *invariants.Run) []scantest.VendorRulesProvenance {
+	prov, err := scantest.LoadRulesProvenance()
 	r.Must(err)
 	r.Expect(len(prov.Vendors), "scan rule vendors")
 	return prov.Vendors
@@ -140,11 +140,25 @@ func scanRuleFilesAreTracked(r *invariants.Run) {
 	}
 }
 
+type passwordVendorPin struct {
+	ID         string   `yaml:"id"`
+	Upstream   string   `yaml:"upstream"`
+	Ref        string   `yaml:"ref"`
+	Commit     string   `yaml:"commit"`
+	TreeSHA256 string   `yaml:"tree_sha256"`
+	License    string   `yaml:"license"`
+	Include    []string `yaml:"include"`
+}
+
 func zxcvbnPasswordsArePinned(r *invariants.Run) {
-	list, err := secretmint.LoadProvenance()
+	raw, err := config.Read(config.SecretMintProvenance)
 	r.Must(err)
-	r.Expect(len(list), "zxcvbn vendors")
-	for _, v := range list {
+	var file struct {
+		Vendors []passwordVendorPin `yaml:"vendors"`
+	}
+	r.Must(config.DecodeYAML(raw, &file))
+	r.Expect(len(file.Vendors), "zxcvbn vendors")
+	for _, v := range file.Vendors {
 		pinned(r, v.ID, v.Commit, v.TreeSHA256, v.Upstream, v.Include, "scripts/vendor-zxcvbn-passwords.sh")
 	}
 }

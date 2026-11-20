@@ -1,0 +1,16 @@
+{
+  "category": "go_struct_fields",
+  "artifact": "lycaon/internal/webresearch/webresearch.hostCrawler",
+  "kind": "algorithm",
+  "workstream": "web-research-runtime",
+  "disposition": "retain",
+  "reason": "Retain the 13 fields for one search crawl fan-out: context, shared Discovery, launched/completed results, completion notification and exact slot release. They describe one concurrent completion and cancellation protocol; separating its fields would obscure which goroutines must drain before the search finishes.",
+  "reviewed_commit": "07ad83d4a386172877e6221d2ed1feffb7f6900f",
+  "ceiling": 13,
+  "boundaries": {
+    "lycaon/internal/webresearch/warm_test.go": "f6f92d847a4573178ee891bb9b36398dedd88b221f6b75ec036322f27e8a278a",
+    "lycaon/internal/webresearch/direct_frontier_test.go": "f4dc30de224355d2376f3c52358e7a5b0c5801538d4c1b9554632e28d3f66201",
+    "lycaon/internal/webresearch/runtime_resources_test.go": "96e4a128bff2d6172940f6175fd0219f6ceaa62865254eefb6db430752e52e1e"
+  },
+  "reviewed_shape": "1556f0a9f313a5219139e60d6720c1a498030955800ebe46110ff5aa1ce4f2f4"
+}

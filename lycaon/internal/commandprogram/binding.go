@@ -1,15 +1,13 @@
 package commandprogram
 
 import (
-	"context"
 	"fmt"
 
 	"github.com/google/uuid"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 )
 
-// OfferedOperations is frozen for one invocation. Discoverability or registry
-// presence never substitutes for the offered capability selected by the host.
+// OfferedOperations records the definitions selected for an invocation.
 type OfferedOperations struct {
 	digests       map[string]string
 	catalogDigest string
@@ -23,29 +21,7 @@ func Offer(definitions ...toolcontract.OperationDefinition) OfferedOperations {
 	return OfferedOperations{digests: digests, catalogDigest: toolcontract.LanguageCatalogDigest()}
 }
 
-// Binding calls one complete typed operation for either interface. The adapter
-// supplies the owner's admission and implementation together; it must not pass
-// a model handler or parse a structured tool response back into domain facts.
-type Binding[Input, Result any] struct {
-	Definition  toolcontract.OperationDefinition
-	InvokeOwner func(context.Context, toolcontract.OperationInvocation, Input) (Result, error)
-}
-
-func Invoke[Input, Result any](ctx context.Context, offered OfferedOperations, binding Binding[Input, Result], invocation toolcontract.OperationInvocation, input Input) (Result, error) {
-	var zero Result
-	if err := offered.Validate(binding.Definition, invocation); err != nil {
-		return zero, err
-	}
-	facts := binding.Definition.ReadOnlyFacts()
-
-	if binding.InvokeOwner == nil {
-		return zero, fmt.Errorf("operation %s has no runtime binding", facts.Identity)
-	}
-	return binding.InvokeOwner(ctx, invocation, input)
-}
-
-// Validate checks frozen exposure and invocation identity without invoking an
-// owner. Effect admission uses this same check before any authority request.
+// Validate checks the selected definition and invocation before effect admission.
 func (offered OfferedOperations) Validate(definition toolcontract.OperationDefinition, invocation toolcontract.OperationInvocation) error {
 	facts := definition.ReadOnlyFacts()
 	if definition.Digest() == "" || offered.digests[facts.Identity] != definition.Digest() {

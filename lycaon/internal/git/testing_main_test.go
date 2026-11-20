@@ -1,6 +1,8 @@
 package git
 
 import (
+	"github.com/lycaon/lycaon/internal/repochange/repochangetest"
+
 	"errors"
 	"fmt"
 	"io/fs"
@@ -13,7 +15,6 @@ import (
 	lyexec "github.com/lycaon/lycaon/internal/exec"
 	"github.com/lycaon/lycaon/internal/fileclone"
 	"github.com/lycaon/lycaon/internal/gitengine"
-	"github.com/lycaon/lycaon/internal/repochange"
 	gittestsetup "github.com/lycaon/lycaon/internal/testsetup/git"
 	"github.com/lycaon/lycaon/internal/testutil"
 )
@@ -36,8 +37,7 @@ func TestMain(m *testing.M) {
 		fmt.Fprintf(os.Stderr, "bundled git is not staged; run ./task gitengine:fetch: %v\n", err)
 		os.Exit(1)
 	}
-	// Status cache tests count loads; a watcher event invalidates one mid-load.
-	repochange.DisableWatchersForTest()
+	releaseWatchers := repochangetest.Suite()
 	// Detached auto-maintenance rewrites shared templates while tests clone them.
 	for key, value := range map[string]string{
 		"GIT_CONFIG_COUNT":   "2",
@@ -60,6 +60,7 @@ func TestMain(m *testing.M) {
 		panic(err)
 	}
 	code := m.Run()
+	releaseWatchers()
 	_ = os.RemoveAll(templateRoot)
 	os.Exit(code)
 }
@@ -141,15 +142,12 @@ func CloneFixtureInto(t *testing.T, name, dst string, seed func(dir string)) {
 	testutil.FailErr(t, "clone fixture tree", err)
 }
 
-// SeedGitEnv builds the environment for git commands seeding fixture
-// templates. Their commits spawn detached auto-maintenance, which takes
-// objects/maintenance.lock and races the template walk, so it is disabled per
-// command; LocalGitEnv strips inherited GIT_* variables, so the override must
-// ride as an extra.
+// SeedGitEnv disables detached Git maintenance while fixture templates are built.
 func SeedGitEnv(extra ...string) []string {
-	return lyexec.LocalGitEnv(append([]string{
+	env := append(lyexec.InheritedEnviron(),
 		"GIT_CONFIG_COUNT=1",
 		"GIT_CONFIG_KEY_0=maintenance.auto",
 		"GIT_CONFIG_VALUE_0=false",
-	}, extra...)...)
+	)
+	return append(env, extra...)
 }

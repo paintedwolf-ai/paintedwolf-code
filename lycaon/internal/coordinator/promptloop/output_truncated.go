@@ -157,7 +157,7 @@ func (l *turnNudges) handleOutputTruncatedTurn(
 	truncated = modelcall.EnrichOutputTruncatedError(truncated, modelcall.CompletionRequest{}, entry, completion)
 
 	if st.draftSlotAppended {
-		if withdrawErr := l.withdrawCoordinatorDraft(context.WithoutCancel(ctx), sess, sessionID, st, ""); withdrawErr != nil {
+		if withdrawErr := l.withdrawCoordinatorDraft(context.WithoutCancel(ctx), sessionID, st, ""); withdrawErr != nil {
 			return false, withdrawErr
 		}
 	} else {

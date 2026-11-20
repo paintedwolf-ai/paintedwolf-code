@@ -201,7 +201,7 @@ func (a *widgetAPI) routes() http.Handler {
 // requireBearer admits only the test bearer, as the host's route seam does.
 func (a *widgetAPI) requireBearer(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		if api.BearerTokenFromRequest(r) != api.TestAPIToken {
+		if api.BearerTokenFromRequest(r) != os.Getenv("LYCAON_API_TOKEN") {
 			a.responses.Fail(w, wire.ApiErrorCodeUnauthorized, "")
 			return
 		}

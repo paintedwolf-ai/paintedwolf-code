@@ -13,11 +13,13 @@ import (
 	"strings"
 	"testing"
 
+	"golang.org/x/sys/unix"
+
 	"github.com/lycaon/lycaon/internal/layeredfs"
 	"github.com/lycaon/lycaon/internal/layeredfs/adapter"
+	"github.com/lycaon/lycaon/internal/layeredfs/adapter/adaptertest"
 	"github.com/lycaon/lycaon/internal/layeredfs/adapter/fuselinux"
 	"github.com/lycaon/lycaon/internal/layeredfs/checkpoint"
-	"golang.org/x/sys/unix"
 )
 
 func confinementVerified(context.Context, adapter.ProbeConfig) error { return nil }
@@ -98,7 +100,7 @@ func TestOverLimitSelectionReportsTheMissingDependency(t *testing.T) {
 	}
 	for want, cfg := range cfgs {
 		selector := adapter.NewSelector("linux", fuselinux.New(cfg), nil, nil)
-		selector.BudgetFor = adapter.ZeroBudget
+		selector.BudgetFor = adaptertest.ZeroBudget
 		choice, err := selector.Choose(t.Context(), adapter.ChooseRequest{})
 		var adapterErr *adapter.AdapterError
 		if !errors.As(err, &adapterErr) || adapterErr.ReasonCode != want || choice.Facts.MountUnavailable != want {

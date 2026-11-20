@@ -2,18 +2,20 @@ package mcp_test
 
 import (
 	"context"
-	"github.com/lycaon/lycaon/internal/toolrejection"
 	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
 	"unicode/utf8"
 
+	sdkmcp "github.com/modelcontextprotocol/go-sdk/mcp"
+
 	"github.com/lycaon/lycaon/internal/mcp"
+	"github.com/lycaon/lycaon/internal/mcp/mcptest"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/pkg/api"
-	sdkmcp "github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
 // Tests stage a synthetic distro manifest with stageFakeDistro, so adding or
@@ -26,7 +28,7 @@ func TestMCPToolNamingConvention(t *testing.T) {
 }
 
 func TestMCPDottedToolNameRegistersAndResolves(t *testing.T) {
-	conn := &mcp.MockConnector{
+	conn := &mcptest.Connector{
 		Tools: map[string][]*sdkmcp.Tool{
 			"svca": {{Name: "intel.search", Description: "Federated search."}},
 		},
@@ -79,7 +81,7 @@ func TestMCPRegistryCheckDisabledProvider(t *testing.T) {
 }
 
 func TestMCPCircuitBreakerOpensOnFailures(t *testing.T) {
-	conn := &mcp.MockConnector{
+	conn := &mcptest.Connector{
 		Tools:   map[string][]*sdkmcp.Tool{"svca": {{Name: "do", Description: "do"}}},
 		CallErr: map[string]error{"svca": context.Canceled},
 	}
@@ -97,7 +99,7 @@ func TestMCPCircuitBreakerOpensOnFailures(t *testing.T) {
 }
 
 func TestMCPCircuitBreakerIgnoresToolReportedErrors(t *testing.T) {
-	conn := &mcp.MockConnector{
+	conn := &mcptest.Connector{
 		Tools:       map[string][]*sdkmcp.Tool{"svca": {{Name: "do", Description: "do"}}},
 		CallIsError: map[string]string{"svca": "scan not found"},
 	}
@@ -119,7 +121,7 @@ func TestMCPCircuitBreakerIgnoresToolReportedErrors(t *testing.T) {
 }
 
 func TestMockCallIsErrorBecomesToolReject(t *testing.T) {
-	conn := &mcp.MockConnector{
+	conn := &mcptest.Connector{
 		Tools: map[string][]*sdkmcp.Tool{
 			"svca": {{Name: "do"}},
 		},
@@ -138,7 +140,7 @@ func TestMockCallIsErrorBecomesToolReject(t *testing.T) {
 
 // newTestRegistry builds a Runtime backed by a fake distro that contains
 // exactly providerIDs (all disabled by default). conn is the MCP transport; pass
-// nil for a default MockConnector that exposes the listed tools.
+// nil for a default mcptest.Connector that exposes the listed tools.
 func newTestRegistry(t *testing.T, conn mcp.SessionConnector, providerIDs ...string) *mcp.Runtime {
 	t.Helper()
 	if len(providerIDs) == 0 {
@@ -152,7 +154,7 @@ func newTestRegistry(t *testing.T, conn mcp.SessionConnector, providerIDs ...str
 				{Name: "query", Description: "query"},
 			}
 		}
-		conn = &mcp.MockConnector{Tools: defaults}
+		conn = &mcptest.Connector{Tools: defaults}
 	}
 	stageFakeDistro(t, providerIDs...)
 	toolReg := tools.NewDefaultRegistry()
@@ -172,7 +174,7 @@ func newTestRegistry(t *testing.T, conn mcp.SessionConnector, providerIDs ...str
 
 func TestMCPPeerDiagnosticIsBoundedWithoutLosingOriginal(t *testing.T) {
 	diagnostic := strings.Repeat("🚀", 2048)
-	conn := &mcp.MockConnector{
+	conn := &mcptest.Connector{
 		Tools:       map[string][]*sdkmcp.Tool{"svca": {{Name: "do"}}},
 		CallIsError: map[string]string{"svca": diagnostic},
 	}

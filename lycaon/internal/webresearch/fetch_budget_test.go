@@ -186,7 +186,6 @@ func TestFetchBudgetRefundsSessionOnHostCancel(t *testing.T) {
 
 func TestFetchURLToolHonorsSessionBudget(t *testing.T) {
 	t.Setenv(configdir.EnvConfigDir, t.TempDir())
-	allowLoopbackFetch(t)
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "text/plain")
 		_, _ = w.Write([]byte("ok body"))
@@ -201,14 +200,14 @@ func TestFetchURLToolHonorsSessionBudget(t *testing.T) {
 	tctx := tools.ToolContext{
 		Identity: tools.InvocationIdentity{SessionID: "budget-sess"},
 	}
-	_, _, err := fetchURLTool(context.Background(), fetchURLToolArgs{
+	_, _, err := fetchURLTool(context.Background(), fetchURLToolArgs{Crawler: newTestCrawler(),
 		URL:    srv.URL + "/a",
 		Budget: budget,
 		Tctx:   tctx,
 	})
 	testutil.FailErr(t, "first fetch", err)
 
-	_, _, err = fetchURLTool(context.Background(), fetchURLToolArgs{
+	_, _, err = fetchURLTool(context.Background(), fetchURLToolArgs{Crawler: newTestCrawler(),
 		URL:    srv.URL + "/b",
 		Budget: budget,
 		Tctx:   tctx,
@@ -222,7 +221,6 @@ func TestFetchURLToolHonorsSessionBudget(t *testing.T) {
 
 func TestFetchURLToolCacheHitSkipsBudget(t *testing.T) {
 	t.Setenv(configdir.EnvConfigDir, t.TempDir())
-	allowLoopbackFetch(t)
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "text/plain")
 		_, _ = w.Write([]byte("cached once"))
@@ -238,13 +236,13 @@ func TestFetchURLToolCacheHitSkipsBudget(t *testing.T) {
 		Identity: tools.InvocationIdentity{SessionID: "cache-sess"},
 	}
 	url := srv.URL + "/once"
-	_, _, err := fetchURLTool(context.Background(), fetchURLToolArgs{
+	_, _, err := fetchURLTool(context.Background(), fetchURLToolArgs{Crawler: newTestCrawler(),
 		URL: url, Budget: budget, Tctx: tctx,
 	})
 	testutil.FailErr(t, "network fetch", err)
 
 	// Same URL from cache must not consume the (already spent) session budget.
-	_, _, err = fetchURLTool(context.Background(), fetchURLToolArgs{
+	_, _, err = fetchURLTool(context.Background(), fetchURLToolArgs{Crawler: newTestCrawler(),
 		URL: url, Budget: budget, Tctx: tctx,
 	})
 	testutil.FailErr(t, "cache hit", err)

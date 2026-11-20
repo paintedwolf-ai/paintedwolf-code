@@ -151,7 +151,7 @@ func (r *SQLRecorder) bindProgramDelivery(ctx context.Context, in ProgramSourceD
 		return "", none, nil, err
 	}
 	defer func() { _ = tx.Rollback() }()
-	const selection = ` FROM invocation_program_outputs o JOIN invocation_programs p ON p.id=o.program_id JOIN invocation_receipts r ON r.id=p.parent_receipt_id WHERE o.program_id=? AND o.reference=? AND r.session_id=?`
+	const selection = ` FROM invocation_program_outputs o JOIN invocation_programs p ON p.id=o.program_id JOIN invocation_receipts r ON r.id=p.parent_receipt_id WHERE o.program_id=? AND o.reference=? AND r.session_id=?` + publishedProgramOutput
 	var size, count int64
 	if err := tx.QueryRowContext(ctx, `SELECT COALESCE(sum(length(CAST(o.id AS BLOB))+length(CAST(o.mappings_json AS BLOB))),0),count(*)`+selection, in.ProgramID, in.OutputReference, in.SessionID).Scan(&size, &count); err != nil {
 		return "", none, nil, err

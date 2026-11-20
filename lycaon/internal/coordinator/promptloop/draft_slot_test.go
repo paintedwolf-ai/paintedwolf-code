@@ -193,7 +193,7 @@ func TestFinalSynthesisCommitSettlesLiveDraftSlot(t *testing.T) {
 		DraftStatus: api.DraftStatusLive,
 	}
 	committed, err := loop.Projection.commitGuardedAssistantTurn(
-		context.Background(), &api.Session{ID: "s1"}, "s1", nil, "go", "implement_synthesis", msg,
+		context.Background(), &api.Session{ID: "s1"}, "s1", nil, "implement_synthesis", msg,
 	)
 	testutil.FailErr(t, "commitGuardedAssistantTurn", err)
 	if committed.Kind == api.MessageKindDraft {
@@ -225,7 +225,7 @@ func TestToolBatchPromoteSettlesLiveMidRunStep(t *testing.T) {
 		ToolCalls:   []api.ToolCall{{ID: "call_1", Name: "read"}},
 	}
 	committed, err := loop.Projection.commitGuardedAssistantTurn(
-		context.Background(), &api.Session{ID: "s1"}, "s1", nil, "go", "", msg,
+		context.Background(), &api.Session{ID: "s1"}, "s1", nil, "", msg,
 	)
 	testutil.FailErr(t, "commitGuardedAssistantTurn", err)
 	if committed.Kind != "" {
@@ -251,7 +251,7 @@ func TestToolCallOnlyEmptyProseSettlesLiveMidRunStep(t *testing.T) {
 		ToolCalls:   []api.ToolCall{{ID: "call_1", Name: "grep"}},
 	}
 	committed, err := loop.Projection.commitGuardedAssistantTurn(
-		context.Background(), &api.Session{ID: "s1"}, "s1", nil, "go", "", msg,
+		context.Background(), &api.Session{ID: "s1"}, "s1", nil, "", msg,
 	)
 	testutil.FailErr(t, "commitGuardedAssistantTurn", err)
 	if committed.Kind != "" {
@@ -280,7 +280,7 @@ func TestToolCallOnlyEmptyProseKeepsDraftKindWithRejectedVersions(t *testing.T) 
 		ToolCalls:   []api.ToolCall{{ID: "call_1", Name: "grep"}},
 	}
 	committed, err := loop.Projection.commitGuardedAssistantTurn(
-		context.Background(), &api.Session{ID: "s1"}, "s1", nil, "go", "", msg,
+		context.Background(), &api.Session{ID: "s1"}, "s1", nil, "", msg,
 	)
 	testutil.FailErr(t, "commitGuardedAssistantTurn", err)
 	if committed.Kind != api.MessageKindDraft {
@@ -333,7 +333,7 @@ func TestVersionCountPopulatedOnCommit(t *testing.T) {
 	})
 	msg := api.Message{ID: "slot-1", Content: "final", Role: api.MessageRoleAssistant}
 	committed, err := loop.Projection.commitGuardedAssistantTurn(
-		context.Background(), &api.Session{ID: "s1"}, "s1", nil, "go", "implement_dispatch", msg,
+		context.Background(), &api.Session{ID: "s1"}, "s1", nil, "implement_dispatch", msg,
 	)
 	testutil.FailErr(t, "commitGuardedAssistantTurn", err)
 	if committed.DraftVersionCount != 3 {

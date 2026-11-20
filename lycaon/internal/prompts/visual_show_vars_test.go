@@ -119,9 +119,7 @@ func TestMergeCoordinatorPromptVarsInvestigateFloorAsksForCapture(t *testing.T) 
 	reader, err := prompts.DeclaredReader(nil, "implement_investigate")
 	testutil.FailErr(t, "DeclaredReader implement_investigate", err)
 	into := reader.Facts()
-	err = prompts.MergeCoordinatorPromptVars("implement_investigate", prompts.ExecutionModePromptTransition{
-		ExecutionMode: "investigate",
-	}, "", into)
+	err = prompts.MergeCoordinatorPromptVars("implement_investigate", prompts.ExecutionModePromptTransition{}, "", into)
 	testutil.FailErr(t, "merge investigate prompt vars", err)
 	if into["visual_show_page"] != false || into["visual_show_needs_request"] != true || into["visual_show_available"] != true {
 		t.Fatalf("the investigate floor carries no capture tool but must ask to load one: %#v", into)
@@ -142,9 +140,7 @@ func TestMergeCoordinatorPromptVarsInvestigateFloorAsksForCapture(t *testing.T) 
 	})
 	testutil.FailErr(t, "loaded reader", err)
 	loaded := loadedReader.Facts()
-	err = prompts.MergeCoordinatorPromptVars("implement_investigate", prompts.ExecutionModePromptTransition{
-		ExecutionMode: "investigate",
-	}, "", loaded)
+	err = prompts.MergeCoordinatorPromptVars("implement_investigate", prompts.ExecutionModePromptTransition{}, "", loaded)
 	testutil.FailErr(t, "merge loaded prompt vars", err)
 	if loaded["visual_show_available"] != true || loaded["visual_show_page"] != true {
 		t.Fatalf("a loaded capture tool must advertise page show: %#v", loaded)
@@ -155,9 +151,7 @@ func TestMergeCoordinatorPromptVarsSynthesisDoesNotRequireRuntimeCapture(t *test
 	reader, err := prompts.DeclaredReader(nil, "implement_synthesis")
 	testutil.FailErr(t, "DeclaredReader implement_synthesis", err)
 	into := reader.Facts()
-	err = prompts.MergeCoordinatorPromptVars("implement_synthesis", prompts.ExecutionModePromptTransition{
-		ExecutionMode: "wrapup",
-	}, "", into)
+	err = prompts.MergeCoordinatorPromptVars("implement_synthesis", prompts.ExecutionModePromptTransition{}, "", into)
 	testutil.FailErr(t, "merge synthesis prompt vars", err)
 	if into["visual_show_available"] != false || into["visual_show_page"] != false || into["visual_show_terminal"] != false {
 		t.Fatalf("render_view authors intent, not a running interface capture: %#v", into)

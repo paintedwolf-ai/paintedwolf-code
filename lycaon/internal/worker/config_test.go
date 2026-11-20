@@ -124,7 +124,7 @@ func TestDraftScratchEnqueuePersistsWorkspaceRootID(t *testing.T) {
 func TestWorkerPolicyFeedbackSurvivesQueueReopen(t *testing.T) {
 	database := testdbfixture.Open(t, "store.db")
 	testdbseed.InsertSession(t, database, "parent", testdbseed.DefaultProjectID)
-	queue := NewSQLQueue(database, 1)
+	queue := NewSQLServices(database, 1).Queue
 	id, err := queue.EnqueueWithProjectID(t.Context(), testdbseed.DefaultProjectID, api.WorkerTask{ParentSessionID: "parent", ProjectID: testdbseed.DefaultProjectID, AgentType: "implementer", Prompt: "Inspect result", Brief: "Inspect result", ExecutionTarget: api.ExecutionTargetLocal})
 	testutil.FailErr(t, "enqueue worker", err)
 	claimed, err := queue.ClaimNext(t.Context(), ClaimRequest{ClaimedBy: "test", ExecutionTarget: api.ExecutionTargetLocal})
@@ -142,7 +142,7 @@ func TestWorkerPolicyFeedbackSurvivesQueueReopen(t *testing.T) {
 	if !won {
 		t.Fatal("worker claim did not commit")
 	}
-	reopened := NewSQLQueue(database, 1)
+	reopened := NewSQLServices(database, 1).Queue
 	task, ok := reopened.Get(id)
 	if !ok || task.Result == nil || !reflect.DeepEqual(task.Result.PolicyFeedback, feedback) || task.Result.Grounding == nil {
 		t.Fatalf("frozen feedback lost on reopen: %+v", task)

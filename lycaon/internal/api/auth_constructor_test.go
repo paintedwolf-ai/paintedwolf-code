@@ -22,7 +22,7 @@ func TestServerConstructorsNeverDefaultToTestCredential(t *testing.T) {
 				t.Fatalf("constructor supplied credential %q", srv.apiToken)
 			}
 			req := httptest.NewRequest(http.MethodGet, "/v1/test", nil)
-			req.Header.Set("Authorization", TestAuthHeader())
+			req.Header.Set("Authorization", "Bearer "+TestAPIToken)
 			rec := httptest.NewRecorder()
 			srv.requireClientAuth(http.HandlerFunc(func(http.ResponseWriter, *http.Request) { t.Fatal("unconfigured server accepted test credential") })).ServeHTTP(rec, req)
 			if rec.Code != http.StatusServiceUnavailable {

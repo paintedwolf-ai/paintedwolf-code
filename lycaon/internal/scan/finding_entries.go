@@ -61,10 +61,10 @@ func publishScanSummary(ctx context.Context, q *db.Queries, scan *api.CodeScan) 
 
 // Summary serves the persisted detail-free projection of a scan transition.
 func (c *CoordinatorImpl) Summary(ctx context.Context, id string) (*api.CodeScan, error) {
-	if c == nil || c.Store == nil {
+	if c == nil || c.reads == nil {
 		return nil, fmt.Errorf("scan coordinator not configured")
 	}
-	raw, err := c.Store.queries.GetScanSummary(ctx, id)
+	raw, err := c.reads.tx.queries.GetScanSummary(ctx, id)
 	if db.IsNoRows(err) {
 		return nil, nil
 	}

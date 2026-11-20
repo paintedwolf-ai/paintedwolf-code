@@ -6,6 +6,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/events"
 	"github.com/lycaon/lycaon/internal/project"
+	"github.com/lycaon/lycaon/internal/project/projecttest"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -13,8 +14,8 @@ import (
 // TestScopeLookupResolvesRootPath covers root-path event scopes.
 func TestScopeLookupResolvesRootPath(t *testing.T) {
 	ctx := context.Background()
-	reg := project.NewMemoryRegistry()
-	p, err := project.CreateWithRoot(ctx, reg, t.TempDir())
+	reg := projecttest.NewRegistry(t)
+	p, err := projecttest.CreateWithRoot(ctx, reg, t.TempDir())
 	testutil.FailErr(t, "create project", err)
 	lookup := project.ScopeLookup{Registry: reg}
 	rootPath := project.PrimaryRootPath(p)
@@ -37,8 +38,8 @@ func TestScopeLookupResolvesRootPath(t *testing.T) {
 // TestPathKeyedPublishReachesProjectSubscriber covers path-to-ID routing.
 func TestPathKeyedPublishReachesProjectSubscriber(t *testing.T) {
 	ctx := context.Background()
-	reg := project.NewMemoryRegistry()
-	p, err := project.CreateWithRoot(ctx, reg, t.TempDir())
+	reg := projecttest.NewRegistry(t)
+	p, err := projecttest.CreateWithRoot(ctx, reg, t.TempDir())
 	testutil.FailErr(t, "create project", err)
 	rootPath := project.PrimaryRootPath(p)
 
@@ -64,10 +65,10 @@ func TestPathKeyedPublishReachesProjectSubscriber(t *testing.T) {
 // TestPathKeyedPublishStaysOutOfOtherProjects covers project isolation.
 func TestPathKeyedPublishStaysOutOfOtherProjects(t *testing.T) {
 	ctx := context.Background()
-	reg := project.NewMemoryRegistry()
-	mine, err := project.CreateWithRoot(ctx, reg, t.TempDir())
+	reg := projecttest.NewRegistry(t)
+	mine, err := projecttest.CreateWithRoot(ctx, reg, t.TempDir())
 	testutil.FailErr(t, "create project", err)
-	other, err := project.CreateWithRoot(ctx, reg, t.TempDir())
+	other, err := projecttest.CreateWithRoot(ctx, reg, t.TempDir())
 	testutil.FailErr(t, "create other project", err)
 
 	hub := events.NewMemoryHub()
@@ -89,8 +90,8 @@ func TestPathKeyedPublishStaysOutOfOtherProjects(t *testing.T) {
 // TestResolveProjectDirAcceptsPath covers path-to-root resolution.
 func TestResolveProjectDirAcceptsPath(t *testing.T) {
 	ctx := context.Background()
-	reg := project.NewMemoryRegistry()
-	p, err := project.CreateWithRoot(ctx, reg, t.TempDir())
+	reg := projecttest.NewRegistry(t)
+	p, err := projecttest.CreateWithRoot(ctx, reg, t.TempDir())
 	testutil.FailErr(t, "create project", err)
 	lookup := project.ScopeLookup{Registry: reg}
 	rootPath := project.PrimaryRootPath(p)

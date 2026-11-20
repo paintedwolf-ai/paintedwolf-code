@@ -13,6 +13,7 @@ import (
 	"github.com/lycaon/lycaon/internal/gate"
 	"github.com/lycaon/lycaon/internal/hitl"
 	"github.com/lycaon/lycaon/internal/project"
+	"github.com/lycaon/lycaon/internal/project/projecttest"
 	"github.com/lycaon/lycaon/internal/session"
 	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/settings"
@@ -25,7 +26,7 @@ func AssertCheckpointReadSurfaces(t *testing.T, server http.Handler, sessionID, 
 	t.Helper()
 	for _, suffix := range []string{"/checkpoints?include_children=true", "/bootstrap"} {
 		req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/v1/sessions/"+sessionID+suffix, nil)
-		api.WithTestAuth(req)
+		req.Header.Set("Authorization", "Bearer "+api.TestAPIToken)
 		response := httptest.NewRecorder()
 		server.ServeHTTP(response, req)
 		if response.Code != http.StatusOK {
@@ -53,11 +54,11 @@ func NewCheckpointHandlerFixture(t *testing.T) (*api.Server, *hitl.Checkpoints, 
 
 	reg := project.NewSQLRegistry(sqlDB)
 	dir := t.TempDir()
-	p, err := project.CreateWithRoot(t.Context(), reg, dir)
+	p, err := projecttest.CreateWithRoot(t.Context(), reg, dir)
 	testutil.FailErr(t, "reg.Create failed", err)
 
 	store := store.NewSQL(sqlDB)
-	sess, err := store.Create(t.Context(), wire.CreateSessionRequest{
+	sess, err := store.Sessions.Create(t.Context(), wire.CreateSessionRequest{
 		Posture:   wire.SessionPostureBuild,
 		ProjectID: p.ID,
 	}, p.ID)
@@ -65,7 +66,7 @@ func NewCheckpointHandlerFixture(t *testing.T) (*api.Server, *hitl.Checkpoints, 
 
 	hub := events.NewMemoryHub()
 	pub := &events.Publisher{Hub: hub}
-	mgr := hitl.NewCheckpoints(hitl.NewSQLStore(sqlDB), pub, authzcontext.SQLRecorder(sqlDB))
+	mgr := hitl.NewCheckpoints(hitl.NewSQLStore(sqlDB), pub, authzcontext.LedgerRecorder{Ledger: &authzcontext.Ledger{Store: authzcontext.NewSQLStore(sqlDB)}})
 
 	srv := api.NewServer(apitest.Dependencies(t, api.Dependencies{Core: api.CoreDependencies{
 		Store: store, Projects: reg, Sessions: session.NewHost(store, session.Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)}, Approvals: api.ApprovalsDependencies{Checkpoints: mgr}}), nil, api.TestAPIToken)

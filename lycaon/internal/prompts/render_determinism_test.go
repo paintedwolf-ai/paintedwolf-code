@@ -12,7 +12,6 @@ import (
 
 // TestRenderPersonaIsDeterministic protects prompt cache keys.
 func TestRenderPersonaIsDeterministic(t *testing.T) {
-	prompts.ResetPersonaContractCache()
 	engine := prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{})
 	ctx := context.Background()
 
@@ -62,7 +61,6 @@ func TestRenderPersonaConcurrentSafe(t *testing.T) {
 		t.Fatalf("warm persona render: %v", err)
 	}
 	synctest.Test(t, func(t *testing.T) {
-		prompts.ResetPersonaContractCache()
 		engine := prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{})
 		ctx := t.Context()
 

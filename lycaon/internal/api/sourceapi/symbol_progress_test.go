@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/lycaon/lycaon/internal/project"
+	"github.com/lycaon/lycaon/internal/project/projecttest"
 	"github.com/lycaon/lycaon/internal/repochange"
 	"github.com/lycaon/lycaon/internal/search"
 	"github.com/lycaon/lycaon/internal/sourcecatalog"
@@ -80,8 +81,8 @@ func symbolProgressFixture(t *testing.T, count int) (*SymbolExecutor, *project.P
 	for i := range count {
 		testutil.FailErr(t, "write source", os.WriteFile(filepath.Join(root, fmt.Sprintf("f%03d.go", i)), []byte("package p\nfunc Target() {}\n"), 0600))
 	}
-	registry := project.NewMemoryRegistry()
-	p, err := project.CreateWithRoot(t.Context(), registry, root)
+	registry := projecttest.NewRegistry(t)
+	p, err := projecttest.CreateWithRoot(t.Context(), registry, root)
 	testutil.FailErr(t, "create project", err)
 	testutil.FailErr(t, "prepare index", catalogtest.AwaitIndex(t.Context(), sourcecatalog.Process(), p.ID, sourcecatalog.Root{ID: p.Roots[0].ID, Path: p.Roots[0].Path}))
 	leg := &search.SymbolPlanLeg{Name: "Target", Query: search.TextExpr{Text: "Target"}, Roots: []search.CodeRoot{{ProjectID: p.ID, RootID: p.Roots[0].ID, Path: p.Roots[0].Path}}, Cap: 200, Flags: search.MatchFlags{WholeWord: true}}

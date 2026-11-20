@@ -19,7 +19,7 @@ phases:
 `
 
 func TestSessionWorkflowStoreUpsertAndList(t *testing.T) {
-	store := NewMemory()
+	store := newSessionWorkflowStore(t)
 	ctx := context.Background()
 	if err := store.Upsert(ctx, "sess-1", []byte(testSessionManifest), Coordinator, nil); err != nil {
 		testutil.FailErr(t, "store.Upsert failed", err)
@@ -55,7 +55,7 @@ phases:
 }
 
 func TestSessionWorkflowStoreDelete(t *testing.T) {
-	store := NewMemory()
+	store := newSessionWorkflowStore(t)
 	ctx := context.Background()
 	if err := store.Upsert(ctx, "sess-1", []byte(testSessionManifest), Coordinator, nil); err != nil {
 		testutil.FailErr(t, "store.Upsert failed", err)
@@ -71,7 +71,7 @@ func TestSessionWorkflowStoreDelete(t *testing.T) {
 }
 
 func TestSessionWorkflowStoreRejectInvalidYAML(t *testing.T) {
-	store := NewMemory()
+	store := newSessionWorkflowStore(t)
 	err := store.Upsert(context.Background(), "sess-1", []byte("not: yaml: {"), Coordinator, nil)
 	if err == nil {
 		t.Fatal("expected parse error")
@@ -79,7 +79,7 @@ func TestSessionWorkflowStoreRejectInvalidYAML(t *testing.T) {
 }
 
 func TestSessionWorkflowStoreRejectsUnknownActor(t *testing.T) {
-	store := NewMemory()
+	store := newSessionWorkflowStore(t)
 	err := store.Upsert(context.Background(), "sess-1", []byte(testSessionManifest), Actor("forged"), nil)
 	if err == nil {
 		t.Fatal("expected invalid compose actor error")
@@ -117,4 +117,11 @@ func TestSessionWorkflowSQLStoreGetNotFound(t *testing.T) {
 	if !errors.Is(err, ErrNotFound) {
 		t.Fatalf("err = %v want ErrNotFound", err)
 	}
+}
+
+func newSessionWorkflowStore(t *testing.T) *SQL {
+	t.Helper()
+	database := testdbfixture.Open(t, "workflow-drafts.db")
+	testdbseed.InsertSession(t, database, "sess-1", testdbseed.DefaultProjectID)
+	return NewSQL(database)
 }

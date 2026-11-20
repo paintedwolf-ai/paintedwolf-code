@@ -1,0 +1,15 @@
+{
+  "category": "go_receiver_lines",
+  "artifact": "lycaon/internal/scan/scan.RunStore",
+  "kind": "runtime_service",
+  "workstream": "scan-persistence-components",
+  "disposition": "retain",
+  "reason": "Retain admission, leases and terminal transitions in one repository. Claims, durable findings, rollups and outbox events commit through the same transaction.",
+  "reviewed_commit": "3437d9cc94c52e9be89f24a2832b7d363834ba30",
+  "ceiling": 709,
+  "boundaries": {
+    "lycaon/internal/scan/claim_transaction_test.go": "3e60846810543abe0c79fb597dc82c395f4b828b5664cd32fcb489b1f57da461",
+    "lycaon/internal/scan/sql_completion_rollback_test.go": "e81b2c224dac304acf14a551e155a641fe485c3522a85621dc1919affdf7eca8"
+  },
+  "reviewed_shape": "3a045b3475bd052a9e83a420fdef391e8c44ffbe348117803c0fc605c40f2d70"
+}

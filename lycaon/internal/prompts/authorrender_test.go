@@ -14,7 +14,6 @@ import (
 )
 
 func TestAuthorRender_BundledPartial(t *testing.T) {
-	ResetPersonaContractCache()
 	res, err := AuthorRender(context.Background(), AuthorRenderRequest{
 		ModuleRoot:  configlayout.FindModuleRoot(),
 		TemplateRef: "partials/finish-handoff.md",
@@ -28,7 +27,6 @@ func TestAuthorRender_BundledPartial(t *testing.T) {
 }
 
 func TestAuthorRender_PersonaHasRequiredHeadings(t *testing.T) {
-	ResetPersonaContractCache()
 	root := configlayout.FindModuleRoot()
 	res, err := AuthorRender(context.Background(), AuthorRenderRequest{
 		ModuleRoot: root,
@@ -53,7 +51,6 @@ func TestAuthorRender_PersonaHasRequiredHeadings(t *testing.T) {
 }
 
 func TestAuthorRender_ProjectOverlayWins(t *testing.T) {
-	ResetPersonaContractCache()
 	project := t.TempDir()
 	dir := filepath.Join(project, settingsoverlay.DirName(), "prompt_files", "partials")
 	if err := os.MkdirAll(dir, 0o750); err != nil {
@@ -115,7 +112,6 @@ func TestPromptSnapshotCapturesOverrideBytesAndRevision(t *testing.T) {
 }
 
 func TestAuthorRender_OverlayParseErrorFailsClosed(t *testing.T) {
-	ResetPersonaContractCache()
 	project := t.TempDir()
 	dir := filepath.Join(project, settingsoverlay.DirName(), "prompt_files", "partials")
 	if err := os.MkdirAll(dir, 0o750); err != nil {
@@ -138,8 +134,6 @@ func TestAuthorRender_OverlayParseErrorFailsClosed(t *testing.T) {
 }
 
 func TestAuthorRender_CheckCatchesStrippedHeadings(t *testing.T) {
-	ResetPersonaContractCache()
-	defer ResetPersonaContractCache()
 	project := t.TempDir()
 	dir := filepath.Join(project, settingsoverlay.DirName(), "prompt_files", "agents")
 	if err := os.MkdirAll(dir, 0o750); err != nil {
@@ -172,7 +166,6 @@ func TestAuthorRender_CheckCatchesStrippedHeadings(t *testing.T) {
 }
 
 func TestAuthorRender_VarsReachTemplate(t *testing.T) {
-	ResetPersonaContractCache()
 	project := t.TempDir()
 	dir := filepath.Join(project, settingsoverlay.DirName(), "prompt_files", "partials")
 	if err := os.MkdirAll(dir, 0o750); err != nil {

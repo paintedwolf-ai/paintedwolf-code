@@ -9,7 +9,6 @@ import (
 )
 
 func TestRuntimePersonaValidationDoesNotEnforceAuthoringByteCap(t *testing.T) {
-	ResetPersonaContractCache()
 	engine := NewFileTemplateEngineLayers(PromptLayers{})
 	reader, err := DeclaredReader(nil, "repo-researcher")
 	testutil.FailErr(t, "DeclaredReader repo-researcher", err)

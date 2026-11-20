@@ -54,7 +54,7 @@ func BuildChangeReport(ctx context.Context, task api.WorkerTask, deps ChangeRepo
 	revision, rootDigest := invocation.SourceRevisionForRoot(task.WorkspaceRoot)
 	proof := workercompletion.BuildWorkerCompletionProof(
 		childMessages,
-		session.OverlayWorkspaceChangedPaths(ctx, &task, nil),
+		session.OverlayWorkspaceChangedPaths(ctx, &task, nil, ""),
 		workercompletion.SourceRevision{Revision: revision, RootDigest: rootDigest},
 	)
 	return api.WorkerChangeReport{

@@ -23,11 +23,11 @@ func TestWorkflowPauseExactReplayReturnsReceiptWithoutDuplicateBoundary(t *testi
 	commandCtx := runstate.WithExpectedRevision(ctx, expected)
 	first, err := mgr.Controls.Pause(commandCtx, run.ID, "review")
 	testutil.FailErr(t, "pause workflow", err)
-	before, err := sessions.GetMessages(ctx, run.SessionID)
+	before, err := sessions.Transcript.GetMessages(ctx, run.SessionID)
 	testutil.FailErr(t, "list messages before replay", err)
 	replayed, err := mgr.Controls.Pause(commandCtx, run.ID, "review")
 	testutil.FailErr(t, "replay pause", err)
-	after, err := sessions.GetMessages(ctx, run.SessionID)
+	after, err := sessions.Transcript.GetMessages(ctx, run.SessionID)
 	testutil.FailErr(t, "list messages after replay", err)
 	if replayed.Revision != first.Revision || len(after) != len(before) {
 		t.Fatalf("replay revision=%d want=%d messages=%d want=%d", replayed.Revision, first.Revision, len(after), len(before))

@@ -158,7 +158,7 @@ func TestOnlyReferencedGenerationAndHeadSurviveIntermediatePublications(t *testi
 	if retained != 1 || !oldHeld {
 		t.Fatalf("retained generations=%d, old held=%t", retained, oldHeld)
 	}
-	if _, err := openNavigation(t.Context(), store, intermediate); !errors.Is(err, pagedview.ErrRevision) {
+	if _, err := store.retainGeneration(intermediate, false); !errors.Is(err, pagedview.ErrRevision) {
 		t.Fatalf("unreferenced intermediate generation opens: %v", err)
 	}
 	old, err := pin.OpenNavigation(t.Context())

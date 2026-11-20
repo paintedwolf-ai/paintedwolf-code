@@ -23,17 +23,17 @@ func fidelityRank(tier string) int {
 }
 
 // RecordFidelity returns the effective trust tier for a ledger record.
-func RecordFidelity(rec Record, ledger Ledger, handle string) string {
+func RecordFidelity(rec Record, ledger Ledger) string {
 	if t := strings.TrimSpace(rec.Fidelity); t != "" {
 		return t
 	}
-	if t := pathTrustForHandle(ledger, handle, rec); t != "" {
+	if t := pathTrustForHandle(ledger, rec); t != "" {
 		return t
 	}
 	return FidelityForShape(RecordShape(rec))
 }
 
-func pathTrustForHandle(ledger Ledger, handle string, rec Record) string {
+func pathTrustForHandle(ledger Ledger, rec Record) string {
 	if len(ledger.PathFidelity) == 0 {
 		return ""
 	}

@@ -169,18 +169,19 @@ func TestCatalogGroundingVerdictsDoNotOverlap(t *testing.T) {
 
 func TestOverlayChangedPathsHonorsCallerCancellation(t *testing.T) {
 	root := t.TempDir()
-	baseline := testbaseline.Capture(t, root)
+	baseline := testbaseline.Capture(t, "root", root)
+	testbaseline.RecordBranch(t, "root", root, root)
 	testutil.FailErr(t, "write change", os.WriteFile(filepath.Join(root, "changed.go"), []byte("changed\n"), 0o600))
 	task := &api.WorkerTask{
 		WorkspaceRoot: root, WorkspaceBaselinePath: baseline,
 		Scope: &api.TaskScope{Mode: api.TaskScopeModeWrite},
 	}
-	if paths := session.OverlayWorkspaceChangedPaths(t.Context(), task, nil); len(paths) != 1 {
+	if paths := session.OverlayWorkspaceChangedPaths(t.Context(), task, nil, ""); len(paths) != 1 {
 		t.Fatalf("live inspection paths=%v", paths)
 	}
 	ctx, cancel := context.WithCancel(t.Context())
 	cancel()
-	if paths := session.OverlayWorkspaceChangedPaths(ctx, task, nil); len(paths) != 0 {
+	if paths := session.OverlayWorkspaceChangedPaths(ctx, task, nil, ""); len(paths) != 0 {
 		t.Fatalf("canceled inspection continued: %v", paths)
 	}
 	if !session.OverlayAwaitingPromote(ctx, task) {
@@ -196,7 +197,8 @@ func TestOverlayChangedPathsIncludesChangesOutsideSuggestedScope(t *testing.T) {
 	testutil.FailErr(t, "WriteFile extra", os.WriteFile(filepath.Join(overlay, "b.go"), []byte("extra\n"), 0o644))
 
 	scope := api.TaskScope{Mode: api.TaskScopeModeWrite, Paths: []string{"a.go"}}
-	baseline := testbaseline.Capture(t, primary)
+	baseline := testbaseline.Capture(t, "root", primary)
+	testbaseline.RecordBranch(t, "root", primary, overlay)
 
 	task := &api.WorkerTask{
 		ProjectID: testdbseed.DefaultProjectID, WorkspacePath: primary,
@@ -205,7 +207,7 @@ func TestOverlayChangedPathsIncludesChangesOutsideSuggestedScope(t *testing.T) {
 		WorkspaceBaselinePath: baseline,
 	}
 
-	paths := session.OverlayWorkspaceChangedPaths(t.Context(), task, nil)
+	paths := session.OverlayWorkspaceChangedPaths(t.Context(), task, nil, "")
 	if len(paths) != 2 || paths[0] != "a.go" || paths[1] != "b.go" {
 		t.Fatalf("OverlayWorkspaceChangedPaths = %v want [a.go b.go]", paths)
 	}
@@ -224,7 +226,8 @@ func TestOverlayAwaitingPromoteWithAbsolutePathSuggestion(t *testing.T) {
 	testutil.FailErr(t, "WriteFile", os.WriteFile(filepath.Join(overlay, "src", "game.js"), []byte("game"), 0o644))
 
 	scope := api.TaskScope{Mode: api.TaskScopeModeWrite, Paths: []string{primary}}
-	baseline := testbaseline.Capture(t, primary)
+	baseline := testbaseline.Capture(t, "root", primary)
+	testbaseline.RecordBranch(t, "root", primary, overlay)
 	if len(baseline) == 0 {
 		t.Fatalf("baseline = %+v", baseline)
 	}
@@ -238,7 +241,7 @@ func TestOverlayAwaitingPromoteWithAbsolutePathSuggestion(t *testing.T) {
 	if !session.OverlayAwaitingPromote(t.Context(), task) {
 		t.Fatal("whole-repo absolute scope overlay must await promote, not abort")
 	}
-	paths := session.OverlayWorkspaceChangedPaths(t.Context(), task, nil)
+	paths := session.OverlayWorkspaceChangedPaths(t.Context(), task, nil, "")
 	if len(paths) != 2 {
 		t.Fatalf("changed = %v want index.html + src/game.js", paths)
 	}
@@ -271,7 +274,8 @@ func TestOverlayAwaitingPromoteFalseWithoutDiff(t *testing.T) {
 	testutil.FailErr(t, "WriteFile", os.WriteFile(filepath.Join(overlay, "a.go"), []byte("same\n"), 0o644))
 
 	scope := api.TaskScope{Mode: api.TaskScopeModeWrite, Paths: []string{"a.go"}}
-	baseline := testbaseline.Capture(t, overlay)
+	baseline := testbaseline.Capture(t, "root", overlay)
+	testbaseline.RecordBranch(t, "root", primary, overlay)
 
 	task := &api.WorkerTask{
 		ProjectID: testdbseed.DefaultProjectID, WorkspacePath: primary,
@@ -300,7 +304,8 @@ func TestOverlayAwaitingPromoteFalseWithoutChanges(t *testing.T) {
 	testutil.FailErr(t, "MkdirAll", os.MkdirAll(overlay, 0o755))
 
 	scope := api.TaskScope{Mode: api.TaskScopeModeWrite, Paths: []string{"test-chess.js"}}
-	baseline := testbaseline.Capture(t, primary)
+	baseline := testbaseline.Capture(t, "root", primary)
+	testbaseline.RecordBranch(t, "root", primary, overlay)
 
 	task := &api.WorkerTask{
 		ProjectID: testdbseed.DefaultProjectID, WorkspacePath: primary,
@@ -316,7 +321,7 @@ func TestOverlayAwaitingPromoteFalseWithoutChanges(t *testing.T) {
 func TestOverlayAwaitingPromoteFalseWhenWorkspaceGone(t *testing.T) {
 	primary := t.TempDir()
 	scope := api.TaskScope{Mode: api.TaskScopeModeWrite, Paths: []string{"a.go"}}
-	baseline := testbaseline.Capture(t, primary)
+	baseline := testbaseline.Capture(t, "root", primary)
 
 	task := &api.WorkerTask{
 		ProjectID: testdbseed.DefaultProjectID, WorkspacePath: primary,
@@ -336,7 +341,8 @@ func TestResolveWorkerSummaryStatus(t *testing.T) {
 	testutil.FailErr(t, "WriteFile", os.WriteFile(filepath.Join(overlay, "a.go"), []byte("new\n"), 0o644))
 
 	scope := api.TaskScope{Mode: api.TaskScopeModeWrite, Paths: []string{"a.go"}}
-	baseline := testbaseline.Capture(t, primary)
+	baseline := testbaseline.Capture(t, "root", primary)
+	testbaseline.RecordBranch(t, "root", primary, overlay)
 
 	task := &api.WorkerTask{
 		ProjectID: testdbseed.DefaultProjectID, WorkspacePath: primary,

@@ -35,7 +35,7 @@ func TestEveryConfigRootFileIsClassified(t *testing.T) {
 	sort.Strings(names)
 
 	classified := make(map[string]ConfigRootEntry)
-	for _, e := range AllClassifiedEntries() {
+	for _, e := range configRootRegistry {
 		classified[e.Name] = e
 	}
 
@@ -53,7 +53,7 @@ func TestEveryConfigRootFileIsClassified(t *testing.T) {
 
 func TestConfigRootRegistryIntegrity(t *testing.T) {
 	t.Parallel()
-	entries := AllClassifiedEntries()
+	entries := configRootRegistry
 	if len(entries) == 0 {
 		t.Fatal("configRootRegistry is empty")
 	}
@@ -153,7 +153,7 @@ func TestSecretCanaryExclusion(t *testing.T) {
 	backupPaths := BackupRelPaths()
 	backupDirs := BackupRelDirs()
 
-	for _, e := range AllClassifiedEntries() {
+	for _, e := range configRootRegistry {
 		if e.IsSecret || e.Class == ClassArchiveExcluded {
 			if slices.Contains(backupPaths, e.Name) {
 				t.Errorf("secret entry %q found in BackupRelPaths()", e.Name)
@@ -205,7 +205,7 @@ func TestActiveManagedSecretWritesRemainVaultOnlyWhileLegacyFilesStayExcluded(t 
 func TestLocalDataBucketsMatchRegistry(t *testing.T) {
 	t.Parallel()
 	claimed := map[string]bool{}
-	for _, e := range AllClassifiedEntries() {
+	for _, e := range configRootRegistry {
 		if e.Bucket != "" && !Known(e.Bucket) {
 			t.Errorf("entry %q names unknown bucket %q", e.Name, e.Bucket)
 		}

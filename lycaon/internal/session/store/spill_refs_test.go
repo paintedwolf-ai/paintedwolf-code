@@ -1,17 +1,18 @@
 package store
 
 import (
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+	"time"
+
 	"github.com/lycaon/lycaon/internal/project"
 	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/tooloutput"
 	"github.com/lycaon/lycaon/pkg/api"
-	"os"
-	"path/filepath"
-	"strings"
-	"testing"
-	"time"
 )
 
 func TestSQLSpillReferencesFollowDurableTranscriptAndCompactionViews(t *testing.T) {
@@ -20,7 +21,7 @@ func TestSQLSpillReferencesFollowDurableTranscriptAndCompactionViews(t *testing.
 	testdbseed.InsertProjectRoot(t, sqlDB, testdbseed.DefaultProjectID, t.TempDir())
 	store := NewSQL(sqlDB)
 	store.SetDataDir(dataDir)
-	sess, err := store.Create(t.Context(), api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
+	sess, err := store.Sessions.Create(t.Context(), api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
 	hostDir, err := project.EnsureHostDataDir(dataDir, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "ensure project data", err)
@@ -46,7 +47,7 @@ func TestSQLSpillReferencesFollowDurableTranscriptAndCompactionViews(t *testing.
 	}
 
 	compactionRel, compactionPath := writeSpill(strings.Repeat("compaction body ", 32))
-	testutil.FailErr(t, "put compaction view", store.PutCompactionView(t.Context(), sess.ID, CompactionView{
+	testutil.FailErr(t, "put compaction view", store.Compaction.PutCompactionView(t.Context(), sess.ID, CompactionView{
 		Generation: 1,
 		Messages: []api.Message{{
 			Role: api.MessageRoleTool, Content: "full output: " + compactionRel,
@@ -56,33 +57,33 @@ func TestSQLSpillReferencesFollowDurableTranscriptAndCompactionViews(t *testing.
 	assertExists(compactionPath, "compaction spill retained")
 	settled := time.Now().Add(-2 * time.Minute)
 	testutil.FailErr(t, "age compaction spill", os.Chtimes(compactionPath, settled, settled))
-	testutil.FailErr(t, "replace compaction view", store.PutCompactionView(t.Context(), sess.ID, CompactionView{
+	testutil.FailErr(t, "replace compaction view", store.Compaction.PutCompactionView(t.Context(), sess.ID, CompactionView{
 		Generation: 2,
 		Messages:   []api.Message{{Role: api.MessageRoleAssistant, Content: "summary"}},
 	}))
 	assertMissing(compactionPath, "replaced compaction spill reclaimed")
 
 	spoofRel, spoofPath := writeSpill(strings.Repeat("spoofed user path ", 32))
-	testutil.FailErr(t, "append user text", store.AppendMessages(t.Context(), sess.ID, api.Message{
+	testutil.FailErr(t, "append user text", store.Transcript.AppendMessages(t.Context(), sess.ID, api.Message{
 		Role: api.MessageRoleUser, Content: "please inspect " + spoofRel,
 	}))
 	testutil.FailErr(t, "age unreferenced spill", os.Chtimes(spoofPath, settled, settled))
 
 	toolRel, toolPath := writeSpill(strings.Repeat("durable tool body ", 32))
-	testutil.FailErr(t, "append tool result", store.AppendMessages(t.Context(), sess.ID, api.Message{
+	testutil.FailErr(t, "append tool result", store.Transcript.AppendMessages(t.Context(), sess.ID, api.Message{
 		Role: api.MessageRoleTool, Content: "full output: " + toolRel,
 		ToolResult: &api.ToolResult{Content: toolRel, Outcome: api.ToolResultOutcomeCompleted},
 	}))
 	store = NewSQL(sqlDB)
 	store.SetDataDir(dataDir)
 	_, freshPath := writeSpill(strings.Repeat("current process body ", 32))
-	_, err = store.Get(t.Context(), sess.ID)
+	_, err = store.Sessions.Get(t.Context(), sess.ID)
 	testutil.FailErr(t, "activate project spill store", err)
 	assertMissing(spoofPath, "unreferenced spill reclaimed")
 	assertExists(toolPath, "tool spill retained")
 	assertExists(freshPath, "current process spill retained")
 	testutil.FailErr(t, "age tool spill", os.Chtimes(toolPath, settled, settled))
-	testutil.FailErr(t, "delete session", store.Delete(t.Context(), sess.ID))
+	testutil.FailErr(t, "delete session", store.Sessions.Delete(t.Context(), sess.ID))
 	assertMissing(toolPath, "deleted session spill reclaimed")
 }
 
@@ -92,7 +93,7 @@ func TestSQLSpillReconciliationAdvancesInBoundedBatches(t *testing.T) {
 	testdbseed.InsertProjectRoot(t, sqlDB, testdbseed.DefaultProjectID, t.TempDir())
 	store := NewSQL(sqlDB)
 	store.SetDataDir(dataDir)
-	sess, err := store.Create(t.Context(), api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
+	sess, err := store.Sessions.Create(t.Context(), api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
 	hostDir, err := project.EnsureHostDataDir(dataDir, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "ensure project data", err)
@@ -108,7 +109,7 @@ func TestSQLSpillReconciliationAdvancesInBoundedBatches(t *testing.T) {
 	}
 	store = NewSQL(sqlDB)
 	store.SetDataDir(dataDir)
-	_, err = store.Get(t.Context(), sess.ID)
+	_, err = store.Sessions.Get(t.Context(), sess.ID)
 	testutil.FailErr(t, "advance first spill batch", err)
 	spillDir := filepath.Join(hostDir, tooloutput.ToolOutputSpillDir)
 	entries, err := os.ReadDir(spillDir)
@@ -116,7 +117,7 @@ func TestSQLSpillReconciliationAdvancesInBoundedBatches(t *testing.T) {
 	if len(entries) != 1 {
 		t.Fatalf("remaining spills after first batch = %d want 1", len(entries))
 	}
-	_, err = store.Get(t.Context(), sess.ID)
+	_, err = store.Sessions.Get(t.Context(), sess.ID)
 	testutil.FailErr(t, "advance second spill batch", err)
 	entries, err = os.ReadDir(spillDir)
 	testutil.FailErr(t, "list reconciled spills", err)

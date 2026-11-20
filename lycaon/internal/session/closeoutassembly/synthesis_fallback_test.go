@@ -4,6 +4,10 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"path/filepath"
+	"strings"
+	"testing"
+
 	"github.com/lycaon/lycaon/internal/coordinator/anchor"
 	"github.com/lycaon/lycaon/internal/coordinator/surface"
 	"github.com/lycaon/lycaon/internal/evidence"
@@ -12,9 +16,6 @@ import (
 	"github.com/lycaon/lycaon/internal/session/verification"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/pkg/api"
-	"path/filepath"
-	"strings"
-	"testing"
 )
 
 type readySynthesis struct{}
@@ -37,7 +38,7 @@ func TestSynthesisAssemblyProjectsHistoricalChecksWithoutChecklist(t *testing.T)
 	previous := anchor.DefaultRegistry()
 	anchor.SetDefaultRegistry(registry)
 	t.Cleanup(func() { anchor.SetDefaultRegistry(previous) })
-	s := New(closeoutSession{}, nil, readySynthesis{}, nil)
+	s := New(closeoutSession{}, closeoutSession{}, closeoutSession{}, nil, readySynthesis{}, nil)
 	s.SetPrompts(prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{ModuleRoot: filepath.Join(testutil.CheckoutRoot(t), "lycaon")}))
 	for _, match := range []verification.SourceMatch{verification.SourceCurrent, verification.SourceChanged, verification.SourceUnknown} {
 		t.Run(string(match), func(t *testing.T) {
@@ -81,7 +82,7 @@ func (c forbiddenEmptyCuration) Curate(context.Context, evidence.Ledger, llm.Cur
 }
 
 func TestSynthesisAssemblyPreservesRetainedDigestWhenTranscriptIsEmpty(t *testing.T) {
-	s := New(closeoutSession{}, nil, readySynthesis{}, nil)
+	s := New(closeoutSession{}, closeoutSession{}, closeoutSession{}, nil, readySynthesis{}, nil)
 	s.SetWorkflow(&WorkflowDomains{Policy: retainedScaffold{}})
 	s.SetSynthesisCurator(forbiddenEmptyCuration{t})
 	got := s.SynthesisEvidenceForAssembly(t.Context(), &api.Session{ID: "parent"}, "implement_synthesis")

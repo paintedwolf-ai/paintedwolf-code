@@ -6,7 +6,8 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/confine"
-	"github.com/lycaon/lycaon/internal/egressproxy"
+	"github.com/lycaon/lycaon/internal/confine/admissiontest"
+	"github.com/lycaon/lycaon/internal/confine/confinetest"
 	"github.com/lycaon/lycaon/internal/testutil"
 )
 
@@ -18,8 +19,7 @@ func TestLaunchPlanRequiresActionLeaseForProxyConfinement(t *testing.T) {
 	if err := plan.validate(); err == nil {
 		t.Fatal("unbound proxy confinement was accepted")
 	}
-	restore := confine.SetBrokerForTest(nil, egressproxy.Addrs{HTTP: "127.0.0.1:1", SOCKS: "127.0.0.1:2"})
-	defer restore()
+	confinetest.StartBroker(t)
 	lease, err := confine.BindAction(c, confine.EgressCommand{ToolCallID: "launch-test"})
 	if err != nil {
 		t.Fatalf("bind egress: %v", err)
@@ -62,7 +62,7 @@ func TestExternalScannerLaunchForbidsConfinement(t *testing.T) {
 
 func TestExternalScannerLaunchIsValidWhileEnforcing(t *testing.T) {
 	testutil.RequireConfinement(t, confine.Available())
-	confine.TestingSetAutoConfine(t)
+	admissiontest.Enable(t)
 	t.Setenv("LYCAON_BYPASS_APPROVALS", "")
 	t.Setenv("LYCAON_SANDBOX", "")
 	if err := ExternalScannerLaunch("trivy").validate(); err != nil {

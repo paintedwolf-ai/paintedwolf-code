@@ -44,15 +44,14 @@ func scanLabel(rec *api.CodeScan) string {
 	return label
 }
 
-func captureFullPassSubject(ctx context.Context, tctx tools.ToolContext, coord scanbase.ScanCoordinator, id string) {
+func (v ResultViews) captureFullPassSubject(ctx context.Context, tctx tools.ToolContext, id string) {
 	if tctx.Effects.Out == nil {
 		return
 	}
-	store := scanbase.StoreFromCoordinator(coord)
-	if store == nil {
+	if v.FullPasses == nil {
 		return
 	}
-	pass, err := store.FullPass(ctx, id)
+	pass, err := v.FullPasses.FullPass(ctx, id)
 	canonical, pathErr := scanbase.CanonicalPath(tctx.ActiveRootPath())
 	if err != nil || pathErr != nil || pass == nil || pass.CanonicalPath != canonical {
 		return

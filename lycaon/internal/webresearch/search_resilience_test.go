@@ -3,7 +3,6 @@ package webresearch
 import (
 	"context"
 	"net/http"
-	"net/http/httptest"
 	"testing"
 	"time"
 )
@@ -40,13 +39,12 @@ func TestProviderHealthOpensAfterRepeatedHardFailures(t *testing.T) {
 }
 
 func TestFanOutCutsSlowProviderWhenBudgetMet(t *testing.T) {
-	slow := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	slow := withProviderHTTP(t, func(w http.ResponseWriter, r *http.Request) {
 		<-r.Context().Done()
-	}))
+	})
 	t.Cleanup(slow.Close)
-	injectProviderHTTPClient(t, slow.Client())
 
-	reg := NewRegistry(testCatalog(t))
+	reg := NewRegistry(testCatalog(t), slow.exchange)
 	reg.Register(&healthWrappedProvider{
 		inner: &stubSeedProvider{
 			id:   "fast",
@@ -55,11 +53,11 @@ func TestFanOutCutsSlowProviderWhenBudgetMet(t *testing.T) {
 		health: reg.ensureHealthGate("fast"),
 	})
 	reg.Register(&healthWrappedProvider{
-		inner:  &slowHTTPStubProvider{baseURL: slow.URL},
+		inner:  &slowHTTPStubProvider{baseURL: slow.URL, exchange: slow.exchange},
 		health: reg.ensureHealthGate("slow"),
 	})
 
-	result := Search(context.Background(), SearchOptions{
+	result := Search(context.Background(), SearchOptions{Discovery: NewDiscovery(newTestCrawler()),
 		Query: "widget probe",
 		Limit: 1,
 		Settings: Settings{
@@ -77,11 +75,8 @@ func TestFanOutCutsSlowProviderWhenBudgetMet(t *testing.T) {
 }
 
 func TestFanOutGraceCutsStragglersWithPartialHits(t *testing.T) {
-	prevGrace := fanOutGraceTimeout
-	fanOutGraceTimeout = 200 * time.Millisecond
-	t.Cleanup(func() { fanOutGraceTimeout = prevGrace })
 
-	reg := NewRegistry(testCatalog(t))
+	reg := NewRegistry(testCatalog(t), nil)
 	reg.Register(&healthWrappedProvider{
 		inner: &stubSeedProvider{
 			id:   "fast",
@@ -94,7 +89,7 @@ func TestFanOutGraceCutsStragglersWithPartialHits(t *testing.T) {
 		health: reg.ensureHealthGate("slow"),
 	})
 
-	result := Search(context.Background(), SearchOptions{
+	result := Search(context.Background(), SearchOptions{Discovery: NewDiscovery(newTestCrawler()),
 		Query: "widget probe",
 		Limit: 5,
 		Settings: Settings{
@@ -115,7 +110,8 @@ func TestFanOutGraceCutsStragglersWithPartialHits(t *testing.T) {
 }
 
 type slowHTTPStubProvider struct {
-	baseURL string
+	exchange Exchange
+	baseURL  string
 }
 
 func (p *slowHTTPStubProvider) ID() string { return "slow" }
@@ -129,7 +125,7 @@ func (p *slowHTTPStubProvider) Search(ctx context.Context, _ Settings, _ string,
 	if err != nil {
 		return providerOutcome{providerID: p.ID(), reason: "parse_error", detail: err.Error()}
 	}
-	_, _, err = doProviderHTTP(ctx, req, 30, false)
+	_, _, err = doProviderHTTP(ctx, req, 30, false, p.exchange)
 	if err != nil {
 		reason := "parse_error"
 		if ctx.Err() != nil {

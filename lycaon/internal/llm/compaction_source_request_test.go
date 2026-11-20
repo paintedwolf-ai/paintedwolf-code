@@ -25,7 +25,7 @@ func TestCompactionExternalProviderReceivesEvidenceWithoutLiveTools(t *testing.T
 	testutil.FailErr(t, "register external", registry.Register(external))
 	testutil.FailErr(t, "register included", registry.Register(local))
 	publishIncludedModelFixture(t, registry, local)
-	summarizer := &RegistrySummarizer{Registry: registry, Policy: NewInMemoryPolicyStore(ModelPolicy{
+	summarizer := &RegistrySummarizer{Registry: registry, Policy: newPolicyFixture(t, ModelPolicy{
 		Coordinator: ModelRef{ProviderID: IncludedProviderID, Model: "included"},
 		Lite:        ModelRef{ProviderID: "external", Model: "external-model"},
 	}), Purpose: "compaction_turn"}

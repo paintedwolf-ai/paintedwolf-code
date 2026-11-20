@@ -10,6 +10,7 @@ import (
 	"github.com/lycaon/lycaon/internal/textfile"
 	"github.com/lycaon/lycaon/internal/tools/native/sourceview"
 	"github.com/lycaon/lycaon/internal/tools/projectpaths"
+	"github.com/lycaon/lycaon/internal/tools/readcaps"
 )
 
 // All concurrent searches share the same file-read budget.
@@ -20,8 +21,8 @@ func readGrepInput(ctx context.Context, reads *projectpaths.ReadSession, drafts 
 		if _, err := reads.Resolve(ctx, abs); err != nil {
 			return nil, false, false, err
 		}
-		if len(draft) > hostGrepMaxFileBytes {
-			return textfile.TrimIncompleteTail(draft[:hostGrepMaxFileBytes]), false, true, nil
+		if len(draft) > readcaps.MaxFileBytes {
+			return textfile.TrimIncompleteTail(draft[:readcaps.MaxFileBytes]), false, true, nil
 		}
 		return draft, false, false, nil
 	}
@@ -59,7 +60,7 @@ func readGrepFile(ctx context.Context, reads *projectpaths.ReadSession, absPath 
 	if !info.Mode().IsRegular() {
 		return nil, false, false, fmt.Errorf("search target is no longer a regular file")
 	}
-	limit := min(info.Size(), int64(hostGrepMaxFileBytes))
+	limit := min(info.Size(), int64(readcaps.MaxFileBytes))
 	bytesTruncated = info.Size() > limit
 	prefix, err := io.ReadAll(io.LimitReader(f, min(limit, 4096)))
 	if err != nil {
@@ -84,7 +85,7 @@ func readGrepFile(ctx context.Context, reads *projectpaths.ReadSession, absPath 
 	if bytesTruncated {
 		content = textfile.TrimIncompleteTail(content)
 	}
-	text, _, err := textfile.Decode(content, textfile.LimitsForRaw(int64(hostGrepMaxFileBytes)))
+	text, _, err := textfile.Decode(content, textfile.LimitsForRaw(int64(readcaps.MaxFileBytes)))
 	if err != nil {
 		return nil, true, bytesTruncated, nil
 	}

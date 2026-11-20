@@ -4,13 +4,13 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	workflowinputs "github.com/lycaon/lycaon/internal/workflow/inputs"
 	"strings"
 	"sync"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/testutil"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
+	workflowinputs "github.com/lycaon/lycaon/internal/workflow/inputs"
 	"github.com/lycaon/lycaon/internal/workflow/runstate"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -78,7 +78,7 @@ func TestRequestUserInputPendingVarsAndAnnounce(t *testing.T) {
 		t.Fatalf("announced ask = %+v ok=%v", ask, ok)
 	}
 
-	msgs, err := store.GetMessages(ctx, "sess-1")
+	msgs, err := store.Transcript.GetMessages(ctx, "sess-1")
 	testutil.FailErr(t, "GetMessages", err)
 	var cards int
 	for _, m := range msgs {
@@ -92,7 +92,7 @@ func TestRequestUserInputPendingVarsAndAnnounce(t *testing.T) {
 
 	// Re-announcement preserves the message id.
 	mgr.Asks.AnnouncePendingAsk(ctx, "sess-1")
-	msgs, err = store.GetMessages(ctx, "sess-1")
+	msgs, err = store.Transcript.GetMessages(ctx, "sess-1")
 	testutil.FailErr(t, "GetMessages after reannounce", err)
 	cards = 0
 	for _, m := range msgs {
@@ -200,7 +200,7 @@ func TestRequestUserInputParallelOnePending(t *testing.T) {
 		t.Fatalf("ASK_USER_ALREADY_PENDING = %d want %d", alreadyPending, n-1)
 	}
 
-	msgs, err := store.GetMessages(ctx, "sess-1")
+	msgs, err := store.Transcript.GetMessages(ctx, "sess-1")
 	testutil.FailErr(t, "GetMessages", err)
 	var cards int
 	for _, m := range msgs {

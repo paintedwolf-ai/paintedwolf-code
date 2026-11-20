@@ -17,8 +17,3 @@ func SurfaceFinishesWithUserProse(surfaceID string) bool {
 	row, err := catalog.Surface(strings.TrimSpace(surfaceID))
 	return err == nil && row.ProseFinish
 }
-
-// HostTurnMayFinishWithProse requires an idle roster and no pending promotion.
-func HostTurnMayFinishWithProse(surfaceID string, workersIdle, pendingOverlayPromote bool) bool {
-	return workersIdle && !pendingOverlayPromote && SurfaceFinishesWithUserProse(surfaceID)
-}

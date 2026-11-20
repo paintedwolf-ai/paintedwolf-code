@@ -13,6 +13,7 @@ import (
 	"github.com/lycaon/lycaon/internal/cost/costtest"
 	"github.com/lycaon/lycaon/internal/llm"
 	"github.com/lycaon/lycaon/internal/project"
+	"github.com/lycaon/lycaon/internal/project/projecttest"
 	"github.com/lycaon/lycaon/internal/session"
 	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"github.com/lycaon/lycaon/internal/settings"
@@ -29,11 +30,11 @@ func TestBoardRequiresProjectID(t *testing.T) {
 
 	dir := t.TempDir()
 	reg := project.NewSQLRegistry(sessionFixture.DB())
-	p, err := project.CreateWithRoot(t.Context(), reg, dir)
+	p, err := projecttest.CreateWithRoot(t.Context(), reg, dir)
 	testutil.FailErr(t, "reg.Open failed", err)
 
 	sessionStore := sessionFixture
-	coord, err := sessionStore.Create(t.Context(), wire.CreateSessionRequest{ProjectID: p.ID, Posture: wire.SessionPostureBuild}, p.ID)
+	coord, err := sessionStore.Sessions.Create(t.Context(), wire.CreateSessionRequest{ProjectID: p.ID, Posture: wire.SessionPostureBuild}, p.ID)
 	testutil.FailErr(t, "create coordinator session", err)
 	queue := workertest.OnDatabase(t, sessionFixture.DB(), 2)
 	snap := &board.SnapshotBuilder{Workers: queue, Repo: repotest.NewProvider(t)}
@@ -71,7 +72,7 @@ func TestBoardRequiresSessionIDMissing(t *testing.T) {
 
 	dir := t.TempDir()
 	reg := project.NewSQLRegistry(sessionFixture.DB())
-	p, err := project.CreateWithRoot(t.Context(), reg, dir)
+	p, err := projecttest.CreateWithRoot(t.Context(), reg, dir)
 	testutil.FailErr(t, "reg.Open failed", err)
 
 	srv := hostapi.NewServer(contractfixture.RequiredTestDeps(t, hostapi.Dependencies{Core: hostapi.CoreDependencies{
@@ -91,7 +92,7 @@ func TestWorkersRequiresSessionID(t *testing.T) {
 
 	dir := t.TempDir()
 	reg := project.NewSQLRegistry(sessionFixture.DB())
-	p, err := project.CreateWithRoot(t.Context(), reg, dir)
+	p, err := projecttest.CreateWithRoot(t.Context(), reg, dir)
 	testutil.FailErr(t, "reg.Open failed", err)
 
 	srv := hostapi.NewServer(contractfixture.RequiredTestDeps(t, hostapi.Dependencies{Core: hostapi.CoreDependencies{
@@ -113,7 +114,7 @@ func TestCostSummaryRequiresSessionID(t *testing.T) {
 	mock := llm.NewMockProvider(nil)
 	tracker := costtest.NewTracker(t, cost.NoopPricer{})
 	mgr := session.NewHost(store, session.Models{Client: mock, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: tracker}, toolstest.NewRegistry())
-	sess, err := store.Create(t.Context(), wire.CreateSessionRequest{Posture: wire.SessionPostureBuild}, testdbseed.DefaultProjectID)
+	sess, err := store.Sessions.Create(t.Context(), wire.CreateSessionRequest{Posture: wire.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session in store", err)
 	if err := tracker.RecordUsage(t.Context(), cost.UsageEvent{
 		SessionID:        sess.ID,

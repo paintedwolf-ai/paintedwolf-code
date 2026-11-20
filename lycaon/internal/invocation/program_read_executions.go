@@ -61,7 +61,7 @@ func readExecutionOutputs(ctx context.Context, tx *sql.Tx, program string, execu
 	if err != nil {
 		return err
 	}
-	rows, err := tx.QueryContext(ctx, `SELECT o.execution_id,o.stream,o.reference,json_extract(o.blob_json,'$.Size'),o.complete,o.redacted,o.preview,o.preview_truncated,o.tail_preview,o.line_count FROM invocation_program_outputs o WHERE o.program_id=? AND o.execution_id IN (SELECT value FROM json_each(?)) AND `+latestExecutionOutput+` ORDER BY o.execution_id,o.stream`, program, string(encoded))
+	rows, err := tx.QueryContext(ctx, `SELECT o.execution_id,o.stream,o.reference,json_extract(o.blob_json,'$.Size'),o.complete,o.redacted,o.preview,o.preview_truncated,o.tail_preview,o.line_count FROM invocation_program_outputs o WHERE o.program_id=? AND o.execution_id IN (SELECT value FROM json_each(?)) AND `+latestExecutionOutput+publishedProgramOutput+` ORDER BY o.execution_id,o.stream`, program, string(encoded))
 	if err != nil {
 		return err
 	}

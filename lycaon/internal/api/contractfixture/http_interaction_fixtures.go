@@ -9,6 +9,7 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"strings"
 	"testing"
 	"time"
@@ -19,6 +20,13 @@ import (
 	"github.com/lycaon/lycaon/internal/testutil"
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
+
+func bearerToken() string {
+	if token := os.Getenv("LYCAON_API_TOKEN"); token != "" {
+		return token
+	}
+	return hostapi.TestAPIToken
+}
 
 // fixtureClient reaches loopback test servers; its bound turns a hung handler
 // into a test failure instead of a stalled run.
@@ -32,7 +40,7 @@ func AcceptPrompt(t *testing.T, baseURL, sessionID, text string) {
 		t.Fatalf("prompt request: %v", err)
 	}
 	req.Header.Set("Content-Type", "application/json")
-	hostapi.WithTestAuth(req)
+	req.Header.Set("Authorization", "Bearer "+bearerToken())
 	resp, err := fixtureClient.Do(req)
 	if err != nil {
 		t.Fatalf("prompt: %v", err)
@@ -75,7 +83,7 @@ func AuthedHTTPGet(url string) (*http.Response, error) {
 	if err != nil {
 		return nil, err
 	}
-	hostapi.WithTestAuth(req)
+	req.Header.Set("Authorization", "Bearer "+bearerToken())
 	return fixtureClient.Do(req)
 }
 
@@ -89,7 +97,7 @@ func AuthedHTTPPost(url, contentType, body string) (*http.Response, error) {
 	if contentType != "" {
 		req.Header.Set("Content-Type", contentType)
 	}
-	hostapi.WithTestAuth(req)
+	req.Header.Set("Authorization", "Bearer "+bearerToken())
 	return fixtureClient.Do(req)
 }
 
@@ -140,7 +148,7 @@ func CreateTestSession(t *testing.T, baseURL, projectDir string) wire.Session {
 		t.Fatalf("create session request: %v", err)
 	}
 	req.Header.Set("Content-Type", "application/json")
-	hostapi.WithTestAuth(req)
+	req.Header.Set("Authorization", "Bearer "+bearerToken())
 	resp, err := fixtureClient.Do(req)
 	if err != nil {
 		t.Fatalf("create session: %v", err)
@@ -179,7 +187,7 @@ func GetSessionAtURL(t *testing.T, baseURL, sessionID string) wire.Session {
 	if err != nil {
 		t.Fatalf("get session request: %v", err)
 	}
-	hostapi.WithTestAuth(req)
+	req.Header.Set("Authorization", "Bearer "+bearerToken())
 	resp, err := fixtureClient.Do(req)
 	if err != nil {
 		t.Fatalf("get session: %v", err)
@@ -202,7 +210,7 @@ func ListMessagesAtURL(t *testing.T, baseURL, sessionID string) []wire.Message {
 	if err != nil {
 		t.Fatalf("list messages request: %v", err)
 	}
-	hostapi.WithTestAuth(req)
+	req.Header.Set("Authorization", "Bearer "+bearerToken())
 	resp, err := fixtureClient.Do(req)
 	if err != nil {
 		t.Fatalf("list messages: %v", err)
@@ -224,7 +232,7 @@ func NewAuthedRequest(method, target string, body io.Reader) *http.Request {
 		req.Header.Set("Content-Type", httpio.MediaTypeJSON)
 	}
 	if strings.HasPrefix(target, "/v1") {
-		hostapi.WithTestAuth(req)
+		req.Header.Set("Authorization", "Bearer "+bearerToken())
 	}
 	return req
 }
@@ -242,7 +250,7 @@ func ReadSSEStream(t *testing.T, streamURL string) (content string, sawDone bool
 	if err != nil {
 		t.Fatalf("stream request: %v", err)
 	}
-	hostapi.WithTestAuth(req)
+	req.Header.Set("Authorization", "Bearer "+bearerToken())
 	resp, err := fixtureClient.Do(req)
 	if err != nil {
 		t.Fatalf("stream get: %v", err)

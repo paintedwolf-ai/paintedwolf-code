@@ -1,7 +1,6 @@
 package progress
 
 import (
-	"path/filepath"
 	"testing"
 
 	"github.com/lycaon/lycaon/pkg/api"
@@ -44,8 +43,7 @@ func TestProgressGatedToolAttemptedSinceBoundary_countsRejectedTask(t *testing.T
 }
 
 func TestInitProgressGatedTools_loadsCatalog(t *testing.T) {
-	root := filepath.Clean(filepath.Join("..", ".."))
-	if err := InitProgressGatedTools(root); err != nil {
+	if err := InitProgressGatedTools(); err != nil {
 		t.Fatalf("InitProgressGatedTools: %v", err)
 	}
 	if !IsProgressGatedTool("task") {

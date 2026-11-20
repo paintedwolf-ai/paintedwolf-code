@@ -11,7 +11,6 @@ import (
 
 	"github.com/lycaon/lycaon/internal/git"
 	"github.com/lycaon/lycaon/internal/packboard"
-	"github.com/lycaon/lycaon/internal/repoinfo"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	repotest "github.com/lycaon/lycaon/internal/testsetup/repoinfo"
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -31,7 +30,7 @@ func TestSnapshotBuilderRepoFromProvider(t *testing.T) {
 	p.Warm(dir)
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
-	if _, err := repoinfo.AwaitBrief(ctx, p, dir); err != nil {
+	if _, err := repotest.AwaitBrief(ctx, p, dir); err != nil {
 		testutil.FailErr(t, "AwaitBrief", err)
 	}
 	snap, err := builder.Build(context.Background(), testdbseed.DefaultProjectID, dir, "sess-1", "", nil)
@@ -68,7 +67,7 @@ func TestSnapshotBuilderGitSlice(t *testing.T) {
 func TestSnapshotBuilderGitNotRepository(t *testing.T) {
 	dir := t.TempDir()
 	builder := &SnapshotBuilder{Repo: repotest.NewProvider(t), Git: git.NewManager()}
-	if _, err := repoinfo.AwaitBrief(t.Context(), builder.Repo, dir); err != nil {
+	if _, err := repotest.AwaitBrief(t.Context(), builder.Repo, dir); err != nil {
 		testutil.FailErr(t, "AwaitBrief", err)
 	}
 	snap, err := builder.Build(context.Background(), testdbseed.DefaultProjectID, dir, "sess-1", api.BoardDetailLevelCompact, nil)

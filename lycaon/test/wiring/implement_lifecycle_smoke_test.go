@@ -11,10 +11,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/lycaon/lycaon/internal/llm"
 	"github.com/lycaon/lycaon/internal/llm/modelcall"
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/testutil/llmtest"
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -25,8 +25,8 @@ type implementLifecycleState struct {
 	consumedWorkerJobs      sync.Map
 }
 
-func newImplementLifecycleMock(state *implementLifecycleState) *llm.KickDrivenMock {
-	coordinator := func(_ context.Context, snap llm.Snapshot) modelcall.Completion {
+func newImplementLifecycleMock(state *implementLifecycleState) *llmtest.KickDrivenMock {
+	coordinator := func(_ context.Context, snap llmtest.Snapshot) modelcall.Completion {
 		if state.stage.CompareAndSwap(0, 1) {
 			return modelcall.Completion{ToolCalls: []wire.ToolCall{{
 				ID: "t1", Name: "task",
@@ -53,8 +53,8 @@ func newImplementLifecycleMock(state *implementLifecycleState) *llm.KickDrivenMo
 		}
 		return state.awaitWorker()
 	}
-	return llm.NewKickDrivenMock(llm.KickDrivenConfig{
-		Fallback: func(ctx context.Context, snap llm.Snapshot) modelcall.Completion {
+	return llmtest.NewKickDrivenMock(llmtest.KickDrivenConfig{
+		Fallback: func(ctx context.Context, snap llmtest.Snapshot) modelcall.Completion {
 			if snap.KickID == "" && state.stage.Load() >= 1 {
 				switch {
 				case strings.Contains(snap.LastUserMessage, "Resolve the TODO marker."):
@@ -71,7 +71,7 @@ func newImplementLifecycleMock(state *implementLifecycleState) *llm.KickDrivenMo
 		},
 		OnPhaseAdvanced:      coordinator,
 		OnWorkerTaskFinished: coordinator,
-		OnLegFinished: func(ctx context.Context, snap llm.Snapshot) modelcall.Completion {
+		OnLegFinished: func(ctx context.Context, snap llmtest.Snapshot) modelcall.Completion {
 			state.legFinishedCount.Add(1)
 			return coordinator(ctx, snap)
 		},
@@ -95,14 +95,14 @@ type implementLifecycleRun struct {
 	sess      *wire.Session
 	dir       string
 	state     *implementLifecycleState
-	recording *llm.RecordingClient
+	recording *llmtest.RecordingClient
 }
 
 func startImplementLifecycle(t *testing.T) *implementLifecycleRun {
 	t.Helper()
 	state := &implementLifecycleState{}
 	// Manual draining keeps worker claims deterministic.
-	recording := llm.NewRecordingClient(newImplementLifecycleMock(state))
+	recording := llmtest.NewRecordingClient(newImplementLifecycleMock(state))
 	h := BuildForTest(t, WithLLMClient(recording))
 	limits := &implementLifecycleLimits{}
 	h.Sessions.Manager.Limits.SetProvider(limits)
@@ -155,7 +155,7 @@ func (r *implementLifecycleRun) awaitPendingWorker(t *testing.T, done ...string)
 func (r *implementLifecycleRun) awaitIdle(t *testing.T) {
 	t.Helper()
 	testutil.WaitFor(t, "the session is idle", func() bool {
-		got, err := r.h.Store.Get(context.Background(), r.sess.ID)
+		got, err := r.h.Store.Sessions.Get(context.Background(), r.sess.ID)
 		return err == nil && got != nil && got.Status == wire.SessionStatusIdle
 	})
 }
@@ -235,7 +235,7 @@ func TestImplementLifecycleSmokePathsForward(t *testing.T) {
 
 	// Drain the final coordinator wake.
 	testutil.WaitFor(t, "the session is idle", func() bool {
-		got, err := h.Store.Get(ctx, sess.ID)
+		got, err := h.Store.Sessions.Get(ctx, sess.ID)
 		return err == nil && got != nil && got.Status == wire.SessionStatusIdle
 	})
 	t.Logf("stage 2 elapsed = %v; workerTaskFinishedCount=%d legFinishedCount=%d",
@@ -254,10 +254,10 @@ func TestImplementLifecycleSmokePathsForward(t *testing.T) {
 func completeWorkerWrite(t *testing.T, h *Harness, sess *wire.Session, job wire.WorkerTask, dir, callID, content, note string) {
 	t.Helper()
 	ctx := context.Background()
-	child, err := h.Store.CreateChild(ctx, sess, wire.SpawnChildRequest{AgentType: "implementer", Prompt: job.Prompt})
+	child, err := h.Store.Sessions.CreateChild(ctx, sess, wire.SpawnChildRequest{AgentType: "implementer", Prompt: job.Prompt})
 	testutil.FailErr(t, "CreateChild "+callID, err)
 	testutil.FailErr(t, "SetChildSessionID "+callID, h.Workers.Queue.SetChildSessionID(ctx, job.ID, child.ID))
-	testutil.FailErr(t, "AppendMessages child "+callID, h.Store.AppendMessages(ctx, child.ID,
+	testutil.FailErr(t, "AppendMessages child "+callID, h.Store.Transcript.AppendMessages(ctx, child.ID,
 		wire.Message{
 			Role: wire.MessageRoleAssistant,
 			ToolCalls: []wire.ToolCall{{
@@ -267,7 +267,7 @@ func completeWorkerWrite(t *testing.T, h *Harness, sess *wire.Session, job wire.
 		},
 		completedWriteToolResult(callID, note),
 	))
-	_, _, err = h.Store.CommitEvidenceToolResult(ctx, child.ID, dir, "write", map[string]any{"path": "main.go", "content": content}, note)
+	_, _, err = h.Store.Evidence.CommitEvidenceToolResult(ctx, child.ID, dir, "write", map[string]any{"path": "main.go", "content": content}, note)
 	testutil.FailErr(t, "CommitEvidenceToolResult "+callID, err)
 	testutil.FailErr(t, "DrainPendingWorkerJobs "+callID, DrainPendingWorkerJobs(ctx, h, sess.ProjectID, sess.ID))
 	testutil.FailErr(t, "PromotePendingWriteOverlays "+callID, PromotePendingWriteOverlays(ctx, h, sess.ProjectID, sess.ID))

@@ -14,6 +14,7 @@ import (
 	"github.com/lycaon/lycaon/internal/credentialstore"
 	"github.com/lycaon/lycaon/internal/hostidentity"
 	"github.com/lycaon/lycaon/internal/mcp"
+	"github.com/lycaon/lycaon/internal/mcp/mcptest"
 )
 
 type probeErrorClassification struct {
@@ -37,11 +38,12 @@ func classifyRefusal(err error) probeErrorClassification {
 	if err == nil {
 		return probeErrorClassification{}
 	}
-	status, hasStatus := credentialstore.KeychainOSStatus(err)
+	var status credentialstore.KeychainStatus
+	hasStatus := errors.As(err, &status)
 	return probeErrorClassification{
 		Failed:              true,
 		HasKeychainOSStatus: hasStatus,
-		KeychainOSStatus:    status,
+		KeychainOSStatus:    int32(status),
 		IsIdentityMissing:   errors.Is(err, credentialstore.ErrIdentityMissing),
 		IsCustodianUnavail:  errors.Is(err, credentialstore.ErrCustodianUnavailable),
 		IsNotExist:          errors.Is(err, os.ErrNotExist),
@@ -76,7 +78,7 @@ func main() {
 		reg, mcpErr := mcp.NewRuntime(mcp.RuntimeOptions{
 			StatePath:          dir,
 			GlobalOverridePath: filepath.Join(dir, "mcp.yaml"),
-			Connector:          &mcp.MockConnector{},
+			Connector:          &mcptest.Connector{},
 		})
 		if mcpErr == nil {
 			mcpErr = reg.Catalog.Load(ctx)

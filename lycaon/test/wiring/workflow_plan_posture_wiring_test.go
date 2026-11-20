@@ -15,11 +15,11 @@ import (
 	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/guidance/feedback"
 	"github.com/lycaon/lycaon/internal/prompts"
-	"github.com/lycaon/lycaon/internal/session"
 	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/testutil/conditionstest"
 	"github.com/lycaon/lycaon/internal/workflow"
 	workflowblueprintfiles "github.com/lycaon/lycaon/internal/workflow/blueprintfiles"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
@@ -76,7 +76,7 @@ func TestPlanResearchObligationsInInject(t *testing.T) {
 	}
 	seed, err := blueprintMgr.Get(ctx, run.ProjectID, run.BlueprintPath)
 	testutil.FailErr(t, "blueprintMgr.Get", err)
-	researchPlan := strings.Replace(conditions.TestPlanContentWithTasks, "research_depth: none", "research_depth: light", 1)
+	researchPlan := strings.Replace(conditionstest.PlanWithTasks, "research_depth: none", "research_depth: light", 1)
 	_, err = blueprintMgr.Store.UpdateContent(ctx, run.ProjectID, run.BlueprintPath, researchPlan, blueprint.ContentDigest(seed.Content))
 	testutil.FailErr(t, "seed research plan", err)
 	if _, err := wfMgr.Phases.Advance(ctx, run.ID); err == nil {
@@ -115,14 +115,14 @@ func startSeededPlanRun(t *testing.T, ctx context.Context, mgr *workflow.RunMana
 	}
 	seed, err := blueprintMgr.Get(ctx, run.ProjectID, run.BlueprintPath)
 	testutil.FailErr(t, "blueprintMgr.Get before seed", err)
-	bp, err := blueprintMgr.Store.UpdateContent(ctx, run.ProjectID, run.BlueprintPath, conditions.TestPlanContentWithTasks, blueprint.ContentDigest(seed.Content))
+	bp, err := blueprintMgr.Store.UpdateContent(ctx, run.ProjectID, run.BlueprintPath, conditionstest.PlanWithTasks, blueprint.ContentDigest(seed.Content))
 	testutil.FailErr(t, "seed blueprint content", err)
 	return run, bp
 }
 
-func approveSeededPlan(t *testing.T, ctx context.Context, mgr *workflow.RunManager, sessStore session.Store, run *api.WorkflowRun, bp *api.Blueprint) *api.WorkflowRun {
+func approveSeededPlan(t *testing.T, ctx context.Context, mgr *workflow.RunManager, sessStore *store.Repositories, run *api.WorkflowRun, bp *api.Blueprint) *api.WorkflowRun {
 	t.Helper()
-	sess, err := sessStore.Get(ctx, "sess-posture")
+	sess, err := sessStore.Sessions.Get(ctx, "sess-posture")
 	testutil.FailErr(t, "store.Get failed", err)
 	run, err = mgr.Approvals.ApprovePlan(
 		ctx, run.ProjectID, run.BlueprintPath, sess.WorkspacePath,
@@ -135,7 +135,7 @@ func approveSeededPlan(t *testing.T, ctx context.Context, mgr *workflow.RunManag
 // newBundledPlanWorkflowManager builds the plan workflow stack over a
 // disposable store and returns the host owner's caller context, since plan
 // approval is an authenticated decision.
-func newBundledPlanWorkflowManager(t *testing.T) (context.Context, *workflow.RunManager, session.Store, *blueprint.Manager) {
+func newBundledPlanWorkflowManager(t *testing.T) (context.Context, *workflow.RunManager, *store.Repositories, *blueprint.Manager) {
 	t.Helper()
 	projectDir := t.TempDir()
 	sqlDB := testdbfixture.Open(t, "posture-lifecycle.db")
@@ -151,7 +151,7 @@ func newBundledPlanWorkflowManager(t *testing.T) (context.Context, *workflow.Run
 	runStore := workflowpersistence.New(sqlDB)
 	// The seal is a precondition of the grant, so the run store carries the same
 	// recorder the sidecar wires.
-	runStore.Transactions.SetAuthzRecorder(authzcontext.SQLRecorder(sqlDB))
+	runStore.Transactions.SetAuthzRecorder(authzcontext.LedgerRecorder{Ledger: &authzcontext.Ledger{Store: authzcontext.NewSQLStore(sqlDB)}})
 	mgr := workflow.NewManager(runStore, sessStore, manifestRegistry, nil)
 	blueprintMgr.AfterRetarget = mgr.Blueprints.RebindBlueprintPath
 	mgr.Blueprints.Creator = blueprint.WorkflowBlueprintCreator{Manager: blueprintMgr}
@@ -171,9 +171,9 @@ func newBundledPlanWorkflowManager(t *testing.T) (context.Context, *workflow.Run
 	return ctx, mgr, sessStore, blueprintMgr
 }
 
-func assertSessionPosture(t *testing.T, ctx context.Context, store session.Store, id string, want api.SessionPosture) {
+func assertSessionPosture(t *testing.T, ctx context.Context, store *store.Repositories, id string, want api.SessionPosture) {
 	t.Helper()
-	sess, err := store.Get(ctx, id)
+	sess, err := store.Sessions.Get(ctx, id)
 	testutil.FailErr(t, "store.Get failed", err)
 	if sess.Posture != want {
 		t.Fatalf("session %s posture = %q want %q", id, sess.Posture, want)

@@ -82,8 +82,8 @@ func TestMarkCompleteSpillKeepsDatabaseResultSmall(t *testing.T) {
 		ScannerID:     "lycaon-secrets",
 		Categories:    []api.ScanCategory{api.ScanCategorySecret},
 	}
-	testutil.FailErr(t, "insert", store.Insert(context.Background(), job, nil, ""))
-	claimed, err := store.ClaimNext(t.Context())
+	testutil.FailErr(t, "insert", store.Runs.Insert(context.Background(), job, nil, ""))
+	claimed, err := store.Runs.ClaimNext(t.Context())
 	testutil.FailErr(t, "claim scan", err)
 	if claimed.ID != job.ID {
 		t.Fatalf("claimed scan %q want %q", claimed.ID, job.ID)
@@ -112,7 +112,7 @@ func TestMarkCompleteSpillKeepsDatabaseResultSmall(t *testing.T) {
 		t.Fatal("markComplete lost the terminal CAS")
 	}
 
-	got, err := store.Get(context.Background(), job.ID)
+	got, err := store.Reads.Get(context.Background(), job.ID)
 	testutil.FailErr(t, "get", err)
 	if len(got.Result) > 64<<10 {
 		t.Fatalf("result_json len = %d want <= 64KiB stub", len(got.Result))

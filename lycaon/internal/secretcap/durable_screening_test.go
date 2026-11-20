@@ -33,7 +33,7 @@ func TestDurableEvidenceSurvivesLifecycleWithoutAChat(t *testing.T) {
 			assertDurableValues(t, service, before, after)
 		})
 	}
-	restarted := NewWithStore(service.handle, values, nil)
+	restarted := NewWithStore(service.repository.handle, values, nil)
 	testutil.FailErr(t, "restore protected evidence", restarted.Reconcile(ctx))
 	assertDurableValues(t, restarted, "orchard-file_marked-before", "orchard-file_marked-after")
 	if len(restarted.DurableScreeningValues("other-project")) != 0 {
@@ -86,7 +86,7 @@ func TestDurableEvidenceFollowsTheLedgerStanding(t *testing.T) {
 		"standing-deleted-chat": false,
 	}
 	assertDurableStanding(t, service, retired)
-	restarted := NewWithStore(service.handle, values, nil)
+	restarted := NewWithStore(service.repository.handle, values, nil)
 	testutil.FailErr(t, "restore protected evidence", restarted.Reconcile(ctx))
 	assertDurableStanding(t, restarted, retired)
 }
@@ -123,13 +123,13 @@ func assertDurableStanding(t *testing.T, service *Service, retired map[string]bo
 func TestDurableEvidenceDoesNotWaitOnTheMetadataWriter(t *testing.T) {
 	service, _, _ := testService(t)
 	// A blocked secret mutation holds both locks; screening reads its memory snapshot.
-	tx, err := service.handle.BeginTx(t.Context(), nil)
+	tx, err := service.repository.handle.BeginTx(t.Context(), nil)
 	testutil.FailErr(t, "hold transcript transaction", err)
 	defer func() { _ = tx.Rollback() }()
-	service.mutationMu.Lock()
-	defer service.mutationMu.Unlock()
+	service.repository.mutationMu.Lock()
+	defer service.repository.mutationMu.Unlock()
 	owner := secretIdentity{id: "secret", projectID: testdbseed.DefaultProjectID, name: "token", origin: OriginFileMarked}
-	service.protectDurableVersion("version", owner, "orchard-held-writer")
+	service.repository.protectDurableVersion("version", owner, "orchard-held-writer")
 	done := make(chan struct{})
 	go func() { service.DurableScreeningValues(testdbseed.DefaultProjectID); close(done) }()
 	select {
@@ -145,16 +145,16 @@ func TestDurableCookieEvidenceScreensValuesAcrossRotationAndRestart(t *testing.T
 	testutil.FailErr(t, "parse cookie site", err)
 	for i, value := range []string{"orchard-cookie-before", "orchard-cookie-after"} {
 		req := jarRequest(value)
-		jar, err := service.OpenCookieJar(t.Context(), req)
+		jar, err := service.Jars.OpenCookieJar(t.Context(), req)
 		testutil.FailErr(t, "open cookie jar", err)
 		jar.Store.SetCookies(site, []*http.Cookie{{Name: "session", Value: value, Path: "/"}})
-		_, err = service.SaveCookieJar(t.Context(), req, jar)
+		_, err = service.Jars.SaveCookieJar(t.Context(), req, jar)
 		testutil.FailErr(t, "save cookie jar", err)
 		if i == 1 {
 			assertDurableValues(t, service, "orchard-cookie-before", value)
 		}
 	}
-	restarted := NewWithStore(service.handle, values, nil)
+	restarted := NewWithStore(service.repository.handle, values, nil)
 	testutil.FailErr(t, "restore cookie evidence", restarted.Reconcile(context.Background()))
 	assertDurableValues(t, restarted, "orchard-cookie-before", "orchard-cookie-after")
 	for _, value := range restarted.DurableScreeningValues("") {

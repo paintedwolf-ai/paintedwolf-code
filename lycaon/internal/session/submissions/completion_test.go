@@ -16,7 +16,7 @@ import (
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
-func openCompletionStore(t *testing.T) *store.SQL {
+func openCompletionStore(t *testing.T) *store.Repositories {
 	db := testdbfixture.Open(t, "completion.db")
 	testdbseed.InsertProjectRoot(t, db, testdbseed.DefaultProjectID, t.TempDir())
 	return store.NewSQL(db)
@@ -24,27 +24,27 @@ func openCompletionStore(t *testing.T) *store.SQL {
 
 func TestStoppedReceiptWinsLateCompletion(t *testing.T) {
 	st := openCompletionStore(t)
-	sess, err := st.Create(t.Context(), api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
+	sess, err := st.Sessions.Create(t.Context(), api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
 	for _, runErr := range []error{nil, context.Canceled, lifecycle.ErrStopping, errors.New("late provider failure")} {
-		row, _, err := st.PutPromptSubmission(t.Context(), store.PromptSubmission{
+		row, _, err := st.Submissions.PutPromptSubmission(t.Context(), store.PromptSubmission{
 			ID: uuid.NewString(), SessionID: sess.ID, ProjectID: sess.ProjectID,
 			InputDigest: "digest", InputJSON: `{}`, Origin: store.PromptSubmissionOriginUser, SubmittedBy: sess.OwnerPersonID,
 		})
 		testutil.FailErr(t, "admit prompt", err)
-		claimed, won, err := st.ClaimPromptSubmission(t.Context(), row.ID)
+		claimed, won, err := st.Submissions.ClaimPromptSubmission(t.Context(), row.ID)
 		testutil.FailErr(t, "claim prompt", err)
 		if !won {
 			t.Fatal("prompt was not claimed")
 		}
-		testutil.FailErr(t, "stop session receipts", st.InterruptRunningPromptSubmissionsBySession(t.Context(), sess.ID))
-		before, err := st.GetPromptSubmission(t.Context(), row.ID)
+		testutil.FailErr(t, "stop session receipts", st.Submissions.InterruptRunningPromptSubmissionsBySession(t.Context(), sess.ID))
+		before, err := st.Submissions.GetPromptSubmission(t.Context(), row.ID)
 		testutil.FailErr(t, "read stopped receipt", err)
-		service := &Service{store: st, SubmissionState: &submissionstate.Service{}}
+		service := &Service{sessionStore: st.Sessions, submissionStore: st.Submissions, people: st.People, SubmissionState: &submissionstate.Service{}}
 		if err := service.finishSubmission(t.Context(), claimed, nil, runErr); !errors.Is(err, lifecycle.ErrStopping) {
 			t.Fatalf("late finish = %v, want a stop", err)
 		}
-		after, err := st.GetPromptSubmission(t.Context(), row.ID)
+		after, err := st.Submissions.GetPromptSubmission(t.Context(), row.ID)
 		testutil.FailErr(t, "read settled receipt", err)
 		if !reflect.DeepEqual(before, after) {
 			t.Fatalf("stopped receipt changed: before=%+v after=%+v", before, after)
@@ -57,7 +57,7 @@ func TestStoppedReceiptWinsLateCompletion(t *testing.T) {
 }
 
 type completionFailureStore struct {
-	Store
+	Submissions
 	finishErr error
 	readErr   error
 	row       *store.PromptSubmission
@@ -74,13 +74,13 @@ func TestCompletionPreservesUnconfirmedFailure(t *testing.T) {
 	failure := errors.New("write failed")
 	for _, current := range []*store.PromptSubmission{nil, {Status: store.PromptSubmissionRunning, ClaimToken: "claim"}, {Status: store.PromptSubmissionComplete, ClaimToken: "claim"}} {
 		st := completionFailureStore{finishErr: failure, row: current}
-		service := &Service{store: st, SubmissionState: &submissionstate.Service{}}
+		service := &Service{sessionStore: st.Sessions, submissionStore: st.Submissions, people: st.People, SubmissionState: &submissionstate.Service{}}
 		if err := service.finishSubmission(t.Context(), &store.PromptSubmission{ID: "id", ClaimToken: "claim"}, nil, nil); !errors.Is(err, failure) {
 			t.Fatalf("lost completion failure: %v", err)
 		}
 	}
 	st := completionFailureStore{finishErr: failure, readErr: errors.New("read failed"), row: &store.PromptSubmission{Status: store.PromptSubmissionInterrupted, ClaimToken: "claim"}}
-	service := &Service{store: st, SubmissionState: &submissionstate.Service{}}
+	service := &Service{sessionStore: st.Sessions, submissionStore: st.Submissions, people: st.People, SubmissionState: &submissionstate.Service{}}
 	if err := service.finishSubmission(t.Context(), &store.PromptSubmission{ID: "id", ClaimToken: "claim"}, nil, nil); !errors.Is(err, failure) {
 		t.Fatalf("unreadable receipt masked completion failure: %v", err)
 	}

@@ -37,7 +37,7 @@ func TestSourceWorkspaceNamesBranchPerRoot(t *testing.T) {
 
 func TestWorkerSourceReadsUseRecordedRootLayout(t *testing.T) {
 	database := testdbfixture.Open(t, "workers.db")
-	queue := worker.NewSQLQueue(database, 1)
+	queue := worker.NewSQLServices(database, 1).Queue
 	srv := contractfixture.NewTestServer(t, contractfixture.WithWorkers(queue), func(d *hostapi.Dependencies) {
 		d.Core.Database = database
 		d.Core.Projects = project.NewSQLRegistry(database)

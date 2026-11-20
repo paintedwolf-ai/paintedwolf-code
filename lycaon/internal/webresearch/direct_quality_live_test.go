@@ -23,6 +23,7 @@ type liveQueryCase struct {
 // It fetches from the network, so it builds only with the live_web tag:
 // ./task test:digest -- ./internal/webresearch -tags live_web -run LiveSearchQuality -count=1
 func TestDirectLiveSearchQuality(t *testing.T) {
+	discovery := NewDiscovery(newTestCrawler())
 	cases := []liveQueryCase{
 		{
 			name:     "fresh_reviews_with_leads",
@@ -60,12 +61,12 @@ func TestDirectLiveSearchQuality(t *testing.T) {
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			resetDirectState(2)
+			discovery.slots = make(chan struct{}, 2)
 			plan, err := parseSeedsJSON(tc.seedJSON)
 			if err != nil {
 				t.Fatalf("parseSeedsJSON: %v", err)
 			}
-			d := discovererSeedingURLs(t, plan.seeds...)
+			d := discovererSeedingURLs(t, discovery, plan.seeds...)
 			ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
 			defer cancel()
 
@@ -97,13 +98,14 @@ func TestDirectLiveSearchQuality(t *testing.T) {
 }
 
 func TestDirectLiveIndexFindsReviewFromHostLeads(t *testing.T) {
-	resetDirectState(1)
+	discovery := NewDiscovery(newTestCrawler())
+	discovery.slots = make(chan struct{}, 1)
 	seedJSON := `{"seeds":["https://www.theverge.com"],"fresh":true,"expand":["Steam Machine review"],"leads":[{"title":"The Steam Machine review","host":"www.theverge.com"}]}`
 	plan, err := parseSeedsJSON(seedJSON)
 	if err != nil {
 		t.Fatalf("parseSeedsJSON: %v", err)
 	}
-	d := discovererSeedingURLs(t, plan.seeds...)
+	d := discovererSeedingURLs(t, discovery, plan.seeds...)
 	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
 	defer cancel()
 	hits, err := d.Search(ctx, DirectRequest{Query: "Steam Machine 2026 hardware console review", MaxResults: 5})

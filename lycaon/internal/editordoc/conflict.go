@@ -92,7 +92,7 @@ func (r *RewindService) Resolve(ctx context.Context, p *project.Project, id stri
 	if read.SHA256 != in.DiskSHA256 {
 		return nil, projectsource.ErrSourceWriteConflict
 	}
-	if err := s.reconcileObservedDocument(ctx, d, read, false, in.ClientID, ""); err != nil {
+	if err := s.reconcileObservedDocument(ctx, d, read, false, ""); err != nil {
 		return nil, err
 	}
 	base, baseEOL, mixed := normalizeEOL(read.Content)

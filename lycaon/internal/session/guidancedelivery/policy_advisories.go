@@ -56,7 +56,7 @@ func (m *Service) TakePolicy(ctx context.Context, sessionID string) ([]api.Messa
 	if err := m.transcript.Append(ctx, sessionID, msg); err != nil && !errors.Is(err, store.ErrDuplicateMessageID) {
 		return nil, err
 	}
-	stored, err := m.store.GetMessage(ctx, sessionID, msg.ID)
+	stored, err := m.transcriptStore.GetMessage(ctx, sessionID, msg.ID)
 	if err != nil {
 		return nil, err
 	}

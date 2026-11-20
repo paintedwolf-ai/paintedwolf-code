@@ -18,6 +18,7 @@ import (
 	"github.com/lycaon/lycaon/internal/hitl"
 	"github.com/lycaon/lycaon/internal/session/approvalstate"
 	"github.com/lycaon/lycaon/internal/settings"
+	"github.com/lycaon/lycaon/internal/settings/settingstest"
 	"github.com/lycaon/lycaon/internal/socketref"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/testutil/apitestdeps"
@@ -33,7 +34,7 @@ func TestRevokeApprovalRemovesEveryProjection(t *testing.T) {
 		t.Run(string(kind), func(t *testing.T) {
 			store, err := settings.NewApprovalStoreAt(filepath.Join(t.TempDir(), "approvals.yaml"))
 			testutil.FailErr(t, "create approval store", err)
-			gate := settings.NewRuleApprovalGate(store, settings.NoSources())
+			gate := settings.NewRuleApprovalGate(store, settingstest.EmptySources())
 			handler := New(&httpio.Responder{}, withHost(t, Deps{
 				Settings: &settings.Service{Approvals: store}, Gate: gate,
 				Authority: Authority{
@@ -136,7 +137,7 @@ func TestRevokeForgetsTheDurableChatGrant(t *testing.T) {
 	testutil.FailErr(t, "create approval store", err)
 	ledger := &fakeChatGrantLedger{ids: map[string]bool{"grant_recorded": true, "quiet_recorded": true}}
 	handler := New(&httpio.Responder{}, withHost(t, Deps{
-		Settings: &settings.Service{Approvals: store}, Gate: settings.NewRuleApprovalGate(store, settings.NoSources()),
+		Settings: &settings.Service{Approvals: store}, Gate: settings.NewRuleApprovalGate(store, settingstest.EmptySources()),
 		Authority: Authority{ChatGrants: ledger},
 	}))
 	req := httptest.NewRequest(http.MethodPost, "/v1/approval-grants/revoke",

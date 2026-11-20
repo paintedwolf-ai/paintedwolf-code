@@ -24,14 +24,14 @@ func (m *Service) SetSynthesisCurator(c llm.Curator) {
 }
 
 func (m *Service) synthesisEvidenceDigest(ctx context.Context, sessionID, surfaceID string) string {
-	if m == nil || m.store == nil || m.synthesisCurator == nil {
+	if m == nil || (m.sessionStore == nil || m.transcriptStore == nil || m.evidenceStore == nil) || m.synthesisCurator == nil {
 		return ""
 	}
 	sessionID = strings.TrimSpace(sessionID)
 	if sessionID == "" {
 		return ""
 	}
-	sess, err := m.store.Get(ctx, sessionID)
+	sess, err := m.sessionStore.Get(ctx, sessionID)
 	if err != nil || sess == nil || sess.IsWorkerChild() {
 		return ""
 	}
@@ -54,7 +54,7 @@ func (m *Service) synthesisEvidenceDigest(ctx context.Context, sessionID, surfac
 		scaffold, _ = m.workflows.Policy.ScaffoldVarsForSession(ctx, sessionID)
 		workflowPhase = m.workflows.Policy.CurrentPhase(ctx, sessionID)
 	}
-	msgs, err := m.store.GetMessages(ctx, sessionID)
+	msgs, err := m.transcriptStore.GetMessages(ctx, sessionID)
 	if err != nil || len(msgs) == 0 {
 		return scaffoldEvidenceDigest(scaffold)
 	}
@@ -70,7 +70,7 @@ func (m *Service) synthesisEvidenceDigest(ctx context.Context, sessionID, surfac
 		Envelopes:       envelopes,
 		MergedBytes:     mergedBytes,
 		WorkerCount:     workerCount,
-		Reader:          m.store,
+		Reader:          m.evidenceStore,
 		Curator:         m.synthesisCurator,
 		DelegationBrief: survey.DelegationBriefFromScaffold(scaffold, workflowPhase),
 		PhaseLabel:      surfaceID,

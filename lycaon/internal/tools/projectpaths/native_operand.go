@@ -98,7 +98,7 @@ func validateOutputPath(path string, nul bool) error {
 	return nil
 }
 
-// PathBase and PathDir are pure platform path operations with exact input bytes.
+// PathBase removes a matching suffix from the final path component.
 func PathBase(path, suffix string) string {
 	if path == "" {
 		return ""
@@ -109,4 +109,3 @@ func PathBase(path, suffix string) string {
 	}
 	return base
 }
-func PathDir(path string) string { return filepath.Dir(path) }

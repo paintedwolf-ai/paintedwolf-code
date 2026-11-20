@@ -1,23 +1,20 @@
 package scans
 
 import (
-	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 
-	"github.com/lycaon/lycaon/test/security"
-
 	wire "github.com/lycaon/lycaon/pkg/api"
+	"github.com/lycaon/lycaon/test/security"
 	"github.com/lycaon/lycaon/test/wiring"
 )
 
 func TestAPIScanSARIFExportHappyPath(t *testing.T) {
 	projectDir := security.ScanFixtureDir(t)
 	h := wiring.BuildForTest(t, wiring.WithBundledScanners())
-	cancel := h.StartBackgroundWorkers(t, context.Background())
-	t.Cleanup(cancel)
+	h.Start(t)
 	created := security.EnqueueCodeScan(t, h.Server, projectDir, []wire.ScanCategory{wire.ScanCategorySecret})
 	got := security.WaitScanComplete(t, h.Server, created.ProjectID, created.ID)
 	if got.Status != wire.CodeScanStatusComplete {

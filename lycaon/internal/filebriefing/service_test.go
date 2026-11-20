@@ -7,7 +7,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/lycaon/lycaon/internal/events"
 	"github.com/lycaon/lycaon/internal/testutil"
 )
@@ -27,13 +26,13 @@ func serviceTarget(path string) Target {
 	return Target{ProjectID: "project", RootID: "root", Input: Input{Path: path, Presentation: "current", Source: "package main\nfunc Build() {}\n", SourceSHA256: "source"}}
 }
 
-func serviceFixture(t *testing.T, generate Generator) (*Service, *Memory, *memoryEnablement) {
+func serviceFixture(t *testing.T, generate Generator) (*Service, *SQL, *memoryEnablement) {
 	t.Helper()
 	cfg, err := LoadConfig()
 	testutil.FailErr(t, "load config", err)
 	enabled := &memoryEnablement{}
 	enabled.enabled.Store(true)
-	store := NewMemory()
+	store, _ := newBriefingStore(t, "project", "root")
 	service := NewService(t.Context(), Dependencies{Config: cfg, Store: store, Settings: enabled, Generator: generate})
 	t.Cleanup(func() {
 		service.Stop()
@@ -130,14 +129,13 @@ func TestDisablePurgesAndFencesLateGenerationAcrossReenable(t *testing.T) {
 		emit("Late model output.")
 		return "Late model output.", nil
 	}))
-	projectID := uuid.NewString()
+	target := serviceTarget("main.go")
+	projectID := target.ProjectID
 	hub := events.NewMemoryHub()
 	service.events = hub
 	stream, unsubscribe, err := hub.Subscribe(t.Context(), events.Subscription{Project: projectID, Viewer: testutil.HostOwner()})
 	testutil.FailErr(t, "subscribe", err)
 	defer unsubscribe()
-	target := serviceTarget("main.go")
-	target.ProjectID = projectID
 	first, err := service.Request(t.Context(), target, "manual")
 	testutil.FailErr(t, "request", err)
 	generation := awaitGeneration(t, started)

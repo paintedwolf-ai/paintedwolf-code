@@ -1,0 +1,13 @@
+{
+  "category": "test_files",
+  "artifact": "lycaon/internal/sourceledger/commandwindow_activity_test.go",
+  "kind": "test_suite",
+  "workstream": "repository-change-lifetime",
+  "disposition": "retain",
+  "reason": "Retain the 643-line command activity matrix: shared SQL fixtures exercise holds, idle reanchoring, failed settlement and recovery under one attribution contract. Coverage loss is implemented in separate fixture support using actual root closure.",
+  "reviewed_commit": "2be34334b2fa7bfea29ebceecc19fa6478bc8a1d",
+  "ceiling": 643,
+  "boundaries": {
+    "lycaon/internal/sourceledger/commandwindow_activity_test.go": "70c09cb1a8405f9c050f35f45967c2bcc1dca449a9e8ef8dd50bd5dab719c250"
+  }
+}

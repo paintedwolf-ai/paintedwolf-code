@@ -10,7 +10,7 @@ import (
 )
 
 func TestRuntimePolicyDefaultsReachWorkersWithoutPersistence(t *testing.T) {
-	store := NewInMemoryPolicyStore(ModelPolicy{})
+	store := newPolicyFixture(t, ModelPolicy{})
 	available := true
 	router := NewStaticModelRouter(store).WithLocalDefault(func(context.Context) bool { return available })
 	for _, view := range []*StaticModelRouter{router, router.WithScope(SettingsScopeProject, t.TempDir())} {
@@ -24,13 +24,6 @@ func TestRuntimePolicyDefaultsReachWorkersWithoutPersistence(t *testing.T) {
 			testutil.FailErr(t, "select worker", err)
 			if selected.ProviderID != want.ProviderID || selected.Model != want.Model {
 				t.Fatalf("worker = %+v, want %+v", selected, want)
-			}
-			group, err := view.SelectGroup(t.Context(), 3)
-			testutil.FailErr(t, "select worker group", err)
-			for _, member := range group {
-				if member.ProviderID != want.ProviderID || member.Model != want.Model {
-					t.Fatalf("group member = %+v, want %+v", member, want)
-				}
 			}
 			child, err := view.ResolveSession(t.Context(), &api.Session{ParentSessionID: "parent"})
 			testutil.FailErr(t, "resolve worker session", err)

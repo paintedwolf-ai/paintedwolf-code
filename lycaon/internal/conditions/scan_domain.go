@@ -17,26 +17,6 @@ type ScanLedger interface {
 	LatestRequiredScanForSession(ctx context.Context, sessionID string) (*api.CodeScan, error)
 }
 
-// ShippedScanDomainIDs returns the registered scan-domain predicates.
-func ShippedScanDomainIDs() []string {
-	return append([]string(nil), shippedScanDomainIDs...)
-}
-
-var shippedScanDomainIDs = []string{
-	"scan_pending",
-	"scan_stale",
-	"required_scans_enqueued",
-	"lint_gate_passed",
-	"baseline_scan_complete",
-	"security_evidence_fresh",
-	"no_critical_findings",
-}
-
-// ScanCatalogStubIDs returns deferred scan predicates. Bundled workflows must not use them as gates.
-func ScanCatalogStubIDs() []string {
-	return append([]string(nil), scanCatalogStubIDs...)
-}
-
 var scanCatalogStubIDs = []string{
 	"findings_triaged",
 	"remediation_complete",

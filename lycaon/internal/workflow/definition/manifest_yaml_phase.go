@@ -128,11 +128,7 @@ func parsePhaseYAML(p phaseYAML) (PhaseDef, error) {
 		}
 	}
 	if p.HumanApproval != nil {
-		cfg, err := parseHumanApprovalYAML(id, *p.HumanApproval)
-		if err != nil {
-			return PhaseDef{}, err
-		}
-		def.HumanApproval = cfg
+		def.HumanApproval = parseHumanApprovalYAML(*p.HumanApproval)
 	}
 	if p.ReviewLoop != nil {
 		rl, err := parseReviewLoopYAML(id, *p.ReviewLoop)
@@ -241,12 +237,12 @@ func parsePhaseTransitionsYAML(phaseID string, raw []transitionYAML) ([]PhaseTra
 	return out, nil
 }
 
-func parseHumanApprovalYAML(phaseID string, raw humanApprovalYAML) (*HumanApprovalConfig, error) {
+func parseHumanApprovalYAML(raw humanApprovalYAML) *HumanApprovalConfig {
 	blueprint := blueprint.ConventionPath(raw.Blueprint)
 	return &HumanApprovalConfig{
 		Blueprint: blueprint,
 		Readiness: strings.TrimSpace(raw.Readiness),
-	}, nil
+	}
 }
 
 func parseReviewLoopYAML(phaseID string, raw reviewLoopYAML) (*ReviewLoopDef, error) {

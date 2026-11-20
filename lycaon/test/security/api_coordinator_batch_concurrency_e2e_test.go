@@ -13,6 +13,7 @@ import (
 	"github.com/lycaon/lycaon/internal/session/workeradmission"
 	"github.com/lycaon/lycaon/internal/spawn"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/testutil/llmtest"
 	"github.com/lycaon/lycaon/pkg/api"
 	"github.com/lycaon/lycaon/test/wiring"
 )
@@ -29,7 +30,7 @@ func TestHTTPCoordinatorBatchThreeTasksAndFollowUpE2E(t *testing.T) {
 			FollowUpText: "The batch is dispatched.",
 		},
 	}})
-	recording := llm.NewRecordingClient(mock)
+	recording := llmtest.NewRecordingClient(mock)
 	h := wiring.BuildForTest(t, wiring.WithLLMClient(recording))
 	ctx := context.Background()
 	dir := t.TempDir()
@@ -41,7 +42,7 @@ func TestHTTPCoordinatorBatchThreeTasksAndFollowUpE2E(t *testing.T) {
 	waitTaskEnqueueCountHTTP(t, h.Server, sess.ID, 3)
 	waitTranscriptContainsHTTP(t, h.Server, sess.ID, "The batch is dispatched.")
 
-	msgs, err := h.Store.GetMessages(ctx, sess.ID)
+	msgs, err := h.Store.Transcript.GetMessages(ctx, sess.ID)
 	testutil.FailErr(t, "GetMessages", err)
 	enqueued := 0
 	for _, msg := range msgs {
@@ -89,7 +90,7 @@ func TestHTTPCoordinatorBatchCapRejectE2E(t *testing.T) {
 		testutil.FailErr(t, "Prompt", err)
 	}
 
-	msgs, err := h.Store.GetMessages(ctx, sess.ID)
+	msgs, err := h.Store.Transcript.GetMessages(ctx, sess.ID)
 	testutil.FailErr(t, "GetMessages", err)
 	enqueued := 0
 	for _, msg := range msgs {

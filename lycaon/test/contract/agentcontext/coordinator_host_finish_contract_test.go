@@ -6,6 +6,7 @@ import (
 	"github.com/lycaon/lycaon/internal/coordinator/guard"
 	"github.com/lycaon/lycaon/internal/coordinator/surface"
 	"github.com/lycaon/lycaon/internal/orchestration"
+	"github.com/lycaon/lycaon/internal/testutil/surfacetest"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -41,7 +42,7 @@ var hostProseFinishContract = map[string]bool{
 
 // TestCoordinatorHostFinish_surfaceClassificationExhaustive: every configured surface is
 // classified, every classified surface exists in coordinator-surfaces.yaml, and the
-// classification matches HostTurnMayFinishWithProse.
+// classification matches the runtime surface catalog.
 func TestCoordinatorHostFinish_surfaceClassificationExhaustive(t *testing.T) {
 	t.Parallel()
 	surfaces := loadImplementSurfaces(t)
@@ -50,8 +51,8 @@ func TestCoordinatorHostFinish_surfaceClassificationExhaustive(t *testing.T) {
 		if !ok {
 			t.Fatalf("surface %q is unclassified — add it to hostProseFinishContract (true if a host cycle turn may close it with user prose once idle, false if it requires a tool terminal)", id)
 		}
-		if got := guard.HostTurnMayFinishWithProse(id, true, false); got != want {
-			t.Fatalf("surface %q: HostTurnMayFinishWithProse(idle, nothing pending) = %v, want %v", id, got, want)
+		if got := guard.SurfaceFinishesWithUserProse(id); got != want {
+			t.Fatalf("surface %q: SurfaceFinishesWithUserProse = %v, want %v", id, got, want)
 		}
 	}
 	for id := range hostProseFinishContract {
@@ -73,12 +74,12 @@ func TestCoordinatorHostFinish_readScoutsCanReportToUser(t *testing.T) {
 				api.CoordinatorRunContext{},
 				&api.Session{Posture: api.SessionPostureBuild},
 				coordinatorTurnHistory(WorkerCompletionHistory(scout), surface.HostLoopWakeSentinel),
-				surface.WithWrapupGates(surface.ImplementSessionState{}, true, false),
+				surfacetest.WithWrapupGates(surface.ImplementSessionState{}, true, false),
 			)
 			if profile.SurfaceID != "implement_synthesis" {
 				t.Fatalf("%s loop wake resolved to surface %q, want implement_synthesis", scout, profile.SurfaceID)
 			}
-			if !guard.HostTurnMayFinishWithProse(profile.SurfaceID, true, false) {
+			if !guard.SurfaceFinishesWithUserProse(profile.SurfaceID) {
 				t.Fatalf("%s synthesis on %q cannot finish with a grounded user answer", scout, profile.SurfaceID)
 			}
 		})

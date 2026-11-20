@@ -12,25 +12,35 @@ import (
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
-type Store interface {
-	Get(context.Context, string) (*api.Session, error)
-	ListUnsettledUserPromptSubmissionIDs(context.Context, string) ([]string, error)
-	LastTurnMessageContent(context.Context, string) (string, error)
+type Sessions interface {
+	Get(ctx context.Context, id string) (*api.Session, error)
+}
+
+type Transcript interface {
+	LastTurnMessageContent(ctx context.Context, sessionID string) (string, error)
+}
+
+type Submissions interface {
+	ListUnsettledUserPromptSubmissionIDs(ctx context.Context, sessionID string) ([]string, error)
 }
 type Queue interface{ AwaitsPerson(string, string) bool }
 type Service struct {
-	store     Store
-	queue     Queue
-	publisher *events.Publisher
-	begun     begunSubmissions
+	sessionStore    Sessions
+	transcriptStore Transcript
+	submissionStore Submissions
+	queue           Queue
+	publisher       *events.Publisher
+	begun           begunSubmissions
 }
 
-func New(store Store, queue Queue) *Service                 { return &Service{store: store, queue: queue} }
+func New(sessionStore Sessions, transcriptStore Transcript, submissionStore Submissions, queue Queue) *Service {
+	return &Service{sessionStore: sessionStore, transcriptStore: transcriptStore, submissionStore: submissionStore, queue: queue}
+}
 func (s *Service) SetPublisher(publisher *events.Publisher) { s.publisher = publisher }
 func (s *Service) Started(submissionID string) bool         { return s.begun.has(submissionID) }
 func (s *Service) Forget(submissionID string)               { s.begun.forget(submissionID) }
 func (s *Service) lastMessage(ctx context.Context, sessionID string) string {
-	content, err := s.store.LastTurnMessageContent(ctx, sessionID)
+	content, err := s.transcriptStore.LastTurnMessageContent(ctx, sessionID)
 	if err != nil {
 		return ""
 	}
@@ -41,10 +51,10 @@ func (s *Dispatch) Began() bool { return s.began.Load() }
 // PromptPending reports whether the session holds an admitted human prompt the
 // host will run without further human action and whose turn has not begun.
 func (m *Service) PromptPending(ctx context.Context, sessionID string) bool {
-	if m == nil || m.store == nil {
+	if m == nil || (m.sessionStore == nil || m.transcriptStore == nil || m.submissionStore == nil) {
 		return false
 	}
-	unsettled, err := m.store.ListUnsettledUserPromptSubmissionIDs(ctx, sessionID)
+	unsettled, err := m.submissionStore.ListUnsettledUserPromptSubmissionIDs(ctx, sessionID)
 	if err != nil {
 		slog.WarnContext(ctx, "read pending prompts", "session_id", sessionID, "error", err)
 		return false
@@ -72,10 +82,10 @@ func (m *Service) PromptPendingAmong(sessionID string, unsettled []string) bool 
 
 // SessionState reads the status and prompt_pending a session event carries.
 func (m *Service) SessionState(ctx context.Context, sessionID string) (api.SessionStatus, bool, error) {
-	if m == nil || m.store == nil {
+	if m == nil || (m.sessionStore == nil || m.transcriptStore == nil || m.submissionStore == nil) {
 		return "", false, fmt.Errorf("session manager unavailable")
 	}
-	sess, err := m.store.Get(ctx, sessionID)
+	sess, err := m.sessionStore.Get(ctx, sessionID)
 	if err != nil {
 		return "", false, err
 	}
@@ -85,10 +95,10 @@ func (m *Service) SessionState(ctx context.Context, sessionID string) (api.Sessi
 // Publish republishes the session after a pending-prompt change
 // that no lifecycle edge reports. Status is read after the revision is stamped.
 func (m *Service) Publish(ctx context.Context, sessionID string) {
-	if m == nil || m.publisher == nil || m.store == nil {
+	if m == nil || m.publisher == nil || (m.sessionStore == nil || m.transcriptStore == nil || m.submissionStore == nil) {
 		return
 	}
-	sess, err := m.store.Get(ctx, sessionID)
+	sess, err := m.sessionStore.Get(ctx, sessionID)
 	if err != nil {
 		return
 	}

@@ -16,7 +16,7 @@ var (
 )
 
 func (m *Service) ResolveNavigation(ctx context.Context, sessionID string, req api.ResolveMessageNavigationRequest, resolve func(context.Context, *project.Project, api.Message, []api.NavigationReference) []api.NavigationReference) (api.MessageNavigationResponse, error) {
-	msg, err := m.store.GetMessage(ctx, sessionID, req.MessageID)
+	msg, err := m.transcriptStore.GetMessage(ctx, sessionID, req.MessageID)
 	if err != nil {
 		return api.MessageNavigationResponse{}, err
 	}
@@ -27,7 +27,7 @@ func (m *Service) ResolveNavigation(ctx context.Context, sessionID string, req a
 	if msg.Role != api.MessageRoleAssistant || msg.Visibility == api.MessageVisibilityInternal {
 		return api.MessageNavigationResponse{}, ErrNavigationMessageNotProse
 	}
-	sess, err := m.store.Get(ctx, sessionID)
+	sess, err := m.sessionStore.Get(ctx, sessionID)
 	if err != nil {
 		return api.MessageNavigationResponse{}, err
 	}
@@ -87,7 +87,7 @@ func (m *Service) ResolveNavigation(ctx context.Context, sessionID string, req a
 
 	out := api.MessageNavigationResponse{ContentSHA256: hash, References: refs}
 	if req.ReferenceID == "" {
-		stored, err := m.store.PatchMessageNavigation(ctx, sessionID, req.MessageID, hash, msg.NavigationRefs, refs)
+		stored, err := m.transcriptStore.PatchMessageNavigation(ctx, sessionID, req.MessageID, hash, msg.NavigationRefs, refs)
 		if err != nil {
 			return out, err
 		}

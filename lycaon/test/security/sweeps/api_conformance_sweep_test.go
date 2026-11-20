@@ -21,17 +21,16 @@ import (
 	"testing"
 	"time"
 
-	"github.com/lycaon/lycaon/test/security"
-
 	"github.com/getkin/kin-openapi/openapi3"
 	"github.com/lycaon/lycaon/internal/api"
 	"github.com/lycaon/lycaon/internal/extpacks"
-	"github.com/lycaon/lycaon/internal/mcp"
+	"github.com/lycaon/lycaon/internal/mcp/mcptest"
 	"github.com/lycaon/lycaon/internal/presence"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/usernotice"
 	wire "github.com/lycaon/lycaon/pkg/api"
 	openapi "github.com/lycaon/lycaon/test/openapi"
+	"github.com/lycaon/lycaon/test/security"
 	"github.com/lycaon/lycaon/test/wiring"
 	sdkmcp "github.com/modelcontextprotocol/go-sdk/mcp"
 )
@@ -368,7 +367,7 @@ func (s *conformanceSweep) send(ctx context.Context, req conformanceRequest) con
 	r := httptest.NewRequestWithContext(reqCtx, req.op.Method, target, body)
 	switch req.credential {
 	case credentialValid:
-		r.Header.Set("Authorization", api.TestAuthHeader())
+		r.Header.Set("Authorization", "Bearer "+os.Getenv("LYCAON_API_TOKEN"))
 	case credentialWrong:
 		r.Header.Set("Authorization", "Bearer not-"+api.TestAPIToken)
 	case credentialNone:
@@ -511,10 +510,10 @@ type conformanceFixture struct {
 // source and read command.
 const conformanceMCPProvider = "conformance-tracker"
 
-func conformanceMCP() *mcp.MockConnector {
+func conformanceMCP() *mcptest.Connector {
 	// Choice steps and search sources call only read-only tools.
 	readOnly := &sdkmcp.ToolAnnotations{ReadOnlyHint: true}
-	return &mcp.MockConnector{
+	return &mcptest.Connector{
 		Tools: map[string][]*sdkmcp.Tool{
 			"svca": {{Name: "do", Description: "do"}},
 			conformanceMCPProvider: {

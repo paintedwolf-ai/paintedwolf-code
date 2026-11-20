@@ -25,7 +25,7 @@ func (h *harness) execMapped(argv ...string) (string, []toolcontract.StreamSourc
 	h.t.Helper()
 	var stdout mappingBuffer
 	streams := commandprogram.Streams{Input: io.NopCloser(strings.NewReader("")), Output: &stdout, Error: io.Discard}
-	result, err := h.owners.Invoke(h.t.Context(), h.tc, mustPaths(h.t, h), h.dispatch, requestFor(h, argv...), streams)
+	result, err := invokeSearch(h.owners, h.t.Context(), h.tc, mustPaths(h.t, h), h.dispatch, requestFor(h, argv...), streams)
 	if err != nil || result.Terminal != toolcontract.ProducerCompleted {
 		h.t.Fatalf("%v: %+v %v", argv, result, err)
 	}

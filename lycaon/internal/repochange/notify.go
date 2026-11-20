@@ -250,15 +250,3 @@ func canonicalDir(root string) string {
 	}
 	return filepath.Clean(abs)
 }
-
-// ResetObserversForTest clears observers (unit tests only).
-func ResetObserversForTest() {
-	mu.Lock()
-	observers = nil
-	observerSeq = 0
-	mu.Unlock()
-	epochMu.Lock()
-	epochBoot = uuid.NewString()
-	clear(epochByDir)
-	epochMu.Unlock()
-}

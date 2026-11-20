@@ -217,7 +217,7 @@ func (s *HarnessControl) handleHarnessAskUser(w http.ResponseWriter, r *http.Req
 	// Announce the card after its transcript rows are durable.
 	mgr.Asks.AnnouncePendingAsk(r.Context(), sessionID)
 	// Publish the card to late SSE subscribers.
-	if msgs, err := s.sessionStore.GetMessages(r.Context(), sessionID); err == nil {
+	if msgs, err := s.transcriptStore.GetMessages(r.Context(), sessionID); err == nil {
 		for _, msg := range msgs {
 			if msg.WorkflowFeedback != nil && msg.WorkflowFeedback.PhaseID == handle.PhaseID {
 				sess, _ := s.sessionStore.Get(r.Context(), sessionID)
@@ -318,7 +318,7 @@ func (s *HarnessControl) handleHarnessAskUserLastResponse(w http.ResponseWriter,
 		s.responses.Fail(w, wire.ApiErrorCodeInvalidRequest, "session_id is required")
 		return
 	}
-	msgs, err := s.sessionStore.GetMessages(r.Context(), sessionID)
+	msgs, err := s.transcriptStore.GetMessages(r.Context(), sessionID)
 	if err != nil {
 		s.responses.InternalError(w, r, err)
 		return

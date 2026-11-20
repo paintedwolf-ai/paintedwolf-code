@@ -143,18 +143,6 @@ func parseWorkflowManifestRef(at extpacks.Source, data []byte, wantID, wantVersi
 	}, nil
 }
 
-// TopologyPathForID returns the path the catalog published for a topology unit
-// (workflows/_topologies/<id>), or an empty Source when no pack provides it.
-// Reach for TopologySpecForID unless the path itself is the answer.
-func TopologyPathForID(catalog *extpacks.EffectiveCatalog, topologyID string) extpacks.Source {
-	topologyID = strings.TrimSpace(topologyID)
-	if topologyID == "" || catalog == nil {
-		return extpacks.Source{}
-	}
-	path, _ := catalog.UnitPath(extpacks.TopologyUnitID(topologyID))
-	return path
-}
-
 // TopologySpecForID parses the topology the catalog published for an id from its
 // captured bytes.
 func TopologySpecForID(catalog *extpacks.EffectiveCatalog, topologyID string) (*TopologySpec, error) {

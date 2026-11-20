@@ -30,10 +30,10 @@ func TestProxyCommandRelaysThroughSocks(t *testing.T) {
 	p := newTestBrokerFor(func(context.Context, string, egressproxy.Endpoint) bool {
 		return true
 	}, leasedPeer("cmd"))
-	p.SetDialEndpointForTest(func(ctx context.Context, ep egressproxy.Endpoint) (net.Conn, error) {
+	dialEndpoint := func(ctx context.Context, ep egressproxy.Endpoint) (net.Conn, error) {
 		return (&net.Dialer{}).DialContext(ctx, "tcp", ep.DialAddr())
-	})
-	addrs, err := p.Start()
+	}
+	addrs, err := p.Start(egressproxy.Options{DialEndpoint: dialEndpoint})
 	testutil.FailErr(t, "start proxy", err)
 	defer func() { _ = p.Close() }()
 

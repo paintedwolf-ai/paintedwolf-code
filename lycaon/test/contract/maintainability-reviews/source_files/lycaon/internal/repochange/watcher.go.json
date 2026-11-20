@@ -1,0 +1,16 @@
+{
+  "category": "source_files",
+  "artifact": "lycaon/internal/repochange/watcher.go",
+  "kind": "runtime_service",
+  "workstream": "repository-change-lifetime",
+  "disposition": "retain",
+  "reason": "Retain the 356-line platform-independent root stream: directory registration, coverage and closure use the same descriptor accounting and stream lock. Platform delivery and process generation retirement remain separate components.",
+  "reviewed_commit": "2be34334b2fa7bfea29ebceecc19fa6478bc8a1d",
+  "ceiling": 356,
+  "boundaries": {
+    "lycaon/internal/repochange/watcher_lifetime_test.go": "34f362920267f03c769254d493ca3443ee2c6c2dc2f507ae8a2262adb71f9459",
+    "lycaon/internal/repochange/watcher_start_test.go": "72e24b35e22cc7672c03b4b6a2d2b0c97c25ecae3ccc85153ce91ac657a70970",
+    "lycaon/internal/repochange/watch_budget_test.go": "2c35bde80d650f9940232d243c6bc8c739776e1b2010ce2cdcf7f7055502dbce",
+    "lycaon/internal/repochange/debounce_lifetime_test.go": "a4a239f85eccd5397afde501ca41b9e340f64d868f4112c9a08e57b0581bb231"
+  }
+}

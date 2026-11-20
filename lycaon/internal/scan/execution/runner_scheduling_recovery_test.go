@@ -2,7 +2,6 @@ package execution
 
 import (
 	"context"
-	scanfixtures "github.com/lycaon/lycaon/internal/scan/scantest"
 	"path/filepath"
 	"testing"
 	"time"
@@ -10,6 +9,7 @@ import (
 	"github.com/lycaon/lycaon/internal/backgroundwork"
 	scanbase "github.com/lycaon/lycaon/internal/scan"
 	scancfg "github.com/lycaon/lycaon/internal/scan/configuration"
+	scanfixtures "github.com/lycaon/lycaon/internal/scan/scantest"
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -20,12 +20,12 @@ import (
 func TestRunnerRecoversLeaseAtItsDeadline(t *testing.T) {
 	store := scanbase.NewSQLStore(testdbfixture.Open(t, "scan.db"))
 	expiry := time.Now().Add(200 * time.Millisecond)
-	testutil.FailErr(t, "insert abandoned execution", store.Insert(t.Context(), api.CodeScan{
+	testutil.FailErr(t, "insert abandoned execution", store.Runs.Insert(t.Context(), api.CodeScan{
 		ID: "abandoned", CanonicalPath: t.TempDir(), ScannerID: "mock",
 		Status: api.CodeScanStatusRunning, Categories: []api.ScanCategory{api.ScanCategorySecurity},
 		SourceSnapshotID: "snapshot", ClaimToken: "lost-host", LeaseExpiresAt: &expiry,
 	}, nil, ""))
-	runner := NewRunner(scanbase.NewSQLStore(store.DB()), &scanfixtures.MockRegistry{Scanner: &scanfixtures.MockScanner{}}, scanbase.NoopIngester{}, scancfg.DefaultRunnerConfig(), nil)
+	runner := NewRunner(scanbase.NewSQLStore(store.DB()), &scanfixtures.MockRegistry{Scanner: &scanfixtures.MockScanner{}}, scanfixtures.DiscardIngester{}, scancfg.DefaultRunnerConfig(), nil)
 	terminal := make(chan api.CodeScan, 1)
 	runner.OnTerminal = func(_ context.Context, scan api.CodeScan) { terminal <- scan }
 	scantest.RunService(t, runner.Run)
@@ -44,7 +44,7 @@ func TestSettingsDisableCancelsClaimBeforeEngineAdmission(t *testing.T) {
 	configuration, err := settings.NewSecurityScannersStoreAt(filepath.Join(t.TempDir(), "security.yaml"))
 	testutil.FailErr(t, "create settings", err)
 	probe := &cancellationProbeScanner{started: make(chan struct{}), stopped: make(chan struct{})}
-	runner := NewRunner(store, &scanfixtures.MockRegistry{Scanner: probe}, scanbase.NoopIngester{}, scancfg.DefaultRunnerConfig(), nil)
+	runner := NewRunner(store, &scanfixtures.MockRegistry{Scanner: probe}, scanfixtures.DiscardIngester{}, scancfg.DefaultRunnerConfig(), nil)
 	runner.Settings = configuration
 	runner.Snapshots = testSnapshots(t, store)
 	runner.Broker = backgroundwork.New(map[backgroundwork.Resource]backgroundwork.Limits{
@@ -56,7 +56,7 @@ func TestSettingsDisableCancelsClaimBeforeEngineAdmission(t *testing.T) {
 	testutil.FailErr(t, "occupy CPU admission", err)
 	defer release()
 	root := t.TempDir()
-	testutil.FailErr(t, "insert waiting scan", store.Insert(t.Context(), api.CodeScan{
+	testutil.FailErr(t, "insert waiting scan", store.Runs.Insert(t.Context(), api.CodeScan{
 		ID: "waiting-for-admission", CanonicalPath: root, ScannerID: probe.ID(),
 		Status: api.CodeScanStatusPending, Categories: probe.Categories(),
 		SourceSnapshotID: publishTestSnapshot(t, runner.Snapshots, root),
@@ -65,7 +65,7 @@ func TestSettingsDisableCancelsClaimBeforeEngineAdmission(t *testing.T) {
 	runner.OnTerminal = func(_ context.Context, scan api.CodeScan) { terminal <- scan }
 	scantest.RunService(t, runner.Run)
 	testutil.WaitFor(t, "one scan is running", func() bool {
-		count, err := store.CountRunning(t.Context())
+		count, err := store.Runs.CountRunning(t.Context())
 		return err == nil && count == 1
 	})
 	off := false

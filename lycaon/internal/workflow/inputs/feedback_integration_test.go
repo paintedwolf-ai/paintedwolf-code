@@ -4,7 +4,6 @@ package inputs_test
 
 import (
 	"context"
-	"github.com/lycaon/lycaon/internal/tools/toolstest"
 	"os"
 	"path/filepath"
 	"strings"
@@ -22,6 +21,7 @@ import (
 	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/tools/toolstest"
 	"github.com/lycaon/lycaon/internal/workflow"
 	workflowcomposition "github.com/lycaon/lycaon/internal/workflow/composition"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
@@ -71,7 +71,7 @@ func setupFeedbackIntegration(t *testing.T) (*workflow.RunManager, *session.Host
 
 	testdbseed.InsertProjectRoot(t, sqlDB, testdbseed.DefaultProjectID, dir)
 
-	sess, err := store.Create(context.Background(), wire.CreateSessionRequest{
+	sess, err := store.Sessions.Create(context.Background(), wire.CreateSessionRequest{
 		Posture: wire.SessionPostureSpec,
 	}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session in store", err)
@@ -140,7 +140,7 @@ func TestFeedbackKickQueuedOnPhaseEntry(t *testing.T) {
 
 	testdbseed.InsertProjectRoot(t, sqlDB, testdbseed.DefaultProjectID, dir)
 
-	sess, err := store.Create(context.Background(), wire.CreateSessionRequest{
+	sess, err := store.Sessions.Create(context.Background(), wire.CreateSessionRequest{
 		Posture: wire.SessionPostureSpec,
 	}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session in store", err)

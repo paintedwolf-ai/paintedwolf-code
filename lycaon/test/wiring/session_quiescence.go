@@ -20,7 +20,7 @@ func WaitForSessionIdleGate(t *testing.T, h *Harness, ctx context.Context, sessi
 		if loop.Admission.PromptExecutionActive(sessionID) || loop.Nudges.HasPendingLoopWakes(sessionID) || loop.Turns.Active(sessionID) {
 			return false
 		}
-		sess, err := h.Store.Get(ctx, sessionID)
+		sess, err := h.Store.Sessions.Get(ctx, sessionID)
 		if err != nil || sess == nil || sess.Status != api.SessionStatusIdle {
 			return false
 		}

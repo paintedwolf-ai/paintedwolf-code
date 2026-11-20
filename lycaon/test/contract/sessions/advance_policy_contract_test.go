@@ -47,7 +47,7 @@ func TestGateFeedbackSatisfySplitByAdvancePolicy(t *testing.T) {
 				if !catalog.Has(gateID) {
 					continue
 				}
-				binding, err := workflowdef.ResolveSurfaceBinding(m, phase.ID, m.ID, "")
+				binding, err := workflowdef.ResolveSurfaceBinding(m, phase.ID, m.ID)
 				contractcheck.FailErr(t, "ResolveSurfaceBinding "+key+" "+phase.ID, err)
 				for _, policy := range policies {
 					offered := offeredCoordinatorTools(t, api.CoordinatorRunContext{

@@ -9,6 +9,7 @@ import (
 	"github.com/lycaon/lycaon/internal/hitl"
 	"github.com/lycaon/lycaon/internal/secretmatch"
 	"github.com/lycaon/lycaon/internal/settings"
+	"github.com/lycaon/lycaon/internal/settings/settingstest"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/tools"
 )
@@ -34,7 +35,7 @@ func unscreenedImageAlert(toolCallID, path, destinationID, destinationLabel stri
 func TestUnscreenedImageTaskReleaseCoversLaterImagesToTheSameDestination(t *testing.T) {
 	store, err := settings.NewApprovalStoreAt(filepath.Join(t.TempDir(), "approvals.yaml"))
 	testutil.FailErr(t, "open approval store", err)
-	gate := settings.NewRuleApprovalGate(store, settings.NoSources())
+	gate := settings.NewRuleApprovalGate(store, settingstest.EmptySources())
 	mgr := &secretScreenHITL{status: hitl.DecisionStatusApproved}
 	exec := toolexecution.NewExecutor(nil, tools.NewDefaultRegistry(), "implement")
 	exec.Approvals.SetCheckpointManager(t.Context(), mgr, gate)

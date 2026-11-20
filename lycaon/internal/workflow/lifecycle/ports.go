@@ -32,8 +32,11 @@ type TeardownRepository interface {
 }
 
 type Sessions interface {
-	Get(context.Context, string) (*api.Session, error)
-	LatestTurnProgress(context.Context, string) (time.Time, error)
+	Get(ctx context.Context, id string) (*api.Session, error)
+}
+
+type Turns interface {
+	LatestTurnProgress(ctx context.Context, sessionID string) (time.Time, error)
 }
 
 type WorkerStop interface {

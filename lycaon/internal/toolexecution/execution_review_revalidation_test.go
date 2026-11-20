@@ -8,11 +8,12 @@ import (
 	"slices"
 	"testing"
 
-	"github.com/lycaon/lycaon/internal/confine"
+	"github.com/lycaon/lycaon/internal/confine/admissiontest"
 	"github.com/lycaon/lycaon/internal/hitl"
 	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/settings"
+	"github.com/lycaon/lycaon/internal/settings/settingstest"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/toolexecution"
 	"github.com/lycaon/lycaon/internal/toolprofiles"
@@ -43,7 +44,7 @@ func TestExecutionReviewHonorsReviewedReasonAndLaterDeny(t *testing.T) {
 			name += "-confined"
 		}
 		t.Run(name, func(t *testing.T) {
-			confine.TestingSetAutoConfine(t)
+			admissiontest.Enable(t)
 			t.Setenv("LYCAON_SANDBOX", "on")
 			t.Setenv("LYCAON_BYPASS_APPROVALS", "0")
 			if scenario.sandboxOff {
@@ -55,7 +56,7 @@ func TestExecutionReviewHonorsReviewedReasonAndLaterDeny(t *testing.T) {
 			testutil.FailErr(t, "create policy store", err)
 			config := settings.ApprovalConfig{Rules: []settings.ApprovalRule{{Category: settings.ApprovalCategoryTool, Pattern: "command", Effect: settings.ApprovalEffectAsk}}}
 			testutil.FailErr(t, "install independent ask", store.PutProject(root, config))
-			sources := settings.NoSources()
+			sources := settingstest.EmptySources()
 			if scenario.missingProducer {
 				sources.Detections = nil
 			}

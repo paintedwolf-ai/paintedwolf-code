@@ -1,0 +1,14 @@
+{
+  "category": "source_files",
+  "artifact": "lycaon/internal/layeredfs/adapter/eagercopy.go",
+  "kind": "runtime_service",
+  "workstream": "materialized-view-release",
+  "disposition": "retain",
+  "reason": "Retain the materialized adapter construction, prepare/reopen and capture/access methods together. Release settlement has a dedicated feature file, and redundant per-instance registration and private forwarding methods are removed. The remaining code shares the exact prepared-view and stat-capture lifecycle; focused release regressions and real consumer recovery contracts support this boundary.",
+  "reviewed_commit": "2991f99b3eb08babf54d6b497fdc67634b360fc4",
+  "ceiling": 373,
+  "boundaries": {
+    "lycaon/internal/layeredfs/adapter/eagercopy_release_test.go": "ebdf27edc6fc384abdb859f0b41f4083b6e39c98138e25b81d328130f9c5383b",
+    "lycaon/internal/layeredfs/adapter/adapter_test.go": "6d8873fd758de705c60c4629484e5feb3569847d666935381d48efd0ede9628d"
+  }
+}

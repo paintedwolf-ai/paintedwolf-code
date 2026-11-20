@@ -81,7 +81,7 @@ func ComputePlanProgress(markdown string, flags PlanEvalFlags, snap DispatchSnap
 		PhaseInferredName: name,
 		ProgressChecklist: checklist,
 		ChecklistHash:     hex.EncodeToString(sum[:]),
-		NextAction:        nextActionForPhase(phase, text, flags),
+		NextAction:        nextActionForPhase(phase, flags),
 		ResearchDepth:     declaredResearchDepth(text),
 		ReviewDepth:       reviewDepthSection(text),
 		ScopeDisplay:      sectionSnippet(text, "## Scope", "## Plan implementation scope"),
@@ -222,7 +222,7 @@ func skippedPhaseIDs(flags PlanEvalFlags) []string {
 	return out
 }
 
-func nextActionForPhase(phase int, text string, flags PlanEvalFlags) string {
+func nextActionForPhase(phase int, flags PlanEvalFlags) string {
 	switch phase {
 	case 0:
 		return "Write the bound blueprint: " + strings.Join(conditions.PlanStubRequiredLabels(), ", ")

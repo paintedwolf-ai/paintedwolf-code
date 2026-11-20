@@ -12,9 +12,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/lycaon/lycaon/internal/confine"
+	"github.com/lycaon/lycaon/internal/confine/admissiontest"
 	"github.com/lycaon/lycaon/internal/gitexec"
 	"github.com/lycaon/lycaon/internal/layeredfs/adapter"
+	"github.com/lycaon/lycaon/internal/layeredfs/adapter/adaptertest"
 	"github.com/lycaon/lycaon/internal/session"
 	"github.com/lycaon/lycaon/internal/sourceledger"
 	"github.com/lycaon/lycaon/internal/testbaseline"
@@ -74,12 +75,12 @@ func TestStressMountedSparseWorkerLifecycleOverALargeSource(t *testing.T) {
 	started = time.Now()
 	completed := fixture.completeWithChange(t, task, func() {})
 	t.Logf("checkpoint elapsed=%s", time.Since(started))
-	_, manifest, published, err := session.OpenTaskCheckpointStore(completed)
+	_, manifest, published, err := session.OpenTaskCheckpointStore(completed, "")
 	testutil.FailErr(t, "scale checkpoint", err)
 	if !published || len(manifest.Entries) != 1 || manifest.Entries[0].Path.Rel != name {
 		t.Fatal("checkpoint scope differs from the single authored file")
 	}
-	service := &MergeService{Queue: fixture.queue, Store: fixture.queue, DataDir: testbaseline.DataDir(t, fixture.db), Workspace: fixture.manager}
+	service := &MergeService{Queue: fixture.queue, Branches: fixture.queue.Branches, Store: fixture.promotions, DataDir: testbaseline.DataDir(t, fixture.db), Workspace: fixture.manager}
 	started = time.Now()
 	result, err := service.PromoteOverlay(t.Context(), "", task.ID, api.PromoteOverlayInput{})
 	t.Logf("promotion elapsed=%s", time.Since(started))
@@ -96,7 +97,7 @@ func TestStressMountedSparseWorkerLifecycleOverALargeSource(t *testing.T) {
 
 func newLargeSourceWorkerFixture(t *testing.T, source string) *layeredWorkerFixture {
 	t.Helper()
-	confine.TestingSetAutoConfine(t)
+	admissiontest.Enable(t)
 	database := testdbfixture.Open(t, "store.db")
 	testdbseed.InsertProjectRootWithID(t, database, testdbseed.DefaultProjectID, "root-id", source)
 	branches := filepath.Join(testbaseline.DataDir(t, database), "worker-branches")
@@ -104,12 +105,13 @@ func newLargeSourceWorkerFixture(t *testing.T, source string) *layeredWorkerFixt
 	git, err := workspace.OpenPrivateGit(branches)
 	testutil.FailErr(t, "scale private Git", err)
 	selector := workspace.HostSelector()
-	selector.BudgetFor = adapter.ZeroBudget
-	manager := workspace.NewManager(branches, selector).WithPrivateGit(git)
-	queue := NewSQLQueue(database, 4)
-	queue.SetBaselineStore(sourceledger.New(database, filepath.Join(testbaseline.DataDir(t, database), "source-content")).Baselines)
-	queue.SetWorkerWorkspaceManager(manager)
-	return &layeredWorkerFixture{db: database, queue: queue, manager: manager, source: source, branches: branches}
+	selector.BudgetFor = adaptertest.ZeroBudget
+	manager := workspace.NewManager(branches, selector, workspace.Filesystem{}).WithPrivateGit(git)
+	services := NewSQLServices(database, 4)
+	queue := services.Queue
+	queue.Branches.SetBaselineStore(sourceledger.New(database, filepath.Join(testbaseline.DataDir(t, database), "source-content"), sourceledger.Timing{}).Baselines)
+	queue.Branches.SetWorkerWorkspaceManager(manager)
+	return &layeredWorkerFixture{db: database, queue: queue, promotions: services.Promotions, manager: manager, source: source, branches: branches}
 }
 
 func claimLargeSourceWorker(t *testing.T, f *layeredWorkerFixture, name string) *api.WorkerTask {
@@ -125,7 +127,7 @@ func claimLargeSourceWorker(t *testing.T, f *layeredWorkerFixture, name string) 
 	if next == nil {
 		t.Fatal("scale worker was not claimable")
 	}
-	task, err := f.queue.ClaimWorkerBranch(t.Context(), id)
+	task, err := f.queue.Branches.ClaimWorkerBranch(t.Context(), id)
 	testutil.FailErr(t, "prepare scale worker", err)
 	task.ClaimToken = next.ClaimToken
 	return task

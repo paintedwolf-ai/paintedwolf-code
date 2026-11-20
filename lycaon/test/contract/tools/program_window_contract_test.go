@@ -1,6 +1,8 @@
 package contract
 
 import (
+	"github.com/lycaon/lycaon/internal/repochange/repochangetest"
+
 	"context"
 	"encoding/json"
 	"os"
@@ -8,7 +10,6 @@ import (
 	"sync/atomic"
 	"testing"
 
-	"github.com/lycaon/lycaon/internal/repochange"
 	"github.com/lycaon/lycaon/internal/sourceledger"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -33,10 +34,10 @@ func (o *countingWindowOpener) OpenCommandWindow(ctx context.Context, in sourcel
 // over real native owners and a real source ledger.
 func windowProgramRepo(t *testing.T) (*toolfixture.ProgramFixture, *countingWindowOpener) {
 	t.Helper()
-	repochange.DisableWatchersForTest()
-	t.Cleanup(repochange.ResetWatchersForTest)
+
+	repochangetest.Acquire(t)
 	f := toolfixture.NewProgramFixture(t)
-	ledger := f.Seed.AttachLedger(t)
+	ledger := f.Seed.AttachLedger(t, sourceledger.Timing{})
 	dir := f.Seed.Dir
 	gittest.Init(t, dir)
 	for _, content := range []string{"one\n", "two\n", "three\n"} {
@@ -94,10 +95,10 @@ git bisect reset`, tc)
 // A program's window has settled by the time the overview reads, so its effects
 // list with their window. A window is observation, not authorship, so the actor stays external.
 func TestSourceHistoryOverviewACCW02ProgramEffectsListSettled(t *testing.T) {
-	repochange.DisableWatchersForTest()
-	t.Cleanup(repochange.ResetWatchersForTest)
+
+	repochangetest.Acquire(t)
 	f := toolfixture.NewProgramFixture(t)
-	ledger := f.Seed.AttachLedger(t)
+	ledger := f.Seed.AttachLedger(t, sourceledger.Timing{})
 	dir := f.Seed.Dir
 	gittest.Init(t, dir)
 	contractcheck.FailErr(t, "write tracked file", os.WriteFile(filepath.Join(dir, "a.txt"), []byte("one\n"), 0o644))
@@ -151,10 +152,10 @@ func TestSourceHistoryOverviewACCW02ProgramEffectsListSettled(t *testing.T) {
 // A bisect check is one of the program's external processes, so the window is
 // active while it runs.
 func TestGitBisectRunHoldsTheWindowWhileItsCheckRuns(t *testing.T) {
-	repochange.DisableWatchersForTest()
-	t.Cleanup(repochange.ResetWatchersForTest)
+
+	repochangetest.Acquire(t)
 	f := toolfixture.NewProgramFixture(t)
-	ledger := f.Seed.AttachLedger(t)
+	ledger := f.Seed.AttachLedger(t, sourceledger.Timing{})
 	dir := f.Seed.Dir
 	gittest.Init(t, dir)
 	for _, content := range []string{"one\n", "two\n", "three\n"} {

@@ -10,17 +10,16 @@ import (
 	"github.com/lycaon/lycaon/internal/api"
 	"github.com/lycaon/lycaon/internal/blueprint"
 	"github.com/lycaon/lycaon/internal/llm"
-	"github.com/lycaon/lycaon/internal/session"
 	sessionstore "github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/testutil"
 	wire "github.com/lycaon/lycaon/pkg/api"
 	"github.com/lycaon/lycaon/test/wiring"
 )
 
-func advancePlanRunToImplement(t *testing.T, h *wiring.Harness, srv *api.Server, store session.Store, blueprintMgr *blueprint.Manager, sess wire.Session) wire.WorkflowRun {
+func advancePlanRunToImplement(t *testing.T, h *wiring.Harness, srv *api.Server, store *sessionstore.Repositories, blueprintMgr *blueprint.Manager, sess wire.Session) wire.WorkflowRun {
 	t.Helper()
 	ctx := t.Context()
-	if _, err := store.Get(ctx, sess.ID); err != nil {
+	if _, err := store.Sessions.Get(ctx, sess.ID); err != nil {
 		testutil.FailErr(t, "store.Get failed", err)
 	}
 
@@ -38,7 +37,7 @@ func advancePlanRunToImplement(t *testing.T, h *wiring.Harness, srv *api.Server,
 	}
 	run = advancePlanRunToExecuteHTTP(t, h, srv, blueprintMgr, sess, run)
 
-	sessAfter, err := store.Get(ctx, sess.ID)
+	sessAfter, err := store.Sessions.Get(ctx, sess.ID)
 	testutil.FailErr(t, "store.Get failed", err)
 	if sessAfter.Posture != wire.SessionPostureBuild {
 		t.Fatalf("session posture = %q want build", sessAfter.Posture)
@@ -74,7 +73,7 @@ func TestBuildPostureDisallowedAgentAfterImplementPhase(t *testing.T) {
 	accepted := acceptPromptHTTP(t, srv, sess.ID, "spawn task")
 
 	testutil.WaitFor(t, "the posture prompt settles", func() bool {
-		submission, err := store.GetPromptSubmission(ctx, accepted.OperationID)
+		submission, err := store.Submissions.GetPromptSubmission(ctx, accepted.OperationID)
 		testutil.FailErr(t, "read posture prompt receipt", err)
 		if !submission.Status.Terminal() {
 			return false
@@ -85,7 +84,7 @@ func TestBuildPostureDisallowedAgentAfterImplementPhase(t *testing.T) {
 		return true
 	})
 
-	msgs, err := store.GetMessages(ctx, sess.ID)
+	msgs, err := store.Transcript.GetMessages(ctx, sess.ID)
 	testutil.FailErr(t, "store.GetMessages failed", err)
 	var toolDeny string
 	for _, msg := range msgs {
@@ -134,7 +133,7 @@ func TestBuildPostureAllowsDelegationWithPlanManifestRules(t *testing.T) {
 		return err == nil && len(tasks) == 1
 	})
 
-	msgs, err := store.GetMessages(ctx, sess.ID)
+	msgs, err := store.Transcript.GetMessages(ctx, sess.ID)
 	testutil.FailErr(t, "store.GetMessages failed", err)
 	for _, msg := range msgs {
 		if msg.Role == wire.MessageRoleTool && strings.Contains(msg.Content, "SPEC_POSTURE_DELEGATION_FORBIDDEN") {

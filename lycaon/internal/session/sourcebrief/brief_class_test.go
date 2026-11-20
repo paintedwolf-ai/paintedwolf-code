@@ -2,7 +2,6 @@ package sourcebrief
 
 import (
 	"fmt"
-	"github.com/lycaon/lycaon/internal/timelayout"
 	"math"
 	"testing"
 	"time"
@@ -13,6 +12,7 @@ import (
 	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/timelayout"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -39,7 +39,7 @@ func newBriefLedger(t *testing.T) *briefLedger {
  VALUES (?,'p1',?,'command','npm run build','ended',?,?)`, fmt.Sprintf("w%d", i+1), session, i+1, now)
 		testutil.FailErr(t, "seed window", err)
 	}
-	return &briefLedger{t: t, ledger: sourceledger.New(sqlDB, t.TempDir())}
+	return &briefLedger{t: t, ledger: sourceledger.New(sqlDB, t.TempDir(), sourceledger.Timing{})}
 }
 
 func (l *briefLedger) checkpoint(turn int) {
@@ -72,7 +72,7 @@ func (l *briefLedger) person(path string) {
 
 func (l *briefLedger) build() inject.SourceChangeBrief {
 	l.t.Helper()
-	service := New(briefWindowStore{turn: 2}, briefRootList(briefRoots()))
+	service := New(briefWindowStore{turn: 2}, briefWindowStore{turn: 2}, briefWindowStore{turn: 2}, briefRootList(briefRoots()))
 	service.SetSources(tools.SourceHistory{Files: l.ledger.History, Git: l.ledger.Git, Authorship: l.ledger.Walk}, l.ledger.Checkpoints)
 	return service.Build(l.t.Context(), &api.Session{ID: "s1", ProjectID: "p1"})
 }

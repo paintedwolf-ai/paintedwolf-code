@@ -13,6 +13,7 @@ import (
 	"github.com/lycaon/lycaon/internal/hitl"
 	"github.com/lycaon/lycaon/internal/sensitivepath"
 	"github.com/lycaon/lycaon/internal/settings"
+	"github.com/lycaon/lycaon/internal/settings/settingstest"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -37,7 +38,7 @@ func filesystemCard(t *testing.T, action hitl.ProposedAction) (*hitl.ApprovalRes
 	testutil.FailErr(t, "PutGlobal strict", store.PutGlobal(settings.ApprovalConfig{Posture: gate.PostureStrict}))
 	locations, err := sensitivepath.Load(sensitivepath.Bundled())
 	testutil.FailErr(t, "sensitivepath.Load failed", err)
-	sources := settings.NoSources()
+	sources := settingstest.EmptySources()
 	sources.Locations = locations
 	g := settings.NewRuleApprovalGate(store, sources)
 	res, err := g.Evaluate(context.Background(), action)
@@ -182,7 +183,7 @@ func TestCardNamesTheUncoveredCrossing(t *testing.T) {
 	testutil.FailErr(t, "PutGlobal strict", store.PutGlobal(settings.ApprovalConfig{Posture: gate.PostureStrict}))
 	locations, err := sensitivepath.Load(sensitivepath.Bundled())
 	testutil.FailErr(t, "sensitivepath.Load failed", err)
-	sources := settings.NoSources()
+	sources := settingstest.EmptySources()
 	sources.Locations = locations
 	g := settings.NewRuleApprovalGate(store, sources)
 
@@ -428,7 +429,7 @@ func TestALeaseOnOnePathDoesNotCoverAnother(t *testing.T) {
 	testutil.FailErr(t, "PutGlobal strict", store.PutGlobal(settings.ApprovalConfig{Posture: gate.PostureStrict}))
 	locations, err := sensitivepath.Load(sensitivepath.Bundled())
 	testutil.FailErr(t, "sensitivepath.Load failed", err)
-	sources := settings.NoSources()
+	sources := settingstest.EmptySources()
 	sources.Locations = locations
 	g := settings.NewRuleApprovalGate(store, sources)
 
@@ -574,7 +575,7 @@ func TestCredentialStoreReadAsksInsideAnAttachedHome(t *testing.T) {
 	testutil.FailErr(t, "set balanced", store.PutGlobal(settings.ApprovalConfig{Posture: gate.PostureBalanced}))
 	locations, err := sensitivepath.Load(sensitivepath.Bundled())
 	testutil.FailErr(t, "load locations", err)
-	sources := settings.NoSources()
+	sources := settingstest.EmptySources()
 	sources.Locations = locations
 	g := settings.NewRuleApprovalGate(store, sources)
 	path := filepath.Join(home(t), ".aws", "credentials")

@@ -36,7 +36,7 @@ func (s *Content) readChatContent(w http.ResponseWriter, r *http.Request) (chatC
 	var out chatContentRead
 	query := r.URL.Query()
 	sessionID := chi.URLParam(r, "id")
-	if _, err := s.Store.Get(r.Context(), sessionID); err != nil {
+	if _, err := s.SessionQueries.Get(r.Context(), sessionID); err != nil {
 		if errors.Is(err, store.ErrSessionNotFound) {
 			s.responses.Fail(w, wire.ApiErrorCodeSessionNotFound, "chat not found")
 			return out, false
@@ -44,7 +44,7 @@ func (s *Content) readChatContent(w http.ResponseWriter, r *http.Request) (chatC
 		s.responses.InternalError(w, r, err)
 		return out, false
 	}
-	msg, err := s.Store.GetMessage(r.Context(), sessionID, chi.URLParam(r, "message_id"))
+	msg, err := s.TranscriptQueries.GetMessage(r.Context(), sessionID, chi.URLParam(r, "message_id"))
 	if errors.Is(err, store.ErrMessageNotFound) {
 		s.responses.Fail(w, wire.ApiErrorCodeChatContentNotFound, "Chat content not found.")
 		return out, false

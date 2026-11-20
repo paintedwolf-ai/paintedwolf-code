@@ -27,10 +27,13 @@ func TestComputeSurfaceFacts_reflectsSources(t *testing.T) {
 	sess := &api.Session{
 		Posture: api.SessionPostureSpec,
 	}
-	state := WithWrapupGates(ImplementSessionState{
-		WorkersInFlight:   2,
-		PendingOverlayIDs: []string{"j-overlay"},
-	}, true, true)
+	state := ImplementSessionState{
+		WorkersInFlight:           2,
+		PendingOverlayIDs:         []string{"j-overlay"},
+		WrapupGatesLoaded:         true,
+		BatchReadyForSynthesis:    true,
+		OpenRepairSinceUserIntent: true,
+	}
 
 	facts := ComputeSurfaceFacts(runCtx, sess, history, state)
 
@@ -73,7 +76,7 @@ func TestComputeSurfaceFacts_reflectsSources(t *testing.T) {
 }
 
 func TestComputeSurfaceFacts_visibleUserClearsHardBlockWhenStructuralGuardsClear(t *testing.T) {
-	runCtx := enrichPickerRunContext(api.CoordinatorRunContext{WorkflowID: "implement", CurrentPhase: "work"})
+	runCtx := api.CoordinatorRunContext{WorkflowID: "implement", WorkflowInvestigateEligible: new(true), CurrentPhase: "work"}
 	sess := &api.Session{Posture: api.SessionPostureBuild}
 	facts := ComputeSurfaceFacts(runCtx, sess, []api.Message{visibleTurnMessage("fix the auth bug")}, ImplementSessionState{})
 	if facts.InvestigateHardBlock {
@@ -88,7 +91,7 @@ func TestComputeSurfaceFacts_visibleUserClearsHardBlockWhenStructuralGuardsClear
 }
 
 func TestComputeSurfaceFacts_investigateDefaultEligibleAmbient(t *testing.T) {
-	runCtx := enrichPickerRunContext(api.CoordinatorRunContext{WorkflowID: "implement", CurrentPhase: "work"})
+	runCtx := api.CoordinatorRunContext{WorkflowID: "implement", WorkflowInvestigateEligible: new(true), CurrentPhase: "work"}
 	facts := ComputeSurfaceFacts(runCtx, &api.Session{}, []api.Message{visibleTurnMessage("hello")}, ImplementSessionState{})
 	if !facts.InvestigateDefaultEligible {
 		t.Fatal("enriched ambient implement run should be investigate-default eligible")
@@ -110,7 +113,7 @@ func TestSurfaceFactsAsMap_matchesRegistryKeys(t *testing.T) {
 		BatchReadyForSynthesis:           true,
 		Posture:                          "build",
 	}.AsMap()
-	for _, name := range RegisteredSurfaceFactNames() {
+	for _, name := range registeredSurfaceFactNames {
 		if _, ok := m[name]; !ok {
 			t.Fatalf("AsMap missing registered fact %q", name)
 		}
@@ -155,7 +158,7 @@ func TestSurfaceFactsRegistry_structFieldClosure(t *testing.T) {
 		}
 		seen[fact] = struct{}{}
 	}
-	for _, name := range RegisteredSurfaceFactNames() {
+	for _, name := range registeredSurfaceFactNames {
 		if _, ok := seen[name]; !ok {
 			t.Fatalf("registered fact %q has no SurfaceFacts field", name)
 		}
@@ -163,7 +166,7 @@ func TestSurfaceFactsRegistry_structFieldClosure(t *testing.T) {
 }
 
 func TestIsKnownFact_closure(t *testing.T) {
-	for _, name := range RegisteredSurfaceFactNames() {
+	for _, name := range registeredSurfaceFactNames {
 		if !IsKnownFact(name) {
 			t.Fatalf("IsKnownFact(%q) = false", name)
 		}
@@ -176,4 +179,29 @@ func TestIsKnownFact_closure(t *testing.T) {
 	if len(factKinds) != len(registeredSurfaceFactNames) {
 		t.Fatalf("factKinds len = %d registered = %d", len(factKinds), len(registeredSurfaceFactNames))
 	}
+}
+
+var registeredSurfaceFactNames = []string{
+	FactHasComposeDraft,
+	FactManifestBoundSurface,
+	FactOverlayPromotePending,
+	FactChildSubroutineBlocksInvestigate,
+	FactWorkflowDeclaredMode,
+	FactInvestigateDefaultEligible,
+	FactInvestigateHardBlock,
+	FactWorkersInFlight,
+	FactWorkersDelivered,
+	FactHostCycleTurn,
+	FactWorkerTaskFinishedTurn,
+	FactHostLoopWakeTurn,
+	FactOpenRepairSinceUserIntent,
+	FactBatchReadyForSynthesis,
+	FactWrapupGatesLoaded,
+	FactVerifyUnverified,
+	FactVisibleUserTurn,
+	FactPosture,
+	FactProgressHasOpenSteps,
+	FactProgressMissing,
+	FactProgressGatedToolAttemptedSinceIntent,
+	FactPhaseHostHeld,
 }

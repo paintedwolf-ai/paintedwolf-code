@@ -13,7 +13,7 @@ import (
 )
 
 // AppendDraftVersion snapshots one superseded coordinator draft attempt.
-func (s *sqlCompaction) AppendDraftVersion(ctx context.Context, sessionID, slotID, body, outcomeCode string) (int, error) {
+func (s *sqlTranscript) AppendDraftVersion(ctx context.Context, sessionID, slotID, body, outcomeCode string) (int, error) {
 	if err := ctx.Err(); err != nil {
 		return 0, err
 	}
@@ -70,7 +70,7 @@ func (s *sqlCompaction) AppendDraftVersion(ctx context.Context, sessionID, slotI
 }
 
 // ListDraftVersions returns sidecar snapshots for one draft slot in version order.
-func (s *sqlCompaction) ListDraftVersions(ctx context.Context, sessionID, slotID string) ([]api.DraftVersion, error) {
+func (s *sqlTranscript) ListDraftVersions(ctx context.Context, sessionID, slotID string) ([]api.DraftVersion, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
@@ -103,7 +103,7 @@ func (s *sqlCompaction) ListDraftVersions(ctx context.Context, sessionID, slotID
 }
 
 // CountDraftVersions returns the number of superseded snapshots for a draft slot.
-func (s *sqlCompaction) CountDraftVersions(ctx context.Context, sessionID, slotID string) (int, error) {
+func (s *sqlTranscript) CountDraftVersions(ctx context.Context, sessionID, slotID string) (int, error) {
 	if err := ctx.Err(); err != nil {
 		return 0, err
 	}

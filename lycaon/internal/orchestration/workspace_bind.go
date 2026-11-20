@@ -34,7 +34,7 @@ func (o *OrchestratorImpl) bindUnitWorkspacesIfIsolated(
 	projectDir, batchID string,
 	unitIDs []string,
 ) ([]*workspace.Binding, error) {
-	if effectiveWorkspaceMode(spec.WorkspaceMode) != WorkspaceIsolated {
+	if !TopologyRequiresIsolation(spec) {
 		return nil, nil
 	}
 	if err := o.ensureWorkspaceManager(spec.WorkspaceMode); err != nil {

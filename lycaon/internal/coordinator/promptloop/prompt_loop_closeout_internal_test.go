@@ -2,7 +2,6 @@ package promptloop
 
 import (
 	"context"
-	"github.com/lycaon/lycaon/internal/tools/toolstest"
 	"strings"
 	"testing"
 
@@ -10,6 +9,7 @@ import (
 	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/tools"
+	"github.com/lycaon/lycaon/internal/tools/toolstest"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -100,7 +100,7 @@ func TestAppendTurnCloseoutNudgeDedupsVerbatim(t *testing.T) {
 
 func TestEarlyWorkerCloseoutExecutesCompleteLeg(t *testing.T) {
 	sessionStore := storetest.New(t, "project-1")
-	sess, err := sessionStore.Create(t.Context(), api.CreateSessionRequest{Posture: api.SessionPostureBuild}, "project-1")
+	sess, err := sessionStore.Sessions.Create(t.Context(), api.CreateSessionRequest{Posture: api.SessionPostureBuild}, "project-1")
 	testutil.FailErr(t, "create worker", err)
 	sess.ParentSessionID = "parent-1"
 	sess.AgentType = "security-reviewer"

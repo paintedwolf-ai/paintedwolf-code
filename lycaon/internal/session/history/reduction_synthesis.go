@@ -50,7 +50,7 @@ func (m *Service) scheduleReductionSynthesis(ctx context.Context, sc *compaction
 
 // runReductionSynthesis settles the outcome under the admission that fences publication.
 func (m *Service) runReductionSynthesis(ctx context.Context, token lifecycle.Turn, sc *compaction.SimpleCompactor, info compaction.SessionInfo, input reductionInput, attempt attemptPass) {
-	memo := &pendingAttemptMemo{CompactionAttemptStore: m.store}
+	memo := &pendingAttemptMemo{CompactionAttemptStore: m.compactionStore}
 	info.Attempts = memo
 	if attempt.explicit {
 		info.Attempts = nil
@@ -79,7 +79,7 @@ func (m *Service) runReductionSynthesis(ctx context.Context, token lifecycle.Tur
 		})
 	})
 	if err == nil && published {
-		if sess, err := m.store.Get(ctx, info.ID); err == nil {
+		if sess, err := m.sessionStore.Get(ctx, info.ID); err == nil {
 			m.Schedule(ctx, sess)
 		}
 	}
@@ -92,11 +92,11 @@ func (m *Service) publishReductionSynthesis(ctx context.Context, info compaction
 	if !report.SessionCompacted && report.ChunksCompacted == 0 || report.TokensAfter >= report.TokensBefore {
 		return false, nil
 	}
-	current, err := m.store.CompactionViewCurrent(ctx, info.ID, snapshot.CoveredThroughOrd, snapshot.CoveredThroughID, snapshot.SourceSeq)
+	current, err := m.compactionStore.CompactionViewCurrent(ctx, info.ID, snapshot.CoveredThroughOrd, snapshot.CoveredThroughID, snapshot.SourceSeq)
 	if err != nil || !current {
 		return false, err
 	}
-	sess, err := m.store.Get(ctx, info.ID)
+	sess, err := m.sessionStore.Get(ctx, info.ID)
 	if err != nil || sess == nil || sess.CompactionGeneration != snapshot.Generation {
 		return false, err
 	}

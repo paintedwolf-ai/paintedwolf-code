@@ -22,7 +22,7 @@ func TestReviewLoopDeliberationPhasesBindAdjudicateSurface(t *testing.T) {
 				continue
 			}
 			checked++
-			binding, err := workflowdef.ResolveSurfaceBinding(m, ph.ID, m.ID, "")
+			binding, err := workflowdef.ResolveSurfaceBinding(m, ph.ID, m.ID)
 			contractcheck.FailErr(t, "ResolveSurfaceBinding "+key+" "+ph.ID, err)
 			plan, err := surface.CompileToolPlan(surface.TurnProfile{SurfaceID: binding.CoordinatorSurface}, 1)
 			if err != nil {

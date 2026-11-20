@@ -9,13 +9,13 @@ import (
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/tools"
 	workflowcomposition "github.com/lycaon/lycaon/internal/workflow/composition"
-	workflowdrafts "github.com/lycaon/lycaon/internal/workflow/drafts"
+	"github.com/lycaon/lycaon/internal/workflow/drafts/draftstest"
 )
 
 func TestComposeToolRequiresCoordinator(t *testing.T) {
 	regConditions, err := conditions.NewDefaultRegistry(conditions.RegistryDeps{})
 	testutil.FailErr(t, "build conditions", err)
-	c := &workflowcomposition.Composer{SessionStore: workflowdrafts.NewMemory(), Registry: regConditions}
+	c := &workflowcomposition.Composer{SessionStore: draftstest.NewStore(t), Registry: regConditions}
 	reg := tools.NewDefaultRegistry()
 	if err := RegisterComposeTool(reg, c); err != nil {
 		testutil.FailErr(t, "RegisterComposeTool failed", err)

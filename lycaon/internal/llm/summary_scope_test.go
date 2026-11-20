@@ -10,6 +10,7 @@ import (
 	"github.com/lycaon/lycaon/internal/llm/compaction"
 	"github.com/lycaon/lycaon/internal/prompts/promptstest"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/testutil/llmtest"
 )
 
 func TestSummaryUsesInvocationPolicyWithoutChangingSharedBinding(t *testing.T) {
@@ -17,7 +18,7 @@ func TestSummaryUsesInvocationPolicyWithoutChangingSharedBinding(t *testing.T) {
 	provider := &captureProvider{id: "selected"}
 	registry := newTestRegistry()
 	testutil.FailErr(t, "register provider", registry.Register(provider))
-	policy := NewInMemoryPolicyStore(ModelPolicy{Lite: ModelRef{ProviderID: "selected", Model: "global"}})
+	policy := newPolicyFixture(t, ModelPolicy{Lite: ModelRef{ProviderID: "selected", Model: "global"}})
 	primary, active, other := t.TempDir(), t.TempDir(), t.TempDir()
 	testutil.FailErr(t, "set primary", policy.PutProject(primary, ModelPolicy{Lite: ModelRef{ProviderID: "selected", Model: "primary"}}))
 	testutil.FailErr(t, "set active", policy.PutProject(active, ModelPolicy{Lite: ModelRef{ProviderID: "selected", Model: "active"}}))
@@ -55,12 +56,12 @@ func TestSummaryUsesInvocationPolicyWithoutChangingSharedBinding(t *testing.T) {
 
 func TestCompactionRoutingAndRevisionFollowProjectPolicy(t *testing.T) {
 	guidance.SetGuidanceRenderer(promptstest.GuidanceRenderer(t))
-	body, err := (compaction.MockSummarizer{Text: "Continue the same work."}).Summarize(compaction.WithSummaryFormat(t.Context()), "", "", 0)
+	body, err := (llmtest.Summarizer{Structured: compaction.SummaryFormatRequested, Text: "Continue the same work."}).Summarize(compaction.WithSummaryFormat(t.Context()), "", "", 0)
 	testutil.FailErr(t, "summary fixture", err)
 	provider := &captureProvider{id: "selected", response: body}
 	registry := newTestRegistry()
 	testutil.FailErr(t, "register provider", registry.Register(provider))
-	policy := NewInMemoryPolicyStore(ModelPolicy{Lite: ModelRef{ProviderID: "missing-global", Model: "unavailable"}})
+	policy := newPolicyFixture(t, ModelPolicy{Lite: ModelRef{ProviderID: "missing-global", Model: "unavailable"}})
 	root := t.TempDir()
 	testutil.FailErr(t, "set project", policy.PutProject(root, ModelPolicy{Lite: ModelRef{ProviderID: "selected", Model: "first"}}))
 	summarizer := &RegistrySummarizer{Registry: registry, Policy: policy, Purpose: "compaction"}

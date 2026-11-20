@@ -34,17 +34,17 @@ func TestRunnerCompletionSurvivesLeaseRetirementAfterCommit(t *testing.T) {
 	runner.Snapshots = testSnapshots(t, store)
 	root := t.TempDir()
 	writeScanSource(t, root, "main.go", "package main\n")
-	testutil.FailErr(t, "insert scan", store.Insert(t.Context(), api.CodeScan{
+	testutil.FailErr(t, "insert scan", store.Runs.Insert(t.Context(), api.CodeScan{
 		ID: "complete-before-retirement", CanonicalPath: root, ScannerID: scanner.ID(),
 		Status: api.CodeScanStatusPending, Categories: scanner.Categories(),
 		SourceSnapshotID: publishTestSnapshot(t, runner.Snapshots, root),
 	}, nil, ""))
-	job, err := store.ClaimNext(t.Context())
+	job, err := store.Runs.ClaimNext(t.Context())
 	testutil.FailErr(t, "claim scan", err)
 	ctx, cancel := context.WithCancel(t.Context())
 	defer cancel()
 	store.SetEventOutbox(&completionOutbox{committed: func() {
-		committed, err := store.Get(t.Context(), job.ID)
+		committed, err := store.Reads.Get(t.Context(), job.ID)
 		testutil.FailErr(t, "read committed transition", err)
 		if committed != nil && committed.Status == api.CodeScanStatusComplete {
 			cancel()
@@ -62,7 +62,7 @@ func TestRunnerCompletionSurvivesLeaseRetirementAfterCommit(t *testing.T) {
 	if terminal.Status != api.CodeScanStatusComplete || terminal.CompletedAt == nil || terminal.StartedAt == nil {
 		t.Fatalf("terminal notification lost committed metadata: %+v", terminal)
 	}
-	open, err := store.OpenFindings(t.Context(), root, scanner.ID())
+	open, err := store.Findings.OpenFindings(t.Context(), root, scanner.ID())
 	testutil.FailErr(t, "read finding history", err)
 	if len(open) != 1 {
 		t.Fatalf("completion lost finding history: %+v", open)

@@ -50,14 +50,6 @@ func ReplaceActiveFrom(old, next *EffectiveCatalog) {
 	active = next
 }
 
-// ClearActive removes the process-wide effective catalog.
-func ClearActive() {
-	activeMu.Lock()
-	defer activeMu.Unlock()
-	active = nil
-	activeStamp = ""
-}
-
 // ActiveIsStale reports whether device intent changed after activation.
 func ActiveIsStale() bool {
 	activeMu.RLock()

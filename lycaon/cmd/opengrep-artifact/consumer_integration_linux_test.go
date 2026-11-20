@@ -13,7 +13,7 @@ import (
 	"runtime"
 	"testing"
 
-	"github.com/lycaon/lycaon/internal/confine"
+	"github.com/lycaon/lycaon/internal/confine/admissiontest"
 	"github.com/lycaon/lycaon/internal/scan/bundled"
 	"github.com/lycaon/lycaon/internal/scan/installed"
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -48,7 +48,7 @@ func TestConsumerFinalizationNativeScanner(t *testing.T) {
 	testutil.FailErr(t, "retain executed relocation inputs", os.WriteFile(recipePath, raw, 0o600))
 	evidence, err := filepath.Abs("../../config/runtime/scanners")
 	testutil.FailErr(t, "resolve committed producer selection evidence", err)
-	confine.TestingSetAutoConfine(t)
+	admissiontest.Enable(t)
 	t.Setenv("LYCAON_SANDBOX", "")
 	t.Setenv("LYCAON_BYPASS_APPROVALS", "")
 	encoded, err := execute(options{mode: "relocate-consumer", directory: producerDirectory, root: root,

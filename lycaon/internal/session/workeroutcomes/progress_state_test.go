@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/progress"
+	"github.com/lycaon/lycaon/internal/progress/progresstest"
 	"github.com/lycaon/lycaon/internal/session/progressclosure"
 	"github.com/lycaon/lycaon/internal/session/workeroutcomes"
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -28,14 +29,14 @@ func (p *progressSessions) GetMessages(context.Context, string) ([]api.Message, 
 }
 
 func TestCurrentProgressSnapshotUsesRootStoreIndependentlyOfHistory(t *testing.T) {
-	store := progress.NewMemoryStore()
+	store := progresstest.New(t, "root", "child")
 	testutil.FailErr(t, "seed root checklist", store.Set("root", "- [ ] Deliver\n- [ ] Verify"))
 	testutil.FailErr(t, "seed unrelated child state", store.Set("child", "- [ ] Wrong scope"))
 	closure := progressclosure.New()
 	closure.SetProgress(store)
 	closure.Arm(t.Context(), "root", "worker-one")
 	sessions := &progressSessions{}
-	state := workeroutcomes.NewState(workeroutcomes.StatePorts{Sessions: sessions})
+	state := workeroutcomes.NewState(workeroutcomes.StatePorts{SessionStore: sessions, TranscriptStore: sessions})
 	state.SetProgress(store)
 	state.SetProgressReconciliation(closure)
 	var previousRevision string
@@ -64,7 +65,7 @@ func TestCurrentProgressSnapshotUsesRootStoreIndependentlyOfHistory(t *testing.T
 }
 
 func TestEmptyProgressExplicitlyRequiresInitialization(t *testing.T) {
-	state := workeroutcomes.NewState(workeroutcomes.StatePorts{Sessions: &progressSessions{}, Progress: progress.NewMemoryStore()})
+	state := workeroutcomes.NewState(workeroutcomes.StatePorts{SessionStore: &progressSessions{}, TranscriptStore: &progressSessions{}, Progress: progresstest.New(t, "root", "child")})
 	current := state.ForSession(t.Context(), &api.Session{ID: "child", ParentSessionID: "root"})
 	var snapshot progress.RequestSnapshot
 	testutil.FailErr(t, "decode empty checklist", json.Unmarshal([]byte(current.ProgressSnapshot), &snapshot))
@@ -81,7 +82,7 @@ func TestSessionStateCountsDeliveredWorkers(t *testing.T) {
 		err  error
 		want int
 	}{{2, nil, 2}, {5, errors.New("store closed"), 0}} {
-		state := workeroutcomes.NewState(workeroutcomes.StatePorts{Sessions: &progressSessions{}})
+		state := workeroutcomes.NewState(workeroutcomes.StatePorts{SessionStore: &progressSessions{}, TranscriptStore: &progressSessions{}})
 		state.SetDeliveredWorkers(func(_ context.Context, sessionID string) (int, error) {
 			if sessionID != "coord" {
 				t.Fatalf("counted in session %q", sessionID)

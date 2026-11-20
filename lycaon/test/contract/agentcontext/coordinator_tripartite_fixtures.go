@@ -1,6 +1,7 @@
 package contract
 
 import (
+	"github.com/lycaon/lycaon/internal/testutil/surfacetest"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 
 	"github.com/lycaon/lycaon/internal/coordinator/surface"
@@ -23,7 +24,7 @@ type ContextDietMatrixRow struct {
 
 // batchReadySessionState is a wrapup-admitted idle snapshot for tripartite fixtures.
 func batchReadySessionState() surface.ImplementSessionState {
-	return surface.WithWrapupGates(surface.ImplementSessionState{
+	return surfacetest.WithWrapupGates(surface.ImplementSessionState{
 		WorkersInFlight:   0,
 		PendingOverlayIDs: []string{},
 	}, true, false)

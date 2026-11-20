@@ -1,20 +1,20 @@
 package phases_test
 
 import (
-	workflow "github.com/lycaon/lycaon/internal/workflow"
-
 	"context"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/conditions"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/testutil/conditionstest"
+	workflow "github.com/lycaon/lycaon/internal/workflow"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 	"github.com/lycaon/lycaon/internal/workflow/runstate"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
 func TestRegistryGateEvaluatorBlocksPlanStub(t *testing.T) {
-	reg, err := conditions.NewDefaultRegistry(conditions.TestRegistryDeps())
+	reg, err := conditions.NewDefaultRegistry(conditionstest.Dependencies())
 	testutil.FailErr(t, "conditions.NewDefaultRegistry failed", err)
 	eval := workflow.RegistryGateEvaluator{Registry: reg}
 	manifest := workflowdef.Manifest{
@@ -88,9 +88,9 @@ func TestAdvanceAfterPlanStub(t *testing.T) {
 }
 
 func TestAdvanceImplementPhaseCompletesRun(t *testing.T) {
-	mgr, _, blueprintMgr, projectDir := testManagerWithRegistry(t)
-	setTestRegistry(t, mgr, blueprintMgr, conditions.TestRegistryDepsWithEvidence())
-	ctx := workflowCaller(t, mgr)
+	mgr, repositories, blueprintMgr, projectDir := testManagerWithRegistry(t)
+	setTestRegistry(t, mgr, blueprintMgr, conditionstest.DependenciesWithEvidence())
+	ctx := workflowCaller(t, repositories)
 
 	run, err := startRun(ctx, mgr, "sess-1", "plan", "1.0.1")
 	testutil.FailErr(t, "startRun failed", err)

@@ -10,7 +10,7 @@ import (
 
 func emitProgressCompletion(
 	ctx context.Context,
-	store *store.SQL,
+	store *store.Repositories,
 	eventPub *events.Publisher,
 	progressStore progress.RunScopedStore,
 	activeRun ActiveRunID,
@@ -19,5 +19,5 @@ func emitProgressCompletion(
 	if store == nil || eventPub == nil || progressStore == nil || activeRun == nil {
 		return
 	}
-	emitProgressCompletionFromContent(ctx, store, eventPub, progressStore, activeRun, sessionID, progressStore.Get(ctx, sessionID))
+	emitProgressCompletionFromContent(ctx, store.Sessions, store.Transcript, eventPub, progressStore, activeRun, sessionID, progressStore.Get(ctx, sessionID))
 }

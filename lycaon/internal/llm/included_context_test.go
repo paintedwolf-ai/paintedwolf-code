@@ -35,7 +35,7 @@ func TestIncludedSelectionPreservesCallerCancellationAndExplicitProvider(t *test
 	if registry.IncludedModelAvailable(probe) || !probe.checked {
 		t.Fatal("missing model discovery ignored caller cancellation")
 	}
-	summarizer := &RegistrySummarizer{Registry: registry, Policy: NewInMemoryPolicyStore(ModelPolicy{
+	summarizer := &RegistrySummarizer{Registry: registry, Policy: newPolicyFixture(t, ModelPolicy{
 		Lite: ModelRef{ProviderID: external.ID(), Model: "lite"},
 	})}
 	probe.checked = false
@@ -58,7 +58,7 @@ func TestRouterAvailabilityUsesRequestContext(t *testing.T) {
 	type requestKey struct{}
 	ctx := context.WithValue(t.Context(), requestKey{}, "request")
 	calls := 0
-	router := NewStaticModelRouter(NewInMemoryPolicyStore(ModelPolicy{})).WithLocalDefault(func(got context.Context) bool {
+	router := NewStaticModelRouter(newPolicyFixture(t, ModelPolicy{})).WithLocalDefault(func(got context.Context) bool {
 		calls++
 		if got.Value(requestKey{}) != "request" {
 			t.Fatal("availability lookup lost request attribution")

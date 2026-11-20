@@ -14,6 +14,7 @@ import (
 	"github.com/lycaon/lycaon/internal/cost"
 	"github.com/lycaon/lycaon/internal/cost/costtest"
 	"github.com/lycaon/lycaon/internal/modelfeed"
+	"github.com/lycaon/lycaon/internal/modelfeed/modelfeedtest"
 	"github.com/lycaon/lycaon/internal/pricing"
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -29,28 +30,11 @@ func (c *countingFetcher) Get(context.Context, string) ([]byte, error) {
 	return nil, nil
 }
 
-type hostStubFeed struct {
-	doc *modelfeed.Document
-}
-
-func newHostStubFeed(t *testing.T) *hostStubFeed {
+func newHostFeed(t *testing.T) *modelfeed.Feed {
 	t.Helper()
 	body, err := os.ReadFile(filepath.Join(configlayout.FindModuleRoot(), "internal", "pricing", "testdata", "models-dev", "api.json"))
 	testutil.FailErr(t, "read fixture", err)
-	doc, err := modelfeed.ParseDocument(body)
-	testutil.FailErr(t, "ParseDocument", err)
-	doc.FetchedAt = time.Date(2025, 1, 2, 3, 4, 5, 0, time.UTC)
-	return &hostStubFeed{doc: doc}
-}
-
-func (s *hostStubFeed) Document(context.Context) (*modelfeed.Document, error) {
-	return s.doc, nil
-}
-func (s *hostStubFeed) Refresh(context.Context) (*modelfeed.Document, error) {
-	return s.doc, nil
-}
-func (s *hostStubFeed) Snapshot() (*modelfeed.Document, string, bool) {
-	return s.doc, string(pricing.StatusOK), s.doc != nil
+	return modelfeedtest.Publish(t, body)
 }
 
 type stubKinds struct{}
@@ -84,7 +68,7 @@ func TestPricingHostKillSwitchQuiet(t *testing.T) {
 		CacheDir:  t.TempDir(),
 		Tracker:   tracker,
 		GetBytes:  fetcher.Get,
-		ModelFeed: newHostStubFeed(t),
+		ModelFeed: newHostFeed(t),
 		Kinds:     stubKinds{},
 	}
 
@@ -153,7 +137,7 @@ func TestPricingHostRejectsRefreshForDisabledSourceWithoutFetching(t *testing.T)
 	host := &settings.PricingHost{
 		Store: store, Catalog: cfg, CacheDir: t.TempDir(),
 		Tracker: costtest.NewTracker(t, cost.NoopPricer{}), GetBytes: fetcher.Get,
-		ModelFeed: newHostStubFeed(t), Kinds: stubKinds{},
+		ModelFeed: newHostFeed(t), Kinds: stubKinds{},
 	}
 	_, err = host.RefreshSource(context.Background(), "litellm")
 	if !errors.Is(err, settings.ErrPricingSourceDisabled) {
@@ -207,7 +191,7 @@ func TestPricingHostAutoRefreshRetriesFailedSource(t *testing.T) {
 		CacheDir:        t.TempDir(),
 		Tracker:         tracker,
 		GetBytes:        fetcher.Get,
-		ModelFeed:       newHostStubFeed(t),
+		ModelFeed:       newHostFeed(t),
 		Kinds:           stubKinds{},
 		RefreshInterval: 20 * time.Millisecond,
 	}
@@ -252,7 +236,7 @@ func TestPricingHostApplySettingsDoesNotWaitForFetch(t *testing.T) {
 	host := &settings.PricingHost{
 		Store: store, Catalog: cfg, CacheDir: t.TempDir(),
 		Tracker: tracker, GetBytes: fetcher.Get,
-		ModelFeed: newHostStubFeed(t), Kinds: stubKinds{},
+		ModelFeed: newHostFeed(t), Kinds: stubKinds{},
 	}
 	var settled atomic.Int32
 	host.SetOnRefreshSettled(func() { settled.Add(1) })
@@ -371,13 +355,13 @@ func (f *flakyFetcher) Get(context.Context, string) ([]byte, error) {
 
 // heldHostFeed answers Document only once released, whatever its context says.
 type heldHostFeed struct {
-	*hostStubFeed
+	*modelfeed.Feed
 	release chan struct{}
 }
 
-func (h *heldHostFeed) Document(context.Context) (*modelfeed.Document, error) {
+func (h *heldHostFeed) Document(ctx context.Context) (*modelfeed.Document, error) {
 	<-h.release
-	return h.doc, nil
+	return h.Feed.Document(ctx)
 }
 
 func TestPricingHostCloseStopsWaitingWithItsContext(t *testing.T) {
@@ -385,7 +369,7 @@ func TestPricingHostCloseStopsWaitingWithItsContext(t *testing.T) {
 	testutil.FailErr(t, "NewPricingStoreAt", err)
 	cfg, err := pricing.LoadSourcesConfig()
 	testutil.FailErr(t, "LoadSourcesConfig", err)
-	feed := &heldHostFeed{hostStubFeed: newHostStubFeed(t), release: make(chan struct{})}
+	feed := &heldHostFeed{Feed: newHostFeed(t), release: make(chan struct{})}
 	host := &settings.PricingHost{
 		Store: store, Catalog: cfg, CacheDir: t.TempDir(),
 		Tracker:   costtest.NewTracker(t, cost.NoopPricer{}),

@@ -8,6 +8,7 @@ import (
 	"github.com/lycaon/lycaon/internal/fspath"
 	"github.com/lycaon/lycaon/internal/hitl"
 	"github.com/lycaon/lycaon/internal/settings"
+	"github.com/lycaon/lycaon/internal/settings/settingstest"
 	"github.com/lycaon/lycaon/internal/tools/native"
 	"github.com/lycaon/lycaon/pkg/api"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
@@ -24,7 +25,7 @@ func TestVerificationRedirectTargetsAreReviewedLikeNativeWrites(t *testing.T) {
 	}
 	store, err := settings.NewApprovalStoreAt(filepath.Join(t.TempDir(), "approvals.yaml"))
 	contractcheck.FailErr(t, "approval store", err)
-	gate := settings.NewRuleApprovalGate(store, settings.NoSources())
+	gate := settings.NewRuleApprovalGate(store, settingstest.EmptySources())
 	result, err := gate.Evaluate(t.Context(), retarget(action, filepath.Join(f.Dir, ".env")))
 	contractcheck.FailErr(t, "protected destination review", err)
 	if len(gatesOf(result)) == 0 {

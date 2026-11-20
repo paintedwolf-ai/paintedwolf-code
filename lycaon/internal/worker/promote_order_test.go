@@ -29,7 +29,7 @@ func TestAssessPromotePaths3WayCleanIfFirstWhenSiblingWouldConflict(t *testing.T
 	baseline := map[string]testbaseline.File{
 		"shared.go": {Content: body},
 	}
-	raw := testbaseline.FromFiles(t, baseline)
+	raw := testbaseline.FromFiles(t, "root", baseline)
 
 	taskA := &api.WorkerTask{
 		ID:                    "job-a",
@@ -42,9 +42,11 @@ func TestAssessPromotePaths3WayCleanIfFirstWhenSiblingWouldConflict(t *testing.T
 		WorkspaceBaselinePath: raw,
 		Status:                api.WorkerStatusComplete,
 	}
+	testbaseline.RecordBranch(t, "root", taskA.WorkspacePath, taskA.WorkspaceRoot)
 	taskB := *taskA
 	taskB.ID = "job-b"
 	taskB.WorkspaceRoot = branchB
+	testbaseline.RecordBranch(t, "root", taskB.WorkspacePath, taskB.WorkspaceRoot)
 
 	svc := &worker.MergeService{
 		Sessions: overlapSessionLister{tasks: []api.WorkerTask{*taskA, taskB}},
@@ -84,7 +86,7 @@ func TestAssessPromotePaths3WayIndependentWhenLineDistant(t *testing.T) {
 	baseline := map[string]testbaseline.File{
 		"shared.go": {Content: body},
 	}
-	raw := testbaseline.FromFiles(t, baseline)
+	raw := testbaseline.FromFiles(t, "root", baseline)
 
 	taskA := &api.WorkerTask{
 		ID:                    "job-a",
@@ -97,9 +99,11 @@ func TestAssessPromotePaths3WayIndependentWhenLineDistant(t *testing.T) {
 		WorkspaceBaselinePath: raw,
 		Status:                api.WorkerStatusComplete,
 	}
+	testbaseline.RecordBranch(t, "root", taskA.WorkspacePath, taskA.WorkspaceRoot)
 	taskB := *taskA
 	taskB.ID = "job-b"
 	taskB.WorkspaceRoot = branchB
+	testbaseline.RecordBranch(t, "root", taskB.WorkspacePath, taskB.WorkspaceRoot)
 
 	svc := &worker.MergeService{
 		Sessions: overlapSessionLister{tasks: []api.WorkerTask{*taskA, taskB}},

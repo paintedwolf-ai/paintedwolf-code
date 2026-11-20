@@ -131,7 +131,7 @@ func runWorkerScriptOnHarness(t *testing.T, agentType string, scope *api.TaskSco
 	parent, err := h.CreateHarnessSession(t, api.CreateSessionRequest{}, dir)
 	testutil.FailErr(t, "create parent", err)
 
-	ledger := sourceledger.New(h.DB, t.TempDir())
+	ledger := sourceledger.New(h.DB, t.TempDir(), sourceledger.Timing{})
 	testutil.FailErr(t, "record a coordinator change", ledger.Record(ctx, sourceledger.RecordInput{
 		RecordLocation: sourceledger.RecordLocation{RootID: parent.WorkspaceRootID, Path: "coordinator.go"},
 		ProjectID:      parent.ProjectID, Op: api.SourceChangeOpWrite, Origin: api.SourceChangeOriginAgent,
@@ -379,7 +379,7 @@ func TestSourceHistoryACDF19CredentialDiffMarksTheWorkersSession(t *testing.T) {
 	if !ok || job.ChildSessionID == "" {
 		t.Fatalf("job = %+v, want its child session", job)
 	}
-	exposed, err := h.Store.SessionSecretExposure(context.Background(), job.ChildSessionID)
+	exposed, err := h.Store.Evidence.SessionSecretExposure(context.Background(), job.ChildSessionID)
 	testutil.FailErr(t, "secret exposure", err)
 	if !exposed {
 		t.Fatal("the worker's session is not marked as exposed")

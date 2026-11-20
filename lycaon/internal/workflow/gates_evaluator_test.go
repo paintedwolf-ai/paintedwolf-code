@@ -2,6 +2,7 @@ package workflow
 
 import (
 	"context"
+	"github.com/lycaon/lycaon/internal/testutil/conditionstest"
 	"os"
 	"testing"
 
@@ -14,7 +15,7 @@ import (
 )
 
 func TestRegistryGateEvaluatorGatesList(t *testing.T) {
-	reg, err := conditions.NewDefaultRegistry(conditions.TestRegistryDeps())
+	reg, err := conditions.NewDefaultRegistry(conditionstest.Dependencies())
 	testutil.FailErr(t, "conditions.NewDefaultRegistry failed", err)
 	eval := RegistryGateEvaluator{Registry: reg}
 	manifest := workflowdef.Manifest{
@@ -38,9 +39,9 @@ func TestRegistryGateEvaluatorGatesList(t *testing.T) {
 		t.Fatalf("result = %+v", result)
 	}
 
-	const planBody = conditions.TestPlanContentWithTasks
+	const planBody = conditionstest.PlanWithTasks
 	blueprintPath := settingsoverlay.Rel("blueprints/plan.md")
-	deps := conditions.TestRegistryDepsWithEvidence()
+	deps := conditionstest.DependenciesWithEvidence()
 	deps.BlueprintGet = func(_ context.Context, path string) (*api.Blueprint, error) {
 		return &api.Blueprint{Path: path, Content: planBody}, nil
 	}
@@ -66,7 +67,7 @@ func TestRegistryGateEvaluatorGatesList(t *testing.T) {
 }
 
 func TestRegistryGateEvaluatorCompoundCompleteWhen(t *testing.T) {
-	reg, err := conditions.NewDefaultRegistry(conditions.TestRegistryDeps())
+	reg, err := conditions.NewDefaultRegistry(conditionstest.Dependencies())
 	testutil.FailErr(t, "conditions.NewDefaultRegistry failed", err)
 	eval := RegistryGateEvaluator{Registry: reg}
 	manifest := workflowdef.Manifest{
@@ -96,7 +97,7 @@ func TestCollectFailedLeavesUnknownIgnored(t *testing.T) {
 }
 
 func TestReviewGateRequiresCommittedWorkflowAcceptance(t *testing.T) {
-	reg, err := conditions.NewDefaultRegistry(conditions.TestRegistryDepsWithEvidence())
+	reg, err := conditions.NewDefaultRegistry(conditionstest.DependenciesWithEvidence())
 	testutil.FailErr(t, "create successful evidence registry", err)
 	run := &api.WorkflowRun{SessionID: "session", CurrentPhase: "review"}
 	manifest := workflowdef.Manifest{PhaseDefs: []workflowdef.PhaseDef{{ID: "review", CompleteWhen: workflowdef.CompleteWhenGatesSatisfied, Gates: []string{"evidence_passed:rl_key"}, ReviewLoop: &workflowdef.ReviewLoopDef{EvidenceKey: "rl_key"}}}}

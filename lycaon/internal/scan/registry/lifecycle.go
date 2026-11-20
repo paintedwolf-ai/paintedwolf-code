@@ -22,13 +22,9 @@ func (r *Impl) Reload() error {
 		return err
 	}
 	defer finish()
-	cfg := r.static
-	if cfg == nil {
-		var err error
-		cfg, err = scancatalog.LoadMergedScannerConfig(r.opts.ModuleRoot, "", r.home)
-		if err != nil {
-			return err
-		}
+	cfg, err := scancatalog.LoadMergedScannerConfig(r.opts.ModuleRoot, "", r.home)
+	if err != nil {
+		return err
 	}
 	manifest, err := bundled.LoadManifest()
 	if err != nil {

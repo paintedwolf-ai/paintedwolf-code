@@ -3,17 +3,18 @@
 package confine
 
 import (
+	"errors"
 	"os"
-
-	"github.com/lycaon/lycaon/internal/osprocess"
 )
 
+var errNativeLaunchMetadataUnavailable = errors.New("native launch metadata is unavailable")
+
 func nativeFileChange(os.FileInfo) (fileChange, error) {
-	return fileChange{}, osprocess.ErrExecutableObservationUnavailable
+	return fileChange{}, errNativeLaunchMetadataUnavailable
 }
 
 func openNativeLaunchMetadata(string, bool) (*os.File, error) {
-	return nil, osprocess.ErrExecutableObservationUnavailable
+	return nil, errNativeLaunchMetadataUnavailable
 }
 
-func nativeArgumentBudget() (int, error) { return 0, osprocess.ErrExecutableObservationUnavailable }
+func nativeArgumentBudget() (int, error) { return 0, errNativeLaunchMetadataUnavailable }

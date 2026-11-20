@@ -54,23 +54,6 @@ func extractPlanTasks(content string) []planTask {
 	return tasks
 }
 
-// ShippedPlanDomainIDs returns registered plan predicates.
-func ShippedPlanDomainIDs() []string {
-	return append([]string(nil), shippedPlanDomainIDs...)
-}
-
-var shippedPlanDomainIDs = []string{
-	"plan_stub_valid",
-	"plan_awaiting_approval",
-	"research_required",
-	"research_satisfied",
-	"review_loop_active",
-	"scope_missing",
-	"breaking_missing",
-	"review_depth_missing",
-	"implement_workflow_ready",
-}
-
 // RegisterPlanDomain registers plan-workflow-only vocabulary evaluators.
 func RegisterPlanDomain(reg *ConditionRegistry, deps RegistryDeps) error {
 	if reg == nil {

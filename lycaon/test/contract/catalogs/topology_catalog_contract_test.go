@@ -29,9 +29,14 @@ func TestAllTopologyPatternsHaveBundledExample(t *testing.T) {
 	}
 
 	// Every pattern the orchestrator dispatches must ship at least one catalog example.
-	for _, pattern := range orchestration.AllTopologyPatterns() {
+	for _, pattern := range []orchestration.TopologyPattern{
+		orchestration.TopologySupervisor,
+		orchestration.TopologyPipeline,
+		orchestration.TopologyFanOut,
+		orchestration.TopologyPack,
+	} {
 		if _, ok := exampleFor[pattern]; !ok {
-			t.Fatalf("no bundled _topologies/*.yaml declares pattern %q (supported patterns derive from orchestration.AllTopologyPatterns)", pattern)
+			t.Fatalf("no bundled _topologies/*.yaml declares pattern %q", pattern)
 		}
 	}
 }

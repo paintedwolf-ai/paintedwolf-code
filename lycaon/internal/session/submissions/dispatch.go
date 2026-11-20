@@ -97,7 +97,7 @@ func (m *Service) RouteDraft(ctx context.Context, row *store.PromptSubmission, u
 }
 
 func (m *Service) HeadDispatchable(ctx context.Context, sessionID string) (bool, error) {
-	queued, err := m.store.ListQueuedUserPromptSubmissions(ctx, sessionID)
+	queued, err := m.submissionStore.ListQueuedUserPromptSubmissions(ctx, sessionID)
 	if err != nil {
 		return false, fmt.Errorf("read queued prompt order before draft drain: %w", err)
 	}
@@ -118,7 +118,7 @@ func (m *Service) DrainNext(ctx context.Context, id string) (bool, error) {
 		for i := range pending {
 			ids[i] = pending[i].ID
 		}
-		rows, allClaimed, claimErr := m.store.ClaimPromptSubmissions(ctx, ids)
+		rows, allClaimed, claimErr := m.submissionStore.ClaimPromptSubmissions(ctx, ids)
 		if claimErr != nil {
 			return claimErr
 		}
@@ -142,7 +142,7 @@ func (m *Service) DrainNext(ctx context.Context, id string) (bool, error) {
 }
 
 func (m *Service) TakeSend(ctx context.Context, id string) ([]api.Message, error) {
-	if m == nil || m.queue == nil || m.store == nil {
+	if m == nil || m.queue == nil || (m.sessionStore == nil || m.submissionStore == nil || m.people == nil) {
 		return nil, nil
 	}
 	var applied api.Message
@@ -151,7 +151,7 @@ func (m *Service) TakeSend(ctx context.Context, id string) ([]api.Message, error
 		rows := make([]*store.PromptSubmission, 0, len(items))
 		queuedIDs := make([]string, 0, len(items))
 		for _, item := range items {
-			row, getErr := m.store.GetPromptSubmission(ctx, item.ID)
+			row, getErr := m.submissionStore.GetPromptSubmission(ctx, item.ID)
 			if getErr != nil {
 				return getErr
 			}
@@ -178,7 +178,7 @@ func (m *Service) TakeSend(ctx context.Context, id string) ([]api.Message, error
 			return appendErr
 		}
 		if len(queuedIDs) > 0 {
-			claimed, allClaimed, claimErr := m.store.ClaimPromptSubmissions(ctx, queuedIDs)
+			claimed, allClaimed, claimErr := m.submissionStore.ClaimPromptSubmissions(ctx, queuedIDs)
 			if claimErr != nil {
 				return claimErr
 			}
@@ -219,7 +219,7 @@ func (m *Service) runQueuedTurn(ctx context.Context, id string, claimedRows []st
 		if decodeErr != nil {
 			slog.ErrorContext(ctx, "queued prompt receipt input unusable; receipt failed",
 				"session_id", id, "submission_id", row.ID, "err", decodeErr)
-			if finishErr := m.store.FinishPromptSubmission(context.WithoutCancel(ctx), row.ID, row.ClaimToken,
+			if finishErr := m.submissionStore.FinishPromptSubmission(context.WithoutCancel(ctx), row.ID, row.ClaimToken,
 				store.PromptSubmissionFailed, "", store.PromptSubmissionFailure{Message: decodeErr.Error()}); finishErr != nil {
 				closeErr = errors.Join(closeErr, finishErr)
 				slog.ErrorContext(ctx, "queued prompt receipt close failed",

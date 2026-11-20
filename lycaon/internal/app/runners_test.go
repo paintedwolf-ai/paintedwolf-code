@@ -26,7 +26,7 @@ func TestStopRunnersDrainsPromptRunners(t *testing.T) {
 		t.Fatalf("start runners: %v", err)
 	}
 
-	app.stopRunners()
+	app.stopRunnersWithin(t.Context())
 
 	if names := app.unfinishedRunners(); len(names) != 0 {
 		t.Fatalf("unfinished runners = %v, want none", names)
@@ -54,7 +54,7 @@ func TestStopRunnersBoundsRunnerThatIgnoresCancel(t *testing.T) {
 	returned := make(chan struct{})
 	go func() {
 		defer close(returned)
-		app.stopRunners()
+		app.stopRunnersWithin(t.Context())
 	}()
 	select {
 	case <-returned:
@@ -83,7 +83,7 @@ func TestBackgroundRunnerRestartsAfterFailure(t *testing.T) {
 	if err := app.startRunners(context.Background()); err != nil {
 		t.Fatalf("start runners: %v", err)
 	}
-	t.Cleanup(app.stopRunners)
+	t.Cleanup(func() { app.stopRunnersWithin(context.Background()) })
 
 	select {
 	case <-second:
@@ -111,7 +111,7 @@ func TestBackgroundRunnerRestartsAfterPanic(t *testing.T) {
 	if err := app.startRunners(context.Background()); err != nil {
 		t.Fatalf("start runners: %v", err)
 	}
-	t.Cleanup(app.stopRunners)
+	t.Cleanup(func() { app.stopRunnersWithin(context.Background()) })
 
 	select {
 	case <-restarted:

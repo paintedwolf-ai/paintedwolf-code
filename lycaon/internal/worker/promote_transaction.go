@@ -112,11 +112,11 @@ func (p PromoteRoots) qualifiedTarget(task *api.WorkerTask, path string) (layere
 }
 
 func verifyPromoteOriginal(promote PromoteRoots, task *api.WorkerTask, plan promoteMutation) error {
-	primaryAbs, _, err := promote.fileAbs(task, plan.path)
+	identity, err := promote.locateIdentity(task, plan.path)
 	if err != nil {
 		return err
 	}
-	content, exists, mode, err := readOptionalPromoteFile(primaryAbs)
+	content, exists, mode, err := readOptionalPromoteFile(identity.Primary)
 	if err != nil {
 		return err
 	}

@@ -42,7 +42,7 @@ func (m *Service) HostTurnWithAdmission(
 	in promptinput.Input,
 	onAdmitted func() error,
 ) (*promptresult.Result, error) {
-	if m == nil || m.store == nil {
+	if m == nil || (m.sessionStore == nil || m.submissionStore == nil || m.people == nil) {
 		return nil, fmt.Errorf("prompt manager unavailable")
 	}
 	if !origin.HostInitiated() {

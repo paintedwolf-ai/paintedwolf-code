@@ -15,6 +15,7 @@ import (
 	"github.com/lycaon/lycaon/internal/api/contractfixture"
 	"github.com/lycaon/lycaon/internal/configlayout"
 	"github.com/lycaon/lycaon/internal/project"
+	"github.com/lycaon/lycaon/internal/project/projecttest"
 	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -47,7 +48,7 @@ func newAmbientAttachFixture(t *testing.T, startsAdmitted bool) ambientAttachFix
 
 	sessions := store.NewSQL(sqlDB)
 	projects := project.NewSQLRegistry(sqlDB)
-	p, err := project.CreateWithRoot(t.Context(), projects, t.TempDir())
+	p, err := projecttest.CreateWithRoot(t.Context(), projects, t.TempDir())
 	testutil.FailErr(t, "create project", err)
 
 	registry, err := workflowdef.RegistryFromDirs("")
@@ -74,7 +75,7 @@ func (f ambientAttachFixture) createSession(t *testing.T, posture wire.SessionPo
 	body, err := json.Marshal(wire.CreateSessionRequest{ProjectID: f.projectID, Posture: posture})
 	testutil.FailErr(t, "marshal create session", err)
 	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/v1/sessions", bytes.NewReader(body))
-	req.Header.Set("Authorization", api.TestAuthHeader())
+	req.Header.Set("Authorization", "Bearer "+api.TestAPIToken)
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
 	f.srv.ServeHTTP(w, req)
@@ -92,7 +93,7 @@ func (f ambientAttachFixture) awaitPrepared(t *testing.T, sessionID string) wire
 	var last wire.Session
 	testutil.WaitFor(t, "the session is prepared", func() bool {
 		req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/v1/sessions/"+sessionID, nil)
-		req.Header.Set("Authorization", api.TestAuthHeader())
+		req.Header.Set("Authorization", "Bearer "+api.TestAPIToken)
 		w := httptest.NewRecorder()
 		f.srv.ServeHTTP(w, req)
 		if w.Code != http.StatusOK {

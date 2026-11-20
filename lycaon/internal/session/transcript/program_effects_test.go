@@ -14,12 +14,12 @@ import (
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
-func programEffectsFixture(t *testing.T) (*Service, *store.SQL, string) {
+func programEffectsFixture(t *testing.T) (*Service, *store.Repositories, string) {
 	t.Helper()
 	sessionStore := storetest.New(t, testdbseed.DefaultProjectID)
-	sess, err := sessionStore.Create(t.Context(), api.CreateSessionRequest{ProviderID: "fixture", Model: "large"}, testdbseed.DefaultProjectID)
+	sess, err := sessionStore.Sessions.Create(t.Context(), api.CreateSessionRequest{ProviderID: "fixture", Model: "large"}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
-	return New(sessionStore, nil), sessionStore, sess.ID
+	return New(sessionStore.Sessions, sessionStore.Transcript, sessionStore.Turns, sessionStore.People, nil), sessionStore, sess.ID
 }
 
 func commandRow(callID string, edits ...api.FileEditSnapshot) api.Message {
@@ -31,9 +31,9 @@ func textEdit(path, before, after string) api.FileEditSnapshot {
 }
 
 // storedEdits renders a stored row's edits as path:before>after.
-func storedEdits(t *testing.T, sessionStore *store.SQL, sessionID, callID string) (string, int) {
+func storedEdits(t *testing.T, sessionStore *store.Repositories, sessionID, callID string) (string, int) {
 	t.Helper()
-	msg, err := sessionStore.GetMessage(t.Context(), sessionID, "row-"+callID)
+	msg, err := sessionStore.Transcript.GetMessage(t.Context(), sessionID, "row-"+callID)
 	testutil.FailErr(t, "read stored row", err)
 	var parts []string
 	for _, edit := range msg.ToolResult.FileEdits {

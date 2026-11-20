@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/session"
 	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"github.com/lycaon/lycaon/internal/session/workerworkspace"
@@ -27,7 +28,7 @@ func TestBeforeWorkerWriteRejectsReadScopedMutation(t *testing.T) {
 	testdbseed.InsertSessionWithRoot(t, sessions.DB(), "parent", testdbseed.DefaultProjectID, t.TempDir())
 	mgr := session.NewHost(sessions, session.Models{Client: nil, Provider: nil, Limits: settings.SessionLimits{}, Cost: nil}, nil)
 	q := workertest.OnDatabase(t, sessions.DB(), 8)
-	mgr.SetWorkerQueue(q)
+	mgr.SetWorkerQueue(q, q.Branches)
 	dir := t.TempDir()
 	readScope := api.TaskScope{Mode: api.TaskScopeModeRead, Paths: []string{"internal/**"}}
 	_, err := q.Enqueue(context.Background(), api.WorkerTask{
@@ -60,7 +61,7 @@ func TestBeforeWorkerWriteAllowsPathOutsideSuggestion(t *testing.T) {
 	testdbseed.InsertSessionWithRoot(t, sessions.DB(), "parent", testdbseed.DefaultProjectID, t.TempDir())
 	mgr := session.NewHost(sessions, session.Models{Client: nil, Provider: nil, Limits: settings.SessionLimits{}, Cost: nil}, nil)
 	q := workertest.OnDatabase(t, sessions.DB(), 8)
-	mgr.SetWorkerQueue(q)
+	mgr.SetWorkerQueue(q, q.Branches)
 	writeScope := api.TaskScope{Mode: api.TaskScopeModeWrite, Paths: []string{"src/allowed/**"}}
 	_, err := q.Enqueue(context.Background(), api.WorkerTask{
 		ID: "job-write", ParentSessionID: "parent", ProjectID: testdbseed.DefaultProjectID,
@@ -100,11 +101,11 @@ func TestWorkerReadToolsIgnoreSuggestedPaths(t *testing.T) {
 	testdbseed.InsertSessionWithRoot(t, sessions.DB(), "parent", testdbseed.DefaultProjectID, t.TempDir())
 	mgr := session.NewHost(sessions, session.Models{Client: nil, Provider: nil, Limits: settings.SessionLimits{}, Cost: nil}, nil)
 	queue := workertest.OnDatabase(t, sessions.DB(), 8)
-	mgr.SetWorkerQueue(queue)
+	mgr.SetWorkerQueue(queue, queue.Branches)
 	scope := api.TaskScope{Mode: api.TaskScopeModeRead, Paths: []string{"docs/README.md"}}
-	parent, err := sessions.Get(ctx, "parent")
+	parent, err := sessions.Sessions.Get(ctx, "parent")
 	testutil.FailErr(t, "read parent", err)
-	child, err := sessions.CreateChild(ctx, parent, api.SpawnChildRequest{AgentType: "repo-researcher"})
+	child, err := sessions.Sessions.CreateChild(ctx, parent, api.SpawnChildRequest{AgentType: "repo-researcher"})
 	testutil.FailErr(t, "create child", err)
 	_, err = queue.Enqueue(ctx, api.WorkerTask{
 		ID: "job-read-discovery", ParentSessionID: child.ParentSessionID,
@@ -146,7 +147,7 @@ func readScopedWorkerManager(t *testing.T, jobID string, mode api.TaskScopeMode)
 	testdbseed.InsertSessionWithRoot(t, sessions.DB(), "parent", testdbseed.DefaultProjectID, t.TempDir())
 	mgr := session.NewHost(sessions, session.Models{Client: nil, Provider: nil, Limits: settings.SessionLimits{}, Cost: nil}, nil)
 	q := workertest.OnDatabase(t, sessions.DB(), 8)
-	mgr.SetWorkerQueue(q)
+	mgr.SetWorkerQueue(q, q.Branches)
 	scope := api.TaskScope{Mode: mode, Paths: []string{"."}}
 	ctx := context.Background()
 	_, err := q.Enqueue(ctx, api.WorkerTask{
@@ -197,12 +198,12 @@ func TestWorkspaceSnapshotWalksTree(t *testing.T) {
 
 func TestEmptyWorkspaceBaselineIsValidAndDetectsLaterCreation(t *testing.T) {
 	dir := t.TempDir()
-	ref := testbaseline.Capture(t, dir)
+	ref := testbaseline.Capture(t, "root", dir)
 	baseline, err := workspacebaseline.Open(t.Context(), ref, workspacebaseline.ContentStore(ref))
 	testutil.FailErr(t, "open empty baseline", err)
 	defer func() { _ = baseline.Close() }()
 	testutil.FailErr(t, "write greenfield file", os.WriteFile(filepath.Join(dir, "new.go"), []byte("package new\n"), 0o644))
-	changed, err := baseline.Changes(t.Context(), nil, dir)
+	changed, err := baseline.Changes(t.Context(), []projectroot.RootRef{{ID: "root", Path: dir, IsPrimary: true}}, dir)
 	testutil.FailErr(t, "compare empty baseline", err)
 	if len(changed) != 1 || changed[0] != "new.go" {
 		t.Fatalf("changed = %v", changed)

@@ -70,7 +70,7 @@ func TestDefaultPipelineActiveWorkflowInjectVisible(t *testing.T) {
 	wfMgr.Approvals.Getter = blueprintMgr
 	testdbseed.InsertProjectRoot(t, sqlDB, testdbseed.DefaultProjectID, dir)
 
-	sess, err := sessions.Create(ctx, api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
+	sess, err := sessions.Sessions.Create(ctx, api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "store.Create failed", err)
 	_, err = wfMgr.Starts.StartHuman(ctx, sess.ID, api.StartWorkflowRunRequest{WorkflowID: "bugbash", WorkflowVersion: "1.1.0"})
 	testutil.FailErr(t, "wfMgr.Starts.StartHuman failed", err)
@@ -116,7 +116,7 @@ func TestPendingWorkflowFeedbackReachesCoordinator(t *testing.T) {
 	if ids := h.Sessions.Manager.Coordinator.Guidance.PendingIDs(ctx, sess.ID); !slices.Contains(ids, pendingKick) {
 		t.Fatalf("pending kicks = %v want %s", ids, pendingKick)
 	}
-	current, err := h.Store.Get(ctx, sess.ID)
+	current, err := h.Store.Sessions.Get(ctx, sess.ID)
 	testutil.FailErr(t, "reload session", err)
 	offered := false
 	for _, meta := range h.Sessions.Manager.Coordinator.Guards.Policy().ListForPrompt(ctx, current, orchestration.ProfileCoordinator) {

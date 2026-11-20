@@ -259,7 +259,7 @@ func TestEnsureManagedRejectsHashMismatch(t *testing.T) {
 	if !strings.Contains(err.Error(), "sha256 mismatch") || !strings.Contains(err.Error(), wrong) {
 		t.Fatalf("error = %v, want mismatch naming expected hash", err)
 	}
-	if managedInstallReady(cache) {
+	if ManagedBinary(cache) != "" {
 		t.Fatal("unverified archive was installed")
 	}
 }
@@ -297,7 +297,7 @@ func TestEnsureManagedRejectsMissingPin(t *testing.T) {
 	if !strings.Contains(err.Error(), "no pinned sha256") {
 		t.Fatalf("error = %v, want missing-pin refusal", err)
 	}
-	if managedInstallReady(cache) {
+	if ManagedBinary(cache) != "" {
 		t.Fatal("unverified archive was installed")
 	}
 }
@@ -426,7 +426,7 @@ func TestManagedRootRequiresAnExplicitCacheDir(t *testing.T) {
 	if root := managedRoot(""); root != "" {
 		t.Fatalf("managedRoot(\"\") = %q, want no managed tree", root)
 	}
-	if managedBinaryPath("") != "" {
-		t.Fatal("managedBinaryPath(\"\") resolved a binary without a named cache")
+	if ManagedBinary("") != "" {
+		t.Fatal("ManagedBinary(\"\") resolved a binary without a named cache")
 	}
 }

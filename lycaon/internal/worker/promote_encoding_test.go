@@ -24,7 +24,7 @@ func TestWorkerPromoteRoundTripsSelfIdentifyingEncodings(t *testing.T) {
 			before := testutil.EncodeTextFixture(t, "before 世界\n", encoding)
 			after := testutil.EncodeTextFixture(t, "after 世界\n", encoding)
 			testutil.FailErr(t, "write primary", os.WriteFile(filepath.Join(primary, path), before, 0o600))
-			baseline := testbaseline.Capture(t, primary)
+			baseline := testbaseline.Capture(t, "root", primary)
 			reader, err := workspacebaseline.Open(t.Context(), baseline, workspacebaseline.ContentStore(baseline))
 			testutil.FailErr(t, "open baseline", err)
 			content, exists, err := reader.Content(t.Context(), path)
@@ -67,7 +67,7 @@ func TestWorkerPromoteRefusesEncodingChangesWithoutWriting(t *testing.T) {
 	before := testutil.EncodeTextFixture(t, "before\n", textfile.UTF16LEBOM)
 	after := testutil.EncodeTextFixture(t, "after\n", textfile.UTF8)
 	testutil.FailErr(t, "write primary", os.WriteFile(filepath.Join(primary, path), before, 0o600))
-	baseline := testbaseline.Capture(t, primary)
+	baseline := testbaseline.Capture(t, "root", primary)
 	testutil.FailErr(t, "write branch", os.WriteFile(filepath.Join(branch, path), after, 0o600))
 
 	task := promoteTask(t, primary, branch, nil, []string{path})

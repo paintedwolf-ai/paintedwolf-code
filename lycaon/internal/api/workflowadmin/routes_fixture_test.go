@@ -3,7 +3,6 @@ package workflowadmin_test
 import (
 	"context"
 	"encoding/json"
-	runstate "github.com/lycaon/lycaon/internal/workflow/runstate"
 	"io"
 	"log/slog"
 	"net/http"
@@ -23,9 +22,11 @@ import (
 	"github.com/lycaon/lycaon/internal/extpacks"
 	"github.com/lycaon/lycaon/internal/orchestration"
 	"github.com/lycaon/lycaon/internal/project"
+	"github.com/lycaon/lycaon/internal/project/projecttest"
 	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/testutil"
+	runstate "github.com/lycaon/lycaon/internal/workflow/runstate"
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -34,7 +35,7 @@ import (
 type routesFixture struct {
 	router     chi.Router
 	handler    workflowadmin.Handler
-	sessions   *store.SQL
+	sessions   *store.Repositories
 	runs       *runstate.Repository
 	blueprints *blueprint.Manager
 	project    *project.Project
@@ -47,7 +48,7 @@ func newRoutesFixture(t *testing.T, orchestrator orchestration.Orchestrator) *ro
 	sessions := store.NewSQL(sqlDB)
 	projects := project.NewSQLRegistry(sqlDB)
 	workDir := t.TempDir()
-	p, err := project.CreateWithRoot(t.Context(), projects, workDir)
+	p, err := projecttest.CreateWithRoot(t.Context(), projects, workDir)
 	testutil.FailErr(t, "create project", err)
 
 	deps := apitest.Dependencies(t, hostapi.Dependencies{Core: hostapi.CoreDependencies{Store: sessions, Projects: projects}})
@@ -99,7 +100,7 @@ func workflowRouter(h workflowadmin.Handler) chi.Router {
 
 func (f *routesFixture) createSession(t *testing.T) *wire.Session {
 	t.Helper()
-	sess, err := f.sessions.Create(t.Context(), wire.CreateSessionRequest{
+	sess, err := f.sessions.Sessions.Create(t.Context(), wire.CreateSessionRequest{
 		ProjectID: f.project.ID, Posture: wire.SessionPostureBuild,
 	}, f.project.ID)
 	testutil.FailErr(t, "create session", err)

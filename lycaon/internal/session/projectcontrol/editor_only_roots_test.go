@@ -47,7 +47,7 @@ func TestChatsLeaveEditorOnlyRootsForTheAgentsPrimary(t *testing.T) {
 		{ID: "g", ProjectID: "mixed"},
 		nil,
 	}}
-	s := New(sessions, nil, nil, nil, nil, nil, nil)
+	s := New(sessions, nil, nil, nil, nil, nil, nil, nil)
 	s.SetProjects(reassignProjects{"mixed": mixed, "editor-only": editorOnly})
 
 	testutil.FailErr(t, "reassign project sessions", s.ReassignProjectSessionsOffEditorOnlyRoots(t.Context(), "mixed"))

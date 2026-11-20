@@ -8,7 +8,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/lycaon/lycaon/internal/timelayout"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -16,6 +15,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/lycaon/lycaon/internal/db"
+	"github.com/lycaon/lycaon/internal/timelayout"
 	scanfindings "github.com/lycaon/lycaon/internal/scan/findings"
 	"github.com/lycaon/lycaon/internal/sourcesnapshot"
 	"github.com/lycaon/lycaon/internal/tools/surveyjson"
@@ -23,12 +23,12 @@ import (
 )
 
 // BindPublishedSourceSnapshot replaces a warming source identity.
-func (s *sqlCore) BindPublishedSourceSnapshot(ctx context.Context, id string, snapshot sourcesnapshot.Snapshot) (*api.CodeScan, error) {
+func (s *RunStore) BindPublishedSourceSnapshot(ctx context.Context, id string, snapshot sourcesnapshot.Snapshot) (*api.CodeScan, error) {
 	id = strings.TrimSpace(id)
 	if id == "" || strings.TrimSpace(snapshot.ID) == "" || snapshot.ID == api.SourceSnapshotWarming {
 		return nil, fmt.Errorf("bind source snapshot requires id and published snapshot")
 	}
-	err := s.inTx(ctx, func(qtx *db.Queries, tx *sql.Tx) error {
+	err := s.tx.inTx(ctx, func(qtx *db.Queries, tx *sql.Tx) error {
 		changed, err := qtx.BindPublishedScanSnapshot(ctx, db.BindPublishedScanSnapshotParams{
 			SourceSnapshotID: snapshot.ID,
 			ID:               id,
@@ -60,12 +60,12 @@ func (s *sqlCore) BindPublishedSourceSnapshot(ctx context.Context, id string, sn
 				return err
 			}
 		}
-		return s.emitScanTx(ctx, tx, id)
+		return s.tx.emitScanTx(ctx, tx, id)
 	})
 	if err != nil {
 		return nil, err
 	}
-	return s.Get(ctx, id)
+	return s.reads.Get(ctx, id)
 }
 
 // ErrAssessmentIdentityMismatch means an assessment id is already recorded
@@ -82,8 +82,8 @@ type AssessmentDraft struct {
 	CreatedAt        time.Time
 }
 
-func (s *sqlCore) EnsureAssessment(ctx context.Context, draft AssessmentDraft) (string, error) {
-	if s == nil || s.db == nil {
+func (s *RunStore) EnsureAssessment(ctx context.Context, draft AssessmentDraft) (string, error) {
+	if s == nil || s.tx.db == nil {
 		return "", fmt.Errorf("scan store not configured")
 	}
 	if strings.TrimSpace(draft.ID) == "" {
@@ -111,7 +111,7 @@ func (s *sqlCore) EnsureAssessment(ctx context.Context, draft AssessmentDraft) (
 	if err != nil {
 		return "", err
 	}
-	err = s.inTx(ctx, func(qtx *db.Queries, _ *sql.Tx) error {
+	err = s.tx.inTx(ctx, func(qtx *db.Queries, _ *sql.Tx) error {
 		if err := qtx.InsertSecurityAssessment(ctx, db.InsertSecurityAssessmentParams{
 			ID: draft.ID, CanonicalPath: draft.CanonicalPath,
 			SourceSnapshotID:     draft.SourceSnapshotID,
@@ -220,8 +220,8 @@ func scanReuseKey(scan api.CodeScan, baseSnapshotID string) (string, error) {
 	return hex.EncodeToString(sum[:]), nil
 }
 
-func (s *sqlCore) ensureAssessmentForScan(ctx context.Context, scan api.CodeScan) error {
-	identity, err := s.queries.GetSecurityAssessmentIdentity(ctx, scan.AssessmentID)
+func (s *RunStore) ensureAssessmentForScan(ctx context.Context, scan api.CodeScan) error {
+	identity, err := s.tx.queries.GetSecurityAssessmentIdentity(ctx, scan.AssessmentID)
 	if err == nil {
 		if identity.CanonicalPath != scan.CanonicalPath ||
 			identity.SourceSnapshotID != scan.SourceSnapshotID ||
@@ -300,9 +300,9 @@ func hydrateScanFacts(ctx context.Context, handle db.DBTX, scan *api.CodeScan) e
 	return nil
 }
 
-func (s *sqlCore) hydrateScan(ctx context.Context, scan *api.CodeScan) (*api.CodeScan, error) {
+func (s *ReadStore) hydrateScan(ctx context.Context, scan *api.CodeScan) (*api.CodeScan, error) {
 	if scan != nil {
-		pruned, err := db.New(s.db).GetHistoryBodyPrunedAt(ctx, db.GetHistoryBodyPrunedAtParams{Class: "scan_detail", OwnerID: scan.ID})
+		pruned, err := db.New(s.tx.db).GetHistoryBodyPrunedAt(ctx, db.GetHistoryBodyPrunedAtParams{Class: "scan_detail", OwnerID: scan.ID})
 		if err != nil && !db.IsNoRows(err) {
 			return nil, err
 		}
@@ -311,7 +311,7 @@ func (s *sqlCore) hydrateScan(ctx context.Context, scan *api.CodeScan) (*api.Cod
 			return scan, nil
 		}
 	}
-	if err := hydrateScanFacts(ctx, s.db, scan); err != nil {
+	if err := hydrateScanFacts(ctx, s.tx.db, scan); err != nil {
 		return nil, err
 	}
 	if scan != nil && scan.FindingSetID != "" {
@@ -319,7 +319,7 @@ func (s *sqlCore) hydrateScan(ctx context.Context, scan *api.CodeScan) (*api.Cod
 		if err != nil {
 			return nil, err
 		}
-		if err := s.attachFindingHistory(ctx, scan.CanonicalPath, scan.ScannerID, findings); err != nil {
+		if err := s.findings.attachFindingHistory(ctx, scan.CanonicalPath, scan.ScannerID, findings); err != nil {
 			return nil, err
 		}
 		scan.Findings = findings
@@ -330,7 +330,7 @@ func (s *sqlCore) hydrateScan(ctx context.Context, scan *api.CodeScan) (*api.Cod
 	return scan, nil
 }
 
-func (s *sqlCore) hydrateScans(ctx context.Context, scans []api.CodeScan) ([]api.CodeScan, error) {
+func (s *ReadStore) hydrateScans(ctx context.Context, scans []api.CodeScan) ([]api.CodeScan, error) {
 	for index := range scans {
 		if _, err := s.hydrateScan(ctx, &scans[index]); err != nil {
 			return nil, err
@@ -350,15 +350,20 @@ func EstablishesAuthority(scan api.CodeScan) bool {
 }
 
 // FinalizeCompleteJSON atomically commits completion and its finding set.
-func (s *sqlCore) FinalizeCompleteJSON(ctx context.Context, claimed *api.CodeScan, resultJSON []byte, findings []api.SecurityFinding, warnings []api.ScanWarning, coverage api.ScanCoverageStatus) (bool, error) {
+func (s *RunStore) FinalizeCompleteJSON(ctx context.Context, claimed *api.CodeScan, resultJSON []byte, findings []api.SecurityFinding, warnings []api.ScanWarning, coverage api.ScanCoverageStatus) (bool, error) {
 	if claimed == nil || claimed.ID == "" || claimed.ClaimToken == "" {
 		return false, fmt.Errorf("scan claim token required")
 	}
 	if !json.Valid(resultJSON) {
 		return false, fmt.Errorf("scan result must be valid JSON")
 	}
+	var (
+		setID         string
+		reduced       []api.SecurityFinding
+		finalCoverage api.ScanCoverageStatus
+	)
 	won := false
-	err := s.inTx(ctx, func(qtx *db.Queries, tx *sql.Tx) error {
+	err := s.tx.inTx(ctx, func(qtx *db.Queries, tx *sql.Tx) error {
 		changed, err := qtx.MarkScanComplete(ctx, db.MarkScanCompleteParams{
 			ResultJson:  db.NullString(string(resultJSON)),
 			CompletedAt: db.NullString(timelayout.Format(time.Now().UTC())),
@@ -370,22 +375,25 @@ func (s *sqlCore) FinalizeCompleteJSON(ctx context.Context, claimed *api.CodeSca
 		if changed != 1 {
 			return nil
 		}
-		setID, reduced, finalCoverage, err := commitFindingSetTx(ctx, tx, claimed, findings, warnings, coverage)
+		setID, reduced, finalCoverage, err = commitFindingSetTx(ctx, tx, claimed, findings, warnings, coverage)
 		if err != nil {
 			return err
 		}
-		claimed.FindingSetID = setID
-		claimed.Findings = reduced
-		claimed.FindingsStored = len(reduced)
-		claimed.CoverageStatus = finalCoverage
 		won = true
-		return s.emitScanTx(ctx, tx, claimed.ID)
+		return s.tx.emitScanTx(ctx, tx, claimed.ID)
 	})
-	return won && err == nil, err
+	if err != nil || !won {
+		return false, err
+	}
+	claimed.FindingSetID = setID
+	claimed.Findings = reduced
+	claimed.FindingsStored = len(reduced)
+	claimed.CoverageStatus = finalCoverage
+	return true, nil
 }
 
 // FinalizeFailure atomically commits failure and unavailable coverage.
-func (s *sqlCore) FinalizeFailure(ctx context.Context, claimed *api.CodeScan, status api.CodeScanStatus, code, message string) (bool, error) {
+func (s *RunStore) FinalizeFailure(ctx context.Context, claimed *api.CodeScan, status api.CodeScanStatus, code, message string) (bool, error) {
 	if claimed == nil || claimed.ID == "" || claimed.ClaimToken == "" {
 		return false, fmt.Errorf("scan claim token required")
 	}
@@ -395,7 +403,7 @@ func (s *sqlCore) FinalizeFailure(ctx context.Context, claimed *api.CodeScan, st
 		return false, fmt.Errorf("invalid scan failure status %q", status)
 	}
 	won := false
-	err := s.inTx(ctx, func(qtx *db.Queries, tx *sql.Tx) error {
+	err := s.tx.inTx(ctx, func(qtx *db.Queries, tx *sql.Tx) error {
 		changed, err := qtx.MarkScanTerminalFailure(ctx, db.MarkScanTerminalFailureParams{
 			Status: string(status), Error: db.NullString(strings.TrimSpace(message)),
 			CompletedAt: db.NullString(timelayout.Format(time.Now().UTC())),
@@ -414,20 +422,20 @@ func (s *sqlCore) FinalizeFailure(ctx context.Context, claimed *api.CodeScan, st
 			return err
 		}
 		won = true
-		return s.emitScanTx(ctx, tx, claimed.ID)
+		return s.tx.emitScanTx(ctx, tx, claimed.ID)
 	})
 	return won && err == nil, err
 }
 
 // FinalizePendingFailure records a typed failure before a job is claimed.
-func (s *sqlCore) FinalizePendingFailure(ctx context.Context, id, code, message string) (bool, error) {
+func (s *RunStore) FinalizePendingFailure(ctx context.Context, id, code, message string) (bool, error) {
 	id = strings.TrimSpace(id)
 	code = strings.TrimSpace(code)
 	if id == "" || code == "" {
 		return false, fmt.Errorf("scan id and failure code required")
 	}
 	won := false
-	err := s.inTx(ctx, func(qtx *db.Queries, tx *sql.Tx) error {
+	err := s.tx.inTx(ctx, func(qtx *db.Queries, tx *sql.Tx) error {
 		changed, err := qtx.MarkPendingScanFailed(ctx, db.MarkPendingScanFailedParams{
 			Error:       db.NullString(strings.TrimSpace(message)),
 			CompletedAt: db.NullString(timelayout.Format(time.Now().UTC())), ID: id,
@@ -441,7 +449,7 @@ func (s *sqlCore) FinalizePendingFailure(ctx context.Context, id, code, message 
 			return err
 		}
 		won = true
-		return s.emitScanTx(ctx, tx, id)
+		return s.tx.emitScanTx(ctx, tx, id)
 	})
 	return won && err == nil, err
 }
@@ -545,12 +553,12 @@ func FindingTouchesPaths(finding api.SecurityFinding, paths []string) bool {
 	return false
 }
 
-func (s *sqlCore) findingSetForScan(ctx context.Context, scanID string) ([]api.SecurityFinding, api.ScanCoverageStatus, error) {
-	row, err := s.queries.GetScanFindingSetForScan(ctx, scanID)
+func (s *ReadStore) findingSetForScan(ctx context.Context, scanID string) ([]api.SecurityFinding, api.ScanCoverageStatus, error) {
+	row, err := s.tx.queries.GetScanFindingSetForScan(ctx, scanID)
 	if err != nil {
 		return nil, "", fmt.Errorf("scan %s finding set: %w", scanID, err)
 	}
-	findings, err := loadFindingEntries(ctx, s.queries, row.ID)
+	findings, err := loadFindingEntries(ctx, s.tx.queries, row.ID)
 	if err != nil {
 		return nil, "", err
 	}

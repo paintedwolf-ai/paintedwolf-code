@@ -1,7 +1,6 @@
 package definition
 
 import (
-	"path/filepath"
 	"strings"
 	"testing"
 
@@ -159,8 +158,7 @@ func TestResolveSurfaceBindingPlanProfile(t *testing.T) {
 			{ID: "research"},
 		},
 	}
-	root := filepath.Join("..", "..", "..")
-	binding, err := ResolveSurfaceBinding(m, "research", "plan@1.0.0", root)
+	binding, err := ResolveSurfaceBinding(m, "research", "plan@1.0.0")
 	testutil.FailErr(t, "ResolveSurfaceBinding", err)
 	if binding.CoordinatorSurface != "plan_research" {
 		t.Fatalf("surface = %q", binding.CoordinatorSurface)
@@ -178,8 +176,7 @@ func TestResolveSurfaceBindingPlanProfile(t *testing.T) {
 
 func TestResolveSurfaceBindingEmptyWorkflowUsesImplementProfile(t *testing.T) {
 	m := Manifest{ID: "implement", Version: "1.0.0"}
-	root := filepath.Join("..", "..", "..")
-	binding, err := ResolveSurfaceBinding(m, "work", "", root)
+	binding, err := ResolveSurfaceBinding(m, "work", "")
 	testutil.FailErr(t, "ResolveSurfaceBinding", err)
 	if !binding.WorkflowInvestigateEligible {
 		t.Fatal("empty workflow id must resolve implement investigate_eligible")

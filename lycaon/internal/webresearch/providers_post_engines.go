@@ -161,14 +161,15 @@ type RESTSpec struct {
 // RESTSearchProvider implements SearchProvider from a RESTSpec.
 type RESTSearchProvider struct {
 	spec                 RESTSpec
+	exchange             Exchange
 	kind                 ProviderKind
 	allowPrivateEndpoint bool
 	// requiredConfig names the catalog extra fields Configured requires.
 	requiredConfig []string
 }
 
-func NewRESTSearchProvider(spec RESTSpec, kind ProviderKind) *RESTSearchProvider {
-	return &RESTSearchProvider{spec: spec, kind: kind}
+func NewRESTSearchProvider(spec RESTSpec, kind ProviderKind, exchange Exchange) *RESTSearchProvider {
+	return &RESTSearchProvider{spec: spec, kind: kind, exchange: exchange}
 }
 
 func (p *RESTSearchProvider) ID() string { return p.spec.ProviderID }
@@ -221,7 +222,7 @@ func (p *RESTSearchProvider) Search(ctx context.Context, s Settings, query strin
 			return providerOutcome{providerID: providerID, reason: "parse_error", detail: err.Error()}
 		}
 	}
-	body, status, err := doProviderHTTP(ctx, req, p.providerTimeoutSec(s), p.allowPrivateEndpoint)
+	body, status, err := doProviderHTTP(ctx, req, p.providerTimeoutSec(s), p.allowPrivateEndpoint, p.exchange)
 	if err != nil {
 		reason := "parse_error"
 		if errors.Is(err, context.DeadlineExceeded) || errors.Is(ctx.Err(), context.DeadlineExceeded) {

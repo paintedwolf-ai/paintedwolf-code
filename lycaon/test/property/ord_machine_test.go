@@ -13,6 +13,7 @@ import (
 	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/pkg/api"
+	"github.com/lycaon/lycaon/pkg/api/apitest"
 	"pgregory.net/rapid"
 )
 
@@ -29,7 +30,7 @@ type ordEntry struct {
 // are never reused, whatever was rewound.
 type ordMachine struct {
 	ctx     context.Context
-	store   *store.SQL
+	store   *store.Repositories
 	session string
 	entries []ordEntry
 	// high is the largest ord ever minted in the session.
@@ -55,7 +56,7 @@ func (m *ordMachine) appendBatch(t *rapid.T, count int) {
 	for i := range batch {
 		batch[i] = m.draft(t, "batch")
 	}
-	failErr(t, "append", m.store.AppendMessages(m.ctx, m.session, batch...))
+	failErr(t, "append", m.store.Transcript.AppendMessages(m.ctx, m.session, batch...))
 	stored := m.read(t)
 	var shared time.Time
 	for i, msg := range batch {
@@ -90,8 +91,8 @@ func (m *ordMachine) Patch(t *rapid.T) {
 	// Patches carry stale or forged creation fields; the store keeps its own.
 	patch.Ord = rapid.Int64Range(0, m.high+5).Draw(t, "patch_ord")
 	patch.Seq = rapid.Int64Range(0, 5).Draw(t, "patch_seq")
-	patch.DraftStatus = rapid.SampledFrom(append([]api.DraftStatus{""}, api.AllDraftStatuses()...)).Draw(t, "patch_draft_status")
-	_, err := m.store.UpdateMessage(m.ctx, m.session, patch.ID, patch)
+	patch.DraftStatus = rapid.SampledFrom(append([]api.DraftStatus{""}, apitest.AllDraftStatuses()...)).Draw(t, "patch_draft_status")
+	_, err := m.store.Transcript.UpdateMessage(m.ctx, m.session, patch.ID, patch)
 	failErr(t, "patch", err)
 	m.entries[i].content = patch.Content
 }
@@ -103,13 +104,13 @@ func (m *ordMachine) Rewind(t *rapid.T) {
 	i := rapid.IntRange(0, len(m.entries)-1).Draw(t, "rewind_index")
 	anchor := m.entries[i].id
 	op := uuid.NewString()
-	failErr(t, "prepare rewind", m.store.PrepareRewind(m.ctx, store.RewindOperation{
+	failErr(t, "prepare rewind", m.store.Rewind.PrepareRewind(m.ctx, store.RewindOperation{
 		ID: op, SessionID: m.session, AnchorMessageID: anchor, InputDigest: "digest", ProjectDir: "/project",
 		CheckpointAnchorIDs: []string{anchor},
 	}))
-	failErr(t, "rewind applying", m.store.SetRewindPhase(m.ctx, op, "applying", ""))
-	failErr(t, "rewind files applied", m.store.SetRewindPhase(m.ctx, op, "files_applied", ""))
-	_, err := m.store.CommitRewind(m.ctx, op, m.session, anchor, api.RewindSessionResponse{})
+	failErr(t, "rewind applying", m.store.Rewind.SetRewindPhase(m.ctx, op, "applying", ""))
+	failErr(t, "rewind files applied", m.store.Rewind.SetRewindPhase(m.ctx, op, "files_applied", ""))
+	_, err := m.store.Rewind.CommitRewind(m.ctx, op, m.session, anchor, api.RewindSessionResponse{})
 	failErr(t, "commit rewind", err)
 	m.entries = m.entries[:i]
 }
@@ -120,7 +121,7 @@ func (m *ordMachine) DuplicateID(t *rapid.T) {
 	}
 	again := m.draft(t, "duplicate")
 	again.ID = m.entries[rapid.IntRange(0, len(m.entries)-1).Draw(t, "duplicate_index")].id
-	err := m.store.AppendMessages(m.ctx, m.session, m.draft(t, "duplicate_lead"), again)
+	err := m.store.Transcript.AppendMessages(m.ctx, m.session, m.draft(t, "duplicate_lead"), again)
 	if !errors.Is(err, store.ErrDuplicateMessageID) {
 		t.Fatalf("append repeating %s = %v, want ErrDuplicateMessageID", again.ID, err)
 	}
@@ -141,7 +142,7 @@ func (m *ordMachine) ConcurrentAppend(t *rapid.T) {
 	for lane, msgs := range lanes {
 		wg.Go(func() {
 			for _, msg := range msgs {
-				if err := m.store.AppendMessages(m.ctx, m.session, msg); err != nil {
+				if err := m.store.Transcript.AppendMessages(m.ctx, m.session, msg); err != nil {
 					errs[lane] = err
 					return
 				}
@@ -173,7 +174,7 @@ func (m *ordMachine) ConcurrentAppend(t *rapid.T) {
 }
 
 func (m *ordMachine) read(t *rapid.T) []api.Message {
-	stored, err := m.store.GetMessages(m.ctx, m.session)
+	stored, err := m.store.Transcript.GetMessages(m.ctx, m.session)
 	failErr(t, "read transcript", err)
 	return stored
 }
@@ -199,7 +200,7 @@ func (m *ordMachine) Check(t *rapid.T) {
 		return
 	}
 	after := m.entries[0].ord
-	page, err := m.store.GetTranscriptPage(m.ctx, m.session, api.TranscriptPageQuery{Limit: 2, After: &after})
+	page, err := m.store.Transcript.GetTranscriptPage(m.ctx, m.session, api.TranscriptPageQuery{Limit: 2, After: &after})
 	failErr(t, "page after the first message", err)
 	ids := make([]string, len(page.Messages))
 	for i, msg := range page.Messages {
@@ -220,7 +221,7 @@ func TestTranscriptOrdIsMintedOnceAndNeverReused(t *testing.T) {
 	testdbseed.InsertProjectRoot(t, sqlDB, testdbseed.DefaultProjectID, t.TempDir())
 	sqlStore := store.NewSQL(sqlDB)
 	rapid.Check(t, func(t *rapid.T) {
-		sess, err := sqlStore.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
+		sess, err := sqlStore.Sessions.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 		failErr(t, "create session", err)
 		machine := &ordMachine{ctx: ctx, store: sqlStore, session: sess.ID, seq: map[string]int64{}}
 		t.Repeat(rapid.StateMachineActions(machine))

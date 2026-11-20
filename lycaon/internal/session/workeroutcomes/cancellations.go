@@ -4,8 +4,10 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/lycaon/lycaon/internal/bgprocess"
+	"github.com/lycaon/lycaon/internal/evidence"
 	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/session/workercloseout"
@@ -13,9 +15,23 @@ import (
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
-type CancellationSessions interface {
-	Get(context.Context, string) (*api.Session, error)
-	SetSessionStatus(context.Context, string, api.SessionStatus) error
+type Sessions interface {
+	Get(ctx context.Context, id string) (*api.Session, error)
+	SetSessionStatus(ctx context.Context, id string, status api.SessionStatus) error
+}
+
+type Transcript interface {
+	GetMessages(ctx context.Context, id string) ([]api.Message, error)
+	GetWorkerJobMessages(ctx context.Context, sessionID, workerJobID string) ([]api.Message, error)
+	UserIntentBefore(ctx context.Context, sessionID string, before time.Time) (time.Time, error)
+}
+
+type Evidence interface {
+	LoadLedger(ctx context.Context, sessionID string) (evidence.Ledger, error)
+	SeedSecretExposure(ctx context.Context, sessionID string) error
+	SeedUntrustedContent(ctx context.Context, sessionID string) error
+	SessionSecretExposure(ctx context.Context, sessionID string) (bool, error)
+	UpsertEvidenceRecord(ctx context.Context, sessionID string, rec evidence.Record) error
 }
 
 type ExecutionCancel interface{ Cancel(string) }
@@ -29,7 +45,7 @@ type ParentCards interface {
 type GroundingReset interface{ Reset(string) }
 
 type Cancellations struct {
-	sessions  CancellationSessions
+	sessions  Sessions
 	execution ExecutionCancel
 	stops     RuntimeStop
 	graceful  GracefulFinish
@@ -42,7 +58,7 @@ type Cancellations struct {
 func (m *Cancellations) SetWorkerNames(names workercompletion.WorkerNames) { m.names = names }
 
 type CancellationPorts struct {
-	Sessions  CancellationSessions
+	Sessions  Sessions
 	Execution ExecutionCancel
 	Stops     RuntimeStop
 	Graceful  GracefulFinish

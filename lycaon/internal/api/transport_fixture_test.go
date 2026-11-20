@@ -13,9 +13,10 @@ import (
 	"github.com/lycaon/lycaon/config/configtest"
 	"github.com/lycaon/lycaon/internal/events"
 	"github.com/lycaon/lycaon/internal/llm"
-	providercredentials "github.com/lycaon/lycaon/internal/llm/credentials"
+	"github.com/lycaon/lycaon/internal/llm/credentials/credentialstest"
 	"github.com/lycaon/lycaon/internal/project"
 	"github.com/lycaon/lycaon/internal/session"
+	sessionstore "github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/sourceledger"
@@ -119,7 +120,7 @@ func newProviderTestServerWithCatalogs(t *testing.T, shipYAML, localYAML string,
 
 	catalog, err := llm.NewProviderCatalogAt(userProviders)
 	testutil.FailErr(t, "load provider catalog", err)
-	creds := providercredentials.NewAt(credPath)
+	creds := credentialstest.Open(t, credPath)
 	policy, err := llm.NewPolicyStoreAt(globalPolicy)
 	testutil.FailErr(t, "load model policy", err)
 	registry, err := llm.NewRegistry(t.Context(), catalog, creds, nil)
@@ -168,7 +169,7 @@ func (f *recordingInventoryService) snapshot() []sourceledger.InventoryRequest {
 
 const testProviderID = "prov-a"
 
-func withSessionStore(store session.Store) testDeps {
+func withSessionStore(store *sessionstore.Repositories) testDeps {
 	return func(d *Dependencies) { d.Core.Store = store }
 }
 

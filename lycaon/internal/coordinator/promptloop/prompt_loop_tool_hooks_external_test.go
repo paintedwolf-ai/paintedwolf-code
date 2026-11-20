@@ -3,7 +3,6 @@ package promptloop_test
 import (
 	"context"
 	"fmt"
-	"github.com/lycaon/lycaon/internal/tools/toolstest"
 	"strings"
 	"testing"
 
@@ -14,13 +13,14 @@ import (
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/tools"
+	"github.com/lycaon/lycaon/internal/tools/toolstest"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
 func TestLoopBeforeToolRunSkipsRegistryRun(t *testing.T) {
 	ctx := context.Background()
 	store := storetest.New(t, testdbseed.DefaultProjectID)
-	sess, err := store.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
+	sess, err := store.Sessions.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session in store", err)
 	reg := toolstest.NewRegistry()
 	reg.Register("state_update", func(context.Context, map[string]any, tools.ToolContext) (string, error) {
@@ -33,7 +33,7 @@ func TestLoopBeforeToolRunSkipsRegistryRun(t *testing.T) {
 	deps := promptloop.StoreDeps(store)
 	deps.Model.LLM = client
 	deps.Context.Tools = reg
-	deps.Tools.BeforeToolRun = func(_ context.Context, _ *api.Session, _ []api.Message, _ string, tool string, _ map[string]any) (string, bool, error) {
+	deps.Tools.BeforeToolRun = func(_ context.Context, _ *api.Session, _ []api.Message, tool string, _ map[string]any) (string, bool, error) {
 		if tool == "state_update" {
 			return "host answered", true, nil
 		}
@@ -47,7 +47,7 @@ func TestLoopBeforeToolRunSkipsRegistryRun(t *testing.T) {
 		},
 	})
 	testutil.FailErr(t, "loop.Run failed", err)
-	msgs, err := store.GetMessages(ctx, sess.ID)
+	msgs, err := store.Transcript.GetMessages(ctx, sess.ID)
 	testutil.FailErr(t, "store.GetMessages failed", err)
 	found := false
 	for _, msg := range msgs {
@@ -66,7 +66,7 @@ func TestLoopBeforeToolRunSkipsRegistryRun(t *testing.T) {
 func TestLoopAfterToolRunMutatesSuccessOutput(t *testing.T) {
 	ctx := context.Background()
 	store := storetest.New(t, testdbseed.DefaultProjectID)
-	sess, err := store.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
+	sess, err := store.Sessions.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session in store", err)
 	reg := toolstest.NewRegistry()
 	reg.Register("read", func(context.Context, map[string]any, tools.ToolContext) (string, error) {
@@ -90,7 +90,7 @@ func TestLoopAfterToolRunMutatesSuccessOutput(t *testing.T) {
 		},
 	})
 	testutil.FailErr(t, "loop.Run failed", err)
-	msgs, err := store.GetMessages(ctx, sess.ID)
+	msgs, err := store.Transcript.GetMessages(ctx, sess.ID)
 	testutil.FailErr(t, "store.GetMessages failed", err)
 	for _, msg := range msgs {
 		if msg.Role == api.MessageRoleTool && strings.Contains(msg.Content, "mutated") {
@@ -103,7 +103,7 @@ func TestLoopAfterToolRunMutatesSuccessOutput(t *testing.T) {
 func TestLoopBeforeToolRunRejectDoesNotInvokeTool(t *testing.T) {
 	ctx := context.Background()
 	store := storetest.New(t, testdbseed.DefaultProjectID)
-	sess, err := store.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
+	sess, err := store.Sessions.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session in store", err)
 	sess.WorkspacePath = "/tmp/repo"
 	reg := toolstest.NewRegistry()
@@ -119,7 +119,7 @@ func TestLoopBeforeToolRunRejectDoesNotInvokeTool(t *testing.T) {
 	deps.Model.LLM = client
 	deps.Context.Tools = reg
 	deps.Context.LoadedTools = func(string) map[string]bool { return map[string]bool{"write": true} }
-	deps.Tools.BeforeToolRun = func(_ context.Context, _ *api.Session, _ []api.Message, _ string, _ string, _ map[string]any) (string, bool, error) {
+	deps.Tools.BeforeToolRun = func(_ context.Context, _ *api.Session, _ []api.Message, _ string, _ map[string]any) (string, bool, error) {
 		return "", true, fmt.Errorf("Rejected: COORDINATOR_ORCHESTRATE_WRITE_DENIED\nWhy: no\nInstead: task\nCode: COORDINATOR_ORCHESTRATE_WRITE_DENIED")
 	}
 	loop := promptloop.NewPromptLoopForTest(deps)
@@ -130,7 +130,7 @@ func TestLoopBeforeToolRunRejectDoesNotInvokeTool(t *testing.T) {
 		},
 	})
 	testutil.FailErr(t, "loop.Run failed", err)
-	msgs, err := store.GetMessages(ctx, sess.ID)
+	msgs, err := store.Transcript.GetMessages(ctx, sess.ID)
 	testutil.FailErr(t, "store.GetMessages failed", err)
 	var settledAssistant *api.Message
 	var rejectResults int

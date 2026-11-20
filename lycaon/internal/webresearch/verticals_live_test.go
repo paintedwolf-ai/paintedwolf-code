@@ -12,7 +12,7 @@ import (
 //	./task test:digest -- ./internal/webresearch -tags live_web -run VerticalProvidersLive -count=1
 func TestVerticalProvidersLive(t *testing.T) {
 	t.Parallel()
-	reg := testRegistry(t)
+	reg := testRegistry(t, nil)
 	s := DefaultSettings(nil, nil, reg.Catalog())
 	// Exercise every configured keyless provider.
 	// Shared pacing keys serialize parallel subtests.

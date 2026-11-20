@@ -65,10 +65,16 @@ type Engine struct {
 	LanguageArgument string
 }
 
-var (
-	verifiedMu sync.Mutex
-	verified   = map[string]Engine{}
-)
+type rootVerifier struct {
+	mu    sync.Mutex
+	roots map[string]Engine
+}
+
+var installed = newVerifier()
+
+func newVerifier() *rootVerifier {
+	return &rootVerifier{roots: make(map[string]Engine)}
+}
 
 // Resolve returns the verified bundled engine for this process. Every payload
 // digest is checked once per root; a later call reuses that result.
@@ -77,19 +83,19 @@ func Resolve() (Engine, error) {
 	if err != nil {
 		return Engine{}, err
 	}
-	return resolve(pin, runtime.GOOS, runtime.GOARCH, candidateRoots())
+	return installed.resolve(pin, runtime.GOOS, runtime.GOARCH, candidateRoots())
 }
 
 // resolve returns the first root that verifies for the platform. A missing
 // root falls through to the next; a present but altered one stops resolution.
-func resolve(pin *Pin, goos, goarch string, roots []string) (Engine, error) {
+func (v *rootVerifier) resolve(pin *Pin, goos, goarch string, roots []string) (Engine, error) {
 	plat, ok := pin.Platform(goos, goarch)
 	if !ok {
 		return Engine{}, &UnavailableError{Reason: ReasonUnsupportedPlatform}
 	}
 	var missing error
 	for _, root := range roots {
-		engine, err := verifyRoot(root, pin, plat)
+		engine, err := v.verifyRoot(root, pin, plat)
 		if err == nil {
 			return engine, nil
 		}
@@ -127,14 +133,14 @@ func candidateRoots() []string {
 // verifyRoot checks every pinned payload under root. A verified root is
 // remembered for the process; an absent or mismatched one is re-examined on
 // the next call, so staging the engine later takes effect without a restart.
-func verifyRoot(root string, pin *Pin, plat PlatformPin) (Engine, error) {
+func (v *rootVerifier) verifyRoot(root string, pin *Pin, plat PlatformPin) (Engine, error) {
 	if err := pin.validateLanguages(); err != nil {
 		return Engine{}, err
 	}
 	root = filepath.Clean(root)
-	verifiedMu.Lock()
-	engine, ok := verified[root]
-	verifiedMu.Unlock()
+	v.mu.Lock()
+	engine, ok := v.roots[root]
+	v.mu.Unlock()
 	if ok {
 		return engine, nil
 	}
@@ -155,9 +161,9 @@ func verifyRoot(root string, pin *Pin, plat PlatformPin) (Engine, error) {
 		Version:          pin.EngineVersion,
 		LanguageArgument: strings.Join(pin.RecognitionLanguages, "+"),
 	}
-	verifiedMu.Lock()
-	verified[root] = engine
-	verifiedMu.Unlock()
+	v.mu.Lock()
+	v.roots[root] = engine
+	v.mu.Unlock()
 	return engine, nil
 }
 
@@ -182,11 +188,4 @@ func verifyPayload(path string, payload Payload) error {
 		return &UnavailableError{Reason: ReasonDigestMismatch, Path: path}
 	}
 	return nil
-}
-
-// resetForTest forgets verified roots.
-func resetForTest() {
-	verifiedMu.Lock()
-	verified = map[string]Engine{}
-	verifiedMu.Unlock()
 }

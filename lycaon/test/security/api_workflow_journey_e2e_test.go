@@ -7,9 +7,9 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/lycaon/lycaon/internal/conditions"
 	"github.com/lycaon/lycaon/internal/settingsoverlay"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/testutil/conditionstest"
 	wire "github.com/lycaon/lycaon/pkg/api"
 	"github.com/lycaon/lycaon/test/wiring"
 )
@@ -104,11 +104,11 @@ func assertPhaseGateError(t *testing.T, body []byte, phase, failedGate string) {
 func assertPlanWriteAllowed(t *testing.T, h *wiring.Harness, sessionID string) {
 	t.Helper()
 	ctx := context.Background()
-	loaded, err := h.Store.Get(ctx, sessionID)
+	loaded, err := h.Store.Sessions.Get(ctx, sessionID)
 	testutil.FailErr(t, "h.Store.Get failed", err)
 	planPath := settingsoverlay.Rel("blueprints/plan.md")
 	err = h.Sessions.Manager.Coordinator.Guards.Policy().EvaluateInvoke(ctx, loaded, "write", map[string]any{
-		"path": planPath, "content": conditions.TestPlanContentWithTasks,
+		"path": planPath, "content": conditionstest.PlanWithTasks,
 	})
 	testutil.FailErr(t, "write invoke policy", err)
 }

@@ -28,7 +28,7 @@ type workerSummaryDraft struct {
 
 // Append adds a terminal worker row to the parent transcript.
 func (m *Summaries) Append(ctx context.Context, parentID string, in SummaryInput) (string, error) {
-	if m == nil || m.store == nil {
+	if m == nil || (m.sessionStore == nil || m.transcriptStore == nil || m.evidenceStore == nil) {
 		return "", fmt.Errorf("worker summary service unavailable")
 	}
 	in.JobID = strings.TrimSpace(in.JobID)
@@ -37,7 +37,7 @@ func (m *Summaries) Append(ctx context.Context, parentID string, in SummaryInput
 	if in.JobID == "" || in.ChildSessionID == "" || in.AgentType == "" {
 		return "", fmt.Errorf("worker summary identity required")
 	}
-	childMessages, err := m.store.GetWorkerJobMessages(ctx, in.ChildSessionID, in.JobID)
+	childMessages, err := m.transcriptStore.GetWorkerJobMessages(ctx, in.ChildSessionID, in.JobID)
 	if err != nil {
 		return "", fmt.Errorf("load worker summary transcript: %w", err)
 	}
@@ -65,7 +65,7 @@ func (m *Summaries) Append(ctx context.Context, parentID string, in SummaryInput
 			status = string(api.WorkerSummaryStatusPartial)
 		}
 	}
-	parent, err := m.store.Get(ctx, parentID)
+	parent, err := m.sessionStore.Get(ctx, parentID)
 	if err != nil {
 		return "", fmt.Errorf("load worker summary parent: %w", err)
 	}
@@ -82,7 +82,7 @@ func (m *Summaries) Append(ctx context.Context, parentID string, in SummaryInput
 		if report.Brief == "" {
 			report.Brief = summary
 		}
-		eval, err := workercompletion.EvaluateWorkerSummary(ctx, workercompletion.WorkerSummaryEvalInput{MaxChars: maxChars, AgentType: in.AgentType, Report: report, MissingReport: summary == "" && report.LegStatus == "", ChildSessionID: in.ChildSessionID, ChildMessages: childMessages, ProjectDir: in.ProjectDir, ProjectRoots: in.ProjectRoots, ActiveRootID: in.ActiveRootID, WorkspaceCheck: m.workspaceCheck, WorkspaceChanges: &changes, Hints: m.workflowHints, Ledger: workercloseout.LedgerForMessages(m.store, childMessages), Pipeline: m.oarPipeline})
+		eval, err := workercompletion.EvaluateWorkerSummary(ctx, workercompletion.WorkerSummaryEvalInput{MaxChars: maxChars, AgentType: in.AgentType, Report: report, MissingReport: summary == "" && report.LegStatus == "", ChildSessionID: in.ChildSessionID, ChildMessages: childMessages, ProjectDir: in.ProjectDir, ProjectRoots: in.ProjectRoots, ActiveRootID: in.ActiveRootID, WorkspaceCheck: m.workspaceCheck, WorkspaceChanges: &changes, Hints: m.workflowHints, Ledger: workercloseout.LedgerForMessages(m.evidenceStore, childMessages), Pipeline: m.oarPipeline})
 		if err != nil {
 			return "", err
 		}
@@ -218,10 +218,10 @@ func (m *Summaries) completeWorkerSummary(
 	if err := m.cards.Project(ctx, parentID, draft.input.JobID, ws); err != nil {
 		return "", err
 	}
-	if err := MergeWorkerUntrustedIntoParent(ctx, m.store, parentID, draft.input.ChildSessionID); err != nil {
+	if err := MergeWorkerUntrustedIntoParent(ctx, m.sessionStore, m.transcriptStore, m.evidenceStore, parentID, draft.input.ChildSessionID); err != nil {
 		return "", fmt.Errorf("merge worker untrusted-content state: %w", err)
 	}
-	if err := MergeWorkerSecretExposureIntoParent(ctx, m.store, parentID, draft.input.ChildSessionID); err != nil {
+	if err := MergeWorkerSecretExposureIntoParent(ctx, m.sessionStore, m.transcriptStore, m.evidenceStore, parentID, draft.input.ChildSessionID); err != nil {
 		return "", fmt.Errorf("merge worker secret-exposure state: %w", err)
 	}
 	// Completed child transcripts remain durable; turn state does not.
@@ -235,7 +235,7 @@ func (m *Summaries) completeWorkerSummary(
 
 // Tags returns tagged worker summaries without prose for grounding.
 func (m *Summaries) Tags(ctx context.Context, sessionID string) ([]api.WorkerSummaryMeta, error) {
-	msgs, err := m.store.GetMessages(ctx, sessionID)
+	msgs, err := m.transcriptStore.GetMessages(ctx, sessionID)
 	if err != nil {
 		return nil, err
 	}

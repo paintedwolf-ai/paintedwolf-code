@@ -90,7 +90,7 @@ func TestCloseoutGatesPassedAnchoredSecurityEvidence(t *testing.T) {
 	})
 	testutil.FailErr(t, "SetChange landed", err)
 	planDeps := plantest.Deps(records)
-	planDeps.Jobs = worker.NewSQLQueue(sqlDB, 1)
+	planDeps.Jobs = worker.NewSQLServices(sqlDB, 1).Queue
 	planSvc := plantest.New(t, planDeps)
 
 	verifyRec := evidence.Record{
@@ -111,21 +111,21 @@ func TestCloseoutGatesPassedAnchoredSecurityEvidence(t *testing.T) {
 		SessionWorkIDs:          planSvc.SessionWorkIDs,
 		Evidence:                conditions.StoreEvidenceReader{Store: evidenceStore},
 		PlanCloseout:            planSvc.CloseoutComplete,
-		ScanLedger:              store,
+		ScanLedger:              store.Reads,
 		SourceSnapshots:         coord.SnapshotStore(),
 		ScanProactiveCategories: proactive,
 	})
 	testutil.FailErr(t, "conditions.NewDefaultRegistry failed", err)
 	created := commitRequiredSecurityLanding(t, sqlDB, coord, store, projectDir, "dep-closeout")
-	claimed, err := store.ClaimNext(t.Context())
+	claimed, err := store.Runs.ClaimNext(t.Context())
 	testutil.FailErr(t, "claim scan", err)
 	if claimed.ID != created.ID {
 		t.Fatalf("claimed scan %q want %q", claimed.ID, created.ID)
 	}
-	if _, err := store.MarkComplete(context.Background(), claimed, &scanoutput.Result{}); err != nil {
+	if _, err := store.Runs.MarkComplete(context.Background(), claimed, &scanoutput.Result{}); err != nil {
 		testutil.FailErr(t, "store.MarkComplete failed", err)
 	}
-	completed, err := store.Get(t.Context(), created.ID)
+	completed, err := store.Reads.Get(t.Context(), created.ID)
 	testutil.FailErr(t, "get completed scan", err)
 	ec := conditions.EvalContext{
 		Ctx:        context.Background(),
@@ -162,7 +162,7 @@ func TestCloseoutGatesPassedAnchoredSecurityEvidence(t *testing.T) {
 		Categories: proactive,
 	})
 	testutil.FailErr(t, "ing.Ingest failed", err)
-	if err := store.SaveIngest(context.Background(), created.ID, rec); err != nil {
+	if err := store.Findings.SaveIngest(context.Background(), created.ID, rec); err != nil {
 		testutil.FailErr(t, "store.SaveIngest failed", err)
 	}
 
@@ -202,7 +202,7 @@ func commitRequiredSecurityLanding(
 		ExecutionTarget: api.ExecutionTargetLocal, Status: api.WorkerStatusComplete,
 	}))
 	branch := enginepaths.JobBranchDir(enginepaths.WorkerBranchesRootUnder(testbaseline.DataDir(t, sqlDB)), projectDir, jobID)
-	bound, err := workerStore.SetWorkerWorkspace(ctx, jobID, branch, testbaseline.Durable(t, sqlDB, jobID, t.TempDir()))
+	bound, err := workerStore.SetWorkerWorkspace(ctx, jobID, branch, testbaseline.Durable(t, "root", sqlDB, jobID, t.TempDir()))
 	testutil.FailErr(t, "SetWorkerWorkspace", err)
 	if !bound {
 		t.Fatal("worker workspace binding did not win")
@@ -225,7 +225,7 @@ func commitRequiredSecurityLanding(
 	}
 	testutil.FailErr(t, "CommitPromotion", workerStore.CommitPromotion(ctx, jobID, token, worker.PromotionCommit{Plan: plan}))
 	testutil.FailErr(t, "PublishPending", coord.PublishPending(ctx, plan.ScanID))
-	rec, err := store.Get(ctx, plan.ScanID)
+	rec, err := store.Reads.Get(ctx, plan.ScanID)
 	testutil.FailErr(t, "Get landed scan", err)
 	if rec == nil {
 		t.Fatal("landed scan obligation missing")

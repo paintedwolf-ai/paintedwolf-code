@@ -60,7 +60,6 @@ func (p *ParsedProgram) Close() error {
 	if !p.closed {
 		p.closed = true
 		p.plan = ProgramSnapshot{}
-		p.source = nil
 		if p.releaseState != nil {
 			p.releaseState()
 		}

@@ -2,7 +2,6 @@ package worker
 
 import (
 	"context"
-	"github.com/lycaon/lycaon/internal/layeredfs/adapter/platform"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -11,6 +10,8 @@ import (
 
 	"github.com/lycaon/lycaon/internal/enginepaths"
 	"github.com/lycaon/lycaon/internal/layeredfs/adapter"
+	"github.com/lycaon/lycaon/internal/layeredfs/adapter/adaptertest"
+	"github.com/lycaon/lycaon/internal/layeredfs/adapter/platform"
 	"github.com/lycaon/lycaon/internal/layeredfs/claim"
 	"github.com/lycaon/lycaon/internal/sourceledger"
 	"github.com/lycaon/lycaon/internal/testbaseline"
@@ -27,9 +28,9 @@ func TestClaimNextDoesNotProvisionBranch(t *testing.T) {
 	sqlDB := testdbfixture.Open(t, "store.db")
 	testdbseed.InsertProjectRootWithID(t, sqlDB, testdbseed.DefaultProjectID, "root-id", dir)
 
-	q := NewSQLQueue(sqlDB, 4)
-	q.SetBaselineStore(sourceledger.New(sqlDB, filepath.Join(testbaseline.DataDir(t, sqlDB), "source-content")).Baselines)
-	q.SetWorkerWorkspaceManager(workspace.NewManager(filepath.Join(testbaseline.DataDir(t, sqlDB), "worker-branches"), platform.NewSelector(platform.Config{})))
+	q := NewSQLServices(sqlDB, 4).Queue
+	q.Branches.SetBaselineStore(sourceledger.New(sqlDB, filepath.Join(testbaseline.DataDir(t, sqlDB), "source-content"), sourceledger.Timing{}).Baselines)
+	q.Branches.SetWorkerWorkspaceManager(workspace.NewManager(filepath.Join(testbaseline.DataDir(t, sqlDB), "worker-branches"), platform.NewSelector(platform.Config{}), workspace.Filesystem{}))
 
 	id, err := q.Enqueue(context.Background(), api.WorkerTask{
 		ProjectID:       testdbseed.DefaultProjectID,
@@ -59,7 +60,7 @@ func TestClaimNextDoesNotProvisionBranch(t *testing.T) {
 	}
 	testutil.FailErr(t, "update canonical before branch claim", os.WriteFile(filepath.Join(dir, "main.go"), []byte("package claimed\n"), 0o644))
 
-	claimed, err := q.ClaimWorkerBranch(context.Background(), id)
+	claimed, err := q.Branches.ClaimWorkerBranch(context.Background(), id)
 	testutil.FailErr(t, "ClaimWorkerBranch", err)
 	if strings.TrimSpace(claimed.WorkspaceRoot) == "" {
 		t.Fatal("ClaimWorkerBranch must set WorkspaceRoot")
@@ -81,7 +82,7 @@ func TestClaimNextDoesNotProvisionBranch(t *testing.T) {
 	if string(branchBytes) != "package claimed\n" {
 		t.Fatalf("branch drifted with canonical source: %q", branchBytes)
 	}
-	again, err := q.ClaimWorkerBranch(context.Background(), id)
+	again, err := q.Branches.ClaimWorkerBranch(context.Background(), id)
 	testutil.FailErr(t, "ClaimWorkerBranch idempotent", err)
 	persisted, ok := q.Get(id)
 	if !ok || persisted.WorkspaceRoot != claimed.WorkspaceRoot || persisted.WorkspaceBaselinePath != "" {
@@ -102,7 +103,7 @@ func TestClaimWorkerBranchMountedViewSkipsBaselineTreeWalkAndExposesWorkspaceSta
 	sqlDB := testdbfixture.Open(t, "store.db")
 	testdbseed.InsertProjectRootWithID(t, sqlDB, testdbseed.DefaultProjectID, "root-id", dir)
 
-	mountedAdp := adapter.NewMountedAdapter(adapter.MountedAdapterConfig{
+	mountedAdp := adaptertest.NewMounted(adaptertest.MountedConfig{
 		AdapterID: adapter.AdapterNFSDarwin,
 		TargetOS:  runtime.GOOS,
 		MountProbeFn: func(_ context.Context, _, _ string) (adapter.ReasonCode, string, error) {
@@ -110,13 +111,13 @@ func TestClaimWorkerBranchMountedViewSkipsBaselineTreeWalkAndExposesWorkspaceSta
 		},
 	})
 	sel := adapter.NewSelector(runtime.GOOS, mountedAdp, mountedAdp, adapter.NewEagerCopyAdapter())
-	sel.BudgetFor = adapter.ZeroBudget
+	sel.BudgetFor = adaptertest.ZeroBudget
 	sel.Confinement = fixtureConfinement{}
-	wsMgr := workspace.NewManager(filepath.Join(testbaseline.DataDir(t, sqlDB), "worker-branches"), sel)
+	wsMgr := workspace.NewManager(filepath.Join(testbaseline.DataDir(t, sqlDB), "worker-branches"), sel, workspace.Filesystem{})
 
-	q := NewSQLQueue(sqlDB, 4)
-	q.SetBaselineStore(sourceledger.New(sqlDB, filepath.Join(testbaseline.DataDir(t, sqlDB), "source-content")).Baselines)
-	q.SetWorkerWorkspaceManager(wsMgr)
+	q := NewSQLServices(sqlDB, 4).Queue
+	q.Branches.SetBaselineStore(sourceledger.New(sqlDB, filepath.Join(testbaseline.DataDir(t, sqlDB), "source-content"), sourceledger.Timing{}).Baselines)
+	q.Branches.SetWorkerWorkspaceManager(wsMgr)
 
 	id, err := q.Enqueue(t.Context(), api.WorkerTask{
 		ProjectID:       testdbseed.DefaultProjectID,
@@ -139,22 +140,19 @@ func TestClaimWorkerBranchMountedViewSkipsBaselineTreeWalkAndExposesWorkspaceSta
 	// 1. Canceled context leaves no ready workspace root and allows clean retry.
 	canceledCtx, cancel := context.WithCancel(t.Context())
 	cancel()
-	if _, err := q.ClaimWorkerBranch(canceledCtx, id); err == nil {
+	if _, err := q.Branches.ClaimWorkerBranch(canceledCtx, id); err == nil {
 		t.Fatal("expected canceled ClaimWorkerBranch to fail")
 	}
 
 	// 2. Retry succeeds in O(selected roots) with 0 lower-directory ReadDir walks.
-	claimed, err := q.ClaimWorkerBranch(t.Context(), id)
+	claimed, err := q.Branches.ClaimWorkerBranch(t.Context(), id)
 	testutil.FailErr(t, "ClaimWorkerBranch mounted retry", err)
 	if claimed.WorkspaceRoot == "" || claimed.WorkspaceBaselinePath != "" {
 		t.Fatalf("mounted checkpoint binding: root=%q baseline=%q", claimed.WorkspaceRoot, claimed.WorkspaceBaselinePath)
 	}
 
-	cv, ok := workspace.LookupBranchClaimedView(claimed.WorkspaceRoot)
-	if !ok || cv == nil || cv.Prepared == nil || cv.Prepared.Core == nil {
-		t.Fatalf("expected active mounted ClaimedView for %s, got ok=%v cv=%+v", claimed.WorkspaceRoot, ok, cv)
-	}
-	if stats := cv.Prepared.Core.Stats(); stats.LowerDirReads != 0 {
+	view := requireMountedView(t, sel.Registry, claimed.WorkspaceRoot)
+	if stats := view.Core.Stats(); stats.LowerDirReads != 0 {
 		t.Fatalf("expected 0 lower ReadDir walks across mounted ClaimWorkerBranch + baseline bind, got %d", stats.LowerDirReads)
 	}
 

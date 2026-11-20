@@ -9,9 +9,12 @@ import (
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
-type Sessions interface {
-	CommitEvidenceToolResult(context.Context, string, string, string, map[string]any, string) (string, string, error)
-	AppendMessages(context.Context, string, ...api.Message) error
+type Transcript interface {
+	AppendMessages(ctx context.Context, id string, msgs ...api.Message) error
+}
+
+type Evidence interface {
+	CommitEvidenceToolResult(ctx context.Context, sessionID, projectDir, toolName string, args map[string]any, content string) (string, string, error)
 }
 type Profiles interface {
 	PromptToolProfile(context.Context, *api.Session) (string, error)
@@ -37,16 +40,17 @@ type Verification interface {
 type SourceProof func(context.Context, *api.WorkerTask, []api.Message, string, workercompletion.SourceRevision) workercompletion.WorkerCompletionProof
 
 type Service struct {
-	store        Sessions
-	Profiles     Profiles
-	Context      Context
-	Workspaces   Workspaces
-	Workspace    Workspace
-	tools        Tools
-	Verification Verification
-	proof        SourceProof
+	transcriptStore Transcript
+	evidenceStore   Evidence
+	Profiles        Profiles
+	Context         Context
+	Workspaces      Workspaces
+	Workspace       Workspace
+	tools           Tools
+	Verification    Verification
+	proof           SourceProof
 }
 
-func New(sessions Sessions, profiles Profiles, context Context, workspaces Workspaces, workspace Workspace, tools Tools, verification Verification, proof SourceProof) *Service {
-	return &Service{store: sessions, Profiles: profiles, Context: context, Workspaces: workspaces, Workspace: workspace, tools: tools, Verification: verification, proof: proof}
+func New(transcriptStore Transcript, evidenceStore Evidence, profiles Profiles, context Context, workspaces Workspaces, workspace Workspace, tools Tools, verification Verification, proof SourceProof) *Service {
+	return &Service{transcriptStore: transcriptStore, evidenceStore: evidenceStore, Profiles: profiles, Context: context, Workspaces: workspaces, Workspace: workspace, tools: tools, Verification: verification, proof: proof}
 }

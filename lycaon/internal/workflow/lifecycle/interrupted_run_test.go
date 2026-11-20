@@ -2,11 +2,11 @@ package lifecycle_test
 
 import (
 	"context"
-	"github.com/lycaon/lycaon/internal/configlayout"
 	"path/filepath"
 	"testing"
 	"time"
 
+	"github.com/lycaon/lycaon/internal/configlayout"
 	"github.com/lycaon/lycaon/internal/extpacks"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -14,12 +14,13 @@ import (
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
+
 // Ambient implement@ survives the post-create reconcile, so the first user
 // prompt is stamped with its workflow_run_id.
 func TestReconcileOrphanedRunsSkipsAmbientSessionCreate(t *testing.T) {
 	mgr, store, _, _ := testManager(t)
 	ctx := context.Background()
-	sess, err := store.Create(ctx, api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
+	sess, err := store.Sessions.Create(ctx, api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
 	mgr.Recovery.Busy = func(context.Context, string) bool { return false }
 
@@ -46,7 +47,7 @@ func TestReconcileOrphanedRunsSkipsAmbientSessionCreate(t *testing.T) {
 		Role:    api.MessageRoleUser,
 		Content: "Tell me about this repo",
 	}))
-	msgs, err := store.GetMessages(ctx, sess.ID)
+	msgs, err := store.Transcript.GetMessages(ctx, sess.ID)
 	testutil.FailErr(t, "GetMessages", err)
 	for _, msg := range msgs {
 		if msg.Role == api.MessageRoleUser && msg.Content == "Tell me about this repo" {
@@ -64,7 +65,7 @@ func TestReconcileOrphanedRunsSkipsAmbientSessionCreate(t *testing.T) {
 func TestReconcileOrphanedRunsInterruptsChildImplement(t *testing.T) {
 	mgr, store, _, _ := testManager(t)
 	ctx := context.Background()
-	sess, err := store.Create(ctx, api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
+	sess, err := store.Sessions.Create(ctx, api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
 	mgr.Recovery.Busy = func(context.Context, string) bool { return false }
 
@@ -112,6 +113,7 @@ func TestReconcileOrphanedRunsInterruptsChildImplement(t *testing.T) {
 		t.Fatalf("child_run vars = %+v want interrupted", childRun)
 	}
 }
+
 
 func TestReconcileOrphanedRunsPreservesHumanApproval(t *testing.T) {
 	mgr, _, blueprintMgr, _ := testManagerWithRegistry(t)

@@ -4,10 +4,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/testutil/conditionstest"
 	"testing"
 	"time"
 
-	"github.com/lycaon/lycaon/internal/conditions"
 	"github.com/lycaon/lycaon/internal/evidence"
 	"github.com/lycaon/lycaon/internal/testutil"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
@@ -34,18 +34,18 @@ func persistReviewResponse(t *testing.T, mgr *RunManager, session string, msg ap
 	assistant := api.Message{ID: msg.ToolResult.AssistantMessageID, Role: api.MessageRoleAssistant, CreatedAt: time.Now().UTC(), ToolCalls: []api.ToolCall{{ID: msg.ToolResult.ToolCallID, Name: "submit_verdict"}}}
 	msg.CreatedAt = assistant.CreatedAt.Add(time.Millisecond)
 	msg.Role = api.MessageRoleTool
-	testutil.FailErr(t, "persist review response", mgr.Sessions.AppendMessages(t.Context(), session, assistant, msg))
+	testutil.FailErr(t, "persist review response", mgr.Transcript.TranscriptStore.AppendMessages(t.Context(), session, assistant, msg))
 }
 
 func TestReviewRepairBlocksOnceAndResumeRetainsWork(t *testing.T) {
 	mgr, _, blueprintMgr, _ := testManager(t)
-	setTestRegistry(t, mgr, blueprintMgr, conditions.TestRegistryDeps())
+	setTestRegistry(t, mgr, blueprintMgr, conditionstest.Dependencies())
 	run := startReviewLoopRun(t.Context(), t, mgr)
 	for i := 0; i < 3; i++ {
 		msg := api.Message{ID: fmt.Sprintf("result-%d", i), WorkflowRunID: run.ID, ToolResult: &api.ToolResult{Tool: "submit_verdict", Outcome: api.ToolResultOutcomeRejected, AssistantMessageID: fmt.Sprintf("response-%d", i), ToolCallID: fmt.Sprintf("call-%d", i), Codes: []string{"TOOL_ARGS_INVALID"}, Feedback: []api.ToolFeedback{{Code: "TOOL_ARGS_INVALID", Details: map[string]any{"field": "verdict.coverage"}}}}}
 		persistReviewResponse(t, mgr, run.SessionID, msg)
-		testutil.FailErr(t, "record repair", mgr.RecordReviewToolResult(t.Context(), run.SessionID, msg))
-		testutil.FailErr(t, "replay repair", mgr.RecordReviewToolResult(t.Context(), run.SessionID, msg))
+		testutil.FailErr(t, "record repair", mgr.Repairs.RecordReviewToolResult(t.Context(), run.SessionID, msg))
+		testutil.FailErr(t, "replay repair", mgr.Repairs.RecordReviewToolResult(t.Context(), run.SessionID, msg))
 	}
 	got, err := mgr.Store.Runs.Get(t.Context(), run.ID)
 	testutil.FailErr(t, "get run", err)
@@ -74,9 +74,9 @@ func TestReviewRepairBlocksOnceAndResumeRetainsWork(t *testing.T) {
 
 func TestReviewContractBlocksWithoutModelAttempts(t *testing.T) {
 	mgr, _, blueprints, _ := testManager(t)
-	setTestRegistry(t, mgr, blueprints, conditions.TestRegistryDeps())
+	setTestRegistry(t, mgr, blueprints, conditionstest.Dependencies())
 	run := startReviewLoopRun(t.Context(), t, mgr)
-	testutil.FailErr(t, "block impossible contract", ReviewRepairs{mgr}.BlockContract(t.Context(), run.ID, fmt.Errorf("host id rejected by schema")))
+	testutil.FailErr(t, "block impossible contract", mgr.Repairs.BlockContract(t.Context(), run.ID, fmt.Errorf("host id rejected by schema")))
 	got, err := mgr.Store.Runs.Get(t.Context(), run.ID)
 	testutil.FailErr(t, "read blocked run", err)
 	vars, err := mgr.Store.Runs.GetScaffoldVars(t.Context(), run.ID)
@@ -93,14 +93,14 @@ func TestReviewContractBlocksWithoutModelAttempts(t *testing.T) {
 
 func TestReviewRepairRecoveryCountsResponsesOnce(t *testing.T) {
 	mgr, _, blueprints, _ := testManager(t)
-	setTestRegistry(t, mgr, blueprints, conditions.TestRegistryDeps())
+	setTestRegistry(t, mgr, blueprints, conditionstest.Dependencies())
 	run := startReviewLoopRun(t.Context(), t, mgr)
 	for i := 0; i < 3; i++ {
 		msg := api.Message{ID: fmt.Sprintf("durable-result-%d", i), Role: api.MessageRoleTool, WorkflowRunID: run.ID, CreatedAt: time.Now().UTC(), ToolResult: &api.ToolResult{Tool: "submit_verdict", ToolCallID: fmt.Sprintf("call-%d", i), AssistantMessageID: fmt.Sprintf("response-%d", i), Outcome: api.ToolResultOutcomeRejected, Codes: []string{"TOOL_ARGS_INVALID"}, Feedback: []api.ToolFeedback{{Code: "TOOL_ARGS_INVALID", Details: map[string]any{"workflow_phase": run.CurrentPhase, "field": "verdict.coverage"}}}}}
 		persistReviewResponse(t, mgr, run.SessionID, msg)
 	}
-	testutil.FailErr(t, "recover response accounting", ReviewRepairs{mgr}.Recover(t.Context()))
-	testutil.FailErr(t, "repeat recovery", ReviewRepairs{mgr}.Recover(t.Context()))
+	testutil.FailErr(t, "recover response accounting", mgr.Repairs.Recover(t.Context()))
+	testutil.FailErr(t, "repeat recovery", mgr.Repairs.Recover(t.Context()))
 	vars, err := mgr.Store.Runs.GetScaffoldVars(t.Context(), run.ID)
 	testutil.FailErr(t, "read recovered episode", err)
 	repair, err := runstate.CurrentReviewRepair(vars, run.CurrentPhase)
@@ -112,10 +112,10 @@ func TestReviewRepairRecoveryCountsResponsesOnce(t *testing.T) {
 
 func TestReviewRepairIgnoresResultsFromPriorPhase(t *testing.T) {
 	mgr, _, blueprints, _ := testManager(t)
-	setTestRegistry(t, mgr, blueprints, conditions.TestRegistryDeps())
+	setTestRegistry(t, mgr, blueprints, conditionstest.Dependencies())
 	run := startReviewLoopRun(t.Context(), t, mgr)
 	msg := api.Message{ID: "old-result", WorkflowRunID: run.ID, ToolResult: &api.ToolResult{Tool: "submit_verdict", ToolCallID: "old-call", Outcome: api.ToolResultOutcomeRejected, Codes: []string{"TOOL_ARGS_INVALID"}, Feedback: []api.ToolFeedback{{Code: "TOOL_ARGS_INVALID", Details: map[string]any{"workflow_phase": "previous_phase"}}}}}
-	testutil.FailErr(t, "ignore old result", mgr.RecordReviewToolResult(t.Context(), run.SessionID, msg))
+	testutil.FailErr(t, "ignore old result", mgr.Repairs.RecordReviewToolResult(t.Context(), run.SessionID, msg))
 	vars, err := mgr.Store.Runs.GetScaffoldVars(t.Context(), run.ID)
 	testutil.FailErr(t, "read current episode", err)
 	repair, err := runstate.CurrentReviewRepair(vars, run.CurrentPhase)
@@ -155,12 +155,12 @@ func TestReviewRepairCountsOneResponseAndRetainsLatestCandidate(t *testing.T) {
 
 func TestReviewRepairTotalBudgetBoundsChangingDefects(t *testing.T) {
 	mgr, _, blueprints, _ := testManager(t)
-	setTestRegistry(t, mgr, blueprints, conditions.TestRegistryDeps())
+	setTestRegistry(t, mgr, blueprints, conditionstest.Dependencies())
 	run := startReviewLoopRun(t.Context(), t, mgr)
 	for i := 0; i < 8; i++ {
 		msg := api.Message{ID: fmt.Sprintf("result-%d", i), WorkflowRunID: run.ID, ToolResult: &api.ToolResult{Tool: "submit_verdict", ToolCallID: fmt.Sprintf("call-%d", i), AssistantMessageID: fmt.Sprintf("response-%d", i), Outcome: api.ToolResultOutcomeRejected, Codes: []string{"TOOL_ARGS_INVALID"}, Feedback: []api.ToolFeedback{{Code: "TOOL_ARGS_INVALID", Details: map[string]any{"field": fmt.Sprintf("verdict.claims[%d]", i)}}}}}
 		persistReviewResponse(t, mgr, run.SessionID, msg)
-		testutil.FailErr(t, "record changing defect", mgr.RecordReviewToolResult(t.Context(), run.SessionID, msg))
+		testutil.FailErr(t, "record changing defect", mgr.Repairs.RecordReviewToolResult(t.Context(), run.SessionID, msg))
 		got, err := mgr.Store.Runs.Get(t.Context(), run.ID)
 		testutil.FailErr(t, "read repair state", err)
 		if i < 7 && got.Status != api.WorkflowRunStatusRunning {

@@ -48,7 +48,7 @@ func (f *fakeReproducedDeps) Roots(context.Context, *api.Session) ([]projectroot
 
 func newTestReproducedService(deps *fakeReproducedDeps, withAuthorship bool, reader candidateReader) *Service {
 	svc := New(nil)
-	svc.SetSources(deps, deps, nil, nil)
+	svc.SetSources(deps, deps, deps, nil, nil)
 	if withAuthorship {
 		svc.SetSourceAuthorship(deps)
 	}

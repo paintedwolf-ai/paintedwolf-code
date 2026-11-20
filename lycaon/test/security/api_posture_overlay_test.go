@@ -45,7 +45,7 @@ func writePostureLabel(t *testing.T, projectDir, label string) {
 // effectiveSpecLabel reads the spec posture label the session resolves.
 func effectiveSpecLabel(t *testing.T, h *wiring.Harness, sessionID string) string {
 	t.Helper()
-	stored, err := h.Store.Get(t.Context(), sessionID)
+	stored, err := h.Store.Sessions.Get(t.Context(), sessionID)
 	testutil.FailErr(t, "load session", err)
 	postures, err := h.Sessions.Manager.Profiles.EffectivePostures(t.Context(), stored)
 	testutil.FailErr(t, "EffectivePostures", err)
@@ -113,7 +113,7 @@ postures:
 		testutil.FailErr(t, "decode accepted session", err)
 	}
 	testutil.WaitFor(t, "the session is in error", func() bool {
-		stored, err := h.Store.Get(t.Context(), sess.ID)
+		stored, err := h.Store.Sessions.Get(t.Context(), sess.ID)
 		return err == nil && stored.Status == wire.SessionStatusError
 	})
 }

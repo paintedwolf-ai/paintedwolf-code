@@ -50,24 +50,13 @@ func DefaultSlot() (credentialstore.Slot, error) {
 	}, nil
 }
 
-// NewOAuthTokenStore loads tokens from the encrypted credential vault.
-func NewOAuthTokenStore() (*OAuthTokenStore, error) {
-	slot, err := DefaultSlot()
-	if err != nil {
-		return nil, err
-	}
+// OpenOAuthTokenStore loads the encrypted OAuth namespace from its configured slot.
+func OpenOAuthTokenStore(slot credentialstore.Slot) (*OAuthTokenStore, error) {
 	inner, err := credentialstore.Open(slot, nil)
 	if err != nil {
 		return nil, err
 	}
 	return &OAuthTokenStore{store: inner}, nil
-}
-
-// NewOAuthTokenStoreAt opens an empty store at path with a development identity file.
-func NewOAuthTokenStoreAt(path string) *OAuthTokenStore {
-	return &OAuthTokenStore{store: credentialstore.NewEmpty(credentialstore.Slot{
-		Path: path, Namespace: credentialstore.NamespaceMCPOAuth, Context: oauthRecordContext,
-	}, nil)}
 }
 
 // Get returns a stored token record.

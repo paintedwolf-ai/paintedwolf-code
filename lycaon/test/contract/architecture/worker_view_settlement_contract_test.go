@@ -76,7 +76,7 @@ func TestWorkerDataDeletionSettlesAndPlatformAdaptersStayBehindTheContract(t *te
 		if strings.HasPrefix(rel, "app/") || strings.HasPrefix(rel, "api/") {
 			ast.Inspect(full, func(node ast.Node) bool {
 				if sel, ok := node.(*ast.SelectorExpr); ok && sel.Sel.Name == "EvictJobTree" {
-					offences = append(offences, rel+": retention bypasses worker.BranchEvictor")
+					offences = append(offences, rel+": retention bypasses worker.BranchService.EvictBranch")
 				}
 				return true
 			})

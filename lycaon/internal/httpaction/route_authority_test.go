@@ -15,10 +15,10 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/confine"
-	"github.com/lycaon/lycaon/internal/egress"
 	"github.com/lycaon/lycaon/internal/egressgate"
 	"github.com/lycaon/lycaon/internal/egressproxy"
 	"github.com/lycaon/lycaon/internal/outboundhttp"
+	"github.com/lycaon/lycaon/internal/testsetup/dns"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/internal/tools"
@@ -54,12 +54,13 @@ func TestExplicitRouteDenialPrecedesConnectionAndAllowsRecovery(t *testing.T) {
 				dial.TargetHost = routeHost
 			}
 			var lookups atomic.Int32
-			egress.TestingResolve(t, func(_ context.Context, _, host string) ([]netip.Addr, error) {
+			dns.Install(t, func(host string) []netip.Addr {
 				lookups.Add(1)
 				if host != routeHost {
-					return nil, fmt.Errorf("unexpected fixture DNS host %q", host)
+					t.Errorf("unexpected fixture DNS host %q", host)
+					return nil
 				}
-				return []netip.Addr{endpoint.Addr()}, nil
+				return []netip.Addr{endpoint.Addr()}
 			})
 			denied := true
 			t.Cleanup(confine.SetEgressRuleEvaluator(func(_ context.Context, _ confine.EgressCommand, host string) confine.EgressRuleResult {
@@ -131,13 +132,14 @@ func TestExplicitRouteAskPostureRequiresSelectedRouteAndPreservesOrdinaryDNS(t *
 	routePort := endpoint.Port()
 
 	var lookups atomic.Int32
-	egress.TestingResolve(t, func(_ context.Context, _, host string) ([]netip.Addr, error) {
+	dns.Install(t, func(host string) []netip.Addr {
 		lookups.Add(1)
 		switch host {
 		case "route.example.com", "nominal.example.com":
-			return []netip.Addr{endpoint.Addr()}, nil
+			return []netip.Addr{endpoint.Addr()}
 		default:
-			return nil, fmt.Errorf("unexpected DNS lookup for %q", host)
+			t.Errorf("unexpected DNS lookup for %q", host)
+			return nil
 		}
 	})
 
@@ -315,16 +317,17 @@ func newRedirectRouteFixture(t *testing.T) *redirectRouteFixture {
 	t.Cleanup(origin.Close)
 	f.originEndpoint = origin.Listener.Addr().(*net.TCPAddr).AddrPort()
 
-	egress.TestingResolve(t, func(_ context.Context, _, host string) ([]netip.Addr, error) {
+	dns.Install(t, func(host string) []netip.Addr {
 		switch host {
 		case "nominal.example.com":
 			f.originLookups.Add(1)
-			return []netip.Addr{f.originEndpoint.Addr()}, nil
+			return []netip.Addr{f.originEndpoint.Addr()}
 		case "redirected.example.com", "route2.example.com":
 			f.targetLookups.Add(1)
-			return []netip.Addr{f.targetEndpoint.Addr()}, nil
+			return []netip.Addr{f.targetEndpoint.Addr()}
 		default:
-			return nil, fmt.Errorf("unexpected DNS lookup for %q", host)
+			t.Errorf("unexpected DNS lookup for %q", host)
+			return nil
 		}
 	})
 

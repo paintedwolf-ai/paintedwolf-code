@@ -5,7 +5,6 @@ package apitestdeps
 import (
 	"context"
 	"errors"
-	"github.com/lycaon/lycaon/internal/tools/toolstest"
 	"path/filepath"
 	"testing"
 	"time"
@@ -21,6 +20,7 @@ import (
 	"github.com/lycaon/lycaon/internal/configlayout"
 	"github.com/lycaon/lycaon/internal/cost"
 	"github.com/lycaon/lycaon/internal/credentialstore"
+	"github.com/lycaon/lycaon/internal/credentialstore/credentialstoretest"
 	"github.com/lycaon/lycaon/internal/db"
 	"github.com/lycaon/lycaon/internal/decide"
 	"github.com/lycaon/lycaon/internal/detectionpack"
@@ -37,8 +37,9 @@ import (
 	"github.com/lycaon/lycaon/internal/hostresources"
 	"github.com/lycaon/lycaon/internal/invocation"
 	"github.com/lycaon/lycaon/internal/llm"
-	providercredentials "github.com/lycaon/lycaon/internal/llm/credentials"
+	"github.com/lycaon/lycaon/internal/llm/credentials/credentialstest"
 	"github.com/lycaon/lycaon/internal/mcp"
+	"github.com/lycaon/lycaon/internal/mcp/mcptest"
 	"github.com/lycaon/lycaon/internal/progress"
 	"github.com/lycaon/lycaon/internal/project"
 	"github.com/lycaon/lycaon/internal/projectignore"
@@ -50,6 +51,7 @@ import (
 	sessiondecisions "github.com/lycaon/lycaon/internal/session/decisions"
 	sessionstore "github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/settings"
+	"github.com/lycaon/lycaon/internal/settings/settingstest"
 	"github.com/lycaon/lycaon/internal/sourceledger"
 	"github.com/lycaon/lycaon/internal/testdbfixture"
 	repoinfotest "github.com/lycaon/lycaon/internal/testsetup/repoinfo"
@@ -57,6 +59,7 @@ import (
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/testutil/oartest"
 	"github.com/lycaon/lycaon/internal/testutil/scantest"
+	"github.com/lycaon/lycaon/internal/tools/toolstest"
 	"github.com/lycaon/lycaon/internal/visual"
 	"github.com/lycaon/lycaon/internal/webresearch"
 	"github.com/lycaon/lycaon/internal/worker"
@@ -70,12 +73,13 @@ import (
 
 // Deps mirrors the API dependencies a server cannot be built without.
 type Deps struct {
+	Branches          *worker.BranchService
 	ApprovalDecisions interface {
 		ListApprovalDecisionsSince(context.Context, time.Time) ([]authzcontext.Event, error)
 	}
 	ApprovalGate      hitl.ApprovalGate
 	Database          db.Handle
-	Store             session.Store
+	Store             *sessionstore.Repositories
 	Projects          project.Registry
 	Sessions          *session.Host
 	Settings          *settings.Service
@@ -130,8 +134,8 @@ type Deps struct {
 // kept; the ones it builds share one disposable database.
 func Fill(t *testing.T, d *Deps) {
 	t.Helper()
-	if d.Database == nil {
-		d.Database = storeDatabase(d.Store)
+	if d.Database == nil && d.Store != nil {
+		d.Database = d.Store.DB()
 	}
 	if d.Database == nil {
 		d.Database = testdbfixture.Open(t, "api-deps.db")
@@ -154,7 +158,7 @@ func Fill(t *testing.T, d *Deps) {
 	fillSessions(t, d)
 	fillSettings(t, d)
 	if d.ApprovalGate == nil {
-		d.ApprovalGate = settings.NewRuleApprovalGate(d.Settings.Approvals, settings.NoSources())
+		d.ApprovalGate = settings.NewRuleApprovalGate(d.Settings.Approvals, settingstest.EmptySources())
 	}
 	if d.Invocations == nil {
 		d.Invocations = invocation.NewSQLRecorder(d.Database)
@@ -176,25 +180,38 @@ func Fill(t *testing.T, d *Deps) {
 func fillWebResearch(t *testing.T, d *Deps) {
 	t.Helper()
 	dir := t.TempDir()
+	if d.WebResearch.Crawler == nil {
+		d.WebResearch.Crawler = webresearch.NewCrawler(nil)
+	}
+	if d.WebResearch.Discovery == nil {
+		d.WebResearch.Discovery = webresearch.NewDiscovery(d.WebResearch.Crawler)
+	}
+	if d.WebResearch.FetchBudget == nil {
+		d.WebResearch.FetchBudget = webresearch.NewFetchBudget(webresearch.DefaultFetchURLLimits())
+	}
 	if d.WebResearch.Catalog == nil {
 		catalog, err := webresearch.LoadCatalog()
 		testutil.FailErr(t, "web research catalog", err)
 		d.WebResearch.Catalog = catalog
 	}
 	if d.WebResearch.Registry == nil {
-		registry := webresearch.NewRegistry(d.WebResearch.Catalog)
+		registry := webresearch.NewRegistry(d.WebResearch.Catalog, nil)
 		testutil.FailErr(t, "web research providers", webresearch.RegisterCatalogProviders(t.Context(), registry))
 		d.WebResearch.Registry = registry
 	}
 	if d.WebResearch.Config == nil {
-		d.WebResearch.Config = webresearch.NewConfigStoreAt(filepath.Join(dir, "web-research.yaml"))
+		opened, openErr := webresearch.OpenConfigStore(filepath.Join(dir, "web-research.yaml"))
+		testutil.FailErr(t, "open web research store", openErr)
+		d.WebResearch.Config = opened
 	}
 	if d.WebResearch.Creds == nil {
-		d.WebResearch.Creds = webresearch.NewCredentialStoreAt(filepath.Join(dir, "web-research-vault.age"), d.WebResearch.Catalog)
+		opened, openErr := webresearch.OpenCredentialStore(credentialstore.Slot{Path: filepath.Join(dir, "web-research-vault.age"), Namespace: credentialstore.NamespaceWebResearch, Context: "web research"}, d.WebResearch.Catalog)
+		testutil.FailErr(t, "open web research store", openErr)
+		d.WebResearch.Creds = opened
 	}
 	if d.WebDiscoverer == nil {
 		rt := d.WebResearch
-		d.WebDiscoverer = webresearch.NewDirectDiscovererFactory(nil, rt.Registry, rt.Creds, rt.Config, rt.Catalog, decide.Reranker{})
+		d.WebDiscoverer = webresearch.NewDirectDiscovererFactory(rt.Discovery, nil, rt.Registry, rt.Creds, rt.Config, rt.Catalog, decide.Reranker{})
 	}
 }
 
@@ -206,7 +223,7 @@ func fillLLM(t *testing.T, d *Deps) {
 	dir := t.TempDir()
 	catalog, err := llm.NewProviderCatalogAt(filepath.Join(dir, "providers.local.yaml"))
 	testutil.FailErr(t, "provider catalog", err)
-	credentials := providercredentials.NewAt(filepath.Join(dir, "credential-vault.age"))
+	credentials := credentialstest.Open(t, filepath.Join(dir, "credential-vault.age"))
 	policy, err := llm.NewPolicyStoreAt(filepath.Join(dir, "model-policy.yaml"))
 	testutil.FailErr(t, "model policy", err)
 	registry, err := llm.NewRegistry(t.Context(), catalog, credentials, nil)
@@ -251,7 +268,7 @@ func fillHost(t *testing.T, d *Deps) {
 		d.HostIdentity = identity
 	}
 	if d.Checkpoints == nil {
-		d.Checkpoints = hitl.NewCheckpoints(hitl.NewSQLStore(d.Database), d.EventPublisher, authzcontext.SQLRecorder(d.Database))
+		d.Checkpoints = hitl.NewCheckpoints(hitl.NewSQLStore(d.Database), d.EventPublisher, authzcontext.LedgerRecorder{Ledger: &authzcontext.Ledger{Store: authzcontext.NewSQLStore(d.Database)}})
 	}
 	if d.ProgressStore == nil {
 		d.ProgressStore = progress.NewSQLStore(d.Database)
@@ -281,7 +298,11 @@ func fillHost(t *testing.T, d *Deps) {
 func fillWorkers(t *testing.T, d *Deps) {
 	t.Helper()
 	if d.Workers == nil {
-		d.Workers = worker.NewSQLQueue(d.Database, 2)
+		queue := worker.NewSQLServices(d.Database, 2).Queue
+		d.Workers, d.Branches = queue, queue.Branches
+	}
+	if queue, ok := d.Workers.(*worker.SQLQueue); ok && d.Branches == nil {
+		d.Branches = queue.Branches
 	}
 	if d.WorkerCancel == nil {
 		d.WorkerCancel = &worker.CancelService{Queue: d.Workers, Events: d.Sessions.Coordinator.Workers, Graceful: d.Sessions.Workers.Cancel, Cancellations: d.Sessions.Workers.Cancellations}
@@ -308,13 +329,13 @@ func fillHarness(t *testing.T, d *Deps) {
 		return
 	}
 	if d.HarnessWorkers == nil {
-		scripted, err := harnessfixture.NewWorkers(t.TempDir(), d.Store, d.Workers, d.Sessions.Workers.Harness.Verify,
+		scripted, err := harnessfixture.NewWorkers(t.TempDir(), d.Store, d.Workers, d.Branches, d.Sessions.Workers.Harness.Verify,
 			d.Sessions.Workers.Harness.Read, sessiondecisions.NewSQL(d.Database), refusingExecutor{})
 		testutil.FailErr(t, "scripted workers", err)
 		d.HarnessWorkers = scripted
 	}
 	if d.LLM.Preparation == nil {
-		preparation, err := harnessfixture.NewPreludeController(t.TempDir(), d.Store)
+		preparation, err := harnessfixture.NewPreludeController(t.TempDir(), d.Store.Transcript)
 		testutil.FailErr(t, "conversation preparation", err)
 		d.LLM.Preparation = preparation
 	}
@@ -328,13 +349,6 @@ func (refusingExecutor) Execute(context.Context, wire.WorkerTask, worker.WorkerR
 }
 
 func (refusingExecutor) AbortWorkerRuntime(context.Context, wire.WorkerTask) error { return nil }
-
-func storeDatabase(store session.Store) db.Handle {
-	if database, ok := store.(interface{ DB() db.Handle }); ok {
-		return database.DB()
-	}
-	return nil
-}
 
 func fillSessions(t *testing.T, d *Deps) {
 	t.Helper()
@@ -411,7 +425,7 @@ func fillSettings(t *testing.T, d *Deps) {
 func fillSources(t *testing.T, d *Deps) {
 	t.Helper()
 	if d.ManagedSecrets == nil {
-		values := credentialstore.NewEmpty(credentialstore.Slot{
+		values := credentialstoretest.Open(t, credentialstore.Slot{
 			Path:      filepath.Join(t.TempDir(), credentialstore.VaultBasename),
 			Namespace: credentialstore.NamespaceManagedSecrets,
 			Context:   "test managed secret",
@@ -435,7 +449,7 @@ func fillSources(t *testing.T, d *Deps) {
 		}
 	}
 	if d.SourceLedger == nil {
-		d.SourceLedger = sourceledger.New(d.Database, t.TempDir())
+		d.SourceLedger = sourceledger.New(d.Database, t.TempDir(), sourceledger.Timing{})
 	}
 	if d.SourceMutations == nil {
 		d.SourceMutations = projectsource.NewSourceMutationService(d.Database, d.SourceLedger)
@@ -449,7 +463,7 @@ func fillSources(t *testing.T, d *Deps) {
 		d.EditorDocuments = documents
 	}
 	if d.FileBriefings == nil {
-		briefings := filebriefing.NewService(context.Background(), filebriefing.Dependencies{Store: filebriefing.NewMemory()})
+		briefings := filebriefing.NewService(context.Background(), filebriefing.Dependencies{Store: filebriefing.NewSQL(d.Database)})
 		t.Cleanup(func() { briefings.Stop(); briefings.Wait(context.Background()) })
 		d.FileBriefings = briefings
 	}
@@ -506,7 +520,7 @@ func fillExtensions(t *testing.T, d *Deps) {
 		registry, err := mcp.NewRuntime(mcp.RuntimeOptions{
 			StatePath:          t.TempDir(),
 			GlobalOverridePath: filepath.Join(t.TempDir(), "mcp.yaml"),
-			OAuthStore:         mcp.NewOAuthTokenStoreAt(filepath.Join(t.TempDir(), "mcp-oauth.vault")),
+			OAuthStore:         mcptest.OpenOAuthStore(t, filepath.Join(t.TempDir(), "mcp-oauth.vault")),
 		})
 		testutil.FailErr(t, "mcp registry", err)
 		t.Cleanup(func() { _ = registry.Close(t.Context()) })

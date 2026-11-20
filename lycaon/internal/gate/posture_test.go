@@ -13,11 +13,11 @@ import (
 // Raising posture preserves every gate already enabled.
 func TestPostureLadderIsMonotone(t *testing.T) {
 	t.Parallel()
-	ordered := Postures()
+	ordered := testPostures()
 	for i := 1; i < len(ordered); i++ {
 		lower, higher := ordered[i-1], ordered[i]
 		if lower.Strictness() >= higher.Strictness() {
-			t.Fatalf("Postures() is not ordered by Strictness: %s(%d) then %s(%d)",
+			t.Fatalf("postures are not ordered by Strictness: %s(%d) then %s(%d)",
 				lower, lower.Strictness(), higher, higher.Strictness())
 		}
 		for _, g := range lower.Gates() {
@@ -35,7 +35,7 @@ func TestPostureGatesAreInCitationPriorityOrder(t *testing.T) {
 	for i, g := range api.AllApprovalGateValues() {
 		priority[g] = i
 	}
-	for _, p := range Postures() {
+	for _, p := range testPostures() {
 		live := p.Gates()
 		if len(live) == 0 {
 			t.Fatalf("%s runs no gates", p)
@@ -66,7 +66,7 @@ func TestPostureGatesAreInCitationPriorityOrder(t *testing.T) {
 // Only the three canonical tokens parse; a typo is an error, never a posture.
 func TestParsePostureAcceptsOnlyCanonicalTokens(t *testing.T) {
 	t.Parallel()
-	for _, p := range Postures() {
+	for _, p := range testPostures() {
 		if got, err := ParsePosture(string(p)); err != nil || got != p {
 			t.Errorf("ParsePosture(%q) = %q, %v; want a round trip", p, got, err)
 		}
@@ -149,7 +149,7 @@ func TestEveryGateHasAPostureFloor(t *testing.T) {
 // posture reviews, every stricter one reviews too.
 func TestPostureRulesAreMonotone(t *testing.T) {
 	t.Parallel()
-	ordered := Postures()
+	ordered := testPostures()
 	for i := 1; i < len(ordered); i++ {
 		lower, higher := ordered[i-1].rule(), ordered[i].rule()
 		quiets := []struct {
@@ -201,7 +201,7 @@ func TestStricterNeverLowersASetPosture(t *testing.T) {
 // The egress default is derived, so the network side cannot disagree with the card side.
 func TestAsksOnFirstHostFollowsTheGateTable(t *testing.T) {
 	t.Parallel()
-	for _, p := range Postures() {
+	for _, p := range testPostures() {
 		if got, want := p.AsksOnFirstHost(), p.Enables(api.GateFirstHost); got != want {
 			t.Errorf("%s.AsksOnFirstHost() = %v want %v", p, got, want)
 		}
@@ -218,7 +218,7 @@ func TestAsksOnFirstHostFollowsTheGateTable(t *testing.T) {
 func TestPostureLadderShapeIsMonotone(t *testing.T) {
 	t.Parallel()
 	widenRank := map[Widening]int{WidenFromFirstCard: 0, WidenMenuOnly: 1}
-	ordered := Postures()
+	ordered := testPostures()
 	for i := 1; i < len(ordered); i++ {
 		lower, higher := ordered[i-1].Ladder(), ordered[i].Ladder()
 		if widenRank[higher.Widening] < widenRank[lower.Widening] {
@@ -253,4 +253,8 @@ func TestDecisionCarriesItsPosture(t *testing.T) {
 	if unreported == nil || unreported.Posture != PostureLight {
 		t.Fatalf("incomplete-facts decision must carry the posture too: %+v", unreported)
 	}
+}
+
+func testPostures() []Posture {
+	return []Posture{PostureLight, PostureBalanced, PostureStrict}
 }

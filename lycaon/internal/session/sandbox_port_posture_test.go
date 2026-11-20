@@ -456,9 +456,9 @@ func TestNudgeCoordinatorScanDoneWakesOnlyTheSessionThatRequestedTheScan(t *test
 	store := storetest.New(t, "p1")
 	mgr := NewHost(store, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
 
-	requester, err := store.Create(context.Background(), api.CreateSessionRequest{ProjectID: "p1"}, "p1")
+	requester, err := store.Sessions.Create(context.Background(), api.CreateSessionRequest{ProjectID: "p1"}, "p1")
 	testutil.FailErr(t, "create requesting session", err)
-	sameProject, err := store.Create(context.Background(), api.CreateSessionRequest{ProjectID: "p1"}, "p1")
+	sameProject, err := store.Sessions.Create(context.Background(), api.CreateSessionRequest{ProjectID: "p1"}, "p1")
 	testutil.FailErr(t, "create same-project session", err)
 
 	mgr.Coordinator.Scans.Wait = coordinatorcontrol.ScanWaitState{
@@ -503,7 +503,7 @@ func TestFailedExecutionsReportOnceAndRetainTypedErrors(t *testing.T) {
 			mgr, st := newTestManager(t)
 			provider := &failure.ProviderEmptyCompletionError{ProviderID: "fixture"}
 			mgr.Coordinator.Model.LLM = failingTurnClient{provider}
-			sess, err := st.Create(ctx, api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
+			sess, err := st.Sessions.Create(ctx, api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
 			testutil.FailErr(t, "create failure session", err)
 			var delivered []error
 			mgr.Runner.Turns.SetFailureSink(func(_ context.Context, id string, cause error) {
@@ -537,7 +537,7 @@ func TestFailedTurnBlocksAutomaticAdmissionButAllowsExplicitRetry(t *testing.T) 
 	mgr, st := newTestManager(t)
 	provider := &failure.ProviderEmptyCompletionError{ProviderID: "fixture"}
 	mgr.Coordinator.Model.LLM = failingTurnClient{provider}
-	sess, err := st.Create(t.Context(), api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
+	sess, err := st.Sessions.Create(t.Context(), api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
 	failures := 0
 	mgr.Runner.Turns.SetFailureSink(func(context.Context, string, error) { failures++ })
@@ -546,7 +546,7 @@ func TestFailedTurnBlocksAutomaticAdmissionButAllowsExplicitRetry(t *testing.T) 
 		if !errors.Is(err, provider) || failures != attempt {
 			t.Fatalf("explicit attempt %d: failures=%d error=%v", attempt, failures, err)
 		}
-		status, err := st.LatestTurnStatus(t.Context(), sess.ID)
+		status, err := st.Turns.LatestTurnStatus(t.Context(), sess.ID)
 		testutil.FailErr(t, "read failed turn", err)
 		if status != store.TurnStatusFailed {
 			t.Fatalf("turn status=%s", status)

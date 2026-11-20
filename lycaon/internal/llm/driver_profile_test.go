@@ -5,7 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	providercredentials "github.com/lycaon/lycaon/internal/llm/credentials"
+	"github.com/lycaon/lycaon/internal/llm/credentials/credentialstest"
 	"github.com/lycaon/lycaon/internal/llm/modelcall"
 	"github.com/lycaon/lycaon/internal/llm/modelinfo"
 	"github.com/lycaon/lycaon/internal/llm/providerprofile"
@@ -55,7 +55,7 @@ func TestNewProviderForEntryDispatch(t *testing.T) {
 			}
 			reg, err := NewRegistry(t.Context(),
 				mustTestProviderCatalog(t, entry),
-				providercredentials.NewAt(filepath.Join(t.TempDir(), "credential-vault.age")), nil,
+				credentialstest.Open(t, filepath.Join(t.TempDir(), "credential-vault.age")), nil,
 			)
 			if err == nil {
 				reg.SetOutboundSecretScreen(NewModelSecretScreen(nil, nil))

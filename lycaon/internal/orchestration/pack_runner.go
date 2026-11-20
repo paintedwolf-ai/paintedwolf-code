@@ -40,17 +40,6 @@ func (o *OrchestratorImpl) runPack(ctx context.Context, req RunRequest, wf *work
 	count := effectivePackCount(packSpec)
 	mergeStrategy := effectivePackMergeStrategy(packSpec)
 
-	var assignments []ModelAssignment
-	if o.models != nil {
-		assignments, err = o.models.SelectGroup(ctx, projectDir, count)
-		if err != nil {
-			return nil, fmt.Errorf("pack select group: %w", err)
-		}
-		if len(assignments) != count {
-			return nil, fmt.Errorf("pack model assignments = %d want %d", len(assignments), count)
-		}
-	}
-
 	runID := uuid.NewString()
 	state := &runState{
 		runID:      runID,
@@ -77,7 +66,7 @@ func (o *OrchestratorImpl) runPack(ctx context.Context, req RunRequest, wf *work
 		task = "pack run"
 	}
 
-	batchID, unitIDs, err := o.setupPackBatch(ctx, req, wf, sessionID, projectDir, task, profileID, count, assignments, state)
+	batchID, unitIDs, err := o.setupPackBatch(ctx, req, wf, sessionID, projectDir, task, profileID, count, state)
 	if err != nil {
 		return nil, err
 	}
@@ -136,7 +125,6 @@ func (o *OrchestratorImpl) setupPackBatch(
 	wf *workflowRunContext,
 	sessionID, projectDir, task, profileID string,
 	count int,
-	assignments []ModelAssignment,
 	state *runState,
 ) (string, []string, error) {
 	wfID, wfVer, wfRunID := workflowFieldsFromState(wf)
@@ -169,7 +157,7 @@ func (o *OrchestratorImpl) setupPackBatch(
 	phase := boundPhaseForStage(state, TopologyBindStagePack)
 	units := make([]TopologyUnit, count)
 	for i := range count {
-		units[i] = buildPackUnit(profileID, task, phase, i, modelAssignmentAt(assignments, i))
+		units[i] = buildPackUnit(profileID, task, phase, i)
 	}
 	created, createdUnits, err := o.workers.CreateBatch(ctx, batch, units)
 	if err != nil {
@@ -183,23 +171,12 @@ func (o *OrchestratorImpl) setupPackBatch(
 	return created.ID, unitIDs, nil
 }
 
-func modelAssignmentAt(assignments []ModelAssignment, index int) *ModelAssignment {
-	if index < 0 || index >= len(assignments) {
-		return nil
-	}
-	return &assignments[index]
-}
-
-func buildPackUnit(profileID, task, phase string, index int, model *ModelAssignment) TopologyUnit {
-	prompt := strings.TrimSpace(task)
-	if model != nil {
-		prompt = fmt.Sprintf("Probe %d\nTask: %s\nModel: %s/%s", index, task, model.ProviderID, model.Model)
-	}
+func buildPackUnit(profileID, task, phase string, index int) TopologyUnit {
 	return TopologyUnit{
 		ID:        uuid.NewString(),
 		WorkID:    packProbeKey(index),
 		AgentType: profileID,
-		Prompt:    prompt,
+		Prompt:    strings.TrimSpace(task),
 		Phase:     phase,
 		Status:    api.LegStatusPending,
 	}

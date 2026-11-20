@@ -1,6 +1,7 @@
 package surface_test
 
 import (
+	"github.com/lycaon/lycaon/internal/testutil/surfacetest"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 
 	"testing"
@@ -138,7 +139,7 @@ func TestResolveTurnProfileImplementerSynthesisWhenIdle(t *testing.T) {
 		api.CoordinatorRunContext{},
 		&api.Session{Posture: api.SessionPostureBuild},
 		hostLoopHistory(completeImplementerHistory()),
-		surface.WithWrapupGates(surface.ImplementSessionState{}, true, false),
+		surfacetest.WithWrapupGates(surface.ImplementSessionState{}, true, false),
 	)
 	if profile.SurfaceID != "implement_synthesis" {
 		t.Fatalf("surface = %q want implement_synthesis", profile.SurfaceID)
@@ -183,21 +184,6 @@ func pendingMergeHistory() []api.Message {
 </task>`,
 		WorkerSummary: &api.WorkerSummaryMeta{WorkerID: "j1", Status: api.WorkerSummaryStatusOpen},
 	}}
-}
-
-func TestPendingOverlaySummaryIDs(t *testing.T) {
-	ids := surface.PendingOverlaySummaryIDs(pendingMergeHistory())
-	if len(ids) != 1 || ids[0] != "j1" {
-		t.Fatalf("ids = %v want [j1]", ids)
-	}
-
-	superseded := append(pendingMergeHistory(), api.Message{
-		Role:          api.MessageRoleAssistant,
-		WorkerSummary: &api.WorkerSummaryMeta{WorkerID: "j1", Status: "promoted"},
-	})
-	if ids := surface.PendingOverlaySummaryIDs(superseded); len(ids) != 0 {
-		t.Fatalf("superseded overlay summary ids = %v, want []", ids)
-	}
 }
 
 func TestPartialWorkerSummaryJobIDs(t *testing.T) {
@@ -333,7 +319,7 @@ func TestResolveTurnProfilePathExplorerUsesSynthesisWhenBatchReady(t *testing.T)
 		api.CoordinatorRunContext{},
 		&api.Session{Posture: api.SessionPostureBuild},
 		hostLoopHistory(history),
-		surface.WithWrapupGates(surface.ImplementSessionState{}, true, false),
+		surfacetest.WithWrapupGates(surface.ImplementSessionState{}, true, false),
 	)
 	if profile.SurfaceID != "implement_synthesis" {
 		t.Fatalf("surface = %q want implement_synthesis", profile.SurfaceID)

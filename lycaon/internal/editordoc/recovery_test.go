@@ -38,7 +38,7 @@ func TestRecoverySettlesOtherDocumentsAfterOneLedgerFailure(t *testing.T) {
 	projectID, rootID := testdbseed.DefaultProjectID, uuid.NewString()
 	testdbseed.InsertProjectRootWithID(t, database, projectID, rootID, root)
 	p := &project.Project{ID: projectID, Roots: []project.Root{{ID: rootID, ProjectID: projectID, Path: root, IsPrimary: true}}}
-	recorder := &selectiveRecoveryRecorder{captureRecorder: captureRecorder{Store: sourceledger.New(database, "")}}
+	recorder := &selectiveRecoveryRecorder{captureRecorder: captureRecorder{Store: sourceledger.New(database, "", sourceledger.Timing{})}}
 	store := NewStore(database)
 	service := New(store, recorder, recorder.History, fixedRoots{p: p})
 	closeServiceAtCleanup(t, service)
@@ -79,7 +79,7 @@ func TestRecoveryPreservesDraftAndSettlesUnavailableTarget(t *testing.T) {
 			path := filepath.Join(root, "a.txt")
 			testutil.FailErr(t, "write fixture", os.WriteFile(path, []byte("base\n"), 0o600))
 			p := &project.Project{ID: projectID, Roots: []project.Root{{ID: rootID, ProjectID: projectID, Path: root, IsPrimary: true}}}
-			recorder := &captureRecorder{Store: sourceledger.New(database, ""), err: errors.New("injected ledger outage")}
+			recorder := &captureRecorder{Store: sourceledger.New(database, "", sourceledger.Timing{}), err: errors.New("injected ledger outage")}
 			store := NewStore(database)
 			service := New(store, recorder, recorder.History, fixedRoots{p: p})
 			closeServiceAtCleanup(t, service)

@@ -5,6 +5,7 @@ package processes
 import (
 	"context"
 	"fmt"
+	"net"
 
 	"github.com/lycaon/lycaon/internal/confine"
 	"github.com/lycaon/lycaon/internal/exec"
@@ -14,7 +15,7 @@ func (b *Runtime) StartEgress(dataDir string) error {
 	if !confine.Available() {
 		return nil
 	}
-	addrs, err := confine.StartEgressBroker(dataDir)
+	addrs, err := confine.StartEgressBroker(dataDir, net.Listen)
 	if err != nil {
 		return fmt.Errorf("egress broker: %w", err)
 	}

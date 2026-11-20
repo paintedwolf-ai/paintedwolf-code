@@ -87,7 +87,7 @@ func TestArchivedWorkflowReplay_100(t *testing.T) {
 
 	// Claims-ground citations resolve against a seeded survey record, exactly as
 	// a live 1.0.0 run would have observed the digested worker evidence.
-	testutil.FailErr(t, "seed survey evidence", h.Store.UpsertEvidenceRecord(ctx, sess.ID, evidence.Record{
+	testutil.FailErr(t, "seed survey evidence", h.Store.Evidence.UpsertEvidenceRecord(ctx, sess.ID, evidence.Record{
 		Handle: "survey#1", Path: "internal/store/query.go",
 		Kind: "read", Shape: evidence.ShapeFileRegion, SourceTool: "read", Fidelity: evidence.FidelityStructured,
 		LineRanges: []evidence.LineRange{{Start: 88, End: 88}},

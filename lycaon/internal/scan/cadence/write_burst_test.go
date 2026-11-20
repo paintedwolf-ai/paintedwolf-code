@@ -31,7 +31,7 @@ func TestCadenceWriteBurstCoalescesAndWaitsForIdle(t *testing.T) {
 
 	canonical, err := scanbase.CanonicalPath(dir)
 	testutil.FailErr(t, "CanonicalPath", err)
-	before, err := store.ListByCanonicalPath(context.Background(), canonical)
+	before, err := store.Reads.ListByCanonicalPath(context.Background(), canonical)
 	testutil.FailErr(t, "list before burst", err)
 
 	testutil.FailErr(t, "change a.go", os.WriteFile(filepath.Join(dir, "src", "a.go"), []byte("package a\nvar A = 1\n"), 0o644))
@@ -41,7 +41,7 @@ func TestCadenceWriteBurstCoalescesAndWaitsForIdle(t *testing.T) {
 	testutil.FailErr(t, "NoteWrites b.go", noteCadenceWrites(context.Background(), cadence, dir, []string{"src/b.go"}))
 	clock.Advance(2 * time.Second)
 	cadence.Tick(context.Background())
-	afterEarly, err := store.ListByCanonicalPath(context.Background(), canonical)
+	afterEarly, err := store.Reads.ListByCanonicalPath(context.Background(), canonical)
 	testutil.FailErr(t, "list early burst", err)
 	if len(afterEarly) != len(before) {
 		t.Fatalf("burst fired before idle: %d -> %d", len(before), len(afterEarly))
@@ -49,7 +49,7 @@ func TestCadenceWriteBurstCoalescesAndWaitsForIdle(t *testing.T) {
 
 	clock.Advance(3 * time.Second)
 	cadence.Tick(context.Background())
-	after, err := store.ListByCanonicalPath(context.Background(), canonical)
+	after, err := store.Reads.ListByCanonicalPath(context.Background(), canonical)
 	testutil.FailErr(t, "list after burst", err)
 	var bursts []api.CodeScan
 	for _, sc := range after {
@@ -83,7 +83,7 @@ func TestCadenceWriteBurstSkipsPathsExcludedFromSourceSnapshots(t *testing.T) {
 
 	canonical, err := scanbase.CanonicalPath(dir)
 	testutil.FailErr(t, "CanonicalPath", err)
-	before, err := store.ListByCanonicalPath(context.Background(), canonical)
+	before, err := store.Reads.ListByCanonicalPath(context.Background(), canonical)
 	testutil.FailErr(t, "list before excluded write", err)
 
 	excluded := filepath.Join(settingsoverlay.DirName(), "blueprints", "plan.md")
@@ -91,7 +91,7 @@ func TestCadenceWriteBurstSkipsPathsExcludedFromSourceSnapshots(t *testing.T) {
 	clock.Advance(5 * time.Second)
 	cadence.Tick(context.Background())
 
-	after, err := store.ListByCanonicalPath(context.Background(), canonical)
+	after, err := store.Reads.ListByCanonicalPath(context.Background(), canonical)
 	testutil.FailErr(t, "list after excluded write", err)
 	if len(after) != len(before) {
 		t.Fatalf("excluded blueprint scheduled a write-burst scan: %d -> %d", len(before), len(after))
@@ -126,7 +126,7 @@ func TestCadenceConcurrentWriteBurstsDoNotLosePaths(t *testing.T) {
 
 	canonical, err := scanbase.CanonicalPath(dir)
 	testutil.FailErr(t, "CanonicalPath", err)
-	series, err := store.GetSeries(context.Background(), canonical, "lycaon-sast")
+	series, err := store.Series.GetSeries(context.Background(), canonical, "lycaon-sast")
 	testutil.FailErr(t, "GetSeries SAST", err)
 	if series == nil || len(series.DesiredPaths) != changes {
 		t.Fatalf("coalesced paths = %#v want %d paths", series, changes)
@@ -145,14 +145,14 @@ func TestCadenceWriteBurstScansWithoutAFullPass(t *testing.T) {
 
 	canonical, err := scanbase.CanonicalPath(dir)
 	testutil.FailErr(t, "CanonicalPath", err)
-	scans, err := store.ListByCanonicalPath(context.Background(), canonical)
+	scans, err := store.Reads.ListByCanonicalPath(context.Background(), canonical)
 	testutil.FailErr(t, "ListByCanonicalPath", err)
 	if len(scans) != 3 {
 		t.Fatalf("a change without a full pass behind it still scans as a delta; got %d scans", len(scans))
 	}
 	completeCadenceScans(t, cadence, store)
 	for _, sc := range scans {
-		completed, err := store.Get(context.Background(), sc.ID)
+		completed, err := store.Reads.Get(context.Background(), sc.ID)
 		testutil.FailErr(t, "read completed delta", err)
 		if completed.CoverageStatus != api.ScanCoveragePartial {
 			t.Fatalf("delta without a full pass reports %q coverage, want partial", completed.CoverageStatus)
@@ -177,7 +177,7 @@ func TestCadenceContinuousWritesCappedAtMaxDefer(t *testing.T) {
 		clock.Advance(step)
 		testutil.FailErr(t, "NoteWrites loop", noteCadenceWrites(context.Background(), cadence, dir, []string{"main.go"}))
 		cadence.Tick(context.Background())
-		scans, listErr := store.ListByCanonicalPath(context.Background(), canonical)
+		scans, listErr := store.Reads.ListByCanonicalPath(context.Background(), canonical)
 		testutil.FailErr(t, "ListByCanonicalPath during writes", listErr)
 		if len(scans) != 0 {
 			t.Fatalf("delta fired before max defer at %v (cap %v)", clock.Now(), capDeadline)
@@ -187,12 +187,12 @@ func TestCadenceContinuousWritesCappedAtMaxDefer(t *testing.T) {
 	clock.Advance(step + time.Second)
 	testutil.FailErr(t, "NoteWrites past cap", noteCadenceWrites(context.Background(), cadence, dir, []string{"main.go"}))
 	cadence.Tick(context.Background())
-	scans, err := store.ListByCanonicalPath(context.Background(), canonical)
+	scans, err := store.Reads.ListByCanonicalPath(context.Background(), canonical)
 	testutil.FailErr(t, "ListByCanonicalPath past cap", err)
 	if len(scans) != 3 {
 		t.Fatalf("capped delta len = %d want 3", len(scans))
 	}
-	series, err := store.ListSeriesForPath(context.Background(), canonical)
+	series, err := store.Series.ListSeriesForPath(context.Background(), canonical)
 	testutil.FailErr(t, "ListSeriesForPath", err)
 	for _, row := range series {
 		if !row.MaxDueAt.IsZero() {

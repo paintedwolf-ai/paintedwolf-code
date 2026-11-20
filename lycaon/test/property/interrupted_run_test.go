@@ -84,14 +84,14 @@ type runSnapshot struct {
 	messages   int
 }
 
-func snapshotRuns(t *rapid.T, ctx context.Context, wf *runstate.Repository, sessions *store.SQL, sessionID string, ids []string) runSnapshot {
+func snapshotRuns(t *rapid.T, ctx context.Context, wf *runstate.Repository, sessions *store.Repositories, sessionID string, ids []string) runSnapshot {
 	snap := runSnapshot{status: map[string]api.WorkflowRunStatus{}, boundaries: map[string]int{}}
 	for _, id := range ids {
 		run, err := wf.Runs.Get(ctx, id)
 		failErr(t, "get run", err)
 		snap.status[id] = run.Status
 	}
-	msgs, err := sessions.GetMessages(ctx, sessionID)
+	msgs, err := sessions.Transcript.GetMessages(ctx, sessionID)
 	failErr(t, "messages", err)
 	snap.messages = len(msgs)
 	for _, msg := range msgs {
@@ -116,7 +116,7 @@ func TestOrphanedRunReconcileIsIdempotentAndLeavesNoUndrivenRun(t *testing.T) {
 
 	rapid.Check(t, func(rt *rapid.T) {
 		c := drawOrphanCase(rt)
-		sess, err := sessStore.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
+		sess, err := sessStore.Sessions.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 		failErr(rt, "create session", err)
 		var ids []string
 		create := func(run *api.WorkflowRun) {
@@ -162,14 +162,14 @@ func TestOrphanedRunReconcileIsIdempotentAndLeavesNoUndrivenRun(t *testing.T) {
 			runMgr.Recovery.Before = time.Now().UTC()
 		}
 		if c.touched {
-			failErr(rt, "busy", sessStore.SetSessionStatus(ctx, sess.ID, api.SessionStatusBusy))
-			failErr(rt, "idle", sessStore.SetSessionStatus(ctx, sess.ID, api.SessionStatusIdle))
-			failErr(rt, "rename", sessStore.UpdateSession(ctx, sess.ID, func(s *api.Session) { s.Title = "Renamed after restart" }))
+			failErr(rt, "busy", sessStore.Sessions.SetSessionStatus(ctx, sess.ID, api.SessionStatusBusy))
+			failErr(rt, "idle", sessStore.Sessions.SetSessionStatus(ctx, sess.ID, api.SessionStatusIdle))
+			failErr(rt, "rename", sessStore.Sessions.UpdateSession(ctx, sess.ID, func(s *api.Session) { s.Title = "Renamed after restart" }))
 		}
 		if c.progressed {
-			turn, err := sessStore.BeginTurn(ctx, store.TurnStart{SessionID: sess.ID, ProjectID: sess.ProjectID, Origin: store.TurnOriginUser, InputJSON: "{}"})
+			turn, err := sessStore.Turns.BeginTurn(ctx, store.TurnStart{SessionID: sess.ID, ProjectID: sess.ProjectID, Origin: store.TurnOriginUser, InputJSON: "{}"})
 			failErr(rt, "begin turn", err)
-			_, err = sessStore.FinishTurn(ctx, turn.Turn.ID, turn.Attempt.ID, store.TurnStatusComplete, "", "", "")
+			_, err = sessStore.Turns.FinishTurn(ctx, turn.Turn.ID, turn.Attempt.ID, store.TurnStatusComplete, "", "", "")
 			failErr(rt, "finish turn", err)
 		}
 		runMgr.Recovery.Busy = func(context.Context, string) bool { return c.busy }

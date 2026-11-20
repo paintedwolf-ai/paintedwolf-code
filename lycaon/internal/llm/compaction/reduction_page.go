@@ -32,7 +32,7 @@ func (c *SimpleCompactor) reductionPage(ctx context.Context, info SessionInfo, a
 			return reductionPage{}, err
 		}
 		page = reductionPage{source: prefix, retained: remainingCompactionRows(all, retainedMessageIDs(prefix))}
-		page.replacement = compactionReplacement(info, prefix, nil, priorSummary(info.PriorContinuation), text)
+		page.replacement = compactionReplacement(prefix, nil, priorSummary(info.PriorContinuation), text)
 		useful, err := c.usefulCompaction(info, prefix, page.replacement, c.cfg.SessionMinSavingsTokens)
 		if err != nil || useful || len(prefix) == len(bounded) {
 			return page, err

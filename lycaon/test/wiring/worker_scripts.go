@@ -4,9 +4,9 @@ import (
 	"context"
 	"sync"
 
-	"github.com/lycaon/lycaon/internal/llm"
 	"github.com/lycaon/lycaon/internal/llm/modelcall"
 	"github.com/lycaon/lycaon/internal/session/workercontext"
+	"github.com/lycaon/lycaon/internal/testutil/llmtest"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -38,9 +38,9 @@ func (q *QueuedWorkerScripts) SetCoordinatorReply(reply string) {
 	q.coordinatorReply = reply
 }
 
-func (q *QueuedWorkerScripts) Mock(h **Harness) *llm.KickDrivenMock {
-	return llm.NewKickDrivenMock(llm.KickDrivenConfig{
-		Fallback: func(ctx context.Context, _ llm.Snapshot) modelcall.Completion {
+func (q *QueuedWorkerScripts) Mock(h **Harness) *llmtest.KickDrivenMock {
+	return llmtest.NewKickDrivenMock(llmtest.KickDrivenConfig{
+		Fallback: func(ctx context.Context, _ llmtest.Snapshot) modelcall.Completion {
 			jobID := workercontext.Job(ctx)
 			if jobID == "" {
 				q.mu.Lock()

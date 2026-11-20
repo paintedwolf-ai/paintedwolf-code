@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/commandsurface"
+	"github.com/lycaon/lycaon/internal/commandsurface/commandsurfacetest"
 	"github.com/lycaon/lycaon/internal/testutil"
 )
 
@@ -122,7 +123,7 @@ func TestBraceAdmissionRefusesBeforeAnyFieldWithSourceRange(t *testing.T) {
 	for _, c := range cases {
 		t.Run(c.word, func(t *testing.T) {
 			source := prefix + c.word
-			plan, err := commandsurface.ParseProgram([]byte(source), commandsurface.ParseOptions{})
+			plan, err := commandsurfacetest.Admit(t, []byte(source), commandsurface.ParseOptions{})
 			var diagnostic *commandsurface.SyntaxDiagnostic
 			if plan != nil || !errors.As(err, &diagnostic) || diagnostic.Code != c.code || diagnostic.Limit != c.limit || diagnostic.Observed != c.observed {
 				t.Fatalf("diagnostic %+v err=%v", diagnostic, err)
@@ -142,7 +143,7 @@ func TestBraceAdmissionRefusesBeforeAnyFieldWithSourceRange(t *testing.T) {
 
 func TestBraceRefusesOutsideFieldWordsWhereBashWouldNotExpandSafely(t *testing.T) {
 	for _, source := range []string{"export X={a,b}", "cat > ./out{a,b}", "cat 2>&{1,2}", "trap 'echo' {EXIT,INT}"} {
-		plan, err := commandsurface.ParseProgram([]byte(source), commandsurface.ParseOptions{})
+		plan, err := commandsurfacetest.Admit(t, []byte(source), commandsurface.ParseOptions{})
 		var diagnostic *commandsurface.SyntaxDiagnostic
 		if plan != nil || !errors.As(err, &diagnostic) || diagnostic.Code != "COMMAND_SYNTAX_UNSUPPORTED" {
 			t.Fatalf("%s: plan=%v err=%v", source, plan, err)
@@ -193,7 +194,7 @@ func TestUntilHereStringAndAssigningOperatorsLower(t *testing.T) {
 		}
 	}
 	for _, source := range []string{"echo ${1:=x}", "echo ${@:=x}", "echo ${?:=x}", "echo ${PIPESTATUS:=x}", "echo ${a[@]:=x}"} {
-		plan, err := commandsurface.ParseProgram([]byte(source), commandsurface.ParseOptions{})
+		plan, err := commandsurfacetest.Admit(t, []byte(source), commandsurface.ParseOptions{})
 		var diagnostic *commandsurface.SyntaxDiagnostic
 		if plan != nil || !errors.As(err, &diagnostic) || diagnostic.Code != "COMMAND_SYNTAX_UNSUPPORTED" || source[diagnostic.Span.StartByte:diagnostic.Span.EndByte] != strings.TrimPrefix(source, "echo ") {
 			t.Fatalf("%s: diagnostic %+v err=%v", source, diagnostic, err)
@@ -203,15 +204,15 @@ func TestUntilHereStringAndAssigningOperatorsLower(t *testing.T) {
 
 func TestBraceSnapshotsAreDetached(t *testing.T) {
 	source := "echo {a,$(printf b)}{1..3}"
-	p, err := commandsurface.ParseProgram([]byte(source), commandsurface.ParseOptions{SourceName: "fixture.pw"})
+	p, err := commandsurfacetest.Admit(t, []byte(source), commandsurface.ParseOptions{SourceName: "fixture.pw"})
 	testutil.FailErr(t, "parse brace program", err)
-	baseline := p.Snapshot()
-	mutated := p.Snapshot()
+	baseline := p.View(t)
+	mutated := p.View(t)
 	word := simpleWords(t, mutated)[1]
 	list := word.Parts[0].(commandsurface.BracePart)
 	list.Alternatives[0].Parts[0] = commandsurface.LiteralPart{Value: "changed"}
 	word.Parts[1].(commandsurface.BracePart).Sequence.End = 99
-	if !reflect.DeepEqual(p.Snapshot(), baseline) {
+	if !reflect.DeepEqual(p.View(t), baseline) {
 		t.Fatal("snapshot mutation changed the frozen brace plan")
 	}
 	if !reflect.DeepEqual(parseProgram(t, source), parseProgram(t, source)) {

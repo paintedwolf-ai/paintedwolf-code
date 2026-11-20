@@ -3,10 +3,10 @@ package lifecycle_test
 import (
 	"context"
 	"errors"
-	workflow "github.com/lycaon/lycaon/internal/workflow"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/testutil"
+	workflow "github.com/lycaon/lycaon/internal/workflow"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -65,7 +65,7 @@ func TestPauseHonorsManifestWorkerControls(t *testing.T) {
 }
 
 func TestExitPersistsAndRecoversTeardown(t *testing.T) {
-	mgr, sessionID, _ := testWorkflowManager(t)
+	mgr, sessionID, _, _ := testWorkflowManager(t)
 	ctx := context.Background()
 	run, err := mgr.Starts.StartHuman(ctx, sessionID, api.StartWorkflowRunRequest{
 		WorkflowID: "options", WorkflowVersion: "1.0.0",
@@ -95,7 +95,7 @@ func TestExitPersistsAndRecoversTeardown(t *testing.T) {
 }
 
 func TestExitHonorsNoTeardownControls(t *testing.T) {
-	mgr, sessionID, _ := testWorkflowManager(t)
+	mgr, sessionID, _, _ := testWorkflowManager(t)
 	manifest, err := mgr.Resolver.Overlay.Get("options", "1.0.0")
 	testutil.FailErr(t, "Get options manifest", err)
 	manifest.Controls.OnStop = &workflowdef.StopControls{}
@@ -122,7 +122,7 @@ func TestExitHonorsNoTeardownControls(t *testing.T) {
 }
 
 func TestTeardownStaysPendingWithoutService(t *testing.T) {
-	mgr, sessionID, _ := testWorkflowManager(t)
+	mgr, sessionID, _, _ := testWorkflowManager(t)
 	ctx := context.Background()
 	run, err := mgr.Starts.StartHuman(ctx, sessionID, api.StartWorkflowRunRequest{
 		WorkflowID: "options", WorkflowVersion: "1.0.0",

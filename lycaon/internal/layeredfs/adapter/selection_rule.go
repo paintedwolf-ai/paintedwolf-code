@@ -59,11 +59,6 @@ func RecordedBudget(class BudgetClass) BudgetFact {
 	return fact
 }
 
-// ZeroBudget puts every tree over budget. Fixtures that exercise a mounted view use it.
-func ZeroBudget(class BudgetClass) BudgetFact {
-	return BudgetFact{Class: class, Limit: -1, EntryCost: 1}
-}
-
 // CostSource says where a materialize cost came from.
 type CostSource string
 

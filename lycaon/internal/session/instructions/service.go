@@ -2,9 +2,9 @@ package instructions
 
 import (
 	"context"
-	"github.com/lycaon/lycaon/internal/messageview"
 
 	"github.com/lycaon/lycaon/internal/coordinator/batch"
+	"github.com/lycaon/lycaon/internal/messageview"
 	"github.com/lycaon/lycaon/internal/progress"
 	"github.com/lycaon/lycaon/internal/session/checkpointcontrol"
 	"github.com/lycaon/lycaon/internal/session/promptinput"
@@ -12,9 +12,12 @@ import (
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
-type Store interface {
-	Get(context.Context, string) (*api.Session, error)
-	ReadSourceTurn(context.Context, string, int) (messageview.SourceTurn, error)
+type Sessions interface {
+	Get(ctx context.Context, id string) (*api.Session, error)
+}
+
+type Transcript interface {
+	ReadSourceTurn(ctx context.Context, id string, number int) (messageview.SourceTurn, error)
 }
 type WorkflowDomains struct {
 	Batch    WorkflowBatch
@@ -35,7 +38,8 @@ type IntentBoundary interface{ NoteUserIntentBoundary(string) }
 
 // Service records user instructions and advances only their explicit boundaries.
 type Service struct {
-	store            Store
+	sessionStore     Sessions
+	transcriptStore  Transcript
 	transcript       *transcript.Service
 	captures         *checkpointcontrol.Capture
 	deliverKicks     func(context.Context, string) error
@@ -46,8 +50,8 @@ type Service struct {
 	gateRepeatLedger IntentBoundary
 }
 
-func New(store Store, transcript *transcript.Service, captures *checkpointcontrol.Capture, deliver func(context.Context, string) error) *Service {
-	return &Service{store: store, transcript: transcript, captures: captures, deliverKicks: deliver}
+func New(sessionStore Sessions, transcriptStore Transcript, transcript *transcript.Service, captures *checkpointcontrol.Capture, deliver func(context.Context, string) error) *Service {
+	return &Service{sessionStore: sessionStore, transcriptStore: transcriptStore, transcript: transcript, captures: captures, deliverKicks: deliver}
 }
 func (m *Service) SetWorkflow(workflow *WorkflowDomains)           { m.workflows = workflow }
 func (m *Service) SetProgress(progress progress.RunScopedStore)    { m.progress = progress }

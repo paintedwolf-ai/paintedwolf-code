@@ -136,11 +136,6 @@ SELECT id, project_id, path, label, is_primary, git_remote_hash, added_at, kind
 FROM project_roots
 WHERE project_id = ? AND path = ?;
 
--- name: CountProjectRoots :one
-SELECT COUNT(*) AS count
-FROM project_roots
-WHERE project_id = ?;
-
 -- name: ClearProjectPrimary :exec
 UPDATE project_roots
 SET is_primary = 0

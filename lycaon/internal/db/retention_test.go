@@ -14,7 +14,7 @@ import (
 	"github.com/lycaon/lycaon/internal/testutil"
 )
 
-func TestRunRetentionPreservesProjectAndSessionHistory(t *testing.T) {
+func TestMaintenancePassPreservesProjectAndSessionHistory(t *testing.T) {
 	ctx := t.Context()
 	database := openTestDB(t)
 	testdbseed.InsertProject(t, database, testdbseed.DefaultProjectID)
@@ -43,8 +43,8 @@ VALUES ('message', 'entry', 'child', 'user', 'retained history', 'user', 'user',
 
 	cfg := DefaultRetention()
 	cfg.IncrementalVacuumMinFreelistPages = 9999
-	_, err = RunRetention(ctx, database, cfg)
-	testutil.FailErr(t, "RunRetention", err)
+	_, err = RunMaintenancePass(ctx, database, cfg, true)
+	testutil.FailErr(t, "maintenance pass", err)
 	for table, id := range map[string]string{"sessions": "child", "worker_jobs": "job", "code_scans": "scan", "security_full_passes": "pass", "workflow_runs": "run", "session_entries": "entry", "messages": "message"} {
 		if !rowExists(t, database, "SELECT 1 FROM "+table+" WHERE id = ?", id) {
 			t.Fatalf("%s history row %s was aged out", table, id)
@@ -52,7 +52,7 @@ VALUES ('message', 'entry', 'child', 'user', 'retained history', 'user', 'user',
 	}
 }
 
-func TestRunRetentionDisabledByEnv(t *testing.T) {
+func TestMaintenancePassDisabledByEnv(t *testing.T) {
 	t.Setenv("LYCAON_STORE_RETENTION", "0")
 	if DefaultRetention().Enabled {
 		t.Fatal("retention enabled despite LYCAON_STORE_RETENTION=0")
@@ -95,7 +95,7 @@ func TestFreshStoreUsesIncrementalAutoVacuum(t *testing.T) {
 	}
 }
 
-func TestRunRetentionAgesOutOnlyTerminalOperationReceipts(t *testing.T) {
+func TestMaintenancePassAgesOutOnlyTerminalOperationReceipts(t *testing.T) {
 	database := openTestDB(t)
 	testdbseed.InsertProject(t, database, testdbseed.DefaultProjectID)
 	insertTestSession(t, database, "sess-1")
@@ -113,10 +113,10 @@ func TestRunRetentionAgesOutOnlyTerminalOperationReceipts(t *testing.T) {
 
 	cfg := DefaultRetention()
 	cfg.IncrementalVacuumMinFreelistPages = 9999
-	report, err := RunRetention(t.Context(), database, cfg)
-	testutil.FailErr(t, "RunRetention", err)
-	if report.JournalDeleted("prompt_submissions") != 1 || report.JournalDeleted("command_invocations") != 1 ||
-		report.JournalDeleted("worker_operations") != 1 || !rowExists(t, database, `SELECT 1 FROM worker_operations WHERE operation_id = 'worker-op-fresh'`) {
+	report, err := RunMaintenancePass(t.Context(), database, cfg, true)
+	testutil.FailErr(t, "maintenance pass", err)
+	if report.OperationJournals["prompt_submissions"] != 1 || report.OperationJournals["command_invocations"] != 1 ||
+		report.OperationJournals["worker_operations"] != 1 || !rowExists(t, database, `SELECT 1 FROM worker_operations WHERE operation_id = 'worker-op-fresh'`) {
 		t.Fatalf("journal cleanup report = %+v", report.OperationJournals)
 	}
 	if rowExists(t, database, `SELECT 1 FROM prompt_submissions WHERE id = 'old'`) {
@@ -129,7 +129,7 @@ func TestRunRetentionAgesOutOnlyTerminalOperationReceipts(t *testing.T) {
 	}
 }
 
-func TestRunRetentionRemovesOnlyUnreachableLLMCalls(t *testing.T) {
+func TestMaintenancePassRemovesOnlyUnreachableLLMCalls(t *testing.T) {
 	database := openTestDB(t)
 	testdbseed.InsertProject(t, database, testdbseed.DefaultProjectID)
 	insertTestSession(t, database, "sess-1")
@@ -138,8 +138,8 @@ func TestRunRetentionRemovesOnlyUnreachableLLMCalls(t *testing.T) {
 	seedLLMCallRow(t, database, "orphan", "gone-project", "gone", time.Now().Add(-400*24*time.Hour))
 	cfg := DefaultRetention()
 	cfg.IncrementalVacuumMinFreelistPages = 9999
-	report, err := RunRetention(t.Context(), database, cfg)
-	testutil.FailErr(t, "RunRetention", err)
+	report, err := RunMaintenancePass(t.Context(), database, cfg, true)
+	testutil.FailErr(t, "maintenance pass", err)
 	if report.OrphanLLMCalls != 1 {
 		t.Fatalf("orphan calls removed=%d want 1", report.OrphanLLMCalls)
 	}
@@ -202,21 +202,21 @@ func TestRollupLLMCallIDsPreservesUnselectedReceipts(t *testing.T) {
 	}
 }
 
-func TestRunRetentionOptimizesFTSOnAnInterval(t *testing.T) {
+func TestMaintenancePassOptimizesFTSOnAnInterval(t *testing.T) {
 	database := openTestDB(t)
 	cfg := DefaultRetention()
 	cfg.IncrementalVacuumMinFreelistPages = 9999
 	// Empty retention tables isolate the FTS maintenance latch.
 	cfg.OperationJournals = 0
 
-	report, err := RunRetention(t.Context(), database, cfg)
-	testutil.FailErr(t, "RunRetention", err)
+	report, err := RunMaintenancePass(t.Context(), database, cfg, true)
+	testutil.FailErr(t, "maintenance pass", err)
 	if len(report.FTSOptimized) != 2 {
 		t.Fatalf("first run optimized=%v want both tables", report.FTSOptimized)
 	}
 
-	report2, err := RunRetention(t.Context(), database, cfg)
-	testutil.FailErr(t, "RunRetention second pass", err)
+	report2, err := RunMaintenancePass(t.Context(), database, cfg, true)
+	testutil.FailErr(t, "maintenance pass second pass", err)
 	if len(report2.FTSOptimized) != 0 {
 		t.Fatalf("second pass within interval optimized=%v want none", report2.FTSOptimized)
 	}
@@ -311,8 +311,8 @@ func TestRetentionReturnsPagesItDidNotFree(t *testing.T) {
 	if before < 1500 {
 		t.Fatalf("freelist = %d pages; the test cannot show a reclaim", before)
 	}
-	report, err := RunRetention(ctx, database, DefaultRetention())
-	testutil.FailErr(t, "RunRetention", err)
+	report, err := RunMaintenancePass(ctx, database, DefaultRetention(), true)
+	testutil.FailErr(t, "maintenance pass", err)
 	if report.TotalDeleted() != 0 || !report.IncrementalVacuumed {
 		t.Fatalf("report = %+v, want a vacuum without deletions", report)
 	}

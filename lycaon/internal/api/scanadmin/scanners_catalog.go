@@ -362,7 +362,7 @@ func (s *Handler) lookupScannerSummary(w http.ResponseWriter, r *http.Request, i
 }
 
 func (s *Handler) buildScannerListResponse(cfg *scancatalog.ScannerConfig, rejected []scancatalog.RejectedRow, homeDir, projectDir string) wire.ScannerListResponse {
-	reports := scancatalog.CheckCatalog(cfg, s.ModuleRoot, projectDir)
+	reports := scancatalog.CheckCatalog(cfg, projectDir)
 	byID := make(map[string]scancatalog.ScannerEntry, len(cfg.Scanners))
 	for _, e := range cfg.Scanners {
 		byID[e.ID] = e

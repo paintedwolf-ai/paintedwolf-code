@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/project"
+	"github.com/lycaon/lycaon/internal/project/projecttest"
 	"github.com/lycaon/lycaon/internal/testutil"
 )
 
@@ -14,7 +15,7 @@ func TestPromotionPreservesRootIDAndAdoptsDestinationLabel(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 	ctx := context.Background()
-	reg := project.NewMemoryRegistry()
+	reg := projecttest.NewRegistry(t)
 
 	p, err := reg.Create(ctx, project.CreateParams{Draft: true})
 	testutil.FailErr(t, "create draft", err)

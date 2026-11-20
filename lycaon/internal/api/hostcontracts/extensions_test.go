@@ -333,7 +333,6 @@ func TestExtensionsMutationStaleRevisionConflict(t *testing.T) {
 func TestExtensionsDeviceMutationRefreshesActiveCatalog(t *testing.T) {
 	cfg := t.TempDir()
 	t.Setenv("LYCAON_CONFIG_DIR", cfg)
-	t.Cleanup(extpacks.ClearActive)
 
 	boot, err := extpacks.ApplyCatalog(t.Context(), nil, nil)
 	testutil.FailErr(t, "boot resolve", err)

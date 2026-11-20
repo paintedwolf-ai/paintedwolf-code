@@ -34,7 +34,7 @@ func TestDecideRetainsPriorityAcrossWholeQuestionBatches(t *testing.T) {
 			done := make(chan result, 1)
 			go func() {
 				value, err := client.Decide(ctx, decide.HeadTurnLoad, "state", map[string]decide.Question{
-					"c": decide.Noul("third?"), "b": decide.Noul("second?"), "a": decide.Noul("first?"),
+					"c": {Kind: decide.KindNoul, Instructions: "third?"}, "b": {Kind: decide.KindNoul, Instructions: "second?"}, "a": {Kind: decide.KindNoul, Instructions: "first?"},
 				})
 				done <- result{value, err}
 			}()

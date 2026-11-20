@@ -34,7 +34,7 @@ func TestComparePathOfASpecialFileHasNoText(t *testing.T) {
 	for _, path := range []string{"pipe", "sock"} {
 		done := make(chan workspacebaseline.PathComparison, 1)
 		go func() {
-			got, err := reader.ComparePath(t.Context(), nil, branch, path)
+			got, err := reader.ComparePath(t.Context(), singleRoots(), branch, path)
 			if err != nil {
 				t.Errorf("compare %s: %v", path, err)
 			}
@@ -58,7 +58,7 @@ func TestComparePathOfASpecialFileHasNoText(t *testing.T) {
 func TestChangeSetListsASpecialFile(t *testing.T) {
 	branch, reader := sealedBranch(t, map[string][]byte{"keep.txt": []byte("keep\n")})
 	testutil.FailErr(t, "mkfifo", unix.Mkfifo(filepath.Join(branch, "pipe"), 0o600))
-	changes, err := reader.ChangeSet(t.Context(), nil, branch)
+	changes, err := reader.ChangeSet(t.Context(), singleRoots(), branch)
 	testutil.FailErr(t, "change set", err)
 	if len(changes) != 1 || changes[0].Path != "pipe" || changes[0].Kind != workspacebaseline.ChangeCreated {
 		t.Fatalf("changes = %+v, want the fifo as created", changes)

@@ -5,22 +5,22 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
-	"github.com/lycaon/lycaon/internal/timelayout"
 	"strings"
 	"time"
 
 	"github.com/lycaon/lycaon/internal/db"
+	"github.com/lycaon/lycaon/internal/timelayout"
 	"github.com/lycaon/lycaon/internal/projectignore"
 	scanignore "github.com/lycaon/lycaon/internal/scan/ignores"
 )
 
 // SyncIgnores refreshes cached verdicts when the declaration digest changes.
-func (s *sqlIgnoreStore) SyncIgnores(ctx context.Context, canonicalPath string, rootPaths []string) (*scanignore.IgnoreCatalog, error) {
+func (s *IgnoreStore) SyncIgnores(ctx context.Context, canonicalPath string, rootPaths []string) (*scanignore.IgnoreCatalog, error) {
 	catalog, secretDecisions, err := s.ignoreDeclarations(ctx, canonicalPath, rootPaths)
 	if err != nil {
 		return nil, err
 	}
-	applied, err := s.queries.GetScanIgnoreDigest(ctx, canonicalPath)
+	applied, err := s.tx.queries.GetScanIgnoreDigest(ctx, canonicalPath)
 	if err != nil && !errors.Is(err, sql.ErrNoRows) {
 		return nil, fmt.Errorf("read ignore digest: %w", err)
 	}
@@ -35,12 +35,12 @@ func (s *sqlIgnoreStore) SyncIgnores(ctx context.Context, canonicalPath string, 
 
 // IgnoreMatches reads the declared ignores and counts the ledger rows each one
 // matches now, without recording the verdicts.
-func (s *sqlIgnoreStore) IgnoreMatches(ctx context.Context, canonicalPath string, rootPaths []string) (*scanignore.IgnoreCatalog, map[string]int, error) {
+func (s *IgnoreStore) IgnoreMatches(ctx context.Context, canonicalPath string, rootPaths []string) (*scanignore.IgnoreCatalog, map[string]int, error) {
 	catalog, secretDecisions, err := s.ignoreDeclarations(ctx, canonicalPath, rootPaths)
 	if err != nil {
 		return nil, nil, err
 	}
-	subjects, err := s.queries.ListScanFindingLedgerSubjects(ctx, canonicalPath)
+	subjects, err := s.tx.queries.ListScanFindingLedgerSubjects(ctx, canonicalPath)
 	if err != nil {
 		return nil, nil, fmt.Errorf("read ledger subjects: %w", err)
 	}
@@ -55,7 +55,7 @@ func (s *sqlIgnoreStore) IgnoreMatches(ctx context.Context, canonicalPath string
 
 // ignoreDeclarations are the overlay ignore catalog and the secret decisions,
 // with a digest over both.
-func (s *sqlIgnoreStore) ignoreDeclarations(ctx context.Context, canonicalPath string, rootPaths []string) (*scanignore.IgnoreCatalog, map[string]projectignore.SecretEntry, error) {
+func (s *IgnoreStore) ignoreDeclarations(ctx context.Context, canonicalPath string, rootPaths []string) (*scanignore.IgnoreCatalog, map[string]projectignore.SecretEntry, error) {
 	catalog, err := scanignore.LoadIgnoreCatalog(rootPaths)
 	if err != nil {
 		return nil, nil, err
@@ -89,17 +89,17 @@ func ignoreVerdict(subject db.ListScanFindingLedgerSubjectsRow, catalog *scanign
 }
 
 // Clearing cached verdicts restores findings whose declarations were removed.
-func (s *sqlIgnoreStore) applyIgnores(ctx context.Context, canonicalPath string, catalog *scanignore.IgnoreCatalog, secretDecisions map[string]projectignore.SecretEntry) error {
-	subjects, err := s.queries.ListScanFindingLedgerSubjects(ctx, canonicalPath)
+func (s *IgnoreStore) applyIgnores(ctx context.Context, canonicalPath string, catalog *scanignore.IgnoreCatalog, secretDecisions map[string]projectignore.SecretEntry) error {
+	subjects, err := s.tx.queries.ListScanFindingLedgerSubjects(ctx, canonicalPath)
 	if err != nil {
 		return fmt.Errorf("read ledger subjects: %w", err)
 	}
-	tx, err := s.db.BeginTx(ctx, nil)
+	tx, err := s.tx.db.BeginTx(ctx, nil)
 	if err != nil {
 		return fmt.Errorf("apply ignores: %w", err)
 	}
 	defer func() { _ = tx.Rollback() }()
-	qtx := s.queries.WithTx(tx)
+	qtx := s.tx.queries.WithTx(tx)
 
 	if err := qtx.ClearScanFindingLedgerIgnores(ctx, canonicalPath); err != nil {
 		return fmt.Errorf("clear ledger ignores: %w", err)
@@ -136,8 +136,8 @@ func (s *sqlIgnoreStore) applyIgnores(ctx context.Context, canonicalPath string,
 }
 
 // InvalidateIgnoreDigest forces the next read to re-apply.
-func (s *sqlIgnoreStore) InvalidateIgnoreDigest(ctx context.Context, canonicalPath string) error {
-	if err := s.queries.PutScanIgnoreDigest(ctx, db.PutScanIgnoreDigestParams{
+func (s *IgnoreStore) InvalidateIgnoreDigest(ctx context.Context, canonicalPath string) error {
+	if err := s.tx.queries.PutScanIgnoreDigest(ctx, db.PutScanIgnoreDigestParams{
 		CanonicalPath: canonicalPath,
 		Digest:        "",
 		AppliedAt:     timelayout.Format(time.Now().UTC()),

@@ -3,12 +3,12 @@ package wiring
 import (
 	"context"
 	"encoding/json"
+	"github.com/lycaon/lycaon/internal/testutil/conditionstest"
 	"os"
 	"path/filepath"
 	"testing"
 	"time"
 
-	"github.com/lycaon/lycaon/internal/conditions"
 	"github.com/lycaon/lycaon/internal/coordinator/surface"
 	"github.com/lycaon/lycaon/internal/evidence"
 	"github.com/lycaon/lycaon/internal/orchestration"
@@ -58,7 +58,7 @@ func TestSecuritySurveyFanOutWorkflowEndToEnd(t *testing.T) {
 		t.Fatalf("unresolved coverage citations outcome = %+v, want grounding refusal", out)
 	}
 
-	testutil.FailErr(t, "seed survey evidence", h.Store.UpsertEvidenceRecord(ctx, sess.ID, evidence.Record{
+	testutil.FailErr(t, "seed survey evidence", h.Store.Evidence.UpsertEvidenceRecord(ctx, sess.ID, evidence.Record{
 		Handle: "survey#1", Path: "internal/store/query.go",
 		Kind: "read", Shape: evidence.ShapeFileRegion, SourceTool: "read", Fidelity: evidence.FidelityStructured,
 		LineRanges: []evidence.LineRange{{Start: 88, End: 88}},
@@ -139,7 +139,7 @@ func TestBugbashWorkflowEndToEnd(t *testing.T) {
 	WaitWorkflowPhase(t, ctx, h.Workflows.Manager, run.ID, "expand")
 	blueprintPath := filepath.Join(dir, filepath.FromSlash(run.BlueprintPath))
 	testutil.FailErr(t, "create Bugbash blueprint dir", os.MkdirAll(filepath.Dir(blueprintPath), 0o755))
-	testutil.FailErr(t, "write Bugbash blueprint", os.WriteFile(blueprintPath, []byte(conditions.TestPlanContentStubOnly), 0o644))
+	testutil.FailErr(t, "write Bugbash blueprint", os.WriteFile(blueprintPath, []byte(conditionstest.PlanStub), 0o644))
 
 	run, err = h.Workflows.Manager.Phases.Advance(ctx, run.ID)
 	testutil.FailErr(t, "advance written fix plan", err)

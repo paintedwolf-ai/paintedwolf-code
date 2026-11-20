@@ -140,7 +140,7 @@ func (m *Service) candidateContext(ctx context.Context, sess *api.Session, tool 
 		if m.harvestHas == nil {
 			return fmt.Errorf("[OAR-FACT-18] credential_harvested provider unavailable")
 		}
-		root := sessiontree.RootID(ctx, m.store, sess.ID)
+		root := sessiontree.RootID(ctx, m.sessionStore, sess.ID)
 		if gc.Published == nil {
 			gc.Published = map[string]any{}
 		}

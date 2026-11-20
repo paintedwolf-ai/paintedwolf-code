@@ -19,6 +19,7 @@ import (
 	"github.com/lycaon/lycaon/internal/session"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/testutil/gittest"
 	"github.com/lycaon/lycaon/internal/workspace"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -53,7 +54,7 @@ func TestOverlayChangedPathsAndDivergenceFromPublishedCheckpoint(t *testing.T) {
 	if !session.OverlayAwaitingPromote(t.Context(), task) {
 		t.Fatal("expected OverlayAwaitingPromote true for published checkpoint")
 	}
-	changed := session.OverlayWorkspaceChangedPaths(t.Context(), task, nil)
+	changed := session.OverlayWorkspaceChangedPaths(t.Context(), task, nil, "")
 	if len(changed) != 2 || changed[0] != "checkpointed.go" || changed[1] != "deleted.go" {
 		t.Fatalf("OverlayWorkspaceChangedPaths = %v, want [checkpointed.go deleted.go]", changed)
 	}
@@ -94,12 +95,12 @@ func TestCheckpointRefImportValidatesReachableObjectsConflictsAndWorktreeGitdir(
 	}
 
 	objsDir := checkpoint.CheckpointGitObjectsDir(storeDir, "chk-1", "")
-	blobOID, err := checkpoint.WriteLooseGitObject(objsDir, "blob", []byte("hello world\n"))
+	blobOID, err := gittest.WriteLooseObject(objsDir, "blob", []byte("hello world\n"))
 	testutil.FailErr(t, "write blob", err)
 	blobRaw, _ := hex.DecodeString(blobOID)
-	treeOID, err := checkpoint.WriteLooseGitObject(objsDir, "tree", append([]byte("100644 file.txt\x00"), blobRaw...))
+	treeOID, err := gittest.WriteLooseObject(objsDir, "tree", append([]byte("100644 file.txt\x00"), blobRaw...))
 	testutil.FailErr(t, "write tree", err)
-	commitOID, err := checkpoint.WriteLooseGitObject(objsDir, "commit", []byte(fmt.Sprintf("tree %s\nauthor A <a@b.c> 1 +0000\ncommitter A <a@b.c> 1 +0000\n\nmsg\n", treeOID)))
+	commitOID, err := gittest.WriteLooseObject(objsDir, "commit", []byte(fmt.Sprintf("tree %s\nauthor A <a@b.c> 1 +0000\ncommitter A <a@b.c> 1 +0000\n\nmsg\n", treeOID)))
 	testutil.FailErr(t, "write commit", err)
 
 	imported, err := importer(t.Context(), "tx-1", "w-1", checkpoint.PrivateGitSnapshot{Refs: map[string]string{"refs/heads/feat": commitOID}})
@@ -110,7 +111,7 @@ func TestCheckpointRefImportValidatesReachableObjectsConflictsAndWorktreeGitdir(
 	if _, err := importer(t.Context(), "tx-1", "w-1", checkpoint.PrivateGitSnapshot{Refs: map[string]string{"refs/heads/feat": commitOID}}); err != nil {
 		t.Fatalf("same-OID retry failed: %v", err)
 	}
-	otherOID, err := checkpoint.WriteLooseGitObject(objsDir, "blob", []byte("other\n"))
+	otherOID, err := gittest.WriteLooseObject(objsDir, "blob", []byte("other\n"))
 	testutil.FailErr(t, "write other blob", err)
 	if _, err := importer(t.Context(), "tx-1", "w-1", checkpoint.PrivateGitSnapshot{Refs: map[string]string{"refs/heads/feat": otherOID}}); !errors.Is(err, checkpoint.ErrCheckpointRefConflict) {
 		t.Fatalf("conflicting OID err = %v, want ErrCheckpointRefConflict", err)
@@ -155,14 +156,14 @@ func TestCheckpointPromotionRetryUnresolvedRootAndErrorPropagation(t *testing.T)
 		t.Fatalf("TargetRootsForTaskCheckpoint unmapped root err = %v, want ErrInvalidRoot", err)
 	}
 
-	testutil.FailErr(t, "commit task checkpoint", commitTaskCheckpoint(t, task, nil))
+	testutil.FailErr(t, "commit task checkpoint", commitTaskCheckpoint(t, task, nil, ""))
 	if _, err := os.Stat(removedPath); !os.IsNotExist(err) {
 		t.Fatalf("expected removed.txt to be deleted, stat err = %v", err)
 	}
 
 	// Recreate file at old deletion path after promotion completes; retry must NOT re-delete it.
 	testutil.FailErr(t, "recreate removed.txt", os.WriteFile(removedPath, []byte("recreated post-promote\n"), 0o644))
-	testutil.FailErr(t, "retry task checkpoint", commitTaskCheckpoint(t, task, nil))
+	testutil.FailErr(t, "retry task checkpoint", commitTaskCheckpoint(t, task, nil, ""))
 	if gotBytes, err := os.ReadFile(removedPath); err != nil || !strings.Contains(string(gotBytes), "recreated post-promote") {
 		t.Fatalf("post-promotion recreated file was clobbered or unreadable: %q (%v)", string(gotBytes), err)
 	}
@@ -206,7 +207,7 @@ func TestMultiRootCheckpointQualificationAndWorkspaceSync(t *testing.T) {
 
 	scope := api.TaskScope{Mode: api.TaskScopeModeWrite}
 	task := &api.WorkerTask{ID: "job-multi-cp", ProjectID: testdbseed.DefaultProjectID, WorkspacePath: primary, WorkspaceRoot: overlay, WorkspaceRootID: "primary", Scope: &scope}
-	changed := session.OverlayWorkspaceChangedPaths(t.Context(), task, roots)
+	changed := session.OverlayWorkspaceChangedPaths(t.Context(), task, roots, "")
 	if len(changed) != 1 || changed[0] != "@docs/mod.txt" {
 		t.Fatalf("OverlayWorkspaceChangedPaths = %v, want [@docs/mod.txt]", changed)
 	}
@@ -314,11 +315,11 @@ func recoveryStoreFor(t *testing.T, branch, source string) (*checkpoint.Store, f
 }
 
 // commitTaskCheckpoint runs a task's checkpoint promotion through a complete transaction.
-func commitTaskCheckpoint(t *testing.T, task *api.WorkerTask, roots []projectroot.RootRef) error {
+func commitTaskCheckpoint(t *testing.T, task *api.WorkerTask, roots []projectroot.RootRef, checkpointID string) error {
 	t.Helper()
 	txn, err := checkpoint.BeginTransaction(checkpoint.TransactionConfig{Dir: filepath.Join(t.TempDir(), "tx"), ID: "promotion"})
 	testutil.FailErr(t, "begin transaction", err)
-	if err := session.ApplyTaskCheckpoint(t.Context(), txn, task, roots); err != nil {
+	if err := session.ApplyTaskCheckpoint(t.Context(), txn, task, roots, checkpointID); err != nil {
 		return err
 	}
 	return txn.Commit()
@@ -352,16 +353,14 @@ func TestCheckpointPromotionUsesBoundPreviewAfterNewPublication(t *testing.T) {
 			testutil.FailErr(t, "publish reviewed checkpoint", err)
 			bindCheckpoint("cp-reviewed")
 			task := &api.WorkerTask{ID: "job-bound-preview", ProjectID: testdbseed.DefaultProjectID, WorkspacePath: primary, WorkspaceRoot: overlay, WorkspaceRootID: "primary"}
-			_, manifest, promoter, ok, err := session.NewTaskCheckpointPromoter(task, nil)
+			_, manifest, promoter, ok, err := session.NewTaskCheckpointPromoter(task, nil, "")
 			testutil.FailErr(t, "prepare reviewed checkpoint", err)
 			if !ok {
 				t.Fatal("published checkpoint was not selected")
 			}
 			preview, err := promoter.Preview(t.Context(), checkpoint.PreviewRequest{CheckpointID: manifest.CheckpointID})
 			testutil.FailErr(t, "preview reviewed checkpoint", err)
-			session.MarkTaskCheckpointPreviewBindIntent(task.ID)
-			session.MaybeBindTaskCheckpointPreview(task.ID, preview)
-			t.Cleanup(func() { session.ClearTaskCheckpointPreview(task.ID) })
+
 			_, err = core.WriteFile(path, []byte("later\n"), 0o644)
 			testutil.FailErr(t, "write later result", err)
 			_, err = pub.Publish(t.Context(), checkpoint.PublishRequest{CheckpointID: "cp-later", Trigger: checkpoint.TriggerWorkerCompletion})
@@ -369,7 +368,7 @@ func TestCheckpointPromotionUsesBoundPreviewAfterNewPublication(t *testing.T) {
 			if missing {
 				testutil.FailErr(t, "remove reviewed manifest", os.Remove(filepath.Join(store.RootDir(), "checkpoints", "cp-reviewed", "manifest.json")))
 			}
-			_, selected, _, ok, err := session.NewTaskCheckpointPromoter(task, nil)
+			_, selected, _, ok, err := session.NewTaskCheckpointPromoter(task, nil, preview.CheckpointID)
 			if missing {
 				if !ok || !errors.Is(err, checkpoint.ErrCheckpointNotFound) {
 					t.Fatalf("missing reviewed checkpoint fell back: selected=%q ok=%t err=%v", selected.CheckpointID, ok, err)
@@ -380,7 +379,7 @@ func TestCheckpointPromotionUsesBoundPreviewAfterNewPublication(t *testing.T) {
 			if !ok || selected.CheckpointID != preview.CheckpointID {
 				t.Fatalf("checkpoint changed after preview: selected=%q reviewed=%q", selected.CheckpointID, preview.CheckpointID)
 			}
-			testutil.FailErr(t, "commit reviewed checkpoint", commitTaskCheckpoint(t, task, nil))
+			testutil.FailErr(t, "commit reviewed checkpoint", commitTaskCheckpoint(t, task, nil, preview.CheckpointID))
 			body, err := os.ReadFile(filepath.Join(primary, "result.txt"))
 			testutil.FailErr(t, "read promoted result", err)
 			if string(body) != "reviewed\n" {
@@ -432,8 +431,7 @@ func TestOverlayPromoteConsultsLayeredConsumerDivergenceWithoutFullBaseline(t *t
 	if err != nil {
 		t.Fatalf("NewEngine: %v", err)
 	}
-	consumer.RegisterBranchEngine(mountDir, eng)
-	t.Cleanup(func() { consumer.UnregisterBranchEngine(mountDir) })
+	t.Cleanup(func() { consumer.UnregisterEngine(eng) })
 
 	task := &api.WorkerTask{
 		ID:            "job-layered-promote",
@@ -444,7 +442,7 @@ func TestOverlayPromoteConsultsLayeredConsumerDivergenceWithoutFullBaseline(t *t
 	}
 	rootRefs := []projectroot.RootRef{{ID: "code", Label: "code", Path: srcDir, IsPrimary: true}}
 
-	changed, err := session.InspectOverlayChanges(ctx, task, rootRefs)
+	changed, err := session.InspectOverlayChanges(ctx, task, rootRefs, "")
 	if err != nil {
 		t.Fatalf("InspectOverlayChanges: %v", err)
 	}
@@ -493,7 +491,7 @@ func TestEachRoundOpensItsOwnCheckpointInASharedLane(t *testing.T) {
 	scope := api.TaskScope{Mode: api.TaskScopeModeWrite}
 	for job, want := range map[string]string{"job-1": "chk-round-1", "job-2": "chk-round-2", "job-roundless": "chk-round-2"} {
 		task := &api.WorkerTask{ID: job, ProjectID: testdbseed.DefaultProjectID, WorkspacePath: primary, WorkspaceRoot: lane, Scope: &scope}
-		_, manifest, ok, err := session.OpenTaskCheckpointStore(task)
+		_, manifest, ok, err := session.OpenTaskCheckpointStore(task, "")
 		testutil.FailErr(t, "open "+job, err)
 		if !ok || manifest.CheckpointID != want {
 			t.Fatalf("%s opened %q, want %q", job, manifest.CheckpointID, want)

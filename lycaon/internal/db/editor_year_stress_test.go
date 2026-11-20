@@ -36,7 +36,7 @@ func TestStressEditorWorkingYearWithRecovery(t *testing.T) {
 	rootID := uuid.NewString()
 	testdbseed.InsertProjectRootWithID(t, database, testdbseed.DefaultProjectID, rootID, root)
 	p := &project.Project{ID: testdbseed.DefaultProjectID, Roots: []project.Root{{ID: rootID, ProjectID: testdbseed.DefaultProjectID, Path: root, IsPrimary: true}}}
-	sourceHistory13 := sourceledger.New(database, filepath.Join(config, "source-content"))
+	sourceHistory13 := sourceledger.New(database, filepath.Join(config, "source-content"), sourceledger.Timing{})
 	service := editordoc.New(editordoc.NewStore(database), sourceHistory13, sourceHistory13.History, storageStressRoots{p})
 	t.Cleanup(func() { _ = service.Close(context.Background()) })
 	random := rand.New(rand.NewPCG(31, 47))
@@ -70,7 +70,7 @@ func TestStressEditorWorkingYearWithRecovery(t *testing.T) {
 			_, err = database.ExecContext(t.Context(), `UPDATE editor_mutations SET updated_at=? WHERE id=?`, time.Now().UTC().Add(-time.Duration(249-day)*24*time.Hour).Format(time.RFC3339Nano), operation)
 			testutil.FailErr(t, "date publication receipt", err)
 		}
-		_, err := db.RunRetention(t.Context(), database, db.DefaultRetention())
+		_, err := db.RunMaintenancePass(t.Context(), database, db.DefaultRetention(), true)
 		testutil.FailErr(t, "maintain completed history", err)
 		if (day+1)%50 == 0 {
 			t.Logf("completed %d working days / %d real saves", day+1, (day+1)*100)

@@ -41,7 +41,7 @@ func TestFetchDestinationBindsSchemeAndPort(t *testing.T) {
 
 func TestWebSearchDestinationBindsResolvedProviderSet(t *testing.T) {
 	t.Parallel()
-	reg := testRegistry(t)
+	reg := testRegistry(t, nil)
 	base := Settings{SearchEnabled: true, Config: map[string]map[string]string{}}
 	cat := reg.Catalog()
 	for _, entry := range cat.Entries() {

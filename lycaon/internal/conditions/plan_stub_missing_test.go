@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/conditions"
+	"github.com/lycaon/lycaon/internal/testutil/conditionstest"
 )
 
 func TestPlanStubMissingRequiredWrongHeadings(t *testing.T) {
@@ -29,7 +30,7 @@ func TestPlanStubMissingRequiredWrongHeadings(t *testing.T) {
 }
 
 func TestPlanStubMissingRequiredComplete(t *testing.T) {
-	body := conditions.TestPlanContentStubOnly
+	body := conditionstest.PlanStub
 	if got := conditions.PlanStubMissingRequired(body); len(got) != 0 {
 		t.Fatalf("complete stub missing=%v", got)
 	}

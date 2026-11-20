@@ -222,7 +222,7 @@ func TestCheckpointCreatedObjectsUpdateRetainedStockAndReopen(t *testing.T) {
 	exec := NewGitExecutor(mgr, viewID, RemotePolicy{})
 
 	// Lazy-init private repository on mounted view and check baseline retained stock.
-	_, err := exec.Status(ctx, "--porcelain")
+	_, err := exec.Run(ctx, ".", "status", "--porcelain")
 	testutil.FailErr(t, "exec.Status init", err)
 
 	mInit := mgr.Store().Metrics()
@@ -237,7 +237,7 @@ func TestCheckpointCreatedObjectsUpdateRetainedStockAndReopen(t *testing.T) {
 	testutil.FailErr(t, "core.WriteFile checkpoint-stock.txt", err)
 	_, err = exec.Run(ctx, ".", "add", "checkpoint-stock.txt")
 	testutil.FailErr(t, "exec.Run add", err)
-	_, err = exec.Commit(ctx, "worker checkpoint commit")
+	_, err = exec.Run(ctx, ".", "commit", "-m", "worker checkpoint commit")
 	testutil.FailErr(t, "exec.Commit", err)
 
 	cpState, err := mgr.CaptureCheckpointGitState(ctx, viewID, "cp-stock-1")

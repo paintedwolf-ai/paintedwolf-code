@@ -52,7 +52,7 @@ func TestPortablePackIsPortable(t *testing.T) {
 		t.Fatal("portable pack loaded no rules")
 	}
 	for _, r := range rules {
-		rep := LintPortability(r)
+		rep := lintPortability(r)
 		if !rep.Portable {
 			t.Errorf("%s is not portable: host_anchor=%q host_facts=%v", r.Qualified(), rep.HostAnchor, rep.HostFacts)
 		}

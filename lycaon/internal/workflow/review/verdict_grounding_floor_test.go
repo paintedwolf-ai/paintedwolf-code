@@ -2,9 +2,9 @@ package review_test
 
 import (
 	"context"
+	"github.com/lycaon/lycaon/internal/testutil/conditionstest"
 	"testing"
 
-	"github.com/lycaon/lycaon/internal/conditions"
 	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/testutil"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
@@ -50,7 +50,7 @@ func TestParseVerdictClaims(t *testing.T) {
 
 func TestRecordReviewLoopVerdictGroundingFloor(t *testing.T) {
 	mgr, _, blueprintMgr, _ := testManager(t)
-	setTestRegistry(t, mgr, blueprintMgr, conditions.TestRegistryDeps())
+	setTestRegistry(t, mgr, blueprintMgr, conditionstest.Dependencies())
 	ctx := context.Background()
 	startReviewLoopRun(ctx, t, mgr)
 

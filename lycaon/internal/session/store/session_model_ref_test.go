@@ -16,7 +16,7 @@ import (
 
 func TestSessionStoreRequiresCompleteModelRef(t *testing.T) {
 	dir := t.TempDir()
-	sqlDB := testdbfixture.OpenPath(t, filepath.Join(dir, "store.db"))
+	sqlDB := testdbfixture.OpenPath(t, filepath.Join(dir, "store.core.db.db"))
 	testdbseed.InsertProjectRoot(t, sqlDB, testdbseed.DefaultProjectID, dir)
 
 	sessionStore := NewSQL(sqlDB)
@@ -26,7 +26,7 @@ func TestSessionStoreRequiresCompleteModelRef(t *testing.T) {
 	}
 	for requestName, req := range requests {
 		t.Run(requestName, func(t *testing.T) {
-			_, err := sessionStore.Create(t.Context(), req, testdbseed.DefaultProjectID)
+			_, err := sessionStore.Sessions.Create(t.Context(), req, testdbseed.DefaultProjectID)
 			if !errors.Is(err, ErrSessionModelRefIncomplete) {
 				t.Fatalf("Create error = %v, want %v", err, ErrSessionModelRefIncomplete)
 			}
@@ -36,7 +36,7 @@ func TestSessionStoreRequiresCompleteModelRef(t *testing.T) {
 
 func TestSessionSchemaRequiresCompleteModelRef(t *testing.T) {
 	dir := t.TempDir()
-	sqlDB := testdbfixture.OpenPath(t, filepath.Join(dir, "store.db"))
+	sqlDB := testdbfixture.OpenPath(t, filepath.Join(dir, "store.core.db.db"))
 	testdbseed.InsertProject(t, sqlDB, testdbseed.DefaultProjectID)
 
 	now := time.Now().UTC().Format(time.RFC3339Nano)

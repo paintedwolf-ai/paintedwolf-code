@@ -75,15 +75,3 @@ func NewDefaultRegistry(deps RegistryDeps) (*ConditionRegistry, error) {
 	}
 	return reg, nil
 }
-
-// TestRegistryDeps wires shipped predicates for unit tests with no active delegation.
-func TestRegistryDeps() RegistryDeps {
-	return RegistryDeps{
-		BlueprintGet: func(_ context.Context, blueprintPath string) (*api.Blueprint, error) {
-			return &api.Blueprint{Path: blueprintPath, Content: TestPlanContentWithTasks}, nil
-		},
-		PlanCloseout: func(context.Context, string) (bool, error) {
-			return true, nil
-		},
-	}
-}
