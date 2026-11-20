@@ -227,7 +227,13 @@ host_facts:
    observation: True when the invocation's process was still running when observed.
  - name: paintedwolf.refused_write_paths
    type: list<string>
-   observation: Refused write paths covered by ordinary path recovery.
+   observation: Paths the kernel refused the invocation's processes for writing, at any layer; empty when none.
+ - name: paintedwolf.ordinary_write_paths
+   type: list<string>
+   observation: Refused paths eligible for write-root recovery outside shared temporary directories.
+ - name: paintedwolf.ordinary_write_grants
+   type: list<string>
+   observation: Requestable write-root grants for filesystem refusals outside shared temporary directories.
  - name: paintedwolf.refused_shared_temp
    type: list<string>
    observation: Shared temporary directories refused for writing in this occurrence.

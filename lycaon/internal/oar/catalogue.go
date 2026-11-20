@@ -105,6 +105,8 @@ var factDecls = []factDecl{
 	{"confine_signals", oarcore.TypeListString, FactTierHost, ""},
 	{"failed_stages", oarcore.TypeListString, FactTierHost, ""},
 	{"process_running", oarcore.TypeBool, FactTierHost, ""},
+	{"ordinary_write_paths", oarcore.TypeListString, FactTierHost, ""},
+	{"ordinary_write_grants", oarcore.TypeListString, FactTierHost, ""},
 	{"refused_write_paths", oarcore.TypeListString, FactTierHost, ""},
 	{"refused_write_grants", oarcore.TypeListString, FactTierHost, ""},
 	{"refused_read_paths", oarcore.TypeListString, FactTierHost, ""},

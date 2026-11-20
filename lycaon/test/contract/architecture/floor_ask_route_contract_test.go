@@ -19,7 +19,7 @@ import (
 // refusedGrantFact is the host fact that names each capability's grant for a
 // path the applied profile refused.
 var refusedGrantFact = map[string]string{
-	"write_root":       "paintedwolf.refused_write_grants",
+	"write_root":       "paintedwolf.ordinary_write_grants",
 	"read_path":        "paintedwolf.refused_read_grants",
 	"credential_store": "paintedwolf.refused_credential_store_paths",
 }
@@ -32,6 +32,16 @@ func TestEveryFloorLayerReachesAnAskOrIsTheControlPlane(t *testing.T) {
 	t.Parallel()
 	rules := stockPostInvokeRules(t)
 	for _, layer := range confine.FloorLayers() {
+		if layer == confine.FloorSharedTemp {
+			for _, code := range []string{isolation.CodeSharedTempRefused, isolation.CodeSharedTempTolerated} {
+				if !slices.ContainsFunc(rules, func(rule *oar.Rule) bool {
+					return rule.ID == code && rule.Anchor == oar.AnchorSharedTemp && slices.Contains(oar.FactsReferenced(rule.When, rule.Flow), "paintedwolf.refused_shared_temp")
+				}) {
+					t.Errorf("%s: missing post-run shared temp settlement %s", layer, code)
+				}
+			}
+			continue
+		}
 		recovery := layer.Recovery()
 		if recovery.Terminal() {
 			if layer != confine.FloorControlPlane && layer != confine.FloorReadControlPlane {
@@ -122,7 +132,7 @@ func stockPostInvokeRules(t *testing.T) []*oar.Rule {
 	contractcheck.FailErr(t, "load stock policy", err)
 	var out []*oar.Rule
 	for _, rule := range rules.All() {
-		if rule.Anchor == oar.AnchorToolPost {
+		if rule.Anchor == oar.AnchorToolPost || rule.Anchor == oar.AnchorSharedTemp {
 			out = append(out, rule)
 		}
 	}

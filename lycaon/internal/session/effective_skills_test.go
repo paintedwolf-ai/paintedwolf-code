@@ -326,7 +326,6 @@ func TestWriteRootAndReadPathBrokerResults(t *testing.T) {
 	ctx := t.Context()
 	projectDir := t.TempDir()
 
-	// 1. InRoots ordinary subject (sandbox_write_root_broker.go line 99)
 	resInRoots, err := broker.Authorize(ctx, command.SandboxWriteRootAsk{
 		SessionID: "sess", ProjectDir: projectDir, ProposedWriteRoot: filepath.Join(projectDir, "sub"),
 	})
@@ -335,8 +334,7 @@ func TestWriteRootAndReadPathBrokerResults(t *testing.T) {
 		t.Fatalf("resInRoots = %+v, want authorized", resInRoots)
 	}
 
-	// 2. ApprovalsDisabled autoGrant (sandbox_write_root_broker.go line 154)
-	outsideRoot := filepath.Join(t.TempDir(), "outside")
+	outsideRoot := "/opt/paintedwolf-broker-test-nonexistent/outside"
 	resAuto, err := broker.Authorize(ctx, command.SandboxWriteRootAsk{
 		SessionID: "sess", ProjectDir: projectDir, ProposedWriteRoot: outsideRoot,
 	})
@@ -345,7 +343,6 @@ func TestWriteRootAndReadPathBrokerResults(t *testing.T) {
 		t.Fatalf("resAuto = %+v, want authorized", resAuto)
 	}
 
-	// 3. Exact overlay match for non-ordinary subject (sandbox_write_root_broker.go line 102)
 	exactPath := filepath.Join(t.TempDir(), ".ssh", "id_ed25519")
 	runtime.GrantSessionWriteRoot("sess", exactPath)
 	resExact, err := broker.Authorize(ctx, command.SandboxWriteRootAsk{
@@ -356,7 +353,6 @@ func TestWriteRootAndReadPathBrokerResults(t *testing.T) {
 		t.Fatalf("resExact = %+v, want authorized", resExact)
 	}
 
-	// 4. Rule deny (sandbox_write_root_broker.go line 110)
 	broker.ApprovalsDisabled = nil
 	broker.Rule = func(context.Context, string, string, string) (settings.ApprovalRule, bool) {
 		return settings.ApprovalRule{Effect: settings.ApprovalEffectDeny}, true
@@ -369,7 +365,6 @@ func TestWriteRootAndReadPathBrokerResults(t *testing.T) {
 		t.Fatalf("resDeny = %+v, want denied", resDeny)
 	}
 
-	// 5. AuthorizeRead autoGrant (sandbox_read_path_broker.go line 69)
 	broker.Rule = nil
 	broker.ApprovalsDisabled = func(string) bool { return true }
 	readRes, err := broker.AuthorizeRead(ctx, command.SandboxReadPathAsk{

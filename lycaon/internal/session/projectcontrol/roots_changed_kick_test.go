@@ -172,7 +172,7 @@ func TestEnqueuePostureChangedKickCoalescesAndDropsNoOp(t *testing.T) {
 	}
 	text, lease, ok, err := kicks.RenderPendingNudge(ctx, "sess-1", kick.CoordinatorKickRenderContext{})
 	testutil.FailErr(t, "render strict posture nudge", err)
-	if !ok || strings.TrimSpace(text) != "The person now wants to approve writes outside the project, including temporary folders." {
+	if !ok || strings.TrimSpace(text) != "Declared writes outside the project and scratch now require review, including writes to standard caches." {
 		t.Fatalf("strict nudge = %q (ok=%v)", text, ok)
 	}
 	kicks.AckPendingNudge("sess-1", lease)
@@ -185,7 +185,7 @@ func TestEnqueuePostureChangedKickCoalescesAndDropsNoOp(t *testing.T) {
 	}
 	text2, lease2, ok, err := kicks.RenderPendingNudge(ctx, "sess-1", kick.CoordinatorKickRenderContext{})
 	testutil.FailErr(t, "render non-strict posture nudge", err)
-	if !ok || strings.TrimSpace(text2) != "The person now allows writes to temporary and cache folders without asking; other paths outside the project still ask first." {
+	if !ok || strings.TrimSpace(text2) != "Confined programs can now write standard caches and package stores without a separate review." {
 		t.Fatalf("non-strict nudge = %q (ok=%v)", text2, ok)
 	}
 	kicks.AckPendingNudge("sess-1", lease2)
@@ -274,7 +274,7 @@ func TestRepositoryApprovalsOverlayTighteningChangesPromptAndEnqueuesNotice(t *t
 		t.Fatalf("turn 2 posture = %q want strict", surface2.Posture)
 	}
 	prompt2 := renderPrompt(surface2)
-	if strings.Contains(prompt2, "except temporary and cache folders") {
+	if !strings.Contains(prompt2, "Declared writes outside these folders and scratch are reviewed.") {
 		t.Fatalf("turn 2 prompt kept non-strict copy:\n%s", prompt2)
 	}
 	if got := kicks.TakePendingKickIDUnless(sess.ID, nil); got != "coordinator-posture-changed" {
@@ -282,7 +282,7 @@ func TestRepositoryApprovalsOverlayTighteningChangesPromptAndEnqueuesNotice(t *t
 	}
 	notice, lease, ok, err := kicks.RenderPendingNudge(ctx, sess.ID, kick.CoordinatorKickRenderContext{})
 	testutil.FailErr(t, "render overlay tightening notice", err)
-	if !ok || strings.TrimSpace(notice) != "The person now wants to approve writes outside the project, including temporary folders." {
+	if !ok || strings.TrimSpace(notice) != "Declared writes outside the project and scratch now require review, including writes to standard caches." {
 		t.Fatalf("overlay tightening notice = %q (ok=%v)", notice, ok)
 	}
 	kicks.AckPendingNudge(sess.ID, lease)

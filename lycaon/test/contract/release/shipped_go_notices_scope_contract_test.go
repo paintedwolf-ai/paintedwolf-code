@@ -11,6 +11,7 @@ import (
 
 // Staged Go binaries and notice inputs must name the same package roots.
 var (
+	guestGoPackagePattern   = regexp.MustCompile(`"go",\s*"build",[^\]]*?"(\./cmd/[\w.-]+)"`)
 	stagedGoPackagePattern  = regexp.MustCompile(`go build\b[^\n]*\s(\./cmd/[\w.-]+)`)
 	noticesGoPackagePattern = regexp.MustCompile(`(?s)SHIPPED_GO_PACKAGES=\((.*?)\)`)
 )
@@ -20,9 +21,22 @@ func TestNoticesCoverEveryStagedGoBinary(t *testing.T) {
 	t.Parallel()
 	root := contractcheck.RepoRoot(t)
 
-	staged := stagedGoPackages(t, contractcheck.ReadRepoFile(t, root, "scripts/stage-engine.sh"))
+	stage := contractcheck.ReadRepoFile(t, root, "scripts/stage-engine.sh")
+	staged := stagedGoPackages(t, stage)
 	if len(staged) == 0 {
 		t.Fatal("scripts/stage-engine.sh: no `go build ./cmd/...` invocations found — the extraction pattern is stale")
+	}
+
+	if !strings.Contains(stage, "scripts/service-guest/assemble.py") {
+		t.Fatal("private service guest assembler missing from release staging")
+	}
+	guest := contractcheck.ReadRepoFile(t, root, "scripts/service-guest/assemble.py")
+	roots := guestGoPackagePattern.FindAllStringSubmatch(guest, -1)
+	if len(roots) == 0 {
+		t.Fatal("no guest supervisor package found in guest assembly")
+	}
+	for _, row := range roots {
+		staged = append(staged, row[1])
 	}
 
 	covered := noticesGoPackages(t, contractcheck.ReadRepoFile(t, root, "scripts/licenses-notices.sh"))

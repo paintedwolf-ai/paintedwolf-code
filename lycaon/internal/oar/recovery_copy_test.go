@@ -15,7 +15,7 @@ func TestRecoveryRecipesRequireUnrequestedSupportedCapabilities(t *testing.T) {
 	testutil.FailErr(t, "load recovery catalog", err)
 	for _, tc := range []struct{ code, field, target string }{
 		{"SANDBOX_TRY_READ_PATH", "read_path", "refused_read_grants"},
-		{"SANDBOX_TRY_WRITE_ROOT", "write_root", "refused_write_grants"},
+		{"SANDBOX_TRY_WRITE_ROOT", "write_root", "ordinary_write_grants"},
 		{"SANDBOX_TRY_SOCKET_PATH", "socket_paths", "refused_socket_paths"},
 		{"SANDBOX_TRY_CREDENTIAL_STORE", "credential_store", ""},
 		{"SANDBOX_TRY_PROCESS_CONTROL", "process_control", "refused_signals"},

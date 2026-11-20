@@ -108,13 +108,17 @@ func TestSharedTempRefusalsKeepEveryOtherCapability(t *testing.T) {
 		}
 		gc := oar.NewGuardContext()
 		ObserveConfine(gc, confine.Observation{Applied: true, Refusals: subset})
-		groups := [][]string{gc.Refusals.RefusedReadGrants, gc.Refusals.RefusedWriteGrants, subset.SharedTempRoots(), gc.Refusals.RefusedTerminalWritePaths, gc.Refusals.RefusedCredentialStorePaths, gc.Refusals.RefusedSocketPaths, gc.Refusals.RefusedSignals, gc.Refusals.UnsandboxedRefusals, gc.Refusals.RefusedListenPorts, gc.Refusals.RefusedConnectPorts, gc.Refusals.RefusedTerminalReadPaths}
+		groups := [][]string{gc.Refusals.RefusedReadGrants, gc.Refusals.OrdinaryWriteGrants, subset.SharedTempRoots(), gc.Refusals.RefusedTerminalWritePaths, gc.Refusals.RefusedCredentialStorePaths, gc.Refusals.RefusedSocketPaths, gc.Refusals.RefusedSignals, gc.Refusals.UnsandboxedRefusals, gc.Refusals.RefusedListenPorts, gc.Refusals.RefusedConnectPorts, gc.Refusals.RefusedTerminalReadPaths}
 		for i, group := range groups {
 			if (len(group) > 0) != (mask&(1<<i) != 0) {
 				t.Fatalf("subset %b group %d=%v", mask, i, group)
 			}
 		}
-		if slices.Contains(gc.Refusals.RefusedWritePaths, "/tmp/slot") || slices.Contains(gc.Refusals.RefusedWriteGrants, "/tmp") {
+		hasTemp := mask&(1<<2) != 0
+		if slices.Contains(gc.Refusals.RefusedWritePaths, "/tmp/slot") != hasTemp || slices.Contains(gc.Refusals.RefusedWriteGrants, "/tmp") != hasTemp {
+			t.Fatalf("published write observation missing from subset %b", mask)
+		}
+		if slices.Contains(gc.Refusals.OrdinaryWritePaths, "/tmp/slot") || slices.Contains(gc.Refusals.OrdinaryWriteGrants, "/tmp") {
 			t.Fatalf("temp leaked into ordinary writes in subset %b", mask)
 		}
 	}
