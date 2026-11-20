@@ -162,6 +162,7 @@ func Build(ctx context.Context, deps Dependencies) (*Runtime, error) {
 
 	return &Runtime{
 		Manager:      mgr,
+		Store:        deps.Storage.Sessions,
 		PromptEngine: promptEngine,
 		Invocations:  invocations,
 	}, nil

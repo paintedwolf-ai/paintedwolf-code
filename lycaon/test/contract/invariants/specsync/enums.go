@@ -164,7 +164,7 @@ func waitTriggersAgree(r *invariants.Run) {
 	r.Expect(len(schema), "wait condition kinds")
 	var host []string
 	for _, trigger := range stringConsts(r, "internal/coordinator/loopwake", "WaitTrigger") {
-		if trigger != string(loopwake.WaitTriggerTimer) {
+		if trigger != string(loopwake.WaitTriggerTimer) && trigger != string(loopwake.WaitTriggerProgramDone) {
 			host = append(host, trigger)
 		}
 	}
