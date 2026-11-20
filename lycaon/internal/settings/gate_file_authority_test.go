@@ -30,7 +30,7 @@ func TestNativeWriteTargetsRequireMutationAuthority(t *testing.T) {
 	if len(targets) != 2 || targets[0].WithinConfinement || !targets[1].WithinConfinement {
 		t.Fatalf("mixed native targets = %+v", targets)
 	}
-	action.Execution.Contained.GrantedWriteRoots = []string{shared}
+	action.Scope.GrantedWriteRoots = []string{shared}
 	targets = g.declaredFileTargets(action)
 	if len(targets) != 2 || !targets[0].WithinConfinement {
 		t.Fatalf("reviewed write = %+v", targets)

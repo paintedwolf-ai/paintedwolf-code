@@ -43,6 +43,7 @@ func (e *Boundary) fileChangeReviewer(tool string, args map[string]any, tc tools
 			}
 			return nil
 		}
+		confReq := e.actionConfineRequest(ctx, tc)
 		action := hitl.ProposedAction{
 			Invocation: hitl.ActionInvocation{
 				NativeInputs:       tc.Invocation.NativeInputs,
@@ -58,9 +59,10 @@ func (e *Boundary) fileChangeReviewer(tool string, args map[string]any, tc tools
 				RootSessionID:      tc.ChatSessionID(),
 				SessionScratchRoot: tc.Host.SessionScratchDir,
 				SessionOutputRoot:  tc.Host.SessionOutputDir,
+				GrantedWriteRoots:  append([]string(nil), confReq.GrantedWriteRoots...),
 			},
 			Execution: hitl.ActionExecution{
-				Contained: hitl.ContainedForRequest(e.actionConfineRequest(ctx, tc)),
+				Contained: hitl.ContainedForRequest(confReq),
 			},
 		}
 		files, policies := map[string]bool{}, map[string]bool{}

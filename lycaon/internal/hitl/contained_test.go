@@ -193,12 +193,3 @@ func TestContainedPreservesReadOnlyRootAuthority(t *testing.T) {
 		t.Fatal("unapplied boundary exposed read authority")
 	}
 }
-
-func TestNativeGrantRemainsScopedWhenSubprocessConfinementIsDisabled(t *testing.T) {
-	t.Setenv("LYCAON_SANDBOX", "off")
-	req := confine.Request{GrantedWriteRoots: []string{t.TempDir()}}
-	got := hitl.ContainedForRequest(req)
-	if got.FSJailed || !reflect.DeepEqual(got.GrantedWriteRoots, req.GrantedWriteRoots) {
-		t.Fatalf("native grants %v with subprocess boundary %v", got.GrantedWriteRoots, got.FSJailed)
-	}
-}

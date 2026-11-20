@@ -167,7 +167,7 @@ func pathWithinFileAuthority(action hitl.ProposedAction, roots []string, path st
 	if !write && confine.PathWithinRoots(path, c.ReadRoots) {
 		return true
 	}
-	root, err := confine.NativeFilesystemRootForPath(action.Scope.ProjectID, roots, c.GrantedWriteRoots, action.Scope.SessionScratchRoot, path, write)
+	root, err := confine.NativeFilesystemRootForPath(action.Scope.ProjectID, roots, action.Scope.GrantedWriteRoots, action.Scope.SessionScratchRoot, path, write)
 	return err == nil && root != ""
 }
 
