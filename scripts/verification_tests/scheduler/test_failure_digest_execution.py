@@ -1,6 +1,7 @@
 import json
 import os
 from pathlib import Path
+import select
 import signal
 import tempfile
 import unittest
@@ -286,9 +287,21 @@ class DigestDelivery(support.BatchFixture):
         self.assertEqual(lines[1], "Request build: cancelled, exit 130.")
         self.assertIn("Reason: fixture", lines)
 
+    def await_subscriber_notice(self, process, notice):
+        received = bytearray()
+
+        def observed():
+            if select.select([process.stderr], [], [], 0)[0]:
+                chunk = os.read(process.stderr.fileno(), 4096)
+                self.assertTrue(chunk, f"subscriber exited before {notice!r}: {received!r}")
+                received.extend(chunk)
+            return notice in received
+
+        self.await_condition(observed)
+
     def test_ac_ver_03_interrupted_subscriber_reports_unverified(self):
         process = self.start("build")
-        self.queued(1)
+        self.await_subscriber_notice(process, b"test execution: build: paused\n")
         os.kill(process.pid, signal.SIGTERM)
         stdout, _ = self.finish(process, 130)
         lines = self.assert_digest_ends(stdout)
@@ -299,8 +312,7 @@ class DigestDelivery(support.BatchFixture):
         process = self.start("build")
         self.queued(1)
         self.queue.resume()
-        while "joined batch" not in process.stderr.readline():
-            pass
+        self.await_subscriber_notice(process, b"test execution: build joined batch ")
         os.kill(process.pid, signal.SIGTERM)
         stdout, _ = self.finish(process, 130)
         lines = self.assert_digest_ends(stdout)
