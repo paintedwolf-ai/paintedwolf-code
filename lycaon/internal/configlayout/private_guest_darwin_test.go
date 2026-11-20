@@ -121,3 +121,26 @@ func TestPrivateGuestBootFileRequiresExclusiveCustody(t *testing.T) {
 	testutil.FailErr(t, "release mapping", unix.Munmap(mapping))
 	testutil.FailErr(t, "establish exclusive custody", verifyUnlinkedBootFile(rd))
 }
+
+func TestPrivateGuestResolvesItsCompiledChannel(t *testing.T) {
+	app := filepath.Join(t.TempDir(), "Painted Wolf Code.app")
+	contents := filepath.Join(app, "Contents")
+	host := filepath.Join(contents, "Helpers", "Painted Wolf Code engine.app", "Contents", "MacOS", "pw")
+	testutil.FailErr(t, "create engine bundle", os.MkdirAll(filepath.Dir(host), 0700))
+	testutil.FailErr(t, "seed engine", os.WriteFile(host, nil, 0700))
+	for _, development := range []bool{false, true} {
+		dir, seal, err := guestRuntimeLocation(host, development)
+		testutil.FailErr(t, "resolve bundled runtime", err)
+		if dir != filepath.Join(contents, "Resources", "service-guest") || (development && seal != "") || (!development && seal != app) {
+			t.Fatalf("development=%v runtime=%s seal=%s", development, dir, seal)
+		}
+	}
+	external := filepath.Join(t.TempDir(), "pw")
+	testutil.FailErr(t, "seed external engine", os.WriteFile(external, nil, 0700))
+	if _, _, err := guestRuntimeLocation(external, false); err == nil {
+		t.Fatal("release accepted an external stage")
+	}
+	if dir, seal, err := guestRuntimeLocation(external, true); err != nil || seal != "" || dir != filepath.Join(filepath.Dir(external), "service-guest") {
+		t.Fatalf("external dev runtime=%s seal=%s err=%v", dir, seal, err)
+	}
+}

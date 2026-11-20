@@ -39,14 +39,25 @@ func OpenPrivateGuestPayload() (*PrivateGuestPayload, error) {
 	if err != nil {
 		return nil, err
 	}
-	contents := MacOSAppContents(host)
-	if contents != "" {
-		return privateGuestPayload(filepath.Join(contents, "Resources", "service-guest"), root, filepath.Dir(contents))
+	bundle, app, err := guestRuntimeLocation(host, configdir.IsDevelopmentBuild())
+	if err != nil {
+		return nil, err
 	}
-	if configdir.IsDevelopmentBuild() {
-		return privateGuestPayload(filepath.Join(filepath.Dir(host), "service-guest"), root, "")
+	return privateGuestPayload(bundle, root, app)
+}
+
+func guestRuntimeLocation(host string, development bool) (bundle, app string, err error) {
+	if contents := MacOSAppContents(host); contents != "" {
+		bundle = filepath.Join(contents, "Resources", "service-guest")
+		if !development {
+			app = filepath.Dir(contents)
+		}
+		return bundle, app, nil
 	}
-	return nil, errors.New("private service runtime missing from application bundle")
+	if development {
+		return filepath.Join(filepath.Dir(host), "service-guest"), "", nil
+	}
+	return "", "", errors.New("private service runtime missing from application bundle")
 }
 
 func privateGuestPayload(bundle, root, app string) (_ *PrivateGuestPayload, err error) {
