@@ -60,18 +60,33 @@ root = pathlib.Path(os.environ["NOTICE_TEST_ROOT"])
 if sys.argv[1] == "check":
     if "./cmd/pw-service-guest" in sys.argv:
         (root / "guest_checked.json").write_text(json.dumps([os.environ["GOOS"], os.environ["CGO_ENABLED"]]))
-        raise SystemExit(37)
-    (root / "checked.json").write_text(json.dumps(sys.argv[1:]))
-    if os.environ["GOOS"] != "darwin":
-        raise SystemExit(37)
+    else:
+        (root / "checked.json").write_text(json.dumps(sys.argv[1:]))
+        if os.environ["GOOS"] != "darwin":
+            raise SystemExit(37)
 elif sys.argv[1] == "csv":
-    print("fixture/module,https://example.com,MIT")
+    print("shared,https://example.com,MIT")
+    if "./cmd/pw-service-guest" in sys.argv:
+        print("guest,https://example.com,MIT")
 elif sys.argv[1] == "save":
     path = next(arg.split("=", 1)[1] for arg in sys.argv if arg.startswith("--save_path="))
-    pathlib.Path(path).mkdir()
+    dest = pathlib.Path(path)
+    dest.mkdir()
+    names = ("shared", "guest") if "./cmd/pw-service-guest" in sys.argv else ("shared", "host")
+    for name in names:
+        file = dest / name
+        file.write_text(name)
+        file.chmod(0o444)
 ''',
                     "cargo-about": "#!/bin/sh\nexit 0\n",
-                    "bun": "#!/bin/sh\nexit 0\n",
+                    "bun": '''#!/usr/bin/env python3
+import pathlib, sys
+work = pathlib.Path(sys.argv[sys.argv.index("--out") + 1]).parent
+for name in ("host", "guest", "shared"):
+    assert (work / "go-save" / name).read_text() == name
+assert len((work / "go.csv").read_text().splitlines()) == 2
+raise SystemExit(37)
+''',
                 }
                 for name, body in stubs.items():
                     executable = binaries / name
