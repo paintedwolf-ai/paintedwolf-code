@@ -162,9 +162,9 @@ func TestCompactionViewExcludesTranscriptChrome(t *testing.T) {
 			cfg.ChunkStrategyDefault = "truncate"
 			cfg.TargetTokens = 100
 			mgr, st := newCompactionManager(t, cfg)
-			sess, err := st.Create(t.Context(), api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
+			sess, err := st.Sessions.Create(t.Context(), api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
 			testutil.FailErr(t, "create session", err)
-			testutil.FailErr(t, "append history", st.AppendMessages(t.Context(), sess.ID,
+			testutil.FailErr(t, "append history", st.Transcript.AppendMessages(t.Context(), sess.ID,
 				api.Message{ID: "request", Role: api.MessageRoleUser, Content: "Plan the change"},
 				api.Message{ID: "boundary", Role: api.MessageRoleSystem, Kind: api.MessageKindWorkflowBoundary, WorkflowBoundary: &api.WorkflowBoundaryMeta{Event: "started", Phase: "research"}},
 				api.Message{ID: "evidence", Role: api.MessageRoleAssistant, Content: strings.Repeat("Prior evidence\n", 1000)},
@@ -175,7 +175,7 @@ func TestCompactionViewExcludesTranscriptChrome(t *testing.T) {
 				_, err = mgr.ForceCompact(t.Context(), sess.ID)
 				testutil.FailErr(t, "compact session", err)
 			}
-			published, ok, err := st.GetCompactionView(t.Context(), sess.ID)
+			published, ok, err := st.Compaction.GetCompactionView(t.Context(), sess.ID)
 			testutil.FailErr(t, "read published view", err)
 			if !ok {
 				t.Fatal("compaction did not publish a view")

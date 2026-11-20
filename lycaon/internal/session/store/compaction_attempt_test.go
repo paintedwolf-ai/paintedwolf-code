@@ -18,7 +18,7 @@ func TestCompactionAttemptSurvivesStoreReopen(t *testing.T) {
 	testutil.FailErr(t, "create session", err)
 	want := messageview.CompactionAttempt{Revision: "exact-revision", Reason: "insufficient_savings"}
 	testutil.FailErr(t, "save no-op", st.Compaction.PutCompactionAttempt(t.Context(), sess.ID, want))
-	got, found, err := NewSQL(database).GetCompactionAttempt(t.Context(), sess.ID)
+	got, found, err := NewSQL(database).Compaction.GetCompactionAttempt(t.Context(), sess.ID)
 	testutil.FailErr(t, "reload no-op", err)
 	if !found || got != want {
 		t.Fatalf("memo lost: %+v found=%v", got, found)

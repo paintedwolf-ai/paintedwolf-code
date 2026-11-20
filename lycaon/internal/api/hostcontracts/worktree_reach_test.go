@@ -319,7 +319,7 @@ func TestWorktreeReachSourceHistoryCannotChangeGitRepositoryIdentity(t *testing.
 // orders the repositories through it.
 func orderedRepos(t *testing.T, srv *hostapi.Server, p *project.Project, roots []projectroot.RootRef, activeRootID, sessionID string) []git.RepoRef {
 	t.Helper()
-	scope, err := requestscope.ResolveSessionProject(srv.Sources.Workspace.SessionStore, t.Context(), p, sessionID)
+	scope, err := requestscope.ResolveSessionProject(srv.Admin.SessionAdmin.Lifecycle.SessionStore, t.Context(), p, sessionID)
 	testutil.FailErr(t, "resolve session scope", err)
 	if sessionID != "" {
 		roots = scope.Project.SourceRoots()

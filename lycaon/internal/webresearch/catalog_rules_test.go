@@ -106,7 +106,7 @@ func TestKeyedExtraProviderRequiresItsCatalogExtraFields(t *testing.T) {
 	if err != nil {
 		t.Fatalf("shipped catalog: %v", err)
 	}
-	reg := NewRegistry(cat)
+	reg := NewRegistry(cat, nil)
 	if err := RegisterCatalogProviders(t.Context(), reg); err != nil {
 		t.Fatalf("register catalog providers: %v", err)
 	}

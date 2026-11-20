@@ -3,15 +3,12 @@ package sourceledger
 import (
 	"testing"
 
-	"github.com/lycaon/lycaon/internal/repochange"
 	"github.com/lycaon/lycaon/internal/testutil"
 )
 
 // Opening a window waits for its start inventory however long that takes, so a
 // slow machine still attributes the command's changes to its window.
 func TestSlowWindowStartStillAttributesTheCommand(t *testing.T) {
-	repochange.DisableWatchersForTest()
-	t.Cleanup(repochange.ResetWatchersForTest)
 	store, ctx, root := openLedgerOnDisk(t)
 	writeRootFile(t, root, "out.txt", "before\n")
 	real := store.Commands.inventory

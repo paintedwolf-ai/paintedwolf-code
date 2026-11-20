@@ -74,13 +74,13 @@ func TestCompletionPreservesUnconfirmedFailure(t *testing.T) {
 	failure := errors.New("write failed")
 	for _, current := range []*store.PromptSubmission{nil, {Status: store.PromptSubmissionRunning, ClaimToken: "claim"}, {Status: store.PromptSubmissionComplete, ClaimToken: "claim"}} {
 		st := completionFailureStore{finishErr: failure, row: current}
-		service := &Service{sessionStore: st.Sessions, submissionStore: st.Submissions, people: st.People, SubmissionState: &submissionstate.Service{}}
+		service := &Service{submissionStore: st, SubmissionState: &submissionstate.Service{}}
 		if err := service.finishSubmission(t.Context(), &store.PromptSubmission{ID: "id", ClaimToken: "claim"}, nil, nil); !errors.Is(err, failure) {
 			t.Fatalf("lost completion failure: %v", err)
 		}
 	}
 	st := completionFailureStore{finishErr: failure, readErr: errors.New("read failed"), row: &store.PromptSubmission{Status: store.PromptSubmissionInterrupted, ClaimToken: "claim"}}
-	service := &Service{sessionStore: st.Sessions, submissionStore: st.Submissions, people: st.People, SubmissionState: &submissionstate.Service{}}
+	service := &Service{submissionStore: st, SubmissionState: &submissionstate.Service{}}
 	if err := service.finishSubmission(t.Context(), &store.PromptSubmission{ID: "id", ClaimToken: "claim"}, nil, nil); !errors.Is(err, failure) {
 		t.Fatalf("unreadable receipt masked completion failure: %v", err)
 	}

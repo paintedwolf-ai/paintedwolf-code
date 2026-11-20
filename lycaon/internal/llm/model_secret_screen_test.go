@@ -734,7 +734,7 @@ func TestRequestEvidenceReplacesStaleManagedReferenceWithoutMutatingHarvest(t *t
 
 // ScreenOutbound applies the installed final screen, and refuses before one is installed.
 func TestRegistryScreenOutboundUsesTheInstalledScreen(t *testing.T) {
-	reg := newEmptyRegistry()
+	reg := &Registry{}
 	req := modelcall.CompletionRequest{Messages: []api.Message{{Role: api.MessageRoleUser, Content: "token " + modelScreenGitHubToken}}}
 	var fault *ModelRequestSecretScreenFaultError
 	if _, err := reg.ScreenOutbound(t.Context(), ScreenDestination{ID: "test"}, req); !errors.As(err, &fault) {

@@ -123,7 +123,7 @@ func TestElevatedAccessRevokeHasNoBulkIDCeiling(t *testing.T) {
 // An unknown session answers session_not_found on both routes and leaves
 // another chat's authority in place.
 func TestElevatedAccessUnknownSessionNotFound(t *testing.T) {
-	s, chat := elevatedTestHandler(t)
+	s, chat, _ := elevatedTestHandler(t)
 	addElevatedGrant(t, s, chat, "grant_kept")
 	router := chi.NewRouter()
 	router.Get("/v1/sessions/{id}/elevated-access", s.Access.HandleGetElevatedAccess)

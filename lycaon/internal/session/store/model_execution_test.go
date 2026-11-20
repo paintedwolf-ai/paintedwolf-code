@@ -63,7 +63,7 @@ func TestModelAllowanceUsesSettledOutputsAcrossTurns(t *testing.T) {
 	if err := st.Turns.SealTurnCloseout(ctx, TurnCloseoutCommit{TurnID: second.Turn.ID, AttemptID: second.Attempt.ID, OutputID: last.ID, Message: &api.Message{ID: last.MessageID, Content: "Changed"}, CheckpointJSON: "{}"}); err == nil {
 		t.Fatal("sealed closeout changed")
 	}
-	if err := NewSQL(st.core.db.db).AdmitModelResponse(ctx, sess.ID, second.Attempt.ID); !errors.Is(err, ErrModelResponseLimit) {
+	if err := NewSQL(st.core.db).Turns.AdmitModelResponse(ctx, sess.ID, second.Attempt.ID); !errors.Is(err, ErrModelResponseLimit) {
 		t.Fatalf("reopened allowance = %v", err)
 	}
 
@@ -112,19 +112,19 @@ func TestSQLCloseoutSurvivesHostTurnAndClearsOnNewUserAdmission(t *testing.T) {
 	_, err = st.Turns.FinishTurn(ctx, host.Turn.ID, host.Attempt.ID, TurnStatusComplete, "", "{}", "")
 	testutil.FailErr(t, "finish host wake", err)
 	var closeout string
-	err = st.core.db.db.QueryRowContext(ctx, `SELECT COALESCE(closeout_attempt_id,'') FROM session_turn_heads WHERE session_id=?`, sess.ID).Scan(&closeout)
+	err = st.core.db.QueryRowContext(ctx, `SELECT COALESCE(closeout_attempt_id,'') FROM session_turn_heads WHERE session_id=?`, sess.ID).Scan(&closeout)
 	testutil.FailErr(t, "read preserved closeout", err)
 	if closeout != first.Attempt.ID {
 		t.Fatalf("host wake changed closeout: %s", closeout)
 	}
 	begin(TurnOriginUser)
-	err = st.core.db.db.QueryRowContext(ctx, `SELECT COALESCE(closeout_attempt_id,'') FROM session_turn_heads WHERE session_id=?`, sess.ID).Scan(&closeout)
+	err = st.core.db.QueryRowContext(ctx, `SELECT COALESCE(closeout_attempt_id,'') FROM session_turn_heads WHERE session_id=?`, sess.ID).Scan(&closeout)
 	testutil.FailErr(t, "read new task", err)
 	if closeout != "" {
 		t.Fatal("new user task inherited old closeout")
 	}
 	var retained int
-	testutil.FailErr(t, "read audit retention", st.core.db.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM turn_attempt_closeouts`).Scan(&retained))
+	testutil.FailErr(t, "read audit retention", st.core.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM turn_attempt_closeouts`).Scan(&retained))
 	if retained != 1 {
 		t.Fatal("new task deleted immutable closeout history")
 	}
@@ -189,15 +189,15 @@ func TestCloseoutRollsBackWhenFinalizingCheckpointLosesItsClaim(t *testing.T) {
 	testutil.FailErr(t, "create session", err)
 	turn, err := st.Turns.BeginTurn(ctx, TurnStart{SessionID: sess.ID, ProjectID: sess.ProjectID, Origin: TurnOriginUser, InputJSON: "{}"})
 	testutil.FailErr(t, "begin turn", err)
-	_, err = st.core.db.db.ExecContext(ctx, "UPDATE turn_attempts SET status='interrupted' WHERE id=?", turn.Attempt.ID)
+	_, err = st.core.db.ExecContext(ctx, "UPDATE turn_attempts SET status='interrupted' WHERE id=?", turn.Attempt.ID)
 	testutil.FailErr(t, "invalidate attempt claim", err)
 	err = st.Turns.SealTurnCloseout(ctx, TurnCloseoutCommit{TurnID: turn.Turn.ID, AttemptID: turn.Attempt.ID, Message: &api.Message{ID: "message", Content: "Complete."}, CheckpointJSON: "{}"})
 	if err == nil {
 		t.Fatal("closeout committed after losing its finalizing claim")
 	}
 	var records, heads int
-	testutil.FailErr(t, "read closeout records", st.core.db.db.QueryRowContext(ctx, "SELECT count(*) FROM turn_attempt_closeouts WHERE turn_attempt_id=?", turn.Attempt.ID).Scan(&records))
-	testutil.FailErr(t, "read closeout head", st.core.db.db.QueryRowContext(ctx, "SELECT count(*) FROM session_turn_heads WHERE session_id=? AND closeout_attempt_id IS NOT NULL", sess.ID).Scan(&heads))
+	testutil.FailErr(t, "read closeout records", st.core.db.QueryRowContext(ctx, "SELECT count(*) FROM turn_attempt_closeouts WHERE turn_attempt_id=?", turn.Attempt.ID).Scan(&records))
+	testutil.FailErr(t, "read closeout head", st.core.db.QueryRowContext(ctx, "SELECT count(*) FROM session_turn_heads WHERE session_id=? AND closeout_attempt_id IS NOT NULL", sess.ID).Scan(&heads))
 	if records != 0 || heads != 0 {
 		t.Fatalf("partial closeout committed: records=%d heads=%d", records, heads)
 	}

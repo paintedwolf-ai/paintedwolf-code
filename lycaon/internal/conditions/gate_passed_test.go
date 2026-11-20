@@ -4,12 +4,13 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/conditions"
+	"github.com/lycaon/lycaon/internal/conditions/conditionstest"
 	"github.com/lycaon/lycaon/internal/testutil"
 )
 
 // gate_passed:<name> reads only the typed gates map; other vars never satisfy it.
 func TestGatePassedReadsOnlyTheGatesVar(t *testing.T) {
-	reg, err := conditions.NewDefaultRegistry(conditions.TestRegistryDeps())
+	reg, err := conditions.NewDefaultRegistry(conditionstest.Dependencies())
 	testutil.FailErr(t, "build conditions registry", err)
 	prose := "Advisory summary recommends merging this approach."
 	cases := []struct {
