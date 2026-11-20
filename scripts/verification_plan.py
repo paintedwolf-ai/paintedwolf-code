@@ -2,6 +2,7 @@
 
 import hashlib
 import json
+import os
 from pathlib import Path
 import re
 import shlex
@@ -11,6 +12,7 @@ import sys
 CATALOG = Path(__file__).with_name("verification-plan.json")
 GO_MODULE = CATALOG.parent.parent / "lycaon"
 DEN = CATALOG.parent.parent / "lycaon-den"
+PLATFORM_FLOOR = GO_MODULE / "internal" / "platformfloor" / "linux_floor.txt"
 # The scheduler's own descriptors and per-operation paths; a nested request never forwards them.
 SCHEDULER_ENV = {"PW_TEST_EXECUTION_TICKET", "PW_TEST_EXECUTION_FD", "PW_TEST_RESOURCE_FD", "PW_TEST_COMPLETION_FD",
                  "PW_TEST_STAGE_RESULT", "PW_TEST_STAGE_RAW", "PW_TEST_STAGE_EVENTS", "PW_TEST_STAGE_PROGRESS",
@@ -89,8 +91,10 @@ def backstop_seconds(name):
 def catalog():
     value = json.loads(CATALOG.read_text())
     if set(value) != {"groups", "go", "tasks", "private", "selection", "resources", "environment", "ci",
-                      "capacity", "fuzz", "provisions", "not_run"}:
+                      "capacity", "fuzz", "provisions", "not_run", "den_shell"}:
         raise ValueError("invalid verification catalog")
+    if not isinstance(value["den_shell"], list) or not all(isinstance(name, str) and name for name in value["den_shell"]):
+        raise ValueError("den_shell lists the targets that launch the Den shell or its sidecar")
     for name, provision in value["provisions"].items():
         targets, packages = provision.get("targets"), provision.get("packages", [])
         if (set(provision) - {"targets", "packages"} or not isinstance(targets, dict) or not targets and not packages
@@ -318,6 +322,39 @@ def unmatched_playwright_filters(filters):
         if not any(pattern.search(path) for path in files):
             unmatched.append(arg)
     return unmatched
+
+
+def host_glibc():
+    """The running C library's version when it is glibc, else None (macOS, musl)."""
+    try:
+        value = os.confstr("CS_GNU_LIBC_VERSION")
+    except (AttributeError, ValueError, OSError):
+        return None
+    return value.split()[1] if value and value.startswith("glibc ") else None
+
+
+def version_numbers(version):
+    return tuple(int(part) for part in re.findall(r"\d+", version))
+
+
+def shell_floor_refusal(names, glibc=None):
+    """Why this host cannot run a requested target that launches the Den shell or its sidecar, or None.
+
+    Below the floor the engine refuses to start, so a browser suite would time out test by test."""
+    data = catalog()
+
+    def launches(name):
+        return name in data["den_shell"] or any(launches(child) for child in data["groups"].get(name, []))
+
+    blocked = [name for name in names if launches(name)]
+    glibc = glibc or host_glibc()
+    if not blocked or glibc is None:
+        return None
+    floor = dict(line.split() for line in PLATFORM_FLOOR.read_text().splitlines() if line.strip())["glibc"]
+    if version_numbers(glibc) >= version_numbers(floor):
+        return None
+    return (f"this host has glibc {glibc}; the Den shell needs {floor}, so {', '.join(blocked)} cannot run here. "
+            "Run it on a newer host or in CI. No verification was queued")
 
 
 def declared_names(data):
