@@ -12,7 +12,9 @@ import "C"
 import (
 	"errors"
 	"fmt"
+	"golang.org/x/sys/unix"
 	"os"
+	"syscall"
 	"unsafe"
 )
 
@@ -61,4 +63,19 @@ func openGuestResourceEnvelope(app string) (C.SecStaticCodeRef, func(), error) {
 		return 0, nil, fmt.Errorf("open package resource envelope (OSStatus %d)", status)
 	}
 	return seal, func() { C.CFRelease(C.CFTypeRef(seal)) }, nil
+}
+
+// verifyUnlinkedBootFile runs after unlink and before sharing the descriptor.
+func verifyUnlinkedBootFile(file *os.File) error {
+	var stat unix.Stat_t
+	if err := unix.Fstat(int(file.Fd()), &stat); err != nil {
+		return err
+	}
+	if stat.Nlink != 0 {
+		return errors.New("private service boot file has a named alias")
+	}
+	if errno := C.pw_guest_exclusive_reader(C.int(file.Fd())); errno != 0 {
+		return fmt.Errorf("private service boot file has outstanding references: %w", syscall.Errno(errno))
+	}
+	return nil
 }

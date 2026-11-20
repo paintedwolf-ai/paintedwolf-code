@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/testutil"
+	"golang.org/x/sys/unix"
 )
 
 func TestPrivateGuestSnapshotsHoldOneGeneration(t *testing.T) {
@@ -89,4 +90,29 @@ func TestPrivateGuestSealsExactPackagedResources(t *testing.T) {
 	if err := verifyGuestResource(seal, path, []byte("another identity")); err == nil {
 		t.Fatal("accepted a different packaged identity")
 	}
+}
+
+func TestPrivateGuestBootFileRequiresExclusiveCustody(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "boot")
+	testutil.FailErr(t, "seed boot file", os.WriteFile(path, []byte("boot"), 0600))
+	rd, err := os.Open(path)
+	testutil.FailErr(t, "retain boot input", err)
+	defer rd.Close()
+	if err := verifyUnlinkedBootFile(rd); err == nil {
+		t.Fatal("accepted a named boot input")
+	}
+	writer, err := os.OpenFile(path, os.O_RDWR, 0)
+	testutil.FailErr(t, "hold second descriptor", err)
+	mapping, err := unix.Mmap(int(writer.Fd()), 0, 4, unix.PROT_READ|unix.PROT_WRITE, unix.MAP_SHARED)
+	testutil.FailErr(t, "map boot input", err)
+	testutil.FailErr(t, "unlink boot file", os.Remove(path))
+	if err := verifyUnlinkedBootFile(rd); err == nil {
+		t.Fatal("accepted another open descriptor")
+	}
+	testutil.FailErr(t, "release writer", writer.Close())
+	if err := verifyUnlinkedBootFile(rd); err == nil {
+		t.Fatal("accepted an outstanding writable mapping")
+	}
+	testutil.FailErr(t, "release mapping", unix.Munmap(mapping))
+	testutil.FailErr(t, "establish exclusive custody", verifyUnlinkedBootFile(rd))
 }

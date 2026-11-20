@@ -1,6 +1,16 @@
 #include <CoreFoundation/CoreFoundation.h>
 #include <Security/Security.h>
 #include <string.h>
+#include <errno.h>
+#include <stdint.h>
+#include <sys/ioccom.h>
+#include <unistd.h>
+
+// XNU counts open descriptors and active mappings against the unlinked vnode.
+static int pw_guest_exclusive_reader(int fd) {
+    uint32_t argument = 0;
+    return ffsctl(fd, _IOWR('A', 21, uint32_t), &argument, 0) == 0 ? 0 : errno;
+}
 
 static OSStatus pw_verify_guest_code(const char *path, CFStringRef team, CFStringRef identifier,
                                      SecCSFlags flags, SecStaticCodeRef *result) {

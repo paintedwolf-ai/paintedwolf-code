@@ -93,6 +93,9 @@ func privateGuestPayload(bundle, root, app string) (_ *PrivateGuestPayload, err 
 		if err := os.Remove(dest); err != nil {
 			return nil, err
 		}
+		if err := verifyUnlinkedBootFile(file); err != nil {
+			return nil, err
+		}
 	}
 	id, err := os.Open(filepath.Join(bundle, "pw-service-vm.cdhash"))
 	if err != nil {
