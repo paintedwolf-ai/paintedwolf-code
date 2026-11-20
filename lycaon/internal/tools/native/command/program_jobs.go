@@ -31,12 +31,13 @@ type SessionJobs struct {
 	SessionID  string
 	ProjectID  string
 
-	mu        sync.Mutex
-	closed    atomic.Bool
-	results   map[string]jobOutcome
-	waiters   map[string]map[*jobWaiter]bool
-	signals   map[string]int
-	processes map[string]jobProcess
+	privateService privateServiceSession
+	mu             sync.Mutex
+	closed         atomic.Bool
+	results        map[string]jobOutcome
+	waiters        map[string]map[*jobWaiter]bool
+	signals        map[string]int
+	processes      map[string]jobProcess
 	// order is the job table in start order. A job takes one more than the
 	// highest number in the table and leaves it once waited, so numbers are
 	// reused as a shell reuses them.

@@ -3,7 +3,6 @@ package skills
 import (
 	"context"
 	"fmt"
-	"runtime"
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/coordinator/turnload"
@@ -135,7 +134,6 @@ func (t *SkillsReadTool) renderPackBody(ctx context.Context, tctx tools.ToolCont
 		vars[name] = value
 	}
 	vars["session_scratch_dir"] = tctx.Host.SessionScratchDir
-	vars["platform_os"] = runtime.GOOS
 	vars["configuration"] = t.packConfiguration(ctx, tctx, sk.PackID)
 	out, err := pongoplain.Execute(ctx, tpl, vars)
 	if err != nil {

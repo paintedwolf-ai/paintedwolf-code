@@ -9,9 +9,14 @@ metadata:
 
 Choose the server version the test expects and give the instance fresh storage.
 
-{% if session_scratch_dir and profile_command_external_exec %}## Local PostgreSQL
+{% if profile_command_external_exec %}## Private PostgreSQL
 
-{% if platform_os == "linux" %}When the server tools are installed, initialize fresh storage with `initdb -D "$SCRATCH_DIR/pgdata"`. Start `postgres -D "$SCRATCH_DIR/pgdata" -k "$SCRATCH_DIR" -c listen_addresses=''` as a background job. Keep its job handle. In a later command, check readiness with `pg_isready -h "$SCRATCH_DIR"` and query with `psql -h "$SCRATCH_DIR" -d postgres`. Stop the job when the test finishes.{% elif platform_os == "darwin" %}PostgreSQL initialization requires System V shared memory. For an isolated database on macOS, use an available container engine through its reviewed service route.{% else %}Check whether the host provides isolated System V shared memory before starting a local instance.{% endif %}
+Use `private-service -- PROGRAM ARG...` to run a command in this session’s isolated service environment. Files under `/work` persist across service commands. For a fresh PostgreSQL instance:
+
+1. Run `private-service -- initdb -D /work/pgdata`.
+2. Start `private-service -- postgres -D /work/pgdata -k /work/tmp -c listen_addresses='' &` and keep the job handle.
+3. Run `private-service -- pg_isready -h /work/tmp`. Query with `private-service -- psql -h /work/tmp -d postgres -c 'SELECT 42'`.
+4. Stop the saved job with `kill %1`, substituting its actual job number.
 
 {% endif %}## Container workflow
 

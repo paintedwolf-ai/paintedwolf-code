@@ -375,6 +375,11 @@ func (s *ProgramSupervisor) DisposeSession(ctx context.Context, sessionID string
 		jobs.mu.Unlock()
 	}
 	s.Stop(sessionID)
+	if jobs != nil {
+		if err := jobs.privateService.close(); err != nil {
+			return err
+		}
+	}
 	if s.Background != nil {
 		if err := s.Background.Lifecycle.DisposeSession(ctx, sessionID, bgprocess.TerminationReasonFromContext(ctx, bgprocess.TerminationChatDeleted)); err != nil {
 			return err

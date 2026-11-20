@@ -1109,6 +1109,84 @@
         "external-operands-valid",
         "external-rejection"
       ]
+    },
+    {
+      "name": "private-service",
+      "operands_end_options": true,
+      "aliases": [],
+      "family": "process",
+      "owner": "processes",
+      "argv": "private-service -- PROGRAM [ARG ...]",
+      "forms": [],
+      "operands": "PROGRAM and ARG are literal guest arguments. The guest starts in /work with temporary files in /work/tmp.",
+      "encoding": "Exact bytes for streams; captured saved-file encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
+      "statuses": {
+        "0": "complete result",
+        "1": "ordinary command failure",
+        "2": "usage or utility error"
+      },
+      "effects": [
+        {
+          "mode": "default",
+          "requires": [
+            "external-exec"
+          ]
+        }
+      ],
+      "platform_capabilities": [
+        "macos",
+        "linux",
+        "windows-contract-pending-native-qualification"
+      ],
+      "limits": [
+        "argv_bytes",
+        "argument_bytes",
+        "stream_bytes",
+        "statement_visits",
+        "child_executions"
+      ],
+      "example": {
+        "program": "private-service -- printf \"%s\" ready",
+        "stdout": "ready",
+        "status": 0,
+        "kind": "documented-output-example; setup defined by fixture corpus; metadata/job identities synthetic",
+        "setup": {
+          "input": "alpha\nbeta",
+          "empty": "",
+          "same-a": "same\n",
+          "same-b": "same\n",
+          "script.sh": "printf 'alpha\\n'\n",
+          "settings.json": "{\"enabled\":false}\n",
+          "main.go": "package main\nimport \"fmt\"\nfunc main() { fmt.Println(\"a\") }\n",
+          "link": {
+            "symlink": "input"
+          },
+          "empty-dir": {
+            "directory": true
+          }
+        }
+      },
+      "notes": "Run an executable in the private service environment for this session. Commands share /work across calls. Use & for a managed job. Stop it with its job handle.",
+      "reuse": {
+        "implementation": "lycaon/internal/tools/native/command/private_service.go",
+        "tests": [
+          "lycaon/internal/tools/native/command/private_service_test.go"
+        ],
+        "extension": "Runs within the existing process operation and background job lifecycle.",
+        "evidence_kind": "Private service execution contract."
+      },
+      "unsupported": {
+        "code": "COMMAND_OPTION_UNSUPPORTED",
+        "fallback": false,
+        "kind": "option-fragment",
+        "words": [
+          "--not-a-version-1-option"
+        ]
+      },
+      "fixture_ids": [
+        "private-service-operands-valid",
+        "private-service-rejection"
+      ]
     }
   ]
 }
