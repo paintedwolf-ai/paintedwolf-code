@@ -7,7 +7,7 @@ import (
 	"sync"
 
 	"github.com/lycaon/lycaon/internal/commandprogram"
-	"github.com/lycaon/lycaon/internal/confine"
+	"github.com/lycaon/lycaon/internal/confine/privateguesthost"
 	"github.com/lycaon/lycaon/internal/serviceguest"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/toolrejection"
@@ -32,7 +32,7 @@ type privateServiceSession struct {
 }
 
 func openPrivateService(ctx context.Context) (privateServiceClient, error) {
-	client, err := confine.OpenPrivateGuest(ctx)
+	client, err := privateguesthost.OpenPrivateGuest(ctx)
 	if err != nil {
 		return nil, err
 	}
