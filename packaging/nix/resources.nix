@@ -35,7 +35,7 @@ in stdenvNoCC.mkDerivation {
     runHook postInstall
   '';
   passthru = {
-    inherit inputs scanner notices generationSeed;
+    inherit inputs scanner notices generationSeed guest;
     noticeRuntimeInputs = [ inputs.browser inputs.gitengine inputs.ocr inputs.decision scanner notices guest.runtimeQemu ]
       ++ lib.optional (generationSeed != null) generationSeed;
   };

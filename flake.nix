@@ -116,6 +116,7 @@
           gitengine = resources.inputs.gitengine;
           ocr = resources.inputs.ocr;
           decision-resources = resources.inputs.decision;
+          private-service = resources.guest;
           scanner-original = resources.inputs.scannerOriginal;
           scanner-finalized = resources.scanner;
           notices = resources.notices;
