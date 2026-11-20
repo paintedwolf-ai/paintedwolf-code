@@ -174,7 +174,10 @@ sys.exit(code)
             time.sleep(.02)
 
     def queued(self, count):
-        self.await_condition(lambda: len([e for e in self.queue.status()["runs"] if e.get("kind") == "request"]) == count)
+        """Wait for `count` queued requests; the newest request, while it still runs, is the one expected to queue."""
+        newest = self.processes[-1] if self.processes and self.processes[-1].poll() is None else None
+        self.await_condition(lambda: len([e for e in self.queue.status()["runs"] if e.get("kind") == "request"]) == count,
+                             newest)
 
     def collect(self, process, code=0):
         out, err = process.communicate()
