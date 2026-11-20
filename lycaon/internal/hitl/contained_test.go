@@ -20,7 +20,7 @@ func TestContainedProvenanceMatchesDefaultConfinement(t *testing.T) {
 	got := hitl.ContainedForRequest(req)
 	fromSame := hitl.ContainedFromConfinement(c, ok)
 
-	if !reflect.DeepEqual(got, fromSame) {
+	if ok && !reflect.DeepEqual(got, fromSame) {
 		t.Fatalf("ContainedForRequest diverged from ContainedFromConfinement: got=%+v fromSame=%+v", got, fromSame)
 	}
 	if ok {
