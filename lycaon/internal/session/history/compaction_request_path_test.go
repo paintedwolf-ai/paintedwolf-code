@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/llm/compaction"
+	"github.com/lycaon/lycaon/internal/llm/llmtest"
 	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -21,7 +22,7 @@ type countingSummarizer struct{ calls atomic.Int32 }
 
 func (s *countingSummarizer) Summarize(ctx context.Context, system, user string, maxTokens int) (string, error) {
 	s.calls.Add(1)
-	return compaction.MockSummarizer{Text: "Continue from compacted context."}.Summarize(ctx, system, user, maxTokens)
+	return llmtest.Summarizer{Structured: compaction.SummaryFormatRequested, Text: "Continue from compacted context."}.Summarize(ctx, system, user, maxTokens)
 }
 
 // oversizedSession holds history above the hard ceiling, so a request fit
