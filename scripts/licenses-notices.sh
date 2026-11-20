@@ -125,7 +125,7 @@ if [[ "${GOOS:-$(go env GOOS)}" == darwin ]]; then
   LC_ALL=C sort -u "${TMP}/go.csv" "${TMP}/guest.csv" >"${TMP}/combined.csv"
   mv "${TMP}/combined.csv" "${TMP}/go.csv"
   # Modules shared by the host and guest already have a saved license.
-  cp -Rn "${TMP}/guest-save/." "${TMP}/go-save/"
+  rsync -r --ignore-existing "${TMP}/guest-save/" "${TMP}/go-save/"
 fi
 
 
