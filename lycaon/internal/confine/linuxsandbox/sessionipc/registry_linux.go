@@ -107,8 +107,9 @@ func (r *Registry) request(session object, owned *launch, op byte, fd int) unix.
 			return unix.EINVAL
 		}
 		defer r.cancel(session, owned)
-		// SIOCUNIXFILE returns the actual bound filesystem socket.
-		handle, _, errno := unix.Syscall(unix.SYS_IOCTL, uintptr(fd), 0x89e0, 0)
+		// SIOCUNIXFILE returns the inode of the actual bound socket.
+		const siocUnixFile = 0x89e0
+		handle, _, errno := unix.Syscall(unix.SYS_IOCTL, uintptr(fd), siocUnixFile, 0)
 		if errno != 0 {
 			return errno
 		}
