@@ -80,6 +80,8 @@ func (s *Store) fillPartial(ctx context.Context, source modelBucket, a Artifact,
 		progress.add(offset)
 		return nil
 	}
+	ctx, cancel := context.WithCancelCause(ctx)
+	defer cancel(nil)
 	body, start, err := source.openPayload(ctx, a, offset)
 	if err != nil {
 		return err
@@ -98,7 +100,10 @@ func (s *Store) fillPartial(ctx context.Context, source modelBucket, a Artifact,
 		return err
 	}
 	progress.add(start)
-	n, err := io.Copy(io.MultiWriter(f, progress), contextReader{ctx: ctx, reader: io.LimitReader(body, missing+1)})
+	n, err := copyPayload(io.MultiWriter(f, progress), io.LimitReader(body, missing+1), cancel)
+	if cause := context.Cause(ctx); cause != nil {
+		return cause
+	}
 	if err != nil {
 		return err
 	}

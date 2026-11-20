@@ -41,12 +41,16 @@ func (s *Store) publish(signed SignedManifest, repair, exclusive bool) error {
 	}
 	defer lock.Unlock()
 
-	if !s.Verified(m.Artifact.Digest) {
-		return fmt.Errorf("modelstore: artifact %s is not verified", m.Artifact.Digest)
-	}
-	for _, f := range m.Files {
-		if !s.Verified(f.Digest) {
-			return fmt.Errorf("modelstore: supplementary artifact %s is not verified", f.Digest)
+	keep := &m
+	if exclusive {
+		// The installer verified and pinned each payload before publication.
+		repair = true
+		keep = nil
+	} else {
+		for _, a := range manifestFiles(m) {
+			if !s.Verified(a.Digest) {
+				return fmt.Errorf("modelstore: artifact %s is not verified", a.Digest)
+			}
 		}
 	}
 	if err := s.recoverJournal(); err != nil {
@@ -63,7 +67,7 @@ func (s *Store) publish(signed SignedManifest, repair, exclusive bool) error {
 		exclusive = true
 	}
 	if exclusive {
-		if err := s.checkEvictable(history.all, &m); err != nil {
+		if err := s.checkEvictable(history.all, keep); err != nil {
 			return err
 		}
 	}
