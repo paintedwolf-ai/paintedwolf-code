@@ -1116,7 +1116,7 @@
       "aliases": [],
       "family": "process",
       "owner": "processes",
-      "argv": "private-service -- PROGRAM [ARG ...]",
+      "argv": "private-service -- PROGRAM [ARG ...] | private-service release",
       "forms": [],
       "operands": "PROGRAM and ARG are literal guest arguments. The guest starts in /work with temporary files in /work/tmp.",
       "encoding": "Exact bytes for streams; captured saved-file encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
@@ -1166,7 +1166,7 @@
           }
         }
       },
-      "notes": "Run an executable in the private service environment for this session. Commands share /work across calls. Use & for a managed job. Stop it with its job handle.",
+      "notes": "Run an executable in the private service environment for this session. Commands share /work across calls. Use & for a managed job. Stop it with its job handle. Once all jobs finish, private-service release discards /work and releases the runtime.",
       "reuse": {
         "implementation": "lycaon/internal/tools/native/command/private_service.go",
         "tests": [

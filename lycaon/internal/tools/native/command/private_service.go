@@ -24,6 +24,7 @@ type privateServiceSession struct {
 	starting chan struct{}
 	cancel   context.CancelFunc
 	closed   bool
+	active   int
 }
 
 func openPrivateService(ctx context.Context) (privateServiceClient, error) {
@@ -91,12 +92,38 @@ func (s *privateServiceSession) close() error {
 	return nil
 }
 
+func (s *privateServiceSession) releaseIdle() (toolcontract.ProducerResult, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.active != 0 {
+		err := errors.New("private service jobs are running")
+		return readFailure(err), err
+	}
+	if s.client == nil {
+		return readResult(0), nil
+	}
+	if err := s.client.Close(); err != nil {
+		return ownerFailure(err), err
+	}
+	s.client = nil
+	result := readResult(0)
+	result.EffectCertainty = toolcontract.EffectCompleted
+	return result, nil
+}
+
 func (s *privateServiceSession) execute(ctx context.Context, req commandprogram.OperationRequest, streams commandprogram.Streams) (toolcontract.ProducerResult, error) {
 	args := req.Argv.Values()
+	if len(args) == 2 && args[1] == "release" {
+		return s.releaseIdle()
+	}
 	if len(args) < 3 || args[1] != "--" || args[2] == "" {
 		const code = "COMMAND_OPERAND_INVALID"
 		return refusedResult(code), toolrejection.RejectInvalidArguments(code, map[string]any{"command": "private-service", "expected": "-- PROGRAM [ARG ...]"})
 	}
+	s.mu.Lock()
+	s.active++
+	s.mu.Unlock()
+	defer func() { s.mu.Lock(); s.active--; s.mu.Unlock() }()
 	input, err := io.ReadAll(io.LimitReader(streams.Reader(0), serviceguest.MaxInput+1))
 	if err != nil {
 		return readFailure(err), err

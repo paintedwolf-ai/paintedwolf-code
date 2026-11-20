@@ -16,7 +16,7 @@ Use `private-service -- PROGRAM ARG...` to run a command in this session’s iso
 1. Run `private-service -- initdb -D /work/pgdata`.
 2. Start `private-service -- postgres -D /work/pgdata -k /work/tmp -c listen_addresses='' &` and keep the job handle.
 3. Run `private-service -- pg_isready -h /work/tmp`. Query with `private-service -- psql -h /work/tmp -d postgres -c 'SELECT 42'`.
-4. Stop the saved job with `kill %1`, substituting its actual job number.
+4. Stop the saved job with `kill %1`, substituting its actual job number. When the session has finished using its private service files, `private-service release` discards them and releases the runtime.
 
 {% endif %}## Container workflow
 
