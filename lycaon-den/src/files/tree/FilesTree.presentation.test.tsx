@@ -254,13 +254,15 @@ it("reads a replacement view instead of keeping the expired view's rows", async 
 it("keeps the visible position when expansion finishes after a scroll to the old bottom", async () => {
   const fixture = treeViewFixture();
   const rowAt = (index: number) => index === 0 ? treeRow(".", "directory", true) : treeRow(`file-${index}.ts`);
-  fixture.large(601, rowAt);
+  // The host locates any row it holds, whether or not it has served that row yet.
+  const rank = (path: string) => path === "." ? 0 : Number(path.slice("file-".length, -".ts".length));
+  fixture.large(601, rowAt, rank);
   const view = mount(fixture);
   await findFileRow("file-1.ts");
   let release!: () => void;
   const gate = new Promise<void>(resolve => { release = resolve; });
   fixture.read(async () => gate);
-  fixture.update(command => { if (command.kind === "disclose") fixture.large(1801, rowAt); });
+  fixture.update(command => { if (command.kind === "disclose") fixture.large(1801, rowAt, rank); });
   view.expand();
   await waitFor(() => expect(fixture.commands.some(command => command.kind === "disclose")).toBe(true));
   const scroll = document.querySelector<HTMLElement>(".den-files-tree-scroll")!;
@@ -398,16 +400,17 @@ it("reads one destination at a time while the thumb drags and lands at its lates
   const holds: (() => void)[] = [];
   fixture.read(() => new Promise<void>(resolve => { holds.push(resolve); }));
   // Read-ahead only pages around the mounted window, so a far page names a thumb destination.
-  const destinations = () => fixture.requests
+  const rowOffsets = () => fixture.requests
     .filter(request => request.path.includes("/rows?"))
-    .map(request => Number(new URL(request.path, "http://fixture").searchParams.get("offset")))
-    .filter(offset => offset >= 1_000);
+    .map(request => Number(new URL(request.path, "http://fixture").searchParams.get("offset")));
+  const destinations = () => rowOffsets().filter(offset => offset >= 1_000);
 
   // The three positions land on destination pages 600, 1000 and 1400.
   handle.dispatchEvent(pointer("pointerdown", 0));
   handle.dispatchEvent(pointer("pointermove", 90));
   await nextFrame();
-  await waitFor(() => expect(holds.length).toBeGreaterThan(0));
+  // The first destination's read is in flight before the thumb moves on.
+  await waitFor(() => expect(rowOffsets()).toContain(600));
   for (const y of [150, 210]) {
     handle.dispatchEvent(pointer("pointermove", y));
     await nextFrame();
