@@ -49,6 +49,10 @@ describe("layout over the parsed range", () => {
         }),
       });
       try {
+        // The initial parse stops on a time slice. Parsing to a fixed point with no time limit makes
+        // the starting tree the same on any host; past the viewport, later updates parse nothing more.
+        const start = Math.max(syntaxTree(view.state).length, view.viewport.to, view.state.doc.line(400).to);
+        expect(forceParsing(view, start, Infinity), path).toBe(true);
         const parsedBefore = syntaxTree(view.state).length;
         expect(parsedBefore, path).toBeLessThan(doc.length);
         applyPrettyConfig(view, { enabled: true, path });
@@ -58,7 +62,7 @@ describe("layout over the parsed range", () => {
         expect(lastDecoration(view), path).toBeLessThan(parsed);
 
         const target = Math.min(doc.length, parsed + 200_000);
-        expect(forceParsing(view, target, 5_000), path).toBe(true);
+        expect(forceParsing(view, target, Infinity), path).toBe(true);
         const reached = syntaxTree(view.state).length;
         expect(reached, path).toBeGreaterThan(parsed);
         const work = prettyWorkOf(view.state);
