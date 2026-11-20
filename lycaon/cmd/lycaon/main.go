@@ -137,6 +137,8 @@ func run(ctx context.Context, args []string) error {
 		return runPrompts(ctx, rest)
 	case "browser":
 		return runBrowser(ctx, rest)
+	case "local-model":
+		return runLocalModel(ctx, rest, os.Stdout, request)
 	case "decide":
 		return runDecide(ctx, rest)
 	default:

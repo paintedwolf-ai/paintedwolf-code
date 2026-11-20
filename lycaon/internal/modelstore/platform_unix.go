@@ -3,6 +3,7 @@
 package modelstore
 
 import (
+	"errors"
 	"math"
 	"math/bits"
 	"os"
@@ -33,4 +34,31 @@ func availableDiskBytes(blocks uint64, blockSize int64) (int64, error) {
 		return math.MaxInt64, nil
 	}
 	return int64(available), nil
+}
+
+func openPartial(root *os.Root, name string) (*os.File, error) {
+	f, err := root.OpenFile(name, os.O_RDWR|os.O_CREATE|syscall.O_NOFOLLOW|syscall.O_NONBLOCK, 0600)
+	if err != nil {
+		return nil, err
+	}
+	info, err := f.Stat()
+	if err == nil && !privatePartial(info) {
+		err = errors.New("modelstore: unsafe partial file")
+	}
+	if err != nil {
+		return nil, errors.Join(err, f.Close())
+	}
+	return f, nil
+}
+
+func reclaimableBlocks(info os.FileInfo, links int) int64 {
+	stat, ok := info.Sys().(*syscall.Stat_t)
+	if !ok || !info.Mode().IsRegular() || links < 1 || uint64(stat.Nlink) != uint64(links) {
+		return 0
+	}
+	return min(info.Size(), stat.Blocks*512)
+}
+
+func privatePartial(info os.FileInfo) bool {
+	return info.Mode().IsRegular() && info.Sys().(*syscall.Stat_t).Nlink == 1
 }
