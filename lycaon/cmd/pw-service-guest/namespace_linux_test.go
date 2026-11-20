@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"io"
+	"net"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -36,7 +37,10 @@ func TestGuestNamespaceActivation(t *testing.T) {
 	pair, err := unix.Socketpair(unix.AF_UNIX, unix.SOCK_STREAM|unix.SOCK_CLOEXEC, 0)
 	testutil.FailErr(t, "open activation stream", err)
 	parent, child := os.NewFile(uintptr(pair[0]), "controller"), os.NewFile(uintptr(pair[1]), "namespace")
-	defer parent.Close()
+	channel, err := net.FileConn(parent)
+	_ = parent.Close()
+	testutil.FailErr(t, "initialize pollable controller", err)
+	defer channel.Close()
 	defer child.Close()
 	ctx, cancel := context.WithTimeout(t.Context(), 15*time.Second)
 	defer cancel()
@@ -50,7 +54,7 @@ func TestGuestNamespaceActivation(t *testing.T) {
 	cmd.SysProcAttr = &syscall.SysProcAttr{Cloneflags: unix.CLONE_NEWUSER | unix.CLONE_NEWNS | unix.CLONE_NEWPID | unix.CLONE_NEWNET | unix.CLONE_NEWIPC | unix.CLONE_NEWUTS, UidMappings: []syscall.SysProcIDMap{{ContainerID: 0, HostID: os.Getuid(), Size: 1}}, GidMappings: []syscall.SysProcIDMap{{ContainerID: 0, HostID: os.Getgid(), Size: 1}}, Pdeathsig: syscall.SIGKILL}
 	testutil.FailErr(t, "start isolated guest fixture", cmd.Start())
 	testutil.FailErr(t, "release child endpoint", child.Close())
-	client, err := serviceguest.Open(ctx, parent)
+	client, err := serviceguest.Open(ctx, channel)
 	if err != nil {
 		_ = cmd.Process.Kill()
 		_ = cmd.Wait()
