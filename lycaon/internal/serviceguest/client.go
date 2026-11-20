@@ -22,7 +22,7 @@ type Client struct {
 	send      sync.Mutex
 }
 
-// Open authenticates the retained VM channel before accepting job operations.
+// Open checks protocol readiness on the adapter's retained channel.
 func Open(ctx context.Context, transport io.ReadWriteCloser) (*Client, error) {
 	c := &Client{transport: transport, active: make(map[uint64]pending), done: make(chan struct{})}
 	var nonce [32]byte

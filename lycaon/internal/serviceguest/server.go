@@ -16,7 +16,7 @@ type Executor interface {
 	Close() error
 }
 
-// Serve accepts one authenticated host-CID connection for the lifetime of the VM.
+// Serve ties the workload lifetime to the host's retained channel.
 func Serve(ctx context.Context, channel io.ReadWriteCloser, executor Executor) error {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
