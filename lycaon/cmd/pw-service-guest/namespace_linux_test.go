@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime/coverage"
 	"syscall"
 	"testing"
 	"time"
@@ -20,13 +21,30 @@ import (
 
 func TestGuestNamespaceActivation(t *testing.T) {
 	if os.Getenv("PW_GUEST_TEST_NAMESPACE") == "1" {
+		collect := os.Getenv("PW_GUEST_TEST_COVERAGE") == "1"
+		if collect {
+			unix.CloseOnExec(4)
+		}
 		err := runNative("--enter-native")
+		if collect {
+			const dir = "/proc/self/fd/4"
+			testutil.FailErr(t, "record guest metadata", coverage.WriteMetaDir(dir))
+			testutil.FailErr(t, "record guest counters", coverage.WriteCountersDir(dir))
+		}
 		if err != nil && !errors.Is(err, io.EOF) {
 			t.Fatalf("serve private namespace: %v", err)
 		}
 		return
 	}
 	root := t.TempDir()
+	image := filepath.Join(root, "init")
+	build := exec.CommandContext(t.Context(), "go", "build", "-o", image, "./testdata/workload")
+	build.Env = append(os.Environ(), "CGO_ENABLED=0")
+	if out, err := build.CombinedOutput(); err != nil {
+		t.Fatalf("build static guest workload: %v\n%s", err, out)
+	}
+	testutil.FailErr(t, "create program directory", os.Mkdir(filepath.Join(root, "bin"), 0755))
+	testutil.FailErr(t, "link guest workload", os.Symlink("/init", filepath.Join(root, "bin/workload")))
 	for _, name := range []string{"dev", "proc", "tmp", "home/service"} {
 		testutil.FailErr(t, "create root mount point", os.MkdirAll(filepath.Join(root, name), 0755))
 	}
@@ -42,7 +60,7 @@ func TestGuestNamespaceActivation(t *testing.T) {
 	testutil.FailErr(t, "initialize pollable controller", err)
 	defer channel.Close()
 	defer child.Close()
-	ctx, cancel := context.WithTimeout(t.Context(), 15*time.Second)
+	ctx, cancel := context.WithTimeout(t.Context(), 60*time.Second)
 	defer cancel()
 	self, err := os.Executable()
 	testutil.FailErr(t, "locate guest fixture", err)
@@ -51,6 +69,13 @@ func TestGuestNamespaceActivation(t *testing.T) {
 	var output bytes.Buffer
 	cmd.Stdin, cmd.Stdout, cmd.Stderr = child, &output, &output
 	cmd.ExtraFiles = []*os.File{pin}
+	if directory := os.Getenv("PW_GO_CHILD_COVERDIR"); directory != "" {
+		counters, err := os.Open(directory)
+		testutil.FailErr(t, "open child counter directory", err)
+		defer counters.Close()
+		cmd.ExtraFiles = append(cmd.ExtraFiles, counters)
+		cmd.Env = append(cmd.Env, "PW_GUEST_TEST_COVERAGE=1")
+	}
 	cmd.SysProcAttr = &syscall.SysProcAttr{Cloneflags: unix.CLONE_NEWUSER | unix.CLONE_NEWNS | unix.CLONE_NEWPID | unix.CLONE_NEWNET | unix.CLONE_NEWIPC | unix.CLONE_NEWUTS, UidMappings: []syscall.SysProcIDMap{{ContainerID: 0, HostID: os.Getuid(), Size: 1}}, GidMappings: []syscall.SysProcIDMap{{ContainerID: 0, HostID: os.Getgid(), Size: 1}}, Pdeathsig: syscall.SIGKILL}
 	testutil.FailErr(t, "start isolated guest fixture", cmd.Start())
 	testutil.FailErr(t, "release child endpoint", child.Close())
@@ -60,6 +85,27 @@ func TestGuestNamespaceActivation(t *testing.T) {
 		_ = cmd.Wait()
 		t.Fatalf("guest readiness: %v\n%s", err, &output)
 	}
+	t.Cleanup(func() { _ = client.Close() })
+	input := bytes.Repeat([]byte("a"), serviceguest.MaxOutput+1)
+	result, err := client.RunInput(ctx, []string{"/bin/workload", "streams"}, input)
+	testutil.FailErr(t, "run confined workload", err)
+	if result.ExitCode != 7 || !result.StdoutTruncated || !bytes.Equal(result.Stdout, input[:serviceguest.MaxOutput]) || string(result.Stderr) != "uid=65534 gid=65534" {
+		t.Fatalf("streams code=%d, bytes=%d, truncated=%v, identity=%q", result.ExitCode, len(result.Stdout), result.StdoutTruncated, result.Stderr)
+	}
+	active, err := client.Start(ctx, []string{"/bin/workload", "hold"})
+	testutil.FailErr(t, "launch retained guest", err)
+	status, err := client.Status(ctx, active.ID)
+	testutil.FailErr(t, "inspect retained guest", err)
+	if status.State != serviceguest.Running {
+		t.Fatalf("active guest state %s, stderr %s", status.State, status.Stderr)
+	}
+	stopped, err := client.Stop(ctx, active.ID)
+	testutil.FailErr(t, "stop retained guest", err)
+	if stopped.State != serviceguest.Exited {
+		t.Fatalf("stopped guest state %s", stopped.State)
+	}
+	_, err = client.Start(ctx, []string{"/bin/workload", "hold"})
+	testutil.FailErr(t, "launch guest for controller teardown", err)
 	testutil.FailErr(t, "close guest controller", client.Close())
 	if err := cmd.Wait(); err != nil {
 		t.Fatalf("guest shutdown: %v\n%s", err, &output)
