@@ -9,7 +9,7 @@ Choose the server version the test expects and give the instance fresh storage.
 
 {% if profile_command_external_exec %}## Private PostgreSQL
 
-Use `private-service -- PROGRAM ARG...` to run a command in this session’s isolated service environment. Files under `/work` persist across service commands. The environment includes PostgreSQL 16 and the BusyBox POSIX shell (`sh`). For a fresh instance:
+Use `private-service -- PROGRAM ARG...` to run a command in this session’s isolated service environment. Files under `/work` live inside the guest. Inspect them with `private-service -- ls /work`. The environment includes PostgreSQL 16 and the BusyBox POSIX shell (`sh`). For a fresh instance:
 
 1. Run `private-service -- initdb -D /work/pgdata`.
 2. Start `private-service -- postgres -D /work/pgdata -k /work/tmp -c listen_addresses='' &` and keep the job handle. Run the server in the foreground of that job so the handle tracks its lifetime.
