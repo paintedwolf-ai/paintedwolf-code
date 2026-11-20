@@ -316,7 +316,7 @@ The Go host binds a private service environment to one session. The process subs
 
 | Adapter | Execution boundary |
 |---|---|
-| Linux | The private userland runs under Linux kernel isolation. Workload sockets use the Linux supervisor’s bound-inode checks. |
+| Linux | The private userland runs in namespaces with a bounded resource scope inside the caller’s cgroup hierarchy. Where the hierarchy cannot provide that scope, an on-demand QEMU VM boots the same userland within the caller’s cgroup. It has no host disk, filesystem share or network interface. Both routes use the supervisor’s bound-inode checks for workload sockets. |
 | macOS | A separate virtualization-entitled helper runs the private Linux userland in an ephemeral VM. A dedicated virtio socket device connects the host to the guest supervisor. The VM has no host directory share or network interface. |
 
 The Linux launch broker selects resources inside its existing cgroup hierarchy. Its privileged setup checks the active package image and delegates a bounded service subtree before dropping privileges. Kernel directory descriptors pin the delegation to cgroup v2. The ordinary broker's group shares the original ancestor limits. Each service takes a distinct leaf with a 512 MiB memory ceiling and 256 tasks. A user service manager can supply an equivalent transient scope. The launcher pins each environment to one available CPU, and the workload filter protects the inherited affinity.
