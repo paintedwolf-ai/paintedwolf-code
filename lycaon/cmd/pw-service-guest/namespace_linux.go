@@ -10,8 +10,8 @@ import (
 	"runtime"
 	"syscall"
 
-	"github.com/lycaon/lycaon/internal/serviceguest"
 	"github.com/lycaon/lycaon/internal/launchguard/servicescope"
+	"github.com/lycaon/lycaon/internal/serviceguest"
 	"golang.org/x/sys/unix"
 )
 
@@ -98,11 +98,8 @@ func isolateRoot() error {
 	if err := unix.Mount("", "/", "", unix.MS_REC|unix.MS_PRIVATE, ""); err != nil {
 		return err
 	}
-	if err := unix.Mount("/proc/self/fd/3", root, "", unix.MS_BIND, ""); err != nil {
-		return err
-	}
-	if err := unix.Close(3); err != nil {
-		return err
+	if err := bindPackagedRoot(root); err != nil {
+		return fmt.Errorf("bind packaged root: %w", err)
 	}
 	if err := unix.Mount("", root, "", unix.MS_BIND|unix.MS_REMOUNT|unix.MS_RDONLY|unix.MS_NOSUID|unix.MS_NODEV, ""); err != nil {
 		return err
@@ -149,4 +146,33 @@ func isolateRoot() error {
 		return err
 	}
 	return unix.Chdir("/")
+}
+
+// The inherited pin names the original mount. Bind the same directory from this mount namespace.
+func bindPackagedRoot(target string) error {
+	const pin = 3
+	defer unix.Close(pin)
+	path, err := os.Readlink("/proc/self/fd/3")
+	if err != nil {
+		return err
+	}
+	if !filepath.IsAbs(path) {
+		return errors.New("guest root must be absolute")
+	}
+	fd, err := unix.Openat2(unix.AT_FDCWD, path, &unix.OpenHow{Flags: unix.O_PATH | unix.O_DIRECTORY | unix.O_CLOEXEC, Resolve: unix.RESOLVE_NO_SYMLINKS | unix.RESOLVE_NO_MAGICLINKS})
+	if err != nil {
+		return err
+	}
+	defer unix.Close(fd)
+	var expected, actual unix.Stat_t
+	if err := unix.Fstat(pin, &expected); err != nil {
+		return err
+	}
+	if err := unix.Fstat(fd, &actual); err != nil {
+		return err
+	}
+	if expected.Dev != actual.Dev || expected.Ino != actual.Ino {
+		return errors.New("guest root changed during launch")
+	}
+	return unix.Mount(fmt.Sprintf("/proc/self/fd/%d", fd), target, "", unix.MS_BIND, "")
 }
