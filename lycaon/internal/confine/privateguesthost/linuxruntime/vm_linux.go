@@ -107,7 +107,11 @@ func openBootResource(path string) (*os.File, error) {
 
 func readBootManifest(path string) (bootManifest, error) {
 	var manifest bootManifest
-	file, err := openBootResource(path)
+	open := openBootResource
+	if strings.HasPrefix(path, "/nix/store/") {
+		open = func(path string) (*os.File, error) { return trustedFile(path, false) }
+	}
+	file, err := open(path)
 	if err != nil {
 		return manifest, err
 	}
@@ -142,11 +146,6 @@ func openEmulator(bundle, path string) (*os.File, error) {
 		if !strings.HasPrefix(bundle, "/nix/store/") || !strings.HasPrefix(path, "/nix/store/") || !strings.HasSuffix(path, "/bin/"+name) {
 			return nil, errors.New("private emulator is outside its package")
 		}
-		manifest, err := trustedFile(filepath.Join(bundle, "manifest.json"), false)
-		if err != nil {
-			return nil, err
-		}
-		_ = manifest.Close()
 	}
 	return trustedFile(path, true)
 }
@@ -180,18 +179,24 @@ func trustedFile(path string, executable bool) (*os.File, error) {
 				changed = true
 				break
 			}
-			if info.Mode().Perm()&0022 != 0 {
+			if !packageModeTrusted(prefix, info.Mode()) {
 				return nil, errors.New("writable private emulator package")
 			}
 			if n == len(parts)-1 {
 				if !info.Mode().IsRegular() || (executable && info.Mode().Perm()&0111 == 0) {
 					return nil, errors.New("invalid private emulator file")
 				}
-				fd, err := unix.Openat2(unix.AT_FDCWD, prefix, &unix.OpenHow{Flags: unix.O_RDONLY | unix.O_CLOEXEC, Resolve: unix.RESOLVE_NO_SYMLINKS})
+				fd, err := unix.Openat2(unix.AT_FDCWD, prefix, &unix.OpenHow{Flags: unix.O_RDONLY | unix.O_CLOEXEC | unix.O_NONBLOCK, Resolve: unix.RESOLVE_NO_SYMLINKS})
 				if err != nil {
 					return nil, err
 				}
-				return os.NewFile(uintptr(fd), prefix), nil
+				file := os.NewFile(uintptr(fd), prefix)
+				opened, err := file.Stat()
+				if err != nil || !os.SameFile(info, opened) || opened.Mode() != info.Mode() {
+					_ = file.Close()
+					return nil, errors.Join(errors.New("private emulator package changed during capture"), err)
+				}
+				return file, nil
 			}
 		}
 		if !changed {
@@ -199,6 +204,14 @@ func trustedFile(path string, executable bool) (*os.File, error) {
 		}
 	}
 	return nil, errors.New("invalid private emulator links")
+}
+
+func packageModeTrusted(path string, mode os.FileMode) bool {
+	if mode.Perm()&0022 == 0 {
+		return true
+	}
+	// The sticky store protects root-owned entries while build users create outputs.
+	return path == "/nix/store" && mode.IsDir() && mode&os.ModeSticky != 0 && mode.Perm()&0002 == 0
 }
 
 func sealedBootFile(path, digest string) (*os.File, error) {

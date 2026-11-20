@@ -97,3 +97,23 @@ func TestEmulatorExitIsSettled(t *testing.T) {
 		t.Fatal("missing emulator started")
 	}
 }
+
+func TestPackageDirectoryModes(t *testing.T) {
+	for _, check := range []struct {
+		path string
+		mode os.FileMode
+		want bool
+	}{
+		{"/nix/store", os.ModeDir | os.ModeSticky | 0775, true},
+		{"/nix/store", os.ModeDir | 0775, false},
+		{"/nix/store", os.ModeDir | os.ModeSticky | 0777, false},
+		{"/nix/store/object", os.ModeDir | os.ModeSticky | 0775, false},
+		{"/nix/store", os.ModeSticky | 0775, false},
+		{"/nix/store/object", os.ModeDir | 0555, true},
+		{"/usr/bin", os.ModeDir | 0755, true},
+	} {
+		if got := packageModeTrusted(check.path, check.mode); got != check.want {
+			t.Errorf("trust %s %s = %v", check.path, check.mode, got)
+		}
+	}
+}
