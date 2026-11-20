@@ -38,7 +38,7 @@ func main() {
 }
 
 func run() error {
-	config, err := prepareVM()
+	config, err := prepareVM("/", workUID, unix.Mount)
 	if err != nil {
 		return err
 	}

@@ -159,3 +159,28 @@ func TestGuestBootModuleOrder(t *testing.T) {
 		t.Fatalf("invalid module reported %v", err)
 	}
 }
+
+func TestGuestBootPublishesPreparedSession(t *testing.T) {
+	for _, key := range []string{"HOME", "PATH", "LANG", "LC_ALL", "XDG_CACHE_HOME", "XDG_DATA_HOME", configdir.EnvDev} {
+		t.Setenv(key, "")
+	}
+	root := t.TempDir()
+	attach := func(string, string, string, uintptr, string) error { return nil }
+	if _, err := prepareVM(root, os.Getuid(), attach); err == nil {
+		t.Fatal("guest boot admitted a missing workspace link")
+	}
+	workspace := enginepaths.SessionScratchUnder(configdir.ChannelConfigRoot(filepath.Join(root, workBase)), "session")
+	testutil.FailErr(t, "link prepared workspace", os.Symlink(workspace, filepath.Join(root, "work")))
+	got, err := prepareVM(root, os.Getuid(), attach)
+	testutil.FailErr(t, "boot isolated session", err)
+	want := configuration{scratch: workspace, groups: filepath.Join(root, cgroupRoot, "pw-jobs"), helper: filepath.Join(root, "init")}
+	if got != want {
+		t.Fatalf("guest configuration = %+v, want %+v", got, want)
+	}
+	if _, err := prepareVM(root, os.Getuid(), attach); !errors.Is(err, os.ErrExist) {
+		t.Fatalf("reused guest domain error %v", err)
+	}
+	if _, err := prepareVM(root, os.Getuid(), func(string, string, string, uintptr, string) error { return unix.EPERM }); !errors.Is(err, unix.EPERM) {
+		t.Fatalf("failed mount error %v", err)
+	}
+}

@@ -21,22 +21,24 @@ const (
 
 type configuration struct{ scratch, groups, helper string }
 
-func prepareVM() (configuration, error) {
-	if err := mountVM("/", unix.Mount); err != nil {
+type mountFilesystem func(string, string, string, uintptr, string) error
+
+func prepareVM(root string, uid int, attach mountFilesystem) (configuration, error) {
+	if err := mountVM(root, attach); err != nil {
 		return configuration{}, err
 	}
-	if err := loadBootModules("/lib/pw-boot-modules", unix.FinitModule); err != nil {
+	if err := loadBootModules(filepath.Join(root, "lib/pw-boot-modules"), unix.FinitModule); err != nil {
 		return configuration{}, err
 	}
-	scratch, err := prepareWork(workBase, "/work", workUID)
+	scratch, err := prepareWork(filepath.Join(root, workBase), filepath.Join(root, "work"), uid)
 	if err != nil {
 		return configuration{}, err
 	}
-	groups, err := prepareJobGroups(cgroupRoot)
+	groups, err := prepareJobGroups(filepath.Join(root, cgroupRoot))
 	if err != nil {
 		return configuration{}, err
 	}
-	return configuration{scratch: scratch, groups: groups, helper: "/init"}, nil
+	return configuration{scratch: scratch, groups: groups, helper: filepath.Join(root, "init")}, nil
 }
 
 func prepareJobGroups(root string) (string, error) {
@@ -55,7 +57,7 @@ func prepareJobGroups(root string) (string, error) {
 	return jobGroups, nil
 }
 
-func mountVM(root string, attach func(string, string, string, uintptr, string) error) error {
+func mountVM(root string, attach mountFilesystem) error {
 	for _, mount := range []struct {
 		path, kind, options string
 		flags               uintptr
