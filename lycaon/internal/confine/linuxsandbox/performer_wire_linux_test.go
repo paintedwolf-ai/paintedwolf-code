@@ -12,7 +12,7 @@ import (
 )
 
 func TestPathCallFramesRoundTrip(t *testing.T) {
-	for _, op := range []string{callOpen, callMkdir, callMknod, callSymlink, callLink, callRename, callUnlink, callTruncate, callListener, callSessionBind} {
+	for _, op := range []string{callOpen, callMkdir, callMknod, callSymlink, callLink, callRename, callUnlink, callTruncate, callListener, callSessionBind, callMetadata} {
 		want := pathCall{Op: op, Absolute: 2, Dirs: 2, Mode: 0o644, Umask: 0o22, Flags: 1 << 40,
 			Dev: 7, Resolve: 3, Notification: 1<<63 + 5, Caller: 4242, Path: "a", NewPath: "b/c", Content: ""}
 		raw, err := encodePathCall(want)

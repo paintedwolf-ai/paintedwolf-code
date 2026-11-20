@@ -263,3 +263,41 @@ func TestLinuxMetadataPreservesReadOnlySourceMount(t *testing.T) {
 		t.Fatalf("source mount fixture did not finish: %s", out)
 	}
 }
+
+func TestLinuxSharedTempMetadataReportsTheObservedInode(t *testing.T) {
+	self := requireLinuxSandbox(t)
+	requireRefusalWatch(t)
+	project, custom := t.TempDir(), outsideTemporaryWriteRoots(t)
+	t.Setenv("TMPDIR", custom)
+	for _, root := range []string{"/tmp", custom} {
+		file, err := os.CreateTemp(root, "pw-meta-")
+		testutil.FailErr(t, "create metadata fixture", err)
+		testutil.FailErr(t, "close metadata fixture", file.Close())
+		target := file.Name()
+		t.Cleanup(func() { _ = os.Remove(target) })
+		probe := `import os,sys
+p=sys.argv[1]
+with open(p,"rb") as f:
+    for op in (lambda:os.chmod(p,0o640),lambda:os.fchmod(f.fileno(),0o640),lambda:os.utime(p,ns=(100,100)),lambda:os.setxattr(p,"user.pw","x".encode())):
+        try: op()
+        except OSError as e: print(e.errno)
+`
+		refusals, out := refusalsOf(t, self, liveBoundaryRoots(project), "/usr/bin/python3", "-I", "-c", probe, target)
+		got := map[string]bool{}
+		for _, r := range refusals.Refusals {
+			if r.Target == target && r.Layer == confine.FloorSharedTemp && r.Recovery == confine.RecoverWriteRoot && r.Grant == root {
+				got[r.Operation] = true
+			}
+		}
+		for _, op := range []string{"file-write-mode", "file-write-times", "file-write-xattr"} {
+			if !got[op] {
+				t.Fatalf("missing %s refusal for %s: %+v; output %q", op, root, refusals, out)
+			}
+		}
+		info, err := os.Stat(target)
+		testutil.FailErr(t, "inspect fixture", err)
+		if info.Mode().Perm() != 0o600 || info.ModTime().UnixNano() == 100 {
+			t.Fatalf("metadata changed after refusal: %v", info)
+		}
+	}
+}

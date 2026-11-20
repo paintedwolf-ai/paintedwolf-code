@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/lycaon/lycaon/internal/confine/linuxsandbox/metadatacall"
 	"golang.org/x/sys/unix"
 )
 
@@ -318,4 +319,46 @@ func selfRelative(path string, pid, tid int) string {
 		}
 	}
 	return path
+}
+
+const callMetadata = "metadata"
+const errMetadataContinue = errAnswered - 1
+
+func (s *supervisor) observeMetadata(t *targetProcess, o metadatacall.Operand) (int64, unix.Errno, bool) {
+	if o.Operation == "" || s.performer == nil {
+		return 0, errMetadataContinue, true
+	}
+	call := pathCall{Op: callMetadata, Content: o.Operation, Notification: t.id, Caller: t.pid}
+	if o.Address != 0 {
+		path, err := t.readPath(o.Address)
+		if err != nil {
+			return 0, errMetadataContinue, true
+		}
+		call.Path = selfRelative(path, t.caller.nsPid, t.caller.nsTid)
+	}
+	if call.Path == "" && !o.Empty {
+		return 0, errMetadataContinue, true
+	}
+	if o.NoFollow {
+		call.Flags = unix.O_NOFOLLOW
+	}
+	var dirs []int
+	if strings.HasPrefix(call.Path, "/") {
+		call.Absolute = 1
+	} else {
+		fd, err := t.openDir(o.Directory)
+		if err != nil {
+			return 0, errMetadataContinue, true
+		}
+		defer unix.Close(fd)
+		dirs = []int{fd}
+		call.Dirs = 1
+	}
+	if !t.valid() {
+		return 0, unix.EINTR, true
+	}
+	if err := s.performer.forward(call, dirs); err != nil {
+		return 0, errMetadataContinue, true
+	}
+	return 0, errAnswered, true
 }

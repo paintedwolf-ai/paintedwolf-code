@@ -15,6 +15,7 @@ import (
 	"strings"
 	"unsafe"
 
+	"github.com/lycaon/lycaon/internal/confine/linuxsandbox/metadatacall"
 	"github.com/lycaon/lycaon/internal/fspath"
 	"golang.org/x/sys/unix"
 )
@@ -88,7 +89,9 @@ func (s *supervisor) answer(listener int, n seccompNotif) {
 		return
 	}
 	resp := seccompNotifResp{ID: n.ID, Val: result}
-	if errno != 0 {
+	if errno == errMetadataContinue {
+		resp.Flags = unix.SECCOMP_USER_NOTIF_FLAG_CONTINUE
+	} else if errno != 0 {
 		resp = seccompNotifResp{ID: n.ID, Error: -int32(errno)}
 	}
 	_ = ioctlPtr(listener, unix.SECCOMP_IOCTL_NOTIF_SEND, unsafe.Pointer(&resp))
@@ -103,6 +106,9 @@ func (s *supervisor) perform(listener int, n seccompNotif) (int64, unix.Errno, b
 		return 0, unix.EACCES, errors.Is(err, unix.ESRCH)
 	}
 	defer target.close()
+	if operand, ok := metadatacall.Decode(uint32(n.Nr), n.Args, target.read); ok {
+		return s.observeMetadata(target, operand)
+	}
 	if isPathCall(n.Nr) {
 		return s.performPath(target, n)
 	}

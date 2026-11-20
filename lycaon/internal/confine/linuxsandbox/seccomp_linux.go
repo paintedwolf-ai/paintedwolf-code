@@ -4,6 +4,7 @@ package linuxsandbox
 
 import (
 	"fmt"
+	"github.com/lycaon/lycaon/internal/confine/linuxsandbox/metadatacall"
 	"unsafe"
 
 	"golang.org/x/net/bpf"
@@ -177,7 +178,7 @@ func seccompProgram() ([]bpf.RawInstruction, error) {
 		insts = append(insts, block...)
 	}
 	notify := uint32(unix.SECCOMP_RET_USER_NOTIF)
-	for _, nr := range append(append([]uint32(nil), pathCreators...), legacyPathCreators...) {
+	for _, nr := range append(append(metadatacall.Numbers(), pathCreators...), legacyPathCreators...) {
 		insts = append(insts,
 			bpf.JumpIf{Cond: bpf.JumpEqual, Val: nr, SkipFalse: 1},
 			bpf.RetConstant{Val: notify},

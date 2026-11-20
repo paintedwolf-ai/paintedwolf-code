@@ -306,6 +306,9 @@ func answerKernel(listener int, call pathCall, result pathResult, opened int) {
 		} else {
 			resp.Val = int64(remoteFD)
 		}
+	} else if call.Op == callMetadata && result.Errno == 0 {
+		// The mount enforces metadata writes when observation finds no refusal.
+		resp.Flags = unix.SECCOMP_USER_NOTIF_FLAG_CONTINUE
 	} else if result.Errno != 0 {
 		resp.Error = -int32(result.Errno)
 	}

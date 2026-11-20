@@ -42,6 +42,8 @@ func (f creationFloors) perform(call pathCall, dirs []int) (pathResult, int) {
 		}
 	}
 	switch call.Op {
+	case callMetadata:
+		return f.metadata(dir(0), call), -1
 	case callSessionBind:
 		return f.bindSessionSocket(call, dirs), -1
 	case callOpen:
@@ -517,4 +519,24 @@ func (f creationFloors) tempWriteResult(err error, operation string, parents ...
 		}
 	}
 	return result
+}
+
+func (f creationFloors) metadata(dir int, call pathCall) pathResult {
+	fd := dir
+	if call.Path != "" {
+		handle, err := unix.Openat(dir, call.Path, int(call.Flags)|unix.O_PATH|unix.O_CLOEXEC, 0)
+		if err != nil {
+			return pathResult{}
+		}
+		defer unix.Close(handle)
+		fd = handle
+	}
+	if !readOnlyMount(fd, "") {
+		return pathResult{}
+	}
+	path, err := os.Readlink("/proc/self/fd/" + strconv.Itoa(fd))
+	if err != nil || strings.HasSuffix(path, " (deleted)") || !underAny(path, f.sharedTemp) {
+		return pathResult{}
+	}
+	return pathResult{Errno: int(unix.EROFS), Refusal: &Refusal{Operation: call.Content, Target: path}}
 }
