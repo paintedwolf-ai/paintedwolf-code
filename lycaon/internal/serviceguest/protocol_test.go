@@ -127,3 +127,22 @@ func TestFrameBoundsAndHandshake(t *testing.T) {
 		t.Fatal("unmatched challenge accepted")
 	}
 }
+
+type failedTransport struct {
+	net.Conn
+	exit error
+}
+
+func (t failedTransport) Close() error {
+	_ = t.Conn.Close()
+	return t.exit
+}
+
+func TestFailedHandshakePreservesHelperExit(t *testing.T) {
+	host, guest := net.Pipe()
+	testutil.FailErr(t, "disconnect service fixture", guest.Close())
+	exit := errors.New("helper exited with status 4")
+	if _, err := Open(t.Context(), failedTransport{Conn: host, exit: exit}); !errors.Is(err, exit) {
+		t.Fatalf("open failed helper: %v", err)
+	}
+}

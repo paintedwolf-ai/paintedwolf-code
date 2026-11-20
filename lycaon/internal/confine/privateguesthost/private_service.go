@@ -20,7 +20,6 @@ func OpenPrivateGuest(ctx context.Context) (*serviceguest.Client, error) {
 		if err == nil {
 			return client, nil
 		}
-		err = errors.Join(err, channel.Close())
 	}
 	if ctx.Err() != nil {
 		return nil, ctx.Err()

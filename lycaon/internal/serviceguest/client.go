@@ -19,6 +19,7 @@ type Client struct {
 	active    map[uint64]pending
 	done      chan struct{}
 	closeOnce sync.Once
+	closeErr  error
 	send      sync.Mutex
 }
 
@@ -27,26 +28,23 @@ func Open(ctx context.Context, transport io.ReadWriteCloser) (*Client, error) {
 	c := &Client{transport: transport, active: make(map[uint64]pending), done: make(chan struct{})}
 	var nonce [32]byte
 	if _, err := rand.Read(nonce[:]); err != nil {
-		_ = transport.Close()
-		return nil, err
+		return nil, errors.Join(err, transport.Close())
 	}
 	go c.receive()
 	token := hex.EncodeToString(nonce[:])
 	reply, err := c.call(ctx, request{Op: "hello", Challenge: token})
-	if err != nil || reply.Challenge != token {
-		_ = c.Close()
-		if err != nil {
-			return nil, err
-		}
-		return nil, errors.New("private service handshake failed")
+	if err == nil && reply.Challenge != token {
+		err = errors.New("private service handshake failed")
+	}
+	if err != nil {
+		return nil, errors.Join(err, c.Close())
 	}
 	return c, nil
 }
 
 func (c *Client) Close() error {
-	var err error
-	c.closeOnce.Do(func() { close(c.done); err = c.transport.Close() })
-	return err
+	c.closeOnce.Do(func() { close(c.done); c.closeErr = c.transport.Close() })
+	return c.closeErr
 }
 
 func (c *Client) receive() {
