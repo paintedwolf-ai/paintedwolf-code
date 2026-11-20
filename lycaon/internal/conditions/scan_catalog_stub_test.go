@@ -191,7 +191,7 @@ func TestDeferredScanCatalogStubsNotRegistered(t *testing.T) {
 }
 
 func TestShippedScanDomainIDsRegistered(t *testing.T) {
-	shipped := conditions.ShippedScanDomainIDs()
+	shipped := conditionstest.ScanIDs
 	if len(shipped) == 0 {
 		t.Fatal("no shipped scan domain ids")
 	}
