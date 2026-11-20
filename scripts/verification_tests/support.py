@@ -165,7 +165,12 @@ sys.exit(code)
         return process
 
     def await_condition(self, predicate):
+        """Wait for queue state; once every request the fixture started has exited, nothing else will change it."""
         while not predicate():
+            if self.processes and all(process.poll() is not None for process in self.processes) and not predicate():
+                outputs = "".join(out + err for out, err in (process.communicate() for process in self.processes))
+                self.fail("every started request exited before the expected state: "
+                          + json.dumps(self.queue.status()) + "\n" + outputs)
             time.sleep(.02)
 
     def queued(self, count):
