@@ -518,3 +518,12 @@ func TestProgramEntryStatesTheSettledRun(t *testing.T) {
 		}
 	}
 }
+
+func TestPrivateServiceReleaseUsesProcessEntry(t *testing.T) {
+	f := newProgramFixture(t)
+	out, err := f.call(t, t.Context(), "private-service release && printf ready")
+	testutil.FailErr(t, "release idle private service", err)
+	if result := decodeOutcome(t, out); result.Stdout != "ready" {
+		t.Fatalf("private service release outcome %s", out)
+	}
+}
