@@ -42,98 +42,130 @@ func DelegateForBroker(uid int) error {
 	if err != nil {
 		return err
 	}
+	root, err := unix.Openat2(unix.AT_FDCWD, hierarchy, &unix.OpenHow{Flags: unix.O_RDONLY | unix.O_DIRECTORY | unix.O_CLOEXEC, Resolve: unix.RESOLVE_NO_SYMLINKS})
+	if err != nil {
+		return err
+	}
+	defer unix.Close(root)
 	var fs unix.Statfs_t
-	if err := unix.Statfs(hierarchy, &fs); err != nil {
+	if err := unix.Fstatfs(root, &fs); err != nil {
 		return err
 	}
 	if fs.Type != unix.CGROUP2_SUPER_MAGIC {
 		return errors.New("private service hierarchy is not cgroup v2")
 	}
-	path := hierarchy
-	if err := controlledDirectory(path); err != nil {
-		return err
-	}
 	relative, err := filepath.Rel(hierarchy, currentGroup)
 	if err != nil {
 		return err
 	}
+	currentDir := root
 	if relative != "." {
-		for _, entry := range strings.Split(relative, "/") {
-			path = filepath.Join(path, entry)
-			if err := controlledDirectory(path); err != nil {
+		for _, name := range strings.Split(relative, "/") {
+			fd, err := openDirectory(currentDir, name, false, 0)
+			if err != nil {
 				return err
 			}
+			defer unix.Close(fd)
+			currentDir = fd
 		}
 	}
-	if err := enable(path); err != nil {
+	if err := writeControl(currentDir, "cgroup.subtree_control", controllers); err != nil {
 		return err
 	}
 	for _, name := range []string{class, identity(uid)} {
-		path = filepath.Join(path, name)
-		if err := makeControlled(path); err != nil {
+		fd, err := openDirectory(currentDir, name, true, 0)
+		if err != nil {
 			return err
 		}
-		if err := enable(path); err != nil {
+		defer unix.Close(fd)
+		currentDir = fd
+		if err := writeControl(fd, "cgroup.subtree_control", controllers); err != nil {
 			return err
 		}
 	}
-	manager := filepath.Join(path, "ordinary")
-	if err := makeControlled(manager); err != nil {
-		return err
-	}
-	pool := filepath.Join(path, "sessions")
-	// The root-owned parent fixes the pool's name and aggregate ceilings.
-	if err := os.Mkdir(pool, 0755); err != nil && !errors.Is(err, os.ErrExist) {
-		return err
-	}
-	stat, err := os.Lstat(pool)
+	manager, err := openDirectory(currentDir, "ordinary", true, 0)
 	if err != nil {
 		return err
 	}
-	if !stat.IsDir() {
-		return unix.ENOTDIR
-	}
-	if err := setLimits(pool, 4); err != nil {
+	defer unix.Close(manager)
+	pool, err := openDirectory(currentDir, "sessions", true, uint32(uid))
+	if err != nil {
 		return err
 	}
-	if err := enable(pool); err != nil {
-		return err
-	}
-	for _, name := range []string{"cgroup.procs", "cgroup.threads", "cgroup.subtree_control", ""} {
-		if err := os.Chown(filepath.Join(pool, name), uid, -1); err != nil {
+	defer unix.Close(pool)
+	for file, value := range limits(4) {
+		if err := writeControl(pool, file, value); err != nil {
 			return err
 		}
 	}
-	if err := os.Chown(filepath.Join(path, "cgroup.procs"), uid, -1); err != nil {
+	if err := writeControl(pool, "cgroup.subtree_control", controllers); err != nil {
 		return err
 	}
-	return os.WriteFile(filepath.Join(manager, "cgroup.procs"), []byte("0"), 0600)
-}
-
-func controlledDirectory(path string) error {
-	var st unix.Stat_t
-	if err := unix.Lstat(path, &st); err != nil {
+	for _, name := range []string{"cgroup.procs", "cgroup.threads", "cgroup.subtree_control"} {
+		if err := delegateControl(pool, name, uid); err != nil {
+			return err
+		}
+	}
+	if err := unix.Fchown(pool, uid, -1); err != nil {
 		return err
 	}
-	if st.Mode&unix.S_IFMT != unix.S_IFDIR || st.Uid != 0 || st.Mode&0022 != 0 {
-		return fmt.Errorf("untrusted cgroup %q", path)
-	}
-	return nil
-}
-
-func makeControlled(path string) error {
-	if err := os.Mkdir(path, 0755); err != nil && !errors.Is(err, os.ErrExist) {
+	if err := delegateControl(currentDir, "cgroup.procs", uid); err != nil {
 		return err
 	}
-	return controlledDirectory(path)
+	return writeControl(manager, "cgroup.procs", "0")
 }
 
-func enable(path string) error {
-	return os.WriteFile(filepath.Join(path, "cgroup.subtree_control"), []byte(controllers), 0600)
+func openDirectory(parent int, name string, create bool, owner uint32) (int, error) {
+	if create {
+		if err := unix.Mkdirat(parent, name, 0755); err != nil && !errors.Is(err, unix.EEXIST) {
+			return -1, err
+		}
+	}
+	fd, err := openObject(parent, name, unix.O_RDONLY|unix.O_DIRECTORY)
+	if err != nil {
+		return -1, err
+	}
+	var stat unix.Stat_t
+	if err := unix.Fstat(fd, &stat); err != nil || (stat.Uid != 0 && stat.Uid != owner) || stat.Mode&0022 != 0 {
+		_ = unix.Close(fd)
+		return -1, fmt.Errorf("untrusted service cgroup %q", name)
+	}
+	return fd, nil
+}
+
+// Privileged writes stay on the captured cgroup mount, including beneath delegated directories.
+func openObject(parent int, name string, flags uint64) (int, error) {
+	return unix.Openat2(parent, name, &unix.OpenHow{Flags: flags | unix.O_CLOEXEC, Resolve: unix.RESOLVE_BENEATH | unix.RESOLVE_NO_XDEV | unix.RESOLVE_NO_SYMLINKS})
+}
+
+func writeControl(parent int, name, value string) error {
+	fd, err := openObject(parent, name, unix.O_WRONLY)
+	if err != nil {
+		return err
+	}
+	defer unix.Close(fd)
+	n, err := unix.Write(fd, []byte(value))
+	if err == nil && n != len(value) {
+		return errors.New("incomplete cgroup control write")
+	}
+	return err
+}
+
+func delegateControl(parent int, name string, uid int) error {
+	fd, err := openObject(parent, name, unix.O_RDONLY)
+	if err != nil {
+		return err
+	}
+	defer unix.Close(fd)
+	return unix.Fchown(fd, uid, -1)
+}
+
+func limits(sessions int) map[string]string {
+	return map[string]string{"memory.max": strconv.Itoa(sessions * (512 << 20)), "pids.max": strconv.Itoa(sessions * 256)}
 }
 
 func setLimits(path string, sessions int) error {
-	for name, value := range map[string]string{"memory.max": strconv.Itoa(sessions * (512 << 20)), "pids.max": strconv.Itoa(sessions * 256)} {
+	for name, value := range limits(sessions) {
 		if err := os.WriteFile(filepath.Join(path, name), []byte(value), 0600); err != nil {
 			return err
 		}
