@@ -207,7 +207,7 @@ func TestWorkerTurnRecoveryIsScopedByOrigin(t *testing.T) {
 	st := openTurnSQLStore(t)
 	sess, err := st.Sessions.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
-	_, err = st.core.db.db.ExecContext(ctx, `
+	_, err = st.core.db.ExecContext(ctx, `
 		INSERT INTO worker_jobs (
 			id, project_id, child_session_id, agent_type, status, prompt, brief, created_at
 		) VALUES (?, ?, ?, 'repo-researcher', 'running', 'fixture', 'fixture', ?)
@@ -264,17 +264,17 @@ func TestReadModelOutputsReturnsASessionsOutputsWithTheirBodies(t *testing.T) {
 			Iteration: i + 1, MessageID: uuid.NewString(), Content: content, ToolCallsJSON: map[bool]string{true: `[{"id":"c1"}]`}[content == ""]})
 		testutil.FailErr(t, "settle output", err)
 	}
-	outputs, err := ReadModelOutputs(t.Context(), st.core.queries.queries, dataDir, "reader")
+	outputs, err := ReadModelOutputs(t.Context(), st.core.queries, dataDir, "reader")
 	testutil.FailErr(t, "read outputs", err)
 	if len(outputs) != 2 || outputs[0].Content != "First." || outputs[1].ToolCallsJSON != `[{"id":"c1"}]` || outputs[0].SettledAt.IsZero() {
 		t.Fatalf("outputs = %+v", outputs)
 	}
-	none, err := ReadModelOutputs(t.Context(), st.core.queries.queries, dataDir, "other")
+	none, err := ReadModelOutputs(t.Context(), st.core.queries, dataDir, "other")
 	testutil.FailErr(t, "read empty session", err)
 	if len(none) != 0 {
 		t.Fatalf("another session's outputs = %+v", none)
 	}
-	if _, err := ReadModelOutputs(t.Context(), st.core.queries.queries, t.TempDir(), "reader"); err == nil {
+	if _, err := ReadModelOutputs(t.Context(), st.core.queries, t.TempDir(), "reader"); err == nil {
 		t.Fatal("an output whose body is missing was read")
 	}
 }

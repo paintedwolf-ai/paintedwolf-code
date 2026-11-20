@@ -31,7 +31,7 @@ func TestLatestTurnStatus(t *testing.T) {
 		_, err = st.Turns.FinishTurn(ctx, execution.Turn.ID, execution.Attempt.ID, status, "", "{}", "")
 		testutil.FailErr(t, "finish turn", err)
 		check(status)
-		reopened, err := NewSQL(st.core.db.db).LatestTurnStatus(ctx, sess.ID)
+		reopened, err := NewSQL(st.core.db).Turns.LatestTurnStatus(ctx, sess.ID)
 		testutil.FailErr(t, "read status from reopened store", err)
 		if reopened != status {
 			t.Fatalf("reopened status=%q want=%q", reopened, status)

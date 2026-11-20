@@ -4,8 +4,8 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/conditions"
-	"github.com/lycaon/lycaon/internal/conditions/conditionstest"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/testutil/conditionstest"
 )
 
 // gate_passed:<name> reads only the typed gates map; other vars never satisfy it.
