@@ -13,10 +13,11 @@ import (
 )
 
 func TestGuestWorkDirectories(t *testing.T) {
-	for _, key := range []string{"HOME", "PATH", "LANG", "LC_ALL", "XDG_CACHE_HOME", "XDG_DATA_HOME", configdir.EnvDev, configdir.EnvConfigDir} {
+	for _, key := range []string{"HOME", "PATH", "LANG", "LC_ALL", "XDG_CACHE_HOME", "XDG_DATA_HOME", configdir.EnvDev} {
 		t.Setenv(key, "")
 	}
 	root := t.TempDir()
+	t.Setenv(configdir.EnvConfigDir, filepath.Join(root, "host-override"))
 	home, link := filepath.Join(root, "home"), filepath.Join(root, "work")
 	want := enginepaths.SessionScratchUnder(configdir.ChannelConfigRoot(home), "session")
 	if _, err := prepareWork(home, link, os.Getuid()); err == nil {
