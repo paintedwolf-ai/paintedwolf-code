@@ -7,7 +7,6 @@ import (
 	"io"
 	"os"
 	"path"
-	"path/filepath"
 	"strings"
 
 	"github.com/diskfs/go-diskfs/backend/file"
@@ -73,6 +72,11 @@ func extract(image, output string) error {
 	if err := lines.Err(); err != nil {
 		return err
 	}
+	destination, err := os.OpenRoot(output)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = destination.Close() }()
 	seen := map[string]bool{}
 	var write func(string) error
 	write = func(name string) error {
@@ -97,7 +101,7 @@ func extract(image, output string) error {
 			return err
 		}
 		seen[name] = true
-		return os.WriteFile(filepath.Join(output, fmt.Sprintf("%02d-%s", len(seen), path.Base(name))), data, 0600)
+		return destination.WriteFile(fmt.Sprintf("%02d-%s", len(seen), path.Base(name)), data, 0600)
 	}
 	builtin, err := tree.OpenFile(path.Join(root, "modules.builtin"), os.O_RDONLY)
 	if err != nil {
