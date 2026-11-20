@@ -11,7 +11,7 @@ import (
 	"syscall"
 
 	"github.com/lycaon/lycaon/internal/serviceguest"
-	"github.com/lycaon/lycaon/internal/servicescope"
+	"github.com/lycaon/lycaon/internal/launchguard/servicescope"
 	"golang.org/x/sys/unix"
 )
 

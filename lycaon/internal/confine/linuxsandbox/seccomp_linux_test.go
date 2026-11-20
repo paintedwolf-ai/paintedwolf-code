@@ -208,3 +208,31 @@ func TestSeccompProgramDecides(t *testing.T) {
 		t.Fatalf("foreign architecture: filter returned %#x, want kill", got)
 	}
 }
+
+func TestPrivateServiceCPUSet(t *testing.T) {
+	for _, fixed := range []bool{false, true} {
+		raw, err := seccompProgram(fixed)
+		if err != nil {
+			t.Fatal(err)
+		}
+		code, ok := bpf.Disassemble(raw)
+		if !ok {
+			t.Fatal("invalid program")
+		}
+		vm, err := bpf.NewVM(code)
+		if err != nil {
+			t.Fatal(err)
+		}
+		data := make([]byte, 64)
+		binary.BigEndian.PutUint32(data[seccompDataArch:], nativeAuditArch)
+		binary.BigEndian.PutUint32(data[seccompDataNr:], unix.SYS_SCHED_SETAFFINITY)
+		got, err := vm.Run(data)
+		want := int(unix.SECCOMP_RET_ALLOW)
+		if fixed {
+			want = int(unix.SECCOMP_RET_ERRNO) | int(unix.EPERM)
+		}
+		if err != nil || got != want {
+			t.Fatalf("fixed=%v: got %#x, %v, want %#x", fixed, got, err, want)
+		}
+	}
+}

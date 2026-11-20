@@ -11,7 +11,7 @@ import (
 	"golang.org/x/sys/unix"
 
 	"github.com/lycaon/lycaon/internal/launchbroker"
-	"github.com/lycaon/lycaon/internal/servicescope"
+	"github.com/lycaon/lycaon/internal/launchguard/servicescope"
 	"path/filepath"
 )
 
