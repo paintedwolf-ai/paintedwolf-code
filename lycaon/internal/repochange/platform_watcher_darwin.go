@@ -68,7 +68,7 @@ func newPlatformWatcher(root string) (platformWatcher, error) {
 	w.streams = []*fsevents.EventStream{stream}
 	w.roots = []fseventsWatchRoot{{logical: root, resolved: resolved}}
 	w.wg.Add(2)
-	go w.pump(stream)
+	go w.pump(stream, stream.EventID)
 	go w.deliver()
 	return w, nil
 }
@@ -128,7 +128,7 @@ func (w *fseventsPlatformWatcher) Add(path string) error {
 	w.streams = append(w.streams, stream)
 	w.wg.Add(1)
 	w.mu.Unlock()
-	go w.pump(stream)
+	go w.pump(stream, stream.EventID)
 	return nil
 }
 
@@ -174,7 +174,7 @@ func (w *fseventsPlatformWatcher) Close() error {
 	return nil
 }
 
-func (w *fseventsPlatformWatcher) pump(stream *fsevents.EventStream) {
+func (w *fseventsPlatformWatcher) pump(stream *fsevents.EventStream, minID uint64) {
 	defer w.wg.Done()
 	for {
 		select {
@@ -185,7 +185,7 @@ func (w *fseventsPlatformWatcher) pump(stream *fsevents.EventStream) {
 				return
 			}
 			for _, event := range batch {
-				if translated := w.translate(event); translated.resync || translated.event.Op != 0 {
+				if translated := w.translate(event); translated.resync || (event.ID > minID && translated.event.Op != 0) {
 					w.enqueue(translated)
 				}
 			}
