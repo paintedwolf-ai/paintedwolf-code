@@ -3,11 +3,13 @@ package privateguesthost
 import (
 	"context"
 	"errors"
+	"os"
 	"path/filepath"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/nixgeneration"
 	"github.com/lycaon/lycaon/internal/serviceguest"
+	"github.com/lycaon/lycaon/internal/testutil"
 )
 
 func TestPrivateServiceBundle(t *testing.T) {
@@ -37,4 +39,25 @@ func TestPrivateServiceBundle(t *testing.T) {
 	if _, err := launchServiceBundle(ctx, dir); !errors.Is(err, context.Canceled) {
 		t.Fatalf("canceled service launch: got %v", err)
 	}
+}
+
+func TestMain(m *testing.M) {
+	if len(os.Args) == 2 && os.Args[1] == "--acquire-native" {
+		os.Exit(handshakeFixtureStatus(os.Stdin))
+	}
+	os.Exit(m.Run())
+}
+
+func TestPrivateServicePackageActivation(t *testing.T) {
+	host, err := os.Executable()
+	testutil.FailErr(t, "locate test executable", err)
+	bundle := filepath.Join(filepath.Dir(host), "service-guest")
+	testutil.FailErr(t, "reserve fixture bundle", os.Mkdir(bundle, 0700))
+	t.Cleanup(func() { _ = os.RemoveAll(bundle) })
+	root := filepath.Join(bundle, "rootfs")
+	testutil.FailErr(t, "stage root filesystem", os.Mkdir(root, 0700))
+	testutil.FailErr(t, "stage protocol fixture", os.Symlink(host, filepath.Join(root, "init")))
+	client, err := OpenPrivateGuest(t.Context())
+	testutil.FailErr(t, "open packaged fixture", err)
+	testutil.FailErr(t, "release and reap packaged fixture", client.Close())
 }

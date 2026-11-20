@@ -1,7 +1,6 @@
 package privateguesthost
 
 import (
-	"context"
 	"encoding/hex"
 	"errors"
 	"io"
@@ -15,10 +14,6 @@ import (
 	"github.com/lycaon/lycaon/internal/testutil"
 )
 
-type handshakeFixture struct{ serviceguest.Executor }
-
-func (handshakeFixture) Close() error { return nil }
-
 func TestMain(m *testing.M) {
 	if filepath.Base(os.Args[0]) == "pw-service-vm" {
 		for i, name := range []string{"manifest.json", "kernel", "initramfs.gz"} {
@@ -30,10 +25,7 @@ func TestMain(m *testing.M) {
 			_ = file.Close()
 		}
 		channel := os.NewFile(3, "activation")
-		if err := serviceguest.Serve(context.Background(), channel, handshakeFixture{}); err != nil && !errors.Is(err, io.EOF) {
-			os.Exit(1)
-		}
-		os.Exit(0)
+		os.Exit(handshakeFixtureStatus(channel))
 	}
 	os.Exit(m.Run())
 }
