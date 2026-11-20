@@ -319,6 +319,10 @@ The Go host binds a private service environment to one session. The process subs
 | Linux | The private userland runs under Linux kernel isolation. Workload sockets use the Linux supervisor’s bound-inode checks. |
 | macOS | A separate virtualization-entitled helper runs the private Linux userland in an ephemeral VM. A dedicated virtio socket device connects the host to the guest supervisor. The VM has no host directory share or network interface. |
 
+The Linux launch broker selects resources inside its existing cgroup hierarchy. Its privileged setup checks the active package image and delegates a bounded service subtree before dropping privileges. Kernel directory descriptors pin the delegation to cgroup v2. The ordinary broker's group shares the original ancestor limits. Each service takes a distinct leaf with a 512 MiB memory ceiling and 256 tasks. A user service manager can supply an equivalent transient scope. The launcher pins each environment to one available CPU, and the workload filter protects the inherited affinity.
+
+The controller pivots to the packaged, read-only root in private mount, user, PID, network and IPC namespaces. Separate tmpfs mounts hold the workspace, temporary files and shared memory. A connected descriptor carries the control protocol. Closing it waits for the namespace's processes to exit.
+
 The guest supervisor launches unprivileged workloads in the private environment. The workload cannot inherit the management channel. The helper has no vault access. Existing human approval rules govern connections to host services and writes to host temporary directories.
 
 ### Platform coverage
