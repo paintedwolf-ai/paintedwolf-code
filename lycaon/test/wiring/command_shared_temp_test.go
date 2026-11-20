@@ -47,3 +47,24 @@ func TestDeclaredSharedTempRedirectIsReviewedBeforeWriting(t *testing.T) {
 		})
 	}
 }
+
+func TestDeclaredSharedTempRedirectUsesTheRequestedNarrowGrant(t *testing.T) {
+	shared := outsideCommandFolder(t)
+	target := filepath.Join(shared, "output.txt")
+	args := map[string]any{
+		"command":            "printf changed > '" + target + "'",
+		"capability_request": map[string]any{"write_root": target},
+	}
+	session := newCommandProgramSessionWithArgs(t, args, wire.CreateSessionRequest{}, "", gate.PostureBalanced)
+	t.Setenv("TMPDIR", shared)
+	cards := runCommandWithApprovals(t, session, "recommended")
+	plan := cards[0].ToolApproval.Plan
+	if plan.Subject.Kind != wire.ApprovalSubjectKindWriteRootSet {
+		t.Fatalf("exact target review = %+v", plan)
+	}
+	data, err := os.ReadFile(target)
+	testutil.FailErr(t, "read exact redirect target", err)
+	if string(data) != "changed" {
+		t.Fatalf("redirect target = %q", data)
+	}
+}

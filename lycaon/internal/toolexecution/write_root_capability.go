@@ -34,6 +34,10 @@ func (e *Boundary) preflightWriteRoot(ctx context.Context, tool string, args map
 
 // ReviewRedirectRoot reviews the destination before its producer starts.
 func (e *Boundary) ReviewRedirectRoot(ctx context.Context, tc tools.ToolContext, operator, path, root string) (tools.ToolContext, error) {
+	tc.Files.GrantedWriteRoots = e.actionConfineRequest(ctx, tc).GrantedWriteRoots
+	if confine.PathWithinRoots(path, tc.Files.GrantedWriteRoots) {
+		return tc, nil
+	}
 	args := map[string]any{"command": operator + " " + path}
 	if err := e.reviewWriteRoot(ctx, "command", args, tc, root); err != nil {
 		return tc, err
