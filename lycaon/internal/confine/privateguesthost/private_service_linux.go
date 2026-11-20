@@ -5,23 +5,47 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/lycaon/lycaon/internal/configlayout"
-	hostexec "github.com/lycaon/lycaon/internal/exec"
-	"github.com/lycaon/lycaon/internal/installbinding"
-	"github.com/lycaon/lycaon/internal/serviceguest"
-	"golang.org/x/sys/unix"
 	"net"
 	"os"
 	"path/filepath"
+
+	"github.com/lycaon/lycaon/internal/configdir"
+	"github.com/lycaon/lycaon/internal/configlayout"
+	hostexec "github.com/lycaon/lycaon/internal/exec"
+	"github.com/lycaon/lycaon/internal/installbinding"
+	"github.com/lycaon/lycaon/internal/nixgeneration"
+	"github.com/lycaon/lycaon/internal/serviceguest"
+	"golang.org/x/sys/unix"
 )
 
-// OpenPrivateGuest starts one bounded service environment in the user's manager.
+// OpenPrivateGuest activates the service userland attached to this engine.
 func OpenPrivateGuest(ctx context.Context) (*serviceguest.Client, error) {
-	root := configlayout.EngineRoot()
-	if !filepath.IsAbs(root) {
-		return nil, errors.Join(serviceguest.ErrUnavailable, errors.New("private service package is missing"))
+	host, err := os.Executable()
+	if err != nil {
+		return nil, errors.Join(serviceguest.ErrUnavailable, err)
 	}
-	return openPrivateGuestFrom(ctx, filepath.Join(root, "service-guest"))
+	layout, err := nixgeneration.Running()
+	if err != nil {
+		return nil, errors.Join(serviceguest.ErrUnavailable, err)
+	}
+	bundle, err := serviceBundle(host, layout, configdir.IsDevelopmentBuild())
+	if err != nil {
+		return nil, err
+	}
+	return openPrivateGuestFrom(ctx, bundle)
+}
+func serviceBundle(host string, layout *nixgeneration.Layout, development bool) (string, error) {
+	root := configlayout.LinuxInstallRoot
+	if layout != nil {
+		root = layout.Root
+	}
+	if filepath.Dir(host) == filepath.Join(root, "bin") {
+		return filepath.Join(root, configlayout.LinuxEngineRootDirName, "service-guest"), nil
+	}
+	if development && filepath.IsAbs(host) {
+		return filepath.Join(filepath.Dir(host), "service-guest"), nil
+	}
+	return "", errors.Join(serviceguest.ErrUnavailable, errors.New("private service package is missing"))
 }
 
 func openPrivateGuestFrom(ctx context.Context, bundle string) (*serviceguest.Client, error) {
