@@ -3,7 +3,7 @@ import Foundation
 import Virtualization
 
 enum GuestError: Error {
-    case invalidChannel, unsupportedMachine, invalidAssets, invalidArguments
+    case invalidLauncher, invalidChannel, unsupportedMachine, invalidAssets, invalidArguments
 }
 
 @main
@@ -11,6 +11,7 @@ struct GuestHost {
     static func main() {
         do {
             guard CommandLine.arguments.count == 1 else { throw GuestError.invalidArguments }
+            try verifyLauncher()
             try verifyChannel(3)
             guard VZVirtualMachine.isSupported else { throw GuestError.unsupportedMachine }
             signal(SIGPIPE, SIG_IGN)
@@ -20,7 +21,7 @@ struct GuestHost {
             boot.commandLine = "rdinit=/init panic=1 quiet"
             let config = VZVirtualMachineConfiguration()
             config.bootLoader = boot
-            config.cpuCount = 2
+            config.cpuCount = 1
             config.memorySize = 1024 * 1024 * 1024
             config.entropyDevices = [VZVirtioEntropyDeviceConfiguration()]
             config.socketDevices = [VZVirtioSocketDeviceConfiguration()]

@@ -34,7 +34,8 @@ final class BootAssets {
     private static func inherited(_ fd: Int32, maximum: Int64) throws -> FileHandle {
         let handle = FileHandle(fileDescriptor: fd, closeOnDealloc: true)
         var info = stat()
-        guard fstat(fd, &info) == 0, (info.st_mode & S_IFMT) == S_IFREG,
+        let flags = fcntl(fd, F_GETFL)
+        guard flags >= 0, flags & O_ACCMODE == O_RDONLY, fstat(fd, &info) == 0, (info.st_mode & S_IFMT) == S_IFREG,
               info.st_size > 0, info.st_size <= maximum else { throw GuestError.invalidAssets }
         return handle
     }
