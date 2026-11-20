@@ -304,7 +304,7 @@ On Linux the supervisor that performs every `connect`, `bind`, and `listen` a co
 | A listener or a direct connection | `local_listen`, or `loopback_connect` / `direct_ip`; a refused connection is reported only by port |
 | A signal outside the boundary | `process_control` |
 | A query for interface state: `system-info`, or a routing or kernel control socket | None: the kernel redacts the answer or the program continues without it |
-| Anything no sandbox capability admits, such as a unix-socket listener or a device | `host_execution` |
+| An operation requiring host access, such as binding a Unix socket at a required path outside session scratch or opening a protected device | `host_execution` |
 
 On Linux an action settles when every launch's report pipe has closed, which happens when its supervisor exits, bounded by the same timeout. On macOS, when an action ends, the host has the kernel refuse one more operation under a fresh tag and waits for that report. The kernel's live log is one ordered stream, so the probe's arrival means every earlier report has been read. A result lists what was refused, and names its `sandbox_refusal_witness` when the record is weaker: `incomplete` when the stream was not live for the whole action, restarted, or never delivered the probe, and `unavailable` when this host cannot read the reports at all (streaming the unified log requires an administrator account). The live stream can also drop reports without saying so, during a burst and for minutes after it, so an empty or partial list is never evidence that nothing else was refused.
 
