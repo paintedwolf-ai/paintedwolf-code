@@ -127,29 +127,36 @@ func TestProgramRedirectConflictStopsLaterStatements(t *testing.T) {
 	}
 }
 
-func TestProgramOutsideWritesRefusedForRedirectAndMutationWhileTempAllowed(t *testing.T) {
+func TestProgramRedirectAndMutationUseSessionScratch(t *testing.T) {
 	h := newHarness(t, nil)
 	account, err := user.LookupId(strconv.Itoa(os.Getuid()))
 	testutil.FailErr(t, "look up account home", err)
-	outsideDir, err := os.MkdirTemp(account.HomeDir, ".paintedwolf-mutation-outside-") //nolint:usetesting // Must lie outside OS temporary write roots.
+	outsideDir, err := os.MkdirTemp(account.HomeDir, ".paintedwolf-mutation-outside-") //nolint:usetesting // Exercise a home path outside the attached roots.
 	testutil.FailErr(t, "create outside fixture dir", err)
 	t.Cleanup(func() { _ = os.RemoveAll(outsideDir) })
 
-	// The OS temporary directory in its own spelling, which on macOS runs
-	// through a linked parent (/tmp or /var).
-	tmpDir := t.TempDir()
+	tmpDir := h.tc.Host.SessionScratchDir
 
 	tmpFile := filepath.Join(tmpDir, "allowed.txt")
 	tmpSub := filepath.Join(tmpDir, "sub")
 	out, err := h.evaluate("echo temp-ok > " + tmpFile + "; mkdir " + tmpSub)
 	if err != nil || out.Stop != nil {
-		t.Fatalf("OS temp write refused below Strict: err=%v stop=%+v", err, out.Stop)
+		t.Fatalf("session scratch write refused: err=%v stop=%+v", err, out.Stop)
 	}
 	if data, readErr := os.ReadFile(tmpFile); readErr != nil || string(data) != "temp-ok\n" {
 		t.Fatalf("temp redirect write = %q, %v", data, readErr)
 	}
 	if info, statErr := os.Stat(tmpSub); statErr != nil || !info.IsDir() {
 		t.Fatalf("temp mkdir = %v, %v", info, statErr)
+	}
+
+	sharedFile := filepath.Join(t.TempDir(), "unapproved")
+	out, err = h.evaluate("echo nope > " + sharedFile)
+	if reject := toolrejection.AsToolReject(err); reject == nil || reject.Code != "SURVEY_PATH_ESCAPE" || out.Stop == nil {
+		t.Fatalf("shared temp redirect: err=%v stop=%+v", err, out.Stop)
+	}
+	if _, err := os.Lstat(sharedFile); !os.IsNotExist(err) {
+		t.Fatalf("shared temp redirect created %s: %v", sharedFile, err)
 	}
 
 	redirectTarget := filepath.Join(outsideDir, "redirect.txt")
