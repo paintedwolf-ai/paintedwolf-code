@@ -120,8 +120,7 @@ func (s *jobs) Start(ctx context.Context, id string, argv []string, input []byte
 }
 
 func (s *jobs) launch(ctx context.Context, j *job, argv []string, input []byte) error {
-	box := confine.Confinement{SessionScratchRoot: s.config.scratch, Network: confine.NetworkDeny, EgressOff: confine.EgressOffOverride,
-		Process: confine.ProcessAttributes{Limits: []confine.ResourceLimit{{Resource: "core", Soft: 0, Hard: 0}, {Resource: "nofile", Soft: 256, Hard: 256}, {Resource: "fsize", Soft: 128 << 20, Hard: 128 << 20}}}}
+	box := confine.PrivateServiceBoundary(s.config.scratch, confine.ProcessAttributes{Limits: []confine.ResourceLimit{{Resource: "core", Soft: 0, Hard: 0}, {Resource: "nofile", Soft: 256, Hard: 256}, {Resource: "fsize", Soft: 128 << 20, Hard: 128 << 20}}})
 	cmd, release, err := confine.Command(ctx, s.config.helper, argv[0], argv[1:], box)
 	if err != nil {
 		return err

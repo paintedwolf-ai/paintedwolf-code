@@ -20,6 +20,18 @@ func osDefaultWriteRoots() []string {
 	return append(standardCacheDataRoots(), platformUserCache())
 }
 
+// PrivateServiceBoundary confines a guest command to its session workspace.
+func PrivateServiceBoundary(scratch string, process ProcessAttributes) Confinement {
+	return Confinement{privateUserland: true, SessionScratchRoot: scratch, Process: process, Network: NetworkDeny, EgressOff: EgressOffOverride}
+}
+
+func (c Confinement) writeRoots() ([]string, error) {
+	if c.privateUserland {
+		return filesystemRoots("", nil, nil, c.SessionScratchRoot, nil)
+	}
+	return WriteRootsForBoundary(c.ProjectID, c.Roots, c.GrantedWriteRoots, c.SessionScratchRoot)
+}
+
 // WriteRootsForBoundary is the write profile for one confinement: attached
 // roots, session scratch, OS caches, durable grants, and per-action granted overlays.
 func WriteRootsForBoundary(projectID string, projectRoots, granted []string, sessionScratchRoot string) ([]string, error) {

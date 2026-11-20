@@ -100,7 +100,7 @@ func BoundaryOf(c *Confinement) Boundary {
 	if c == nil {
 		return Boundary{}
 	}
-	writeRoots, err := WriteRootsForBoundary(c.ProjectID, c.Roots, c.GrantedWriteRoots, c.SessionScratchRoot)
+	writeRoots, err := c.writeRoots()
 	if err != nil {
 		return Boundary{}
 	}
@@ -127,6 +127,7 @@ func (b Boundary) DeniesDirectSockets() bool {
 
 // Confinement describes the box for one command.
 type Confinement struct {
+	privateUserland bool
 	ProcessControl  bool
 	CredentialStore bool
 	HostExecution   bool
@@ -407,7 +408,7 @@ func filesystemRules(c Confinement) (FilesystemRules, error) {
 		roots:      slices.Clone(c.Roots),
 		sharedTemp: SharedTempLocations(),
 	}
-	writeRoots, err := WriteRootsForBoundary(c.ProjectID, c.Roots, c.GrantedWriteRoots, c.SessionScratchRoot)
+	writeRoots, err := c.writeRoots()
 	if err != nil {
 		return rules, err
 	}
