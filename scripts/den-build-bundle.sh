@@ -63,11 +63,8 @@ bash "${ROOT}/scripts/sync-den-versions.sh"
 bash "${ROOT}/scripts/stage-engine.sh" --release
 BUNDLED_OPENGREP="$(bash "${ROOT}/scripts/stage-bundled-opengrep.sh" --verify "${ENGINE_ROOT}" "${TARGET}" "${SIDECAR_BIN}")"
 
-if [[ ! -f "${ROOT}/THIRD-PARTY-NOTICES.md" ]]; then
-  echo "den:bundle — generating THIRD-PARTY-NOTICES.md" >&2
-  bash "${ROOT}/scripts/licenses-notices.sh"
-fi
-python3 "${ROOT}/scripts/stage-notices.py" "${ROOT}/THIRD-PARTY-NOTICES.md" "${TAURI_DIR}/THIRD-PARTY-NOTICES.md"
+echo "den:bundle — generating third-party notices for the staged release" >&2
+bash "${ROOT}/scripts/licenses-notices.sh"
 
 MACOS_FLOOR_FILE="${GO_DIR}/internal/platformfloor/macos_floor.txt"
 if [[ ! -f "${MACOS_FLOOR_FILE}" ]]; then
