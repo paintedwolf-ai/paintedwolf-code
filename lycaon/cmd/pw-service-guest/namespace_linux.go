@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"runtime"
 	"syscall"
@@ -58,22 +59,8 @@ func runNative(mode string) error {
 func launchNamespace() error {
 	runtime.LockOSThread()
 	defer runtime.UnlockOSThread()
-	var available unix.CPUSet
-	if err := unix.SchedGetaffinity(0, &available); err != nil {
+	if err := pinAvailableCPU(); err != nil {
 		return err
-	}
-	if available.Count() == 0 {
-		return errors.New("private service has no available CPU")
-	}
-	for cpu := 0; ; cpu++ {
-		if available.IsSet(cpu) {
-			var selected unix.CPUSet
-			selected.Set(cpu)
-			if err := unix.SchedSetaffinity(0, &selected); err != nil {
-				return err
-			}
-			break
-		}
 	}
 
 	if err := linuxruntime.Verify(); err != nil {
@@ -88,14 +75,35 @@ func launchNamespace() error {
 		return err
 	}
 	defer func() { _ = root.Close() }()
-	cmd := linuxruntime.ControllerCommand(context.Background(), "/proc/self/exe", "--enter-native")
+	return namespaceCommand(context.Background(), root).Run()
+}
+
+func pinAvailableCPU() error {
+	var available unix.CPUSet
+	if err := unix.SchedGetaffinity(0, &available); err != nil {
+		return err
+	}
+	if available.Count() == 0 {
+		return errors.New("private service has no available CPU")
+	}
+	for cpu := 0; ; cpu++ {
+		if available.IsSet(cpu) {
+			var selected unix.CPUSet
+			selected.Set(cpu)
+			return unix.SchedSetaffinity(0, &selected)
+		}
+	}
+}
+
+func namespaceCommand(ctx context.Context, root *os.File) *exec.Cmd {
+	cmd := linuxruntime.ControllerCommand(ctx, "/proc/self/exe", "--enter-native")
 	cmd.Stdin = os.Stdin
 	cmd.ExtraFiles = []*os.File{root}
 	cmd.SysProcAttr = &syscall.SysProcAttr{
 		Cloneflags:  unix.CLONE_NEWUSER | unix.CLONE_NEWNS | unix.CLONE_NEWPID | unix.CLONE_NEWNET | unix.CLONE_NEWIPC | unix.CLONE_NEWUTS,
 		UidMappings: []syscall.SysProcIDMap{{ContainerID: 0, HostID: os.Getuid(), Size: 1}}, GidMappings: []syscall.SysProcIDMap{{ContainerID: 0, HostID: os.Getgid(), Size: 1}}, Pdeathsig: syscall.SIGKILL,
 	}
-	return cmd.Run()
+	return cmd
 }
 
 func isolateRoot() error {

@@ -9,7 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"syscall"
+	"runtime"
 	"testing"
 	"time"
 
@@ -55,13 +55,11 @@ func TestGuestNamespaceActivation(t *testing.T) {
 	defer child.Close()
 	ctx, cancel := context.WithTimeout(t.Context(), 60*time.Second)
 	defer cancel()
-	self, err := os.Executable()
-	testutil.FailErr(t, "locate guest fixture", err)
-	cmd := exec.CommandContext(ctx, self, "-test.run=^TestGuestNamespaceActivation$")
+	cmd := namespaceCommand(ctx, pin)
+	cmd.Args = []string{cmd.Path, "-test.run=^TestGuestNamespaceActivation$"}
 	cmd.Env = []string{"PW_GUEST_TEST_NAMESPACE=1"}
 	var output bytes.Buffer
 	cmd.Stdin, cmd.Stdout, cmd.Stderr = child, &output, &output
-	cmd.ExtraFiles = []*os.File{pin}
 	if directory := os.Getenv("PW_GO_CHILD_COVERDIR"); directory != "" {
 		counters, err := os.Open(directory)
 		testutil.FailErr(t, "open child counter directory", err)
@@ -70,7 +68,6 @@ func TestGuestNamespaceActivation(t *testing.T) {
 		cmd.Env = append(cmd.Env, "PW_GUEST_TEST_COVERAGE=1")
 		cmd.Args = append(cmd.Args, "-test.gocoverdir=/proc/self/fd/4")
 	}
-	cmd.SysProcAttr = &syscall.SysProcAttr{Cloneflags: unix.CLONE_NEWUSER | unix.CLONE_NEWNS | unix.CLONE_NEWPID | unix.CLONE_NEWNET | unix.CLONE_NEWIPC | unix.CLONE_NEWUTS, UidMappings: []syscall.SysProcIDMap{{ContainerID: 0, HostID: os.Getuid(), Size: 1}}, GidMappings: []syscall.SysProcIDMap{{ContainerID: 0, HostID: os.Getgid(), Size: 1}}, Pdeathsig: syscall.SIGKILL}
 	testutil.FailErr(t, "start isolated guest fixture", cmd.Start())
 	defer func() {
 		if cmd.ProcessState == nil {
@@ -129,6 +126,24 @@ func TestGuestCLIRequiresActivation(t *testing.T) {
 		var exit *exec.ExitError
 		if err := cmd.Run(); !errors.As(err, &exit) || exit.ExitCode() != want {
 			t.Fatalf("%s exit = %v, want %d", mode, err, want)
+		}
+	}
+}
+
+func TestGuestSelectsOneAvailableCPU(t *testing.T) {
+	runtime.LockOSThread()
+	defer runtime.UnlockOSThread()
+	var before, after unix.CPUSet
+	testutil.FailErr(t, "read available CPUs", unix.SchedGetaffinity(0, &before))
+	defer func() { testutil.FailErr(t, "restore CPU affinity", unix.SchedSetaffinity(0, &before)) }()
+	testutil.FailErr(t, "select controller CPU", pinAvailableCPU())
+	testutil.FailErr(t, "inspect controller affinity", unix.SchedGetaffinity(0, &after))
+	if after.Count() != 1 {
+		t.Fatalf("expected one CPU, got %d", after.Count())
+	}
+	for i, mask := range after {
+		if mask&^before[i] != 0 {
+			t.Fatalf("selected CPU outside inherited affinity: %v", after)
 		}
 	}
 }
