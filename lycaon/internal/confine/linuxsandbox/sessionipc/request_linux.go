@@ -35,7 +35,12 @@ func ask(channel, fd int, op byte) unix.Errno {
 	}
 	defer unix.Close(pair[0])
 	rights := unix.UnixRights(fd, pair[1])
-	err = unix.Sendmsg(channel, []byte{op}, rights, nil, unix.MSG_NOSIGNAL)
+	for {
+		err = unix.Sendmsg(channel, []byte{op}, rights, nil, unix.MSG_NOSIGNAL)
+		if err != unix.EINTR {
+			break
+		}
+	}
 	unix.Close(pair[1])
 	if err != nil {
 		return unix.EIO

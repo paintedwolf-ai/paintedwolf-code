@@ -33,14 +33,24 @@ type entry struct {
 }
 
 var calls = map[uint32]entry{
-	unix.SYS_FCHMOD: {mode, fd}, unix.SYS_FCHMODAT: {mode, at}, unix.SYS_FCHMODAT2: {mode, atMode},
-	unix.SYS_FCHOWN: {owner, fd}, unix.SYS_FCHOWNAT: {owner, atOwner},
-	unix.SYS_UTIMENSAT: {times, atTimes},
-	unix.SYS_SETXATTR:  {xattr, path}, unix.SYS_LSETXATTR: {xattr, link}, unix.SYS_FSETXATTR: {xattr, fd},
-	unix.SYS_REMOVEXATTR: {xattr, path}, unix.SYS_LREMOVEXATTR: {xattr, link}, unix.SYS_FREMOVEXATTR: {xattr, fd},
+	unix.SYS_FCHMOD:       {mode, fd},
+	unix.SYS_FCHMODAT:     {mode, at},
+	unix.SYS_FCHMODAT2:    {mode, atMode},
+	unix.SYS_FCHOWN:       {owner, fd},
+	unix.SYS_FCHOWNAT:     {owner, atOwner},
+	unix.SYS_UTIMENSAT:    {times, atTimes},
+	unix.SYS_SETXATTR:     {xattr, path},
+	unix.SYS_LSETXATTR:    {xattr, link},
+	unix.SYS_FSETXATTR:    {xattr, fd},
+	unix.SYS_REMOVEXATTR:  {xattr, path},
+	unix.SYS_LREMOVEXATTR: {xattr, link},
+	unix.SYS_FREMOVEXATTR: {xattr, fd},
 }
 
 func init() { addLegacy(calls) }
+
+// Observes reports whether the syscall has a metadata operand.
+func Observes(nr uint32) bool { _, ok := calls[nr]; return ok }
 
 // Numbers lists the syscall numbers observed on the native architecture.
 func Numbers() []uint32 {
@@ -73,6 +83,9 @@ func Decode(nr uint32, args [6]uint64, read func(uint64, []byte) error) (Operand
 	case link:
 		o.NoFollow = true
 	case fd:
+		if int32(args[0]) < 0 {
+			return Operand{}, true
+		}
 		o.Directory, o.Address, o.Empty = int32(args[0]), 0, true
 	default:
 		o.Directory, o.Address = int32(args[0]), args[1]

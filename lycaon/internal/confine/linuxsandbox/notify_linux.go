@@ -70,7 +70,7 @@ func (s *supervisor) serveNotifications(listener int) {
 		// The performer serves one name-creating call at a time, so answering
 		// those here costs no concurrency and saves waking another thread;
 		// socket calls, which can wait on the network, run beside the loop.
-		if isPathCall(n.Nr) {
+		if isPathCall(n.Nr) || metadatacall.Observes(uint32(n.Nr)) {
 			s.answer(listener, n)
 			continue
 		}
