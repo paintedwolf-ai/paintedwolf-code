@@ -8,6 +8,7 @@ import (
 	"math"
 	"os"
 	"os/exec"
+	"syscall"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -166,5 +167,96 @@ func TestGuardianImmediatePollDistinguishesInterruptFromReadiness(t *testing.T) 
 		if calls != 2 || !errors.Is(err, final) || (final == nil && fds[0].Revents != ready) {
 			t.Fatalf("poll = %v after %d calls, readiness %d", err, calls, fds[0].Revents)
 		}
+	}
+}
+
+func TestGuardianRegisteredRootLiveness(t *testing.T) {
+	if phase := os.Getenv("PW_TEST_GUARDIAN_ROOT_PHASE"); phase != "" {
+		state := protectedGuardian{}
+		alive, settled := state.registeredAlive(), state.registeredSettled()
+		if alive != (phase == "live") || settled != (phase == "settled") {
+			t.Fatalf("root phase %s: alive=%t settled=%t", phase, alive, settled)
+		}
+		if phase == "settled" {
+			checkRetiredBootstrapStage(t)
+		}
+		return
+	}
+	var finish [3]func()
+	files := make([]*os.File, 15)
+	for i := range finish {
+		cmd := exec.CommandContext(t.Context(), "/bin/cat")
+		gate, err := cmd.StdinPipe()
+		testutil.FailErr(t, "create root lifetime gate", err)
+		var pin int
+		cmd.SysProcAttr = &syscall.SysProcAttr{PidFD: &pin}
+		testutil.FailErr(t, "start registered root", cmd.Start())
+		finish[i] = func() {
+			testutil.FailErr(t, "release registered root", gate.Close())
+			testutil.FailErr(t, "wait for registered root exit", cmd.Wait())
+		}
+		t.Cleanup(func() {
+			_ = gate.Close()
+			if cmd.ProcessState == nil {
+				_ = cmd.Process.Kill()
+				_ = cmd.Wait()
+			}
+		})
+		file := os.NewFile(uintptr(pin), "registered-root")
+		files[12+i] = file
+		t.Cleanup(func() { _ = file.Close() })
+	}
+	check := func(phase string) {
+		cmd := exec.CommandContext(t.Context(), os.Args[0], "-test.run=^TestGuardianRegisteredRootLiveness$")
+		cmd.ExtraFiles = files
+		cmd.Env = append(os.Environ(), "PW_TEST_GUARDIAN_ROOT_PHASE="+phase)
+		if testing.CoverMode() != "" {
+			dir := os.Getenv("PW_GO_CHILD_COVERDIR")
+			if dir == "" {
+				dir = os.Getenv("GOCOVERDIR")
+			}
+			if dir != "" {
+				cmd.Args = append(cmd.Args, "-test.gocoverdir="+dir)
+			}
+		}
+		if out, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("observe %s roots: %v\n%s", phase, err, out)
+		}
+	}
+	check("live")
+	finish[0]()
+	check("mixed")
+	finish[1]()
+	finish[2]()
+	check("settled")
+}
+
+// This fixture process owns only the setup child that the bootstrap reaps.
+func checkRetiredBootstrapStage(t *testing.T) {
+	t.Helper()
+	stage := exec.CommandContext(t.Context(), "/bin/cat")
+	gate, err := stage.StdinPipe()
+	testutil.FailErr(t, "create setup gate", err)
+	defer gate.Close()
+	var pin int
+	stage.SysProcAttr = &syscall.SysProcAttr{PidFD: &pin}
+	testutil.FailErr(t, "start setup child", stage.Start())
+	defer unix.Close(pin)
+	defer func() { _ = stage.Process.Kill(); _ = stage.Wait() }()
+	children, err := os.Open("/proc/thread-self/children")
+	testutil.FailErr(t, "open bootstrap children", err)
+	defer children.Close()
+	proc, err := os.Open("/proc")
+	testutil.FailErr(t, "open bootstrap process view", err)
+	defer proc.Close()
+	retireBootstrapSetup(pin, children, proc, Identity{}, nil)
+	polls := []unix.PollFd{{Fd: int32(pin), Events: unix.POLLIN}}
+	testutil.FailErr(t, "observe retired setup child", pollGuardianNow(polls, unix.Poll))
+	if polls[0].Revents&unix.POLLIN == 0 {
+		t.Fatal("bootstrap returned with a live setup child")
+	}
+	var status unix.WaitStatus
+	if _, err := unix.Wait4(stage.Process.Pid, &status, unix.WNOHANG, nil); !errors.Is(err, unix.ECHILD) {
+		t.Fatalf("bootstrap retained an unreaped setup child: %v", err)
 	}
 }
