@@ -174,6 +174,8 @@ func (s *supervisor) performSessionSocket(target *targetProcess, req SocketReque
 	return 0, errnoOf(unix.Connect(socket, &unix.SockaddrUnix{Name: "/proc/self/fd/" + strconv.Itoa(destination)}), 0)
 }
 
+const callSessionBind = "session-bind"
+
 // The performer binds from its pinned parent with the caller's filesystem restrictions.
 func (f creationFloors) bindSessionSocket(call pathCall, dirs []int) pathResult {
 	if len(dirs) != 2 || call.NewPath == "" {
