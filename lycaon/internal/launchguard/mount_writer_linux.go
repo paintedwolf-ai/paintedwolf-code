@@ -149,7 +149,7 @@ func receiveInitialMountLeases(socket int, plan moduleViewPlan) (_ *moduleMountW
 		if err := writer.accept(message, tree); err != nil {
 			// A destination removed after preparation is pruned, as after startup.
 			var unavailable *mountDestinationError
-			if !errors.As(err, &unavailable) {
+			if !errors.As(err, &unavailable) || !errors.Is(err, unix.ENOENT) {
 				return nil, err
 			}
 			if writer.unattached == nil {

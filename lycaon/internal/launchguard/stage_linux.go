@@ -23,14 +23,28 @@ const agentSelfFD = agentWatchFD + 1
 // static transition into the caller guardian. Ordinary broker launches are
 // parented outside that lineage, directly to the bootstrap supervisor.
 func RunStage() error {
-	err := runStage()
-	if err != nil {
-		sendStageRefusal(stageGuardianFD, err)
+	handoff := os.NewFile(stageGuardianFD, "guardian-bootstrap-handoff")
+	err := runStage(handoff)
+	if err != nil && bootstrapHandoff(int(handoff.Fd())) {
+		sendStageRefusal(int(handoff.Fd()), err)
 	}
+	runtime.KeepAlive(handoff)
 	return err
 }
 
-func runStage() error {
+// bootstrapHandoff reports whether fd is the bootstrap's handoff: a sequenced
+// socket whose peer is this stage's root parent. Anyone can run the stage
+// directly, so its refusal goes nowhere else.
+func bootstrapHandoff(fd int) bool {
+	kind, err := unix.GetsockoptInt(fd, unix.SOL_SOCKET, unix.SO_TYPE)
+	if err != nil || kind != unix.SOCK_SEQPACKET {
+		return false
+	}
+	peer, err := unix.GetsockoptUcred(fd, unix.SOL_SOCKET, unix.SO_PEERCRED)
+	return err == nil && peer.Uid == 0 && int(peer.Pid) == os.Getppid()
+}
+
+func runStage(handoff *os.File) error {
 	runtime.LockOSThread()
 	if err := initialUserNamespace(); err != nil {
 		return err
@@ -89,7 +103,6 @@ func runStage() error {
 	origin := os.NewFile(stageOriginFD, "original-user-namespace")
 	transition := os.NewFile(stageMountTransitionFD, "selected-mount-transition")
 	lifetime := os.NewFile(stageLifetimeFD, "generation-lifetime")
-	handoff := os.NewFile(stageGuardianFD, "guardian-bootstrap-handoff")
 	if err := rootRegular(entryImage); err != nil {
 		return err
 	}

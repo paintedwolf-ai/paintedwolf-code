@@ -118,18 +118,16 @@ func (volume *mountedVolume) unmount() error {
 	}
 	visible, err := openMountPoint(current)
 	if err != nil {
-		if detached, checkErr := kernelDetachedMount(volume.mountID); checkErr == nil && detached {
-			return nil
+		if settled, settleErr := volume.settleUnlisted(); settled {
+			return settleErr
 		}
 		return err
 	}
 	visibleID, statErr := mountID(visible)
 	_ = unix.Close(visible)
 	if statErr != nil || visibleID != volume.mountID {
-		// Removing the directory beneath a mount detaches it in every namespace.
-		// A covered mount is still listed, so only a vanished one is settled here.
-		if detached, checkErr := kernelDetachedMount(volume.mountID); checkErr == nil && detached {
-			return nil
+		if settled, settleErr := volume.settleUnlisted(); settled {
+			return settleErr
 		}
 		return errors.New("retained volume is covered or no longer visible")
 	}
@@ -148,17 +146,33 @@ func (failure *mountDestinationError) Error() string {
 }
 func (failure *mountDestinationError) Unwrap() error { return failure.err }
 
-// kernelDetachedMount reports whether a held mount is absent from this
-// namespace's topology, which only the kernel's detachment produces here.
-func kernelDetachedMount(id uint64) (bool, error) {
+// settleUnlisted retires a volume missing from this namespace's topology
+// through its own descriptor. Removing the directory beneath a mount detaches
+// it in every namespace, and a mount moved out of reach is unlisted too; the
+// kernel reports EINVAL only for the detached one. A covered volume is still
+// listed, so it is never settled here.
+func (volume *mountedVolume) settleUnlisted() (bool, error) {
+	listed, err := mountListed(volume.mountID)
+	if err != nil || listed {
+		return false, nil
+	}
+	err = unix.Unmount(mountDescriptorPath(volume.tree), unix.MNT_DETACH)
+	if err == nil || errors.Is(err, unix.EINVAL) {
+		return true, nil
+	}
+	return true, fmt.Errorf("detach unlisted retained volume: %w", err)
+}
+
+// mountListed reports whether a mount appears in this namespace's topology.
+func mountListed(id uint64) (bool, error) {
 	_, entries, err := readCurrentMountTopology()
 	if err != nil {
 		return false, err
 	}
 	for _, entry := range entries {
 		if uint64(entry.id) == id {
-			return false, nil
+			return true, nil
 		}
 	}
-	return true, nil
+	return false, nil
 }

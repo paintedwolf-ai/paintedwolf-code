@@ -36,12 +36,14 @@ func (view *preparedModuleView) close() {
 }
 
 func readCurrentMountTopology() ([]byte, []mountEntry, error) {
-	file, err := os.Open("/proc/thread-self/mountinfo")
+	// os.Open would register mountinfo with Go netpoll, whose epoll callback
+	// can consume the epoch event the consistent read depends on.
+	fd, err := unix.Open("/proc/thread-self/mountinfo", unix.O_RDONLY|unix.O_CLOEXEC, 0)
 	if err != nil {
 		return nil, nil, err
 	}
-	defer func() { _ = file.Close() }()
-	raw, err := readConsistentMountInfo(int(file.Fd()))
+	defer func() { _ = unix.Close(fd) }()
+	raw, err := readConsistentMountInfo(fd)
 	if err != nil {
 		return nil, nil, err
 	}

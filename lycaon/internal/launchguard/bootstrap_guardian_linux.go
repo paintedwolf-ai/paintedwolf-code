@@ -266,13 +266,19 @@ func (failure *handoffExitError) Error() string {
 
 func (failure *handoffExitError) Unwrap() error { return failure.err }
 
+// handoffExitWait bounds how long a failed setup waits to name its child's
+// exit. The wait adds a diagnostic only and never decides the outcome.
+const handoffExitWait = time.Second
+
 // withHandoffExit attaches the handoff child's exit when it has one. End of
-// file on the handoff means its only holder is exiting, so that exit is awaited.
+// file on the handoff usually means its holder is exiting, so the exit is
+// awaited briefly; a holder that lingers is left to setup cleanup.
 func withHandoffExit(err error, pidfd, pid int) error {
 	if errors.Is(err, io.EOF) {
 		polls := []unix.PollFd{{Fd: int32(pidfd), Events: unix.POLLIN}}
-		for {
-			if _, pollErr := unix.Poll(polls, -1); !errors.Is(pollErr, unix.EINTR) {
+		deadline := time.Now().Add(handoffExitWait)
+		for remaining := time.Until(deadline); remaining > 0; remaining = time.Until(deadline) {
+			if _, pollErr := unix.Poll(polls, int(remaining/time.Millisecond)+1); !errors.Is(pollErr, unix.EINTR) {
 				break
 			}
 		}
