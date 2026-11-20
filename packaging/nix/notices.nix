@@ -22,7 +22,7 @@ let
       # the same reviewed vendored copy for this inventory only.
       substituteInPlace go.mod vendor/modules.txt \
         --replace-fail '../third_party/gotreesitter' './vendor/github.com/odvcencio/gotreesitter'
-      packages=(./cmd/lycaon ./cmd/pw-logs ./cmd/pw-vault-identity)
+      packages=(./cmd/lycaon ./cmd/pw-logs ./cmd/pw-vault-identity ./cmd/pw-service-guest)
       ignored=(--ignore=github.com/lycaon/lycaon --ignore=github.com/deitch/magic
         --ignore=github.com/alecthomas/chroma/v2)
       go-licenses check "''${packages[@]}" "''${ignored[@]}" \

@@ -10,11 +10,7 @@ import (
 	"golang.org/x/sys/unix"
 )
 
-// Inside reports whether this process is the helper the outer helper
-// relaunched: the first process of the fresh PID namespace, whose user
-// namespace also differs from the engine's. The outer helper is never PID 1,
-// and its own user namespace need not be the engine's: under the protected
-// launch the broker starts it outside the engine's namespace.
+// Inside identifies the PID 1 relay in the workspace's private user namespace.
 func Inside(plan Plan) bool {
 	host := plan.Attest.HostNamespaces[NamespaceUser]
 	own, err := os.Readlink("/proc/self/ns/" + NamespaceUser)

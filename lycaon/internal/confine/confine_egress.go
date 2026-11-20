@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"net"
 	"os"
-	"path/filepath"
 	"sort"
 	"strings"
 	"sync"
@@ -18,17 +17,6 @@ import (
 	"github.com/lycaon/lycaon/internal/gate"
 	"github.com/lycaon/lycaon/internal/scopedstore"
 )
-
-// SSHKnownHostsPath returns the project's known_hosts scratch path. Keying it by
-// project keeps the value a command reads the same on every invocation; keys
-// accepted here are already inside the project's trust domain.
-func SSHKnownHostsPath(c Confinement) string {
-	project := strings.TrimSpace(c.ProjectID)
-	if project == "" {
-		return ""
-	}
-	return filepath.Join(os.TempDir(), "lycaon-ssh-known-"+project)
-}
 
 // EgressCommand attributes a broker connection to its command.
 type EgressCommand struct {
@@ -892,9 +880,9 @@ func GitSSHEnv(c Confinement, selfPath, knownHosts string) []string {
 	// Each shell layer receives its own quoting.
 	proxyCmd := shellQuote(selfPath) + " ssh-proxy-command %h %p"
 	// The host mirror supplies read-only key verification.
-	knownHostsFiles := knownHosts
+	knownHostsFiles := sshConfigPath(knownHosts)
 	if mirror := hostKnownHostsMirror(); mirror != "" {
-		knownHostsFiles = knownHosts + " " + mirror
+		knownHostsFiles += " " + sshConfigPath(mirror)
 	}
 	sshCmd := strings.Join([]string{
 		"ssh",

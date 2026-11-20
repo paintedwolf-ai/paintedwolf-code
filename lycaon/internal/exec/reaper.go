@@ -7,6 +7,8 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/lycaon/lycaon/internal/configdir"
+	"github.com/lycaon/lycaon/internal/enginepaths"
 	"github.com/lycaon/lycaon/internal/osprocess"
 )
 
@@ -78,11 +80,13 @@ func trackReaperMembers(leaderPID int, members []osprocess.Incarnation) {
 	}
 }
 
-// reaperDirPath admits only paths the line protocol carries unambiguously and
-// that lie strictly inside the temp root, so the reaper deletes nothing else.
+// The reaper accepts temp descendants and individual host-owned action directories.
 func reaperDirPath(path string) bool {
 	if !filepath.IsAbs(path) || filepath.Clean(path) != path || strings.ContainsAny(path, "\n\r") {
 		return false
+	}
+	if root, err := configdir.Root(); err == nil && filepath.Dir(path) == enginepaths.ActionWorkRootUnder(root) && strings.HasPrefix(filepath.Base(path), "action-") {
+		return true
 	}
 	rel, err := filepath.Rel(filepath.Clean(os.TempDir()), path)
 	return err == nil && rel != "." && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator))

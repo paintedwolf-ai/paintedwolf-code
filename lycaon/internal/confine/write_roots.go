@@ -4,9 +4,12 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"sort"
 	"strings"
 
+	"github.com/lycaon/lycaon/internal/configdir"
+	"github.com/lycaon/lycaon/internal/enginepaths"
 	"github.com/lycaon/lycaon/internal/fspath"
 )
 
@@ -18,13 +21,66 @@ func isWindowsAbsPath(path string) bool {
 }
 
 func osDefaultWriteRoots() []string {
-	standard := append([]string{"/tmp", "/private/tmp", "/var/tmp", "/private/var/tmp", os.TempDir()}, standardCacheDataRoots()...)
-	return append(standard, darwinUserRoots()...)
+	return append(standardCacheDataRoots(), platformUserCache())
+}
+
+// PrivateServiceBoundary confines a guest command to its session workspace.
+func PrivateServiceBoundary(scratch string, process ProcessAttributes) Confinement {
+	return Confinement{privateUserland: true, Workspaces: WorkspaceRoots{SessionScratch: scratch}, Process: process, Network: NetworkDeny, EgressOff: EgressOffOverride}
+}
+
+// WorkspaceRoots separates session storage from a single invocation’s private stage.
+type WorkspaceRoots struct {
+	SessionScratch string
+	Action         ActionWorkspace `json:"-"`
+}
+
+// ActionWorkspace holds a private working directory for one tool invocation.
+type ActionWorkspace struct{ path string }
+
+func NewActionWorkspace() (ActionWorkspace, error) {
+	root, err := configdir.UserConfigDir()
+	if err != nil {
+		return ActionWorkspace{}, err
+	}
+	parent := enginepaths.ActionWorkRootUnder(root)
+	if err := os.MkdirAll(parent, 0700); err != nil {
+		return ActionWorkspace{}, err
+	}
+	path, err := os.MkdirTemp(parent, "action-")
+	return ActionWorkspace{path: path}, err
+}
+
+func (w ActionWorkspace) Path() string { return w.path }
+
+func (c Confinement) privateWorkRoots() []string {
+	var paths []string
+	for _, dir := range []string{c.Workspaces.SessionScratch, c.Workspaces.Action.Path()} {
+		if dir != "" {
+			paths = append(paths, fspath.CanonicalPath(dir))
+		}
+	}
+	return paths
+}
+
+func (c Confinement) writeRoots() ([]string, error) {
+	if c.privateUserland {
+		return filesystemRoots("", nil, nil, c.Workspaces.SessionScratch, nil)
+	}
+	granted := c.GrantedWriteRoots
+	if c.Workspaces.Action.Path() != "" {
+		granted = append(slices.Clone(granted), c.Workspaces.Action.Path())
+	}
+	return WriteRootsForBoundary(c.ProjectID, c.Roots, granted, c.Workspaces.SessionScratch)
 }
 
 // WriteRootsForBoundary is the write profile for one confinement: attached
 // roots, session scratch, OS caches, durable grants, and per-action granted overlays.
 func WriteRootsForBoundary(projectID string, projectRoots, granted []string, sessionScratchRoot string) ([]string, error) {
+	return filesystemRoots(projectID, projectRoots, granted, sessionScratchRoot, osDefaultWriteRoots())
+}
+
+func filesystemRoots(projectID string, projectRoots, granted []string, sessionScratchRoot string, defaults []string) ([]string, error) {
 	roots := []string{}
 	add := func(p string) {
 		if strings.TrimSpace(p) == "" {
@@ -52,7 +108,7 @@ func WriteRootsForBoundary(projectID string, projectRoots, granted []string, ses
 	if sessionScratchRoot != "" {
 		add(sessionScratchRoot)
 	}
-	for _, root := range osDefaultWriteRoots() {
+	for _, root := range defaults {
 		if !defaultRootContainsStateFolder(fspath.CanonicalPath(root)) {
 			add(root)
 		}
@@ -81,27 +137,6 @@ func WriteRootsForBoundary(projectID string, projectRoots, granted []string, ses
 	return out, nil
 }
 
-// FilesystemRootForPath returns the narrowest process write root containing path.
-// Callers enforce protected paths and worker isolation separately.
-func FilesystemRootForPath(projectID string, roots, granted []string, sessionScratch, path string) (string, error) {
-	if !filepath.IsAbs(path) {
-		return "", nil
-	}
-	allowed, err := WriteRootsForBoundary(projectID, roots, granted, sessionScratch)
-	if err != nil {
-		return "", err
-	}
-	abs := fspath.CanonicalPath(path)
-	var best string
-	for _, root := range allowed {
-		rel, err := filepath.Rel(root, abs)
-		if err == nil && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)) && len(root) > len(best) {
-			best = root
-		}
-	}
-	return best, nil
-}
-
 // PathWithinRoots matches existing and not-yet-created paths.
 func PathWithinRoots(path string, roots []string) bool {
 	p := fspath.CanonicalPath(path)
@@ -118,4 +153,33 @@ func PathWithinRoots(path string, roots []string) bool {
 		}
 	}
 	return false
+}
+
+// NativeFilesystemRootForPath preserves default read scope while limiting writes to reviewed and session roots.
+func NativeFilesystemRootForPath(projectID string, roots, granted []string, sessionScratch, path string, write bool) (string, error) {
+	if !filepath.IsAbs(path) {
+		return "", nil
+	}
+	var defaults []string
+	if !write {
+		defaults = osDefaultWriteRoots()
+	}
+	allowed, err := filesystemRoots(projectID, roots, granted, sessionScratch, defaults)
+	if err != nil {
+		return "", err
+	}
+	if !write {
+		if temp := SharedTempLocation(path); temp != "" && !defaultRootContainsStateFolder(temp) {
+			allowed = append(allowed, temp)
+		}
+	}
+	abs := fspath.CanonicalPath(path)
+	var best string
+	for _, root := range allowed {
+		rel, err := filepath.Rel(root, abs)
+		if err == nil && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)) && len(root) > len(best) {
+			best = root
+		}
+	}
+	return best, nil
 }

@@ -10,6 +10,7 @@ func ap(s string) netip.AddrPort { return netip.MustParseAddrPort(s) }
 func TestDecideSocketCalls(t *testing.T) {
 	t.Parallel()
 	deny := Network{Mode: NetworkDeny}
+	session := Network{Mode: NetworkDeny, SessionSocketRoot: "/scratch/one"}
 	loopback := Network{Mode: NetworkProxyOnly, ProxyAddr: "127.0.0.1:9", LoopbackConnect: true, LoopbackConnectPorts: []uint16{5432}}
 	anyLoopback := Network{Mode: NetworkDeny, LoopbackConnect: true}
 	listen := Network{Mode: NetworkDeny, Listen: true, ListenPorts: []uint16{3000}}
@@ -30,6 +31,11 @@ func TestDecideSocketCalls(t *testing.T) {
 		action  Action
 		refusal string
 	}{
+		{"session listener", session, SocketRequest{Op: OpBind, Unix: "/scratch/one/peer", Stream: true}, SessionSocket, ""},
+		{"session connection", session, SocketRequest{Op: OpConnect, Unix: "/scratch/one/peer", Seqpacket: true}, SessionSocket, ""},
+		{"session datagram", session, SocketRequest{Op: OpBind, Unix: "/scratch/one/peer"}, Refuse, "network-bind /scratch/one/peer"},
+		{"session sibling", session, SocketRequest{Op: OpConnect, Unix: "/scratch/one-more/peer", Stream: true}, Refuse, "network-outbound /scratch/one-more/peer"},
+		{"host listener", session, SocketRequest{Op: OpBind, Unix: "/scratch/one/peer", Stream: true, HostSocket: true}, Refuse, "network-bind /scratch/one/peer"},
 		{"unix grant", grant, SocketRequest{Op: OpConnect, Unix: "/run/user/1/agent.sock", Stream: true}, Perform, ""},
 		{"unix seqpacket grant", grant, SocketRequest{Op: OpConnect, Unix: "/run/user/1/agent.sock", Seqpacket: true}, Perform, ""},
 		{"unix datagram grant refused", grant, SocketRequest{Op: OpConnect, Unix: "/run/user/1/agent.sock"}, Refuse, "network-outbound /run/user/1/agent.sock"},

@@ -2,6 +2,7 @@ package settings_test
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -29,9 +30,7 @@ func neverAskGate(t *testing.T, neverAsk bool) (hitl.ApprovalGate, string) {
 	return settings.NewRuleApprovalGate(store, settings.NoSources()), filepath.Join(tmp, "project")
 }
 
-// The switch buys silence: everything the gate would have asked about auto-approves,
-// including the substrate path-escape that survives every posture.
-func TestNeverAskSilencesEveryAsk(t *testing.T) {
+func TestNeverAskSilencesDiscretionaryAsks(t *testing.T) {
 	gate, proj := neverAskGate(t, true)
 	for _, action := range []hitl.ProposedAction{
 		{
@@ -121,5 +120,31 @@ func TestProjectOverlayCannotSetNeverAsk(t *testing.T) {
 	cfg := store.Get("project", settings.ProjectRef{Dir: proj})
 	if cfg.NeverAsk != nil && *cfg.NeverAsk {
 		t.Fatal("a project overlay must not be able to disable approvals")
+	}
+}
+
+func TestDisabledPromptsKeepSharedTempWriteReview(t *testing.T) {
+	for _, bypass := range []bool{false, true} {
+		t.Run(fmt.Sprintf("bypass=%t", bypass), func(t *testing.T) {
+			g, project := neverAskGate(t, !bypass)
+			if bypass {
+				t.Setenv("LYCAON_BYPASS_APPROVALS", "1")
+			}
+			shared := t.TempDir()
+			t.Setenv("TMPDIR", shared)
+			path := filepath.Join(shared, "notes.txt")
+			action := hitl.ProposedAction{Invocation: hitl.ActionInvocation{Tool: "write", Files: []string{path}}, Scope: hitl.ActionScope{ProjectDir: project}}
+			result, err := g.Evaluate(t.Context(), action)
+			testutil.FailErr(t, "evaluate shared temp write", err)
+			if !result.Required() || len(result.FileAccess) != 1 || !result.FileAccess[0].Write {
+				t.Fatalf("shared temp review = %+v", result)
+			}
+			action.Invocation.ApprovedFileAccess = result.FileAccess
+			result, err = g.Evaluate(t.Context(), action)
+			testutil.FailErr(t, "evaluate approved shared temp write", err)
+			if result.Required() {
+				t.Fatalf("approved write asked again: %+v", result)
+			}
+		})
 	}
 }

@@ -71,6 +71,7 @@ func (r *ProgramRuntime) continueProgram(ctx context.Context, e *programEvaluati
 			out.CommandProgram = &projection.Program
 		}
 	}
+	e.observeRunningConfinement()
 	result, err := surveyjson.Marshal(RunningProgramResult{ProgramID: run.root.Identity.ProgramID, State: "running", Handle: handle})
 	return string(result), err
 }

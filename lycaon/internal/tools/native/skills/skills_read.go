@@ -3,13 +3,13 @@ package skills
 import (
 	"context"
 	"fmt"
-	"github.com/lycaon/lycaon/internal/toolrejection"
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/coordinator/turnload"
 	"github.com/lycaon/lycaon/internal/pongoplain"
 	"github.com/lycaon/lycaon/internal/skills"
 	"github.com/lycaon/lycaon/internal/spawn"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/tools/safecmd"
 	"github.com/lycaon/lycaon/pkg/api"
@@ -133,7 +133,7 @@ func (t *SkillsReadTool) renderPackBody(ctx context.Context, tctx tools.ToolCont
 	for name, value := range t.policyVars(ctx, tctx) {
 		vars[name] = value
 	}
-	// Keep configuration defined for templates without settings.
+	vars["session_scratch_dir"] = tctx.Host.SessionScratchDir
 	vars["configuration"] = t.packConfiguration(ctx, tctx, sk.PackID)
 	out, err := pongoplain.Execute(ctx, tpl, vars)
 	if err != nil {

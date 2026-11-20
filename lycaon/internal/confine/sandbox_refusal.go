@@ -250,7 +250,7 @@ func routeOperation(rules FilesystemRules, operation, target string) SandboxRefu
 	case operation == "network-outbound":
 		r.Recovery = RecoverOutboundPort
 	case operation == "network-bind" && strings.HasPrefix(target, "/"):
-		// No capability grants a unix-socket listener inside the sandbox.
+		// Pathname listeners are confined to session scratch.
 		r.Recovery = RecoverHostExecution
 	case operation == "network-bind", operation == "network-inbound":
 		r.Recovery = RecoverLocalListen
@@ -321,4 +321,16 @@ func operationAccess(operation string) FilesystemAccess {
 	default:
 		return ""
 	}
+}
+
+// SharedTempRoots lists the shared directories identified by observed write refusals.
+func (s SandboxRefusals) SharedTempRoots() []string {
+	var roots []string
+	for _, path := range s.Paths(AccessWrite) {
+		if path.Layer == FloorSharedTemp && path.Grant != "" && !slices.Contains(roots, path.Grant) {
+			roots = append(roots, path.Grant)
+		}
+	}
+	slices.Sort(roots)
+	return roots
 }

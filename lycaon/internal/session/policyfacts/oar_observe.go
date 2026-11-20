@@ -78,12 +78,21 @@ func observeSandboxRefusals(gc *oar.GuardContext, refusals confine.SandboxRefusa
 			// Filesystem layers and their grants are grouped below.
 		}
 	}
+	var ordinary confine.SandboxRefusals
+	for _, refusal := range refusals.Refusals {
+		if refusal.Layer != confine.FloorSharedTemp {
+			ordinary.Refusals = append(ordinary.Refusals, refusal)
+		}
+	}
 	for _, path := range refusals.Paths(confine.AccessWrite) {
 		if path.Layer.Recovery().Terminal() {
 			gc.Refusals.RefusedTerminalWritePaths = append(gc.Refusals.RefusedTerminalWritePaths, path.Path)
 			continue
 		}
 		gc.Refusals.RefusedWritePaths = append(gc.Refusals.RefusedWritePaths, path.Path)
+		if path.Layer != confine.FloorSharedTemp {
+			gc.Refusals.OrdinaryWritePaths = append(gc.Refusals.OrdinaryWritePaths, path.Path)
+		}
 	}
 	for _, path := range refusals.Paths(confine.AccessRead) {
 		if path.Layer == confine.FloorReadCredentialStore {
@@ -97,6 +106,7 @@ func observeSandboxRefusals(gc *oar.GuardContext, refusals confine.SandboxRefusa
 		gc.Refusals.RefusedReadPaths = append(gc.Refusals.RefusedReadPaths, path.Path)
 	}
 	gc.Refusals.RefusedWriteGrants = refusals.Grants(confine.AccessWrite)
+	gc.Refusals.OrdinaryWriteGrants = ordinary.Grants(confine.AccessWrite)
 	gc.Refusals.RefusedReadGrants = refusals.Grants(confine.AccessRead)
 }
 

@@ -42,6 +42,8 @@ func CommandGuidanceFactKeys() []string {
 		"runner_socket_tools",
 		"runner_write_root_tools",
 		"session_scratch_dir",
+		"shared_temp_writable",
+		"shared_temp_locations",
 		"tool_profile",
 		"workspace_roots",
 	}
@@ -71,6 +73,7 @@ type CommandGuidanceSnapshotInput struct {
 	RootCount             int
 	ProjectDir            string
 	SessionScratchDir     string
+	SharedTempLocations   []string
 	Posture               gate.Posture
 	CommandExternalHidden bool
 }
@@ -116,6 +119,7 @@ func BuildCommandGuidanceSnapshot(in CommandGuidanceSnapshotInput) ([]string, ma
 	for k, v := range AgentPromptSurfaceTemplateVars(AgentPromptSurface{
 		SessionScratchDir:     strings.TrimSpace(in.SessionScratchDir),
 		Posture:               in.Posture,
+		SharedTempLocations:   in.SharedTempLocations,
 		CommandExternalHidden: in.CommandExternalHidden,
 	}) {
 		vars[k] = v
@@ -134,7 +138,10 @@ func BuildCommandGuidanceSnapshot(in CommandGuidanceSnapshotInput) ([]string, ma
 		templates = append(templates, "tools/schemas/command.yaml")
 	}
 	if hasCommandAny {
-		templates = append(templates, "partials/command-surface.md")
+		if !in.IsCoordinator {
+			templates = append(templates, "partials/command-surface.md")
+		}
+		templates = append(templates, "partials/temporary-storage.md")
 	}
 	if strings.TrimSpace(in.AgentType) == "implementer" {
 		templates = append(templates, "partials/sandbox-confinement.md")

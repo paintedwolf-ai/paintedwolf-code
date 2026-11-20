@@ -13,9 +13,9 @@ import (
 	"github.com/lycaon/lycaon/internal/tools"
 )
 
-// Default filesystem authority does not attach paths to the project.
+// External filesystem authority carries no project identity.
 func resolveFilesystemPath(ctx context.Context, b *sandbox.Boundary, tctx tools.ToolContext, modelPath string, op sandbox.PathOp) (Resolved, bool, error) {
-	root, err := confine.FilesystemRootForPath(tctx.Identity.ProjectID, workspaceRoots(tctx), tctx.Files.GrantedWriteRoots, tctx.Host.SessionScratchDir, modelPath)
+	root, err := confine.NativeFilesystemRootForPath(tctx.Identity.ProjectID, workspaceRoots(tctx), tctx.Files.GrantedWriteRoots, tctx.Host.SessionScratchDir, modelPath, op != sandbox.PathOpRead)
 	if err != nil || root == "" {
 		return Resolved{}, false, err
 	}

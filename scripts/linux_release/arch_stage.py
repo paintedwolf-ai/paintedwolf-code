@@ -83,7 +83,10 @@ def extract(package, destination, root, architecture, version):
                   (root / "lycaon/internal/platformfloor/linux_floor.txt").read_text().splitlines() if line.strip())
     dependencies = json.loads((root / "packaging/linux/dependencies.json").read_text())["pacman"]
     for key, catalog in [("depend", "depends"), ("optdepend", "recommends")]:
-        if sorted(fields.get(key, [])) != sorted(value.format(**floors) for value in dependencies[catalog]):
+        rows = dependencies[catalog]
+        if key == "depend":
+            rows = [*rows, *dependencies["architecture_depends"][architecture]]
+        if sorted(fields.get(key, [])) != sorted(value.format(**floors) for value in rows):
             raise ValueError("pacman dependencies differ from the shared native catalog")
     hook = root / "packaging/linux/arch/painted-wolf-code.install"
     installed_hook = destination / ".INSTALL"

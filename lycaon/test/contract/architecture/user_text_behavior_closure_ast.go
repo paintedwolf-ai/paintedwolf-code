@@ -457,6 +457,7 @@ var registeredCoordinatorBooleanGates = map[string]bool{
 	"is_coordinator":               true,
 	"command_on_floor":             true,
 	"session_scratch_dir":          true,
+	"shared_temp_writable":         true, // Live write-root grants.
 	"command_output_scratch_files": true,
 	"profile_has_command_output":   true,
 	"profile_has_command_stop":     true,

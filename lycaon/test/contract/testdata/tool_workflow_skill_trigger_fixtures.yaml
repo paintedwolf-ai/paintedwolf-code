@@ -7,6 +7,14 @@ apply-a-structural-codemod:
   should_not_trigger:
     - "Fix the typo in this one error message"
     - "Rename this single local variable"
+run-a-throwaway-service:
+  should_not_trigger:
+  - Run the project's docker-compose stack
+  - Why is the production redis slow?
+  should_trigger:
+  - Spin up a postgres to rehearse this migration against
+  - The integration tests need a redis instance
+  - Test this against a real queue without touching staging
 use-secrets-without-reading-them:
   should_trigger:
     - "Generate a new database password and configure the service without showing it"

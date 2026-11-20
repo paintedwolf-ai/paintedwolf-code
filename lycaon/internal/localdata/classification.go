@@ -135,7 +135,7 @@ var configRootRegistry = []ConfigRootEntry{
 
 	// Runtime
 	{Name: clisocket.CompletionCacheName, IsDir: false, Class: ClassRuntime, Reason: "project names cache for CLI shell completion, rewritten as projects change"},
-	{Name: enginepaths.SSHDirName, IsDir: true, Class: ClassRuntime, Reason: "host-managed SSH known_hosts mirror for confined subprocesses"},
+	{Name: enginepaths.SSHDirName, IsDir: true, Class: ClassRuntime, Reason: "host-managed SSH mirror and per-project host keys"},
 	{Name: "locks", IsDir: true, Class: ClassRuntime, Reason: "advisory process file locks for extension installations"},
 }
 

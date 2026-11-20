@@ -72,7 +72,8 @@ func (m *Context) Build() promptloop.ContextDeps {
 			_, count, _, _ := m.Workspace.PromptRootRows(ctx, sess)
 			return count
 		},
-		LoadedTools: m.Loading.LoadedTools,
+		WritableSharedTemp: m.Profiles.WritableSharedTemp,
+		LoadedTools:        m.Loading.LoadedTools,
 		LiveResources: func(sessionID string) toolcontract.ResourcePresence {
 			presence := toolcontract.ResourcePresence{}
 			if m != nil && m.Processes.Background != nil {

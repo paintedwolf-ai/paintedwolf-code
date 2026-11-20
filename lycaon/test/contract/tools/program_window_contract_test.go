@@ -3,6 +3,7 @@ package contract
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"sync/atomic"
@@ -166,11 +167,20 @@ func TestGitBisectRunHoldsTheWindowWhileItsCheckRuns(t *testing.T) {
 	tc.Source.Commands = ledger.Commands
 	done := make(chan error, 1)
 	go func() {
-		_, err := f.Invoke(t, `git bisect start HEAD HEAD~2 && git bisect run /bin/sh -c 'touch started; until test -e release; do sleep 0.01; done; exit 0'
-git bisect reset`, tc)
+		defer close(done)
+		out, err := f.Invoke(t, `git bisect start HEAD HEAD~2 && git bisect run /bin/sh -c ': > started || exit 1; until test -e release; do sleep 0.01; done' && git bisect reset`, tc)
+		if err == nil && (out.Status != 0 || out.Refusal != nil) {
+			err = fmt.Errorf("bisect status %d, refusal %+v, stderr %q", out.Status, out.Refusal, out.Stderr)
+		}
 		done <- err
 	}()
+	t.Cleanup(func() { _ = os.WriteFile(filepath.Join(dir, "release"), nil, 0o600) })
 	testutil.WaitFor(t, "the bisect check starts", func() bool {
+		select {
+		case err := <-done:
+			t.Fatalf("bisect finished before its check started: %v", err)
+		default:
+		}
 		_, err := os.Stat(filepath.Join(dir, "started"))
 		return err == nil
 	})

@@ -524,6 +524,12 @@ publishes the result through the pinned write door at its captured destination
 revision. A rewrite that would drop comments, tags or literals refuses with
 `JQ_EDIT_LOSSY`.
 
+### Private service commands
+
+`private-service -- PROGRAM ARG...` runs a packaged Linux executable in the invoking session’s private service environment. On both supported platforms, commands start in `/work`, temporary files go in `/work/tmp`, and later commands can use the same files and verified service endpoints. The environment includes BusyBox `sh` and PostgreSQL 16. Host project paths, environment variables, credentials and external network access are unavailable inside this environment. Use ordinary `command` for host toolchains.
+
+A trailing `&` returns a normal session job handle. Subsequent calls can run a client in the same environment. Use `kill` or `command_stop` with the saved handle to stop the server. When the private files can be discarded, `private-service release` closes the idle environment and releases its capacity. Session disposal also shuts it down. Host interruption ends live work without replay.
+
 ### Platform adapter evidence
 
 `fseffect.Replace` reports whether replacement, directory durability and byte
@@ -622,20 +628,20 @@ Domain tools expose intent and consequences as fields. `command` expresses progr
 
 ### Root-scope guards
 
-Native tools do not extend past attached project folders without explicit approval. Project file tools resolve through attached root identity, the shared default filesystem boundary, or approved absolute paths. Paths are normalized, symlink escapes are refused, and write scope is checked at the final mutation boundary. An absolute path outside attached roots and permitted scratch areas raises an approval card at every posture, and the approved grant admits the call ([grant shapes](authorization.md#the-filesystem-axis)). Without a covering grant, after the person declines, discovery tools report `SURVEY_PATH_ESCAPE`.
+Native file tools may change files in attached folders, session scratch, and locations covered by a reviewed grant. Strict also reviews confined writes. A write to another absolute path requires approval at every posture. Paths are normalized, symlink escapes are refused, and write scope is checked at the final mutation boundary. See [filesystem grants](authorization.md#the-filesystem-axis).
 
-Temporary, cache, and tool data paths derive from the same OS conventions as subprocess write roots; below Strict, native tools need no extra outside-folders approval there. Strict reviews a native write to those paths and leaves reads and subprocess write roots alone. Scratch files stay outside project identity, editor presence, and rewind; deliverables belong in attached folders so they show in Files.
+Native reads also resolve under the operating system’s temporary, cache, and tool data folders. Protected-path and worker restrictions still apply. Scratch files stay outside project identity, editor presence, and rewind. Place deliverables in attached folders so they show in Files.
 
 Multi-root calls use explicit root addressing when a relative path is ambiguous. Host-data-relative spill paths are a separate jailed namespace that never exposes the absolute config directory.
 
-`@scratch/<path>` addresses the invoking session's private scratch folder, a host namespace no attached root may share, and `@label/<path>` an attached folder. One grammar resolves them for native tools, `cwd` and redirects. In a `command` program an unquoted leading `@label` or `@scratch` expands to the folder's absolute path in every argument and assignment value, external programs included; a quoted one stays literal, and a label no folder carries stays literal for the program to read. Expansion grants nothing; the operation or launch that uses the path checks it. `native_path` converts a computed path explicitly. `TMPDIR`, `TMP`, `TEMP` and `SCRATCH_DIR` name the same folder for native utilities and processes, and `mktemp` creates there; literal `/tmp` keeps its OS meaning. `pwd` and `$PWD` are absolute, and the command guidance lists each folder's label and absolute path with the scratch path ([paths in command programs](projects.md#paths-in-command-programs)). A path or label of a folder that was removed, moved or renamed refuses with `ROOT_NOT_ATTACHED` and lists the current folders ([root changes](projects.md#root-changes-during-a-session)). A worker's scratch is its own, so a worker returns findings in its result rather than as a scratch path.
+`@scratch/<path>` addresses the invoking session's private scratch folder, a host namespace no attached root may share, and `@label/<path>` an attached folder. One grammar resolves them for native tools, `cwd` and redirects. In a `command` program an unquoted leading `@label` or `@scratch` expands to the folder's absolute path in every argument and assignment value, external programs included; a quoted one stays literal, and a label no folder carries stays literal for the program to read. Expansion grants nothing; the operation or launch that uses the path checks it. `native_path` converts a computed path explicitly. `TMPDIR`, `TMP`, `TEMP` and `SCRATCH_DIR` name the same folder for native utilities and processes, and `mktemp` creates there; literal `/tmp` names the machine’s shared temp folder. `pwd` and `$PWD` are absolute, and the command guidance lists each folder's label and absolute path with the scratch path ([paths in command programs](projects.md#paths-in-command-programs)). A path or label of a folder that was removed, moved or renamed refuses with `ROOT_NOT_ATTACHED` and lists the current folders ([root changes](projects.md#root-changes-during-a-session)). A worker's scratch is its own, so a worker returns findings in its result rather than as a scratch path.
 
 `@output/<program>.stdout` and `.stderr` address the invoking chat's retained
 command output copies. Failed child diagnostics use
 `@output/<program>/<execution>.stdout` and `.stderr`; the result provides each
 path and whether the retained prefix is complete. Unquoted addresses expand to absolute paths; quoted
 addresses remain literal. The host prepares this folder under its own state,
-outside writable scratch and standard temporary roots. These files are views,
+outside writable scratch. These files are views,
 not authoritative output: retained screened blobs and their size and SHA-256
 identify the bytes. A host `read` repairs a missing or changed view and serves
 the retained bytes. Commands read the current file; changed bytes cannot reuse

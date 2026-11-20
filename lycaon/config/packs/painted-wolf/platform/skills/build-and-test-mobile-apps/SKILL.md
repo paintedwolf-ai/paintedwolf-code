@@ -9,6 +9,8 @@ metadata:
 
 Run the toolchain in `command` and declare its id (`android-sdk`, `flutter`, or `xcode`) in `capability_request.host_resources` on that call.
 
+{% if session_scratch_dir %}For an isolated Xcode build, pass `-derivedDataPath @scratch/DerivedData`.{% endif %} If a developer shim fails after a shared-temp refusal, follow the host’s reported review outcome.
+
 ## Rules for every platform
 
 1. **Use the project's own entry point**: the Gradle wrapper, the Flutter project, the Xcode scheme. Discover real names before building (`xcodebuild -list`, `adb devices -l`, `xcrun simctl list devices available`, `flutter doctor`).

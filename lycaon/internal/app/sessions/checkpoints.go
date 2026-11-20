@@ -119,7 +119,8 @@ func (r *Runtime) WireCheckpoints(ctx context.Context, deps CheckpointDependenci
 	if locErr != nil {
 		slog.WarnContext(ctx, "sensitive locations catalog unavailable", "error", locErr)
 	}
-	deps.Execution.Host.Commands.SetSandboxWriteRootGate(&session.WriteRootCheckpointBroker{
+	writeBroker := &session.WriteRootCheckpointBroker{
+		TempHistory:       checkpointStore.SharedTempHistory,
 		Checkpoints:       r.Checkpoints,
 		Store:             deps.Sessions,
 		Runtime:           writeRootRT,
@@ -131,7 +132,9 @@ func (r *Runtime) WireCheckpoints(ctx context.Context, deps CheckpointDependenci
 		Rule:              deps.Execution.Host.Authority.WriteRootRule,
 		Locations:         locations,
 		Authz:             authzRec,
-	})
+	}
+	deps.Execution.Host.Commands.SetSandboxWriteRootGate(writeBroker)
+	r.Manager.Profiles.SessionWriteRoots = writeBroker.SessionWriteRoots
 	deps.Execution.Host.Authority.SetSandboxListenGate(&session.ListenCheckpointBroker{
 		Checkpoints:       r.Checkpoints,
 		Store:             deps.Sessions,

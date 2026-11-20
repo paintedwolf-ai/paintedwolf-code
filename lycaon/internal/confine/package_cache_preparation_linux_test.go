@@ -14,7 +14,7 @@ import (
 
 func cachePreparationFixture(t *testing.T) Confinement {
 	t.Helper()
-	home := t.TempDir()
+	home := privateCacheFixture(t)
 	t.Setenv("HOME", home)
 	t.Setenv("XDG_DATA_HOME", filepath.Join(home, "data"))
 	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, "config"))

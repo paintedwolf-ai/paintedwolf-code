@@ -44,7 +44,7 @@ func outsideTemporaryWriteRoots(t *testing.T) string {
 	t.Helper()
 	account, err := user.LookupId(strconv.Itoa(os.Getuid()))
 	testutil.FailErr(t, "look up account home", err)
-	dir, err := os.MkdirTemp(account.HomeDir, ".paintedwolf-confine-test-") //nolint:usetesting // Probe must be outside the permitted temporary write roots.
+	dir, err := os.MkdirTemp(account.HomeDir, ".paintedwolf-confine-test-") //nolint:usetesting // Probe must be outside machine temp.
 	testutil.FailErr(t, "create outside-write-root fixture", err)
 	t.Cleanup(func() { testutil.FailErr(t, "remove outside-write-root fixture", os.RemoveAll(dir)) })
 	return dir
@@ -69,6 +69,9 @@ func confinedRun(t *testing.T, self string, c confine.Confinement, name string, 
 	cmd, cleanup, err := confine.Command(context.Background(), self, name, args, c)
 	testutil.FailErr(t, "confine.Command failed", err)
 	defer cleanup()
+	if scratch := c.Workspaces.SessionScratch; scratch != "" {
+		cmd.Env = append(cmd.Environ(), "TMPDIR="+scratch, "TMP="+scratch, "TEMP="+scratch)
+	}
 	out, _ := cmd.CombinedOutput()
 	return cmd.ProcessState.ExitCode(), string(out)
 }
@@ -362,8 +365,8 @@ func TestBuildProfileDeniesWritingSecretStoresEvenWhenHomeIsGranted(t *testing.T
 	allowWrite, _ := profileBlock(t, p, blockAllowWrite, 0)
 	assertBlockCoversPath(t, allowWrite, resolvedHome, "write-root allow (reviewed home)")
 
-	// Protected descendants remain in the deny block.
-	denyWrite, _ := profileBlock(t, p, blockDenyWrite, 0)
+	// Find the protected-store rule among the applied write floors.
+	denyWrite, _ := profileBlockContaining(t, p, blockDenyWrite, filepath.Join(resolvedHome, ".ssh"))
 	for _, rel := range []string{
 		".ssh", ".aws", ".gnupg", ".kube", ".config/gcloud", ".azure",
 		".docker/config.json", ".docker/contexts", ".docker/cli-plugins",
@@ -523,7 +526,7 @@ func TestGitSSHEnvQuotesAppBundleExecutablePath(t *testing.T) {
 	}
 	env := confine.GitSSHEnv(c, "/Applications/Painted Wolf Code.app/Contents/MacOS/painted-wolf", "/tmp/known hosts")
 	joined := strings.Join(env, "\n")
-	if !strings.Contains(joined, "UserKnownHostsFile=/tmp/known hosts") {
+	if !strings.Contains(joined, `UserKnownHostsFile="/tmp/known hosts"`) {
 		t.Fatalf("known-hosts option missing: %s", joined)
 	}
 	sshCommand := strings.TrimPrefix(env[0], "GIT_SSH_COMMAND=")
@@ -537,7 +540,7 @@ func TestGitSSHEnvQuotesAppBundleExecutablePath(t *testing.T) {
 			continue
 		}
 		knownHostsArgs++
-		if !strings.HasPrefix(arg, "UserKnownHostsFile=/tmp/known hosts") {
+		if !strings.HasPrefix(arg, `UserKnownHostsFile="/tmp/known hosts"`) {
 			t.Fatalf("outer shell split known-hosts path: %q", args)
 		}
 	}
@@ -572,7 +575,8 @@ func TestBoundaryDraftWorkspaceVenvInterpreterExecutes(t *testing.T) {
 	testutil.FailErr(t, "project.DraftWorkspaceDir failed", err)
 	testutil.FailErr(t, "mkdir draft", os.MkdirAll(draft, 0o700))
 	venv := filepath.Join(draft, ".venv")
-	confinement := confine.Confinement{Roots: []string{draft}}
+	scratch := outsideTemporaryWriteRoots(t)
+	confinement := confine.Confinement{Roots: []string{draft}, Workspaces: confine.WorkspaceRoots{SessionScratch: scratch}}
 	code, out := confinedRun(t, self, confinement, python, "-m", "venv", venv)
 	if code != 0 {
 		t.Fatalf("create draft venv under confinement, exit=%d out=%s", code, out)

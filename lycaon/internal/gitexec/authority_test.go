@@ -2,9 +2,13 @@ package gitexec
 
 import (
 	"errors"
+	"os"
+	"path/filepath"
 	"testing"
 
+	"github.com/lycaon/lycaon/internal/confine"
 	"github.com/lycaon/lycaon/internal/exec"
+	"github.com/lycaon/lycaon/internal/testutil"
 )
 
 // Inside an agent's tool call Git runs only under the agent's admitted launch
@@ -41,5 +45,30 @@ func TestAgentEntryRequiresAnExplicitLaunchAuthority(t *testing.T) {
 	}
 	if got, err := launchPlan(t.Context(), "git"); err != nil || got.Kind != exec.LaunchHostInternal {
 		t.Fatalf("host caller plan = %+v, %v", got, err)
+	}
+}
+
+func TestGitStagingUsesOnlyTheAdmittedActionWorkspace(t *testing.T) {
+	t.Setenv("LYCAON_CONFIG_DIR", filepath.Join(t.TempDir(), "host"))
+	t.Setenv("TMPDIR", t.TempDir())
+	agent := AgentEntry(t.Context())
+	if _, err := MakeScratch(agent, "index-*"); !errors.Is(err, ErrLaunchAuthorityRequired) {
+		t.Fatalf("unadmitted staging: %v", err)
+	}
+	plan := exec.AgentLaunch(exec.LaunchAgentCommand, "git", nil)
+	if _, err := MakeScratch(WithAgentLaunch(agent, AgentLaunch{Plan: plan}), "index-*"); err == nil {
+		t.Fatal("agent staging used machine temp without a private workspace")
+	}
+	workspace, err := confine.NewActionWorkspace()
+	testutil.FailErr(t, "prepare private workspace", err)
+	location, err := MakeScratch(WithAgentLaunch(agent, AgentLaunch{Plan: plan, Workspace: workspace}), "index-*")
+	testutil.FailErr(t, "stage private index", err)
+	if filepath.Dir(location) != workspace.Path() {
+		t.Fatalf("staging parent %q, want %q", filepath.Dir(location), workspace.Path())
+	}
+	host, err := MakeScratch(WithHostPurpose(agent, "repository_lease"), "index-*")
+	testutil.FailErr(t, "stage host bookkeeping", err)
+	if filepath.Dir(host) != os.TempDir() {
+		t.Fatalf("host staging location %q", host)
 	}
 }

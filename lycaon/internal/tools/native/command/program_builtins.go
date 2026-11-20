@@ -155,10 +155,11 @@ func jobBuiltins(jobs *SessionJobs, commands map[string]toolcontract.CommandSpec
 		return readResult(0), nil
 	})
 	return map[string]commandprogram.OperationDispatcher{
-		"jobs":  listJobs,
-		"ps":    psBuiltin(jobs, commands["ps"]),
-		"pgrep": pgrepBuiltin(jobs, commands["pgrep"]),
-		"pkill": pkillBuiltin(jobs, commands["pkill"]),
+		"jobs":            listJobs,
+		"private-service": jobBuiltin(jobs.privateService.execute),
+		"ps":              psBuiltin(jobs, commands["ps"]),
+		"pgrep":           pgrepBuiltin(jobs, commands["pgrep"]),
+		"pkill":           pkillBuiltin(jobs, commands["pkill"]),
 		"wait": jobBuiltin(func(ctx context.Context, request commandprogram.OperationRequest, _ commandprogram.Streams) (toolcontract.ProducerResult, error) {
 			handles := request.Argv.Values()[1:]
 			named := len(handles) > 0

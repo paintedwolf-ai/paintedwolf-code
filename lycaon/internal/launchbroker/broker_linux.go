@@ -32,9 +32,8 @@ const (
 	MaxRequest = 256 << 10
 	// RequiredFiles are the call channel and the three standard streams.
 	RequiredFiles = 4
-	// MaxExtraFiles covers four helper slots, eight retained sockets, four
-	// pinned launch inputs and the supervisor's two lifetime/report pipes.
-	MaxExtraFiles = 4 + 8 + 4 + 2
+	// MaxExtraFiles covers helper slots, approved sockets, session IPC, pinned inputs and supervisor pipes.
+	MaxExtraFiles = 4 + 8 + 1 + 4 + 2
 	// ControlSpace sizes a receive buffer for one request's descriptors.
 	controlSlack = 64
 )

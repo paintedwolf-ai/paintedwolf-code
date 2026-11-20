@@ -22,7 +22,7 @@ func TestNativeScratchAccessDoesNotAskForAnOutsideFolderGrant(t *testing.T) {
 				Files: []string{filepath.Join(scratch, "notes.txt")},
 			},
 			Scope: hitl.ActionScope{
-				ProjectDir: project,
+				ProjectDir: project, SessionScratchRoot: scratch,
 			},
 		})
 		testutil.FailErr(t, "evaluate scratch "+tool, err)

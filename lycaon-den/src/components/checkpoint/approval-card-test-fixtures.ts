@@ -203,3 +203,23 @@ export function unredactableSecretCheckpoint(note: string): PendingCheckpoint {
     }),
   };
 }
+
+export function sharedTempCheckpoint(locations: string[]): PendingCheckpoint {
+  return {
+    ...checkpoint(),
+    tool_approval: toolApprovalFixture({
+      tool: "command",
+      command: "build",
+      subject: {
+        kind: "write_root_set",
+        title: `Allow writes to ${locations.join(", ")}`,
+        targets: locations.map((label) => ({ kind: "shared_temp", label })),
+      },
+      presentation: {
+        action: "Sandbox write access",
+        command: "build",
+        impact: "Other programs keep temporary files here.",
+      },
+    }),
+  };
+}

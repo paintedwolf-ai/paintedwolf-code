@@ -172,6 +172,7 @@ type ActionScope struct {
 	RootSessionID      string
 	SessionScratchRoot string
 	SessionOutputRoot  string
+	GrantedWriteRoots  []string
 }
 
 // ChatSession returns the chat that chat-scoped authority belongs to:

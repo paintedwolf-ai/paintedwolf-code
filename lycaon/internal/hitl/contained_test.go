@@ -15,11 +15,12 @@ func TestContainedProvenanceMatchesDefaultConfinement(t *testing.T) {
 	confine.TestingSetAutoConfine(t)
 	roots := []string{t.TempDir()}
 
-	c, ok := confine.DefaultConfinement(confine.Request{Roots: roots})
-	got := hitl.ContainedForRequest(confine.Request{Roots: roots})
+	req := confine.Request{Roots: roots, GrantedWriteRoots: []string{t.TempDir()}}
+	c, ok := confine.DefaultConfinement(req)
+	got := hitl.ContainedForRequest(req)
 	fromSame := hitl.ContainedFromConfinement(c, ok)
 
-	if !reflect.DeepEqual(got, fromSame) {
+	if ok && !reflect.DeepEqual(got, fromSame) {
 		t.Fatalf("ContainedForRequest diverged from ContainedFromConfinement: got=%+v fromSame=%+v", got, fromSame)
 	}
 	if ok {

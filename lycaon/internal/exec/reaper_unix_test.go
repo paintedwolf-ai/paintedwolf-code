@@ -16,6 +16,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/lycaon/lycaon/internal/confine"
 	"github.com/lycaon/lycaon/internal/osprocess"
 	"github.com/lycaon/lycaon/internal/testutil"
 )
@@ -261,16 +262,37 @@ func TestReaperHelperProcess(t *testing.T) {
 	os.Exit(0)
 }
 
-// The reaper deletes only directories inside the temp root.
+func TestReaperRemovesOnlyTheTrackedActionWorkspace(t *testing.T) {
+	state, temp := t.TempDir(), t.TempDir()
+	t.Setenv("LYCAON_CONFIG_DIR", state)
+	t.Setenv("TMPDIR", temp)
+	active, err := confine.NewActionWorkspace()
+	testutil.FailErr(t, "create active action directory", err)
+	other, err := confine.NewActionWorkspace()
+	testutil.FailErr(t, "create another action directory", err)
+	parent := filepath.Dir(active.Path())
+	reapLines("+d"+active.Path()+"\n", "+d"+parent+"\n")
+	if _, err := os.Stat(active.Path()); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("tracked action directory survived: %v", err)
+	}
+	_, err = os.Stat(other.Path())
+	testutil.FailErr(t, "untracked action directory must remain", err)
+}
+
 func TestReaperDirPathStaysInsideTheTempRoot(t *testing.T) {
+	t.Setenv("LYCAON_CONFIG_DIR", "/fixture/state")
 	root := filepath.Clean(os.TempDir())
 	for path, want := range map[string]bool{
-		filepath.Join(root, "scan-run"):   true,
-		root:                              false,
-		filepath.Dir(root):                false,
-		"/usr/bin":                        false,
-		filepath.Join(root, "..", "else"): false,
-		"relative/scan-run":               false,
+		filepath.Join(root, "scan-run"):               true,
+		root:                                          false,
+		filepath.Dir(root):                            false,
+		"/usr/bin":                                    false,
+		filepath.Join(root, "..", "else"):             false,
+		"relative/scan-run":                           false,
+		"/fixture/state/action-work/action-42":        true,
+		"/fixture/state/action-work/other":            false,
+		"/fixture/state/action-work":                  false,
+		"/fixture/state/action-work/action-42/nested": false,
 	} {
 		if got := reaperDirPath(path); got != want {
 			t.Errorf("reaperDirPath(%q) = %v, want %v", path, got, want)

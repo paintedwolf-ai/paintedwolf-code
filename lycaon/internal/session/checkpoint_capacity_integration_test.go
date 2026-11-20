@@ -152,7 +152,7 @@ func TestPolicyFeedbackRetriesRenderingAndPersistenceWithoutLoss(t *testing.T) {
 }
 
 func TestPolicyAdvisoryRoutingAtEveryHostBoundary(t *testing.T) {
-	anchors := []string{oar.AnchorToolPreInvoke, oar.AnchorCoordinatorPreInvoke, oar.AnchorSessionPreInvoke, oar.AnchorToolHandler, oar.AnchorToolRejected, oar.AnchorCoordinatorPostTurn, oar.AnchorCoordinatorCloseoutCheck, oar.AnchorWorkerReportCheck, oar.AnchorWorkerFinalize, oar.AnchorToolPost, oar.AnchorCredentialAssignment, oar.AnchorContentInput, oar.AnchorContentOutput, oar.AnchorContentToolResult}
+	anchors := []string{oar.AnchorToolPreInvoke, oar.AnchorCoordinatorPreInvoke, oar.AnchorSessionPreInvoke, oar.AnchorToolHandler, oar.AnchorToolRejected, oar.AnchorCoordinatorPostTurn, oar.AnchorCoordinatorCloseoutCheck, oar.AnchorWorkerReportCheck, oar.AnchorWorkerFinalize, oar.AnchorToolPost, oar.AnchorCredentialAssignment, oar.AnchorSharedTemp, oar.AnchorContentInput, oar.AnchorContentOutput, oar.AnchorContentToolResult}
 	for _, anchor := range anchors {
 		for _, effect := range []oar.Effect{oar.EffectWarn, oar.EffectNudge} {
 			t.Run(anchor+"/"+string(effect), func(t *testing.T) {
@@ -168,7 +168,7 @@ func TestPolicyAdvisoryRoutingAtEveryHostBoundary(t *testing.T) {
 				if res.Decision == nil || res.Decision.Effect != effect {
 					t.Fatalf("decision = %#v", res.Decision)
 				}
-				inline := anchor == oar.AnchorWorkerFinalize || effect == oar.EffectWarn && (anchor == oar.AnchorToolPost || anchor == oar.AnchorCredentialAssignment)
+				inline := anchor == oar.AnchorWorkerFinalize || effect == oar.EffectWarn && (anchor == oar.AnchorToolPost || anchor == oar.AnchorCredentialAssignment || anchor == oar.AnchorSharedTemp)
 				queued := mgr.Coordinator.Runtime.Kicks().LeasePolicyFeedback("session")
 				if (len(queued.Entries) == 0) != inline {
 					t.Fatalf("inline=%v queued=%d", inline, len(queued.Entries))

@@ -138,14 +138,6 @@ run-a-notebook-headlessly:
   - Execute the analysis notebook and give me the results
   - Re-run all the cells to check the notebook still works
   - The notebook works for me but fails in CI
-run-a-throwaway-service:
-  should_not_trigger:
-  - Run the project's docker-compose stack
-  - Why is the production redis slow?
-  should_trigger:
-  - Spin up a postgres to rehearse this migration against
-  - The integration tests need a redis instance
-  - Test this against a real queue without touching staging
 run-browser-e2e-tests:
   should_not_trigger:
   - Write a unit test for this function

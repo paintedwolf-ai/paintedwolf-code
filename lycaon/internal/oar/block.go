@@ -20,6 +20,7 @@ const (
 	AnchorWorkerFinalize           = "worker.finalize"
 	AnchorWorkerReportCheck        = "worker.report_check"
 	AnchorToolPost                 = "tool.post_invoke"
+	AnchorSharedTemp               = "sandbox.shared_temp"
 	AnchorCredentialAssignment     = "credential.assignment"
 	// Content-safety anchors implementing the three core model-IO anchors.
 	AnchorContentInput      = "content.input"

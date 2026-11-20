@@ -81,9 +81,13 @@ func FinalProcessEnvironment(opts ExecOpts, stageEnv map[string]string) ([]strin
 	}
 	env = confine.ProcessEnvironment(env, boundary)
 	env = withoutConfinedGitFsmonitor(env, boundary)
-	if boundary.Network != confine.NetworkDeny {
+	if boundary.Network == confine.NetworkProxyOnly {
 		if self, err := os.Executable(); err == nil {
-			env = overlayProcessEnv(env, confine.GitSSHEnv(boundary, self, confine.SSHKnownHostsPath(boundary)))
+			knownHosts, err := confine.PrepareSSHKnownHosts(boundary)
+			if err != nil {
+				return nil, fmt.Errorf("prepare SSH host keys: %w", err)
+			}
+			env = overlayProcessEnv(env, confine.GitSSHEnv(boundary, self, knownHosts))
 		}
 	}
 	return env, nil

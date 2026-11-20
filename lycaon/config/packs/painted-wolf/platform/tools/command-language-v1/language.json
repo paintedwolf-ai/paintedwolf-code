@@ -1205,6 +1205,7 @@
     "pkill",
     "printenv",
     "printf",
+    "private-service",
     "ps",
     "pwd",
     "read",

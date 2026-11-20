@@ -131,4 +131,5 @@ class ProfileTests(unittest.TestCase):
                                                             "binaries/nativegen"])
         self.assertEqual(config["bundle"]["macOS"]["files"], {
             "Helpers/" + host.BUNDLE_NAME: "host-bundle/" + host.BUNDLE_NAME,
+            "Resources/service-guest": "service-guest",
         })
