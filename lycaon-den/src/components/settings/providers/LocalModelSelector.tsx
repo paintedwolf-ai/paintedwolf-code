@@ -25,6 +25,7 @@ export function LocalModelSelector(props: Props) {
   const [choice, setChoice] = createSignal<string>();
   const [working, setWorking] = createSignal(false);
   const [error, setError] = createSignal("");
+  const [readError, setReadError] = createSignal("");
   const [retry, setRetry] = createSignal<LocalModelSelectionRequest>();
   let pending: LocalModelSelectionRequest | undefined;
   let version = 0;
@@ -47,6 +48,7 @@ export function LocalModelSelector(props: Props) {
   const transfer = () => status()?.state === "downloading" ? status() : undefined;
   const installed = () => !!selected() && selected() === status()?.selected_model;
   const current = () => installed() && usable(status());
+  const problem = () => error() || readError();
   const retryImport = () => !!(retry()?.bundle_path || retry()?.packaged_seed);
   const canApply = () => {
     if (working()) return false;
@@ -72,27 +74,28 @@ export function LocalModelSelector(props: Props) {
   const accept = async (next: LocalGenerationStatus, ticket: number) => {
     if (!alive || version !== ticket) return;
     setSnapshot(next);
+    setReadError("");
     if (next.state === "downloading") return;
     const request = pending;
     pending = undefined;
-    setWorking(true);
-    try {
-      await props.onRefresh();
-      if (!alive || version !== ticket) return;
-      // Retain the confirmed result until the provider list catches up.
-      const refreshed = props.provider.local_runtime;
-      if (refreshed?.state === next.state && refreshed.selected_model === next.selected_model) setSnapshot(undefined);
-      if (!request) return;
+    if (request) {
       if (next.selected_model === request.model && usable(next)) {
         setRetry(undefined);
         setChoice(undefined);
+        setError("");
         props.onContinue?.();
       } else {
         setRetry(request);
         setError(next.detail || "Installation did not finish. Try again.");
       }
-    } finally {
-      if (alive && version === ticket) setWorking(false);
+    }
+    try {
+      await props.onRefresh();
+      if (!alive || version !== ticket) return;
+      const refreshed = props.provider.local_runtime;
+      if (refreshed?.state === next.state && refreshed.selected_model === next.selected_model) setSnapshot(undefined);
+    } catch (err) {
+      if (alive && version === ticket) setReadError(err instanceof Error ? err.message : String(err));
     }
   };
 
@@ -100,18 +103,22 @@ export function LocalModelSelector(props: Props) {
     if (!transfer()) return;
     let stopped = false;
     let timer: ReturnType<typeof setTimeout>;
+    let delay = 750;
     const poll = async () => {
       const ticket = version;
       try {
         const next = await props.client.getLocalModelStatus(props.provider.id);
         if (!stopped && ticket === version && !working()) {
-          setError("");
+          delay = 750;
           await accept(next, ticket);
         }
       } catch (err) {
-        if (!stopped && ticket === version) setError(err instanceof Error ? err.message : String(err));
+        if (!stopped && ticket === version) {
+          delay = Math.min(delay * 2, 15_000);
+          setReadError(err instanceof Error ? err.message : String(err));
+        }
       }
-      if (!stopped) timer = setTimeout(() => void poll(), 750);
+      if (!stopped) timer = setTimeout(() => void poll(), delay);
     };
     timer = setTimeout(() => void poll(), 750);
     onCleanup(() => { stopped = true; clearTimeout(timer); });
@@ -143,8 +150,8 @@ export function LocalModelSelector(props: Props) {
       }
       if (!model) {
         await props.client.deleteLocalModel(props.provider.id);
-        await props.onRefresh();
         if (alive) props.onContinue?.();
+        await props.onRefresh();
         return;
       }
       pending = action === "seed" ? { model, packaged_seed: true }
@@ -183,7 +190,10 @@ export function LocalModelSelector(props: Props) {
       }>{active =>
         <LocalModelTransfer status={active()} busy={working()} onCancel={() => void run("cancel")} />
       }</ShowLatest>
-      <Show when={error()}><p role="alert" class="den-settings-warn">{error()}</p></Show>
+      <Show when={problem()}><p role="alert" class="den-settings-warn">{problem()}</p></Show>
+      <Show when={props.onContinue && (problem() || transfer() || working())}>
+        <DenButton variant="secondary" onClick={() => props.onContinue?.()}>Finish model setup later</DenButton>
+      </Show>
     </div>
   );
 }

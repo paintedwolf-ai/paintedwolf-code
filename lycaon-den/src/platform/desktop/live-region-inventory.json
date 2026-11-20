@@ -24,7 +24,7 @@
   "components/nav/FocusedProjectNav.tsx": 1,
   "components/NoProviderCard.tsx": 1,
   "components/NoticeRail.tsx": 2,
-  "components/onboarding/OnboardingGate.tsx": 2,
+  "components/onboarding/ModelSetupConnection.tsx": 1,
   "components/primitives/DenField.tsx": 1,
   "components/primitives/PreparedSurface.tsx": 1,
   "components/ProgressStrip.tsx": 1,

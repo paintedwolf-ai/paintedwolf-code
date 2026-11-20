@@ -188,6 +188,18 @@ describe("Local model setup", () => {
     expect(completeModelStep).toHaveBeenCalledOnce();
   });
 
+  it("rechecks an inaccessible catalog and continues without changing host model choices", async () => {
+    const store = createSettingsStore();
+    const client = mockClient({listProviders:vi.fn().mockRejectedValue(new Error("Host offline"))});
+    render(() => <OnboardingGate client={client} settingsStore={store} settingsChecked={true} />);
+    fireEvent.click(screen.getByRole("button", {name: "Check again"}));
+    expect(await screen.findByText("Host offline")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", {name: "Continue without configuring a model"}));
+    expect(await screen.findByTestId("onboarding-layout")).toBeTruthy();
+    expect(client.deleteLocalModel).not.toHaveBeenCalled();
+    expect(client.selectLocalModel).not.toHaveBeenCalled();
+  });
+
   it("defers the model decision while every download is unpublished", async () => {
     const store = createSettingsStore({providers: [includedProvider({
       state: "idle", recovery_action: "none",

@@ -24,6 +24,7 @@ import { ONBOARDING_LAYOUT_COPY } from "./onboarding-layout-copy.ts";
 import { setOnboardingWelcomeDismissSink } from "./onboarding-welcome-dismiss.ts";
 import { OnboardingLayoutChoices } from "./OnboardingLayoutChoices.tsx";
 import { OnboardingSettingsTeachNav } from "./OnboardingSettingsTeachNav.tsx";
+import { ModelSetupConnection } from "./ModelSetupConnection.tsx";
 import { OnboardingStepPage } from "./OnboardingStepPage.tsx";
 
 type Props = {
@@ -35,6 +36,7 @@ type Props = {
 export function OnboardingGate(props: Props) {
   const upgrade = firstRunSetupCompletedPref();
   const [page, setPage] = createSignal<OnboardingGatePage | "waiting">("waiting");
+  const [checkedHere, setCheckedHere] = createSignal(false);
   const [includesModel, setIncludesModel] = createSignal(false);
   const [dismissing, setDismissing] = createSignal(false);
   const localProvider = () => props.settingsStore.state.providers.find(isIncludedProvider);
@@ -42,6 +44,14 @@ export function OnboardingGate(props: Props) {
     const client = props.client;
     const provider = localProvider();
     return client && provider ? { client, provider } : null;
+  };
+  const refreshProviders = async () => {
+    const client = props.client;
+    if (!client) return;
+    const providers = await client.listProviders();
+    if (client !== props.client) return;
+    props.settingsStore.actions.setProviders(providers);
+    setCheckedHere(true);
   };
   let entryResolved = false;
   let modelStepDeferred = false;
@@ -59,7 +69,7 @@ export function OnboardingGate(props: Props) {
   };
 
   createEffect(() => {
-    if (entryResolved || !props.settingsChecked || !props.client) return;
+    if (entryResolved || !(props.settingsChecked || checkedHere()) || !props.client) return;
     const setup = localModelSetup(localProvider()?.local_runtime);
     if (setup === "unknown") return;
     entryResolved = true;
@@ -153,10 +163,8 @@ export function OnboardingGate(props: Props) {
           <Show when={page() === "waiting"}>
             <OnboardingStepPage data-testid="onboarding-waiting" aria-labelledby="onboarding-waiting-title">
               <h1 id="onboarding-waiting-title" class="onboarding-gate__title" {...chromeProps()}>Preparing setup</h1>
-              <p role="status">{props.settingsChecked && props.client ? "Checking the installation…" : "Waiting for the local engine…"}</p>
-              <Show when={!dismissing()}>
-                <DenButton variant="secondary" onClick={() => void finishModelStep()}>Continue without configuring a model</DenButton>
-              </Show>
+              <ModelSetupConnection connected={!!props.client} checked={props.settingsChecked || checkedHere()}
+                onRetry={refreshProviders} onContinue={() => void finishModelStep()} />
             </OnboardingStepPage>
           </Show>
           <Show when={page() === "local_model"}>
@@ -167,15 +175,11 @@ export function OnboardingGate(props: Props) {
               </header>
               <div class="onboarding-gate__card">
                 <ShowLatest when={modelSetup()} fallback={
-                  <div>
-                    <p role="status">{props.settingsChecked && props.client ? "Local generation is unavailable on this device." : "Waiting for the local engine…"}</p>
-                    <DenButton variant="primary" disabled={dismissing()} onClick={() => void finishModelStep()}>Continue without a local model</DenButton>
-                  </div>
+                  <ModelSetupConnection connected={!!props.client} checked={props.settingsChecked}
+                    onRetry={refreshProviders} onContinue={() => void finishModelStep()} />
                 }>
                   {setup => <LocalModelSelector client={setup().client} provider={setup().provider}
-                    onRefresh={async () => {
-                      if (props.client) props.settingsStore.actions.setProviders(await props.client.listProviders());
-                    }}
+                    onRefresh={refreshProviders}
                     onContinue={() => void finishModelStep()} />}
                 </ShowLatest>
               </div>

@@ -16,9 +16,11 @@ const STATES = {
 export function localGenerationView(provider: Pick<ProviderMeta, "local_runtime">) {
   const status = provider.local_runtime;
   const state = status?.state ?? "unavailable";
-  const action = status?.recovery_action ?? "none";
+  const replace = state === "repair_required" && status?.recovery_action !== "repair";
+  const action = replace ? "none" : status?.recovery_action ?? "none";
   return {
     ...STATES[state],
+    detail: replace ? "Download the model again or import a signed offline bundle." : STATES[state].detail,
     ready: state === "ready",
     action,
     actionLabel: action === "repair" ? "Repair model" : state === "idle" ? "Load model" : "Try again",
