@@ -6,6 +6,9 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/lycaon/lycaon/internal/configdir"
+	"github.com/lycaon/lycaon/internal/enginepaths"
+
 	scanoutput "github.com/lycaon/lycaon/internal/scan/output"
 	"github.com/lycaon/lycaon/internal/testutil"
 )
@@ -15,15 +18,17 @@ func TestOpengrepTempJSONPathUsesPrivateDir(t *testing.T) {
 	testutil.FailErr(t, "newOpengrepRunFiles", err)
 	defer cleanup()
 
-	if !strings.HasPrefix(files.runDir, filepath.Clean(os.TempDir())+string(filepath.Separator)) {
-		t.Fatalf("run dir = %q, want under OS temp %q", files.runDir, os.TempDir())
+	config, err := configdir.UserConfigDir()
+	testutil.FailErr(t, "resolve scanner configuration root", err)
+	if parent := filepath.Dir(files.dir()); parent != enginepaths.ActionWorkRootUnder(config) {
+		t.Fatalf("scanner workspace parent = %q, want private action storage", parent)
 	}
 	st, err := os.Stat(files.jsonPath)
 	testutil.FailErr(t, "stat temp json", err)
 	if st.Mode().Perm() != 0o600 {
 		t.Fatalf("mode = %o, want 0600", st.Mode().Perm())
 	}
-	dirStat, err := os.Stat(files.runDir)
+	dirStat, err := os.Stat(files.dir())
 	testutil.FailErr(t, "stat run dir", err)
 	if dirStat.Mode().Perm() != 0o700 {
 		t.Fatalf("dir mode = %o, want 0700", dirStat.Mode().Perm())
@@ -105,7 +110,7 @@ func TestOpengrepTempCleanupRemovesFile(t *testing.T) {
 		}
 	}
 	cleanup()
-	if _, err := os.Stat(files.runDir); !os.IsNotExist(err) {
+	if _, err := os.Stat(files.dir()); !os.IsNotExist(err) {
 		t.Fatalf("expected run directory removed, stat err = %v", err)
 	}
 	for _, path := range []string{
@@ -125,7 +130,7 @@ func TestOpengrepSubprocessEnvKeepsCLIStateInRunFiles(t *testing.T) {
 	testutil.FailErr(t, "newOpengrepRunFiles", err)
 	defer cleanup()
 
-	t.Setenv("XDG_CACHE_HOME", filepath.Join(os.TempDir(), "xdg-cache"))
+	t.Setenv("XDG_CACHE_HOME", filepath.Join(string(filepath.Separator), "custom", "cache"))
 	for _, key := range []string{"TMPDIR", "TMP", "TEMP"} {
 		t.Setenv(key, t.TempDir())
 	}

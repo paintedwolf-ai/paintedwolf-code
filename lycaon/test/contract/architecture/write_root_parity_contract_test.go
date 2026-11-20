@@ -136,7 +136,7 @@ var confinementProducerInventory = map[string]string{
 	"internal/tools/native/terminal/session_open.go":        "tools.ConfineRootsForAction(tctx) — host provenance only",
 	"internal/tools/safecmd/safecmd.go":                     "Confine(roots) wrapper; callers supply session roots (see internal/mcp/connector.go)",
 	"internal/mcp/connector.go":                             "stdioConfinement(roots) — server spawn roots from the session, never from tool args",
-	"internal/scan/bundled_confinement.go":                  "BundledScannerConfinement(projectDir, outputDir) — bundled OpenGrep: project read-only plus exact host output root, network denied, mandatory application",
+	"internal/scan/bundled_confinement.go":                  "BundledScannerConfinement(projectDir, workspace) — bundled OpenGrep: project read-only plus private action workspace, network denied, mandatory application",
 	"internal/confine/confine.go":                           "DefaultConfinement / BuildSeatbeltProfile themselves",
 	"internal/hitl/contained.go":                            "ContainedForRequest projection — reads the same union the executor applies",
 	"internal/toolexecution/command_operand_expansion.go":   "globReadable(confReq) — pre-grant read boundaries for glob expansion",

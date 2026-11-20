@@ -8,18 +8,21 @@ import (
 )
 
 // BundledScannerConfinement permits project reads and output writes without egress.
-func BundledScannerConfinement(projectDir, outputDir string) (*confine.Confinement, error) {
+func BundledScannerConfinement(projectDir string, workspace confine.ActionWorkspace) (*confine.Confinement, error) {
 	if strings.TrimSpace(projectDir) == "" {
 		return nil, fmt.Errorf("bundled scanner project root is required")
 	}
-	if strings.TrimSpace(outputDir) == "" {
+	if workspace.Path() == "" {
 		return nil, fmt.Errorf("bundled scanner output root is required")
 	}
 	box, applied := confine.DefaultConfinement(confine.Request{
-		Roots: []string{outputDir}, ReadRoots: []string{projectDir}, Egress: confine.EgressDeny,
+		Roots: []string{workspace.Path()}, ReadRoots: []string{projectDir}, Egress: confine.EgressDeny,
 	})
 	if err := confine.RequireApplied(applied); err != nil {
 		return nil, err
+	}
+	if box != nil {
+		box.Workspaces.Action = workspace
 	}
 	return box, nil
 }
