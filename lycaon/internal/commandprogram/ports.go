@@ -302,9 +302,10 @@ type ProgramRecorder interface {
 
 // OutputDestination is one reached output redirection after target expansion.
 type OutputDestination struct {
-	Invocation toolcontract.OperationInvocation
-	Redirect   commandsurface.ProgramRedirect
-	Target     Field
+	RequestedWriteRoot string
+	Invocation         toolcontract.OperationInvocation
+	Redirect           commandsurface.ProgramRedirect
+	Target             Field
 }
 
 // OutputPublication opens a redirect destination through its owner. Bytes are

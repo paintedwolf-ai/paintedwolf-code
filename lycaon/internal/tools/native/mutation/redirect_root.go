@@ -27,6 +27,10 @@ func (p *Publication) bindOutput(ctx context.Context, destination commandprogram
 	if root == "" || confine.ClassifyBlockedWrite(path).Kind != confine.WriteSubjectOrdinary {
 		return bound, tc, err
 	}
+	requested := destination.RequestedWriteRoot
+	if filepath.IsAbs(requested) && confine.PathWithinRoots(requested, []string{root}) && confine.PathWithinRoots(path, []string{requested}) {
+		root = requested
+	}
 	tc, err = p.ReviewRoot(ctx, tc, destination.Redirect.Operator, path, root)
 	if err != nil {
 		return bound, tc, err
