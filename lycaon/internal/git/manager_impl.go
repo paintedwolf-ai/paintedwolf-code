@@ -90,7 +90,8 @@ func (m *gitDiffStatusManager) StatusIgnored(ctx context.Context, projectDir str
 	if len(paths) == 0 {
 		return nil, fmt.Errorf("paths are required for ignored status")
 	}
-	args := []string{"status", "--porcelain=v1", "-z", "--ignored=matching", "--"}
+	// A status read must not write the index.
+	args := []string{"--no-optional-locks", "status", "--porcelain=v1", "-z", "--ignored=matching", "--"}
 	for _, p := range paths {
 		args = append(args, filepath.ToSlash(p))
 	}
@@ -675,7 +676,8 @@ func renameSource(entry porcelainEntry) string {
 }
 
 func readPorcelainStatus(ctx context.Context, dir string, branch bool) (string, []porcelainEntry, error) {
-	args := []string{"status", "--porcelain=v1", "-z", "--untracked-files=all"}
+	// A status read must not write the index.
+	args := []string{"--no-optional-locks", "status", "--porcelain=v1", "-z", "--untracked-files=all"}
 	if branch {
 		args = append(args, "-b")
 	}

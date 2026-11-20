@@ -270,12 +270,8 @@ func (s *Comparisons) resolveRootRepoPosition(
 	if strings.TrimSpace(rootPath) == "" {
 		return "", "", false
 	}
-	repos, err := s.Git.LoadOrderedRepos(ctx, p, roots, "", "")
-	if err != nil {
-		return "", "", false
-	}
 	toplevel := ""
-	for _, repo := range repos {
+	for _, repo := range s.Git.LoadOrderedRepos(ctx, p, roots, "", nil) {
 		if !repo.Available || strings.TrimSpace(repo.Toplevel) == "" {
 			continue
 		}

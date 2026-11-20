@@ -71,50 +71,83 @@ func GitStatusViaAPI(t *testing.T, srv *hostapi.Server, projectID, repoID string
 	if len(sessionIDs) > 0 {
 		sessionID = sessionIDs[0]
 	}
+	// Readiness waits on the host's refresh within the test's own deadline; a fixed
+	// wall-clock bound fails on loaded runners before the first status lands.
+	var snapshot GitStatusSnapshot
+	testutil.WaitFor(t, "git status is served", func() bool {
+		published, ok := readGitStatus(t, srv, projectID, repoID, sessionID)
+		if !ok || published.Refreshing {
+			return false
+		}
+		snapshot = published
+		return true
+	})
+	return snapshot
+}
+
+// GitStatusPublishedWhen waits for a published status snapshot, refreshing or
+// not, that satisfies want. A caller names the facts it needs instead of
+// waiting for the cache to report itself fresh.
+func GitStatusPublishedWhen(t *testing.T, srv *hostapi.Server, projectID, repoID, sessionID, step string, want func(GitStatusSnapshot) bool) GitStatusSnapshot {
+	t.Helper()
+	var snapshot GitStatusSnapshot
+	testutil.WaitFor(t, step, func() bool {
+		published, ok := readGitStatus(t, srv, projectID, repoID, sessionID)
+		if !ok || !want(published) {
+			return false
+		}
+		snapshot = published
+		return true
+	})
+	return snapshot
+}
+
+// readGitStatus reads the newest published status generation and its changed
+// files. It reports false while no snapshot exists or when a newer generation
+// lands between the two reads.
+func readGitStatus(t *testing.T, srv *hostapi.Server, projectID, repoID, sessionID string) (GitStatusSnapshot, bool) {
+	t.Helper()
 	statusURL := GitRepoURL(projectID, repoID, "status")
 	lens := ""
 	if sessionID != "" {
 		statusURL += "?session_id=" + sessionID
 		lens = "&session_id=" + sessionID
 	}
-	// Readiness waits on the host's refresh within the test's own deadline; a fixed
-	// wall-clock bound fails on loaded runners before the first status lands.
-	var snapshot GitStatusSnapshot
-	testutil.WaitFor(t, "git status is served", func() bool {
-		req := NewAuthedRequest(http.MethodGet, statusURL, nil)
-		w := httptest.NewRecorder()
-		srv.ServeHTTP(w, req)
-		if w.Code != http.StatusOK && w.Code != http.StatusAccepted {
-			t.Fatalf("git status = %d body = %s", w.Code, w.Body.String())
+	req := NewAuthedRequest(http.MethodGet, statusURL, nil)
+	w := httptest.NewRecorder()
+	srv.ServeHTTP(w, req)
+	if w.Code != http.StatusOK && w.Code != http.StatusAccepted {
+		t.Fatalf("git status = %d body = %s", w.Code, w.Body.String())
+	}
+	if w.Code == http.StatusAccepted {
+		return GitStatusSnapshot{}, false
+	}
+	var summary wire.GitStatusSummary
+	if err := json.Unmarshal(w.Body.Bytes(), &summary); err != nil {
+		t.Fatalf("decode status: %v", err)
+	}
+	changesReq := NewAuthedRequest(http.MethodGet,
+		fmt.Sprintf("%s?revision=%d&limit=500%s", GitRepoURL(projectID, repoID, "changes"), summary.Revision, lens), nil)
+	changesW := httptest.NewRecorder()
+	srv.ServeHTTP(changesW, changesReq)
+	if changesW.Code == http.StatusAccepted {
+		return GitStatusSnapshot{}, false
+	}
+	if changesW.Code != http.StatusOK {
+		var refusal wire.ErrorResponse
+		if json.Unmarshal(changesW.Body.Bytes(), &refusal) == nil && refusal.Code == wire.ApiErrorCodeCursorGenerationExpired {
+			return GitStatusSnapshot{}, false
 		}
-		var summary wire.GitStatusSummary
-		if err := json.Unmarshal(w.Body.Bytes(), &summary); err != nil {
-			t.Fatalf("decode status: %v", err)
-		}
-		if w.Code == http.StatusAccepted || summary.Refreshing {
-			return false
-		}
-		changesReq := NewAuthedRequest(http.MethodGet,
-			fmt.Sprintf("%s?revision=%d&limit=500%s", GitRepoURL(projectID, repoID, "changes"), summary.Revision, lens), nil)
-		changesW := httptest.NewRecorder()
-		srv.ServeHTTP(changesW, changesReq)
-		if changesW.Code == http.StatusAccepted {
-			return false
-		}
-		if changesW.Code != http.StatusOK {
-			t.Fatalf("git changes = %d body = %s", changesW.Code, changesW.Body.String())
-		}
-		var changes wire.GitChangesPage
-		if err := json.Unmarshal(changesW.Body.Bytes(), &changes); err != nil {
-			t.Fatalf("decode changes: %v", err)
-		}
-		if changes.Revision != summary.Revision {
-			return false
-		}
-		snapshot = GitStatusSnapshot{GitStatusSummary: summary, Files: changes.Files}
-		return true
-	})
-	return snapshot
+		t.Fatalf("git changes = %d body = %s", changesW.Code, changesW.Body.String())
+	}
+	var changes wire.GitChangesPage
+	if err := json.Unmarshal(changesW.Body.Bytes(), &changes); err != nil {
+		t.Fatalf("decode changes: %v", err)
+	}
+	if changes.Revision != summary.Revision {
+		return GitStatusSnapshot{}, false
+	}
+	return GitStatusSnapshot{GitStatusSummary: summary, Files: changes.Files}, true
 }
 
 func InitCommittedRepo(t *testing.T) (string, func(args ...string)) {
