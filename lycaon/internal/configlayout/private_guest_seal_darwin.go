@@ -24,15 +24,19 @@ func verifyPrivateGuestSeal(app, helper string, manifest, cdhash []byte) error {
 	if err != nil {
 		return err
 	}
-	outer, exe := C.CString(app), C.CString(helper)
-	defer C.free(unsafe.Pointer(outer))
-	defer C.free(unsafe.Pointer(exe))
-	var seal C.SecStaticCodeRef
-	status := C.pw_verify_guest_runtime(outer, exe, &seal)
-	if status != 0 {
-		return fmt.Errorf("private service package seal (OSStatus %d)", status)
+	seal, release, err := openGuestResourceEnvelope(app)
+	if err != nil {
+		return err
 	}
-	defer C.CFRelease(C.CFTypeRef(seal))
+	defer release()
+	image, releaseImage, err := openGuestResourceEnvelope(helper)
+	if err != nil {
+		return err
+	}
+	defer releaseImage()
+	if status := C.pw_verify_guest_runtime(seal, image); status != 0 {
+		return fmt.Errorf("private service package identity (OSStatus %d)", status)
+	}
 	if err := verifyGuestResource(seal, "Resources/service-guest/manifest.json", manifest); err != nil {
 		return err
 	}
