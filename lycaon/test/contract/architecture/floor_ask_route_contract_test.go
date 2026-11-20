@@ -35,7 +35,7 @@ func TestEveryFloorLayerReachesAnAskOrIsTheControlPlane(t *testing.T) {
 		if layer == confine.FloorSharedTemp {
 			for _, code := range []string{isolation.CodeSharedTempRefused, isolation.CodeSharedTempTolerated} {
 				if !slices.ContainsFunc(rules, func(rule *oar.Rule) bool {
-					return rule.ID == code && rule.Anchor == oar.AnchorSharedTemp && slices.Contains(oar.FactsReferenced(rule.When, rule.Flow), "paintedwolf.refused_shared_temp")
+					return rule.ID == code && rule.Anchor == oar.AnchorSharedTemp && slices.Contains(oar.RuleFactsReferenced(rule), "paintedwolf.refused_shared_temp")
 				}) {
 					t.Errorf("%s: missing post-run shared temp settlement %s", layer, code)
 				}
