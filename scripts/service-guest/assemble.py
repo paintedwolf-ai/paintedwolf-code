@@ -175,6 +175,7 @@ def assemble(args, work, output):
             check=True,
         )
         identity = os.environ.get("APPLE_SIGNING_IDENTITY") if args.release else "-"
+        helper.chmod(0o755)
         if not identity or (args.release and identity == "-"):
             raise ValueError("missing Developer ID for private service helper")
         timestamp = ["--timestamp"] if args.release else []
@@ -208,6 +209,10 @@ def assemble(args, work, output):
         (output / "pw-service-vm.cdhash").write_text(cdhash[1] + "\n")
     (output / "manifest.json").write_text(json.dumps(manifest, indent=2) + "\n")
     shutil.copyfile(LOCK, output / "inputs.json")
+    output.chmod(0o755)
+    for item in output.iterdir():
+        if item.is_file() and item.name != "pw-service-vm":
+            item.chmod(0o644)
 
 
 def main():

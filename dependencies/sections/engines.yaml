@@ -111,3 +111,20 @@ rows:
       host runs confined beside itself and every release signs and probes. Den binds CodeMirror
       to Yjs text and the host applies Yrs updates, so a bump must stay update-compatible with
       Den's `yjs`. Treat a 0.x minor bump as breaking.
+
+  - id: private-service-userland
+    name: Private service userland and Linux VM kernel
+    pins:
+      - label: Alpine release
+        from: json packaging/service-guest/inputs.json alpine
+      - label: PostgreSQL source
+        from: json packaging/service-guest/inputs.json postgresql
+    urgency: high
+    urgency_reason: |
+      The guest runs service programs selected by the agent.
+    friction: high
+    notes: |
+      The build verifies the Alpine release media, musl cross compiler and PostgreSQL
+      sources against the SHA-256 values in the pin. On macOS the packaged helper has
+      its own virtualization entitlement. Qualify a new pin on both CPU architectures
+      and exercise init, a separate client, clean shutdown and release on both hosts.

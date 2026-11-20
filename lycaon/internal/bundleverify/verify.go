@@ -75,6 +75,7 @@ func Verify(ctx context.Context, opts Options) (Report, error) {
 
 	var findings []Finding
 	findings = append(findings, checkLayout(opts.AppPath)...)
+	findings = append(findings, checkServiceGuestAssets(opts.AppPath)...)
 	findings = append(findings, checkGitengineWeight(opts.AppPath)...)
 
 	machOs, err := WalkMachO(opts.AppPath)
