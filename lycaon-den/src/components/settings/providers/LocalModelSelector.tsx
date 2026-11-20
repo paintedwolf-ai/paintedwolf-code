@@ -77,6 +77,7 @@ export function LocalModelSelector(props: Props) {
     setSnapshot(next);
     setReadError("");
     if (next.state === "downloading") return;
+    setWorking(false);
     const request = pending;
     pending = undefined;
     if (request) {
