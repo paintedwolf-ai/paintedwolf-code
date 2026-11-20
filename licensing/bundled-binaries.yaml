@@ -43,6 +43,8 @@ binaries:
     license: PostgreSQL
     source_url: https://ftp.postgresql.org/pub/source/v16.16/postgresql-16.16.tar.bz2
     license_text_file: texts/PostgreSQL.txt
+    notice_text_file: texts/postgresql-compiled-notices.md
+
   - name: opengrep
     artifact: opengrep
 
