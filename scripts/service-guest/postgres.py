@@ -27,6 +27,9 @@ def build_postgres(source, compiler, machine, libc, cache):
         for name in ("source", "compiler", "bin", "libc", "build", "native"):
             (work / name).mkdir()
         src = extract_sources(source, work / "source")
+        # Configure compares physical paths when preparing out-of-tree Makefiles.
+        configure = src / "configure"
+        configure.write_bytes(configure.read_bytes().replace(b"/bin/pwd", b"pwd -P"))
         zig = extract_sources(compiler, work / "compiler") / "zig"
         (work / "libc/libc.so").write_bytes(libc.data)
         for driver, args in {
