@@ -134,3 +134,17 @@ func TestPrivateServiceReclaimsSlotAfterHelperExitError(t *testing.T) {
 		t.Fatalf("release after helper exit returned %v with %d occupied slots", err, len(slots))
 	}
 }
+
+func TestSessionDisposalReleasesFailedService(t *testing.T) {
+	supervisor := &ProgramSupervisor{}
+	jobs := supervisor.Jobs("discarded", "project")
+	exitErr := errors.New("guest interrupted")
+	jobs.privateService.slots <- struct{}{}
+	jobs.privateService.client = &privateServiceFixture{closeErr: exitErr}
+	if err := supervisor.DisposeSession(t.Context(), "discarded"); !errors.Is(err, exitErr) {
+		t.Fatalf("dispose interrupted guest: %v", err)
+	}
+	if supervisor.sessions["discarded"] != nil || len(supervisor.privateSlots) != 0 {
+		t.Fatal("discarded session retained an environment")
+	}
+}

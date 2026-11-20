@@ -378,14 +378,13 @@ func (s *ProgramSupervisor) DisposeSession(ctx context.Context, sessionID string
 		jobs.mu.Unlock()
 	}
 	s.Stop(sessionID)
+	var serviceErr error
 	if jobs != nil {
-		if err := jobs.privateService.close(); err != nil {
-			return err
-		}
+		serviceErr = jobs.privateService.close()
 	}
 	if s.Background != nil {
 		if err := s.Background.Lifecycle.DisposeSession(ctx, sessionID, bgprocess.TerminationReasonFromContext(ctx, bgprocess.TerminationChatDeleted)); err != nil {
-			return err
+			return errors.Join(serviceErr, err)
 		}
 	}
 	s.mu.Lock()
@@ -393,5 +392,5 @@ func (s *ProgramSupervisor) DisposeSession(ctx context.Context, sessionID string
 		delete(s.sessions, sessionID)
 	}
 	s.mu.Unlock()
-	return nil
+	return serviceErr
 }
