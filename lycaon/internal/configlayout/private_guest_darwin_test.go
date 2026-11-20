@@ -123,7 +123,9 @@ func TestPrivateGuestBootFileRequiresExclusiveCustody(t *testing.T) {
 }
 
 func TestPrivateGuestResolvesItsCompiledChannel(t *testing.T) {
-	app := filepath.Join(t.TempDir(), "Painted Wolf Code.app")
+	root, err := filepath.EvalSymlinks(t.TempDir())
+	testutil.FailErr(t, "resolve fixture parent", err)
+	app := filepath.Join(root, "Painted Wolf Code.app")
 	contents := filepath.Join(app, "Contents")
 	host := filepath.Join(contents, "Helpers", "Painted Wolf Code engine.app", "Contents", "MacOS", "pw")
 	testutil.FailErr(t, "create engine bundle", os.MkdirAll(filepath.Dir(host), 0700))
