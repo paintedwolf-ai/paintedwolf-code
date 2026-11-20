@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 	"syscall"
@@ -13,6 +14,8 @@ import (
 
 // Acquire runs the fixed controller in one private leaf and reclaims it on exit.
 func Acquire(image string) error {
+	runtime.LockOSThread()
+	defer runtime.UnlockOSThread()
 	path, err := current()
 	if err != nil {
 		return err

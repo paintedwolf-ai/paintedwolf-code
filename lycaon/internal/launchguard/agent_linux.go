@@ -60,8 +60,15 @@ func runBrokerAgent(frame, broker, ready *os.File) error {
 		_ = broker.Close()
 		return err
 	}
-	// Enter the service resource domain while the authenticated broker can still delegate it.
-	if peer, err := launchbroker.CheckSocket(int(broker.Fd())); err == nil && peer.Uid == trustedOwner && int(peer.Pid) == spec.SupervisorPID && os.Geteuid() == 0 {
+	if err := initialUserNamespace(); err != nil {
+		_ = broker.Close()
+		return err
+	}
+	if peer, err := launchbroker.CheckSocket(int(broker.Fd())); err != nil || peer.Uid != trustedOwner || int(peer.Pid) != spec.SupervisorPID {
+		_ = broker.Close()
+		return errors.New("broker agent socket is not the launch supervisor")
+	}
+	if os.Geteuid() == 0 {
 		image := filepath.Join(spec.Generation.LogicalInstallRoot, "engine-root", "service-guest", "rootfs", "init")
 		if file, err := openRootControlled(image, false); err == nil {
 			_ = file.Close()
@@ -71,14 +78,6 @@ func runBrokerAgent(frame, broker, ready *os.File) error {
 	if err := sealBrokerAgentIdentity(spec); err != nil {
 		_ = broker.Close()
 		return err
-	}
-	if err := initialUserNamespace(); err != nil {
-		_ = broker.Close()
-		return err
-	}
-	if peer, err := launchbroker.CheckSocket(int(broker.Fd())); err != nil || peer.Uid != trustedOwner || int(peer.Pid) != spec.SupervisorPID {
-		_ = broker.Close()
-		return errors.New("broker agent socket is not the launch supervisor")
 	}
 	unix.CloseOnExec(int(broker.Fd()))
 	if ready == nil {

@@ -77,10 +77,24 @@ func openPrivateGuestFrom(ctx context.Context, bundle string) (*serviceguest.Cli
 		return nil, errors.Join(serviceguest.ErrUnavailable, err)
 	}
 	_ = child.Close()
-	go func() { _ = cmd.Wait(); _ = transport.Close() }()
-	client, err := serviceguest.Open(ctx, transport)
+	channel := &linuxServiceConnection{Conn: transport, done: make(chan struct{})}
+	go func() { channel.status = cmd.Wait(); close(channel.done); _ = channel.Conn.Close() }()
+	client, err := serviceguest.Open(ctx, channel)
 	if err != nil {
 		return nil, errors.Join(serviceguest.ErrUnavailable, err)
 	}
 	return client, nil
+}
+
+// The launcher waits for namespace PID 1 and the kernel's descendant teardown.
+type linuxServiceConnection struct {
+	net.Conn
+	done   chan struct{}
+	status error
+}
+
+func (c *linuxServiceConnection) Close() error {
+	_ = c.Conn.Close()
+	<-c.done
+	return c.status
 }
