@@ -16,6 +16,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/lycaon/lycaon/internal/confine"
 	"github.com/lycaon/lycaon/internal/osprocess"
 	"github.com/lycaon/lycaon/internal/testutil"
 )
@@ -259,6 +260,23 @@ func TestReaperHelperProcess(t *testing.T) {
 	}
 	time.Sleep(90 * time.Second)
 	os.Exit(0)
+}
+
+func TestReaperRemovesOnlyTheTrackedActionWorkspace(t *testing.T) {
+	state, temp := t.TempDir(), t.TempDir()
+	t.Setenv("LYCAON_CONFIG_DIR", state)
+	t.Setenv("TMPDIR", temp)
+	active, err := confine.NewActionWorkspace()
+	testutil.FailErr(t, "create active action directory", err)
+	other, err := confine.NewActionWorkspace()
+	testutil.FailErr(t, "create another action directory", err)
+	parent := filepath.Dir(active.Path())
+	reapLines("+d"+active.Path()+"\n", "+d"+parent+"\n")
+	if _, err := os.Stat(active.Path()); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("tracked action directory survived: %v", err)
+	}
+	_, err = os.Stat(other.Path())
+	testutil.FailErr(t, "untracked action directory must remain", err)
 }
 
 func TestReaperDirPathStaysInsideTheTempRoot(t *testing.T) {
