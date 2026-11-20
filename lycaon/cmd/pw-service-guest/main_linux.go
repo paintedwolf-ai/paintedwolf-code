@@ -5,7 +5,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/lycaon/lycaon/internal/confine/privateguesthost/linuxruntime"
 	"io"
 	"os"
 	"path/filepath"
@@ -13,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/lycaon/lycaon/internal/confine/privateguesthost/linuxruntime"
 	"github.com/lycaon/lycaon/internal/serviceguest"
 	"golang.org/x/sys/unix"
 )
@@ -55,7 +55,7 @@ func hostChannel() (*os.File, error) {
 		return nil, err
 	}
 	if slices.Contains(strings.Fields(string(cmdline)), linuxruntime.ConsoleArgument) {
-		return privateConsole()
+		return privateConsole("/sys/class/virtio-ports", "/dev", time.Now().Add(15*time.Second))
 	}
 	fd, err := unix.Socket(unix.AF_VSOCK, unix.SOCK_STREAM|unix.SOCK_CLOEXEC, 0)
 	if err != nil {
@@ -83,20 +83,19 @@ func hostChannel() (*os.File, error) {
 	}
 }
 
-func privateConsole() (*os.File, error) {
-	deadline := time.Now().Add(15 * time.Second)
+func privateConsole(ports, devices string, deadline time.Time) (*os.File, error) {
 	for {
-		entries, err := os.ReadDir("/sys/class/virtio-ports")
+		entries, err := os.ReadDir(ports)
 		if err != nil && !errors.Is(err, os.ErrNotExist) {
 			return nil, err
 		}
 		for _, entry := range entries {
-			name, err := os.ReadFile(filepath.Join("/sys/class/virtio-ports", entry.Name(), "name"))
+			name, err := os.ReadFile(filepath.Join(ports, entry.Name(), "name"))
 			if err != nil {
 				return nil, err
 			}
 			if strings.TrimSpace(string(name)) == linuxruntime.ConsoleName {
-				return os.OpenFile(filepath.Join("/dev", entry.Name()), os.O_RDWR|unix.O_NOCTTY, 0)
+				return os.OpenFile(filepath.Join(devices, entry.Name()), os.O_RDWR|unix.O_NOCTTY, 0)
 			}
 		}
 		if time.Now().After(deadline) {

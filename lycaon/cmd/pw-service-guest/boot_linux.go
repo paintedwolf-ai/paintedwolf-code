@@ -41,10 +41,10 @@ func prepareVM() (configuration, error) {
 			return configuration{}, fmt.Errorf("mount %s: %w", mount.path, err)
 		}
 	}
-	if err := loadBootModules(); err != nil {
+	if err := loadBootModules("/lib/pw-boot-modules"); err != nil {
 		return configuration{}, err
 	}
-	scratch, err := prepareWork(workUID)
+	scratch, err := prepareWork(workBase, "/work", workUID)
 	if err != nil {
 		return configuration{}, err
 	}
@@ -62,8 +62,7 @@ func prepareVM() (configuration, error) {
 	return configuration{scratch: scratch, groups: jobGroups, helper: "/init"}, nil
 }
 
-func loadBootModules() error {
-	const base = "/lib/pw-boot-modules"
+func loadBootModules(base string) error {
 	entries, err := os.ReadDir(base)
 	if errors.Is(err, os.ErrNotExist) {
 		return nil
@@ -88,8 +87,8 @@ func loadBootModules() error {
 	return nil
 }
 
-func prepareWork(uid int) (string, error) {
-	for key, value := range map[string]string{"HOME": workBase, "PATH": "/usr/local/bin:/usr/bin:/bin", "LANG": "C", "LC_ALL": "C"} {
+func prepareWork(home, link string, uid int) (string, error) {
+	for key, value := range map[string]string{"HOME": home, "PATH": "/usr/local/bin:/usr/bin:/bin", "LANG": "C", "LC_ALL": "C"} {
 		if err := os.Setenv(key, value); err != nil {
 			return "", err
 		}
@@ -107,7 +106,7 @@ func prepareWork(uid int) (string, error) {
 			return "", err
 		}
 	}
-	if target, err := os.Readlink("/work"); err != nil || filepath.Clean(filepath.Join("/", target)) != scratch {
+	if target, err := filepath.EvalSymlinks(link); err != nil || target != scratch {
 		return "", errors.New("invalid guest work path")
 	}
 	for key, value := range map[string]string{"XDG_CACHE_HOME": filepath.Join(scratch, "cache"), "XDG_DATA_HOME": filepath.Join(scratch, "data")} {

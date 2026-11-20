@@ -16,8 +16,16 @@ import (
 )
 
 func runNative(mode string) error {
-	if _, err := unix.Getpeername(0); err != nil {
+	peer, err := unix.Getpeername(0)
+	if err != nil {
 		return fmt.Errorf("private activation: %w", err)
+	}
+	if _, ok := peer.(*unix.SockaddrUnix); !ok {
+		return errors.New("private activation requires a Unix socket")
+	}
+	stream, err := unix.GetsockoptInt(0, unix.SOL_SOCKET, unix.SO_TYPE)
+	if err != nil || stream != unix.SOCK_STREAM {
+		return errors.New("private activation requires a stream")
 	}
 	if mode == "--acquire-native" {
 		image, err := os.Executable()
@@ -41,7 +49,7 @@ func runNative(mode string) error {
 		return err
 	}
 	os.Clearenv()
-	scratch, err := prepareWork(0)
+	scratch, err := prepareWork(workBase, "/work", 0)
 	if err != nil {
 		return err
 	}
