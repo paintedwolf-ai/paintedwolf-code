@@ -9,7 +9,7 @@ import (
 )
 
 type Executor interface {
-	Start(context.Context, string, []string) (Job, error)
+	Start(context.Context, string, []string, []byte) (Job, error)
 	Status(context.Context, string) (Job, error)
 	Wait(context.Context, string) (Job, error)
 	Stop(context.Context, string) (Job, error)
@@ -28,7 +28,7 @@ func Serve(ctx context.Context, channel io.ReadWriteCloser, executor Executor) e
 		return err
 	}
 	token, err := hex.DecodeString(first.Challenge)
-	if err != nil || len(token) != 32 || first.Version != Version || first.Op != "hello" || first.Sequence != 1 || first.ID != "" || len(first.Argv) != 0 {
+	if err != nil || len(token) != 32 || first.Version != Version || first.Op != "hello" || first.Sequence != 1 || first.ID != "" || len(first.Argv) != 0 || len(first.Input) != 0 {
 		return errors.New("invalid private service handshake")
 	}
 	if err := writeFrame(channel, response{Version: Version, Sequence: first.Sequence, Challenge: first.Challenge}); err != nil {
@@ -68,13 +68,13 @@ func Serve(ctx context.Context, channel io.ReadWriteCloser, executor Executor) e
 			<-limit
 		}
 		id, err := hex.DecodeString(req.ID)
-		if err != nil || len(id) != 16 || req.ID != hex.EncodeToString(id) || (req.Op == "start") != validArgv(req.Argv) || (req.Op != "start" && len(req.Argv) > 0) {
+		if err != nil || len(id) != 16 || req.ID != hex.EncodeToString(id) || (req.Op == "start") != validArgv(req.Argv) || len(req.Input) > MaxInput || (req.Op != "start" && (len(req.Argv) > 0 || len(req.Input) > 0)) {
 			respond(Job{}, errors.New("invalid private service request"))
 			continue
 		}
 		switch req.Op {
 		case "start":
-			respond(executor.Start(ctx, req.ID, req.Argv))
+			respond(executor.Start(ctx, req.ID, req.Argv, req.Input))
 		case "status":
 			respond(executor.Status(ctx, req.ID))
 		case "stop":

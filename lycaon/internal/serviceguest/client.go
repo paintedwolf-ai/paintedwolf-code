@@ -107,7 +107,7 @@ func (c *Client) action(ctx context.Context, req request) (Job, error) {
 	if err != nil {
 		return Job{}, err
 	}
-	if r.Job == nil || r.Job.ID != req.ID || (r.Job.State != Running && r.Job.State != Exited) {
+	if r.Job == nil || len(r.Job.Stdout) > MaxOutput || len(r.Job.Stderr) > MaxOutput || r.Job.ID != req.ID || (r.Job.State != Running && r.Job.State != Exited) {
 		return Job{}, errors.New("invalid private service job response")
 	}
 	return *r.Job, nil
@@ -115,7 +115,11 @@ func (c *Client) action(ctx context.Context, req request) (Job, error) {
 
 // Start gives a service an unpredictable handle before its launch is submitted.
 func (c *Client) Start(ctx context.Context, argv []string) (Job, error) {
-	if !validArgv(argv) {
+	return c.start(ctx, argv, nil)
+}
+
+func (c *Client) start(ctx context.Context, argv []string, input []byte) (Job, error) {
+	if !validArgv(argv) || len(input) > MaxInput {
 		return Job{}, errors.New("invalid private service arguments")
 	}
 	var id [16]byte
@@ -123,7 +127,7 @@ func (c *Client) Start(ctx context.Context, argv []string) (Job, error) {
 		return Job{}, err
 	}
 	jobID := hex.EncodeToString(id[:])
-	job, err := c.action(ctx, request{Op: "start", Argv: argv, ID: jobID})
+	job, err := c.action(ctx, request{Op: "start", Argv: argv, Input: input, ID: jobID})
 	if err != nil && ctx.Err() != nil {
 		c.stopCanceled(jobID)
 	}
@@ -144,7 +148,11 @@ func (c *Client) stopCanceled(id string) {
 
 // Run waits for one foreground job and cancels only that job.
 func (c *Client) Run(ctx context.Context, argv []string) (Result, error) {
-	job, err := c.Start(ctx, argv)
+	return c.RunInput(ctx, argv, nil)
+}
+
+func (c *Client) RunInput(ctx context.Context, argv []string, input []byte) (Result, error) {
+	job, err := c.start(ctx, argv, input)
 	if err != nil {
 		return Result{}, err
 	}

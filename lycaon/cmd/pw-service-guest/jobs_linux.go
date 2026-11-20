@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -54,7 +55,7 @@ func (o *output) snapshot() ([]byte, bool) {
 
 func newJobs(c configuration) *jobs { return &jobs{config: c, records: make(map[string]*job)} }
 
-func (s *jobs) Start(ctx context.Context, id string, argv []string) (serviceguest.Job, error) {
+func (s *jobs) Start(ctx context.Context, id string, argv []string, input []byte) (serviceguest.Job, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.closed || s.records[id] != nil {
@@ -93,7 +94,7 @@ func (s *jobs) Start(ctx context.Context, id string, argv []string) (servicegues
 		return serviceguest.Job{}, err
 	}
 	j := &job{id: id, group: group, done: make(chan struct{})}
-	if err := s.launch(ctx, j, argv); err != nil {
+	if err := s.launch(ctx, j, argv, input); err != nil {
 		_ = group.Close()
 		_ = os.Remove(path)
 		return serviceguest.Job{}, err
@@ -118,7 +119,7 @@ func (s *jobs) Start(ctx context.Context, id string, argv []string) (servicegues
 	return j.snapshot(), nil
 }
 
-func (s *jobs) launch(ctx context.Context, j *job, argv []string) error {
+func (s *jobs) launch(ctx context.Context, j *job, argv []string, input []byte) error {
 	box := confine.Confinement{SessionScratchRoot: s.config.scratch, Network: confine.NetworkDeny, EgressOff: confine.EgressOffOverride,
 		Process: confine.ProcessAttributes{Limits: []confine.ResourceLimit{{Resource: "core", Soft: 0, Hard: 0}, {Resource: "nofile", Soft: 256, Hard: 256}, {Resource: "fsize", Soft: 128 << 20, Hard: 128 << 20}}}}
 	cmd, release, err := confine.Command(ctx, s.config.helper, argv[0], argv[1:], box)
@@ -126,6 +127,7 @@ func (s *jobs) launch(ctx context.Context, j *job, argv []string) error {
 		return err
 	}
 	defer release()
+	cmd.Stdin = bytes.NewReader(input)
 	cmd.Dir = s.config.scratch
 	cmd.Env = []string{"PATH=/usr/local/bin:/usr/bin:/bin", "HOME=/work/home", "TMPDIR=/work/tmp", "TEMP=/work/tmp", "TMP=/work/tmp", "XDG_CACHE_HOME=/work/cache", "XDG_DATA_HOME=/work/data", "LANG=C", "LC_ALL=C"}
 	cmd.Stdout, cmd.Stderr = &j.stdout, &j.stderr

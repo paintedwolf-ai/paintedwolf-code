@@ -14,10 +14,13 @@ import (
 const (
 	Port        = 2663
 	Version     = 1
+	MaxInput    = 64 << 10
 	MaxOutput   = 32 << 10
 	maxFrame    = 512 << 10
 	maxArgBytes = 64 << 10
 )
+
+var ErrUnavailable = errors.New("private service runtime unavailable")
 
 type State string
 
@@ -45,6 +48,7 @@ type request struct {
 	Sequence  uint64   `json:"sequence"`
 	Op        string   `json:"op"`
 	Challenge string   `json:"challenge,omitempty"`
+	Input     []byte   `json:"input,omitempty"`
 	Argv      []string `json:"argv,omitempty"`
 	ID        string   `json:"id,omitempty"`
 }
