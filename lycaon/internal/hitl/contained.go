@@ -164,7 +164,10 @@ func ContainedForAction(in ActionConfineInputs) Contained {
 
 // ContainedForRequest derives the gate fact from applied confinement.
 func ContainedForRequest(req confine.Request) Contained {
-	return ContainedFromConfinement(confine.DefaultConfinement(req))
+	contained := ContainedFromConfinement(confine.DefaultConfinement(req))
+	// Native file operations consume reviewed roots even without a subprocess boundary.
+	contained.GrantedWriteRoots = append([]string(nil), req.GrantedWriteRoots...)
+	return contained
 }
 
 // ContainedFromConfinement reuses an existing confinement result.
@@ -186,7 +189,6 @@ func ContainedFromConfinement(c *confine.Confinement, ok bool) Contained {
 		Egress:            ContainedEgressLabel(c.Network),
 		Roots:             append([]string(nil), c.Roots...),
 		WriteRoots:        writeRoots,
-		GrantedWriteRoots: append([]string(nil), c.GrantedWriteRoots...),
 		ReadRoots:         append([]string(nil), c.ReadRoots...),
 		SocketPathsDigest: confine.SocketPathsDigest(c.SocketGrants),
 		SocketCount:       len(c.SocketGrants),
