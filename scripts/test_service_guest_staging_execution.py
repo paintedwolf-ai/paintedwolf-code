@@ -41,7 +41,7 @@ class ServiceGuestStaging(unittest.TestCase):
     def setUp(self):
         temp = tempfile.TemporaryDirectory()
         self.addCleanup(temp.cleanup)
-        self.dir = Path(temp.name)
+        self.dir = Path(temp.name).resolve()
 
     def test_pinned_download_is_verified_on_every_use(self):
         upstream = self.dir / "upstream"
