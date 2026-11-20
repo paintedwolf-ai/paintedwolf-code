@@ -1,8 +1,6 @@
 package main
 
 import (
-	"github.com/lycaon/lycaon/internal/testutil"
-
 	"bytes"
 	"errors"
 	"os"
@@ -10,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/serviceguest"
+	"github.com/lycaon/lycaon/internal/testutil"
 )
 
 func TestGuestRecordsBoundOutputAndWait(t *testing.T) {

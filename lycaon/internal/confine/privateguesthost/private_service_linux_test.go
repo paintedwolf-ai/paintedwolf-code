@@ -3,10 +3,11 @@ package privateguesthost
 import (
 	"context"
 	"errors"
-	"github.com/lycaon/lycaon/internal/nixgeneration"
-	"github.com/lycaon/lycaon/internal/serviceguest"
 	"path/filepath"
 	"testing"
+
+	"github.com/lycaon/lycaon/internal/nixgeneration"
+	"github.com/lycaon/lycaon/internal/serviceguest"
 )
 
 func TestPrivateServiceBundle(t *testing.T) {

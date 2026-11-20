@@ -10,9 +10,10 @@ import "C"
 
 import (
 	"fmt"
-	"golang.org/x/sys/unix"
 	"os"
 	"unsafe"
+
+	"golang.org/x/sys/unix"
 )
 
 func spawnGuest(path, cdhash string, files []*os.File) (*os.Process, error) {

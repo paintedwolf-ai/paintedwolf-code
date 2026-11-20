@@ -1,8 +1,6 @@
 package serviceguest
 
 import (
-	"github.com/lycaon/lycaon/internal/testutil"
-
 	"bytes"
 	"context"
 	"errors"
@@ -10,6 +8,8 @@ import (
 	"net"
 	"sync"
 	"testing"
+
+	"github.com/lycaon/lycaon/internal/testutil"
 )
 
 type fixture struct {

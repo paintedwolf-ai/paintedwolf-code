@@ -1,14 +1,14 @@
 package bundleverify
 
 import (
-	"github.com/lycaon/lycaon/internal/testutil"
-
 	"crypto/sha256"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/lycaon/lycaon/internal/testutil"
 )
 
 func writeGuestAssets(t *testing.T, app string) {

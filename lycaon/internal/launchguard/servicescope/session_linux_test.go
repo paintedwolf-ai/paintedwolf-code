@@ -1,12 +1,12 @@
 package servicescope
 
 import (
-	"github.com/lycaon/lycaon/internal/testutil"
-
-	"golang.org/x/sys/unix"
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/lycaon/lycaon/internal/testutil"
+	"golang.org/x/sys/unix"
 )
 
 func TestServiceLimitsAndDelegator(t *testing.T) {

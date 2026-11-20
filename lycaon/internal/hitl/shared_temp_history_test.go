@@ -1,13 +1,14 @@
 package hitl_test
 
 import (
+	"slices"
+	"testing"
+
 	"github.com/lycaon/lycaon/internal/authzledger"
 	"github.com/lycaon/lycaon/internal/hitl"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/pkg/api"
-	"slices"
-	"testing"
 )
 
 func TestSharedTempHistoryIncludesWorkerReportsAndHumanDenials(t *testing.T) {

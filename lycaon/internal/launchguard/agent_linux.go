@@ -5,14 +5,13 @@ package launchguard
 import (
 	"errors"
 	"os"
+	"path/filepath"
 	"syscall"
 	"unsafe"
 
-	"golang.org/x/sys/unix"
-
 	"github.com/lycaon/lycaon/internal/launchbroker"
 	"github.com/lycaon/lycaon/internal/launchguard/servicescope"
-	"path/filepath"
+	"golang.org/x/sys/unix"
 )
 
 // BrokerAgentArgument selects the entry image's broker agent mode.

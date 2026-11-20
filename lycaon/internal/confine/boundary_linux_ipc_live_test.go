@@ -9,7 +9,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/lycaon/lycaon/internal/scratch"
 	"io"
 	"os"
 	"os/exec"
@@ -19,10 +18,10 @@ import (
 	"time"
 	"unsafe"
 
-	"golang.org/x/sys/unix"
-
 	"github.com/lycaon/lycaon/internal/confine"
+	"github.com/lycaon/lycaon/internal/scratch"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"golang.org/x/sys/unix"
 )
 
 const ipcProbeEnv = "PW_CONFINE_IPC_PROBE"

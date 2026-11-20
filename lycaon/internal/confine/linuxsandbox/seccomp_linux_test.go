@@ -3,11 +3,10 @@
 package linuxsandbox
 
 import (
-	"github.com/lycaon/lycaon/internal/testutil"
-
 	"encoding/binary"
 	"testing"
 
+	"github.com/lycaon/lycaon/internal/testutil"
 	"golang.org/x/net/bpf"
 	"golang.org/x/sys/unix"
 )

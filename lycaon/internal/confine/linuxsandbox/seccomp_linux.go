@@ -4,9 +4,9 @@ package linuxsandbox
 
 import (
 	"fmt"
-	"github.com/lycaon/lycaon/internal/confine/linuxsandbox/metadatacall"
 	"unsafe"
 
+	"github.com/lycaon/lycaon/internal/confine/linuxsandbox/metadatacall"
 	"golang.org/x/net/bpf"
 	"golang.org/x/sys/unix"
 )

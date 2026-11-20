@@ -1,14 +1,13 @@
 package linuxsandbox
 
 import (
-	"github.com/lycaon/lycaon/internal/testutil"
-
 	"errors"
 	"fmt"
 	"reflect"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/linuxbus"
+	"github.com/lycaon/lycaon/internal/testutil"
 )
 
 func TestPlanRoundTripSortsAndDedupes(t *testing.T) {
