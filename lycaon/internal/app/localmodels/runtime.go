@@ -7,6 +7,7 @@ import (
 	"io"
 	"os"
 	"strings"
+	"syscall"
 
 	"github.com/lycaon/lycaon/internal/decide/bialy"
 	"github.com/lycaon/lycaon/internal/inference"
@@ -68,17 +69,13 @@ func Build(ctx context.Context, options Options) (*Runtime, error) {
 	if err != nil {
 		return nil, err
 	}
-	if _, err := store.Collect(); err != nil {
-		resources.Close()
-		return nil, err
-	}
 	decision := options.Decision
 	decision.Resources = resources.Decision
 	physicalBytes := device.TotalBytes
 	if device.UnifiedMemory {
 		physicalBytes = options.PhysicalRAM
 	}
-	return &Runtime{
+	r := &Runtime{
 		Decision: decision, Store: store, Resources: resources, Backend: inventory.Backend,
 		Generation: nativegen.NewRuntime(nativegen.RuntimeConfig{
 			DecisionDeviceBytes: plan.DeviceBytes, PhysicalBytes: physicalBytes, BinaryPath: options.Binary, MetalLibrary: options.MetalLibrary,
@@ -87,23 +84,42 @@ func Build(ctx context.Context, options Options) (*Runtime, error) {
 			DeviceMemory: resources.GenerationDevice, UnifiedMemory: device.UnifiedMemory,
 			ModelStore: store, SeedDirectory: options.Seed, SharedWorkspaceBytes: resources.SharedWorkspaceBytes,
 		}),
-	}, nil
+	}
+	if _, err := store.Collect(); err != nil {
+		r.Generation.ReportSelectionError(err)
+	}
+	return r, nil
 }
 
-func readAuthority(path string) (authority *modelstore.Authority, resultErr error) {
-	file, err := os.Open(path)
+func readAuthority(path string) (*modelstore.Authority, error) {
+	raw, err := readPackagedMetadata(path, modelstore.MaxAuthorityBytes)
 	if errors.Is(err, os.ErrNotExist) {
 		return modelstore.NewAuthority(nil)
 	}
 	if err != nil {
 		return nil, err
 	}
-	defer func() { resultErr = errors.Join(resultErr, file.Close()) }()
-	raw, err := io.ReadAll(io.LimitReader(file, modelstore.MaxAuthorityBytes+1))
+	return modelstore.DecodeAuthority(raw)
+}
+
+func readPackagedMetadata(path string, limit int64) (data []byte, resultErr error) {
+	file, err := os.OpenFile(path, os.O_RDONLY|syscall.O_NONBLOCK, 0)
 	if err != nil {
 		return nil, err
 	}
-	return modelstore.DecodeAuthority(raw)
+	defer func() { resultErr = errors.Join(resultErr, file.Close()) }()
+	info, err := file.Stat()
+	if err != nil {
+		return nil, err
+	}
+	if !info.Mode().IsRegular() || info.Size() > limit {
+		return nil, fmt.Errorf("local models: invalid packaged metadata at %s", path)
+	}
+	data, err = io.ReadAll(io.LimitReader(file, limit+1))
+	if int64(len(data)) > limit {
+		return nil, fmt.Errorf("local models: packaged metadata exceeds %d bytes", limit)
+	}
+	return data, err
 }
 
 func requestedDevice(value, backend string) (*inference.PhysicalDevice, error) {

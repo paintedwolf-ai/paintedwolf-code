@@ -127,8 +127,20 @@ func TestOfflineSelectionLoadsAndDiscoversChosenTier(t *testing.T) {
 	rt.config.PhysicalBytes = 24 << 30
 	rt.config.DeviceMemory, _ = inference.NewMemoryBudget(12 << 30)
 	request := api.LocalModelSelectionRequest{Model: tiers[1].id, PackagedSeed: true}
+	device, err := rt.config.Devices.Bind(rt.config.PhysicalDevice)
+	testutil.FailErr(t, "bind physical device", err)
+	permit, err := device.Acquire(t.Context(), inference.Work{Owner: "fixture", Generation: 1, Step: "hold", Priority: inference.Foreground})
+	testutil.FailErr(t, "hold device during activation", err)
+	t.Cleanup(permit.Complete)
 	notified := make(chan struct{})
 	testutil.FailErr(t, "start seed import", rt.StartSelection(request, nil, func() { close(notified) }))
+	testutil.WaitFor(t, "committed offline installation", func() bool {
+		var status api.LocalGenerationStatus
+		rt.SelectionStatus(&status)
+		return status.SelectedModel == request.Model && status.TransferPhase == "activating"
+	})
+	testutil.FailErr(t, "cancel after commit", rt.CancelTransfer(t.Context()))
+	permit.Complete()
 	<-notified
 	if err := rt.Warm(t.Context(), DefaultModelID); err == nil || rt.Readiness().State != "ready" {
 		t.Fatal("stale request displaced the admitted tier")
