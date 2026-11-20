@@ -143,3 +143,28 @@ func TestGuardianObservationRefusesDescriptorWidthBeforePoll(t *testing.T) {
 		t.Fatalf("unrepresentable health descriptor reached poll: observation=%+v err=%v", observation, err)
 	}
 }
+
+func TestGuardianImmediatePollDistinguishesInterruptFromReadiness(t *testing.T) {
+	for _, final := range []error{nil, unix.EBADF} {
+		calls := 0
+		var ready int16 = unix.POLLIN
+		fds := []unix.PollFd{{Fd: 23, Events: ready}}
+		err := pollGuardianNow(fds, func(fds []unix.PollFd, timeout int) (int, error) {
+			calls++
+			if timeout != 0 || len(fds) != 1 || fds[0].Fd != 23 {
+				t.Fatalf("unexpected pidfd observation: %v, timeout %d", fds, timeout)
+			}
+			if calls == 1 {
+				return -1, unix.EINTR
+			}
+			if final != nil {
+				return -1, final
+			}
+			fds[0].Revents = ready
+			return 1, nil
+		})
+		if calls != 2 || !errors.Is(err, final) || (final == nil && fds[0].Revents != ready) {
+			t.Fatalf("poll = %v after %d calls, readiness %d", err, calls, fds[0].Revents)
+		}
+	}
+}

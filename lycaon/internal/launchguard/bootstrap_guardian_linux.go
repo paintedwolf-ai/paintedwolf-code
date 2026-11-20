@@ -52,7 +52,7 @@ func awaitGuardianHandoff(control *os.File, stagePID int, stageFD int, caller Id
 				return err
 			}
 			alive := []unix.PollFd{{Fd: stagePoll, Events: unix.POLLIN}}
-			if _, err := unix.Poll(alive, 0); err != nil || alive[0].Revents != 0 {
+			if err := pollGuardianNow(alive, unix.Poll); err != nil || alive[0].Revents != 0 {
 				return errors.New("guardian exited during profile verification")
 			}
 			return nil
@@ -79,7 +79,7 @@ func retireBootstrapSetup(stageFD int, children, proc *os.File, caller Identity,
 	for {
 		expireBootstrapNotice(notice, noticeDeadline)
 		polls := []unix.PollFd{{Fd: stagePoll, Events: unix.POLLIN}}
-		if _, err := unix.Poll(polls, 0); err == nil && polls[0].Revents&unix.POLLIN != 0 {
+		if err := pollGuardianNow(polls, unix.Poll); err == nil && polls[0].Revents&unix.POLLIN != 0 {
 			stageExited = true
 		}
 		if stageExited {
