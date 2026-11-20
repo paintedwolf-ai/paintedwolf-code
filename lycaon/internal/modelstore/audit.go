@@ -42,7 +42,7 @@ func auditFile(ctx context.Context, root *os.Root, name string, artifact Artifac
 	if !info.Mode().IsRegular() || info.Size() != artifact.Bytes {
 		return errors.New("payload shape differs from manifest")
 	}
-	f, err := openBundleFile(root, name, artifact.Bytes)
+	f, err := openBoundedFile(root, name, artifact.Bytes)
 	if err != nil {
 		return err
 	}
