@@ -1,0 +1,49 @@
+{
+  "schema": 1,
+  "alpine": "3.24.4",
+  "postgresql": "16.16",
+  "architectures": {
+    "arm64": {
+      "base": {
+        "url": "https://dl-cdn.alpinelinux.org/alpine/v3.24/releases/aarch64/alpine-minirootfs-3.24.4-aarch64.tar.gz",
+        "sha256": "4b14c18f7e90a063b61462ea1462a5732c154bf6adad594974fe6487cd98a8de"
+      },
+      "boot": {
+        "url": "https://dl-cdn.alpinelinux.org/alpine/v3.24/releases/aarch64/alpine-virt-3.24.4-aarch64.iso",
+        "sha256": "cf88d8ba67389d20d9ed307366b52e487c15d7d3ee3233b62b95f709daa1d430"
+      }
+    },
+    "amd64": {
+      "base": {
+        "url": "https://dl-cdn.alpinelinux.org/alpine/v3.24/releases/x86_64/alpine-minirootfs-3.24.4-x86_64.tar.gz",
+        "sha256": "cdaa38cb8de3537967ee5b6c9b6cd00cc962da2b018e6eea48696bb274923012"
+      },
+      "boot": {
+        "url": "https://dl-cdn.alpinelinux.org/alpine/v3.24/releases/x86_64/alpine-virt-3.24.4-x86_64.iso",
+        "sha256": "157d353f8e54252cad2d9812a0d56bb7fa2231fc154a110e1d180d7480ef8b4f"
+      }
+    }
+  },
+  "postgres": {
+    "url": "https://ftp.postgresql.org/pub/source/v16.16/postgresql-16.16.tar.bz2",
+    "sha256": "9d5cd8633043b75740d5d59749c6b7365e6aeb53c47098b1a5e80bb18f87881a"
+  },
+  "compilers": {
+    "aarch64-macos": {
+      "url": "https://ziglang.org/download/0.17.1/zig-aarch64-macos-0.17.1.tar.xz",
+      "sha256": "75f1bc7a1e9852f17ec9a0c1895f767c4ec56d46bc8a834920eece1d0359dd8d"
+    },
+    "x86_64-macos": {
+      "url": "https://ziglang.org/download/0.17.1/zig-x86_64-macos-0.17.1.tar.xz",
+      "sha256": "9af07b20319fbd0c92ee46ad23e81d6a782b1aaea2cfb8dcbff35f1d2c7ddbb7"
+    },
+    "aarch64-linux": {
+      "url": "https://ziglang.org/download/0.17.1/zig-aarch64-linux-0.17.1.tar.xz",
+      "sha256": "a1546d5646eb184437918d6635ca6b762a0e889eac09cef720ee7a1ed3fe7795"
+    },
+    "x86_64-linux": {
+      "url": "https://ziglang.org/download/0.17.1/zig-x86_64-linux-0.17.1.tar.xz",
+      "sha256": "3581863e3cbcfd0fce0efc682ce7e9e93da96668a977791d356a26d2a7e9b17a"
+    }
+  }
+}
