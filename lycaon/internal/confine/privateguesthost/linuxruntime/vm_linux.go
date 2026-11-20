@@ -43,6 +43,10 @@ func runVM(image string) error {
 		return err
 	}
 	defer func() { _ = binary.Close() }()
+	return launchVM(bundle, manifest, binary)
+}
+
+func launchVM(bundle string, manifest bootManifest, binary *os.File) error {
 	kernel, err := sealedBootFile(filepath.Join(bundle, "kernel"), manifest.Kernel)
 	if err != nil {
 		return err

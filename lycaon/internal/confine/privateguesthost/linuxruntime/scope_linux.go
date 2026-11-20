@@ -48,6 +48,10 @@ func Acquire(image string) error {
 	if err != nil {
 		return err
 	}
+	return activate(image, origin)
+}
+
+func activate(image, origin string) error {
 	leaf, err := delegatedLeaf(origin)
 	if err != nil {
 		return err
@@ -127,6 +131,10 @@ func nestedManager(origin string) (string, error) {
 		return "", err
 	}
 	path := "/run/user/" + strconv.Itoa(os.Getuid()) + "/systemd/private"
+	return managerForOrigin(manager, path, origin)
+}
+
+func managerForOrigin(manager, path, origin string) (string, error) {
 	dialer := net.Dialer{Timeout: 2 * time.Second}
 	conn, err := dialer.DialContext(context.Background(), "unix", path)
 	if err != nil {
@@ -193,6 +201,10 @@ func Verify() error {
 	if st.Type != unix.CGROUP2_SUPER_MAGIC {
 		return errors.New("private service requires a kernel resource domain")
 	}
+	return verifyMembershipAndLimits(group, os.Getenv("PW_SERVICE_RESOURCE_PARENT"))
+}
+
+func verifyMembershipAndLimits(group, parent string) error {
 	members, err := os.Open(filepath.Join(group, "cgroup.procs"))
 	if err != nil {
 		return err
@@ -212,7 +224,7 @@ func Verify() error {
 	if !member {
 		return errors.New("private service is outside its claimed resource domain")
 	}
-	if parent := os.Getenv("PW_SERVICE_RESOURCE_PARENT"); parent != "" && !contained(parent, group) {
+	if parent != "" && !contained(parent, group) {
 		return errors.New("private service left its resource domain")
 	}
 	for file, max := range limits() {
