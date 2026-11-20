@@ -9,7 +9,7 @@ import (
 
 func TestAgentLaunchUsesTheSameRealSessionTemporaryDirectory(t *testing.T) {
 	scratch := t.TempDir()
-	boundary := &confine.Confinement{SessionScratchRoot: scratch, Network: confine.NetworkDeny}
+	boundary := &confine.Confinement{Workspaces: confine.WorkspaceRoots{SessionScratch: scratch}, Network: confine.NetworkDeny}
 	plan := AgentLaunch(LaunchAgentCommand, "fixture", boundary)
 	cmd := &exec.Cmd{}
 	testutil.FailErr(t, "configure child environment", configureStageCmdEnv(cmd, ExecOpts{Launch: plan, Env: []string{"TMPDIR=/unrelated", "TMP=/unrelated", "TEMP=/unrelated"}}, nil))

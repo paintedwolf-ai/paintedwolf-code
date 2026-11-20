@@ -403,7 +403,7 @@ func bindCommandForegroundConfine(
 		confReq.HostServices = services
 		resolved, applied := confine.DefaultConfinement(confReq)
 		if resolved != nil {
-			resolved.ActionWorkspace = tctx.Host.ActionWorkspace
+			resolved.Workspaces.Action = tctx.Host.ActionWorkspace
 		}
 		bound.confinement = resolved
 		if err := confine.RequireApplied(applied); err != nil {

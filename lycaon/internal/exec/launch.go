@@ -133,8 +133,8 @@ func AgentLaunch(kind LaunchKind, subject string, confinement *confine.Confineme
 	if kind == LaunchAgentCommand {
 		plan.Environment = EnvironmentReduced
 	}
-	if confinement != nil && strings.TrimSpace(confinement.SessionScratchRoot) != "" {
-		scratch := confinement.SessionScratchRoot
+	if confinement != nil && strings.TrimSpace(confinement.Workspaces.SessionScratch) != "" {
+		scratch := confinement.Workspaces.SessionScratch
 		plan.ExtraEnv = []string{ScratchDirEnv + "=" + scratch, "TMPDIR=" + scratch, "TMP=" + scratch, "TEMP=" + scratch}
 	}
 	return plan

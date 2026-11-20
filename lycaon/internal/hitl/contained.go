@@ -173,7 +173,7 @@ func ContainedFromConfinement(c *confine.Confinement, ok bool) Contained {
 	if !ok || c == nil {
 		return Contained{}
 	}
-	writeRoots, err := confine.WriteRootsForBoundary(c.ProjectID, c.Roots, c.GrantedWriteRoots, c.SessionScratchRoot)
+	writeRoots, err := confine.WriteRootsForBoundary(c.ProjectID, c.Roots, c.GrantedWriteRoots, c.Workspaces.SessionScratch)
 	if err != nil {
 		return Contained{}
 	}

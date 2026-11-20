@@ -26,7 +26,13 @@ func osDefaultWriteRoots() []string {
 
 // PrivateServiceBoundary confines a guest command to its session workspace.
 func PrivateServiceBoundary(scratch string, process ProcessAttributes) Confinement {
-	return Confinement{privateUserland: true, SessionScratchRoot: scratch, Process: process, Network: NetworkDeny, EgressOff: EgressOffOverride}
+	return Confinement{privateUserland: true, Workspaces: WorkspaceRoots{SessionScratch: scratch}, Process: process, Network: NetworkDeny, EgressOff: EgressOffOverride}
+}
+
+// WorkspaceRoots separates session storage from a single invocation’s private stage.
+type WorkspaceRoots struct {
+	SessionScratch string
+	Action         ActionWorkspace `json:"-"`
 }
 
 // ActionWorkspace holds a private working directory for one tool invocation.
@@ -49,7 +55,7 @@ func (w ActionWorkspace) Path() string { return w.path }
 
 func (c Confinement) privateWorkRoots() []string {
 	var paths []string
-	for _, dir := range []string{c.SessionScratchRoot, c.ActionWorkspace.Path()} {
+	for _, dir := range []string{c.Workspaces.SessionScratch, c.Workspaces.Action.Path()} {
 		if dir != "" {
 			paths = append(paths, fspath.CanonicalPath(dir))
 		}
@@ -59,13 +65,13 @@ func (c Confinement) privateWorkRoots() []string {
 
 func (c Confinement) writeRoots() ([]string, error) {
 	if c.privateUserland {
-		return filesystemRoots("", nil, nil, c.SessionScratchRoot, nil)
+		return filesystemRoots("", nil, nil, c.Workspaces.SessionScratch, nil)
 	}
 	granted := c.GrantedWriteRoots
-	if c.ActionWorkspace.Path() != "" {
-		granted = append(slices.Clone(granted), c.ActionWorkspace.Path())
+	if c.Workspaces.Action.Path() != "" {
+		granted = append(slices.Clone(granted), c.Workspaces.Action.Path())
 	}
-	return WriteRootsForBoundary(c.ProjectID, c.Roots, granted, c.SessionScratchRoot)
+	return WriteRootsForBoundary(c.ProjectID, c.Roots, granted, c.Workspaces.SessionScratch)
 }
 
 // WriteRootsForBoundary is the write profile for one confinement: attached

@@ -31,7 +31,7 @@ func TestAgentCommandLaunchDropsTheEngineEnvironment(t *testing.T) {
 	t.Setenv("XDG_CACHE_HOME", "/xdg/cache")
 	t.Setenv("USER", "person")
 	scratch := t.TempDir()
-	plan := AgentLaunch(LaunchAgentCommand, "fixture", &confine.Confinement{SessionScratchRoot: scratch, Network: confine.NetworkDeny})
+	plan := AgentLaunch(LaunchAgentCommand, "fixture", &confine.Confinement{Workspaces: confine.WorkspaceRoots{SessionScratch: scratch}, Network: confine.NetworkDeny})
 	for name, opts := range map[string]ExecOpts{
 		"default":           {Launch: plan},
 		"explicit inherit":  {Launch: plan, Env: os.Environ()},

@@ -374,7 +374,7 @@ func TestLinuxControlPlaneIsHiddenButSessionScratchRestored(t *testing.T) {
 	scratch := filepath.Join(cfg, "sessions", "s1", "scratch")
 	testutil.FailErr(t, "mkdir scratch", os.MkdirAll(scratch, 0o700))
 	c := denyConfinement(t.TempDir())
-	c.SessionScratchRoot = scratch
+	c.Workspaces.SessionScratch = scratch
 	status, out := linuxConfinedRun(t, self, c, nil, "/bin/sh", "-c",
 		"cat "+cfg+"/api.token && echo LEAK; echo scratch > "+scratch+"/note && cat "+scratch+"/note")
 	if strings.Contains(out, "bearer") || strings.Contains(out, "LEAK") {

@@ -30,7 +30,7 @@ func TestStateTreeAncestorRootsRefuseBeforeLaunch(t *testing.T) {
 			case "reviewed":
 				c.GrantedWriteRoots = []string{base}
 			case "scratch":
-				c.SessionScratchRoot = base
+				c.Workspaces.SessionScratch = base
 			case "durable":
 				confine.SetGrantedWriteRootsSource(func(string) []string { return []string{base} })
 				t.Cleanup(func() { confine.SetGrantedWriteRootsSource(nil) })

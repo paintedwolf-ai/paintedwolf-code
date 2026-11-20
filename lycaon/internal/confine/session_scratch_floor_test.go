@@ -25,8 +25,8 @@ func sessionScratchFixture(t *testing.T) (c confine.Confinement, configDir, own,
 		testutil.FailErr(t, "create scratch", os.MkdirAll(dir, 0o700))
 	}
 	c = confine.Confinement{
-		Roots:              []string{t.TempDir()},
-		SessionScratchRoot: own,
+		Roots:      []string{t.TempDir()},
+		Workspaces: confine.WorkspaceRoots{SessionScratch: own},
 	}
 	return c, configDir, own, other
 }
@@ -87,7 +87,7 @@ func TestKernelLimitsStagingToTheAdmittedGitLaunch(t *testing.T) {
 	current := other
 	work, err := confine.NewActionWorkspace()
 	testutil.FailErr(t, "create private stage", err)
-	current.ActionWorkspace = work
+	current.Workspaces.Action = work
 	index := filepath.Join(work.Path(), "index")
 	if code, out := confinedRun(t, self, current, "/bin/sh", "-c", `echo staged > "$1" && cat "$1"`, "sh", index); code != 0 || out != "staged\n" {
 		t.Fatalf("Git launch could not use its stage: %d, %q", code, out)
@@ -105,7 +105,7 @@ func TestActionWorkspaceIsPrivateToItsLaunch(t *testing.T) {
 	work, err := confine.NewActionWorkspace()
 	testutil.FailErr(t, "create action workspace", err)
 	private := shared
-	private.ActionWorkspace = work
+	private.Workspaces.Action = work
 	file := filepath.Join(work.Path(), "index")
 	writeFixtureFile(t, file)
 	for _, access := range []confine.FilesystemAccess{confine.AccessRead, confine.AccessWrite} {

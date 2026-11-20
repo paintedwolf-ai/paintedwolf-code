@@ -145,7 +145,7 @@ func TestNonHTTPContractSocketEmitterLiteralOnlyAndDirectRemoteIP(t *testing.T) 
 	contractcheck.FailErr(t, "resolve session scratch", err)
 	for _, mode := range []confine.NetworkMode{confine.NetworkDeny, confine.NetworkProxyOnly, confine.NetworkDirectIP} {
 		for _, sessionRoot := range []string{"", scratch} {
-			c := confine.Confinement{Network: mode, SessionScratchRoot: sessionRoot, ProxyAddr: "127.0.0.1:4256"}
+			c := confine.Confinement{Network: mode, Workspaces: confine.WorkspaceRoots{SessionScratch: sessionRoot}, ProxyAddr: "127.0.0.1:4256"}
 			profile, err := confine.BuildSeatbeltProfile(c)
 			contractcheck.FailErr(t, "build socket profile", err)
 			want := "(allow network-bind network-inbound (subpath " + strconv.Quote(sessionRoot) + "))"

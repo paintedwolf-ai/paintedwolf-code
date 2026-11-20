@@ -137,9 +137,7 @@ type Confinement struct {
 	Roots []string
 	// GrantedWriteRoots are per-action reviewed write-root leases.
 	GrantedWriteRoots []string
-	// SessionScratchRoot is the session-owned scratch root for this execution.
-	SessionScratchRoot string
-	ActionWorkspace    ActionWorkspace `json:"-"`
+	Workspaces        WorkspaceRoots
 	// ReadRoots are read-only carve-outs.
 	ReadRoots []string
 	// ReadDenyPaths are per-action read exclusions.
@@ -217,7 +215,7 @@ func DefaultConfinement(req Request) (*Confinement, bool) {
 		ProjectID:                   req.ProjectID,
 		Roots:                       prepared.Roots,
 		GrantedWriteRoots:           append([]string(nil), prepared.GrantedWriteRoots...),
-		SessionScratchRoot:          prepared.SessionScratchRoot,
+		Workspaces:                  WorkspaceRoots{SessionScratch: prepared.SessionScratchRoot},
 		ReadRoots:                   prepared.ReadRoots,
 		ReadDenyPaths:               prepared.ReadDenyPaths,
 		View:                        prepared.View,

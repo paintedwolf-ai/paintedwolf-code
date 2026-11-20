@@ -252,7 +252,7 @@ func TestConfinementIntegrityForeignTemporaryTreeWriteDenied(t *testing.T) {
 	t.Setenv("LYCAON_CONFIG_DIR", state)
 	scratch := enginepaths.SessionScratchUnder(state, "temp-boundary")
 	testutil.FailErr(t, "create session scratch", os.MkdirAll(scratch, 0700))
-	c := confine.Confinement{Roots: []string{proj}, SessionScratchRoot: scratch}
+	c := confine.Confinement{Roots: []string{proj}, Workspaces: confine.WorkspaceRoots{SessionScratch: scratch}}
 
 	for _, dir := range []string{foreignTemporaryTree(t), t.TempDir()} {
 		probe := filepath.Join(dir, "escape.txt")

@@ -50,14 +50,14 @@ func prepareCredentialSocket(c Confinement) (Confinement, func(), error) {
 var sessionSockets sessionipc.Registry
 
 func sessionSocketRoot(c Confinement) string {
-	if c.HostExecution || c.SessionScratchRoot == "" {
+	if c.HostExecution || c.Workspaces.SessionScratch == "" {
 		return ""
 	}
 	state, err := configdir.Root()
 	if err != nil {
 		return ""
 	}
-	root := filepath.Clean(c.SessionScratchRoot)
+	root := filepath.Clean(c.Workspaces.SessionScratch)
 	if filepath.Dir(root) != fspath.CanonicalPath(enginepaths.ScratchRootUnder(state)) {
 		return ""
 	}

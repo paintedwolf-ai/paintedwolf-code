@@ -242,12 +242,12 @@ func TestLinuxSessionSocketAcrossCommands(t *testing.T) {
 		dirs, err := folders.Ensure(id)
 		testutil.FailErr(t, "prepare session", err)
 		c := denyConfinement(project)
-		c.SessionScratchRoot = dirs.Scratch
+		c.Workspaces.SessionScratch = dirs.Scratch
 		return c
 	}
 	owner, worker := session("owner"), session("worker")
-	listenerPath := filepath.Join(owner.SessionScratchRoot, "service.sock")
-	hostPath := filepath.Join(owner.SessionScratchRoot, "external.sock")
+	listenerPath := filepath.Join(owner.Workspaces.SessionScratch, "service.sock")
+	hostPath := filepath.Join(owner.Workspaces.SessionScratch, "external.sock")
 	greeter(t, "unix", hostPath)
 	ctx, cancel := context.WithTimeout(t.Context(), 40*time.Second)
 	defer cancel()
@@ -283,14 +283,14 @@ with socket.socket(socket.AF_UNIX) as client:
 		t.Helper()
 		status, out := linuxConfinedRun(t, self, c, nil, "/usr/bin/python3", "-I", "-c", dial, path)
 		if !status.Exited() || status.ExitStatus() != 0 || !strings.Contains(out, want+"\n") {
-			t.Fatalf("session %s accessing %s: status %v; output %q; want %q", c.SessionScratchRoot, path, status, out, want)
+			t.Fatalf("session %s accessing %s: status %v; output %q; want %q", c.Workspaces.SessionScratch, path, status, out, want)
 		}
 	}
 	probe(owner, hostPath, "errno 13")
-	alias := filepath.Join(worker.SessionScratchRoot, "other-session.sock")
+	alias := filepath.Join(worker.Workspaces.SessionScratch, "other-session.sock")
 	testutil.FailErr(t, "link socket into other session", os.Link(listenerPath, alias))
 	probe(worker, alias, "errno 13")
-	moved := filepath.Join(owner.SessionScratchRoot, "moved.sock")
+	moved := filepath.Join(owner.Workspaces.SessionScratch, "moved.sock")
 	testutil.FailErr(t, "rename session socket", os.Rename(listenerPath, moved))
 	testutil.FailErr(t, "reuse original selector", os.Rename(hostPath, listenerPath))
 	probe(owner, listenerPath, "errno 13")

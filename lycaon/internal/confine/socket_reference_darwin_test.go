@@ -168,7 +168,7 @@ func TestRetainedNativeGrantCannotBecomeSeatbeltPathnameAuthority(t *testing.T) 
 func TestDarwinSessionScratchAllowsSocketBindWithIndependentConnectAuthority(t *testing.T) {
 	self := requireLiveBoundary(t)
 	own, other := shortTempDir(t), shortTempDir(t)
-	c := confine.Confinement{SessionScratchRoot: own, GrantedWriteRoots: []string{other}, Network: confine.NetworkDeny}
+	c := confine.Confinement{Workspaces: confine.WorkspaceRoots{SessionScratch: own}, GrantedWriteRoots: []string{other}, Network: confine.NetworkDeny}
 	const bind = `IO::Socket::UNIX->new(Type => SOCK_STREAM, Local => $ARGV[0], Listen => 1) or die "bind: $!";`
 	const rejectedBind = `my $sock = IO::Socket::UNIX->new(Type => SOCK_STREAM, Local => $ARGV[0], Listen => 1); exit(!$sock && ($!{EPERM} || $!{EACCES}) ? 0 : 1);`
 	const rejectedConnect = `my $sock = IO::Socket::UNIX->new(Type => SOCK_STREAM, Peer => $ARGV[0]); exit(!$sock && ($!{EPERM} || $!{EACCES}) ? 0 : 1);`

@@ -165,7 +165,7 @@ func TestLinuxReadRestorationDoesNotGrantMetadataWrites(t *testing.T) {
 	t.Setenv("LYCAON_CONFIG_DIR", cfg)
 	c := denyConfinement(t.TempDir())
 	c.ReadRoots = []string{filepath.Dir(readable)}
-	c.SessionScratchRoot = scratch
+	c.Workspaces.SessionScratch = scratch
 	script := []string{}
 	for _, op := range []string{"chmod", "fchmodat-empty", "utimensat-empty", "setxattr", "setflags"} {
 		script = append(script, op+" "+readable, op+" "+scratchFile)

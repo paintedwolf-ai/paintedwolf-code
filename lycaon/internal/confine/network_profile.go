@@ -11,10 +11,10 @@ import (
 )
 
 func writeNetworkRules(b *strings.Builder, c Confinement) error {
-	if c.SessionScratchRoot != "" {
-		root := fspath.CanonicalPath(c.SessionScratchRoot)
+	if c.Workspaces.SessionScratch != "" {
+		root := fspath.CanonicalPath(c.Workspaces.SessionScratch)
 		if root == "" || !filepath.IsAbs(root) || filepath.Dir(root) == root {
-			return fmt.Errorf("invalid private service directory %q", c.SessionScratchRoot)
+			return fmt.Errorf("invalid private service directory %q", c.Workspaces.SessionScratch)
 		}
 		b.WriteString("(allow network-bind network-inbound (subpath " + sbplString(root) + "))\n")
 	}
