@@ -5,6 +5,8 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -100,6 +102,69 @@ func TestEnsureManagedRetriesAFailedTransfer(t *testing.T) {
 	testutil.FailErr(t, "ensureManaged failed", err)
 	if !isExecutable(path) || requests.Load() != 2 {
 		t.Fatalf("provisioned %s after %d requests, want an executable after 2", path, requests.Load())
+	}
+}
+
+// A provision whose every attempt fails is refused with its cause, after the bounded retries.
+func TestEnsureBinaryRefusesAProvisionThatFailsEveryAttempt(t *testing.T) {
+	if _, err := cftPlatform(); err != nil {
+		t.Skip(err)
+	}
+	var requests atomic.Int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		requests.Add(1)
+		w.WriteHeader(http.StatusServiceUnavailable)
+	}))
+	t.Cleanup(srv.Close)
+	prev := chromeForTestingBase
+	chromeForTestingBase = srv.URL + "/chrome-for-testing-public"
+	t.Cleanup(func() { chromeForTestingBase = prev })
+	t.Setenv(EnvBrowserBin, "")
+	t.Setenv(EnvBrowserSkipDownload, "0")
+	cache := t.TempDir()
+
+	_, err := ensureManaged(context.Background(), cache)
+	if err == nil || !strings.Contains(err.Error(), fmt.Sprintf("attempt %d: download", downloadAttempts)) ||
+		requests.Load() != downloadAttempts {
+		t.Fatalf("ensureManaged = %v after %d requests, want every attempt's failure after %d", err, requests.Load(), downloadAttempts)
+	}
+	_, err = EnsureBinary(context.Background(), ResolveOptions{CacheDir: cache, AllowDownload: true})
+	var reject *RejectError
+	if !errors.As(err, &reject) || reject.Code != "BROWSER_UNAVAILABLE" || reject.Data["reason"] != "provision_failed" {
+		t.Fatalf("EnsureBinary = %v, want BROWSER_UNAVAILABLE provision_failed", err)
+	}
+}
+
+// A cancelled caller is not retried.
+func TestDownloadArchiveStopsRetryingOnceTheCallerCancels(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	var requests atomic.Int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		requests.Add(1)
+		cancel()
+		w.WriteHeader(http.StatusServiceUnavailable)
+	}))
+	t.Cleanup(srv.Close)
+	file, err := os.CreateTemp(t.TempDir(), "archive-*.zip")
+	testutil.FailErr(t, "create archive file", err)
+	t.Cleanup(func() { _ = file.Close() })
+
+	if err := downloadArchive(ctx, srv.URL, file); err == nil || requests.Load() != 1 {
+		t.Fatalf("downloadArchive = %v after %d requests, want one failed attempt", err, requests.Load())
+	}
+}
+
+// An archive file that cannot be emptied is refused before any request.
+func TestDownloadArchiveRefusesAFileItCannotRewind(t *testing.T) {
+	var requests atomic.Int32
+	srv := httptest.NewServer(http.HandlerFunc(func(_ http.ResponseWriter, _ *http.Request) { requests.Add(1) }))
+	t.Cleanup(srv.Close)
+	file, err := os.CreateTemp(t.TempDir(), "archive-*.zip")
+	testutil.FailErr(t, "create archive file", err)
+	testutil.FailErr(t, "close archive file", file.Close())
+
+	if err := downloadArchive(context.Background(), srv.URL, file); !errors.Is(err, os.ErrClosed) || requests.Load() != 0 {
+		t.Fatalf("downloadArchive = %v after %d requests, want os.ErrClosed before any request", err, requests.Load())
 	}
 }
 
