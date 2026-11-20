@@ -5,6 +5,7 @@ package configlayout
 import (
 	"io"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -58,5 +59,34 @@ func TestPrivateGuestRefusesSymlinkAndUnsealedManifest(t *testing.T) {
 	testutil.FailErr(t, "inspect failed preparations", err)
 	if len(entries) != 0 {
 		t.Fatalf("retained failed snapshots: %v", entries)
+	}
+}
+
+func TestPrivateGuestSealsExactPackagedResources(t *testing.T) {
+	app := filepath.Join(t.TempDir(), "Probe.app")
+	contents := filepath.Join(app, "Contents")
+	resources := filepath.Join(contents, "Resources", "service-guest")
+	testutil.FailErr(t, "create resources", os.MkdirAll(resources, 0700))
+	executables := filepath.Join(contents, "MacOS")
+	testutil.FailErr(t, "create executable directory", os.Mkdir(executables, 0700))
+	main, err := os.ReadFile("/usr/bin/true")
+	testutil.FailErr(t, "read system fixture", err)
+	testutil.FailErr(t, "write executable", os.WriteFile(filepath.Join(executables, "probe"), main, 0700))
+	const metadata = `<?xml version="1.0" encoding="UTF-8"?>
+<plist version="1.0"><dict><key>CFBundleIdentifier</key><string>dev.fixture.probe</string><key>CFBundleExecutable</key><string>probe</string><key>CFBundlePackageType</key><string>APPL</string></dict></plist>`
+	testutil.FailErr(t, "write bundle metadata", os.WriteFile(filepath.Join(contents, "Info.plist"), []byte(metadata), 0600))
+	resource := []byte("fixture code identity")
+	testutil.FailErr(t, "write resource", os.WriteFile(filepath.Join(resources, "pw-service-vm.cdhash"), resource, 0600))
+	output, err := exec.Command("/usr/bin/codesign", "--force", "--sign", "-", app).CombinedOutput()
+	if err != nil {
+		t.Fatalf("sign test bundle: %v %s", err, output)
+	}
+	seal, release, err := openGuestResourceEnvelope(app)
+	testutil.FailErr(t, "open signed app envelope", err)
+	defer release()
+	path := "Resources/service-guest/pw-service-vm.cdhash"
+	testutil.FailErr(t, "verify captured bytes", verifyGuestResource(seal, path, resource))
+	if err := verifyGuestResource(seal, path, []byte("another identity")); err == nil {
+		t.Fatal("accepted a different packaged identity")
 	}
 }
