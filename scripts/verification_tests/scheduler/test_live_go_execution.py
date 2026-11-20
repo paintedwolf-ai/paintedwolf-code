@@ -127,11 +127,11 @@ func TestFixture(t *testing.T) {
         first = self.start("test:digest", "--", "./good")
         self.queued(1)
         self.queue.resume()
-        self.await_condition(lambda: any(e.get("kind") == "batch" for e in self.queue.status()["runs"]))
+        self.await_condition(lambda: any(e.get("kind") == "batch" for e in self.queue.status()["runs"]), first)
         active = next(e for e in self.queue.status()["runs"] if e.get("kind") == "batch")
         directory = Path(active["directory"])
         raw = directory / "stage-001-go.json"
-        self.await_condition(lambda: raw.exists() and '"Action":"run"' in raw.read_text())
+        self.await_condition(lambda: raw.exists() and '"Action":"run"' in raw.read_text(), first)
         self.assertIsNone(first.poll())
         self.assertFalse((directory / "stage-001.json").exists())
         status = batch.status_details(self.queue)
