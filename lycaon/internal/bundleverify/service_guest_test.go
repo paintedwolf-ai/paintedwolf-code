@@ -1,6 +1,8 @@
 package bundleverify
 
 import (
+	"github.com/lycaon/lycaon/internal/testutil"
+
 	"crypto/sha256"
 	"fmt"
 	"os"
@@ -29,9 +31,7 @@ func TestPrivateServiceGuestIntegrity(t *testing.T) {
 			if got := checkServiceGuestAssets(app); len(got) != 0 {
 				t.Fatalf("valid assets: %v", got)
 			}
-			if err := os.WriteFile(filepath.Join(app, serviceGuestDir, name), []byte("changed"), 0644); err != nil {
-				t.Fatal(err)
-			}
+			testutil.FailErr(t, "replace guest asset", os.WriteFile(filepath.Join(app, serviceGuestDir, name), []byte("changed"), 0644))
 			if got := checkServiceGuestAssets(app); len(got) != 1 || got[0].Path != filepath.Join(serviceGuestDir, name) {
 				t.Fatalf("changed asset: %v", got)
 			}

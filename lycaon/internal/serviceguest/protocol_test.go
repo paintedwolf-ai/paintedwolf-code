@@ -1,6 +1,8 @@
 package serviceguest
 
 import (
+	"github.com/lycaon/lycaon/internal/testutil"
+
 	"bytes"
 	"context"
 	"errors"
@@ -63,9 +65,7 @@ func TestServiceSession(t *testing.T) {
 	served := make(chan error, 1)
 	go func() { served <- Serve(ctx, guest, exec) }()
 	client, err := Open(ctx, host)
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.FailErr(t, "open service channel", err)
 	defer client.Close()
 	input := []byte{0, 1, 255, 10}
 	r, err := client.RunInput(ctx, []string{"cat"}, input)
@@ -79,9 +79,7 @@ func TestServiceSession(t *testing.T) {
 		t.Fatal("empty program accepted")
 	}
 	first, err := client.Start(ctx, []string{"serve"})
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.FailErr(t, "start first service job", err)
 	<-exec.started
 	jobCtx, cancel := context.WithCancel(ctx)
 	done := make(chan error, 1)
@@ -89,7 +87,7 @@ func TestServiceSession(t *testing.T) {
 	second := <-exec.started
 	cancel()
 	if err := <-done; !errors.Is(err, context.Canceled) {
-		t.Fatal(err)
+		t.Fatalf("canceled service job: got %v", err)
 	}
 	if got := <-exec.stopped; got != second || got == first.ID {
 		t.Fatalf("stopped %s for %s", got, second)
@@ -99,14 +97,12 @@ func TestServiceSession(t *testing.T) {
 		t.Fatalf("other job %+v %v", running, err)
 	}
 	if _, err := client.Stop(ctx, first.ID); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "stop first service job", err)
 	}
-	if err := client.Close(); err != nil {
-		t.Fatal(err)
-	}
+	testutil.FailErr(t, "close service channel", client.Close())
 	<-exec.closed
 	if err := <-served; !errors.Is(err, io.EOF) {
-		t.Fatal(err)
+		t.Fatalf("serve disconnected channel: got %v", err)
 	}
 }
 

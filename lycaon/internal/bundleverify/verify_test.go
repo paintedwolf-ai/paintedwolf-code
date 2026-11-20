@@ -152,9 +152,7 @@ func buildFakeApp(t *testing.T, opts appOptions) string {
 	mustWriteFile(t, filepath.Join(app, "Contents", "Resources", "engine-root", "schemas", ".keep"), []byte("x"))
 	writeGuestAssets(t, app)
 	mustWriteFile(t, filepath.Join(app, serviceGuestHelper), []byte("service helper"))
-	if err := os.Chmod(filepath.Join(app, serviceGuestHelper), 0755); err != nil {
-		t.Fatal(err)
-	}
+	testutil.FailErr(t, "mark helper executable", os.Chmod(filepath.Join(app, serviceGuestHelper), 0755))
 
 	if !opts.omitNotices {
 		stub := strings.Repeat("third-party notices fixture line\n", 200)

@@ -1,6 +1,8 @@
 package main
 
 import (
+	"github.com/lycaon/lycaon/internal/testutil"
+
 	"bytes"
 	"errors"
 	"os"
@@ -19,7 +21,7 @@ func TestGuestRecordsBoundOutputAndWait(t *testing.T) {
 		t.Fatal(n, err)
 	}
 	if _, err := j.stderr.Write([]byte("error")); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "write job stderr", err)
 	}
 	selected, err := s.Status(t.Context(), j.id)
 	if err != nil || selected.State != serviceguest.Running || !selected.StdoutTruncated || selected.StderrTruncated || string(selected.Stderr) != "error" || len(selected.Stdout) != serviceguest.MaxOutput {
@@ -34,9 +36,7 @@ func TestGuestRecordsBoundOutputAndWait(t *testing.T) {
 	if _, err := s.Stop(t.Context(), "missing"); err == nil {
 		t.Fatal("unknown job accepted")
 	}
-	if err := s.Close(); err != nil {
-		t.Fatal(err)
-	}
+	testutil.FailErr(t, "close job supervisor", s.Close())
 	if _, err := s.Start(t.Context(), "next", []string{"unused"}, nil); err == nil {
 		t.Fatal("closed executor accepted work")
 	}
@@ -57,22 +57,16 @@ func TestGuestLimitsConcurrentLaunches(t *testing.T) {
 
 func TestJobGroupOwnsCleanup(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "task")
-	if err := os.Mkdir(path, 0700); err != nil {
-		t.Fatal(err)
-	}
+	testutil.FailErr(t, "create job group", os.Mkdir(path, 0700))
 	file, err := os.Open(path)
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.FailErr(t, "open job group", err)
 	j := &job{group: file}
 	if err := j.killGroup(); !errors.Is(err, os.ErrNotExist) {
-		t.Fatal(err)
+		t.Fatalf("missing cgroup kill control: got %v", err)
 	}
 	j.releaseGroup()
 	if _, err := os.Lstat(path); !errors.Is(err, os.ErrNotExist) {
-		t.Fatal(err)
+		t.Fatalf("removed job group: got %v", err)
 	}
-	if err := j.killGroup(); err != nil {
-		t.Fatal(err)
-	}
+	testutil.FailErr(t, "stop released group", j.killGroup())
 }

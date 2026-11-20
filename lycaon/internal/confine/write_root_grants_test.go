@@ -516,9 +516,7 @@ func TestSharedTempGrantNamesTheLocationAtEveryDepth(t *testing.T) {
 	t.Setenv("TMPDIR", location)
 	root := fspath.CanonicalPath(location)
 	rules, err := filesystemRules(Confinement{})
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.FailErr(t, "compile default filesystem rules", err)
 	path := root
 	for depth := 1; depth <= 6; depth++ {
 		path = filepath.Join(path, "build")
@@ -528,9 +526,7 @@ func TestSharedTempGrantNamesTheLocationAtEveryDepth(t *testing.T) {
 		}
 	}
 	rules, err = filesystemRules(Confinement{GrantedWriteRoots: []string{root}})
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.FailErr(t, "compile filesystem rules with grant", err)
 	if !rules.Verdict(AccessWrite, path).Allowed {
 		t.Fatal("reviewed temp root did not admit nested write")
 	}

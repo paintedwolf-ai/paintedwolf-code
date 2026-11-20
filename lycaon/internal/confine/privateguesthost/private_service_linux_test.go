@@ -29,11 +29,11 @@ func TestPrivateServiceBundle(t *testing.T) {
 	}
 	dir := t.TempDir()
 	if _, err := launchServiceBundle(t.Context(), filepath.Join(dir, "missing")); !errors.Is(err, serviceguest.ErrUnavailable) {
-		t.Fatal(err)
+		t.Fatalf("missing service bundle: got %v", err)
 	}
 	ctx, cancel := context.WithCancel(t.Context())
 	cancel()
 	if _, err := launchServiceBundle(ctx, dir); !errors.Is(err, context.Canceled) {
-		t.Fatal(err)
+		t.Fatalf("canceled service launch: got %v", err)
 	}
 }

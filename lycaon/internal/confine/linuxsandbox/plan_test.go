@@ -1,6 +1,8 @@
 package linuxsandbox
 
 import (
+	"github.com/lycaon/lycaon/internal/testutil"
+
 	"errors"
 	"fmt"
 	"reflect"
@@ -151,7 +153,5 @@ func TestSessionSocketPlanRequiresAnAbsoluteRootAndDedicatedDescriptor(t *testin
 		t.Fatal("session channel overlaps a socket reference")
 	}
 	network.SocketGrants[0].FD = SocketReferenceFD
-	if err := (Plan{Version: PlanVersion, Network: network}).Validate(); err != nil {
-		t.Fatal(err)
-	}
+	testutil.FailErr(t, "validate socket reference", (Plan{Version: PlanVersion, Network: network}).Validate())
 }

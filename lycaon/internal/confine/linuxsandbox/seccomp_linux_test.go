@@ -3,6 +3,8 @@
 package linuxsandbox
 
 import (
+	"github.com/lycaon/lycaon/internal/testutil"
+
 	"encoding/binary"
 	"testing"
 
@@ -212,17 +214,13 @@ func TestSeccompProgramDecides(t *testing.T) {
 func TestPrivateServiceCPUSet(t *testing.T) {
 	for _, fixed := range []bool{false, true} {
 		raw, err := seccompProgram(fixed)
-		if err != nil {
-			t.Fatal(err)
-		}
+		testutil.FailErr(t, "build seccomp program", err)
 		code, ok := bpf.Disassemble(raw)
 		if !ok {
 			t.Fatal("invalid program")
 		}
 		vm, err := bpf.NewVM(code)
-		if err != nil {
-			t.Fatal(err)
-		}
+		testutil.FailErr(t, "load seccomp program", err)
 		data := make([]byte, 64)
 		binary.BigEndian.PutUint32(data[seccompDataArch:], nativeAuditArch)
 		binary.BigEndian.PutUint32(data[seccompDataNr:], unix.SYS_SCHED_SETAFFINITY)
