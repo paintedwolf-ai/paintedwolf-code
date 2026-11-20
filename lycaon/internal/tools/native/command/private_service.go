@@ -163,6 +163,10 @@ func (s *privateServiceSession) execute(ctx context.Context, req commandprogram.
 		return refusedResult(code), toolrejection.RejectInvalidArguments(code, map[string]any{"limit": "private_service_input_bytes", "maximum": serviceguest.MaxInput, "observed": len(input)})
 	}
 	client, err := s.acquire(ctx, openPrivateService)
+	if errors.Is(err, serviceguest.ErrUnavailable) {
+		const code = "COMMAND_PLATFORM_UNAVAILABLE"
+		return refusedResult(code), toolrejection.RejectInvalidArguments(code, map[string]any{"command": "private-service", "reason": err.Error()})
+	}
 	if err != nil {
 		return ownerFailure(err), err
 	}

@@ -13,7 +13,7 @@ x-paintedwolf-category: recoverable
 x-paintedwolf-emit: guard:command_composition_redirect
 message: native command operation is unavailable
 what: This native command operation is unavailable on the current platform.
-cause: The platform adapter cannot provide the required confined path operation.
+cause: The platform adapter cannot provide the requested operation.
 why: ''
 fix: ''
 instead: ''
