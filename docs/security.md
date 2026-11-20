@@ -316,14 +316,14 @@ The Go host binds a private service environment to one session. The process subs
 
 | Adapter | Execution boundary |
 |---|---|
-| Linux | The private userland runs in namespaces with a bounded resource scope inside the caller’s cgroup hierarchy. Where the hierarchy cannot provide that scope, an on-demand QEMU VM boots the same userland within the caller’s cgroup. It has no host disk, filesystem share or network interface. Both routes use the supervisor’s bound-inode checks for workload sockets. |
+| Linux | The private userland runs in namespaces with a bounded resource scope inside the caller’s cgroup hierarchy. Where the hierarchy cannot provide that scope, an on-demand QEMU VM boots the same userland within the caller’s cgroup. It has no host disk, filesystem share or network interface. |
 | macOS | A separate virtualization-entitled helper runs the private Linux userland in an ephemeral VM. A dedicated virtio socket device connects the host to the guest supervisor. The VM has no host directory share or network interface. |
 
 The Linux launch broker starts the packaged controller outside the protected desktop. The controller can use a delegated cgroup below the caller or a transient user-manager scope inside that same resource domain. Each native environment has a 512 MiB memory ceiling, 256 tasks and one available CPU. The workload filter protects the inherited CPU affinity. The controller pivots to the packaged, read-only root in private mount, user, PID, network and IPC namespaces. Separate tmpfs mounts hold the workspace, temporary files and shared memory.
 
 Where the caller has no suitable child resource domain, the controller starts an ephemeral VM inside the caller's existing cgroup. The installed emulator receives verified, sealed kernel and initramfs descriptors, one virtual CPU, 1 GiB of RAM and a dedicated virtio control port. It uses KVM when available and software emulation otherwise. Its device configuration excludes host drives, networking, directory shares and management consoles. Closing the host channel waits for the environment's processes to exit.
 
-The guest supervisor launches unprivileged workloads in the private environment. The workload cannot inherit the management channel. The helper has no vault access. Existing human approval rules govern connections to host services and writes to host temporary directories.
+On both platforms the guest supervisor launches unprivileged workloads under the same Linux confinement policy. The guest checks a workload socket’s bound inode before permitting a client connection. The workload cannot inherit the management channel. The helper has no vault access. Existing human approval rules govern connections to host services and writes to host temporary directories.
 
 ### Platform coverage
 
