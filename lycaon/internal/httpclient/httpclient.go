@@ -62,7 +62,10 @@ func StreamingWithHeaderTimeout(class egressclass.ID, header time.Duration) *htt
 // Download bounds response headers and the full artifact transfer.
 func Download(class egressclass.ID, total time.Duration) *http.Client {
 	egressclass.RequireTransport(class, egressclass.HTTPDownload)
-	tr := baseTransport()
+	return downloadClient(baseTransport(), total)
+}
+
+func downloadClient(tr *http.Transport, total time.Duration) *http.Client {
 	tr.ResponseHeaderTimeout = 30 * time.Second
 	return &http.Client{
 		Transport: tr,
