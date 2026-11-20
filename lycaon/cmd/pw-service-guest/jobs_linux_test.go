@@ -2,9 +2,11 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"os"
 	"path/filepath"
+	"strconv"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/serviceguest"
@@ -68,4 +70,54 @@ func TestJobGroupOwnsCleanup(t *testing.T) {
 		t.Fatalf("removed job group: got %v", err)
 	}
 	testutil.FailErr(t, "stop released group", j.killGroup())
+}
+
+func TestGuestJobGroupKillControl(t *testing.T) {
+	group := t.TempDir()
+	control := filepath.Join(group, "cgroup.kill")
+	testutil.FailErr(t, "create kill control", os.WriteFile(control, nil, 0600))
+	file, err := os.Open(group)
+	testutil.FailErr(t, "pin job group", err)
+	defer file.Close()
+	j := job{group: file}
+	testutil.FailErr(t, "terminate job group", j.killGroup())
+	value, err := os.ReadFile(control)
+	testutil.FailErr(t, "read kill control", err)
+	if string(value) != "1" {
+		t.Fatalf("cgroup.kill = %q", value)
+	}
+}
+
+func TestGuestLaunchFailureReleasesGroupAndFinishedHistory(t *testing.T) {
+	root := t.TempDir()
+	s := newJobs(configuration{scratch: root, groups: root, helper: filepath.Join(root, "absent")})
+	for i := range 32 {
+		id := strconv.Itoa(i)
+		j := &job{id: id, done: make(chan struct{})}
+		if i > 0 {
+			close(j.done)
+		}
+		s.records[id] = j
+		s.order = append(s.order, id)
+	}
+	if _, err := s.Start(t.Context(), "next", []string{"/bin/missing"}, nil); err == nil {
+		t.Fatal("missing helper accepted")
+	}
+	if _, err := os.Stat(filepath.Join(root, "next")); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("failed launch kept resources: %v", err)
+	}
+	if s.records["0"] == nil || s.records["1"] != nil || s.records["2"] == nil || s.records["next"] != nil {
+		t.Fatal("launch failure lost active work or retained evicted job")
+	}
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+	if _, err := s.Wait(ctx, "0"); !errors.Is(err, context.Canceled) {
+		t.Fatalf("canceled wait: %v", err)
+	}
+	if _, err := s.Status(t.Context(), "1"); err == nil {
+		t.Fatal("status retained an evicted job")
+	}
+	if _, err := s.Wait(t.Context(), "1"); err == nil {
+		t.Fatal("wait retained an evicted job")
+	}
 }

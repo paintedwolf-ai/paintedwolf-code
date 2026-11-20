@@ -1,8 +1,10 @@
 package main
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
+	"slices"
 	"testing"
 	"time"
 
@@ -10,6 +12,7 @@ import (
 	"github.com/lycaon/lycaon/internal/confine/privateguesthost/linuxruntime"
 	"github.com/lycaon/lycaon/internal/enginepaths"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"golang.org/x/sys/unix"
 )
 
 func TestGuestWorkDirectories(t *testing.T) {
@@ -66,4 +69,65 @@ func TestGuestModulesAndControllerPort(t *testing.T) {
 	controller, err := privateConsole(ports, devices, time.Now())
 	testutil.FailErr(t, "open controller device", err)
 	testutil.FailErr(t, "close controller", controller.Close())
+}
+
+func TestGuestBootMounts(t *testing.T) {
+	root := t.TempDir()
+	type mounted struct {
+		kind, path, options string
+		flags               uintptr
+	}
+	var mounts []mounted
+	attach := func(source, path, kind string, flags uintptr, options string) error {
+		info, err := os.Stat(path)
+		testutil.FailErr(t, "inspect mount point", err)
+		if !info.IsDir() || source != kind {
+			t.Fatalf("mount point %s has type %s, source %s, kind %s", path, info.Mode(), source, kind)
+		}
+		rel, err := filepath.Rel(root, path)
+		testutil.FailErr(t, "locate VM filesystem", err)
+		mounts = append(mounts, mounted{kind, rel, options, flags})
+		if kind == "devtmpfs" {
+			return unix.EBUSY
+		}
+		return nil
+	}
+	testutil.FailErr(t, "mount guest filesystems", mountVM(root, attach))
+	want := []mounted{
+		{"proc", "proc", "", unix.MS_NOSUID | unix.MS_NODEV | unix.MS_NOEXEC},
+		{"sysfs", "sys", "", unix.MS_NOSUID | unix.MS_NODEV | unix.MS_NOEXEC},
+		{"devtmpfs", "dev", "mode=0755", unix.MS_NOSUID},
+		{"tmpfs", "dev/shm", "size=32M,mode=1777", unix.MS_NOSUID | unix.MS_NODEV},
+		{"tmpfs", "tmp", "size=16M,mode=1777", unix.MS_NOSUID | unix.MS_NODEV},
+		{"tmpfs", "home/service", "size=256M,mode=0700,uid=65534,gid=65534", unix.MS_NOSUID | unix.MS_NODEV},
+		{"cgroup2", "sys/fs/cgroup", "", unix.MS_NOSUID | unix.MS_NODEV | unix.MS_NOEXEC},
+	}
+	if !slices.Equal(mounts, want) {
+		t.Fatalf("guest mounts = %+v", mounts)
+	}
+	if err := mountVM(root, func(string, string, string, uintptr, string) error { return unix.EPERM }); !errors.Is(err, unix.EPERM) {
+		t.Fatalf("mount rejection = %v", err)
+	}
+}
+
+func TestGuestResourceDomain(t *testing.T) {
+	root := t.TempDir()
+	group, err := prepareJobGroups(root)
+	testutil.FailErr(t, "prepare job resources", err)
+	if group != filepath.Join(root, "pw-jobs") {
+		t.Fatalf("unexpected group %q", group)
+	}
+	for name, want := range map[string]string{"cgroup.subtree_control": "+cpu +memory +pids", "pw-jobs/cgroup.subtree_control": "+cpu +memory +pids", "pw-jobs/cpu.max": "100000 100000", "pw-jobs/memory.max": "402653184", "pw-jobs/pids.max": "256"} {
+		got, err := os.ReadFile(filepath.Join(root, name))
+		testutil.FailErr(t, "inspect job resource", err)
+		if string(got) != want {
+			t.Fatalf("%s=%q, want %q", name, got, want)
+		}
+	}
+	if _, err := prepareJobGroups(root); !errors.Is(err, os.ErrExist) {
+		t.Fatalf("reused guest group = %v", err)
+	}
+	if _, err := prepareJobGroups(filepath.Join(root, "missing")); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("missing domain = %v", err)
+	}
 }

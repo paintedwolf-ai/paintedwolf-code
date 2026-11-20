@@ -13,15 +13,49 @@ import (
 )
 
 const (
-	workUID   = 65534
-	workGID   = 65534
-	workBase  = "/home/service"
-	jobGroups = "/sys/fs/cgroup/pw-jobs"
+	workUID    = 65534
+	workGID    = 65534
+	workBase   = "/home/service"
+	cgroupRoot = "/sys/fs/cgroup"
 )
 
 type configuration struct{ scratch, groups, helper string }
 
 func prepareVM() (configuration, error) {
+	if err := mountVM("/", unix.Mount); err != nil {
+		return configuration{}, err
+	}
+	if err := loadBootModules("/lib/pw-boot-modules"); err != nil {
+		return configuration{}, err
+	}
+	scratch, err := prepareWork(workBase, "/work", workUID)
+	if err != nil {
+		return configuration{}, err
+	}
+	groups, err := prepareJobGroups(cgroupRoot)
+	if err != nil {
+		return configuration{}, err
+	}
+	return configuration{scratch: scratch, groups: groups, helper: "/init"}, nil
+}
+
+func prepareJobGroups(root string) (string, error) {
+	if err := os.WriteFile(filepath.Join(root, "cgroup.subtree_control"), []byte("+cpu +memory +pids"), 0600); err != nil {
+		return "", err
+	}
+	jobGroups := filepath.Join(root, "pw-jobs")
+	if err := os.Mkdir(jobGroups, 0700); err != nil {
+		return "", err
+	}
+	for name, value := range map[string]string{"pids.max": "256", "memory.max": "402653184", "cpu.max": "100000 100000", "cgroup.subtree_control": "+cpu +memory +pids"} {
+		if err := os.WriteFile(filepath.Join(jobGroups, name), []byte(value), 0600); err != nil {
+			return "", err
+		}
+	}
+	return jobGroups, nil
+}
+
+func mountVM(root string, attach func(string, string, string, uintptr, string) error) error {
 	for _, mount := range []struct {
 		path, kind, options string
 		flags               uintptr
@@ -34,32 +68,15 @@ func prepareVM() (configuration, error) {
 		{workBase, "tmpfs", "size=256M,mode=0700,uid=65534,gid=65534", unix.MS_NOSUID | unix.MS_NODEV},
 		{"/sys/fs/cgroup", "cgroup2", "", unix.MS_NOSUID | unix.MS_NOEXEC | unix.MS_NODEV},
 	} {
-		if err := os.MkdirAll(mount.path, 0700); err != nil {
-			return configuration{}, err
+		path := filepath.Join(root, mount.path)
+		if err := os.MkdirAll(path, 0700); err != nil {
+			return err
 		}
-		if err := unix.Mount(mount.kind, mount.path, mount.kind, mount.flags, mount.options); err != nil && !errors.Is(err, unix.EBUSY) {
-			return configuration{}, fmt.Errorf("mount %s: %w", mount.path, err)
-		}
-	}
-	if err := loadBootModules("/lib/pw-boot-modules"); err != nil {
-		return configuration{}, err
-	}
-	scratch, err := prepareWork(workBase, "/work", workUID)
-	if err != nil {
-		return configuration{}, err
-	}
-	if err := os.WriteFile("/sys/fs/cgroup/cgroup.subtree_control", []byte("+cpu +memory +pids"), 0600); err != nil {
-		return configuration{}, err
-	}
-	if err := os.Mkdir(jobGroups, 0700); err != nil {
-		return configuration{}, err
-	}
-	for name, value := range map[string]string{"pids.max": "256", "memory.max": "402653184", "cpu.max": "100000 100000", "cgroup.subtree_control": "+cpu +memory +pids"} {
-		if err := os.WriteFile(filepath.Join(jobGroups, name), []byte(value), 0600); err != nil {
-			return configuration{}, err
+		if err := attach(mount.kind, path, mount.kind, mount.flags, mount.options); err != nil && !errors.Is(err, unix.EBUSY) {
+			return fmt.Errorf("mount %s: %w", mount.path, err)
 		}
 	}
-	return configuration{scratch: scratch, groups: jobGroups, helper: "/init"}, nil
+	return nil
 }
 
 func loadBootModules(base string) error {
