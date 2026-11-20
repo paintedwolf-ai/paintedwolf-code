@@ -51,6 +51,7 @@ def add_postgres(tree, archive):
         "psql",
         "pg_isready",
         "pg_ctl",
+        "pg_controldata",
         "createdb",
         "createuser",
         "pg_dump",

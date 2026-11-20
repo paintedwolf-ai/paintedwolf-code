@@ -47,6 +47,7 @@ def build_postgres(source, compiler, machine, libc, cache):
             "RANLIB": "pw-guest-ranlib",
             "CFLAGS": "-O2 -g0 -fPIC",
             "LDFLAGS_EX_BE": "-Wl,--export-dynamic",
+            "LDFLAGS": "-Wl,-s,--build-id=none",
             "SOURCE_DATE_EPOCH": "0",
             "LC_ALL": "C",
             "TZ": "UTC",
