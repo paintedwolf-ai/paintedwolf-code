@@ -118,11 +118,19 @@ func (volume *mountedVolume) unmount() error {
 	}
 	visible, err := openMountPoint(current)
 	if err != nil {
+		if detached, checkErr := kernelDetachedMount(volume.mountID); checkErr == nil && detached {
+			return nil
+		}
 		return err
 	}
 	visibleID, statErr := mountID(visible)
 	_ = unix.Close(visible)
 	if statErr != nil || visibleID != volume.mountID {
+		// Removing the directory beneath a mount detaches it in every namespace.
+		// A covered mount is still listed, so only a vanished one is settled here.
+		if detached, checkErr := kernelDetachedMount(volume.mountID); checkErr == nil && detached {
+			return nil
+		}
 		return errors.New("retained volume is covered or no longer visible")
 	}
 	if err := unix.Unmount(mountDescriptorPath(fd), unix.MNT_DETACH); err != nil {
@@ -139,3 +147,18 @@ func (failure *mountDestinationError) Error() string {
 	return "module mount destination is unavailable: " + failure.err.Error()
 }
 func (failure *mountDestinationError) Unwrap() error { return failure.err }
+
+// kernelDetachedMount reports whether a held mount is absent from this
+// namespace's topology, which only the kernel's detachment produces here.
+func kernelDetachedMount(id uint64) (bool, error) {
+	_, entries, err := readCurrentMountTopology()
+	if err != nil {
+		return false, err
+	}
+	for _, entry := range entries {
+		if uint64(entry.id) == id {
+			return false, nil
+		}
+	}
+	return true, nil
+}

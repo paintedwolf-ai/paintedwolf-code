@@ -72,3 +72,60 @@ func TestMountTransferDenialHasExactIdentityAndNoDescriptor(t *testing.T) {
 		t.Fatal("denial accepted descriptor authority")
 	}
 }
+
+func TestWriterRetiresAnInitialLeaseItNeverAttached(t *testing.T) {
+	writer := &moduleMountWriter{unattached: map[uint64]string{4: "/tmp/fixture/004"}}
+	testutil.FailErr(t, "retire an unattached initial lease",
+		writer.accept(mountTransfer{kind: mountTransferRemove, sequence: 1, id: 4, path: "/tmp/fixture/004"}, -1))
+	if len(writer.unattached) != 0 {
+		t.Fatal("the unattached lease stayed recorded")
+	}
+	if err := writer.accept(mountTransfer{kind: mountTransferRemove, sequence: 2, id: 4, path: "/tmp/fixture/004"}, -1); err == nil {
+		t.Fatal("a second removal of the same lease was accepted")
+	}
+}
+
+// replyToInitialLease runs the stage's side of one initial transfer against a
+// writer that answers with reply and, when held is set, a descriptor.
+func replyToInitialLease(t *testing.T, reply func(mountTransfer) mountTransfer, held bool) error {
+	t.Helper()
+	pair, err := unix.Socketpair(unix.AF_UNIX, unix.SOCK_SEQPACKET|unix.SOCK_CLOEXEC, 0)
+	testutil.FailErr(t, "create private transfer pair", err)
+	t.Cleanup(func() { _ = unix.Close(pair[0]); _ = unix.Close(pair[1]) })
+	tree, err := os.CreateTemp(t.TempDir(), "tree")
+	testutil.FailErr(t, "create prepared tree stand-in", err)
+	view := &preparedModuleView{
+		plan:  moduleViewPlan{staging: []byte("2 1 8:1 / / rw - ext4 /dev/root rw\n11 2 0:30 / /tmp/fixture/004 ro - fuse.fixture fixture ro\n"), initial: []initialMountLease{{lease: 1, mountID: 11}}},
+		trees: []*os.File{tree},
+	}
+	done := make(chan error, 1)
+	go func() { done <- transferInitialMountLeases(pair[0], view) }()
+	message, fd, err := receiveMountTransfer(pair[1])
+	testutil.FailErr(t, "receive the initial lease", err)
+	if fd >= 0 {
+		_ = unix.Close(fd)
+	}
+	extra := -1
+	if held {
+		extra = int(tree.Fd())
+	}
+	testutil.FailErr(t, "answer the initial lease", sendMountTransfer(pair[1], reply(message), extra))
+	return <-done
+}
+
+func TestStageAcceptsAnAttachedOrPrunedInitialLeaseAndNamesEveryOtherReply(t *testing.T) {
+	ack := func(m mountTransfer) mountTransfer {
+		return mountTransfer{kind: mountTransferAck, sequence: m.sequence}
+	}
+	denied := func(m mountTransfer) mountTransfer { m.kind = mountTransferDenied; return m }
+	testutil.FailErr(t, "attached initial lease", replyToInitialLease(t, ack, false))
+	testutil.FailErr(t, "pruned initial lease", replyToInitialLease(t, denied, false))
+	if err := replyToInitialLease(t, ack, true); err == nil {
+		t.Fatal("a reply carrying a descriptor was accepted")
+	}
+	if err := replyToInitialLease(t, func(m mountTransfer) mountTransfer {
+		return mountTransfer{kind: mountTransferAck, sequence: m.sequence + 1}
+	}, false); err == nil {
+		t.Fatal("a reply for another sequence was accepted")
+	}
+}

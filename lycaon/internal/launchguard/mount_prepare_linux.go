@@ -41,12 +41,41 @@ func readCurrentMountTopology() ([]byte, []mountEntry, error) {
 		return nil, nil, err
 	}
 	defer func() { _ = file.Close() }()
-	raw, err := readMountInfo(int(file.Fd()), nil)
+	raw, err := readConsistentMountInfo(int(file.Fd()))
 	if err != nil {
 		return nil, nil, err
 	}
 	entries, err := parseMountTopology(raw)
 	return raw, entries, err
+}
+
+// mountInfoReadSize holds a typical table in one buffer; reads still loop.
+const mountInfoReadSize = 256 << 10
+
+// readConsistentMountInfo reads mountinfo as one snapshot. The kernel holds the
+// namespace lock only for each read(), so a mount or unmount anywhere in the
+// namespace, including one propagated from the host, can tear a table read
+// across several calls. The poll epoch, cleared before the read and checked
+// after it, names such a read, which is then read again.
+func readConsistentMountInfo(fd int) ([]byte, error) {
+	buf := make([]byte, 0, mountInfoReadSize)
+	for {
+		if _, err := mountInfoEpochChanged(fd); err != nil {
+			return nil, err
+		}
+		raw, err := readMountInfo(fd, buf)
+		if err != nil {
+			return nil, err
+		}
+		changed, err := mountInfoEpochChanged(fd)
+		if err != nil {
+			return nil, err
+		}
+		if !changed {
+			return raw, nil
+		}
+		buf = raw[:0]
+	}
 }
 
 // Freeze the app staging namespace before its final inventory. Intake keeps
@@ -64,13 +93,20 @@ func prepareModuleView(spec EntrySpec, frame, origin, entry, desktop *os.File) (
 	if err != nil {
 		return nil, err
 	}
+	resolved, err := structuralResolvedPaths(spec.Generation, desktop)
+	if err != nil {
+		return nil, err
+	}
 	code, err := captureModuleCodeRoots(spec.Generation, desktop)
 	if err != nil {
 		return nil, err
 	}
 	defer closeModuleCodeRoots(code)
 	_, sourceAfter, err := readCurrentMountTopology()
-	if err != nil || !sameMountEpoch(sourceEntries, sourceAfter, nil) {
+	if err != nil {
+		return nil, fmt.Errorf("reread source topology after structural selection: %w", err)
+	}
+	if !sameSelectionTopology(sourceEntries, sourceAfter, sourceStructural, resolved) {
 		return nil, errors.New("source topology changed during structural selection")
 	}
 	source, err := os.Open("/proc/thread-self/ns/mnt")
@@ -144,21 +180,42 @@ func (view *preparedModuleView) prepareInitialLeases(opener *mountSourceOpener, 
 		return err
 	}
 	removed := make(map[int]bool)
+	stable := func(stage string) ([]mountEntry, error) {
+		_, current, err := readCurrentMountTopology()
+		if err != nil {
+			return nil, fmt.Errorf("reread initial mount topology %s: %w", stage, err)
+		}
+		if !acceptVanishedMounts(staging, current, removed, structural) {
+			return nil, fmt.Errorf("initial mount topology changed %s", stage)
+		}
+		return current, nil
+	}
 	for _, mount := range volumeDetachOrder(staging, structural) {
 		fd, err := opener.open(mount)
-		if errors.Is(err, unix.EACCES) {
-			_, current, readErr := readCurrentMountTopology()
-			if readErr != nil || !sameMountEpoch(staging, current, removed) {
-				return errors.New("initial mount topology changed before administrative pruning")
+		if errors.Is(err, unix.ENOENT) {
+			// Only a mount the kernel has already detached may be missing.
+			if _, err := stable("after a missing initial mount"); err != nil {
+				return err
 			}
-			err = pruneAdministrativeMount(mount, current)
+			if !removed[mount.id] {
+				return fmt.Errorf("open initial mount %q (%d) for private view: %w", mount.mountPoint, mount.id, unix.ENOENT)
+			}
+			continue
+		}
+		if errors.Is(err, unix.EACCES) {
+			current, err := stable("before administrative pruning")
 			if err != nil {
+				return err
+			}
+			if removed[mount.id] {
+				continue
+			}
+			if err := pruneAdministrativeMount(mount, current); err != nil {
 				return fmt.Errorf("prune administrative mount: %w", err)
 			}
 			removed[mount.id] = true
-			_, after, readErr := readCurrentMountTopology()
-			if readErr != nil || !sameMountEpoch(staging, after, removed) {
-				return errors.New("administrative pruning changed unexpected topology")
+			if _, err := stable("by administrative pruning"); err != nil {
+				return err
 			}
 			continue
 		}
@@ -171,10 +228,14 @@ func (view *preparedModuleView) prepareInitialLeases(opener *mountSourceOpener, 
 		}
 		// Descriptor-relative unmount is safe only after complete epoch and
 		// visible-ID checks, with this stage the sole namespace mount writer.
-		_, current, err := readCurrentMountTopology()
-		if err != nil || !sameMountEpoch(staging, current, removed) {
+		if _, err := stable("during preparation"); err != nil {
 			_ = unix.Close(fd)
-			return errors.New("initial mount topology changed during preparation")
+			return err
+		}
+		if removed[mount.id] {
+			// Detached while prepared; the writer prunes its lease at attachment.
+			_ = unix.Close(fd)
+			continue
 		}
 		if err := verifyMountSourceRoot(fd, mount); err != nil {
 			_ = unix.Close(fd)
@@ -187,11 +248,39 @@ func (view *preparedModuleView) prepareInitialLeases(opener *mountSourceOpener, 
 		}
 		removed[mount.id] = true
 	}
-	_, after, err := readCurrentMountTopology()
-	if err != nil || !sameMountEpoch(staging, after, removed) {
-		return errors.New("initial mount topology changed after preparation")
+	_, err = stable("after preparation")
+	return err
+}
+
+// acceptVanishedMounts adds to removed each non-structural staging mount that
+// is no longer present. Removing a directory detaches the mounts on it in every
+// namespace that shares it, this private staging copy included. A vanished
+// structural mount, or any other difference, still fails.
+func acceptVanishedMounts(staging, current []mountEntry, removed, structural map[int]bool) bool {
+	present := make(map[int]bool, len(current))
+	for _, entry := range current {
+		present[entry.id] = true
 	}
-	return nil
+	merged := make(map[int]bool, len(removed))
+	for id := range removed {
+		merged[id] = true
+	}
+	for _, entry := range staging {
+		if merged[entry.id] || present[entry.id] {
+			continue
+		}
+		if structural[entry.id] {
+			return false
+		}
+		merged[entry.id] = true
+	}
+	if !sameMountEpoch(staging, current, merged) {
+		return false
+	}
+	for id := range merged {
+		removed[id] = true
+	}
+	return true
 }
 
 func (view *preparedModuleView) prepareInitialLease(fd int, mount mountEntry, visible bool) error {

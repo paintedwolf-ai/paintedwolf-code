@@ -77,7 +77,7 @@ func verifyMountSourceRoot(fd int, expected mountEntry) error {
 		return err
 	}
 	defer func() { _ = mountinfo.Close() }()
-	raw, err := readMountInfo(int(mountinfo.Fd()), nil)
+	raw, err := readConsistentMountInfo(int(mountinfo.Fd()))
 	if err != nil {
 		return err
 	}
