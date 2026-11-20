@@ -164,6 +164,17 @@ jobs:
         timeout-minutes: 5
         run: HOMEBREW_NO_AUTO_UPDATE=1 brew install minisign
 
+      # The rehearsal replays each release's editor documents with Den's codecs.
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+        with:
+          bun-version-file: .bun-version
+          no-cache: true
+
+      - name: Install frontend dependencies
+        working-directory: lycaon-den
+        timeout-minutes: 10
+        run: bun install --frozen-lockfile
+
       - name: Verify the candidate corpus with the built sidecar
         if: ${{ !cancelled() && steps.browser.outcome == 'success' }}
         timeout-minutes: 10
