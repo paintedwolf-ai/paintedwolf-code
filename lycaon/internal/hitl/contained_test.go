@@ -15,8 +15,9 @@ func TestContainedProvenanceMatchesDefaultConfinement(t *testing.T) {
 	confine.TestingSetAutoConfine(t)
 	roots := []string{t.TempDir()}
 
-	c, ok := confine.DefaultConfinement(confine.Request{Roots: roots})
-	got := hitl.ContainedForRequest(confine.Request{Roots: roots})
+	req := confine.Request{Roots: roots, GrantedWriteRoots: []string{t.TempDir()}}
+	c, ok := confine.DefaultConfinement(req)
+	got := hitl.ContainedForRequest(req)
 	fromSame := hitl.ContainedFromConfinement(c, ok)
 
 	if !reflect.DeepEqual(got, fromSame) {
@@ -190,5 +191,14 @@ func TestContainedPreservesReadOnlyRootAuthority(t *testing.T) {
 	}
 	if unavailable := hitl.ContainedFromConfinement(c, false); len(unavailable.ReadRoots) != 0 {
 		t.Fatal("unapplied boundary exposed read authority")
+	}
+}
+
+func TestNativeGrantRemainsScopedWhenSubprocessConfinementIsDisabled(t *testing.T) {
+	t.Setenv("LYCAON_SANDBOX", "off")
+	req := confine.Request{GrantedWriteRoots: []string{t.TempDir()}}
+	got := hitl.ContainedForRequest(req)
+	if got.FSJailed || !reflect.DeepEqual(got.GrantedWriteRoots, req.GrantedWriteRoots) {
+		t.Fatalf("native grants %v with subprocess boundary %v", got.GrantedWriteRoots, got.FSJailed)
 	}
 }
