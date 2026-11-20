@@ -3,7 +3,9 @@ package contract
 import (
 	"fmt"
 	"os"
+	"os/user"
 	"path/filepath"
+	"strconv"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/toolrejection"
@@ -119,7 +121,15 @@ func TestNativeDeleteNonEmptyDirPreservesContentsE2E(t *testing.T) {
 }
 
 func TestNativeDeleteOutsideWriteScopeStructuredRejectE2E(t *testing.T) {
-	root := t.TempDir()
+	account, err := user.LookupId(strconv.Itoa(os.Getuid()))
+	testutil.FailErr(t, "locate account home", err)
+	parent, err := os.MkdirTemp(account.HomeDir, ".pw-delete-scope-") //nolint:usetesting // The sibling must be outside shared temp.
+	testutil.FailErr(t, "create deletion fixture", err)
+	t.Cleanup(func() { _ = os.RemoveAll(parent) })
+	root := filepath.Join(parent, "project")
+	testutil.FailErr(t, "create attached project", os.Mkdir(root, 0700))
+	outside := filepath.Join(parent, "outside.txt")
+	testutil.FailErr(t, "seed outside file", os.WriteFile(outside, []byte("keep"), 0600))
 	program := toolfixture.NewProgramFixture(t)
 	outcome, err := program.Invoke(t, "rm -- ../outside.txt", tools.ToolContext{
 		Source: tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "r1", Label: "root", Path: root, IsPrimary: true}},
@@ -127,6 +137,11 @@ func TestNativeDeleteOutsideWriteScopeStructuredRejectE2E(t *testing.T) {
 		Identity: tools.InvocationIdentity{Agent: "implement"},
 	})
 	assertProgramRefusal(t, outcome, err, "DELETE_PATH_DENIED")
+	contents, err := os.ReadFile(outside)
+	testutil.FailErr(t, "read refused delete target", err)
+	if string(contents) != "keep" {
+		t.Fatalf("outside file changed to %q", contents)
+	}
 }
 
 func TestNativeDeleteGitPathStructuredRejectE2E(t *testing.T) {
