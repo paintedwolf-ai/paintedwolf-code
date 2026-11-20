@@ -1129,14 +1129,14 @@
         {
           "mode": "default",
           "requires": [
-            "external-exec"
+            "external-exec",
+            "confinement"
           ]
         }
       ],
       "platform_capabilities": [
         "macos",
-        "linux",
-        "windows-contract-pending-native-qualification"
+        "linux"
       ],
       "limits": [
         "argv_bytes",
