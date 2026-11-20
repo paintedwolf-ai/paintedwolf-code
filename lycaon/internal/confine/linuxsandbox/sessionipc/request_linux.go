@@ -2,6 +2,8 @@ package sessionipc
 
 import (
 	"encoding/binary"
+	"errors"
+
 	"golang.org/x/sys/unix"
 )
 
@@ -37,7 +39,7 @@ func ask(channel, fd int, op byte) unix.Errno {
 	rights := unix.UnixRights(fd, pair[1])
 	for {
 		err = unix.Sendmsg(channel, []byte{op}, rights, nil, unix.MSG_NOSIGNAL)
-		if err != unix.EINTR {
+		if !errors.Is(err, unix.EINTR) {
 			break
 		}
 	}
@@ -48,7 +50,7 @@ func ask(channel, fd int, op byte) unix.Errno {
 	var reply [4]byte
 	for {
 		n, err := unix.Read(pair[0], reply[:])
-		if err == unix.EINTR {
+		if errors.Is(err, unix.EINTR) {
 			continue
 		}
 		if err != nil || n != len(reply) {

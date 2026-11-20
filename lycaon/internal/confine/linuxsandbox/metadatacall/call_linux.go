@@ -76,33 +76,27 @@ func Decode(nr uint32, args [6]uint64, read func(uint64, []byte) error) (Operand
 	if !ok {
 		return Operand{}, false
 	}
-	o := Operand{Operation: e.operation, Directory: unix.AT_FDCWD, Address: args[0]}
-	flags := uint32(0)
+	o := Operand{Operation: e.operation, Directory: int32(args[0]), Address: args[1]}
+	var flags uint32
 	switch e.layout {
-	case path:
-	case link:
-		o.NoFollow = true
+	case path, link:
+		o.Directory, o.Address, o.NoFollow = unix.AT_FDCWD, args[0], e.layout == link
 	case fd:
-		if int32(args[0]) < 0 {
+		if o.Directory < 0 {
 			return Operand{}, true
 		}
-		o.Directory, o.Address, o.Empty = int32(args[0]), 0, true
-	default:
-		o.Directory, o.Address = int32(args[0]), args[1]
-		switch e.layout {
-		case atMode:
-			flags = uint32(args[3])
-		case atOwner:
-			flags = uint32(args[4])
-		case atTimes:
-			flags = uint32(args[3])
-			if !setsTime(args[2], read) {
-				return Operand{}, true
-			}
-			if o.Address == 0 {
-				o.Empty = true
-			}
+		o.Address, o.Empty = 0, true
+	case at:
+	case atMode:
+		flags = uint32(args[3])
+	case atOwner:
+		flags = uint32(args[4])
+	case atTimes:
+		flags = uint32(args[3])
+		if !setsTime(args[2], read) {
+			return Operand{}, true
 		}
+		o.Empty = o.Address == 0
 	}
 	if flags & ^uint32(unix.AT_EMPTY_PATH|unix.AT_SYMLINK_NOFOLLOW) != 0 {
 		return Operand{}, true
