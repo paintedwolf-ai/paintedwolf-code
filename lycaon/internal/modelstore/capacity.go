@@ -25,7 +25,7 @@ func (s *Store) admitInstall(ctx context.Context, m Manifest, resumable bool, be
 		}
 		if resumable {
 			info, err := os.Lstat(filepath.Join(s.root, "partials", a.Digest))
-			if err == nil && info.Mode().IsRegular() && info.Size() < a.Bytes {
+			if err == nil && privatePartial(info) && info.Size() <= a.Bytes {
 				need.StagingBytes -= info.Size()
 			}
 		}
