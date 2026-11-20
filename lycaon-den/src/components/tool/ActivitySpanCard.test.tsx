@@ -162,25 +162,7 @@ describe("ActivitySpanCard", () => {
     const span = container.querySelector('[data-testid="activity-span-card"]');
     expect(span).toBeTruthy();
     expect(span?.getAttribute("data-count")).toBe("2");
-    expect(span?.textContent).toMatch(/Read/);
-    expect(span?.textContent).toMatch(/×2/);
-    expect(span?.querySelector(".den-activity-span-hint")?.textContent).toBe(
-      "main.go, +1",
-    );
-  });
-
-  it("leaves the hint empty when every title repeats the operation", () => {
-    const repeated: ActivitySpanEntry[] = parts.map((part) => ({
-      kind: "tool",
-      part: { ...part, title: "read", args: { path: "read" } },
-    }));
-    const { container } = render(() => (
-      <ActivitySpanCard label="read" entries={repeated} layout="chat" />
-    ));
-
-    expect(
-      container.querySelector(".den-activity-span-hint")?.textContent,
-    ).toBe("");
+    expect(disclosureToggle(span).textContent).toBe("Read×2");
   });
 
   it("renders a singleton through the same span without a redundant count", () => {

@@ -143,21 +143,21 @@ window.__scrollThread = {
   async updateCollapsedActivity() {
     const v = this.stream();
     const card = [...v.querySelectorAll(".den-activity-span:not([open])")].at(-1);
-    const hint = card?.querySelector(".den-activity-span-hint");
-    if (!hint) throw new Error("collapsed activity missing");
-    const text = hint.textContent;
+    const name = card?.querySelector(".den-activity-span-name");
+    if (!name) throw new Error("collapsed activity missing");
+    const text = name.textContent;
     const failures = [];
     const initial = v.scrollTop;
     try {
       for (let update = 0; update < 60; update++) {
-        hint.textContent = `Updated action ${String(update).padStart(2, "0")}`;
+        name.textContent = `Updated action ${String(update).padStart(2, "0")}`;
         await new Promise(requestAnimationFrame);
         if (Math.abs(v.scrollTop - initial) > 1) {
           failures.push(`update ${update}: offset ${v.scrollTop}, expected ${initial}`);
         }
       }
     } finally {
-      hint.textContent = text;
+      name.textContent = text;
     }
     return failures;
   },

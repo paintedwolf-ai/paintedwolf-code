@@ -124,13 +124,21 @@ webE2e.describe("command action card", () => {
   });
 });
 
-modelIndependentWebE2e("command activities contain long text at narrow card widths", async ({ page, request }, testInfo) => {
+for (const groups of [
+ ["Running programs", "Running programs"],
+ ["Reading files", "Running programs", "Reading files", "Running tests", "Editing files"],
+]) {
+const mixed = new Set(groups).size > 1;
+modelIndependentWebE2e(`command activities contain long text at narrow card widths (${mixed ? "mixed" : "repeated"})`, async ({ page, request }, testInfo) => {
  await bootstrapChatSession(page, request);
  const session = await settledChatSessionId(page);
  const assistant = crypto.randomUUID();
  const call = crypto.randomUUID();
  const source = `cd /${"long-directory/".repeat(30)} && cargo build && cargo test`;
- const facts: CommandActivity[] = ["build", "test"].map(id => ({ id, group: "Running programs", label: "Run process", subject: `${id}-${"x".repeat(256)}`, directory: `/${"directory/".repeat(24)}`, state: "completed", outcome: "Exited 0", status_code: 0, execution_ids: [id], spans: [], steps: [{id, command: id, count: 1, running: 0, waiting: 0, failed: 0, refused: 0, interrupted: 0, state: "completed", outcome: "Finished"}] }));
+ const facts: CommandActivity[] = groups.map((group, index) => {
+  const id = `action-${index}`;
+  return { id, group, label: "Run process", subject: `${id}-${"x".repeat(256)}`, directory: `/${"directory/".repeat(24)}`, state: "completed", outcome: "Exited 0", status_code: 0, execution_ids: [id], spans: [], steps: [{id, command: id, count: 1, running: 0, waiting: 0, failed: 0, refused: 0, interrupted: 0, state: "completed", outcome: "Finished"}] };
+ });
  const program: CommandProgramReceipt = { id: crypto.randomUUID(), parent_receipt_id: crypto.randomUUID(), language_version: 1, catalog_digest: "catalog", source_digest: "source", source_ref: "source", state: "completed", detail_ref: "detail", progress_state: "unchanged", started_at: "2026-10-30T10:00:00Z", activities: facts };
  await page.route("**/program-receipts/**", route => route.fulfill({ json: { program, executions: [], nodes: [], executions_omitted: 0, nodes_omitted: 0 } }));
  await apiSeedSessionTranscript(request, session, transcriptMessages([
@@ -139,9 +147,32 @@ modelIndependentWebE2e("command activities contain long text at narrow card widt
  ]));
  const group = liveChatStage(page).getByTestId("activity-span-card").first();
  await expect(group).toBeVisible();
+ const header = group.locator(":scope > .den-transcript-disclosure-header");
+ const sequence = header.locator(".den-activity-span-hint");
+ await expect(group).toHaveAttribute("data-count", String(groups.length));
+ if (mixed) {
+  await expect(sequence).toHaveText("Reading files → Running programs → Running tests · +1");
+ } else {
+  await expect(sequence).toHaveText("");
+ }
+ for (const width of ["12rem", "48rem"]) {
+  await group.evaluate((element, width) => { element.style.width = width; element.style.maxWidth = width; }, width);
+  const count = header.locator(".den-activity-span-count");
+  if (width === "12rem") await expect(count).toBeHidden();
+  else await expect(count).toBeVisible();
+  const title = await header.locator(".den-activity-span-name").boundingBox();
+  const bounds = await header.boundingBox();
+  const line = await sequence.boundingBox();
+  expect(line!.height).toBeGreaterThan(0);
+  expect(line!.y).toBeGreaterThanOrEqual(title!.y + title!.height);
+  expect(line!.x + line!.width).toBeLessThanOrEqual(bounds!.x + bounds!.width);
+  if (mixed) {
+   expect(await sequence.evaluate(el => el.scrollWidth > el.clientWidth)).toBe(width === "12rem");
+  }
+ }
  if (await group.getAttribute("data-expanded") !== "true") await group.locator(":scope > .den-transcript-disclosure-header").click();
  const rows = group.locator("[data-command-activity]");
- await expect(rows).toHaveCount(2);
+ await expect(rows).toHaveCount(groups.length);
  const row = rows.last();
  for (const width of [320,420,680]) {
   await group.evaluate((element,width) => { element.style.width = `${width}px`; element.style.maxWidth = `${width}px`; },width);
@@ -175,3 +206,4 @@ modelIndependentWebE2e("command activities contain long text at narrow card widt
   await group.screenshot({ path: testInfo.outputPath(`activity-${width}.png`) });
  }
 });
+}
