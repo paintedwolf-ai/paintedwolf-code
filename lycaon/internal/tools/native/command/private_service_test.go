@@ -4,7 +4,9 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"io"
 	"slices"
+	"strings"
 	"sync/atomic"
 	"testing"
 
@@ -15,12 +17,14 @@ import (
 
 type privateServiceFixture struct {
 	args   []string
+	input  []byte
 	closed atomic.Bool
 	result serviceguest.Result
 }
 
-func (f *privateServiceFixture) RunInput(_ context.Context, args []string, _ []byte) (serviceguest.Result, error) {
+func (f *privateServiceFixture) RunInput(_ context.Context, args []string, input []byte) (serviceguest.Result, error) {
 	f.args = slices.Clone(args)
+	f.input = slices.Clone(input)
 	return f.result, nil
 }
 
@@ -38,9 +42,9 @@ func TestPrivateServiceUsesRetainedSessionTransport(t *testing.T) {
 		fixture.result.StdoutTruncated = truncated
 		out.Reset()
 		diag.Reset()
-		got, err := session.execute(t.Context(), request, commandprogram.Streams{Output: &out, Error: &diag})
+		got, err := session.execute(t.Context(), request, commandprogram.Streams{Input: io.NopCloser(strings.NewReader("query input")), Output: &out, Error: &diag})
 		testutil.FailErr(t, "run retained private client", err)
-		if got.Status != 3 || got.Complete == truncated || got.PublicationEligible || out.String() != "answer" || diag.String() != "diagnostic" || !slices.Equal(fixture.args, []string{"query", "two words"}) {
+		if string(fixture.input) != "query input" || got.Status != 3 || got.Complete == truncated || got.PublicationEligible || out.String() != "answer" || diag.String() != "diagnostic" || !slices.Equal(fixture.args, []string{"query", "two words"}) {
 			t.Fatalf("private service result %+v, stdout %q, stderr %q, arguments %q", got, out.String(), diag.String(), fixture.args)
 		}
 	}
@@ -94,5 +98,25 @@ func TestPrivateServiceCapacityFollowsEnvironmentLifetime(t *testing.T) {
 	testutil.FailErr(t, "close final environment", second.close())
 	if len(slots) != 0 {
 		t.Fatal("closed environment retained capacity")
+	}
+}
+
+func TestPrivateServiceRejectsInvalidInputBeforeAcquiringRuntime(t *testing.T) {
+	session := &privateServiceSession{closed: true}
+	for _, tc := range []struct {
+		name  string
+		args  commandprogram.Fields
+		input string
+		code  string
+	}{
+		{"missing executable", commandprogram.Fields{{Value: "private-service"}, {Value: "--"}}, "", "COMMAND_OPERAND_INVALID"},
+		{"input exceeds limit", commandprogram.Fields{{Value: "private-service"}, {Value: "--"}, {Value: "program"}}, strings.Repeat("x", serviceguest.MaxInput+1), "COMMAND_LIMIT_EXCEEDED"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			result, err := session.execute(t.Context(), commandprogram.OperationRequest{Argv: tc.args}, commandprogram.Streams{Input: io.NopCloser(strings.NewReader(tc.input))})
+			if err == nil || result.StopCode != tc.code {
+				t.Fatalf("outcome %+v, error %v", result, err)
+			}
+		})
 	}
 }
