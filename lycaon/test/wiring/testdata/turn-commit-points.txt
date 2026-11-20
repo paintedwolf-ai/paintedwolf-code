@@ -50,6 +50,9 @@ history_storage_clock:update llm_calls:insert llm_cost_totals:insert #2
 history_storage_clock:update llm_calls:update llm_cost_totals:delete llm_cost_totals:insert llm_cost_totals:update #1
 history_storage_clock:update llm_calls:update llm_cost_totals:delete llm_cost_totals:update #1
 history_storage_clock:update projects:update source_blob_objects:insert source_blob_reclaim_queue:delete source_blob_reclaim_queue:insert source_directories:insert source_files:insert source_head_entries:insert source_versions:insert #1
+history_storage_clock:update scan_series:insert #1
+history_storage_clock:update scan_series:update #1
+history_storage_clock:update scan_series:update #2
 history_storage_clock:update source_manifest_chunks:insert source_manifest_entries:insert #1
 invocation_program_definitions:insert invocation_program_executions:insert invocation_program_nodes:update invocation_program_outputs:insert invocation_programs:update #1
 invocation_program_deliveries:insert invocation_programs:update #1
@@ -58,6 +61,10 @@ invocation_program_executions:update invocation_programs:update #1
 invocation_program_nodes:insert invocation_program_outputs:insert invocation_program_sources:insert invocation_programs:insert invocation_programs:update #1
 invocation_program_outputs:insert invocation_programs:update #1
 invocation_program_outputs:insert invocation_programs:update #2
+invocation_program_publications:insert #1
+invocation_program_publications:update #1
+invocation_program_publications:update #2
+invocation_program_publications:update #3
 invocation_program_revision_pins:insert #1
 invocation_programs:update #1
 invocation_receipts:insert #1
