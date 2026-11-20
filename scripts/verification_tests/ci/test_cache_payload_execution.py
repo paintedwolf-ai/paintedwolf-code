@@ -77,7 +77,7 @@ class CachePayloadTests(unittest.TestCase):
 
     def test_maintenance_and_summary_keep_misses_visible(self):
         records = {"go": dict(active=True, hit="true"), "rust": dict(active=True, hit="false"),
-                   "native": dict(active=False, deferred=True)}
+                   "native": dict(active=False, hit="")}
         for event in ("schedule", "workflow_dispatch"):
             state = cache_payload.status({"go": records["go"]}, event)
             self.assertEqual(state, dict(warm=False, maintenance=True, prepare=True))
@@ -90,12 +90,7 @@ class CachePayloadTests(unittest.TestCase):
             self.assertIn("prepare=true", (root / "output").read_text())
             self.assertIn("| go | exact hit |", (root / "summary").read_text())
             self.assertIn("| rust | miss |", (root / "summary").read_text())
-            self.assertIn("deferred to preparation; not probed", (root / "summary").read_text())
-            records["rust"]["hit"] = "true"
-            (root / "summary").write_text("")
-            with patch.dict(os.environ, {**env, "CACHE_HITS": json.dumps(records)}):
-                cache_payload.report_status()
-            self.assertIn("not needed; not probed", (root / "summary").read_text())
+            self.assertNotIn("native", (root / "summary").read_text())
 
     def test_empty_lookup_results_and_targeted_workspace_cli(self):
         for records in ({}, [], {"go": dict(active=False)}):

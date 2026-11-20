@@ -92,7 +92,7 @@ jobs:
              "OpenGrep":{"active":true,"hit":"${{ steps.probe.outputs.opengrep-cache-hit }}"},
              "Release Rust":{"active":${{ runner.os == 'macOS' }},"hit":"${{ steps.probe-release.outputs.cache-hit }}"},
              "WebKitGTK images":{"active":${{ runner.os == 'Linux' }},"hit":"${{ steps.probe-images.outputs.cache-hit }}"},
-             "Native package archives":{"active":false,"deferred":${{ runner.os == 'Linux' }}}}
+             "Native package archives":{"active":${{ runner.os == 'Linux' }},"hit":"${{ steps.probe.outputs.native-cache-hit }}"}}
         run: python3 -m ci_policy.cache_payload status
 
       - id: setup
@@ -221,6 +221,27 @@ jobs:
         uses: ./.github/actions/setup-reference-userlands
         with:
           save: 'true'
+
+  # Arm64 lanes restore native package archives keyed by their own runner image and architecture.
+  native-arm64:
+    needs: verification
+    if: ${{ !cancelled() }}
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Probe native package archives
+        id: probe
+        uses: ./.github/actions/setup-linux-native
+        with:
+          lookup-only: 'true'
+
+      - name: Prepare native package archives
+        if: steps.probe.outputs.cache-hit != 'true'
+        uses: ./.github/actions/setup-linux-native
+        with:
+          save: ${{ github.ref == 'refs/heads/main' }}
 
   usage:
     if: always()

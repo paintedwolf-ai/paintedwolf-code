@@ -77,6 +77,9 @@ outputs:
   artifact-root:
     description: Checkout artifact directory
     value: ${{ steps.paths.outputs.artifact-root }}
+  native-cache-hit:
+    description: Exact native cache lookup result
+    value: ${{ steps.native.outputs.cache-hit }}
   go-cache-hit:
     description: Whether the Go caches for the current module graph were restored
     value: ${{ steps.go.outputs.cache-hit }}
@@ -168,9 +171,11 @@ runs:
         fi
 
     - name: Provision Linux native test dependencies
-      if: inputs.lookup-only != 'true' && (runner.os == 'Linux' && (inputs.setup == 'shell' || inputs.linux-launch == 'true'))
+      id: native
+      if: runner.os == 'Linux' && (inputs.setup == 'shell' || inputs.linux-launch == 'true')
       uses: ./.github/actions/setup-linux-native
       with:
+        lookup-only: ${{ inputs.lookup-only }}
         save: ${{ inputs.save-caches }}
 
     - uses: ./.github/actions/cache-document-core

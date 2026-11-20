@@ -10,12 +10,14 @@ import subprocess
 import sys
 import time
 from urllib.parse import urlsplit
+import urllib.request
 
 ROOT = Path(__file__).resolve().parent
 sys.path.insert(0, str(ROOT.parents[2] / "scripts" / "ci_policy"))
 import apt_origins
-DOWNLOAD_SECONDS = 240
-TRANSFER_SECONDS = 30
+# A transfer fails only when no bytes arrive for this long; one that keeps progressing never times out.
+STALL_SECONDS = 60
+CHUNK = 1 << 20
 
 
 def packages():
@@ -26,7 +28,7 @@ def packages():
 
 
 def apt(*arguments, capture=False):
-    command = ["sudo", "timeout", "--kill-after=10s", "180s", "env", "DEBIAN_FRONTEND=noninteractive", "apt-get",
+    command = ["sudo", "env", "DEBIAN_FRONTEND=noninteractive", "apt-get",
                "-o", "Acquire::Retries=2", "-o", "Acquire::http::Timeout=20", "-o", "Acquire::https::Timeout=20",
                *arguments]
     result = subprocess.run(command, check=True, text=True, stdout=subprocess.PIPE if capture else None)
@@ -77,26 +79,41 @@ def verified(path, row):
         return hashlib.file_digest(source, "sha256").hexdigest() == row["sha256"]
 
 
-def transfer(uri, path, row, deadline):
-    remaining = deadline - time.monotonic()
-    if remaining <= 0:
-        raise TimeoutError("native package download deadline expired")
-    command = ["curl", "--fail", "--location", "--silent", "--show-error",
-               "--proto", "=http,https", "--proto-redir", "=http,https", "--connect-timeout", "15",
-               "--max-time", str(remaining), "--max-filesize", str(row["size"]), "--output", str(path), "--", uri]
+class Stalled(OSError):
+    """A mirror delivered no bytes for STALL_SECONDS."""
+
+
+class HTTPOnlyRedirects(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, request, response, code, message, headers, location):
+        if urlsplit(location).scheme not in {"http", "https"}:
+            raise OSError(f"redirect to {location} refused")
+        return super().redirect_request(request, response, code, message, headers, location)
+
+
+OPENER = urllib.request.build_opener(HTTPOnlyRedirects)
+
+
+def open_uri(uri, stall):
+    """The response stream; every connect and read waits at most `stall` seconds for data."""
+    return OPENER.open(urllib.request.Request(uri, headers={"User-Agent": "paintedwolf-ci"}), timeout=stall)
+
+
+def transfer(uri, path, row):
+    received = 0
     try:
-        subprocess.run(command, check=True, capture_output=True, text=True, timeout=remaining)
-    except subprocess.TimeoutExpired as error:
-        raise TimeoutError("native package transfer exceeded its deadline") from error
-    except subprocess.CalledProcessError as error:
-        raise OSError(f"native package transfer failed with curl exit {error.returncode}") from error
-    if time.monotonic() >= deadline:
-        raise TimeoutError("native package transfer exceeded its deadline")
+        with open_uri(uri, STALL_SECONDS) as response, path.open("wb") as output:
+            while chunk := response.read(CHUNK):
+                received += len(chunk)
+                if received > row["size"]:
+                    raise ValueError("native package is larger than its resolved size")
+                output.write(chunk)
+    except TimeoutError as error:
+        raise Stalled(f"stalled: no bytes for {STALL_SECONDS} s after {received} of {row['size']} bytes") from error
     if not verified(path, row):
         raise ValueError("native package differs from its resolved SHA256 or size")
 
 
-def fetch(row, directory, deadline):
+def fetch(row, directory):
     destination = directory / row["name"]
     if verified(destination, row):
         return "cached"
@@ -104,12 +121,13 @@ def fetch(row, directory, deadline):
     failures = []
     for uri in apt_origins.fallback_uris(row["uri"]) * 2:
         try:
-            transfer(uri, temporary, row, min(deadline, time.monotonic() + TRANSFER_SECONDS))
+            transfer(uri, temporary, row)
             temporary.replace(destination)
             print(f"Native package verified: {row['name']} from {urlsplit(uri).hostname}", flush=True)
             return "downloaded"
         except (OSError, ValueError) as error:
             failures.append(f"{urlsplit(uri).hostname}: {error}")
+            print(f"Native package {row['name']} from {urlsplit(uri).hostname}: {error}", flush=True)
         finally:
             temporary.unlink(missing_ok=True)
     raise ValueError(f"Unable to prepare {row['name']}: {'; '.join(failures)}")
@@ -117,9 +135,8 @@ def fetch(row, directory, deadline):
 
 def prepare(rows, directory):
     started = time.monotonic()
-    deadline = started + DOWNLOAD_SECONDS
     with ThreadPoolExecutor(max_workers=4) as executor:
-        results = list(executor.map(lambda row: fetch(row, directory, deadline), rows))
+        results = list(executor.map(lambda row: fetch(row, directory), rows))
     summary = {"archives": len(rows), "cached": results.count("cached"), "downloaded": results.count("downloaded"),
                "download_seconds": round(time.monotonic() - started, 3)}
     print(json.dumps(summary, sort_keys=True), flush=True)
