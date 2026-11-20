@@ -7,6 +7,7 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -120,8 +121,8 @@ func TestNonHTTPContractSocketEmitterLiteralOnlyAndDirectRemoteIP(t *testing.T) 
 		if strings.Contains(lit.Value, "allow network-outbound") && !strings.Contains(lit.Value, "remote ip") && !strings.Contains(lit.Value, "literal") {
 			t.Fatalf("forbidden bare network-outbound allow: %s", lit.Value)
 		}
-		if strings.Contains(lit.Value, "subpath") {
-			t.Fatal("network rules must not use socket subpath grants")
+		if strings.Contains(lit.Value, "subpath") && lit.Value != `"(allow network-bind network-inbound (subpath "` {
+			t.Fatalf("unexpected socket subpath authority: %s", lit.Value)
 		}
 		if strings.Contains(lit.Value, "remote ip") {
 			hasRemoteIP = true
@@ -139,6 +140,29 @@ func TestNonHTTPContractSocketEmitterLiteralOnlyAndDirectRemoteIP(t *testing.T) 
 	}
 	if strings.Contains(profile, "(allow network*)") {
 		t.Fatal("direct profile must not emit network*")
+	}
+	scratch, err := filepath.EvalSymlinks(t.TempDir())
+	contractcheck.FailErr(t, "resolve session scratch", err)
+	for _, mode := range []confine.NetworkMode{confine.NetworkDeny, confine.NetworkProxyOnly, confine.NetworkDirectIP} {
+		for _, sessionRoot := range []string{"", scratch} {
+			c := confine.Confinement{Network: mode, SessionScratchRoot: sessionRoot, ProxyAddr: "127.0.0.1:4256"}
+			profile, err := confine.BuildSeatbeltProfile(c)
+			contractcheck.FailErr(t, "build socket profile", err)
+			want := "(allow network-bind network-inbound (subpath " + strconv.Quote(sessionRoot) + "))"
+			found := false
+			for line := range strings.SplitSeq(profile, "\n") {
+				if !strings.HasPrefix(line, "(allow network") || !strings.Contains(line, "subpath") {
+					continue
+				}
+				if sessionRoot == "" || line != want || found {
+					t.Fatalf("network mode %v, session %q: unexpected directory socket rule %q", mode, sessionRoot, line)
+				}
+				found = true
+			}
+			if sessionRoot != "" && !found {
+				t.Fatalf("network mode %v, session %q: missing directory listener rule", mode, sessionRoot)
+			}
+		}
 	}
 }
 
