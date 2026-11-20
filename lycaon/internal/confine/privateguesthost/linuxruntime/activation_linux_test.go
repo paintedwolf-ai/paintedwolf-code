@@ -52,7 +52,7 @@ func TestAcquisitionRequiresImageOrResourceScope(t *testing.T) {
 }
 
 func TestResourceManagerRequiresSameUIDAndNestedDomain(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "manager")
+	path := fmt.Sprintf("@pw-resource-manager-%d", os.Getpid())
 	manager := "/usr/bin/systemd-run"
 	got, err := managerForOrigin(manager, path, hierarchy)
 	if err != nil || got != "" {
