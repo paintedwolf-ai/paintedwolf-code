@@ -21,6 +21,7 @@ export const API_OPERATIONS = {
   beginProjectManagedSecretReveal: { method: "POST", path: "/v1/projects/{id}/secrets/{secret_id}/reveal-challenges" },
   bindGitWorktree: { method: "PUT", path: "/v1/sessions/{id}/git-worktree" },
   browseProjectSource: { method: "GET", path: "/v1/projects/{id}/source/browse" },
+  cancelLocalModelTransfer: { method: "POST", path: "/v1/providers/{provider_id}/local-model/cancel" },
   cancelMcpOAuth: { method: "POST", path: "/v1/mcp/providers/{provider_id}/oauth/cancel" },
   cancelProjectPromotion: { method: "DELETE", path: "/v1/projects/{id}/promotion" },
   cancelSourceOperation: { method: "POST", path: "/v1/projects/{id}/source/operations/{operation_id}/cancel" },
@@ -65,6 +66,7 @@ export const API_OPERATIONS = {
   deleteExtensionPack: { method: "DELETE", path: "/v1/extensions/packs/{pack_id}" },
   deleteGitWorktree: { method: "DELETE", path: "/v1/sessions/{id}/git-worktree" },
   deleteHistoryProtection: { method: "DELETE", path: "/v1/history-storage/protections/{protection_id}" },
+  deleteLocalModel: { method: "DELETE", path: "/v1/providers/{provider_id}/local-model" },
   deleteMcpProvider: { method: "DELETE", path: "/v1/mcp/providers/{provider_id}" },
   deleteProjectArtifact: { method: "DELETE", path: "/v1/projects/{id}/artifacts/{artifact_id}" },
   deleteProjectFindingIgnore: { method: "DELETE", path: "/v1/projects/{id}/findings/ignores/{entry_id}" },
@@ -122,6 +124,7 @@ export const API_OPERATIONS = {
   getHostResources: { method: "GET", path: "/v1/host-resources" },
   getLimitsSettings: { method: "GET", path: "/v1/settings/limits" },
   getLocalData: { method: "GET", path: "/v1/local-data" },
+  getLocalModelStatus: { method: "GET", path: "/v1/providers/{provider_id}/local-model" },
   getModelPolicySettings: { method: "GET", path: "/v1/settings/model-policy" },
   getPowerSettings: { method: "GET", path: "/v1/settings/power" },
   getPreflight: { method: "GET", path: "/v1/preflight" },
@@ -295,6 +298,7 @@ export const API_OPERATIONS = {
   searchContributionSource: { method: "POST", path: "/v1/projects/{id}/contribution-search/{source_id}" },
   searchProjectSource: { method: "GET", path: "/v1/projects/{id}/source/search" },
   searchSourceView: { method: "GET", path: "/v1/projects/{id}/source/views/{view_id}/presentations/{presentation_id}/search" },
+  selectLocalModel: { method: "POST", path: "/v1/providers/{provider_id}/local-model/select" },
   sendPrompt: { method: "POST", path: "/v1/sessions/{id}/prompts" },
   startFullScan: { method: "POST", path: "/v1/projects/{id}/scans" },
   startMcpOAuth: { method: "POST", path: "/v1/mcp/providers/{provider_id}/oauth/start" },
@@ -368,6 +372,7 @@ export type OperationPathParameters = {
   beginProjectManagedSecretReveal: { id: string | number; secret_id: string | number; };
   bindGitWorktree: { id: string | number; };
   browseProjectSource: { id: string | number; };
+  cancelLocalModelTransfer: { provider_id: string | number; };
   cancelMcpOAuth: { provider_id: string | number; };
   cancelProjectPromotion: { id: string | number; };
   cancelSourceOperation: { id: string | number; operation_id: string | number; };
@@ -412,6 +417,7 @@ export type OperationPathParameters = {
   deleteExtensionPack: { pack_id: string | number; };
   deleteGitWorktree: { id: string | number; };
   deleteHistoryProtection: { protection_id: string | number; };
+  deleteLocalModel: { provider_id: string | number; };
   deleteMcpProvider: { provider_id: string | number; };
   deleteProjectArtifact: { id: string | number; artifact_id: string | number; };
   deleteProjectFindingIgnore: { id: string | number; entry_id: string | number; };
@@ -469,6 +475,7 @@ export type OperationPathParameters = {
   getHostResources: Record<string, never>;
   getLimitsSettings: Record<string, never>;
   getLocalData: Record<string, never>;
+  getLocalModelStatus: { provider_id: string | number; };
   getModelPolicySettings: Record<string, never>;
   getPowerSettings: Record<string, never>;
   getPreflight: Record<string, never>;
@@ -642,6 +649,7 @@ export type OperationPathParameters = {
   searchContributionSource: { id: string | number; source_id: string | number; };
   searchProjectSource: { id: string | number; };
   searchSourceView: { id: string | number; view_id: string | number; presentation_id: string | number; };
+  selectLocalModel: { provider_id: string | number; };
   sendPrompt: { id: string | number; };
   startFullScan: { id: string | number; };
   startMcpOAuth: { provider_id: string | number; };

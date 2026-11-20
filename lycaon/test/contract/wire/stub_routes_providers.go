@@ -107,6 +107,15 @@ func registerStubSettingsWorkflowRoutes(mux *http.ServeMux, now time.Time, write
 	mux.HandleFunc("POST /v1/web-research/providers/{provider_id}/test", func(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, api.ProviderProbeResult{OK: true})
 	})
+	localStatus := func(w http.ResponseWriter, _ *http.Request) {
+		writeJSON(w, http.StatusOK, api.LocalGenerationStatus{State: "idle", RecoveryAction: "none", AvailableModels: []api.LocalModelTier{}})
+	}
+	mux.HandleFunc("GET /v1/providers/{provider_id}/local-model", localStatus)
+	mux.HandleFunc("POST /v1/providers/{provider_id}/local-model/select", localStatus)
+	mux.HandleFunc("POST /v1/providers/{provider_id}/local-model/cancel", localStatus)
+	mux.HandleFunc("DELETE /v1/providers/{provider_id}/local-model", func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusNoContent)
+	})
 	mux.HandleFunc("GET /v1/providers", func(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, api.ProviderListResponse{
 			Providers: []api.ProviderMeta{{

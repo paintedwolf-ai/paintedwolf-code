@@ -3894,6 +3894,58 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/providers/{provider_id}/local-model": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Inspect local model selection */
+        get: operations["getLocalModelStatus"];
+        put?: never;
+        post?: never;
+        /** Remove the local model */
+        delete: operations["deleteLocalModel"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/providers/{provider_id}/local-model/select": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Start a local model download or offline import */
+        post: operations["selectLocalModel"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/providers/{provider_id}/local-model/cancel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Cancel a local model transfer */
+        post: operations["cancelLocalModelTransfer"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/providers/{provider_id}/repair": {
         parameters: {
             query?: never;
@@ -15599,12 +15651,23 @@ export interface components {
              */
             overage_nano_usd?: number;
         };
+        LocalModelTier: {
+            id: string;
+            display_name: string;
+            /** @description Short guidance for choosing this tier. */
+            description: string;
+            download_bytes: number;
+            min_memory_bytes: number;
+            eligible: boolean;
+            recommended: boolean;
+            download_available: boolean;
+        };
         LocalGenerationStatus: {
             /**
              * @description Current host runtime state, independent of cached model discovery.
              * @enum {string}
              */
-            state: "idle" | "loading" | "ready" | "repairing" | "unavailable" | "repair_required" | "insufficient_memory" | "stopped";
+            state: "idle" | "loading" | "ready" | "repairing" | "unavailable" | "repair_required" | "insufficient_memory" | "downloading" | "opted_out" | "stopped";
             /**
              * @description Available recovery action selected from host facts.
              * @enum {string}
@@ -15616,6 +15679,31 @@ export interface components {
             revision?: string;
             /** @description Admitted context capacity of the ready process. */
             context_tokens?: number;
+            /**
+             * @description Memory named in local model requirements on this generation host.
+             * @enum {string}
+             */
+            memory_kind?: "system" | "gpu";
+            /**
+             * @description Persisted local model decision when the host can read its store.
+             * @enum {string}
+             */
+            selection_state?: "unconfigured" | "selected" | "opted_out";
+            selected_model?: string;
+            target_model?: string;
+            /**
+             * @description Current phase of an active model installation.
+             * @enum {string}
+             */
+            transfer_phase?: "preparing" | "downloading" | "importing" | "activating";
+            downloaded_bytes?: number;
+            total_bytes?: number;
+            /** @description This installation was packaged with an explicitly selected offline tier. */
+            offline_installer?: boolean;
+            /** @description Tier contained in the packaged offline seed. */
+            seed_model?: string;
+            seed_available?: boolean;
+            available_models?: components["schemas"]["LocalModelTier"][];
         };
         ProviderListResponse: {
             providers: components["schemas"]["ProviderMeta"][];
@@ -15644,6 +15732,12 @@ export interface components {
         };
         ProviderKindListResponse: {
             kinds: components["schemas"]["ProviderKindTemplate"][];
+        };
+        LocalModelSelectionRequest: {
+            model: string;
+            /** @description Use the packaged offline seed for the requested tier. */
+            packaged_seed?: boolean;
+            bundle_path?: string;
         };
         LocalGenerationRepairResult: {
             ok: boolean;
@@ -26936,6 +27030,122 @@ export interface operations {
             default: components["responses"]["Error"];
         };
     };
+    getLocalModelStatus: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                provider_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Current local model status */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LocalGenerationStatus"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            429: components["responses"]["TooManyRequests"];
+            default: components["responses"]["Error"];
+        };
+    };
+    deleteLocalModel: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                provider_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Local model removed */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            429: components["responses"]["TooManyRequests"];
+            default: components["responses"]["Error"];
+        };
+    };
+    selectLocalModel: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                provider_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LocalModelSelectionRequest"];
+            };
+        };
+        responses: {
+            /** @description Current local model status */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LocalGenerationStatus"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            413: components["responses"]["ContentTooLarge"];
+            415: components["responses"]["UnsupportedMediaType"];
+            429: components["responses"]["TooManyRequests"];
+            default: components["responses"]["Error"];
+        };
+    };
+    cancelLocalModelTransfer: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                provider_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Current local model status */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LocalGenerationStatus"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            429: components["responses"]["TooManyRequests"];
+            default: components["responses"]["Error"];
+        };
+    };
     repairLocalGeneration: {
         parameters: {
             query?: never;
@@ -31594,11 +31804,13 @@ export type ProviderModelCapabilities = components["schemas"]["ProviderModelCapa
 export type ModelRoleEligibility = components["schemas"]["ModelRoleEligibility"];
 export type ModelRoleEligibilitySet = components["schemas"]["ModelRoleEligibilitySet"];
 export type ProviderUsageQuota = components["schemas"]["ProviderUsageQuota"];
+export type LocalModelTier = components["schemas"]["LocalModelTier"];
 export type LocalGenerationStatus = components["schemas"]["LocalGenerationStatus"];
 export type ProviderListResponse = components["schemas"]["ProviderListResponse"];
 export type ProviderModelConfig = components["schemas"]["ProviderModelConfig"];
 export type ProviderKindTemplate = components["schemas"]["ProviderKindTemplate"];
 export type ProviderKindListResponse = components["schemas"]["ProviderKindListResponse"];
+export type LocalModelSelectionRequest = components["schemas"]["LocalModelSelectionRequest"];
 export type LocalGenerationRepairResult = components["schemas"]["LocalGenerationRepairResult"];
 export type WebResearchProviderRole = components["schemas"]["WebResearchProviderRole"];
 export type WebResearchIndexHealth = components["schemas"]["WebResearchIndexHealth"];

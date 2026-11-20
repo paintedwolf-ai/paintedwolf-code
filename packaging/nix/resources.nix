@@ -1,5 +1,6 @@
 { lib, stdenvNoCC, callPackage, source, frontend
 , generationRelease ? null
+, generationAuthority ? null
 , inputs ? callPackage ./resource-inputs.nix { inherit source; }
 , scanner ? callPackage ./scanner.nix { inherit source inputs; }
 , notices ? callPackage ./notices.nix { inherit source frontend inputs; }
@@ -25,6 +26,10 @@ in stdenvNoCC.mkDerivation {
     cp -R ${inputs.decision}/decide "$out/engine-root/decide"
     ${lib.optionalString (generationSeed != null) ''
       cp -R ${generationSeed}/engine-root/generation "$out/engine-root/generation"
+    ''}
+    ${lib.optionalString (generationRelease == null && generationAuthority != null) ''
+      mkdir -p "$out/engine-root/generation"
+      install -m644 ${lib.escapeShellArg (toString generationAuthority)} "$out/engine-root/generation/release-keys.json"
     ''}
     cp -R ${scanner}/engine-root/bundled "$out/engine-root/bundled"
     cp ${scanner}/scanner-identity.base64 ${scanner}/scanner-audit.json "$out/"

@@ -3,6 +3,7 @@ package llm
 import (
 	"context"
 	"errors"
+	"github.com/lycaon/lycaon/internal/llm/providers/nativegen"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -27,12 +28,12 @@ func TestIncludedSelectionPreservesCallerCancellationAndExplicitProvider(t *test
 	publishIncludedModelFixture(t, registry, local)
 	ctx, cancel := context.WithCancel(t.Context())
 	cancel()
-	if !registry.IncludedModelAvailable(ctx) {
+	if registry.IncludedModel(ctx) == "" {
 		t.Fatal("caller cancellation erased an admitted model snapshot")
 	}
 	registry.discovery.Invalidate(discoveryCacheKey(IncludedProviderID, local.Profile(), "", ""))
 	probe := &canceledDiscoveryContext{Context: ctx}
-	if registry.IncludedModelAvailable(probe) || !probe.checked {
+	if registry.IncludedModel(probe) != "" || !probe.checked {
 		t.Fatal("missing model discovery ignored caller cancellation")
 	}
 	summarizer := &RegistrySummarizer{Registry: registry, Policy: NewInMemoryPolicyStore(ModelPolicy{
@@ -58,12 +59,12 @@ func TestRouterAvailabilityUsesRequestContext(t *testing.T) {
 	type requestKey struct{}
 	ctx := context.WithValue(t.Context(), requestKey{}, "request")
 	calls := 0
-	router := NewStaticModelRouter(NewInMemoryPolicyStore(ModelPolicy{})).WithLocalDefault(func(got context.Context) bool {
+	router := NewStaticModelRouter(NewInMemoryPolicyStore(ModelPolicy{})).WithLocalDefault(func(got context.Context) string {
 		calls++
 		if got.Value(requestKey{}) != "request" {
 			t.Fatal("availability lookup lost request attribution")
 		}
-		return true
+		return nativegen.DefaultModelID
 	})
 	selected, err := router.Lite(ctx)
 	testutil.FailErr(t, "resolve included default", err)

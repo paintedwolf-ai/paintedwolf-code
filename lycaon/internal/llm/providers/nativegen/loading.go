@@ -14,6 +14,15 @@ import (
 const startupHostBytes = 512 << 20
 
 func (p *Runtime) ensureLoaded(ctx context.Context, model string) (err error) {
+	if p.loaded != nil && p.loaded.model != model {
+		selection, selectionErr := p.config.ModelStore.Selection()
+		if selectionErr != nil {
+			return selectionErr
+		}
+		if selection.Model != model {
+			return errors.New("native generation: requested tier is not selected")
+		}
+	}
 	defer func() { p.settleReadiness(err) }()
 	return p.loadModel(ctx, model)
 }
@@ -43,12 +52,6 @@ func (p *Runtime) loadModel(ctx context.Context, model string) error {
 	}
 	p.publishReadiness("loading", "none")
 	runtime := &p.config
-	if runtime.ModelStore.Status(model, runtime.Backend).State == modelstore.StateAbsent && runtime.SeedDirectory != "" {
-		target := modelstore.Slot{Model: model, Device: runtime.Backend}
-		if err := runtime.ModelStore.ImportBundle(ctx, runtime.SeedDirectory, target); err != nil {
-			return err
-		}
-	}
 	device, err := runtime.Devices.Bind(runtime.PhysicalDevice)
 	if err != nil {
 		return err
