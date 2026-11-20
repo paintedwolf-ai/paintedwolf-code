@@ -234,3 +234,19 @@ func resolveRelayedProgram(cmd *exec.Cmd, state protectedLaunch) {
 func relayedCommand(cmd *exec.Cmd) bool {
 	return cmd != nil && len(cmd.Args) > 1 && cmd.Args[1] == relayCommand
 }
+
+// StartPrivateService activates the installed controller outside the protected desktop.
+func StartPrivateService(image string, control *os.File) (*exec.Cmd, error) {
+	cmd := exec.Command(image, "--acquire-native")
+	cmd.Dir = "/"
+	cmd.Env = []string{}
+	cmd.Stdin = control
+	cmd.Stderr = os.Stderr
+	if err := relayThroughBroker(cmd); err != nil {
+		return nil, err
+	}
+	if err := cmd.Start(); err != nil {
+		return nil, err
+	}
+	return cmd, nil
+}

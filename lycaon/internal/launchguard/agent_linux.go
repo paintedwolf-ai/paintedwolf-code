@@ -11,6 +11,8 @@ import (
 	"golang.org/x/sys/unix"
 
 	"github.com/lycaon/lycaon/internal/launchbroker"
+	"github.com/lycaon/lycaon/internal/servicescope"
+	"path/filepath"
 )
 
 // BrokerAgentArgument selects the entry image's broker agent mode.
@@ -57,6 +59,14 @@ func runBrokerAgent(frame, broker, ready *os.File) error {
 	if err != nil {
 		_ = broker.Close()
 		return err
+	}
+	// Enter the service resource domain while the authenticated broker can still delegate it.
+	if peer, err := launchbroker.CheckSocket(int(broker.Fd())); err == nil && peer.Uid == trustedOwner && int(peer.Pid) == spec.SupervisorPID && os.Geteuid() == 0 {
+		image := filepath.Join(spec.Generation.LogicalInstallRoot, "engine-root", "service-guest", "rootfs", "init")
+		if file, err := openRootControlled(image, false); err == nil {
+			_ = file.Close()
+			_ = servicescope.DelegateForBroker(int(spec.UID))
+		}
 	}
 	if err := sealBrokerAgentIdentity(spec); err != nil {
 		_ = broker.Close()

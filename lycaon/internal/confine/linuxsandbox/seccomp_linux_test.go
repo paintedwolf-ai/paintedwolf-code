@@ -12,7 +12,7 @@ import (
 
 func TestSeccompProgramAssembles(t *testing.T) {
 	t.Parallel()
-	raw, err := seccompProgram()
+	raw, err := seccompProgram(false)
 	if err != nil {
 		t.Fatalf("seccompProgram: %v", err)
 	}
@@ -82,7 +82,7 @@ func TestHandledAccessesGrowWithTheABI(t *testing.T) {
 // offsets are the kernel's.
 func TestSeccompProgramDecides(t *testing.T) {
 	t.Parallel()
-	raw, err := seccompProgram()
+	raw, err := seccompProgram(false)
 	if err != nil {
 		t.Fatalf("seccompProgram: %v", err)
 	}

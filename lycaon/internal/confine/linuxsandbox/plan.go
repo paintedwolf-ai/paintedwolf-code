@@ -21,7 +21,8 @@ const PlanVersion = 3
 // Plan is the typed boundary the helper applies. The host renders it from the
 // same policy inputs as the macOS profile; the helper never widens it.
 type Plan struct {
-	Version int `json:"version"`
+	FixedCPU bool `json:"fixed_cpu,omitempty"`
+	Version  int  `json:"version"`
 	// Probe exits after attestation instead of running the target.
 	Probe bool `json:"probe,omitempty"`
 	// ProcessControl records the approved capability. Inside a PID namespace

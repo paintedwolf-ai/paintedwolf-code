@@ -13,7 +13,7 @@ import (
 )
 
 func main() {
-	if len(os.Args) == 2 && (os.Args[1] == "--launch-native" || os.Args[1] == "--enter-native") {
+	if len(os.Args) == 2 && (os.Args[1] == "--acquire-native" || os.Args[1] == "--launch-native" || os.Args[1] == "--enter-native") {
 		if err := runNative(os.Args[1]); err != nil && !errors.Is(err, io.EOF) {
 			fmt.Fprintln(os.Stderr, "private service environment:", err)
 			os.Exit(1)

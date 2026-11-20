@@ -8,17 +8,23 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
-	"strconv"
-	"strings"
 	"syscall"
 
 	"github.com/lycaon/lycaon/internal/serviceguest"
+	"github.com/lycaon/lycaon/internal/servicescope"
 	"golang.org/x/sys/unix"
 )
 
 func runNative(mode string) error {
 	if _, err := unix.Getpeername(0); err != nil {
 		return fmt.Errorf("private activation: %w", err)
+	}
+	if mode == "--acquire-native" {
+		image, err := os.Executable()
+		if err != nil {
+			return err
+		}
+		return servicescope.Acquire(image)
 	}
 	if mode == "--launch-native" {
 		return launchNamespace()
@@ -43,7 +49,27 @@ func runNative(mode string) error {
 }
 
 func launchNamespace() error {
-	if err := verifyQuota(); err != nil {
+	runtime.LockOSThread()
+	defer runtime.UnlockOSThread()
+	var available unix.CPUSet
+	if err := unix.SchedGetaffinity(0, &available); err != nil {
+		return err
+	}
+	if available.Count() == 0 {
+		return errors.New("private service has no available CPU")
+	}
+	for cpu := 0; ; cpu++ {
+		if available.IsSet(cpu) {
+			var selected unix.CPUSet
+			selected.Set(cpu)
+			if err := unix.SchedSetaffinity(0, &selected); err != nil {
+				return err
+			}
+			break
+		}
+	}
+
+	if err := servicescope.Verify(); err != nil {
 		return err
 	}
 	image, err := os.Executable()
@@ -65,35 +91,6 @@ func launchNamespace() error {
 		UidMappings: []syscall.SysProcIDMap{{ContainerID: 0, HostID: os.Getuid(), Size: 1}}, GidMappings: []syscall.SysProcIDMap{{ContainerID: 0, HostID: os.Getgid(), Size: 1}}, Pdeathsig: syscall.SIGKILL,
 	}
 	return cmd.Run()
-}
-
-func verifyQuota() error {
-	data, err := os.ReadFile("/proc/self/cgroup")
-	if err != nil {
-		return err
-	}
-	group, ok := strings.CutPrefix(strings.TrimSpace(string(data)), "0::/")
-	if !ok || group == "" || !filepath.IsLocal(group) {
-		return errors.New("private service requires a bounded cgroup")
-	}
-	for file, max := range map[string]int64{"memory.max": 512 << 20, "pids.max": 256, "cpu.max": 1} {
-		data, err := os.ReadFile(filepath.Join("/sys/fs/cgroup", group, file))
-		if err != nil {
-			return err
-		}
-		fields := strings.Fields(string(data))
-		if len(fields) == 0 {
-			return errors.New("missing private service limit")
-		}
-		limit, err := strconv.ParseInt(fields[0], 10, 64)
-		if file == "cpu.max" && len(fields) == 2 {
-			max, _ = strconv.ParseInt(fields[1], 10, 64)
-		}
-		if err != nil || limit <= 0 || limit > max {
-			return fmt.Errorf("invalid private service %s limit", file)
-		}
-	}
-	return nil
 }
 
 func isolateRoot() error {

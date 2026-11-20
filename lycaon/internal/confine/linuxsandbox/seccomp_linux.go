@@ -91,7 +91,7 @@ func seccompArgLow(n uint32) uint32 { return seccompDataArg0 + 8*n }
 // seccompProgram mediates socket addresses and name creation, which the filter
 // cannot inspect. It refuses namespace escapes, unmediated socket families and
 // Fast Open. io_uring and clone3 receive ENOSYS so libraries use mediated calls.
-func seccompProgram() ([]bpf.RawInstruction, error) {
+func seccompProgram(fixedCPU bool) ([]bpf.RawInstruction, error) {
 	kill := uint32(unix.SECCOMP_RET_KILL_PROCESS)
 	insts := []bpf.Instruction{
 		bpf.LoadAbsolute{Off: seccompDataArch, Size: 4},
@@ -104,6 +104,9 @@ func seccompProgram() ([]bpf.RawInstruction, error) {
 			bpf.JumpIf{Cond: bpf.JumpBitsSet, Val: x32SyscallBit, SkipFalse: 1},
 			bpf.RetConstant{Val: kill},
 		)
+	}
+	if fixedCPU {
+		insts = append(insts, bpf.JumpIf{Cond: bpf.JumpEqual, Val: unix.SYS_SCHED_SETAFFINITY, SkipFalse: 1}, bpf.RetConstant{Val: uint32(unix.SECCOMP_RET_ERRNO) | uint32(unix.EPERM)})
 	}
 	// A library may try to isolate only its thread's cwd/root/umask state.
 	// Deny that exact operation without killing its process; no unshare runs.
@@ -232,8 +235,8 @@ const socketTypeMask = 0xf
 
 // applySeccomp installs the filter on every thread of the process and returns
 // the descriptor its notifications arrive on.
-func applySeccomp() (int, error) {
-	raw, err := seccompProgram()
+func applySeccomp(fixedCPU bool) (int, error) {
+	raw, err := seccompProgram(fixedCPU)
 	if err != nil {
 		return -1, fmt.Errorf("seccomp assemble: %w", err)
 	}

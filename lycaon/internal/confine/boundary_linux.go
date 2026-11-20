@@ -86,10 +86,11 @@ func probeHelper() (string, error) {
 		return "", err
 	}
 	plan := linuxsandbox.Plan{
-		Version: linuxsandbox.PlanVersion,
-		Probe:   true,
-		Attest:  linuxsandbox.Attest{HostNamespaces: linuxsandbox.HostNamespaces()},
-		Network: linuxsandbox.Network{Mode: linuxsandbox.NetworkDeny},
+		FixedCPU: c.privateUserland,
+		Version:  linuxsandbox.PlanVersion,
+		Probe:    true,
+		Attest:   linuxsandbox.Attest{HostNamespaces: linuxsandbox.HostNamespaces()},
+		Network:  linuxsandbox.Network{Mode: linuxsandbox.NetworkDeny},
 	}
 	raw, err := plan.Encode()
 	if err != nil {
@@ -160,6 +161,7 @@ func renderProfile(c Confinement) (string, error) {
 	}
 	fs.SharedTemp = SharedTempLocations()
 	plan := linuxsandbox.Plan{
+		FixedCPU:       c.privateUserland,
 		Version:        linuxsandbox.PlanVersion,
 		ProcessControl: c.ProcessControl,
 		Attest:         linuxsandbox.Attest{HostNamespaces: linuxsandbox.HostNamespaces()},

@@ -6,14 +6,13 @@ import (
 	"errors"
 	"fmt"
 	"github.com/lycaon/lycaon/internal/configlayout"
+	hostexec "github.com/lycaon/lycaon/internal/exec"
 	"github.com/lycaon/lycaon/internal/installbinding"
 	"github.com/lycaon/lycaon/internal/serviceguest"
 	"golang.org/x/sys/unix"
 	"net"
 	"os"
-	"os/exec"
 	"path/filepath"
-	"time"
 )
 
 // OpenPrivateGuest starts one bounded service environment in the user's manager.
@@ -48,20 +47,14 @@ func openPrivateGuestFrom(ctx context.Context, bundle string) (*serviceguest.Cli
 	if err != nil {
 		return nil, err
 	}
-	// The manager owns the complete process group, including descendants of PID 1.
-	cmd := exec.Command("systemd-run", "--user", "--quiet", "--collect", "--pipe", "--wait", "--service-type=exec", "--property=TasksMax=256", "--property=MemoryMax=512M", "--property=CPUQuota=100%", "--property=LimitCORE=0", "--", image, "--launch-native")
-	cmd.Stdin = child
-	cmd.Stderr = os.Stderr
-	cmd.Dir = "/"
-	if err := cmd.Start(); err != nil {
+	cmd, err := hostexec.StartPrivateService(image, child)
+	if err != nil {
 		_ = transport.Close()
 		return nil, errors.Join(serviceguest.ErrUnavailable, err)
 	}
 	_ = child.Close()
 	go func() { _ = cmd.Wait(); _ = transport.Close() }()
-	boot, cancel := context.WithTimeout(ctx, 30*time.Second)
-	defer cancel()
-	client, err := serviceguest.Open(boot, transport)
+	client, err := serviceguest.Open(ctx, transport)
 	if err != nil {
 		return nil, errors.Join(serviceguest.ErrUnavailable, err)
 	}
