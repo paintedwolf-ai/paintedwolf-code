@@ -23,6 +23,14 @@ const agentSelfFD = agentWatchFD + 1
 // static transition into the caller guardian. Ordinary broker launches are
 // parented outside that lineage, directly to the bootstrap supervisor.
 func RunStage() error {
+	err := runStage()
+	if err != nil {
+		sendStageRefusal(stageGuardianFD, err)
+	}
+	return err
+}
+
+func runStage() error {
 	runtime.LockOSThread()
 	if err := initialUserNamespace(); err != nil {
 		return err

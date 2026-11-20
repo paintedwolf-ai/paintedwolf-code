@@ -3,10 +3,12 @@
 package launchguard
 
 import (
+	"bytes"
 	"encoding/binary"
 	"errors"
 	"io"
 	"math"
+	"unicode"
 
 	"golang.org/x/sys/unix"
 )
@@ -50,7 +52,69 @@ func sendGuardianMessage(fd int, phase uint32, status uint32) error {
 
 type guardianNotice struct{ phase, status uint32 }
 
+// A privileged stage that stops before handoff prints nothing itself; it sends
+// its reason here so the bootstrap's refusal names the actual cause.
+const (
+	stageRefusalMagic = "PWGSREF1"
+	stageRefusalLimit = 512
+)
+
+func sendStageRefusal(fd int, reason error) {
+	text := []byte(reason.Error())
+	if len(text) > stageRefusalLimit {
+		text = text[:stageRefusalLimit]
+	}
+	packet := append([]byte(stageRefusalMagic), text...)
+	_, _ = unix.SendmsgN(fd, packet, nil, nil, unix.MSG_NOSIGNAL|unix.MSG_DONTWAIT)
+}
+
+// stageRefusal reads a refusal frame as printable text.
+func stageRefusal(raw []byte) (string, bool) {
+	if !bytes.HasPrefix(raw, []byte(stageRefusalMagic)) {
+		return "", false
+	}
+	text := []rune(string(raw[len(stageRefusalMagic):]))
+	for index, r := range text {
+		if !unicode.IsPrint(r) {
+			text[index] = '?'
+		}
+	}
+	return string(text), true
+}
+
+type stageRefusalError struct{ reason string }
+
+func (err *stageRefusalError) Error() string { return "protected setup refused: " + err.reason }
+
+// receiveHandoffPacket admits the stage's own refusal, sent while it is still
+// root, beside the guardian's notice, sent after the drop to the caller.
+func receiveHandoffPacket(fd int, pid int, caller Identity) (raw []byte, root bool, err error) {
+	var credentials *unix.Ucred
+	raw, credentials, err = receivePacket(fd, pid, len(stageRefusalMagic)+stageRefusalLimit)
+	if err != nil {
+		return nil, false, err
+	}
+	switch {
+	case credentials.Uid == caller.UID && credentials.Gid == caller.GID:
+		return raw, false, nil
+	case credentials.Uid == 0 && credentials.Gid == 0:
+		return raw, true, nil
+	}
+	return nil, false, errors.New("guardian handoff sender differs from selected process")
+}
+
 func receiveGuardianPacket(fd int, pid int, caller Identity, limit int) ([]byte, error) {
+	raw, credentials, err := receivePacket(fd, pid, limit)
+	if err != nil {
+		return nil, err
+	}
+	if credentials.Uid != caller.UID || credentials.Gid != caller.GID {
+		return nil, errors.New("guardian handoff sender differs from selected process")
+	}
+	return raw, nil
+}
+
+func receivePacket(fd int, pid int, limit int) ([]byte, *unix.Ucred, error) {
 	raw := make([]byte, limit+1)
 	control := make([]byte, unix.CmsgSpace(unix.SizeofUcred))
 	for {
@@ -59,11 +123,11 @@ func receiveGuardianPacket(fd int, pid int, caller Identity, limit int) ([]byte,
 			continue
 		}
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		// Linux can echo the requested close-on-exec flag even on EOF.
 		if n == 0 && oobn == 0 && (flags == 0 || flags == unix.MSG_CMSG_CLOEXEC) {
-			return nil, io.EOF
+			return nil, nil, io.EOF
 		}
 		messages, controlErr := unix.ParseSocketControlMessage(control[:oobn])
 		// Close any injected rights before rejecting their control shape.
@@ -76,13 +140,13 @@ func receiveGuardianPacket(fd int, pid int, caller Identity, limit int) ([]byte,
 			}
 		}
 		if flags&(unix.MSG_TRUNC|unix.MSG_CTRUNC) != 0 || n > limit || controlErr != nil || len(messages) != 1 || messages[0].Header.Level != unix.SOL_SOCKET || messages[0].Header.Type != unix.SCM_CREDENTIALS {
-			return nil, errors.New("invalid guardian handoff control shape")
+			return nil, nil, errors.New("invalid guardian handoff control shape")
 		}
 		credentials, err := unix.ParseUnixCredentials(&messages[0])
-		if err != nil || int(credentials.Pid) != pid || credentials.Uid != caller.UID || credentials.Gid != caller.GID {
-			return nil, errors.New("guardian handoff sender differs from selected process")
+		if err != nil || int(credentials.Pid) != pid {
+			return nil, nil, errors.New("guardian handoff sender differs from selected process")
 		}
-		return raw[:n], nil
+		return raw[:n], credentials, nil
 	}
 }
 
