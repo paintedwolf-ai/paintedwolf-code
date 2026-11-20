@@ -2,6 +2,7 @@
 package linuxruntime
 
 import (
+	"bufio"
 	"errors"
 	"fmt"
 	"net"
@@ -135,7 +136,14 @@ func contained(parent, path string) bool {
 }
 
 func managerScope(image, manager, origin string) error {
-	cmd := exec.Command(manager, "--user", "--scope", "--quiet", "--collect", "--property=TasksMax=256", "--property=MemoryMax=512M", "--", image, "--launch-native")
+	file, err := trustedFile(manager, true)
+	if err != nil {
+		return err
+	}
+	defer file.Close()
+	cmd := exec.Command("/proc/self/fd/3", "--user", "--scope", "--quiet", "--collect", "--property=TasksMax=256", "--property=MemoryMax=512M", "--", image, "--launch-native")
+	cmd.Args[0] = manager
+	cmd.ExtraFiles = []*os.File{file}
 	cmd.Stdin, cmd.Stderr = os.Stdin, os.Stderr
 	cmd.Dir = "/"
 	cmd.SysProcAttr = &syscall.SysProcAttr{Pdeathsig: syscall.SIGKILL}
@@ -148,6 +156,32 @@ func Verify() error {
 	group, err := processGroup("self")
 	if err != nil {
 		return err
+	}
+	var st unix.Statfs_t
+	if err := unix.Statfs(group, &st); err != nil {
+		return err
+	}
+	if st.Type != unix.CGROUP2_SUPER_MAGIC {
+		return errors.New("private service requires a kernel resource domain")
+	}
+	members, err := os.Open(filepath.Join(group, "cgroup.procs"))
+	if err != nil {
+		return err
+	}
+	defer members.Close()
+	scan := bufio.NewScanner(members)
+	member := false
+	for scan.Scan() {
+		if scan.Text() == strconv.Itoa(os.Getpid()) {
+			member = true
+			break
+		}
+	}
+	if err := scan.Err(); err != nil {
+		return err
+	}
+	if !member {
+		return errors.New("private service is outside its claimed resource domain")
 	}
 	if parent := os.Getenv("PW_SERVICE_RESOURCE_PARENT"); parent != "" && !contained(parent, group) {
 		return errors.New("private service left its resource domain")
