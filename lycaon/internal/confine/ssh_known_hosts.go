@@ -66,6 +66,9 @@ func PrepareSSHKnownHosts(c Confinement) (string, error) {
 }
 
 func addSSHKnownHostsAccess(rules *FilesystemRules, c Confinement) error {
+	if c.privateUserland {
+		return nil
+	}
 	state, err := configdir.Root()
 	if err != nil {
 		return err
