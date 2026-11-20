@@ -313,13 +313,24 @@ func resolveSocketPath(path string, target *targetProcess) (string, bool) {
 		}
 		path = cwd + "/" + path
 	}
-	if resolved, err := filepath.EvalSymlinks(path); err == nil {
-		return resolved, true
-	} else if !errors.Is(err, os.ErrNotExist) || slices.Contains(strings.Split(path, "/"), "..") {
-		return "", false
+	// Resolve traversal in the existing prefix before appending missing names.
+	if slices.Contains(strings.Split(path, "/"), "..") {
+		prefix, suffix := path, ""
+		for {
+			resolved, err := filepath.EvalSymlinks(prefix)
+			if err == nil {
+				return fspath.CanonicalPathOrMissing(resolved + suffix)
+			}
+			if !errors.Is(err, os.ErrNotExist) {
+				return "", false
+			}
+			dir, leaf := filepath.Split(strings.TrimRight(prefix, "/"))
+			if leaf == "" || leaf == "." || leaf == ".." {
+				return "", false
+			}
+			suffix, prefix = "/"+leaf+suffix, dir
+		}
 	}
-	// A name that does not exist yet is still a name the plan can decide: a
-	// bind creates one, and a connect to it refuses like any ungranted path.
 	return fspath.CanonicalPathOrMissing(path)
 }
 

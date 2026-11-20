@@ -50,6 +50,9 @@ func TestRelativeSocketPathsResolveAgainstTheTargetDirectory(t *testing.T) {
 	if resolved, ok := resolveSocketPath(root+"/linked/../entry", &targetProcess{pid: -1}); !ok || resolved != entry {
 		t.Fatalf("directory-relative traversal = %q,%v, want %q", resolved, ok, entry)
 	}
+	if resolved, ok := resolveSocketPath(root+"/linked/../missing/service", &targetProcess{pid: -1}); !ok || resolved != filepath.Join(root, "nested", "missing", "service") {
+		t.Fatalf("missing path after linked traversal = %q,%v", resolved, ok)
+	}
 	// A name that does not exist yet keeps its resolved directory.
 	for _, missing := range []string{"socket.missing", filepath.Join("absent", "deeper", "socket")} {
 		got, ok := resolveSocketPath(filepath.Join(root, missing), &targetProcess{pid: -1})
