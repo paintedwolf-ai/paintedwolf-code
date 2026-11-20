@@ -28,6 +28,7 @@ func TestWithheldListenerRoutesToLocalListen(t *testing.T) {
 		t.Skip("python3 is required to open a TCP listener")
 	}
 	confine.StartRefusalWatch(t.Context(), "", nil)
+	t.Cleanup(confine.StopRefusalWatch)
 	ctx, cancel := context.WithTimeout(t.Context(), 15*time.Second)
 	defer cancel()
 	for !confine.RefusalWatchLive() {
