@@ -7,9 +7,9 @@ metadata:
 
 # Run browser E2E tests
 
-Use this workflow to run the project's own end-to-end suite and turn failures into evidence instead of noise. On a process start that runs the suite, declare `node` in `capability_request.host_resources`.
+Use this workflow to run the project's own end-to-end suite and turn failures into evidence instead of noise. On a process start that runs the suite, declare `node` in `capability_request.host_resources`.{% if session_scratch_dir %}
 
-{% if session_scratch_dir %}If the suite needs a persistent browser profile, give Playwright’s `launchPersistentContext` a fresh user data directory under `$SCRATCH_DIR`.{% endif %}
+If the suite needs a persistent browser profile, give Playwright’s `launchPersistentContext` a fresh user data directory under `$SCRATCH_DIR`.{% endif %}
 
 ## Workflow
 

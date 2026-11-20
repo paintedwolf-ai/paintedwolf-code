@@ -116,7 +116,7 @@ func TestCommandGuidanceDebugCaptureInLLMRequestsJSONL(t *testing.T) {
 	}
 	for _, wantTmpl := range []string{
 		"tools/schemas/command.yaml",
-		"partials/command-surface.md",
+		"partials/temporary-storage.md",
 		"units/coordinator-host-runner.md",
 		"units/secure-by-default-run.md",
 		"units/runner-operating-procedure.md",
