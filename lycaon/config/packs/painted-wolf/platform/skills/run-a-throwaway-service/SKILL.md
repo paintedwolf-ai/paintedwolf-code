@@ -12,9 +12,10 @@ Choose the server version the test expects and give the instance fresh storage.
 Use `private-service -- PROGRAM ARG...` to run a command in this session’s isolated service environment. Files under `/work` persist across service commands. The environment includes PostgreSQL 16 and the BusyBox POSIX shell (`sh`). For a fresh instance:
 
 1. Run `private-service -- initdb -D /work/pgdata`.
-2. Start `private-service -- postgres -D /work/pgdata -k /work/tmp -c listen_addresses='' &` and keep the job handle.
+2. Start `private-service -- postgres -D /work/pgdata -k /work/tmp -c listen_addresses='' &` and keep the job handle. Run the server in the foreground of that job so the handle tracks its lifetime.
 3. Run `private-service -- pg_isready -h /work/tmp`. Query with `private-service -- psql -h /work/tmp -d postgres -c 'SELECT 42'`.
-4. Stop the saved job with `kill %1`, substituting its actual job number. When the session has finished using its private service files, `private-service release` discards them and releases the runtime.
+4. Stop the saved job with `kill %1`, substituting its actual job number. Check the shutdown state with `private-service -- pg_controldata /work/pgdata`. A clean stop reports `shut down`.
+5. When the session has finished using its private service files, `private-service release` discards them and releases the runtime.
 
 ## Container workflow
 
