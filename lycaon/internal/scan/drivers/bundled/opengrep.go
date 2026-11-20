@@ -232,6 +232,9 @@ func (o *OpenGrepScanner) consoleTail(console []byte) string {
 func opengrepSubprocessEnv(files opengrepRunFiles) []string {
 	out := append([]string(nil), os.Environ()...)
 	pins := map[string]string{
+		"TMPDIR":                     files.dir(),
+		"TMP":                        files.dir(),
+		"TEMP":                       files.dir(),
 		"LANG":                       "C.UTF-8",
 		"LC_ALL":                     "C.UTF-8",
 		"LC_CTYPE":                   "C.UTF-8",

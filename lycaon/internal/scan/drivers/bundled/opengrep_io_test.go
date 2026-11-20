@@ -125,6 +125,9 @@ func TestOpengrepSubprocessEnvKeepsCLIStateInRunFiles(t *testing.T) {
 	testutil.FailErr(t, "newOpengrepRunFiles", err)
 	defer cleanup()
 
+	for _, key := range []string{"TMPDIR", "TMP", "TEMP"} {
+		t.Setenv(key, t.TempDir())
+	}
 	got := make(map[string]string)
 	for _, assignment := range opengrepSubprocessEnv(files) {
 		key, value, ok := strings.Cut(assignment, "=")
@@ -133,6 +136,9 @@ func TestOpengrepSubprocessEnvKeepsCLIStateInRunFiles(t *testing.T) {
 		}
 	}
 	want := map[string]string{
+		"TMPDIR":                     files.dir(),
+		"TMP":                        files.dir(),
+		"TEMP":                       files.dir(),
 		"SEMGREP_LOG_FILE":           files.logPath,
 		"SEMGREP_SETTINGS_FILE":      files.settingsPath,
 		"SEMGREP_VERSION_CACHE_PATH": files.versionCachePath,
