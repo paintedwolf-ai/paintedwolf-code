@@ -3,6 +3,7 @@ package testutil
 import (
 	"fmt"
 	"io"
+	"os"
 	"slices"
 	"sync"
 	"testing"
@@ -59,12 +60,18 @@ var pendingWaits = struct {
 	sync.Mutex
 	next    uint64
 	entries map[uint64]string
+	// out is the test binary's stderr as a test goroutine sees it, read after
+	// testing.M.Run has settled it.
+	out io.Writer
 }{entries: map[uint64]string{}}
 
 // trackWait lists a wait as pending until the returned function runs.
 func trackWait(t testing.TB, step string) func() {
 	pendingWaits.Lock()
 	defer pendingWaits.Unlock()
+	if pendingWaits.out == nil {
+		pendingWaits.out = os.Stderr
+	}
 	id := pendingWaits.next
 	pendingWaits.next++
 	pendingWaits.entries[id] = t.Name() + ": " + step
@@ -73,6 +80,15 @@ func trackWait(t testing.TB, step string) func() {
 		defer pendingWaits.Unlock()
 		delete(pendingWaits.entries, id)
 	}
+}
+
+func pendingWaitsOutput(fallback io.Writer) io.Writer {
+	pendingWaits.Lock()
+	defer pendingWaits.Unlock()
+	if pendingWaits.out == nil {
+		return fallback
+	}
+	return pendingWaits.out
 }
 
 // writePendingWaits prints one line per wait in progress, oldest first. The runner's

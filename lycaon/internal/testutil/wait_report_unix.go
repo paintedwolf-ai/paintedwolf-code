@@ -3,6 +3,7 @@
 package testutil
 
 import (
+	"io"
 	"os"
 	"os/signal"
 	"syscall"
@@ -12,11 +13,13 @@ import (
 func init() {
 	signals := make(chan os.Signal, 1)
 	signal.Notify(signals, syscall.SIGUSR1)
-	go reportPendingWaits(signals)
+	go reportPendingWaits(signals, os.Stderr)
 }
 
-func reportPendingWaits(signals <-chan os.Signal) {
+// reportPendingWaits never reads os.Stderr: testing.M.Run reassigns it with no
+// ordering against a signal. Before any wait registers it writes to initStderr.
+func reportPendingWaits(signals <-chan os.Signal, initStderr io.Writer) {
 	for range signals {
-		writePendingWaits(os.Stderr)
+		writePendingWaits(pendingWaitsOutput(initStderr))
 	}
 }
