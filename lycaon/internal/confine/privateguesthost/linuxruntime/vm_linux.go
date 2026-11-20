@@ -92,9 +92,23 @@ func hasKVM() bool {
 	return err == nil && version == 12
 }
 
+func openBootResource(path string) (*os.File, error) {
+	fd, err := unix.Open(path, unix.O_RDONLY|unix.O_CLOEXEC|unix.O_NOFOLLOW|unix.O_NONBLOCK, 0)
+	if err != nil {
+		return nil, err
+	}
+	file := os.NewFile(uintptr(fd), path)
+	info, err := file.Stat()
+	if err != nil || !info.Mode().IsRegular() {
+		_ = file.Close()
+		return nil, errors.Join(errors.New("invalid private boot resource"), err)
+	}
+	return file, nil
+}
+
 func readBootManifest(path string) (bootManifest, error) {
 	var manifest bootManifest
-	file, err := os.Open(path)
+	file, err := openBootResource(path)
 	if err != nil {
 		return manifest, err
 	}
@@ -193,7 +207,7 @@ func sealedBootFile(path, digest string) (*os.File, error) {
 	if err != nil || len(want) != sha256.Size {
 		return nil, errors.New("invalid private boot digest")
 	}
-	source, err := os.Open(path)
+	source, err := openBootResource(path)
 	if err != nil {
 		return nil, err
 	}

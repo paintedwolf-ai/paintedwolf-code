@@ -72,7 +72,7 @@ func TestEmulatorAuthorityAndDevices(t *testing.T) {
 }
 func TestManifestRequiresSupportedArchitecture(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "manifest.json")
-	for _, content := range []string{"{}", "{}{}", "{}", fmt.Sprintf(`{"schema":1,"architecture":%q,"unknown":true}`, runtime.GOARCH)} {
+	for _, content := range []string{"{}", "{}{}", fmt.Sprintf(`{"schema":1,"architecture":%q,"unknown":true}`, runtime.GOARCH)} {
 		if err := os.WriteFile(path, []byte(content), 0600); err != nil {
 			t.Fatalf("write manifest: %v", err)
 		}

@@ -13,6 +13,7 @@ import (
 	"strconv"
 	"strings"
 	"syscall"
+	"time"
 
 	"golang.org/x/sys/unix"
 )
@@ -54,7 +55,11 @@ func Acquire(image string) error {
 		defer os.Remove(leaf)
 		return startLeaf(image, leaf)
 	}
-	if manager := nestedManager(origin); manager != "" {
+	manager, err := nestedManager(origin)
+	if err != nil {
+		return err
+	}
+	if manager != "" {
 		return managerScope(image, manager, origin)
 	}
 	return runVM(image)
@@ -102,33 +107,49 @@ func startLeaf(image, leaf string) error {
 	return cmd.Run()
 }
 
-func nestedManager(origin string) string {
+func nestedManager(origin string) (string, error) {
 	manager := "/usr/bin/systemd-run"
 	if _, err := os.Stat(manager); errors.Is(err, os.ErrNotExist) {
 		manager = "/run/current-system/sw/bin/systemd-run"
 	}
 	if _, err := os.Stat(manager); err != nil {
-		return ""
+		if errors.Is(err, os.ErrNotExist) {
+			return "", nil
+		}
+		return "", err
 	}
 	path := "/run/user/" + strconv.Itoa(os.Getuid()) + "/systemd/private"
-	conn, err := net.DialUnix("unix", nil, &net.UnixAddr{Name: path, Net: "unix"})
+	conn, err := net.DialTimeout("unix", path, 2*time.Second)
 	if err != nil {
-		return ""
+		if errors.Is(err, os.ErrNotExist) || errors.Is(err, unix.ECONNREFUSED) {
+			return "", nil
+		}
+		return "", err
 	}
 	defer conn.Close()
-	raw, err := conn.SyscallConn()
+	raw, err := conn.(*net.UnixConn).SyscallConn()
 	if err != nil {
-		return ""
+		return "", err
 	}
 	var peer *unix.Ucred
-	if err := raw.Control(func(fd uintptr) { peer, _ = unix.GetsockoptUcred(int(fd), unix.SOL_SOCKET, unix.SO_PEERCRED) }); err != nil || peer == nil || peer.Uid != uint32(os.Getuid()) {
-		return ""
+	var credentials error
+	if err := raw.Control(func(fd uintptr) { peer, credentials = unix.GetsockoptUcred(int(fd), unix.SOL_SOCKET, unix.SO_PEERCRED) }); err != nil {
+		return "", err
+	}
+	if credentials != nil {
+		return "", credentials
+	}
+	if peer == nil || peer.Uid != uint32(os.Getuid()) {
+		return "", errors.New("unexpected resource manager peer")
 	}
 	group, err := processGroup(strconv.Itoa(int(peer.Pid)))
-	if err != nil || !contained(origin, group) {
-		return ""
+	if err != nil {
+		return "", err
 	}
-	return manager
+	if !contained(origin, group) {
+		return "", nil
+	}
+	return manager, nil
 }
 
 func contained(parent, path string) bool {
