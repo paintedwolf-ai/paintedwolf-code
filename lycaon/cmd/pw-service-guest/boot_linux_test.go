@@ -46,10 +46,10 @@ func TestGuestWorkDirectories(t *testing.T) {
 func TestGuestModulesAndControllerPort(t *testing.T) {
 	root := t.TempDir()
 	modules := filepath.Join(root, "modules")
-	testutil.FailErr(t, "boot with built-in drivers", loadBootModules(modules))
+	testutil.FailErr(t, "boot with built-in drivers", loadBootModules(modules, unix.FinitModule))
 	testutil.FailErr(t, "create module directory", os.Mkdir(modules, 0755))
 	testutil.FailErr(t, "write unexpected module entry", os.WriteFile(filepath.Join(modules, "unknown"), nil, 0600))
-	if err := loadBootModules(modules); err == nil {
+	if err := loadBootModules(modules, unix.FinitModule); err == nil {
 		t.Fatal("unexpected module entry accepted")
 	}
 	ports, devices := filepath.Join(root, "ports"), filepath.Join(root, "devices")
@@ -129,5 +129,33 @@ func TestGuestResourceDomain(t *testing.T) {
 	}
 	if _, err := prepareJobGroups(filepath.Join(root, "missing")); !errors.Is(err, os.ErrNotExist) {
 		t.Fatalf("missing domain = %v", err)
+	}
+}
+
+func TestGuestBootModuleOrder(t *testing.T) {
+	root := t.TempDir()
+	for _, name := range []string{"02-transport.ko", "01-driver.ko"} {
+		testutil.FailErr(t, "write package module", os.WriteFile(filepath.Join(root, name), []byte(name), 0600))
+	}
+	var loaded []string
+	err := loadBootModules(root, func(fd int, params string, flags int) error {
+		var content [64]byte
+		n, err := unix.Pread(fd, content[:], 0)
+		testutil.FailErr(t, "read pinned module", err)
+		if params != "" || flags != 0 {
+			t.Fatalf("module parameters %q, flags %d", params, flags)
+		}
+		loaded = append(loaded, string(content[:n]))
+		if len(loaded) == 1 {
+			return unix.EEXIST
+		}
+		return nil
+	})
+	testutil.FailErr(t, "load packaged modules", err)
+	if !slices.Equal(loaded, []string{"01-driver.ko", "02-transport.ko"}) {
+		t.Fatalf("module load order %q", loaded)
+	}
+	if err := loadBootModules(root, func(int, string, int) error { return unix.ENOEXEC }); !errors.Is(err, unix.ENOEXEC) {
+		t.Fatalf("invalid module reported %v", err)
 	}
 }

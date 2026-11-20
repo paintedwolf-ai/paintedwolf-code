@@ -25,7 +25,7 @@ func prepareVM() (configuration, error) {
 	if err := mountVM("/", unix.Mount); err != nil {
 		return configuration{}, err
 	}
-	if err := loadBootModules("/lib/pw-boot-modules"); err != nil {
+	if err := loadBootModules("/lib/pw-boot-modules", unix.FinitModule); err != nil {
 		return configuration{}, err
 	}
 	scratch, err := prepareWork(workBase, "/work", workUID)
@@ -79,7 +79,7 @@ func mountVM(root string, attach func(string, string, string, uintptr, string) e
 	return nil
 }
 
-func loadBootModules(base string) error {
+func loadBootModules(base string, load func(int, string, int) error) error {
 	entries, err := os.ReadDir(base)
 	if errors.Is(err, os.ErrNotExist) {
 		return nil
@@ -95,7 +95,7 @@ func loadBootModules(base string) error {
 		if err != nil {
 			return err
 		}
-		err = unix.FinitModule(int(file.Fd()), "", 0)
+		err = load(int(file.Fd()), "", 0)
 		_ = file.Close()
 		if err != nil && !errors.Is(err, unix.EEXIST) {
 			return fmt.Errorf("load %s: %w", entry.Name(), err)
