@@ -16,10 +16,11 @@ import (
 )
 
 type privateServiceFixture struct {
-	args   []string
-	input  []byte
-	closed atomic.Bool
-	result serviceguest.Result
+	args     []string
+	input    []byte
+	closed   atomic.Bool
+	closeErr error
+	result   serviceguest.Result
 }
 
 func (f *privateServiceFixture) RunInput(_ context.Context, args []string, input []byte) (serviceguest.Result, error) {
@@ -28,7 +29,7 @@ func (f *privateServiceFixture) RunInput(_ context.Context, args []string, input
 	return f.result, nil
 }
 
-func (f *privateServiceFixture) Close() error { f.closed.Store(true); return nil }
+func (f *privateServiceFixture) Close() error { f.closed.Store(true); return f.closeErr }
 
 func TestPrivateServiceUsesRetainedSessionTransport(t *testing.T) {
 	fixture := &privateServiceFixture{result: serviceguest.Result{ExitCode: 3, Stdout: []byte("answer"), Stderr: []byte("diagnostic")}}
@@ -118,5 +119,17 @@ func TestPrivateServiceRejectsInvalidInputBeforeAcquiringRuntime(t *testing.T) {
 				t.Fatalf("outcome %+v, error %v", result, err)
 			}
 		})
+	}
+}
+
+func TestPrivateServiceReclaimsSlotAfterHelperExitError(t *testing.T) {
+	slots := make(chan struct{}, 1)
+	slots <- struct{}{}
+	exitErr := errors.New("helper exited with status 1")
+	fixture := &privateServiceFixture{closeErr: exitErr}
+	session := &privateServiceSession{slots: slots, client: fixture}
+	_, err := session.releaseIdle()
+	if !errors.Is(err, exitErr) || !fixture.closed.Load() || len(slots) != 0 || session.client != nil {
+		t.Fatalf("release after helper exit returned %v with %d occupied slots", err, len(slots))
 	}
 }

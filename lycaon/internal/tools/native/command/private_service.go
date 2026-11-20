@@ -115,11 +115,9 @@ func (s *privateServiceSession) close() error {
 // The caller holds mu until the runtime has relinquished its slot.
 func (s *privateServiceSession) releaseClient() error {
 	err := s.client.Close()
-	if err == nil {
-		s.client = nil
-		if s.slots != nil {
-			<-s.slots
-		}
+	s.client = nil
+	if s.slots != nil {
+		<-s.slots
 	}
 	return err
 }
