@@ -57,7 +57,12 @@ func TestPrivateServicePackageActivation(t *testing.T) {
 	root := filepath.Join(bundle, "rootfs")
 	testutil.FailErr(t, "stage root filesystem", os.Mkdir(root, 0700))
 	testutil.FailErr(t, "stage protocol fixture", os.Symlink(host, filepath.Join(root, "init")))
-	client, err := OpenPrivateGuest(t.Context())
+	startup, cancel := context.WithCancel(t.Context())
+	defer cancel()
+	client, err := OpenPrivateGuest(startup)
 	testutil.FailErr(t, "open packaged fixture", err)
+	cancel()
+	_, err = client.Run(t.Context(), []string{"fixture"})
+	testutil.FailErr(t, "run after releasing startup context", err)
 	testutil.FailErr(t, "release and reap packaged fixture", client.Close())
 }

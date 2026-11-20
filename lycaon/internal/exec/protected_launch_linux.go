@@ -3,6 +3,7 @@
 package exec
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"io/fs"
@@ -237,10 +238,14 @@ func relayedCommand(cmd *exec.Cmd) bool {
 }
 
 // StartPrivateService activates the installed controller outside the protected desktop.
-func StartPrivateService(image string, control *os.File) (*exec.Cmd, error) {
-	cmd := linuxruntime.ControllerCommand(image, "--acquire-native")
+func StartPrivateService(ctx context.Context, image string, control *os.File) (*exec.Cmd, error) {
+	// The retained channel controls the process after the startup handshake.
+	cmd := linuxruntime.ControllerCommand(context.WithoutCancel(ctx), image, "--acquire-native")
 	cmd.Stdin = control
 	if err := relayThroughBroker(cmd); err != nil {
+		return nil, err
+	}
+	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
 	if err := cmd.Start(); err != nil {

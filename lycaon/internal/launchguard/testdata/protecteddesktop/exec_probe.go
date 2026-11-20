@@ -60,7 +60,7 @@ func execProbe(scratch string) ExecProbe {
 	_ = os.Setenv(exec.LaunchBrokerFDEnv, "6")
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
-	probe.PrivateService = privateServiceProbe(scratch)
+	probe.PrivateService = privateServiceProbe(ctx, scratch)
 	fmt.Fprintln(os.Stderr, "protected_exec_probe=host")
 	out, hostStderr, code, err := exec.RunSeparate(ctx, "sh", []string{"-c", namespaceScript}, exec.ExecOpts{Launch: exec.HostLaunch("toolchain_version_probe")})
 	probe.HostOutput, probe.HostCode = string(out), code
@@ -256,7 +256,7 @@ func relayLossProbe(ctx context.Context) (bool, string) {
 	return false, "the brokered program outlived its relay"
 }
 
-func privateServiceProbe(scratch string) string {
+func privateServiceProbe(ctx context.Context, scratch string) string {
 	image := filepath.Join(scratch, "activation")
 	script := "#!/bin/sh\n[ \"$#\" = 1 ] && [ \"$1\" = '--acquire-native' ] || exit 2\nreadlink /proc/self/ns/user >&0\n"
 	if err := os.WriteFile(image, []byte(script), 0700); err != nil {
@@ -268,7 +268,7 @@ func privateServiceProbe(scratch string) string {
 	}
 	parent, child := os.NewFile(uintptr(pair[0]), "controller"), os.NewFile(uintptr(pair[1]), "service")
 	defer parent.Close()
-	cmd, err := exec.StartPrivateService(image, child)
+	cmd, err := exec.StartPrivateService(ctx, image, child)
 	_ = child.Close()
 	if err != nil {
 		return err.Error()

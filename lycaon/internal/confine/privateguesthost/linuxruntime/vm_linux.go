@@ -2,6 +2,7 @@ package linuxruntime
 
 import (
 	"bytes"
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -53,7 +54,7 @@ func runVM(image string) error {
 	}
 	defer func() { _ = initrd.Close() }()
 	args := vmArguments(runtime.GOARCH, hasKVM())
-	cmd := ControllerCommand("/proc/self/fd/4", args...)
+	cmd := ControllerCommand(context.Background(), "/proc/self/fd/4", args...)
 	cmd.Args[0] = manifest.QEMU
 	cmd.Env = []string{"LANG=C"}
 	cmd.ExtraFiles = []*os.File{os.Stdin, binary, kernel, initrd}

@@ -42,7 +42,7 @@ func TestResourceSelection(t *testing.T) {
 }
 
 func TestControllerStartsFromSystemRoot(t *testing.T) {
-	cmd := ControllerCommand("/fixture/controller", "--launch-native")
+	cmd := ControllerCommand(t.Context(), "/fixture/controller", "--launch-native")
 	if cmd.Dir != "/" || cmd.Env == nil || len(cmd.Env) != 0 || cmd.Stderr != os.Stderr || !slices.Equal(cmd.Args, []string{"/fixture/controller", "--launch-native"}) {
 		t.Fatalf("controller path=%q dir=%q env=%v args=%q", cmd.Path, cmd.Dir, cmd.Env, cmd.Args)
 	}

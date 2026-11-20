@@ -62,7 +62,7 @@ func launchServiceBundle(ctx context.Context, bundle string) (net.Conn, error) {
 		return nil, err
 	}
 	defer func() { _ = child.Close() }()
-	cmd, err := hostexec.StartPrivateService(image, child)
+	cmd, err := hostexec.StartPrivateService(ctx, image, child)
 	if err != nil {
 		_ = transport.Close()
 		return nil, errors.Join(serviceguest.ErrUnavailable, err)

@@ -90,8 +90,8 @@ func delegatedLeaf(origin string) (string, error) {
 }
 
 // ControllerCommand prepares private infrastructure with a fixed root and empty environment.
-func ControllerCommand(image string, args ...string) *exec.Cmd {
-	cmd := exec.CommandContext(context.Background(), image, args...)
+func ControllerCommand(ctx context.Context, image string, args ...string) *exec.Cmd {
+	cmd := exec.CommandContext(ctx, image, args...)
 	cmd.Dir = "/"
 	cmd.Env = []string{}
 	cmd.Stderr = os.Stderr
@@ -109,7 +109,7 @@ func startLeaf(image, leaf string) error {
 		return err
 	}
 	defer func() { _ = group.Close() }()
-	cmd := ControllerCommand(image, "--launch-native")
+	cmd := ControllerCommand(context.Background(), image, "--launch-native")
 	cmd.Stdin = os.Stdin
 	cmd.SysProcAttr = &syscall.SysProcAttr{UseCgroupFD: true, CgroupFD: int(group.Fd()), Pdeathsig: syscall.SIGKILL}
 	return cmd.Run()
@@ -127,7 +127,8 @@ func nestedManager(origin string) (string, error) {
 		return "", err
 	}
 	path := "/run/user/" + strconv.Itoa(os.Getuid()) + "/systemd/private"
-	conn, err := net.DialTimeout("unix", path, 2*time.Second)
+	dialer := net.Dialer{Timeout: 2 * time.Second}
+	conn, err := dialer.DialContext(context.Background(), "unix", path)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) || errors.Is(err, unix.ECONNREFUSED) {
 			return "", nil
@@ -170,7 +171,7 @@ func managerScope(image, manager, origin string) error {
 		return err
 	}
 	defer func() { _ = file.Close() }()
-	cmd := ControllerCommand("/proc/self/fd/3", "--user", "--scope", "--quiet", "--collect", "--property=TasksMax=256", "--property=MemoryMax=512M", "--", image, "--launch-native")
+	cmd := ControllerCommand(context.Background(), "/proc/self/fd/3", "--user", "--scope", "--quiet", "--collect", "--property=TasksMax=256", "--property=MemoryMax=512M", "--", image, "--launch-native")
 	cmd.Args[0] = manager
 	cmd.ExtraFiles = []*os.File{file}
 	cmd.Stdin = os.Stdin

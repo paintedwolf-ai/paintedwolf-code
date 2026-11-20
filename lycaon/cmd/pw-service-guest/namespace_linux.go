@@ -88,7 +88,7 @@ func launchNamespace() error {
 		return err
 	}
 	defer func() { _ = root.Close() }()
-	cmd := linuxruntime.ControllerCommand("/proc/self/exe", "--enter-native")
+	cmd := linuxruntime.ControllerCommand(context.Background(), "/proc/self/exe", "--enter-native")
 	cmd.Stdin = os.Stdin
 	cmd.ExtraFiles = []*os.File{root}
 	cmd.SysProcAttr = &syscall.SysProcAttr{
