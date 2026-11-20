@@ -181,11 +181,38 @@ const videoDecodeScript = `async (times, spread, window, crop, width, quality) =
   canvas.height = Math.max(1, Math.round(outW * src.height / src.width));
   const g = canvas.getContext("2d");
   const frames = [];
+  const seek = (at) => waitFor(["seeked", "loadeddata"], () => !v.seeking && v.readyState >= 2, () => {
+    v.currentTime = at;
+  });
+  // A seek can finish before the compositor presents its frame, so drawing on
+  // seeked alone can capture the previous frame. The callback is registered
+  // before the seek starts, so the first frame presented after it is seen;
+  // a frame later than the target is not the one the seek asked for.
+  const seekPresented = (at) => new Promise((resolve) => {
+    let seeked = null, presented = false;
+    const settle = () => {
+      if (seeked === false || (seeked && presented)) resolve(seeked);
+    };
+    const onFrame = (_, meta) => {
+      if (meta.mediaTime <= at + 0.001) {
+        presented = true;
+        settle();
+        return;
+      }
+      v.requestVideoFrameCallback(onFrame);
+    };
+    v.requestVideoFrameCallback(onFrame);
+    seek(at).then((ok) => {
+      seeked = ok;
+      settle();
+    });
+  });
   for (const t of times) {
     const at = Math.min(Math.max(0, t / 1000), Math.max(0, v.duration - 0.001));
-    if (!await waitFor(["seeked", "loadeddata"], () => !v.seeking && v.readyState >= 2, () => {
-      v.currentTime = at;
-    })) return failure();
+    // A seek that does not move presents no new frame to wait for.
+    const moves = Math.abs(v.currentTime - at) > 1e-6;
+    const ok = moves && typeof v.requestVideoFrameCallback === "function" ? await seekPresented(at) : await seek(at);
+    if (!ok) return failure();
     g.drawImage(v, src.x, src.y, src.width, src.height, 0, 0, canvas.width, canvas.height);
     frames.push({at_ms: at * 1000, data: canvas.toDataURL("image/jpeg", quality)});
   }
