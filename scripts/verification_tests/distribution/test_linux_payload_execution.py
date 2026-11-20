@@ -186,7 +186,7 @@ class LinuxPayloadTests(unittest.TestCase):
             self.assertFalse(log.exists())
             self.assertEqual(state.read_text(), "preserve")
 
-    def test_apparmor_profile_attaches_only_to_the_packaged_engine_path(self):
+    def test_apparmor_attaches_only_to_packaged_namespace_executors(self):
         config = module("linux-package-config")
         catalog = load()
         with tempfile.TemporaryDirectory() as directory:
@@ -213,7 +213,7 @@ class LinuxPayloadTests(unittest.TestCase):
         profile = (ROOT / "packaging/linux/apparmor/painted-wolf-code").read_text(encoding="utf-8")
         uncommented = "\n".join(line.split("#", 1)[0] for line in profile.splitlines())
         attachments = re.findall(r"^\s*profile\s+\S+\s+(\S+)\s+flags=", uncommented, flags=re.MULTILINE)
-        self.assertEqual(attachments, [engine_path])
+        self.assertEqual(attachments, [engine_path, "/opt/painted-wolf-code/engine-root/service-guest/rootfs/init"])
         for token in ("*", "?", "[", "{", "^"):
             self.assertNotIn(token, attachments[0])
         for helper in catalog["helpers"]:

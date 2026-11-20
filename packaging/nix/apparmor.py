@@ -37,6 +37,18 @@ def profile(package):
             or facts.get("package") != "painted-wolf-code"
             or facts.get("install_root") != str(root)):
         raise ValueError("manifest does not identify the selected package")
+    profiles = [attachment(root, facts, "bin/pw", "engine")]
+    guest = "engine-root/service-guest/rootfs/init"
+    if (root / guest).exists() or any(isinstance(row, dict) and row.get("path") == guest for row in payload):
+        profiles.append(attachment(root, facts, guest, "service-guest"))
+    return "".join(profiles)
+
+
+def attachment(root, facts, relative, role):
+    engine = root / relative
+    if engine.resolve() != engine or not engine.is_file() or not engine.stat().st_mode & 0o111:
+        raise ValueError("selected namespace helper must be a physical executable")
+    payload = facts["payload"]
     machine = {"x86_64": 62, "aarch64": 183}.get(facts.get("architecture"))
     with engine.open("rb") as source:
         header = source.read(20)
@@ -51,14 +63,14 @@ def profile(package):
     entries = [entry for entry in facts.get("executables", [])
                if isinstance(entry, dict) and entry.get("path") == str(engine)]
     payload_entries = [entry for entry in payload
-                       if isinstance(entry, dict) and entry.get("path") == "bin/pw"]
+                       if isinstance(entry, dict) and entry.get("path") == relative]
     if (len(entries) != 1 or entries[0].get("sha256") != digest
             or entries[0].get("size") != engine.stat().st_size
             or len(payload_entries) != 1 or payload_entries[0].get("kind") != "file"
             or payload_entries[0].get("sha256") != digest
             or payload_entries[0].get("size") != engine.stat().st_size):
         raise ValueError("selected engine bytes differ from final manifest")
-    name = "paintedwolf-engine-" + hashlib.sha256(str(engine).encode()).hexdigest()
+    name = f"paintedwolf-{role}-" + hashlib.sha256(str(engine).encode()).hexdigest()
     return (f"profile {name} {literal(str(engine))} flags=(unconfined) {{\n"
             "  userns,\n}\n")
 

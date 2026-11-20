@@ -15,6 +15,9 @@ LDFLAGS="-X github.com/lycaon/lycaon/internal/version.Version=${APP_VERSION} -X 
 BIN_DIR="${LYCAON_E2E_STATE_DIR:?LYCAON_E2E_STATE_DIR is required}/runtime"
 BIN="${BIN_DIR}/sidecar"
 mkdir -p "${BIN_DIR}"
+case "$(go env GOOS)" in
+  darwin|linux) python3 "${ROOT}/scripts/service-guest/assemble.py" --system "$(go env GOOS)" --arch "$(go env GOARCH)" --output "${BIN_DIR}/service-guest" ;;
+esac
 TMP_BIN="$(mktemp "${BIN_DIR}/sidecar.XXXXXX")"
 trap 'rm -f "${TMP_BIN}"' EXIT
 (cd "${GO_DIR}" && go build -ldflags="${LDFLAGS}" -o "${TMP_BIN}" ./cmd/lycaon)

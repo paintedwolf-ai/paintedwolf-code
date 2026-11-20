@@ -39,6 +39,23 @@ class SelectedEngineAppArmorTests(unittest.TestCase):
                                       "size": len(data), "sha256": digest}]}
         self.save()
 
+    def test_guest_attachment_requires_its_own_manifest_identity(self):
+        guest = self.root / "engine-root/service-guest/rootfs/init"
+        guest.parent.mkdir(parents=True)
+        guest.write_bytes(self.engine.read_bytes())
+        guest.chmod(0o755)
+        with self.assertRaisesRegex(ValueError, "bytes differ"):
+            APPARMOR.profile(self.package)
+        entry = self.manifest["executables"][0] | {"path": str(guest)}
+        payload = self.manifest["payload"][-1] | {"path": str(guest.relative_to(self.root))}
+        self.manifest["executables"].append(entry)
+        self.manifest["payload"].append(payload)
+        self.save()
+        self.assertIn(str(guest), APPARMOR.profile(self.package))
+        guest.write_bytes(guest.read_bytes() + b"changed")
+        with self.assertRaisesRegex(ValueError, "bytes differ"):
+            APPARMOR.profile(self.package)
+
     def save(self):
         (self.root / "manifest.json").write_text(json.dumps(self.manifest))
 

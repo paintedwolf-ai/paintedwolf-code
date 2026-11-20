@@ -1,4 +1,5 @@
 { lib, stdenvNoCC, callPackage, source, frontend
+, guest ? callPackage ./service-guest.nix { inherit source; }
 , generationRelease ? null
 , inputs ? callPackage ./resource-inputs.nix { inherit source; }
 , scanner ? callPackage ./scanner.nix { inherit source inputs; }
@@ -21,6 +22,7 @@ in stdenvNoCC.mkDerivation {
     cp -R ${source}/schemas "$out/engine-root/schemas"
     cp -R ${inputs.browser}/browser "$out/engine-root/browser"
     cp -R ${inputs.gitengine}/gitengine "$out/engine-root/gitengine"
+    cp -a ${guest}/service-guest "$out/engine-root/"
     cp -R ${inputs.ocr}/ocr "$out/engine-root/ocr"
     cp -R ${inputs.decision}/decide "$out/engine-root/decide"
     ${lib.optionalString (generationSeed != null) ''

@@ -206,6 +206,18 @@ if [[ "${HOST_KIND}" == "darwin" ]]; then
   fi
   python3 "${ROOT}/scripts/stage-macos-host.py" "${HOST_ARGS[@]}"
 fi
+if [[ "${HOST_KIND}" == darwin || "${HOST_KIND}" == linux ]]; then
+  GUEST_DIR="${ENGINE_ROOT}/service-guest"
+  [[ "${HOST_KIND}" != darwin ]] || GUEST_DIR="${TAURI_DIR}/service-guest"
+  case "${TARGET}" in
+    aarch64-*) GUEST_ARCH=arm64 ;;
+    x86_64-*) GUEST_ARCH=amd64 ;;
+    *) echo "unsupported service guest architecture ${TARGET}" >&2; exit 1 ;;
+  esac
+  GUEST_ARGS=(--system "${HOST_KIND}" --arch "${GUEST_ARCH}" --output "${GUEST_DIR}")
+  [[ "${RELEASE_BUILD}" != 1 ]] || GUEST_ARGS+=(--release)
+  python3 "${ROOT}/scripts/service-guest/assemble.py" "${GUEST_ARGS[@]}"
+fi
 
 if [[ "${MODE}" == "full" ]]; then
   echo "stage-engine — provisioning chrome-headless-shell into engine-root/browser" >&2

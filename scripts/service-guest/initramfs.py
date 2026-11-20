@@ -55,13 +55,36 @@ def pack(tree, output):
         for parent in PurePosixPath(name).parents:
             if str(parent) != ".":
                 tree.setdefault(str(parent), Entry(stat.S_IFDIR | 0o755))
-    with output.open("wb") as raw, gzip.GzipFile(filename="", fileobj=raw, mode="wb", mtime=0, compresslevel=6) as dest:
-        for ino, (name, entry) in enumerate([*sorted(tree.items()), ("TRAILER!!!", Entry(0))], 1):
+    with (
+        output.open("wb") as raw,
+        gzip.GzipFile(
+            filename="", fileobj=raw, mode="wb", mtime=0, compresslevel=6
+        ) as dest,
+    ):
+        for ino, (name, entry) in enumerate(
+            [*sorted(tree.items()), ("TRAILER!!!", Entry(0))], 1
+        ):
             for parent in PurePosixPath(name).parents:
                 if str(parent) != "." and not stat.S_ISDIR(tree[str(parent)].mode):
                     raise ValueError(f"non-directory parent of guest entry {name}")
             label = os.fsencode(name) + b"\0"
-            fields = (ino, entry.mode, entry.uid, entry.gid, 1, 0, len(entry.data), 0, 0, 0, 0, len(label), 0)
-            header = b"070701" + b"".join(f"{value:08x}".encode("ascii") for value in fields)
+            fields = (
+                ino,
+                entry.mode,
+                entry.uid,
+                entry.gid,
+                1,
+                0,
+                len(entry.data),
+                0,
+                0,
+                0,
+                0,
+                len(label),
+                0,
+            )
+            header = b"070701" + b"".join(
+                f"{value:08x}".encode("ascii") for value in fields
+            )
             dest.write(header + label + bytes(-(len(header) + len(label)) % 4))
             dest.write(entry.data + bytes(-len(entry.data) % 4))

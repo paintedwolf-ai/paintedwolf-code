@@ -150,6 +150,10 @@ func buildFakeApp(t *testing.T, opts appOptions) string {
 		macho.CpuArm64, "13.0", []string{"/usr/lib/libSystem.B.dylib"})
 
 	mustWriteFile(t, filepath.Join(app, "Contents", "Resources", "engine-root", "schemas", ".keep"), []byte("x"))
+	mustWriteFile(t, filepath.Join(app, serviceGuestHelper), []byte("service helper"))
+	if err := os.Chmod(filepath.Join(app, serviceGuestHelper), 0755); err != nil {
+		t.Fatal(err)
+	}
 
 	if !opts.omitNotices {
 		stub := strings.Repeat("third-party notices fixture line\n", 200)

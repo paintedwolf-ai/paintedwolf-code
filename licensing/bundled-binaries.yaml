@@ -19,6 +19,30 @@
 #                        (required when license is copyleft / LGPL / GPL)
 
 binaries:
+
+  - name: Alpine Linux virtual kernel (private service VM)
+    version: "6.18.60-0-virt"
+    license: GPL-2.0-only
+    source_url: https://gitlab.alpinelinux.org/alpine/aports/-/tree/v3.24.4/main/linux-lts
+    license_text_file: texts/GPL-2.0.txt
+
+  - name: BusyBox (private service commands)
+    version: "1.37.0-r31"
+    license: GPL-2.0-only
+    source_url: https://gitlab.alpinelinux.org/alpine/aports/-/tree/c3ef5d10e6ef6528852c51f0564963e2f8c1be19/main/busybox
+    license_text_file: texts/GPL-2.0.txt
+
+  - name: musl (private service runtime)
+    version: "1.2.6-r3"
+    license: MIT
+    source_url: https://gitlab.alpinelinux.org/alpine/aports/-/tree/8f79d39391b46d6dbf1800fb68b8212a21d5ee2e/main/musl
+    license_text_file: texts/MIT-musl.txt
+
+  - name: PostgreSQL (private service runtime)
+    version: "16.16"
+    license: PostgreSQL
+    source_url: https://ftp.postgresql.org/pub/source/v16.16/postgresql-16.16.tar.bz2
+    license_text_file: texts/PostgreSQL.txt
   - name: opengrep
     artifact: opengrep
 

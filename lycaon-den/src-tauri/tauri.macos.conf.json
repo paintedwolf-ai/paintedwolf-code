@@ -29,6 +29,7 @@
     ],
     "macOS": {
       "files": {
+        "Resources/service-guest": "service-guest",
         "Helpers/Painted Wolf Code engine.app": "host-bundle/Painted Wolf Code engine.app"
       }
     }

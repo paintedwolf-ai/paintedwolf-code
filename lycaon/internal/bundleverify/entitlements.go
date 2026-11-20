@@ -39,6 +39,8 @@ func contractFor(rel string) entitlementContract {
 	switch {
 	case filepath.Base(rel) == browserBinaryName:
 		return browserContract
+	case rel == serviceGuestHelper:
+		return entitlementContract{required: []string{"com.apple.security.virtualization"}}
 	case rel == sidecarRelPath:
 		return engineContract
 	default:
