@@ -5,6 +5,7 @@ import (
 	"errors"
 	"io"
 	"sync"
+	"time"
 
 	"github.com/lycaon/lycaon/internal/commandprogram"
 	"github.com/lycaon/lycaon/internal/confine/privateguesthost"
@@ -68,7 +69,7 @@ func (s *privateServiceSession) acquire(ctx context.Context, open func(context.C
 					return nil, toolrejection.RejectInvalidArguments("COMMAND_LIMIT_EXCEEDED", map[string]any{"limit": "private_service_sessions", "maximum": cap(s.slots), "observed": cap(s.slots) + 1})
 				}
 			}
-			start, cancel := context.WithCancel(ctx)
+			start, cancel := context.WithTimeout(ctx, time.Minute)
 			s.cancel, s.starting = cancel, make(chan struct{})
 			s.mu.Unlock()
 			client, err := open(start)
