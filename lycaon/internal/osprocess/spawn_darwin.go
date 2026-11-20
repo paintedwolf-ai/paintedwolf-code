@@ -11,8 +11,8 @@ import "C"
 import (
 	"encoding/hex"
 	"fmt"
-	"strings"
 	"os"
+	"strings"
 	"unsafe"
 
 	"golang.org/x/sys/unix"
