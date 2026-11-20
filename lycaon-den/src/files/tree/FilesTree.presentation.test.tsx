@@ -399,18 +399,19 @@ it("reads one destination at a time while the thumb drags and lands at its lates
   // Every row read blocks here, so a destination read stays in flight until released.
   const holds: (() => void)[] = [];
   fixture.read(() => new Promise<void>(resolve => { holds.push(resolve); }));
-  // Read-ahead only pages around the mounted window, so a far page names a thumb destination.
+  // Read-ahead fills three pages past the mounted window (through row 799), so a page from 800 on
+  // is read only for a thumb destination.
   const rowOffsets = () => fixture.requests
     .filter(request => request.path.includes("/rows?"))
     .map(request => Number(new URL(request.path, "http://fixture").searchParams.get("offset")));
   const destinations = () => rowOffsets().filter(offset => offset >= 1_000);
 
-  // The three positions land on destination pages 600, 1000 and 1400.
+  // The three positions land on destination pages 800, 1000 and 1400.
   handle.dispatchEvent(pointer("pointerdown", 0));
-  handle.dispatchEvent(pointer("pointermove", 90));
+  handle.dispatchEvent(pointer("pointermove", 120));
   await nextFrame();
   // The first destination's read is in flight before the thumb moves on.
-  await waitFor(() => expect(rowOffsets()).toContain(600));
+  await waitFor(() => expect(rowOffsets()).toContain(800));
   for (const y of [150, 210]) {
     handle.dispatchEvent(pointer("pointermove", y));
     await nextFrame();
