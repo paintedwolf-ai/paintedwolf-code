@@ -39,10 +39,10 @@ func verdictFixture(t *testing.T, outside string) (confine.Confinement, []bounda
 	writeFixtureFile(t, granted)
 
 	c := confine.Confinement{
-		Roots:              []string{project},
-		SessionScratchRoot: scratch,
-		ReadDenyPaths:      []string{workerSource},
-		PolicyWriteGrants:  []confine.ProtectedPathGrant{confine.NewProtectedPathGrant(granted)},
+		Roots:             []string{project},
+		Workspaces:        confine.WorkspaceRoots{SessionScratch: scratch},
+		ReadDenyPaths:     []string{workerSource},
+		PolicyWriteGrants: []confine.ProtectedPathGrant{confine.NewProtectedPathGrant(granted)},
 	}
 	overlaySink := filepath.Join(project, settingsoverlay.DirName(), settingsoverlay.BasenameApprovals)
 	allowed := confine.FloorVerdict{Allowed: true}
