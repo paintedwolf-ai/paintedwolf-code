@@ -32,7 +32,7 @@ func recordProjectHistory(ctx context.Context, configDir, projectID, sessionID s
 	if err := store.QueryRowContext(ctx, `SELECT id FROM project_roots WHERE project_id = ?`, projectID).Scan(&rootID); err != nil {
 		return err
 	}
-	ledger := sourceledger.New(store, filepath.Join(configDir, enginepaths.SourceContentDirName))
+	ledger := sourceledger.New(store, filepath.Join(configDir, enginepaths.SourceContentDirName), sourceledger.Timing{})
 	defer func() { err = errors.Join(err, ledger.Snapshots.Close()) }()
 	for start := 0; start < files; start += historyOperationFiles {
 		operation := uuid.NewSHA1(historyNamespace, []byte(projectID+"\x00"+strconv.Itoa(start))).String()

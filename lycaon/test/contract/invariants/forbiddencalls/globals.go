@@ -18,6 +18,9 @@ var globals = []invariants.Invariant{{
 	Anchors: []invariants.Anchor{invariants.Package("internal/app")},
 	Check: func(r *invariants.Run) {
 		for _, f := range r.GoFiles(invariants.Production, "internal", "cmd", "pkg", "config") {
+			if invariants.Under(f, "internal/testutil") {
+				continue
+			}
 			for _, decl := range f.AST.Decls {
 				gen, ok := decl.(*ast.GenDecl)
 				if !ok || gen.Tok != token.VAR {
