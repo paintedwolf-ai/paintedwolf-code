@@ -82,17 +82,17 @@ def tree_files(tree: Path):
             yield Path(dirpath) / name
 
 
-def rendered_dependencies(root: Path, family: str) -> dict[str, list[str]]:
+def rendered_dependencies(root: Path, family: str, arch: str) -> dict[str, list[str]]:
     config = load_package_config(root)
     floors = config.floor_values(root / "lycaon" / "internal" / "platformfloor" / "linux_floor.txt")
     catalog = json.loads((root / "packaging" / "linux" / "dependencies.json").read_text(encoding="utf-8"))
-    return config.render_dependencies(catalog, family, floors)
+    return config.render_dependencies(catalog, family, floors, arch)
 
 
 def deb_control(root: Path, data: Path, version: str, arch: str) -> str:
     meta = tauri_metadata(root)
     deb = meta.get("linux", {}).get("deb", {})
-    dependencies = rendered_dependencies(root, "deb")
+    dependencies = rendered_dependencies(root, "deb", arch)
     installed_kib = sum(path.lstat().st_size for path in tree_files(data)) // 1024
     description = textwrap.wrap(meta["longDescription"], width=78)
     fields = [
@@ -241,8 +241,8 @@ def rpm_tree(root: Path, deb_tree: Path, destination: Path) -> Path:
     return destination
 
 
-def rpm_spec(root: Path, tree: Path, version: str, zstd_level: int) -> str:
-    dependencies = rendered_dependencies(root, "rpm")
+def rpm_spec(root: Path, tree: Path, version: str, zstd_level: int, arch: str) -> str:
+    dependencies = rendered_dependencies(root, "rpm", arch)
     meta = tauri_metadata(root)
     scriptlets = []
     for section, filename in RPM_SCRIPTLETS:
@@ -287,7 +287,7 @@ def write_rpm(root: Path, staged: Path, workdir: Path, version: str, arch: str, 
     topdir = workdir / "rpmbuild"
     topdir.mkdir()
     spec_path = topdir / f"{PACKAGE_NAME}.spec"
-    spec_path.write_text(rpm_spec(root, tree, version, zstd_level), encoding="utf-8")
+    spec_path.write_text(rpm_spec(root, tree, version, zstd_level, arch), encoding="utf-8")
     subprocess.run(
         [
             "rpmbuild", "-bb", "--quiet", "--target", arch,

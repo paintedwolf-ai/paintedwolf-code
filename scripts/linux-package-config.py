@@ -54,10 +54,12 @@ def floor_values(path: Path) -> dict[str, str]:
     return values
 
 
-def render_dependencies(catalog: dict, family: str, floors: dict[str, str]) -> dict[str, list[str]]:
+def render_dependencies(catalog: dict, family: str, floors: dict[str, str], arch: str) -> dict[str, list[str]]:
     rendered: dict[str, list[str]] = {}
     for field in ("depends", "recommends"):
         rows = catalog[family].get(field, [])
+        if field == "depends":
+            rows = [*rows, *catalog[family]["architecture_depends"][arch]]
         if not isinstance(rows, list) or not all(isinstance(row, str) and row.strip() for row in rows):
             raise ValueError(f"dependencies.json {family}.{field} must be a list of non-empty strings")
         rendered[field] = [row.format(**floors) for row in rows]
@@ -141,7 +143,7 @@ def main() -> int:
         files = {**required, **optional_files(root, "deb")}
         # Validate both families' constraints here; linux-package-assemble.py writes them.
         for family in ("deb", "rpm"):
-            render_dependencies(catalog, family, floors)
+            render_dependencies(catalog, family, floors, args.target.split("-", 1)[0])
         linux = {"deb": {"files": {destination: str(source) for destination, source in sorted(files.items())}}}
     except (OSError, ValueError, KeyError, json.JSONDecodeError) as exc:
         print(f"error: {exc}", file=sys.stderr)

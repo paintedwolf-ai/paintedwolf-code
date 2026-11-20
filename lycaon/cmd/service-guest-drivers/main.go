@@ -1,4 +1,4 @@
-// Command modules extracts the guest's boot drivers from the pinned release image.
+// Command service-guest-drivers extracts the guest's boot drivers from the pinned release image.
 package main
 
 import (
@@ -99,7 +99,7 @@ func extract(image, output string) error {
 		seen[name] = true
 		return os.WriteFile(filepath.Join(output, fmt.Sprintf("%02d-%s", len(seen), path.Base(name))), data, 0644)
 	}
-	for _, name := range []string{"virtio-rng.ko", "vmw_vsock_virtio_transport.ko"} {
+	for _, name := range []string{"virtio_console.ko", "virtio-rng.ko", "vmw_vsock_virtio_transport.ko"} {
 		if err := write(names[name]); err != nil {
 			return err
 		}

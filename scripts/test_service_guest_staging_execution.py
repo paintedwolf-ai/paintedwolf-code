@@ -221,7 +221,7 @@ class ServiceGuestStaging(unittest.TestCase):
                 )
 
                 def command(argv, **kwargs):
-                    if argv[0] == "/usr/bin/bsdtar":
+                    if argv[0] == "bsdtar":
                         kwargs["stdout"].write(
                             zboot + compressed
                             if argv[-1] == "boot/vmlinuz-virt"
@@ -241,6 +241,8 @@ class ServiceGuestStaging(unittest.TestCase):
                         system=system,
                         arch="arm64",
                         guest_binary=supervisor,
+                        driver_tool=None,
+                        qemu_path=None,
                         release=False,
                         cache=work,
                     ),
@@ -251,8 +253,8 @@ class ServiceGuestStaging(unittest.TestCase):
                 self.assertEqual(
                     manifest["initramfs_sha256"], assemble.sha(output / "initramfs.gz")
                 )
+                self.assertEqual((output / "kernel").read_bytes(), kernel_payload)
                 if system == "darwin":
-                    self.assertEqual((output / "kernel").read_bytes(), kernel_payload)
                     self.assertEqual(
                         manifest["kernel_sha256"], assemble.sha(output / "kernel")
                     )
@@ -264,6 +266,8 @@ class ServiceGuestStaging(unittest.TestCase):
                         (output / "rootfs/init").read_bytes(), b"supervisor"
                     )
                     self.assertTrue((output / "rootfs/work").is_dir())
+                    self.assertEqual(manifest["qemu_path"], "/usr/bin/qemu-system-aarch64")
+                    self.assertEqual(manifest["kernel_sha256"], assemble.sha(output / "kernel"))
 
 
 if __name__ == "__main__":

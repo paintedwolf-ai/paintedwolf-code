@@ -23,7 +23,7 @@ def rehearse(work):
         directory.mkdir()
         top = directory / "rpmbuild"
         top.mkdir()
-        content = assembler.rpm_spec(ROOT, tree, version, 3)
+        content = assembler.rpm_spec(ROOT, tree, version, 3, architecture)
         if name == "spelling-error":
             # A misspelling outside the accepted domain vocabulary must still fail the summary.
             summary = assembler.tauri_metadata(ROOT)["shortDescription"]

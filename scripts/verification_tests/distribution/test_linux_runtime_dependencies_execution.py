@@ -91,7 +91,7 @@ class LinuxRuntimeDependencyTests(unittest.TestCase):
         families = {key for key, value in self.catalog.items() if isinstance(value, dict)}
         self.assertEqual(families, set(REQUIRED), "a new package family must declare its browser runtime here")
         for family in sorted(families):
-            rendered = self.assemble.rendered_dependencies(ROOT, family)
+            rendered = self.assemble.rendered_dependencies(ROOT, family, "x86_64")
             self.assert_hard(family, rendered["depends"], rendered["recommends"])
 
     def test_rendered_deb_control_and_rpm_spec_carry_the_runtime_as_hard_dependencies(self):
@@ -104,14 +104,22 @@ class LinuxRuntimeDependencyTests(unittest.TestCase):
             bootstrap.parent.mkdir(parents=True)
             bootstrap.write_text("fixture bootstrap")
             control = self.assemble.deb_control(ROOT, tree, "1.0.2~rc.1", "x86_64")
-            spec = self.assemble.rpm_spec(ROOT, tree, "1.0.2~rc.1", 3)
+            spec = self.assemble.rpm_spec(ROOT, tree, "1.0.2~rc.1", 3, "x86_64")
         self.assert_hard("deb", control_field(control, "Depends"), control_field(control, "Recommends"))
         self.assert_hard("rpm", spec_field(spec, "Requires"), spec_field(spec, "Recommends"))
         self.assertIn("AutoReqProv: no", spec.splitlines(), "declared Requires are the only rpm dependencies")
 
+    def test_private_service_runtime_matches_package_architecture(self):
+        for family, arches in self.catalog.items():
+            if not isinstance(arches, dict):
+                continue
+            for arch, packages in arches["architecture_depends"].items():
+                rendered = self.assemble.rendered_dependencies(ROOT, family, arch)
+                self.assertEqual([p for p in rendered["depends"] if p.startswith("qemu-")], packages)
+
     def test_hardware_vulkan_stays_optional(self):
         for family, accepted in {"deb": {"libvulkan1"}, "rpm": {"vulkan-loader"}}.items():
-            rendered = self.assemble.rendered_dependencies(ROOT, family)
+            rendered = self.assemble.rendered_dependencies(ROOT, family, "x86_64")
             self.assertEqual(satisfied(rendered["depends"], accepted), [])
             self.assertEqual(len(satisfied(rendered["recommends"], accepted)), 1)
 

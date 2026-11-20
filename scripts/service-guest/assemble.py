@@ -52,7 +52,7 @@ def acquire(spec, cache):
     return artifact
 
 
-def boot_image(image, arch, output, tree, work):
+def boot_image(image, arch, output, tree, work, driver_tool):
     modloop = work / "modloop"
     modules = work / "modules"
     modules.mkdir()
@@ -62,7 +62,7 @@ def boot_image(image, arch, output, tree, work):
     ]:
         with file.open("wb") as f:
             subprocess.run(
-                ["/usr/bin/bsdtar", "-xOf", str(image), member], stdout=f, check=True
+                ["bsdtar", "-xOf", str(image), member], stdout=f, check=True
             )
     if arch == "arm64":
         kernel = output / "kernel"
@@ -75,7 +75,7 @@ def boot_image(image, arch, output, tree, work):
             raise ValueError("invalid arm64 Linux Image")
         kernel.write_bytes(raw)
     subprocess.run(
-        ["go", "run", str(HERE / "modules.go"), str(modloop), str(modules)],
+        [*driver_tool, str(modloop), str(modules)],
         cwd=ROOT / "lycaon",
         check=True,
     )
@@ -150,12 +150,13 @@ def assemble(args, work, output):
         stat.S_IFLNK | 0o777, b"home/service/.config/paintedwolf/scratch/session"
     )
     manifest = {"schema": 1, "architecture": args.arch}
-    if args.system == "darwin":
-        boot_image(acquire(pin["boot"], args.cache), args.arch, output, tree, work)
-        manifest["kernel_sha256"] = sha(output / "kernel")
+    driver_tool = [args.driver_tool] if args.driver_tool else ["go", "run", "./cmd/service-guest-drivers"]
+    boot_image(acquire(pin["boot"], args.cache), args.arch, output, tree, work, driver_tool)
+    manifest["kernel_sha256"] = sha(output / "kernel")
     pack(tree, output / "initramfs.gz")
     manifest["initramfs_sha256"] = sha(output / "initramfs.gz")
     if args.system == "linux":
+        manifest["qemu_path"] = args.qemu_path or f"/usr/bin/qemu-system-{machine}"
         stage_rootfs(tree, output / "rootfs")
     else:
         helper = output / "pw-service-vm"
@@ -225,6 +226,8 @@ def main():
     )
     p.add_argument("--release", action="store_true")
     p.add_argument("--guest-binary", type=Path, help="package-built Linux supervisor")
+    p.add_argument("--driver-tool", type=Path, help="package-built boot driver extractor")
+    p.add_argument("--qemu-path", help="package-owned native QEMU executable")
     args = p.parse_args()
     args.cache = args.cache.resolve()
     dest = args.output.absolute()

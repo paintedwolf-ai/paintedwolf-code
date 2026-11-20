@@ -36,7 +36,7 @@ in stdenvNoCC.mkDerivation {
   '';
   passthru = {
     inherit inputs scanner notices generationSeed;
-    noticeRuntimeInputs = [ inputs.browser inputs.gitengine inputs.ocr inputs.decision scanner notices ]
+    noticeRuntimeInputs = [ inputs.browser inputs.gitengine inputs.ocr inputs.decision scanner notices guest.runtimeQemu ]
       ++ lib.optional (generationSeed != null) generationSeed;
   };
   meta = {
