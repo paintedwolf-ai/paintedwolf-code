@@ -571,7 +571,7 @@ func (c *tempDecisionFixture) RequestCheckpoint(_ context.Context, req hitl.Chec
 func TestSharedTempSettlementAndChatScope(t *testing.T) {
 	t.Setenv("LYCAON_CONFIG_DIR", "/opt/shared-temp-review-fixture/config")
 	roots := []string{confine.SharedTempLocation("/tmp"), confine.SharedTempLocation("/var/tmp")}
-	for _, status := range []hitl.DecisionStatus{hitl.DecisionStatusApproved, hitl.DecisionStatusRejected, hitl.DecisionStatusExpired} {
+	for _, status := range []hitl.DecisionStatus{hitl.DecisionStatusApproved, hitl.DecisionStatusRejected, hitl.DecisionStatusExpired, hitl.DecisionStatusCanceled} {
 		t.Run(string(status), func(t *testing.T) {
 			runtime := approvalstate.NewSandboxPathGrantRuntime()
 			cards := &tempDecisionFixture{runtime: runtime, status: status}
@@ -586,22 +586,19 @@ func TestSharedTempSettlementAndChatScope(t *testing.T) {
 					t.Fatalf("target %d=%+v", i, target)
 				}
 			}
-			var outcome []string
-			switch status {
-			case hitl.DecisionStatusApproved:
-				outcome = result.Allowed
-			case hitl.DecisionStatusRejected:
-				outcome = result.Declined
-			case hitl.DecisionStatusExpired:
-				outcome = result.Unanswered
-			}
+			outcome := map[hitl.DecisionStatus][]string{
+				hitl.DecisionStatusApproved: result.Allowed,
+				hitl.DecisionStatusRejected: result.Declined,
+				hitl.DecisionStatusExpired:  result.Unanswered,
+				hitl.DecisionStatusCanceled: result.Unanswered,
+			}[status]
 			if !slices.Equal(outcome, roots) || len(result.Allowed)+len(result.Declined)+len(result.Unanswered) != len(roots) {
 				t.Fatalf("status=%s outcome=%+v", status, result)
 			}
 			in.ToolCallID = "second"
 			broker.ReviewSharedTemp(t.Context(), in, roots, true)
 			expected := 1
-			if status == hitl.DecisionStatusExpired {
+			if status == hitl.DecisionStatusExpired || status == hitl.DecisionStatusCanceled {
 				expected = 2
 			}
 			if len(cards.cards) != expected {

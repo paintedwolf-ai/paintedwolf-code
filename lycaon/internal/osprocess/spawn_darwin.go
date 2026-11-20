@@ -33,7 +33,7 @@ func SpawnVerifiedChild(path, cdhash string, files []*os.File) (*os.Process, err
 		if err != nil {
 			return nil, err
 		}
-		defer unix.Close(fd)
+		defer func() { _ = unix.Close(fd) }()
 		fds[i] = C.int(fd)
 	}
 	exe, identity := C.CString(path), C.CString(cdhash)

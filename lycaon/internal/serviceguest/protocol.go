@@ -108,7 +108,7 @@ func writeFrame(w io.Writer, value any) error {
 	if len(payload) > maxFrame {
 		return fmt.Errorf("private service frame exceeds %d bytes", maxFrame)
 	}
-	frame := binary.BigEndian.AppendUint32(nil, uint32(len(payload)))
+	frame := binary.BigEndian.AppendUint32(nil, uint32(len(payload))) // #nosec G115 -- maxFrame bounds the payload size.
 	frame = append(frame, payload...)
 	_, err = io.Copy(w, bytes.NewReader(frame))
 	return err

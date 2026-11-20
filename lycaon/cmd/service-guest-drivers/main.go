@@ -30,7 +30,7 @@ func extract(image, output string) error {
 	if err != nil {
 		return err
 	}
-	defer source.Close()
+	defer func() { _ = source.Close() }()
 	info, err := source.Stat()
 	if err != nil {
 		return err
@@ -59,7 +59,7 @@ func extract(image, output string) error {
 	if err != nil {
 		return err
 	}
-	defer index.Close()
+	defer func() { _ = index.Close() }()
 	names, deps := map[string]string{}, map[string][]string{}
 	lines := bufio.NewScanner(index)
 	for lines.Scan() {
@@ -91,19 +91,19 @@ func extract(image, output string) error {
 		if err != nil {
 			return err
 		}
-		defer r.Close()
+		defer func() { _ = r.Close() }()
 		data, err := io.ReadAll(r)
 		if err != nil {
 			return err
 		}
 		seen[name] = true
-		return os.WriteFile(filepath.Join(output, fmt.Sprintf("%02d-%s", len(seen), path.Base(name))), data, 0644)
+		return os.WriteFile(filepath.Join(output, fmt.Sprintf("%02d-%s", len(seen), path.Base(name))), data, 0600)
 	}
 	builtin, err := tree.OpenFile(path.Join(root, "modules.builtin"), os.O_RDONLY)
 	if err != nil {
 		return err
 	}
-	defer builtin.Close()
+	defer func() { _ = builtin.Close() }()
 	compiled := map[string]bool{}
 	lines = bufio.NewScanner(builtin)
 	for lines.Scan() {

@@ -71,7 +71,7 @@ func privateGuestPayload(bundle, root, app string) (_ *PrivateGuestPayload, err 
 	if err != nil {
 		return nil, err
 	}
-	defer os.RemoveAll(dir)
+	defer func() { _ = os.RemoveAll(dir) }()
 	p := &PrivateGuestPayload{Helper: filepath.Join(bundle, "pw-service-vm")}
 	defer func() {
 		if err != nil {
@@ -135,7 +135,7 @@ func readGuestResource(source string, limit int64) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer file.Close()
+	defer func() { _ = file.Close() }()
 	info, err := file.Stat()
 	if err != nil {
 		return nil, err
@@ -158,7 +158,7 @@ func snapshotGuestFile(source, dest string, limit int64) error {
 	if err != nil {
 		return err
 	}
-	defer file.Close()
+	defer func() { _ = file.Close() }()
 	info, err := file.Stat()
 	if err != nil {
 		return err

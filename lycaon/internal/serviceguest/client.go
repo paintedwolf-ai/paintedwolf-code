@@ -127,7 +127,7 @@ func (c *Client) start(ctx context.Context, argv []string, input []byte) (Job, e
 	jobID := hex.EncodeToString(id[:])
 	job, err := c.action(ctx, request{Op: "start", Argv: argv, Input: input, ID: jobID})
 	if err != nil && ctx.Err() != nil {
-		c.stopCanceled(jobID)
+		c.stopCanceled(ctx, jobID)
 	}
 	return job, err
 }
@@ -138,8 +138,8 @@ func (c *Client) Status(ctx context.Context, id string) (Job, error) {
 func (c *Client) Stop(ctx context.Context, id string) (Job, error) {
 	return c.action(ctx, request{Op: "stop", ID: id})
 }
-func (c *Client) stopCanceled(id string) {
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+func (c *Client) stopCanceled(ctx context.Context, id string) {
+	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Second)
 	defer cancel()
 	_, _ = c.Stop(ctx, id)
 }
@@ -159,7 +159,7 @@ func (c *Client) RunInput(ctx context.Context, argv []string, input []byte) (Res
 		job, err = c.action(ctx, request{Op: "wait", ID: job.ID})
 		if err != nil {
 			if ctx.Err() != nil {
-				c.stopCanceled(id)
+				c.stopCanceled(ctx, id)
 			}
 			return Result{}, err
 		}

@@ -47,7 +47,7 @@ func PrepareSSHKnownHosts(c Confinement) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	defer dir.Close()
+	defer func() { _ = dir.Close() }()
 	f, err := dir.OpenFile("known_hosts", os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o600)
 	if errors.Is(err, os.ErrExist) {
 		info, statErr := dir.Lstat("known_hosts")

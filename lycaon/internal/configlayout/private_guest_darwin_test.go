@@ -102,7 +102,7 @@ func TestPrivateGuestBootFileRequiresExclusiveCustody(t *testing.T) {
 	testutil.FailErr(t, "seed boot file", os.WriteFile(path, []byte("boot"), 0600))
 	rd, err := os.Open(path)
 	testutil.FailErr(t, "retain boot input", err)
-	defer rd.Close()
+	defer func() { _ = rd.Close() }()
 	if err := verifyUnlinkedBootFile(rd); err == nil {
 		t.Fatal("accepted a named boot input")
 	}
