@@ -136,7 +136,7 @@ func TestNativeDeleteOutsideWriteScopeStructuredRejectE2E(t *testing.T) {
 			ActiveRootID: "r1"},
 		Identity: tools.InvocationIdentity{Agent: "implement"},
 	})
-	assertProgramRefusal(t, outcome, err, "DELETE_PATH_DENIED")
+	assertProgramRefusal(t, outcome, err, "SURVEY_PATH_ESCAPE")
 	contents, err := os.ReadFile(outside)
 	testutil.FailErr(t, "read refused delete target", err)
 	if string(contents) != "keep" {
