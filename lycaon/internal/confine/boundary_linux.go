@@ -86,11 +86,10 @@ func probeHelper() (string, error) {
 		return "", err
 	}
 	plan := linuxsandbox.Plan{
-		FixedCPU: c.privateUserland,
-		Version:  linuxsandbox.PlanVersion,
-		Probe:    true,
-		Attest:   linuxsandbox.Attest{HostNamespaces: linuxsandbox.HostNamespaces()},
-		Network:  linuxsandbox.Network{Mode: linuxsandbox.NetworkDeny},
+		Version: linuxsandbox.PlanVersion,
+		Probe:   true,
+		Attest:  linuxsandbox.Attest{HostNamespaces: linuxsandbox.HostNamespaces()},
+		Network: linuxsandbox.Network{Mode: linuxsandbox.NetworkDeny},
 	}
 	raw, err := plan.Encode()
 	if err != nil {
