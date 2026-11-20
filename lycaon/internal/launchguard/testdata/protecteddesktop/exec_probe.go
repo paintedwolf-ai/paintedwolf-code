@@ -7,8 +7,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	osexec "os/exec"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"sync"
@@ -24,6 +26,7 @@ import (
 // protected namespace: which namespace each program ran in, and whether
 // terminal interrupts and relay loss behaved.
 type ExecProbe struct {
+	PrivateService         string `json:"private_service"`
 	HostOutput             string `json:"host_output"`
 	HostCode               int    `json:"host_code"`
 	HostError              string `json:"host_error,omitempty"`
@@ -57,6 +60,7 @@ func execProbe(scratch string) ExecProbe {
 	_ = os.Setenv(exec.LaunchBrokerFDEnv, "6")
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
+	probe.PrivateService = privateServiceProbe(scratch)
 	fmt.Fprintln(os.Stderr, "protected_exec_probe=host")
 	out, hostStderr, code, err := exec.RunSeparate(ctx, "sh", []string{"-c", namespaceScript}, exec.ExecOpts{Launch: exec.HostLaunch("toolchain_version_probe")})
 	probe.HostOutput, probe.HostCode = string(out), code
@@ -250,4 +254,31 @@ func relayLossProbe(ctx context.Context) (bool, string) {
 		time.Sleep(20 * time.Millisecond)
 	}
 	return false, "the brokered program outlived its relay"
+}
+
+func privateServiceProbe(scratch string) string {
+	image := filepath.Join(scratch, "activation")
+	script := "#!/bin/sh\n[ \"$#\" = 1 ] && [ \"$1\" = '--acquire-native' ] || exit 2\nreadlink /proc/self/ns/user >&0\n"
+	if err := os.WriteFile(image, []byte(script), 0700); err != nil {
+		return err.Error()
+	}
+	pair, err := unix.Socketpair(unix.AF_UNIX, unix.SOCK_STREAM|unix.SOCK_CLOEXEC, 0)
+	if err != nil {
+		return err.Error()
+	}
+	parent, child := os.NewFile(uintptr(pair[0]), "controller"), os.NewFile(uintptr(pair[1]), "service")
+	defer parent.Close()
+	cmd, err := exec.StartPrivateService(image, child)
+	_ = child.Close()
+	if err != nil {
+		return err.Error()
+	}
+	raw, readErr := io.ReadAll(parent)
+	if err := cmd.Wait(); err != nil {
+		return err.Error()
+	}
+	if readErr != nil {
+		return readErr.Error()
+	}
+	return strings.TrimSpace(string(raw))
 }

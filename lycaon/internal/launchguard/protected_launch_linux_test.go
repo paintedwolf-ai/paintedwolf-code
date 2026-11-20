@@ -82,6 +82,7 @@ type protectedFacts struct {
 
 // engineProbe mirrors the fixture's report on the engine's launch paths.
 type engineProbe struct {
+	PrivateService         string `json:"private_service"`
 	HostOutput             string `json:"host_output"`
 	HostCode               int    `json:"host_code"`
 	HostError              string `json:"host_error,omitempty"`
@@ -467,6 +468,9 @@ func TestProtectedLaunchRoutesEngineLaunchesThroughTheBroker(t *testing.T) {
 	}
 	initial, err := os.Readlink("/proc/self/ns/user")
 	testutil.FailErr(t, "initial user namespace", err)
+	if probe.PrivateService != initial {
+		t.Fatalf("private service bootstrap reported %q, want %q; stderr: %s", probe.PrivateService, initial, launch.stderr.String())
+	}
 	protected := fmt.Sprintf("user:[%d]", launch.facts.Namespace.Inode)
 	for name, run := range map[string]struct {
 		output, err string
