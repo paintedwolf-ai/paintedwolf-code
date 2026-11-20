@@ -62,12 +62,13 @@ webE2e("canceling MCP sign-in closes its callback and preserves a newer attempt"
     };
     const first = await start();
     await cancel();
+    // Only a refused connection proves the callback listener closed; a slow answer does not.
     await expect.poll(async () => {
       try {
-        await request.get(first.redirect_uri, { timeout: 1_000 });
+        await request.get(first.redirect_uri);
         return false;
-      } catch {
-        return true;
+      } catch (error) {
+        return /ECONNREFUSED/.test(String(error));
       }
     }).toBe(true);
     const late = await request.post(`${providerURL}/oauth/complete`, {

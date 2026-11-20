@@ -86,9 +86,8 @@ webE2e.describe("pending transcript time", () => {
       await composer.fill(prompt);
       const sampling = stage.evaluate(async (root, text) => {
         const samples: { top: number; height: number; pending: boolean; composerHeight: number; offset: number }[] = [];
-        const until = performance.now() + 30_000;
         let confirmedFrames = 0;
-        while (performance.now() < until && confirmedFrames < 30) {
+        while (confirmedFrames < 30) {
           // Resize observers settle geometry after animation callbacks, before paint.
           await new Promise<void>(resolve => requestAnimationFrame(() => setTimeout(resolve, 0)));
           const bubble = [...root.querySelectorAll<HTMLElement>(".bubble--user")]

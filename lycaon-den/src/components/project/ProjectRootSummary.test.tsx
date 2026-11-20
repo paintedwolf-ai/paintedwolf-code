@@ -515,7 +515,7 @@ it("keeps the overview for another chat on the same checkout and still follows t
   await Promise.resolve();
   expect(vi.mocked(client.listGitRepos)).toHaveBeenCalledTimes(reads);
   invalidateWorkspace(client, "p1", "chat-b");
-  await vi.waitFor(() => expect(vi.mocked(client.listGitRepos).mock.calls.length).toBeGreaterThan(reads));
+  await waitFor(() => expect(vi.mocked(client.listGitRepos).mock.calls.length).toBeGreaterThan(reads));
 });
 
 it("refreshes the mounted summary after a branch checkout without changing the root path", async () => {

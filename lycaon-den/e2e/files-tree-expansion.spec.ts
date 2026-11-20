@@ -68,7 +68,7 @@ function observeFrames(page: Page, project: string) {
   };
   page.on("requestfinished", collect);
   page.on("request", count);
-  return { frames, requests: () => rowRequests, async stop() {
+  return { frames, requests: () => rowRequests, settled: () => Promise.all(pending), async stop() {
     page.off("requestfinished", collect);
     page.off("request", count);
     await Promise.all(pending);
@@ -116,10 +116,13 @@ test("expand all opens a large tree in bounded frames and keeps rows virtualized
     },
   });
   const capture = observeFrames(page, project.id), { frames } = capture, started = Date.now();
+  // Samples every frame of the expansion, and 60 more once the tree reaches its expanded height.
   const painting = page.getByTestId("files-tree-scroll").evaluate(async element => {
     const heights: number[] = [], loading: number[] = [];
-    for (let frame = 0; frame < 90; frame++) {
+    for (let frame = 0, settled = 0; settled < 60; frame++) {
       await new Promise<void>(resolve => requestAnimationFrame(() => resolve()));
+      const expanded = (window as unknown as { __expandedHeight?: number }).__expandedHeight;
+      if (expanded !== undefined && element.scrollHeight >= expanded) settled++;
       heights.push(element.scrollHeight);
       const bounds = element.getBoundingClientRect();
       const missing = [...element.querySelectorAll(".den-files-tree__hint--loading")].some(row => {
@@ -131,6 +134,7 @@ test("expand all opens a large tree in bounded frames and keeps rows virtualized
     return { heights, loading };
   });
   const accepted = await expand(page, project.id);
+  await page.evaluate(height => { Object.assign(window, { __expandedHeight: height }); }, Math.min(4_000_000, accepted.extent.rows * 26));
   const painted = await painting;
   writeFileSync(info.outputPath("expansion-painting.json"), JSON.stringify(painted, null, 2));
   expect(painted.loading).toEqual([]);
@@ -187,10 +191,11 @@ test("expands a generated repository beyond the directory and child cache limits
     await expect(page.locator('.den-files-tree__label--file[data-path="group-0000/folder-0000/file-00.ts"]')).toBeVisible({ timeout: 30_000 });
     firstExpandedFrameMs = Date.now() - started;
     const idleRequests = capture.requests();
+    const idleFrom = frames.length;
     const idle = await page.getByTestId("files-tree-scroll").evaluate(async element => {
       const started = performance.now();
       let missing = 0;
-      while (performance.now() - started < 4_000) {
+      for (let frame = 0; frame < 240; frame++) {
         await new Promise<void>(resolve => requestAnimationFrame(() => resolve()));
         const bounds = element.getBoundingClientRect();
         if ([...element.querySelectorAll(".den-files-tree__hint--loading")].some(row => {
@@ -200,10 +205,14 @@ test("expands a generated repository beyond the directory and child cache limits
       }
       return { elapsedMs: performance.now() - started, missing };
     });
-    const idleSamples = { ...idle, requests: capture.requests() - idleRequests };
+    await capture.settled();
+    const idleFrames = frames.slice(idleFrom);
+    const idleSamples = { ...idle, requests: capture.requests() - idleRequests, frames: idleFrames };
     writeFileSync(info.outputPath("cold-tree-idle.json"), JSON.stringify(idleSamples, null, 2));
     expect(idle.missing).toBe(0);
-    expect(idleSamples.requests).toBeLessThan(12 * idle.elapsedMs / 1_000);
+    // Idle reads answer only what the host published: each frame once, one presentation per projection revision.
+    expect(new Set(idleFrames.map(frame => `${frame.presentation}:${frame.start}`)).size, "an idle tree reads each frame once").toBe(idleFrames.length);
+    expect(new Set(idleFrames.map(frame => frame.presentation)).size).toBeLessThanOrEqual(new Set(idleFrames.map(frame => frame.revision)).size);
     await page.getByTestId("files-tree").locator('.den-files-tree__label--dir[data-path="."]').press("End");
     await expect(page.locator('.den-files-tree__label--file[data-path="z-last.ts"]')).toBeVisible();
     await expect.poll(() => page.getByTestId("files-tree-scroll").evaluate(element => {
@@ -252,7 +261,10 @@ test("expands a generated repository beyond the directory and child cache limits
     await capture.stop();
     expect(frames.length).toBeGreaterThan(0);
     expect(frames.every(frame => frame.rows <= 200 && frame.bytes <= 256 * 1024)).toBe(true);
-    expect(capture.requests()).toBeLessThan(64 * (1 + (Date.now() - started) / 1_000));
+    // Row reads follow the reading done (two sweeps of 240 and 360 scrolled frames) and the projection revisions the host published.
+    const scrolledFrames = 240 + 360;
+    const revisions = new Set(frames.map(frame => frame.revision)).size;
+    expect(capture.requests(), JSON.stringify({ scrolledFrames, revisions })).toBeLessThan(64 + scrolledFrames + 8 * revisions);
     await page.screenshot({ path: info.outputPath("large-expanded-tree.png") });
   } finally {
     writeFileSync(info.outputPath("large-expansion-performance.json"), JSON.stringify({ firstExpandedFrameMs, scenarioElapsedMs: Date.now() - started, rowRequests: capture.requests(), frames }, null, 2));
