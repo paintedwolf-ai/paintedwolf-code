@@ -111,7 +111,7 @@ func TestBrokerRequestsBoundTheirExtraDescriptors(t *testing.T) {
 			t.Fatalf("%s accepted", name)
 		}
 	}
-	request.ExtraFileLayout = strings.Repeat("01", request.ExtraFiles/2)
+	request.ExtraFileLayout = strings.Repeat("01", (request.ExtraFiles+1)/2)[:request.ExtraFiles]
 	if err := request.Validate(); err != nil {
 		t.Fatalf("bounded sparse descriptor layout: %v", err)
 	}

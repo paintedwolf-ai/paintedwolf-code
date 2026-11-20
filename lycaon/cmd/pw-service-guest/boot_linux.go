@@ -93,10 +93,7 @@ func prepareWork(home, link string, uid int) (string, error) {
 			return "", err
 		}
 	}
-	state, err := configdir.UserConfigDir()
-	if err != nil {
-		return "", err
-	}
+	state := configdir.ChannelConfigRoot(home)
 	scratch := enginepaths.SessionScratchUnder(state, "session")
 	for _, p := range []string{filepath.Dir(state), state, filepath.Dir(scratch), scratch, filepath.Join(scratch, "home"), filepath.Join(scratch, "tmp"), filepath.Join(scratch, "cache"), filepath.Join(scratch, "data")} {
 		if err := os.MkdirAll(p, 0700); err != nil {
