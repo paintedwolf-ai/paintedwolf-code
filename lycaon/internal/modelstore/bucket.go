@@ -20,10 +20,11 @@ type ModelPin struct {
 }
 
 func (s *Store) ImportFromBucket(ctx context.Context, pin ModelPin, progress func(done, total int64)) error {
-	client := httpclient.Download(egressclass.LocalModelDownload, 4*time.Hour)
-	client.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
+	origin, client, err := httpclient.FixedPublicDownload(ctx, egressclass.LocalModelDownload, 4*time.Hour)
+	if err != nil {
+		return err
+	}
 	defer client.CloseIdleConnections()
-	origin := egressclass.RequireSingleFixedEndpoint(egressclass.LocalModelDownload, egressclass.HTTPDownload)
 	return s.download(ctx, modelBucket{base: origin, client: client}, pin, progress)
 }
 
