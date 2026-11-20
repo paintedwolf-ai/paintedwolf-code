@@ -291,7 +291,11 @@ with socket.socket(socket.AF_UNIX) as client:
 	alias := filepath.Join(worker.SessionScratchRoot, "other-session.sock")
 	testutil.FailErr(t, "link socket into other session", os.Link(listenerPath, alias))
 	probe(worker, alias, "errno 13")
-	probe(owner, listenerPath, "session")
+	moved := filepath.Join(owner.SessionScratchRoot, "moved.sock")
+	testutil.FailErr(t, "rename session socket", os.Rename(listenerPath, moved))
+	testutil.FailErr(t, "reuse original selector", os.Rename(hostPath, listenerPath))
+	probe(owner, listenerPath, "errno 13")
+	probe(owner, moved, "session")
 
 	shared, err := os.MkdirTemp("/var/tmp", "pw-shared-") //nolint:usetesting // Exercise the machine-wide directory.
 	testutil.FailErr(t, "create shared directory fixture", err)
