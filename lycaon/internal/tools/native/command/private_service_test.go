@@ -69,3 +69,30 @@ func TestPrivateServiceCloseCancelsPendingStartup(t *testing.T) {
 		t.Fatalf("startup returned %v", err)
 	}
 }
+
+func TestPrivateServiceCapacityFollowsEnvironmentLifetime(t *testing.T) {
+	slots := make(chan struct{}, 1)
+	first, second := &privateServiceSession{slots: slots}, &privateServiceSession{slots: slots}
+	open := func(context.Context) (privateServiceClient, error) { return &privateServiceFixture{}, nil }
+	_, err := first.acquire(t.Context(), open)
+	testutil.FailErr(t, "reserve first service environment", err)
+	if _, err := second.acquire(t.Context(), open); err == nil {
+		t.Fatal("second environment exceeded capacity")
+	}
+	first.active = 1
+	if _, err := first.releaseIdle(); err == nil {
+		t.Fatal("released an active service environment")
+	}
+	first.active = 0
+	_, err = first.releaseIdle()
+	testutil.FailErr(t, "release idle environment", err)
+	if _, err := second.acquire(t.Context(), func(context.Context) (privateServiceClient, error) { return nil, errors.New("missing payload") }); err == nil {
+		t.Fatal("missing payload started")
+	}
+	_, err = second.acquire(t.Context(), open)
+	testutil.FailErr(t, "reuse capacity after failed boot", err)
+	testutil.FailErr(t, "close final environment", second.close())
+	if len(slots) != 0 {
+		t.Fatal("closed environment retained capacity")
+	}
+}

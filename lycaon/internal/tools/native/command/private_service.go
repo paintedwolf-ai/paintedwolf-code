@@ -13,6 +13,9 @@ import (
 	"github.com/lycaon/lycaon/internal/toolrejection"
 )
 
+// Each live environment reserves up to one GiB.
+const maxPrivateServiceSessions = 4
+
 type privateServiceClient interface {
 	RunInput(context.Context, []string, []byte) (serviceguest.Result, error)
 	Close() error
@@ -25,6 +28,7 @@ type privateServiceSession struct {
 	cancel   context.CancelFunc
 	closed   bool
 	active   int
+	slots    chan struct{}
 }
 
 func openPrivateService(ctx context.Context) (privateServiceClient, error) {
@@ -56,6 +60,14 @@ func (s *privateServiceSession) acquire(ctx context.Context, open func(context.C
 				return nil, ctx.Err()
 			}
 		default:
+			if s.slots != nil {
+				select {
+				case s.slots <- struct{}{}:
+				default:
+					s.mu.Unlock()
+					return nil, toolrejection.RejectInvalidArguments("COMMAND_LIMIT_EXCEEDED", map[string]any{"limit": "private_service_sessions", "maximum": cap(s.slots), "observed": cap(s.slots) + 1})
+				}
+			}
 			start, cancel := context.WithCancel(ctx)
 			s.cancel, s.starting = cancel, make(chan struct{})
 			s.mu.Unlock()
@@ -65,6 +77,9 @@ func (s *privateServiceSession) acquire(ctx context.Context, open func(context.C
 			if s.closed && client != nil {
 				err = errors.Join(context.Canceled, client.Close())
 				client = nil
+			}
+			if client == nil && s.slots != nil {
+				<-s.slots
 			}
 			s.client = client
 			close(s.starting)
@@ -87,9 +102,25 @@ func (s *privateServiceSession) close() error {
 		<-starting
 	}
 	if client != nil {
-		return client.Close()
+		s.mu.Lock()
+		defer s.mu.Unlock()
+		if s.client != nil {
+			return s.releaseClient()
+		}
 	}
 	return nil
+}
+
+// The caller holds mu until the runtime has relinquished its slot.
+func (s *privateServiceSession) releaseClient() error {
+	err := s.client.Close()
+	if err == nil {
+		s.client = nil
+		if s.slots != nil {
+			<-s.slots
+		}
+	}
+	return err
 }
 
 func (s *privateServiceSession) releaseIdle() (toolcontract.ProducerResult, error) {
@@ -102,10 +133,9 @@ func (s *privateServiceSession) releaseIdle() (toolcontract.ProducerResult, erro
 	if s.client == nil {
 		return readResult(0), nil
 	}
-	if err := s.client.Close(); err != nil {
+	if err := s.releaseClient(); err != nil {
 		return ownerFailure(err), err
 	}
-	s.client = nil
 	result := readResult(0)
 	result.EffectCertainty = toolcontract.EffectCompleted
 	return result, nil

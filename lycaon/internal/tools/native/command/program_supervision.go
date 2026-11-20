@@ -37,9 +37,10 @@ type ProgramSupervisor struct {
 	// Background is the session process registry that holds & jobs.
 	Background *bgprocess.Registry
 
-	mu       sync.Mutex
-	programs map[string]*supervisedProgram
-	sessions map[string]*SessionJobs
+	mu           sync.Mutex
+	programs     map[string]*supervisedProgram
+	sessions     map[string]*SessionJobs
+	privateSlots chan struct{}
 }
 
 // Jobs returns the session's job set; wait and kill read the same outcomes
@@ -54,10 +55,12 @@ func (s *ProgramSupervisor) Jobs(sessionID, projectID string) *SessionJobs {
 	}
 	if s.sessions == nil {
 		s.sessions = map[string]*SessionJobs{}
+		s.privateSlots = make(chan struct{}, maxPrivateServiceSessions)
 	}
 	jobs, ok := s.sessions[sessionID]
 	if !ok {
 		jobs = &SessionJobs{Registry: s.Background, Supervisor: s, SessionID: sessionID, ProjectID: projectID}
+		jobs.privateService.slots = s.privateSlots
 		s.sessions[sessionID] = jobs
 	}
 	return jobs
