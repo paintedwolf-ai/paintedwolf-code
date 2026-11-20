@@ -7,6 +7,7 @@ import (
 
 	"github.com/diskfs/go-diskfs/backend/file"
 	"github.com/diskfs/go-diskfs/filesystem/squashfs"
+	"github.com/lycaon/lycaon/internal/testutil"
 )
 
 func TestPinnedBootDrivers(t *testing.T) {
@@ -21,31 +22,21 @@ func TestPinnedBootDrivers(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			image := filepath.Join(t.TempDir(), "modloop")
 			f, err := os.Create(image)
-			if err != nil {
-				t.Fatal(err)
-			}
+			testutil.FailErr(t, "create kernel module image", err)
 			defer f.Close()
 			tree, err := squashfs.Create(file.New(f, false), 0, 0, 4096)
-			if err != nil {
-				t.Fatal(err)
-			}
+			testutil.FailErr(t, "create squashfs fixture", err)
 			root := filepath.Join(tree.Workspace(), "modules", "test-virt")
-			if err := os.MkdirAll(root, 0755); err != nil {
-				t.Fatal(err)
-			}
+			testutil.FailErr(t, "create kernel module directory", os.MkdirAll(root, 0755))
 			files := map[string]string{
 				"modules.dep":     "virtio-rng.ko: bus.ko\nvmw_vsock_virtio_transport.ko: bus.ko\nbus.ko:\n",
 				"modules.builtin": tc.builtin,
 				"bus.ko":          "bus", "virtio-rng.ko": "entropy", "vmw_vsock_virtio_transport.ko": "socket",
 			}
 			for name, contents := range files {
-				if err := os.WriteFile(filepath.Join(root, name), []byte(contents), 0644); err != nil {
-					t.Fatal(err)
-				}
+				testutil.FailErr(t, "write kernel module fixture", os.WriteFile(filepath.Join(root, name), []byte(contents), 0644))
 			}
-			if err := tree.Finalize(squashfs.FinalizeOptions{}); err != nil {
-				t.Fatal(err)
-			}
+			testutil.FailErr(t, "finalize squashfs image", tree.Finalize(squashfs.FinalizeOptions{}))
 			output := t.TempDir()
 			err = extract(image, output)
 			if (err == nil) != tc.valid {
