@@ -292,4 +292,26 @@ with socket.socket(socket.AF_UNIX) as client:
 	testutil.FailErr(t, "link socket into other session", os.Link(listenerPath, alias))
 	probe(worker, alias, "errno 13")
 	probe(owner, listenerPath, "session")
+
+	shared, err := os.MkdirTemp("/var/tmp", "pw-shared-") //nolint:usetesting // Exercise the machine-wide directory.
+	testutil.FailErr(t, "create shared directory fixture", err)
+	t.Cleanup(func() { _ = os.RemoveAll(shared) })
+	granted := owner
+	granted.GrantedWriteRoots = []string{"/var/tmp"}
+	sharedProbe := `import pathlib, socket, sys
+root = pathlib.Path(sys.argv[1])
+(root / "file").write_text("approved")
+with socket.socket(socket.AF_UNIX) as server:
+    try: server.bind(str(root / "socket"))
+    except OSError as e: print("bind errno", e.errno)
+`
+	status, out := linuxConfinedRun(t, self, granted, nil, "/usr/bin/python3", "-I", "-c", sharedProbe, shared)
+	if status.ExitStatus() != 0 || !strings.Contains(out, "bind errno 13") {
+		t.Fatalf("shared directory grant: status %v, output %q", status, out)
+	}
+	contents, err := os.ReadFile(filepath.Join(shared, "file"))
+	testutil.FailErr(t, "read granted shared file", err)
+	if string(contents) != "approved" {
+		t.Fatalf("shared file contains %q", contents)
+	}
 }
