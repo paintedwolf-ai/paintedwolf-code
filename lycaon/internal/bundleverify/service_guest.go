@@ -9,13 +9,17 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
+	"strings"
+
+	"github.com/lycaon/lycaon/internal/platformfloor"
 )
 
 const serviceGuestDir = "Contents/Resources/service-guest"
 
 var codeDirectoryHash = regexp.MustCompile("^[a-f0-9]{40}\n$")
 
-func checkServiceGuestAssets(app string) []Finding {
+func checkServiceGuestAssets(app string, images []MachOFacts) []Finding {
 	base := filepath.Join(app, serviceGuestDir)
 	var manifest struct {
 		Schema       int    `json:"schema"`
@@ -24,10 +28,14 @@ func checkServiceGuestAssets(app string) []Finding {
 		Initramfs    string `json:"initramfs_sha256"`
 	}
 	content, err := os.ReadFile(filepath.Join(base, "manifest.json"))
-	if err != nil || json.Unmarshal(content, &manifest) != nil || manifest.Schema != 1 || (manifest.Architecture != "arm64" && manifest.Architecture != "amd64") {
+	if err != nil || json.Unmarshal(content, &manifest) != nil || manifest.Schema != 1 || !slices.Contains(platformfloor.DarwinArches(), manifest.Architecture) {
 		return []Finding{guestAssetFinding("manifest.json", "invalid guest manifest")}
 	}
 	var findings []Finding
+	helper := slices.IndexFunc(images, func(image MachOFacts) bool { return image.Path == filepath.Join(app, serviceGuestHelper) })
+	if helper < 0 || len(images[helper].Slices) != 1 || images[helper].Slices[0].GoArch != manifest.Architecture {
+		findings = append(findings, guestAssetFinding("pw-service-vm", "helper must contain the single CPU architecture declared by the guest manifest"))
+	}
 	for _, file := range []struct{ name, digest string }{{"kernel", manifest.Kernel}, {"initramfs.gz", manifest.Initramfs}} {
 		if err := verifyImageDigest(filepath.Join(base, file.name), file.digest); err != nil {
 			findings = append(findings, guestAssetFinding(file.name, err.Error()))
@@ -62,4 +70,22 @@ func verifyImageDigest(path, expected string) error {
 
 func guestAssetFinding(name, reason string) Finding {
 	return Finding{Code: CodeEngineResourceMissing, Severity: SeverityError, Path: filepath.Join(serviceGuestDir, name), Detail: map[string]string{"reason": reason}}
+}
+
+func checkGuestHelperSignature(app string, display []byte) []Finding {
+	values := map[string]string{}
+	for line := range strings.Lines(string(display)) {
+		key, value, ok := strings.Cut(strings.TrimSpace(line), "=")
+		if ok && (key == "Identifier" || key == "CDHash") {
+			values[key] = value
+		}
+	}
+	if values["Identifier"] != "dev.paintedwolf.code.service-vm" {
+		return []Finding{guestAssetFinding("pw-service-vm", "unexpected service helper signing identifier")}
+	}
+	data, err := os.ReadFile(filepath.Join(app, serviceGuestDir, "pw-service-vm.cdhash"))
+	if err == nil && codeDirectoryHash.Match(data) && strings.TrimSpace(string(data)) != values["CDHash"] {
+		return []Finding{guestAssetFinding("pw-service-vm.cdhash", "packaged code identity differs from the signed service helper")}
+	}
+	return nil
 }

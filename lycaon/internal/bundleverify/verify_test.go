@@ -77,6 +77,8 @@ func (f *fakeRunner) callsFor(name string, prefix ...string) [][]string {
 func signedOK() *fakeRunner {
 	r := newFakeRunner()
 	r.stderr["codesign"] = []byte(codesignDeveloperIDWithRuntime)
+	r.stderr["codesign --display @pw-service-vm"] = guestCodesignFixture(codesignDeveloperIDWithRuntime)
+	r.stdout["codesign -d @pw-service-vm"] = []byte(`<plist><dict><key>com.apple.security.virtualization</key><true/></dict></plist>`)
 	r.stdout["codesign -d"] = []byte(entitlementsEmpty)
 	r.stdout["codesign -d @"+browserBinaryName] = []byte(entitlementsBrowserOK)
 	r.stdout["codesign -d @pw"] = []byte(entitlementsEngineOK)
@@ -151,8 +153,6 @@ func buildFakeApp(t *testing.T, opts appOptions) string {
 
 	mustWriteFile(t, filepath.Join(app, "Contents", "Resources", "engine-root", "schemas", ".keep"), []byte("x"))
 	writeGuestAssets(t, app)
-	mustWriteFile(t, filepath.Join(app, serviceGuestHelper), []byte("service helper"))
-	testutil.FailErr(t, "mark helper executable", os.Chmod(filepath.Join(app, serviceGuestHelper), 0755))
 
 	if !opts.omitNotices {
 		stub := strings.Repeat("third-party notices fixture line\n", 200)
@@ -297,6 +297,7 @@ func codesignReporting(description string) func() *fakeRunner {
 	return func() *fakeRunner {
 		runner := newFakeRunner()
 		runner.stderr["codesign"] = []byte(description)
+		runner.stderr["codesign --display @pw-service-vm"] = guestCodesignFixture(description)
 		return runner
 	}
 }
@@ -386,8 +387,8 @@ var verifyCases = []verifyCase{
 			if errs, _ := run.report.Counts(); errs != 0 {
 				t.Fatalf("clean bundle has %d error findings: %+v", errs, run.report.Findings)
 			}
-			// Sidecar, logs CLI, document core, decision engine, app binary, browser, scanner.
-			machOCount(7)(t, run)
+			// Include every executable inspected inside the app.
+			machOCount(8)(t, run)
 		},
 	},
 	{
@@ -507,8 +508,8 @@ var verifyCases = []verifyCase{
 	{
 		name:   "ad hoc signature warns when signing is not required",
 		runner: codesignReporting(codesignAdhoc),
-		// The app and its seven Mach-O files.
-		want:    []wantCode{{CodeSignatureAdhoc, 8, SeverityWarn}},
+		// The app and its eight Mach-O files.
+		want:    []wantCode{{CodeSignatureAdhoc, 9, SeverityWarn}},
 		verdict: reportPasses,
 	},
 	{
@@ -713,7 +714,7 @@ var verifyCases = []verifyCase{
 				"Contents/Resources/app.js":     []byte("export const x = 1;"),
 			}
 		},
-		inspect: machOCount(7),
+		inspect: machOCount(8),
 	},
 }
 
