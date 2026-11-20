@@ -26,7 +26,7 @@ func sshKnownHostsPath(c Confinement) (string, error) {
 		return "", err
 	}
 	id := sha256.Sum256([]byte(c.ProjectID))
-	return filepath.Join(fspath.CanonicalPath(enginepaths.ScratchRootUnder(stateRoot)), "ssh-known-hosts", fmt.Sprintf("%x", id), "known_hosts"), nil
+	return filepath.Join(fspath.CanonicalPath(enginepaths.SSHRootUnder(stateRoot)), "projects", fmt.Sprintf("%x", id), "known_hosts"), nil
 }
 
 // OpenSSH parses each file name after the shell has split its arguments.

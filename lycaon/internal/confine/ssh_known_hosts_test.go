@@ -10,9 +10,6 @@ import (
 	"github.com/lycaon/lycaon/internal/testutil"
 )
 
-// Every build failure is reported as an empty path, which is indistinguishable
-// from having no key material to mirror — and an absent mirror silently drops
-// ssh to trust-on-first-use. So this asserts the file, not the call.
 func TestBuildKnownHostsMirrorWritesCollectedMaterial(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)

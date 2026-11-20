@@ -503,7 +503,7 @@ Cookies issued by a local socket carry that retained object's issuer receipt in 
 
 ### Project SSH host keys
 
-Mediated Git SSH records newly accepted host keys in one private file per project under the host’s scratch directory. The launcher creates the file and grants the confined process write access to that exact path. Existing host keys are available through the read-only mirror. A different project uses its own file.
+Mediated Git SSH records newly accepted host keys in one private file per project under the host’s SSH state directory. The launcher creates the file and grants the confined process write access to that exact path. Existing host keys are available through the read-only mirror. A different project uses its own file.
 
 ---
 
