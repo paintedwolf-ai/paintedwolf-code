@@ -264,11 +264,13 @@ function parseContextNav(value: unknown): DenContextNavPrefs | undefined {
 
 function parseOnboarding(value: unknown): DenOnboardingPrefs | undefined {
   if (typeof value !== "object" || value === null) return undefined;
-  const row = value as Partial<DenOnboardingPrefs>;
+  const row = value as Record<string, unknown>;
   const onboarding: DenOnboardingPrefs = {};
-  if (typeof row.firstRunSetupCompleted === "boolean") {
-    onboarding.firstRunSetupCompleted = row.firstRunSetupCompleted;
+  for (const key of ["completedSetupRevision", "completedLocalModelStepRevision"] as const) {
+    const revision = row[key];
+    if (typeof revision === "number" && Number.isSafeInteger(revision) && revision > 0) onboarding[key] = revision;
   }
+  if (!onboarding.completedSetupRevision && row.firstRunSetupCompleted === true) onboarding.completedSetupRevision = 1;
   return Object.keys(onboarding).length > 0 ? onboarding : undefined;
 }
 

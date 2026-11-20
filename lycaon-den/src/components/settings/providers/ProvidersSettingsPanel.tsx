@@ -13,7 +13,6 @@ import {
 } from "../../../settings/providers/models-editor-model.ts";
 import { showAllModelsPref } from "../../../settings/appearance/display-prefs.ts";
 import { MODELS_SETTINGS_COPY } from "../../../settings/providers/models-settings-copy.ts";
-import { onboardingModelHintForProviders } from "../../../settings/providers/provider-onboarding-hints.ts";
 import { AI_PROVIDERS_SECTION_LABEL } from "../../../settings/settings-nav-model.ts";
 import { ModelSlotPicker } from "../../model/ModelSlotPicker.tsx";
 import { ThinkingOverridesPanel } from "../../model/ThinkingOverridesPanel.tsx";
@@ -21,24 +20,19 @@ import { ShowLatest } from "../../primitives/ShowLatest.tsx";
 import { SettingsEditorTitle, ProvidersIcon } from "../SettingsEditorTitle.tsx";
 import { SettingsScopeLede } from "../SettingsScopeLede.tsx";
 import { ProvidersPanel } from "./ProvidersPanel.tsx";
-import { SummarizerModelHint } from "../../model/SummarizerModelHint.tsx";
 import { settingAnchor, settingLabel } from "../../../settings/settings-registry.ts";
 
 type Props = {
   client: LycaonClient;
   settingsStore: SettingsStore;
-  /** `onboarding` hides settings chrome and optional summarizer for first-run focus. */
-  variant?: "settings" | "onboarding";
   counterpartLabel?: string;
   onOpenCounterpart?: () => void;
 };
 
-/** Connect model providers and pick the default model — the first-run setup step. */
 export function ProvidersSettingsPanel(props: Props) {
-  const isOnboarding = () => props.variant === "onboarding";
   const providers = () => props.settingsStore.state.providers;
   const [addOpen, setAddOpen] = createSignal(false);
- const [savingPolicy, setSavingPolicy] = createSignal(false);
+  const [savingPolicy, setSavingPolicy] = createSignal(false);
 
   const removeProvider = async (id: string) => {
     const current = policy();
@@ -64,7 +58,7 @@ export function ProvidersSettingsPanel(props: Props) {
   };
 
   const applyModelPolicy = async (next: ModelPolicyPatch, propagateError = false) => {
- setSavingPolicy(true);
+    setSavingPolicy(true);
     props.settingsStore.actions.setError(undefined);
     try {
       const updated = await props.client.updateModelPolicySettings(next);
@@ -87,74 +81,6 @@ export function ProvidersSettingsPanel(props: Props) {
     await applyModelPolicy(summarizerPatch(ref));
   };
 
-  const defaultModelBlock = () => (
-    <Show when={hasReady()}>
-      <div class="den-settings-default-model" data-testid="default-model-settings">
-        <Show when={effectivePolicy() && !hasDefaultModel(effectivePolicy())}>
-          <p
-            class="den-settings-warn"
-            role="status"
-            data-testid="default-model-required-warning"
-          >
-            {MODELS_SETTINGS_COPY.defaultModelRequired}
-          </p>
-        </Show>
-        <label class="den-settings-default-model-label" for="default-model-select">
-          Default model
-        </label>
-        <Show
-          when={
-            isOnboarding()
-              ? onboardingModelHintForProviders(providers(), {
-                  defaultProviderId: defaultRef().provider_id,
-                })
-              : MODELS_SETTINGS_COPY.defaultModelHint
-          }
-        >
-          {(hint) => (
-            <p class="den-settings-hint" data-testid="default-model-hint">
-              {hint()}
-            </p>
-          )}
-        </Show>
-        <ModelSlotPicker
- disabled={savingPolicy()}
-          compact
-          id="default-model-select"
-          label="Default model"
-          providers={providers()}
-          roleSlot="coordinator"
-          showAllModels={showAll()}
-          value={defaultRef()}
-          onChange={(ref) => void selectModel(ref)}
-          data-testid="default-model-select"
-        />
-
-        <Show when={!isOnboarding()}>
-          <label
-            class="den-settings-default-model-label"
-            for="default-summarizer-model-select"
-          >
-            {MODELS_SETTINGS_COPY.defaultSummarizerModelLabel}
-          </label>
-          <p class="den-settings-hint"><SummarizerModelHint /></p>
-          <ModelSlotPicker
- disabled={savingPolicy()}
-            compact
-            id="default-summarizer-model-select"
-            label={MODELS_SETTINGS_COPY.defaultSummarizerModelLabel}
-            providers={providers()}
-            roleSlot="lite"
-            showAllModels={showAll()}
-            value={summarizerRef()}
-            onChange={(ref) => void selectSummarizerModel(ref)}
-            data-testid="default-summarizer-model-select"
-          />
-        </Show>
-      </div>
-    </Show>
-  );
-
   const settingsPrefsBand = () => (
     <div class="den-settings-prefs-band" data-testid="providers-toolbar">
       <div data-testid="default-model-settings" style={{ display: "contents" }}>
@@ -176,7 +102,7 @@ export function ProvidersSettingsPanel(props: Props) {
               {settingLabel("default-model")}
             </label>
             <ModelSlotPicker
- disabled={savingPolicy()}
+              disabled={savingPolicy()}
               compact
               id="default-model-select"
               label={settingLabel("default-model")}
@@ -196,7 +122,7 @@ export function ProvidersSettingsPanel(props: Props) {
               {settingLabel("summarizer-model")}
             </label>
             <ModelSlotPicker
- disabled={savingPolicy()}
+              disabled={savingPolicy()}
               compact
               id="default-summarizer-model-select"
               label={settingLabel("summarizer-model")}
@@ -216,41 +142,29 @@ export function ProvidersSettingsPanel(props: Props) {
   return (
     <div
       class="den-settings-editor"
-      classList={{ "den-settings-editor--onboarding": isOnboarding() }}
       data-testid="providers-settings"
     >
-      <Show when={!isOnboarding()}>
-        <SettingsEditorTitle icon={<ProvidersIcon />}>
-          {AI_PROVIDERS_SECTION_LABEL}
-        </SettingsEditorTitle>
-      </Show>
+      <SettingsEditorTitle icon={<ProvidersIcon />}>
+        {AI_PROVIDERS_SECTION_LABEL}
+      </SettingsEditorTitle>
 
-      <Show
-        when={!isOnboarding()}
-        fallback={
-          <p class="den-settings-hint">{MODELS_SETTINGS_COPY.onboardingProvidersIntro}</p>
-        }
+      <SettingsScopeLede
+        scope="device"
+        counterpartLabel={props.counterpartLabel}
+        onOpenCounterpart={props.onOpenCounterpart}
       >
-        <SettingsScopeLede
-          scope="device"
-          counterpartLabel={props.counterpartLabel}
-          onOpenCounterpart={props.onOpenCounterpart}
-        >
-          <p class="den-settings-hint">{MODELS_SETTINGS_COPY.providersIntro}</p>
-        </SettingsScopeLede>
-      </Show>
+        <p class="den-settings-hint">{MODELS_SETTINGS_COPY.providersIntro}</p>
+      </SettingsScopeLede>
 
-      <Show when={!isOnboarding()}>
-        {settingsPrefsBand()}
-        <ShowLatest when={policy()}>{(current) => <ThinkingOverridesPanel
-          policy={current()}
-          saving={savingPolicy()}
-          providers={providers()}
-          onChange={(thinking_overrides) => applyModelPolicy({ thinking_overrides }, true)}
-        />}</ShowLatest>
-        <Show when={providers().length === 0}>
-          <p class="den-settings-hint">{MODELS_SETTINGS_COPY.noProvidersLoaded}</p>
-        </Show>
+      {settingsPrefsBand()}
+      <ShowLatest when={policy()}>{(current) => <ThinkingOverridesPanel
+        policy={current()}
+        saving={savingPolicy()}
+        providers={providers()}
+        onChange={(thinking_overrides) => applyModelPolicy({ thinking_overrides }, true)}
+      />}</ShowLatest>
+      <Show when={providers().length === 0}>
+        <p class="den-settings-hint">{MODELS_SETTINGS_COPY.noProvidersLoaded}</p>
       </Show>
 
       <ProvidersPanel
@@ -262,7 +176,6 @@ export function ProvidersSettingsPanel(props: Props) {
         onAddOpenChange={setAddOpen}
       />
 
-      <Show when={isOnboarding()}>{defaultModelBlock()}</Show>
     </div>
   );
 }

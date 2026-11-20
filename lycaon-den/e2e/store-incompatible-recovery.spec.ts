@@ -22,7 +22,7 @@ mockedBackendE2e.describe("store incompatible recovery", () => {
         body: JSON.stringify({ code: "store_incompatible", message: "Store incompatible" }),
       });
     });
-    await seedAppState(page, { onboarding: { firstRunSetupCompleted: true } });
+    await seedAppState(page);
     await page.goto("/");
     await expect(page.getByTestId("critical-stop")).toHaveAttribute("data-code", "store_incompatible", { timeout: 30_000 });
     // The stop replaces the whole app, not one stage of it.
@@ -100,9 +100,7 @@ mockedBackendE2e.describe("store incompatible recovery", () => {
         );
       });
 
-      await seedAppState(page, {
-        onboarding: { firstRunSetupCompleted: true },
-      });
+      await seedAppState(page);
       await page.setViewportSize({ width: 1280, height: 1000 });
       await page.goto("/");
 
@@ -212,9 +210,7 @@ mockedBackendE2e.describe("store incompatible recovery", () => {
         );
       });
 
-      await seedAppState(page, {
-        onboarding: { firstRunSetupCompleted: true },
-      });
+      await seedAppState(page);
       await page.goto("/");
 
       const stop = page.getByTestId("critical-stop");

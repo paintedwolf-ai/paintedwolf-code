@@ -48,6 +48,7 @@
 @import "./styling/recipes/keyboard-utilities.css";
 @import "./styling/recipes/settings-rules-utilities.css";
 @import "./styling/recipes/settings-preferences-utilities.css";
+@import "./styling/recipes/local-model-utilities.css";
 @import "./styling/recipes/saved-approvals-utilities.css";
 @import "./styling/recipes/tabs-utilities.css";
 @import "./styling/recipes/provider-selection-utilities.css";
