@@ -15,6 +15,7 @@ import (
 	"slices"
 	"strings"
 	"syscall"
+	"time"
 
 	"golang.org/x/sys/unix"
 )
@@ -62,7 +63,7 @@ func runVM(image string) error {
 	if err := unix.Prctl(unix.PR_SET_NO_NEW_PRIVS, 1, 0, 0, 0); err != nil {
 		return err
 	}
-	return cmd.Run()
+	return superviseVM(cmd)
 }
 
 func vmArguments(arch string, kvm bool) []string {
@@ -75,7 +76,7 @@ func vmArguments(arch string, kvm bool) []string {
 		accelerator, cpu = "kvm", "host"
 	}
 	return []string{"-no-user-config", "-nodefaults", "-no-reboot", "-display", "none", "-monitor", "none", "-serial", "none", "-parallel", "none", "-nic", "none",
-		"-machine", machine, "-accel", accelerator, "-cpu", cpu, "-smp", "1", "-m", "512M",
+		"-machine", machine, "-accel", accelerator, "-cpu", cpu, "-smp", "1", "-m", "1024M",
 		"-sandbox", "on,obsolete=deny,elevateprivileges=deny,spawn=deny,resourcecontrol=deny",
 		"-kernel", "/proc/self/fd/5", "-initrd", "/proc/self/fd/6", "-append", "rdinit=/init panic=1 quiet " + ConsoleArgument,
 		"-chardev", "socket,id=pwcontrol,fd=3", "-device", "virtio-serial-pci", "-device", "virtserialport,chardev=pwcontrol,name=" + ConsoleName}
@@ -232,4 +233,35 @@ func sealedBootFile(path, digest string) (*os.File, error) {
 	}
 	ok = true
 	return file, nil
+}
+
+// A lost host also retires a VM that never reached its guest supervisor.
+func superviseVM(cmd *exec.Cmd) error {
+	read, write, err := os.Pipe()
+	if err != nil {
+		return err
+	}
+	defer read.Close()
+	if err := cmd.Start(); err != nil {
+		_ = write.Close()
+		return err
+	}
+	done := make(chan struct{})
+	var status error
+	go func() { status = cmd.Wait(); _ = write.Close(); close(done) }()
+	poll := []unix.PollFd{{Fd: 0, Events: unix.POLLRDHUP}, {Fd: int32(read.Fd()), Events: unix.POLLIN}}
+	for {
+		if _, err := unix.Poll(poll, -1); errors.Is(err, unix.EINTR) {
+			continue
+		}
+		break
+	}
+	select {
+	case <-done:
+		return status
+	case <-time.After(5 * time.Second):
+	}
+	_ = cmd.Process.Kill()
+	<-done
+	return status
 }

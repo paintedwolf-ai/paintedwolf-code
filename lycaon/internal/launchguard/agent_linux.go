@@ -8,8 +8,9 @@ import (
 	"syscall"
 	"unsafe"
 
-	"github.com/lycaon/lycaon/internal/launchbroker"
 	"golang.org/x/sys/unix"
+
+	"github.com/lycaon/lycaon/internal/launchbroker"
 )
 
 // BrokerAgentArgument selects the entry image's broker agent mode.
