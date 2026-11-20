@@ -11,7 +11,7 @@ Choose the server version the test expects and give the instance fresh storage.
 
 {% if session_scratch_dir and profile_command_external_exec %}## Local PostgreSQL
 
-When the server tools are installed, initialize fresh storage with `initdb -D "$SCRATCH_DIR/pgdata"`. Start `postgres -D "$SCRATCH_DIR/pgdata" -k "$SCRATCH_DIR" -c listen_addresses=''` as a background job. Keep its job handle. In a later command, check readiness with `pg_isready -h "$SCRATCH_DIR"` and query with `psql -h "$SCRATCH_DIR" -d postgres`. Stop the job when the test finishes.
+{% if platform_os == "linux" %}When the server tools are installed, initialize fresh storage with `initdb -D "$SCRATCH_DIR/pgdata"`. Start `postgres -D "$SCRATCH_DIR/pgdata" -k "$SCRATCH_DIR" -c listen_addresses=''` as a background job. Keep its job handle. In a later command, check readiness with `pg_isready -h "$SCRATCH_DIR"` and query with `psql -h "$SCRATCH_DIR" -d postgres`. Stop the job when the test finishes.{% elif platform_os == "darwin" %}PostgreSQL initialization requires System V shared memory. For an isolated database on macOS, use an available container engine through its reviewed service route.{% else %}Check whether the host provides isolated System V shared memory before starting a local instance.{% endif %}
 
 {% endif %}## Container workflow
 
