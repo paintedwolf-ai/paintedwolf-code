@@ -59,7 +59,7 @@ func TestDeclaredSharedTempRedirectUsesTheRequestedNarrowGrant(t *testing.T) {
 	t.Setenv("TMPDIR", shared)
 	cards := runCommandWithApprovals(t, session, "recommended")
 	plan := cards[0].ToolApproval.Plan
-	if plan.Subject.Kind != wire.ApprovalSubjectKindWriteRootSet {
+	if plan.Subject.Kind != wire.ApprovalSubjectKindWriteRootSet || len(plan.Subject.Targets) != 1 || plan.Subject.Targets[0].Label != target {
 		t.Fatalf("exact target review = %+v", plan)
 	}
 	data, err := os.ReadFile(target)
