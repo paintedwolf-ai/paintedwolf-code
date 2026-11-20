@@ -124,3 +124,25 @@ func TestRegistryPrunesUnlinkedSocketsAtCapacity(t *testing.T) {
 		t.Fatalf("retained %d endpoints, want 1", len(owned.pins))
 	}
 }
+
+func TestRegistryReservationsAreBoundedAcrossLaunches(t *testing.T) {
+	var reg Registry
+	session := object{ino: 1}
+	owners := make([]launch, maxSessionSockets)
+	for i := range owners {
+		if errno := reg.reserve(session, &owners[i]); errno != 0 {
+			t.Fatalf("reserve %d: %v", i, errno)
+		}
+	}
+	if errno := reg.reserve(session, &owners[0]); errno != unix.EBUSY {
+		t.Fatalf("duplicate reservation: %v", errno)
+	}
+	var next launch
+	if errno := reg.reserve(session, &next); errno != unix.ENOSPC {
+		t.Fatalf("exhausted session: %v", errno)
+	}
+	reg.release(session, &owners[0])
+	if errno := reg.reserve(session, &next); errno != 0 {
+		t.Fatalf("reserve released capacity: %v", errno)
+	}
+}

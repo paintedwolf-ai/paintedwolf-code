@@ -209,6 +209,8 @@ func (r *Registry) retain(session object, owner *launch, fd int) unix.Errno {
 		unix.Close(fd)
 		return unix.EEXIST
 	}
+	g.reservations--
+	owner.reserved = false
 	g.pins[id] = endpoint{fd: fd, owner: owner}
 	owner.pins[id] = fd
 	return 0
