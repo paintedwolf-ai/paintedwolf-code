@@ -19,6 +19,7 @@ import (
 	"github.com/lycaon/lycaon/internal/git"
 	"github.com/lycaon/lycaon/internal/packboard"
 	"github.com/lycaon/lycaon/internal/project"
+	"github.com/lycaon/lycaon/internal/projectroot"
 	repotest "github.com/lycaon/lycaon/internal/testsetup/repoinfo"
 	"github.com/lycaon/lycaon/internal/testutil"
 	wire "github.com/lycaon/lycaon/pkg/api"
@@ -81,10 +82,10 @@ func TestWorktreeReach_realProductWorkflow(t *testing.T) {
 	if len(repos.Repos) == 0 || repos.Repos[0].RepoID != baseRepoID {
 		t.Fatalf("bound repo identity = %#v want %q", repos.Repos, baseRepoID)
 	}
-	status := contractfixture.GitStatusViaAPI(t, srv, projectID, baseRepoID, sess.ID)
-	if !status.Dirty || status.Branch != binding.Branch {
-		t.Fatalf("bound status = %#v", status)
-	}
+	written := contractfixture.GitStatusPublishedWhen(t, srv, projectID, baseRepoID, sess.ID,
+		"bound status shows the session write", func(status contractfixture.GitStatusSnapshot) bool {
+			return status.Branch == binding.Branch && status.Dirty
+		})
 
 	w = contractfixture.PostWorktreeJSON(t, srv, contractfixture.GitRepoURL(projectID, baseRepoID, "commit")+"?session_id="+sess.ID, wire.GitCommitRequest{
 		Message: "feat: session change",
@@ -92,10 +93,10 @@ func TestWorktreeReach_realProductWorkflow(t *testing.T) {
 	if w.Code != http.StatusOK {
 		t.Fatalf("bound commit = %d body=%s", w.Code, w.Body.String())
 	}
-	status = contractfixture.GitStatusViaAPI(t, srv, projectID, baseRepoID, sess.ID)
-	if status.Dirty || status.Branch != binding.Branch {
-		t.Fatalf("commit status = %#v", status)
-	}
+	contractfixture.GitStatusPublishedWhen(t, srv, projectID, baseRepoID, sess.ID,
+		"bound status shows the commit", func(status contractfixture.GitStatusSnapshot) bool {
+			return status.Revision > written.Revision && status.Branch == binding.Branch && !status.Dirty
+		})
 
 	w = contractfixture.LandWorktree(t, srv, sess.ID)
 	if w.Code != http.StatusOK {
@@ -144,8 +145,7 @@ func TestWorktreeReach_tabAndBoardAgree(t *testing.T) {
 	p, err := srv.Sources.Workspace.ProjectRegistry.Get(t.Context(), projectID)
 	testutil.FailErr(t, "project", err)
 	roots := project.RootRefsFrom(p)
-	repos, err := srv.Admin.Git.LoadOrderedRepos(t.Context(), p, roots, sess.WorkspaceRootID, sess.ID)
-	testutil.FailErr(t, "loadOrderedRepos", err)
+	repos := orderedRepos(t, srv, p, roots, sess.WorkspaceRootID, sess.ID)
 	if len(repos) == 0 || !repos[0].Available {
 		t.Fatalf("repos = %#v", repos)
 	}
@@ -195,10 +195,8 @@ func TestWorktreeReach_tabWithoutSessionUnsubstituted(t *testing.T) {
 	p, err := srv.Sources.Workspace.ProjectRegistry.Get(t.Context(), projectID)
 	testutil.FailErr(t, "project", err)
 	roots := project.RootRefsFrom(p)
-	withSession, err := srv.Admin.Git.LoadOrderedRepos(t.Context(), p, roots, "", sess.ID)
-	testutil.FailErr(t, "with session", err)
-	without, err := srv.Admin.Git.LoadOrderedRepos(t.Context(), p, roots, "", "")
-	testutil.FailErr(t, "without session", err)
+	withSession := orderedRepos(t, srv, p, roots, "", sess.ID)
+	without := orderedRepos(t, srv, p, roots, "", "")
 	if len(without) == 0 || !contractfixture.SameReachPath(without[0].Toplevel, binding.Toplevel) {
 		t.Fatalf("session-less toplevel = %#v want %q", without, binding.Toplevel)
 	}
@@ -306,8 +304,7 @@ func TestWorktreeReachSourceHistoryCannotChangeGitRepositoryIdentity(t *testing.
 	srv.Admin.Git.RepoSetCache.Invalidate(projectID)
 	_ = srv.Sources.Comparisons.CommitLens(t.Context(), scope.Project)
 	for _, sessionID := range []string{sess.ID, "", sess.ID} {
-		repos, err := srv.Admin.Git.LoadOrderedRepos(t.Context(), p, project.RootRefsFrom(p), sess.WorkspaceRootID, sessionID)
-		testutil.FailErr(t, "resolve Git repositories", err)
+		repos := orderedRepos(t, srv, p, project.RootRefsFrom(p), sess.WorkspaceRootID, sessionID)
 		wantPath := scope.Binding.Toplevel
 		if sessionID != "" {
 			wantPath = scope.Binding.WorktreePath
@@ -316,4 +313,16 @@ func TestWorktreeReachSourceHistoryCannotChangeGitRepositoryIdentity(t *testing.
 			t.Fatalf("session %q repository identity changed after source history: %+v", sessionID, repos)
 		}
 	}
+}
+
+// orderedRepos resolves the session's worktree scope as the Git handlers do and
+// orders the repositories through it.
+func orderedRepos(t *testing.T, srv *hostapi.Server, p *project.Project, roots []projectroot.RootRef, activeRootID, sessionID string) []git.RepoRef {
+	t.Helper()
+	scope, err := requestscope.ResolveSessionProject(srv.Sources.Workspace.SessionStore, t.Context(), p, sessionID)
+	testutil.FailErr(t, "resolve session scope", err)
+	if sessionID != "" {
+		roots = scope.Project.SourceRoots()
+	}
+	return srv.Admin.Git.LoadOrderedRepos(t.Context(), p, roots, activeRootID, scope.Binding)
 }
