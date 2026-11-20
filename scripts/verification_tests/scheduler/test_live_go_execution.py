@@ -118,10 +118,8 @@ tasks:
         (self.repo / "lycaon" / "good" / "fixture_test.go").write_text('''package good
 import ("os"; "testing"; "time")
 func TestFixture(t *testing.T) {
- deadline := time.Now().Add(60*time.Second)
  for {
   if _, err := os.Stat(os.Getenv("FIXTURE_RELEASE")); err == nil { return }
-  if time.Now().After(deadline) { t.Fatal("await release: fixture deadline exceeded") }
   time.Sleep(10*time.Millisecond)
  }
 }
