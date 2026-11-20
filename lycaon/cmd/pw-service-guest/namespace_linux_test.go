@@ -9,7 +9,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"runtime/coverage"
 	"syscall"
 	"testing"
 	"time"
@@ -21,16 +20,10 @@ import (
 
 func TestGuestNamespaceActivation(t *testing.T) {
 	if os.Getenv("PW_GUEST_TEST_NAMESPACE") == "1" {
-		collect := os.Getenv("PW_GUEST_TEST_COVERAGE") == "1"
-		if collect {
+		if os.Getenv("PW_GUEST_TEST_COVERAGE") == "1" {
 			unix.CloseOnExec(4)
 		}
 		err := runNative("--enter-native")
-		if collect {
-			const dir = "/proc/self/fd/4"
-			testutil.FailErr(t, "record guest metadata", coverage.WriteMetaDir(dir))
-			testutil.FailErr(t, "record guest counters", coverage.WriteCountersDir(dir))
-		}
 		if err != nil && !errors.Is(err, io.EOF) {
 			t.Fatalf("serve private namespace: %v", err)
 		}
@@ -75,9 +68,16 @@ func TestGuestNamespaceActivation(t *testing.T) {
 		defer counters.Close()
 		cmd.ExtraFiles = append(cmd.ExtraFiles, counters)
 		cmd.Env = append(cmd.Env, "PW_GUEST_TEST_COVERAGE=1")
+		cmd.Args = append(cmd.Args, "-test.gocoverdir=/proc/self/fd/4")
 	}
 	cmd.SysProcAttr = &syscall.SysProcAttr{Cloneflags: unix.CLONE_NEWUSER | unix.CLONE_NEWNS | unix.CLONE_NEWPID | unix.CLONE_NEWNET | unix.CLONE_NEWIPC | unix.CLONE_NEWUTS, UidMappings: []syscall.SysProcIDMap{{ContainerID: 0, HostID: os.Getuid(), Size: 1}}, GidMappings: []syscall.SysProcIDMap{{ContainerID: 0, HostID: os.Getgid(), Size: 1}}, Pdeathsig: syscall.SIGKILL}
 	testutil.FailErr(t, "start isolated guest fixture", cmd.Start())
+	defer func() {
+		if cmd.ProcessState == nil {
+			_ = cmd.Process.Kill()
+			_ = cmd.Wait()
+		}
+	}()
 	testutil.FailErr(t, "release child endpoint", child.Close())
 	client, err := serviceguest.Open(ctx, channel)
 	if err != nil {
@@ -123,6 +123,9 @@ func TestGuestCLIRequiresActivation(t *testing.T) {
 	for mode, want := range map[string]int{"--unexpected": 2, "--acquire-native": 1, "--launch-native": 1, "--enter-native": 1} {
 		cmd := exec.CommandContext(t.Context(), self, "-test.run=^TestGuestCLIRequiresActivation$")
 		cmd.Env = []string{"PW_GUEST_TEST_MODE=" + mode}
+		if counters := os.Getenv("PW_GO_CHILD_COVERDIR"); counters != "" {
+			cmd.Env = append(cmd.Env, "GOCOVERDIR="+counters)
+		}
 		var exit *exec.ExitError
 		if err := cmd.Run(); !errors.As(err, &exit) || exit.ExitCode() != want {
 			t.Fatalf("%s exit = %v, want %d", mode, err, want)
