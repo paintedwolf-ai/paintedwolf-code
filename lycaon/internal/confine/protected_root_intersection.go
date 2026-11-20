@@ -32,8 +32,7 @@ func NormalizeWriteRootKey(root string) string {
 }
 
 // defaultRootContainsStateFolder drops an OS default root above the state folder.
-// A placement folder under one is denied by HardDenyWriteSpecs instead, because
-// losing /var/tmp as a write root would break ordinary builds.
+// Placement folders have their own write floor.
 func defaultRootContainsStateFolder(path string) bool {
 	dir, err := configdir.Root()
 	if err != nil || strings.TrimSpace(dir) == "" {

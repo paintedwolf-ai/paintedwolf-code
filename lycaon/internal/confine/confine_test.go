@@ -44,7 +44,7 @@ func outsideTemporaryWriteRoots(t *testing.T) string {
 	t.Helper()
 	account, err := user.LookupId(strconv.Itoa(os.Getuid()))
 	testutil.FailErr(t, "look up account home", err)
-	dir, err := os.MkdirTemp(account.HomeDir, ".paintedwolf-confine-test-") //nolint:usetesting // Probe must be outside the permitted temporary write roots.
+	dir, err := os.MkdirTemp(account.HomeDir, ".paintedwolf-confine-test-") //nolint:usetesting // Probe must be outside machine temp.
 	testutil.FailErr(t, "create outside-write-root fixture", err)
 	t.Cleanup(func() { testutil.FailErr(t, "remove outside-write-root fixture", os.RemoveAll(dir)) })
 	return dir
