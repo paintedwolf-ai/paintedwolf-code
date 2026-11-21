@@ -117,3 +117,13 @@ func guardianPollDescriptor(fd uintptr) (int32, error) {
 	}
 	return int32(fd), nil
 }
+
+// A signal may interrupt a zero-timeout pidfd observation before the kernel reports readiness.
+func pollGuardianNow(fds []unix.PollFd, poll func([]unix.PollFd, int) (int, error)) error {
+	for {
+		_, err := poll(fds, 0)
+		if !errors.Is(err, unix.EINTR) {
+			return err
+		}
+	}
+}

@@ -66,3 +66,30 @@ SELECT EXISTS(
           SELECT 1 FROM json_each(c.payload_json, '$.review_keys') k
           WHERE k.value = CAST(sqlc.arg(review_key) AS TEXT)))
 ) AS suppressed;
+
+-- name: ChatSharedTempHistory :many
+WITH RECURSIVE family(id) AS (
+    SELECT s.id FROM sessions s WHERE s.id = sqlc.arg(chat_id)
+    UNION ALL
+    SELECT s.id FROM sessions s JOIN family f ON s.parent_session_id = f.id
+), requested(locations_json) AS (
+    SELECT CAST(sqlc.arg(locations_json) AS TEXT)
+), locations(path, review_key) AS (
+    SELECT json_extract(item.value, '$.path'), json_extract(item.value, '$.key')
+    FROM requested, json_each(requested.locations_json) item
+)
+SELECT CAST(locations.path AS TEXT) AS path,
+       EXISTS(
+           SELECT 1 FROM messages m JOIN family f ON f.id = m.session_id
+           JOIN json_each(NULLIF(m.tool_result_json, ''), '$.feedback') feedback
+           JOIN json_each(feedback.value, '$.details.refused_shared_temp') location
+           WHERE m.role = 'tool' AND json_extract(feedback.value, '$.code') = 'SANDBOX_SHARED_TEMP_TOLERATED'
+             AND location.value = locations.path
+       ) AS reported,
+       EXISTS(
+           SELECT 1 FROM checkpoints c JOIN family f ON f.id = c.session_id
+           JOIN json_each(c.payload_json, '$.review_keys') review
+           WHERE c.kind = 'tool_approval' AND c.status = 'rejected' AND c.resolved_by = 'human'
+             AND review.value = locations.review_key
+       ) AS declined
+FROM locations;

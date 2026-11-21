@@ -169,6 +169,7 @@ var workerViews = []invariants.Invariant{{
 	Name:    "worker-view-processes-enter-through-the-launch-helper",
 	Anchors: []invariants.Anchor{invariants.Decl("internal/exec", "ExecOpts.Dir")},
 	Exempt: []invariants.Exemption{
+		{Key: "internal/confine/privateguesthost/linuxruntime/scope_linux.go", Reason: "the private service controller starts at the filesystem root"},
 		{Key: "internal/exec/pipeline.go", Reason: "records the requested directory on a scratch command that is never started; the launch pins it for the helper"},
 		{Key: "internal/confine/process_pin_binding.go", Reason: "clears Dir on the helper command, which is what makes entry happen after exec"},
 		{Key: "internal/confine/process_attributes_unix.go", Reason: "starts a limit probe at the filesystem root, which is never a view"},

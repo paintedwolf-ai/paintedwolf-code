@@ -29,7 +29,7 @@ func TestAppliedSocketCreationFloor(t *testing.T) {
 	if err := unix.Prctl(unix.PR_SET_NO_NEW_PRIVS, 1, 0, 0, 0); err != nil {
 		t.Fatalf("no new privileges: %v", err)
 	}
-	listener, err := applySeccomp()
+	listener, err := applySeccomp(false)
 	if err != nil {
 		t.Fatalf("apply production filter: %v", err)
 	}

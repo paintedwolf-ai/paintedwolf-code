@@ -218,6 +218,7 @@ var retentionAnswers = []invariants.Exemption{
 	{Key: "internal/session/turnadmission/queue_round_drain.go#bySession", Reason: "released when its identity is disposed"},
 	{Key: "internal/secretharvest/secretharvest.go#bySession", Reason: "process lifetime, justified"},
 	// Chat approvals: durable projections of chat_grants, released when the chat is disposed.
+	{Key: "internal/session/approvalstate/sandbox_path_grant_runtime.go#tempChats", Reason: "released when its identity is disposed"},
 	{Key: "internal/session/approvalstate/sandbox_ask_guard.go#bySession", Reason: "released when its identity is disposed"},
 	{Key: "internal/session/projectcontrol/service.go#lastSessionPosture", Reason: "process lifetime, justified"},
 	{Key: "internal/session/projectcontrol/service.go#lastSessionExternalHidden", Reason: "process lifetime, justified"},

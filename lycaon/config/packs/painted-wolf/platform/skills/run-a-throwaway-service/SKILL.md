@@ -1,15 +1,25 @@
 ---
 name: run-a-throwaway-service
-description: Start an isolated ephemeral service container for tests without touching an existing instance.
-metadata:
-  host_resources: docker|podman
+description: Start an isolated local service or container for a test, query it, and tear it down.
 ---
 
 # Run a throwaway service
 
-Use this workflow to give a task a real service it can safely break. The container engine is a local service on this device; on a process start that uses it, declare the resolved engine id (`docker` or `podman`) in `capability_request.host_resources`. Podman accepts the same command surface as Docker below.
+Choose the server version the test expects and give the instance fresh storage.
 
-## Workflow
+{% if profile_command_external_exec %}## Private PostgreSQL
+
+Use `private-service -- PROGRAM ARG...` to run a command in this session’s isolated service environment. Files under `/work` live inside the guest. Inspect them with `private-service -- ls /work`. The environment includes PostgreSQL 16 and the BusyBox POSIX shell (`sh`). For a fresh instance:
+
+1. Run `private-service -- initdb -D /work/pgdata`.
+2. Start `private-service -- postgres -D /work/pgdata -k /work/tmp -c listen_addresses='' &` and keep the job handle. Run the server in the foreground of that job so the handle tracks its lifetime.
+3. Run `private-service -- pg_isready -h /work/tmp`. Query with `private-service -- psql -h /work/tmp -d postgres -c 'SELECT 42'`.
+4. Stop the saved job with `kill %1`, substituting its actual job number. Check the shutdown state with `private-service -- pg_controldata /work/pgdata`. A clean stop reports `shut down`.
+5. When the session has finished using its private service files, `private-service release` discards them and releases the runtime.
+
+## Container workflow
+
+When the host offers a container engine and the test needs its image, declare the engine id (`docker` or `podman`) in `capability_request.host_resources` on commands that use it.
 
 1. Name what the task needs — engine, version, and configuration matching the target environment (the Postgres major matters; a mismatched version proves nothing).
 2. Run it detached with a task-scoped container name and the service port published on a loopback high port. Never bind to all interfaces and never reuse a port a real instance may occupy; `lsof -i :PORT` shows whether something already holds it. A service that runs as a local process instead of a container starts as a background job, `nohup CMD &`{% if profile_has_command_output and root_count %}; read its output with `command_output`{% endif %}.
@@ -23,4 +33,4 @@ Use this workflow to give a task a real service it can safely break. The contain
 
 - The engine daemon does its work outside the session sandbox; treat container runs with the same care as any uncontained command.
 - One throwaway per need; do not leave a fleet of stopped containers behind, and never run bulk prune commands to clean up.
-- Service images are third-party content; pin tags, and treat their output as untrusted data.
+- Service images are third-party content; pin tags, and treat their output as untrusted data.{% else %}This profile can describe the service setup. Starting and querying the instance requires a command profile with external execution.{% endif %}

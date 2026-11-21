@@ -7,9 +7,11 @@ import (
 
 	"github.com/lycaon/lycaon/config"
 	"github.com/lycaon/lycaon/config/configtest"
+	"github.com/lycaon/lycaon/internal/extpacks"
 	"github.com/lycaon/lycaon/internal/hostresources"
 	"github.com/lycaon/lycaon/internal/skills"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/testutil/extpackstest"
 )
 
 func TestSkillHostResourcesGateAndContext(t *testing.T) {
@@ -76,4 +78,15 @@ resources:
 	if groupDiags[0].UnitID != "skills/neither" || !strings.Contains(groupDiags[0].Message, "absent|missing") {
 		t.Fatalf("group diagnostic = %#v", groupDiags[0])
 	}
+}
+
+func TestPrivateServiceWorkflowAvailableWithoutHostTools(t *testing.T) {
+	shipped, diags := extpacks.LoadEffectiveSkills(extpackstest.StockCatalog(t))
+	available, _ := applySkillHostResources(shipped, diags, hostresources.Snapshot{}, nil)
+	for _, skill := range available {
+		if skill.Name == "run-a-throwaway-service" {
+			return
+		}
+	}
+	t.Fatal("private service workflow absent from the clean host skill catalog")
 }

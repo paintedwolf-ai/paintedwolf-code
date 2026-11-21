@@ -24,7 +24,15 @@
     "recommends": [
       "libvulkan1",
       "mesa-vulkan-drivers"
-    ]
+    ],
+    "architecture_depends": {
+      "x86_64": [
+        "qemu-system-x86"
+      ],
+      "aarch64": [
+        "qemu-system-arm"
+      ]
+    }
   },
   "rpm": {
     "depends": [
@@ -47,7 +55,15 @@
     "recommends": [
       "vulkan-loader",
       "mesa-vulkan-drivers"
-    ]
+    ],
+    "architecture_depends": {
+      "x86_64": [
+        "qemu-system-x86-core"
+      ],
+      "aarch64": [
+        "qemu-system-aarch64-core"
+      ]
+    }
   },
   "pacman": {
     "depends": [
@@ -77,6 +93,14 @@
     "recommends": [
       "vulkan-icd-loader: Bialy Vulkan acceleration",
       "vulkan-driver: Vulkan hardware driver"
-    ]
+    ],
+    "architecture_depends": {
+      "x86_64": [
+        "qemu-system-x86"
+      ],
+      "aarch64": [
+        "qemu-system-aarch64"
+      ]
+    }
   }
 }

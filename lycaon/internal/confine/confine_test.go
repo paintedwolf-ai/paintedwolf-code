@@ -22,6 +22,7 @@ import (
 	"github.com/lycaon/lycaon/internal/confine/confinetest"
 	"github.com/lycaon/lycaon/internal/egressproxy"
 	"github.com/lycaon/lycaon/internal/enginepaths"
+	"github.com/lycaon/lycaon/internal/fspath"
 	"github.com/lycaon/lycaon/internal/project"
 	"github.com/lycaon/lycaon/internal/socketref"
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -45,7 +46,7 @@ func outsideTemporaryWriteRoots(t *testing.T) string {
 	t.Helper()
 	account, err := user.LookupId(strconv.Itoa(os.Getuid()))
 	testutil.FailErr(t, "look up account home", err)
-	dir, err := os.MkdirTemp(account.HomeDir, ".paintedwolf-confine-test-") //nolint:usetesting // Probe must be outside the permitted temporary write roots.
+	dir, err := os.MkdirTemp(account.HomeDir, ".paintedwolf-confine-test-") //nolint:usetesting // Probe must be outside machine temp.
 	testutil.FailErr(t, "create outside-write-root fixture", err)
 	t.Cleanup(func() { testutil.FailErr(t, "remove outside-write-root fixture", os.RemoveAll(dir)) })
 	return dir
@@ -70,6 +71,9 @@ func confinedRun(t *testing.T, self string, c confine.Confinement, name string, 
 	cmd, cleanup, err := confine.Command(context.Background(), self, name, args, c)
 	testutil.FailErr(t, "confine.Command failed", err)
 	defer cleanup()
+	if scratch := c.Workspaces.SessionScratch; scratch != "" {
+		cmd.Env = append(cmd.Environ(), "TMPDIR="+scratch, "TMP="+scratch, "TEMP="+scratch)
+	}
 	out, _ := cmd.CombinedOutput()
 	return cmd.ProcessState.ExitCode(), string(out)
 }
@@ -196,6 +200,18 @@ func TestDefaultConfinementPolicy(t *testing.T) {
 	}
 }
 
+func TestBuildProfileDeniesPerActionSecretReads(t *testing.T) {
+	project := t.TempDir()
+	secret := filepath.Join(project, ".env.local")
+	testutil.FailErr(t, "create per-action secret fixture", os.WriteFile(secret, []byte("TOKEN=fixture\n"), 0o600))
+	c := confine.Confinement{ProjectID: "project", Roots: []string{project}, ReadDenyPaths: []string{secret}, Network: confine.NetworkDeny}
+	profile, err := confine.BuildSeatbeltProfile(c)
+	testutil.FailErr(t, "build per-action read-deny profile", err)
+	resolvedSecret := fspath.CanonicalPath(secret)
+	if !strings.Contains(profile, "(subpath \""+resolvedSecret+"\")") {
+		t.Fatalf("profile does not deny per-action secret read %q: %s", secret, profile)
+	}
+}
 func TestProxyEnvHTTPOnlyByDefault(t *testing.T) {
 	c := confine.Confinement{
 		Roots:          []string{"/p"},
@@ -342,7 +358,7 @@ func TestGitSSHEnvQuotesAppBundleExecutablePath(t *testing.T) {
 	}
 	env := confine.GitSSHEnv(c, "/Applications/Painted Wolf Code.app/Contents/MacOS/painted-wolf", "/tmp/known hosts")
 	joined := strings.Join(env, "\n")
-	if !strings.Contains(joined, "UserKnownHostsFile=/tmp/known hosts") {
+	if !strings.Contains(joined, `UserKnownHostsFile="/tmp/known hosts"`) {
 		t.Fatalf("known-hosts option missing: %s", joined)
 	}
 	sshCommand := strings.TrimPrefix(env[0], "GIT_SSH_COMMAND=")
@@ -356,7 +372,7 @@ func TestGitSSHEnvQuotesAppBundleExecutablePath(t *testing.T) {
 			continue
 		}
 		knownHostsArgs++
-		if !strings.HasPrefix(arg, "UserKnownHostsFile=/tmp/known hosts") {
+		if !strings.HasPrefix(arg, `UserKnownHostsFile="/tmp/known hosts"`) {
 			t.Fatalf("outer shell split known-hosts path: %q", args)
 		}
 	}
@@ -391,7 +407,8 @@ func TestBoundaryDraftWorkspaceVenvInterpreterExecutes(t *testing.T) {
 	testutil.FailErr(t, "project.DraftWorkspaceDir failed", err)
 	testutil.FailErr(t, "mkdir draft", os.MkdirAll(draft, 0o700))
 	venv := filepath.Join(draft, ".venv")
-	confinement := confine.Confinement{Roots: []string{draft}}
+	scratch := outsideTemporaryWriteRoots(t)
+	confinement := confine.Confinement{Roots: []string{draft}, Workspaces: confine.WorkspaceRoots{SessionScratch: scratch}}
 	code, out := confinedRun(t, self, confinement, python, "-m", "venv", venv)
 	if code != 0 {
 		t.Fatalf("create draft venv under confinement, exit=%d out=%s", code, out)

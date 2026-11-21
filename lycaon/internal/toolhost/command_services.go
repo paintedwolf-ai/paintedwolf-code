@@ -55,6 +55,9 @@ func (r *CommandServices) SetSandboxWriteRootGate(writeRoot command.SandboxWrite
 	if r == nil {
 		return
 	}
+	if programs := r.programs(); programs != nil {
+		programs.SharedTemp = writeRoot
+	}
 	if r.paths != nil {
 		r.paths.SetSessionWriteRootOverlay(writeRoot.SessionWriteRoots)
 		r.paths.SetWriteRootPreflight(func(ctx context.Context, tool string, args map[string]any, tc tools.ToolContext, root string) (bool, bool, string, error) {
@@ -148,6 +151,7 @@ func (r *CommandServices) SetProgramServices(services ProgramServices) error {
 	programs.Clock = services.Clock
 	if programs.Executor != nil {
 		programs.Executor.Metadata.SetCommandExternalHidden(services.ExternalHidden)
+		r.owners.reviewRoot = programs.Executor.Boundary.ReviewRedirectRoot
 	}
 	owners, err := r.owners.compose(services.Recorder)
 	if err != nil {

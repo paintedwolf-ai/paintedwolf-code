@@ -2,6 +2,7 @@ package contract_test
 
 import (
 	"context"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -98,6 +99,42 @@ func TestWriteRootCardAlwaysHasAnOption(t *testing.T) {
 	_, err := mgr.Authority.ResolveApprovalOption(owner, "session-floor", event.ID, plan.Options[0].ID)
 	testutil.FailErr(t, "resolve floor option", err)
 	<-resultCh
+}
+
+type unexpectedApproval struct{ cancel context.CancelFunc }
+
+func (e unexpectedApproval) PublishCheckpoint(_ context.Context, _, _ string, event api.CheckpointEvent) {
+	if event.Status == api.CheckpointStatusPending {
+		e.cancel()
+	}
+}
+
+func (unexpectedApproval) PublishAttention(context.Context) {}
+
+func TestWriteRootBrokerHomeChildrenWithApprovalsDisabled(t *testing.T) {
+	const home = "/Users/approval-plan-contract"
+	t.Setenv("HOME", home)
+	for _, child := range []string{"cache", ".tool"} {
+		t.Run(child, func(t *testing.T) {
+			path := filepath.Join(home, child)
+			store, rec, _ := newApprovalPlanStore(t, "session")
+			ctx, cancel := context.WithCancel(t.Context())
+			defer cancel()
+			broker := &session.WriteRootCheckpointBroker{
+				Checkpoints:       hitl.NewCheckpoints(store, unexpectedApproval{cancel}, rec),
+				Runtime:           approvalstate.NewSandboxPathGrantRuntime(),
+				ApprovalsDisabled: func(string) bool { return true },
+			}
+			result, err := broker.Authorize(ctx, command.SandboxWriteRootAsk{
+				SessionID: "session", ProjectDir: t.TempDir(), ToolCallID: "mkdir",
+				Command: "mkdir -p " + path, ProposedWriteRoot: path,
+			})
+			testutil.FailErr(t, "authorize ordinary home child", err)
+			if result.Raised || !result.Authorized || result.ProposedWriteRoot != path {
+				t.Fatalf("home child authorization = %+v, want %q without a checkpoint", result, path)
+			}
+		})
+	}
 }
 
 func TestWriteRootBrokerRaisesBalancedCardOutsideRoots(t *testing.T) {

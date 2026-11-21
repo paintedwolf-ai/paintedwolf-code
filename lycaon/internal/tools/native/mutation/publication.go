@@ -26,10 +26,11 @@ import (
 // are staged outside the destination and published only through the pinned
 // write door at that capture. Nothing is truncated early and nothing reruns.
 type Publication struct {
-	Owners    *Owners
-	Program   Program
-	Tools     tools.ToolContext
-	Admission tools.CommandOutputAdmission
+	Owners     *Owners
+	Program    Program
+	Tools      tools.ToolContext
+	Admission  tools.CommandOutputAdmission
+	ReviewRoot RedirectRootReview
 }
 
 var (
@@ -63,7 +64,7 @@ func outputTarget(destination commandprogram.OutputDestination, bound projectpat
 // Open captures one output destination. The null device is a typed sink that
 // publishes nothing and touches no file.
 func (p *Publication) Open(ctx context.Context, destination commandprogram.OutputDestination) (commandprogram.StagedOutput, error) {
-	bound, err := p.Program.Paths.Bind(ctx, destination.Target.Value, true)
+	bound, tc, err := p.bindOutput(ctx, destination)
 	if err != nil {
 		return nil, redirectError(destination.Redirect.Operator, destination.Target, err)
 	}
@@ -77,7 +78,7 @@ func (p *Publication) Open(ctx context.Context, destination commandprogram.Outpu
 	if err != nil {
 		return nil, err
 	}
-	target, err := p.Owners.captureDestination(ctx, p.Tools, destination.Invocation.Identity.ExecutionID, bound.Resolved.Abs)
+	target, err := p.Owners.captureDestination(ctx, tc, destination.Invocation.Identity.ExecutionID, bound.Resolved.Abs)
 	if err != nil {
 		_ = admission.Abandon(ctx, err)
 		return nil, redirectError(destination.Redirect.Operator, destination.Target, err)

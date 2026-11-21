@@ -37,9 +37,10 @@ type ProgramSupervisor struct {
 	// Background is the session process registry that holds & jobs.
 	Background *bgprocess.Registry
 
-	mu       sync.Mutex
-	programs map[string]*supervisedProgram
-	sessions map[string]*SessionJobs
+	mu           sync.Mutex
+	programs     map[string]*supervisedProgram
+	sessions     map[string]*SessionJobs
+	privateSlots chan struct{}
 }
 
 // Jobs returns the session's job set; wait and kill read the same outcomes
@@ -54,10 +55,12 @@ func (s *ProgramSupervisor) Jobs(sessionID, projectID string) *SessionJobs {
 	}
 	if s.sessions == nil {
 		s.sessions = map[string]*SessionJobs{}
+		s.privateSlots = make(chan struct{}, maxPrivateServiceSessions)
 	}
 	jobs, ok := s.sessions[sessionID]
 	if !ok {
 		jobs = &SessionJobs{Registry: s.Background, Supervisor: s, SessionID: sessionID, ProjectID: projectID}
+		jobs.privateService.slots = s.privateSlots
 		s.sessions[sessionID] = jobs
 	}
 	return jobs
@@ -406,9 +409,13 @@ func (s *ProgramSupervisor) DisposeSession(ctx context.Context, sessionID string
 		jobs.mu.Unlock()
 	}
 	s.Stop(sessionID)
+	var serviceErr error
+	if jobs != nil {
+		serviceErr = jobs.privateService.close()
+	}
 	if s.Background != nil {
 		if err := s.Background.Lifecycle.DisposeSession(ctx, sessionID, bgprocess.TerminationReasonFromContext(ctx, bgprocess.TerminationChatDeleted)); err != nil {
-			return err
+			return errors.Join(serviceErr, err)
 		}
 	}
 	s.mu.Lock()
@@ -416,5 +423,5 @@ func (s *ProgramSupervisor) DisposeSession(ctx context.Context, sessionID string
 		delete(s.sessions, sessionID)
 	}
 	s.mu.Unlock()
-	return nil
+	return serviceErr
 }

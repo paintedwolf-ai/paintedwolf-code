@@ -402,7 +402,7 @@ func TestControlPlanePathDeniedLeavesOnlyTheInvocationsScratch(t *testing.T) {
 
 func TestWriteRootsForBoundarySymmetricAliases(t *testing.T) {
 	t.Setenv(configdir.EnvConfigDir, "/opt/paintedwolf-fixture-state")
-	roots, err := WriteRootsForBoundary("", nil, nil, "")
+	roots, err := WriteRootsForBoundary("", nil, []string{"/tmp"}, "")
 	testutil.FailErr(t, "admit write roots", err)
 	if runtime.GOOS == "darwin" {
 		// Both /tmp and /private/tmp must be present.
@@ -496,21 +496,38 @@ func TestWriteRootsForBoundaryIncludesSessionScratch(t *testing.T) {
 	}
 }
 
-func TestWriteRootsForBoundaryIncludesDarwinConfstrRootsWithOverriddenTMPDIR(t *testing.T) {
+func TestDarwinTempAndCacheWithOverriddenTMPDIR(t *testing.T) {
 	if runtime.GOOS != "darwin" {
-		t.Skip("confstr's per-user temporary roots exist only on macOS")
-	}
-	userRoots := darwinUserRoots()
-	if len(userRoots) == 0 {
-		t.Fatal("darwinUserRoots() returned no confstr roots on darwin")
+		t.Skip("Darwin confstr directories")
 	}
 	t.Setenv("TMPDIR", t.TempDir())
 	roots, err := WriteRootsForBoundary("", nil, nil, "")
 	testutil.FailErr(t, "admit write roots", err)
-	for _, root := range userRoots {
-		probe := filepath.Join(root, "xcrun_db-probe")
-		if !PathWithinRoots(probe, roots) {
-			t.Fatalf("darwin confstr root child %q not within WriteRootsForBoundary when TMPDIR is overridden: %v", probe, roots)
+	if temp := platformUserTemp(); temp == "" || SharedTempLocation(temp) == "" || PathWithinRoots(temp, roots) {
+		t.Fatalf("shared temp %q in boundary %v", temp, roots)
+	}
+	if cache := platformUserCache(); cache == "" || !PathWithinRoots(cache, roots) {
+		t.Fatalf("missing cache %q in boundary %v", cache, roots)
+	}
+}
+
+func TestSharedTempGrantNamesTheLocationAtEveryDepth(t *testing.T) {
+	location := t.TempDir()
+	t.Setenv("TMPDIR", location)
+	root := fspath.CanonicalPath(location)
+	rules, err := filesystemRules(Confinement{})
+	testutil.FailErr(t, "compile default filesystem rules", err)
+	path := root
+	for depth := 1; depth <= 6; depth++ {
+		path = filepath.Join(path, "build")
+		verdict := rules.Verdict(AccessWrite, path)
+		if verdict.Layer != FloorSharedTemp || verdict.Layer.Recovery().GrantPath(path) != root {
+			t.Fatalf("depth %d: %+v", depth, verdict)
 		}
+	}
+	rules, err = filesystemRules(Confinement{GrantedWriteRoots: []string{root}})
+	testutil.FailErr(t, "compile filesystem rules with grant", err)
+	if !rules.Verdict(AccessWrite, path).Allowed {
+		t.Fatal("reviewed temp root did not admit nested write")
 	}
 }

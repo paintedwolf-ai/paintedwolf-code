@@ -11,7 +11,7 @@ import (
 // The path-only spellings reach the supervisor like their *at forms.
 func TestSeccompProgramNotifiesLegacyPathCreators(t *testing.T) {
 	t.Parallel()
-	raw, err := seccompProgram()
+	raw, err := seccompProgram(false)
 	if err != nil {
 		t.Fatalf("seccompProgram: %v", err)
 	}

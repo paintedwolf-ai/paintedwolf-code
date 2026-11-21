@@ -7,6 +7,7 @@ import (
 	"sync"
 	"sync/atomic"
 
+	"github.com/lycaon/lycaon/internal/capabilityrequest"
 	"github.com/lycaon/lycaon/internal/commandprogram"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/tools/projectpaths"
@@ -39,6 +40,13 @@ func (p *trackedOutputPublication) CheckOutput(ctx context.Context, destination 
 }
 
 func (p *trackedOutputPublication) Open(ctx context.Context, destination commandprogram.OutputDestination) (commandprogram.StagedOutput, error) {
+	requested, reject := capabilityrequest.ParseCapabilityRequest(p.run.envelope)
+	if reject != nil {
+		return nil, reject
+	}
+	if requested != nil {
+		destination.RequestedWriteRoot = requested.WriteRoot
+	}
 	staged, err := p.inner.Open(ctx, destination)
 	if err != nil || staged == nil {
 		return staged, err

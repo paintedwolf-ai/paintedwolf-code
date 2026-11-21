@@ -132,6 +132,8 @@ func bareActivation(gc *GuardContext) map[string]any {
 		"response_tools_callable":             gc.Response.ToolsCallable,
 		"response_structured_output":          gc.Response.StructuredOutput,
 		"process_running":                     gc.Execution.ProcessRunning,
+		"ordinary_write_paths":                strList(gc.Refusals.OrdinaryWritePaths),
+		"ordinary_write_grants":               strList(gc.Refusals.OrdinaryWriteGrants),
 		"refused_write_paths":                 strList(gc.Refusals.RefusedWritePaths),
 		"refused_write_grants":                strList(gc.Refusals.RefusedWriteGrants),
 		"optional_read_paths":                 strList(gc.Refusals.OptionalReadPaths),

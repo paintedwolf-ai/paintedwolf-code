@@ -7,12 +7,10 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/configdir"
+	"github.com/lycaon/lycaon/internal/enginepaths"
 	"github.com/lycaon/lycaon/internal/testutil"
 )
 
-// Every build failure is reported as an empty path, which is indistinguishable
-// from having no key material to mirror — and an absent mirror silently drops
-// ssh to trust-on-first-use. So this asserts the file, not the call.
 func TestBuildKnownHostsMirrorWritesCollectedMaterial(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
@@ -37,5 +35,43 @@ func TestBuildKnownHostsMirrorWritesCollectedMaterial(t *testing.T) {
 	testutil.FailErr(t, "stat mirror", err)
 	if info.Mode().Perm() != 0o600 {
 		t.Fatalf("mirror mode = %v, want 0600", info.Mode().Perm())
+	}
+}
+
+func TestMediatedProjectUsesExactHostKeyFile(t *testing.T) {
+	t.Setenv(configdir.EnvConfigDir, t.TempDir())
+	c := Confinement{Network: NetworkProxyOnly, ProjectID: "project-1"}
+	path, err := PrepareSSHKnownHosts(c)
+	testutil.FailErr(t, "prepare project keys", err)
+	testutil.FailErr(t, "save key", os.WriteFile(path, []byte("fixture"), 0600))
+	again, err := PrepareSSHKnownHosts(c)
+	testutil.FailErr(t, "reopen project keys", err)
+	data, err := os.ReadFile(again)
+	testutil.FailErr(t, "read project key", err)
+	if again != path || string(data) != "fixture" {
+		t.Fatalf("key file %q contains %q", again, data)
+	}
+	for _, access := range []FilesystemAccess{AccessRead, AccessWrite} {
+		fs, err := filesystemRules(c)
+		testutil.FailErr(t, "compile project rules", err)
+		exact, sibling := fs.Verdict(access, path), fs.Verdict(access, path+"2")
+		if !exact.Allowed || sibling.Allowed {
+			t.Errorf("%s project key verdict %+v, sibling verdict %+v", access, exact, sibling)
+		}
+	}
+	c.ProjectID = "project-2"
+	fs, err := filesystemRules(c)
+	testutil.FailErr(t, "compile other project rules", err)
+	if fs.Verdict(AccessWrite, path).Allowed || fs.Verdict(AccessRead, path).Allowed {
+		t.Fatal("another project can access the key file")
+	}
+	mirror := enginepaths.SSHKnownHostsMirrorUnder(os.Getenv(configdir.EnvConfigDir))
+	if !fs.Verdict(AccessRead, mirror).Allowed || fs.Verdict(AccessRead, mirror+"2").Allowed || fs.Verdict(AccessWrite, mirror).Allowed {
+		t.Fatal("host mirror must allow only exact-file reads")
+	}
+	c.Network = NetworkDeny
+	path, err = PrepareSSHKnownHosts(c)
+	if path != "" || err != nil {
+		t.Fatalf("offline key file = %q, %v", path, err)
 	}
 }

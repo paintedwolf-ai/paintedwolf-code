@@ -37,6 +37,7 @@ type programOwnerTools struct {
 	summarize  *survey.SummarizeTool
 	repo       *reposurvey.RepoTool
 	operations mutation.Operations
+	reviewRoot mutation.RedirectRootReview
 	catalog    *sourcecatalog.Catalog
 	// git is the Git owner; nil leaves git to its unsupported refusal.
 	git *git.Manager
@@ -124,7 +125,7 @@ func (t programOwnerTools) compose(recorder *invocation.SQLRecorder) (func(tools
 			PublishDocument: mutationOwners.Operations.Write.PublishAccepted,
 			Natives:         map[string]command.NativeOperation{},
 			Publication: func(admit tools.CommandOutputAdmission) commandprogram.OutputPublication {
-				return &mutation.Publication{Owners: mutationOwners, Program: program, Tools: tc, Admission: admit}
+				return &mutation.Publication{Owners: mutationOwners, Program: program, Tools: tc, Admission: admit, ReviewRoot: t.reviewRoot}
 			},
 			Input:   &mutation.Publication{Owners: mutationOwners, Program: program, Tools: tc},
 			Sources: &mutation.Publication{Owners: mutationOwners, Program: program, Tools: tc},
@@ -146,7 +147,7 @@ func (t programOwnerTools) compose(recorder *invocation.SQLRecorder) (func(tools
 				return builtins, release, nil
 			},
 			Redirections: func(frame *projectpaths.ProgramPaths, admit tools.CommandOutputAdmission) (commandprogram.InputRedirection, commandprogram.OutputPublication) {
-				publication := &mutation.Publication{Owners: mutationOwners, Program: mutation.Program{Paths: frame}, Tools: tc, Admission: admit}
+				publication := &mutation.Publication{Owners: mutationOwners, Program: mutation.Program{Paths: frame}, Tools: frame.ToolContext(), Admission: admit, ReviewRoot: t.reviewRoot}
 				return publication, publication
 			},
 		}

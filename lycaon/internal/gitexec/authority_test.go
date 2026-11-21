@@ -6,7 +6,9 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/lycaon/lycaon/internal/confine"
 	"github.com/lycaon/lycaon/internal/exec"
+	"github.com/lycaon/lycaon/internal/testutil"
 )
 
 // Inside an agent's tool call Git runs only under the agent's admitted launch
@@ -47,18 +49,27 @@ func TestAgentEntryRequiresAnExplicitLaunchAuthority(t *testing.T) {
 	}
 }
 
-// Git's working files go where the agent's launch can write them: its scratch,
-// not the host's temporary directory.
-func TestMkdirTempFollowsTheAgentLaunchScratch(t *testing.T) {
-	scratch := t.TempDir()
-	launched := WithAgentLaunch(AgentEntry(t.Context()), AgentLaunch{Plan: exec.AgentLaunch(exec.LaunchAgentCommand, "git", nil), Scratch: scratch})
-	dir, err := MkdirTemp(launched, "work-*")
-	if err != nil || filepath.Dir(dir) != scratch {
-		t.Fatalf("agent launch working dir = %q (%v), want one inside %q", dir, err, scratch)
+func TestGitStagingUsesOnlyTheAdmittedActionWorkspace(t *testing.T) {
+	t.Setenv("LYCAON_CONFIG_DIR", filepath.Join(t.TempDir(), "host"))
+	t.Setenv("TMPDIR", t.TempDir())
+	agent := AgentEntry(t.Context())
+	if _, err := MakeScratch(agent, "index-*"); !errors.Is(err, ErrLaunchAuthorityRequired) {
+		t.Fatalf("unadmitted staging: %v", err)
 	}
-	host, err := MkdirTemp(t.Context(), "work-*")
-	t.Cleanup(func() { _ = os.RemoveAll(host) })
-	if err != nil || filepath.Dir(host) != filepath.Clean(os.TempDir()) {
-		t.Fatalf("host working dir = %q (%v), want one inside %q", host, err, os.TempDir())
+	plan := exec.AgentLaunch(exec.LaunchAgentCommand, "git", nil)
+	if _, err := MakeScratch(WithAgentLaunch(agent, AgentLaunch{Plan: plan}), "index-*"); err == nil {
+		t.Fatal("agent staging used machine temp without a private workspace")
+	}
+	workspace, err := confine.NewActionWorkspace()
+	testutil.FailErr(t, "prepare private workspace", err)
+	location, err := MakeScratch(WithAgentLaunch(agent, AgentLaunch{Plan: plan, Workspace: workspace}), "index-*")
+	testutil.FailErr(t, "stage private index", err)
+	if filepath.Dir(location) != workspace.Path() {
+		t.Fatalf("staging parent %q, want %q", filepath.Dir(location), workspace.Path())
+	}
+	host, err := MakeScratch(WithHostPurpose(agent, "repository_lease"), "index-*")
+	testutil.FailErr(t, "stage host bookkeeping", err)
+	if filepath.Dir(host) != os.TempDir() {
+		t.Fatalf("host staging location %q", host)
 	}
 }

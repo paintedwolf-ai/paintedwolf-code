@@ -49,16 +49,44 @@ elif sys.argv[1] == "list":
     print("fixture/cmd/logs")
     if os.environ["GOOS"] == "linux":
         print("fixture/cmd/linux-only")
+        if "./cmd/pw-service-guest" in sys.argv:
+            print("fixture/cmd/private-guest")
 else:
     raise SystemExit("unexpected go operation")
 ''',
                     "go-licenses": '''#!/usr/bin/env python3
 import json, os, pathlib, sys
-pathlib.Path(os.environ["NOTICE_TEST_ROOT"], "checked.json").write_text(json.dumps(sys.argv[1:]))
-raise SystemExit(37)
+root = pathlib.Path(os.environ["NOTICE_TEST_ROOT"])
+if sys.argv[1] == "check":
+    if "./cmd/pw-service-guest" in sys.argv:
+        (root / "guest_checked.json").write_text(json.dumps([os.environ["GOOS"], os.environ["CGO_ENABLED"]]))
+    else:
+        (root / "checked.json").write_text(json.dumps(sys.argv[1:]))
+        if os.environ["GOOS"] != "darwin":
+            raise SystemExit(37)
+elif sys.argv[1] == "csv":
+    print("shared,https://example.com,MIT")
+    if "./cmd/pw-service-guest" in sys.argv:
+        print("guest,https://example.com,MIT")
+elif sys.argv[1] == "save":
+    path = next(arg.split("=", 1)[1] for arg in sys.argv if arg.startswith("--save_path="))
+    dest = pathlib.Path(path)
+    dest.mkdir()
+    names = ("shared", "guest") if "./cmd/pw-service-guest" in sys.argv else ("shared", "host")
+    for name in names:
+        file = dest / name
+        file.write_text(name)
+        file.chmod(0o444)
 ''',
                     "cargo-about": "#!/bin/sh\nexit 0\n",
-                    "bun": "#!/bin/sh\nexit 0\n",
+                    "bun": '''#!/usr/bin/env python3
+import pathlib, sys
+work = pathlib.Path(sys.argv[sys.argv.index("--out") + 1]).parent
+for name in ("host", "guest", "shared"):
+    assert (work / "go-save" / name).read_text() == name
+assert len((work / "go.csv").read_text().splitlines()) == 2
+raise SystemExit(37)
+''',
                 }
                 for name, body in stubs.items():
                     executable = binaries / name
@@ -75,5 +103,7 @@ raise SystemExit(37)
                 packages = [arg for arg in checked[1:] if not arg.startswith("--")]
                 expected = ["fixture/cmd/engine", "fixture/cmd/logs"]
                 if platform == "linux":
-                    expected.append("fixture/cmd/linux-only")
+                    expected.extend(["fixture/cmd/linux-only", "fixture/cmd/private-guest"])
+                if platform == "darwin":
+                    self.assertEqual(json.loads((root / "guest_checked.json").read_text()), ["linux", "0"])
                 self.assertEqual(packages, expected)

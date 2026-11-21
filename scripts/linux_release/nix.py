@@ -23,7 +23,7 @@ CREDENTIALS = ("GH_TOKEN", "GITHUB_TOKEN", "LINUX_PACKAGE_SIGNING_KEY", "FEED_SI
                "TAURI_SIGNING_PRIVATE_KEY", "TAURI_SIGNING_PRIVATE_KEY_PASSWORD")
 COMPONENTS = ("default", "bun-lock", "frontend", "shell", "engine", "bound-engine", "bialy", "nativegen", "model-bundle", "generation-seed-check", "document-core",
               "desktop-settings-observer", "desktop-shell-check", "resources", "browser", "gitengine", "ocr",
-              "decision-resources", "scanner-original", "scanner-finalized", "notices", "notice-tools",
+              "decision-resources", "private-service", "scanner-original", "scanner-finalized", "notices", "notice-tools",
               "closure-notices", "scanner-host-tools", "nixos-module", "nixos-gnome-vm", "nixos-plasma-vm",
               "nix-workflow-fixture")
 

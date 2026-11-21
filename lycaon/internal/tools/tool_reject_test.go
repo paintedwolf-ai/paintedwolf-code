@@ -73,6 +73,12 @@ func TestCompleteFailureMetadataBindsIsolationDisposition(t *testing.T) {
 				Code: outcome.Code,
 				Data: map[string]any{"failure_class": "forged", "retryable": !retryable},
 			}, "command", "processes")
+			if outcome.Disposition == isolation.DispositionObservation {
+				if reject.FailureClass != api.FailureClassHostRejection || reject.Retryable || reject.Data["isolation_disposition"] != nil {
+					t.Fatalf("observation classified as an isolation failure: %+v", reject)
+				}
+				return
+			}
 			if reject.FailureClass != api.FailureClassIsolationRejection || reject.Retryable != retryable {
 				t.Fatalf("metadata = class %q retryable %v", reject.FailureClass, reject.Retryable)
 			}

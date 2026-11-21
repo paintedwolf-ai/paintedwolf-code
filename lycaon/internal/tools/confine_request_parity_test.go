@@ -29,8 +29,8 @@ func (parityDirectIPRuntime) GrantChat(string, hitl.DirectIPLease, string, strin
 	return true
 }
 
-// Checks that the gate Contained fact matches the confine.Request applied by the executor spawn path.
 func TestGateContainedMatchesSpawnRequest(t *testing.T) {
+	confine.TestingSetAutoConfine(t)
 	project := t.TempDir()
 	overlayRoot := t.TempDir()
 	socketDir, err := os.MkdirTemp("/tmp", "lyc-cp-") //nolint:usetesting // Short socket path.
@@ -56,11 +56,13 @@ func TestGateContainedMatchesSpawnRequest(t *testing.T) {
 	}
 
 	cases := []struct {
-		name    string
-		mutate  func(*tools.ToolContext)
-		overlay []string
+		name       string
+		mutate     func(*tools.ToolContext)
+		overlay    []string
+		sandboxOff bool
 	}{
 		{name: "command_with_overlay_roots", overlay: []string{overlayRoot}},
+		{name: "overlay_with_sandbox_off", overlay: []string{overlayRoot}, sandboxOff: true},
 		{name: "package_explicit_read", mutate: func(tc *tools.ToolContext) {
 			tc.Files.PackageExecution = &packageexec.Execution{SensitiveReads: []string{overlayRoot}, ApprovedReadPaths: []string{filepath.Join(overlayRoot, "cacert.pem")}}
 			tc.Files.SessionReadPaths = []string{filepath.Join(overlayRoot, "unrelated-secret")}
@@ -79,6 +81,9 @@ func TestGateContainedMatchesSpawnRequest(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
+			if tc.sandboxOff {
+				t.Setenv("LYCAON_SANDBOX", "off")
+			}
 			tctx := base
 			if tc.mutate != nil {
 				tc.mutate(&tctx)
@@ -97,14 +102,8 @@ func TestGateContainedMatchesSpawnRequest(t *testing.T) {
 				t.Fatalf("gate Contained diverged from executor Contained:\ngate:  %+v\nspawn: %+v", gateContained, spawnContained)
 			}
 			if tc.overlay != nil && gateContained.Active() {
-				found := false
-				for _, root := range gateContained.Roots {
-					if root == overlayRoot {
-						found = true
-					}
-				}
-				if !found {
-					t.Fatalf("overlay root missing from gate Contained.Roots: %+v", gateContained.Roots)
+				if !confine.PathWithinRoots(overlayRoot, gateContained.WriteRoots) || confine.PathWithinRoots(overlayRoot, gateContained.Roots) {
+					t.Fatalf("reviewed root %q, writable roots %v, attached roots %v", overlayRoot, gateContained.WriteRoots, gateContained.Roots)
 				}
 			}
 			if tctx.Direct.DirectIPRequested && gateContained.Active() {

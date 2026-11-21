@@ -79,7 +79,7 @@ func Enter(plan Plan) error {
 		if err := startPerformer(plan.Filesystem); err != nil {
 			return err
 		}
-		listener, err := applySeccomp()
+		listener, err := applySeccomp(plan.FixedCPU)
 		if err != nil {
 			return err
 		}

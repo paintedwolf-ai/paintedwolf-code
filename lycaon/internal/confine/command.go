@@ -48,7 +48,7 @@ func Command(
 			return nil, func() {}, err
 		}
 	}
-	socketFiles, closeSockets, err := socketCommandFiles(c.SocketGrants)
+	socketFiles, closeSockets, err := socketCommandFiles(c)
 	if err != nil {
 		return nil, func() {}, err
 	}

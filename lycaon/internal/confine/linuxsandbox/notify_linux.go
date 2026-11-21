@@ -15,6 +15,7 @@ import (
 	"strings"
 	"unsafe"
 
+	"github.com/lycaon/lycaon/internal/confine/linuxsandbox/metadatacall"
 	"github.com/lycaon/lycaon/internal/fspath"
 	"golang.org/x/sys/unix"
 )
@@ -69,7 +70,7 @@ func (s *supervisor) serveNotifications(listener int) {
 		// The performer serves one name-creating call at a time, so answering
 		// those here costs no concurrency and saves waking another thread;
 		// socket calls, which can wait on the network, run beside the loop.
-		if isPathCall(n.Nr) {
+		if isPathCall(n.Nr) || metadatacall.Observes(uint32(n.Nr)) {
 			s.answer(listener, n)
 			continue
 		}
@@ -88,7 +89,9 @@ func (s *supervisor) answer(listener int, n seccompNotif) {
 		return
 	}
 	resp := seccompNotifResp{ID: n.ID, Val: result}
-	if errno != 0 {
+	if errno == errMetadataContinue {
+		resp.Flags = unix.SECCOMP_USER_NOTIF_FLAG_CONTINUE
+	} else if errno != 0 {
 		resp = seccompNotifResp{ID: n.ID, Error: -int32(errno)}
 	}
 	_ = ioctlPtr(listener, unix.SECCOMP_IOCTL_NOTIF_SEND, unsafe.Pointer(&resp))
@@ -103,6 +106,9 @@ func (s *supervisor) perform(listener int, n seccompNotif) (int64, unix.Errno, b
 		return 0, unix.EACCES, errors.Is(err, unix.ESRCH)
 	}
 	defer target.close()
+	if operand, ok := metadatacall.Decode(uint32(n.Nr), n.Args, target.read); ok {
+		return s.observeMetadata(target, operand)
+	}
 	if isPathCall(n.Nr) {
 		return s.performPath(target, n)
 	}
@@ -175,6 +181,8 @@ func (s *supervisor) decideAndPerform(target *targetProcess, n seccompNotif, fd,
 	switch decision.Action {
 	case Refuse:
 		return 0, unix.EACCES
+	case SessionSocket:
+		return s.performSessionSocket(target, req, sock)
 	case HostSocket:
 		return s.hostSocketCall(target, fd, sock, info, req, decision)
 	case Perform:
@@ -240,9 +248,23 @@ func (s *supervisor) decodeAddress(req *SocketRequest, info socketInfo, raw []by
 		if i := indexByte(path, 0); i >= 0 {
 			path = path[:i]
 		}
-		resolved, ok := resolveSocketPath(string(path), target)
+		rawPath := string(path)
+		dir, base := rawPath, ""
+		if req.Op == OpBind {
+			dir, base = filepath.Split(rawPath)
+			if base == "" || base == "." || base == ".." {
+				return errUnresolvedSocketPath
+			}
+			if dir == "" {
+				dir = "."
+			}
+		}
+		resolved, ok := resolveSocketPath(dir, target)
 		if !ok {
 			return errUnresolvedSocketPath
+		}
+		if base != "" {
+			resolved = filepath.Join(resolved, base)
 		}
 		req.Unix = resolved
 		return nil
@@ -289,10 +311,26 @@ func resolveSocketPath(path string, target *targetProcess) (string, bool) {
 		if err != nil || !filepath.IsAbs(cwd) {
 			return "", false
 		}
-		path = filepath.Join(cwd, path)
+		path = cwd + "/" + path
 	}
-	// A name that does not exist yet is still a name the plan can decide: a
-	// bind creates one, and a connect to it refuses like any ungranted path.
+	// Resolve traversal in the existing prefix before appending missing names.
+	if slices.Contains(strings.Split(path, "/"), "..") {
+		prefix, suffix := path, ""
+		for {
+			resolved, err := filepath.EvalSymlinks(prefix)
+			if err == nil {
+				return fspath.CanonicalPathOrMissing(resolved + suffix)
+			}
+			if !errors.Is(err, os.ErrNotExist) {
+				return "", false
+			}
+			dir, leaf := filepath.Split(strings.TrimRight(prefix, "/"))
+			if leaf == "" || leaf == "." || leaf == ".." {
+				return "", false
+			}
+			suffix, prefix = "/"+leaf+suffix, dir
+		}
+	}
 	return fspath.CanonicalPathOrMissing(path)
 }
 

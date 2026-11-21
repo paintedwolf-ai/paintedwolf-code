@@ -43,6 +43,7 @@ func (e *Executor) reviewInvocationCapabilities(ctx context.Context, tool string
 	if err != nil || len(reviews) == 0 {
 		return ctx, err
 	}
+	confReq := e.Boundary.actionConfineRequest(ctx, tc)
 	action := hitl.ProposedAction{
 		Invocation: hitl.ActionInvocation{
 			NativeInputs: tc.Invocation.NativeInputs,
@@ -54,13 +55,14 @@ func (e *Executor) reviewInvocationCapabilities(ctx context.Context, tool string
 			Command: commandsurface.PrimaryCommandLine(args, nil),
 		},
 		Scope: hitl.ActionScope{
-			ProjectID:     tc.Identity.ProjectID,
-			ProjectDir:    tc.ActiveRootPath(),
-			SessionID:     tc.Identity.SessionID,
-			RootSessionID: tc.ChatSessionID(),
+			ProjectID:         tc.Identity.ProjectID,
+			ProjectDir:        tc.ActiveRootPath(),
+			SessionID:         tc.Identity.SessionID,
+			RootSessionID:     tc.ChatSessionID(),
+			GrantedWriteRoots: append([]string(nil), confReq.GrantedWriteRoots...),
 		},
 		Execution: hitl.ActionExecution{
-			Contained: hitl.ContainedForRequest(e.Boundary.actionConfineRequest(ctx, tc)),
+			Contained: hitl.ContainedForRequest(confReq),
 		},
 		Resources: hitl.ActionResources{
 			HostResources:        append([]string(nil), tc.Host.HostResources...),
@@ -106,7 +108,7 @@ func (e *Executor) reviewInvocationCapabilities(ctx context.Context, tool string
 func capabilityReviewDenialCode(plan *hitl.ApprovalPlan) string {
 	for _, target := range plan.Subject.Targets {
 		switch target.Kind {
-		case "write_root", "credential_file", "key_material":
+		case "write_root", "credential_file", "key_material", "shared_temp":
 			return isolation.CodeWriteRootDenied
 		case "read_path":
 			return isolation.CodeReadPathDenied

@@ -54,13 +54,8 @@ func (g *RuleApprovalGate) Evaluate(ctx context.Context, action hitl.ProposedAct
 		), nil
 	}
 
-	// Bypass settings affect discretionary asks after enforcement.
-	if confine.BypassEnabled() {
-		return &hitl.ApprovalResult{}, nil
-	}
-
-	// NeverAsk disables discretionary prompts only.
-	if cfg.NeverAsk != nil && *cfg.NeverAsk {
+	promptsDisabled := confine.BypassEnabled() || (cfg.NeverAsk != nil && *cfg.NeverAsk)
+	if promptsDisabled && !g.sharedTempWriteNeedsReview(action, cfg.Grants) {
 		return &hitl.ApprovalResult{}, nil
 	}
 	facts, citation, matchedRules := g.factsForAction(action, cfg, layers)

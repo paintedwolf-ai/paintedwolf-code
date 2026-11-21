@@ -66,7 +66,7 @@ func prepareOperation(ctx context.Context, repo gitrepo.Repo, plan operationPlan
 		p.status = string(raw)
 	}
 	recordOperationVisits(ctx, strings.Count(p.status, "\x00"))
-	p.scratch, err = gitexec.MkdirTemp(ctx, "git-operation-*")
+	p.scratch, err = gitexec.MakeScratch(ctx, "git-operation-*")
 	if err != nil {
 		return nil, err
 	}

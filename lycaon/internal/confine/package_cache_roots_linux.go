@@ -51,6 +51,9 @@ func packageCacheDataRoots() []string {
 // Missing Linux roots cannot acquire a Landlock rule. Materialize only the
 // declared stores; directory availability never widens the boundary's authority.
 func preparePackageCacheDataRoots(c Confinement, mkdir func(fseffect.Location, os.FileMode) (int, error)) error {
+	if c.privateUserland {
+		return nil
+	}
 	rules, err := filesystemRules(c)
 	if err != nil {
 		return err
