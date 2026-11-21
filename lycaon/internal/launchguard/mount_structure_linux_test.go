@@ -104,14 +104,14 @@ func TestVanishedInitialMountsArePrunedOnlyWhenNonStructural(t *testing.T) {
 func TestMountListedReadsThisNamespaceTopology(t *testing.T) {
 	_, entries, err := readCurrentMountTopology()
 	testutil.FailErr(t, "read this namespace", err)
-	if listed, err := mountListed(uint64(entries[0].id)); err != nil || !listed {
-		t.Fatalf("a listed mount reads as unlisted: %v %v", listed, err)
+	if entries[0].id < 0 || !mountListed(uint64(entries[0].id)) {
+		t.Fatal("a listed mount reads as unlisted")
 	}
 	highest := 0
 	for _, entry := range entries {
 		highest = max(highest, entry.id)
 	}
-	if listed, err := mountListed(uint64(highest) + 1); err != nil || listed {
-		t.Fatalf("an unused mount identity reads as listed: %v %v", listed, err)
+	if mountListed(uint64(highest) + 1) {
+		t.Fatal("an unused mount identity reads as listed")
 	}
 }
