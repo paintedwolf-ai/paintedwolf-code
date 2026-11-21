@@ -91,8 +91,11 @@ func (b *WriteRootCheckpointBroker) authorizeWriteRoot(ctx context.Context, in c
 	}
 	// Control-plane writes are denied without prompting.
 	if confine.ControlPlanePathDenied(proposed, true, in.SessionScratchRoot, in.SessionOutputRoot) {
-		out.Denied = isSharedTempRoot(proposed)
-		return out, nil
+		return command.SandboxWriteRootResult{
+			Denied:            true,
+			DenialCause:       command.DenialCauseControlPlanePolicy,
+			ProposedWriteRoot: proposed,
+		}, nil
 	}
 	// The invocation's own scratch is already inside its boundary.
 	if confine.WithinSessionDirectory(proposed, in.SessionScratchRoot) {
@@ -106,8 +109,11 @@ func (b *WriteRootCheckpointBroker) authorizeWriteRoot(ctx context.Context, in c
 	if subject.Kind == confine.WriteSubjectOrdinary {
 		// A root granted here must also pass the boundary's granted lane.
 		if refused, _ := confine.GrantedWriteRootRefused(proposed); refused {
-			out.Denied = isSharedTempRoot(proposed)
-			return out, nil
+			return command.SandboxWriteRootResult{
+				Denied:            true,
+				DenialCause:       command.DenialCauseControlPlanePolicy,
+				ProposedWriteRoot: proposed,
+			}, nil
 		}
 	}
 	invokingSessionID, rootSessionID := askSessionIDs(ctx, b.Store, in.SessionID, in.ParentSessionID)
@@ -152,7 +158,13 @@ func (b *WriteRootCheckpointBroker) authorizeWriteRoot(ctx context.Context, in c
 		rule, matched := b.Rule(ctx, in.ProjectID, projectDir, proposed)
 		if matched && rule.Effect == settings.ApprovalEffectDeny {
 			b.recordRuleDeny(ctx, invokingSessionID, in, proposed, rule)
-			return command.SandboxWriteRootResult{Denied: true, ProposedWriteRoot: proposed}, nil
+			deniedRule := rule
+			return command.SandboxWriteRootResult{
+				Denied:            true,
+				DenialCause:       command.DenialCauseApprovalRule,
+				DeniedRule:        &deniedRule,
+				ProposedWriteRoot: proposed,
+			}, nil
 		}
 		if matched && rule.Effect == settings.ApprovalEffectAsk {
 			approvalMatches = []hitl.ApprovalRuleMatch{approvalRuleMatch(rule)}
@@ -222,10 +234,15 @@ func (b *WriteRootCheckpointBroker) raiseWriteRootCard(
 	if err != nil || !resolved.Answered {
 		return command.SandboxWriteRootResult{}, err
 	}
+	cause := resolved.DenialCause
+	if resolved.Denied && cause == command.DenialCauseNone {
+		cause = command.DenialCauseUserDeclined
+	}
 	return command.SandboxWriteRootResult{
 		Raised:            resolved.Raised,
 		Authorized:        resolved.Authorized,
 		Denied:            resolved.Denied,
+		DenialCause:       cause,
 		ProposedWriteRoot: proposed,
 		UserGuidance:      resolved.UserGuidance,
 	}, nil

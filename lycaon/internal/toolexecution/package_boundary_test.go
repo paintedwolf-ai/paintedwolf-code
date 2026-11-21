@@ -52,12 +52,16 @@ func TestPackageReadAccessRequiresSuccessfulExplicitPreflight(t *testing.T) {
 				calls := 0
 				executor := func() *Executor {
 					e := NewExecutor(nil, nil, "")
-					e.Boundary.readPathPreflight = func(_ context.Context, gotTool string, _ map[string]any, _ tools.ToolContext, gotPath string) (bool, bool, string, error) {
+					e.Boundary.readPathPreflight = func(_ context.Context, gotTool string, _ map[string]any, _ tools.ToolContext, gotPath string) (PathPreflightResult, error) {
 						calls++
 						if gotTool != tool || gotPath != path {
 							t.Fatalf("reviewed %q %q, want %q %q", gotTool, gotPath, tool, path)
 						}
-						return approved, !approved, "", nil
+						cause := DenialCauseNone
+						if !approved {
+							cause = DenialCauseUserDeclined
+						}
+						return PathPreflightResult{Authorized: approved, Denied: !approved, DenialCause: cause}, nil
 					}
 					return e
 				}()

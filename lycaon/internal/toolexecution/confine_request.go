@@ -2,17 +2,38 @@ package toolexecution
 
 import (
 	"context"
-	"github.com/lycaon/lycaon/internal/tools"
 
 	"github.com/lycaon/lycaon/internal/confine"
 	"github.com/lycaon/lycaon/internal/hitl"
+	"github.com/lycaon/lycaon/internal/settings"
+	"github.com/lycaon/lycaon/internal/tools"
 )
+
+// PathDenialCause classifies why a path preflight refused authority.
+type PathDenialCause string
+
+const (
+	DenialCauseNone               PathDenialCause = ""
+	DenialCauseUserDeclined       PathDenialCause = "user_declined"
+	DenialCausePriorUserDeclined  PathDenialCause = "prior_user_declined"
+	DenialCauseApprovalRule       PathDenialCause = "approval_rule"
+	DenialCauseControlPlanePolicy PathDenialCause = "control_plane_policy"
+)
+
+// PathPreflightResult is the structured outcome of a write-root or read-path preflight.
+type PathPreflightResult struct {
+	Authorized   bool
+	Denied       bool
+	DenialCause  PathDenialCause
+	DeniedRule   *settings.ApprovalRule
+	UserGuidance string
+}
 
 // SessionWriteRootOverlay returns the session tree’s approved write paths.
 type SessionWriteRootOverlay func(ctx context.Context, sessionID, parentSessionID string) []string
 
 // WriteRootPreflight resolves one explicit root before process spawn.
-type WriteRootPreflight func(ctx context.Context, tool string, args map[string]any, tc tools.ToolContext, root string) (authorized, denied bool, guidance string, err error)
+type WriteRootPreflight func(ctx context.Context, tool string, args map[string]any, tc tools.ToolContext, root string) (PathPreflightResult, error)
 
 func (e *Boundary) SetWriteRootPreflight(fn WriteRootPreflight) {
 	if e != nil {
@@ -21,7 +42,7 @@ func (e *Boundary) SetWriteRootPreflight(fn WriteRootPreflight) {
 }
 
 // ReadPathPreflight resolves one explicit protected read path before spawn.
-type ReadPathPreflight func(ctx context.Context, tool string, args map[string]any, tc tools.ToolContext, path string) (authorized, denied bool, guidance string, err error)
+type ReadPathPreflight func(ctx context.Context, tool string, args map[string]any, tc tools.ToolContext, path string) (PathPreflightResult, error)
 
 func (e *Boundary) SetReadPathPreflight(fn ReadPathPreflight) {
 	if e != nil {

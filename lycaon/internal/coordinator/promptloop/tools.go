@@ -298,8 +298,11 @@ func (l *toolInvocations) executeToolCall(
 		schema = offered
 	}
 	if reject := tools.ValidateCallArguments(tc.Name, tc.Args, schema, toolCtx); reject != nil {
-		refused := refusedInvocation(l.toolReject(reject.Code, reject.Data))
+		refused := refusedInvocation(l.curateToolRejectOccurrence(ctx, sess, tc, toolCtx, reject))
 		refused.receipt, refused.contract = receipt, def.Contract
+		if typed := toolrejection.AsToolReject(refused.reject); typed != nil && typed.FailureClass != "" {
+			refused.failure = rejectionFailure(refused.reject.Code(), typed.FailureClass, invocationFailureOwner(def.Contract, toolCaptures{}), refused.facts.FeedbackFor(refused.reject.Code()).Details)
+		}
 		return refused
 	}
 	if l.Deps.BeforeToolRun != nil {

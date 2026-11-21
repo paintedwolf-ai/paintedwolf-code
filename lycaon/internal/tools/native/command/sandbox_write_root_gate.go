@@ -1,6 +1,21 @@
 package command
 
-import "context"
+import (
+	"context"
+
+	"github.com/lycaon/lycaon/internal/settings"
+)
+
+// SandboxDenialCause identifies why a path preflight refused authority.
+type SandboxDenialCause string
+
+const (
+	DenialCauseNone               SandboxDenialCause = ""
+	DenialCauseUserDeclined       SandboxDenialCause = "user_declined"
+	DenialCausePriorUserDeclined  SandboxDenialCause = "prior_user_declined"
+	DenialCauseApprovalRule       SandboxDenialCause = "approval_rule"
+	DenialCauseControlPlanePolicy SandboxDenialCause = "control_plane_policy"
+)
 
 // SandboxWriteRootAsk is the structured pre-spawn input for write authority.
 type SandboxWriteRootAsk struct {
@@ -25,8 +40,12 @@ type SandboxWriteRootResult struct {
 	Raised bool
 	// Authorized reports whether the root was granted.
 	Authorized bool
-	// Denied reports a rejected or expired approval.
+	// Denied reports a rejected ask, deny rule, or control-plane block.
 	Denied bool
+	// DenialCause distinguishes rule, control-plane, and user denials.
+	DenialCause SandboxDenialCause
+	// DeniedRule is the matched deny rule when DenialCause == DenialCauseApprovalRule.
+	DeniedRule *settings.ApprovalRule
 	// ProposedWriteRoot is the approved root.
 	ProposedWriteRoot string
 	// UserGuidance is explicit composer direction attached to a denial.
@@ -52,9 +71,11 @@ type SandboxReadPathAsk struct {
 
 // SandboxReadPathResult is the gate outcome after optional HITL.
 type SandboxReadPathResult struct {
-	Raised     bool
-	Authorized bool
-	Denied     bool
+	Raised      bool
+	Authorized  bool
+	Denied      bool
+	DenialCause SandboxDenialCause
+	DeniedRule  *settings.ApprovalRule
 	// ProposedReadPath is the approved path.
 	ProposedReadPath string
 	// UserGuidance is explicit composer direction attached to a denial.

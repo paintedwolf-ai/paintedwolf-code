@@ -58,3 +58,34 @@ func (gc *GuardContext) setTextActionFacts(action actionenvelope.Observation) {
 	gc.setObservationFact("text_action_loadable_tools", loadable)
 	gc.setObservationFact("text_action_command_forms", forms)
 }
+
+// ObserveCommandOperationReach derives command_operation_reachable and
+// admitted_command_forms from the occurrence's frozen request reach.
+func (gc *GuardContext) ObserveCommandOperationReach() {
+	if gc == nil || !gc.Reach.Known() {
+		return
+	}
+	need, _ := gc.ObservationData["need"].(string)
+	need = strings.TrimSpace(need)
+	if need == "" {
+		need, _ = gc.Invocation.ToolArgs["need"].(string)
+		need = strings.TrimSpace(need)
+	}
+	if need == "" {
+		gc.setObservationFact("command_operation_reachable", false)
+		gc.setObservationFact("admitted_command_forms", []string{})
+		return
+	}
+	route := RouteTool(gc.Reach, need)
+	admitted := make([]string, 0, len(route.Forms))
+	for _, form := range route.Forms {
+		if gc.Reach.Program(form) && !slices.Contains(admitted, form) {
+			admitted = append(admitted, form)
+		}
+	}
+	status := gc.Reach.Status(toolreach.ProgramTool)
+	commandReachable := status == toolreach.Callable ||
+		(status == toolreach.Loadable && gc.Reach.Status(toolreach.LoaderTool) == toolreach.Callable)
+	gc.setObservationFact("admitted_command_forms", admitted)
+	gc.setObservationFact("command_operation_reachable", commandReachable && len(admitted) > 0)
+}

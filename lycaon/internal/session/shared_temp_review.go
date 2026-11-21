@@ -63,7 +63,7 @@ func (b *WriteRootCheckpointBroker) ReviewSharedTemp(ctx context.Context, in com
 		prior := len(reviews)
 		verdict, err := b.authorizeWriteRoot(ctx, in, func(ctx context.Context, req sandboxAskRequest) (sandboxAskResolution, error) {
 			if history.Declined[root] {
-				return sandboxAskResolution{Answered: true, Denied: true}, nil
+				return sandboxAskResolution{Answered: true, Denied: true, DenialCause: command.DenialCausePriorUserDeclined}, nil
 			}
 			return reviews.prepare(ctx, req)
 		})
@@ -72,7 +72,7 @@ func (b *WriteRootCheckpointBroker) ReviewSharedTemp(ctx context.Context, in com
 			result.Unanswered = append(result.Unanswered, root)
 		case verdict.Authorized:
 			result.Allowed = append(result.Allowed, root)
-		case verdict.Denied:
+		case verdict.Denied && verdict.DenialCause != command.DenialCauseControlPlanePolicy:
 			result.Declined = append(result.Declined, root)
 		case len(reviews) > prior:
 			held = append(held, root)
@@ -107,7 +107,7 @@ func (reviews *sharedTempReviews) prepare(ctx context.Context, req sandboxAskReq
 		return sandboxAskResolution{}, err
 	}
 	if declined {
-		return sandboxAskResolution{Answered: true, Denied: true}, nil
+		return sandboxAskResolution{Answered: true, Denied: true, DenialCause: command.DenialCausePriorUserDeclined}, nil
 	}
 	card, err := req.BuildCard()
 	if err == nil {

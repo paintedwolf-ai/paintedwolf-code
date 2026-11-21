@@ -13,6 +13,7 @@ import (
 	"github.com/lycaon/lycaon/internal/session/approvalstate"
 	sessiontree "github.com/lycaon/lycaon/internal/session/tree"
 	"github.com/lycaon/lycaon/internal/toolrejection"
+	"github.com/lycaon/lycaon/internal/tools/native/command"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -64,6 +65,7 @@ type sandboxAskResolution struct {
 	Authorized    bool
 	Denied        bool
 	HumanDeclined bool
+	DenialCause   command.SandboxDenialCause
 	UserGuidance  string
 }
 
@@ -99,7 +101,10 @@ func awaitSandboxAsk(ctx context.Context, req sandboxAskRequest) (sandboxAskReso
 		}
 		if suppressed {
 			recordSandboxAskSuppressed(ctx, req, authzledger.AskSuppressedCausePriorDeny)
-			return sandboxAskResolution{Answered: true, Raised: true, Denied: true}, nil
+			return sandboxAskResolution{
+				Answered: true, Raised: true, Denied: true,
+				DenialCause: command.DenialCausePriorUserDeclined,
+			}, nil
 		}
 	}
 	begin, existing := req.Gate.Begin(req.InvokingSessionID, req.Key, req.ToolCallID)
@@ -154,9 +159,18 @@ func settleSandboxAsk(ctx context.Context, req sandboxAskRequest, checkpointID s
 
 func sandboxAskAnswer(final *hitl.CheckpointResponse) sandboxAskResolution {
 	authorized := hitl.CheckpointAuthorizes(final)
+	rejected := final != nil && final.Status == hitl.DecisionStatusRejected
+	cause := command.DenialCauseNone
+	if rejected {
+		cause = command.DenialCauseUserDeclined
+	}
 	return sandboxAskResolution{
-		Answered: true, Raised: true, Authorized: authorized, Denied: !authorized,
-		HumanDeclined: final != nil && final.Status == hitl.DecisionStatusRejected && final.ResolvedBy == authzledger.ResolvedByHuman,
+		Answered:      true,
+		Raised:        true,
+		Authorized:    authorized,
+		Denied:        rejected,
+		HumanDeclined: rejected && final.ResolvedBy == authzledger.ResolvedByHuman,
+		DenialCause:   cause,
 		UserGuidance:  resolvedUserGuidance(final),
 	}
 }

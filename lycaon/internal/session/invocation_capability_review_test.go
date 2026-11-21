@@ -167,13 +167,21 @@ func newCapabilityReviewFixture(t *testing.T, approve bool) *capabilityReviewFix
 	f.executor.Capabilities.SetSocketCapabilityRuntime(c.sockets)
 	f.executor.Boundary.SetSessionWriteRootOverlay(broker.SessionWriteRoots)
 	f.executor.Boundary.SetSessionReadPathOverlay(broker.SessionReadPaths)
-	f.executor.Boundary.SetWriteRootPreflight(func(ctx context.Context, tool string, _ map[string]any, tc tools.ToolContext, path string) (bool, bool, string, error) {
+	f.executor.Boundary.SetWriteRootPreflight(func(ctx context.Context, tool string, _ map[string]any, tc tools.ToolContext, path string) (toolexecution.PathPreflightResult, error) {
 		result, err := broker.Authorize(ctx, command.SandboxWriteRootAsk{SessionID: tc.Identity.SessionID, ProjectID: tc.Identity.ProjectID, ToolCallID: tc.Identity.ToolCallID, ProjectDir: tc.ActiveRootPath(), ToolName: tool, ProposedWriteRoot: path})
-		return result.Authorized, result.Denied, result.UserGuidance, err
+		return toolexecution.PathPreflightResult{
+			Authorized: result.Authorized, Denied: result.Denied,
+			DenialCause: toolexecution.PathDenialCause(result.DenialCause),
+			DeniedRule:  result.DeniedRule, UserGuidance: result.UserGuidance,
+		}, err
 	})
-	f.executor.Boundary.SetReadPathPreflight(func(ctx context.Context, tool string, _ map[string]any, tc tools.ToolContext, path string) (bool, bool, string, error) {
+	f.executor.Boundary.SetReadPathPreflight(func(ctx context.Context, tool string, _ map[string]any, tc tools.ToolContext, path string) (toolexecution.PathPreflightResult, error) {
 		result, err := broker.AuthorizeRead(ctx, command.SandboxReadPathAsk{SessionID: tc.Identity.SessionID, ProjectID: tc.Identity.ProjectID, ToolCallID: tc.Identity.ToolCallID, ProjectDir: tc.ActiveRootPath(), ToolName: tool, ProposedReadPath: path, ReadDenyPaths: f.readPaths})
-		return result.Authorized, result.Denied, result.UserGuidance, err
+		return toolexecution.PathPreflightResult{
+			Authorized: result.Authorized, Denied: result.Denied,
+			DenialCause: toolexecution.PathDenialCause(result.DenialCause),
+			DeniedRule:  result.DeniedRule, UserGuidance: result.UserGuidance,
+		}, err
 	})
 	f.executor.Boundary.SetSessionListenGrant(func(_ context.Context, session, _ string) (bool, []uint16) {
 		return c.listen.SessionPorts(session)
