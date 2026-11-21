@@ -63,6 +63,7 @@ webE2e(
           content: "",
           kind: "progress_update",
           progress_update: {
+            initial: false,
             changes: [
               { kind: "done", label: "Read the app package", state: "done" },
               { kind: "done", label: "Add a greeting helper", state: "done" },
