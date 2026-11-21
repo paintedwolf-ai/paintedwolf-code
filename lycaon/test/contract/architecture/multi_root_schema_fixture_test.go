@@ -93,7 +93,7 @@ func multiRootPlantScalar(propName string, prop map[string]any) (any, bool) {
 	}
 }
 
-func multiRootPlantArgsFromSchema(tool string, schema map[string]any, probePath string, includePath bool) (map[string]any, bool) {
+func multiRootPlantArgsFromSchema(schema map[string]any, probePath string, includePath bool) (map[string]any, bool) {
 	if schema == nil {
 		return nil, false
 	}
@@ -173,8 +173,5 @@ func multiRootPlantArgsFromSchema(tool string, schema map[string]any, probePath 
 		}
 	}
 
-	if tool == "inspect_source" {
-		args["operation"] = "git_head"
-	}
 	return args, plantedPath
 }
