@@ -14,7 +14,6 @@ import (
 	"slices"
 	"strconv"
 	"sync"
-	"time"
 
 	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/internal/toolcontract"
@@ -24,18 +23,20 @@ import (
 // ErrUncacheableRenderInput reports a variable outside the sound render-cache grammar.
 var ErrUncacheableRenderInput = errors.New("hoststate: uncacheable render input")
 
-var timeType = reflect.TypeFor[time.Time]()
-
 type ptrVisit struct {
-	typ reflect.Type
-	ptr uintptr
+	kind   reflect.Kind
+	typ    reflect.Type
+	ptr    uintptr
+	length int
 }
 
 // TryRenderCacheKey hashes templateID, catalogRevision, selectedUnits, and the
-// complete fullVars map under the admitted value grammar: nil, bool, string,
-// integers, finite floats, time.Time (instant + location + zone offset),
-// slices/arrays, string-keyed maps, and structs whose fields are all exported.
-// Any value outside that grammar returns ErrUncacheableRenderInput.
+// complete fullVars map under the admitted plain-data value grammar: nil,
+// methodless bool/string/int/uint/finite-float scalars, methodless pointers,
+// non-cyclic slices/arrays and string-keyed maps, and methodless structs whose
+// fields are all exported. Values with methods (including time.Time and
+// pointer-receiver formatters), unexported fields, non-string map keys,
+// non-finite floats, callables, or reference cycles return ErrUncacheableRenderInput.
 func TryRenderCacheKey(
 	templateID, catalogRevision string,
 	selectedUnits []string,
@@ -71,6 +72,7 @@ func RenderCacheKey(templateID, catalogRevision string, selectedUnits []string, 
 
 // AuthorityDigest hashes the offered tool set, projected argument schemas,
 // native program reach vector, evidence mints, and subject reader reach.
+// Uncacheable projected schema values return "" so CheckAuthority bypasses reuse.
 func AuthorityDigest(
 	offered []string,
 	projectedSchemas map[string]map[string]any,
@@ -129,37 +131,49 @@ func sha256CanonicalJSON(v any) string {
 	return hex.EncodeToString(sum[:])
 }
 
+func hasAnyMethods(t reflect.Type) bool {
+	if t.NumMethod() > 0 {
+		return true
+	}
+	if t.Kind() != reflect.Pointer && t.Kind() != reflect.Interface {
+		return reflect.PointerTo(t).NumMethod() > 0
+	}
+	return false
+}
+
 func encodeAdmittedValue(v reflect.Value, seen map[ptrVisit]bool) (any, error) {
 	if !v.IsValid() {
 		return []any{"nil", ""}, nil
 	}
-	var visits []ptrVisit
-	for v.Kind() == reflect.Interface || v.Kind() == reflect.Pointer {
+	for v.Kind() == reflect.Interface {
 		if v.IsNil() {
-			typeName := ""
-			if v.Kind() == reflect.Pointer {
-				typeName = v.Type().String()
-			}
-			return []any{"nil", typeName}, nil
-		}
-		if v.Kind() == reflect.Pointer {
-			key := ptrVisit{typ: v.Type(), ptr: v.Pointer()}
-			if seen[key] {
-				return nil, fmt.Errorf("%w: cyclic pointer %s", ErrUncacheableRenderInput, v.Type())
-			}
-			seen[key] = true
-			visits = append(visits, key)
+			return []any{"nil", ""}, nil
 		}
 		v = v.Elem()
 	}
-	defer func() {
-		for _, k := range visits {
-			delete(seen, k)
-		}
-	}()
 
-	typeName := v.Type().String()
+	typ := v.Type()
+	if hasAnyMethods(typ) {
+		return nil, fmt.Errorf("%w: type %s defines methods", ErrUncacheableRenderInput, typ)
+	}
+	typeName := typ.String()
+
 	switch v.Kind() {
+	case reflect.Pointer:
+		if v.IsNil() {
+			return []any{"ptr", typeName, nil}, nil
+		}
+		key := ptrVisit{kind: reflect.Pointer, typ: typ, ptr: v.Pointer()}
+		if seen[key] {
+			return nil, fmt.Errorf("%w: cyclic pointer %s", ErrUncacheableRenderInput, typeName)
+		}
+		seen[key] = true
+		defer delete(seen, key)
+		elem, err := encodeAdmittedValue(v.Elem(), seen)
+		if err != nil {
+			return nil, err
+		}
+		return []any{"ptr", typeName, elem}, nil
 	case reflect.Bool:
 		return []any{"bool", typeName, v.Bool()}, nil
 	case reflect.String:
@@ -187,6 +201,14 @@ func encodeAdmittedValue(v reflect.Value, seen map[ptrVisit]bool) (any, error) {
 
 func encodeAdmittedList(v reflect.Value, typeName string, seen map[ptrVisit]bool) (any, error) {
 	isNil := v.Kind() == reflect.Slice && v.IsNil()
+	if v.Kind() == reflect.Slice && !isNil && v.Len() > 0 {
+		key := ptrVisit{kind: reflect.Slice, typ: v.Type(), ptr: v.Pointer(), length: v.Len()}
+		if seen[key] {
+			return nil, fmt.Errorf("%w: cyclic slice %s", ErrUncacheableRenderInput, typeName)
+		}
+		seen[key] = true
+		defer delete(seen, key)
+	}
 	items := make([]any, v.Len())
 	for i := 0; i < v.Len(); i++ {
 		enc, err := encodeAdmittedValue(v.Index(i), seen)
@@ -202,6 +224,15 @@ func encodeAdmittedMap(v reflect.Value, typeName string, seen map[ptrVisit]bool)
 	if v.Type().Key().Kind() != reflect.String {
 		return nil, fmt.Errorf("%w: non-string map key type %s", ErrUncacheableRenderInput, v.Type().Key())
 	}
+	isNil := v.IsNil()
+	if !isNil {
+		key := ptrVisit{kind: reflect.Map, typ: v.Type(), ptr: v.Pointer()}
+		if seen[key] {
+			return nil, fmt.Errorf("%w: cyclic map %s", ErrUncacheableRenderInput, typeName)
+		}
+		seen[key] = true
+		defer delete(seen, key)
+	}
 	out := make(map[string]any, v.Len())
 	iter := v.MapRange()
 	for iter.Next() {
@@ -211,19 +242,10 @@ func encodeAdmittedMap(v reflect.Value, typeName string, seen map[ptrVisit]bool)
 		}
 		out[iter.Key().String()] = enc
 	}
-	return []any{"map", typeName, v.IsNil(), out}, nil
+	return []any{"map", typeName, isNil, out}, nil
 }
 
 func encodeAdmittedStruct(v reflect.Value, typeName string, seen map[ptrVisit]bool) (any, error) {
-	if v.Type() == timeType {
-		ts := v.Interface().(time.Time)
-		zoneName, offsetSec := ts.Zone()
-		locName := ""
-		if loc := ts.Location(); loc != nil {
-			locName = loc.String()
-		}
-		return []any{"time", ts.Unix(), ts.Nanosecond(), locName, zoneName, offsetSec}, nil
-	}
 	typ := v.Type()
 	fields := make(map[string]any, v.NumField())
 	for i := 0; i < v.NumField(); i++ {

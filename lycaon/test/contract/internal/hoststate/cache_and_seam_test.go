@@ -3,6 +3,7 @@ package hoststate_test
 import (
 	"context"
 	"errors"
+	"fmt"
 	"maps"
 	"math"
 	"reflect"
@@ -37,15 +38,9 @@ func TestRenderCacheKeyDistinguishesNonReaderVars(t *testing.T) {
 		t.Fatalf("expected matching Reader.Fingerprint(), got %s vs %s", readerA.Fingerprint(), readerB.Fingerprint())
 	}
 
-	varsA, err := prompts.Vars(readerA, map[string]any{
-		"session_scratch_dir":     "/tmp/scratch-a",
-		"reviews_confined_writes": false,
-	})
+	varsA, err := prompts.Vars(readerA, map[string]any{"session_scratch_dir": "/tmp/scratch-a", "reviews_confined_writes": false})
 	contractcheck.FailErr(t, "Vars A", err)
-	varsB, err := prompts.Vars(readerB, map[string]any{
-		"session_scratch_dir":     "/tmp/scratch-b",
-		"reviews_confined_writes": true,
-	})
+	varsB, err := prompts.Vars(readerB, map[string]any{"session_scratch_dir": "/tmp/scratch-b", "reviews_confined_writes": true})
 	contractcheck.FailErr(t, "Vars B", err)
 
 	keyA := hoststate.RenderCacheKey("partials/command-surface.md", "rev-1", []string{"u1"}, varsA)
@@ -56,51 +51,24 @@ func TestRenderCacheKeyDistinguishesNonReaderVars(t *testing.T) {
 
 	cache := hoststate.NewRenderCache()
 	calls := 0
-	out1, hit1, err := cache.RenderOrReuse(keyA, func() (string, error) {
-		calls++
-		return "rendered-body", nil
-	})
+	out1, hit1, err := cache.RenderOrReuse(keyA, func() (string, error) { calls++; return "rendered-body", nil })
 	contractcheck.FailErr(t, "RenderOrReuse miss", err)
-	out2, hit2, err := cache.RenderOrReuse(keyA, func() (string, error) {
-		calls++
-		return "different", nil
-	})
+	out2, hit2, err := cache.RenderOrReuse(keyA, func() (string, error) { calls++; return "different", nil })
 	contractcheck.FailErr(t, "RenderOrReuse hit", err)
 	if hit1 || !hit2 || calls != 1 || out1 != "rendered-body" || out2 != "rendered-body" {
 		t.Fatalf("unexpected cache behavior: hit1=%t hit2=%t calls=%d out1=%q out2=%q", hit1, hit2, calls, out1, out2)
 	}
 
-	auth1 := hoststate.AuthorityDigest(
-		[]string{"wait"},
-		map[string]map[string]any{"wait": {"enum": []string{"process_done"}}},
-		nil,
-		readerA.Mints(),
-		readerA,
-	)
-	auth2 := hoststate.AuthorityDigest(
-		[]string{"wait"},
-		map[string]map[string]any{"wait": {"enum": []string{"next_worker_done"}}},
-		nil,
-		readerA.Mints(),
-		readerA,
-	)
-	if auth1 == auth2 {
-		t.Fatal("AuthorityDigest collided across distinct wait schemas")
+	auth1 := hoststate.AuthorityDigest([]string{"wait"}, map[string]map[string]any{"wait": {"enum": []string{"process_done"}}}, nil, readerA.Mints(), readerA)
+	auth2 := hoststate.AuthorityDigest([]string{"wait"}, map[string]map[string]any{"wait": {"enum": []string{"next_worker_done"}}}, nil, readerA.Mints(), readerA)
+	if auth1 == "" || auth2 == "" || auth1 == auth2 {
+		t.Fatal("AuthorityDigest invalid or collided across distinct wait schemas")
 	}
 
 	authRuns := 0
-	contractcheck.FailErr(t, "first CheckAuthority", cache.CheckAuthority(keyA, auth1, func() error {
-		authRuns++
-		return nil
-	}))
-	contractcheck.FailErr(t, "cached CheckAuthority", cache.CheckAuthority(keyA, auth1, func() error {
-		authRuns++
-		return nil
-	}))
-	contractcheck.FailErr(t, "distinct authority CheckAuthority", cache.CheckAuthority(keyA, auth2, func() error {
-		authRuns++
-		return nil
-	}))
+	contractcheck.FailErr(t, "first CheckAuthority", cache.CheckAuthority(keyA, auth1, func() error { authRuns++; return nil }))
+	contractcheck.FailErr(t, "cached CheckAuthority", cache.CheckAuthority(keyA, auth1, func() error { authRuns++; return nil }))
+	contractcheck.FailErr(t, "distinct CheckAuthority", cache.CheckAuthority(keyA, auth2, func() error { authRuns++; return nil }))
 	if authRuns != 2 {
 		t.Fatalf("authRuns = %d, want 2 (cached duplicate skipped, distinct authority re-run)", authRuns)
 	}
@@ -111,28 +79,41 @@ type hiddenStateValue struct {
 	secret   string
 }
 
-func (h hiddenStateValue) Label() string { return h.Exported + ":" + h.secret }
+type ptrOnlyStringer struct{ Exported string }
+
+func (p *ptrOnlyStringer) String() string { return "ptr:" + p.Exported }
+
+type plainDataBox struct{ Value string }
 
 func TestRenderCacheSoundEncodingAndAuthorityRetryAndOverlap(t *testing.T) {
-	t1 := time.Date(2026, 11, 21, 12, 0, 0, 0, time.UTC)
-	t2 := time.Date(2026, 11, 21, 12, 0, 0, 1, time.UTC)
-	t3 := t1.In(time.FixedZone("PST", -8*3600))
-	k1, err := hoststate.TryRenderCacheKey("tpl", "r1", nil, map[string]any{"ts": t1})
-	contractcheck.FailErr(t, "TryRenderCacheKey t1", err)
-	k2, err := hoststate.TryRenderCacheKey("tpl", "r1", nil, map[string]any{"ts": t2})
-	contractcheck.FailErr(t, "TryRenderCacheKey t2", err)
-	k3, err := hoststate.TryRenderCacheKey("tpl", "r1", nil, map[string]any{"ts": t3})
-	contractcheck.FailErr(t, "TryRenderCacheKey t3", err)
-	if k1 == k2 || k1 == k3 || k2 == k3 {
-		t.Fatalf("time.Time keys collided: k1=%s k2=%s k3=%s", k1, k2, k3)
+	// Methodless plain data values and pointers must hash distinctly without colliding.
+	box := plainDataBox{Value: "ok"}
+	kVal, err := hoststate.TryRenderCacheKey("tpl", "r1", nil, map[string]any{"box": box})
+	contractcheck.FailErr(t, "TryRenderCacheKey box value", err)
+	kPtr, err := hoststate.TryRenderCacheKey("tpl", "r1", nil, map[string]any{"box": &box})
+	contractcheck.FailErr(t, "TryRenderCacheKey box ptr", err)
+	if kVal == "" || kPtr == "" || kVal == kPtr {
+		t.Fatalf("methodless value vs pointer collided: kVal=%q kPtr=%q", kVal, kPtr)
 	}
 
-	cache := hoststate.NewRenderCache()
+	cyclicMap := map[string]any{}
+	cyclicMap["self"] = cyclicMap
+	cyclicSlice := make([]any, 1)
+	cyclicSlice[0] = cyclicSlice
+	nowMono := time.Now()
+	ptrFmt := ptrOnlyStringer{Exported: "x"}
+
 	for name, badVars := range map[string]map[string]any{
-		"unexported_struct": {"v": hiddenStateValue{Exported: "same", secret: "a"}},
-		"typed_int_map_key": {"v": map[int]string{1: "one"}},
-		"nan_float":         {"v": math.NaN()},
-		"func_value":        {"v": func() string { return "x" }},
+		"cyclic_map":          {"v": cyclicMap},
+		"cyclic_slice":        {"v": cyclicSlice},
+		"time_with_monotonic": {"v": nowMono},
+		"time_stripped_mono":  {"v": nowMono.Round(0)},
+		"ptr_only_method_val": {"v": ptrFmt},
+		"ptr_only_method_ptr": {"v": &ptrFmt},
+		"unexported_struct":   {"v": hiddenStateValue{Exported: "same", secret: "a"}},
+		"typed_int_map_key":   {"v": map[int]string{1: "one"}},
+		"nan_float":           {"v": math.NaN()},
+		"func_value":          {"v": func() string { return "x" }},
 	} {
 		if _, tryErr := hoststate.TryRenderCacheKey("tpl", "r1", nil, badVars); !errors.Is(tryErr, hoststate.ErrUncacheableRenderInput) {
 			t.Fatalf("%s: TryRenderCacheKey err = %v, want ErrUncacheableRenderInput", name, tryErr)
@@ -142,33 +123,53 @@ func TestRenderCacheSoundEncodingAndAuthorityRetryAndOverlap(t *testing.T) {
 		}
 	}
 
-	vA := hiddenStateValue{Exported: "same", secret: "alpha"}
-	vB := hiddenStateValue{Exported: "same", secret: "beta"}
-	outA, hitA, err := cache.RenderOrReuse(hoststate.RenderCacheKey("tpl", "r1", nil, map[string]any{"v": vA}), func() (string, error) {
-		return vA.Label(), nil
-	})
-	contractcheck.FailErr(t, "RenderOrReuse unexported A", err)
-	outB, hitB, err := cache.RenderOrReuse(hoststate.RenderCacheKey("tpl", "r1", nil, map[string]any{"v": vB}), func() (string, error) {
-		return vB.Label(), nil
-	})
-	contractcheck.FailErr(t, "RenderOrReuse unexported B", err)
-	if hitA || hitB || outA == outB {
-		t.Fatalf("uncacheable values reused cache: hitA=%t hitB=%t outA=%q outB=%q", hitA, hitB, outA, outB)
+	// Focused bypass witnesses: time.Now vs Round(0) and val vs &val with pointer-only String()
+	// must bypass BOTH RenderOrReuse and CheckAuthority reuse.
+	cache := hoststate.NewRenderCache()
+	for i, candidate := range []any{nowMono, nowMono.Round(0), ptrFmt, &ptrFmt} {
+		rk := hoststate.RenderCacheKey("tpl", "r1", nil, map[string]any{"v": candidate})
+		out, hit, rErr := cache.RenderOrReuse(rk, func() (string, error) { return fmt.Sprint(candidate), nil })
+		contractcheck.FailErr(t, "RenderOrReuse bypass", rErr)
+		if hit || out != fmt.Sprint(candidate) {
+			t.Fatalf("candidate %d reused render cache: hit=%t out=%q", i, hit, out)
+		}
+		authChecks := 0
+		contractcheck.FailErr(t, "CheckAuthority bypass 1", cache.CheckAuthority(rk, "auth-valid", func() error { authChecks++; return nil }))
+		contractcheck.FailErr(t, "CheckAuthority bypass 2", cache.CheckAuthority(rk, "auth-valid", func() error { authChecks++; return nil }))
+		if authChecks != 2 || cache.AuthorityVerified(rk, "auth-valid") {
+			t.Fatalf("candidate %d reused authority check: authChecks=%d verified=%t", i, authChecks, cache.AuthorityVerified(rk, "auth-valid"))
+		}
+	}
+	if hits, misses, bypasses := cache.Stats(); hits != 0 || misses != 0 || bypasses != 4 {
+		t.Fatalf("unexpected stats after bypasses: hits=%d misses=%d bypasses=%d", hits, misses, bypasses)
 	}
 
+	// Uncacheable projected schema in AuthorityDigest must also bypass CheckAuthority reuse.
+	reader, err := prompts.DeclaredReader(nil, "implement_investigate")
+	contractcheck.FailErr(t, "DeclaredReader", err)
+	badAuth := hoststate.AuthorityDigest([]string{"wait"}, map[string]map[string]any{"wait": {"nan": math.NaN()}}, nil, reader.Mints(), reader)
+	if badAuth != "" {
+		t.Fatalf("expected empty AuthorityDigest on NaN schema, got %q", badAuth)
+	}
+	badAuthRuns := 0
+	contractcheck.FailErr(t, "badAuth 1", cache.CheckAuthority(kVal, badAuth, func() error { badAuthRuns++; return nil }))
+	contractcheck.FailErr(t, "badAuth 2", cache.CheckAuthority(kVal, badAuth, func() error { badAuthRuns++; return nil }))
+	if badAuthRuns != 2 || cache.AuthorityVerified(kVal, badAuth) {
+		t.Fatalf("empty AuthorityDigest did not bypass reuse: runs=%d", badAuthRuns)
+	}
+
+	verifyCheckAuthorityRetryAndOverlap(t, cache, kVal, kPtr)
+}
+
+func verifyCheckAuthorityRetryAndOverlap(t *testing.T, cache *hoststate.RenderCache, k1, k2 string) {
+	t.Helper()
 	sentinelErr := errors.New("authority violation")
 	attempts := 0
-	err = cache.CheckAuthority(k1, "auth-x", func() error {
-		attempts++
-		return sentinelErr
-	})
+	err := cache.CheckAuthority(k1, "auth-x", func() error { attempts++; return sentinelErr })
 	if !errors.Is(err, sentinelErr) || cache.AuthorityVerified(k1, "auth-x") {
 		t.Fatalf("failed check recorded as verified: err=%v verified=%t", err, cache.AuthorityVerified(k1, "auth-x"))
 	}
-	contractcheck.FailErr(t, "retry CheckAuthority", cache.CheckAuthority(k1, "auth-x", func() error {
-		attempts++
-		return nil
-	}))
+	contractcheck.FailErr(t, "retry CheckAuthority", cache.CheckAuthority(k1, "auth-x", func() error { attempts++; return nil }))
 	if attempts != 2 || !cache.AuthorityVerified(k1, "auth-x") {
 		t.Fatalf("attempts=%d verified=%t, want 2 and true", attempts, cache.AuthorityVerified(k1, "auth-x"))
 	}
@@ -191,19 +192,13 @@ func TestRenderCacheSoundEncodingAndAuthorityRetryAndOverlap(t *testing.T) {
 	<-started
 	go func() {
 		defer wg.Done()
-		errs[1] = cache.CheckAuthority(k2, "auth-overlap", func() error {
-			leaderRuns.Add(1)
-			return nil
-		})
+		errs[1] = cache.CheckAuthority(k2, "auth-overlap", func() error { leaderRuns.Add(1); return nil })
 	}()
 	time.Sleep(10 * time.Millisecond)
 	close(release)
 	wg.Wait()
-	if !errors.Is(errs[0], sentinelErr) || !errors.Is(errs[1], sentinelErr) || leaderRuns.Load() != 1 {
+	if !errors.Is(errs[0], sentinelErr) || !errors.Is(errs[1], sentinelErr) || leaderRuns.Load() != 1 || cache.AuthorityVerified(k2, "auth-overlap") {
 		t.Fatalf("overlapping failure mismatch: errs=%v leaderRuns=%d", errs, leaderRuns.Load())
-	}
-	if cache.AuthorityVerified(k2, "auth-overlap") {
-		t.Fatal("failed overlapping check marked pair verified")
 	}
 }
 
@@ -261,42 +256,32 @@ func TestFreezeTurnAuthorityMatchesPromptLoopRequestSeam(t *testing.T) {
 		{
 			name: "floor_only_agent_build",
 			state: pickState(func(s hoststate.CoordinatorState) bool {
-				return s.SessionMode == api.SessionModeAgent &&
-					s.Posture == api.SessionPostureBuild &&
-					s.WorkflowState == hoststate.WorkflowAmbientIdle &&
-					s.RootTopology == hoststate.RootsSingleGit &&
-					s.Loading == hoststate.LoadingFloorOnly &&
-					s.WebSearch && !s.CommandExternalHidden
+				return s.SessionMode == api.SessionModeAgent && s.Posture == api.SessionPostureBuild &&
+					s.WorkflowState == hoststate.WorkflowAmbientIdle && s.RootTopology == hoststate.RootsSingleGit &&
+					s.Loading == hoststate.LoadingFloorOnly && s.WebSearch && !s.CommandExternalHidden
 			}),
 		},
 		{
 			name: "partly_loaded_agent_build",
 			state: pickState(func(s hoststate.CoordinatorState) bool {
-				return s.SessionMode == api.SessionModeAgent &&
-					s.Posture == api.SessionPostureBuild &&
-					s.WorkflowState == hoststate.WorkflowAmbientIdle &&
-					s.RootTopology == hoststate.RootsSingleGit &&
-					s.Loading == hoststate.LoadingPartlyLoaded &&
-					s.WebSearch && !s.CommandExternalHidden
+				return s.SessionMode == api.SessionModeAgent && s.Posture == api.SessionPostureBuild &&
+					s.WorkflowState == hoststate.WorkflowAmbientIdle && s.RootTopology == hoststate.RootsSingleGit &&
+					s.Loading == hoststate.LoadingPartlyLoaded && s.WebSearch && !s.CommandExternalHidden
 			}),
 		},
 		{
 			name: "ask_ambient_idle",
 			state: pickState(func(s hoststate.CoordinatorState) bool {
-				return s.SessionMode == api.SessionModeAsk &&
-					s.Posture == api.SessionPostureBuild &&
-					s.WorkflowState == hoststate.WorkflowAmbientIdle &&
-					s.RootTopology == hoststate.RootsSingleGit &&
+				return s.SessionMode == api.SessionModeAsk && s.Posture == api.SessionPostureBuild &&
+					s.WorkflowState == hoststate.WorkflowAmbientIdle && s.RootTopology == hoststate.RootsSingleGit &&
 					s.Loading == hoststate.LoadingFloorOnly
 			}),
 		},
 		{
 			name: "ask_active_workflow_observe_plan",
 			state: pickState(func(s hoststate.CoordinatorState) bool {
-				return s.SessionMode == api.SessionModeAsk &&
-					s.Posture == api.SessionPostureBuild &&
-					s.WorkflowState == hoststate.WorkflowActivePhase &&
-					s.RequestedSurfaceID == "observe_plan" &&
+				return s.SessionMode == api.SessionModeAsk && s.Posture == api.SessionPostureBuild &&
+					s.WorkflowState == hoststate.WorkflowActivePhase && s.RequestedSurfaceID == "observe_plan" &&
 					s.RootTopology == hoststate.RootsSingleGit
 			}),
 		},
@@ -315,11 +300,8 @@ func TestFreezeTurnAuthorityMatchesPromptLoopRequestSeam(t *testing.T) {
 
 			recorder := &recordingLLMClient{}
 			sess := &api.Session{
-				ID:            "seam-sess",
-				Mode:          st.SessionMode,
-				Posture:       st.Posture,
-				AgentType:     prompts.CoordinatorProfileID,
-				WorkspacePath: "/tmp/fixture-primary",
+				ID: "seam-sess", Mode: st.SessionMode, Posture: st.Posture,
+				AgentType: prompts.CoordinatorProfileID, WorkspacePath: "/tmp/fixture-primary",
 			}
 			frame := inject.CoordinatorTurnFrame{
 				RunContext: st.RunContext,
@@ -350,11 +332,9 @@ func TestFreezeTurnAuthorityMatchesPromptLoopRequestSeam(t *testing.T) {
 					ImplementSessionState: func(context.Context, *api.Session) surface.ImplementSessionState {
 						return st.ImplementState
 					},
-					LoadedTools:      func(string) map[string]bool { return maps.Clone(st.Loaded) },
-					ProjectRootCount: func(context.Context, *api.Session) int { return st.RootCount },
-					ContextSurfaceDeps: promptloop.ContextSurfaceDeps{
-						WebSearchEnabled: func() bool { return st.WebSearch },
-					},
+					LoadedTools:        func(string) map[string]bool { return maps.Clone(st.Loaded) },
+					ProjectRootCount:   func(context.Context, *api.Session) int { return st.RootCount },
+					ContextSurfaceDeps: promptloop.ContextSurfaceDeps{WebSearchEnabled: func() bool { return st.WebSearch }},
 				},
 				Projection: promptloop.ProjectionDeps{
 					AppendMessages:              func(context.Context, string, ...api.Message) error { return nil },
@@ -378,19 +358,12 @@ func TestFreezeTurnAuthorityMatchesPromptLoopRequestSeam(t *testing.T) {
 			}
 
 			_, runErr := loop.Run(t.Context(), promptloop.PromptRunInput{
-				SessionID: sess.ID,
-				Session:   sess,
-				History:   st.History,
-				ProfileID: prompts.CoordinatorProfileID,
-				Machine:   frame.Machine,
+				SessionID: sess.ID, Session: sess, History: st.History,
+				ProfileID: prompts.CoordinatorProfileID, Machine: frame.Machine,
 			})
 			contractcheck.FailErr(t, "PromptLoop.Run", runErr)
-			if len(recorder.requests) != 1 {
-				t.Fatalf("captured %d LLM requests, want 1", len(recorder.requests))
-			}
-			liveTools := recorder.requests[0].Tools
-			if !reflect.DeepEqual(frozen.Metas, liveTools) {
-				t.Fatalf("FreezeTurnAuthority != live CompletionRequest.Tools:\nfrozen=%v\nlive=%v", frozen.Offered, liveTools)
+			if len(recorder.requests) != 1 || !reflect.DeepEqual(frozen.Metas, recorder.requests[0].Tools) {
+				t.Fatalf("FreezeTurnAuthority != live CompletionRequest.Tools:\nfrozen=%v\nlive=%v", frozen.Offered, recorder.requests)
 			}
 		})
 	}
