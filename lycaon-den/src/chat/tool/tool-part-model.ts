@@ -1,10 +1,12 @@
 import type { CommandActivityView } from "./command-activity-facts.ts";
 import type {
   ActionDescriptor,
+  ActionFact,
   Message,
   ChatContentReference,
   ToolCall,
   FileEditPreview,
+  NavigationTarget,
   VisualArtifact,
   WorkerSummaryMeta,
   ExternalAccess,
@@ -84,6 +86,7 @@ export interface ToolPartView {
   childSessionId?: string;
   /** Text changes the call made, one per file. */
   fileEdits?: readonly FileEditPreview[];
+  sourceLocations?: readonly NavigationTarget[];
   /** Further text changes the result does not hold. */
   fileEditsOmitted?: number;
   visual?: VisualArtifact | null;
@@ -105,6 +108,7 @@ export interface ToolPartView {
   /** Host program receipt; present only for portable command programs. */
   commandProgram?: CommandProgramReceipt | null;
   commandActivity?: CommandActivityView;
+  sourceObservation?: ActionFact;
   /** Host provenance for redacted result spans. */
   redaction?: HostSecretRedactionMeta | null;
   /** Host provenance for rendered argument spans. */
@@ -285,6 +289,7 @@ export function toolPartFromCall(
     jobId,
     childSessionId: resultMsg?.tool_result?.dispatch?.child_session_id?.trim(),
     fileEdits: resultMsg?.tool_result?.file_edit_previews ?? [],
+    sourceLocations: resultMsg?.source_context?.locations,
     fileEditsOmitted: resultMsg?.tool_result?.file_edits_omitted ?? 0,
     visual: resultMsg?.tool_result?.visual ?? null,
     externalAccess: resultMsg?.tool_result?.external_access ?? null,
@@ -298,6 +303,7 @@ export function toolPartFromCall(
     process: resultMsg?.tool_result?.process ?? null,
     invocation: resultMsg?.tool_result?.invocation ?? null,
     commandProgram: resultMsg?.tool_result?.command_program ?? null,
+    sourceObservation: resultMsg?.tool_result?.card_facts?.find((fact) => fact.kind === "source_observation"),
     verdict: resultMsg?.tool_result?.verdict ?? null,
     outcome: resultMsg?.tool_result?.outcome,
     codes: resultMsg?.tool_result?.codes,

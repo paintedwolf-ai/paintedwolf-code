@@ -1,4 +1,8 @@
 import type { createFilesTabCommands } from "../tabs/files-tab-commands.ts";
+import { navigateFromStatusChip, statusChipNavigationAvailable } from "../../chat/status/status-navigation-sink.ts";
+import { refreshChatLocations } from "../source/chat-locations.ts";
+import { reportSurfaceFailure } from "../../notices/surface-failure.ts";
+import { isOutsideRoot, outsideHostPath, outsideRootId } from "../source/outside-namespace.ts";
 import { fileOpenTarget } from "../source/file-open-target.ts";
 import type { createFilesEditorActions } from "../editor/files-editor-actions.ts";
 import type { createFileMutationCommands } from "../commands/file-mutation-commands.ts";
@@ -21,7 +25,7 @@ import { emphasizeSymbolRangeOnly } from "../../components/source/editor/codemir
 import { isComposedBufferKind } from "../documents/project-files-buffer-kind.ts";
 import type { FilesScope } from "../components/files-scope.ts";
 
-type FileContextDependencies = Pick<FilesScope, "projectId" | "sourceSessionId" | "state" | "activeBuffer" |
+type FileContextDependencies = Pick<FilesScope, "projectId" | "client" | "sourceSessionId" | "state" | "activeBuffer" |
   "filesRoots" | "copyAbsolutePathRef" | "copyRelativePathRef"> & Pick<ReturnType<typeof createFileMutationCommands>,
   "setMoveError" | "setMoveSource" | "duplicateEntry" | "setTrashConfirm"> & {
   resolveRootId: (rootId: string) => string | undefined;
@@ -43,6 +47,12 @@ type FileContextDependencies = Pick<FilesScope, "projectId" | "sourceSessionId" 
   activeInfoActions: () => { copyPath: () => void; copyRelativePath: () => void; addToChat: () => void } | null;
   editorContextActions: ReturnType<typeof createFilesEditorActions>["editorContextActions"];
   setCtxMenu: (menu: { anchor: ContextMenuAnchor; items: ContextMenuItem[] }) => void;
+};
+
+const HIDE_LOCATION_FAILED = {
+  code: "files_location_hide_failed",
+  title: "Couldn’t hide location",
+  suggestedAction: "Try again from the location's menu.",
 };
 
 export function createFileContextActions(options: FileContextDependencies) {
@@ -84,28 +94,45 @@ export function createFileContextActions(options: FileContextDependencies) {
     duplicate: (rootId, path, isDir) =>
       void options.duplicateEntry(rootId, path, isDir),
     moveToTrash,
+    ...(statusChipNavigationAvailable() ? {
+      manageLocationAccess: () => navigateFromStatusChip({ kind: "project-configuration", section: "approvals" }),
+    } : {}),
+    hideChatLocation: (locationId) => {
+      const client = options.client();
+      const projectId = options.projectId();
+      if (!client) return;
+      void client.updateSourceChatLocation(projectId, locationId, { hidden: true })
+        .then(() => refreshChatLocations(projectId))
+        .catch((error: unknown) => reportSurfaceFailure(HIDE_LOCATION_FAILED, error instanceof Error ? error.message : "The location could not be hidden.", projectId));
+    },
     copyPath: (rootId, path) => options.copyAbsolutePathRef(rootId, path),
     copyRelativePath: (rootId, path) => options.copyRelativePathRef(rootId, path),
     addToChat: (rootId, path, isDir) => void options.addPathToChat(rootId, path, isDir),
     explainFile: options.explainFileInReview,
     openInTarget: (target) => {
       const roots = options.filesRoots();
+      const outside = outsideRootId(options.projectId());
       if (target.surface === "tab") {
         const buffer = bufferForKey(target.bufferKey);
-        return buffer ? fileOpenTarget(buffer, roots) : null;
+        return buffer ? fileOpenTarget(buffer, roots, undefined, outside) : null;
       }
       if (target.surface === "editor" || target.surface === "gutter" || target.surface === "info-card" || target.surface === "image-viewer") {
         const buffer = options.activeBuffer();
         const view = buffer ? getFilesEditorView(options.projectId(), buffer.key) : null;
         const line = target.surface === "gutter" ? target.line ?? undefined
           : view ? view.state.doc.lineAt(view.state.selection.main.head).number : undefined;
-        return buffer ? fileOpenTarget(buffer, roots, line) : null;
+        return buffer ? fileOpenTarget(buffer, roots, line, outside) : null;
       }
       if (target.surface === "tree-background") {
         const root = roots[0];
         return root ? { absolutePath: root.path, projectRoots: roots.map((r) => r.path), entryKind: "folder" } : null;
       }
       if (target.surface !== "tree-row" && target.surface !== "breadcrumb" && target.surface !== "changed-file") return null;
+      if (outside && target.rootId === outside) {
+        return { absolutePath: outsideHostPath(target.path), projectRoots: roots.map((r) => r.path),
+          entryKind: "isDir" in target && target.isDir ? "folder" : "file",
+          unavailable: "deleted" in target && target.deleted ? "This file is not present on disk." : undefined };
+      }
       const root = roots.find((r) => r.id === target.rootId);
       if (!root) return null;
       return { absolutePath: absolutePathForBuffer(root.path, target.path), projectRoots: roots.map((r) => r.path),
@@ -281,6 +308,10 @@ export function createFilePathIntents(options: Pick<FilesScope, "projectId" | "f
   openReviewRowFile: (rootId: string, path: string) => void;
 }) {
   const copyAbsolutePathRef = (rootId: string, path: string) => {
+    if (isOutsideRoot(options.projectId(), rootId)) {
+      void copyTextToClipboard(outsideHostPath(path));
+      return;
+    }
     const root = options.filesRoots().find((r) => r.id === rootId);
     if (!root) return;
     void copyTextToClipboard(absolutePathForBuffer(root.path, path));

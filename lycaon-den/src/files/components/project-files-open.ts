@@ -6,6 +6,8 @@ import { projectFilesState } from "../documents/files-buffer-state.ts";
 import { pushProjectJump } from "./project-files-jump-bridge.ts";
 import { setSelectedFileVersion } from "../history/files-version-selection.ts";
 import { leaveWalk } from "../walk/walk-store.ts";
+import { retargetOpenFilesUnderPath } from "../commands/project-files-retarget.ts";
+import { fileBufferKey } from "./project-files-model.ts";
 import { flushFilesDraftSyncFor } from "../documents/files-draft-sync.ts";
 
 /** Walk state outlives the stage, so opening a working file leaves Walk. */
@@ -21,8 +23,16 @@ export function openSourceInFilesStage(args: {
 
   const bufferKey = batch(() => {
     leaveWalk(projectId);
+    if (request.fileId && !jobId) {
+      const key = fileBufferKey(request.rootId, request.path, undefined, request.fileId);
+      const current = projectFilesState(projectId).byKey[key];
+      if (current && (current.rootId !== request.rootId || current.path !== request.path)) {
+        retargetOpenFilesUnderPath(projectId, current.rootId, current.path, request.path, request.rootId);
+      }
+    }
     const key = openFilesBuffer(projectId, {
       rootId: request.rootId,
+      fileId: request.fileId,
       rootLabel: rootLabelFor(request.rootId),
       path: request.path,
       intent: request.intent,

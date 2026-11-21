@@ -240,6 +240,7 @@ export function ProjectFilesView(props: ProjectFilesViewProps) {
                   }
                 }}
                 sessionId={filesSourceAddress()}
+                chatId={chatSessionId()}
                 scopeMarksVersion={scopeMarksVersion()}
                 retainPresentation={!workspaceSettled() || !treeSettled()}
                 navigationRevision={state().aimRevision}

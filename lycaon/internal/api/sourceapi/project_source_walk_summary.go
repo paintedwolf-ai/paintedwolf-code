@@ -318,6 +318,21 @@ func mapSourceCommandWindow(w sourceledger.CommandWindow) *wire.SourceCommandWin
 		ended := w.EndedTS
 		out.EndedAt = &ended
 	}
+	for _, folder := range w.Coverage {
+		out.Coverage = append(out.Coverage, mapSourceWindowCoverage(folder))
+	}
+	return out
+}
+
+func mapSourceWindowCoverage(folder sourceledger.FolderCoverage) wire.SourceWindowFolderCoverage {
+	out := wire.SourceWindowFolderCoverage{RootID: folder.RootID, Path: folder.Path, Coverage: folder.State, OmittedBoundaries: folder.OmittedBoundaries}
+	if folder.Reason != "" {
+		reason := folder.Reason
+		out.Reason = &reason
+	}
+	for _, boundary := range folder.Boundaries {
+		out.Boundaries = append(out.Boundaries, wire.SourceWindowBoundary{Path: boundary.Path, Reason: boundary.Reason})
+	}
 	return out
 }
 

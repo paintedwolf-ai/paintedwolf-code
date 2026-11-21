@@ -308,6 +308,30 @@ it("retains unchanged roots and siblings across expand and collapse", async () =
   expect(button("src")).toBe(directory);
 });
 
+it("switches outside locations without replacing the project rows", async () => {
+  const root = treeRow(".", "directory", true);
+  const readme = treeRow("README.md");
+  const fixture = treeViewFixture([root, readme]);
+  const [chatId, setChat] = createSignal("chat-a");
+  const locationRow = (id: string) => ({ ...treeRow(".", "directory"), address: { root_id: id, path: "." }, name: id });
+  fixture.update(command => {
+    if (command.kind !== "select_chat" || !command.chat_id) return;
+    const id = command.chat_id;
+    fixture.rows([root, readme, locationRow(id)]);
+    fixture.outside([{ id, session_id: id, root_id: "outside", anchor: `home/${id}`, path: `/home/${id}`,
+      kind: "folder", label: id, hidden: false, available: true }]);
+  });
+  mount(fixture, { get chatId() { return chatId(); } });
+  const original = await findFileRow("README.md");
+  original.focus();
+  setChat("chat-b");
+  await screen.findByTestId("files-tree-outside-tag");
+  expect(screen.getByText("chat-b")).toBeTruthy();
+  expect(getFileRow("README.md")).toBe(original);
+  expect(document.activeElement).toBe(original);
+  expect(fixture.requests.filter(request => request.method === "POST" && request.path.endsWith("/views"))).toHaveLength(1);
+});
+
 it("contracts segmented scroll geometry after collapsing a distant expanded view", async () => {
   const fixture = treeViewFixture();
   fixture.large(1_000_001, index => index === 0 ? treeRow(".", "directory", true) : treeRow(`file-${index}.ts`));

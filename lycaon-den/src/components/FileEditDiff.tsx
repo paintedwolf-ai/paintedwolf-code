@@ -8,6 +8,7 @@ import type {
   FileEditLineStat,
 } from "../chat/file-edit/file-edit-fold.ts";
 import { fileEditReader } from "../chat/file-edit/file-edit-reader.ts";
+import { isAbsolutePath } from "../platform/files/reveal-in-file-manager.ts";
 import { getLycaonClient } from "../platform/connection/app-connection.ts";
 import type { DiffRowSource } from "./source/diff/diff-row-source.ts";
 import { SourceDiffRow } from "./source/diff/SourceDiffRow.tsx";
@@ -40,6 +41,12 @@ export function FileEditDiff(props: Props) {
     get sessionId() { return props.sessionId; },
     get jobId() { return props.jobId; },
     get rootRefs() { return props.rootRefs; },
+    navigationTarget: (revision) => {
+      const edit = shown(revision);
+      if (edit.deleted || edit.root_id || !isAbsolutePath(edit.path)) return undefined;
+      const target = (revision === null ? steps().at(-1) : steps()[revision])?.navigationTarget;
+      return target && target.project_id === props.projectId ? target : null;
+    },
     get revisions() {
       const held = steps();
       return held.map((step, index) => ({

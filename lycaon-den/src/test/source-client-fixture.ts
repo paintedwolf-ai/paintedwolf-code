@@ -38,10 +38,10 @@ export function stubFilesClient(overrides: FileClientStubs = {}, prepareDocument
   const openEditorDocument = vi.fn<LycaonClient["openEditorDocument"]>(async function (this: unknown, projectId, request, sessionId) {
     if (!classifiedOpens.has(request)) {
       const sourceClient = (this as LycaonClient | undefined) ?? client;
-      const observed = await sourceClient.getProjectSource(projectId, request.path, {
-        rootId: request.root_id, sessionId, decodeAs: request.decode_as, includeDeleted: true,
+      const observed = await sourceClient.getProjectSource(projectId, request.path ?? "", {
+        rootId: request.root_id, ...(request.file_id ? { fileId: request.file_id } : {}), sessionId, decodeAs: request.decode_as, includeDeleted: true,
       });
-      const source = { ...observed, file_id: observed.file_id ?? "", version_id: observed.version_id ?? "", root_id: observed.root_id ?? request.root_id };
+      const source = { ...observed, file_id: observed.file_id ?? "", version_id: observed.version_id ?? "", root_id: observed.root_id ?? request.root_id ?? "" };
       servedSources.set(servedKey(projectId, source.root_id, source.path), source);
       prepareDocument?.(projectId, source);
       if (!source.writable || source.binary || source.over_limit || !source.encoding || source.deleted) {

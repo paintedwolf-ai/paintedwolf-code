@@ -102,6 +102,11 @@ export function SourceDiffRow(props: Props) {
 
   const change = () => props.source.change(activeIndex());
   const path = () => props.source.path(activeIndex());
+  const navigationTarget = () => props.source.navigationTarget?.(activeIndex());
+  const openable = () => {
+    const target = navigationTarget();
+    return target === undefined ? props.source.openable(activeIndex()) : target !== null;
+  };
   const isNoop = () => props.source.isNoop(activeIndex());
   const wholeFile = () => wholeFileChange(change());
 
@@ -187,7 +192,19 @@ export function SourceDiffRow(props: Props) {
         }}
         class="den-file-edit-diff-header"
       >
-        <SourcePathLink truncate strong path={path()} openable={false} change={wholeFileChange(change())} />
+        <SourcePathLink
+          truncate
+          strong
+          path={path()}
+          rootId={props.source.rootId(activeIndex())}
+          openable={false}
+          navigationTarget={navigationTarget() ?? undefined}
+          change={wholeFileChange(change())}
+          projectId={props.source.projectId}
+          jobId={props.source.jobId}
+          rootRefs={props.source.rootRefs}
+          chatDestination={props.source.chatDestination}
+        />
         <span class="den-file-edit-diff-fill" aria-hidden="true" />
         <SourceChangeChip change={change()} />
         <Show

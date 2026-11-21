@@ -31,6 +31,10 @@ type ActionDescriptor struct {
 // ActionFact One typed fact. The fields a kind uses are listed on each field; Den formats the values and owns the label for each kind.
 type ActionFact struct {
 	Kind ActionFactKind `json:"kind"`
+	// source_observation: gaps in a command's before-and-after comparison.
+	SourceCoverage []CommandFolderCoverage `json:"source_coverage,omitempty"`
+	// source_observation: windows still settling when the result was published.
+	SourceWindows []string `json:"source_windows,omitempty"`
 	// result: how the action ended.
 	Outcome string `json:"outcome,omitempty"`
 	// result: process exit status.
@@ -1706,6 +1710,16 @@ type CommandExecutionReceipt struct {
 	RevisionConflict *CommandRevisionConflict `json:"revision_conflict,omitempty"`
 }
 
+// CommandFolderCoverage
+type CommandFolderCoverage struct {
+	// The covered folder's host path. A slash alone with unconfined coverage denotes all folders outside the project.
+	Folder            string                 `json:"folder"`
+	Coverage          SourceWindowCoverage   `json:"coverage"`
+	Reason            SourceWindowGapReason  `json:"reason,omitempty"`
+	Boundaries        []SourceWindowBoundary `json:"boundaries,omitempty"`
+	OmittedBoundaries int                    `json:"omitted_boundaries,omitempty"`
+}
+
 // CommandInvokeContext Structured invocation coordinates. The host resolves and verifies these against machine state; a Den boolean is never authority.
 type CommandInvokeContext struct {
 	RootID           string `json:"root_id,omitempty"`
@@ -1749,6 +1763,12 @@ type CommandInvokeResponse struct {
 	// Tool result text for completed MCP tool calls.
 	Output string              `json:"output,omitempty"`
 	Error  *CommandInvokeError `json:"error,omitempty"`
+}
+
+// CommandObservationStatus
+type CommandObservationStatus struct {
+	Settling bool                    `json:"settling"`
+	Coverage []CommandFolderCoverage `json:"coverage"`
 }
 
 // CommandProgramNode
@@ -2710,9 +2730,11 @@ type CreateSessionRequest struct {
 
 // CurrentComparisonSource A read-only, immutable snapshot of the current on-disk file. Frames and search remain bounded for files above the editing limit.
 type CurrentComparisonSource struct {
-	Kind     string `json:"kind"`
-	RootID   string `json:"root_id"`
-	Path     string `json:"path"`
+	Kind string `json:"kind"`
+	// The recorded outside file ID. Use without root_id or path.
+	FileID   string `json:"file_id,omitempty"`
+	RootID   string `json:"root_id,omitempty"`
+	Path     string `json:"path,omitempty"`
 	DecodeAs string `json:"decode_as,omitempty"`
 }
 
@@ -4817,15 +4839,17 @@ type NavigationReference struct {
 	// Markdown occurrence kind (link, code, fence, or text).
 	Syntax string `json:"syntax"`
 	// Exact Markdown destination or standalone path token; independent of display label.
-	Mention   string              `json:"mention"`
-	ProjectID string              `json:"project_id"`
-	RootID    string              `json:"root_id,omitempty"`
-	Path      string              `json:"path"`
+	Mention   string `json:"mention"`
+	ProjectID string `json:"project_id"`
+	RootID    string `json:"root_id,omitempty"`
+	Path      string `json:"path"`
+	// Host-recorded logical identity for a file outside the project folders.
+	FileID    string              `json:"file_id,omitempty"`
 	EntryKind NavigationEntryKind `json:"entry_kind,omitempty"`
 	Status    NavigationStatus    `json:"status"`
 	// True only for an authored Markdown destination, rather than an inferred prose path.
 	Explicit bool `json:"explicit"`
-	// The exact path is absent and has retained deletion history. Availability is rechecked when opening; this never pins the link to a file or version.
+	// The current address is absent and has retained deletion history. Availability is rechecked when opening.
 	Deleted    bool               `json:"deleted,omitempty"`
 	WorkerID   string             `json:"worker_id,omitempty"`
 	Line       int                `json:"line,omitempty"`
@@ -4835,9 +4859,11 @@ type NavigationReference struct {
 
 // NavigationTarget
 type NavigationTarget struct {
-	ProjectID string              `json:"project_id"`
-	RootID    string              `json:"root_id"`
-	Path      string              `json:"path"`
+	ProjectID string `json:"project_id"`
+	RootID    string `json:"root_id"`
+	Path      string `json:"path"`
+	// Host-recorded logical identity for a file outside the project folders.
+	FileID    string              `json:"file_id,omitempty"`
 	EntryKind NavigationEntryKind `json:"entry_kind"`
 	WorkerID  string              `json:"worker_id,omitempty"`
 }
@@ -4864,17 +4890,43 @@ type ObserveEditorDocumentRequest struct {
 	ClientID string `json:"client_id"`
 }
 
-// OpenEditorDocumentRequest
-type OpenEditorDocumentRequest struct {
-	// Root-relative, slash-separated file path.
+// OpenChatLocationFileRequest
+type OpenChatLocationFileRequest struct {
+	// File row path under the location root.
 	Path string `json:"path"`
+}
+
+// OpenEditorDocumentRequest Use file_id for an outside file, or root_id and path for an attached file.
+type OpenEditorDocumentRequest struct {
+	// Recorded project file identity for an outside tab.
+	FileID string `json:"file_id,omitempty"`
+	// Root-relative, slash-separated file path.
+	Path string `json:"path,omitempty"`
 	// Attached root that contains the file.
-	RootID string `json:"root_id"`
+	RootID string `json:"root_id,omitempty"`
 	// Stable id for the client view opening the document.
 	ClientID string `json:"client_id"`
 	// Explicit decoding for BOM-less UTF-16 text.
 	DecodeAs string           `json:"decode_as,omitempty"`
 	Replica  *RetainedReplica `json:"replica,omitempty"`
+}
+
+// OpenOutsideFileRequest
+type OpenOutsideFileRequest struct {
+	// The chat whose Files section receives the file.
+	SessionID string `json:"session_id"`
+	// Absolute host path the person chose in the native file picker.
+	Path string `json:"path"`
+}
+
+// OpenedOutsideFile
+type OpenedOutsideFile struct {
+	// The project's outside namespace.
+	RootID string `json:"root_id"`
+	// The file's outside-namespace path.
+	Path     string             `json:"path"`
+	FileID   string             `json:"file_id"`
+	Location SourceChatLocation `json:"location"`
 }
 
 // OverlayMergePlan
@@ -5176,10 +5228,12 @@ type ProgressUpdateSummary struct {
 
 // Project
 type Project struct {
-	ID              string        `json:"id"`
-	Name            *string       `json:"name"`
-	Roots           []ProjectRoot `json:"roots"`
-	RootsGeneration int           `json:"roots_generation"`
+	ID    string        `json:"id"`
+	Name  *string       `json:"name"`
+	Roots []ProjectRoot `json:"roots"`
+	// The project's namespace for files beyond every root. Source history addresses those files by this root id and their host path without its leading slash.
+	OutsideRootID   string `json:"outside_root_id"`
+	RootsGeneration int    `json:"roots_generation"`
 	// Number of retained root chats, including archived chats and excluding worker sessions.
 	SessionCount int  `json:"session_count"`
 	Starred      bool `json:"starred"`
@@ -5946,8 +6000,10 @@ type RetainedComparisonSource struct {
 	Kind       string `json:"kind"`
 	ViewID     string `json:"view_id"`
 	Comparison string `json:"comparison"`
-	RootID     string `json:"root_id,omitempty"`
-	Path       string `json:"path,omitempty"`
+	// The recorded outside file ID. Use without root_id or path.
+	FileID string `json:"file_id,omitempty"`
+	RootID string `json:"root_id,omitempty"`
+	Path   string `json:"path,omitempty"`
 }
 
 // RetainedReplica State the client already holds, from a live replica or from the synchronized checkpoint it preserved. When it names the current document and epoch, crdt_update carries only the state missing from state_vector and base_content is omitted for a matching base_sha256 (a client without the saved text sends an empty hash, which never matches); otherwise the response is a full snapshot.
@@ -7130,7 +7186,9 @@ type SourceChange struct {
 	RootID string `json:"root_id"`
 	// Root-relative path after the change (destination for rename).
 	Path string `json:"path"`
-	// Root-relative path before a rename; omit for other ops.
+	// Source root for a rename across roots.
+	FromRootID string `json:"from_root_id,omitempty"`
+	// Path before a rename, relative to from_root_id when present and root_id otherwise.
 	FromPath string             `json:"from_path,omitempty"`
 	Op       SourceChangeOp     `json:"op"`
 	Origin   SourceChangeOrigin `json:"origin"`
@@ -7155,6 +7213,28 @@ type SourceChangesEvent struct {
 	Resync        bool                `json:"resync"`
 	// A git ref surface moved in this window — possibly with no file changes at all (a commit). Consumers refresh git-derived comparisons even when changes is empty.
 	GitChanged bool `json:"git_changed,omitempty"`
+}
+
+// SourceChatLocation A place outside the project where a root chat has worked. A Files tree view for the chat lists each visible location as a root whose id is the location id; its rows address files by the location and their path under the anchor.
+type SourceChatLocation struct {
+	ID string `json:"id"`
+	// The root chat the location belongs to.
+	SessionID string `json:"session_id"`
+	// The project's outside namespace, which addresses the location's files in source history.
+	RootID string `json:"root_id"`
+	// The anchor's outside-namespace path, its host path without the leading slash.
+	Anchor string `json:"anchor"`
+	// The anchor's host path.
+	Path string `json:"path"`
+	// What the location is anchored at: a repository work tree, a folder, or one protected file listed alone.
+	Kind string `json:"kind"`
+	// The anchor's name for display.
+	Label string `json:"label"`
+	// Hidden from the chat's Files section. Hiding revokes and deletes nothing.
+	Hidden bool `json:"hidden"`
+	// Whether the host can still address the observed location.
+	Available bool                  `json:"available"`
+	Access    *SourceLocationAccess `json:"access,omitempty"`
 }
 
 // SourceCommandWindow One host-run command's observation window: the span of a command or
@@ -7182,6 +7262,10 @@ type SourceCommandWindow struct {
 	StartedAt time.Time `json:"started_at"`
 	// When the window ended; omitted while running.
 	EndedAt *time.Time `json:"ended_at,omitempty"`
+	// One entry per folder the window covered: its attached roots and the
+	// command's write roots beyond the project. A folder appears once its
+	// observation is decided.
+	Coverage []SourceWindowFolderCoverage `json:"coverage,omitempty"`
 }
 
 // SourceCommitComparison Current Git comparison addressed by root_id and path, independent of
@@ -7781,6 +7865,15 @@ type SourceInventoryState struct {
 	CompletedAt   *time.Time `json:"completed_at,omitempty"`
 }
 
+// SourceLocationAccess The strongest active saved approval covering this location or a path within it.
+type SourceLocationAccess struct {
+	Path      string     `json:"path"`
+	Mode      string     `json:"mode"`
+	Tree      bool       `json:"tree"`
+	Scope     string     `json:"scope"`
+	ExpiresAt *time.Time `json:"expires_at,omitempty"`
+}
+
 // SourceOperationEvent A file operation's status after a persisted transition or progress save; the same shape the operation list returns.
 type SourceOperationEvent struct {
 	ProjectID string                `json:"project_id"`
@@ -8167,6 +8260,8 @@ type SourceTreeIntent struct {
 	Disclosures []SourceTreeDisclosure `json:"disclosures,omitempty"`
 	Filter      string                 `json:"filter,omitempty"`
 	Review      *SourceTreeReviewScope `json:"review,omitempty"`
+	// Chat whose outside locations are shown. Omit for project folders only.
+	ChatID string `json:"chat_id,omitempty"`
 }
 
 // SourceTreeLocation
@@ -8230,6 +8325,13 @@ type SourceTreeSearchPage struct {
 	Matches            []SourceTreeSearchMatch `json:"matches"`
 }
 
+// SourceTreeSelectChat
+type SourceTreeSelectChat struct {
+	Kind string `json:"kind"`
+	// Chat whose outside locations are shown. Omit for project folders only.
+	ChatID string `json:"chat_id,omitempty"`
+}
+
 // SourceTreeToggle
 type SourceTreeToggle struct {
 	Kind    string            `json:"kind"`
@@ -8251,6 +8353,8 @@ type SourceTreeView struct {
 	WorkspaceID        string             `json:"workspace_id"`
 	Intent             SourceTreeIntent   `json:"intent"`
 	Roots              []ProjectRoot      `json:"roots"`
+	// The view's chat's visible locations outside the project, in tree order after the roots. Each is also a tree root whose id is the location id.
+	OutsideLocations []SourceChatLocation `json:"outside_locations"`
 	// Directory reads still pending for this view.
 	LoadingDirectories int `json:"loading_directories"`
 }
@@ -8418,8 +8522,9 @@ type SourceWalkResponse struct {
 	// git_change_id; those references do not advance the page cursor.
 	GitChanges []SourceGitChange `json:"git_changes"`
 	// Every command observation window an effect on this page references
-	// by command_id, newest first. A window that observed nothing has no
-	// row, so there is no bare command to list.
+	// by command_id, and every window in the page's span that left a
+	// folder uncompared, newest first. A window that observed nothing and
+	// compared every folder has no row, so there is no bare command to list.
 	Commands []SourceCommandWindow `json:"commands"`
 	// Explanation target for each step on this page, keyed by the step's rail key (an effect id, git:<change id>, command:<window id> or outside:<first effect id>). Den reads targets from here rather than inventing them.
 	BriefingTargets map[string]SourceStepBriefingTarget `json:"briefing_targets,omitempty"`
@@ -8468,6 +8573,30 @@ type SourceWatchCoverage struct {
 	WatchLimitReached bool `json:"watch_limit_reached,omitempty"`
 }
 
+// SourceWindowBoundary One folder a partial observation did not enter.
+type SourceWindowBoundary struct {
+	// Slash-separated, relative to the covered folder; "." is the folder itself.
+	Path   string                     `json:"path"`
+	Reason SourceWindowBoundaryReason `json:"reason"`
+}
+
+// SourceWindowFolderCoverage How much of one folder the window compared. root_id is an attached
+// root, with an empty path for its whole tree, or the project's outside
+// namespace, where path is the folder's host path without its leading
+// slash and an empty path stands for every host folder beyond the
+// project. Partial and not observed never mean no changes.
+type SourceWindowFolderCoverage struct {
+	RootID   string               `json:"root_id"`
+	Path     string               `json:"path"`
+	Coverage SourceWindowCoverage `json:"coverage"`
+	// Why nothing can be said about the folder; present only when not observed.
+	Reason *SourceWindowGapReason `json:"reason,omitempty"`
+	// The folders a partial observation did not enter; empty otherwise.
+	Boundaries []SourceWindowBoundary `json:"boundaries,omitempty"`
+	// Boundaries past the listed ones; zero when the list is whole.
+	OmittedBoundaries int `json:"omitted_boundaries,omitempty"`
+}
+
 // SourceWorkspace
 type SourceWorkspace struct {
 	// Identity derived from the project's resolved physical roots.
@@ -8476,6 +8605,8 @@ type SourceWorkspace struct {
 	SessionScoped bool `json:"session_scoped"`
 	// Ordered physical roots used by every Files read and path action.
 	Roots []SourceWorkspaceRoot `json:"roots"`
+	// The project's namespace for files beyond every root. Source history addresses those files by this root id and their host path without its leading slash.
+	OutsideRootID string `json:"outside_root_id"`
 	// The ledger's pass over the tree. Outside edits to tracked files reach history by path before it completes; untracked files enter history when the pass, or an open command window, admits them.
 	Inventory SourceInventoryState `json:"inventory"`
 }
@@ -9124,6 +9255,12 @@ type UpdateSessionRequest struct {
 	Pinned *bool `json:"pinned,omitempty"`
 	// Moves a pinned session to this 1-based position in its project's pinned order; a position past the end moves it last. The project's pinned chats are renumbered 1…n.
 	PinPosition *int `json:"pin_position,omitempty"`
+}
+
+// UpdateSourceChatLocationRequest
+type UpdateSourceChatLocationRequest struct {
+	// Whether the chat's Files section hides the location; omitted keeps it.
+	Hidden *bool `json:"hidden,omitempty"`
 }
 
 // UpdateTrustSettingsRequest

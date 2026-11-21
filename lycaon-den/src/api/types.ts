@@ -1480,6 +1480,63 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/projects/{id}/source/outside-files": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Open a file outside the project in a chat's Files section
+         * @description Adds a file the person chose in the native file picker to the chat: records that the chat opened it and places it in one of the chat's locations. Afterwards the file is addressed by the project's outside namespace and its path like any other source file.
+         */
+        post: operations["openOutsideFile"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/projects/{id}/source/outside-locations/{location_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Hide or show a chat location
+         * @description Changes only whether the chat's Files section presents the location; agent access and history are unchanged.
+         */
+        patch: operations["updateSourceChatLocation"];
+        trace?: never;
+    };
+    "/v1/projects/{id}/source/outside-locations/{location_id}/files": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Open a file from a chat's outside location */
+        post: operations["openChatLocationFile"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/projects/{id}/agent-presence": {
         parameters: {
             query?: never;
@@ -2227,6 +2284,23 @@ export interface paths {
         };
         /** Read complete Walk chapter counts for visible transcript turns */
         get: operations["getProjectSourceWalkSummary"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/projects/{id}/source/command-windows/{window_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Read a chat command window's observation gaps */
+        get: operations["getProjectSourceCommandObservation"];
         put?: never;
         post?: never;
         delete?: never;
@@ -6243,7 +6317,12 @@ export interface components {
             root_id: string;
             /** @description Root-relative path after the change (destination for rename). */
             path: string;
-            /** @description Root-relative path before a rename; omit for other ops. */
+            /**
+             * Format: uuid
+             * @description Source root for a rename across roots.
+             */
+            from_root_id?: string;
+            /** @description Path before a rename, relative to from_root_id when present and root_id otherwise. */
             from_path?: string;
             op: components["schemas"]["SourceChangeOp"];
             origin: components["schemas"]["SourceChangeOrigin"];
@@ -6679,6 +6758,11 @@ export interface components {
             id: string;
             name: string | null;
             roots: components["schemas"]["ProjectRoot"][];
+            /**
+             * Format: uuid
+             * @description The project's namespace for files beyond every root. Source history addresses those files by this root id and their host path without its leading slash.
+             */
+            outside_root_id: string;
             roots_generation: number;
             /** @description Number of retained root chats, including archived chats and excluding worker sessions. */
             session_count: number;
@@ -8381,10 +8465,14 @@ export interface components {
             redaction?: components["schemas"]["HostSecretRedactionMeta"];
         };
         /** @enum {string} */
-        ActionFactKind: "result" | "changed" | "found" | "took" | "steps" | "stopped_by" | "network" | "worker" | "budget" | "process" | "captured" | "containment" | "loaded_by";
+        ActionFactKind: "result" | "source_observation" | "changed" | "found" | "took" | "steps" | "stopped_by" | "network" | "worker" | "budget" | "process" | "captured" | "containment" | "loaded_by";
         /** @description One typed fact. The fields a kind uses are listed on each field; Den formats the values and owns the label for each kind. */
         ActionFact: {
             kind: components["schemas"]["ActionFactKind"];
+            /** @description source_observation: gaps in a command's before-and-after comparison. */
+            source_coverage?: components["schemas"]["CommandFolderCoverage"][];
+            /** @description source_observation: windows still settling when the result was published. */
+            source_windows?: string[];
             /**
              * @description result: how the action ended.
              * @enum {string}
@@ -10955,6 +11043,26 @@ export interface components {
         HostSecretRedactionMeta: {
             spans: components["schemas"]["RedactedSpan"][];
         };
+        /** @enum {string} */
+        SourceWindowCoverage: "complete" | "partial" | "not_observed";
+        /** @enum {string} */
+        SourceWindowGapReason: "unconfined" | "baseline_incomplete" | "canceled" | "io_error" | "settlement_failed" | "time_budget";
+        /** @enum {string} */
+        SourceWindowBoundaryReason: "scope" | "directory_cap" | "subtree_cap" | "walk_budget" | "unreadable";
+        /** @description One folder a partial observation did not enter. */
+        SourceWindowBoundary: {
+            /** @description Slash-separated, relative to the covered folder; "." is the folder itself. */
+            path: string;
+            reason: components["schemas"]["SourceWindowBoundaryReason"];
+        };
+        CommandFolderCoverage: {
+            /** @description The covered folder's host path. A slash alone with unconfined coverage denotes all folders outside the project. */
+            folder: string;
+            coverage: components["schemas"]["SourceWindowCoverage"];
+            reason?: components["schemas"]["SourceWindowGapReason"];
+            boundaries?: components["schemas"]["SourceWindowBoundary"][];
+            omitted_boundaries?: number;
+        };
         ChatContentRow: {
             index: number;
             offset: number;
@@ -11785,6 +11893,11 @@ export interface components {
             /** Format: uuid */
             root_id: string;
             path: string;
+            /**
+             * Format: uuid
+             * @description Host-recorded logical identity for a file outside the project folders.
+             */
+            file_id?: string;
             entry_kind: components["schemas"]["NavigationEntryKind"];
             /** Format: uuid */
             worker_id?: string;
@@ -11809,11 +11922,16 @@ export interface components {
             /** Format: uuid */
             root_id?: string;
             path: string;
+            /**
+             * Format: uuid
+             * @description Host-recorded logical identity for a file outside the project folders.
+             */
+            file_id?: string;
             entry_kind?: components["schemas"]["NavigationEntryKind"];
             status: components["schemas"]["NavigationStatus"];
             /** @description True only for an authored Markdown destination, rather than an inferred prose path. */
             explicit: boolean;
-            /** @description The exact path is absent and has retained deletion history. Availability is rechecked when opening; this never pins the link to a file or version. */
+            /** @description The current address is absent and has retained deletion history. Availability is rechecked when opening. */
             deleted?: boolean;
             /** Format: uuid */
             worker_id?: string;
@@ -13321,8 +13439,84 @@ export interface components {
             session_scoped: boolean;
             /** @description Ordered physical roots used by every Files read and path action. */
             roots: components["schemas"]["SourceWorkspaceRoot"][];
+            /**
+             * Format: uuid
+             * @description The project's namespace for files beyond every root. Source history addresses those files by this root id and their host path without its leading slash.
+             */
+            outside_root_id: string;
             /** @description The ledger's pass over the tree. Outside edits to tracked files reach history by path before it completes; untracked files enter history when the pass, or an open command window, admits them. */
             inventory: components["schemas"]["SourceInventoryState"];
+        };
+        OpenOutsideFileRequest: {
+            /**
+             * Format: uuid
+             * @description The chat whose Files section receives the file.
+             */
+            session_id: string;
+            /** @description Absolute host path the person chose in the native file picker. */
+            path: string;
+        };
+        /** @description The strongest active saved approval covering this location or a path within it. */
+        SourceLocationAccess: {
+            path: string;
+            /** @enum {string} */
+            mode: "read" | "write";
+            tree: boolean;
+            /** @enum {string} */
+            scope: "chat" | "project" | "device";
+            /** Format: date-time */
+            expires_at?: string;
+        };
+        /** @description A place outside the project where a root chat has worked. A Files tree view for the chat lists each visible location as a root whose id is the location id; its rows address files by the location and their path under the anchor. */
+        SourceChatLocation: {
+            /** Format: uuid */
+            id: string;
+            /**
+             * Format: uuid
+             * @description The root chat the location belongs to.
+             */
+            session_id: string;
+            /**
+             * Format: uuid
+             * @description The project's outside namespace, which addresses the location's files in source history.
+             */
+            root_id: string;
+            /** @description The anchor's outside-namespace path, its host path without the leading slash. */
+            anchor: string;
+            /** @description The anchor's host path. */
+            path: string;
+            /**
+             * @description What the location is anchored at: a repository work tree, a folder, or one protected file listed alone.
+             * @enum {string}
+             */
+            kind: "repository" | "folder" | "file";
+            /** @description The anchor's name for display. */
+            label: string;
+            /** @description Hidden from the chat's Files section. Hiding revokes and deletes nothing. */
+            hidden: boolean;
+            /** @description Whether the host can still address the observed location. */
+            available: boolean;
+            access?: components["schemas"]["SourceLocationAccess"];
+        };
+        OpenedOutsideFile: {
+            /**
+             * Format: uuid
+             * @description The project's outside namespace.
+             */
+            root_id: string;
+            /** @description The file's outside-namespace path. */
+            path: string;
+            /** Format: uuid */
+            file_id: string;
+            location: components["schemas"]["SourceChatLocation"];
+        };
+        UpdateSourceChatLocationRequest: {
+            /** @description Whether the chat's Files section hides the location; omitted keeps it. */
+            hidden?: boolean;
+        };
+        OpenChatLocationFileRequest: {
+            /** @description File row path under the location root. */
+            path: string;
         };
         /**
          * @description What a running tool call is doing to its file target. `reading` is a read-family tool; `editing` is a write-family tool. Derived from the tool's catalog identity, never from arguments or prose.
@@ -13489,14 +13683,20 @@ export interface components {
             state_vector: string;
             base_sha256: string;
         };
+        /** @description Use file_id for an outside file, or root_id and path for an attached file. */
         OpenEditorDocumentRequest: {
+            /**
+             * Format: uuid
+             * @description Recorded project file identity for an outside tab.
+             */
+            file_id?: string;
             /** @description Root-relative, slash-separated file path. */
-            path: string;
+            path?: string;
             /**
              * Format: uuid
              * @description Attached root that contains the file.
              */
-            root_id: string;
+            root_id?: string;
             /** @description Stable id for the client view opening the document. */
             client_id: string;
             /**
@@ -14287,6 +14487,10 @@ export interface components {
         SourceWalkSummary: {
             turns: components["schemas"]["SourceWalkTurnSummary"][];
         };
+        CommandObservationStatus: {
+            settling: boolean;
+            coverage: components["schemas"]["CommandFolderCoverage"][];
+        };
         /** @enum {string} */
         SourceGitChangeKind: "checkout" | "commit" | "amend" | "merge" | "rebase" | "pull" | "reset" | "cherry_pick" | "revert" | "clone" | "repo_appeared" | "repo_gone" | "other" | "unknown";
         /**
@@ -14558,6 +14762,25 @@ export interface components {
         /** @enum {string} */
         SourceCommandWindowState: "running" | "ended" | "interrupted";
         /**
+         * @description How much of one folder the window compared. root_id is an attached
+         *     root, with an empty path for its whole tree, or the project's outside
+         *     namespace, where path is the folder's host path without its leading
+         *     slash and an empty path stands for every host folder beyond the
+         *     project. Partial and not observed never mean no changes.
+         */
+        SourceWindowFolderCoverage: {
+            /** Format: uuid */
+            root_id: string;
+            path: string;
+            coverage: components["schemas"]["SourceWindowCoverage"];
+            /** @description Why nothing can be said about the folder; present only when not observed. */
+            reason?: components["schemas"]["SourceWindowGapReason"];
+            /** @description The folders a partial observation did not enter; empty otherwise. */
+            boundaries?: components["schemas"]["SourceWindowBoundary"][];
+            /** @description Boundaries past the listed ones; zero when the list is whole. */
+            omitted_boundaries?: number;
+        };
+        /**
          * @description One host-run command's observation window: the span of a command or
          *     verify tool call during which reconcile passes attribute the file
          *     changes they observe to that command, and admit files the window's
@@ -14595,6 +14818,12 @@ export interface components {
              * @description When the window ended; omitted while running.
              */
             ended_at?: string;
+            /**
+             * @description One entry per folder the window covered: its attached roots and the
+             *     command's write roots beyond the project. A folder appears once its
+             *     observation is decided.
+             */
+            coverage?: components["schemas"]["SourceWindowFolderCoverage"][];
         };
         SourceWalkResponse: {
             /**
@@ -14620,8 +14849,9 @@ export interface components {
             git_changes: components["schemas"]["SourceGitChange"][];
             /**
              * @description Every command observation window an effect on this page references
-             *     by command_id, newest first. A window that observed nothing has no
-             *     row, so there is no bare command to list.
+             *     by command_id, and every window in the page's span that left a
+             *     folder uncompared, newest first. A window that observed nothing and
+             *     compared every folder has no row, so there is no bare command to list.
              */
             commands: components["schemas"]["SourceCommandWindow"][];
             /** @description Explanation target for each step on this page, keyed by the step's rail key (an effect id, git:<change id>, command:<window id> or outside:<first effect id>). Den reads targets from here rather than inventing them. */
@@ -16736,6 +16966,11 @@ export interface components {
             disclosures?: components["schemas"]["SourceTreeDisclosure"][];
             filter?: string;
             review?: components["schemas"]["SourceTreeReviewScope"];
+            /**
+             * Format: uuid
+             * @description Chat whose outside locations are shown. Omit for project folders only.
+             */
+            chat_id?: string;
         };
         SourceTreeViewCreate: {
             /**
@@ -16759,9 +16994,14 @@ export interface components {
              * @enum {string}
              */
             kind: "current";
+            /**
+             * Format: uuid
+             * @description The recorded outside file ID. Use without root_id or path.
+             */
+            file_id?: string;
             /** Format: uuid */
-            root_id: string;
-            path: string;
+            root_id?: string;
+            path?: string;
             /** @enum {string} */
             decode_as?: "utf-16le" | "utf-16be";
         };
@@ -16903,6 +17143,11 @@ export interface components {
             view_id: string;
             /** @enum {string} */
             comparison: "before" | "current";
+            /**
+             * Format: uuid
+             * @description The recorded outside file ID. Use without root_id or path.
+             */
+            file_id?: string;
             /** Format: uuid */
             root_id?: string;
             path?: string;
@@ -16963,6 +17208,8 @@ export interface components {
             workspace_id: string;
             intent: components["schemas"]["SourceTreeIntent"];
             roots: components["schemas"]["ProjectRoot"][];
+            /** @description The view's chat's visible locations outside the project, in tree order after the roots. Each is also a tree root whose id is the location id. */
+            outside_locations: components["schemas"]["SourceChatLocation"][];
             /** @description Directory reads still pending for this view. */
             loading_directories: number;
         };
@@ -17044,6 +17291,18 @@ export interface components {
             /** @description One digest per requested source, in request order. */
             digests: components["schemas"]["SourceComparisonDigest"][];
         };
+        SourceTreeSelectChat: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "select_chat";
+            /**
+             * Format: uuid
+             * @description Chat whose outside locations are shown. Omit for project folders only.
+             */
+            chat_id?: string;
+        };
         SourceTreeToggle: {
             /**
              * @description discriminator enum property added by openapi-typescript
@@ -17087,7 +17346,7 @@ export interface components {
             kind: "review";
             scope?: components["schemas"]["SourceTreeReviewScope"];
         };
-        SourceTreeCommand: components["schemas"]["SourceTreeToggle"] | components["schemas"]["SourceTreeDisclose"] | components["schemas"]["SourceTreeReveal"] | components["schemas"]["SourceTreeFilter"] | components["schemas"]["SourceTreeReview"];
+        SourceTreeCommand: components["schemas"]["SourceTreeToggle"] | components["schemas"]["SourceTreeDisclose"] | components["schemas"]["SourceTreeReveal"] | components["schemas"]["SourceTreeFilter"] | components["schemas"]["SourceTreeReview"] | components["schemas"]["SourceTreeSelectChat"];
         SourceTreeViewUpdate: {
             /**
              * @description discriminator enum property added by openapi-typescript
@@ -21009,11 +21268,13 @@ export interface operations {
     };
     getProjectSource: {
         parameters: {
-            query: {
+            query?: {
                 /** @description Optional session whose bound checkout supplies the project roots */
                 session_id?: components["parameters"]["SourceSessionIdQuery"];
-                /** @description Repo-relative path (slash-separated) */
-                path: string;
+                /** @description Recorded file ID. Required for outside files. Use without path, root_id or worker_id. */
+                file_id?: string;
+                /** @description Attached-root-relative path. Required when file_id is omitted. */
+                path?: string;
                 /** @description Attached root to pin the read to; omitted searches every root primary-first */
                 root_id?: string;
                 /**
@@ -21021,7 +21282,7 @@ export interface operations {
                  *     that overlay while it is available, including absent files.
                  */
                 worker_id?: string;
-                /** @description Open retained deletion history when the exact root-addressed path is absent. Existing files always take precedence. Requires root_id; does not search history for other paths. */
+                /** @description Open retained deletion history when the exact root-addressed path is absent. Existing files always take precedence. Requires root_id or file_id; does not search history for other paths. */
                 include_deleted?: boolean;
                 /**
                  * @description Explicit human choice to reopen an otherwise unsupported file as
@@ -21420,6 +21681,184 @@ export interface operations {
                 };
             };
             409: components["responses"]["Conflict"];
+            default: components["responses"]["Error"];
+        };
+    };
+    openOutsideFile: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ProjectId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["OpenOutsideFileRequest"];
+            };
+        };
+        responses: {
+            /** @description The file and the location holding it */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OpenedOutsideFile"];
+                };
+            };
+            /** @description The path is not an absolute file path outside the project */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            /** @description Project, chat, or file not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description This project is changing */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description The request or the chosen file is too large */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            415: components["responses"]["UnsupportedMediaType"];
+            429: components["responses"]["TooManyRequests"];
+            default: components["responses"]["Error"];
+        };
+    };
+    updateSourceChatLocation: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ProjectId"];
+                location_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateSourceChatLocationRequest"];
+            };
+        };
+        responses: {
+            /** @description The updated location */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SourceChatLocation"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            /** @description Project or location not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description The request body is too large */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            415: components["responses"]["UnsupportedMediaType"];
+            429: components["responses"]["TooManyRequests"];
+            default: components["responses"]["Error"];
+        };
+    };
+    openChatLocationFile: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ProjectId"];
+                location_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["OpenChatLocationFileRequest"];
+            };
+        };
+        responses: {
+            /** @description The opened file and its identity */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OpenedOutsideFile"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            /** @description Project, location, or file not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description This project is changing */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description The request or file is too large */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            415: components["responses"]["UnsupportedMediaType"];
+            429: components["responses"]["TooManyRequests"];
             default: components["responses"]["Error"];
         };
     };
@@ -22535,11 +22974,13 @@ export interface operations {
     };
     getProjectSourceRaw: {
         parameters: {
-            query: {
+            query?: {
                 /** @description Optional session whose bound checkout supplies the project roots */
                 session_id?: components["parameters"]["SourceSessionIdQuery"];
-                /** @description Repo-relative path (slash-separated) */
-                path: string;
+                /** @description Recorded file ID. Required for outside files. Use without path, root_id or worker_id. */
+                file_id?: string;
+                /** @description Attached-root-relative path. Required when file_id is omitted. */
+                path?: string;
                 /** @description Attached root to pin the read to */
                 root_id?: string;
                 /** @description Worker job whose live overlay contains this path */
@@ -23451,6 +23892,35 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             404: components["responses"]["NotFound"];
             409: components["responses"]["Conflict"];
+            default: components["responses"]["Error"];
+        };
+    };
+    getProjectSourceCommandObservation: {
+        parameters: {
+            query: {
+                session_id: string;
+            };
+            header?: never;
+            path: {
+                id: components["parameters"]["ProjectId"];
+                window_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Observation gaps currently recorded for this window */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CommandObservationStatus"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
             default: components["responses"]["Error"];
         };
     };
@@ -31401,6 +31871,11 @@ export type RedactionKind = components["schemas"]["RedactionKind"];
 export type RedactionSource = components["schemas"]["RedactionSource"];
 export type RedactedSpan = components["schemas"]["RedactedSpan"];
 export type HostSecretRedactionMeta = components["schemas"]["HostSecretRedactionMeta"];
+export type SourceWindowCoverage = components["schemas"]["SourceWindowCoverage"];
+export type SourceWindowGapReason = components["schemas"]["SourceWindowGapReason"];
+export type SourceWindowBoundaryReason = components["schemas"]["SourceWindowBoundaryReason"];
+export type SourceWindowBoundary = components["schemas"]["SourceWindowBoundary"];
+export type CommandFolderCoverage = components["schemas"]["CommandFolderCoverage"];
 export type ChatContentRow = components["schemas"]["ChatContentRow"];
 export type ChatContentReference = components["schemas"]["ChatContentReference"];
 export type CommandActivity = components["schemas"]["CommandActivity"];
@@ -31619,6 +32094,12 @@ export type SourceWatchCoverage = components["schemas"]["SourceWatchCoverage"];
 export type SourceWorkspaceRoot = components["schemas"]["SourceWorkspaceRoot"];
 export type SourceInventoryState = components["schemas"]["SourceInventoryState"];
 export type SourceWorkspace = components["schemas"]["SourceWorkspace"];
+export type OpenOutsideFileRequest = components["schemas"]["OpenOutsideFileRequest"];
+export type SourceLocationAccess = components["schemas"]["SourceLocationAccess"];
+export type SourceChatLocation = components["schemas"]["SourceChatLocation"];
+export type OpenedOutsideFile = components["schemas"]["OpenedOutsideFile"];
+export type UpdateSourceChatLocationRequest = components["schemas"]["UpdateSourceChatLocationRequest"];
+export type OpenChatLocationFileRequest = components["schemas"]["OpenChatLocationFileRequest"];
 export type AgentActivityKind = components["schemas"]["AgentActivityKind"];
 export type AgentActivity = components["schemas"]["AgentActivity"];
 export type AgentPresenceExtent = components["schemas"]["AgentPresenceExtent"];
@@ -31696,6 +32177,7 @@ export type SourceSymbol = components["schemas"]["SourceSymbol"];
 export type SourceSymbolsResponse = components["schemas"]["SourceSymbolsResponse"];
 export type SourceWalkTurnSummary = components["schemas"]["SourceWalkTurnSummary"];
 export type SourceWalkSummary = components["schemas"]["SourceWalkSummary"];
+export type CommandObservationStatus = components["schemas"]["CommandObservationStatus"];
 export type SourceGitChangeKind = components["schemas"]["SourceGitChangeKind"];
 export type SourceGitChange = components["schemas"]["SourceGitChange"];
 export type SourceGitCommitDetails = components["schemas"]["SourceGitCommitDetails"];
@@ -31714,6 +32196,7 @@ export type SourceContributor = components["schemas"]["SourceContributor"];
 export type SourceWalkEffect = components["schemas"]["SourceWalkEffect"];
 export type SourceWalkFile = components["schemas"]["SourceWalkFile"];
 export type SourceCommandWindowState = components["schemas"]["SourceCommandWindowState"];
+export type SourceWindowFolderCoverage = components["schemas"]["SourceWindowFolderCoverage"];
 export type SourceCommandWindow = components["schemas"]["SourceCommandWindow"];
 export type SourceWalkResponse = components["schemas"]["SourceWalkResponse"];
 export type SourceFileVersion = components["schemas"]["SourceFileVersion"];
@@ -31965,6 +32448,7 @@ export type SourceView = components["schemas"]["SourceView"];
 export type SourceComparisonDigestRequest = components["schemas"]["SourceComparisonDigestRequest"];
 export type SourceComparisonDigest = components["schemas"]["SourceComparisonDigest"];
 export type SourceComparisonDigests = components["schemas"]["SourceComparisonDigests"];
+export type SourceTreeSelectChat = components["schemas"]["SourceTreeSelectChat"];
 export type SourceTreeToggle = components["schemas"]["SourceTreeToggle"];
 export type SourceTreeDisclose = components["schemas"]["SourceTreeDisclose"];
 export type SourceTreeReveal = components["schemas"]["SourceTreeReveal"];

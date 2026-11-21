@@ -202,6 +202,8 @@ type InvocationSource struct {
 	// the response's own accepted writes advance it.
 	EditorReadBases *AgentReadBases
 	Roots           []projectroot.RootRef
+	// OutsideRoot is the project's namespace for files beyond every root.
+	OutsideRoot projectroot.RootRef
 	// RootHistory is the project's attachment generation when Roots was
 	// captured; it answers stale spellings and later removals from facts.
 	RootHistory         projectroot.HistoryView
@@ -227,6 +229,7 @@ type InvocationSource struct {
 	MutationRecorder PrimaryMutationRecorder
 	// SourceLedger records project mutations in this app instance.
 	SourceLedger    sourceledger.Recorder
+	OutsideReads    sourceledger.ChatFileRecorder
 	History         SourceHistory
 	Commands        sourceledger.CommandWindowOpener
 	GitMutations    SourceGitMutations

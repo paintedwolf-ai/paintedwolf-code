@@ -37,7 +37,10 @@ export type SourceComparisonTarget =
 /** The range endpoint has no turn form; a source view reads turns. */
 export type SourceRangeTarget = Exclude<SourceComparisonTarget, { turn: number }>;
 
+type CommandObservationStatus = import("../types.ts").components["schemas"]["CommandObservationStatus"];
+
 export interface SourceHistoryClient {
+  getProjectSourceCommandObservation(projectId: string, sessionId: string, windowId: string, signal: AbortSignal): Promise<CommandObservationStatus>;
   getProjectSourceWalkSummary(projectId: string, sessionId: string, messageIds: string[]): Promise<import("../types.ts").SourceWalkTurnSummary[]>;
   getProjectSourceGitReview(projectId: string, changeId: string, opts?: {
     movement?: boolean; parent?: number; cursor?: string; limit?: number; sessionId?: string; signal?: AbortSignal;
@@ -171,6 +174,8 @@ function sourceComparisonQuery(target: SourceRangeTarget, sessionId?: string): s
 
 export function createSourceHistoryClient(j: JsonRequester): SourceHistoryClient {
   return {
+    getProjectSourceCommandObservation: (projectId, sessionId, windowId, signal) =>
+      j<CommandObservationStatus>(`/v1/projects/${projectId}/source/command-windows/${windowId}${formatQuery({ session_id: sessionId })}`, { signal }),
     getProjectSourceWalkSummary: async (projectId, sessionId, messageIds) => (await j<SourceWalkSummary>(`/v1/projects/${projectId}/source/walk-summary${formatQuery({ session_id: sessionId, message_ids: messageIds.join(",") })}`)).turns,
     getProjectSourceGitReview: (projectId, changeId, opts) => j(
       `/v1/projects/${projectId}/source/git-changes/${encodeURIComponent(changeId)}/review${formatQuery({

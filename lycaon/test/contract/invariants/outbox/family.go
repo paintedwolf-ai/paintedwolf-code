@@ -45,6 +45,7 @@ var silentMutators = []invariants.Exemption{
 	{Key: "internal/project/sql_registry.go:SetCover", Reason: "moves the project cover reference; session.Manager publishes the project update after visual.DesignateCover"},
 	{Key: "internal/sourceledger/gittrack.go:commitGitTransitions", Reason: "records observed git ref transitions; its projects write only allocates their source-history ordinals"},
 	{Key: "internal/sourceledger/commandwindow.go:insertWindow", Reason: "opens a command window; its projects write only allocates the window's source-history ordinal, which is off the project wire"},
+	{Key: "internal/sourceledger/commandwindow_retention.go:pin", Reason: "pins private before-images until the window settles"},
 
 	// The session plan is published through progress write observers.
 

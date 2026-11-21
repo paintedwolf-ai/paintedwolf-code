@@ -11,6 +11,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/lycaon/lycaon/internal/projectroot"
+	"github.com/lycaon/lycaon/internal/sourceworkspace"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -192,6 +194,30 @@ func TestTransactionalEmitSuppressesWatcherOnlyAfterCommit(t *testing.T) {
 	}
 	if cap.deliveries.Load() != 1 {
 		t.Fatalf("delivery count=%d want 1", cap.deliveries.Load())
+	}
+}
+
+func TestTransactionalProjectSignalInvalidatesOnlyItsWorkspace(t *testing.T) {
+	const projectID = "project"
+	roots := []projectroot.RootRef{{ID: "root", Path: t.TempDir()}}
+	workspace := sourceworkspace.ID(projectID, roots)
+	cap := &capturePub{}
+	t.Cleanup(Bind(cap))
+	calls := 0
+	t.Cleanup(Subscribe(projectID, workspace, func(Notice) { calls++ }))
+	t.Cleanup(Subscribe(projectID, "other", func(Notice) { t.Error("signal crossed workspace scope") }))
+	delivery, err := EmitProjectSignalTx(t.Context(), nil, projectID, roots)
+	testutil.FailErr(t, "stage project signal", err)
+	if calls != 0 {
+		t.Fatal("project signal was delivered before commit")
+	}
+	batches := cap.batches()
+	if len(batches) != 1 || batches[0].ProjectID != projectID || batches[0].WorkspaceID != workspace || len(batches[0].Changes) != 0 {
+		t.Fatalf("staged project signal = %+v", batches)
+	}
+	delivery.DeliverCommitted()
+	if calls != 1 || cap.deliveries.Load() != 1 {
+		t.Fatalf("observer calls = %d, sink deliveries = %d", calls, cap.deliveries.Load())
 	}
 }
 

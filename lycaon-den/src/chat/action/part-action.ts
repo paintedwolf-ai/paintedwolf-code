@@ -3,7 +3,7 @@ import type { ActivitySpanEntry } from "../transcript/projection/transcript-item
 import { commandActivityStatus } from "../tool/command-activity-facts.ts";
 import type { ToolPartView } from "../tool/tool-part-model.ts";
 import { TOOL_ACTION_LABELS } from "../tool/tool-presentation.generated.ts";
-import { mergeActions, type CardAction } from "./action-merge.ts";
+import { combineSourceObservations, mergeActions, withSourceObservation, type CardAction } from "./action-merge.ts";
 
 /**
  * The action a card draws for a tool part: a folded session's merged
@@ -18,7 +18,9 @@ export function partAction(part: ToolPartView): CardAction | undefined {
     const merged = mergeActions(members.length ? [...members, ...calls.filter((action) => !members.includes(action))] : calls);
     if (!merged) return undefined;
     const status = commandActivityStatus(activity);
-    return { ...merged, status: status === "completed" ? "done" : status };
+    const action = { ...merged, status: status === "completed" ? "done" : status };
+    const observation = combineSourceObservations(activity.calls.flatMap((call) => call.sourceObservation ?? []));
+    return observation ? withSourceObservation(action, observation) : action;
   }
   return part.action;
 }

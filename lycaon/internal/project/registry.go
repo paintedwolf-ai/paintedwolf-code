@@ -6,6 +6,7 @@ import (
 	"errors"
 	"time"
 
+	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/sourcebranch"
 )
 
@@ -22,12 +23,14 @@ var (
 	ErrProjectBusy        = errors.New("project has active work")
 )
 
-// RootKind distinguishes the engine-managed draft workspace from attached folders.
+// RootKind distinguishes attached folders, the engine-managed draft workspace,
+// and the namespace for files beyond every folder.
 type RootKind string
 
 const (
 	RootKindAttached RootKind = "attached"
 	RootKindDraft    RootKind = "draft"
+	RootKindOutside  RootKind = "outside"
 )
 
 // Root is a folder attached to a project workspace.
@@ -81,12 +84,15 @@ type Promotion struct {
 
 // Project is a materialized chat workspace.
 type Project struct {
-	SourceBranch    sourcebranch.ID
-	RootBranches    map[string]sourcebranch.ID
-	ID              string
-	Name            string // empty when unset (wire null)
-	Roots           []Root
-	RootsGeneration int
+	SourceBranch sourcebranch.ID
+	RootBranches map[string]sourcebranch.ID
+	ID           string
+	Name         string // empty when unset (wire null)
+	Roots        []Root
+	// Outside is the namespace for files beyond every root; it is never in Roots.
+	Outside            Root
+	outsideReadBinding projectroot.OutsideBinding
+	RootsGeneration    int
 	// TrustEnabled is surface id → enabled. Missing key means on.
 	TrustEnabled map[string]bool
 	// TrustSeen holds read summaries; file bytes live in the trust baseline store.

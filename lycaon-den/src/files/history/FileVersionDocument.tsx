@@ -1,3 +1,4 @@
+import { outsideFileId } from "../source/outside-namespace.ts";
 import { SurfaceDeck } from "../../components/primitives/SurfaceDeck.tsx";
 import { usePresentationParticipant } from "../../ui/presentation-context.tsx";
 import { ThemeIcon } from "../../components/primitives/ThemeIcon.tsx";
@@ -68,7 +69,9 @@ function FileVersionContent(props: FileVersionDocumentProps) {
     if (version.source.kind === "reader") {
       if (props.comparison() === "before" || props.preview) return sourceReaderAccess(client, props.projectId, version.source.reader, props.sessionId);
       const original = sourceReaderAccess(client, props.projectId, version.source.reader, props.sessionId);
-      return currentComparisonAccess(original, client, props.projectId, props.buffer.rootId, props.buffer.path, props.sessionId);
+      const fileId = outsideFileId(props.projectId, props.buffer);
+      const address = fileId ? { file_id: fileId } : { root_id: props.buffer.rootId, path: props.buffer.path };
+      return currentComparisonAccess(original, client, props.projectId, address, props.sessionId);
     }
     if (version.source.kind !== "text") return undefined;
     return sourceReaderAccess(client, props.projectId, { kind: "text", path: version.path, before: props.comparison() === "current" ? props.currentContent() : version.beforeAvailability === "absent" ? null : version.source.before, after: version.availability === "absent" ? null : version.source.after }, props.sessionId);

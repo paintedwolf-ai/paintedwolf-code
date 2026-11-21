@@ -1,3 +1,4 @@
+import { outsideFileId } from "../source/outside-namespace.ts";
 import { createPresentationWaiting } from "../../ui/presentation.ts";
 import { observeSurfaceFailure } from "../../notices/surface-failure.ts";
 import { usePresentationParticipant } from "../../ui/presentation-context.tsx";
@@ -111,7 +112,7 @@ export function FilesImageViewer(props: Props) {
     void buf.editRevision;
     return {
       client: c, projectId: props.projectId, path: buf.path,
-      rootId: buf.rootId || undefined, jobId: buf.jobId, sessionId: props.sessionId,
+      rootId: buf.rootId || undefined, fileId: outsideFileId(props.projectId, buf), jobId: buf.jobId, sessionId: props.sessionId,
     };
   });
   let loadedSource: ReturnType<typeof source> | undefined;
@@ -127,6 +128,7 @@ export function FilesImageViewer(props: Props) {
     setLoadError(null);
     void request.client.getProjectSourceRaw(request.projectId, request.path, {
       rootId: request.rootId,
+      ...(request.fileId ? { fileId: request.fileId } : {}),
       workerId: request.jobId,
       sessionId: request.sessionId,
       signal: abort.signal,

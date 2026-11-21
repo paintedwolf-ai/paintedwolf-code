@@ -86,6 +86,10 @@ func (s *Inventory) recordObservation(ctx context.Context, projectID string, hea
 	if err != nil {
 		return false, err
 	}
+	return s.commitObservation(ctx, prepared)
+}
+
+func (s *Inventory) commitObservation(ctx context.Context, prepared *preparedObservation) (bool, error) {
 	defer prepared.recording.Close()
 	s.recordMu.Lock()
 	defer s.recordMu.Unlock()
@@ -94,7 +98,7 @@ func (s *Inventory) recordObservation(ctx context.Context, projectID string, hea
 		return false, err
 	}
 	defer func() { _ = tx.Rollback() }()
-	scope, err := s.writer.mutationObservationScope(ctx, tx, projectID)
+	scope, err := s.writer.mutationObservationScope(ctx, tx, prepared.projectID)
 	if err != nil {
 		return false, err
 	}

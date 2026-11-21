@@ -85,7 +85,7 @@ type Service struct {
 	redactMessageForStorage Redactor
 	secretSweeps            sweepQueue
 	reconcile               Reconciler
-	programEdits            programEdits
+	programEffects          pendingProgramEffects
 }
 
 func New(sessionStore Sessions, transcriptStore Transcript, turnStore Turns, people People, workspace Workspace) *Service {

@@ -184,6 +184,7 @@ func (s *Inventory) reconcileSnapshot(
 	}
 	window.mu.Lock()
 	window.admissionMode = string(snapshot.AdmissionMode)
+	window.attachedBoundaries = snapshot.Unobserved()
 	window.mu.Unlock()
 	admitted, err := s.windowAdmissions(ctx, projectID, batchID, window, window, snapshot, live, rootIDs, transitionByRoot)
 	if err != nil {
@@ -351,27 +352,6 @@ func (s *Inventory) windowAdmissions(
 	}
 	var inputs []RecordInput
 	now := time.Now().UTC()
-	admit := func(rootID, path string, op api.SourceChangeOp, before, after *sourcesnapshot.Entry) error {
-		in := observationCause{batchID: batchID, gitTransitionID: transitionByRoot[rootID], window: claim}.apply(RecordInput{
-			RecordLocation: RecordLocation{RootID: rootID, Path: path, EntryKind: EntryKindFile},
-			ProjectID:      projectID, BranchID: branchForObservedRoot(window.roots, rootID), Op: op, TS: now})
-		if before != nil {
-			sha, raw, err := s.versionFacts(ctx, *before)
-			if err != nil {
-				return err
-			}
-			in.BeforeSHA256, in.BeforeSize, in.Before = sha, before.Size, raw
-		}
-		if after != nil {
-			sha, raw, err := s.versionFacts(ctx, *after)
-			if err != nil {
-				return err
-			}
-			in.AfterSHA256, in.AfterSize, in.After = sha, after.Size, raw
-		}
-		inputs = append(inputs, in)
-		return nil
-	}
 	err := s.snapshots.Diff(ctx, startID, snapshot.ID, func(change sourcesnapshot.Change) error {
 		rootID, known := rootIDs[change.RootPath()]
 		if !known {
@@ -380,16 +360,45 @@ func (s *Inventory) windowAdmissions(
 		if _, tracked := live[entryKey(rootID, change.Path())]; tracked {
 			return nil
 		}
-		switch {
-		case change.Before == nil:
-			return admit(rootID, change.Path(), api.SourceChangeOpCreate, nil, change.After)
-		case change.After == nil:
-			return admit(rootID, change.Path(), api.SourceChangeOpDelete, change.Before, nil)
-		default:
-			return admit(rootID, change.Path(), api.SourceChangeOpWrite, change.Before, change.After)
+		in, err := s.admissionInput(ctx, observationCause{batchID: batchID, gitTransitionID: transitionByRoot[rootID], window: claim}.apply(RecordInput{
+			RecordLocation: RecordLocation{RootID: rootID, Path: change.Path(), EntryKind: EntryKindFile},
+			ProjectID:      projectID, BranchID: branchForObservedRoot(window.roots, rootID), TS: now}), change.Before, change.After)
+		if err != nil {
+			return err
 		}
+		inputs = append(inputs, in)
+		return nil
 	})
 	return inputs, err
+}
+
+// admissionInput completes an admitted file's record from the snapshot entries
+// before and after it changed: a missing before is a creation, a missing after
+// a deletion. A before whose bytes were not retained keeps only its digest.
+func (s *Inventory) admissionInput(ctx context.Context, in RecordInput, before, after *sourcesnapshot.Entry) (RecordInput, error) {
+	switch {
+	case before == nil:
+		in.Op = api.SourceChangeOpCreate
+	case after == nil:
+		in.Op = api.SourceChangeOpDelete
+	default:
+		in.Op = api.SourceChangeOpWrite
+	}
+	if before != nil {
+		sha, raw, err := s.versionFacts(ctx, *before)
+		if err != nil {
+			return in, err
+		}
+		in.BeforeSHA256, in.BeforeSize, in.Before = sha, before.Size, raw
+	}
+	if after != nil {
+		sha, raw, err := s.versionFacts(ctx, *after)
+		if err != nil {
+			return in, err
+		}
+		in.AfterSHA256, in.AfterSize, in.After = sha, after.Size, raw
+	}
+	return in, nil
 }
 
 // seedTrackingBoundary records when sparse tracking begins.

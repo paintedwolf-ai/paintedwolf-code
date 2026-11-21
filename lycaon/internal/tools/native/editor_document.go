@@ -23,7 +23,7 @@ func loadAgentSourceText(ctx context.Context, tool string, tctx tools.ToolContex
 	if err != nil || st.Editor == nil {
 		return st, err
 	}
-	documents, ok := sourceview.DocumentsFor(tctx, resolved)
+	documents, _, ok := sourceview.DocumentsFor(tctx, resolved)
 	if !ok {
 		return sourceview.Text{}, &toolrejection.ToolReject{Code: "EDITOR_DOCUMENT_CHANGING", Data: map[string]any{"path": resolved.DisplayPath}}
 	}
@@ -114,10 +114,10 @@ func landEditedText(ctx context.Context, tctx tools.ToolContext, tool string, re
 			return landing{}, err
 		}
 		reportLandedEditorConfig(ctx, tctx, resolved, st, newContent)
-		if documents, ok := sourceview.DocumentsFor(tctx, resolved); ok {
-			if branch, berr := tctx.SourceBranch(resolved.Root.ID); berr == nil {
+		if documents, address, ok := sourceview.DocumentsFor(tctx, resolved); ok {
+			if branch, berr := tctx.SourceBranch(address.RootID); berr == nil {
 				// The written text is the agent's own; this response can edit from it.
-				if doc, ok, err := documents.OpenDocument(ctx, tctx.Identity.ProjectID, branch, resolved.Root.ID, resolved.ScopeRel); err == nil && ok {
+				if doc, ok, err := documents.OpenDocument(ctx, tctx.Identity.ProjectID, branch, address.RootID, address.Path); err == nil && ok {
 					documents.AdvanceAgentRead(tctx.Identity.ProjectID, tctx.Identity.SessionID, tctx.Source.EditorReadBases,
 						tools.EditorDocumentEdit{DocumentID: doc.ID, Content: newContent}, doc)
 				}
@@ -125,7 +125,7 @@ func landEditedText(ctx context.Context, tctx tools.ToolContext, tool string, re
 		}
 		return landing{change: mutationContext(st.Content, newContent)}, nil
 	}
-	documents, ok := sourceview.DocumentsFor(tctx, resolved)
+	documents, _, ok := sourceview.DocumentsFor(tctx, resolved)
 	if !ok {
 		return landing{}, &toolrejection.ToolReject{Code: "EDITOR_DOCUMENT_CHANGING", Data: map[string]any{"path": resolved.DisplayPath}}
 	}
@@ -161,7 +161,7 @@ func landEditedText(ctx context.Context, tctx tools.ToolContext, tool string, re
 	readEdit.Content = proposal.Authored
 	documents.AdvanceAgentRead(tctx.Identity.ProjectID, tctx.Identity.SessionID, tctx.Source.EditorReadBases, readEdit, applied.Document)
 	tctx.RecordModelAuthoredCredentials(ctx, resolved.Abs, []byte(newContent))
-	reportLanded(tctx, applied.Document)
+	recordLandedDocument(tctx, applied.Document)
 	reportLandedEditorConfig(ctx, tctx, resolved, st, newContent)
 	return landing{change: mutationContext(preview.Before.Text, applied.Document.Text), editor: true, saved: applied.Saved, recreated: st.Editor.Absent && applied.Saved,
 		heldVersionID: applied.HeldVersionID, publicationError: applied.PublicationError}, nil

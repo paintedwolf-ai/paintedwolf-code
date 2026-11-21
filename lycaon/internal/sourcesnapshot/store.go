@@ -198,6 +198,12 @@ func (s *Store) Ensure(ctx context.Context, req Request) (Snapshot, error) {
 	}
 	req.Verify = req.Verify.Normalized()
 	key := rootsKey(req.Roots) + "\x00" + string(req.Verify)
+	if req.Scope != nil {
+		key += "\x00scope:" + req.Scope.Identity()
+	}
+	if req.Unwatched {
+		key += "\x00unwatched"
+	}
 
 admit:
 	if err := ctx.Err(); err != nil {
@@ -278,4 +284,28 @@ func ChangeToken(roots []Root) string {
 	}
 	sum := sha256.Sum256([]byte(strings.Join(parts, "\x00")))
 	return hex.EncodeToString(sum[:])
+}
+
+// outsideScopes builds the scope of a write root beyond the project.
+type outsideScopes interface {
+	Outside(root string, omit []string) *sourcescope.Scope
+}
+
+// OutsideScope is the capture scope for a write root beyond the project,
+// skipping the absolute folders in omit. A provider without outside budgets
+// falls back to the bundled ones.
+func (s *Store) OutsideScope(root string, omit []string) *sourcescope.Scope {
+	if s == nil {
+		return (*sourcescope.Provider)(nil).Outside(root, omit)
+	}
+	s.mu.Lock()
+	provider := s.scopes
+	s.mu.Unlock()
+	if outside, ok := provider.(outsideScopes); ok {
+		return outside.Outside(root, omit)
+	}
+	if bundled, ok := defaultScopes().(outsideScopes); ok {
+		return bundled.Outside(root, omit)
+	}
+	return (*sourcescope.Provider)(nil).Outside(root, omit)
 }

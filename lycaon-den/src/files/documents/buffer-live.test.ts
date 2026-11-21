@@ -274,6 +274,21 @@ describe("buffer-live lifecycle + divergence", () => {
     expect(state.byKey[key]).toBeUndefined();
   });
 
+  it("moves a dirty buffer to the destination root", () => {
+    const key = openLoaded("src/old.ts", "body");
+    applyFilesBufferDraft(PROJECT, key, "unsaved");
+    applyBufferSourceChanged(
+      PROJECT,
+      evt({ op: "rename", root_id: "r2", path: "moved.ts", from_root_id: "r1", from_path: "src/old.ts" }),
+    );
+
+    const state = projectFilesState(PROJECT);
+    expect(state.byKey[key]).toBeUndefined();
+    const [moved] = Object.values(state.byKey);
+    expect(moved).toMatchObject({ rootId: "r2", path: "moved.ts", dirty: true });
+    expect(filesBufferText(moved!)).toBe("unsaved");
+  });
+
   it("foreign delete with dirty buffers calls guarded close handler", () => {
     const key = openLoaded("src/a.ts", "body");
     applyFilesBufferDraft(PROJECT, key, "dirty");

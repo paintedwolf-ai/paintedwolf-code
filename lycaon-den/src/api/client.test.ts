@@ -104,6 +104,20 @@ describe("LycaonClient", () => {
     expect(String(at(fetchMock.mock.calls, 0)[0])).not.toContain("worker_id");
   });
 
+  it("sends only the file identity when reading an outside source", async () => {
+    const fetchMock = vi.fn().mockImplementation(() =>
+      Promise.resolve(new Response(JSON.stringify({}), { status: 200 })),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const client = createLycaonClient(connection);
+    const opts = { fileId: "file-uuid", rootId: "outside", workerId: "worker" };
+    await client.getProjectSource("proj-uuid", "home/me/diagram.svg", opts);
+    await client.getProjectSourceRaw("proj-uuid", "home/me/diagram.svg", opts);
+    const queries = fetchMock.mock.calls.map(([url]) => new URL(String(url)).search);
+    expect(queries).toEqual(["?file_id=file-uuid", "?file_id=file-uuid"]);
+  });
+
   it("scopes source and Git status reads to the session checkout", async () => {
     const fetchMock = vi.fn().mockImplementation(() =>
       Promise.resolve(new Response(JSON.stringify({}), { status: 200 })),

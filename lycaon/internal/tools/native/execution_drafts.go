@@ -22,21 +22,22 @@ func (e ExecutionRevisions) SaveDrafts(ctx context.Context, tctx tools.ToolConte
 
 // SaveResolvedDrafts saves drafts under an existing path binding.
 func SaveResolvedDrafts(ctx context.Context, tctx tools.ToolContext, resolved projectpaths.Resolved, descendants bool) error {
-	documents, ok := sourceview.DocumentsFor(tctx, resolved)
+	documents, address, ok := sourceview.DocumentsFor(tctx, resolved)
 	if !ok {
 		return nil
 	}
-	branch, err := tctx.SourceBranch(resolved.Root.ID)
+	branch, err := tctx.SourceBranch(address.RootID)
 	if err != nil {
 		return err
 	}
-	queryPath := resolved.ScopeRel
+	queryPath := address.Path
 	if queryPath == "." {
 		queryPath = ""
 	}
-	err = documents.SaveForAgentOperation(ctx, tctx.Identity.ProjectID, branch, resolved.Root.ID, queryPath, descendants, tools.DraftSaveCall(ctx, tctx))
+	err = documents.SaveForAgentOperation(ctx, tctx.Identity.ProjectID, branch, address.RootID, queryPath, descendants, tools.DraftSaveCall(ctx, tctx))
 	var changed *tools.EditorFileChanged
 	if errors.As(err, &changed) {
+		resolved.ScopeRel, resolved.DisplayPath = changed.Path, address.DisplayPath(changed.Path)
 		return fileChangedConflict(resolved, changed)
 	}
 	return err
@@ -95,5 +96,5 @@ func fileChangedConflict(resolved projectpaths.Resolved, changed *tools.EditorFi
 		}
 		return r
 	}
-	return &ExecutionRevisionConflict{Path: changed.Path, Pinned: revision(changed.BaseSHA256, changed.BaseAbsent), Current: revision(changed.DiskSHA256, changed.DiskAbsent)}
+	return &ExecutionRevisionConflict{Path: resolved.DisplayPath, Pinned: revision(changed.BaseSHA256, changed.BaseAbsent), Current: revision(changed.DiskSHA256, changed.DiskAbsent)}
 }

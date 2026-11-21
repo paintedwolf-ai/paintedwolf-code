@@ -9,6 +9,7 @@ import { relativeTimeLabel } from "../../time/time-copy.ts";
 import { buildWalkChapters, type WalkChapter } from "./walk-chapters.ts";
 import {
   commandWindowAction,
+  commandWindowHasGaps,
 } from "../source/source-command-window.ts";
 import { gitChangeAction, gitChangeLine, gitChangeTitle } from "../source/source-git-change.ts";
 
@@ -208,10 +209,11 @@ export function buildWalk(
       label: gitChangeAction(change),
     });
   }
-  // Only command windows named by an effect become steps.
+  // Command windows become steps when an effect names them or they left a
+  // folder uncompared, which the step must say.
   for (const command of knownCommands.values()) {
-    const effects = byCommand.get(command.id);
-    if (!effects) continue;
+    const effects = byCommand.get(command.id) ?? [];
+    if (effects.length === 0 && !commandWindowHasGaps(command)) continue;
     steps.push({
       kind: "command",
       key: walkCommandStepKey(command.id),

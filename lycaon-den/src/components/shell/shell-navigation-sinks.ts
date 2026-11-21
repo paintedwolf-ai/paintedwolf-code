@@ -16,6 +16,7 @@ import { startWorkspaceViewPresentationMirror } from "../../platform/windows/wor
 import { registerOpenInSearchSink } from "../../search/search-nav.ts";
 import { registerOpenSourceSink, registerOpenSourceProjectLookup } from "../../platform/navigation/open-source.ts";
 import { setProjectFilesRevealRequest } from "../../files/tree/project-files-reveal.ts";
+import { OUTSIDE_ROOT_LABEL } from "../../files/source/outside-namespace.ts";
 import { openSourceInFilesStage } from "../../files/components/project-files-open.ts";
 import { applyOpenFilesSurfaceRequest, registerOpenFilesSurfaceSink } from "../../platform/navigation/open-files-surface.ts";
 import { registerOpenFindingSink, setFindingFocusRequest } from "../../platform/navigation/open-finding.ts";
@@ -148,6 +149,7 @@ export function installShellNavigationSinks({ shell, projects, appStore, openSta
     openSourceInFilesStage({
       request: req,
       rootLabelFor: (rootId) => {
+        if (project?.outside_root_id === rootId) return OUTSIDE_ROOT_LABEL;
         const root = project?.roots.find((r) => r.id === rootId);
         return root?.label ?? rootId;
       },
@@ -172,7 +174,7 @@ export function installShellNavigationSinks({ shell, projects, appStore, openSta
   });
   const unregisterProjectLookup = registerOpenSourceProjectLookup((id) => {
     const project = projects.byId(id);
-    return project ? { roots: project.roots } : undefined;
+    return project ? { roots: project.roots, outsideRootId: project.outside_root_id } : undefined;
   });
   const unregisterNotificationOpen = registerNotificationSessionOpenSink(
     (sessionId) => openNotificationSession(sessionId),
