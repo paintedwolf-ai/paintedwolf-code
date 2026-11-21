@@ -43,3 +43,21 @@ func TestCommandFormToolOfResolvesAlias(t *testing.T) {
 		t.Fatalf("CommandFormToolOf(not-a-form) = %q, want empty", got)
 	}
 }
+
+func TestCommandLanguageReachableMixedModeAndMutatingForms(t *testing.T) {
+	readOnly := map[string]bool{"command": true}
+	mutating := map[string]bool{"command": true, ReachCommandMutation: true}
+	for _, form := range []string{"find", "sed", "yq"} {
+		if !CommandLanguageReachable(form, readOnly) {
+			t.Fatalf("%s has a read-only mode and must be reachable on read-only command surfaces", form)
+		}
+	}
+	for _, form := range []string{"edit", "replace-lines", "jq-edit", "rm", "mkdir"} {
+		if CommandLanguageReachable(form, readOnly) {
+			t.Fatalf("%s requires mutation and must not be reachable on read-only command surfaces", form)
+		}
+		if !CommandLanguageReachable(form, mutating) {
+			t.Fatalf("%s must be reachable when command mutation is held", form)
+		}
+	}
+}

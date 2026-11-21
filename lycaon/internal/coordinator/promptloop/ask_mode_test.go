@@ -15,7 +15,8 @@ import (
 
 func TestAskFinalPlanClampsLoadedAndImpliedCalls(t *testing.T) {
 	metas := []tools.ToolMeta{
-		{Name: "inspect_source"}, {Name: "command"}, {Name: "command_stop"}, {Name: "request_tools"},
+		{Name: "command"}, {Name: "command_output"}, {Name: "command_stop"}, {Name: "request_tools"},
+		{Name: "verify"}, {Name: "code_rewrite"}, {Name: "promote_overlay"},
 		{Name: "mcp_doc_lookup", Source: tools.ToolSourceMCP, ReadOnlyHint: true},
 		{Name: "mcp_doc_update", Source: tools.ToolSourceMCP},
 		{Name: "workflow_advance"}, {Name: "unknown_dynamic"},
@@ -23,7 +24,10 @@ func TestAskFinalPlanClampsLoadedAndImpliedCalls(t *testing.T) {
 	loop := NewPromptLoopForTest(PromptLoopDeps{Context: ContextDeps{
 		Policy: registryTestPolicy{metas: metas},
 		LoadedTools: func(string) map[string]bool {
-			return map[string]bool{"mcp_doc_lookup": true, "mcp_doc_update": true, "unknown_dynamic": true}
+			return map[string]bool{
+				"verify": true, "code_rewrite": true, "promote_overlay": true,
+				"mcp_doc_lookup": true, "mcp_doc_update": true, "unknown_dynamic": true,
+			}
 		},
 		LiveResources: func(string) toolcontract.ResourcePresence { return toolcontract.ResourcePresence{CommandJobs: true} },
 	}})
@@ -31,12 +35,12 @@ func TestAskFinalPlanClampsLoadedAndImpliedCalls(t *testing.T) {
 		sess := &api.Session{ID: "session", Mode: api.SessionModeAsk, Posture: posture, WorkspacePath: "/project", AgentType: "coordinator"}
 		frame := inject.CoordinatorTurnFrame{RunContext: api.CoordinatorRunContext{AdvanceWhenGateMet: "coordinator"}}
 		meta, plan := mustCoordinatorToolsForTurn(t, loop, sess, frame)
-		for _, name := range []string{"inspect_source", "mcp_doc_lookup", "request_tools", "workflow_advance"} {
+		for _, name := range []string{"command", "command_output", "command_stop", "mcp_doc_lookup", "request_tools", "workflow_advance"} {
 			if !containsMeta(meta, name) {
 				t.Errorf("%s: missing %s", posture, name)
 			}
 		}
-		for _, name := range []string{"command", "command_stop", "mcp_doc_update", "unknown_dynamic"} {
+		for _, name := range []string{"verify", "code_rewrite", "promote_overlay", "mcp_doc_update", "unknown_dynamic"} {
 			if plan.Addressable(name) {
 				t.Errorf("%s: prohibited %s is addressable", posture, name)
 			}

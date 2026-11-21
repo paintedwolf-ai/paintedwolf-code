@@ -84,13 +84,14 @@ var loadCommandReachTables = sync.OnceValue(func() *commandReachTables {
 				out.aliasForm[alias] = spec.Name
 			}
 		}
-		mutates := false
+		mutates := len(spec.Effects) > 0
 		for _, effect := range spec.Effects {
-			// A wrapper whose child effects are unbound cannot promise
-			// read-only; treat it as mutating so copy stays guarded.
+			// A command with at least one non-mutating mode (e.g. find's default
+			// print or sed's stream-script) is reachable on read-only surfaces;
+			// wrappers whose child effects are unbound on every mode stay guarded.
 			required, err := effect.CommandEffects(nil)
-			if err != nil || required.Allows(mutation) {
-				mutates = true
+			if err == nil && !required.Allows(mutation) {
+				mutates = false
 			}
 		}
 		if mutates {
