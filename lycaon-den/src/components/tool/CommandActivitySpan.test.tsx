@@ -8,12 +8,21 @@ import { ToolPartShell } from "./ToolPartShell.tsx";
 import { CommandActivitySpan } from "./CommandActivitySpan.tsx";
 import { stubClient } from "../../test/client-fixture.ts";
 import { getLycaonClient } from "../../platform/connection/app-connection.ts";
+import { saveVerboseMode } from "../../settings/system/debug-prefs.ts";
 vi.mock("../../platform/connection/app-connection.ts", () => ({ getLycaonClient: vi.fn() }));
 
-function entry(id: string, group: string, state: "running" | "completed" = "running", phase?: CommandActivity["phase"]): ActivitySpanEntry {
-  const fact: CommandActivity = { id, group, label: "Read source", subject: "source.rs", state, outcome: state === "running" ? "Running" : "Completed", phase, execution_ids: [id], spans: [] };
+function entry(
+  id: string,
+  group: string,
+  state: "running" | "completed" | "failed" = "running",
+  phase?: CommandActivity["phase"],
+): ActivitySpanEntry {
+  const label = phase === "execute" ? "Run process" : "Read source";
+  const outcome = { running: "Running", completed: "Completed", failed: "Failed" }[state];
+  const fact: CommandActivity = { id, group, label, subject: "source.rs", state, outcome, phase, execution_ids: [id], spans: [] };
   const program = { id, state, activities: [fact] } as CommandProgramReceipt;
-  return { kind: "tool", part: { id, toolCallId: id, assistantMessageId: "assistant", messageId: "result", tool: "command", kind: "command", status: state === "running" ? "running" : "completed", commandProgram: program } };
+  const status = state === "failed" ? "error" : state;
+  return { kind: "tool", part: { id, toolCallId: id, assistantMessageId: "assistant", messageId: "result", tool: "command", kind: "command", status, commandProgram: program } };
 }
 
 it("preserves group and row elements and expansion while later work arrives", async () => {
@@ -57,4 +66,58 @@ it("takes its status from the settled receipt, not the program recorded while ru
   const view = render(() => <CommandActivitySpan label="Running commands" entries={[recorded]} sessionId="session" layout="chat" entryKey="command-groups-settled" renderToolEntry={part => <ToolPartShell part={part()} layout="chat"><span>Recorded detail</span></ToolPartShell>} />);
   const group = () => view.container.querySelector('[data-testid="activity-span-card"]');
   await waitFor(() => expect(group()?.getAttribute("data-status")).toBe("done"));
+});
+
+it.each([
+  { group: "Running programs", sequence: "" },
+  { group: "Running tests", sequence: "Running programs → Running tests" },
+])("updates recovered command chrome with $group and keeps its rows", async ({ group, sequence }) => {
+  const attempts = Array.from({ length: 16 }, (_, index) =>
+    entry(`attempt-${index}`, "Running programs", "failed", "execute"),
+  );
+  const [entries, setEntries] = createSignal(attempts);
+  const { container } = render(() => (
+    <CommandActivitySpan
+      label="Running commands"
+      layout="chat"
+      entries={entries()}
+      renderToolEntry={(part) => <ToolPartShell part={part()} layout="chat"><span>Recorded detail</span></ToolPartShell>}
+    />
+  ));
+  const span = container.querySelector('[data-testid="activity-span-card"]')!;
+  const toggle = disclosureToggle(span);
+  const failureChip = () => span.querySelector('[data-testid="activity-span-failed"]');
+  const headerSequence = () => span.querySelector(".den-activity-span-hint")?.textContent;
+  const rows = () => Array.from(span.querySelectorAll('[data-testid="tool-part-card"]'));
+  expect(span.getAttribute("data-status")).toBe("error");
+  expect(failureChip()?.textContent).toBe("16 failed");
+  expect(toggle.getAttribute("aria-label")).toContain("16 failed");
+  expect(headerSequence()).toBe("");
+
+  fireEvent.click(toggle);
+  const failedRows = rows();
+  expect(failedRows).toHaveLength(16);
+  setEntries([...attempts, entry("verification", group, "completed", "execute")]);
+  expect(span.getAttribute("data-status")).toBe("done");
+  expect(failureChip()).toBeNull();
+  expect(toggle.getAttribute("aria-label")).toBe("Running programs, done, 17 actions");
+  expect(headerSequence()).toBe(sequence);
+  const recoveredRows = rows();
+  expect(recoveredRows).toHaveLength(17);
+  failedRows.forEach((row, index) => {
+    expect(recoveredRows[index]).toBe(row);
+    expect(row.getAttribute("data-status")).toBe("error");
+  });
+  expect(recoveredRows.at(-1)?.getAttribute("data-status")).toBe("done");
+
+  try {
+    await saveVerboseMode(true);
+    expect(failureChip()?.textContent).toBe("16 failed");
+    expect(toggle.getAttribute("aria-label")).toContain("16 failed");
+    expect(headerSequence()).toBe(sequence);
+    expect(rows()).toHaveLength(17);
+    expect(isDisclosureOpen(span)).toBe(true);
+  } finally {
+    await saveVerboseMode(false);
+  }
 });
