@@ -2,20 +2,76 @@ spec_version: "1.0"
 id: SESSION_ASK_MODE_ACTIVE
 kind: policy
 on: session.pre_invoke
-selector:
-  tools: [task, instruct_worker]
-requires_facts: [paintedwolf.session_mode, paintedwolf.ask_worker_writes]
+selector: {}
+requires_facts: [paintedwolf.agent_type, paintedwolf.ask_worker_writes, paintedwolf.can_command, paintedwolf.can_task, paintedwolf.command, paintedwolf.missing, paintedwolf.mode_denied, paintedwolf.profile_mutation_capable, paintedwolf.provider, paintedwolf.rejection_field, paintedwolf.rejection_reason, paintedwolf.response_type, paintedwolf.scope_mode, paintedwolf.session_mode, tool]
 when: paintedwolf.session_mode == "ask" && paintedwolf.ask_worker_writes
 effect: block
 x-paintedwolf-category: recoverable
 x-paintedwolf-emit: guard:coordinator
 message: This operation requires Agent mode
-what: This operation is unavailable in Ask mode.
-cause: Ask mode limits actions to read-only tools and worker scopes.
-fix: Use read-only tools or let the user know that this work requires Agent mode.
+what: >-
+  {% if paintedwolf.rejection_field %}`{{ paintedwolf.rejection_field }}` on {{ tool }} is unavailable in Ask mode.{% else %}{% if paintedwolf.command %}External launch `{{ paintedwolf.command }}` inside {{ tool }} is{% if paintedwolf.mode_denied %} refused under launch-time Ask authority{% else %} unavailable in Ask mode{% endif %}.{% else %}{% if paintedwolf.response_type %}Secret collection via {{ tool }} is unavailable in Ask mode.{% else %}{% if paintedwolf.missing %}Connected tool `{{ tool }}` is unavailable in Ask mode.{% else %}{% if paintedwolf.ask_worker_writes %}{{ tool }} cannot dispatch or continue a write-capable worker in Ask mode.{% else %}{% if paintedwolf.profile_mutation_capable %}{{ tool }} cannot dispatch or continue a write-capable worker in Ask mode.{% else %}{% if paintedwolf.scope_mode %}{{ tool }} cannot use `{{ paintedwolf.scope_mode }}` worker scope in Ask mode.{% else %}`{{ tool }}` is{% if paintedwolf.mode_denied %} refused under launch-time Ask authority{% else %} unavailable in Ask mode{% endif %}.{% endif %}{% endif %}{% endif %}{% endif %}{% endif %}{% endif %}{% endif %}
+cause: >-
+  {% if paintedwolf.rejection_field %}Ask mode prunes restricted `{{ paintedwolf.rejection_field }}` parameters from the read-only command schema.{% else %}{% if paintedwolf.command %}{% if paintedwolf.mode_denied %}This program started while Ask mode was active and kept its frozen read-only authority across the session upgrade; earlier completed statements remain authoritative.{% else %}Ask mode runs only read-only native command utilities and bundled Git inspection without launching external programs; earlier completed statements remain authoritative.{% endif %}{% else %}{% if paintedwolf.response_type %}Ask mode blocks secret input requests so credentials are not collected during read-only investigation.{% else %}{% if paintedwolf.missing %}Connected provider{% if paintedwolf.provider %} `{{ paintedwolf.provider }}`{% endif %} does not declare `readOnlyHint: true` on `{{ tool }}`, which Ask mode requires before calling a connected tool.{% else %}{% if paintedwolf.profile_mutation_capable %}Worker profile{% if paintedwolf.agent_type %} `{{ paintedwolf.agent_type }}`{% endif %} is mutation-capable, and Ask mode permits only read-only worker profiles in read scope.{% else %}{% if paintedwolf.scope_mode %}Ask mode permits only read-only worker profiles in read scope without write overlays (requested scope `{{ paintedwolf.scope_mode }}`).{% else %}{% if paintedwolf.ask_worker_writes %}Ask mode permits only read-only worker profiles in read scope without write overlays.{% else %}{% if paintedwolf.mode_denied %}The invocation started while Ask mode was active and retains its launch-time read-only authority.{% else %}Ask mode limits the session to read-only inspection and answers without file writes, external process launches, or mutating tools.{% endif %}{% endif %}{% endif %}{% endif %}{% endif %}{% endif %}{% endif %}{% endif %}
+fix: >-
+  {% if paintedwolf.rejection_field %}{% if paintedwolf.can_command %}Omit `{{ paintedwolf.rejection_field }}` and run the read-only native command directly{% else %}Omit `{{ paintedwolf.rejection_field }}` and continue with the offered read-only tools{% endif %}, or explain that the user can switch to Agent mode if that capability is required.{% else %}{% if paintedwolf.command %}{% if paintedwolf.can_command %}Use read-only native command utilities (`rg`, `fd`, `cat`, `head`, `tail`, `sed -n`, `yq`, or read-only `git`) instead of `{{ paintedwolf.command }}`{% else %}Continue with the offered read-only tools{% endif %}, or explain that the user can switch to Agent mode to run external programs.{% else %}{% if paintedwolf.response_type %}Continue with nonsecret information or report the secret dependency so the user can switch to Agent mode; never ask the user to paste a secret into chat.{% else %}{% if paintedwolf.missing %}{% if paintedwolf.can_command %}Inspect the workspace with read-only native commands{% else %}Use an offered read-only tool{% endif %}, or explain that the user can switch to Agent mode to call `{{ tool }}`.{% else %}{% if paintedwolf.ask_worker_writes %}{% if paintedwolf.can_task %}Dispatch a read-only worker profile in read scope{% else %}Investigate directly in the current session{% endif %}, or explain that the user can switch to Agent mode for write-scoped worker work (existing read-only workers keep their read-only scope after upgrade).{% else %}{% if paintedwolf.profile_mutation_capable %}{% if paintedwolf.can_task %}Dispatch a read-only worker profile in read scope{% else %}Investigate directly in the current session{% endif %}, or explain that the user can switch to Agent mode for write-scoped worker work (existing read-only workers keep their read-only scope after upgrade).{% else %}{% if paintedwolf.scope_mode %}{% if paintedwolf.can_task %}Use read scope with a read-only worker profile{% else %}Investigate directly in the current session{% endif %}, or explain that the user can switch to Agent mode for write-scoped worker work (existing read-only workers keep their read-only scope after upgrade).{% else %}{% if paintedwolf.can_command %}Use read-only native commands to inspect the workspace{% else %}{% if paintedwolf.can_task %}Delegate read-scoped research{% else %}Continue with the offered read-only surface or answer from gathered evidence{% endif %}{% endif %}, or explain that the user can switch to Agent mode.{% endif %}{% endif %}{% endif %}{% endif %}{% endif %}{% endif %}{% endif %}
 x-paintedwolf-scenarios:
   - id: write_worker
     vars:
       session_mode: ask
       ask_worker_writes: true
+      profile_mutation_capable: true
+      agent_type: implementer
+      scope_mode: write
+      can_task: true
       tool: task
+  - id: write_scope_worker
+    vars:
+      session_mode: ask
+      ask_worker_writes: true
+      profile_mutation_capable: false
+      scope_mode: write
+      can_task: true
+      tool: task
+  - id: hidden_command_field
+    vars:
+      session_mode: ask
+      field: capability_request
+      reason: command_field_unavailable
+      can_command: true
+      tool: command
+  - id: external_command_launch
+    vars:
+      session_mode: ask
+      command: pytest
+      reason: external_exec
+      can_command: true
+      tool: command
+  - id: delayed_after_upgrade
+    vars:
+      session_mode: agent
+      mode_denied: true
+      command: pytest
+      reason: external_exec
+      can_command: true
+      tool: command
+  - id: secret_ask_user
+    vars:
+      session_mode: ask
+      reason: secret_input
+      response_type: secret
+      tool: ask_user
+  - id: mcp_non_readonly
+    vars:
+      session_mode: ask
+      provider: github
+      reason: mcp_read_only_required
+      missing: true
+      can_command: true
+      tool: write
+  - id: blocked_native_tool
+    vars:
+      session_mode: ask
+      can_command: false
+      can_task: false
+      tool: verify

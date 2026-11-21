@@ -474,6 +474,11 @@ func skillUnreachableNames(text string, declared, reachable map[string]bool) []s
 		}
 		seen[name] = true
 	}
+	if !reachable[toolcontract.ReachCommandMutation] {
+		for _, name := range toolcontract.MutatingMixedModeInvocationsIn(text) {
+			seen[name] = true
+		}
+	}
 	out := make([]string, 0, len(seen))
 	for name := range seen {
 		out = append(out, name)

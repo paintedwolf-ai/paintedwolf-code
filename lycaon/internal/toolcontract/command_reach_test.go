@@ -60,4 +60,21 @@ func TestCommandLanguageReachableMixedModeAndMutatingForms(t *testing.T) {
 			t.Fatalf("%s must be reachable when command mutation is held", form)
 		}
 	}
+
+	// Concrete mixed-mode invocations distinguish read-only examples from mutating flags.
+	readExamples := "Chain `find . -maxdepth 2 -type d`, `sed -n '1,20p' a.go`, `yq '.a.b' cfg.yaml`, `sort file.txt`, and `tar -tf archive.tar`."
+	if got := MutatingMixedModeInvocationsIn(readExamples); len(got) != 0 {
+		t.Fatalf("read-only mixed-mode examples flagged as mutating: %v", got)
+	}
+	mutatingExamples := "Avoid `sed -i 's/a/b/' a.go`, `find . -name '*.tmp' -delete`, `yq -i '.a = 1' cfg.yaml`, `sort -o out.txt in.txt`, and `tar -czf out.tgz .` on read-only surfaces."
+	wantMutating := []string{"find", "sed", "sort", "tar", "yq"}
+	gotMutating := MutatingMixedModeInvocationsIn(mutatingExamples)
+	if len(gotMutating) != len(wantMutating) {
+		t.Fatalf("MutatingMixedModeInvocationsIn = %v, want %v", gotMutating, wantMutating)
+	}
+	for i := range wantMutating {
+		if gotMutating[i] != wantMutating[i] {
+			t.Fatalf("MutatingMixedModeInvocationsIn[%d] = %q, want %q", i, gotMutating[i], wantMutating[i])
+		}
+	}
 }

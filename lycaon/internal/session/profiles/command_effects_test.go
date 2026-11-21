@@ -171,7 +171,6 @@ func TestConstrainCommandProfilesAskModeAndRoundAuthority(t *testing.T) {
 	input = append(input, sandbox.ToolProfile{ID: "no_command_effects", CommandEffects: 0})
 
 	for _, posture := range []api.SessionPosture{
-		"",
 		api.SessionPostureSpec,
 		api.SessionPostureVet,
 		api.SessionPostureBuild,
@@ -184,6 +183,19 @@ func TestConstrainCommandProfilesAskModeAndRoundAuthority(t *testing.T) {
 			want := input[i].CommandEffects & read
 			if p.CommandEffects != want {
 				t.Fatalf("posture %q profile %s effects = %v, want %v", posture, p.ID, p.CommandEffects.Classes(), want.Classes())
+			}
+		}
+	}
+
+	// An empty or unresolved stored posture closes the command surface (0 effects)
+	// in both Agent and Ask modes rather than defaulting to Build.
+	for _, mode := range []api.SessionMode{api.SessionModeAgent, api.SessionModeAsk} {
+		service := New(commandSessionFixture{posture: "", mode: mode}, nil, nil)
+		service.SetPostureRegistry(registry)
+		narrowed := service.ConstrainCommandProfiles(t.Context(), "session", input)
+		for _, p := range narrowed {
+			if p.CommandEffects != 0 {
+				t.Fatalf("empty posture in mode %q granted %s command effects %v, want []", mode, p.ID, p.CommandEffects.Classes())
 			}
 		}
 	}

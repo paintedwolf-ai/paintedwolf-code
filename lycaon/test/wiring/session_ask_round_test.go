@@ -13,6 +13,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/lycaon/lycaon/internal/decide"
 	"github.com/lycaon/lycaon/internal/llm/modelcall"
+	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/testutil/llmtest"
 	"github.com/lycaon/lycaon/internal/tools"
@@ -117,6 +118,14 @@ func assertAskUpgradeRounds(t *testing.T, requests []modelcall.CompletionRequest
 			t.Fatalf("round 1 Ask command schema still includes pruned field %q", pruned)
 		}
 	}
+	round1Standing := requestStandingText(requests[0])
+	if !strings.Contains(round1Standing, "## Ask mode") || !strings.Contains(round1Standing, "let the person decide whether to switch to Agent mode") {
+		t.Fatalf("round 1 Ask standing context missing Ask mode orientation:\n%s", round1Standing)
+	}
+	if requestHasTransitionNotice(requests[0]) {
+		t.Fatal("round 1 Ask request unexpectedly included an Agent transition notice")
+	}
+
 	if !slices.Contains(round2Cmd.DescriptionParts, "mutation") {
 		t.Fatalf("round 2 Agent command DescriptionParts = %v, expected mutation", round2Cmd.DescriptionParts)
 	}
@@ -125,6 +134,159 @@ func assertAskUpgradeRounds(t *testing.T, requests []modelcall.CompletionRequest
 		if _, present := round2Props[restored]; !present {
 			t.Fatalf("round 2 Agent command schema missing restored field %q", restored)
 		}
+	}
+	round2Standing := requestStandingText(requests[1])
+	if strings.Contains(round2Standing, "## Ask mode") {
+		t.Fatalf("round 2 Agent standing context still carried Ask mode section:\n%s", round2Standing)
+	}
+	if !requestHasTransitionNotice(requests[1]) {
+		t.Fatal("round 2 Agent request missing Agent mode transition notice")
+	}
+}
+
+func requestStandingText(req modelcall.CompletionRequest) string {
+	var b strings.Builder
+	for _, msg := range req.Messages {
+		if msg.Role == api.MessageRoleSystem {
+			b.WriteString(msg.Content)
+			b.WriteByte('\n')
+		}
+	}
+	return b.String()
+}
+
+func requestHasTransitionNotice(req modelcall.CompletionRequest) bool {
+	for _, msg := range req.Messages {
+		if msg.HostSignalID == "session.mode.agent_enabled" || strings.Contains(msg.Content, "[host:session-agent-enabled]") {
+			return true
+		}
+	}
+	return false
+}
+
+func countRequestTransitionNotices(req modelcall.CompletionRequest) int {
+	n := 0
+	for _, msg := range req.Messages {
+		if msg.HostSignalID == "session.mode.agent_enabled" || strings.Contains(msg.Content, "[host:session-agent-enabled]") {
+			n++
+		}
+	}
+	return n
+}
+
+func TestAskContinuedTurnsAndBetweenTurnUpgradeDeliverAccurateContextAndOneTimeNotice(t *testing.T) {
+	var h *Harness
+	var id string
+	var turnNum atomic.Int32
+	var roundInTurn atomic.Int32
+	mock := llm.NewRecordingClient(llm.NewKickDrivenMock(llm.KickDrivenConfig{
+		Fallback: func(ctx context.Context, _ llm.Snapshot) modelcall.Completion {
+			currentTurn := turnNum.Load()
+			r := roundInTurn.Add(1)
+			switch currentTurn {
+			case 1:
+				if r == 1 {
+					return askRoundToolCall("ask-read-1", "command", map[string]any{"command": "cat note.txt"})
+				}
+				return modelcall.Completion{Content: "Turn 1 answer from Ask mode [note.txt:1]."}
+			case 2:
+				return modelcall.Completion{Content: "Turn 2 continued in Ask mode [note.txt:1]."}
+			case 3:
+				if r == 1 {
+					return askRoundToolCall("agent-write-1", "command", map[string]any{"command": "printf 'upgraded\\n' > between.txt"})
+				}
+				if r == 2 {
+					return askRoundToolCall("agent-progress-1", "update_progress", h.ProgressUpdateArgs(t, ctx, id, "## Progress\n- [x] between-turn upgrade\n"))
+				}
+				return modelcall.Completion{Content: MockCoordinatorCloseoutMarkdown("Completed between-turn upgrade write.", "")}
+			default:
+				return modelcall.Completion{Content: MockCoordinatorCloseoutMarkdown("Subsequent Agent turn completed.", "")}
+			}
+		},
+	}))
+	h = BuildForTest(t, WithLLMClient(mock), WithDecider(decide.Absent{}))
+	ctx := h.OwnerCtx(t, t.Context())
+	dir := h.ProjectDir(t, "ask-between-turn-upgrade")
+	writeTestProjectApprovalsAllowWrite(t, dir)
+	testutil.FailErr(t, "seed project source", os.WriteFile(filepath.Join(dir, "note.txt"), []byte("alpha\n"), 0o600))
+	sess, err := h.CreateHarnessSession(t, api.CreateSessionRequest{Mode: new(api.SessionModeAsk)}, dir)
+	testutil.FailErr(t, "create Ask session", err)
+	id = sess.ID
+	h.SeedProgress(t, ctx, id)
+	cancel := h.StartBackgroundWorkers(t, ctx)
+	t.Cleanup(cancel)
+
+	// 1. First Ask turn: standing context names Ask mode, no transition notice.
+	turnNum.Store(1)
+	roundInTurn.Store(0)
+	_, err = h.Sessions.Manager.Submissions.Prompt(ctx, id, "Inspect note.txt in Ask mode.")
+	testutil.FailErr(t, "run first Ask turn", err)
+	reqsAfterTurn1 := mock.AllRequests()
+	if len(reqsAfterTurn1) < 2 {
+		t.Fatalf("expected at least 2 requests in Turn 1, got %d", len(reqsAfterTurn1))
+	}
+	for i, req := range reqsAfterTurn1 {
+		standing := requestStandingText(req)
+		if !strings.Contains(standing, "## Ask mode") {
+			t.Fatalf("Turn 1 request %d missing ## Ask mode:\n%s", i, standing)
+		}
+		if requestHasTransitionNotice(req) {
+			t.Fatalf("Turn 1 request %d unexpectedly had transition notice", i)
+		}
+	}
+
+	// 2. Continued Ask turn: standing context still names Ask mode, no transition notice.
+	turnNum.Store(2)
+	roundInTurn.Store(0)
+	_, err = h.Sessions.Manager.Submissions.Prompt(ctx, id, "Continue in Ask mode.")
+	testutil.FailErr(t, "run second Ask turn", err)
+	reqsAfterTurn2 := mock.AllRequests()
+	if len(reqsAfterTurn2) <= len(reqsAfterTurn1) {
+		t.Fatalf("expected new request in Turn 2")
+	}
+	turn2Req := reqsAfterTurn2[len(reqsAfterTurn1)]
+	if !strings.Contains(requestStandingText(turn2Req), "## Ask mode") || requestHasTransitionNotice(turn2Req) {
+		t.Fatalf("Turn 2 continued Ask request had wrong orientation or transition notice")
+	}
+
+	// 3. Between-turn ask -> agent upgrade: Turn 3's first request uses Agent standing context,
+	// full command schema, and carries session.mode.agent_enabled once.
+	_, err = h.Store.SetMode(ctx, id, api.SessionModeAgent)
+	testutil.FailErr(t, "switch Ask -> Agent between turns", err)
+	turnNum.Store(3)
+	roundInTurn.Store(0)
+	_, err = h.Sessions.Manager.Submissions.Prompt(ctx, id, "Now write between.txt in Agent mode.")
+	testutil.FailErr(t, "run third turn in Agent mode", err)
+	reqsAfterTurn3 := mock.AllRequests()
+	if len(reqsAfterTurn3) <= len(reqsAfterTurn2) {
+		t.Fatalf("expected new requests in Turn 3")
+	}
+	turn3FirstReq := reqsAfterTurn3[len(reqsAfterTurn2)]
+	if strings.Contains(requestStandingText(turn3FirstReq), "## Ask mode") {
+		t.Fatalf("Turn 3 Agent request still carried ## Ask mode")
+	}
+	if countRequestTransitionNotices(turn3FirstReq) != 1 {
+		t.Fatalf("Turn 3 first Agent request transition notices = %d, want 1", countRequestTransitionNotices(turn3FirstReq))
+	}
+
+	// 4. Refused agent -> ask downgrade produces no transition notice, and Turn 4 in Agent mode has no duplicate notice.
+	if _, err := h.Store.SetMode(ctx, id, api.SessionModeAsk); !errors.Is(err, store.ErrSessionModeLocked) {
+		t.Fatalf("expected ErrSessionModeLocked on Agent -> Ask downgrade, got %v", err)
+	}
+	turnNum.Store(4)
+	roundInTurn.Store(0)
+	_, err = h.Sessions.Manager.Submissions.Prompt(ctx, id, "Confirm Agent mode stays active without duplicate notice.")
+	testutil.FailErr(t, "run fourth turn in Agent mode", err)
+	msgs, err := h.Store.GetMessages(ctx, id)
+	testutil.FailErr(t, "get transcript messages", err)
+	totalNudges := 0
+	for _, msg := range msgs {
+		if msg.HostSignalID == "session.mode.agent_enabled" {
+			totalNudges++
+		}
+	}
+	if totalNudges != 1 {
+		t.Fatalf("total session.mode.agent_enabled transcript messages across turns = %d, want 1", totalNudges)
 	}
 }
 

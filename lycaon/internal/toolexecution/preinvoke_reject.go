@@ -3,8 +3,12 @@ package toolexecution
 import (
 	"github.com/lycaon/lycaon/internal/oar"
 	"github.com/lycaon/lycaon/internal/toolfeedback"
+	"github.com/lycaon/lycaon/internal/toolreach"
+	"github.com/lycaon/lycaon/internal/tools"
 
 	"context"
+	"maps"
+
 	"github.com/lycaon/lycaon/internal/toolrejection"
 
 	"github.com/lycaon/lycaon/internal/guidance"
@@ -31,6 +35,28 @@ func (e *Rejections) renderUnrenderedReject(qualifiedName string, err error) err
 	return e.renderReject(reject)
 }
 
+func rejectWithReach(ctx context.Context, rej *toolrejection.ToolReject) *toolrejection.ToolReject {
+	if rej == nil || ctx == nil {
+		return rej
+	}
+	reach := tools.CallReach(ctx)
+	if !reach.Known() {
+		return rej
+	}
+	clone := *rej
+	clone.Data = maps.Clone(rej.Data)
+	if clone.Data == nil {
+		clone.Data = map[string]any{}
+	}
+	for _, fact := range []string{"can_command", "can_task"} {
+		if _, exists := clone.Data[fact]; !exists {
+			tool := fact[len("can_"):]
+			clone.Data[fact] = reach.Status(tool) == toolreach.Callable
+		}
+	}
+	return &clone
+}
+
 // rejectBeforeInvoke routes a pre-invoke observation through the configured OAR block
 // plane before returning the structured rejection.
 func (e *Rejections) rejectBeforeInvoke(
@@ -42,14 +68,15 @@ func (e *Rejections) rejectBeforeInvoke(
 	if deferred, _ := ctx.Value(deferredProgramRejectionKey{}).(bool); deferred {
 		return rej
 	}
+	enriched := rejectWithReach(ctx, rej)
 	if e.blockPlane == nil {
-		return e.renderReject(rej)
+		return e.renderRejectWithCause(enriched, rej)
 	}
-	if err := e.blockPlane.RejectObservation(ctx, qualifiedName, profileID, args, rej); err != nil {
+	if err := e.blockPlane.RejectObservation(ctx, qualifiedName, profileID, args, enriched); err != nil {
 		return err
 	}
 	// No Decision claimed the observation, so the executor renders it.
-	return e.renderReject(rej)
+	return e.renderRejectWithCause(enriched, rej)
 }
 
 // settleReject publishes a post-invoke observation to the block plane and renders
@@ -63,12 +90,13 @@ func (e *Rejections) settleReject(
 	if deferred, _ := ctx.Value(deferredProgramRejectionKey{}).(bool); deferred {
 		return tr
 	}
+	enriched := rejectWithReach(ctx, tr)
 	if e.blockPlane != nil {
-		if ferr := e.blockPlane.RejectObservation(ctx, qualifiedName, profileID, args, tr); ferr != nil {
+		if ferr := e.blockPlane.RejectObservation(ctx, qualifiedName, profileID, args, enriched); ferr != nil {
 			return ferr
 		}
 	}
-	return e.renderReject(tr)
+	return e.renderRejectWithCause(enriched, tr)
 }
 
 func (e *Rejections) SetRejectFormatter(f *guidance.StaticRejectFormatter) {
@@ -78,10 +106,18 @@ func (e *Rejections) SetRejectFormatter(f *guidance.StaticRejectFormatter) {
 }
 
 func (e *Rejections) renderReject(rej *toolrejection.ToolReject) error {
-	if e == nil {
-		return toolrejection.RenderReject(rej, nil)
+	return e.renderRejectWithCause(rej, rej)
+}
+
+func (e *Rejections) renderRejectWithCause(renderRej, cause *toolrejection.ToolReject) error {
+	if renderRej == nil {
+		return nil
 	}
-	return toolrejection.RenderReject(rej, e.rejectFmt)
+	var fmt *guidance.StaticRejectFormatter
+	if e != nil {
+		fmt = e.rejectFmt
+	}
+	return toolrejection.RenderRejectBlock(renderRej.Code, renderRej.Data, cause, fmt)
 }
 
 func (e *Rejections) SetBlockPlane(bp *toolfeedback.BlockPlane) {

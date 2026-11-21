@@ -21,6 +21,7 @@ import (
 	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/tools/projectpaths"
+	"github.com/lycaon/lycaon/pkg/api"
 )
 
 // NativeOperation binds one catalog command to its existing typed owner under
@@ -285,10 +286,24 @@ func (d *ProgramDispatcher) invokeBuiltin(ctx context.Context, spec toolcontract
 // the literal argv and directory it will run with, then launches it once.
 func (d *ProgramDispatcher) invokeExternal(ctx context.Context, request commandprogram.OperationRequest, streams commandprogram.Streams) (toolcontract.ProducerResult, error) {
 	if d.run.tc.Source.AskMode {
-		reject := tools.AskModeReject("command")
 		command := "external"
 		if len(request.Argv) > 0 && request.Argv[0].Value != "" {
 			command = request.Argv[0].Value
+		}
+		reject := tools.AskModeReject("command")
+		reject.Data["command"] = command
+		reject.Data["reason"] = "external_exec"
+		if d.run.sessions != nil {
+			sessionID := d.run.tc.ChatSessionID()
+			if sessionID == "" {
+				sessionID = d.run.tc.Identity.SessionID
+			}
+			if sess, err := d.run.sessions.Get(ctx, sessionID); err == nil && sess != nil && sess.Mode != "" {
+				reject.Data["session_mode"] = string(sess.Mode)
+				if sess.Mode == api.SessionModeAgent {
+					reject.Data["mode_denied"] = true
+				}
+			}
 		}
 		d.writeStatementRefusal(streams, command, reject)
 		return refusedResult(reject.Code), reject

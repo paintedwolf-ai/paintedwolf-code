@@ -135,6 +135,9 @@ func FactsFromData(data map[string]any) map[string]any {
 	if kind, ok := data["kind"].(string); ok && kind == "redirect" {
 		out["paintedwolf.redirect"] = true
 	}
+	if mode, ok := data["session_mode"].(string); ok && mode == "agent" {
+		out["paintedwolf.mode_denied"] = true
+	}
 	if operation, _ := out["paintedwolf.native_operation"].(string); operation != "" {
 		if form := CommandFormOf(operation); form != "" {
 			out["paintedwolf.command_form"] = form

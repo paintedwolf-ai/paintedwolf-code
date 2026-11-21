@@ -281,11 +281,12 @@ func (r *Rejections) RenderProgramRefusal(ctx context.Context, frame ProgramFram
 	delete(clone.Data, "native_command")
 	var rendered error
 	ctx = invocationContext(ctx, tc)
+	renderClone := rejectWithReach(ctx, &clone)
 	if r.blockPlane != nil {
-		rendered = r.blockPlane.RejectObservation(ctx, frame.lifetime.model.ToolName, tc.Identity.Agent, submitted, &clone)
+		rendered = r.blockPlane.RejectObservation(ctx, frame.lifetime.model.ToolName, tc.Identity.Agent, submitted, renderClone)
 	}
 	if rendered == nil {
-		rendered = r.renderReject(&clone)
+		rendered = r.renderRejectWithCause(renderClone, &clone)
 	}
 	refusal, ok := guidance.RefusalFromError(rendered)
 	if !ok {

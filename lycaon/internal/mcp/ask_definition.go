@@ -15,6 +15,18 @@ func mcpDefinitionUnavailable(providerID, toolName string) *toolrejection.ToolRe
 	}
 }
 
+func askModeMCPReadOnlyReject(providerID, toolName string) *toolrejection.ToolReject {
+	return &toolrejection.ToolReject{
+		Code: tools.AskModeActiveCode,
+		Data: map[string]any{
+			"tool":     QualifiedToolName(providerID, toolName),
+			"provider": providerID,
+			"reason":   "mcp_read_only_required",
+			"missing":  true,
+		},
+	}
+}
+
 // Compare the scoped live definition to the registry generation held by dispatch.
 func (r *ToolCalls) verifyAskDefinition(ctx context.Context, scope CallScope, entry MCPProviderEntry, name string) (ProviderSession, error) {
 	r.Tools.mu.RLock()
@@ -26,7 +38,7 @@ func (r *ToolCalls) verifyAskDefinition(ctx context.Context, scope CallScope, en
 	}
 	r.Tools.mu.RUnlock()
 	if !expected.ReadOnly {
-		return nil, tools.AskModeReject(QualifiedToolName(entry.ID, name))
+		return nil, askModeMCPReadOnlyReject(entry.ID, name)
 	}
 	want, err := toolDefinitionFingerprint(expected)
 	if err != nil {
@@ -47,7 +59,7 @@ func (r *ToolCalls) verifyAskDefinition(ctx context.Context, scope CallScope, en
 		}
 		observed := sanitizeToolDefinition(tool)
 		if !observed.ReadOnly {
-			return nil, tools.AskModeReject(QualifiedToolName(entry.ID, name))
+			return nil, askModeMCPReadOnlyReject(entry.ID, name)
 		}
 		got, err := toolDefinitionFingerprint(observed)
 		if err != nil || got != want {

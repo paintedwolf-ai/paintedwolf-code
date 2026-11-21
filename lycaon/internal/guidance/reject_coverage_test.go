@@ -14,10 +14,14 @@ import (
 	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/oarcopy"
 	"github.com/lycaon/lycaon/internal/prompts"
+	"github.com/lycaon/lycaon/internal/session/workeradmission"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/testutil/guidancetest"
 	"github.com/lycaon/lycaon/internal/toolcontract"
+	"github.com/lycaon/lycaon/internal/toolrejection"
+	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/toolschema"
+	"github.com/lycaon/lycaon/pkg/api"
 	"gopkg.in/yaml.v3"
 )
 
@@ -258,4 +262,220 @@ func TestInapplicableArgumentRecoveryUsesHostFacts(t *testing.T) {
 			t.Fatalf("recovery lost the inapplicable fields: %s", block)
 		}
 	}
+}
+
+func TestAskModeRefusalProducersRenderSpecificCausesAndConditionedRecovery(t *testing.T) {
+	setupGuidanceRenderer(t)
+	cfg := loadValidatedHints(t)
+	fmtReject := guidance.NewStaticRejectFormatter(cfg)
+
+	renderToolReject := func(t *testing.T, rej *toolrejection.ToolReject, extra map[string]any) (string, *guidance.RejectBlock) {
+		t.Helper()
+		if rej == nil {
+			t.Fatal("expected non-nil ToolReject")
+		}
+		data := map[string]any{}
+		for k, v := range rej.Data {
+			data[k] = v
+		}
+		for k, v := range extra {
+			data[k] = v
+		}
+		raw, err := fmtReject.Format(rej.Code, data)
+		testutil.FailErr(t, "Format "+rej.Code, err)
+		parsed, err := fmtReject.Parse(raw)
+		testutil.FailErr(t, "Parse "+rej.Code, err)
+		if parsed.What == "" || parsed.Cause == "" || parsed.Fix == "" {
+			t.Fatalf("rendered %s missing What/Cause/Fix:\n%s", rej.Code, raw)
+		}
+		return raw, parsed
+	}
+
+	// 1. Blocked native tool or external launch inside command.
+	t.Run("blocked_native_tool_and_external_launch", func(t *testing.T) {
+		rawVerify, _ := renderToolReject(t, tools.AskModeReject("verify"), map[string]any{"can_command": true})
+		if !strings.Contains(rawVerify, "`verify` is unavailable in Ask mode") || !strings.Contains(rawVerify, "switch to Agent mode") {
+			t.Fatalf("unexpected verify Ask refusal:\n%s", rawVerify)
+		}
+
+		extRej := tools.AskModeReject("command")
+		extRej.Data["command"] = "pytest"
+		extRej.Data["reason"] = "external_exec"
+		rawExt, _ := renderToolReject(t, extRej, map[string]any{"can_command": true})
+		for _, want := range []string{
+			"External launch `pytest` inside command is unavailable in Ask mode.",
+			"earlier completed statements remain authoritative",
+			"switch to Agent mode",
+		} {
+			if !strings.Contains(rawExt, want) {
+				t.Fatalf("external launch Ask refusal missing %q:\n%s", want, rawExt)
+			}
+		}
+	})
+
+	// 2. Hidden command field (never echoes secret/value).
+	t.Run("hidden_command_field", func(t *testing.T) {
+		const secretSentinel = "SUPER_SECRET_TOKEN_VALUE_12345"
+		rej := tools.AskModeCommandFieldReject("command", map[string]any{
+			"command":    "rg -n foo",
+			"secret_use": map[string]any{"token": secretSentinel},
+		})
+		raw, _ := renderToolReject(t, rej, map[string]any{"can_command": true})
+		for _, want := range []string{
+			"`secret_use` on command is unavailable in Ask mode.",
+			"read-only command schema",
+			"Omit `secret_use`",
+		} {
+			if !strings.Contains(raw, want) {
+				t.Fatalf("hidden field Ask refusal missing %q:\n%s", want, raw)
+			}
+		}
+		if strings.Contains(raw, secretSentinel) {
+			t.Fatalf("hidden field Ask refusal leaked field value:\n%s", raw)
+		}
+	})
+
+	// 3. Worker creation or continuation: mutating profile vs write scope.
+	t.Run("worker_mutating_profile_vs_write_scope", func(t *testing.T) {
+		mutRej := toolrejection.AsToolReject(workeradmission.RequireAskReadScope("task", true, true, api.TaskScope{Mode: api.TaskScopeModeRead}))
+		mutRej.Data["agent_type"] = "implementer"
+		rawMut, _ := renderToolReject(t, mutRej, map[string]any{"can_task": true})
+		for _, want := range []string{
+			"Worker profile `implementer` is mutation-capable",
+			"Dispatch a read-only worker profile in read scope",
+			"existing read-only workers keep their read-only scope after upgrade",
+		} {
+			if !strings.Contains(rawMut, want) {
+				t.Fatalf("mutating profile Ask refusal missing %q:\n%s", want, rawMut)
+			}
+		}
+
+		scopeRej := toolrejection.AsToolReject(workeradmission.RequireAskReadScope("task", false, true, api.TaskScope{Mode: api.TaskScopeModeWrite}))
+		rawScope, _ := renderToolReject(t, scopeRej, map[string]any{"can_task": true})
+		for _, want := range []string{
+			"requested scope `write`",
+			"existing read-only workers keep their read-only scope after upgrade",
+		} {
+			if !strings.Contains(rawScope, want) {
+				t.Fatalf("write-scope Ask refusal missing %q:\n%s", want, rawScope)
+			}
+		}
+	})
+
+	// 4. Connected MCP tool lacking readOnlyHint: true.
+	t.Run("connected_mcp_tool_without_readonly_hint", func(t *testing.T) {
+		mcpRej := &toolrejection.ToolReject{
+			Code: tools.AskModeActiveCode,
+			Data: map[string]any{
+				"tool":     "mcp_github_create_issue",
+				"provider": "github",
+				"reason":   "mcp_read_only_required",
+				"missing":  true,
+			},
+		}
+		rawMCP, _ := renderToolReject(t, mcpRej, map[string]any{"can_command": true})
+		for _, want := range []string{
+			"Connected tool `mcp_github_create_issue` is unavailable in Ask mode.",
+			"Connected provider `github` does not declare `readOnlyHint: true`",
+			"switch to Agent mode",
+		} {
+			if !strings.Contains(rawMCP, want) {
+				t.Fatalf("MCP Ask refusal missing %q:\n%s", want, rawMCP)
+			}
+		}
+	})
+
+	// 5. Workflow start or advance requiring Agent mode.
+	t.Run("workflow_requires_agent", func(t *testing.T) {
+		wfRej := &toolrejection.ToolReject{
+			Code: "SESSION_ASK_MODE_WORKFLOW_REQUIRES_AGENT",
+			Data: map[string]any{
+				"tool":        "workflow_advance",
+				"workflow_id": "feature-build",
+				"phase":       "plan",
+				"requested":   "implement",
+			},
+		}
+		rawWF, _ := renderToolReject(t, wfRej, map[string]any{"can_command": true})
+		for _, want := range []string{
+			"Workflow `feature-build` phase `implement` requires Agent mode.",
+			"the workflow remains at its current read phase `plan`",
+			"Continue read-only inspection in phase `plan`",
+			"switch to Agent mode to enter `implement`",
+		} {
+			if !strings.Contains(rawWF, want) {
+				t.Fatalf("workflow Ask refusal missing %q:\n%s", want, rawWF)
+			}
+		}
+	})
+
+	// 6. Secret input request via ask_user.
+	t.Run("secret_ask_user", func(t *testing.T) {
+		secRej := &toolrejection.ToolReject{
+			Code: tools.AskModeActiveCode,
+			Data: map[string]any{
+				"tool":          "ask_user",
+				"reason":        "secret_input",
+				"response_type": "secret",
+			},
+		}
+		rawSec, _ := renderToolReject(t, secRej, nil)
+		for _, want := range []string{
+			"Secret collection via ask_user is unavailable in Ask mode.",
+			"never ask the user to paste a secret into chat",
+		} {
+			if !strings.Contains(rawSec, want) {
+				t.Fatalf("secret ask_user refusal missing %q:\n%s", want, rawSec)
+			}
+		}
+	})
+
+	// 7. Unavailable alternative: when command and task are not offered, recovery does not recommend calling them.
+	t.Run("unavailable_alternative_omitted", func(t *testing.T) {
+		rawNoTools, _ := renderToolReject(t, tools.AskModeReject("verify"), map[string]any{
+			"can_command": false,
+			"can_task":    false,
+		})
+		for _, forbidden := range []string{"read-only native commands", "Delegate read-scoped research"} {
+			if strings.Contains(rawNoTools, forbidden) {
+				t.Fatalf("refusal recommended unoffered capability %q:\n%s", forbidden, rawNoTools)
+			}
+		}
+	})
+
+	// 8. Independent restriction: COMMAND_EFFECT_NOT_ALLOWED on worker_readonly in Agent mode is not misattributed to Ask mode.
+	t.Run("independent_worker_profile_restriction", func(t *testing.T) {
+		effRej := &toolrejection.ToolReject{
+			Code: "COMMAND_EFFECT_NOT_ALLOWED",
+			Data: map[string]any{
+				"tool":          "command",
+				"profile":       "worker_readonly",
+				"expected_form": "read_only",
+				"source_line":   1,
+				"source_column": 1,
+			},
+		}
+		rawEff, _ := renderToolReject(t, effRej, nil)
+		if !strings.Contains(rawEff, "profile **worker_readonly**") || strings.Contains(rawEff, "Ask mode") {
+			t.Fatalf("independent profile restriction misattributed to Ask mode:\n%s", rawEff)
+		}
+	})
+
+	// 9. Delayed Ask refusal rendered after upgrade to Agent mode uses past-tense launch-time authority.
+	t.Run("delayed_refusal_after_upgrade_past_tense", func(t *testing.T) {
+		delayedRej := tools.AskModeReject("command")
+		delayedRej.Data["command"] = "pytest"
+		delayedRej.Data["reason"] = "external_exec"
+		delayedRej.Data["session_mode"] = "agent"
+		delayedRej.Data["mode_denied"] = true
+		rawDelayed, _ := renderToolReject(t, delayedRej, map[string]any{"can_command": true})
+		for _, want := range []string{
+			"refused under launch-time Ask authority",
+			"This program started while Ask mode was active and kept its frozen read-only authority across the session upgrade",
+		} {
+			if !strings.Contains(rawDelayed, want) {
+				t.Fatalf("delayed Ask refusal after upgrade missing past-tense explanation %q:\n%s", want, rawDelayed)
+			}
+		}
+	})
 }
