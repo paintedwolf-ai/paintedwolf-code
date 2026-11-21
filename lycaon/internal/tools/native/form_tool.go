@@ -4,7 +4,6 @@ import (
 	"context"
 
 	"github.com/lycaon/lycaon/internal/toolreach"
-	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/tools/native/command"
 )
@@ -19,12 +18,8 @@ type FormTool struct {
 
 // Run executes the form the arguments select.
 func (t *FormTool) Run(ctx context.Context, args map[string]any, tc tools.ToolContext) (string, error) {
-	argv := t.Argv(args)
-	if len(argv) == 0 {
-		return "", toolrejection.RejectInvalidArguments("TOOL_ARGS_INVALID", map[string]any{"tool": tc.Invocation.ToolName})
-	}
 	if tc.Effects.RequestedArgs == nil {
 		tc.Effects.RequestedArgs = command.CanonicalToolArgs(tc, args)
 	}
-	return t.Programs.Run(ctx, "command", map[string]any{"command": toolreach.QuoteProgram(argv)}, tc)
+	return t.Programs.Run(ctx, "command", map[string]any{"command": toolreach.QuoteProgram(t.Argv(args))}, tc)
 }

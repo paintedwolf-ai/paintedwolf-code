@@ -133,7 +133,13 @@ func (c Config) validateAskAllowed() error {
 		return err
 	}
 	for _, tool := range c.AskAllowed {
-		if c.Lifecycle[tool] == LifecycleJournaledMutation || slices.Contains(c.SpawnsProcess, tool) {
+		if c.Lifecycle[tool] == LifecycleJournaledMutation {
+			return fmt.Errorf("ask_allowed: %s has a protected effect", tool)
+		}
+		if tool == "command" {
+			continue
+		}
+		if slices.Contains(c.SpawnsProcess, tool) {
 			return fmt.Errorf("ask_allowed: %s has a protected effect", tool)
 		}
 		for _, capability := range c.ExecutionCapabilities[tool] {

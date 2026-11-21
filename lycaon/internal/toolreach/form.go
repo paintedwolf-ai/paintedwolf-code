@@ -6,15 +6,13 @@ func FormCommand(tool string, args map[string]any) (string, bool) {
 	if !ok {
 		return "", false
 	}
-	words := argv(args)
-	return QuoteProgram(words), len(words) > 0
+	return QuoteProgram(argv(args)), true
 }
 
 var formArgv = map[string]func(map[string]any) []string{
-	"summarize":      SummarizeArgv,
-	"survey_repo":    SurveyRepoArgv,
-	"code_rewrite":   CodeRewriteArgv,
-	"inspect_source": InspectSourceArgv,
+	"summarize":    SummarizeArgv,
+	"survey_repo":  SurveyRepoArgv,
+	"code_rewrite": CodeRewriteArgv,
 }
 
 func stringArg(args map[string]any, key string) string {
