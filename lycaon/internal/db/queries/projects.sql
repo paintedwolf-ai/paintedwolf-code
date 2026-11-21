@@ -75,10 +75,13 @@ UPDATE projects
 SET starred = ?
 WHERE id = ?;
 
--- name: TouchProjectLastOpened :exec
+-- name: MostRecentlyOpenedProjectID :one
+SELECT id FROM projects ORDER BY last_opened_at DESC, rowid DESC LIMIT 1;
+
+-- name: TouchProjectLastOpened :execrows
 UPDATE projects
-SET last_opened_at = ?
-WHERE id = ?;
+SET last_opened_at = MAX(last_opened_at, sqlc.arg(last_opened_at))
+WHERE id = sqlc.arg(id);
 
 -- name: SetProjectCover :exec
 UPDATE projects

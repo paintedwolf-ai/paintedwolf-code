@@ -7,6 +7,9 @@ import (
 	"testing/synctest"
 	"time"
 
+	"github.com/lycaon/lycaon/internal/eventoutbox"
+	"github.com/lycaon/lycaon/internal/events"
+	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/pkg/api"
@@ -37,7 +40,7 @@ func TestAttentionCompletedTurn(t *testing.T) {
 	if len(candidates) != 1 || candidates[0].SessionID != sess.ID {
 		t.Fatalf("unread candidates = %+v", candidates)
 	}
-	testutil.FailErr(t, "mark completed turn seen", st.Sessions.UpdateSession(ctx, sess.ID, func(s *api.Session) { s.SeenAt = completed.CompletedAt }))
+	testutil.FailErr(t, "mark completed turn seen", st.Sessions.MarkSessionSeen(ctx, sess.ID, *completed.CompletedAt))
 	candidates, err = st.Sessions.ListAttentionCandidates(ctx)
 	testutil.FailErr(t, "read seen candidates", err)
 	if len(candidates) != 0 {
@@ -84,7 +87,7 @@ func TestAttentionCandidateStatusSince(t *testing.T) {
 
 		time.Sleep(2 * time.Millisecond)
 		testutil.FailErr(t, "rename", st.Sessions.UpdateSession(ctx, sess.ID, func(s *api.Session) { s.Title = "Renamed" }))
-		testutil.FailErr(t, "read", st.Sessions.UpdateSession(ctx, sess.ID, func(s *api.Session) { s.SeenAt = new(time.Now().UTC()) }))
+		testutil.FailErr(t, "read", st.Sessions.MarkSessionSeen(ctx, sess.ID, time.Now().UTC()))
 		if got := since(); !got.Equal(failedAt) {
 			t.Fatalf("record writes moved status since: %v -> %v", failedAt, got)
 		}
@@ -95,4 +98,61 @@ func TestAttentionCandidateStatusSince(t *testing.T) {
 			t.Fatalf("status change kept the old since: %v", got)
 		}
 	})
+}
+
+func TestSQLSeenStampPublishesOnlyWhenItCrossesCompletedTurn(t *testing.T) {
+	ctx := t.Context()
+	database := testdbfixture.Open(t, "seen.db")
+	testdbseed.InsertProjectRoot(t, database, testdbseed.DefaultProjectID, t.TempDir())
+	st := NewSQL(database)
+	st.SetEventOutbox(eventoutbox.New(database, events.NewMemoryHub()))
+	sess, err := st.Sessions.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
+	testutil.FailErr(t, "create chat", err)
+	turn, err := st.Turns.BeginTurn(ctx, TurnStart{SessionID: sess.ID, ProjectID: sess.ProjectID, Origin: TurnOriginUser, InputJSON: "{}"})
+	testutil.FailErr(t, "start turn", err)
+
+	countUpdates := func(want int) {
+		t.Helper()
+		var got int
+		testutil.FailErr(t, "count session updates", database.QueryRowContext(ctx, `
+			SELECT COUNT(*) FROM event_outbox WHERE session_id = ? AND topic = 'session'
+			  AND json_extract(data_json, '$.action') = 'updated'
+		`, sess.ID).Scan(&got))
+		if got != want {
+			t.Fatalf("session updates = %d, want %d", got, want)
+		}
+	}
+	seed := sess.CreatedAt.Add(-time.Hour)
+	for i := range 3 {
+		testutil.FailErr(t, "stamp running chat", st.Sessions.MarkSessionSeen(ctx, sess.ID, seed.Add(time.Duration(i)*time.Second)))
+	}
+	countUpdates(0)
+	finished, err := st.Turns.FinishTurn(ctx, turn.Turn.ID, turn.Attempt.ID, TurnStatusComplete, "", "{}", "")
+	testutil.FailErr(t, "finish turn", err)
+	if finished.CompletedAt == nil {
+		t.Fatal("completed turn has no finish time")
+	}
+	countUpdates(0)
+	testutil.FailErr(t, "stamp just before finish", st.Sessions.MarkSessionSeen(ctx, sess.ID, finished.CompletedAt.Add(-time.Nanosecond)))
+	countUpdates(0)
+	latestTurn, err := st.Turns.BeginTurn(ctx, TurnStart{SessionID: sess.ID, ProjectID: sess.ProjectID, Origin: TurnOriginUser, InputJSON: "{}"})
+	testutil.FailErr(t, "start another turn", err)
+	latest, err := st.Turns.FinishTurn(ctx, latestTurn.Turn.ID, latestTurn.Attempt.ID, TurnStatusComplete, "", "{}", "")
+	testutil.FailErr(t, "finish another turn", err)
+	if latest.CompletedAt == nil {
+		t.Fatal("latest turn has no finish time")
+	}
+	testutil.FailErr(t, "stamp at earlier finish", st.Sessions.MarkSessionSeen(ctx, sess.ID, *finished.CompletedAt))
+	countUpdates(0)
+	testutil.FailErr(t, "stamp at latest finish", st.Sessions.MarkSessionSeen(ctx, sess.ID, *latest.CompletedAt))
+	countUpdates(1)
+	newest := latest.CompletedAt.Add(time.Second)
+	testutil.FailErr(t, "stamp after finish", st.Sessions.MarkSessionSeen(ctx, sess.ID, newest))
+	testutil.FailErr(t, "retry older stamp", st.Sessions.MarkSessionSeen(ctx, sess.ID, seed))
+	countUpdates(1)
+	got, err := st.Sessions.Get(ctx, sess.ID)
+	testutil.FailErr(t, "read latest stamp", err)
+	if got.SeenAt == nil || !got.SeenAt.Equal(newest) {
+		t.Fatalf("seen at = %v, want %v", got.SeenAt, newest)
+	}
 }

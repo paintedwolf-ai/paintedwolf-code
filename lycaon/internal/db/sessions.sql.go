@@ -2963,6 +2963,21 @@ func (q *Queries) ListWorkerJobMessagesTail(ctx context.Context, arg ListWorkerJ
 	return items, nil
 }
 
+const markSessionSeen = `-- name: MarkSessionSeen :exec
+UPDATE sessions SET seen_at = ?1, updated_at = ?2 WHERE id = ?3
+`
+
+type MarkSessionSeenParams struct {
+	SeenAt    sql.NullString `json:"seen_at"`
+	UpdatedAt string         `json:"updated_at"`
+	ID        string         `json:"id"`
+}
+
+func (q *Queries) MarkSessionSeen(ctx context.Context, arg MarkSessionSeenParams) error {
+	_, err := q.db.ExecContext(ctx, markSessionSeen, arg.SeenAt, arg.UpdatedAt, arg.ID)
+	return err
+}
+
 const maxMessageScreenGenerationInTree = `-- name: MaxMessageScreenGenerationInTree :one
 WITH RECURSIVE tree(id) AS (
     SELECT sessions.id FROM sessions WHERE sessions.id = ?
@@ -3213,6 +3228,33 @@ func (q *Queries) SessionHasMessageBeforeOrd(ctx context.Context, arg SessionHas
 	return has_more, err
 }
 
+const sessionSeenCrossesLatestFinish = `-- name: SessionSeenCrossesLatestFinish :one
+WITH latest_finish AS (
+    SELECT completed_at FROM turns
+    WHERE session_id = ?3 AND status = 'complete' AND completed_at IS NOT NULL
+    ORDER BY completed_at DESC
+    LIMIT 1
+)
+SELECT EXISTS (
+    SELECT 1 FROM latest_finish
+    WHERE completed_at > COALESCE(?1, '')
+      AND completed_at <= ?2
+)
+`
+
+type SessionSeenCrossesLatestFinishParams struct {
+	PreviousSeenAt sql.NullString `json:"previous_seen_at"`
+	SeenAt         sql.NullString `json:"seen_at"`
+	SessionID      string         `json:"session_id"`
+}
+
+func (q *Queries) SessionSeenCrossesLatestFinish(ctx context.Context, arg SessionSeenCrossesLatestFinishParams) (int64, error) {
+	row := q.db.QueryRowContext(ctx, sessionSeenCrossesLatestFinish, arg.PreviousSeenAt, arg.SeenAt, arg.SessionID)
+	var column_1 int64
+	err := row.Scan(&column_1)
+	return column_1, err
+}
+
 const setRewindOperationPhase = `-- name: SetRewindOperationPhase :execrows
 UPDATE rewind_operations SET status = ?, error = ?, updated_at = ?
 WHERE id = ? AND status <> 'committed'
@@ -3453,14 +3495,14 @@ UPDATE sessions SET
     project_id = ?1, posture = ?2, agent_type = ?3,
     provider_id = ?4, model = ?5,
     title = ?6, status = ?7, compaction_generation = ?8,
-    archived_at = ?9, seen_at = ?10, updated_at = ?11,
+    archived_at = ?9, updated_at = ?10,
     status_changed_at = CASE
-        WHEN status = ?7 THEN status_changed_at ELSE ?11
+        WHEN status = ?7 THEN status_changed_at ELSE ?10
     END,
     pin_rank = CASE
         WHEN project_id = ?1 AND ?9 IS NULL THEN pin_rank
     END
-WHERE id = ?12
+WHERE id = ?11
 `
 
 type UpdateSessionParams struct {
@@ -3473,7 +3515,6 @@ type UpdateSessionParams struct {
 	Status               string         `json:"status"`
 	CompactionGeneration int64          `json:"compaction_generation"`
 	ArchivedAt           sql.NullString `json:"archived_at"`
-	SeenAt               sql.NullString `json:"seen_at"`
 	UpdatedAt            string         `json:"updated_at"`
 	ID                   string         `json:"id"`
 }
@@ -3490,7 +3531,6 @@ func (q *Queries) UpdateSession(ctx context.Context, arg UpdateSessionParams) er
 		arg.Status,
 		arg.CompactionGeneration,
 		arg.ArchivedAt,
-		arg.SeenAt,
 		arg.UpdatedAt,
 		arg.ID,
 	)

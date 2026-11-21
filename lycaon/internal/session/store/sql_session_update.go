@@ -84,7 +84,6 @@ func updateSession(
 		Status:               string(sess.Status),
 		CompactionGeneration: int64(sess.CompactionGeneration),
 		ArchivedAt:           db.NullTimePtr(sess.ArchivedAt),
-		SeenAt:               db.NullTimePtr(sess.SeenAt),
 		UpdatedAt:            timelayout.Format(sess.UpdatedAt),
 		ID:                   id,
 	}); err != nil {

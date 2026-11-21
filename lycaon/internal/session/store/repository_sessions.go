@@ -26,6 +26,7 @@ type SessionRepository interface {
 	ListAttentionCandidates(ctx context.Context) ([]attention.Candidate, error)
 	ListBusySessionIDs(ctx context.Context, limit int) ([]string, error)
 	ListProjectSummaries(ctx context.Context, q SummaryQuery) (SummaryPage, error)
+	MarkSessionSeen(ctx context.Context, id string, seenAt time.Time) error
 	MovePinnedSession(ctx context.Context, id string, position int) error
 	PinSession(ctx context.Context, id string) error
 	PutWorktreeBinding(ctx context.Context, b WorktreeBinding) error

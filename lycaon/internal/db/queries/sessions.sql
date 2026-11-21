@@ -58,7 +58,7 @@ UPDATE sessions SET
     project_id = sqlc.arg(project_id), posture = sqlc.arg(posture), agent_type = sqlc.arg(agent_type),
     provider_id = sqlc.arg(provider_id), model = sqlc.arg(model),
     title = sqlc.arg(title), status = sqlc.arg(status), compaction_generation = sqlc.arg(compaction_generation),
-    archived_at = sqlc.narg(archived_at), seen_at = sqlc.narg(seen_at), updated_at = sqlc.arg(updated_at),
+    archived_at = sqlc.narg(archived_at), updated_at = sqlc.arg(updated_at),
     status_changed_at = CASE
         WHEN status = sqlc.arg(status) THEN status_changed_at ELSE sqlc.arg(updated_at)
     END,
@@ -66,6 +66,22 @@ UPDATE sessions SET
         WHEN project_id = sqlc.arg(project_id) AND sqlc.narg(archived_at) IS NULL THEN pin_rank
     END
 WHERE id = sqlc.arg(id);
+
+-- name: MarkSessionSeen :exec
+UPDATE sessions SET seen_at = sqlc.arg(seen_at), updated_at = sqlc.arg(updated_at) WHERE id = sqlc.arg(id);
+
+-- name: SessionSeenCrossesLatestFinish :one
+WITH latest_finish AS (
+    SELECT completed_at FROM turns
+    WHERE session_id = sqlc.arg(session_id) AND status = 'complete' AND completed_at IS NOT NULL
+    ORDER BY completed_at DESC
+    LIMIT 1
+)
+SELECT EXISTS (
+    SELECT 1 FROM latest_finish
+    WHERE completed_at > COALESCE(sqlc.narg(previous_seen_at), '')
+      AND completed_at <= sqlc.arg(seen_at)
+);
 
 -- name: GetSessionPinState :one
 SELECT project_id, pin_rank, archived_at, parent_session_id FROM sessions WHERE id = ?;

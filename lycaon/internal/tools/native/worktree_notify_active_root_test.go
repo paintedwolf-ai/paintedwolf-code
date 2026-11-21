@@ -63,3 +63,41 @@ func TestWorktreeChangesFollowTheActiveRoot(t *testing.T) {
 		t.Fatalf("labeled-root invalidation = %v", paths)
 	}
 }
+
+func TestWorktreeChangesExcludeExternalWrites(t *testing.T) {
+	t.Cleanup(repochange.ResetObserversForTest)
+	t.Cleanup(func() { repochange.ResetDebouncerForTest(context.Background()) })
+
+	root := filepath.Join(t.TempDir(), "workspace")
+	var events []repochange.Event
+	repochange.RegisterObserver(func(_ context.Context, ev repochange.Event) {
+		if ev.Kind == repochange.WorktreeChanged && ev.ProjectDir == root {
+			events = append(events, ev)
+		}
+	})
+	tctx := tools.ToolContext{Source: tools.InvocationSource{
+		Roots:               []projectroot.RootRef{{ID: "r1", Path: root, IsPrimary: true}},
+		SourceWorkspaceKind: api.SourceWorkspaceKindProject,
+	}}
+	external := resolvedMutationLocation(projectpaths.Resolved{
+		Abs: filepath.Join(root+"-other", ".env"), DisplayPath: "approved/external", External: true,
+	})
+	start := repochange.CurrentEpoch(root)
+	notifyWorktreeChangedLocations(t.Context(), tctx, external)
+	repochange.ResetDebouncerForTest(t.Context())
+	if len(events) != 0 || repochange.CurrentEpoch(root) != start {
+		t.Fatalf("external write changed the workspace: %v", events)
+	}
+
+	inside := resolvedMutationLocation(projectpaths.Resolved{
+		Abs: filepath.Join(root, ".env"), DisplayPath: "approved/inside",
+	})
+	notifyWorktreeChangedLocations(t.Context(), tctx, external, inside)
+	repochange.ResetDebouncerForTest(t.Context())
+	if len(events) != 1 || len(events[0].Paths) != 1 || events[0].Paths[0] != ".env" {
+		t.Fatalf("events = %#v, want one relative .env change", events)
+	}
+	if epoch := repochange.CurrentEpoch(root); epoch.Value != start.Value+1 {
+		t.Fatalf("workspace epoch advanced from %v to %v", start, epoch)
+	}
+}

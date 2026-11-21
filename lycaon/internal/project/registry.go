@@ -146,7 +146,7 @@ type Registry interface {
 	CommitPromotion(ctx context.Context, projectID string) (*Project, error)
 	DeletePromotion(ctx context.Context, projectID string) error
 	CancelPromotion(ctx context.Context, projectID string) (*Project, error)
-	TouchLastOpened(ctx context.Context, id string) error
+	TouchLastOpened(ctx context.Context, id string) (movedToFront bool, err error)
 	AttachRoot(ctx context.Context, id string, params AttachRootParams) (*RootChange, error)
 	DetachRoot(ctx context.Context, id, rootID string) (*RootChange, error)
 	PatchRoot(ctx context.Context, id, rootID string, params PatchRootParams) (*RootChange, error)

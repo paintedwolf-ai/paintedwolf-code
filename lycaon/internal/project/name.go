@@ -2,6 +2,7 @@ package project
 
 import (
 	"context"
+	"database/sql"
 	"github.com/lycaon/lycaon/internal/timelayout"
 	"path/filepath"
 	"strings"
@@ -152,34 +153,54 @@ func (r *SQLRegistry) UpdateNameIfUnset(ctx context.Context, id, name string) (b
 	return true, nil
 }
 
-// TouchLastOpened bumps projects.last_opened_at for recents ordering.
-func (r *SQLRegistry) TouchLastOpened(ctx context.Context, id string) error {
-	if err := ctx.Err(); err != nil {
-		return err
-	}
+// TouchLastOpened updates recency and publishes when the project moves to the front.
+func (r *SQLRegistry) TouchLastOpened(ctx context.Context, id string) (bool, error) {
 	tx, err := r.db.BeginTx(ctx, nil)
 	if err != nil {
-		return err
+		return false, err
 	}
 	defer func() { _ = tx.Rollback() }()
 	q := r.queries.WithTx(tx)
-	now := time.Now().UTC()
-	if err := q.TouchProjectLastOpened(ctx, db.TouchProjectLastOpenedParams{
-		LastOpenedAt: timelayout.Format(now),
-		ID:           id,
-	}); err != nil {
-		return err
+	before, err := q.MostRecentlyOpenedProjectID(ctx)
+	if err != nil && !db.IsNoRows(err) {
+		return false, err
 	}
-	after, err := loadProject(ctx, q, id)
+	count, err := q.TouchProjectLastOpened(ctx, db.TouchProjectLastOpenedParams{
+		LastOpenedAt: timelayout.Format(time.Now().UTC()),
+		ID:           id,
+	})
+	if err != nil {
+		return false, err
+	}
+	if count == 0 {
+		return false, ErrNotFound
+	}
+	moved := false
+	if before != id {
+		after, err := q.MostRecentlyOpenedProjectID(ctx)
+		if err != nil {
+			return false, err
+		}
+		moved = after == id
+		if moved {
+			if err := r.enqueueProjectTouch(ctx, tx, id); err != nil {
+				return false, err
+			}
+		}
+	}
+	if err := tx.Commit(); err != nil {
+		return false, err
+	}
+	if moved {
+		r.notifyProjectEvents()
+	}
+	return moved, nil
+}
+
+func (r *SQLRegistry) enqueueProjectTouch(ctx context.Context, tx *sql.Tx, id string) error {
+	after, err := loadProject(ctx, r.queries.WithTx(tx), id)
 	if err != nil {
 		return err
 	}
-	if err := r.enqueueProjectEventTx(ctx, tx, api.ProjectEventUpdated, after); err != nil {
-		return err
-	}
-	if err := tx.Commit(); err != nil {
-		return err
-	}
-	r.notifyProjectEvents()
-	return nil
+	return r.enqueueProjectEventTx(ctx, tx, api.ProjectEventUpdated, after)
 }
