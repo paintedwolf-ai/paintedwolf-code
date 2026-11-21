@@ -4,6 +4,7 @@ import { bindingForHandler } from "../../shortcuts/display-binding-for.ts";
 import { copyTextToClipboard } from "../../utils/clipboard.ts";
 import { emphasizeScopePreview } from "../../components/source/editor/codemirror-theme.ts";
 import { beginRenameCard, resolveScopeForView } from "../../components/source/inline-edit/run-editor-action.ts";
+import { prettyCopyAction } from "./files-pretty-copy.ts";
 import { secretSpanFact } from "../../components/source/secrets/secret-span-copy.ts";
 import { getSecretSpanMarks } from "../../components/source/secrets/secret-span-decorations.ts";
 import { siblingSecretSpans } from "../../components/source/secrets/secret-span-model.ts";
@@ -214,7 +215,8 @@ export function createFilesEditorActions(options: FilesEditorActionsOptions) {
 
   const editorContextActions = (capturedSymbolTarget: EditorSymbolTarget, capturedEditorView?: EditorView,
     capturedPosition?: number | null): Pick<FilesContextMenuActions,
-    "editorCopyPath" | "editorCopyRelativePath" | "editorAddSelectionToChat" | "editorSymbol" | "editorSelectionVerb" | "renameShortcutHint" | "goToDefinitionShortcutHint" | "editorEmphasizeScope" | "editorSecret" | "editorHasFinding" | "addSelectionShortcutHint"> => ({
+    "editorCopyAsShown" | "editorCopyPath" | "editorCopyRelativePath" | "editorAddSelectionToChat" | "editorSymbol" | "editorSelectionVerb" | "renameShortcutHint" | "goToDefinitionShortcutHint" | "editorEmphasizeScope" | "editorSecret" | "editorHasFinding" | "addSelectionShortcutHint"> => ({
+    editorCopyAsShown: prettyCopyAction(capturedEditorView?.state, "selection"),
     editorCopyPath: () => {
       const buf = activeBuffer();
       if (!buf) return;

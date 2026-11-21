@@ -23,6 +23,7 @@ import { BrowseSegmented, type BrowseSegmentedOption } from "../../components/br
 import { DenButton } from "../../components/primitives/DenButton.tsx";
 import { CheckIcon, CopyIcon, FindIcon, GotoLineIcon } from "../../components/source/viewer-icons.tsx";
 import { formatSentenceCase } from "../../format/format-sentence-case.ts";
+import { prettyCopyAction } from "./files-pretty-copy.ts";
 import { FilesPathCrumbs } from "./FilesPathCrumbs.tsx";
 
 export function FilesEditorToolbar(props: { children: JSX.Element; actions: JSX.Element }) {
@@ -131,7 +132,9 @@ export function createEditorToolbarMenus(options: {
   };
   const copyMenuItems = (): ContextMenuItem[] => {
     const buffer = options.buffer();
+    const view = options.activeEditorView();
     return copyPathMenuItems({
+      copyAsShown: options.activeReaderHandle() || view?.dom.closest("[inert]") ? undefined : prettyCopyAction(view?.state, "document"),
       copyAbsolute: absolutePath() ? onCopy : null,
       copyRelative: onCopyRelative,
       copyFileName: onCopyFileName,

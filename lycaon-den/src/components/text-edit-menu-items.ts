@@ -30,6 +30,7 @@ function systemEditItems(opts: {
   hasSelection: boolean;
   onCut: ContextActionHandler;
   onCopy: ContextActionHandler;
+  copyAsShown?: ContextActionHandler;
   onPaste: ContextActionHandler;
   onSelectAll: ContextActionHandler;
   /** When false, Cut and Paste are omitted rather than shown disabled. */
@@ -49,6 +50,9 @@ function systemEditItems(opts: {
     disabled: !opts.hasSelection,
     onSelect: opts.onCopy,
   }));
+  if (opts.copyAsShown) {
+    items.push(contextAction("copyAsShown", { testId: "files-ctx-editor-copy-as-shown", onSelect: opts.copyAsShown }));
+  }
   if (includeMutators) {
     items.push(contextAction("paste", {
       testId: "text-edit-paste",
@@ -66,10 +70,11 @@ function systemEditItems(opts: {
 /** System quartet without Add to chat. */
 export function textEditSystemMenuItems(
   ctx: TextEditContext,
-  opts?: { omitMutatorsWhenReadOnly?: boolean },
+  opts?: { omitMutatorsWhenReadOnly?: boolean; copyAsShown?: ContextActionHandler },
 ): ContextMenuItem[] {
   if (ctx.kind === "selection") {
     return systemEditItems({
+      copyAsShown: opts?.copyAsShown,
       canMutate: false,
       hasSelection: true,
       includeMutators: !opts?.omitMutatorsWhenReadOnly,
@@ -87,6 +92,7 @@ export function textEditSystemMenuItems(
   const hasSelection = editableHasSelection(snap);
   const canMutate = !snap.readOnly;
   return systemEditItems({
+    copyAsShown: opts?.copyAsShown,
     canMutate,
     hasSelection,
     includeMutators: opts?.omitMutatorsWhenReadOnly ? canMutate : true,
