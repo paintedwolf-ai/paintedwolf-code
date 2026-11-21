@@ -116,8 +116,11 @@ func TestOrdinaryToolchainsStartWithoutRefusals(t *testing.T) {
 	project, err := filepath.EvalSymlinks(t.TempDir())
 	testutil.FailErr(t, "resolve project", err)
 	config := outsideTemporaryWriteRoots(t)
+	t.Setenv("HOME", config)
 	t.Setenv("XDG_CONFIG_HOME", config)
-	testutil.FailErr(t, "initialize toolchain state", os.MkdirAll(filepath.Join(config, "go", "telemetry"), 0700))
+	userCfg, err := os.UserConfigDir()
+	testutil.FailErr(t, "resolve user config dir", err)
+	testutil.FailErr(t, "initialize toolchain state", os.MkdirAll(filepath.Join(userCfg, "go", "telemetry"), 0700))
 	probes := [][]string{
 		{"/bin/sh", "-c", "true"},
 		{"/usr/bin/env", "true"},
