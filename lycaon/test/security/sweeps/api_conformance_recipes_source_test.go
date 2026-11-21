@@ -79,11 +79,11 @@ var sourceRecipes = map[string]successRecipe{
 	"searchProjectSource":       {seed: sourceSeedSearchFiles},
 
 	// Recorded history.
-	"listProjectSourceVersions":         {prepare: sourceVersionsInputs},
-	"restoreProjectSourceVersion":       {prepare: sourceRestoreVersionInputs},
-	"getProjectSourceComparison":        {prepare: sourceComparisonInputs},
-	"digestSourceComparisons":           {prepare: sourceDigestInputs},
-	"listProjectSourceWalk":             {seed: sourceSeedWalk},
+	"listProjectSourceVersions":          {prepare: sourceVersionsInputs},
+	"restoreProjectSourceVersion":        {prepare: sourceRestoreVersionInputs},
+	"getProjectSourceComparison":         {prepare: sourceComparisonInputs},
+	"digestSourceComparisons":            {prepare: sourceDigestInputs},
+	"listProjectSourceWalk":              {seed: sourceSeedWalk},
 	"completeProjectSourcePresentation":  {prepare: sourceCompletePresentationInputs},
 	"listProjectSourceSeen":              {seed: sourceSeedSeen},
 	"withdrawProjectSourcePresentation":  {prepare: sourceWithdrawPresentationInputs},
