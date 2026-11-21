@@ -20,6 +20,7 @@ import (
 	"github.com/lycaon/lycaon/internal/skills"
 	"github.com/lycaon/lycaon/internal/toolschema"
 	"github.com/lycaon/lycaon/internal/toolvocab"
+	"github.com/lycaon/lycaon/test/contract/internal/hoststate"
 )
 
 // Stock is the stock catalog with the tool profiles and tool vocabulary a
@@ -66,10 +67,6 @@ func PersonaEngine() *prompts.FileTemplateEngine {
 	return prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{ModuleRoot: configlayout.FindModuleRoot()})
 }
 
-// NoFolderSurfaces are the coordinator surfaces that open with no folder
-// attached.
-var NoFolderSurfaces = []string{"implement_routing", "implement_investigate", "implement_synthesis"}
-
 // Text is one rendered text.
 type Text struct {
 	Label    string
@@ -90,6 +87,10 @@ type SkillRender struct {
 // profile across branch and git states.
 func RenderStockSkills(stock *Stock) ([]SkillRender, error) {
 	loaded, err := StockSkills(stock)
+	if err != nil {
+		return nil, err
+	}
+	folderless, err := hoststate.FolderlessSurfaces()
 	if err != nil {
 		return nil, err
 	}
@@ -118,7 +119,7 @@ func RenderStockSkills(stock *Stock) ([]SkillRender, error) {
 			return nil, err
 		}
 		for _, id := range sortedKeys(plans) {
-			if roots == 0 && !slices.Contains(NoFolderSurfaces, id) {
+			if roots == 0 && !slices.Contains(folderless, id) {
 				continue
 			}
 			plan := plans[id]

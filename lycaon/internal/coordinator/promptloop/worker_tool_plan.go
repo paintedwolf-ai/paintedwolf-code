@@ -160,7 +160,7 @@ func (l *promptContext) coordinatorToolsForTurn(
 		if frame.RunContext.RunID == "" {
 			plan = plan.Without("ask_user")
 		}
-		all = askToolArgumentSchemas(all)
+		all = ProjectAskToolMetas(all)
 	}
 	return trimCoordinatorToolMetasForPlan(plan, all, taskAllowlist, phaseVerdictSchema(frame)), plan, surfaceID, nil
 }

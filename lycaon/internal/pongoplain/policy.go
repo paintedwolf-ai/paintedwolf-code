@@ -16,9 +16,12 @@ var (
 )
 
 // Analysis is the structurally verified part of a template.
-type Analysis struct{ Dependencies []string }
+type Analysis struct {
+	Dependencies []string
+	Branches     []BranchSpec
+}
 
-// Inspect applies limits before parsing or loading source.
+// Inspect applies limits and discovers static dependencies and branches before parsing.
 func Inspect(source string, profile Profile) (Analysis, error) {
 	if len(source) > MaxSourceBytes {
 		return Analysis{}, fmt.Errorf("%w: %d > %d bytes", ErrSourceLimit, len(source), MaxSourceBytes)
@@ -31,21 +34,28 @@ func Inspect(source string, profile Profile) (Analysis, error) {
 	forDepth := 0
 	tagCount := 0
 	opaqueEnd := ""
-	for offset := 0; ; {
-		start := strings.Index(source[offset:], "{%")
-		if start < 0 {
+	for offset := 0; offset < len(source); {
+		nextTag, nextComment := nextTemplateDelimiter(source, offset)
+		if nextTag < 0 {
 			break
 		}
-		start += offset
+		if opaqueEnd == "" && nextComment >= 0 && nextComment < nextTag {
+			closeComment := strings.Index(source[nextComment+2:], "#}")
+			if closeComment < 0 {
+				break
+			}
+			offset = nextComment + 2 + closeComment + 2
+			continue
+		}
+		start := nextTag
 		end := strings.Index(source[start+2:], "%}")
 		if end < 0 {
 			break
 		}
 		end += start + 2
-		body := strings.TrimSpace(source[start+2 : end])
-		body = strings.TrimSpace(strings.TrimPrefix(strings.TrimSuffix(body, "-"), "-"))
-		fields := strings.Fields(body)
-		if len(fields) == 0 {
+		rawInner := source[start+2 : end]
+		kwOffset, tag, rest := parseTagHeader(rawInner, start+2)
+		if tag == "" {
 			offset = end + 2
 			continue
 		}
@@ -54,41 +64,132 @@ func Inspect(source string, profile Profile) (Analysis, error) {
 			return Analysis{}, fmt.Errorf("%w: more than %d tags", ErrSourceLimit, MaxTemplateTags)
 		}
 		if opaqueEnd != "" {
-			if fields[0] == opaqueEnd {
+			if tag == opaqueEnd {
 				opaqueEnd = ""
 			}
 			offset = end + 2
 			continue
 		}
-		switch fields[0] {
-		case "comment":
-			opaqueEnd = "endcomment"
-		case "verbatim":
-			opaqueEnd = "endverbatim"
-		case "for":
-			forDepth++
-			if forDepth > MaxForNesting {
-				return Analysis{}, fmt.Errorf("%w: for nesting exceeds %d", ErrExecutionLimit, MaxForNesting)
-			}
-		case "endfor":
-			if forDepth > 0 {
-				forDepth--
-			}
-		case "now":
-			return Analysis{}, fmt.Errorf("%w: tag now", ErrNondeterministic)
-		case "include":
-			if profile != Composed {
-				break
-			}
-			dep, ok := quotedDependency(strings.TrimSpace(strings.TrimPrefix(body, fields[0])))
-			if !ok {
-				return Analysis{}, fmt.Errorf("%w: %s dependency must be a string literal", ErrComposition, fields[0])
-			}
-			analysis.Dependencies = append(analysis.Dependencies, dep)
+		if err := applyInspectedTag(&analysis, source, profile, tag, rest, kwOffset, &forDepth, &opaqueEnd); err != nil {
+			return Analysis{}, err
 		}
 		offset = end + 2
 	}
 	return analysis, nil
+}
+
+func nextTemplateDelimiter(source string, offset int) (tagIdx, commentIdx int) {
+	tagIdx = strings.Index(source[offset:], "{%")
+	if tagIdx >= 0 {
+		tagIdx += offset
+	}
+	commentIdx = strings.Index(source[offset:], "{#")
+	if commentIdx >= 0 {
+		commentIdx += offset
+	}
+	return tagIdx, commentIdx
+}
+
+func parseTagHeader(rawInner string, baseOffset int) (kwOffset int, tag, rest string) {
+	trimmedRight := strings.TrimSpace(strings.TrimSuffix(strings.TrimSpace(rawInner), "-"))
+	idx := 0
+	if idx < len(rawInner) && rawInner[idx] == '-' {
+		idx++
+	}
+	for idx < len(rawInner) && (rawInner[idx] == ' ' || rawInner[idx] == '\t' || rawInner[idx] == '\n' || rawInner[idx] == '\r') {
+		idx++
+	}
+	fields := strings.Fields(trimmedRight)
+	if len(fields) == 0 {
+		return 0, "", ""
+	}
+	tag = strings.TrimPrefix(fields[0], "-")
+	if tag == "" {
+		if len(fields) < 2 {
+			return 0, "", ""
+		}
+		tag = fields[1]
+	}
+	rel := strings.Index(rawInner[idx:], tag)
+	if rel < 0 {
+		return baseOffset + idx, tag, ""
+	}
+	kwStart := idx + rel
+	after := strings.TrimSpace(strings.TrimSuffix(strings.TrimSpace(rawInner[kwStart+len(tag):]), "-"))
+	return baseOffset + kwStart, tag, after
+}
+
+func applyInspectedTag(
+	analysis *Analysis,
+	source string,
+	profile Profile,
+	tag, rest string,
+	kwOffset int,
+	forDepth *int,
+	opaqueEnd *string,
+) error {
+	appendBranch := func(kind BranchKind, expr string) {
+		line, col := lineColAt(source, kwOffset)
+		analysis.Branches = append(analysis.Branches, BranchSpec{
+			Index:      len(analysis.Branches),
+			Line:       line,
+			Col:        col,
+			Kind:       kind,
+			Expression: expr,
+		})
+	}
+	switch tag {
+	case "comment":
+		*opaqueEnd = "endcomment"
+	case "verbatim":
+		*opaqueEnd = "endverbatim"
+	case "if":
+		appendBranch(BranchIf, rest)
+	case "elif":
+		appendBranch(BranchElif, rest)
+	case "else":
+		appendBranch(BranchElse, "")
+	case "for":
+		*forDepth++
+		if *forDepth > MaxForNesting {
+			return fmt.Errorf("%w: for nesting exceeds %d", ErrExecutionLimit, MaxForNesting)
+		}
+		appendBranch(BranchFor, rest)
+	case "empty":
+		appendBranch(BranchEmpty, "")
+	case "endfor":
+		if *forDepth > 0 {
+			*forDepth--
+		}
+	case "now":
+		return fmt.Errorf("%w: tag now", ErrNondeterministic)
+	case "include":
+		if profile != Composed {
+			return nil
+		}
+		dep, ok := quotedDependency(rest)
+		if !ok {
+			return fmt.Errorf("%w: %s dependency must be a string literal", ErrComposition, tag)
+		}
+		analysis.Dependencies = append(analysis.Dependencies, dep)
+	}
+	return nil
+}
+
+func lineColAt(source string, offset int) (line, col int) {
+	if offset < 0 {
+		offset = 0
+	}
+	if offset > len(source) {
+		offset = len(source)
+	}
+	prefix := source[:offset]
+	line = 1 + strings.Count(prefix, "\n")
+	lastNL := strings.LastIndexByte(prefix, '\n')
+	if lastNL < 0 {
+		return line, 1 + offset
+	}
+	return line, 1 + (offset - lastNL - 1)
 }
 
 func quotedDependency(rest string) (string, bool) {

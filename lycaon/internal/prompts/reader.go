@@ -149,7 +149,7 @@ func NewReader(in ReaderInput) (Reader, error) {
 
 	// A requestable tool is not held until it loads: copy that names it would
 	// name a tool the request does not offer.
-	held := readerHeldSet(toolNameSet(offered), effects)
+	held := readerProfileHeldSet(profile, toolNameSet(offered), effects)
 	mints := evidenceMints(held)
 	mode := strings.TrimSpace(in.Mode)
 	if mode == "" && surfaceID != "" {
@@ -192,7 +192,11 @@ func defaultExecutionModeForSurface(surfaceID string) string {
 }
 
 func readerHeldSet(tools map[string]bool, effects toolcontract.CommandEffects) map[string]bool {
-	held := make(map[string]bool, len(tools)+3)
+	return readerProfileHeldSet(sandbox.ToolProfile{}, tools, effects)
+}
+
+func readerProfileHeldSet(profile sandbox.ToolProfile, tools map[string]bool, effects toolcontract.CommandEffects) map[string]bool {
+	held := make(map[string]bool, len(tools)+4)
 	for name, ok := range tools {
 		if ok {
 			held[name] = true
@@ -201,6 +205,13 @@ func readerHeldSet(tools map[string]bool, effects toolcontract.CommandEffects) m
 	for mark, ok := range toolcontract.ReachMarks(held["command"], effects) {
 		if ok {
 			held[mark] = true
+		}
+	}
+	if len(profile.DenyTools) > 0 {
+		for mark, ok := range toolcontract.DeniedCommandMarks(held, effects, profile.ToolDenied) {
+			if ok {
+				held[mark] = true
+			}
 		}
 	}
 	return held

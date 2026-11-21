@@ -16,6 +16,7 @@ import (
 	"github.com/lycaon/lycaon/internal/toolvocab"
 	"github.com/lycaon/lycaon/pkg/api"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
+	"github.com/lycaon/lycaon/test/contract/internal/hoststate"
 )
 
 func promptNameCatalog(t *testing.T) (*toolvocab.Catalog, []sandbox.ToolProfile) {
@@ -53,6 +54,8 @@ func linesNaming(corpus string, names []string) string {
 // it. Retired names count: a prompt must not teach what no longer exists.
 func TestRenderedCoordinatorPromptsNameOnlyReachableTools(t *testing.T) {
 	catalog, _ := promptNameCatalog(t)
+	folderless, err := hoststate.FolderlessSurfaces()
+	contractcheck.FailErr(t, "folderless surfaces", err)
 	states := map[string]surface.ImplementSessionState{
 		"idle":              {},
 		"workers in flight": {WorkersInFlight: 2},
@@ -76,7 +79,7 @@ func TestRenderedCoordinatorPromptsNameOnlyReachableTools(t *testing.T) {
 				}
 			}
 			// With no folder attached, only the surfaces that reach no worktree open.
-			if rootCount > 0 || slices.Contains(noFolderSurfaces, id) {
+			if rootCount > 0 || slices.Contains(folderless, id) {
 				t.Run(fmt.Sprintf("%s/%d-roots", id, rootCount), func(t *testing.T) {
 					check(t, renderCoordinatorTripartiteAtRootCount(t, rootCount, id))
 				})
@@ -94,8 +97,6 @@ func TestRenderedCoordinatorPromptsNameOnlyReachableTools(t *testing.T) {
 		}
 	}
 }
-
-var noFolderSurfaces = []string{surfaceImplementRouting, "implement_investigate", surfaceImplementSynthesis, "observe_investigate", "observe_synthesis"}
 
 func TestRenderedAskModeCoordinatorPromptsMatchOfferedTools(t *testing.T) {
 	catalog, profiles := promptNameCatalog(t)
