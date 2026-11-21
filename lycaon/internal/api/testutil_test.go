@@ -20,6 +20,7 @@ import (
 	"github.com/lycaon/lycaon/internal/coordinator/anchor"
 	"github.com/lycaon/lycaon/internal/llm"
 	"github.com/lycaon/lycaon/internal/project"
+	"github.com/lycaon/lycaon/internal/repochange/repochangetest"
 	"github.com/lycaon/lycaon/internal/session"
 	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"github.com/lycaon/lycaon/internal/settings"
@@ -75,6 +76,7 @@ func newTestServerWithRegistry(t *testing.T, reg tools.ToolRegistry, opts ...tes
 // adjust deps, and stops its background work when the test ends.
 func newServerForTest(t *testing.T, deps Dependencies, opts ...testDeps) *Server {
 	t.Helper()
+	repochangetest.Acquire(t)
 	deps.Core.UserNotices = testUserNotices(t)
 	for _, opt := range opts {
 		opt(&deps)
