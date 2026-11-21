@@ -20,6 +20,9 @@
   font-size: var(--text-den-hint);
   cursor: pointer;
 }
+.den-file-edit-diff-header > .den-source-path-plain {
+  user-select: text;
+}
 .den-file-edit-diff-disclosure {
   display: inline-flex;
   flex-shrink: 0;

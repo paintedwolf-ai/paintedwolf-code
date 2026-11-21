@@ -3503,7 +3503,8 @@ type FileBriefingSection struct {
 
 // FileEditPreview
 type FileEditPreview struct {
-	Path         string            `json:"path"`
+	Path string `json:"path"`
+	// Attached folder containing the file. Absent for edits outside attached folders.
 	RootID       string            `json:"root_id,omitempty"`
 	Reference    FileEditReference `json:"reference"`
 	Added        int               `json:"added"`
@@ -3525,7 +3526,7 @@ type FileEditReference struct {
 
 // FileEditSnapshot
 type FileEditSnapshot struct {
-	// Attached project root containing the file.
+	// Attached folder containing the file. Absent for edits outside attached folders.
 	RootID string `json:"root_id,omitempty"`
 	// The write removed the file; its diff has no current file target.
 	Deleted bool    `json:"deleted,omitempty"`

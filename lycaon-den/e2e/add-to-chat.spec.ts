@@ -110,6 +110,40 @@ webE2e.describe("add to chat", () => {
     expect(body.attachments).toEqual([{ blob_id: receipt.blob_id }]);
   });
 
+  webE2e("repeated uploads stage and send one attachment", async ({ page, request }, testInfo) => {
+    await bootstrapChatSession(page, request);
+    await waitForChatComposerReady(page);
+    const chat = liveChatStage(page).getByTestId("chat-view");
+    await expect(chat).toBeVisible();
+    const receipts: string[] = [];
+    for (let index = 0; index < 2; index++) {
+      const uploaded = page.waitForResponse((response) =>
+        response.request().method() === "POST" &&
+        /\/v1\/projects\/[^/]+\/attachments(?:\?|$)/.test(response.url()),
+      );
+      await chat.evaluate((element) => {
+        const transfer = new DataTransfer();
+        transfer.items.add(new File(["same content"], "note.txt", { type: "text/plain" }));
+        for (const type of ["dragenter", "dragover", "drop"]) {
+          element.dispatchEvent(new DragEvent(type, { bubbles: true, cancelable: true, dataTransfer: transfer }));
+        }
+      });
+      const response = await uploaded;
+      expect(response.ok()).toBe(true);
+      receipts.push((await response.json() as { blob_id: string }).blob_id);
+    }
+    expect(receipts[1]).toBe(receipts[0]);
+    const chips = liveChatStage(page).getByTestId("composer-attachment-chips");
+    await expect(chips.getByTestId("composer-attachment-chip")).toHaveCount(1);
+    await testInfo.attach("One chip for two uploads", { body: await chips.screenshot(), contentType: "image/png" });
+
+    const posting = page.waitForRequest((sent) =>
+      sent.method() === "POST" && /\/v1\/sessions\/[^/]+\/prompts$/.test(sent.url()),
+    );
+    await sendChatPrompt(page, "Read the note.");
+    expect((await posting).postDataJSON().attachments).toEqual([{ blob_id: receipts[0] }]);
+  });
+
   webE2e("Add to chat from the sink → path-file chip", async ({ page, request }) => {
     const project = await bootstrapChatSession(page, request);
     await expect(liveChatStage(page).getByTestId("chat-composer")).toBeVisible({

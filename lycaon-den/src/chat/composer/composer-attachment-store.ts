@@ -9,6 +9,7 @@ import {
   isReferenceKind,
   rejectMessageForCode,
   revokeComposerAttachment,
+  sameComposerAttachment,
   wouldExceedTurnBytes,
   type ComposerPendingAttachment,
 } from "./composer-attachments.ts";
@@ -74,7 +75,7 @@ function planeCount(
 export function addPendingAttachments(
   sessionId: string | null | undefined,
   attachments: ComposerPendingAttachment[],
-): { ok: true } | { ok: false; reason: string } {
+): { ok: true; additions: ComposerPendingAttachment[] } | { ok: false; reason: string } {
   const id = sessionId?.trim();
   if (!id) {
     for (const attachment of attachments) revokeComposerAttachment(attachment);
@@ -82,19 +83,27 @@ export function addPendingAttachments(
   }
   const current = bySession()[id] ?? [];
   const additions: ComposerPendingAttachment[] = [];
+  const duplicates: ComposerPendingAttachment[] = [];
   for (const attachment of attachments) {
-    const result = addResult([...current, ...additions], attachment);
+    const held = [...current, ...additions];
+    if (held.some((candidate) => sameComposerAttachment(candidate, attachment))) {
+      duplicates.push(attachment);
+      continue;
+    }
+    const result = addResult(held, attachment);
     if (!result.ok) {
       for (const candidate of attachments) revokeComposerAttachment(candidate);
       return result;
     }
     additions.push(attachment);
   }
+  for (const duplicate of duplicates) revokeComposerAttachment(duplicate);
+  if (additions.length === 0) return { ok: true, additions };
   setBySession((previous) => ({
     ...previous,
     [id]: [...(previous[id] ?? []), ...additions],
   }));
-  return { ok: true };
+  return { ok: true, additions };
 }
 
 /** Replace one session from the host-managed canonical document. */

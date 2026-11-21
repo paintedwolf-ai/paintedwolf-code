@@ -31,7 +31,7 @@ function step(
   before: string | null,
   after: string,
 ): FileEditStep {
-  return { key, snapshot: fileEditPreviewFixture({ path, before, after }), tool: "edit" };
+  return { key, snapshot: fileEditPreviewFixture({ path, before, after, root_id: "root-1" }), tool: "edit" };
 }
 
 const RUN = [

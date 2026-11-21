@@ -595,7 +595,7 @@ components:
         root_id:
           type: string
           format: uuid
-          description: Attached project root containing the file.
+          description: Attached folder containing the file. Absent for edits outside attached folders.
         deleted:
           type: boolean
           description: The write removed the file; its diff has no current file target.

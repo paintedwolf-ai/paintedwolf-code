@@ -11539,7 +11539,10 @@ export interface components {
         };
         FileEditPreview: {
             path: string;
-            /** Format: uuid */
+            /**
+             * Format: uuid
+             * @description Attached folder containing the file. Absent for edits outside attached folders.
+             */
             root_id?: string;
             reference: components["schemas"]["FileEditReference"];
             added: number;
@@ -11552,7 +11555,7 @@ export interface components {
         FileEditSnapshot: {
             /**
              * Format: uuid
-             * @description Attached project root containing the file.
+             * @description Attached folder containing the file. Absent for edits outside attached folders.
              */
             root_id?: string;
             /** @description The write removed the file; its diff has no current file target. */
