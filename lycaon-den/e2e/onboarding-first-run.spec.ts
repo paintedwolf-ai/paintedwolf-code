@@ -3,6 +3,9 @@ import { appStateStorageSliceKey } from "../shared/app-state-storage.ts";
 import {
   apiClearDefaultModel,
   apiEnsureDefaultModel,
+  bootstrapActiveProject,
+  liveChatStage,
+  openNewChatSession,
   seedAppState,
   seedFirstRunUnset,
   webE2e,
@@ -186,7 +189,14 @@ webE2e.describe("onboarding first-run", () => {
       await expect(page.getByTestId("no-provider-banner").first()).toBeVisible({
         timeout: 30_000,
       });
-      await page.getByTestId("no-provider-open-settings").first().click();
+      await bootstrapActiveProject(page, request);
+      await openNewChatSession(page);
+      const chat = liveChatStage(page);
+      await expect(chat.getByTestId("no-provider-banner")).toBeVisible({ timeout: 90_000 });
+      const composerInput = chat.getByTestId("chat-composer");
+      await expect(composerInput).toBeDisabled();
+      await expect(composerInput).toHaveAttribute("placeholder", /AI providers/i);
+      await chat.getByTestId("no-provider-open-settings").click();
       await expect(page.getByTestId("settings-view")).toBeVisible({
         timeout: 15_000,
       });

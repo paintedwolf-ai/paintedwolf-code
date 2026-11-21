@@ -5,6 +5,7 @@ package apitestdeps
 import (
 	"context"
 	"errors"
+	"github.com/lycaon/lycaon/internal/tools/toolstest"
 	"path/filepath"
 	"testing"
 	"time"
@@ -56,7 +57,6 @@ import (
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/testutil/oartest"
 	"github.com/lycaon/lycaon/internal/testutil/scantest"
-	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/visual"
 	"github.com/lycaon/lycaon/internal/webresearch"
 	"github.com/lycaon/lycaon/internal/worker"
@@ -137,7 +137,11 @@ func Fill(t *testing.T, d *Deps) {
 		d.Database = testdbfixture.Open(t, "api-deps.db")
 	}
 	if d.Store == nil {
-		d.Store = sessionstore.NewMemory()
+		database, ok := d.Database.(db.ReadHandle)
+		if !ok {
+			t.Fatal("session fixtures require a database with consistent read snapshots")
+		}
+		d.Store = sessionstore.NewSQL(database)
 	}
 	if d.Projects == nil {
 		// Source ledger rows reference the project table in the same database.
@@ -277,7 +281,7 @@ func fillHost(t *testing.T, d *Deps) {
 func fillWorkers(t *testing.T, d *Deps) {
 	t.Helper()
 	if d.Workers == nil {
-		d.Workers = worker.NewInMemoryQueue(2)
+		d.Workers = worker.NewSQLQueue(d.Database, 2)
 	}
 	if d.WorkerCancel == nil {
 		d.WorkerCancel = &worker.CancelService{Queue: d.Workers, Events: d.Sessions.Coordinator.Workers, Graceful: d.Sessions.Workers.Cancel, Cancellations: d.Sessions.Workers.Cancellations}
@@ -326,8 +330,8 @@ func (refusingExecutor) Execute(context.Context, wire.WorkerTask, worker.WorkerR
 func (refusingExecutor) AbortWorkerRuntime(context.Context, wire.WorkerTask) error { return nil }
 
 func storeDatabase(store session.Store) db.Handle {
-	if owner, ok := store.(interface{ DB() db.Handle }); ok {
-		return owner.DB()
+	if database, ok := store.(interface{ DB() db.Handle }); ok {
+		return database.DB()
 	}
 	return nil
 }
@@ -344,7 +348,7 @@ func fillSessions(t *testing.T, d *Deps) {
 	if d.Sessions != nil {
 		return
 	}
-	registry := tools.NewStubRegistry()
+	registry := toolstest.NewRegistry()
 	d.Sessions = session.NewHost(d.Store, session.Models{Client: llm.NewMockProvider(nil), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, registry)
 	d.Sessions.SetDataDir(t.TempDir())
 	d.Sessions.SetProjectRegistry(d.Projects)

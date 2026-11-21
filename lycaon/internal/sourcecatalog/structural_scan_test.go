@@ -398,10 +398,7 @@ func TestStructuralScanStopsOnEmitError(t *testing.T) {
 }
 
 func BenchmarkStructuralScan(b *testing.B) {
-	rootPath := os.Getenv("PW_TREE_BENCH_ROOT")
-	if rootPath == "" {
-		b.Skip("set PW_TREE_BENCH_ROOT to benchmark structural scanning")
-	}
+	rootPath := testutil.BenchRoot(b)
 	var totalDirectories int64
 	var totalEntries int64
 	b.ResetTimer()

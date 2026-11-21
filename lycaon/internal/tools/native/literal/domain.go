@@ -112,9 +112,7 @@ func runSummarize(inv *invocation) error {
 	} else {
 		request.Paths = paths
 	}
-	diskCtx := inv.tc
-	diskCtx.Source.EditorDocuments = nil
-	resp, windows, err := inv.owners.Domain.Summarize.Summarize(inv.ctx, request, diskCtx)
+	resp, windows, err := inv.owners.Domain.Summarize.Summarize(inv.ctx, request, inv.tc)
 	if err != nil {
 		return err
 	}
@@ -155,9 +153,7 @@ func runRepoMap(inv *invocation) error {
 	if !hasBundle {
 		bundle = repoMapBundle
 	}
-	diskCtx := inv.tc
-	diskCtx.Source.EditorDocuments = nil
-	resp, err := inv.owners.Domain.Repo.Survey(inv.ctx, reposurvey.RepoRequest{Bundle: bundle, Path: abs, LayoutDepth: depth}, diskCtx)
+	resp, err := inv.owners.Domain.Repo.Survey(inv.ctx, reposurvey.RepoRequest{Bundle: bundle, Path: abs, LayoutDepth: depth}, inv.tc)
 	if err != nil {
 		return err
 	}

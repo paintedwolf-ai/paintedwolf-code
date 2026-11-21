@@ -25,7 +25,7 @@ pub(super) fn activate(t: &mut Transaction, lease: &mut Lease) -> Result<(), Upd
             {
                 return Ok(());
             }
-            let rebuilt = installer::prepare_at(target, candidate)?;
+            let rebuilt = installer::prepare_at(target, candidate, &crate::update_service::Trust::embedded())?;
             let rebuilt_path = installer::prepared_path(target, candidate)?;
             if rebuilt_path != prepared {
                 if prepared.exists() {

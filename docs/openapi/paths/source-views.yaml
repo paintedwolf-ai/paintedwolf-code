@@ -146,6 +146,7 @@ paths:
         - "projects"
       operationId: "releaseSourceView"
       x-person-action: none
+      x-idempotent-release: true
       summary: "Release a source view and its work interests"
       parameters:
         -
@@ -534,6 +535,7 @@ paths:
       tags: [projects]
       operationId: releaseSourcePresentation
       x-person-action: none
+      x-idempotent-release: true
       summary: Release a source presentation
       description: Release is idempotent. A presentation belongs to one view; under any other view it is not retained and is already released.
       parameters:
@@ -628,6 +630,7 @@ paths:
       tags: [projects]
       operationId: releaseSourceViewportInterest
       x-person-action: none
+      x-idempotent-release: true
       summary: Release source viewport demand
       responses:
         "204":

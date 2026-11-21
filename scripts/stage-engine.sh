@@ -199,12 +199,10 @@ if [[ "${HOST_KIND}" == "darwin" || "${HOST_KIND}" == "linux" ]]; then
   bash "${ROOT}/scripts/generation/run.sh" stage "${GENERATION_ARGS[@]}"
 fi
 
-if [[ "${HOST_KIND}" == "darwin" ]]; then
-  HOST_ARGS=(--binary "${SIDECAR_BIN}" --output "${TAURI_DIR}/host-bundle" --version "${APP_VERSION}")
-  if [[ "${RELEASE_BUILD}" == "1" ]]; then
-    HOST_ARGS+=(--release)
-  fi
-  python3 "${ROOT}/scripts/stage-macos-host.py" "${HOST_ARGS[@]}"
+# A release signs the host in den:bundle's package phase, after the unsigned compile.
+if [[ "${HOST_KIND}" == "darwin" && "${RELEASE_BUILD}" != "1" ]]; then
+  python3 "${ROOT}/scripts/stage-macos-host.py" --binary "${SIDECAR_BIN}" --output "${TAURI_DIR}/host-bundle" \
+    --version "${APP_VERSION}"
 fi
 
 if [[ "${MODE}" == "full" ]]; then

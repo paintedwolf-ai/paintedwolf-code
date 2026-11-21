@@ -60,6 +60,16 @@ func TestContentIngestionEnforcesObservedBytes(t *testing.T) {
 }
 
 // Each access has exactly one budget and one size code.
+func TestReadContentCappedRefusesDirectory(t *testing.T) {
+	root := t.TempDir()
+	testutil.FailErr(t, "mkdir", os.Mkdir(filepath.Join(root, "dir"), 0o755))
+	body, err := ReadContentCapped("read", AccessRead, fseffect.Location{Root: root, Rel: "dir"}, "dir", false, 1024)
+	var reject *toolrejection.ToolReject
+	if body != nil || !errors.As(err, &reject) || reject.Code != "READ_IS_DIRECTORY" || reject.Data["path"] != "dir" {
+		t.Fatalf("reading a directory = (%q, %v), want READ_IS_DIRECTORY for dir", body, err)
+	}
+}
+
 func TestAccessBudgets(t *testing.T) {
 	if AccessRead.MaxBytes() != readcaps.MaxFileBytes || AccessMutate.MaxBytes() != readcaps.MaxMutationBytes {
 		t.Fatalf("budgets = %d/%d", AccessRead.MaxBytes(), AccessMutate.MaxBytes())

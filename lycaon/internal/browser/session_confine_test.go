@@ -33,9 +33,7 @@ func requireBrowserBoundary(t *testing.T) {
 	t.Helper()
 	switch runtime.GOOS {
 	case "darwin":
-		if !confine.Available() {
-			t.Skip("seatbelt unavailable")
-		}
+		testutil.RequireConfinement(t, confine.Available())
 	case "linux":
 		if !confine.Available() {
 			caps, _ := confine.LinuxCapabilities()

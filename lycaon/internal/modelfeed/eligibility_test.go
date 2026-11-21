@@ -78,8 +78,15 @@ func TestEligibleModelsDropsNonChat(t *testing.T) {
 		t.Fatalf("expected deepinfra embedding dropped, got %v", deepinfraIDs)
 	}
 
+	scalewayKey, ok := FeedKeyForKind("scaleway")
+	if !ok || scalewayKey != "scaleway" {
+		t.Fatalf("FeedKeyForKind(scaleway) = (%q, %v), want (\"scaleway\", true)", scalewayKey, ok)
+	}
+	if kind, ok := KindForFeedKey(scalewayKey); !ok || kind != "scaleway" {
+		t.Fatalf("KindForFeedKey(%q) = (%q, %v), want (\"scaleway\", true)", scalewayKey, kind, ok)
+	}
 	scalewayIDs := map[string]bool{}
-	for _, m := range loadFixtureDoc(t).EligibleModels("scaleway") {
+	for _, m := range loadFixtureDoc(t).EligibleModels(scalewayKey) {
 		scalewayIDs[m.ID] = true
 	}
 	if !scalewayIDs["qwen3-235b-a22b-instruct-2507"] {

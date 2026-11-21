@@ -1,0 +1,8 @@
+surfaces: [http]
+notification: { tier: non_catastrophic, scope: project }
+title: Project is already saved
+message: Only a draft project can be saved to a folder. This project already has one.
+suggested_action: Keep working in the project's folder.
+scenarios:
+  - id: default
+    vars: {}

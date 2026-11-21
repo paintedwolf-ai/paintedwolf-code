@@ -4,8 +4,7 @@ from unittest.mock import MagicMock, patch
 
 from linux_release.installed_cases import performance
 
-LIMITS = {'startup.ready': 7500, 'restart.ready': 7500, 'project.create': 1000, 'session.prepare': 1000,
-          'prompt.accept': 1000, 'prompt.settle': 5000, 'peak_rss_bytes': 512 << 20, 'rss_growth_bytes': 16 << 20}
+LIMITS = {'peak_rss_bytes': 512 << 20, 'rss_growth_bytes': 16 << 20}
 IDENTITY = {'pid': 42, 'parent_pid': 7, 'start_time_ticks': 9}
 
 
@@ -29,15 +28,14 @@ def installed_app(complete=True, limit=False, streams=None):
 
 
 class StartSampleTests(unittest.TestCase):
-    def measure(self, app, limits=LIMITS, step=0.5):
-        with patch.object(performance, 'limits', return_value=limits), \
-                patch.object(performance, 'InstalledApp', return_value=app) as launches, \
+    def measure(self, app, step=0.5):
+        with patch.object(performance, 'InstalledApp', return_value=app) as launches, \
                 patch('linux_release.installed_cases.desktop_ui.interactive_window', return_value={'window': 'main'}) as window, \
                 patch.object(performance.time, 'monotonic', Clock(step)):
             facts, streams = performance.start_samples({'artifact': {}})
         return facts, streams, launches, window
 
-    def test_twenty_launches_measure_restart_ready_against_the_absolute_limit(self):
+    def test_twenty_launches_report_restart_ready_without_judging_it(self):
         app = installed_app()
         facts, streams, launches, window = self.measure(app)
         self.assertEqual(launches.call_count, 20)
@@ -46,17 +44,17 @@ class StartSampleTests(unittest.TestCase):
         self.assertEqual(app.stop.call_count, 20)
         self.assertEqual(facts['measurements_ms']['restart.ready']['samples'], 20)
         self.assertEqual(facts['samples_ms'], [500.0] * 20)
-        self.assertEqual(facts['failures'], [])
-        self.assertEqual(facts['absolute_limits'], LIMITS)
+        self.assertNotIn('failures', facts)
         self.assertEqual(facts['windows'], [{'window': 'main'}] * 20)
         self.assertEqual(facts['engine_identities'], [IDENTITY] * 20)
         self.assertEqual(facts['cache_state'], 'uncontrolled')
         self.assertIn('boot-bound-cold-launch', facts['remaining_requirements'])
         self.assertEqual(streams, {'app-stdout': b'out' * 20, 'app-stderr': b'err' * 20})
 
-    def test_a_restart_slower_than_the_absolute_limit_is_a_failure(self):
-        facts, _, _, _ = self.measure(installed_app(), limits=dict(LIMITS, **{'restart.ready': 400}))
-        self.assertEqual(facts['failures'], [{'metric': 'restart.ready', 'p95': 500.0, 'absolute_limit': 400}])
+    def test_a_slow_restart_is_reported_not_failed(self):
+        facts, _, _, _ = self.measure(installed_app(), step=60.0)
+        self.assertEqual(facts['measurements_ms']['restart.ready']['p95'], 60000.0)
+        self.assertNotIn('failures', facts)
 
     def test_a_launch_without_bounded_capture_or_within_evidence_bounds_is_refused(self):
         for app in [installed_app(complete=False), installed_app(limit=True),
@@ -81,8 +79,7 @@ class WorkflowSampleTests(unittest.TestCase):
             return turn
         provider = MagicMock()
         provider.__enter__.return_value = provider
-        with patch.object(performance, 'limits', return_value=LIMITS), \
-                patch.object(performance, 'InstalledApp', return_value=app), \
+        with patch.object(performance, 'InstalledApp', return_value=app), \
                 patch.object(performance, 'ProviderFixture', return_value=provider) as fixtures, \
                 patch.object(performance, 'ToolTurn', side_effect=tool_turn), \
                 patch.object(performance, 'wait_settled') as settled, \
@@ -91,12 +88,12 @@ class WorkflowSampleTests(unittest.TestCase):
             facts, streams = performance.workflow_samples({'artifact': {}})
         return facts, streams, turns, fixtures, settled, invocation, app
 
-    def test_twenty_tool_turns_measure_session_preparation_and_prompt_settlement(self):
+    def test_twenty_tool_turns_report_session_preparation_and_prompt_settlement(self):
         facts, streams, turns, fixtures, settled, invocation, app = self.measure()
         self.assertEqual(len(turns), 20)
         self.assertEqual(facts['samples_ms'], {'session.prepare': [250.0] * 20, 'prompt.settle': [250.0] * 20})
         self.assertEqual(facts['measurements_ms']['prompt.settle']['samples'], 20)
-        self.assertEqual(facts['failures'], [])
+        self.assertNotIn('failures', facts)
         self.assertEqual(facts['workload'], 'deterministic-local-provider-command')
         self.assertEqual([row['project'] for row in facts['witnesses']], [str(index) for index in range(20)])
         self.assertEqual(fixtures.call_args.args[0], [{'name': 'command', 'arguments': {'command': 'printf installed-performance-fixture'}}])

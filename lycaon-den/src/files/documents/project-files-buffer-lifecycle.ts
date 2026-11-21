@@ -52,6 +52,16 @@ import {
   setFilesStoreRaw,
 } from "./files-buffer-state.ts";
 import { discardFilesBufferDraft } from "./project-files-buffer-io.ts";
+import { documentResidency, documentResourceKey } from "./document-residency.ts";
+
+/** A replaced preview keeps its document until nothing presents it and no tab has reopened it. */
+function releaseReplacedDocument(projectId: string, documentId: string | null | undefined): void {
+  if (!documentId) return;
+  void documentResidency.whenUnprotected(documentResourceKey(projectId, { documentId })).then(() => {
+    if (Object.values(projectFilesState(projectId).byKey).some((buffer) => buffer.documentId === documentId)) return false;
+    return evictEditorDocument(documentId);
+  }).catch(() => undefined);
+}
 
 function clearOtherPreviews(state: ProjectFilesState, exceptKey: FileBufferKey | null): void {
   for (const key of state.order) {
@@ -155,7 +165,7 @@ export function openFilesBuffer(
       });
       if (previewKey && previewKey !== key) {
         const idx = state.order.indexOf(previewKey);
-        void evictEditorDocument(state.byKey[previewKey]?.documentId).catch(() => undefined);
+        releaseReplacedDocument(projectId, state.byKey[previewKey]?.documentId);
         delete state.byKey[previewKey];
         if (idx >= 0) state.order[idx] = key;
         else state.order.push(key);

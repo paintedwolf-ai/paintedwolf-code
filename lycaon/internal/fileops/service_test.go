@@ -243,3 +243,36 @@ func TestFileOperationRecoveryDatesInterruptionAtLastProgress(t *testing.T) {
 		t.Fatalf("recovered = %s at %v, want interrupted at %s", got.State, got.CompletedAt, lastProgress)
 	}
 }
+
+// A test host's hold keeps a run cancelable before its work starts, and a
+// cancel ends the hold.
+func TestFileOperationHoldKeepsTheRunCancelable(t *testing.T) {
+	service := NewService(NewStore(nil))
+	held := make(chan Request, 1)
+	service.HoldBeforeWorkForTest(func(ctx context.Context, r Request) {
+		held <- r
+		<-ctx.Done()
+	})
+	run, _, err := service.Admit(t.Context(), requestFixture(), false)
+	testutil.FailErr(t, "admit", err)
+	worked := false
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		run.Execute(t.Context(), func(ctx context.Context) Outcome {
+			worked = ctx.Err() == nil
+			return Outcome{Status: 500}
+		})
+	}()
+	if r := <-held; r.ID != "operation" || !r.Cancelable {
+		t.Fatalf("held request = %+v, want the cancelable operation", r)
+	}
+	testutil.FailErr(t, "cancel the held run", service.Cancel("operation"))
+	<-done
+	if worked {
+		t.Fatal("the canceled run's work ran with a live context")
+	}
+	if got := run.Snapshot().State; got != "canceled" {
+		t.Fatalf("state=%s want=canceled", got)
+	}
+}

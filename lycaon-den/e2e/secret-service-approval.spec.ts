@@ -8,7 +8,7 @@ import {
   settledChatSessionId, waitHarnessConnected, webE2e,
 } from "./helpers.ts";
 import { startSecretService } from "./secret-service-fixture.ts";
-import { manualHarnessTools } from "./manual-harness-tools.ts";
+import { manualHarnessTools, shellWord } from "./manual-harness-tools.ts";
 
 /** Resolves true when the call waits on an unconfined-run card, false once it has a result. */
 async function awaitUnconfinedRun(request: APIRequestContext, sessionId: string, callId: string) {
@@ -102,7 +102,7 @@ webE2e("managed service setup approval covers live requests until revoked", asyn
     const prompt = await apiPostPrompt(request, sessionId, { text: "Configure the local test service and verify authenticated requests." });
     expect(prompt.ok(), await prompt.text()).toBeTruthy();
     const driver = manualHarnessTools(request, sessionId);
-    await driver.loadTools("secret_generate", "command", "http_request", "update_progress");
+    await driver.loadTools("secret_generate", "update_progress");
     await driver.completed(await driver.invoke("update_progress", {
       content: "## Progress\n- [ ] Configure the service\n- [ ] Verify authenticated requests\n",
     }));
@@ -124,10 +124,10 @@ webE2e("managed service setup approval covers live requests until revoked", asyn
       "assert connection.getresponse().status == 204",
       'print("service configured")',
     ].join("; ");
+    // The reference sits in an environment value slot, which the host resolves for the process alone.
     const setup = await driver.invoke("command", {
-      command: "/usr/bin/python3 -", stdin: python, cwd: ".",
-      env: { SERVICE_PASSWORD: secret!.reference }, secret_use: { services: [service.origin] },
-      capability_request: capability,
+      command: `SERVICE_PASSWORD=${shellWord(secret!.reference)} /usr/bin/python3 -c ${shellWord(python)}`, cwd: ".",
+      secret_use: { services: [service.origin] }, capability_request: capability,
     });
     const cards = () => liveChatStage(page).getByTestId("tool-approval-card");
     await expect(cards()).toHaveCount(1, { timeout: 30_000 });
@@ -145,19 +145,19 @@ webE2e("managed service setup approval covers live requests until revoked", asyn
       await cards().getByTestId("approval-approve-primary").click();
     }
     const setupOutput = await driver.completed(setup);
-    const setupResult = JSON.parse(setupOutput.slice(setupOutput.indexOf("{"))) as { ok: boolean; tail: string };
-    expect(setupResult.ok, setupResult.tail).toBe(true);
-    expect(setupResult.tail).toContain("service configured");
+    const setupResult = JSON.parse(setupOutput.slice(setupOutput.indexOf("{"))) as { status: number; stdout: string; stderr?: string };
+    expect(setupResult.status, setupResult.stderr).toBe(0);
+    expect(setupResult.stdout).toContain("service configured");
     expect(service.configured()).toBe(true);
     await expect(cards()).toHaveCount(0);
     await expect(page.locator("body")).not.toContainText(service.password());
 
-    const httpArgs = {
-      url: `${service.origin}/data`, auth: { scheme: "basic", username: "test", password: secret!.reference },
-      capability_request: capability,
+    const fetchData = {
+      command: `curl -sS -u ${shellWord(`test:${secret!.reference}`)} ${shellWord(`${service.origin}/data`)}`,
+      secret_use: { services: [service.origin] }, capability_request: capability,
     };
     for (let index = 0; index < 3; index++) {
-      const call = await driver.invoke("http_request", httpArgs);
+      const call = await driver.invoke("command", fetchData);
       expect(await driver.completed(call)).toContain("authenticated");
       expect(service.authenticatedRequests()).toBe(index + 1);
       await expect(cards()).toHaveCount(0);
@@ -183,7 +183,7 @@ webE2e("managed service setup approval covers live requests until revoked", asyn
     await page.getByTestId("settings-stage-close").click();
     expect(await settledChatSessionId(page)).toBe(sessionId);
 
-    const next = await driver.invoke("http_request", httpArgs);
+    const next = await driver.invoke("command", fetchData);
     await expect(cards()).toHaveCount(1, { timeout: 30_000 });
     await expect(cards().getByTestId("approval-secret-names")).toContainText(name);
     await expect(cards().getByTestId("approval-approve-primary")).toContainText("Send for this chat");

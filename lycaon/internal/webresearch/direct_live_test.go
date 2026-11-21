@@ -1,3 +1,5 @@
+//go:build live_web
+
 package webresearch
 
 import (
@@ -8,12 +10,9 @@ import (
 )
 
 // TestDirectLivePublicIndexFetch hits real public doc sites with provider seeds.
-// Run with LYCAON_LIVE_DIRECT_FETCH=1:
-// ./task test:digest -- ./internal/webresearch -run LivePublic -count=1 -timeout=3m
-// Skipped under -short (CI / check-fast).
+// It fetches from the network, so it builds only with the live_web tag:
+// ./task test:digest -- ./internal/webresearch -tags live_web -run LivePublic -count=1
 func TestDirectLivePublicIndexFetch(t *testing.T) {
-	skipUnlessLiveDirectFetch(t)
-
 	resetDirectState(2)
 
 	type siteExpect struct {
@@ -65,8 +64,6 @@ func TestDirectLivePublicIndexFetch(t *testing.T) {
 }
 
 func TestDirectLiveSparseWithSynthesis(t *testing.T) {
-	skipUnlessLiveDirectFetch(t)
-
 	resetDirectState(1)
 
 	// sqlite.org publishes no sitemap or llms.txt — seed the known WAL page
@@ -91,8 +88,6 @@ func TestDirectLiveSparseWithSynthesis(t *testing.T) {
 }
 
 func TestDirectLiveParallelQueries(t *testing.T) {
-	skipUnlessLiveDirectFetch(t)
-
 	resetDirectState(2)
 
 	queries := []string{
@@ -142,7 +137,6 @@ func TestDirectLiveParallelQueries(t *testing.T) {
 }
 
 func TestDirectLiveTalosQueryIsolated(t *testing.T) {
-	skipUnlessLiveDirectFetch(t)
 	resetDirectState(1)
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()

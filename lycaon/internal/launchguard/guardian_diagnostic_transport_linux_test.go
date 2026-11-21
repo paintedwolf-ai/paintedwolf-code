@@ -5,8 +5,12 @@ package launchguard
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
+	"io"
 	"os"
+	"os/exec"
 	"strings"
+	"syscall"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -167,5 +171,89 @@ func TestGuardianRetirementDiagnosticCrossesRealTransition(t *testing.T) {
 	}
 	if count != 1 {
 		t.Fatalf("actual static transition produced %d first-retirement records; stderr: %s", count, launch.stderr.String())
+	}
+}
+
+// awaitStageHandoff runs the bootstrap's handoff wait against this process as
+// the stage, with the peer end standing in for the stage's handoff descriptor.
+func awaitStageHandoff(t *testing.T, send func(peer int)) error {
+	t.Helper()
+	pair := guardianMetadataPair(t, true)
+	self, err := unix.PidfdOpen(os.Getpid(), 0)
+	testutil.FailErr(t, "pin this process as the stage", err)
+	t.Cleanup(func() { _ = unix.Close(self) })
+	send(pair[0])
+	owned, err := unix.Dup(pair[1])
+	testutil.FailErr(t, "own the bootstrap end", err)
+	control := os.NewFile(uintptr(owned), "bootstrap-guardian")
+	t.Cleanup(func() { _ = control.Close() })
+	return awaitGuardianHandoff(control, os.Getpid(), self, Identity{UID: uint32(os.Getuid()), GID: uint32(os.Getgid())}, nil)
+}
+
+func TestBootstrapReportsTheStageRefusalInsteadOfEOF(t *testing.T) {
+	for _, reason := range []string{
+		"source topology changed during structural selection",
+		"initial lease attachment was not acknowledged",
+		"protected stage requires the bootstrap's administrator identity",
+	} {
+		err := awaitStageHandoff(t, func(peer int) { sendStageRefusal(peer, errors.New(reason)) })
+		var refusal *stageRefusalError
+		if !errors.As(err, &refusal) || refusal.reason != reason {
+			t.Fatalf("stage refusal %q reached the bootstrap as %v", reason, err)
+		}
+	}
+	err := awaitStageHandoff(t, func(peer int) { _ = unix.Shutdown(peer, unix.SHUT_WR) })
+	if !errors.Is(err, io.EOF) {
+		t.Fatalf("a stage that closes without a refusal reports %v, want EOF", err)
+	}
+}
+
+func TestStageRefusalIsBoundedAndPrintable(t *testing.T) {
+	long := strings.Repeat("x", 2*stageRefusalLimit)
+	err := awaitStageHandoff(t, func(peer int) { sendStageRefusal(peer, errors.New("bad\x1b[31m\nline "+long)) })
+	var refusal *stageRefusalError
+	if !errors.As(err, &refusal) {
+		t.Fatalf("refusal not delivered: %v", err)
+	}
+	if len(refusal.reason) != stageRefusalLimit || strings.ContainsAny(refusal.reason, "\x1b\n") {
+		t.Fatalf("refusal of %d bytes kept control characters or exceeded its bound", len(refusal.reason))
+	}
+	if _, refused := stageRefusal([]byte("PWGHAND1")); refused {
+		t.Fatal("a guardian notice read as a stage refusal")
+	}
+}
+
+// handoffChild starts a child the way the bootstrap starts its stage, with a
+// pidfd, and returns once it has been asked to end.
+func handoffChild(t *testing.T, script string) (pid, pidfd int) {
+	t.Helper()
+	pidfd = -1
+	child := exec.Command("/bin/sh", "-c", script)
+	child.SysProcAttr = &syscall.SysProcAttr{PidFD: &pidfd}
+	testutil.FailErr(t, "start handoff child", child.Start())
+	t.Cleanup(func() { _ = child.Process.Kill(); _ = child.Wait(); _ = unix.Close(pidfd) })
+	return child.Process.Pid, pidfd
+}
+
+func TestFailedSetupNamesHowTheHandoffChildEnded(t *testing.T) {
+	pid, pidfd := handoffChild(t, "exit 125")
+	err := withHandoffExit(io.EOF, pidfd, pid)
+	var ended *handoffExitError
+	if !errors.As(err, &ended) || !errors.Is(err, io.EOF) || !ended.status.Exited() || ended.status.ExitStatus() != 125 {
+		t.Fatalf("a transition refusal reached the bootstrap as %v", err)
+	}
+	pid, pidfd = handoffChild(t, "kill -KILL $$")
+	err = withHandoffExit(io.EOF, pidfd, pid)
+	if !errors.As(err, &ended) || !ended.status.Signaled() || ended.status.Signal() != syscall.SIGKILL {
+		t.Fatalf("a killed setup process reached the bootstrap as %v", err)
+	}
+	pid, pidfd = handoffChild(t, "exec sleep 30")
+	refusal := &stageRefusalError{reason: "still running"}
+	if err := withHandoffExit(refusal, pidfd, pid); !errors.Is(err, refusal) {
+		t.Fatalf("a live child changed the reported refusal to %v", err)
+	}
+	// A holder that closed the handoff but lingers is left to setup cleanup.
+	if err := withHandoffExit(io.EOF, pidfd, pid); !errors.Is(err, io.EOF) || errors.As(err, &ended) {
+		t.Fatalf("a lingering child changed the reported end of file to %v", err)
 	}
 }

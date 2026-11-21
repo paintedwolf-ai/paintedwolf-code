@@ -2,6 +2,7 @@ package phases_test
 
 import (
 	workflow "github.com/lycaon/lycaon/internal/workflow"
+	"github.com/lycaon/lycaon/internal/workflow/workflowtest"
 
 	"context"
 	"testing"
@@ -35,7 +36,7 @@ func TestTryAutoAdvanceInvokesPhaseAdvancedHook(t *testing.T) {
 	wfStore := workflowpersistence.New(sqlDB)
 	mgr := workflow.NewManager(wfStore, store, manifestReg, nil)
 	dir := t.TempDir()
-	workflow.WireBlueprintDepsForTest(mgr, dir)
+	workflowtest.WireBlueprintDeps(mgr, dir)
 
 	ctx := context.Background()
 

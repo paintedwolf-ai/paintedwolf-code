@@ -86,7 +86,7 @@ func (d *Document) DraftSHA256() (string, error) {
 	if !d.Dirty {
 		return d.BaseSHA256, nil
 	}
-	encoded, err := textfile.EncodeBounded(serializeEOL(d.Draft, d.EOL), d.Encoding, textfile.LimitsForRaw(projectsource.SourceWriteMaxBytes))
+	encoded, err := textfile.EncodeBounded(textfile.SerializeEOL(d.Draft, d.EOL), d.Encoding, textfile.LimitsForRaw(projectsource.SourceWriteMaxBytes))
 	if err != nil {
 		return "", err
 	}
@@ -157,12 +157,4 @@ func normalizeEOL(content string) (string, string, bool) {
 		eol = "crlf"
 	}
 	return strings.ReplaceAll(content, "\r\n", "\n"), eol, crlf > 0 && lf > 0
-}
-
-func serializeEOL(content, eol string) string {
-	content = strings.ReplaceAll(content, "\r\n", "\n")
-	if eol == "crlf" {
-		return strings.ReplaceAll(content, "\n", "\r\n")
-	}
-	return content
 }

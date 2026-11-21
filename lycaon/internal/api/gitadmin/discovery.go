@@ -28,11 +28,12 @@ func (s *Handler) HandleGitRepos(w http.ResponseWriter, r *http.Request) {
 	}
 	sessionID := strings.TrimSpace(r.URL.Query().Get("session_id"))
 	activeRootID := s.activeRootIDFromSession(r.Context(), sessionID)
-	repos, err := s.LoadOrderedRepos(r.Context(), p, p.SourceRoots(), activeRootID, sessionID)
+	scope, err := requestscope.ResolveSessionProject(s.SessionStore, r.Context(), p, sessionID)
 	if err != nil {
 		s.WriteGitReposLoadError(w, r, err)
 		return
 	}
+	repos := s.LoadOrderedRepos(r.Context(), p, scope.Project.SourceRoots(), activeRootID, scope.Binding)
 
 	out := make([]wire.GitRepoEntry, 0, len(repos))
 	activeRepoID := ""
@@ -94,12 +95,7 @@ func (s *Handler) requireGitRepoQuery(w http.ResponseWriter, r *http.Request) (g
 		s.WriteGitReposLoadError(w, r, err)
 		return git.RepoRef{}, nil, false
 	}
-	repos, err := s.LoadOrderedRepos(r.Context(), p, scope.Project.SourceRoots(), "", sessionID)
-	if err != nil {
-		s.responses.InternalError(w, r, err)
-		return git.RepoRef{}, nil, false
-	}
-	for _, repo := range repos {
+	for _, repo := range s.LoadOrderedRepos(r.Context(), p, scope.Project.SourceRoots(), "", scope.Binding) {
 		if repo.ID == repoID && repo.Available {
 			return repo, scope.Project, true
 		}
@@ -108,23 +104,10 @@ func (s *Handler) requireGitRepoQuery(w http.ResponseWriter, r *http.Request) (g
 	return git.RepoRef{}, nil, false
 }
 
-func (s *Handler) LoadOrderedRepos(ctx context.Context, p *project.Project, roots []projectroot.RootRef, activeRootID, sessionID string) ([]git.RepoRef, error) {
-	sessionID = strings.TrimSpace(sessionID)
-	sessionSubstituted := false
-	var bindingRepoID string
-	var bindingPath string
-	if sessionID != "" {
-		scope, err := requestscope.ResolveSessionProject(s.SessionStore, ctx, p, sessionID)
-		if err != nil {
-			return nil, err
-		}
-		roots = scope.Project.SourceRoots()
-		if scope.Binding != nil {
-			sessionSubstituted = true
-			bindingRepoID = scope.Binding.RepoID
-			bindingPath = canonicalGitPath(scope.Binding.WorktreePath)
-		}
-	}
+// LoadOrderedRepos orders the project's repositories over roots. A session's
+// worktree binding, already validated by its caller, re-addresses the bound
+// repository at that worktree.
+func (s *Handler) LoadOrderedRepos(ctx context.Context, p *project.Project, roots []projectroot.RootRef, activeRootID string, binding *store.WorktreeBinding) []git.RepoRef {
 	// The cached set describes the project's own folders. A session bound to
 	// a linked worktree substitutes that worktree for the bound repository's
 	// top level; the worktree is its own top level, so no discovery is needed.
@@ -134,14 +117,14 @@ func (s *Handler) LoadOrderedRepos(ctx context.Context, p *project.Project, root
 	} else {
 		repos = git.DiscoverRepos(ctx, p.SourceRoots())
 	}
-	if sessionSubstituted {
-		repos = substituteWorktreeRepo(repos, bindingRepoID, bindingPath)
+	if binding != nil {
+		repos = substituteWorktreeRepo(repos, binding.RepoID, canonicalGitPath(binding.WorktreePath))
 	}
 	primaryID := ""
 	if prim, err := projectroot.PrimaryRoot(roots); err == nil {
 		primaryID = prim.ID
 	}
-	return git.OrderRepos(repos, activeRootID, primaryID), nil
+	return git.OrderRepos(repos, activeRootID, primaryID)
 }
 
 // substituteWorktreeRepo re-addresses the bound repository at its linked

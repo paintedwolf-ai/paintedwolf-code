@@ -14,6 +14,7 @@ import (
 	"github.com/lycaon/lycaon/internal/testutil/apitestdeps"
 	"github.com/lycaon/lycaon/internal/visual"
 	wire "github.com/lycaon/lycaon/pkg/api"
+	"github.com/lycaon/lycaon/pkg/api/apitest"
 )
 
 func canonPath(t *testing.T, p string) string {
@@ -47,15 +48,15 @@ func TestPromptAdmissionWithExternalReferencesGrantsAccessAndPerceivesImages(t *
 		OperationID: uuid.NewString(),
 		Text:        "Check these files",
 		References: []wire.PromptReferencePart{
-			wire.NewPromptReferenceExternalFile(wire.PromptReferenceExternalFilePart{
+			apitest.NewPromptReferenceExternalFile(wire.PromptReferenceExternalFilePart{
 				ProjectID: sess.ProjectID,
 				Path:      extFile,
 			}),
-			wire.NewPromptReferenceExternalFolder(wire.PromptReferenceExternalFolderPart{
+			apitest.NewPromptReferenceExternalFolder(wire.PromptReferenceExternalFolderPart{
 				ProjectID: sess.ProjectID,
 				Path:      extDir,
 			}),
-			wire.NewPromptReferenceExternalFile(wire.PromptReferenceExternalFilePart{
+			apitest.NewPromptReferenceExternalFile(wire.PromptReferenceExternalFilePart{
 				ProjectID: sess.ProjectID,
 				Path:      extImg,
 			}),

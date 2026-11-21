@@ -60,6 +60,8 @@ var (
 	ErrInvalidGenerate   = errors.New("invalid secret generation request")
 	ErrInvalidPut        = errors.New("invalid managed secret")
 	ErrInvalidUpdate     = errors.New("invalid managed secret update")
+	// ErrOperationReused refuses an operation id retried with different input.
+	ErrOperationReused = errors.New("operation id was already used for a different managed secret")
 	// ErrValueTooShort rejects values below the exact-match screening floor.
 	ErrValueTooShort = fmt.Errorf(
 		"a value under %d characters occurs too often in ordinary text for the host to tell it apart",

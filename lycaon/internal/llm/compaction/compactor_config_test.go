@@ -1,8 +1,11 @@
 package compaction
 
 import (
+	"regexp"
 	"testing"
 
+	"github.com/lycaon/lycaon/config"
+	"github.com/lycaon/lycaon/internal/limits"
 	"github.com/lycaon/lycaon/internal/testutil"
 )
 
@@ -158,6 +161,27 @@ func TestLoadBundledCompactionConfigDerivesBudgets(t *testing.T) {
 	if cfg.TargetTokens != 131072*35/100 {
 		t.Fatalf("TargetTokens = %d want %d", cfg.TargetTokens, 131072*35/100)
 	}
+	assertCompactionBand(t, cfg)
+}
+
+// The fallback percentages keep the same band when compaction.yaml omits them.
+func TestOmittedCompactionPercentagesKeepTheBand(t *testing.T) {
+	cfg := DefaultCompactionConfig()
+	cfg.BudgetTriggerPct, cfg.TargetTokensPct, cfg.HardCeilingPct = 0, 0, 0
+	cfg.HardCeilingTokens, cfg.TargetTokens = 0, 0
+	cfg, err := NormalizeConfig(cfg)
+	testutil.FailErr(t, "normalize compaction config", err)
+	assertCompactionBand(t, cfg)
+}
+
+// assertCompactionBand requires target < trigger < hard ceiling: compaction
+// starts below the ceiling and lands below where it starts.
+func assertCompactionBand(t *testing.T, cfg CompactionConfig) {
+	t.Helper()
+	trigger := cfg.CompactionTriggerTokens()
+	if !(cfg.TargetTokens > 0 && cfg.TargetTokens < trigger && trigger < cfg.HardCeilingTokens) {
+		t.Fatalf("band target %d < trigger %d < ceiling %d does not hold", cfg.TargetTokens, trigger, cfg.HardCeilingTokens)
+	}
 }
 
 func TestCompactionPctKnobsDerivedTokens(t *testing.T) {
@@ -207,5 +231,24 @@ func TestDefaultCompactionConfigUsesYAMLWindow(t *testing.T) {
 	cfg := DefaultCompactionConfig()
 	if cfg.ModelContextWindow != 131072 {
 		t.Fatalf("DefaultCompactionConfig ModelContextWindow = %d want 131072 (YAML SSOT, not Go 200000 twin)", cfg.ModelContextWindow)
+	}
+}
+
+func TestCompactionConfigCarriesTheCitationRetryCeiling(t *testing.T) {
+	raw, err := config.Read(config.Compaction)
+	testutil.FailErr(t, "config.Read failed", err)
+	key := regexp.MustCompile(`(?m)^max_citation_grounding_retries:.*$`)
+	if !key.Match(raw) {
+		t.Fatal("bundled compaction config has no citation retry ceiling")
+	}
+	cfg, err := decodeCompactionConfig(key.ReplaceAll(raw, []byte("max_citation_grounding_retries: 7")), CompactionConfig{})
+	testutil.FailErr(t, "decodeCompactionConfig failed", err)
+	if cfg.MaxCitationGroundingRetries != 7 {
+		t.Fatalf("MaxCitationGroundingRetries = %d, want 7", cfg.MaxCitationGroundingRetries)
+	}
+	cfg, err = decodeCompactionConfig(key.ReplaceAll(raw, nil), CompactionConfig{})
+	testutil.FailErr(t, "decodeCompactionConfig failed", err)
+	if cfg.MaxCitationGroundingRetries != limits.DefaultCitationGroundingRetries || cfg.MaxCitationGroundingRetries <= 0 {
+		t.Fatalf("omitted ceiling = %d, want the shared default %d", cfg.MaxCitationGroundingRetries, limits.DefaultCitationGroundingRetries)
 	}
 }

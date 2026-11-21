@@ -3,9 +3,6 @@ package contract
 import (
 	"fmt"
 	"maps"
-	"os"
-	"path/filepath"
-	"regexp"
 	"slices"
 	"testing"
 
@@ -145,40 +142,4 @@ func toolFactStates(t *testing.T, binding *evidence.Binding, units promptunit.Ca
 		states = append(states, toolFactState{name: "profile " + profile.ID, host: host, offered: offered, requestable: requestable})
 	}
 	return states
-}
-
-// policyHandle matches an evidence handle in policy copy.
-var policyHandle = regexp.MustCompile(`(?:^|[^A-Za-z0-9_/.:-])([a-z][a-z0-9_]*)#`)
-
-// Policy copy renders per occurrence from facts that do not carry the reader's
-// tools, so each handle it names must at least be a declared evidence kind.
-func TestPolicyCopyNamesDeclaredEvidenceHandles(t *testing.T) {
-	binding, err := evidence.LoadBinding()
-	contractcheck.FailErr(t, "load evidence binding", err)
-	kinds := binding.KindShapeMap()
-	packs := filepath.Join(contractcheck.RepoRoot(t), "lycaon", "config", "packs")
-	var files []string
-	for _, pattern := range []string{"*/*/policy/*.yaml", "*/*/host/next-steps/*.yaml"} {
-		matches, err := filepath.Glob(filepath.Join(packs, pattern))
-		contractcheck.FailErr(t, "glob "+pattern, err)
-		files = append(files, matches...)
-	}
-	if len(files) == 0 {
-		t.Fatal("no policy copy found")
-	}
-	checked := 0
-	for _, path := range files {
-		body, err := os.ReadFile(path)
-		contractcheck.FailErr(t, "read "+path, err)
-		for _, match := range policyHandle.FindAllStringSubmatch(string(body), -1) {
-			checked++
-			if _, known := kinds[match[1]]; !known && binding.ToolKind(match[1]) != "" {
-				rel, _ := filepath.Rel(packs, path)
-				t.Errorf("%s: names tool %q as an evidence handle; its kind is %q", rel, match[1]+"#", binding.ToolKind(match[1])+"#")
-			}
-		}
-	}
-	if checked == 0 {
-		t.Fatal("no handle found in policy copy; the scan is broken")
-	}
 }

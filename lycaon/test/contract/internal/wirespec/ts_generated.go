@@ -59,14 +59,14 @@ func tsGeneratedSchemaExists(content, name string) bool {
 // Field names are already snake_case on the OpenAPI wire.
 var generatedSchemaFieldRe = regexp.MustCompile(`(?m)^            (?:readonly )?(\w+)(\?)?:`)
 
-func parseGeneratedSchemaFieldSpecs(content, name string) ([]wireField, error) {
+func parseGeneratedSchemaFieldSpecs(content, name string) ([]Field, error) {
 	body, err := extractGeneratedSchemaObjectBody(content, name)
 	if err != nil {
 		return nil, err
 	}
-	var out []wireField
+	var out []Field
 	for _, fm := range generatedSchemaFieldRe.FindAllStringSubmatch(body, -1) {
-		out = append(out, wireField{
+		out = append(out, Field{
 			Name:     fm[1],
 			Optional: fm[2] == "?",
 		})

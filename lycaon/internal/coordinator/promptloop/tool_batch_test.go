@@ -1,9 +1,8 @@
 package promptloop_test
 
 import (
-	"github.com/lycaon/lycaon/internal/toolcontract"
-
 	"context"
+	"slices"
 	"sort"
 	"strings"
 	"sync"
@@ -15,14 +14,17 @@ import (
 	"github.com/lycaon/lycaon/internal/coordinator/promptloop"
 	"github.com/lycaon/lycaon/internal/llm"
 	"github.com/lycaon/lycaon/internal/session/store"
+	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/tools"
+	"github.com/lycaon/lycaon/internal/tools/toolstest"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
-func commitEvidenceFromStore(store *store.Memory) func(context.Context, string, *api.Session, string, map[string]any, string, string) (string, string, error) {
+func commitEvidenceFromStore(store *store.SQL) func(context.Context, string, *api.Session, string, map[string]any, string, string) (string, string, error) {
 	return func(ctx context.Context, sessionID string, sess *api.Session, toolName string, args map[string]any, content, artifactID string) (string, string, error) {
 		if sess == nil {
 			return "", content, nil
@@ -53,7 +55,7 @@ func TestLoopRunsConcurrentTools(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		var concurrent int32
 		var peak int32
-		reg := tools.NewStubRegistry()
+		reg := toolstest.NewRegistry()
 		_ = reg.Register("read", func(ctx context.Context, args map[string]any, _ tools.ToolContext) (string, error) {
 			cur := atomic.AddInt32(&concurrent, 1)
 			for {
@@ -75,7 +77,7 @@ func TestLoopRunsConcurrentTools(t *testing.T) {
 			{ID: "tc1", Name: "read", Args: map[string]any{"path": "a.go"}},
 			{ID: "tc2", Name: "read", Args: map[string]any{"path": "b.go"}},
 		})})
-		store := store.NewMemory()
+		store := storetest.New(t, testdbseed.DefaultProjectID)
 		deps := promptloop.StoreDeps(store)
 		deps.Context.LoadedTools = workersLoaded
 		deps.Context.Limits = loopTestLimits(2)
@@ -104,7 +106,7 @@ func TestLoopRunsConcurrentTools(t *testing.T) {
 func TestLoopCoordinatorReadsGetHandlesAcrossSurfaces(t *testing.T) {
 	for _, surface := range []string{toolcontract.SurfaceImplementInvestigate, "orchestrate_plan", "implement_overlay_promote"} {
 		t.Run(surface, func(t *testing.T) {
-			reg := tools.NewStubRegistry()
+			reg := toolstest.NewRegistry()
 			_ = reg.Register("command", func(_ context.Context, args map[string]any, _ tools.ToolContext) (string, error) {
 				path, _ := args["path"].(string)
 				return "contents of " + path, nil
@@ -113,7 +115,7 @@ func TestLoopCoordinatorReadsGetHandlesAcrossSurfaces(t *testing.T) {
 				{ID: "tc1", Name: "command", Args: map[string]any{"path": "a.go", "command": "cat a.go"}},
 				{ID: "tc2", Name: "command", Args: map[string]any{"path": "b.go", "command": "cat b.go"}},
 			})})
-			store := store.NewMemory()
+			store := storetest.New(t, testdbseed.DefaultProjectID)
 			deps := promptloop.StoreDeps(store)
 			deps.Context.LoadedTools = workersLoaded
 			// The final iteration is prose-only.
@@ -151,9 +153,9 @@ func TestLoopCoordinatorReadsGetHandlesAcrossSurfaces(t *testing.T) {
 					got[path] = m.Content[:nl]
 				}
 			}
-			want := map[string]string{"a.go": "[command#1]", "b.go": "[command#2]"}
-			if got["a.go"] != want["a.go"] || got["b.go"] != want["b.go"] {
-				t.Fatalf("coordinator reads tagged %v, want %v", got, want)
+			// Parallel calls take handles as they finish.
+			if handles := []string{got["a.go"], got["b.go"]}; !slices.Contains(handles, "[command#1]") || !slices.Contains(handles, "[command#2]") {
+				t.Fatalf("coordinator reads tagged %v, want command#1 and command#2", got)
 			}
 		})
 	}
@@ -163,7 +165,7 @@ func TestLoopParallelWorkerReadsCommitInCallOrder(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		// Reverse completion order exercises timestamp and handle ordering.
 		sleeps := map[string]time.Duration{"a.go": 30 * time.Millisecond, "b.go": 15 * time.Millisecond, "c.go": 0}
-		reg := tools.NewStubRegistry()
+		reg := toolstest.NewRegistry()
 		_ = reg.Register("read", func(_ context.Context, args map[string]any, _ tools.ToolContext) (string, error) {
 			path, _ := args["path"].(string)
 			time.Sleep(sleeps[path])
@@ -175,7 +177,7 @@ func TestLoopParallelWorkerReadsCommitInCallOrder(t *testing.T) {
 			{ID: "tc2", Name: "read", Args: map[string]any{"path": "b.go"}},
 			{ID: "tc3", Name: "read", Args: map[string]any{"path": "c.go"}},
 		})})
-		store := store.NewMemory()
+		store := storetest.New(t, testdbseed.DefaultProjectID)
 		deps := promptloop.StoreDeps(store)
 		deps.Context.LoadedTools = workersLoaded
 		deps.Context.Limits = loopTestLimits(2)
@@ -200,6 +202,7 @@ func TestLoopParallelWorkerReadsCommitInCallOrder(t *testing.T) {
 		testutil.FailErr(t, "get messages", err)
 		type toolRow struct {
 			ts     time.Time
+			ord    int64
 			handle string
 			path   string
 		}
@@ -212,19 +215,23 @@ func TestLoopParallelWorkerReadsCommitInCallOrder(t *testing.T) {
 			if nl <= 0 || !strings.HasPrefix(m.Content, "[read#") {
 				continue
 			}
-			rows = append(rows, toolRow{ts: m.CreatedAt, handle: m.Content[:nl], path: strings.TrimPrefix(m.Content[nl+1:], "contents of ")})
+			rows = append(rows, toolRow{ts: m.CreatedAt, ord: m.Ord, handle: m.Content[:nl], path: strings.TrimPrefix(m.Content[nl+1:], "contents of ")})
 		}
-		// Simulate the production store's ORDER BY ts retrieval.
-		sort.SliceStable(rows, func(i, j int) bool { return rows[i].ts.Before(rows[j].ts) })
-		wantPaths := []string{"a.go", "b.go", "c.go"}
-		wantHandles := []string{"[read#1]", "[read#2]", "[read#3]"}
 		if len(rows) != 3 {
 			t.Fatalf("tagged read rows = %d want 3 (%v)", len(rows), rows)
 		}
-		for i, r := range rows {
-			if r.path != wantPaths[i] || r.handle != wantHandles[i] {
-				t.Fatalf("ts-ordered read %d = (%s, %s) want (%s, %s) — batch scrambled by completion-order ts",
-					i, r.handle, r.path, wantHandles[i], wantPaths[i])
+		// Timestamps keep call order.
+		sort.SliceStable(rows, func(i, j int) bool { return rows[i].ts.Before(rows[j].ts) })
+		for i, want := range []string{"a.go", "b.go", "c.go"} {
+			if rows[i].path != want {
+				t.Fatalf("ts-ordered read %d = %s want %s — batch scrambled by completion-order ts", i, rows[i].path, want)
+			}
+		}
+		// Handles are minted as each result is stored, so they follow the stored order.
+		sort.SliceStable(rows, func(i, j int) bool { return rows[i].ord < rows[j].ord })
+		for i, want := range []string{"[read#1]", "[read#2]", "[read#3]"} {
+			if rows[i].handle != want {
+				t.Fatalf("read stored %d carries %s want %s", i, rows[i].handle, want)
 			}
 		}
 	})
@@ -236,7 +243,7 @@ func TestLoopMixedBatchSerializesWriteAfterParallelReads(t *testing.T) {
 		var peak int32
 		var order []string
 		var orderMu sync.Mutex
-		reg := tools.NewStubRegistry()
+		reg := toolstest.NewRegistry()
 		_ = reg.Register("read", func(ctx context.Context, args map[string]any, _ tools.ToolContext) (string, error) {
 			cur := atomic.AddInt32(&concurrent, 1)
 			for {
@@ -269,7 +276,7 @@ func TestLoopMixedBatchSerializesWriteAfterParallelReads(t *testing.T) {
 			{ID: "tc2", Name: "read", Args: map[string]any{"path": "b.go"}},
 			{ID: "tc3", Name: "write", Args: map[string]any{"path": "a.go", "content": "x"}},
 		})})
-		store := store.NewMemory()
+		store := storetest.New(t, testdbseed.DefaultProjectID)
 		deps := promptloop.StoreDeps(store)
 		deps.Context.LoadedTools = workersLoaded
 		deps.Context.Limits = loopTestLimits(2)
@@ -302,7 +309,7 @@ func TestLoopMixedBatchSerializesWriteAfterParallelReads(t *testing.T) {
 
 func TestLoopDropsEmptyArgPhantomTaskBeforeExecution(t *testing.T) {
 	var taskInvocations int32
-	reg := tools.NewStubRegistry()
+	reg := toolstest.NewRegistry()
 	_ = reg.Register("task", func(_ context.Context, args map[string]any, _ tools.ToolContext) (string, error) {
 		atomic.AddInt32(&taskInvocations, 1)
 		if args["agent_type"] != "implementer" {
@@ -314,7 +321,7 @@ func TestLoopDropsEmptyArgPhantomTaskBeforeExecution(t *testing.T) {
 		{ID: "tc_valid", Name: "task", Args: taskCallArgs("implementer", "work")},
 		{ID: "tc_phantom", Name: "task", Args: nil},
 	})})
-	store := store.NewMemory()
+	store := storetest.New(t, testdbseed.DefaultProjectID)
 	deps := promptloop.StoreDeps(store)
 	deps.Context.LoadedTools = workersLoaded
 	deps.Context.Limits = loopTestLimits(2)
@@ -355,7 +362,9 @@ func TestLoopDropsEmptyArgPhantomTaskBeforeExecution(t *testing.T) {
 	}
 }
 
-func TestLoopPublishesClassifiedResultBeforeEvidence(t *testing.T) {
+// A result is stored once, already carrying its evidence handle, so no crash
+// can leave it stored without one.
+func TestLoopStoresClassifiedResultWithItsEvidence(t *testing.T) {
 	var order []string
 	var orderMu sync.Mutex
 	note := func(step string) {
@@ -363,7 +372,7 @@ func TestLoopPublishesClassifiedResultBeforeEvidence(t *testing.T) {
 		order = append(order, step)
 		orderMu.Unlock()
 	}
-	reg := tools.NewStubRegistry()
+	reg := toolstest.NewRegistry()
 	_ = reg.Register("command", func(_ context.Context, args map[string]any, _ tools.ToolContext) (string, error) {
 		path, _ := args["path"].(string)
 		return "contents of " + path, nil
@@ -371,8 +380,8 @@ func TestLoopPublishesClassifiedResultBeforeEvidence(t *testing.T) {
 	client := llm.NewMockProvider(&llm.MockConfig{Responses: mockToolThenDone("review", []llm.MockToolCall{
 		{ID: "tc1", Name: "command", Args: map[string]any{"path": "a.go", "command": "cat a.go"}},
 	})})
-	mem := store.NewMemory()
-	deps := promptloop.StoreDeps(mem)
+	sessionStore := storetest.New(t, testdbseed.DefaultProjectID)
+	deps := promptloop.StoreDeps(sessionStore)
 	deps.Context.LoadedTools = workersLoaded
 	deps.Context.Limits = loopTestLimits(2)
 	deps.Model.LLM = client
@@ -382,18 +391,18 @@ func TestLoopPublishesClassifiedResultBeforeEvidence(t *testing.T) {
 	deps.Projection.AppendMessages = func(ctx context.Context, sessionID string, msgs ...api.Message) error {
 		for _, msg := range msgs {
 			if msg.Role == api.MessageRoleTool {
-				note("append")
+				note("append " + strings.Join(msg.EvidenceHandles, ","))
 			}
 		}
-		return mem.AppendMessages(ctx, sessionID, msgs...)
+		return sessionStore.AppendMessages(ctx, sessionID, msgs...)
 	}
 	deps.Tools.CommitEvidenceToolResult = func(ctx context.Context, sessionID string, sess *api.Session, toolName string, args map[string]any, content, artifactID string) (string, string, error) {
 		note("evidence")
-		return mem.CommitVisualEvidenceToolResult(ctx, sessionID, sess.WorkspacePath, toolName, args, content, artifactID)
+		return sessionStore.CommitVisualEvidenceToolResult(ctx, sessionID, sess.WorkspacePath, toolName, args, content, artifactID)
 	}
 	loop := promptloop.NewPromptLoopForTest(deps)
 	ctx := context.Background()
-	sess, err := mem.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
+	sess, err := sessionStore.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
 	_, err = loop.Run(ctx, promptloop.PromptRunInput{
 		SessionID:  sess.ID,
@@ -406,8 +415,8 @@ func TestLoopPublishesClassifiedResultBeforeEvidence(t *testing.T) {
 		},
 	})
 	testutil.FailErr(t, "loop.Run", err)
-	if len(order) < 2 || order[0] != "append" || order[1] != "evidence" {
-		t.Fatalf("commit order = %v want append before evidence", order)
+	if !slices.Equal(order, []string{"evidence", "append command#1"}) {
+		t.Fatalf("commit order = %v want the evidence, then the result appended with its handle", order)
 	}
 }
 
@@ -416,7 +425,7 @@ func TestLoopPublishesParallelResultAsEachFinishes(t *testing.T) {
 	var once sync.Once
 	slowStarted := make(chan struct{})
 	releaseSlow := make(chan struct{})
-	reg := tools.NewStubRegistry()
+	reg := toolstest.NewRegistry()
 	_ = reg.Register("read", func(_ context.Context, args map[string]any, _ tools.ToolContext) (string, error) {
 		path, _ := args["path"].(string)
 		if path == "slow.go" {
@@ -430,16 +439,16 @@ func TestLoopPublishesParallelResultAsEachFinishes(t *testing.T) {
 		{ID: "tc-slow", Name: "read", Args: map[string]any{"path": "slow.go"}},
 		{ID: "tc-fast", Name: "read", Args: map[string]any{"path": "fast.go"}},
 	})})
-	mem := store.NewMemory()
-	deps := promptloop.StoreDeps(mem)
+	sessionStore := storetest.New(t, testdbseed.DefaultProjectID)
+	deps := promptloop.StoreDeps(sessionStore)
 	deps.Context.LoadedTools = workersLoaded
 	deps.Context.Limits = loopTestLimits(2)
 	deps.Model.LLM = client
 	deps.Context.Tools = reg
 	deps.Context.Policy = &recordingToolPolicy{}
-	deps.Tools.CommitEvidenceToolResult = commitEvidenceFromStore(mem)
+	deps.Tools.CommitEvidenceToolResult = commitEvidenceFromStore(sessionStore)
 	deps.Projection.AppendMessages = func(ctx context.Context, sessionID string, msgs ...api.Message) error {
-		err := mem.AppendMessages(ctx, sessionID, msgs...)
+		err := sessionStore.AppendMessages(ctx, sessionID, msgs...)
 		for _, msg := range msgs {
 			if msg.Role == api.MessageRoleTool && msg.ToolResult != nil &&
 				msg.ToolResult.ToolCallID == "tc-fast" {
@@ -450,7 +459,7 @@ func TestLoopPublishesParallelResultAsEachFinishes(t *testing.T) {
 	}
 	loop := promptloop.NewPromptLoopForTest(deps)
 	ctx := context.Background()
-	sess, err := mem.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
+	sess, err := sessionStore.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
 	sess.ParentSessionID = "coordinator-parent"
 	done := make(chan error, 1)

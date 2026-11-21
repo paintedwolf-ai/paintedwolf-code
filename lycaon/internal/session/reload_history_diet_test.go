@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
+	"github.com/lycaon/lycaon/internal/db"
 	"github.com/lycaon/lycaon/internal/extpacks"
 	"github.com/lycaon/lycaon/internal/llm/compaction"
 	"github.com/lycaon/lycaon/internal/project"
@@ -367,13 +368,13 @@ func (j *rewindFaultJournal) PrepareEffect(ctx context.Context, p sourceeffect.P
 }
 
 // RegisterProjectContextForTest wires a project and its trust store.
-func RegisterProjectContextForTest(t *testing.T, m *Host, projectDir string) string {
+func RegisterProjectContextForTest(t *testing.T, m *Host, database db.Handle, projectDir string) string {
 	t.Helper()
 	surfaces, err := settings.NewTrustSurfacesStoreAt(
 		filepath.Join(t.TempDir(), "trust-surfaces.yaml"))
 	testutil.FailErr(t, "trust surfaces store", err)
 
-	reg := project.NewMemoryRegistry()
+	reg := project.NewSQLRegistry(database)
 	p, err := project.CreateWithRoot(t.Context(), reg, projectDir)
 	testutil.FailErr(t, "CreateWithRoot", err)
 	m.SetProjectRegistry(reg)

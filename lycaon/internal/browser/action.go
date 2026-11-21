@@ -14,7 +14,13 @@ const (
 	MaxCaptureActions = 20
 	DefaultWaitIdle   = "idle"
 	NavTimeout        = 30 * time.Second
-	ActionTimeout     = 15 * time.Second
+	// ActionTimeout bounds one driver call; it outlasts the longest step
+	// deadline, so the step's own deadline decides when it gives up.
+	ActionTimeout = 45 * time.Second
+	// targetTimeoutMS bounds a step finding and reaching its target.
+	targetTimeoutMS = 10000
+	// waitForTimeoutMS bounds a wait_for step.
+	waitForTimeoutMS = 30000
 	// MaxTypedRunes bounds one type or fill value.
 	MaxTypedRunes = 4096
 	// MaxHoldMS bounds a hover dwell or drag hold.
@@ -59,8 +65,10 @@ type CaptureAction struct {
 	By        *ActionOffset  `json:"by,omitempty"`
 	HoldMS    int            `json:"hold_ms,omitempty"`
 	Routes    []RouteRule    `json:"routes,omitempty"`
-	TimeoutMS int            `json:"timeout_ms,omitempty"`
-	Wait      string         `json:"wait,omitempty"`
+	Gone      bool           `json:"gone,omitempty"`
+	// TimeoutMS is the deadline the host gives the step's driver call.
+	TimeoutMS int    `json:"-"`
+	Wait      string `json:"wait,omitempty"`
 }
 
 func (a CaptureAction) kind() string {
@@ -109,12 +117,24 @@ func dispatchAction(page *rod.Page, drive *pageDrive, act CaptureAction) (json.R
 	case "route":
 		return routeAction(drive, act)
 	case "wait_for":
-		return driverCall(page, "waitFor", withTimeout(map[string]any{"selector": act.Selector, "text": act.Text}, act.TimeoutMS))
+		return driverCall(page, "waitFor", withTimeout(map[string]any{"selector": act.Selector, "text": act.Text, "gone": act.Gone}, act.TimeoutMS))
 	case "wait":
 		return waitAction(page, act)
 	default:
 		return nil, fmt.Errorf("unknown action type %q", act.Type)
 	}
+}
+
+// stepTimeoutMS is the deadline the host gives a step's driver call; zero
+// for a step that waits on no target.
+func stepTimeoutMS(kind string) int {
+	switch kind {
+	case "wait_for":
+		return waitForTimeoutMS
+	case "click", "hover", "drag", "scroll", "fill", "type", "select":
+		return targetTimeoutMS
+	}
+	return 0
 }
 
 func withTimeout(opts map[string]any, timeoutMS int) map[string]any {
@@ -129,13 +149,7 @@ func waitAction(page *rod.Page, act CaptureAction) (json.RawMessage, error) {
 	if wait == "" || wait == DefaultWaitIdle {
 		return driverCall(page, "waitIdle", map[string]any{})
 	}
-	if ms := act.TimeoutMS; ms > 0 {
-		if err := pause(page, time.Duration(ms)*time.Millisecond); err != nil {
-			return nil, err
-		}
-		return surveyjson.Marshal(map[string]any{"ok": true, "waited_ms": ms})
-	}
-	return nil, fmt.Errorf("wait action requires wait=idle or timeout_ms")
+	return nil, fmt.Errorf("wait action requires wait=idle")
 }
 
 func pause(page *rod.Page, d time.Duration) error {

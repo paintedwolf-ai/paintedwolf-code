@@ -40,3 +40,58 @@ class BaselineTests(unittest.TestCase):
             with self.subTest(raw=raw), patch.object(baseline, "read_bytes", return_value=raw):
                 with self.assertRaises(ValueError):
                     baseline.capture("https://downloads.paintedwolf.dev", "1.1.0", {}, [], Path("unused"))
+
+
+class PublishedSourceTests(unittest.TestCase):
+    """The nightly installed upgrade runs from the release before the newest to the newest."""
+
+    def setUp(self):
+        self.root = Path(self.enterContext(tempfile.TemporaryDirectory()))
+        for version in ("1.0.1", "1.0.2-rc7", "1.0.2-rc8", "1.0.2", "1.0.3-rc1"):
+            (self.root / "lycaon/testdata/upgrade-corpus" / version).mkdir(parents=True)
+        self.registry = {"signing_generation": 1, "generations": [{"generation": 1, "bridge_version": None}]}
+        self.pointers = {"stable": "1.0.2", "preview": "1.0.2"}
+        self.published = {"1.0.1", "1.0.2-rc7", "1.0.2-rc8", "1.0.2"}
+
+    def capture(self):
+        import release_control
+        def pointer(_base, channel, number, _registry, _destination):
+            version = self.pointers.get(channel)
+            if version is None:
+                return None
+            return {"channel": channel, "generation": number, "path": f"updates/{channel}/key-{number}/latest.json",
+                    "manifest": {"version": version, "update_keys": {"signing_generation": 1, "embedded_generation": 1}}}
+        def retained(_base, version, _registry, _destination):
+            if version not in self.published:
+                return None
+            return {"path": f"anchors/{version}.json", "verification": "artifact_signature_required",
+                    "manifest": {"version": version, "update_keys": {"signing_generation": 1, "embedded_generation": 1}}}
+        with patch("update_keys.load_registry", return_value=self.registry), \
+             patch("release_upgrade.feeds.capture", side_effect=pointer), \
+             patch.object(baseline, "retained", side_effect=retained) as reads, \
+             patch("release_upgrade.plan.validate_binding"):
+            result = release_control.capture_published("https://downloads.paintedwolf.dev", self.root, self.root / "sources")
+        return result, [call.args[1] for call in reads.call_args_list]
+
+    def test_the_newest_pointer_is_the_candidate_and_the_newest_earlier_corpus_the_source(self):
+        result, reads = self.capture()
+        self.assertEqual(result["candidate"]["version"], "1.0.2")
+        self.assertEqual(result["candidate_source"], "published")
+        self.assertEqual(reads, ["1.0.2-rc8"])
+        self.assertEqual(sorted(case["id"] for case in result["cases"]), ["1.0.2-rc8-preview", "1.0.2-rc8-stable"])
+
+    def test_a_sealed_but_unpublished_corpus_is_passed_over(self):
+        self.pointers["preview"] = "1.0.3-rc2"
+        (self.root / "lycaon/testdata/upgrade-corpus/1.0.3-rc2").mkdir()
+        result, reads = self.capture()
+        self.assertEqual(result["candidate"]["version"], "1.0.3-rc2")
+        self.assertEqual(reads, ["1.0.3-rc1", "1.0.2"])
+        self.assertEqual([case["id"] for case in result["cases"]], ["1.0.2-preview"])
+
+    def test_manual_install_clients_and_an_empty_origin_are_refused(self):
+        self.published = {"1.0.1"}
+        with self.assertRaisesRegex(ValueError, "no earlier published release"):
+            self.capture()
+        self.pointers = {}
+        with self.assertRaisesRegex(ValueError, "no release is published"):
+            self.capture()

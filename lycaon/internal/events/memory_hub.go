@@ -18,7 +18,8 @@ import (
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
-const replayCapacity = 4096
+// ReplayCapacity is how many delivered events a cursor can resume across.
+const ReplayCapacity = 4096
 
 type replayCursor struct {
 	Generation string `json:"g"`
@@ -71,7 +72,7 @@ func NewMemoryHub() *MemoryHub {
 		pending:     make(map[string]debouncedEntry),
 		lifecycles:  make(map[string]sessionLifecycle),
 		generation:  uuid.NewString(),
-		replay:      make([]api.EventEnvelope, 0, replayCapacity),
+		replay:      make([]api.EventEnvelope, 0, ReplayCapacity),
 		cursorKey:   key,
 	}
 }
@@ -215,9 +216,9 @@ func (h *MemoryHub) deliverLocked(env api.EventEnvelope) {
 	h.sequence++
 	env.Cursor = h.encodeReplayCursor(replayCursor{Generation: h.generation, Sequence: h.sequence})
 	h.replay = append(h.replay, env)
-	if len(h.replay) > replayCapacity {
-		copy(h.replay, h.replay[len(h.replay)-replayCapacity:])
-		h.replay = h.replay[:replayCapacity]
+	if len(h.replay) > ReplayCapacity {
+		copy(h.replay, h.replay[len(h.replay)-ReplayCapacity:])
+		h.replay = h.replay[:ReplayCapacity]
 	}
 	var overflowed []string
 	for _, sub := range h.subscribers {

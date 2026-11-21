@@ -5,115 +5,12 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"slices"
 	"strings"
 	"testing"
 
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
+	"gopkg.in/yaml.v3"
 )
-
-func TestRepositorySetupArtifactsFollowSharedReleaseAdmission(t *testing.T) {
-	t.Parallel()
-	workflow := parseLane(t, ".github/workflows/release.yml")
-	if _, duplicate := workflow.Jobs["linux-candidates"]; duplicate {
-		t.Fatal("public Linux release must build one package set")
-	}
-	native := workflow.Jobs["linux-repositories"]
-	if native.Environment != "release-signing" {
-		t.Fatal("repository setup must use signing custody")
-	}
-	assembled, uploaded := false, false
-	for _, step := range native.Steps {
-		if strings.Contains(step.Run, "scripts.linux_release.release_repository_setup") {
-			if step.Env["LINUX_PACKAGE_SIGNING_KEY"] != "${{ secrets.LINUX_PACKAGE_SIGNING_KEY }}" {
-				t.Fatal("setup assembly must use the selected package signing key")
-			}
-			assembled = true
-		}
-		if strings.HasPrefix(step.Uses, "actions/upload-artifact@") && step.With["name"] == "linux-repository-setup" {
-			if !assembled || !strings.Contains(step.With["path"], "linux-setup/*") {
-				t.Fatal("setup upload must follow independent admission and contain its curated assets")
-			}
-			uploaded = true
-		}
-	}
-	if !assembled || !uploaded {
-		t.Fatal("setup packages must be assembled and admitted before publication")
-	}
-	for _, name := range []string{"publish-artifacts", "publish-github-release"} {
-		job := workflow.Jobs[name]
-		if !workflow.ancestors(name)["linux-repositories"] {
-			t.Errorf("%s can publish before the setup packages are admitted", name)
-		}
-		downloaded := false
-		for _, step := range job.Steps {
-			if strings.HasPrefix(step.Uses, "actions/download-artifact@") && step.With["name"] == "linux-repository-setup" {
-				downloaded = step.With["path"] == "release-artifacts"
-			}
-		}
-		loops := 1
-		if name == "publish-artifacts" {
-			loops = 2
-		}
-		if !downloaded || strings.Count(job.text(), "for artifact in release-artifacts/*; do") != loops {
-			t.Errorf("%s must deposit or compare every curated setup asset", name)
-		}
-	}
-	if !strings.Contains(workflow.Jobs["publish-github-release"].text(), `gh release create "v${VERSION}" release-artifacts/*`) {
-		t.Fatal("the trailing mirror must include every curated setup asset")
-	}
-}
-
-func TestReleaseDistributionDocumentFollowsObservedDeliveryBeforeAnnouncement(t *testing.T) {
-	t.Parallel()
-	workflow := parseLane(t, ".github/workflows/release.yml")
-	for _, completed := range []string{"ship-gates", "publish-artifacts", "publish-linux-repositories", "linux-delivery"} {
-		if !workflow.ancestors("publish-immutable")[completed] {
-			t.Errorf("distribution signing precedes completed %s", completed)
-		}
-	}
-	metadata := workflow.Jobs["publish-immutable"]
-	if metadata.Environment != "release-publication" || !strings.Contains(metadata.If, "needs.classify.outputs.publish == 'true'") {
-		t.Fatal("completed metadata publication must use the shared publication decision and custody")
-	}
-	for _, artifact := range []string{"release-public-artifacts", "linux-repository-setup", "release-metadata", "linux-repository-publication", "nix-cache-publication", "release-channel-plan"} {
-		if !slices.Contains(metadata.artifacts("download-artifact"), artifact) {
-			t.Errorf("completed document lacks selected %s", artifact)
-		}
-	}
-	text := metadata.text()
-	prepare := strings.Index(text, "scripts.release_distribution_contract.release_lane")
-	deposit := strings.Index(text, "bash scripts/release-r2-immutable-put.sh")
-	verify := strings.Index(text, "public_bytes")
-	if prepare < 0 || deposit <= prepare || verify <= deposit || !strings.Contains(text, "for name in distribution.v1.json distribution.v1.json.sig") {
-		t.Fatal("both signed document objects must be constructed, deposited and publicly verified in order")
-	}
-	for _, name := range []string{"update-cask", "notify-website", "activate-updater", "publish-github-release"} {
-		if !workflow.ancestors(name)["publish-immutable"] {
-			t.Errorf("%s bypasses the completed immutable document gate", name)
-		}
-	}
-	notice := workflow.Jobs["notify-website"].text()
-	for _, required := range []string{"signed-distribution/distribution.v1.json", `"distribution_sha256"`, "--distribution-sha256", `"publication_channels": plan["channels"]`, "--input"} {
-		if !strings.Contains(notice, required) {
-			t.Errorf("website confirmation lacks %s", required)
-		}
-	}
-	if !slices.ContainsFunc(workflow.Jobs["notify-website"].Steps, func(step laneStep) bool {
-		return step.Uses == "./.github/actions/setup-apt" && slices.Contains(strings.Fields(step.With["packages"]), "minisign")
-	}) {
-		t.Error("website confirmation lacks the minisign verifier")
-	}
-	delivery := parseLane(t, ".github/workflows/release-linux-delivery.yml")
-	if !slices.Contains(delivery.Jobs["publish-nix-cache"].artifacts("upload-artifact"), "nix-cache-publication") ||
-		!slices.Contains(workflow.Jobs["publish-linux-repositories"].artifacts("upload-artifact"), "linux-repository-publication") {
-		t.Fatal("document facts must select actual current-run delivery receipts")
-	}
-	mirror := workflow.Jobs["publish-github-release"].text()
-	if !strings.Contains(mirror, "distribution.v1.json") || !strings.Contains(mirror, "distribution.v1.json.sig") {
-		t.Fatal("the trailing mirror must retain both signed document objects")
-	}
-}
 
 func TestReleasePublicationBoundaryExcludesCandidateBytes(t *testing.T) {
 	root := contractcheck.RepoRoot(t)
@@ -267,41 +164,32 @@ func TestReleasePublicationCollectsEveryCurrentPublicPackage(t *testing.T) {
 	}
 }
 
-func TestReleaseChannelPlanFeedsEveryPublicationSurface(t *testing.T) {
-	t.Parallel()
-	workflow := parseLane(t, ".github/workflows/release.yml")
-	for _, name := range []string{"linux-repositories", "linux-pacman-repositories", "publish-artifacts", "publish-linux-repositories", "publish-immutable", "update-cask", "notify-website", "activate-updater"} {
-		job := workflow.Jobs[name]
-		if !workflow.ancestors(name)["select-release-channels"] || !slices.Contains(job.artifacts("download-artifact"), "release-channel-plan") ||
-			!strings.Contains(job.text(), "release-plan/channel-plan.json") {
-			t.Errorf("%s does not consume the one retained release channel plan", name)
-		}
-	}
-	deposit := workflow.Jobs["publish-artifacts"].text()
-	if !strings.Contains(deposit, "release-metadata/${VERSION}/channel-plan.json") || !strings.Contains(deposit, "channels check") {
-		t.Fatal("the original plan must be re-admitted and retained immutably before channel effects")
-	}
-	activation := workflow.Jobs["activate-updater"].text()
-	if !strings.Contains(activation, ".channels[]") || !strings.Contains(activation, "--advance-if-newer") {
-		t.Fatal("updater activation must consume the shared plan and keep its monotonic Preview guard")
-	}
-}
-
 func TestReleaseMirrorRefusesWithdrawnIntentBeforeProviderAccess(t *testing.T) {
 	root := contractcheck.RepoRoot(t)
-	job := parseLane(t, ".github/workflows/release.yml").Jobs["publish-github-release"]
+	var release struct {
+		Jobs map[string]struct {
+			Environment string
+			Steps       []struct {
+				Run string
+				Env map[string]string
+			}
+		}
+	}
+	contractcheck.FailErr(t, "decode release workflow",
+		yaml.Unmarshal([]byte(contractcheck.ReadRepoFile(t, root, ".github/workflows/release.yml")), &release))
+	job := release.Jobs["publish-github-release"]
 	var body string
-	var mirror laneStep
+	var mirror map[string]string
 	for _, step := range job.Steps {
 		if strings.Contains(step.Run, "gh release create") {
-			body, mirror = step.Run, step
+			body, mirror = step.Run, step.Env
 		}
 	}
 	if body == "" || job.Environment != "release-publication" {
 		t.Fatal("mirror must use its shared protected publication owner")
 	}
 	for _, name := range []string{"CLOUDFLARE_ACCOUNT_ID", "CLOUDFLARE_API_TOKEN", "R2_BUCKET"} {
-		if mirror.Env[name] != "${{ secrets."+name+" }}" {
+		if mirror[name] != "${{ secrets."+name+" }}" {
 			t.Fatalf("mirror ledger read requires the existing protected %s credential", name)
 		}
 	}

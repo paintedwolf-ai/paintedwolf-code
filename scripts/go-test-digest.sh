@@ -186,12 +186,9 @@ else
   fi
   # No package fails on elapsed time; the watchdog below is the run's one limit.
   TEST_ARGS=(-json -p "${P_PKGS}" -parallel "${P_INTRA}" -timeout 0)
-  if ((${#SHORT_FLAG[@]})); then
-    TEST_ARGS+=("${SHORT_FLAG[@]}")
-  else
-    # Filesystem-heavy runs avoid test-result input hashing.
-    TEST_ARGS+=(-count=1)
-  fi
+  # Go's result cache cannot see what a test's child processes read, so every package executes.
+  TEST_ARGS+=(-count=1)
+  if ((${#SHORT_FLAG[@]})); then TEST_ARGS+=("${SHORT_FLAG[@]}"); fi
   if ((${#RACE_FLAG[@]})); then TEST_ARGS+=("${RACE_FLAG[@]}"); fi
   if [[ -n "${BUILD_TAGS}" ]]; then TEST_ARGS+=("-tags" "${BUILD_TAGS}"); fi
   TEST_ARGS+=("${PKGS[@]}")
@@ -231,23 +228,12 @@ python3 "${MANIFEST_TOOL}" create \
   --env "GOMAXPROCS=${EFFECTIVE_GOMAXPROCS}" \
   --env "LYCAON_LLM_MOCK=${EFFECTIVE_LLM_MOCK}"
 
-# Shared stages run each test binary through the reuse and early-outcome program; the replay
-# manifest keeps the plain invocation, which does not depend on this snapshot's scripts.
+# Shared stages run each test binary through the early-outcome program; the replay manifest keeps
+# the plain invocation, which does not depend on this snapshot's scripts.
 EXEC_ARGS=()
 if [[ -n "${PW_TEST_STAGE_EVENTS:-}" ]]; then
   EXEC_ARGS=(-exec "${ROOT}/scripts/go-test-exec.py")
-  if [[ -n "${PW_TEST_REUSE_STORE:-}" ]]; then
-    # Recorded results replace Go's result cache, which a fresh snapshot's file times defeat anyway.
-    if ((${#SHORT_FLAG[@]})); then
-      EXEC_ARGS+=(-count=1)
-    fi
-    export PW_TEST_PACKAGE_IDENTITIES="${RUN_DIR}/package-identities.json"
-    if ! python3 "${ROOT}/scripts/verification_reuse.py" identities "${PW_TEST_PACKAGE_IDENTITIES}" -- "${TEST_ARGS[@]}" \
-      2>"${RUN_DIR}/package-identities.log"; then
-      echo "go-test-digest: package build identities unavailable; every package runs (${RUN_DIR}/package-identities.log)" >&2
-    fi
-  fi
-  export PW_TEST_SCRATCH_ROOT="${RUN_DIR}" PW_TEST_SOURCE_ROOT="${ROOT}" PW_TEST_MODULE_ROOT="${GO_DIR}"
+  export PW_TEST_SCRATCH_ROOT="${RUN_DIR}" PW_TEST_MODULE_ROOT="${GO_DIR}"
 fi
 
 set +e

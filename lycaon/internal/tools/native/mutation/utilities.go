@@ -50,7 +50,7 @@ func runRm(inv *invocation) error {
 		if err != nil {
 			return 0, err
 		}
-		if err := inv.owners.Revisions.CheckUnsavedDraft(inv.ctx, inv.tc, bound.Resolved.Abs, true); err != nil {
+		if err := inv.owners.Revisions.SaveDrafts(inv.ctx, inv.tc, bound.Resolved.Abs, true); err != nil {
 			return 0, err
 		}
 		dirs, err := inv.directoriesUnder(bound.Resolved.Abs)
@@ -89,7 +89,7 @@ func runRmdir(inv *invocation) error {
 			inv.fail(operand, "Not a directory")
 			return 0, nil
 		}
-		if err := inv.owners.Revisions.CheckUnsavedDraft(inv.ctx, inv.tc, bound.Resolved.Abs, true); err != nil {
+		if err := inv.owners.Revisions.SaveDrafts(inv.ctx, inv.tc, bound.Resolved.Abs, true); err != nil {
 			return 0, err
 		}
 		result, err := inv.owners.Operations.Delete.Delete(inv.ctx, native.DeleteInput{Memory: inv.owners.Revisions.Memory, Paths: []string{bound.Resolved.Abs}}, inv.tc)
@@ -117,7 +117,7 @@ func runMv(inv *invocation) error {
 		if err != nil {
 			return 0, err
 		}
-		if err := inv.owners.Revisions.CheckUnsavedDraft(inv.ctx, inv.tc, source.Resolved.Abs, true); err != nil {
+		if err := inv.owners.Revisions.SaveDrafts(inv.ctx, inv.tc, source.Resolved.Abs, true); err != nil {
 			return 0, err
 		}
 		to, err := inv.destinationEntry(dest, source.Resolved.Abs, len(sources) > 1)
@@ -145,7 +145,7 @@ func runCp(inv *invocation) error {
 	}
 	defer operation.Close()
 	return inv.each(sources, func(operand string) (int, error) {
-		source, err := inv.bind(operand, false)
+		source, err := inv.bindInput(operand)
 		if err != nil {
 			return 0, err
 		}

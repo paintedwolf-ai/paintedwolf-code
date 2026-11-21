@@ -16,7 +16,7 @@ import {
   webE2e,
 } from "./helpers.ts";
 
-import { manualHarnessTools } from "./manual-harness-tools.ts";
+import { manualHarnessTools, shellWord } from "./manual-harness-tools.ts";
 
 /** Applies the harness text scale; no argument locks the accessibility maximum. */
 async function setTextScale(page: Page, scale?: number): Promise<number> {
@@ -50,7 +50,6 @@ webE2e.describe("plan full lifecycle", () => {
 
     let run = await apiStartWorkflowRun(request, sessionId, {
       workflow_id: "plan",
-      workflow_version: "1.0.0",
       request: "Plan a ready endpoint for the fixture project.",
       parameters: { research_depth: "none" },
     });
@@ -174,7 +173,7 @@ webE2e.describe("plan full lifecycle", () => {
       run = await apiFireWorkflowTransition(request, run.id, "critique");
       expect(run.current_phase).toBe("review");
       const driver = manualHarnessTools(request, sessionId);
-      const read = await driver.invoke("read", { path: blueprintPath });
+      const read = await driver.invoke("command", { command: `cat ${shellWord(blueprintPath)}` });
       await driver.completed(read);
       const verdict = await driver.invoke("submit_verdict", {
         verdict: { verdict: "APPROVED", bullets: "Scope matches the fixture endpoint." },

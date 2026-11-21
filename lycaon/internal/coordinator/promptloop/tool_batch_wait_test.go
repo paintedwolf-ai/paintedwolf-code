@@ -3,6 +3,7 @@ package promptloop
 import (
 	"context"
 	"errors"
+	"github.com/lycaon/lycaon/internal/tools/toolstest"
 	"slices"
 	"strconv"
 	"strings"
@@ -62,7 +63,7 @@ func TestWaitVisibilityAtBatchBoundary(t *testing.T) {
 		{"note covers text", "The build is still running", true, true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			reg := tools.NewStubRegistry()
+			reg := toolstest.NewRegistry()
 			waitRuns := 0
 			testutil.FailErr(t, "register wait", reg.Register("wait", func(_ context.Context, _ map[string]any, ctx tools.ToolContext) (string, error) {
 				waitRuns++
@@ -156,7 +157,7 @@ type midTurnHarness struct {
 func newMidTurnHarness(t *testing.T, surfaceID string) *midTurnHarness {
 	t.Helper()
 	h := &midTurnHarness{ledger: &midTurnLedgerStub{}, sess: &api.Session{ID: "coordinator", Posture: api.SessionPostureBuild}}
-	reg := tools.NewStubRegistry()
+	reg := toolstest.NewRegistry()
 	testutil.FailErr(t, "register recall", reg.Register("recall", func(context.Context, map[string]any, tools.ToolContext) (string, error) {
 		h.order = append(h.order, "recall")
 		return `{"ok":true}`, nil

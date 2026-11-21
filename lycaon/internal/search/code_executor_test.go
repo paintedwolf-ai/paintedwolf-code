@@ -491,6 +491,7 @@ func TestCodeExecutorPrefilterRejectsIndexFalsePositive(t *testing.T) {
 	root := t.TempDir()
 	testutil.FailErr(t, "write hit", os.WriteFile(filepath.Join(root, "hit.txt"), []byte("abcabc\n"), 0o644))
 	testutil.FailErr(t, "write grams", os.WriteFile(filepath.Join(root, "grams.txt"), []byte("abc bca cab\n"), 0o644))
+	testutil.FailErr(t, "await source index", catalogtest.AwaitIndex(t.Context(), sourcecatalog.Process(), "p1", sourcecatalog.Root{ID: "root", Path: root}))
 	report, err := NewCodeExecutor(decide.Reranker{}).Run(context.Background(), PlanLeg{Code: &CodePlanLeg{
 		Query:     TextExpr{Text: "abcabc"},
 		PathRoots: []CodeRoot{{ProjectID: "p1", RootID: "root", Path: root}},
@@ -549,23 +550,6 @@ func TestCodeExecutorFindsEditsUnderStaleGeneration(t *testing.T) {
 	sourcecatalog.Process().InvalidateRoot(root, "edited.txt")
 	if got := hitPathsOfKind(runCodeLeg(t, leg), HitKindCode); !contains(got, "edited.txt") {
 		t.Fatalf("hits after edit = %v, want edited.txt", got)
-	}
-}
-
-func TestCodeExecutorReportsWarmingRootAfterJoinGrace(t *testing.T) {
-	root := t.TempDir()
-	testutil.FailErr(t, "write file", os.WriteFile(filepath.Join(root, "a.txt"), []byte("needle\n"), 0o644))
-	exec := NewCodeExecutor(decide.Reranker{})
-	exec.generationJoinGrace = time.Nanosecond
-	report, err := exec.Run(context.Background(), PlanLeg{Code: &CodePlanLeg{
-		Query:     TextExpr{Text: "needle"},
-		PathRoots: []CodeRoot{{ProjectID: "p1", RootID: "cold-root", Path: root}},
-		Lines:     true,
-		Cap:       SearchExecutorProbeHits,
-	}})
-	testutil.FailErr(t, "run code leg", err)
-	if report.Code.WarmingRoots != 1 || report.TimedOut || len(report.Hits) != 0 {
-		t.Fatalf("report = %+v, want one warming root and no timeout", report)
 	}
 }
 

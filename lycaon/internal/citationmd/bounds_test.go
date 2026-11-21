@@ -4,6 +4,8 @@ import (
 	"runtime"
 	"strings"
 	"testing"
+
+	"github.com/lycaon/lycaon/internal/testutil"
 )
 
 func tableShape(columns int) string {
@@ -59,7 +61,7 @@ func TestStructureBudgetShapes(t *testing.T) {
 		if got := issueCodes(doc); len(got) == 0 || got[0] != IssueStructureBudget {
 			t.Errorf("%s: issues = %v", name, got)
 		}
-		if limit := uint64(64*len(source)) + 1<<20; allocated > limit {
+		if limit := uint64(64*len(source)) + 1<<20; !testutil.RaceEnabled && allocated > limit {
 			t.Errorf("%s: allocated %d bytes for %d", name, allocated, len(source))
 		}
 	}
@@ -67,6 +69,7 @@ func TestStructureBudgetShapes(t *testing.T) {
 
 // H9: shapes under the budgets are parsed, and stay proportional in allocation.
 func TestParsedShapesAllocateInProportion(t *testing.T) {
+	testutil.SkipIfRace(t, "race instrumentation inflates heap allocation")
 	const size = 1 << 20
 	shapes := map[string]string{
 		"plain":      strings.Repeat("word word word\n", size/15),

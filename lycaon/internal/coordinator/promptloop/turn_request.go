@@ -52,6 +52,7 @@ func (l *modelTurn) buildTurnRequest(
 	}
 	if frame != nil {
 		frameValue = *frame
+		st.coordinatorFrame = frameValue
 	}
 	if st != nil && st.proseTurn(sess, iterIndex, maxIter) {
 		st.proseFinish = true

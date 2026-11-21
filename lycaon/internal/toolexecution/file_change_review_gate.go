@@ -7,6 +7,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/fspath"
 	"github.com/lycaon/lycaon/internal/hitl"
+	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/internal/tools"
 )
@@ -45,8 +46,11 @@ func (e *Boundary) fileChangeReviewer(tool string, args map[string]any, tc tools
 		}
 		action := hitl.ProposedAction{
 			Invocation: hitl.ActionInvocation{
-				NativeInputs:       tc.Invocation.NativeInputs,
+				NativeInputs: tc.Invocation.NativeInputs,
+				// Command and entry-tool rules judge the stage that made these changes.
+				BoundStages:        toolcontract.CloneExecutionStages(tc.Invocation.NativeStages),
 				Tool:               tool,
+				EntryTool:          tc.Invocation.EntryTool,
 				Args:               args,
 				ApprovedFileAccess: append([]hitl.GrantedPathDelta(nil), tc.Files.ApprovedFileAccess...),
 				ActionID:           tc.EffectActionID(),

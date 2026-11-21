@@ -52,7 +52,7 @@ func TestStartBugbashViaOrchestrator(t *testing.T) {
 
 	var w *httptest.ResponseRecorder
 	testutil.WaitFor(t, "the run advances", func() bool {
-		req := authedRequest(t, http.MethodPost, "/v1/workflow-runs/"+run.ID+"/advance", workflowCommandBody(t, h.srv, run.ID, nil))
+		req := AuthedRequest(t, http.MethodPost, "/v1/workflow-runs/"+run.ID+"/advance", workflowCommandBody(t, h.srv, run.ID, nil))
 		w = httptest.NewRecorder()
 		h.srv.ServeHTTP(w, req)
 		return !strings.Contains(w.Body.String(), "workflow_revision_conflict")
@@ -104,7 +104,7 @@ func TestProductCatalogHidesNonVisibleBundledWorkflows(t *testing.T) {
 	projectDir := t.TempDir()
 	h := newOrchestrationPipelineServer(t, projectDir)
 
-	req := authedRequest(t, http.MethodGet, "/v1/workflows", nil)
+	req := AuthedRequest(t, http.MethodGet, "/v1/workflows", nil)
 	w := httptest.NewRecorder()
 	h.srv.ServeHTTP(w, req)
 	if w.Code != http.StatusOK {

@@ -12,6 +12,7 @@ import (
 	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/internal/tools"
+	"github.com/lycaon/lycaon/internal/tools/native"
 	"github.com/lycaon/lycaon/internal/tools/projectpaths"
 )
 
@@ -112,9 +113,23 @@ func (inv *invocation) bind(operand string, write bool) (projectpaths.BoundPath,
 		return projectpaths.BoundPath{}, inv.usage(operand, "a filesystem path, not the null device")
 	}
 	if write {
-		if err := inv.owners.Revisions.CheckUnsavedDraft(inv.ctx, inv.tc, bound.Resolved.Abs, false); err != nil {
+		if err := inv.owners.Revisions.SaveDrafts(inv.ctx, inv.tc, bound.Resolved.Abs, false); err != nil {
 			return projectpaths.BoundPath{}, err
 		}
+	}
+	return bound, nil
+}
+
+// bindInput binds a path whose bytes a write carries elsewhere: a copy source
+// or an archive member. The person's unsaved text there is saved first, so the
+// copy carries what they see.
+func (inv *invocation) bindInput(operand string) (projectpaths.BoundPath, error) {
+	bound, err := inv.bind(operand, false)
+	if err != nil {
+		return projectpaths.BoundPath{}, err
+	}
+	if err := native.SaveResolvedDrafts(inv.ctx, inv.tc, bound.Resolved, true); err != nil {
+		return projectpaths.BoundPath{}, err
 	}
 	return bound, nil
 }
@@ -224,7 +239,7 @@ func (inv *invocation) destinationEntry(dest string, source string, many bool) (
 	info, statErr := os.Stat(bound.Resolved.Abs)
 	if statErr == nil && info.IsDir() {
 		target := filepath.Join(bound.Resolved.Abs, filepath.Base(source))
-		if err := inv.owners.Revisions.CheckUnsavedDraft(inv.ctx, inv.tc, target, true); err != nil {
+		if err := inv.owners.Revisions.SaveDrafts(inv.ctx, inv.tc, target, true); err != nil {
 			return "", err
 		}
 		return target, nil

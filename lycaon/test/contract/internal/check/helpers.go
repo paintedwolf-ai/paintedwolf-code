@@ -115,17 +115,6 @@ func DoJSON(t *testing.T, client *http.Client, method, url string, body any, wan
 	}
 }
 
-func AssertJSONRoundTrip(t *testing.T, v any) {
-	t.Helper()
-	b, err := json.Marshal(v)
-	if err != nil {
-		t.Fatalf("marshal: %v", err)
-	}
-	if err := json.Unmarshal(b, v); err != nil {
-		t.Fatalf("unmarshal round-trip: %v", err)
-	}
-}
-
 // ParseNonTestGoTree parses the production Go files under dir and its
 // subpackages, skipping testdata.
 func ParseNonTestGoTree(t *testing.T, dir string) (*token.FileSet, []*ast.File) {

@@ -32,7 +32,7 @@ func TestPlanImplementLegLoopWakesCoordinator(t *testing.T) {
 	sess := createSessionHTTP(t, srv, t.TempDir())
 
 	startBody := planStartBody
-	req := authedRequest(t, http.MethodPost, "/v1/sessions/"+sess.ID+"/workflow-runs", strings.NewReader(startBody))
+	req := AuthedRequest(t, http.MethodPost, "/v1/sessions/"+sess.ID+"/workflow-runs", strings.NewReader(startBody))
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
 	srv.ServeHTTP(w, req)
@@ -140,7 +140,7 @@ func TestPlanImplementLegLoopWakesCoordinator(t *testing.T) {
 		return assistants >= 2 && hasAuto
 	})
 
-	req = authedRequest(t, http.MethodGet, "/v1/sessions/"+sess.ID+"/messages", nil)
+	req = AuthedRequest(t, http.MethodGet, "/v1/sessions/"+sess.ID+"/messages", nil)
 	w = httptest.NewRecorder()
 	srv.ServeHTTP(w, req)
 	if w.Code != http.StatusOK {
@@ -284,7 +284,7 @@ func readCoordinatorWakeRuns(ctx context.Context, handle db.ReadHandle, sessionI
 func TestCoordinatorWakeFacts(t *testing.T) {
 	h := wiring.BuildForTest(t, wiring.WithoutCoordinatorLoop())
 	ctx := t.Context()
-	project := createProjectHTTP(t, h.Server, t.TempDir())
+	project := CreateProjectHTTP(t, h.Server, t.TempDir())
 	sess, err := h.Store.Create(h.OwnerCtx(t, ctx), wire.CreateSessionRequest{Posture: wire.SessionPostureBuild}, project.ID)
 	testutil.FailErr(t, "create diagnostic session", err)
 	receipt, _, err := h.Store.PutPromptSubmission(ctx, store.PromptSubmission{

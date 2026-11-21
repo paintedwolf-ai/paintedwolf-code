@@ -48,7 +48,7 @@ assert lib.assertMsg
     test -f internal/exec/hostread/desktop_linux.go || {
       echo "The final Nix engine requires the native host proxy integration source" >&2; exit 1;
     }
-    test -f internal/configlayout/nix.go || {
+    test -f internal/nixgeneration/layout.go || {
       echo "The final Nix engine requires running-generation resource integration source" >&2; exit 1;
     }
   '';

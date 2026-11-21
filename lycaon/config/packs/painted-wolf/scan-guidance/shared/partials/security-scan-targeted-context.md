@@ -1,6 +1,6 @@
 ## Targeted context (finding paths only)
 
-After `scan_summary` or `scan_query` names files, rules, or directories:
+After {% if profile_has_scan_summary and profile_has_scan_query %}`scan_summary` or `scan_query`{% else %}the scan findings{% endif %} name files, rules, or directories:
 
 {{ units.orientation }}
 

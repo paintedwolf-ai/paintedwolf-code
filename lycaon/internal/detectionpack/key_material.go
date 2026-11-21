@@ -16,14 +16,19 @@ const KeyMaterialPackID = "key-material"
 // with no grant offered, confine refuses a project root that would swallow one,
 // a load failure is a boot failure, and overlays do not extend it.
 func BundledKeyMaterialPaths() ([]string, error) {
-	files := bundledPackFiles(config.DetectionPacksDir.Join(KeyMaterialPackID))
-	pack, warnings := ParsePack(files)
-	if pack == nil {
-		return nil, fmt.Errorf("bundled %s pack did not load: %v", KeyMaterialPackID, warnings)
+	return bundledFloorPaths(KeyMaterialPackID)
+}
+
+// bundledFloorPaths loads a write-floor pack whole: a rule that does not parse
+// would silently narrow the floor, so any load warning is an error.
+func bundledFloorPaths(packID string) ([]string, error) {
+	pack, warnings := ParsePack(bundledPackFiles(config.DetectionPacksDir.Join(packID)))
+	if pack == nil || len(warnings) > 0 {
+		return nil, fmt.Errorf("bundled %s pack did not load: %v", packID, warnings)
 	}
 	paths := targetFilePathsFromRules(pack.Rules)
 	if len(paths) == 0 {
-		return nil, fmt.Errorf("bundled %s pack names no TargetFile paths", KeyMaterialPackID)
+		return nil, fmt.Errorf("bundled %s pack names no TargetFile paths", packID)
 	}
 	return paths, nil
 }

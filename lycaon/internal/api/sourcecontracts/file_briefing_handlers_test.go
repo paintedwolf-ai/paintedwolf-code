@@ -18,7 +18,7 @@ import (
 	"github.com/lycaon/lycaon/internal/filebriefing"
 	"github.com/lycaon/lycaon/internal/project"
 	"github.com/lycaon/lycaon/internal/projectsource"
-	"github.com/lycaon/lycaon/internal/session/store"
+	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"github.com/lycaon/lycaon/internal/sourceledger"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -26,6 +26,8 @@ import (
 )
 
 func TestRequestFileBriefingReturnsStructureBeforeGeneration(t *testing.T) {
+	sessionFixture := storetest.New(t)
+
 	t.Setenv("LYCAON_LLM_MOCK", "1")
 	root := t.TempDir()
 	testutil.FailErr(t, "write source fixture", os.WriteFile(filepath.Join(root, "main.go"), []byte(`package main
@@ -34,14 +36,14 @@ func Build() error {
 	return nil
 }
 `), 0o600))
-	projects := project.NewMemoryRegistry()
+	projects := project.NewSQLRegistry(sessionFixture.DB())
 	p, err := project.CreateWithRoot(t.Context(), projects, root)
 	testutil.FailErr(t, "create project", err)
 	hub := events.NewMemoryHub()
 	cfg, err := filebriefing.LoadConfig()
 	testutil.FailErr(t, "load file briefing config", err)
 	briefings := filebriefing.NewMemory()
-	deps := contractfixture.RequiredTestDeps(t, hostapi.Dependencies{Core: hostapi.CoreDependencies{Store: store.NewMemory(), Projects: projects}, Host: hostapi.HostDependencies{Events: hub}})
+	deps := contractfixture.RequiredTestDeps(t, hostapi.Dependencies{Core: hostapi.CoreDependencies{Store: sessionFixture, Projects: projects}, Host: hostapi.HostDependencies{Events: hub}})
 	contractfixture.WithTestFileBriefings(t, briefings, cfg)(&deps)
 	srv := hostapi.NewServer(deps, nil, hostapi.TestAPIToken)
 	contractfixture.StopBackgroundOnCleanup(t, srv)
@@ -108,9 +110,11 @@ func Build() error {
 }
 
 func TestFileBriefingReadsImmutableRetainedVersion(t *testing.T) {
+	sessionFixture := storetest.New(t)
+
 	t.Setenv("LYCAON_LLM_MOCK", "1")
 	root := t.TempDir()
-	projects := project.NewMemoryRegistry()
+	projects := project.NewSQLRegistry(sessionFixture.DB())
 	p, err := project.CreateWithRoot(t.Context(), projects, root)
 	testutil.FailErr(t, "create project", err)
 	ledger, ledgerDB, withLedger := contractfixture.TestSourceLedger(t)
@@ -118,7 +122,7 @@ func TestFileBriefingReadsImmutableRetainedVersion(t *testing.T) {
 	cfg, err := filebriefing.LoadConfig()
 	testutil.FailErr(t, "load file briefing config", err)
 	briefings := filebriefing.NewMemory()
-	deps := hostapi.Dependencies{Core: hostapi.CoreDependencies{Store: store.NewMemory(), Projects: projects}, Host: hostapi.HostDependencies{Events: events.NewMemoryHub()}}
+	deps := hostapi.Dependencies{Core: hostapi.CoreDependencies{Store: sessionFixture, Projects: projects}, Host: hostapi.HostDependencies{Events: events.NewMemoryHub()}}
 	withLedger(&deps)
 	deps = contractfixture.RequiredTestDeps(t, deps)
 	contractfixture.WithTestFileBriefings(t, briefings, cfg)(&deps)
@@ -177,18 +181,20 @@ func TestFileBriefingReadsImmutableRetainedVersion(t *testing.T) {
 }
 
 func TestGetFileBriefingResumesOrphanedPendingWork(t *testing.T) {
+	sessionFixture := storetest.New(t)
+
 	t.Setenv("LYCAON_LLM_MOCK", "1")
 	root := t.TempDir()
 	testutil.FailErr(t, "write source fixture", os.WriteFile(
 		filepath.Join(root, "main.go"), []byte("package main\n\nfunc Build() {}\n"), 0o600,
 	))
-	projects := project.NewMemoryRegistry()
+	projects := project.NewSQLRegistry(sessionFixture.DB())
 	p, err := project.CreateWithRoot(t.Context(), projects, root)
 	testutil.FailErr(t, "create project", err)
 	cfg, err := filebriefing.LoadConfig()
 	testutil.FailErr(t, "load file briefing config", err)
 	briefings := filebriefing.NewMemory()
-	deps := contractfixture.RequiredTestDeps(t, hostapi.Dependencies{Core: hostapi.CoreDependencies{Store: store.NewMemory(), Projects: projects}, Host: hostapi.HostDependencies{Events: events.NewMemoryHub()}})
+	deps := contractfixture.RequiredTestDeps(t, hostapi.Dependencies{Core: hostapi.CoreDependencies{Store: sessionFixture, Projects: projects}, Host: hostapi.HostDependencies{Events: events.NewMemoryHub()}})
 	contractfixture.WithTestFileBriefings(t, briefings, cfg)(&deps)
 	srv := hostapi.NewServer(deps, nil, hostapi.TestAPIToken)
 	contractfixture.StopBackgroundOnCleanup(t, srv)

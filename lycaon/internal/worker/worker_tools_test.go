@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/orchestration/orchestrationtest"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -12,7 +13,6 @@ import (
 
 	"github.com/lycaon/lycaon/internal/db"
 	"github.com/lycaon/lycaon/internal/layeredfs/checkpoint"
-	"github.com/lycaon/lycaon/internal/orchestration"
 	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/prompts"
 	sessiondecisions "github.com/lycaon/lycaon/internal/session/decisions"
@@ -381,7 +381,7 @@ func TestPrerequisiteFollowsTheProducersLatestRound(t *testing.T) {
 func TestTaskStartsANamedWorker(t *testing.T) {
 	f := newWorkerToolsFixture(t)
 	testutil.FailErr(t, "register task", RegisterTaskTool(f.reg, TaskToolDeps{
-		Queue: f.queue, Agents: orchestration.NewMemoryAgentRegistryForTest(), Workers: DefaultWorkersConfig(), WorkerRecords: f.records, Reviews: f.ops,
+		Queue: f.queue, Agents: orchestrationtest.Registry(t), Workers: DefaultWorkersConfig(), WorkerRecords: f.records, Reviews: f.ops,
 		Plan: plantest.New(t, plantest.Deps(f.records)),
 	}))
 	args := map[string]any{"agent_type": "repo-researcher", "name": "scout", "scope": map[string]any{"mode": "read"},
@@ -564,7 +564,7 @@ func TestTaskStartsAReviewerOnASealedResult(t *testing.T) {
 	var accounted []string
 	f.ops.Accounted = func(_ string, jobs []string) { accounted = append(accounted, jobs...) }
 	testutil.FailErr(t, "register task", RegisterTaskTool(f.reg, TaskToolDeps{
-		Queue: f.queue, Agents: orchestration.NewMemoryAgentRegistryForTest(), Workers: DefaultWorkersConfig(),
+		Queue: f.queue, Agents: orchestrationtest.Registry(t), Workers: DefaultWorkersConfig(),
 		WorkerRecords: f.records, Reviews: f.ops, Plan: plantest.New(t, plantest.Deps(f.records)),
 	}))
 	review := func(call, handle string, extra map[string]any) error {

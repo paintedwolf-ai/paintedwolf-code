@@ -92,6 +92,17 @@ WHERE projection.model_output_id IS NULL
 ORDER BY output.settled_at, output.id
 LIMIT 256;
 
+-- A live draft without a settled model output holds no response.
+-- name: ListUnsettledLiveDrafts :many
+SELECT message.id
+FROM messages message
+WHERE message.session_id = ? AND message.draft_status = 'live'
+  AND NOT EXISTS (
+    SELECT 1 FROM model_outputs output
+    WHERE output.session_id = message.session_id AND output.message_id = message.id
+  )
+ORDER BY message.ord;
+
 -- name: GetWorkerJobForTurnAttempt :one
 SELECT worker_turn.worker_job_id
 FROM turn_attempts attempt

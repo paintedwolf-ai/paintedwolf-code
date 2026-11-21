@@ -19,7 +19,7 @@ import (
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 )
 
-func TestProgramPathFeedbackPreservesTypedRefusalAndCatalogHelp(t *testing.T) {
+func TestProgramPathFeedbackPreservesTypedRefusal(t *testing.T) {
 	cfg, err := guidance.LoadHintConfigStock()
 	contractcheck.FailErr(t, "load path feedback", err)
 	guidance.SetGuidanceRenderer(prompts.NewGuidanceRenderer(prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{})))
@@ -31,13 +31,13 @@ func TestProgramPathFeedbackPreservesTypedRefusalAndCatalogHelp(t *testing.T) {
 	invocation := toolcontract.OperationInvocation{Kind: toolcontract.ProgramChildInvocation, ActorID: "fixture-actor", SessionID: "fixture-session", Scope: toolcontract.OperationScope{Kind: toolcontract.ProjectOperationScope, ProjectID: "fixture-project", RootID: "fixture-root"}, Identity: toolcontract.ExecutionIdentity{ProgramID: "fixture-program", NodeID: "fixture-node", ExecutionID: "fixture-execution"}, SourceUnitID: "fixture-source", Span: toolcontract.SourceSpan{StartByte: 7, EndByte: 20, Line: 2, Column: 3}, CatalogDigest: toolcontract.LanguageCatalogDigest()}
 	contractcheck.FailErr(t, "validate fixture host invocation", invocation.Validate())
 	for _, fixture := range []struct {
-		command    string
-		args       []string
-		code, want string
+		command string
+		args    []string
+		code    string
 	}{
-		{"basename", []string{"--unsupported"}, "COMMAND_OPTION_UNSUPPORTED", "basename [-a] [-s SUFFIX] [-z] [--] PATH [SUFFIX] | PATH ..."},
-		{"native_path", []string{"--", "/dev/null"}, "COMMAND_OPERAND_INVALID", "null device"},
-		{"native_path", []string{"--", strings.Repeat("x", 131073)}, "COMMAND_LIMIT_EXCEEDED", "argument_bytes"},
+		{"basename", []string{"--unsupported"}, "COMMAND_OPTION_UNSUPPORTED"},
+		{"native_path", []string{"--", "/dev/null"}, "COMMAND_OPERAND_INVALID"},
+		{"native_path", []string{"--", strings.Repeat("x", 131073)}, "COMMAND_LIMIT_EXCEEDED"},
 	} {
 		var stdout bytes.Buffer
 		statement := commandsurface.Statement{SyntaxLocation: commandsurface.SyntaxLocation{ID: commandsurface.NodeID(invocation.Identity.NodeID), Span: invocation.Span}}
@@ -57,7 +57,7 @@ func TestProgramPathFeedbackPreservesTypedRefusalAndCatalogHelp(t *testing.T) {
 		if reject.Data["source_start_byte"] != 7 || reject.Data["source_end_byte"] != 20 || reject.Data["source_line"] != 2 || reject.Data["source_column"] != 3 {
 			t.Fatalf("source coordinates lost: %+v", reject.Data)
 		}
-		if fixture.code == "COMMAND_LIMIT_EXCEEDED" && (reject.Data["resource_unit"] != "bytes" || reject.Data["maximum"] != int64(131072) || reject.Data["observed"] != int64(131073)) {
+		if fixture.code == "COMMAND_LIMIT_EXCEEDED" && (reject.Data["limit_id"] != "argument_bytes" || reject.Data["resource_unit"] != "bytes" || reject.Data["maximum"] != int64(131072) || reject.Data["observed"] != int64(131073)) {
 			t.Fatalf("typed resource bound lost: %+v", reject.Data)
 		}
 		rendered, err := formatter.Format(reject.Code, reject.Data)

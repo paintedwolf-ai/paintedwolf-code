@@ -81,6 +81,7 @@ type kingfisherRule struct {
 	id           string
 	title        string
 	regex        *regexp.Regexp
+	secretGroup  int
 	keywords     []string
 	entropy      float64
 	requirements kingfisherRequirements
@@ -280,7 +281,7 @@ func compileKingfisherRule(source *kingfisherSourceRule) (kingfisherRule, string
 		return kingfisherRule{}, "no_secret_capture", nil
 	}
 	rule := kingfisherRule{
-		id: source.ID, title: strings.TrimSpace(source.Name), regex: re,
+		id: source.ID, title: strings.TrimSpace(source.Name), regex: re, secretGroup: re.SubexpIndex("secret"),
 		keywords: requiredRegexKeywords(pattern), entropy: source.MinEntropy,
 		requirements: source.PatternRequirements,
 	}
@@ -293,7 +294,7 @@ func compileKingfisherRule(source *kingfisherSourceRule) (kingfisherRule, string
 func (r kingfisherRule) gitleaksRule() (gconfig.Rule, error) {
 	gr := gconfig.Rule{
 		RuleID: r.id, Description: r.title, Regex: r.regex, Keywords: r.keywords,
-		SecretGroup: 1, Entropy: r.entropy, Tags: []string{"vendor:kingfisher"},
+		SecretGroup: max(r.secretGroup, 0), Entropy: r.entropy, Tags: []string{"vendor:kingfisher"},
 	}
 	if err := gr.Validate(); err != nil {
 		return gconfig.Rule{}, err
@@ -301,20 +302,38 @@ func (r kingfisherRule) gitleaksRule() (gconfig.Rule, error) {
 	return gr, nil
 }
 
+// validateKingfisherExamples holds positive examples to the pattern alone, as
+// upstream does: a rule's offline requirements may reject its own examples.
 func validateKingfisherExamples(rule kingfisherRule, examples, negativeExamples []string) error {
 	for _, example := range examples {
-		match := rule.regex.FindStringSubmatch(example)
-		if len(match) < 2 || !rule.requirements.accept(match[1]) {
+		if _, ok := rule.capture(example); !ok {
 			return errors.New("positive example is not preserved")
 		}
 	}
 	for _, example := range negativeExamples {
-		match := rule.regex.FindStringSubmatch(example)
-		if len(match) >= 2 && rule.requirements.accept(match[1]) {
+		if secret, ok := rule.capture(example); ok && rule.requirements.accept(secret) {
 			return errors.New("negative example still matches")
 		}
 	}
 	return nil
+}
+
+// capture selects the secret as gitleaks does: the named secret group, or the
+// first non-empty group when alternatives each capture their own.
+func (r kingfisherRule) capture(text string) (string, bool) {
+	groups := r.regex.FindStringSubmatch(text)
+	if len(groups) < 2 {
+		return "", false
+	}
+	if r.secretGroup > 0 {
+		return groups[r.secretGroup], groups[r.secretGroup] != ""
+	}
+	for _, group := range groups[1:] {
+		if group != "" {
+			return group, true
+		}
+	}
+	return "", false
 }
 
 func (r kingfisherRequirements) empty() bool {

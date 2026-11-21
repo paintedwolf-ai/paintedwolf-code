@@ -1,33 +1,18 @@
 package contract
 
 import (
-	"os"
-	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/textguard"
-	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 )
 
-// TestFetchHygieneContract locks the content half of fetch hygiene: the extract
-// walk drops what a reader cannot see, and one shared invisible-codepoint table
-// covers zero-width, BiDi, and Unicode Tags. Retrieval marking derives from
-// message provenance; TestToolHandlersDoNotMarkTheirOwnOutput covers it.
+// TestFetchHygieneContract locks the shared invisible-codepoint table:
+// zero-width, BiDi, and Unicode Tags. The extract walk's comment and hidden
+// element drops are covered by webresearch
+// TestExtractHTMLTextDropsCommentsAndHiddenElements.
 func TestFetchHygieneContract(t *testing.T) {
 	t.Parallel()
-	root := contractcheck.RepoRoot(t)
-
-	fetchPath := filepath.Join(root, "lycaon", "internal", "webresearch", "fetch.go")
-	fetchSrc, err := os.ReadFile(fetchPath)
-	contractcheck.FailErr(t, "read fetch.go", err)
-	if !strings.Contains(string(fetchSrc), "html.CommentNode") {
-		t.Fatal("fetch.go must skip HTML comments in the extract walk")
-	}
-	if !strings.Contains(string(fetchSrc), "isHiddenElement") {
-		t.Fatal("fetch.go must drop hidden-element subtrees in the extract walk")
-	}
-
 	// The agent path shares textguard.InvisibleFormatRune.
 	if !textguard.InvisibleFormatRune(0x200B) ||
 		!textguard.InvisibleFormatRune(0xFEFF) ||

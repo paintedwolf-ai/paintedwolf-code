@@ -32,6 +32,7 @@ func runActionBatch(actions []CaptureAction, run func(CaptureAction) (json.RawMe
 	results := make([]json.RawMessage, 0, len(actions))
 	completed := make([]completedAction, 0, len(actions))
 	for i, act := range actions {
+		act.TimeoutMS = stepTimeoutMS(act.kind())
 		res, err := run(act)
 		if err != nil || !driverOK(res) {
 			data := actionFailedData(i, act, res, err)

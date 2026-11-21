@@ -114,6 +114,27 @@ func TestRunTimeoutInterruptsANativeCommandOnExpiry(t *testing.T) {
 	}
 }
 
+// TestRunTimeoutExpiryBeforeLaunchIsATimeout fires the deadline, then lets the
+// inner launch proceed: it finds its context ended before any process attached
+// to the relay and fails with its own error, as an interrupted launch does.
+func TestRunTimeoutExpiryBeforeLaunchIsATimeout(t *testing.T) {
+	clock := newManualClock()
+	launch := make(chan struct{})
+	done := startTimeout(clock, TimeoutPlan{Duration: time.Second, Signal: term}, nil, func(ctx context.Context, _ *SignalRelay) (toolcontract.ProducerResult, error) {
+		<-launch
+		if ctx.Err() == nil {
+			t.Error("the launch ran before the deadline ended it")
+		}
+		return toolcontract.ProducerResult{Status: 1, Terminal: toolcontract.ProducerFailed, EffectCertainty: toolcontract.NoEffect}, errors.New("launch stopped before the process started")
+	})
+	clock.fireNext(t, time.Second)
+	close(launch)
+	got := <-done
+	if got.err != nil || got.result.Status != TimedOutStatus || got.result.Terminal != toolcontract.ProducerCompleted || got.result.Validate() != nil {
+		t.Fatalf("result = %+v, %v; want completed status %d", got.result, got.err, TimedOutStatus)
+	}
+}
+
 // processInner stands for an external process that ignores TERM: it records
 // every relayed signal and exits only on KILL, with the shell's 137.
 func processInner(received chan<- Signal) func(context.Context, *SignalRelay) (toolcontract.ProducerResult, error) {

@@ -61,7 +61,7 @@ func (e *Executor) ApplyProgramProgress(ctx context.Context, p *PreparedProgramE
 	if reject := e.validateInvocation(ctx, "update_progress", tc.Identity.Agent, arguments.values, &tc); reject != nil {
 		return result, reject
 	}
-	use, err := parseSecretUse(tc.Invocation.Contract, arguments.values)
+	use, err := parseSecretUse("update_progress", tc.Invocation.Contract, arguments.values)
 	if err != nil {
 		return result, err
 	}

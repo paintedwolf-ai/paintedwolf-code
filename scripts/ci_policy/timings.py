@@ -13,9 +13,22 @@ from ci_policy import github
 
 ARTIFACT = "nightly-timings"
 FILE = "timings.json"
+SPEC_FILES = "e2e-specs-*.json"
 MAX_BYTES = 4 * 1024 * 1024
-PACKAGE_LANES = ("behavior",)
 SLOWEST_TESTS = 50
+
+
+def package_lanes():
+    """Lanes that run the Go packages a change affects, so they measure each package."""
+    from verification_plan import catalog
+    return {name for name, lane in catalog()["ci"].items() if lane.get("phases") == "affected-packages"}
+
+
+def race_lanes():
+    """Nightly lanes that run the race recipe, so they measure each package under the race detector."""
+    from verification_plan import catalog
+    return {name for name, lane in catalog()["ci"].items()
+            if "test:race" in lane["targets"] and "nightly" in lane["profiles"]}
 
 
 def row_key(lane, shard):
@@ -60,8 +73,7 @@ def record(root, run):
         for events in sorted((root / "verification").glob("*/stage-*-events.jsonl")):
             for line in events.read_text().splitlines():
                 event = json.loads(line)
-                if isinstance(event.get("package"), str) and type(event.get("elapsed")) in (int, float) \
-                        and not event.get("reused"):
+                if isinstance(event.get("package"), str) and type(event.get("elapsed")) in (int, float):
                     packages[event["package"]] = packages.get(event["package"], 0) + event["elapsed"]
     job_start = run.get('job_started_at')
     complete = valid_seconds(job_start, allow_zero=True) and job_start <= run['started_at']
@@ -75,23 +87,55 @@ def record(root, run):
     (root / "ci" / "timings.json").write_text(json.dumps(measured, indent=2) + "\n")
 
 
+def spec_durations(report):
+    """Seconds each Playwright spec file ran, retries included, from the JSON reporter's output."""
+    def milliseconds(suite):
+        own = sum(result["duration"] for spec in suite.get("specs", []) for test in spec.get("tests", [])
+                  for result in test.get("results", []) if valid_seconds(result.get("duration"), allow_zero=True))
+        return own + sum(milliseconds(child) for child in suite.get("suites", []))
+    durations = {}
+    for suite in report.get("suites", []):
+        elapsed = milliseconds(suite)
+        if isinstance(suite.get("file"), str) and elapsed > 0:
+            durations[suite["file"]] = round(durations.get(suite["file"], 0) + elapsed / 1000, 3)
+    return durations
+
+
+def record_specs(report, output):
+    """Write one browser shard's spec durations beside the job's receipts."""
+    output = Path(output)
+    output.parent.mkdir(parents=True, exist_ok=True)
+    output.write_text(json.dumps(spec_durations(json.loads(Path(report).read_text())), indent=2, sort_keys=True) + "\n")
+
+
+def merge_specs(paths):
+    """Browser spec durations by file; a later attempt replaces the run it reran."""
+    specs = {}
+    for path in paths:
+        measured = json.loads(path.read_text())
+        if isinstance(measured, dict):
+            specs.update({name: seconds for name, seconds in measured.items() if valid_seconds(seconds)})
+    return specs
+
+
 def merge(paths):
     """Durations of lanes that finished, whatever their verdict, by matrix row; every package duration the
     uninstrumented lane measured; and the slowest tests across lanes."""
-    lanes, packages, tests = {}, {}, {}
+    lanes, packages, race, tests = {}, {}, {}, {}
     for path in paths:
         measured = json.loads(path.read_text())
         if (measured.get("basis") == "setup-and-execution" and measured.get("finished") is True
                 and valid_seconds(measured["seconds"])):
             lanes[row_key(measured["lane"], measured["shard"])] = measured["seconds"]
-        if measured.get("lane") in PACKAGE_LANES:
-            packages.update({name: seconds for name, seconds in measured["packages"].items()
-                             if valid_seconds(seconds, allow_zero=True)})
+        for lanes_of, durations in ((package_lanes(), packages), (race_lanes(), race)):
+            if measured.get("lane") in lanes_of:
+                durations.update({name: seconds for name, seconds in measured["packages"].items()
+                                  if valid_seconds(seconds, allow_zero=True)})
         for row in measured.get("tests", []):
             if valid_seconds(row.get("seconds")) and isinstance(row.get("package"), str) and isinstance(row.get("test"), str):
                 key = (row["package"], row["test"])
                 tests[key] = max(tests.get(key, 0), row["seconds"])
-    return {"lanes": lanes, "packages": packages,
+    return {"lanes": lanes, "packages": packages, "race_packages": race,
             "tests": slowest([{"package": package, "test": name, "seconds": seconds}
                               for (package, name), seconds in tests.items()])}
 
@@ -100,6 +144,7 @@ def publish(receipts, output, environment):
     """One file for the whole run, bound to the source it measured."""
     # One directory per receipt; the archive may root it at `ci/`. A later attempt sorts after the one it reran.
     measured = merge(sorted(Path(receipts).glob("*/**/timings.json")))
+    measured["specs"] = merge_specs(sorted(Path(receipts).glob(f"*/**/{SPEC_FILES}")))
     measured.update(run=int(environment["GITHUB_RUN_ID"]),
                     source_sha=environment["SOURCE_SHA"], source_tree=environment["SOURCE_TREE"])
     Path(output).write_text(json.dumps(measured, indent=2, sort_keys=True) + "\n")
@@ -145,10 +190,13 @@ def resolve(repository):
 
 
 def main(arguments):
+    if arguments[0] == "specs":
+        record_specs(*arguments[1:])
+        return 0
     receipts, output = arguments
     measured = publish(receipts, output, os.environ)
-    print(f"Merged {len(measured['lanes'])} lane, {len(measured['packages'])} package and "
-          f"{len(measured['tests'])} test durations from {measured['source_sha']}")
+    print(f"Merged {len(measured['lanes'])} lane, {len(measured['packages'])} package, "
+          f"{len(measured['tests'])} test and {len(measured['specs'])} browser spec durations from {measured['source_sha']}")
     return 0
 
 

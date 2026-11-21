@@ -162,8 +162,7 @@ func (s *MergeService) RejectOverlay(ctx context.Context, sessionID, overlayID, 
 		OverlayID: overlayID,
 		Reason:    strings.TrimSpace(reason),
 	}
-	eng := s.engine()
-	children, err := eng.childOverlaysOf(ctx, sessionID, overlayID)
+	children, err := s.childOverlaysOf(ctx, sessionID, overlayID)
 	if err != nil {
 		return out, err
 	}
@@ -191,8 +190,8 @@ func (s *MergeService) RejectOverlay(ctx context.Context, sessionID, overlayID, 
 			return api.OverlayRejectOutcome{}, fmt.Errorf("persist rejected overlay tree: %w", err)
 		}
 	}
-	eng.clearReconcilePaths(sessionID)
-	if err := eng.teardownBranch(ctx, task); err != nil {
+	s.clearReconcilePaths(sessionID)
+	if err := s.teardownBranch(ctx, task); err != nil {
 		slog.WarnContext(ctx, "rejected overlay cleanup deferred", "overlay_id", overlayID, "err", err)
 	} else if s.Store != nil {
 		cleanupCtx, cancel := promoteCleanupContext(ctx)
@@ -237,7 +236,7 @@ func (s *MergeService) RebaseChildren(ctx context.Context, sessionID, parentOver
 	if strings.TrimSpace(parent.ParentSessionID) != strings.TrimSpace(sessionID) {
 		return nil, s.reject(ctx, OverlayPromoteSessionMismatchCode, map[string]any{"job_id": parentOverlayID})
 	}
-	outs, updates, err := s.engine().assessChildRebases(ctx, sessionID, parentOverlayID)
+	outs, updates, err := s.assessChildRebases(ctx, sessionID, parentOverlayID)
 	if err != nil || len(updates) == 0 || s.Store == nil {
 		return outs, err
 	}
@@ -247,8 +246,8 @@ func (s *MergeService) RebaseChildren(ctx context.Context, sessionID, parentOver
 	return outs, nil
 }
 
-func (s mergeEngine) assessChildRebases(ctx context.Context, sessionID, parentOverlayID string) ([]api.OverlayRebaseOutcome, []MergeStatusUpdate, error) {
-	if s.MergeService == nil || s.Queue == nil {
+func (s *MergeService) assessChildRebases(ctx context.Context, sessionID, parentOverlayID string) ([]api.OverlayRebaseOutcome, []MergeStatusUpdate, error) {
+	if s == nil || s.Queue == nil {
 		return nil, nil, nil
 	}
 	children, err := s.childOverlaysOf(ctx, sessionID, parentOverlayID)
@@ -283,7 +282,7 @@ func (s mergeEngine) assessChildRebases(ctx context.Context, sessionID, parentOv
 
 // assessChildRebase re-reads one stacked child against the moved primary,
 // holding its branch for the read.
-func (s mergeEngine) assessChildRebase(ctx context.Context, sessionID string, child api.WorkerTask) (PromoteAssessment, error) {
+func (s *MergeService) assessChildRebase(ctx context.Context, sessionID string, child api.WorkerTask) (PromoteAssessment, error) {
 	lease, err := s.holdBranch(ctx, child.ID)
 	if err != nil {
 		return PromoteAssessment{}, err
@@ -293,8 +292,8 @@ func (s mergeEngine) assessChildRebase(ctx context.Context, sessionID string, ch
 	return s.assessMerge(ctx, sessionID, &child, paths)
 }
 
-func (s mergeEngine) childOverlaysOf(ctx context.Context, sessionID, parentOverlayID string) ([]api.WorkerTask, error) {
-	if s.MergeService == nil || s.Sessions == nil {
+func (s *MergeService) childOverlaysOf(ctx context.Context, sessionID, parentOverlayID string) ([]api.WorkerTask, error) {
+	if s == nil || s.Sessions == nil {
 		return nil, nil
 	}
 	all, err := s.Sessions.ListLiveOverlaysForSession(ctx, sessionID)

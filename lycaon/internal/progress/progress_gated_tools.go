@@ -116,3 +116,26 @@ func SurfaceMissingUpdateProgress(tools []string) bool {
 	}
 	return gated && !hasAuthoring
 }
+
+// lifecycleTools settle or inspect worker results, in the order the progress
+// procedure names them.
+var lifecycleTools = []string{
+	"preview_overlay", "promote_overlay", "reject_overlay", "shelve_overlay",
+	"wait", "answer_decision", "pack_board", "worker_history",
+}
+
+// UngatedLifecycleTools lists the offered lifecycle tools that are not
+// progress-gated.
+func UngatedLifecycleTools(offered map[string]bool) []string {
+	return ungatedLifecycleTools(offered, IsProgressGatedTool)
+}
+
+func ungatedLifecycleTools(offered map[string]bool, gated func(string) bool) []string {
+	var out []string
+	for _, tool := range lifecycleTools {
+		if offered[tool] && !gated(tool) {
+			out = append(out, tool)
+		}
+	}
+	return out
+}

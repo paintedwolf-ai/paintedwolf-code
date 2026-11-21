@@ -9,7 +9,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -26,20 +25,7 @@ func detachedDaemonCommand(t *testing.T, ctx context.Context, stay bool) (*exec.
 	python, err := exec.LookPath("python3")
 	testutil.FailErr(t, "locate daemon fixture runtime", err)
 	path := filepath.Join(t.TempDir(), "daemon.pid")
-	script := fmt.Sprintf(`import os, signal, time
-path = %s
-if os.fork() == 0:
-    os.setsid()
-    if os.fork() == 0:
-        signal.signal(signal.SIGTERM, signal.SIG_IGN)
-        with open(path, 'w') as file:
-            file.write(str(os.getpid()))
-        time.sleep(60)
-    os._exit(0)
-while not os.path.exists(path):
-    time.sleep(0.01)
-%s
-`, strconv.Quote(path), map[bool]string{true: "time.sleep(60)", false: ""}[stay])
+	script := testutil.DetachedDaemonScript(path, stay)
 	cmd, cleanup, err := PrepareCommand(ctx, python, []string{"-c", script}, ExecOpts{Launch: HostLaunch("detached daemon test")})
 	testutil.FailErr(t, "prepare detached command", err)
 	return cmd, cleanup, path

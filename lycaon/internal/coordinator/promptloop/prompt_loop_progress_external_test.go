@@ -2,6 +2,7 @@ package promptloop_test
 
 import (
 	"context"
+	"github.com/lycaon/lycaon/internal/tools/toolstest"
 	"strings"
 	"testing"
 
@@ -9,7 +10,7 @@ import (
 	"github.com/lycaon/lycaon/internal/llm/compaction"
 	"github.com/lycaon/lycaon/internal/llm/modelcall"
 	"github.com/lycaon/lycaon/internal/orchestration"
-	"github.com/lycaon/lycaon/internal/session/store"
+	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/tools"
@@ -18,7 +19,7 @@ import (
 )
 
 func TestStreamProgressBuffersContentUntilSettle(t *testing.T) {
-	st := store.NewMemory()
+	st := storetest.New(t, testdbseed.DefaultProjectID)
 	deps := promptloop.StoreDeps(st)
 	var live, updates int
 	deps.Projection.Streams = &observedMessageStreams{MessageStreams: deps.Projection.Streams, project: func(ctx context.Context, sessionID string, msg api.Message) error {
@@ -57,7 +58,7 @@ func TestStreamProgressBuffersContentUntilSettle(t *testing.T) {
 }
 
 func TestStreamProgressBuffersAllToolCalls(t *testing.T) {
-	st := store.NewMemory()
+	st := storetest.New(t, testdbseed.DefaultProjectID)
 	deps := promptloop.StoreDeps(st)
 	var sawCommand bool
 	deps.Projection.Streams = &observedMessageStreams{MessageStreams: deps.Projection.Streams, project: func(ctx context.Context, sessionID string, msg api.Message) error {
@@ -75,7 +76,7 @@ func TestStreamProgressBuffersAllToolCalls(t *testing.T) {
 		{ID: "tc-sum", Name: "summarize", Args: map[string]any{"path": "pkg"}},
 		{ID: "tc-read", Name: "read", Args: map[string]any{"path": "a.go"}},
 	}}
-	reg := tools.NewStubRegistry()
+	reg := toolstest.NewRegistry()
 	_ = reg.Register("summarize", func(_ context.Context, _ map[string]any, _ tools.ToolContext) (string, error) {
 		return "ok", nil
 	})
@@ -102,7 +103,7 @@ func TestStreamProgressBuffersAllToolCalls(t *testing.T) {
 }
 
 func TestLoopPublishesWorkerProgress(t *testing.T) {
-	store := store.NewMemory()
+	store := storetest.New(t, testdbseed.DefaultProjectID)
 	var published []publishedProgress
 	var lastCtx *api.WorkerContextUsage
 	deps := promptloop.StoreDeps(store)
@@ -174,11 +175,11 @@ func TestLoopPublishesAnEdgePerSettledToolCall(t *testing.T) {
 		}},
 		{Content: "done"},
 	}}
-	store := store.NewMemory()
+	store := storetest.New(t, testdbseed.DefaultProjectID)
 	var published []publishedProgress
 	deps := promptloop.StoreDeps(store)
 	deps.Model.LLM = client
-	deps.Context.Tools = tools.NewStubRegistry()
+	deps.Context.Tools = toolstest.NewRegistry()
 	deps.Context.Policy = &recordingToolPolicy{}
 	deps.Nudges.PublishWorkerProgress = func(_ context.Context, _ string, snap workerprogress.Snapshot, checkpoint bool) {
 		published = append(published, publishedProgress{snap: snap, checkpoint: checkpoint})

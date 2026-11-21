@@ -42,6 +42,7 @@ describe("NoticeRail", () => {
     expect(screen.getByTestId("notice-rail")).toBeTruthy();
     // The message renders only while the notice is expanded.
     expect(screen.getByText('provider "openai" is not configured')).toBeTruthy();
+    expect(screen.getByText("Open Settings → AI providers")).toBeTruthy();
 
     assertNamedControl(screen.getByTestId("notice-dismiss"), "button").click();
     expect(onDismiss).toHaveBeenCalledWith("n1");

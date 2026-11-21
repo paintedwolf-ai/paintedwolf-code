@@ -50,6 +50,9 @@ func TestClampSessionToolOutputFindResults(t *testing.T) {
 	if jsonvalue.Int(clamp.Vars["kept"]) != len(page) {
 		t.Fatalf("kept = %v want %d", clamp.Vars["kept"], len(page))
 	}
+	if obj["truncation_banner"] != "TOOL_SURVEY_BYTE_CLAMPED" {
+		t.Fatalf("truncation_banner = %v, want the registered code", obj["truncation_banner"])
+	}
 }
 
 func TestClampSessionToolOutputReadContent(t *testing.T) {

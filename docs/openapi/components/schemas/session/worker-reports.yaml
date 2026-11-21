@@ -60,7 +60,7 @@ components:
       x-go-generate: true
       type: object
       additionalProperties: false
-      required: [worker_id, child_session_id, agent_type, status, envelope]
+      required: [worker_id, agent_type, status, envelope]
       properties:
         source_context:
           x-go-pointer: true
@@ -89,6 +89,7 @@ components:
           type: string
           format: uuid
         child_session_id:
+          description: Absent for a worker cancelled before it started a session.
           type: string
           format: uuid
         agent_type:

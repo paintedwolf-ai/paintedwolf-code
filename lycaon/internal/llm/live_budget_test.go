@@ -1,6 +1,7 @@
 package llm
 
 import (
+	"github.com/lycaon/lycaon/internal/limits"
 	"github.com/lycaon/lycaon/internal/llm/compaction"
 	"net/http"
 	"net/http/httptest"
@@ -285,6 +286,22 @@ func TestPromptSizingLimitsFollowTheCappedBudget(t *testing.T) {
 				t.Fatalf("limits %+v summary %d", limits, out.MaxWorkerSummaryChars)
 			}
 		})
+	}
+	// With no model to resolve, the summary limit follows the fallback window.
+	out, limits, err := ApplyLiveBudget(compaction.DefaultCompactionConfig(), ModelPolicy{}, nil, testWindows(t))
+	testutil.FailErr(t, "ApplyLiveBudget without a model", err)
+	if limits.MaxWorkerSummaryChars != 16384 || out.MaxWorkerSummaryChars != 16384 {
+		t.Fatalf("no model: limits %+v summary %d, want 16384", limits, out.MaxWorkerSummaryChars)
+	}
+}
+
+// With no model selected, the scaled worker summary cap is the bundled limit
+// the coordinator's closeout copy advertises.
+func TestWorkerSummaryBudgetWithoutAModelIsTheLimitsDefault(t *testing.T) {
+	out, scaled, err := ApplyLiveBudget(compaction.DefaultCompactionConfig(), ModelPolicy{}, nil, testWindows(t))
+	testutil.FailErr(t, "ApplyLiveBudget", err)
+	if out.MaxWorkerSummaryChars != limits.DefaultWorkerSummaryMaxChars || scaled.MaxWorkerSummaryChars != limits.DefaultWorkerSummaryMaxChars {
+		t.Fatalf("worker summary cap = %d (limits %d), want %d", out.MaxWorkerSummaryChars, scaled.MaxWorkerSummaryChars, limits.DefaultWorkerSummaryMaxChars)
 	}
 }
 

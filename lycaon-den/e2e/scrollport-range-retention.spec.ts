@@ -7,6 +7,8 @@ import {
   transcriptMessages,
   webE2e,
 } from "./helpers.ts";
+import { directInputSettled, scrollSettled, settleFrames } from "./fixtures/settle.ts";
+import { SCROLLPORT_EXTENT_HOLD_ATTR } from "../src/platform/scrolling/scrollport-motion-types.ts";
 
 const PROBE_PX = 240;
 
@@ -99,7 +101,8 @@ async function expandedCardAtBottom(page: Page, request: APIRequestContext) {
   await page.mouse.move(600, 200);
   for (let i = 0; i < 8; i += 1) await page.mouse.wheel(0, 200);
   await expect.poll(() => stream(page).evaluate((el) => el.scrollHeight - el.clientHeight - el.scrollTop)).toBeLessThan(2);
-  await page.waitForTimeout(700);
+  await directInputSettled(stream(page));
+  await scrollSettled(stream(page));
   const box = (await summary.boundingBox())!;
   const x = box.x + 40;
   const y = box.y + box.height - 8;
@@ -135,7 +138,6 @@ webE2e("a card collapsed at the tail holds through a click sequence, then glides
   // Quick presses that follow the first land on the same control.
   await page.mouse.down({ clickCount: 1 });
   await page.mouse.up({ clickCount: 1 });
-  await page.waitForTimeout(120);
   await page.mouse.down({ clickCount: 2 });
   await page.mouse.up({ clickCount: 2 });
   await page.mouse.down({ clickCount: 3 });
@@ -161,10 +163,12 @@ webE2e("wheeling up after a collapse at the tail never pulls back", async ({ pag
   const offsets = [await stream(page).evaluate((el) => el.scrollTop)];
   for (let notch = 0; notch < 8; notch += 1) {
     await page.mouse.wheel(0, -60);
-    await page.waitForTimeout(60);
+    await settleFrames(page);
     offsets.push(await stream(page).evaluate((el) => el.scrollTop));
   }
-  await page.waitForTimeout(900);
+  // The held range is released once the reader has left it; a pull-back would follow that release.
+  await expect(stream(page).locator(`[${SCROLLPORT_EXTENT_HOLD_ATTR}]`)).toHaveCount(0);
+  await scrollSettled(stream(page));
   offsets.push(await stream(page).evaluate((el) => el.scrollTop));
   const pulledBack = offsets.slice(1).filter((offset, index) => offset > offsets[index]! + 1);
   expect(pulledBack, `offsets ${offsets.map(Math.round).join(", ")}`).toEqual([]);
@@ -194,7 +198,7 @@ webE2e("the newest card is the end of the chat: a wheel never scrolls further pa
   const seen = [await spaceBelowNewest(page)];
   for (const deltaY of [up, up, 120, 120, 120, 120, 120, 120]) {
     await page.mouse.wheel(0, deltaY);
-    await page.waitForTimeout(40);
+    await settleFrames(page);
     seen.push(await spaceBelowNewest(page));
   }
   const grew = seen.slice(1).filter((gap, index) => gap > seen[index]! + 1);

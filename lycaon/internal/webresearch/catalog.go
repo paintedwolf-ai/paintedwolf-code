@@ -69,6 +69,34 @@ type CatalogEntry struct {
 	FamilyParams map[string]string `yaml:"family_params"`
 }
 
+// CatalogRule names the catalog rule a provider entry violates.
+type CatalogRule string
+
+const (
+	RuleMissingID                         CatalogRule = "missing_id"
+	RuleDirectID                          CatalogRule = "direct_id"
+	RuleUnknownKind                       CatalogRule = "unknown_kind"
+	RuleMissingLabel                      CatalogRule = "missing_label"
+	RuleMissingHint                       CatalogRule = "missing_hint"
+	RuleQueryBackoffMinWords              CatalogRule = "query_backoff_min_words"
+	RuleDefaultEnabledNotKeyless          CatalogRule = "default_enabled_not_keyless"
+	RulePacingNotKeyless                  CatalogRule = "pacing_not_keyless"
+	RuleKeylessMissingEndpoint            CatalogRule = "keyless_missing_endpoint"
+	RulePrivateEndpointNotKeylessEndpoint CatalogRule = "private_endpoint_not_keyless_endpoint"
+	RuleEmptyRoles                        CatalogRule = "empty_roles"
+	RuleUnknownRole                       CatalogRule = "unknown_role"
+)
+
+// CatalogEntryError rejects one provider entry of the catalog.
+type CatalogEntryError struct {
+	ID   string
+	Rule CatalogRule
+}
+
+func (e *CatalogEntryError) Error() string {
+	return fmt.Sprintf("web research catalog: provider %q violates %s", e.ID, e.Rule)
+}
+
 // Catalog is the bundled custom-provider list (direct search is not included).
 type Catalog struct {
 	entries *catalogruntime.Catalog[CatalogEntry]
@@ -95,10 +123,10 @@ func LoadCatalog() (*Catalog, error) {
 	for _, entry := range raw.Providers {
 		id := strings.TrimSpace(entry.ID)
 		if id == "" {
-			return nil, fmt.Errorf("web research catalog: provider missing id")
+			return nil, &CatalogEntryError{Rule: RuleMissingID}
 		}
 		if id == directWireProviderID {
-			return nil, fmt.Errorf("web research catalog: %q belongs on the direct mode side, not the catalog", id)
+			return nil, &CatalogEntryError{ID: id, Rule: RuleDirectID}
 		}
 		if err := validateCatalogEntry(id, entry); err != nil {
 			return nil, err
@@ -131,40 +159,42 @@ func catalogFromEntries(entries []CatalogEntry) (*Catalog, error) {
 }
 
 func validateCatalogEntry(id string, entry CatalogEntry) error {
+	if rule := catalogEntryRule(entry); rule != "" {
+		return &CatalogEntryError{ID: id, Rule: rule}
+	}
+	return validateCatalogFamily(id, entry)
+}
+
+func catalogEntryRule(entry CatalogEntry) CatalogRule {
 	switch entry.Kind {
 	case KindKeyed, KindKeyedExtra, KindKeylessEndpoint, KindKeyless:
 	default:
-		return fmt.Errorf("web research catalog: %q has unknown kind %q", id, entry.Kind)
+		return RuleUnknownKind
 	}
-	if entry.QueryBackoff != nil && entry.QueryBackoff.MinWords < 1 {
-		return fmt.Errorf("web research catalog: %q query_backoff.min_words must be >= 1", id)
-	}
-	if entry.DefaultEnabled && entry.Kind != KindKeyless {
-		return fmt.Errorf("web research catalog: %q default_enabled is only allowed on keyless providers", id)
-	}
-	if entry.Pacing != nil && entry.Kind != KindKeyless {
-		return fmt.Errorf("web research catalog: %q pacing is only allowed on keyless providers", id)
-	}
-	if entry.Kind == KindKeyless && strings.TrimSpace(entry.DefaultEndpoint) == "" {
-		return fmt.Errorf("web research catalog: %q kind keyless requires default_endpoint", id)
-	}
-	if entry.AllowPrivateEndpoint && entry.Kind != KindKeylessEndpoint {
-		return fmt.Errorf("web research catalog: %q allow_private_endpoint is only allowed on keyless_endpoint providers", id)
-	}
-	if entry.Roles != nil && len(entry.Roles) == 0 {
-		return fmt.Errorf("web research catalog: %q roles must not be empty when present", id)
+	switch {
+	case strings.TrimSpace(entry.Label) == "":
+		return RuleMissingLabel
+	case strings.TrimSpace(entry.Hint) == "":
+		return RuleMissingHint
+	case entry.QueryBackoff != nil && entry.QueryBackoff.MinWords < 1:
+		return RuleQueryBackoffMinWords
+	case entry.DefaultEnabled && entry.Kind != KindKeyless:
+		return RuleDefaultEnabledNotKeyless
+	case entry.Pacing != nil && entry.Kind != KindKeyless:
+		return RulePacingNotKeyless
+	case entry.Kind == KindKeyless && strings.TrimSpace(entry.DefaultEndpoint) == "":
+		return RuleKeylessMissingEndpoint
+	case entry.AllowPrivateEndpoint && entry.Kind != KindKeylessEndpoint:
+		return RulePrivateEndpointNotKeylessEndpoint
+	case entry.Roles != nil && len(entry.Roles) == 0:
+		return RuleEmptyRoles
 	}
 	for _, role := range entry.Roles {
-		switch role {
-		case RoleResults, RoleSeeds:
-		default:
-			return fmt.Errorf("web research catalog: %q has unknown role %q", id, role)
+		if role != RoleResults && role != RoleSeeds {
+			return RuleUnknownRole
 		}
 	}
-	if err := validateCatalogFamily(id, entry); err != nil {
-		return err
-	}
-	return nil
+	return ""
 }
 
 // RolesOrDefault returns roles, defaulting to [results] when absent in YAML.

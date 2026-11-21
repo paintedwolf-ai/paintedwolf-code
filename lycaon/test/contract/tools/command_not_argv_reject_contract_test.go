@@ -136,7 +136,7 @@ func TestCommandArgvRequiredRejectObservation(t *testing.T) {
 	t.Parallel()
 	exec := commandRejectExecutor(t)
 	_, err := exec.Invoke(context.Background(), "command", map[string]any{
-		"command": "", "cwd": ".", "timeout_ms": 120000, "terminal_capture": map[string]any{},
+		"command": "", "cwd": ".", "terminal_capture": map[string]any{},
 	}, tools.ToolContext{
 		Source: tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "r1", Label: "root", Path: t.TempDir(), IsPrimary: true}},
 			ActiveRootID: "r1"},

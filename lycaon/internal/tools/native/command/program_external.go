@@ -128,6 +128,12 @@ func (l ExternalStages) Launch(ctx context.Context, request commandprogram.Opera
 		}
 		return externalLaunchFailure(err, toolcontract.ProducerResult{Status: 127, Terminal: toolcontract.ProducerFailed, EffectCertainty: toolcontract.NoEffect}), err
 	}
+	if bound.directIPApplied {
+		// Every return below follows the reap, including a program handed back
+		// as running whose launch settles later.
+		tools.EmitDirectIPLifecycle(tctx, tools.DirectIPLifecycleStarted)
+		defer tools.EmitDirectIPLifecycle(tctx, tools.DirectIPLifecycleCompleted)
+	}
 	detach := request.Process.Signals.Attach(func(sig commandprogram.Signal) bool {
 		return async.Signal(syscall.Signal(sig.Number))
 	})

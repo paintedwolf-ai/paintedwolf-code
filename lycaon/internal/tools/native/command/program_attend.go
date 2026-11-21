@@ -58,7 +58,6 @@ type programEvaluation struct {
 	stderr         *programStream
 	outputs        *invocation.ProgramOutputRetention
 	scope          captureprojection.Scope
-	documents      *programDocuments
 	paths          *projectpaths.ProgramPaths
 	verification   func() commandSourceIdentity
 	failureAttempt *commandFailureAttempt
@@ -82,7 +81,7 @@ func (r *ProgramRuntime) attend(callCtx context.Context, e *programEvaluation) (
 	lifetime := &programLifetime{release: e.release}
 	e.release = lifetime.settled
 	defer lifetime.callerDone()
-	budget := newForegroundBudget(r.clock(), ProgramInlineWait)
+	budget := newForegroundBudget(r.clock(), toolcontract.ProgramInlineWait)
 	defer budget.Close()
 	expired := budget.Expired()
 	e.waits = &programWaits{budget: budget}
@@ -149,7 +148,7 @@ func (r *ProgramRuntime) parkProgram(callCtx context.Context, e *programEvaluati
 	run, state := e.run, blocked.state
 	programID := run.root.Identity.ProgramID
 	parked, err := r.Parking.ParkProgram(callCtx, e.callTC, tools.ProgramPark{
-		ProgramID: programID, Reason: state.Statement, Deadline: e.call.deadline,
+		ProgramID: programID, Reason: state.Statement,
 		Claim:     func() bool { return e.park.claim(blocked) },
 		Interrupt: func(ctx context.Context) string { return r.interruptProgram(ctx, run, ending) },
 	})
@@ -311,7 +310,6 @@ func (r *ProgramRuntime) finish(e *programEvaluation) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	outcome.Stderr = e.documents.appendNotes(outcome.Stderr)
 	outcome.Refusal = refusal
 	outcome.CPUTimeUnmeasured = evaluated.CPUTimeUnmeasured
 	outcome.SourceWindow = run.window.fact()

@@ -2,6 +2,7 @@
 import json
 import math
 import os
+import re
 from pathlib import Path
 import shutil
 import subprocess
@@ -68,14 +69,74 @@ def combined_exit(current, result):
     return 1 if 1 in (current, result) else current or result
 
 
-def run_lane(name, shard="", merge_group=False, clock=time.monotonic):
+def lane_commands(name, lane, profile, scope, goos=None):
+    """The commands a lane runs in a profile for a change scope, and the Go packages it selected there.
+    `goos` names the runner's system when it is not this one."""
+    invocations = hosted_plan.profile_invocations(lane, profile)
+    targets = [invocation[0] for invocation in invocations]
+    command = ["./task", *hosted_plan.invocation(targets)]
+    if "arguments" in lane:
+        command += ["--", *lane["arguments"]]
+    packages = None
+    phases = lane.get("phases")
+    if scope and phases == "affected-packages":
+        from ci_policy.impact import go_scope
+        selected = go_scope(scope)
+        if selected:
+            command += ["--", *selected]
+            packages = selected
+    if phases == "changed-packages":
+        from ci_policy.impact import buildable, changed_packages
+        # The plan deals the change's packages into this job's share; a run outside a plan selects them itself.
+        # The planner selects this lane only for a change that edits Go source, so no scope is a fault.
+        packages = planned_share() or changed_packages(scope or {"paths": []})
+        if packages:
+            packages = buildable(packages, recipe_tags(targets[0]), goos)
+        if not packages:
+            raise ValueError(f"CI lane {name} found no changed Go package that builds on this runner")
+        command += ["--", *packages]
+    commands = [command]
+    # A selection reaches one target at a time, so a lane's arguments run as one phase per target.
+    if "arguments" in lane and len(hosted_plan.invocation(targets)) > 1:
+        commands = [["./task", target, "--", *lane["arguments"]] for target in hosted_plan.invocation(targets)]
+    elif any(len(invocation) > 1 for invocation in invocations):
+        commands = [["./task", *invocation] for invocation in invocations]
+    if phases == "admission":
+        commands = ready_scope.check_phases(hosted_plan.invocation(targets), scope)
+    elif phases == "admission-tests":
+        commands, packages = ready_scope.test_phases(scope)
+    return commands, packages
+
+
+def planned_share():
+    """The packages the plan gave this job, as the workflow passes its matrix row."""
+    share = json.loads(os.environ.get("PW_CI_SHARD_PACKAGES") or "null")
+    if share is not None and (not isinstance(share, list) or not all(isinstance(name, str) for name in share)):
+        raise ValueError("PW_CI_SHARD_PACKAGES must be a list of Go packages")
+    return share
+
+
+def recipe_tags(target):
+    """The build tags a Go recipe compiles with."""
+    from verification_plan import catalog
+    options = catalog()["go"][target]["options"]
+    return options[options.index("--tags") + 1].split(",") if "--tags" in options else []
+
+
+def run_lane(name, shard="", clock=time.monotonic, profile=hosted_plan.GATE):
     lane = hosted_plan.lanes()[name]
     # The lane's minutes are its one time limit, counted from here across every phase.
     deadline = clock() + lane["minutes"] * 60
     count = lane.get("shards", 1)
-    if (shard == "") != (count == 1) or shard and shard not in {f"{k}/{count}" for k in range(1, count + 1)}:
+    # A lane sharded by its selection receives its share from the plan, not a fixed shard count.
+    by_selection = lane.get("phases") == "changed-packages"
+    if by_selection and shard and not re.fullmatch(r"([1-9][0-9]*)/([1-9][0-9]*)", shard):
+        raise ValueError(f"CI lane {name} shard must be k/N; got {shard!r}")
+    if not by_selection and ((shard == "") != (count == 1)
+                             or shard and shard not in {f"{k}/{count}" for k in range(1, count + 1)}):
         raise ValueError(f"CI lane {name} has {count} shard(s); got {shard!r}")
-    targets = lane["targets"]
+    invocations = hosted_plan.profile_invocations(lane, profile)
+    targets = [invocation[0] for invocation in invocations]
     scope = None
     if os.environ.get("PW_CI_AFFECTED") == "1" or "budgets" in targets:
         from ci_policy.impact import change
@@ -103,7 +164,7 @@ def run_lane(name, shard="", merge_group=False, clock=time.monotonic):
         environment["PW_TEST_WORKERS"] = str(lane["workers"])
     # Shards use the plan's shared package weights.
     measured = environment.pop("PW_CI_PACKAGE_TIMINGS", "")
-    if shard:
+    if shard and not by_selection:
         environment["PW_GO_SHARD"] = shard
         if measured:
             weights = directory / "package-weights.json"
@@ -113,35 +174,17 @@ def run_lane(name, shard="", merge_group=False, clock=time.monotonic):
     stop = threading.Event()
     if os.environ.get("PW_TEST_HOST") == "dedicated" and Path("/proc/meminfo").exists():
         threading.Thread(target=sample_resources, args=(stop,), daemon=True).start()
-    command = ["./task", *hosted_plan.invocation(targets)]
-    if "arguments" in lane:
-        command += ["--", *lane["arguments"]]
-
     try:
         code = 0
         record["phases"] = []
-        packages = None
-        if scope and name == "behavior":
-            from ci_policy.impact import go_scope
-            packages = go_scope(scope)
-            if packages:
-                command += ["--", *packages]
-                record["packages"] = packages
-        # Admission reports every failure, so repairs need not rediscover them one run at a time.
-        complete = merge_group or name in {"ready", "ready-tests", "frontend"}
-        commands = [command]
-        if complete:
-            environment["PW_TEST_KEEP_GOING"] = "1"
-        if name == "ready":
-            commands = ready_scope.check_phases(hosted_plan.invocation(targets), scope, lane.get("early_targets", []))
-        elif name == "ready-tests":
-            commands, record["packages"] = ready_scope.test_phases(scope)
-        if merge_group:
-            from ci_policy.merge_preflight import commands as ordered_commands
-            commands = ordered_commands(lane, hosted_plan.invocation(targets), packages)
+        commands, packages = lane_commands(name, lane, profile, scope)
+        if packages is not None or lane.get("phases") == "admission-tests":
+            record["packages"] = packages
+        # Every phase runs, so one run reports every failure and repairs need not rediscover them one at a time.
+        environment["PW_TEST_KEEP_GOING"] = "1"
         for command in commands:
             # A signal is the job being torn down, not a check's result, so nothing further can report.
-            if code < 0 or (code != 0 and not complete):
+            if code < 0:
                 break
             phase = {"command": command, "started_at": time.time()}
             record["phases"].append(phase)

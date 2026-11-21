@@ -189,6 +189,12 @@ func (b *serveBuilder) reportRecovery(report bootrecovery.Report, err error) err
 	if log == nil {
 		log = slog.Default()
 	}
+	for _, outcome := range report.Outcomes {
+		if !outcome.Degraded() && !outcome.Skipped() {
+			log.Debug("startup recovery settled", "entry", outcome.Name, "kind", string(outcome.Kind),
+				"phase", string(outcome.Phase), "duration", outcome.Duration)
+		}
+	}
 	for _, outcome := range report.Degraded() {
 		switch {
 		case outcome.Skipped():

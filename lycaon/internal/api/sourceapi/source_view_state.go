@@ -128,8 +128,7 @@ func sourceViewPublication(snapshot wire.SourceView) ([sha256.Size]byte, error) 
 	return sha256.Sum256(body), nil
 }
 
-// Notifications carry observable changes only; notifier delivery is serialized per view,
-// so published needs no lock.
+// Notifications carry observable changes only.
 func (s *Views) publishSourceView(view *sourceView) {
 	if s.Events == nil || view.ctx.Err() != nil {
 		return
@@ -139,10 +138,18 @@ func (s *Views) publishSourceView(view *sourceView) {
 		return
 	}
 	publication, err := sourceViewPublication(snapshot)
-	if err != nil || publication == view.published {
+	if err != nil {
 		return
 	}
-	view.published = publication
+	view.mu.Lock()
+	unchanged := publication == view.published
+	if !unchanged {
+		view.published = publication
+	}
+	view.mu.Unlock()
+	if unchanged {
+		return
+	}
 	event := wire.SourceViewEvent{ViewID: view.id}
 	if tree := snapshot.Tree; tree != nil {
 		event.Kind, event.IntentRevision, event.ProjectionRevision = "tree", tree.IntentRevision, tree.ProjectionRevision

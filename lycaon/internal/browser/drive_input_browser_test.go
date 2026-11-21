@@ -169,10 +169,13 @@ func TestPointerLandsWhereTheTargetReceivesItOrFailsWhereNoReaderCouldClick(t *t
 	if hits := pageValue[[]any](t, held, `() => window.hits`); len(hits) != 1 || hits[0].(float64) < 50 {
 		t.Fatalf("click landed under the header: %v", hits)
 	}
-	_, err = held.Act(t.Context(), []CaptureAction{{Type: "click", ActionLocator: ActionLocator{Selector: "#covered"}, TimeoutMS: 300}}, nil)
+	_, err = held.Act(t.Context(), []CaptureAction{{Type: "click", ActionLocator: ActionLocator{Selector: "#covered"}}}, nil)
 	var rej *browserengine.RejectError
 	if !errors.As(err, &rej) || rej.Code != "CAPTURE_ACTION_FAILED" || rej.Data["error"] != "target obscured" {
 		t.Fatalf("clicking a covered button = %v", err)
+	}
+	if rej.Data["step_timeout_ms"] != float64(targetTimeoutMS) || rej.Data["step_deadline_expired"] != true {
+		t.Fatalf("covered click deadline report %v", rej.Data)
 	}
 	if hits := pageValue[[]any](t, held, `() => window.hits`); len(hits) != 1 {
 		t.Fatalf("a covered button received a click: %v", hits)

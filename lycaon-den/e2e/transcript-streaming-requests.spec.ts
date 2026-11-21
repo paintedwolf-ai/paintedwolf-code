@@ -6,6 +6,7 @@ import {
   transcriptMessages,
   webE2e,
 } from "./helpers.ts";
+import { settleTranscriptLayout } from "./fixtures/settle.ts";
 
 const SOURCE_VIEW_READ = /\/v1\/projects\/[^/]+\/source\/views\/[^/?]+(\?|$)/;
 
@@ -75,7 +76,8 @@ webE2e(
       );
     }
     await expect(page.getByTestId("message-stream").getByText(`streamed reply ${arrivals}`).first()).toBeAttached({ timeout: 15_000 });
-    await page.waitForTimeout(500);
+    // A late read would follow the last row's layout.
+    await settleTranscriptLayout(page);
     expect(reads, reads.join("\n")).toHaveLength(0);
   },
 );

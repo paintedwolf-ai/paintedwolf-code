@@ -402,8 +402,8 @@ func TestPutProviderLabelOnlyUpdate(t *testing.T) {
 	if !ok {
 		t.Fatal("label-test missing after rename")
 	}
-	if stored.Label != "Work" || len(stored.Models) != 1 {
-		t.Fatalf("catalog after rename: %+v", stored)
+	if stored.Label != "Work" || stored.BaseURL != "https://proxy.example/v1" || len(stored.Models) != 1 {
+		t.Fatalf("catalog after a body without base_url: %+v", stored)
 	}
 
 	clear := `{"label":""}`

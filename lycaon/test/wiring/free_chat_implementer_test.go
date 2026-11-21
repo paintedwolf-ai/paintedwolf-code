@@ -3,12 +3,10 @@ package wiring
 import (
 	"context"
 	"os"
-	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/llm"
-	"github.com/lycaon/lycaon/internal/settingsoverlay"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -41,8 +39,8 @@ func TestFreeChatImplementerTask(t *testing.T) {
 
 	ctx := context.Background()
 	dir := t.TempDir()
-	writeTestProjectApprovalsAllowWrite(t, dir)
-	mainPath := writeImplementFixture(t, dir)
+	WriteTestProjectApprovalsAllowWrite(t, dir)
+	mainPath := WriteImplementFixture(t, dir)
 
 	sess, err := h.CreateHarnessSession(t, api.CreateSessionRequest{}, dir)
 	testutil.FailErr(t, "create session in store", err)
@@ -105,27 +103,4 @@ func TestFreeChatImplementerChildIncludesCommandInSchema(t *testing.T) {
 	if !hasCommand {
 		t.Fatalf("implementer schema must include command")
 	}
-}
-
-func writeTestProjectApprovalsAllowWrite(t *testing.T, dir string) {
-	t.Helper()
-	// These smokes exercise workflow behavior, not confinement.
-	t.Setenv("LYCAON_BYPASS_APPROVALS", "1")
-	overlay := filepath.Join(dir, settingsoverlay.DirName())
-	if err := os.MkdirAll(overlay, 0o700); err != nil {
-		testutil.FailErr(t, "create directory", err)
-	}
-	body := "rules:\n  - category: tool\n    pattern: write\n    effect: allow\n  - category: tool\n    pattern: edit\n    effect: allow\n"
-	if err := os.WriteFile(filepath.Join(overlay, "approvals.yaml"), []byte(body), 0o600); err != nil {
-		testutil.FailErr(t, "write file", err)
-	}
-}
-
-func writeImplementFixture(t *testing.T, dir string) string {
-	t.Helper()
-	path := filepath.Join(dir, "main.go")
-	if err := os.WriteFile(path, []byte("package main\n\nfunc main() {}\n"), 0o644); err != nil {
-		testutil.FailErr(t, "write file", err)
-	}
-	return path
 }

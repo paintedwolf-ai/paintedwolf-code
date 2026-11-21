@@ -44,10 +44,11 @@ type recordedStream struct {
 // logStreamSource reads kernel sandbox reports from the unified log.
 type logStreamSource struct {
 	stateRoot string
+	track     ProcessTracker
 }
 
-func newRefusalSource(stateRoot string) refusalSource {
-	return logStreamSource{stateRoot: stateRoot}
+func newRefusalSource(stateRoot string, track ProcessTracker) refusalSource {
+	return logStreamSource{stateRoot: stateRoot, track: track}
 }
 
 func (s logStreamSource) open(ctx context.Context, selfPID int) (io.ReadCloser, func() error, error) {
@@ -69,8 +70,13 @@ func (s logStreamSource) open(ctx context.Context, selfPID int) (io.ReadCloser, 
 		return nil, nil, err
 	}
 	s.record(cmd.Process.Pid)
+	forget := func() {}
+	if s.track != nil {
+		forget = s.track(cmd.Process.Pid)
+	}
 	wait := func() error {
 		err := cmd.Wait()
+		forget()
 		s.forget(cmd.Process.Pid)
 		if detail := strings.TrimSpace(stderr.String()); detail != "" {
 			return errors.Join(err, errors.New(detail))

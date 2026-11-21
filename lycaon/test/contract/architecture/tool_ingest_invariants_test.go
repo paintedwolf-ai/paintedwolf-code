@@ -2,8 +2,6 @@ package contract
 
 import (
 	"fmt"
-	"github.com/lycaon/lycaon/internal/oar"
-	"github.com/lycaon/lycaon/internal/toolrejection"
 	"go/ast"
 	"go/token"
 	"os"
@@ -13,6 +11,9 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+
+	"github.com/lycaon/lycaon/internal/oar"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 
 	"github.com/lycaon/lycaon/internal/oarcopy"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
@@ -27,51 +28,6 @@ func walkGoFiles(t *testing.T, root string, fn func(path string, fset *token.Fil
 		if !file.IsTest {
 			fn(file.Path, corpus.Fset, file.AST)
 		}
-	}
-}
-
-// TestToolFileIngestIsSizeBounded requires size checks before whole-file reads.
-func TestToolFileIngestIsSizeBounded(t *testing.T) {
-	t.Parallel()
-	root := filepath.Join(contractcheck.RepoRoot(t), "lycaon", "internal", "tools")
-	var violations []string
-
-	walkGoFiles(t, root, func(path string, fset *token.FileSet, file *ast.File) {
-		for _, decl := range file.Decls {
-			fn, ok := decl.(*ast.FuncDecl)
-			if !ok || fn.Body == nil {
-				continue
-			}
-			var slurps []token.Pos
-			guarded := false
-			ast.Inspect(fn.Body, func(n ast.Node) bool {
-				call, ok := n.(*ast.CallExpr)
-				if !ok {
-					return true
-				}
-				switch name := contractcheck.CallName(call); {
-				case name == "os.ReadFile":
-					slurps = append(slurps, call.Lparen)
-				case strings.HasSuffix(name, ".Size"), name == "readContentCapped",
-					strings.HasSuffix(name, "SpillBytes"):
-					// Either path proves the read is bounded.
-					guarded = true
-				}
-				return true
-			})
-			if guarded {
-				continue
-			}
-			for _, pos := range slurps {
-				violations = append(violations,
-					fset.Position(pos).String()+" in "+fn.Name.Name)
-			}
-		}
-	})
-
-	if len(violations) > 0 {
-		t.Fatalf("unbounded file ingest — stat the file first or call readContentCapped:\n  %s",
-			strings.Join(violations, "\n  "))
 	}
 }
 

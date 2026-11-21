@@ -27,6 +27,11 @@ inputs:
   browser:
     description: Provision the pinned browser before an offline lane runs test:confine:linux
     default: 'false'
+  managed-browser:
+    description: Provision the development browser cache before an offline lane builds a harness sidecar
+  playwright:
+    description: Install the Playwright browsers before an offline lane runs the harness journeys
+    default: 'false'
   linux-launch:
     description: Provision GTK and display dependencies for protected launch tests
     default: 'false'
@@ -74,6 +79,9 @@ outputs:
   artifact-root:
     description: Checkout artifact directory
     value: ${{ steps.paths.outputs.artifact-root }}
+  native-cache-hit:
+    description: Exact native cache lookup result
+    value: ${{ steps.native.outputs.cache-hit }}
   go-cache-hit:
     description: Whether the Go caches for the current module graph were restored
     value: ${{ steps.go.outputs.cache-hit }}
@@ -165,9 +173,11 @@ runs:
         fi
 
     - name: Provision Linux native test dependencies
-      if: inputs.lookup-only != 'true' && (runner.os == 'Linux' && (inputs.setup == 'shell' || inputs.linux-launch == 'true'))
+      id: native
+      if: runner.os == 'Linux' && (inputs.setup == 'shell' || inputs.linux-launch == 'true')
       uses: ./.github/actions/setup-linux-native
       with:
+        lookup-only: ${{ inputs.lookup-only }}
         save: ${{ inputs.save-caches }}
 
     - uses: ./.github/actions/cache-document-core
@@ -312,6 +322,17 @@ runs:
       if: inputs.lookup-only != 'true' && (inputs.browser == 'true')
       shell: bash
       run: ./task test:confine:linux -- --prepare
+
+    - name: Provision the development browser cache
+      if: inputs.lookup-only != 'true' && (inputs.managed-browser == 'true')
+      shell: bash
+      run: bash scripts/managed-browser-prepare.sh
+
+    - name: Install Playwright browsers
+      if: inputs.lookup-only != 'true' && (inputs.playwright == 'true')
+      shell: bash
+      working-directory: lycaon-den
+      run: bunx playwright install chromium webkit --with-deps
 
     - name: Provision pinned Nix and locked inputs
       if: inputs.lookup-only != 'true' && (inputs.nix == 'true')

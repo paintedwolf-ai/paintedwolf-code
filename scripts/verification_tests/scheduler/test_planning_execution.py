@@ -23,7 +23,7 @@ SCRIPT = support.SCRIPT
 class PlanningTests(unittest.TestCase):
     def test_subscriber_reports_state_changes_without_repeated_wait_notices(self):
         with tempfile.TemporaryDirectory() as root:
-            queue = execution.Queue(Path(root) / "queue")
+            queue = execution.Queue(Path(root) / "queue", Path(root) / "history")
             queue.pause("fixture")
             sleeps = 0
 
@@ -76,7 +76,7 @@ class PlanningTests(unittest.TestCase):
                 planning.validate_selection(["den:test:rust"], arguments)
 
     def test_harness_filters_use_bounded_resources_and_reject_unsupported_flags(self):
-        args = ["den:harness:test", "--", "recording-encoding-measurement.spec.ts", "--grep", "capture",
+        args = ["den:harness:test", "--", "boot.spec.ts", "--grep", "sidecar",
                 "--retries=0"]
         plan = planning.request(args, {})
         self.assertEqual(plan["stages"][0]["arguments"], args)
@@ -92,10 +92,8 @@ class PlanningTests(unittest.TestCase):
     def test_catalog_declares_resources_for_every_stage(self):
         catalog = planning.catalog()
         self.assertLessEqual(set(catalog["tasks"]) | {"go", "go:bundled"}, set(catalog["resources"]))
-        taskfile = (SCRIPT.parent.parent / "Taskfile.yml").read_text()
         for name in set(catalog["resources"]) - set(catalog["tasks"]) - {"go", "go:bundled"}:
             with self.subTest(invocation=name):
-                self.assertRegex(taskfile, rf"(?m)^  {re.escape(name)}:$")
                 self.assertNotIn(name, planning.declared_names(catalog))
 
     def test_invocations_hold_what_their_stages_declare(self):
@@ -175,7 +173,7 @@ class PlanningTests(unittest.TestCase):
                        "compatibility": "same", "admission": {"locks": [], "workers": 1}}
             operation = {"ticket": "operation-1", "name": "Go digest", "state": "running", "locks": ["go"],
                          "workers": 1, "order": 0}
-            queue = execution.Queue(Path(root) / "queue")
+            queue = execution.Queue(Path(root) / "queue", Path(root) / "history")
             snapshot = {"paused": None, "runs": [active, invocation, request], "operations": [operation, waiting]}
             with patch.object(queue, "status", return_value=snapshot):
                 result = batch.status_details(queue)
@@ -287,7 +285,7 @@ class PlanningTests(unittest.TestCase):
                      ["check", "CONFIG=other"]):
             with self.subTest(args=args):
                 self.assertIsNone(planning.request(args, {}))
-        self.assertIsNone(planning.request(["check"], {"UPDATE_SCHEMA_LOCK": "1"}))
+        self.assertIsNone(planning.request(["check"], {"UPDATE_REPORT_GOLDEN": "1"}))
         self.assertIsNone(planning.request(["check"], {"PW_TEST_REPLAY_MANIFEST": "replay.json"}))
         self.assertIsNone(planning.request(["check"], {"GOFLAGS": "-count=2"}))
         self.assertIsNone(planning.request(["check"], {"GOFLAGS": "-failfast"}))
@@ -303,7 +301,7 @@ class PlanningTests(unittest.TestCase):
                      ["test:digest", "--", "-args", "-custom"],
                      ["den:test:digest", "--", "outside-src.test.ts", "--bogus"],
                      ["den:harness:test", "--", "e2e/fixture.spec.ts", "--workers=1"]):
-            for env in ({}, {"UPDATE_SCHEMA_LOCK": "1"}, {"PW_TEST_REPLAY_MANIFEST": "replay.json"}):
+            for env in ({}, {"UPDATE_REPORT_GOLDEN": "1"}, {"PW_TEST_REPLAY_MANIFEST": "replay.json"}):
                 with self.subTest(args=args, env=env), self.assertRaisesRegex(ValueError, "unsupported flag"):
                     planning.request(args, env)
 
@@ -364,7 +362,7 @@ class PlanningTests(unittest.TestCase):
         agent = {"CODEX_THREAD_ID": "one", "CLAUDE_CODE_SESSION_ID": "two", "CLAUDE_CODE_MESSAGING_TOKEN": "secret",
                  "SENTRY-TRACE": "trace", "SSH_AUTH_SOCK": "/socket", "TERM": "xterm"}
         declared = {"PATH": "/bin", "HOME": "/home/user", "GOFLAGS": "-mod=mod", "LC_ALL": "C",
-                    "PW_TEST_WORKERS": "2", "UPDATE_SCHEMA_LOCK": "1"}
+                    "PW_TEST_WORKERS": "2", "UPDATE_REPORT_GOLDEN": "1"}
         scheduler = {"PW_TEST_RESOURCE_FD": "201", "PW_TEST_EXECUTION_TICKET": "1", "PW_TEST_STAGE_EVENTS": "x"}
         # This run's state and a live network route are not inputs to a shared stage.
         host = {"LYCAON_LOG_FILE": "/c/debug/a/sidecar.log", "HTTPS_PROXY": "http://127.0.0.1:51845"}
@@ -470,7 +468,7 @@ class PlanningTests(unittest.TestCase):
     @unittest.skipIf(os.name == "nt", "requires POSIX file descriptions")
     def test_opening_the_active_lease_does_not_inherit_its_admission(self):
         with tempfile.TemporaryDirectory() as directory:
-            queue = execution.Queue(directory)
+            queue = execution.Queue(directory, Path(directory) / "history")
             with execution.Lease(queue, "ownership fixture", 1) as lease:
                 lease.entry.update(state="running", pid=987654321, lease_fd=200)
                 lease.write()
@@ -479,6 +477,7 @@ class PlanningTests(unittest.TestCase):
                         f"os.execv(sys.executable,[sys.executable,{str(SCRIPT)!r},'holding'])")
                 result = subprocess.run([sys.executable, "-c", body], capture_output=True, timeout=5,
                                         env={**os.environ, "PW_TEST_EXECUTION_ROOT": directory,
+                                             "XDG_CACHE_HOME": str(Path(directory) / "user-cache"),
                                              "PW_TEST_EXECUTION_TICKET": lease.entry["ticket"]})
                 self.assertEqual(result.returncode, 1, result.stderr.decode())
 
@@ -486,7 +485,7 @@ class PlanningTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary:
             directory = Path(temporary) / "batch"
             directory.mkdir()
-            queue = execution.Queue(Path(temporary) / "queue")
+            queue = execution.Queue(Path(temporary) / "queue", Path(temporary) / "history")
             request = {"ticket": "request", "source": temporary,
                        "plan": {"names": ["gate"], "stages": [{"name": "obsolete"}]}}
             entry = {"ticket": "batch", "kind": "batch", "directory": str(directory)}

@@ -38,6 +38,8 @@ func (s *Responder) ProjectRegistryError(w http.ResponseWriter, r *http.Request,
 		s.Fail(w, wire.ApiErrorCodeProjectBusy, "project has in-flight work")
 	case errors.Is(err, project.ErrPromotionConflict), errors.Is(err, project.ErrPromotionPhase):
 		s.Fail(w, wire.ApiErrorCodePromotionConflict, "the project is already being saved to a folder")
+	case errors.Is(err, project.ErrNotDraft):
+		s.Fail(w, wire.ApiErrorCodeProjectNotDraft, "only a draft project can be saved to a folder")
 	case errors.Is(err, project.ErrPromotionNotFound):
 		s.Fail(w, wire.ApiErrorCodePromotionNotFound, "project has no active save to folder")
 	case errors.Is(err, project.ErrInvalidName), errors.Is(err, project.ErrInvalidRootLabel):

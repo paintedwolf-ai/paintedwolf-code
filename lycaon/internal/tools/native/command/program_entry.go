@@ -65,7 +65,7 @@ type ProgramRuntime struct {
 	// the foreground.
 	Parking tools.ProgramParking
 	// ParkThreshold is how long a call holds its turn while its program waits;
-	// zero means DefaultParkThreshold.
+	// zero means toolcontract.ProgramParkThreshold.
 	ParkThreshold time.Duration
 	// Clock times program waits; nil is the system clock.
 	Clock commandprogram.Clock
@@ -90,7 +90,7 @@ func (r *ProgramRuntime) clock() commandprogram.Clock {
 
 func (r *ProgramRuntime) parkThreshold() time.Duration {
 	if r.ParkThreshold <= 0 {
-		return DefaultParkThreshold
+		return toolcontract.ProgramParkThreshold
 	}
 	return r.ParkThreshold
 
@@ -160,7 +160,7 @@ func (r *ProgramRuntime) Run(ctx context.Context, tool string, args map[string]a
 		return "", err
 	}
 	callCtx := ctx
-	ctx, call := r.newProgramCall(ctx, args, catalog)
+	ctx, call := r.newProgramCall(ctx)
 	handedOff := false
 	defer func() {
 		if !handedOff {
@@ -203,18 +203,12 @@ func (r *ProgramRuntime) Run(ctx context.Context, tool string, args map[string]a
 	if strings.TrimSpace(tc.Host.SessionOutputDir) == "" {
 		return "", toolrejection.RejectInvalidArguments(tools.SessionOutputUnavailableCode, map[string]any{"path": "@output"})
 	}
-	documents, err := newProgramDocuments(ctx, tc, memory)
-	if err != nil {
-		return "", err
-	}
-	releaseDocuments := release
-	release = func() { documents.close(); releaseDocuments() }
-	ctx = context.WithValue(ctx, programDocumentsKey{}, documents)
 	run.windows = &tools.ProgramWindows{}
 	ctx = tools.WithProgramWindows(ctx, run.windows)
+	ctx = tools.WithUnsavedPaths(ctx)
 	ctx = tools.WithCommandReadObserver(ctx, func(ctx context.Context, root, path string) error {
 		run.observeProvenanceFileRead(ctx, root, path)
-		return documents.read(ctx, root, path)
+		return nil
 	})
 	failureAttempt, verification, err := beginProgramAttempt(ctx, r.FailureTracker, tc, args, paths.Cwd().Abs)
 	if err != nil {
@@ -285,12 +279,12 @@ func (r *ProgramRuntime) Run(ctx context.Context, tool string, args map[string]a
 	callTC := tc
 	run.tc.Effects.Out = &tools.ToolInvocationOut{}
 	run.tc.Effects.GitNoRepository = &atomic.Bool{}
-	park := newProgramPark(r.clock(), call, r.parkThreshold())
+	park := call.park
 	ports.Waits = park
 	handedOff = true
 	return r.attend(callCtx, &programEvaluation{
 		ctx: ctx, run: run, call: call, park: park, plan: snapshot.Plan, ports: ports, dispatcher: dispatcher,
-		stdout: stdout, stderr: stderr, outputs: outputs, scope: scope, documents: documents,
+		stdout: stdout, stderr: stderr, outputs: outputs, scope: scope,
 		paths: paths, verification: verification, failureAttempt: failureAttempt, release: release, callTC: callTC,
 	})
 
@@ -703,7 +697,7 @@ func (r *programRun) nativeArguments(base map[string]any, contract toolcontract.
 			request["loopback_connect"] = map[string]any{"ports": ports}
 		}
 	}
-	if secretUse, ok := r.envelope["secret_use"]; ok && contract.SecretReferenceSurface != "" {
+	if secretUse, ok := r.envelope["secret_use"]; ok && contract.AcceptsSecretUse() {
 		arguments["secret_use"] = secretUse
 	}
 	return arguments

@@ -1,6 +1,7 @@
 package contract
 
 import (
+	"slices"
 	"sort"
 	"strings"
 	"testing"
@@ -14,8 +15,8 @@ import (
 
 // "Can this turn reach project files" is one catalog fact read three ways: the
 // coordinator surface hides folder-requiring tools at zero roots, the no_folder
-// posture rule denies them, and prompt copy gates on has_file_tools. All resolve
-// through toolscope.RequiresProjectRoots.
+// posture rule denies them, and prompt copy gates on has_file_tools. The
+// expectation comes from the catalog's no-folder allowlist itself.
 func TestFileToolFactHasOneSource(t *testing.T) {
 	t.Parallel()
 	allowlist, err := toolscope.NoFolderAllowlist()
@@ -36,7 +37,7 @@ func TestFileToolFactHasOneSource(t *testing.T) {
 	// withhold file tools with a folder attached.
 	cfg, loadErr := nativemanifest.Load()
 	contractcheck.FailErr(t, "load native manifest", loadErr)
-	folderRequiring := folderRequiringCatalogTools(cfg)
+	folderRequiring := folderRequiringCatalogTools(cfg, allowlist)
 	if len(folderRequiring) == 0 {
 		t.Fatal("no catalog tool requires an attached folder — the axis is inert")
 	}
@@ -71,10 +72,10 @@ func TestZeroRootSurfaceNeverClaimsFileTools(t *testing.T) {
 	}
 }
 
-func folderRequiringCatalogTools(cfg nativemanifest.Config) []string {
+func folderRequiringCatalogTools(cfg nativemanifest.Config, allowlist []string) []string {
 	var out []string
 	for _, name := range cfg.AllTools() {
-		if toolscope.RequiresProjectRoots(name) {
+		if !slices.Contains(allowlist, name) {
 			out = append(out, name)
 		}
 	}

@@ -6,72 +6,32 @@ import (
 	"time"
 
 	"github.com/lycaon/lycaon/internal/commandprogram"
-	"github.com/lycaon/lycaon/internal/toolcontract"
-	"github.com/lycaon/lycaon/internal/toolrejection"
-	"github.com/lycaon/lycaon/internal/tools/native/toolkit"
 )
 
-// DefaultParkThreshold bounds a known inline wait or the initial job-only wait.
-const DefaultParkThreshold = 10 * time.Second
-
-// programBound is a call's outer deadline: its timeout_ms, or the catalog's
-// program lifetime when the call names none.
-type programBound struct {
-	limitID string
-	maximum time.Duration
-}
-
-func callBound(args map[string]any, catalog toolcontract.LanguageCatalog) programBound {
-	if timeout := toolkit.ClampIntArg(args, "timeout_ms", 0, 0, 7200000); timeout > 0 {
-		return programBound{limitID: "timeout_ms", maximum: time.Duration(timeout) * time.Millisecond}
-	}
-	for _, limit := range catalog.Language.Limits {
-		if limit.ID == "program_lifetime_ms" {
-			return programBound{limitID: limit.ID, maximum: time.Duration(limit.Maximum) * time.Millisecond}
-		}
-	}
-	return programBound{}
-}
-
-// refusal is the limit a single wait reaches when it cannot end within the
-// bound; observed is how long after the program's start the wait would end.
-func (b programBound) refusal(observed time.Duration) error {
-	return &toolrejection.ToolReject{Code: "COMMAND_LIMIT_EXCEEDED", Data: map[string]any{
-		"limit_id": b.limitID, "resource_unit": "milliseconds",
-		"maximum": b.maximum.Milliseconds(), "observed": observed.Milliseconds(),
-	}}
-}
-
-// programCall ties one command call to its program. The program runs under
-// the call's bound and follows the call's cancellation until the call parks.
+// programCall ties one command call to its program. The program follows the
+// call's cancellation until the call parks.
 type programCall struct {
 	ctx context.Context
 	// started is the program's start on the runtime clock.
 	started time.Time
-	// deadline is the program's bound on the host clock, which leases use.
-	deadline time.Time
-	bound    programBound
-	end      func()
-	detach   func() bool
+	park    *programPark
+	end     func()
+	detach  func() bool
 }
 
-func (r *ProgramRuntime) newProgramCall(ctx context.Context, args map[string]any, catalog toolcontract.LanguageCatalog) (context.Context, *programCall) {
-	call := &programCall{started: r.clock().Now(), bound: callBound(args, catalog)}
+func (r *ProgramRuntime) newProgramCall(ctx context.Context) (context.Context, *programCall) {
+	clock := r.clock()
+	call := &programCall{started: clock.Now()}
+	call.park = newProgramPark(clock, call, r.parkThreshold())
 	programCtx, cancel := context.WithCancelCause(context.WithoutCancel(ctx))
 	call.detach = context.AfterFunc(ctx, func() { cancel(context.Cause(ctx)) })
 	call.end = func() { cancel(nil) }
-	if call.bound.maximum > 0 {
-		var cancelDeadline context.CancelFunc
-		call.deadline = time.Now().Add(call.bound.maximum)
-		programCtx, cancelDeadline = context.WithDeadline(programCtx, call.deadline)
-		call.end = func() { cancelDeadline(); cancel(nil) }
-	}
 	call.ctx = programCtx
 	return programCtx, call
 }
 
-// programPark is one call's watch over its program's waits. It refuses a wait
-// the bound cannot hold and signals each wait that should park the call. A
+// programPark is one call's watch over its program's waits. It signals each
+// wait that should park the call. A
 // signal parks only through claim, which holds while that wait is still the
 // program's current one, so a wait that ended before its signal was taken
 // never parks the call.
@@ -79,7 +39,6 @@ type programPark struct {
 	clock     commandprogram.Clock
 	started   time.Time
 	threshold time.Duration
-	bound     programBound
 	// parks carries the latest wait that should park the call.
 	parks chan *blockedWait
 
@@ -96,22 +55,10 @@ type blockedWait struct{ state commandprogram.WaitState }
 var _ commandprogram.ProgramWaits = (*programPark)(nil)
 
 func newProgramPark(clock commandprogram.Clock, call *programCall, threshold time.Duration) *programPark {
-	return &programPark{clock: clock, started: call.started, threshold: threshold, bound: call.bound, parks: make(chan *blockedWait, 1)}
-}
-
-func (p *programPark) waitStart() time.Time {
-	start := p.started
-	if now := p.clock.Now(); now.After(start) {
-		return now
-	}
-	return start
+	return &programPark{clock: clock, started: call.started, threshold: threshold, parks: make(chan *blockedWait, 1)}
 }
 
 func (p *programPark) Block(_ context.Context, state commandprogram.WaitState) (func(), error) {
-	start := p.waitStart()
-	if p.bound.maximum > 0 && !state.Until.IsZero() && state.Until.After(start.Add(p.bound.maximum)) {
-		return nil, p.bound.refusal(state.Until.Sub(start))
-	}
 	blocked := &blockedWait{state: state}
 	p.mu.Lock()
 	p.blocked = blocked

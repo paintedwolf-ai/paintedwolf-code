@@ -37,6 +37,18 @@ type protectedGuardian struct {
 // initial-root authority. A fresh Go runtime inherits caller credentials and
 // empty capability sets; the root-owned namespace shields its exec window.
 func RunGuardian() (int, error) {
+	status, err := runGuardian()
+	if err != nil {
+		// Before admission the bootstrap still waits on this handoff.
+		sendStageRefusal(guardianControlFD, fmt.Errorf("protected guardian: %w", err))
+	}
+	return status, err
+}
+
+// guardianControlFD is the handoff the stage passes to the guardian.
+const guardianControlFD = 12
+
+func runGuardian() (int, error) {
 	runtime.LockOSThread()
 	if unix.Gettid() != os.Getpid() {
 		return 1, errors.New("guardian must execute on the process leader")
@@ -86,7 +98,7 @@ func RunGuardian() (int, error) {
 	_ = rootFrame.Close()
 	state := &protectedGuardian{roots: roots, supervisor: spec.SupervisorPID, caller: Identity{UID: spec.UID, GID: spec.GID, Groups: spec.Groups},
 		children: os.NewFile(13, "protected-lineage-children"), proc: os.NewFile(14, "protected-process-directory"),
-		control: os.NewFile(12, "guardian-bootstrap"), health: os.NewFile(7, "mount-view-health"),
+		control: os.NewFile(guardianControlFD, "guardian-bootstrap"), health: os.NewFile(7, "mount-view-health"),
 		lifetime: os.NewFile(6, "generation-lifetime"), viewLifetime: os.NewFile(18, "mount-view-lifetime"), gate: os.NewFile(19, "desktop-admission"), nextHealth: roots.sequence, lastHealth: time.Now()}
 	state.diagnosticBirths = state.captureDiagnosticBirths()
 	return state.run(), nil

@@ -104,10 +104,11 @@ func TestConcurrentScansStayBounded(t *testing.T) {
 	if len(owned) < n {
 		reportf(t, "observer attributed %d run dirs for %d scans (sampling gap, not necessarily a leak)", len(owned), n)
 	}
-	if leaked := survivingDirs(owned); len(leaked) > 0 {
+	leaked := survivingDirs(owned)
+	if len(leaked) > 0 {
 		t.Errorf("run directories leaked under contention: %v", leaked)
 	}
-	reportf(t, "owned_run_dirs=%d leaked=0 drain=%s", len(owned), drain.Round(time.Millisecond))
+	reportf(t, "owned_run_dirs=%d leaked=%d drain=%s", len(owned), len(leaked), drain.Round(time.Millisecond))
 }
 
 func maxPGIDs(samples []treeSample) int {

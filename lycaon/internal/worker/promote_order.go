@@ -149,7 +149,8 @@ func simulateCleanAfter(
 	siblingIDs []string,
 ) PromotePathOrder {
 	out := PromotePathOrder{Path: rel, Order: api.WorkerPromoteOrderIndependent}
-	primaryRaw, _, branchPresent, err := readPromotePairBytes(task.WorkspacePath, task.WorkspaceRoot, rel)
+	promote := PromoteRootsForTask(task, svc.taskRootRefs(ctx, task))
+	primaryRaw, _, branchPresent, err := promote.ReadPairBytes(task, rel)
 	if err != nil || !branchPresent {
 		return out
 	}

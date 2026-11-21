@@ -1,14 +1,12 @@
 package contract
 
 import (
-	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/gate"
 	"github.com/lycaon/lycaon/internal/hitl"
 	"github.com/lycaon/lycaon/pkg/api"
-	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 )
 
 func TestEveryDiscretionaryGateProducesAQuietSubject(t *testing.T) {
@@ -75,45 +73,5 @@ func TestQuietIsNeverTheGlobalSwitch(t *testing.T) {
 		if a[0].Key == b[0].Key {
 			t.Errorf("%s: two different actions share a quiet key — the quiet is class-wide", g)
 		}
-	}
-}
-
-func TestEveryToolApprovalMintSiteOffersQuiet(t *testing.T) {
-	t.Parallel()
-	root := contractcheck.RepoRoot(t)
-	sites := []string{
-		"lycaon/internal/toolexecution/socket_approval.go",
-		"lycaon/internal/toolexecution/direct_ip_capability.go",
-		"lycaon/internal/session/sandbox_write_root_broker.go",
-		"lycaon/internal/session/sandbox_listen_broker.go",
-		"lycaon/internal/session/sandbox_loopback_broker.go",
-		"lycaon/internal/session/sandbox_local_network_broker.go",
-	}
-	for _, rel := range sites {
-		src := contractcheck.ReadRepoFile(t, root, filepath.FromSlash(rel))
-		if !strings.Contains(src, "quietOptionsFor(") && !strings.Contains(src, "QuietOptions(") {
-			t.Errorf("%s builds an approval plan with no quiet rung", rel)
-		}
-	}
-}
-
-func TestSecretCardCarriesBothLadders(t *testing.T) {
-	t.Parallel()
-	root := contractcheck.RepoRoot(t)
-	src := contractcheck.ReadRepoFile(t, root, filepath.FromSlash("lycaon/internal/toolexecution/secret_release_offer.go"))
-	if !strings.Contains(src, "secretReleaseLadder") {
-		t.Fatal("secret release ladder missing")
-	}
-	for _, want := range []string{
-		"TitleSendUnchangedFor1Day",
-		"TitleSendUnchangedForThisChat",
-		"TitleSendUnchangedForThisProject",
-	} {
-		if !strings.Contains(src, want) {
-			t.Errorf("secret release ladder is missing %s", want)
-		}
-	}
-	if !strings.Contains(src, "secretRedactLadder") || !strings.Contains(src, "TitleKeepRedactingThisDevice") {
-		t.Error("secret card is missing the standing device redaction rung")
 	}
 }

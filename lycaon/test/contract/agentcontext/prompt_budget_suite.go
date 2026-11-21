@@ -109,6 +109,12 @@ func decodePromptSizePolicy(raw []byte) (sizebudget.Policy, error) {
 	if err := policy.Validate(promptBudgetSuite.CategoryNames()); err != nil {
 		return sizebudget.Policy{}, fmt.Errorf("prompt budgets: %w", err)
 	}
+	// Prompt sizes protect the model window, so every category keeps a hard limit.
+	for _, name := range promptBudgetSuite.CategoryNames() {
+		if !policy.Limits[name].Bounded() {
+			return sizebudget.Policy{}, fmt.Errorf("prompt budgets: %s needs a hard limit", name)
+		}
+	}
 	return policy, nil
 }
 

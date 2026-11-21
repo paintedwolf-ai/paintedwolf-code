@@ -7,6 +7,7 @@ import {
   settledChatSessionId,
   transcriptMessages,
 } from "./helpers.ts";
+import { directInputSettled, settleTranscriptLayout } from "./fixtures/settle.ts";
 
 async function tailDistance(page: Page) {
   return liveChatStage(page).locator(".den-chat-stream").evaluate((stream) => {
@@ -247,11 +248,7 @@ modelIndependentWebE2e("idle virtualized history stays on the same visible row",
   await page.mouse.wheel(0, -1600);
   await expect(page.getByTestId("stream-scroll-jump")).toHaveAttribute("aria-hidden", "false");
   // Direct input settlement includes the initial row measurements.
-  await expect.poll(() => stream.evaluate(async (host) => {
-    const url = "/src/platform/scrolling/scrollport-motion.ts";
-    const { scrollportMotionForViewport } = await import(/* @vite-ignore */ url);
-    return scrollportMotionForViewport(host)?.input.isDirectInputActive();
-  })).toBe(false);
+  await directInputSettled(stream);
   const samples = await stream.evaluate(async (host) => {
     const read = () => {
       const top = host.getBoundingClientRect().top;
@@ -282,32 +279,41 @@ modelIndependentWebE2e("expanded tool cards never bounce during later transcript
   await atTail(page);
   const output = activity.getByRole("button", { name: "Output in Files", exact: true });
   await expect(output).toBeVisible();
-  const sample = stream.evaluate(async (host) => {
-    const offsets = [host.scrollTop];
-    const until = performance.now() + 4000;
-    while (performance.now() < until) {
-      await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
-      offsets.push(host.scrollTop);
-    }
-    return offsets;
+  // Every painted frame from the first arrival until the last one has come to rest.
+  await stream.evaluate((host) => {
+    const trace = { offsets: [host.scrollTop], active: true };
+    (window as unknown as { __arrivalOffsets: typeof trace }).__arrivalOffsets = trace;
+    const frame = () => {
+      if (!trace.active) return;
+      trace.offsets.push(host.scrollTop);
+      requestAnimationFrame(frame);
+    };
+    requestAnimationFrame(frame);
   });
-  const append = async () => {
-    for (let index = 0; index < 3; index++) {
-      const assistantId = crypto.randomUUID();
-      const callId = `later-command-${index}`;
-      await apiSeedSessionTranscript(request, sessionId, transcriptMessages([
-        { id: assistantId, role: "assistant", content: "", created_at: "2026-09-14T12:00:00Z",
-          seq: 23 + index * 2, ord: 23 + index * 2,
-          tool_calls: [{ id: callId, name: "command", args: { command: "pwd" } }] },
-        { id: crypto.randomUUID(), role: "tool", content: "/tmp", created_at: "2026-09-14T12:00:00Z",
-          seq: 24 + index * 2, ord: 24 + index * 2,
-          tool_result: { tool: "command", tool_call_id: callId, assistant_message_id: assistantId, content: "/tmp" } },
-      ]));
-      // Include the delayed status/render pass between arrivals.
-      await page.waitForTimeout(900);
-    }
-  };
-  const [offsets] = await Promise.all([sample, append()]);
+  const cards = liveChatStage(page).getByTestId("activity-span-card");
+  const actions = () => cards.evaluateAll((all) => all.reduce((sum, card) => sum + Number(card.getAttribute("data-count")), 0));
+  const seeded = await actions();
+  for (let index = 0; index < 3; index++) {
+    const assistantId = crypto.randomUUID();
+    const callId = `later-command-${index}`;
+    await apiSeedSessionTranscript(request, sessionId, transcriptMessages([
+      { id: assistantId, role: "assistant", content: "", created_at: "2026-09-14T12:00:00Z",
+        seq: 23 + index * 2, ord: 23 + index * 2,
+        tool_calls: [{ id: callId, name: "command", args: { command: "pwd" } }] },
+      { id: crypto.randomUUID(), role: "tool", content: "/tmp", created_at: "2026-09-14T12:00:00Z",
+        seq: 24 + index * 2, ord: 24 + index * 2,
+        tool_result: { tool: "command", tool_call_id: callId, assistant_message_id: assistantId, content: "/tmp" } },
+    ]));
+    // An arrival is complete once its action is counted, reports done, and the layout rests.
+    await expect.poll(actions).toBe(seeded + index + 1);
+    await expect(cards.last()).toHaveAttribute("data-status", "done");
+    await settleTranscriptLayout(page);
+  }
+  const offsets = await page.evaluate(() => {
+    const trace = (window as unknown as { __arrivalOffsets: { offsets: number[]; active: boolean } }).__arrivalOffsets;
+    trace.active = false;
+    return trace.offsets;
+  });
   let furthest = offsets[0]!;
   let backward = 0;
   for (const offset of offsets) {

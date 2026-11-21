@@ -18,6 +18,7 @@ import (
 	"github.com/lycaon/lycaon/internal/api/httpio"
 	"github.com/lycaon/lycaon/internal/api/taskgroup"
 	"github.com/lycaon/lycaon/internal/credentialstore"
+	"github.com/lycaon/lycaon/internal/db"
 	"github.com/lycaon/lycaon/internal/editordoc"
 	"github.com/lycaon/lycaon/internal/people"
 	"github.com/lycaon/lycaon/internal/people/peoplestore"
@@ -26,8 +27,7 @@ import (
 	"github.com/lycaon/lycaon/internal/secretmatch"
 	"github.com/lycaon/lycaon/internal/secretspan"
 	"github.com/lycaon/lycaon/internal/session"
-	"github.com/lycaon/lycaon/internal/session/store"
-	"github.com/lycaon/lycaon/internal/testdbfixture"
+	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/testutil/apitestdeps"
 	"github.com/lycaon/lycaon/internal/viewstate"
@@ -71,8 +71,11 @@ func (l *promotionLog) count() int {
 
 type fixtureOption func(*apitestdeps.Deps)
 
-func withSessions(sessions session.Store) fixtureOption {
-	return func(d *apitestdeps.Deps) { d.Store = sessions }
+func withSessions(sessions interface {
+	session.Store
+	DB() db.Handle
+}) fixtureOption {
+	return func(d *apitestdeps.Deps) { d.Store = sessions; d.Database = sessions.DB() }
 }
 
 func newEditorFixture(t *testing.T, opts ...fixtureOption) *editorFixture {
@@ -82,7 +85,8 @@ func newEditorFixture(t *testing.T, opts ...fixtureOption) *editorFixture {
 	fingerprints, err := secretmatch.NewFingerprinter(bytes.Repeat([]byte{0x5a}, 32))
 	testutil.FailErr(t, "build fingerprinter", err)
 	matcher.SetFingerprinter(fingerprints)
-	deps := apitestdeps.Deps{Store: store.NewMemory(), Database: testdbfixture.Open(t, "editor.db")}
+	sessions := storetest.New(t)
+	deps := apitestdeps.Deps{Store: sessions, Database: sessions.DB()}
 	for _, opt := range opts {
 		opt(&deps)
 	}

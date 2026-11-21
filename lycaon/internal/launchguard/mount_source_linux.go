@@ -170,11 +170,26 @@ func serveMountSource(entries []mountEntry, socket, lifetime int) error {
 			}
 			continue
 		}
+		if errors.Is(err, unix.ENOENT) {
+			err = sendMountTransfer(socket, mountTransfer{kind: mountTransferRemove, sequence: sequence, id: request.id, path: request.path}, -1)
+			if err != nil {
+				return err
+			}
+			continue
+		}
 		if err != nil {
 			return fmt.Errorf("open selected mount source: %w", err)
 		}
 		id, identityErr := mountID(fd)
 		alias, aliasErr := os.Readlink(mountDescriptorPath(fd))
+		if identityErr == nil && aliasErr == nil && alias == request.path && id != request.id {
+			_ = unix.Close(fd)
+			err = sendMountTransfer(socket, mountTransfer{kind: mountTransferRemove, sequence: sequence, id: request.id, path: request.path}, -1)
+			if err != nil {
+				return err
+			}
+			continue
+		}
 		if identityErr != nil || id != request.id || aliasErr != nil || alias != request.path {
 			_ = unix.Close(fd)
 			return errors.New("selected mount source changed before opening")

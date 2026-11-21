@@ -1,24 +1,35 @@
 package contract
 
 import (
+	"errors"
+	"fmt"
+	"slices"
+	"strings"
 	"testing"
 
 	"github.com/lycaon/lycaon/config"
 	"github.com/lycaon/lycaon/internal/extpacks"
 	workflowcomposition "github.com/lycaon/lycaon/internal/workflow/composition"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
-	"github.com/lycaon/lycaon/test/contract/internal/wirespec"
+	"github.com/lycaon/lycaon/test/contract/internal/workflowfixture"
 )
 
 func TestComposePolicyYAMLLoads(t *testing.T) {
 	t.Parallel()
-	policy, err := workflowcomposition.LoadComposePolicy()
-	contractcheck.FailErr(t, "workflowcomposition.LoadComposePolicy failed", err)
-	if !policy.RequireExtends {
-		t.Fatal("expected require_extends true")
+	c := workflowfixture.ContractWorkflowComposer(t)
+	compose := func(manifest []byte) error {
+		_, err := c.Compose(t.Context(), workflowcomposition.ComposeRequest{
+			SessionID: "contract-policy", ManifestYAML: manifest, CreatedBy: "coordinator", DryRun: true,
+		})
+		return err
 	}
-	if policy.MaxPhasesCap() != 5 {
-		t.Fatalf("max phases = %d", policy.MaxPhasesCap())
+	contractcheck.FailErr(t, "control compose within policy", compose(composePolicyManifest(true, 0)))
+	if codes := composeErrorCodes(t, compose(composePolicyManifest(false, 0))); !slices.Contains(codes, "extends_required") {
+		t.Fatalf("compose without extends codes = %v want extends_required", codes)
+	}
+	overCap := composePolicyManifest(true, c.Policy.MaxPhasesCap())
+	if codes := composeErrorCodes(t, compose(overCap)); !slices.Equal(codes, []string{"max_phases_exceeded"}) {
+		t.Fatalf("compose over the phase cap codes = %v want [max_phases_exceeded]", codes)
 	}
 }
 
@@ -44,25 +55,49 @@ func TestBundledWorkflowTemplatesExpand(t *testing.T) {
 	}
 }
 
-func TestWorkflowTemplateRoutesInOpenAPI(t *testing.T) {
-	t.Parallel()
-	root := contractcheck.RepoRoot(t)
-	routes, err := wirespec.LoadOpenAPIRoutes(root)
-	contractcheck.FailErr(t, "load OpenAPI routes from docs/openapi.yaml", err)
-	foundList := false
-	foundCompose := false
-	for _, r := range routes {
-		if r.Method == "GET" && r.Path == "/v1/workflow-templates" && r.OperationID == "listWorkflowTemplates" {
-			foundList = true
-		}
-		if r.Method == "POST" && r.Path == "/v1/sessions/{id}/workflows/compose-from-template" && r.OperationID == "composeWorkflowFromTemplate" {
-			foundCompose = true
-		}
+// composePolicyManifest is a session compose that passes the bundled policy;
+// extraPhases chains that many reachable phases after build.
+func composePolicyManifest(extends bool, extraPhases int) []byte {
+	var b strings.Builder
+	b.WriteString("id: policy-session\nversion: 1.0.0\n")
+	if extends {
+		b.WriteString("extends: plan@1.0.0\n")
 	}
-	if !foundList {
-		t.Fatal("listWorkflowTemplates route missing")
+	b.WriteString(`initial_posture: spec
+agents:
+  - { id: plan-writer, tools: profile }
+  - { id: implementer, tools: profile }
+phases:
+  - id: research
+    activity_label: Understanding the request
+    gates:
+      - hitl_consulted:research
+    next: build
+  - id: build
+    activity_label: Building the change
+    invoke_workflow:
+      workflow_id: implement
+      version: "1.0.0"
+      blueprint: none
+    complete_when: gates_satisfied
+    gates:
+      - child_run_complete
+`)
+	for i := range extraPhases {
+		fmt.Fprintf(&b, "    next: extra-%d\n  - id: extra-%d\n    activity_label: Extra step\n", i, i)
 	}
-	if !foundCompose {
-		t.Fatal("composeWorkflowFromTemplate route missing")
+	return []byte(b.String())
+}
+
+func composeErrorCodes(t *testing.T, err error) []string {
+	t.Helper()
+	var failed *workflowcomposition.ComposeValidationFailed
+	if !errors.As(err, &failed) {
+		t.Fatalf("compose error = %v, want ComposeValidationFailed", err)
 	}
+	codes := make([]string, 0, len(failed.Errors))
+	for _, e := range failed.Errors {
+		codes = append(codes, e.Code)
+	}
+	return codes
 }

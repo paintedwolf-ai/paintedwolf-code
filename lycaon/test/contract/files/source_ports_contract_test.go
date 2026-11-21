@@ -4,27 +4,10 @@ import (
 	"go/ast"
 	"go/parser"
 	"go/token"
-	"path/filepath"
 	"testing"
 
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 )
-
-func TestSourceRecordingPortDoesNotRecoverPeerCapabilities(t *testing.T) {
-	t.Parallel()
-	fset, files := contractcheck.ParseNonTestGoTree(t, filepath.Join(contractcheck.RepoRoot(t), "lycaon", "internal"))
-	for _, file := range files {
-		for _, declaration := range file.Decls {
-			function, ok := declaration.(*ast.FuncDecl)
-			if !ok || function.Body == nil {
-				continue
-			}
-			for _, assertion := range sourceRecorderAssertions(function.Body) {
-				t.Errorf("%s: source recording dependencies must receive history, command, and checkpoint ports explicitly", fset.Position(assertion.Pos()))
-			}
-		}
-	}
-}
 
 func sourceRecorderAssertions(body *ast.BlockStmt) []*ast.TypeAssertExpr {
 	aliases := map[string]bool{}

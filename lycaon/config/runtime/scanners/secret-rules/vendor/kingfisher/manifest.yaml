@@ -61,9 +61,8 @@ policy:
 inventory:
   files: 612
   upstream_rules: 1051
-  imported_rules: 859
+  imported_rules: 866
   skipped:
-    example_mismatch: 7
     hidden: 158
     incompatible_regex: 4
     low_confidence: 21
@@ -88,7 +87,6 @@ inventory:
     kingfisher.auth0.1: hidden
     kingfisher.auth0.3: hidden
     kingfisher.aws.1: hidden
-    kingfisher.aws.2: example_mismatch
     kingfisher.aws.4: incompatible_regex
     kingfisher.azure.4: hidden
     kingfisher.azure.7: hidden
@@ -99,7 +97,6 @@ inventory:
     kingfisher.azure.notificationhub.3: hidden
     kingfisher.azureapim.2: hidden
     kingfisher.azurebatch.2: hidden
-    kingfisher.azurecosmosdb.2: example_mismatch
     kingfisher.azureopenai.host.1: hidden
     kingfisher.azuresastoken.1: incompatible_regex
     kingfisher.azurespeech.1: hidden
@@ -167,7 +164,6 @@ inventory:
     kingfisher.intra42.3: hidden
     kingfisher.jamf.1: hidden
     kingfisher.jamf.2: hidden
-    kingfisher.jdbc.1: example_mismatch
     kingfisher.jfrog.1: hidden
     kingfisher.jira.1: hidden
     kingfisher.jira.4: hidden
@@ -189,9 +185,7 @@ inventory:
     kingfisher.miro.3: hidden
     kingfisher.mixpanel.4: hidden
     kingfisher.mongodb.2: hidden
-    kingfisher.mongodb.3: example_mismatch
     kingfisher.mux.2: hidden
-    kingfisher.mysql.1: example_mismatch
     kingfisher.nylas.api_uri.1: hidden
     kingfisher.octopusdeploy.1: hidden
     kingfisher.okta.2: hidden
@@ -225,7 +219,6 @@ inventory:
     kingfisher.saucelabs.2: hidden
     kingfisher.sendbird.1: hidden
     kingfisher.shopify.2: hidden
-    kingfisher.slack.2: example_mismatch
     kingfisher.slack.8: low_confidence
     kingfisher.snowflake.3: hidden
     kingfisher.sonarqube.2: hidden
@@ -248,7 +241,6 @@ inventory:
     kingfisher.twitter.2: hidden
     kingfisher.upstash.2: hidden
     kingfisher.upstash.3: hidden
-    kingfisher.uri.1: example_mismatch
     kingfisher.voiceflow.2: hidden
     kingfisher.vonage.1: hidden
     kingfisher.webex.1: hidden

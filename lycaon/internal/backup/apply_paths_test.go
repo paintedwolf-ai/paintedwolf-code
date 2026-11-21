@@ -16,6 +16,7 @@ func TestMain(m *testing.M) {
 }
 
 func TestRestoreTransactionRejectsSymlinkDirectory(t *testing.T) {
+	t.Parallel()
 	config := t.TempDir()
 	candidate := filepath.Join(config, localdata.RestoreStagingDirPrefix+"-11111111-1111-1111-1111-111111111111")
 	testutil.FailErr(t, "link transaction directory", os.Symlink(t.TempDir(), candidate))

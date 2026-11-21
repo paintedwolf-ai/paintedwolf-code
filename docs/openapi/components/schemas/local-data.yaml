@@ -195,7 +195,7 @@ components:
       type: object
       x-go-generate: true
       additionalProperties: false
-      required: [removed_count, released_bytes, complete, preview_token]
+      required: [removed_count, released_bytes, complete]
       properties:
         removed_count: {type: integer, format: int64}
         released_bytes:
@@ -204,5 +204,6 @@ components:
           description: Encoded body bytes whose retained references were released; physical unlink and page reclamation may finish later.
         complete: {type: boolean}
         preview_token:
+          description: Authorizes the next batch; absent once pruning is complete.
           type: string
           pattern: '^[a-z0-9_-]+$'

@@ -6,6 +6,7 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/lycaon/lycaon/config"
 	"github.com/lycaon/lycaon/internal/configlayout"
 	"github.com/lycaon/lycaon/internal/extpacks"
 	"github.com/lycaon/lycaon/internal/guidance"
@@ -70,9 +71,27 @@ func InstallCloseoutPolicy(t *testing.T, manager closeoutHost) {
 // configuration, whose fixture files are not valid policy input.
 func InstallStockCloseoutPolicy(t *testing.T, manager closeoutHost) {
 	t.Helper()
-	catalog, err := extpacks.ResolveStockCatalog(t.Context(), nil)
-	testutil.FailErr(t, "resolve stock closeout catalog", err)
-	installCloseoutPolicy(manager, closeoutPolicyFor(t, catalog))
+	installCloseoutPolicy(manager, closeoutPolicyFor(t, stockCloseoutCatalog(t)))
+}
+
+var stockCloseout struct {
+	sync.Mutex
+	generation uint64
+	catalog    *extpacks.EffectiveCatalog
+}
+
+// stockCloseoutCatalog resolves the stock catalog once per bundled source.
+func stockCloseoutCatalog(t *testing.T) *extpacks.EffectiveCatalog {
+	t.Helper()
+	generation := config.SourceGeneration()
+	stockCloseout.Lock()
+	defer stockCloseout.Unlock()
+	if stockCloseout.catalog == nil || stockCloseout.generation != generation {
+		catalog, err := extpacks.ResolveStockCatalog(t.Context(), nil)
+		testutil.FailErr(t, "resolve stock closeout catalog", err)
+		stockCloseout.generation, stockCloseout.catalog = generation, catalog
+	}
+	return stockCloseout.catalog
 }
 
 func installCloseoutPolicy(manager closeoutHost, policy closeoutPolicy) {

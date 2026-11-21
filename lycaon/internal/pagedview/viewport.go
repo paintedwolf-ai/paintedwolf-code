@@ -46,7 +46,9 @@ type ViewportInterests struct {
 	workers sync.WaitGroup
 }
 
-func (v *ViewportInterests) Replace(ctx context.Context, id string, sequence int64, work func(context.Context), release func()) error {
+// Replace supersedes id's demand; launch runs the preparation, so the caller
+// tracks it with the rest of its background work.
+func (v *ViewportInterests) Replace(ctx context.Context, id string, sequence int64, work func(context.Context), release func(), launch func(func())) error {
 	v.mu.Lock()
 	if v.closed {
 		v.mu.Unlock()
@@ -81,7 +83,7 @@ func (v *ViewportInterests) Replace(ctx context.Context, id string, sequence int
 	v.entries[id] = viewportInterest{sequence: sequence, until: now.Add(ViewportLifetime), cancel: cancel}
 	v.workers.Add(1)
 	v.mu.Unlock()
-	go func() { defer release(); defer v.workers.Done(); defer cancel(); work(lifetime) }()
+	launch(func() { defer release(); defer v.workers.Done(); defer cancel(); work(lifetime) })
 	return nil
 }
 

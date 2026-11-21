@@ -1,10 +1,7 @@
 package detectionpack
 
 import (
-	"fmt"
 	"sort"
-
-	"github.com/lycaon/lycaon/config"
 )
 
 // CredentialStorePackID names the pack that catalogues credential stores. Any pack may
@@ -16,16 +13,7 @@ const CredentialStorePackID = "credential-stores" // #nosec G101 -- a pack direc
 //
 // Only the embedded pack defines this fail-closed boundary input.
 func BundledCredentialStorePaths() ([]string, error) {
-	files := bundledPackFiles(config.DetectionPacksDir.Join(CredentialStorePackID))
-	pack, warnings := ParsePack(files)
-	if pack == nil {
-		return nil, fmt.Errorf("bundled %s pack did not load: %v", CredentialStorePackID, warnings)
-	}
-	paths := targetFilePathsFromRules(pack.Rules)
-	if len(paths) == 0 {
-		return nil, fmt.Errorf("bundled %s pack names no TargetFile paths", CredentialStorePackID)
-	}
-	return paths, nil
+	return bundledFloorPaths(CredentialStorePackID)
 }
 
 // CredentialStorePaths returns the store paths this matcher's credential-stores rules

@@ -1,8 +1,14 @@
 #!/usr/bin/env bash
-# Exercise release controls under an isolated object prefix.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+case "${1:-}" in
+  --assembly|--macos)
+    mode="${1#--}"
+    shift
+    exec python3 "${ROOT}/scripts/release_assembly/rehearsal.py" "${mode}" "$@"
+    ;;
+esac
 if [[ "${1:-}" == --r2-nix-cache && $# -eq 1 ]]; then
   cd "${ROOT}"
   exec python3 -m scripts.nix_cache.rehearsal_r2

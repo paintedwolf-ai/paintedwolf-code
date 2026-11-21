@@ -74,7 +74,25 @@ func TestLoadDeclarationsMissingFile(t *testing.T) {
 	}
 }
 
-func TestDeclarationDescriptionRequiredForSubsystemAndFamilyWithContract(t *testing.T) {
+func TestSubsystemDeclarationRequiresDescription(t *testing.T) {
+	t.Parallel()
+	const entry = `
+    entry_points:
+        - github.com/lycaon/lycaon/internal/x
+`
+	described := "internal/x:\n    kind: subsystem\n    description: A concern." + entry
+	if _, err := loadDeclarations(func(string) ([]byte, error) { return []byte(described), nil }); err != nil {
+		t.Fatalf("subsystem with description: %v", err)
+	}
+	for name, description := range map[string]string{"absent": "", "blank": "\n    description: \"  \""} {
+		raw := "internal/x:\n    kind: subsystem" + description + entry
+		if _, err := loadDeclarations(func(string) ([]byte, error) { return []byte(raw), nil }); err == nil {
+			t.Errorf("subsystem with %s description accepted", name)
+		}
+	}
+}
+
+func TestFamilyDeclarationAcceptsContractWithoutDescription(t *testing.T) {
 	t.Parallel()
 	raw := `internal/x:
     kind: family
@@ -82,9 +100,9 @@ func TestDeclarationDescriptionRequiredForSubsystemAndFamilyWithContract(t *test
 `
 	loaded, err := loadDeclarations(func(string) ([]byte, error) { return []byte(raw), nil })
 	if err != nil {
-		t.Fatalf("family with contract: %v", err)
+		t.Fatalf("family with contract and no description: %v", err)
 	}
-	if loaded["internal/x"].Kind != family {
-		t.Fatalf("kind = %q", loaded["internal/x"].Kind)
+	if got := loaded["internal/x"]; got.Kind != family || got.Contract != "github.com/lycaon/lycaon/internal/x/contract" {
+		t.Fatalf("declaration = %#v", got)
 	}
 }

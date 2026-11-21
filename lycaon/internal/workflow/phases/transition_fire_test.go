@@ -3,6 +3,7 @@ package phases_test
 import (
 	workflow "github.com/lycaon/lycaon/internal/workflow"
 	runstate "github.com/lycaon/lycaon/internal/workflow/runstate"
+	"github.com/lycaon/lycaon/internal/workflow/workflowtest"
 
 	"context"
 	"errors"
@@ -37,7 +38,7 @@ func choiceTransitionsTestMgr(t *testing.T) (*workflow.RunManager, *store.SQL, s
 	wfStore := workflowpersistence.New(sqlDB)
 	mgr := workflow.NewManager(wfStore, sessStore, reg, nil)
 	dir := t.TempDir()
-	workflow.WireBlueprintDepsForTest(mgr, dir)
+	workflowtest.WireBlueprintDeps(mgr, dir)
 	testdbseed.InsertProjectRoot(t, sqlDB, testdbseed.DefaultProjectID, dir)
 	return mgr, sessStore, dir
 }

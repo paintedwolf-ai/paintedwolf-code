@@ -35,7 +35,7 @@ func TestFireWorkflowTransitionHTTP(t *testing.T) {
 	testutil.FailErr(t, "start choice workflow", err)
 
 	body := `{"expected_revision":` + strconv.FormatInt(run.Revision, 10) + `}`
-	req := authedRequest(t, http.MethodPost, "/v1/workflow-runs/"+run.ID+"/transitions/critique", strings.NewReader(body))
+	req := AuthedRequest(t, http.MethodPost, "/v1/workflow-runs/"+run.ID+"/transitions/critique", strings.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
 	h.Server.ServeHTTP(w, req)
@@ -59,7 +59,7 @@ func TestFireWorkflowTransitionHTTPUnknown(t *testing.T) {
 	testutil.FailErr(t, "start choice workflow", err)
 
 	body := `{"expected_revision":` + strconv.FormatInt(run.Revision, 10) + `}`
-	req := authedRequest(t, http.MethodPost, "/v1/workflow-runs/"+run.ID+"/transitions/nope", strings.NewReader(body))
+	req := AuthedRequest(t, http.MethodPost, "/v1/workflow-runs/"+run.ID+"/transitions/nope", strings.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
 	h.Server.ServeHTTP(w, req)
@@ -82,7 +82,7 @@ func TestGetWorkflowRunChoiceTransitionsUI(t *testing.T) {
 	})
 	testutil.FailErr(t, "start choice workflow", err)
 
-	req := authedRequest(t, http.MethodGet, "/v1/workflow-runs/"+run.ID, nil)
+	req := AuthedRequest(t, http.MethodGet, "/v1/workflow-runs/"+run.ID, nil)
 	w := httptest.NewRecorder()
 	h.Server.ServeHTTP(w, req)
 	if w.Code != http.StatusOK {

@@ -27,6 +27,7 @@ import (
 )
 
 func TestWorkerCopyStateMatrixAndReachability(t *testing.T) {
+	retired := retiredToolMention(t)
 	root := contractcheck.RepoRoot(t)
 	catalog, profiles := promptNameCatalog(t)
 	engine := contractcheck.BundledPromptEngineForRoot(t)
@@ -64,7 +65,7 @@ func TestWorkerCopyStateMatrixAndReachability(t *testing.T) {
 				if names := unreachableNames(t, catalog, block, reader); len(names) > 0 {
 					t.Errorf("%s/%s names unreachable tools %v:\n%s", id, cell.name, names, linesNaming(block, names))
 				}
-				checkBannedMention(t, retiredToolMention, id+"/"+cell.name, block)
+				checkBannedMention(t, retired, id+"/"+cell.name, block)
 			}
 		}
 		for _, noticeKind := range []string{"consumption", "quiet"} {
@@ -80,7 +81,7 @@ func TestWorkerCopyStateMatrixAndReachability(t *testing.T) {
 			if names := unreachableNames(t, catalog, out, reader); len(names) > 0 {
 				t.Errorf("round notice on %s names unreachable %v", id, names)
 			}
-			checkBannedMention(t, retiredToolMention, "round-notice/"+id, out)
+			checkBannedMention(t, retired, "round-notice/"+id, out)
 		}
 	}
 
@@ -120,7 +121,7 @@ func TestWorkerCopyStateMatrixAndReachability(t *testing.T) {
 						t.Errorf("assignment on %s names unreachable %v", profile.ID, names)
 					}
 				}
-				checkBannedMention(t, retiredToolMention, "assignment/"+profile.ID, out)
+				checkBannedMention(t, retired, "assignment/"+profile.ID, out)
 			}
 		}
 	}

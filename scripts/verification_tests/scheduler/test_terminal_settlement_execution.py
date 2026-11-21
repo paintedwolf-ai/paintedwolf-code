@@ -31,7 +31,7 @@ class TerminalFixture(unittest.TestCase):
         self.temporary = tempfile.TemporaryDirectory()
         self.addCleanup(self.temporary.cleanup)
         self.root = Path(self.temporary.name)
-        self.queue = execution.Queue(self.root / "queue")
+        self.queue = execution.Queue(self.root / "queue", self.root / "history")
         self.sequence = 0
 
     def capability(self, suffix="resource", batch="shared"):
@@ -156,7 +156,7 @@ class TerminalProcessTests(TerminalFixture):
         batch = self.capability("lease")
         directory = self.root / "batch"
         directory.mkdir()
-        request = {"ticket": "request", "order": 1, "environment_identity": "fixture"}
+        request = {"ticket": "request", "order": 1}
         plan = {"batch": {"ticket": batch.entry["ticket"], "workers": 1, "members": ["request"]},
                 "requests": [request]}
         (directory / "plan.json").write_text(json.dumps(plan))

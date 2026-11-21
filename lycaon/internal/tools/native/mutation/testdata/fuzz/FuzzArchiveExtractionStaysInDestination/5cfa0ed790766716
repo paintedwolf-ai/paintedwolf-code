@@ -1,0 +1,5 @@
+go test fuzz v1
+string("00\n00\nd0\n00")
+byte('_')
+bool(true)
+bool(false)

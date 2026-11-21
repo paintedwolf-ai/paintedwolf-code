@@ -21,6 +21,31 @@ var ErrEditorReadRequired = errors.New("read the shared document before editing 
 // published file moved after capture. It is never retried or rebased.
 var ErrEditorExecutionConflict = errors.New("editor document changed since the program captured it")
 
+// EditorFileChanged reports an open document whose file changed outside it:
+// the base the document sits on and the file now on disk. Saving the document
+// would overwrite that change.
+type EditorFileChanged struct {
+	RootID, Path string
+	BaseSHA256   string
+	BaseAbsent   bool
+	DiskSHA256   string
+	DiskAbsent   bool
+}
+
+func (e *EditorFileChanged) Error() string {
+	return "the file at " + e.Path + " changed outside its open document"
+}
+
+func (e *EditorFileChanged) Unwrap() error { return ErrEditorExecutionConflict }
+
+// EditorAgentCall names the agent tool call that causes a document save.
+type EditorAgentCall struct {
+	SessionID  string
+	Turn       int
+	ToolCallID string
+	ToolName   string
+}
+
 // EditorDocumentText is what an open editor document presents for one
 // project-tree path: the text the person sees, whatever the file holds.
 type EditorDocumentText struct {
@@ -147,6 +172,14 @@ type EditorDocuments interface {
 	// VisitUnsavedDocuments streams accepted metadata for an exact path or subtree.
 	// Empty path selects the root; no document is opened or reconciled.
 	VisitUnsavedDocuments(ctx context.Context, projectID string, branch sourcebranch.ID, rootID, path string, descendants bool, visit func(EditorDocumentState) error) error
+	// RetainRevision keeps a document revision so a program edit prepared
+	// against it anchors there after later typing. A revision already passed
+	// and not retained returns ErrEditorDocumentMoved.
+	RetainRevision(ctx context.Context, projectID, documentID string, revision int64) error
+	// SaveForAgentOperation saves each unsaved document at path, or beneath it
+	// with descendants, before an agent operation acts on the file there. A
+	// document whose file changed outside it returns *EditorFileChanged.
+	SaveForAgentOperation(ctx context.Context, projectID string, branch sourcebranch.ID, rootID, path string, descendants bool, call EditorAgentCall) error
 	// DirtyDocuments lists the project's documents whose draft differs from
 	// the saved file, so a search reads the person's text instead.
 	DirtyDocuments(ctx context.Context, projectID string, branch sourcebranch.ID) ([]EditorDocumentPath, error)

@@ -200,7 +200,7 @@ This is intake hygiene for a single-user desktop sidecar. It does not try to sto
 
 `attachments[]` carries blob IDs for every uploaded body, rasters included; there is no separate `images[]`. A sibling `references[]` of `PromptReferencePart` carries project coordinates or explicit human selections of absolute external paths. The host resolves and frames them; external references install chat-scoped grants only as part of prompt admission. A rejected admission revokes the grants it installed, preserving grants from other submissions.
 
-`PromptReferencePart` is a strict discriminated union: a `oneOf` over six variants discriminated by `kind`, each with `additionalProperties: false`. A field belonging to another variant is a rejection, not a field the host ignores (`TestPromptReferencePartRejectsCrossVariantFields`). Go constructs it through the `NewPromptReference*` helpers, so the discriminator is never set by hand.
+`PromptReferencePart` is a strict discriminated union: a `oneOf` over six variants discriminated by `kind`, each with `additionalProperties: false`. A field belonging to another variant is a rejection, not a field the host ignores (`TestPromptReferencePartRejectsCrossVariantFields`). Go decodes the union by its discriminator. Test fixtures use constructors in `pkg/api/apitest` to set the matching discriminator and payload together.
 
 | `kind` | Required | Also allowed | Host emits |
 |--------|----------|--------------|------------|

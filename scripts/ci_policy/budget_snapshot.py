@@ -53,12 +53,19 @@ def validate(report, sha, tree):
             raise ValueError('invalid artifact identity')
         if type(row.get('touched')) is not bool:
             raise ValueError('invalid artifact touch status')
-        if any(type(row.get(field)) is not int for field in ['measured', 'warn', 'limit', 'effective_cap']):
+        if any(type(row.get(field)) is not int for field in ['measured', 'warn']):
             raise ValueError('invalid artifact measurement')
-        if not 0 < row['warn'] < row['limit'] <= row['effective_cap'] or row['measured'] <= row['warn']:
+        # A category without a hard limit carries neither a limit nor an effective cap.
+        bounded = row.get('limit') is not None
+        if bounded and any(type(row.get(field)) is not int for field in ['limit', 'effective_cap']) \
+                or not bounded and row.get('effective_cap') is not None:
+            raise ValueError('invalid artifact measurement')
+        if (not 0 < row['warn'] or row['measured'] <= row['warn']
+                or bounded and not row['warn'] < row['limit'] <= row['effective_cap']):
             raise ValueError('invalid artifact thresholds')
         reason, sources = row.get('exception_reason'), row.get('sources')
-        if not isinstance(reason, str) or len(reason) > 4096 or row['effective_cap'] > row['limit'] and not reason.strip():
+        excepted = bounded and row['effective_cap'] > row['limit']
+        if not isinstance(reason, str) or len(reason) > 4096 or excepted and not reason.strip():
             raise ValueError('invalid exception reason')
         if not isinstance(sources, list) or not sources or len(sources) > 1000 or not all(relative(s) for s in sources):
             raise ValueError('invalid artifact sources')

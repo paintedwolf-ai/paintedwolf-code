@@ -13,6 +13,7 @@ import { clearTranscriptEntryMemory, noteTranscriptEntryBaseline, transcriptEntr
 import { clearVisualArtifactSessionMemory, noteVisualArtifactIntroBaseline } from "../chat/visual/visual-artifact-reveal.ts";
 import { mergeTranscriptBaseline } from "../chat/transcript/projection/transcript-baseline-merge.ts";
 import { transcriptReaderReach } from "../chat/transcript/history/transcript-reader-reach.ts";
+import { TranscriptObservedRevisions } from "../chat/transcript/layout/transcript-observed-revisions.ts";
 import { traceTranscriptPageEvictions } from "../chat/transcript/layout/transcript-paging-trace.ts";
 import { TRANSCRIPT_RESIDENT_ORD_BUDGET, appendToTail, applyTranscriptPage, copyTranscriptWindow, emptyTranscriptWindow, installTailWindow, materializeTranscriptWindow, mergeIntoTail, patchRowInWindow, precedesLiveTail, refreshTailWindow, resetOlderPages, residentPageOrds, transcriptWindowPage, trimOldestPages, type TranscriptEvictedPage } from "../chat/transcript/layout/transcript-window.ts";
 import { clearDraftVersionCache } from "../chat/draft/draft-version-cache.ts";
@@ -87,6 +88,7 @@ export function createAppStore(
     const evicted = workerRetention.evictions(state.workerTranscripts, workerId);
     if (evicted.length) setState("workerTranscripts", produce(cache => { for (const id of evicted) delete cache[id]; }));
   };
+  const observedRevisions = new TranscriptObservedRevisions();
   const residencyPolicy = (sessionId: string | undefined) => {
     const keepOrds = sessionId ? transcriptReaderReach(sessionId) : undefined;
     return keepOrds ? { keepOrds } : undefined;
@@ -276,7 +278,8 @@ export function createAppStore(
         replayForegroundBufferedMessages({ state, actions }, sid);
       }
     },
-    installTranscriptBaseline(sessionId, messages, watermark, baseline) {
+    installTranscriptBaseline(sessionId, fetched, watermark, baseline) {
+      const messages = observedRevisions.reconcile(sessionId, fetched, watermark);
       // Only initial hydration establishes the reveal baseline.
       const isFreshHydration =
         state.transcriptSessionId !== sessionId || state.messages.length === 0;
@@ -315,6 +318,7 @@ export function createAppStore(
       ) {
         return;
       }
+      const evicted: TranscriptEvictedPage[] = [];
       setState(
         produce((draft) => {
           if (merged.sessionChanged) {
@@ -323,12 +327,10 @@ export function createAppStore(
               resetPages: true,
             });
           } else {
-            draft.transcript = mergeIntoTail(
-              draft.transcript,
-              page,
-              watermark,
-              draft.messages,
-            );
+            draft.transcript = mergeIntoTail(draft.transcript, page, watermark, {
+              ...residencyPolicy(sessionId),
+              evicted,
+            });
           }
           draft.messages = materializeTranscriptWindow(draft.transcript);
           draft.transcriptSessionId = sessionId;
@@ -337,6 +339,7 @@ export function createAppStore(
           draft.turnLoads = nextTurnLoads;
         }),
       );
+      traceTranscriptPageEvictions(evicted);
       // Reconciliation preserves the live reveal baseline.
       if (isFreshHydration) {
         noteTranscriptEntryBaseline(
@@ -348,6 +351,9 @@ export function createAppStore(
     },
     loadTranscriptPage(request, page) {
       const sessionId = state.transcriptSessionId?.trim();
+      const messages = sessionId
+        ? observedRevisions.reconcile(sessionId, page.messages, page.watermark)
+        : page.messages;
       let applied = false;
       const evicted: TranscriptEvictedPage[] = [];
       setState(
@@ -355,7 +361,7 @@ export function createAppStore(
           const next = applyTranscriptPage(
             draft.transcript,
             request,
-            transcriptWindowPage(page),
+            transcriptWindowPage({ ...page, messages }),
             { ...residencyPolicy(sessionId), evicted },
           );
           if (!next) return;
@@ -423,6 +429,7 @@ export function createAppStore(
             }
             if (!patchRowInWindow(draft.transcript, message)) {
               // Missing sparse rows cannot be appended at the live tip.
+              observedRevisions.note(draft.transcriptSessionId, message);
               return;
             }
             // Keep the existing array slot.
@@ -433,7 +440,10 @@ export function createAppStore(
           // New ids at or below the baseline watermark are stale.
           if (seq > 0 && seq <= watermarkBeforeUpsert) return;
           // Unknown older rows return with their paged transcript window.
-          if (precedesLiveTail(draft.transcript, message)) return;
+          if (precedesLiveTail(draft.transcript, message)) {
+            observedRevisions.note(draft.transcriptSessionId, message);
+            return;
+          }
           const sessionId = draft.transcriptSessionId?.trim();
           const evicted: TranscriptEvictedPage[] = [];
           draft.transcript = appendToTail(draft.transcript, message, { ...residencyPolicy(sessionId), evicted });

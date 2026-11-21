@@ -5,6 +5,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"strings"
 	"testing"
 
@@ -23,7 +24,7 @@ func TestSettingsRoundTripE2E(t *testing.T) {
 	t.Cleanup(httpSrv.Close)
 	base := httpSrv.URL
 
-	initial := openAPIGetJSON[wire.ProviderListResponse](t, base, "/v1/providers", nil, http.StatusOK).Providers
+	initial := OpenAPIGetJSON[wire.ProviderListResponse](t, base, "/v1/providers", nil, http.StatusOK).Providers
 	if len(initial) != 1 || initial[0].ID != llm.IncludedProviderID || initial[0].Configured {
 		t.Fatalf("fresh config dir must expose only the unconfigured included provider, got %+v", initial)
 	}
@@ -42,7 +43,7 @@ func TestSettingsRoundTripE2E(t *testing.T) {
 	}
 
 	full := `{"id":"test-merge","base_url":"https://x.example/v1","models":[{"id":"keep-me","input_per_1k_nano_usd":1000000}]}`
-	created := openAPIPostJSON[wire.ProviderMeta](t, base, "/v1/providers", nil, full, http.StatusCreated)
+	created := OpenAPIPostJSON[wire.ProviderMeta](t, base, "/v1/providers", nil, full, http.StatusCreated)
 	if created.ID != "test-merge" {
 		t.Fatalf("created id = %q, want test-merge", created.ID)
 	}
@@ -66,7 +67,7 @@ func TestSettingsRoundTripE2E(t *testing.T) {
 		t.Fatalf("GET after partial PATCH base_url = %q", merged.BaseURL)
 	}
 
-	credResp := openAPIPutJSON[wire.ProviderMeta](t, base, "/v1/providers/{provider_id}/credential",
+	credResp := OpenAPIPutJSON[wire.ProviderMeta](t, base, "/v1/providers/{provider_id}/credential",
 		map[string]string{"provider_id": "test-merge"}, `{"api_key":"sk-test-1234"}`, http.StatusOK)
 	if !credResp.CredentialPresent {
 		t.Fatalf("PUT credential should report credential_present: true, got %+v", credResp)
@@ -80,7 +81,7 @@ func TestSettingsRoundTripE2E(t *testing.T) {
 		t.Fatalf("provider list exposed api_key field: %s", listAfterCred)
 	}
 
-	openAPIDo(t, base, http.MethodDelete, "/v1/providers/{provider_id}/credential",
+	OpenAPIDo(t, base, http.MethodDelete, "/v1/providers/{provider_id}/credential",
 		map[string]string{"provider_id": "test-merge"}, "", http.StatusNoContent)
 	afterDelete := findProvider(settingsGetJSON[wire.ProviderListResponse](t, base, "/v1/providers").Providers, "test-merge")
 	if afterDelete == nil || afterDelete.CredentialPresent {
@@ -94,40 +95,40 @@ func TestSettingsRoundTripE2E(t *testing.T) {
 
 func testSettingsModelPolicy(t *testing.T, base string) {
 	t.Helper()
-	_ = openAPIGetJSON[wire.ModelPolicy](t, base, "/v1/settings/model-policy", nil, http.StatusOK)
+	_ = OpenAPIGetJSON[wire.ModelPolicy](t, base, "/v1/settings/model-policy", nil, http.StatusOK)
 
-	providerID, _ := seedTestProvider(t, base, false)
+	providerID, _ := SeedTestProvider(t, base, false)
 	newPolicy := wire.ModelPolicy{
-		Coordinator: &wire.ModelRefDTO{ProviderID: providerID, Model: testProviderModel},
-		Lite:        &wire.ModelRefDTO{ProviderID: providerID, Model: testProviderModel},
+		Coordinator: &wire.ModelRefDTO{ProviderID: providerID, Model: TestProviderModel},
+		Lite:        &wire.ModelRefDTO{ProviderID: providerID, Model: TestProviderModel},
 		AgentPool: wire.AgentPoolDTO{
 			Selection: "round_robin",
 			Models: []wire.ModelRefDTO{
-				{ProviderID: providerID, Model: testProviderModel},
+				{ProviderID: providerID, Model: TestProviderModel},
 			},
 		},
 	}
 	body, err := json.Marshal(newPolicy)
 	testutil.FailErr(t, "json.Marshal failed", err)
-	putPolicy := settingsPatchJSON[wire.ModelPolicy](t, base, "/v1/settings/model-policy", string(body), http.StatusOK)
-	if putPolicy.Coordinator.Model != testProviderModel {
+	putPolicy := SettingsPatchJSON[wire.ModelPolicy](t, base, "/v1/settings/model-policy", string(body), http.StatusOK)
+	if putPolicy.Coordinator.Model != TestProviderModel {
 		t.Fatalf("PATCH model-policy did not apply: %+v", putPolicy)
 	}
 	getAfter := settingsGetJSON[wire.ModelPolicy](t, base, "/v1/settings/model-policy")
-	if getAfter.Coordinator.Model != testProviderModel {
+	if getAfter.Coordinator.Model != TestProviderModel {
 		t.Fatalf("GET after PATCH model-policy lost change: %+v", getAfter)
 	}
 
 	coordOnly, err := json.Marshal(map[string]any{
-		"coordinator": wire.ModelRefDTO{ProviderID: providerID, Model: testProviderModel},
+		"coordinator": wire.ModelRefDTO{ProviderID: providerID, Model: TestProviderModel},
 		"agent_pool": wire.AgentPoolDTO{
 			Selection: "round_robin",
-			Models:    []wire.ModelRefDTO{{ProviderID: providerID, Model: testProviderModel}},
+			Models:    []wire.ModelRefDTO{{ProviderID: providerID, Model: TestProviderModel}},
 		},
 	})
 	testutil.FailErr(t, "marshal coordinator patch", err)
-	patched := settingsPatchJSON[wire.ModelPolicy](t, base, "/v1/settings/model-policy", string(coordOnly), http.StatusOK)
-	if patched.Lite.Model != testProviderModel {
+	patched := SettingsPatchJSON[wire.ModelPolicy](t, base, "/v1/settings/model-policy", string(coordOnly), http.StatusOK)
+	if patched.Lite.Model != TestProviderModel {
 		t.Fatalf("coordinator patch cleared lite: %+v", patched)
 	}
 
@@ -146,7 +147,7 @@ func testSettingsModelPolicy(t *testing.T, base string) {
 
 func testSettingsApprovals(t *testing.T, base string) {
 	t.Helper()
-	applied := settingsPatchJSON[wire.ApprovalConfigResponse](t, base,
+	applied := SettingsPatchJSON[wire.ApprovalConfigResponse](t, base,
 		"/v1/settings/approvals",
 		`{"rules":[],"approval_posture":"strict"}`, http.StatusOK)
 	if applied.ApprovalPosture != "strict" {
@@ -170,7 +171,7 @@ func testSettingsLimits(t *testing.T, base string) {
 	newLimit := wire.SettingsLimitsPatch{MaxIterations: new(limits.MaxIterations + 5)}
 	bodyL, err := json.Marshal(newLimit)
 	testutil.FailErr(t, "marshal limits", err)
-	putLimits := settingsPatchJSON[wire.SettingsLimitsResponse](t, base,
+	putLimits := SettingsPatchJSON[wire.SettingsLimitsResponse](t, base,
 		"/v1/settings/limits", string(bodyL), http.StatusOK)
 	if putLimits.MaxIterations != *newLimit.MaxIterations {
 		t.Fatalf("PATCH limits did not apply: %+v", putLimits)
@@ -182,15 +183,15 @@ func testSettingsLimits(t *testing.T, base string) {
 	if getLimits.MaxToolResultBytes != limits.MaxToolResultBytes || getLimits.SpendWarningRatio != limits.SpendWarningRatio {
 		t.Fatalf("partial patch changed omitted limits: before=%+v after=%+v", limits, getLimits)
 	}
-	empty := settingsPatchJSON[wire.SettingsLimitsResponse](t, base, "/v1/settings/limits", `{}`, http.StatusOK)
+	empty := SettingsPatchJSON[wire.SettingsLimitsResponse](t, base, "/v1/settings/limits", `{}`, http.StatusOK)
 	if empty.MaxIterations != getLimits.MaxIterations {
 		t.Fatalf("empty patch changed limit: %+v", empty)
 	}
-	zero := settingsPatchJSON[wire.SettingsLimitsResponse](t, base, "/v1/settings/limits", `{"max_coordinator_loop_cycles":0}`, http.StatusOK)
+	zero := SettingsPatchJSON[wire.SettingsLimitsResponse](t, base, "/v1/settings/limits", `{"max_coordinator_loop_cycles":0}`, http.StatusOK)
 	if zero.MaxCoordinatorLoopCycles != 0 || zero.MaxIterations != getLimits.MaxIterations {
 		t.Fatalf("explicit zero did not preserve unrelated limit: %+v", zero)
 	}
-	reset := settingsPatchJSON[wire.SettingsLimitsResponse](t, base, "/v1/settings/limits", `{"max_iterations":null}`, http.StatusOK)
+	reset := SettingsPatchJSON[wire.SettingsLimitsResponse](t, base, "/v1/settings/limits", `{"max_iterations":null}`, http.StatusOK)
 	if reset.MaxIterations != limits.MaxIterations || reset.MaxCoordinatorLoopCycles != 0 {
 		t.Fatalf("null reset did not restore default and preserve explicit zero: %+v", reset)
 	}
@@ -231,4 +232,93 @@ func settingsGetJSON[T any](t *testing.T, base, path string) T {
 		t.Fatalf("decode GET %s: %v body=%s", path, err, body)
 	}
 	return v
+}
+
+func settingsControlsBase(t *testing.T) string {
+	t.Helper()
+	h := wiring.BuildForTest(t)
+	httpSrv := httptest.NewServer(h.Server)
+	t.Cleanup(httpSrv.Close)
+	return httpSrv.URL
+}
+
+func mustJSON(t *testing.T, v any) string {
+	t.Helper()
+	raw, err := json.Marshal(v)
+	testutil.FailErr(t, "encode request body", err)
+	return string(raw)
+}
+
+func TestProviderSettingsSurvivePartialUpdatesE2E(t *testing.T) {
+	// Bedrock's ambient chain must not read machine AWS files or reach EC2 metadata.
+	awsDir := t.TempDir()
+	t.Setenv("AWS_CONFIG_FILE", awsDir+"/config")
+	t.Setenv("AWS_SHARED_CREDENTIALS_FILE", awsDir+"/credentials")
+	t.Setenv("AWS_EC2_METADATA_DISABLED", "true")
+	t.Setenv("AWS_ACCESS_KEY_ID", "")
+	t.Setenv("AWS_SECRET_ACCESS_KEY", "")
+	t.Setenv("AWS_PROFILE", "")
+	base := settingsControlsBase(t)
+	const providerPath = "/v1/providers/{provider_id}"
+	update := func(id string, req wire.UpdateProviderRequest) wire.ProviderMeta {
+		t.Helper()
+		return openAPIPatchJSON[wire.ProviderMeta](t, base, providerPath, map[string]string{"provider_id": id},
+			mustJSON(t, req), http.StatusOK)
+	}
+
+	const azureID, bedrockID = "settings-azure-fixture", "settings-bedrock-fixture"
+	models := []wire.ProviderModelConfig{{ID: "fixture-deployment", PricedAs: "fixture-model"}}
+	OpenAPIPostJSON[wire.ProviderMeta](t, base, "/v1/providers", nil, mustJSON(t, wire.CreateProviderRequest{
+		ID: azureID, Kind: "azure", Label: "Deployment fixture", BaseURL: "https://fixture.openai.azure.com", Models: models,
+	}), http.StatusCreated)
+	azure := update(azureID, wire.UpdateProviderRequest{Label: new("Renamed deployment fixture")})
+	if len(azure.ConfiguredModels) != len(models) ||
+		azure.ConfiguredModels[0].ID != models[0].ID || azure.ConfiguredModels[0].PricedAs != models[0].PricedAs {
+		t.Fatalf("label update lost deployment rows: configured_models = %+v, want %+v", azure.ConfiguredModels, models)
+	}
+
+	OpenAPIPostJSON[wire.ProviderMeta](t, base, "/v1/providers", nil, mustJSON(t, wire.CreateProviderRequest{
+		ID: bedrockID, Kind: "bedrock", Label: "Credential mode fixture", BaseURL: "us-east-1", RequiresAPIKey: new(true),
+	}), http.StatusCreated)
+	for _, required := range []bool{false, true} {
+		update(bedrockID, wire.UpdateProviderRequest{RequiresAPIKey: new(required)})
+		provider := update(bedrockID, wire.UpdateProviderRequest{Label: new("Retained credential mode")})
+		if provider.RequiresAPIKey != required {
+			t.Fatalf("label update changed requires_api_key: got %t, want %t", provider.RequiresAPIKey, required)
+		}
+		if provider.AmbientAuth != "aws-sdk-chain" {
+			t.Fatalf("ambient_auth = %q, want aws-sdk-chain", provider.AmbientAuth)
+		}
+	}
+
+	for _, id := range []string{azureID, bedrockID} {
+		OpenAPIDo(t, base, http.MethodDelete, providerPath, map[string]string{"provider_id": id}, "", http.StatusNoContent)
+	}
+}
+
+func TestDetectionPackEnableSettingRetainedE2E(t *testing.T) {
+	base := settingsControlsBase(t)
+	read := func() wire.DetectionPackList {
+		t.Helper()
+		return OpenAPIGetJSON[wire.DetectionPackList](t, base, "/v1/detection-packs", nil, http.StatusOK)
+	}
+	original := read()
+	if len(original.Packs) == 0 {
+		t.Fatal("detection catalog lists no packs")
+	}
+	for _, pack := range original.Packs {
+		path := map[string]string{"pack_id": pack.ID}
+		for _, enabled := range []bool{false, true, pack.Enabled} {
+			OpenAPIDo(t, base, http.MethodPatch, "/v1/detection-packs/{pack_id}", path,
+				mustJSON(t, wire.UpdateDetectionPackRequest{Enabled: new(enabled)}), http.StatusOK)
+			packs := read().Packs
+			i := slices.IndexFunc(packs, func(p wire.DetectionPack) bool { return p.ID == pack.ID })
+			if i < 0 {
+				t.Fatalf("%s: pack missing after PATCH enabled=%t", pack.ID, enabled)
+			}
+			if got := packs[i].Enabled; got != enabled {
+				t.Fatalf("%s: enabled = %t after PATCH enabled=%t", pack.ID, got, enabled)
+			}
+		}
+	}
 }

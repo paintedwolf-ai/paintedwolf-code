@@ -2,12 +2,13 @@ package scan
 
 import (
 	"errors"
+	"github.com/lycaon/lycaon/internal/scan/findings/findingstest"
 	"github.com/lycaon/lycaon/internal/timelayout"
 	"testing"
 	"time"
 
 	"github.com/lycaon/lycaon/internal/db"
-	scanfindings "github.com/lycaon/lycaon/internal/scan/findings"
+
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/pkg/api"
@@ -19,7 +20,7 @@ func TestFindingHistoryAndLedgerRollBackWithoutTheirEvent(t *testing.T) {
 	testdbseed.InsertProjectRoot(t, store.db, testdbseed.DefaultProjectID, root)
 	first := authorityScan("history-event", "assessment-event", root, "snapshot-event", "sast", api.ScanTargetFull, nil)
 	testutil.FailErr(t, "insert scan", store.Insert(t.Context(), first, nil, ""))
-	finding := scanfindings.FixtureFinding("rule-a", api.FindingLevelHigh, "finding", "a.go", 1)
+	finding := findingstest.Finding("rule-a", api.FindingLevelHigh, "finding", "a.go", 1)
 	completed := completeNextScan(t, store, finding)
 	outbox := &progressOutbox{err: errors.New("outbox unavailable")}
 	store.SetEventOutbox(outbox)
@@ -48,8 +49,8 @@ func TestFindingHistoryRecordsIntroductionsAndFixes(t *testing.T) {
 	root := t.TempDir()
 	first := authorityScan("scan-1", "assessment-1", root, "snapshot-1", "sast", api.ScanTargetPaths, nil)
 	testutil.FailErr(t, "insert first", store.Insert(t.Context(), first, []string{"a.go"}, ""))
-	a := scanfindings.FixtureFinding("rule-a", api.FindingLevelHigh, "a", "a.go", 1)
-	b := scanfindings.FixtureFinding("rule-b", api.FindingLevelLow, "b", "a.go", 2)
+	a := findingstest.Finding("rule-a", api.FindingLevelHigh, "a", "a.go", 1)
+	b := findingstest.Finding("rule-b", api.FindingLevelLow, "b", "a.go", 2)
 	completed := completeNextScan(t, store, a, b)
 	t0 := time.Date(2026, 9, 9, 10, 0, 0, 0, time.UTC)
 	testutil.FailErr(t, "record introductions", store.RecordFindingEvents(t.Context(), &completed, []api.SecurityFinding{a, b}, nil, t0))
@@ -100,7 +101,7 @@ func TestScanQueryReturnsFixesWhenNoCurrentFindingsRemain(t *testing.T) {
 	root := t.TempDir()
 	first := authorityScan("before", "assessment-before", root, "snapshot-before", "sast", api.ScanTargetFull, nil)
 	testutil.FailErr(t, "insert first scan", store.Insert(t.Context(), first, nil, ""))
-	finding := scanfindings.FixtureFinding("rule", api.FindingLevelHigh, "finding", "a.go", 1)
+	finding := findingstest.Finding("rule", api.FindingLevelHigh, "finding", "a.go", 1)
 	before := completeNextScan(t, store, finding)
 	since := time.Date(2026, 9, 10, 12, 0, 0, 0, time.UTC)
 	testutil.FailErr(t, "record introduction", store.RecordFindingEvents(t.Context(), &before, []api.SecurityFinding{finding}, nil, since))
@@ -121,7 +122,7 @@ func TestFindingHistoryReintroductionAfterAFixIsANewIntroduction(t *testing.T) {
 	root := t.TempDir()
 	scan := authorityScan("scan-1", "assessment-1", root, "snapshot-1", "sast", api.ScanTargetPaths, nil)
 	testutil.FailErr(t, "insert", store.Insert(t.Context(), scan, []string{"a.go"}, ""))
-	a := scanfindings.FixtureFinding("rule-a", api.FindingLevelHigh, "a", "a.go", 1)
+	a := findingstest.Finding("rule-a", api.FindingLevelHigh, "a", "a.go", 1)
 	completed := completeNextScan(t, store, a)
 	t0 := time.Date(2026, 9, 9, 10, 0, 0, 0, time.UTC)
 	testutil.FailErr(t, "introduce", store.RecordFindingEvents(t.Context(), &completed, []api.SecurityFinding{a}, nil, t0))
@@ -143,7 +144,7 @@ func TestBlobFindingsCacheRoundTrip(t *testing.T) {
 	if _, ok, err := store.BlobFindings(t.Context(), "fp", "sha", "a.go"); err != nil || ok {
 		t.Fatalf("empty cache = %v %v", ok, err)
 	}
-	finding := scanfindings.FixtureFinding("rule", api.FindingLevelHigh, "x", "file.go", 1)
+	finding := findingstest.Finding("rule", api.FindingLevelHigh, "x", "file.go", 1)
 	testutil.FailErr(t, "save", store.SaveBlobFindings(t.Context(), "fp", []CachedFileResult{{ContentID: "sha", Path: "a.go", Findings: []api.SecurityFinding{finding}}}, time.Now()))
 	cached, ok, err := store.BlobFindings(t.Context(), "fp", "sha", "a.go")
 	testutil.FailErr(t, "read", err)

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"maps"
 	"strings"
 	"time"
 
@@ -144,10 +145,7 @@ func (e *Engine) logRequest(ctx context.Context, r resolved, snap Snapshot, err 
 
 func (e *Engine) request(ctx context.Context, r resolved) (Snapshot, error) {
 	request := r.request
-	stored := map[string]Result{}
-	for hash, result := range r.results {
-		stored[hash] = result
-	}
+	stored := maps.Clone(r.results)
 	if len(r.missing) == 0 {
 		snap, err := e.settle(ctx, r, "", stored)
 		if request.Manual {
@@ -185,12 +183,15 @@ func (e *Engine) request(ctx context.Context, r resolved) (Snapshot, error) {
 		}
 		return snap, nil
 	}
+	// The job fills in results while the caller still reads its own resolution.
+	run := r
+	run.results = maps.Clone(r.results)
 	job := Job{
 		Key: jobKey(request), Project: request.ProjectID,
 		Manual: request.Manual, Policy: request.Policy,
-		Run: func(ctx context.Context) { e.generate(ctx, r, attempt, stored) },
+		Run: func(ctx context.Context) { e.generate(ctx, run, attempt, stored) },
 		Expired: func(ctx context.Context) {
-			e.fail(ctx, r, attempt, Failure{Code: CodeQueueExpired, Message: ErrQueueExpired.Error()})
+			e.fail(ctx, run, attempt, Failure{Code: CodeQueueExpired, Message: ErrQueueExpired.Error()})
 		},
 	}
 	if _, err := e.scheduler.Submit(ctx, job); err != nil {

@@ -5,7 +5,6 @@ import (
 	"strings"
 	"sync"
 	"testing"
-	"time"
 
 	hostapi "github.com/lycaon/lycaon/internal/api"
 	"github.com/lycaon/lycaon/internal/sourcecatalog"
@@ -15,10 +14,8 @@ import (
 
 func DrainBackground(t *testing.T, srv *hostapi.Server) {
 	t.Helper()
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-	srv.WaitForBackground(ctx)
-	testutil.FailErr(t, "drain server background work", ctx.Err())
+	// A hang is reported by the test binary's deadline, not a local one.
+	srv.WaitForBackground(context.Background())
 }
 
 // testUserNotices loads the bundled user-notice catalog.
@@ -28,8 +25,7 @@ func ReleaseProjectSources(t *testing.T, srv *hostapi.Server) {
 	if srv.Sources.Workspace.ProjectRegistry == nil {
 		return
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
+	ctx := context.Background()
 	projects, err := srv.Sources.Workspace.ProjectRegistry.List(ctx)
 	testutil.FailErr(t, "list projects for source release", err)
 	for i := range projects {

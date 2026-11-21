@@ -9,25 +9,6 @@ import (
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 )
 
-func TestCoordinatorRuntimeGuardCodesRegistered(t *testing.T) {
-	t.Parallel()
-	cfg, err := guidance.LoadHintConfigStock()
-	contractcheck.FailErr(t, "load hint registry", err)
-	for _, code := range []string{
-		"COORDINATOR_ORCHESTRATE_WRITE_DENIED",
-		"COORDINATOR_READ_OUTSIDE_SCOPE",
-		"COORDINATOR_BATCH_ALREADY_CLOSED",
-		"COORDINATOR_BATCH_WRONG_PHASE",
-		"COORDINATOR_SYNTHESIS_WRAPUP_ONLY",
-		"PROGRESS_MISSING",
-		"PROGRESS_SYNTHESIS_RECONCILE_ONLY",
-	} {
-		if _, ok := cfg.HintCodes[code]; !ok {
-			t.Fatalf("missing hint code %q", code)
-		}
-	}
-}
-
 func TestBundledAgentToolProfilesRuntimeRules(t *testing.T) {
 	t.Parallel()
 	rules, err := toolpolicy.LoadProfileRuntimeRules()

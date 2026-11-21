@@ -3,7 +3,6 @@ package session
 import (
 	"context"
 	"errors"
-	"github.com/lycaon/lycaon/internal/toolreach"
 	"os"
 	"path/filepath"
 	"strings"
@@ -16,10 +15,12 @@ import (
 	"github.com/lycaon/lycaon/internal/isolation"
 	sessioncheckpoint "github.com/lycaon/lycaon/internal/session/checkpoint"
 	"github.com/lycaon/lycaon/internal/session/checkpointcontrol"
-	sessionstore "github.com/lycaon/lycaon/internal/session/store"
+	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"github.com/lycaon/lycaon/internal/settings"
+	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/testutil/gittest"
+	"github.com/lycaon/lycaon/internal/toolreach"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -237,7 +238,7 @@ func (q decisionWorkerJobs) Get(id string) (*api.WorkerTask, bool) {
 func TestWorkerDecisionUsesBoundJobInsteadOfRenderedPreamble(t *testing.T) {
 	worker := &api.Session{ID: "child", ParentSessionID: "parent", AgentType: "builder"}
 	job := &api.WorkerTask{ID: "job", ChildSessionID: worker.ID, ParentSessionID: worker.ParentSessionID, AgentType: worker.AgentType, Brief: "Add Docker support", Prompt: strings.Repeat("host instructions ", 200)}
-	mgr := NewHost(sessionstore.NewMemory(), Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
+	mgr := NewHost(storetest.New(t, testdbseed.DefaultProjectID), Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
 	mgr.SetWorkerQueue(decisionWorkerJobs{job: job})
 	history := []api.Message{{ID: "opening", WorkerID: job.ID, Content: strings.Repeat("host instructions ", 200)}}
 	for _, jobID := range []string{job.ID, ""} {

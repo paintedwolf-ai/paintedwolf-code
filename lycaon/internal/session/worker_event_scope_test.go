@@ -16,13 +16,13 @@ import (
 
 	"github.com/lycaon/lycaon/internal/bgprocess"
 	"github.com/lycaon/lycaon/internal/citationmd"
+	"github.com/lycaon/lycaon/internal/events"
 	"github.com/lycaon/lycaon/internal/exec"
 	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/hostcmd"
-
-	"github.com/lycaon/lycaon/internal/events"
 	"github.com/lycaon/lycaon/internal/oar"
-	sessionstore "github.com/lycaon/lycaon/internal/session/store"
+	"github.com/lycaon/lycaon/internal/session/store"
+	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"github.com/lycaon/lycaon/internal/session/workeradmission"
 	"github.com/lycaon/lycaon/internal/session/workflowfacts"
 	"github.com/lycaon/lycaon/internal/settings"
@@ -46,7 +46,7 @@ func TestWorkerWritePublishesBoardByProjectIdentity(t *testing.T) {
 	testutil.FailErr(t, "subscribe to project events", err)
 	defer unsubscribe()
 	board := &workerEventBoard{}
-	manager := NewHost(sessionstore.NewMemory(), Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
+	manager := NewHost(storetest.New(t, testdbseed.DefaultProjectID), Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
 	manager.SetEventPublisher(&events.Publisher{Hub: hub, Board: board})
 	manager.Workers.Workspaces.AfterWorkerWrite(t.Context(), tools.ToolContext{Identity: tools.InvocationIdentity{ProjectID: testdbseed.DefaultProjectID, HandoffSessionID: "session"}}, "file.go")
 	hub.FlushDebounced()
@@ -119,6 +119,9 @@ func TestWorkflowDeliveryRequiresAcceptedCurrentPhaseCloseout(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			mgr, sess, _ := verifyGateHarness(t, "")
+			database := mgr.Coordinator.Context.Sessions.(*store.SQL).DB()
+			testdbseed.InsertSessionWorkflowRun(t, database, "run", sess.ID, "running")
+			testdbseed.InsertSessionWorkflowRun(t, database, "old-run", sess.ID, "complete")
 			ready, err := mgr.Runner.Transcript.DeliveredWorkflowPhase(t.Context(), sess.ID, "run", "work")
 			testutil.FailErr(t, "read initial delivery state", err)
 			if ready {

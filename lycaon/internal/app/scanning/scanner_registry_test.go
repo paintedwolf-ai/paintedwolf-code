@@ -3,12 +3,13 @@ package scanning
 import (
 	"context"
 	"errors"
+	"github.com/lycaon/lycaon/internal/scan/scantest"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/configdir"
 	"github.com/lycaon/lycaon/internal/configlayout"
 	"github.com/lycaon/lycaon/internal/exec"
-	"github.com/lycaon/lycaon/internal/scan"
+
 	scanregistry "github.com/lycaon/lycaon/internal/scan/registry"
 	"github.com/lycaon/lycaon/internal/testutil"
 )
@@ -38,7 +39,7 @@ func TestDefaultScannerRegistryRegistersImmediateOwnedCleanup(t *testing.T) {
 }
 
 func TestInjectedScannerRegistryRemainsCallerOwned(t *testing.T) {
-	injected := &scan.MockRegistry{}
+	injected := &scantest.MockRegistry{}
 	resources := &scannerResources{}
 	loaded, err := loadScannerRegistry(t.Context(), Dependencies{Fixtures: ScannerFixtures{Registry: injected}, Resources: resources}, exec.ProcessPriorityBelowNormal, nil)
 	testutil.FailErr(t, "bind injected registry", err)

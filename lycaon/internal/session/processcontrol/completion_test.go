@@ -55,7 +55,7 @@ func TestCommandSettlementRetainsReportAndWakesOnlySubscribedWait(t *testing.T) 
 	service := New(f, f, f, f)
 	service.SetLoop(f, f)
 	now := time.Now()
-	service.HandleCommandCompletion(t.Context(), bgprocess.Completion{SessionID: "session", Handle: "handle", OriginTool: "verify", RunID: "run", ToolCallID: "call", ExitCode: 1, FinishedAt: now, Tail: "failed check", UnsavedDocumentPaths: []string{"source.txt"}})
+	service.HandleCommandCompletion(t.Context(), bgprocess.Completion{SessionID: "session", Handle: "handle", OriginTool: "verify", RunID: "run", ToolCallID: "call", ExitCode: 1, FinishedAt: now, Tail: "failed check"})
 	report, ok := service.Report("session", "handle")
 	t.Logf("completion report for manual render inspection:\n%s", report)
 	if !ok || !strings.Contains(report, "failed check") || !strings.Contains(report, "policy guidance") {
@@ -104,7 +104,7 @@ func TestSilentRunningProcessSerializesEmptyChunksAcrossEndpoints(t *testing.T) 
 	if err != nil {
 		t.Fatalf("start silent process: %v", err)
 	}
-	t.Cleanup(func() { _, _ = bg.Lifecycle.Stop("s", handle, bgprocess.TerminationStoppedByUser) })
+	t.Cleanup(func() { stopAndWait(t, bg, handle, bgprocess.TerminationStoppedByUser) })
 
 	directOut, err := svc.GetBackgroundProcessOutput(t.Context(), "s", handle)
 	if err != nil {
@@ -151,7 +151,7 @@ func TestHandleSubjectResolvesHeldAndUnknownHandles(t *testing.T) {
 	if err != nil {
 		t.Fatalf("start bg process: %v", err)
 	}
-	t.Cleanup(func() { _, _ = bg.Lifecycle.Stop("s", bgHandle, bgprocess.TerminationStoppedByAgent) })
+	t.Cleanup(func() { stopAndWait(t, bg, bgHandle, bgprocess.TerminationStoppedByAgent) })
 	if got := svc.HandleSubject("s", bgHandle); !strings.Contains(got, "-test.list=^$") {
 		t.Fatalf("bg subject = %q", got)
 	}
@@ -288,5 +288,15 @@ func TestCommandCompletionDigestSeparatesApprovalWaitFromRunTime(t *testing.T) {
 	completion.PersonWait = 0
 	if digest := CommandCompletionDigest(completion); !strings.Contains(digest, " elapsed=21.75s ") || strings.Contains(digest, "awaited_approval") {
 		t.Fatalf("digest without a wait = %q", digest)
+	}
+}
+
+// stopAndWait stops a test's background command and waits until it and its
+// supervisor have exited, so no process outlives the test that started it.
+func stopAndWait(t *testing.T, bg *bgprocess.Registry, handle string, reason bgprocess.TerminationReason) {
+	t.Helper()
+	_, _ = bg.Lifecycle.Stop("s", handle, reason)
+	if _, _, err := bg.Lifecycle.Wait(context.Background(), "s", handle); err != nil {
+		t.Errorf("wait for background command %s: %v", handle, err)
 	}
 }
