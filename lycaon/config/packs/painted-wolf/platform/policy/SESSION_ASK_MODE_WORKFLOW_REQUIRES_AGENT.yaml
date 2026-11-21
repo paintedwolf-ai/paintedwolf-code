@@ -3,16 +3,30 @@ id: SESSION_ASK_MODE_WORKFLOW_REQUIRES_AGENT
 kind: policy
 on: tool.rejected
 selector: {}
-requires_facts: [paintedwolf.rejection_code]
+requires_facts: [paintedwolf.can_command, paintedwolf.phase, paintedwolf.rejection_code, paintedwolf.requested, paintedwolf.workflow_id, tool]
 when: paintedwolf.rejection_code == "SESSION_ASK_MODE_WORKFLOW_REQUIRES_AGENT"
 effect: block
 x-paintedwolf-category: recoverable
 x-paintedwolf-emit: guard:coordinator
 message: This workflow phase requires Agent mode
-what: This workflow phase requires Agent mode.
-cause: The next phase needs actions unavailable in Ask.
-fix: Tell the user they can switch to Agent mode to continue the workflow.
+what: >-
+  {% if paintedwolf.requested %}Workflow{% if paintedwolf.workflow_id %} `{{ paintedwolf.workflow_id }}`{% endif %} phase `{{ paintedwolf.requested }}` requires Agent mode.{% else %}Workflow{% if paintedwolf.workflow_id %} `{{ paintedwolf.workflow_id }}`{% endif %} requires Agent mode to advance via `{{ tool }}`.{% endif %}
+cause: >-
+  {% if paintedwolf.phase %}The target phase{% if paintedwolf.requested %} `{{ paintedwolf.requested }}`{% endif %} declares an Agent mode requirement; the workflow remains at its current read phase `{{ paintedwolf.phase }}`.{% else %}This workflow phase declares an Agent mode requirement and was not started in Ask mode.{% endif %}
+fix: >-
+  {% if paintedwolf.can_command %}Continue read-only inspection{% if paintedwolf.phase %} in phase `{{ paintedwolf.phase }}`{% endif %} or summarize your findings{% else %}Summarize your findings from the current read-only surface{% endif %}, and explain that the user can switch to Agent mode to enter{% if paintedwolf.requested %} `{{ paintedwolf.requested }}`{% else %} the Agent-only workflow phase{% endif %}.
 x-paintedwolf-scenarios:
   - id: phase
     vars:
       tool: workflow_advance
+      workflow_id: feature-build
+      phase: plan
+      requested: implement
+      can_command: true
+  - id: without_command
+    vars:
+      tool: workflow_transition
+      workflow_id: feature-build
+      phase: plan
+      requested: implement
+      can_command: false

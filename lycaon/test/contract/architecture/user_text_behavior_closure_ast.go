@@ -460,6 +460,7 @@ var registeredCoordinatorBooleanGates = map[string]bool{
 	"command_output_scratch_files": true,
 	"profile_has_command_output":   true,
 	"profile_has_command_stop":     true,
+	"has_git":                      true,
 }
 
 func scanCoordinatorPongoBooleanGates(catalogRoot string) ([]string, error) {

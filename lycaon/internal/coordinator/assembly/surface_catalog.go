@@ -142,7 +142,13 @@ func (e *promptSurface) workerReader(ctx context.Context, sess *api.Session, fe 
 		catalog = fe.Layers().Catalog
 	}
 	if len(profiles) == 0 {
-		loaded, err := sandbox.LoadToolProfilesWithCatalog(catalog)
+		var loaded []sandbox.ToolProfile
+		var err error
+		if catalog != nil {
+			loaded, err = sandbox.LoadToolProfilesWithCatalog(catalog)
+		} else {
+			loaded, err = sandbox.LoadToolProfiles()
+		}
 		if err != nil {
 			return prompts.Reader{}, err
 		}
@@ -150,10 +156,11 @@ func (e *promptSurface) workerReader(ctx context.Context, sess *api.Session, fe 
 	}
 	var visible []string
 	var loaded map[string]bool
-	_, rootCount, _, _, ok := e.workspaceRootsForTurn(ctx, sess, nil)
+	roots, rootCount, activePath, _, ok := e.workspaceRootsForTurn(ctx, sess, nil)
 	if !ok {
 		rootCount = 1
 	}
+	hasGit := workspaceRowsHaveGit(roots, activePath, sess)
 	if vars != nil {
 		if raw, ok := vars["visible_tools"].([]string); ok {
 			visible = raw
@@ -174,6 +181,7 @@ func (e *promptSurface) workerReader(ctx context.Context, sess *api.Session, fe 
 		Visible:   visible,
 		Schemas:   schemas,
 		RootCount: rootCount,
+		HasGit:    hasGit,
 		WebSearch: webSearchEnabled,
 	})
 	if err != nil {

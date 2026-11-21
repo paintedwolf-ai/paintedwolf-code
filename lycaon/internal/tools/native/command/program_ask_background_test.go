@@ -88,6 +88,10 @@ func newAskBarrierFixture(t *testing.T, initialLine string) *askBarrierFixture {
 	return f
 }
 
+// setAskMode toggles the future ToolContext mode for subsequent foreground
+// command invocations on this runtime fixture. Background jobs already launched
+// retain their frozen launch-time programRun authority; store-backed round
+// transitions are covered in lycaon/test/wiring/session_ask_round_test.go.
 func (f *askBarrierFixture) setAskMode(ask bool) {
 	f.mu.Lock()
 	f.askMode = ask

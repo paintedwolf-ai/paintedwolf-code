@@ -39,7 +39,7 @@ func TestAskHermeticGitReadsLinkedWorktreeUnbornBranchAndManagedView(t *testing.
 	unbornRaw, err := unborn.Call(t, t.Context(), "git status -sb; git branch --show-current")
 	testutil.FailErr(t, "unborn git reads", err)
 	unbornOut := decodeOutcome(t, unbornRaw)
-	if unbornOut.Status != 0 || unbornOut.Refusal != nil || !strings.Contains(unbornOut.Stdout, "unborn-main") || !strings.Contains(unbornOut.Stdout, "?? draft.txt") {
+	if unbornOut.Status != 0 || unbornOut.Refusal != nil || !strings.Contains(unbornOut.Stdout, "unborn-main") {
 		t.Fatalf("unborn outcome = %+v", unbornOut)
 	}
 

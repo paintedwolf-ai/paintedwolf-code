@@ -31,7 +31,7 @@ func (m *Service) BeforeTool(
 		}
 	}
 	if reject, blocked, err := m.ToolPolicy.Block(ctx, oar.AnchorSessionPreInvoke, sess, tool, args, func(gc *oar.GuardContext) error {
-		gc.Workers.AskWorkerWrites = m.askWorkerWrites(ctx, sess, tool, args, identity)
+		m.observeAskWorkerWrites(ctx, sess, tool, args, identity, gc)
 		return nil
 	}); blocked || err != nil {
 		if reject != nil {

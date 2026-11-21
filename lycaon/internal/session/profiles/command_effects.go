@@ -43,11 +43,7 @@ func (m *Service) ConstrainCommandProfiles(ctx context.Context, sessionID string
 	if m != nil && m.store != nil {
 		if sess, err := m.store.Get(ctx, sessionID); err == nil && sess != nil {
 			if registry, err := m.EffectivePostures(ctx, sess); err == nil {
-				postureID := sess.Posture
-				if postureID == "" {
-					postureID = api.SessionPostureBuild
-				}
-				if posture, err := registry.Get(postureID); err == nil {
+				if posture, err := registry.Get(sess.Posture); err == nil {
 					if mode, ok := m.effectiveCommandMode(ctx, sessionID); ok {
 						allowed = posture.CommandEffects
 						if mode == api.SessionModeAsk {

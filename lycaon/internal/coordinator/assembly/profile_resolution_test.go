@@ -2,17 +2,22 @@ package assembly
 
 import (
 	"context"
+	"os"
 	"path/filepath"
 	"runtime"
 	"strings"
 	"testing"
 
+	"github.com/lycaon/lycaon/internal/coordinator/inject"
 	"github.com/lycaon/lycaon/internal/coordinator/surface"
 	"github.com/lycaon/lycaon/internal/orchestration"
 	"github.com/lycaon/lycaon/internal/prompts"
+	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/spawn"
+	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/testutil/prompttest"
+	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -79,4 +84,141 @@ func synthesisPromptStabilityEngine(t *testing.T) *AssemblyEngine {
 	eng := &AssemblyEngine{}
 	eng.SetDeps(deps)
 	return eng
+}
+
+func TestTurnReaderAndWorkerReaderSpecificityAcrossGitRootCountAndUpgrade(t *testing.T) {
+	_, file, _, ok := runtime.Caller(0)
+	if !ok {
+		t.Fatal("runtime.Caller failed")
+	}
+	root := filepath.Join(filepath.Dir(file), "..", "..", "..")
+	pe := prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{ModuleRoot: root})
+	gitDir := t.TempDir()
+	testutil.FailErr(t, "create .git dir", mkdirAllGit(gitDir))
+	plainDir := t.TempDir()
+
+	// 1. turnReader varies HasGit and RootCount one dimension at a time.
+	for _, tc := range []struct {
+		name     string
+		roots    []map[string]any
+		count    int
+		active   string
+		wantGit  bool
+		wantText string
+		forbid   string
+	}{
+		{
+			name:     "single_git_root",
+			roots:    []map[string]any{{"label": "app", "path": gitDir, "is_primary": true, "is_active": true}},
+			count:    1,
+			active:   gitDir,
+			wantGit:  true,
+			wantText: "inspect Git status, diffs, and history with read-only native commands",
+			forbid:   "in Git-backed folders",
+		},
+		{
+			name:     "single_non_git_root",
+			roots:    []map[string]any{{"label": "app", "path": plainDir, "is_primary": true, "is_active": true}},
+			count:    1,
+			active:   plainDir,
+			wantGit:  false,
+			wantText: "Use `command` to read, search, or query project files with read-only native commands",
+			forbid:   "Git status",
+		},
+		{
+			name: "multi_root_with_git",
+			roots: []map[string]any{
+				{"label": "app", "path": gitDir, "is_primary": true, "is_active": true},
+				{"label": "docs", "path": plainDir, "is_primary": false, "is_active": false},
+			},
+			count:    2,
+			active:   gitDir,
+			wantGit:  true,
+			wantText: "inspect Git status, diffs, and history in Git-backed folders",
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			ps := &promptSurface{
+				deps: promptSurfaceDeps{
+					Prompts: pe,
+					WorkspaceRoots: func(context.Context, *api.Session) ([]map[string]any, int, string, int) {
+						return tc.roots, tc.count, tc.active, 0
+					},
+				},
+				cache: &SessionPromptCache{},
+			}
+			sess := &api.Session{
+				ID:            "ask-" + tc.name,
+				Mode:          api.SessionModeAsk,
+				Posture:       api.SessionPostureBuild,
+				AgentType:     orchestration.ProfileCoordinator,
+				WorkspacePath: tc.active,
+			}
+			turn := &TurnAssemblyScratch{SurfaceID: "observe_investigate"}
+			var frame inject.CoordinatorTurnFrame
+			reader, err := ps.turnReader(t.Context(), sess, frame, nil, turn, tc.count)
+			testutil.FailErr(t, "turnReader", err)
+			facts := reader.Facts()
+			if facts["has_git"] != tc.wantGit || reader.RootCount() != tc.count {
+				t.Fatalf("facts has_git=%v root_count=%d, want %t/%d", facts["has_git"], reader.RootCount(), tc.wantGit, tc.count)
+			}
+			rendered, err := ps.renderSystemPrefix(t.Context(), sess, frame, nil, turn, nil)
+			testutil.FailErr(t, "renderSystemPrefix", err)
+			if !strings.Contains(rendered, tc.wantText) {
+				t.Fatalf("rendered prompt missing %q:\n%s", tc.wantText, rendered)
+			}
+			if tc.forbid != "" && strings.Contains(rendered, tc.forbid) {
+				t.Fatalf("rendered prompt leaked %q:\n%s", tc.forbid, rendered)
+			}
+			for _, leak := range []string{"{%", "{{", "&quot;", "&#39;"} {
+				if strings.Contains(rendered, leak) {
+					t.Fatalf("rendered prompt leaked template syntax %q:\n%s", leak, rendered)
+				}
+			}
+		})
+	}
+
+	// 2. workerReader for read-only workers keeps read-only command guidance even after root upgrades to Agent mode.
+	loadedProfiles, err := sandbox.LoadToolProfiles()
+	testutil.FailErr(t, "LoadToolProfiles", err)
+	for _, agentType := range []string{"path-explorer", "repo-researcher"} {
+		ps := &promptSurface{
+			deps: promptSurfaceDeps{
+				Prompts: pe,
+				WorkspaceRoots: func(context.Context, *api.Session) ([]map[string]any, int, string, int) {
+					return []map[string]any{{"label": "app", "path": gitDir, "is_primary": true, "is_active": true}}, 1, gitDir, 0
+				},
+			},
+			cache: &SessionPromptCache{},
+		}
+		workerSess := &api.Session{
+			ID:              "worker-" + agentType,
+			ParentSessionID: "root-upgraded-to-agent",
+			RootSessionID:   "root-upgraded-to-agent",
+			Mode:            api.SessionModeAgent,
+			Posture:         api.SessionPostureBuild,
+			AgentType:       agentType,
+			WorkspacePath:   gitDir,
+		}
+		reader, err := ps.workerReader(t.Context(), workerSess, pe, agentType, map[string]any{
+			"visible_tools": []string{"command", "command_output", "command_stop", "summarize"},
+		})
+		testutil.FailErr(t, "workerReader "+agentType, err)
+		wantReadOnly, err := toolcontract.NewCommandEffects(toolcontract.CommandReadOnly)
+		testutil.FailErr(t, "NewCommandEffects", err)
+		if reader.Effects() != wantReadOnly {
+			t.Fatalf("%s effects after root upgrade = %v, want CommandReadOnly", agentType, reader.Effects())
+		}
+		vars := reader.Facts()
+		for _, flag := range []string{"profile_command_mutation", "profile_command_external_exec", "profile_command_network_egress"} {
+			if vars[flag] != false {
+				t.Fatalf("%s %s = %v after root upgrade, want false", agentType, flag, vars[flag])
+			}
+		}
+		_ = loadedProfiles
+	}
+}
+
+func mkdirAllGit(dir string) error {
+	return os.MkdirAll(filepath.Join(dir, ".git"), 0o755)
 }

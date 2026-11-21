@@ -146,7 +146,7 @@ loop:
 				return nil, err
 			}
 		}
-		if previous == api.SessionModeAsk && authority.Mode == api.SessionModeAgent {
+		if shouldDeliverAgentEnabledNudge(sess, previous, authority.Mode, st.history) {
 			st.history, err = l.appendAgentEnabledNudge(ctx, id, st)
 			if err != nil {
 				return nil, err

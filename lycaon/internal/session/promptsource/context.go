@@ -13,6 +13,7 @@ import (
 	"github.com/lycaon/lycaon/internal/coordinator/promptloop"
 	"github.com/lycaon/lycaon/internal/coordinator/surface"
 	"github.com/lycaon/lycaon/internal/coordinator/turnload"
+	"github.com/lycaon/lycaon/internal/gitrepo"
 	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/internal/sandbox"
 	sessionlimits "github.com/lycaon/lycaon/internal/session/limits"
@@ -222,8 +223,27 @@ func (m *Context) procedureReader(ctx context.Context, sess *api.Session, profil
 		visible = append(visible, remaining...)
 	}
 	rootCount := 1
+	hasGit := false
 	if m != nil && m.Workspace != nil && sess != nil {
-		_, rootCount, _, _ = m.Workspace.PromptRootRows(ctx, sess)
+		var rows []map[string]any
+		var activePath string
+		rows, rootCount, activePath, _ = m.Workspace.PromptRootRows(ctx, sess)
+		if strings.TrimSpace(activePath) != "" {
+			_, hasGit = gitrepo.Discover(strings.TrimSpace(activePath))
+		}
+		if !hasGit {
+			for _, r := range rows {
+				if dir, _ := r["path"].(string); strings.TrimSpace(dir) != "" {
+					if _, ok := gitrepo.Discover(strings.TrimSpace(dir)); ok {
+						hasGit = true
+						break
+					}
+				}
+			}
+		}
+	}
+	if !hasGit && sess != nil && strings.TrimSpace(sess.WorkspacePath) != "" {
+		_, hasGit = gitrepo.Discover(strings.TrimSpace(sess.WorkspacePath))
 	}
 	return prompts.NewReader(prompts.ReaderInput{
 		ProfileID: resolvedProfileID,
@@ -233,6 +253,7 @@ func (m *Context) procedureReader(ctx context.Context, sess *api.Session, profil
 		Loaded:    offeredSet,
 		Visible:   visible,
 		RootCount: rootCount,
+		HasGit:    hasGit,
 		WebSearch: m.WebSearchEnabled(),
 	})
 }

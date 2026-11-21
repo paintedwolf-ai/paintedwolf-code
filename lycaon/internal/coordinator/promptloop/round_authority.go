@@ -71,3 +71,24 @@ func (l *PromptLoop) appendAgentEnabledNudge(ctx context.Context, sessionID stri
 		Content:  content,
 	}, "", state)
 }
+
+func shouldDeliverAgentEnabledNudge(sess *api.Session, previous, current api.SessionMode, history []api.Message) bool {
+	if sess == nil || sess.IsWorkerChild() || current != api.SessionModeAgent {
+		return false
+	}
+	rootID := sess.RootSessionID
+	if rootID == "" {
+		rootID = sess.ID
+	}
+	upgraded := store.TakeAgentModeUpgrade(rootID) || previous == api.SessionModeAsk
+	if !upgraded {
+		return false
+	}
+	signal := anchor.SessionAgentEnabled.String()
+	for _, msg := range history {
+		if msg.HostSignalID == signal {
+			return false
+		}
+	}
+	return true
+}

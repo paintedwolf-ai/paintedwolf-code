@@ -34,7 +34,10 @@ func RegisterAskUserTool(reg *tools.DefaultRegistry, runs *Asks, boundary *sandb
 			return "", err
 		}
 		if tctx.Source.AskMode && (req.ResponseType == workflowdef.FeedbackResponseSecret || req.Secret != nil) {
-			return "", tools.AskModeReject("ask_user")
+			return "", &toolrejection.ToolReject{
+				Code: tools.AskModeActiveCode,
+				Data: map[string]any{"tool": "ask_user", "reason": "secret_input", "response_type": "secret"},
+			}
 		}
 		req.ToolCallID = strings.TrimSpace(tctx.Identity.ToolCallID)
 		req.WorkspaceImages = WorkspaceImageReaderForBoundary(boundary, tctx)
