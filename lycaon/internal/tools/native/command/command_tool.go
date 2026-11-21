@@ -46,6 +46,12 @@ func CaptureInvocation(args map[string]any) bool {
 
 // Run executes a v1 program through the program entry, or one retained capture.
 func (t *CommandTool) Run(ctx context.Context, args map[string]any, tctx tools.ToolContext) (string, error) {
+	if tctx.Source.AskMode {
+		if reject := tools.AskModeCommandFieldReject("command", args); reject != nil {
+			return "", reject
+		}
+		tctx.Source.ReadOnly = true
+	}
 	tctx.Execution.VerificationCheck = VerificationRequested(args)
 	if t.DeclaredCommand != nil {
 		declared := t.DeclaredCommand(tctx.ActiveRootPath())

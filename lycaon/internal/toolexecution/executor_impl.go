@@ -66,12 +66,13 @@ func (e *Executor) Invoke(ctx context.Context, qualifiedName string, args map[st
 	ctx = tools.WithRecoveryContract(ctx, qualifiedName, contract)
 	ctx = invocationContext(ctx, tc)
 	if tc.Source.AskMode {
+		tc.Source.ReadOnly = true
 		definition, ok := e.definitionFor(qualifiedName)
 		if !ok || !tools.AllowedInAsk(definition.Meta) {
 			return "", e.Rejections.rejectBeforeInvoke(ctx, qualifiedName, profileID, args, tools.AskModeReject(qualifiedName))
 		}
 	}
-	if retained, entry := e.programEntries[qualifiedName]; entry && (retained == nil || !retained(args)) {
+	if retained, entry := e.programEntries[qualifiedName]; entry && (tc.Source.AskMode || retained == nil || !retained(args)) {
 		return e.invokeProgramEntry(ctx, qualifiedName, profileID, args, tc)
 	}
 	if reject := e.validateInvocation(ctx, qualifiedName, profileID, args, &tc); reject != nil {
@@ -165,6 +166,11 @@ func (e *Executor) validateInvocation(
 	}
 	if reject := tools.ValidateCallArguments(qualifiedName, args, e.Metadata.argsSchemaFor(ctx, tc.Identity.SessionID, qualifiedName), *tc); reject != nil {
 		return reject
+	}
+	if tc.Source.AskMode {
+		if reject := tools.AskModeCommandFieldReject(qualifiedName, args); reject != nil {
+			return reject
+		}
 	}
 	if reject := toolcommand.ArgvShapeReject(qualifiedName, args); reject != nil {
 		return reject
@@ -284,6 +290,11 @@ func (e *Executor) invokeProgramEntry(ctx context.Context, tool, profileID strin
 	if reject := tools.ValidateCallArguments(tool, args, e.Metadata.argsSchemaFor(ctx, tc.Identity.SessionID, tool), tc); reject != nil {
 		ctx = tools.WithCallReach(ctx, tools.TurnReach(tc))
 		return "", e.Rejections.rejectBeforeInvoke(ctx, tool, profileID, args, reject)
+	}
+	if tc.Source.AskMode {
+		if reject := tools.AskModeCommandFieldReject(tool, args); reject != nil {
+			return "", e.Rejections.rejectBeforeInvoke(ctx, tool, profileID, args, reject)
+		}
 	}
 	if reject := admitCredentialFiles(ctx, tool, tc); reject != nil {
 		return "", e.Rejections.rejectBeforeInvoke(ctx, tool, profileID, args, reject)
