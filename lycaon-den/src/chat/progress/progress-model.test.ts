@@ -76,7 +76,7 @@ describe("progress-model", () => {
       id: "summary",
       kind: "progress_update",
       created_at: "2026-06-18T12:00:01Z",
-      progress_update: { summary },
+      progress_update: { initial: false, summary },
     })];
     expect(progressHistoryFromMessages(messages)).toEqual([{
       key: "summary:summary",
@@ -120,6 +120,7 @@ describe("progress-model", () => {
         ord: 2,
         created_at: "2026-08-31T13:43:24Z",
         progress_update: {
+          initial: false,
           changes: [{
             kind: "updated",
             label: "Run registry in Docker",

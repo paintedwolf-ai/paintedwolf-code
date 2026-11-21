@@ -125,6 +125,7 @@ describe("messagesEqual", () => {
       kind: "progress_update",
       created_at: "t",
       progress_update: {
+        initial: false,
         summary: {
           change_count: 13,
           total_steps: 20,

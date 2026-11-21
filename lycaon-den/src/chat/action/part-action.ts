@@ -18,7 +18,7 @@ export function partAction(part: ToolPartView): CardAction | undefined {
     const merged = mergeActions(members.length ? [...members, ...calls.filter((action) => !members.includes(action))] : calls);
     if (!merged) return undefined;
     const status = commandActivityStatus(activity);
-    const action = { ...merged, status: status === "completed" ? "done" : status };
+    const action: CardAction = { ...merged, status: status === "completed" ? "done" : status };
     const observation = combineSourceObservations(activity.calls.flatMap((call) => call.sourceObservation ?? []));
     return observation ? withSourceObservation(action, observation) : action;
   }

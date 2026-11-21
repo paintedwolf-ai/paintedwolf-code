@@ -103,10 +103,6 @@ export function SourceDiffRow(props: Props) {
   const change = () => props.source.change(activeIndex());
   const path = () => props.source.path(activeIndex());
   const navigationTarget = () => props.source.navigationTarget?.(activeIndex());
-  const openable = () => {
-    const target = navigationTarget();
-    return target === undefined ? props.source.openable(activeIndex()) : target !== null;
-  };
   const isNoop = () => props.source.isNoop(activeIndex());
   const wholeFile = () => wholeFileChange(change());
 

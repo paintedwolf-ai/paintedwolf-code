@@ -227,7 +227,7 @@ describe("SessionTranscript tools and progress", () => {
         ...host,
         id: "pu-change",
         kind: "progress_update",
-        progress_update: { changes: [{ kind: "done", label: "Ship auth", state: "done" }] },
+        progress_update: { initial: false, changes: [{ kind: "done", label: "Ship auth", state: "done" }] },
         created_at: "2026-06-28T04:45:11.000Z",
       },
       {
