@@ -31,12 +31,7 @@ type ptrVisit struct {
 }
 
 // TryRenderCacheKey hashes templateID, catalogRevision, selectedUnits, and the
-// complete fullVars map under the admitted plain-data value grammar: nil,
-// methodless bool/string/int/uint/finite-float scalars, methodless pointers,
-// non-cyclic slices/arrays and string-keyed maps, and methodless structs whose
-// fields are all exported. Values with methods (including time.Time and
-// pointer-receiver formatters), unexported fields, non-string map keys,
-// non-finite floats, callables, or reference cycles return ErrUncacheableRenderInput.
+// complete fullVars map. Unsupported render inputs return ErrUncacheableRenderInput.
 func TryRenderCacheKey(
 	templateID, catalogRevision string,
 	selectedUnits []string,
