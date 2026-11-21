@@ -180,7 +180,8 @@ func dedupeEnvelopeMaps(in []map[string]any) []map[string]any {
 	seen := make(map[string]bool, len(in))
 	out := make([]map[string]any, 0, len(in))
 	for _, m := range in {
-		digest := sha256CanonicalJSON(canonicalValue(reflect.ValueOf(m)))
+		enc, _ := encodeAdmittedValue(reflect.ValueOf(m), map[ptrVisit]bool{})
+		digest := sha256CanonicalJSON(enc)
 		if seen[digest] {
 			continue
 		}

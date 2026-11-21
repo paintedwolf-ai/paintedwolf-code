@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"slices"
+	"sync"
 
 	"github.com/lycaon/lycaon/internal/coordinator/surface"
 	"github.com/lycaon/lycaon/internal/coordinator/surfacecatalog"
@@ -94,6 +95,9 @@ type CoordinatorState struct {
 	SharedTempLocations []string
 	SpawnAllowlist      []string
 
+	RunContext     api.CoordinatorRunContext
+	ImplementState surface.ImplementSessionState
+	History        []api.Message
 	TurnProfile    surface.TurnProfile
 	Plan           toolsurface.Plan
 	Loaded         map[string]bool
@@ -118,9 +122,22 @@ type coordinatorSeed struct {
 	mcp        MCPState
 }
 
+var (
+	coordStatesMu   sync.Mutex
+	coordStatesMemo []CoordinatorState
+)
+
 // CoordinatorStates generates the deterministic union-of-products coordinator matrix,
 // recording both realizable cells and inadmissible cells with production exclusion reasons.
 func CoordinatorStates(ctx context.Context) ([]CoordinatorState, error) {
+	coordStatesMu.Lock()
+	if coordStatesMemo != nil {
+		cached := slices.Clone(coordStatesMemo)
+		coordStatesMu.Unlock()
+		return cached, nil
+	}
+	coordStatesMu.Unlock()
+
 	overlays, err := DiscoverPackOverlays(ctx)
 	if err != nil {
 		return nil, err
@@ -157,6 +174,9 @@ func CoordinatorStates(ctx context.Context) ([]CoordinatorState, error) {
 		seen[st.ID] = true
 		out = append(out, st)
 	}
+	coordStatesMu.Lock()
+	coordStatesMemo = slices.Clone(out)
+	coordStatesMu.Unlock()
 	return out, nil
 }
 
@@ -294,8 +314,9 @@ func resolveCoordinatorSeed(
 		CommandExternalHidden: seed.extHidden, ApprovalPosture: seed.approval,
 		TempState: seed.temp, MCPState: seed.mcp, Roots: roots, RootCount: len(roots),
 		HasGit: hasGit, HasAnyGitRoot: anyGit, SessionScratchDir: scratch,
-		SharedTempLocations: shared, SpawnAllowlist: allowlist, TurnProfile: tp,
-		Plan: plan, Loaded: loaded, Overlay: overlay,
+		SharedTempLocations: shared, SpawnAllowlist: allowlist,
+		RunContext: runCtx, ImplementState: implState, History: history,
+		TurnProfile: tp, Plan: plan, Loaded: loaded, Overlay: overlay,
 		Excluded: excludedReason != "", ExcludedReason: excludedReason,
 	}, nil
 }
@@ -348,57 +369,4 @@ func coordinatorExclusionReason(
 		return "resolved_surface_requires_project_root"
 	}
 	return ""
-}
-
-func buildRootsForTopology(rt RootTopology) (roots []RootSpec, primaryGit, anyGit bool) {
-	r1 := projectroot.RootRef{ID: "r1", Label: "primary", Path: "/tmp/fixture-primary", IsPrimary: true}
-	r2 := projectroot.RootRef{ID: "r2", Label: "secondary", Path: "/tmp/fixture-secondary", IsPrimary: false}
-	switch rt {
-	case RootsSingleGit:
-		return []RootSpec{{Ref: r1, HasGit: true}}, true, true
-	case RootsSingleNonGit:
-		return []RootSpec{{Ref: r1, HasGit: false}}, false, false
-	case RootsDualGitFirst:
-		return []RootSpec{{Ref: r1, HasGit: true}, {Ref: r2, HasGit: false}}, true, true
-	case RootsDualNonGitFirst:
-		return []RootSpec{{Ref: r1, HasGit: false}, {Ref: r2, HasGit: true}}, false, true
-	default:
-		return nil, false, false
-	}
-}
-
-func buildTempPaths(ts TempState) (scratch string, shared []string) {
-	switch ts {
-	case TempScratchOnly:
-		return "/tmp/pw-session-scratch", nil
-	case TempScratchAndShared:
-		return "/tmp/pw-session-scratch", []string{"/tmp/pw-shared-cache"}
-	default:
-		return "", nil
-	}
-}
-
-func selectLoadedTools(plan toolsurface.Plan, mode LoadingMode) (map[string]bool, string) {
-	deferred := plan.DeferredNames()
-	slices.Sort(deferred)
-	switch mode {
-	case LoadingFloorOnly:
-		return map[string]bool{}, ""
-	case LoadingPartlyLoaded:
-		if len(deferred) < 2 {
-			return nil, "partly_loaded_requires_at_least_two_deferred_tools"
-		}
-		return map[string]bool{deferred[0]: true}, ""
-	case LoadingAllLoaded:
-		if len(deferred) == 0 {
-			return nil, "all_loaded_redundant_on_closed_floor_surface"
-		}
-		out := make(map[string]bool, len(deferred))
-		for _, name := range deferred {
-			out[name] = true
-		}
-		return out, ""
-	default:
-		return map[string]bool{}, ""
-	}
 }

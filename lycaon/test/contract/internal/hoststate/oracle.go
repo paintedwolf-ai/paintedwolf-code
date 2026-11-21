@@ -3,11 +3,11 @@ package hoststate
 import (
 	"context"
 	"fmt"
+	"maps"
 	"slices"
-	"sort"
 	"sync"
 
-	"github.com/lycaon/lycaon/internal/coordinator/guard"
+	"github.com/lycaon/lycaon/internal/coordinator/inject"
 	"github.com/lycaon/lycaon/internal/coordinator/promptloop"
 	"github.com/lycaon/lycaon/internal/coordinator/surface"
 	"github.com/lycaon/lycaon/internal/extpacks"
@@ -16,6 +16,7 @@ import (
 	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/toolexecution"
+	"github.com/lycaon/lycaon/internal/toolpolicy"
 	"github.com/lycaon/lycaon/internal/toolprofiles"
 	"github.com/lycaon/lycaon/internal/toolreach"
 	"github.com/lycaon/lycaon/internal/tools"
@@ -46,9 +47,14 @@ type executorCacheKey struct {
 	mcpState       MCPState
 }
 
+type executorBundle struct {
+	exec *toolexecution.Executor
+	reg  *tools.DefaultRegistry
+}
+
 var (
 	executorCacheMu sync.Mutex
-	executorCache   = map[executorCacheKey]*toolexecution.Executor{}
+	executorCache   = map[executorCacheKey]executorBundle{}
 )
 
 // NarrowProfilesForPosture narrows every profile's CommandEffects by posture,
@@ -96,9 +102,36 @@ func ExecutorForOverlay(
 	clampReadOnly, webSearch, externalHidden bool,
 	mcpState MCPState,
 ) (*toolexecution.Executor, []sandbox.ToolProfile, error) {
-	narrowed, err := NarrowProfilesForPosture(overlay.Profiles, posture, clampReadOnly)
+	bundle, narrowed, err := executorBundleForOverlay(overlay, posture, clampReadOnly, webSearch, externalHidden, mcpState)
 	if err != nil {
 		return nil, nil, err
+	}
+	return bundle.exec, narrowed, nil
+}
+
+// RegistryAndExecutorForOverlay returns both the catalog ToolRegistry and Executor for overlay.
+func RegistryAndExecutorForOverlay(
+	overlay PackOverlay,
+	posture api.SessionPosture,
+	clampReadOnly, webSearch, externalHidden bool,
+	mcpState MCPState,
+) (*tools.DefaultRegistry, *toolexecution.Executor, []sandbox.ToolProfile, error) {
+	bundle, narrowed, err := executorBundleForOverlay(overlay, posture, clampReadOnly, webSearch, externalHidden, mcpState)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	return bundle.reg, bundle.exec, narrowed, nil
+}
+
+func executorBundleForOverlay(
+	overlay PackOverlay,
+	posture api.SessionPosture,
+	clampReadOnly, webSearch, externalHidden bool,
+	mcpState MCPState,
+) (executorBundle, []sandbox.ToolProfile, error) {
+	narrowed, err := NarrowProfilesForPosture(overlay.Profiles, posture, clampReadOnly)
+	if err != nil {
+		return executorBundle{}, nil, err
 	}
 	key := executorCacheKey{
 		revision:       overlay.Catalog.Revision,
@@ -117,11 +150,11 @@ func ExecutorForOverlay(
 
 	reg, err := buildCatalogRegistry(overlay.Catalog, mcpState)
 	if err != nil {
-		return nil, nil, err
+		return executorBundle{}, nil, err
 	}
 	sandboxCfg, err := sandbox.LoadConfig()
 	if err != nil {
-		return nil, nil, fmt.Errorf("load sandbox config: %w", err)
+		return executorBundle{}, nil, fmt.Errorf("load sandbox config: %w", err)
 	}
 	boundary := sandbox.NewBoundary(sandboxCfg, narrowed)
 	policy := toolprofiles.NewProfilePolicyEngine(boundary)
@@ -134,10 +167,11 @@ func ExecutorForOverlay(
 	exec.Metadata.SetToolSchemas(overlay.Schemas)
 	exec.Metadata.SetCommandExternalHidden(externalHidden)
 
+	bundle := executorBundle{exec: exec, reg: reg}
 	executorCacheMu.Lock()
-	executorCache[key] = exec
+	executorCache[key] = bundle
 	executorCacheMu.Unlock()
-	return exec, narrowed, nil
+	return bundle, narrowed, nil
 }
 
 func buildCatalogRegistry(eff *extpacks.EffectiveCatalog, mcpState MCPState) (*tools.DefaultRegistry, error) {
@@ -195,7 +229,8 @@ func registerFixtureMCPTool(reg *tools.DefaultRegistry, mcpState MCPState) error
 }
 
 // FreezeTurnAuthority computes the production tool list, schema projections,
-// native program reach, and Reader for a CoordinatorState.
+// native program reach, and Reader for a CoordinatorState through the live
+// toolpolicy.Engine and promptloop.ProjectTurnTools pipeline.
 func FreezeTurnAuthority(ctx context.Context, state CoordinatorState) (TurnAuthority, error) {
 	overlay := state.Overlay
 	if overlay.Catalog == nil {
@@ -205,27 +240,31 @@ func FreezeTurnAuthority(ctx context.Context, state CoordinatorState) (TurnAutho
 		}
 		overlay = overlays[0]
 	}
-	exec, narrowed, err := ExecutorForOverlay(
+	bundle, narrowed, err := executorBundleForOverlay(
 		overlay, state.Posture, false, state.WebSearch, state.CommandExternalHidden, state.MCPState,
 	)
 	if err != nil {
 		return TurnAuthority{}, err
 	}
 
-	surfaceID := state.TurnProfile.SurfaceID
+	deps, sess, history, frame := buildCoordinatorTurnInputs(state, bundle)
+	metas, plan, resolvedSurfaceID, err := promptloop.ProjectTurnTools(ctx, deps, sess, history, frame)
+	if err != nil {
+		return TurnAuthority{}, fmt.Errorf("ProjectTurnTools: %w", err)
+	}
+	if state.TurnProfile.SurfaceID != "" && resolvedSurfaceID != state.TurnProfile.SurfaceID {
+		return TurnAuthority{}, fmt.Errorf(
+			"resolved surface %q disagrees with state.TurnProfile.SurfaceID %q",
+			resolvedSurfaceID, state.TurnProfile.SurfaceID,
+		)
+	}
+
 	filter := platform.ToolFilter{
 		ProfileID:        prompts.CoordinatorProfileID,
-		SurfaceID:        surfaceID,
+		SurfaceID:        resolvedSurfaceID,
 		ProjectRootCount: state.RootCount,
 	}
-	rawMetas, err := exec.Metadata.List(ctx, filter)
-	if err != nil {
-		return TurnAuthority{}, fmt.Errorf("Metadata.List: %w", err)
-	}
-	plan := applyCoordinatorRuntimePlan(state, rawMetas)
-	metas := filterCoordinatorTurnMetas(state, plan, rawMetas)
-
-	progReach, err := exec.Metadata.ProgramReach(ctx, filter)
+	progReach, err := bundle.exec.Metadata.ProgramReach(ctx, filter)
 	if err != nil {
 		return TurnAuthority{}, fmt.Errorf("Metadata.ProgramReach: %w", err)
 	}
@@ -233,8 +272,8 @@ func FreezeTurnAuthority(ctx context.Context, state CoordinatorState) (TurnAutho
 	offered := toolMetaNames(metas)
 	reader, err := prompts.NewReader(prompts.ReaderInput{
 		ProfileID: prompts.CoordinatorProfileID,
-		SurfaceID: surfaceID,
-		Mode:      surface.ExecutionModeFamily(surfaceID),
+		SurfaceID: resolvedSurfaceID,
+		Mode:      surface.ExecutionModeFamily(resolvedSurfaceID),
 		Profiles:  narrowed,
 		Plan:      plan,
 		Loaded:    state.Loaded,
@@ -252,77 +291,87 @@ func FreezeTurnAuthority(ctx context.Context, state CoordinatorState) (TurnAutho
 	return assembleTurnAuthority(metas, offered, plan, progReach, reader), nil
 }
 
-func applyCoordinatorRuntimePlan(state CoordinatorState, rawMetas []tools.ToolMeta) toolsurface.Plan {
-	plan := state.Plan
-	if !state.WebSearch {
-		plan = plan.Without(webresearch.SearchToolName, webresearch.FetchURLToolName)
+func buildCoordinatorTurnInputs(
+	state CoordinatorState,
+	bundle executorBundle,
+) (promptloop.ContextDeps, *api.Session, []api.Message, inject.CoordinatorTurnFrame) {
+	sess := &api.Session{
+		ID:        "coord-fixture",
+		Mode:      state.SessionMode,
+		Posture:   state.Posture,
+		AgentType: prompts.CoordinatorProfileID,
 	}
-	for name, ok := range state.Loaded {
-		if ok && plan.Addressable(name) {
-			plan = plan.Promote(name)
-		}
+	if len(state.Roots) > 0 {
+		sess.WorkspacePath = state.Roots[0].Ref.Path
+	} else if state.RootCount > 0 {
+		sess.WorkspacePath = "/tmp/fixture-primary"
 	}
-	if plan.Immediate("request_tools") {
-		for _, meta := range rawMetas {
-			if meta.IsMCP() && (state.SessionMode != api.SessionModeAsk || tools.AllowedInAsk(meta)) {
-				plan = plan.Promote(meta.Name)
-			}
-		}
+
+	history := state.History
+	if len(history) == 0 {
+		history = []api.Message{{Role: api.MessageRoleUser, Content: "Inspect current state"}}
 	}
-	if state.SessionMode == api.SessionModeAsk {
-		allowed := make(map[string]bool, len(rawMetas))
-		for _, m := range rawMetas {
-			allowed[m.Name] = tools.AllowedInAsk(m)
-		}
-		for _, name := range plan.AddressableNames() {
-			if !allowed[name] {
-				plan = plan.Without(name)
-			}
-		}
-		if !state.TurnProfile.WorkflowActive {
-			plan = plan.Without("ask_user")
-		}
+
+	runCtx := normalizeCoordinatorRunContext(state, sess, history)
+	var roster *inject.AgentRoster
+	if state.SpawnAllowlist != nil {
+		roster = &inject.AgentRoster{Effective: slices.Clone(state.SpawnAllowlist)}
 	}
-	return plan
+	frame := inject.CoordinatorTurnFrame{
+		RunContext: runCtx,
+		Roster:     roster,
+		Machine:    inject.Machine{ProfileID: prompts.CoordinatorProfileID},
+	}
+
+	policy := toolpolicy.NewEngine(toolpolicy.EngineDeps{
+		ToolLister:       bundle.exec.Metadata,
+		ProjectRootCount: func(context.Context, *api.Session) int { return state.RootCount },
+	})
+	deps := promptloop.ContextDeps{
+		Tools:  bundle.reg,
+		Policy: policy,
+		ImplementSessionState: func(context.Context, *api.Session) surface.ImplementSessionState {
+			return state.ImplementState
+		},
+		LoadedTools:      func(string) map[string]bool { return maps.Clone(state.Loaded) },
+		ProjectRootCount: func(context.Context, *api.Session) int { return state.RootCount },
+		ContextSurfaceDeps: promptloop.ContextSurfaceDeps{
+			WebSearchEnabled: func() bool { return state.WebSearch },
+		},
+	}
+	return deps, sess, history, frame
 }
 
-func filterCoordinatorTurnMetas(
+func normalizeCoordinatorRunContext(
 	state CoordinatorState,
-	plan toolsurface.Plan,
-	rawMetas []tools.ToolMeta,
-) []tools.ToolMeta {
-	metas := make([]tools.ToolMeta, 0, len(rawMetas))
-	for _, meta := range rawMetas {
-		if !toolcontract.AdmitsSession(meta.Name, false) && !meta.IsMCP() {
-			continue
-		}
-		if state.SessionMode == api.SessionModeAsk && !tools.AllowedInAsk(meta) {
-			continue
-		}
-		metas = append(metas, meta)
+	sess *api.Session,
+	history []api.Message,
+) api.CoordinatorRunContext {
+	runCtx := state.RunContext
+	if state.TurnProfile.AdvanceWhenGateMet != "" && runCtx.AdvanceWhenGateMet == "" {
+		runCtx.AdvanceWhenGateMet = state.TurnProfile.AdvanceWhenGateMet
 	}
-	if state.SessionMode == api.SessionModeAsk {
-		metas = promptloop.ProjectAskToolMetas(metas)
-	}
-	out := make([]tools.ToolMeta, 0, len(metas))
-	for _, meta := range metas {
-		if !plan.Immediate(meta.Name) {
-			continue
+	if runCtx.RunID == "" && state.TurnProfile.WorkflowActive {
+		runCtx.RunID = "fixture-run"
+		runCtx.WorkflowID = "fixture-workflow"
+		if runCtx.PhaseCoordinatorSurface == "" {
+			runCtx.PhaseCoordinatorSurface = state.TurnProfile.PhaseCoordinatorSurface
 		}
-		projected := tools.ProjectProviderToolMeta(meta)
-		switch meta.Name {
-		case "task":
-			if state.SpawnAllowlist != nil && len(state.SpawnAllowlist) == 0 {
-				continue
-			}
-			projected = guard.ApplySpawnAllowlistSchema(projected, state.SpawnAllowlist)
-		case "instruct_worker":
-			projected = guard.ApplySpawnAllowlistSchema(projected, state.SpawnAllowlist)
+		if runCtx.PhaseCoordinatorSurface == "" {
+			runCtx.PhaseCoordinatorSurface = state.TurnProfile.SurfaceID
 		}
-		out = append(out, projected)
 	}
-	sort.Slice(out, func(i, j int) bool { return out[i].Name < out[j].Name })
-	return out
+	if runCtx.RunID == "" && state.SessionMode != api.SessionModeAsk && state.TurnProfile.SurfaceID != "" {
+		resolved := surface.ResolveTurnProfile(runCtx, sess, history, state.ImplementState)
+		if resolved.SurfaceID != state.TurnProfile.SurfaceID {
+			runCtx.RunID = "fixture-run"
+			runCtx.WorkflowID = "fixture-workflow"
+			runCtx.PhaseCoordinatorSurface = state.TurnProfile.SurfaceID
+			runCtx.PhaseHostHeld = state.TurnProfile.SurfaceID == "await_host"
+			runCtx.HasComposeDraft = state.TurnProfile.SurfaceID == "workflow_compose"
+		}
+	}
+	return runCtx
 }
 
 func toolMetaNames(metas []tools.ToolMeta) []string {

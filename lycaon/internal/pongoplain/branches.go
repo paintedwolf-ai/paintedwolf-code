@@ -40,8 +40,10 @@ type BranchHit struct {
 	TakenFalse  int
 }
 
-// BranchRecorder collects branch outcomes when installed on ActiveBranchRecorder.
-// Leave ActiveBranchRecorder nil in production for zero execution overhead.
+// BranchRecorder aggregates branch outcomes under Mu when stored on
+// ActiveBranchRecorder. Tracked tags perform an atomic pointer load and skip
+// recording when nil; concurrent renders attribute hits via each token's
+// parsed filename (or Aliases entry) and must access Aliases and Hits under Mu.
 type BranchRecorder struct {
 	Mu      sync.Mutex
 	Aliases map[string]string

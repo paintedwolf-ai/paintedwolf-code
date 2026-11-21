@@ -3,11 +3,14 @@ package hoststate
 import (
 	"context"
 	"fmt"
+	"slices"
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/gate"
+	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/internal/sandbox"
+	"github.com/lycaon/lycaon/internal/toolsurface"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -152,5 +155,58 @@ func buildWorkerState(
 		HasGit: hasGit, HasAnyGitRoot: anyGit, OnWorkerBranch: onBranch,
 		Loaded: loaded, Overlay: overlay,
 		Excluded: excluded != "", ExcludedReason: excluded,
+	}
+}
+
+func buildRootsForTopology(rt RootTopology) (roots []RootSpec, primaryGit, anyGit bool) {
+	r1 := projectroot.RootRef{ID: "r1", Label: "primary", Path: "/tmp/fixture-primary", IsPrimary: true}
+	r2 := projectroot.RootRef{ID: "r2", Label: "secondary", Path: "/tmp/fixture-secondary", IsPrimary: false}
+	switch rt {
+	case RootsSingleGit:
+		return []RootSpec{{Ref: r1, HasGit: true}}, true, true
+	case RootsSingleNonGit:
+		return []RootSpec{{Ref: r1, HasGit: false}}, false, false
+	case RootsDualGitFirst:
+		return []RootSpec{{Ref: r1, HasGit: true}, {Ref: r2, HasGit: false}}, true, true
+	case RootsDualNonGitFirst:
+		return []RootSpec{{Ref: r1, HasGit: false}, {Ref: r2, HasGit: true}}, false, true
+	default:
+		return nil, false, false
+	}
+}
+
+func buildTempPaths(ts TempState) (scratch string, shared []string) {
+	switch ts {
+	case TempScratchOnly:
+		return "/tmp/pw-session-scratch", nil
+	case TempScratchAndShared:
+		return "/tmp/pw-session-scratch", []string{"/tmp/pw-shared-cache"}
+	default:
+		return "", nil
+	}
+}
+
+func selectLoadedTools(plan toolsurface.Plan, mode LoadingMode) (map[string]bool, string) {
+	deferred := plan.DeferredNames()
+	slices.Sort(deferred)
+	switch mode {
+	case LoadingFloorOnly:
+		return map[string]bool{}, ""
+	case LoadingPartlyLoaded:
+		if len(deferred) < 2 {
+			return nil, "partly_loaded_requires_at_least_two_deferred_tools"
+		}
+		return map[string]bool{deferred[0]: true}, ""
+	case LoadingAllLoaded:
+		if len(deferred) == 0 {
+			return nil, "all_loaded_redundant_on_closed_floor_surface"
+		}
+		out := make(map[string]bool, len(deferred))
+		for _, name := range deferred {
+			out[name] = true
+		}
+		return out, ""
+	default:
+		return map[string]bool{}, ""
 	}
 }

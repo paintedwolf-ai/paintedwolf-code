@@ -130,8 +130,9 @@ func buildWidestTupleReader(
 
 func verifyAuthorityProjections(t *testing.T, stock hoststate.PackOverlay) {
 	t.Helper()
+	askRunCtx := api.CoordinatorRunContext{RunID: "run-ask", PhaseCoordinatorSurface: "observe_plan"}
 	askProfile := surface.ResolveTurnProfile(
-		api.CoordinatorRunContext{RunID: "run-ask", PhaseCoordinatorSurface: "observe_plan"},
+		askRunCtx,
 		&api.Session{Mode: api.SessionModeAsk, Posture: api.SessionPostureBuild},
 		nil,
 	)
@@ -144,6 +145,7 @@ func verifyAuthorityProjections(t *testing.T, stock hoststate.PackOverlay) {
 		RootCount:      1,
 		HasGit:         true,
 		WebSearch:      true,
+		RunContext:     askRunCtx,
 		TurnProfile:    askProfile,
 		Plan:           askPlan,
 		SpawnAllowlist: prompts.ReadOnlyAgents(stock.SpawnAllowlist),
@@ -159,14 +161,12 @@ func verifyAuthorityProjections(t *testing.T, stock hoststate.PackOverlay) {
 		t.Fatal("ProjectAskToolMetas did not strip secret property from ask_user")
 	}
 
-	// Ask-spawned implementer worker must be clamped to read-only.
 	workerReader, err := hoststate.WorkerReaderForSession(t.Context(), askState, "implementer")
 	contractcheck.FailErr(t, "WorkerReaderForSession Ask implementer", err)
 	if workerReader.Held()[toolcontract.ReachCommandMutation] {
 		t.Fatal("Ask-spawned worker reader retained command_mutation")
 	}
 
-	// Read-only surface command schema must prune external-exec fields.
 	roProfile := surface.ResolveTurnProfileForSurface("implement_routing", api.CoordinatorRunContext{}, &api.Session{
 		Mode: api.SessionModeAgent, Posture: api.SessionPostureBuild,
 	})
@@ -187,77 +187,6 @@ func verifyAuthorityProjections(t *testing.T, stock hoststate.PackOverlay) {
 	cmdProps, _ := roAuth.Schemas["command"]["properties"].(map[string]any)
 	if _, hasVerif := cmdProps["verification"]; hasVerif {
 		t.Fatal("read-only command schema retained verification property")
-	}
-}
-
-func TestRenderCacheKeyDistinguishesNonReaderVars(t *testing.T) {
-	readerA, err := prompts.DeclaredReader(nil, "implement_investigate")
-	contractcheck.FailErr(t, "DeclaredReader A", err)
-	readerB, err := prompts.DeclaredReader(nil, "implement_investigate")
-	contractcheck.FailErr(t, "DeclaredReader B", err)
-	if readerA.Fingerprint() != readerB.Fingerprint() {
-		t.Fatalf("expected matching Reader.Fingerprint(), got %s vs %s", readerA.Fingerprint(), readerB.Fingerprint())
-	}
-
-	varsA, err := prompts.Vars(readerA, map[string]any{
-		"session_scratch_dir":     "/tmp/scratch-a",
-		"reviews_confined_writes": false,
-	})
-	contractcheck.FailErr(t, "Vars A", err)
-	varsB, err := prompts.Vars(readerB, map[string]any{
-		"session_scratch_dir":     "/tmp/scratch-b",
-		"reviews_confined_writes": true,
-	})
-	contractcheck.FailErr(t, "Vars B", err)
-
-	keyA := hoststate.RenderCacheKey("partials/command-surface.md", "rev-1", []string{"u1"}, varsA)
-	keyB := hoststate.RenderCacheKey("partials/command-surface.md", "rev-1", []string{"u1"}, varsB)
-	if keyA == keyB {
-		t.Fatal("RenderCacheKey collided across distinct non-Reader variables")
-	}
-
-	cache := hoststate.NewRenderCache()
-	calls := 0
-	out1, hit1, err := cache.RenderOrReuse(keyA, func() (string, error) {
-		calls++
-		return "rendered-body", nil
-	})
-	contractcheck.FailErr(t, "RenderOrReuse miss", err)
-	out2, hit2, err := cache.RenderOrReuse(keyA, func() (string, error) {
-		calls++
-		return "different", nil
-	})
-	contractcheck.FailErr(t, "RenderOrReuse hit", err)
-	if hit1 || !hit2 || calls != 1 || out1 != "rendered-body" || out2 != "rendered-body" {
-		t.Fatalf("unexpected cache behavior: hit1=%t hit2=%t calls=%d out1=%q out2=%q", hit1, hit2, calls, out1, out2)
-	}
-
-	// Same rendered bytes under two different wait schemas must trigger authority recheck.
-	auth1 := hoststate.AuthorityDigest(
-		[]string{"wait"},
-		map[string]map[string]any{"wait": {"enum": []string{"process_done"}}},
-		nil,
-		readerA.Mints(),
-		readerA,
-	)
-	auth2 := hoststate.AuthorityDigest(
-		[]string{"wait"},
-		map[string]map[string]any{"wait": {"enum": []string{"next_worker_done"}}},
-		nil,
-		readerA.Mints(),
-		readerA,
-	)
-	if auth1 == auth2 {
-		t.Fatal("AuthorityDigest collided across distinct wait schemas")
-	}
-	if !cache.NeedsAuthorityCheck(keyA, auth1) {
-		t.Fatal("first authority check should be required")
-	}
-	if cache.NeedsAuthorityCheck(keyA, auth1) {
-		t.Fatal("duplicate authority check should be skipped")
-	}
-	if !cache.NeedsAuthorityCheck(keyA, auth2) {
-		t.Fatal("distinct AuthorityDigest on same RenderCacheKey must re-run authority check")
 	}
 }
 

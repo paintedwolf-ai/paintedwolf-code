@@ -3,19 +3,19 @@ package hoststate
 import (
 	"context"
 	"fmt"
-	"sort"
+	"maps"
 
+	"github.com/lycaon/lycaon/internal/coordinator/inject"
 	"github.com/lycaon/lycaon/internal/coordinator/promptloop"
 	"github.com/lycaon/lycaon/internal/platform"
 	"github.com/lycaon/lycaon/internal/prompts"
-	"github.com/lycaon/lycaon/internal/toolcontract"
-	"github.com/lycaon/lycaon/internal/tools"
-	"github.com/lycaon/lycaon/internal/toolsurface"
+	"github.com/lycaon/lycaon/internal/toolpolicy"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
 // FreezeWorkerAuthority computes the production tool list, schema projections,
-// native program reach, and Reader for a WorkerState.
+// native program reach, and Reader for a WorkerState through toolpolicy.Engine
+// and promptloop.ProjectTurnTools.
 func FreezeWorkerAuthority(ctx context.Context, state WorkerState) (TurnAuthority, error) {
 	overlay := state.Overlay
 	if overlay.Catalog == nil {
@@ -26,47 +26,46 @@ func FreezeWorkerAuthority(ctx context.Context, state WorkerState) (TurnAuthorit
 		overlay = overlays[0]
 	}
 	askChild := state.ParentSessionMode == api.SessionModeAsk
-	exec, narrowed, err := ExecutorForOverlay(
+	bundle, narrowed, err := executorBundleForOverlay(
 		overlay, state.Posture, askChild, state.WebSearch, state.CommandExternalHidden, MCPNone,
 	)
 	if err != nil {
 		return TurnAuthority{}, err
 	}
-	filter := platform.ToolFilter{ProfileID: state.ToolProfile, ProjectRootCount: state.RootCount}
-	rawMetas, err := exec.Metadata.List(ctx, filter)
+
+	workerSess := &api.Session{
+		ID:              "worker-fixture",
+		ParentSessionID: "coord-fixture",
+		Mode:            state.ParentSessionMode,
+		Posture:         state.Posture,
+		AgentType:       state.AgentID,
+	}
+	if state.RootCount > 0 {
+		workerSess.WorkspacePath = "/tmp/fixture-primary"
+	}
+	policy := toolpolicy.NewEngine(toolpolicy.EngineDeps{
+		ToolLister:       bundle.exec.Metadata,
+		ProjectRootCount: func(context.Context, *api.Session) int { return state.RootCount },
+	})
+	deps := promptloop.ContextDeps{
+		Tools:            bundle.reg,
+		Policy:           policy,
+		LoadedTools:      func(string) map[string]bool { return maps.Clone(state.Loaded) },
+		ProjectRootCount: func(context.Context, *api.Session) int { return state.RootCount },
+		ContextSurfaceDeps: promptloop.ContextSurfaceDeps{
+			WebSearchEnabled: func() bool { return state.WebSearch },
+		},
+	}
+	frame := inject.CoordinatorTurnFrame{
+		Machine: inject.Machine{ProfileID: state.ToolProfile},
+	}
+	offeredMetas, plan, _, err := promptloop.ProjectTurnTools(ctx, deps, workerSess, nil, frame)
 	if err != nil {
-		return TurnAuthority{}, fmt.Errorf("worker Metadata.List: %w", err)
-	}
-	if askChild {
-		rawMetas = promptloop.ProjectAskToolMetas(rawMetas)
+		return TurnAuthority{}, fmt.Errorf("worker ProjectTurnTools: %w", err)
 	}
 
-	var immediate, deferred []string
-	kept := make([]tools.ToolMeta, 0, len(rawMetas))
-	for _, meta := range rawMetas {
-		if !toolcontract.AdmitsSession(meta.Name, true) {
-			continue
-		}
-		if askChild && !tools.AllowedInAsk(meta) {
-			continue
-		}
-		kept = append(kept, meta)
-		if meta.Deferred && !state.Loaded[meta.Name] {
-			deferred = append(deferred, meta.Name)
-		} else {
-			immediate = append(immediate, meta.Name)
-		}
-	}
-	plan := toolsurface.Compile(immediate, deferred)
-	offeredMetas := make([]tools.ToolMeta, 0, len(immediate))
-	for _, meta := range kept {
-		if plan.Immediate(meta.Name) {
-			offeredMetas = append(offeredMetas, tools.ProjectProviderToolMeta(meta))
-		}
-	}
-	sort.Slice(offeredMetas, func(i, j int) bool { return offeredMetas[i].Name < offeredMetas[j].Name })
-
-	progReach, err := exec.Metadata.ProgramReach(ctx, filter)
+	filter := platform.ToolFilter{ProfileID: state.ToolProfile, ProjectRootCount: state.RootCount}
+	progReach, err := bundle.exec.Metadata.ProgramReach(ctx, filter)
 	if err != nil {
 		return TurnAuthority{}, fmt.Errorf("worker Metadata.ProgramReach: %w", err)
 	}

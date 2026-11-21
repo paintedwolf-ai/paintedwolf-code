@@ -17,8 +17,9 @@ type RuleBranchHit struct {
 	ScenarioFalse int
 }
 
-// RuleBranchRecorder collects OAR rule when and next-steps branch outcomes when
-// installed on ActiveRuleBranchRecorder (zero cost when nil).
+// RuleBranchRecorder aggregates OAR when and next-steps outcomes under Mu when
+// stored on ActiveRuleBranchRecorder. Evaluation performs an atomic pointer
+// load and skips recording when nil.
 type RuleBranchRecorder struct {
 	Mu   sync.Mutex
 	Hits map[string]*RuleBranchHit

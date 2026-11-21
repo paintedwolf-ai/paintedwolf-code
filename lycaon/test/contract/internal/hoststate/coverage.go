@@ -139,6 +139,7 @@ type CoverageTracker struct {
 	templateRec   *pongoplain.BranchRecorder
 	ruleRec       *oar.RuleBranchRecorder
 	templateSpecs map[string][]pongoplain.BranchSpec
+	inlineOwners  map[string]string
 	ruleSpecs     map[string][]discoveredRuleBranch
 	reachedCells  int
 	excludedCells int
@@ -151,6 +152,7 @@ func NewCoverageTracker() *CoverageTracker {
 		templateRec:   &pongoplain.BranchRecorder{Aliases: map[string]string{}, Hits: map[string]*pongoplain.BranchHit{}},
 		ruleRec:       &oar.RuleBranchRecorder{Hits: map[string]*oar.RuleBranchHit{}},
 		templateSpecs: make(map[string][]pongoplain.BranchSpec),
+		inlineOwners:  make(map[string]string),
 		ruleSpecs:     make(map[string][]discoveredRuleBranch),
 		excludedWhy:   make(map[string]int),
 	}
@@ -177,11 +179,16 @@ func (t *CoverageTracker) RegisterTemplate(unitID, source string, profile pongop
 	if t.templateRec.Aliases == nil {
 		t.templateRec.Aliases = make(map[string]string)
 	}
-	t.templateRec.Aliases[inlineID] = unitID
+	owner, exists := t.templateRec.Aliases[inlineID]
+	if !exists {
+		owner = unitID
+		t.templateRec.Aliases[inlineID] = unitID
+	}
 	t.templateRec.Mu.Unlock()
 
 	t.mu.Lock()
 	t.templateSpecs[unitID] = analysis.Branches
+	t.inlineOwners[unitID] = owner
 	t.mu.Unlock()
 	return nil
 }
@@ -244,6 +251,10 @@ func (t *CoverageTracker) Report() CoverageReport {
 	for k, v := range t.templateSpecs {
 		tplSpecsCopy[k] = slices.Clone(v)
 	}
+	inlineOwnersCopy := make(map[string]string, len(t.inlineOwners))
+	for k, v := range t.inlineOwners {
+		inlineOwnersCopy[k] = v
+	}
 	ruleSpecsCopy := make(map[string][]discoveredRuleBranch, len(t.ruleSpecs))
 	for k, v := range t.ruleSpecs {
 		ruleSpecsCopy[k] = slices.Clone(v)
@@ -253,7 +264,7 @@ func (t *CoverageTracker) Report() CoverageReport {
 	return CoverageReport{
 		DiscoveredTemplates: tplIDs,
 		DiscoveredRules:     ruleIDs,
-		TemplateBranches:    t.collectTemplateSummaries(tplIDs, tplSpecsCopy),
+		TemplateBranches:    t.collectTemplateSummaries(tplIDs, tplSpecsCopy, inlineOwnersCopy),
 		RuleBranches:        t.collectRuleSummaries(ruleIDs, ruleSpecsCopy),
 		ReachedCells:        reached,
 		ExcludedCells:       excluded,
@@ -264,15 +275,22 @@ func (t *CoverageTracker) Report() CoverageReport {
 func (t *CoverageTracker) collectTemplateSummaries(
 	tplIDs []string,
 	specs map[string][]pongoplain.BranchSpec,
+	inlineOwners map[string]string,
 ) []TemplateBranchSummary {
 	t.templateRec.Mu.Lock()
 	defer t.templateRec.Mu.Unlock()
 	var out []TemplateBranchSummary
 	for _, unitID := range tplIDs {
+		owner := inlineOwners[unitID]
 		for _, sp := range specs[unitID] {
-			branchID := fmt.Sprintf("%s@L%d:C%d:%s", unitID, sp.Line, sp.Col, sp.Kind)
+			suffix := fmt.Sprintf("@L%d:C%d:%s", sp.Line, sp.Col, sp.Kind)
+			branchID := unitID + suffix
 			var takenTrue, takenFalse int
-			if hit := t.templateRec.Hits[branchID]; hit != nil {
+			hit := t.templateRec.Hits[branchID]
+			if hit == nil && owner != "" && owner != unitID {
+				hit = t.templateRec.Hits[owner+suffix]
+			}
+			if hit != nil {
 				takenTrue = hit.TakenTrue
 				takenFalse = hit.TakenFalse
 			}
