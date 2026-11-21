@@ -88,11 +88,15 @@ webE2e.describe("activity summary space", () => {
       const sessionId = await seedReadCard(page, request);
       await openCard(page, sessionId);
       const before = await bodyOffset(page);
+      const intent = page.getByTestId("activity-summary").locator('[data-section="intent"]');
+      const outcome = page.getByTestId("activity-summary").locator('[data-section="outcome"]');
+      await expect(intent).toContainText("Intent:");
+      await expect(outcome).toContainText("Outcome:");
       await expect(page.getByTestId("activity-summary")).toHaveAttribute("data-state", "ready", { timeout: 10_000 });
       await expect(page.getByTestId("activity-summary")).toContainText(text.purpose.slice(0, 30));
       expect(await bodyOffset(page)).toBeCloseTo(before, 0);
       if (name === "long") {
-        await page.getByTestId("activity-summary-show-all").click();
+        await page.getByRole("button", { name: "Show all outcome" }).click();
         expect(await bodyOffset(page)).toBeGreaterThan(before);
       }
     });

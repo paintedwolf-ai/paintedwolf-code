@@ -52,7 +52,7 @@ function Mark(props: { disclaimer: string }) {
   );
 }
 
-function Inline(props: { text: string }) {
+export function BriefingInline(props: { text: string }) {
   return (
     <For each={splitBriefingInline(props.text)}>
       {(part) => <Show when={part.kind === "code"} fallback={part.text}><code class="den-briefing-summary__code">{part.text}</code></Show>}
@@ -63,7 +63,7 @@ function Inline(props: { text: string }) {
 /** Text that arrives while watched fades in once; code spans keep their style throughout. */
 function ArrivingText(props: { text: string; onceKey: string }) {
   const fade = claimSummaryFade(props.onceKey);
-  return <span class={fade ? SUMMARY_FADE_CLASS : undefined}><Inline text={props.text} /></span>;
+  return <span class={fade ? SUMMARY_FADE_CLASS : undefined}><BriefingInline text={props.text} /></span>;
 }
 
 // The label flows with its text so a narrow pane wraps the sentence, not the label.
@@ -105,7 +105,7 @@ export function BriefingSummary(props: Props) {
             })()}
           >
             <p class="den-briefing-summary__section" data-section={section.id} data-source={section.source}>
-              <Show when={section.source === "summarizer"} fallback={<Labelled label={section.label}><Inline text={section.text ?? ""} /></Labelled>}>
+              <Show when={section.source === "summarizer"} fallback={<Labelled label={section.label}><BriefingInline text={section.text ?? ""} /></Labelled>}>
                 <Mark disclaimer={disclaimer()} />
                 <Labelled label={section.label}>
                   {(() => {
