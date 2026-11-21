@@ -3,11 +3,11 @@
 package launchguard
 
 import (
-	"time"
-	"errors"
 	"bytes"
+	"errors"
 	"os"
 	"testing"
+	"time"
 
 	"golang.org/x/sys/unix"
 
