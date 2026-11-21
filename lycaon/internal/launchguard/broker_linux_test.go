@@ -314,8 +314,11 @@ func TestBrokerAgentIdentityAndBootstrapHelpers(t *testing.T) {
 	holder, err := os.Open("/dev/null")
 	testutil.FailErr(t, "open stage handoff slot probe", err)
 	defer func() { _ = holder.Close() }()
-	testutil.FailErr(t, "place probe at stageGuardianFD", unix.Dup3(int(holder.Fd()), stageGuardianFD, unix.O_CLOEXEC))
-	defer func() { _ = unix.Close(stageGuardianFD) }()
+	holderFD := int(holder.Fd())
+	if holderFD != stageGuardianFD {
+		testutil.FailErr(t, "place probe at stageGuardianFD", unix.Dup3(holderFD, stageGuardianFD, unix.O_CLOEXEC))
+		defer func() { _ = unix.Close(stageGuardianFD) }()
+	}
 	if err := RunStage(); err == nil {
 		t.Fatal("expected RunStage to reject non-root caller")
 	}
@@ -324,6 +327,7 @@ func TestBrokerAgentIdentityAndBootstrapHelpers(t *testing.T) {
 	runtime.GC()
 	runtime.GC()
 	<-finalized
+	runtime.KeepAlive(holder)
 	if _, err := unix.FcntlInt(stageGuardianFD, unix.F_GETFD, 0); err != nil {
 		t.Fatalf("RunStage claimed stageGuardianFD (%d) before privilege checks: %v", stageGuardianFD, err)
 	}
