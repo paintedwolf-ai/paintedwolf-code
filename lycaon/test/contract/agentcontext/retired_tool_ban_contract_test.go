@@ -22,6 +22,7 @@ import (
 	"github.com/lycaon/lycaon/internal/toolvocab"
 	"github.com/lycaon/lycaon/test/contract/internal/catalogfixture"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
+	"github.com/lycaon/lycaon/test/contract/internal/hoststate"
 	"github.com/lycaon/lycaon/test/contract/invariants/promptrender"
 	"gopkg.in/yaml.v3"
 )
@@ -58,12 +59,14 @@ func checkBannedMention(t *testing.T, mention *regexp.Regexp, label, corpus stri
 // rendered copy presents a fully retired tool name as a call.
 func TestRenderedStockCopyNeverNamesFullyRetiredTools(t *testing.T) {
 	retired := retiredToolMention(t)
+	folderless, err := hoststate.FolderlessSurfaces()
+	contractcheck.FailErr(t, "folderless surfaces", err)
 
 	for _, rootCount := range []int{0, 1, 2} {
 		plans, err := surface.CompileToolPlans(rootCount)
 		contractcheck.FailErr(t, "compile tool plans", err)
 		for id := range plans {
-			if rootCount == 0 && !slices.Contains(noFolderSurfaces, id) {
+			if rootCount == 0 && !slices.Contains(folderless, id) {
 				continue
 			}
 			t.Run(fmt.Sprintf("coordinator/%s/%d-roots", id, rootCount), func(t *testing.T) {

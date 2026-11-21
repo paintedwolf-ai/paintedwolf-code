@@ -4,6 +4,7 @@ package pongoplain
 import (
 	"fmt"
 	"io"
+	"strings"
 
 	"github.com/flosch/pongo2/v6"
 	"github.com/lycaon/lycaon/internal/scopedstore"
@@ -23,7 +24,10 @@ const (
 	MaxCompositionDepth = 12
 )
 
-func init() { pongo2.SetAutoescape(false) }
+func init() {
+	pongo2.SetAutoescape(false)
+	installTrackedControlTags()
+}
 
 // Profile is the closed vocabulary of template capabilities.
 type Profile uint8
@@ -94,10 +98,16 @@ func NewSet(name string, loader pongo2.TemplateLoader, profile Profile) (*pongo2
 	return set, nil
 }
 
-type denyLoader struct{}
+type denyLoader struct {
+	id     string
+	source string
+}
 
 func (denyLoader) Abs(_, name string) string { return name }
-func (denyLoader) Get(path string) (io.Reader, error) {
+func (l denyLoader) Get(path string) (io.Reader, error) {
+	if l.id != "" && path == l.id {
+		return strings.NewReader(l.source), nil
+	}
 	return nil, fmt.Errorf("pongoplain: isolated template requested file %q", path)
 }
 
@@ -111,12 +121,13 @@ func Compile(source string) (*pongo2.Template, error) {
 	if _, err := Inspect(source, Isolated); err != nil {
 		return nil, err
 	}
-	// Each body has isolated mutable parse state.
-	set, err := NewSet("painted-wolf-string", denyLoader{}, Isolated)
+	inlineID := InlineTemplateID(source)
+	// Each body has isolated mutable parse state and a deterministic inline ID.
+	set, err := NewSet("painted-wolf-string", denyLoader{id: inlineID, source: source}, Isolated)
 	if err != nil {
 		return nil, err
 	}
-	tpl, err := set.FromString(source)
+	tpl, err := set.FromFile(inlineID)
 	if err != nil {
 		return nil, fmt.Errorf("pongoplain: compile: %w", err)
 	}

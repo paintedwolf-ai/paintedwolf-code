@@ -116,7 +116,7 @@ func buildReaderFacts(
 	isCoordinator := surfaceID != "" || profileID == CoordinatorProfileID
 	offeredSet := toolNameSet(offered)
 	command := commandEffectFlags(offeredSet["command"], effects)
-	reachHeld := readerHeldSet(offeredSet, effects)
+	reachHeld := readerProfileHeldSet(profile, offeredSet, effects)
 
 	writeTools := orderedEnabledTools(nativeWriteTools, offeredSet)
 	if command.mutation {
@@ -235,7 +235,7 @@ func buildReaderFacts(
 		}
 	}
 
-	f.Mints = evidenceMintsForCommand(offeredSet, command.mutation, command.externalExec)
+	f.Mints = evidenceMints(reachHeld)
 	f.ReceiptKind = evidence.ActiveBinding().ReceiptKinds()
 	for name := range vocab.ReceiptTools {
 		if _, ok := f.ReceiptKind[name]; !ok {

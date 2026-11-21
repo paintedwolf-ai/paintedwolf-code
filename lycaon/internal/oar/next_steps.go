@@ -310,9 +310,10 @@ func ResolveNextSteps(r *Rule, gc *GuardContext) ResolvedSteps {
 		return out
 	}
 	facts := activation(gc)
+	ruleID := r.Qualified()
 	var sentences []string
-	for _, step := range r.NextSteps.Steps {
-		text, calls := resolveStep(step, gc, facts)
+	for i, step := range r.NextSteps.Steps {
+		text, calls := resolveStep(ruleID, fmt.Sprintf("steps[%d]", i), i, step, gc, facts)
 		if strings.TrimSpace(text) != "" {
 			sentences = append(sentences, text)
 		}
@@ -322,13 +323,17 @@ func ResolveNextSteps(r *Rule, gc *GuardContext) ResolvedSteps {
 	return out
 }
 
-func resolveStep(step NextStep, gc *GuardContext, facts map[string]any) (string, []toolreach.Call) {
+func resolveStep(ruleID, branchPrefix string, stepIndex int, step NextStep, gc *GuardContext, facts map[string]any) (string, []toolreach.Call) {
 	applies, err := EvaluateCondition(step.When, gc)
+	if strings.TrimSpace(step.When) != "" && err == nil {
+		recordRuleBranch(ruleID, branchPrefix+".when", stepIndex, gc, applies)
+	}
 	if err != nil || !applies {
 		return "", nil
 	}
 	if call, built := stepCall(step, gc, facts); built {
 		if sequence, reachable := gc.Reach.Sequence(call); reachable {
+			recordRuleBranch(ruleID, branchPrefix+".reach", stepIndex, gc, true)
 			bound := make(map[string]any, len(facts)+1)
 			for name, value := range facts {
 				bound[name] = value
@@ -337,8 +342,9 @@ func resolveStep(step NextStep, gc *GuardContext, facts map[string]any) (string,
 			return oarcore.RenderCopy(step.Say, bound), sequence
 		}
 	}
-	for _, alternative := range step.Or {
-		if text, calls := resolveStep(alternative, gc, facts); strings.TrimSpace(text) != "" {
+	recordRuleBranch(ruleID, branchPrefix+".reach", stepIndex, gc, false)
+	for j, alternative := range step.Or {
+		if text, calls := resolveStep(ruleID, fmt.Sprintf("%s.or[%d]", branchPrefix, j), stepIndex, alternative, gc, facts); strings.TrimSpace(text) != "" {
 			return text, calls
 		}
 	}

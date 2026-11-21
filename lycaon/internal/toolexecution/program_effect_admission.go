@@ -135,6 +135,9 @@ func (e *Metadata) ProgramReach(ctx context.Context, filter platform.ToolFilter)
 		if !surfaceAllowsCommandForm(surfaceTools, spec.Name) {
 			permitted = false
 		}
+		if e.externalHidden && spec.Name == "external" {
+			permitted = false
+		}
 		reachable[spec.Name] = permitted && anyModeAllowed(spec, allowed)
 	}
 	return func(name string) bool { return reachable[name] }, nil

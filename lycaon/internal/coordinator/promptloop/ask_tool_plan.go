@@ -12,7 +12,8 @@ import (
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
-func askToolArgumentSchemas(metas []tools.ToolMeta) []tools.ToolMeta {
+// ProjectAskToolMetas narrows ask_user schema options for Ask-mode requests.
+func ProjectAskToolMetas(metas []tools.ToolMeta) []tools.ToolMeta {
 	out := append([]tools.ToolMeta(nil), metas...)
 	for index, meta := range out {
 		if meta.Name != "ask_user" {
