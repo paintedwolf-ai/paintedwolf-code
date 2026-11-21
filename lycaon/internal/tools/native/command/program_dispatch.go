@@ -286,6 +286,11 @@ func (d *ProgramDispatcher) invokeBuiltin(ctx context.Context, spec toolcontract
 func (d *ProgramDispatcher) invokeExternal(ctx context.Context, request commandprogram.OperationRequest, streams commandprogram.Streams) (toolcontract.ProducerResult, error) {
 	if d.run.tc.Source.AskMode {
 		reject := tools.AskModeReject("command")
+		command := "external"
+		if len(request.Argv) > 0 && request.Argv[0].Value != "" {
+			command = request.Argv[0].Value
+		}
+		d.writeStatementRefusal(streams, command, reject)
 		return refusedResult(reject.Code), reject
 	}
 	spec := d.run.commands["external"]
