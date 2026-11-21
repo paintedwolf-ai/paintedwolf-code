@@ -27,7 +27,7 @@ func Revision5(target Baseline) Step {
 		ID:       "source-manifests-and-command-records",
 		Checksum: "3c1367dfa1ba765e99099758135817ceee1550418b6a2d105643a606966da999",
 		From:     manifestLayoutSource, To: target,
-	}, SourceManifestLayout(), VaultUnlockAway(), EffectPermitIdentity(), ProgramReceipts(), SourceLinkKind(), SessionProgressIdentity(), TurnLoadVisibility(), EvidenceRootID(), ToolResultFileEdits(), Briefings(), LiveModelOutputs(), WorkerRecords(), VersionReclaimProbe(), ProgramPublications())
+	}, SourceManifestLayout(), VaultUnlockAway(), EffectPermitIdentity(), ProgramReceipts(), SourceLinkKind(), SessionProgressIdentity(), TurnLoadVisibility(), EvidenceRootID(), ToolResultFileEdits(), Briefings(), LiveModelOutputs(), WorkerRecords(), VersionReclaimProbe(), ProgramPublications(), WorkflowManifestStorage())
 }
 
 func composeStep(step Step, parts ...Part) Step {
@@ -92,5 +92,16 @@ func ProgramPublications() Part {
 		return err
 	}, Writes: func(context.Context, DBTX, uint64) (uint64, error) {
 		return 1 << 20, nil
+	}}
+}
+
+//go:embed workflow_manifest_storage.sql
+var workflowManifestStorageSQL []byte
+
+func WorkflowManifestStorage() Part {
+	// The added column uses a constant default and leaves existing rows in place.
+	return Part{Source: workflowManifestStorageSQL, Writes: func(context.Context, DBTX, uint64) (uint64, error) { return 0, nil }, Apply: func(ctx context.Context, tx *sql.Tx) error {
+		_, err := tx.ExecContext(ctx, string(workflowManifestStorageSQL))
+		return err
 	}}
 }

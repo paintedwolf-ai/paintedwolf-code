@@ -139,7 +139,11 @@ func (m *Children) InvokeChild(ctx context.Context, parentRunID string, spec wor
 		childRun.EndMessageID = childBoundary.ID
 		messages = append(messages, childBoundary)
 	}
-	mutation := runstate.ChildStartMutation{ProjectDir: projectDir, Vars: vars, Messages: messages,
+	snapshot, err := workflowdef.EncodeRunManifest(childManifest)
+	if err != nil {
+		return nil, err
+	}
+	mutation := runstate.ChildStartMutation{ManifestYAML: snapshot, ProjectDir: projectDir, Vars: vars, Messages: messages,
 		Posture: runstate.MutationPosture(childRun, vars, workflowdef.StartPosture(childManifest, childRun.CurrentPhase))}
 	if err := m.Starts.StartChild(ctx, parent, childRun, mutation); err != nil {
 		return nil, err

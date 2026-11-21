@@ -1,0 +1,113 @@
+package vocabulary
+
+const (
+	CompleteWhenGatesSatisfied = "gates_satisfied"
+	CompleteWhenGateSatisfied  = "gate_satisfied:"
+)
+
+type usage uint8
+
+const (
+	predicate usage = iota
+	overlayPredicate
+	completionForm
+	catalogOnly
+	hostOnly
+)
+
+type declaration struct {
+	domain string
+	usage  usage
+}
+
+var declarations = map[string]declaration{
+	"var_set:*":                     {"—", hostOnly},
+	"agent_is:*":                    {"—", predicate},
+	"agent_is_plan_writer":          {"—", predicate},
+	"approval_denied":               {"—", predicate},
+	"closeout_gates_passed":         {"—", predicate},
+	"critic_task":                   {"—", predicate},
+	"delegation_closeout_complete":  {"—", overlayPredicate},
+	"delivery_gates_passed":         {"—", predicate},
+	"disallowed_agent":              {"—", predicate},
+	"doom_loop_exceeded":            {"—", predicate},
+	"evidence_missing:*":            {"—", predicate},
+	"fanout_planned":                {"—", predicate},
+	"grounding_blocked":             {"—", predicate},
+	"handoff_not_ready":             {"—", predicate},
+	"high_risk_tool":                {"—", predicate},
+	"iteration_cap_near":            {"—", predicate},
+	"pack_runner_task":              {"—", predicate},
+	"parallel_stages_complete":      {"—", predicate},
+	"plan_not_approved":             {"—", predicate},
+	"posture_is:*":                  {"—", predicate},
+	"posture_is_build":              {"—", predicate},
+	"posture_is_orchestrate":        {"—", predicate},
+	"posture_is_spec":               {"—", predicate},
+	"posture_is_vet":                {"—", predicate},
+	"posture_unresolved":            {"—", predicate},
+	"project_has_no_roots":          {"—", predicate},
+	"project_has_roots":             {"—", predicate},
+	"recon_or_board_ready":          {"—", predicate},
+	"research_task":                 {"—", predicate},
+	"stub_invalid":                  {"—", predicate},
+	"stub_valid":                    {"—", predicate},
+	"tool_is_command":               {"—", predicate},
+	"tool_is_delegation":            {"—", predicate},
+	"tool_is_handoff":               {"—", predicate},
+	"tool_is_scan_pack":             {"—", predicate},
+	"tool_is_state":                 {"—", predicate},
+	"tool_is_task":                  {"—", predicate},
+	"tool_is_workflow_advance":      {"—", predicate},
+	"tool_is_workflow_transition":   {"—", predicate},
+	"tool_is_write":                 {"—", predicate},
+	"tool_names_agent":              {"—", predicate},
+	"tool_requires_project_roots":   {"—", predicate},
+	"topology_report_delivered":     {"—", predicate},
+	"topology_stage_complete":       {"—", predicate},
+	"user_decision_pending:*":       {"—", predicate},
+	"user_feedback_pending:*":       {"—", predicate},
+	"worker_cycle_ready":            {"—", predicate},
+	"workflow_active":               {"—", predicate},
+	"workflow_not_runnable":         {"—", predicate},
+	"workflow_paused":               {"—", predicate},
+	"baseline_scan_complete":        {"scan", predicate},
+	"lint_gate_passed":              {"scan", predicate},
+	"no_critical_findings":          {"scan", predicate},
+	"required_scans_enqueued":       {"scan", predicate},
+	"scan_pending":                  {"scan", predicate},
+	"scan_stale":                    {"scan", predicate},
+	"security_evidence_fresh":       {"scan", predicate},
+	"blueprint_materialized":        {"blueprint", predicate},
+	"options_selection_valid":       {"blueprint", predicate},
+	"breaking_missing":              {"plan", predicate},
+	"implement_workflow_ready":      {"plan", predicate},
+	"plan_awaiting_approval":        {"plan", predicate},
+	"plan_stub_valid":               {"plan", predicate},
+	"research_required":             {"plan", predicate},
+	"research_satisfied":            {"plan", predicate},
+	"review_depth_missing":          {"plan", predicate},
+	"review_loop_active":            {"plan", predicate},
+	"scope_missing":                 {"plan", predicate},
+	"child_run_complete":            {"—", overlayPredicate},
+	"child_run_failed":              {"—", overlayPredicate},
+	"choice_transition_required":    {"—", overlayPredicate},
+	"evidence_passed:*":             {"—", overlayPredicate},
+	"gate_passed:*":                 {"—", overlayPredicate},
+	"hitl_consulted:*":              {"—", overlayPredicate},
+	"human_approval":                {"—", overlayPredicate},
+	"obligation_settled:*":          {"—", overlayPredicate},
+	"orchestration_complete":        {"—", overlayPredicate},
+	"phase_is:*":                    {"—", overlayPredicate},
+	"phase_skipped:*":               {"—", overlayPredicate},
+	"user_decision:*":               {"—", overlayPredicate},
+	"user_decision_received:*":      {"—", overlayPredicate},
+	"user_feedback_received:*":      {"—", overlayPredicate},
+	"var_equals:*":                  {"—", overlayPredicate},
+	"var_truthy:*":                  {"—", overlayPredicate},
+	"findings_triaged":              {"scan", catalogOnly},
+	"remediation_complete":          {"scan", catalogOnly},
+	CompleteWhenGateSatisfied + "*": {"—", completionForm},
+	CompleteWhenGatesSatisfied:      {"—", completionForm},
+	"permission_denied":             {"—", catalogOnly},
+}

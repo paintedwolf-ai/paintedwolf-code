@@ -10,6 +10,33 @@ import (
 	"database/sql"
 )
 
+const deletePublishedWorkflowDraft = `-- name: DeletePublishedWorkflowDraft :exec
+DELETE FROM session_workflows
+WHERE session_id = ? AND workflow_id = ? AND version = ?
+  AND manifest_yaml = ? AND authored_yaml = ? AND created_at = ?
+`
+
+type DeletePublishedWorkflowDraftParams struct {
+	SessionID    string `json:"session_id"`
+	WorkflowID   string `json:"workflow_id"`
+	Version      string `json:"version"`
+	ManifestYaml string `json:"manifest_yaml"`
+	AuthoredYaml string `json:"authored_yaml"`
+	CreatedAt    string `json:"created_at"`
+}
+
+func (q *Queries) DeletePublishedWorkflowDraft(ctx context.Context, arg DeletePublishedWorkflowDraftParams) error {
+	_, err := q.db.ExecContext(ctx, deletePublishedWorkflowDraft,
+		arg.SessionID,
+		arg.WorkflowID,
+		arg.Version,
+		arg.ManifestYaml,
+		arg.AuthoredYaml,
+		arg.CreatedAt,
+	)
+	return err
+}
+
 const deleteSessionWorkflow = `-- name: DeleteSessionWorkflow :execrows
 DELETE FROM session_workflows
 WHERE session_id = ? AND workflow_id = ? AND version = ?
@@ -29,6 +56,17 @@ func (q *Queries) DeleteSessionWorkflow(ctx context.Context, arg DeleteSessionWo
 	return result.RowsAffected()
 }
 
+const getRunManifest = `-- name: GetRunManifest :one
+SELECT manifest_yaml FROM workflow_run_manifests WHERE run_id = ?
+`
+
+func (q *Queries) GetRunManifest(ctx context.Context, runID string) (string, error) {
+	row := q.db.QueryRowContext(ctx, getRunManifest, runID)
+	var manifest_yaml string
+	err := row.Scan(&manifest_yaml)
+	return manifest_yaml, err
+}
+
 const getSessionScaffoldVars = `-- name: GetSessionScaffoldVars :one
 SELECT vars_json FROM session_workflow_scaffold WHERE session_id = ?
 `
@@ -41,7 +79,7 @@ func (q *Queries) GetSessionScaffoldVars(ctx context.Context, sessionID string) 
 }
 
 const getSessionWorkflow = `-- name: GetSessionWorkflow :one
-SELECT session_id, workflow_id, version, manifest_yaml, effective_summary_json, created_at, created_by, created_by_person_id
+SELECT session_id, workflow_id, version, manifest_yaml, effective_summary_json, created_at, created_by, created_by_person_id, authored_yaml
 FROM session_workflows
 WHERE session_id = ? AND workflow_id = ? AND version = ?
 `
@@ -64,12 +102,13 @@ func (q *Queries) GetSessionWorkflow(ctx context.Context, arg GetSessionWorkflow
 		&i.CreatedAt,
 		&i.CreatedBy,
 		&i.CreatedByPersonID,
+		&i.AuthoredYaml,
 	)
 	return i, err
 }
 
 const listSessionWorkflows = `-- name: ListSessionWorkflows :many
-SELECT session_id, workflow_id, version, manifest_yaml, effective_summary_json, created_at, created_by, created_by_person_id
+SELECT session_id, workflow_id, version, manifest_yaml, effective_summary_json, created_at, created_by, created_by_person_id, authored_yaml
 FROM session_workflows
 WHERE session_id = ?
 ORDER BY workflow_id ASC, version DESC
@@ -93,6 +132,7 @@ func (q *Queries) ListSessionWorkflows(ctx context.Context, sessionID string) ([
 			&i.CreatedAt,
 			&i.CreatedBy,
 			&i.CreatedByPersonID,
+			&i.AuthoredYaml,
 		); err != nil {
 			return nil, err
 		}
@@ -105,6 +145,20 @@ func (q *Queries) ListSessionWorkflows(ctx context.Context, sessionID string) ([
 		return nil, err
 	}
 	return items, nil
+}
+
+const saveRunManifest = `-- name: SaveRunManifest :exec
+INSERT INTO workflow_run_manifests (run_id, manifest_yaml) VALUES (?, ?)
+`
+
+type SaveRunManifestParams struct {
+	RunID        string `json:"run_id"`
+	ManifestYaml string `json:"manifest_yaml"`
+}
+
+func (q *Queries) SaveRunManifest(ctx context.Context, arg SaveRunManifestParams) error {
+	_, err := q.db.ExecContext(ctx, saveRunManifest, arg.RunID, arg.ManifestYaml)
+	return err
 }
 
 const upsertSessionScaffoldVars = `-- name: UpsertSessionScaffoldVars :exec
@@ -128,14 +182,15 @@ func (q *Queries) UpsertSessionScaffoldVars(ctx context.Context, arg UpsertSessi
 
 const upsertSessionWorkflow = `-- name: UpsertSessionWorkflow :exec
 
-INSERT INTO session_workflows (session_id, workflow_id, version, manifest_yaml, effective_summary_json, created_at, created_by, created_by_person_id)
-VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+INSERT INTO session_workflows (session_id, workflow_id, version, manifest_yaml, effective_summary_json, created_at, created_by, created_by_person_id, authored_yaml)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
 ON CONFLICT(session_id, workflow_id, version) DO UPDATE SET
     manifest_yaml = excluded.manifest_yaml,
     effective_summary_json = excluded.effective_summary_json,
     created_at = excluded.created_at,
     created_by = excluded.created_by,
-    created_by_person_id = excluded.created_by_person_id
+    created_by_person_id = excluded.created_by_person_id,
+    authored_yaml = excluded.authored_yaml
 `
 
 type UpsertSessionWorkflowParams struct {
@@ -147,6 +202,7 @@ type UpsertSessionWorkflowParams struct {
 	CreatedAt            string         `json:"created_at"`
 	CreatedBy            string         `json:"created_by"`
 	CreatedByPersonID    sql.NullString `json:"created_by_person_id"`
+	AuthoredYaml         string         `json:"authored_yaml"`
 }
 
 // Per-session workflow manifests and the session scaffold vars sidecar.
@@ -160,6 +216,7 @@ func (q *Queries) UpsertSessionWorkflow(ctx context.Context, arg UpsertSessionWo
 		arg.CreatedAt,
 		arg.CreatedBy,
 		arg.CreatedByPersonID,
+		arg.AuthoredYaml,
 	)
 	return err
 }

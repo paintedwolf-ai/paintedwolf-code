@@ -19,7 +19,8 @@ func (p Plan) reviewedRetainedRoute() bool {
 	// rebuilds use the measured receipt tree. The evidence, file edit, and
 	// worker record rewrites use their declared write estimates. Briefing
 	// and publication indexes start empty. Dropping live_model_outputs and
-	// replacing the version reclaim trigger do not rewrite rows.
+	// replacing the version reclaim trigger do not rewrite rows. Workflow
+	// manifest storage adds an empty table and a constant-default column.
 	return p.steps[0].ID == "source-manifests-and-command-records" &&
 		p.steps[0].Checksum == "3c1367dfa1ba765e99099758135817ceee1550418b6a2d105643a606966da999"
 }

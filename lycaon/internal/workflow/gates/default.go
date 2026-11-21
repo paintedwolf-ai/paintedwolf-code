@@ -4,6 +4,7 @@ import (
 	"context"
 	"strings"
 
+	"github.com/lycaon/lycaon/internal/vocabulary"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -25,7 +26,7 @@ func (FailClosedGateEvaluator) PhaseGateMet(_ context.Context, manifest workflow
 	}
 	cw := strings.TrimSpace(def.CompleteWhen)
 	switch cw {
-	case workflowdef.CompleteWhenGatesSatisfied:
+	case vocabulary.CompleteWhenGatesSatisfied:
 		var failed []string
 		for _, gate := range def.Gates {
 			if !SatisfiedInVars(vars, gate) {
@@ -34,7 +35,7 @@ func (FailClosedGateEvaluator) PhaseGateMet(_ context.Context, manifest workflow
 		}
 		if len(failed) > 0 {
 			return false, GateCheckResult{
-				Reason:       workflowdef.CompleteWhenGatesSatisfied,
+				Reason:       vocabulary.CompleteWhenGatesSatisfied,
 				FailedGate:   failed[0],
 				FailedLeaves: failed,
 			}, nil
@@ -43,8 +44,8 @@ func (FailClosedGateEvaluator) PhaseGateMet(_ context.Context, manifest workflow
 	case "":
 		return true, GateCheckResult{}, nil
 	default:
-		if strings.HasPrefix(cw, workflowdef.CompleteWhenGateSatisfied) {
-			gate := strings.TrimPrefix(cw, workflowdef.CompleteWhenGateSatisfied)
+		if strings.HasPrefix(cw, vocabulary.CompleteWhenGateSatisfied) {
+			gate := strings.TrimPrefix(cw, vocabulary.CompleteWhenGateSatisfied)
 			if SatisfiedInVars(vars, gate) {
 				return true, GateCheckResult{Reason: cw}, nil
 			}

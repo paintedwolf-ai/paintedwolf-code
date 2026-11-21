@@ -31,6 +31,7 @@ type workflowFile struct {
 	Blueprint          *blueprintYAML                   `yaml:"blueprint"`
 	Presets            []manifestPresetYAML             `yaml:"presets"`
 	Injects            []anchor.WorkflowInject          `yaml:"injects"`
+	WorkflowFormat     *int                             `yaml:"workflow_format,omitempty"`
 }
 
 type agentYAML struct {

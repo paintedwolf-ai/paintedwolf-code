@@ -1599,6 +1599,7 @@ type SessionWorkflows struct {
 	CreatedAt            string         `json:"created_at"`
 	CreatedBy            string         `json:"created_by"`
 	CreatedByPersonID    sql.NullString `json:"created_by_person_id"`
+	AuthoredYaml         string         `json:"authored_yaml"`
 }
 
 type SessionWorktrees struct {
@@ -2448,6 +2449,11 @@ type WorkflowReviewSubjects struct {
 	Phase       string `json:"phase"`
 	Revision    string `json:"revision"`
 	SubjectJson string `json:"subject_json"`
+}
+
+type WorkflowRunManifests struct {
+	RunID        string `json:"run_id"`
+	ManifestYaml string `json:"manifest_yaml"`
 }
 
 type WorkflowRunPageOrdinals struct {
