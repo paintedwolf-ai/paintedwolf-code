@@ -6,13 +6,23 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/dotversion"
+	"github.com/lycaon/lycaon/internal/platformfloor"
 	"github.com/lycaon/lycaon/internal/testutil"
 )
 
 func TestLinuxDefaultEnvReportsHealthyHostFacts(t *testing.T) {
 	env := DefaultEnv(t.TempDir(), nil, nil, nil, nil, nil)
-	if got := run(t, osVersionProbe{}, env); got.Status != StatusOK || got.Code != "" {
-		t.Fatalf("os version probe = %+v, want ok without a code", got)
+	glibc, err := env.LibcVersion()
+	testutil.FailErr(t, "read glibc version", err)
+	cmp, err := dotversion.Compare(glibc, platformfloor.LinuxGlibcMin())
+	testutil.FailErr(t, "compare glibc floor", err)
+	got := run(t, osVersionProbe{}, env)
+	if cmp >= 0 {
+		if got.Status != StatusOK || got.Code != "" {
+			t.Fatalf("os version probe = %+v, want ok without a code", got)
+		}
+	} else if got.Status != StatusBlocked || got.Code != CodeOSBelowFloor || got.Detail["got"] != glibc {
+		t.Fatalf("os version probe = %+v, want blocked %s for glibc %s", got, CodeOSBelowFloor, glibc)
 	}
 	free, err := env.FreeBytes(env.ConfigDir)
 	if err != nil || free == 0 {

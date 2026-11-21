@@ -1,8 +1,6 @@
 package native
 
 import (
-	"github.com/lycaon/lycaon/internal/repochange/repochangetest"
-
 	"encoding/json"
 	"testing"
 
@@ -28,9 +26,8 @@ func decodeSourceWindowReceipt(t *testing.T, raw string) sourceWindowReceipt {
 }
 
 func TestCaptureResultStatesItsWindowACCW07(t *testing.T) {
-
-	repochangetest.Acquire(t)
 	f := newNativeWalkFixture(t)
+	retireObservedStreams(t, f.dir)
 	boundary := sandbox.NewBoundary(sandbox.Config{ProjectRootRequired: true}, []sandbox.ToolProfile{{ID: f.tc.Identity.Agent, Tools: map[string]bool{"command": true}}})
 	tool := &command.CommandTool{Runner: hostcmd.NewRunner(), Boundary: boundary, Background: newTestBackgroundRegistry(t)}
 	raw, err := tool.Run(t.Context(), map[string]any{"command": "true", "terminal_capture": map[string]any{}}, f.tc)

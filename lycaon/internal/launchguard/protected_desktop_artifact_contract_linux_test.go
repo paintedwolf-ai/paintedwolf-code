@@ -15,7 +15,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/lycaon/lycaon/internal/configlayout"
 	"github.com/lycaon/lycaon/internal/pkgmanifest"
 	"github.com/lycaon/lycaon/internal/testutil"
 )
@@ -120,7 +119,7 @@ func fixtureArchitecture(t *testing.T) string {
 }
 
 func releaseFixtureArchitecture() (string, error) {
-	path := filepath.Join(configlayout.FindModuleRoot(), "..", "packaging", "release-platforms.json")
+	path := filepath.Join("..", "..", "..", "packaging", "release-platforms.json")
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return "", err

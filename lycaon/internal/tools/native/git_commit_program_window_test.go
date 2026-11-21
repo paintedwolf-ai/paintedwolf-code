@@ -1,6 +1,7 @@
 package native
 
 import (
+	"context"
 	"encoding/json"
 	"os"
 	"path/filepath"
@@ -25,12 +26,21 @@ import (
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
+func retireObservedStreams(t *testing.T, dir string) {
+	t.Helper()
+	repochangetest.Acquire(t)
+	t.Cleanup(repochange.RegisterObserver(func(_ context.Context, event repochange.Event) {
+		if event.ProjectDir == dir && event.Source == repochange.SourceWatcher {
+			repochange.CloseRoot(dir)
+		}
+	}))
+}
+
 // A generated file stages with the session's work because the session's own
 // program was observed creating it; a peer's dirty file stays out.
 func TestGitCommitStagesWhatTheSessionsProgramGeneratedACCW10(t *testing.T) {
-
-	repochangetest.Acquire(t)
 	f := programtest.New(t, programtest.Options{})
+	retireObservedStreams(t, f.Dir)
 	ledger := f.AttachLedger(t, sourceledger.Timing{})
 	manager := git.NewManager()
 	ledger.Git.SetGitReader(walkGitReader{manager})
@@ -82,9 +92,8 @@ func TestGitCommitStagesWhatTheSessionsProgramGeneratedACCW10(t *testing.T) {
 // A person's save while a program sits between external processes is not staged
 // by the session's bulk commit; explicit paths remain the way to commit it.
 func TestBulkCommitLeavesAnOutsideEditMadeBetweenProcessesOfAProgram(t *testing.T) {
-
-	repochangetest.Acquire(t)
 	f := programtest.New(t, programtest.Options{})
+	retireObservedStreams(t, f.Dir)
 	f.Runtime.ParkThreshold = time.Hour
 	gate := make(chan time.Time)
 	ledger := f.AttachLedger(t, sourceledger.Timing{After: func(time.Duration) <-chan time.Time { return gate }})
@@ -120,9 +129,8 @@ func TestBulkCommitLeavesAnOutsideEditMadeBetweenProcessesOfAProgram(t *testing.
 
 // Drift while two sessions' windows are active belongs to neither bulk commit.
 func TestBulkCommitLeavesDriftObservedWhileTwoSessionsWereActive(t *testing.T) {
-
-	repochangetest.Acquire(t)
 	f := programtest.New(t, programtest.Options{})
+	retireObservedStreams(t, f.Dir)
 	ledger := f.AttachLedger(t, sourceledger.Timing{})
 	manager := git.NewManager()
 	ledger.Git.SetGitReader(walkGitReader{manager})
@@ -163,9 +171,8 @@ func TestBulkCommitLeavesDriftObservedWhileTwoSessionsWereActive(t *testing.T) {
 // A person's edit to a file a window claimed earlier is theirs: it stays out of
 // the bulk commit and uncommitted_paths reports it.
 func TestBulkCommitLeavesAPersonsEditToAFileAWindowClaimed(t *testing.T) {
-
-	repochangetest.Acquire(t)
 	f := programtest.New(t, programtest.Options{})
+	retireObservedStreams(t, f.Dir)
 	ledger := f.AttachLedger(t, sourceledger.Timing{})
 	manager := git.NewManager()
 	ledger.Git.SetGitReader(walkGitReader{manager})

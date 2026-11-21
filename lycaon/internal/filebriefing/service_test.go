@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/lycaon/lycaon/internal/events"
+	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
 )
 
@@ -23,7 +24,7 @@ func (s *memoryEnablement) Enabled() bool               { return s.enabled.Load(
 func (s *memoryEnablement) PutEnabled(value bool) error { s.enabled.Store(value); return nil }
 
 func serviceTarget(path string) Target {
-	return Target{ProjectID: "project", RootID: "root", Input: Input{Path: path, Presentation: "current", Source: "package main\nfunc Build() {}\n", SourceSHA256: "source"}}
+	return Target{ProjectID: testdbseed.DefaultProjectID, RootID: "root", Input: Input{Path: path, Presentation: "current", Source: "package main\nfunc Build() {}\n", SourceSHA256: "source"}}
 }
 
 func serviceFixture(t *testing.T, generate Generator) (*Service, *SQL, *memoryEnablement) {
@@ -32,7 +33,7 @@ func serviceFixture(t *testing.T, generate Generator) (*Service, *SQL, *memoryEn
 	testutil.FailErr(t, "load config", err)
 	enabled := &memoryEnablement{}
 	enabled.enabled.Store(true)
-	store, _ := newBriefingStore(t, "project", "root")
+	store, _ := newBriefingStore(t, testdbseed.DefaultProjectID, "root")
 	service := NewService(t.Context(), Dependencies{Config: cfg, Store: store, Settings: enabled, Generator: generate})
 	t.Cleanup(func() {
 		service.Stop()

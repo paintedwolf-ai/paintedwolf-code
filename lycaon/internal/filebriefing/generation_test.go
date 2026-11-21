@@ -6,7 +6,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/lycaon/lycaon/internal/events"
 	"github.com/lycaon/lycaon/internal/testutil"
 	wire "github.com/lycaon/lycaon/pkg/api"
@@ -23,7 +22,6 @@ func TestGenerationPublishesNoPartialText(t *testing.T) {
 	hub := events.NewMemoryHub()
 	service.events = hub
 	target := serviceTarget("main.go")
-	target.ProjectID = uuid.NewString()
 	stream, unsubscribe, err := hub.Subscribe(t.Context(), events.Subscription{Project: target.ProjectID, Viewer: testutil.HostOwner()})
 	testutil.FailErr(t, "subscribe", err)
 	defer unsubscribe()
