@@ -3,6 +3,7 @@ package modeladmin
 import (
 	"context"
 	"net/http"
+	"strings"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/lycaon/lycaon/internal/api/httpio"
@@ -56,6 +57,10 @@ func (s *Handler) SelectLocalModel(w http.ResponseWriter, r *http.Request) {
 	var req wire.LocalModelSelectionRequest
 	if err := httpio.DecodeJSON(w, r, &req); err != nil {
 		s.responses.DecodeError(w, r, err)
+		return
+	}
+	if strings.TrimSpace(req.Model) == "" {
+		s.responses.InvalidField(w, "model", "is required")
 		return
 	}
 	if !s.localProvider(w, r) {

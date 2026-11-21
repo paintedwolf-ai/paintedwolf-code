@@ -34,3 +34,17 @@ func TestNativeSummarizeNoInputStructuredRejectE2E(t *testing.T) {
 		t.Fatalf("expected typed program refusal COMMAND_OPERAND_INVALID, got %+v", outcome)
 	}
 }
+
+func assertStructuredRejectCode(t *testing.T, err error, want string) {
+	t.Helper()
+	if err == nil {
+		t.Fatalf("expected structured reject %s, got nil", want)
+	}
+	reject, ok := guidance.RefusalFromError(err)
+	if !ok {
+		t.Fatalf("expected typed guidance.Refusal (%s), got %T: %v", want, err, err)
+	}
+	if reject.Code() != want {
+		t.Fatalf("reject.Code() = %q want %q", reject.Code(), want)
+	}
+}
