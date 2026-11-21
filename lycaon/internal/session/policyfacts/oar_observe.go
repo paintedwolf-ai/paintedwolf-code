@@ -281,7 +281,21 @@ func (m *Service) DeferredUnactivatedCount(sessionID, surfaceID string) int64 {
 	if m == nil || surfaceID == "" {
 		return 0
 	}
-	plan, err := surface.CompileToolPlan(surface.TurnProfile{SurfaceID: surfaceID}, 1)
+	rootCount := 1
+	var sess *api.Session
+	if m.sessionStore != nil && sessionID != "" {
+		sess, _ = m.sessionStore.Get(context.Background(), sessionID)
+		if sess != nil && m.workspace != nil {
+			if roots, err := m.workspace.Roots(context.Background(), sess); err == nil {
+				rootCount = len(roots)
+			}
+		}
+	}
+	prof := surface.TurnProfile{SurfaceID: surfaceID}
+	if sess != nil && sess.Mode == api.SessionModeAsk {
+		prof.SessionMode = sess.Mode
+	}
+	plan, err := surface.CompileToolPlan(prof, rootCount)
 	if err != nil {
 		return 0
 	}

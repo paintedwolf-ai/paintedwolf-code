@@ -18,6 +18,7 @@ import (
 	"github.com/lycaon/lycaon/internal/llm/providerretry"
 	"github.com/lycaon/lycaon/internal/messageview"
 	"github.com/lycaon/lycaon/internal/oar"
+	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/sourceref"
 	"github.com/lycaon/lycaon/internal/tokenest"
@@ -318,7 +319,11 @@ func (l *modelTurn) completeStreamWithOverflowRetry(
 	if st != nil {
 		st.turnToolPlan = turn.ToolPlan
 		if resolve := l.Tools.Deps.ProgramReach; resolve != nil {
-			st.turnPrograms = resolve(ctx, profileID, turn.SurfaceID)
+			reachCtx := ctx
+			if strings.TrimSpace(sessionID) != "" {
+				reachCtx = sandbox.WithSessionID(ctx, sessionID)
+			}
+			st.turnPrograms = resolve(reachCtx, profileID, turn.SurfaceID)
 		}
 	}
 	req, surfaceID, transcriptEstimate := turn.Req, turn.SurfaceID, turn.TranscriptEstimate

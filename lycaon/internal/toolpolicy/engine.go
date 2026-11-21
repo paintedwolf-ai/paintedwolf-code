@@ -61,6 +61,9 @@ func (e *engine) ListForPrompt(ctx context.Context, sess *api.Session, profileID
 	if e == nil || e.deps.ToolLister == nil {
 		return nil
 	}
+	if sess != nil && strings.TrimSpace(sess.ID) != "" {
+		ctx = sandbox.WithSessionID(ctx, sess.ID)
+	}
 	filter := platform.ToolFilter{
 		ProfileID: profileID,
 		SurfaceID: coordinatorSurfaceFromContext(ctx),

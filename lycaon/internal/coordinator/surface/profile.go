@@ -291,11 +291,18 @@ func ResolveTurnProfileForSurface(
 	if o := overlayModeRef(overlay); o != "" {
 		modeRefs = append(modeRefs, o)
 	}
-	return TurnProfile{
+	out := TurnProfile{
 		SurfaceID:       surfaceID,
 		SurfaceTemplate: resolveSurfaceTemplate(surfaceID, runCtx, posture),
 		ModeRefs:        modeRefs,
 	}
+	if sess != nil && sess.Mode == api.SessionModeAsk {
+		out.SessionMode = sess.Mode
+		out.WorkflowActive = strings.TrimSpace(runCtx.RunID) != ""
+		out.PhaseCoordinatorSurface = strings.TrimSpace(runCtx.PhaseCoordinatorSurface)
+		out.AdvanceWhenGateMet = strings.TrimSpace(runCtx.AdvanceWhenGateMet)
+	}
+	return out
 }
 
 func sessionPosture(sess *api.Session) api.SessionPosture {

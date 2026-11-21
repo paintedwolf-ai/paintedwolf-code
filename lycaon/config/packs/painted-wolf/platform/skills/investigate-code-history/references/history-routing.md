@@ -1,12 +1,12 @@
 # Code history routing reference
 
-{% if has_git and not on_worker_branch %}Native Git commands in `command` provide committed history.{% if profile_has_source_history %} `source_history` provides the live source ledger for uncommitted work.{% endif %}{% else %}This workspace does not inspect the main tree's Git history directly{% if not has_git %} (no `.git` metadata){% endif %}, so Git rows below do not apply here. {% if profile_has_source_history %}`source_history()` and `source_history(path, mode=diff)` provide the live change history here.{% else %}Report the historical question for a read worker or the coordinator to resolve against main-tree Git metadata.{% endif %}{% endif %}
+{% if has_git and not on_worker_branch and profile_has_command %}Native Git commands in `command` provide committed history.{% if profile_has_source_history %} `source_history` provides the live source ledger for uncommitted work.{% endif %}{% else %}This workspace does not inspect the main tree's Git history directly{% if not has_git %} (no `.git` metadata){% endif %}, so Git rows below do not apply here. {% if profile_has_source_history %}`source_history()` and `source_history(path, mode=diff)` provide the live change history here.{% else %}Report the historical question for a read worker or the coordinator to resolve against main-tree Git metadata.{% endif %}{% endif %}
 
 ## Choose the evidence
 
 | Question | Evidence |
 |---|---|
-{% if has_git and not on_worker_branch %}| Is the change only local? | `git status --short` and `git diff -- path` in `command` |
+{% if has_git and not on_worker_branch and profile_has_command %}| Is the change only local? | `git status --short` and `git diff -- path` in `command` |
 | Which commit last touched these lines? | `git blame -L A,B -- path`, then `git show ref -- path` in `command` |
 | How did a file evolve? | `git log -- path` in `command` |
 | Which commits differ between branches? | `git rev-list --left-right --count base...head`, `git log base..head`, and `git diff base head -- paths` in `command` |
@@ -22,7 +22,7 @@
 | Who wrote these uncommitted lines? | `source_history(path, mode=lines, start_line, end_line)` |
 | What has this session changed? | `source_history(mode=mine)` |
 {% endif %}{% if profile_has_restore_version %}| How do I undo a retained file change? | `restore_version(path)` or with `version_id`, only when requested |{% else %}| How do I undo a retained file change? | Not available on this reader — record the file and version in your report |{% endif %}
-{% if has_git and not on_worker_branch %}
+{% if has_git and not on_worker_branch and profile_has_command %}
 Discover local branches with `git branch --list` in `command`. Local refs do not establish remote state, PR status or CI results.
 {% endif %}
 ## Attribution traps
