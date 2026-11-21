@@ -8,6 +8,7 @@ import (
 	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/internal/tools"
 	"slices"
+	"strings"
 
 	"github.com/lycaon/lycaon/internal/commandsurface"
 	"github.com/lycaon/lycaon/internal/hitl"
@@ -97,7 +98,16 @@ func (e *Executor) reviewInvocationCapabilities(ctx context.Context, tool string
 	}
 	ctx = hitl.WithPreparedApprovalAnswer(ctx, reviews, final)
 	if !hitl.CheckpointAuthorizes(final) {
-		return ctx, e.Approvals.rejectApprovalErr(ctx, tool, tc.Identity.Agent, args, isolationCheckpointReject(capabilityReviewDenialCode(plan), final))
+		denialCode, denialPath := capabilityReviewDenialCodeAndPath(plan)
+		reject := isolationCheckpointReject(denialCode, final)
+		if denialPath != "" {
+			if reject.Data == nil {
+				reject.Data = map[string]any{}
+			}
+			reject.Data["path"] = denialPath
+			reject.Data["tool"] = tool
+		}
+		return ctx, e.Approvals.rejectApprovalErr(ctx, tool, tc.Identity.Agent, args, reject)
 	}
 	if secretIncluded {
 		ctx = context.WithValue(ctx, capabilityReviewSecretKey{}, permission)
@@ -105,24 +115,27 @@ func (e *Executor) reviewInvocationCapabilities(ctx context.Context, tool string
 	return ctx, nil
 }
 
-func capabilityReviewDenialCode(plan *hitl.ApprovalPlan) string {
+func capabilityReviewDenialCodeAndPath(plan *hitl.ApprovalPlan) (string, string) {
+	if plan == nil {
+		return isolation.CodeApprovalUnavailable, ""
+	}
 	for _, target := range plan.Subject.Targets {
 		switch target.Kind {
 		case "write_root", "credential_file", "key_material", "shared_temp":
-			return isolation.CodeWriteRootDenied
+			return isolation.CodeWriteRootDenied, strings.TrimSpace(target.Label)
 		case "read_path":
-			return isolation.CodeReadPathDenied
+			return isolation.CodeReadPathDenied, strings.TrimSpace(target.Label)
 		case "socket":
-			return isolation.CodeSocketPathDenied
+			return isolation.CodeSocketPathDenied, strings.TrimSpace(target.Label)
 		case "process_control", "credential_store", "host_execution":
-			return isolation.CodeExecutionCapabilityDenied
+			return isolation.CodeExecutionCapabilityDenied, ""
 		case "direct_ip":
-			return isolation.CodeDirectIPDenied
+			return isolation.CodeDirectIPDenied, ""
 		case "local_listen", "loopback_connect":
-			return isolation.CodeLocalNetworkDenied
+			return isolation.CodeLocalNetworkDenied, ""
 		}
 	}
-	return isolation.CodeApprovalUnavailable
+	return isolation.CodeApprovalUnavailable, ""
 }
 
 func multipleCapabilityFamilies(request *capabilityrequest.CapabilityRequest) bool {

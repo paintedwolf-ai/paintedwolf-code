@@ -30,6 +30,14 @@ func fillOccurrenceIdentity(ctx context.Context, gc *oar.GuardContext) {
 	gc.Session.SessionID = sess.SessionID
 	gc.Session.Principal = sess.OwnerPersonID
 	gc.Session.SessionPosture = sess.Posture
+	gc.Session.SessionMode = sess.Mode
+	gc.Session.Surface = sess.Surface
+	gc.Session.WorkerLeg = strings.TrimSpace(sess.ParentSessionID) != ""
+	if gc.Session.WorkerLeg {
+		gc.Session.Role = "worker"
+	} else if sess.SessionID != "" || sess.Posture != "" || sess.Mode != "" {
+		gc.Session.Role = "coordinator"
+	}
 	if caller, ok := people.Caller(ctx); ok {
 		gc.Session.Principal = caller.ID
 		gc.Session.PrincipalRoles = []string{string(caller.Role)}

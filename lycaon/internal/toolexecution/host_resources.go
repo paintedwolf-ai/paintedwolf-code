@@ -75,6 +75,7 @@ func (e *Network) expandHostResourceConnections(
 	if len(resolution.Deny) > 0 {
 		if e.Rejections.blockPlane != nil && e.Rejections.blockPlane.Enforces(oar.AnchorToolRejected) {
 			if err := e.Rejections.blockPlane.Evaluate(ctx, oar.AnchorToolRejected, tool, tc.Identity.Agent, args, func(gc *oar.GuardContext) error {
+				gc.ObservedRejectCode = "HOST_RESOURCE_POLICY_DENIED"
 				observeHostResourceResolution(gc, resolution)
 				gc.PutRejectData("HOST_RESOURCE_POLICY_DENIED", map[string]any{"host_resources": resolution.Deny})
 				return nil

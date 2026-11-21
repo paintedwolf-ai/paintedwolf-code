@@ -10,6 +10,7 @@ import (
 	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/skills"
+	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -60,7 +61,9 @@ func (m *Service) ExecutionSurfaces(
 
 func executionSurfacesForToolProfile(profile sandbox.ToolProfile) []hostresources.ExecutionSurface {
 	surfaces := []hostresources.ExecutionSurface{}
-	if profile.ToolAllowed("command") || profile.ToolAllowed("terminal_open") {
+	extExec, _ := toolcontract.NewCommandEffects(toolcontract.CommandExternalExec)
+	commandExec := profile.ToolAllowed("command") && (profile.CommandEffects == 0 || profile.CommandEffects.Allows(extExec))
+	if commandExec || profile.ToolAllowed("terminal_open") {
 		surfaces = append(surfaces, hostresources.SurfaceProcessExec)
 	}
 	return surfaces

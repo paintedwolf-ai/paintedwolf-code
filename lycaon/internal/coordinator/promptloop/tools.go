@@ -246,6 +246,8 @@ func (l *toolInvocations) executeToolCall(
 		ProjectID:       sess.ProjectID,
 		OwnerPersonID:   sess.OwnerPersonID,
 		Posture:         string(sess.Posture),
+		Mode:            string(sess.Mode),
+		Surface:         toolCtx.Turn.TurnSurfaceID,
 		Agent:           toolCtx.Identity.Agent,
 		ParentSessionID: toolCtx.Identity.ParentSessionID,
 		ToolCallID:      tc.ID,
