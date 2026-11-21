@@ -20,7 +20,7 @@ func TestPathDenialsPreserveUserDirection(t *testing.T) {
 	decline := func(context.Context, string, map[string]any, tools.ToolContext, string) (PathPreflightResult, error) {
 		return PathPreflightResult{
 			Denied:       true,
-			DenialCause:  DenialCauseUserDeclined,
+			DenialCause:  isolation.PathDenialUserDeclined,
 			UserGuidance: "Keep the existing location.",
 		}, nil
 	}
@@ -76,7 +76,7 @@ func TestWriteRootAndReadPathDenialCauseAttribution(t *testing.T) {
 			name: "approval_rule_denied",
 			result: PathPreflightResult{
 				Denied:      true,
-				DenialCause: DenialCauseApprovalRule,
+				DenialCause: isolation.PathDenialApprovalRule,
 				DeniedRule:  denyRule,
 			},
 			wantWriteCode:  "APPROVAL_RULE_DENIED",
@@ -89,7 +89,7 @@ func TestWriteRootAndReadPathDenialCauseAttribution(t *testing.T) {
 			name: "control_plane_policy_denied",
 			result: PathPreflightResult{
 				Denied:      true,
-				DenialCause: DenialCauseControlPlanePolicy,
+				DenialCause: isolation.PathDenialControlPlanePolicy,
 			},
 			wantWriteCode: isolation.CodeControlPlaneDenied,
 			wantReadCode:  isolation.CodeControlPlaneDenied,
@@ -100,7 +100,7 @@ func TestWriteRootAndReadPathDenialCauseAttribution(t *testing.T) {
 			name: "user_declined",
 			result: PathPreflightResult{
 				Denied:       true,
-				DenialCause:  DenialCauseUserDeclined,
+				DenialCause:  isolation.PathDenialUserDeclined,
 				UserGuidance: "Keep writes inside the project workspace.",
 			},
 			wantWriteCode: isolation.CodeWriteRootDenied,
@@ -111,18 +111,29 @@ func TestWriteRootAndReadPathDenialCauseAttribution(t *testing.T) {
 			name: "prior_user_declined",
 			result: PathPreflightResult{
 				Denied:      true,
-				DenialCause: DenialCausePriorUserDeclined,
+				DenialCause: isolation.PathDenialPriorUserDeclined,
 			},
 			wantWriteCode: isolation.CodeWriteRootDenied,
 			wantReadCode:  isolation.CodeReadPathDenied,
 			wantSubstring: "Wait for new user direction",
 		},
 		{
-			name: "approval_unavailable",
+			name: "nonhuman_or_unattributed_rejected",
+			result: PathPreflightResult{
+				Denied:      true,
+				DenialCause: isolation.PathDenialNonHumanRejected,
+			},
+			wantWriteCode: isolation.CodeApprovalUnavailable,
+			wantReadCode:  isolation.CodeApprovalUnavailable,
+			wantSubstring: "rejected without a confirmed user decision",
+			forbidSubstr:  "Wait for new user direction",
+		},
+		{
+			name: "approval_unavailable_and_unknown_cause",
 			result: PathPreflightResult{
 				Authorized:  false,
 				Denied:      false,
-				DenialCause: DenialCauseNone,
+				DenialCause: isolation.PathDenialCause("unexpected_cause"),
 			},
 			wantWriteCode: isolation.CodeApprovalUnavailable,
 			wantReadCode:  isolation.CodeApprovalUnavailable,

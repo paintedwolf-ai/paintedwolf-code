@@ -96,21 +96,34 @@ func pathPreflightReject(
 	capability, path, deniedCode string,
 	res PathPreflightResult,
 ) *toolrejection.ToolReject {
-	if res.DenialCause == DenialCauseApprovalRule || res.DeniedRule != nil {
+	if res.DenialCause == isolation.PathDenialApprovalRule || res.DeniedRule != nil {
 		return approvalRuleDeniedReject(tool, tc.Identity.Agent, path, commandsurface.PrimaryCommandLine(args, nil), res.DeniedRule)
 	}
 	switch res.DenialCause {
-	case DenialCauseControlPlanePolicy:
+	case isolation.PathDenialControlPlanePolicy:
 		return &toolrejection.ToolReject{
 			Code: isolation.CodeControlPlaneDenied,
 			Data: map[string]any{"path": path, "capability": capability},
 		}
-	case DenialCauseUserDeclined, DenialCausePriorUserDeclined:
+	case isolation.PathDenialUserDeclined, isolation.PathDenialPriorUserDeclined:
 		data := map[string]any{"path": path}
 		if res.UserGuidance != "" {
 			data[toolrejection.UserGuidanceKey] = res.UserGuidance
 		}
 		return &toolrejection.ToolReject{Code: deniedCode, Data: data}
+	case isolation.PathDenialNonHumanRejected:
+		return &toolrejection.ToolReject{
+			Code: isolation.CodeApprovalUnavailable,
+			Data: map[string]any{
+				"path":   path,
+				"reason": "The approval request was rejected without a confirmed user decision.",
+			},
+		}
+	case isolation.PathDenialNone:
+		return &toolrejection.ToolReject{
+			Code: isolation.CodeApprovalUnavailable,
+			Data: map[string]any{"path": path, "reason": "approval did not install authority"},
+		}
 	default:
 		return &toolrejection.ToolReject{
 			Code: isolation.CodeApprovalUnavailable,

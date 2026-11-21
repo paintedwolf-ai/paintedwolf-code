@@ -11,6 +11,7 @@ import (
 	"github.com/lycaon/lycaon/internal/confine"
 	"github.com/lycaon/lycaon/internal/gate"
 	"github.com/lycaon/lycaon/internal/hitl"
+	"github.com/lycaon/lycaon/internal/isolation"
 	"github.com/lycaon/lycaon/internal/sensitivepath"
 	"github.com/lycaon/lycaon/internal/session/approvalstate"
 	sessiontree "github.com/lycaon/lycaon/internal/session/tree"
@@ -93,7 +94,7 @@ func (b *WriteRootCheckpointBroker) authorizeWriteRoot(ctx context.Context, in c
 	if confine.ControlPlanePathDenied(proposed, true, in.SessionScratchRoot, in.SessionOutputRoot) {
 		return command.SandboxWriteRootResult{
 			Denied:            true,
-			DenialCause:       command.DenialCauseControlPlanePolicy,
+			DenialCause:       isolation.PathDenialControlPlanePolicy,
 			ProposedWriteRoot: proposed,
 		}, nil
 	}
@@ -111,7 +112,7 @@ func (b *WriteRootCheckpointBroker) authorizeWriteRoot(ctx context.Context, in c
 		if refused, _ := confine.GrantedWriteRootRefused(proposed); refused {
 			return command.SandboxWriteRootResult{
 				Denied:            true,
-				DenialCause:       command.DenialCauseControlPlanePolicy,
+				DenialCause:       isolation.PathDenialControlPlanePolicy,
 				ProposedWriteRoot: proposed,
 			}, nil
 		}
@@ -161,7 +162,7 @@ func (b *WriteRootCheckpointBroker) authorizeWriteRoot(ctx context.Context, in c
 			deniedRule := rule
 			return command.SandboxWriteRootResult{
 				Denied:            true,
-				DenialCause:       command.DenialCauseApprovalRule,
+				DenialCause:       isolation.PathDenialApprovalRule,
 				DeniedRule:        &deniedRule,
 				ProposedWriteRoot: proposed,
 			}, nil
@@ -235,8 +236,12 @@ func (b *WriteRootCheckpointBroker) raiseWriteRootCard(
 		return command.SandboxWriteRootResult{}, err
 	}
 	cause := resolved.DenialCause
-	if resolved.Denied && cause == command.DenialCauseNone {
-		cause = command.DenialCauseUserDeclined
+	if resolved.Denied && cause == isolation.PathDenialNone {
+		if resolved.HumanDeclined {
+			cause = isolation.PathDenialUserDeclined
+		} else {
+			cause = isolation.PathDenialNonHumanRejected
+		}
 	}
 	return command.SandboxWriteRootResult{
 		Raised:            resolved.Raised,
@@ -439,7 +444,7 @@ func writeRootChatGrant(action hitl.ProposedAction, root string) hitl.ApprovalGr
 }
 
 func resolvedUserGuidance(final *hitl.CheckpointResponse) string {
-	if final == nil || final.Result == nil || final.Status != hitl.DecisionStatusRejected {
+	if final == nil || final.Result == nil || final.Status != hitl.DecisionStatusRejected || final.ResolvedBy != authzledger.ResolvedByHuman {
 		return ""
 	}
 	return strings.TrimSpace(final.Result.Comments)

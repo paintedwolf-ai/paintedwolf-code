@@ -26,6 +26,18 @@ func (o Outcome) Retryable() bool {
 	return o.Disposition == DispositionRetry
 }
 
+// PathDenialCause classifies why a path preflight refused authority.
+type PathDenialCause string
+
+const (
+	PathDenialNone               PathDenialCause = ""
+	PathDenialUserDeclined       PathDenialCause = "user_declined"
+	PathDenialPriorUserDeclined  PathDenialCause = "prior_user_declined"
+	PathDenialNonHumanRejected   PathDenialCause = "nonhuman_rejected"
+	PathDenialApprovalRule       PathDenialCause = "approval_rule"
+	PathDenialControlPlanePolicy PathDenialCause = "control_plane_policy"
+)
+
 // Agent isolation outcome codes.
 const (
 	CodeExecutionBoundaryUnavailable       = "SANDBOX_EXECUTION_BOUNDARY_UNAVAILABLE"

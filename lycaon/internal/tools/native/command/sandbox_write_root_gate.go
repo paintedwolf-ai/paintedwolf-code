@@ -3,18 +3,8 @@ package command
 import (
 	"context"
 
+	"github.com/lycaon/lycaon/internal/isolation"
 	"github.com/lycaon/lycaon/internal/settings"
-)
-
-// SandboxDenialCause identifies why a path preflight refused authority.
-type SandboxDenialCause string
-
-const (
-	DenialCauseNone               SandboxDenialCause = ""
-	DenialCauseUserDeclined       SandboxDenialCause = "user_declined"
-	DenialCausePriorUserDeclined  SandboxDenialCause = "prior_user_declined"
-	DenialCauseApprovalRule       SandboxDenialCause = "approval_rule"
-	DenialCauseControlPlanePolicy SandboxDenialCause = "control_plane_policy"
 )
 
 // SandboxWriteRootAsk is the structured pre-spawn input for write authority.
@@ -42,9 +32,9 @@ type SandboxWriteRootResult struct {
 	Authorized bool
 	// Denied reports a rejected ask, deny rule, or control-plane block.
 	Denied bool
-	// DenialCause distinguishes rule, control-plane, and user denials.
-	DenialCause SandboxDenialCause
-	// DeniedRule is the matched deny rule when DenialCause == DenialCauseApprovalRule.
+	// DenialCause classifies why authority was refused.
+	DenialCause isolation.PathDenialCause
+	// DeniedRule is the matched rule when DenialCause == isolation.PathDenialApprovalRule.
 	DeniedRule *settings.ApprovalRule
 	// ProposedWriteRoot is the approved root.
 	ProposedWriteRoot string
@@ -74,7 +64,7 @@ type SandboxReadPathResult struct {
 	Raised      bool
 	Authorized  bool
 	Denied      bool
-	DenialCause SandboxDenialCause
+	DenialCause isolation.PathDenialCause
 	DeniedRule  *settings.ApprovalRule
 	// ProposedReadPath is the approved path.
 	ProposedReadPath string

@@ -5,26 +5,16 @@ import (
 
 	"github.com/lycaon/lycaon/internal/confine"
 	"github.com/lycaon/lycaon/internal/hitl"
+	"github.com/lycaon/lycaon/internal/isolation"
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/tools"
-)
-
-// PathDenialCause classifies why a path preflight refused authority.
-type PathDenialCause string
-
-const (
-	DenialCauseNone               PathDenialCause = ""
-	DenialCauseUserDeclined       PathDenialCause = "user_declined"
-	DenialCausePriorUserDeclined  PathDenialCause = "prior_user_declined"
-	DenialCauseApprovalRule       PathDenialCause = "approval_rule"
-	DenialCauseControlPlanePolicy PathDenialCause = "control_plane_policy"
 )
 
 // PathPreflightResult is the structured outcome of a write-root or read-path preflight.
 type PathPreflightResult struct {
 	Authorized   bool
 	Denied       bool
-	DenialCause  PathDenialCause
+	DenialCause  isolation.PathDenialCause
 	DeniedRule   *settings.ApprovalRule
 	UserGuidance string
 }

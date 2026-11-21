@@ -13,6 +13,7 @@ import (
 	"github.com/lycaon/lycaon/internal/confine"
 	"github.com/lycaon/lycaon/internal/gate"
 	"github.com/lycaon/lycaon/internal/hitl"
+	"github.com/lycaon/lycaon/internal/isolation"
 	"github.com/lycaon/lycaon/internal/sensitivepath"
 	"github.com/lycaon/lycaon/internal/settings"
 
@@ -33,7 +34,7 @@ func (b *WriteRootCheckpointBroker) AuthorizeRead(ctx context.Context, in comman
 	if confine.ControlPlanePathDenied(proposed, false, in.SessionScratchRoot, in.SessionOutputRoot) {
 		return command.SandboxReadPathResult{
 			Denied:           true,
-			DenialCause:      command.DenialCauseControlPlanePolicy,
+			DenialCause:      isolation.PathDenialControlPlanePolicy,
 			ProposedReadPath: proposed,
 		}, nil
 	}
@@ -45,14 +46,14 @@ func (b *WriteRootCheckpointBroker) AuthorizeRead(ctx context.Context, in comman
 	projectDir := strings.TrimSpace(in.ProjectDir)
 	if b.Authority != nil {
 		evalRes, evalErr := b.Authority.Evaluate(ctx, hitl.ProposedAction{
-			Invocation: hitl.ActionInvocation{Tool: "read_path", Files: []string{proposed}},
+			Invocation: hitl.ActionInvocation{Files: []string{proposed}},
 			Scope:      hitl.ActionScope{ProjectID: in.ProjectID, ProjectDir: projectDir, SessionID: invokingSessionID, RootSessionID: rootSessionID},
 		})
 		if evalErr == nil && evalRes != nil && evalRes.Denied && len(evalRes.MatchedRules) > 0 {
 			m := evalRes.MatchedRules[0]
 			return command.SandboxReadPathResult{
 				Denied:      true,
-				DenialCause: command.DenialCauseApprovalRule,
+				DenialCause: isolation.PathDenialApprovalRule,
 				DeniedRule: &settings.ApprovalRule{
 					Category: settings.ApprovalCategory(m.Category),
 					Pattern:  m.Pattern,
@@ -142,8 +143,12 @@ func (b *WriteRootCheckpointBroker) raiseReadPathCard(
 		return command.SandboxReadPathResult{}, err
 	}
 	cause := resolved.DenialCause
-	if resolved.Denied && cause == command.DenialCauseNone {
-		cause = command.DenialCauseUserDeclined
+	if resolved.Denied && cause == isolation.PathDenialNone {
+		if resolved.HumanDeclined {
+			cause = isolation.PathDenialUserDeclined
+		} else {
+			cause = isolation.PathDenialNonHumanRejected
+		}
 	}
 	return command.SandboxReadPathResult{
 		Raised: resolved.Raised, Authorized: resolved.Authorized, Denied: resolved.Denied,

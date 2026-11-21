@@ -171,7 +171,7 @@ func newCapabilityReviewFixture(t *testing.T, approve bool) *capabilityReviewFix
 		result, err := broker.Authorize(ctx, command.SandboxWriteRootAsk{SessionID: tc.Identity.SessionID, ProjectID: tc.Identity.ProjectID, ToolCallID: tc.Identity.ToolCallID, ProjectDir: tc.ActiveRootPath(), ToolName: tool, ProposedWriteRoot: path})
 		return toolexecution.PathPreflightResult{
 			Authorized: result.Authorized, Denied: result.Denied,
-			DenialCause: toolexecution.PathDenialCause(result.DenialCause),
+			DenialCause: result.DenialCause,
 			DeniedRule:  result.DeniedRule, UserGuidance: result.UserGuidance,
 		}, err
 	})
@@ -179,7 +179,7 @@ func newCapabilityReviewFixture(t *testing.T, approve bool) *capabilityReviewFix
 		result, err := broker.AuthorizeRead(ctx, command.SandboxReadPathAsk{SessionID: tc.Identity.SessionID, ProjectID: tc.Identity.ProjectID, ToolCallID: tc.Identity.ToolCallID, ProjectDir: tc.ActiveRootPath(), ToolName: tool, ProposedReadPath: path, ReadDenyPaths: f.readPaths})
 		return toolexecution.PathPreflightResult{
 			Authorized: result.Authorized, Denied: result.Denied,
-			DenialCause: toolexecution.PathDenialCause(result.DenialCause),
+			DenialCause: result.DenialCause,
 			DeniedRule:  result.DeniedRule, UserGuidance: result.UserGuidance,
 		}, err
 	})

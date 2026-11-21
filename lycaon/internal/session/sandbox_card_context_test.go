@@ -3,11 +3,14 @@ package session
 import (
 	"context"
 	"path/filepath"
+	"slices"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/authzledger"
+	"github.com/lycaon/lycaon/internal/fspath"
 	"github.com/lycaon/lycaon/internal/gate"
 	"github.com/lycaon/lycaon/internal/hitl"
+	"github.com/lycaon/lycaon/internal/isolation"
 	"github.com/lycaon/lycaon/internal/session/approvalstate"
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/settings/settingstest"
@@ -60,6 +63,7 @@ type attributionCheckpoints struct {
 	unusedWriteRootCheckpoints
 	suppressed bool
 	status     hitl.DecisionStatus
+	resolvedBy string
 	reason     string
 	requested  int
 }
@@ -81,7 +85,7 @@ func (c *attributionCheckpoints) PollCheckpoint(context.Context, string) (*hitl.
 	return &hitl.CheckpointResponse{
 		CheckpointID: "cp-attribution",
 		Status:       c.status,
-		ResolvedBy:   authzledger.ResolvedByHuman,
+		ResolvedBy:   c.resolvedBy,
 		Result:       res,
 	}, nil
 }
@@ -89,7 +93,7 @@ func (c *attributionCheckpoints) PollCheckpoint(context.Context, string) (*hitl.
 func TestWriteRootAndReadPathDenialCauseAttribution(t *testing.T) {
 	t.Run("approval_rule_denied", assertBrokerRuleDenialAttribution)
 	t.Run("control_plane_policy_denied", assertBrokerControlPlaneDenialAttribution)
-	t.Run("user_declined_prior_declined_and_unavailable", assertBrokerHumanAndExpiredAttribution)
+	t.Run("human_nonhuman_prior_and_expired_attribution", assertBrokerHumanAndExpiredAttribution)
 }
 
 func assertBrokerRuleDenialAttribution(t *testing.T) {
@@ -139,7 +143,7 @@ func assertBrokerRuleDenialAttribution(t *testing.T) {
 		SessionID: "sess-rule", ProposedWriteRoot: denyRoot, ToolName: "command",
 	})
 	testutil.FailErr(t, "Authorize rule-denied write root", err)
-	if wRes.Authorized || wRes.Raised || !wRes.Denied || wRes.DenialCause != command.DenialCauseApprovalRule || wRes.DeniedRule == nil {
+	if wRes.Authorized || wRes.Raised || !wRes.Denied || wRes.DenialCause != isolation.PathDenialApprovalRule || wRes.DeniedRule == nil {
 		t.Fatalf("write-root rule denial = %+v", wRes)
 	}
 	if wRes.DeniedRule.Source.UnitID != denyWriteRule.Source.UnitID || wRes.DeniedRule.Source.PackID != denyWriteRule.Source.PackID {
@@ -152,7 +156,7 @@ func assertBrokerRuleDenialAttribution(t *testing.T) {
 		SessionID: "sess-rule", ProposedReadPath: pemPath, ReadDenyPaths: []string{pemDir}, ToolName: "command",
 	})
 	testutil.FailErr(t, "AuthorizeRead rule-denied path", err)
-	if rRes.Authorized || rRes.Raised || !rRes.Denied || rRes.DenialCause != command.DenialCauseApprovalRule || rRes.DeniedRule == nil {
+	if rRes.Authorized || rRes.Raised || !rRes.Denied || rRes.DenialCause != isolation.PathDenialApprovalRule || rRes.DeniedRule == nil {
 		t.Fatalf("read-path rule denial = %+v", rRes)
 	}
 	if rRes.DeniedRule.Source.UnitID != readRule.Source.UnitID || rRes.DeniedRule.Pattern != "*.pem" {
@@ -161,8 +165,9 @@ func assertBrokerRuleDenialAttribution(t *testing.T) {
 }
 
 func assertBrokerControlPlaneDenialAttribution(t *testing.T) {
-	ancestor := t.TempDir()
+	ancestor := fspath.CanonicalPath(t.TempDir())
 	cfg := filepath.Join(ancestor, "lycaon-state")
+	t.Setenv("TMPDIR", ancestor)
 	t.Setenv("LYCAON_CONFIG_DIR", cfg)
 
 	broker := &WriteRootCheckpointBroker{
@@ -176,16 +181,23 @@ func assertBrokerControlPlaneDenialAttribution(t *testing.T) {
 			SessionID: "sess-cp", ProposedWriteRoot: root, ToolName: "command",
 		})
 		testutil.FailErr(t, "Authorize control-plane write", err)
-		if wRes.Authorized || wRes.Raised || !wRes.Denied || wRes.DenialCause != command.DenialCauseControlPlanePolicy {
+		if wRes.Authorized || wRes.Raised || !wRes.Denied || wRes.DenialCause != isolation.PathDenialControlPlanePolicy {
 			t.Fatalf("root %s write control-plane result = %+v", root, wRes)
 		}
+	}
+
+	settled := broker.ReviewSharedTemp(t.Context(), command.SandboxWriteRootAsk{
+		SessionID: "sess-cp", ToolName: "command",
+	}, []string{ancestor}, true)
+	if !slices.Equal(settled.Declined, []string{ancestor}) || len(settled.Unanswered) != 0 || len(settled.Allowed) != 0 {
+		t.Fatalf("control-plane shared-temp settlement = %+v, want Declined=[%s] and empty Unanswered/Allowed", settled, ancestor)
 	}
 
 	rRes, err := broker.AuthorizeRead(t.Context(), command.SandboxReadPathAsk{
 		SessionID: "sess-cp", ProposedReadPath: filepath.Join(cfg, "approvals.yaml"), ToolName: "command",
 	})
 	testutil.FailErr(t, "AuthorizeRead control-plane read", err)
-	if rRes.Authorized || rRes.Raised || !rRes.Denied || rRes.DenialCause != command.DenialCauseControlPlanePolicy {
+	if rRes.Authorized || rRes.Raised || !rRes.Denied || rRes.DenialCause != isolation.PathDenialControlPlanePolicy {
 		t.Fatalf("read control-plane result = %+v", rRes)
 	}
 }
@@ -196,23 +208,23 @@ func assertBrokerHumanAndExpiredAttribution(t *testing.T) {
 	protectedReadDir := t.TempDir()
 	protectedRead := filepath.Join(protectedReadDir, "secret.json")
 
-	cpDecline := &attributionCheckpoints{
-		status: hitl.DecisionStatusRejected,
-		reason: "Use the attached workspace instead.",
-	}
 	broker := &WriteRootCheckpointBroker{
-		Checkpoints: cpDecline,
 		Runtime:     approvalstate.NewSandboxPathGrantRuntime(),
 		ReadRuntime: approvalstate.NewSandboxPathGrantRuntime(),
 		Posture:     func(string) gate.Posture { return gate.PostureBalanced },
 	}
 
+	broker.Checkpoints = &attributionCheckpoints{
+		status:     hitl.DecisionStatusRejected,
+		resolvedBy: authzledger.ResolvedByHuman,
+		reason:     "Use the attached workspace instead.",
+	}
 	wDeclined, err := broker.Authorize(t.Context(), command.SandboxWriteRootAsk{
 		SessionID: "sess-human", ToolCallID: "tc-1", ProposedWriteRoot: outside, ToolName: "command",
 	})
 	testutil.FailErr(t, "Authorize user decline", err)
 	if !wDeclined.Raised || wDeclined.Authorized || !wDeclined.Denied ||
-		wDeclined.DenialCause != command.DenialCauseUserDeclined ||
+		wDeclined.DenialCause != isolation.PathDenialUserDeclined ||
 		wDeclined.UserGuidance != "Use the attached workspace instead." {
 		t.Fatalf("user-declined write root = %+v", wDeclined)
 	}
@@ -223,37 +235,61 @@ func assertBrokerHumanAndExpiredAttribution(t *testing.T) {
 	})
 	testutil.FailErr(t, "AuthorizeRead user decline", err)
 	if !rDeclined.Raised || rDeclined.Authorized || !rDeclined.Denied ||
-		rDeclined.DenialCause != command.DenialCauseUserDeclined ||
+		rDeclined.DenialCause != isolation.PathDenialUserDeclined ||
 		rDeclined.UserGuidance != "Use the attached workspace instead." {
 		t.Fatalf("user-declined read path = %+v", rDeclined)
+	}
+
+	for _, actor := range []string{"", authzledger.ResolvedBySystemDeny} {
+		broker.Checkpoints = &attributionCheckpoints{
+			status:     hitl.DecisionStatusRejected,
+			resolvedBy: actor,
+			reason:     "system note must not masquerade as user guidance",
+		}
+		wNonHuman, wErr := broker.Authorize(t.Context(), command.SandboxWriteRootAsk{
+			SessionID: "sess-nh-" + actor, ToolCallID: "tc-nh-w", ProposedWriteRoot: outside, ToolName: "command",
+		})
+		testutil.FailErr(t, "Authorize nonhuman reject", wErr)
+		if !wNonHuman.Raised || wNonHuman.Authorized || !wNonHuman.Denied ||
+			wNonHuman.DenialCause != isolation.PathDenialNonHumanRejected || wNonHuman.UserGuidance != "" {
+			t.Fatalf("actor=%q write-root nonhuman reject = %+v", actor, wNonHuman)
+		}
+		rNonHuman, rErr := broker.AuthorizeRead(t.Context(), command.SandboxReadPathAsk{
+			SessionID: "sess-nh-" + actor, ToolCallID: "tc-nh-r", ProposedReadPath: protectedRead,
+			ReadDenyPaths: []string{protectedReadDir}, ToolName: "command",
+		})
+		testutil.FailErr(t, "AuthorizeRead nonhuman reject", rErr)
+		if !rNonHuman.Raised || rNonHuman.Authorized || !rNonHuman.Denied ||
+			rNonHuman.DenialCause != isolation.PathDenialNonHumanRejected || rNonHuman.UserGuidance != "" {
+			t.Fatalf("actor=%q read-path nonhuman reject = %+v", actor, rNonHuman)
+		}
 	}
 
 	cpPrior := &attributionCheckpoints{suppressed: true}
 	broker.Checkpoints = cpPrior
 	wPrior, err := broker.Authorize(t.Context(), command.SandboxWriteRootAsk{
-		SessionID: "sess-human", ToolCallID: "tc-3", ProposedWriteRoot: outside, ToolName: "command",
+		SessionID: "sess-prior", ToolCallID: "tc-3", ProposedWriteRoot: outside, ToolName: "command",
 	})
 	testutil.FailErr(t, "Authorize suppressed repeat", err)
-	if cpPrior.requested != 0 || !wPrior.Raised || !wPrior.Denied || wPrior.DenialCause != command.DenialCausePriorUserDeclined {
+	if cpPrior.requested != 0 || !wPrior.Raised || !wPrior.Denied || wPrior.DenialCause != isolation.PathDenialPriorUserDeclined {
 		t.Fatalf("prior-declined write root = %+v (cards=%d)", wPrior, cpPrior.requested)
 	}
 
 	rPrior, err := broker.AuthorizeRead(t.Context(), command.SandboxReadPathAsk{
-		SessionID: "sess-human", ToolCallID: "tc-4", ProposedReadPath: protectedRead,
+		SessionID: "sess-prior", ToolCallID: "tc-4", ProposedReadPath: protectedRead,
 		ReadDenyPaths: []string{protectedReadDir}, ToolName: "command",
 	})
 	testutil.FailErr(t, "AuthorizeRead suppressed repeat", err)
-	if cpPrior.requested != 0 || !rPrior.Raised || !rPrior.Denied || rPrior.DenialCause != command.DenialCausePriorUserDeclined {
+	if cpPrior.requested != 0 || !rPrior.Raised || !rPrior.Denied || rPrior.DenialCause != isolation.PathDenialPriorUserDeclined {
 		t.Fatalf("prior-declined read path = %+v (cards=%d)", rPrior, cpPrior.requested)
 	}
 
-	cpExpired := &attributionCheckpoints{status: hitl.DecisionStatusExpired}
-	broker.Checkpoints = cpExpired
+	broker.Checkpoints = &attributionCheckpoints{status: hitl.DecisionStatusExpired}
 	wExpired, err := broker.Authorize(t.Context(), command.SandboxWriteRootAsk{
 		SessionID: "sess-expired", ToolCallID: "tc-5", ProposedWriteRoot: outside, ToolName: "command",
 	})
 	testutil.FailErr(t, "Authorize expired checkpoint", err)
-	if wExpired.Authorized || wExpired.Denied || wExpired.DenialCause != command.DenialCauseNone {
+	if wExpired.Authorized || wExpired.Denied || wExpired.DenialCause != isolation.PathDenialNone {
 		t.Fatalf("expired write root = %+v", wExpired)
 	}
 
@@ -262,7 +298,7 @@ func assertBrokerHumanAndExpiredAttribution(t *testing.T) {
 		ReadDenyPaths: []string{protectedReadDir}, ToolName: "command",
 	})
 	testutil.FailErr(t, "AuthorizeRead expired checkpoint", err)
-	if rExpired.Authorized || rExpired.Denied || rExpired.DenialCause != command.DenialCauseNone {
+	if rExpired.Authorized || rExpired.Denied || rExpired.DenialCause != isolation.PathDenialNone {
 		t.Fatalf("expired read path = %+v", rExpired)
 	}
 }

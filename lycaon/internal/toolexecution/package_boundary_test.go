@@ -10,6 +10,7 @@ import (
 	"slices"
 	"testing"
 
+	"github.com/lycaon/lycaon/internal/isolation"
 	"github.com/lycaon/lycaon/internal/packageexec"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/toolcontract"
@@ -57,9 +58,9 @@ func TestPackageReadAccessRequiresSuccessfulExplicitPreflight(t *testing.T) {
 						if gotTool != tool || gotPath != path {
 							t.Fatalf("reviewed %q %q, want %q %q", gotTool, gotPath, tool, path)
 						}
-						cause := DenialCauseNone
+						cause := isolation.PathDenialNone
 						if !approved {
-							cause = DenialCauseUserDeclined
+							cause = isolation.PathDenialUserDeclined
 						}
 						return PathPreflightResult{Authorized: approved, Denied: !approved, DenialCause: cause}, nil
 					}

@@ -71,7 +71,7 @@ func (r *CommandServices) SetSandboxWriteRootGate(writeRoot command.SandboxWrite
 			return toolexecution.PathPreflightResult{
 				Authorized:   result.Authorized,
 				Denied:       result.Denied,
-				DenialCause:  toolexecution.PathDenialCause(result.DenialCause),
+				DenialCause:  result.DenialCause,
 				DeniedRule:   result.DeniedRule,
 				UserGuidance: result.UserGuidance,
 			}, err
@@ -89,7 +89,7 @@ func (r *CommandServices) SetSandboxWriteRootGate(writeRoot command.SandboxWrite
 			return toolexecution.PathPreflightResult{
 				Authorized:   result.Authorized,
 				Denied:       result.Denied,
-				DenialCause:  toolexecution.PathDenialCause(result.DenialCause),
+				DenialCause:  result.DenialCause,
 				DeniedRule:   result.DeniedRule,
 				UserGuidance: result.UserGuidance,
 			}, err
