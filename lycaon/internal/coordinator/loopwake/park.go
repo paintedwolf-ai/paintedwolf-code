@@ -8,7 +8,6 @@ import (
 	"time"
 
 	awaitstore "github.com/lycaon/lycaon/internal/await"
-	"github.com/lycaon/lycaon/internal/coordinator/anchor"
 	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/pkg/api"
@@ -206,7 +205,7 @@ func (l *WaitSubscriptions) resolveLease(ctx context.Context, store *awaitstore.
 	}
 	l.Waits.breakSleep(ctx, lease.SessionID, winner.Kind, false)
 	if coordinator {
-		l.Nudges.Nudge(ctx, lease.SessionID, anchor.LoopWake, anchor.LoopWake, lease.ID, anchor.Envelope{})
+		l.Deliveries.runWaitResumeAsync(ctx, lease.SessionID)
 	}
 	return true, nil
 }

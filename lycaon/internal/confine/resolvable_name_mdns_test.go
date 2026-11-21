@@ -48,9 +48,11 @@ func registerResolvableName(t *testing.T) string {
 	if !strings.Contains(got.reply, "Name now registered and active") {
 		t.Fatalf("dns-sd did not register %s:\n%s", name, got.transcript)
 	}
-	out, err := exec.Command(resolveProbe[0], append(resolveProbe[1:], name)...).CombinedOutput()
-	if err != nil || strings.TrimSpace(string(out)) != resolvableNameAddr {
-		t.Fatalf("registered name %s did not resolve to %s: err=%v probe=%q", name, resolvableNameAddr, err, out)
-	}
+	var out []byte
+	var resolveErr error
+	testutil.WaitFor(t, "registered name "+name+" resolves to "+resolvableNameAddr, func() bool {
+		out, resolveErr = exec.Command(resolveProbe[0], append(resolveProbe[1:], name)...).CombinedOutput()
+		return resolveErr == nil && strings.TrimSpace(string(out)) == resolvableNameAddr
+	})
 	return name
 }

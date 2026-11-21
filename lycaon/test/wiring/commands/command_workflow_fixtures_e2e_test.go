@@ -124,9 +124,9 @@ func newCommandWorkflowFixtureWithApprovalRules(t *testing.T, turns []workflowTu
 	sess, err := f.h.CreateHarnessSession(t, wire.CreateSessionRequest{}, f.dir)
 	testutil.FailErr(t, "create session", err)
 	f.session = sess.ID
+	testutil.FailErr(t, "set agent type", f.h.Sessions.Manager.Chats.SetAgentType(t.Context(), sess.ID, "implementer"))
 	wiring.AttachDefaultAmbient(t, f.h, t.Context(), sess.ID)
 	testutil.FailErr(t, "orient workflow", f.h.Workflows.Manager.Fanout.RecordBoardOrientReady(t.Context(), sess.ID, "workflow-fixture-orient"))
-	testutil.FailErr(t, "set agent type", f.h.Sessions.Manager.Chats.SetAgentType(t.Context(), sess.ID, "implementer"))
 	f.h.SeedProgress(t, t.Context(), sess.ID)
 	return f
 }
