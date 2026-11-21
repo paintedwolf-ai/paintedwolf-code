@@ -20,6 +20,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 
 	"golang.org/x/sys/unix"
@@ -180,6 +181,11 @@ func Send(socket *os.File, request Request, stdin, stdout, stderr *os.File, extr
 		fds = append(fds, int(file.Fd()))
 	}
 	err = unix.Sendmsg(int(socket.Fd()), payload, unix.UnixRights(fds...), nil, 0)
+	runtime.KeepAlive(socket)
+	runtime.KeepAlive(stdin)
+	runtime.KeepAlive(stdout)
+	runtime.KeepAlive(stderr)
+	runtime.KeepAlive(extra)
 	_ = unix.Close(pair[1])
 	if err != nil {
 		_ = channel.Close()

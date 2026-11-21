@@ -311,6 +311,11 @@ func TestBrokerAgentIdentityAndBootstrapHelpers(t *testing.T) {
 	if !DropPrivilegesForError() {
 		t.Fatal("expected DropPrivilegesForError to report unprivileged caller")
 	}
+	preFinalize := make(chan struct{})
+	runtime.SetFinalizer(new(byte), func(*byte) { close(preFinalize) })
+	runtime.GC()
+	runtime.GC()
+	<-preFinalize
 	holder, err := os.Open("/dev/null")
 	testutil.FailErr(t, "open stage handoff slot probe", err)
 	defer func() { _ = holder.Close() }()
