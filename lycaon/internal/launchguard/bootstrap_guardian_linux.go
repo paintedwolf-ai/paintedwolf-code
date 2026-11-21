@@ -274,12 +274,14 @@ const handoffExitWait = time.Second
 // file on the handoff usually means its holder is exiting, so the exit is
 // awaited briefly; a holder that lingers is left to setup cleanup.
 func withHandoffExit(err error, pidfd, pid int) error {
-	if errors.Is(err, io.EOF) {
-		polls := []unix.PollFd{{Fd: int32(pidfd), Events: unix.POLLIN}}
-		deadline := time.Now().Add(handoffExitWait)
-		for remaining := time.Until(deadline); remaining > 0; remaining = time.Until(deadline) {
-			if _, pollErr := unix.Poll(polls, int(remaining/time.Millisecond)+1); !errors.Is(pollErr, unix.EINTR) {
-				break
+	if errors.Is(err, io.EOF) && pidfd >= 0 {
+		if pollFd, fdErr := guardianPollDescriptor(uintptr(pidfd)); fdErr == nil {
+			polls := []unix.PollFd{{Fd: pollFd, Events: unix.POLLIN}}
+			deadline := time.Now().Add(handoffExitWait)
+			for remaining := time.Until(deadline); remaining > 0; remaining = time.Until(deadline) {
+				if _, pollErr := unix.Poll(polls, int(remaining/time.Millisecond)+1); !errors.Is(pollErr, unix.EINTR) {
+					break
+				}
 			}
 		}
 	}

@@ -249,11 +249,11 @@ func TestFailedSetupNamesHowTheHandoffChildEnded(t *testing.T) {
 	}
 	pid, pidfd = handoffChild(t, "exec sleep 30")
 	refusal := &stageRefusalError{reason: "still running"}
-	if err := withHandoffExit(refusal, pidfd, pid); err != refusal {
+	if err := withHandoffExit(refusal, pidfd, pid); !errors.Is(err, refusal) {
 		t.Fatalf("a live child changed the reported refusal to %v", err)
 	}
 	// A holder that closed the handoff but lingers is left to setup cleanup.
-	if err := withHandoffExit(io.EOF, pidfd, pid); err != io.EOF {
+	if err := withHandoffExit(io.EOF, pidfd, pid); !errors.Is(err, io.EOF) || errors.As(err, &ended) {
 		t.Fatalf("a lingering child changed the reported end of file to %v", err)
 	}
 }

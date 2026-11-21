@@ -163,11 +163,10 @@ func (failure *mountDestinationError) Unwrap() error { return failure.err }
 // kernel reports EINVAL only for the detached one. A covered volume is still
 // listed, so it is never settled here.
 func (volume *mountedVolume) settleUnlisted() (bool, error) {
-	listed, err := mountListed(volume.mountID)
-	if err != nil || listed {
+	if mountListed(volume.mountID) {
 		return false, nil
 	}
-	err = unix.Unmount(mountDescriptorPath(volume.tree), unix.MNT_DETACH)
+	err := unix.Unmount(mountDescriptorPath(volume.tree), unix.MNT_DETACH)
 	if err == nil || errors.Is(err, unix.EINVAL) {
 		return true, nil
 	}
@@ -175,15 +174,16 @@ func (volume *mountedVolume) settleUnlisted() (bool, error) {
 }
 
 // mountListed reports whether a mount appears in this namespace's topology.
-func mountListed(id uint64) (bool, error) {
+// An unreadable topology fails closed as listed so an active volume is not retired.
+func mountListed(id uint64) bool {
 	_, entries, err := readCurrentMountTopology()
 	if err != nil {
-		return false, err
+		return true
 	}
 	for _, entry := range entries {
-		if uint64(entry.id) == id {
-			return true, nil
+		if entry.id >= 0 && uint64(entry.id) == id {
+			return true
 		}
 	}
-	return false, nil
+	return false
 }
