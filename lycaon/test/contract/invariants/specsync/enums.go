@@ -57,7 +57,7 @@ func enumRegistriesAreExhaustive(r *invariants.Run) {
 		"WorkerStatus":          wirespec.GoEnumValues(apitest.AllWorkerStatuses()...),
 		"WorkerSummaryStatus":   wirespec.GoEnumValues(apitest.AllWorkerSummaryStatuses()...),
 		"WorkflowBoundaryKind":  wirespec.GoEnumValues(apitest.AllWorkflowBoundaryKinds()...),
-		"WorkflowRunStatus":     wirespec.GoEnumValues(api.AllWorkflowRunStatuses()...),
+		"WorkflowRunStatus":     wirespec.GoEnumValues(api.AllWorkflowRunStatusValues()...),
 	} {
 		if len(declared[name]) == 0 {
 			r.Report("pkg/api declares no %s constants", name)

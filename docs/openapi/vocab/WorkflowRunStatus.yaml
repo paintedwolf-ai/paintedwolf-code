@@ -1,0 +1,11 @@
+name: WorkflowRunStatus
+go_const_prefix: WorkflowRunStatus
+values:
+  - id: running
+  - id: paused
+  - id: paused_on_child
+  - id: complete
+  - id: failed
+  - id: canceled
+  - id: interrupted
+    comment: "closes orphaned catalog or child runs. Session-ambient roots persist across idle gaps."

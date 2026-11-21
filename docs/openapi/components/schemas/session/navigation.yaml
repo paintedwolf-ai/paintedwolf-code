@@ -127,8 +127,4 @@ components:
           items:
             $ref: "#/components/schemas/NavigationReference"
     NavigationEntryKind:
-      type: string
-      description: Navigable project filesystem entry identity.
-      enum:
-      - file
-      - folder
+      $ref: ../navigation-entry-kind.generated.yaml#/components/schemas/NavigationEntryKind

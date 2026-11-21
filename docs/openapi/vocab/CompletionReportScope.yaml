@@ -1,0 +1,10 @@
+name: CompletionReportScope
+description: What a grounded completion report is a report of. `session` covers a chat session's own work; `phase` covers one workflow phase; `run` is the run's declared deliverable, produced in the phase gated on topology_report_delivered. Stated on the record, never re-derived from live run state.
+go_const_prefix: CompletionReportScope
+values:
+  - id: session
+    comment: "covers one chat session."
+  - id: phase
+    comment: "covers one workflow phase."
+  - id: run
+    comment: "covers one workflow run."
