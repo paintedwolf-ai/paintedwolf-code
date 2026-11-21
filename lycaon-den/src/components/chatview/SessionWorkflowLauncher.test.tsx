@@ -9,7 +9,7 @@ import { sessionLauncherTiles } from "../../workflow/session-launcher-model.ts";
 import type { WorkflowSummary } from "../../api/types.ts";
 
 const catalog: WorkflowSummary[] = [
-  { id: "plan", version: "1.0.0", name: "Plan", icon: "route", featured: true },
+  { id: "plan", version: "1.0.0", name: "Plan", icon: "route", featured: true, description: "Research, expand, approve, then build." },
   {
     id: "recon-pack",
     version: "1.0.0",
@@ -82,6 +82,24 @@ describe("SessionWorkflowLauncher", () => {
     expect(onSelect).not.toHaveBeenCalled();
   });
 
+  it("marks workflows that need Agent while leaving read-only tiles available", () => {
+    const onSelect = vi.fn();
+    const tiles = sessionLauncherTiles(
+      catalog.map((workflow) => ({ ...workflow, requires_agent: workflow.id === "plan" })),
+      { hasRepo: true },
+    );
+    render(() => <SessionWorkflowLauncher tiles={tiles} busy={false} askMode onSelect={onSelect} />);
+    const blocked = screen.getByRole("button", { name: "Plan — needs Agent" }) as HTMLButtonElement;
+    expect(blocked.disabled).toBe(true);
+    expect(blocked.textContent).toContain("Research, expand, approve, then build.");
+    expect(blocked.getAttribute("data-tip")).toBe("Plan needs Agent.");
+    expect(screen.getByText("Needs Agent")).toBeTruthy();
+    fireEvent.click(blocked);
+    expect(onSelect).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "Recon" }));
+    expect(onSelect).toHaveBeenCalledWith(expect.objectContaining({ id: "recon-pack" }));
+  });
+
   it("opens the full catalog from the More tile", () => {
     const onBrowseAll = vi.fn();
     render(() => (
@@ -141,11 +159,12 @@ describe("tile grid reflow", () => {
       join(import.meta.dirname, "../../chat-utilities.css"),
       "utf8",
     );
-    const iconOnly = css.match(
-      /@container den-session-launcher-tile \(max-width:\s*[\d.]+rem\)\s*\{([\s\S]*?)\n\}/,
-    )?.[1];
+    const tileTiers = css.matchAll(
+      /@container den-session-launcher-tile \(max-width:\s*[\d.]+rem\)\s*\{([\s\S]*?)\n\}/g,
+    );
+    const iconOnly = Array.from(tileTiers, ([, rules]) => rules)
+      .find((rules) => rules?.includes(".den-session-launcher__tile-title"));
     expect(iconOnly, "icon-only tile tier missing").toBeTruthy();
-    expect(iconOnly).toMatch(/\.den-session-launcher__tile-title/);
     expect(iconOnly).toMatch(/display:\s*none/);
   });
 

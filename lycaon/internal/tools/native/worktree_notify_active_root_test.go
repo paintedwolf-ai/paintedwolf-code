@@ -65,16 +65,15 @@ func TestWorktreeChangesFollowTheActiveRoot(t *testing.T) {
 }
 
 func TestWorktreeChangesExcludeExternalWrites(t *testing.T) {
-	t.Cleanup(repochange.ResetObserversForTest)
-	t.Cleanup(func() { repochange.ResetDebouncerForTest(context.Background()) })
+	repochangetest.Acquire(t)
 
 	root := filepath.Join(t.TempDir(), "workspace")
 	var events []repochange.Event
-	repochange.RegisterObserver(func(_ context.Context, ev repochange.Event) {
+	t.Cleanup(repochange.RegisterObserver(func(_ context.Context, ev repochange.Event) {
 		if ev.Kind == repochange.WorktreeChanged && ev.ProjectDir == root {
 			events = append(events, ev)
 		}
-	})
+	}))
 	tctx := tools.ToolContext{Source: tools.InvocationSource{
 		Roots:               []projectroot.RootRef{{ID: "r1", Path: root, IsPrimary: true}},
 		SourceWorkspaceKind: api.SourceWorkspaceKindProject,
@@ -84,7 +83,7 @@ func TestWorktreeChangesExcludeExternalWrites(t *testing.T) {
 	})
 	start := repochange.CurrentEpoch(root)
 	notifyWorktreeChangedLocations(t.Context(), tctx, external)
-	repochange.ResetDebouncerForTest(t.Context())
+	repochange.UseDebounce(t.Context(), repochange.DefaultDebounce)()
 	if len(events) != 0 || repochange.CurrentEpoch(root) != start {
 		t.Fatalf("external write changed the workspace: %v", events)
 	}
@@ -93,7 +92,7 @@ func TestWorktreeChangesExcludeExternalWrites(t *testing.T) {
 		Abs: filepath.Join(root, ".env"), DisplayPath: "approved/inside",
 	})
 	notifyWorktreeChangedLocations(t.Context(), tctx, external, inside)
-	repochange.ResetDebouncerForTest(t.Context())
+	repochange.UseDebounce(t.Context(), repochange.DefaultDebounce)()
 	if len(events) != 1 || len(events[0].Paths) != 1 || events[0].Paths[0] != ".env" {
 		t.Fatalf("events = %#v, want one relative .env change", events)
 	}

@@ -1,4 +1,4 @@
-package wiring
+package commands
 
 import (
 	"io"
@@ -12,6 +12,7 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/test/wiring"
 )
 
 func TestCommandCurlUsesManagedJarsAcrossSubmissions(t *testing.T) {
@@ -45,10 +46,10 @@ func TestCommandCurlUsesManagedJarsAcrossSubmissions(t *testing.T) {
 	}
 	const jars = "curl -s --managed-cookie-jar browser --managed-token-jar api "
 	run.seed(t, "refresh.txt", "previous publication")
-	run.script.steps = []citableStep{
-		{command: jars + "--capture-token session=header:X-Session --capture-token number=json:result.id -D login.headers " + server.URL + "/login"},
-		{command: jars + "--capture-token session=header:X-Session --capture-token number=json:result.id -o refresh.txt " + server.URL + "/refresh"},
-		{command: jars + "-H 'X-Session: {{token:session}}' -H 'X-Number: {{token:number}}' -o response.txt " + server.URL + "/check"},
+	run.script.Steps = []wiring.CitableStep{
+		{Command: jars + "--capture-token session=header:X-Session --capture-token number=json:result.id -D login.headers " + server.URL + "/login"},
+		{Command: jars + "--capture-token session=header:X-Session --capture-token number=json:result.id -o refresh.txt " + server.URL + "/refresh"},
+		{Command: jars + "-H 'X-Session: {{token:session}}' -H 'X-Number: {{token:number}}' -o response.txt " + server.URL + "/check"},
 	}
 	_, err = run.h.Sessions.Manager.Submissions.Prompt(t.Context(), run.session, "use the fixture service")
 	testutil.FailErr(t, "submit command sequence", err)

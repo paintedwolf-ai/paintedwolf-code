@@ -10,6 +10,7 @@ import (
 	"github.com/lycaon/lycaon/internal/eventoutbox"
 	"github.com/lycaon/lycaon/internal/people/peoplestore"
 	"github.com/lycaon/lycaon/internal/scopedstore"
+	"github.com/lycaon/lycaon/internal/session/promptstate"
 	"github.com/lycaon/lycaon/internal/visual"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -51,6 +52,7 @@ type sqlCore struct {
 	promptPending    PromptPendingSource
 	dataDir          string
 	mutationLocks    [64]sync.Mutex
+	modeLocks        promptstate.MutexRegistry
 	peopleStore      *peoplestore.Store
 	// artifacts binds minted evidence handles onto visual artifact rows.
 	artifacts *visual.Records

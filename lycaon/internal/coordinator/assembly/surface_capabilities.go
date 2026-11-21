@@ -49,6 +49,9 @@ func (e *promptSurface) mergeVisibleTools(ctx context.Context, sess *api.Session
 	}
 	names := make([]string, 0, len(metas))
 	for _, meta := range metas {
+		if sess.Mode == api.SessionModeAsk && !tools.AllowedInAsk(meta) {
+			continue
+		}
 		if strings.TrimSpace(meta.Name) != "" {
 			names = append(names, meta.Name)
 		}
@@ -166,6 +169,9 @@ func (e *promptSurface) resolveTurnRoster(
 	if len(declared) == 0 {
 		declared = spawn.AmbientAllowedAgents()
 	}
+	if sess.Mode == api.SessionModeAsk {
+		declared = prompts.ReadOnlyAgents(declared)
+	}
 	roster := inject.ResolveAgentRoster(profile.SurfaceID, declared, rootCount, repoKnownEmpty, webSearchEnabled)
 	return &roster
 }
@@ -204,7 +210,7 @@ func (e *promptSurface) turnReader(
 ) (prompts.Reader, error) {
 	profile, _ := e.resolveCoordinatorProfile(ctx, sess, frame, history, turn)
 	if frame.Roster != nil && strings.TrimSpace(frame.Roster.Facts.SurfaceID) != "" {
-		profile = surface.TurnProfile{SurfaceID: strings.TrimSpace(frame.Roster.Facts.SurfaceID)}
+		profile.SurfaceID = strings.TrimSpace(frame.Roster.Facts.SurfaceID)
 	}
 	// A turn that moves to another surface, as a dispatch moves it to park,
 	// is read with that surface's tools.

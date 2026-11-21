@@ -1,4 +1,5 @@
 import { createSignal } from "solid-js";
+import type { SessionMode } from "../../api/types.ts";
 import type { DenChatPrefs, DenMessageTimes } from "../../../shared/app-state-types.ts";
 import {
   getAppStateSnapshot,
@@ -8,6 +9,24 @@ import { persistAppStateInBackground } from "../../store/app-state-background-wr
 const DEFAULT_MESSAGE_TIMES: DenMessageTimes = "hover";
 
 const [messageTimes, setMessageTimes] = createSignal<DenMessageTimes>(DEFAULT_MESSAGE_TIMES);
+const [lastStartedMode, setLastStartedMode] = createSignal<SessionMode>("agent");
+const [prefsReady, setPrefsReady] = createSignal(false);
+
+export function chatPrefsReady(): boolean {
+  return prefsReady();
+}
+
+export function lastStartedModePref(): SessionMode {
+  return lastStartedMode();
+}
+
+export function rememberStartedMode(mode: SessionMode): void {
+  if (lastStartedMode() === mode) return;
+  setLastStartedMode(mode);
+  void persistAppStateInBackground({
+    chat: { ...getAppStateSnapshot().chat, lastStartedMode: mode },
+  });
+}
 
 /** When the person's own messages show their time. */
 export function messageTimesPref(): DenMessageTimes {
@@ -19,7 +38,10 @@ export function resolveMessageTimes(prefs?: DenChatPrefs): DenMessageTimes {
 }
 
 export function syncChatPrefsFromSnapshot(): void {
-  setMessageTimes(resolveMessageTimes(getAppStateSnapshot().chat));
+  const prefs = getAppStateSnapshot().chat;
+  setMessageTimes(resolveMessageTimes(prefs));
+  setLastStartedMode(prefs?.lastStartedMode === "ask" ? "ask" : "agent");
+  setPrefsReady(true);
 }
 
 export async function saveMessageTimes(value: DenMessageTimes): Promise<void> {

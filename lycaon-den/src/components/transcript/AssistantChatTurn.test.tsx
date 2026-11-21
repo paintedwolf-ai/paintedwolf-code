@@ -51,7 +51,7 @@ function groundedMessage(overrides: Partial<Message> = {}): Message {
 function seedStore(runs: WorkflowRun[]) {
   const store = createAppStore();
   const sessionId = runs[0]?.session_id ?? "session-1";
-  store.actions.setCurrentSession({ id: sessionId, owner_person_id: "00000000-0000-4000-8000-000000000002", project_id: "project-1", posture: "build", status: "idle", created_at: "t", activity_at: "t", updated_at: "t" });
+  store.actions.setCurrentSession({ mode: "agent" as const, started: true, root_session_id: sessionId, id: sessionId, owner_person_id: "00000000-0000-4000-8000-000000000002", project_id: "project-1", posture: "build", status: "idle", created_at: "t", activity_at: "t", updated_at: "t" });
   store.actions.setWorkflowState(sessionId, store.state.sessionViewEpoch, {
     workflowRuns: runs,
     workflowCatalog: catalog,

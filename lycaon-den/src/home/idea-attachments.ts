@@ -1,3 +1,4 @@
+import type { SessionMode } from "../api/types.ts";
 /** Home buffers attachments until its draft project exists. */
 
 import { basenameOfPath } from "../api/project-path.ts";
@@ -51,6 +52,7 @@ export type HomeIdeaAttachment =
 export type HomeIdeaDraft = {
   text: string;
   attachments: readonly HomeIdeaAttachment[];
+  mode: SessionMode;
 };
 
 export const HOME_IDEA_FOLDER_REJECT =

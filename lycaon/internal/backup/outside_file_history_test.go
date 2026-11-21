@@ -22,12 +22,12 @@ func TestOutsideFileHistorySurvivesBackupAfterItsFirstChatIsDeleted(t *testing.T
 	projectID := testdbseed.DefaultProjectID
 	testdbseed.InsertProjectRoot(t, database, projectID, t.TempDir())
 	chats := store.NewSQL(database)
-	first, err := chats.Create(ctx, api.CreateSessionRequest{}, projectID)
+	first, err := chats.Sessions.Create(ctx, api.CreateSessionRequest{}, projectID)
 	testutil.FailErr(t, "create first chat", err)
-	second, err := chats.Create(ctx, api.CreateSessionRequest{}, projectID)
+	second, err := chats.Sessions.Create(ctx, api.CreateSessionRequest{}, projectID)
 	testutil.FailErr(t, "create second chat", err)
 
-	ledger := sourceledger.New(database, filepath.Join(config, "source-content"))
+	ledger := sourceledger.New(database, filepath.Join(config, "source-content"), sourceledger.Timing{})
 	outside, err := db.New(database).GetProjectOutsideRootID(ctx, projectID)
 	testutil.FailErr(t, "resolve outside namespace", err)
 	input := sourceledger.RecordInput{
@@ -41,7 +41,7 @@ func TestOutsideFileHistorySurvivesBackupAfterItsFirstChatIsDeleted(t *testing.T
 	var effectID string
 	testutil.FailErr(t, "read retained effect", database.QueryRowContext(ctx, `SELECT e.id FROM source_effects e
 		JOIN source_operations o ON o.id = e.operation_id WHERE o.session_id = ?`, second.ID).Scan(&effectID))
-	testutil.FailErr(t, "delete first chat", chats.Delete(ctx, first.ID))
+	testutil.FailErr(t, "delete first chat", chats.Sessions.Delete(ctx, first.ID))
 
 	archive, _, err := createArchive(t, ctx, backup.CreateOpts{ConfigDir: config, DBPath: dbPath, SQLDB: database, SchemaUserVersion: db.SchemaVersion})
 	testutil.FailErr(t, "back up outside history", err)
@@ -54,7 +54,7 @@ func TestOutsideFileHistorySurvivesBackupAfterItsFirstChatIsDeleted(t *testing.T
 	testutil.FailErr(t, "restore outside history", backup.ApplyPending(ctx, target))
 
 	restored := testdbfixture.OpenPath(t, targetPath)
-	restoredLedger := sourceledger.New(restored, filepath.Join(target, "source-content"))
+	restoredLedger := sourceledger.New(restored, filepath.Join(target, "source-content"), sourceledger.Timing{})
 	diff, err := restoredLedger.Comparisons.CompareEffect(ctx, projectID, effectID)
 	testutil.FailErr(t, "compare restored effect", err)
 	if diff.Before.Content != "first\n" || diff.After.Content != "second\n" {

@@ -44,7 +44,6 @@ var silentMutators = []invariants.Exemption{
 	{Key: "internal/contentblob/density.go:densifyProject", Reason: "marks a densified project's storage tier cold; the tier is storage bookkeeping, not on the project wire"},
 	{Key: "internal/project/sql_registry.go:SetCover", Reason: "moves the project cover reference; session.Manager publishes the project update after visual.DesignateCover"},
 	{Key: "internal/sourceledger/gittrack.go:commitGitTransitions", Reason: "records observed git ref transitions; its projects write only allocates their source-history ordinals"},
-	{Key: "internal/sourceledger/commandwindow.go:insertWindow", Reason: "opens a command window; its projects write only allocates the window's source-history ordinal, which is off the project wire"},
 	{Key: "internal/sourceledger/commandwindow_retention.go:pin", Reason: "pins private before-images until the window settles"},
 
 	// The session plan is published through progress write observers.
@@ -61,7 +60,6 @@ var silentMutators = []invariants.Exemption{
 
 	// Prompt submission receipts reach clients only as the reply to a prompt
 	// admission or its replay; the queue draft and the run announce the rest.
-	{Key: "internal/session/store/sql_prompt_submission.go:putPromptSubmissionSQL", Reason: "admits a queue receipt; session.Manager publishes the queue snapshot through events.Publisher.PublishQueue"},
 	{Key: "internal/session/store/sql_prompt_submission.go:claimPromptSubmissionSQL", Reason: "claims one admitted receipt for execution; the run announces through its session and message events"},
 	{Key: "internal/session/store/sql_prompt_submission.go:claimPromptSubmissionsSQL", Reason: "claims queued receipts for one dispatch; the queue snapshot is published through PublishQueue"},
 	{Key: "internal/session/store/sql_prompt_submission.go:FinishPromptSubmission", Reason: "finishes a claimed submission"},
@@ -72,6 +70,13 @@ var silentMutators = []invariants.Exemption{
 	{Key: "internal/session/store/sql_prompt_attachment.go:recoverPromptSubmissionsSQL", Reason: "requeues interrupted receipts at boot, before any subscriber; recovered submissions announce as they dispatch"},
 	{Key: "internal/session/store/turn_sql_recovery.go:recoverTurnsSQL", Reason: "completes running receipts whose turns finished before host exit, at boot before any subscriber; the idle transitions after it announce the sessions"},
 	{Key: "internal/session/store/turn_sql_recovery.go:recoverTurnsForSessionSQL", Reason: "completes a panicked session's running receipts whose turns finished; the session's idle transition after it announces the recovery"},
+
+	// Turn admission can announce the session start latch. Turn records
+	// support execution and recovery.
+	{Key: "internal/session/store/turn_closeout.go:checkpointTurnTx", Reason: "saves the attempt's recovery checkpoint and advances its turn's progress clock"},
+	{Key: "internal/session/store/turn_closeout.go:sealTurnCloseoutSQL", Reason: "points the session at the finalized closeout used for recovery"},
+	{Key: "internal/session/store/turn_sql.go:TouchTurnProgress", Reason: "refreshes the running turn's progress clock for the watchdog"},
+	{Key: "internal/session/store/turn_sql_recovery.go:finishTurnSQL", Reason: "settles the turn and its attempt. Session lifecycle events announce session status"},
 
 	// Session and transcript rows written beside an announced transition.
 	{Key: "internal/session/store/secret_screen_generation.go:StampMessageScreenGeneration", Reason: "stamps the evidence revision a row was screened at; the content rewrite beside it goes through UpdateMessage, which announces"},

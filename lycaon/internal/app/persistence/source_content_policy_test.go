@@ -9,6 +9,7 @@ import (
 	"github.com/lycaon/lycaon/internal/confine"
 	"github.com/lycaon/lycaon/internal/db"
 	"github.com/lycaon/lycaon/internal/project"
+	"github.com/lycaon/lycaon/internal/project/projecttest"
 	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -20,7 +21,7 @@ func TestSourceContentPolicyUsesProjectRootAndOutsideAddresses(t *testing.T) {
 	registry := project.NewSQLRegistry(database)
 	attached := t.TempDir()
 	outside := t.TempDir()
-	proj, err := project.CreateWithRoot(ctx, registry, attached)
+	proj, err := projecttest.CreateWithRoot(ctx, registry, attached)
 	testutil.FailErr(t, "create project", err)
 
 	const protectedFile = "fixture-credential.json"

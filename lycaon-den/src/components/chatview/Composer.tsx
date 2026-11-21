@@ -1,7 +1,7 @@
 import { createComposerElevatedAccess, ElevatedAccessButton } from "./ComposerElevatedAccess.tsx";
 import { createComposerVaultUnlock, VaultUnlockButton } from "./ComposerVaultUnlock.tsx";
 import { createComposerEditMenu } from "./composer-edit-menu.ts";
-import { Show, batch, createEffect, createSignal, onCleanup, untrack } from "solid-js";
+import { Show, batch, createEffect, createSignal, onCleanup, untrack, type JSX } from "solid-js";
 import {
   attachDispatcher,
   declinable,
@@ -73,7 +73,8 @@ import { ContextMenu } from "../ContextMenu.tsx";
 import { MarkSecretDialog } from "../source/secrets/MarkSecretDialog.tsx";
 import { useComposerAttachments } from "./useComposerAttachments.ts";
 import { ComposerAttachmentStrip } from "./ComposerAttachmentStrip.tsx";
-import { useComposerDraftSizing } from "./useComposerDraftSizing.ts";
+import { createFadingInputHint } from "../../ui/fading-input-hint.ts";
+import { fitDraftHeight, useComposerDraftSizing } from "./useComposerDraftSizing.ts";
 
 let nextSlashListboxId = 0;
 
@@ -99,6 +100,8 @@ type Props = {
   activeWorkflow?: WorkflowRun | null;
   workflowCatalog?: readonly WorkflowSummary[];
   placeholder?: string;
+  modeControl?: (resize: (mutate: () => void) => void, focusInput: () => void) => JSX.Element;
+  sendBlocked?: boolean;
   /** The active or armed workflow accepts an empty submission. */
   emptySubmitEnabled?: boolean;
   /** Provider readiness blocks composing. */
@@ -172,6 +175,7 @@ export function Composer(props: Props) {
     );
 
   const sendBlocked = () =>
+    props.sendBlocked ||
     !appBootPreparation.ready() ||
     isComposerSendBlocked(
       props.sidecarStatus,
@@ -379,6 +383,13 @@ export function Composer(props: Props) {
 
   const presence = useResidentPresence();
   const [inputFocused, setInputFocused] = createSignal(false);
+  const hint = createFadingInputHint(placeholder, () => !inputFocused() && text().length === 0);
+  const resizeModeChrome = (mutate: () => void) => {
+    resizeChrome(() => {
+      batch(mutate);
+      if (inputRef) fitDraftHeight(inputRef, scrollRef);
+    });
+  };
   /** A staged choice keeps focus on its control, so it arms Enter for the displayed chat only. */
   const holdsAskSend = () => presence() === "active" && sendArmedByAsk();
   createEffect(() => {
@@ -630,7 +641,8 @@ export function Composer(props: Props) {
                   if (el) el.value = untrack(text);
                 }}
                 class="den-composer-input"
-                placeholder={placeholder()}
+                placeholder={hint.text()}
+                data-hint-out={hint.out() ? "" : undefined}
                 rows={2}
                 disabled={composeBlocked()}
                 onInput={(e) => {
@@ -760,6 +772,7 @@ export function Composer(props: Props) {
                 <ElevatedAccessButton state={elevated} />
                 <VaultUnlockButton state={vaultUnlock} />
               </div>
+              {props.modeControl?.(resizeModeChrome, () => focusComposerInput(inputRef))}
               <button
                 type="button"
                 class="den-quiet-icon-btn"

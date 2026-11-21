@@ -26,9 +26,7 @@ func TestServeRecoverySettlesPersistedBusySession(t *testing.T) {
 	host, err := Build(t.Context(), cfg)
 	testutil.FailErr(t, "reopen host", err)
 	t.Cleanup(func() { _ = host.Close() })
-	stop, err := host.StartBackgroundWorkers(t.Context())
-	testutil.FailErr(t, "start recovered host", err)
-	t.Cleanup(stop)
+	testutil.FailErr(t, "start recovered host", host.startRunners(t.Context()))
 	var status api.SessionStatus
 	testutil.FailErr(t, "read recovered status", host.DB.QueryRowContext(t.Context(), "SELECT status FROM sessions WHERE id = 'interrupted'").Scan(&status))
 	if status != api.SessionStatusIdle {

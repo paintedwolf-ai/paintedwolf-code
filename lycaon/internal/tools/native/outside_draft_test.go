@@ -12,11 +12,12 @@ import (
 	"github.com/lycaon/lycaon/internal/hitl"
 	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/tools"
 	nativefixture "github.com/lycaon/lycaon/internal/tools/native/internal/testfixture"
 )
 
-func TestCheckUnsavedDraftNamesAGrantedOutsideDescendant(t *testing.T) {
+func TestSaveDraftsSavesOrRejectsAGrantedOutsideDescendant(t *testing.T) {
 	_, tc, _, outside := outsideNativeFixture(t)
 	dir := fspath.CanonicalPath(outside)
 	file := filepath.Join(dir, "draft.txt")
@@ -26,16 +27,17 @@ func TestCheckUnsavedDraftNamesAGrantedOutsideDescendant(t *testing.T) {
 		t.Fatal("fixture has no outside address")
 	}
 	draft := openDoc("outside-editor", "unsaved\n", true)
+	draft.Diverged, draft.BaseSHA256 = true, "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
 	tc.Source.EditorDocuments = &fakeEditorDocuments{docs: map[string]*tools.EditorDocumentText{tc.Source.OutsideRoot.ID + "/" + rel: draft}}
 	tc.Files.ApprovedFileAccess = []hitl.GrantedPathDelta{{Path: dir, Write: true}, {Path: file, Write: true}}
 	revisions := ExecutionRevisions{Boundary: nativefixture.Boundary(t)}
 
-	testutil.FailErr(t, "check just the outside folder", revisions.CheckUnsavedDraft(t.Context(), tc, dir, false))
+	testutil.FailErr(t, "save just the outside folder", revisions.SaveDrafts(t.Context(), tc, dir, false))
 	for _, operand := range []string{dir, file} {
-		err := revisions.CheckUnsavedDraft(t.Context(), tc, operand, operand == dir)
+		err := revisions.SaveDrafts(t.Context(), tc, operand, operand == dir)
 		var conflict *ExecutionRevisionConflict
-		if !errors.As(err, &conflict) || !conflict.UnsavedDraft || conflict.Path != file || conflict.Current.DocumentID != draft.ID {
-			t.Fatalf("draft check for %s = %+v, %v", operand, conflict, err)
+		if !errors.As(err, &conflict) || conflict.Path != file || conflict.Pinned.DiskSHA256 != draft.BaseSHA256 || conflict.Current.Mode != toolcontract.AbsentRevision {
+			t.Fatalf("draft save for %s = %+v, %v", operand, conflict, err)
 		}
 	}
 }

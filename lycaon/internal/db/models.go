@@ -1545,6 +1545,13 @@ type SessionEntries struct {
 	CreatedAt    string `json:"created_at"`
 }
 
+type SessionModeAuthority struct {
+	SessionID     string         `json:"session_id"`
+	RootSessionID sql.NullString `json:"root_session_id"`
+	Mode          sql.NullString `json:"mode"`
+	Started       sql.NullInt64  `json:"started"`
+}
+
 type SessionModelLimits struct {
 	SessionID          string         `json:"session_id"`
 	ResponseLimit      int64          `json:"response_limit"`
@@ -1637,6 +1644,9 @@ type Sessions struct {
 	ArchivedAt           sql.NullString `json:"archived_at"`
 	PinRank              sql.NullInt64  `json:"pin_rank"`
 	SeenAt               sql.NullString `json:"seen_at"`
+	RootSessionID        string         `json:"root_session_id"`
+	Mode                 sql.NullString `json:"mode"`
+	Started              int64          `json:"started"`
 }
 
 type SourceAgentPresentations struct {

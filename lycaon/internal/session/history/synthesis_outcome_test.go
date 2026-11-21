@@ -15,6 +15,7 @@ import (
 	"github.com/lycaon/lycaon/internal/prompts/promptstest"
 	"github.com/lycaon/lycaon/internal/session/lifecycle"
 	"github.com/lycaon/lycaon/internal/session/store"
+	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/pkg/api"
@@ -83,21 +84,21 @@ func testSynthesisOutcome(t *testing.T, state, reason string, calls int) {
 	previous := slog.Default()
 	slog.SetDefault(slog.New(slog.NewJSONHandler(&output, nil)))
 	t.Cleanup(func() { slog.SetDefault(previous) })
-	mem := store.NewMemory()
-	sess, err := mem.Create(t.Context(), api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
+	mem := storetest.New(t)
+	sess, err := mem.Sessions.Create(t.Context(), api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create synthesis session", err)
-	testutil.FailErr(t, "append canonical observations", mem.AppendMessages(t.Context(), sess.ID,
+	testutil.FailErr(t, "append canonical observations", mem.Transcript.AppendMessages(t.Context(), sess.ID,
 		api.Message{ID: "one", Role: api.MessageRoleAssistant, Content: "First observation"},
 		api.Message{ID: "two", Role: api.MessageRoleAssistant, Content: "Second observation"}))
-	rows, err := mem.GetMessages(t.Context(), sess.ID)
+	rows, err := mem.Transcript.GetMessages(t.Context(), sess.ID)
 	testutil.FailErr(t, "read canonical observations", err)
 	second := rows[1]
 	record := &messageview.Continuation{Format: messageview.ContinuationFormat, Window: 8192,
 		ThroughOrd: second.Ord, Reason: "references_only"}
 	baseline := synthesisTestBaseline(second, record, state)
-	testutil.FailErr(t, "publish test baseline", mem.PutCompactionView(t.Context(), sess.ID, baseline))
+	testutil.FailErr(t, "publish test baseline", mem.Compaction.PutCompactionView(t.Context(), sess.ID, baseline))
 	baseline.Continuation = record
-	unit := &Service{store: mem, Gate: lifecycle.New(mem), Runner: NewRunner()}
+	unit := &Service{sessionStore: mem.Sessions, transcriptStore: mem.Transcript, compactionStore: mem.Compaction, Gate: lifecycle.New(mem.Sessions), Runner: NewRunner()}
 	token, err := unit.Gate.Capture(t.Context(), sess.ID)
 	testutil.FailErr(t, "capture session admission", err)
 	model := synthesisOutcomeModel(t, mem, sess.ID, rows[0], state)
@@ -109,7 +110,7 @@ func testSynthesisOutcome(t *testing.T, state, reason string, calls int) {
 	defer cancel()
 	switch state {
 	case "model changed":
-		testutil.FailErr(t, "replace receiver model", mem.UpdateSession(ctx, sess.ID, func(s *api.Session) { s.Model = "changed" }))
+		testutil.FailErr(t, "replace receiver model", mem.Sessions.UpdateSession(ctx, sess.ID, func(s *api.Session) { s.Model = "changed" }))
 	case "canceled":
 		cancel()
 	case "unchanged source":
@@ -131,7 +132,7 @@ func testSynthesisOutcome(t *testing.T, state, reason string, calls int) {
 	}
 	log := logs[0]
 	if log.Outcome == "published" {
-		view, ok, err := mem.GetCompactionView(t.Context(), sess.ID)
+		view, ok, err := mem.Compaction.GetCompactionView(t.Context(), sess.ID)
 		testutil.FailErr(t, "load enriched continuation", err)
 		if !ok || view.Continuation.RenderTokens == 0 {
 			t.Fatal("the accepted projection did not keep its display budget")
@@ -166,13 +167,13 @@ func synthesisTestBaseline(last api.Message, record *messageview.Continuation, s
 	return view
 }
 
-func synthesisOutcomeModel(t *testing.T, mem *store.Memory, sessionID string, first api.Message, state string) *synthesisTestModel {
+func synthesisOutcomeModel(t *testing.T, mem *store.Repositories, sessionID string, first api.Message, state string) *synthesisTestModel {
 	t.Helper()
 	return &synthesisTestModel{callback: func() (string, error) {
 		switch state {
 		case "stale after first call":
 			first.Content = "Corrected first observation"
-			_, err := mem.UpdateMessage(t.Context(), sessionID, first.ID, first)
+			_, err := mem.Transcript.UpdateMessage(t.Context(), sessionID, first.ID, first)
 			testutil.FailErr(t, "make source stale between pages", err)
 		case "provider error":
 			return "", errors.New("fixture provider error")

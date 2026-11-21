@@ -187,7 +187,7 @@ func (s *Commands) baselineOutside(ctx context.Context, w *openCommandWindow, sp
 	if len(added) == 0 {
 		return nil
 	}
-	ctx, cancel := context.WithTimeout(ctx, s.observationBudget/2)
+	ctx, cancel := context.WithTimeout(ctx, windowSettlePassBudget)
 	defer cancel()
 	var starts []string
 	for _, folder := range added {

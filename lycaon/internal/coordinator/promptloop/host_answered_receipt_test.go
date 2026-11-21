@@ -316,7 +316,7 @@ func TestInvocationSettlementMatchesEffectsAndRefusal(t *testing.T) {
 		t.Run(want.name, func(t *testing.T) {
 			rec := newRecordingRecorder()
 			deps, mem := readCallDeps(t, rec)
-			reg := tools.NewStubRegistry()
+			reg := toolstest.NewRegistry()
 			testutil.FailErr(t, "register fixture handler", reg.Register("read", func(_ context.Context, _ map[string]any, tc tools.ToolContext) (string, error) {
 				if want.programState == "" {
 					return "", toolrejection.RenderReject(&toolrejection.ToolReject{Code: want.code, BeforeEffect: want.beforeEffect}, nil)

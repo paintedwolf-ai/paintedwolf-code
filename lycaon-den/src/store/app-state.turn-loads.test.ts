@@ -3,6 +3,9 @@ import type { Message, Session, TurnLoad } from "../api/types.ts";
 import { createAppStore } from "./app-state.ts";
 
 const session = (id: string): Session => ({
+  mode: "agent" as const,
+  started: true,
+  root_session_id: id,
   id,
   owner_person_id: "00000000-0000-4000-8000-000000000002",
   project_id: "00000000-0000-4000-8000-000000000001",

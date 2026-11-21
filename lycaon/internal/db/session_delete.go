@@ -72,7 +72,7 @@ func ReleaseOutsideFiles(ctx context.Context, q *Queries, projectID string) erro
 const sessionTreeQuery = `
 		WITH RECURSIVE session_tree(id) AS (
 		    SELECT sessions.id FROM sessions WHERE sessions.id = ?
-		    UNION ALL
+		    UNION
 		    SELECT s.id FROM sessions s
 		    JOIN session_tree parent ON s.parent_session_id = parent.id
 		)

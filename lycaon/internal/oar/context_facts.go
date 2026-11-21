@@ -39,6 +39,7 @@ type SessionFacts struct {
 	ProjectID                string
 	SessionID                string
 	SessionPosture           string
+	SessionMode              string
 	Surface                  string
 	Role                     string
 	Phase                    string
@@ -87,6 +88,7 @@ type WorkflowFacts struct {
 }
 
 type WorkersFacts struct {
+	AskWorkerWrites         bool
 	WorkersIdle             bool
 	WorkerSpawnBlocked      bool
 	ActiveWorkerCount       int64

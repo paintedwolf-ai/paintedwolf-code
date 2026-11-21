@@ -39,6 +39,7 @@ import (
 
 type Sessions interface {
 	Get(ctx context.Context, id string) (*api.Session, error)
+	ResolveEffectiveMode(context.Context, string) (store.RootAuthority, error)
 }
 
 type Transcript interface {
@@ -63,24 +64,25 @@ type Evidence interface {
 	CommitVisualEvidenceToolResult(ctx context.Context, sessionID, projectDir, toolName string, args map[string]any, content, artifactID string) (string, string, error)
 }
 type Context struct {
-	PolicyIndex *policyindex.Service
-	Frame       inject.CoordinatorTurnFrameSource
-	Guards      *turnguards.Service
-	Limits      *sessionlimits.Service
-	Loading     *loading.Service
-	Pages       *pagesession.Registry
-	Policy      *policyfacts.Service
-	Processes   *processcontrol.Service
-	Profiles    *profiles.Service
-	Prompts     prompts.PromptTemplateEngine
-	Runtime     *coordinator.Runtime
-	Sessions    Sessions
-	ToolContext *toolcontext.Service
-	Tools       tools.ToolRegistry
-	WebResearch *webresearch.ConfigStore
-	WorkerState *workeroutcomes.State
-	Workspace   *sessionscope.Service
-	Workspaces  *workerworkspace.Service
+	ActivateAgentWorkflow func(context.Context, string) error
+	PolicyIndex           *policyindex.Service
+	Frame                 inject.CoordinatorTurnFrameSource
+	Guards                *turnguards.Service
+	Limits                *sessionlimits.Service
+	Loading               *loading.Service
+	Pages                 *pagesession.Registry
+	Policy                *policyfacts.Service
+	Processes             *processcontrol.Service
+	Profiles              *profiles.Service
+	Prompts               prompts.PromptTemplateEngine
+	Runtime               *coordinator.Runtime
+	Sessions              Sessions
+	ToolContext           *toolcontext.Service
+	Tools                 tools.ToolRegistry
+	WebResearch           *webresearch.ConfigStore
+	WorkerState           *workeroutcomes.State
+	Workspace             *sessionscope.Service
+	Workspaces            *workerworkspace.Service
 }
 
 func (m *Context) Build() promptloop.ContextDeps {
@@ -88,6 +90,14 @@ func (m *Context) Build() promptloop.ContextDeps {
 	deps := promptloop.ContextDeps{
 		Limits: m.Limits.Effective,
 		Tools:  m.Tools,
+		ResolveEffectiveMode: func(ctx context.Context, id string) (store.RootAuthority, error) {
+			if m.Sessions == nil {
+				return store.RootAuthority{}, store.ErrSessionModeUnavailable
+			}
+			return m.Sessions.ResolveEffectiveMode(ctx, id)
+		},
+		ActivateAgentWorkflow: m.ActivateAgentWorkflow,
+		RefreshRoundMachine:   m.Profiles.CompileMachine,
 		RootSessionID: func(ctx context.Context, sessionID string) string {
 			return sessiontree.RootID(ctx, m.Sessions, sessionID)
 		},
@@ -220,6 +230,9 @@ func (m *Context) procedureReader(ctx context.Context, sess *api.Session, profil
 	var remaining []string
 	if offeredSet["request_tools"] {
 		for _, name := range deferred {
+			if sess != nil && sess.Mode == api.SessionModeAsk && !tools.AllowedInAsk(tools.ToolMeta{Name: name}) {
+				continue
+			}
 			if !offeredSet[name] {
 				remaining = append(remaining, name)
 			}

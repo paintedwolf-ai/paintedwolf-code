@@ -12,7 +12,7 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/hostcmd"
-	"github.com/lycaon/lycaon/internal/repochange"
+	"github.com/lycaon/lycaon/internal/repochange/repochangetest"
 	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/toolcontract"
@@ -37,8 +37,7 @@ func newLaunchDoorWorld(t *testing.T) *launchDoorWorld {
 	if runtime.GOOS == "windows" {
 		t.Skip("unix openpty")
 	}
-	repochange.DisableWatchersForTest()
-	t.Cleanup(repochange.ResetWatchersForTest)
+	repochangetest.Acquire(t)
 	f := newNativeWalkFixture(t)
 	bg := newTestBackgroundRegistry(t)
 	registry := tools.NewDefaultRegistry()

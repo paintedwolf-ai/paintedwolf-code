@@ -245,7 +245,7 @@ func captureDestinationRevision(ctx context.Context, tctx tools.ToolContext, res
 		revision.Mode, revision.Representation = toolcontract.AcceptedDocumentRevision, toolcontract.LogicalUTF8LF
 		revision.DocumentID, revision.DocumentRevision, revision.DiskSHA256 = st.Editor.ID, st.Editor.Revision, st.Editor.BaseSHA256
 		// Retaining the anchor lets later typing merge with the edit.
-		if documents, ok := sourceview.DocumentsFor(tctx, resolved); ok {
+		if documents, _, ok := sourceview.DocumentsFor(tctx, resolved); ok {
 			if err := documents.RetainRevision(ctx, tctx.Identity.ProjectID, st.Editor.ID, st.Editor.Revision); err != nil {
 				return sourceview.Text{}, toolcontract.ExecutionRevision{}, &ExecutionRevisionConflict{Path: resolved.DisplayPath, Pinned: revision, Cause: err}
 			}

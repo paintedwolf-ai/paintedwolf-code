@@ -37,7 +37,7 @@ func TestOutsideNamespaceLeavesFolderRulesAlone(t *testing.T) {
 	if _, err := store.Exec(`INSERT INTO project_roots(id,project_id,path,label,is_primary,added_at,kind) VALUES('second','p6','','outside',0,'2026-01-01T00:00:00Z','outside')`); err == nil {
 		t.Fatal("a project accepted a second outside namespace")
 	}
-	const session = `INSERT INTO sessions(id,project_id,owner_person_id,posture,workspace_root_id,created_at,activity_at,updated_at) VALUES(?,'p6',(SELECT id FROM people WHERE role='owner'),'build',?,'2026-01-01T00:00:00Z','2026-01-01T00:00:00Z','2026-01-01T00:00:00Z')`
+	const session = `INSERT INTO sessions(id,project_id,owner_person_id,posture,workspace_root_id,created_at,activity_at,updated_at,root_session_id,mode) VALUES(?,'p6',(SELECT id FROM people WHERE role='owner'),'build',?,'2026-01-01T00:00:00Z','2026-01-01T00:00:00Z','2026-01-01T00:00:00Z',?1,'agent')`
 	_, err = store.Exec(session, "s6-folder", "folder")
 	testutil.FailErr(t, "start a session on the folder", err)
 	if _, err := store.Exec(session, "s6-outside", outside); err == nil {

@@ -64,7 +64,7 @@ func TestLocalModelManagementRoutes(t *testing.T) {
 	} {
 		req, err := http.NewRequestWithContext(t.Context(), tc.method, base+"/v1/providers/"+tc.id+"/local-model"+tc.suffix, strings.NewReader(tc.body))
 		testutil.FailErr(t, "prepare local model request", err)
-		hostapi.WithTestAuth(req)
+		req.Header.Set("Authorization", "Bearer "+hostapi.TestAPIToken)
 		req.Header.Set("Content-Type", "application/json")
 		res, err := http.DefaultClient.Do(req)
 		testutil.FailErr(t, "request model status", err)

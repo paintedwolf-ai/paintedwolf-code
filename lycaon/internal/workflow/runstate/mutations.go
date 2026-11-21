@@ -32,6 +32,9 @@ type CommandRejection struct {
 
 type StartMutation struct {
 	ManifestYAML              string
+	BindSessionMode           bool
+	ModeIntent                *api.SessionMode
+	RequiresAgent             bool
 	ProjectDir                string
 	Vars                      map[string]any
 	Messages                  []api.Message

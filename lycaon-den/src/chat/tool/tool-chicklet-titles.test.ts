@@ -11,6 +11,7 @@ import {
 
 const SAMPLE_ARGS: Record<string, Record<string, unknown>> = {
   read: { path: "src/main.go" },
+  inspect_source: { operation: "git_head" },
   write: { path: "README.md" },
   edit: { path: "pkg/foo.go" },
   replace_lines: { path: "pkg/foo.go" },
@@ -161,6 +162,18 @@ describe("tool-chicklet-titles", () => {
       expect(title, tool).not.toBe(tool);
       expect(title.length).toBeGreaterThan(0);
     }
+  });
+
+  it.each([
+    [{ operation: "read", path: "README.md" }, "README.md"],
+    [{ operation: "list" }, "List files"],
+    [{ operation: "search", pattern: "TODO" }, "TODO"],
+    [{ operation: "query_json" }, "Query JSON"],
+    [{ operation: "query_yaml" }, "Query YAML"],
+    [{ operation: "git_head", path: "nested" }, "Git branch and commit · nested"],
+    [{ operation: "git_head" }, "Git branch and commit"],
+  ] as const)("describes source inspection for %j", (args, title) => {
+    expect(resolveChickletTitle("inspect_source", args)).toBe(title);
   });
 
   it("allows no-arg tools to show only the tool name", () => {

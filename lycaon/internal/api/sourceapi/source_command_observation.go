@@ -18,7 +18,7 @@ func (s *History) HandleGetProjectSourceCommandObservation(w http.ResponseWriter
 	if !ok {
 		return
 	}
-	chat, ok := requestscope.Session(s.SessionStore, s.responses, w, r, r.URL.Query().Get("session_id"))
+	chat, ok := requestscope.Session(s.SessionQueries, s.responses, w, r, r.URL.Query().Get("session_id"))
 	if !ok {
 		return
 	}

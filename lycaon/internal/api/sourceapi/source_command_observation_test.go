@@ -24,12 +24,12 @@ func TestCommandObservationReadsTheAuthorizedChatWindowAfterSettlement(t *testin
 	sessions := store.NewSQL(conn)
 	server := newSourceHandlerFixture(t, func(deps *Deps) {
 		deps.SessionStore, deps.ProjectRegistry = sessions, project.NewSQLRegistry(conn)
-		deps.SourceLedger = sourceledger.New(conn, t.TempDir())
+		deps.SourceLedger = sourceledger.New(conn, t.TempDir(), sourceledger.Timing{})
 	})
 	p := sourceViewFixtureProject(t, server)
 	ctx := testdbseed.OwnerCaller(t, t.Context(), conn)
 	makeChat := func(projectID string) string {
-		chat, err := sessions.Create(ctx, wire.CreateSessionRequest{Posture: wire.SessionPostureBuild}, projectID)
+		chat, err := sessions.Sessions.Create(ctx, wire.CreateSessionRequest{Posture: wire.SessionPostureBuild}, projectID)
 		testutil.FailErr(t, "create chat", err)
 		return chat.ID
 	}

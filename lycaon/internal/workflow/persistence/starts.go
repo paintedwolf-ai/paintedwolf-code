@@ -45,6 +45,16 @@ func (s *Starts) ActivateStart(ctx context.Context, operationID, inputDigest str
 		return nil, err
 	}
 	defer func() { _ = tx.Rollback() }()
+	if mutation.BindSessionMode {
+		if s.transactions.sessions == nil {
+			return nil, fmt.Errorf("workflow session mode transaction participant unavailable")
+		}
+		if err := s.transactions.sessions.AdmitModeInTx(ctx, tx, replacement.SessionID, mutation.ModeIntent, func(mode api.SessionMode) error {
+			return runstate.ValidateWorkflowMode(mode, mutation.RequiresAgent)
+		}); err != nil {
+			return nil, err
+		}
+	}
 	queries := db.New(tx)
 	var replaced []api.WorkflowRun
 	// Rows wait for every run event below; see appendPlannedRowsTx.

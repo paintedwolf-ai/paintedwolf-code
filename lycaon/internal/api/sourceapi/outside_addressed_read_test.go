@@ -26,11 +26,11 @@ func TestOutsideMetadataAndImageReadsRequireHeldIdentity(t *testing.T) {
 	sessions := store.NewSQL(db)
 	server := newSourceHandlerFixture(t, func(deps *Deps) {
 		deps.SessionStore, deps.ProjectRegistry = sessions, project.NewSQLRegistry(db)
-		deps.SourceLedger = sourceledger.New(db, t.TempDir())
+		deps.SourceLedger = sourceledger.New(db, t.TempDir(), sourceledger.Timing{})
 	})
 	p := sourceViewFixtureProject(t, server)
 	ctx := testdbseed.OwnerCaller(t, t.Context(), db)
-	chat, err := sessions.Create(ctx, wire.CreateSessionRequest{Posture: wire.SessionPostureBuild}, p.ID)
+	chat, err := sessions.Sessions.Create(ctx, wire.CreateSessionRequest{Posture: wire.SessionPostureBuild}, p.ID)
 	testutil.FailErr(t, "create chat", err)
 	dir := filepath.Join(t.TempDir(), "observed")
 	testutil.FailErr(t, "make observed folder", os.Mkdir(dir, 0o700))

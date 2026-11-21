@@ -18,6 +18,7 @@ import {
 } from "../../workflow/workflows-drawer-model.ts";
 import { DownloadReportButton } from "./DownloadReportButton.tsx";
 import { DenButton } from "../primitives/DenButton.tsx";
+import { NEEDS_AGENT_BADGE, WORKFLOW_NEEDS_AGENT } from "../chatview/session-mode-copy.ts";
 
 type Props = {
   activeRun: WorkflowRun | null | undefined;
@@ -26,6 +27,7 @@ type Props = {
   pickerOpen: boolean;
   error: string | null;
   busy: boolean;
+  askMode?: boolean;
   onExit: (run: WorkflowRun) => void;
   onPause: () => void;
   onResume: () => void;
@@ -292,24 +294,30 @@ export function WorkflowsTab(props: Props) {
           >
             <div class="den-workflows-tab__picker-menu">
               <For each={pickerRows()}>
-                {(wf) => (
-                  <button
-                    type="button"
-                    class="den-workflows-tab__picker-row"
-                    disabled={props.busy}
-                    data-testid={`workflow-picker-row-${wf.start_preset_id ?? wf.id}`}
-                    onClick={() => props.onArmWorkflow(wf)}
-                  >
-                    <span class="den-workflows-tab__picker-row-title">
-                      {workflowPickerRowTitle(wf)}
-                    </span>
-                    <Show when={workflowPickerRowTrigger(wf)}>
-                      {(trigger) => (
-                        <code class="den-workflows-tab__picker-row-trigger">{trigger()}</code>
-                      )}
-                    </Show>
-                  </button>
-                )}
+                {(wf) => {
+                  const title = workflowPickerRowTitle(wf);
+                  const needsAgent = () => props.askMode && wf.requires_agent;
+                  return (
+                    <button
+                      type="button"
+                      class="den-workflows-tab__picker-row"
+                      disabled={props.busy || needsAgent()}
+                      aria-label={needsAgent() ? `${title} — ${WORKFLOW_NEEDS_AGENT}` : undefined}
+                      data-testid={`workflow-picker-row-${wf.start_preset_id ?? wf.id}`}
+                      onClick={() => props.onArmWorkflow(wf)}
+                    >
+                      <span class="den-workflows-tab__picker-row-title">{title}</span>
+                      <Show when={needsAgent()}>
+                        <span class="den-workflow-needs-badge">{NEEDS_AGENT_BADGE}</span>
+                      </Show>
+                      <Show when={workflowPickerRowTrigger(wf)}>
+                        {(trigger) => (
+                          <code class="den-workflows-tab__picker-row-trigger">{trigger()}</code>
+                        )}
+                      </Show>
+                    </button>
+                  );
+                }}
               </For>
             </div>
           </Show>

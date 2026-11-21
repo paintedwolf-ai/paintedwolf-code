@@ -11,6 +11,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/messageview"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/testutil/llmtest"
 	"github.com/lycaon/lycaon/internal/tokenest"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -155,12 +156,12 @@ func TestSynthesisAppendsAcceptedPageFacts(t *testing.T) {
 	c := savingsCompactor(t, continuationTestSummarizer(func(_ context.Context, _, input string, _ int) (string, error) {
 		calls++
 		if calls == 1 {
-			return mockCompactionSummary("Observation from the first page.")
+			return llmtest.SummaryJSON("Observation from the first page.")
 		}
 		if !strings.Contains(input, "Observation from the first page.") {
 			t.Error("second page lacked its earlier context")
 		}
-		return mockCompactionSummary("Second page observation.")
+		return llmtest.SummaryJSON("Second page observation.")
 	}))
 	c.cfg.SummaryInputTokens = 900
 	c.cfg.SummaryMessageTokens = 500

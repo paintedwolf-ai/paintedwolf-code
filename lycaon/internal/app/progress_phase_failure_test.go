@@ -12,7 +12,7 @@ import (
 	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
-	"github.com/lycaon/lycaon/internal/tools"
+	"github.com/lycaon/lycaon/internal/tools/toolstest"
 	"github.com/lycaon/lycaon/internal/worker"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 	workflowphases "github.com/lycaon/lycaon/internal/workflow/phases"
@@ -28,7 +28,7 @@ func TestPhaseEntryStopsWhenProgressCannotCommit(t *testing.T) {
 	testutil.FailErr(t, "insert child run", err)
 	_, err = database.ExecContext(t.Context(), `CREATE TRIGGER refuse_phase_plan BEFORE INSERT ON messages BEGIN SELECT RAISE(ABORT,'unavailable'); END`)
 	testutil.FailErr(t, "refuse phase plan row", err)
-	host := session.NewHost(records, session.Models{Limits: settings.DefaultSessionLimits()}, tools.NewStubRegistry())
+	host := session.NewHost(records, session.Models{Limits: settings.DefaultSessionLimits()}, toolstest.NewRegistry())
 	runtime := workerruntime.New(database, nil, worker.WorkersConfig{})
 	runtime.SetDependencies(workerruntime.Dependencies{Sessions: &sessions.Runtime{Manager: host}, Progress: func() progress.Store { return plans }})
 	err = runtime.OnWorkflowPhaseEnter(t.Context(), &workflowphases.RunContext{SessionID: "session", RunID: "child", Phase: "work"}, workflowdef.PhaseDef{ID: "work"})

@@ -26,7 +26,7 @@ func TestOutsideReadRecordsAnOrdinaryPathButNotScratch(t *testing.T) {
 	testdbseed.InsertSession(t, database, chatID, projectID)
 	outsideID, err := db.New(database).GetProjectOutsideRootID(ctx, projectID)
 	testutil.FailErr(t, "read outside namespace", err)
-	ledger := sourceledger.New(database, t.TempDir())
+	ledger := sourceledger.New(database, t.TempDir(), sourceledger.Timing{})
 	tc := tools.ToolContext{
 		Identity: tools.InvocationIdentity{ProjectID: projectID, SessionID: chatID},
 		Source: tools.InvocationSource{

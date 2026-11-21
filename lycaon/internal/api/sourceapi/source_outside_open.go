@@ -46,7 +46,7 @@ func (s *Workspace) HandleOpenOutsideFile(w http.ResponseWriter, r *http.Request
 	if !ok {
 		return
 	}
-	scoped, ok := requestscope.ProjectForSession(s.SessionStore, s.responses, w, r, p, sess.ID)
+	scoped, ok := requestscope.ProjectForSession(s.SessionQueries, s.responses, w, r, p, sess.ID)
 	if !ok {
 		return
 	}
@@ -201,7 +201,7 @@ func (s *Workspace) HandleOpenChatLocationFile(w http.ResponseWriter, r *http.Re
 	if !ok {
 		return
 	}
-	scoped, ok := requestscope.ProjectForSession(s.SessionStore, s.responses, w, r, p, chat.ID)
+	scoped, ok := requestscope.ProjectForSession(s.SessionQueries, s.responses, w, r, p, chat.ID)
 	if !ok {
 		return
 	}
@@ -224,7 +224,7 @@ func (s *Workspace) HandleOpenChatLocationFile(w http.ResponseWriter, r *http.Re
 }
 
 func (s *Workspace) ownedLocationChat(w http.ResponseWriter, r *http.Request, projectID, chatID string) (*wire.Session, bool) {
-	chat, ok := requestscope.Session(s.SessionStore, s.responses, w, r, strings.TrimSpace(chatID))
+	chat, ok := requestscope.Session(s.SessionQueries, s.responses, w, r, strings.TrimSpace(chatID))
 	if !ok {
 		return nil, false
 	}

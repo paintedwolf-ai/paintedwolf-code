@@ -12,6 +12,7 @@ import (
 // SessionRepository persists session identity, lifecycle and workspace binding.
 type SessionRepository interface {
 	SessionEventsOutboxed() bool
+	AdmitModeInTx(ctx context.Context, tx *sql.Tx, id string, mode *api.SessionMode, validate func(api.SessionMode) error) error
 	Create(ctx context.Context, req api.CreateSessionRequest, projectID string) (*api.Session, error)
 	CreateChild(ctx context.Context, parent *api.Session, req api.SpawnChildRequest) (*api.Session, error)
 	CreateWithStatus(ctx context.Context, req api.CreateSessionRequest, projectID string, status api.SessionStatus) (*api.Session, error)
@@ -32,8 +33,10 @@ type SessionRepository interface {
 	PutWorktreeBinding(ctx context.Context, b WorktreeBinding) error
 	ReadExecutionState(ctx context.Context, root string) (ExecutionState, error)
 	ReassignSessionsWorkspaceRoot(ctx context.Context, projectID, fromRootID, toRootID string) error
+	ResolveEffectiveMode(ctx context.Context, id string) (RootAuthority, error)
 	SessionTreeIDs(ctx context.Context, rootSessionID string) ([]string, error)
 	SessionTreeMembers(ctx context.Context, rootID string) ([]SessionTreeMember, error)
+	SetMode(ctx context.Context, id string, mode api.SessionMode) (*api.Session, error)
 	SetPostureTx(ctx context.Context, tx *sql.Tx, sessionID string, posture api.SessionPosture) error
 	SetSessionStatus(ctx context.Context, id string, status api.SessionStatus) error
 	SetSessionStatusEvent(
@@ -46,5 +49,6 @@ type SessionRepository interface {
 	UpdateSession(ctx context.Context, id string, fn func(*api.Session)) error
 	UpdateSessionWith(ctx context.Context, id string, fn func(*api.Session), mutate func(*sql.Tx) error) error
 	UpdateTitleIfUnset(ctx context.Context, id, title string) (bool, error)
+	WithModeAdmission(ctx context.Context, id string, fn func(context.Context) error) error
 	WorkspaceNotificationIDs(ctx context.Context, root, after string) ([]string, error)
 }

@@ -6,7 +6,6 @@ import (
 	"io"
 	"runtime"
 	"testing"
-	"time"
 
 	"github.com/lycaon/lycaon/internal/confine"
 	"github.com/lycaon/lycaon/internal/exec"
@@ -29,7 +28,7 @@ func TestCommandJobAdmissionPrecedesPreparation(t *testing.T) {
 			return err
 		}},
 		{"pty capture", JobModeAwaited, ErrAwaitedCapReached, func(ctx context.Context, r *Registry, req hostcmd.Request, runner *hostcmd.Runner) error {
-			_, err := r.Terminal.RunPTYCapture(ctx, "session", "", "", req, runner, exec.WinSize{}, confine.SpawnFacts{}, time.Second)
+			_, err := r.Terminal.RunPTYCapture(ctx, "session", "", "", req, runner, exec.WinSize{}, confine.SpawnFacts{})
 			return err
 		}},
 		{"pty open", JobModeBackground, ErrBackgroundCapReached, func(ctx context.Context, r *Registry, req hostcmd.Request, runner *hostcmd.Runner) error {

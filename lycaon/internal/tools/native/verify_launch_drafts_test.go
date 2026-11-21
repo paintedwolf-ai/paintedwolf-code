@@ -31,7 +31,7 @@ func TestVerificationEvidenceCoversPublishedLaunchDrafts(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			f := programtest.New(t, programtest.Options{Tools: []string{"verify"}})
-			ledger := sourceledger.New(f.Database, t.TempDir())
+			ledger := sourceledger.New(f.Database, t.TempDir(), sourceledger.Timing{})
 			drafts := &testfixture.DiskDrafts{Publish: func(path, text string) error {
 				if err := os.WriteFile(filepath.Join(f.Dir, path), []byte(text), 0o644); err != nil {
 					return err

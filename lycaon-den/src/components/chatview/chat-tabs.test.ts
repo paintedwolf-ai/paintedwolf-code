@@ -38,6 +38,9 @@ describe("createChatTabsState", () => {
     const [open, setOpen] = createSignal<"workflows" | null>("workflows");
     const [offline, setOffline] = createSignal(false);
     const setSession = (id: string) => store.actions.setCurrentSession({
+      mode: "agent" as const,
+      started: true,
+      root_session_id: id,
       id, owner_person_id: "00000000-0000-4000-8000-000000000002", project_id: "p1", posture: "build", status: "idle", created_at: "t", activity_at: "t", updated_at: "t",
     });
     setSession(sessionId());

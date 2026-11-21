@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/lycaon/lycaon/internal/confine"
+	"github.com/lycaon/lycaon/internal/confine/admissiontest"
 	"github.com/lycaon/lycaon/internal/hitl"
 	"github.com/lycaon/lycaon/internal/packageexec"
 	"github.com/lycaon/lycaon/internal/projectroot"
@@ -30,7 +31,7 @@ func (parityDirectIPRuntime) GrantChat(string, hitl.DirectIPLease, string, strin
 }
 
 func TestGateContainedMatchesSpawnRequest(t *testing.T) {
-	confine.TestingSetAutoConfine(t)
+	admissiontest.Enable(t)
 	project := t.TempDir()
 	overlayRoot := t.TempDir()
 	socketDir, err := os.MkdirTemp("/tmp", "lyc-cp-") //nolint:usetesting // Short socket path.

@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/credentialstore"
+	"github.com/lycaon/lycaon/internal/credentialstore/credentialstoretest"
 	"github.com/lycaon/lycaon/internal/secretcap"
 	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/testdbseed"
@@ -21,7 +22,7 @@ func TestCurlScreensManagedValuesAcrossCompressedTransferAndPublication(t *testi
 	h.tc.Identity.ProjectID = testdbseed.DefaultProjectID
 	database := testdbfixture.Open(t, "jars.db")
 	testdbseed.InsertSession(t, database, h.tc.Identity.SessionID, h.tc.Identity.ProjectID)
-	values := credentialstore.NewEmpty(credentialstore.Slot{Path: filepath.Join(t.TempDir(), credentialstore.VaultBasename), Namespace: credentialstore.NamespaceManagedSecrets, Context: "curl transfer"}, func(string) bool { return true })
+	values := credentialstoretest.Open(t, credentialstore.Slot{Path: filepath.Join(t.TempDir(), credentialstore.VaultBasename), Namespace: credentialstore.NamespaceManagedSecrets, Context: "curl transfer"}, func(string) bool { return true })
 	service := secretcap.NewWithStore(database, values, nil)
 	h.owners.HTTP.Secrets, h.owners.HTTP.Jars = service, service.Jars
 

@@ -98,7 +98,11 @@ func (m *Service) turnToolSets(ctx context.Context, sess *api.Session, profileID
 		}
 		return floor, loadable, cards
 	}
-	plan, err := surface.CompileToolPlan(surface.TurnProfile{SurfaceID: surfaceID}, rootCount)
+	profile := surface.TurnProfile{SurfaceID: surfaceID}
+	if sess != nil {
+		profile.SessionMode = sess.Mode
+	}
+	plan, err := surface.CompileToolPlan(profile, rootCount)
 	if err != nil {
 		return nil, nil, nil
 	}

@@ -19,6 +19,9 @@ describe("ensureSessionChrome", () => {
   it("restores host-managed task and session chrome after a frontend reload", async () => {
     const store = createAppStore();
     store.actions.setCurrentSession({
+      mode: "agent" as const,
+      started: true,
+      root_session_id: "session-1",
       id: "session-1",
       owner_person_id: "00000000-0000-4000-8000-000000000002",
       project_id: "project-1",
@@ -68,6 +71,9 @@ describe("ensureSessionChrome", () => {
   it("joins concurrent ensures and skips a remount in the same epoch", async () => {
     const store = createAppStore();
     store.actions.setCurrentSession({
+      mode: "agent" as const,
+      started: true,
+      root_session_id: "session-1",
       id: "session-1",
       owner_person_id: "00000000-0000-4000-8000-000000000002",
       project_id: "project-1",
@@ -120,6 +126,9 @@ describe("ensureSessionChrome", () => {
   it("treats bootstrap projections as hydrated", async () => {
     const store = createAppStore();
     const session: SessionBootstrap["session"] = {
+      mode: "agent" as const,
+      started: true,
+      root_session_id: "session-1",
       id: "session-1",
       owner_person_id: "00000000-0000-4000-8000-000000000002",
       project_id: "project-1",
@@ -196,6 +205,9 @@ describe("ensureSessionChrome", () => {
     const { dispose } = bindAppConnection(services);
     try {
       const session: SessionBootstrap["session"] = {
+        mode: "agent" as const,
+        started: true,
+        root_session_id: "session-aux-err",
         id: "session-aux-err",
         owner_person_id: "00000000-0000-4000-8000-000000000002",
         project_id: "project-1",

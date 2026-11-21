@@ -50,6 +50,7 @@ var declarations = map[string]declaration{
 	"project_has_roots":             {"—", predicate},
 	"recon_or_board_ready":          {"—", predicate},
 	"research_task":                 {"—", predicate},
+	"session_is_agent_mode":         {"—", predicate},
 	"stub_invalid":                  {"—", predicate},
 	"stub_valid":                    {"—", predicate},
 	"tool_is_command":               {"—", predicate},

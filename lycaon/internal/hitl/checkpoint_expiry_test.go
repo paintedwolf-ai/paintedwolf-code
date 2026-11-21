@@ -251,9 +251,7 @@ func TestApprovalReviewIntentSurvivesRestartAndRejectsLateDenials(t *testing.T) 
 				}
 			}
 			for _, child := range []string{"worker-a", "worker-b"} {
-				testdbseed.InsertSession(t, database, child, testdbseed.DefaultProjectID)
-				_, err := database.ExecContext(ctx, "UPDATE sessions SET parent_session_id = ? WHERE id = ?", chat, child)
-				testutil.FailErr(t, "attach worker", err)
+				testdbseed.InsertChildSession(t, database, child, chat)
 			}
 			beforeIntent, err := checkpoints.ApprovalReviewIntent(ctx, chat)
 			testutil.FailErr(t, "read initial intent", err)

@@ -55,7 +55,7 @@ func (s *Trees) chatLocations(ctx context.Context, scope pagedview.Scope, p *pro
 	if _, err := uuid.Parse(chatID); err != nil {
 		return chatLocationProjection{}, rejectedSourceIntent("chat_id must be a UUID.")
 	}
-	chat, err := s.Views.SessionStore.Get(ctx, chatID)
+	chat, err := s.Views.SessionQueries.Get(ctx, chatID)
 	if err != nil {
 		return chatLocationProjection{}, err
 	}

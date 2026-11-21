@@ -17,8 +17,8 @@ func TestDeleteSessionTreeClosesSessionReferences(t *testing.T) {
 
 	insertTestSession(t, sqlDB, "coordinator")
 	_, err := sqlDB.ExecContext(ctx, `
-		INSERT INTO sessions (id, project_id, owner_person_id, posture, status, parent_session_id, created_at, activity_at, updated_at)
-		VALUES ('worker-child', ?, (SELECT id FROM people WHERE role = 'owner'), 'build', 'idle', 'coordinator', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z')
+		INSERT INTO sessions (id, project_id, owner_person_id, posture, status, parent_session_id, created_at, activity_at, updated_at, root_session_id, mode)
+		VALUES ('worker-child', ?, (SELECT id FROM people WHERE role = 'owner'), 'build', 'idle', 'coordinator', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z', 'coordinator', NULL)
 	`, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "insert child session", err)
 

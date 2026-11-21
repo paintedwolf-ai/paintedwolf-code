@@ -1,4 +1,4 @@
-package wiring
+package commands
 
 import (
 	"fmt"
@@ -13,6 +13,7 @@ import (
 	"github.com/lycaon/lycaon/internal/secretcap"
 	"github.com/lycaon/lycaon/internal/secretmatch"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/test/wiring"
 )
 
 func TestCommandCurlContinuesReleasedSessionWithoutStandaloneHTTP(t *testing.T) {
@@ -60,11 +61,11 @@ func TestCommandCurlContinuesReleasedSessionWithoutStandaloneHTTP(t *testing.T) 
 	const command = "curl -s --managed-cookie-jar browser --managed-token-jar api "
 	const marker = "{{token:session}}"
 	run.seed(t, "body.txt", marker)
-	run.script.steps = []citableStep{
-		{command: command + "--data-raw '" + marker + "' " + server.URL + "/private/inline"},
-		{command: command + "--data-binary @body.txt " + server.URL + "/public/file"},
-		{command: command + "--data-binary @- " + server.URL + "/private/stdin < body.txt"},
-		{command: command + "--data-raw '{{token:missing}}' " + server.URL + "/private/refused"},
+	run.script.Steps = []wiring.CitableStep{
+		{Command: command + "--data-raw '" + marker + "' " + server.URL + "/private/inline"},
+		{Command: command + "--data-binary @body.txt " + server.URL + "/public/file"},
+		{Command: command + "--data-binary @- " + server.URL + "/private/stdin < body.txt"},
+		{Command: command + "--data-raw '{{token:missing}}' " + server.URL + "/private/refused"},
 	}
 	_, err = run.h.Sessions.Manager.Submissions.Prompt(t.Context(), run.session, "continue the saved service session")
 	testutil.FailErr(t, "submit saved session", err)

@@ -16,7 +16,7 @@ func TestNativeWriteTargetsRequireMutationAuthority(t *testing.T) {
 		Scope:      hitl.ActionScope{ProjectDir: project},
 		Execution:  hitl.ActionExecution{Contained: hitl.Contained{FSJailed: true, Roots: []string{project}, WriteRoots: []string{project, shared}}},
 	}
-	g := &RuleApprovalGate{sources: NoSources()}
+	g := &RuleApprovalGate{sources: emptySources()}
 	for _, name := range pathMutatingTools {
 		action.Invocation.Tool = name
 		targets := g.declaredFileTargets(action)

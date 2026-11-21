@@ -173,6 +173,9 @@ func sessionFromRow(r db.GetSessionRow) (*api.Session, error) {
 		ProviderID:           db.StringFromNull(r.ProviderID),
 		Model:                db.StringFromNull(r.Model),
 		ParentSessionID:      db.StringFromNull(r.ParentSessionID),
+		RootSessionID:        r.RootSessionID,
+		Mode:                 api.SessionMode(r.EffectiveMode),
+		Started:              r.EffectiveStarted == 1,
 	}
 	var err error
 	sess.CreatedAt, err = db.ParseTime(r.CreatedAt)

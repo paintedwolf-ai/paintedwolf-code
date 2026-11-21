@@ -27,7 +27,7 @@ func TestResolveOutsideFileNeedsAHeldIdentity(t *testing.T) {
 	testdbseed.InsertSession(t, database, chatID, projectID)
 	outside, err := db.New(database).GetProjectOutsideRootID(ctx, projectID)
 	testutil.FailErr(t, "read outside namespace", err)
-	ledger := sourceledger.New(database, t.TempDir())
+	ledger := sourceledger.New(database, t.TempDir(), sourceledger.Timing{})
 
 	dir, err := filepath.EvalSymlinks(t.TempDir())
 	testutil.FailErr(t, "resolve fixture path", err)

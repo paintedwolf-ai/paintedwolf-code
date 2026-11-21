@@ -23,7 +23,7 @@ func TestOutsideNavigationFollowsTheRecordedFile(t *testing.T) {
 	ctx := t.Context()
 	database := testdbfixture.Open(t, "store.db")
 	testdbseed.InsertSession(t, database, "chat", "p1")
-	ledger := sourceledger.New(database, filepath.Join(t.TempDir(), "content"))
+	ledger := sourceledger.New(database, filepath.Join(t.TempDir(), "content"), sourceledger.Timing{})
 	outside, err := db.New(database).GetProjectOutsideRootID(ctx, "p1")
 	testutil.FailErr(t, "read outside namespace", err)
 	p := &project.Project{ID: "p1", Outside: project.Root{ID: outside, ProjectID: "p1", Path: "/", Kind: project.RootKindOutside}}

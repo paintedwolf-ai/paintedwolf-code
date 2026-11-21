@@ -71,6 +71,9 @@ func (m *Fanout) BindWorkflowTask(ctx context.Context, tctx tools.ToolContext, w
 	if err != nil {
 		return err
 	}
+	if tctx.Source.AskMode && runstate.IsAmbientRun(run) {
+		run = nil
+	}
 	if run == nil {
 		if workID != "" {
 			if m.PlannedWorkKnown != nil {

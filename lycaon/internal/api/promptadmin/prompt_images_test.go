@@ -48,7 +48,7 @@ func TestPromptAdmissionProjectsEachImageBlobOnce(t *testing.T) {
 	handler, sessions, attachments, sess := newPromptAttachmentRecoveryFixture(t)
 	handler.Submission.Caps = promptattach.Active()
 	handler.Submission.References = &References{Caps: handler.Submission.Caps}
-	handler.Submission.Store = sessions
+	handler.Submission.SessionQueries = sessions.Sessions
 	handler.Submission.VisualStore = visual.NewMemoryStore()
 	input := wire.PromptRequest{OperationID: uuid.NewString(), Text: "Compare the attachments."}
 	for i, name := range []string{"first.png", "second.png"} {

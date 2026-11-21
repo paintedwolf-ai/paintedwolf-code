@@ -27,7 +27,7 @@ describe("refreshGitStatus", () => {
 
   it("keeps mutation results and required reads without repainting another session", async () => {
     const store = createAppStore();
-    const session = { id: "s1", owner_person_id: "00000000-0000-4000-8000-000000000002", project_id: "p1", posture: "build" as const, status: "idle" as const, created_at: "t", activity_at: "t", updated_at: "t" };
+    const session = { mode: "agent" as const, started: true, root_session_id: "s1", id: "s1", owner_person_id: "00000000-0000-4000-8000-000000000002", project_id: "p1", posture: "build" as const, status: "idle" as const, created_at: "t", activity_at: "t", updated_at: "t" };
     store.actions.setCurrentSession(session);
     let finish!: (result: GitMutationResult) => void;
     const response = new Promise<GitMutationResult>((resolve) => { finish = resolve; });

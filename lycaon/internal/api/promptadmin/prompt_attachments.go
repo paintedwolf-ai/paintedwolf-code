@@ -83,7 +83,10 @@ func (s *Submission) HandlePrompt(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	allowEmpty := s.Sessions.Runner.AcceptsEmpty(r.Context(), id)
+	allowEmpty, ok := s.promptModeForAdmission(w, r, id, req.Mode)
+	if !ok {
+		return
+	}
 	if req.Recovery == nil && text == "" && len(req.Attachments) == 0 && len(req.References) == 0 && len(req.Secrets) == 0 && !allowEmpty {
 		s.responses.Fail(w, wire.ApiErrorCodeInvalidRequest, "text, attachments, references, or an active workflow request required")
 		return
@@ -114,6 +117,7 @@ func (s *Submission) HandlePrompt(w http.ResponseWriter, r *http.Request) {
 		s.responses.InternalError(w, r, err)
 		return
 	}
+	prepared.input.ModeIntent = req.Mode
 	row, _, err := s.Sessions.Submissions.AdmitPrompt(r.Context(), id, req.OperationID, req, prepared.input)
 	if err != nil {
 		s.revokePromptGrants(installed)
@@ -121,6 +125,9 @@ func (s *Submission) HandlePrompt(w http.ResponseWriter, r *http.Request) {
 			s.responses.Logger.WarnContext(r.Context(), "release unadmitted prompt attachments", "operation_id", req.OperationID, "error", releaseErr)
 		}
 		s.discardPromptImages(r.Context(), sess.ProjectID, prepared.createdArtifactIDs)
+		if requestscope.WriteSessionModeError(s.responses, w, err) {
+			return
+		}
 		if errors.Is(err, spendguard.ErrCeiling) {
 			s.responses.FailDetails(w, wire.ApiErrorCodeSessionSpendCeilingReached, usernotice.SpendCeilingContext(err), "chat spend ceiling reached")
 			return

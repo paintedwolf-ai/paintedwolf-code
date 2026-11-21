@@ -17,7 +17,6 @@ import (
 	"github.com/google/uuid"
 	"github.com/lycaon/lycaon/internal/project"
 	"github.com/lycaon/lycaon/internal/projectroot"
-	"github.com/lycaon/lycaon/internal/session"
 	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/sourceledger"
 	"github.com/lycaon/lycaon/internal/testdbfixture"
@@ -31,12 +30,12 @@ func TestOpenedLocationSelectsOneChatWithoutReplacingTree(t *testing.T) {
 	sessions := store.NewSQL(db)
 	server := newSourceHandlerFixture(t, func(deps *Deps) {
 		deps.SessionStore, deps.ProjectRegistry = sessions, project.NewSQLRegistry(db)
-		deps.SourceLedger = sourceledger.New(db, t.TempDir())
+		deps.SourceLedger = sourceledger.New(db, t.TempDir(), sourceledger.Timing{})
 	})
 	p := sourceViewFixtureProject(t, server)
 	ctx := testdbseed.OwnerCaller(t, t.Context(), db)
 	openChat := func(projectID string) string {
-		chat, err := sessions.Create(ctx, wire.CreateSessionRequest{Posture: wire.SessionPostureBuild}, projectID)
+		chat, err := sessions.Sessions.Create(ctx, wire.CreateSessionRequest{Posture: wire.SessionPostureBuild}, projectID)
 		testutil.FailErr(t, "create chat", err)
 		return chat.ID
 	}
@@ -82,11 +81,11 @@ func TestChatLocationOpenUsesObservedAnchor(t *testing.T) {
 	sessions := store.NewSQL(db)
 	server := newSourceHandlerFixture(t, func(deps *Deps) {
 		deps.SessionStore, deps.ProjectRegistry = sessions, project.NewSQLRegistry(db)
-		deps.SourceLedger = sourceledger.New(db, t.TempDir())
+		deps.SourceLedger = sourceledger.New(db, t.TempDir(), sourceledger.Timing{})
 	})
 	p := sourceViewFixtureProject(t, server)
 	ctx := testdbseed.OwnerCaller(t, t.Context(), db)
-	chat, err := sessions.Create(ctx, wire.CreateSessionRequest{Posture: wire.SessionPostureBuild}, p.ID)
+	chat, err := sessions.Sessions.Create(ctx, wire.CreateSessionRequest{Posture: wire.SessionPostureBuild}, p.ID)
 	testutil.FailErr(t, "create chat", err)
 	dir := filepath.Join(t.TempDir(), "outside")
 	testutil.FailErr(t, "make location", os.Mkdir(dir, 0o700))
@@ -113,11 +112,11 @@ func TestPickedOutsideLocationCanBeHiddenAndShown(t *testing.T) {
 	sessions := store.NewSQL(db)
 	server := newSourceHandlerFixture(t, func(deps *Deps) {
 		deps.SessionStore, deps.ProjectRegistry = sessions, project.NewSQLRegistry(db)
-		deps.SourceLedger = sourceledger.New(db, t.TempDir())
+		deps.SourceLedger = sourceledger.New(db, t.TempDir(), sourceledger.Timing{})
 	})
 	p := sourceViewFixtureProject(t, server)
 	ctx := testdbseed.OwnerCaller(t, t.Context(), db)
-	chat, err := sessions.Create(ctx, wire.CreateSessionRequest{Posture: wire.SessionPostureBuild}, p.ID)
+	chat, err := sessions.Sessions.Create(ctx, wire.CreateSessionRequest{Posture: wire.SessionPostureBuild}, p.ID)
 	testutil.FailErr(t, "create chat", err)
 
 	pick := func(chatID, path string) *httptest.ResponseRecorder {
@@ -154,7 +153,7 @@ func TestPickedOutsideLocationCanBeHiddenAndShown(t *testing.T) {
 			t.Fatalf("covering location = %+v, found=%t after hidden=%t", covering, found, hidden)
 		}
 	}
-	server.Workspace.SessionStore = unavailableLocationChatStore{Store: sessions}
+	server.Workspace.SessionQueries = unavailableLocationChatStore{SessionRepository: sessions.Sessions}
 	sourceViewErrorCode(t, pick(chat.ID, picked), http.StatusInternalServerError)
 	sourceViewErrorCode(t, update(opened.Location.ID, true), http.StatusInternalServerError)
 	open := callChatLocation(t, ctx, http.MethodPost, server.Workspace.HandleOpenChatLocationFile,
@@ -162,7 +161,7 @@ func TestPickedOutsideLocationCanBeHiddenAndShown(t *testing.T) {
 	sourceViewErrorCode(t, open, http.StatusInternalServerError)
 }
 
-type unavailableLocationChatStore struct{ session.Store }
+type unavailableLocationChatStore struct{ store.SessionRepository }
 
 func (unavailableLocationChatStore) Get(context.Context, string) (*wire.Session, error) {
 	return nil, errors.New("session store unavailable")
@@ -187,11 +186,11 @@ func TestOutsideReaderOpensARecordedCommandFile(t *testing.T) {
 	sessions := store.NewSQL(db)
 	server := newSourceHandlerFixture(t, func(deps *Deps) {
 		deps.SessionStore, deps.ProjectRegistry = sessions, project.NewSQLRegistry(db)
-		deps.SourceLedger = sourceledger.New(db, t.TempDir())
+		deps.SourceLedger = sourceledger.New(db, t.TempDir(), sourceledger.Timing{})
 	})
 	p := sourceViewFixtureProject(t, server)
 	ctx := testdbseed.OwnerCaller(t, t.Context(), db)
-	chat, err := sessions.Create(ctx, wire.CreateSessionRequest{Posture: wire.SessionPostureBuild}, p.ID)
+	chat, err := sessions.Sessions.Create(ctx, wire.CreateSessionRequest{Posture: wire.SessionPostureBuild}, p.ID)
 	testutil.FailErr(t, "create chat", err)
 	dir, err := filepath.EvalSymlinks(t.TempDir())
 	testutil.FailErr(t, "resolve fixture directory", err)

@@ -560,6 +560,15 @@
       "overlay": false
     },
     {
+      "id": "session_is_agent_mode",
+      "layer": "core",
+      "domain": "—",
+      "status": "shipped",
+      "parameterized": false,
+      "kind": "predicate",
+      "overlay": false
+    },
+    {
       "id": "stub_invalid",
       "layer": "core",
       "domain": "—",

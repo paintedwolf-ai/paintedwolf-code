@@ -12,16 +12,19 @@ import (
 // NewEvalContext builds rule input with workflow phase when available.
 func NewEvalContext(sess *api.Session, toolName string, args map[string]any, phase, blueprintPath, planContent string) EvalContext {
 	mode := api.SessionPosture("")
+	var sessionMode api.SessionMode
 	projectDir := ""
 	projectID := ""
 	if sess != nil {
 		mode = sess.Posture
+		sessionMode = sess.Mode
 		projectDir = sess.WorkspacePath
 		// ProjectID lets the trust gate resolve the project row.
 		projectID = sess.ProjectID
 	}
 	return EvalContext{EvalContext: conditions.EvalContext{
 		SessionPosture: mode,
+		SessionMode:    sessionMode,
 		Phase:          phase,
 		ToolName:       toolName,
 		ToolArgs:       args,

@@ -33,7 +33,7 @@ func decisionFailureFixture(t *testing.T) (*db.Store, *SQLDecisionResolver, api.
 		WorkerJobID: "job", DeliveredAt: time.Now().UTC().Format(time.RFC3339Nano),
 	}))
 	messages := sessionstore.NewSQL(database)
-	queue := NewSQLQueue(database, 1)
+	queue := NewSQLServices(database, 1).Queue
 	outbox := eventoutbox.New(database, nil)
 	messages.SetEventOutbox(outbox)
 	queue.SetEventOutbox(outbox)

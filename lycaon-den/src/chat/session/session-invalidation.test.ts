@@ -12,7 +12,7 @@ describe("session invalidation projections", () => {
 
   it("drops a queued cost refresh after switching away and back", async () => {
     const store = createAppStore();
-    const session = { id: "a", owner_person_id: "00000000-0000-4000-8000-000000000002", project_id: "project", status: "idle" as const, posture: "build" as const, created_at: "t", activity_at: "t", updated_at: "t" };
+    const session = { mode: "agent" as const, started: true, root_session_id: "a", id: "a", owner_person_id: "00000000-0000-4000-8000-000000000002", project_id: "project", status: "idle" as const, posture: "build" as const, created_at: "t", activity_at: "t", updated_at: "t" };
     store.actions.setCurrentSession(session);
     const schedulers = createSessionInvalidationSchedulers(store, () => null, () => [], () => false);
     const first = vi.fn(async () => undefined);

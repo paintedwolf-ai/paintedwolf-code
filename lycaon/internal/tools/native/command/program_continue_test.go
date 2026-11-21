@@ -32,7 +32,7 @@ func TestProgramContinuationPreservesSequenceAndOutput(t *testing.T) {
 			registry := bgprocess.NewRegistry(bgprocess.DefaultConfig(), bgprocess.Hooks{
 				Complete: func(_ context.Context, completion bgprocess.Completion) { completed <- completion },
 			})
-			registry.Output.SetCaptureProjector(captureprojection.New(secretmatch.NewInertMatcher(), nil))
+			registry.Output.SetCaptureProjector(captureprojection.New(&secretmatch.Matcher{}, nil))
 			t.Cleanup(func() { _ = registry.Lifecycle.Close(context.Background()) })
 			f := programtest.New(t, programtest.Options{Background: registry})
 			clock := programtest.NewManualClock()

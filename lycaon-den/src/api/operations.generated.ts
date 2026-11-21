@@ -264,8 +264,9 @@ export const API_OPERATIONS = {
   ] },
   getProjectSource: { method: "GET", path: "/v1/projects/{id}/source", query: [
     {"name":"decode_as","type":"string","enum":["utf-16le","utf-16be"]},
+    {"name":"file_id","type":"string"},
     {"name":"include_deleted","type":"boolean"},
-    {"name":"path","type":"string","required":true,"minLength":1},
+    {"name":"path","type":"string","minLength":1},
     {"name":"root_id","type":"string"},
     {"name":"session_id","type":"string"},
     {"name":"worker_id","type":"string"},
@@ -274,6 +275,9 @@ export const API_OPERATIONS = {
     {"name":"path","type":"string","required":true},
     {"name":"root_id","type":"string","required":true},
     {"name":"session_id","type":"string"},
+  ] },
+  getProjectSourceCommandObservation: { method: "GET", path: "/v1/projects/{id}/source/command-windows/{window_id}", query: [
+    {"name":"session_id","type":"string","required":true},
   ] },
   getProjectSourceComparison: { method: "GET", path: "/v1/projects/{id}/source/comparison", query: [
     {"name":"baseline","type":"string"},
@@ -308,7 +312,8 @@ export const API_OPERATIONS = {
     {"name":"session_id","type":"string"},
   ] },
   getProjectSourceRaw: { method: "GET", path: "/v1/projects/{id}/source/raw", query: [
-    {"name":"path","type":"string","required":true,"minLength":1},
+    {"name":"file_id","type":"string"},
+    {"name":"path","type":"string","minLength":1},
     {"name":"root_id","type":"string"},
     {"name":"session_id","type":"string"},
     {"name":"worker_id","type":"string"},
@@ -551,9 +556,11 @@ export const API_OPERATIONS = {
   markEditorSecret: { method: "POST", path: "/v1/projects/{id}/editor-documents/{document_id}/secret-spans/mark" },
   markSessionSeen: { method: "POST", path: "/v1/sessions/{id}/seen" },
   observeEditorDocument: { method: "POST", path: "/v1/projects/{id}/editor-documents/{document_id}/observe" },
+  openChatLocationFile: { method: "POST", path: "/v1/projects/{id}/source/outside-locations/{location_id}/files" },
   openEditorDocument: { method: "POST", path: "/v1/projects/{id}/editor-documents", query: [
     {"name":"session_id","type":"string"},
   ] },
+  openOutsideFile: { method: "POST", path: "/v1/projects/{id}/source/outside-files" },
   openProjectTrustReview: { method: "POST", path: "/v1/projects/{id}/trust/review" },
   pauseWorkflowRun: { method: "POST", path: "/v1/workflow-runs/{id}/pause" },
   persistWorkflow: { method: "POST", path: "/v1/sessions/{id}/workflows/{workflow_id}/persist" },
@@ -754,6 +761,7 @@ export const API_OPERATIONS = {
   updateSecurityScannersSettings: { method: "PATCH", path: "/v1/settings/security-scanners" },
   updateSession: { method: "PATCH", path: "/v1/sessions/{id}" },
   updateSessionQueue: { method: "PATCH", path: "/v1/sessions/{id}/queue" },
+  updateSourceChatLocation: { method: "PATCH", path: "/v1/projects/{id}/source/outside-locations/{location_id}" },
   updateTrustSettings: { method: "PATCH", path: "/v1/settings/project-trust" },
   updateVerifySettings: { method: "PATCH", path: "/v1/settings/verify", query: [
     {"name":"project_id","type":"string","required":true},
@@ -908,6 +916,7 @@ export type OperationPathParameters = {
   getProjectSecurity: { id: string | number; };
   getProjectSource: { id: string | number; };
   getProjectSourceAttribution: { id: string | number; };
+  getProjectSourceCommandObservation: { id: string | number; window_id: string | number; };
   getProjectSourceComparison: { id: string | number; };
   getProjectSourceFormatSettings: { id: string | number; };
   getProjectSourceGitReview: { id: string | number; git_change_id: string | number; };
@@ -1000,7 +1009,9 @@ export type OperationPathParameters = {
   markEditorSecret: { id: string | number; document_id: string | number; };
   markSessionSeen: { id: string | number; };
   observeEditorDocument: { id: string | number; document_id: string | number; };
+  openChatLocationFile: { id: string | number; location_id: string | number; };
   openEditorDocument: { id: string | number; };
+  openOutsideFile: { id: string | number; };
   openProjectTrustReview: { id: string | number; };
   pauseWorkflowRun: { id: string | number; };
   persistWorkflow: { id: string | number; workflow_id: string | number; };
@@ -1112,6 +1123,7 @@ export type OperationPathParameters = {
   updateSecurityScannersSettings: Record<string, never>;
   updateSession: { id: string | number; };
   updateSessionQueue: { id: string | number; };
+  updateSourceChatLocation: { id: string | number; location_id: string | number; };
   updateTrustSettings: Record<string, never>;
   updateVerifySettings: Record<string, never>;
   updateWebResearchProvider: { provider_id: string | number; };

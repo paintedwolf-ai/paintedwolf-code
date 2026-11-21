@@ -16,9 +16,9 @@ func TestProjectReportPagesGlobalSortAndLiteralSearch(t *testing.T) {
 	tracker, database := newTestTracker(t, nil)
 	testdbseed.InsertProject(t, database, "p")
 	_, err := database.ExecContext(t.Context(), `WITH RECURSIVE n(i) AS (VALUES(1) UNION ALL SELECT i+1 FROM n WHERE i<125)
- INSERT INTO sessions(id,project_id,owner_person_id,title,posture,status,created_at,activity_at,updated_at,archived_at)
+ INSERT INTO sessions(id,project_id,owner_person_id,title,posture,status,created_at,activity_at,updated_at,archived_at, root_session_id, mode)
  SELECT printf('s-%03d',i),'p',(SELECT id FROM people WHERE role = 'owner'),printf('Chat %03d',i),'build','idle','2026-01-01T00:00:00Z','2026-01-01T00:00:00Z','2026-01-01T00:00:00Z',
- CASE WHEN i%2=0 THEN '2026-01-02T00:00:00Z' END FROM n`)
+ CASE WHEN i%2=0 THEN '2026-01-02T00:00:00Z' END, printf('s-%03d',i), 'agent' FROM n`)
 	testutil.FailErr(t, "seed chats", err)
 	for i := 1; i <= 125; i++ {
 		value := int64(i) * 1_000_000

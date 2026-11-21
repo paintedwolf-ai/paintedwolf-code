@@ -1,4 +1,4 @@
-package wiring
+package commands
 
 import (
 	"os"
@@ -23,7 +23,7 @@ func TestDeclaredSharedTempRedirectIsReviewedBeforeWriting(t *testing.T) {
 			shared := outsideCommandFolder(t)
 			target := filepath.Join(shared, "note.txt")
 			testutil.FailErr(t, "seed redirect target", os.WriteFile(target, []byte("original"), 0600))
-			session := newCommandProgramSession(t, tc.program+" > '"+target+"'", "", tc.posture)
+			session := newProgramHost(t, tc.posture).program(t, tc.program+" > '"+target+"'", "")
 			t.Setenv("TMPDIR", shared)
 			cards := runCommandWithApprovals(t, session, tc.answer)
 			plan := cards[0].ToolApproval.Plan
@@ -55,7 +55,7 @@ func TestDeclaredSharedTempRedirectUsesTheRequestedNarrowGrant(t *testing.T) {
 		"command":            "printf changed > '" + target + "'",
 		"capability_request": map[string]any{"write_root": target},
 	}
-	session := newCommandProgramSessionWithArgs(t, args, wire.CreateSessionRequest{}, "", gate.PostureBalanced)
+	session := newProgramHost(t, gate.PostureBalanced).programWithArgs(t, args, wire.CreateSessionRequest{}, "")
 	t.Setenv("TMPDIR", shared)
 	cards := runCommandWithApprovals(t, session, "recommended")
 	plan := cards[0].ToolApproval.Plan
