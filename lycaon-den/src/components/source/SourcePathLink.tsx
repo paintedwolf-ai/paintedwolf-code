@@ -207,7 +207,12 @@ export function SourcePathLink(props: SourcePathLinkProps) {
         fallback={
           <Show when={label()}>
             {(text) => (
-              <span class={cn("den-source-path-plain", variantClass(props))} data-file-change={props.change ?? undefined}>
+              <span
+                class={cn("den-source-path-plain", variantClass(props))}
+                data-file-change={props.change ?? undefined}
+                data-tip={props.truncate ? text() : undefined}
+                data-tip-when-clipped={props.truncate ? "" : undefined}
+              >
                 {text()}
               </span>
             )}
