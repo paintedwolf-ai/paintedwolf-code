@@ -55,6 +55,9 @@ func attachPreparedMount(lease uint64, name string, tree int) (_ *mountedVolume,
 		return nil, err
 	}
 	if err := unix.MoveMount(tree, "", target, "", unix.MOVE_MOUNT_F_EMPTY_PATH|unix.MOVE_MOUNT_T_EMPTY_PATH); err != nil {
+		if errors.Is(err, unix.ENOENT) || errors.Is(err, unix.EINVAL) {
+			return nil, &mountDestinationError{err: err}
+		}
 		return nil, err
 	}
 	return confirmMountAttachment(lease, name, tree, id)
@@ -76,6 +79,9 @@ func confirmMountAttachment(lease uint64, name string, tree int, id uint64) (_ *
 	// lexical alias is the attachment location; retire the prepared tree if
 	// that race is observed. The kernel always binds the opened object.
 	if actual, linkErr := os.Readlink(mountDescriptorPath(tree)); linkErr != nil || actual != name {
+		if settled, settleErr := mounted.settleUnlisted(); settled && settleErr == nil {
+			return nil, &mountDestinationError{err: unix.ENOENT}
+		}
 		return nil, errors.New("attached mount point moved during attachment")
 	}
 	return mounted, nil
@@ -118,14 +124,25 @@ func (volume *mountedVolume) unmount() error {
 	}
 	visible, err := openMountPoint(current)
 	if err != nil {
+		if settled, settleErr := volume.settleUnlisted(); settled {
+			return settleErr
+		}
 		return err
 	}
 	visibleID, statErr := mountID(visible)
 	_ = unix.Close(visible)
 	if statErr != nil || visibleID != volume.mountID {
+		if settled, settleErr := volume.settleUnlisted(); settled {
+			return settleErr
+		}
 		return errors.New("retained volume is covered or no longer visible")
 	}
 	if err := unix.Unmount(mountDescriptorPath(fd), unix.MNT_DETACH); err != nil {
+		if errors.Is(err, unix.EINVAL) {
+			if settled, settleErr := volume.settleUnlisted(); settled {
+				return settleErr
+			}
+		}
 		return fmt.Errorf("detach retained volume: %w", err)
 	}
 	return nil
@@ -139,3 +156,34 @@ func (failure *mountDestinationError) Error() string {
 	return "module mount destination is unavailable: " + failure.err.Error()
 }
 func (failure *mountDestinationError) Unwrap() error { return failure.err }
+
+// settleUnlisted retires a volume missing from this namespace's topology
+// through its own descriptor. Removing the directory beneath a mount detaches
+// it in every namespace, and a mount moved out of reach is unlisted too; the
+// kernel reports EINVAL only for the detached one. A covered volume is still
+// listed, so it is never settled here.
+func (volume *mountedVolume) settleUnlisted() (bool, error) {
+	listed, err := mountListed(volume.mountID)
+	if err != nil || listed {
+		return false, nil
+	}
+	err = unix.Unmount(mountDescriptorPath(volume.tree), unix.MNT_DETACH)
+	if err == nil || errors.Is(err, unix.EINVAL) {
+		return true, nil
+	}
+	return true, fmt.Errorf("detach unlisted retained volume: %w", err)
+}
+
+// mountListed reports whether a mount appears in this namespace's topology.
+func mountListed(id uint64) (bool, error) {
+	_, entries, err := readCurrentMountTopology()
+	if err != nil {
+		return false, err
+	}
+	for _, entry := range entries {
+		if uint64(entry.id) == id {
+			return true, nil
+		}
+	}
+	return false, nil
+}

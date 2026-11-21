@@ -5,6 +5,7 @@ package launchguard
 import (
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"time"
 
@@ -38,10 +39,20 @@ func awaitGuardianHandoff(control *os.File, stagePID int, stageFD int, caller Id
 			return err
 		}
 		if polls[0].Revents&unix.POLLIN != 0 {
-			notice, err := receiveGuardianNotice(int(control.Fd()), stagePID, caller)
+			raw, root, err := receiveHandoffPacket(int(control.Fd()), stagePID, caller)
 			if errors.Is(err, unix.EAGAIN) {
 				continue
 			}
+			if err != nil {
+				return err
+			}
+			if reason, refused := stageRefusal(raw); refused {
+				return &stageRefusalError{reason: reason}
+			}
+			if root {
+				return errors.New("protected stage sent its handoff before dropping to the caller")
+			}
+			notice, err := decodeGuardianNotice(raw)
 			if err != nil {
 				return err
 			}
@@ -237,4 +248,44 @@ func notifyGuardianFailure(already bool) bool {
 		_, _ = fmt.Fprintln(os.Stderr, "Painted Wolf Code: protected launch stopped. Waiting for its processes to exit.")
 	}
 	return true
+}
+
+// handoffExitError adds how the handoff child ended, so a static transition
+// refusal, a guardian error and a death no longer read alike.
+type handoffExitError struct {
+	err    error
+	status unix.WaitStatus
+}
+
+func (failure *handoffExitError) Error() string {
+	if failure.status.Signaled() {
+		return fmt.Sprintf("%v (protected setup process ended by signal %d)", failure.err, int(failure.status.Signal()))
+	}
+	return fmt.Sprintf("%v (protected setup process exited with status %d)", failure.err, failure.status.ExitStatus())
+}
+
+func (failure *handoffExitError) Unwrap() error { return failure.err }
+
+// handoffExitWait bounds how long a failed setup waits to name its child's
+// exit. The wait adds a diagnostic only and never decides the outcome.
+const handoffExitWait = time.Second
+
+// withHandoffExit attaches the handoff child's exit when it has one. End of
+// file on the handoff usually means its holder is exiting, so the exit is
+// awaited briefly; a holder that lingers is left to setup cleanup.
+func withHandoffExit(err error, pidfd, pid int) error {
+	if errors.Is(err, io.EOF) {
+		polls := []unix.PollFd{{Fd: int32(pidfd), Events: unix.POLLIN}}
+		deadline := time.Now().Add(handoffExitWait)
+		for remaining := time.Until(deadline); remaining > 0; remaining = time.Until(deadline) {
+			if _, pollErr := unix.Poll(polls, int(remaining/time.Millisecond)+1); !errors.Is(pollErr, unix.EINTR) {
+				break
+			}
+		}
+	}
+	status, ok := observeHandoffExit(pidfd, pid)
+	if !ok || (!status.Exited() && !status.Signaled()) {
+		return err
+	}
+	return &handoffExitError{err: err, status: status}
 }

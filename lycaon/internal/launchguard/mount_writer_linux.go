@@ -13,10 +13,13 @@ import (
 // stacks an owned lease: a replacement retires the previous lease first.
 // Parent and child leases are distinct; atomic groups have one root lease.
 type moduleMountWriter struct {
-	volumes   map[uint64]*mountedVolume
-	roots     map[uint64]*mountedVolume
-	sequence  uint64
-	lastLease uint64
+	volumes map[uint64]*mountedVolume
+	roots   map[uint64]*mountedVolume
+	// unattached holds initial leases whose destination was gone at startup;
+	// the intake retires them like any vanished source.
+	unattached map[uint64]string
+	sequence   uint64
+	lastLease  uint64
 }
 
 func (writer *moduleMountWriter) accept(message mountTransfer, tree int) (err error) {
@@ -63,6 +66,10 @@ func (writer *moduleMountWriter) accept(message mountTransfer, tree int) (err er
 		if tree >= 0 {
 			_ = unix.Close(tree)
 			return errors.New("module removal carries a descriptor")
+		}
+		if path, never := writer.unattached[message.id]; never && path == message.path {
+			delete(writer.unattached, message.id)
+			return nil
 		}
 		volume, exists := writer.volumes[message.id]
 		if !exists || volume.path != message.path {
@@ -138,10 +145,21 @@ func receiveInitialMountLeases(socket int, plan moduleViewPlan) (_ *moduleMountW
 			_ = unix.Close(tree)
 			return nil, errors.New("initial mount root differs from sealed selection")
 		}
+		reply := mountTransfer{kind: mountTransferAck, sequence: message.sequence}
 		if err := writer.accept(message, tree); err != nil {
-			return nil, err
+			// A destination removed after preparation is pruned, as after startup.
+			var unavailable *mountDestinationError
+			if !errors.As(err, &unavailable) || !errors.Is(err, unix.ENOENT) {
+				return nil, err
+			}
+			if writer.unattached == nil {
+				writer.unattached = make(map[uint64]string)
+			}
+			writer.unattached[message.id] = message.path
+			reply = message
+			reply.kind = mountTransferDenied
 		}
-		if err := sendMountTransfer(socket, mountTransfer{kind: mountTransferAck, sequence: message.sequence}, -1); err != nil {
+		if err := sendMountTransfer(socket, reply, -1); err != nil {
 			return nil, err
 		}
 	}
@@ -207,11 +225,17 @@ func transferInitialMountLeases(socket int, view *preparedModuleView) error {
 			return err
 		}
 		reply, fd, err := receiveMountTransfer(socket)
+		if err != nil {
+			return fmt.Errorf("receive initial lease attachment reply: %w", err)
+		}
 		if fd >= 0 {
 			_ = unix.Close(fd)
+			return errors.New("initial lease attachment reply carried a descriptor")
 		}
-		if err != nil || fd >= 0 || reply != (mountTransfer{kind: mountTransferAck, sequence: message.sequence}) {
-			return errors.New("initial lease attachment was not acknowledged")
+		denied := message
+		denied.kind = mountTransferDenied
+		if reply != (mountTransfer{kind: mountTransferAck, sequence: message.sequence}) && reply != denied {
+			return errors.New("initial lease attachment reply differs from its lease")
 		}
 		_ = view.trees[index].Close()
 	}
