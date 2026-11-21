@@ -848,6 +848,9 @@ func runPathCell(t *testing.T, host *programHost, template refusalProject, tpl p
 	}
 	config := &llm.MockConfig{Responses: []llm.MockResponseEntry{{Pattern: "run the program", FollowUpText: "Done."}}}
 	s = host.withClientAt(t, project.project, llm.NewMockProvider(config), wire.CreateSessionRequest{}, "")
+	if tpl.tool == "inspect_source" {
+		testutil.FailErr(t, "bind read-only profile", s.h.Sessions.Manager.Chats.SetAgentType(t.Context(), s.session, "path-explorer"))
+	}
 	s.h.SeedProgress(t, t.Context(), s.session)
 	// An escape can reach only the outside tree and its repository.
 	beforeTree, beforeGit := treeEntries(t, project.outside), gitDigest(t, project.outside)

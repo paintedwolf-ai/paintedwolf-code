@@ -5,10 +5,12 @@ import (
 	"strings"
 	"time"
 
+	"github.com/lycaon/lycaon/internal/coordinator/guard"
 	"github.com/lycaon/lycaon/internal/coordinator/turnload"
 	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/session/transcript"
 	"github.com/lycaon/lycaon/internal/skills"
+	"github.com/lycaon/lycaon/internal/toolpolicy"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -42,7 +44,7 @@ func (m *Service) readSkillForTool(ctx context.Context, sess *api.Session, tctx 
 	}
 	roster, _ := m.skills(ctx, sess, tctx.Identity.Agent, roots)
 	roster = eligibleSkillsForOfferedTools(roster, m.toolEventOfferedTools(ctx, sess, tctx, tool, len(roots)))
-	card := turnload.ToolCard{Name: tool, Description: m.toolDescription(ctx, sess, tctx.Identity.Agent, tool)}
+	card := turnload.ToolCard{Name: tool, Description: m.toolDescription(ctx, sess, tctx.Identity.Agent, tctx.Turn.TurnSurfaceID, tool)}
 	finishDeciding := m.beginDeciding(ctx, sess, sess.ID, api.TurnLoadTriggerToolEvent, tctx.Identity.ToolCallID)
 	outcome := turnload.RankToolEvent(ctx, m.Decider(), catalog.ToolEvent, request, card, roster)
 	finishDeciding()
@@ -141,7 +143,7 @@ func (m *Service) renderToolEventSkill(ctx context.Context, sessionID string, tc
 }
 
 // toolDescription returns the policy description for tool on profileID.
-func (m *Service) toolDescription(ctx context.Context, sess *api.Session, profileID, tool string) string {
+func (m *Service) toolDescription(ctx context.Context, sess *api.Session, profileID, surfaceID, tool string) string {
 	if m == nil || m.policy == nil {
 		return ""
 	}
@@ -149,7 +151,11 @@ func (m *Service) toolDescription(ctx context.Context, sess *api.Session, profil
 	if policy == nil {
 		return ""
 	}
-	for _, meta := range policy.ListForPrompt(ctx, sess, profileID) {
+	listCtx := ctx
+	if guard.IsCoordinatorProfile(profileID) && surfaceID != "" {
+		listCtx = toolpolicy.WithCoordinatorSurface(ctx, surfaceID)
+	}
+	for _, meta := range policy.ListForPrompt(listCtx, sess, profileID) {
 		if meta.Name == tool {
 			return meta.Description
 		}

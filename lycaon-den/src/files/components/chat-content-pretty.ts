@@ -49,9 +49,10 @@ export function useChatContentLineWidth(
     const pid = projectId().trim();
     const current = doc();
     const path = current.path?.trim() || "";
+    const rootId = current.rootId?.trim() || "";
     const tools = formatters();
     setLineWidth(undefined);
-    if (!apiClient || !pid || !path) {
+    if (!apiClient || !pid || !path || !rootId) {
       return;
     }
     let cancelled = false;
@@ -59,7 +60,7 @@ export function useChatContentLineWidth(
       cancelled = true;
     });
     void apiClient
-      .getProjectSourceFormatSettings(pid, path, "", current.sessionId)
+      .getProjectSourceFormatSettings(pid, path, rootId, current.sessionId)
       .then((resolved) => {
         if (!cancelled) setLineWidth(declaredLineWidth(resolved.sources, tools));
       })

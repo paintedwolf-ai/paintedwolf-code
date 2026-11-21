@@ -40,7 +40,7 @@ export function addReceiptScope(scopes: CommandReceiptScope[], scope: CommandRec
 
 function status(fact: CommandActivity): ToolPartStatus {
   if (fact.state === "running" || fact.state === "waiting") return "running";
-  if (fact.state === "failed" || fact.state === "refused" || fact.state === "interrupted" || (fact.status_code ?? 0) !== 0) return "error";
+  if (fact.state === "failed" || fact.state === "refused" || fact.state === "interrupted") return "error";
   return "completed";
 }
 

@@ -103,6 +103,10 @@ export function SourceDiffRow(props: Props) {
   const change = () => props.source.change(activeIndex());
   const path = () => props.source.path(activeIndex());
   const navigationTarget = () => props.source.navigationTarget?.(activeIndex());
+  const openable = () => {
+    const target = navigationTarget();
+    return target === undefined ? props.source.openable(activeIndex()) : target !== null;
+  };
   const isNoop = () => props.source.isNoop(activeIndex());
   const wholeFile = () => wholeFileChange(change());
 
@@ -303,11 +307,12 @@ export function SourceDiffRow(props: Props) {
           </div>
 
           <footer class="den-file-edit-diff-footer">
-            <Show when={props.source.openable(activeIndex()) !== false}>
+            <Show when={openable() !== false}>
               <SourcePathLink
                 label="Open in Files"
                 path={path()}
                 rootId={props.source.rootId(activeIndex())}
+                navigationTarget={navigationTarget() ?? undefined}
                 projectId={props.source.projectId}
                 jobId={props.source.jobId}
                 rootRefs={props.source.rootRefs}
