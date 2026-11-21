@@ -13,6 +13,21 @@ import (
 // OpenDocument returns the accepted shared document for a project-tree path.
 // A failed lookup is an error, never a silent fall back to disk.
 func OpenDocument(ctx context.Context, tctx tools.ToolContext, resolved projectpaths.Resolved) (tools.EditorDocumentText, bool, error) {
+	defer tools.ReadingDrafts(ctx)()
+	return openDocument(ctx, tctx, resolved)
+}
+
+// OpenPinnedDocument captures and pins a revision under the program's read lock.
+func OpenPinnedDocument(ctx context.Context, tctx tools.ToolContext, resolved projectpaths.Resolved) (tools.EditorDocumentText, bool, error) {
+	defer tools.ReadingDrafts(ctx)()
+	doc, open, err := openDocument(ctx, tctx, resolved)
+	if err == nil && open {
+		tools.PinDraft(ctx, doc.ID, doc.Revision)
+	}
+	return doc, open, err
+}
+
+func openDocument(ctx context.Context, tctx tools.ToolContext, resolved projectpaths.Resolved) (tools.EditorDocumentText, bool, error) {
 	documents, ok := DocumentsFor(tctx, resolved)
 	if !ok {
 		return tools.EditorDocumentText{}, false, nil

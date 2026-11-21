@@ -48,7 +48,16 @@ func DocumentsFor(tctx tools.ToolContext, resolved projectpaths.Resolved) (tools
 // cannot authorize a filesystem write that would bypass an unknown draft.
 // The document is held to the file's access budget.
 func LoadText(ctx context.Context, tool string, access Access, tctx tools.ToolContext, resolved projectpaths.Resolved) (Text, error) {
-	doc, open, err := OpenDocument(ctx, tctx, resolved)
+	return loadText(ctx, tool, access, tctx, resolved, OpenDocument)
+}
+
+// LoadPinnedDestination captures the editor revision before a launch can save it.
+func LoadPinnedDestination(ctx context.Context, tctx tools.ToolContext, resolved projectpaths.Resolved) (Text, error) {
+	return loadText(ctx, "write", AccessMutate, tctx, resolved, OpenPinnedDocument)
+}
+
+func loadText(ctx context.Context, tool string, access Access, tctx tools.ToolContext, resolved projectpaths.Resolved, openDocument func(context.Context, tools.ToolContext, projectpaths.Resolved) (tools.EditorDocumentText, bool, error)) (Text, error) {
+	doc, open, err := openDocument(ctx, tctx, resolved)
 	if err != nil {
 		return Text{}, err
 	}

@@ -36,6 +36,8 @@ type OperationRequest struct {
 	// Entries are a "stage" operation's exact index changes.
 	Entries []IndexEntry
 	Review  func(context.Context, []RestoreFile) error
+	// BeforeWorktree prepares inputs after ref planning, outside the repository lease.
+	BeforeWorktree func(context.Context) error
 }
 
 // RepositoryState is observed even when Git reports a failed or partial effect.
@@ -86,12 +88,7 @@ func (m *Manager) Operate(ctx context.Context, root string, req OperationRequest
 	if repo.Root != gitrepo.CanonicalDir(root) {
 		return result, operationRefusal("repository_root_required")
 	}
-	release, err := gitlease.Repository(ctx, repo.Root)
-	if err != nil {
-		return result, err
-	}
-	prepared, err := prepareOperation(ctx, repo, req)
-	release()
+	prepared, err := prepareLeasedOperation(ctx, repo, req)
 	if err != nil {
 		return result, err
 	}
@@ -106,6 +103,36 @@ func (m *Manager) Operate(ctx context.Context, root string, req OperationRequest
 		}
 	}
 	return prepared.apply(ctx, repo)
+}
+
+func prepareLeasedOperation(ctx context.Context, repo gitrepo.Repo, req OperationRequest) (*preparedOperation, error) {
+	release, err := gitlease.Repository(ctx, repo.Root)
+	if err != nil {
+		return nil, err
+	}
+	prepare := req.BeforeWorktree
+	req.BeforeWorktree = nil
+	plan, err := planOperation(ctx, repo.Root, req)
+	if err != nil {
+		release()
+		return nil, err
+	}
+	if prepare != nil {
+		release()
+		if err := prepare(ctx); err != nil {
+			return nil, err
+		}
+		release, err = gitlease.Repository(ctx, repo.Root)
+		if err != nil {
+			return nil, err
+		}
+		if err := plan.validateRefs(ctx, repo.Root); err != nil {
+			release()
+			return nil, err
+		}
+	}
+	defer release()
+	return prepareOperation(ctx, repo, plan)
 }
 
 func (p *preparedOperation) apply(ctx context.Context, repo gitrepo.Repo) (result OperationResult, err error) {

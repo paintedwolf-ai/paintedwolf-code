@@ -119,6 +119,57 @@ func TestRejectedPushSettlesUnknown(t *testing.T) {
 	}
 }
 
+func TestPullPreparesDraftsOnlyWithAFetchedCommit(t *testing.T) {
+	for _, remoteHasCommit := range []bool{false, true} {
+		name := "empty remote"
+		if remoteHasCommit {
+			name = "fast-forward"
+		}
+		t.Run(name, func(t *testing.T) {
+			h, drafts, events := draftHarness(t)
+			h.clean()
+			origin := h.bareRemote(t, "origin.git")
+			h.git("remote", "add", "origin", origin)
+			if remoteHasCommit {
+				advanceDraftTestRemote(t, h, origin)
+			}
+			drafts.Type("notes.txt", "typed by the person\n")
+			result := h.exec("git", "pull", "--ff-only", "origin")
+			if events.count("launch") != 1 {
+				t.Fatalf("pull did not bind its fetch: %v", events.events)
+			}
+			if !remoteHasCommit {
+				if result.result.Status == 0 || events.count("save") != 0 || !h.absent("notes.txt") {
+					t.Fatalf("missing FETCH_HEAD: status=%d, preparations=%v", result.result.Status, events.events)
+				}
+				return
+			}
+			if result.err != nil || result.result.Status != 0 {
+				t.Fatalf("pull: %+v %v %s", result.result, result.err, result.stderr)
+			}
+			if events.count("save") != 1 || h.read("notes.txt") != "typed by the person\n" || h.read("ahead.txt") != "ahead\n" {
+				t.Fatalf("pull did not publish the draft and integrate the fetched commit: %v", events.events)
+			}
+		})
+	}
+}
+
+func advanceDraftTestRemote(t *testing.T, h *harness, origin string) {
+	t.Helper()
+	h.git("push", "-q", "origin", "main")
+	parent := t.TempDir()
+	other := filepath.Join(parent, "other")
+	if out, stderr, status := h.direct(parent, "clone", "-q", origin, other); status != 0 {
+		t.Fatalf("clone: %d %s %s", status, out, stderr)
+	}
+	testutil.FailErr(t, "write upstream change", os.WriteFile(filepath.Join(other, "ahead.txt"), []byte("ahead\n"), 0o644))
+	for _, args := range [][]string{{"add", "ahead.txt"}, {"-c", "user.name=t", "-c", "user.email=t@example.test", "commit", "-q", "-m", "ahead"}, {"push", "-q", "origin", "main"}} {
+		if out, stderr, status := h.direct(other, args...); status != 0 {
+			t.Fatalf("git %v: %d %s %s", args, status, out, stderr)
+		}
+	}
+}
+
 // git init and git worktree add and remove bind their launch with the
 // directory whose entry they create or remove, so an approved path outside
 // the project is writable.

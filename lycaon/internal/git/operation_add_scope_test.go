@@ -56,7 +56,7 @@ func namedAddPreparationVisits(t *testing.T, tracked bool, unrelated int) int {
 	}
 	visitedEntries := 0
 	ctx := context.WithValue(t.Context(), operationVisitKey{}, func(count int) { visitedEntries += count })
-	prepared, err := prepareOperation(ctx, repo, OperationRequest{Kind: "add", Paths: []string{"README.txt"}})
+	prepared, err := prepareLeasedOperation(ctx, repo, OperationRequest{Kind: "add", Paths: []string{"README.txt"}})
 	testutil.FailErr(t, "prepare named add", err)
 	defer prepared.close()
 	wantBefore, wantAfter, maxVisits := "", "selected\n", 3

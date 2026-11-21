@@ -23,7 +23,7 @@ func HoldsUnsavedText(ctx context.Context, tctx tools.ToolContext, resolved proj
 			return nil
 		})
 	}
-	memo, ok := tools.ProgramUnsavedPaths(ctx)
+	memo, ok := tools.ProgramDraftsFrom(ctx)
 	if !ok {
 		found := false
 		err := visit(resolved.ScopeRel, false, func(tools.EditorDocumentState) { found = true })

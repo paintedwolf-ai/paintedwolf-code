@@ -46,6 +46,17 @@ type EditorAgentCall struct {
 	ToolName   string
 }
 
+// EditorUnsavedDocument identifies a draft left unsaved by a launch.
+type EditorUnsavedDocument struct {
+	RootID, Path string
+	Cause        string
+}
+
+type EditorLaunchSave struct {
+	Unsaved   []EditorUnsavedDocument
+	Published bool
+}
+
 // EditorDocumentText is what an open editor document presents for one
 // project-tree path: the text the person sees, whatever the file holds.
 type EditorDocumentText struct {
@@ -180,6 +191,8 @@ type EditorDocuments interface {
 	// with descendants, before an agent operation acts on the file there. A
 	// document whose file changed outside it returns *EditorFileChanged.
 	SaveForAgentOperation(ctx context.Context, projectID string, branch sourcebranch.ID, rootID, path string, descendants bool, call EditorAgentCall) error
+	// SaveForAgentLaunch publishes person-authored drafts before process start.
+	SaveForAgentLaunch(ctx context.Context, projectID string, branch sourcebranch.ID, call EditorAgentCall, pinned func(documentID string, revision int64) bool) (EditorLaunchSave, error)
 	// DirtyDocuments lists the project's documents whose draft differs from
 	// the saved file, so a search reads the person's text instead.
 	DirtyDocuments(ctx context.Context, projectID string, branch sourcebranch.ID) ([]EditorDocumentPath, error)

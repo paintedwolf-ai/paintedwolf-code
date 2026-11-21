@@ -90,7 +90,7 @@ var targetForms = map[string]bool{"git init": true, "git worktree": true}
 func bindTargetLaunch(ctx context.Context, p Prepared, tc tools.ToolContext, written ...string) (context.Context, func(failed bool), error) {
 	launchTC := tc
 	launchTC.Files.GrantedWriteRoots = append(slices.Clone(tc.Files.GrantedWriteRoots), written...)
-	plan, release, err := p.owners.Launch(ctx, launchTC, "git", p.commandLine(), nil)
+	plan, release, err := p.bindLaunch(ctx, launchTC, nil)
 	if err != nil {
 		return ctx, nil, err
 	}
@@ -218,7 +218,8 @@ type Prepared struct {
 	// filesystem supplies the program's shared file effects and pinned inputs.
 	filesystem *mutation.Owners
 	// execution records the pinned file inputs.
-	execution string
+	execution          string
+	saveWorktreeDrafts func(context.Context) error
 	// request and nested let git bisect run dispatch its check as a child.
 	request commandprogram.OperationRequest
 	nested  commandprogram.NestedCommand
@@ -287,7 +288,7 @@ func (p Prepared) InvokeOwner(ctx context.Context, tc tools.ToolContext, streams
 	// target forms once the path they create is bound, so the confinement
 	// carries exactly those recipients and paths.
 	if !networkForms[p.command.spec.Name] && !targetForms[p.command.spec.Name] {
-		plan, release, launchErr := p.owners.Launch(ctx, tc, "git", p.commandLine(), nil)
+		plan, release, launchErr := p.bindLaunch(ctx, tc, nil)
 		if launchErr != nil {
 			return settle(0, launchErr, p.command.spec.Name)
 		}
@@ -296,6 +297,7 @@ func (p Prepared) InvokeOwner(ctx context.Context, tc tools.ToolContext, streams
 		}()
 		ctx = gitexec.WithAgentLaunch(ctx, gitexec.AgentLaunch{Plan: plan})
 	}
+	p.bindWorktreeDrafts(tc)
 	ctx = reportRepositoryRead(ctx, p.commandDir())
 	if _, ok := mutateForms[p.command.spec.Name]; ok {
 		return invokeMutation(ctx, p, tc, streams)

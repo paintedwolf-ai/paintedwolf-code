@@ -37,14 +37,11 @@ func recordOperationVisits(ctx context.Context, count int) {
 
 func (p *preparedOperation) close() { _ = os.RemoveAll(p.scratch) }
 
-func prepareOperation(ctx context.Context, repo gitrepo.Repo, req OperationRequest) (*preparedOperation, error) {
-	plan, err := planOperation(ctx, repo.Root, req)
-	if err != nil {
-		return nil, err
-	}
+func prepareOperation(ctx context.Context, repo gitrepo.Repo, plan operationPlan) (*preparedOperation, error) {
 	p := &preparedOperation{operationPlan: plan, inputs: map[string]RestoreContent{}, nestedHeads: map[string]string{}}
 	p.result = OperationResult{Available: true, Paths: []string{}}
 	var rawStatus string
+	var err error
 	p.result.Before, rawStatus, err = readRepositoryStateAndStatus(ctx, repo.Root)
 	if err != nil {
 		return nil, err
