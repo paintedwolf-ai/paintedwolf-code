@@ -432,8 +432,8 @@ func TestSQLForcedDeleteRemovesABusyProjectAndItsHistory(t *testing.T) {
 	testutil.FailErr(t, "create project", err)
 	_, err = sqlDB.ExecContext(ctx, `
 		INSERT INTO sessions (
-			id, project_id, owner_person_id, workspace_root_id, posture, status, created_at, activity_at, updated_at
-		) VALUES ('busy-session', ?, (SELECT id FROM people WHERE role = 'owner'), ?, 'build', 'busy', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z')
+			id, project_id, owner_person_id, workspace_root_id, posture, status, created_at, activity_at, updated_at, root_session_id, mode
+		) VALUES ('busy-session', ?, (SELECT id FROM people WHERE role = 'owner'), ?, 'build', 'busy', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z', 'busy-session', 'agent')
 	`, p.ID, p.Roots[0].ID)
 	testutil.FailErr(t, "insert busy session", err)
 	for i := range 3 {

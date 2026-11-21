@@ -23,10 +23,11 @@ func (workerMintRule) MintedCredentialRule(action hitl.ProposedAction) (hitl.Det
 
 func TestMintedWorkerOutputIsRememberedInItsParentChat(t *testing.T) {
 	db := testdbfixture.Open(t, "mint.db")
-	for _, id := range []string{"root", "worker", "other"} {
+	for _, id := range []string{"root", "other"} {
 		testdbseed.InsertSession(t, db, id, testdbseed.DefaultProjectID)
 	}
-	_, err := db.ExecContext(t.Context(), "UPDATE sessions SET parent_session_id = 'root', agent_type = 'implementer' WHERE id = 'worker'")
+	testdbseed.InsertChildSession(t, db, "worker", "root")
+	_, err := db.ExecContext(t.Context(), "UPDATE sessions SET agent_type = 'implementer' WHERE id = 'worker'")
 	testutil.FailErr(t, "attach worker", err)
 	host := session.NewHost(store.NewSQL(db), session.Models{Limits: settings.DefaultSessionLimits()}, nil)
 	host.ToolPolicy.SetMintedCredentialSource(func() policyfacts.MintedCredentialSource { return workerMintRule{} })

@@ -45,7 +45,7 @@ func (s *Store) journalBytes() (data []byte, resultErr error) {
 		return nil, err
 	}
 	defer func() { resultErr = errors.Join(resultErr, root.Close()) }()
-	f, err := root.Open(journalFileName)
+	f, err := openBoundedFile(root, journalFileName, MaxJournalBytes)
 	if os.IsNotExist(err) {
 		return nil, nil
 	}

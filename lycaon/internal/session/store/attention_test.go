@@ -105,11 +105,11 @@ func TestSQLSeenStampPublishesOnlyWhenItCrossesCompletedTurn(t *testing.T) {
 	database := testdbfixture.Open(t, "seen.db")
 	testdbseed.InsertProjectRoot(t, database, testdbseed.DefaultProjectID, t.TempDir())
 	st := NewSQL(database)
-	st.SetEventOutbox(eventoutbox.New(database, events.NewMemoryHub()))
 	sess, err := st.Sessions.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create chat", err)
 	turn, err := st.Turns.BeginTurn(ctx, TurnStart{SessionID: sess.ID, ProjectID: sess.ProjectID, Origin: TurnOriginUser, InputJSON: "{}"})
 	testutil.FailErr(t, "start turn", err)
+	st.SetEventOutbox(eventoutbox.New(database, events.NewMemoryHub()))
 
 	countUpdates := func(want int) {
 		t.Helper()

@@ -15,10 +15,9 @@ func TestSharedTempHistoryIncludesWorkerReportsAndHumanDenials(t *testing.T) {
 	db, manager, chat := newTestManager(t)
 	insertSession(t, db, chat)
 	worker := "temp-review-worker"
-	insertSession(t, db, worker)
+	testdbseed.InsertChildSession(t, db, worker, chat)
 	ctx := testdbseed.OwnerCaller(t, t.Context(), db)
-	_, err := db.ExecContext(ctx, "UPDATE sessions SET parent_session_id=? WHERE id=?", chat, worker)
-	testutil.FailErr(t, "attach worker", err)
+	var err error
 	testdbseed.InsertSessionEntry(t, db, "temp-report", worker, "utterance", "temp-report", 1)
 	_, err = db.ExecContext(ctx, `INSERT INTO messages(id,entry_id,session_id,role,content,origin,authority,trust_tier,seq,ord,ts,tool_result_json) VALUES('temp-report','temp-report',?,'tool','result','tool','none','untrusted',1,1,'2026-01-01T00:00:00Z',?)`, worker, `{"feedback":[{"code":"SANDBOX_SHARED_TEMP_TOLERATED","details":{"refused_shared_temp":["/var/tmp"]}}]}`)
 	testutil.FailErr(t, "store delivered report", err)

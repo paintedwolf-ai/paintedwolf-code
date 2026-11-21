@@ -7,6 +7,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/db"
 	"github.com/lycaon/lycaon/internal/sourcebranch"
+	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -18,15 +19,13 @@ func outsideRoot(t *testing.T, store *Store, ctx context.Context) string {
 	return id
 }
 
-func insertChat(t *testing.T, store *Store, ctx context.Context, id, parent string) {
+func insertChat(t *testing.T, store *Store, _ context.Context, id, parent string) {
 	t.Helper()
-	var parentID any
-	if parent != "" {
-		parentID = parent
+	if parent == "" {
+		testdbseed.InsertSession(t, store.sqlDB, id, "p1")
+		return
 	}
-	_, err := store.sqlDB.ExecContext(ctx, `INSERT INTO sessions (id,project_id,owner_person_id,posture,parent_session_id,created_at,activity_at,updated_at)
-		VALUES (?,'p1',(SELECT id FROM people WHERE role = 'owner'),'build',?,'2026-09-13T00:00:00Z','2026-09-13T00:00:00Z','2026-09-13T00:00:00Z')`, id, parentID)
-	testutil.FailErr(t, "create chat "+id, err)
+	testdbseed.InsertChildSession(t, store.sqlDB, id, parent)
 }
 
 func recordOutside(t *testing.T, store *Store, ctx context.Context, outside, session, path, after string) {

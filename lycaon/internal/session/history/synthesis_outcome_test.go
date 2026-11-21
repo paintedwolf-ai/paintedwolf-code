@@ -84,7 +84,7 @@ func testSynthesisOutcome(t *testing.T, state, reason string, calls int) {
 	previous := slog.Default()
 	slog.SetDefault(slog.New(slog.NewJSONHandler(&output, nil)))
 	t.Cleanup(func() { slog.SetDefault(previous) })
-	mem := storetest.New(t)
+	mem := storetest.New(t, testdbseed.DefaultProjectID)
 	sess, err := mem.Sessions.Create(t.Context(), api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create synthesis session", err)
 	testutil.FailErr(t, "append canonical observations", mem.Transcript.AppendMessages(t.Context(), sess.ID,

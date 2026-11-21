@@ -12,11 +12,13 @@ import (
 
 func TestBoardResourcesFollowOnlyTheirOwnChatTree(t *testing.T) {
 	db := testdbfixture.Open(t, "boards.db")
-	for _, id := range []string{"root", "worker", "nested", "other"} {
+	for _, id := range []string{"root", "other"} {
 		testdbseed.InsertSession(t, db, id, testdbseed.DefaultProjectID)
 	}
-	for child, parent := range map[string]string{"worker": "root", "nested": "worker"} {
-		_, err := db.ExecContext(t.Context(), "UPDATE sessions SET parent_session_id = ?, agent_type = 'implementer' WHERE id = ?", parent, child)
+	testdbseed.InsertChildSession(t, db, "worker", "root")
+	testdbseed.InsertChildSession(t, db, "nested", "worker")
+	for _, child := range []string{"worker", "nested"} {
+		_, err := db.ExecContext(t.Context(), "UPDATE sessions SET agent_type = 'implementer' WHERE id = ?", child)
 		testutil.FailErr(t, "attach worker", err)
 	}
 	runtime := New(Dependencies{Storage: persistence.Runtime{Sessions: store.NewSQL(db)}})

@@ -17,7 +17,7 @@ import (
 
 func TestSetModePublishesRootLifecycleAndRejectsWorkerChanges(t *testing.T) {
 	ctx := t.Context()
-	sessions := storetest.New(t)
+	sessions := storetest.New(t, testdbseed.DefaultProjectID)
 	ask := api.SessionModeAsk
 	root, err := sessions.Sessions.Create(ctx, api.CreateSessionRequest{Mode: &ask}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create Ask chat", err)

@@ -42,6 +42,7 @@ func newSynthesisDelayManager(t *testing.T) (*Host, *api.Session, *sessionstore.
 		Posture: api.SessionPostureBuild,
 	}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create coordinator session", err)
+	testdbseed.InsertWorkflowRun(t, store.DB(), "run-"+sess.ID, sess.ID, testdbseed.DefaultProjectID)
 	rejectFmt := guidance.NewStaticRejectFormatter(hints)
 	mgr := NewHost(store, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
 	mgr.SetProgressStore(progress.NewSQLStore(store.DB()))

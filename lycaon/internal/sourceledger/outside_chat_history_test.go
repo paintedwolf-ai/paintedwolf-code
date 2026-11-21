@@ -11,12 +11,11 @@ import (
 
 func TestOutsideHistorySharesFileIdentityAndKeepsChatAttribution(t *testing.T) {
 	store, ctx := openLedger(t)
-	for _, session := range []string{"first", "second", "child"} {
+	for _, session := range []string{"first", "second"} {
 		testdbseed.InsertSession(t, store.sqlDB, session, "p1")
 	}
+	testdbseed.InsertChildSession(t, store.sqlDB, "child", "first")
 	testdbseed.InsertSession(t, store.sqlDB, "other", "p2")
-	_, err := store.sqlDB.ExecContext(ctx, `UPDATE sessions SET parent_session_id = 'first' WHERE id = 'child'`)
-	testutil.FailErr(t, "set worker parent", err)
 	outsideOne, err := store.queries.GetProjectOutsideRootID(ctx, "p1")
 	testutil.FailErr(t, "read first outside namespace", err)
 	outsideTwo, err := store.queries.GetProjectOutsideRootID(ctx, "p2")

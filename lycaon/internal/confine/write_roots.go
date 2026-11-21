@@ -189,7 +189,7 @@ func NativeFilesystemRootForPath(projectID string, roots, granted []string, sess
 // host's own state.
 func UnrecordedRoots() []string {
 	roots := controlPlaneReadDenyRootsResolved()
-	for _, root := range osDefaultWriteRoots() {
+	for _, root := range append(osDefaultWriteRoots(), SharedTempLocations()...) {
 		if canonical := fspath.CanonicalPath(root); canonical != "" {
 			roots = append(roots, canonical)
 		}

@@ -201,6 +201,7 @@ var registeredSurfaceFactNames = []string{
 	FactVerifyUnverified,
 	FactVisibleUserTurn,
 	FactPosture,
+	FactMode,
 	FactProgressHasOpenSteps,
 	FactProgressMissing,
 	FactProgressGatedToolAttemptedSinceIntent,
