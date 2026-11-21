@@ -248,9 +248,16 @@ never separates producing calls from their tool results. An unsuccessful
 candidate is memoized by its selected sources, continuation, current request,
 model, and policy. Appending untouched history does not repeat synthesis for that
 candidate. Deterministic reductions publish without waiting for a provider;
-optional synthesis may also prepare an unaccepted page and publishes only after
-source, lifecycle, model, and projection-generation validation. Failed synthesis
-leaves canonical history and the last accepted continuation available for recall.
+the resulting continuation preserves bounded excerpts of recorded commands and
+completion reports, with receipt outcomes and recovery addresses. It reports how
+many recorded observations fell outside the display budget.
+
+Optional synthesis may prepare an unaccepted page. Enrichment appends page clues
+within list bounds and checks the captured source, receiver model, and projection
+generation before each model call. Publication also checks lifecycle admission
+and the growth budget. Each enrichment pass logs one outcome with its source
+range, generation, and model-call count. Canonical history and the last accepted
+continuation remain available when enrichment cannot publish.
 
 Prompt-cache identity follows stable machine inputs rather than incidental labels: a change to workflow revision, tool surface, or material context invalidates the relevant prefix; a cosmetic transcript change does not. Details: [Prompt assembly](prompt-assembly.md).
 

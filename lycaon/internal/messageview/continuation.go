@@ -1,7 +1,7 @@
 package messageview
 
 // ContinuationFormat identifies a rebuildable history projection.
-const ContinuationFormat = 2
+const ContinuationFormat = 3
 
 // MaxCompactionRevisionLag bounds source validation before a projection is rebuilt.
 const MaxCompactionRevisionLag int64 = 4096
@@ -11,16 +11,19 @@ const MaxCompactionRows = 4096
 
 // Continuation covers canonical observations independently of summary quality.
 type Continuation struct {
-	Level             string               `json:"level"`
-	Format            int                  `json:"format"`
-	SummaryThroughOrd int64                `json:"summary_through_ord"`
-	ThroughOrd        int64                `json:"through_ord"`
-	RemovedRows       int                  `json:"removed_rows"`
-	Summary           ContinuationSummary  `json:"summary"`
-	Sources           []ContinuationSource `json:"sources"`
-	Receiver          string               `json:"receiver"`
-	Window            int                  `json:"window"`
-	Reason            string               `json:"reason"`
+	Level               string               `json:"level"`
+	Format              int                  `json:"format"`
+	SummaryThroughOrd   int64                `json:"summary_through_ord"`
+	ThroughOrd          int64                `json:"through_ord"`
+	RecordedRows        int                  `json:"recorded_rows,omitempty"`
+	RecordedRowsClipped bool                 `json:"-"`
+	RemovedRows         int                  `json:"removed_rows"`
+	Summary             ContinuationSummary  `json:"summary"`
+	Sources             []ContinuationSource `json:"sources"`
+	Receiver            string               `json:"receiver"`
+	Window              int                  `json:"window"`
+	RenderTokens        int                  `json:"render_tokens,omitempty"`
+	Reason              string               `json:"reason"`
 }
 
 // ContinuationSummary contains model-authored navigation clues, not host state.
@@ -36,11 +39,18 @@ type ContinuationSummary struct {
 type ContinuationSource struct {
 	MessageID   string                 `json:"message_id"`
 	Ord         int64                  `json:"ord"`
+	Command     string                 `json:"command,omitempty"`
+	Conclusion  string                 `json:"conclusion,omitempty"`
 	Tool        string                 `json:"tool,omitempty"`
 	Handles     []string               `json:"handles,omitempty"`
 	Disposition string                 `json:"disposition"`
 	Tokens      int                    `json:"tokens"`
 	Execution   *ContinuationExecution `json:"execution,omitempty"`
+}
+
+// HasRecordedDetail identifies a command or report with a recorded observation.
+func (s ContinuationSource) HasRecordedDetail() bool {
+	return s.Conclusion != "" || s.Command != "" || s.Tool == "command" && s.Execution != nil
 }
 
 // CloneContinuation separates an accepted projection from mutable consumers.
