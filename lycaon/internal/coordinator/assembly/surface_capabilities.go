@@ -190,7 +190,11 @@ func (e *promptSurface) toolAddressable(ctx context.Context, sess *api.Session, 
 }
 
 func (e *promptSurface) taskOffered(sess *api.Session, surfaceID string, rootCount int) bool {
-	plan, err := surface.CompileToolPlan(surface.TurnProfile{SurfaceID: surfaceID}, rootCount)
+	var mode api.SessionMode
+	if sess != nil {
+		mode = sess.Mode
+	}
+	plan, err := surface.CompileToolPlan(surface.TurnProfile{SurfaceID: surfaceID, SessionMode: mode}, rootCount)
 	if err != nil {
 		return false
 	}

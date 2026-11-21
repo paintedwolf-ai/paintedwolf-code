@@ -42,10 +42,13 @@ func LoadCoordinatorSurfaceActivityLabel(surfaceID string) string {
 
 // TurnProfile is the resolved coordinator turn: surface tools and mode partials.
 type TurnProfile struct {
-	SurfaceID       string
-	SurfaceTemplate string
-	ModeRefs        []string // len 1 or 2: [base] or [base, overlay]
-	SessionMode     api.SessionMode
+	SurfaceID               string
+	SurfaceTemplate         string
+	ModeRefs                []string // len 1 or 2: [base] or [base, overlay]
+	SessionMode             api.SessionMode
+	WorkflowActive          bool
+	PhaseCoordinatorSurface string
+	AdvanceWhenGateMet      string
 }
 
 // RunStateOverlay is a mode-agnostic overlay partial suffix (feedback, gates, running).
@@ -269,7 +272,15 @@ func ResolveTurnProfileForSurface(
 		if err != nil {
 			panic(fmt.Sprintf("coordinator surface mode: %v", err))
 		}
-		return TurnProfile{SurfaceID: surfaceID, SurfaceTemplate: "agents/coordinator-surface-ask.md", ModeRefs: []string{modeRef}, SessionMode: sess.Mode}
+		return TurnProfile{
+			SurfaceID:               surfaceID,
+			SurfaceTemplate:         "agents/coordinator-surface-ask.md",
+			ModeRefs:                []string{modeRef},
+			SessionMode:             sess.Mode,
+			WorkflowActive:          strings.TrimSpace(runCtx.RunID) != "",
+			PhaseCoordinatorSurface: strings.TrimSpace(runCtx.PhaseCoordinatorSurface),
+			AdvanceWhenGateMet:      strings.TrimSpace(runCtx.AdvanceWhenGateMet),
+		}
 	}
 	overlay := ResolveRunStateOverlay(runCtx)
 	base, err := resolveBaseModeRef(surfaceID, runCtx)
@@ -322,7 +333,27 @@ func CompileToolPlan(profile TurnProfile, rootCount int) (toolsurface.Plan, erro
 	}
 	plan, err := compileToolPlan(row, rootCount)
 	if err == nil && profile.SessionMode == api.SessionModeAsk {
+		if profile.WorkflowActive && profile.PhaseCoordinatorSurface != "" {
+			if phaseRow, phaseErr := catalog.Surface(profile.PhaseCoordinatorSurface); phaseErr == nil {
+				if phase, compileErr := compileToolPlan(phaseRow, rootCount); compileErr == nil {
+					plan = plan.Promote(phase.ImmediateNames()...)
+					for _, name := range phase.DeferredNames() {
+						if !plan.Addressable(name) {
+							plan = plan.Defer(name)
+						}
+					}
+				}
+			}
+		}
+		if profile.AdvanceWhenGateMet == "coordinator" {
+			if promoted, filterErr := FilterSurfaceToolsForRootCount([]string{"workflow_advance"}, rootCount); filterErr == nil && len(promoted) > 0 {
+				plan = plan.Promote(promoted...)
+			}
+		}
 		plan = applyAskCatalogCeiling(plan)
+		if !profile.WorkflowActive {
+			plan = plan.Without("ask_user")
+		}
 	}
 	return plan, err
 }

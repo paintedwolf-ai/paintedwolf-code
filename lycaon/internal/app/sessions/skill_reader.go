@@ -4,6 +4,7 @@ import (
 	"context"
 	"strings"
 
+	"github.com/lycaon/lycaon/internal/coordinator/surface"
 	"github.com/lycaon/lycaon/internal/gitrepo"
 	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/internal/sandbox"
@@ -42,7 +43,11 @@ func skillToolReader(ctx context.Context, mgr *session.Host, tctx tools.ToolCont
 	rootCount := len(tctx.Source.Roots)
 	plan := tctx.Turn.TurnToolPlan
 	if surfaceID != "" && !plan.Compiled() {
-		compiled, err := prompts.CompileSurfacePlan(surfaceID, max(rootCount, 1))
+		var mode api.SessionMode
+		if tctx.Source.AskMode {
+			mode = api.SessionModeAsk
+		}
+		compiled, err := surface.CompileToolPlan(surface.TurnProfile{SurfaceID: surfaceID, SessionMode: mode}, max(rootCount, 1))
 		if err != nil {
 			return prompts.Reader{}, err
 		}

@@ -44,7 +44,12 @@ func (l *promptContext) applyRoundAuthority(ctx context.Context, sess *api.Sessi
 	updated := *sess
 	updated.Mode = authority.Mode
 	if l.Deps.RefreshRoundMachine != nil {
+		scratchDir := state.machine.Surface.SessionScratchDir
 		state.machine = l.Deps.RefreshRoundMachine(ctx, &updated, profileID)
+		if scratchDir != "" && state.machine.Surface.SessionScratchDir == "" {
+			state.machine.Surface.SessionScratchDir = scratchDir
+			state.machine.Surface.Fingerprint = state.machine.Surface.CacheFingerprint()
+		}
 	}
 	return &updated, nil
 }
