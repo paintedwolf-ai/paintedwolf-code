@@ -76,7 +76,7 @@ describe("progress-model", () => {
       id: "summary",
       kind: "progress_update",
       created_at: "2026-06-18T12:00:01Z",
-      progress_update: { seq: 1, summary },
+      progress_update: { summary },
     })];
     expect(progressHistoryFromMessages(messages)).toEqual([{
       key: "summary:summary",
@@ -95,7 +95,6 @@ describe("progress-model", () => {
         ord: 3,
         created_at: "2026-08-31T14:31:29Z",
         progress_complete: {
-          seq: 1,
           steps: [
             { state: "done", label: "Scaffold crate" },
             { state: "done", label: "Run registry (kellnr) in Docker" },
@@ -108,7 +107,6 @@ describe("progress-model", () => {
         ord: 1,
         created_at: "2026-08-31T13:43:13Z",
         progress_update: {
-          seq: 1,
           initial: true,
           steps: [
             { state: "pending", label: "Scaffold crate" },
@@ -122,7 +120,6 @@ describe("progress-model", () => {
         ord: 2,
         created_at: "2026-08-31T13:43:24Z",
         progress_update: {
-          seq: 2,
           changes: [{
             kind: "updated",
             label: "Run registry in Docker",
@@ -180,7 +177,6 @@ describe("progress-model", () => {
         ord: 1,
         created_at: "t1",
         progress_complete: {
-          seq: 1,
           steps: [{ state: "done", label: "Ship crate" }],
         },
       }),
@@ -190,7 +186,6 @@ describe("progress-model", () => {
         ord: 2,
         created_at: "t2",
         progress_update: {
-          seq: 3,
           initial: true,
           steps: [{ state: "pending", label: "Review auth behavior" }],
         },
@@ -216,7 +211,7 @@ describe("progress-model", () => {
       hostMessage({
         id: "pc-1",
         kind: "progress_complete",
-        progress_complete: { steps: [...steps], seq: 1 },
+        progress_complete: { steps: [...steps], },
         created_at: "2026-06-18T12:00:00Z",
       }),
     ];

@@ -117,7 +117,7 @@ func InsertSession(t testing.TB, sqlDB store, sessionID, projectID string) {
 	InsertProject(t, sqlDB, projectID)
 	now := formatTime(time.Now().UTC())
 	_, err := sqlDB.ExecContext(t.Context(), `
-		INSERT INTO sessions (
+		INSERT OR IGNORE INTO sessions (
 			id, project_id, owner_person_id, posture, status, created_at, activity_at, updated_at
 		) VALUES (?, ?, (SELECT id FROM people WHERE role = 'owner'), 'build', 'idle', ?, ?, ?)
 	`, sessionID, projectID, now, now, now)
@@ -125,7 +125,7 @@ func InsertSession(t testing.TB, sqlDB store, sessionID, projectID string) {
 }
 
 // InsertWorkflowRun inserts a minimal running workflow for FK-backed tests.
-func InsertWorkflowRun(t *testing.T, sqlDB store, runID, sessionID, projectID string) {
+func InsertWorkflowRun(t testing.TB, sqlDB store, runID, sessionID, projectID string) {
 	t.Helper()
 	InsertSession(t, sqlDB, sessionID, projectID)
 	now := formatTime(time.Now().UTC())

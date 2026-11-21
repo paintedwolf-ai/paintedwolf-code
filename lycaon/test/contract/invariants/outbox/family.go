@@ -48,10 +48,7 @@ var silentMutators = []invariants.Exemption{
 
 	// The session plan is published through progress write observers.
 
-	{Key: "internal/progress/snapshot_store.go:Update", Reason: "commits one revision-aware progress update; ApplyAuthorUpdate notifies the registered progress write observers after the transaction"},
-	{Key: "internal/progress/sql.go:Set", Reason: "writes the session plan; progress write observers publish it through events.Publisher.PublishProgress"},
-	{Key: "internal/progress/sql.go:EnsureRun", Reason: "reseeds the session plan for a new workflow run; session.Manager.maybeBootstrapProgress notifies the progress write observers that publish it"},
-	{Key: "internal/progress/sql.go:BindRun", Reason: "binds the session plan to its workflow run; the plan wire carries only the content, which the binding leaves unchanged"},
+	{Key: "internal/progress/sql_transition.go:writeTransition", Reason: "runs inside AppendMessagesWith; its returned transition rows enqueue message events in the same transaction, and post-commit observers invalidate the progress projection"},
 
 	// Security scan bookkeeping; the scans announce through emitScanTx.
 	{Key: "internal/scan/authority_store.go:EnsureAssessment", Reason: "records the assessment a scan joins; the scans that join it announce through emitScanTx, which refreshes the assessment rollup"},

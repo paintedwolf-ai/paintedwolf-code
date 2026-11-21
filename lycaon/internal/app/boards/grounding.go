@@ -110,7 +110,7 @@ func (r *Runtime) wireFindingAndProgressTools() error {
 	}, r.Findings, r.rootSessionKey); err != nil {
 		return fmt.Errorf("record_finding tool: %w", err)
 	}
-	r.Progress = progress.NewSQLStore(r.deps.Storage.Database)
+	r.Progress = progress.NewSQLStore(r.deps.Storage.Database, r.deps.Storage.Sessions)
 	r.deps.Workflows.Manager.Fanout.Progress = r.Progress
 	r.deps.Sessions.Manager.SetProgressStore(r.Progress)
 	if err := native.RegisterUpdateProgressTool(r.deps.Execution.Host.Registry, r.Progress, r.rootSessionKey, r.deps.Sessions.Manager.Coordinator.ProgressClosure); err != nil {

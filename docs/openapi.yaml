@@ -28838,11 +28838,8 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/ProgressStep'
-        seq:
-          type: integer
       required:
         - steps
-        - seq
     ProgressChangeKind:
       type: string
       enum:
@@ -28913,10 +28910,7 @@ components:
           $ref: '#/components/schemas/ProgressUpdateSummary'
         initial:
           type: boolean
-        seq:
-          type: integer
-      required:
-        - seq
+      required: null
     FeedbackResponseType:
       type: string
       enum:

@@ -1,7 +1,6 @@
 package httpclient
 
 import (
-	"context"
 	"errors"
 	"net/http"
 	"net/http/httptest"
@@ -12,11 +11,14 @@ import (
 	"github.com/lycaon/lycaon/internal/egress"
 	"github.com/lycaon/lycaon/internal/egressclass"
 	"github.com/lycaon/lycaon/internal/hostproxy"
+	"github.com/lycaon/lycaon/internal/testsetup/dns"
 	"github.com/lycaon/lycaon/internal/testutil"
 )
 
 func TestFixedModelDownloadRequiresPublicAddresses(t *testing.T) {
-	egress.TestingResolve(t, egress.StaticLookup(netip.MustParseAddr("8.8.8.8"), netip.MustParseAddr("10.0.0.1")))
+	dns.Install(t, func(string) []netip.Addr {
+		return []netip.Addr{netip.MustParseAddr("8.8.8.8"), netip.MustParseAddr("10.0.0.1")}
+	})
 	_, client, err := FixedPublicDownload(t.Context(), egressclass.LocalModelDownload, time.Minute)
 	var denied *egress.DestinationDeniedError
 	if client != nil || !errors.As(err, &denied) {
@@ -35,12 +37,12 @@ func TestFixedModelDownloadUsesPinnedAddressThroughProxy(t *testing.T) {
 	t.Setenv("NO_PROXY", "")
 	t.Setenv("no_proxy", "")
 	lookups := 0
-	egress.TestingResolve(t, func(_ context.Context, _, host string) ([]netip.Addr, error) {
+	dns.Install(t, func(host string) []netip.Addr {
 		lookups++
 		if host != "downloads.paintedwolf.dev" {
 			t.Fatalf("unexpected destination %q", host)
 		}
-		return []netip.Addr{netip.MustParseAddr("8.8.8.8")}, nil
+		return []netip.Addr{netip.MustParseAddr("8.8.8.8")}
 	})
 	origin, client, err := FixedPublicDownload(t.Context(), egressclass.LocalModelDownload, time.Minute)
 	testutil.FailErr(t, "build pinned model download client", err)

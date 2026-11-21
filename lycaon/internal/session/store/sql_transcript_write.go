@@ -44,7 +44,7 @@ func (s *sqlTranscript) AppendMessages(ctx context.Context, id string, msgs ...a
 }
 
 // AppendMessagesWith commits related state with the transcript rows.
-func (s *sqlTranscript) AppendMessagesWith(ctx context.Context, id string, mutate func(*sql.Tx) error, msgs ...api.Message) error {
+func (s *sqlTranscript) AppendMessagesWith(ctx context.Context, id string, mutate func(*sql.Tx) ([]api.Message, error)) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
@@ -62,7 +62,8 @@ func (s *sqlTranscript) AppendMessagesWith(ctx context.Context, id string, mutat
 		return err
 	}
 	defer func() { _ = tx.Rollback() }()
-	if err := mutate(tx); err != nil {
+	msgs, err := mutate(tx)
+	if err != nil {
 		return err
 	}
 	if err := appendMessagesTx(ctx, core, tx, id, msgs...); err != nil {

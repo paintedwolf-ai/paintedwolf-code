@@ -147,13 +147,15 @@ func (m *Children) InvokeChild(ctx context.Context, parentRunID string, spec wor
 	if def, ok := childManifest.PhaseByID(childRun.CurrentPhase); ok && !terminalSink {
 		m.Entries.Trigger(ctx, childRun, projectDir, def)
 		if m.Phases.PhaseEnterHook != nil {
-			m.Phases.PhaseEnterHook(ctx, &workflowphases.RunContext{
+			if err := m.Phases.PhaseEnterHook(ctx, &workflowphases.RunContext{
 				SessionID:       childRun.SessionID,
 				RunID:           childRun.ID,
 				WorkflowID:      childRun.WorkflowID,
 				WorkflowVersion: childRun.WorkflowVersion,
 				Phase:           childRun.CurrentPhase,
-			}, def)
+			}, def); err != nil {
+				return nil, err
+			}
 		}
 	}
 	m.Publication.Publish(ctx, sess, childRun)

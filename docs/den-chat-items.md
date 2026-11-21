@@ -16,6 +16,15 @@ host facts -> deterministic item projection -> activity-span presentation
 
 Grouping may change chrome. It cannot change whether an event exists.
 
+### Plan transitions
+
+A visible plan transition and its transcript row commit together. The row uses
+that transition's workflow run and receives its ordinal in the same transaction.
+For a tool-originated transition, it follows the calling assistant message and
+is stored before the call returns. Concurrent messages may intervene; adjacency
+is not required. Failed persistence leaves neither the plan change nor its row.
+Post-commit notifications refresh consumers without creating transcript history.
+
 ## Transcript scale
 
 Long sessions render as a window over canonical rows. Virtualization, collapsed disclosures, and reveal anchors keep interaction bounded while stable row identity preserves focus and scroll. The transcript store retains ordered facts for the loaded window; older ranges remain addressable through host pagination, and Den does not concatenate the whole session to find one item.

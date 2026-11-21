@@ -166,7 +166,6 @@ describe("SessionTranscript tools and progress", () => {
         kind: "progress_update",
         progress_update: {
           initial: true,
-          seq: 1,
           steps: [{ state: "pending", label: planLabel }],
         },
         created_at: "2026-06-28T04:45:10.611Z",
@@ -220,7 +219,6 @@ describe("SessionTranscript tools and progress", () => {
         kind: "progress_update",
         progress_update: {
           initial: true,
-          seq: 1,
           steps: [{ state: "pending", label: "Ship auth" }, { state: "pending", label: "Verify build" }],
         },
         created_at: "2026-06-28T04:45:10.000Z",
@@ -229,7 +227,7 @@ describe("SessionTranscript tools and progress", () => {
         ...host,
         id: "pu-change",
         kind: "progress_update",
-        progress_update: { seq: 2, changes: [{ kind: "done", label: "Ship auth", state: "done" }] },
+        progress_update: { changes: [{ kind: "done", label: "Ship auth", state: "done" }] },
         created_at: "2026-06-28T04:45:11.000Z",
       },
       {
@@ -237,7 +235,6 @@ describe("SessionTranscript tools and progress", () => {
         id: "pc-done",
         kind: "progress_complete",
         progress_complete: {
-          seq: 3,
           steps: [{ state: "done", label: "Ship auth" }, { state: "done", label: "Verify build" }],
         },
         created_at: "2026-06-28T04:45:12.000Z",
@@ -263,7 +260,6 @@ describe("SessionTranscript tools and progress", () => {
       kind: "progress_update",
       progress_update: {
         initial: true,
-        seq: 1,
         steps: [{ state: "pending", label: "Build the lexer" }],
       },
       created_at: "2026-06-28T04:45:10.611Z",
@@ -313,7 +309,6 @@ describe("SessionTranscript tools and progress", () => {
         kind: "progress_update",
         progress_update: {
           initial: true,
-          seq: 1,
           steps: [{ state: "pending", label: "Ship auth" }],
         },
         created_at: "2026-06-28T04:45:10.611Z",

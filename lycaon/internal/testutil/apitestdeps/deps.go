@@ -271,7 +271,11 @@ func fillHost(t *testing.T, d *Deps) {
 		d.Checkpoints = hitl.NewCheckpoints(hitl.NewSQLStore(d.Database), d.EventPublisher, authzcontext.LedgerRecorder{Ledger: &authzcontext.Ledger{Store: authzcontext.NewSQLStore(d.Database)}})
 	}
 	if d.ProgressStore == nil {
-		d.ProgressStore = progress.NewSQLStore(d.Database)
+		database, ok := d.Database.(db.ReadHandle)
+		if !ok {
+			t.Fatal("progress fixture requires a database with read transactions")
+		}
+		d.ProgressStore = progress.NewSQLStore(database, sessionstore.NewSQL(database))
 	}
 	if d.VisualStore == nil {
 		d.VisualStore = visual.NewMemoryStore()
