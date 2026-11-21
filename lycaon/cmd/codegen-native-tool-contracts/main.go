@@ -226,6 +226,9 @@ func renderContractRow(b *bytes.Buffer, row nativemanifest.ToolContractRow) erro
 	b.WriteString(lifecycleConstant(row.Lifecycle))
 	b.WriteString(", Capabilities: ")
 	b.WriteString(caps)
+	if row.AskAllowed {
+		b.WriteString(", AskAllowed: true")
+	}
 	if row.ChunkablePayload {
 		b.WriteString(", ChunkablePayload: true")
 	}

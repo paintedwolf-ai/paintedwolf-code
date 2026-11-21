@@ -171,10 +171,12 @@ func TestExecutionObservationUsesApplicationOwners(t *testing.T) {
 func TestExecutionObservationRejectsMissingSession(t *testing.T) {
 	st := store.NewMemory()
 	_, _, err := st.PutPromptSubmission(t.Context(), store.PromptSubmission{ID: "orphan", SessionID: "missing", Origin: store.PromptSubmissionOriginUser, SubmittedBy: testutil.HostOwner().ID})
-	testutil.FailErr(t, "retain orphan admission", err)
+	if !errors.Is(err, store.ErrSessionModeUnavailable) {
+		t.Fatalf("admit prompt for missing session: %v", err)
+	}
 	manager := session.NewHost(st, session.Models{Client: nil, Provider: nil, Limits: settings.SessionLimits{}, Cost: nil}, nil)
-	if _, err := manager.Observations.Observe(t.Context(), "missing", "orphan"); err == nil {
-		t.Fatal("missing session became a wait state")
+	if _, err := manager.Observations.Observe(t.Context(), "missing", "orphan"); !errors.Is(err, store.ErrPromptSubmissionNotFound) {
+		t.Fatalf("observe rejected admission: %v", err)
 	}
 }
 

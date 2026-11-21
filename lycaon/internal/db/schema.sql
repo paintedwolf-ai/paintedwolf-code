@@ -692,6 +692,13 @@ CREATE TABLE IF NOT EXISTS sessions (
     -- When the person last had this chat readable on screen. A turn that
     -- completed after this stamp is a result they have not seen yet.
     seen_at TEXT,
+    root_session_id TEXT NOT NULL DEFAULT '' REFERENCES sessions(id) ON DELETE CASCADE,
+    mode TEXT CHECK (mode IN ('agent', 'ask')),
+    started INTEGER NOT NULL DEFAULT 0 CHECK (
+        started IN (0, 1) AND
+        ((parent_session_id IS NULL AND id = root_session_id AND mode IS NOT NULL) OR
+         (parent_session_id IS NOT NULL AND id != root_session_id AND mode IS NULL AND started = 0))
+    ),
     CHECK (
         (provider_id IS NULL AND model IS NULL) OR
         (provider_id IS NOT NULL AND model IS NOT NULL AND
@@ -715,6 +722,45 @@ BEFORE UPDATE OF owner_person_id ON sessions
 BEGIN
     SELECT RAISE(ABORT, 'session ownership is immutable');
 END;
+CREATE INDEX IF NOT EXISTS idx_sessions_root_session ON sessions(root_session_id);
+
+CREATE TRIGGER IF NOT EXISTS sessions_child_shares_root
+BEFORE INSERT ON sessions
+WHEN NEW.parent_session_id IS NOT NULL AND NOT EXISTS (
+    SELECT 1 FROM sessions p
+    WHERE p.id = NEW.parent_session_id AND p.root_session_id = NEW.root_session_id
+      AND p.project_id = NEW.project_id
+)
+BEGIN
+    SELECT RAISE(ABORT, 'a child session shares its parent''s root');
+END;
+
+CREATE TRIGGER IF NOT EXISTS sessions_lineage_immutable
+BEFORE UPDATE OF id, parent_session_id, root_session_id ON sessions
+WHEN NEW.id IS NOT OLD.id OR NEW.parent_session_id IS NOT OLD.parent_session_id
+    OR NEW.root_session_id IS NOT OLD.root_session_id
+BEGIN
+    SELECT RAISE(ABORT, 'session lineage is immutable');
+END;
+
+CREATE TRIGGER IF NOT EXISTS sessions_mode_latch
+BEFORE UPDATE OF mode, started ON sessions
+WHEN OLD.started = 1 AND (NEW.started = 0 OR (OLD.mode = 'agent' AND NEW.mode IS NOT 'agent'))
+BEGIN
+    SELECT RAISE(ABORT, 'started session cannot reset or return to Ask');
+END;
+
+CREATE VIEW IF NOT EXISTS session_mode_authority AS
+SELECT s.id AS session_id, root.id AS root_session_id, root.mode, root.started
+FROM sessions s
+LEFT JOIN sessions parent ON parent.id = s.parent_session_id
+LEFT JOIN sessions root ON root.id = s.root_session_id AND root.root_session_id = root.id
+    AND root.parent_session_id IS NULL AND root.project_id = s.project_id
+    AND root.owner_person_id = s.owner_person_id AND root.mode IN ('agent', 'ask') AND root.started IN (0, 1)
+    AND ((s.id = root.id AND s.parent_session_id IS NULL) OR
+         (s.id != root.id AND s.mode IS NULL AND s.started = 0 AND parent.root_session_id = root.id
+            AND parent.project_id = s.project_id AND parent.owner_person_id = s.owner_person_id));
+
 CREATE INDEX IF NOT EXISTS idx_sessions_status
     ON sessions(status, id);
 CREATE INDEX IF NOT EXISTS idx_sessions_active_activity

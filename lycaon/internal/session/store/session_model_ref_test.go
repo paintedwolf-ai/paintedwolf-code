@@ -58,8 +58,8 @@ func TestSessionSchemaRequiresCompleteModelRef(t *testing.T) {
 	for _, ref := range refs {
 		_, err := sqlDB.ExecContext(t.Context(), `
 			INSERT INTO sessions (
-				id, project_id, owner_person_id, posture, provider_id, model, status, created_at, activity_at, updated_at
-			) VALUES (?, ?, (SELECT id FROM people WHERE role = 'owner'), 'build', ?, ?, 'idle', ?, ?, ?)
+				id, project_id, owner_person_id, posture, provider_id, model, status, created_at, activity_at, updated_at, root_session_id, mode
+			) VALUES (?, ?, (SELECT id FROM people WHERE role = 'owner'), 'build', ?, ?, 'idle', ?, ?, ?, ?1, 'agent')
 		`, uuid.NewString(), testdbseed.DefaultProjectID, ref.providerID, ref.model, now, now, now)
 		if err == nil {
 			t.Fatal("incomplete model reference was inserted")

@@ -43,27 +43,27 @@ func beginTurnMemory(ctx context.Context, s *memoryCore, in TurnStart) (TurnExec
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if _, ok := s.sessions[in.SessionID]; !ok {
-		return TurnExecution{}, ErrSessionNotFound
-	}
 	if workerJobID := strings.TrimSpace(in.WorkerJobID); workerJobID != "" {
 		turnIDs := s.workerTurns[workerJobID]
 		for i := len(turnIDs) - 1; i >= 0; i-- {
 			turn := s.turns[turnIDs[i]]
 			if turn.Origin == in.Origin &&
 				(turn.Status == TurnStatusRecovering || turn.Status == TurnStatusFailed || turn.Status == TurnStatusInterrupted) {
-				return resumeTurnLocked(s, turnIDs[i], in, execution.Attempt, now)
+				return resumeTurnLocked(ctx, s, turnIDs[i], in, execution.Attempt, now)
 			}
 		}
 	}
 	if len(in.SubmissionIDs) > 0 {
 		if recoveredID := s.turnSubmissions[strings.TrimSpace(in.SubmissionIDs[0])]; recoveredID != "" &&
 			s.turns[recoveredID].Status == TurnStatusRecovering {
-			return resumeTurnLocked(s, recoveredID, in, execution.Attempt, now)
+			return resumeTurnLocked(ctx, s, recoveredID, in, execution.Attempt, now)
 		}
 	}
 	if _, exists := s.turns[in.ID]; exists {
 		return TurnExecution{}, fmt.Errorf("turn already exists: %s", in.ID)
+	}
+	if err := applyModeIntent(ctx, memoryModeRecords{s}, in.SessionID, nil, true, nil); err != nil {
+		return TurnExecution{}, err
 	}
 	s.turns[in.ID] = execution.Turn
 	s.turnHeads[in.SessionID] = in.ID
@@ -80,10 +80,13 @@ func beginTurnMemory(ctx context.Context, s *memoryCore, in TurnStart) (TurnExec
 }
 
 // resumeTurnLocked adds a fresh attempt to a turn being retried.
-func resumeTurnLocked(s *memoryCore, turnID string, in TurnStart, attempt TurnAttempt, now time.Time) (TurnExecution, error) {
+func resumeTurnLocked(ctx context.Context, s *memoryCore, turnID string, in TurnStart, attempt TurnAttempt, now time.Time) (TurnExecution, error) {
 	turn := s.turns[turnID]
 	if turn.SessionID != in.SessionID || turn.ProjectID != in.ProjectID {
 		return TurnExecution{}, fmt.Errorf("recovering turn identity mismatch: %s", turnID)
+	}
+	if err := applyModeIntent(ctx, memoryModeRecords{s}, in.SessionID, nil, true, nil); err != nil {
+		return TurnExecution{}, err
 	}
 	attempt.TurnID = turnID
 	attempt.Attempt = len(s.turnAttempts[turnID]) + 1

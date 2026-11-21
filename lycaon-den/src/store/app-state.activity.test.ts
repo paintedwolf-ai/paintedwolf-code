@@ -14,6 +14,9 @@ describe("createAppStore", () => {
   it("setLLMCallStatus tracks llm turn activity chrome", () => {
     const store = createAppStore();
     store.actions.setCurrentSession({
+      mode: "agent" as const,
+      started: true,
+      root_session_id: "sess-1",
       id: "sess-1",
       owner_person_id: "00000000-0000-4000-8000-000000000002",
       project_id: "00000000-0000-4000-8000-000000000001",
@@ -57,6 +60,9 @@ describe("createAppStore", () => {
   it("setLLMCallStatus marks guarded turns from coordinator_loop", () => {
     const store = createAppStore();
     store.actions.setCurrentSession({
+      mode: "agent" as const,
+      started: true,
+      root_session_id: "sess-1",
       id: "sess-1",
       owner_person_id: "00000000-0000-4000-8000-000000000002",
       project_id: "00000000-0000-4000-8000-000000000001",
@@ -82,6 +88,9 @@ describe("createAppStore", () => {
   it("mergeSession idle with title clears activity chrome", () => {
     const store = createAppStore();
     store.actions.setCurrentSession({
+      mode: "agent" as const,
+      started: true,
+      root_session_id: "sess-1",
       id: "sess-1",
       owner_person_id: "00000000-0000-4000-8000-000000000002",
       project_id: "00000000-0000-4000-8000-000000000001",
@@ -115,6 +124,9 @@ describe("createAppStore", () => {
   it("a submitted prompt stays in flight until an event after its admission applies", () => {
     const store = createAppStore();
     store.actions.setCurrentSession({
+      mode: "agent" as const,
+      started: true,
+      root_session_id: "sess-1",
       id: "sess-1",
       owner_person_id: "00000000-0000-4000-8000-000000000002",
       project_id: "00000000-0000-4000-8000-000000000001",
@@ -174,6 +186,9 @@ describe("createAppStore", () => {
   it("mergeSession carries the host's prompt_pending, reading an omitted value as false", () => {
     const store = createAppStore();
     store.actions.setCurrentSession({
+      mode: "agent" as const,
+      started: true,
+      root_session_id: "sess-1",
       id: "sess-1",
       owner_person_id: "00000000-0000-4000-8000-000000000002",
       project_id: "00000000-0000-4000-8000-000000000001",
@@ -218,6 +233,9 @@ describe("createAppStore", () => {
     const store = createAppStore({
       ...INITIAL_APP_STATE,
       currentSession: {
+        mode: "agent" as const,
+        started: true,
+        root_session_id: "sess-1",
         id: "sess-1",
         owner_person_id: "00000000-0000-4000-8000-000000000002",
         project_id: "00000000-0000-4000-8000-000000000001",
@@ -250,6 +268,9 @@ describe("createAppStore", () => {
     const store = createAppStore({
       ...INITIAL_APP_STATE,
       currentSession: {
+        mode: "agent" as const,
+        started: true,
+        root_session_id: "sess-1",
         id: "sess-1",
         owner_person_id: "00000000-0000-4000-8000-000000000002",
         project_id: "00000000-0000-4000-8000-000000000001",
@@ -320,6 +341,9 @@ describe("createAppStore", () => {
     const store = createAppStore({
       ...INITIAL_APP_STATE,
       currentSession: {
+        mode: "agent" as const,
+        started: true,
+        root_session_id: "sess-1",
         id: "sess-1",
         owner_person_id: "00000000-0000-4000-8000-000000000002",
         project_id: "00000000-0000-4000-8000-000000000001",
@@ -348,6 +372,9 @@ describe("createAppStore", () => {
     const store = createAppStore({
       ...INITIAL_APP_STATE,
       currentSession: {
+        mode: "agent" as const,
+        started: true,
+        root_session_id: "sess-1",
         id: "sess-1",
         owner_person_id: "00000000-0000-4000-8000-000000000002",
         project_id: "00000000-0000-4000-8000-000000000001",

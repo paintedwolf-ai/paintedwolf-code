@@ -1,3 +1,5 @@
+import { mergeSessionMode, replaceSessionWithMode, sessionReceivesMode } from "../chat/session/session-mode-projection.ts";
+import { settleSessionModeIntent } from "../chat/session/session-mode-state.ts";
 import { batch } from "solid-js";
 import { createStore, produce } from "solid-js/store";
 import { projectMatchesDir } from "../api/project-path.ts";
@@ -104,11 +106,12 @@ export function createAppStore(
     installSessionBootstrap(bootstrap, sessionOverride) {
       const session = sessionOverride ?? bootstrap.session;
       const sid = session.id.trim();
+      settleSessionModeIntent(actions, session);
       const queue = rememberQueueDraft(sid, bootstrap.queue);
       setState(
         produce((draft) => {
           draft.sessionViewEpoch++;
-          draft.currentSession = session;
+          draft.currentSession = replaceSessionWithMode(draft.currentSession, session);
           progressRevisionEpoch = draft.sessionViewEpoch;
           findingsRevisionEpoch = draft.sessionViewEpoch;
           draft.progress = bootstrap.progress;
@@ -263,10 +266,11 @@ export function createAppStore(
       );
     },
     setCurrentSession(session) {
+      if (session) settleSessionModeIntent(actions, session);
       setState(
         produce((draft) => {
           if (draft.currentSession?.id !== session?.id) draft.sessionViewEpoch++;
-          draft.currentSession = session;
+          draft.currentSession = replaceSessionWithMode(draft.currentSession, session);
           draft.queueDraft = queueDrafts.get(session?.id.trim() ?? "");
         }),
       );
@@ -637,7 +641,23 @@ export function createAppStore(
       if (state.currentSession?.id !== sessionId) return;
       setState("currentSession", "archived_at", archived ? new Date().toISOString() : undefined);
     },
+    applySessionMode(sessionId, projection) {
+      if (projection.mode === undefined && projection.started === undefined) return;
+      const current = state.currentSession;
+      const updated = current && sessionReceivesMode(current, sessionId)
+        ? mergeSessionMode(current, projection)
+        : undefined;
+      if (updated && current !== updated) {
+        setState(produce((draft) => { draft.currentSession = updated; }));
+      }
+      settleSessionModeIntent(actions, {
+        id: sessionId,
+        mode: updated?.mode ?? projection.mode,
+        started: updated?.started ?? projection.started,
+      });
+    },
     mergeSession(event) {
+      actions.applySessionMode(event.id, event);
       setState(
         produce((draft) => {
           if (draft.currentSession?.id !== event.id) return;
@@ -790,6 +810,7 @@ export function createAppStore(
       setState("latestCodeScan", undefined);
     },
     restoreSessionChatSnapshot(snapshot) {
+      settleSessionModeIntent(actions, snapshot.session);
       const sessionId = snapshot.scope.sessionId.trim();
       const transcript = copyTranscriptWindow(snapshot.transcript);
       const messages = materializeTranscriptWindow(transcript);
@@ -800,7 +821,7 @@ export function createAppStore(
       noteVisualArtifactIntroBaseline(messages);
       setState(
         produce((draft) => {
-          draft.currentSession = snapshot.session;
+          draft.currentSession = replaceSessionWithMode(draft.currentSession, snapshot.session);
           if (snapshot.queueDraft) {
             draft.queueDraft = rememberQueueDraft(sessionId, snapshot.queueDraft, false);
           } else {

@@ -19,8 +19,12 @@ func (m *Requests) AcceptsEmptyRequest(ctx context.Context, sessionID string) bo
 	if m == nil {
 		return false
 	}
+	sess, err := m.Sessions.Get(ctx, sessionID)
+	if err != nil || sess == nil {
+		return false
+	}
 	run, vars, err := m.Runs.ActiveStateBySession(ctx, sessionID)
-	if err != nil {
+	if err != nil || (sess.Mode == api.SessionModeAsk && (run == nil || runstate.IsAmbientRun(run))) {
 		return false
 	}
 	if run == nil {
@@ -59,7 +63,7 @@ func (m *Requests) PrepareUserRequest(ctx context.Context, sessionID, text strin
 	if m == nil {
 		return text, nil, false, nil
 	}
-	if _, err := m.Ambient.EnsureSessionWorkflow(ctx, sessionID); err != nil {
+	if run, err := m.Ambient.EnsureSessionWorkflow(ctx, sessionID); err != nil || run == nil {
 		return text, nil, false, err
 	}
 	run, vars, err := m.Runs.ActiveStateBySession(ctx, sessionID)

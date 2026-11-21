@@ -65,6 +65,7 @@ func (m *Service) FillSessionFacts(ctx context.Context, gc *oar.GuardContext, se
 		gc.Session.ProjectID = sess.ProjectID
 		gc.Session.SessionID = sess.ID
 		gc.Session.SessionPosture = string(sess.Posture)
+		gc.Session.SessionMode = string(sess.Mode)
 		gc.Session.Principal = sess.OwnerPersonID
 		gc.Session.WorkerLeg = sess.IsWorkerChild()
 		if sess.ParentSessionID == "" {

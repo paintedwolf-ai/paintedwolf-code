@@ -144,6 +144,12 @@ type programRun struct {
 // freezes frame and surface, records the program, evaluates it under
 // supervision, settles it and returns the bounded owner projection.
 func (r *ProgramRuntime) Run(ctx context.Context, tool string, args map[string]any, tc tools.ToolContext) (string, error) {
+	if tc.Source.AskMode {
+		if reject := tools.AskModeCommandFieldReject(tool, args); reject != nil {
+			return "", reject
+		}
+		tc.Source.ReadOnly = true
+	}
 	ctx = sandbox.WithSessionID(ctx, tc.Identity.SessionID)
 	source, _ := args["command"].(string)
 	if source == "" {
@@ -488,6 +494,9 @@ func (r *ProgramRuntime) bindProgramSurface(ctx context.Context, run *programRun
 	}
 
 	run.surface = surface
+	if tc.Source.AskMode {
+		run.surface = surface.ReadOnly()
+	}
 	complete = true
 	return dispatcher, publication, releaseSurface, nil
 }

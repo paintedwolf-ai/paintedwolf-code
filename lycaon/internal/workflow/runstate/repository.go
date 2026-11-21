@@ -88,6 +88,7 @@ type TransactionsRepository interface {
 }
 
 type SessionMutations interface {
+	AdmitModeInTx(context.Context, *sql.Tx, string, *api.SessionMode, func(api.SessionMode) error) error
 	AppendMessagesTx(context.Context, *sql.Tx, string, ...api.Message) error
 	SetPostureTx(context.Context, *sql.Tx, string, api.SessionPosture) error
 }

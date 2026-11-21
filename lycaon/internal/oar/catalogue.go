@@ -64,6 +64,8 @@ var factDecls = []factDecl{
 	{"last_assistant", oarcore.TypeString, FactTierHost, ""},
 	{"turn_tools", oarcore.TypeListString, FactTierHost, ""},
 	{"session_posture", oarcore.TypeString, FactTierHost, ""},
+	{"session_mode", oarcore.TypeString, FactTierHost, ""},
+	{"ask_worker_writes", oarcore.TypeBool, FactTierHost, ""},
 	{"surface", oarcore.TypeString, FactTierHost, ""},
 	{"session_role", oarcore.TypeString, FactTierHost, ""},
 	{"phase", oarcore.TypeString, FactTierHost, ""},

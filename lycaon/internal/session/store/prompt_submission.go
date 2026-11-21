@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/lycaon/lycaon/internal/db"
+	"github.com/lycaon/lycaon/pkg/api"
 )
 
 var ErrPromptSubmissionNotFound = errors.New("prompt submission not found")
@@ -78,6 +79,7 @@ func (o PromptSubmissionOrigin) Valid() bool {
 
 // PromptSubmission is the receipt written before asynchronous prompt work begins.
 type PromptSubmission struct {
+	Mode              *api.SessionMode
 	ID                string
 	SessionID         string
 	AdmissionSeq      int64
@@ -100,6 +102,9 @@ type PromptSubmission struct {
 
 // validateAuthorship requires a sender on user prompts and none on host turns.
 func (p PromptSubmission) validateAuthorship() error {
+	if p.Mode != nil && p.Origin != PromptSubmissionOriginUser {
+		return ErrInvalidSessionMode
+	}
 	if !p.Origin.Valid() {
 		return fmt.Errorf("invalid prompt submission origin %q", p.Origin)
 	}

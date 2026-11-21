@@ -376,12 +376,8 @@ func TestQuietRoundsReadsQueueProgressAndPendingApprovals(t *testing.T) {
 		ProjectID: testdbseed.DefaultProjectID, Posture: wire.SessionPostureBuild,
 	}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create parent session", err)
-	workerChild, err := app.Sessions.Store.Create(t.Context(), wire.CreateSessionRequest{
-		ProjectID: testdbseed.DefaultProjectID, Posture: wire.SessionPostureBuild,
-	}, testdbseed.DefaultProjectID)
+	workerChild, err := app.Sessions.Store.CreateChild(t.Context(), parentSess, wire.SpawnChildRequest{AgentType: "implementer"})
 	testutil.FailErr(t, "create worker child", err)
-	_, err = store.ExecContext(t.Context(), "UPDATE sessions SET parent_session_id = ? WHERE id = ?", parentSess.ID, workerChild.ID)
-	testutil.FailErr(t, "bind worker child parent", err)
 	coordActor := workerrecords.Actor{SessionID: parentSess.ID, Role: workerrecords.RoleCoordinator, PrincipalID: parentSess.ID}
 	_, err = app.Boards.WorkerRecords.CreateWorker(t.Context(), coordActor, workerrecords.Op{ID: "cw-1"}, workerrecords.WorkerSpec{
 		Name: "auth-fixer", AgentType: "implementer", ScopeMode: "write", Brief: "Fix auth", ChildSessionID: workerChild.ID,

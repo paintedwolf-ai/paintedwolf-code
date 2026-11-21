@@ -185,7 +185,7 @@ func insertSession(t *testing.T, sqlDB db.Handle, id string, createdAt time.Time
 	)
 	testutil.FailErr(t, "insert project", err)
 	_, err = sqlDB.ExecContext(t.Context(),
-		`INSERT INTO sessions (id, project_id, owner_person_id, posture, created_at, activity_at, updated_at) VALUES (?, ?, (SELECT id FROM people WHERE role = 'owner'), ?, ?, ?, ?)`,
+		`INSERT INTO sessions (id, project_id, owner_person_id, posture, created_at, activity_at, updated_at, root_session_id, mode) VALUES (?, ?, (SELECT id FROM people WHERE role = 'owner'), ?, ?, ?, ?, ?1, 'agent')`,
 		id, "proj", "build", timelayout.Format(createdAt), timelayout.Format(createdAt), timelayout.Format(createdAt),
 	)
 	testutil.FailErr(t, "insert session", err)

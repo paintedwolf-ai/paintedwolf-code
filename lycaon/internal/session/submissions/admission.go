@@ -63,6 +63,7 @@ func (m *Service) admitPrompt(
 	} else if !errors.Is(readErr, store.ErrPromptSubmissionNotFound) {
 		return nil, false, readErr
 	}
+	modeIntent := in.ModeIntent
 	if in.Recovery != nil {
 		in, err = m.Recovery.Prepare(ctx, sessionID, in)
 		if err != nil {
@@ -101,6 +102,7 @@ func (m *Service) admitPrompt(
 	err = m.Gate.WithSessionTreeAdmission(ctx, sessionID, func() error {
 		var putErr error
 		row, created, putErr = m.store.PutPromptSubmission(ctx, store.PromptSubmission{
+			Mode:              modeIntent,
 			ID:                operationID,
 			SessionID:         sessionID,
 			ProjectID:         sess.ProjectID,

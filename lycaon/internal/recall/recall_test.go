@@ -48,8 +48,8 @@ func insertChild(t *testing.T, sqlDB db.Handle, id, parent, agent string) {
 	t.Helper()
 	now := time.Now().UTC().Format(time.RFC3339)
 	_, err := sqlDB.ExecContext(t.Context(), `
-		INSERT INTO sessions (id, project_id, owner_person_id, posture, status, agent_type, parent_session_id, created_at, activity_at, updated_at)
-		VALUES (?, ?, (SELECT id FROM people WHERE role = 'owner'), 'build', 'idle', ?, ?, ?, ?, ?)
+		INSERT INTO sessions (id, project_id, owner_person_id, posture, status, agent_type, parent_session_id, created_at, activity_at, updated_at, root_session_id, mode)
+		VALUES (?, ?, (SELECT id FROM people WHERE role = 'owner'), 'build', 'idle', ?, ?, ?, ?, ?, COALESCE(?4, ?1), CASE WHEN ?4 IS NULL THEN 'agent' END)
 	`, id, projectID, agent, parent, now, now, now)
 	testutil.FailErr(t, "insert child session", err)
 }

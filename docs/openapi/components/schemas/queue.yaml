@@ -83,6 +83,10 @@ components:
       additionalProperties: false
       required: [expected_revision]
       properties:
+        mode:
+          x-go-pointer: true
+          $ref: 'session/identity.yaml#/components/schemas/SessionMode'
+          description: Upgrade the session to Agent when sending queued prompts.
         op:
           type: string
           enum:

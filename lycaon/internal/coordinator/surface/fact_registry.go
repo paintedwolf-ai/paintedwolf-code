@@ -22,6 +22,7 @@ const (
 	FactVerifyUnverified                      = "verify_unverified"
 	FactVisibleUserTurn                       = "visible_user_turn"
 	FactPosture                               = "posture"
+	FactMode                                  = "mode"
 	FactProgressHasOpenSteps                  = "progress_has_open_steps"
 	FactProgressMissing                       = "progress_missing"
 	FactProgressGatedToolAttemptedSinceIntent = "progress_gated_tool_attempted_since_intent"
@@ -55,6 +56,7 @@ var factKinds = map[string]surfaceFactKind{
 	FactVerifyUnverified:                      surfaceFactKindBool,
 	FactVisibleUserTurn:                       surfaceFactKindBool,
 	FactPosture:                               surfaceFactKindEnum,
+	FactMode:                                  surfaceFactKindEnum,
 	FactProgressHasOpenSteps:                  surfaceFactKindBool,
 	FactProgressMissing:                       surfaceFactKindBool,
 	FactProgressGatedToolAttemptedSinceIntent: surfaceFactKindBool,
@@ -81,6 +83,7 @@ var registeredSurfaceFactNames = []string{
 	FactVerifyUnverified,
 	FactVisibleUserTurn,
 	FactPosture,
+	FactMode,
 	FactProgressHasOpenSteps,
 	FactProgressMissing,
 	FactProgressGatedToolAttemptedSinceIntent,

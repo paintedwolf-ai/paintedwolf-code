@@ -55,6 +55,7 @@ func (m *Service) Enrich(ctx context.Context, sess *api.Session, tctx tools.Tool
 		}
 		task = claimed
 	}
+	tctx.Source.ReadOnly = tctx.Source.ReadOnly || !task.EffectiveScope().IsWrite()
 	tctx.Identity.WorkerJobID = task.ID
 	// A worker addresses its own workspace only once it has a private branch;
 	// a read-scoped worker reads the project tree and its open documents.
@@ -80,7 +81,6 @@ func (m *Service) Enrich(ctx context.Context, sess *api.Session, tctx tools.Tool
 		tctx.Source.WorkerSourceRoots = workerSourceRootPaths(layout.Roots)
 		tctx.Source.Roots = layout.Roots
 		tctx.Source.WorkerBranchRoot = root
-		tctx.Source.ReadOnly = !task.EffectiveScope().IsWrite()
 		tctx.Source.RecordViewProcess = workspace.BranchProcessRecorder(root)
 		tctx.Source.WorkerViewBoundary = workspace.BranchViewBoundary(root)
 		tctx.Source.WorkerBaselinePath = task.WorkspaceBaselinePath

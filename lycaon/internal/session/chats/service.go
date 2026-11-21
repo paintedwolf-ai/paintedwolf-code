@@ -28,6 +28,7 @@ type Store interface {
 	Get(context.Context, string) (*api.Session, error)
 	ListProjectSummaries(context.Context, store.SummaryQuery) (store.SummaryPage, error)
 	HasActiveProjectSessions(context.Context, string, time.Time) (bool, error)
+	SetMode(context.Context, string, api.SessionMode) (*api.Session, error)
 	UpdateSession(context.Context, string, func(*api.Session)) error
 	PinSession(context.Context, string) error
 	UnpinSession(context.Context, string) error

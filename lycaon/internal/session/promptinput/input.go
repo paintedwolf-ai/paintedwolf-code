@@ -17,6 +17,8 @@ type HostSignal struct {
 
 // Input is one user-facing or host-authored turn.
 type Input struct {
+	// ModeIntent applies only when the user submission is admitted.
+	ModeIntent    *api.SessionMode   `json:"-"`
 	SourceContext *api.SourceContext `json:"source_context,omitempty"`
 	SubmissionID  string             `json:"submission_id,omitempty"`
 	// SubmissionIDs binds coalesced receipts to one execution turn.

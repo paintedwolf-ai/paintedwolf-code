@@ -22,12 +22,6 @@ func (m *Service) BeforeTool(
 	tool string,
 	args map[string]any,
 ) (string, bool, error) {
-	if reject, blocked, err := m.ToolPolicy.Block(ctx, oar.AnchorSessionPreInvoke, sess, tool, args, nil); blocked || err != nil {
-		if reject != nil {
-			return "", false, reject
-		}
-		return "", blocked, err
-	}
 	var identity workeradmission.TaskIdentity
 	if tool == "task" && sess != nil && surface.IsCoordinatorParent(sess) {
 		var err error
@@ -35,6 +29,15 @@ func (m *Service) BeforeTool(
 		if err != nil {
 			return "", false, err
 		}
+	}
+	if reject, blocked, err := m.ToolPolicy.Block(ctx, oar.AnchorSessionPreInvoke, sess, tool, args, func(gc *oar.GuardContext) error {
+		gc.Workers.AskWorkerWrites = m.askWorkerWrites(ctx, sess, tool, args, identity)
+		return nil
+	}); blocked || err != nil {
+		if reject != nil {
+			return "", false, reject
+		}
+		return "", blocked, err
 	}
 	implState := m.state.ForSession(ctx, sess)
 	surfaceID := m.surface.PromptTurnSurfaceID(sess.ID)

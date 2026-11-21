@@ -1066,6 +1066,15 @@ values:
     status: 409
     comment: >-
       archived chats cannot be pinned; unarchive the chat first
+  - id: session_mode_locked
+    status: 409
+    comment: A started Agent chat cannot switch to Ask.
+  - id: session_mode_unavailable
+    status: 503
+    comment: The root chat mode could not be verified.
+  - id: session_ask_mode_workflow_requires_agent
+    status: 409
+    comment: The requested workflow phase requires Agent mode.
   - id: session_not_found
     status: 404
     comment: >-

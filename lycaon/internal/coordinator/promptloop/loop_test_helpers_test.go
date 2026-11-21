@@ -47,7 +47,8 @@ func (s *testMessageStreams) Finish(ctx context.Context, sessionID string) {
 func StoreDeps(st *store.Memory) PromptLoopDeps {
 	return PromptLoopDeps{
 		Context: ContextDeps{
-			Limits: func(context.Context, *api.Session) settings.SessionLimits { return settings.DefaultSessionLimits() },
+			ResolveEffectiveMode: st.ResolveEffectiveMode,
+			Limits:               func(context.Context, *api.Session) settings.SessionLimits { return settings.DefaultSessionLimits() },
 			BuildMessages: func(_ context.Context, _ *api.Session, history []api.Message, _ *inject.CoordinatorTurnFrame) ([]api.Message, error) {
 				return history, nil
 			},
@@ -99,6 +100,11 @@ func (emptyEvidenceLedger) WorkerLegs(context.Context, string, time.Time) ([]gui
 
 // NewPromptLoopForTest wires a PromptLoop for unit and integration tests.
 func NewPromptLoopForTest(deps PromptLoopDeps) *PromptLoop {
+	if deps.Context.ResolveEffectiveMode == nil {
+		deps.Context.ResolveEffectiveMode = func(_ context.Context, id string) (store.RootAuthority, error) {
+			return store.RootAuthority{RootSessionID: id, Mode: api.SessionModeAgent, Started: true}, nil
+		}
+	}
 	if deps.Context.Policy == nil && deps.Context.Tools != nil {
 		deps.Context.Policy = registryTestPolicy{metas: deps.Context.Tools.List()}
 	}

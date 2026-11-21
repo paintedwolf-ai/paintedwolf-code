@@ -2735,6 +2735,16 @@
       "emit": "guard:security",
       "summary": "Security scanners are disabled for this device."
     },
+    "SESSION_ASK_MODE_ACTIVE": {
+      "category": "recoverable",
+      "emit": "guard:coordinator",
+      "summary": "This operation is unavailable in Ask mode."
+    },
+    "SESSION_ASK_MODE_WORKFLOW_REQUIRES_AGENT": {
+      "category": "recoverable",
+      "emit": "guard:coordinator",
+      "summary": "This workflow phase requires Agent mode."
+    },
     "SESSION_OUTPUT_UNAVAILABLE": {
       "branch_instruction": "Keep the delivered result until output storage is available",
       "category": "recoverable",

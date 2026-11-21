@@ -187,6 +187,8 @@ type SourceDeliveryTag struct {
 
 // InvocationSource carries the source workspace and mutation services.
 type InvocationSource struct {
+	// AskMode is the root authority captured for the model round.
+	AskMode             bool
 	ProjectSourceBranch sourcebranch.ID
 	ProjectRootBranches map[string]sourcebranch.ID
 	// ModelSourceContext is the source context of the request that proposed this call.

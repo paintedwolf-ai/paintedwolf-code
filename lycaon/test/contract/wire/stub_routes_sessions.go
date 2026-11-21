@@ -78,8 +78,11 @@ func registerStubWorkspaceRoutes(mux *http.ServeMux, now time.Time, writeJSON st
 
 	session := api.Session{
 		ID:            fixtureSessionID,
+		RootSessionID: fixtureSessionID,
 		WorkspacePath: fixtureProjectDir,
 		Posture:       api.SessionPostureSpec,
+		Mode:          api.SessionModeAgent,
+		Started:       true,
 		Status:        api.SessionStatusIdle,
 		CreatedAt:     now,
 		ActivityAt:    now,
@@ -87,7 +90,9 @@ func registerStubWorkspaceRoutes(mux *http.ServeMux, now time.Time, writeJSON st
 	}
 
 	mux.HandleFunc("POST /v1/sessions", func(w http.ResponseWriter, r *http.Request) {
-		writeJSON(w, http.StatusAccepted, session)
+		out := session
+		out.Started = false
+		writeJSON(w, http.StatusAccepted, out)
 	})
 	mux.HandleFunc("GET /v1/sessions/{id}", func(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, session)
@@ -96,6 +101,10 @@ func registerStubWorkspaceRoutes(mux *http.ServeMux, now time.Time, writeJSON st
 		var req api.UpdateSessionRequest
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 			writeJSON(w, http.StatusBadRequest, api.ErrorResponse{Code: api.ApiErrorCodeInvalidRequest, Message: err.Error()})
+			return
+		}
+		if req.Mode != nil && *req.Mode == api.SessionModeAsk {
+			writeJSON(w, http.StatusConflict, api.ErrorResponse{Code: api.ApiErrorCodeSessionModeLocked, Message: "Open a new chat to use Ask."})
 			return
 		}
 		out := session
@@ -121,6 +130,8 @@ func registerStubWorkspaceRoutes(mux *http.ServeMux, now time.Time, writeJSON st
 				ProjectID:    fixtureProjectID,
 				Title:        "fixture chat",
 				Posture:      api.SessionPostureSpec,
+				Mode:         session.Mode,
+				Started:      session.Started,
 				Status:       api.SessionStatusIdle,
 				MessageCount: 2,
 				CreatedAt:    now,

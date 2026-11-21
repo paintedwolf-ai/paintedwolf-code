@@ -173,6 +173,9 @@ func (s *memorySessions) UpdateSession(ctx context.Context, id string, fn func(*
 	}
 	updated := *sess
 	fn(&updated)
+	updated.ID, updated.OwnerPersonID = sess.ID, sess.OwnerPersonID
+	updated.ParentSessionID, updated.RootSessionID = sess.ParentSessionID, sess.RootSessionID
+	updated.Mode, updated.Started = sess.Mode, sess.Started
 	if !api.CanTransitionSessionStatus(sess.Status, updated.Status) {
 		return &SessionStatusTransitionError{From: sess.Status, To: updated.Status}
 	}
@@ -263,6 +266,9 @@ func sessionFromRow(r db.GetSessionRow) (*api.Session, error) {
 		ProviderID:           db.StringFromNull(r.ProviderID),
 		Model:                db.StringFromNull(r.Model),
 		ParentSessionID:      db.StringFromNull(r.ParentSessionID),
+		RootSessionID:        r.RootSessionID,
+		Mode:                 api.SessionMode(r.EffectiveMode),
+		Started:              r.EffectiveStarted == 1,
 	}
 	var err error
 	sess.CreatedAt, err = db.ParseTime(r.CreatedAt)

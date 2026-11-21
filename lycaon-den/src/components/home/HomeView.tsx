@@ -1,7 +1,11 @@
 import { ThemeIcon } from "../primitives/ThemeIcon.tsx";
 import { noticeReporterFor } from "../../platform/connection/app-connection.ts";
 import { APP_SCOPE } from "../../notices/notice-scope.ts";
-import { For, Show, createEffect, createMemo, createSignal, onCleanup, onMount } from "solid-js";
+import { batch, For, Show, createEffect, createMemo, createSignal, onCleanup, onMount } from "solid-js";
+import { SessionModeSwitch } from "../chatview/SessionModeSwitch.tsx";
+import { ASK_INPUT_HINT } from "../chatview/session-mode-copy.ts";
+import { createHomeIdeaDraftMode } from "../../home/idea-draft-mode.ts";
+import { createFadingInputHint } from "../../ui/fading-input-hint.ts";
 import { PreflightNudge } from "./PreflightNudge.tsx";
 import { AttentionBand } from "./AttentionBand.tsx";
 import type { AttentionRow } from "../../api/types.ts";
@@ -115,6 +119,13 @@ export function HomeView(props: Props) {
   const [ideaAttachments, setIdeaAttachments] = createSignal<HomeIdeaAttachment[]>([]);
   const [dragActive, setDragActive] = createSignal(false);
   const residentPresence = useResidentPresence();
+  const hasIdeaDraft = () => Boolean(idea() || ideaAttachments().length);
+  const ideaMode = createHomeIdeaDraftMode(() => residentPresence() === "active", hasIdeaDraft);
+  const ideaHint = createFadingInputHint(
+    () => ideaMode.mode() === "ask" ? ASK_INPUT_HINT : IDEA_HINT,
+    () => residentPresence() === "active" && !idea(),
+  );
+  const clearIdeaModeIfEmpty = () => { if (!hasIdeaDraft()) ideaMode.clear(); };
   const [listPage, setListPage] = createSignal(0);
   const [listSortKey, setListSortKey] = createSignal<ProjectListSortKey>("updated");
   const [listSortDir, setListSortDir] = createSignal<ProjectListSortDir>("desc");
@@ -204,6 +215,7 @@ export function HomeView(props: Props) {
       if (victim) revokeHomeIdeaAttachment(victim);
       return prev.filter((item) => item.id !== id);
     });
+    clearIdeaModeIfEmpty();
   };
 
   const clearIdeaAttachments = () => {
@@ -235,19 +247,26 @@ export function HomeView(props: Props) {
     ideaAttachments().filter((item) => item.kind !== "reject");
   const canSubmit = () =>
     !props.submitting &&
+    ideaMode.mode() !== undefined &&
     !rejectsBlockSubmit() &&
     (idea().trim().length > 0 || sendableIdeaAttachments().length > 0);
 
   const submit = async () => {
-    if (!canSubmit()) return;
+    const mode = ideaMode.mode();
+    if (!mode || !canSubmit()) return;
     const text = idea();
     const attachments = ideaAttachments();
     try {
-      const accepted = await props.onSubmitIdea({ text: text.trim(), attachments });
+      const accepted = await props.onSubmitIdea({ text: text.trim(), attachments, mode });
       if (!accepted) return;
       // Preserve edits made while submission was pending.
-      if (idea() === text) setIdea("");
-      if (ideaAttachments() === attachments) clearIdeaAttachments();
+      const sameText = idea() === text;
+      const sameAttachments = ideaAttachments() === attachments;
+      batch(() => {
+        if (sameText) setIdea("");
+        if (sameAttachments) clearIdeaAttachments();
+        if (sameText && sameAttachments) ideaMode.accept(mode);
+      });
     } catch (cause) {
       noticeReporterFor(APP_SCOPE).reportError(cause);
     }
@@ -363,19 +382,24 @@ export function HomeView(props: Props) {
             <Scrollport class="home-view__idea-scroll" eager>
               {/* The WebKitGTK AT-SPI workaround draws the hint instead of a placeholder. */}
               <Show when={webkitAtspiWorkaroundActive() && !idea()}>
-                <span class="home-view__idea-hint" aria-hidden="true">{IDEA_HINT}</span>
+                <span class="home-view__idea-hint" data-hint-out={ideaHint.out() ? "" : undefined} aria-hidden="true">
+                  {ideaHint.text()}
+                </span>
               </Show>
               <textarea
                 ref={ideaRef}
                 class="home-view__idea-input"
                 data-testid="home-idea-input"
                 rows={1}
-                placeholder={webkitAtspiWorkaroundActive() ? undefined : IDEA_HINT}
-                aria-label={webkitAtspiWorkaroundActive() ? "Describe your idea" : undefined}
+                placeholder={webkitAtspiWorkaroundActive() ? undefined : ideaHint.text()}
+                data-hint-out={ideaHint.out() ? "" : undefined}
+                aria-label={webkitAtspiWorkaroundActive() ? (ideaMode.mode() === "ask" ? "Ask a question" : "Describe your idea") : undefined}
                 value={idea()}
                 disabled={props.submitting}
                 onInput={(e) => {
+                  const cleared = Boolean(idea()) && !e.currentTarget.value;
                   setIdea(e.currentTarget.value);
+                  if (cleared) clearIdeaModeIfEmpty();
                   autoGrowIdea(e.currentTarget);
                 }}
                 onPaste={(e) => {
@@ -391,6 +415,9 @@ export function HomeView(props: Props) {
                 }}
               />
             </Scrollport>
+            <ShowLatest when={ideaMode.mode()}>
+              {(mode) => <SessionModeSwitch mode={mode()} disabled={props.submitting} onSelect={ideaMode.select} />}
+            </ShowLatest>
             <button
               type="button"
               class="home-view__idea-send"
@@ -419,7 +446,10 @@ export function HomeView(props: Props) {
                 type="button"
                 class="den-composer-attach-clear"
                 data-testid="home-idea-attach-clear"
-                onClick={clearIdeaAttachments}
+                onClick={() => {
+                  clearIdeaAttachments();
+                  clearIdeaModeIfEmpty();
+                }}
               >
                 Clear all
               </button>

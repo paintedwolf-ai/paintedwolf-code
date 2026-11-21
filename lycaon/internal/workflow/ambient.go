@@ -33,9 +33,19 @@ func (m *Ambient) StartAmbient(ctx context.Context, sessionID, workflowID, versi
 // EnsureSessionWorkflow binds an active workflow before a new user request.
 // Worker sessions retain their parent's execution scope.
 func (m *Ambient) EnsureSessionWorkflow(ctx context.Context, sessionID string) (*api.WorkflowRun, error) {
+	authority, err := m.Sessions.ResolveEffectiveMode(ctx, sessionID)
+	if err != nil {
+		return nil, err
+	}
 	run, err := m.Runs.ActiveBySession(ctx, sessionID)
-	if err != nil || run != nil {
-		return run, err
+	if err != nil {
+		return nil, err
+	}
+	if authority.Mode == api.SessionModeAsk && (run == nil || runstate.IsAmbientRun(run)) {
+		return nil, nil
+	}
+	if run != nil {
+		return run, nil
 	}
 	sess, err := m.Sessions.Get(ctx, sessionID)
 	if err != nil {

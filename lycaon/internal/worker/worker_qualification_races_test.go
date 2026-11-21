@@ -245,8 +245,8 @@ func (e *raceQualificationEnv) invoke(t *testing.T, tool, callID string, args ma
 func (e *raceQualificationEnv) insertChildSession(t *testing.T, childID, agent string) {
 	t.Helper()
 	now := timelayout.Format(time.Now().UTC())
-	_, err := e.sqlDB.ExecContext(t.Context(), `INSERT INTO sessions (id, project_id, owner_person_id, posture, status, parent_session_id, agent_type, created_at, activity_at, updated_at)
-		VALUES (?, ?, (SELECT id FROM people WHERE role = 'owner'), 'build', 'idle', 'coord', ?, ?, ?, ?)`, childID, testdbseed.DefaultProjectID, agent, now, now, now)
+	_, err := e.sqlDB.ExecContext(t.Context(), `INSERT INTO sessions (id, project_id, owner_person_id, posture, status, parent_session_id, agent_type, created_at, activity_at, updated_at, root_session_id, mode)
+		VALUES (?, ?, (SELECT id FROM people WHERE role = 'owner'), 'build', 'idle', 'coord', ?, ?, ?, ?, 'coord', NULL)`, childID, testdbseed.DefaultProjectID, agent, now, now, now)
 	testutil.FailErr(t, "insert child "+childID, err)
 }
 

@@ -78,25 +78,25 @@ func TestEnsureSessionWorkflowConcurrentRequestsShareRun(t *testing.T) {
 
 type workflowSessionReadStub struct {
 	session.Store
-	sess *api.Session
-	err  error
+	err error
 }
 
 func (s workflowSessionReadStub) Get(context.Context, string) (*api.Session, error) {
-	return s.sess, s.err
+	return nil, s.err
 }
 
 func TestEnsureSessionWorkflowWorkersAndReadFailures(t *testing.T) {
 	mgr, sessions, _, _ := testManager(t)
-	workerSessions := workflowSessionReadStub{Store: sessions, sess: &api.Session{ID: "worker", ParentSessionID: "sess-1"}}
-	mgr.Policy.Sessions = workerSessions
-	mgr.Ambient.Sessions = workerSessions
-	run, err := mgr.Ambient.EnsureSessionWorkflow(t.Context(), "worker")
+	parent, err := sessions.Get(t.Context(), "sess-1")
+	testutil.FailErr(t, "read parent session", err)
+	worker, err := sessions.CreateChild(t.Context(), parent, api.SpawnChildRequest{AgentType: "repo-researcher"})
+	testutil.FailErr(t, "create worker session", err)
+	run, err := mgr.Ambient.EnsureSessionWorkflow(t.Context(), worker.ID)
 	testutil.FailErr(t, "worker execution scope", err)
 	if run != nil {
 		t.Fatal("worker received an independent ambient workflow")
 	}
-	testutil.FailErr(t, "worker runnable without ambient", mgr.Policy.AssertSessionRunnable(t.Context(), "worker"))
+	testutil.FailErr(t, "worker runnable without ambient", mgr.Policy.AssertSessionRunnable(t.Context(), worker.ID))
 	failure := errors.New("session read failed")
 	failedSessions := workflowSessionReadStub{Store: sessions, err: failure}
 	mgr.Policy.Sessions = failedSessions

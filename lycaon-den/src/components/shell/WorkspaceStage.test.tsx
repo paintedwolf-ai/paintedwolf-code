@@ -74,9 +74,9 @@ describe("workspace resident stage routing", () => {
     expect(callbacks.openSettings).toHaveBeenCalledWith("debug", { advanced: "diagnostics" });
     expect(callbacks.toggleStar).toHaveBeenCalledWith("project", true);
     expect(callbacks.renameProject).toHaveBeenCalledWith("project", "New name");
-    const draft = { text: "Build a garden", attachments: [] };
+    const draft = { text: "Build a garden", attachments: [], mode: "ask" as const };
     expect(await seams.home.onSubmitIdea(draft)).toBe(true);
-    expect(callbacks.startEmptySession).toHaveBeenCalledWith({ kind: "new-project" }, { prompt: draft.text, ideaAttachments: [] });
+    expect(callbacks.startEmptySession).toHaveBeenCalledWith({ kind: "new-project" }, { prompt: draft.text, ideaAttachments: [], mode: "ask" });
     expect(await seams.home.onSubmitIdea(draft)).toBe(false);
     expect(shell.state.materializingDraft).toBe(true);
     seams.home.onOpenAttention?.({ project_id: "project", session_id: "other" } as never);

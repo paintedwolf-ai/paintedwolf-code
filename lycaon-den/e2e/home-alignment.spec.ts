@@ -78,3 +78,48 @@ webE2e("home doors divider aligns in macOS custom chrome", async ({ page }) => {
 
   await expectHomeDividerAligned(page);
 });
+
+webE2e("Home mode sits beside send without resizing or flashing the idea box", async ({ page }) => {
+  await page.goto("/");
+  await waitHarnessConnected(page);
+  const home = page.getByTestId("home-view");
+  const input = home.getByTestId("home-idea-input");
+  const send = home.getByTestId("home-idea-send");
+  const mode = home.getByRole("radiogroup", { name: "Session mode" });
+  await expect(mode).toBeVisible();
+
+  const placement = await mode.evaluate((track) => {
+    const box = track.closest(".home-view__idea")!;
+    const height = box.getBoundingClientRect().height;
+    const next = track.nextElementSibling;
+    const priorDisplay = track.style.display;
+    track.style.display = "none";
+    const heightWithoutTrack = box.getBoundingClientRect().height;
+    track.style.display = priorDisplay;
+    return { height, heightWithoutTrack, next: next?.getAttribute("data-testid") };
+  });
+  expect(placement.next).toBe("home-idea-send");
+  expect(placement.height).toBe(placement.heightWithoutTrack);
+
+  const ideaBox = home.locator(".home-view__idea");
+  await input.focus();
+  const ring = await ideaBox.evaluate(async (box) => {
+    await Promise.all(box.getAnimations().map((animation) => animation.finished));
+    return getComputedStyle(box).boxShadow;
+  });
+  await mode.locator('[aria-checked="false"]').click();
+  await expect(input).toBeFocused();
+  expect(await ideaBox.evaluate((box) => ({
+    ring: getComputedStyle(box).boxShadow,
+    animations: box.getAnimations().length,
+  }))).toEqual({ ring, animations: 0 });
+
+  await input.evaluate((element) => element.blur());
+  await mode.locator('[aria-checked="false"]').click();
+  expect(await ideaBox.evaluate((box) => box.contains(document.activeElement))).toBe(false);
+
+  await input.fill("First line\nSecond line\nThird line");
+  const trackBox = (await mode.boundingBox())!;
+  const sendBox = (await send.boundingBox())!;
+  expect(Math.abs(trackBox.y + trackBox.height - sendBox.y - sendBox.height)).toBeLessThanOrEqual(0.5);
+});

@@ -6,8 +6,11 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/platform"
+	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/toolcontract"
+	"github.com/lycaon/lycaon/internal/toolprofiles"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/internal/tools"
 )
 
@@ -62,5 +65,44 @@ func TestProgramSurfaceRequiresExplicitNativeSelection(t *testing.T) {
 	}
 	if _, err := executor.Metadata.SelectNativeOperations(t.Context(), platform.ToolFilter{}, []toolcontract.OperationDefinition{read}); err == nil {
 		t.Fatal("implicit profile admitted")
+	}
+}
+
+func TestReadOnlyProgramSurfaceNarrowsTheDeclaredProfile(t *testing.T) {
+	const profile = "fixture"
+	boundary := sandbox.NewBoundary(sandbox.Config{}, []sandbox.ToolProfile{
+		{ID: profile, CommandEffects: toolcontract.AllCommandEffects()},
+	})
+	executor := NewExecutor(toolprofiles.NewProfilePolicyEngine(boundary), tools.NewDefaultRegistry(), profile)
+	read := nativeDefinition(t, "read")
+	write := nativeDefinition(t, "write")
+	surface, err := executor.Metadata.FreezeProgramSurface(t.Context(), platform.ToolFilter{ProfileID: profile}, []toolcontract.OperationDefinition{read, write})
+	testutil.FailErr(t, "freeze declared program surface", err)
+
+	invocation, _ := frameFixture(t)
+	readOnly := surface.ReadOnly()
+	for _, binding := range []struct {
+		def        toolcontract.OperationDefinition
+		wantDenied bool
+	}{
+		{def: read},
+		{def: write, wantDenied: true},
+	} {
+		form := binding.def.Facts().Commands[0]
+		operation, err := toolcontract.BindOperation(binding.def, invocation, form.Name, form.Effects[0].Mode, nil)
+		testutil.FailErr(t, "bind catalog operation", err)
+		testutil.FailErr(t, "validate full profile", surface.ValidateOperation(operation))
+		err = readOnly.ValidateOperation(operation)
+		if binding.wantDenied {
+			if reject := toolrejection.AsToolReject(err); reject == nil || reject.Code != "COMMAND_EFFECT_NOT_ALLOWED" {
+				t.Fatalf("write-capable operation admitted by read-only surface: %v", err)
+			}
+		} else {
+			testutil.FailErr(t, "validate read operation", err)
+		}
+	}
+	full := toolcontract.AllCommandEffects()
+	if surface.Effects() != full || readOnly.AllowsEffects(full) {
+		t.Fatalf("full effects = %v, read-only effects = %v", surface.Effects(), readOnly.Effects())
 	}
 }

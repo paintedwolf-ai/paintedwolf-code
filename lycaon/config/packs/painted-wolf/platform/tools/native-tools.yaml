@@ -713,6 +713,51 @@ lifecycle:
   summarize: read_only
   survey_repo: read_only
 
+# Calls allowed in Ask. Worker and workflow calls check their resolved targets.
+ask_allowed:
+  - answer_decision
+  - ask_user
+  - command
+  - command_output
+  - command_stop
+  - complete_leg
+  - fanout_plan
+  - fetch_url
+  - held_result
+  - held_stop
+  - instruct_worker
+  - message_coordinator
+  - pack_board
+  - parse_evaluation
+  - parse_extract_json
+  - parse_validate
+  - read_findings
+  - read_review
+  - recall
+  - record_finding
+  - request_decision
+  - request_tools
+  - scan_compare
+  - scan_list
+  - scan_query
+  - scan_summary
+  - secret_list
+  - skills_read
+  - source_history
+  - state_query
+  - summarize
+  - survey_repo
+  - task
+  - update_progress
+  - wait
+  - web_search
+  - worker_cancel
+  - worker_history
+  - workflow_advance
+  - workflow_catalog_summaries
+  - workflow_transition
+  - workflow_user_feedback
+
 chunkable_payload:
   - code_rewrite
 

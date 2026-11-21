@@ -140,6 +140,7 @@ func TestSurfaceFactsRegistry_structFieldClosure(t *testing.T) {
 		"VerifyUnverified":                      FactVerifyUnverified,
 		"VisibleUserTurn":                       FactVisibleUserTurn,
 		"Posture":                               FactPosture,
+		"Mode":                                  FactMode,
 		"ProgressHasOpenSteps":                  FactProgressHasOpenSteps,
 		"ProgressMissing":                       FactProgressMissing,
 		"ProgressGatedToolAttemptedSinceIntent": FactProgressGatedToolAttemptedSinceIntent,

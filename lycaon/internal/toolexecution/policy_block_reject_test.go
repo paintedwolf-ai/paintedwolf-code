@@ -3,15 +3,20 @@ package toolexecution
 import (
 	"context"
 	"errors"
-	"github.com/lycaon/lycaon/internal/toolprofiles"
-	"github.com/lycaon/lycaon/internal/toolrejection"
-	"github.com/lycaon/lycaon/internal/tools"
+	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/platform"
+	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/internal/sandbox"
+	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/toolcontract"
+	"github.com/lycaon/lycaon/internal/toolprofiles"
+	"github.com/lycaon/lycaon/internal/toolrejection"
+	"github.com/lycaon/lycaon/internal/tools"
+	"github.com/lycaon/lycaon/internal/toolschema"
 )
 
 // A profile denial leaves Invoke as a typed reject, so the ledger records
@@ -176,5 +181,154 @@ func TestExecutorCapabilityParseRejectIncludesContractFields(t *testing.T) {
 	fields, _ := reject.Data["capability_request_fields"].([]string)
 	if len(fields) == 0 {
 		t.Fatalf("capability_request_fields = %#v, want command contract fields", reject.Data["capability_request_fields"])
+	}
+}
+
+func TestAskExecutorAdmitsOnlyRegisteredReadTools(t *testing.T) {
+	for _, tc := range []struct {
+		name       string
+		registered bool
+		mcpRead    bool
+		allowed    bool
+	}{
+		{name: "command", registered: true, allowed: true},
+		{name: "command_output", registered: true, allowed: true},
+		{name: "command_stop", registered: true, allowed: true},
+		{name: "verify", registered: true},
+		{name: "write", registered: true},
+		{name: "mcp_fixture_read", registered: true, mcpRead: true, allowed: true},
+		{name: "mcp_fixture_mutation", registered: true},
+		{name: "mcp_fixture_missing"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			reg := tools.NewDefaultRegistry()
+			calls := 0
+			handler := func(context.Context, map[string]any, tools.ToolContext) (string, error) {
+				calls++
+				return "observation", nil
+			}
+			if tc.registered {
+				meta := tools.ToolMeta{Name: tc.name, ReadOnlyHint: tc.mcpRead, ArgsSchema: map[string]any{"type": "object"}}
+				if meta.IsMCP() {
+					meta.Source, meta.SourceID = tools.ToolSourceMCP, "fixture"
+					testutil.FailErr(t, "register MCP tool", reg.RegisterDefinition(tools.Definition{
+						Meta: meta, Contract: toolcontract.External("mcp:fixture"), Handler: handler,
+					}))
+				} else {
+					testutil.FailErr(t, "register native tool", reg.Register(tc.name, handler))
+				}
+			}
+			executor := NewExecutor(nil, reg, "implement")
+			executor.SetProgramEntry("command", func(args map[string]any) bool {
+				_, terminal := args["terminal_capture"]
+				_, snapshot := args["snapshot_capture"]
+				return terminal || snapshot
+			})
+			ctx := fixtureToolContext(t.TempDir())
+			ctx.Source.AskMode, ctx.Source.ReadOnly = true, true
+
+			out, err := executor.Invoke(t.Context(), tc.name, map[string]any{"command": "git status"}, ctx)
+			if tc.allowed {
+				testutil.FailErr(t, "run read tool", err)
+				if calls != 1 || out != "observation" {
+					t.Fatalf("read tool calls = %d, output = %q", calls, out)
+				}
+				return
+			}
+			reject := toolrejection.AsToolReject(err)
+			if reject == nil || reject.Code != tools.AskModeActiveCode || calls != 0 || out != "" {
+				t.Fatalf("denied tool calls = %d, output = %q, error = %v", calls, out, err)
+			}
+		})
+	}
+}
+
+type askWorkerCoordSpy struct {
+	ensured int
+}
+
+func (s *askWorkerCoordSpy) BeforeWorkerWrite(context.Context, tools.ToolContext, string) error {
+	return nil
+}
+
+func (s *askWorkerCoordSpy) AfterWorkerWrite(context.Context, tools.ToolContext, string) {}
+
+func (s *askWorkerCoordSpy) ReleaseReservations(context.Context, string, string) error { return nil }
+
+func (s *askWorkerCoordSpy) EnsureBranch(_ context.Context, tctx tools.ToolContext) (tools.ToolContext, error) {
+	s.ensured++
+	return tctx, nil
+}
+
+func TestAskExecutorRejectsPrunedCommandFieldsBeforeAdmission(t *testing.T) {
+	cfg, err := toolschema.LoadSchemaDirWithOperations(filepath.Join("..", "..", "config", "packs", "painted-wolf", "platform", "tools", "schemas"))
+	testutil.FailErr(t, "load tool schemas", err)
+	hints, err := guidance.LoadHintConfigStock()
+	testutil.FailErr(t, "load hint catalog", err)
+	guidance.SetGuidanceRenderer(prompts.NewGuidanceRenderer(prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{})))
+	formatter := guidance.NewStaticRejectFormatter(hints)
+
+	for _, c := range []struct {
+		name  string
+		field string
+		value any
+	}{
+		{name: "capability_request", field: "capability_request", value: map[string]any{"write_root": "/tmp/out"}},
+		{name: "secret_use", field: "secret_use", value: map[string]any{"services": []any{"https://api.example.com"}}},
+		{name: "snapshot_capture", field: "snapshot_capture", value: map[string]any{"caption": "snap"}},
+		{name: "socks_proxy", field: "socks_proxy", value: false},
+		{name: "terminal_capture", field: "terminal_capture", value: map[string]any{"winsize": map[string]any{"cols": 80, "rows": 24}}},
+		{name: "verification_false", field: "verification", value: false},
+		{name: "verification_true", field: "verification", value: true},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			reg, err := tools.NewCatalogRegistry(cfg)
+			testutil.FailErr(t, "catalog registry", err)
+			handlerCalls := 0
+			testutil.FailErr(t, "register command", reg.Register("command", func(context.Context, map[string]any, tools.ToolContext) (string, error) {
+				handlerCalls++
+				return "ran", nil
+			}))
+			executor := NewExecutor(nil, reg, "implement")
+			executor.Rejections.SetRejectFormatter(formatter)
+			executor.SetProgramEntry("command", func(args map[string]any) bool {
+				_, terminal := args["terminal_capture"]
+				_, snapshot := args["snapshot_capture"]
+				return terminal || snapshot
+			})
+
+			credIndex := &unavailableCredentialIndex{failure: errors.New("credential admission must not run")}
+			workerCoord := &askWorkerCoordSpy{}
+			tctx := fixtureToolContext(t.TempDir())
+			tctx.Identity.ProjectID = "project-1"
+			tctx.Identity.WorkerJobID = "worker-job-1"
+			tctx.Source.WorkerBranchRoot = ""
+			tctx.Source.WorkerCoord = workerCoord
+			tctx.Effects.CredentialFiles = credIndex
+			tctx.Source.AskMode, tctx.Source.ReadOnly = true, true
+
+			args := map[string]any{
+				"command": "pwd",
+				c.field:   c.value,
+			}
+			out, invokeErr := executor.Invoke(t.Context(), "command", args, tctx)
+			if invokeErr == nil || out != "" {
+				t.Fatalf("expected Ask pruned-field rejection, got out=%q err=%v", out, invokeErr)
+			}
+			if credIndex.project != "" || workerCoord.ensured != 0 || handlerCalls != 0 {
+				t.Fatalf("reached admission or handler: credProject=%q workerEnsured=%d handlerCalls=%d", credIndex.project, workerCoord.ensured, handlerCalls)
+			}
+			refusal, rendered := guidance.RefusalFromError(invokeErr)
+			if !rendered || refusal.Code() != tools.AskModeActiveCode || strings.TrimSpace(refusal.Body) == "" {
+				t.Fatalf("refusal rendering failed: rendered=%t code=%q body=%q", rendered, refusal.Code(), refusal.Body)
+			}
+			reject := toolrejection.AsToolReject(invokeErr)
+			if reject == nil || reject.Code != tools.AskModeActiveCode {
+				t.Fatalf("reject = %+v, want %s", reject, tools.AskModeActiveCode)
+			}
+			if reject.Data["tool"] != "command" || reject.Data["field"] != c.field || len(reject.Data) != 2 {
+				t.Fatalf("reject.Data = %#v, want tool=command and field=%s only", reject.Data, c.field)
+			}
+		})
 	}
 }

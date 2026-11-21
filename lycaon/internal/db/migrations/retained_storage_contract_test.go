@@ -1,6 +1,7 @@
 package migrations
 
 import (
+	"database/sql"
 	"math"
 	"strings"
 	"testing"
@@ -78,7 +79,7 @@ func assertRetainedStorageFallback(t *testing.T, plan Plan) {
 }
 
 func retainedStorageContractPlan() Plan {
-	target := Baseline{Revision: 5, Shape: "a1c252d46e94940750d9b239e96716d7f8d3a612fb1a2d24969085876aac2aaa"}
+	target := Baseline{Revision: 5, Shape: "b5e7468adb7ecc99d5e86cd22a057cef77a4f1de94e14bbb2100eccb40b485d2"}
 	step := Revision5(target)
 	return Plan{Source: step.From, Target: target, steps: []Step{step}}
 }
@@ -149,6 +150,40 @@ func TestRetainedSorterBudgetRejectsMergeAndFinalSumOverflow(t *testing.T) {
 				t.Fatal("accepted an overflowing scratch reservation")
 			}
 		})
+	}
+}
+
+func TestSessionModeWriteEstimateTracksSessionRows(t *testing.T) {
+	ctx := t.Context()
+	database, err := sql.Open("sqlite", ":memory:")
+	testutil.FailErr(t, "open session migration fixture", err)
+	defer database.Close()
+	_, err = database.ExecContext(ctx, "CREATE TABLE sessions(id TEXT PRIMARY KEY, title TEXT)")
+	testutil.FailErr(t, "create released session tree", err)
+	empty, err := sessionModeWrites(ctx, database, 0)
+	testutil.FailErr(t, "estimate writes for empty session tree", err)
+	_, err = database.ExecContext(ctx, "INSERT INTO sessions VALUES ('session', ?)", strings.Repeat("a", 8192))
+	testutil.FailErr(t, "seed session with overflow pages", err)
+	populated, err := sessionModeWrites(ctx, database, 0)
+	testutil.FailErr(t, "estimate writes for populated session tree", err)
+	if populated <= empty {
+		t.Fatalf("session rows did not increase write reservation: %d <= %d", populated, empty)
+	}
+}
+
+func TestRetainedStorageIncludesSessionLineageAndRootIndex(t *testing.T) {
+	if !retainedRouteTree("sessions") {
+		t.Fatal("session tree omitted from retained inventory")
+	}
+	empty, err := sessionModeScratch(retainedTree{}, 4096)
+	testutil.FailErr(t, "reserve scratch for empty session tree", err)
+	reserve, err := sessionModeScratch(retainedTree{cells: 10000, record: 1024}, 4096)
+	testutil.FailErr(t, "reserve scratch for populated session lineage", err)
+	if reserve <= empty {
+		t.Fatalf("session rows did not increase scratch reservation: %d <= %d", reserve, empty)
+	}
+	if _, err := sessionModeScratch(retainedTree{cells: math.MaxUint64, record: 1024}, 4096); err == nil {
+		t.Fatal("accepted an overflowing session scratch reservation")
 	}
 }
 

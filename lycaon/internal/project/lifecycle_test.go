@@ -108,8 +108,8 @@ func TestSQLRegistryDetachRootBumpsGeneration(t *testing.T) {
 	replacementID := p.Roots[1].ID
 	_, err = sqlDB.ExecContext(ctx, `
 		INSERT INTO sessions (
-			id, project_id, owner_person_id, workspace_root_id, posture, status, created_at, activity_at, updated_at
-		) VALUES ('detach-session', ?, (SELECT id FROM people WHERE role = 'owner'), ?, 'build', 'idle', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z')
+			id, project_id, owner_person_id, workspace_root_id, posture, status, created_at, activity_at, updated_at, root_session_id, mode
+		) VALUES ('detach-session', ?, (SELECT id FROM people WHERE role = 'owner'), ?, 'build', 'idle', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z', 'detach-session', 'agent')
 	`, p.ID, detachedID)
 	testutil.FailErr(t, "insert bound session", err)
 	change, err = reg.DetachRoot(ctx, p.ID, detachedID)
@@ -137,8 +137,8 @@ func TestSQLLifecycleMutationsRefuseBusyProjectInsideTransaction(t *testing.T) {
 	busyRootID := p.Roots[1].ID
 	_, err = sqlDB.ExecContext(ctx, `
 		INSERT INTO sessions (
-			id, project_id, owner_person_id, workspace_root_id, posture, status, created_at, activity_at, updated_at
-		) VALUES ('busy-session', ?, (SELECT id FROM people WHERE role = 'owner'), ?, 'build', 'busy', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z')
+			id, project_id, owner_person_id, workspace_root_id, posture, status, created_at, activity_at, updated_at, root_session_id, mode
+		) VALUES ('busy-session', ?, (SELECT id FROM people WHERE role = 'owner'), ?, 'build', 'busy', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z', 'busy-session', 'agent')
 	`, p.ID, busyRootID)
 	testutil.FailErr(t, "insert busy session", err)
 

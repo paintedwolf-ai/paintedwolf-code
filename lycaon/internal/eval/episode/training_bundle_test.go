@@ -34,9 +34,7 @@ func newBundleFixture(t *testing.T) bundleFixture {
 	database := testdbfixture.OpenPath(t, filepath.Join(capture, "store.db"))
 	project := testdbseed.DefaultProjectID
 	testdbseed.InsertSession(t, database, "root", project)
-	testdbseed.InsertSession(t, database, "child", project)
-	_, err := database.ExecContext(t.Context(), `UPDATE sessions SET parent_session_id='root' WHERE id='child'`)
-	testutil.FailErr(t, "bind child", err)
+	testdbseed.InsertChildSession(t, database, "child", "root")
 	history := store.NewSQL(database)
 	history.SetDataDir(capture)
 	turn, err := history.BeginTurn(t.Context(), store.TurnStart{SessionID: "root", ProjectID: project, Origin: store.TurnOriginUser, InputJSON: "{}"})

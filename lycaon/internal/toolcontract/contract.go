@@ -176,6 +176,7 @@ type Contract struct {
 	BatchSerialWhenArg    string
 	Order                 TurnOrder
 	Lifecycle             Lifecycle
+	AskAllowed            bool
 	Capabilities          Capability
 	// ChunkablePayload allows argument payloads to be split across calls.
 	ChunkablePayload bool

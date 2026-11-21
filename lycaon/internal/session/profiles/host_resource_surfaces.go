@@ -48,6 +48,9 @@ func (m *Service) ExecutionSurfaces(
 	sess *api.Session,
 	profileID string,
 ) []hostresources.ExecutionSurface {
+	if sess != nil && sess.Mode == api.SessionModeAsk {
+		return nil
+	}
 	profile, ok := m.ToolProfile(ctx, sess, profileID)
 	if !ok {
 		return nil
@@ -64,6 +67,9 @@ func executionSurfacesForToolProfile(profile sandbox.ToolProfile) []hostresource
 }
 
 func (m *Service) MutationCapable(ctx context.Context, sess *api.Session, profileID string) bool {
+	if sess != nil && sess.Mode == api.SessionModeAsk {
+		return false
+	}
 	profile, ok := m.ToolProfile(ctx, sess, profileID)
 	if !ok {
 		return false

@@ -15,6 +15,9 @@ function deferred<T>() {
 function fixture() {
   const store = createAppStore();
   const session = {
+    mode: "agent" as const,
+    started: true,
+    root_session_id: "session",
     id: "session", owner_person_id: "00000000-0000-4000-8000-000000000002", project_id: "project", workspace_path: "/tmp/project",
     posture: "build", status: "idle", created_at: "t", activity_at: "t", updated_at: "t",
   } as const;
