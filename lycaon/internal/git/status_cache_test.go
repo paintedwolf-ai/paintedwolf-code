@@ -81,6 +81,9 @@ func TestStatusCache_forceAlwaysExecs(t *testing.T) {
 func TestStatusCache_NotifyInvalidates(t *testing.T) {
 	t.Parallel()
 	dir := initTestRepo(t)
+	repochange.EnsureRoot(t.Context(), dir)
+	t.Cleanup(func() { repochange.CloseRoot(dir) })
+	repochange.WaitQuiet(t.Context(), dir, repochange.DefaultDebounce, 5*time.Second)
 	loader := &countingLoader{inner: git.NewManager()}
 	cache := git.NewStatusCache(loader)
 	t.Cleanup(cache.RegisterRepochangeObserver())
@@ -98,6 +101,9 @@ func TestStatusCache_NotifyInvalidates(t *testing.T) {
 func TestStatusCache_WorktreeChangedInvalidates(t *testing.T) {
 	t.Parallel()
 	dir := initTestRepo(t)
+	repochange.EnsureRoot(t.Context(), dir)
+	t.Cleanup(func() { repochange.CloseRoot(dir) })
+	repochange.WaitQuiet(t.Context(), dir, repochange.DefaultDebounce, 5*time.Second)
 	loader := &countingLoader{inner: git.NewManager()}
 	cache := git.NewStatusCache(loader)
 	t.Cleanup(cache.RegisterRepochangeObserver())

@@ -10,6 +10,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/project/projecttest"
 	"github.com/lycaon/lycaon/internal/repochange"
+	"github.com/lycaon/lycaon/internal/repochange/repochangetest"
 	"github.com/lycaon/lycaon/internal/sourcecatalog"
 	"github.com/lycaon/lycaon/internal/sourcefeed"
 	"github.com/lycaon/lycaon/internal/sourceledger"
@@ -55,6 +56,7 @@ func TestExternalWatchRevalidatesDirectoriesAndHeadOnlyBatches(t *testing.T) {
 }
 
 func TestEnsureSourceWatchBindsBeforeTheCatalogWalk(t *testing.T) {
+	repochangetest.Acquire(t)
 	walkStarted := make(chan struct{})
 	release := make(chan struct{})
 	srv := newTestServer(t, func(d *Dependencies) {
