@@ -23,12 +23,10 @@ const agentSelfFD = agentWatchFD + 1
 // static transition into the caller guardian. Ordinary broker launches are
 // parented outside that lineage, directly to the bootstrap supervisor.
 func RunStage() error {
-	handoff := os.NewFile(stageGuardianFD, "guardian-bootstrap-handoff")
-	err := runStage(handoff)
-	if err != nil && bootstrapHandoff(int(handoff.Fd())) {
-		sendStageRefusal(int(handoff.Fd()), err)
+	err := runStage()
+	if err != nil && bootstrapHandoff(stageGuardianFD) {
+		sendStageRefusal(stageGuardianFD, err)
 	}
-	runtime.KeepAlive(handoff)
 	return err
 }
 
@@ -44,7 +42,7 @@ func bootstrapHandoff(fd int) bool {
 	return err == nil && peer.Uid == 0 && int(peer.Pid) == os.Getppid()
 }
 
-func runStage(handoff *os.File) error {
+func runStage() error {
 	runtime.LockOSThread()
 	if err := initialUserNamespace(); err != nil {
 		return err
@@ -166,6 +164,8 @@ func runStage(handoff *os.File) error {
 		return err
 	}
 	defer func() { _ = roots.Close() }()
+	handoff := os.NewFile(stageGuardianFD, "guardian-bootstrap-handoff")
+	defer runtime.KeepAlive(handoff)
 	roles := [guardianTransitionRoles]*os.File{prepared.guardian, prepared.source, frame, lifetime, view.health, entryImage, origin, roots, handoff, children, proc, entryPin, view.pidfds[0], view.pidfds[1], view.lifetime, gateW}
 	proof, err := sealGuardianTransition(roles, Identity{UID: spec.UID, GID: spec.GID, Groups: spec.Groups})
 	if err != nil {
