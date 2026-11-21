@@ -1,5 +1,6 @@
 import type { ActionDescriptor } from "../../api/types.ts";
 import type { ActivitySpanEntry } from "../transcript/projection/transcript-item-model.ts";
+import { commandActivityStatus } from "../tool/command-activity-facts.ts";
 import type { ToolPartView } from "../tool/tool-part-model.ts";
 import { TOOL_ACTION_LABELS } from "../tool/tool-presentation.generated.ts";
 import { mergeActions, type CardAction } from "./action-merge.ts";
@@ -14,7 +15,10 @@ export function partAction(part: ToolPartView): CardAction | undefined {
   if (activity) {
     const members = activity.members.flatMap((member) => member.action ?? []);
     const calls = activity.calls.flatMap((call) => (call.commandProgram?.activities?.length ? [] : call.action ?? []));
-    return mergeActions(members.length ? [...members, ...calls.filter((action) => !members.includes(action))] : calls);
+    const merged = mergeActions(members.length ? [...members, ...calls.filter((action) => !members.includes(action))] : calls);
+    if (!merged) return undefined;
+    const status = commandActivityStatus(activity);
+    return { ...merged, status: status === "completed" ? "done" : status };
   }
   return part.action;
 }

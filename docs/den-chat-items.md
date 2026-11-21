@@ -149,12 +149,23 @@ and enclosing program outcome are distinct facts; exit zero never proves an
 external program's purpose succeeded.
 
 Den fixes each row's key, label, subject and initial position when it appears.
-Repetitions update counts and outcomes in place. Group titles retain their first
-activity's description. Decision-engine receipts belong in host-decision details,
-not in the count of actions performed. Receipt-page changes do not redefine the
-activity's result. Retained transcripts resolve host activity summaries before
-mounting rows when their stored snapshot has no structural steps. Failed detail
-reads preserve the recorded command.
+A read-only activity can join the preceding compatible row when it first has
+facts. A late report keeps its own row if an earlier call's work is still
+unknown. Membership then stays fixed across updates and remounts while the
+call's projection is cached. If a span splits and leaves a folded call without
+its row, the call opens its own row. Once the chat reloads, a parallel batch
+can group differently from its live run.
+
+Repetitions update counts and outcomes in place. A row shows as running while
+any member or output read is active, then shows an error if any failed. A
+pending receipt read preserves any activities already drawn. On a cold load,
+the span waits for host activity summaries when the stored snapshot lacks
+structural steps. A failed detail read still leaves the recorded command
+inspectable.
+
+A decision-engine receipt follows the call it introduces into host-decision
+details when that call opens a command row. A decision without such a row
+is shown on its own.
 
 Activities sit in the span as single-line rows that open into details; grouping
 adds no further disclosure level. Rows show only the action and outcome, with

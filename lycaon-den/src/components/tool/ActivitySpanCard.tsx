@@ -17,7 +17,7 @@ import {
   ActivitySpanAccordionProvider,
 } from "../../chat/tool/activity-span-accordion.ts";
 import { activitySpanSummary } from "../../chat/tool/activity-span-summary.ts";
-import type { ActivitySpanEntry } from "../../chat/transcript/projection/transcript-item-model.ts";
+import { activitySpanEntryKey, type ActivitySpanEntry } from "../../chat/transcript/projection/transcript-item-model.ts";
 import type { TranscriptLayout } from "../../chat/transcript/layout/transcript-layout.ts";
 import { bindFindRevealHost } from "../../find/use-findable-view.ts";
 import { formatSentenceCase } from "../../format/format-sentence-case.ts";
@@ -40,10 +40,6 @@ export type ActivitySpanCardProps = {
   running?: boolean;
   renderToolEntry: (part: () => ToolPartView) => JSX.Element;
 };
-
-function entryLeadKey(entry: ActivitySpanEntry): string {
-  return entry.kind === "tool" ? entry.part.id : entry.key;
-}
 
 function ActivitySpanToolEntryRow(props: {
   entry: () => ActivitySpanEntry;
@@ -264,7 +260,7 @@ export function ActivitySpanCard(props: ActivitySpanCardProps) {
       </TranscriptDisclosureToggle>
       <TranscriptDisclosurePanel disclosure={disclosure} class="den-activity-span-items">
         <ActivitySpanAccordionProvider value={accordion}>
-          <VirtualCardList threshold={100} scroll="ancestor" items={entries()} keyOf={entryLeadKey} label="Actions"
+          <VirtualCardList threshold={100} scroll="ancestor" items={entries()} keyOf={activitySpanEntryKey} label="Actions"
             pinnedKeys={[accordion.activeKey(), findToolKey()].filter((key): key is string => !!key)}
             onReveal={value => { revealRow = value; }}
             search={(entry, query, sensitive, signal) => entry.kind === "tool" ? searchToolPart(entry.part, props.sessionId, query, sensitive, signal) : Promise.resolve([])}
@@ -273,7 +269,7 @@ export function ActivitySpanCard(props: ActivitySpanCardProps) {
               revealTool(match.toolCallId ?? entry.part.toolCallId, match);
             }}>
             {(entry) => (
-              <div class="den-activity-span-item" data-activity-entry-key={entryLeadKey(entry())}>
+              <div class="den-activity-span-item" data-activity-entry-key={activitySpanEntryKey(entry())}>
                 <ActivitySpanEntryRow
                   entry={entry}
                   layout={props.layout}

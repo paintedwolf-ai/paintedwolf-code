@@ -20,6 +20,10 @@ export type ActivitySpanEntry =
       row: TurnLoadRow;
     };
 
+export function activitySpanEntryKey(entry: ActivitySpanEntry): string {
+  return entry.kind === "tool" ? entry.part.id : entry.key;
+}
+
 export type TranscriptItem =
   | {
       kind: "user";
