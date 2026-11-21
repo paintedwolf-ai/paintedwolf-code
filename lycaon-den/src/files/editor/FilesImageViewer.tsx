@@ -334,7 +334,6 @@ export function FilesImageViewer(props: Props) {
             class="den-files-editor__tool den-inset-icon-btn"
             classList={{ "den-files-editor__tool--ok": copiedPath() }}
             data-testid="files-image-copy-toolbar"
-            data-tip="Copy path"
             data-tip-pos="below"
             aria-label="Copy path"
             onClick={onCopyPath}

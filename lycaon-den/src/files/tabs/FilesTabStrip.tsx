@@ -55,7 +55,7 @@ function FilesTabStripShell(props: StripShellProps & { children: JSX.Element }) 
         class="den-files-tab-strip__tree-toggle den-auto-restore-control"
         data-restore="automatic"
         aria-label="Widen window to restore file navigator"
-        data-tip="Widen window to restore Files"
+        data-tip="Widen window to restore file navigator"
         data-tip-pos="below"
         data-testid="files-tree-auto-restore-btn"
         onClick={props.onAutoRestore}

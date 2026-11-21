@@ -1,3 +1,4 @@
+import { viewerCalendarTimeFormat } from "../../time/calendar-time.ts";
 import type { ComparisonSnapshot } from "../../api/source-reader.ts";
 import { loadComparisonSnapshot } from "../../api/source-reader.ts";
 import { For, Show, batch, createEffect, createMemo, createSignal, on, onCleanup, untrack } from "solid-js";
@@ -179,8 +180,8 @@ export function WalkGitReview(props: Props) {
         <dl class="den-files-info__meta den-walk-page__meta" aria-label="Commit details">
           <div class="den-files-info__meta-row"><dt>Commit</dt><dd><button class="den-git-review__hash" type="button" aria-label="Copy commit ID" data-tip={data().commit.hash} onClick={() => void copy(data().commit.hash)}>{data().commit.hash.slice(0, 12)}</button></dd></div>
           <div class="den-files-info__meta-row"><dt>Author</dt><dd>{data().commit.author_name}</dd></div>
-          <div class="den-files-info__meta-row"><dt>Committed</dt><dd><time dateTime={data().commit.committed_at} data-tip={new Date(data().commit.committed_at).toLocaleString()}>{relativeTimeLabel(data().commit.committed_at)}</time></dd></div>
-          <Show when={data().commit.authored_at !== data().commit.committed_at}><div class="den-files-info__meta-row"><dt>Authored</dt><dd><time dateTime={data().commit.authored_at} data-tip={new Date(data().commit.authored_at).toLocaleString()}>{relativeTimeLabel(data().commit.authored_at)}</time></dd></div></Show>
+          <div class="den-files-info__meta-row"><dt>Committed</dt><dd><time dateTime={data().commit.committed_at} data-tip={viewerCalendarTimeFormat().fullDateTime(Date.parse(data().commit.committed_at))}>{relativeTimeLabel(data().commit.committed_at)}</time></dd></div>
+          <Show when={data().commit.authored_at !== data().commit.committed_at}><div class="den-files-info__meta-row"><dt>Authored</dt><dd><time dateTime={data().commit.authored_at} data-tip={viewerCalendarTimeFormat().fullDateTime(Date.parse(data().commit.authored_at))}>{relativeTimeLabel(data().commit.authored_at)}</time></dd></div></Show>
         </dl>
         <div class="den-git-review__controls">
           <label>Compare <DenSelect

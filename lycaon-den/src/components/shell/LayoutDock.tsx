@@ -79,9 +79,9 @@ export function LayoutDockTray(props: LayoutDockTrayProps) {
   const stageLabel = () =>
     props.stageId ? stageLabelFor(props.stageId) : "";
   // Only native windows can offer a widening hint.
-  const placementHint = (kind: StagePlacement, label: string) =>
+  const placementHint = (kind: StagePlacement) =>
     isTauriRuntime() && props.widensFor?.(kind) === true
-      ? `${label} — widens the window to make room.`
+      ? "Widens the window to make room"
       : undefined;
   const showWindowAction = () =>
     props.stageId != null &&
@@ -106,14 +106,14 @@ export function LayoutDockTray(props: LayoutDockTrayProps) {
               <PlacementTile
                 kind="inline"
                 label="Single view"
-                hint={placementHint("inline", "Single view")}
+                hint={placementHint("inline")}
                 active={props.placement === "inline"}
                 onSelect={() => props.onPlacement?.("inline")}
               />
               <PlacementTile
                 kind="split"
                 label="Split view"
-                hint={placementHint("split", "Split view")}
+                hint={placementHint("split")}
                 active={props.placement === "split"}
                 onSelect={() => props.onPlacement?.("split")}
               />

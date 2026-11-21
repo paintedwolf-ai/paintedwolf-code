@@ -380,7 +380,6 @@ export function OnboardingGate(props: Props) {
                   aria-describedby={
                     setupBlockerHint() ? SETUP_CONTINUE_HINT_ID : undefined
                   }
-                  data-tip={setupBlockerHint()}
                   aria-busy={validating()}
                   onClick={() => void runSetupContinue()}
                 >

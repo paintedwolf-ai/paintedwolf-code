@@ -453,7 +453,6 @@ const denFolding: Extension = codeFolding({
       "aria-label",
       prepared > 0 ? `Unfold ${label}` : "Unfold",
     );
-    el.dataset.tip = "Unfold";
     el.onclick = onclick;
     return el;
   },

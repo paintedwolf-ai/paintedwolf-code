@@ -73,7 +73,7 @@ function FileSummarySectionLine(props: SummarySectionProps) {
                   type="button"
                   class="den-file-summary__symbol"
                   data-testid="file-summary-location"
-                  data-tip={`${target().name} · Line ${target().line}`}
+                  data-tip={`Line ${target().line}`}
                   aria-label={`Open ${target().name} at line ${target().line}`}
                   onClick={() => props.onOpen(target().line)}
                 >

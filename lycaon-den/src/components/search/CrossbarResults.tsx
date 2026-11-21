@@ -142,7 +142,7 @@ export function globIndicatorTitle(prefs: SearchMatchPrefs): string {
   const parts: string[] = [];
   if (prefs.include.trim()) parts.push(`include ${prefs.include.trim()}`);
   if (prefs.exclude.trim()) parts.push(`exclude ${prefs.exclude.trim()}`);
-  return `Path filters from full search: ${parts.join(", ")}. Click to clear.`;
+  return `Path filters from full search: ${parts.join(", ")}`;
 }
 
 export function renderMatchUnderline(text: string, indexes: readonly number[]) {

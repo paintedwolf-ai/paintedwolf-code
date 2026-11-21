@@ -118,7 +118,7 @@ describe("LayoutDockTray", () => {
     const split = screen.getByTestId("layout-tile-split");
     expect(split.hasAttribute("aria-disabled")).toBe(false);
     expect(split.getAttribute("data-tip")).toBe(
-      "Split view — widens the window to make room.",
+      "Widens the window to make room",
     );
     expect(screen.getByTestId("layout-tile-inline").hasAttribute("data-tip")).toBe(
       false,
@@ -132,7 +132,7 @@ describe("LayoutDockTray", () => {
       widensFor: (placement) => placement === "inline",
     });
     expect(screen.getByTestId("layout-tile-inline").getAttribute("data-tip")).toBe(
-      "Single view — widens the window to make room.",
+      "Widens the window to make room",
     );
     expect(screen.getByTestId("layout-tile-split").hasAttribute("data-tip")).toBe(
       false,

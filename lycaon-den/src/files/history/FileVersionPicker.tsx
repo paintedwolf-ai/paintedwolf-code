@@ -4,7 +4,7 @@ import type { SourceFileVersion } from "../../api/types.ts";
 import { relativeTimeLabel } from "../../time/time-copy.ts";
 import { createPresentationWaiting } from "../../ui/presentation.ts";
 import { ThemeIcon } from "../../components/primitives/ThemeIcon.tsx";
-import { bindingForHandler } from "../../shortcuts/display-binding-for.ts";
+import { tipWithShortcut } from "../../shortcuts/display-binding-for.ts";
 import { AnchoredSurface } from "../../components/primitives/AnchoredSurface.tsx";
 import { Scrollport } from "../../components/primitives/Scrollport.tsx";
 import { ShowLatest } from "../../components/primitives/ShowLatest.tsx";
@@ -346,11 +346,7 @@ export function FileVersionPicker(props: Props) {
           "den-file-version__trigger--historical": props.selected != null,
         }}
         data-testid="file-version-trigger"
-        data-tip={
-          bindingForHandler("files.openVersionHistory")
-            ? `File history (${bindingForHandler("files.openVersionHistory")})`
-            : "File history"
-        }
+        data-tip={tipWithShortcut("File history", "files.openVersionHistory")}
         data-tip-pos="below"
         aria-label={`File version: ${selectedLabel(props.selected)}`}
         aria-haspopup="menu"

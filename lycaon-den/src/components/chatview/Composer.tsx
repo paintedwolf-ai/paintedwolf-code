@@ -51,7 +51,7 @@ import type {
   WorkflowSummary,
 } from "../../api/types.ts";
 import type { SidecarStatus } from "../../store/app-state-model.ts";
-import { bindingForHandler } from "../../shortcuts/display-binding-for.ts";
+import { tipWithShortcut } from "../../shortcuts/display-binding-for.ts";
 import { shortcutOverrides } from "../../settings/system/shortcut-prefs.ts";
 import { ComposerActivityIndicator } from "./ComposerActivityIndicator.tsx";
 import { APPROVALS_COPY } from "../../settings/security/approvals-copy.ts";
@@ -375,7 +375,7 @@ export function Composer(props: Props) {
   const stopTitle = () =>
     props.stopping
       ? "Stopping…"
-      : `Stop (${bindingForHandler("session.stop", { overrides: shortcutOverrides() })})`;
+      : tipWithShortcut("Stop", "session.stop", { overrides: shortcutOverrides() });
 
   const presence = useResidentPresence();
   const [inputFocused, setInputFocused] = createSignal(false);
@@ -767,7 +767,7 @@ export function Composer(props: Props) {
                 disabled={composeBlocked() || isAttachLimitReached()}
                 onClick={() => fileInputRef?.click()}
                 aria-label="Attach file"
-                data-tip="Attach file"
+                data-tip={isAttachLimitReached() ? "Attachment limit reached" : undefined}
               >
                 <ThemeIcon slot="plus" size={16} />
               </button>

@@ -217,9 +217,7 @@ describe("OnboardingGate setup page", () => {
     expect(cont.disabled).toBe(false);
     expect(cont.getAttribute("aria-disabled")).toBe("true");
     expect(cont.getAttribute("aria-describedby")).toBe(hint.id);
-    expect(cont.getAttribute("data-tip")).toBe(
-      MODELS_SETTINGS_COPY.onboardingContinueNeedProvider,
-    );
+    expect(cont.hasAttribute("data-tip")).toBe(false);
 
     // With a provider ready, the ask moves to the other half.
     settingsStore.actions.setProviders([readyProvider]);
