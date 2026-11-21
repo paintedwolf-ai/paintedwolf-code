@@ -172,6 +172,24 @@ func (f *commandWorkflowFixture) outcome(t *testing.T, callID string) command.Pr
 		if out.ProgramID == "" {
 			t.Fatalf("call %s missing program_id in %s", callID, jsonBody)
 		}
+		if out.State == "parked" {
+			for _, wake := range msgs {
+				if wake.Kind != wire.MessageKindHostLoopWake {
+					continue
+				}
+				_, wakeJSON, _, ok := hostmarker.SplitToolJSONBody(wake.Content)
+				if !ok {
+					_, wakeJSON, ok = strings.Cut(wake.Content, "\n\n")
+				}
+				if !ok {
+					continue
+				}
+				var settled command.ProgramOutcome
+				if json.Unmarshal([]byte(wakeJSON), &settled) == nil && settled.ProgramID == out.ProgramID {
+					return settled
+				}
+			}
+		}
 		return out
 	}
 	t.Fatalf("no tool result found for call %s", callID)

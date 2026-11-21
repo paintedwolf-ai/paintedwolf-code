@@ -191,6 +191,7 @@ def main():
     package = package_name(os.getcwd(), environment["PW_TEST_MODULE_ROOT"])
     race = environment.get("PW_TEST_RACE") == "1"
     started = time.monotonic()
+    heap_limit = budget(package)
     limit = budget(package, race)
     entry = f"{OWNER_ENV}={os.getpid()}-{os.urandom(8).hex()}"
     scan = {}
@@ -204,7 +205,7 @@ def main():
 
     with tempfile.NamedTemporaryFile(prefix="package-child-", dir=environment["PW_TEST_SCRATCH_ROOT"]) as owner:
         status, output, forked, resource_limit, leaked = execute(
-            binary, arguments, {**runtime_environment(child_environment, limit), OWNER_ENV: entry.partition("=")[2]},
+            binary, arguments, {**runtime_environment(child_environment, heap_limit), OWNER_ENV: entry.partition("=")[2]},
             owner, fork_observable(), settle, limit)
     elapsed = time.monotonic() - started
     code = os.waitstatus_to_exitcode(status)
