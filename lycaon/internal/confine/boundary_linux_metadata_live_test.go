@@ -17,6 +17,7 @@ import (
 	"golang.org/x/sys/unix"
 
 	"github.com/lycaon/lycaon/internal/confine"
+	confinefixture "github.com/lycaon/lycaon/internal/testsetup/confine"
 	"github.com/lycaon/lycaon/internal/testutil"
 )
 
@@ -266,7 +267,7 @@ func TestLinuxMetadataPreservesReadOnlySourceMount(t *testing.T) {
 
 func TestLinuxSharedTempMetadataReportsTheObservedInode(t *testing.T) {
 	self := requireLinuxSandbox(t)
-	requireRefusalWatch(t)
+	confinefixture.RequireRefusalReports(t)
 	project, custom := t.TempDir(), outsideTemporaryWriteRoots(t)
 	t.Setenv("TMPDIR", custom)
 	for _, root := range []string{"/tmp", custom} {
