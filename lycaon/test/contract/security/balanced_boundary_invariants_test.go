@@ -54,7 +54,7 @@ func TestInvariantWriteRootSSOTSharedByGateAndConfine(t *testing.T) {
 		}
 		res := evalBundled(t, hitl.ProposedAction{
 			Invocation: hitl.ActionInvocation{Tool: "write", Files: []string{path}},
-			Scope:      hitl.ActionScope{ProjectDir: proj, SessionScratchRoot: scratch},
+			Scope:      hitl.ActionScope{ProjectDir: proj, SessionScratchRoot: scratch, GrantedWriteRoots: []string{granted}},
 			Execution:  hitl.ActionExecution{Contained: contained},
 		})
 		if res.AutoApproved() != inside {

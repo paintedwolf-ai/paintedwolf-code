@@ -191,3 +191,4 @@ components:
         initial:
           type: boolean
       required:
+        - initial

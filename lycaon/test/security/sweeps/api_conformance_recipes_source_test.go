@@ -20,7 +20,9 @@ import (
 	"sync"
 
 	"github.com/google/uuid"
+	"github.com/lycaon/lycaon/internal/db"
 	"github.com/lycaon/lycaon/internal/fileops"
+	"github.com/lycaon/lycaon/internal/fspath"
 	"github.com/lycaon/lycaon/internal/mcp"
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
@@ -48,6 +50,8 @@ var sourceRecipes = map[string]successRecipe{
 	"releaseSourceView":             {prepare: sourceViewInputs},
 
 	// Editor documents.
+	"openEditorDocument":             {stage: stageCreate, prepare: sourceEditorOpenInputs},
+	"leaveEditorDocument":            {prepare: sourceEditorLeaveInputs},
 	"createEditorDocumentSnapshot":   {prepare: sourceEditorSnapshotInputs},
 	"replaceEditorDocument":          {prepare: sourceEditorReplaceInputs},
 	"reloadEditorDocument":           {prepare: sourceEditorReloadInputs},
@@ -80,9 +84,13 @@ var sourceRecipes = map[string]successRecipe{
 	"getProjectSourceComparison":        {prepare: sourceComparisonInputs},
 	"digestSourceComparisons":           {prepare: sourceDigestInputs},
 	"listProjectSourceWalk":             {seed: sourceSeedWalk},
-	"completeProjectSourcePresentation": {prepare: sourceCompletePresentationInputs},
-	"listProjectSourceSeen":             {seed: sourceSeedSeen},
-	"withdrawProjectSourcePresentation": {prepare: sourceWithdrawPresentationInputs},
+	"completeProjectSourcePresentation":  {prepare: sourceCompletePresentationInputs},
+	"listProjectSourceSeen":              {seed: sourceSeedSeen},
+	"withdrawProjectSourcePresentation":  {prepare: sourceWithdrawPresentationInputs},
+	"openOutsideFile":                    {stage: stageCreate, prepare: sourceOpenOutsideFileInputs},
+	"openChatLocationFile":               {prepare: sourceOpenChatLocationFileInputs},
+	"updateSourceChatLocation":           {prepare: sourceUpdateChatLocationInputs},
+	"getProjectSourceCommandObservation": {prepare: sourceCommandObservationInputs},
 
 	// Repository history.
 	"restoreProjectSourceCommitState": {prepare: sourceRestoreCommitInputs},
@@ -101,13 +109,16 @@ var sourceRecipes = map[string]successRecipe{
 
 // sourceState caches fixtures that are costly to build once per sweep.
 type sourceState struct {
-	names       int
-	versions    *sourceVersioned
-	git         *sourceGitFixture
-	briefing    map[string]any
-	recordID    string
-	chatSHA     string
-	chatMessage string
+	names           int
+	versions        *sourceVersioned
+	git             *sourceGitFixture
+	briefing        map[string]any
+	recordID        string
+	chatSHA         string
+	chatMessage     string
+	outsideLocation string
+	outsideFileName string
+	commandWindowID string
 }
 
 func sourceStateOf(s *conformanceSweep) *sourceState {
@@ -433,6 +444,31 @@ func sourceEditorDoc(ctx context.Context, s *conformanceSweep, name, content str
 
 func sourceDocParams(doc map[string]any) map[string]string {
 	return map[string]string{"document_id": sourceString(doc, "id")}
+}
+
+func sourceEditorOpenInputs(ctx context.Context, s *conformanceSweep, _ *conformanceOp) (successInputs, error) {
+	root, err := sourceRootID(s)
+	if err != nil {
+		return successInputs{}, err
+	}
+	name := sourceName(s, "editor-open", ".txt")
+	if err := sourceWriteNew(s, name, []byte("open\n")); err != nil {
+		return successInputs{}, err
+	}
+	if err := sourceSettle(ctx, s); err != nil {
+		return successInputs{}, err
+	}
+	return successInputs{fields: map[string]any{
+		"path": name, "root_id": root, "client_id": sourceClientID,
+	}}, nil
+}
+
+func sourceEditorLeaveInputs(ctx context.Context, s *conformanceSweep, _ *conformanceOp) (successInputs, error) {
+	doc, err := sourceEditorDoc(ctx, s, "conformance-editor-leave.txt", "leave\n")
+	if err != nil {
+		return successInputs{}, err
+	}
+	return successInputs{params: sourceDocParams(doc), fields: map[string]any{"client_id": sourceClientID}}, nil
 }
 
 func sourceEditorSnapshotInputs(_ context.Context, _ *conformanceSweep, _ *conformanceOp) (successInputs, error) {
@@ -1400,4 +1436,96 @@ func sourceHeldOperationInputs(ctx context.Context, s *conformanceSweep, _ *conf
 		return successInputs{}, err
 	}
 	return successInputs{params: map[string]string{"operation_id": id}}, nil
+}
+
+func sourceOutsidePickedFile(s *conformanceSweep, name string) (string, error) {
+	dir := fspath.CanonicalPath(s.fixture.t.TempDir())
+	if dir == "" {
+		return "", errors.New("could not canonicalize outside temp directory")
+	}
+	picked := filepath.Join(dir, name)
+	if err := os.WriteFile(picked, []byte("outside "+name+"\n"), 0o644); err != nil {
+		return "", err
+	}
+	return picked, nil
+}
+
+func sourceOpenOutsideFileInputs(_ context.Context, s *conformanceSweep, _ *conformanceOp) (successInputs, error) {
+	picked, err := sourceOutsidePickedFile(s, sourceName(s, "outside", ".txt"))
+	if err != nil {
+		return successInputs{}, err
+	}
+	return successInputs{fields: map[string]any{
+		"session_id": s.fixture.session.ID,
+		"path":       picked,
+	}}, nil
+}
+
+func sourceOutsideLocation(ctx context.Context, s *conformanceSweep) (string, string, error) {
+	state := sourceStateOf(s)
+	if state.outsideLocation == "" {
+		const name = "conformance-outside-location.txt"
+		picked, err := sourceOutsidePickedFile(s, name)
+		if err != nil {
+			return "", "", err
+		}
+		opened, err := s.prerequisite(ctx, "openOutsideFile", successInputs{fields: map[string]any{
+			"session_id": s.fixture.session.ID,
+			"path":       picked,
+		}})
+		if err != nil {
+			return "", "", err
+		}
+		location, _ := opened["location"].(map[string]any)
+		id := sourceString(location, "id")
+		if id == "" {
+			return "", "", errors.New("openOutsideFile answered no location id")
+		}
+		state.outsideLocation = id
+		state.outsideFileName = name
+	}
+	return state.outsideLocation, state.outsideFileName, nil
+}
+
+func sourceOpenChatLocationFileInputs(ctx context.Context, s *conformanceSweep, _ *conformanceOp) (successInputs, error) {
+	locationID, fileName, err := sourceOutsideLocation(ctx, s)
+	if err != nil {
+		return successInputs{}, err
+	}
+	return successInputs{
+		params: map[string]string{"location_id": locationID},
+		fields: map[string]any{"path": fileName},
+	}, nil
+}
+
+func sourceUpdateChatLocationInputs(ctx context.Context, s *conformanceSweep, _ *conformanceOp) (successInputs, error) {
+	locationID, _, err := sourceOutsideLocation(ctx, s)
+	if err != nil {
+		return successInputs{}, err
+	}
+	return successInputs{
+		params: map[string]string{"location_id": locationID},
+		fields: map[string]any{"hidden": false},
+	}, nil
+}
+
+func sourceCommandObservationInputs(ctx context.Context, s *conformanceSweep, _ *conformanceOp) (successInputs, error) {
+	if s.host == nil {
+		return successInputs{}, errors.New("no host to insert a command window on")
+	}
+	state := sourceStateOf(s)
+	if state.commandWindowID == "" {
+		id := uuid.NewString()
+		if err := db.New(s.host.DB).InsertSourceCommandWindow(ctx, db.InsertSourceCommandWindowParams{
+			ID: id, ProjectID: s.fixture.project.ID, SessionID: s.fixture.session.ID,
+			ToolName: "command", Ordinal: 1, StartedTs: "2026-11-18T10:00:00Z",
+		}); err != nil {
+			return successInputs{}, err
+		}
+		state.commandWindowID = id
+	}
+	return successInputs{
+		params: map[string]string{"window_id": state.commandWindowID},
+		query:  map[string]string{"session_id": s.fixture.session.ID},
+	}, nil
 }

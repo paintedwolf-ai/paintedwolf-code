@@ -210,7 +210,7 @@ func newProgramFixture(t *testing.T) *programFixture {
 	testutil.FailErr(t, "resolve dir", err)
 	database := testdbfixture.Open(t, "programs.db")
 	session := "session-1"
-	testdbseed.InsertSession(t, database, session, testdbseed.DefaultProjectID)
+	testdbseed.InsertWorkflowRun(t, database, "run-"+session, session, testdbseed.DefaultProjectID)
 	recorder := invocation.NewSQLRecorder(database)
 	registry := tools.NewDefaultRegistry()
 	classes, err := toolcontract.NewCommandEffects(toolcontract.CommandReadOnly, toolcontract.CommandMutation)

@@ -574,7 +574,9 @@ func describeWitness(t *testing.T, s *commandProgramSession, w refusalWitness) s
 }
 
 // programEntry reports a tool whose result is a command program outcome.
-func programEntry(tool string) bool { return tool == "command" || tool == "verify" }
+func programEntry(tool string) bool {
+	return tool == "command" || tool == "verify" || tool == "code_rewrite" || tool == "summarize" || tool == "survey_repo" || tool == "inspect_source"
+}
 
 func findWitnessResult(t *testing.T, s *commandProgramSession) (*wire.ToolResult, bool) {
 	t.Helper()
@@ -666,6 +668,7 @@ func pathTemplates() []pathTemplate {
 		{covers: "view_video", tool: "view_video", args: map[string]any{"path": "{f}"}},
 		{covers: "summarize", tool: "summarize", args: map[string]any{"path": "{f}"}},
 		{covers: "survey_repo", tool: "survey_repo", args: map[string]any{"bundle": "layout_overview", "path": "{d}"}},
+		{covers: "inspect_source", tool: "inspect_source", args: map[string]any{"operation": "read", "path": "{f}"}},
 	}
 }
 

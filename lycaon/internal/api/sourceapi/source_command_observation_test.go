@@ -53,8 +53,8 @@ func TestCommandObservationReadsTheAuthorizedChatWindowAfterSettlement(t *testin
 		var state wire.CommandObservationStatus
 		if want == http.StatusOK {
 			testutil.FailErr(t, "decode observation", json.Unmarshal(res.Body.Bytes(), &state))
-		} else if code := sourceViewErrorCode(t, res, want); code != wire.ApiErrorCodeNotFound {
-			t.Fatalf("unavailable observation code = %q, want not_found", code)
+		} else if code := sourceViewErrorCode(t, res, want); code != wire.ApiErrorCodeSourceHistoryNotFound {
+			t.Fatalf("unavailable observation code = %q, want %q", code, wire.ApiErrorCodeSourceHistoryNotFound)
 		}
 		return state
 	}

@@ -5216,7 +5216,7 @@ type ProgressUpdateMeta struct {
 	Changes []ProgressChange       `json:"changes,omitempty"`
 	Steps   []ProgressStep         `json:"steps,omitempty"`
 	Summary *ProgressUpdateSummary `json:"summary,omitempty"`
-	Initial bool                   `json:"initial,omitempty"`
+	Initial bool                   `json:"initial"`
 }
 
 // ProgressUpdateSummary The plan's state after a progress update; the full checklist remains in ProgressDigest.

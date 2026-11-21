@@ -1,33 +1,36 @@
 package contract
 
 import (
+	"encoding/json"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/projectroot"
+	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/tools"
+	"github.com/lycaon/lycaon/internal/tools/native/command"
 	"github.com/lycaon/lycaon/test/contract/internal/toolfixture"
 )
-
-func assertStructuredRejectCode(t *testing.T, err error, code string) {
-	t.Helper()
-	if err == nil {
-		t.Fatalf("expected structured reject %q", code)
-	}
-	reject, ok := guidance.RefusalFromError(err)
-	if !ok || reject.Code() != code {
-		t.Fatalf("expected typed reject %q, got %v", code, err)
-	}
-}
 
 // Summarize with a task but no material is refused by the served executor
 // with a typed operand refusal before any work starts.
 func TestNativeSummarizeNoInputStructuredRejectE2E(t *testing.T) {
 	program := toolfixture.NewProgramFixture(t)
-	_, err := program.InvokeTool(t, "summarize", map[string]any{"task": "explain"}, tools.ToolContext{
+	raw, err := program.InvokeTool(t, "summarize", map[string]any{"task": "explain"}, tools.ToolContext{
 		Source: tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "r1", Label: "root", Path: t.TempDir(), IsPrimary: true}},
 			ActiveRootID: "r1"},
 		Identity: tools.InvocationIdentity{Agent: "implement"},
 	})
-	assertStructuredRejectCode(t, err, "COMMAND_OPERAND_INVALID")
+	if err != nil {
+		reject, ok := guidance.RefusalFromError(err)
+		if !ok || reject.Code() != "COMMAND_OPERAND_INVALID" {
+			t.Fatalf("expected typed reject COMMAND_OPERAND_INVALID, got %v", err)
+		}
+		return
+	}
+	var outcome command.ProgramOutcome
+	testutil.FailErr(t, "decode program outcome", json.Unmarshal([]byte(raw), &outcome))
+	if outcome.Refusal == nil || outcome.Refusal.Code != "COMMAND_OPERAND_INVALID" || outcome.Status == 0 {
+		t.Fatalf("expected typed program refusal COMMAND_OPERAND_INVALID, got %+v", outcome)
+	}
 }

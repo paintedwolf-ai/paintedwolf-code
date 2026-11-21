@@ -10,6 +10,11 @@ import (
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
 
+// Registry returns the provider registry.
+func (s *Handler) Registry() *llm.Registry {
+	return s.service.Registry
+}
+
 func (s *Handler) RepairLocalGeneration(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "provider_id")
 	entry, exists := s.service.Catalog.Get(id)
@@ -48,12 +53,12 @@ func (s *Handler) GetLocalModelStatus(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Handler) SelectLocalModel(w http.ResponseWriter, r *http.Request) {
-	if !s.localProvider(w, r) {
-		return
-	}
 	var req wire.LocalModelSelectionRequest
 	if err := httpio.DecodeJSON(w, r, &req); err != nil {
 		s.responses.DecodeError(w, r, err)
+		return
+	}
+	if !s.localProvider(w, r) {
 		return
 	}
 	err := s.selectLocalModel(r.Context(), req)

@@ -266,13 +266,17 @@ func (m *Service) publishSessionLifecycle(ctx context.Context, sess *wire.Sessio
 		return
 	}
 	ev := wire.SessionEvent{
-		ID:        sess.ID,
-		ProjectID: sess.ProjectID,
-		Action:    wire.SessionEventActionUpdated,
-		Title:     sess.Title,
-		Status:    sess.Status,
-		Mode:      sess.Mode,
-		Started:   &sess.Started,
+		ID:               sess.ID,
+		ProjectID:        sess.ProjectID,
+		Action:           wire.SessionEventActionUpdated,
+		Title:            sess.Title,
+		Status:           sess.Status,
+		Mode:             sess.Mode,
+		Started:          &sess.Started,
+		UntrustedContent: sess.UntrustedContent,
+		CurrentTurn:      sess.CurrentTurn,
+		UI:               sess.UI,
+		PromptPending:    sess.PromptPending,
 	}
 	key := events.PublishKey{Project: strings.TrimSpace(sess.ProjectID)}
 	_ = m.events.Hub.Publish(ctx, wire.EventTopicSession, key, ev)

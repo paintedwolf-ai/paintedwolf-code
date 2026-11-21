@@ -125,7 +125,7 @@ func seedFanoutProgress(ctx context.Context, store progress.Store, sessionID, ru
 		labels = append(labels, leg.ID+" "+leg.Subject)
 	}
 	_, err := store.Update(ctx, sessionID, func(before progress.Snapshot) (progress.Document, error) {
-		doc := progress.Document{Content: before.Content, ItemIDs: before.ItemIDs}
+		doc := progress.Document{Content: before.Content, ItemIDs: before.ItemIDs, RunID: before.RunID}
 		if before.RunID != "" && before.RunID != runID {
 			return doc, nil
 		}

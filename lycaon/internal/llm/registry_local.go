@@ -4,8 +4,19 @@ import (
 	"context"
 	"errors"
 
+	"github.com/lycaon/lycaon/internal/llm/providers/nativegen"
+	"github.com/lycaon/lycaon/internal/modelstore"
 	"github.com/lycaon/lycaon/pkg/api"
 )
+
+// SetLocalGeneration attaches a local generation runtime and model store.
+func (r *Registry) SetLocalGeneration(runtime *nativegen.Runtime, store *modelstore.Store) {
+	if r == nil {
+		return
+	}
+	r.localRuntime = runtime
+	r.localStore = store
+}
 
 func (r *registryCore) LocalGenerationStatus() api.LocalGenerationStatus {
 	status := r.localRuntime.Readiness()

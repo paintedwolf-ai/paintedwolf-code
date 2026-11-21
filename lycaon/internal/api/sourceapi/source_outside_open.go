@@ -42,17 +42,17 @@ func (s *Workspace) HandleOpenOutsideFile(w http.ResponseWriter, r *http.Request
 	if !ok {
 		return
 	}
+	abs := fspath.CanonicalPath(req.Path)
+	if abs == "" || !filepath.IsAbs(req.Path) {
+		s.responses.InvalidField(w, "path", "must be an absolute host path")
+		return
+	}
 	sess, ok := s.ownedLocationChat(w, r, p.ID, req.SessionID)
 	if !ok {
 		return
 	}
 	scoped, ok := requestscope.ProjectForSession(s.SessionQueries, s.responses, w, r, p, sess.ID)
 	if !ok {
-		return
-	}
-	abs := fspath.CanonicalPath(req.Path)
-	if abs == "" || !filepath.IsAbs(req.Path) {
-		s.responses.InvalidField(w, "path", "must be an absolute host path")
 		return
 	}
 	if pathInsideAttached(p, abs) || scoped != p && pathInsideAttached(scoped, abs) {
@@ -87,7 +87,7 @@ func (s *Workspace) trackOpenedOutsideFile(w http.ResponseWriter, r *http.Reques
 		tracked, err = s.SourceLedger.TrackChatLocationFile(r.Context(), observed, *location)
 	}
 	if errors.Is(err, sourceledger.ErrHistoryNotFound) {
-		s.responses.Fail(w, wire.ApiErrorCodeNotFound, "location not found")
+		s.responses.Fail(w, wire.ApiErrorCodeSourceHistoryNotFound, "location not found")
 		return
 	}
 	if err != nil {
@@ -148,7 +148,7 @@ func (s *Workspace) HandleUpdateSourceChatLocation(w http.ResponseWriter, r *htt
 	id := strings.TrimSpace(chi.URLParam(r, "location_id"))
 	location, err := s.SourceLedger.ChatLocation(r.Context(), p.ID, id)
 	if errors.Is(err, sourceledger.ErrHistoryNotFound) {
-		s.responses.Fail(w, wire.ApiErrorCodeNotFound, "location not found")
+		s.responses.Fail(w, wire.ApiErrorCodeSourceHistoryNotFound, "location not found")
 		return
 	}
 	if err != nil {
@@ -190,7 +190,7 @@ func (s *Workspace) HandleOpenChatLocationFile(w http.ResponseWriter, r *http.Re
 	}
 	location, err := s.SourceLedger.ChatLocation(r.Context(), p.ID, chi.URLParam(r, "location_id"))
 	if errors.Is(err, sourceledger.ErrHistoryNotFound) {
-		s.responses.Fail(w, wire.ApiErrorCodeNotFound, "location not found")
+		s.responses.Fail(w, wire.ApiErrorCodeSourceHistoryNotFound, "location not found")
 		return
 	}
 	if err != nil {

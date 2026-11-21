@@ -23,7 +23,7 @@ func (s *History) HandleGetProjectSourceCommandObservation(w http.ResponseWriter
 		return
 	}
 	if chat.ProjectID != p.ID || chat.OwnerPersonID != requestscope.Caller(r).ID {
-		s.responses.Fail(w, wire.ApiErrorCodeNotFound, "Command observation not found.")
+		s.responses.Fail(w, wire.ApiErrorCodeSourceHistoryNotFound, "Command observation not found.")
 		return
 	}
 	windowID := chi.URLParam(r, "window_id")
@@ -34,7 +34,7 @@ func (s *History) HandleGetProjectSourceCommandObservation(w http.ResponseWriter
 	}
 	window, found := windows[windowID]
 	if !found || window.ProjectID != p.ID || window.SessionID != chat.ID {
-		s.responses.Fail(w, wire.ApiErrorCodeNotFound, "Command observation not found.")
+		s.responses.Fail(w, wire.ApiErrorCodeSourceHistoryNotFound, "Command observation not found.")
 		return
 	}
 	httpio.WriteJSON(w, http.StatusOK, wire.CommandObservationStatus{

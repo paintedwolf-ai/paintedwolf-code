@@ -11316,7 +11316,7 @@ export interface components {
             changes?: components["schemas"]["ProgressChange"][];
             steps?: components["schemas"]["ProgressStep"][];
             summary?: components["schemas"]["ProgressUpdateSummary"];
-            initial?: boolean;
+            initial: boolean;
         };
         /** @enum {string} */
         FeedbackResponseType: "text" | "single_choice" | "multi_choice" | "secret";

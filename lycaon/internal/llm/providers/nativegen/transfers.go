@@ -115,9 +115,9 @@ func (p *Runtime) StartSelection(req api.LocalModelSelectionRequest, installed f
 		if err != nil && !errors.Is(err, context.Canceled) {
 			p.ReportSelectionError(err)
 		}
-		close(job.done)
 		p.transfers.Unlock()
 		settled()
+		close(job.done)
 	}()
 	return nil
 }

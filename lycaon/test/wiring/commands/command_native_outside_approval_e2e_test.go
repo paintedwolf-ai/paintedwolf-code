@@ -126,16 +126,17 @@ func TestNativeChildrenReceiveCommandPathCapabilityRequests(t *testing.T) {
 		name, command, field, grant string
 		want                        string
 		subject                     wire.ApprovalSubjectKind
+		answers                     []string
 	}{
-		{name: "read_path", command: "cat '" + file + "'", field: "read_path", grant: file, want: "capability bytes\n", subject: wire.ApprovalSubjectKindReadPathSet},
-		{name: "write_root", command: "cp notes.txt '" + filepath.Join(outside, "output.txt") + "'", field: "write_root", grant: outside, subject: wire.ApprovalSubjectKindWriteRootSet},
+		{name: "read_path", command: "cat '" + file + "'", field: "read_path", grant: file, want: "capability bytes\n", subject: wire.ApprovalSubjectKindReadPathSet, answers: []string{"recommended", "recommended"}},
+		{name: "write_root", command: "cp notes.txt '" + filepath.Join(outside, "output.txt") + "'", field: "write_root", grant: outside, subject: wire.ApprovalSubjectKindWriteRootSet, answers: []string{"recommended"}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			s := p.programWithArgs(t, map[string]any{
 				"command":            tc.command,
 				"capability_request": map[string]any{tc.field: tc.grant},
 			}, wire.CreateSessionRequest{}, "")
-			cards := runCommandWithApprovals(t, s, "recommended", "recommended")
+			cards := runCommandWithApprovals(t, s, tc.answers...)
 			if !slices.ContainsFunc(cards, func(card wire.CheckpointEvent) bool {
 				plan := card.ToolApproval.Plan
 				return plan.Subject.Kind == tc.subject && slices.ContainsFunc(plan.Subject.Targets, func(target wire.ApprovalTarget) bool {

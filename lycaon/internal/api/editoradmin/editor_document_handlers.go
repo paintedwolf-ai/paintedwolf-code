@@ -42,6 +42,15 @@ func (s *Handler) HandleOpenEditorDocument(w http.ResponseWriter, r *http.Reques
 		s.responses.DecodeError(w, r, err)
 		return
 	}
+	release := requestscope.BeginRuntime(s.MutationGate, s.responses, w, r, strings.TrimSpace(chi.URLParam(r, "id")))
+	if release == nil {
+		return
+	}
+	defer release()
+	p, ok := s.editorProject(w, r)
+	if !ok {
+		return
+	}
 	switch {
 	case req.FileID != "" && uuid.Validate(req.FileID) != nil:
 		s.responses.InvalidField(w, "file_id", "must be a UUID")
@@ -57,15 +66,6 @@ func (s *Handler) HandleOpenEditorDocument(w http.ResponseWriter, r *http.Reques
 		return
 	case strings.TrimSpace(req.ClientID) == "":
 		s.responses.InvalidField(w, "client_id", "is required")
-		return
-	}
-	release := requestscope.BeginRuntime(s.MutationGate, s.responses, w, r, strings.TrimSpace(chi.URLParam(r, "id")))
-	if release == nil {
-		return
-	}
-	defer release()
-	p, ok := s.editorProject(w, r)
-	if !ok {
 		return
 	}
 	p, target, err := outsideaccess.Resolve(r.Context(), s.SourceLedger, p, outsideaccess.Address{RootID: req.RootID, Path: req.Path, FileID: req.FileID})

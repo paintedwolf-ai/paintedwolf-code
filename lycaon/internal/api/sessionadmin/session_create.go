@@ -288,13 +288,17 @@ func (s *Lifecycle) PublishSessionCreated(ctx context.Context, sess *wire.Sessio
 	}
 	key := events.PublishKey{Project: strings.TrimSpace(sess.ProjectID), Session: sess.ID}
 	_ = s.Events.Publish(ctx, wire.EventTopicSession, key, wire.SessionEvent{
-		ID:        sess.ID,
-		ProjectID: sess.ProjectID,
-		Action:    wire.SessionEventActionCreated,
-		Title:     sess.Title,
-		Status:    sess.Status,
-		Mode:      sess.Mode,
-		Started:   &sess.Started,
+		ID:               sess.ID,
+		ProjectID:        sess.ProjectID,
+		Action:           wire.SessionEventActionCreated,
+		Title:            sess.Title,
+		Status:           sess.Status,
+		Mode:             sess.Mode,
+		Started:          &sess.Started,
+		UntrustedContent: sess.UntrustedContent,
+		CurrentTurn:      sess.CurrentTurn,
+		UI:               sess.UI,
+		PromptPending:    sess.PromptPending,
 	})
 }
 

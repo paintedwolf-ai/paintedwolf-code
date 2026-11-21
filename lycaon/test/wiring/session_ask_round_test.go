@@ -32,8 +32,10 @@ func TestAskRoundUpgradeEnablesNativeWriteAndRewind(t *testing.T) {
 				}
 				return askRoundToolCall("read", "inspect_source", map[string]any{"operation": "read", "path": "note.txt"})
 			case 2:
-				return askRoundToolCall("write", "command", map[string]any{"command": "printf 'created\n' > result.txt"})
+				return askRoundToolCall("plan", "update_progress", h.ProgressUpdateArgs(t, ctx, id, "## Progress\n- [ ] wiring test plan\n"))
 			case 3:
+				return askRoundToolCall("write", "command", map[string]any{"command": "printf 'created\n' > result.txt"})
+			case 4:
 				return askRoundToolCall("progress", "update_progress", h.ProgressUpdateArgs(t, ctx, id, "## Progress\n- [x] wiring test plan\n"))
 			default:
 				return modelcall.Completion{Content: MockCoordinatorCloseoutMarkdown("Wrote the requested result.", "")}
@@ -48,7 +50,6 @@ func TestAskRoundUpgradeEnablesNativeWriteAndRewind(t *testing.T) {
 	sess, err := h.CreateHarnessSession(t, api.CreateSessionRequest{Mode: new(api.SessionModeAsk)}, dir)
 	testutil.FailErr(t, "create Ask session", err)
 	id = sess.ID
-	h.SeedProgress(t, ctx, id)
 	h.Start(t)
 
 	_, err = h.Sessions.Manager.Submissions.Prompt(ctx, id, "Read the note, then write a result if Agent mode is available.")

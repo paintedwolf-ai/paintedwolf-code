@@ -29299,7 +29299,8 @@ components:
           $ref: '#/components/schemas/ProgressUpdateSummary'
         initial:
           type: boolean
-      required: null
+      required:
+        - initial
     FeedbackResponseType:
       type: string
       enum:
