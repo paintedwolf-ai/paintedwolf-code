@@ -75,6 +75,7 @@ type memoryCore struct {
 	owner           people.Person
 	mu              sync.RWMutex
 	sessions        map[string]*api.Session
+	upgradedFromAsk map[string]bool
 	statusChangedAt map[string]time.Time
 	memoryTranscriptState
 	memoryCompactionState
@@ -129,6 +130,7 @@ func NewMemory() *Memory {
 	core := &memoryCore{
 		owner:           people.Person{ID: uuid.NewString(), Role: api.PersonRoleOwner},
 		sessions:        make(map[string]*api.Session),
+		upgradedFromAsk: make(map[string]bool),
 		statusChangedAt: make(map[string]time.Time),
 		memoryTranscriptState: memoryTranscriptState{
 			messages:         make(map[string][]api.Message),

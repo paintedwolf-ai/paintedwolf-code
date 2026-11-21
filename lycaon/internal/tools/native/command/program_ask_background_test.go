@@ -21,6 +21,7 @@ import (
 	"github.com/lycaon/lycaon/internal/tools/native/command"
 	"github.com/lycaon/lycaon/internal/tools/native/toolkit"
 	"github.com/lycaon/lycaon/internal/tools/projectpaths"
+	"github.com/lycaon/lycaon/pkg/api"
 )
 
 type askBarrierFixture struct {
@@ -30,6 +31,27 @@ type askBarrierFixture struct {
 	release chan struct{}
 	mu      sync.Mutex
 	askMode bool
+}
+
+type askBarrierSessions struct {
+	fixture *askBarrierFixture
+	base    command.SessionOwners
+}
+
+func (s askBarrierSessions) Get(ctx context.Context, id string) (*api.Session, error) {
+	sess, err := s.base.Get(ctx, id)
+	if err != nil || sess == nil {
+		return sess, err
+	}
+	s.fixture.mu.Lock()
+	ask := s.fixture.askMode
+	s.fixture.mu.Unlock()
+	if ask {
+		sess.Mode = api.SessionModeAsk
+	} else {
+		sess.Mode = api.SessionModeAgent
+	}
+	return sess, nil
 }
 
 func newAskBarrierFixture(t *testing.T, initialLine string) *askBarrierFixture {
@@ -78,6 +100,7 @@ func newAskBarrierFixture(t *testing.T, initialLine string) *askBarrierFixture {
 		release: release,
 		askMode: true,
 	}
+	base.Runtime.Sessions = askBarrierSessions{fixture: f, base: base.Runtime.Sessions}
 	base.Configure = func(tc *tools.ToolContext) {
 		f.mu.Lock()
 		ask := f.askMode
@@ -357,6 +380,15 @@ func TestAskBudgetContinuedProgramPagesStopsAndRetainsReadOnlyAuthorityAcrossUpg
 			testutil.FailErr(t, "decode final outcome from stderr", json.Unmarshal([]byte(lines[len(lines)-1]), &finalOutcome))
 			if finalOutcome.ProgramID != running.ProgramID || finalOutcome.Refusal == nil || finalOutcome.Refusal.Code != c.wantCode {
 				t.Fatalf("finalOutcome = %+v (refusal=%+v), want code %s", finalOutcome, finalOutcome.Refusal, c.wantCode)
+			}
+			if c.wantCode == tools.AskModeActiveCode {
+				if !strings.Contains(finalOutcome.Refusal.Feedback, "refused under launch-time Ask authority") ||
+					!strings.Contains(finalOutcome.Refusal.Feedback, "kept its frozen read-only authority across the session upgrade") {
+					t.Fatalf("post-upgrade Ask refusal feedback missing launch-time authority cause:\n%s", finalOutcome.Refusal.Feedback)
+				}
+				if strings.Contains(finalOutcome.Refusal.Feedback, "switch to Agent mode") {
+					t.Fatalf("post-upgrade Ask refusal feedback still told the model to switch to Agent mode:\n%s", finalOutcome.Refusal.Feedback)
+				}
 			}
 			if f.clock.Pending() != 0 {
 				t.Fatalf("retained %d timers", f.clock.Pending())

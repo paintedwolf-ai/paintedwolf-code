@@ -288,6 +288,25 @@ func TestAskContinuedTurnsAndBetweenTurnUpgradeDeliverAccurateContextAndOneTimeN
 	if totalNudges != 1 {
 		t.Fatalf("total session.mode.agent_enabled transcript messages across turns = %d, want 1", totalNudges)
 	}
+
+	// 5. An ordinary Agent session (created in Ask mode, switched to Agent before any turn starts)
+	// never emits session.mode.agent_enabled.
+	ordinarySess, err := h.Store.Create(ctx, api.CreateSessionRequest{Mode: new(api.SessionModeAsk)}, sess.ProjectID)
+	testutil.FailErr(t, "create unstarted Ask session", err)
+	_, err = h.Store.SetMode(ctx, ordinarySess.ID, api.SessionModeAgent)
+	testutil.FailErr(t, "switch unstarted Ask session to Agent", err)
+	h.SeedProgress(t, ctx, ordinarySess.ID)
+	turnNum.Store(5)
+	roundInTurn.Store(0)
+	_, err = h.Sessions.Manager.Submissions.Prompt(ctx, ordinarySess.ID, "Run ordinary Agent turn.")
+	testutil.FailErr(t, "run ordinary Agent turn", err)
+	ordinaryMsgs, err := h.Store.GetMessages(ctx, ordinarySess.ID)
+	testutil.FailErr(t, "get ordinary Agent transcript messages", err)
+	for _, msg := range ordinaryMsgs {
+		if msg.HostSignalID == "session.mode.agent_enabled" || strings.Contains(msg.Content, "[host:session-agent-enabled]") {
+			t.Fatalf("ordinary Agent session unexpectedly received session.mode.agent_enabled notice: %+v", msg)
+		}
+	}
 }
 
 func verifyAskUpgradeTranscript(t *testing.T, messages []api.Message) {
@@ -310,6 +329,12 @@ func verifyAskUpgradeTranscript(t *testing.T, messages []api.Message) {
 				writeRefused = slices.Contains(res.Codes, "COMMAND_EFFECT_NOT_ALLOWED") || strings.Contains(body, "COMMAND_EFFECT_NOT_ALLOWED")
 			case "blocked-external":
 				externalRefused = slices.Contains(res.Codes, tools.AskModeActiveCode) || strings.Contains(body, tools.AskModeActiveCode)
+				if strings.Contains(body, "switch to Agent mode") {
+					t.Fatalf("already-upgraded round-1 external refusal still directed switching to Agent mode:\n%s", body)
+				}
+				if !strings.Contains(body, "refused under launch-time Ask authority") {
+					t.Fatalf("already-upgraded round-1 external refusal missing launch-time Ask authority explanation:\n%s", body)
+				}
 			}
 		}
 	}

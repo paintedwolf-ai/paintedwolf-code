@@ -29,7 +29,21 @@ func resolveEffectiveModeSQL(ctx context.Context, q *db.Queries, id string) (Roo
 		!root.Started.Valid || (root.Started.Int64 != 0 && root.Started.Int64 != 1) {
 		return RootAuthority{}, ErrSessionModeUnavailable
 	}
-	return RootAuthority{RootSessionID: root.RootSessionID.String, Mode: mode, Started: root.Started.Int64 == 1}, nil
+	upgraded := false
+	if mode == api.SessionModeAgent && root.Started.Int64 == 1 {
+		_, stampErr := q.GetCheckpointDecisionStamp(ctx, db.GetCheckpointDecisionStampParams{
+			SessionID: root.RootSessionID.String, ToolCallID: agentModeUpgradeStampID,
+		})
+		if stampErr == nil {
+			upgraded = true
+		} else if !errors.Is(stampErr, sql.ErrNoRows) {
+			return RootAuthority{}, sessionModeUnavailable(id, stampErr)
+		}
+	}
+	return RootAuthority{
+		RootSessionID: root.RootSessionID.String, Mode: mode, Started: root.Started.Int64 == 1,
+		UpgradedFromAsk: upgraded,
+	}, nil
 }
 
 // WithModeAdmission serializes preparations that depend on the pre-start mode.
@@ -126,11 +140,20 @@ func (r sqlModeRecords) StoreAuthority(ctx context.Context, root RootAuthority) 
 
 func putRootAuthority(ctx context.Context, s *sqlCore, tx *sql.Tx, root RootAuthority) error {
 	q := s.queries.WithTx(tx)
+	now := timelayout.Format(time.Now().UTC())
 	if err := q.SetRootSessionMode(ctx, db.SetRootSessionModeParams{
 		ID: root.RootSessionID, Mode: db.NullString(string(root.Mode)),
-		Started: int64(boolToInt(root.Started)), UpdatedAt: timelayout.Format(time.Now().UTC()),
+		Started: int64(boolToInt(root.Started)), UpdatedAt: now,
 	}); err != nil {
 		return err
+	}
+	if root.UpgradedFromAsk {
+		if err := q.UpsertCheckpointDecisionStamp(ctx, db.UpsertCheckpointDecisionStampParams{
+			SessionID: root.RootSessionID, ToolCallID: agentModeUpgradeStampID,
+			DecisionJson: `{"from":"ask","to":"agent"}`, CreatedAt: now,
+		}); err != nil {
+			return err
+		}
 	}
 	row, err := q.GetSession(ctx, root.RootSessionID)
 	if err != nil {

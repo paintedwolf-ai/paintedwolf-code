@@ -4,29 +4,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"strings"
-	"sync"
 
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
-var pendingAgentUpgrades sync.Map
-
-// NoteAgentModeUpgrade records that a started Ask root chat switched to Agent mode.
-func NoteAgentModeUpgrade(rootSessionID string) {
-	if id := strings.TrimSpace(rootSessionID); id != "" {
-		pendingAgentUpgrades.Store(id, true)
-	}
-}
-
-// TakeAgentModeUpgrade consumes a pending Ask-to-Agent mode upgrade notice for rootSessionID.
-func TakeAgentModeUpgrade(rootSessionID string) bool {
-	if id := strings.TrimSpace(rootSessionID); id != "" {
-		_, ok := pendingAgentUpgrades.LoadAndDelete(id)
-		return ok
-	}
-	return false
-}
+const agentModeUpgradeStampID = "session.mode.agent_enabled"
 
 var (
 	ErrInvalidSessionMode     = errors.New("session mode must be agent or ask")
@@ -37,9 +19,10 @@ var (
 
 // RootAuthority is the mode and admission latch owned by a root session.
 type RootAuthority struct {
-	RootSessionID string
-	Mode          api.SessionMode
-	Started       bool
+	RootSessionID   string
+	Mode            api.SessionMode
+	Started         bool
+	UpgradedFromAsk bool
 }
 
 // WithModeIntent validates a proposed transition without persisting it.
@@ -94,15 +77,11 @@ func applyModeIntent(ctx context.Context, records modeRecords, id string, intent
 	if root.Mode == mode && root.Started == started {
 		return nil
 	}
-	upgradedFromAsk := root.Started && root.Mode == api.SessionModeAsk && mode == api.SessionModeAgent
+	if root.Started && root.Mode == api.SessionModeAsk && mode == api.SessionModeAgent {
+		root.UpgradedFromAsk = true
+	}
 	root.Mode, root.Started = mode, started
-	if err := records.StoreAuthority(ctx, root); err != nil {
-		return err
-	}
-	if upgradedFromAsk {
-		NoteAgentModeUpgrade(root.RootSessionID)
-	}
-	return nil
+	return records.StoreAuthority(ctx, root)
 }
 
 func validSessionMode(mode api.SessionMode) bool {

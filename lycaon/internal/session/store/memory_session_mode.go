@@ -43,7 +43,10 @@ func (r memoryModeRecords) ReadAuthority(_ context.Context, id string) (RootAuth
 			return RootAuthority{}, ErrSessionModeUnavailable
 		}
 	}
-	return RootAuthority{RootSessionID: root.ID, Mode: root.Mode, Started: root.Started}, nil
+	return RootAuthority{
+		RootSessionID: root.ID, Mode: root.Mode, Started: root.Started,
+		UpgradedFromAsk: s.upgradedFromAsk[root.ID],
+	}, nil
 }
 
 func (s *memorySessions) SetMode(ctx context.Context, id string, mode api.SessionMode) (*api.Session, error) {
@@ -62,6 +65,12 @@ func (s *memorySessions) SetMode(ctx context.Context, id string, mode api.Sessio
 func (r memoryModeRecords) StoreAuthority(_ context.Context, root RootAuthority) error {
 	row := r.core.sessions[root.RootSessionID]
 	row.Mode, row.Started = root.Mode, root.Started
+	if root.UpgradedFromAsk {
+		if r.core.upgradedFromAsk == nil {
+			r.core.upgradedFromAsk = make(map[string]bool)
+		}
+		r.core.upgradedFromAsk[root.RootSessionID] = true
+	}
 	row.UpdatedAt = time.Now().UTC()
 	return nil
 }
