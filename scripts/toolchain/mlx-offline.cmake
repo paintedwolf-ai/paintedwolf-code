@@ -1,5 +1,10 @@
 # This toolchain contributes source inputs only; target/platform selection stays
 # with Cargo and cmake-rs. Other CMake consumers and non-Apple builds are unchanged.
+# Keep try_compile subprojects aligned with the outer build's staged toolchain path.
+get_property(_pw_in_try_compile GLOBAL PROPERTY IN_TRY_COMPILE)
+if(_pw_in_try_compile AND DEFINED _CMAKE_SYSTEM_TOOLCHAIN_FILE)
+  set(CMAKE_TOOLCHAIN_FILE "${_CMAKE_SYSTEM_TOOLCHAIN_FILE}")
+endif()
 if(NOT CMAKE_HOST_APPLE OR NOT EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/mlx/c/array.h")
   return()
 endif()
