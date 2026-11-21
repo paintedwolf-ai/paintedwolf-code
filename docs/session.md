@@ -19,11 +19,12 @@ The host records your mode at first admission. An Ask chat can switch to Agent
 once. This upgrade leaves your default for new chats as it was. Rewinding the
 first turn preserves the chat's mode and admission history.
 
-Ask lets the assistant investigate and answer using native read tools and
-read-scoped workers. It blocks agent-initiated file and blueprint edits,
-commands, background processes, overlay changes, secret changes, and workflow
-phases that require mutation or verification. Connected MCP tools rely on their
-provider's read-only declaration and remain subject to integration trust checks.
+Ask lets the assistant investigate and answer using read-only native commands
+and pipelines, native read tools, and read-scoped workers. It blocks
+agent-initiated file and blueprint edits, outside programs, overlay changes,
+secret changes, and workflow phases that require mutation or verification.
+Connected MCP tools rely on their provider's read-only declaration and remain
+subject to integration trust checks.
 
 Workers inherit the root chat's ceiling and keep their own scopes when the chat
 switches to Agent. Existing permission, confinement, and workflow rules still

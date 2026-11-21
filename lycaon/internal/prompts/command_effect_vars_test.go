@@ -1,8 +1,13 @@
 package prompts_test
 
 import (
+	"context"
+	"strings"
 	"testing"
 
+	"github.com/lycaon/lycaon/internal/configlayout"
+	"github.com/lycaon/lycaon/internal/gate"
+	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -115,5 +120,98 @@ func TestDeclaredReaderEffectsFollowCatalogs(t *testing.T) {
 		if got.Allows(mutation) != want[0] || got.Allows(programs) != want[1] {
 			t.Errorf("%s effects = %v", scope, got.Classes())
 		}
+	}
+}
+
+func TestCommandSurfaceAndAskCoordinatorGuidanceRenders(t *testing.T) {
+	engine := prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{ModuleRoot: configlayout.FindModuleRoot()})
+	roots := []projectroot.RootRef{
+		{ID: "r1", Label: "app", Path: "/workspace/app", IsPrimary: true},
+	}
+
+	renderCommandSurface := func(t *testing.T, readOnly bool) string {
+		t.Helper()
+		offered := []string{"command", "command_output", "command_stop", "wait", "summarize", "survey_repo", "code_rewrite"}
+		effects := toolcontract.AllCommandEffects()
+		if readOnly {
+			effects = effectSet(t, toolcontract.CommandReadOnly)
+		}
+		reader, err := prompts.NewReader(prompts.ReaderInput{
+			ProfileID: prompts.CoordinatorProfileID,
+			Plan:      toolsurface.Compile(offered, nil),
+			Visible:   offered,
+			Profiles: []sandbox.ToolProfile{{
+				ID:             prompts.CoordinatorProfileID,
+				Tools:          toolSetMap(offered),
+				CommandEffects: effects,
+			}},
+			RootCount: len(roots),
+			HasGit:    true,
+			WebSearch: true,
+		})
+		testutil.FailErr(t, "new reader", err)
+		vars := prompts.AgentPromptSurfaceTemplateVars(prompts.AgentPromptSurface{
+			SessionScratchDir: "/scratch/sess-1",
+			Posture:           gate.PostureStrict,
+		})
+		prompts.MergeWorkspaceRootsVars(vars, roots, roots[0].ID)
+		vars, err = prompts.Vars(reader, vars)
+		testutil.FailErr(t, "merge reader vars", err)
+		vars["command_on_floor"] = true
+		out, err := engine.Render(context.Background(), "partials/command-surface.md", vars)
+		testutil.FailErr(t, "render command-surface.md", err)
+		return out
+	}
+
+	readOnlySurface := renderCommandSurface(t, true)
+	for _, want := range []string{
+		"On this read-only surface, `command` runs read-only native utilities and pipelines only; file writes, output redirects to files, and external programs are refused.",
+		"For long output, read the saved copy named in the result.",
+		"One `command` call can chain orientation (`repo-map`, `outline --path`, `summarize`, `rg -n`, `find`, `git status`, `git diff`) and bounded slices (`sed -n 'A,Bp'`, `cat -n`).",
+		"`&` starts a session job; `$!`/`jobs` return its handle. Join with `wait %1`/`wait $!`. Across calls, page `command_output` by cursor; follow `next_cursor`. Stop with `command_stop`. Across turns, use offered `wait` conditions. `ps`/`pgrep` inspect session processes.",
+	} {
+		if !strings.Contains(readOnlySurface, want) {
+			t.Fatalf("read-only command-surface.md missing %q:\n%s", want, readOnlySurface)
+		}
+	}
+	for _, forbidden := range []string{
+		"multi-edit sequences",
+		"replace-lines",
+		"code-rewrite",
+		"jq-edit",
+		"heredocs",
+		"kill %1",
+		"kill $!",
+		"`kill` signals them",
+	} {
+		if strings.Contains(readOnlySurface, forbidden) {
+			t.Fatalf("read-only command-surface.md leaked mutating guidance %q:\n%s", forbidden, readOnlySurface)
+		}
+	}
+	if drift := prompts.RenderedProseStructureDrift(readOnlySurface); len(drift) > 0 {
+		t.Fatalf("read-only command-surface.md prose drift: %v\n%s", drift, readOnlySurface)
+	}
+
+	mutatingSurface := renderCommandSurface(t, false)
+	for _, want := range []string{
+		"multi-edit sequences (`edit`, `replace-lines`, `code-rewrite`, `jq-edit`, heredocs)",
+		"stop with `kill %1`/`kill $!`",
+		"`kill` signals them",
+	} {
+		if !strings.Contains(mutatingSurface, want) {
+			t.Fatalf("mutating command-surface.md missing %q:\n%s", want, mutatingSurface)
+		}
+	}
+	if drift := prompts.RenderedProseStructureDrift(mutatingSurface); len(drift) > 0 {
+		t.Fatalf("mutating command-surface.md prose drift: %v\n%s", drift, mutatingSurface)
+	}
+
+	askCoordinator, err := engine.Render(context.Background(), "agents/coordinator-surface-ask.md", nil)
+	testutil.FailErr(t, "render coordinator-surface-ask.md", err)
+	if !strings.Contains(askCoordinator, "Use `command` to read, search, or query project files and inspect Git status, diffs, and history with read-only native commands and pipelines.") {
+		t.Fatalf("coordinator-surface-ask.md missing command guidance:\n%s", askCoordinator)
+	}
+	if strings.Contains(askCoordinator, "inspect_source") {
+		t.Fatalf("coordinator-surface-ask.md still references inspect_source:\n%s", askCoordinator)
 	}
 }

@@ -174,7 +174,7 @@ func (m *Context) procedureReader(ctx context.Context, sess *api.Session, profil
 	if err != nil {
 		return prompts.Reader{}, err
 	}
-	if m != nil && m.Profiles != nil && sess != nil && sess.Posture != "" {
+	if m != nil && m.Profiles != nil && sess != nil {
 		profiles = m.Profiles.ConstrainCommandProfiles(ctx, sess.ID, profiles)
 	}
 	surfaceID := ""
