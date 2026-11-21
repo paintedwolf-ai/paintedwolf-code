@@ -13,9 +13,7 @@ import (
 	"github.com/lycaon/lycaon/internal/hostcmd"
 	"github.com/lycaon/lycaon/internal/runeclamp"
 	"github.com/lycaon/lycaon/internal/session/verification"
-	"github.com/lycaon/lycaon/internal/toolreach"
 	"github.com/lycaon/lycaon/internal/tools"
-	"github.com/lycaon/lycaon/internal/toolsurface"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -110,14 +108,7 @@ func (m *Service) HandleCommandRefusal(ctx context.Context, notice bgprocess.Ref
 // withPostToolGuidance appends the policy guidance the observation raises for
 // the job's own tool.
 func (m *Service) withPostToolGuidance(ctx context.Context, sess *api.Session, tool, digest string, facts guidance.ToolResultFacts) string {
-	if !tools.CallReach(ctx).Known() && strings.TrimSpace(tool) != "" {
-		offered := []string{tool}
-		if tool == "command" {
-			offered = append(offered, "command_output", "command_stop")
-		}
-		ctx = tools.WithCallReach(ctx, toolreach.Freeze(offered, toolsurface.Plan{}))
-	}
-	out, _ := m.ToolPolicy.AfterTool(ctx, sess, tool, map[string]any{}, digest, 0, facts)
+	out, _ := m.ToolPolicy.AfterTool(ctx, sess, tool, nil, digest, 0, facts)
 	return out
 }
 

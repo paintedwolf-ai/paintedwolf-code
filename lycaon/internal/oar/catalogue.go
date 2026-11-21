@@ -52,6 +52,8 @@ var factDecls = []factDecl{
 	{"native_operation", oarcore.TypeString, FactTierHost, ""},
 	{"operation", oarcore.TypeString, FactTierHost, ""},
 	{"command_form", oarcore.TypeString, FactTierHost, ""},
+	{"command_operation_reachable", oarcore.TypeBool, FactTierHost, ""},
+	{"admitted_command_forms", oarcore.TypeListString, FactTierHost, ""},
 	{"syntax_override_commands", oarcore.TypeString, FactTierHost, ""},
 	{"command_surface", oarcore.TypeBool, FactTierHost, ""},
 	{"response_tools_callable", oarcore.TypeBool, FactTierHost, ""},

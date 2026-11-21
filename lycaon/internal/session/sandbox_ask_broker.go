@@ -64,6 +64,7 @@ type sandboxAskResolution struct {
 	Authorized    bool
 	Denied        bool
 	HumanDeclined bool
+	DenialCause   isolation.PathDenialCause
 	UserGuidance  string
 }
 
@@ -99,7 +100,10 @@ func awaitSandboxAsk(ctx context.Context, req sandboxAskRequest) (sandboxAskReso
 		}
 		if suppressed {
 			recordSandboxAskSuppressed(ctx, req, authzledger.AskSuppressedCausePriorDeny)
-			return sandboxAskResolution{Answered: true, Raised: true, Denied: true}, nil
+			return sandboxAskResolution{
+				Answered: true, Raised: true, Denied: true,
+				DenialCause: isolation.PathDenialPriorUserDeclined,
+			}, nil
 		}
 	}
 	begin, existing := req.Gate.Begin(req.InvokingSessionID, req.Key, req.ToolCallID)
@@ -154,10 +158,27 @@ func settleSandboxAsk(ctx context.Context, req sandboxAskRequest, checkpointID s
 
 func sandboxAskAnswer(final *hitl.CheckpointResponse) sandboxAskResolution {
 	authorized := hitl.CheckpointAuthorizes(final)
+	rejected := final != nil && final.Status == hitl.DecisionStatusRejected
+	humanDeclined := rejected && final.ResolvedBy == authzledger.ResolvedByHuman
+	cause := isolation.PathDenialNone
+	switch {
+	case humanDeclined:
+		cause = isolation.PathDenialUserDeclined
+	case rejected:
+		cause = isolation.PathDenialNonHumanRejected
+	}
+	guidance := ""
+	if humanDeclined {
+		guidance = resolvedUserGuidance(final)
+	}
 	return sandboxAskResolution{
-		Answered: true, Raised: true, Authorized: authorized, Denied: !authorized,
-		HumanDeclined: final != nil && final.Status == hitl.DecisionStatusRejected && final.ResolvedBy == authzledger.ResolvedByHuman,
-		UserGuidance:  resolvedUserGuidance(final),
+		Answered:      true,
+		Raised:        true,
+		Authorized:    authorized,
+		Denied:        rejected,
+		HumanDeclined: humanDeclined,
+		DenialCause:   cause,
+		UserGuidance:  guidance,
 	}
 }
 

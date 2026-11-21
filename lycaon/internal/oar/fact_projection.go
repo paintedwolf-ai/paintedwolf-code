@@ -84,6 +84,8 @@ func bareActivation(gc *GuardContext) map[string]any {
 	out := map[string]any{
 		"tool":                                gc.Invocation.Tool,
 		"tool_args":                           mapOrEmpty(gc.Invocation.ToolArgs),
+		"command_operation_reachable":         false,
+		"admitted_command_forms":              []string{},
 		"unpublished_tool_text_pending":       gc.Session.UnpublishedToolTextPending,
 		"mid_turn_citations_required":         gc.Session.MidTurnCitationsRequired,
 		"mid_turn_citation_attempted":         gc.Session.MidTurnCitationAttempted,

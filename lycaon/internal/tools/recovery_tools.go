@@ -56,6 +56,12 @@ func RegisterRecoveryFacts(ctx context.Context, gc *oar.GuardContext) {
 		target.ObservationData["offered_tools"] = request.OfferedNames()
 		return nil
 	})
+	observeCommandOp := func(target *oar.GuardContext) error {
+		target.ObserveCommandOperationReach()
+		return nil
+	}
+	gc.RegisterProvider("paintedwolf.command_operation_reachable", observeCommandOp)
+	gc.RegisterProvider("paintedwolf.admitted_command_forms", observeCommandOp)
 	for _, fact := range oar.CanCallFacts() {
 		tool := strings.TrimPrefix(fact, "can_")
 		gc.RegisterProvider("paintedwolf."+fact, func(target *oar.GuardContext) error {

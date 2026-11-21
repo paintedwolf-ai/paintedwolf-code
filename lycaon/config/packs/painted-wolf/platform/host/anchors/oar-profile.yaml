@@ -878,6 +878,12 @@ host_facts:
    type: list<string>
  - name: paintedwolf.need
    type: string
+ - name: paintedwolf.command_operation_reachable
+   type: bool
+   observation: True when the frozen request can run or load command and admits at least one replacement form for paintedwolf.need.
+ - name: paintedwolf.admitted_command_forms
+   type: list<string>
+   observation: Replacement command forms for paintedwolf.need admitted by the frozen request; empty when none are admitted or reach is unknown.
  - name: paintedwolf.bare_repo_scope
    type: bool
  - name: paintedwolf.blocked
