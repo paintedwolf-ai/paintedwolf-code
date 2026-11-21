@@ -21,10 +21,6 @@ func AllowedInAsk(meta ToolMeta) bool {
 	if meta.IsMCP() {
 		return meta.ReadOnlyHint
 	}
-	switch meta.Name {
-	case "command", "command_output", "command_stop":
-		return true
-	}
 	contract, ok := toolcontract.Lookup(meta.Name)
 	return ok && contract.AskAllowed
 }

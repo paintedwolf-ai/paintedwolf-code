@@ -211,7 +211,7 @@ func TestCommandSurfaceAndAskCoordinatorGuidanceRenders(t *testing.T) {
 	if !strings.Contains(askCoordinator, "Use `command` to read, search, or query project files and inspect Git status, diffs, and history with read-only native commands and pipelines.") {
 		t.Fatalf("coordinator-surface-ask.md missing command guidance:\n%s", askCoordinator)
 	}
-	if strings.Contains(askCoordinator, "inspect_source") {
-		t.Fatalf("coordinator-surface-ask.md still references inspect_source:\n%s", askCoordinator)
+	if drift := prompts.RenderedProseStructureDrift(askCoordinator); len(drift) > 0 {
+		t.Fatalf("coordinator-surface-ask.md prose drift: %v\n%s", drift, askCoordinator)
 	}
 }
