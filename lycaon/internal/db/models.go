@@ -781,6 +781,7 @@ type InvocationProgramExecutions struct {
 	Complete                        int64          `json:"complete"`
 	PublicationEligible             int64          `json:"publication_eligible"`
 	PublicationBasis                int64          `json:"publication_basis"`
+	ConsumerClosed                  int64          `json:"consumer_closed"`
 	EffectCertainty                 string         `json:"effect_certainty"`
 	EvidenceKind                    string         `json:"evidence_kind"`
 	EvidenceRef                     string         `json:"evidence_ref"`

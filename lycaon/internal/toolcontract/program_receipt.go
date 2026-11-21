@@ -125,6 +125,8 @@ type ProgramChildSettlement struct {
 	JobHandle string
 	// Conflict is the destination owner's typed stale-destination fact.
 	Conflict *RevisionConflict
+	// ConsumerClosedExecutions are authoritatively settled by this pipeline.
+	ConsumerClosedExecutions []string
 }
 
 // RevisionConflict records a stale destination. It requires fresh preparation;

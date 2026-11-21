@@ -74,7 +74,8 @@ type ChildRecord struct {
 	Result       toolcontract.ProducerResult
 	Diagnostic   error
 	// JobHandle is the registry handle of the job a trailing & statement started.
-	JobHandle string
+	JobHandle                string
+	ConsumerClosedExecutions []string
 }
 
 // SourceRecord binds a reached source statement to its exact captured bytes.
