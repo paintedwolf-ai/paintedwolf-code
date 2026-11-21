@@ -59,6 +59,12 @@ func TestKnownModelMetadataDoesNotWaitForCatalogRefresh(t *testing.T) {
 	reg.discovery = discovery.NewCache(func() time.Time { return now })
 	reg.discovery.Put(key, cached, nil)
 	now = now.Add(2 * discovery.CacheTTL)
+	unknownCtx, cancelUnknown := context.WithDeadline(t.Context(), time.Now().Add(-time.Millisecond))
+	defer cancelUnknown()
+	unknown := reg.resolveSelectedModel(unknownCtx, "local", "unknown")
+	if !errors.Is(unknown.DiscoveryError, context.DeadlineExceeded) || len(unknown.Models) != 0 {
+		t.Fatal("unknown selection bypassed required discovery")
+	}
 	ctx := t.Context()
 	if !reg.ModelHasVision(ctx, "local", "known") {
 		t.Fatal("known capability waited for or was lost during refresh")
@@ -74,12 +80,6 @@ func TestKnownModelMetadataDoesNotWaitForCatalogRefresh(t *testing.T) {
 	}
 	if calls.Load() != 2 {
 		t.Fatalf("discovery calls=%d, want initial load and one refresh", calls.Load())
-	}
-	unknownCtx, cancelUnknown := context.WithDeadline(t.Context(), time.Now().Add(-time.Millisecond))
-	defer cancelUnknown()
-	unknown := reg.resolveSelectedModel(unknownCtx, "local", "unknown")
-	if !errors.Is(unknown.DiscoveryError, context.DeadlineExceeded) || len(unknown.Models) != 0 {
-		t.Fatal("unknown selection bypassed required discovery")
 	}
 	close(release)
 	models := reg.EffectiveModels(t.Context(), "local")

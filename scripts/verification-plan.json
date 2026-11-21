@@ -1577,7 +1577,7 @@
       "targets": [
         "test:race"
       ],
-      "minutes": 60,
+      "minutes": 90,
       "profiles": [
         "integration"
       ],
@@ -1587,7 +1587,7 @@
         "go-code"
       ],
       "phases": "changed-packages",
-      "shard_seconds": 2400,
+      "shard_seconds": 1200,
       "package_seconds": 40
     },
     "browser-smoke": {
