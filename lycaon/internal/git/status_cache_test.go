@@ -34,7 +34,7 @@ func (c *countingLoader) Log(ctx context.Context, projectDir string, opts git.Gi
 
 func initTestRepo(t *testing.T) string {
 	t.Helper()
-	dir := git.CloneFixtureRepo(t, "worktree-base", func(dir string) {
+	return git.CloneFixtureRepo(t, "worktree-base", func(dir string) {
 		mgr := git.NewManager()
 		testutil.FailErr(t, "init", mgr.Init(context.Background(), dir))
 		path := filepath.Join(dir, "a.txt")
@@ -42,6 +42,11 @@ func initTestRepo(t *testing.T) string {
 		_, commitErr1 := mgr.Commit(context.Background(), dir, git.GitCommitOpts{Message: "init", Paths: []string{"a.txt"}})
 		testutil.FailErr(t, "commit", commitErr1)
 	})
+}
+
+func initWatchedTestRepo(t *testing.T) string {
+	t.Helper()
+	dir := initTestRepo(t)
 	repochange.EnsureRoot(t.Context(), dir)
 	t.Cleanup(func() { repochange.CloseRoot(dir) })
 	repochange.WaitQuiet(t.Context(), dir, repochange.DefaultDebounce, 5*time.Second)
@@ -84,7 +89,7 @@ func TestStatusCache_forceAlwaysExecs(t *testing.T) {
 
 func TestStatusCache_NotifyInvalidates(t *testing.T) {
 	t.Parallel()
-	dir := initTestRepo(t)
+	dir := initWatchedTestRepo(t)
 	loader := &countingLoader{inner: git.NewManager()}
 	cache := git.NewStatusCache(loader)
 	t.Cleanup(cache.RegisterRepochangeObserver())
@@ -101,7 +106,7 @@ func TestStatusCache_NotifyInvalidates(t *testing.T) {
 
 func TestStatusCache_WorktreeChangedInvalidates(t *testing.T) {
 	t.Parallel()
-	dir := initTestRepo(t)
+	dir := initWatchedTestRepo(t)
 	loader := &countingLoader{inner: git.NewManager()}
 	cache := git.NewStatusCache(loader)
 	t.Cleanup(cache.RegisterRepochangeObserver())
@@ -379,7 +384,7 @@ func (g *gatedLoader) Log(ctx context.Context, projectDir string, opts git.GitLo
 
 func TestStatusCache_RevalidateServesStaleWhileReloading(t *testing.T) {
 	t.Parallel()
-	dir := initTestRepo(t)
+	dir := initWatchedTestRepo(t)
 	loader := &gatedLoader{
 		inner:   git.NewManager(),
 		entered: make(chan struct{}, 1),
