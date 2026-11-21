@@ -110,7 +110,7 @@ func testSynthesisOutcome(t *testing.T, state, reason string, calls int) {
 	defer cancel()
 	switch state {
 	case "model changed":
-		testutil.FailErr(t, "replace receiver model", mem.Sessions.UpdateSession(ctx, sess.ID, func(s *api.Session) { s.Model = "changed" }))
+		testutil.FailErr(t, "replace receiver model", mem.Sessions.UpdateSession(ctx, sess.ID, func(s *api.Session) { s.ProviderID = "test-provider"; s.Model = "changed" }))
 	case "canceled":
 		cancel()
 	case "unchanged source":
