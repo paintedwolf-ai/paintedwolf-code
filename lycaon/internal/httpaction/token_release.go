@@ -3,7 +3,6 @@ package httpaction
 import (
 	"context"
 	"sort"
-	"strings"
 
 	"github.com/lycaon/lycaon/internal/secretmatch"
 	"github.com/lycaon/lycaon/internal/toolrejection"
@@ -25,7 +24,7 @@ func releaseForeignTokens(
 	if len(foreign) == 0 {
 		return secretmatch.Resolution{Decision: secretmatch.SendUnchanged}, nil
 	}
-	if deps.SecretAsk == nil {
+	if deps.SecretAsk == nil || deps.SecretMatcher == nil {
 		return secretmatch.Resolution{}, screenFaultReject(secretmatch.FaultStageScreenUnwired)
 	}
 	destinationID, destinationLabel := requestDestination(spec)
@@ -43,7 +42,7 @@ func releaseForeignTokens(
 		SourceKind: secretmatch.SourceToolArgument, SourceTool: "http_request", SourcePath: "request",
 		OriginKind: secretmatch.OriginField, Fingerprints: tokenFingerprints(deps.SecretMatcher, foreign),
 		VarName: foreign[0].name, Container: "token jar " + jarName,
-		ContestToken: strings.TrimSpace(spec.contest), RecipientsLocal: spec.dialsLoopback(),
+		ContestToken: spec.contest, RecipientsLocal: spec.dialsLoopback(),
 	})
 	if err != nil {
 		stage := secretmatch.FaultStageRaise

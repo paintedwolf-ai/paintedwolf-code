@@ -130,10 +130,12 @@ func (in Request) now() time.Time {
 // HopRequest describes one HTTP hop presented to BeforeHopRequest before
 // resolution or dialing.
 type HopRequest struct {
-	URL        *url.URL
-	Method     string
-	HostHeader string
-	setCookies func([]*http.Cookie)
+	CarriesOriginHeaders bool
+	CarriesBody          bool
+	URL                  *url.URL
+	Method               string
+	HostHeader           string
+	setCookies           func([]*http.Cookie)
 }
 
 // FreezeCookies binds the exact owned cookie snapshot authorized for this hop
@@ -271,6 +273,7 @@ func Do(ctx context.Context, in Request) (out Response, err error) {
 		var cookiesFrozen bool
 		if in.BeforeHopRequest != nil {
 			hopReq := HopRequest{
+				CarriesOriginHeaders: len(originHeaders) > 0, CarriesBody: len(body) > 0,
 				URL:        current,
 				Method:     method,
 				HostHeader: hostHeader,

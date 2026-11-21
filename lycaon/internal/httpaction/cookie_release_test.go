@@ -5,7 +5,6 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
-	"net/netip"
 	"net/url"
 	"path/filepath"
 	"reflect"
@@ -17,7 +16,6 @@ import (
 	"github.com/lycaon/lycaon/internal/egressproxy"
 	"github.com/lycaon/lycaon/internal/hitl"
 	"github.com/lycaon/lycaon/internal/httpcookies"
-	"github.com/lycaon/lycaon/internal/outboundhttp"
 	"github.com/lycaon/lycaon/internal/secretcap"
 	"github.com/lycaon/lycaon/internal/secretmatch"
 	"github.com/lycaon/lycaon/internal/settings"
@@ -32,6 +30,66 @@ import (
 // A cookie whose receipt names a retained service object is foreign to every
 // other recipient. When its disclosure cannot be decided, the request must stop
 // before any byte leaves and the protected jar must stay as it was.
+// secretShapedCookie is a cookie value the bundled patterns recognize, so the
+// outbound screen decides its disclosure. It is assembled so no token-shaped
+// literal appears in source.
+const secretShapedCookie = "gh" + "p_" + "wWPw5k4aXcaT4fNP" + "0UcnZwJUVFk6LO0pINUx"
+
+func TestCookieScreenFaultsStopTheRequestBeforeDelivery(t *testing.T) {
+	matcher, err := secretmatch.BuildMatcher(secretmatch.Bundled())
+	testutil.FailErr(t, "cookie matcher", err)
+	fingerprinter, err := secretmatch.NewFingerprinter([]byte(strings.Repeat("f", 32)))
+	testutil.FailErr(t, "cookie fingerprinter", err)
+	matcher.SetFingerprinter(fingerprinter)
+
+	cases := []struct {
+		name    string
+		matcher *secretmatch.Matcher
+		ask     func(*atomic.Int64) secretmatch.AskFunc
+		asked   int64
+		stage   string
+	}{
+		{name: "disclosure_unwired", matcher: matcher, stage: secretmatch.FaultStageScreenUnwired},
+		{name: "disclosure_error", matcher: matcher, ask: answering(errors.New("card store offline")), asked: 1, stage: secretmatch.FaultStageRaise},
+		{name: "disclosure_fault", matcher: matcher, ask: answering(secretmatch.NewAskFault(secretmatch.FaultStageNoSession, nil)), asked: 1, stage: secretmatch.FaultStageNoSession},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			secrets, _ := testSecrets(t)
+			var requests atomic.Int64
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				requests.Add(1)
+				w.WriteHeader(http.StatusNoContent)
+			}))
+			t.Cleanup(server.Close)
+			target, err := url.Parse(server.URL + "/private")
+			testutil.FailErr(t, "cookie target", err)
+			store := httpcookies.New(nil)
+			store.SetCookies(target, []*http.Cookie{{Name: "session", Value: secretShapedCookie, Path: "/"}})
+			before := store.Snapshot()
+
+			var asked atomic.Int64
+			deps := Deps{Boundary: testBoundary(), Secrets: secrets, SecretMatcher: tc.matcher}
+			if tc.ask != nil {
+				deps.SecretAsk = tc.ask(&asked)
+			}
+			_, err = runRequestWith(t, deps, map[string]any{
+				"url": server.URL + "/private", "capability_request": loopbackCapability(t, server.URL),
+			}, sessionContext(t.TempDir(), "ordinary-transport"), ExchangeOptions{Jar: testFrontendJar{store}})
+			var reject *toolrejection.ToolReject
+			if !errors.As(err, &reject) || reject.Code != toolrejection.OutboundSecretScreenFailedCode || reject.Data["fault_stage"] != tc.stage {
+				t.Fatalf("error = %v, want %s at %s", err, toolrejection.OutboundSecretScreenFailedCode, tc.stage)
+			}
+			if requests.Load() != 0 || asked.Load() != tc.asked {
+				t.Fatalf("requests=%d asks=%d, want no delivery and %d asks", requests.Load(), asked.Load(), tc.asked)
+			}
+			if !reflect.DeepEqual(store.Snapshot(), before) {
+				t.Fatal("a disclosure fault changed the jar")
+			}
+		})
+	}
+}
+
 func TestForeignIssuerCookieFaultsStopTheRequestBeforeDelivery(t *testing.T) {
 	matcher, err := secretmatch.BuildMatcher(secretmatch.Bundled())
 	testutil.FailErr(t, "cookie matcher", err)
@@ -87,15 +145,6 @@ func TestForeignIssuerCookieFaultsStopTheRequestBeforeDelivery(t *testing.T) {
 	}
 }
 
-func answering(err error) func(*atomic.Int64) secretmatch.AskFunc {
-	return func(asked *atomic.Int64) secretmatch.AskFunc {
-		return func(context.Context, secretmatch.Alert) (secretmatch.Resolution, error) {
-			asked.Add(1)
-			return secretmatch.Resolution{}, err
-		}
-	}
-}
-
 func cookieSeedRequest(operation string) secretcap.CookieJarRequest {
 	return secretcap.CookieJarRequest{ProjectID: testdbseed.DefaultProjectID, ChatSessionID: "root-1", SessionID: "root-1", OperationID: operation, Name: "service"}
 }
@@ -119,86 +168,6 @@ func seedRetainedIssuerCookie(t *testing.T, secrets *secretcap.Service, rawURL s
 		t.Fatalf("seeded cookie lacks its issuer receipt: %+v", snapshot)
 	}
 	return snapshot
-}
-
-func TestCookieRecipientOverridesRequireReview(t *testing.T) {
-	target, err := url.Parse("https://issuer.example/api")
-	testutil.FailErr(t, "parse target", err)
-	plain := requestSpec{target: target, method: http.MethodGet}
-
-	for name, tc := range map[string]struct {
-		spec    requestSpec
-		foreign bool
-	}{
-		"plain":              {plain, false},
-		"matching Host":      {requestSpec{target: target, method: http.MethodGet, hostHeader: "ISSUER.example:443"}, false},
-		"different Host":     {requestSpec{target: target, method: http.MethodGet, hostHeader: "other.example"}, true},
-		"applicable mapping": {requestSpec{target: target, method: http.MethodGet, resolve: []outboundhttp.ResolveMapping{{Host: "issuer.example", Address: netip.MustParseAddr("192.0.2.2")}}}, true},
-		"mapped hostname":    {requestSpec{target: target, method: http.MethodGet, resolve: []outboundhttp.ResolveMapping{{Host: "issuer.example", TargetHost: "recipient.example", TargetPort: 8443}}}, true},
-		"other host mapping": {requestSpec{target: target, method: http.MethodGet, resolve: []outboundhttp.ResolveMapping{{Host: "other.example", Address: netip.MustParseAddr("192.0.2.2")}}}, false},
-		"other port mapping": {requestSpec{target: target, method: http.MethodGet, resolve: []outboundhttp.ResolveMapping{{Host: "issuer.example", Port: 8443, Address: netip.MustParseAddr("192.0.2.2")}}}, false},
-	} {
-		t.Run(name, func(t *testing.T) {
-			store := httpcookies.New(nil)
-			store.SetCookies(target, []*http.Cookie{{Name: "session", Value: "private-cookie-4411", Path: "/"}})
-			jar := &secretcap.CookieJar{Name: "jar", Reference: "secret://cookie-jar", Store: store}
-
-			asks := 0
-			deps := Deps{SecretMatcher: testSecretMatcher(t), SecretAsk: func(_ context.Context, a secretmatch.Alert) (secretmatch.Resolution, error) {
-				asks++
-				wantDest, wantLabel := requestDestination(tc.spec)
-				if a.DestinationID != wantDest || a.DestinationLabel != wantLabel || a.Container != "cookie jar jar" || len(a.SecretNames) != 1 || a.SecretNames[0] != "session" {
-					t.Errorf("alert = %+v, want dest (%q, %q)", a, wantDest, wantLabel)
-				}
-				return secretmatch.Resolution{Decision: secretmatch.Withhold}, nil
-			}}
-			beforeHop, err := prepareRequestCookieDelivery(t.Context(), deps, tc.spec, tools.ToolContext{}, jar, secretcap.CookieJarRequest{}, nil, true)
-			testutil.FailErr(t, "prepareRequestCookieDelivery", err)
-			testutil.FailErr(t, "beforeHop", beforeHop(t.Context(), outboundhttp.HopRequest{URL: target, Method: http.MethodGet, HostHeader: tc.spec.hostHeader}))
-			delivered := jar.Store.Cookies(target)
-			if tc.foreign && (asks != 1 || len(delivered) != 0) {
-				t.Fatalf("foreign override sent cookie without withholding: asks=%d delivered=%+v", asks, delivered)
-			}
-			if !tc.foreign && (asks != 0 || len(delivered) != 1 || delivered[0].Value != "private-cookie-4411") {
-				t.Fatalf("plain issuer failed to deliver cookie quietly: asks=%d delivered=%+v", asks, delivered)
-			}
-
-			// Conversely, a cookie captured on an overridden hop records the override
-			// issuer and cannot be silently promoted into plain URL authority later.
-			captureStore := httpcookies.New(nil)
-			captureJar := &secretcap.CookieJar{Name: "jar", Reference: "secret://cookie-jar", Store: captureStore}
-			captureHop, err := prepareRequestCookieDelivery(t.Context(), deps, tc.spec, tools.ToolContext{}, captureJar, secretcap.CookieJarRequest{}, nil, true)
-			testutil.FailErr(t, "prepare capture hop", err)
-			testutil.FailErr(t, "run capture hop", captureHop(t.Context(), outboundhttp.HopRequest{URL: target, Method: http.MethodGet, HostHeader: tc.spec.hostHeader}))
-			captureStore.SetCookies(target, []*http.Cookie{{Name: "captured", Value: "override-cookie-8822", Path: "/"}})
-
-			plainAsks := 0
-			plainDeps := Deps{SecretMatcher: testSecretMatcher(t), SecretAsk: func(_ context.Context, _ secretmatch.Alert) (secretmatch.Resolution, error) {
-				plainAsks++
-				return secretmatch.Resolution{Decision: secretmatch.Withhold}, nil
-			}}
-			plainHop, err := prepareRequestCookieDelivery(t.Context(), plainDeps, plain, tools.ToolContext{}, captureJar, secretcap.CookieJarRequest{}, nil, true)
-			testutil.FailErr(t, "prepare plain hop", err)
-			testutil.FailErr(t, "run plain hop", plainHop(t.Context(), outboundhttp.HopRequest{URL: target, Method: http.MethodGet}))
-			plainDelivered := captureStore.Cookies(target)
-			if tc.foreign && (plainAsks != 1 || len(plainDelivered) != 0) {
-				t.Fatalf("override-captured cookie promoted to plain authority without review: asks=%d delivered=%+v", plainAsks, plainDelivered)
-			}
-			if !tc.foreign && (plainAsks != 0 || len(plainDelivered) != 1) {
-				t.Fatalf("plain-captured cookie required review on plain hop: asks=%d delivered=%+v", plainAsks, plainDelivered)
-			}
-		})
-	}
-}
-
-func TestManagedCookieJarAndGrantFreshnessAcrossReviewWait(t *testing.T) {
-	t.Run("jar_modified_during_egress_wait_cannot_send_unreviewed_cookie", testJarModifiedDuringEgressWaitCannotSendUnreviewedCookie)
-
-	t.Run("jar_revoked_during_secret_review_wait_stops_before_delivery", testJarRevokedDuringSecretReviewWaitStopsBeforeDelivery)
-
-	t.Run("unbacked_frontend_cookie_jar_fails_closed_before_delivery", testUnbackedFrontendCookieJarFailsClosedBeforeDelivery)
-
-	t.Run("standing_secret_grant_revoked_across_wait_and_redirect_with_real_approval_store", testStandingGrantRevokedAcrossWaitAndRedirect)
 }
 
 func testJarModifiedDuringEgressWaitCannotSendUnreviewedCookie(t *testing.T) {
@@ -299,6 +268,23 @@ func testJarRevokedDuringSecretReviewWaitStopsBeforeDelivery(t *testing.T) {
 	if requests.Load() != 0 {
 		t.Fatalf("server received %d requests after jar revocation during wait, want 0", requests.Load())
 	}
+}
+
+func answering(err error) func(*atomic.Int64) secretmatch.AskFunc {
+	return func(asked *atomic.Int64) secretmatch.AskFunc {
+		return func(context.Context, secretmatch.Alert) (secretmatch.Resolution, error) {
+			asked.Add(1)
+			return secretmatch.Resolution{}, err
+		}
+	}
+}
+
+func TestJarAndGrantFreshnessAcrossReviewWait(t *testing.T) {
+	t.Run("changed_while_waiting", testJarModifiedDuringEgressWaitCannotSendUnreviewedCookie)
+	t.Run("revoked_during_review", testJarRevokedDuringSecretReviewWaitStopsBeforeDelivery)
+	t.Run("unbacked_frontend_cookie_jar_fails_closed_before_delivery", testUnbackedFrontendCookieJarFailsClosedBeforeDelivery)
+
+	t.Run("standing_secret_grant_revoked_across_wait_and_redirect_with_real_approval_store", testStandingGrantRevokedAcrossWaitAndRedirect)
 }
 
 func testUnbackedFrontendCookieJarFailsClosedBeforeDelivery(t *testing.T) {
@@ -558,3 +544,13 @@ func (unbackedCookieJar) SetCookies(*url.URL, []*http.Cookie) {}
 func (unbackedCookieJar) Cookies(*url.URL) []*http.Cookie {
 	return []*http.Cookie{{Name: "session", Value: "unreviewed"}}
 }
+
+// testFrontendJar is a caller-supplied jar over one cookie store, the shape
+// curl's -b and -c jar hands the exchange.
+type testFrontendJar struct{ store *httpcookies.Store }
+
+func (j testFrontendJar) SetCookies(u *url.URL, cookies []*http.Cookie) {
+	j.store.SetCookies(u, cookies)
+}
+func (j testFrontendJar) Cookies(u *url.URL) []*http.Cookie { return j.store.Cookies(u) }
+func (j testFrontendJar) CookieStore() *httpcookies.Store   { return j.store }

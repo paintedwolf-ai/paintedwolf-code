@@ -33,7 +33,7 @@ func (e *Secrets) AskSecretScreen(ctx context.Context, finding secretmatch.Alert
 	// A cited receipt turns the ask into a redaction contest.
 	contested := false
 	if token := strings.TrimSpace(finding.ContestToken); token != "" && e != nil {
-		_, contested = e.secretReceipts().Consume(secretScreenChatSession(finding), token)
+		_, contested = e.secretReceipts().Consume(secretScreenChatSession(finding), token, finding.DestinationID, finding.Fingerprints)
 		if !contested {
 			// Stale, spent, or over-cap tokens fall through to an ordinary screen.
 			finding.ContestToken = ""

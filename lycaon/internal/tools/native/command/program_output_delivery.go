@@ -143,6 +143,7 @@ func (r *ProgramRuntime) outcome(ctx context.Context, run *programRun, outputs *
 	if err := r.Provenance.MarkProgramPublicationMaterialized(ctx, target.SessionID, programID); err != nil {
 		return ProgramOutcome{}, err
 	}
+	run.statePrintedPages()
 	return out, nil
 }
 

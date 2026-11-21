@@ -1,7 +1,6 @@
 package httpaction
 
 import (
-	"encoding/json"
 	"net/url"
 	"strconv"
 	"strings"
@@ -38,13 +37,8 @@ func wireProvenance(args map[string]any, resolution *secretcap.Resolution, sendi
 			}
 		case "host_header":
 			protected[host] = append(protected[host], value)
-		case "body_json":
-			encoded, _ := json.Marshal(value)
-			protected[body] = append(protected[body], string(encoded))
 		case "body_text":
 			protected[body] = append(protected[body], value)
-		case "body_form":
-			protected[body] = append(protected[body], url.QueryEscape(value))
 		case "form":
 			if parts[2] == "name" || parts[2] == "filename" {
 				value = escapeQuotes(value)
