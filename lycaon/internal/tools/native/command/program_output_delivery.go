@@ -86,6 +86,7 @@ func (r *ProgramRuntime) outcome(ctx context.Context, run *programRun, outputs *
 			receipt = projection.Program
 		}
 		run.tc.Effects.Out.CommandProgram = &receipt
+		run.tc.Effects.Out.CommandStarted = projection.StartedChildren > 0
 	}
 	out := ProgramOutcome{
 		ProgramID:                programID,
@@ -115,24 +116,32 @@ func (r *ProgramRuntime) outcome(ctx context.Context, run *programRun, outputs *
 		}
 		out.NonzeroExecutions = append(out.NonzeroExecutions, observed)
 	}
+	if run.tc.Effects.Out != nil && run.tc.Effects.Out.CommandProgram != nil {
+		defer func() {
+			run.tc.Effects.Out.CommandProgram.Outputs = append([]api.CommandProgramOutputWindow(nil), out.Outputs...)
+		}()
+	}
 	for _, stream := range staged {
-		if err := r.recordProgramStreamDelivery(ctx, run, stream); err != nil {
-			return ProgramOutcome{}, err
-		}
+		err := r.recordProgramStreamDelivery(ctx, run, stream)
 		window := stream.window
+		if window.OutputPath != "" {
+			out.Outputs = append(out.Outputs, window)
+			out.Truncated = out.Truncated || window.Truncated
+		}
 		if stream.name == "stdout" {
 			out.Stdout, out.StdoutRef = stream.inline, window.Ref
 		} else {
 			out.Stderr, out.StderrRef = stream.inline, window.Ref
 		}
-		out.Outputs = append(out.Outputs, window)
-		out.Truncated = out.Truncated || window.Truncated
+		if err != nil {
+			if !recordOutputScreenLimit(run.tc, &out, projection.Program.StatusCode, err) {
+				return out, err
+			}
+			break
+		}
 	}
 	if err := r.Provenance.MarkProgramPublicationMaterialized(ctx, target.SessionID, programID); err != nil {
 		return ProgramOutcome{}, err
-	}
-	if run.tc.Effects.Out != nil && run.tc.Effects.Out.CommandProgram != nil {
-		run.tc.Effects.Out.CommandProgram.Outputs = append([]api.CommandProgramOutputWindow(nil), out.Outputs...)
 	}
 	return out, nil
 }
@@ -302,6 +311,11 @@ func (r *ProgramRuntime) recordProgramStreamDelivery(ctx context.Context, run *p
 	}
 	if window.Stream == "stdout" {
 		r.commitProgramWindows(ctx, run, program, window.Ref, output.ranges)
+	}
+	if output.spill != nil {
+		if limit := captureprojection.ScreeningLimit(output.spill.Failure); limit != nil {
+			return limit
+		}
 	}
 	return nil
 }

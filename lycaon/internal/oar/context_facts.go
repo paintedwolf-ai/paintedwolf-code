@@ -141,6 +141,7 @@ type RefusalsFacts struct {
 	RefusedWritePaths           []string
 	RefusedWriteGrants          []string
 	RefusedReadPaths            []string
+	OptionalReadPaths           []string
 	RefusedReadGrants           []string
 	RefusedCredentialStorePaths []string
 	RefusedTerminalReadPaths    []string

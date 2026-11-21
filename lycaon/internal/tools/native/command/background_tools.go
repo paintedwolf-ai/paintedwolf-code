@@ -10,6 +10,7 @@ import (
 	"github.com/lycaon/lycaon/internal/toolrejection"
 
 	"github.com/lycaon/lycaon/internal/bgprocess"
+	"github.com/lycaon/lycaon/internal/captureprojection"
 	"github.com/lycaon/lycaon/internal/confine"
 	"github.com/lycaon/lycaon/internal/hostcmd"
 	"github.com/lycaon/lycaon/internal/tools"
@@ -40,6 +41,12 @@ func (t *CommandOutputTool) Run(ctx context.Context, args map[string]any, tctx t
 	if err != nil {
 		if errors.Is(err, bgprocess.ErrProcessNotFound) {
 			return "", missingCommandHandleReject(t.Registry, tctx.Identity.SessionID, handle)
+		}
+		if reject := rejectOutputScreenLimit(captureprojection.ScreeningLimit(err), snapshot.Output.ExitCode, nil); reject != nil {
+			if snapshot.Output.ExitCode != nil {
+				t.Registry.Observe(tctx.Identity.SessionID, handle)
+			}
+			return "", reject
 		}
 		return "", err
 	}

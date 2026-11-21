@@ -50,6 +50,7 @@ type ToolState struct {
 	Counters  SessionForgetter
 	Rejects   SessionForgetter
 	Outputs   SessionForgetter
+	Policy    SessionForgetter
 }
 
 func (s *ToolState) Forget(id string) {
@@ -67,6 +68,9 @@ func (s *ToolState) Forget(id string) {
 	}
 	if s.Outputs != nil {
 		s.Outputs.ForgetSession(id)
+	}
+	if s.Policy != nil {
+		s.Policy.ForgetSession(id)
 	}
 }
 

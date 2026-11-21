@@ -10,6 +10,7 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -437,7 +438,7 @@ func TestParseCapabilityRequestReadPathDeclares(t *testing.T) {
 	if reject != nil {
 		t.Fatalf("declaring a key read rejected: %+v", reject)
 	}
-	if req == nil || req.ReadPath != filepath.Join(home, ".ssh", "id_ed25519") {
+	if req == nil || !slices.Equal(req.ReadPaths, []string{filepath.Join(home, ".ssh", "id_ed25519")}) {
 		t.Fatalf("parsed %+v", req)
 	}
 	_, reject = capabilityrequest.ParseCapabilityRequest(map[string]any{"capability_request": map[string]any{
@@ -476,7 +477,7 @@ func TestCapabilityRequestAllowsPolicyWriteApproval(t *testing.T) {
 	request, reject := capabilityrequest.ParseCapabilityRequest(map[string]any{"capability_request": map[string]any{
 		"read_path": agents,
 	}})
-	if reject != nil || request == nil || request.ReadPath != agents {
+	if reject != nil || request == nil || !slices.Equal(request.ReadPaths, []string{agents}) {
 		t.Fatalf("governance read request = %+v reject=%+v", request, reject)
 	}
 	request, reject = capabilityrequest.ParseCapabilityRequest(map[string]any{"capability_request": map[string]any{

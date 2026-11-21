@@ -10,6 +10,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/confine"
 	"github.com/lycaon/lycaon/internal/guidance"
+	"github.com/lycaon/lycaon/internal/invocation"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/pkg/api"
@@ -139,5 +140,32 @@ func TestSandboxRecoveryPreservesRunningJobDependency(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestOptionalProtectedReadNoticePreservesSuccessfulCommand(t *testing.T) {
+	mgr := newPostToolGuidanceManager(t)
+	const code = "OPTIONAL_PROTECTED_READ_WITHHELD"
+	const original = `{"exit":0}`
+	const path = "/fixture/preferences"
+	sess := &api.Session{ID: t.Name()}
+	raised := guidance.ToolResultFacts{CommandExitedZero: true, Confine: confine.Observation{
+		Applied: true,
+		Refusals: confine.SandboxRefusals{Witness: confine.WitnessKernel, Refusals: []confine.SandboxRefusal{
+			{Operation: "file-read-data", Target: path, Grant: path, Layer: confine.FloorReadKeyMaterial, Recovery: confine.RecoverReadPath},
+		}},
+	}}
+	ctx := tools.WithCallReach(t.Context(), toolreach.Offered([]string{"command"}))
+	out, facts := mgr.ToolPolicy.AfterTool(ctx, sess, "command", nil, original, 1, raised)
+	if !facts.Succeeded() || !slices.Equal(facts.Codes, []string{code}) || invocation.SettlementIsolation(nil, facts.Codes) != nil {
+		t.Fatalf("successful command became an isolation stop: %+v", facts)
+	}
+	paths, _ := facts.FeedbackFor(code).Details["paths"].([]string)
+	if !slices.Equal(paths, []string{path}) || !strings.HasPrefix(out, original) || !strings.Contains(out, path) {
+		t.Fatalf("notice lost the command result or its observed path: paths=%v output=%s", paths, out)
+	}
+	out, facts = mgr.ToolPolicy.AfterTool(ctx, sess, "command", nil, original, 1, raised)
+	if !facts.Succeeded() || len(facts.Codes) != 0 || out != original {
+		t.Fatalf("optional read notice repeated: %+v", facts)
 	}
 }

@@ -2,6 +2,7 @@ package captureprojection
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"github.com/lycaon/lycaon/internal/secretmatch"
@@ -21,6 +22,19 @@ type LimitError struct {
 
 func (e *LimitError) Error() string {
 	return fmt.Sprintf("%s: requested %d, maximum %d", e.Resource, e.Observed, e.Maximum)
+}
+
+// ScreeningLimit preserves the resource accounting of a projection refusal.
+func ScreeningLimit(err error) *LimitError {
+	var limit *LimitError
+	if errors.As(err, &limit) {
+		return limit
+	}
+	var stream *secretmatch.StreamLimitError
+	if errors.As(err, &stream) {
+		return &LimitError{Resource: stream.Resource, Maximum: stream.Maximum, Observed: stream.Observed}
+	}
+	return nil
 }
 
 // BytesSpans projects one bounded detector unit. Larger streams use ScreenStream;

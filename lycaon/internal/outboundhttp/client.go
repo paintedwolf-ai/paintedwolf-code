@@ -747,7 +747,7 @@ func validateHeader(h Header) error {
 	}
 	switch strings.ToLower(name) {
 	case "host", "connection", "proxy-authorization", "proxy-connection", "keep-alive", "transfer-encoding", "te", "trailer", "upgrade", "content-length":
-		return invalidRequest("request header %q is controlled by the host", name)
+		return &RequestInvalidError{Reason: fmt.Sprintf("request header %q is controlled by the host", name), ControlledHeader: name}
 	}
 	return nil
 }

@@ -24,6 +24,7 @@ type ProgramOutcome struct {
 	StdoutRef                string                           `json:"stdout_ref,omitempty"`
 	StderrRef                string                           `json:"stderr_ref,omitempty"`
 	Outputs                  []api.CommandProgramOutputWindow `json:"outputs,omitempty"`
+	OutputLimit              *api.CommandProgramOutputLimit   `json:"output_limit,omitempty"`
 	Truncated                bool                             `json:"truncated,omitempty"`
 	ExecutedChildren         int                              `json:"executed_children"`
 	CompletedEffects         int                              `json:"completed_effects"`

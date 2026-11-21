@@ -162,3 +162,37 @@ func TestCommandProjectionKeepsRuntimeFailuresAsNativeOutput(t *testing.T) {
 		t.Fatalf("runtime output became a host refusal: %+v", parts)
 	}
 }
+
+func TestCommandProjectionKeepsOnlyModelMetadataAndStripsTerminalSequences(t *testing.T) {
+	message := commandResultMessage(t)
+	var body map[string]any
+	testutil.FailErr(t, "decode command fixture", json.Unmarshal([]byte(message.Content), &body))
+	body["stdout"] = "\x1b[32mhello\x1b[0m \x1b]8;;https://example.invalid\x1b\\world\x1b]8;;\a"
+	body["outputs"] = []any{map[string]any{
+		"stream": "stdout", "output_path": "@output/a&b>c", "total_bytes": 7, "total_lines": 3, "truncated": true,
+		"omitted_lines": 1, "omitted_bytes": 3, "head_end_byte": 2, "inline_budget_bytes": 10,
+		"ref": strings.Repeat("x", 1024),
+	}}
+	body["nonzero_executions"] = []any{map[string]any{
+		"status_code": 2, "span": map[string]any{"line": 9, "column": 2}, "execution_id": strings.Repeat("x", 1024),
+	}}
+	encoded, err := json.Marshal(body)
+	testutil.FailErr(t, "encode command fixture", err)
+	message.Content = string(encoded)
+	parts := projectCommandResult(message, api.MessageTextParts(message))
+	if len(parts) != 4 || !strings.Contains(parts[3].Content, "hello world") || strings.ContainsRune(parts[3].Content, '\x1b') {
+		t.Fatalf("projected stream = %+v", parts)
+	}
+	metadata := parts[1].Content
+	if len(metadata) >= 512 || !strings.Contains(metadata, "@output/a&b>c") {
+		t.Fatalf("projected metadata = %s", metadata)
+	}
+	for _, key := range []string{"program_id", "stdout_ref", "executed_children", "uncertain_effects", "omitted_bytes", "ref", "execution_id", "column"} {
+		if strings.Contains(metadata, "`"+key+"`") || strings.Contains(metadata, "\""+key+"\"") {
+			t.Errorf("unexpected field %s in %s", key, metadata)
+		}
+	}
+	if message.Content != string(encoded) {
+		t.Fatal("command result projection changed retained bytes")
+	}
+}
