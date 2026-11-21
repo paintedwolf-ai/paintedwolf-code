@@ -32,17 +32,30 @@ import { useElapsableClock } from "../test/elapse.ts";
 const elapse = useElapsableClock();
 
 const client = stubFilesClient();
-const openSourceLocation = vi.hoisted(() => vi.fn());
-vi.mock("../platform/navigation/open-source.ts", async original => ({
-  ...await original<typeof import("../platform/navigation/open-source.ts")>(), openSourceLocation,
-}));
+const { openSourceLocation, restoreOpenSourceLocation } = vi.hoisted(() => {
+  let real: typeof import("../platform/navigation/open-source.ts").openSourceLocation | undefined;
+  const fn = vi.fn();
+  return {
+    openSourceLocation: fn,
+    restoreOpenSourceLocation: (impl?: typeof real) => {
+      if (impl) real = impl;
+      fn.mockReset();
+      if (real) fn.mockImplementation(real);
+    },
+  };
+});
+vi.mock("../platform/navigation/open-source.ts", async original => {
+  const actual = await original<typeof import("../platform/navigation/open-source.ts")>();
+  restoreOpenSourceLocation(actual.openSourceLocation);
+  return { ...actual, openSourceLocation };
+});
 vi.mock("../platform/connection/app-connection.ts", async original => ({
   ...await original<typeof import("../platform/connection/app-connection.ts")>(), getLycaonClient: () => client,
 }));
 
 afterEach(() => {
   cleanup();
-  openSourceLocation.mockReset();
+  restoreOpenSourceLocation();
   resetFindControllerForTests();
   resetOpenSourceForTests();
   resetFindRevealHostsForTests();
