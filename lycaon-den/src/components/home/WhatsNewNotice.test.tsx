@@ -14,6 +14,7 @@ import { WhatsNewNotice } from "./WhatsNewNotice.tsx";
 vi.mock("../../settings/system/onboarding-prefs.ts", () => ({
   onboardingPrefsReady: () => true,
   firstRunSetupCompletedPref: () => true,
+  localModelPromptHandled: () => true,
 }));
 
 describe("WhatsNewNotice", () => {

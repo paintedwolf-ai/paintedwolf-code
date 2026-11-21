@@ -2,6 +2,7 @@ package llm
 
 import (
 	"context"
+	"github.com/lycaon/lycaon/internal/llm/providers/nativegen"
 	"reflect"
 	"testing"
 
@@ -12,13 +13,18 @@ import (
 func TestRuntimePolicyDefaultsReachWorkersWithoutPersistence(t *testing.T) {
 	store := newPolicyFixture(t, ModelPolicy{})
 	available := true
-	router := NewStaticModelRouter(store).WithLocalDefault(func(context.Context) bool { return available })
+	router := NewStaticModelRouter(store).WithLocalDefault(func(context.Context) string {
+		if available {
+			return nativegen.DefaultModelID
+		}
+		return ""
+	})
 	for _, view := range []*StaticModelRouter{router, router.WithScope(SettingsScopeProject, t.TempDir())} {
 		for _, ready := range []bool{true, false, true} {
 			available = ready
 			want := ModelRef{}
 			if ready {
-				want = DefaultLocalModelRef()
+				want = ModelRef{ProviderID: IncludedProviderID, Model: nativegen.DefaultModelID}
 			}
 			selected, err := view.Select(t.Context())
 			testutil.FailErr(t, "select worker", err)
@@ -42,7 +48,7 @@ func TestRuntimePolicyDefaultsReachWorkersWithoutPersistence(t *testing.T) {
 func TestResolvedPolicyPreservesExplicitAssignmentsAndOwnsItsSlices(t *testing.T) {
 	remote := ModelRef{ProviderID: "remote", Model: "chosen"}
 	original := ModelPolicy{Coordinator: remote, Lite: remote, AgentPool: AgentPool{Models: []ModelRef{remote}}}
-	resolved := ResolveModelPolicy(original, true)
+	resolved := ResolveModelPolicy(original, nativegen.DefaultModelID)
 	if !reflect.DeepEqual(resolved, original) {
 		t.Fatalf("explicit policy changed: %+v", resolved)
 	}

@@ -4316,6 +4316,43 @@ type LocalGenerationStatus struct {
 	Revision string `json:"revision,omitempty"`
 	// Admitted context capacity of the ready process.
 	ContextTokens int `json:"context_tokens,omitempty"`
+	// Memory named in local model requirements on this generation host.
+	MemoryKind string `json:"memory_kind,omitempty"`
+	// Persisted local model decision when the host can read its store.
+	SelectionState string `json:"selection_state,omitempty"`
+	SelectedModel  string `json:"selected_model,omitempty"`
+	TargetModel    string `json:"target_model,omitempty"`
+	// Current phase of an active model installation.
+	TransferPhase   string `json:"transfer_phase,omitempty"`
+	DownloadedBytes int    `json:"downloaded_bytes,omitempty"`
+	TotalBytes      int    `json:"total_bytes,omitempty"`
+	// This installation was packaged with an explicitly selected offline tier.
+	OfflineInstaller bool `json:"offline_installer,omitempty"`
+	// Tier contained in the packaged offline seed.
+	SeedModel       string           `json:"seed_model,omitempty"`
+	SeedAvailable   bool             `json:"seed_available,omitempty"`
+	AvailableModels []LocalModelTier `json:"available_models,omitempty"`
+}
+
+// LocalModelSelectionRequest
+type LocalModelSelectionRequest struct {
+	Model string `json:"model"`
+	// Use the packaged offline seed for the requested tier.
+	PackagedSeed bool   `json:"packaged_seed,omitempty"`
+	BundlePath   string `json:"bundle_path,omitempty"`
+}
+
+// LocalModelTier
+type LocalModelTier struct {
+	ID          string `json:"id"`
+	DisplayName string `json:"display_name"`
+	// Short guidance for choosing this tier.
+	Description       string `json:"description"`
+	DownloadBytes     int    `json:"download_bytes"`
+	MinMemoryBytes    int    `json:"min_memory_bytes"`
+	Eligible          bool   `json:"eligible"`
+	Recommended       bool   `json:"recommended"`
+	DownloadAvailable bool   `json:"download_available"`
 }
 
 // LockVaultRequest

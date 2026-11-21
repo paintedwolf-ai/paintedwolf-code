@@ -10223,6 +10223,142 @@ paths:
           $ref: '#/components/responses/TooManyRequests'
         default:
           $ref: '#/components/responses/Error'
+  /v1/providers/{provider_id}/local-model:
+    get:
+      tags:
+        - providers
+      operationId: getLocalModelStatus
+      summary: Inspect local model selection
+      parameters:
+        - name: provider_id
+          in: path
+          required: true
+          schema:
+            type: string
+            pattern: ^[a-zA-Z0-9_.-]+$
+      responses:
+        '200':
+          description: Current local model status
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LocalGenerationStatus'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+        default:
+          $ref: '#/components/responses/Error'
+    delete:
+      tags:
+        - providers
+      operationId: deleteLocalModel
+      x-person-action: record
+      summary: Remove the local model
+      parameters:
+        - name: provider_id
+          in: path
+          required: true
+          schema:
+            type: string
+            pattern: ^[a-zA-Z0-9_.-]+$
+      responses:
+        '204':
+          description: Local model removed
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+        default:
+          $ref: '#/components/responses/Error'
+  /v1/providers/{provider_id}/local-model/select:
+    post:
+      tags:
+        - providers
+      operationId: selectLocalModel
+      x-person-action: record
+      summary: Start a local model download or offline import
+      parameters:
+        - name: provider_id
+          in: path
+          required: true
+          schema:
+            type: string
+            pattern: ^[a-zA-Z0-9_.-]+$
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LocalModelSelectionRequest'
+      responses:
+        '200':
+          description: Current local model status
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LocalGenerationStatus'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '413':
+          $ref: '#/components/responses/ContentTooLarge'
+        '415':
+          $ref: '#/components/responses/UnsupportedMediaType'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+        default:
+          $ref: '#/components/responses/Error'
+  /v1/providers/{provider_id}/local-model/cancel:
+    post:
+      tags:
+        - providers
+      operationId: cancelLocalModelTransfer
+      x-person-action: record
+      summary: Cancel a local model transfer
+      parameters:
+        - name: provider_id
+          in: path
+          required: true
+          schema:
+            type: string
+            pattern: ^[a-zA-Z0-9_.-]+$
+      responses:
+        '200':
+          description: Current local model status
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LocalGenerationStatus'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+        default:
+          $ref: '#/components/responses/Error'
   /v1/providers/{provider_id}/repair:
     post:
       tags:
@@ -38919,6 +39055,38 @@ components:
           type: integer
           format: int64
           description: Estimated USD overage in nano-USD for usage above the included daily allowance when applicable.
+    LocalModelTier:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - display_name
+        - description
+        - download_bytes
+        - min_memory_bytes
+        - eligible
+        - recommended
+        - download_available
+      properties:
+        id:
+          type: string
+          pattern: ^[a-zA-Z0-9_.-]+$
+        display_name:
+          type: string
+        description:
+          type: string
+          description: Short guidance for choosing this tier.
+        download_bytes:
+          type: integer
+        min_memory_bytes:
+          type: integer
+        eligible:
+          type: boolean
+        recommended:
+          type: boolean
+        download_available:
+          type: boolean
     LocalGenerationStatus:
       x-go-generate: true
       type: object
@@ -38937,6 +39105,8 @@ components:
             - unavailable
             - repair_required
             - insufficient_memory
+            - downloading
+            - opted_out
             - stopped
           description: Current host runtime state, independent of cached model discovery.
         recovery_action:
@@ -38957,6 +39127,47 @@ components:
           type: integer
           minimum: 0
           description: Admitted context capacity of the ready process.
+        memory_kind:
+          type: string
+          enum:
+            - system
+            - gpu
+          description: Memory named in local model requirements on this generation host.
+        selection_state:
+          type: string
+          enum:
+            - unconfigured
+            - selected
+            - opted_out
+          description: Persisted local model decision when the host can read its store.
+        selected_model:
+          type: string
+        target_model:
+          type: string
+        transfer_phase:
+          type: string
+          enum:
+            - preparing
+            - downloading
+            - importing
+            - activating
+          description: Current phase of an active model installation.
+        downloaded_bytes:
+          type: integer
+        total_bytes:
+          type: integer
+        offline_installer:
+          type: boolean
+          description: This installation was packaged with an explicitly selected offline tier.
+        seed_model:
+          type: string
+          description: Tier contained in the packaged offline seed.
+        seed_available:
+          type: boolean
+        available_models:
+          type: array
+          items:
+            $ref: '#/components/schemas/LocalModelTier'
     ProviderListResponse:
       x-go-generate: true
       type: object
@@ -39043,6 +39254,20 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/ProviderKindTemplate'
+    LocalModelSelectionRequest:
+      x-go-generate: true
+      type: object
+      required:
+        - model
+      additionalProperties: false
+      properties:
+        model:
+          type: string
+        packaged_seed:
+          type: boolean
+          description: Use the packaged offline seed for the requested tier.
+        bundle_path:
+          type: string
     LocalGenerationRepairResult:
       x-go-generate: true
       type: object

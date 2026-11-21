@@ -63,7 +63,10 @@ func StreamingWithHeaderTimeout(class egressclass.ID, header time.Duration) *htt
 // when it stalls: a transfer that keeps delivering bytes never fails because time passed.
 func Download(class egressclass.ID) *http.Client {
 	egressclass.RequireTransport(class, egressclass.HTTPDownload)
-	tr := baseTransport()
+	return downloadClient(baseTransport(), total)
+}
+
+func downloadClient(tr *http.Transport, total time.Duration) *http.Client {
 	tr.ResponseHeaderTimeout = 30 * time.Second
 	return &http.Client{Transport: &stallTransport{base: tr, stall: DownloadStall, after: afterTimer}}
 }

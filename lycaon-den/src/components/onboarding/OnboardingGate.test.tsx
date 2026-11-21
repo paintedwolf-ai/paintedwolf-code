@@ -1,26 +1,25 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { createSignal } from "solid-js";
 import { cleanup, fireEvent, render, screen, waitFor } from "@solidjs/testing-library";
 import type { LycaonClient } from "../../api/client.ts";
 import type { ModelPolicy, ProviderMeta } from "../../api/types.ts";
-import { CLIENT_NOTICES } from "../../notices/client-notices.generated.ts";
 import { createSettingsStore } from "../../store/settings-store.ts";
 import {
-  dispatchKeyboardEvent,
-  registerCommandHandler,
   resetDispatcherForTests,
+  registerCommandHandler,
+  dispatchKeyboardEvent,
   setDispatcherPlatformForTests,
 } from "../../shortcuts/dispatcher.ts";
-import { OnboardingGate } from "./OnboardingGate.tsx";
-import { onboardingSetupBlocker } from "./onboarding-gate-model.ts";
 import { tryDismissOnboardingWelcome } from "./onboarding-welcome-dismiss.ts";
 import { MODELS_SETTINGS_COPY } from "../../settings/providers/models-settings-copy.ts";
+import { OnboardingGate } from "./OnboardingGate.tsx";
 import { resetLayoutForTests } from "../../layout/layout-test-support.ts";
 import {
   saveStartupCompanion,
   saveWorkspaceOrientation,
   startupCompanionPref,
 } from "../../shell/workspace-layout.ts";
+import { includedProvider, publishedTier } from "../../test/local-generation-fixture.ts";
+import { createSignal } from "solid-js";
 import { providerModel } from "../../test/provider-fixtures.ts";
 import { stageLabelFor } from "../stage/stage-registry.tsx";
 import { ONBOARDING_LAYOUT_COPY } from "./onboarding-layout-copy.ts";
@@ -37,9 +36,17 @@ vi.mock("../../store/app-state-snapshot.ts", () => ({
   persistAppState: vi.fn().mockResolvedValue(undefined),
 }));
 
-const completeFirstRunSetup = vi.fn().mockResolvedValue(undefined);
+let firstRunComplete = false;
+let modelStepComplete = false;
+const postponePrompt = vi.hoisted(() => vi.fn());
+const completeModelStep = vi.fn(async () => { modelStepComplete = true; });
+const completeFirstRunSetup = vi.hoisted(() => vi.fn().mockResolvedValue(undefined));
 vi.mock("../../settings/system/onboarding-prefs.ts", () => ({
-  completeFirstRunSetup: () => completeFirstRunSetup(),
+  localModelOnboardingCompletedPref: () => modelStepComplete,
+  completeLocalModelOnboarding: () => completeModelStep(),
+  firstRunSetupCompletedPref: () => firstRunComplete,
+  completeFirstRunSetup,
+  postponeLocalModelPrompt: postponePrompt,
 }));
 
 
@@ -60,6 +67,8 @@ const readyProvider: ProviderMeta = {
   models: [providerModel("llama3.1")],
 };
 
+const normalProvider = includedProvider({state: "idle", recovery_action: "none", offline_installer: false, available_models: [publishedTier]});
+
 const policyWithDefault: ModelPolicy = {
   coordinator: { provider_id: "local", model: "llama3.1" },
   lite: { provider_id: "", model: "" },
@@ -71,7 +80,9 @@ const policyWithDefault: ModelPolicy = {
 
 function mockClient(overrides: Partial<LycaonClient> = {}): LycaonClient {
   return {
-    listProviders: vi.fn().mockResolvedValue([readyProvider]),
+    listProviders: vi.fn().mockResolvedValue([normalProvider, readyProvider]),
+    deleteLocalModel: vi.fn().mockResolvedValue(undefined),
+    selectLocalModel: vi.fn(),
     listProviderKinds: vi.fn().mockResolvedValue([
       {
         kind: "ollama",
@@ -101,7 +112,8 @@ function mockClient(overrides: Partial<LycaonClient> = {}): LycaonClient {
 }
 
 async function advanceToLayout(): Promise<void> {
-  fireEvent.click(screen.getByTestId("onboarding-summarizer-continue"));
+  fireEvent.click(screen.getByRole("radio", {name: "Use no local model"}));
+  fireEvent.click(screen.getByRole("button", { name: "Continue without a local model" }));
   await waitFor(() => {
     expect(screen.getByTestId("onboarding-layout")).toBeTruthy();
   });
@@ -130,116 +142,125 @@ function pressEscape(): void {
 afterEach(() => {
   cleanup();
   customChrome = true;
+  firstRunComplete = false;
+  modelStepComplete = false;
+  completeModelStep.mockClear();
   completeFirstRunSetup.mockClear();
   resetDispatcherForTests();
   setDispatcherPlatformForTests(null);
   resetLayoutForTests();
 });
 
-describe("onboarding-gate-model continue helpers", () => {
-  it("onboardingSetupBlocker names the missing half", () => {
-    expect(
-      onboardingSetupBlocker({ readyProviderCount: 0, hasDefaultModel: true }),
-    ).toBe("provider");
-    expect(
-      onboardingSetupBlocker({ readyProviderCount: 1, hasDefaultModel: false }),
-    ).toBe("default_model");
-    expect(
-      onboardingSetupBlocker({ readyProviderCount: 1, hasDefaultModel: true }),
-    ).toBeNull();
+describe("Local model setup", () => {
+  it("starts with device selection even with a configured provider", async () => {
+    const client = mockClient();
+    const store = createSettingsStore({ providers: [normalProvider, readyProvider], modelPolicy: policyWithDefault });
+    render(() => <OnboardingGate client={client} settingsStore={store} settingsChecked={true} />);
+    expect(screen.getByRole("dialog").getAttribute("aria-labelledby")).toBe("onboarding-local_model-title");
+    expect(screen.getByTestId("onboarding-progress").textContent).toBe("1 / 3");
+    await advanceToWelcome();
+    expect(screen.getByTestId("onboarding-welcome-settings-teach").textContent).toContain("AI providers");
+    expect(client.testProvider).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByTestId("onboarding-welcome-dismiss"));
+    expect(completeFirstRunSetup).toHaveBeenCalledOnce();
+  });
+
+  it("resumes at the layout after the model decision was saved", () => {
+    modelStepComplete = true;
+    render(() => <OnboardingGate client={mockClient()} settingsStore={createSettingsStore({providers: [normalProvider]})} settingsChecked={true} />);
+    expect(screen.getByTestId("onboarding-progress").textContent).toBe("2 / 3");
+    expect(screen.getByTestId("onboarding-layout")).toBeTruthy();
+  });
+
+  it("waits for the host installation fact and skips the pane for a damaged offline seed", async () => {
+    const [checked, setChecked] = createSignal(false);
+    const store = createSettingsStore({providers: [normalProvider]});
+    const client = mockClient();
+    render(() => <OnboardingGate client={client} settingsStore={store} settingsChecked={checked()} />);
+    expect(screen.getByTestId("onboarding-waiting")).toBeTruthy();
+    expect(screen.queryByTestId("onboarding-local-model")).toBeNull();
+    store.actions.setProviders([includedProvider({state: "repair_required", recovery_action: "repair",
+      offline_installer: true, seed_available: false})]);
+    setChecked(true);
+    expect(await screen.findByTestId("onboarding-layout")).toBeTruthy();
+    expect(screen.getByTestId("onboarding-progress").textContent).toBe("1 / 2");
+    expect(screen.queryByTestId("onboarding-layout-back")).toBeNull();
+    fireEvent.click(screen.getByTestId("onboarding-layout-continue"));
+    expect(screen.getByTestId("onboarding-progress").textContent).toBe("2 / 2");
+    expect(completeModelStep).toHaveBeenCalledOnce();
+  });
+
+  it("rechecks an inaccessible catalog and continues without changing host model choices", async () => {
+    const store = createSettingsStore();
+    const client = mockClient({listProviders:vi.fn().mockRejectedValue(new Error("Host offline"))});
+    render(() => <OnboardingGate client={client} settingsStore={store} settingsChecked={true} />);
+    fireEvent.click(screen.getByRole("button", {name: "Check again"}));
+    expect(await screen.findByText("Host offline")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", {name: "Continue without configuring a model"}));
+    expect(await screen.findByTestId("onboarding-layout")).toBeTruthy();
+    expect(client.deleteLocalModel).not.toHaveBeenCalled();
+    expect(client.selectLocalModel).not.toHaveBeenCalled();
+  });
+
+  it("defers the model decision while every download is unpublished", async () => {
+    const store = createSettingsStore({providers: [includedProvider({
+      state: "idle", recovery_action: "none",
+    })]});
+    const client = mockClient();
+    render(() => <OnboardingGate client={client} settingsStore={store} settingsChecked={true} />);
+    expect(screen.getByTestId("onboarding-waiting")).toBeTruthy();
+    store.actions.setProviders([includedProvider({
+      state: "idle", recovery_action: "none",
+      available_models: [{...publishedTier, download_available: false}],
+    })]);
+    expect(screen.getByTestId("onboarding-progress").textContent).toBe("1 / 2");
+    expect(screen.queryByTestId("onboarding-layout-back")).toBeNull();
+    fireEvent.click(screen.getByTestId("onboarding-layout-continue"));
+    expect(screen.getByTestId("onboarding-welcome").textContent).toContain("AI providers");
+    fireEvent.click(screen.getByTestId("onboarding-welcome-dismiss"));
+    expect(completeFirstRunSetup).toHaveBeenCalledOnce();
+    expect(completeModelStep).not.toHaveBeenCalled();
+    expect(client.deleteLocalModel).not.toHaveBeenCalled();
+  });
+
+  it.each(["selected", "opted_out"] as const)("honors a %s host journal entry on a fresh Den profile", async selection_state => {
+    const client = mockClient();
+    const store = createSettingsStore({providers: [includedProvider({
+      state: "unavailable", recovery_action: "none", selection_state, available_models: [publishedTier],
+    })]});
+    render(() => <OnboardingGate client={client} settingsStore={store} settingsChecked={true} />);
+    expect(await screen.findByTestId("onboarding-layout")).toBeTruthy();
+    expect(screen.queryByTestId("onboarding-local-model")).toBeNull();
+    expect(screen.queryByTestId("onboarding-layout-back")).toBeNull();
+    expect(completeModelStep).toHaveBeenCalledOnce();
+    expect(client.selectLocalModel).not.toHaveBeenCalled();
+    expect(client.deleteLocalModel).not.toHaveBeenCalled();
+  });
+
+  it("finishes the outstanding model step on a returning offline installation", async () => {
+    firstRunComplete = true;
+    const store = createSettingsStore({providers: [includedProvider({state: "opted_out", recovery_action: "none", offline_installer: true})]});
+    render(() => <OnboardingGate client={mockClient()} settingsStore={store} settingsChecked={true} />);
+    await waitFor(() => expect(completeModelStep).toHaveBeenCalledOnce());
+    expect(screen.queryByTestId("onboarding-local-model")).toBeNull();
+    expect(screen.queryByTestId("onboarding-layout")).toBeNull();
+  });
+
+  it("opens just one page on an existing installation", async () => {
+    firstRunComplete = true;
+    render(() => <OnboardingGate client={mockClient()} settingsStore={createSettingsStore({providers: [normalProvider]})} settingsChecked={true} />);
+    expect(screen.getByTestId("onboarding-progress").textContent).toBe("1 / 1");
+    fireEvent.click(screen.getByRole("radio", {name: "Use no local model"}));
+    fireEvent.click(screen.getByRole("button", {name: "Continue without a local model"}));
+    await waitFor(() => expect(completeModelStep).toHaveBeenCalledOnce());
+    expect(completeFirstRunSetup).not.toHaveBeenCalled();
   });
 });
 
-describe("OnboardingGate setup page", () => {
-  it("accepts the host-resolved default without writing it to the overlay", () => {
-    const overlay: ModelPolicy = {
-      coordinator: { provider_id: "", model: "" },
-      lite: { provider_id: "", model: "" },
-      agent_pool: { selection: "first", models: [] },
-    };
-    const store = createSettingsStore({ providers: [readyProvider], modelPolicy: overlay,
-      effectiveModelPolicy: policyWithDefault });
-    const client = mockClient();
-    render(() => <OnboardingGate client={client} settingsStore={store} settingsChecked={true} />);
-    expect(screen.queryByTestId("onboarding-setup")).toBeNull();
-    expect(store.state.modelPolicy).toEqual(overlay);
-    expect(client.updateModelPolicySettings).not.toHaveBeenCalled();
-  });
-
-  it("mounts setup with continue gated until provider + default model exist", () => {
-    const settingsStore = createSettingsStore({
-      providers: [],
-      modelPolicy: {
-        coordinator: { provider_id: "", model: "" },
-        lite: { provider_id: "", model: "" },
-        agent_pool: { selection: "first", models: [] },
-      },
-    });
-    const { getByTestId, queryByTestId } = render(() => (
-      <OnboardingGate
-        client={mockClient()}
-        settingsStore={settingsStore}
-        settingsChecked={true}
-      />
-    ));
-    expect(getByTestId("onboarding-setup")).toBeTruthy();
-    const cont = getByTestId("onboarding-setup-continue") as HTMLButtonElement;
-    expect(cont.getAttribute("aria-disabled")).toBe("true");
-    expect(queryByTestId("onboarding-welcome")).toBeNull();
-    expect(getByTestId("onboarding-setup").textContent).toContain(
-      MODELS_SETTINGS_COPY.onboardingSetupTitle,
-    );
-  });
-
-  it("says what Continue is waiting for, and keeps it reachable", async () => {
-    const settingsStore = createSettingsStore({
-      providers: [],
-      modelPolicy: {
-        coordinator: { provider_id: "", model: "" },
-        lite: { provider_id: "", model: "" },
-        agent_pool: { selection: "first", models: [] },
-      },
-    });
-    const { getByTestId } = render(() => (
-      <OnboardingGate
-        client={mockClient()}
-        settingsStore={settingsStore}
-        settingsChecked={true}
-      />
-    ));
-
-    const hint = getByTestId("onboarding-setup-continue-hint");
-    expect(hint.textContent).toBe(
-      MODELS_SETTINGS_COPY.onboardingContinueNeedProvider,
-    );
-    const cont = getByTestId("onboarding-setup-continue") as HTMLButtonElement;
-    // Focusable and announced rather than removed from the tab order.
-    expect(cont.disabled).toBe(false);
-    expect(cont.getAttribute("aria-disabled")).toBe("true");
-    expect(cont.getAttribute("aria-describedby")).toBe(hint.id);
-    expect(cont.hasAttribute("data-tip")).toBe(false);
-
-    // With a provider ready, the ask moves to the other half.
-    settingsStore.actions.setProviders([readyProvider]);
-    await waitFor(() => {
-      expect(getByTestId("onboarding-setup-continue-hint").textContent).toBe(
-        MODELS_SETTINGS_COPY.onboardingContinueNeedDefaultModel,
-      );
-    });
-
-    settingsStore.actions.setModelPolicy(policyWithDefault);
-    await waitFor(() => {
-      expect(
-        (
-          getByTestId("onboarding-setup-continue") as HTMLButtonElement
-        ).getAttribute("aria-disabled"),
-      ).toBeNull();
-    });
-  });
-
+describe("Setup navigation and accessibility", () => {
   it("is a labelled modal landmark that takes focus on mount", async () => {
     const settingsStore = createSettingsStore({
-      providers: [],
+      providers: [normalProvider],
       modelPolicy: {
         coordinator: { provider_id: "", model: "" },
         lite: { provider_id: "", model: "" },
@@ -257,7 +278,7 @@ describe("OnboardingGate setup page", () => {
     const gate = getByTestId("onboarding-gate");
     expect(gate.getAttribute("role")).toBe("dialog");
     expect(gate.getAttribute("aria-modal")).toBe("true");
-    expect(gate.getAttribute("aria-labelledby")).toBe("onboarding-setup-title");
+    expect(gate.getAttribute("aria-labelledby")).toBe("onboarding-local_model-title");
     expect(container.querySelector("main")).toBeTruthy();
     await waitFor(() => {
       expect(document.activeElement).toBe(
@@ -266,94 +287,9 @@ describe("OnboardingGate setup page", () => {
     });
   });
 
-  it("puts a heading between the page title and the provider groups", () => {
-    const settingsStore = createSettingsStore({
-      providers: [readyProvider],
-      modelPolicy: {
-        coordinator: { provider_id: "", model: "" },
-        lite: { provider_id: "", model: "" },
-        agent_pool: { selection: "first", models: [] },
-      },
-    });
-    const { container } = render(() => (
-      <OnboardingGate
-        client={mockClient()}
-        settingsStore={settingsStore}
-        settingsChecked={true}
-      />
-    ));
-    const levels = [...container.querySelectorAll("h1, h2, h3, h4, h5, h6")].map(
-      (h) => Number(h.tagName.slice(1)),
-    );
-    expect(levels[0]).toBe(1);
-    expect(levels[1]).toBe(2);
-  });
-
-  it("opens on summarizer when config is already ready and latch is unset", () => {
-    const settingsStore = createSettingsStore({
-      providers: [readyProvider],
-      modelPolicy: policyWithDefault,
-    });
-    const { getByTestId, queryByTestId } = render(() => (
-      <OnboardingGate
-        client={mockClient()}
-        settingsStore={settingsStore}
-        settingsChecked={true}
-      />
-    ));
-    expect(getByTestId("onboarding-summarizer")).toBeTruthy();
-    expect(queryByTestId("onboarding-setup")).toBeNull();
-    expect(queryByTestId("onboarding-welcome")).toBeNull();
-    expect(getByTestId("onboarding-summarizer").textContent).toContain(
-      MODELS_SETTINGS_COPY.onboardingSummarizerTitle,
-    );
-  });
-
-  it("waits for the boot settings read before routing a configured profile", async () => {
-    const [settingsChecked, setSettingsChecked] = createSignal(false);
-    const settingsStore = createSettingsStore({ providers: [] });
-    const { getByTestId, queryByTestId } = render(() => (
-      <OnboardingGate
-        client={mockClient()}
-        settingsStore={settingsStore}
-        settingsChecked={settingsChecked()}
-      />
-    ));
-
-    expect(getByTestId("onboarding-setup")).toBeTruthy();
-    settingsStore.actions.setProviders([readyProvider]);
-    settingsStore.actions.setModelPolicy(policyWithDefault);
-    expect(getByTestId("onboarding-setup")).toBeTruthy();
-
-    setSettingsChecked(true);
-    await waitFor(() => {
-      expect(getByTestId("onboarding-summarizer")).toBeTruthy();
-      expect(queryByTestId("onboarding-setup")).toBeNull();
-    });
-  });
-
-  it("setup Skip latches and exits the whole first-run", async () => {
-    const settingsStore = createSettingsStore({
-      providers: [],
-    });
-    const { getByTestId, queryByTestId } = render(() => (
-      <OnboardingGate
-        client={mockClient()}
-        settingsStore={settingsStore}
-        settingsChecked={true}
-      />
-    ));
-    expect(getByTestId("onboarding-setup-skip")).toBeTruthy();
-    fireEvent.click(getByTestId("onboarding-setup-skip"));
-    await waitFor(() => {
-      expect(completeFirstRunSetup).toHaveBeenCalledOnce();
-    });
-    expect(queryByTestId("onboarding-summarizer-skip")).toBeNull();
-  });
-
   it("welcome fades in the stage wash background", async () => {
     const settingsStore = createSettingsStore({
-      providers: [readyProvider],
+      providers: [normalProvider, readyProvider],
       modelPolicy: policyWithDefault,
     });
     const { getByTestId, queryByTestId } = render(() => (
@@ -365,7 +301,7 @@ describe("OnboardingGate setup page", () => {
     ));
     await advanceToWelcome();
     expect(getByTestId("onboarding-welcome-wash")).toBeTruthy();
-    expect(queryByTestId("onboarding-setup")).toBeNull();
+    expect(queryByTestId("onboarding-local-model")).toBeNull();
     expect(
       getByTestId("onboarding-gate").classList.contains(
         "onboarding-gate--welcome",
@@ -375,7 +311,7 @@ describe("OnboardingGate setup page", () => {
 
   it("welcome teach reuses Settings dock chrome with AI providers selected and the nav dot", async () => {
     const settingsStore = createSettingsStore({
-      providers: [readyProvider],
+      providers: [normalProvider, readyProvider],
       modelPolicy: policyWithDefault,
     });
     const { getByTestId } = render(() => (
@@ -413,190 +349,9 @@ describe("OnboardingGate setup page", () => {
     ).toBe(false);
   });
 
-  it("summarizer mirrors settings select and centers add-provider chrome", async () => {
+  it("Back walks welcome → layout → model choice without latching", async () => {
     const settingsStore = createSettingsStore({
-      providers: [readyProvider],
-      modelPolicy: policyWithDefault,
-    });
-    const { getByTestId, queryByTestId } = render(() => (
-      <OnboardingGate
-        client={mockClient()}
-        settingsStore={settingsStore}
-        settingsChecked={true}
-      />
-    ));
-    expect(getByTestId("onboarding-summarizer").textContent).toContain(
-      MODELS_SETTINGS_COPY.onboardingSummarizerOptional,
-    );
-    expect(getByTestId("onboarding-summarizer-local-tip").textContent).toContain(
-      MODELS_SETTINGS_COPY.onboardingSummarizerLocalSaveHint,
-    );
-    expect(getByTestId("onboarding-summarizer-settings")).toBeTruthy();
-    expect(getByTestId("default-summarizer-model-select")).toBeTruthy();
-    expect(queryByTestId("onboarding-summarizer-provider-embed")).toBeNull();
-
-    fireEvent.click(getByTestId("onboarding-summarizer-add-provider"));
-    await waitFor(() => {
-      expect(getByTestId("onboarding-summarizer-provider-embed")).toBeTruthy();
-      expect(getByTestId("providers-add")).toBeTruthy();
-    });
-    expect(getByTestId("providers-row-local")).toBeTruthy();
-
-    fireEvent.click(getByTestId("providers-add"));
-    await waitFor(() => {
-      expect(screen.getByTestId("providers-add-dialog")).toBeTruthy();
-    });
-  });
-
-  it("setup page uses the same AI providers panel as the summarizer, unhidden", async () => {
-    const settingsStore = createSettingsStore({
-      providers: [readyProvider],
-      modelPolicy: policyWithDefault,
-    });
-    const { queryByTestId, getByTestId } = render(() => (
-      <OnboardingGate
-        client={mockClient()}
-        settingsStore={settingsStore}
-        settingsChecked={false}
-      />
-    ));
-    await waitFor(() => {
-      expect(getByTestId("default-model-select")).toBeTruthy();
-    });
-    expect(queryByTestId("onboarding-summarizer-add-provider")).toBeNull();
-    expect(getByTestId("providers-list-chrome")).toBeTruthy();
-    expect(getByTestId("providers-add")).toBeTruthy();
-    expect(getByTestId("providers-row-local")).toBeTruthy();
-    expect(queryByTestId("default-summarizer-model-select")).toBeNull();
-  });
-
-  it("Continue validates via testProvider then advances to summarizer then welcome", async () => {
-    const testProvider = vi.fn().mockResolvedValue({ ok: true, latency_ms: 9 });
-    const settingsStore = createSettingsStore({
-      providers: [readyProvider],
-      modelPolicy: policyWithDefault,
-    });
-    const { getByTestId, queryByTestId } = render(() => (
-      <OnboardingGate
-        client={mockClient({ testProvider })}
-        settingsStore={settingsStore}
-        settingsChecked={false}
-      />
-    ));
-    await waitFor(() => {
-      expect(
-        getByTestId("onboarding-setup-continue").getAttribute("aria-disabled"),
-      ).toBeNull();
-    });
-    fireEvent.click(getByTestId("onboarding-setup-continue"));
-    await waitFor(() => {
-      expect(testProvider).toHaveBeenCalledWith("local", expect.any(AbortSignal));
-      expect(getByTestId("onboarding-summarizer")).toBeTruthy();
-    });
-    expect(queryByTestId("onboarding-setup")).toBeNull();
-    expect(queryByTestId("onboarding-summarizer-skip")).toBeNull();
-    fireEvent.click(getByTestId("onboarding-summarizer-continue"));
-    await waitFor(() => {
-      expect(getByTestId("onboarding-layout")).toBeTruthy();
-    });
-    fireEvent.click(getByTestId("onboarding-layout-continue"));
-    await waitFor(() => {
-      expect(getByTestId("onboarding-welcome")).toBeTruthy();
-    });
-    fireEvent.click(getByTestId("onboarding-welcome-dismiss"));
-    await waitFor(() => {
-      expect(completeFirstRunSetup).toHaveBeenCalledOnce();
-    });
-  });
-
-  it("key check is cancellable and still lets the user continue", async () => {
-    let rejectCheck: ((err: Error) => void) | undefined;
-    const testProvider = vi.fn(
-      (_id: string, signal?: AbortSignal) =>
-        new Promise<never>((_resolve, reject) => {
-          rejectCheck = reject;
-          signal?.addEventListener("abort", () =>
-            reject(new DOMException("aborted", "AbortError")),
-          );
-        }),
-    );
-    const settingsStore = createSettingsStore({
-      providers: [readyProvider],
-      modelPolicy: policyWithDefault,
-    });
-    const { getByTestId, queryByTestId } = render(() => (
-      <OnboardingGate
-        client={mockClient({ testProvider })}
-        settingsStore={settingsStore}
-        settingsChecked={false}
-      />
-    ));
-    await waitFor(() => {
-      expect(
-        getByTestId("onboarding-setup-continue").getAttribute("aria-disabled"),
-      ).toBeNull();
-    });
-
-    fireEvent.click(getByTestId("onboarding-setup-continue"));
-    await waitFor(() => {
-      expect(getByTestId("onboarding-setup-stop-check")).toBeTruthy();
-    });
-    expect(queryByTestId("onboarding-setup-continue-anyway")).toBeNull();
-
-    fireEvent.click(getByTestId("onboarding-setup-stop-check"));
-    await waitFor(() => {
-      expect(getByTestId("onboarding-setup-continue-anyway")).toBeTruthy();
-      expect(queryByTestId("onboarding-setup-stop-check")).toBeNull();
-    });
-    expect(getByTestId("onboarding-setup-error").textContent).toContain(
-      CLIENT_NOTICES.provider_check_unfinished.title,
-    );
-
-    fireEvent.click(getByTestId("onboarding-setup-continue-anyway"));
-    await waitFor(() => {
-      expect(getByTestId("onboarding-summarizer")).toBeTruthy();
-    });
-    expect(rejectCheck).toBeTypeOf("function");
-  });
-
-  it("a timed-out key check offers continue rather than trapping the user", async () => {
-    const testProvider = vi
-      .fn()
-      .mockRejectedValue(new Error("network timeout"));
-    const settingsStore = createSettingsStore({
-      providers: [readyProvider],
-      modelPolicy: policyWithDefault,
-    });
-    const { getByTestId } = render(() => (
-      <OnboardingGate
-        client={mockClient({ testProvider })}
-        settingsStore={settingsStore}
-        settingsChecked={false}
-      />
-    ));
-    await waitFor(() => {
-      expect(
-        getByTestId("onboarding-setup-continue").getAttribute("aria-disabled"),
-      ).toBeNull();
-    });
-    fireEvent.click(getByTestId("onboarding-setup-continue"));
-
-    await waitFor(() => {
-      expect(getByTestId("onboarding-setup-continue-anyway")).toBeTruthy();
-    });
-    const error = getByTestId("onboarding-setup-error").textContent ?? "";
-    expect(error).toContain(CLIENT_NOTICES.provider_check_unfinished.message);
-    expect(error).not.toContain("network timeout");
-
-    fireEvent.click(getByTestId("onboarding-setup-continue-anyway"));
-    await waitFor(() => {
-      expect(getByTestId("onboarding-summarizer")).toBeTruthy();
-    });
-  });
-
-  it("Back walks welcome → layout → summarizer → setup without latching", async () => {
-    const settingsStore = createSettingsStore({
-      providers: [readyProvider],
+      providers: [normalProvider, readyProvider],
       modelPolicy: policyWithDefault,
     });
     const { getByTestId, queryByTestId } = render(() => (
@@ -617,79 +372,28 @@ describe("OnboardingGate setup page", () => {
 
     fireEvent.click(getByTestId("onboarding-layout-back"));
     await waitFor(() => {
-      expect(getByTestId("onboarding-summarizer")).toBeTruthy();
+      expect(getByTestId("onboarding-local-model")).toBeTruthy();
     });
-
-    fireEvent.click(getByTestId("onboarding-summarizer-back"));
-    await waitFor(() => {
-      expect(getByTestId("onboarding-setup")).toBeTruthy();
-    });
-    expect(getByTestId("onboarding-setup-skip")).toBeTruthy();
     expect(queryByTestId("onboarding-setup-back")).toBeNull();
     expect(completeFirstRunSetup).not.toHaveBeenCalled();
   });
 
-  it("Escape on setup skips the whole first-run and latches", async () => {
+  it("dismisses setup with Escape while host facts are unavailable", async () => {
+    render(() => <OnboardingGate client={null} settingsStore={createSettingsStore()} settingsChecked={false} />);
+    expect(screen.getByTestId("onboarding-waiting")).toBeTruthy();
+    expect(tryDismissOnboardingWelcome()).toBe(true);
+    await waitFor(() => expect(completeFirstRunSetup).toHaveBeenCalledOnce());
+    expect(postponePrompt).toHaveBeenCalled();
+    expect(completeModelStep).not.toHaveBeenCalled();
+  });
+
+  it("Escape steps layout → welcome without latching", async () => {
     setDispatcherPlatformForTests("macos");
     registerCommandHandler("overlay.dismiss", () => {
       tryDismissOnboardingWelcome();
     });
     const settingsStore = createSettingsStore({
-      providers: [],
-    });
-    const { getByTestId } = render(() => (
-      <OnboardingGate
-        client={mockClient()}
-        settingsStore={settingsStore}
-        settingsChecked={true}
-      />
-    ));
-    expect(getByTestId("onboarding-setup")).toBeTruthy();
-    dispatchKeyboardEvent({
-      key: "Escape",
-      code: "Escape",
-      metaKey: false,
-      ctrlKey: false,
-      altKey: false,
-      shiftKey: false,
-      target: document.body,
-    });
-    await waitFor(() => {
-      expect(completeFirstRunSetup).toHaveBeenCalledOnce();
-    });
-  });
-
-  it("Escape closes the provider picker before the setup page", async () => {
-    const settingsStore = createSettingsStore({ providers: [] });
-    const { getByTestId, queryByTestId } = render(() => (
-      <OnboardingGate
-        client={mockClient()}
-        settingsStore={settingsStore}
-        settingsChecked={true}
-      />
-    ));
-
-    fireEvent.click(getByTestId("providers-add"));
-    await waitFor(() => {
-      expect(screen.getByTestId("add-provider-filter")).toBeTruthy();
-    });
-    fireEvent.keyDown(screen.getByTestId("add-provider-filter"), {
-      key: "Escape",
-    });
-    await waitFor(() => {
-      expect(queryByTestId("providers-add-dialog")).toBeNull();
-      expect(getByTestId("onboarding-setup")).toBeTruthy();
-    });
-    expect(completeFirstRunSetup).not.toHaveBeenCalled();
-  });
-
-  it("Escape steps summarizer → layout → welcome without latching", async () => {
-    setDispatcherPlatformForTests("macos");
-    registerCommandHandler("overlay.dismiss", () => {
-      tryDismissOnboardingWelcome();
-    });
-    const settingsStore = createSettingsStore({
-      providers: [readyProvider],
+      providers: [normalProvider, readyProvider],
       modelPolicy: policyWithDefault,
     });
     const { getByTestId } = render(() => (
@@ -699,11 +403,9 @@ describe("OnboardingGate setup page", () => {
         settingsChecked={true}
       />
     ));
-    expect(getByTestId("onboarding-summarizer")).toBeTruthy();
-    pressEscape();
-    await waitFor(() => {
-      expect(getByTestId("onboarding-layout")).toBeTruthy();
-    });
+    fireEvent.click(screen.getByRole("radio", {name: "Use no local model"}));
+    fireEvent.click(screen.getByRole("button", {name: "Continue without a local model"}));
+    expect(await screen.findByTestId("onboarding-layout")).toBeTruthy();
     pressEscape();
     await waitFor(() => {
       expect(getByTestId("onboarding-welcome")).toBeTruthy();
@@ -719,7 +421,7 @@ describe("OnboardingGate setup page", () => {
       tryDismissOnboardingWelcome();
     });
     const settingsStore = createSettingsStore({
-      providers: [readyProvider],
+      providers: [normalProvider, readyProvider],
       modelPolicy: policyWithDefault,
     });
     const { getByTestId } = render(() => (
@@ -745,42 +447,10 @@ describe("OnboardingGate setup page", () => {
     });
   });
 
-  it("keeps setup and shows an error when validation fails", async () => {
-    const testProvider = vi.fn().mockResolvedValue({
-      ok: false,
-      message: "connection refused",
-    });
-    const settingsStore = createSettingsStore({
-      providers: [readyProvider],
-      modelPolicy: policyWithDefault,
-    });
-    const { getByTestId, queryByTestId } = render(() => (
-      <OnboardingGate
-        client={mockClient({ testProvider })}
-        settingsStore={settingsStore}
-        settingsChecked={false}
-      />
-    ));
-    await waitFor(() => {
-      expect(
-        getByTestId("onboarding-setup-continue").getAttribute("aria-disabled"),
-      ).toBeNull();
-    });
-    fireEvent.click(getByTestId("onboarding-setup-continue"));
-    await waitFor(() => {
-      expect(getByTestId("onboarding-setup-error").textContent).toContain(
-        "connection refused",
-      );
-    });
-    expect(queryByTestId("onboarding-welcome")).toBeNull();
-    expect(queryByTestId("onboarding-summarizer")).toBeNull();
-    expect(getByTestId("onboarding-setup")).toBeTruthy();
-  });
-
   it("omits the drag strip when custom chrome is off", () => {
     customChrome = false;
     const settingsStore = createSettingsStore({
-      providers: [],
+      providers: [normalProvider],
     });
     const { container } = render(() => (
       <OnboardingGate
@@ -791,77 +461,12 @@ describe("OnboardingGate setup page", () => {
     ));
     expect(container.querySelector(".onboarding-gate__chrome-drag")).toBeNull();
   });
-
-  it("renders setup with a waiting state and a usable Skip when client is null", () => {
-    const settingsStore = createSettingsStore({
-      providers: [],
-      modelPolicy: {
-        coordinator: { provider_id: "", model: "" },
-        lite: { provider_id: "", model: "" },
-        agent_pool: { selection: "first", models: [] },
-      },
-    });
-    const { getByTestId, queryByTestId } = render(() => (
-      <OnboardingGate
-        client={null}
-        settingsStore={settingsStore}
-        settingsChecked={true}
-      />
-    ));
-    expect(getByTestId("onboarding-setup")).toBeTruthy();
-    expect(getByTestId("onboarding-setup-waiting")).toBeTruthy();
-    expect(queryByTestId("default-model-select")).toBeNull();
-    expect(getByTestId("onboarding-setup-skip")).toBeTruthy();
-  });
-
-  it("swaps waiting state for the provider panel when the client arrives", async () => {
-    const [client, setClient] = createSignal<LycaonClient | null>(null);
-    const settingsStore = createSettingsStore({
-      providers: [],
-      modelPolicy: {
-        coordinator: { provider_id: "", model: "" },
-        lite: { provider_id: "", model: "" },
-        agent_pool: { selection: "first", models: [] },
-      },
-    });
-    const { getByTestId, queryByTestId } = render(() => (
-      <OnboardingGate
-        client={client()}
-        settingsStore={settingsStore}
-        settingsChecked={true}
-      />
-    ));
-    expect(getByTestId("onboarding-setup-waiting")).toBeTruthy();
-
-    setClient(mockClient());
-    await waitFor(() => {
-      expect(queryByTestId("onboarding-setup-waiting")).toBeNull();
-      expect(getByTestId("providers-settings")).toBeTruthy();
-    });
-  });
-
-  it("skipping with a null client still latches first-run", async () => {
-    const settingsStore = createSettingsStore({
-      providers: [],
-    });
-    const { getByTestId } = render(() => (
-      <OnboardingGate
-        client={null}
-        settingsStore={settingsStore}
-        settingsChecked={true}
-      />
-    ));
-    fireEvent.click(getByTestId("onboarding-setup-skip"));
-    await waitFor(() => {
-      expect(completeFirstRunSetup).toHaveBeenCalledOnce();
-    });
-  });
 });
 
 describe("OnboardingGate starting layout page", () => {
   async function renderAtLayout() {
     const settingsStore = createSettingsStore({
-      providers: [readyProvider],
+      providers: [normalProvider, readyProvider],
       modelPolicy: policyWithDefault,
     });
     const view = render(() => (
@@ -878,9 +483,9 @@ describe("OnboardingGate starting layout page", () => {
   const radio = (testId: string) =>
     screen.getByTestId(testId) as HTMLInputElement;
 
-  it("sits between the summarizer and welcome as step 3 of 4", async () => {
+  it("sits between model selection and welcome as step 2 of 3", async () => {
     const { getByTestId } = await renderAtLayout();
-    expect(getByTestId("onboarding-progress").textContent).toBe("3 / 4");
+    expect(getByTestId("onboarding-progress").textContent).toBe("2 / 3");
     const gate = getByTestId("onboarding-gate");
     expect(gate.getAttribute("aria-labelledby")).toBe("onboarding-layout-title");
     expect(gate.classList.contains("onboarding-gate--layout")).toBe(true);

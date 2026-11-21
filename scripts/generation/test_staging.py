@@ -20,13 +20,13 @@ class StagingTests(unittest.TestCase):
             authority.write_text("trusted keys")
             signed = {"manifest": {"artifact": {"name": "model.safetensors"}, "files": []}}
             resources = root / "generation"
-            def verify(verifier, bundle, keys, backend):
+            def verify(verifier, bundle, keys, backend, model):
                 self.assertEqual((bundle / "model.safetensors").read_text(), "model.safetensors")
                 self.assertEqual(keys.read_text(), "trusted keys")
                 self.assertEqual(backend, "mlx")
                 return signed
             with patch.object(staging, "verify_seed", side_effect=verify) as verify_mock:
-                staging.stage_seed(Path("verifier"), source, authority, resources, "mlx")
+                staging.stage_seed(Path("verifier"), source, authority, resources, "mlx", "gemma4-e4b-paintedwolf")
             self.assertEqual(verify_mock.call_count, 2)
             self.assertEqual({p.name for p in (resources / "models/mlx").iterdir()}, {"manifest.json", "model.safetensors"})
             self.assertTrue((source / "unused-secret").is_file())
@@ -47,10 +47,10 @@ class StagingTests(unittest.TestCase):
             for invalid in ("", "../escape", "manifest.json"):
                 with patch.object(staging, "verify_seed", return_value={"manifest": {"artifact": {"name": invalid}}}):
                     with self.assertRaises(ValueError):
-                        staging.stage_seed(Path("verifier"), source, source / "keys", resources, "mlx")
+                        staging.stage_seed(Path("verifier"), source, source / "keys", resources, "mlx", "gemma4-e4b-paintedwolf")
             with patch.object(staging, "verify_seed", side_effect=[valid, ValueError("damaged copy")]):
                 with self.assertRaisesRegex(ValueError, "damaged"):
-                    staging.stage_seed(Path("verifier"), source, source / "keys", resources, "mlx")
+                    staging.stage_seed(Path("verifier"), source, source / "keys", resources, "mlx", "gemma4-e4b-paintedwolf")
             self.assertEqual((current / "preserve").read_text(), "existing")
             self.assertEqual(sorted(p.name for p in resources.iterdir()), ["models"])
 
@@ -98,7 +98,7 @@ class StagingTests(unittest.TestCase):
                                 {"BIALY_GENERATION_AUTHORITY": "/keys"}):
                 with patch.dict(command.os.environ, environment, clear=True):
                     with self.assertRaisesRegex(ValueError, "requires"):
-                        command.stage(Path("nativegen"), Path("generation"))
+                        command.stage(Path("nativegen"), Path("generation"), "12b")
             build.assert_not_called()
         with tempfile.TemporaryDirectory() as temporary:
             with patch.object(command.runtime, "build"), \
@@ -110,11 +110,11 @@ class StagingTests(unittest.TestCase):
                         "BIALY_GENERATION_BUNDLE": "/seed",
                         "BIALY_GENERATION_AUTHORITY": "/keys",
                     }, clear=True):
-                command.stage(Path("nativegen"), Path("generation"))
+                command.stage(Path("nativegen"), Path("generation"), "26b")
         run.assert_called_once()
         self.assertEqual(run.call_args.args[0][:2], ["go", "build"])
         self.assertEqual(stage_seed.call_args.args[1:], (
-            Path("/seed"), Path("/keys"), Path("generation"), "vulkan"))
+            Path("/seed"), Path("/keys"), Path("generation"), "vulkan", "gemma4-26b-paintedwolf"))
 
     def test_vulkan_library_is_staged_for_build_and_installed_layouts(self):
         with tempfile.TemporaryDirectory() as temporary:

@@ -40,6 +40,7 @@ import { startComposerDocumentMirror } from "./chat/composer/composer-document-s
 import { isTauriRuntime } from "./platform/runtime.ts";
 import { nativeUpdateState } from "./settings/system/update-state.ts";
 import { listenHostEvent } from "./platform/windows/window-channel.ts";
+import { isIncludedProvider } from "./settings/providers/models-editor-model.ts";
 import { WhatsNewNotice } from "./components/home/WhatsNewNotice.tsx";
 import { mountUpdateNotice } from "./settings/system/mount-update-notice.ts";
 import { EngineStartupStage } from "./components/EngineStartupStage.tsx";
@@ -152,7 +153,7 @@ function App() {
         fallback={<EngineStartupStage />}
       >
         <Show when={!criticalStop.spec()} fallback={criticalStop.view()}>
-          <Show when={!windowSubject()}><WhatsNewNotice notices={noticeStore} /></Show>
+          <Show when={!windowSubject()}><WhatsNewNotice notices={noticeStore} localRuntime={settingsStore.state.providers.find(isIncludedProvider)?.local_runtime} /></Show>
           <Shell
             shell={shellStore}
             recents={recentsStore}

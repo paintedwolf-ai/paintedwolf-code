@@ -1,14 +1,27 @@
 import { createSignal } from "solid-js";
-import {
-  getAppStateSnapshot,
-} from "../../store/app-state-snapshot.ts";
+import { SETUP_REVISION } from "../../../shared/app-state-types.ts";
+import { getAppStateSnapshot } from "../../store/app-state-snapshot.ts";
 import { persistAppStateInBackground } from "../../store/app-state-background-write.ts";
 
 const [firstRunSetupCompleted, setFirstRunSetupCompleted] = createSignal(false);
+const [localModelOnboardingCompleted, setLocalModelOnboardingCompleted] = createSignal(false);
+const [postponed, setPostponed] = createSignal(false);
 const [prefsReady, setPrefsReady] = createSignal(false);
+
+export function localModelPromptHandled(): boolean {
+  return postponed() || localModelOnboardingCompleted();
+}
+
+export function postponeLocalModelPrompt(): void {
+  setPostponed(true);
+}
 
 export function firstRunSetupCompletedPref(): boolean {
   return firstRunSetupCompleted();
+}
+
+export function localModelOnboardingCompletedPref(): boolean {
+  return localModelOnboardingCompleted();
 }
 
 export function onboardingPrefsReady(): boolean {
@@ -16,19 +29,24 @@ export function onboardingPrefsReady(): boolean {
 }
 
 export function syncOnboardingPrefsFromSnapshot(): void {
-  setFirstRunSetupCompleted(
-    getAppStateSnapshot().onboarding?.firstRunSetupCompleted === true,
-  );
+  const saved = getAppStateSnapshot().onboarding;
+  setLocalModelOnboardingCompleted((saved?.completedLocalModelStepRevision ?? 0) >= SETUP_REVISION);
+  setFirstRunSetupCompleted((saved?.completedSetupRevision ?? 0) >= SETUP_REVISION);
   setPrefsReady(true);
 }
 
-export async function completeFirstRunSetup(): Promise<void> {
-  setPrefsReady(true);
+export async function completeLocalModelOnboarding(): Promise<void> {
+  if (localModelOnboardingCompleted()) return;
   await persistAppStateInBackground({
-    onboarding: {
-      ...getAppStateSnapshot().onboarding,
-      firstRunSetupCompleted: true,
-    },
+    onboarding: { ...getAppStateSnapshot().onboarding, completedLocalModelStepRevision: SETUP_REVISION },
+  });
+  setLocalModelOnboardingCompleted(true);
+}
+
+export async function completeFirstRunSetup(): Promise<void> {
+  if (firstRunSetupCompleted()) return;
+  await persistAppStateInBackground({
+    onboarding: { ...getAppStateSnapshot().onboarding, completedSetupRevision: SETUP_REVISION },
   });
   setFirstRunSetupCompleted(true);
 }

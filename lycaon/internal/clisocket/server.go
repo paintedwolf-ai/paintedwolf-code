@@ -30,8 +30,10 @@ const (
 
 // Ops the CLI can ask for.
 const (
-	OpList = "ls"
-	OpOpen = "open"
+	OpList        = "ls"
+	OpOpen        = "open"
+	OpImportModel = "local_model_import"
+	OpOptOutModel = "local_model_opt_out"
 )
 
 // Response statuses.
@@ -44,6 +46,7 @@ const (
 // Request is one CLI invocation.
 type Request struct {
 	Op     string `json:"op"`
+	Model  string `json:"model,omitempty"`
 	Target string `json:"target,omitempty"`
 	New    bool   `json:"new,omitempty"`
 }
@@ -77,6 +80,7 @@ type OpenPublisher interface {
 // Server answers CLI requests on a Unix socket.
 type Server struct {
 	projects Projects
+	models   LocalModels
 	publish  OpenPublisher
 	listener net.Listener
 	path     string
@@ -95,7 +99,7 @@ func SocketPath() (string, error) {
 //
 // A Unix socket path is capped near 104 bytes on macOS, so a deep config-dir
 // override fails to bind. That loses the CLI, not the engine.
-func Listen(ctx context.Context, projects Projects, publish OpenPublisher) (*Server, error) {
+func Listen(ctx context.Context, projects Projects, publish OpenPublisher, models LocalModels) (*Server, error) {
 	path, err := SocketPath()
 	if err != nil {
 		return nil, err
@@ -112,7 +116,7 @@ func Listen(ctx context.Context, projects Projects, publish OpenPublisher) (*Ser
 		_ = listener.Close()
 		return nil, err
 	}
-	s := &Server{projects: projects, publish: publish, listener: listener, path: path}
+	s := &Server{models: models, projects: projects, publish: publish, listener: listener, path: path}
 	go s.serve(ctx)
 	return s, nil
 }
@@ -181,6 +185,8 @@ func (s *Server) Handle(ctx context.Context, req Request) Response {
 	switch req.Op {
 	case OpList:
 		return s.handleList(ctx)
+	case OpImportModel, OpOptOutModel:
+		return s.handleModel(ctx, req)
 	case OpOpen:
 		return s.handleOpen(ctx, req)
 	default:

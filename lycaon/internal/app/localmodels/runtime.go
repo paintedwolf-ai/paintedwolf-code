@@ -7,6 +7,7 @@ import (
 	"io"
 	"os"
 	"strings"
+	"syscall"
 
 	"github.com/lycaon/lycaon/internal/decide/bialy"
 	"github.com/lycaon/lycaon/internal/inference"
@@ -16,6 +17,7 @@ import (
 
 // Options names packaged resources and device-persistent model storage.
 type Options struct {
+	Store        *modelstore.Store
 	Binary       string
 	MetalLibrary string
 	Authority    string
@@ -39,9 +41,13 @@ func Build(ctx context.Context, options Options) (*Runtime, error) {
 	if options.Binary == "" || options.StoreRoot == "" || options.Decision.Disabled {
 		return nil, errors.New("local models: incomplete runtime configuration")
 	}
-	authority, err := readAuthority(options.Authority)
-	if err != nil {
-		return nil, err
+	store := options.Store
+	if store == nil {
+		authority, err := readAuthority(options.Authority)
+		if err != nil {
+			return nil, err
+		}
+		store = modelstore.New(options.StoreRoot, authority)
 	}
 	inventory, err := nativegen.InspectDevices(ctx, options.Binary, options.MetalLibrary)
 	if err != nil {
@@ -63,32 +69,57 @@ func Build(ctx context.Context, options Options) (*Runtime, error) {
 	if err != nil {
 		return nil, err
 	}
-	store := modelstore.New(options.StoreRoot, authority)
 	decision := options.Decision
 	decision.Resources = resources.Decision
-	return &Runtime{
+	physicalBytes := device.TotalBytes
+	if device.UnifiedMemory {
+		physicalBytes = options.PhysicalRAM
+	}
+	r := &Runtime{
 		Decision: decision, Store: store, Resources: resources, Backend: inventory.Backend,
 		Generation: nativegen.NewRuntime(nativegen.RuntimeConfig{
-			BinaryPath: options.Binary, MetalLibrary: options.MetalLibrary,
+			DecisionDeviceBytes: plan.DeviceBytes, PhysicalBytes: physicalBytes, BinaryPath: options.Binary, MetalLibrary: options.MetalLibrary,
 			Backend: inventory.Backend, PhysicalDevice: device.PhysicalDevice,
 			Devices: resources.Devices, HostMemory: resources.GenerationHost,
 			DeviceMemory: resources.GenerationDevice, UnifiedMemory: device.UnifiedMemory,
 			ModelStore: store, SeedDirectory: options.Seed, SharedWorkspaceBytes: resources.SharedWorkspaceBytes,
 		}),
-	}, nil
+	}
+	if _, err := store.Collect(); err != nil {
+		r.Generation.ReportSelectionError(err)
+	}
+	return r, nil
 }
 
-func readAuthority(path string) (authority *modelstore.Authority, resultErr error) {
-	file, err := os.Open(path)
-	if err != nil {
-		return nil, err
+func readAuthority(path string) (*modelstore.Authority, error) {
+	raw, err := readPackagedMetadata(path, modelstore.MaxAuthorityBytes)
+	if errors.Is(err, os.ErrNotExist) {
+		return modelstore.NewAuthority(nil)
 	}
-	defer func() { resultErr = errors.Join(resultErr, file.Close()) }()
-	raw, err := io.ReadAll(io.LimitReader(file, modelstore.MaxAuthorityBytes+1))
 	if err != nil {
 		return nil, err
 	}
 	return modelstore.DecodeAuthority(raw)
+}
+
+func readPackagedMetadata(path string, limit int64) (data []byte, resultErr error) {
+	file, err := os.OpenFile(path, os.O_RDONLY|syscall.O_NONBLOCK, 0)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { resultErr = errors.Join(resultErr, file.Close()) }()
+	info, err := file.Stat()
+	if err != nil {
+		return nil, err
+	}
+	if !info.Mode().IsRegular() || info.Size() > limit {
+		return nil, fmt.Errorf("local models: invalid packaged metadata at %s", path)
+	}
+	data, err = io.ReadAll(io.LimitReader(file, limit+1))
+	if int64(len(data)) > limit {
+		return nil, fmt.Errorf("local models: packaged metadata exceeds %d bytes", limit)
+	}
+	return data, err
 }
 
 func requestedDevice(value, backend string) (*inference.PhysicalDevice, error) {

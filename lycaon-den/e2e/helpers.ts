@@ -6,6 +6,9 @@ import { fileURLToPath } from "node:url";
 import { expect, test, type APIRequestContext, type Locator, type Page } from "@playwright/test";
 import {
   DEFAULT_CONTEXT_NAV_VISIBLE,
+  SETUP_REVISION,
+  type DenLayoutPrefs,
+  type DenOnboardingPrefs,
   type ContextNavItemId,
 } from "../shared/app-state-types.ts";
 import {
@@ -299,7 +302,8 @@ export async function seedAppState(
     /** Device context navigation pins. */
     contextNav?: { visible?: string[] };
     /** Defaults to completed for shell tests. */
-    onboarding?: { firstRunSetupCompleted?: boolean };
+    onboarding?: DenOnboardingPrefs | { firstRunSetupCompleted: true };
+    layout?: Pick<DenLayoutPrefs, "startupCompanion">;
     /** Optional What's New latch. */
     whatsNew?: { lastSeenVersion?: string };
     /** Contextual tips default off. */
@@ -308,9 +312,9 @@ export async function seedAppState(
     debug?: { verboseMode?: boolean };
   },
 ) {
-  const onboarding = {
-    firstRunSetupCompleted:
-      partial?.onboarding?.firstRunSetupCompleted ?? true,
+  const onboarding = partial?.onboarding ?? {
+    completedSetupRevision: SETUP_REVISION,
+    completedLocalModelStepRevision: SETUP_REVISION,
   };
   const firstTimeTips = {
     enabled: partial?.firstTimeTips?.enabled ?? false,
@@ -344,6 +348,7 @@ export async function seedAppState(
       const state = {
         recents: [],
         onboarding: onboardingState,
+        ...(partialState?.layout ? {layout: partialState.layout} : {}),
         firstTimeTips: firstTimeTipsState,
         ...(whatsNewState ? { whatsNew: whatsNewState } : {}),
         ...(partialState?.lastActiveProjectId
@@ -369,6 +374,7 @@ export async function seedAppState(
       partialState: {
         lastActiveProjectId: partial?.lastActiveProjectId,
         contextNav: partial?.contextNav,
+        layout: partial?.layout,
       },
       onboardingState: onboarding,
       whatsNewState: partial?.whatsNew,
@@ -392,7 +398,7 @@ export const CONTEXT_NAV_WITH = (...extra: ContextNavItemId[]) => {
 
 export async function seedFirstRunUnset(page: Page) {
   await seedAppState(page, {
-    onboarding: { firstRunSetupCompleted: false },
+    onboarding: {},
   });
 }
 

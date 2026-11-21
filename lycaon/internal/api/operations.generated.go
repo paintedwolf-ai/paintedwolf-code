@@ -31,6 +31,7 @@ var (
 	operationBeginProjectManagedSecretReveal    = generatedOperation{ID: "beginProjectManagedSecretReveal", Method: "POST", Path: "/v1/projects/{id}/secrets/{secret_id}/reveal-challenges", Params: []string{"id", "secret_id"}}
 	operationBindGitWorktree                    = generatedOperation{ID: "bindGitWorktree", Method: "PUT", Path: "/v1/sessions/{id}/git-worktree", Params: []string{"id"}, RecordsPersonAction: true}
 	operationBrowseProjectSource                = generatedOperation{ID: "browseProjectSource", Method: "GET", Path: "/v1/projects/{id}/source/browse", Params: []string{"id"}}
+	operationCancelLocalModelTransfer           = generatedOperation{ID: "cancelLocalModelTransfer", Method: "POST", Path: "/v1/providers/{provider_id}/local-model/cancel", Params: []string{"provider_id"}, RecordsPersonAction: true}
 	operationCancelMcpOAuth                     = generatedOperation{ID: "cancelMcpOAuth", Method: "POST", Path: "/v1/mcp/providers/{provider_id}/oauth/cancel", Params: []string{"provider_id"}}
 	operationCancelProjectPromotion             = generatedOperation{ID: "cancelProjectPromotion", Method: "DELETE", Path: "/v1/projects/{id}/promotion", Params: []string{"id"}, RecordsPersonAction: true}
 	operationCancelSourceOperation              = generatedOperation{ID: "cancelSourceOperation", Method: "POST", Path: "/v1/projects/{id}/source/operations/{operation_id}/cancel", Params: []string{"id", "operation_id"}, RecordsPersonAction: true}
@@ -75,6 +76,7 @@ var (
 	operationDeleteExtensionPack                = generatedOperation{ID: "deleteExtensionPack", Method: "DELETE", Path: "/v1/extensions/packs/{pack_id}", Params: []string{"pack_id"}, RecordsPersonAction: true}
 	operationDeleteGitWorktree                  = generatedOperation{ID: "deleteGitWorktree", Method: "DELETE", Path: "/v1/sessions/{id}/git-worktree", Params: []string{"id"}, RecordsPersonAction: true}
 	operationDeleteHistoryProtection            = generatedOperation{ID: "deleteHistoryProtection", Method: "DELETE", Path: "/v1/history-storage/protections/{protection_id}", Params: []string{"protection_id"}, RecordsPersonAction: true}
+	operationDeleteLocalModel                   = generatedOperation{ID: "deleteLocalModel", Method: "DELETE", Path: "/v1/providers/{provider_id}/local-model", Params: []string{"provider_id"}, RecordsPersonAction: true}
 	operationDeleteMcpProvider                  = generatedOperation{ID: "deleteMcpProvider", Method: "DELETE", Path: "/v1/mcp/providers/{provider_id}", Params: []string{"provider_id"}, RecordsPersonAction: true}
 	operationDeleteProjectArtifact              = generatedOperation{ID: "deleteProjectArtifact", Method: "DELETE", Path: "/v1/projects/{id}/artifacts/{artifact_id}", Params: []string{"id", "artifact_id"}, RecordsPersonAction: true}
 	operationDeleteProjectFindingIgnore         = generatedOperation{ID: "deleteProjectFindingIgnore", Method: "DELETE", Path: "/v1/projects/{id}/findings/ignores/{entry_id}", Params: []string{"id", "entry_id"}, RecordsPersonAction: true}
@@ -132,6 +134,7 @@ var (
 	operationGetHostResources                   = generatedOperation{ID: "getHostResources", Method: "GET", Path: "/v1/host-resources"}
 	operationGetLimitsSettings                  = generatedOperation{ID: "getLimitsSettings", Method: "GET", Path: "/v1/settings/limits"}
 	operationGetLocalData                       = generatedOperation{ID: "getLocalData", Method: "GET", Path: "/v1/local-data"}
+	operationGetLocalModelStatus                = generatedOperation{ID: "getLocalModelStatus", Method: "GET", Path: "/v1/providers/{provider_id}/local-model", Params: []string{"provider_id"}}
 	operationGetModelPolicySettings             = generatedOperation{ID: "getModelPolicySettings", Method: "GET", Path: "/v1/settings/model-policy"}
 	operationGetPowerSettings                   = generatedOperation{ID: "getPowerSettings", Method: "GET", Path: "/v1/settings/power"}
 	operationGetPreflight                       = generatedOperation{ID: "getPreflight", Method: "GET", Path: "/v1/preflight"}
@@ -305,6 +308,7 @@ var (
 	operationSearchContributionSource           = generatedOperation{ID: "searchContributionSource", Method: "POST", Path: "/v1/projects/{id}/contribution-search/{source_id}", Params: []string{"id", "source_id"}}
 	operationSearchProjectSource                = generatedOperation{ID: "searchProjectSource", Method: "GET", Path: "/v1/projects/{id}/source/search", Params: []string{"id"}}
 	operationSearchSourceView                   = generatedOperation{ID: "searchSourceView", Method: "GET", Path: "/v1/projects/{id}/source/views/{view_id}/presentations/{presentation_id}/search", Params: []string{"id", "view_id", "presentation_id"}}
+	operationSelectLocalModel                   = generatedOperation{ID: "selectLocalModel", Method: "POST", Path: "/v1/providers/{provider_id}/local-model/select", Params: []string{"provider_id"}, RecordsPersonAction: true}
 	operationSendPrompt                         = generatedOperation{ID: "sendPrompt", Method: "POST", Path: "/v1/sessions/{id}/prompts", Params: []string{"id"}, RecordsPersonAction: true}
 	operationStartFullScan                      = generatedOperation{ID: "startFullScan", Method: "POST", Path: "/v1/projects/{id}/scans", Params: []string{"id"}, RecordsPersonAction: true}
 	operationStartMcpOAuth                      = generatedOperation{ID: "startMcpOAuth", Method: "POST", Path: "/v1/mcp/providers/{provider_id}/oauth/start", Params: []string{"provider_id"}}
@@ -371,6 +375,7 @@ var allGeneratedOperations = []generatedOperation{
 	operationBeginProjectManagedSecretReveal,
 	operationBindGitWorktree,
 	operationBrowseProjectSource,
+	operationCancelLocalModelTransfer,
 	operationCancelMcpOAuth,
 	operationCancelProjectPromotion,
 	operationCancelSourceOperation,
@@ -415,6 +420,7 @@ var allGeneratedOperations = []generatedOperation{
 	operationDeleteExtensionPack,
 	operationDeleteGitWorktree,
 	operationDeleteHistoryProtection,
+	operationDeleteLocalModel,
 	operationDeleteMcpProvider,
 	operationDeleteProjectArtifact,
 	operationDeleteProjectFindingIgnore,
@@ -472,6 +478,7 @@ var allGeneratedOperations = []generatedOperation{
 	operationGetHostResources,
 	operationGetLimitsSettings,
 	operationGetLocalData,
+	operationGetLocalModelStatus,
 	operationGetModelPolicySettings,
 	operationGetPowerSettings,
 	operationGetPreflight,
@@ -645,6 +652,7 @@ var allGeneratedOperations = []generatedOperation{
 	operationSearchContributionSource,
 	operationSearchProjectSource,
 	operationSearchSourceView,
+	operationSelectLocalModel,
 	operationSendPrompt,
 	operationStartFullScan,
 	operationStartMcpOAuth,

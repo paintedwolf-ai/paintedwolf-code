@@ -133,7 +133,7 @@ func (s *Store) checkRevision(m Manifest) (path string, resultErr error) {
 	}
 	defer func() { resultErr = errors.Join(resultErr, root.Close()) }()
 	rel := s.revisionRel(m)
-	f, err := root.Open(filepath.Join(rel, ".manifest.json"))
+	f, err := openBoundedFile(root, filepath.Join(rel, ".manifest.json"), 1<<20)
 	if err != nil {
 		return "", err
 	}

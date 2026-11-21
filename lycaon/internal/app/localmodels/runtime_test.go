@@ -16,6 +16,7 @@ import (
 	"github.com/lycaon/lycaon/internal/llm/providers/nativegen"
 	"github.com/lycaon/lycaon/internal/modelstore"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/pkg/api"
 )
 
 func installedFixture(t *testing.T) localmodels.Options {
@@ -107,13 +108,29 @@ func TestBuildRetainsRecoveryWhenSeedIsInvalid(t *testing.T) {
 	testutil.FailErr(t, "compose recovery runtime", err)
 	defer r.Resources.Close()
 	defer r.Generation.Close()
-	if err := r.Generation.Warm(t.Context(), nativegen.DefaultModelID); err == nil {
-		t.Fatal("loaded an invalid seed")
-	}
-	if status := r.Generation.Readiness(); status.State != "repair_required" || status.Action != "repair" {
-		t.Fatalf("seed failure lost recovery: %+v", status)
+	entries, err := r.Generation.DiscoverModels(t.Context())
+	testutil.FailErr(t, "discover without an installed model", err)
+	var status api.LocalGenerationStatus
+	r.Generation.SelectionStatus(&status)
+	if len(entries) != 0 || status.SeedAvailable || status.SelectedModel != "" || len(status.AvailableModels) != 3 {
+		t.Fatalf("invalid seed altered model setup: %+v", status)
 	}
 	if r.Decision.Resources != r.Resources.Decision {
 		t.Fatal("seed failure discarded the shared decision partition")
+	}
+}
+
+func TestGenerationStoreFailureKeepsDecisionResources(t *testing.T) {
+	options := installedFixture(t)
+	testutil.FailErr(t, "create model store", os.MkdirAll(options.StoreRoot, 0700))
+	testutil.FailErr(t, "damage journal", os.WriteFile(filepath.Join(options.StoreRoot, "journal.jsonl"), []byte("invalid journal\n"), 0600))
+	r, err := localmodels.Build(t.Context(), options)
+	testutil.FailErr(t, "allocate decision and generation resources", err)
+	t.Cleanup(func() { _ = r.Generation.Close(); r.Resources.Close() })
+	if r.Decision.Resources == nil || r.Decision.Resources != r.Resources.Decision {
+		t.Fatal("generation failure discarded decision admission")
+	}
+	if status := r.Generation.Readiness(); status.State != "unavailable" || status.Detail == "" {
+		t.Fatalf("generation store failure: %+v", status)
 	}
 }

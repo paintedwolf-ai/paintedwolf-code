@@ -27,6 +27,7 @@ export const API_OPERATIONS = {
     {"name":"root_id","type":"string"},
     {"name":"session_id","type":"string"},
   ] },
+  cancelLocalModelTransfer: { method: "POST", path: "/v1/providers/{provider_id}/local-model/cancel" },
   cancelMcpOAuth: { method: "POST", path: "/v1/mcp/providers/{provider_id}/oauth/cancel", query: [
     {"name":"project_id","type":"string"},
   ] },
@@ -104,6 +105,7 @@ export const API_OPERATIONS = {
   ] },
   deleteGitWorktree: { method: "DELETE", path: "/v1/sessions/{id}/git-worktree" },
   deleteHistoryProtection: { method: "DELETE", path: "/v1/history-storage/protections/{protection_id}" },
+  deleteLocalModel: { method: "DELETE", path: "/v1/providers/{provider_id}/local-model" },
   deleteMcpProvider: { method: "DELETE", path: "/v1/mcp/providers/{provider_id}", query: [
     {"name":"project_id","type":"string"},
   ] },
@@ -236,6 +238,7 @@ export const API_OPERATIONS = {
     {"name":"project_id","type":"string"},
   ] },
   getLocalData: { method: "GET", path: "/v1/local-data" },
+  getLocalModelStatus: { method: "GET", path: "/v1/providers/{provider_id}/local-model" },
   getModelPolicySettings: { method: "GET", path: "/v1/settings/model-policy", query: [
     {"name":"effective","type":"boolean"},
     {"name":"project_id","type":"string"},
@@ -678,6 +681,7 @@ export const API_OPERATIONS = {
     {"name":"limit","type":"integer","minimum":1,"maximum":200},
     {"name":"q","type":"string","required":true,"minLength":1,"maxLength":4096},
   ] },
+  selectLocalModel: { method: "POST", path: "/v1/providers/{provider_id}/local-model/select" },
   sendPrompt: { method: "POST", path: "/v1/sessions/{id}/prompts" },
   startFullScan: { method: "POST", path: "/v1/projects/{id}/scans", query: [
     {"name":"root_id","type":"string"},
@@ -789,6 +793,7 @@ export type OperationPathParameters = {
   beginProjectManagedSecretReveal: { id: string | number; secret_id: string | number; };
   bindGitWorktree: { id: string | number; };
   browseProjectSource: { id: string | number; };
+  cancelLocalModelTransfer: { provider_id: string | number; };
   cancelMcpOAuth: { provider_id: string | number; };
   cancelProjectPromotion: { id: string | number; };
   cancelSourceOperation: { id: string | number; operation_id: string | number; };
@@ -833,6 +838,7 @@ export type OperationPathParameters = {
   deleteExtensionPack: { pack_id: string | number; };
   deleteGitWorktree: { id: string | number; };
   deleteHistoryProtection: { protection_id: string | number; };
+  deleteLocalModel: { provider_id: string | number; };
   deleteMcpProvider: { provider_id: string | number; };
   deleteProjectArtifact: { id: string | number; artifact_id: string | number; };
   deleteProjectFindingIgnore: { id: string | number; entry_id: string | number; };
@@ -890,6 +896,7 @@ export type OperationPathParameters = {
   getHostResources: Record<string, never>;
   getLimitsSettings: Record<string, never>;
   getLocalData: Record<string, never>;
+  getLocalModelStatus: { provider_id: string | number; };
   getModelPolicySettings: Record<string, never>;
   getPowerSettings: Record<string, never>;
   getPreflight: Record<string, never>;
@@ -1063,6 +1070,7 @@ export type OperationPathParameters = {
   searchContributionSource: { id: string | number; source_id: string | number; };
   searchProjectSource: { id: string | number; };
   searchSourceView: { id: string | number; view_id: string | number; presentation_id: string | number; };
+  selectLocalModel: { provider_id: string | number; };
   sendPrompt: { id: string | number; };
   startFullScan: { id: string | number; };
   startMcpOAuth: { provider_id: string | number; };
