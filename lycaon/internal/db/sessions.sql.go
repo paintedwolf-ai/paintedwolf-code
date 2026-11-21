@@ -619,20 +619,26 @@ func (q *Queries) GetSessionMessageOrdBounds(ctx context.Context, sessionID stri
 }
 
 const getSessionModeAuthority = `-- name: GetSessionModeAuthority :one
-SELECT root_session_id, mode, started
+SELECT root_session_id, mode, started, upgraded_from_ask
 FROM session_mode_authority WHERE session_id = ? AND mode IS NOT NULL
 `
 
 type GetSessionModeAuthorityRow struct {
-	RootSessionID sql.NullString `json:"root_session_id"`
-	Mode          sql.NullString `json:"mode"`
-	Started       sql.NullInt64  `json:"started"`
+	RootSessionID   sql.NullString `json:"root_session_id"`
+	Mode            sql.NullString `json:"mode"`
+	Started         sql.NullInt64  `json:"started"`
+	UpgradedFromAsk sql.NullInt64  `json:"upgraded_from_ask"`
 }
 
 func (q *Queries) GetSessionModeAuthority(ctx context.Context, sessionID string) (GetSessionModeAuthorityRow, error) {
 	row := q.db.QueryRowContext(ctx, getSessionModeAuthority, sessionID)
 	var i GetSessionModeAuthorityRow
-	err := row.Scan(&i.RootSessionID, &i.Mode, &i.Started)
+	err := row.Scan(
+		&i.RootSessionID,
+		&i.Mode,
+		&i.Started,
+		&i.UpgradedFromAsk,
+	)
 	return i, err
 }
 
@@ -3005,6 +3011,17 @@ func (q *Queries) ListWorkerJobMessagesTail(ctx context.Context, arg ListWorkerJ
 	return items, nil
 }
 
+const markRootSessionAgentNoticeDelivered = `-- name: MarkRootSessionAgentNoticeDelivered :exec
+UPDATE sessions
+SET upgraded_from_ask = 2
+WHERE id = ? AND parent_session_id IS NULL AND upgraded_from_ask = 1
+`
+
+func (q *Queries) MarkRootSessionAgentNoticeDelivered(ctx context.Context, id string) error {
+	_, err := q.db.ExecContext(ctx, markRootSessionAgentNoticeDelivered, id)
+	return err
+}
+
 const maxMessageScreenGenerationInTree = `-- name: MaxMessageScreenGenerationInTree :one
 WITH RECURSIVE tree(id) AS (
     SELECT sessions.id FROM sessions WHERE sessions.id = ?
@@ -3282,21 +3299,25 @@ func (q *Queries) SetRewindOperationPhase(ctx context.Context, arg SetRewindOper
 
 const setRootSessionMode = `-- name: SetRootSessionMode :exec
 UPDATE sessions
-SET mode = ?1, started = ?2, updated_at = ?3
-WHERE id = ?4 AND parent_session_id IS NULL
+SET mode = ?1, started = ?2,
+    upgraded_from_ask = MAX(upgraded_from_ask, ?3),
+    updated_at = ?4
+WHERE id = ?5 AND parent_session_id IS NULL
 `
 
 type SetRootSessionModeParams struct {
-	Mode      sql.NullString `json:"mode"`
-	Started   int64          `json:"started"`
-	UpdatedAt string         `json:"updated_at"`
-	ID        string         `json:"id"`
+	Mode            sql.NullString `json:"mode"`
+	Started         int64          `json:"started"`
+	UpgradedFromAsk int64          `json:"upgraded_from_ask"`
+	UpdatedAt       string         `json:"updated_at"`
+	ID              string         `json:"id"`
 }
 
 func (q *Queries) SetRootSessionMode(ctx context.Context, arg SetRootSessionModeParams) error {
 	_, err := q.db.ExecContext(ctx, setRootSessionMode,
 		arg.Mode,
 		arg.Started,
+		arg.UpgradedFromAsk,
 		arg.UpdatedAt,
 		arg.ID,
 	)

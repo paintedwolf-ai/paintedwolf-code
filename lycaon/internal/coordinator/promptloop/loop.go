@@ -146,7 +146,7 @@ loop:
 				return nil, err
 			}
 		}
-		if shouldDeliverAgentEnabledNudge(sess, previous, authority, st.history) {
+		if shouldDeliverAgentEnabledNudge(sess, previous, authority, st) {
 			st.history, err = l.appendAgentEnabledNudge(ctx, id, st)
 			if err != nil {
 				return nil, err

@@ -316,7 +316,7 @@ func TestAskModeRefusalProducersRenderSpecificCausesAndConditionedRecovery(t *te
 			"`secret_use` on command is unavailable in Ask mode.",
 			"read-only command schema",
 			"If the command only inspects files or state, omit `secret_use` and retry as a read-only native command",
-			"if the operation itself requires `secret_use`, explain that the user can switch to Agent mode.",
+			"if the operation itself requires `secret_use`, issue a new Agent-mode command call once Agent mode is active, or explain that the user can switch to Agent mode if still in Ask mode.",
 		} {
 			if !strings.Contains(raw, want) {
 				t.Fatalf("hidden field Ask refusal missing %q:\n%s", want, raw)

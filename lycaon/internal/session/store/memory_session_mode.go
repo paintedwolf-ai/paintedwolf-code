@@ -44,8 +44,11 @@ func (r memoryModeRecords) ReadAuthority(_ context.Context, id string) (RootAuth
 		}
 	}
 	return RootAuthority{
-		RootSessionID: root.ID, Mode: root.Mode, Started: root.Started,
-		UpgradedFromAsk: s.upgradedFromAsk[root.ID],
+		RootSessionID:        root.ID,
+		Mode:                 root.Mode,
+		Started:              root.Started,
+		UpgradedFromAsk:      s.upgradedFromAsk[root.ID],
+		AgentNoticeDelivered: s.agentNoticeDelivered[root.ID],
 	}, nil
 }
 
@@ -70,6 +73,12 @@ func (r memoryModeRecords) StoreAuthority(_ context.Context, root RootAuthority)
 			r.core.upgradedFromAsk = make(map[string]bool)
 		}
 		r.core.upgradedFromAsk[root.RootSessionID] = true
+	}
+	if root.AgentNoticeDelivered {
+		if r.core.agentNoticeDelivered == nil {
+			r.core.agentNoticeDelivered = make(map[string]bool)
+		}
+		r.core.agentNoticeDelivered[root.RootSessionID] = true
 	}
 	row.UpdatedAt = time.Now().UTC()
 	return nil

@@ -211,6 +211,7 @@ func (s *memorySessions) Delete(ctx context.Context, id string) error {
 func deleteSessionLocked(s *memoryCore, id string) {
 	delete(s.sessions, id)
 	delete(s.upgradedFromAsk, id)
+	delete(s.agentNoticeDelivered, id)
 	delete(s.turnHeads, id)
 	delete(s.statusChangedAt, id)
 	delete(s.modelLimits, id)

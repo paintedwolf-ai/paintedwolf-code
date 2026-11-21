@@ -206,6 +206,14 @@ func appendMessagesMemory(ctx context.Context, s *memoryCore, id string, msgs ..
 		}
 		msgs[i].Seq = nextSeqLocked(s, id)
 		msgs[i].Ord = nextOrdLocked(s, id)
+		if msgs[i].HostSignalID == agentModeEnabledSignalID {
+			if s.upgradedFromAsk[id] {
+				if s.agentNoticeDelivered == nil {
+					s.agentNoticeDelivered = make(map[string]bool)
+				}
+				s.agentNoticeDelivered[id] = true
+			}
+		}
 		if api.IsUserIntentMessage(msgs[i]) {
 			if s.userTurns[id] == nil {
 				s.userTurns[id] = make(map[string]int)

@@ -1532,10 +1532,11 @@ type SessionEntries struct {
 }
 
 type SessionModeAuthority struct {
-	SessionID     string         `json:"session_id"`
-	RootSessionID sql.NullString `json:"root_session_id"`
-	Mode          sql.NullString `json:"mode"`
-	Started       sql.NullInt64  `json:"started"`
+	SessionID       string         `json:"session_id"`
+	RootSessionID   sql.NullString `json:"root_session_id"`
+	Mode            sql.NullString `json:"mode"`
+	Started         sql.NullInt64  `json:"started"`
+	UpgradedFromAsk sql.NullInt64  `json:"upgraded_from_ask"`
 }
 
 type SessionModelLimits struct {
@@ -1632,6 +1633,7 @@ type Sessions struct {
 	RootSessionID        string         `json:"root_session_id"`
 	Mode                 sql.NullString `json:"mode"`
 	Started              int64          `json:"started"`
+	UpgradedFromAsk      int64          `json:"upgraded_from_ask"`
 }
 
 type SourceAgentPresentations struct {

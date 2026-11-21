@@ -8,6 +8,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/coordinator/anchor"
 	"github.com/lycaon/lycaon/internal/coordinator/inject"
+	"github.com/lycaon/lycaon/internal/llm/failure"
 	"github.com/lycaon/lycaon/internal/llm/modelcall"
 	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/settings"
@@ -165,6 +166,15 @@ func TestBetweenTurnUpgradeNoticeSurvivesSQLReopenAndFailedAppendRetry(t *testin
 		},
 		Model: ModelDeps{
 			LLM: &askModeTestLLMClient{requests: &requests},
+			CompactAfterContextOverflow: func(_ context.Context, _ *api.Session, history []api.Message, _ int) ([]api.Message, error) {
+				var out []api.Message
+				for _, m := range history {
+					if m.HostSignalID != anchor.SessionAgentEnabled.String() {
+						out = append(out, m)
+					}
+				}
+				return out, nil
+			},
 		},
 		Closeout: CloseoutDeps{
 			CloseoutTrackingDeps: CloseoutTrackingDeps{
@@ -250,7 +260,43 @@ func TestBetweenTurnUpgradeNoticeSurvivesSQLReopenAndFailedAppendRetry(t *testin
 		t.Fatalf("persisted transcript notices after second Agent turn = %d, want 1", got)
 	}
 
-	// 6. Ordinary Agent session never receives session.mode.agent_enabled.
+	// 6. After context compaction removes the delivered signal from the model window,
+	// another eligible round (including after another reopen) must not duplicate it.
+	turnState := &promptLoopTurnState{history: append([]api.Message(nil), historyAfterSecond...)}
+	compactedWindow := loop.Model.recoverFromContextOverflow(
+		ctx, reopenedSess, reopenedSess.ID, turnState.history, turnState, "", "test-provider", "test-model", 1000,
+		&failure.ProviderContextTooSmallError{MaxContext: 100000},
+	)
+	if got := countSignal(compactedWindow); got != 0 || countSignal(turnState.history) != 0 {
+		t.Fatalf("compacted window still contains notice: %d", got)
+	}
+	authAfterDeliver, err := st2.ResolveEffectiveMode(ctx, reopenedSess.ID)
+	testutil.FailErr(t, "resolve authority after notice delivery", err)
+	if !authAfterDeliver.UpgradedFromAsk || !authAfterDeliver.AgentNoticeDelivered {
+		t.Fatalf("authority after notice delivery = %+v, want UpgradedFromAsk=true AgentNoticeDelivered=true", authAfterDeliver)
+	}
+	beforeCompactedReqs := len(requests)
+	_, err = loop.Run(ctx, PromptRunInput{
+		SessionID:  reopenedSess.ID,
+		Session:    reopenedSess,
+		History:    compactedWindow,
+		ProfileID:  "coordinator",
+		UserPrompt: "Third Agent turn with compacted window",
+	})
+	testutil.FailErr(t, "run third Agent turn with compacted window", err)
+	if len(requests) != beforeCompactedReqs+1 {
+		t.Fatalf("model requests after compacted turn = %d, want %d", len(requests), beforeCompactedReqs+1)
+	}
+	if got := countSignal(requests[len(requests)-1]); got != 0 {
+		t.Fatalf("compacted-window request re-emitted notice %d times, want 0", got)
+	}
+	historyAfterCompacted, err := st2.GetMessages(ctx, reopenedSess.ID)
+	testutil.FailErr(t, "load history after compacted turn", err)
+	if got := countSignal(historyAfterCompacted); got != 1 {
+		t.Fatalf("persisted transcript notices after compacted turn = %d, want 1", got)
+	}
+
+	// 7. Ordinary Agent session never receives session.mode.agent_enabled.
 	reopenedOrdinary, err := st2.Get(ctx, ordinary.ID)
 	testutil.FailErr(t, "get reopened ordinary session", err)
 	_, err = loop.Run(ctx, PromptRunInput{

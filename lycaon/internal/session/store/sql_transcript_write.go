@@ -139,6 +139,11 @@ func appendMessagesTx(ctx context.Context, s *sqlCore, tx *sql.Tx, id string, ms
 			}
 			return err
 		}
+		if msgs[i].HostSignalID == agentModeEnabledSignalID {
+			if err := qtx.MarkRootSessionAgentNoticeDelivered(ctx, id); err != nil {
+				return err
+			}
+		}
 		for _, part := range msgs[i].ContentParts {
 			blobID := strings.TrimSpace(part.BlobID)
 			if blobID == "" {
