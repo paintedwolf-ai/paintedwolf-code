@@ -38,7 +38,7 @@ func (p *Runtime) admitContext(ctx context.Context, child *rpcProcess) (command,
 		if low > high || p.config.ContextLimit <= minimum {
 			break
 		}
-		// E4B cache reservations increase monotonically in 256-token blocks.
+		// Cache reservations increase monotonically in 256-token blocks.
 		limits.ContextTokens = ((low + high) / 2) * 256
 	}
 	if selected.ContextTokens == 0 {

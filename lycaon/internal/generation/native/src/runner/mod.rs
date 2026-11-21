@@ -90,7 +90,13 @@ impl<B: Backend, F: FnMut(&Path, usize, usize, u64) -> Result<B>> Runner<B, F> {
                     prefill_chunk,
                     device_budget_bytes,
                 )?;
-                let executor = Executor::new(backend, context_tokens, prefill_chunk, settings.eos)?;
+                let executor = Executor::new(
+                    backend,
+                    context_tokens,
+                    prefill_chunk,
+                    settings.eos,
+                    settings.suppressed,
+                )?;
                 self.loaded = Some(Loaded {
                     executor,
                     renderer,
