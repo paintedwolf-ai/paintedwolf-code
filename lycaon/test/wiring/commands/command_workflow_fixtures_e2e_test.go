@@ -149,6 +149,7 @@ func (f *commandWorkflowFixture) run(t *testing.T) {
 	t.Helper()
 	_, err := f.h.Sessions.Manager.Submissions.Prompt(t.Context(), f.session, "execute workflow")
 	testutil.FailErr(t, "prompt workflow", err)
+	wiring.WaitForSessionIdleGate(t, f.h, t.Context(), f.session)
 }
 
 func (f *commandWorkflowFixture) outcome(t *testing.T, callID string) command.ProgramOutcome {
