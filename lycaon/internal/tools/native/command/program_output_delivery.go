@@ -89,6 +89,7 @@ func (r *ProgramRuntime) outcome(ctx context.Context, run *programRun, outputs *
 	}
 	out := ProgramOutcome{
 		ProgramID:                programID,
+		hasAdmittedActivity:      projection.HasAdmittedActivity,
 		DetailRef:                projection.DetailReference,
 		State:                    projection.Program.State,
 		Status:                   result.Status,

@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"os"
 	"regexp"
-	"regexp/syntax"
 	"slices"
 	"strconv"
 	"strings"
@@ -177,15 +176,23 @@ type procCandidate struct {
 	parents map[int]int
 }
 
-func matchProcessCandidates(ctx context.Context, jobs *SessionJobs, pattern string, fullMatch, exactMatch bool) ([]procCandidate, error) {
-	expr := pattern
-	if exactMatch {
-		expr = "^(?:" + pattern + ")$"
+func processPattern(command string, bound commandprogram.BoundArgv) (*regexp.Regexp, error) {
+	operands := bound.Operands().Values()
+	if len(operands) != 1 || operands[0] == "" {
+		return nil, toolrejection.RejectInvalidArguments("COMMAND_OPERAND_INVALID", map[string]any{"command": command, "reason": "requires one pattern operand"})
+	}
+	expr := operands[0]
+	if len(bound.Options("-x")) > 0 {
+		expr = "^(?:" + expr + ")$"
 	}
 	re, err := regexp.Compile(expr)
 	if err != nil {
-		return nil, err
+		return nil, toolrejection.RejectInvalidArguments("COMMAND_OPERAND_INVALID", map[string]any{"command": command, "pattern": operands[0], "word": operands[0], "reason": err.Error()})
 	}
+	return re, nil
+}
+
+func matchProcessCandidates(ctx context.Context, jobs *SessionJobs, re *regexp.Regexp, fullMatch bool) ([]procCandidate, error) {
 	statuses, err := jobs.List(ctx)
 	if err != nil {
 		return nil, err
@@ -271,149 +278,133 @@ func matchProcessCandidates(ctx context.Context, jobs *SessionJobs, pattern stri
 	return matches, nil
 }
 
-func pgrepBuiltin(jobs *SessionJobs, spec toolcontract.CommandSpecification) commandprogram.OperationDispatcher {
-	return jobBuiltin(func(ctx context.Context, request commandprogram.OperationRequest, streams commandprogram.Streams) (toolcontract.ProducerResult, error) {
-		bound, err := (commandprogram.CatalogBinder{}).Bind(spec, request.Argv)
+func pgrepOperation(jobs *SessionJobs, spec toolcontract.CommandSpecification) NativeOperation {
+	return preparedHostBuiltin(spec, func(_ commandprogram.OperationRequest, bound commandprogram.BoundArgv) (hostedBody, error) {
+		pattern, err := processPattern(spec.Name, bound)
 		if err != nil {
-			return refusedResult("COMMAND_OPERAND_INVALID"), argvRejection(spec, err)
-		}
-		operands := bound.Operands().Values()
-		if len(operands) != 1 || operands[0] == "" {
-			return refusedResult("COMMAND_OPERAND_INVALID"), toolrejection.RejectInvalidArguments("COMMAND_OPERAND_INVALID", map[string]any{"command": "pgrep", "reason": "requires one pattern operand"})
+			return nil, err
 		}
 		fullMatch := len(bound.Options("-f")) > 0
-		exactMatch := len(bound.Options("-x")) > 0
-		listName := len(bound.Options("-l")) > 0
-		listFull := len(bound.Options("-a")) > 0
 		newest := len(bound.Options("-n")) > 0
 		oldest := len(bound.Options("-o")) > 0
-
-		matches, err := matchProcessCandidates(ctx, jobs, operands[0], fullMatch, exactMatch)
-		if err != nil {
-			var syntaxErr *syntax.Error
-			if !errors.As(err, &syntaxErr) {
+		listName := len(bound.Options("-l")) > 0
+		listFull := len(bound.Options("-a")) > 0
+		return func(ctx context.Context, streams commandprogram.Streams) (toolcontract.ProducerResult, error) {
+			matches, err := matchProcessCandidates(ctx, jobs, pattern, fullMatch)
+			if err != nil {
 				return ownerFailure(err), err
 			}
-			return refusedResult("COMMAND_OPERAND_INVALID"), toolrejection.RejectInvalidArguments("COMMAND_OPERAND_INVALID", map[string]any{"command": "pgrep", "pattern": operands[0], "word": operands[0], "reason": err.Error()})
-		}
-		if newest || oldest {
-			matches = selectProcessAge(matches, newest)
-		}
-		if len(matches) == 0 {
-			return readResult(1), nil
-		}
-		var out strings.Builder
-		for _, m := range matches {
-			switch {
-			case listFull:
-				if m.job {
-					fmt.Fprintf(&out, "%s %s [session job]\n", m.id, m.cmd)
-				} else {
-					fmt.Fprintf(&out, "%s %s\n", m.id, m.cmd)
-				}
-			case listName:
-				if m.job {
-					fmt.Fprintf(&out, "%s %s [session job]\n", m.id, m.comm)
-				} else {
-					fmt.Fprintf(&out, "%s %s\n", m.id, m.comm)
-				}
-			default:
-				fmt.Fprintf(&out, "%s\n", m.id)
+			if newest || oldest {
+				matches = selectProcessAge(matches, newest)
 			}
-		}
-		if _, err := fmt.Fprint(nonNilWriter(streams.Output), out.String()); err != nil {
-			return readFailure(err), err
-		}
-		return readResult(0), nil
+			if len(matches) == 0 {
+				return readResult(1), nil
+			}
+			var out strings.Builder
+			for _, m := range matches {
+				switch {
+				case listFull:
+					if m.job {
+						fmt.Fprintf(&out, "%s %s [session job]\n", m.id, m.cmd)
+					} else {
+						fmt.Fprintf(&out, "%s %s\n", m.id, m.cmd)
+					}
+				case listName:
+					if m.job {
+						fmt.Fprintf(&out, "%s %s [session job]\n", m.id, m.comm)
+					} else {
+						fmt.Fprintf(&out, "%s %s\n", m.id, m.comm)
+					}
+				default:
+					fmt.Fprintf(&out, "%s\n", m.id)
+				}
+			}
+			if _, err := fmt.Fprint(nonNilWriter(streams.Output), out.String()); err != nil {
+				return readFailure(err), err
+			}
+			return readResult(0), nil
+		}, nil
 	})
 }
 
-func pkillBuiltin(jobs *SessionJobs, spec toolcontract.CommandSpecification) commandprogram.OperationDispatcher {
-	return jobBuiltin(func(ctx context.Context, request commandprogram.OperationRequest, _ commandprogram.Streams) (toolcontract.ProducerResult, error) {
-		bound, err := (commandprogram.CatalogBinder{}).Bind(spec, request.Argv)
+func pkillOperation(jobs *SessionJobs, spec toolcontract.CommandSpecification) NativeOperation {
+	return preparedHostBuiltin(spec, func(_ commandprogram.OperationRequest, bound commandprogram.BoundArgv) (hostedBody, error) {
+		pattern, err := processPattern(spec.Name, bound)
 		if err != nil {
-			return refusedResult("COMMAND_OPERAND_INVALID"), argvRejection(spec, err)
+			return nil, err
 		}
+		fullMatch := len(bound.Options("-f")) > 0
+		newest := len(bound.Options("-n")) > 0
+		oldest := len(bound.Options("-o")) > 0
 		signal := "TERM"
 		if option, ok := bound.Last("-s"); ok && len(option.Values) > 0 {
 			signal = strings.TrimPrefix(strings.ToUpper(option.Values[0].Value), "SIG")
 		}
-		operands := bound.Operands().Values()
-		if len(operands) != 1 || operands[0] == "" {
-			return refusedResult("COMMAND_OPERAND_INVALID"), toolrejection.RejectInvalidArguments("COMMAND_OPERAND_INVALID", map[string]any{"command": "pkill", "reason": "requires one pattern operand"})
-		}
-		fullMatch := len(bound.Options("-f")) > 0
-		exactMatch := len(bound.Options("-x")) > 0
-		newest := len(bound.Options("-n")) > 0
-		oldest := len(bound.Options("-o")) > 0
-
-		matches, err := matchProcessCandidates(ctx, jobs, operands[0], fullMatch, exactMatch)
-		if err != nil {
-			var syntaxErr *syntax.Error
-			if !errors.As(err, &syntaxErr) {
+		return func(ctx context.Context, _ commandprogram.Streams) (toolcontract.ProducerResult, error) {
+			matches, err := matchProcessCandidates(ctx, jobs, pattern, fullMatch)
+			if err != nil {
 				return ownerFailure(err), err
 			}
-			return refusedResult("COMMAND_OPERAND_INVALID"), toolrejection.RejectInvalidArguments("COMMAND_OPERAND_INVALID", map[string]any{"command": "pkill", "pattern": operands[0], "word": operands[0], "reason": err.Error()})
-		}
-		if len(matches) == 0 {
-			return toolcontract.ProducerResult{Status: 1, Terminal: toolcontract.ProducerCompleted, Complete: true, PublicationEligible: false, EffectCertainty: toolcontract.NoEffect}, nil
-		}
-		if newest || oldest {
-			matches = selectProcessAge(matches, newest)
-		}
-		if len(matches) == 0 {
-			return readResult(1), nil
-		}
-		_, name, err := jobSignal(signal)
-		if err != nil {
-			return refusedResult("COMMAND_OPERAND_INVALID"), err
-		}
-		// Jobs first: stopping one ends its descendants, which then need no
-		// signal of their own.
-		slices.SortStableFunc(matches, func(a, b procCandidate) int {
-			switch {
-			case a.job == b.job:
-				return 0
-			case a.job:
-				return -1
+			if len(matches) == 0 {
+				return toolcontract.ProducerResult{Status: 1, Terminal: toolcontract.ProducerCompleted, Complete: true, PublicationEligible: false, EffectCertainty: toolcontract.NoEffect}, nil
 			}
-			return 1
-		})
-		stopped := map[int]bool{}
-		for _, m := range matches {
-			if !m.job {
-				if underStoppedJob(m, stopped) {
+			if newest || oldest {
+				matches = selectProcessAge(matches, newest)
+			}
+			if len(matches) == 0 {
+				return readResult(1), nil
+			}
+			_, name, err := jobSignal(signal)
+			if err != nil {
+				return refusedResult("COMMAND_OPERAND_INVALID"), err
+			}
+			// Jobs first: stopping one ends its descendants, which then need no
+			// signal of their own.
+			slices.SortStableFunc(matches, func(a, b procCandidate) int {
+				switch {
+				case a.job == b.job:
+					return 0
+				case a.job:
+					return -1
+				}
+				return 1
+			})
+			stopped := map[int]bool{}
+			for _, m := range matches {
+				if !m.job {
+					if underStoppedJob(m, stopped) {
+						continue
+					}
+					err := jobs.signalDescendant(ctx, m.pid, name)
+					// A process the scan found as the session's own and no longer is
+					// left with a job this pkill stopped.
+					if reject := toolrejection.AsToolReject(err); reject != nil && reject.Code == "PROCESS_NOT_OWNED" && len(stopped) > 0 {
+						continue
+					}
+					if err != nil && !errors.Is(err, errDescendantGone) {
+						if reject := toolrejection.AsToolReject(err); reject != nil && reject.Data != nil {
+							reject.Data["command"] = "pkill"
+						}
+						return ownerFailure(err), err
+					}
 					continue
 				}
-				err := jobs.signalDescendant(ctx, m.pid, name)
-				// A process the scan found as the session's own and no longer is
-				// left with a job this pkill stopped.
-				if reject := toolrejection.AsToolReject(err); reject != nil && reject.Code == "PROCESS_NOT_OWNED" && len(stopped) > 0 {
-					continue
+				ref := m.handle
+				if ref == "" {
+					ref = m.id
 				}
-				if err != nil && !errors.Is(err, errDescendantGone) {
+				if err := jobs.Signal(ctx, ref, signal); err != nil {
 					if reject := toolrejection.AsToolReject(err); reject != nil && reject.Data != nil {
 						reject.Data["command"] = "pkill"
 					}
 					return ownerFailure(err), err
 				}
-				continue
-			}
-			ref := m.handle
-			if ref == "" {
-				ref = m.id
-			}
-			if err := jobs.Signal(ctx, ref, signal); err != nil {
-				if reject := toolrejection.AsToolReject(err); reject != nil && reject.Data != nil {
-					reject.Data["command"] = "pkill"
+				if m.pid > 0 {
+					stopped[m.pid] = true
 				}
-				return ownerFailure(err), err
 			}
-			if m.pid > 0 {
-				stopped[m.pid] = true
-			}
-		}
-		return toolcontract.ProducerResult{Status: 0, Terminal: toolcontract.ProducerCompleted, Complete: true, PublicationEligible: true, EffectCertainty: toolcontract.EffectAttempted}, nil
+			return toolcontract.ProducerResult{Status: 0, Terminal: toolcontract.ProducerCompleted, Complete: true, PublicationEligible: true, EffectCertainty: toolcontract.EffectAttempted}, nil
+		}, nil
 	})
 }
 

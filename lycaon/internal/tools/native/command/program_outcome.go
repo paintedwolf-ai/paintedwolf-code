@@ -40,6 +40,7 @@ type ProgramOutcome struct {
 	// external process.
 	SourceWindow *hostcmd.SourceWindow `json:"source_window,omitempty"`
 	toolcontract.LaunchDrafts
+	hasAdmittedActivity bool
 }
 
 // ProgramRefusal is a typed host refusal at the program's stop point with its

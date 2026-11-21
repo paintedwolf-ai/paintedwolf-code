@@ -31,6 +31,13 @@ type trackedOutputPublication struct {
 	run   *programRun
 }
 
+func (p *trackedOutputPublication) CheckOutput(ctx context.Context, destination commandprogram.OutputDestination) error {
+	if checker, ok := p.inner.(commandprogram.OutputPreflight); ok {
+		return checker.CheckOutput(ctx, destination)
+	}
+	return nil
+}
+
 func (p *trackedOutputPublication) Open(ctx context.Context, destination commandprogram.OutputDestination) (commandprogram.StagedOutput, error) {
 	staged, err := p.inner.Open(ctx, destination)
 	if err != nil || staged == nil {

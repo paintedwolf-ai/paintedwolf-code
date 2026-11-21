@@ -45,6 +45,7 @@ var invocationOutRules = map[string]mergeRule{
 	"Process":          outerEnvelope,
 	"Verdict":          outerEnvelope,
 	"CommandProgram":   outerEnvelope,
+	"ProgramRefusal":   outerEnvelope,
 	"SourceRun":        outerEnvelope,
 	"RetrievedFrom":    outerEnvelope,
 	"CardFacts":        outerEnvelope,

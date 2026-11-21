@@ -234,7 +234,7 @@ func (d *ProgramDispatcher) Redirections() (commandprogram.InputRedirection, com
 		return nil, nil
 	}
 	forkPaths := d.paths.Fork()
-	in, out := d.redirections(forkPaths, d.beginOutput)
+	in, out := d.redirections(forkPaths, d.outputAdmission())
 	return d.wrapInputRedirection(in, forkPaths), d.wrapOutputPublication(out, forkPaths)
 }
 

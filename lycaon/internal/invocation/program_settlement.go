@@ -46,7 +46,11 @@ func (r *SQLRecorder) WaitChild(ctx context.Context, executionID, approvalRefere
 	if err := oneProgramTransition(result); err != nil {
 		return err
 	}
-	return tx.Commit()
+	if err := tx.Commit(); err != nil {
+		return err
+	}
+	notifyActivity(ctx, programID, executionID)
+	return nil
 }
 
 // SettleChild retains the owner outcome separately from a later authority stop.

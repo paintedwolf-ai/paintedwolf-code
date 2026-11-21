@@ -150,11 +150,15 @@ func (p ProgramInputCapture) PrepareChild(ctx context.Context, in toolcontract.P
 	if in.ArgumentsReference != "" || invocation.Kind != toolcontract.ProgramChildInvocation || invocation.Identity.ProgramID != p.ProgramID || invocation.SessionID != p.Scope.SessionID || invocation.Scope.ProjectID != p.Scope.ProjectID {
 		return "", fmt.Errorf("expanded child capture requires actual invocation scope and generated reference")
 	}
-	return p.retain(ctx, invocation.Identity.ExecutionID, in.ExpandedInputs, func(reference string, spill *tooloutput.StreamSpill, redacted bool) (*tooloutput.RetainedStreamBody, error) {
+	ref, err := p.retain(ctx, invocation.Identity.ExecutionID, in.ExpandedInputs, func(reference string, spill *tooloutput.StreamSpill, redacted bool) (*tooloutput.RetainedStreamBody, error) {
 		in.ArgumentsReference = reference
 		return p.Outputs.recorder.prepareChildBody(ctx, in, spill, redacted)
 	}, func(reference string, body []byte, redacted bool) error {
 		in.ArgumentsReference = reference
 		return p.Outputs.prepareChildInline(ctx, in, body, redacted)
 	})
+	if err == nil && in.StartOwner != nil {
+		notifyActivity(ctx, invocation.Identity.ProgramID, invocation.Identity.ExecutionID)
+	}
+	return ref, err
 }

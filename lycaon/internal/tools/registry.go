@@ -92,7 +92,9 @@ type ToolInvocationOut struct {
 	// Verdict is Den UI metadata for a recorded review_loop verdict.
 	Verdict *api.VerdictOutcome
 	// CommandProgram is the settled command program receipt for a portable command call.
-	CommandProgram *api.CommandProgramReceipt
+	CommandProgram           *api.CommandProgramReceipt
+	ProgramRefusal           *ProgramRefusalVisibility
+	programProgressPublished atomic.Bool
 	// SourceDeliveries lists the source deliveries confirmed during the call.
 	SourceDeliveries []SourceDeliveryTag
 	// Listener is Den UI and wire metadata for loopback listener attribution on http_request.

@@ -9,6 +9,11 @@ func FormCommand(tool string, args map[string]any) (string, bool) {
 	return QuoteProgram(argv(args)), true
 }
 
+// ProgramBacked reports whether a callable tool evaluates a portable program.
+func ProgramBacked(tool string) bool {
+	return tool == ProgramTool || tool == "verify" || formArgv[tool] != nil
+}
+
 var formArgv = map[string]func(map[string]any) []string{
 	"summarize":    SummarizeArgv,
 	"survey_repo":  SurveyRepoArgv,

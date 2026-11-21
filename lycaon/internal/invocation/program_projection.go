@@ -13,21 +13,22 @@ import (
 // OAR owns dispositions and copy; workflow owners supply outstanding obligations.
 // Static counts never predict future loop or function invocations.
 type ProgramProjection struct {
-	Progress          *api.CommandProgramProgressReceipt
-	ParentToolCallID  string
-	ParentTool        string
-	ParentSessionID   string
-	RootSourceUnitID  string
-	Program           api.CommandProgramReceipt
-	Effects           []ExecutionProjection
-	Unknown           []ExecutionProjection
-	Stopped           *ExecutionProjection
-	Nonzero           []ExecutionProjection
-	NonzeroExecutions int
-	OmittedNonzero    int
-	CompletedEffects  int
-	UncertainEffects  int
-	ExecutedChildren  int
+	Progress            *api.CommandProgramProgressReceipt
+	ParentToolCallID    string
+	ParentTool          string
+	ParentSessionID     string
+	RootSourceUnitID    string
+	Program             api.CommandProgramReceipt
+	Effects             []ExecutionProjection
+	Unknown             []ExecutionProjection
+	Stopped             *ExecutionProjection
+	Nonzero             []ExecutionProjection
+	NonzeroExecutions   int
+	OmittedNonzero      int
+	CompletedEffects    int
+	UncertainEffects    int
+	ExecutedChildren    int
+	HasAdmittedActivity bool
 	// NativeGaps counts native names this program ran as installed programs.
 	NativeGaps                int
 	ExecutedReads             int
@@ -85,7 +86,7 @@ func projectProgram(ctx context.Context, tx *sql.Tx, sessionID, programID string
 		return out, err
 	}
 	var reached, unsettled int
-	err = tx.QueryRowContext(ctx, `SELECT count(*) FILTER (WHERE effect_certainty='completed'),count(*) FILTER (WHERE effect_certainty IN ('unknown','attempted')),count(*) FILTER (WHERE owner_invoked=1),count(*) FILTER (WHERE owner_invoked=1 AND lifecycle='read_only'),count(*) FILTER (WHERE owner_started=1 OR owner_invoked=1),count(*) FILTER (WHERE state IN ('prepared','waiting','running')),count(*) FILTER (WHERE native_gap_json != ''),count(*) FILTER (WHERE status_code <> 0) FROM invocation_program_executions WHERE program_id=?`, programID).Scan(&out.CompletedEffects, &out.UncertainEffects, &out.ExecutedChildren, &out.ExecutedReads, &reached, &unsettled, &out.NativeGaps, &out.NonzeroExecutions)
+	err = tx.QueryRowContext(ctx, `SELECT count(*) FILTER (WHERE effect_certainty='completed'),count(*) FILTER (WHERE effect_certainty IN ('unknown','attempted')),count(*) FILTER (WHERE owner_invoked=1),count(*) FILTER (WHERE owner_invoked=1 AND lifecycle='read_only'),count(*) FILTER (WHERE owner_started=1 OR owner_invoked=1),count(*) FILTER (WHERE state IN ('prepared','waiting','running')),count(*) FILTER (WHERE native_gap_json != ''),count(*) FILTER (WHERE status_code <> 0),COALESCE(MAX(`+admittedProgramExecution+`),0) FROM invocation_program_executions WHERE program_id=?`, programID).Scan(&out.CompletedEffects, &out.UncertainEffects, &out.ExecutedChildren, &out.ExecutedReads, &reached, &unsettled, &out.NativeGaps, &out.NonzeroExecutions, &out.HasAdmittedActivity)
 	if err != nil {
 		return out, err
 	}

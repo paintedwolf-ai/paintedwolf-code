@@ -177,8 +177,8 @@ describe("transcript row stability", () => {
     },
   );
 
-  it("draws a row's calls once the host commits the row", () => {
-    const call = { id: "c1", name: "command", args: { command: "ls" } };
+  it("draws a lifecycle call once the host commits its row", () => {
+    const call = { id: "c1", name: "instruct_worker", args: {} };
     const drawnCalls = (visibility: "internal" | "transcript") =>
       leaves(
         createTranscriptDisplayProjector()(

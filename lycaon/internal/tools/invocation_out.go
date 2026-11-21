@@ -5,6 +5,24 @@ import (
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
+// ProgramRefusalVisibility records the refusal code and whether it preceded admission.
+type ProgramRefusalVisibility struct {
+	Code            string
+	BeforeAdmission bool
+}
+
+// MarkProgramProgressPublished keeps a published live program visible at settlement.
+func (o *ToolInvocationOut) MarkProgramProgressPublished() {
+	if o != nil {
+		o.programProgressPublished.Store(true)
+	}
+}
+
+// ProgramProgressPublished reports whether a live program frame was emitted.
+func (o *ToolInvocationOut) ProgramProgressPublished() bool {
+	return o != nil && o.programProgressPublished.Load()
+}
+
 // MergeScope names the seam a child's outputs cross.
 type MergeScope int
 

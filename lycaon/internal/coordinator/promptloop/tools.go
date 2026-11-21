@@ -19,7 +19,6 @@ import (
 	"github.com/lycaon/lycaon/internal/toolpolicy"
 	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/internal/tools"
-	"github.com/lycaon/lycaon/internal/visual"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -38,25 +37,27 @@ func warnLedgerUnwired() {
 
 // toolCaptures holds per-invocation UI metadata.
 type toolCaptures struct {
-	sourceContext    *api.SourceContext
-	overlayPromotion *api.OverlayPromotion
-	ownerRef         string
-	fileEdits        []api.FileEditSnapshot
-	fileEditsOmitted int
-	visual           *tools.VisualCapture
-	externalAccess   *api.ExternalAccess
-	displaySubject   string
-	skill            *api.SkillActivation
-	process          *api.ToolProcessHandle
-	verdict          *api.VerdictOutcome
-	commandProgram   *api.CommandProgramReceipt
-	sourceDeliveries []tools.SourceDeliveryTag
-	sourceRun        *tools.SourceRunCapture
-	listener         *api.LoopbackListenerFact
-	cardFacts        []api.ActionFact
-	dispatch         *api.WorkerDispatch
-	workerReport     *api.WorkerReportAcceptance
-	completion       *api.ToolCompletion
+	programRefusal           *tools.ProgramRefusalVisibility
+	programProgressPublished bool
+	sourceContext            *api.SourceContext
+	overlayPromotion         *api.OverlayPromotion
+	ownerRef                 string
+	fileEdits                []api.FileEditSnapshot
+	fileEditsOmitted         int
+	visual                   *tools.VisualCapture
+	externalAccess           *api.ExternalAccess
+	displaySubject           string
+	skill                    *api.SkillActivation
+	process                  *api.ToolProcessHandle
+	verdict                  *api.VerdictOutcome
+	commandProgram           *api.CommandProgramReceipt
+	sourceDeliveries         []tools.SourceDeliveryTag
+	sourceRun                *tools.SourceRunCapture
+	listener                 *api.LoopbackListenerFact
+	cardFacts                []api.ActionFact
+	dispatch                 *api.WorkerDispatch
+	workerReport             *api.WorkerReportAcceptance
+	completion               *api.ToolCompletion
 	// retrievedFrom is the handler-observed retrieval host.
 	retrievedFrom string
 	// sourceReads is the project text the handler returned.
@@ -421,11 +422,13 @@ func toolCapturesFrom(out *tools.ToolInvocationOut) toolCaptures {
 		return toolCaptures{}
 	}
 	return toolCaptures{
-		workerReport:     out.WorkerReport,
-		displaySubject:   out.DisplaySubject,
-		overlayPromotion: out.OverlayPromotion,
-		sourceContext:    out.SourceContext,
-		ownerRef:         out.OwnerRef, fileEdits: out.FileEdits, fileEditsOmitted: out.FileEditsOmitted, visual: out.Visual,
+		programRefusal:           out.ProgramRefusal,
+		programProgressPublished: out.ProgramProgressPublished(),
+		workerReport:             out.WorkerReport,
+		displaySubject:           out.DisplaySubject,
+		overlayPromotion:         out.OverlayPromotion,
+		sourceContext:            out.SourceContext,
+		ownerRef:                 out.OwnerRef, fileEdits: out.FileEdits, fileEditsOmitted: out.FileEditsOmitted, visual: out.Visual,
 		externalAccess: out.ExternalAccess,
 		skill:          out.Skill, process: out.Process, verdict: out.Verdict,
 		commandProgram:   out.CommandProgram,
@@ -508,77 +511,4 @@ func invocationOwnerRef(explicit string, result *api.ToolResult) string {
 		return strings.TrimSpace(result.Visual.ID)
 	}
 	return ""
-}
-
-func applyToolResultSidecars(
-	ctx context.Context,
-	store visual.Store,
-	designateCover func(ctx context.Context, projectID, rootSessionID, artifactID string) error,
-	projectID string,
-	rootSessionID string,
-	producerSessionID string,
-	toolName, toolContent string,
-	tr *api.ToolResult,
-	captures toolCaptures,
-) string {
-	guidance.ApplyTaskDispatchMetadata(toolName, tr, captures.dispatch)
-	tr.WorkerReport = captures.workerReport
-	tr.DisplaySubject = captures.displaySubject
-	tr.OverlayPromotion = captures.overlayPromotion
-	if captures.completion != nil {
-		completion := *captures.completion
-		tr.Completion = &completion
-	}
-	tr.FileEdits, tr.FileEditsOmitted = captures.fileEdits, captures.fileEditsOmitted
-	if captures.externalAccess != nil {
-		tr.ExternalAccess = tools.ExternalAccessFromCapture(captures.externalAccess)
-	}
-	if captures.skill != nil {
-		tr.Skill = captures.skill
-	}
-	if captures.process != nil {
-		tr.Process = captures.process
-		if captures.process.Running {
-			// A live handle stays visible until the mirror reports it settled.
-			tr.UiVisibility = api.ToolResultUiVisibilityNormal
-		}
-	}
-	if captures.verdict != nil {
-		tr.Verdict = captures.verdict
-	}
-	if captures.commandProgram != nil {
-		tr.CommandProgram = captures.commandProgram
-	}
-	if captures.listener != nil {
-		tr.Listener = captures.listener
-	}
-	tr.CardFacts = captures.cardFacts
-	if visualCap := captures.visual; visualCap != nil && store != nil && strings.TrimSpace(rootSessionID) != "" {
-		stamped, err := visual.AttachToolResult(ctx, store, rootSessionID, producerSessionID, tr.ToolCallID, tr, visualCap, toolContent)
-		if err != nil {
-			return toolContent
-		}
-		toolContent = stamped
-		// Visual artifacts stay visible when textual output is benign.
-		if tr.Visual != nil {
-			tr.UiVisibility = api.ToolResultUiVisibilityNormal
-		}
-		if tr.Visual != nil && designateCover != nil && strings.TrimSpace(projectID) != "" && isCoverProducerTool(toolName) {
-			src := tr.Visual.Source
-			if (src == api.VisualArtifactSourceCapture || src == api.VisualArtifactSourceRender) &&
-				visual.IsRasterMime(tr.Visual.Mime) {
-				_ = designateCover(ctx, projectID, rootSessionID, tr.Visual.ID)
-			}
-		}
-	}
-	return toolContent
-}
-
-func isCoverProducerTool(toolName string) bool {
-	switch strings.TrimSpace(toolName) {
-	case "capture_page", "render_view":
-		return true
-	default:
-		return false
-	}
 }

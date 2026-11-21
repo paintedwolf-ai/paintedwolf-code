@@ -1,9 +1,10 @@
+import { toolDrawsWhileRunning } from "./tool-transcript-visibility.ts";
 import { partHasFileEdits } from "../file-edit/file-edit-model.ts";
 import { collectSegmentFolds } from "../file-edit/file-edit-fold.ts";
 import {
   isLoopbackTarget,
   isTaskToolName,
-  toolDrawsWhileRunning,
+  toolPartDisplayStatus,
 } from "./tool-part-model.ts";
 import { ACTIVITY_ROLE_TIERS, TOOL_ACTIVITY_PRESENTATION } from "./tool-presentation.generated.ts";
 import type { ToolActivityRole } from "./tool-presentation.generated.ts";
@@ -125,7 +126,7 @@ function activityCandidate(
     headline,
     weight,
     role,
-    drawnBeforeResult: toolDrawsWhileRunning(toolName, {
+    drawnBeforeResult: item.part.shownInFlight || toolDrawsWhileRunning(toolName, {
       verboseMode: opts?.verboseMode ?? false,
       layout: opts?.layout,
     }),
