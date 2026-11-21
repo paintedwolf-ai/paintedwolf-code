@@ -313,7 +313,7 @@ func TestAskModeRefusalProducersRenderSpecificCausesAndConditionedRecovery(t *te
 		}
 	})
 
-	// 2. Hidden command field (never echoes secret/value).
+	// 2. Hidden command field (never echoes secret/value, and keeps recovery conditional on whether the command is a read-only inspection).
 	t.Run("hidden_command_field", func(t *testing.T) {
 		const secretSentinel = "SUPER_SECRET_TOKEN_VALUE_12345"
 		rej := tools.AskModeCommandFieldReject("command", map[string]any{
@@ -324,7 +324,8 @@ func TestAskModeRefusalProducersRenderSpecificCausesAndConditionedRecovery(t *te
 		for _, want := range []string{
 			"`secret_use` on command is unavailable in Ask mode.",
 			"read-only command schema",
-			"Omit `secret_use`",
+			"If the command only inspects files or state, omit `secret_use` and retry as a read-only native command",
+			"if the operation itself requires `secret_use`, explain that the user can switch to Agent mode.",
 		} {
 			if !strings.Contains(raw, want) {
 				t.Fatalf("hidden field Ask refusal missing %q:\n%s", want, raw)
@@ -461,20 +462,29 @@ func TestAskModeRefusalProducersRenderSpecificCausesAndConditionedRecovery(t *te
 		}
 	})
 
-	// 9. Delayed Ask refusal rendered after upgrade to Agent mode uses past-tense launch-time authority.
+	// 9. Delayed Ask refusal rendered after upgrade to Agent mode uses past-tense launch-time authority and does not direct the model to ask the user to upgrade again.
 	t.Run("delayed_refusal_after_upgrade_past_tense", func(t *testing.T) {
 		delayedRej := tools.AskModeReject("command")
 		delayedRej.Data["command"] = "pytest"
 		delayedRej.Data["reason"] = "external_exec"
 		delayedRej.Data["session_mode"] = "agent"
 		delayedRej.Data["mode_denied"] = true
-		rawDelayed, _ := renderToolReject(t, delayedRej, map[string]any{"can_command": true})
+		rawDelayed, parsedDelayed := renderToolReject(t, delayedRej, map[string]any{"can_command": true})
 		for _, want := range []string{
 			"refused under launch-time Ask authority",
 			"This program started while Ask mode was active and kept its frozen read-only authority across the session upgrade",
+			"Run `pytest` in a new Agent-mode command call outside the Ask-launched program",
 		} {
 			if !strings.Contains(rawDelayed, want) {
-				t.Fatalf("delayed Ask refusal after upgrade missing past-tense explanation %q:\n%s", want, rawDelayed)
+				t.Fatalf("delayed Ask refusal after upgrade missing expected guidance %q:\n%s", want, rawDelayed)
+			}
+		}
+		for _, forbidden := range []string{
+			"switch to Agent mode",
+			"unavailable in Ask mode",
+		} {
+			if strings.Contains(rawDelayed, forbidden) || strings.Contains(parsedDelayed.Fix, forbidden) {
+				t.Fatalf("delayed Ask refusal after upgrade still directed switching to Agent mode (%q):\n%s", forbidden, rawDelayed)
 			}
 		}
 	})

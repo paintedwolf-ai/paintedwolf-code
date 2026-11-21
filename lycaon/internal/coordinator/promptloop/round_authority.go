@@ -11,9 +11,10 @@ import (
 
 // RoundAuthority is the root ceiling frozen with the model's tool offer.
 type RoundAuthority struct {
-	RootSessionID string
-	Mode          api.SessionMode
-	ReadOnly      bool
+	RootSessionID   string
+	Mode            api.SessionMode
+	ReadOnly        bool
+	UpgradedFromAsk bool
 }
 
 func (l *promptContext) roundAuthority(ctx context.Context, sess *api.Session, workerReadOnly bool) (RoundAuthority, error) {
@@ -29,6 +30,7 @@ func (l *promptContext) roundAuthority(ctx context.Context, sess *api.Session, w
 	}
 	return RoundAuthority{
 		RootSessionID: root.RootSessionID, Mode: root.Mode, ReadOnly: workerReadOnly || root.Mode == api.SessionModeAsk,
+		UpgradedFromAsk: root.UpgradedFromAsk,
 	}, nil
 }
 
@@ -77,16 +79,11 @@ func (l *PromptLoop) appendAgentEnabledNudge(ctx context.Context, sessionID stri
 	}, "", state)
 }
 
-func shouldDeliverAgentEnabledNudge(sess *api.Session, previous, current api.SessionMode, history []api.Message) bool {
-	if sess == nil || sess.IsWorkerChild() || current != api.SessionModeAgent {
+func shouldDeliverAgentEnabledNudge(sess *api.Session, previous api.SessionMode, authority RoundAuthority, history []api.Message) bool {
+	if sess == nil || sess.IsWorkerChild() || authority.Mode != api.SessionModeAgent {
 		return false
 	}
-	rootID := sess.RootSessionID
-	if rootID == "" {
-		rootID = sess.ID
-	}
-	upgraded := store.TakeAgentModeUpgrade(rootID) || previous == api.SessionModeAsk
-	if !upgraded {
+	if !authority.UpgradedFromAsk && previous != api.SessionModeAsk {
 		return false
 	}
 	signal := anchor.SessionAgentEnabled.String()
