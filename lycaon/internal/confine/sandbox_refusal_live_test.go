@@ -134,6 +134,8 @@ func TestOrdinaryToolchainsStartWithoutRefusals(t *testing.T) {
 		if err != nil {
 			continue
 		}
+		// Warm system shims (such as macOS xcrun wrappers) outside the sandbox first.
+		_, _ = exec.Command(name, probe[1:]...).CombinedOutput()
 		refusals, out := refusalsOf(t, self, []string{project}, name, probe[1:]...)
 		if len(refusals.Refusals) > 0 {
 			var lines []string
