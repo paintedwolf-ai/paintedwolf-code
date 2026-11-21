@@ -15,6 +15,7 @@ type WaitSubscriptionsDeps struct {
 	GetSession                func(ctx context.Context, sessionID string) (*api.Session, error)
 	HostWakeOverlayPromoteDue func(ctx context.Context, sessionID string) bool
 	ProcessReport             func(sessionID, handle string) (report string, published bool)
+	ObserveProcess            func(sessionID, handle string)
 	ProcessRunning            func(sessionID string, handles []string) bool
 	ProcessState              func(sessionID, handle string) (known, running bool)
 	ProcessSubject            func(sessionID, handle string) string

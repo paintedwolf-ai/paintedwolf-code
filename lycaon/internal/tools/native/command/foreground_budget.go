@@ -86,19 +86,24 @@ func (b *foregroundBudget) expire() {
 // programWaits routes one program's waits on a person to its foreground
 // budget and, once the program runs in the background, to its job.
 type programWaits struct {
-	mu     sync.Mutex
-	budget *foregroundBudget
-	job    func() (end func())
-	open   int
-	endJob func()
+	mu        sync.Mutex
+	budget    *foregroundBudget
+	job       func() (end func())
+	open      int
+	endJob    func()
+	heldSince time.Time
+	held      time.Duration
 }
 
 func (w *programWaits) BeginHumanWait() func() {
 	endBudget := w.budget.BeginHumanWait()
 	w.mu.Lock()
 	w.open++
-	if w.open == 1 && w.job != nil {
-		w.endJob = w.job()
+	if w.open == 1 {
+		w.heldSince = w.budget.clock.Now()
+		if w.job != nil {
+			w.endJob = w.job()
+		}
 	}
 	w.mu.Unlock()
 	var once sync.Once
@@ -108,12 +113,24 @@ func (w *programWaits) BeginHumanWait() func() {
 			w.mu.Lock()
 			defer w.mu.Unlock()
 			w.open--
-			if w.open == 0 && w.endJob != nil {
-				w.endJob()
-				w.endJob = nil
+			if w.open == 0 {
+				w.held += w.budget.clock.Now().Sub(w.heldSince)
+				if w.endJob != nil {
+					w.endJob()
+					w.endJob = nil
+				}
 			}
 		})
 	}
+}
+
+func (w *programWaits) personWait(at time.Time) time.Duration {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	if w.open > 0 {
+		return w.held + max(0, at.Sub(w.heldSince))
+	}
+	return w.held
 }
 
 // promoted reports later waits, and any open now, to the program's job.

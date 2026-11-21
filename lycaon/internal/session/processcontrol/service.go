@@ -44,6 +44,14 @@ type Service struct {
 func New(sessions Sessions, verification Verification, policy ToolPolicy, guidance Guidance) *Service {
 	return &Service{store: sessions, Verification: verification, ToolPolicy: policy, Guidance: guidance}
 }
+func (s *Service) Observe(sessionID, handle string) {
+	if report, ok := s.processReports.lookup(sessionID, handle); ok {
+		report.exit.Observe()
+	} else {
+		s.Background.Observe(sessionID, handle)
+	}
+}
+
 func (s *Service) SetLoop(waits Waits, nudges Nudges) { s.waits, s.nudges = waits, nudges }
 func (s *Service) Run(ctx context.Context, spec heldcall.Spec, fn heldcall.Func) (heldcall.Outcome, error) {
 	if s.Held == nil {

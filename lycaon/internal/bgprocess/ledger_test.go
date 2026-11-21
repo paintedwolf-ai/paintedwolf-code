@@ -79,7 +79,13 @@ func TestProgramJobCarriesItsStagesSettledRefusals(t *testing.T) {
 
 func TestLedgerKeepsAnUnobservedExitUntilTheAgentObservesIt(t *testing.T) {
 	r := NewRegistry(DefaultConfig(), Hooks{})
-	handle := startGatedProgram(t, r, "session", exitWith(1))
+	finish := make(chan struct{})
+	handle := startGatedProgram(t, r, "session", func(context.Context, string) (ProgramJobResult, error) {
+		<-finish
+		return ProgramJobResult{ExitCode: 1}, nil
+	})
+	r.Observe("session", handle)
+	close(finish)
 	awaitJob(t, r, "session", handle)
 	for range 2 {
 		if got := ledgerHandles(r, "session"); !reflect.DeepEqual(got, []string{handle}) {

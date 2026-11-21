@@ -162,6 +162,10 @@ func (e *StartConflict) Unwrap() error { return e.Kind }
 
 // Completion is the terminal, host-authoritative result for one command job.
 type Completion struct {
+	ExitObservation *ExitObservation
+	ProgramStop     ProgramStop
+	// ReleaseNotices returns admission after the completion consumer finishes.
+	ReleaseNotices   func()
 	IsCheck          bool
 	SourceRevision   string
 	SourceRootDigest string

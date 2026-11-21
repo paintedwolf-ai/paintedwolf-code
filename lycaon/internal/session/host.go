@@ -239,6 +239,7 @@ func NewHost(store *sessionstore.Repositories, modelSources Models, registry too
 	workerResults.SetSummaries(workerSummaries)
 	m.Coordinator.Guidance = guidancedelivery.New(store.Sessions, store.Transcript, turnTranscript, workerState, workerResults, m.Coordinator.ProgressClosure)
 	m.Processes = processcontrol.New(store.Sessions, m.Verification, m.ToolPolicy, m.Coordinator.Guidance)
+	m.Submissions.SetProcessObserver(m.Processes.Observe)
 	m.Workers = workerexecution.New(store.Sessions, store.Evidence, m.Workspace, gate, m.Coordinator.Guidance, m.Limits, router, workerexecution.PeerServices{Cancel: workerCancel, Cards: workerCards, Cancellations: workerCancellations, Delivery: workerDelivery, Summaries: workerSummaries, Results: workerResults, Digests: workerDigests, State: workerState, Notes: workerNotes, Workspaces: workerworkspace.New(store.Sessions, m.Workspace, newBranchWorkspace)})
 	m.Verification.SetWorkspaceTrackers(m.Workers.Workspaces)
 	turnPreparation := preparation.New(turnHistory, m.Coordinator.Loading, m.Profiles, m.SourceBriefs, m.ViewContexts, m.ToolContext, m.Workers.Workspaces, m.Workers.State)
