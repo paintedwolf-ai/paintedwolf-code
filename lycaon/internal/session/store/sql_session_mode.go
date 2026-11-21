@@ -34,23 +34,16 @@ func resolveEffectiveModeSQL(ctx context.Context, q *db.Queries, id string) (Roo
 	}
 	mode := api.SessionMode(root.Mode.String)
 	if !root.RootSessionID.Valid || root.RootSessionID.String == "" || !validSessionMode(mode) ||
-		!root.Started.Valid || (root.Started.Int64 != 0 && root.Started.Int64 != 1) {
+		!root.Started.Valid || (root.Started.Int64 != 0 && root.Started.Int64 != 1) ||
+		!root.UpgradedFromAsk.Valid || root.UpgradedFromAsk.Int64 < 0 || root.UpgradedFromAsk.Int64 > 2 {
 		return RootAuthority{}, ErrSessionModeUnavailable
 	}
-	upgraded := false
-	if mode == api.SessionModeAgent && root.Started.Int64 == 1 {
-		_, stampErr := q.GetCheckpointDecisionStamp(ctx, db.GetCheckpointDecisionStampParams{
-			SessionID: root.RootSessionID.String, ToolCallID: agentModeUpgradeStampID,
-		})
-		if stampErr == nil {
-			upgraded = true
-		} else if !errors.Is(stampErr, sql.ErrNoRows) {
-			return RootAuthority{}, sessionModeUnavailable(id, stampErr)
-		}
-	}
 	return RootAuthority{
-		RootSessionID: root.RootSessionID.String, Mode: mode, Started: root.Started.Int64 == 1,
-		UpgradedFromAsk: upgraded,
+		RootSessionID:        root.RootSessionID.String,
+		Mode:                 mode,
+		Started:              root.Started.Int64 == 1,
+		UpgradedFromAsk:      root.UpgradedFromAsk.Int64 >= 1,
+		AgentNoticeDelivered: root.UpgradedFromAsk.Int64 == 2,
 	}, nil
 }
 
@@ -150,18 +143,13 @@ func putRootAuthority(ctx context.Context, s *sqlCore, tx *sql.Tx, root RootAuth
 	q := s.queries.WithTx(tx)
 	now := timelayout.Format(time.Now().UTC())
 	if err := q.SetRootSessionMode(ctx, db.SetRootSessionModeParams{
-		ID: root.RootSessionID, Mode: db.NullString(string(root.Mode)),
-		Started: int64(boolToInt(root.Started)), UpdatedAt: now,
+		ID:              root.RootSessionID,
+		Mode:            db.NullString(string(root.Mode)),
+		Started:         int64(boolToInt(root.Started)),
+		UpgradedFromAsk: upgradedState(root),
+		UpdatedAt:       now,
 	}); err != nil {
 		return err
-	}
-	if root.UpgradedFromAsk {
-		if err := q.UpsertCheckpointDecisionStamp(ctx, db.UpsertCheckpointDecisionStampParams{
-			SessionID: root.RootSessionID, ToolCallID: agentModeUpgradeStampID,
-			DecisionJson: `{"from":"ask","to":"agent"}`, CreatedAt: now,
-		}); err != nil {
-			return err
-		}
 	}
 	row, err := q.GetSession(ctx, root.RootSessionID)
 	if err != nil {

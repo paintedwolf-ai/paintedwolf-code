@@ -2,6 +2,7 @@ package promptloop
 
 import (
 	"context"
+	"errors"
 
 	"github.com/lycaon/lycaon/internal/coordinator/anchor"
 	"github.com/lycaon/lycaon/internal/session/store"
@@ -11,10 +12,11 @@ import (
 
 // RoundAuthority is the root ceiling frozen with the model's tool offer.
 type RoundAuthority struct {
-	RootSessionID   string
-	Mode            api.SessionMode
-	ReadOnly        bool
-	UpgradedFromAsk bool
+	RootSessionID        string
+	Mode                 api.SessionMode
+	ReadOnly             bool
+	UpgradedFromAsk      bool
+	AgentNoticeDelivered bool
 }
 
 func (l *promptContext) roundAuthority(ctx context.Context, sess *api.Session, workerReadOnly bool) (RoundAuthority, error) {
@@ -29,8 +31,11 @@ func (l *promptContext) roundAuthority(ctx context.Context, sess *api.Session, w
 		return RoundAuthority{}, store.ErrSessionModeUnavailable
 	}
 	return RoundAuthority{
-		RootSessionID: root.RootSessionID, Mode: root.Mode, ReadOnly: workerReadOnly || root.Mode == api.SessionModeAsk,
-		UpgradedFromAsk: root.UpgradedFromAsk,
+		RootSessionID:        root.RootSessionID,
+		Mode:                 root.Mode,
+		ReadOnly:             workerReadOnly || root.Mode == api.SessionModeAsk,
+		UpgradedFromAsk:      root.UpgradedFromAsk,
+		AgentNoticeDelivered: root.AgentNoticeDelivered,
 	}, nil
 }
 
@@ -73,23 +78,54 @@ func (l *PromptLoop) appendAgentEnabledNudge(ctx context.Context, sessionID stri
 	if err != nil {
 		return nil, err
 	}
-	return l.Nudges.appendHostNudge(ctx, sessionID, state.history, HostNudge{
+	nudge := newHostNudge(HostNudge{
 		SignalID: anchor.SessionAgentEnabled.String(),
 		Content:  content,
-	}, "", state)
+	}, "")
+	nudge.ID = store.AgentEnabledMessageID(sessionID)
+	if l.Projection == nil || l.Projection.Deps.AppendMessages == nil {
+		if state != nil {
+			state.agentEnabledNoticeDelivered = true
+		}
+		return append(state.history, nudge), nil
+	}
+	stamped, err := l.Projection.appendMessage(ctx, sessionID, nudge)
+	if err != nil {
+		if errors.Is(err, store.ErrDuplicateMessageID) {
+			if state != nil {
+				state.agentEnabledNoticeDelivered = true
+			}
+			return state.history, nil
+		}
+		return nil, err
+	}
+	if state != nil {
+		state.agentEnabledNoticeDelivered = true
+	}
+	return append(state.history, stamped), nil
 }
 
-func shouldDeliverAgentEnabledNudge(sess *api.Session, previous api.SessionMode, authority RoundAuthority, history []api.Message) bool {
+func shouldDeliverAgentEnabledNudge(sess *api.Session, previous api.SessionMode, authority RoundAuthority, state *promptLoopTurnState) bool {
 	if sess == nil || sess.IsWorkerChild() || authority.Mode != api.SessionModeAgent {
+		return false
+	}
+	if authority.AgentNoticeDelivered {
+		return false
+	}
+	if state != nil && state.agentEnabledNoticeDelivered {
 		return false
 	}
 	if !authority.UpgradedFromAsk && previous != api.SessionModeAsk {
 		return false
 	}
-	signal := anchor.SessionAgentEnabled.String()
-	for _, msg := range history {
-		if msg.HostSignalID == signal {
-			return false
+	if state != nil {
+		signal := anchor.SessionAgentEnabled.String()
+		deterministicID := store.AgentEnabledMessageID(sess.ID)
+		for _, msg := range state.history {
+			if msg.HostSignalID == signal || msg.ID == deterministicID {
+				state.agentEnabledNoticeDelivered = true
+				return false
+			}
 		}
 	}
 	return true

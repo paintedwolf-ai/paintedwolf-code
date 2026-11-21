@@ -218,7 +218,7 @@ func TestSessionModeAskToAgentUpgradePersistsAcrossSQLReopenAndIgnoresPreStartSw
 	testutil.FailErr(t, "upgrade started Ask session to Agent", err)
 	upAuth, err := st.ResolveEffectiveMode(ctx, startedAsk.ID)
 	testutil.FailErr(t, "read upgraded authority before reopen", err)
-	if !upAuth.UpgradedFromAsk || upAuth.Mode != api.SessionModeAgent || !upAuth.Started {
+	if !upAuth.UpgradedFromAsk || upAuth.AgentNoticeDelivered || upAuth.Mode != api.SessionModeAgent || !upAuth.Started {
 		t.Fatalf("upgraded authority before reopen = %+v", upAuth)
 	}
 	testutil.FailErr(t, "close SQL DB for reopen", sqlDB.Close())
@@ -227,12 +227,28 @@ func TestSessionModeAskToAgentUpgradePersistsAcrossSQLReopenAndIgnoresPreStartSw
 	reopenedStore := NewSQL(reopenedDB)
 	reopenedAuth, err := reopenedStore.ResolveEffectiveMode(ctx, startedAsk.ID)
 	testutil.FailErr(t, "read upgraded authority after reopen", err)
-	if !reopenedAuth.UpgradedFromAsk || reopenedAuth.Mode != api.SessionModeAgent || !reopenedAuth.Started {
+	if !reopenedAuth.UpgradedFromAsk || reopenedAuth.AgentNoticeDelivered || reopenedAuth.Mode != api.SessionModeAgent || !reopenedAuth.Started {
 		t.Fatalf("upgraded authority after reopen = %+v", reopenedAuth)
+	}
+	testutil.FailErr(t, "append agent_enabled notice", reopenedStore.AppendMessages(ctx, startedAsk.ID, api.Message{
+		ID:           AgentEnabledMessageID(startedAsk.ID),
+		Role:         api.MessageRoleUser,
+		Origin:       api.MessageOriginHost,
+		Kind:         api.MessageKindHostNudge,
+		HostSignalID: agentModeEnabledSignalID,
+		Content:      "[host:session-agent-enabled]\nAgent mode is now active.",
+	}))
+	deliveredAuth, err := reopenedStore.ResolveEffectiveMode(ctx, startedAsk.ID)
+	testutil.FailErr(t, "read authority after notice delivery", err)
+	if !deliveredAuth.UpgradedFromAsk || !deliveredAuth.AgentNoticeDelivered {
+		t.Fatalf("authority after notice delivery = %+v", deliveredAuth)
+	}
+	if _, err := reopenedDB.ExecContext(ctx, "UPDATE sessions SET upgraded_from_ask = 0 WHERE id = ?", startedAsk.ID); err == nil {
+		t.Fatal("SQLite accepted resetting upgraded_from_ask on a started session")
 	}
 	reopenedOrd, err := reopenedStore.ResolveEffectiveMode(ctx, ordinary.ID)
 	testutil.FailErr(t, "read ordinary authority after reopen", err)
-	if reopenedOrd.UpgradedFromAsk {
+	if reopenedOrd.UpgradedFromAsk || reopenedOrd.AgentNoticeDelivered {
 		t.Fatalf("ordinary Agent session marked UpgradedFromAsk after reopen: %+v", reopenedOrd)
 	}
 }

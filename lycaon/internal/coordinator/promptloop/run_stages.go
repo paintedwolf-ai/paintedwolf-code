@@ -45,8 +45,9 @@ type promptLoopTurnState struct {
 	draftSlotOrd      int64
 	draftSlotSeq      int64
 	// proseFinish is a forced or last-iteration closeout.
-	proseFinish      bool
-	coordinatorFrame inject.CoordinatorTurnFrame
+	proseFinish                 bool
+	agentEnabledNoticeDelivered bool
+	coordinatorFrame            inject.CoordinatorTurnFrame
 	machine          inject.Machine
 
 	turnStreamState
