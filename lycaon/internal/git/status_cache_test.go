@@ -34,7 +34,7 @@ func (c *countingLoader) Log(ctx context.Context, projectDir string, opts git.Gi
 
 func initTestRepo(t *testing.T) string {
 	t.Helper()
-	return git.CloneFixtureRepo(t, "worktree-base", func(dir string) {
+	dir := git.CloneFixtureRepo(t, "worktree-base", func(dir string) {
 		mgr := git.NewManager()
 		testutil.FailErr(t, "init", mgr.Init(context.Background(), dir))
 		path := filepath.Join(dir, "a.txt")
@@ -42,6 +42,10 @@ func initTestRepo(t *testing.T) string {
 		_, commitErr1 := mgr.Commit(context.Background(), dir, git.GitCommitOpts{Message: "init", Paths: []string{"a.txt"}})
 		testutil.FailErr(t, "commit", commitErr1)
 	})
+	repochange.EnsureRoot(t.Context(), dir)
+	t.Cleanup(func() { repochange.CloseRoot(dir) })
+	repochange.WaitQuiet(t.Context(), dir, repochange.DefaultDebounce, 5*time.Second)
+	return dir
 }
 
 func writeFile(path, body string) error {
@@ -81,9 +85,6 @@ func TestStatusCache_forceAlwaysExecs(t *testing.T) {
 func TestStatusCache_NotifyInvalidates(t *testing.T) {
 	t.Parallel()
 	dir := initTestRepo(t)
-	repochange.EnsureRoot(t.Context(), dir)
-	t.Cleanup(func() { repochange.CloseRoot(dir) })
-	repochange.WaitQuiet(t.Context(), dir, repochange.DefaultDebounce, 5*time.Second)
 	loader := &countingLoader{inner: git.NewManager()}
 	cache := git.NewStatusCache(loader)
 	t.Cleanup(cache.RegisterRepochangeObserver())
@@ -101,9 +102,6 @@ func TestStatusCache_NotifyInvalidates(t *testing.T) {
 func TestStatusCache_WorktreeChangedInvalidates(t *testing.T) {
 	t.Parallel()
 	dir := initTestRepo(t)
-	repochange.EnsureRoot(t.Context(), dir)
-	t.Cleanup(func() { repochange.CloseRoot(dir) })
-	repochange.WaitQuiet(t.Context(), dir, repochange.DefaultDebounce, 5*time.Second)
 	loader := &countingLoader{inner: git.NewManager()}
 	cache := git.NewStatusCache(loader)
 	t.Cleanup(cache.RegisterRepochangeObserver())
@@ -366,7 +364,10 @@ func (g *coldGatedLoader) Log(ctx context.Context, projectDir string, opts git.G
 
 func (g *gatedLoader) Status(ctx context.Context, projectDir string) (*git.GitStatus, error) {
 	if n := g.statusN.Add(1); n > 1 {
-		g.entered <- struct{}{}
+		select {
+		case g.entered <- struct{}{}:
+		default:
+		}
 		<-g.release
 	}
 	return g.inner.Status(ctx, projectDir)
