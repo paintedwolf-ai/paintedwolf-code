@@ -55,6 +55,9 @@ func attachPreparedMount(lease uint64, name string, tree int) (_ *mountedVolume,
 		return nil, err
 	}
 	if err := unix.MoveMount(tree, "", target, "", unix.MOVE_MOUNT_F_EMPTY_PATH|unix.MOVE_MOUNT_T_EMPTY_PATH); err != nil {
+		if errors.Is(err, unix.ENOENT) || errors.Is(err, unix.EINVAL) {
+			return nil, &mountDestinationError{err: err}
+		}
 		return nil, err
 	}
 	return confirmMountAttachment(lease, name, tree, id)
@@ -76,6 +79,9 @@ func confirmMountAttachment(lease uint64, name string, tree int, id uint64) (_ *
 	// lexical alias is the attachment location; retire the prepared tree if
 	// that race is observed. The kernel always binds the opened object.
 	if actual, linkErr := os.Readlink(mountDescriptorPath(tree)); linkErr != nil || actual != name {
+		if settled, settleErr := mounted.settleUnlisted(); settled && settleErr == nil {
+			return nil, &mountDestinationError{err: unix.ENOENT}
+		}
 		return nil, errors.New("attached mount point moved during attachment")
 	}
 	return mounted, nil
@@ -132,6 +138,11 @@ func (volume *mountedVolume) unmount() error {
 		return errors.New("retained volume is covered or no longer visible")
 	}
 	if err := unix.Unmount(mountDescriptorPath(fd), unix.MNT_DETACH); err != nil {
+		if errors.Is(err, unix.EINVAL) {
+			if settled, settleErr := volume.settleUnlisted(); settled {
+				return settleErr
+			}
+		}
 		return fmt.Errorf("detach retained volume: %w", err)
 	}
 	return nil

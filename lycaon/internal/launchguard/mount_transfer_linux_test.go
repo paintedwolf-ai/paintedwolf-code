@@ -3,6 +3,8 @@
 package launchguard
 
 import (
+	"time"
+	"errors"
 	"bytes"
 	"os"
 	"testing"
@@ -120,7 +122,7 @@ func TestStageAcceptsAnAttachedOrPrunedInitialLeaseAndNamesEveryOtherReply(t *te
 	denied := func(m mountTransfer) mountTransfer { m.kind = mountTransferDenied; return m }
 	testutil.FailErr(t, "attached initial lease", replyToInitialLease(t, ack, false))
 	testutil.FailErr(t, "pruned initial lease", replyToInitialLease(t, denied, false))
-	if err := replyToInitialLease(t, ack, true); err == nil {
+	if err := replyToInitialLease(t, func(m mountTransfer) mountTransfer { return m }, true); err == nil {
 		t.Fatal("a reply carrying a descriptor was accepted")
 	}
 	if err := replyToInitialLease(t, func(m mountTransfer) mountTransfer {
@@ -128,4 +130,159 @@ func TestStageAcceptsAnAttachedOrPrunedInitialLeaseAndNamesEveryOtherReply(t *te
 	}, false); err == nil {
 		t.Fatal("a reply for another sequence was accepted")
 	}
+}
+
+func TestCaptureIntakeLeaseReportsEpochChangeWhenTopologyMovesDuringFailure(t *testing.T) {
+	missing := mountEntry{id: 999999, parent: 2, device: "0:30", root: "/", mountPoint: "/tmp/vanished-during-capture", filesystem: "fuse.fixture"}
+	_, _, err := captureIntakeLease(missing, indexMountForest(nil), []mountEntry{missing})
+	if !errors.Is(err, errIntakeEpochChanged) {
+		t.Fatalf("a capture failure across a changed topology did not report an epoch change: %v", err)
+	}
+}
+
+func TestMountIDReadsDescriptorIdentityFromFdinfo(t *testing.T) {
+	dir := t.TempDir()
+	fd, err := openMountPoint(dir)
+	testutil.FailErr(t, "open temp dir", err)
+	defer func() { _ = unix.Close(fd) }()
+	id, err := mountID(fd)
+	testutil.FailErr(t, "read mount ID from fdinfo", err)
+	want, _, err := mountDescriptorIdentity(fd)
+	testutil.FailErr(t, "read descriptor identity", err)
+	if id == 0 || id != want {
+		t.Fatalf("mountID = %d, want %d", id, want)
+	}
+	if _, err := mountID(-1); !errors.Is(err, unix.EBADF) {
+		t.Fatalf("mountID(-1) = %v, want EBADF", err)
+	}
+}
+
+func TestPrepareInitialLeasesPrunesVanishedMountsOverMountSourceProtocol(t *testing.T) {
+	_, current, err := readCurrentMountTopology()
+	testutil.FailErr(t, "read current mount topology", err)
+	structural := make(map[int]bool, len(current))
+	highest := 0
+	for _, entry := range current {
+		structural[entry.id] = true
+		highest = max(highest, entry.id)
+	}
+	unmountedDir := t.TempDir()
+	vanished := []mountEntry{
+		{id: highest + 10, parent: current[0].id, device: "0:30", root: "/", mountPoint: "/tmp/pw-vanished-initial-dir", filesystem: "fuse.fixture"},
+		{id: highest + 11, parent: current[0].id, device: "0:31", root: "/", mountPoint: unmountedDir, filesystem: "fuse.fixture"},
+	}
+	staging := append(append([]mountEntry(nil), current...), vanished...)
+	pair, err := unix.Socketpair(unix.AF_UNIX, unix.SOCK_SEQPACKET|unix.SOCK_CLOEXEC, 0)
+	testutil.FailErr(t, "create mount source socketpair", err)
+	defer func() { _ = unix.Close(pair[0]); _ = unix.Close(pair[1]) }()
+	lifeR, lifeW, err := os.Pipe()
+	testutil.FailErr(t, "create mount source lifetime pipe", err)
+	defer func() { _ = lifeR.Close(); _ = lifeW.Close() }()
+	done := make(chan error, 1)
+	go func() { done <- serveMountSource(vanished, pair[1], int(lifeR.Fd())) }()
+	opener := &mountSourceOpener{socket: os.NewFile(uintptr(pair[0]), "mount-source-stage"), deadline: time.Now().Add(5 * time.Second)}
+	view := &preparedModuleView{}
+	testutil.FailErr(t, "prune vanished initial mounts", view.prepareInitialLeases(opener, staging, structural))
+	_ = lifeW.Close()
+	<-done
+
+	// A mount still present in mountinfo that reports ENOENT is refused.
+	present := current[len(current)-1]
+	delete(structural, present.id)
+	pair2, err := unix.Socketpair(unix.AF_UNIX, unix.SOCK_SEQPACKET|unix.SOCK_CLOEXEC, 0)
+	testutil.FailErr(t, "create refusal socketpair", err)
+	defer func() { _ = unix.Close(pair2[0]); _ = unix.Close(pair2[1]) }()
+	go func() {
+		req, fd, recvErr := receiveMountTransfer(pair2[1])
+		if fd >= 0 {
+			_ = unix.Close(fd)
+		}
+		if recvErr == nil {
+			req.kind = mountTransferRemove
+			_ = sendMountTransfer(pair2[1], req, -1)
+		}
+	}()
+	opener2 := &mountSourceOpener{socket: os.NewFile(uintptr(pair2[0]), "mount-source-stage-2"), deadline: time.Now().Add(5 * time.Second)}
+	if err := (&preparedModuleView{}).prepareInitialLeases(opener2, current, structural); err == nil {
+		t.Fatal("a present mount reporting ENOENT was pruned")
+	}
+}
+
+func TestReceiveInitialMountLeasesPrunesAMissingDestinationAndRefusesOtherErrors(t *testing.T) {
+	dir := t.TempDir()
+	fd, err := openMountPoint(dir)
+	testutil.FailErr(t, "open tree dir", err)
+	defer func() { _ = unix.Close(fd) }()
+	_, inode, err := mountDescriptorIdentity(fd)
+	testutil.FailErr(t, "read tree inode", err)
+
+	plan := moduleViewPlan{
+		staging: []byte("2 1 8:1 / / rw - ext4 /dev/root rw\n11 2 0:30 / /tmp/pw-missing-initial-dest ro - fuse.fixture fixture ro\n"),
+		initial: []initialMountLease{{lease: 1, mountID: 11, inode: inode}},
+	}
+	pair, err := unix.Socketpair(unix.AF_UNIX, unix.SOCK_SEQPACKET|unix.SOCK_CLOEXEC, 0)
+	testutil.FailErr(t, "create writer socketpair", err)
+	defer func() { _ = unix.Close(pair[0]); _ = unix.Close(pair[1]) }()
+	go func() {
+		_ = sendMountTransfer(pair[0], mountTransfer{kind: mountTransferAdd, sequence: 1, id: 1, path: "/tmp/pw-missing-initial-dest"}, fd)
+		_, rfd, _ := receiveMountTransfer(pair[0])
+		if rfd >= 0 {
+			_ = unix.Close(rfd)
+		}
+	}()
+	writer, err := receiveInitialMountLeases(pair[1], plan)
+	testutil.FailErr(t, "prune missing initial destination", err)
+	if writer.unattached[1] != "/tmp/pw-missing-initial-dest" {
+		t.Fatalf("unattached = %v", writer.unattached)
+	}
+
+	file := dir + "/not-a-dir"
+	testutil.FailErr(t, "write regular file", os.WriteFile(file, []byte("x"), 0o600))
+	badPath := file + "/child"
+	planBad := moduleViewPlan{
+		staging: []byte("2 1 8:1 / / rw - ext4 /dev/root rw\n11 2 0:30 / " + badPath + " ro - fuse.fixture fixture ro\n"),
+		initial: []initialMountLease{{lease: 1, mountID: 11, inode: inode}},
+	}
+	pair2, err := unix.Socketpair(unix.AF_UNIX, unix.SOCK_SEQPACKET|unix.SOCK_CLOEXEC, 0)
+	testutil.FailErr(t, "create writer error socketpair", err)
+	defer func() { _ = unix.Close(pair2[0]); _ = unix.Close(pair2[1]) }()
+	go func() {
+		_ = sendMountTransfer(pair2[0], mountTransfer{kind: mountTransferAdd, sequence: 1, id: 1, path: badPath}, fd)
+	}()
+	if _, err := receiveInitialMountLeases(pair2[1], planBad); err == nil {
+		t.Fatal("ENOTDIR destination was pruned as ENOENT")
+	}
+}
+
+func TestSettleUnlistedAndStructuralResolvedPaths(t *testing.T) {
+	_, entries, err := readCurrentMountTopology()
+	testutil.FailErr(t, "read topology", err)
+	dir := t.TempDir()
+	fd, err := openMountPoint(dir)
+	testutil.FailErr(t, "open dir", err)
+	defer func() { _ = unix.Close(fd) }()
+	if settled, err := (&mountedVolume{tree: fd, mountID: uint64(entries[0].id)}).settleUnlisted(); err != nil || settled {
+		t.Fatalf("a listed volume was settled: %v %v", settled, err)
+	}
+	_, _ = (&mountedVolume{tree: fd, mountID: ^uint64(0) >> 1}).settleUnlisted()
+	_, _ = readConsistentMountInfo(-1)
+
+	self, err := os.Open("/proc/self/exe")
+	testutil.FailErr(t, "open self exe", err)
+	defer func() { _ = self.Close() }()
+	paths, err := structuralResolvedPaths(GenerationPolicy{LogicalInstallRoot: "/opt/pw", LibraryRoots: []string{"/usr/lib"}}, self)
+	testutil.FailErr(t, "resolve structural paths", err)
+	if len(paths) == 0 {
+		t.Fatal("no structural resolved paths")
+	}
+	bad, err := os.CreateTemp(dir, "not-elf")
+	testutil.FailErr(t, "create non-elf", err)
+	defer func() { _ = bad.Close() }()
+	if _, err := structuralResolvedPaths(GenerationPolicy{LogicalInstallRoot: "/opt/pw"}, bad); err == nil {
+		t.Fatal("non-ELF image accepted by structuralResolvedPaths")
+	}
+	_ = (&handoffExitError{err: errors.New("eof"), status: unix.WaitStatus(unix.SIGKILL)}).Error()
+	_ = (&handoffExitError{err: errors.New("eof"), status: unix.WaitStatus(2 << 8)}).Error()
+	_ = (&handoffExitError{err: errors.New("eof")}).Unwrap()
+	_ = acceptVanishedMounts(entries, entries, map[int]bool{entries[0].id: true}, map[int]bool{entries[0].id: true})
 }
