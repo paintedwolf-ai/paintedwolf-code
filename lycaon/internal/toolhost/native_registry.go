@@ -95,7 +95,7 @@ func buildNativeRegistry(deps buildDeps) (*tools.DefaultRegistry, *nativeToolSer
 			}
 		}
 		inspect := &native.InspectSourceTool{
-			Boundary: boundary, Form: native.FormTool{Programs: verifyTool.Programs, Argv: toolreach.InspectSourceArgv},
+			Boundary: boundary, Form: native.FormTool{Name: "inspect_source", Programs: verifyTool.Programs, Argv: toolreach.InspectSourceArgv},
 		}
 		if err := register("inspect_source", inspect.Run); err != nil {
 			return nil, nil, err

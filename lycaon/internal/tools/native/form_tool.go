@@ -27,5 +27,9 @@ func (t *FormTool) Run(ctx context.Context, args map[string]any, tc tools.ToolCo
 	if tc.Effects.RequestedArgs == nil {
 		tc.Effects.RequestedArgs = command.CanonicalToolArgs(tc, args)
 	}
-	return t.Programs.Run(ctx, t.Name, map[string]any{"command": toolreach.QuoteProgram(argv)}, tc)
+	name := t.Name
+	if name == "" {
+		name = tc.Invocation.ToolName
+	}
+	return t.Programs.Run(ctx, name, map[string]any{"command": toolreach.QuoteProgram(argv)}, tc)
 }
