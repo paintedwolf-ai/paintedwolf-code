@@ -22,9 +22,13 @@ func tailOmissionNotice(ctx context.Context, recallAvailable func(context.Contex
 
 // omissionNotice is reference-only: it establishes no summary coverage.
 func omissionNotice(ctx context.Context, recallAvailable func(context.Context, *api.Session) bool, sess *api.Session, id string, from, through int64) (*api.Message, error) {
+	return omissionNoticeForRecall(ctx, recallAvailable != nil && recallAvailable(ctx, sess), id, from, through)
+}
+
+func omissionNoticeForRecall(ctx context.Context, recall bool, id string, from, through int64) (*api.Message, error) {
 	text, err := guidance.RenderGuidance(ctx, guidance.CompactionContinuationRecordRef, map[string]any{
 		"level": "references", "through_ord": through, "omitted_from_ord": from, "omitted_through_ord": through,
-		"recall_available": recallAvailable != nil && recallAvailable(ctx, sess),
+		"recall_available": recall,
 	})
 	if err != nil {
 		return nil, err

@@ -19,8 +19,8 @@ func (m *Service) SpendSoftStop(ctx context.Context, sess *api.Session) promptlo
 
 // SpendRunway returns one warning per session and ceiling.
 func (m *Service) SpendRunway(ctx context.Context, sess *api.Session, ceilingUSD float64) promptloop.HostNudge {
-	if m == nil || !m.Spend.ClaimWarning(ctx, sess, ceilingUSD) {
+	if m == nil || sess == nil || !m.Spend.ClaimWarning(ctx, sess, ceilingUSD) {
 		return promptloop.HostNudge{}
 	}
-	return m.Render(ctx, sess, anchor.TurnSpendRunwayLow, nil)
+	return m.RenderWithReader(ctx, sess, m.activeTurnReader(ctx, sess, ""), anchor.TurnSpendRunwayLow, nil)
 }

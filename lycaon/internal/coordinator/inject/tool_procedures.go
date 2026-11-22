@@ -30,8 +30,8 @@ func RenderToolProceduresBlock(
 		return "", err
 	}
 	prompts.MergeUnitVars(vars, blocks)
-	block, err := anchor.RenderInform(ctx, anchor.InjectToolProcedures,
-		anchor.MatchContext{Surface: surface, Profile: profile, SessionID: sessionID}, renderer, vars)
+	block, err := anchor.RenderInformWithReader(ctx, anchor.InjectToolProcedures,
+		anchor.MatchContext{Surface: surface, Profile: profile, SessionID: sessionID}, renderer, reader, vars)
 	return strings.TrimSpace(block), err
 }
 

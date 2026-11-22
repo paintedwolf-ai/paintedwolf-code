@@ -191,6 +191,7 @@ func buildReaderFactVocabularyUncached(eff *extpacks.EffectiveCatalog) (ReaderFa
 			skillKeySet[norm] = true
 		}
 	}
+
 	loadedSkills, _ := extpacks.LoadEffectiveSkills(eff)
 	for _, sk := range loadedSkills {
 		if sk.Name != "" {
@@ -372,11 +373,57 @@ func checkSetBindings(unitID, origin, source string, vocab ReaderFactVocabulary,
 	return notes, nil
 }
 
+func buildDeclaredToolAndOpSet(vocab ReaderFactVocabulary) map[string]bool {
+	declared := maps.Clone(vocab.Tools)
+	if declared == nil {
+		declared = map[string]bool{}
+	}
+	if cfg, err := cachedNativeManifest(); err == nil {
+		for _, list := range [][]string{cfg.AllTools(), cfg.HostProducedTools, cfg.AllOperations()} {
+			for _, name := range list {
+				if name = strings.TrimSpace(name); name != "" {
+					declared[name] = true
+				}
+			}
+		}
+	}
+	return declared
+}
+
+func checkZeroToolUtilitySource(unitID, origin, source string, vocab ReaderFactVocabulary, declared map[string]bool, stock bool) ([]string, error) {
+	var notes []string
+	report := func(msg string) error {
+		if stock {
+			return fmt.Errorf("template %s (%s): %s", unitID, origin, msg)
+		}
+		notes = append(notes, fmt.Sprintf("%s (%s): %s", unitID, origin, msg))
+		return nil
+	}
+	for _, ref := range pongoplain.VariableReferences(source) {
+		root := ref
+		if idx := strings.IndexByte(ref, '.'); idx >= 0 {
+			root = ref[:idx]
+		}
+		if IsDeclaredOrReservedReaderFact(ref) || IsDeclaredOrReservedReaderFact(root) || vocab.AllowsReference(ref) || root == "units" {
+			if err := report(fmt.Sprintf("zero-tool utility prompt references reader/capability fact %q", ref)); err != nil {
+				return nil, err
+			}
+		}
+	}
+	for _, tool := range skillUnreachableNames(source, declared, map[string]bool{}) {
+		if err := report(fmt.Sprintf("zero-tool utility prompt claims callable tool or command %q", tool)); err != nil {
+			return nil, err
+		}
+	}
+	return notes, nil
+}
+
 func checkTemplateVocabularyUncached(eff *extpacks.EffectiveCatalog) ([]string, error) {
 	vocab, err := BuildReaderFactVocabulary(eff)
 	if err != nil {
 		return nil, err
 	}
+	declaredTools := buildDeclaredToolAndOpSet(vocab)
 	var notes []string
 	checkSource := func(unitID, packID, source string, stock bool) error {
 		refs := pongoplain.VariableReferences(source)
@@ -397,6 +444,13 @@ func checkTemplateVocabularyUncached(eff *extpacks.EffectiveCatalog) ([]string, 
 			return err
 		}
 		notes = append(notes, setNotes...)
+		if subRef, ok := strings.CutPrefix(strings.TrimSuffix(unitID, ".md"), "guidance/"); ok && IsZeroToolUtilityTemplate(subRef) {
+			utilNotes, err := checkZeroToolUtilitySource(unitID, packID, source, vocab, declaredTools, stock)
+			if err != nil {
+				return err
+			}
+			notes = append(notes, utilNotes...)
+		}
 		return nil
 	}
 
@@ -428,6 +482,16 @@ func checkTemplateVocabularyUncached(eff *extpacks.EffectiveCatalog) ([]string, 
 		}
 	}
 
+	if eff.StockAuthority("painted-wolf/platform") {
+		if _, hasPlatformGuidance := eff.Loaded["guidance/utility/today-line"]; hasPlatformGuidance {
+			for _, ref := range ZeroToolUtilityTemplates() {
+				if _, exists := eff.Loaded["guidance/"+ref]; !exists {
+					return nil, fmt.Errorf("zero-tool utility allowlist ref %q missing from loaded catalog", ref)
+				}
+			}
+		}
+	}
+
 	loadedSkills, _ := extpacks.LoadEffectiveSkills(eff)
 	for _, sk := range loadedSkills {
 		stock := !sk.UserProvided && eff.StockAuthority(sk.PackID)
@@ -454,6 +518,7 @@ func checkCapturedOverlayTemplates(eff *extpacks.EffectiveCatalog, captured map[
 	if err != nil {
 		return nil, err
 	}
+	declaredTools := buildDeclaredToolAndOpSet(vocab)
 	var notes []string
 	refs := make([]string, 0, len(captured))
 	for ref := range captured {
@@ -480,6 +545,10 @@ func checkCapturedOverlayTemplates(eff *extpacks.EffectiveCatalog, captured map[
 		}
 		setNotes, _ := checkSetBindings(ref, "override", string(body), vocab, false)
 		notes = append(notes, setNotes...)
+		if subRef, ok := strings.CutPrefix(strings.TrimSuffix(ref, ".md"), "guidance/"); ok && IsZeroToolUtilityTemplate(subRef) {
+			utilNotes, _ := checkZeroToolUtilitySource(ref, "override", string(body), vocab, declaredTools, false)
+			notes = append(notes, utilNotes...)
+		}
 	}
 	sort.Strings(notes)
 	return notes, nil

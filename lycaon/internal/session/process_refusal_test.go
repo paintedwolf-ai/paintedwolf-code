@@ -19,6 +19,7 @@ import (
 	"github.com/lycaon/lycaon/internal/llm"
 	"github.com/lycaon/lycaon/internal/project"
 	"github.com/lycaon/lycaon/internal/prompts"
+	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/session/processcontrol"
 	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/session/store/storetest"
@@ -95,8 +96,17 @@ func testHandleCommandRefusalWakesWithDigest(t *testing.T, offered []string) {
 	select {
 	case env := <-reports:
 		assertRefusalDigest(t, env.CommandRefusalDigest)
+		profiles, err := sandbox.LoadToolProfiles()
+		testutil.FailErr(t, "LoadToolProfiles", err)
+		reader, err := prompts.NewReader(prompts.ReaderInput{
+			ProfileID: prompts.CoordinatorProfileID,
+			Profiles:  profiles,
+			RootCount: 1,
+			WebSearch: true,
+		})
+		testutil.FailErr(t, "NewReader coordinator", err)
 		engine := prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{})
-		text, err := engine.RenderKick(t.Context(), "coordinator-process-refused", map[string]any{"command_refusal": env.CommandRefusalDigest})
+		text, err := engine.RenderKick(t.Context(), reader, "coordinator-process-refused", map[string]any{"command_refusal": env.CommandRefusalDigest})
 		testutil.FailErr(t, "render process refusal wake", err)
 		for _, control := range []string{"command_output", "command_stop"} {
 			if strings.Contains(text, control) != tools.ToolOffered(ctx, control) {

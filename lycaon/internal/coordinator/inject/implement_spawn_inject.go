@@ -43,7 +43,7 @@ func RenderImplementSpawnInject(
 	if err != nil {
 		return "", err
 	}
-	block, err := anchor.RenderInform(ctx, anchor.InjectImplementSpawn, anchor.MatchContext{Surface: "coordinator", SessionID: sessionID}, renderer, vars)
+	block, err := anchor.RenderInformWithReader(ctx, anchor.InjectImplementSpawn, anchor.MatchContext{Surface: "coordinator", SessionID: sessionID}, renderer, reader, vars)
 	if err != nil {
 		return "", err
 	}

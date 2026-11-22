@@ -56,15 +56,17 @@ func RenderCatalog(ctx context.Context, ref string, data map[string]any) (string
 }
 
 // RenderCommandOutputOmitted renders the terminal-style omission notice for bounded command output.
-func RenderCommandOutputOmitted(ctx context.Context, omittedLines, omittedSize, outputPath string, nextLine, endLine, totalLines int, totalBytes int64, complete bool) (string, error) {
+func RenderCommandOutputOmitted(ctx context.Context, commandAvailable bool, omittedLines, omittedSize, outputPath string, nextLine, endLine, totalLines int, totalBytes int64, complete bool) (string, error) {
 	data := map[string]any{
-		"omitted_lines": omittedLines,
-		"complete":      complete,
-		"total_lines":   totalLines, "total_bytes": totalBytes,
-		"omitted_size": omittedSize,
-		"output_path":  outputPath,
-		"next_line":    nextLine,
-		"end_line":     endLine,
+		"command_available": commandAvailable,
+		"omitted_lines":     omittedLines,
+		"complete":          complete,
+		"total_lines":       totalLines,
+		"total_bytes":       totalBytes,
+		"omitted_size":      omittedSize,
+		"output_path":       outputPath,
+		"next_line":         nextLine,
+		"end_line":          endLine,
 	}
 	block, err := RenderCatalog(ctx, UtilityCommandOutputOmittedRef, data)
 	if err == nil {
@@ -82,7 +84,7 @@ func RenderCommandOutputOmitted(ctx context.Context, omittedLines, omittedSize, 
 
 // RenderTodayLine renders the date-awareness preamble for lite-model calls.
 func RenderTodayLine(ctx context.Context, now time.Time, cutoff string) (string, error) {
-	return RenderCatalog(ctx, UtilityTodayLineRef, map[string]any{
+	return prompts.RenderUtilityPrompt(ctx, UtilityTodayLineRef, map[string]any{
 		"weekday": now.Format("Monday"),
 		"date":    now.Format("2006-01-02"),
 		"cutoff":  strings.TrimSpace(cutoff),

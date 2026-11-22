@@ -11,6 +11,8 @@ import (
 	"github.com/lycaon/lycaon/internal/oar"
 	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/promptresult"
+	"github.com/lycaon/lycaon/internal/prompts"
+	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/session/workercompletion"
 	"github.com/lycaon/lycaon/internal/session/workercontext"
@@ -136,7 +138,22 @@ func FinalizeWorkerSummaryForCanceled(
 
 	if resolver != nil {
 		kickData := map[string]any{"cancel_reason": cancelReason}
-		closeout := RenderWorkerKick(ctx, opts.RenderWorkerKick, anchor.InformRenderFor(ctx, anchor.WorkerCancelCloseout, anchor.MatchContext{Surface: "worker", SessionID: childSessionID}), kickData)
+		var reader prompts.Reader
+		if profiles, pErr := sandbox.LoadToolProfiles(); pErr == nil {
+			profileID := "implement"
+			if agentID := strings.TrimSpace(opts.AgentType); agentID != "" {
+				if resolved, rErr := prompts.ToolProfileForAgent(agentID); rErr == nil {
+					profileID = resolved
+				}
+			}
+			reader, _ = prompts.NewReader(prompts.ReaderInput{
+				ProfileID: profileID,
+				Profiles:  profiles,
+				RootCount: 1,
+				WebSearch: true,
+			})
+		}
+		closeout := RenderWorkerKick(ctx, opts.RenderWorkerKick, reader, anchor.InformRenderFor(ctx, anchor.WorkerCancelCloseout, anchor.MatchContext{Surface: "worker", SessionID: childSessionID}), kickData)
 		if closeout != "" {
 			if _, err := opts.hostTurns.PromptHostTurn(ctx, childSessionID, store.PromptSubmissionOriginWorkerCloseout, closeout); err == nil {
 				messages, err := loadChildMessages(ctx, resolver, childSessionID)

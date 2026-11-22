@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/lycaon/lycaon/internal/prompts"
+	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -302,11 +303,30 @@ func (k *KickEngine) renderEagerKick(ctx context.Context, templateID string, dat
 	if cfg.engine == nil {
 		return "", fmt.Errorf("kick %q: prompt engine not configured", templateID)
 	}
+	profiles, err := sandbox.LoadToolProfiles()
+	if err != nil {
+		return "", fmt.Errorf("eager kick profiles %q: %w", templateID, err)
+	}
+	profileID := prompts.CoordinatorProfileID
+	if agentID := strings.TrimSpace(data["agent_type"]); agentID != "" {
+		if resolved, rErr := prompts.ToolProfileForAgent(agentID); rErr == nil {
+			profileID = resolved
+		}
+	}
+	reader, err := prompts.NewReader(prompts.ReaderInput{
+		ProfileID: profileID,
+		Profiles:  profiles,
+		RootCount: 1,
+		WebSearch: true,
+	})
+	if err != nil {
+		return "", fmt.Errorf("eager kick reader %q: %w", templateID, err)
+	}
 	vars := make(map[string]any, len(data))
 	for key, value := range data {
 		vars[key] = value
 	}
-	text, err := cfg.engine.RenderKick(ctx, templateID, vars)
+	text, err := cfg.engine.RenderKick(ctx, reader, templateID, vars)
 	if err != nil {
 		return "", fmt.Errorf("render kick %q: %w", templateID, err)
 	}

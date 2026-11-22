@@ -66,7 +66,7 @@ func TestWorkerKickCopyRendersEveryState(t *testing.T) {
 				data[k] = v
 			}
 			prompts.MergeCoordinatorKickVarsForTools(data, reader)
-			out, err := engine.RenderKick(t.Context(), tc.kick, data)
+			out, err := engine.RenderKick(t.Context(), reader, tc.kick, data)
 			testutil.FailErr(t, tc.kick, err)
 			for _, want := range tc.want {
 				if !strings.Contains(out, want) {

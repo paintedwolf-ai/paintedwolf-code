@@ -189,18 +189,33 @@ func (stubBoardFormatter) FormatBoardInject(_ api.BoardSnapshot, _ bool, _ time.
 	return "pack-board:v1\nbody", true
 }
 
+func integrationCoordReader(t *testing.T) prompts.Reader {
+	t.Helper()
+	profiles, err := sandbox.LoadToolProfiles()
+	testutil.FailErr(t, "LoadToolProfiles", err)
+	r, err := prompts.NewReader(prompts.ReaderInput{
+		ProfileID: prompts.CoordinatorProfileID,
+		Profiles:  profiles,
+		RootCount: 1,
+		WebSearch: true,
+	})
+	testutil.FailErr(t, "NewReader coordinator", err)
+	return r
+}
+
 func TestBoardEnginePrependOnFirstTurn(t *testing.T) {
 	engine := assembly.NewBoardEngine(stubBoardBuilder{hash: "abc"}, stubBoardFormatter{}, nil)
 	ctx := context.Background()
+	reader := integrationCoordReader(t)
 	sess := &api.Session{ID: "s1", ProjectID: testdbseed.DefaultProjectID, WorkspacePath: t.TempDir(), AgentType: "coordinator"}
 	if err := os.WriteFile(filepath.Join(sess.WorkspacePath, "go.mod"), []byte("module x\n"), 0o644); err != nil {
 		testutil.FailErr(t, "write file", err)
 	}
-	block, ok := engine.PrependBoardIfChanged(ctx, sess, api.CoordinatorRunContext{CurrentPhase: "plan"})
+	block, ok := engine.PrependBoardIfChanged(ctx, sess, reader, api.CoordinatorRunContext{CurrentPhase: "plan"})
 	if !ok || !strings.Contains(block, "Pack board") {
 		t.Fatalf("block = %q ok=%v", block, ok)
 	}
-	block2, ok2 := engine.PrependBoardIfChanged(ctx, sess, api.CoordinatorRunContext{CurrentPhase: "plan"})
+	block2, ok2 := engine.PrependBoardIfChanged(ctx, sess, reader, api.CoordinatorRunContext{CurrentPhase: "plan"})
 	if ok2 {
 		t.Fatalf("expected no reinject on stable hash/phase, got %q", block2)
 	}
@@ -209,11 +224,12 @@ func TestBoardEnginePrependOnFirstTurn(t *testing.T) {
 func TestBoardWillForceInjectOnPhaseChange(t *testing.T) {
 	engine := assembly.NewBoardEngine(stubBoardBuilder{hash: "abc"}, stubBoardFormatter{}, nil)
 	ctx := context.Background()
+	reader := integrationCoordReader(t)
 	sess := &api.Session{ID: "s2", ProjectID: testdbseed.DefaultProjectID, WorkspacePath: t.TempDir(), AgentType: "coordinator"}
 	if err := os.WriteFile(filepath.Join(sess.WorkspacePath, "go.mod"), []byte("module x\n"), 0o644); err != nil {
 		testutil.FailErr(t, "write file", err)
 	}
-	_, _ = engine.PrependBoardIfChanged(ctx, sess, api.CoordinatorRunContext{CurrentPhase: "plan"})
+	_, _ = engine.PrependBoardIfChanged(ctx, sess, reader, api.CoordinatorRunContext{CurrentPhase: "plan"})
 	if !engine.BoardWillForceInject(ctx, sess, api.CoordinatorRunContext{CurrentPhase: "implement"}) {
 		t.Fatal("phase change should force inject")
 	}
@@ -229,11 +245,12 @@ func TestRuntimeSetKickAndBoard(t *testing.T) {
 	}
 
 	// The first turn prepends the wired board.
+	reader := integrationCoordReader(t)
 	sess := &api.Session{ID: "s1", ProjectID: testdbseed.DefaultProjectID, WorkspacePath: t.TempDir(), AgentType: "coordinator"}
 	if err := os.WriteFile(filepath.Join(sess.WorkspacePath, "go.mod"), []byte("module x\n"), 0o644); err != nil {
 		testutil.FailErr(t, "write file", err)
 	}
-	block, ok := rt.Board().PrependBoardIfChanged(context.Background(), sess, api.CoordinatorRunContext{CurrentPhase: "plan"})
+	block, ok := rt.Board().PrependBoardIfChanged(context.Background(), sess, reader, api.CoordinatorRunContext{CurrentPhase: "plan"})
 	if !ok || !strings.Contains(block, "Pack board") {
 		t.Fatalf("board block = %q ok=%v want injected board", block, ok)
 	}

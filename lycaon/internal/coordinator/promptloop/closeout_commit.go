@@ -238,12 +238,10 @@ func (l *turnCloseout) hostKickRenderer(ctx context.Context, st *promptLoopTurnS
 	render := l.Deps.RenderHostKick
 	reader := closeoutTurnReader(st)
 	return func(kickID string, data map[string]any) string {
-		if reader.Valid() {
-			if merged, err := prompts.Vars(reader, data); err == nil {
-				data = merged
-			}
+		if !reader.Valid() {
+			return guard.HostKickMarker(kickID)
 		}
-		kick, err := render(ctx, kickID, data)
+		kick, err := render(ctx, reader, kickID, data)
 		if err != nil || strings.TrimSpace(kick) == "" {
 			return guard.HostKickMarker(kickID)
 		}

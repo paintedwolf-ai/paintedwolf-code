@@ -203,9 +203,9 @@ func TestCloseoutRecoveryCopyUsesCallableTools(t *testing.T) {
 						return guidance.RetainedCloseout{}
 					},
 					CloseoutTrackingDeps: CloseoutTrackingDeps{
-						RenderHostKick: func(ctx context.Context, id string, data map[string]any) (string, error) {
+						RenderHostKick: func(ctx context.Context, reader prompts.Reader, id string, data map[string]any) (string, error) {
 							var err error
-							rendered, err = engine.RenderKick(ctx, id, data)
+							rendered, err = engine.RenderKick(ctx, reader, id, data)
 							return rendered, err
 						},
 					},

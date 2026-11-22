@@ -14,14 +14,19 @@ var (
 	guidanceRenderer   *prompts.GuidanceRenderer
 )
 
-// SetGuidanceRenderer installs the process-wide pongo guidance renderer.
+// SetGuidanceRenderer installs the process-wide pongo guidance and utility renderers.
 func SetGuidanceRenderer(renderer *prompts.GuidanceRenderer) {
 	guidanceRendererMu.Lock()
 	guidanceRenderer = renderer
 	guidanceRendererMu.Unlock()
+	if renderer != nil {
+		prompts.SetUtilityPromptRenderer(prompts.NewUtilityPromptRenderer(renderer.Engine()))
+	} else {
+		prompts.SetUtilityPromptRenderer(nil)
+	}
 }
 
-// RenderGuidance renders the pack guidance template guidance/{ref}.md.
+// RenderGuidance renders a reader-free structural guidance template guidance/{ref}.md.
 func RenderGuidance(ctx context.Context, ref string, data map[string]any) (string, error) {
 	guidanceRendererMu.RLock()
 	renderer := guidanceRenderer

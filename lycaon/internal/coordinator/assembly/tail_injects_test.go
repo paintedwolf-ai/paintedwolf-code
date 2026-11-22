@@ -41,10 +41,10 @@ func (s *advancingTurnFrameSource) BuildCoordinatorTurnFrame(_ context.Context, 
 
 type advancingBoard struct{}
 
-func (advancingBoard) PrependBoardIfChanged(_ context.Context, _ *api.Session, run api.CoordinatorRunContext) (string, bool) {
+func (advancingBoard) PrependBoardIfChanged(_ context.Context, _ *api.Session, _ prompts.Reader, run api.CoordinatorRunContext) (string, bool) {
 	return "board phase=" + run.CurrentPhase, true
 }
-func (advancingBoard) WorkerBoard(context.Context, *api.Session) (string, bool) {
+func (advancingBoard) WorkerBoard(context.Context, *api.Session, prompts.Reader) (string, bool) {
 	return "", false
 }
 func (advancingBoard) BoardInjectHash(string) string { return "board-v1" }

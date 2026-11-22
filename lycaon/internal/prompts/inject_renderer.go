@@ -23,7 +23,8 @@ func NewInjectRenderer(engine PromptTemplateEngine) *InjectRenderer {
 	return &InjectRenderer{engine: engine}
 }
 
-// Render executes inject/{ref}.md with the given DTO map.
+// Render executes reader-free inject/{ref}.md with occurrence data.
+// Injects that carry or reference reader capability facts must use RenderWithReader.
 func (r *InjectRenderer) Render(ctx context.Context, ref string, data map[string]any) (string, error) {
 	if r == nil || r.engine == nil {
 		return "", fmt.Errorf("inject renderer not configured")
@@ -35,7 +36,35 @@ func (r *InjectRenderer) Render(ctx context.Context, ref string, data map[string
 	if sandbox.HasParentTraversal(name) || strings.HasPrefix(name, "/") {
 		return "", fmt.Errorf("invalid inject ref %q", ref)
 	}
+	if err := rejectReaderFactsInOccurrence("inject", name, data); err != nil {
+		return "", err
+	}
+	if err := rejectReaderFactReferencesInEngineTemplate(r.engine, "inject", InjectTemplatePrefix+name+".md"); err != nil {
+		return "", err
+	}
 	return r.engine.RenderInject(ctx, name, data)
+}
+
+// RenderWithReader executes inject/{ref}.md against a validated Reader merged with occurrence data.
+func (r *InjectRenderer) RenderWithReader(ctx context.Context, reader Reader, ref string, occurrence map[string]any) (string, error) {
+	if r == nil || r.engine == nil {
+		return "", fmt.Errorf("inject renderer not configured")
+	}
+	name := strings.TrimSpace(ref)
+	if name == "" {
+		return "", fmt.Errorf("empty inject ref")
+	}
+	if sandbox.HasParentTraversal(name) || strings.HasPrefix(name, "/") {
+		return "", fmt.Errorf("invalid inject ref %q", ref)
+	}
+	if !reader.Valid() {
+		return "", fmt.Errorf("inject %q requires a valid reader", name)
+	}
+	merged, err := mergeOccurrenceWithReader(reader, occurrence)
+	if err != nil {
+		return "", err
+	}
+	return r.engine.RenderInject(ctx, name, merged)
 }
 
 // UnitCatalog loads the unit catalog behind the wrapped engine.

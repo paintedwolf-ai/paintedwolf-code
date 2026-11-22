@@ -40,10 +40,16 @@ func TestRenderTurnStateBlock(t *testing.T) {
 	testutil.FailErr(t, "NewReader without progress", err)
 
 	t.Run("empty inputs render empty", func(t *testing.T) {
-		block, err := inject.RenderTurnStateBlock(context.Background(), renderer, "sess-empty", inject.TurnStateInjectInput{})
+		block, err := inject.RenderTurnStateBlock(context.Background(), renderer, "sess-empty", inject.TurnStateInjectInput{Reader: withProgress})
 		testutil.FailErr(t, "RenderTurnStateBlock", err)
 		if block != "" {
 			t.Fatalf("expected empty block, got: %q", block)
+		}
+	})
+
+	t.Run("zero reader fails closed", func(t *testing.T) {
+		if _, err := inject.RenderTurnStateBlock(context.Background(), renderer, "sess-zero", inject.TurnStateInjectInput{}); err == nil {
+			t.Fatal("expected zero Reader to fail closed")
 		}
 	})
 
@@ -72,6 +78,7 @@ func TestRenderTurnStateBlock(t *testing.T) {
 	t.Run("verify required", func(t *testing.T) {
 		_, err := inject.RenderTurnStateBlock(context.Background(), renderer, "sess-verify", inject.TurnStateInjectInput{
 			VerifyRequired: true,
+			Reader:         withProgress,
 		})
 		testutil.FailErr(t, "RenderTurnStateBlock", err)
 	})
@@ -176,7 +183,17 @@ func TestTurnStateRosterRendersEveryState(t *testing.T) {
 
 func TestTurnStateNamesOmittedWorkers(t *testing.T) {
 	renderer := prompts.NewInjectRenderer(prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{ModuleRoot: testConfigRoot(t)}))
+	profiles, err := sandbox.LoadToolProfiles()
+	testutil.FailErr(t, "LoadToolProfiles", err)
+	coordReader, err := prompts.NewReader(prompts.ReaderInput{
+		ProfileID: prompts.CoordinatorProfileID,
+		Profiles:  profiles,
+		RootCount: 1,
+		WebSearch: true,
+	})
+	testutil.FailErr(t, "NewReader coordinator", err)
 	block, err := inject.RenderTurnStateBlock(t.Context(), renderer, "roster-omitted", inject.TurnStateInjectInput{
+		Reader:         coordReader,
 		Workers:        []map[string]any{{"name": "shown", "agent": "explorer", "state": "idle"}},
 		WorkersOmitted: 7,
 	})

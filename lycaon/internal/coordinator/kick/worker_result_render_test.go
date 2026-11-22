@@ -66,7 +66,7 @@ func TestWorkerResultNoticeRendersEveryShape(t *testing.T) {
 			}
 			data := map[string]any{"worker_result": notice}
 			prompts.MergeCoordinatorKickVarsForTools(data, reader)
-			out, err := engine.RenderKick(t.Context(), "coordinator-worker-task-finished", data)
+			out, err := engine.RenderKick(t.Context(), reader, "coordinator-worker-task-finished", data)
 			testutil.FailErr(t, name, err)
 			for _, want := range []string{"`fixer`", notice["leg_status"].(string)} {
 				if !strings.Contains(out, want) {

@@ -54,12 +54,12 @@ func TestUnreadReportFenceIsRefusedByName(t *testing.T) {
 					noted.code, noted.unread = code, unread
 					return 1, ""
 				},
-				RenderHostKick: func(_ context.Context, _ string, data map[string]any) (string, error) {
+				RenderHostKick: func(_ context.Context, reader prompts.Reader, _ string, data map[string]any) (string, error) {
 					if _, ok := data["retained_document"]; ok {
 						kick = data
 					}
 					var err error
-					rendered, err = engine.RenderKick(t.Context(), "coordinator-report-document", data)
+					rendered, err = engine.RenderKick(t.Context(), reader, "coordinator-report-document", data)
 					return rendered, err
 				},
 			},

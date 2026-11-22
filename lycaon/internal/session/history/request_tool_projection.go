@@ -14,8 +14,8 @@ import (
 )
 
 // projectRecordedToolBodies preserves active exchanges while moving large bodies behind recall.
-func projectRecordedToolBodies(ctx context.Context, rows []api.Message, tokens ...int) []api.Message {
-	out := projectCompletedCommands(ctx, rows, tokens...)
+func projectRecordedToolBodies(ctx context.Context, recallAvailable bool, rows []api.Message, tokens ...int) []api.Message {
+	out := projectCompletedCommands(ctx, recallAvailable, rows, tokens...)
 	for i, row := range out {
 		if !isOversizedToolBody(row) {
 			continue
@@ -23,7 +23,7 @@ func projectRecordedToolBodies(ctx context.Context, rows []api.Message, tokens .
 		if len(tokens) > 0 && tokens[0] > 1 && retainedToolTailTokens(out, i) <= tokens[0] {
 			break
 		}
-		if projected, ok := projectToolBody(ctx, row); ok {
+		if projected, ok := projectToolBody(ctx, recallAvailable, row); ok {
 			out[i] = projected
 		}
 	}
@@ -31,13 +31,13 @@ func projectRecordedToolBodies(ctx context.Context, rows []api.Message, tokens .
 }
 
 // projectToolBodiesThrough replays a held projection on every oversized body up to through.
-func projectToolBodiesThrough(ctx context.Context, rows []api.Message, through int64) []api.Message {
+func projectToolBodiesThrough(ctx context.Context, recallAvailable bool, rows []api.Message, through int64) []api.Message {
 	out := append([]api.Message(nil), rows...)
 	for i, row := range out {
 		if row.Ord > through || !isOversizedToolBody(row) {
 			continue
 		}
-		if projected, ok := projectToolBody(ctx, row); ok {
+		if projected, ok := projectToolBody(ctx, recallAvailable, row); ok {
 			out[i] = projected
 		}
 	}
@@ -48,24 +48,24 @@ func projectToolBodiesThrough(ctx context.Context, rows []api.Message, through i
 // to the next anchor, so each append does not rewrite one more retained row. The
 // latest exchange stays whole, and a projection that stopped short of the turn
 // leaves the turn's bodies alone.
-func extendBodyProjection(ctx context.Context, before, projected []api.Message) []api.Message {
+func extendBodyProjection(ctx context.Context, recallAvailable bool, before, projected []api.Message) []api.Message {
 	last := lastProjectedBody(before, projected)
 	opener := api.UserIntentBoundary(projected) - 1
 	if last == 0 || opener < 0 || last < projected[opener].Ord {
 		return projected
 	}
 	through := (last/PrefixGridRowStep+1)*PrefixGridRowStep - 1
-	return projectToolBodiesThrough(ctx, projected, min(through, projected[latestExchangeStart(projected)].Ord-1))
+	return projectToolBodiesThrough(ctx, recallAvailable, projected, min(through, projected[latestExchangeStart(projected)].Ord-1))
 }
 
-func projectToolBody(ctx context.Context, row api.Message) (api.Message, bool) {
+func projectToolBody(ctx context.Context, recallAvailable bool, row api.Message) (api.Message, bool) {
 	raw := row.Content
 	if row.ModelProjected {
 		raw = row.ToolResult.Content
 	}
 	content, fitted, isHistory := raw, len(raw) <= 2048, false
 	if !fitted {
-		content, fitted, isHistory = projectRecallHistoryPage(ctx, raw, 2048, row.ToolResult.ToolArgs)
+		content, fitted, isHistory = projectRecallHistoryPage(ctx, recallAvailable, raw, 2048, row.ToolResult.ToolArgs)
 		if !fitted && !isHistory && row.ToolResult.Tool == "recall" {
 			content, fitted = projectRecallSearch(raw, 2048)
 		}
@@ -85,8 +85,11 @@ func projectToolBody(ctx context.Context, row api.Message) (api.Message, bool) {
 		historyJSON, err := json.Marshal(record)
 		if err == nil {
 			if rendered, err := guidance.RenderGuidance(ctx, "compaction/tool-result-reference", map[string]any{
-				"tool": row.ToolResult.Tool, "outcome": row.ToolResult.Outcome,
-				"evidence_handles": row.EvidenceHandles, "history_json": string(historyJSON),
+				"recall_available": recallAvailable,
+				"tool":             row.ToolResult.Tool,
+				"outcome":          row.ToolResult.Outcome,
+				"evidence_handles": row.EvidenceHandles,
+				"history_json":     string(historyJSON),
 			}); err == nil && rendered != "" && len(rendered) <= 2048 {
 				content = rendered
 			}
@@ -112,7 +115,7 @@ func projectToolBody(ctx context.Context, row api.Message) (api.Message, bool) {
 	return row, true
 }
 
-func projectRecallHistoryPage(ctx context.Context, raw string, maxBytes int, originalArgs map[string]any) (string, bool, bool) {
+func projectRecallHistoryPage(ctx context.Context, recallAvailable bool, raw string, maxBytes int, originalArgs map[string]any) (string, bool, bool) {
 	prefix, body, suffix, ok := hostmarker.SplitToolJSONBody(raw)
 	if !ok {
 		return "", false, false
@@ -129,8 +132,12 @@ func projectRecallHistoryPage(ctx context.Context, raw string, maxBytes int, ori
 	if !ok || len(entries) == 0 {
 		return "", false, true
 	}
-	if action, err := guidance.RenderGuidance(ctx, "recall/history-continuation", nil); err == nil {
-		root["next_action"] = action
+	if recallAvailable {
+		if action, err := guidance.RenderGuidance(ctx, "recall/history-continuation", nil); err == nil {
+			root["next_action"] = action
+		}
+	} else {
+		delete(root, "next_action")
 	}
 	if format, _ := history["format"].(string); len(entries) == 1 && format != "index" {
 		entry, ok := entries[0].(map[string]any)

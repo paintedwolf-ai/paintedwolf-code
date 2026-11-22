@@ -10,6 +10,7 @@ import (
 	"github.com/lycaon/lycaon/internal/packboard"
 	"github.com/lycaon/lycaon/internal/project"
 	"github.com/lycaon/lycaon/internal/projectroot"
+	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/internal/session/workercontext"
 	"github.com/lycaon/lycaon/internal/settingsoverlay"
 	"github.com/lycaon/lycaon/internal/testdbseed"
@@ -115,7 +116,9 @@ func TestBoardInjectReachesCoordinatorAndWorkerTurnsWiring(t *testing.T) {
 	ctx := context.Background()
 	engine := f.h.Sessions.Manager.Coordinator.Runtime.Board()
 
-	block, ok := engine.PrependBoardIfChanged(ctx, f.parent, wire.CoordinatorRunContext{RunID: "run-1"})
+	coordReader, err := prompts.DeclaredReader(nil, prompts.CoordinatorProfileID)
+	testutil.FailErr(t, "DeclaredReader coordinator", err)
+	block, ok := engine.PrependBoardIfChanged(ctx, f.parent, coordReader, wire.CoordinatorRunContext{RunID: "run-1"})
 	if !ok {
 		t.Fatal("coordinator turn received no board inject")
 	}
@@ -125,9 +128,11 @@ func TestBoardInjectReachesCoordinatorAndWorkerTurnsWiring(t *testing.T) {
 
 	// The second leg gets a real private branch; its board resolves the
 	// branch roots for the job its request runs.
-	_, err := f.h.Workers.Queue.Branches.ClaimWorkerBranch(ctx, f.jobB)
+	_, err = f.h.Workers.Queue.Branches.ClaimWorkerBranch(ctx, f.jobB)
 	testutil.FailErr(t, "claim worker branch", err)
-	workerBlock, ok := engine.WorkerBoard(workercontext.WithJob(ctx, f.jobB), f.childB)
+	workerReader, err := prompts.DeclaredReader(nil, "implement")
+	testutil.FailErr(t, "DeclaredReader worker", err)
+	workerBlock, ok := engine.WorkerBoard(workercontext.WithJob(ctx, f.jobB), f.childB, workerReader)
 	if !ok {
 		t.Fatal("worker request received no board inject")
 	}
