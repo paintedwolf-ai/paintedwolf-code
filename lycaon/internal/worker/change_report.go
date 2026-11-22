@@ -189,7 +189,3 @@ type AnswerDecisionToolDeps struct {
 	// Workers resolves the worker a call names to its asking round.
 	Workers *workerops.Service
 }
-
-type overlayTaskLookup interface {
-	Get(jobID string) (*api.WorkerTask, bool)
-}

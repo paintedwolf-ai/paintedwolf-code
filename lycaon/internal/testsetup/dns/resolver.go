@@ -27,7 +27,7 @@ func Install(t *testing.T, answer func(string) []netip.Addr) {
 }
 
 func serveQuery(ctx context.Context, conn net.Conn, answer func(string) []netip.Addr) {
-	defer conn.Close()
+	defer func() { _ = conn.Close() }()
 	if deadline, ok := ctx.Deadline(); ok {
 		_ = conn.SetDeadline(deadline)
 	}
@@ -64,9 +64,10 @@ func serveQuery(ctx context.Context, conn net.Conn, answer func(string) []netip.
 		}
 	}
 	wire, err := response.Pack()
-	if err != nil {
+	n := len(wire)
+	if err != nil || n < 0 || n > 0xffff {
 		return
 	}
-	binary.BigEndian.PutUint16(prefix[:], uint16(len(wire)))
+	binary.BigEndian.PutUint16(prefix[:], uint16(n))
 	_, _ = conn.Write(append(prefix[:], wire...))
 }

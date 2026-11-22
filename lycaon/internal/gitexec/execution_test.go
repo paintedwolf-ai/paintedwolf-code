@@ -1,11 +1,13 @@
 package gitexec
 
 import (
+	"errors"
 	"strings"
 	"testing"
 )
 
 func TestConcurrentExecutionsKeepTheirHostResources(t *testing.T) {
+	t.Parallel()
 	bin := bundledGitBinary(t)
 	for _, command := range []string{"ssh -i first-key", "ssh -i second-key"} {
 		t.Run(command, func(t *testing.T) {
@@ -23,7 +25,7 @@ func TestConcurrentExecutionsKeepTheirHostResources(t *testing.T) {
 				}
 			}
 			_, _, err := e.run(AgentEntry(t.Context()), dir, []string{"status"}, Opts{}, nil)
-			if err != ErrLaunchAuthorityRequired {
+			if !errors.Is(err, ErrLaunchAuthorityRequired) {
 				t.Fatalf("resource instance bypassed authority: %v", err)
 			}
 		})

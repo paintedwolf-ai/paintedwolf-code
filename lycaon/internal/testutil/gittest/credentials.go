@@ -16,9 +16,9 @@ func UserCredentials(t testing.TB, username, password string) {
 	dir := t.TempDir()
 	helper := filepath.Join(dir, "credential-helper")
 	quote := func(s string) string { return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'" }
-	body := "#!/bin/sh\nif [ \"$1\" = get ]; then\n  printf '%s\\n' " + quote("username="+username) + " " + quote("password="+password) + "\nfi\n"
-	testutil.FailErr(t, "write credential helper", os.WriteFile(helper, []byte(body), 0o700))
+	body := "if [ \"$1\" = get ]; then\n  printf '%s\\n' " + quote("username="+username) + " " + quote("password="+password) + "\nfi\n"
+	testutil.FailErr(t, "write credential helper", os.WriteFile(helper, []byte(body), 0o600))
 	config := filepath.Join(dir, "gitconfig")
-	testutil.FailErr(t, "write user Git config", os.WriteFile(config, []byte("[credential]\n\thelper = "+strconv.Quote("!"+quote(helper))+"\n"), 0o600))
+	testutil.FailErr(t, "write user Git config", os.WriteFile(config, []byte("[credential]\n\thelper = "+strconv.Quote("!sh "+quote(helper))+"\n"), 0o600))
 	t.Setenv("GIT_CONFIG_GLOBAL", config)
 }

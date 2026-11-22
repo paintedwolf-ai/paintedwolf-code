@@ -23,7 +23,9 @@ func Startup(t *testing.T, prepare func()) bool {
 	if err != nil {
 		t.Fatalf("locate test executable: %v", err)
 	}
-	command := exec.CommandContext(t.Context(), executable, "-test.run=^"+regexp.QuoteMeta(t.Name())+"$", "-test.count=1")
+	command := exec.CommandContext(t.Context(), "/bin/sh")
+	command.Path = executable
+	command.Args = []string{executable, "-test.run=^" + regexp.QuoteMeta(t.Name()) + "$", "-test.count=1"}
 	command.Env = append(os.Environ(), startupCase+"="+t.Name())
 	output, err := command.CombinedOutput()
 	if err != nil {

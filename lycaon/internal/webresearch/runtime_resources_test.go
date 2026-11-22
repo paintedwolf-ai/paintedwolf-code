@@ -3,6 +3,7 @@ package webresearch
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"sync/atomic"
@@ -77,7 +78,7 @@ func TestDiscoveryAdmissionUsesExactReservation(t *testing.T) {
 	other()
 	ctx, cancel := context.WithCancel(t.Context())
 	cancel()
-	if _, err := discovery.acquire(ctx); err != context.Canceled {
+	if _, err := discovery.acquire(ctx); !errors.Is(err, context.Canceled) {
 		t.Fatalf("canceled acquire = %v", err)
 	}
 	release()
@@ -120,7 +121,7 @@ func TestDiscoverySeedAdmissionUsesExactReservation(t *testing.T) {
 	}
 	ctx, cancel := context.WithCancel(t.Context())
 	cancel()
-	if _, err := discovery.acquireSeed(ctx, "provider", true); err != context.Canceled {
+	if _, err := discovery.acquireSeed(ctx, "provider", true); !errors.Is(err, context.Canceled) {
 		t.Fatalf("canceled seed acquire = %v", err)
 	}
 	independent := NewDiscovery(newTestCrawler())
@@ -131,7 +132,7 @@ func TestDiscoverySeedAdmissionUsesExactReservation(t *testing.T) {
 	next, err := discovery.acquireSeed(t.Context(), "provider", true)
 	testutil.FailErr(t, "reserve released seed call", err)
 	releases[0]()
-	if _, err := discovery.acquireSeed(ctx, "provider", true); err != context.Canceled {
+	if _, err := discovery.acquireSeed(ctx, "provider", true); !errors.Is(err, context.Canceled) {
 		t.Fatalf("duplicate release freed a later seed call: %v", err)
 	}
 	next()
@@ -143,7 +144,7 @@ func TestDiscoverySeedAdmissionUsesExactReservation(t *testing.T) {
 func TestCrawlerStateStaysLocal(t *testing.T) {
 	left, right := NewCrawler(nil), NewCrawler(nil)
 	left.politeRecord("busy.example", 429, "30")
-	if _, err := left.politeAcquire(t.Context(), "busy.example"); err != errHostCoolingDown {
+	if _, err := left.politeAcquire(t.Context(), "busy.example"); !errors.Is(err, errHostCoolingDown) {
 		t.Fatalf("rate limited crawler = %v", err)
 	}
 	release, err := right.politeAcquire(t.Context(), "busy.example")
@@ -193,7 +194,7 @@ func TestCrawlerCancellationReleasesPacingReservation(t *testing.T) {
 		go func() { _, err := crawler.politeAcquire(ctx, "paced.example"); result <- err }()
 		synctest.Wait()
 		cancel()
-		if err := <-result; err != context.Canceled {
+		if err := <-result; !errors.Is(err, context.Canceled) {
 			t.Fatalf("pacing cancellation = %v", err)
 		}
 		<-gate.pace
@@ -219,7 +220,7 @@ func TestCrawlerQueuedRequestHonorsNewCooldown(t *testing.T) {
 		synctest.Wait()
 		crawler.politeRecord("paced.example", 429, "30")
 		<-gate.pace
-		if err := <-result; err != errHostCoolingDown {
+		if err := <-result; !errors.Is(err, errHostCoolingDown) {
 			t.Fatalf("queued request ignored cooldown: %v", err)
 		}
 		if len(gate.sem) != 0 {

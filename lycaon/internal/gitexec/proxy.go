@@ -61,7 +61,7 @@ var loopbackExceptions = []string{"localhost", "127.0.0.0/8", "::1"}
 
 // NetworkProxyPlan returns the proxy plan for a network invocation against remote.
 func NetworkProxyPlan(remote string) (ProxyPlan, error) {
-	return planFor(hostproxy.Current(), remote)
+	return planFor(productionExecution().proxyConfiguration(), remote)
 }
 
 func planFor(config hostproxy.Configuration, remote string) (ProxyPlan, error) {

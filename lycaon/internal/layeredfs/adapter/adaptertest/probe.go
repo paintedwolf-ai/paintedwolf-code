@@ -32,7 +32,7 @@ func (a *Mounted) Probe(ctx context.Context, cfg adapter.ProbeConfig) (adapter.P
 	if err != nil {
 		return fail(adapter.ReasonMountDenied, err)
 	}
-	defer os.RemoveAll(root)
+	defer func() { _ = os.RemoveAll(root) }()
 	source, backing, mount := filepath.Join(root, "source"), filepath.Join(root, "backing"), filepath.Join(root, "mount")
 	for _, dir := range []string{source, backing, mount} {
 		if err := os.MkdirAll(dir, 0o700); err != nil {
@@ -58,7 +58,7 @@ func (a *Mounted) Probe(ctx context.Context, cfg adapter.ProbeConfig) (adapter.P
 	if err != nil {
 		return fail(adapter.ReasonProbeReadWriteFailed, err)
 	}
-	defer core.ReleaseView()
+	defer func() { _ = core.ReleaseView() }()
 	path := layeredfs.QualifiedPath{RootID: "root", Rel: "probe.txt"}
 	if _, err := core.WriteFile(path, []byte("probe"), 0o600); err != nil {
 		return fail(adapter.ReasonProbeReadWriteFailed, err)
