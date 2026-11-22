@@ -179,7 +179,7 @@ func TestCallTextDeterministicEmptyContainersNumericVariantsAndPartialCalls(t *t
 		},
 	}
 	partialText := typedVariants.Text()
-	wantPartial := "`command(a_int=42, b_uint=99, c_num=12345, d_float=1.5, e_strs=[\"x\", \"y\"], f_ints=[1, 2], g_str_map={\"a\": \"1\", \"b\": \"2\"}, h_nil=null, …)`"
+	wantPartial := "`command(a_int=42, b_uint=99, c_num=12345, d_float=1.5, e_strs=[\"x\", \"y\"], f_ints=[1, 2], g_str_map.a=\"1\", g_str_map.b=\"2\", h_nil=null, …)`"
 	if partialText != wantPartial {
 		t.Fatalf("partial Call.Text() =\n%s\nwant:\n%s", partialText, wantPartial)
 	}
@@ -191,5 +191,149 @@ func TestCallTextDeterministicEmptyContainersNumericVariantsAndPartialCalls(t *t
 	barePartial := (toolreach.Call{Tool: "command", Partial: true}).Text()
 	if barePartial != "`command(…)`" || !strings.Contains(barePartial, "…") {
 		t.Fatalf("bare partial = %q, want `command(…)`", barePartial)
+	}
+}
+
+func TestCallTextPreservesTypedSlicesMapsStructsAndExactInt64(t *testing.T) {
+	eff, err := extpacks.CatalogForConsumers()
+	testutil.FailErr(t, "catalog", err)
+	profiles, err := sandbox.LoadToolProfilesWithCatalog(eff)
+	testutil.FailErr(t, "profiles", err)
+	stockSchemas, _, err := extpacks.LoadEffectiveToolSchemas(eff)
+	testutil.FailErr(t, "schemas", err)
+	waitMeta, _ := stockSchemas.ToolMeta("wait")
+	projectedWait := toolschema.ProjectToolArgsSchema("wait", waitMeta.ArgsSchema, toolschema.ProjectOptions{
+		PruneWaitConditions: true,
+		WaitConditions:      []string{"process_done", "http_ready"},
+	})
+	stockCat, err := toolvocab.NewCatalog(stockSchemas, profiles, toolvocab.Provenance{})
+	testutil.FailErr(t, "stock vocab catalog", err)
+
+	typedWait := toolreach.Call{
+		Tool: "wait",
+		Args: map[string]any{
+			"capability_request": map[string]any{
+				"loopback_connect": map[string]any{"ports": [1]int32{8080}},
+			},
+			"conditions": []map[string]any{
+				{"kind": "process_done", "handles": []string{"cmd-1"}},
+				{"kind": "http_ready", "url": "http://127.0.0.1:8080/ready", "port": uint16(8080)},
+			},
+			"timeout_ms":     int64(60000),
+			"until_complete": true,
+		},
+	}
+	waitRendered := typedWait.Text()
+	wantWait := "`wait(capability_request.loopback_connect.ports=[8080], conditions=[{\"handles\": [\"cmd-1\"], \"kind\": \"process_done\"}, {\"kind\": \"http_ready\", \"port\": 8080, \"url\": \"http://127.0.0.1:8080/ready\"}], timeout_ms=60000, until_complete=true)`"
+	if waitRendered != wantWait {
+		t.Fatalf("typed wait Call.Text() =\n%s\nwant:\n%s", waitRendered, wantWait)
+	}
+	parsedWait := toolvocabtest.ParseCallExamples(stockCat, waitRendered)
+	if len(parsedWait) != 1 || parsedWait[0].HasEllipsis {
+		t.Fatalf("parsed typed wait = %+v", parsedWait)
+	}
+	if issues := toolvocabtest.ValidateCallExample(parsedWait[0], projectedWait); len(issues) > 0 {
+		t.Fatalf("ValidateCallExample on typed wait failed: %+v", issues)
+	}
+	waitReq := toolreach.Offered([]string{"wait"}).WithSchemas(map[string]map[string]any{"wait": projectedWait})
+	if _, ok := waitReq.Sequence(typedWait); !ok {
+		t.Fatal("Sequence rejected admitted []map[string]any wait conditions")
+	}
+	prunedTypedWait := toolreach.Call{
+		Tool: "wait",
+		Args: map[string]any{"conditions": []map[string]any{{"kind": "port_ready", "port": 8080}}},
+	}
+	if _, ok := waitReq.Sequence(prunedTypedWait); ok {
+		t.Fatal("Sequence admitted pruned port_ready inside []map[string]any")
+	}
+
+	customSchemas := toolschema.ConfigFromEntries(map[string]toolschema.Entry{
+		"command": {
+			Description: "Run command",
+			Schema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"command": map[string]any{"type": "string"},
+					"counts":  map[string]any{"type": "object", "additionalProperties": map[string]any{"type": "integer"}},
+					"flags":   map[string]any{"type": "array", "items": map[string]any{"type": "boolean"}},
+					"offset":  map[string]any{"type": "integer"},
+					"toggles": map[string]any{"type": "object", "additionalProperties": map[string]any{"type": "boolean"}},
+				},
+				"required": []any{"command"},
+			},
+		},
+	})
+	projCmd := toolschema.ProjectArgsSchema(customSchemas.Tools["command"].Schema)
+	cmdCat, err := toolvocab.NewCatalog(customSchemas, []sandbox.ToolProfile{{ID: "p", Tools: map[string]bool{"command": true}}}, toolvocab.Provenance{})
+	testutil.FailErr(t, "cmd catalog", err)
+
+	boolAndIntCall := toolreach.Call{
+		Tool: "command",
+		Args: map[string]any{
+			"command": "ls",
+			"counts":  map[string]int{"B": 2, "A": 1},
+			"flags":   []bool{true, false},
+			"offset":  int64(9007199254740993),
+			"toggles": map[string]bool{"strict": true, "verbose": false},
+		},
+	}
+	gotBoolText := boolAndIntCall.Text()
+	wantBoolText := "`command(command=\"ls\", counts={\"A\": 1, \"B\": 2}, flags=[true, false], offset=9007199254740993, toggles.strict=true, toggles.verbose=false)`"
+	if gotBoolText != wantBoolText {
+		t.Fatalf("bool/int Call.Text() =\n%s\nwant:\n%s", gotBoolText, wantBoolText)
+	}
+	parsedCmd := toolvocabtest.ParseCallExamples(cmdCat, gotBoolText)
+	if len(parsedCmd) != 1 || parsedCmd[0].HasEllipsis {
+		t.Fatalf("parsed bool/int call = %+v", parsedCmd)
+	}
+	wantCmdArgs := map[string]any{
+		"command": "ls",
+		"counts":  map[string]any{"A": int64(1), "B": int64(2)},
+		"flags":   []any{true, false},
+		"offset":  int64(9007199254740993),
+		"toggles": map[string]any{"strict": true, "verbose": false},
+	}
+	if !reflect.DeepEqual(parsedCmd[0].Args, wantCmdArgs) {
+		t.Fatalf("round-tripped bool/int args =\n%#v\nwant:\n%#v", parsedCmd[0].Args, wantCmdArgs)
+	}
+	if issues := toolvocabtest.ValidateCallExample(parsedCmd[0], projCmd); len(issues) > 0 {
+		t.Fatalf("ValidateCallExample on bool/int call failed: %+v", issues)
+	}
+	testExtraReflectAndJSONBranches(t, cmdCat)
+}
+
+func testExtraReflectAndJSONBranches(t *testing.T, cmdCat *toolvocab.Catalog) {
+	t.Helper()
+	type customKey string
+	type extraCfg struct {
+		Mode  string `json:"mode"`
+		Limit int64  `json:"limit"`
+	}
+	ptrNum := int8(-7)
+	var nilPtr *int
+	var nilSlice []bool
+	var nilMap map[string]int
+	extraPartial := toolreach.Call{
+		Tool:    "command",
+		Partial: true,
+		Args: map[string]any{
+			"a_ptr":       &ptrNum,
+			"b_nil_ptr":   nilPtr,
+			"c_nil_slice": nilSlice,
+			"d_nil_map":   nilMap,
+			"e_f32":       float32(2.5),
+			"f_custom":    map[customKey]bool{"Z": false, "A": true},
+			"g_struct":    extraCfg{Mode: "fast", Limit: 9007199254740993},
+			"h_raw":       json.RawMessage(`{"k":"v"}`),
+		},
+	}
+	gotExtra := extraPartial.Text()
+	wantExtra := "`command(a_ptr=-7, b_nil_ptr=null, c_nil_slice=null, d_nil_map=null, e_f32=2.5, f_custom={\"A\": true, \"Z\": false}, g_struct.limit=9007199254740993, g_struct.mode=\"fast\", h_raw.k=\"v\", …)`"
+	if gotExtra != wantExtra {
+		t.Fatalf("extra partial Call.Text() =\n%s\nwant:\n%s", gotExtra, wantExtra)
+	}
+	parsedExtra := toolvocabtest.ParseCallExamples(cmdCat, gotExtra)
+	if len(parsedExtra) != 1 || !parsedExtra[0].HasEllipsis {
+		t.Fatalf("expected extra partial call to remain partial, got %+v", parsedExtra)
 	}
 }
