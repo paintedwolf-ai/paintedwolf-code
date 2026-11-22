@@ -199,7 +199,7 @@ func bareActivation(gc *GuardContext) map[string]any {
 		"agent_is_scout":                      gc.Workers.AgentIsScout,
 		"agent_is_implementer":                gc.Workers.AgentIsImplementer,
 		"profile_surveys_project_tree":        gc.Grounding.ProfileSurveysProjectTree,
-		"profile_fetches_urls":                gc.Grounding.ProfileFetchesURLs,
+		"ask_user_secret_allowed":             false,
 		"repo_known_empty":                    gc.Grounding.RepoKnownEmpty,
 		"last_audit_ungrounded":               gc.Grounding.LastAuditUngrounded,
 		"grounding_escalated":                 gc.Grounding.GroundingEscalated,

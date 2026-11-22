@@ -5,7 +5,7 @@ on: tool.rejected
 selector:
   tools:
     - terminal_send
-requires_facts: [paintedwolf.command, paintedwolf.rejection_code]
+requires_facts: [paintedwolf.command, paintedwolf.next_steps, paintedwolf.rejection_code]
 when: paintedwolf.rejection_code == "REMOTE_PACKAGE_EXECUTION_REQUIRES_FRESH_BOUNDARY"
 effect: block
 x-paintedwolf-category: recoverable
@@ -14,8 +14,8 @@ message: downloaded package code needs a fresh boundary
 what: 'the package action `{{ paintedwolf.command }}` needs a fresh remote-package execution boundary.'
 cause: 'an already-running terminal cannot remove inherited secrets or narrow file and network access after it starts.'
 why: 'downloaded package code must pass the package identity card and start inside the reviewed boundary.'
-fix: 'Run the same action with command instead of sending it into this terminal.'
-instead: 'Use command for this package action; keep the terminal for already-installed local programs'
+fix: '{% if paintedwolf.next_steps %}{{ paintedwolf.next_steps }}{% else %}This request offers no fresh command boundary for `{{ paintedwolf.command }}`; report the blocked package action instead of sending it into this terminal.{% endif %}'
+instead: 'Do not send downloaded package actions into an already-running terminal; keep the terminal for already-installed local programs'
 x-paintedwolf-scenarios:
   - id: default
     vars:

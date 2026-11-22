@@ -4,6 +4,7 @@ import (
 	"context"
 	"strings"
 
+	"github.com/lycaon/lycaon/internal/curationctx"
 	"github.com/lycaon/lycaon/internal/oar"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/toolreach"
@@ -62,6 +63,15 @@ func RegisterRecoveryFacts(ctx context.Context, gc *oar.GuardContext) {
 	}
 	gc.RegisterProvider("paintedwolf.command_operation_reachable", observeCommandOp)
 	gc.RegisterProvider("paintedwolf.admitted_command_forms", observeCommandOp)
+	sessCtx := curationctx.SessionFrom(ctx)
+	gc.RegisterProvider("paintedwolf.ask_user_secret_allowed", func(target *oar.GuardContext) error {
+		if target.ObservationData == nil {
+			target.ObservationData = map[string]any{}
+		}
+		askMode := target.Session.SessionMode == "ask" || sessCtx.Mode == "ask"
+		target.ObservationData["ask_user_secret_allowed"] = request.Status("ask_user") != toolreach.Absent && !askMode
+		return nil
+	})
 	for _, fact := range oar.CanCallFacts() {
 		tool := strings.TrimPrefix(fact, "can_")
 		gc.RegisterProvider("paintedwolf."+fact, func(target *oar.GuardContext) error {

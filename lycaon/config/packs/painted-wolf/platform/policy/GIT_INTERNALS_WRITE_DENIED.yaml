@@ -3,7 +3,7 @@ id: GIT_INTERNALS_WRITE_DENIED
 kind: policy
 on: tool.rejected
 selector: {}
-requires_facts: [paintedwolf.class, paintedwolf.dest, paintedwolf.extracted_bytes, paintedwolf.extracted_entries, paintedwolf.extracted_paths_omitted, paintedwolf.extracted_paths_sample, paintedwolf.extraction_started, paintedwolf.path, paintedwolf.rejection_code]
+requires_facts: [paintedwolf.can_command, paintedwolf.class, paintedwolf.dest, paintedwolf.extracted_bytes, paintedwolf.extracted_entries, paintedwolf.extracted_paths_omitted, paintedwolf.extracted_paths_sample, paintedwolf.extraction_started, paintedwolf.path, paintedwolf.rejection_code]
 when: paintedwolf.rejection_code == "GIT_INTERNALS_WRITE_DENIED"
 effect: block
 x-paintedwolf-category: recoverable
@@ -12,11 +12,12 @@ message: git internals write denied
 what: Cannot write {{ paintedwolf.path }} — repository git internals ({{ paintedwolf.class }}) are not writable via native tools.
 cause: Native tools do not write inside .git; Git's own operations change repository metadata, and hooks or config planted there would run later under the user's own terminal git.
 why: Keeping native writes out of .git leaves every repository change to a reviewed Git operation and keeps the user's terminal git honest about what we refuse to execute ourselves.
-fix: 'Inspect repository settings with `git config --list` or `git config --get` inside command, and ask the user to edit repository settings or hooks in their terminal if they must change.{% if paintedwolf.extraction_started %} Extraction stopped in {{ paintedwolf.dest }} after committing {{ paintedwolf.extracted_entries }} entries ({{ paintedwolf.extracted_bytes }} bytes).{% if paintedwolf.extracted_paths_sample %} Completed path sample: {{ paintedwolf.extracted_paths_sample }}.{% endif %}{% if paintedwolf.extracted_paths_omitted %} {{ paintedwolf.extracted_paths_omitted }} additional completed paths are retained in the structured result.{% endif %} The destination and parent directories may also have been created; completed changes remain in place. Inspect them before retrying so you do not overwrite work.{% endif %}'
-instead: Inspect settings with `git config --list` or `git config --get` inside command and ask the user to apply `.git` changes in their terminal; do not retry the write
+fix: '{% if paintedwolf.can_command %}Inspect repository settings with `git config --list` or `git config --get` inside command, and ask{% else %}Ask{% endif %} the user to edit repository settings or hooks in their terminal if they must change.{% if paintedwolf.extraction_started %} Extraction stopped in {{ paintedwolf.dest }} after committing {{ paintedwolf.extracted_entries }} entries ({{ paintedwolf.extracted_bytes }} bytes).{% if paintedwolf.extracted_paths_sample %} Completed path sample: {{ paintedwolf.extracted_paths_sample }}.{% endif %}{% if paintedwolf.extracted_paths_omitted %} {{ paintedwolf.extracted_paths_omitted }} additional completed paths are retained in the structured result.{% endif %} The destination and parent directories may also have been created; completed changes remain in place. Inspect them before retrying so you do not overwrite work.{% endif %}'
+instead: '{% if paintedwolf.can_command %}Inspect settings with `git config --list` or `git config --get` inside command and ask{% else %}Ask{% endif %} the user to apply `.git` changes in their terminal; do not retry the write'
 x-paintedwolf-scenarios:
   - id: hooks
     vars:
+      can_command: true
       detail: bad args
       path: .git/hooks/pre-commit
       class: hooks
@@ -24,6 +25,7 @@ x-paintedwolf-scenarios:
       tool: write
   - id: config
     vars:
+      can_command: false
       detail: bad args
       path: .git/config
       class: config

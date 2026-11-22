@@ -253,12 +253,19 @@ func verifyPartialMultiFormAndStepFallback(
 	if !ok || rule == nil {
 		t.Fatal("TOOL_COMMAND_OPERATION missing from effective ruleset")
 	}
+	gcObserved := oar.NewGuardContext()
+	gcObserved.Reach = deferredNoLoader.Reach
+	gcObserved.ObservationData = map[string]any{"need": "edit"}
+	gcObserved.ObserveCommandOperationReach()
+	if got := oar.ResolveNextSteps(rule, gcObserved); got.Text != "" || len(got.Calls) != 0 {
+		t.Fatalf("ObserveCommandOperationReach on unreachable deferred reach = %+v, want empty steps", got)
+	}
+
 	gc := oar.NewGuardContext()
 	gc.Reach = deferredNoLoader.Reach
 	gc.ObservationData = map[string]any{
 		"need":                        "edit",
 		"command_operation_reachable": true,
-		"admitted_command_forms":      []string{"edit"},
 	}
 	resolved := oar.ResolveNextSteps(rule, gc)
 	if resolved.Text != "Use an available capability or report the missing operation." || len(resolved.Calls) != 0 {
