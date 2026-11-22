@@ -491,13 +491,25 @@ func TestAskModeRefusalProducersRenderSpecificCausesAndConditionedRecovery(t *te
 			}
 		}
 
-		// Unknown reach (neither can_command nor tool_loadable+can_request_tools set) suppresses concrete run/load instruction.
-		rawAskUnknownReach, _ := renderToolReject(t, askAltRej, nil)
-		if strings.Contains(rawAskUnknownReach, "Run `find src -name '*.tmp'`") || strings.Contains(rawAskUnknownReach, "Load `command`") {
-			t.Fatalf("unknown reach still rendered concrete command remedy:\n%s", rawAskUnknownReach)
+		// Unknown reach (neither can_command nor tool_loadable+can_request_tools set, and no expected_form or code_instead) suppresses concrete run/load instruction and avoids unverified availability claims.
+		askUnknownRej := &toolrejection.ToolReject{
+			Code: "COMMAND_EFFECT_NOT_ALLOWED",
+			Data: map[string]any{
+				"tool":          "command",
+				"session_mode":  "ask",
+				"command":       "find",
+				"mode":          "-delete",
+				"class":         "mutation",
+				"source_line":   1,
+				"source_column": 1,
+			},
 		}
-		if !strings.Contains(rawAskUnknownReach, "Available read-only forms on this surface: find [default-predicates-print].") {
-			t.Fatalf("unknown reach missing fallback surface form:\n%s", rawAskUnknownReach)
+		rawAskUnknownReach, _ := renderToolReject(t, askUnknownRej, nil)
+		if strings.Contains(rawAskUnknownReach, "Run `find src -name '*.tmp'`") || strings.Contains(rawAskUnknownReach, "Load `command`") || strings.Contains(rawAskUnknownReach, "Available read-only forms") {
+			t.Fatalf("unknown reach still rendered concrete command remedy or unverified availability:\n%s", rawAskUnknownReach)
+		}
+		if !strings.Contains(rawAskUnknownReach, "Fix: Do not retry this operation on the active read-only surface.") {
+			t.Fatalf("unknown reach missing grounded fallback:\n%s", rawAskUnknownReach)
 		}
 
 		askLoadableRej := &toolrejection.ToolReject{
@@ -536,7 +548,7 @@ func TestAskModeRefusalProducersRenderSpecificCausesAndConditionedRecovery(t *te
 		rawAskNoAlt, _ := renderToolReject(t, askNoAltRej, map[string]any{"can_command": true})
 		for _, want := range []string{
 			"`mkdir` (`create`) at 1:1 is unavailable in Ask mode.",
-			"This operation has no read-only form on the active surface.",
+			"Do not retry this operation on the active read-only surface.",
 		} {
 			if !strings.Contains(rawAskNoAlt, want) {
 				t.Fatalf("Ask COMMAND_EFFECT_NOT_ALLOWED without alternative missing %q:\n%s", want, rawAskNoAlt)

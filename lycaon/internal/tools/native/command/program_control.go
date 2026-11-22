@@ -124,7 +124,7 @@ func (d *ProgramDispatcher) invokeHost(ctx context.Context, request commandprogr
 	tracker := &trackingWriter{w: nonNilWriter(streams.Error)}
 	runStreams := streams
 	runStreams.Error = tracker
-	effect := toolexecution.NativeEffect{Operation: bound, Arguments: arguments, Streams: runStreams, Inspection: d.run.capture, Stage: toolcontract.ExecutionStage{ExecutionID: request.Invocation.Identity.ExecutionID, OperationID: definition.ReadOnlyFacts().Identity, Argv: request.Argv.Values()}, ValidateCandidate: func(ctx context.Context, argv []string) (toolcontract.BoundOperation, commandprogram.ArgvReview, bool) {
+	effect := toolexecution.NativeEffect{Operation: bound, Arguments: arguments, Streams: runStreams, Inspection: d.run.capture, Stage: toolcontract.ExecutionStage{ExecutionID: request.Invocation.Identity.ExecutionID, OperationID: definition.ReadOnlyFacts().Identity, Argv: request.Argv.Values()}, ValidateCandidate: func(ctx context.Context, argv []string) (toolcontract.BoundOperation, commandprogram.ArgvReview, []string, bool) {
 		return d.validateCandidateAlternative(ctx, request, argv)
 	}, PrepareReviewed: func(context.Context, map[string]any, tools.ToolContext) (toolexecution.PreparedNativeEffect, error) {
 		return toolexecution.PreparedNativeEffect{Operation: bound, InvokeOwner: func(ctx context.Context, tc tools.ToolContext, streams commandprogram.Streams) (toolcontract.ProducerResult, error) {

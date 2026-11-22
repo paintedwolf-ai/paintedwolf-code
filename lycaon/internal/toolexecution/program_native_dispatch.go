@@ -67,7 +67,7 @@ type NativeEffect struct {
 	Argv              *commandprogram.ArgvReview
 	Streams           commandprogram.Streams
 	PrepareReviewed   func(context.Context, map[string]any, tools.ToolContext) (PreparedNativeEffect, error)
-	ValidateCandidate func(ctx context.Context, argv []string) (toolcontract.BoundOperation, commandprogram.ArgvReview, bool)
+	ValidateCandidate func(ctx context.Context, argv []string) (toolcontract.BoundOperation, commandprogram.ArgvReview, []string, bool)
 }
 
 // InvokeNative is reached-effect admission, not an interpreter or JSON tool call.
