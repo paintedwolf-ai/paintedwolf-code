@@ -7,13 +7,18 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/coordinator/capability"
+	"github.com/lycaon/lycaon/internal/coordinator/promptloop"
 	"github.com/lycaon/lycaon/internal/coordinator/surface"
 	"github.com/lycaon/lycaon/internal/extpacks"
 	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/spawn"
+	"github.com/lycaon/lycaon/internal/toolcontract"
+	"github.com/lycaon/lycaon/internal/tools"
+	"github.com/lycaon/lycaon/internal/toolsurface"
 	"github.com/lycaon/lycaon/internal/toolvocab"
+	"github.com/lycaon/lycaon/internal/toolvocab/toolvocabtest"
 	"github.com/lycaon/lycaon/pkg/api"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 	"github.com/lycaon/lycaon/test/contract/internal/hoststate"
@@ -99,7 +104,11 @@ func TestRenderedCoordinatorPromptsNameOnlyReachableTools(t *testing.T) {
 }
 
 func TestRenderedAskModeCoordinatorPromptsMatchOfferedTools(t *testing.T) {
-	catalog, profiles := promptNameCatalog(t)
+	catalog, _ := promptNameCatalog(t)
+	prunable, err := toolvocabtest.StockPrunableSchemaIndex()
+	contractcheck.FailErr(t, "stock prunable index", err)
+	vocab, err := toolvocabtest.StockBacktickVocab()
+	contractcheck.FailErr(t, "stock backtick vocab", err)
 	engine := contractcheck.BundledPromptEngineForRoot(t)
 	unitCatalog, err := prompts.UnitCatalogForEngine(engine)
 	contractcheck.FailErr(t, "unit catalog", err)
@@ -110,44 +119,48 @@ func TestRenderedAskModeCoordinatorPromptsMatchOfferedTools(t *testing.T) {
 			t.Run(name, func(t *testing.T) {
 				sess := &api.Session{Mode: api.SessionModeAsk, Posture: api.SessionPostureBuild}
 				var roots []projectroot.RootRef
+				var rootSpecs []hoststate.RootSpec
 				if rootCount >= 1 {
 					sess.WorkspacePath = "/tmp/fixture-project"
-					roots = append(roots, projectroot.RootRef{ID: "r1", Label: "main", Path: sess.WorkspacePath, IsPrimary: true})
+					r1 := projectroot.RootRef{ID: "r1", Label: "main", Path: sess.WorkspacePath, IsPrimary: true}
+					roots = append(roots, r1)
+					rootSpecs = append(rootSpecs, hoststate.RootSpec{Ref: r1, HasGit: true})
 				}
 				if rootCount >= 2 {
-					roots = append(roots, projectroot.RootRef{ID: "r2", Label: "den", Path: "/tmp/fixture-den", IsPrimary: false})
+					r2 := projectroot.RootRef{ID: "r2", Label: "den", Path: "/tmp/fixture-den", IsPrimary: false}
+					roots = append(roots, r2)
+					rootSpecs = append(rootSpecs, hoststate.RootSpec{Ref: r2, HasGit: true})
 				}
 				runCtx := api.CoordinatorRunContext{
 					AllowedAgents: prompts.ReadOnlyAgents(spawn.AmbientAllowedAgents()),
 				}
 				if workflowActive {
 					runCtx.RunID = "run-ask-1"
+					runCtx.WorkflowID = "fixture-workflow"
 					runCtx.PhaseCoordinatorSurface = "observe_plan"
 					runCtx.AdvanceWhenGateMet = "coordinator"
 				}
 				profile := surface.ResolveTurnProfile(runCtx, sess, nil)
-				plan, err := surface.CompileToolPlan(profile, rootCount)
-				contractcheck.FailErr(t, "compile Ask tool plan", err)
-				if !workflowActive && plan.Addressable("ask_user") {
-					t.Fatal("ambient Ask mode must not offer ask_user")
-				}
-				if workflowActive && !plan.Immediate("ask_user") {
-					t.Fatal("active workflow Ask mode must offer ask_user")
-				}
-				reader, err := prompts.NewReader(prompts.ReaderInput{
-					ProfileID:      prompts.CoordinatorProfileID,
-					SurfaceID:      profile.SurfaceID,
-					Mode:           surface.ExecutionModeFamily(profile.SurfaceID),
-					SessionMode:    string(api.SessionModeAsk),
-					Profiles:       profiles,
-					Plan:           plan,
+				auth, err := hoststate.FreezeTurnAuthority(t.Context(), hoststate.CoordinatorState{
+					SessionMode:    api.SessionModeAsk,
+					Posture:        api.SessionPostureBuild,
+					WebSearch:      true,
+					Roots:          rootSpecs,
 					RootCount:      rootCount,
 					HasGit:         rootCount > 0,
 					HasAnyGitRoot:  rootCount > 0,
-					WebSearch:      true,
 					SpawnAllowlist: runCtx.AllowedAgents,
+					RunContext:     runCtx,
+					TurnProfile:    profile,
 				})
-				contractcheck.FailErr(t, "new Ask reader", err)
+				contractcheck.FailErr(t, "freeze Ask turn authority", err)
+				if !workflowActive && auth.Plan.Addressable("ask_user") {
+					t.Fatal("ambient Ask mode must not offer ask_user")
+				}
+				if workflowActive && !auth.Plan.Immediate("ask_user") {
+					t.Fatal("active workflow Ask mode must offer ask_user")
+				}
+				reader := auth.Reader
 				vars := mergeCoordinatorSurfaceVars(t, profile.SurfaceID)
 				prompts.MergeWorkspaceRootsVars(vars, roots, "")
 				transition := surface.ComputeModeTransition("", surface.ExecutionModeFamily(profile.SurfaceID), nil)
@@ -180,18 +193,143 @@ func TestRenderedAskModeCoordinatorPromptsMatchOfferedTools(t *testing.T) {
 					}
 				}
 				corpus := strings.Join(parts, "\n\n")
-				held := reader.Held()
-				if names := toolvocab.UnreachableNames(catalog, corpus, held); len(names) > 0 {
-					t.Errorf("Ask mode prompt names unreachable tools %v:\n%s", names, linesNaming(corpus, names))
-				}
-				for _, cmdUtility := range []string{"`cat -n", "`grep -n", "`rg -n", "`sed -n"} {
-					if strings.Contains(corpus, cmdUtility) {
-						t.Errorf("Ask mode prompt teaches command utility %s when command is not offered:\n%s", cmdUtility, corpus)
-					}
+				violations := toolvocabtest.EvaluateClaimBlock(toolvocabtest.ClaimEvaluationContext{
+					Catalog:     catalog,
+					Prunable:    prunable,
+					Vocab:       vocab,
+					Self:        toolvocabtest.AuthorityFromReaderAndMetas(auth.Reader, auth.ProgramReach, auth.Metas),
+					SessionMode: api.SessionModeAsk,
+					Posture:     api.SessionPostureBuild,
+				}, toolvocabtest.ClaimBlock{
+					Label:   "ask/" + name,
+					Subject: toolvocabtest.SubjectSelfNow(),
+					Text:    corpus,
+				})
+				for _, v := range violations {
+					t.Errorf("Ask mode prompt violation (%s at line %d): %s — %s", v.Claim, v.Line, v.Reason, linesNaming(corpus, []string{v.Claim}))
 				}
 			})
 		}
 	}
+}
+
+func TestAskModeCommandUtilityClaimsFollowResolvedAuthorityAcrossRevisions(t *testing.T) {
+	eff := contractcheck.StockCatalog(t)
+	profiles, err := sandbox.LoadToolProfilesWithCatalog(eff)
+	contractcheck.FailErr(t, "load profiles", err)
+	schemas, _, err := extpacks.LoadEffectiveToolSchemas(eff)
+	contractcheck.FailErr(t, "load schemas", err)
+	catalog, err := toolvocab.NewCatalog(schemas, profiles, toolvocab.Provenance{})
+	contractcheck.FailErr(t, "catalog", err)
+	prunable, err := toolvocabtest.StockPrunableSchemaIndex()
+	contractcheck.FailErr(t, "prunable", err)
+	vocab, err := toolvocabtest.StockBacktickVocab()
+	contractcheck.FailErr(t, "vocab", err)
+
+	roEffects, err := toolcontract.NewCommandEffects(toolcontract.CommandReadOnly)
+	contractcheck.FailErr(t, "ro effects", err)
+	narrowedProfiles := slices.Clone(profiles)
+	for i := range narrowedProfiles {
+		narrowedProfiles[i].CommandEffects &= roEffects
+	}
+
+	cmdMeta, ok := schemas.ToolMeta("command")
+	if !ok {
+		t.Fatal("missing command schema")
+	}
+	askMeta, ok := schemas.ToolMeta("ask_user")
+	if !ok {
+		t.Fatal("missing ask_user schema")
+	}
+	roCommandSchema := tools.PruneCommandReadOnlySchema(cmdMeta.ArgsSchema)
+	askMetas := promptloop.ProjectAskToolMetas([]tools.ToolMeta{
+		{Name: "ask_user", ArgsSchema: askMeta.ArgsSchema},
+		{Name: "command", ArgsSchema: roCommandSchema},
+	})
+
+	t.Run("v1-baseline Ask withholds command and rejects command utilities", func(t *testing.T) {
+		v1Plan := toolsurface.Compile([]string{"recall", "source_history", "ask_user"}, nil)
+		v1Reader, rErr := prompts.NewReader(prompts.ReaderInput{
+			ProfileID:   prompts.CoordinatorProfileID,
+			SurfaceID:   "observe_investigate",
+			SessionMode: string(api.SessionModeAsk),
+			Profiles:    narrowedProfiles,
+			Plan:        v1Plan,
+			Visible:     []string{"recall", "source_history", "ask_user"},
+			Schemas:     schemas,
+			RootCount:   1,
+			HasGit:      true,
+		})
+		contractcheck.FailErr(t, "v1 reader", rErr)
+		evalCtx := toolvocabtest.ClaimEvaluationContext{
+			Catalog:     catalog,
+			Prunable:    prunable,
+			Vocab:       vocab,
+			Self:        toolvocabtest.AuthorityFromReaderAndMetas(v1Reader, nil, askMetas[:1]),
+			SessionMode: api.SessionModeAsk,
+			Posture:     api.SessionPostureBuild,
+		}
+		if got := toolvocabtest.EvaluateClaimBlock(evalCtx, toolvocabtest.ClaimBlock{
+			Label: "v1-valid", Subject: toolvocabtest.SubjectSelfNow(),
+			Text: "Use `source_history` to inspect recorded changes and `ask_user(prompt=\"Clarify?\")` when needed.",
+		}); len(got) > 0 {
+			t.Fatalf("unexpected v1-baseline violations: %+v", got)
+		}
+		for _, badUtility := range []string{"`cat -n FILE`", "`grep -n PAT FILE`", "`rg -n PAT`", "`sed -n '1,20p' FILE`"} {
+			if got := toolvocabtest.EvaluateClaimBlock(evalCtx, toolvocabtest.ClaimBlock{
+				Label: "v1-cmd", Subject: toolvocabtest.SubjectSelfNow(),
+				Text: "Inspect lines with " + badUtility + ".",
+			}); len(got) == 0 {
+				t.Fatalf("expected v1-baseline Ask authority without command to reject %s", badUtility)
+			}
+		}
+	})
+
+	t.Run("v2-ro02-option1 Ask offers read-only command and rejects mutating or pruned forms", func(t *testing.T) {
+		v2Plan := toolsurface.Compile([]string{"recall", "command", "source_history", "ask_user"}, nil)
+		v2Reader, rErr := prompts.NewReader(prompts.ReaderInput{
+			ProfileID:   prompts.CoordinatorProfileID,
+			SurfaceID:   "observe_investigate",
+			SessionMode: string(api.SessionModeAsk),
+			Profiles:    narrowedProfiles,
+			Plan:        v2Plan,
+			Visible:     []string{"recall", "command", "source_history", "ask_user"},
+			Schemas:     schemas,
+			RootCount:   1,
+			HasGit:      true,
+		})
+		contractcheck.FailErr(t, "v2 reader", rErr)
+		evalCtx := toolvocabtest.ClaimEvaluationContext{
+			Catalog:     catalog,
+			Prunable:    prunable,
+			Vocab:       vocab,
+			Self:        toolvocabtest.AuthorityFromReaderAndMetas(v2Reader, nil, askMetas),
+			SessionMode: api.SessionModeAsk,
+			Posture:     api.SessionPostureBuild,
+		}
+		if got := toolvocabtest.EvaluateClaimBlock(evalCtx, toolvocabtest.ClaimBlock{
+			Label: "v2-readonly-utilities", Subject: toolvocabtest.SubjectSelfNow(),
+			Text: "Inspect files with `cat -n FILE`, `grep -n PAT FILE`, `rg -n PAT`, `sed -n '1,20p' FILE`, and `git status` in `command`.",
+		}); len(got) > 0 {
+			t.Fatalf("expected v2-ro02-option1 Ask authority to admit read-only command utilities, got %+v", got)
+		}
+		for _, forbidden := range []string{
+			"Apply changes with `edit --path a.go --old-string x --new-string y`.",
+			"Commit via `git commit -m msg -- a.go`.",
+			"Fetch with `curl -s https://example.com`.",
+			"Run `external -- ls`.",
+			"Run `command(command=\"./task test:short\", verification=true)`.",
+			"Declare `capability_request.local_listen` on `command`.",
+			"Ask secret via `ask_user(response_type=\"secret\", …)`.",
+		} {
+			if got := toolvocabtest.EvaluateClaimBlock(evalCtx, toolvocabtest.ClaimBlock{
+				Label: "v2-forbidden", Subject: toolvocabtest.SubjectSelfNow(),
+				Text: forbidden,
+			}); len(got) == 0 {
+				t.Fatalf("expected v2-ro02-option1 Ask authority to reject %q", forbidden)
+			}
+		}
+	})
 }
 
 type workflowPhaseBindings struct {
