@@ -111,40 +111,6 @@ func SchemaAcceptsField(projected map[string]any, fieldPath string) bool {
 	return len(findFieldSchemas(projected, "", fieldPath, 0)) > 0
 }
 
-// SchemaAdmitsStringValue reports whether projected admits fieldPath and string value,
-// enforcing enum/const constraints when declared and admitting unconstrained string fields.
-func SchemaAdmitsStringValue(projected map[string]any, fieldPath, value string) bool {
-	fieldPath = strings.TrimSpace(fieldPath)
-	if fieldPath == "" || projected == nil {
-		return false
-	}
-	nodes := findFieldSchemas(projected, "", fieldPath, 0)
-	if len(nodes) == 0 {
-		return false
-	}
-	for _, node := range nodes {
-		if !nodeHasEnumOrConst(node) || nodeAcceptsEnumValue(node, value) {
-			return true
-		}
-	}
-	return false
-}
-
-// SchemaAcceptsEnumValue reports whether projected declares fieldPath with an
-// enum or const constraint that admits value.
-func SchemaAcceptsEnumValue(projected map[string]any, fieldPath, value string) bool {
-	fieldPath = strings.TrimSpace(fieldPath)
-	if fieldPath == "" || value == "" || projected == nil {
-		return false
-	}
-	for _, node := range findFieldSchemas(projected, "", fieldPath, 0) {
-		if nodeAcceptsEnumValue(node, value) {
-			return true
-		}
-	}
-	return false
-}
-
 func findFieldSchemas(node map[string]any, prefix, target string, depth int) []map[string]any {
 	if node == nil || depth > argFieldDepthMax {
 		return nil
@@ -182,69 +148,6 @@ func findFieldSchemas(node map[string]any, prefix, target string, depth int) []m
 		}
 	}
 	return out
-}
-
-func nodeHasEnumOrConst(node map[string]any) bool {
-	if node == nil {
-		return false
-	}
-	if _, ok := node["enum"]; ok {
-		return true
-	}
-	if _, ok := node["const"]; ok {
-		return true
-	}
-	for _, key := range []string{"oneOf", "anyOf", "allOf"} {
-		if branches, ok := node[key].([]any); ok {
-			for _, raw := range branches {
-				if branch, ok := raw.(map[string]any); ok && nodeHasEnumOrConst(branch) {
-					return true
-				}
-			}
-		}
-	}
-	return false
-}
-
-func nodeAcceptsEnumValue(node map[string]any, value string) bool {
-	if node == nil {
-		return false
-	}
-	if rawEnum, hasEnum := node["enum"]; hasEnum {
-		values, ok := copySchemaList(rawEnum)
-		if !ok {
-			return false
-		}
-		for _, v := range values {
-			if s, isStr := v.(string); isStr && s == value {
-				return true
-			}
-		}
-		return false
-	}
-	if rawConst, hasConst := node["const"]; hasConst {
-		s, ok := rawConst.(string)
-		return ok && s == value
-	}
-	for _, key := range []string{"oneOf", "anyOf"} {
-		if branches, ok := node[key].([]any); ok {
-			for _, raw := range branches {
-				if branch, ok := raw.(map[string]any); ok && nodeAcceptsEnumValue(branch, value) {
-					return true
-				}
-			}
-		}
-	}
-	if branches, ok := node["allOf"].([]any); ok && len(branches) > 0 {
-		for _, raw := range branches {
-			branch, ok := raw.(map[string]any)
-			if !ok || !nodeAcceptsEnumValue(branch, value) {
-				return false
-			}
-		}
-		return true
-	}
-	return false
 }
 
 func cloneSchemaMap(in map[string]any) map[string]any {
