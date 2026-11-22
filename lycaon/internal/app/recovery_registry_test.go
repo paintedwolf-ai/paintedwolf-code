@@ -5,6 +5,8 @@ import (
 
 	"github.com/lycaon/lycaon/internal/bootrecovery"
 	"github.com/lycaon/lycaon/internal/configlayout"
+	"github.com/lycaon/lycaon/internal/scan"
+	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/testutil"
 )
 
@@ -54,4 +56,19 @@ func TestBuiltRecoveryRegistryShape(t *testing.T) {
 			}
 		}
 	})
+}
+
+func TestWorkflowScanInventoryDelegatesToReadStore(t *testing.T) {
+	inv := workflowScanInventory{store: scan.NewSQLStore(testdbfixture.Open(t, "workflow-scan-inv.db"))}
+	scans, err := inv.RunScans(t.Context(), "run-missing")
+	testutil.FailErr(t, "RunScans failed", err)
+	if len(scans) != 0 {
+		t.Fatalf("RunScans = %v, want empty", scans)
+	}
+	rec, err := inv.Scan(t.Context(), "scan-missing")
+	testutil.FailErr(t, "Scan failed", err)
+	if rec != nil {
+		t.Fatalf("Scan = %v, want nil", rec)
+	}
+	testutil.FailErr(t, "restoreWorkerDrafts empty builder", restoreWorkerDrafts(&serveBuilder{}, t.Context()))
 }

@@ -74,4 +74,47 @@ func TestValidateCatalogSchemaParity(t *testing.T) {
 	if !strings.Contains(err.Error(), "metadata differs from catalog") {
 		t.Fatalf("error = %q", err.Error())
 	}
+	if err := ValidateCatalogSchemaParity(nil, cfg); err == nil {
+		t.Fatal("expected error for nil registry")
+	}
+	if err := ValidateCatalogSchemaParity(reg, nil); err == nil {
+		t.Fatal("expected error for nil config")
+	}
+}
+
+func TestValidateRegistryAndPromptProviderArgsSchemas(t *testing.T) {
+	if err := ValidateRegistryProviderArgsSchemas(nil); err == nil {
+		t.Fatal("expected error for nil registry")
+	}
+	reg := tools.NewDefaultRegistry()
+	_ = reg.RegisterDerived(tools.ToolMeta{Name: "read", Description: "read file", ArgsSchema: map[string]any{"type": "object"}}, func(_ context.Context, _ map[string]any, _ tools.ToolContext) (string, error) {
+		return "", nil
+	})
+	if err := ValidateRegistryProviderArgsSchemas(reg); err != nil {
+		t.Fatalf("ValidateRegistryProviderArgsSchemas valid: %v", err)
+	}
+
+	matchingCfg := &toolschema.Config{
+		Tools: map[string]toolschema.Entry{
+			"read": {
+				Description: "read file",
+				Schema:      map[string]any{"type": "object"},
+			},
+			"unregistered": {
+				Description: "not in registry",
+				Schema:      map[string]any{"type": "object"},
+			},
+			"no_schema": {},
+		},
+	}
+	if err := ValidateCatalogSchemaParity(reg, matchingCfg); err != nil {
+		t.Fatalf("ValidateCatalogSchemaParity matching: %v", err)
+	}
+
+	if err := ValidatePromptToolMetas("test", []tools.ToolMeta{{Name: "read", ArgsSchema: map[string]any{"type": "object"}}}); err != nil {
+		t.Fatalf("ValidatePromptToolMetas valid: %v", err)
+	}
+	if err := ValidatePromptToolMetas("test", []tools.ToolMeta{{Name: "broken"}}); err == nil {
+		t.Fatal("expected violation for missing prompt ArgsSchema")
+	}
 }

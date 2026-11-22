@@ -3,6 +3,8 @@ package toolapi_test
 import (
 	"context"
 	"encoding/json"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -33,6 +35,7 @@ func TestScanPackToolReturnsEnqueueReceipt(t *testing.T) {
 	testdbseed.InsertSession(t, sqlDB, "sess-1", testdbseed.DefaultProjectID)
 
 	projectDir := t.TempDir()
+	testutil.FailErr(t, "write fixture file", os.WriteFile(filepath.Join(projectDir, "main.go"), []byte("package main\n"), 0o600))
 	store := scanbase.NewSQLStore(sqlDB)
 	coord := newTestCoordinator(t, store, staticHead{sha: "abc"})
 	toolReg := tools.NewDefaultRegistry()
@@ -84,6 +87,24 @@ func TestScanPackToolReturnsEnqueueReceipt(t *testing.T) {
 	if payload.Status != api.CodeScanStatusPending || !payload.WaitTimedOut {
 		t.Fatalf("timed receipt = %#v", payload)
 	}
+
+	out, err = toolReg.Run(context.Background(), "scan_pack", map[string]any{
+		"categories": []any{"all"}, "paths": []any{"main.go"},
+	}, scanToolContext("sess-1", projectDir))
+	testutil.FailErr(t, "path scan_pack", err)
+	testutil.FailErr(t, "decode path scan_pack", json.Unmarshal([]byte(out), &payload))
+	if len(payload.ScanIDs) == 0 {
+		t.Fatalf("path receipt = %#v", payload)
+	}
+
+	out, err = toolReg.Run(context.Background(), "scan_pack", map[string]any{
+		"categories": []any{"all"}, "paths": []any{"main.go"}, "completion": "summary", "timeout_ms": float64(25),
+	}, scanToolContext("sess-1", projectDir))
+	testutil.FailErr(t, "timed path scan_pack", err)
+	testutil.FailErr(t, "decode timed path scan_pack", json.Unmarshal([]byte(out), &payload))
+	if !payload.WaitTimedOut {
+		t.Fatalf("timed path receipt = %#v", payload)
+	}
 }
 
 func TestScanPackToolCanWaitForSummary(t *testing.T) {
@@ -93,6 +114,7 @@ func TestScanPackToolCanWaitForSummary(t *testing.T) {
 	testdbseed.InsertSession(t, sqlDB, "sess-1", testdbseed.DefaultProjectID)
 
 	projectDir := t.TempDir()
+	testutil.FailErr(t, "write fixture file", os.WriteFile(filepath.Join(projectDir, "main.go"), []byte("package main\n"), 0o600))
 	store := scanbase.NewSQLStore(sqlDB)
 	coord := newTestCoordinator(t, store, staticHead{sha: "abc"})
 	scannerReg := &fanOutMockRegistry{scanners: []scanbase.CodeScanner{
@@ -136,6 +158,7 @@ func TestScanQueryAggregatesPackAcrossEnginesByPackage(t *testing.T) {
 	sqlDB := testdbfixture.Open(t, "store.db")
 
 	projectDir := t.TempDir()
+	testutil.FailErr(t, "write fixture file", os.WriteFile(filepath.Join(projectDir, "main.go"), []byte("package main\n"), 0o600))
 	store := scanbase.NewSQLStore(sqlDB)
 	coord := newTestCoordinator(t, store, nil)
 	toolReg := tools.NewDefaultRegistry()

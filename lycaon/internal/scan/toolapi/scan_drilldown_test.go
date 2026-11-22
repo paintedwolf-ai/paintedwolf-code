@@ -238,3 +238,42 @@ func TestNativeScanListRequiresProjectRoot(t *testing.T) {
 		t.Fatalf("missing project root = %v", err)
 	}
 }
+
+func TestNativeScanSummaryPackAndPassID(t *testing.T) {
+	reg, _, store, projectDir := registerNativeScanTools(t)
+	for _, id := range []string{"scan-a", "scan-b"} {
+		if err := store.Runs.Insert(t.Context(), wire.CodeScan{
+			ID:            id,
+			CanonicalPath: projectDir,
+			ScannerID:     "lycaon-sca",
+			Categories:    []wire.ScanCategory{wire.ScanCategorySCA},
+			Status:        wire.CodeScanStatusComplete,
+			CreatedAt:     time.Now().UTC(),
+		}, nil, ""); err != nil {
+			testutil.FailErr(t, "store.Insert failed", err)
+		}
+	}
+	tctx := scanToolContext("sess-1", projectDir)
+	tctx.Effects.Out = &tools.ToolInvocationOut{}
+
+	out, err := reg.Run(t.Context(), "scan_summary", map[string]any{
+		"scan_ids": []any{"scan-a", "scan-b"},
+	}, tctx)
+	testutil.FailErr(t, "scan_summary pack failed", err)
+	var pack scantoolapi.ScanPackToolResult
+	testutil.FailErr(t, "decode scan_summary pack", json.Unmarshal([]byte(out), &pack))
+	if len(pack.ScanIDs) != 2 {
+		t.Fatalf("pack scan_ids = %v", pack.ScanIDs)
+	}
+
+	_, err = reg.Run(t.Context(), "scan_summary", map[string]any{
+		"pass_id": "missing-pass",
+	}, tctx)
+	if err == nil || !strings.Contains(err.Error(), scanbase.DrilldownRejectPassNotFound) {
+		t.Fatalf("missing pass_id = %v, want %s", err, scanbase.DrilldownRejectPassNotFound)
+	}
+
+	if _, err := (scantoolapi.ResultViews{}).SummarizeFullPass(t.Context(), "p1", "", nil); err == nil {
+		t.Fatal("expected unconfigured error from empty ResultViews")
+	}
+}

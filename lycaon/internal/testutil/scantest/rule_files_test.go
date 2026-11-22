@@ -38,3 +38,22 @@ func TestValidateRuleFile_rejectsMissingLanguages(t *testing.T) {
 		t.Fatal("expected error for missing languages")
 	}
 }
+
+func TestCollectRuleIDsFromDirAndProvenance(t *testing.T) {
+	ids, err := scantest.CollectRuleIDsFromDir("testdata")
+	testutil.FailErr(t, "CollectRuleIDsFromDir failed", err)
+	if len(ids) == 0 {
+		t.Fatal("expected collected rule IDs")
+	}
+	if _, err := scantest.LoadRuleFile(filepath.Join("testdata", "does-not-exist.yaml")); err == nil {
+		t.Fatal("expected error for missing file")
+	}
+	if err := scantest.ValidateRuleFile(filepath.Join("testdata", "does-not-exist.yaml")); err == nil {
+		t.Fatal("expected error for missing file")
+	}
+	cfg, err := scantest.LoadRulesProvenance()
+	testutil.FailErr(t, "LoadRulesProvenance failed", err)
+	if cfg == nil || len(cfg.Vendors) == 0 {
+		t.Fatalf("LoadRulesProvenance = %+v", cfg)
+	}
+}
