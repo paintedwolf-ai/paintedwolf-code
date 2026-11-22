@@ -34,7 +34,9 @@ def test_binaries(pgid):
     found = []
     for line in listing.splitlines():
         fields = line.split(None, 2)
-        if len(fields) == 3 and fields[1] == str(pgid) and fields[2].split(" -test.", 1)[0].endswith(".test"):
+        if len(fields) == 3 and fields[1] == str(pgid) and (
+            fields[2].split(" -test.", 1)[0].endswith(".test") or fields[2].split(None, 1)[0].endswith(".test")
+        ):
             found.append(int(fields[0]))
     return found
 
@@ -47,9 +49,27 @@ def signal_each(pids, number):
             pass
 
 
+def group_alive(pgid):
+    try:
+        os.killpg(pgid, 0)
+        return True
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        # A denied probe still means the process group exists.
+        return True
+
+
 def report_waits(pgid):
     binaries = test_binaries(pgid)
     if not binaries:
+        try:
+            os.killpg(pgid, signal.SIGQUIT)
+        except (ProcessLookupError, PermissionError):
+            return
+        relayed = time.monotonic() + RELAY_SECONDS
+        while time.monotonic() < relayed and group_alive(pgid):
+            time.sleep(0.1)
         return
     signal_each(binaries, signal.SIGUSR1)
     time.sleep(REPORT_SECONDS)
@@ -76,13 +96,8 @@ def main() -> int:
     if os.environ.get("PW_TEST_WATCHDOG_DEADLINE"):
         deadline = min(deadline, timeout_seconds(os.environ["PW_TEST_WATCHDOG_DEADLINE"]))
     while True:
-        try:
-            os.killpg(pgid, 0)
-        except ProcessLookupError:
+        if not group_alive(pgid):
             return 0
-        except PermissionError:
-            # A denied probe still means the process group exists.
-            pass
         remaining = deadline - time.monotonic()
         if remaining <= 0:
             break
