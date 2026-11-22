@@ -34,7 +34,9 @@ def test_binaries(pgid):
     found = []
     for line in listing.splitlines():
         fields = line.split(None, 2)
-        if len(fields) == 3 and fields[1] == str(pgid) and fields[2].split(" -test.", 1)[0].endswith(".test"):
+        if len(fields) == 3 and fields[1] == str(pgid) and (
+            fields[2].split(" -test.", 1)[0].endswith(".test") or fields[2].split(None, 1)[0].endswith(".test")
+        ):
             found.append(int(fields[0]))
     return found
 
@@ -50,6 +52,8 @@ def signal_each(pids, number):
 def report_waits(pgid):
     binaries = test_binaries(pgid)
     if not binaries:
+        signal_each([-pgid], signal.SIGQUIT)
+        time.sleep(REPORT_SECONDS)
         return
     signal_each(binaries, signal.SIGUSR1)
     time.sleep(REPORT_SECONDS)
