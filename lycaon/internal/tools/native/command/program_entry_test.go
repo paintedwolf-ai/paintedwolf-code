@@ -14,6 +14,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/commandprogram"
 	"github.com/lycaon/lycaon/internal/commandsurface"
+	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/programtest"
 	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -553,12 +554,37 @@ func TestProgramRuntimeOutputWindowFollowsActorSedAdmission(t *testing.T) {
 		f.Context = func(_ string, tc *tools.ToolContext) {
 			tc.Host.ModelContextWindow = 16384
 			tc.Turn.TurnOfferedToolNames = []string{"command"}
+			tc.Turn.TurnOfferedToolSchemas = guidance.StockProjectedToolSchemas("command")
 		}
 		out, err := f.call(t, t.Context(), "external -- /bin/cat big.txt")
 		testutil.FailErr(t, "run cat big.txt", err)
 		res := decodeOutcome(t, out)
 		if !strings.Contains(res.Stdout, "full output: @output/") || !strings.Contains(res.Stdout, "(sed -n '") {
 			t.Fatalf("expected saved path and sed continuation when sed is admitted, got:\n%s", res.Stdout)
+		}
+	})
+
+	t.Run("command offered with missing or narrowed command schema", func(t *testing.T) {
+		for label, schemas := range map[string]map[string]map[string]any{
+			"missing":  nil,
+			"narrowed": {"command": {"type": "object", "properties": map[string]any{}}},
+		} {
+			f := newSedFixture(t)
+			testutil.FailErr(t, "write fixture file", os.WriteFile(filepath.Join(f.Dir, "big.txt"), []byte(payload), 0o644))
+			f.Context = func(_ string, tc *tools.ToolContext) {
+				tc.Host.ModelContextWindow = 16384
+				tc.Turn.TurnOfferedToolNames = []string{"command"}
+				tc.Turn.TurnOfferedToolSchemas = schemas
+			}
+			out, err := f.call(t, t.Context(), "external -- /bin/cat big.txt")
+			testutil.FailErr(t, "run cat big.txt ("+label+")", err)
+			res := decodeOutcome(t, out)
+			if !strings.Contains(res.Stdout, "full output: @output/") {
+				t.Fatalf("%s schema lost saved path:\n%s", label, res.Stdout)
+			}
+			if strings.Contains(res.Stdout, "sed -n") {
+				t.Fatalf("%s schema leaked sed continuation:\n%s", label, res.Stdout)
+			}
 		}
 	})
 

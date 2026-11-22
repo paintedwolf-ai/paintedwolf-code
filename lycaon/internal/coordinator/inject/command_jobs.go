@@ -11,52 +11,18 @@ import (
 	"github.com/lycaon/lycaon/internal/heldcall"
 	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/internal/runeclamp"
+	"github.com/lycaon/lycaon/internal/toolschema"
 )
 
 const maxCommandLedgerLineRunes = 64
 
 // WaitSchemaAllowsProcessDone reports whether a projected wait tool schema
-// accepts until_complete with conditions[].kind == "process_done".
+// accepts until_complete with conditions[].handles and conditions[].kind == "process_done".
 func WaitSchemaAllowsProcessDone(waitSchema map[string]any) bool {
-	if waitSchema == nil {
-		return false
-	}
-	props, ok := waitSchema["properties"].(map[string]any)
-	if !ok {
-		return false
-	}
-	if _, hasUntilComplete := props["until_complete"]; !hasUntilComplete {
-		return false
-	}
-	conditions, ok := props["conditions"].(map[string]any)
-	if !ok {
-		return false
-	}
-	items, ok := conditions["items"].(map[string]any)
-	if !ok {
-		return false
-	}
-	itemProps, ok := items["properties"].(map[string]any)
-	if !ok {
-		return false
-	}
-	kind, ok := itemProps["kind"].(map[string]any)
-	if !ok {
-		return false
-	}
-	switch vals := kind["enum"].(type) {
-	case []string:
-		return slices.Contains(vals, "process_done")
-	case []any:
-		for _, elem := range vals {
-			if s, isStr := elem.(string); isStr && s == "process_done" {
-				return true
-			}
-		}
-		return false
-	default:
-		return false
-	}
+	return waitSchema != nil &&
+		toolschema.SchemaAcceptsField(waitSchema, "until_complete") &&
+		toolschema.SchemaAcceptsField(waitSchema, "conditions.handles") &&
+		toolschema.SchemaAcceptsEnumValue(waitSchema, "conditions.kind", "process_done")
 }
 
 // RenderCommandJobsBlock renders the host ledger of command jobs and held calls

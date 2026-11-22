@@ -268,7 +268,7 @@ func intArg(raw any) int {
 func formatOverlayPromoteHostContent(ctx context.Context, overlayID string, out api.WorkerMergeResult, runErr error) (string, error) {
 	reach := toolreach.FromContext(ctx)
 	if !reach.Known() {
-		reach = toolreach.Offered([]string{"preview_overlay", "promote_overlay", "instruct_worker"})
+		reach = guidance.StockToolReach("preview_overlay", "promote_overlay", "instruct_worker")
 	}
 	banners, err := guidance.RenderOverlayRebaseConflictBanners(ctx, reach, overlayID, out.Rebased)
 	if err != nil {

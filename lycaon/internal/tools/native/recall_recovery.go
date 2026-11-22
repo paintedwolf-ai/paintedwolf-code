@@ -31,7 +31,7 @@ func addRecallRecoveryAction(ctx context.Context, result *recall.Result) {
 	}
 	reach := toolreach.FromContext(ctx)
 	if !reach.Known() {
-		reach = toolreach.Offered([]string{"recall"})
+		reach = guidance.StockToolReach("recall")
 	}
 	if action, err := guidance.RenderGuidanceWithReach(ctx, reach, ref, nil); err == nil {
 		result.NextAction = strings.TrimSpace(result.NextAction + "\n" + action)

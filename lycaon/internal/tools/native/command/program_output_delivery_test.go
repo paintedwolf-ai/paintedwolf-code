@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/commandsurface"
+	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/scratch"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/tooloutput"
@@ -19,7 +20,7 @@ import (
 )
 
 func sedDeliveryReach() toolreach.Request {
-	return toolreach.Offered([]string{toolreach.ProgramTool}).WithPrograms(func(name string) bool {
+	return guidance.StockToolReach(toolreach.ProgramTool).WithPrograms(func(name string) bool {
 		return name == "sed"
 	})
 }
@@ -191,13 +192,24 @@ func TestWindowStreamOutputQuotesPathAndFollowsConcreteSedReach(t *testing.T) {
 	data := []byte(b.String())
 	outputDir := filepath.FromSlash("/state/output/sess-1")
 
-	sedAdmitted := toolreach.Offered([]string{toolreach.ProgramTool}).WithPrograms(func(name string) bool {
+	sedAdmitted := guidance.StockToolReach(toolreach.ProgramTool).WithPrograms(func(name string) bool {
 		return name == "sed"
 	})
-	sedDenied := toolreach.Offered([]string{toolreach.ProgramTool}).WithPrograms(func(name string) bool {
+	sedDenied := guidance.StockToolReach(toolreach.ProgramTool).WithPrograms(func(name string) bool {
 		return name != "sed"
 	})
-	cmdUnoffered := toolreach.Offered([]string{"recall"})
+	cmdMissingSchema := toolreach.Offered([]string{toolreach.ProgramTool}).WithPrograms(func(name string) bool {
+		return name == "sed"
+	})
+	cmdNarrowedNoCommandArg := toolreach.Offered([]string{toolreach.ProgramTool}).WithPrograms(func(name string) bool {
+		return name == "sed"
+	}).WithSchemas(map[string]map[string]any{
+		toolreach.ProgramTool: {
+			"type":       "object",
+			"properties": map[string]any{"description": map[string]any{"type": "string"}},
+		},
+	})
+	cmdUnoffered := guidance.StockToolReach("recall")
 
 	for _, outputPath := range []string{"@output/my file's.stdout", "sub dir/it's here.stdout"} {
 		sample, err := sampleOutput(bytes.NewReader(data), 12<<10)
@@ -234,8 +246,10 @@ func TestWindowStreamOutputQuotesPathAndFollowsConcreteSedReach(t *testing.T) {
 		}
 
 		for label, reach := range map[string]toolreach.Request{
-			"sed denied":        sedDenied,
-			"command unoffered": cmdUnoffered,
+			"sed denied":                  sedDenied,
+			"command missing schema":      cmdMissingSchema,
+			"command narrowed no command": cmdNarrowedNoCommandArg,
+			"command unoffered":           cmdUnoffered,
 		} {
 			neg, _, _, err := sample.window(t.Context(), reach, "stdout", "output:program:p1:stdout", outputPath, true)
 			testutil.FailErr(t, "window "+label, err)

@@ -47,9 +47,9 @@ func (m *Service) PromoteOverlay(ctx context.Context, sessionID, overlayID strin
 	if len(out.Rebased) > 0 {
 		reach := toolreach.FromContext(ctx)
 		if !reach.Known() {
-			reach = toolreach.Offered([]string{"preview_overlay", "promote_overlay", "instruct_worker"})
+			reach = guidance.StockToolReach("preview_overlay", "promote_overlay", "instruct_worker")
 			if sess, sErr := m.sessionStore.Get(ctx, sessionID); sErr == nil && sess != nil && sess.Mode == api.SessionModeAsk {
-				reach = toolreach.Offered([]string{"preview_overlay"})
+				reach = guidance.StockToolReach("preview_overlay")
 			}
 		}
 		var bErr error

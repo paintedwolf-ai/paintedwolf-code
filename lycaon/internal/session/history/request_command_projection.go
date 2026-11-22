@@ -31,7 +31,7 @@ func projectCompletedCommands(ctx context.Context, recallAvailable bool, rows []
 		request := recordedHistoryRequest(rows[i])
 		raw, _ := json.Marshal(request)     //nolint:errchkjson // History coordinates are plain values.
 		encoded, _ := json.Marshal(records) //nolint:errchkjson // Records contain typed execution facts and coordinates.
-		content, err := guidance.RenderGuidanceWithReach(ctx, recallReach(recallAvailable), "compaction/command-exchange-reference", map[string]any{
+		content, err := guidance.RenderGuidanceWithReach(ctx, recallReach(ctx, recallAvailable), "compaction/command-exchange-reference", map[string]any{
 			"history_json": string(raw),
 			"records_json": string(encoded),
 		})

@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"maps"
-	"sort"
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/bgprocess"
@@ -13,7 +12,6 @@ import (
 	"github.com/lycaon/lycaon/internal/coordinator/inject"
 	"github.com/lycaon/lycaon/internal/coordinator/promptloop"
 	"github.com/lycaon/lycaon/internal/coordinator/surface"
-	"github.com/lycaon/lycaon/internal/coordinator/surfacecatalog"
 	"github.com/lycaon/lycaon/internal/extpacks"
 	"github.com/lycaon/lycaon/internal/heldcall"
 	"github.com/lycaon/lycaon/internal/platform"
@@ -274,86 +272,36 @@ func (e *promptSurface) workerTurnReader(
 type commandJobsToolLister struct {
 	sess         *api.Session
 	promptLister PromptToolLister
-	profiles     []sandbox.ToolProfile
-	schemas      *toolschema.Config
 }
 
 func (l *commandJobsToolLister) List(ctx context.Context, filter platform.ToolFilter) ([]tools.ToolMeta, error) {
-	var prof sandbox.ToolProfile
-	for _, p := range l.profiles {
-		if p.ID == filter.ProfileID {
-			prof = p
-			break
-		}
-	}
-	if l.promptLister != nil {
-		metas, err := l.promptLister(ctx, l.sess, filter.ProfileID)
-		if err != nil {
-			return nil, err
-		}
-		out := make([]tools.ToolMeta, 0, len(metas))
-		for _, meta := range metas {
-			if filter.ProjectRootCount == 0 && toolscope.RequiresProjectRoots(meta.Name) {
-				continue
-			}
-			if meta.Name == "wait" && meta.ArgsSchema == nil && l.schemas != nil {
-				if declared, ok := l.schemas.ToolMeta("wait"); ok {
-					meta.ArgsSchema = toolschema.PruneWaitConditionSchema(declared.ArgsSchema, prof.WaitConditions)
-				}
-			}
-			out = append(out, meta)
-		}
-		return out, nil
-	}
-	if prof.ID == "" || l.schemas == nil {
+	if l == nil || l.promptLister == nil {
 		return nil, nil
 	}
-	effects, effErr := surfacecatalog.AdmittedCommandEffects(l.profiles, filter.ProfileID, filter.SurfaceID)
-	mutEffect, _ := toolcontract.NewCommandEffects(toolcontract.CommandMutation)
-	cmdReadOnly := effErr != nil || !effects.Allows(mutEffect)
-	names := make([]string, 0, len(l.schemas.Tools))
-	for name := range l.schemas.Tools {
-		names = append(names, name)
+	metas, err := l.promptLister(ctx, l.sess, filter.ProfileID)
+	if err != nil {
+		return nil, err
 	}
-	sort.Strings(names)
-	out := make([]tools.ToolMeta, 0, len(names))
-	for _, name := range names {
-		if !prof.ToolAllowed(name) {
+	if filter.ProjectRootCount > 0 {
+		return metas, nil
+	}
+	out := make([]tools.ToolMeta, 0, len(metas))
+	for _, meta := range metas {
+		if toolscope.RequiresProjectRoots(meta.Name) {
 			continue
 		}
-		if filter.ProjectRootCount == 0 && toolscope.RequiresProjectRoots(name) {
-			continue
-		}
-		declared, ok := l.schemas.ToolMeta(name)
-		if !ok {
-			continue
-		}
-		argsSchema := toolschema.ProjectToolArgsSchema(name, declared.ArgsSchema, toolschema.ProjectOptions{
-			CommandReadOnly:     name == "command" && cmdReadOnly,
-			PruneWaitConditions: name == "wait",
-			WaitConditions:      prof.WaitConditions,
-		})
-		out = append(out, tools.ToolMeta{
-			Name:               name,
-			Description:        declared.Description,
-			DescriptionEffects: declared.DescriptionEffects,
-			Tags:               declared.Tags,
-			ArgsSchema:         argsSchema,
-			Deferred:           prof.ToolDeferred(name),
-		})
+		out = append(out, meta)
 	}
 	return out, nil
 }
 
-func (e *promptSurface) resolveCommandJobsCatalog(ctx context.Context, sess *api.Session) ([]sandbox.ToolProfile, *toolschema.Config, error) {
+func (e *promptSurface) resolveCommandJobsProfiles(ctx context.Context, sess *api.Session) ([]sandbox.ToolProfile, error) {
 	var (
 		profiles []sandbox.ToolProfile
-		schemas  *toolschema.Config
 		catalog  *extpacks.EffectiveCatalog
 	)
 	if view := e.sessionCatalogView(ctx, sess); view != nil {
 		profiles = view.ToolProfiles
-		schemas = view.ToolSchemas
 		catalog = view.Catalog
 	}
 	if catalog == nil {
@@ -372,21 +320,11 @@ func (e *promptSurface) resolveCommandJobsCatalog(ctx context.Context, sess *api
 			loaded, err = sandbox.LoadToolProfiles()
 		}
 		if err != nil {
-			return nil, nil, err
+			return nil, err
 		}
 		profiles = loaded
 	}
-	if schemas == nil {
-		if catalog != nil {
-			schemas, _, _ = extpacks.LoadEffectiveToolSchemas(catalog)
-		}
-		if schemas == nil {
-			if eff, err := extpacks.CatalogForConsumers(); err == nil && eff != nil {
-				schemas, _, _ = extpacks.LoadEffectiveToolSchemas(eff)
-			}
-		}
-	}
-	return profiles, schemas, nil
+	return profiles, nil
 }
 
 func (e *promptSurface) resolveCommandJobsProfile(
@@ -441,7 +379,7 @@ func (e *promptSurface) commandJobsReader(
 	jobs []bgprocess.JobSnapshot,
 	held []heldcall.Running,
 ) (prompts.Reader, map[string]any, error) {
-	profiles, schemas, err := e.resolveCommandJobsCatalog(ctx, sess)
+	profiles, err := e.resolveCommandJobsProfiles(ctx, sess)
 	if err != nil {
 		return prompts.Reader{}, nil, err
 	}
@@ -469,8 +407,6 @@ func (e *promptSurface) commandJobsReader(
 	lister := &commandJobsToolLister{
 		sess:         sess,
 		promptLister: e.deps.PromptToolLister,
-		profiles:     profiles,
-		schemas:      schemas,
 	}
 	policy := toolpolicy.NewEngine(toolpolicy.EngineDeps{
 		ToolLister:       lister,
@@ -564,7 +500,6 @@ func (e *promptSurface) commandJobsReader(
 		Plan:                  plan,
 		Loaded:                loadedMap,
 		Visible:               offered,
-		Schemas:               schemas,
 		ProjectedSchemas:      projectedSchemas,
 		RootCount:             rootCount,
 		HasGit:                hasGit,

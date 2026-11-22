@@ -13,6 +13,7 @@ import (
 	"github.com/lycaon/lycaon/internal/pongoplain"
 	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/toolreach"
+	"github.com/lycaon/lycaon/internal/toolschema"
 )
 
 var zeroToolUtilityAllowlist = []string{
@@ -273,14 +274,35 @@ func (r *GuidanceRenderer) RenderWithReach(ctx context.Context, req toolreach.Re
 	if err := rejectCapabilityKeysInOccurrence("guidance", name, occurrence); err != nil {
 		return "", err
 	}
-	merged := make(map[string]any, len(occurrence)+5)
+	callableField := func(tool, field string) bool {
+		return req.Status(tool) == toolreach.Callable && req.AcceptsField(tool, field)
+	}
+	canRecallHistory := callableField("recall", "history.after_ord") && callableField("recall", "history.through_ord")
+	merged := make(map[string]any, len(occurrence)+7)
 	maps.Copy(merged, occurrence)
-	merged["can_sed_read"] = req.Status(toolreach.ProgramTool) == toolreach.Callable && req.ProgramInvocation("sed", "-n", "1,1p", "FILE")
-	merged["can_recall"] = req.Status("recall") == toolreach.Callable
-	merged["can_preview_overlay"] = req.Status("preview_overlay") == toolreach.Callable
-	merged["can_promote_overlay"] = req.Status("promote_overlay") == toolreach.Callable
-	merged["can_instruct_worker"] = req.Status("instruct_worker") == toolreach.Callable
+	merged["can_sed_read"] = callableField(toolreach.ProgramTool, "command") && req.ProgramInvocation("sed", "-n", "1,1p", "FILE")
+	merged["can_recall_history"] = canRecallHistory
+	merged["can_recall_history_record"] = canRecallHistory &&
+		callableField("recall", "history.search") &&
+		callableField("recall", "history.message_id") &&
+		callableField("recall", "history.offset") &&
+		explicitEnumAccepted(req, "recall", "history.format", "record")
+	merged["can_recall_query"] = callableField("recall", "query")
+	merged["can_preview_overlay"] = callableField("preview_overlay", "overlay_id")
+	merged["can_promote_overlay"] = callableField("promote_overlay", "overlay_id") &&
+		callableField("promote_overlay", "resolutions.path") &&
+		callableField("promote_overlay", "resolutions.content")
+	merged["can_instruct_worker"] = callableField("instruct_worker", "worker") &&
+		callableField("instruct_worker", "instructions")
 	return r.engine.RenderGuidance(ctx, name, merged)
+}
+
+func explicitEnumAccepted(req toolreach.Request, tool, field, value string) bool {
+	if req.Status(tool) != toolreach.Callable {
+		return false
+	}
+	schema, ok := req.ToolSchema(tool)
+	return ok && toolschema.SchemaAcceptsEnumValue(schema, field, value)
 }
 
 // RenderWithReader executes guidance/{ref}.md against a validated Reader merged with occurrence data.

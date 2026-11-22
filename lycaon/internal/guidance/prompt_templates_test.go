@@ -2,6 +2,7 @@ package guidance
 
 import (
 	"context"
+	"maps"
 	"strings"
 	"testing"
 
@@ -9,6 +10,7 @@ import (
 	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/toolreach"
+	"github.com/lycaon/lycaon/pkg/api"
 )
 
 func TestRenderCompactionSystemPrompts(t *testing.T) {
@@ -119,13 +121,21 @@ func TestRenderUtilityPromptsAndSurveySeparation(t *testing.T) {
 
 func TestRenderCommandOutputOmittedPairedWitnesses(t *testing.T) {
 	setTestRenderer(t)
-	sedAdmitted := toolreach.Offered([]string{toolreach.ProgramTool}).WithPrograms(func(name string) bool {
+	sedAdmitted := StockToolReach(toolreach.ProgramTool).WithPrograms(func(name string) bool {
 		return name == "sed"
 	})
-	sedDenied := toolreach.Offered([]string{toolreach.ProgramTool}).WithPrograms(func(name string) bool {
+	sedDenied := StockToolReach(toolreach.ProgramTool).WithPrograms(func(name string) bool {
 		return name != "sed"
 	})
-	withoutCommand := toolreach.Offered([]string{"recall"})
+	missingSchema := toolreach.Offered([]string{toolreach.ProgramTool}).WithPrograms(func(name string) bool {
+		return name == "sed"
+	})
+	narrowedNoCommand := toolreach.Offered([]string{toolreach.ProgramTool}).WithPrograms(func(name string) bool {
+		return name == "sed"
+	}).WithSchemas(map[string]map[string]any{
+		toolreach.ProgramTool: {"type": "object", "properties": map[string]any{}},
+	})
+	withoutCommand := StockToolReach("recall")
 
 	pos, err := RenderCommandOutputOmitted(t.Context(), sedAdmitted, "4,182", "184 KB", "@output/prog.stdout", 251, 400, 5000, 200000, true)
 	testutil.FailErr(t, "render with sed admitted", err)
@@ -143,21 +153,169 @@ func TestRenderCommandOutputOmittedPairedWitnesses(t *testing.T) {
 		t.Fatalf("quoted witness did not safely quote command operand: %q", quotedOut)
 	}
 
-	denied, err := RenderCommandOutputOmitted(t.Context(), sedDenied, "4,182", "184 KB", quotedPath, 251, 400, 5000, 200000, true)
-	testutil.FailErr(t, "render with sed denied", err)
-	if strings.Contains(denied, "sed -n") {
-		t.Fatalf("sed-denied witness leaked sed command hint: %q", denied)
+	for label, req := range map[string]toolreach.Request{
+		"sed denied":          sedDenied,
+		"missing schema":      missingSchema,
+		"narrowed no command": narrowedNoCommand,
+		"without command":     withoutCommand,
+	} {
+		neg, err := RenderCommandOutputOmitted(t.Context(), req, "4,182", "184 KB", quotedPath, 251, 400, 5000, 200000, true)
+		testutil.FailErr(t, "render "+label, err)
+		if strings.Contains(neg, "sed -n") {
+			t.Fatalf("%s witness leaked sed command hint: %q", label, neg)
+		}
+		if !strings.Contains(neg, "full output: @output/my file's.stdout") {
+			t.Fatalf("%s witness lost saved output path notice: %q", label, neg)
+		}
 	}
-	if !strings.Contains(denied, "full output: @output/my file's.stdout") {
-		t.Fatalf("sed-denied witness lost saved output path notice: %q", denied)
+}
+
+func cloneNestedSchemaMap(in map[string]any) map[string]any {
+	if in == nil {
+		return nil
+	}
+	out := make(map[string]any, len(in))
+	for k, v := range in {
+		if m, ok := v.(map[string]any); ok {
+			out[k] = cloneNestedSchemaMap(m)
+			continue
+		}
+		out[k] = v
+	}
+	return out
+}
+
+func TestRenderContinuationProjectedRecallArgumentWitnesses(t *testing.T) {
+	setTestRenderer(t)
+	fullRecall := StockProjectedToolSchemas("recall")["recall"]
+	historyOnly := cloneNestedSchemaMap(fullRecall)
+	delete(historyOnly["properties"].(map[string]any), "query")
+
+	historyIndexOnly := cloneNestedSchemaMap(historyOnly)
+	histProps := historyIndexOnly["properties"].(map[string]any)["history"].(map[string]any)["properties"].(map[string]any)
+	delete(histProps, "message_id")
+	delete(histProps, "format")
+
+	queryOnly := cloneNestedSchemaMap(fullRecall)
+	delete(queryOnly["properties"].(map[string]any), "history")
+
+	emptyNestedHistoryWithQuery := map[string]any{
+		"type": "object",
+		"properties": map[string]any{
+			"history": map[string]any{"type": "object"},
+			"query":   map[string]any{"type": "string"},
+		},
 	}
 
-	neg, err := RenderCommandOutputOmitted(t.Context(), withoutCommand, "4,182", "184 KB", "@output/prog.stdout", 251, 400, 5000, 200000, true)
-	testutil.FailErr(t, "render without command", err)
-	if strings.Contains(neg, "sed -n") {
-		t.Fatalf("negative witness leaked sed command hint without command tool: %q", neg)
+	occurrence := map[string]any{
+		"level":               "summary",
+		"summary_through_ord": int64(10),
+		"through_ord":         int64(12),
+		"facts":               []string{"build passed"},
+		"compacted_sources": []map[string]any{
+			{"handles": []string{"read#3"}, "tool": "read"},
+			{"message_id": "msg-7", "tool": "command"},
+		},
 	}
-	if !strings.Contains(neg, "full output: @output/prog.stdout") {
-		t.Fatalf("negative witness lost saved output path notice: %q", neg)
+
+	for _, tc := range []struct {
+		name           string
+		schemas        map[string]map[string]any
+		wantHistoryIdx bool
+		wantHistoryRec bool
+		wantQuery      bool
+		wantReacquire  bool
+	}{
+		{"full schema", map[string]map[string]any{"recall": fullRecall}, true, true, true, false},
+		{"history only", map[string]map[string]any{"recall": historyOnly}, true, true, false, false},
+		{"history index only", map[string]map[string]any{"recall": historyIndexOnly}, true, false, false, false},
+		{"query only", map[string]map[string]any{"recall": queryOnly}, false, false, true, false},
+		{"empty nested history object with query", map[string]map[string]any{"recall": emptyNestedHistoryWithQuery}, false, false, true, false},
+		{"missing schema", nil, false, false, false, true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			req := toolreach.Offered([]string{"recall"}).WithSchemas(tc.schemas)
+			out, err := RenderGuidanceWithReach(t.Context(), req, CompactionContinuationRecordRef, occurrence)
+			testutil.FailErr(t, "RenderGuidanceWithReach continuation-record", err)
+
+			if strings.Contains(out, `recall(history={"after_ord":0,"through_ord":12})`) != tc.wantHistoryIdx {
+				t.Fatalf("history index presence = %v, want %v:\n%s", !tc.wantHistoryIdx, tc.wantHistoryIdx, out)
+			}
+			if strings.Contains(out, `"format":"record"`) != tc.wantHistoryRec {
+				t.Fatalf("history record presence = %v, want %v:\n%s", !tc.wantHistoryRec, tc.wantHistoryRec, out)
+			}
+			if strings.Contains(out, `recall(query="handle:read#3")`) != tc.wantQuery {
+				t.Fatalf("query presence = %v, want %v:\n%s", !tc.wantQuery, tc.wantQuery, out)
+			}
+			if strings.Contains(out, "Reacquire the needed evidence through the reads this surface offers.") != tc.wantReacquire {
+				t.Fatalf("fallback reacquire presence = %v, want %v:\n%s", !tc.wantReacquire, tc.wantReacquire, out)
+			}
+
+			bodyMissing, err := RenderGuidanceWithReach(t.Context(), req, "recall/body-missing", nil)
+			testutil.FailErr(t, "RenderGuidanceWithReach body-missing", err)
+			if strings.Contains(bodyMissing, `query="handle:<returned handle>"`) != tc.wantQuery {
+				t.Fatalf("body-missing query presence = %v, want %v: %q", !tc.wantQuery, tc.wantQuery, bodyMissing)
+			}
+			if strings.Contains(bodyMissing, "page the covered history index") != tc.wantHistoryIdx {
+				t.Fatalf("body-missing history index presence = %v, want %v: %q", !tc.wantHistoryIdx, tc.wantHistoryIdx, bodyMissing)
+			}
+		})
+	}
+}
+
+func TestRenderOverlayRebaseConflictProjectedArgumentWitnesses(t *testing.T) {
+	setTestRenderer(t)
+	offered := []string{"preview_overlay", "promote_overlay", "instruct_worker"}
+	full := StockProjectedToolSchemas(offered...)
+	outcomes := []api.OverlayRebaseOutcome{{
+		OverlayID: "ov-child",
+		Status:    api.WorkerMergeStatusRebasing,
+		Conflicts: []string{"pkg/main.go"},
+	}}
+
+	narrowPromote := maps.Clone(full)
+	narrowPromoteSchema := cloneNestedSchemaMap(full["promote_overlay"])
+	resItemsProps := narrowPromoteSchema["properties"].(map[string]any)["resolutions"].(map[string]any)["items"].(map[string]any)["properties"].(map[string]any)
+	delete(resItemsProps, "content")
+	narrowPromote["promote_overlay"] = narrowPromoteSchema
+
+	emptyNestedPromote := maps.Clone(full)
+	emptyNestedPromoteSchema := cloneNestedSchemaMap(full["promote_overlay"])
+	emptyNestedPromoteSchema["properties"].(map[string]any)["resolutions"].(map[string]any)["items"] = map[string]any{"type": "object"}
+	emptyNestedPromote["promote_overlay"] = emptyNestedPromoteSchema
+
+	missingInstruct := maps.Clone(full)
+	delete(missingInstruct, "instruct_worker")
+
+	for _, tc := range []struct {
+		name         string
+		schemas      map[string]map[string]any
+		wantPreview  bool
+		wantPromote  bool
+		wantInstruct bool
+	}{
+		{"all schemas admitted", full, true, true, true},
+		{"promote_overlay narrowed omits content", narrowPromote, true, false, true},
+		{"promote_overlay empty nested items object", emptyNestedPromote, true, false, true},
+		{"instruct_worker missing schema", missingInstruct, true, true, false},
+		{"all schemas missing", nil, false, false, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			req := toolreach.Offered(offered).WithSchemas(tc.schemas)
+			out, err := RenderOverlayRebaseConflictBanners(t.Context(), req, "ov-parent", outcomes)
+			testutil.FailErr(t, "RenderOverlayRebaseConflictBanners", err)
+			if !strings.Contains(out, "Code: OVERLAY_REBASE_CONFLICT") || !strings.Contains(out, "`pkg/main.go`") {
+				t.Fatalf("conflict header/code missing:\n%s", out)
+			}
+			if strings.Contains(out, "`preview_overlay`") != tc.wantPreview {
+				t.Fatalf("preview_overlay = %v, want %v:\n%s", !tc.wantPreview, tc.wantPreview, out)
+			}
+			if strings.Contains(out, "`promote_overlay`") != tc.wantPromote {
+				t.Fatalf("promote_overlay = %v, want %v:\n%s", !tc.wantPromote, tc.wantPromote, out)
+			}
+			if strings.Contains(out, "`instruct_worker`") != tc.wantInstruct {
+				t.Fatalf("instruct_worker = %v, want %v:\n%s", !tc.wantInstruct, tc.wantInstruct, out)
+			}
+		})
 	}
 }

@@ -84,7 +84,7 @@ func projectToolBody(ctx context.Context, recallAvailable bool, row api.Message)
 		content = string(envelope)
 		historyJSON, err := json.Marshal(record)
 		if err == nil {
-			if rendered, err := guidance.RenderGuidanceWithReach(ctx, recallReach(recallAvailable), "compaction/tool-result-reference", map[string]any{
+			if rendered, err := guidance.RenderGuidanceWithReach(ctx, recallReach(ctx, recallAvailable), "compaction/tool-result-reference", map[string]any{
 				"tool":             row.ToolResult.Tool,
 				"outcome":          row.ToolResult.Outcome,
 				"evidence_handles": row.EvidenceHandles,
@@ -132,7 +132,7 @@ func projectRecallHistoryPage(ctx context.Context, recallAvailable bool, raw str
 		return "", false, true
 	}
 	if recallAvailable {
-		if action, err := guidance.RenderGuidanceWithReach(ctx, recallReach(true), "recall/history-continuation", nil); err == nil {
+		if action, err := guidance.RenderGuidanceWithReach(ctx, recallReach(ctx, true), "recall/history-continuation", nil); err == nil {
 			root["next_action"] = action
 		}
 	} else {

@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/commandprogram"
+	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/toolreach"
@@ -17,7 +18,7 @@ import (
 )
 
 func sedStreamAdmittedReach() toolreach.Request {
-	return toolreach.Offered([]string{toolreach.ProgramTool}).WithPrograms(func(name string) bool {
+	return guidance.StockToolReach(toolreach.ProgramTool).WithPrograms(func(name string) bool {
 		return name == "sed"
 	})
 }
