@@ -540,3 +540,136 @@ func TestStateSpecificGuidanceProjectedSchemaAndSelectorStates(t *testing.T) {
 		}
 	}
 }
+
+func TestStateSpecificGuidancePerOperationGitReachWitnesses(t *testing.T) {
+	_, eff, profiles, readOnlyEffects := newGuidanceTestEnv(t)
+	readMutEffects, err := toolcontract.NewCommandEffects(toolcontract.CommandReadOnly, toolcontract.CommandMutation)
+	testutil.FailErr(t, "NewCommandEffects read_only+mutation", err)
+
+	t.Run("commit_skill_holds_git_command_and_mutation_constant_while_denying_git_commit", func(t *testing.T) {
+		commitSk := loadSkillByName(t, eff, "commit-in-logical-groups")
+		rawBatch, rErr := commitSk.ReadResource("references/batch-and-amend.md")
+		testutil.FailErr(t, "ReadResource batch-and-amend.md", rErr)
+		batchTpl, cErr := pongoplain.Compile(string(rawBatch))
+		testutil.FailErr(t, "Compile batch-and-amend.md", cErr)
+
+		// 1. Mutating profile allowing git_commit (plan_write_only) -> can_git_commit=true
+		allowCommitReader, err := prompts.NewReader(prompts.ReaderInput{
+			ProfileID:     "plan_write_only",
+			Profiles:      profiles,
+			RootCount:     1,
+			HasGit:        true,
+			HasAnyGitRoot: true,
+		})
+		testutil.FailErr(t, "allowCommitReader", err)
+		if allowCommitReader.Facts()["can_git_commit"] != true {
+			t.Fatalf("plan_write_only with Git root should have can_git_commit=true, got %v", allowCommitReader.Facts()["can_git_commit"])
+		}
+		outAllow := renderSkillForReader(t, commitSk, allowCommitReader)
+		if !strings.Contains(outAllow, "git add -- PATHS") || !strings.Contains(outAllow, "git commit -m MESSAGE -- PATHS") {
+			t.Fatalf("eligible commit profile missing git add / git commit:\n%s", outAllow)
+		}
+
+		// 2. Adjacent stock editor_file profile: HasGit=true, command offered, mutation=true, denies git_commit!
+		editorReader, err := prompts.NewReader(prompts.ReaderInput{
+			ProfileID:     "editor_file",
+			Profiles:      profiles,
+			RootCount:     1,
+			HasGit:        true,
+			HasAnyGitRoot: true,
+		})
+		testutil.FailErr(t, "editorReader", err)
+		facts := editorReader.Facts()
+		if facts["profile_command_mutation"] != true || facts["can_git_read"] != true || facts["can_git_commit"] != false {
+			t.Fatalf("editor_file facts mismatch: mutation=%v can_git_read=%v can_git_commit=%v",
+				facts["profile_command_mutation"], facts["can_git_read"], facts["can_git_commit"])
+		}
+		outDeny := renderSkillForReader(t, commitSk, editorReader)
+		if strings.Contains(outDeny, "git commit") || strings.Contains(outDeny, "git add") {
+			t.Fatalf("editor_file (git_commit denied) leaked git commit/add:\n%s", outDeny)
+		}
+		if !strings.Contains(outDeny, "git status --short") || !strings.Contains(outDeny, "report its paths and message to the coordinator") {
+			t.Fatalf("editor_file lost git status survey or coordinator commit handoff:\n%s", outDeny)
+		}
+		denyVars, err := prompts.SkillVars(editorReader)
+		testutil.FailErr(t, "SkillVars editorReader", err)
+		batchOut, err := pongoplain.Execute(t.Context(), batchTpl, denyVars)
+		testutil.FailErr(t, "Execute batch-and-amend editorReader", err)
+		if strings.Contains(batchOut, "git commit") || !strings.Contains(batchOut, "report each group's paths and message to the coordinator") {
+			t.Fatalf("batch-and-amend leaked git commit or missed handoff on editor_file:\n%s", batchOut)
+		}
+
+		// 3. Deferred mutating command where git_commit is denied -> can_request_git_commit=false, can_request_git_read=true
+		deferredDenyCommit, err := prompts.NewReader(prompts.ReaderInput{
+			ProfileID: "deferred_no_commit",
+			Profiles: []sandbox.ToolProfile{{
+				ID:             "deferred_no_commit",
+				Tools:          map[string]bool{"command": true, "request_tools": true},
+				DeferredTools:  map[string]bool{"command": true},
+				CommandEffects: readMutEffects,
+				DenyTools:      []string{"git_commit"},
+			}},
+			Plan:      toolsurface.Compile([]string{"request_tools"}, []string{"command"}),
+			Visible:   []string{"request_tools", "command"},
+			RootCount: 1,
+			HasGit:    true,
+		})
+		testutil.FailErr(t, "deferredDenyCommit", err)
+		df := deferredDenyCommit.Facts()
+		if df["can_request_git_commit"] != false || df["can_request_git_read"] != true {
+			t.Fatalf("deferred git_commit deny: can_request_git_commit=%v (want false), can_request_git_read=%v (want true)",
+				df["can_request_git_commit"], df["can_request_git_read"])
+		}
+	})
+
+	t.Run("read_and_bisect_skills_respect_per_form_operation_denies", func(t *testing.T) {
+		histSk := loadSkillByName(t, eff, "investigate-code-history")
+		bisectSk := loadSkillByName(t, eff, "hunt-a-regression-with-bisect")
+
+		// Read: HasGit=true, command+source_history offered, read_only=true, but git_blame denied
+		denyBlameReader, err := prompts.NewReader(prompts.ReaderInput{
+			ProfileID: "ro_no_blame",
+			Profiles: []sandbox.ToolProfile{{
+				ID:             "ro_no_blame",
+				Tools:          map[string]bool{"command": true, "source_history": true},
+				CommandEffects: readOnlyEffects,
+				DenyTools:      []string{"git_blame"},
+			}},
+			Plan:      toolsurface.Compile([]string{"command", "source_history"}, nil),
+			Visible:   []string{"command", "source_history"},
+			RootCount: 1,
+			HasGit:    true,
+		})
+		testutil.FailErr(t, "denyBlameReader", err)
+		if denyBlameReader.Facts()["can_git_read"] != false {
+			t.Fatalf("denying git_blame must set can_git_read=false, got %v", denyBlameReader.Facts()["can_git_read"])
+		}
+		histOut := renderSkillForReader(t, histSk, denyBlameReader)
+		if strings.Contains(histOut, "git blame") || !strings.Contains(histOut, "source_history") {
+			t.Fatalf("git_blame-denied history render leaked git blame or lost source_history fallback:\n%s", histOut)
+		}
+
+		// Bisect: HasGit=true, command offered, full effects (mutation+external_exec), but git_* denied
+		denyBisectReader, err := prompts.NewReader(prompts.ReaderInput{
+			ProfileID: "exec_no_git",
+			Profiles: []sandbox.ToolProfile{{
+				ID:             "exec_no_git",
+				Tools:          map[string]bool{"command": true},
+				CommandEffects: toolcontract.AllCommandEffects(),
+				DenyTools:      []string{"git_*"},
+			}},
+			Plan:      toolsurface.Compile([]string{"command"}, nil),
+			Visible:   []string{"command"},
+			RootCount: 1,
+			HasGit:    true,
+		})
+		testutil.FailErr(t, "denyBisectReader", err)
+		if denyBisectReader.Facts()["can_git_bisect"] != false {
+			t.Fatalf("denying git_* on external-exec profile must set can_git_bisect=false, got %v", denyBisectReader.Facts()["can_git_bisect"])
+		}
+		bisectOut := renderSkillForReader(t, bisectSk, denyBisectReader)
+		if strings.Contains(bisectOut, "git bisect start") || !strings.Contains(bisectOut, "for the coordinator to run the bisect") {
+			t.Fatalf("git-denied bisect render leaked git bisect start or missed handoff:\n%s", bisectOut)
+		}
+	})
+}

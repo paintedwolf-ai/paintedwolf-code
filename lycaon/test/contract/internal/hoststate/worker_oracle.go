@@ -70,6 +70,7 @@ func FreezeWorkerAuthority(ctx context.Context, state WorkerState) (TurnAuthorit
 		return TurnAuthority{}, fmt.Errorf("worker Metadata.ProgramReach: %w", err)
 	}
 	offered := toolMetaNames(offeredMetas)
+	projectedSchemas := toolMetaSchemas(offeredMetas)
 	var reviewsConfinedWrites bool
 	if state.ApprovalPosture != "" {
 		reviewsConfinedWrites = state.ApprovalPosture.ReviewsConfinedWrites()
@@ -82,6 +83,7 @@ func FreezeWorkerAuthority(ctx context.Context, state WorkerState) (TurnAuthorit
 		Loaded:                state.Loaded,
 		Visible:               offered,
 		Schemas:               overlay.Schemas,
+		ProjectedSchemas:      projectedSchemas,
 		RootCount:             state.RootCount,
 		HasGit:                state.HasGit,
 		HasAnyGitRoot:         state.HasAnyGitRoot,
