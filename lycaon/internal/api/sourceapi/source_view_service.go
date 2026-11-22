@@ -142,7 +142,7 @@ func (s *Views) sourceViewRegistry() *sourceViewService {
 		service.registry = pagedview.NewRegistry[*sourceView](s.sourceReaders.Budget(), sourceViewCapacity, sourceViewLifetime)
 		service.presentations = pagedview.NewLeaseRegistry[*sourcePresentation](s.sourceReaders.Budget(), sourceViewCapacity*2, sourceViewLifetime)
 		service.mu.Unlock()
-		s.background.GoService(func(ctx context.Context) {
+		s.background.GoService(context.Background(), func(ctx context.Context) {
 			ticker := time.NewTicker(time.Minute)
 			defer ticker.Stop()
 			defer service.close()

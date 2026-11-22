@@ -2,6 +2,7 @@ package promptattach_test
 
 import (
 	"errors"
+	"github.com/lycaon/lycaon/pkg/api/apitest"
 	"os"
 	"path/filepath"
 	"strings"
@@ -56,7 +57,7 @@ func TestIngestReferences_pathFileFence(t *testing.T) {
 			}
 			return "src/main.go", api.NavigationTarget{ProjectID: "proj", RootID: "root-1", Path: "src/main.go"}, nil
 		},
-	}, []api.PromptReferencePart{api.NewPromptReferencePathFile(api.PromptReferencePathFilePart{
+	}, []api.PromptReferencePart{apitest.NewPromptReferencePathFile(api.PromptReferencePathFilePart{
 		ProjectID: "proj",
 		RootID:    "root-1",
 		Path:      "src/main.go",
@@ -93,8 +94,8 @@ func TestIngestReferencesSourceContextKeepsCanonicalRootAndWorker(t *testing.T) 
 			return promptattach.ReferenceEvidence{Snippet: ".ignored/a.go", HitKind: "message", SessionID: "worker-session", SourceContext: &api.SourceContext{Locations: []api.NavigationTarget{worker}}}, nil
 		},
 	}, []api.PromptReferencePart{
-		api.NewPromptReferencePathFile(api.PromptReferencePathFilePart{ProjectID: "proj", Path: "@secondary/.ignored/a.go"}),
-		api.NewPromptReferenceSearchHit(api.PromptReferenceSearchHitPart{ProjectID: "proj", SourceRef: "message"}),
+		apitest.NewPromptReferencePathFile(api.PromptReferencePathFilePart{ProjectID: "proj", Path: "@secondary/.ignored/a.go"}),
+		apitest.NewPromptReferenceSearchHit(api.PromptReferenceSearchHitPart{ProjectID: "proj", SourceRef: "message"}),
 	})
 	testutil.FailErr(t, "ingest addressed references", err)
 	context := res.SourceContext()
@@ -109,7 +110,7 @@ func TestIngestReferences_pathFileRangeFence(t *testing.T) {
 		ResolvePath: func(_, _, path string) (string, api.NavigationTarget, error) {
 			return path, api.NavigationTarget{ProjectID: "proj", RootID: "root-1", Path: path}, nil
 		},
-	}, []api.PromptReferencePart{api.NewPromptReferencePathFile(api.PromptReferencePathFilePart{
+	}, []api.PromptReferencePart{apitest.NewPromptReferencePathFile(api.PromptReferencePathFilePart{
 		ProjectID: "proj",
 		RootID:    "root-1",
 		Path:      "src/main.go",
@@ -136,7 +137,7 @@ func TestIngestReferences_pathFileRangeCarriesTheSelectedLines(t *testing.T) {
 			}
 			return "func main() {\n\trun()", nil
 		},
-	}, []api.PromptReferencePart{api.NewPromptReferencePathFile(api.PromptReferencePathFilePart{
+	}, []api.PromptReferencePart{apitest.NewPromptReferencePathFile(api.PromptReferencePathFilePart{
 		ProjectID: "proj",
 		RootID:    "root-1",
 		Path:      "src/main.go",
@@ -164,7 +165,7 @@ func TestIngestReferences_pathFileRangeKeepsPointerWhenLinesUnavailable(t *testi
 		ReadLines: func(string, string, string, int, int) (string, error) {
 			return "", errors.New("binary")
 		},
-	}, []api.PromptReferencePart{api.NewPromptReferencePathFile(api.PromptReferencePathFilePart{
+	}, []api.PromptReferencePart{apitest.NewPromptReferencePathFile(api.PromptReferencePathFilePart{
 		ProjectID: "proj",
 		RootID:    "root-1",
 		Path:      "img.bin",
@@ -189,7 +190,7 @@ func TestIngestReferences_wholeFileNeverReadsLines(t *testing.T) {
 			t.Fatal("a whole-file reference asked for lines")
 			return "", nil
 		},
-	}, []api.PromptReferencePart{api.NewPromptReferencePathFile(api.PromptReferencePathFilePart{
+	}, []api.PromptReferencePart{apitest.NewPromptReferencePathFile(api.PromptReferencePathFilePart{
 		ProjectID: "proj",
 		RootID:    "root-1",
 		Path:      "src/main.go",
@@ -237,7 +238,7 @@ func TestIngestReferences_pathFolderFence(t *testing.T) {
 		ResolvePath: func(_, _, path string) (string, api.NavigationTarget, error) {
 			return path, api.NavigationTarget{ProjectID: "proj", RootID: "root-1", Path: path}, nil
 		},
-	}, []api.PromptReferencePart{api.NewPromptReferencePathFolder(api.PromptReferencePathFolderPart{
+	}, []api.PromptReferencePart{apitest.NewPromptReferencePathFolder(api.PromptReferencePathFolderPart{
 		ProjectID: "proj",
 		RootID:    "root-1",
 		Path:      "pkg",
@@ -259,7 +260,7 @@ func TestIngestReferences_pathOutOfJail(t *testing.T) {
 		ResolvePath: func(_, _, _ string) (string, api.NavigationTarget, error) {
 			return "", api.NavigationTarget{ProjectID: "proj", RootID: "", Path: ""}, errors.New("path escapes project root boundary")
 		},
-	}, []api.PromptReferencePart{api.NewPromptReferencePathFile(api.PromptReferencePathFilePart{
+	}, []api.PromptReferencePart{apitest.NewPromptReferencePathFile(api.PromptReferencePathFilePart{
 		ProjectID: "proj",
 		Path:      "../secret",
 	})})
@@ -277,7 +278,7 @@ func TestIngestReferences_artifactRelink(t *testing.T) {
 			}
 			return "art-1", nil
 		},
-	}, []api.PromptReferencePart{api.NewPromptReferenceArtifact(api.PromptReferenceArtifactPart{
+	}, []api.PromptReferencePart{apitest.NewPromptReferenceArtifact(api.PromptReferenceArtifactPart{
 		ProjectID:  "proj",
 		ArtifactID: "art-1",
 	})})
@@ -298,7 +299,7 @@ func TestIngestReferences_artifactMiss(t *testing.T) {
 		LookupArtifact: func(string) (string, error) {
 			return "", errors.New("missing")
 		},
-	}, []api.PromptReferencePart{api.NewPromptReferenceArtifact(api.PromptReferenceArtifactPart{
+	}, []api.PromptReferencePart{apitest.NewPromptReferenceArtifact(api.PromptReferenceArtifactPart{
 		ProjectID:  "proj",
 		ArtifactID: "missing",
 	})})
@@ -316,7 +317,7 @@ func TestIngestReferences_searchHitUsesStoredSnippet(t *testing.T) {
 			}
 			return promptattach.ReferenceEvidence{Snippet: "stored snippet body", HitKind: "message", SessionID: "source-session"}, nil
 		},
-	}, []api.PromptReferencePart{api.NewPromptReferenceSearchHit(api.PromptReferenceSearchHitPart{
+	}, []api.PromptReferencePart{apitest.NewPromptReferenceSearchHit(api.PromptReferenceSearchHitPart{
 		ProjectID: "proj",
 		SourceRef: "msg-9",
 		HitKind:   "message",
@@ -350,7 +351,7 @@ func TestIngestReferences_folderNeverCallsArtifactOrEvidence(t *testing.T) {
 			t.Fatal("LookupEvidence must not run for path-folder")
 			return promptattach.ReferenceEvidence{Snippet: "", HitKind: "", SessionID: ""}, nil
 		},
-	}, []api.PromptReferencePart{api.NewPromptReferencePathFolder(api.PromptReferencePathFolderPart{
+	}, []api.PromptReferencePart{apitest.NewPromptReferencePathFolder(api.PromptReferencePathFolderPart{
 		ProjectID: "proj",
 		Path:      "docs",
 	})})
@@ -365,7 +366,7 @@ func TestIngestReferences_projectMismatch(t *testing.T) {
 		ResolvePath: func(_, _, path string) (string, api.NavigationTarget, error) {
 			return path, api.NavigationTarget{ProjectID: "proj", RootID: "root-1", Path: path}, nil
 		},
-	}, []api.PromptReferencePart{api.NewPromptReferencePathFile(api.PromptReferencePathFilePart{
+	}, []api.PromptReferencePart{apitest.NewPromptReferencePathFile(api.PromptReferencePathFilePart{
 		ProjectID: "proj-b",
 		Path:      "a.go",
 	})})
@@ -380,7 +381,7 @@ func TestIngestReferences_externalFileText(t *testing.T) {
 	testutil.FailErr(t, "write file", os.WriteFile(filePath, []byte("hello from external file\nsecond line"), 0o644))
 
 	res, err := ingestReferences(t, promptattach.ReferenceDeps{SessionProjectID: "proj"}, []api.PromptReferencePart{
-		api.NewPromptReferenceExternalFile(api.PromptReferenceExternalFilePart{
+		apitest.NewPromptReferenceExternalFile(api.PromptReferenceExternalFilePart{
 			ProjectID: "proj",
 			Path:      filePath,
 		}),
@@ -414,7 +415,7 @@ func TestIngestReferences_externalFileImage(t *testing.T) {
 	testutil.FailErr(t, "write image", os.WriteFile(imagePath, pngBytes, 0o644))
 
 	res, err := ingestReferences(t, promptattach.ReferenceDeps{SessionProjectID: "proj"}, []api.PromptReferencePart{
-		api.NewPromptReferenceExternalFile(api.PromptReferenceExternalFilePart{
+		apitest.NewPromptReferenceExternalFile(api.PromptReferenceExternalFilePart{
 			ProjectID: "proj",
 			Path:      imagePath,
 		}),
@@ -444,7 +445,7 @@ func TestIngestReferences_externalFolder(t *testing.T) {
 	testutil.FailErr(t, "mkdir", os.Mkdir(folderPath, 0o755))
 
 	res, err := ingestReferences(t, promptattach.ReferenceDeps{SessionProjectID: "proj"}, []api.PromptReferencePart{
-		api.NewPromptReferenceExternalFolder(api.PromptReferenceExternalFolderPart{
+		apitest.NewPromptReferenceExternalFolder(api.PromptReferenceExternalFolderPart{
 			ProjectID: "proj",
 			Path:      folderPath,
 		}),
@@ -464,7 +465,7 @@ func TestIngestReferences_externalFolder(t *testing.T) {
 
 func TestIngestReferences_externalFileProtectedPathRefused(t *testing.T) {
 	_, err := ingestReferences(t, promptattach.ReferenceDeps{SessionProjectID: "proj"}, []api.PromptReferencePart{
-		api.NewPromptReferenceExternalFile(api.PromptReferenceExternalFilePart{
+		apitest.NewPromptReferenceExternalFile(api.PromptReferenceExternalFilePart{
 			ProjectID: "proj",
 			Path:      "relative/path.txt",
 		}),
@@ -474,7 +475,7 @@ func TestIngestReferences_externalFileProtectedPathRefused(t *testing.T) {
 	}
 
 	_, err = ingestReferences(t, promptattach.ReferenceDeps{SessionProjectID: "proj"}, []api.PromptReferencePart{
-		api.NewPromptReferenceExternalFile(api.PromptReferenceExternalFilePart{
+		apitest.NewPromptReferenceExternalFile(api.PromptReferenceExternalFilePart{
 			ProjectID: "proj",
 			Path:      "/nonexistent/path/file.txt",
 		}),
@@ -497,7 +498,7 @@ func TestIngestReferences_pathFileImageUsesReadImage(t *testing.T) {
 			}
 			return pngBytes, "image/png", nil
 		},
-	}, []api.PromptReferencePart{api.NewPromptReferencePathFile(api.PromptReferencePathFilePart{
+	}, []api.PromptReferencePart{apitest.NewPromptReferencePathFile(api.PromptReferencePathFilePart{
 		ProjectID: "proj",
 		RootID:    "root-1",
 		Path:      "assets/logo.png",

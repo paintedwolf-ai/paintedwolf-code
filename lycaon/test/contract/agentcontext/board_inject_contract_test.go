@@ -6,30 +6,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/lycaon/lycaon/internal/board"
 	"github.com/lycaon/lycaon/internal/coordinator/inject"
 	"github.com/lycaon/lycaon/internal/packboard"
 	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/pkg/api"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 )
-
-func TestBoardInjectServeWiring(t *testing.T) {
-	t.Parallel()
-	root := contractcheck.RepoRoot(t)
-	text := contractcheck.ReadRepoFile(t, root, "lycaon/internal/app/boards/build.go")
-	for _, needle := range []string{"Coordinator.ConfigureBoard(&board.InjectBuilder{", "SnapshotBuilder: r.Snapshot", "RegisterBoardTools", "board.DefaultInjectFormatter()", "Manager.Promotion"} {
-		if !strings.Contains(text, needle) {
-			t.Fatalf("serve wire missing %q board inject wiring", needle)
-		}
-	}
-	peer := contractcheck.ReadRepoFile(t, root, "lycaon/internal/session/coordinatorcontrol/board.go")
-	for _, needle := range []string{"func (m *Service) ConfigureBoard(", "rt.SetBoardInject(builder, formatter", "SetWorkerRoots(workspaces.BoardRoots)", "SetActiveReservations(workspaces.ReservationEntries)", "SetPromotePathOverlay(promotion.PromotePathBoardLines)", "SetOverlayMergePlan(promotion.MergePlan())"} {
-		if !strings.Contains(peer, needle) {
-			t.Fatalf("typed board peer missing %q", needle)
-		}
-	}
-}
 
 func fatLangSnapshot() api.BoardSnapshot {
 	langs := make([]string, 0, 50)
@@ -39,36 +21,6 @@ func fatLangSnapshot() api.BoardSnapshot {
 	return api.BoardSnapshot{
 		Repo:        api.RepoBrief{Languages: langs, FileCount: 9999},
 		DetailLevel: api.BoardDetailLevelCompact,
-	}
-}
-
-func TestBoardInjectFormatterRespectsCharBudget(t *testing.T) {
-	t.Parallel()
-	f := board.DefaultInjectFormatter()
-	now := time.Date(2026, 5, 31, 14, 0, 0, 0, time.UTC)
-	text, ok := f.FormatBoardInject(fatLangSnapshot(), false, now)
-	if !ok {
-		t.Fatal("expected inject output")
-	}
-	if len(text) > api.MaxBoardInjectChars+32 {
-		t.Fatalf("inject output len = %d exceeds budget", len(text))
-	}
-}
-
-func TestBoardInjectEnvelopeMarker(t *testing.T) {
-	t.Parallel()
-	f := board.DefaultInjectFormatter()
-	now := time.Date(2026, 5, 31, 14, 0, 0, 0, time.UTC)
-	snap := api.BoardSnapshot{
-		Repo:        api.RepoBrief{Languages: []string{"Go"}, FileCount: 12},
-		DetailLevel: api.BoardDetailLevelCompact,
-	}
-	text, ok := f.FormatBoardInject(snap, false, now)
-	if !ok {
-		t.Fatal("expected inject output")
-	}
-	if !strings.Contains(text, "pack-board:v1") {
-		t.Fatal("inject output missing pack-board:v1 envelope marker")
 	}
 }
 

@@ -59,7 +59,7 @@ func TestCloseoutPromptBoundary(t *testing.T) {
 			sess := root
 			if tc.worker {
 				var err error
-				sess, err = mgr.store.(*store.Memory).CreateChild(t.Context(), root, api.SpawnChildRequest{AgentType: "implementer"})
+				sess, err = mgr.store.(*store.SQL).CreateChild(t.Context(), root, api.SpawnChildRequest{AgentType: "implementer"})
 				testutil.FailErr(t, "create worker", err)
 				seedCloseoutState(mgr, root.ID, root.ID)
 			}

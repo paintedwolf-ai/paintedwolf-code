@@ -35,7 +35,6 @@ const (
 	SurveyGrepEmptyTextRef         = "survey/grep-empty-text"
 	SurveyGrepEmptyStructuralRef   = "survey/grep-empty-structural"
 	SurveyGrepScopeDenseRef        = "survey/grep-scope-dense"
-	SurveyCommandUnsavedDraftRef   = "survey/command-unsaved-draft"
 )
 
 var (

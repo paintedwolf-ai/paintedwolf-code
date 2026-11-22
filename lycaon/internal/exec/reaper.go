@@ -17,13 +17,15 @@ const ReaperCommand = "internal-process-reaper"
 // Reaper protocol lines are "<op><kind><payload>\n": op '+' tracks and '-'
 // forgets; kind 'g' names a process group/session leader, 's' a command
 // supervisor, 'p' a single process, 'm' a surviving session member transferred
-// before leader reap, and 'd' a directory by absolute path.
+// before leader reap, 'd' a directory by absolute path, and 'b' the engine's
+// sandbox mark directory.
 const (
 	reaperGroup      byte = 'g'
 	reaperSupervisor byte = 's'
 	reaperProcess    byte = 'p'
 	reaperMember     byte = 'm'
 	reaperDir        byte = 'd'
+	reaperMark       byte = 'b'
 )
 
 // TrackProcess records a started child that shares the engine's process group,

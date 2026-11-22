@@ -2,29 +2,14 @@ import { expect } from "@playwright/test";
 import {
   apiSeedSessionTranscript,
   bootstrapChatSession,
+  liveChatStage,
   settledChatSessionId,
   transcriptMessages,
   webE2e,
 } from "./helpers.ts";
-import type { DraftVersionsResponse } from "../src/api/types.ts";
 
 webE2e("deterministic chat items", async ({ page, request }) => {
   const slotId = "00000000-0000-4000-8000-000000000201";
-
-  await page.route("**/v1/sessions/*/drafts/*/versions", async (route) => {
-    await route.fulfill({
-      json: {
-        versions: [
-          {
-            version_index: 0,
-            body: "Rejected attempt",
-            outcome_code: "PROGRESS_MISSING",
-            created_at: "2026-07-16T12:00:00Z",
-          },
-        ],
-      } satisfies DraftVersionsResponse,
-    });
-  });
 
   // The fixture's draft row is a mid-run orchestration step, which chat hides
   // unless verbose mode is on — seed it rather than inherit an ambient pref.
@@ -151,10 +136,27 @@ webE2e("deterministic chat items", async ({ page, request }) => {
     ]),
   );
 
-  await expect(page.getByTestId("blueprint-card").first()).toBeVisible({
-    timeout: 30_000,
-  });
-  await expect(page.getByTestId("task-card").first()).toBeVisible();
-  await expect(page.getByTestId("checkpoint-decision-chicklet").first()).toBeVisible();
-  await expect(page.getByTestId("draft-rail").first()).toBeVisible();
+  const stage = liveChatStage(page);
+  const blueprint = stage.getByTestId("blueprint-card");
+  await expect(blueprint).toHaveCount(1, { timeout: 30_000 });
+  await expect(blueprint).toHaveAttribute("data-blueprint-phase", "ready");
+  await expect(blueprint).toHaveAttribute("data-blueprint-revision", "rev-1");
+
+  const task = stage.getByTestId("task-card");
+  await expect(task).toHaveCount(1);
+  await expect(task).toHaveAttribute("data-tool-call-id", "tc-task");
+  await expect(task).toHaveAttribute("data-task-status", "canceled");
+  await expect(task).toHaveAttribute("data-job-id", "job-1");
+
+  const decision = stage.getByTestId("checkpoint-decision-chicklet");
+  await expect(decision).toHaveCount(1);
+  await expect(decision).toHaveAttribute("data-checkpoint-id", "chk-1");
+  await expect(decision).toHaveAttribute("data-kind", "tool_approval");
+  await expect(decision).toHaveAttribute("data-status", "rejected");
+
+  const draft = stage.getByTestId("draft-rail");
+  await expect(draft).toHaveCount(1);
+  await expect(draft).toHaveAttribute("data-draft-slot-id", slotId);
+  await expect(draft).toHaveAttribute("data-draft-live", "false");
+  await expect(draft).toHaveAttribute("data-draft-version-count", "2");
 });

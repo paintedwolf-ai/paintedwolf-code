@@ -24,9 +24,10 @@ import (
 
 func TestReasoningRecoveryKeepsRunAlive(t *testing.T) {
 	withThinkingRules(t, bundledThinkingRules(t))
-	t.Cleanup(modelcall.ResetTurnBudgetForTest)
 	for _, transport := range []string{"complete", "sse", "json_stream"} {
 		t.Run(transport, func(t *testing.T) {
+			sessionID := t.Name()
+			t.Cleanup(func() { modelcall.ClearSessionReasoningRecovery(sessionID) })
 			var requests []map[string]any
 			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				var body map[string]any
@@ -51,7 +52,7 @@ func TestReasoningRecoveryKeepsRunAlive(t *testing.T) {
 			model := "@cf/zai-org/glm-5.3-flash"
 			inner := openaicompat.New("fixture", server.URL, "fixture", []modelinfo.Entry{{ID: model, MaxTokens: 131072}})
 			provider := &responseRetryProvider{inner: inner}
-			req := modelcall.CompletionRequest{Model: model, Think: modelcall.ThinkHigh, Tools: []tools.ToolMeta{{Name: "read_file"}}, Debug: modelcall.RequestDebug{SessionID: transport}, Messages: []api.Message{{Role: api.MessageRoleUser, Content: "Continue the work"}}}
+			req := modelcall.CompletionRequest{Model: model, Think: modelcall.ThinkHigh, Tools: []tools.ToolMeta{{Name: "read_file"}}, Debug: modelcall.RequestDebug{SessionID: sessionID}, Messages: []api.Message{{Role: api.MessageRoleUser, Content: "Continue the work"}}}
 			var got *modelcall.Completion
 			var err error
 			if transport == "complete" {
@@ -78,7 +79,7 @@ func TestReasoningRecoveryKeepsRunAlive(t *testing.T) {
 			if len(requests) != 2 || requests[0]["max_tokens"] != float64(32768) || requests[1]["max_tokens"] != float64(16384) || requests[0]["reasoning_effort"] != "high" || requests[1]["reasoning_effort"] != "low" {
 				t.Fatalf("unexpected recovery controls: %+v", requests)
 			}
-			if modelcall.SessionReasoningRecovery(transport) {
+			if modelcall.SessionReasoningRecovery(sessionID) {
 				t.Fatal("successful recovery left the run permanently downgraded")
 			}
 		})
@@ -114,7 +115,6 @@ func TestRecoveryRequiresChangedReasoningAndRespectsFixedOverrides(t *testing.T)
 
 func TestReasoningRecoveryPreservesAdmittedOutputLimit(t *testing.T) {
 	withThinkingRules(t, bundledThinkingRules(t))
-	t.Cleanup(modelcall.ResetTurnBudgetForTest)
 	for _, limit := range []int{2048, 11375, 32768} {
 		p := openaicompat.New("fixture", "http://unused", "fixture", []modelinfo.Entry{{ID: "glm-5.3-flash", MaxTokens: 65536}})
 		req := modelcall.CompletionRequest{Model: "glm-5.3-flash", MaxTokens: limit, Think: modelcall.ThinkHigh, AttemptBudget: &modelcall.CompletionBudget{}}
@@ -172,7 +172,6 @@ func TestReasoningCaptureRedactsBeforeTakingTail(t *testing.T) {
 }
 
 func TestNativeReasoningRecoveryControls(t *testing.T) {
-	t.Cleanup(modelcall.ResetTurnBudgetForTest)
 	req := modelcall.CompletionRequest{Model: "fixture", Think: modelcall.ThinkMedium, Tools: []tools.ToolMeta{{Name: "read"}}}
 	for _, provider := range []modelcall.Provider{
 		anthropicprovider.New("anthropic", "http://unused", "fixture", []modelinfo.Entry{{ID: "fixture", MaxTokens: 65536, ThinkStyle: "budget_tokens"}}),

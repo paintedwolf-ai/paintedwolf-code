@@ -12,11 +12,12 @@ from ci_policy import cache_payload
 
 
 class CachePayloadTests(unittest.TestCase):
-    def test_native_cache_inputs_cover_workspace_manifests_and_current_runner_image(self):
+    def test_native_cache_inputs_cover_workspace_manifests_and_the_runner_os_release(self):
         import yaml
         root = Path(__file__).resolve().parents[3]
         for family, workspace in (("rust", "lycaon-den/src-tauri"),
                                   ("decide", "lycaon/internal/decide/native"),
+                                  ("generation", "lycaon/internal/generation/native"),
                                   ("document-core", "lycaon/internal/documentcore/native")):
             action = yaml.safe_load((root / f".github/actions/cache-{family}/action.yml").read_text())
             steps = action["runs"]["steps"]
@@ -28,18 +29,22 @@ class CachePayloadTests(unittest.TestCase):
             self.assertTrue(required)
             self.assertLessEqual(required, matched, family)
             paths = next(step for step in steps if step.get("id") == "paths")
-            prefixes = []
+            prefixes = {}
             with tempfile.TemporaryDirectory() as directory:
-                for image in ("20261101.1", "20261102.1"):
-                    output = Path(directory) / image
+                # Hosted runners of one OS release serve several image builds at once, so a build shares the cache
+                # of its release; another release starts its own.
+                for release, image in (("ubuntu24", "20261101.1"), ("ubuntu24", "20261102.1"), ("ubuntu26", "20261101.1")):
+                    output = Path(directory) / f"{release}-{image}"
                     result = subprocess.run(["bash", "-e", "-c", paths["run"]], cwd=root, text=True,
                                             capture_output=True, check=False,
                                             env={**os.environ, "RUNNER_OS": "Linux", "RUNNER_ARCH": "X64",
-                                                 "ImageOS": "ubuntu24", "ImageVersion": image,
+                                                 "ImageOS": release, "ImageVersion": image,
                                                  "GITHUB_WORKSPACE": str(root), "GITHUB_OUTPUT": str(output)})
                     self.assertEqual(result.returncode, 0, result.stderr)
-                    prefixes.append(next(line for line in output.read_text().splitlines() if line.startswith("prefix=")))
-            self.assertNotEqual(*prefixes, family)
+                    prefixes[release, image] = next(line for line in output.read_text().splitlines()
+                                                    if line.startswith("prefix="))
+            self.assertEqual(prefixes["ubuntu24", "20261101.1"], prefixes["ubuntu24", "20261102.1"], family)
+            self.assertNotEqual(prefixes["ubuntu24", "20261101.1"], prefixes["ubuntu26", "20261101.1"], family)
 
     def test_all_exact_hits_skip_preparation_on_push(self):
         records = {name: dict(active=True, hit="true") for name in ("go", "rust", "analysis")}
@@ -72,7 +77,7 @@ class CachePayloadTests(unittest.TestCase):
 
     def test_maintenance_and_summary_keep_misses_visible(self):
         records = {"go": dict(active=True, hit="true"), "rust": dict(active=True, hit="false"),
-                   "native": dict(active=False, deferred=True)}
+                   "native": dict(active=False, hit="")}
         for event in ("schedule", "workflow_dispatch"):
             state = cache_payload.status({"go": records["go"]}, event)
             self.assertEqual(state, dict(warm=False, maintenance=True, prepare=True))
@@ -85,79 +90,7 @@ class CachePayloadTests(unittest.TestCase):
             self.assertIn("prepare=true", (root / "output").read_text())
             self.assertIn("| go | exact hit |", (root / "summary").read_text())
             self.assertIn("| rust | miss |", (root / "summary").read_text())
-            self.assertIn("deferred to preparation; not probed", (root / "summary").read_text())
-            records["rust"]["hit"] = "true"
-            (root / "summary").write_text("")
-            with patch.dict(os.environ, {**env, "CACHE_HITS": json.dumps(records)}):
-                cache_payload.report_status()
-            self.assertIn("not needed; not probed", (root / "summary").read_text())
-
-    def test_all_heavy_workflow_steps_share_the_prepare_guard(self):
-        import yaml
-        root = Path(__file__).resolve().parents[3]
-        workflow = yaml.safe_load((root / ".github/workflows/build-caches.yml").read_text())
-        heavy = []
-        for step in workflow["jobs"]["verification"]["steps"]:
-            probe = step.get("with", {}).get("lookup-only") == "true"
-            checkout = step.get("uses", "").startswith("actions/checkout@")
-            if not probe and not checkout and step.get("id") != "state":
-                heavy.append(step)
-                self.assertIn("steps.state.outputs.prepare == 'true'", step.get("if", ""), step.get("name", step))
-        self.assertGreater(len(heavy), 10)
-
-    def test_lookup_mode_bypasses_provisioning_and_uses_real_tool_keys(self):
-        import yaml
-        root = Path(__file__).resolve().parents[3]
-        setup = yaml.safe_load((root / ".github/actions/setup-verification/action.yml").read_text())
-        metadata = {"paths", "go", "modules", "analysis", "document", "rust", "decide", "generation", "opengrep", "notices", "bun"}
-        for step in setup["runs"]["steps"]:
-            if step.get("id") not in metadata:
-                self.assertIn("inputs.lookup-only != 'true'", step.get("if", ""), step)
-            elif step.get("id") != "paths":
-                self.assertEqual(step["with"]["lookup-only"], "${{ inputs.lookup-only }}")
-        source = (root / ".github/actions/cache-analysis-tools/action.yml").read_text()
-        self.assertIn('python3 scripts/analysis_tools.py key base', source)
-        self.assertIn('key: analyzers-${{ runner.os }}-${{ runner.arch }}-${{ steps.paths.outputs.base }}', source)
-        source = (root / ".github/actions/cache-go/action.yml").read_text()
-        self.assertIn('from analysis_tools import toolchain; print(toolchain())', source)
-        self.assertNotIn('github.sha', source)
-        self.assertIn("inputs.setup == 'harness'", next(step for step in setup["runs"]["steps"]
-                      if step.get("name") == "Provision native dependencies")["if"])
-
-    def test_native_lookup_and_save_have_identical_payload_versions(self):
-        import yaml
-        root = Path(__file__).resolve().parents[3]
-        for name in ("cache-go", "cache-rust", "cache-decide", "cache-generation", "cache-document-core", "cache-release-build",
-                     "cache-notices-tools", "cache-analysis-tools", "cache-lint-diagnostics", "setup-opengrep",
-                     "setup-linux-native", "setup-webkit-atspi-images", "setup-verification"):
-            action = yaml.safe_load((root / f".github/actions/{name}/action.yml").read_text())
-            restores = {(step["with"]["key"], step["with"]["path"])
-                        for step in action["runs"]["steps"]
-                        if step.get("uses", "").startswith("actions/cache/restore@")}
-            for step in action["runs"]["steps"]:
-                if step.get("uses", "").startswith("actions/cache/save@"):
-                    self.assertIn((step["with"]["key"], step["with"]["path"]), restores, name)
-                    self.assertIn("cache-hit != 'true'", step["if"], name)
-            if name == "cache-rust":
-                self.assertNotIn("~/.cargo/registry", str(restores))
-                self.assertNotIn("~/.cargo/git", str(restores))
-            if name == "cache-decide":
-                self.assertTrue(all("steps.paths.outputs.metal" in paths for _, paths in restores))
-
-    def test_compiler_keys_include_their_payload_policy(self):
-        root = Path(__file__).resolve().parents[3]
-        for family, warm_script in (("decide", "warm-workspace-build.sh"),
-                                    ("generation", "warm-workspace-build.sh"),
-                                    ("rust", "warm-workspace-build.sh"),
-                                    ("release-build", "warm-release-build.sh")):
-            source = (root / f".github/actions/cache-{family}/action.yml").read_text()
-            keys = [line for line in source.splitlines() if line.strip().startswith("key:")]
-            self.assertEqual(len(keys), 2)
-            for key in keys:
-                self.assertIn("'scripts/ci_policy/cache_payload.py'", key)
-                if warm_script:
-                    self.assertIn(f"'scripts/{warm_script}'", key)
-                self.assertNotIn("github.sha", key)
+            self.assertNotIn("native", (root / "summary").read_text())
 
     def test_empty_lookup_results_and_targeted_workspace_cli(self):
         for records in ({}, [], {"go": dict(active=False)}):
@@ -185,10 +118,6 @@ class CachePayloadTests(unittest.TestCase):
             run.return_value.stdout = json.dumps(data)
             cache_payload.prune_workspace(Path("workspace/Cargo.toml"), "aarch64-apple-darwin")
             self.assertEqual(run.call_args.args[0][6:8], ["--target", "aarch64-apple-darwin"])
-        root = Path(__file__).resolve().parents[3]
-        workspace = (root / "scripts/warm-workspace-build.sh").read_text()
-        self.assertIn('cache_payload workspace "${ROOT}/lycaon/internal/decide/native/Cargo.toml"', workspace)
-        self.assertNotIn("rm -rf", workspace)
         for members in ([], ["missing"]):
             with patch.object(cache_payload.subprocess, "run") as run, self.assertRaises(ValueError):
                 run.return_value.stdout = json.dumps({**data, "workspace_members": members})

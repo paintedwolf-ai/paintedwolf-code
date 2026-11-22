@@ -227,6 +227,9 @@ phases:
 	if m.Controls.Report == nil || !m.Controls.Report.Enabled {
 		t.Fatalf("Controls.Report = %#v want Enabled true", m.Controls.Report)
 	}
+	if !m.Summary().ReportEnabled {
+		t.Fatal("summary.report_enabled = false want true")
+	}
 }
 
 func TestParseManifestYAMLReportAbsent(t *testing.T) {
@@ -245,6 +248,9 @@ phases:
 	}
 	if m.Controls.Report != nil {
 		t.Fatalf("Controls.Report = %#v want nil", m.Controls.Report)
+	}
+	if m.Summary().ReportEnabled {
+		t.Fatal("summary.report_enabled = true without controls.report")
 	}
 }
 
@@ -361,17 +367,29 @@ phases:
 }
 
 func TestParseManifestYAMLRejectsInvalidDefaultExecutionMode(t *testing.T) {
-	_, err := ParseManifestYAML([]byte(`
-id: bad
-version: 1.0.0
-controls:
-  default_execution_mode: parallel
-phases:
-  - id: boot
-    activity_label: Test phase
-`))
-	if err == nil {
+	manifest := func(mode string) []byte {
+		return []byte("id: bad\nversion: 1.0.0\ncontrols:\n  default_execution_mode: " + mode + "\nphases:\n  - id: boot\n    activity_label: Test phase\n")
+	}
+	_, err := ParseManifestYAML(manifest("orchestrate"))
+	testutil.FailErr(t, "control manifest with a valid mode", err)
+	if _, err := ParseManifestYAML(manifest("parallel")); err == nil {
 		t.Fatal("expected invalid default_execution_mode error")
+	}
+}
+
+// The posture value alone decides the outcome: a valid session posture parses and a
+// phase id is refused, with activity_label present so set_posture is reached.
+func TestParseManifestYAMLRejectsInvalidSetPosture(t *testing.T) {
+	manifest := func(posture string) []byte {
+		return []byte("id: posture\nversion: 1.0.0\nphases:\n  - id: research\n    activity_label: Test phase\n    on_enter:\n      set_posture: " + posture + "\n")
+	}
+	m, err := ParseManifestYAML(manifest("build"))
+	testutil.FailErr(t, "control manifest with set_posture build", err)
+	if research, ok := m.PhaseByID("research"); !ok || research.OnEnter.SetPosture != "build" {
+		t.Fatalf("research on_enter = %+v", research.OnEnter)
+	}
+	if _, err := ParseManifestYAML(manifest("research")); err == nil {
+		t.Fatal("set_posture research parsed")
 	}
 }
 
@@ -379,20 +397,36 @@ func TestParseManifestYAMLPhaseSetExecutionMode(t *testing.T) {
 	m, err := ParseManifestYAML([]byte(`
 id: scout-build
 version: 1.0.0
+controls:
+  default_execution_mode: investigate
 phases:
   - id: scout
     activity_label: Test phase
     on_enter:
       set_execution_mode: investigate
+    next: work
   - id: work
     activity_label: Test phase
     on_enter:
       set_execution_mode: orchestrate
 `))
 	testutil.FailErr(t, "ParseManifestYAML", err)
-	scout, ok := m.PhaseByID("scout")
-	if !ok || scout.OnEnter.SetExecutionMode != ExecutionModeInvestigate {
-		t.Fatalf("scout on_enter = %+v", scout.OnEnter)
+	encoded, err := MarshalManifestYAML(m)
+	testutil.FailErr(t, "MarshalManifestYAML", err)
+	again, err := ParseManifestYAML([]byte(encoded))
+	testutil.FailErr(t, "reparse marshalled manifest", err)
+	for name, got := range map[string]Manifest{"parsed": m, "round trip": again} {
+		if got.Controls.DefaultExecutionMode != ExecutionModeInvestigate {
+			t.Fatalf("%s default = %q", name, got.Controls.DefaultExecutionMode)
+		}
+		scout, ok := got.PhaseByID("scout")
+		if !ok || scout.OnEnter.SetExecutionMode != ExecutionModeInvestigate {
+			t.Fatalf("%s scout on_enter = %+v", name, scout.OnEnter)
+		}
+		work, ok := got.PhaseByID("work")
+		if !ok || work.OnEnter.SetExecutionMode != ExecutionModeOrchestrate {
+			t.Fatalf("%s work on_enter = %+v", name, work.OnEnter)
+		}
 	}
 }
 

@@ -1,10 +1,17 @@
-"""Run a required lane with loopback networking only on an ephemeral Linux runner."""
+"""Run a required lane with loopback networking only on an ephemeral Actions runner."""
 import os
 import subprocess
 import sys
 
+# Everything the lane does is allowed except reaching beyond the machine; nothing a macOS lane runs
+# applies a Seatbelt profile of its own, which a second profile inside this one would refuse.
+MACOS_PROFILE = ('(version 1) (allow default) (deny network-outbound) '
+                 '(allow network-outbound (remote unix-socket)) (allow network-outbound (remote ip "localhost:*"))')
 
-def command(arguments, uid, gid):
+
+def command(arguments, uid, gid, platform=sys.platform):
+    if platform == 'darwin':
+        return ['sandbox-exec', '-p', MACOS_PROFILE, *arguments]
     # Namespace setup is privileged; test execution immediately returns to the runner account.
     return ['sudo', '--preserve-env', 'unshare', '--net', '--', 'env', 'PATH=' + os.environ['PATH'],
             'HOME=' + os.environ['HOME'], 'sh', '-c',
@@ -13,8 +20,8 @@ def command(arguments, uid, gid):
 
 
 def main():
-    if os.environ.get('GITHUB_ACTIONS') != 'true' or not sys.platform.startswith('linux'):
-        raise SystemExit('offline lane requires an ephemeral Linux Actions runner')
+    if os.environ.get('GITHUB_ACTIONS') != 'true' or not (sys.platform.startswith('linux') or sys.platform == 'darwin'):
+        raise SystemExit('offline lane requires an ephemeral Linux or macOS Actions runner')
     # Pass identities separately so no source path or lane name becomes shell text.
     arguments = [sys.executable, 'scripts/ci_verification.py', 'run', *sys.argv[1:]]
     invocation = command(arguments, os.getuid(), os.getgid())

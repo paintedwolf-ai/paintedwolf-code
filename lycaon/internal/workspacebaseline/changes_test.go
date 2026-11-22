@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -87,19 +88,19 @@ func TestChangeSetStopsWhenCanceledMidComparison(t *testing.T) {
 	}
 	t.Run("manifest pass", func(t *testing.T) {
 		branch, reader := sealedBranch(t, files)
-		ctx := &cancelAfterChecks{Context: t.Context(), remaining: 8}
+		ctx := newCancelAfterChecks(t.Context(), 8)
 		if _, err := reader.ChangeSet(ctx, nil, branch); !errors.Is(err, context.Canceled) {
 			t.Fatalf("err = %v, want canceled", err)
 		}
-		if ctx.checks > 16 {
-			t.Fatalf("comparison checked its context %d times after being canceled", ctx.checks)
+		if checks := ctx.checks.Load(); checks > 16 {
+			t.Fatalf("comparison checked its context %d times after being canceled", checks)
 		}
 	})
 	t.Run("tree walk", func(t *testing.T) {
 		branch, reader := sealedBranch(t, files)
 		// The manifest pass checks once per entry, and the walk follows it. Removing
 		// the check from either pass leaves too few to reach the cancellation.
-		ctx := &cancelAfterChecks{Context: t.Context(), remaining: len(files) + 8}
+		ctx := newCancelAfterChecks(t.Context(), len(files)+8)
 		_, err := reader.ChangeSet(ctx, nil, branch)
 		if !errors.Is(err, context.Canceled) {
 			t.Fatalf("err = %v, want canceled", err)
@@ -110,13 +111,19 @@ func TestChangeSetStopsWhenCanceledMidComparison(t *testing.T) {
 // cancelAfterChecks reports cancellation once its Err has been read enough times.
 type cancelAfterChecks struct {
 	context.Context
-	remaining, checks int
+	remaining, checks atomic.Int64
 }
 
+func newCancelAfterChecks(ctx context.Context, remaining int) *cancelAfterChecks {
+	c := &cancelAfterChecks{Context: ctx}
+	c.remaining.Store(int64(remaining))
+	return c
+}
+
+// Err is called from the comparison's concurrent walkers.
 func (c *cancelAfterChecks) Err() error {
-	c.checks++
-	if c.remaining > 0 {
-		c.remaining--
+	c.checks.Add(1)
+	if c.remaining.Add(-1) >= 0 {
 		return c.Context.Err()
 	}
 	return context.Canceled

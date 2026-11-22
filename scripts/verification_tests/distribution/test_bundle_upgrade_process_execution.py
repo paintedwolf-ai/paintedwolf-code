@@ -46,6 +46,34 @@ class ProcessTests(unittest.TestCase):
             "--stdout", str(installation.config / "desktop-launch.log"),
             "--stderr", str(installation.config / "desktop-launch.log"), str(installation.app)])
 
+    def test_a_relaunch_cannot_observe_the_engine_record_of_a_stopped_process(self):
+        import json
+        import tempfile
+        installation = self.installation()
+        installation.config = Path(self.enterContext(tempfile.TemporaryDirectory()))
+        installation.owned = {}
+        record = installation.config / "daemon.json"
+        for alive in (True, False):
+            with self.subTest(alive=alive):
+                record.write_text(json.dumps({"pid": 4242, "port": 4343}))
+                with patch.object(process.subprocess, "run"), \
+                     patch.object(process, "process_identity", return_value="engine" if alive else None):
+                    installation.launch()
+                self.assertEqual(record.exists(), alive)
+        with patch.object(installation, "capture_owned"):
+            self.assertIsNone(installation.observe("1.1.0"))
+        self.assertEqual(installation.last_observation["state"], "daemon_missing")
+
+    def test_the_app_is_running_only_while_a_captured_app_process_keeps_its_identity(self):
+        installation = self.installation()
+        installation.owned = {10: ("app", 1), 11: ("engine", 2)}
+        identities = {10: "app", 11: "engine"}
+        with patch.object(installation, "capture_owned"), \
+             patch.object(process, "process_identity", side_effect=lambda pid: identities.get(pid)):
+            self.assertTrue(installation.app_running())
+            identities[10] = "reused pid"
+            self.assertFalse(installation.app_running())
+
     def test_process_ownership_uses_exact_executable_paths(self):
         installation = self.installation()
         installation.owned = {}

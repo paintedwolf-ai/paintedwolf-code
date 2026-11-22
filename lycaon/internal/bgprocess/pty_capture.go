@@ -19,6 +19,10 @@ type PTYCaptureResult struct {
 	Boundary confine.Boundary
 }
 
+// ptyCaptureLimit is when a capture whose command has not exited takes the
+// screen and stops it.
+const ptyCaptureLimit = 2 * time.Minute
+
 // RunPTYCapture executes one command and discards its terminal handle.
 func (r *Terminal) RunPTYCapture(
 	ctx context.Context,
@@ -27,17 +31,13 @@ func (r *Terminal) RunPTYCapture(
 	runner *hostcmd.Runner,
 	winsize lycexec.WinSize,
 	facts confine.SpawnFacts,
-	timeout time.Duration,
 ) (PTYCaptureResult, error) {
-	if timeout <= 0 {
-		timeout = 2 * time.Minute
-	}
 	handle, err := r.startPTY(ctx, sessionID, rootSessionID, projectID, req, runner, winsize, facts, true)
 	if err != nil {
 		return PTYCaptureResult{}, err
 	}
 	defer r.jobs.remove(strings.TrimSpace(sessionID), strings.TrimSpace(handle))
-	finished, err := r.Lifecycle.Await(ctx, sessionID, handle, timeout)
+	finished, err := r.Lifecycle.Await(ctx, sessionID, handle, ptyCaptureLimit)
 	if err != nil {
 		if proc, lookupErr := r.jobs.lookup(sessionID, handle); lookupErr == nil {
 			r.Lifecycle.killProcess(proc, TerminationReasonFromContext(ctx, TerminationStoppedByAgent))

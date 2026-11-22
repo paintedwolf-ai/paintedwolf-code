@@ -4,7 +4,9 @@ package blueprints_test
 
 import (
 	"context"
+	"github.com/lycaon/lycaon/internal/blueprint/blueprinttest"
 	workflow "github.com/lycaon/lycaon/internal/workflow"
+	"github.com/lycaon/lycaon/internal/workflow/workflowtest"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/blueprint"
@@ -53,12 +55,12 @@ func TestPlanResearchDepthNoneReachesExecutionSubroutine(t *testing.T) {
 
 	sessStore := store.NewSQL(sqlDB)
 	dir := t.TempDir()
-	blueprintStore := blueprint.NewFileStoreForTest(dir)
+	blueprintStore := blueprinttest.NewFileStore(dir)
 	blueprintMgr := blueprint.NewManager(blueprintStore)
 	reg, err := workflowdef.RegistryFromDirs("")
 	testutil.FailErr(t, "RegistryFromDirs", err)
 	mgr := workflow.NewManager(testRunStore(t, sqlDB), sessStore, reg, nil)
-	workflow.WireBlueprintDepsForTest(mgr, dir)
+	workflowtest.WireBlueprintDeps(mgr, dir)
 	setTestRegistry(t, mgr, blueprintMgr, conditions.TestRegistryDepsWithEvidence())
 
 	testdbseed.InsertProjectRoot(t, sqlDB, testdbseed.DefaultProjectID, dir)

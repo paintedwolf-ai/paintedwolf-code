@@ -6,15 +6,16 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/lycaon/lycaon/internal/toolrejection"
 	"os"
 	"os/user"
 	"path/filepath"
 	"strconv"
 	"strings"
+	"syscall"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	nativefixture "github.com/lycaon/lycaon/internal/tools/native/internal/testfixture"
 )
 
@@ -70,6 +71,11 @@ func TestChownToolRejectsForeignUID(t *testing.T) {
 	if !errors.As(err, &reject) || reject.Code != "CHOWN_TARGET_DENIED" {
 		t.Fatalf("err = %v want CHOWN_TARGET_DENIED", err)
 	}
+	info, err := os.Stat(filepath.Join(tmpDir, "a.txt"))
+	testutil.FailErr(t, "stat refused file", err)
+	if st, ok := info.Sys().(*syscall.Stat_t); !ok || int(st.Uid) != os.Getuid() {
+		t.Fatalf("refused chown changed the owner: %+v", info.Sys())
+	}
 }
 
 func TestChownToolRejectsRootWhenNotRoot(t *testing.T) {
@@ -119,8 +125,13 @@ func TestChownToolRejectsGitPath(t *testing.T) {
 		"owner": "current",
 	}, nativefixture.Context(tmpDir))
 	var reject *toolrejection.ToolReject
-	if !errors.As(err, &reject) || reject.Code != "GIT_INTERNALS_WRITE_DENIED" {
-		t.Fatalf("err = %v want GIT_INTERNALS_WRITE_DENIED", err)
+	if !errors.As(err, &reject) || reject.Code != "GIT_INTERNALS_WRITE_DENIED" || reject.Data["class"] != "config" {
+		t.Fatalf("err = %v want GIT_INTERNALS_WRITE_DENIED for repository config", err)
+	}
+	data, err := os.ReadFile(filepath.Join(tmpDir, ".git", "config"))
+	testutil.FailErr(t, "read refused config", err)
+	if string(data) != "x" {
+		t.Fatalf("refused chown changed the config: %q", data)
 	}
 }
 

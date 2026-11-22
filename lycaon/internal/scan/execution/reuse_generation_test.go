@@ -2,10 +2,11 @@ package execution
 
 import (
 	"fmt"
+	"github.com/lycaon/lycaon/internal/scan/findings/findingstest"
 	"testing"
 
 	scanbase "github.com/lycaon/lycaon/internal/scan"
-	scanfindings "github.com/lycaon/lycaon/internal/scan/findings"
+
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -14,7 +15,7 @@ func TestReturningToEarlierSourceGetsAFreshLedgerObservation(t *testing.T) {
 	root := ledgerRoot(t)
 	store := ledgerFixture(t, root, "sast", "execution-1")
 	runner := &Runner{Store: store}
-	finding := scanfindings.FixtureFinding("cycle", api.FindingLevelHigh, "cycle", "a.go", 1)
+	finding := findingstest.Finding("cycle", api.FindingLevelHigh, "cycle", "a.go", 1)
 	for index, present := range []bool{true, false, true, false, true, false} {
 		findings := []api.SecurityFinding{}
 		if present {

@@ -2,7 +2,6 @@ package invocation_test
 
 import (
 	"errors"
-	"strings"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/invocation"
@@ -44,7 +43,7 @@ func TestSQLRecorderSettlesRefusedOutcomeAsHostFault(t *testing.T) {
 		})
 		var refused *invocation.SettlementRefusedError
 		if !errors.As(err, &refused) || refused.ReceiptID != receipt.ID ||
-			!strings.Contains(err.Error(), "requires a rejected receipt") {
+			!errors.Is(err, invocation.ErrIsolationTerminalNotRejected) {
 			t.Fatalf("refused settlement error = %v", err)
 		}
 		fault := refused.Receipt

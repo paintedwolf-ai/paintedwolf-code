@@ -10,11 +10,18 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// Limit is one category's warning line and hard limit.
+// Limit is one category's warning line and hard limit. A category without a
+// hard limit only warns.
 type Limit struct {
 	Warn  int `yaml:"warn" json:"warn"`
-	Limit int `yaml:"limit" json:"limit"`
+	Limit int `yaml:"limit,omitempty" json:"limit,omitempty"`
 }
+
+// Bounded reports whether the category has a hard limit.
+func (l Limit) Bounded() bool { return l.Limit > 0 }
+
+// Exceeded reports whether a size is past the hard limit.
+func (l Limit) Exceeded(value int) bool { return l.Bounded() && value > l.Limit }
 
 // Exception admits one artifact above its category limit, up to its cap, for
 // a reason a reviewer can weigh.
@@ -38,8 +45,8 @@ func (p Policy) Validate(categories []string) error {
 		if !ok {
 			return fmt.Errorf("category %s has no limit", name)
 		}
-		if limit.Warn <= 0 || limit.Warn >= limit.Limit {
-			return fmt.Errorf("category %s needs 0 < warn (%d) < limit (%d)", name, limit.Warn, limit.Limit)
+		if limit.Warn <= 0 || limit.Limit < 0 || limit.Bounded() && limit.Warn >= limit.Limit {
+			return fmt.Errorf("category %s needs 0 < warn (%d) < limit (%d) or no limit", name, limit.Warn, limit.Limit)
 		}
 	}
 	for name := range p.Limits {
@@ -52,6 +59,9 @@ func (p Policy) Validate(categories []string) error {
 			return fmt.Errorf("unknown category %q", name)
 		}
 		for id, exception := range entries {
+			if !p.Limits[name].Bounded() {
+				return fmt.Errorf("exception %s[%q] admits nothing: the category has no hard limit", name, id)
+			}
 			if exception.Cap <= p.Limits[name].Limit {
 				return fmt.Errorf("exception %s[%q] cap %d must exceed the limit %d", name, id, exception.Cap, p.Limits[name].Limit)
 			}
@@ -63,7 +73,8 @@ func (p Policy) Validate(categories []string) error {
 	return nil
 }
 
-// Cap returns the most an artifact may measure, and whether an exception sets it.
+// Cap returns the most an artifact may measure, 0 when nothing bounds it, and
+// whether an exception sets it.
 func (p Policy) Cap(category, id string) (int, bool) {
 	if exception, ok := p.Exceptions[category][id]; ok {
 		return exception.Cap, true
@@ -169,7 +180,7 @@ func Evaluate(p Policy, measured Measurements, touched Touched) []Finding {
 				continue
 			case excepted:
 				finding.Kind, finding.Bound, finding.Reason = Excepted, exception.Cap, exception.Reason
-			case value > limit.Limit:
+			case limit.Exceeded(value):
 				finding.Kind, finding.Bound = OverLimit, limit.Limit
 			case value > limit.Warn:
 				finding.Kind, finding.Bound = OverWarn, limit.Warn
@@ -196,7 +207,7 @@ func Untouched(p Policy, measured Measurements, touched Touched) map[string]int 
 	out := map[string]int{}
 	for name, artifacts := range measured {
 		for id, value := range artifacts {
-			if _, excepted := p.Exceptions[name][id]; !excepted && value > p.Limits[name].Limit && !touched(name, id) {
+			if _, excepted := p.Exceptions[name][id]; !excepted && p.Limits[name].Exceeded(value) && !touched(name, id) {
 				out[name]++
 			}
 		}

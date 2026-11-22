@@ -2,6 +2,8 @@ package wirespec
 
 import (
 	"fmt"
+	"os"
+	"path/filepath"
 	"reflect"
 	"strings"
 
@@ -15,16 +17,11 @@ type DtoSyncSpec struct {
 	TSInterface   string
 }
 
-type openAPISchemaDoc struct {
-	Type       string         `yaml:"type"`
-	Properties map[string]any `yaml:"properties"`
-}
-
-func SyncDTOFields(root string, spec DtoSyncSpec) error {
-	goType := reflect.TypeOf(spec.GoValue)
-	goFields := JsonFieldNames(goType)
-
-	openAPI, err := LoadOpenAPISchemaProperties(root, spec.OpenAPISchema)
+// SyncDTO compares a Go DTO's JSON fields with its OpenAPI schema and its
+// generated TypeScript schema in types.ts.
+func (s *Spec) SyncDTO(ts string, spec DtoSyncSpec) error {
+	goFields := JsonFieldNames(reflect.TypeOf(spec.GoValue))
+	openAPI, err := s.SchemaProperties(spec.OpenAPISchema)
 	if err != nil {
 		return err
 	}
@@ -32,8 +29,7 @@ func SyncDTOFields(root string, spec DtoSyncSpec) error {
 		return fmt.Errorf("%s\nfix: align pkg/api JSON tags with docs/openapi.yaml schema %q",
 			testutil.FormatSetDiff("Go vs OpenAPI "+spec.OpenAPISchema, goFields, openAPI), spec.OpenAPISchema)
 	}
-
-	tsFields, err := parseTSInterfaceFields(root, spec.TSInterface)
+	tsFields, err := parseGeneratedSchemaFieldNames(ts, spec.TSInterface)
 	if err != nil {
 		return err
 	}
@@ -44,12 +40,17 @@ func SyncDTOFields(root string, spec DtoSyncSpec) error {
 	return nil
 }
 
-func LoadOpenAPIObjectSchemas(repoRoot string) (map[string]openAPISchemaDoc, error) {
-	doc, err := cachedOpenAPIDoc(repoRoot)
+// SyncDTOFields runs SyncDTO against a checkout.
+func SyncDTOFields(repoRoot string, spec DtoSyncSpec) error {
+	s, err := ReadSpec(repoRoot)
 	if err != nil {
-		return nil, err
+		return err
 	}
-	return doc.objectSchemas, nil
+	ts, err := os.ReadFile(filepath.Join(repoRoot, "lycaon-den", "src", "api", "types.ts"))
+	if err != nil {
+		return err
+	}
+	return s.SyncDTO(string(ts), spec)
 }
 
 func JsonFieldNames(typ reflect.Type) []string {
@@ -65,28 +66,4 @@ func JsonFieldNames(typ reflect.Type) []string {
 		}
 	}
 	return out
-}
-
-func LoadOpenAPISchemaProperties(repoRoot, schema string) ([]string, error) {
-	schemas, err := LoadOpenAPIObjectSchemas(repoRoot)
-	if err != nil {
-		return nil, err
-	}
-	s, ok := schemas[schema]
-	if !ok {
-		return nil, fmt.Errorf("schema %q not found", schema)
-	}
-	var out []string
-	for k := range s.Properties {
-		out = append(out, k)
-	}
-	return out, nil
-}
-
-func parseTSInterfaceFields(repoRoot, name string) ([]string, error) {
-	content, err := cachedTSContent(repoRoot)
-	if err != nil {
-		return nil, err
-	}
-	return parseGeneratedSchemaFieldNames(content, name)
 }

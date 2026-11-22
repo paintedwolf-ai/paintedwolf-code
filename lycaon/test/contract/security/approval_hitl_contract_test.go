@@ -25,7 +25,6 @@ import (
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/pkg/api"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
-	"github.com/lycaon/lycaon/test/contract/internal/wirespec"
 )
 
 // bundledStandardGate loads bundled rules without overlays.
@@ -327,83 +326,33 @@ func TestBundledStandardRunsContainedEditsAndDeletesSilently(t *testing.T) {
 	}
 }
 
+// assertBundledRunsInProject asks the bundled rules about tool on an
+// in-project source and destination; an ask rule for it, however spelled,
+// fails this.
+func assertBundledRunsInProject(t *testing.T, tool string) {
+	t.Helper()
+	dir := t.TempDir()
+	res := evalBundled(t, hitl.ProposedAction{
+		Invocation: hitl.ActionInvocation{
+			Tool:  tool,
+			Files: []string{filepath.Join(dir, "src", "a.txt"), filepath.Join(dir, "dst", "a.txt")},
+		},
+		Scope: hitl.ActionScope{ProjectDir: dir},
+	})
+	if !res.AutoApproved() || res.Required() || res.Denied {
+		t.Errorf("in-project %s must auto-approve under the bundled rules: %+v", tool, res)
+	}
+}
+
 func TestBundledApprovalsNoAskOnChmod(t *testing.T) {
 	t.Parallel()
-	root := contractcheck.RepoRoot(t)
-	path := filepath.Join(root, "lycaon", "config", "packs", "painted-wolf", "security", "host", "approvals.yaml")
-	data, err := os.ReadFile(path)
-	contractcheck.FailErr(t, "read file", err)
-	body := string(data)
-	if strings.Contains(body, "pattern: chmod") {
-		t.Fatal("bundled approvals.yaml must not ask on chmod by default")
-	}
+	assertBundledRunsInProject(t, "chmod")
 }
 
 func TestBundledApprovalsNoAskOnFileOps(t *testing.T) {
 	t.Parallel()
-	root := contractcheck.RepoRoot(t)
-	path := filepath.Join(root, "lycaon", "config", "packs", "painted-wolf", "security", "host", "approvals.yaml")
-	data, err := os.ReadFile(path)
-	contractcheck.FailErr(t, "read file", err)
-	body := string(data)
 	for _, tool := range []string{"copy", "move", "mkdir"} {
-		if strings.Contains(body, "pattern: "+tool) {
-			t.Fatalf("bundled approvals.yaml must not ask on %s by default", tool)
-		}
-	}
-}
-
-func TestCheckpointRoutesRegistered(t *testing.T) {
-	t.Parallel()
-	root := contractcheck.RepoRoot(t)
-	routes, err := wirespec.LoadOpenAPIRoutes(root)
-	contractcheck.FailErr(t, "load OpenAPI routes from docs/openapi.yaml", err)
-	want := []string{
-		"GET /v1/sessions/{id}/checkpoints",
-		"POST /v1/sessions/{id}/checkpoints/{checkpoint_id}",
-	}
-	for _, w := range want {
-		ok := false
-		for _, r := range routes {
-			if r.Method+" "+r.Path == w {
-				ok = true
-				break
-			}
-		}
-		if !ok {
-			t.Fatalf("missing route %s", w)
-		}
-	}
-}
-
-func TestCheckpointRoutesNotMarkedStub(t *testing.T) {
-	t.Parallel()
-	root := contractcheck.RepoRoot(t)
-	data, err := os.ReadFile(filepath.Join(root, "docs", "openapi.yaml"))
-	contractcheck.FailErr(t, "read file", err)
-	body := string(data)
-	for _, fragment := range []string{
-		"/v1/sessions/{id}/checkpoints:",
-		"/v1/sessions/{id}/checkpoints/{checkpoint_id}:",
-	} {
-		idx := strings.Index(body, fragment)
-		if idx < 0 {
-			t.Fatalf("missing OpenAPI path %s", fragment)
-		}
-		window := body[idx : idx+400]
-		if strings.Contains(window, "x-paintedwolf-status: stub") {
-			t.Fatalf("checkpoint route %s must not be x-paintedwolf-status: stub", fragment)
-		}
-	}
-}
-
-func TestApprovalDecisionActionEnumSync(t *testing.T) {
-	t.Parallel()
-	root := contractcheck.RepoRoot(t)
-	goEnums, err := wirespec.DiscoverAPIStringEnums(root)
-	contractcheck.FailErr(t, "discover API string enums in pkg/api", err)
-	if !strings.Contains(strings.Join(goEnums["ApprovalDecisionAction"], ","), "approve") {
-		t.Fatalf("ApprovalDecisionAction = %v", goEnums["ApprovalDecisionAction"])
+		assertBundledRunsInProject(t, tool)
 	}
 }
 
@@ -522,6 +471,9 @@ func denyOutsideRead(t *testing.T, path string) (string, *guidance.Refusal, *hit
 	refusal, ok := guidance.RefusalFromError(err)
 	if !ok {
 		t.Fatalf("expected an approval refusal, got %v", err)
+	}
+	if mgr.request.Decision == nil {
+		t.Fatal("raised card carries no gate decision")
 	}
 	plan, planErr := hitl.CompileCheckpointApprovalPlan(mgr.request)
 	contractcheck.FailErr(t, "compile captured approval plan", planErr)

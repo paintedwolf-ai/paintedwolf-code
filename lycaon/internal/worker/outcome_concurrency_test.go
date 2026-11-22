@@ -31,7 +31,7 @@ func (r *cycleOutcomeRecorder) OnWorkerComplete(ctx context.Context, jobID strin
 
 func TestConcurrentOutcomesSettleParentCycle(t *testing.T) {
 	ctx := t.Context()
-	queue := NewInMemoryQueue(32)
+	queue := newTestQueue(t, 32, testdbseed.DefaultProjectID, "parent")
 	var tasks []api.WorkerTask
 	for range 16 {
 		id, err := queue.EnqueueWithProjectID(ctx, testdbseed.DefaultProjectID, api.WorkerTask{Prompt: "fixture", Brief: "fixture", ParentSessionID: "parent", ProjectID: testdbseed.DefaultProjectID, ExecutionTarget: api.ExecutionTargetLocal})

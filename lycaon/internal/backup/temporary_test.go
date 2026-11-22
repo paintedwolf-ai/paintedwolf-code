@@ -10,6 +10,7 @@ import (
 )
 
 func TestInterruptedTransferCleanupPreservesRecoveryAndDoesNotFollowLinks(t *testing.T) {
+	t.Parallel()
 	root, outside := t.TempDir(), t.TempDir()
 	testutil.FailErr(t, "seed outside", os.WriteFile(filepath.Join(outside, "keep"), []byte("history"), 0o600))
 	for _, name := range []string{".backup-export-123.zip", ".restore-upload-456.zip", "restore.pending.json", "my-backup.zip"} {

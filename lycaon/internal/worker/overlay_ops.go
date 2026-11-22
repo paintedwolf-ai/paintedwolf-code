@@ -39,14 +39,13 @@ func (s *MergeService) promoteOverlay(ctx context.Context, sessionID, overlayID 
 		return api.WorkerMergeResult{}, fmt.Errorf("acquire promote lock: %w", err)
 	}
 	defer lock.release()
-	eng := s.engine()
-	work, err := eng.resolvePromoteWork(ctx, sessionID, overlayID)
+	work, err := s.resolvePromoteWork(ctx, sessionID, overlayID)
 	if err != nil {
 		return api.WorkerMergeResult{}, err
 	}
 	defer work.lease.Release()
 
-	plans, applied, conflictOut, err := eng.preparePromoteOverlayPlans(ctx, work, in)
+	plans, applied, conflictOut, err := s.preparePromoteOverlayPlans(ctx, work, in)
 	if err != nil {
 		return conflictOut, err
 	}
@@ -63,9 +62,9 @@ func (s *MergeService) promoteOverlay(ctx context.Context, sessionID, overlayID 
 		if len(changed) > 0 {
 			return api.WorkerMergeResult{}, s.reject(ctx, OverlayPromoteNoPathsCode, map[string]any{"job_id": overlayID, "remaining_overlay_paths": changed})
 		}
-		return eng.finalizeEmptyPromote(ctx, sessionID, work.task, overlayID, in.Detail)
+		return s.finalizeEmptyPromote(ctx, sessionID, work.task, overlayID, in.Detail)
 	}
-	return eng.applyPromoteOverlayPlans(ctx, work, in, plans, applied)
+	return s.applyPromoteOverlayPlans(ctx, work, in, plans, applied)
 }
 
 // promotePlans are the file effects a promotion validates and the ones its transaction writes
@@ -77,7 +76,7 @@ type promotePlans struct {
 	resolved []string
 }
 
-func (s mergeEngine) preparePromoteOverlayPlans(
+func (s *MergeService) preparePromoteOverlayPlans(
 	ctx context.Context,
 	work promoteWork,
 	in api.PromoteOverlayInput,
@@ -113,7 +112,7 @@ func (s mergeEngine) preparePromoteOverlayPlans(
 	return s.buildValidatedPromotePlans(ctx, work, assessment, resolutions, resolutionByPath)
 }
 
-func (s mergeEngine) assessPromoteOverlay(
+func (s *MergeService) assessPromoteOverlay(
 	ctx context.Context,
 	work promoteWork,
 	callerResolutions []api.WorkerPromoteResolution,
@@ -136,7 +135,7 @@ func (s mergeEngine) assessPromoteOverlay(
 	return s.assessMerge(ctx, work.sessionID, work.task, mergePaths)
 }
 
-func (s mergeEngine) buildValidatedPromotePlans(
+func (s *MergeService) buildValidatedPromotePlans(
 	ctx context.Context,
 	work promoteWork,
 	assessment PromoteAssessment,
@@ -169,7 +168,7 @@ func (s mergeEngine) buildValidatedPromotePlans(
 	return out, unionPromotePaths(assessment.CleanPaths, validated), api.WorkerMergeResult{}, nil
 }
 
-func (s mergeEngine) applyPromoteOverlayPlans(ctx context.Context, work promoteWork, in api.PromoteOverlayInput, plans promotePlans, applied []string) (api.WorkerMergeResult, error) {
+func (s *MergeService) applyPromoteOverlayPlans(ctx context.Context, work promoteWork, in api.PromoteOverlayInput, plans promotePlans, applied []string) (api.WorkerMergeResult, error) {
 	// The hold outlives any rollback of landed bytes, so observation never sees them first.
 	documents, err := s.holdPromotedDocuments(ctx, work.task, work.targets, applied)
 	if err != nil {
@@ -231,7 +230,7 @@ type promoteWork struct {
 	lease *BranchLease
 }
 
-func (s mergeEngine) resolvePromoteWork(ctx context.Context, sessionID, overlayID string) (promoteWork, error) {
+func (s *MergeService) resolvePromoteWork(ctx context.Context, sessionID, overlayID string) (promoteWork, error) {
 	task, ok := s.Queue.Get(overlayID)
 	if !ok || task == nil {
 		return promoteWork{}, s.reject(ctx, OverlayPromoteNotFoundCode, map[string]any{"job_id": overlayID})
@@ -294,7 +293,7 @@ func expandResolutionDropFolders(resolutions []api.WorkerPromoteResolution, allo
 }
 
 // finalizeEmptyPromote closes an overlay with no changes.
-func (s mergeEngine) finalizeEmptyPromote(ctx context.Context, sessionID string, task *api.WorkerTask, jobID, detail string) (api.WorkerMergeResult, error) {
+func (s *MergeService) finalizeEmptyPromote(ctx context.Context, sessionID string, task *api.WorkerTask, jobID, detail string) (api.WorkerMergeResult, error) {
 	out := api.WorkerMergeResult{JobID: jobID, Mode: "merge", AgentType: task.AgentType}
 	claim, claimCtx, err := s.beginMergeClaim(ctx, jobID)
 	if err != nil {
@@ -311,7 +310,7 @@ func (s mergeEngine) finalizeEmptyPromote(ctx context.Context, sessionID string,
 		return out, errors.Join(err, s.releaseMergeClaim(ctx, claim))
 	}
 	revertPending := func() error { return s.releaseMergeClaim(ctx, claim) }
-	if err := applyTaskCheckpoint(claimCtx, s.MergeService, zeroTx, task, nil); err != nil {
+	if err := applyTaskCheckpoint(claimCtx, s, zeroTx, task, nil); err != nil {
 		return out, failPromoteTransaction(ctx, zeroTx, revertPending, err)
 	}
 	if err := s.finishPromoteState(claimCtx, promoteFinishInput{
@@ -336,9 +335,9 @@ func enrichMergeChangedPaths(out *api.WorkerMergeResult, task api.WorkerTask, de
 }
 
 // applyPromoteEffects applies file effects, then commits checkpoint effects to the same promotion.
-func (s mergeEngine) applyPromoteEffects(ctx context.Context, tx *promoteTransaction, promote PromoteRoots, task *api.WorkerTask, resolvedPaths []string) error {
+func (s *MergeService) applyPromoteEffects(ctx context.Context, tx *promoteTransaction, promote PromoteRoots, task *api.WorkerTask, resolvedPaths []string) error {
 	if err := tx.apply(ctx, promote, task); err != nil {
 		return err
 	}
-	return applyTaskCheckpoint(ctx, s.MergeService, tx, task, resolvedPaths)
+	return applyTaskCheckpoint(ctx, s, tx, task, resolvedPaths)
 }

@@ -3,6 +3,7 @@ package browser
 import (
 	"bytes"
 	"errors"
+	"github.com/lycaon/lycaon/internal/timelinearchive/timelinearchivetest"
 	"image/png"
 	"testing"
 
@@ -54,7 +55,7 @@ func TestRecordingShowsALateLayoutShiftASettledCaptureWouldMiss(t *testing.T) {
 	if len(rec.Actions) != 1 || !rec.Actions[0].OK || rec.Actions[0].StartMS > jump.AtMS {
 		t.Fatalf("actions = %+v", rec.Actions)
 	}
-	m, entries, err := timelinearchive.Unpack(rec.Archive)
+	m, entries, err := timelinearchivetest.Unpack(rec.Archive)
 	testutil.FailErr(t, "unpack timeline", err)
 	if len(m.Frames) != s.FrameCount || len(m.Frames) < 3 || m.Frames[0].AtMS > 100 {
 		t.Fatalf("frames = %d (summary %d), first at %v", len(m.Frames), s.FrameCount, m.Frames[0].AtMS)
@@ -83,7 +84,7 @@ func TestRecordingSurvivesTheStepThatFails(t *testing.T) {
 	tail := 1000
 	rec, err := held.Record(t.Context(), []CaptureAction{
 		{Type: "click", ActionLocator: ActionLocator{Selector: "#go"}},
-		{Type: "click", ActionLocator: ActionLocator{Selector: "#missing"}, TimeoutMS: 200},
+		{Type: "click", ActionLocator: ActionLocator{Selector: "#missing"}},
 	}, RecordOpts{Watch: []string{"#content"}, TailMS: &tail}, nil)
 	var rej *browserengine.RejectError
 	if !errors.As(err, &rej) || rej.Code != "CAPTURE_ACTION_FAILED" || rej.Data["index"] != 1 {

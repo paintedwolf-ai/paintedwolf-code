@@ -75,7 +75,7 @@ func TestOptionsWorkflowEndToEnd(t *testing.T) {
 
 	// Resolution launches the bound topology.
 	waitTopologyStageComplete(t, h.Workflows.Manager, run.ID, orchestration.TopologyBindStageFanOut)
-	waitWorkflowPhase(t, ctx, h.Workflows.Manager, run.ID, "judge")
+	WaitWorkflowPhase(t, ctx, h.Workflows.Manager, run.ID, "judge")
 	settleCtx := t.Context()
 	h.Server.WaitForBackground(settleCtx)
 	if err := settleCtx.Err(); err != nil {

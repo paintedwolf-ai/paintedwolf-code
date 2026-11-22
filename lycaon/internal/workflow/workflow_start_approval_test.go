@@ -3,6 +3,7 @@ package workflow
 import (
 	"context"
 	"errors"
+	"github.com/lycaon/lycaon/internal/blueprint/blueprinttest"
 	workflowblueprintfiles "github.com/lycaon/lycaon/internal/workflow/blueprintfiles"
 	"testing"
 
@@ -33,7 +34,7 @@ func testWorkflowManager(t *testing.T) (*RunManager, string, string) {
 	testutil.FailErr(t, "sessStore.Create failed", err)
 	manifestRegistry, err := workflowdef.RegistryFromDirs("")
 	testutil.FailErr(t, "RegistryFromDirs failed", err)
-	blueprintStore := blueprint.NewFileStoreForTest(projectDir)
+	blueprintStore := blueprinttest.NewFileStore(projectDir)
 	blueprintMgr := blueprint.NewManager(blueprintStore)
 	runStore := workflowpersistence.New(sqlDB)
 	mgr := NewManager(runStore, sessStore, manifestRegistry, nil)

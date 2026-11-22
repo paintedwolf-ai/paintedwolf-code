@@ -45,22 +45,3 @@ func TestWorkflowCoordinatorProfileOverridesAgent(t *testing.T) {
 		t.Fatalf("manifest profile = %q want explore_readonly", got)
 	}
 }
-
-func TestPostureRegistryRulesMatchBundledPaths(t *testing.T) {
-	t.Parallel()
-	reg, err := profiles.LoadPostureRegistry()
-	contractcheck.FailErr(t, "profiles.LoadPostureRegistry failed", err)
-	wantFiles := map[api.SessionPosture]string{
-		api.SessionPostureSpec:        "config/packs/painted-wolf/platform/host/posture-rules/spec.yaml",
-		api.SessionPostureBuild:       "config/packs/painted-wolf/platform/host/posture-rules/build.yaml",
-		api.SessionPostureOrchestrate: "config/packs/painted-wolf/platform/host/posture-rules/orchestrate.yaml",
-		api.SessionPostureVet:         "config/packs/painted-wolf/platform/host/posture-rules/vet.yaml",
-	}
-	for posture, wantPath := range wantFiles {
-		spec, err := reg.Get(posture)
-		contractcheck.FailErr(t, "reg.Get failed", err)
-		if len(spec.Rules) != 1 || spec.Rules[0] != wantPath {
-			t.Fatalf("posture %q rules = %v want [%q]", posture, spec.Rules, wantPath)
-		}
-	}
-}

@@ -3,7 +3,6 @@ package wirespec
 import (
 	"context"
 	"fmt"
-	"os"
 	"path/filepath"
 	"strings"
 	"time"
@@ -20,11 +19,16 @@ type clientInterface struct {
 
 type clientImport struct{ path, name string }
 
-func ParseTSClientMethods(path string) (map[string]struct{}, error) {
-	return parseTSInterfaceMethods(path, "LycaonClient", make(map[string]bool))
+// ReadFile reads one source file of the client contract.
+type ReadFile func(path string) ([]byte, error)
+
+// ParseTSClientMethods returns the methods of LycaonClient declared in path,
+// following local base interfaces.
+func ParseTSClientMethods(read ReadFile, path string) (map[string]struct{}, error) {
+	return parseTSInterfaceMethods(read, path, "LycaonClient", make(map[string]bool))
 }
 
-func parseTSInterfaceMethods(path, name string, visiting map[string]bool) (map[string]struct{}, error) {
+func parseTSInterfaceMethods(read ReadFile, path, name string, visiting map[string]bool) (map[string]struct{}, error) {
 	path = filepath.Clean(path)
 	key := path + ":" + name
 	if visiting[key] {
@@ -32,7 +36,7 @@ func parseTSInterfaceMethods(path, name string, visiting map[string]bool) (map[s
 	}
 	visiting[key] = true
 	defer delete(visiting, key)
-	interfaces, imports, err := readClientInterfaces(path)
+	interfaces, imports, err := readClientInterfaces(read, path)
 	if err != nil {
 		return nil, err
 	}
@@ -48,7 +52,7 @@ func parseTSInterfaceMethods(path, name string, visiting map[string]bool) (map[s
 			}
 			parentPath, parentName = filepath.Join(filepath.Dir(path), imported.path), imported.name
 		}
-		methods, err := parseTSInterfaceMethods(parentPath, parentName, visiting)
+		methods, err := parseTSInterfaceMethods(read, parentPath, parentName, visiting)
 		if err != nil {
 			return nil, err
 		}
@@ -59,8 +63,8 @@ func parseTSInterfaceMethods(path, name string, visiting map[string]bool) (map[s
 	return declaration.methods, nil
 }
 
-func readClientInterfaces(path string) (map[string]clientInterface, map[string]clientImport, error) {
-	body, err := os.ReadFile(path)
+func readClientInterfaces(read ReadFile, path string) (map[string]clientInterface, map[string]clientImport, error) {
+	body, err := read(path)
 	if err != nil {
 		return nil, nil, err
 	}

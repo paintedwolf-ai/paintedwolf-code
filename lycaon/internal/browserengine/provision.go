@@ -9,13 +9,13 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"net"
 	"net/http"
 	"os"
 	"path/filepath"
 	"runtime"
 	"strings"
 	"sync"
-	"time"
 
 	"github.com/lycaon/lycaon/internal/configdir"
 	"github.com/lycaon/lycaon/internal/egressclass"
@@ -100,6 +100,7 @@ func EnsureBinary(ctx context.Context, opts ResolveOptions) (ResolvedBrowser, er
 			return ResolvedBrowser{Path: path, Source: SourceManaged}, nil
 		}
 		provisionErr = err
+		slog.WarnContext(ctx, "managed browser provisioning failed", "err", err)
 	}
 
 	// The shipped app carries its own tree, so a miss there is a broken install
@@ -149,7 +150,7 @@ func ensureManaged(ctx context.Context, cacheDir string) (string, error) {
 	zipPath := tmpZip.Name()
 	defer func() { _ = os.Remove(zipPath) }()
 
-	if err := downloadFile(ctx, url, tmpZip); err != nil {
+	if err := downloadArchive(ctx, url, tmpZip); err != nil {
 		_ = tmpZip.Close()
 		return "", err
 	}
@@ -243,13 +244,52 @@ func verifyPinnedArchive(zipPath, plat string) error {
 	return nil
 }
 
+// downloadAttempts bounds retries of a failed or stalled archive transfer.
+const downloadAttempts = 3
+
+// downloadArchive retries a failed transfer, each attempt from an empty file.
+func downloadArchive(ctx context.Context, url string, file *os.File) error {
+	var failures []string
+	for attempt := 1; attempt <= downloadAttempts; attempt++ {
+		if err := rewind(file); err != nil {
+			return err
+		}
+		err := downloadFile(ctx, url, file)
+		if err == nil {
+			return nil
+		}
+		// Name resolution fails the same way at once on every attempt, as on a host with no network.
+		var unresolved *net.DNSError
+		if errors.As(err, &unresolved) {
+			slog.WarnContext(ctx, "browser archive host cannot be resolved", "host", unresolved.Name, "err", err)
+			return fmt.Errorf("download %s: cannot resolve %s; the network or its resolver is unreachable: %w", url, unresolved.Name, err)
+		}
+		failures = append(failures, fmt.Sprintf("attempt %d: %v", attempt, err))
+		slog.WarnContext(ctx, "browser archive download failed", "url", url, "attempt", attempt, "err", err)
+		if ctx.Err() != nil {
+			break
+		}
+	}
+	return fmt.Errorf("download %s: %s", url, strings.Join(failures, "; "))
+}
+
+func rewind(file *os.File) error {
+	if err := file.Truncate(0); err != nil {
+		return err
+	}
+	_, err := file.Seek(0, io.SeekStart)
+	return err
+}
+
+// downloadClient is replaceable so tests can fail a transfer before it reaches the network.
+var downloadClient = func() *http.Client { return httpclient.Download(egressclass.BrowserEngineDownload) }
+
 func downloadFile(ctx context.Context, url string, w io.Writer) error {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
 		return err
 	}
-	client := httpclient.Download(egressclass.BrowserEngineDownload, 10*time.Minute)
-	resp, err := client.Do(req)
+	resp, err := downloadClient().Do(req)
 	if err != nil {
 		return err
 	}

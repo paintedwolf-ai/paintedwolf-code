@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+
 	"github.com/lycaon/lycaon/internal/app/boards"
 	"github.com/lycaon/lycaon/internal/app/configuration"
 	"github.com/lycaon/lycaon/internal/app/decisions"
@@ -27,6 +28,7 @@ import (
 	"github.com/lycaon/lycaon/internal/harnessfixture"
 	"github.com/lycaon/lycaon/internal/llm"
 	"github.com/lycaon/lycaon/internal/observability"
+	"github.com/lycaon/lycaon/internal/repochange"
 	"github.com/lycaon/lycaon/internal/startupprotocol"
 	"github.com/lycaon/lycaon/internal/worker"
 )
@@ -75,8 +77,12 @@ func Build(ctx context.Context, cfg configuration.Config) (*ServeApp, error) {
 	buildOutcome := "error"
 	defer func() { buildPerf.End(buildOutcome) }()
 	resources := newRuntimeResources()
+	if cfg.TestChangeDebounce > 0 {
+		restore := repochange.UseDebounce(ctx, cfg.TestChangeDebounce)
+		resources.Track("change-debounce", 95, func(context.Context) error { restore(); return nil })
+	}
 	b := &serveBuilder{startup: startupBootstrap{ctx: ctx, cfg: cfg, resources: resources, recovery: bootrecovery.New()},
-		storage: persistence.Runtime{}}
+		storage: persistence.Runtime{CommitObserver: cfg.TestStoreCommitObserver}}
 	for _, step := range []struct {
 		name  string
 		phase startupprotocol.Phase
@@ -108,7 +114,7 @@ func Build(ctx context.Context, cfg configuration.Config) (*ServeApp, error) {
 			b.localModels = localmodels.Start(ctx, llm.MockEnabled(cfg.TestLLMClient) || cfg.TestDecider != nil)
 			resources.Track("generation-engine", 46, b.localModels.CloseGeneration)
 			resources.Track("local-inference-resources", 48, b.localModels.CloseResources)
-			return b.providers.Build(ctx, providers.Options{LocalRuntime: b.localModels.Generation(), Client: cfg.TestLLMClient, Pricer: cfg.TestCostPricer, Startup: cfg.Startup}, b.storage.Database, b.storage.Directory, b.settings.Service, resources, b.startup.recovery)
+			return b.providers.Build(ctx, providers.Options{LocalRuntime: b.localModels.Generation(), Client: cfg.TestLLMClient, Pricer: cfg.TestCostPricer, Startup: cfg.Startup, ModelFeedDocument: cfg.TestModelFeedDocument}, b.storage.Database, b.storage.Directory, b.settings.Service, resources, b.startup.recovery)
 		}},
 		{"tool-runtime", startupprotocol.PhaseTools, b.wireToolRuntime},
 		{"presence", startupprotocol.PhaseTools, func() error { return b.security.BuildPresence(b.execution.Host.Executor.Secrets) }},

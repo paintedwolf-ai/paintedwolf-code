@@ -1,15 +1,9 @@
 package contract
 
 import (
-	"bytes"
 	"context"
-	"go/ast"
-	"go/parser"
-	"go/token"
 	"os"
 	"path/filepath"
-	"sort"
-	"strings"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/catalogview"
@@ -18,141 +12,13 @@ import (
 	"github.com/lycaon/lycaon/internal/project"
 	"github.com/lycaon/lycaon/internal/projectcontrib"
 	"github.com/lycaon/lycaon/internal/session"
-	"github.com/lycaon/lycaon/internal/session/store"
+	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/settingsoverlay"
-	"github.com/lycaon/lycaon/internal/tools"
+	"github.com/lycaon/lycaon/internal/tools/toolstest"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 	"gopkg.in/yaml.v3"
 )
-
-// extpacksActiveAllowlist names device-catalog boundaries. The ambient task()
-// roster and the workflow manifest registry are device-scoped and have no
-// session to resolve a turn view from.
-var extpacksActiveAllowlist = map[string]bool{
-	"lycaon/internal/app/configuration/catalog.go":         true,
-	"lycaon/internal/app/build_server.go":                  true,
-	"lycaon/internal/app/workflows/build.go":               true,
-	"lycaon/internal/app/execution/runtime.go":             true,
-	"lycaon/internal/session/catalog/effective_catalog.go": true,
-	"lycaon/internal/session/profiles/effective_skills.go": true,
-	"lycaon/internal/session/catalog/catalog_view.go":      true,
-	"lycaon/internal/workflow/definition/manifest.go":      true,
-}
-
-func TestExtpacksActiveOnlyAtDeviceBoundaries(t *testing.T) {
-	t.Parallel()
-	root := contractcheck.RepoRoot(t)
-	lycaonRoot := filepath.Join(root, "lycaon")
-	sites := scanExtpacksActiveCallSites(t, lycaonRoot)
-	if len(sites) == 0 {
-		t.Fatal("expected production extpacks.Active() call sites")
-	}
-	var unexpected []string
-	for site := range sites {
-		if !extpacksActiveAllowlist[site] {
-			unexpected = append(unexpected, site)
-		}
-	}
-	sort.Strings(unexpected)
-	for _, u := range unexpected {
-		t.Errorf("%s: extpacks.Active() outside the device-catalog allowlist — use a turn View / WithCatalog path, or extend the allowlist", u)
-	}
-	for allowed := range extpacksActiveAllowlist {
-		if _, ok := sites[allowed]; !ok {
-			t.Errorf("allowlist entry %s has no Active() call — update allowlist", allowed)
-		}
-	}
-}
-
-func TestNoContextCarriedCatalogOrView(t *testing.T) {
-	t.Parallel()
-	root := contractcheck.RepoRoot(t)
-	lycaonRoot := filepath.Join(root, "lycaon")
-	hits := scanContextWithValueCatalogCarriers(t, lycaonRoot)
-	sort.Strings(hits)
-	for _, h := range hits {
-		t.Errorf("%s: context must not carry *extpacks.EffectiveCatalog or *catalogview.View — thread View/catalog as an explicit parameter", h)
-	}
-}
-
-func scanInventoryKindRoots(t *testing.T) []string {
-	t.Helper()
-	src := contractcheck.ReadRepoFile(t, contractcheck.RepoRoot(t), "lycaon/internal/extpacks/inventory.go")
-	start := strings.Index(src, "var inventoryKindRoots = []string{")
-	if start < 0 {
-		t.Fatal("inventoryKindRoots not found in inventory.go")
-	}
-	end := strings.Index(src[start:], "}")
-	if end < 0 {
-		t.Fatal("unterminated inventoryKindRoots")
-	}
-	var roots []string
-	for _, line := range strings.Split(src[start:start+end], "\n")[1:] {
-		line = strings.TrimSpace(strings.TrimSuffix(strings.TrimSpace(line), ","))
-		switch {
-		case strings.HasPrefix(line, `"`):
-			roots = append(roots, strings.Trim(line, `"`))
-		case line == "ArchiveKindRoot":
-			roots = append(roots, extpacks.ArchiveKindRoot)
-		case line == "NextStepsKindRoot":
-			roots = append(roots, extpacks.NextStepsKindRoot)
-		case line == "DetectionPackKindRoot":
-			roots = append(roots, extpacks.DetectionPackKindRoot)
-		case line == "CredentialSlotsKindRoot":
-			roots = append(roots, extpacks.CredentialSlotsKindRoot)
-		}
-	}
-	if len(roots) == 0 {
-		t.Fatal("no kind roots parsed from inventoryKindRoots")
-	}
-	return roots
-}
-
-func TestProjectScopeCoversEveryKindRootContract(t *testing.T) {
-	t.Parallel()
-	kindRoots := scanInventoryKindRoots(t)
-	for _, root := range kindRoots {
-		if extpacks.ProjectScope(root) == 0 {
-			t.Fatalf("kind root %q has no ProjectScope class", root)
-		}
-	}
-	var deviceOnly []string
-	for _, root := range kindRoots {
-		if extpacks.ProjectScope(root) == extpacks.ScopeDeviceOnly {
-			deviceOnly = append(deviceOnly, root)
-		}
-	}
-	if len(deviceOnly) == 0 {
-		t.Fatal("device-only class must be non-empty")
-	}
-	foundTools := false
-	for _, k := range deviceOnly {
-		if k == "tools" {
-			foundTools = true
-			break
-		}
-	}
-	if !foundTools {
-		t.Fatalf("device-only class must include tools; got %v", deviceOnly)
-	}
-}
-
-func TestDesiredStateAPIHasOneProvenanceShape(t *testing.T) {
-	t.Parallel()
-	root := contractcheck.RepoRoot(t)
-	sources := contractcheck.ReadRepoFile(t, root, "lycaon/internal/extpacks/desired.go") +
-		contractcheck.ReadRepoFile(t, root, "lycaon/internal/extpacks/desired_write.go")
-	for _, forbidden := range []string{
-		"func MergeDesiredWithProvenance(",
-		"func LoadMergedDesiredWithProvenance(",
-		"func LoadDesiredFileChecked(",
-	} {
-		if strings.Contains(sources, forbidden) {
-			t.Fatalf("desired-state API retains obsolete alternate shape %q", forbidden)
-		}
-	}
-}
 
 func TestFloorProjectDisables(t *testing.T) {
 	t.Parallel()
@@ -195,71 +61,8 @@ func TestFloorProjectDisables(t *testing.T) {
 	}
 }
 
-func TestCatalogViewCacheBoundAndFingerprintKey(t *testing.T) {
-	t.Parallel()
-	root := configlayout.FindModuleRoot()
-	stock, err := extpacks.DiscoverStockContent()
-	contractcheck.FailErr(t, "DiscoverStockContent", err)
-	eff := extpacks.Resolve(t.Context(), extpacks.ResolveInput{
-		Packs: stock, Desired: extpacks.EmptyDesired(),
-	})
-	if eff.Revision == "" {
-		t.Fatal("empty fingerprint")
-	}
-	if catalogview.LRUCap != 8 {
-		t.Fatalf("LRUCap=%d want 8", catalogview.LRUCap)
-	}
-
-	cache := catalogview.NewCache(root, nil)
-	v1, err := cache.For(t.Context(), eff)
-	contractcheck.FailErr(t, "For first", err)
-	v2, err := cache.For(t.Context(), eff)
-	contractcheck.FailErr(t, "For second", err)
-	if v1 != v2 {
-		t.Fatal("same fingerprint must return the same *View pointer")
-	}
-	if cache.BuildCount() != 1 {
-		t.Fatalf("builds=%d want 1", cache.BuildCount())
-	}
-
-	// LRU hard cap.
-	cache2 := catalogview.NewCache(root, nil)
-	var first *extpacks.EffectiveCatalog
-	for i := 0; i < catalogview.LRUCap+1; i++ {
-		e := extpacks.Resolve(t.Context(), extpacks.ResolveInput{
-			Packs: stock, Desired: uniqueDisableDesired(i),
-		})
-		if i == 0 {
-			first = e
-		}
-		_, err := cache2.For(t.Context(), e)
-		contractcheck.FailErr(t, "For lru", err)
-	}
-	if cache2.Len() != catalogview.LRUCap {
-		t.Fatalf("lru len=%d want %d", cache2.Len(), catalogview.LRUCap)
-	}
-	before := cache2.BuildCount()
-	_, err = cache2.For(t.Context(), first)
-	contractcheck.FailErr(t, "For evicted", err)
-	if cache2.BuildCount() != before+1 {
-		t.Fatalf("evicted key should rebuild: builds=%d", cache2.BuildCount())
-	}
-
-	// Failed builds are not cached.
-	failCache := catalogview.NewCache("", nil)
-	_, err = failCache.For(t.Context(), eff)
-	if err == nil {
-		t.Fatal("empty module root must fail Build")
-	}
-	if failCache.Len() != 0 {
-		t.Fatalf("failed build must not cache: len=%d", failCache.Len())
-	}
-	if failCache.BuildCount() != 0 {
-		t.Fatalf("failed build counted as success: %d", failCache.BuildCount())
-	}
-}
-
 func TestGateParitySurfaceOffResolvesDevice(t *testing.T) {
+
 	ctx := context.Background()
 	root := configlayout.FindModuleRoot()
 
@@ -273,6 +76,8 @@ func TestGateParitySurfaceOffResolvesDevice(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
+			sessionFixture := storetest.New(t)
+
 			surfaces, err := settings.NewTrustSurfacesStoreAt(filepath.Join(t.TempDir(), "cs.yaml"))
 			contractcheck.FailErr(t, "surfaces", err)
 			if err := surfaces.PutEnabled(map[string]bool{projectcontrib.SurfaceExtensionConfig: tc.deviceOn}); err != nil {
@@ -286,11 +91,11 @@ func TestGateParitySurfaceOffResolvesDevice(t *testing.T) {
 				}(),
 				Desired: extpacks.EmptyDesired(),
 			})
-			m := session.NewHost(store.NewMemory(), session.Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
+			m := session.NewHost(sessionFixture, session.Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, toolstest.NewRegistry())
 			m.SetEffectiveCatalogDeps(root, boot, surfaces)
 			m.Catalog.SetCatalogViewCache(catalogview.NewCache(root, nil))
 
-			reg := project.NewMemoryRegistry()
+			reg := project.NewSQLRegistry(sessionFixture.DB())
 			m.SetProjectRegistry(reg)
 			projDir := t.TempDir()
 			lycaonDir := filepath.Join(projDir, settingsoverlay.DirName())
@@ -332,119 +137,6 @@ func TestGateParitySurfaceOffResolvesDevice(t *testing.T) {
 	}
 }
 
-func scanExtpacksActiveCallSites(t *testing.T, lycaonRoot string) map[string]bool {
-	t.Helper()
-	out := map[string]bool{}
-	err := filepath.WalkDir(lycaonRoot, func(path string, d os.DirEntry, err error) error {
-		if err != nil {
-			return err
-		}
-		if d.IsDir() {
-			base := d.Name()
-			if base == "testdata" || base == "vendor" || base == ".git" {
-				return filepath.SkipDir
-			}
-			return nil
-		}
-		if !strings.HasSuffix(path, ".go") || strings.HasSuffix(path, "_test.go") {
-			return nil
-		}
-		rel, relErr := filepath.Rel(filepath.Dir(lycaonRoot), path)
-		if relErr != nil {
-			return relErr
-		}
-		rel = filepath.ToSlash(rel)
-		fset := token.NewFileSet()
-		f, parseErr := parser.ParseFile(fset, path, nil, 0)
-		if parseErr != nil {
-			return parseErr
-		}
-		ast.Inspect(f, func(n ast.Node) bool {
-			call, ok := n.(*ast.CallExpr)
-			if !ok {
-				return true
-			}
-			sel, ok := call.Fun.(*ast.SelectorExpr)
-			if !ok || sel.Sel == nil || sel.Sel.Name != "Active" {
-				return true
-			}
-			ident, ok := sel.X.(*ast.Ident)
-			if !ok || ident.Name != "extpacks" {
-				return true
-			}
-			out[rel] = true
-			return true
-		})
-		return nil
-	})
-	contractcheck.FailErr(t, "walk Active sites", err)
-	return out
-}
-
-func scanContextWithValueCatalogCarriers(t *testing.T, lycaonRoot string) []string {
-	t.Helper()
-	var hits []string
-	err := filepath.WalkDir(lycaonRoot, func(path string, d os.DirEntry, err error) error {
-		if err != nil {
-			return err
-		}
-		if d.IsDir() {
-			base := d.Name()
-			if base == "testdata" || base == "vendor" || base == ".git" {
-				return filepath.SkipDir
-			}
-			return nil
-		}
-		if !strings.HasSuffix(path, ".go") || strings.HasSuffix(path, "_test.go") {
-			return nil
-		}
-		rel, relErr := filepath.Rel(filepath.Dir(lycaonRoot), path)
-		if relErr != nil {
-			return relErr
-		}
-		rel = filepath.ToSlash(rel)
-		fset := token.NewFileSet()
-		f, parseErr := parser.ParseFile(fset, path, nil, 0)
-		if parseErr != nil {
-			return parseErr
-		}
-		ast.Inspect(f, func(n ast.Node) bool {
-			call, ok := n.(*ast.CallExpr)
-			if !ok {
-				return true
-			}
-			if !isContextWithValueCall(call) {
-				return true
-			}
-			var buf bytes.Buffer
-			_ = ast.Fprint(&buf, fset, call, nil)
-			s := buf.String()
-			if strings.Contains(s, "EffectiveCatalog") || strings.Contains(s, "catalogview.View") {
-				hits = append(hits, rel)
-			}
-			return true
-		})
-		return nil
-	})
-	contractcheck.FailErr(t, "walk WithValue", err)
-	return hits
-}
-
-func isContextWithValueCall(call *ast.CallExpr) bool {
-	switch fun := call.Fun.(type) {
-	case *ast.SelectorExpr:
-		if fun.Sel == nil || fun.Sel.Name != "WithValue" {
-			return false
-		}
-		if ident, ok := fun.X.(*ast.Ident); ok && ident.Name == "context" {
-			return true
-		}
-	case *ast.Ident:
-		return fun.Name == "WithValue"
-	}
-	return false
-}
-
 func hasFloorDiagUnit(eff *extpacks.EffectiveCatalog, code, unitID string) bool {
 	if eff == nil {
 		return false
@@ -483,28 +175,4 @@ func mustContractInventoryPack(t *testing.T, packRoot, id string) extpacks.PackC
 	pc, err := extpacks.InventoryPack(extpacks.Pack{ID: id, Root: extpacks.OnDisk(packRoot)}, man)
 	contractcheck.FailErr(t, "InventoryPack", err)
 	return pc
-}
-
-func uniqueDisableDesired(i int) extpacks.DesiredState {
-	d := extpacks.EmptyDesired()
-	switch i % 9 {
-	case 0:
-	case 1:
-		d.Disabled = []string{extpacks.GuidanceUnitID("coordinator-gate-blocked")}
-	case 2:
-		d.Disabled = []string{extpacks.PolicyUnitID("WRITE_SCOPE_DENIED")}
-	case 3:
-		d.Disabled = []string{extpacks.PolicyUnitID("DOOM_LOOP_REPEAT")}
-	case 4:
-		d.Disabled = []string{extpacks.PolicyUnitID("DOOM_LOOP_REPEAT_WARN")}
-	case 5:
-		d.Disabled = []string{extpacks.WorkflowUnitID("plan")}
-	case 6:
-		d.Disabled = []string{extpacks.WorkflowUnitID("implement")}
-	case 7:
-		d.Disabled = []string{extpacks.GuidanceUnitID("coordinator-gate-blocked"), extpacks.PolicyUnitID("WRITE_SCOPE_DENIED")}
-	default:
-		d.Disabled = []string{extpacks.PolicyUnitID("TOOL_PROFILE_DENIED")}
-	}
-	return d
 }

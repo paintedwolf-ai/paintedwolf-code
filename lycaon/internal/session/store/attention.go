@@ -3,7 +3,6 @@ package store
 import (
 	"context"
 	"fmt"
-	"sort"
 	"strings"
 	"time"
 
@@ -61,63 +60,5 @@ func (s *sqlSessionViews) LatestFinishes(ctx context.Context) (map[string]time.T
 		}
 		out[row.SessionID] = at
 	}
-	return out, nil
-}
-
-// LatestFinishes returns each session's newest completed turn.
-func (s *memorySessionViews) LatestFinishes(ctx context.Context) (map[string]time.Time, error) {
-	if err := ctx.Err(); err != nil {
-		return nil, err
-	}
-	s.core.mu.RLock()
-	defer s.core.mu.RUnlock()
-	return latestFinishesLocked(s.core), nil
-}
-
-func latestFinishesLocked(s *memoryCore) map[string]time.Time {
-	out := make(map[string]time.Time)
-	for _, turn := range s.turns {
-		if turn.Status == TurnStatusComplete && turn.CompletedAt != nil && turn.CompletedAt.After(out[turn.SessionID]) {
-			out[turn.SessionID] = *turn.CompletedAt
-		}
-	}
-	return out
-}
-
-// ListAttentionCandidates selects unarchived root sessions that are active or
-// hold an unread completed turn. Memory holds no checkpoints or workflow runs,
-// so those never select an idle session here.
-func (s *memorySessionViews) ListAttentionCandidates(ctx context.Context) ([]attention.Candidate, error) {
-	if err := ctx.Err(); err != nil {
-		return nil, err
-	}
-	core := s.core
-	core.mu.RLock()
-	defer core.mu.RUnlock()
-	out := make([]attention.Candidate, 0)
-	finishes := latestFinishesLocked(core)
-	for _, sess := range core.sessions {
-		if sess == nil || sess.ArchivedAt != nil || strings.TrimSpace(sess.ParentSessionID) != "" {
-			continue
-		}
-		finished, hasFinish := finishes[sess.ID]
-		unread := hasFinish && (sess.SeenAt == nil || finished.After(*sess.SeenAt))
-		if sess.Status == api.SessionStatusIdle && !unread {
-			continue
-		}
-		statusSince, changed := core.statusChangedAt[sess.ID]
-		if !changed {
-			statusSince = sess.CreatedAt
-		}
-		out = append(out, attention.Candidate{
-			SessionID:   sess.ID,
-			ProjectID:   sess.ProjectID,
-			Title:       strings.TrimSpace(sess.Title),
-			Status:      sess.Status,
-			StatusSince: statusSince,
-			SeenAt:      sess.SeenAt,
-		})
-	}
-	sort.Slice(out, func(i, j int) bool { return out[i].SessionID < out[j].SessionID })
 	return out, nil
 }

@@ -60,7 +60,7 @@ def suite_findings(name, report):
     tracked = {(r["category"], r["id"]): r for r in report.get("tracking", {}).get("artifacts", [])}
     for f in report["findings"]:
         kind, label = f["kind"], f'{f["category"]} {f["id"]}'
-        limit = report["categories"][f["category"]]["limit"]
+        limit = report["categories"][f["category"]].get("limit")
         source = f["sources"][0] if f["sources"] else None
         if kind == "over_limit":
             failed = True
@@ -80,7 +80,8 @@ def suite_findings(name, report):
                            f"{review['reason']}" if review else
                            "review cohesion, dependencies, and lifecycle; choose refactoring, consolidation, or bounded retention")
             severity = "notice" if review and review['state'] == 'retained' else "warning"
-            out.append(Finding(severity, name, f"{label}: {size(f)}, warning {f['bound']:,}, limit {limit:,}; {disposition}", source))
+            ceiling = f"limit {limit:,}" if limit is not None else "no hard limit"
+            out.append(Finding(severity, name, f"{label}: {size(f)}, warning {f['bound']:,}, {ceiling}; {disposition}", source))
         elif kind == "excepted":
             out.append(Finding("notice", name, f'{label}: {size(f)}, admitted up to {f["bound"]:,} because: '
                                f'{f["reason"]}', source))

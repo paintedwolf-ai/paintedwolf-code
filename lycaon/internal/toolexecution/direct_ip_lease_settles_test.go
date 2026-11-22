@@ -90,3 +90,59 @@ func TestDirectIPChatLeaseSettlesOnlyTheDirectNetworkReason(t *testing.T) {
 		})
 	}
 }
+
+// quietedDirectIPGate answers every quiet key as live.
+type quietedDirectIPGate struct{ decisionGate }
+
+func (quietedDirectIPGate) AskQuietLive(string, string) (hitl.AskQuiet, bool) {
+	return hitl.AskQuiet{}, true
+}
+
+func (quietedDirectIPGate) NoteAskQuietSuppressed(string, string) {}
+
+// cardCountingHITL counts raised cards; the quiet path must raise none.
+type cardCountingHITL struct {
+	hitl.CheckpointManager
+	requested int
+}
+
+func (m *cardCountingHITL) RequestCheckpoint(context.Context, hitl.CheckpointRequest) (*hitl.CheckpointResponse, error) {
+	m.requested++
+	return &hitl.CheckpointResponse{Status: hitl.DecisionStatusRejected}, nil
+}
+
+// A live quiet answers the direct-network ask without a card, so the
+// executor itself issues the once-permit and the action is authorized.
+func TestQuietedDirectIPAskIssuesTheOncePermit(t *testing.T) {
+	directFact := gate.Fact{Gate: api.GateUnobservedChannel, Key: "boundary.egress", Value: gate.EgressDirectIP, Source: "confine"}
+	contract, ok := toolcontract.Lookup("command")
+	if !ok {
+		t.Fatal("command contract missing")
+	}
+	root := shortTempDir(t)
+	runtime := &memoryDirectIPRuntime{}
+	cards := &cardCountingHITL{}
+	executor := NewExecutor(nil, nil, "implement")
+	executor.Approvals.checkpointMgr = cards
+	executor.Approvals.approvalGate = quietedDirectIPGate{decisionGate{decision: &gate.Decision{
+		Primary: api.GateUnobservedChannel, Cited: []gate.Fact{directFact}, ReasonKey: string(api.GateUnobservedChannel) + ":unconfined",
+	}}}
+	executor.Capabilities.SetDirectIPCapabilityRuntime(runtime)
+	toolCtx := tools.ToolContext{
+		Invocation: tools.Invocation{Contract: contract},
+		Identity:   tools.InvocationIdentity{SessionID: "chat", ToolCallID: "call-1"},
+		Source: tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "root", Path: root, IsPrimary: true}},
+			ActiveRootID: "root"},
+	}
+	args := map[string]any{"command": "ntpdate time.example", "capability_request": map[string]any{"direct_ip": true}}
+	result, err := executor.Capabilities.preflightDirectIPCapability(t.Context(), "command", args, toolCtx, false)
+	if err != nil || result == nil || !result.Authorized {
+		t.Fatalf("quieted direct-IP ask = %+v, %v; want authorized", result, err)
+	}
+	if cards.requested != 0 {
+		t.Fatalf("quieted ask raised %d cards", cards.requested)
+	}
+	if !runtime.Authorized(toolCtx.PermitIdentity(), result.ActionDigest) {
+		t.Fatal("quieted ask left no current-call permit")
+	}
+}

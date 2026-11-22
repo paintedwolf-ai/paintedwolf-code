@@ -48,6 +48,10 @@ func TestRefWatchEmitsHeadMovedForOutsideCommit(t *testing.T) {
 			headMoved.Add(1)
 		}
 		if ev.Kind == repochange.WorktreeChanged {
+			// The setup write can arrive again after the platform stream becomes live.
+			if len(ev.Paths) == 1 && ev.Paths[0] == watchBarrier {
+				return
+			}
 			mu.Lock()
 			worktree = append(worktree, ev.Paths)
 			mu.Unlock()

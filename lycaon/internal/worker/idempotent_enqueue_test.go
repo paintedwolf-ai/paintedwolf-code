@@ -42,33 +42,6 @@ func TestEnqueueReplaysSourceToolCallAndRejectsDifferentArguments(t *testing.T) 
 	}
 }
 
-func TestMemoryEnqueueReplaysSourceToolCallAndRejectsDifferentArguments(t *testing.T) {
-	ctx := context.Background()
-	queue := NewInMemoryQueue(2)
-	task := api.WorkerTask{
-		ParentSessionID: "parent-1", SourceToolCallID: "call-1", SourceArgsDigest: "digest-a",
-		ProjectID: "project-1", WorkspacePath: t.TempDir(), AgentType: "implementer",
-		Status: api.WorkerStatusPending, ExecutionTarget: api.ExecutionTargetLocal,
-		Prompt: "Inspect the project", Brief: "Inspect the project",
-	}
-	firstID, err := queue.Enqueue(ctx, task)
-	testutil.FailErr(t, "enqueue first task", err)
-	replayedID, err := queue.Enqueue(ctx, task)
-	testutil.FailErr(t, "replay task enqueue", err)
-	if replayedID != firstID {
-		t.Fatalf("replayed id = %s want %s", replayedID, firstID)
-	}
-	task.SourceArgsDigest = "digest-b"
-	if _, err := queue.Enqueue(ctx, task); err == nil {
-		t.Fatal("expected source tool-call conflict")
-	}
-	jobs, err := queue.List(ctx, "project-1")
-	testutil.FailErr(t, "list jobs", err)
-	if len(jobs) != 1 {
-		t.Fatalf("jobs = %d want 1", len(jobs))
-	}
-}
-
 func TestReviewJobInsertionFencesDuplicateReservations(t *testing.T) {
 	database := testdbfixture.Open(t, "store.db")
 	root := t.TempDir()

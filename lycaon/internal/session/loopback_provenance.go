@@ -258,7 +258,7 @@ func (p *DefaultLoopbackProvenance) IsSessionOwned(ctx context.Context, sessionI
 	if err != nil {
 		current = listenerView{}
 	}
-	return p.ownership(ctx, sessionID, workspaceDir, port, netip.Addr{}, onPort(current.listeners, port))
+	return p.ownership(ctx, sessionID, workspaceDir, port, onPort(current.listeners, port))
 }
 
 // InspectEndpoint decides whether the listeners answering endpoint belong to the session.
@@ -272,7 +272,7 @@ func (p *DefaultLoopbackProvenance) InspectEndpoint(ctx context.Context, session
 	}
 	portListeners := onPort(current.listeners, endpoint.Port())
 	answering := listenersAnsweringAddr(portListeners, endpoint.Addr())
-	return p.ownership(ctx, sessionID, workspaceDir, endpoint.Port(), endpoint.Addr(), answering)
+	return p.ownership(ctx, sessionID, workspaceDir, endpoint.Port(), answering)
 }
 
 // HeldByOther implements LoopbackProvenanceResolver.
@@ -288,7 +288,7 @@ func (p *DefaultLoopbackProvenance) HeldByOther(ctx context.Context, sessionID, 
 	if len(held) == 0 {
 		return !current.complete
 	}
-	owned, _ := p.ownership(ctx, sessionID, workspaceDir, port, netip.Addr{}, held)
+	owned, _ := p.ownership(ctx, sessionID, workspaceDir, port, held)
 	return !owned
 }
 
@@ -343,7 +343,6 @@ func (p *DefaultLoopbackProvenance) ownership(
 	ctx context.Context,
 	sessionID, workspaceDir string,
 	port uint16,
-	targetAddr netip.Addr,
 	held []socketListener,
 ) (bool, ProvenanceEvidence) {
 	pub, hasPub := p.findContainerPublishedPort(ctx, workspaceDir, port)

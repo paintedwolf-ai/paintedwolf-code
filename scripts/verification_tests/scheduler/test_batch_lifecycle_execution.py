@@ -615,6 +615,39 @@ print('fixture '+name, flush=True)'''))
         self.assertEqual([r["source"] for r in self.records()], ["initial", "later"])
         self.assertEqual(len({r["batch_id"] for r in self.receipts()}), 2)
 
+    def test_concurrent_snapshots_never_share_a_rust_target(self):
+        """Cargo trusts file times, so a target another source built later would pass for this one."""
+        self.env.pop("GITHUB_ACTIONS", None)
+        self.parallel_profiles()
+        first = self.start("build")
+        self.queued(1)
+        self.queue.resume()
+        self.await_condition(lambda: len(self.records()) == 1)
+        (self.repo / "source.txt").write_text("later")
+        second = self.start("lint")
+        self.await_condition(lambda: len(self.records()) == 2)
+        self.release.touch()
+        self.collect(first)
+        self.collect(second)
+        records = self.records()
+        self.assertEqual({r["source"] for r in records}, {"initial", "later"})
+        self.assertEqual(len({r["cwd"] for r in records}), 2)
+        targets = {Path(r[key]).resolve() for r in records for key in ("cargo_target", "compiler_cache")}
+        self.assertEqual(len(targets), 4)
+        shared = {(self.repo / "lycaon-den" / "target").resolve(), (self.artifacts / "compiler-cache").resolve()}
+        self.assertFalse(targets & shared)
+
+    def test_a_hosted_runner_snapshot_keeps_the_checkouts_rust_target(self):
+        """A hosted runner verifies only its job's source, so its restored compiler caches stay in use."""
+        self.env["GITHUB_ACTIONS"] = "true"
+        self.catalog["environment"]["prefixes"].append("GITHUB_")
+        self.save_catalog()
+        self.queue.resume()
+        self.collect(self.start("build"))
+        record = self.records()[0]
+        self.assertEqual(Path(record["cargo_target"]).resolve(), (self.repo / "lycaon-den" / "target").resolve())
+        self.assertEqual(Path(record["compiler_cache"]).resolve(), (self.artifacts / "compiler-cache").resolve())
+
     def test_snapshot_remains_stable_while_the_checkout_changes(self):
         self.hold.touch()
         first = self.start("check-fast")

@@ -50,7 +50,7 @@ var documentationWords = []string{"--help", "--version", "info", "man"}
 
 // Cases returns the corpus in a fixed order.
 func Cases() []Case {
-	return slices.Concat(languageCases, naturalCases, utilityCases, gitCases, liveRunCases, statusCases())
+	return slices.Concat(languageCases, naturalCases, utilityCases, gitCases, liveRunCases, StatusCases())
 }
 
 // Validate reports a corpus that cannot be compared: duplicate identifiers,

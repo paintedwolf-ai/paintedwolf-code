@@ -261,7 +261,9 @@ func TestCommandTransformConflictsWhenDestinationMovesDuringReview(t *testing.T)
 	}
 }
 
-func TestCommandCapturesDiskWhilePreservingHumanDraft(t *testing.T) {
+// A native capture reads the person's draft; an installed program is declared
+// the saved file it will read. Neither saves the draft.
+func TestCommandCapturesTheDraftWhileLaunchesDeclareDisk(t *testing.T) {
 	f := newRevisionFixture(t, map[string]string{"a.txt": "base\n", "b.txt": "other\n"})
 	ctx := t.Context()
 	f.personTypes(t, ctx, "a.txt", "unsaved draft\n")
@@ -270,7 +272,7 @@ func TestCommandCapturesDiskWhilePreservingHumanDraft(t *testing.T) {
 	declared, err := f.revisions.DeclareLaunchInput(ctx, f.tctx, "a.txt")
 	testutil.FailErr(t, "declare launch input", err)
 	diskSHA := textfile.SHA256([]byte("base\n"))
-	if source.Content != "base\n" || source.Revision.Mode != toolcontract.PublishedDiskRevision || source.Revision.DiskSHA256 != diskSHA || source.Revision.ContentSHA256 != diskSHA {
+	if source.Content != "unsaved draft\n" || source.Revision.Mode != toolcontract.AcceptedDocumentRevision || source.Revision.DiskSHA256 != diskSHA || source.Revision.ContentSHA256 != textfile.SHA256([]byte("unsaved draft\n")) {
 		t.Fatalf("native capture = %+v", source)
 	}
 	if declared.Mode != toolcontract.PublishedDiskRevision || declared.Basis != toolcontract.DeclaredAtLaunch || declared.DiskSHA256 != diskSHA || declared.ContentSHA256 != diskSHA || declared.ContentBytes != 5 {
@@ -280,12 +282,12 @@ func TestCommandCapturesDiskWhilePreservingHumanDraft(t *testing.T) {
 	testutil.FailErr(t, "capture destination", err)
 	result, err := f.write.Apply(ctx, f.pinnedWrite("b.txt", strings.ToUpper(source.Content), destination, source.Revision), f.tctx)
 	testutil.FailErr(t, "publish from draft", err)
-	if !result.Saved || f.disk(t, "b.txt") != "BASE\n" {
+	if !result.Saved || f.disk(t, "b.txt") != "UNSAVED DRAFT\n" {
 		t.Fatalf("result = %+v", result)
 	}
 	testutil.FailErr(t, "record native and launch provenance", f.recorder.RecordRevisionPins(ctx, f.execution, 0, []toolcontract.ExecutionRevision{source.Revision, destination, declared}))
 	if f.disk(t, "a.txt") != "base\n" {
-		t.Fatal("unrelated draft was saved")
+		t.Fatal("reading the draft saved it")
 	}
 	dirty, err := f.adapter.DirtyDocuments(ctx, f.project.ID, f.project.SourceBranch)
 	testutil.FailErr(t, "dirty documents", err)

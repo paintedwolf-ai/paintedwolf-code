@@ -100,6 +100,23 @@ func freelistTrunks(freelistPages, pageSize int64) int64 {
 	return freelistPages/(leaves+1) + 1
 }
 
+// VacuumPassPageLimit is the most free pages one pass releases.
+const VacuumPassPageLimit = vacuumSlicePages * vacuumSlicesPerPass
+
+// VacuumPassShrinkLimit is the most pages one pass removes from the file: its
+// free pages, plus the pointer-map pages, of usable/5 entries each, that
+// stop being needed when those pages go.
+func VacuumPassShrinkLimit(pageSize int64) int64 {
+	entries := max(pageSize/5, 1)
+	return VacuumPassPageLimit + (VacuumPassPageLimit+entries-1)/entries + 1
+}
+
+// VacuumPassPages is what a full pass frees from a freelist this long. Slices
+// grow as the list shrinks, so no later pass of the same drain frees fewer.
+func VacuumPassPages(freelistPages, pageSize int64) int64 {
+	return vacuumPagesForSlice(freelistPages, pageSize) * vacuumSlicesPerPass
+}
+
 func vacuumPagesForSlice(freelistPages, pageSize int64) int64 {
 	return min(max(vacuumSliceTrunkVisits/freelistTrunks(freelistPages, pageSize), 1), vacuumSlicePages)
 }

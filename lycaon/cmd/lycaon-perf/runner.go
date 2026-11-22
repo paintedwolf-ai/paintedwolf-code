@@ -71,10 +71,7 @@ func (s *runState) scenarios() runScenarioRunner {
 	return runScenarioRunner{s}
 }
 
-const (
-	soakCycleInterval      = 5 * time.Second
-	harnessCompletionGrace = 5 * time.Minute
-)
+const soakCycleInterval = 5 * time.Second
 
 func run(ctx context.Context, cfg runConfig) (result report, resultErr error) {
 	state, err := newRunState(cfg)
@@ -94,9 +91,7 @@ func run(ctx context.Context, cfg runConfig) (result report, resultErr error) {
 			}
 		}()
 	}
-	runCtx, cancelRun := context.WithTimeout(ctx, harnessRunTimeout(cfg.soak))
-	defer cancelRun()
-	if err := state.exec().startSidecar(runCtx); err != nil {
+	if err := state.exec().startSidecar(ctx); err != nil {
 		_ = state.exec().stopSidecar()
 		return report{}, err
 	}
@@ -105,7 +100,7 @@ func run(ctx context.Context, cfg runConfig) (result report, resultErr error) {
 			resultErr = fmt.Errorf("stop performance sidecar: %w", err)
 		}
 	}()
-	if err := state.runWorkload(runCtx); err != nil {
+	if err := state.runWorkload(ctx); err != nil {
 		return report{}, err
 	}
 	state.workloadEnd = time.Now()
@@ -286,15 +281,8 @@ func (s runExecutor) stopSidecar() (resultErr error) {
 	if err := process.Signal(os.Interrupt); err != nil && !errors.Is(err, os.ErrProcessDone) {
 		return err
 	}
-	select {
-	case err := <-s.wait:
-		if err != nil {
-			return processExitedError(s.stderrPath, err)
-		}
-		return nil
-	case <-time.After(20 * time.Second):
-		_ = process.Kill()
-		<-s.wait
-		return fmt.Errorf("sidecar did not stop within 20s")
+	if err := <-s.wait; err != nil {
+		return processExitedError(s.stderrPath, err)
 	}
+	return nil
 }

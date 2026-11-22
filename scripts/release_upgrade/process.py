@@ -30,7 +30,7 @@ def read_json(path: Path):
 
 
 def process_identity(pid: int) -> str | None:
-    result = subprocess.run(["ps", "-p", str(pid), "-o", "lstart=,comm="], capture_output=True, text=True, timeout=5)
+    result = subprocess.run(["ps", "-p", str(pid), "-o", "lstart=,comm="], capture_output=True, text=True)
     return result.stdout.strip() if result.returncode == 0 else None
 
 
@@ -45,17 +45,30 @@ class Installation:
         self.launched_at = time.time()
 
     def launch(self):
+        self.clear_stale_daemon()
         self.launched_at = time.time()
         subprocess.run(["/usr/bin/open", "-n", "-j", "--env", "LYCAON_LLM_MOCK=1",
                         "--stdout", str(self.config / "desktop-launch.log"),
                         "--stderr", str(self.config / "desktop-launch.log"), str(self.app)], check=True, timeout=30)
+
+    def clear_stale_daemon(self):
+        """Forget a daemon record whose process has exited, so observation waits for the next engine."""
+        record = self.config / "daemon.json"
+        daemon = read_json(record)
+        pid = daemon.get("pid") if isinstance(daemon, dict) else None
+        if type(pid) is int and pid > 1 and process_identity(pid) is None:
+            record.unlink(missing_ok=True)
+
+    def app_running(self) -> bool:
+        self.capture_owned()
+        return any(kind == 1 and process_identity(pid) == identity for pid, (identity, kind) in self.owned.items())
 
     def capture_owned(self):
         helpers = self.config.glob("updates/installations/*/staging/*/update-helper")
         commands = {str(self.executable): 1, **{str(path): 0 for path in helpers},
                     str(self.app / "Contents/MacOS/pw"): 2,
                     str(self.app / "Contents/Helpers/Painted Wolf Code engine.app/Contents/MacOS/pw"): 2}
-        result = subprocess.run(["ps", "-axo", "pid=,ppid=,comm="], check=True, capture_output=True, text=True, timeout=5)
+        result = subprocess.run(["ps", "-axo", "pid=,ppid=,comm="], check=True, capture_output=True, text=True)
         rows = [row.strip().split(None, 2) for row in result.stdout.splitlines()]
         rows = [(int(row[0]), int(row[1]), row[2]) for row in rows if len(row) == 3 and row[0].isdigit() and row[1].isdigit()]
         for pid, _, executable in rows:
@@ -91,7 +104,7 @@ class Installation:
         if self.owned.get(pid) != (engine, 2):
             return None
         self.last_observation["state"] = "parent_unavailable"
-        parent = subprocess.run(["ps", "-p", str(pid), "-o", "ppid="], capture_output=True, text=True, timeout=5)
+        parent = subprocess.run(["ps", "-p", str(pid), "-o", "ppid="], capture_output=True, text=True)
         if parent.returncode or not parent.stdout.strip().isdigit():
             return None
         app_pid = int(parent.stdout.strip())

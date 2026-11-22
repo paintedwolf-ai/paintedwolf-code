@@ -3,34 +3,11 @@ package confine_test
 import (
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/confine"
 	"github.com/lycaon/lycaon/internal/testutil"
 )
-
-func TestBuildProfileReadRootsAllowBackNotWritable(t *testing.T) {
-	cfg := t.TempDir()
-	t.Setenv("LYCAON_CONFIG_DIR", cfg)
-	skillDir := filepath.Join(cfg, "packs", "stock", "skills", "verify-a-change")
-	testutil.FailErr(t, "mkdir skill", os.MkdirAll(skillDir, 0o700))
-	proj := t.TempDir()
-
-	p, err := confine.BuildSeatbeltProfile(confine.Confinement{
-		Roots:     []string{proj},
-		ReadRoots: []string{skillDir},
-	})
-	testutil.FailErr(t, "BuildSeatbeltProfile", err)
-
-	allowBack := readAllowBackBlock(t, p)
-	assertBlockCoversPath(t, allowBack, skillDir, "skill read allow-back")
-
-	writeAllow, _ := profileBlock(t, p, blockAllowWrite, 0)
-	if strings.Contains(writeAllow, skillDir) {
-		t.Fatalf("ReadRoots must not appear in write allow: %s", writeAllow)
-	}
-}
 
 func TestBoundarySkillReadRoots(t *testing.T) {
 	self := requireLiveBoundary(t)

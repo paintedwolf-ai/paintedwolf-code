@@ -84,14 +84,6 @@ func prependEvidenceHandles(content string, handles []string) string {
 	return content
 }
 
-func (st *promptLoopTurnState) lookupSecretStorage(id string) (secretStorageOverlay, bool) {
-	if st == nil || len(st.secretStorageOverlays) == 0 {
-		return secretStorageOverlay{}, false
-	}
-	overlay, ok := st.secretStorageOverlays[strings.TrimSpace(id)]
-	return overlay, ok
-}
-
 func (st *promptLoopTurnState) rememberSecretStorageOverlay(stored, transient api.Message) {
 	if st == nil || strings.TrimSpace(stored.ID) == "" {
 		return

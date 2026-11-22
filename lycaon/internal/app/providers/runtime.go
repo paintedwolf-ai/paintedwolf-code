@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"github.com/lycaon/lycaon/internal/db"
 	"log/slog"
+	"os"
 
 	"github.com/lycaon/lycaon/internal/bootrecovery"
 	"github.com/lycaon/lycaon/internal/briefinghost"
@@ -14,6 +15,7 @@ import (
 	"github.com/lycaon/lycaon/internal/llm/compaction"
 	"github.com/lycaon/lycaon/internal/llm/modelcall"
 	"github.com/lycaon/lycaon/internal/llm/providers/nativegen"
+	"github.com/lycaon/lycaon/internal/modelfeed"
 	"github.com/lycaon/lycaon/internal/pricing"
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/startupprotocol"
@@ -56,6 +58,13 @@ func (b *Runtime) Build(ctx context.Context, options Options, database *db.Store
 	}
 	service := b.Service
 	resources.Track("llm-service", 45, service.Close)
+	if options.ModelFeedDocument != "" {
+		feed, err := fixtureModelFeed(options.ModelFeedDocument, dataDir)
+		if err != nil {
+			return fmt.Errorf("model feed fixture: %w", err)
+		}
+		service.Registry.SetModelFeed(ctx, feed)
+	}
 	if !mockEnabled && (b.Service == nil || b.Service.Registry == nil || !b.Service.Registry.AnyConfigured()) {
 		slog.WarnContext(ctx, "no LLM provider configured; prompts will fail until a provider API key is set")
 	}
@@ -138,6 +147,16 @@ type Options struct {
 	Client       modelcall.LLMClient
 	Pricer       cost.Pricer
 	Startup      startupprotocol.Sink
+	// ModelFeedDocument is a models.dev document the shared model feed serves
+	// in place of fetching it.
+	ModelFeedDocument string
+}
+
+func fixtureModelFeed(document, dataDir string) (*modelfeed.Feed, error) {
+	return modelfeed.New(modelfeed.Options{
+		CacheDir: enginepaths.ModelfeedRootUnder(dataDir),
+		GetBytes: func(context.Context, string) ([]byte, error) { return os.ReadFile(document) },
+	})
 }
 
 type ResourceLifetime interface {

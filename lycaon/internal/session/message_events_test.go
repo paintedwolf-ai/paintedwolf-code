@@ -3,6 +3,7 @@ package session_test
 import (
 	"context"
 	"encoding/json"
+	"github.com/lycaon/lycaon/internal/tools/toolstest"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/events"
@@ -13,7 +14,6 @@ import (
 	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
-	"github.com/lycaon/lycaon/internal/tools"
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -23,7 +23,7 @@ func TestAppendMessagesPublishesMessageSSE(t *testing.T) {
 	store := store.NewSQL(sqlDB)
 	hub := events.NewMemoryHub()
 	pub := &events.Publisher{Hub: hub}
-	mgr := session.NewHost(store, session.Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
+	mgr := session.NewHost(store, session.Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, toolstest.NewRegistry())
 	mgr.SetEventPublisher(pub)
 
 	ctx := context.Background()

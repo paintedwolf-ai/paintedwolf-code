@@ -11,7 +11,7 @@ import { isApiErrorCode } from "../../api/http.ts";
 import type { AppStore } from "../../store/app-state-model.ts";
 import { projectIdForPath } from "../../store/app-state.ts";
 import type { Project } from "../../api/types.ts";
-import { catalogWorkflowRun } from "../../workflow/workflow-run-stack.ts";
+import { catalogWorkflowRun, isAmbientRootRun } from "../../workflow/workflow-run-stack.ts";
 
 /** Refusals that mean the run moved under the caller's view of it. */
 const WORKFLOW_CHANGED_CODES = [
@@ -20,6 +20,9 @@ const WORKFLOW_CHANGED_CODES = [
   "workflow_replacement_target_required",
   "workflow_run_not_active",
 ] as const;
+
+const EXIT_STALE_CODES = ["workflow_revision_conflict", "workflow_run_not_active"] as const;
+const EXITABLE_STATUSES = new Set<WorkflowRun["status"]>(["running", "paused", "paused_on_child"]);
 
 function workflowRunIdsFromMessages(messages: readonly Message[]): string[] {
   const ids = new Set<string>();
@@ -206,12 +209,32 @@ export async function exitActiveWorkflow(
 		appStore.state.workflowRuns,
 	) ?? appStore.state.activeWorkflowRun;
   if (!active) return null;
-  return mutateWorkflowAndRefresh(appStore, sessionId, projectDir, projects, client, () =>
-    client.exitWorkflowRun(active.id, {
-      expected_revision: active.revision,
-      ...(reason ? { reason } : {}),
-    }),
-  );
+  const exit = (run: WorkflowRun) =>
+    mutateWorkflowAndRefresh(appStore, sessionId, projectDir, projects, client, () =>
+      client.exitWorkflowRun(run.id, {
+        expected_revision: run.revision,
+        ...(reason ? { reason } : {}),
+      }),
+    );
+  try {
+    return await exit(active);
+  } catch (err) {
+    if (!isApiErrorCode(err, EXIT_STALE_CODES)) throw err;
+    // The view was stale: a named run is reread; a typed /exit means the host's current catalog run.
+    const current = target ? await client.getWorkflowRun(target.id) : await hostCatalogRun(client, sessionId);
+    return current && EXITABLE_STATUSES.has(current.status) ? exit(current) : current ?? null;
+  }
+}
+
+async function hostCatalogRun(client: LycaonClient, sessionId: string): Promise<WorkflowRun | null> {
+  let run = await client.getActiveWorkflowRun(sessionId);
+  if (!run || isAmbientRootRun(run)) return null;
+  while (run.parent_run_id) {
+    const parent = await client.getWorkflowRun(run.parent_run_id);
+    if (isAmbientRootRun(parent)) break;
+    run = parent;
+  }
+  return run;
 }
 
 export async function pauseActiveWorkflow(

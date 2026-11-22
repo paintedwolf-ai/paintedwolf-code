@@ -1,0 +1,18 @@
+id: conformance/sweep:items
+label: Items
+prefix: items
+requirement: conformance/sweep:tracker
+tool: search_items
+query:
+  min_length: 2
+  max_results: 25
+result:
+  id: item_id
+  title: title
+  description: kind
+  detail: state
+  arguments: activation
+activation:
+  command: conformance/sweep:read-item
+  input:
+    - {id: item-id, type: string, required: true}

@@ -48,7 +48,7 @@ def engine_crash(binding: dict, host_execution: bool) -> tuple[str, dict, dict]:
             script = root / 'lifecycle.py'
             script.write_text(SCRIPT)
             arguments = {'command': shlex.join([str(Path(sys.executable).resolve()), str(script), 'detached']),
-                         'background': True, 'wait_ms': 1, 'timeout_ms': 90000}
+                         'background': True, 'wait_ms': 1}
             if host_execution:
                 arguments['capability_request'] = {'host_execution': True}
             provider = stack.enter_context(ProviderFixture([{'name': 'command', 'arguments': arguments}]))

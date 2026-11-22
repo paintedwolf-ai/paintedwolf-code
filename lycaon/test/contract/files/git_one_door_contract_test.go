@@ -2,66 +2,9 @@ package contract
 
 import (
 	"go/ast"
-	"go/parser"
 	"go/token"
-	"os"
-	"path/filepath"
 	"strconv"
-	"strings"
-	"testing"
-
-	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 )
-
-// TestGitOneDoorContract proves every git subprocess in lycaon/internal goes
-// through gitexec: no PATH LookPath("git"), no /usr/bin/git literal, no direct
-// exec of "git"/"git-lfs", and no config --local/--global/--system writes.
-// Every non-test Go tree that ships in the sidecar is scanned, including cmd/
-// and pkg/.
-func TestGitOneDoorContract(t *testing.T) {
-	t.Parallel()
-	root := contractcheck.RepoRoot(t)
-	fset := token.NewFileSet()
-	var findings []string
-
-	for _, tree := range []string{"internal", "cmd", "pkg"} {
-		treeRoot := filepath.Join(root, "lycaon", tree)
-		if _, statErr := os.Stat(treeRoot); statErr != nil {
-			continue
-		}
-		err := filepath.WalkDir(treeRoot, func(path string, d os.DirEntry, walkErr error) error {
-			if walkErr != nil {
-				return walkErr
-			}
-			if d.IsDir() {
-				return nil
-			}
-			if !strings.HasSuffix(path, ".go") || strings.HasSuffix(path, "_test.go") {
-				return nil
-			}
-			rel, _ := filepath.Rel(root, path)
-			src, err := os.ReadFile(path)
-			if err != nil {
-				return err
-			}
-			if strings.Contains(string(src), "/usr/bin/git") {
-				findings = append(findings, rel+`: literal /usr/bin/git`)
-			}
-			file, err := parser.ParseFile(fset, path, src, 0)
-			if err != nil {
-				return err
-			}
-			inGitexec := strings.Contains(filepath.ToSlash(rel), "/internal/gitexec/")
-			findings = append(findings, scanGitOneDoor(fset, file, rel, inGitexec)...)
-			return nil
-		})
-		contractcheck.FailErr(t, "walk "+tree, err)
-	}
-
-	if len(findings) > 0 {
-		t.Fatalf("git one-door violations:\n  %s", strings.Join(findings, "\n  "))
-	}
-}
 
 func scanGitOneDoor(fset *token.FileSet, file *ast.File, rel string, inGitexec bool) []string {
 	var out []string

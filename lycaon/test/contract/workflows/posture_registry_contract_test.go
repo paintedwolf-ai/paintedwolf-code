@@ -1,17 +1,15 @@
 package contract
 
 import (
-	"os"
-	"path/filepath"
 	"testing"
 
 	"github.com/lycaon/lycaon/config"
 	"github.com/lycaon/lycaon/internal/rules"
 	sessionposture "github.com/lycaon/lycaon/internal/session/posture"
 	"github.com/lycaon/lycaon/internal/session/profiles"
+	workflowcomposition "github.com/lycaon/lycaon/internal/workflow/composition"
 	"github.com/lycaon/lycaon/pkg/api"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
-	"gopkg.in/yaml.v3"
 )
 
 func TestPostureRegistryClosure(t *testing.T) {
@@ -45,31 +43,20 @@ func TestPostureRegistryClosure(t *testing.T) {
 
 func TestComposePolicyPosturesValid(t *testing.T) {
 	t.Parallel()
-	root := contractcheck.RepoRoot(t)
-	path := filepath.Join(root, "lycaon", "config", "packs", "painted-wolf", "platform", "host", "compose-policy.yaml")
-	data, err := os.ReadFile(path)
-	contractcheck.FailErr(t, "read file", err)
-	var raw map[string]any
-	if err := yaml.Unmarshal(data, &raw); err != nil {
-		contractcheck.FailErr(t, "unmarshal YAML document", err)
+	policy, err := workflowcomposition.LoadComposePolicy()
+	contractcheck.FailErr(t, "workflowcomposition.LoadComposePolicy failed", err)
+	if len(policy.PostureRequiredGates) == 0 {
+		t.Fatal("compose policy loaded no posture_required_gates")
 	}
-	if _, ok := raw["mode_required_gates"]; ok {
-		t.Fatal("compose-policy must not use mode_required_gates key")
-	}
-	gatesRaw, ok := raw["posture_required_gates"].(map[string]any)
-	if !ok {
-		t.Fatal("compose-policy.yaml missing posture_required_gates")
-	}
-	for posture, gates := range gatesRaw {
+	for posture, gates := range policy.PostureRequiredGates {
 		if !sessionposture.ValidSessionPosture(posture) {
-			t.Fatalf("compose-policy unknown posture %q", posture)
+			t.Errorf("compose policy keys unknown posture %q", posture)
 		}
-		list, ok := gates.([]any)
-		if !ok || len(list) == 0 {
-			t.Fatalf("compose-policy posture %q has empty gates", posture)
+		if len(gates) == 0 {
+			t.Errorf("compose policy posture %q has no gates", posture)
 		}
 	}
-	if _, ok := gatesRaw["spec"]; ok {
-		t.Fatal("spec posture should not have compose-time required gates")
+	if _, ok := policy.PostureRequiredGates[string(api.SessionPostureSpec)]; ok {
+		t.Error("spec posture carries compose-time required gates")
 	}
 }

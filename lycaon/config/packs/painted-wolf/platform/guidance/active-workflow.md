@@ -12,7 +12,7 @@ User limits apply: `ask_user` before conflicting action. `topology` defines the 
 {% endif %}{% if allowed_agents %}- **allowed_agents**: {% for agent in allowed_agents %}`{{ agent }}`{% if not forloop.Last %}, {% endif %}{% endfor %}
 {% endif %}{% if excluded_agents %}- **unavailable this turn**: {% for agent in excluded_agents %}`{{ agent.name }}` ({{ agent.code }}){% if not forloop.Last %}, {% endif %}{% endfor %} — do not dispatch these
 {% endif %}{% if requires_isolation %}- **requires_isolation**: true — every write worker runs in its own isolated workspace and lands through `promote_overlay`; do not edit product paths inline on this run
-{% endif %}{% if failed_leaves %}- **failed_leaves**: {% for leaf in failed_leaves %}`{{ leaf }}`{% if not forloop.Last %}, {% endif %}{% endfor %} — these gate leaves were evaluated and did not pass. Produce the evidence each one names; do not call `workflow_advance` until they do, and do not claim the phase is done in chat
+{% endif %}{% if failed_leaves %}- **failed_leaves**: {% for leaf in failed_leaves %}`{{ leaf }}`{% if not forloop.Last %}, {% endif %}{% endfor %} — these gate leaves were evaluated and did not pass. Produce the evidence each one names; {% if phase_exit.coordinator_advances %}do not call `workflow_advance` until they do, and {% endif %}do not claim the phase is done in chat
 {% endif %}{% if unsatisfied_gate_leaves and not failed_leaves %}- **unsatisfied_gate_leaves**: {% for leaf in unsatisfied_gate_leaves %}`{{ leaf }}`{% if not forloop.Last %}, {% endif %}{% endfor %} — not yet satisfied, and not yet failed. The phase work below is what satisfies them
 {% endif %}{% if pending_feedback %}- **pending_feedback**: phase `{{ pending_feedback.phase_id }}`{% if pending_feedback.prompt %} — "{{ pending_feedback.prompt }}"{% endif %}
 {% endif %}{% if feedback_phases %}- **feedback_phases**: {{ feedback_phases|join:", " }}
@@ -73,7 +73,7 @@ Every gate for this phase is satisfied.
 {% endif %}{% if phase_exit.kind != "terminal" and phase_exit.kind != "human_approval" %}{% if phase_exit.coordinator_advances %}
 Advancing is your call: when the gates pass, call `workflow_advance`.
 {% else %}
-The host advances on its own once the gates pass — do not call `workflow_advance`.
+The host advances on its own once the gates pass.
 {% endif %}{% endif %}{% if phase_exit.choice_transitions %}
 **Choice transitions out of this phase** — call `workflow_transition` with the arm's `transition_id`; do not invent phase ids.
 {% for arm in phase_exit.choice_transitions %}- `{{ arm.id }}` — {{ arm.label }}{% if arm.coordinator_may_fire %}: `workflow_transition(transition_id="{{ arm.id }}")`{% else %}: {% if arm.actors %}{% for a in arm.actors %}{{ a }}{% if not forloop.Last %}, {% endif %}{% endfor %}{% else %}the user{% endif %} takes this one — you cannot fire it{% endif %}

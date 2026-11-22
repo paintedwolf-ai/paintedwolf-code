@@ -33,7 +33,7 @@ func TestUnchangedNoReductionSkipsScanAndSummarizerAC_COMP_01(t *testing.T) {
 	}{
 		{"rejected page", func(t *testing.T, f *attemptFixture) { f.seedRejectablePage(t) }, "insufficient_savings", 1},
 		{"protected history under pressure", func(t *testing.T, f *attemptFixture) {
-			testutil.FailErr(t, "append active turn", f.mem.AppendMessages(t.Context(), f.sess.ID, append(
+			testutil.FailErr(t, "append active turn", f.sqlStore.AppendMessages(t.Context(), f.sess.ID, append(
 				[]api.Message{{ID: "opener", Role: api.MessageRoleUser, Origin: api.MessageOriginUser, Content: "Finish it."}},
 				turnExchange(0, strings.Repeat("observation ", 4000))...)...))
 		}, "protected_history", 0},
@@ -66,11 +66,11 @@ func TestUnchangedNoReductionSkipsScanAndSummarizerAC_COMP_01(t *testing.T) {
 		record := f.record(t)
 		scans := f.scans.count()
 		f.appendRows(t, 2*attemptResumeRows)
-		rows, err := f.mem.GetMessages(t.Context(), f.sess.ID)
+		rows, err := f.sqlStore.GetMessages(t.Context(), f.sess.ID)
 		testutil.FailErr(t, "read rows", err)
-		rewindFrom(t, f.mem, f.sess.ID, rows[len(rows)-2*attemptResumeRows].ID)
+		rewindFrom(t, f.sqlStore, f.sess.ID, rows[len(rows)-2*attemptResumeRows].ID)
 		f.appendRows(t, 3)
-		rows, err = f.mem.GetMessages(t.Context(), f.sess.ID)
+		rows, err = f.sqlStore.GetMessages(t.Context(), f.sess.ID)
 		testutil.FailErr(t, "read rows after gap", err)
 		if gap := rows[len(rows)-1].Ord - record.source.ord; gap < attemptResumeRows {
 			t.Fatalf("fixture has no ordinal gap: %d", gap)
@@ -89,21 +89,21 @@ func TestRelevantChangeResumesSuppressedWorkAC_COMP_02(t *testing.T) {
 	}{
 		{"32 appended rows", func(t *testing.T, f *attemptFixture) { f.appendRows(t, attemptResumeRows) }},
 		{"new human instruction", func(t *testing.T, f *attemptFixture) {
-			testutil.FailErr(t, "append instruction", f.mem.AppendMessages(t.Context(), f.sess.ID,
+			testutil.FailErr(t, "append instruction", f.sqlStore.AppendMessages(t.Context(), f.sess.ID,
 				api.Message{ID: "next", Role: api.MessageRoleUser, Origin: api.MessageOriginUser, Content: "Now this."}))
 		}},
 		{"edited eligible source", func(t *testing.T, f *attemptFixture) {
-			msg, err := f.mem.GetMessage(t.Context(), f.sess.ID, "observation")
+			msg, err := f.sqlStore.GetMessage(t.Context(), f.sess.ID, "observation")
 			testutil.FailErr(t, "read source", err)
 			msg.Content = strings.Repeat("edited clue ", 12)
-			_, err = f.mem.UpdateMessage(t.Context(), f.sess.ID, "observation", msg)
+			_, err = f.sqlStore.UpdateMessage(t.Context(), f.sess.ID, "observation", msg)
 			testutil.FailErr(t, "edit source", err)
 		}},
 		{"published coverage", func(t *testing.T, f *attemptFixture) {
-			view, _, err := f.mem.GetCompactionView(t.Context(), f.sess.ID)
+			view, _, err := f.sqlStore.GetCompactionView(t.Context(), f.sess.ID)
 			testutil.FailErr(t, "read view", err)
 			view.Generation++
-			testutil.FailErr(t, "publish coverage", f.mem.PutCompactionView(t.Context(), f.sess.ID, *view))
+			testutil.FailErr(t, "publish coverage", f.sqlStore.PutCompactionView(t.Context(), f.sess.ID, *view))
 		}},
 		{"relevant configuration", func(t *testing.T, f *attemptFixture) {
 			cfg := attemptConfig()
@@ -159,7 +159,7 @@ func TestStaleCompletionLeavesNewerStateAC_COMP_03(t *testing.T) {
 		f := newAttemptFixture(t, step)
 		f.provider.entered, f.provider.release = make(chan struct{}, 4), make(chan struct{})
 		f.seedRejectablePage(t)
-		sess, err := f.mem.Get(t.Context(), f.sess.ID)
+		sess, err := f.sqlStore.Get(t.Context(), f.sess.ID)
 		testutil.FailErr(t, "read session", err)
 		f.svc.Schedule(t.Context(), sess)
 		<-f.provider.entered
@@ -167,10 +167,10 @@ func TestStaleCompletionLeavesNewerStateAC_COMP_03(t *testing.T) {
 	}
 	publishNewer := func(t *testing.T, f *attemptFixture) {
 		t.Helper()
-		view, _, err := f.mem.GetCompactionView(t.Context(), f.sess.ID)
+		view, _, err := f.sqlStore.GetCompactionView(t.Context(), f.sess.ID)
 		testutil.FailErr(t, "read view", err)
 		view.Generation++
-		testutil.FailErr(t, "publish newer", f.mem.PutCompactionView(t.Context(), f.sess.ID, *view))
+		testutil.FailErr(t, "publish newer", f.sqlStore.PutCompactionView(t.Context(), f.sess.ID, *view))
 	}
 
 	t.Run("newer generation is not penalized", func(t *testing.T) {
@@ -183,7 +183,7 @@ func TestStaleCompletionLeavesNewerStateAC_COMP_03(t *testing.T) {
 				if _, found := f.svc.Runner.attempts.records.Load(f.sess.ID); found || len(f.clock.pending()) != 0 {
 					t.Fatalf("stale work left state: timers=%v", f.clock.pending())
 				}
-				if _, found, err := f.mem.GetCompactionAttempt(t.Context(), f.sess.ID); err != nil || found {
+				if _, found, err := f.sqlStore.GetCompactionAttempt(t.Context(), f.sess.ID); err != nil || found {
 					t.Fatalf("stale work replaced the memo: found=%v err=%v", found, err)
 				}
 			})
@@ -193,7 +193,7 @@ func TestStaleCompletionLeavesNewerStateAC_COMP_03(t *testing.T) {
 	t.Run("newer attempt record survives", func(t *testing.T) {
 		f := blocked(t, failWith(transient))
 		f.appendRows(t, 1)
-		sess, err := f.mem.Get(t.Context(), f.sess.ID)
+		sess, err := f.sqlStore.Get(t.Context(), f.sess.ID)
 		testutil.FailErr(t, "read session", err)
 		sc := f.svc.Compactor.(*compaction.SimpleCompactor)
 		control := f.svc.attemptControl()
@@ -308,11 +308,11 @@ func TestTransientFailureRetriesOnVirtualClockAC_COMP_04(t *testing.T) {
 		f := newAttemptFixture(t, failWith(overloaded(0)), answerShort)
 		f.seedRejectablePage(t)
 		f.schedule(t)
-		before, err := f.mem.Get(t.Context(), f.sess.ID)
+		before, err := f.sqlStore.Get(t.Context(), f.sess.ID)
 		testutil.FailErr(t, "read session", err)
 		f.clock.advance(transientRetryDelays[0])
 		f.settle(t)
-		after, err := f.mem.Get(t.Context(), f.sess.ID)
+		after, err := f.sqlStore.Get(t.Context(), f.sess.ID)
 		testutil.FailErr(t, "read session", err)
 		if after.CompactionGeneration <= before.CompactionGeneration || len(f.clock.pending()) != 0 {
 			t.Fatalf("no recovery: generation %d -> %d timers=%v", before.CompactionGeneration, after.CompactionGeneration, f.clock.pending())
@@ -386,9 +386,9 @@ func TestTransientFailureRetriesOnVirtualClockAC_COMP_04(t *testing.T) {
 			t.Fatalf("fixture is not in backoff: %v", f.clock.pending())
 		}
 		for i := range 40 {
-			testutil.FailErr(t, "append exchange", f.mem.AppendMessages(t.Context(), f.sess.ID, turnExchange(i, strings.Repeat("recorded observation ", 150))...))
+			testutil.FailErr(t, "append exchange", f.sqlStore.AppendMessages(t.Context(), f.sess.ID, turnExchange(i, strings.Repeat("recorded observation ", 150))...))
 		}
-		sess, err := f.mem.Get(t.Context(), f.sess.ID)
+		sess, err := f.sqlStore.Get(t.Context(), f.sess.ID)
 		testutil.FailErr(t, "read session", err)
 		history, err := f.svc.Load(t.Context(), sess)
 		testutil.FailErr(t, "load", err)
@@ -534,7 +534,7 @@ func TestAttemptControlFailsOpenOnStoreFaults(t *testing.T) {
 			f.seedRejectablePage(t)
 			f.schedule(t)
 			sc := f.svc.Compactor.(*compaction.SimpleCompactor)
-			faults := &faultStore{Store: f.mem}
+			faults := &faultStore{Store: f.sqlStore}
 			tc.fault(faults)
 			f.svc.store = faults
 			if _, admitted := f.svc.attemptControl().admit(t.Context(), f.sess.ID, sc); !admitted {
@@ -551,11 +551,11 @@ func TestAttemptControlFailsOpenOnStoreFaults(t *testing.T) {
 			f := newAttemptFixture(t, answerUnproductive)
 			f.seedRejectablePage(t)
 			sc := f.svc.Compactor.(*compaction.SimpleCompactor)
-			sess, err := f.mem.Get(t.Context(), f.sess.ID)
+			sess, err := f.sqlStore.Get(t.Context(), f.sess.ID)
 			testutil.FailErr(t, "read session", err)
 			pass, err := f.svc.attemptControl().capture(t.Context(), sess, sc)
 			testutil.FailErr(t, "capture", err)
-			faults := &faultStore{Store: f.mem}
+			faults := &faultStore{Store: f.sqlStore}
 			fault(faults)
 			f.svc.store = faults
 			f.svc.attemptControl().settle(t.Context(), sc, f.sess.ID, pass, attemptResult{outcome: attemptNoReduction})
@@ -570,18 +570,18 @@ func TestAttemptControlFailsOpenOnStoreFaults(t *testing.T) {
 		sc := f.svc.Compactor.(*compaction.SimpleCompactor)
 		memo := &messageview.CompactionAttempt{Revision: "exact", Reason: "insufficient_savings"}
 		f.svc.attemptControl().settle(t.Context(), sc, f.sess.ID, attemptPass{}, attemptResult{outcome: attemptNoReduction, memo: memo})
-		got, found, err := f.mem.GetCompactionAttempt(t.Context(), f.sess.ID)
+		got, found, err := f.sqlStore.GetCompactionAttempt(t.Context(), f.sess.ID)
 		testutil.FailErr(t, "read memo", err)
 		if _, recorded := f.svc.Runner.attempts.records.Load(f.sess.ID); !found || got != *memo || recorded {
 			t.Fatalf("memo=%+v found=%v recorded=%v", got, found, recorded)
 		}
-		f.svc.store = &faultStore{Store: f.mem, failPut: true}
+		f.svc.store = &faultStore{Store: f.sqlStore, failPut: true}
 		f.svc.attemptControl().saveMemo(t.Context(), f.sess.ID, memo)
 	})
 
 	t.Run("a retry firing for a removed session schedules nothing", func(t *testing.T) {
 		f := newAttemptFixture(t, answerUnproductive)
-		f.svc.store = &faultStore{Store: f.mem, failGet: true}
+		f.svc.store = &faultStore{Store: f.sqlStore, failGet: true}
 		f.svc.attemptControl().fire(f.sess.ID)
 		f.svc.Runner.Stop()
 		f.svc.attemptControl().fire(f.sess.ID)
@@ -593,9 +593,9 @@ func TestAttemptControlFailsOpenOnStoreFaults(t *testing.T) {
 	t.Run("an explicit request without identity still runs", func(t *testing.T) {
 		f := newAttemptFixture(t, answerUnproductive)
 		sc := f.svc.Compactor.(*compaction.SimpleCompactor)
-		sess, err := f.mem.Get(t.Context(), f.sess.ID)
+		sess, err := f.sqlStore.Get(t.Context(), f.sess.ID)
 		testutil.FailErr(t, "read session", err)
-		f.svc.store = &faultStore{Store: f.mem, failPage: true}
+		f.svc.store = &faultStore{Store: f.sqlStore, failPage: true}
 		if pass := f.svc.attemptControl().explicit(t.Context(), sess, sc); !pass.explicit || pass.key != "" {
 			t.Fatalf("pass = %+v", pass)
 		}

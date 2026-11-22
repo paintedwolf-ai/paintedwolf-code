@@ -18,12 +18,12 @@ import (
 	"github.com/lycaon/lycaon/internal/llm/modelcall"
 	"github.com/lycaon/lycaon/internal/progress"
 	"github.com/lycaon/lycaon/internal/report"
-	"github.com/lycaon/lycaon/internal/reviewcoverage"
 	"github.com/lycaon/lycaon/internal/scan"
 	scanoutput "github.com/lycaon/lycaon/internal/scan/output"
 	"github.com/lycaon/lycaon/internal/session/workercontext"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/toolrejection"
+	"github.com/lycaon/lycaon/internal/workflow"
 	workflowreview "github.com/lycaon/lycaon/internal/workflow/review"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -63,7 +63,7 @@ func TestSecuritySurveyCompletesWithFullCoverageWithoutRepeatingWork(t *testing.
 			return modelcall.Completion{}
 		}
 		if assignment != nil && assignment.CoverageRequired {
-			args["coverage_review"] = completeCoverageReview(assignment.Subject.Facts, api.CitationGroundingCitedEvidence{Path: "audit.go", Line: 1, Excerpt: "package audit"})
+			args["coverage_review"] = CompleteCoverageReview(assignment.Subject.Facts, api.CitationGroundingCitedEvidence{Path: "audit.go", Line: 1, Excerpt: "package audit"})
 		}
 		return modelcall.Completion{ToolCalls: []api.ToolCall{{ID: uuid.NewString(), Name: "complete_leg", Args: args}}}
 	}})
@@ -92,8 +92,8 @@ func TestSecuritySurveyCompletesWithFullCoverageWithoutRepeatingWork(t *testing.
 		}
 	}
 	testutil.FailErr(t, "settle scanner obligation", h.Workflows.Manager.Obligations.RecordObligationTerminal(ctx, run.ID, scan.WorkflowObligationKind))
-	waitWorkflowPhase(t, ctx, h.Workflows.Manager, run.ID, "plan")
-	call := wiringToolContext(sess.ID, dir)
+	WaitWorkflowPhase(t, ctx, h.Workflows.Manager, run.ID, "plan")
+	call := WiringToolContext(sess.ID, dir)
 	call.Identity.ProjectID, call.Identity.Agent = sess.ProjectID, "coordinator"
 	testutil.FailErr(t, "resolve source root", h.DB.QueryRowContext(ctx, "SELECT id FROM project_roots WHERE project_id = ? AND is_primary = 1", sess.ProjectID).Scan(&call.Source.ActiveRootID))
 	call.Source.Roots[0].ID = call.Source.ActiveRootID
@@ -111,14 +111,30 @@ func TestSecuritySurveyCompletesWithFullCoverageWithoutRepeatingWork(t *testing.
 	for i := 1; i <= 5; i++ {
 		legs = append(legs, map[string]any{"agent_type": "security-reviewer", "subject": fmt.Sprintf("Boundary %d", i), "prompt": "Review the assigned boundary.", "done_when": []any{"Account for the assigned boundary"}})
 	}
+	fanoutPlanned := func() bool {
+		t.Helper()
+		vars, err := h.Workflows.Manager.Store.Runs.GetScaffoldVars(ctx, run.ID)
+		testutil.FailErr(t, "read plan gates", err)
+		gates, _ := vars["gates"].(map[string]any)
+		return gates["fanout_planned"] == true
+	}
+	// The plan phase refuses a plan without a threat model and leaves its gate shut.
+	var refused workflow.FanoutPlanToolResult
+	testutil.FailErr(t, "decode refused plan", json.Unmarshal([]byte(invoke("fanout_plan", map[string]any{"legs": legs})), &refused))
+	if refused.OK || refused.Error != "invalid_plan" || fanoutPlanned() {
+		t.Fatalf("plan without a threat model = %+v, gate planned %v", refused, fanoutPlanned())
+	}
 	invoke("fanout_plan", map[string]any{"legs": legs, "threat_model": "Local application reading untrusted project content."})
+	if !fanoutPlanned() {
+		t.Fatal("plan with a threat model left the fanout gate shut")
+	}
 	_, err = h.Workflows.Manager.Phases.Advance(ctx, run.ID)
 	testutil.FailErr(t, "enter planned execution", err)
 	for i := 1; i <= 5; i++ {
 		invoke("task", map[string]any{"workflow_work_id": fmt.Sprintf("leg-%d", i), "prompt": "Review the assigned boundary."})
 	}
 	testutil.FailErr(t, "execute survey workers", DrainPendingWorkerJobs(ctx, h, sess.ProjectID, ""))
-	waitWorkflowPhase(t, ctx, h.Workflows.Manager, run.ID, "claims")
+	WaitWorkflowPhase(t, ctx, h.Workflows.Manager, run.ID, "claims")
 	surveyTasks, err := h.Workers.Queue.ListByWorkflowRunID(ctx, run.ID)
 	testutil.FailErr(t, "read survey workers", err)
 	if len(surveyTasks) != 5 {
@@ -135,7 +151,7 @@ func TestSecuritySurveyCompletesWithFullCoverageWithoutRepeatingWork(t *testing.
 		if len(facts.Gaps) != 0 {
 			t.Fatalf("normal run has coverage gaps: %+v", facts.Gaps)
 		}
-		raw, err := json.Marshal(completeCoverageReview(facts, surveyCitation))
+		raw, err := json.Marshal(CompleteCoverageReview(facts, surveyCitation))
 		testutil.FailErr(t, "encode coverage review", err)
 		var value map[string]any
 		testutil.FailErr(t, "decode coverage arguments", json.Unmarshal(raw, &value))
@@ -151,7 +167,7 @@ func TestSecuritySurveyCompletesWithFullCoverageWithoutRepeatingWork(t *testing.
 		}
 	}
 	submit(map[string]any{"verdict": "CLAIMED", "threat_model": "Local application reading untrusted project content.", "claims": []any{}, "set_asides": []any{}, "coverage": coverage()}, nil)
-	waitWorkflowPhase(t, ctx, h.Workflows.Manager, run.ID, "challenge")
+	WaitWorkflowPhase(t, ctx, h.Workflows.Manager, run.ID, "challenge")
 	for _, agent := range []string{"skeptic", "web-researcher"} {
 		invoke("task", map[string]any{"workflow_work_id": "review/" + agent, "agent_type": agent, "brief": map[string]any{"goal": "Independently review coverage", "done_when": []any{"Account for the assigned boundary"}}, "prompt": "Independently review the assigned coverage and source evidence.", "scope": map[string]any{"mode": "read"}})
 	}
@@ -165,7 +181,7 @@ func TestSecuritySurveyCompletesWithFullCoverageWithoutRepeatingWork(t *testing.
 		}
 	}
 	submit(map[string]any{"verdict": "CHALLENGED", "challenges": []any{}, "set_asides": []any{}, "coverage": coverage()}, citations)
-	waitWorkflowPhase(t, ctx, h.Workflows.Manager, run.ID, "report")
+	WaitWorkflowPhase(t, ctx, h.Workflows.Manager, run.ID, "report")
 	manifest, err := h.Workflows.Manager.Resolver.ForRunID(ctx, run.ID)
 	testutil.FailErr(t, "load report brief", err)
 	levels := manifest.ReportBrief().LevelLabels()
@@ -209,12 +225,4 @@ func TestSecuritySurveyCompletesWithFullCoverageWithoutRepeatingWork(t *testing.
 		t.Fatalf("coordinator calls=%d, want one progress update and one report", calls[""])
 	}
 
-}
-
-func completeCoverageReview(facts reviewcoverage.Facts, citation api.CitationGroundingCitedEvidence) *api.CoverageReview {
-	review := &api.CoverageReview{Revision: facts.Revision}
-	for _, fact := range facts.Obligations {
-		review.Assessments = append(review.Assessments, api.CoverageAssessment{ID: fact.ID, Disposition: reviewcoverage.Satisfied, Reason: "Required source scope and recorded outcomes were independently reviewed.", CitedEvidence: []api.CitationGroundingCitedEvidence{citation}})
-	}
-	return review
 }

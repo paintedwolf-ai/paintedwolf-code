@@ -115,6 +115,8 @@ type supervisedProgram struct {
 	foreground  bool
 	// interrupted records a foreground the host interrupted.
 	interrupted bool
+	// jobsStopped counts the & jobs an explicit stop ended with the program.
+	jobsStopped int
 	settle      func(stopped bool)
 }
 
@@ -166,7 +168,13 @@ func (s *ProgramSupervisor) RunProgram(ctx context.Context, root toolcontract.Op
 		}
 		if errors.Is(cause, ErrProgramInterrupted) {
 			// An interrupted wait is the program's typed stop; its result still reaches the turn.
-			return stopped, errors.Join(err, cause, toolrejection.RejectInvalidArguments(toolrejection.ToolOwnerInterruptedCode, map[string]any{"program_id": root.Identity.ProgramID}))
+			data := map[string]any{"program_id": root.Identity.ProgramID}
+			s.mu.Lock()
+			if program.jobsStopped > 0 {
+				data["jobs_stopped"] = program.jobsStopped
+			}
+			s.mu.Unlock()
+			return stopped, errors.Join(err, cause, toolrejection.RejectInvalidArguments(toolrejection.ToolOwnerInterruptedCode, data))
 		}
 		return stopped, errors.Join(err, cause)
 	}
@@ -226,6 +234,29 @@ func (s *ProgramSupervisor) Interrupt(programID string) bool {
 		program.cancel(ErrProgramInterrupted)
 	}
 	return running
+}
+
+// StopProgram ends a program's foreground at the statement it waits at and
+// ends its & jobs, for an explicit stop of the program's handle. Each external
+// command leads its own session, which ends with its job.
+func (s *ProgramSupervisor) StopProgram(programID string) {
+	if s == nil {
+		return
+	}
+	s.mu.Lock()
+	program, ok := s.programs[programID]
+	var jobs []*supervisedJob
+	if ok {
+		for _, job := range program.jobs {
+			jobs = append(jobs, job)
+		}
+		program.jobsStopped = len(jobs)
+	}
+	s.mu.Unlock()
+	s.Interrupt(programID)
+	for _, job := range jobs {
+		job.end(ErrProgramStopped)
+	}
 }
 
 // StopAll stops every session's programs, for the host disable control.

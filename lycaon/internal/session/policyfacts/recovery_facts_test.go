@@ -1,9 +1,13 @@
 package policyfacts
 
 import (
-	"github.com/lycaon/lycaon/internal/toolreach"
+	"reflect"
 	"slices"
 	"testing"
+
+	"github.com/lycaon/lycaon/internal/isolation"
+	"github.com/lycaon/lycaon/internal/toolreach"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 
 	"github.com/lycaon/lycaon/internal/confine"
 	"github.com/lycaon/lycaon/internal/oar"
@@ -82,5 +86,24 @@ func TestObserveConfineDropsAncestorMetadataReadGrant(t *testing.T) {
 	wantGrants := []string{"/Users/person/Library/Keychains/login.keychain-db"}
 	if !slices.Equal(gc.Refusals.RefusedReadGrants, wantGrants) {
 		t.Fatalf("RefusedReadGrants = %v, want %v", gc.Refusals.RefusedReadGrants, wantGrants)
+	}
+}
+
+// Every post-invoke refusal code carries the observed destination, so a guard
+// keyed on any of them can name it.
+func TestObserveConfinePublishesPostInvokeRefusalData(t *testing.T) {
+	gc := oar.NewGuardContext()
+	gc.Invocation.Tool = "command"
+	ObserveConfine(gc, confine.Observation{Applied: true, Destination: "service.test:8443", Port: 8443})
+	want := map[string]any{"tool": "command", "destination": "service.test:8443", "port": "8443"}
+	for _, code := range []string{isolation.CodeBoundaryRefused, isolation.CodeRemotePackageDestinationDenied, toolrejection.VerifyUnverifiableCode} {
+		if got := gc.RejectData[code]; !reflect.DeepEqual(got, want) {
+			t.Errorf("reject data for %s = %v want %v", code, got, want)
+		}
+	}
+	unapplied := oar.NewGuardContext()
+	ObserveConfine(unapplied, confine.Observation{Destination: "service.test"})
+	if len(unapplied.RejectData) != 0 {
+		t.Fatalf("unapplied boundary published reject data: %v", unapplied.RejectData)
 	}
 }

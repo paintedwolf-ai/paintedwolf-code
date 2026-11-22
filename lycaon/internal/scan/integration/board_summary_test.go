@@ -1,18 +1,19 @@
 package integration
 
 import (
+	"github.com/lycaon/lycaon/internal/scan/findings/findingstest"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/scan"
-	scanfindings "github.com/lycaon/lycaon/internal/scan/findings"
+
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
 func TestTopLocationsOrderStable(t *testing.T) {
 	findings := []api.SecurityFinding{
-		scanfindings.FixtureFinding("r1", api.FindingLevelMedium, "m", "b.go", 2),
-		scanfindings.FixtureFinding("r2", api.FindingLevelCritical, "c", "a.go", 1),
-		scanfindings.FixtureFinding("r3", api.FindingLevelCritical, "c2", "a.go", 1),
+		findingstest.Finding("r1", api.FindingLevelMedium, "m", "b.go", 2),
+		findingstest.Finding("r2", api.FindingLevelCritical, "c", "a.go", 1),
+		findingstest.Finding("r3", api.FindingLevelCritical, "c2", "a.go", 1),
 	}
 	got := scan.TopLocationsFromFindings(findings, 3)
 	if len(got) != 2 {
@@ -37,7 +38,7 @@ func TestBuildBoardCompareSliceTopNew(t *testing.T) {
 	slice := scan.BuildBoardCompareSlice("baseline-1", &scan.Comparison{
 		NewCount: 1,
 		NewFindings: []api.SecurityFinding{
-			scanfindings.FixtureFinding("gitleaks:token", api.FindingLevelHigh, "leak", "secrets.env", 2),
+			findingstest.Finding("gitleaks:token", api.FindingLevelHigh, "leak", "secrets.env", 2),
 		},
 	})
 	if slice == nil || slice.BaselineAssessmentID != "baseline-1" || slice.ScannersCompared != 1 || slice.NewCount != 1 {

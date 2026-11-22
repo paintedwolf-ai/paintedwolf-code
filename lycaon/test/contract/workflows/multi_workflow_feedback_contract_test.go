@@ -35,15 +35,6 @@ func TestFeedbackPackageNoBlueprintImport(t *testing.T) {
 	}
 }
 
-func TestWorkflowGateBlockedHintRegistered(t *testing.T) {
-	t.Parallel()
-	hintCfg, err := guidance.LoadHintConfigStock()
-	contractcheck.FailErr(t, "load hint registry", err)
-	if _, ok := hintCfg.HintCodes["WORKFLOW_GATE_BLOCKED"]; !ok {
-		t.Fatal("expected WORKFLOW_GATE_BLOCKED in hint registry")
-	}
-}
-
 func TestMultiWorkflowEnrichCitesPhaseAndStructuredGateFeedback(t *testing.T) {
 	t.Parallel()
 	hintCfg, err := guidance.LoadHintConfigStock()

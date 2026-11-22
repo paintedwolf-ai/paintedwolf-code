@@ -30,7 +30,7 @@ func (r *cancellationOutcomeRecorder) OnWorkerFailed(context.Context, string, er
 func TestCanceledOutcomeRetainsItsResultAcrossDeliveryRetry(t *testing.T) {
 	for _, hasReport := range []bool{false, true} {
 		t.Run(map[bool]string{false: "host-only", true: "change-report"}[hasReport], func(t *testing.T) {
-			queue := &acknowledgementQueue{InMemoryQueue: NewInMemoryQueue(1), ackError: errors.New("acknowledgement unavailable")}
+			queue := &acknowledgementQueue{SQLQueue: newTestQueue(t, 1, testdbseed.DefaultProjectID, "parent"), ackError: errors.New("acknowledgement unavailable")}
 			id, err := queue.EnqueueWithProjectID(t.Context(), testdbseed.DefaultProjectID, api.WorkerTask{
 				Prompt: "fixture", Brief: "fixture", ParentSessionID: "parent", ProjectID: testdbseed.DefaultProjectID,
 			})
@@ -75,7 +75,7 @@ func TestCanceledOutcomeRetainsItsResultAcrossDeliveryRetry(t *testing.T) {
 }
 
 type acknowledgementQueue struct {
-	*InMemoryQueue
+	*SQLQueue
 	ackError error
 }
 
@@ -83,7 +83,7 @@ func (q *acknowledgementQueue) MarkOutcomeDelivered(ctx context.Context, id stri
 	if q.ackError != nil {
 		return q.ackError
 	}
-	return q.InMemoryQueue.MarkOutcomeDelivered(ctx, id)
+	return q.SQLQueue.MarkOutcomeDelivered(ctx, id)
 }
 
 type acknowledgementRecorder struct {
@@ -101,7 +101,7 @@ func (r *acknowledgementRecorder) OnOutcomeDelivered(ctx context.Context, _ api.
 }
 
 func TestParentReleaseFollowsCommittedOutcomeAcknowledgement(t *testing.T) {
-	queue := &acknowledgementQueue{InMemoryQueue: NewInMemoryQueue(1), ackError: errors.New("acknowledgement unavailable")}
+	queue := &acknowledgementQueue{SQLQueue: newTestQueue(t, 1, testdbseed.DefaultProjectID, "parent"), ackError: errors.New("acknowledgement unavailable")}
 	id, err := queue.EnqueueWithProjectID(t.Context(), testdbseed.DefaultProjectID, api.WorkerTask{
 		Prompt: "fixture", Brief: "fixture", ParentSessionID: "parent",
 		ProjectID: testdbseed.DefaultProjectID, ExecutionTarget: api.ExecutionTargetLocal,

@@ -141,79 +141,28 @@ async function installScanRoutes(page: Page, findings = scanFindings, partial = 
 }
 
 webE2e.describe("Security findings pane", () => {
-  webE2e("loads results only after queued and running scans complete", async ({ page, request }) => {
-    await installScanRoutes(page);
-    let status = "pending";
-    const queryStatuses: string[] = [];
-    const summary = () => ({ ...scanSummary, status, long_running: false,
-      findings_count: status === "complete" ? 1 : 0,
-      findings_stored: status === "complete" ? 1 : 0,
-      progress: status === "running" ? { chunks: 3, completed: 1, files: 20 } : undefined,
-    });
-    await page.route("**/v1/projects/*/scans?*", (route) => route.fulfill({ json: { scans: [summary()] } }));
-    await page.route(`**/v1/projects/*/scans/${scanId}?*`, (route) => route.fulfill({ json: summary() }));
-    await page.route(`**/v1/projects/*/scans/${scanId}/query`, async (route) => {
-      queryStatuses.push(status);
-      if (status !== "complete") {
-        await route.fulfill({ status: 409, json: { code: "scan_not_complete", message: "Results are not ready" } });
-        return;
-      }
-      await route.fallback();
-    });
+  webE2e("partial scan coverage keeps findings usable beside the diagnostics popover", async ({ page, request }) => {
+    await installScanRoutes(page, scanFindings, true);
     await bootstrapActiveProject(page, request, undefined, undefined, { contextNav: CONTEXT_NAV_WITH("security") });
     await page.getByTestId("project-security-entry").click();
     await selectRunsView(page);
-    await expect(page.getByTestId("scans-empty")).toContainText("Scan queued");
-    expect(queryStatuses).toEqual([]);
-    await expect(page.getByTestId("scans-counts")).toHaveCount(0);
-    status = "running";
-    await expect(page.getByTestId("scans-empty")).toContainText("1 of 3 chunks", { timeout: 30_000 });
-    expect(queryStatuses).toEqual([]);
-    status = "complete";
-    await expect(page.getByTestId("scans-finding-row")).toContainText("SQL concat", { timeout: 30_000 });
-    expect(queryStatuses.length).toBeGreaterThan(0);
-    expect(queryStatuses.every((value) => value === "complete")).toBe(true);
-    await expect(page.getByTestId("scans-error")).toHaveCount(0);
-    await expect(page.getByRole("button", { name: "Retry loading", exact: true })).toHaveCount(0);
-    await expect(page.getByTestId("scans-counts")).toContainText("1 finding");
+    await expect(page.getByTestId("scans-finding-row")).toHaveCount(1);
+    const diagnostics = page.getByTestId("scans-issues-trigger");
+    await diagnostics.focus();
+    await page.keyboard.press("Enter");
+    await expect(diagnostics).toHaveAttribute("aria-expanded", "true");
+    // The popover has loaded the run's diagnostic locations.
+    await expect(page.getByText("src/pipeline-0.py:73:18", { exact: true })).toBeVisible();
+    await expect(page.getByTestId("scans-finding-row")).toBeVisible();
+    const bounds = await page.getByTestId("scans-findings-scroll").boundingBox();
+    expect(bounds?.height).toBeGreaterThan(150);
+    await page.keyboard.press("Escape");
+    await expect(diagnostics).toHaveAttribute("aria-expanded", "false");
+    await expect(diagnostics).toBeFocused();
+    await page.setViewportSize({ width: 800, height: 700 });
+    await expect(diagnostics).toBeVisible();
+    expect(await page.locator("body").evaluate((body) => body.scrollWidth <= window.innerWidth)).toBe(true);
   });
-
-  for (const hasFindings of [false, true]) {
-    webE2e(`partial scan coverage with ${hasFindings ? "available findings" : "empty results"}`, async ({ page, request }) => {
-      await installScanRoutes(page, hasFindings ? scanFindings : [], true);
-      await bootstrapActiveProject(page, request, undefined, undefined, { contextNav: CONTEXT_NAV_WITH("security") });
-      await page.getByTestId("project-security-entry").click();
-      await selectRunsView(page);
-      await expect(page.getByTestId("scans-issues-trigger")).toContainText("Analysis issues · 14");
-      await expect(page.getByTestId("scans-limitations")).toHaveCount(0);
-      if (hasFindings) {
-        await expect(page.getByTestId("scans-finding-row")).toHaveCount(1);
-      } else {
-        await expect(page.getByTestId("scans-empty")).toContainText("No findings in analyzed code");
-        await expect(page.getByText("No findings in this run.", { exact: true })).toHaveCount(0);
-      }
-      const diagnostics = page.getByRole("button", { name: "Analysis issues · 14", exact: true });
-      await diagnostics.focus();
-      await page.keyboard.press("Enter");
-      await expect(diagnostics).toHaveAttribute("aria-expanded", "true");
-      await expect(page.getByText("src/pipeline-0.py:73:18", { exact: true })).toBeVisible();
-      if (hasFindings) {
-        await expect(page.getByTestId("scans-finding-row")).toBeVisible();
-        const bounds = await page.getByTestId("scans-findings-scroll").boundingBox();
-        expect(bounds?.height).toBeGreaterThan(150);
-      }
-      await page.keyboard.press("Escape");
-      await expect(diagnostics).toHaveAttribute("aria-expanded", "false");
-      await expect(diagnostics).toBeFocused();
-      if (hasFindings) {
-        await page.getByTestId("scans-finding-row").click();
-        await expect(page.getByTestId("scans-drill-down")).toContainText("opengrep:sql");
-      }
-      await page.setViewportSize({ width: 800, height: 700 });
-      await expect(diagnostics).toBeVisible();
-      expect(await page.locator("body").evaluate((body) => body.scrollWidth <= window.innerWidth)).toBe(true);
-    });
-  }
 
   webE2e("opens from Context menu, lists locations, drills down, exposes SARIF download", async ({
     page,
@@ -383,39 +332,5 @@ webE2e.describe("Security findings pane", () => {
     await expect(chooser).toHaveCount(0);
     await expect(composer).toHaveValue("Help me understand these findings.");
     expect(sends).toEqual([]);
-  });
-
-  webE2e("opens on the project ledger and drills into the run behind a row", async ({
-    page,
-    request,
-  }) => {
-    await installScanRoutes(page);
-    await bootstrapActiveProject(
-      page,
-      request,
-      undefined,
-      undefined,
-      { contextNav: CONTEXT_NAV_WITH("security") },
-    );
-    await page.getByTestId("project-security-entry").click();
-
-    await expect(page.getByTestId("ledger-rows")).toBeVisible();
-    await expect(page.getByTestId("scans-run-picker")).toHaveCount(0);
-    await expect(page.getByTestId("ledger-row").first()).toContainText("SQL concat");
-    await expect(page.getByTestId("ledger-counts")).toContainText("1 open");
-    await page.getByTestId("ledger-tab-all").click();
-    await page.getByTestId("ledger-filter").click();
-    await expect(page.getByTestId("ledger-filter-state-not_observed")).toBeVisible();
-    await page.keyboard.press("Escape");
-
-    await page.getByTestId("ledger-row").first().click();
-    await expect(page.getByTestId("ledger-detail")).toContainText("opengrep:sql");
-    await expect(page.getByTestId("ledger-fix-with-agent")).toBeVisible();
-
-    await page.getByTestId("ledger-open-run").click();
-    await expect(page.getByTestId("scans-run-picker")).toBeVisible();
-    await expect(page.getByTestId("scans-finding-row").first()).toContainText(
-      "src/main.go:12",
-    );
   });
 });

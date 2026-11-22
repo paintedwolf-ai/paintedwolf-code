@@ -11,14 +11,15 @@ import (
 	"github.com/lycaon/lycaon/internal/bytebound"
 	"github.com/lycaon/lycaon/internal/session"
 	"github.com/lycaon/lycaon/internal/session/store"
+	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/testutil"
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
 
-func newPromptAttachmentRecoveryFixture(t *testing.T) (*Handler, *store.Memory, blobstore.Store, *wire.Session) {
+func newPromptAttachmentRecoveryFixture(t *testing.T) (*Handler, *store.SQL, blobstore.Store, *wire.Session) {
 	t.Helper()
-	sessions := store.NewMemory()
+	sessions := storetest.New(t, "project")
 	sess, err := sessions.Create(t.Context(), wire.CreateSessionRequest{Posture: wire.SessionPostureBuild}, "project")
 	testutil.FailErr(t, "create session", err)
 	manager := session.NewHost(sessions, session.Models{Client: nil, Provider: nil, Limits: settings.SessionLimits{}, Cost: nil}, nil)
@@ -33,7 +34,7 @@ func newPromptAttachmentRecoveryFixture(t *testing.T) (*Handler, *store.Memory, 
 
 func admitRetainedAttachment(
 	t *testing.T,
-	sessions *store.Memory,
+	sessions *store.SQL,
 	attachmentStore blobstore.Store,
 	sess *wire.Session,
 ) (string, blobstore.Blob) {

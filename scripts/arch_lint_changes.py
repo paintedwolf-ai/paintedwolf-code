@@ -15,7 +15,6 @@ Policy, including the test-support package rule, is scripts/arch-lint-policy.jso
 """
 
 import argparse
-import hashlib
 import json
 import os
 from pathlib import Path
@@ -24,7 +23,7 @@ import subprocess
 import sys
 import tempfile
 
-from artifact_paths import artifact_root, bin_dir
+from artifact_paths import bin_dir
 import change_report
 from change_report import Finding
 
@@ -137,21 +136,14 @@ def checks(binary, tree, policy, go=True, den=False, refs=True):
     return found
 
 
-def base_checks(root, base, binary, policy, cache, go=True, den=False, refs=True):
-    """Findings at the base, cached by base commit, scope and the binary that judged it."""
-    digest = hashlib.sha256(binary.read_bytes()).hexdigest()[:16] if binary else "knip"
-    parts = ('' if go else '-nogo') + ('' if refs else '-norefs') + ('-den' if den else '')
-    cached = cache / f"base-{base}-{digest}{parts}.json"
-    if cached.exists():
-        return {(f["kind"], f["key"]): f for f in json.loads(cached.read_text())}
-    tree = cache / "base-tree"
-    if tree.exists():
-        run(["git", "-C", str(tree), "checkout", "-q", "--force", "--detach", base])
-    else:
-        run(["git", "-C", str(root), "worktree", "add", "-q", "--force", "--detach", str(tree), base])
-    found = checks(binary, tree, policy, go, den, refs)
-    cached.write_text(json.dumps(list(found.values())))
-    return found
+def base_checks(root, base, binary, policy, work, go=True, den=False, refs=True):
+    """Findings at the change base, judged by the same binary and policy in a private worktree."""
+    tree = work / "base"
+    run(["git", "-C", str(root), "worktree", "add", "-q", "--force", "--detach", str(tree), base])
+    try:
+        return checks(binary, tree, policy, go, den, refs)
+    finally:
+        run(["git", "-C", str(root), "worktree", "remove", "--force", str(tree)])
 
 
 def golangci_lint(root):
@@ -205,11 +197,11 @@ def to_finding(level, f):
     return Finding(level, f["kind"], f["message"], path=path or None, line=int(line) if line.isdigit() else None)
 
 
-def changes(root, scope, policy, cache, binary, linter):
+def changes(root, scope, policy, work, binary, linter):
     """The Go and cross-language findings the change adds."""
     go = scope.touches(["lycaon/"])
     head = checks(binary, root, policy, go)
-    base = base_checks(root, scope.base, binary, policy, cache, go)
+    base = base_checks(root, scope.base, binary, policy, work, go)
     new = [f for key, f in sorted(head.items()) if key not in base]
     new += unparam(root, scope.base, linter, host_packages(root, changed_go_packages(root, scope.paths)))
     findings = [to_finding("error", f) for f in new]
@@ -217,12 +209,12 @@ def changes(root, scope, policy, cache, binary, linter):
     return header, findings, bool(findings)
 
 
-def den_changes(root, scope, policy, cache):
+def den_changes(root, scope, policy, work):
     """The knip findings a change to Den adds."""
     if not scope.touches([policy["den"]["dir"] + "/"]):
         return f"{scope.describe()}; no Den change", [], False
     head = checks(None, root, policy, go=False, den=True, refs=False)
-    base = base_checks(root, scope.base, None, policy, cache, go=False, den=True, refs=False)
+    base = base_checks(root, scope.base, None, policy, work, go=False, den=True, refs=False)
     findings = [to_finding("error", f) for key, f in sorted(head.items()) if key not in base]
     header = f"{scope.describe()}; {len(head)} Den finding(s) at the working tree, {len(base)} at the base"
     return header, findings, bool(findings)
@@ -244,17 +236,19 @@ def main(argv=None):
     parser.add_argument("--den", action="store_true", help="judge only the knip findings a Den change adds")
     args = parser.parse_args(argv)
     policy = json.loads(POLICY.read_text())
-    cache = artifact_root(ROOT) / "arch-lint"
-    if args.all:
-        header, findings, failed = everything(ROOT, policy, build(ROOT, cache / "bin"))
-    else:
-        scope = change_report.resolve(ROOT)
-        if scope is None:
-            raise RuntimeError("no main branch to measure the change against; set PW_CHANGE_BASE")
-        if args.den:
-            header, findings, failed = den_changes(ROOT, scope, policy, cache)
+    # Each run builds its binary and judges its base in its own directory.
+    with tempfile.TemporaryDirectory(prefix="arch-lint-") as directory:
+        work = Path(directory)
+        if args.all:
+            header, findings, failed = everything(ROOT, policy, build(ROOT, work))
         else:
-            header, findings, failed = changes(ROOT, scope, policy, cache, build(ROOT, cache / "bin"), golangci_lint(ROOT))
+            scope = change_report.resolve(ROOT)
+            if scope is None:
+                raise RuntimeError("no main branch to measure the change against; set PW_CHANGE_BASE")
+            if args.den:
+                header, findings, failed = den_changes(ROOT, scope, policy, work)
+            else:
+                header, findings, failed = changes(ROOT, scope, policy, work, build(ROOT, work), golangci_lint(ROOT))
     change_report.emit(ROOT, TITLE, header, findings, failed)
     return 1 if failed else 0
 

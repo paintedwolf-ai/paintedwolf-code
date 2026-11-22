@@ -17,41 +17,6 @@ import (
 	"github.com/lycaon/lycaon/internal/layeredfs/adapter"
 )
 
-// DisownMountForTest mutates the recorded mount ownership metadata for viewID so tests can
-// verify that Release and unmountOwnedRoot refuse to unmount an unowned or mismatched path.
-func (a *Adapter) DisownMountForTest(viewID, unownedPath string) error {
-	a.mu.Lock()
-	defer a.mu.Unlock()
-	st, ok := a.views[viewID]
-	if !ok || st == nil {
-		return &adapter.AdapterError{AdapterID: adapter.AdapterNFSDarwin, Op: "disown", ReasonCode: adapter.ReasonViewNotFound, Diagnostic: viewID}
-	}
-	m := st.mounts[st.primaryRoot]
-	if m == nil {
-		return &adapter.AdapterError{AdapterID: adapter.AdapterNFSDarwin, Op: "disown", ReasonCode: adapter.ReasonViewNotFound, Diagnostic: viewID}
-	}
-	m.mountPath = canonicalPath(unownedPath)
-	m.facts.MountPath = m.mountPath
-	m.facts.ExportSource = "127.0.0.1:/views/unowned/primary/fake"
-	return nil
-}
-
-// SetUmountBinForTest updates UmountBin and DiskutilBin so tests can inject unmount failures and restore them on retry.
-func (a *Adapter) SetUmountBinForTest(umountBin, diskutilBin string) {
-	a.mu.Lock()
-	if umountBin != "" {
-		a.cfg.UmountBin = umountBin
-	} else {
-		a.cfg.UmountBin = DefaultUmountBin
-	}
-	if diskutilBin != "" {
-		a.cfg.DiskutilBin = diskutilBin
-	} else {
-		a.cfg.DiskutilBin = DefaultDiskutilBin
-	}
-	a.mu.Unlock()
-}
-
 func verifyMountAndServerForBarrier(st *viewState, viewID, rootID string, m *rootMount, op string) error {
 	if err := checkServerAlive(m); err != nil {
 		if st.privateGitMgr != nil {

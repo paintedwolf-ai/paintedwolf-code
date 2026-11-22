@@ -305,32 +305,64 @@ export function installTailWindow(
   return next;
 }
 
-/** Merge rows newer than the fetched tail watermark. */
+/**
+ * Refresh the live tail from a same-session tail page fetched at `watermark`. Within the page's
+ * span the page wins, except over local rows newer than the watermark; resident tail rows older
+ * than the page stay. A page past the resident tail cannot be bridged: the old tail becomes the
+ * newest older page, behind a tail gap.
+ */
 export function mergeIntoTail(
   tw: TranscriptWindow,
   page: TranscriptWindowPage,
   watermark: number,
-  localRows: readonly Message[],
+  policy?: TranscriptResidencyPolicy,
 ): TranscriptWindow {
-  const next = installTailWindow(tw, page, { resetPages: false });
-  const indexById = new Map(next.tail.map((m, i) => [m.id, i] as const));
-  for (const row of localRows) {
-    if ((row.seq ?? 0) <= watermark) continue;
-    const idx = indexById.get(row.id);
-    if (idx == null) {
-      // Keep rows that arrived after the fetched snapshot.
-      next.tail.push(row);
-      indexById.set(row.id, next.tail.length - 1);
-    } else if ((next.tail[idx]?.seq ?? 0) < (row.seq ?? 0)) {
-      next.tail[idx] = row;
+  const pageOldest = page.messages[0]?.ord;
+  const newestTail = newestTailOrd(tw);
+  const byId = new Map<string, Message>(page.messages.map((row) => [row.id, row]));
+  const older: Message[] = [];
+  for (const row of tw.tail) {
+    if (pageOldest != null && (row.ord ?? 0) < pageOldest) {
+      older.push(row);
+    } else if ((row.seq ?? 0) > watermark && (byId.get(row.id)?.seq ?? 0) < (row.seq ?? 0)) {
+      // Rows that arrived after the fetched snapshot.
+      byId.set(row.id, row);
     }
   }
-  next.tail.sort((a, b) => (a.ord ?? 0) - (b.ord ?? 0));
-  next.hasMoreBefore = page.hasMoreBefore;
-  next.hasMoreAfter = page.hasMoreAfter;
-  const bounds = mergeOrdBounds(next.bounds, page.bounds, next.tail);
-  if (bounds) next.bounds = bounds;
-  return next;
+  const fresh = [...byId.values()].sort((a, b) => (a.ord ?? 0) - (b.ord ?? 0));
+  const bridged = pageOldest == null || (newestTail != null && pageOldest <= newestTail);
+  const pages = { ...tw.pages };
+  let hasTailGap = tw.hasTailGap;
+  let tail = fresh;
+  let olderKey: string | undefined;
+  if (bridged) {
+    tail = [...older, ...fresh];
+  } else if (!tw.hasTailGap && older.length > 0) {
+    olderKey = pageKey(older);
+    if (olderKey) pages[olderKey] = older;
+    hasTailGap = true;
+  }
+  const tailOldest = tail[0]?.ord;
+  if (tailOldest != null) {
+    for (const [key, rows] of Object.entries(pages)) {
+      if ((rows[rows.length - 1]?.ord ?? 0) >= tailOldest) delete pages[key];
+    }
+  }
+  // Resident older rows keep the older edge; only a page that is now the oldest row moves it.
+  const keepsOlderEdge = Object.keys(pages).length > 0 || (bridged && older.length > 0);
+  const { evictedOlder, evictedNewer } = evictPagesBeyondBudget(pages, "older", policy, olderKey);
+  const bounds = mergeOrdBounds(tw.bounds, page.bounds, tail);
+  return rollTailOverflowIntoPages(
+    {
+      tail,
+      pages,
+      hasTailGap: hasTailGap || evictedNewer,
+      hasMoreBefore: (keepsOlderEdge ? tw.hasMoreBefore : page.hasMoreBefore) || evictedOlder,
+      hasMoreAfter: page.hasMoreAfter,
+      ...(bounds ? { bounds } : {}),
+    },
+    policy,
+  );
 }
 
 /**

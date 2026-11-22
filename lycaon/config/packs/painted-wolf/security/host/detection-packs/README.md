@@ -80,7 +80,7 @@ card can only state one place. `unrecoverable` is orthogonal and rides along.
 - **Level** (`critical` / `high` / `medium` / …) decides which postures hear it: Light hears `critical`; Balanced also `high`; Strict also `medium`.
 - `critical` and `high` **must** declare `unrecoverable`; `medium` **must not**. That is
   what keeps the reversible tier out of the default posture, and it is enforced by
-  `TestDetectionPackLevelMatchesEffectClass`.
+  the `catalog-load/detection-pack-level-matches-effect-class` invariant.
 
 An untagged rule fails toward asking.
 

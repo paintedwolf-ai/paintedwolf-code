@@ -171,7 +171,7 @@ export async function waitUntil(
     }
     await sleep(100);
   }
-  return { ok: false, error: `timed out after ${timeoutMs}ms waiting for ${label}` };
+  return { ok: false, error: `timed out after ${timeoutMs}ms waiting for ${label}`, deadline_ms: timeoutMs, elapsed_ms: Date.now() - start, deadline_expired: true };
 }
 
 function passesPointerThrough(el: Element): boolean {

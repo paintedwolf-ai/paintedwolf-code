@@ -14,10 +14,7 @@ import (
 
 // BenchmarkRecursivePreparation isolates cold expansion from search enrichment.
 func BenchmarkRecursivePreparation(b *testing.B) {
-	root := os.Getenv("PW_TREE_BENCH_ROOT")
-	if root == "" {
-		b.Skip("set PW_TREE_BENCH_ROOT to a repository")
-	}
+	root := testutil.BenchRoot(b)
 	if profile := os.Getenv("PW_TREE_BENCH_PROFILE"); profile != "" {
 		file, err := os.Create(profile)
 		testutil.FailErr(b, "create preparation profile", err)

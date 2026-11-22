@@ -1,7 +1,6 @@
 package store
 
 import (
-	"context"
 	"maps"
 	"testing"
 
@@ -12,26 +11,14 @@ import (
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
-// contactStore is the surface the contact tests exercise on both stores.
-type contactStore interface {
-	Create(ctx context.Context, req api.CreateSessionRequest, projectID string) (*api.Session, error)
-	RecordContact(ctx context.Context, sessionID, host string, contact evidence.Contact) error
-	SessionContacts(sessionID string) map[string]evidence.Contact
-	SessionUntrustedContent(sessionID string) bool
-}
-
 func TestRecordContactBuildsSessionContacts(t *testing.T) {
-	t.Run("memory", func(t *testing.T) {
-		testRecordContactBuildsSessionContacts(t, NewMemory(), "proj-contacts-memory")
-	})
-	t.Run("sql", func(t *testing.T) {
-		sqlDB := testdbfixture.Open(t, "contacts.db")
-		testdbseed.InsertProjectRoot(t, sqlDB, testdbseed.DefaultProjectID, t.TempDir())
-		testRecordContactBuildsSessionContacts(t, NewSQL(sqlDB), testdbseed.DefaultProjectID)
-	})
+
+	sqlDB := testdbfixture.Open(t, "contacts.db")
+	testdbseed.InsertProjectRoot(t, sqlDB, testdbseed.DefaultProjectID, t.TempDir())
+	testRecordContactBuildsSessionContacts(t, NewSQL(sqlDB), testdbseed.DefaultProjectID)
 }
 
-func testRecordContactBuildsSessionContacts(t *testing.T, st contactStore, projectID string) {
+func testRecordContactBuildsSessionContacts(t *testing.T, st *SQL, projectID string) {
 	t.Helper()
 	ctx := t.Context()
 	sess, err := st.Create(ctx, api.CreateSessionRequest{ProjectID: projectID, Posture: api.SessionPostureBuild}, projectID)
@@ -96,26 +83,14 @@ func TestContactRecordShape(t *testing.T) {
 	}
 }
 
-// urlStandingStore is the surface the address-standing test exercises on both stores.
-type urlStandingStore interface {
-	Create(ctx context.Context, req api.CreateSessionRequest, projectID string) (*api.Session, error)
-	UpsertEvidenceRecord(ctx context.Context, sessionID string, rec evidence.Record) error
-	RecordContact(ctx context.Context, sessionID, host string, contact evidence.Contact) error
-	SessionURLStanding(sessionID, rawURL string) evidence.URLStanding
-}
-
 func TestSessionURLStandingMatchesRecordedAddressesExactly(t *testing.T) {
-	t.Run("memory", func(t *testing.T) {
-		testSessionURLStanding(t, NewMemory(), "proj-observed-memory")
-	})
-	t.Run("sql", func(t *testing.T) {
-		sqlDB := testdbfixture.Open(t, "observed.db")
-		testdbseed.InsertProjectRoot(t, sqlDB, testdbseed.DefaultProjectID, t.TempDir())
-		testSessionURLStanding(t, NewSQL(sqlDB), testdbseed.DefaultProjectID)
-	})
+
+	sqlDB := testdbfixture.Open(t, "observed.db")
+	testdbseed.InsertProjectRoot(t, sqlDB, testdbseed.DefaultProjectID, t.TempDir())
+	testSessionURLStanding(t, NewSQL(sqlDB), testdbseed.DefaultProjectID)
 }
 
-func testSessionURLStanding(t *testing.T, st urlStandingStore, projectID string) {
+func testSessionURLStanding(t *testing.T, st *SQL, projectID string) {
 	t.Helper()
 	ctx := t.Context()
 	sess, err := st.Create(ctx, api.CreateSessionRequest{ProjectID: projectID, Posture: api.SessionPostureBuild}, projectID)

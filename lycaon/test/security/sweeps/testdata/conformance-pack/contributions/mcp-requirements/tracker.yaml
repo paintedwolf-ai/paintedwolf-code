@@ -1,0 +1,7 @@
+id: conformance/sweep:tracker
+provider_id: conformance-tracker
+required_tools:
+  - list_items
+  - search_items
+  - get_item
+purpose: Serve the sweep's choice step and search source.

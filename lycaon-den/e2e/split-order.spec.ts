@@ -1,6 +1,7 @@
 import { writeFileSync } from "node:fs";
 import path from "node:path";
 import { expect, type Page } from "@playwright/test";
+import { animationsFinished } from "./fixtures/settle.ts";
 import { bootstrapChatSession, liveChatStage, openProjectFilesFixture, webE2e } from "./helpers.ts";
 
 async function openSplit(page: Page) {
@@ -201,11 +202,19 @@ webE2e.describe("independent split order", () => {
       await chat.getByTestId("nav-expand-btn").click();
       await expect(page.getByTestId("nav-collapse-btn")).toBeVisible();
 
+      await page.setViewportSize({ width: 1000, height: 900 });
+      await expect(chat).toBeVisible();
+      await expect(stage).toBeVisible();
+
       // Automatic collapse keeps double chevrons and only one sidebar restore.
       await page.setViewportSize({ width: 800, height: 900 });
       await expect(chat).toBeVisible();
       await expect(stage).toBeHidden();
+      await expect(page.getByTestId("split-divider")).toBeHidden();
+      // The seam swaps its control: nothing left to hide, a width to claim.
+      await expect(page.getByTestId("conversation-collapse-btn")).toBeHidden();
       await expect(page.getByTestId("split-fit-restore-stage")).toBeVisible();
+      await expect(page.getByTestId("split-fit-restore-stage")).toHaveAttribute("aria-label", "Widen window to show Files");
       await expect(visibleRestore(page, "nav-auto-restore-btn")).toHaveCount(1);
       await page.setViewportSize({ width: 1600, height: 1000 });
       await expect(stage).toBeVisible();
@@ -216,13 +225,19 @@ webE2e.describe("independent split order", () => {
       await page.getByTestId("display-narrow-survivor").click();
       await page.locator('[role="option"][data-value="stage"]').click();
       await page.getByTestId("settings-stage-close").click();
-      await page.setViewportSize({ width: 800, height: 900 });
+      // The surviving stage never inherits width the split had denied it, so the tree holds across the seam.
+      for (const width of [1500, 1300, 1200, 1120, 1080, 1000, 900, 800]) {
+        await page.setViewportSize({ width, height: 900 });
+        await expect(page.getByTestId("files-tree")).toBeVisible();
+      }
       await expect(chat).toBeHidden();
       await expect(stage).toBeVisible();
       await expect(stage.getByTestId("nav-auto-restore-btn")).toBeVisible();
       await expect(stage.getByTestId("split-fit-restore-conversation")).toBeVisible();
+      await expect(stage.getByTestId("split-fit-restore-conversation")).toHaveAttribute("aria-label", "Widen window to show conversation");
       await expect(stage.getByTestId("split-fit-restore-conversation")).toHaveText("Chat");
       await page.setViewportSize({ width: 1600, height: 1000 });
+      await expect(stage).toBeVisible();
       await expect(chat).toBeVisible();
       await expect(stage.getByTestId("split-fit-restore-conversation")).toBeHidden();
     });
@@ -307,6 +322,9 @@ webE2e.describe("session tabs in the stage title bar", () => {
     await expect(page.getByTestId("files-tree")).toBeVisible();
     await expect(stageTab(page, "progress")).toBeVisible();
 
+    // The drawer slides in, so measure once its entrance has finished.
+    await animationsFinished(drawer);
+    await animationsFinished(page.getByTestId("split-col-stage"));
     // The drawer lies over the stage's trailing edge and the stage keeps its width.
     const stage = await page.getByTestId("split-col-stage").boundingBox();
     const box = await drawer.boundingBox();

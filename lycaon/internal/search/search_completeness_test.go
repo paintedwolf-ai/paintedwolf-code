@@ -20,12 +20,16 @@ func TestProjectToolMessageIndexesRejectedOutcome(t *testing.T) {
 		},
 		CreatedAt: time.Now().UTC(),
 	}
-	rows := ProjectToolMessage("proj", "sess", msg, "read")
-	if len(rows) == 0 {
-		t.Fatal("expected rejected tool result indexed")
+	rows := ProjectToolMessage("proj", "sess", msg, "Read")
+	if len(rows) != 1 {
+		t.Fatalf("rows = %+v, want one rejected tool row", rows)
 	}
-	if !strings.Contains(rows[0].Snippet, "READ_PATH_NOT_FOUND") {
-		t.Fatalf("snippet = %q", rows[0].Snippet)
+	row := rows[0]
+	if row.Tool != "read" || row.SourceRef != "call-1" || row.MessageID != "tool-rej" || row.HitKind != HitKindTool {
+		t.Fatalf("row = %+v, want tool read, call call-1, message tool-rej", row)
+	}
+	if row.Snippet != msg.ToolResult.Content {
+		t.Fatalf("snippet = %q, want the result content", row.Snippet)
 	}
 }
 
@@ -58,19 +62,56 @@ func TestProjectLifecycleEvidenceCheckpointDecisionSubject(t *testing.T) {
 }
 
 func TestProjectLifecycleEvidenceWorkflowBoundary(t *testing.T) {
-	msg := api.Message{
-		ID:   "b1",
-		Role: api.MessageRoleSystem,
-		Kind: api.MessageKindWorkflowBoundary,
-		WorkflowBoundary: &api.WorkflowBoundaryMeta{
-			Event: "paused",
-			Phase: "review",
-		},
-		CreatedAt: time.Now().UTC(),
+	for _, kind := range api.AllWorkflowBoundaryKinds() {
+		event := string(kind)
+		t.Run(event, func(t *testing.T) {
+			msg := api.Message{
+				ID:               "b1",
+				Role:             api.MessageRoleSystem,
+				Kind:             api.MessageKindWorkflowBoundary,
+				WorkflowBoundary: &api.WorkflowBoundaryMeta{Event: event, Phase: "review"},
+				CreatedAt:        time.Now().UTC(),
+			}
+			rows := ProjectLifecycleEvidence("proj", "sess", msg)
+			if len(rows) != 1 {
+				t.Fatalf("rows = %+v, want one boundary row", rows)
+			}
+			row := rows[0]
+			if row.Kind != "workflow_boundary" || row.ID != RowID(SourceMessage, "b1", "boundary:"+event) {
+				t.Fatalf("row = %+v", row)
+			}
+			if want := event + " · review"; row.Snippet != want {
+				t.Fatalf("snippet = %q, want %q", row.Snippet, want)
+			}
+		})
 	}
-	rows := ProjectLifecycleEvidence("proj", "sess", msg)
-	if len(rows) != 1 || rows[0].Kind != "workflow_boundary" {
-		t.Fatalf("rows = %+v", rows)
+}
+
+func TestProjectLifecycleEvidenceWorkflowFeedback(t *testing.T) {
+	cases := []struct {
+		name, answer, content, want string
+	}{
+		{"answer", "  use the second option ", "ignored content", "use the second option"},
+		{"content fallback", " ", "approve the plan", "approve the plan"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			msg := api.Message{
+				ID:               "f1",
+				Role:             api.MessageRoleSystem,
+				Kind:             api.MessageKindWorkflowFeedback,
+				WorkflowFeedback: &api.WorkflowFeedbackMeta{Answer: tc.answer},
+				Content:          tc.content,
+				CreatedAt:        time.Now().UTC(),
+			}
+			rows := ProjectLifecycleEvidence("proj", "sess", msg)
+			if len(rows) != 1 || rows[0].Kind != "workflow_feedback" {
+				t.Fatalf("rows = %+v, want one feedback row", rows)
+			}
+			if rows[0].Snippet != tc.want {
+				t.Fatalf("snippet = %q, want %q", rows[0].Snippet, tc.want)
+			}
+		})
 	}
 }
 

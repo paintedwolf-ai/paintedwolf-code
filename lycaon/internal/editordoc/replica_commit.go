@@ -195,7 +195,7 @@ func (c replicaCommitter) acceptReplica(ctx context.Context, d *Document, in Rep
 		s.replicas.evict(ctx, d.ID)
 		return err
 	}
-	if _, err := textfile.EncodeBounded(serializeEOL(snapshot.Text, d.EOL), d.Encoding, textfile.LimitsForRaw(projectsource.SourceWriteMaxBytes)); err != nil {
+	if _, err := textfile.EncodeBounded(textfile.SerializeEOL(snapshot.Text, d.EOL), d.Encoding, textfile.LimitsForRaw(projectsource.SourceWriteMaxBytes)); err != nil {
 		s.replicas.evict(ctx, d.ID)
 		return err
 	}

@@ -140,6 +140,7 @@ func RunBootstrap(arguments []string) (int, error) {
 	stagePin := os.NewFile(uintptr(stagePIDFD), "protected-stage-pidfd")
 	defer func() { _ = stagePin.Close(); _ = stage.Process.Release() }()
 	if err := awaitGuardianHandoff(handoff[0], stage.Process.Pid, stagePIDFD, caller, origin); err != nil {
+		err = withHandoffExit(err, stagePIDFD, stage.Process.Pid)
 		_ = unix.Shutdown(int(handoff[0].Fd()), unix.SHUT_RDWR)
 		retireBootstrapSetup(stagePIDFD, children, proc, caller, generation.MountTransition)
 		_ = broker.Close()

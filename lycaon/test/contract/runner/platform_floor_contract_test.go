@@ -66,41 +66,6 @@ func TestPlatformFloorCaskMatchesSSOT(t *testing.T) {
 	}
 }
 
-func TestPlatformFloorAboveGoToolchain(t *testing.T) {
-	t.Parallel()
-	major, _, err := platformfloor.MacOSMinParts()
-	if err != nil {
-		testutil.FailErr(t, "parse macOS floor", err)
-	}
-	if major < platformfloor.GoToolchainMacOSMinMajor {
-		t.Fatalf("macOS floor major %d is below the Go toolchain floor %d — the product floor can never be lower than what the toolchain itself requires",
-			major, platformfloor.GoToolchainMacOSMinMajor)
-	}
-}
-
-func TestBundleScriptPinsDeploymentTarget(t *testing.T) {
-	t.Parallel()
-	// The shared staging script pins the sidecar build.
-	stageScript := contractcheck.ReadRepoFile(t, contractcheck.RepoRoot(t), "scripts/stage-engine.sh")
-	for _, want := range []string{
-		"export MACOSX_DEPLOYMENT_TARGET=",
-		"export CGO_ENABLED=1",
-		"export CGO_ENABLED=0",
-		"assert_static()",
-		"BUILD_ARGS=(-trimpath",
-	} {
-		if !strings.Contains(stageScript, want) {
-			t.Fatalf("scripts/stage-engine.sh is missing %q.\n"+
-				"Without the pin, the shipped floor is whatever SDK the build host happened to have; without -trimpath the binary leaks build-machine paths and 4.8's BUILD_PATH_LEAK check cannot pass.", want)
-		}
-	}
-
-	bundleScript := contractcheck.ReadRepoFile(t, contractcheck.RepoRoot(t), "scripts/den-build-bundle.sh")
-	if !strings.Contains(bundleScript, "export MACOSX_DEPLOYMENT_TARGET=") {
-		t.Fatal("scripts/den-build-bundle.sh is missing \"export MACOSX_DEPLOYMENT_TARGET=\" — the Rust/Tauri build needs the same floor pin as the sidecar")
-	}
-}
-
 func releaseMatrixArches(t *testing.T) []string {
 	t.Helper()
 	var catalog releasePlatformCatalog

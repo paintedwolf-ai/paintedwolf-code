@@ -47,7 +47,10 @@ paths:
       tags:
       - workers
       operationId: getWorkerHistory
-      x-multi-stream-list: true
+      x-multi-stream-list:
+        cursor: before
+        next: before
+        bounded: [messages]
       summary: Read bounded round and message history for a session worker
       parameters:
       - $ref: ../components/parameters.yaml#/components/parameters/ProjectIDQuery

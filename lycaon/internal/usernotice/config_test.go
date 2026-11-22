@@ -14,8 +14,8 @@ func TestLoadUserNoticeConfig(t *testing.T) {
 	if len(HostErrorCodes(cfg)) < 7 {
 		t.Fatalf("HostErrorCodes = %v want at least 7 host_error entries", HostErrorCodes(cfg))
 	}
-	if len(HTTPCodes(cfg)) < 40 {
-		t.Fatalf("HTTPCodes = %d want full HTTP ledger coverage", len(HTTPCodes(cfg)))
+	if len(surfaceCodes(cfg, "http")) < 40 {
+		t.Fatalf("HTTPCodes = %d want full HTTP ledger coverage", len(surfaceCodes(cfg, "http")))
 	}
 	entry, ok := cfg.UserNotices["session_aborted"]
 	if !ok || entry.IsUserVisible() {

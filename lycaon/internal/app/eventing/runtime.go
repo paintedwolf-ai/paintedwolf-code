@@ -42,6 +42,11 @@ func (b *Runtime) latestWorker(ctx context.Context, child string) (*api.WorkerTa
 	return b.workers.GetLatestByChildSessionID(ctx, child)
 }
 func Build(ctx context.Context, database *db.Store, sessions *store.SQL, projects *project.SQLRegistry, power *hostpower.Controller, states events.SessionStateSource, pending store.PromptPendingSource, listing ProjectSessions, resources ResourceLifetime, preparation PreparationObserver) (*Runtime, error) {
+	// Without a database the outbox records nothing and every store wired below
+	// would drop its events.
+	if database == nil {
+		return nil, fmt.Errorf("event outbox: no database")
+	}
 	b := &Runtime{}
 
 	b.Hub = events.WrapDebugHub(events.NewMemoryHub())
@@ -49,13 +54,7 @@ func Build(ctx context.Context, database *db.Store, sessions *store.SQL, project
 		b.Hub = &preparationHub{ReplayHub: b.Hub, observer: preparation}
 	}
 	b.Outbox = eventoutbox.New(database, b.Hub)
-	if b.Outbox != nil {
-		resources.Track("event-outbox", 120, func(context.Context) error { return b.Outbox.Close() })
-	}
-	// An absent outbox would silently drop mutation events.
-	if b.Outbox == nil {
-		return nil, fmt.Errorf("event outbox: nil after construction; every store wired below would drop its events")
-	}
+	resources.Track("event-outbox", 120, func(context.Context) error { return b.Outbox.Close() })
 	sessions.SetEventOutbox(b.Outbox)
 	projects.SetEventOutbox(b.Outbox)
 	b.Presence = events.NewPresence(b.Hub, events.DefaultUserActionWindow)

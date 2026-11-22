@@ -11,7 +11,7 @@ import (
 	"github.com/lycaon/lycaon/internal/session/batchcontrol"
 	"github.com/lycaon/lycaon/internal/session/execution"
 	"github.com/lycaon/lycaon/internal/session/promptstate"
-	"github.com/lycaon/lycaon/internal/session/store"
+	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -38,15 +38,15 @@ func (stubWorkflowPolicy) AssertSessionCompletion(context.Context, string) error
 func (stubWorkflowPolicy) CurrentPhase(context.Context, string) string { return "plan" }
 
 func TestFinishAndSettlePendingPreservesCloseoutBlockedWithoutFailingTurn(t *testing.T) {
-	mem := store.NewMemory()
-	sess, err := mem.Create(t.Context(), api.CreateSessionRequest{}, "proj-1")
+	sessionStore := storetest.New(t, "proj-1")
+	sess, err := sessionStore.Create(t.Context(), api.CreateSessionRequest{}, "proj-1")
 	testutil.FailErr(t, "create session", err)
-	testutil.FailErr(t, "mark session busy", mem.SetSessionStatus(t.Context(), sess.ID, api.SessionStatusBusy))
+	testutil.FailErr(t, "mark session busy", sessionStore.SetSessionStatus(t.Context(), sess.ID, api.SessionStatusBusy))
 
-	status := execution.NewStatus(mem)
+	status := execution.NewStatus(sessionStore)
 	status.SetPublisher(&events.Publisher{Hub: events.NewMemoryHub()})
 	rt := coordinator.NewRuntime(coordinator.RuntimeDeps{})
-	svc := New(mem, stubGate{}, &promptstate.MutexRegistry{}, status, nil, &batchcontrol.Service{})
+	svc := New(sessionStore, stubGate{}, &promptstate.MutexRegistry{}, status, nil, &batchcontrol.Service{})
 	svc.SetRuntime(rt)
 	svc.SetWorkflow(&WorkflowDomains{
 		Phases:  stubWorkflowPhases{},
@@ -67,7 +67,7 @@ func TestFinishAndSettlePendingPreservesCloseoutBlockedWithoutFailingTurn(t *tes
 		t.Fatal("expected deferred closeout_blocked settlement")
 	}
 	testutil.FailErr(t, "settle pending closeout_blocked turn", svc.SettlePending(t.Context(), sess.ID))
-	updated, err := mem.Get(t.Context(), sess.ID)
+	updated, err := sessionStore.Get(t.Context(), sess.ID)
 	testutil.FailErr(t, "read settled session", err)
 	if updated.Status != api.SessionStatusIdle {
 		t.Fatalf("session status = %s, want idle", updated.Status)

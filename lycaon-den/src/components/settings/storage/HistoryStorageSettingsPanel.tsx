@@ -95,7 +95,8 @@ export function HistoryStorageSettingsPanel(props: { client: LycaonClient | null
       const result = await client.pruneHistory({ ...selection, preview_token: token });
       if (!current()) return;
       count += result.removed_count; bytes += result.released_bytes;
-      more = !result.complete; token = result.preview_token;
+      more = !result.complete && result.preview_token !== undefined;
+      if (result.preview_token !== undefined) token = result.preview_token;
       setMessage(`Removed ${count} history items; ${historyBytes(bytes)} of history references released.`);
     } while (more && !stopPruning);
     setPreview(undefined);

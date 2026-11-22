@@ -210,7 +210,8 @@ func TestWorkerCopyLifetimesAndSkillHistory(t *testing.T) {
 		WebSearch: true,
 	})
 	contractcheck.FailErr(t, "skill reader A", err)
-	varsA := prompts.SkillVars(readerA)
+	varsA, err := prompts.SkillVars(readerA)
+	contractcheck.FailErr(t, "skill vars A", err)
 	for _, sk := range stockSkillCorpus(t) {
 		if sk.Name != "orchestrate-a-large-task" {
 			continue
@@ -218,8 +219,8 @@ func TestWorkerCopyLifetimesAndSkillHistory(t *testing.T) {
 		before := renderSkillParts(t, sk, varsA)
 		after := renderSkillParts(t, sk, varsA)
 		for i := range before {
-			if before[i].text != after[i].text {
-				t.Fatalf("skill read part %s mutated across volatile state", before[i].label)
+			if before[i].Text != after[i].Text {
+				t.Fatalf("skill read part %s mutated across volatile state", before[i].Label)
 			}
 		}
 	}

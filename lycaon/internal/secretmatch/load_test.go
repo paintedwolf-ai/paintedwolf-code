@@ -78,8 +78,8 @@ func TestBundledCatalogInventory(t *testing.T) {
 	}
 	vendor, err := bundledKingfisherCatalog()
 	testutil.FailErr(t, "load bundled Kingfisher catalog", err)
-	if len(vendor.rules) != 859 {
-		t.Errorf("vendor catalog count: got %d want 859", len(vendor.rules))
+	if len(vendor.rules) != 866 {
+		t.Errorf("vendor catalog count: got %d want 866", len(vendor.rules))
 	}
 	if len(got) != len(want) {
 		t.Errorf("local catalog count: got %d want %d", len(got), len(want))

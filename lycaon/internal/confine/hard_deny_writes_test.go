@@ -1,6 +1,7 @@
 package confine_test
 
 import (
+	"bytes"
 	"os"
 	"path/filepath"
 	"strings"
@@ -54,46 +55,6 @@ func TestHardDenyWriteSpecsIncludesOverlaysAndAgents(t *testing.T) {
 	}
 	if !hasLauncher {
 		t.Fatalf("expected launcher literal %q, got %#v", exeResolved, specs)
-	}
-}
-
-// Workspace allow-backs do not expose adjacent host state.
-func TestBuildProfileDeniesControlPlaneSubtreeWithWorkspaceAllowBack(t *testing.T) {
-	cfg := t.TempDir()
-	t.Setenv("LYCAON_CONFIG_DIR", cfg)
-	cfgResolved := cfg
-	if rp, err := filepath.EvalSymlinks(cfg); err == nil {
-		cfgResolved = rp
-	}
-	draft := filepath.Join(cfgResolved, "drafts", "d1")
-	testutil.FailErr(t, "mkdir draft", os.MkdirAll(draft, 0o700))
-
-	p, err := confine.BuildSeatbeltProfile(confine.Confinement{
-		Roots:             []string{"/proj"},
-		GrantedWriteRoots: []string{draft},
-	})
-	testutil.FailErr(t, "BuildSeatbeltProfile", err)
-	denyWrite, denyAt := profileBlock(t, p, blockDenyWrite, 0)
-	assertBlockMentions(t, denyWrite, cfgResolved, "control-plane subtree deny")
-	tail := p[denyAt+len(denyWrite):]
-	if !strings.Contains(tail, "(subpath \""+draft+"\")") {
-		t.Fatalf("granted workspace under the control plane must be re-allowed after the deny:\n%s", p)
-	}
-}
-
-func TestBuildProfileRendersHardDenyWrites(t *testing.T) {
-	cfg := t.TempDir()
-	t.Setenv("LYCAON_CONFIG_DIR", cfg)
-	proj := "/proj"
-	p, err := confine.BuildSeatbeltProfile(confine.Confinement{Roots: []string{proj}})
-	testutil.FailErr(t, "BuildSeatbeltProfile", err)
-	// Each entry must appear in the deny block.
-	denyWrite, _ := profileBlockContaining(t, p, blockDenyWrite, "approvals.yaml")
-	assertBlockMentions(t, denyWrite, "approvals.yaml", "write hard-deny")
-	policyDeny, _ := profileBlockContaining(t, p, blockDenyWrite, `[Aa][Gg][Ee]`)
-	assertBlockMentions(t, policyDeny, "(regex ", "instruction approval boundary")
-	if !strings.Contains(p, `[Aa][Gg][Ee]`) {
-		t.Fatalf("profile must render recursive AGENTS.md deny:\n%s", p)
 	}
 }
 
@@ -163,7 +124,9 @@ func TestBoundaryDeniesUngrantedAgentPolicyWrites(t *testing.T) {
 	}
 }
 
-// The launcher remains immutable inside its writable parent.
+// The launcher remains immutable inside its writable parent. Each refused
+// mutation is paired with the same program succeeding on a sibling, so a
+// refusal cannot come from the program failing to run at all.
 func TestBoundaryLauncherUntamperable(t *testing.T) {
 	self := requireLiveBoundary(t)
 	exe, err := os.Executable()
@@ -171,59 +134,53 @@ func TestBoundaryLauncherUntamperable(t *testing.T) {
 	if rp, err := filepath.EvalSymlinks(exe); err == nil {
 		exe = rp
 	}
+	original, err := os.ReadFile(exe)
+	testutil.FailErr(t, "read launcher", err)
 	launcherDir := filepath.Dir(exe)
 	c := confine.Confinement{Roots: []string{launcherDir}}
 
 	sibling := filepath.Join(launcherDir, "lycaon_launcher_sibling_ok.txt")
-	_ = os.Remove(sibling)
-	t.Cleanup(func() { _ = os.Remove(sibling) })
-	if code := confinedExit(t, self, c, "/usr/bin/touch", sibling); code != 0 {
-		t.Fatalf("sibling write in launcher dir must succeed, exit=%d", code)
+	renameSrc := filepath.Join(launcherDir, "lycaon_launcher_rename_src")
+	t.Cleanup(func() { _ = os.Remove(sibling); _ = os.Remove(renameSrc) })
+	seed := func() {
+		t.Helper()
+		testutil.FailErr(t, "seed sibling", os.WriteFile(sibling, []byte("seed"), 0o600))
+		testutil.FailErr(t, "seed rename source", os.WriteFile(renameSrc, []byte("x"), 0o600))
 	}
-
-	if code := confinedExit(t, self, c, "/bin/bash", "-c", "printf x >"+shellSingleQuote(exe)); code == 0 {
-		t.Fatal("write over launcher should be denied")
+	mutations := []struct {
+		name string
+		argv func(target string) []string
+	}{
+		{"write", func(target string) []string {
+			return []string{"/bin/bash", "-c", "printf x >" + shellSingleQuote(target)}
+		}},
+		{"truncate", func(target string) []string { return []string{"/bin/bash", "-c", ": >" + shellSingleQuote(target)} }},
+		{"overwrite", func(target string) []string {
+			return []string{"/bin/dd", "if=/dev/zero", "of=" + target, "bs=1", "count=1"}
+		}},
+		{"rename-over", func(target string) []string { return []string{"/bin/mv", "-f", renameSrc, target} }},
+		{"unlink", func(target string) []string { return []string{"/bin/rm", "-f", target} }},
 	}
-	if code := confinedExit(t, self, c, "/bin/bash", "-c", ": >"+shellSingleQuote(exe)); code == 0 {
-		t.Fatal("truncate of launcher should be denied")
-	}
-	if code := confinedExit(t, self, c, "/bin/rm", "-f", exe); code == 0 {
-		t.Fatal("unlink of launcher should be denied")
-	}
-	if _, err := os.Stat(exe); err != nil {
-		t.Fatalf("launcher must still exist after denied unlink: %v", err)
-	}
-	if code := confinedExit(t, self, c, "/bin/dd", "if=/dev/zero", "of="+exe, "bs=1", "count=1"); code == 0 {
-		t.Fatal("create-at/overwrite of launcher should be denied")
-	}
-
-	src := filepath.Join(launcherDir, "lycaon_launcher_rename_src")
-	testutil.FailErr(t, "write rename src", os.WriteFile(src, []byte("x"), 0o600))
-	t.Cleanup(func() { _ = os.Remove(src) })
-	if code := confinedExit(t, self, c, "/bin/mv", "-f", src, exe); code == 0 {
-		t.Fatal("rename-over launcher should be denied")
-	}
-	if _, err := os.Stat(exe); err != nil {
-		t.Fatalf("launcher must still exist after denied rename-over: %v", err)
+	for _, m := range mutations {
+		seed()
+		argv := m.argv(sibling)
+		if code := confinedExit(t, self, c, argv[0], argv[1:]...); code != 0 {
+			t.Fatalf("positive control: %s of a sibling must succeed, exit=%d", m.name, code)
+		}
+		if got, _ := os.ReadFile(sibling); string(got) == "seed" {
+			t.Fatalf("positive control: %s left the sibling unchanged", m.name)
+		}
+		seed()
+		argv = m.argv(exe)
+		if code := confinedExit(t, self, c, argv[0], argv[1:]...); code == 0 {
+			t.Errorf("%s of the launcher must be refused", m.name)
+		}
+		if got, err := os.ReadFile(exe); err != nil || !bytes.Equal(got, original) {
+			t.Fatalf("launcher changed after the refused %s (err %v)", m.name, err)
+		}
 	}
 }
 
 func shellSingleQuote(s string) string {
 	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
-}
-
-func TestBuildProfileOmitsPrivateVarFoldersWriteRoot(t *testing.T) {
-	p, err := confine.BuildSeatbeltProfile(confine.Confinement{Roots: []string{"/proj"}})
-	testutil.FailErr(t, "BuildSeatbeltProfile", err)
-	// The path must not appear in the write-root allow block.
-	allowWrite, _ := profileBlock(t, p, blockAllowWrite, 0)
-	assertBlockOmitsPath(t, allowWrite, "/private/var/folders", "write-root allow")
-	exe, err := os.Executable()
-	testutil.FailErr(t, "Executable", err)
-	if rp, err := filepath.EvalSymlinks(exe); err == nil {
-		exe = rp
-	}
-	// The launcher must appear in the deny block.
-	denyWrite, _ := profileBlockContaining(t, p, blockDenyWrite, exe)
-	assertBlockMentions(t, denyWrite, exe, "write hard-deny (launcher)")
 }

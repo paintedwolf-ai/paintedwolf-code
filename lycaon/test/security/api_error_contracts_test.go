@@ -44,12 +44,12 @@ func TestAPIErrorContractsMatrix(t *testing.T) {
 	base := httpSrv.URL
 
 	projectDir := t.TempDir()
-	project := createAPIProjectAtPath(t, base, projectDir)
-	rootlessProject := openAPIPostJSON[wire.Project](t, base, "/v1/projects", nil, `{"name":"rootless"}`, http.StatusCreated)
-	sess := openAPIPostJSON[wire.Session](t, base, "/v1/sessions", nil,
+	project := CreateAPIProjectAtPath(t, base, projectDir)
+	rootlessProject := OpenAPIPostJSON[wire.Project](t, base, "/v1/projects", nil, `{"name":"rootless"}`, http.StatusCreated)
+	sess := OpenAPIPostJSON[wire.Session](t, base, "/v1/sessions", nil,
 		`{"project_id":"`+project.ID+`","posture":"spec"}`, http.StatusAccepted)
 
-	overlaysOffProject := createAPIProjectAtPath(t, base, t.TempDir())
+	overlaysOffProject := CreateAPIProjectAtPath(t, base, t.TempDir())
 	openAPIPatchJSON[wire.ProjectTrust](t, base,
 		"/v1/projects/{id}/trust", map[string]string{"id": overlaysOffProject.ID},
 		`{"enabled":{"scan_config":false}}`, http.StatusOK)

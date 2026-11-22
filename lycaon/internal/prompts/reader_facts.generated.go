@@ -38,14 +38,17 @@ var declaredReaderFactScalarNames = []string{
 	"profile_has_write_tools",
 	"profile_mutation_capable",
 	"progress_gated_tools",
+	"progress_ungated_lifecycle_tools",
 	"read_globs",
 	"recall_may_widen",
 	"reject_codes",
 	"requestable_capabilities",
 	"root_count",
 	"runner_direct_ip_tools",
+	"runner_inline_wait_seconds",
 	"runner_local_listen_tools",
 	"runner_loopback_connect_tools",
+	"runner_park_seconds",
 	"runner_socket_tools",
 	"runner_write_root_tools",
 	"surface_card_label",
@@ -98,14 +101,17 @@ var declaredReaderFactScalars = map[string]ReaderFactScalarSpec{
 	"profile_has_write_tools":            {Name: "profile_has_write_tools", Type: "bool", States: "At least one workspace-mutating tool or mutating command is offered."},
 	"profile_mutation_capable":           {Name: "profile_mutation_capable", Type: "bool", States: "At least one workspace-mutating tool or mutating command is reachable."},
 	"progress_gated_tools":               {Name: "progress_gated_tools", Type: "[]string", States: "Offered tools gated on an active progress checklist item."},
+	"progress_ungated_lifecycle_tools":   {Name: "progress_ungated_lifecycle_tools", Type: "[]string", States: "Offered worker-lifecycle tools that run without an active progress checklist item."},
 	"read_globs":                         {Name: "read_globs", Type: "[]string", States: "Readable path globs for this coordinator surface."},
 	"recall_may_widen":                   {Name: "recall_may_widen", Type: "bool", States: "Recall supports widening beyond the current leg."},
 	"reject_codes":                       {Name: "reject_codes", Type: "[]map[string]any", States: "Recoverable rejection codes reachable by this reader's tools."},
 	"requestable_capabilities":           {Name: "requestable_capabilities", Type: "[]string", States: "Capability group labels for tools loadable via request_tools."},
 	"root_count":                         {Name: "root_count", Type: "int", States: "Workspace roots attached to the session."},
 	"runner_direct_ip_tools":             {Name: "runner_direct_ip_tools", Type: "[]string", States: "Offered host-runner tools that can dial direct IP literals."},
+	"runner_inline_wait_seconds":         {Name: "runner_inline_wait_seconds", Type: "int", States: "Seconds a command call waits for running work before returning its handle."},
 	"runner_local_listen_tools":          {Name: "runner_local_listen_tools", Type: "[]string", States: "Offered host-runner tools that can bind a local listener."},
 	"runner_loopback_connect_tools":      {Name: "runner_loopback_connect_tools", Type: "[]string", States: "Offered host-runner tools that can connect to loopback ports."},
+	"runner_park_seconds":                {Name: "runner_park_seconds", Type: "int", States: "Seconds a command call holds a waiting program before parking it in the background."},
 	"runner_socket_tools":                {Name: "runner_socket_tools", Type: "[]string", States: "Offered host-runner tools that can connect to Unix sockets."},
 	"runner_write_root_tools":            {Name: "runner_write_root_tools", Type: "[]string", States: "Offered host-runner tools that can write inside workspace roots."},
 	"surface_card_label":                 {Name: "surface_card_label", Type: "string", States: "Human-readable label for the active coordinator surface card."},
@@ -178,14 +184,17 @@ type ReaderFacts struct {
 	ProfileHasWriteTools           bool
 	ProfileMutationCapable         bool
 	ProgressGatedTools             []string
+	ProgressUngatedLifecycleTools  []string
 	ReadGlobs                      []string
 	RecallMayWiden                 bool
 	RejectCodes                    []map[string]any
 	RequestableCapabilities        []string
 	RootCount                      int
 	RunnerDirectIPTools            []string
+	RunnerInlineWaitSeconds        int
 	RunnerLocalListenTools         []string
 	RunnerLoopbackConnectTools     []string
+	RunnerParkSeconds              int
 	RunnerSocketTools              []string
 	RunnerWriteRootTools           []string
 	SurfaceCardLabel               string
@@ -214,7 +223,7 @@ type ReaderFacts struct {
 
 // Map flattens the typed reader facts and family maps into a template variable map.
 func (f ReaderFacts) Map() map[string]any {
-	out := make(map[string]any, 62+len(f.ProfileHas)+len(f.AgentHasSkill))
+	out := make(map[string]any, 65+len(f.ProfileHas)+len(f.AgentHasSkill))
 	out["agent_tools"] = f.AgentTools
 	out["caps"] = map[string]any{"vision": f.CapsVision}
 	out["card_edit_deferred"] = f.CardEditDeferred
@@ -257,6 +266,11 @@ func (f ReaderFacts) Map() map[string]any {
 	} else {
 		out["progress_gated_tools"] = []string(nil)
 	}
+	if f.ProgressUngatedLifecycleTools != nil {
+		out["progress_ungated_lifecycle_tools"] = append([]string(nil), f.ProgressUngatedLifecycleTools...)
+	} else {
+		out["progress_ungated_lifecycle_tools"] = []string(nil)
+	}
 	if f.ReadGlobs != nil {
 		out["read_globs"] = append([]string(nil), f.ReadGlobs...)
 	} else {
@@ -275,6 +289,7 @@ func (f ReaderFacts) Map() map[string]any {
 	} else {
 		out["runner_direct_ip_tools"] = []string(nil)
 	}
+	out["runner_inline_wait_seconds"] = f.RunnerInlineWaitSeconds
 	if f.RunnerLocalListenTools != nil {
 		out["runner_local_listen_tools"] = append([]string(nil), f.RunnerLocalListenTools...)
 	} else {
@@ -285,6 +300,7 @@ func (f ReaderFacts) Map() map[string]any {
 	} else {
 		out["runner_loopback_connect_tools"] = []string(nil)
 	}
+	out["runner_park_seconds"] = f.RunnerParkSeconds
 	if f.RunnerSocketTools != nil {
 		out["runner_socket_tools"] = append([]string(nil), f.RunnerSocketTools...)
 	} else {

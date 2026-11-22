@@ -16,6 +16,7 @@ internal/testtool
 internal/api/apitest
 internal/api/contractfixture
 internal/browser/browsertest
+internal/testutil/sourceoutage
 internal/guidance/ledgertest
 internal/prompts/promptstest
 internal/report/reporttest

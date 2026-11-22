@@ -51,6 +51,7 @@ func seedEditorOutbox(t *testing.T, root string) (string, []byte) {
 }
 
 func TestEditorOutboxSurvivesRelocatedRestoreAndRecoveryPreimage(t *testing.T) {
+	t.Parallel()
 	source := t.TempDir()
 	sourceDB := testdbfixture.OpenPath(t, filepath.Join(source, "store.db"))
 	relative, want := seedEditorOutbox(t, source)
@@ -74,6 +75,7 @@ func TestEditorOutboxSurvivesRelocatedRestoreAndRecoveryPreimage(t *testing.T) {
 }
 
 func TestBackupWaitsForNativeOutboxTransactionBeforeSnapshot(t *testing.T) {
+	t.Parallel()
 	root := t.TempDir()
 	database := testdbfixture.OpenPath(t, filepath.Join(root, "store.db"))
 	release, err := editoroutbox.Acquire(t.Context(), root)
@@ -88,6 +90,7 @@ func TestBackupWaitsForNativeOutboxTransactionBeforeSnapshot(t *testing.T) {
 }
 
 func TestExplicitFreshStartRetainsOldEditorWorkWithItsRecoveryDatabase(t *testing.T) {
+	t.Parallel()
 	root := t.TempDir()
 	database := testdbfixture.OpenPath(t, filepath.Join(root, "store.db"))
 	relative, want := seedEditorOutbox(t, root)
@@ -106,6 +109,7 @@ func TestExplicitFreshStartRetainsOldEditorWorkWithItsRecoveryDatabase(t *testin
 }
 
 func TestUpgradeRecoveryCountsOutboxOnceAfterVerifiedPublication(t *testing.T) {
+	t.Parallel()
 	root := t.TempDir()
 	path := filepath.Join(root, "store.db")
 	database := testdbfixture.OpenPath(t, path)

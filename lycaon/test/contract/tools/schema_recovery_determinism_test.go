@@ -88,11 +88,8 @@ func TestSchemaRecoveryPreservesOperation(t *testing.T) {
 				if reject == nil || reject.Code != "TOOL_ARGS_INVALID" {
 					t.Fatalf("expected argument rejection for %s: %#v", tool, reject)
 				}
-				if _, ok := reject.Data["suggested_tool"]; ok {
-					t.Fatalf("schema recovery proposed another operation: %#v", reject.Data)
-				}
-				if reason, _ := reject.Data["reason"].(string); reason == "" {
-					t.Fatalf("missing actionable argument diagnostics: %#v", reject.Data)
+				if reject.Data["tool"] != tool || reject.Data["argument_schema_tool"] != tool {
+					t.Fatalf("schema recovery names another operation: %#v", reject.Data)
 				}
 			})
 		}

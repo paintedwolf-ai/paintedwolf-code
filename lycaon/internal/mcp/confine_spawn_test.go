@@ -44,9 +44,7 @@ func TestPrepareStdioCommandRefusesUnsafeProjectRoot(t *testing.T) {
 }
 
 func TestPrepareStdioCommandConfinedWhenAvailable(t *testing.T) {
-	if !confine.Available() {
-		t.Skip("Seatbelt confinement only on darwin")
-	}
+	testutil.RequireConfinement(t, confine.Available())
 	root := t.TempDir()
 	spawn, err := prepareStdioCommand(context.Background(), "fixture", "/bin/echo", []string{"hi"}, stdioEnv{base: []string{"PATH=/usr/bin"}}, []string{root})
 	testutil.FailErr(t, "prepare", err)
@@ -88,9 +86,7 @@ func TestRegisterStdioEgressAttributesTheServerLineage(t *testing.T) {
 // a secret here would change between invocations and be readable by every
 // descendant.
 func TestPrepareStdioCommandHandsTheServerNoCredential(t *testing.T) {
-	if !confine.Available() {
-		t.Skip("Seatbelt confinement only on darwin")
-	}
+	testutil.RequireConfinement(t, confine.Available())
 	restore := bindEgress
 	bindEgress = func(context.Context, *confine.Confinement, confine.EgressCommand) (func(), error) {
 		return func() {}, nil
@@ -116,9 +112,7 @@ func TestPrepareStdioCommandHandsTheServerNoCredential(t *testing.T) {
 }
 
 func TestPrepareStdioCommandRequiresRootsWhenAvailable(t *testing.T) {
-	if !confine.Available() {
-		t.Skip("Seatbelt confinement only on darwin")
-	}
+	testutil.RequireConfinement(t, confine.Available())
 	_, err := prepareStdioCommand(context.Background(), "fixture", "/bin/echo", nil, stdioEnv{}, nil)
 	if err == nil {
 		t.Fatal("expected error when roots empty")

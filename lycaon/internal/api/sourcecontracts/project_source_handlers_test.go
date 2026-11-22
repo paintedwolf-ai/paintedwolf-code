@@ -21,9 +21,11 @@ import (
 	"github.com/lycaon/lycaon/internal/repochange"
 	"github.com/lycaon/lycaon/internal/sourcefeed"
 	"github.com/lycaon/lycaon/internal/testdbfixture"
+	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/watchfd"
 	"github.com/lycaon/lycaon/internal/worker"
+	"github.com/lycaon/lycaon/internal/worker/workertest"
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -93,12 +95,16 @@ func TestProjectSourceMutationRejectsLifecycleTransition(t *testing.T) {
 func TestWorkerBranchRoot(t *testing.T) {
 	t.Parallel()
 	const projectID = "11111111-1111-4111-8111-111111111111"
-	branch := t.TempDir()
-
+	database := testdbfixture.Open(t, "workers.db")
+	branch := workertest.NewBranch(t, database)
 	contractfixture.CompleteBranchMeta(t, branch)
-	q := worker.NewInMemoryQueue(1)
-	workerID := contractfixture.EnqueueBranchJob(t, q, projectID, branch)
-	otherJobID := contractfixture.EnqueueBranchJob(t, q, "22222222-2222-4222-8222-222222222222", t.TempDir())
+	testdbseed.InsertProject(t, database, projectID)
+	testdbseed.InsertProject(t, database, "22222222-2222-4222-8222-222222222222")
+	q := worker.NewSQLQueue(database, 1)
+	workerID := contractfixture.EnqueueBranchJob(t, q, database, projectID, branch)
+	otherBranch := workertest.NewBranch(t, database)
+	contractfixture.CompleteBranchMeta(t, otherBranch)
+	otherJobID := contractfixture.EnqueueBranchJob(t, q, database, "22222222-2222-4222-8222-222222222222", otherBranch)
 
 	sources := contractfixture.NewTestSources(t, q)
 
@@ -132,8 +138,8 @@ func TestWorkerBranchRootEmptyAfterPromoteReleasesOverlay(t *testing.T) {
 	t.Parallel()
 	const projectID = "44444444-4444-4444-8444-444444444444"
 
-	q := worker.NewInMemoryQueue(1)
-	workerID := contractfixture.EnqueueBranchJob(t, q, projectID, "")
+	q := workertest.NewQueue(t, 1, projectID)
+	workerID := contractfixture.EnqueueBranchJob(t, q, nil, projectID, "")
 
 	sources := contractfixture.NewTestSources(t, q)
 	if got, release := sources.Workspace.WorkerBranchRoot(context.Background(), projectID, workerID); got != "" {
@@ -144,7 +150,7 @@ func TestWorkerBranchRootEmptyAfterPromoteReleasesOverlay(t *testing.T) {
 
 func TestWorkerBranchRootEmptyForUnknownWorker(t *testing.T) {
 	t.Parallel()
-	sources := contractfixture.NewTestSources(t, worker.NewInMemoryQueue(1))
+	sources := contractfixture.NewTestSources(t, workertest.NewQueue(t, 1, testdbseed.DefaultProjectID))
 	if got, release := sources.Workspace.WorkerBranchRoot(context.Background(), "p", "55555555-5555-4555-8555-555555555555"); got != "" {
 		release()
 		t.Fatalf("branch root = %q want empty", got)

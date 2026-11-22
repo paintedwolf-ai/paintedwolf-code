@@ -72,19 +72,13 @@ if ((PREPARE)); then
       status=2
     fi
   done
-  # The lane builds its sidecar offline, so warm the managed browser cache its
-  # browser ensure resolves from while the runner still has a network. The lane
-  # has no decide-heads bundle, so build the engine directly rather than through
-  # ./task browser:ensure's dev-engine build.
-  browser_dir="$(mktemp -d)"
-  if (cd "${DIR}/../lycaon" && go build -o "${browser_dir}/lycaon" ./cmd/lycaon) \
-    && LYCAON_DEV=1 "${browser_dir}/lycaon" browser ensure; then
+  # The lane builds its sidecar offline, so warm the cache its browser ensure resolves from.
+  if bash "${DIR}/managed-browser-prepare.sh"; then
     echo "den:webkit:atspi: managed browser cache ready"
   else
     echo "den:webkit:atspi: unverified: could not provision the managed browser cache" >&2
     status=2
   fi
-  rm -rf "${browser_dir}"
   exit "${status}"
 fi
 

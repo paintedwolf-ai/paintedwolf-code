@@ -32,39 +32,6 @@ function activeLlmTurn(store: ReturnType<typeof createAppStore>, sessionId: stri
 }
 
 describe("applyMessageEvent", () => {
-  it("appends parent session rows from SSE", () => {
-    const store = createAppStore();
-    store.actions.setCurrentSession({
-      id: "parent-1",
-      owner_person_id: "00000000-0000-4000-8000-000000000002",
-      project_id: "00000000-0000-4000-8000-000000000001",
-      workspace_path: "/tmp/p",
-      posture: "build",
-      status: "idle",
-      created_at: "t",
-      activity_at: "t",
-      updated_at: "t",
-    });
-    seedMessages(store, [
-      { id: "u1", role: "user", origin: "user" as const, authority: "user" as const, trust_tier: "trusted" as const, content: "hi", created_at: "t" },
-    ]);
-
-    const applied = applyMessageEvent(store, {
-      session_id: "parent-1",
-      op: "append",
-      message: {
-        id: "a1",
-        role: "assistant", origin: "model" as const, authority: "none" as const, trust_tier: "trusted" as const,
-        content: "Your game is ready.",
-        created_at: "t2",
-      },
-    });
-
-    expect(applied).toBe(true);
-    expect(store.state.messages).toHaveLength(2);
-    expect(store.state.messages[1]?.content).toContain("ready");
-  });
-
   it("resolves the pending-send bubble when its echo row lands", () => {
     const store = createAppStore();
     store.actions.setCurrentSession({
@@ -113,32 +80,6 @@ describe("applyMessageEvent", () => {
       "a-unrelated",
       "op-1",
     ]);
-  });
-
-  it("patches an existing row by id", () => {
-    const store = createAppStore();
-    store.actions.setCurrentSession({
-      id: "parent-1",
-      owner_person_id: "00000000-0000-4000-8000-000000000002",
-      project_id: "00000000-0000-4000-8000-000000000001",
-      workspace_path: "/tmp/p",
-      posture: "build",
-      status: "idle",
-      created_at: "t",
-      activity_at: "t",
-      updated_at: "t",
-    });
-    seedMessages(store, [
-      { id: "a1", role: "assistant", origin: "model" as const, authority: "none" as const, trust_tier: "trusted" as const, content: "Hel", created_at: "t" },
-    ]);
-
-    applyMessageEvent(store, {
-      session_id: "parent-1",
-      op: "patch",
-      message: { id: "a1", role: "assistant", origin: "model" as const, authority: "none" as const, trust_tier: "trusted" as const, content: "Hello", created_at: "t" },
-    });
-
-    expect(store.state.messages[0]?.content).toBe("Hello");
   });
 
   it("skips no-op patches", () => {

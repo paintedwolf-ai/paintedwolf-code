@@ -80,3 +80,21 @@ func synthesisPromptStabilityEngine(t *testing.T) *AssemblyEngine {
 	eng.SetDeps(deps)
 	return eng
 }
+
+// A turn that moves to another surface mid-turn is read with that surface's
+// tools, not the ones it opened with.
+func TestBuildCompletionMessagesReadsAMovedTurnWithItsNewSurface(t *testing.T) {
+	eng := synthesisPromptStabilityEngine(t)
+	sess := &api.Session{ID: "moved-turn", Posture: api.SessionPostureBuild, AgentType: orchestration.ProfileCoordinator, WorkspacePath: t.TempDir()}
+	history := []api.Message{{Role: api.MessageRoleUser, Origin: api.MessageOriginUser, Content: "build parallel modules"}}
+	eng.BeginPromptTurn(sess.ID, "")
+	for _, id := range []string{"implement_investigate", surface.SurfaceImplementPark} {
+		eng.Cache().SetTurnSurfaceID(sess.ID, id)
+		if _, err := eng.BuildCompletionMessages(context.Background(), sess, history, nil); err != nil {
+			t.Fatalf("BuildCompletionMessages on %s: %v", id, err)
+		}
+		if got := eng.Cache().LoadTurn(sess.ID).Reader.SurfaceID(); got != id {
+			t.Fatalf("turn pinned to %s is read as %s", id, got)
+		}
+	}
+}

@@ -236,7 +236,7 @@ components:
             $ref: ../checkpoint.yaml#/components/schemas/ApprovalSecretRecipient
         id:
           type: string
-          pattern: '^[a-z0-9_-]+$'
+          pattern: '^[A-Za-z0-9_-]+$'
           description: Opaque id bound to the complete authority and security witness.
         scope:
           $ref: "#/components/schemas/ApprovalGrantScope"

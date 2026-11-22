@@ -2,6 +2,7 @@ package inputs_test
 
 import (
 	"context"
+	"github.com/lycaon/lycaon/internal/tools/toolstest"
 	"testing"
 
 	"github.com/google/uuid"
@@ -11,7 +12,6 @@ import (
 	"github.com/lycaon/lycaon/internal/session/naming"
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/testutil"
-	"github.com/lycaon/lycaon/internal/tools"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 	"github.com/lycaon/lycaon/internal/workflow/runstate"
 	"github.com/lycaon/lycaon/pkg/api"
@@ -37,7 +37,7 @@ func TestWorkflowRequestsCurateRootChatAfterAdmission(t *testing.T) {
 				manifest.Request.Default = text
 			}
 			mgr.Resolver.Overlay = workflowdef.NewRegistry(map[string]workflowdef.Manifest{"request-curation@1.0.0": manifest})
-			curator := session.NewHost(sessions, session.Models{Limits: settings.DefaultSessionLimits()}, tools.NewStubRegistry())
+			curator := session.NewHost(sessions, session.Models{Limits: settings.DefaultSessionLimits()}, toolstest.NewRegistry())
 			defer curator.Runner.Curation.Wait(t.Context())
 			if surface == "manual title" {
 				_, err := curator.Chats.Naming.SetTitle(t.Context(), "sess-1", "Manual irrigation decision")

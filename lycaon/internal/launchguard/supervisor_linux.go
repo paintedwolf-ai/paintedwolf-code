@@ -6,6 +6,7 @@ import (
 	"errors"
 	"os"
 	"os/signal"
+	"runtime"
 	"sync"
 	"time"
 
@@ -129,6 +130,7 @@ func (s *brokerAgent) finished(pid int, wait unix.WaitStatus) bool {
 // has closed it.
 func (s *brokerAgent) serveBroker(broker *os.File) {
 	defer func() { _ = broker.Close() }()
+	defer runtime.KeepAlive(broker)
 	payload := make([]byte, launchbroker.MaxRequest+1)
 	control := make([]byte, launchbroker.ControlSpace())
 	for {

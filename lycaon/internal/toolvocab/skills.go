@@ -390,7 +390,11 @@ func ValidateSkills(c *Catalog, agents []AgentSurface, loaded []skills.Skill) er
 			continue
 		}
 		held := reader.Held()
-		vars := prompts.SkillVars(reader)
+		vars, err := prompts.SkillVars(reader)
+		if err != nil {
+			problems = append(problems, err.Error())
+			continue
+		}
 		defaultKey := varsDigestKey(vars)
 		variants := skillRenderVarVariants(vars)
 		variantKeys := make([]string, len(variants))
@@ -594,7 +598,10 @@ func offeredSkillVars(offered map[string]bool) (string, map[string]any, error) {
 	if err != nil {
 		return "", nil, err
 	}
-	vars := prompts.SkillVars(reader)
+	vars, err := prompts.SkillVars(reader)
+	if err != nil {
+		return "", nil, err
+	}
 	offeredSkillVarsCache.Store(cacheKey, vars)
 	return cacheKey, vars, nil
 }

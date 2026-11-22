@@ -1,0 +1,17 @@
+id: conformance/sweep:read-item
+title: Read item
+category: Conformance
+icon: tool
+enablement:
+  fact: mcp_requirement_ready
+  is: conformance/sweep:tracker
+input:
+  - id: item-id
+    title: Item ID
+    type: string
+    required: true
+action:
+  kind: mcp_tool
+  requirement: conformance/sweep:tracker
+  tool: get_item
+result: output

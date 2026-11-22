@@ -5,17 +5,32 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/progress"
+	"github.com/lycaon/lycaon/internal/testdbfixture"
+	"github.com/lycaon/lycaon/internal/testdbseed"
+	"github.com/lycaon/lycaon/internal/testutil"
 )
 
+// A new run replaces the prior goal and plan in the memory and SQL stores.
 func TestEnsureBootstrap_staleRunRefreshesGoalAndPlan(t *testing.T) {
-	store := progress.NewMemoryStore()
 	const (
 		sessionID = "sess-root"
 		priorRun  = "run-prior"
 		newRun    = "run-survey"
 	)
+	database := testdbfixture.Open(t, "progress-bootstrap")
+	testdbseed.InsertSession(t, database, sessionID, testdbseed.DefaultProjectID)
+	for name, store := range map[string]progress.RunScopedStore{
+		"memory": progress.NewMemoryStore(),
+		"sql":    progress.NewSQLStore(database),
+	} {
+		t.Run(name, func(t *testing.T) { assertStaleRunRefresh(t, store, sessionID, priorRun, newRun) })
+	}
+}
+
+func assertStaleRunRefresh(t *testing.T, store progress.RunScopedStore, sessionID, priorRun, newRun string) {
+	t.Helper()
 	store.EnsureRun(sessionID, priorRun, "Implement auth middleware for the API")
-	store.Set(sessionID, "# Goal\n\nImplement auth middleware for the API\n\n## Progress\n- [x] stale step\n")
+	testutil.FailErr(t, "seed prior plan", store.Set(sessionID, "# Goal\n\nImplement auth middleware for the API\n\n## Progress\n- [x] stale step\n"))
 
 	if refreshed := progress.EnsureBootstrap(t.Context(), store, sessionID, newRun, "Survey this repo and produce a research brief"); !refreshed {
 		t.Fatal("expected stale-run refresh")

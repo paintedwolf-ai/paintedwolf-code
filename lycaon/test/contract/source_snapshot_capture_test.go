@@ -7,6 +7,29 @@ import (
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 )
 
+// snapshotCacheFixture commits a fixture repository holding the snapshot scripts
+// and points every artifact root at the test directory.
+const snapshotCacheFixture = `set -euo pipefail
+source_root="$1"
+fixture="$2/repo"
+mkdir -p "$fixture/scripts"
+for name in test-source-snapshot.sh checkout-cache-dir.sh sha256.sh test-run-isolation.sh test-run-lease.py digest-run-lock.sh artifact-paths.sh artifact_paths.py; do
+  cp "$source_root/scripts/$name" "$fixture/scripts/$name"
+done
+mkdir -p "$fixture/scripts/verification_lifecycle"
+cp "$source_root/scripts/verification_lifecycle/run_lease.py" "$fixture/scripts/verification_lifecycle/run_lease.py"
+printf 'module example.invalid/cachefixture\n\ngo 1.26.6\n' > "$fixture/go.mod"
+printf 'package cachefixture\n\nfunc Value() int { return 1 }\n' > "$fixture/value.go"
+git -C "$fixture" init -q
+git -C "$fixture" add scripts go.mod value.go
+git -C "$fixture" -c user.name=Test -c user.email=test@example.invalid commit -qm fixture
+commit="$(git -C "$fixture" rev-parse HEAD)"
+export PW_TEST_SNAPSHOT_ROOT="$2/snapshots"
+export PW_ARTIFACT_ROOT="$2/artifacts" PW_TEST_ARTIFACT_ROOT="$2/artifacts"
+export PW_BIN_DIR="$2/tools" PW_BUILD_DIR="$2/build" PW_LOCK_ROOT="$2/locks"
+unset OPENGREP_STAGE_DIR
+`
+
 func TestSnapshotCaptureKeepsOnlyStableAttempt(t *testing.T) {
 	for _, mode := range []string{"success", "failure", "exhausted"} {
 		t.Run(mode, func(t *testing.T) {

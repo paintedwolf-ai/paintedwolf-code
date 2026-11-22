@@ -39,7 +39,9 @@ class BatchFixture(unittest.TestCase):
                      "digest-run-lock.sh", "repo-snapshot-lock.sh", "snapshot-publish.sh",
                      "artifact-paths.sh", "artifact_paths.py", "checkout-cache-dir.sh", "sha256.sh"]:
             shutil.copy2(SCRIPT.with_name(name), self.scripts / name)
-        self.catalog = {"resources": {}, "private": [], "capacity": {},
+        self.catalog = {"resources": {}, "private": [], "capacity": {}, "provisions": {},
+            "not_run": {"tags": {}, "tests": []},
+            "fuzz": {"tags": [], "smoke_seconds": 1, "targets": {"./good": {"FuzzFixture": 1}}},
             "ci": {"fixture": {"targets": ["test:digest"], "minutes": 30}},
             "environment": {"names": ["PATH", "HOME", "TMPDIR", "USER", "LANG"],
                             "prefixes": ["LC_", "GO", "PW_", "FIXTURE_", "XDG_"]},
@@ -80,6 +82,7 @@ name=[a for a in (args[:args.index('--')] if '--' in args else args) if not a.st
 root=pathlib.Path.cwd()
 subprocess.run([sys.executable,str(root/'scripts/test-execution.py'),'holding'],pass_fds=(200,),check=True)
 record={'name':name, 'source':(root/'source.txt').read_text(), 'cwd':str(root), 'workers':os.environ['PW_TEST_WORKERS'], 'pid':os.getpid()}
+record.update(cargo_target=os.environ.get('CARGO_TARGET_DIR'), compiler_cache=os.environ.get('PW_COMPILER_CACHE_DIR'))
 record['git']={k:subprocess.run(['git','config','--get',k],capture_output=True,text=True).stdout.strip() for k in ('core.fsmonitor','gc.autoDetach','maintenance.autoDetach')}
 with open(os.environ['FIXTURE_CALLS'],'a') as f: f.write(json.dumps(record)+'\\n')
 if pathlib.Path(os.environ['FIXTURE_HOLD']).exists():
@@ -123,7 +126,8 @@ sys.exit(code)
         self.git("init", "-q")
         self.git("add", ".")
         self.git("-c", "user.name=Verification fixture", "-c", "user.email=fixture@example.invalid", "commit", "-qm", "Fixture")
-        self.queue = execution.Queue(self.root / "queue")
+        # The executor's own subprocesses resolve the history under XDG_CACHE_HOME below.
+        self.queue = execution.Queue(self.root / "queue", self.root / "user-cache/paintedwolf/verification")
         self.artifacts = self.root / "artifacts"
         self.artifacts.mkdir(parents=True, exist_ok=True)
         self.env = {**os.environ, "PW_TEST_EXECUTION_ROOT": str(self.queue.root), "PW_TEST_WORKERS": "1",
@@ -135,7 +139,8 @@ sys.exit(code)
                     "PATH": str(self.tools) + os.pathsep + os.environ["PATH"]}
         for key in list(self.env):
             if key.startswith("PW_SOURCE_") or key in {"PW_TEST_EXECUTION_TICKET", "PW_TEST_ARTIFACT_ROOT",
-                                                       "PW_TEST_STAGE_RESULT", "PW_TEST_STAGE_RAW"}:
+                                                       "PW_TEST_STAGE_RESULT", "PW_TEST_STAGE_RAW",
+                                                       "PW_COMPILER_CACHE_DIR", "CARGO_TARGET_DIR"}:
                 self.env.pop(key)
         env_patcher = unittest.mock.patch.dict(os.environ, {
             "PW_ARTIFACT_ROOT": str(self.artifacts),

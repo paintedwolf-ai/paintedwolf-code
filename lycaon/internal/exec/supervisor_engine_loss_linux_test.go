@@ -5,7 +5,6 @@ package exec
 import (
 	"bytes"
 	"context"
-	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -39,21 +38,7 @@ func TestEngineLossFixtureProcess(t *testing.T) {
 		}
 		box = &confine.Confinement{Roots: []string{dir}, Network: confine.NetworkDeny, EgressOff: confine.EgressOffOverride}
 	}
-	script := fmt.Sprintf(`import os, signal, time
-path = %s
-if os.fork() == 0:
-    os.setsid()
-    if os.fork() == 0:
-        signal.signal(signal.SIGTERM, signal.SIG_IGN)
-        os.closerange(0, 256)
-        with open(path, 'w') as file:
-            file.write(str(os.getpid()))
-        time.sleep(60)
-    os._exit(0)
-while not os.path.exists(path):
-    time.sleep(0.01)
-time.sleep(60)
-`, strconv.Quote(filepath.Join(dir, "daemon.pid")))
+	script := testutil.DetachedDaemonScript(filepath.Join(dir, "daemon.pid"), true)
 	cmd, cleanup, err := PrepareCommand(context.Background(), python, []string{"-c", script}, ExecOpts{
 		Launch: AgentLaunch(LaunchAgentCommand, "engine loss fixture", box).WithPathAuthority(confine.NativeLaunchPaths(dir)), Dir: dir,
 	})

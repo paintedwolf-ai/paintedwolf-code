@@ -187,8 +187,17 @@ func (r *SQLRegistry) Patch(ctx context.Context, id string, params PatchParams) 
 	return after, nil
 }
 
+// Delete removes the project's rows in bounded batches, then the project row
+// with its event. Busy projects are refused before any row goes and again at
+// the end; a stopped removal resumes from the rows that remain.
 func (r *SQLRegistry) Delete(ctx context.Context, id string) error {
 	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if err := r.refuseBusyDelete(ctx, r.queries, r.db, id); err != nil {
+		return err
+	}
+	if err := db.DeleteProjectRows(ctx, r.db, id); err != nil {
 		return err
 	}
 	tx, err := r.db.BeginTx(ctx, nil)
@@ -197,24 +206,8 @@ func (r *SQLRegistry) Delete(ctx context.Context, id string) error {
 	}
 	defer func() { _ = tx.Rollback() }()
 	q := r.queries.WithTx(tx)
-	if _, err := q.GetProjectByID(ctx, id); err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			return fmt.Errorf("%w: %s", ErrNotFound, id)
-		}
+	if err := r.refuseBusyDelete(ctx, q, tx, id); err != nil {
 		return err
-	}
-	if !forcedLifecycle(ctx) {
-		blockers, err := q.CountProjectBlockingDependents(ctx, id)
-		if err != nil {
-			return err
-		}
-		var dirtyDocuments int64
-		if err := tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM editor_documents WHERE project_id = ? AND dirty = 1`, id).Scan(&dirtyDocuments); err != nil {
-			return err
-		}
-		if blockers+dirtyDocuments > 0 {
-			return ErrProjectBusy
-		}
 	}
 	if err := q.DeleteProject(ctx, id); err != nil {
 		return err
@@ -226,6 +219,30 @@ func (r *SQLRegistry) Delete(ctx context.Context, id string) error {
 		return err
 	}
 	r.notifyProjectEvents()
+	return nil
+}
+
+func (r *SQLRegistry) refuseBusyDelete(ctx context.Context, q *db.Queries, database db.DBTX, id string) error {
+	if _, err := q.GetProjectByID(ctx, id); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return fmt.Errorf("%w: %s", ErrNotFound, id)
+		}
+		return err
+	}
+	if forcedLifecycle(ctx) {
+		return nil
+	}
+	blockers, err := q.CountProjectBlockingDependents(ctx, id)
+	if err != nil {
+		return err
+	}
+	var dirtyDocuments int64
+	if err := database.QueryRowContext(ctx, `SELECT COUNT(*) FROM editor_documents WHERE project_id = ? AND dirty = 1`, id).Scan(&dirtyDocuments); err != nil {
+		return err
+	}
+	if blockers+dirtyDocuments > 0 {
+		return ErrProjectBusy
+	}
 	return nil
 }
 

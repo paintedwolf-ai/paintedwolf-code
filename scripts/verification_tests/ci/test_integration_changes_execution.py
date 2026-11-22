@@ -36,7 +36,7 @@ class IntegrationChangesTests(unittest.TestCase):
                 self.assertEqual(integration_changes.edited_packages([path], DECLARED), [])
 
     def test_host_packages_drops_only_foreign_platform_packages(self):
-        self.assertEqual(integration_changes.host_packages([], ["-tags=integration"]), [])
+        self.assertEqual(integration_changes.host_packages([], {"integration"}), [])
         completed = subprocess.CompletedProcess(
             args=[], returncode=0,
             stdout=(
@@ -47,17 +47,24 @@ class IntegrationChangesTests(unittest.TestCase):
         )
         with patch.object(integration_changes.subprocess, "run", return_value=completed) as run:
             kept = integration_changes.host_packages(
-                ["./internal/parse", "./internal/layeredfs/adapter/nfsdarwin", "./internal/broken"],
-                ["-tags=integration", "-count=1"],
-            )
+                ["./internal/parse", "./internal/layeredfs/adapter/nfsdarwin", "./internal/broken"], {"integration"})
         self.assertEqual(kept, ["./internal/parse", "./internal/broken"])
         self.assertIn("-tags=integration", run.call_args.args[0])
-        self.assertNotIn("-count=1", run.call_args.args[0])
+
+    def test_the_recipes_tags_decide_which_packages_the_host_builds(self):
+        """A package whose files all carry the integration tag is built by the recipe, so it stays selected."""
+        scope = change_report.Scope("base", "test", ["lycaon/internal/parse/impl.go"])
+        listed = subprocess.CompletedProcess(args=[], returncode=0, stdout="/repo/internal/parse\t\n")
+        with patch.object(integration_changes.change_report, "resolve", return_value=scope), \
+                patch.object(integration_changes.subprocess, "run", return_value=listed) as run, \
+                patch.object(integration_changes.os, "execv"):
+            integration_changes.main()
+        self.assertIn("-tags=integration", run.call_args.args[0])
 
     def test_edited_packages_run_through_the_integration_recipe(self):
         scope = change_report.Scope("base", "test", ["lycaon/internal/parse/impl.go", "docs/README.md"])
         with patch.object(integration_changes.change_report, "resolve", return_value=scope), \
-                patch.object(integration_changes, "host_packages", side_effect=lambda pkgs, _flags: pkgs), \
+                patch.object(integration_changes, "host_packages", side_effect=lambda pkgs, _tags: pkgs), \
                 patch.object(integration_changes.os, "execv") as execute:
             integration_changes.main()
         command = execute.call_args.args[1]

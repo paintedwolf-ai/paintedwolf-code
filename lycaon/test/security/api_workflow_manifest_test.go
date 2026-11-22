@@ -21,11 +21,9 @@ func TestWorkflowManifestModeTransitionsE2E(t *testing.T) {
 	blueprintMgr := h.Workflows.Blueprints
 	sess := createSessionHTTP(t, srv, t.TempDir())
 	ctx := t.Context()
-	_, err := store.Get(ctx, sess.ID)
-	testutil.FailErr(t, "store.Get failed", err)
 
 	startBody := planStartBody
-	req := authedRequest(t, http.MethodPost, "/v1/sessions/"+sess.ID+"/workflow-runs", strings.NewReader(startBody))
+	req := AuthedRequest(t, http.MethodPost, "/v1/sessions/"+sess.ID+"/workflow-runs", strings.NewReader(startBody))
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
 	srv.ServeHTTP(w, req)
@@ -36,11 +34,16 @@ func TestWorkflowManifestModeTransitionsE2E(t *testing.T) {
 	if err := json.Unmarshal(w.Body.Bytes(), &run); err != nil {
 		testutil.FailErr(t, "unmarshal JSON document", err)
 	}
+	planning, err := store.Get(ctx, sess.ID)
+	testutil.FailErr(t, "store.Get failed", err)
+	if planning.Posture != wire.SessionPostureSpec {
+		t.Fatalf("session posture after plan start = %q, want spec", planning.Posture)
+	}
 	run = advancePlanRunToExecuteHTTP(t, h, srv, blueprintMgr, sess, run)
 	sessAfter, err := store.Get(ctx, sess.ID)
 	testutil.FailErr(t, "store.Get failed", err)
 	if sessAfter.Posture != wire.SessionPostureBuild {
-		t.Fatalf("session posture = %q", sessAfter.Posture)
+		t.Fatalf("session posture at execute = %q, want build", sessAfter.Posture)
 	}
 }
 
@@ -64,7 +67,7 @@ func TestWorkflowManifestGateBlockedE2E(t *testing.T) {
 	})
 	testutil.FailErr(t, "h.Workflows.Manager.Starts.StartHuman failed", err)
 
-	req := authedRequest(t, http.MethodPost, "/v1/workflow-runs/"+run.ID+"/advance", workflowCommandBody(t, srv, run.ID, nil))
+	req := AuthedRequest(t, http.MethodPost, "/v1/workflow-runs/"+run.ID+"/advance", workflowCommandBody(t, srv, run.ID, nil))
 	w := httptest.NewRecorder()
 	srv.ServeHTTP(w, req)
 	if w.Code != http.StatusConflict {

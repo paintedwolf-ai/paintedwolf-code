@@ -175,8 +175,12 @@ webE2e("mounted Files follows branch and worktree checkout changes", async ({ pa
   await page.getByTestId("git-worktree-bind-open").click();
   await page.getByLabel("New branch name").fill("chore/worktree-refresh");
   await page.getByTestId("git-worktree-create").click();
+  // The label follows the host's binding.
+  let worktree = await fetchWorktree(request, sessionId);
+  await expect
+    .poll(async () => (worktree = await fetchWorktree(request, sessionId)).bound, { timeout: 30_000 })
+    .toBe(true);
   await expect(page.getByTestId("git-checkout-location")).toContainText("Chat worktree");
-  const worktree = await fetchWorktree(request, sessionId);
   const worktreePath = worktreePathForBranch(root, worktree.branch!);
   await expect(summaryPath).toHaveText(worktreePath);
   await expect(summaryBranch).toContainText("chore/worktree-refresh");

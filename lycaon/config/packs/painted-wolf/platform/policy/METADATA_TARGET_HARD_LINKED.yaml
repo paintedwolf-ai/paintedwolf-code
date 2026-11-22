@@ -1,0 +1,23 @@
+spec_version: "1.0"
+id: METADATA_TARGET_HARD_LINKED
+kind: schema
+on: tool.rejected
+selector: {}
+requires_facts: [paintedwolf.path, paintedwolf.rejection_code]
+when: paintedwolf.rejection_code == "METADATA_TARGET_HARD_LINKED"
+effect: block
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:metadata
+message: metadata target has other hard links
+what: The metadata change to {{ paintedwolf.path }} was refused because the file has other hard links.
+cause: Permissions, ownership and times belong to the file's shared inode, so the change would also apply to its other names, which may be outside the attached folders.
+why: Hard links share one inode; the host cannot see or review the file's other names.
+fix: Copy the file to replace the hard link, then change the copy, or leave its metadata unchanged.
+instead: Branch on Code; replace the link with a copy before changing metadata
+x-paintedwolf-scenarios:
+  - id: default
+    vars:
+      detail: bad args
+      path: src/main.go
+      profile: coordinator
+      tool: chmod

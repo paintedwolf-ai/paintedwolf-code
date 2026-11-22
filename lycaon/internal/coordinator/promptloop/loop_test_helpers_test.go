@@ -43,8 +43,8 @@ func (s *testMessageStreams) Finish(ctx context.Context, sessionID string) {
 	}
 }
 
-// StoreDeps wires an in-memory store with an attached project and unchanged history.
-func StoreDeps(st *store.Memory) PromptLoopDeps {
+// StoreDeps keeps history unchanged while wiring the session repository.
+func StoreDeps(st *store.SQL) PromptLoopDeps {
 	return PromptLoopDeps{
 		Context: ContextDeps{
 			Limits: func(context.Context, *api.Session) settings.SessionLimits { return settings.DefaultSessionLimits() },
@@ -64,11 +64,9 @@ func StoreDeps(st *store.Memory) PromptLoopDeps {
 					return st.PatchLiveProjection(ctx, sessionID, msg.ID, msg.Content, msg.ToolCalls)
 				},
 			},
-			AppendDraftVersion: st.AppendDraftVersion,
-			CountDraftVersions: st.CountDraftVersions,
-			SettledModelOutputIteration: func(ctx context.Context, attemptID string) (int, error) {
-				return store.SettledModelOutputIteration(ctx, st, attemptID)
-			},
+			AppendDraftVersion:          st.AppendDraftVersion,
+			CountDraftVersions:          st.CountDraftVersions,
+			SettledModelOutputIteration: st.SettledModelOutputIteration,
 		},
 	}
 }

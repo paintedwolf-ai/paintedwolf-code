@@ -43,6 +43,7 @@ import {
 } from "./ExtensionDetailCards.tsx";
 
 export type ExtensionPacksSectionProps = {
+  idPrefix: string;
   catalogLoaded: boolean;
   packs: ExtensionPackSummary[];
   packGrouping: MetaPackGrouping;
@@ -178,9 +179,9 @@ export function ExtensionPacksSection(props: ExtensionPacksSectionProps) {
 
   return (
     <div
-      id="ext-panel-packs"
+      id={`${props.idPrefix}-panel-packs`}
       role="tabpanel"
-      aria-labelledby="ext-tab-packs"
+      aria-labelledby={`${props.idPrefix}-tab-packs`}
       class="den-settings-section"
       data-testid="extensions-panel-packs"
     >
@@ -325,6 +326,7 @@ export function ExtensionPacksSection(props: ExtensionPacksSectionProps) {
 }
 
 export type ExtensionUnitsSectionProps = {
+  idPrefix: string;
   catalogLoaded: boolean;
   isProject: boolean;
   actionsDisabled: boolean;
@@ -386,9 +388,9 @@ export function ExtensionUnitsSection(props: ExtensionUnitsSectionProps) {
 
   return (
     <div
-      id="ext-panel-units"
+      id={`${props.idPrefix}-panel-units`}
       role="tabpanel"
-      aria-labelledby="ext-tab-units"
+      aria-labelledby={`${props.idPrefix}-tab-units`}
       class="den-settings-section"
       data-testid="extensions-panel-units"
     >
@@ -494,14 +496,15 @@ export function ExtensionUnitsSection(props: ExtensionUnitsSectionProps) {
 }
 
 export function ExtensionDesiredSection(props: {
+  idPrefix: string;
   isProject: boolean;
   desired: ExtensionDesiredState | undefined;
 }) {
   return (
     <div
-      id="ext-panel-desired"
+      id={`${props.idPrefix}-panel-desired`}
       role="tabpanel"
-      aria-labelledby="ext-tab-desired"
+      aria-labelledby={`${props.idPrefix}-tab-desired`}
       class="den-settings-section"
       data-testid="extensions-panel-desired"
     >
@@ -531,12 +534,12 @@ export function ExtensionDesiredSection(props: {
   );
 }
 
-export function ExtensionModelSection() {
+export function ExtensionModelSection(props: { idPrefix: string }) {
   return (
     <div
-      id="ext-panel-model"
+      id={`${props.idPrefix}-panel-model`}
       role="tabpanel"
-      aria-labelledby="ext-tab-model"
+      aria-labelledby={`${props.idPrefix}-tab-model`}
       class="den-settings-section"
       data-testid="extensions-panel-model"
     >

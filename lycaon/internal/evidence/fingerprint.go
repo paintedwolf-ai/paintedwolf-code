@@ -259,7 +259,7 @@ func jsonToolPayload(content string) (map[string]any, bool) {
 	return obj, true
 }
 
-// HandlesSorted returns handle keys in tool-call assignment order.
+// HandlesSorted returns handle keys in mint order within each kind.
 func HandlesSorted(ev Ledger) []string {
 	if len(ev.handleOrder) > 0 {
 		out := make([]string, len(ev.handleOrder))

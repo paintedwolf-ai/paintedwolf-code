@@ -70,3 +70,25 @@ func (m *Service) repairModelOutputProjection(ctx context.Context, item store.Pe
 	}
 	return nil
 }
+
+// WithdrawUnsettledDrafts retracts the live drafts an interrupted turn left
+// before its model output settled, so no later prompt carries an empty reply.
+func (m *Service) WithdrawUnsettledDrafts(ctx context.Context, sessionID string) error {
+	ids, err := m.store.ListUnsettledLiveDrafts(ctx, sessionID)
+	if err != nil {
+		return fmt.Errorf("list unsettled drafts: %w", err)
+	}
+	for _, id := range ids {
+		message, err := m.store.GetMessage(ctx, sessionID, id)
+		if err != nil {
+			return fmt.Errorf("read unsettled draft %s: %w", id, err)
+		}
+		message.DraftStatus = api.DraftStatusWithdrawn
+		message.Kind = api.MessageKindDraft
+		message.Visibility = api.MessageVisibilityTranscript
+		if err := m.Update(ctx, sessionID, id, message); err != nil {
+			return fmt.Errorf("withdraw unsettled draft %s: %w", id, err)
+		}
+	}
+	return nil
+}

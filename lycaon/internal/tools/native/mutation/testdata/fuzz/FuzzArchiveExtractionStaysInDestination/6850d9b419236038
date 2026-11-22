@@ -1,0 +1,5 @@
+go test fuzz v1
+string("20/0\n20/0\n2000\n20/0/0")
+byte('b')
+bool(false)
+bool(false)

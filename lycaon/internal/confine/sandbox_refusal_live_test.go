@@ -16,7 +16,7 @@ import (
 // An empty state root prevents reclamation of concurrent test streams.
 func requireRefusalWatch(t *testing.T) {
 	t.Helper()
-	confine.StartRefusalWatch(t.Context(), "")
+	confine.StartRefusalWatch(t.Context(), "", nil)
 	ctx, cancel := context.WithTimeout(t.Context(), 15*time.Second)
 	defer cancel()
 	for !confine.RefusalWatchLive() {

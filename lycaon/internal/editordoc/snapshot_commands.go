@@ -116,7 +116,7 @@ func (c *SnapshotService) ReplaceSnapshot(ctx context.Context, id, projectID str
 		return nil, textfile.ErrTextTooLarge
 	}
 	draft := strings.ReplaceAll(in.Content, "\r\n", "\n")
-	if _, err := textfile.EncodeBounded(serializeEOL(draft, in.EOL), d.Encoding, limits); err != nil {
+	if _, err := textfile.EncodeBounded(textfile.SerializeEOL(draft, in.EOL), d.Encoding, limits); err != nil {
 		return nil, err
 	}
 	previous := d.Revision

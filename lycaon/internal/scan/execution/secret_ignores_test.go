@@ -2,12 +2,13 @@ package execution
 
 import (
 	"context"
+	"github.com/lycaon/lycaon/internal/scan/findings/findingstest"
 	"testing"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/lycaon/lycaon/internal/projectignore"
-	scanfindings "github.com/lycaon/lycaon/internal/scan/findings"
+
 	scanignore "github.com/lycaon/lycaon/internal/scan/ignores"
 	scanoutput "github.com/lycaon/lycaon/internal/scan/output"
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -20,7 +21,7 @@ func TestSecretLedgerReclassifiesWithoutLosingRawFindings(t *testing.T) {
 	store := ledgerFixture(t, root, "fixture-scanner", "execution")
 	_, err := scanignore.AddIgnoreEntry(root, scanignore.IgnoreEntry{Rule: "fixture-token", Reason: "old scanner decision", Expires: "2000-01-01"})
 	testutil.FailErr(t, "write lapsed scanner decision", err)
-	finding := scanfindings.FixtureFinding("fixture-token", api.FindingLevelHigh, "fixture", "a.go", 3)
+	finding := findingstest.Finding("fixture-token", api.FindingLevelHigh, "fixture", "a.go", 3)
 	finding.Tool.DriverID = "fixture-scanner"
 	finding.Properties.Lycaon.Kind = api.FindingKindSecret
 	first := ledgerScan(t, store, uuid.NewString(), root, "fixture-scanner", api.ScanTargetFull, api.ScanCoverageComplete, finding)

@@ -15,6 +15,7 @@ import (
 // A recovery point shares the immutable body and keeps its bytes after the
 // live content-addressed body is collected.
 func TestRecoveryLinkedBodySurvivesLiveCollection(t *testing.T) {
+	t.Parallel()
 	root := t.TempDir()
 	live := filepath.Join(root, "live", "ab", "cdef.zst")
 	recovery := filepath.Join(root, "recovery")

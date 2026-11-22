@@ -9,6 +9,11 @@ import (
 )
 
 func TestConfiguredSealFailsClosedWhenSealerUnavailable(t *testing.T) {
+	unconfigured := New()
+	if err := unconfigured.Seal(t.Context(), &api.Session{ID: "session"}, "coordinator", ""); err != nil {
+		t.Fatalf("unconfigured seal error=%v", err)
+	}
+
 	service := New()
 	service.authzSealRequired = true
 	err := service.Seal(t.Context(), &api.Session{ID: "session"}, "coordinator", "")

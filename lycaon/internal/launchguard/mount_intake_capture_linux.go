@@ -11,6 +11,13 @@ import (
 // Group fallback is selected only by SINGLE open_tree's structured EINVAL
 // and a complete nested subtree. A later mount_setattr EINVAL never selects it.
 func captureIntakeLease(root mountEntry, forest mountForest, current []mountEntry) (lease intakeMountLease, tree int, err error) {
+	defer func() {
+		if err != nil && !errors.Is(err, errIntakeEpochChanged) {
+			if _, after, readErr := readCurrentMountTopology(); readErr == nil && !sameMountEpoch(current, after, nil) {
+				err = errIntakeEpochChanged
+			}
+		}
+	}()
 	fd, inode, err := openedIntakeRoot(root)
 	if err != nil {
 		return lease, -1, err

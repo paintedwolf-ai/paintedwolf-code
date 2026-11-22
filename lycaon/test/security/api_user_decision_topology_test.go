@@ -27,7 +27,7 @@ func TestAdvanceBlockedUntilTopologyStageMarked(t *testing.T) {
 	workflowMgr := h.Workflows.Manager
 	run := startHarnessRun(t, h, sess.ID, "topo-gate", "1.0.0")
 
-	req := authedRequest(t, http.MethodPost, "/v1/workflow-runs/"+run.ID+"/advance", workflowCommandBody(t, srv, run.ID, nil))
+	req := AuthedRequest(t, http.MethodPost, "/v1/workflow-runs/"+run.ID+"/advance", workflowCommandBody(t, srv, run.ID, nil))
 	w := httptest.NewRecorder()
 	srv.ServeHTTP(w, req)
 	if w.Code != http.StatusConflict {
@@ -37,7 +37,7 @@ func TestAdvanceBlockedUntilTopologyStageMarked(t *testing.T) {
 	if err := workflowMgr.Phases.MarkTopologyStageComplete(t.Context(), run.ID, "implement", "", ""); err != nil {
 		testutil.FailErr(t, "workflowMgr.Phases.MarkTopologyStageComplete failed", err)
 	}
-	req = authedRequest(t, http.MethodPost, "/v1/workflow-runs/"+run.ID+"/advance", workflowCommandBody(t, srv, run.ID, nil))
+	req = AuthedRequest(t, http.MethodPost, "/v1/workflow-runs/"+run.ID+"/advance", workflowCommandBody(t, srv, run.ID, nil))
 	w = httptest.NewRecorder()
 	srv.ServeHTTP(w, req)
 	if w.Code != http.StatusOK {
@@ -69,14 +69,14 @@ func TestUserDecisionAPIBlocksCasualChatAdvance(t *testing.T) {
 	acceptPromptHTTP(t, srv, sess.ID, "yes please")
 	waitTranscriptContainsHTTP(t, srv, sess.ID, "yes please")
 
-	req := authedRequest(t, http.MethodPost, "/v1/workflow-runs/"+run.ID+"/advance", workflowCommandBody(t, srv, run.ID, nil))
+	req := AuthedRequest(t, http.MethodPost, "/v1/workflow-runs/"+run.ID+"/advance", workflowCommandBody(t, srv, run.ID, nil))
 	w := httptest.NewRecorder()
 	srv.ServeHTTP(w, req)
 	if w.Code != http.StatusConflict {
 		t.Fatalf("advance after chat status = %d body = %s", w.Code, w.Body.String())
 	}
 
-	req = authedRequest(t, http.MethodPost, "/v1/workflow-runs/"+run.ID+"/decisions/confirm", workflowCommandBody(t, srv, run.ID, map[string]any{"choice": "yes"}))
+	req = AuthedRequest(t, http.MethodPost, "/v1/workflow-runs/"+run.ID+"/decisions/confirm", workflowCommandBody(t, srv, run.ID, map[string]any{"choice": "yes"}))
 	req.Header.Set("Content-Type", "application/json")
 	w = httptest.NewRecorder()
 	srv.ServeHTTP(w, req)

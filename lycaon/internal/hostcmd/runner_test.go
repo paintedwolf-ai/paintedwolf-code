@@ -2,8 +2,10 @@ package hostcmd
 
 import (
 	"context"
+	"errors"
 	"testing"
 
+	"github.com/lycaon/lycaon/internal/argv"
 	"github.com/lycaon/lycaon/internal/exec"
 )
 
@@ -34,34 +36,41 @@ func TestValidateStagesOpenWhenNoPatterns(t *testing.T) {
 	}
 
 	// Sequences, pipelines, and file redirections parse into distinct stages.
-	for _, cmd := range []string{
-		"go test; rm -rf /tmp/x",
-		"go test && make",
-		"which go || echo none",
-		"pytest | tee out.log",
-		"go test > out.log",
+	for cmd, stages := range map[string]int{
+		"go test; rm -rf /tmp/x": 2,
+		"go test && make":        2,
+		"which go || echo none":  2,
+		"pytest | tee out.log":   2,
+		"go test > out.log":      1,
 	} {
-		if err := validateLine(r, cmd); err != nil {
+		parsed, err := exec.StagesFromCommandLine(cmd)
+		if err != nil {
+			t.Fatalf("parse %q: %v", cmd, err)
+		}
+		if len(parsed) != stages {
+			t.Fatalf("%q parsed into %d stages, want %d", cmd, len(parsed), stages)
+		}
+		if err := r.ValidateStages(context.Background(), parsed); err != nil {
 			t.Fatalf("sequenced %q: %v", cmd, err)
 		}
 	}
 
 	// Shell substitutions, incomplete redirections, and bare & reject.
-	for _, cmd := range []string{
-		"go build $(git rev-parse HEAD)",
-		"echo `whoami`",
-		"go test >",
-		"python3 -m http.server &",
+	for cmd, want := range map[string]error{
+		"go build $(git rev-parse HEAD)": argv.ErrShellMetacharacters,
+		"go test `id -u`":                argv.ErrShellMetacharacters,
+		"go test >":                      argv.ErrRedirectionTargetRequired,
+		"python3 -m http.server &":       argv.ErrBackgroundOperator,
 	} {
-		if err := validateLine(r, cmd); err == nil {
-			t.Fatalf("expected block for %q", cmd)
+		if err := validateLine(r, cmd); !errors.Is(err, want) {
+			t.Fatalf("%q = %v, want %v", cmd, err, want)
 		}
 	}
 }
 
 func TestValidateStagesRejectsMetacharInStage(t *testing.T) {
-	if err := validateLine(NewRunner(), "echo $(bad)"); err == nil {
-		t.Fatal("expected metachar rejection")
+	if err := validateLine(NewRunner(), "echo $(bad)"); !errors.Is(err, argv.ErrShellMetacharacters) {
+		t.Fatalf("err = %v, want %v", err, argv.ErrShellMetacharacters)
 	}
 }
 

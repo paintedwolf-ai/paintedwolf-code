@@ -26,21 +26,6 @@ func (s *sqlSessionViews) SessionTreeMembers(ctx context.Context, rootID string)
 	return orderSessionTree(members, rootID)
 }
 
-func (s *memorySessionViews) SessionTreeMembers(ctx context.Context, rootID string) ([]SessionTreeMember, error) {
-	if err := ctx.Err(); err != nil {
-		return nil, err
-	}
-	s.core.mu.RLock()
-	defer s.core.mu.RUnlock()
-	members := make([]SessionTreeMember, 0)
-	for _, id := range memorySessionTreeIDs(s.core.sessions, rootID) {
-		if row := s.core.sessions[id]; row != nil {
-			members = append(members, SessionTreeMember{ID: row.ID, ProjectID: row.ProjectID, ParentSessionID: row.ParentSessionID})
-		}
-	}
-	return orderSessionTree(members, rootID)
-}
-
 func orderSessionTree(members []SessionTreeMember, rootID string) ([]SessionTreeMember, error) {
 	sort.Slice(members, func(i, j int) bool { return members[i].ID < members[j].ID })
 	children := make(map[string][]SessionTreeMember, len(members))

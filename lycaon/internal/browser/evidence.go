@@ -29,7 +29,7 @@ const (
 	maxEvidenceURLBytes    = 512
 	maxErrorMessageBytes   = 1024
 	maxErrorStackFrames    = 6
-	evidenceProjectTimeout = ActionTimeout
+	evidenceProjectTimeout = 15 * time.Second
 	captureUnavailableLine = "[Capture screening unavailable]"
 	networkServedByRoute   = "route"
 	networkServedByProject = "project_file"

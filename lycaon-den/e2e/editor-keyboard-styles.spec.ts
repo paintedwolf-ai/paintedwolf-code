@@ -27,6 +27,8 @@ modelIndependentWebE2e("keyboard editing preserves the existing chrome and docum
   await page.keyboard.press("Enter");
   const editor = page.locator(".den-files-editor:visible .cm-content");
   await expect(editor).toBeVisible();
+  // The editor is read-only until its document has opened.
+  await expect(page.locator(".den-files-editor:visible .den-files-editor__status")).toHaveAttribute("data-editor-identity", "editing");
   await editor.focus();
   await page.keyboard.press(DOCUMENT_START);
   await page.keyboard.press("Control+k");

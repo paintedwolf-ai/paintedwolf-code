@@ -39,7 +39,7 @@ func userMessage(id, content string) api.Message {
 func TestEveryTranscriptWritePathIsScreenedByTheStore(t *testing.T) {
 	installTestRedactor(t)
 	ctx := t.Context()
-	st := openTurnSQLStore(t).(*SQL)
+	st := openTurnSQLStore(t)
 	sess, err := st.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
 
@@ -101,7 +101,7 @@ func TestMessageRedactorReleasePreservesReplacementOnDurableWrites(t *testing.T)
 	releaseCurrent := install("current-owner")
 	defer releaseOld()
 	defer releaseCurrent()
-	st := openTurnSQLStore(t).(*SQL)
+	st := openTurnSQLStore(t)
 	sess, err := st.Create(t.Context(), api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create owner test session", err)
 	releaseOld()

@@ -30,9 +30,7 @@ func TestBranchTreeAnswersFromTheViewOnEveryProvider(t *testing.T) {
 		}, adapter.PreparationMaterialized},
 		{"mounted", func(t *testing.T, state string) *workspace.Manager {
 			confine.TestingSetAutoConfine(t)
-			if !confine.Available() {
-				t.Skip("this host applies no confinement")
-			}
+			testutil.RequireConfinement(t, confine.Available())
 			selector := workspace.HostSelector()
 			selector.BudgetFor = adapter.ZeroBudget
 			branches := enginepaths.WorkerBranchesRootUnder(state)

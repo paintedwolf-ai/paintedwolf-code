@@ -81,6 +81,11 @@ func TestDetectionEgressApprovalKeyUsesExactExecutionAndRule(t *testing.T) {
 	if key == detectionKey(base, ep, &otherRule) {
 		t.Fatal("different rules must not share a detection decision")
 	}
+	correlated := *match
+	correlated.CorrelationID = "corr-2"
+	if key != detectionKey(base, ep, &correlated) {
+		t.Fatal("correlation id must not change the detection decision")
+	}
 }
 
 // A declared-set ask is identified by the set, so every endpoint in one fan-out

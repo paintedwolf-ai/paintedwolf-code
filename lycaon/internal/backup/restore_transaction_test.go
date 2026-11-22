@@ -17,6 +17,7 @@ import (
 
 // The recovery pre-image includes live journal state from disk.
 func TestRecoveryModePreImageCarriesTheLiveJournals(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	configDir := t.TempDir()
 	dbPath := filepath.Join(configDir, "store.db")
@@ -54,6 +55,7 @@ ON CONFLICT(key) DO UPDATE SET value = excluded.value`)
 }
 
 func TestFailedApplyReachesRecoveryAndReleasesTheNextTransaction(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	configDir := t.TempDir()
 	dbPath := filepath.Join(configDir, "store.db")
@@ -103,6 +105,7 @@ func TestFailedApplyReachesRecoveryAndReleasesTheNextTransaction(t *testing.T) {
 }
 
 func TestStageStillRefusesAPendingRestart(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	configDir := t.TempDir()
 	dbPath := filepath.Join(configDir, "store.db")
@@ -122,6 +125,7 @@ func TestStageStillRefusesAPendingRestart(t *testing.T) {
 }
 
 func TestStageReclaimsPreImagesOfCompletedTransactions(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	configDir := t.TempDir()
 	dbPath := filepath.Join(configDir, "store.db")

@@ -140,6 +140,10 @@ func checkMigrationHistory(release, current releaseSource) error {
 	if err != nil {
 		return err
 	}
+	return compareMigrationChecksums(before, after)
+}
+
+func compareMigrationChecksums(before, after map[string]string) error {
 	for id, checksum := range before {
 		if after[id] != checksum {
 			return fmt.Errorf("released migration %s was removed or changed checksum", id)
@@ -151,6 +155,13 @@ func checkMigrationHistory(release, current releaseSource) error {
 // CheckPublishedMigrations requires every migration a published version shipped
 // to keep its identity and checksum in the candidate.
 func CheckPublishedMigrations(ctx context.Context, repoRoot string, versions []string) error {
+	after, err := migrationChecksums(diskRelease{root: repoRoot})
+	if err != nil {
+		return err
+	}
+	sources := make([]gitRelease, 0, len(versions))
+	seen := make(map[string]bool)
+	var shas []string
 	for _, value := range versions {
 		version, err := semver.StrictNewVersion(value)
 		if err != nil {
@@ -160,7 +171,30 @@ func CheckPublishedMigrations(ctx context.Context, repoRoot string, versions []s
 			return fmt.Errorf("invalid published migration source %s", value)
 		}
 		source := gitRelease{ctx: ctx, repoRoot: repoRoot, tag: "refs/tags/v" + value}
-		if err := checkMigrationHistory(source, diskRelease{root: repoRoot}); err != nil {
+		tree, tagSHAs, err := source.listBlobs("lycaon/internal/db/migrations", "lycaon/internal/db/released-baselines.json")
+		if err != nil {
+			return fmt.Errorf("v%s: %w", value, err)
+		}
+		source.tree = tree
+		sources = append(sources, source)
+		for _, sha := range tagSHAs {
+			if !seen[sha] {
+				seen[sha] = true
+				shas = append(shas, sha)
+			}
+		}
+	}
+	blobs, err := (gitRelease{ctx: ctx, repoRoot: repoRoot}).readBlobs(shas)
+	if err != nil {
+		return err
+	}
+	for i, value := range versions {
+		sources[i].blobs = blobs
+		before, err := migrationChecksums(sources[i])
+		if err != nil {
+			return fmt.Errorf("v%s: %w", value, err)
+		}
+		if err := compareMigrationChecksums(before, after); err != nil {
 			return fmt.Errorf("v%s: %w", value, err)
 		}
 	}

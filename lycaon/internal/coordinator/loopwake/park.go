@@ -8,7 +8,6 @@ import (
 	"time"
 
 	awaitstore "github.com/lycaon/lycaon/internal/await"
-	"github.com/lycaon/lycaon/internal/coordinator/anchor"
 	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/pkg/api"
@@ -17,9 +16,6 @@ import (
 const (
 	parkedState      = "parked"
 	waitResourceKind = "wait"
-	// parkedProgramGrace keeps a parked program's lease armed past the
-	// program's own bound, so the program's deadline result settles it.
-	parkedProgramGrace = time.Minute
 )
 
 // parkRequest is one call parking its turn on the session's wait lease.
@@ -125,9 +121,10 @@ func (p ProgramParking) ParkProgram(ctx context.Context, tctx tools.ToolContext,
 		return nil, tools.ErrWaitEnded
 	}
 	lease, err := l.park(ctx, tctx, parkRequest{
-		operation: "command", reason: park.Reason, until: park.Deadline.Add(parkedProgramGrace), untilComplete: true,
+		operation: "command", reason: park.Reason, untilComplete: true,
 		conditions: []awaitstore.Condition{{Kind: string(WaitTriggerProgramDone), ProgramID: park.ProgramID}},
-		triggers:   ensureTimerBackstop([]WaitTrigger{WaitTriggerProgramDone}),
+		// Only the program's own end settles the lease, so it arms no timer.
+		triggers: []WaitTrigger{WaitTriggerProgramDone},
 	})
 	if err != nil {
 		l.parkedPrograms.CompareAndDelete(sessionID, parked)
@@ -208,7 +205,7 @@ func (l *WaitSubscriptions) resolveLease(ctx context.Context, store *awaitstore.
 	}
 	l.Waits.breakSleep(ctx, lease.SessionID, winner.Kind, false)
 	if coordinator {
-		l.Nudges.Nudge(ctx, lease.SessionID, anchor.LoopWake, anchor.LoopWake, lease.ID, anchor.Envelope{})
+		l.Deliveries.runWaitResumeAsync(ctx, lease.SessionID)
 	}
 	return true, nil
 }

@@ -8,14 +8,14 @@ import (
 	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/llm"
 	"github.com/lycaon/lycaon/internal/session"
-	"github.com/lycaon/lycaon/internal/session/store"
+	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"github.com/lycaon/lycaon/internal/session/workercompletion"
 	"github.com/lycaon/lycaon/internal/session/workeroutcomes"
 	"github.com/lycaon/lycaon/internal/session/workerresults"
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
-	"github.com/lycaon/lycaon/internal/tools"
+	"github.com/lycaon/lycaon/internal/tools/toolstest"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -37,8 +37,8 @@ func workerSummaryFixture(jobID, childSessionID, agentType string, status api.Wo
 
 func TestEnsureWorkerCardProjectionMintsEnqueuePair(t *testing.T) {
 	ctx := context.Background()
-	store := store.NewMemory()
-	mgr := session.NewHost(store, session.Models{Client: llm.NewMockProvider(&llm.MockConfig{}), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
+	store := storetest.New(t, testdbseed.DefaultProjectID)
+	mgr := session.NewHost(store, session.Models{Client: llm.NewMockProvider(&llm.MockConfig{}), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, toolstest.NewRegistry())
 	parent, err := store.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
 	jobID := "550e8400-e29b-41d4-a716-446655440000"
@@ -83,8 +83,8 @@ func TestEnsureWorkerCardProjectionMintsEnqueuePair(t *testing.T) {
 
 func TestEnsureWorkerCardProjectionSkipsExistingToolCall(t *testing.T) {
 	ctx := context.Background()
-	store := store.NewMemory()
-	mgr := session.NewHost(store, session.Models{Client: llm.NewMockProvider(&llm.MockConfig{}), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
+	store := storetest.New(t, testdbseed.DefaultProjectID)
+	mgr := session.NewHost(store, session.Models{Client: llm.NewMockProvider(&llm.MockConfig{}), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, toolstest.NewRegistry())
 	parent, err := store.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
 	if err := store.AppendMessages(ctx, parent.ID, api.Message{
@@ -115,8 +115,8 @@ func TestEnsureWorkerCardProjectionSkipsExistingToolCall(t *testing.T) {
 
 func TestCoordinatorDelegateDispatchOneCardThroughPatch(t *testing.T) {
 	ctx := context.Background()
-	store := store.NewMemory()
-	mgr := session.NewHost(store, session.Models{Client: llm.NewMockProvider(&llm.MockConfig{}), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
+	store := storetest.New(t, testdbseed.DefaultProjectID)
+	mgr := session.NewHost(store, session.Models{Client: llm.NewMockProvider(&llm.MockConfig{}), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, toolstest.NewRegistry())
 	parent, err := store.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
 	jobID := "550e8400-e29b-41d4-a716-446655440000"
@@ -183,8 +183,8 @@ func TestCoordinatorDelegateDispatchOneCardThroughPatch(t *testing.T) {
 
 func TestAppendWorkerSummaryWiresJobIDOnMeta(t *testing.T) {
 	ctx := context.Background()
-	store := store.NewMemory()
-	mgr := session.NewHost(store, session.Models{Client: llm.NewMockProvider(&llm.MockConfig{}), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
+	store := storetest.New(t, testdbseed.DefaultProjectID)
+	mgr := session.NewHost(store, session.Models{Client: llm.NewMockProvider(&llm.MockConfig{}), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, toolstest.NewRegistry())
 	parent, err := store.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session in store", err)
 	child, err := store.CreateChild(ctx, parent, api.SpawnChildRequest{AgentType: "implementer"})
@@ -223,8 +223,8 @@ func TestAppendWorkerSummaryWiresJobIDOnMeta(t *testing.T) {
 
 func TestProjectWorkerCardPreservesDispatchJobID(t *testing.T) {
 	ctx := context.Background()
-	store := store.NewMemory()
-	mgr := session.NewHost(store, session.Models{Client: llm.NewMockProvider(&llm.MockConfig{}), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
+	store := storetest.New(t, testdbseed.DefaultProjectID)
+	mgr := session.NewHost(store, session.Models{Client: llm.NewMockProvider(&llm.MockConfig{}), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, toolstest.NewRegistry())
 	parent, err := store.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
 	jobID := "550e8400-e29b-41d4-a716-446655440000"
@@ -262,8 +262,8 @@ func TestProjectWorkerCardPreservesDispatchJobID(t *testing.T) {
 
 func TestProjectWorkerCardRejectsInvalidSummaryContract(t *testing.T) {
 	ctx := context.Background()
-	store := store.NewMemory()
-	mgr := session.NewHost(store, session.Models{Client: llm.NewMockProvider(&llm.MockConfig{}), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
+	store := storetest.New(t, testdbseed.DefaultProjectID)
+	mgr := session.NewHost(store, session.Models{Client: llm.NewMockProvider(&llm.MockConfig{}), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, toolstest.NewRegistry())
 	parent, err := store.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
 	jobID := "550e8400-e29b-41d4-a716-446655440000"
@@ -287,8 +287,8 @@ func TestProjectWorkerCardRejectsInvalidSummaryContract(t *testing.T) {
 
 func TestProjectWorkerCardAfterDecisionResume(t *testing.T) {
 	ctx := context.Background()
-	store := store.NewMemory()
-	mgr := session.NewHost(store, session.Models{Client: llm.NewMockProvider(&llm.MockConfig{}), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
+	store := storetest.New(t, testdbseed.DefaultProjectID)
+	mgr := session.NewHost(store, session.Models{Client: llm.NewMockProvider(&llm.MockConfig{}), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, toolstest.NewRegistry())
 	parent, err := store.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
 

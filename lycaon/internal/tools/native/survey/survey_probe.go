@@ -2,6 +2,7 @@ package survey
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -140,7 +141,11 @@ func (s literalCatalogScan) file(ctx context.Context, entry sourcecatalog.Entry)
 	if s.readFilter != nil && !s.readFilter(entry.Path, false) {
 		return nil
 	}
-	if _, hasDraft := s.drafts.Lookup(abs); !hasDraft && s.catalog != nil && s.catalog.Literals.CanPrune(s.root.Path, s.require, entry) {
+	rel := projectpaths.QualifyAbs(s.tctx, s.root, abs)
+	if text, hasDraft := s.drafts.Lookup(abs); hasDraft {
+		return scanLiteralLines(ctx, bytes.NewReader(text), rel, s.automaton, s.visit)
+	}
+	if s.catalog != nil && s.catalog.Literals.CanPrune(s.root.Path, s.require, entry) {
 		return nil
 	}
 	fileInfo, err := os.Lstat(abs)
@@ -153,7 +158,6 @@ func (s literalCatalogScan) file(ctx context.Context, entry sourcecatalog.Entry)
 	if fileInfo.IsDir() || fileInfo.Mode()&os.ModeSymlink != 0 {
 		return nil
 	}
-	rel := projectpaths.QualifyAbs(s.tctx, s.root, abs)
 	if err := scanLiteralFileWithAutomaton(ctx, s.reads, abs, rel, s.automaton, s.visit); err != nil {
 		if ctxErr := ctx.Err(); ctxErr != nil {
 			return ctxErr

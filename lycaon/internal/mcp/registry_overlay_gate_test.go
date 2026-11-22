@@ -292,3 +292,25 @@ func containsTool(names []string, want string) bool {
 	}
 	return false
 }
+
+// A project overlay that declares nothing leaves the generation the device
+// sees, so a frame revision a client holds stays valid in that project.
+func TestEmptyProjectOverlayKeepsTheDeviceGeneration(t *testing.T) {
+	f := newOverlayFixture(t,
+		"providers: []\n",
+		`providers:
+  - id: broken
+    enabled: true
+`,
+		"providers: []\n",
+		nil,
+	)
+	device := f.reg.Catalog.CurrentGeneration(context.Background(), mcp.CallScope{})
+	if len(device.Rejected) == 0 {
+		t.Fatal("the user layer's invalid entry was not rejected")
+	}
+	project := f.reg.Catalog.CurrentGeneration(context.Background(), f.scope())
+	if project.Revision != device.Revision {
+		t.Fatalf("project rejected rows %+v differ from the device's %+v", project.Rejected, device.Rejected)
+	}
+}

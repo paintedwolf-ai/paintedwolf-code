@@ -3,6 +3,7 @@ package scan
 import (
 	"encoding/json"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/scan/findings/findingstest"
 	"reflect"
 	"testing"
 
@@ -14,11 +15,11 @@ import (
 
 func TestFindingEntryQueryMatchesFindingFilters(t *testing.T) {
 	findings := []api.SecurityFinding{
-		scanfindings.FixtureFinding("rule-high", api.FindingLevelHigh, "one", "src/main.go", 1),
-		scanfindings.FixtureFinding("rule-low", api.FindingLevelLow, "two", "tests/main.go", 2),
-		scanfindings.FixtureFinding("rule-high", api.FindingLevelHigh, "one", "src/main.go", 1),
-		scanfindings.FixtureFinding("rule-unlocated", api.FindingLevelLow, "", "", 0),
-		scanfindings.FixtureFinding("rule-unlocated", api.FindingLevelLow, "", "", 0),
+		findingstest.Finding("rule-high", api.FindingLevelHigh, "one", "src/main.go", 1),
+		findingstest.Finding("rule-low", api.FindingLevelLow, "two", "tests/main.go", 2),
+		findingstest.Finding("rule-high", api.FindingLevelHigh, "one", "src/main.go", 1),
+		findingstest.Finding("rule-unlocated", api.FindingLevelLow, "", "", 0),
+		findingstest.Finding("rule-unlocated", api.FindingLevelLow, "", "", 0),
 	}
 	findings[0] = scanfindings.SetHintCode(findings[0], "SCAN_TEST")
 	findings[0].Properties.Lycaon.Advisory = &api.AdvisoryRef{
@@ -58,7 +59,7 @@ func TestFindingEntryQueryMatchesFindingFilters(t *testing.T) {
 func TestFindingEntryQueryBoundsPageWithoutLosingFindings(t *testing.T) {
 	findings := make([]api.SecurityFinding, maxQueryPageSize+5)
 	for i := range findings {
-		findings[i] = scanfindings.FixtureFinding("rule", api.FindingLevelHigh, fmt.Sprint(i), "src/main.go", i+1)
+		findings[i] = findingstest.Finding("rule", api.FindingLevelHigh, fmt.Sprint(i), "src/main.go", i+1)
 	}
 	store, scan := seedFindingEntryQuery(t, findings)
 	first, err := store.queryFindingEntries(t.Context(), scan, QueryRequest{Limit: 100000})

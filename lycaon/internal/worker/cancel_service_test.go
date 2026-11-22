@@ -82,6 +82,7 @@ func TestCancelServiceReturnsChangeReportAndEnvelope(t *testing.T) {
 func TestCancelServiceRejectsForeignSession(t *testing.T) {
 	ctx := context.Background()
 	_, queue, _, _ := newExecutionStack(t)
+	testdbseed.InsertSession(t, queue.db, "other-session", testdbseed.DefaultProjectID)
 	dir := t.TempDir()
 	jobID, err := queue.EnqueueWithProjectID(ctx, testdbseed.DefaultProjectID, api.WorkerTask{
 		ParentSessionID: "other-session",
@@ -139,65 +140,61 @@ func (r *recordingOutcomeRecorder) OnOutcomeDelivered(context.Context, api.Worke
 }
 
 func TestAbortAllWorkersBoundsSlowWorkerAndPollerSettlesLateExit(t *testing.T) {
-	for _, backend := range []string{"memory", "sql"} {
-		t.Run(backend, func(t *testing.T) {
-			q := cancellationQueue(t, backend)
-			exec := &slowUnwindingExecutor{
-				started: make(chan struct{}),
-				release: make(chan struct{}),
-			}
-			outcomes := &recordingOutcomeRecorder{}
-			poller := NewLocalWorkerPoller(q, exec, DefaultWorkersConfig(), outcomes)
-			q.(interface {
-				SetRunningCancel(func(context.Context, string) error)
-			}).SetRunningCancel(poller.Abort)
 
-			id := enqueueCancellationWorker(t, q)
-			poller.claimAvailable(t.Context())
-			<-exec.started
-
-			stopCtx, cancelStop := context.WithTimeout(t.Context(), 30*time.Millisecond)
-			defer cancelStop()
-			svc := &CancelService{Queue: q}
-			testutil.FailErr(t, "AbortAllWorkers with release timeout", svc.AbortAllWorkers(stopCtx, "parent", testdbseed.DefaultProjectID, "user stopped"))
-
-			// A second sweep after timeout returns immediately without blocking or finalizing early.
-			testutil.FailErr(t, "repeat AbortAllWorkers after timeout", svc.AbortAllWorkers(t.Context(), "parent", testdbseed.DefaultProjectID, "user stopped"))
-
-			// While the worker goroutine is still unwinding, the job remains running with
-			// cancellation requested and maintenance does not block or double-settle it.
-			during, ok := q.Get(id)
-			if !ok || during.Status != api.WorkerStatusRunning || !isJobCancellationRequested(t.Context(), q, id) {
-				t.Fatalf("worker during slow unwind = %+v, want running with cancellation requested", during)
-			}
-			expireCancellationClaim(t, q, id)
-			testutil.FailErr(t, "maintain while worker still active", poller.maintain(t.Context()))
-			if got := exec.abortedCount.Load(); got != 0 {
-				t.Fatalf("AbortWorkerRuntime called %d times before execution exited", got)
-			}
-
-			close(exec.release)
-			poller.inflight.Wait()
-
-			after, ok := q.Get(id)
-			if !ok || after.Status != api.WorkerStatusCanceled {
-				t.Fatalf("worker after late exit = %+v, want canceled", after)
-			}
-			if got := exec.abortedCount.Load(); got != 1 {
-				t.Fatalf("AbortWorkerRuntime calls = %d, want 1", got)
-			}
-			if got := outcomes.completed.Load(); got != 1 {
-				t.Fatalf("canceled outcomes projected = %d, want 1", got)
-			}
-			if got := outcomes.delivered.Load(); got != 1 {
-				t.Fatalf("outcomes delivered = %d, want 1", got)
-			}
-		})
+	q := cancellationQueue(t)
+	exec := &slowUnwindingExecutor{
+		started: make(chan struct{}),
+		release: make(chan struct{}),
 	}
+	outcomes := &recordingOutcomeRecorder{}
+	poller := NewLocalWorkerPoller(q, exec, DefaultWorkersConfig(), outcomes)
+	q.SetRunningCancel(poller.Abort)
+
+	id := enqueueCancellationWorker(t, q)
+	poller.claimAvailable(t.Context())
+	<-exec.started
+
+	stopCtx, cancelStop := context.WithTimeout(t.Context(), 30*time.Millisecond)
+	defer cancelStop()
+	svc := &CancelService{Queue: q}
+	testutil.FailErr(t, "AbortAllWorkers with release timeout", svc.AbortAllWorkers(stopCtx, "parent", testdbseed.DefaultProjectID, "user stopped"))
+
+	// A second sweep after timeout returns immediately without blocking or finalizing early.
+	testutil.FailErr(t, "repeat AbortAllWorkers after timeout", svc.AbortAllWorkers(t.Context(), "parent", testdbseed.DefaultProjectID, "user stopped"))
+
+	// While the worker goroutine is still unwinding, the job remains running with
+	// cancellation requested and maintenance does not block or double-settle it.
+	during, ok := q.Get(id)
+	if !ok || during.Status != api.WorkerStatusRunning || !isJobCancellationRequested(t.Context(), q, id) {
+		t.Fatalf("worker during slow unwind = %+v, want running with cancellation requested", during)
+	}
+	expireCancellationClaim(t, q, id)
+	testutil.FailErr(t, "maintain while worker still active", poller.maintain(t.Context()))
+	if got := exec.abortedCount.Load(); got != 0 {
+		t.Fatalf("AbortWorkerRuntime called %d times before execution exited", got)
+	}
+
+	close(exec.release)
+	poller.inflight.Wait()
+
+	after, ok := q.Get(id)
+	if !ok || after.Status != api.WorkerStatusCanceled {
+		t.Fatalf("worker after late exit = %+v, want canceled", after)
+	}
+	if got := exec.abortedCount.Load(); got != 1 {
+		t.Fatalf("AbortWorkerRuntime calls = %d, want 1", got)
+	}
+	if got := outcomes.completed.Load(); got != 1 {
+		t.Fatalf("canceled outcomes projected = %d, want 1", got)
+	}
+	if got := outcomes.delivered.Load(); got != 1 {
+		t.Fatalf("outcomes delivered = %d, want 1", got)
+	}
+
 }
 
 func TestRunStopServiceBoundsSlowWorkflowWorkerAndPollerSettlesLateExit(t *testing.T) {
-	q := NewInMemoryQueue(1)
+	q := newTestQueue(t, 1, testdbseed.DefaultProjectID, "parent")
 	q.SetWorkflowDomains(&WorkflowDomains{Runs: allowAllWorkflowRuns{}, Tasks: allowAllWorkflowRuns{}})
 	exec := &slowUnwindingExecutor{
 		started: make(chan struct{}),

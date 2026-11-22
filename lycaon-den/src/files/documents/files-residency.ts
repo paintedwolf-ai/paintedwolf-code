@@ -20,14 +20,21 @@ export function createFilesResidency(projectId: string, displayed: () => string 
   const presence = useResidentPresence();
   const token = Symbol("file presentation");
   let protectedKeys = new Set<string>();
+  let displayedResource: { key: string; resource: string } | null = null;
   createEffect(() => {
     const state = projectFilesState(projectId);
     const next = new Set<string>();
+    const shown = displayed();
+    const shownBuffer = shown ? state.byKey[shown] : undefined;
+    // A replaced tab stays on screen until its successor publishes.
+    if (shownBuffer) displayedResource = { key: shown!, resource: documentResourceKey(projectId, shownBuffer) };
+    else if (displayedResource?.key !== shown) displayedResource = null;
     if (presence() !== "idle") {
-      for (const key of [state.activeKey, state.pendingKey, displayed()]) {
+      for (const key of [state.activeKey, state.pendingKey]) {
         const buffer = key ? state.byKey[key] : undefined;
         if (buffer) next.add(documentResourceKey(projectId, buffer));
       }
+      if (displayedResource) next.add(displayedResource.resource);
     }
     untrack(() => {
       for (const key of protectedKeys) if (!next.has(key)) documentResidency.protect(key, false, token);

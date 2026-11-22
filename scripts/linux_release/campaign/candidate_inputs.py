@@ -12,6 +12,7 @@ from .artifact_bundle import download
 from .provenance import artifact_for_run
 from .runtime import file_identity
 from ..release_source import facts
+from scripts.release_preparation import verify as verify_preparation
 
 ARCHES = {"amd64":"x86_64", "arm64":"aarch64"}
 EXTENSIONS = {"deb":"deb", "rpm":"rpm", "pacman":"pkg.tar.zst"}
@@ -32,19 +33,19 @@ def select(api, repository, repository_id, run_id, artifact_id, controller, arch
                   and isinstance(row.get('base'),dict) and row['base'].get('ref')=='main' for row in pulls))
     workflows=run.get('referenced_workflows',[])
     references=[row.get('sha') for row in workflows if isinstance(row,dict) and isinstance(row.get('path'),str)
-                and row['path'].partition('@')[0]==repository+'/.github/workflows/linux-candidates.yml'] if isinstance(workflows,list) else []
+                and row['path'].partition('@')[0]==repository+'/.github/workflows/release-prepare.yml'] if isinstance(workflows,list) else []
     head=run.get('head_sha')
     if (type(run.get('id')) is not int or run['id']!=run_id
             or not isinstance(head,str) or not re.fullmatch('[a-f0-9]{40}',head)
-            or (references!=[controller] if pull_request else head!=controller)
+            or references!=[controller] or not pull_request and head!=controller
             or run.get('repository',{}).get('id')!=repository_id
             or run.get('repository',{}).get('full_name')!=repository
             or run.get('head_repository',{}).get('id')!=repository_id
-            or run.get('path')!='.github/workflows/linux-candidate-requests.yml' or not eligible
+            or not eligible
             or run.get('status')!='completed' or run.get('conclusion')!=('failure' if partial else 'success')
             or type(run.get('run_attempt')) is not int or run['run_attempt']<1):
         raise ValueError('candidate input run differs from its independently pinned native producer')
-    role=('linux-partial-diagnostics-' if partial else 'linux-candidate-')+'linux-'+ARCHES[architecture]
+    role=('linux-partial-diagnostics-' if partial else 'prepared-')+'linux-'+ARCHES[architecture]
     artifact=artifact_for_run(api,repository,repository_id,run_id,head,role)
     if artifact['artifact_id']!=artifact_id:
         raise ValueError('candidate artifact ID differs from its independently selected role')
@@ -89,11 +90,7 @@ def package_rows(root, source, controller, architecture, partial):
                 raise ValueError('partial package path differs from the selected native CPU output')
             rows.append({**row,'family':family})
     else:
-        for name,value in [('source-commit.txt',source['source_commit']),('source-tree.txt',source['source_tree']),
-                           ('controller-commit.txt',controller)]:
-            path=root/name
-            if path.is_symlink() or not path.is_file() or path.stat().st_size>128 or path.read_text().strip()!=value:
-                raise ValueError('native candidate metadata differs from its exact producer and source')
+        verify_preparation(root,'prepared-linux-'+native,source['source_commit'],source['source_tree'])
         report=read(root/'candidate-packages.json')
         expected={'format_version','source_commit','version','platform','architecture','packages','qualification_status','published'}
         if (not isinstance(report,dict) or set(report)!=expected or type(report['format_version']) is not int

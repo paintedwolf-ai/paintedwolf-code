@@ -42,9 +42,7 @@ func TestOwnedSocketFixtureChild(t *testing.T) {
 }
 
 func TestOwnedSocketsRequiresCurrentListenerNotRequestedOrClosedPort(t *testing.T) {
-	if !lineage.Supported() {
-		t.Skip("native observation is unavailable")
-	}
+	testutil.RequireLineage(t, lineage.Supported())
 	l, err := lineage.Open("synthetic-action", "synthetic-session")
 	if err != nil {
 		testutil.FailErr(t, "open owned lineage fixture", err)

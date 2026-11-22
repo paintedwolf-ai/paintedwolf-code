@@ -76,35 +76,3 @@ func (s *sqlTranscript) PatchMessageNavigation(ctx context.Context, sessionID, m
 	core.outbox.Notify()
 	return msg, nil
 }
-
-func (s *memoryTranscript) PatchMessageNavigation(ctx context.Context, sessionID, messageID, contentHash string, expected, refs []api.NavigationReference) (api.Message, error) {
-	if err := ctx.Err(); err != nil {
-		return api.Message{}, err
-	}
-	core := s.core
-	core.mu.Lock()
-	defer core.mu.Unlock()
-	if _, ok := core.sessions[sessionID]; !ok {
-		return api.Message{}, ErrSessionNotFound
-	}
-	for i, msg := range core.messages[sessionID] {
-		if msg.ID != messageID {
-			continue
-		}
-		if NavigationContentHash(msg.Content) != contentHash {
-			return api.Message{}, ErrNavigationContentChanged
-		}
-		if !reflect.DeepEqual(msg.NavigationRefs, expected) || reflect.DeepEqual(msg.NavigationRefs, refs) {
-			return msg, nil
-		}
-		if _, err := sourceref.EncodeMetadata(refs, msg.SourceContext); err != nil {
-			return api.Message{}, err
-		}
-		msg.NavigationRefs = refs
-		msg = screenMessageForStore(messageScreenContext(ctx, core.sessions[sessionID].ProjectID, sessionID), msg)
-		msg.Seq = nextSeqLocked(core, sessionID)
-		core.messages[sessionID][i] = msg
-		return msg, nil
-	}
-	return api.Message{}, errors.New("navigation message not found")
-}

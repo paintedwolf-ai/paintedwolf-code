@@ -18,14 +18,14 @@ func TestMCPEnableThenCheck(t *testing.T) {
 	enabled := true
 	body, err := json.Marshal(wire.UpdateMcpProviderRequest{Enabled: &enabled})
 	testutil.FailErr(t, "marshal request", err)
-	req := authedRequest(t, http.MethodPatch, "/v1/mcp/providers/svca", bytes.NewReader(body))
+	req := AuthedRequest(t, http.MethodPatch, "/v1/mcp/providers/svca", bytes.NewReader(body))
 	w := httptest.NewRecorder()
 	srv.ServeHTTP(w, req)
 	if w.Code != http.StatusOK {
 		t.Fatalf("enable status = %d body=%s", w.Code, w.Body.String())
 	}
 
-	req = authedRequest(t, http.MethodPost, "/v1/mcp/providers/check", nil)
+	req = AuthedRequest(t, http.MethodPost, "/v1/mcp/providers/check", nil)
 	w = httptest.NewRecorder()
 	srv.ServeHTTP(w, req)
 	if w.Code != http.StatusOK {
@@ -55,7 +55,7 @@ func TestMCPDisabledToolsUnavailable(t *testing.T) {
 	for _, name := range names {
 		t.Fatalf("unexpected registered mcp tool %q while disabled", name)
 	}
-	req := authedRequest(t, http.MethodGet, "/v1/mcp/providers", nil)
+	req := AuthedRequest(t, http.MethodGet, "/v1/mcp/providers", nil)
 	w := httptest.NewRecorder()
 	srv.ServeHTTP(w, req)
 	if w.Code != http.StatusOK {

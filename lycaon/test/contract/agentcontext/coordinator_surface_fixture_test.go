@@ -24,18 +24,6 @@ var orchestrationLifecycleTools = []string{
 	"wait",
 }
 
-// orchestrationPinnedSurfaces remain active while parallel work is open.
-var orchestrationPinnedSurfaces = []string{
-	surfaceImplementOverlayPromote,
-	surfaceImplementPark,
-}
-
-// specialistSpawnAgents are task targets, not wire tools.
-var specialistSpawnAgents = []string{
-	"security-reviewer",
-	"implementer",
-}
-
 func loadImplementSurfaces(t *testing.T) map[string][]string {
 	t.Helper()
 	plans, err := surface.CompileToolPlans(1)

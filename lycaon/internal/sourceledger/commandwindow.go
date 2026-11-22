@@ -151,14 +151,12 @@ func (s *Commands) OpenCommandWindow(ctx context.Context, in CommandWindowInput)
 	if in.ProjectID == "" || in.ToolName == "" || len(in.Roots) == 0 {
 		return nil, fmt.Errorf("command window requires project, tool name, and roots")
 	}
-	ctx, cancel := context.WithTimeout(ctx, s.observationBudget)
-	defer cancel()
 	// Recovery interrupts every running row, so no row may be written before it
 	// has succeeded: a later retry would end a live window.
 	if err := s.RecoverInterruptedWindows(ctx); err != nil {
 		return nil, err
 	}
-	snapshotID, err := s.anchorStart(ctx, in.ProjectID, in.Roots, true)
+	snapshotID, err := s.anchorStart(ctx, in.ProjectID, in.Roots)
 	if err != nil {
 		return nil, err
 	}
@@ -186,10 +184,8 @@ func (s *Commands) OpenCommandWindow(ctx context.Context, in CommandWindowInput)
 
 // anchorStart reconciles the tree so drift from before this point is not
 // attributed, and names the inventory that results; incomplete coverage cannot
-// prove the tree unchanged, so it pays a pass. reuseSlow lets a first open take a
-// slow pass that just finished; a re-anchor may not, because that pass predates
-// the gap the re-anchor exists to leave out.
-func (s *Commands) anchorStart(ctx context.Context, projectID string, roots []RootSpec, reuseSlow bool) (string, error) {
+// prove the tree unchanged, so it pays a pass.
+func (s *Commands) anchorStart(ctx context.Context, projectID string, roots []RootSpec) (string, error) {
 	req, err := s.windowInventoryRequest(ctx, projectID, roots)
 	if err != nil {
 		return "", err
@@ -200,7 +196,7 @@ func (s *Commands) anchorStart(ctx context.Context, projectID string, roots []Ro
 	}
 	req.Force = !sourcesnapshot.ChangeTokenTrusted(snapshotRoots(roots))
 	req.Wait = true
-	if err := s.awaitStartInventory(ctx, req, reuseSlow); err != nil {
+	if err := s.inventory.EnsureInventory(ctx, req); err != nil {
 		return "", err
 	}
 	state, err := s.inventory.InventoryState(ctx, projectID, inventoryBranch(req.Roots), req.RootsGeneration)
@@ -234,75 +230,8 @@ func (s *Commands) insertWindow(ctx context.Context, w *openCommandWindow, comma
 	return tx.Commit()
 }
 
-// ErrWindowStartPending refuses a window while a pass that outlasted an earlier
-// open is still running: its start inventory is unknown, and waiting again would
-// charge another launch the whole budget.
-var ErrWindowStartPending = errors.New("command window start inventory is still running")
-
 // ErrWindowClosed refuses a hold on a window whose program has settled.
 var ErrWindowClosed = errors.New("command window is closed")
-
-// slowPassReuseFloor keeps a slow pass usable across a model turn; bounding reuse
-// by the pass alone would leave a pass just over budget unused at agent pace.
-const slowPassReuseFloor = 30 * time.Second
-
-// slowPass is the last pass of a scope that outlasted the observation budget.
-type slowPass struct {
-	generation int
-	finished   time.Time
-	took       time.Duration
-}
-
-// noteSlowPass remembers a completed pass that took longer than an open can wait.
-// Caller holds windowsMu.
-func (s *Commands) noteSlowPass(req InventoryRequest, started time.Time) {
-	finished := s.now()
-	s.slowPasses[req.scopeKey()] = slowPass{generation: req.RootsGeneration, finished: finished, took: finished.Sub(started)}
-}
-
-// awaitStartInventory waits for the window's start inventory within ctx. The pass
-// is detached, so one that outlasts the budget finishes and a later open finds it
-// done; thrown away, a pass longer than the budget would never converge. Forcing
-// another after it would not converge either, so a first open reuses a slow pass
-// that just finished: drift since then may reach the window, bounded by the longer
-// of the pass and slowPassReuseFloor.
-func (s *Commands) awaitStartInventory(ctx context.Context, req InventoryRequest, reuseSlow bool) error {
-	key := req.scopeKey()
-	s.windowsMu.Lock()
-	overdue := s.overduePasses[key] > 0
-	slow, finishedSlow := s.slowPasses[key]
-	s.windowsMu.Unlock()
-	if overdue {
-		return ErrWindowStartPending
-	}
-	started := s.now()
-	if reuseSlow && req.Force && finishedSlow && slow.generation == req.RootsGeneration &&
-		started.Sub(slow.finished) <= max(slow.took, slowPassReuseFloor) {
-		return nil
-	}
-	finished := make(chan error, 1)
-	go func() { finished <- s.inventory.EnsureInventory(context.WithoutCancel(ctx), req) }()
-	select {
-	case err := <-finished:
-		return err
-	case <-ctx.Done():
-	}
-	s.windowsMu.Lock()
-	s.overduePasses[key]++
-	s.windowsMu.Unlock()
-	go func() {
-		err := <-finished
-		s.windowsMu.Lock()
-		defer s.windowsMu.Unlock()
-		if s.overduePasses[key]--; s.overduePasses[key] == 0 {
-			delete(s.overduePasses, key)
-		}
-		if err == nil {
-			s.noteSlowPass(req, started)
-		}
-	}()
-	return ctx.Err()
-}
 
 // windowInventoryRequest reads the project's current root generation so the
 // window's passes join the same inventory lineage as the watcher's.
@@ -444,13 +373,7 @@ func (s *Commands) settleWindowObservations(ctx context.Context, w *openCommandW
 			passErr = err
 		} else {
 			req.Force, req.Wait = incomplete || !sourcesnapshot.ChangeTokenTrusted(snapshotRoots(w.roots)), true
-			started := s.now()
 			passErr = s.inventory.EnsureInventory(ctx, req)
-			if passErr == nil && s.now().Sub(started) > s.observationBudget {
-				s.windowsMu.Lock()
-				s.noteSlowPass(req, started)
-				s.windowsMu.Unlock()
-			}
 		}
 	}
 	release, lockErr = s.git.lockObservations(ctx, w.projectID, w.roots)
@@ -700,16 +623,11 @@ func (s *Commands) SetWindowIdledForTest(observe func(id string)) {
 
 // Commands attributes source observations to host command windows.
 type Commands struct {
-	now               func() time.Time
-	observationBudget time.Duration
-	openWindows       map[string][]*openCommandWindow
-	// overduePasses counts passes still running after an open stopped waiting.
-	overduePasses map[string]int
-	queries       *db.Queries
-	recordMu      *sync.Mutex
-	retention     *startRetention
-	// slowPasses remembers, per scope, the last pass that outlasted the budget.
-	slowPasses map[string]slowPass
+	now         func() time.Time
+	openWindows map[string][]*openCommandWindow
+	queries     *db.Queries
+	recordMu    *sync.Mutex
+	retention   *startRetention
 	// startQuietGrace and startQuietWait bound a window start's wait for
 	// watcher events already on their way.
 	startQuietGrace, startQuietWait time.Duration

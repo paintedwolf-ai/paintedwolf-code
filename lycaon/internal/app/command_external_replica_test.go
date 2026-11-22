@@ -42,13 +42,19 @@ func TestExternalCommandSaveMergesWithHumanTyping(t *testing.T) {
 	if repeated.Revision != merged.Revision {
 		t.Fatalf("outside save applied twice: %d != %d", repeated.Revision, merged.Revision)
 	}
-	refused := callDocumentProgram(t, f, "cat a.txt > a.txt")
-	if refused.StopCode != "COMMAND_REVISION_CONFLICT" || refused.CompletedEffects != 0 {
-		t.Fatalf("native publication=%+v", refused)
+	// A native write reads the merged draft and saves it with the person's typing.
+	written := callDocumentProgram(t, f, "cat a.txt > a.txt")
+	if written.Status != 0 || written.StopCode != "" {
+		t.Fatalf("native publication=%+v", written)
+	}
+	disk, err := os.ReadFile(path)
+	testutil.FailErr(t, "disk after native write", err)
+	if string(disk) != merged.Draft {
+		t.Fatalf("disk after native write=%q", disk)
 	}
 	current, err := service.CurrentSnapshot(t.Context(), p.ID, document.ID)
-	testutil.FailErr(t, "preserved typing", err)
-	if current.Draft != merged.Draft || current.BaseContent != merged.BaseContent {
-		t.Fatalf("native refusal changed replica=%+v", current)
+	testutil.FailErr(t, "saved typing", err)
+	if current.Dirty || current.Draft != merged.Draft {
+		t.Fatalf("document after native write=%+v", current)
 	}
 }

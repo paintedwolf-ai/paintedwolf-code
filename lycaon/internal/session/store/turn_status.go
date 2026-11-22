@@ -15,13 +15,3 @@ func (t *sqlTurns) LatestTurnStatus(ctx context.Context, sessionID string) (Turn
 	}
 	return TurnStatus(status), err
 }
-
-func (t *memoryTurns) LatestTurnStatus(ctx context.Context, sessionID string) (TurnStatus, error) {
-	s := t.core
-	if err := ctx.Err(); err != nil {
-		return "", err
-	}
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	return s.turns[s.turnHeads[strings.TrimSpace(sessionID)]].Status, nil
-}

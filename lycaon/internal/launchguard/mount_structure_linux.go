@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"math"
 	"os"
+	"strings"
 
 	"golang.org/x/sys/unix"
 )
@@ -14,34 +15,55 @@ import (
 // Structural selection is an exact opened-role set, closed over mount parents.
 // A filesystem type, shared superblock or pathname prefix never selects peers
 // or descendants. Every other inherited mount is removed before U_view exists.
+// These are fixed kernel interfaces, not filesystem classification rules.
+// Unknown child masks are restored as safe initial leases before readiness.
+var structuralKernelRoles = []struct {
+	path     string
+	magic    int64
+	optional bool
+}{
+	{"/proc", unix.PROC_SUPER_MAGIC, false},
+	{"/sys", unix.SYSFS_MAGIC, false},
+	{"/dev", unix.TMPFS_MAGIC, false},
+	{"/dev/pts", unix.DEVPTS_SUPER_MAGIC, false},
+	{"/dev/dri", unix.TMPFS_MAGIC, true},
+	{"/dev/snd", unix.TMPFS_MAGIC, true},
+}
+
+const structuralNullPath = "/dev/null"
+
+// structuralObjectPaths are the opened roles that select structural mounts.
+// The held generation is already bound at its logical root. Its store path
+// can be hidden beneath that bind when the store lives inside it.
+func structuralObjectPaths(policy GenerationPolicy, interpreter string) []string {
+	return append(moduleRoots(policy, interpreter), policy.LogicalInstallRoot, "/")
+}
+
+// structuralResolvedPaths is every path whose resolution decides the selection.
+func structuralResolvedPaths(policy GenerationPolicy, image *os.File) ([]string, error) {
+	interpreter, err := programInterpreter(image)
+	if err != nil {
+		return nil, err
+	}
+	paths := structuralObjectPaths(policy, interpreter)
+	for _, role := range structuralKernelRoles {
+		paths = append(paths, role.path)
+	}
+	return append(paths, structuralNullPath), nil
+}
+
 func structuralMounts(policy GenerationPolicy, image *os.File, entries []mountEntry) (map[int]bool, error) {
 	interpreter, err := programInterpreter(image)
 	if err != nil {
 		return nil, err
 	}
 	selected := make(map[int]bool)
-	// The held generation is already bound at its logical root. Its store
-	// path can be hidden beneath that bind when the store lives inside it.
-	paths := append(moduleRoots(policy, interpreter), policy.LogicalInstallRoot, "/")
-	for _, name := range paths {
+	for _, name := range structuralObjectPaths(policy, interpreter) {
 		if err := selectStructuralObject(name, 0, selected); err != nil {
 			return nil, err
 		}
 	}
-	// These are fixed kernel interfaces, not filesystem classification rules.
-	// Unknown child masks are restored as safe initial leases before readiness.
-	for _, role := range []struct {
-		path     string
-		magic    int64
-		optional bool
-	}{
-		{"/proc", unix.PROC_SUPER_MAGIC, false},
-		{"/sys", unix.SYSFS_MAGIC, false},
-		{"/dev", unix.TMPFS_MAGIC, false},
-		{"/dev/pts", unix.DEVPTS_SUPER_MAGIC, false},
-		{"/dev/dri", unix.TMPFS_MAGIC, true},
-		{"/dev/snd", unix.TMPFS_MAGIC, true},
-	} {
+	for _, role := range structuralKernelRoles {
 		if err := selectStructuralObject(role.path, role.magic, selected); err != nil {
 			if role.optional && errors.Is(err, unix.ENOENT) {
 				continue
@@ -87,7 +109,7 @@ func selectStructuralObject(name string, magic int64, selected map[int]bool) err
 }
 
 func structuralNullDevice(selected map[int]bool) error {
-	fd, err := openMountPoint("/dev/null")
+	fd, err := openMountPoint(structuralNullPath)
 	if err != nil {
 		return err
 	}
@@ -127,4 +149,46 @@ func structuralAncestors(entries []mountEntry, selected map[int]bool) (map[int]b
 		}
 	}
 	return result, nil
+}
+
+// sameSelectionTopology compares only what a structural selection depends on:
+// every selected mount, and any mount at or above a path the selection
+// resolved, which could cover or redirect it. Mounts elsewhere still reach a
+// launch through receive-only propagation and leave the selection unchanged.
+func sameSelectionTopology(before, after []mountEntry, selected map[int]bool, paths []string) bool {
+	relevant := func(entry mountEntry) bool {
+		if selected[entry.id] {
+			return true
+		}
+		for _, path := range paths {
+			if mountPointAtOrAbove(entry.mountPoint, path) {
+				return true
+			}
+		}
+		return false
+	}
+	remaining := make(map[int]mountEntry)
+	for _, entry := range before {
+		if relevant(entry) {
+			remaining[entry.id] = entry
+		}
+	}
+	for _, entry := range after {
+		if !relevant(entry) {
+			if _, was := remaining[entry.id]; was {
+				return false
+			}
+			continue
+		}
+		expected, exists := remaining[entry.id]
+		if !exists || expected != entry {
+			return false
+		}
+		delete(remaining, entry.id)
+	}
+	return len(remaining) == 0
+}
+
+func mountPointAtOrAbove(mountPoint, path string) bool {
+	return mountPoint == path || mountPoint == "/" || strings.HasPrefix(path, mountPoint+"/")
 }

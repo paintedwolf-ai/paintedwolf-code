@@ -89,9 +89,9 @@ ripgrep roles rather than copying grep aliases. PCRE-compatible grammar is an
 explicit bounded contract enforced by the native regex engine. File signatures name format-identification evidence,
 not archive/database trust.
 
-Native byte streams preserve the saved file representation, including its
-encoding, BOM and newline policy. Checksums and byte counts cover those saved
-bytes; decoded transforms retain explicit source mappings. Exact delivered literal source windows may
+Native byte streams preserve the file representation, including its encoding,
+BOM and newline policy; unsaved text the person has open streams as the bytes a
+save would write. Checksums and byte counts cover those bytes; decoded transforms retain explicit source mappings. Exact delivered literal source windows may
 qualify conversational edit evidence, while internal execution reads do not.
 Diff reuses the existing engine; complete stream bounds are independent from
 structured preview and context caps.
@@ -317,29 +317,33 @@ A source operation and the existing delivery boundary must still attribute the
 actual page before it qualifies as conversational evidence. These stream ports
 do not activate the later command-entry integration by themselves.
 
-Program operations pin execution revisions from published disk. Native utilities,
-input redirections, Git, and external programs all read the saved file. After a
-reached operation is admitted, accepted changes authored only by that chat can
-publish through separate write admission, current review and the editor save
-path. Each preparation write has its own receipt. Read-only profiles read saved
-bytes without publishing drafts. Human and other chats' drafts stay unsaved.
-Redirects contribute their mutation effects before admission; input opening and
-destination capture happen after accepted-draft preparation settles. Earlier
-admitted operations may already have published when a later operation is refused.
+Native utilities and input redirections read a path the person has open with
+unsaved text as that text, pinned at the document's revision; other paths pin
+published disk. Git and external programs read the saved file. After a reached
+operation is admitted, accepted changes authored only by that chat can publish
+through separate write admission, current review and the editor save path.
+Each preparation write has its own receipt. Read-only profiles read without
+publishing drafts. Redirects contribute their mutation effects before
+admission; input opening and destination capture happen after accepted-draft
+preparation settles. Earlier admitted operations may already have published
+when a later operation is refused.
 
-The initial response includes one note per affected path observed by native
-reads, stating that commands read the saved file. Notices first discovered by
-a background child reach its completion report; paths already reported in the
-initial response are not repeated. Native writes refuse dirty destinations with
-`COMMAND_REVISION_CONFLICT`. External programs retain ordinary sandbox write
-roots. Their outside saves merge with accepted and pending typing through the
+A native operation that changes, moves or removes a path first saves the
+person's unsaved text there, or anywhere beneath it, as an autosave would,
+naming its call; each contribution keeps its own author. A draft held over a
+file that changed outside the document is not saved and refuses with
+`COMMAND_REVISION_CONFLICT`, since saving would overwrite that change. External
+programs retain ordinary sandbox write roots. Their outside saves merge with accepted and pending typing through the
 editor's existing filesystem-replica transition against the saved checkpoint.
 The editor's typing stays in the document even when a program changes disk.
 
 Each destination's revision or absence is captured before preparing its change.
 A `WriteExecutionPinned` write rechecks the destination in the document owner or
-write door and rechecks sources after review. Movement refuses with
-`COMMAND_REVISION_CONFLICT`, without refreshing or rerunning the operation. If an
+write door and rechecks sources after review. In an open document the change is
+anchored in the captured revision, so typing that arrives meanwhile merges as it
+does for a conversational edit; review fences the revision it previewed. A file
+changed outside its document, or a moved source or disk destination, refuses
+with `COMMAND_REVISION_CONFLICT`, without refreshing or rerunning the operation. If an
 editor accepts a command's write but cannot save it, that exact write stops with
 `COMMAND_PUBLICATION_PENDING`. Its accepted revision and held recovery version
 remain in the receipt; later children do not run. There is no dependent-launch
@@ -894,20 +898,21 @@ Discovery `path` values are literal filesystem names; scope options such as `max
 
 Ignored directories and generated files remain searchable by default; `grep` and `find` prune them whole when a call passes `include_ignored: false`, except for a walk root named inside an ignored tree. A search that exhausts its deadline reports how many files it searched and which top-level subtree took most of them. `grep` and pattern-mode `summarize` accelerate literal searches of three or more characters by probing the catalog's per-file 3-gram Bloom filters before opening files. The literals a pattern requires include one from each branch of an alternation such as `foo|bar`, so a file the filters show holds none of them stays closed; unsaved editor text, uncached or modified files, and queries without such literals are read directly. `list_dir` and `stat` answer directory listings and child counts from the catalog snapshot without disk walks. `grep` applies its path filter before opening files, rejects binary prefixes before full reads, streams files to a bounded worker pool while applying results in walk order, and bounds concurrent reads across searches; a 60-second execution deadline returns `GREP_DEADLINE_EXCEEDED`, never a successful empty result.
 
-Results count searched text files, binary skips, unreadable files, byte-capped files, and structural parse gaps. Absence applies only to searched text; any unreadable or capped file leaves coverage incomplete. `./task perf:bench` runs the grep engine benchmarks (`grep_engine_bench_test.go`); `PW_GREP_BENCH_ROOT` points it at an existing working tree, read-only.
+Results count searched text files, binary skips, unreadable files, byte-capped files, and structural parse gaps. Absence applies only to searched text; any unreadable or capped file leaves coverage incomplete. `./task perf:bench` runs the grep engine benchmarks (`grep_engine_bench_test.go`) over the scale fixture tree that `PW_BENCH_ROOT` names, read-only.
 
 ---
 
 ## The open document is the file
 
-A file the person has open in the editor is its editor document, for the agent as for the person. Conversational structured reads of that path serve the document's draft, unsaved edits included; structured writes land in the document and save it. The `command` tool follows the saved-file rules above. There is one text per open file, and it is the one the person is looking at.
+A file the person has open in the editor is its editor document, for the agent as for the person. Agent reads of that path serve the document's draft, unsaved edits included; agent writes land in the document and save it. Inside `command` the native utilities follow the same rule; installed programs read disk. There is one text per open file, and it is the one the person is looking at.
 
 | Tool | With an open document |
 |------|-----------------------|
 | Structured `read`, `diff` | Serve the draft. The receipt's `source.editor` carries the document revision and `dirty`; an unsaved draft is `recorded: false` with a note, because the ledger records saves, not keystrokes |
 | Structured `grep`, `wc` | Search or count the unsaved text for open dirty files; `files_from_editor` and `in_editor` say how many were served that way |
 | `write`, `edit`, `replace_lines`, `code_rewrite`, `jq_edit`, `restore_version` | Compute against the draft, land in the document, and save through the person's own journaled save door, recorded as the agent's write. One save publishes every contribution the draft holds, the person's unsaved typing included, and the ledger records each contributor, so such a publication reads as mixed authorship rather than the agent's alone. `EDITOR_DOCUMENT_CHANGING` rejects a document that kept moving under the write. A document diverged from disk, or a publication that fails after acceptance, holds the edit unsaved in the document: the receipt says the file was not written and why, that the disk still holds its earlier bytes for commands and tests, and names the retained state |
-| `command`, `verify`, processes | Read saved bytes. An accepted edit whose publication failed remains unsaved and does not change those inputs |
+| Native utilities inside `command` | Read the draft. An operation that changes, moves or removes the path saves the draft first, then acts on the file |
+| Installed programs, `verify`, processes | Read saved bytes. An accepted edit whose publication failed remains unsaved and does not change those inputs |
 
 A worker on its private branch never sees documents: its tree is a copy. The design and the Den side are in [files-live.md § The open document is the file](files-live.md#the-open-document-is-the-file).
 
@@ -1097,9 +1102,9 @@ For a known command, `wait(until_complete=true, conditions=[{"kind":"process_don
 
 A wait lease is durable: it persists the addressed session, optional worker job, active profile, optional deadline, conditions, and exact loopback ports, and restart reconstructs subscriptions and probes. The first condition or deadline settles it. Worker waits return through the durable worker queue, coordinator waits keep coordinator workflow gating, and direct agent modes re-enter the same session. Delivery uses the lease id as an idempotent receipt; live delivery retries with bounded backoff, and restart recovery can replay a settled wake without duplicating an admitted one.
 
-A foreground `command` program that has not settled or parked after 30 seconds returns `state: running`, its `program_id`, and a session-scoped `handle`. The original program continues in order: later statements do not start early and nothing is replayed. Load `command_output` to inspect retained output by cursor and `command_stop` to interrupt that program. Its final bounded program result is appended to the output, including refusal details and retained-output references. This handle uses the existing background-job capacity, output retention and stop lifecycle; if registration fails, the host interrupts the original program. The execution deadline still applies. Running is not a successful check or evidence of service readiness. Prefer an explicit `&` job for a persistent service and terminal tools for interactive input.
+A foreground `command` program that has not settled or parked after 30 seconds returns `state: running`, its `program_id`, and a session-scoped `handle`. The original program continues in order: later statements do not start early and nothing is replayed. Load `command_output` to inspect retained output by cursor and `command_stop` to stop that program and the `&` jobs it started; a stop that interrupts a waiting foreground reports how many jobs ended with it (`jobs_stopped`). Its final bounded program result is appended to the output, including refusal details and retained-output references. This handle uses the existing background-job capacity, output retention and stop lifecycle; if registration fails, the host interrupts the original program. Running is not a successful check or evidence of service readiness. Use terminal tools for interactive input.
 
-A `command` call whose program is only waiting parks on the same lease. The evaluator reports a typed wait state when every live statement and job is blocked: the waiting statement, the earliest timer wake, and exact job handles. A known wait whose next wake falls more than ten seconds after that wait starts settles as `parked` with the waiting statement as its reason. Job-only waits park once the call's initial ten-second budget expires. Short polling intervals remain inline even when the program spans several intervals. Its turn ends and releases the worker slot, while the program keeps running under supervision; the lease subscribes to `program_done`, which only the host arms, and the program's end resumes the turn with exactly the result an unparked call returns. Shorter waits stay inline. The call's `timeout_ms`, or the catalog's `program_lifetime_ms` when the call names none, remains the program's outer bound: a single wait that cannot end within it refuses with `COMMAND_LIMIT_EXCEEDED` before the program parks. Anything else that ends the wait interrupts the program at its waiting statement while its `&` jobs keep running: user input or a stop opens the next turn with the interrupted result, and a replacement wait does the same. A restart cannot resume a program, so recovery resolves its lease with the program's receipts, interrupted, and the turn resumes with them; nothing is replayed.
+A `command` call whose program is only waiting parks on the same lease. The evaluator reports a typed wait state when every live statement and job is blocked: the waiting statement, the earliest timer wake, and exact job handles. A known wait whose next wake falls more than ten seconds after that wait starts settles as `parked` with the waiting statement as its reason. Job-only waits park once the call's initial ten-second budget expires. Short polling intervals remain inline even when the program spans several intervals. Its turn ends and releases the worker slot, while the program keeps running under supervision; the lease subscribes to `program_done`, which only the host arms, and the program's end resumes the turn with exactly the result an unparked call returns. Shorter waits stay inline. A program runs until it finishes, until it is interrupted or stopped, or until its session ends; agents choose no deadline. `command_stop` on its handle and the session's end also end the `&` jobs it started. Anything else that ends the wait interrupts the program at its waiting statement while its `&` jobs keep running: user input or a stop of the turn opens the next turn with the interrupted result, and a replacement wait does the same. A restart cannot resume a program, so recovery resolves its lease with the program's receipts, interrupted, and the turn resumes with them; nothing is replayed.
 
 Coordinator wakes retain their event identity, target, batch, and workflow revision while queued. One consumer drains a session's queue; each successful model request acknowledges the facts captured for it, and failed requests do not consume wakes. A matching event settles the lease and delivers its result even when optional workflow gates would suppress an ambient turn; a fresh permitted workflow interruption ends the lease before model execution starts; unrelated process events leave the selected handle's wait armed.
 

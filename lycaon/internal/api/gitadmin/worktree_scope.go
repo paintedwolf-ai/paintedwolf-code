@@ -37,12 +37,7 @@ func (s *Handler) resolveWorktreeScope(w http.ResponseWriter, r *http.Request, s
 	}
 	roots := project.RootRefsFrom(p)
 	// Project folders remain discoverable when a worktree binding is stale.
-	repos, err := s.LoadOrderedRepos(r.Context(), p, roots, s.activeRootIDFromSession(r.Context(), sessionID), "")
-	if err != nil {
-		s.responses.InternalError(w, r, err)
-		return worktreeScope{}, false
-	}
-	repos = reposInRoots(repos, roots)
+	repos := reposInRoots(s.LoadOrderedRepos(r.Context(), p, roots, s.activeRootIDFromSession(r.Context(), sessionID), nil), roots)
 	return worktreeScope{
 		sess:     sess,
 		project:  p,

@@ -6,6 +6,7 @@ import (
 	"github.com/lycaon/lycaon/internal/toolfeedback"
 	"github.com/lycaon/lycaon/internal/toolreach"
 	"github.com/lycaon/lycaon/internal/toolrejection"
+	"github.com/lycaon/lycaon/internal/tools/toolstest"
 	"path/filepath"
 	"reflect"
 	"slices"
@@ -62,7 +63,7 @@ func TestCheckDoomLoopUsesRejectFormatter(t *testing.T) {
 }
 
 func TestRunExecutesRegisteredTool(t *testing.T) {
-	reg := tools.NewStubRegistry()
+	reg := toolstest.NewRegistry()
 	_ = reg.Register("read", func(_ context.Context, _ map[string]any, _ tools.ToolContext) (string, error) {
 		return "file-body", nil
 	})
@@ -121,7 +122,7 @@ func TestRunExecutesRegisteredTool(t *testing.T) {
 
 func TestPromptLoop_ToolMessageContainsSpecProgress(t *testing.T) {
 	guard := &memoryDoomLoopGuard{counts: map[string]map[string]int{}}
-	reg := tools.NewStubRegistry()
+	reg := toolstest.NewRegistry()
 	_ = reg.Register("read", func(_ context.Context, _ map[string]any, _ tools.ToolContext) (string, error) {
 		return "file-body", nil
 	})
@@ -212,7 +213,7 @@ func TestPromptLoop_ToolMessageContainsSpecProgress(t *testing.T) {
 
 func TestPromptLoop_PhaseGateUnmetJSONSkipsDoomLoopRecord(t *testing.T) {
 	guard := &memoryDoomLoopGuard{counts: map[string]map[string]int{}}
-	reg := tools.NewStubRegistry()
+	reg := toolstest.NewRegistry()
 	_ = reg.Register("workflow_advance", func(_ context.Context, _ map[string]any, _ tools.ToolContext) (string, error) {
 		return `{"error":"phase_gate_unmet","failed_gate":"research_satisfied","phase":"research"}`, nil
 	})
@@ -242,7 +243,7 @@ func TestPromptLoop_PhaseGateUnmetJSONSkipsDoomLoopRecord(t *testing.T) {
 }
 
 func TestExecuteToolCallCarriesCompiledInvocationContract(t *testing.T) {
-	reg := tools.NewStubRegistry()
+	reg := toolstest.NewRegistry()
 	var captured tools.ToolContext
 	testutil.FailErr(t, "register read", reg.Register("read", func(_ context.Context, _ map[string]any, tctx tools.ToolContext) (string, error) {
 		captured = tctx
@@ -266,7 +267,7 @@ func TestExecuteToolCallCarriesCompiledInvocationContract(t *testing.T) {
 }
 
 func TestExecuteToolCallTracksWhetherTheSubsystemOwnerRan(t *testing.T) {
-	blocked := tools.NewStubRegistry()
+	blocked := toolstest.NewRegistry()
 	testutil.FailErr(t, "register blocked read", blocked.Register("read", func(context.Context, map[string]any, tools.ToolContext) (string, error) {
 		return "", nil
 	}))
@@ -283,7 +284,7 @@ func TestExecuteToolCallTracksWhetherTheSubsystemOwnerRan(t *testing.T) {
 		t.Fatal("pre-subsystem-owner rejection marked invoked")
 	}
 
-	invoked := tools.NewStubRegistry()
+	invoked := toolstest.NewRegistry()
 	testutil.FailErr(t, "register failing read", invoked.Register("read", func(context.Context, map[string]any, tools.ToolContext) (string, error) {
 		return "", errors.New("subsystem owner failed")
 	}))

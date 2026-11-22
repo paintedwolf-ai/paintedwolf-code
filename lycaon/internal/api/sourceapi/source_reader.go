@@ -237,12 +237,8 @@ func mapSourceComparisonSide(side sourceledger.ComparisonSide) wire.SourceCompar
 func (s *Comparisons) CommitLens(ctx context.Context, p *project.Project) sourceledger.CommitLens {
 	mgr := s.Git.Manager()
 	roots := p.SourceRoots()
-	repos, err := s.Git.LoadOrderedRepos(ctx, p, roots, "", "")
-	if err != nil {
-		return sourceledger.CommitLens{}
-	}
 	topByRootID := make(map[string]string, len(roots))
-	for _, repo := range repos {
+	for _, repo := range s.Git.LoadOrderedRepos(ctx, p, roots, "", nil) {
 		if !repo.Available || strings.TrimSpace(repo.Toplevel) == "" {
 			continue
 		}

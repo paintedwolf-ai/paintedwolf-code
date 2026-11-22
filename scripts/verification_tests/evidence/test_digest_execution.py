@@ -93,6 +93,29 @@ class GoDigestTests(unittest.TestCase):
         self.assertIn("test and subtest results: 1 passed, 0 failed, 1 skipped", result.stdout)
         self.assertIn("1 package with no captured test results", result.stdout)
 
+    def test_report_names_every_skipped_test_with_its_message(self):
+        skipped = [
+            {"Package": "fixture/a", "Test": "TestGated", "Action": "run"},
+            {"Package": "fixture/a", "Test": "TestGated", "Action": "output",
+             "Output": "    gate_test.go:9: this host provides no confinement\n"},
+            {"Package": "fixture/a", "Test": "TestGated", "Action": "output", "Output": "--- SKIP: TestGated (0.00s)\n"},
+            {"Package": "fixture/a", "Test": "TestGated", "Action": "skip"},
+            {"Package": "fixture/a", "Test": "TestSilent", "Action": "run"},
+            {"Package": "fixture/a", "Test": "TestSilent", "Action": "skip"},
+            {"Package": "fixture/a", "Action": "pass"},
+        ]
+        failing = [
+            {"Package": "fixture/b", "Test": "TestBroken", "Action": "run"},
+            {"Package": "fixture/b", "Test": "TestBroken", "Action": "fail"},
+            {"Package": "fixture/b", "Action": "fail"},
+        ]
+        for events in (skipped, skipped + failing):
+            with self.subTest(failing=len(events) > len(skipped)), tempfile.TemporaryDirectory() as directory:
+                result = self.digest(events, directory)
+            self.assertIn("skipped fixture/a TestGated: gate_test.go:9: this host provides no confinement",
+                          result.stdout)
+            self.assertIn("skipped fixture/a TestSilent\n", result.stdout)
+
     def test_all_skipped_and_no_test_reports_never_claim_executed_tests(self):
         cases = [
             ([{"Package": "fixture/no_tests", "Action": "skip"}], 0, 1),
