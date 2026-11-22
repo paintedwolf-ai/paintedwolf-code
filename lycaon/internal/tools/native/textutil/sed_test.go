@@ -13,6 +13,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/lycaon/lycaon/internal/commandmode"
 	"github.com/lycaon/lycaon/internal/commandprogram"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/textsearch"
@@ -433,5 +434,57 @@ func TestSedPreparedOwnerParsesInlineOnceAndPropagatesResourceRefusals(t *testin
 	pins := h.pins.executions[reqFile.Invocation.Identity.ExecutionID]
 	if resFile.Status != 0 || outBuf.String() != "omega\n" || len(pins) != 2 || pins[0].Path != "deferred.sed" || pins[1].Path != "f" || h.memory.InUse().Working != 0 {
 		t.Fatalf("-f outcome: res=%+v out=%q pins=%+v working=%+v", resFile, outBuf.String(), pins, h.memory.InUse())
+	}
+}
+
+func TestSedSharedReachAndExecutionParity(t *testing.T) {
+	h := sedHarness(t)
+	h.seed("file.txt", "alpha\n")
+	h.seed("rules.sed", "s/alpha/beta/\n")
+
+	for _, tc := range []struct {
+		source string
+		words  []string
+		mode   string
+		known  bool
+	}{
+		{"sed p file.txt", []string{"sed", "p", "file.txt"}, "stream-script", true},
+		{"sed 'w written.txt' file.txt", []string{"sed", "w written.txt", "file.txt"}, "w-command", true},
+		{"sed -i .bak 's/alpha/beta/' file.txt", []string{"sed", "-i", ".bak", "s/alpha/beta/", "file.txt"}, "-i", true},
+		{"sed -f rules.sed file.txt", []string{"sed", "-f", "rules.sed", "file.txt"}, "", false},
+		{"sed -i -f rules.sed file.txt", []string{"sed", "-i", "-f", "rules.sed", "file.txt"}, "-i", true},
+		{"sed -i .bak 's/alpha/beta/'", []string{"sed", "-i", ".bak", "s/alpha/beta/"}, "", false},
+	} {
+		req, release := h.bind(tc.source)
+		execMode, execKnown := h.owners.SelectMode(t.Context(), h.memory, req.Argv)
+		release()
+		reachResolved, reachKnown := commandmode.Resolve(t.Context(), tc.words)
+		if execKnown != tc.known || execMode != tc.mode || reachKnown != tc.known || reachResolved.Mode != tc.mode {
+			t.Fatalf("%s: execution=(%q,%v) reach=(%+v,%v), want (%q,%v)",
+				tc.source, execMode, execKnown, reachResolved, reachKnown, tc.mode, tc.known)
+		}
+		if h.memory.InUse().Working != 0 {
+			t.Fatalf("%s leaked working memory: %+v", tc.source, h.memory.InUse())
+		}
+	}
+
+	h.run("sed p file.txt", "").expectOutput(t, "read inline", "alpha\nalpha\n", 0)
+	h.run("sed -n 'w written.txt' file.txt", "").expectOutput(t, "write inline", "", 0)
+	if h.read("written.txt") != "alpha\n" {
+		t.Fatalf("written.txt = %q", h.read("written.txt"))
+	}
+	h.run("sed -f rules.sed file.txt", "").expectOutput(t, "file-backed stream", "beta\n", 0)
+	h.run("sed -i .bak 's/alpha/beta/' file.txt", "").expectOutput(t, "positional backup suffix", "", 0)
+	if h.read("file.txt") != "beta\n" || h.read("file.txt.bak") != "alpha\n" {
+		t.Fatalf("positional backup: file=%q bak=%q", h.read("file.txt"), h.read("file.txt.bak"))
+	}
+	h.seed("inplace.txt", "alpha\n")
+	h.run("sed -i -f rules.sed inplace.txt", "").expectOutput(t, "in-place file-backed", "", 0)
+	if h.read("inplace.txt") != "beta\n" {
+		t.Fatalf("inplace.txt = %q", h.read("inplace.txt"))
+	}
+	h.run("sed -i .bak 's/alpha/beta/'", "").expectRefusal(t, "missing in-place file after positional suffix", "COMMAND_OPERAND_INVALID")
+	if h.memory.InUse().Working != 0 {
+		t.Fatalf("leaked working memory after refusal: %+v", h.memory.InUse())
 	}
 }
