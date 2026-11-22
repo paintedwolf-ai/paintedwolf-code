@@ -8,6 +8,7 @@ import (
 	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/limits"
 	"github.com/lycaon/lycaon/internal/oar"
+	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/internal/session/batchcontrol"
 	"github.com/lycaon/lycaon/internal/session/closeoutassembly"
 	"github.com/lycaon/lycaon/internal/session/closeoutevidence"
@@ -29,7 +30,7 @@ type Closeout struct {
 	Nudges     *turnnudges.Service
 	Policy     *policyfacts.Service
 	Rejects    *guidance.StaticRejectFormatter
-	RenderKick func(context.Context, string, map[string]any) (string, error)
+	RenderKick func(context.Context, prompts.Reader, string, map[string]any) (string, error)
 	Reports    ReportDocuments
 }
 

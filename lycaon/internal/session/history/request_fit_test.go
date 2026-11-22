@@ -259,7 +259,7 @@ func TestReviewRecallPageProjectionKeepsCursorContiguous(t *testing.T) {
 	body := strings.Repeat("😀", 4096)
 	raw, err := json.Marshal(map[string]any{"history": map[string]any{"format": "record", "entries": []any{map[string]any{"message_id": "original", "ord": 1, "content": body, "runes": 9000, "offset": 4096, "seq": 1}}, "next_offset": 8192, "through_ord": 1, "recorded": true}})
 	testutil.FailErr(t, "encode record page", err)
-	rows := projectRecordedToolBodies(t.Context(), []api.Message{{ID: "recall-result", Ord: 3, Role: api.MessageRoleTool, Content: string(raw), ToolResult: &api.ToolResult{Tool: "recall", Content: string(raw)}}})
+	rows := projectRecordedToolBodies(t.Context(), true, []api.Message{{ID: "recall-result", Ord: 3, Role: api.MessageRoleTool, Content: string(raw), ToolResult: &api.ToolResult{Tool: "recall", Content: string(raw)}}})
 	var page struct {
 		History struct {
 			Entries []struct {
@@ -285,7 +285,7 @@ func TestReviewRecallPageProjectionKeepsCursorContiguous(t *testing.T) {
 	}, "through_ord": 4, "recorded": true}})
 	testutil.FailErr(t, "encode index page", err)
 	indexArgs := map[string]any{"history": map[string]any{"through_ord": 4, "search": "needle"}, "limit": 4}
-	indexRows := projectRecordedToolBodies(t.Context(), []api.Message{{ID: "recall-index", Ord: 4, Role: api.MessageRoleTool, Content: string(indexRaw), ToolResult: &api.ToolResult{Tool: "recall", Content: string(indexRaw), ToolArgs: indexArgs}}})
+	indexRows := projectRecordedToolBodies(t.Context(), true, []api.Message{{ID: "recall-index", Ord: 4, Role: api.MessageRoleTool, Content: string(indexRaw), ToolResult: &api.ToolResult{Tool: "recall", Content: string(indexRaw), ToolArgs: indexArgs}}})
 	var indexPage struct {
 		History     recall.HistoryPage          `json:"history"`
 		NextRequest *recall.HistoryContinuation `json:"next_request"`

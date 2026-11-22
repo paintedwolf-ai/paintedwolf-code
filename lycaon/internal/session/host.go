@@ -248,6 +248,8 @@ func NewHost(store *sessionstore.Repositories, modelSources Models, registry too
 	m.Coordinator.Batch = batchcontrol.New(store.Sessions, store.Transcript, workerState, m.Verification, m.Coordinator.Guidance)
 	turnSettlement := turnsettlement.New(store.Sessions, gate, &turnExecution.Prompt, turnStatus, m.Workspace, m.Coordinator.Batch)
 	m.Coordinator.Nudges = turnnudges.New(m.Coordinator.Loading.Ledger, turnSpend)
+	m.Coordinator.Nudges.SetProfiles(m.Profiles)
+	m.Coordinator.Nudges.SetWorkspace(m.Workspace)
 	turnInstructions := instructions.New(store.Sessions, store.Transcript, turnTranscript, captures, m.Coordinator.Guidance.DeliverPending)
 	turnInstructions.SetWaitEnds(func(sessionID string) []string {
 		var texts []string

@@ -67,7 +67,7 @@ func (l *PromptLoop) appendAgentEnabledNudge(ctx context.Context, sessionID stri
 	if l.Closeout.Deps.RenderHostKick == nil {
 		return state.history, nil
 	}
-	content, err := l.Closeout.Deps.RenderHostKick(ctx, "session-agent-enabled", nil)
+	content, err := l.Closeout.Deps.RenderHostKick(ctx, closeoutTurnReader(state), "session-agent-enabled", nil)
 	if err != nil {
 		return nil, err
 	}

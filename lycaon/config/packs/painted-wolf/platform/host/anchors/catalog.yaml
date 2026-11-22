@@ -342,7 +342,10 @@ anchors:
     surface: worker
     planes: [inform]
     envelope:
-      vars: {}
+      vars:
+        reason_text: { type: string }
+        llm_timeout: { type: bool }
+        leg_command_mutation_capable: { type: bool }
 
   - id: worker.cancel.closeout
     title: Worker cancel closeout
@@ -431,6 +434,7 @@ anchors:
       vars:
         reason_text: { type: string, required: true }
         llm_timeout: { type: bool }
+        session_command_mutation_capable: { type: bool }
 
   - id: turn.iterations.low
     title: Turn iterations low
@@ -631,7 +635,7 @@ anchors:
     envelope:
       vars:
         jobs: { type: "object[]", required: true }
-        can_wait: { type: "bool", required: true }
+        wait_process_done_allowed: { type: "bool", required: true }
         has_running: { type: "bool", required: true }
         has_exited: { type: "bool", required: true }
         has_held: { type: "bool", required: true }
@@ -695,7 +699,6 @@ anchors:
         other_may_include_working_set: { type: "bool", required: false }
         truncated: { type: "bool", required: true }
         own_truncated: { type: "bool", required: false }
-        source_history_offered: { type: "bool", required: false }
         citable: { type: "bool", required: false }
 
   - id: inject.view_context
@@ -723,7 +726,6 @@ anchors:
           type: "object[]"
           required: true
           description: "Rows with rule_id, level and location (path:line or empty)."
-        read_offered: { type: "bool", required: true }
 
   - id: inject.synthesis_evidence
     title: Synthesis evidence inject

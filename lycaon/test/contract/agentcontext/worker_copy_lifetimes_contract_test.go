@@ -173,11 +173,15 @@ func TestWorkerCopyLifetimesAndSkillHistory(t *testing.T) {
 		t.Fatal("standing coordinator prefix changed across volatile worker completion")
 	}
 
+	coordReader, err := prompts.DeclaredReader(nil, prompts.CoordinatorProfileID)
+	contractcheck.FailErr(t, "DeclaredReader coordinator", err)
 	tsWorking, err := inject.RenderTurnStateBlock(context.Background(), renderer, "s-life", inject.TurnStateInjectInput{
+		Reader:  coordReader,
 		Workers: []map[string]any{{"name": "w1", "agent": "implementer", "state": "working"}},
 	})
 	contractcheck.FailErr(t, "turn state working", err)
 	tsAsking, err := inject.RenderTurnStateBlock(context.Background(), renderer, "s-life", inject.TurnStateInjectInput{
+		Reader:  coordReader,
 		Workers: []map[string]any{{"name": "w1", "agent": "implementer", "state": "asking", "question": "Use v2?"}},
 	})
 	contractcheck.FailErr(t, "turn state asking", err)
@@ -230,7 +234,9 @@ func TestWorkerCopyAbsentStates(t *testing.T) {
 	root := contractcheck.RepoRoot(t)
 	renderer := prompts.NewInjectRenderer(contractcheck.BundledPromptEngineForRoot(t))
 
-	emptyTurnState, err := inject.RenderTurnStateBlock(context.Background(), renderer, "s-empty", inject.TurnStateInjectInput{})
+	coordReader, err := prompts.DeclaredReader(nil, prompts.CoordinatorProfileID)
+	contractcheck.FailErr(t, "DeclaredReader coordinator", err)
+	emptyTurnState, err := inject.RenderTurnStateBlock(context.Background(), renderer, "s-empty", inject.TurnStateInjectInput{Reader: coordReader})
 	contractcheck.FailErr(t, "empty turn state", err)
 	if emptyTurnState != "" {
 		t.Fatalf("expected empty turn-state block with no workers or gates, got %q", emptyTurnState)

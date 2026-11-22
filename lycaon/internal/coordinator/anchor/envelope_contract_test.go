@@ -16,6 +16,7 @@ import (
 	"github.com/lycaon/lycaon/internal/coordinator/anchor"
 	"github.com/lycaon/lycaon/internal/coordinator/kick"
 	"github.com/lycaon/lycaon/internal/prompts"
+	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/testutil"
 )
 
@@ -174,7 +175,16 @@ func TestGoldenKickRenderByteIdenticalViaEmit(t *testing.T) {
 
 func TestKickTemplateReceivesStructuredContext(t *testing.T) {
 	engine := prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{ModuleRoot: configlayout.FindModuleRoot()})
-	out, err := engine.RenderKick(t.Context(), "coordinator-gate-blocked", map[string]any{
+	profiles, err := sandbox.LoadToolProfiles()
+	testutil.FailErr(t, "LoadToolProfiles", err)
+	reader, err := prompts.NewReader(prompts.ReaderInput{
+		ProfileID: prompts.CoordinatorProfileID,
+		Profiles:  profiles,
+		RootCount: 1,
+		WebSearch: true,
+	})
+	testutil.FailErr(t, "NewReader coordinator", err)
+	out, err := engine.RenderKick(t.Context(), reader, "coordinator-gate-blocked", map[string]any{
 		"gate_obligations": []map[string]any{{
 			"id": "gate.evidence", "purpose": "prove", "missing": []string{"x"}, "satisfy": []string{"x"},
 		}},

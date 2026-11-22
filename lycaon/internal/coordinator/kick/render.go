@@ -113,7 +113,7 @@ func (k *KickEngine) renderCoordinatorKick(ctx context.Context, kickID string, m
 	if err := prompts.MergeCoordinatorKickVarsForTools(data, reader); err != nil {
 		return "", fmt.Errorf("kick policy vars: %w", err)
 	}
-	return cfg.engine.RenderKick(ctx, strings.TrimSpace(kickID), data)
+	return cfg.engine.RenderKick(ctx, reader, strings.TrimSpace(kickID), data)
 }
 
 func kickReader(live CoordinatorKickRenderContext) (prompts.Reader, error) {

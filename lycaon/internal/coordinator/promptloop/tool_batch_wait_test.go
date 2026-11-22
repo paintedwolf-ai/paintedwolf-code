@@ -18,6 +18,7 @@ import (
 	"github.com/lycaon/lycaon/internal/limits"
 	"github.com/lycaon/lycaon/internal/llm/transcript"
 	"github.com/lycaon/lycaon/internal/oar"
+	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/internal/session/closeouts"
 	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -206,7 +207,7 @@ func newMidTurnHarness(t *testing.T, surfaceID string) *midTurnHarness {
 				return guidance.GroundingFriction{Remaining: 3}
 			},
 
-				RenderHostKick: func(_ context.Context, id string, data map[string]any) (string, error) {
+				RenderHostKick: func(_ context.Context, _ prompts.Reader, id string, data map[string]any) (string, error) {
 					h.kick = id
 					workers, _ := data["workers"].([]guidance.MidTurnWorkerFact)
 					parts := []string{"Worker status from the host:"}

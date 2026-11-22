@@ -48,8 +48,8 @@ type ScanGuidanceHook interface {
 }
 
 type BoardPrependHook interface {
-	PrependBoardIfChanged(ctx context.Context, sess *api.Session, run api.CoordinatorRunContext) (block string, ok bool)
-	WorkerBoard(ctx context.Context, sess *api.Session) (block string, ok bool)
+	PrependBoardIfChanged(ctx context.Context, sess *api.Session, reader prompts.Reader, run api.CoordinatorRunContext) (block string, ok bool)
+	WorkerBoard(ctx context.Context, sess *api.Session, reader prompts.Reader) (block string, ok bool)
 	BoardInjectHash(sessionID string) string
 	InvalidateOrientation(sessionID string)
 }
@@ -243,7 +243,7 @@ func (e *AssemblyEngine) BuildCompletionMessages(
 	coordinatorSurface := coordinator && (!frame.Machine.Compiled() || frame.Machine.ProfileID == orchestration.ProfileCoordinator)
 	boardBlock := ""
 	if coordinator && !sess.IsWorkerChild() {
-		frame, boardBlock, err = contextAssembler.prepareCoordinatorBoard(ctx, sess, frame, turn)
+		frame, boardBlock, err = contextAssembler.prepareCoordinatorBoard(ctx, sess, frame, history, turn)
 		if err != nil {
 			return nil, err
 		}

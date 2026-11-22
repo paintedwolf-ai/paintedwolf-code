@@ -76,7 +76,7 @@ func TestWorkerCopyStateMatrixAndReachability(t *testing.T) {
 				"latest_message_seq": 4,
 			}
 			prompts.MergeCoordinatorKickVarsForTools(data, reader)
-			out, err := engine.RenderKick(context.Background(), "coordinator-worker-round-notice", data)
+			out, err := engine.RenderKick(context.Background(), reader, "coordinator-worker-round-notice", data)
 			contractcheck.FailErr(t, "render round notice", err)
 			if names := unreachableNames(t, catalog, out, reader); len(names) > 0 {
 				t.Errorf("round notice on %s names unreachable %v", id, names)
@@ -266,11 +266,15 @@ func TestWorkerCopyInterpolationSensitivity(t *testing.T) {
 	engine := contractcheck.BundledPromptEngineForRoot(t)
 	renderer := prompts.NewInjectRenderer(engine)
 
+	coordReader, err := prompts.DeclaredReader(nil, prompts.CoordinatorProfileID)
+	contractcheck.FailErr(t, "DeclaredReader coordinator", err)
 	b1, err := inject.RenderTurnStateBlock(context.Background(), renderer, "s1", inject.TurnStateInjectInput{
+		Reader:  coordReader,
 		Workers: []map[string]any{{"name": "worker-one", "agent": "implementer", "state": "delivered", "parked_reason": "process_done", "result_handle": "res-one", "result_disposition": "shelved", "shelve_reason": "defer-alpha"}},
 	})
 	contractcheck.FailErr(t, "turn state 1", err)
 	b2, err := inject.RenderTurnStateBlock(context.Background(), renderer, "s2", inject.TurnStateInjectInput{
+		Reader:  coordReader,
 		Workers: []map[string]any{{"name": "worker-two", "agent": "implementer", "state": "delivered", "parked_reason": "timer_elapsed", "result_handle": "res-two", "result_disposition": "shelved", "shelve_reason": "defer-beta"}},
 	})
 	contractcheck.FailErr(t, "turn state 2", err)

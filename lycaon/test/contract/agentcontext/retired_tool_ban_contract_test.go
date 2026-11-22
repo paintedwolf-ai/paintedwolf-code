@@ -123,9 +123,7 @@ func TestRenderedStockCopyNeverNamesFullyRetiredTools(t *testing.T) {
 						WebSearch: true,
 					})
 					contractcheck.FailErr(t, "new reader", err)
-					data, err := prompts.Vars(reader, promptrender.KickFixture())
-					contractcheck.FailErr(t, "prompts.Vars", err)
-					corpus, err := kickEngine.RenderKick(context.Background(), binding.Render, data)
+					corpus, err := kickEngine.RenderKick(context.Background(), reader, binding.Render, promptrender.KickFixture())
 					contractcheck.FailErr(t, "render kick", err)
 					checkBannedMention(t, retired, fmt.Sprintf("kick %s for %s", binding.Render, profile.ID), corpus)
 				})
@@ -137,10 +135,11 @@ func TestRenderedStockCopyNeverNamesFullyRetiredTools(t *testing.T) {
 		}
 		for id := range plans {
 			t.Run("kick/"+binding.Render+"/"+id, func(t *testing.T) {
+				reader := coordinatorTestReader(t, id, 1)
 				data := promptrender.KickFixture()
 				delete(data, "tools")
-				prompts.MergeCoordinatorKickVarsForTools(data, coordinatorTestReader(t, id, 1))
-				corpus, err := kickEngine.RenderKick(context.Background(), binding.Render, data)
+				prompts.MergeCoordinatorKickVarsForTools(data, reader)
+				corpus, err := kickEngine.RenderKick(context.Background(), reader, binding.Render, data)
 				contractcheck.FailErr(t, "render kick", err)
 				checkBannedMention(t, retired, fmt.Sprintf("kick %s on %s", binding.Render, id), corpus)
 			})
@@ -177,9 +176,10 @@ func TestRenderedPhaseKicksNeverNameFullyRetiredTools(t *testing.T) {
 				continue
 			}
 			t.Run(filepath.Base(filepath.Dir(file))+"/"+inject.Selector.Phase, func(t *testing.T) {
+				reader := coordinatorTestReader(t, id, 1)
 				data := promptrender.KickFixture()
-				prompts.MergeCoordinatorKickVarsForTools(data, coordinatorTestReader(t, id, 1))
-				corpus, err := kickEngine.RenderKick(context.Background(), inject.Render, data)
+				prompts.MergeCoordinatorKickVarsForTools(data, reader)
+				corpus, err := kickEngine.RenderKick(context.Background(), reader, inject.Render, data)
 				contractcheck.FailErr(t, "render kick", err)
 				checkBannedMention(t, retired, fmt.Sprintf("phase kick %s on %s", inject.Render, id), corpus)
 			})

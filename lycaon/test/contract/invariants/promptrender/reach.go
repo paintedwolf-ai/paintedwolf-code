@@ -118,7 +118,7 @@ func coordinatorKicksNameOnlyOffered(r *invariants.Run) {
 			data := kickData()
 			delete(data, "tools")
 			prompts.MergeCoordinatorKickVarsForTools(data, reader)
-			text, err := engine.RenderKick(context.Background(), kick, data)
+			text, err := engine.RenderKick(context.Background(), reader, kick, data)
 			r.Must(err)
 			checked++
 			reportUnoffered(r, fmt.Sprintf("kick %s on %s", kick, id), text, reader.Held())
@@ -154,7 +154,7 @@ func phaseKicksNameOnlyTheirSurface(r *invariants.Run) {
 			r.Must(err)
 			data := kickData()
 			prompts.MergeCoordinatorKickVarsForTools(data, reader)
-			text, err := engine.RenderKick(context.Background(), in.Render, data)
+			text, err := engine.RenderKick(context.Background(), reader, in.Render, data)
 			r.Must(err)
 			checked++
 			reportUnoffered(r, fmt.Sprintf("%s phase %s kick %s on %s", key, *in.Selector.Phase, in.Render, id), text, reader.Held())
@@ -202,9 +202,7 @@ func workerKicksNameOnlyOffered(r *invariants.Run) {
 			}
 			reader := workerReader(r, profile.ID, profiles)
 			for _, kick := range informKicks(r, "worker-") {
-				data, err := prompts.Vars(reader, kickData())
-				r.Must(err)
-				text, err := engine.RenderKick(context.Background(), kick, data)
+				text, err := engine.RenderKick(context.Background(), reader, kick, kickData())
 				r.Must(err)
 				checked++
 				reportUnoffered(r, fmt.Sprintf("kick %s for %s in %s", kick, profile.ID, posture), text, reader.Held())

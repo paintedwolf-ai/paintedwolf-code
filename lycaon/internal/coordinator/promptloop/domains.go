@@ -19,6 +19,7 @@ import (
 	"github.com/lycaon/lycaon/internal/llm/compaction"
 	"github.com/lycaon/lycaon/internal/llm/modelcall"
 	"github.com/lycaon/lycaon/internal/oar"
+	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/spawn"
@@ -122,7 +123,7 @@ type CloseoutTrackingDeps struct {
 	CitationRoots                       func(ctx context.Context, sess *api.Session) evidence.CitationRoots
 	OnGroundedSynthesisAccepted         func(ctx context.Context, sess *api.Session, sessionID string)
 	MaxCloseoutCitationGroundingRetries int
-	RenderHostKick                      func(ctx context.Context, kickID string, data map[string]any) (string, error)
+	RenderHostKick                      func(ctx context.Context, reader prompts.Reader, kickID string, data map[string]any) (string, error)
 	BeginCloseoutIntent                 func(ctx context.Context, sessionID string)
 	RecordGroundingFriction             func(ctx context.Context, sessionID string) guidance.GroundingFriction
 	NoteCloseoutGroundingReject         func(ctx context.Context, sessionID, code, offenderKey string, draft guidance.CloseoutDraft, unread []jsonshape.Issue) (attempt int, prevKey string)

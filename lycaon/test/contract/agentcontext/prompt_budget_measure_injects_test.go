@@ -147,11 +147,32 @@ func measureCoordinatorInjectBlock(
 			}
 			jobs = append(jobs, job)
 		}
-		surface := "coordinator"
 		if spec.ID == "worker_command_jobs" {
-			surface = "worker"
+			workerReader, err := prompts.DeclaredReader(nil, "implement")
+			contractcheck.FailErr(t, "DeclaredReader worker_command_jobs", err)
+			return inject.RenderCommandJobsBlock(ctx, renderer, workerReader, []string{"process_done"}, "sess-inject-test", jobs, nil, now, "worker")
 		}
-		return inject.RenderCommandJobsBlock(ctx, renderer, "sess-inject-test", jobs, nil, now, surface)
+		fullReader, err := prompts.DeclaredReader(nil, prompts.CoordinatorProfileID)
+		contractcheck.FailErr(t, "DeclaredReader command_jobs", err)
+		direct := inject.RenderCommandJobsBlock(ctx, renderer, fullReader, []string{"process_done"}, "sess-inject-test", jobs, nil, now, "coordinator")
+		floorPlan, err := prompts.CompileSurfacePlan("implement_investigate", 1)
+		contractcheck.FailErr(t, "CompileSurfacePlan command_jobs", err)
+		profiles, err := sandbox.LoadToolProfiles()
+		contractcheck.FailErr(t, "load profiles command_jobs", err)
+		floorReader, err := prompts.NewReader(prompts.ReaderInput{
+			ProfileID: prompts.CoordinatorProfileID,
+			SurfaceID: "implement_investigate",
+			Plan:      floorPlan.Promote("wait"),
+			Profiles:  profiles,
+			RootCount: 1,
+			WebSearch: true,
+		})
+		contractcheck.FailErr(t, "NewReader floor command_jobs", err)
+		deferred := inject.RenderCommandJobsBlock(ctx, renderer, floorReader, []string{"process_done"}, "sess-inject-test", jobs, nil, now, "coordinator")
+		if len(deferred) > len(direct) {
+			return deferred
+		}
+		return direct
 	case "source_changes":
 		// OwnTruncated selects the longer of the two overflow lines.
 		brief := inject.SourceChangeBrief{OwnTruncated: true, OtherFiles: 240, OtherEffects: 999}
@@ -176,7 +197,9 @@ func measureCoordinatorInjectBlock(
 				At:     "14:02 UTC",
 			})
 		}
-		return inject.RenderSourceChangesBlock(ctx, renderer, "sess-inject-test", brief, true)
+		fullReader, err := prompts.DeclaredReader(nil, prompts.CoordinatorProfileID)
+		contractcheck.FailErr(t, "DeclaredReader source_changes", err)
+		return inject.RenderSourceChangesBlock(ctx, renderer, fullReader, "sess-inject-test", brief)
 	case "view_context":
 		long := func(kind string, i int) string {
 			return fmt.Sprintf("@secondary/src/components/project/%s/%02d/ReviewDiffViewLongName.tsx", kind, i)
@@ -192,7 +215,7 @@ func measureCoordinatorInjectBlock(
 			view.Findings = append(view.Findings, api.ViewFinding{RuleID: strings.Repeat("r", 128), Level: api.FindingLevelCritical,
 				Location: &api.ViewLocation{DisplayPath: long("finding", i), Line: 99999}})
 		}
-		return inject.RenderViewContextBlock(ctx, renderer, "sess-inject-test", view, true)
+		return inject.RenderViewContextBlock(ctx, renderer, "sess-inject-test", view)
 	case "implement_spawn":
 		block, err := inject.RenderImplementSpawnInject(
 			ctx, renderer, "sess-inject-test", spawn.AmbientAllowedAgents(), spawn.MaxInFlightTaskWorkers,
@@ -236,17 +259,21 @@ func measureCoordinatorInjectBlock(
 		}}
 		gateCfg, err := feedback.LoadGateFeedbackCatalog()
 		contractcheck.FailErr(t, "LoadGateFeedbackCatalog", err)
+		wfReader, err := prompts.DeclaredReader(nil, prompts.CoordinatorProfileID)
+		contractcheck.FailErr(t, "DeclaredReader active_workflow", err)
 		block, err := inject.RenderActiveWorkflowInject(
-			ctx, renderer, "sess-inject-test",
+			ctx, renderer, wfReader, "sess-inject-test",
 			inject.CoordinatorTurnFrame{RunContext: promptBudgetActiveWorkflowFixture(), Runtime: promptBudgetWorkflowSnapshotFixture()},
 			hintCfg, []string{"WORKFLOW_GATE_UNMET"}, gateCfg,
 		)
 		contractcheck.FailErr(t, "RenderActiveWorkflowInject", err)
-		return largestCatalogPhaseInject(t, renderer, hintCfg, gateCfg, block)
+		return largestCatalogPhaseInject(t, renderer, wfReader, hintCfg, gateCfg, block)
 	case "board_orientation":
 		now := time.Date(2026, 5, 31, 14, 0, 0, 0, time.UTC)
+		fullReader, err := prompts.DeclaredReader(nil, prompts.CoordinatorProfileID)
+		contractcheck.FailErr(t, "DeclaredReader board_orientation", err)
 		block, err := inject.RenderBoardOrientationInject(
-			ctx, renderer, "sess-inject-test", fatLangSnapshot(), packboard.InjectScopeFull, false, true, now,
+			ctx, renderer, fullReader, "sess-inject-test", fatLangSnapshot(), packboard.InjectScopeFull, false, true, now,
 		)
 		contractcheck.FailErr(t, "RenderBoardOrientationInject", err)
 		return block
@@ -258,7 +285,7 @@ func measureCoordinatorInjectBlock(
 
 // Measure live phase-exit shapes as well as the baseline research fixture, so
 // required verdict fields cannot grow outside the measured prompt surface.
-func largestCatalogPhaseInject(t *testing.T, renderer *prompts.InjectRenderer, hints *guidance.HintConfig, gates *feedback.GateFeedbackCatalog, largest string) string {
+func largestCatalogPhaseInject(t *testing.T, renderer *prompts.InjectRenderer, reader prompts.Reader, hints *guidance.HintConfig, gates *feedback.GateFeedbackCatalog, largest string) string {
 	t.Helper()
 	manifests, err := workflowfixture.LoadMergedWorkflowCatalog(t)
 	contractcheck.FailErr(t, "load phase budget catalog", err)
@@ -277,7 +304,7 @@ func largestCatalogPhaseInject(t *testing.T, renderer *prompts.InjectRenderer, h
 				RunContext: api.CoordinatorRunContext{WorkflowID: manifest.ID, CurrentPhase: phase.ID, RunID: "budget-run", RunStatus: "running"},
 				Runtime:    inject.WorkflowRuntimeSnapshot{Phases: rows, PhaseExit: exit},
 			}
-			block, err := inject.RenderActiveWorkflowInject(t.Context(), renderer, "sess-inject-test", frame, hints, nil, gates)
+			block, err := inject.RenderActiveWorkflowInject(t.Context(), renderer, reader, "sess-inject-test", frame, hints, nil, gates)
 			contractcheck.FailErr(t, "render catalog phase budget", err)
 			if len(block) > len(largest) {
 				largest = block

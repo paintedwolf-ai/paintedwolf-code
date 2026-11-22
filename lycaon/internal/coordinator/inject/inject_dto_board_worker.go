@@ -1,6 +1,7 @@
 package inject
 
 import (
+	"fmt"
 	"strconv"
 	"strings"
 	"time"
@@ -8,7 +9,6 @@ import (
 	"github.com/lycaon/lycaon/internal/packboard"
 	"github.com/lycaon/lycaon/internal/pongoplain"
 	"github.com/lycaon/lycaon/internal/prompts"
-	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -78,6 +78,7 @@ type BoardOrientationRootView struct {
 
 // BoardInjectData is the pongo data model for inject/board-orientation.md.
 type BoardInjectData struct {
+	Reader            prompts.Reader
 	PackSentinel      string
 	NowLine           string
 	OmitDelegation    bool
@@ -96,7 +97,7 @@ const (
 )
 
 // BuildBoardInjectData maps snapshot facts into inject DTO fields.
-func BuildBoardInjectData(snap api.BoardSnapshot, scope packboard.InjectScope, omitDelegation, includeScanLegend bool, now time.Time) BoardInjectData {
+func BuildBoardInjectData(reader prompts.Reader, snap api.BoardSnapshot, scope packboard.InjectScope, omitDelegation, includeScanLegend bool, now time.Time) BoardInjectData {
 	if now.IsZero() {
 		now = time.Now().UTC()
 	}
@@ -120,6 +121,9 @@ func BuildBoardInjectData(snap api.BoardSnapshot, scope packboard.InjectScope, o
 		lines = append(lines, BoardLineView{Text: text})
 	}
 	rootCount := 1
+	if reader.Valid() {
+		rootCount = reader.RootCount()
+	}
 	if multiRoot {
 		rootCount = len(snap.OrientationRoots)
 	}
@@ -133,6 +137,7 @@ func BuildBoardInjectData(snap api.BoardSnapshot, scope packboard.InjectScope, o
 		workersOmitted = len(named) - packboard.MaxOrientationWorkers
 	}
 	return BoardInjectData{
+		Reader:            reader,
 		PackSentinel:      packboard.InjectSentinel(scope),
 		NowLine:           nowLine,
 		OmitDelegation:    omitDelegation,
@@ -177,8 +182,11 @@ func boardRootViews(roots []api.BoardOrientationRoot) ([]BoardOrientationRootVie
 	return views, len(roots) - count
 }
 
-// BoardInjectToMap converts the DTO for pongo2 render.
-func BoardInjectToMap(data BoardInjectData) map[string]any {
+// BoardInjectToMap converts the DTO for pongo2 render against its validated Reader.
+func BoardInjectToMap(data BoardInjectData) (map[string]any, error) {
+	if !data.Reader.Valid() {
+		return nil, fmt.Errorf("board inject requires a valid reader")
+	}
 	lines := make([]map[string]any, len(data.Lines))
 	for i, line := range data.Lines {
 		lines[i] = map[string]any{"text": line.Text}
@@ -205,24 +213,7 @@ func BoardInjectToMap(data BoardInjectData) map[string]any {
 		"workers_omitted":     data.WorkersOmitted,
 		"lines":               lines,
 	}
-	profiles, err := sandbox.LoadToolProfiles()
-	if err != nil {
-		return occurrence
-	}
-	reader, err := prompts.NewReader(prompts.ReaderInput{
-		ProfileID: prompts.CoordinatorProfileID,
-		Profiles:  profiles,
-		RootCount: data.RootCount,
-		WebSearch: true,
-	})
-	if err != nil {
-		return occurrence
-	}
-	vars, err := prompts.Vars(reader, occurrence)
-	if err != nil {
-		return occurrence
-	}
-	return vars
+	return prompts.Vars(data.Reader, occurrence)
 }
 
 // BuildWorkerLegInjectData maps worker leg context into inject DTO fields.

@@ -130,7 +130,7 @@ func (s outputSample) window(ctx context.Context, stream, ref, path string, comp
 		}
 		// The capture ended before the stream did: deliver the prefix with the
 		// incomplete notice instead of presenting it as the full stream.
-		notice, err := guidance.RenderCommandOutputOmitted(ctx, formatDecimalCommas(0), formatOmittedSize(0), path, s.lines+1, s.lines+1, s.lines, s.total, complete)
+		notice, err := guidance.RenderCommandOutputOmitted(ctx, true, formatDecimalCommas(0), formatOmittedSize(0), path, s.lines+1, s.lines+1, s.lines, s.total, complete)
 		if err != nil {
 			return "", window, nil, err
 		}
@@ -144,7 +144,7 @@ func (s outputSample) window(ctx context.Context, stream, ref, path string, comp
 	omittedLines := s.lines - countLines(head) - countLines(tail)
 	nextLine := countLines(head) + 1
 	endLine := min(nextLine+149, nextLine+omittedLines-1)
-	notice, err := guidance.RenderCommandOutputOmitted(ctx, formatDecimalCommas(omittedLines), formatOmittedSize(start-int64(headEnd)), path, nextLine, max(nextLine, endLine), s.lines, s.total, complete)
+	notice, err := guidance.RenderCommandOutputOmitted(ctx, true, formatDecimalCommas(omittedLines), formatOmittedSize(start-int64(headEnd)), path, nextLine, max(nextLine, endLine), s.lines, s.total, complete)
 	if err != nil {
 		return "", window, nil, err
 	}

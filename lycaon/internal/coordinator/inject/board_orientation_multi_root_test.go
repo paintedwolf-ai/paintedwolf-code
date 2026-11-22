@@ -8,10 +8,26 @@ import (
 
 	"github.com/lycaon/lycaon/internal/coordinator/inject"
 	"github.com/lycaon/lycaon/internal/packboard"
+	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/internal/prompts/promptstest"
+	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/pkg/api"
 )
+
+func boardReaderForRoots(t *testing.T, rootCount int) prompts.Reader {
+	t.Helper()
+	profiles, err := sandbox.LoadToolProfiles()
+	testutil.FailErr(t, "LoadToolProfiles", err)
+	r, err := prompts.NewReader(prompts.ReaderInput{
+		ProfileID: prompts.CoordinatorProfileID,
+		Profiles:  profiles,
+		RootCount: rootCount,
+		WebSearch: true,
+	})
+	testutil.FailErr(t, "boardReaderForRoots", err)
+	return r
+}
 
 func TestBuildBoardInjectData_MultiRootSections(t *testing.T) {
 	snap := api.BoardSnapshot{
@@ -21,7 +37,7 @@ func TestBuildBoardInjectData_MultiRootSections(t *testing.T) {
 			{Label: "den", Brief: api.RepoBrief{FileCount: 3, Languages: []string{"TypeScript"}}},
 		},
 	}
-	data := inject.BuildBoardInjectData(snap, packboard.InjectScopeFull, false, false, time.Now().UTC())
+	data := inject.BuildBoardInjectData(boardReaderForRoots(t, 2), snap, packboard.InjectScopeFull, false, false, time.Now().UTC())
 	if !data.MultiRoot || data.RootCount != 2 || len(data.OrientationRoots) != 2 {
 		t.Fatalf("data = %+v", data)
 	}
@@ -36,7 +52,7 @@ func TestRenderBoardOrientationInject_MultiRootNamesBothRoots(t *testing.T) {
 			{Label: "den", Brief: api.RepoBrief{FileCount: 3, Languages: []string{"TypeScript"}, Layout: api.RepoLayout{TopLevel: []string{"src/"}}}},
 		},
 	}
-	block, err := inject.RenderBoardOrientationInject(context.Background(), renderer, "sess-inject-test", snap, packboard.InjectScopeFull, false, false, time.Now().UTC())
+	block, err := inject.RenderBoardOrientationInject(context.Background(), renderer, boardReaderForRoots(t, 2), "sess-inject-test", snap, packboard.InjectScopeFull, false, false, time.Now().UTC())
 	testutil.FailErr(t, "RenderBoardOrientationInject", err)
 	for _, want := range []string{"## @lycaon", "## @den", "spans 2 folders", "@<label>/"} {
 		if !strings.Contains(block, want) {
@@ -50,7 +66,7 @@ func TestRenderBoardOrientationInject_SingleRootParityNoHeaders(t *testing.T) {
 	snap := api.BoardSnapshot{
 		Repo: api.RepoBrief{FileCount: 5, Languages: []string{"Go"}},
 	}
-	block, err := inject.RenderBoardOrientationInject(context.Background(), renderer, "sess-inject-test", snap, packboard.InjectScopeFull, false, false, time.Now().UTC())
+	block, err := inject.RenderBoardOrientationInject(context.Background(), renderer, boardReaderForRoots(t, 1), "sess-inject-test", snap, packboard.InjectScopeFull, false, false, time.Now().UTC())
 	testutil.FailErr(t, "RenderBoardOrientationInject", err)
 	if strings.Contains(block, "spans ") || strings.Contains(block, "## @") {
 		t.Fatalf("single-root inject must not include multi-root headers: %q", block)
@@ -67,7 +83,7 @@ func TestRenderBoardOrientationInject_MultiRootBudgetIsDisclosed(t *testing.T) {
 			Brief:     api.RepoBrief{FileCount: 100, Languages: []string{strings.Repeat("x", 40)}},
 		}
 	}
-	block, err := inject.RenderBoardOrientationInject(context.Background(), renderer, "sess-inject-test", api.BoardSnapshot{OrientationRoots: roots}, packboard.InjectScopeFull, false, false, time.Now().UTC())
+	block, err := inject.RenderBoardOrientationInject(context.Background(), renderer, boardReaderForRoots(t, len(roots)), "sess-inject-test", api.BoardSnapshot{OrientationRoots: roots}, packboard.InjectScopeFull, false, false, time.Now().UTC())
 	testutil.FailErr(t, "RenderBoardOrientationInject", err)
 	packStart := strings.Index(block, packboard.PackBoardSentinel)
 	if packStart < 0 {

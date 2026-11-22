@@ -158,7 +158,7 @@ func coordinatorKicksRenderNonEmpty(r *invariants.Run) {
 		}
 		checked++
 		for label, data := range map[string]map[string]any{"every field": full, "no event fields": minimal} {
-			out, err := engine.RenderKick(context.Background(), id, data)
+			out, err := engine.RenderKick(context.Background(), reader, id, data)
 			switch {
 			case err != nil:
 				r.Report("%s with %s: %v", id, label, err)
@@ -224,9 +224,7 @@ func readOnlyProfilesNeverNameMutations(r *invariants.Run) {
 				Profiles: []sandbox.ToolProfile{profile}, RootCount: 1, WebSearch: true,
 			})
 			r.Must(err)
-			data, err := prompts.Vars(reader, KickFixture())
-			r.Must(err)
-			text, err := kicks.RenderKick(context.Background(), id, data)
+			text, err := kicks.RenderKick(context.Background(), reader, id, KickFixture())
 			r.Must(err)
 			reportMention(r, fmt.Sprintf("kick %s on read-only profile %s", id, pid), text)
 		}

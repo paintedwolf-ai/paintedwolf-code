@@ -62,6 +62,7 @@ func ActiveWorkflowRenderStem(ctx context.Context, sessionID string) string {
 func RenderActiveWorkflowInject(
 	ctx context.Context,
 	renderer *prompts.InjectRenderer,
+	reader prompts.Reader,
 	sessionID string,
 	frame CoordinatorTurnFrame,
 	hints *guidance.HintConfig,
@@ -71,6 +72,9 @@ func RenderActiveWorkflowInject(
 	if renderer == nil {
 		return "", fmt.Errorf("inject renderer not configured")
 	}
+	if !reader.Valid() {
+		return "", fmt.Errorf("active-workflow inject requires a valid reader")
+	}
 	snap := frame.Runtime
 	data := BuildActiveWorkflowInjectData(frame)
 	planBody := ""
@@ -78,7 +82,7 @@ func RenderActiveWorkflowInject(
 		planBody = snap.BlueprintBody
 	}
 	data = AttachGateObligations(ctx, data, gateFeedback, frame.RunContext.AdvanceWhenGateMet, planBody)
-	block, err := anchor.RenderInform(ctx, anchor.InjectActiveWorkflow, anchor.MatchContext{Surface: "coordinator", SessionID: sessionID}, renderer, ActiveWorkflowInjectToMap(data, hints, hintCodes))
+	block, err := anchor.RenderInformWithReader(ctx, anchor.InjectActiveWorkflow, anchor.MatchContext{Surface: "coordinator", SessionID: sessionID}, renderer, reader, ActiveWorkflowInjectToMap(data, hints, hintCodes))
 	if err != nil {
 		return "", err
 	}

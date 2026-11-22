@@ -41,8 +41,8 @@ type TurnAssemblyScratch struct {
 	// by the message that opened the turn.
 	SourceBriefBlocks  map[string]string
 	SourceBriefsLoaded bool
-	// SourceBriefsOffered is the surface answer those blocks were rendered with.
-	SourceBriefsOffered bool
+	// SourceBriefsKey is the reader capability signature those blocks were rendered with.
+	SourceBriefsKey string
 }
 
 // sessionStableEntry caches compiled stable blocks across turns.
