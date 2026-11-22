@@ -215,17 +215,33 @@ func TestAskAndReadOnlyProgramFeedbackAlternativesAndAttribution(t *testing.T) {
 	rawNoFindForm, err := f.Call(t, t.Context(), "find src -name '*.tmp' -delete")
 	testutil.FailErr(t, "find -delete with find program unreachable", err)
 	outNoFindForm := decodeOutcome(t, rawNoFindForm)
-	if outNoFindForm.Refusal == nil || strings.Contains(outNoFindForm.Refusal.Feedback, "Run `find src -name '*.tmp'`") || outNoFindForm.Refusal.Details["code_instead"] != nil {
+	if outNoFindForm.Refusal == nil || strings.Contains(outNoFindForm.Refusal.Feedback, "Run `find src -name '*.tmp'`") || strings.Contains(outNoFindForm.Refusal.Feedback, "Available read-only forms") || outNoFindForm.Refusal.Details["code_instead"] != nil {
 		t.Fatalf("unreachable form still recommended in feedback:\n%s", outNoFindForm.Refusal.Feedback)
 	}
-	if !strings.Contains(outNoFindForm.Refusal.Feedback, "Cause: Ask mode permits only read-only inspection and blocks `mutation`.") {
-		t.Fatalf("missing precise cause when form removed:\n%s", outNoFindForm.Refusal.Feedback)
+	if !strings.Contains(outNoFindForm.Refusal.Feedback, "Cause: Ask mode permits only read-only inspection and blocks `mutation`.") || !strings.Contains(outNoFindForm.Refusal.Feedback, "Fix: Do not retry this operation on the active read-only surface.") {
+		t.Fatalf("missing precise cause or grounded fallback when form removed:\n%s", outNoFindForm.Refusal.Feedback)
 	}
 
-	// 2b. Recipient reach matrix: loadable (with request_tools), absent, and unknown reach.
+	// 2a. Offered command lacking program evidence (TurnPrograms == nil) also suppresses candidate and unverified form availability.
+	f.Context = func(_ string, tc *tools.ToolContext) {
+		tc.Turn.TurnOfferedToolNames = []string{"command"}
+		tc.Turn.TurnPrograms = nil
+	}
+	rawNoProgEvidence, err := f.Call(t, t.Context(), "find src -name '*.tmp' -delete")
+	testutil.FailErr(t, "find -delete without program evidence", err)
+	outNoProgEvidence := decodeOutcome(t, rawNoProgEvidence)
+	if outNoProgEvidence.Refusal == nil || strings.Contains(outNoProgEvidence.Refusal.Feedback, "Run `find src -name '*.tmp'`") || strings.Contains(outNoProgEvidence.Refusal.Feedback, "Available read-only forms") || outNoProgEvidence.Refusal.Details["code_instead"] != nil {
+		t.Fatalf("missing program evidence still recommended form:\n%+v", outNoProgEvidence.Refusal)
+	}
+	if !strings.Contains(outNoProgEvidence.Refusal.Feedback, "Fix: Do not retry this operation on the active read-only surface.") {
+		t.Fatalf("missing grounded fallback without program evidence:\n%s", outNoProgEvidence.Refusal.Feedback)
+	}
+
+	// 2b. Recipient reach matrix: loadable (with request_tools + proven program reach vs denied/missing program reach), absent, and unknown reach.
 	f.Context = func(_ string, tc *tools.ToolContext) {
 		tc.Turn.TurnOfferedToolNames = []string{"request_tools"}
 		tc.Turn.TurnToolPlan = toolsurface.Compile([]string{"request_tools"}, []string{"command"})
+		tc.Turn.TurnPrograms = func(name string) bool { return name == "find" }
 	}
 	rawLoadable, err := f.Call(t, t.Context(), "find src -name '*.tmp' -delete")
 	testutil.FailErr(t, "find -delete with loadable command", err)
@@ -235,14 +251,29 @@ func TestAskAndReadOnlyProgramFeedbackAlternativesAndAttribution(t *testing.T) {
 	}
 
 	f.Context = func(_ string, tc *tools.ToolContext) {
+		tc.Turn.TurnOfferedToolNames = []string{"request_tools"}
+		tc.Turn.TurnToolPlan = toolsurface.Compile([]string{"request_tools"}, []string{"command"})
+		tc.Turn.TurnPrograms = nil
+	}
+	rawLoadableNoProg, err := f.Call(t, t.Context(), "find src -name '*.tmp' -delete")
+	testutil.FailErr(t, "find -delete with loadable command but no program evidence", err)
+	outLoadableNoProg := decodeOutcome(t, rawLoadableNoProg)
+	if outLoadableNoProg.Refusal == nil || strings.Contains(outLoadableNoProg.Refusal.Feedback, "Load `command`") || outLoadableNoProg.Refusal.Details["code_instead"] != nil {
+		t.Fatalf("loadable command without program evidence still recommended candidate:\n%+v", outLoadableNoProg.Refusal)
+	}
+
+	f.Context = func(_ string, tc *tools.ToolContext) {
 		tc.Turn.TurnOfferedToolNames = []string{"task"}
 		tc.Turn.TurnToolPlan = toolsurface.Compile([]string{"task"}, nil)
 	}
 	rawAbsent, err := f.Call(t, t.Context(), "find src -name '*.tmp' -delete")
 	testutil.FailErr(t, "find -delete with absent command", err)
 	outAbsent := decodeOutcome(t, rawAbsent)
-	if outAbsent.Refusal == nil || strings.Contains(outAbsent.Refusal.Feedback, "Run `find src -name '*.tmp'`") || strings.Contains(outAbsent.Refusal.Feedback, "Load `command`") || outAbsent.Refusal.Details["code_instead"] != nil {
-		t.Fatalf("absent command still recommended executable remedy:\n%+v", outAbsent.Refusal)
+	if outAbsent.Refusal == nil || strings.Contains(outAbsent.Refusal.Feedback, "Run `find src -name '*.tmp'`") || strings.Contains(outAbsent.Refusal.Feedback, "Load `command`") || strings.Contains(outAbsent.Refusal.Feedback, "Available read-only forms") || outAbsent.Refusal.Details["code_instead"] != nil {
+		t.Fatalf("absent command still recommended executable remedy or surface availability:\n%+v", outAbsent.Refusal)
+	}
+	if !strings.Contains(outAbsent.Refusal.Feedback, "Fix: Do not retry this operation on the active read-only surface.") {
+		t.Fatalf("absent command missing complete grounded fallback text:\n%s", outAbsent.Refusal.Feedback)
 	}
 
 	f.Context = nil
@@ -250,11 +281,11 @@ func TestAskAndReadOnlyProgramFeedbackAlternativesAndAttribution(t *testing.T) {
 	rawUnknownReach, err := f.Call(t, t.Context(), "find src -name '*.tmp' -delete")
 	testutil.FailErr(t, "find -delete with unknown reach", err)
 	outUnknownReach := decodeOutcome(t, rawUnknownReach)
-	if outUnknownReach.Refusal == nil || strings.Contains(outUnknownReach.Refusal.Feedback, "Run `find src -name '*.tmp'`") || strings.Contains(outUnknownReach.Refusal.Feedback, "Load `command`") || outUnknownReach.Refusal.Details["code_instead"] != nil || outUnknownReach.Refusal.Details["can_command"] != nil {
-		t.Fatalf("unknown reach still recommended executable remedy or invented can_command:\n%+v", outUnknownReach.Refusal)
+	if outUnknownReach.Refusal == nil || strings.Contains(outUnknownReach.Refusal.Feedback, "Run `find src -name '*.tmp'`") || strings.Contains(outUnknownReach.Refusal.Feedback, "Load `command`") || strings.Contains(outUnknownReach.Refusal.Feedback, "Available read-only forms") || outUnknownReach.Refusal.Details["code_instead"] != nil || outUnknownReach.Refusal.Details["can_command"] != nil {
+		t.Fatalf("unknown reach still recommended executable remedy or invented availability:\n%+v", outUnknownReach.Refusal)
 	}
-	if !strings.Contains(outUnknownReach.Refusal.Feedback, "Cause: Ask mode permits only read-only inspection and blocks `mutation`.") {
-		t.Fatalf("unknown reach lost precise cause:\n%s", outUnknownReach.Refusal.Feedback)
+	if !strings.Contains(outUnknownReach.Refusal.Feedback, "Cause: Ask mode permits only read-only inspection and blocks `mutation`.") || !strings.Contains(outUnknownReach.Refusal.Feedback, "Fix: Do not retry this operation on the active read-only surface.") {
+		t.Fatalf("unknown reach lost precise cause or complete grounded fallback:\n%s", outUnknownReach.Refusal.Feedback)
 	}
 	f.noReach = false
 
@@ -297,11 +328,29 @@ func TestAskAndReadOnlyProgramFeedbackAlternativesAndAttribution(t *testing.T) {
 	rawMkdir, err := f.Call(t, t.Context(), "mkdir src/newdir")
 	testutil.FailErr(t, "mkdir in Ask", err)
 	outMkdir := decodeOutcome(t, rawMkdir)
-	if outMkdir.Refusal == nil || outMkdir.Refusal.Details["code_instead"] != nil || !strings.Contains(outMkdir.Refusal.Feedback, "Fix: This operation has no read-only form on the active surface.") {
+	if outMkdir.Refusal == nil || outMkdir.Refusal.Details["code_instead"] != nil || !strings.Contains(outMkdir.Refusal.Feedback, "Fix: Do not retry this operation on the active read-only surface.") {
 		t.Fatalf("mkdir feedback unexpectedly proposed a read form:\n%s", outMkdir.Refusal.Feedback)
 	}
 
-	// 4. Partially completed multi-statement program with retained results.
+	// 4. Partially completed multi-statement program with retained results, including a program-local directory change (cd src) with distinguishable targets.
+	testutil.FailErr(t, "write root notes.txt", os.WriteFile(filepath.Join(f.Dir, "notes.txt"), []byte("root-only\n"), 0o644))
+	rawCdSed, err := f.Call(t, t.Context(), "cd src && sed -i 's/beta/delta/' notes.txt")
+	testutil.FailErr(t, "cd src && sed -i notes.txt in Ask", err)
+	outCdSed := decodeOutcome(t, rawCdSed)
+	if outCdSed.Refusal == nil || !strings.Contains(outCdSed.Refusal.Feedback, "Fix: Run `sed s/beta/delta/ src/notes.txt` to preview the transformed output on stdout without modifying the file in place.") {
+		t.Fatalf("cd src && sed -i feedback did not preserve target identity for fresh call:\n%+v", outCdSed.Refusal)
+	}
+	cdSedSuggested, _ := outCdSed.Refusal.Details["code_instead"].(string)
+	if cdSedSuggested != "sed s/beta/delta/ src/notes.txt" {
+		t.Fatalf("cd src && sed -i code_instead = %q, want %q", cdSedSuggested, "sed s/beta/delta/ src/notes.txt")
+	}
+	rawCdSedFresh, err := f.Call(t, t.Context(), cdSedSuggested)
+	testutil.FailErr(t, "run recommended fresh sed call from initial directory", err)
+	outCdSedFresh := decodeOutcome(t, rawCdSedFresh)
+	if outCdSedFresh.Status != 0 || outCdSedFresh.Refusal != nil || !strings.Contains(outCdSedFresh.Stdout, "alpha\ndelta\ngamma\n") || strings.Contains(outCdSedFresh.Stdout, "root-only") {
+		t.Fatalf("fresh sed call after cd inspected wrong target:\n%+v", outCdSedFresh)
+	}
+
 	rawPartial, err := f.Call(t, t.Context(), "cat src/notes.txt && find src -name '*.tmp' -delete")
 	testutil.FailErr(t, "partial multi-statement program in Ask", err)
 	outPartial := decodeOutcome(t, rawPartial)

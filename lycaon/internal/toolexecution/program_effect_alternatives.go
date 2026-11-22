@@ -59,13 +59,16 @@ func enrichNativeEffectRejection(ctx context.Context, surface ProgramSurface, ef
 		reach = tools.TurnReach(tc)
 	}
 	if !reach.Known() {
+		delete(rejected.Data, "expected_form")
 		return
 	}
 	switch reach.Status(toolreach.ProgramTool) {
 	case toolreach.Absent:
+		delete(rejected.Data, "expected_form")
 		return
 	case toolreach.Loadable:
 		if reach.Status(toolreach.LoaderTool) != toolreach.Callable {
+			delete(rejected.Data, "expected_form")
 			return
 		}
 		rejected.Data["tool_loadable"] = true
@@ -78,6 +81,10 @@ func enrichNativeEffectRejection(ctx context.Context, surface ProgramSurface, ef
 	if codeInstead != "" && nextAction != "" {
 		rejected.Data["code_instead"] = codeInstead
 		rejected.Data["next_action"] = nextAction
+		return
+	}
+	if cmd, _ := rejected.Data["command"].(string); cmd != "" && !reach.Program(cmd) {
+		delete(rejected.Data, "expected_form")
 	}
 }
 
@@ -100,15 +107,17 @@ func buildValidatedReadOnlyAlternative(ctx context.Context, surface ProgramSurfa
 			return "", ""
 		}
 	}
-	candidateBound, candidateReview, ok := effect.ValidateCandidate(ctx, candidateArgv)
-	if !ok {
+	candidateBound, candidateReview, freshArgv, ok := effect.ValidateCandidate(ctx, candidateArgv)
+	if !ok || len(freshArgv) == 0 {
 		return "", ""
+	}
+	for _, word := range freshArgv {
+		if word == "" || strings.ContainsAny(word, "\n\r\x00") || secretmatch.ContainsReferenceToken(word) || secretmatch.ContainsMalformedReferenceToken(word) {
+			return "", ""
+		}
 	}
 	candidateCmd := candidateBound.Command()
-	if candidateCmd == "" {
-		return "", ""
-	}
-	if reach.Known() && tc.Turn.TurnPrograms != nil && !reach.Program(candidateCmd) {
+	if candidateCmd == "" || !reach.Program(candidateCmd) {
 		return "", ""
 	}
 	readOnly, _ := toolcontract.NewCommandEffects(toolcontract.CommandReadOnly)
@@ -121,7 +130,7 @@ func buildValidatedReadOnlyAlternative(ctx context.Context, surface ProgramSurfa
 	if !candidateTargetsReadable(ctx, candidateBound.Invocation(), candidateReview, tc) {
 		return "", ""
 	}
-	return toolreach.QuoteProgram(candidateArgv), nextAction
+	return toolreach.QuoteProgram(freshArgv), nextAction
 }
 
 func candidateTargetsReadable(ctx context.Context, inv toolcontract.OperationInvocation, review commandprogram.ArgvReview, tc tools.ToolContext) bool {

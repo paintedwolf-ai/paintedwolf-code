@@ -107,6 +107,7 @@ func newAskComposedFixture(t *testing.T) *askComposedFixture {
 		tc.Source.AskMode, tc.Source.ReadOnly = af.askMode, af.askMode
 		if !af.noReach && len(tc.Turn.TurnOfferedToolNames) == 0 && !tc.Turn.TurnToolPlan.Compiled() && tc.Turn.TurnPrograms == nil {
 			tc.Turn.TurnOfferedToolNames = []string{"command"}
+			tc.Turn.TurnPrograms = func(string) bool { return true }
 		}
 	}
 	return af

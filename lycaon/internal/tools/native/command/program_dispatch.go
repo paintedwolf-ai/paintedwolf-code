@@ -490,7 +490,7 @@ func (d *ProgramDispatcher) invokeNative(ctx context.Context, spec toolcontract.
 		Operation: bound, Streams: runStreams, Arguments: inputs, Argv: &review, Inspection: d.run.capture,
 		CheckOutputs: request.CheckOutputAdmission,
 		Stage:        toolcontract.ExecutionStage{ExecutionID: request.Invocation.Identity.ExecutionID, OperationID: operationDef.Facts().Identity, Argv: request.Argv.Values()},
-		ValidateCandidate: func(ctx context.Context, argv []string) (toolcontract.BoundOperation, commandprogram.ArgvReview, bool) {
+		ValidateCandidate: func(ctx context.Context, argv []string) (toolcontract.BoundOperation, commandprogram.ArgvReview, []string, bool) {
 			return d.validateCandidateAlternative(ctx, request, argv)
 		},
 		PrepareReviewed: func(ctx context.Context, _ map[string]any, admitted tools.ToolContext) (toolexecution.PreparedNativeEffect, error) {
@@ -605,8 +605,82 @@ func (d *ProgramDispatcher) invokeNative(ctx context.Context, spec toolcontract.
 	return native.Producer, joinSettle(runErr, d.settleWith(ctx, child, toolcontract.ProgramChildSettlement{Result: native.Producer, OwnerInvoked: native.OwnerInvoked || marker.OwnerStartRecorded, HostStopCode: native.HostStopCode, Conflict: revisionConflict(runErr)}))
 }
 
-func (d *ProgramDispatcher) validateCandidateAlternative(ctx context.Context, baseReq commandprogram.OperationRequest, argv []string) (toolcontract.BoundOperation, commandprogram.ArgvReview, bool) {
-	if len(argv) == 0 || argv[0] == "" || d.paths == nil {
+func (d *ProgramDispatcher) validateCandidateAlternative(ctx context.Context, baseReq commandprogram.OperationRequest, argv []string) (toolcontract.BoundOperation, commandprogram.ArgvReview, []string, bool) {
+	bound, review, ok := d.validateCandidateInFrame(ctx, d.paths, baseReq, argv)
+	if !ok {
+		return toolcontract.BoundOperation{}, commandprogram.ArgvReview{}, nil, false
+	}
+	freshPaths := d.paths.Fork()
+	var cdOut strings.Builder
+	if cdRes, cdErr := freshPaths.Invoke(ctx, commandprogram.OperationRequest{OperationID: "cd", Argv: valueFields([]string{"cd"})}, commandprogram.Streams{Output: &cdOut, Error: &cdOut}); cdErr != nil || cdRes.Status != 0 {
+		return toolcontract.BoundOperation{}, commandprogram.ArgvReview{}, nil, false
+	}
+	if filepath.Clean(d.paths.Cwd().Abs) == filepath.Clean(freshPaths.Cwd().Abs) {
+		return bound, review, argv, true
+	}
+	rewrittenArgv, ok := d.rewriteCandidateForFreshFrame(freshPaths, argv, review)
+	if !ok {
+		return toolcontract.BoundOperation{}, commandprogram.ArgvReview{}, nil, false
+	}
+	freshBound, freshReview, freshOK := d.validateCandidateInFrame(ctx, freshPaths, baseReq, rewrittenArgv)
+	if !freshOK || !slices.Equal(freshReview.PathTargets, review.PathTargets) {
+		return toolcontract.BoundOperation{}, commandprogram.ArgvReview{}, nil, false
+	}
+	return freshBound, freshReview, rewrittenArgv, true
+}
+
+func (d *ProgramDispatcher) rewriteCandidateForFreshFrame(freshPaths *projectpaths.ProgramPaths, argv []string, review commandprogram.ArgvReview) ([]string, bool) {
+	if len(review.PathTargets) == 0 || d.paths == nil || freshPaths == nil {
+		return nil, false
+	}
+	cwdAbs := d.paths.Cwd().Abs
+	freshRootAbs := freshPaths.Cwd().Abs
+	scratchDir := d.run.tc.Host.SessionScratchDir
+	rewritten := slices.Clone(argv)
+	for _, target := range review.PathTargets {
+		if target.Path == "" || target.Write || !filepath.IsAbs(target.Path) {
+			return nil, false
+		}
+		freshSpelling := target.Path
+		if rel, err := filepath.Rel(freshRootAbs, target.Path); err == nil && rel != "." && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+			freshSpelling = filepath.ToSlash(rel)
+		}
+		matched := false
+		for i := 1; i < len(rewritten); i++ {
+			resolvedWord := resolveCandidatePathWord(cwdAbs, scratchDir, rewritten[i])
+			if filepath.Clean(resolvedWord) == filepath.Clean(target.Path) {
+				rewritten[i] = freshSpelling
+				matched = true
+				break
+			}
+		}
+		if !matched {
+			return nil, false
+		}
+	}
+	return rewritten, true
+}
+
+func resolveCandidatePathWord(cwd, scratch, word string) string {
+	if word == "" {
+		return ""
+	}
+	if word == "@scratch" || strings.HasPrefix(word, "@scratch/") {
+		rel := strings.TrimPrefix(strings.TrimPrefix(word, "@scratch"), "/")
+		clean := filepath.Clean(rel)
+		if scratch != "" && clean != ".." && !strings.HasPrefix(clean, ".."+string(filepath.Separator)) {
+			return filepath.Join(scratch, clean)
+		}
+		return word
+	}
+	if filepath.IsAbs(word) {
+		return filepath.Clean(word)
+	}
+	return filepath.Clean(filepath.Join(cwd, filepath.FromSlash(word)))
+}
+
+func (d *ProgramDispatcher) validateCandidateInFrame(ctx context.Context, paths *projectpaths.ProgramPaths, baseReq commandprogram.OperationRequest, argv []string) (toolcontract.BoundOperation, commandprogram.ArgvReview, bool) {
+	if len(argv) == 0 || argv[0] == "" || paths == nil {
 		return toolcontract.BoundOperation{}, commandprogram.ArgvReview{}, false
 	}
 	spec, native := d.run.commands[argv[0]]
@@ -617,12 +691,15 @@ func (d *ProgramDispatcher) validateCandidateAlternative(ctx context.Context, ba
 	if operation.Prepare == nil {
 		return toolcontract.BoundOperation{}, commandprogram.ArgvReview{}, false
 	}
+	frameDispatch := *d
+	frameDispatch.paths = paths
 	fields := valueFields(argv)
 	candidateReq := baseReq
 	candidateReq.OperationID = spec.Name
 	candidateReq.Argv = fields
 	candidateReq.EffectMode = ""
 	candidateReq.StreamPreparation = nil
+	candidateReq.Invocation.Scope.Directory = paths.Cwd().Abs
 	if (spec.Name == "git" || spec.Owner == "git") && len(d.run.baseEnv) > 0 && len(candidateReq.Environment) > 0 {
 		var explicit []string
 		for _, entry := range candidateReq.Environment {
@@ -632,7 +709,7 @@ func (d *ProgramDispatcher) validateCandidateAlternative(ctx context.Context, ba
 		}
 		candidateReq.Environment = explicit
 	}
-	prepared, err := operation.Prepare(ctx, d.paths, d, candidateReq)
+	prepared, err := operation.Prepare(ctx, paths, &frameDispatch, candidateReq)
 	if err != nil {
 		return toolcontract.BoundOperation{}, commandprogram.ArgvReview{}, false
 	}
@@ -659,13 +736,13 @@ func (d *ProgramDispatcher) validateCandidateAlternative(ctx context.Context, ba
 		if target.Path == "" || target.Write {
 			return toolcontract.BoundOperation{}, commandprogram.ArgvReview{}, false
 		}
-		boundPath, bindErr := d.paths.Bind(ctx, target.Path, false)
+		boundPath, bindErr := paths.Bind(ctx, target.Path, false)
 		if bindErr != nil || boundPath.Null {
 			return toolcontract.BoundOperation{}, commandprogram.ArgvReview{}, false
 		}
 	}
-	prepared.Review.PathTargets = absolutePathTargets(d.paths.Cwd().Abs, d.run.tc.Host.SessionScratchDir, prepared.Review.PathTargets)
-	if err := d.checkPreparedPolicy(ctx, d.run.tc, spec, mode, candidateReq, d.paths.Cwd(), prepared.Review); err != nil {
+	prepared.Review.PathTargets = absolutePathTargets(paths.Cwd().Abs, d.run.tc.Host.SessionScratchDir, prepared.Review.PathTargets)
+	if err := frameDispatch.checkPreparedPolicy(ctx, d.run.tc, spec, mode, candidateReq, paths.Cwd(), prepared.Review); err != nil {
 		return toolcontract.BoundOperation{}, commandprogram.ArgvReview{}, false
 	}
 	tool := prepared.Tool
@@ -701,7 +778,7 @@ func (d *ProgramDispatcher) validateCandidateAlternative(ctx context.Context, ba
 			return toolcontract.BoundOperation{}, commandprogram.ArgvReview{}, false
 		}
 	}
-	bound, err := toolcontract.BindOperation(operationDef, candidateReq.Invocation, spec.Name, mode, d.childEffectSet(ctx, spec, mode, candidateReq))
+	bound, err := toolcontract.BindOperation(operationDef, candidateReq.Invocation, spec.Name, mode, frameDispatch.childEffectSet(ctx, spec, mode, candidateReq))
 	if err != nil {
 		return toolcontract.BoundOperation{}, commandprogram.ArgvReview{}, false
 	}
