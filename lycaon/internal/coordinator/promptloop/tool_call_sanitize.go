@@ -110,7 +110,7 @@ func offeredToolNames(metas []tools.ToolMeta) []string {
 
 // requestReach is this turn's frozen request.
 func (st *promptLoopTurnState) requestReach() toolreach.Request {
-	return toolreach.Freeze(st.offeredToolNames, st.turnToolPlan).WithPrograms(st.turnPrograms)
+	return toolreach.Freeze(st.offeredToolNames, st.turnToolPlan).WithPrograms(st.turnPrograms).WithSchemas(st.offeredToolSchemas)
 }
 
 // deferredToolNames are the tools the frozen plan can load onto a later request.

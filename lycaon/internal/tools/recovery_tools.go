@@ -56,7 +56,7 @@ func RegisterRecoveryFacts(ctx context.Context, gc *oar.GuardContext) {
 		if target.ObservationData == nil {
 			target.ObservationData = map[string]any{}
 		}
-		target.ObservationData["command_external_reachable"] = request.Known() && request.Program("external")
+		target.ObservationData["command_external_reachable"] = request.Known() && request.ProgramMode("external", "dispatch")
 		return nil
 	})
 	sessCtx := curationctx.SessionFrom(ctx)
@@ -66,6 +66,15 @@ func RegisterRecoveryFacts(ctx context.Context, gc *oar.GuardContext) {
 		}
 		askMode := target.Session.SessionMode == "ask" || sessCtx.Mode == "ask"
 		target.ObservationData["ask_user_secret_allowed"] = !askMode && request.AcceptsEnumValue("ask_user", "response_type", "secret")
+		return nil
+	})
+	gc.RegisterProvider("paintedwolf.ask_user_loadable_without_schema", func(target *oar.GuardContext) error {
+		if target.ObservationData == nil {
+			target.ObservationData = map[string]any{}
+		}
+		askMode := target.Session.SessionMode == "ask" || sessCtx.Mode == "ask"
+		_, hasSchema := request.ToolSchema("ask_user")
+		target.ObservationData["ask_user_loadable_without_schema"] = !askMode && request.Status("ask_user") == toolreach.Loadable && !hasSchema
 		return nil
 	})
 	registerCommandFormRecoveryFacts(gc, request)

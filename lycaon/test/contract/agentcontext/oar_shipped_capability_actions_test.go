@@ -29,7 +29,7 @@ var (
 		{"replace-lines", regexp.MustCompile("`replace-lines\\b")},
 		{"tee", regexp.MustCompile("`tee\\s+--syntax-override-reason\\b")},
 		{"unzip", regexp.MustCompile("`unzip\\s+-p`")},
-		{"tar", regexp.MustCompile("`tar\\s+-x\\b")},
+		{"tar", regexp.MustCompile("`tar\\s+-[tx]\\b")},
 		{"git config", regexp.MustCompile("`git\\s+config\\b")},
 		{"find", regexp.MustCompile("\\bretry\\s+`?find`?\\s+in\\s+command\\b")},
 		{"repo-map", regexp.MustCompile("`repo-map\\b")},
