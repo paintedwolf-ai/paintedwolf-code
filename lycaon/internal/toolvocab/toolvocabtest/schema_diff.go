@@ -218,7 +218,7 @@ func DiffSchemaProjections(base *toolschema.Config, snapshots []ProjectedSchemaS
 		if !ok {
 			continue
 		}
-		baseProj := tools.ProjectProviderToolMeta(tools.ToolMeta{Name: toolName, ArgsSchema: meta.ArgsSchema}).ArgsSchema
+		baseProj := toolschema.ProjectArgsSchema(meta.ArgsSchema)
 		idx.baseSchemas[toolName] = baseProj
 		basePaths := SchemaPropertyPaths(baseProj)
 		for _, p := range basePaths {
@@ -811,7 +811,12 @@ func ResolveWorkerAuthorityForSession(
 	if err != nil {
 		return ActorAuthority{}, err
 	}
-	progReach, err := exec.Metadata.ProgramReach(ctx, platform.ToolFilter{ProfileID: target.ToolProfile, ProjectRootCount: rc})
+	filter := platform.ToolFilter{ProfileID: target.ToolProfile, ProjectRootCount: rc}
+	progReach, err := exec.Metadata.ProgramReach(ctx, filter)
+	if err != nil {
+		return ActorAuthority{}, err
+	}
+	progTable, err := exec.Metadata.ProgramTable(ctx, filter)
 	if err != nil {
 		return ActorAuthority{}, err
 	}
@@ -830,7 +835,17 @@ func ResolveWorkerAuthorityForSession(
 	if err != nil {
 		return ActorAuthority{}, err
 	}
-	return AuthorityFromReaderAndMetas(reader, progReach, metas), nil
+	auth := AuthorityFromReaderAndMetas(reader, progReach, metas)
+	auth.ProgramTable = progTable
+	auth.PostLoadPrograms = progTable
+	for _, p := range narrowed {
+		if p.ID == target.ToolProfile {
+			auth.WaitConditionsKnown = true
+			auth.WaitConditions = slices.Clone(p.WaitConditions)
+			break
+		}
+	}
+	return auth, nil
 }
 
 func buildCatalogToolRegistry(eff *extpacks.EffectiveCatalog) (*tools.DefaultRegistry, error) {
