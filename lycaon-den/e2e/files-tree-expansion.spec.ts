@@ -261,7 +261,8 @@ test("expands a generated repository beyond the directory and child cache limits
     await capture.stop();
     expect(frames.length).toBeGreaterThan(0);
     expect(frames.every(frame => frame.rows <= 200 && frame.bytes <= 256 * 1024)).toBe(true);
-    // Row reads follow the reading done (two sweeps of 240 and 360 scrolled frames) and the projection revisions the host published.
+    // Row reads follow the reading done (two sweeps of 240 and 360 scrolled frames)
+    // and the projection revisions the host published.
     const scrolledFrames = 240 + 360;
     const revisions = new Set(frames.map(frame => frame.revision)).size;
     expect(capture.requests(), JSON.stringify({ scrolledFrames, revisions })).toBeLessThan(64 + scrolledFrames + 8 * revisions);
