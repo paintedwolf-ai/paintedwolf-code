@@ -9,19 +9,10 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/lycaon/lycaon/internal/agentdef"
-	"github.com/lycaon/lycaon/internal/coordinator/inject"
-	"github.com/lycaon/lycaon/internal/coordinator/promptloop"
 	"github.com/lycaon/lycaon/internal/evidence"
-	"github.com/lycaon/lycaon/internal/extpacks"
-	"github.com/lycaon/lycaon/internal/platform"
 	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/internal/sandbox"
-	sessionprofiles "github.com/lycaon/lycaon/internal/session/profiles"
 	"github.com/lycaon/lycaon/internal/toolcontract"
-	"github.com/lycaon/lycaon/internal/toolexecution"
-	"github.com/lycaon/lycaon/internal/toolpolicy"
-	"github.com/lycaon/lycaon/internal/toolprofiles"
 	"github.com/lycaon/lycaon/internal/toolreach"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/toolvocab"
@@ -146,11 +137,15 @@ type SubjectViolation struct {
 }
 
 var (
-	prohibitionClauseRe = regexp.MustCompile(`(?i)(?:^\s*(?:do\s+not|never)\b|\b(?:do\s+not|never)\s+(?:call|run|use|pass|set|assign|mint|combine|invoke)\b|\bis\s+not\s+(?:available|offered|permitted|allowed)\b|\bare\s+(?:not\s+available|not\s+offered|refused|forbidden)\b|\bwithout\s+` + "`?[a-z_]+" + `|\bcannot\s+(?:call|run|use|allow)\b)`)
 	writePromiseProseRe = regexp.MustCompile(`(?i)\b(?:product\s+edits\s+only|scope\.mode\s*[:=]?\s*write|staged\s+command\s+redirect|apply\s+the\s+change\s+in\s+chunks|redo\s+the\s+change\s+in\s+chunks|create\s+or\s+edit\s+files|writes?\s+project\s+files)\b`)
 	snakeWordRe         = regexp.MustCompile(`\b[a-z][a-z0-9]*(?:_[a-z0-9]+)+\b`)
-	bareToolWordRe      = regexp.MustCompile("(?i)`([a-z][a-z0-9_-]*)`")
 	chainSplitRe        = regexp.MustCompile(`\s*(?:&&|\|\||[|;])\s*`)
+	preLoadTargetRe     = regexp.MustCompile("(?i)\\b(?:load|request|unlock|enable)\\s+(?:tool\\s+)?(?:\\*\\*)?`([a-z][a-z0-9_]*)`(?:\\*\\*)?\\s+(?:with|via|through|using|from|by\\s+calling)\\s+(?:\\*\\*)?`?$")
+	preLoadVerbRe       = regexp.MustCompile(`(?i)\b(?:load|request|unlock|enable)\s+(?:tool\s+)?$`)
+	preLoadPrepRe       = regexp.MustCompile(`(?i)^\s+(?:via|with|through|using|from|by\s+calling)\s+$`)
+	afterLoaderPrepRe   = regexp.MustCompile(`(?i)^\s+(?:after|once\s+loaded\s+via|following)\s+(?:calling\s+)?$`)
+	postLoadSeqCueRe    = regexp.MustCompile(`(?i)(?:\bbefore\b|\bthen\b|\bfirst\b|\bafter\b|\bonce\b|\bto\s+[a-z]+)`)
+	unseqConjRe         = regexp.MustCompile(`(?i),\s*and\s+(?:run|use|call|invoke|execute|apply)\b`)
 	gitMutSubcommands   = map[string]bool{
 		"add": true, "commit": true, "restore": true, "reset": true, "checkout": true,
 		"merge": true, "rebase": true, "cherry-pick": true, "tag": true, "stash": true,
@@ -177,7 +172,7 @@ func EvaluateClaimBlock(evalCtx ClaimEvaluationContext, block ClaimBlock) []Subj
 	case SubjectKindHistoricalObservation:
 		return evaluateHistoricalBlock(vocab, block)
 	case SubjectKindSelfRequestable:
-		return evaluateRequestableClause(cat, vocab, evalCtx.Self, block.Label, block.Subject, block.Text, 1)
+		return evaluateRequestableBlock(cat, evalCtx.Prunable, vocab, evalCtx.Self, block)
 	case SubjectKindNamedAgent:
 		return evaluateNamedAgentBlock(cat, evalCtx, vocab, block)
 	case SubjectKindFollowupLeg:
@@ -243,35 +238,68 @@ func evaluateHistoricalBlock(vocab *BacktickVocab, block ClaimBlock) []SubjectVi
 	return out
 }
 
-func evaluateRequestableClause(
+type loadBinding struct {
+	callStart int
+	callEnd   int
+	target    string
+}
+
+func evaluateRequestableBlock(
 	cat *toolvocab.Catalog,
+	idx *PrunableSchemaIndex,
 	vocab *BacktickVocab,
 	self ActorAuthority,
-	label string,
-	subj ClaimSubject,
-	text string,
-	baseLine int,
+	block ClaimBlock,
 ) []SubjectViolation {
 	offeredSet := stringSliceSet(self.Reader.Offered())
 	if !offeredSet[toolreach.LoaderTool] {
 		return []SubjectViolation{{
-			Label: label, Subject: subj, Claim: toolreach.LoaderTool, Line: baseLine,
+			Label: block.Label, Subject: block.Subject, Claim: toolreach.LoaderTool, Line: 1,
 			Reason: "request_tools discovery clause rendered when request_tools is not offered",
 		}}
 	}
-	reqSet := stringSliceSet(self.Reader.Requestable())
-	postHeld := buildPostLoadHeld(self.Reader)
+	if len(self.Reader.Requestable()) == 0 {
+		return []SubjectViolation{{
+			Label: block.Label, Subject: block.Subject, Claim: toolreach.LoaderTool, Line: 1,
+			Reason: "requestable clause rendered with empty Requestable() set",
+		}}
+	}
+	return evaluateActorProse(cat, idx, vocab, self, block.Label, block.Subject, block.Text, false)
+}
+
+func extractSentenceLoadBindings(
+	cat *toolvocab.Catalog,
+	auth ActorAuthority,
+	label string,
+	subj ClaimSubject,
+	sentence string,
+	line int,
+) ([]loadBinding, []SubjectViolation) {
+	if subj.Kind != SubjectKindSelfNow && subj.Kind != SubjectKindSelfRequestable {
+		return nil, nil
+	}
+	offeredSet := stringSliceSet(auth.Reader.Offered())
+	reqSet := stringSliceSet(auth.Reader.Requestable())
+	postHeld := buildPostLoadHeld(auth.Reader)
+	var bindings []loadBinding
 	var out []SubjectViolation
-	calls := ParseCallExamples(cat, text)
-	sawLoader := false
-	for _, ex := range calls {
-		if ex.Tool != toolreach.LoaderTool {
+	reqSubj := SubjectSelfRequestable()
+	for _, ex := range ParseCallExamples(cat, sentence) {
+		if ex.Tool != toolreach.LoaderTool || isClaimSpanNegated(sentence, ex.Start, ex.End) {
 			continue
 		}
-		sawLoader = true
+		if !offeredSet[toolreach.LoaderTool] {
+			out = append(out, SubjectViolation{
+				Label: label, Subject: reqSubj, Claim: toolreach.LoaderTool, Line: line,
+				Reason: "request_tools discovery clause rendered when request_tools is not offered",
+			})
+			continue
+		}
 		needRaw, hasNeed := ex.Args["need"]
 		if !hasNeed {
-			out = append(out, SubjectViolation{Label: label, Subject: subj, Claim: ex.Raw, Line: baseLine, Reason: "request_tools call missing required need argument"})
+			if !ex.HasEllipsis {
+				out = append(out, SubjectViolation{Label: label, Subject: reqSubj, Claim: ex.Raw, Line: line, Reason: "request_tools call missing required need argument"})
+			}
 			continue
 		}
 		needStr, ok := concreteStringOrIdent(needRaw)
@@ -280,34 +308,100 @@ func evaluateRequestableClause(
 		}
 		if strings.Contains(needStr, " ") {
 			if len(reqSet) == 0 {
-				out = append(out, SubjectViolation{Label: label, Subject: subj, Claim: ex.Raw, Line: baseLine, Reason: "request_tools discovery clause rendered with zero requestable tools"})
+				out = append(out, SubjectViolation{Label: label, Subject: reqSubj, Claim: ex.Raw, Line: line, Reason: "request_tools discovery clause rendered with zero requestable tools"})
+				continue
+			}
+			if m := preLoadTargetRe.FindStringSubmatch(sentence[:ex.Start]); len(m) == 2 {
+				if !reqSet[m[1]] {
+					out = append(out, SubjectViolation{Label: label, Subject: reqSubj, Claim: ex.Raw, Line: line, Reason: fmt.Sprintf("request_tools target %q is not in Requestable()", m[1])})
+				} else {
+					bindings = append(bindings, loadBinding{callStart: ex.Start, callEnd: ex.End, target: m[1]})
+				}
 			}
 			continue
 		}
-		admittedViaCommand := reqSet[toolreach.ProgramTool] && toolcontract.CommandLanguageReachable(needStr, postHeld) && !self.Reader.CanReachProgram(needStr)
+		admittedViaCommand := reqSet[toolreach.ProgramTool] && toolcontract.CommandLanguageReachable(needStr, postHeld) && !auth.Reader.CanReachProgram(needStr)
 		if !reqSet[needStr] && !admittedViaCommand {
 			out = append(out, SubjectViolation{
-				Label: label, Subject: subj, Claim: ex.Raw, Line: baseLine,
+				Label: label, Subject: reqSubj, Claim: ex.Raw, Line: line,
 				Reason: fmt.Sprintf("request_tools target %q is neither in Requestable() nor newly admitted via loadable command", needStr),
 			})
+			continue
+		}
+		bindings = append(bindings, loadBinding{callStart: ex.Start, callEnd: ex.End, target: needStr})
+	}
+	return bindings, out
+}
+
+func isSpanSequencedWithLoader(sentence string, spStart, spEnd int, b loadBinding) bool {
+	s, e := expandFormattingBounds(sentence, spStart, spEnd)
+	bStart, bEnd := expandFormattingBounds(sentence, b.callStart, b.callEnd)
+	if e <= bStart {
+		between := sentence[e:bStart]
+		if preLoadVerbRe.MatchString(sentence[:s]) && preLoadPrepRe.MatchString(between) {
+			return true
+		}
+		return afterLoaderPrepRe.MatchString(between)
+	}
+	if s >= bEnd {
+		between := sentence[bEnd:s]
+		if unseqConjRe.MatchString(between) && !strings.Contains(strings.ToLower(between), "first") && !strings.Contains(strings.ToLower(between), "then") {
+			return false
+		}
+		return postLoadSeqCueRe.MatchString(between)
+	}
+	return false
+}
+
+func isBacktickAuthorizedByLoad(
+	cat *toolvocab.Catalog,
+	idx *PrunableSchemaIndex,
+	vocab *BacktickVocab,
+	postHeld map[string]bool,
+	sentence string,
+	bs BacktickSpan,
+	bindings []loadBinding,
+) (authorized bool, schemaViolations []AttributedClaimIssue) {
+	raw := strings.TrimSpace(bs.Span)
+	for _, b := range bindings {
+		if !isSpanSequencedWithLoader(sentence, bs.Start, bs.End, b) {
+			continue
+		}
+		if raw == b.target || strings.HasPrefix(raw, b.target+".") {
+			return true, nil
+		}
+		if strings.HasPrefix(raw, b.target+"(") {
+			for _, ex := range ParseCallExamples(cat, raw) {
+				if ex.Tool == b.target && idx != nil {
+					if base, ok := idx.BaseSchema(b.target); ok {
+						if iss := validateCallAgainstSchema(ex, base); len(iss) > 0 {
+							return false, iss
+						}
+					}
+				}
+			}
+			return true, nil
+		}
+		if b.target == toolreach.ProgramTool && vocab != nil {
+			words := strings.Fields(raw)
+			if len(words) >= 1 && vocab.commands[words[0]] && toolcontract.CommandLanguageReachable(words[0], postHeld) {
+				if words[0] == "git" && len(words) >= 2 {
+					if gitExtSubcommands[words[1]] && !postHeld[toolcontract.ReachCommandExternalExec] {
+						continue
+					}
+					if (gitMutSubcommands[words[1]] || words[1] == "bisect" || words[1] == "worktree") && !postHeld[toolcontract.ReachCommandMutation] {
+						continue
+					}
+				}
+				return true, nil
+			}
+			norm := normalizeSchemaPath(raw)
+			if idx != nil && slices.Contains(idx.AllOwners(norm), toolreach.ProgramTool) && postHeld[toolcontract.ReachCommandExternalExec] {
+				return true, nil
+			}
 		}
 	}
-	if !sawLoader && len(reqSet) == 0 {
-		out = append(out, SubjectViolation{Label: label, Subject: subj, Claim: toolreach.LoaderTool, Line: baseLine, Reason: "requestable clause rendered with empty Requestable() set"})
-	}
-	postAuth := ActorAuthority{
-		Reader:       self.Reader,
-		ProgramReach: func(prog string) bool { return toolcontract.CommandLanguageReachable(prog, postHeld) },
-		Metas:        self.Metas,
-		Schemas:      self.Schemas,
-	}
-	for _, name := range toolvocab.UnreachableNames(cat, text, postHeld) {
-		out = append(out, SubjectViolation{Label: label, Subject: subj, Claim: name, Line: baseLine, Reason: fmt.Sprintf("post-load reach still lacks %q", name)})
-	}
-	for _, cmdViol := range checkCommandInvocations(vocab, postAuth, postHeld, label, subj, text, baseLine) {
-		out = append(out, cmdViol)
-	}
-	return out
+	return false, nil
 }
 
 func evaluateNamedAgentBlock(cat *toolvocab.Catalog, evalCtx ClaimEvaluationContext, vocab *BacktickVocab, block ClaimBlock) []SubjectViolation {
@@ -339,19 +433,25 @@ func evaluateNamedAgentBlock(cat *toolvocab.Catalog, evalCtx ClaimEvaluationCont
 		return []SubjectViolation{{Label: block.Label, Subject: block.Subject, Claim: agentID, Line: 1, Reason: err.Error()}}
 	}
 	var out []SubjectViolation
-	if !readerAllowsMutation(targetAuth.Reader) && writePromiseProseRe.MatchString(stripNegatedSegments(block.Text)) {
+	if !readerAllowsMutation(targetAuth.Reader) && hasNonNegatedMatch(block.Text, writePromiseProseRe) {
 		out = append(out, SubjectViolation{
 			Label: block.Label, Subject: block.Subject, Claim: "write_capability", Line: 1,
 			Reason: fmt.Sprintf("spawn description for %q promises write capability, which its resolved Reader lacks under mode=%q posture=%q", agentID, evalCtx.SessionMode, evalCtx.Posture),
 		})
 	}
 	held := targetAuth.Reader.Held()
-	for _, word := range snakeWordRe.FindAllString(stripNegatedSegments(block.Text), -1) {
-		if cat.KnownName(word) && !held[word] && !slices.Contains(targetAuth.Reader.Requestable(), word) {
-			out = append(out, SubjectViolation{
-				Label: block.Label, Subject: block.Subject, Claim: word, Line: 1,
-				Reason: fmt.Sprintf("spawn description for %q names unoffered tool %q", agentID, word),
-			})
+	for _, sent := range splitActiveSentences(block.Text) {
+		for _, loc := range snakeWordRe.FindAllStringIndex(sent.sentence, -1) {
+			if isClaimSpanNegated(sent.sentence, loc[0], loc[1]) {
+				continue
+			}
+			word := sent.sentence[loc[0]:loc[1]]
+			if cat.KnownName(word) && !held[word] && !slices.Contains(targetAuth.Reader.Requestable(), word) {
+				out = append(out, SubjectViolation{
+					Label: block.Label, Subject: block.Subject, Claim: word, Line: sent.line,
+					Reason: fmt.Sprintf("spawn description for %q names unoffered tool %q", agentID, word),
+				})
+			}
 		}
 	}
 	out = append(out, evaluateActorProse(cat, evalCtx.Prunable, vocab, targetAuth, block.Label, block.Subject, block.Text, true)...)
@@ -366,7 +466,7 @@ func evaluateDeferredTurnBlock(
 	block ClaimBlock,
 ) []SubjectViolation {
 	var out []SubjectViolation
-	if !readerAllowsMutation(targetAuth.Reader) && writePromiseProseRe.MatchString(stripNegatedSegments(block.Text)) {
+	if !readerAllowsMutation(targetAuth.Reader) && hasNonNegatedMatch(block.Text, writePromiseProseRe) {
 		out = append(out, SubjectViolation{
 			Label: block.Label, Subject: block.Subject, Claim: "command_mutation", Line: 1,
 			Reason: fmt.Sprintf("%s promises mutating file/redirect work, which target Reader lacks", block.Subject.Kind),
@@ -403,25 +503,49 @@ func evaluateActorProse(
 		}
 		return nil, false
 	}
+	postHeld := buildPostLoadHeld(auth.Reader)
 
 	var out []SubjectViolation
 	for _, sent := range splitActiveSentences(text) {
-		if isProhibitionClause(sent.sentence) {
-			continue
+		bindings, loadViol := extractSentenceLoadBindings(cat, auth, label, subj, sent.sentence, sent.line)
+		out = append(out, loadViol...)
+
+		var maskedSpans [][2]int
+		for _, bs := range ExtractInlineBackticks(sent.sentence) {
+			if isClaimSpanNegated(sent.sentence, bs.Start, bs.End) {
+				maskedSpans = append(maskedSpans, [2]int{bs.Start, bs.End})
+				continue
+			}
+			if len(bindings) > 0 {
+				authOK, schemaIss := isBacktickAuthorizedByLoad(cat, idx, vocab, postHeld, sent.sentence, bs, bindings)
+				for _, iss := range schemaIss {
+					claim := iss.Path
+					if claim == "" {
+						claim = bs.Span
+					}
+					out = append(out, SubjectViolation{Label: label, Subject: SubjectSelfRequestable(), Claim: claim, Line: sent.line, Reason: iss.Reason})
+				}
+				if authOK {
+					maskedSpans = append(maskedSpans, [2]int{bs.Start, bs.End})
+				}
+			}
 		}
-		if strings.Contains(sent.sentence, "request_tools(") && subj.Kind == SubjectKindSelfNow {
-			out = append(out, evaluateRequestableClause(cat, vocab, auth, label, SubjectSelfRequestable(), sent.sentence, sent.line)...)
-			continue
+		for _, ex := range ParseCallExamples(cat, sent.sentence) {
+			if isClaimSpanNegated(sent.sentence, ex.Start, ex.End) {
+				s, e := expandFormattingBounds(sent.sentence, ex.Start, ex.End)
+				maskedSpans = append(maskedSpans, [2]int{s, e})
+			}
 		}
-		for _, name := range toolvocab.UnreachableNames(cat, sent.sentence, held) {
+		selfSentence := maskByteSpans(sent.sentence, maskedSpans)
+		for _, name := range toolvocab.UnreachableNames(cat, selfSentence, held) {
 			out = append(out, SubjectViolation{
 				Label: label, Subject: subj, Claim: name, Line: sent.line,
 				Reason: fmt.Sprintf("names unreachable tool, operation, or handle %q", name),
 			})
 		}
-		out = append(out, checkCommandInvocations(vocab, auth, held, label, subj, sent.sentence, sent.line)...)
+		out = append(out, checkCommandInvocations(vocab, auth, held, label, subj, selfSentence, sent.line)...)
 		if auth.Schemas != nil || idx != nil {
-			for _, iss := range ValidateAttributedClaims(cat, idx, sent.sentence, offered, schemaFn) {
+			for _, iss := range ValidateAttributedClaims(cat, idx, selfSentence, offered, schemaFn) {
 				claim := iss.Path
 				if claim == "" {
 					claim = iss.Span
@@ -485,155 +609,6 @@ func checkCommandInvocations(
 		}
 	}
 	return out
-}
-
-// ResolveWorkerAuthorityForSession builds the production-projected ActorAuthority
-// for a worker agent under the active session mode and posture.
-func ResolveWorkerAuthorityForSession(
-	ctx context.Context,
-	eff *extpacks.EffectiveCatalog,
-	sessionMode api.SessionMode,
-	posture api.SessionPosture,
-	rootCount int,
-	hasGit, webSearch, externalHidden bool,
-	agentID string,
-) (ActorAuthority, error) {
-	if eff == nil {
-		var err error
-		if eff, err = extpacks.CatalogForConsumers(); err != nil {
-			return ActorAuthority{}, err
-		}
-	}
-	defs, err := agentdef.LoadEffectiveWithCatalog(eff)
-	if err != nil {
-		return ActorAuthority{}, err
-	}
-	var target *agentdef.Profile
-	for i := range defs {
-		if defs[i].ID == agentID {
-			target = &defs[i]
-			break
-		}
-	}
-	if target == nil {
-		return ActorAuthority{}, fmt.Errorf("worker agent %q not found", agentID)
-	}
-	profiles, err := sandbox.LoadToolProfilesWithCatalog(eff)
-	if err != nil {
-		return ActorAuthority{}, err
-	}
-	postureReg, err := sessionprofiles.LoadPostureRegistry()
-	if err != nil {
-		return ActorAuthority{}, err
-	}
-	var allowedEffects toolcontract.CommandEffects
-	foundPosture := false
-	for _, p := range postureReg.List() {
-		if p.ID == posture {
-			allowedEffects = p.CommandEffects
-			foundPosture = true
-			break
-		}
-	}
-	if !foundPosture {
-		return ActorAuthority{}, fmt.Errorf("unknown session posture %q", posture)
-	}
-	askChild := sessionMode == api.SessionModeAsk
-	narrowed, err := narrowPostureProfiles(profiles, allowedEffects, askChild)
-	if err != nil {
-		return ActorAuthority{}, err
-	}
-	schemas, _, err := extpacks.LoadEffectiveToolSchemas(eff)
-	if err != nil {
-		return ActorAuthority{}, err
-	}
-	reg, err := buildCatalogToolRegistry(eff)
-	if err != nil {
-		return ActorAuthority{}, err
-	}
-	sandboxCfg, err := sandbox.LoadConfig()
-	if err != nil {
-		return ActorAuthority{}, err
-	}
-	exec := toolexecution.NewExecutor(toolprofiles.NewProfilePolicyEngine(sandbox.NewBoundary(sandboxCfg, narrowed)), reg, toolprofiles.DefaultToolProfileID)
-	exec.Metadata.SetToolSchemas(schemas)
-	exec.Metadata.SetCommandExternalHidden(externalHidden)
-	rc := max(rootCount, 1)
-	policy := toolpolicy.NewEngine(toolpolicy.EngineDeps{
-		ToolLister:       exec.Metadata,
-		ProjectRootCount: func(context.Context, *api.Session) int { return rc },
-	})
-	deps := promptloop.ContextDeps{
-		Tools:              reg,
-		Policy:             policy,
-		LoadedTools:        func(string) map[string]bool { return map[string]bool{} },
-		ProjectRootCount:   func(context.Context, *api.Session) int { return rc },
-		ContextSurfaceDeps: promptloop.ContextSurfaceDeps{WebSearchEnabled: func() bool { return webSearch }},
-	}
-	workerSess := &api.Session{ID: "worker-check", ParentSessionID: "coord-check", Mode: sessionMode, Posture: posture, AgentType: target.ID, WorkspacePath: "/tmp/proj"}
-	metas, plan, _, err := promptloop.ProjectTurnTools(ctx, deps, workerSess, nil, inject.CoordinatorTurnFrame{Machine: inject.Machine{ProfileID: target.ToolProfile}})
-	if err != nil {
-		return ActorAuthority{}, err
-	}
-	progReach, err := exec.Metadata.ProgramReach(ctx, platform.ToolFilter{ProfileID: target.ToolProfile, ProjectRootCount: rc})
-	if err != nil {
-		return ActorAuthority{}, err
-	}
-	offered := make([]string, len(metas))
-	for i, m := range metas {
-		offered[i] = m.Name
-	}
-	sort.Strings(offered)
-	mutCapable, _ := prompts.AgentMutationCapable(target.ID)
-	reader, err := prompts.NewReader(prompts.ReaderInput{
-		ProfileID: target.ToolProfile, SessionMode: string(sessionMode), Profiles: narrowed,
-		Plan: plan, Visible: offered, Schemas: schemas, RootCount: rc,
-		HasGit: hasGit, HasAnyGitRoot: hasGit, OnWorkerBranch: hasGit && mutCapable && !askChild,
-		WebSearch: webSearch, CommandExternalHidden: externalHidden,
-	})
-	if err != nil {
-		return ActorAuthority{}, err
-	}
-	return AuthorityFromReaderAndMetas(reader, progReach, metas), nil
-}
-
-func buildCatalogToolRegistry(eff *extpacks.EffectiveCatalog) (*tools.DefaultRegistry, error) {
-	regSchemas, err := extpacks.LoadEffectiveRegistrySchemas(eff)
-	if err != nil {
-		return nil, err
-	}
-	reg, err := tools.NewCatalogRegistry(regSchemas)
-	if err != nil {
-		return nil, err
-	}
-	noop := func(context.Context, map[string]any, tools.ToolContext) (string, error) { return "", nil }
-	for name := range regSchemas.Tools {
-		if toolcontract.IsCommandOperation(name) {
-			_ = reg.RegisterOperation(name)
-			continue
-		}
-		if _, ok := toolcontract.Lookup(name); ok {
-			if regErr := reg.Register(name, noop); regErr != nil {
-				return nil, regErr
-			}
-		}
-	}
-	return reg, nil
-}
-
-func narrowPostureProfiles(profiles []sandbox.ToolProfile, allowed toolcontract.CommandEffects, clampReadOnly bool) ([]sandbox.ToolProfile, error) {
-	if clampReadOnly {
-		ro, err := toolcontract.NewCommandEffects(toolcontract.CommandReadOnly)
-		if err != nil {
-			return nil, err
-		}
-		allowed &= ro
-	}
-	out := slices.Clone(profiles)
-	for i := range out {
-		out[i].CommandEffects &= allowed
-	}
-	return out, nil
 }
 
 type sentenceContext struct {
@@ -756,31 +731,32 @@ func extractKnownToolMentions(c *toolvocab.Catalog, s string) []string {
 		return nil
 	}
 	seen := map[string]bool{}
-	for _, t := range toolvocab.ToolsIn(c, s) {
-		if c.KnownName(t) {
-			seen[t] = true
+	for _, bs := range ExtractInlineBackticks(s) {
+		if isClaimSpanNegated(s, bs.Start, bs.End) {
+			continue
 		}
-	}
-	for _, m := range bareToolWordRe.FindAllStringSubmatch(s, -1) {
-		if c.KnownName(m[1]) {
-			seen[m[1]] = true
+		raw := strings.TrimSpace(bs.Span)
+		if c.KnownName(raw) {
+			seen[raw] = true
+		}
+		for _, t := range toolvocab.ToolsIn(c, "`"+raw+"`") {
+			if c.KnownName(t) {
+				seen[t] = true
+			}
 		}
 	}
 	return sortedTrueKeys(seen)
 }
 
-func isProhibitionClause(clause string) bool {
-	return prohibitionClauseRe.MatchString(clause)
-}
-
-func stripNegatedSegments(text string) string {
-	var kept []string
-	for _, sc := range splitActiveSentences(text) {
-		if !isProhibitionClause(sc.sentence) {
-			kept = append(kept, sc.sentence)
+func hasNonNegatedMatch(text string, re *regexp.Regexp) bool {
+	for _, sent := range splitActiveSentences(text) {
+		for _, loc := range re.FindAllStringIndex(sent.sentence, -1) {
+			if !isClaimSpanNegated(sent.sentence, loc[0], loc[1]) {
+				return true
+			}
 		}
 	}
-	return strings.Join(kept, " ")
+	return false
 }
 
 func readerAllowsMutation(r prompts.Reader) bool {

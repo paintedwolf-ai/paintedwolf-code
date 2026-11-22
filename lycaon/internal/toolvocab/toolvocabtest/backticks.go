@@ -49,6 +49,8 @@ const (
 type BacktickSpan struct {
 	Span   string
 	Line   int
+	Start  int
+	End    int
 	Kind   BacktickKind
 	Detail string
 }
@@ -290,6 +292,7 @@ func (v *BacktickVocab) populateCatalogAndEnvelopeIDs(eff *extpacks.EffectiveCat
 func ExtractInlineBackticks(prose string) []BacktickSpan {
 	var out []BacktickSpan
 	inFence := ""
+	lineOffset := 0
 	for idx, lineText := range strings.Split(prose, "\n") {
 		lineNum := idx + 1
 		trimmed := strings.TrimSpace(lineText)
@@ -300,12 +303,13 @@ func ExtractInlineBackticks(prose string) []BacktickSpan {
 			} else if inFence == marker {
 				inFence = ""
 			}
+			lineOffset += len(lineText) + 1
 			continue
 		}
-		if inFence != "" {
-			continue
+		if inFence == "" {
+			out = append(out, scanLineBackticks(lineText, lineNum, lineOffset)...)
 		}
-		out = append(out, scanLineBackticks(lineText, lineNum)...)
+		lineOffset += len(lineText) + 1
 	}
 	return out
 }
@@ -602,7 +606,7 @@ func collectStructTagNames(dst map[string]bool, rootTypes ...reflect.Type) {
 	}
 }
 
-func scanLineBackticks(line string, lineNum int) []BacktickSpan {
+func scanLineBackticks(line string, lineNum int, baseOffset int) []BacktickSpan {
 	var out []BacktickSpan
 	i := 0
 	for i < len(line) {
@@ -620,13 +624,170 @@ func scanLineBackticks(line string, lineNum int) []BacktickSpan {
 		if relEnd < 0 {
 			break
 		}
+		rawEnd := start + relEnd + ticks
 		span := strings.TrimSpace(line[start : start+relEnd])
 		if span != "" {
-			out = append(out, BacktickSpan{Span: span, Line: lineNum})
+			out = append(out, BacktickSpan{
+				Span:  span,
+				Line:  lineNum,
+				Start: baseOffset + i,
+				End:   baseOffset + rawEnd,
+			})
 		}
-		i = start + relEnd + ticks
+		i = rawEnd
 	}
 	return out
+}
+
+var (
+	subClauseBreakRe = regexp.MustCompile(`(?i)(?:,\s*(?:and|but|then|so|while|yet)\b|\b(?:and|but|then)\s+(?:do\s+not|don't|never|cannot|can't|must\s+not|use|call|run|invoke|pass|set|apply|start|open|load|dispatch|execute|prefer|switch|confirm|verify|check|inspect|read|write|create|edit)\b|;\s*|\s+[—–]\s+)`)
+	negVerbPrefixRe  = regexp.MustCompile(`(?i)\b(?:do\s+not|don't|never|cannot|can't|must\s+not)\s+(?:ever\s+)?(?:call|run|use|pass|set|assign|mint|combine|invoke|include|emit|supply|offer|dispatch|execute|specify|allow|create|edit|write|apply|modify|touch|mutate|redirect)(?:\s+(?:the\s+)?(?:tool|argument|parameter|field|flag|option))?\s+(?:(?:\*\*)?` + "`[^`]+`" + `(?:\*\*)?\s*(?:,\s*|\s+or\s+|\s+and\s+|\s*/\s*))*$`)
+	negPrepPrefixRe  = regexp.MustCompile(`(?i)\b(?:do\s+not|don't|never|cannot|can't|must\s+not)\s+(?:(?:call|run|use|pass|set|assign|mint|combine|invoke|include|emit|supply|execute)\b[^,;—–]*?\s+)?(?:on|in|to|with|via)\s+$`)
+	withoutObjPrefRe = regexp.MustCompile(`(?i)\bwithout\s+(?:(?:calling|using|running|passing|setting|enabling|specifying|invoking|supplying)\s+)?(?:(?:\*\*)?` + "`[^`]+`" + `(?:\*\*)?\s*(?:,\s*|\s+or\s+))*$`)
+	negPredSuffixRe  = regexp.MustCompile(`(?i)^(?:\s*(?:,\s*|\s+and\s+|\s+or\s+)(?:\*\*)?` + "`[^`]+`" + `(?:\*\*)?)*\s+(?:is|are)\s+(?:not\s+(?:available|offered|permitted|allowed|reachable|enabled|supported)|unavailable|refused|forbidden|withheld|disabled)\b`)
+)
+
+func isClaimSpanNegated(sentence string, start, end int) bool {
+	if start < 0 || end > len(sentence) || start >= end {
+		return false
+	}
+	s, e := expandFormattingBounds(sentence, start, end)
+	cStart, cEnd := enclosingSubClause(sentence, s, e)
+	if s < cStart {
+		cStart = s
+	}
+	if e > cEnd {
+		cEnd = e
+	}
+	prefix := sentence[cStart:s]
+	suffix := sentence[e:cEnd]
+	return negVerbPrefixRe.MatchString(prefix) ||
+		negPrepPrefixRe.MatchString(prefix) ||
+		withoutObjPrefRe.MatchString(prefix) ||
+		negPredSuffixRe.MatchString(suffix)
+}
+
+func expandFormattingBounds(s string, start, end int) (int, int) {
+	for start > 0 && (s[start-1] == '`' || s[start-1] == '*') {
+		start--
+	}
+	for end < len(s) && (s[end] == '`' || s[end] == '*') {
+		end++
+	}
+	return start, end
+}
+
+func enclosingSubClause(sentence string, start, end int) (int, int) {
+	masked := topLevelMask(sentence)
+	breaks := subClauseBreakRe.FindAllStringIndex(masked, -1)
+	cStart := 0
+	cEnd := len(sentence)
+	for _, br := range breaks {
+		splitAt := br[0]
+		for splitAt < br[1] && (sentence[splitAt] == ',' || sentence[splitAt] == ';' || sentence[splitAt] == ' ') {
+			splitAt++
+		}
+		if splitAt <= start {
+			cStart = splitAt
+		} else if br[0] >= end && br[0] < cEnd {
+			cEnd = br[0]
+			break
+		}
+	}
+	return cStart, cEnd
+}
+
+func topLevelMask(s string) string {
+	buf := []byte(s)
+	inTicks := false
+	for i := 0; i < len(buf); i++ {
+		if buf[i] == '`' {
+			inTicks = !inTicks
+			buf[i] = ' '
+			continue
+		}
+		if inTicks {
+			buf[i] = ' '
+		}
+	}
+	keep := make([]bool, len(buf))
+	walkTopLevel(string(buf), func(idx int, _ byte) bool {
+		keep[idx] = true
+		return true
+	})
+	for i := range buf {
+		if !keep[i] {
+			buf[i] = ' '
+		}
+	}
+	return string(buf)
+}
+
+func maskByteSpans(s string, spans [][2]int) string {
+	if len(spans) == 0 {
+		return s
+	}
+	buf := []byte(s)
+	for _, sp := range spans {
+		lo := max(sp[0], 0)
+		hi := min(sp[1], len(buf))
+		for i := lo; i < hi; i++ {
+			if buf[i] != '\n' {
+				buf[i] = ' '
+			}
+		}
+	}
+	return string(buf)
+}
+
+func walkTopLevel(s string, visit func(idx int, ch byte) bool) {
+	depthParen, depthBracket, depthBrace := 0, 0, 0
+	var quote byte
+	escaped := false
+	for i := 0; i < len(s); i++ {
+		ch := s[i]
+		if quote != 0 {
+			if escaped {
+				escaped = false
+				continue
+			}
+			if ch == '\\' {
+				escaped = true
+				continue
+			}
+			if ch == quote {
+				quote = 0
+			}
+			continue
+		}
+		if depthParen == 0 && depthBracket == 0 && depthBrace == 0 {
+			if !visit(i, ch) {
+				return
+			}
+		}
+		switch ch {
+		case '"', '\'':
+			quote = ch
+		case '(':
+			depthParen++
+		case ')':
+			if depthParen > 0 {
+				depthParen--
+			}
+		case '[':
+			depthBracket++
+		case ']':
+			if depthBracket > 0 {
+				depthBracket--
+			}
+		case '{':
+			depthBrace++
+		case '}':
+			if depthBrace > 0 {
+				depthBrace--
+			}
+		}
+	}
 }
 
 func isAuthoringMetaSource(sourceID string) bool {

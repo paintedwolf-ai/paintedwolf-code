@@ -9,6 +9,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/lycaon/lycaon/internal/agentdef"
 	"github.com/lycaon/lycaon/internal/coordinator/inject"
 	"github.com/lycaon/lycaon/internal/coordinator/promptloop"
 	"github.com/lycaon/lycaon/internal/coordinator/surface"
@@ -720,4 +721,153 @@ func dummyObjectForNodes(nodes []map[string]any) map[string]any {
 		}
 	}
 	return out
+}
+
+// ResolveWorkerAuthorityForSession builds the production-projected ActorAuthority
+// for a worker agent under the active session mode and posture.
+func ResolveWorkerAuthorityForSession(
+	ctx context.Context,
+	eff *extpacks.EffectiveCatalog,
+	sessionMode api.SessionMode,
+	posture api.SessionPosture,
+	rootCount int,
+	hasGit, webSearch, externalHidden bool,
+	agentID string,
+) (ActorAuthority, error) {
+	if eff == nil {
+		var err error
+		if eff, err = extpacks.CatalogForConsumers(); err != nil {
+			return ActorAuthority{}, err
+		}
+	}
+	defs, err := agentdef.LoadEffectiveWithCatalog(eff)
+	if err != nil {
+		return ActorAuthority{}, err
+	}
+	var target *agentdef.Profile
+	for i := range defs {
+		if defs[i].ID == agentID {
+			target = &defs[i]
+			break
+		}
+	}
+	if target == nil {
+		return ActorAuthority{}, fmt.Errorf("worker agent %q not found", agentID)
+	}
+	profiles, err := sandbox.LoadToolProfilesWithCatalog(eff)
+	if err != nil {
+		return ActorAuthority{}, err
+	}
+	postureReg, err := sessionprofiles.LoadPostureRegistry()
+	if err != nil {
+		return ActorAuthority{}, err
+	}
+	var allowedEffects toolcontract.CommandEffects
+	foundPosture := false
+	for _, p := range postureReg.List() {
+		if p.ID == posture {
+			allowedEffects = p.CommandEffects
+			foundPosture = true
+			break
+		}
+	}
+	if !foundPosture {
+		return ActorAuthority{}, fmt.Errorf("unknown session posture %q", posture)
+	}
+	askChild := sessionMode == api.SessionModeAsk
+	narrowed, err := narrowPostureProfiles(profiles, allowedEffects, askChild)
+	if err != nil {
+		return ActorAuthority{}, err
+	}
+	schemas, _, err := extpacks.LoadEffectiveToolSchemas(eff)
+	if err != nil {
+		return ActorAuthority{}, err
+	}
+	reg, err := buildCatalogToolRegistry(eff)
+	if err != nil {
+		return ActorAuthority{}, err
+	}
+	sandboxCfg, err := sandbox.LoadConfig()
+	if err != nil {
+		return ActorAuthority{}, err
+	}
+	exec := toolexecution.NewExecutor(toolprofiles.NewProfilePolicyEngine(sandbox.NewBoundary(sandboxCfg, narrowed)), reg, toolprofiles.DefaultToolProfileID)
+	exec.Metadata.SetToolSchemas(schemas)
+	exec.Metadata.SetCommandExternalHidden(externalHidden)
+	rc := max(rootCount, 1)
+	policy := toolpolicy.NewEngine(toolpolicy.EngineDeps{
+		ToolLister:       exec.Metadata,
+		ProjectRootCount: func(context.Context, *api.Session) int { return rc },
+	})
+	deps := promptloop.ContextDeps{
+		Tools:              reg,
+		Policy:             policy,
+		LoadedTools:        func(string) map[string]bool { return map[string]bool{} },
+		ProjectRootCount:   func(context.Context, *api.Session) int { return rc },
+		ContextSurfaceDeps: promptloop.ContextSurfaceDeps{WebSearchEnabled: func() bool { return webSearch }},
+	}
+	workerSess := &api.Session{ID: "worker-check", ParentSessionID: "coord-check", Mode: sessionMode, Posture: posture, AgentType: target.ID, WorkspacePath: "/tmp/proj"}
+	metas, plan, _, err := promptloop.ProjectTurnTools(ctx, deps, workerSess, nil, inject.CoordinatorTurnFrame{Machine: inject.Machine{ProfileID: target.ToolProfile}})
+	if err != nil {
+		return ActorAuthority{}, err
+	}
+	progReach, err := exec.Metadata.ProgramReach(ctx, platform.ToolFilter{ProfileID: target.ToolProfile, ProjectRootCount: rc})
+	if err != nil {
+		return ActorAuthority{}, err
+	}
+	offered := make([]string, len(metas))
+	for i, m := range metas {
+		offered[i] = m.Name
+	}
+	sort.Strings(offered)
+	mutCapable, _ := prompts.AgentMutationCapable(target.ID)
+	reader, err := prompts.NewReader(prompts.ReaderInput{
+		ProfileID: target.ToolProfile, SessionMode: string(sessionMode), Profiles: narrowed,
+		Plan: plan, Visible: offered, Schemas: schemas, RootCount: rc,
+		HasGit: hasGit, HasAnyGitRoot: hasGit, OnWorkerBranch: hasGit && mutCapable && !askChild,
+		WebSearch: webSearch, CommandExternalHidden: externalHidden,
+	})
+	if err != nil {
+		return ActorAuthority{}, err
+	}
+	return AuthorityFromReaderAndMetas(reader, progReach, metas), nil
+}
+
+func buildCatalogToolRegistry(eff *extpacks.EffectiveCatalog) (*tools.DefaultRegistry, error) {
+	regSchemas, err := extpacks.LoadEffectiveRegistrySchemas(eff)
+	if err != nil {
+		return nil, err
+	}
+	reg, err := tools.NewCatalogRegistry(regSchemas)
+	if err != nil {
+		return nil, err
+	}
+	noop := func(context.Context, map[string]any, tools.ToolContext) (string, error) { return "", nil }
+	for name := range regSchemas.Tools {
+		if toolcontract.IsCommandOperation(name) {
+			_ = reg.RegisterOperation(name)
+			continue
+		}
+		if _, ok := toolcontract.Lookup(name); ok {
+			if regErr := reg.Register(name, noop); regErr != nil {
+				return nil, regErr
+			}
+		}
+	}
+	return reg, nil
+}
+
+func narrowPostureProfiles(profiles []sandbox.ToolProfile, allowed toolcontract.CommandEffects, clampReadOnly bool) ([]sandbox.ToolProfile, error) {
+	if clampReadOnly {
+		ro, err := toolcontract.NewCommandEffects(toolcontract.CommandReadOnly)
+		if err != nil {
+			return nil, err
+		}
+		allowed &= ro
+	}
+	out := slices.Clone(profiles)
+	for i := range out {
+		out[i].CommandEffects &= allowed
+	}
+	return out, nil
 }

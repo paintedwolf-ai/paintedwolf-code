@@ -155,6 +155,14 @@ func TestAttributedCallValidationCatchesNestedEnumAndCrossToolErrors(t *testing.
 			name: "complete call missing required field",
 			text: "Ask via `ask_user({\"response_type\":\"text\"})`.",
 		},
+		{
+			name: "affirmative without phrase does not excuse pruned argument",
+			text: "Run `command` with `verification: true` without delay.",
+		},
+		{
+			name: "compound sentence negated verify does not excuse pruned secret_use on read-only command",
+			text: "Do not call `verify`, and run `command` with `secret_use.services`.",
+		},
 	}
 	for _, tc := range failingCases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -188,6 +196,10 @@ func TestAttributedCallValidationCatchesNestedEnumAndCrossToolErrors(t *testing.
 		{
 			name: "prohibition mentioning pruned argument is exempt",
 			text: "Do not pass `capability_request.local_listen` on `command` here.",
+		},
+		{
+			name: "without directly governing pruned argument is exempt",
+			text: "Run `command` without `verification: true`.",
 		},
 	}
 	for _, tc := range passingCases {
