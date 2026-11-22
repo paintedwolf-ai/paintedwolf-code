@@ -421,4 +421,53 @@ func TestAskAndReadOnlyProgramFeedbackAlternativesAndAttribution(t *testing.T) {
 	if strings.Contains(outWorkerRO.Refusal.Feedback, "Ask") {
 		t.Fatalf("worker_readonly feedback in Agent mode mentioned Ask:\n%s", outWorkerRO.Refusal.Feedback)
 	}
+
+	// 7. Mixed-permission profile (web_research: read_only + network_egress, denying mutation) renders profile-neutral fallback variants.
+	mixedEffects, err := toolcontract.NewCommandEffects(toolcontract.CommandReadOnly, toolcontract.CommandNetworkEgress)
+	testutil.FailErr(t, "mixed command effects", err)
+	mixedTools := map[string]bool{"command": true, "read": true, "find": true, "grep": true, "list_dir": true, "stat": true, "wc": true, "jq": true, "http_request": true, "mkdir": true}
+	mixedBoundary := sandbox.NewBoundary(sandbox.Config{ProjectRootRequired: true, RejectSymlinkEscape: true}, []sandbox.ToolProfile{{
+		ID: "web_research", Tools: mixedTools, CommandEffects: mixedEffects,
+	}})
+	f.Boundary, f.Runtime.Boundary = mixedBoundary, mixedBoundary
+	f.Runtime.Executor = toolexecution.NewExecutor(toolprofiles.NewProfilePolicyEngine(mixedBoundary), f.Runtime.Registry, "web_research")
+	f.Runtime.Executor.Rejections.SetRejectFormatter(guidance.NewStaticRejectFormatter(hints))
+	f.Context = func(_ string, tc *tools.ToolContext) {
+		tc.Identity.Agent = "web_research"
+		tc.Identity.ParentSessionID = "root-session"
+	}
+
+	// 7a. Mixed profile denying mutation when candidate is absent (e.g. find ../outside -delete) renders profile-neutral expected_form fallback.
+	rawMixedWithForm, err := f.Call(t, t.Context(), "find ../outside -name '*.tmp' -delete")
+	testutil.FailErr(t, "web_research find ../outside -delete", err)
+	outMixedWithForm := decodeOutcome(t, rawMixedWithForm)
+	for _, want := range []string{
+		"Rejected: `find` (`-delete`) at 1:1 is outside profile **web_research**.",
+		"Cause: Its bound effect set (`mutation`) is not permitted by the active command surface.",
+		"Fix: Available forms on this surface: find [default-predicates-print].",
+	} {
+		if outMixedWithForm.Refusal == nil || !strings.Contains(outMixedWithForm.Refusal.Feedback, want) {
+			t.Fatalf("web_research expected_form fallback missing %q:\n%+v", want, outMixedWithForm.Refusal)
+		}
+	}
+	if strings.Contains(outMixedWithForm.Refusal.Feedback, "read-only") || strings.Contains(outMixedWithForm.Refusal.Feedback, "Ask") {
+		t.Fatalf("web_research expected_form fallback mislabeled mixed surface as read-only or Ask:\n%s", outMixedWithForm.Refusal.Feedback)
+	}
+
+	// 7b. Mixed profile denying pure mutation with no available form (mkdir) renders profile-neutral no-form fallback.
+	rawMixedNoForm, err := f.Call(t, t.Context(), "mkdir src/newdir")
+	testutil.FailErr(t, "web_research mkdir", err)
+	outMixedNoForm := decodeOutcome(t, rawMixedNoForm)
+	for _, want := range []string{
+		"Rejected: `mkdir` (`each-target`) at 1:1 is outside profile **web_research**.",
+		"Cause: Its bound effect set (`mutation`) is not permitted by the active command surface.",
+		"Fix: Do not retry this operation on the active surface.",
+	} {
+		if outMixedNoForm.Refusal == nil || !strings.Contains(outMixedNoForm.Refusal.Feedback, want) {
+			t.Fatalf("web_research no-form fallback missing %q:\n%+v", want, outMixedNoForm.Refusal)
+		}
+	}
+	if strings.Contains(outMixedNoForm.Refusal.Feedback, "read-only") || strings.Contains(outMixedNoForm.Refusal.Feedback, "Ask") {
+		t.Fatalf("web_research no-form fallback mislabeled mixed surface as read-only or Ask:\n%s", outMixedNoForm.Refusal.Feedback)
+	}
 }

@@ -469,6 +469,44 @@ func TestAskModeRefusalProducersRenderSpecificCausesAndConditionedRecovery(t *te
 		if !strings.Contains(rawEff, "Run `find src -name '*.tmp'` to list the paths selected for deletion") {
 			t.Fatalf("independent profile restriction missing validated read-only alternative:\n%s", rawEff)
 		}
+
+		// Mixed-permission profile (web_research) without a candidate: both fallback variants (with expected_form and without expected_form) use profile-neutral wording.
+		mixedWithFormRej := &toolrejection.ToolReject{
+			Code: "COMMAND_EFFECT_NOT_ALLOWED",
+			Data: map[string]any{
+				"tool":          "command",
+				"profile":       "web_research",
+				"command":       "find",
+				"mode":          "-delete",
+				"class":         "mutation",
+				"expected_form": "find [default-predicates-print]",
+				"worker_leg":    true,
+				"source_line":   1,
+				"source_column": 1,
+			},
+		}
+		rawMixedWithForm, _ := renderToolReject(t, mixedWithFormRej, map[string]any{"can_command": true})
+		if !strings.Contains(rawMixedWithForm, "Available forms on this surface: find [default-predicates-print].") || strings.Contains(rawMixedWithForm, "read-only") {
+			t.Fatalf("mixed profile expected_form fallback mislabeled surface as read-only:\n%s", rawMixedWithForm)
+		}
+
+		mixedNoFormRej := &toolrejection.ToolReject{
+			Code: "COMMAND_EFFECT_NOT_ALLOWED",
+			Data: map[string]any{
+				"tool":          "command",
+				"profile":       "web_research",
+				"command":       "mkdir",
+				"mode":          "create",
+				"class":         "mutation",
+				"worker_leg":    true,
+				"source_line":   1,
+				"source_column": 1,
+			},
+		}
+		rawMixedNoForm, _ := renderToolReject(t, mixedNoFormRej, map[string]any{"can_command": true})
+		if !strings.Contains(rawMixedNoForm, "Do not retry this operation on the active surface.") || strings.Contains(rawMixedNoForm, "read-only") {
+			t.Fatalf("mixed profile no-form fallback mislabeled surface as read-only:\n%s", rawMixedNoForm)
+		}
 	})
 
 	// 9. Paired COMMAND_EFFECT_NOT_ALLOWED renders: Ask with alternative, Ask without alternative, delayed after upgrade, loadable command, absent command, and unknown reach.
