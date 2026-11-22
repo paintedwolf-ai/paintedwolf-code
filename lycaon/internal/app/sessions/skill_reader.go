@@ -65,6 +65,13 @@ func skillToolReader(ctx context.Context, mgr *session.Host, tctx tools.ToolCont
 			loaded[name] = true
 		}
 	}
+	if tctx.Turn.TurnOfferedToolNames == nil && mgr != nil && mgr.Coordinator != nil && mgr.Coordinator.Loading != nil && sess != nil {
+		for name, ok := range mgr.Coordinator.Loading.LoadedTools(sess.ID) {
+			if ok {
+				loaded[name] = true
+			}
+		}
+	}
 	var visible []string
 	if tctx.Turn.TurnOfferedToolNames != nil {
 		visible = tctx.Turn.TurnOfferedToolNames

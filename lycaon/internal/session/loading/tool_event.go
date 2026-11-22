@@ -2,16 +2,20 @@ package loading
 
 import (
 	"context"
+	"sort"
 	"strings"
 	"time"
 
 	"github.com/lycaon/lycaon/internal/coordinator/guard"
 	"github.com/lycaon/lycaon/internal/coordinator/turnload"
+	"github.com/lycaon/lycaon/internal/prompts"
+	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/session/transcript"
 	"github.com/lycaon/lycaon/internal/skills"
 	"github.com/lycaon/lycaon/internal/toolpolicy"
 	"github.com/lycaon/lycaon/internal/tools"
+	"github.com/lycaon/lycaon/internal/toolsurface"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -43,7 +47,11 @@ func (m *Service) readSkillForTool(ctx context.Context, sess *api.Session, tctx 
 		return
 	}
 	roster, _ := m.skills(ctx, sess, tctx.Identity.Agent, roots)
-	roster = eligibleSkillsForOfferedTools(roster, m.toolEventOfferedTools(ctx, sess, tctx, tool, len(roots)))
+	if reader, rErr := m.toolEventReader(ctx, sess, tctx, tool, len(roots)); rErr == nil {
+		roster = eligibleSkillsForReader(roster, reader)
+	} else {
+		roster = eligibleSkillsForOfferedTools(roster, m.toolEventOfferedTools(ctx, sess, tctx, tool, len(roots)))
+	}
 	card := turnload.ToolCard{Name: tool, Description: m.toolDescription(ctx, sess, tctx.Identity.Agent, tctx.Turn.TurnSurfaceID, tool)}
 	finishDeciding := m.beginDeciding(ctx, sess, sess.ID, api.TurnLoadTriggerToolEvent, tctx.Identity.ToolCallID)
 	outcome := turnload.RankToolEvent(ctx, m.Decider(), catalog.ToolEvent, request, card, roster)
@@ -79,6 +87,55 @@ func (m *Service) readSkillForTool(ctx context.Context, sess *api.Session, tctx 
 		"skills", outcome.Names(),
 		"abstained", outcome.Abstained,
 		"elapsed_ms", time.Since(started).Milliseconds())
+}
+
+func (m *Service) toolEventReader(ctx context.Context, sess *api.Session, tctx tools.ToolContext, tool string, rootCount int) (prompts.Reader, error) {
+	var profiles []sandbox.ToolProfile
+	if m != nil && m.profiles != nil {
+		profiles = m.profiles(ctx, sess)
+	}
+	if len(profiles) == 0 {
+		var err error
+		profiles, err = sandbox.LoadToolProfiles()
+		if err != nil {
+			return prompts.Reader{}, err
+		}
+	}
+	profileID := strings.TrimSpace(tctx.Identity.Agent)
+	if mapped, err := prompts.ToolProfileForAgent(profileID); err == nil && mapped != "" {
+		profileID = mapped
+	}
+	if profileID == "" {
+		profileID = prompts.CoordinatorProfileID
+	}
+	surfaceID := ""
+	if guard.IsCoordinatorProfile(profileID) {
+		if cand := strings.TrimSpace(tctx.Turn.TurnSurfaceID); prompts.IsCoordinatorSurfaceID(cand) {
+			surfaceID = cand
+		}
+	}
+	sessionMode := string(api.SessionModeAgent)
+	if tctx.Source.AskMode || (sess != nil && sess.Mode == api.SessionModeAsk) {
+		sessionMode = string(api.SessionModeAsk)
+	}
+	offered := m.toolEventOfferedTools(ctx, sess, tctx, tool, rootCount)
+	visible := make([]string, 0, len(offered))
+	for name := range offered {
+		visible = append(visible, name)
+	}
+	sort.Strings(visible)
+	return prompts.NewReader(prompts.ReaderInput{
+		ProfileID:        profileID,
+		SurfaceID:        surfaceID,
+		SessionMode:      sessionMode,
+		Profiles:         profiles,
+		Plan:             toolsurface.Compile(visible, nil),
+		Loaded:           offered,
+		Visible:          visible,
+		ProjectedSchemas: tctx.Turn.TurnOfferedToolSchemas,
+		RootCount:        rootCount,
+		WebSearch:        true,
+	})
 }
 
 func (m *Service) toolEventOfferedTools(ctx context.Context, sess *api.Session, tctx tools.ToolContext, tool string, rootCount int) map[string]bool {

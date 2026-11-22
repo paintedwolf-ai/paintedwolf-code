@@ -122,7 +122,7 @@ func (r Request) AcceptsEnumValue(tool, dottedPath, value string) bool {
 		return false
 	}
 	schema, ok := r.ToolSchema(tool)
-	return ok && toolschema.SchemaAcceptsEnumValue(schema, dottedPath, value)
+	return ok && toolschema.SchemaAdmitsStringValue(schema, dottedPath, value)
 }
 
 // Program reports whether a native program can enter the reader's next call.

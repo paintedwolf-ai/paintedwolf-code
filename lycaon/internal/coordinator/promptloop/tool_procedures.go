@@ -20,18 +20,13 @@ func (l *toolInvocations) appendToolProcedures(
 	}
 	names := make([]string, 0, len(offered))
 	projected := make(map[string]map[string]any, len(offered))
-	allHaveSchema := true
 	for _, meta := range offered {
 		names = append(names, meta.Name)
-		if meta.ArgsSchema == nil {
-			allHaveSchema = false
-		} else {
+		if meta.ArgsSchema != nil {
 			projected[meta.Name] = meta.ArgsSchema
 		}
 	}
-	if allHaveSchema {
-		ctx = prompts.WithProjectedSchemas(ctx, projected)
-	}
+	ctx = prompts.WithProjectedSchemas(ctx, projected)
 	block, err := l.Context.Deps.ToolProcedures(ctx, sess, profileID, names)
 	if err != nil {
 		return nil, fmt.Errorf("render offered tool procedures: %w", err)

@@ -11,8 +11,11 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/lycaon/lycaon/config"
+	"github.com/lycaon/lycaon/config/configtest"
 	"github.com/lycaon/lycaon/internal/catalogview"
 	"github.com/lycaon/lycaon/internal/configlayout"
+	"github.com/lycaon/lycaon/internal/hostresources"
 	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/session"
 	"github.com/lycaon/lycaon/internal/session/profiles"
@@ -122,8 +125,6 @@ func TestSkillToolReaderMapsReaderFacts(t *testing.T) {
 	}
 }
 
-// primaryRootHasGit checks the active/primary root (or worker branch root),
-// while anyRootHasGit scans every attached root.
 func TestSkillReaderHasGitSplitsPrimaryFromSecondaryRoots(t *testing.T) {
 	gitDir := gitRepoDir(t)
 	plainDir := t.TempDir()
@@ -433,7 +434,6 @@ func TestSkillToolReaderDoesNotPromoteDeferredTools(t *testing.T) {
 	gitDir := gitRepoDir(t)
 	plainDir := t.TempDir()
 
-	// 1. Floor-only implement_investigate turn: deferred tools stay in Requestable(), not Offered().
 	floorOnly, err := skillToolReader(t.Context(), nil, tools.ToolContext{
 		Identity: tools.InvocationIdentity{Agent: "coordinator"},
 		Source: tools.InvocationSource{
@@ -453,7 +453,6 @@ func TestSkillToolReaderDoesNotPromoteDeferredTools(t *testing.T) {
 		t.Fatalf("floor-only reader lost deferred tools from Requestable(): %v", floorOnly.Requestable())
 	}
 
-	// 2. Zero-root turn: max(rootCount, 1) is gone, so workspace/file flags are false and command is absent.
 	zeroRoot, err := skillToolReader(t.Context(), nil, tools.ToolContext{
 		Identity: tools.InvocationIdentity{Agent: "coordinator"},
 		Turn: tools.InvocationTurn{
@@ -471,7 +470,6 @@ func TestSkillToolReaderDoesNotPromoteDeferredTools(t *testing.T) {
 		t.Fatalf("0-root reader exposed command: offered=%v requestable=%v", zeroRoot.Offered(), zeroRoot.Requestable())
 	}
 
-	// 3. Host state: WebSearch == false and CommandExternalHidden == true vs false.
 	cat := extpackstest.StockCatalog(t)
 	st := storetest.New(t, testdbseed.DefaultProjectID)
 	mgr := session.NewHost(st, session.Models{Limits: settings.DefaultSessionLimits()}, nil)
@@ -518,7 +516,6 @@ func TestSkillToolReaderDoesNotPromoteDeferredTools(t *testing.T) {
 		t.Fatalf("externalHidden=true: external=%t private-service=%t", rHidden.CanReachProgram("external"), rHidden.CanReachProgram("private-service"))
 	}
 
-	// 4. Mixed 2-root: (primary=non-git, secondary=git) vs (primary=git, secondary=non-git).
 	nonGitPrimary, err := skillToolReader(t.Context(), nil, tools.ToolContext{
 		Identity: tools.InvocationIdentity{Agent: "coordinator"},
 		Source: tools.InvocationSource{
@@ -559,5 +556,237 @@ func TestSkillToolReaderDoesNotPromoteDeferredTools(t *testing.T) {
 	if f2["has_git"] != true || f2["has_any_git_root"] != true || f2["can_git_read"] != true {
 		t.Fatalf("(primary=git, secondary=non-git) facts: has_git=%v has_any_git_root=%v can_git_read=%v",
 			f2["has_git"], f2["has_any_git_root"], f2["can_git_read"])
+	}
+}
+
+// Both projections keep the secret object; only response_type.enum narrows in the second.
+func TestSkillReadUseSecretsDistinguishesResponseTypeEnumNarrowing(t *testing.T) {
+	rt, sessionID := newWiredSkillHost(t)
+	makeAskSchema := func(responseEnum []any) map[string]any {
+		return map[string]any{
+			"type": "object",
+			"properties": map[string]any{
+				"prompt":        map[string]any{"type": "string"},
+				"response_type": map[string]any{"type": "string", "enum": responseEnum},
+				"secret": map[string]any{
+					"type": "object",
+					"properties": map[string]any{
+						"name":  map[string]any{"type": "string"},
+						"scope": map[string]any{"type": "string", "enum": []any{"chat", "project"}},
+					},
+				},
+			},
+		}
+	}
+	offered := []string{"ask_user", "command", "secret_generate", "secret_list", "secret_revoke"}
+	makeCtx := func(enumVals []any) tools.ToolContext {
+		return tools.ToolContext{
+			Identity: tools.InvocationIdentity{Agent: "coordinator", SessionID: sessionID},
+			Source: tools.InvocationSource{
+				Roots:        []projectroot.RootRef{{ID: "main", Path: gitRepoDir(t), IsPrimary: true}},
+				ActiveRootID: "main",
+			},
+			Turn: tools.InvocationTurn{
+				TurnSurfaceID:        "implement_investigate",
+				TurnOfferedToolNames: offered,
+				TurnOfferedToolSchemas: map[string]map[string]any{
+					"ask_user":        makeAskSchema(enumVals),
+					"command":         {"type": "object"},
+					"secret_generate": {"type": "object"},
+					"secret_list":     {"type": "object"},
+					"secret_revoke":   {"type": "object"},
+				},
+			},
+		}
+	}
+
+	admittedTctx := makeCtx([]any{"text", "single_choice", "multi_choice", "secret"})
+	narrowedEnumTctx := makeCtx([]any{"text", "single_choice", "multi_choice"})
+
+	admittedReader, err := skillToolReader(t.Context(), nil, admittedTctx)
+	testutil.FailErr(t, "admitted skillToolReader", err)
+	narrowedReader, err := skillToolReader(t.Context(), nil, narrowedEnumTctx)
+	testutil.FailErr(t, "narrowed skillToolReader", err)
+	if admittedReader.Facts()["can_ask_user_secret"] != true || narrowedReader.Facts()["can_ask_user_secret"] != false {
+		t.Fatalf("can_ask_user_secret = admitted:%v narrowed:%v",
+			admittedReader.Facts()["can_ask_user_secret"], narrowedReader.Facts()["can_ask_user_secret"])
+	}
+	if admittedReader.Fingerprint() == narrowedReader.Fingerprint() {
+		t.Fatalf("Reader.Fingerprint() collided across response_type enum narrowing: %s", admittedReader.Fingerprint())
+	}
+
+	admittedOut, err := rt.Registry.Run(t.Context(), "skills_read", map[string]any{"need": "use-secrets-without-reading-them"}, admittedTctx)
+	testutil.FailErr(t, "skills_read admitted", err)
+	if !strings.Contains(admittedOut, "call `ask_user` with `response_type: secret` and a `secret` object") || strings.Contains(admittedOut, "report the need upstream") {
+		t.Fatalf("admitted render lost ask_user secret call:\n%s", admittedOut)
+	}
+
+	narrowedOut, err := rt.Registry.Run(t.Context(), "skills_read", map[string]any{"need": "use-secrets-without-reading-them"}, narrowedEnumTctx)
+	testutil.FailErr(t, "skills_read narrowed enum", err)
+	if strings.Contains(narrowedOut, "response_type: secret") || !strings.Contains(narrowedOut, "— report the need upstream") {
+		t.Fatalf("narrowed-enum render leaked response_type: secret or lost upstream handoff:\n%s", narrowedOut)
+	}
+}
+
+// Exercises wired admission and delivery across wide->narrow and narrow->wide with identical offered names.
+func TestWiredSkillAdmissionAndDeliveryDistinguishProjectedSchemasBothOrders(t *testing.T) {
+	t.Setenv("LYCAON_TEST_VERCEL_CLI", "1")
+	configtest.Overlay(t, map[config.Rel]string{
+		config.HostResources: `version: 1
+resources:
+  - id: vercel-cli
+    family: cloud
+    label: Vercel CLI
+    category: Cloud
+    description: Vercel deployment CLI.
+    surfaces: [process_exec]
+    realizations:
+      - discover:
+          environment:
+            names: [LYCAON_TEST_VERCEL_CLI]
+        connections:
+          - mode: proxy
+`,
+	})
+	wideAsk := map[string]any{
+		"type": "object",
+		"properties": map[string]any{
+			"prompt":        map[string]any{"type": "string"},
+			"response_type": map[string]any{"type": "string", "enum": []any{"text", "single_choice", "multi_choice", "secret"}},
+			"secret":        map[string]any{"type": "object"},
+		},
+	}
+	narrowAsk := map[string]any{
+		"type": "object",
+		"properties": map[string]any{
+			"prompt":        map[string]any{"type": "string"},
+			"response_type": map[string]any{"type": "string", "enum": []any{"text", "single_choice", "multi_choice"}},
+			"secret":        map[string]any{"type": "object"},
+		},
+	}
+	wideVerify := map[string]any{
+		"type": "object",
+		"properties": map[string]any{
+			"secret_use": map[string]any{"type": "array"},
+			"capability_request": map[string]any{
+				"type":       "object",
+				"properties": map[string]any{"host_resources": map[string]any{"type": "array"}},
+			},
+		},
+	}
+	narrowVerify := map[string]any{
+		"type":       "object",
+		"properties": map[string]any{"socks_proxy": map[string]any{"type": "boolean"}},
+	}
+
+	for _, order := range []struct {
+		name      string
+		wideFirst bool
+	}{
+		{"wide_then_narrow", true},
+		{"narrow_then_wide", false},
+	} {
+		t.Run(order.name, func(t *testing.T) {
+			cat := extpackstest.StockCatalog(t)
+			root := configlayout.FindModuleRoot()
+			rt, err := toolhost.NewRuntime(toolhost.RuntimeConfig{ConfigRoot: root, Catalog: cat})
+			testutil.FailErr(t, "build runtime", err)
+			st := storetest.New(t, testdbseed.DefaultProjectID)
+			mgr := session.NewHost(st, session.Models{Limits: settings.DefaultSessionLimits()}, nil)
+			mgr.SetEffectiveCatalogDeps(root, cat, nil)
+			mgr.Catalog.SetCatalogViewCache(catalogview.NewCache(root, slog.Default()))
+			hr, err := hostresources.NewService(t.TempDir())
+			testutil.FailErr(t, "new host resources", err)
+			mgr.Profiles.SetHostResources(hr)
+			sess, err := st.Sessions.Create(t.Context(), api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
+			testutil.FailErr(t, "create session", err)
+			wireSessionToolSources(mgr, rt, hr)
+
+			repoDir := gitRepoDir(t)
+			makeRunnerCtx := func(verifySchema map[string]any) tools.ToolContext {
+				return tools.ToolContext{
+					Identity: tools.InvocationIdentity{Agent: "implementer", SessionID: sess.ID},
+					Source: tools.InvocationSource{
+						Roots:        []projectroot.RootRef{{ID: "main", Path: repoDir, IsPrimary: true}},
+						ActiveRootID: "main",
+					},
+					Turn: tools.InvocationTurn{
+						TurnOfferedToolNames: []string{"command", "secret_generate", "secret_list", "secret_revoke", "verify"},
+						TurnOfferedToolSchemas: map[string]map[string]any{
+							"command":         {"type": "object"},
+							"secret_generate": {"type": "object"},
+							"secret_list":     {"type": "object"},
+							"secret_revoke":   {"type": "object"},
+							"verify":          verifySchema,
+						},
+					},
+				}
+			}
+			makeAskDeliveryCtx := func(askSchema map[string]any) tools.ToolContext {
+				return tools.ToolContext{
+					Identity: tools.InvocationIdentity{Agent: "coordinator", SessionID: sess.ID},
+					Source: tools.InvocationSource{
+						Roots:        []projectroot.RootRef{{ID: "main", Path: repoDir, IsPrimary: true}},
+						ActiveRootID: "main",
+					},
+					Turn: tools.InvocationTurn{
+						TurnSurfaceID:        "implement_investigate",
+						TurnOfferedToolNames: []string{"ask_user", "command", "secret_generate", "secret_list", "secret_revoke"},
+						TurnOfferedToolSchemas: map[string]map[string]any{
+							"ask_user":        askSchema,
+							"command":         {"type": "object"},
+							"secret_generate": {"type": "object"},
+							"secret_list":     {"type": "object"},
+							"secret_revoke":   {"type": "object"},
+						},
+					},
+				}
+			}
+			checkStep := func(wide bool) {
+				runnerCtx := makeRunnerCtx(narrowVerify)
+				askCtx := makeAskDeliveryCtx(narrowAsk)
+				if wide {
+					runnerCtx = makeRunnerCtx(wideVerify)
+					askCtx = makeAskDeliveryCtx(wideAsk)
+				}
+				admOut, admErr := rt.Registry.Run(t.Context(), "skills_read", map[string]any{"need": "deploy-to-a-hosting-platform"}, runnerCtx)
+				if wide {
+					testutil.FailErr(t, "admit deploy-to-a-hosting-platform on wide verify", admErr)
+					if !strings.Contains(admOut, "Skill: deploy-to-a-hosting-platform") || !strings.Contains(admOut, "capability_request.host_resources") {
+						t.Fatalf("wide admission missing deploy-to-a-hosting-platform body:\n%s", admOut)
+					}
+				} else {
+					if admErr != nil {
+						var reject *toolrejection.ToolReject
+						if !errors.As(admErr, &reject) || reject.Code != "SKILL_UNKNOWN" {
+							testutil.FailErr(t, "skills_read narrow admission", admErr)
+						}
+						admOut = ""
+					}
+					if strings.Contains(admOut, "deploy-to-a-hosting-platform") {
+						t.Fatalf("narrow verify without host_resources falsely admitted deploy-to-a-hosting-platform:\n%s", admOut)
+					}
+				}
+
+				bodyOut, err := rt.Registry.Run(t.Context(), "skills_read", map[string]any{"need": "use-secrets-without-reading-them"}, askCtx)
+				testutil.FailErr(t, "skills_read body", err)
+				refOut, err := rt.Registry.Run(t.Context(), "skills_read", map[string]any{
+					"need":     "use-secrets-without-reading-them",
+					"resource": "references/managed-references.md",
+				}, runnerCtx)
+				testutil.FailErr(t, "skills_read resource", err)
+				if wide {
+					if !strings.Contains(bodyOut, "response_type: secret") || !strings.Contains(refOut, "When `verify` sets up an authenticated service") {
+						t.Fatalf("wide delivery lost secret collection or verify runner:\nbody:\n%s\nref:\n%s", bodyOut, refOut)
+					}
+				} else {
+					if strings.Contains(bodyOut, "response_type: secret") || !strings.Contains(bodyOut, "— report the need upstream") || strings.Contains(refOut, "## Repeated service use") {
+						t.Fatalf("narrow delivery leaked response_type: secret or verify runner:\nbody:\n%s\nref:\n%s", bodyOut, refOut)
+					}
+				}
+			}
+			checkStep(order.wideFirst)
+			checkStep(!order.wideFirst)
+		})
 	}
 }

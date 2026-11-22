@@ -2,7 +2,6 @@ package toolschema
 
 import (
 	"reflect"
-	"slices"
 	"strings"
 )
 
@@ -109,68 +108,143 @@ func SchemaAcceptsField(projected map[string]any, fieldPath string) bool {
 	if fieldPath == "" || projected == nil {
 		return false
 	}
-	_, ok := findFieldSchema(projected, "", fieldPath, 0)
-	return ok
+	return len(findFieldSchemas(projected, "", fieldPath, 0)) > 0
 }
 
-// SchemaAcceptsEnumValue reports whether projected admits fieldPath and string enum value.
-func SchemaAcceptsEnumValue(projected map[string]any, fieldPath, value string) bool {
+// SchemaAdmitsStringValue reports whether projected admits fieldPath and string value,
+// enforcing enum/const constraints when declared and admitting unconstrained string fields.
+func SchemaAdmitsStringValue(projected map[string]any, fieldPath, value string) bool {
 	fieldPath = strings.TrimSpace(fieldPath)
 	if fieldPath == "" || projected == nil {
 		return false
 	}
-	prop, ok := findFieldSchema(projected, "", fieldPath, 0)
-	if !ok {
+	nodes := findFieldSchemas(projected, "", fieldPath, 0)
+	if len(nodes) == 0 {
 		return false
 	}
-	rawEnum, hasEnum := prop["enum"]
-	if !hasEnum {
+	for _, node := range nodes {
+		if !nodeHasEnumOrConst(node) || nodeAcceptsEnumValue(node, value) {
+			return true
+		}
+	}
+	return false
+}
+
+// SchemaAcceptsEnumValue reports whether projected declares fieldPath with an
+// enum or const constraint that admits value.
+func SchemaAcceptsEnumValue(projected map[string]any, fieldPath, value string) bool {
+	fieldPath = strings.TrimSpace(fieldPath)
+	if fieldPath == "" || value == "" || projected == nil {
+		return false
+	}
+	for _, node := range findFieldSchemas(projected, "", fieldPath, 0) {
+		if nodeAcceptsEnumValue(node, value) {
+			return true
+		}
+	}
+	return false
+}
+
+func findFieldSchemas(node map[string]any, prefix, target string, depth int) []map[string]any {
+	if node == nil || depth > argFieldDepthMax {
+		return nil
+	}
+	var out []map[string]any
+	if props, ok := node["properties"].(map[string]any); ok {
+		for name, raw := range props {
+			if strings.TrimSpace(name) == "" {
+				continue
+			}
+			path := name
+			if prefix != "" {
+				path = prefix + "." + name
+			}
+			child, isMap := raw.(map[string]any)
+			if !isMap || child == nil {
+				continue
+			}
+			if path == target {
+				out = append(out, child)
+			} else if strings.HasPrefix(target, path+".") {
+				out = append(out, findFieldSchemas(child, path, target, depth+1)...)
+			}
+		}
+	} else if items, ok := node["items"].(map[string]any); ok {
+		out = append(out, findFieldSchemas(items, prefix, target, depth+1)...)
+	}
+	for _, key := range []string{"oneOf", "anyOf", "allOf"} {
+		if branches, ok := node[key].([]any); ok {
+			for _, raw := range branches {
+				if branch, ok := raw.(map[string]any); ok {
+					out = append(out, findFieldSchemas(branch, prefix, target, depth+1)...)
+				}
+			}
+		}
+	}
+	return out
+}
+
+func nodeHasEnumOrConst(node map[string]any) bool {
+	if node == nil {
+		return false
+	}
+	if _, ok := node["enum"]; ok {
 		return true
 	}
-	switch vals := rawEnum.(type) {
-	case []string:
-		return slices.Contains(vals, value)
-	case []any:
-		for _, item := range vals {
-			if s, isStr := item.(string); isStr && s == value {
+	if _, ok := node["const"]; ok {
+		return true
+	}
+	for _, key := range []string{"oneOf", "anyOf", "allOf"} {
+		if branches, ok := node[key].([]any); ok {
+			for _, raw := range branches {
+				if branch, ok := raw.(map[string]any); ok && nodeHasEnumOrConst(branch) {
+					return true
+				}
+			}
+		}
+	}
+	return false
+}
+
+func nodeAcceptsEnumValue(node map[string]any, value string) bool {
+	if node == nil {
+		return false
+	}
+	if rawEnum, hasEnum := node["enum"]; hasEnum {
+		values, ok := copySchemaList(rawEnum)
+		if !ok {
+			return false
+		}
+		for _, v := range values {
+			if s, isStr := v.(string); isStr && s == value {
 				return true
 			}
 		}
 		return false
-	default:
-		return true
 	}
-}
-
-func findFieldSchema(schema map[string]any, prefix, target string, depth int) (map[string]any, bool) {
-	if schema == nil || depth > argFieldDepthMax {
-		return nil, false
+	if rawConst, hasConst := node["const"]; hasConst {
+		s, ok := rawConst.(string)
+		return ok && s == value
 	}
-	if items, ok := schema["items"].(map[string]any); ok {
-		if found, ok := findFieldSchema(items, prefix, target, depth+1); ok {
-			return found, true
-		}
-	}
-	props, _ := schema["properties"].(map[string]any)
-	for name, raw := range props {
-		if strings.TrimSpace(name) == "" {
-			continue
-		}
-		path := name
-		if prefix != "" {
-			path = prefix + "." + name
-		}
-		child, ok := raw.(map[string]any)
-		if path == target {
-			return child, ok && child != nil
-		}
-		if ok && strings.HasPrefix(target, path+".") {
-			if found, ok := findFieldSchema(child, path, target, depth+1); ok {
-				return found, true
+	for _, key := range []string{"oneOf", "anyOf"} {
+		if branches, ok := node[key].([]any); ok {
+			for _, raw := range branches {
+				if branch, ok := raw.(map[string]any); ok && nodeAcceptsEnumValue(branch, value) {
+					return true
+				}
 			}
 		}
 	}
-	return nil, false
+	if branches, ok := node["allOf"].([]any); ok && len(branches) > 0 {
+		for _, raw := range branches {
+			branch, ok := raw.(map[string]any)
+			if !ok || !nodeAcceptsEnumValue(branch, value) {
+				return false
+			}
+		}
+		return true
+	}
+	return false
 }
 
 func cloneSchemaMap(in map[string]any) map[string]any {

@@ -131,7 +131,6 @@ func TestStateSpecificGuidanceGitHistoryCommitAndBisect(t *testing.T) {
 	t.Run("investigate_code_history_paired_states", func(t *testing.T) {
 		sk := loadSkillByName(t, eff, "investigate-code-history")
 
-		// 1. Primary root has Git + command offered -> concrete git status/diff/blame
 		gitPrimary, err := prompts.NewReader(prompts.ReaderInput{
 			ProfileID:     "explore_readonly",
 			Profiles:      profiles,
@@ -150,7 +149,7 @@ func TestStateSpecificGuidanceGitHistoryCommitAndBisect(t *testing.T) {
 			}
 		}
 
-		// 2. Primary root non-Git, secondary root Git, command offered -> concrete cwd="@<label>" route
+		// Secondary root has Git while primary does not.
 		secondaryGit, err := prompts.NewReader(prompts.ReaderInput{
 			ProfileID:     "explore_readonly",
 			Profiles:      profiles,
@@ -167,7 +166,6 @@ func TestStateSpecificGuidanceGitHistoryCommitAndBisect(t *testing.T) {
 			t.Fatalf("secondary-git state did not guide cwd=@<label> while omitting primary git blame:\n%s", outSecondary)
 		}
 
-		// 3. Git root present, command deferred and request_tools offered -> concrete request_tools loading step
 		deferredGit, err := prompts.NewReader(prompts.ReaderInput{
 			ProfileID: "worker_loadable_git",
 			Profiles: []sandbox.ToolProfile{{
@@ -189,7 +187,6 @@ func TestStateSpecificGuidanceGitHistoryCommitAndBisect(t *testing.T) {
 			t.Fatalf("deferred command state did not render request_tools:\n%s", outDeferred)
 		}
 
-		// 4. Isolated worker branch with source_history -> concrete source_history route, no git blame
 		workerBranch, err := prompts.NewReader(prompts.ReaderInput{
 			ProfileID:      "implement",
 			Profiles:       profiles,
@@ -235,7 +232,6 @@ func TestStateSpecificGuidanceGitHistoryCommitAndBisect(t *testing.T) {
 			t.Fatalf("can_git_bisect=true lost git bisect/worktree commands:\n%s", bisectMut)
 		}
 
-		// Read-only surface: can_git_read == true, can_git_commit == false, can_git_bisect == false
 		routingPlan, err := prompts.CompileSurfacePlan("implement_routing", 1)
 		testutil.FailErr(t, "CompileSurfacePlan implement_routing", err)
 		readOnlyCoord, err := prompts.NewReader(prompts.ReaderInput{
@@ -265,7 +261,6 @@ func TestStateSpecificGuidanceCoordinatorAndReleaseStates(t *testing.T) {
 	engine, eff, profiles, readOnlyEffects := newGuidanceTestEnv(t)
 
 	t.Run("coordinator_dispatch_ask_and_posture_paired_states", func(t *testing.T) {
-		// Dispatch surface at 1 root (has_workspace_roots=true, has_file_tools=false) vs 0 roots
 		dispatch1Plan, err := prompts.CompileSurfacePlan("implement_dispatch", 1)
 		testutil.FailErr(t, "CompileSurfacePlan dispatch 1", err)
 		dispatch1Reader, err := prompts.NewReader(prompts.ReaderInput{
@@ -313,7 +308,6 @@ func TestStateSpecificGuidanceCoordinatorAndReleaseStates(t *testing.T) {
 			t.Fatalf("dispatch at 0 roots did not narrow to web-researcher:\n%s", outDispatch0)
 		}
 
-		// Observe investigate in Ask mode vs Agent mode
 		obsPlan, err := prompts.CompileSurfacePlan("observe_investigate", 1)
 		testutil.FailErr(t, "CompileSurfacePlan observe_investigate", err)
 		askReader, err := prompts.NewReader(prompts.ReaderInput{
@@ -356,8 +350,6 @@ func TestStateSpecificGuidanceCoordinatorAndReleaseStates(t *testing.T) {
 	t.Run("prepare_a_release_fixed_workspace_varying_reach", func(t *testing.T) {
 		relSk := loadSkillByName(t, eff, "prepare-a-release")
 
-		// Fixed workspace facts: HasGit=true, OnWorkerBranch=false, RootCount=1, SessionScratchDir="/scratch/rel"
-		// 1. Both command (external+mutation) and verify offered -> git log, git status, verify, and @scratch/<version>/
 		fullExec, err := prompts.NewReader(prompts.ReaderInput{
 			ProfileID: "rel_full",
 			Profiles: []sandbox.ToolProfile{{
@@ -380,7 +372,6 @@ func TestStateSpecificGuidanceCoordinatorAndReleaseStates(t *testing.T) {
 			}
 		}
 
-		// 2. Partial load: verify offered, command deferred with request_tools -> names verify and request_tools(need="command"), never unoffered `command`
 		verifyOnlyDeferredCmd, err := prompts.NewReader(prompts.ReaderInput{
 			ProfileID: "rel_verify_only",
 			Profiles: []sandbox.ToolProfile{{
@@ -402,7 +393,6 @@ func TestStateSpecificGuidanceCoordinatorAndReleaseStates(t *testing.T) {
 			t.Fatalf("verify-only partial state leaked unoffered command or missed request_tools:\n%s", outVerifyOnly)
 		}
 
-		// 3. Partial load: read-only command offered, verify absent -> git log/status kept, verify omitted, pending execution reported
 		roCmdOnly, err := prompts.NewReader(prompts.ReaderInput{
 			ProfileID: "rel_ro_cmd",
 			Profiles: []sandbox.ToolProfile{{
@@ -433,8 +423,7 @@ func TestStateSpecificGuidanceProjectedSchemaAndSelectorStates(t *testing.T) {
 		}}
 		occHost := prompts.AgentPromptSurfaceTemplateVars(prompts.AgentPromptSurface{HostResources: sampleResources})
 
-		// Read-only command + verify offered: command's projected schema prunes capability_request and secret_use,
-		// so ONLY `verify` may be named as accepting capability_request.host_resources, capability_request, and secret_use!
+		// Read-only command is pruned while verify keeps runner fields.
 		roCmdPlusVerify, err := prompts.NewReader(prompts.ReaderInput{
 			ProfileID: "implement",
 			Profiles: []sandbox.ToolProfile{{
@@ -470,7 +459,6 @@ func TestStateSpecificGuidanceProjectedSchemaAndSelectorStates(t *testing.T) {
 			t.Fatalf("sandbox-confinement on read-only clamped implement profile leaked command or file-write claims:\n%s", sandboxOut)
 		}
 
-		// Read-only command alone: neither capability_request nor secret_use is accepted by any offered tool
 		roCmdAlone, err := prompts.NewReader(prompts.ReaderInput{
 			ProfileID: "explore_readonly",
 			Profiles: []sandbox.ToolProfile{{
@@ -497,7 +485,6 @@ func TestStateSpecificGuidanceProjectedSchemaAndSelectorStates(t *testing.T) {
 			t.Fatalf("read-only sandbox-confinement missed read-only limitation:\n%s", sandboxOutRO)
 		}
 
-		// Selector visibility: CommandExternalHidden=false vs true on diagnose_resource_exhaustion.md and git-mutation-user-consent.md
 		perfSk := loadSkillByName(t, eff, "diagnose-performance")
 		rawExhaustion, err := perfSk.ReadResource("references/diagnose_resource_exhaustion.md")
 		testutil.FailErr(t, "ReadResource diagnose_resource_exhaustion.md", err)
@@ -553,7 +540,6 @@ func TestStateSpecificGuidancePerOperationGitReachWitnesses(t *testing.T) {
 		batchTpl, cErr := pongoplain.Compile(string(rawBatch))
 		testutil.FailErr(t, "Compile batch-and-amend.md", cErr)
 
-		// 1. Mutating profile allowing git_commit (plan_write_only) -> can_git_commit=true
 		allowCommitReader, err := prompts.NewReader(prompts.ReaderInput{
 			ProfileID:     "plan_write_only",
 			Profiles:      profiles,
@@ -570,7 +556,7 @@ func TestStateSpecificGuidancePerOperationGitReachWitnesses(t *testing.T) {
 			t.Fatalf("eligible commit profile missing git add / git commit:\n%s", outAllow)
 		}
 
-		// 2. Adjacent stock editor_file profile: HasGit=true, command offered, mutation=true, denies git_commit!
+		// Stock editor_file mutates and offers command on Git, while denying git_commit.
 		editorReader, err := prompts.NewReader(prompts.ReaderInput{
 			ProfileID:     "editor_file",
 			Profiles:      profiles,
@@ -599,7 +585,6 @@ func TestStateSpecificGuidancePerOperationGitReachWitnesses(t *testing.T) {
 			t.Fatalf("batch-and-amend leaked git commit or missed handoff on editor_file:\n%s", batchOut)
 		}
 
-		// 3. Deferred mutating command where git_commit is denied -> can_request_git_commit=false, can_request_git_read=true
 		deferredDenyCommit, err := prompts.NewReader(prompts.ReaderInput{
 			ProfileID: "deferred_no_commit",
 			Profiles: []sandbox.ToolProfile{{
@@ -626,7 +611,6 @@ func TestStateSpecificGuidancePerOperationGitReachWitnesses(t *testing.T) {
 		histSk := loadSkillByName(t, eff, "investigate-code-history")
 		bisectSk := loadSkillByName(t, eff, "hunt-a-regression-with-bisect")
 
-		// Read: HasGit=true, command+source_history offered, read_only=true, but git_blame denied
 		denyBlameReader, err := prompts.NewReader(prompts.ReaderInput{
 			ProfileID: "ro_no_blame",
 			Profiles: []sandbox.ToolProfile{{
@@ -649,7 +633,6 @@ func TestStateSpecificGuidancePerOperationGitReachWitnesses(t *testing.T) {
 			t.Fatalf("git_blame-denied history render leaked git blame or lost source_history fallback:\n%s", histOut)
 		}
 
-		// Bisect: HasGit=true, command offered, full effects (mutation+external_exec), but git_* denied
 		denyBisectReader, err := prompts.NewReader(prompts.ReaderInput{
 			ProfileID: "exec_no_git",
 			Profiles: []sandbox.ToolProfile{{

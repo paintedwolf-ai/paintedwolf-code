@@ -429,13 +429,12 @@ func ValidateSkills(c *Catalog, agents []AgentSurface, loaded []skills.Skill) er
 				continue
 			}
 			// Runtime and the contract matrix only offer a skill to readers
-			// whose tools cover its rendered body (SkillToolsOffered), so
-			// validation checks the same eligibility set rather than demanding
-			// every skill render clean for every profile.
-			offerKey := agent.ProfileID + "\x00" + skill.Name + "\x00" + skill.Body
+			// whose tools and projected schemas cover its rendered body, so
+			// validation checks the same eligibility set.
+			offerKey := reader.Fingerprint() + "\x00" + skill.Name + "\x00" + skill.Body
 			isOffered, cachedOffer := offeredByProfile[offerKey]
 			if !cachedOffer {
-				isOffered = SkillToolsOffered(skill, held)
+				isOffered = SkillToolsOfferedForReader(skill, reader)
 				offeredByProfile[offerKey] = isOffered
 			}
 			if !isOffered {
@@ -554,8 +553,54 @@ var fallbackStockCatalog = sync.OnceValue(func() *Catalog {
 	return c
 })
 
+// SkillToolsOfferedForReader reports whether reader's offered tools and
+// projected schemas cover sk's rendered body, host_resources, and any_of_tools.
+func SkillToolsOfferedForReader(sk skills.Skill, reader prompts.Reader) bool {
+	if sk.UserProvided {
+		return true
+	}
+	if !reader.Valid() {
+		return SkillToolsOffered(sk, nil)
+	}
+	vars, err := prompts.SkillVars(reader)
+	if err != nil {
+		return SkillToolsOffered(sk, reader.Held())
+	}
+	if strings.TrimSpace(sk.Metadata["host_resources"]) != "" {
+		hostResTools, _ := vars["runner_host_resources_tools"].([]string)
+		if len(hostResTools) == 0 {
+			return false
+		}
+	}
+	c := StockCatalog()
+	if c == nil {
+		return true
+	}
+	offered := reader.Held()
+	anyOf := sk.AnyOfTools()
+	cacheKey := "reader:" + reader.Fingerprint() + "\x00" + varsDigestKey(vars)
+	rendered, renderErr := renderSkillTextCached(cacheKey, sk.Body, vars)
+	if renderErr != nil {
+		rendered = sk.Body
+	}
+	for _, name := range UnreachableNames(c, rendered, offered) {
+		if !slices.Contains(anyOf, name) {
+			return false
+		}
+	}
+	if len(anyOf) == 0 {
+		return true
+	}
+	for _, tool := range anyOf {
+		if offered[tool] {
+			return true
+		}
+	}
+	return false
+}
+
 // SkillToolsOffered reports whether offered covers every tool, operation, and
-// command form sk's rendered body requires, and satisfies any_of_tools.
+// command form sk's rendered body requires for names-only callers without a Reader.
 func SkillToolsOffered(sk skills.Skill, offered map[string]bool) bool {
 	if sk.UserProvided {
 		return true

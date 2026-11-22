@@ -14,11 +14,6 @@ import (
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 )
 
-// "Is a folder attached" (has_workspace_roots) and "can this turn reach project
-// files directly" (has_file_tools) are distinct capability facts: rootless turns
-// have neither, orchestration-only surfaces at >=1 root have workspace roots
-// without direct file tools, and direct file/shell/survey/source_ledger tools
-// flip has_file_tools only when a folder is attached.
 func TestFileToolFactHasOneSource(t *testing.T) {
 	t.Parallel()
 	allowlist, err := toolscope.NoFolderAllowlist()
@@ -27,8 +22,6 @@ func TestFileToolFactHasOneSource(t *testing.T) {
 		t.Fatal("no_folder_allowlist is empty")
 	}
 
-	// Every allowlisted tool works without a folder and none is a direct project
-	// file tool, so a surface built only from them must not claim file tools.
 	for _, rootCount := range []int{0, 1} {
 		caps := capability.Derive(rootCount, allowlist, nil)
 		if caps.HasFileTools {

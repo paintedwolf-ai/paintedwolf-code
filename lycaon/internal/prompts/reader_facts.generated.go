@@ -103,7 +103,7 @@ var declaredReaderFactScalarNames = []string{
 var declaredReaderFactScalars = map[string]ReaderFactScalarSpec{
 	"agent_tools":                        {Name: "agent_tools", Type: "[]map[string]any", States: "Offered worker tools with required argument summaries."},
 	"can_any_git_read":                   {Name: "can_any_git_read", Type: "bool", States: "At least one workspace root has Git, is not a worker branch, and offers Git inspection forms through command."},
-	"can_ask_user_secret":                {Name: "can_ask_user_secret", Type: "bool", States: "Ask-user is offered and its projected schema accepts secret-reference prompts."},
+	"can_ask_user_secret":                {Name: "can_ask_user_secret", Type: "bool", States: "Ask-user is offered and its projected schema accepts response_type secret and the secret object."},
 	"can_command_external_selector":      {Name: "can_command_external_selector", Type: "bool", States: "Command is offered with external execution and the explicit external selector is visible."},
 	"can_command_verify":                 {Name: "can_command_verify", Type: "bool", States: "Command is offered and admits external execution for verification checks."},
 	"can_git_bisect":                     {Name: "can_git_bisect", Type: "bool", States: "Primary workspace root has Git, is not a worker branch, and reaches Git bisect/worktree and external check execution through command."},

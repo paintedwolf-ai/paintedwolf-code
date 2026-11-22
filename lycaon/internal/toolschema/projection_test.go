@@ -75,4 +75,15 @@ func TestSharedNarrowingPrimitivesPreserveSourceSchemas(t *testing.T) {
 	if !reflect.DeepEqual(rt["enum"], []any{"text", "single_choice", "multi_choice"}) {
 		t.Fatalf("ask_user response_type enum = %v", rt["enum"])
 	}
+	if !SchemaAcceptsEnumValue(askRaw, "response_type", "secret") || SchemaAcceptsEnumValue(narrowedAsk, "response_type", "secret") {
+		t.Fatalf("SchemaAcceptsEnumValue secret mismatch: raw=%t narrowed=%t",
+			SchemaAcceptsEnumValue(askRaw, "response_type", "secret"),
+			SchemaAcceptsEnumValue(narrowedAsk, "response_type", "secret"))
+	}
+	if !SchemaAcceptsEnumValue(narrowedWait, "conditions.kind", "http_ready") || SchemaAcceptsEnumValue(narrowedWait, "conditions.kind", "port_ready") {
+		t.Fatal("SchemaAcceptsEnumValue failed on nested array items enum")
+	}
+	if SchemaAcceptsEnumValue(nil, "response_type", "secret") || SchemaAcceptsEnumValue(askRaw, "missing_field", "secret") {
+		t.Fatal("SchemaAcceptsEnumValue accepted nil schema or missing field")
+	}
 }

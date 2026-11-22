@@ -312,10 +312,6 @@ func TestCapabilityConditionsAndSourceDiscoveryFailClosed(t *testing.T) {
 	}
 }
 
-// Demonstrates independently what production skill admission (toolvocab.SkillToolsOffered)
-// guarantees and does NOT guarantee: scanning unconditional non-form tool names in SKILL.md
-// guarantees only that those tools are in held (and their minimum offered projected schemas),
-// NEVER pruned command arguments or command subprograms like curl or git commit.
 func TestProductionSkillAdmissionGuaranteesAndNonGuarantees(t *testing.T) {
 	t.Parallel()
 	s, err := promptrender.LoadStock(t.Context())
@@ -367,9 +363,6 @@ func TestProductionSkillAdmissionGuaranteesAndNonGuarantees(t *testing.T) {
 		}
 	}
 
-	// Narrower projected schemas on ask_user (Ask mode) and wait (timer-only WaitConditions: nil):
-	// SkillToolsOffered still admits skills naming ask_user or wait, so retained skill-admission
-	// schema guarantees must NOT include pruned fields (secret, conditions).
 	askFields, err := promptrender.SkillGuaranteedSchemaFieldsForText(s,
 		"---\nname: ask-probe\ndescription: Probe.\n---\nCall `ask_user`.\n",
 	)
@@ -385,9 +378,6 @@ func TestProductionSkillAdmissionGuaranteesAndNonGuarantees(t *testing.T) {
 		t.Fatalf("wait retained skill schema guarantees = %v, must keep timeout_ms and exclude timer-only-pruned conditions*", waitFields)
 	}
 
-	// Verify every retained skill-admission schema guarantee on every stock skill holds
-	// across narrowed live TurnAuthority schemas (spec/build x agent/ask, including Ask-mode
-	// ask_user narrowing, spec read-only command narrowing, and timer-only wait narrowing).
 	overlays, err := hoststate.DiscoverPackOverlays(t.Context())
 	contractcheck.FailErr(t, "DiscoverPackOverlays", err)
 	stockOverlay := overlays[0]
@@ -459,7 +449,7 @@ func TestProductionSkillAdmissionGuaranteesAndNonGuarantees(t *testing.T) {
 			contractcheck.FailErr(t, "FreezeWorkerAuthority", wErr)
 			checkAuthoritySkills("worker/"+string(posture)+"/"+string(mode), wAuth.Reader.Held(), wAuth.Offered, wAuth.Schemas)
 
-			// Timer-only wait narrowing (WaitConditions: nil) on the same worker offered set.
+			// Timer-only wait fixture omits WaitConditions on the same offered set.
 			timerSchemas := make(map[string]map[string]any, len(wAuth.Schemas))
 			for k, v := range wAuth.Schemas {
 				timerSchemas[k] = v
