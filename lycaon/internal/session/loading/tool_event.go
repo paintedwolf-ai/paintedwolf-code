@@ -2,11 +2,13 @@ package loading
 
 import (
 	"context"
+	"slices"
 	"sort"
 	"strings"
 	"time"
 
 	"github.com/lycaon/lycaon/internal/coordinator/guard"
+	"github.com/lycaon/lycaon/internal/coordinator/surface"
 	"github.com/lycaon/lycaon/internal/coordinator/turnload"
 	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/internal/sandbox"
@@ -47,10 +49,10 @@ func (m *Service) readSkillForTool(ctx context.Context, sess *api.Session, tctx 
 		return
 	}
 	roster, _ := m.skills(ctx, sess, tctx.Identity.Agent, roots)
-	if reader, rErr := m.toolEventReader(ctx, sess, tctx, tool, len(roots)); rErr == nil {
+	if reader, rErr := m.toolEventReader(ctx, sess, tctx, tool, len(roots)); rErr == nil && reader.Valid() {
 		roster = eligibleSkillsForReader(roster, reader)
 	} else {
-		roster = eligibleSkillsForOfferedTools(roster, m.toolEventOfferedTools(ctx, sess, tctx, tool, len(roots)))
+		roster = nil
 	}
 	card := turnload.ToolCard{Name: tool, Description: m.toolDescription(ctx, sess, tctx.Identity.Agent, tctx.Turn.TurnSurfaceID, tool)}
 	finishDeciding := m.beginDeciding(ctx, sess, sess.ID, api.TurnLoadTriggerToolEvent, tctx.Identity.ToolCallID)
@@ -114,23 +116,103 @@ func (m *Service) toolEventReader(ctx context.Context, sess *api.Session, tctx t
 			surfaceID = cand
 		}
 	}
-	sessionMode := string(api.SessionModeAgent)
+	mode := api.SessionModeAgent
 	if tctx.Source.AskMode || (sess != nil && sess.Mode == api.SessionModeAsk) {
-		sessionMode = string(api.SessionModeAsk)
+		mode = api.SessionModeAsk
 	}
-	offered := m.toolEventOfferedTools(ctx, sess, tctx, tool, rootCount)
-	visible := make([]string, 0, len(offered))
-	for name := range offered {
-		visible = append(visible, name)
+	floor, loadable, _ := m.turnToolSets(ctx, sess, tctx.Identity.Agent, tctx.Turn.TurnSurfaceID, rootCount)
+	basePlan := tctx.Turn.TurnToolPlan
+	if !basePlan.Compiled() && (len(floor) > 0 || len(loadable) > 0) {
+		basePlan = toolsurface.Compile(floor, loadable)
 	}
-	sort.Strings(visible)
+	if surfaceID != "" && !basePlan.Compiled() {
+		compiled, err := surface.CompileToolPlan(surface.TurnProfile{SurfaceID: surfaceID, SessionMode: mode}, rootCount)
+		if err != nil {
+			return prompts.Reader{}, err
+		}
+		basePlan = compiled
+	}
+
+	var (
+		plan    toolsurface.Plan
+		loaded  map[string]bool
+		visible []string
+	)
+	if tctx.Turn.TurnOfferedToolNames != nil {
+		offeredSet := nameSet(tctx.Turn.TurnOfferedToolNames)
+		deferredSet := m.toolEventDeferredSet(sess, profiles, profileID, loadable, basePlan)
+		immediateSet := make(map[string]bool, len(offeredSet))
+		for name := range offeredSet {
+			if !deferredSet[name] {
+				immediateSet[name] = true
+			}
+		}
+		immediate := sortedToolSet(immediateSet)
+		deferred := sortedToolSet(deferredSet)
+		if len(immediate) > 0 || len(deferred) > 0 {
+			plan = toolsurface.Compile(immediate, deferred)
+		} else {
+			plan = basePlan
+		}
+		loaded = offeredSet
+		if surfaceID != "" {
+			visible = slices.Clone(tctx.Turn.TurnOfferedToolNames)
+		} else {
+			allVisible := make(map[string]bool, len(offeredSet)+len(deferredSet))
+			for name := range offeredSet {
+				allVisible[name] = true
+			}
+			for name := range deferredSet {
+				allVisible[name] = true
+			}
+			visible = sortedToolSet(allVisible)
+			if visible == nil {
+				visible = []string{}
+			}
+		}
+	} else {
+		immediateSet := nameSet(floor)
+		for _, name := range basePlan.ImmediateNames() {
+			if name = strings.TrimSpace(name); name != "" {
+				immediateSet[name] = true
+			}
+		}
+		deferredSet := m.toolEventDeferredSet(sess, profiles, profileID, loadable, basePlan)
+		for name := range immediateSet {
+			delete(deferredSet, name)
+		}
+		loaded = make(map[string]bool)
+		if m != nil && m.Ledger != nil && sess != nil {
+			for name := range m.Ledger.Active(sess.ID) {
+				loaded[name] = true
+			}
+		}
+		if invoked := strings.TrimSpace(tool); invoked != "" {
+			if immediateSet[invoked] || deferredSet[invoked] || (len(immediateSet) == 0 && len(deferredSet) == 0) {
+				loaded[invoked] = true
+				if len(immediateSet) == 0 && len(deferredSet) == 0 {
+					immediateSet[invoked] = true
+				}
+			}
+		}
+		immediate := sortedToolSet(immediateSet)
+		deferred := sortedToolSet(deferredSet)
+		plan = toolsurface.Compile(immediate, deferred)
+		if surfaceID == "" {
+			visible = append(slices.Clone(immediate), deferred...)
+			if visible == nil {
+				visible = []string{}
+			}
+		}
+	}
+
 	return prompts.NewReader(prompts.ReaderInput{
 		ProfileID:        profileID,
 		SurfaceID:        surfaceID,
-		SessionMode:      sessionMode,
+		SessionMode:      string(mode),
 		Profiles:         profiles,
-		Plan:             toolsurface.Compile(visible, nil),
-		Loaded:           offered,
+		Plan:             plan,
+		Loaded:           loaded,
 		Visible:          visible,
 		ProjectedSchemas: tctx.Turn.TurnOfferedToolSchemas,
 		RootCount:        rootCount,
@@ -138,38 +220,38 @@ func (m *Service) toolEventReader(ctx context.Context, sess *api.Session, tctx t
 	})
 }
 
-func (m *Service) toolEventOfferedTools(ctx context.Context, sess *api.Session, tctx tools.ToolContext, tool string, rootCount int) map[string]bool {
-	floor, loadable, _ := m.turnToolSets(ctx, sess, tctx.Identity.Agent, tctx.Turn.TurnSurfaceID, rootCount)
-	offered := nameSet(floor)
-	for _, name := range loadable {
+func (m *Service) toolEventDeferredSet(sess *api.Session, profiles []sandbox.ToolProfile, profileID string, loadable []string, basePlan toolsurface.Plan) map[string]bool {
+	deferredSet := nameSet(loadable)
+	for _, name := range basePlan.DeferredNames() {
 		if name = strings.TrimSpace(name); name != "" {
-			offered[name] = true
-		}
-	}
-	for _, name := range tctx.Turn.TurnOfferedToolNames {
-		if name = strings.TrimSpace(name); name != "" {
-			offered[name] = true
-		}
-	}
-	for _, name := range tctx.Turn.TurnToolPlan.ImmediateNames() {
-		if name = strings.TrimSpace(name); name != "" {
-			offered[name] = true
-		}
-	}
-	for _, name := range tctx.Turn.TurnToolPlan.DeferredNames() {
-		if name = strings.TrimSpace(name); name != "" {
-			offered[name] = true
+			deferredSet[name] = true
 		}
 	}
 	if m != nil && m.Ledger != nil && sess != nil {
-		for name := range m.Ledger.Active(sess.ID) {
-			offered[name] = true
+		for _, p := range profiles {
+			if p.ID != profileID {
+				continue
+			}
+			for name := range p.Tools {
+				if m.Ledger.Loadable(sess.ID, name) {
+					deferredSet[name] = true
+				}
+			}
 		}
 	}
-	if tool = strings.TrimSpace(tool); tool != "" {
-		offered[tool] = true
+	return deferredSet
+}
+
+func sortedToolSet(set map[string]bool) []string {
+	if len(set) == 0 {
+		return nil
 	}
-	return offered
+	out := make([]string, 0, len(set))
+	for name := range set {
+		out = append(out, name)
+	}
+	sort.Strings(out)
+	return out
 }
 
 // renderToolEventSkill renders the selected skill's body into the turn ledger.

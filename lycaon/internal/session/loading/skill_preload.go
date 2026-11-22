@@ -106,16 +106,6 @@ func eligibleSkillsForReader(roster []skills.Skill, reader prompts.Reader) []ski
 	return out
 }
 
-func eligibleSkillsForOfferedTools(roster []skills.Skill, offered map[string]bool) []skills.Skill {
-	out := make([]skills.Skill, 0, len(roster))
-	for _, sk := range roster {
-		if toolvocab.SkillToolsOffered(sk, offered) {
-			out = append(out, sk)
-		}
-	}
-	return out
-}
-
 func (m *Service) renderSkillPreload(ctx context.Context, sessionID string, tctx tools.ToolContext, decision *Decision) {
 	if decision.skill == nil || m.skillBody == nil {
 		return

@@ -17,6 +17,7 @@ import (
 	"github.com/lycaon/lycaon/internal/configlayout"
 	"github.com/lycaon/lycaon/internal/hostresources"
 	"github.com/lycaon/lycaon/internal/projectroot"
+	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/internal/session"
 	"github.com/lycaon/lycaon/internal/session/profiles"
 	"github.com/lycaon/lycaon/internal/session/store/storetest"
@@ -787,6 +788,123 @@ resources:
 			}
 			checkStep(order.wideFirst)
 			checkStep(!order.wideFirst)
+		})
+	}
+}
+
+// Positive and negative field-level and root-allOf ask_user projections through can_ask_user_secret.
+func TestCanAskUserSecretRespectsFieldAndRootAllOfIntersections(t *testing.T) {
+	rt, sessionID := newWiredSkillHost(t)
+	repoDir := gitRepoDir(t)
+	offered := []string{"ask_user", "command", "secret_generate", "secret_list", "secret_revoke"}
+
+	for _, tc := range []struct {
+		name      string
+		askSchema map[string]any
+		wantAllow bool
+	}{
+		{
+			name: "field_level_negative_enum_narrowed_by_allOf_const",
+			askSchema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"response_type": map[string]any{
+						"type":  "string",
+						"enum":  []any{"text", "secret"},
+						"allOf": []any{map[string]any{"const": "text"}},
+					},
+					"secret": map[string]any{"type": "object"},
+				},
+			},
+			wantAllow: false,
+		},
+		{
+			name: "field_level_positive_enum_and_allOf_both_admit_secret",
+			askSchema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"response_type": map[string]any{
+						"type":  "string",
+						"enum":  []any{"text", "secret"},
+						"allOf": []any{map[string]any{"enum": []any{"single_choice", "secret"}}},
+					},
+					"secret": map[string]any{"type": "object"},
+				},
+			},
+			wantAllow: true,
+		},
+		{
+			name: "root_allOf_negative_branch_narrows_response_type_to_text",
+			askSchema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"response_type": map[string]any{"type": "string", "enum": []any{"text", "secret"}},
+					"secret":        map[string]any{"type": "object"},
+				},
+				"allOf": []any{
+					map[string]any{
+						"properties": map[string]any{
+							"response_type": map[string]any{"const": "text"},
+						},
+					},
+				},
+			},
+			wantAllow: false,
+		},
+		{
+			name: "root_allOf_positive_branches_preserve_secret",
+			askSchema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"response_type": map[string]any{"type": "string", "enum": []any{"text", "single_choice", "secret"}},
+					"secret":        map[string]any{"type": "object"},
+				},
+				"allOf": []any{
+					map[string]any{
+						"properties": map[string]any{
+							"response_type": map[string]any{"enum": []any{"text", "secret"}},
+						},
+					},
+					map[string]any{"required": []any{"response_type"}},
+				},
+			},
+			wantAllow: true,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			tctx := tools.ToolContext{
+				Identity: tools.InvocationIdentity{Agent: "coordinator", SessionID: sessionID},
+				Source: tools.InvocationSource{
+					Roots:        []projectroot.RootRef{{ID: "main", Path: repoDir, IsPrimary: true}},
+					ActiveRootID: "main",
+				},
+				Turn: tools.InvocationTurn{
+					TurnSurfaceID:        "implement_investigate",
+					TurnOfferedToolNames: offered,
+					TurnOfferedToolSchemas: map[string]map[string]any{
+						"ask_user":        tc.askSchema,
+						"command":         {"type": "object"},
+						"secret_generate": {"type": "object"},
+						"secret_list":     {"type": "object"},
+						"secret_revoke":   {"type": "object"},
+					},
+				},
+			}
+			reader, err := skillToolReader(t.Context(), nil, tctx)
+			testutil.FailErr(t, "skillToolReader", err)
+			vars, err := prompts.SkillVars(reader)
+			testutil.FailErr(t, "SkillVars", err)
+			if got := vars["can_ask_user_secret"]; got != tc.wantAllow {
+				t.Fatalf("can_ask_user_secret = %v, want %t", got, tc.wantAllow)
+			}
+			out, err := rt.Registry.Run(t.Context(), "skills_read", map[string]any{"need": "use-secrets-without-reading-them"}, tctx)
+			testutil.FailErr(t, "skills_read", err)
+			if tc.wantAllow && !strings.Contains(out, "response_type: secret") {
+				t.Fatalf("positive witness omitted response_type: secret:\n%s", out)
+			}
+			if !tc.wantAllow && (strings.Contains(out, "response_type: secret") || !strings.Contains(out, "— report the need upstream")) {
+				t.Fatalf("negative witness leaked response_type: secret:\n%s", out)
+			}
 		})
 	}
 }

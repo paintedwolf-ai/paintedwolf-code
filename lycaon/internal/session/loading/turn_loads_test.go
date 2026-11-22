@@ -178,14 +178,21 @@ func TestNeededForTurnIncludesRecallWhenHistoryHasCompactedContent(t *testing.T)
 	}
 }
 
-func TestToolEventOfferedToolsIncludesDeferredTurnPlanTools(t *testing.T) {
+func TestToolEventReaderKeepsUnactivatedDeferredPlanToolsRequestable(t *testing.T) {
 	t.Parallel()
-	m := &Service{}
+	m := &Service{Ledger: turnload.NewLedger()}
+	sess := &api.Session{ID: "s1"}
 	plan := toolsurface.Compile([]string{"command", "request_tools"}, []string{"terminal_open", "terminal_snapshot"})
-	got := m.toolEventOfferedTools(context.Background(), &api.Session{ID: "s1"}, tools.ToolContext{
+	reader, err := m.toolEventReader(context.Background(), sess, tools.ToolContext{
 		Turn: tools.InvocationTurn{TurnToolPlan: plan},
 	}, "terminal_open", 1)
-	if !got["terminal_open"] || !got["terminal_snapshot"] {
-		t.Fatalf("expected deferred turn plan tools in toolEventOfferedTools, got %v", got)
+	if err != nil {
+		t.Fatalf("toolEventReader: %v", err)
+	}
+	if !slices.Contains(reader.Offered(), "terminal_open") || slices.Contains(reader.Offered(), "terminal_snapshot") {
+		t.Fatalf("offered = %v, want terminal_open offered and terminal_snapshot deferred", reader.Offered())
+	}
+	if !slices.Contains(reader.Requestable(), "terminal_snapshot") {
+		t.Fatalf("requestable = %v, want terminal_snapshot", reader.Requestable())
 	}
 }

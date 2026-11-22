@@ -200,7 +200,7 @@ func resolveProjectedToolSchemas(
 	if in.ProjectedSchemas != nil {
 		for _, name := range offered {
 			if explicit, ok := in.ProjectedSchemas[name]; ok && explicit != nil {
-				out[name] = toolschema.ProjectArgsSchema(explicit)
+				out[name] = explicit
 			}
 		}
 		return out
