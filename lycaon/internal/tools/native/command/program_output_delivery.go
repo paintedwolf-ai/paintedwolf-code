@@ -7,7 +7,6 @@ import (
 
 	"github.com/lycaon/lycaon/internal/captureprojection"
 	"github.com/lycaon/lycaon/internal/evidence"
-	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/invocation"
 	"github.com/lycaon/lycaon/internal/scratch"
 	"github.com/lycaon/lycaon/internal/secretmatch"
@@ -265,19 +264,13 @@ func programRunOutputReach(ctx context.Context, run *programRun) toolreach.Reque
 	if run == nil {
 		return toolreach.Offered(nil)
 	}
-	offered := run.tc.Turn.TurnOfferedToolNames
-	if offered == nil && run.tool != "" {
-		offered = []string{run.tool}
-	}
 	table := run.tc.Turn.TurnPrograms
 	if table == nil {
 		table = run.surface.ProgramTable()
 	}
-	schemas := run.tc.Turn.TurnOfferedToolSchemas
-	if schemas == nil && run.tc.Turn.TurnOfferedToolNames == nil && run.tool != "" {
-		schemas = guidance.StockProjectedToolSchemas(run.tool)
-	}
-	return toolreach.Freeze(offered, run.tc.Turn.TurnToolPlan).WithProgramTable(table).WithSchemas(schemas)
+	return toolreach.Freeze(run.tc.Turn.TurnOfferedToolNames, run.tc.Turn.TurnToolPlan).
+		WithProgramTable(table).
+		WithSchemas(run.tc.Turn.TurnOfferedToolSchemas)
 }
 
 func (r *ProgramRuntime) attachProgramStream(ctx context.Context, run *programRun, outputs *invocation.ProgramOutputRetention, output *screenedProgramOutput) error {

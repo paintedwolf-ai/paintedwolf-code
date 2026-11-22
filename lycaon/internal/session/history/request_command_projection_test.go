@@ -13,6 +13,7 @@ import (
 	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -30,7 +31,7 @@ func largeRecordedCommand() []api.Message {
 func TestCompletedCommandProjectionPreservesFactsAndRecovery(t *testing.T) {
 	guidance.SetGuidanceRenderer(promptstest.GuidanceRenderer(t))
 	rows := largeRecordedCommand()
-	got := projectCompletedCommands(t.Context(), true, rows)
+	got := projectCompletedCommands(recallReachCtx(t), true, rows)
 	if len(got) != 2 || len(got[1].ToolCalls) != 0 || got[1].ToolResult != nil {
 		t.Fatalf("exchange was not replaced atomically: %+v", got)
 	}
@@ -89,7 +90,10 @@ func TestFittingLargeCompletedSourceLeavesRoomForContinuation(t *testing.T) {
 	cfg.ModelContextWindow = 8192
 	cfg.HardCeilingTokens = 6000
 	svc.Compactor = compaction.NewSimpleCompactor(cfg, nil)
-	req := modelcall.CompletionRequest{Messages: append([]api.Message{{ID: "standing", Role: api.MessageRoleSystem, Content: strings.Repeat("standing ", 100)}}, rows...)}
+	req := modelcall.CompletionRequest{
+		Messages: append([]api.Message{{ID: "standing", Role: api.MessageRoleSystem, Content: strings.Repeat("standing ", 100)}}, rows...),
+		Tools:    []tools.ToolMeta{recallToolMeta(t)},
+	}
 	fitted, err := svc.FitRequest(t.Context(), &api.Session{ID: "s"}, rows, req, nil, nil)
 	testutil.FailErr(t, "fit settled source", err)
 	if modelcall.EstimateRequestInput(fitted) >= 6000 || !strings.Contains(fitted.Messages[len(fitted.Messages)-1].Content, `"exit_code":1`) {

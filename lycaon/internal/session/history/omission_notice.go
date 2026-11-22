@@ -2,11 +2,22 @@ package history
 
 import (
 	"context"
+	"strconv"
+	"strings"
 
 	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/toolreach"
 	"github.com/lycaon/lycaon/pkg/api"
 )
+
+const omittedOrdinalsPrefix = "[host:omitted history ordinals "
+
+func (m *Service) effectiveRecallAvailable(ctx context.Context, sess *api.Session) bool {
+	if req := toolreach.FromContext(ctx); req.Known() {
+		return req.Status("recall") == toolreach.Callable
+	}
+	return m != nil && m.recallAvailable != nil && m.recallAvailable(ctx, sess)
+}
 
 func recallReach(ctx context.Context, recallAvailable bool) toolreach.Request {
 	if !recallAvailable {
@@ -15,7 +26,28 @@ func recallReach(ctx context.Context, recallAvailable bool) toolreach.Request {
 	if req := toolreach.FromContext(ctx); req.Known() {
 		return req
 	}
-	return guidance.StockToolReach("recall")
+	return toolreach.Offered(nil)
+}
+
+func parseOmittedOrdinalRange(content string) (int64, int64, bool) {
+	if !strings.HasPrefix(content, omittedOrdinalsPrefix) {
+		return 0, 0, false
+	}
+	rest := content[len(omittedOrdinalsPrefix):]
+	semi := strings.IndexByte(rest, ';')
+	if semi < 0 {
+		return 0, 0, false
+	}
+	fromStr, throughStr, ok := strings.Cut(rest[:semi], " through ")
+	if !ok {
+		return 0, 0, false
+	}
+	from, err1 := strconv.ParseInt(strings.TrimSpace(fromStr), 10, 64)
+	through, err2 := strconv.ParseInt(strings.TrimSpace(throughStr), 10, 64)
+	if err1 != nil || err2 != nil || from <= 0 || through < from {
+		return 0, 0, false
+	}
+	return from, through, true
 }
 
 // tailOmissionNotice names rows between coverage and the canonical tail that hard

@@ -47,10 +47,7 @@ func (m *Service) PromoteOverlay(ctx context.Context, sessionID, overlayID strin
 	if len(out.Rebased) > 0 {
 		reach := toolreach.FromContext(ctx)
 		if !reach.Known() {
-			reach = guidance.StockToolReach("preview_overlay", "promote_overlay", "instruct_worker")
-			if sess, sErr := m.sessionStore.Get(ctx, sessionID); sErr == nil && sess != nil && sess.Mode == api.SessionModeAsk {
-				reach = guidance.StockToolReach("preview_overlay")
-			}
+			reach = toolreach.Offered(nil)
 		}
 		var bErr error
 		banners, bErr = guidance.RenderOverlayRebaseConflictBanners(ctx, reach, overlayID, out.Rebased)

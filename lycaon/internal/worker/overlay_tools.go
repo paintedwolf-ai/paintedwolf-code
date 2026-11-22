@@ -70,6 +70,9 @@ func RegisterOverlayTools(reg *tools.DefaultRegistry, deps OverlayToolDeps) erro
 			ToolCallID:  tctx.Identity.ToolCallID,
 			UserTurn:    tctx.Identity.UserTurn,
 		}
+		if !toolreach.FromContext(ctx).Known() && (len(tctx.Turn.TurnOfferedToolNames) > 0 || len(tctx.Turn.TurnOfferedToolSchemas) > 0) {
+			ctx = toolreach.WithRequest(ctx, tools.TurnReach(tctx))
+		}
 		out, err := deps.Merge.PromoteOverlay(ctx, tctx.Identity.SessionID, overlayID, in)
 		out.ResultHandle = resultHandle
 		if err == nil {
@@ -268,7 +271,7 @@ func intArg(raw any) int {
 func formatOverlayPromoteHostContent(ctx context.Context, overlayID string, out api.WorkerMergeResult, runErr error) (string, error) {
 	reach := toolreach.FromContext(ctx)
 	if !reach.Known() {
-		reach = guidance.StockToolReach("preview_overlay", "promote_overlay", "instruct_worker")
+		reach = toolreach.Offered(nil)
 	}
 	banners, err := guidance.RenderOverlayRebaseConflictBanners(ctx, reach, overlayID, out.Rebased)
 	if err != nil {

@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/prompts"
+	"github.com/lycaon/lycaon/internal/prompts/promptstest"
 	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/toolreach"
@@ -121,10 +122,10 @@ func TestRenderUtilityPromptsAndSurveySeparation(t *testing.T) {
 
 func TestRenderCommandOutputOmittedPairedWitnesses(t *testing.T) {
 	setTestRenderer(t)
-	sedAdmitted := StockToolReach(toolreach.ProgramTool).WithPrograms(func(name string) bool {
+	sedAdmitted := promptstest.StockToolReach(t, toolreach.ProgramTool).WithPrograms(func(name string) bool {
 		return name == "sed"
 	})
-	sedDenied := StockToolReach(toolreach.ProgramTool).WithPrograms(func(name string) bool {
+	sedDenied := promptstest.StockToolReach(t, toolreach.ProgramTool).WithPrograms(func(name string) bool {
 		return name != "sed"
 	})
 	missingSchema := toolreach.Offered([]string{toolreach.ProgramTool}).WithPrograms(func(name string) bool {
@@ -135,7 +136,7 @@ func TestRenderCommandOutputOmittedPairedWitnesses(t *testing.T) {
 	}).WithSchemas(map[string]map[string]any{
 		toolreach.ProgramTool: {"type": "object", "properties": map[string]any{}},
 	})
-	withoutCommand := StockToolReach("recall")
+	withoutCommand := promptstest.StockToolReach(t, "recall")
 
 	pos, err := RenderCommandOutputOmitted(t.Context(), sedAdmitted, "4,182", "184 KB", "@output/prog.stdout", 251, 400, 5000, 200000, true)
 	testutil.FailErr(t, "render with sed admitted", err)
@@ -187,7 +188,7 @@ func cloneNestedSchemaMap(in map[string]any) map[string]any {
 
 func TestRenderContinuationProjectedRecallArgumentWitnesses(t *testing.T) {
 	setTestRenderer(t)
-	fullRecall := StockProjectedToolSchemas("recall")["recall"]
+	fullRecall := promptstest.ProjectedToolSchemas(t, "recall")["recall"]
 	historyOnly := cloneNestedSchemaMap(fullRecall)
 	delete(historyOnly["properties"].(map[string]any), "query")
 
@@ -266,7 +267,7 @@ func TestRenderContinuationProjectedRecallArgumentWitnesses(t *testing.T) {
 func TestRenderOverlayRebaseConflictProjectedArgumentWitnesses(t *testing.T) {
 	setTestRenderer(t)
 	offered := []string{"preview_overlay", "promote_overlay", "instruct_worker"}
-	full := StockProjectedToolSchemas(offered...)
+	full := promptstest.ProjectedToolSchemas(t, offered...)
 	outcomes := []api.OverlayRebaseOutcome{{
 		OverlayID: "ov-child",
 		Status:    api.WorkerMergeStatusRebasing,
