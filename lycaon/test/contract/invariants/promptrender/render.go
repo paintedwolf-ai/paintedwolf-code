@@ -97,9 +97,8 @@ func RenderStockSkills(stock *Stock) ([]SkillRender, error) {
 	}
 	var out []SkillRender
 	add := func(label string, reader prompts.Reader) error {
-		held := reader.Held()
 		for _, sk := range loaded {
-			if sk.Project || !toolvocab.SkillToolsOffered(sk, held) {
+			if sk.Project || !toolvocab.SkillToolsOfferedForReader(sk, reader) {
 				continue
 			}
 			vars, err := prompts.SkillVars(reader)

@@ -69,3 +69,75 @@ func TestReadSkillForToolGatesStockSkillsByOfferedToolsAndCopiesResources(t *tes
 		t.Fatalf("preload resources = %v, want [references/wcag.md]", got.Resources)
 	}
 }
+
+// Tool-event skill selection must honor projected schemas in both wide->narrow and narrow->wide orders.
+func TestReadSkillForToolDistinguishesProjectedSchemasBothOrders(t *testing.T) {
+	wideVerify := map[string]any{
+		"type": "object",
+		"properties": map[string]any{
+			"capability_request": map[string]any{
+				"type":       "object",
+				"properties": map[string]any{"host_resources": map[string]any{"type": "array"}},
+			},
+		},
+	}
+	narrowVerify := map[string]any{
+		"type":       "object",
+		"properties": map[string]any{"socks_proxy": map[string]any{"type": "boolean"}},
+	}
+	roster := []skills.Skill{{
+		Name:        "deploy-to-a-hosting-platform",
+		Description: "Deploy with host CLI access.",
+		Body:        "Run `verify`.",
+		Metadata:    map[string]string{"host_resources": "cloud-cli"},
+	}}
+	for _, order := range []struct {
+		name      string
+		wideFirst bool
+	}{
+		{"wide_then_narrow", true},
+		{"narrow_then_wide", false},
+	} {
+		t.Run(order.name, func(t *testing.T) {
+			sess := &api.Session{ID: "s-" + order.name}
+			ledger := turnload.NewLedger()
+			m := &Service{
+				Ledger:  ledger,
+				decider: &decidetest.Fake{Scores: []float64{3.8}},
+				skills: func(context.Context, *api.Session, string, []string) ([]skills.Skill, []extpacks.Diagnostic) {
+					return roster, nil
+				},
+			}
+			m.SetSkillBodyRenderer(func(_ context.Context, _ tools.ToolContext, sk skills.Skill) (string, error) {
+				return sk.Body, nil
+			})
+			step := func(msgID string, wide bool) {
+				schema := narrowVerify
+				if wide {
+					schema = wideVerify
+				}
+				ledger.BeginTurn(sess.ID, turnload.TurnOpening{
+					OpeningMessageID: msgID,
+					Request:          "Deploy the app",
+					Loadable:         []string{"verify"},
+				}, turnload.Decision{})
+				m.ObserveToolCall(t.Context(), sess, tools.ToolContext{
+					Identity: tools.InvocationIdentity{Agent: "coordinator"},
+					Turn: tools.InvocationTurn{
+						TurnOfferedToolNames:   []string{"verify"},
+						TurnOfferedToolSchemas: map[string]map[string]any{"verify": schema},
+					},
+				}, "verify")
+				got := m.SkillPreload(sess.ID)
+				if wide && (got == nil || got.Name != "deploy-to-a-hosting-platform") {
+					t.Fatalf("wide verify missed preload: %+v", got)
+				}
+				if !wide && got != nil {
+					t.Fatalf("narrow verify without host_resources preloaded %+v", got)
+				}
+			}
+			step("m1", order.wideFirst)
+			step("m2", !order.wideFirst)
+		})
+	}
+}

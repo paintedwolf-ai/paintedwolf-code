@@ -205,13 +205,16 @@ func wireSessionToolSources(mgr *session.Host, host *toolhost.Runtime, hostResou
 			}
 			sess, _ := mgr.Chats.Get(ctx, tctx.Identity.SessionID)
 			loaded, _ := mgr.Profiles.EffectiveSkillsForProfile(ctx, sess, tctx.Identity.Agent, roots)
-			var held map[string]bool
-			if reader, err := skillToolReader(ctx, mgr, tctx); err == nil {
-				held = reader.Held()
-			}
+			reader, err := skillToolReader(ctx, mgr, tctx)
 			reachable := make([]skills.Skill, 0, len(loaded))
 			for _, skill := range loaded {
-				if toolvocab.SkillToolsOffered(skill, held) {
+				admitted := false
+				if err == nil {
+					admitted = toolvocab.SkillToolsOfferedForReader(skill, reader)
+				} else {
+					admitted = toolvocab.SkillToolsOffered(skill, nil)
+				}
+				if admitted {
 					reachable = append(reachable, skill)
 				}
 			}
