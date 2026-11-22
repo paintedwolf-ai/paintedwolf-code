@@ -187,7 +187,7 @@ pub(super) fn plan_confirmation(
     let Ok(facts) = facts else {
         return Some(ConfirmationPrompt {
             title: TITLE,
-            description: "Painted Wolf Code could not check for active work. Quitting may stop work. You can keep working instead.".into(),
+            description: "Painted Wolf Code couldn’t check whether any tasks or background commands are still running. If any are running, quitting will stop them.".into(),
             confirm_label: QUIT,
             cancel_label: KEEP_WORKING,
             has_background_commands: false,
@@ -207,7 +207,7 @@ pub(super) fn plan_confirmation(
         }
         return Some(ConfirmationPrompt {
             title: TITLE,
-            description: "Work is still active. Quitting will stop it. You can keep working instead.".into(),
+            description: "Work is still in progress. Quitting now will interrupt it.".into(),
             confirm_label: QUIT,
             cancel_label: KEEP_WORKING,
             has_background_commands: false,
