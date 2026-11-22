@@ -174,7 +174,7 @@ var (
 	preLoadTargetRe     = regexp.MustCompile("(?i)\\b(?:load|request|unlock|enable)\\s+(?:tool\\s+)?(?:\\*\\*)?`([a-z][a-z0-9_]*)`(?:\\*\\*)?\\s+(?:with|via|through|using|from|by\\s+calling)\\s+(?:\\*\\*)?`?$")
 	preLoadVerbRe       = regexp.MustCompile(`(?i)\b(?:load|request|unlock|enable)\s+(?:tool\s+)?$`)
 	preLoadPrepRe       = regexp.MustCompile(`(?i)^\s+(?:via|with|through|using|from|by\s+calling)\s+$`)
-	afterLoaderPrepRe   = regexp.MustCompile(`(?i)^\s+(?:after|once\s+loaded\s+via|following)\s+(?:calling\s+)?$`)
+	afterLoaderPrepRe   = regexp.MustCompile(`(?i)^\s+(?:after(?:\s+loading(?:\s+it)?\s+(?:with|via))?|once\s+loaded\s+(?:via|with)|following)\s+(?:calling\s+)?$`)
 	postLoadSeqCueRe    = regexp.MustCompile(`(?i)(?:\bbefore\b|\bthen\b|\bfirst\b|\bafter\b|\bonce\b|\bto\s+[a-z]+)`)
 	unseqConjRe         = regexp.MustCompile(`(?i),\s*and\s+(?:run|use|call|invoke|execute|apply)\b`)
 )

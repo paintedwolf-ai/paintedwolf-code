@@ -6,7 +6,7 @@
 | `description` | Yes | Up to 1024 characters; bundled skills use one sentence of at most 180 characters, what and when only. It is the text the host ranks |
 | `license` | No | License name or bundled file reference |
 | `compatibility` | No | Up to 500 characters of environment needs |
-| `metadata` | No | String keys to string values. `host_resources` is a comma-separated list of required host-resource entries; a `\|` inside one entry lists interchangeable alternatives (`docker\|podman`), and each entry needs one available id for the host to advertise or load the skill. `paintedwolf.any_of_tools` is a comma-separated list of tools of which the reader needs only one |
+| `metadata` | No | String keys to string values. `host_resources` is a comma-separated list of required host-resource entries; a `\|` inside one entry lists interchangeable alternatives (`docker\|podman`), and each entry needs one available id for the host to advertise or load the skill. `paintedwolf.any_of_tools` is a comma-separated list of tools of which the reader needs only one. `authoring_reference: "true"` marks extension/skill authoring meta-documentation whose worked examples illustrate template and rule syntax |
 | `allowed-tools` | No | Read and shown, never honored |
 
 ## Size limits

@@ -1,6 +1,6 @@
 # Code history routing reference
 
-{% if can_git_read %}Native Git commands in `command` provide committed history.{% if profile_has_source_history %} `source_history` provides the live source ledger for uncommitted work.{% endif %}{% else %}This folder does not inspect the main tree's Git history directly{% if not has_git %}{% if can_any_git_read %} (pass `cwd="@<label>"` in `command` for the attached Git folder){% elif has_any_git_root %} (primary folder has no `.git`; an attached folder does){% else %} (no `.git` metadata){% endif %}{% endif %}, so Git rows below do not apply to the default folder. {% if profile_has_source_history %}`source_history()` and `source_history(path, mode=diff)` provide the live change history here.{% elif can_request_git_read %}Call `request_tools(need: "inspect git history")` first to run Git commands in `command`.{% else %}Report the historical question for a read worker or the coordinator to resolve against main-tree Git metadata.{% endif %}{% endif %}
+{% if can_git_read %}Native Git commands in `command` provide committed history.{% if profile_has_source_history %} `source_history` provides the live source ledger for uncommitted work.{% endif %}{% else %}This folder does not inspect the main tree's Git history directly{% if not has_git %}{% if can_any_git_read %} (pass `cwd="@<label>"` in `command` for the attached Git folder){% elif has_any_git_root %} (primary folder has no `.git`; an attached folder does){% else %} (no `.git` metadata){% endif %}{% endif %}, so Git rows below do not apply to the default folder. {% if profile_has_source_history %}`source_history()` and `source_history(path, mode=diff)` provide the live change history here. {% endif %}{% if can_request_git_read %}Call `request_tools(need: "inspect git history")` first to inspect committed Git history.{% elif not profile_has_source_history %}Report the historical question for a read worker or the coordinator to resolve against main-tree Git metadata.{% endif %}{% endif %}
 
 ## Choose the evidence
 
@@ -9,7 +9,7 @@
 {% if can_git_read %}| Is the change only local? | `git status --short` and `git diff -- path` in `command` |
 | Which commit last touched these lines? | `git blame -L A,B -- path`, then `git show ref -- path` in `command` |
 | How did a file evolve? | `git log -- path` in `command` |
-| Which commits differ between branches? | `git rev-list --left-right --count base...head`, `git log base..head`, and `git diff base head -- paths` in `command` |
+| Which commits differ between branches? | `git rev-list --count base..head`, `git log base..head`, and `git diff base head -- paths` in `command` |
 | What does a ref resolve to? | `git rev-parse ref` in `command` |
 | Where did text exist at an older revision? | `command`: `git grep -n PATTERN REV -- PATH`; `git show REV:PATH` for the whole file |
 | Which release contains a commit? | `command`: `git describe --tags --always REV`; `git log` between the named tags |

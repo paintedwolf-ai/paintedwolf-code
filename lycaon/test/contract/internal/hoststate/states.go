@@ -272,7 +272,13 @@ func resolveCoordinatorSeed(
 	scratch, shared := buildTempPaths(seed.temp)
 	allowlist := slices.Clone(overlay.SpawnAllowlist)
 	if !seed.web {
-		allowlist = slices.DeleteFunc(allowlist, func(id string) bool { return id == "web-researcher" })
+		webAgents := map[string]bool{}
+		for _, w := range overlay.WorkerAgents {
+			if w.ToolProfile == "web_research" {
+				webAgents[w.ID] = true
+			}
+		}
+		allowlist = slices.DeleteFunc(allowlist, func(id string) bool { return webAgents[id] })
 	}
 	if seed.mode == api.SessionModeAsk {
 		allowlist = prompts.ReadOnlyAgents(allowlist)
@@ -286,7 +292,7 @@ func resolveCoordinatorSeed(
 	history := []api.Message{{Role: api.MessageRoleUser, Content: "Inspect current state"}}
 	tp := surface.ResolveTurnProfile(runCtx, sess, history, implState)
 
-	excludedReason := coordinatorExclusionReason(seed, tp, surfMap, folderless)
+	excludedReason := coordinatorExclusionReason(seed, overlay, tp, surfMap, folderless)
 	planKey := fmt.Sprintf("%s|%s|%t|%s|%s|%d", tp.SurfaceID, tp.SessionMode, tp.WorkflowActive, tp.PhaseCoordinatorSurface, tp.AdvanceWhenGateMet, len(roots))
 	plan, cached := planCache[planKey]
 	if !cached {
@@ -344,12 +350,33 @@ func coordinatorRunInputs(seed coordinatorSeed, allowlist []string) (api.Coordin
 	return runCtx, st
 }
 
+func surfaceTemplatesLoadedInCatalog(overlay PackOverlay, tp surface.TurnProfile) bool {
+	if overlay.Catalog == nil {
+		return true
+	}
+	if tp.SurfaceTemplate != "" {
+		if _, _, ok := prompts.ResolveCatalogTemplateUnit(overlay.Catalog, tp.SurfaceTemplate); !ok {
+			return false
+		}
+	}
+	for _, modeRef := range tp.ModeRefs {
+		if _, _, ok := prompts.ResolveCatalogTemplateUnit(overlay.Catalog, surface.ModeTemplateRef(modeRef)); !ok {
+			return false
+		}
+	}
+	return true
+}
+
 func coordinatorExclusionReason(
 	seed coordinatorSeed,
+	overlay PackOverlay,
 	tp surface.TurnProfile,
 	surfMap map[string]surfacecatalog.Surface,
 	folderless []string,
 ) string {
+	if !surfaceTemplatesLoadedInCatalog(overlay, tp) {
+		return "surface_template_pack_removed_in_overlay"
+	}
 	if seed.wf == WorkflowActivePhase && seed.surfaceID != "" {
 		reqRow := surfMap[seed.surfaceID]
 		if seed.mode == api.SessionModeAsk && reqRow.RequiresAgent {

@@ -15,8 +15,10 @@ import (
 	"github.com/lycaon/lycaon/internal/extpacks"
 	"github.com/lycaon/lycaon/internal/hintregistry"
 	"github.com/lycaon/lycaon/internal/hostmarker"
+	"github.com/lycaon/lycaon/internal/hostresources"
 	"github.com/lycaon/lycaon/internal/isolation"
 	"github.com/lycaon/lycaon/internal/nativemanifest"
+	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/recall"
 	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/session/verification"
@@ -57,17 +59,18 @@ type BacktickSpan struct {
 
 // BacktickVocab holds the closed protocol catalogs for inline backtick classification.
 type BacktickVocab struct {
-	catalog       *toolvocab.Catalog
-	operations    map[string]bool
-	retiredTools  map[string]bool
-	commands      map[string]bool
-	commandFlags  map[string]bool
-	commandSyntax map[string]bool
-	schemaItems   map[string]bool
-	evidenceKinds map[string]bool
-	codes         map[string]bool
-	catalogIDs    map[string]bool
-	rootLabels    map[string]bool
+	catalog         *toolvocab.Catalog
+	operations      map[string]bool
+	retiredTools    map[string]bool
+	commands        map[string]bool
+	commandFlags    map[string]bool
+	commandSyntax   map[string]bool
+	schemaItems     map[string]bool
+	evidenceKinds   map[string]bool
+	codes           map[string]bool
+	catalogIDs      map[string]bool
+	hostResources   map[string]bool
+	authoringSkills map[string]bool
 }
 
 var (
@@ -87,15 +90,38 @@ var (
 		"HTTP_PROXY": true, "HTTPS_PROXY": true, "NO_PROXY": true, "ALL_PROXY": true,
 		"TMPDIR": true, "HOME": true, "PATH": true, "USER": true, "PWD": true, "OLDPWD": true,
 	}
-	commonExternalCLIs = map[string]bool{
-		"openssl": true, "docker": true, "podman": true, "python3": true, "python": true,
-		"yq": true, "sops": true, "doppler": true, "lsof": true, "screencapture": true,
+	posixShellBuiltinsAndSystemTools = map[string]bool{
 		"chmod": true, "eval": true, "exec": true, "printf": true, "nl": true, "patch": true,
+		"openssl": true, "python3": true, "python": true, "yq": true, "lsof": true, "screencapture": true,
 	}
 )
 
 // StockBacktickVocab returns the cached closed backtick vocabulary for stock packs.
 func StockBacktickVocab() (*BacktickVocab, error) { return stockBacktickOnce() }
+
+// IsKnownProgramOrCLI reports whether norm is a declared native program, operation,
+// shell builtin, or host-resource executable.
+func (v *BacktickVocab) IsKnownProgramOrCLI(norm string) bool {
+	if v == nil {
+		return false
+	}
+	return v.commands[norm] || v.commandSyntax[norm] || v.operations[norm] ||
+		v.retiredTools[norm] || v.hostResources[norm] || posixShellBuiltinsAndSystemTools[norm]
+}
+
+// IsAuthoringReferenceSource reports whether sourceID belongs to a skill carrying
+// metadata authoring_reference: "true".
+func (v *BacktickVocab) IsAuthoringReferenceSource(sourceID string) bool {
+	if v == nil {
+		return false
+	}
+	for sk := range v.authoringSkills {
+		if strings.Contains(sourceID, "skills/"+sk) || strings.Contains(sourceID, "skill "+sk+" ") {
+			return true
+		}
+	}
+	return false
+}
 
 // NewBacktickVocab constructs a closed backtick vocabulary from eff (or stock packs when nil).
 func NewBacktickVocab(eff *extpacks.EffectiveCatalog) (*BacktickVocab, error) {
@@ -122,7 +148,7 @@ func NewBacktickVocab(eff *extpacks.EffectiveCatalog) (*BacktickVocab, error) {
 		commands: map[string]bool{}, commandFlags: map[string]bool{}, commandSyntax: map[string]bool{},
 		schemaItems: map[string]bool{}, evidenceKinds: map[string]bool{},
 		codes: map[string]bool{}, catalogIDs: map[string]bool{},
-		rootLabels: map[string]bool{"scratch": true, "output": true, "label": true, "<label>": true, "main": true, "den": true, "primary": true, "secondary": true, "fixture": true},
+		hostResources: map[string]bool{}, authoringSkills: map[string]bool{},
 	}
 	for _, p := range profiles {
 		v.catalogIDs[p.ID] = true
@@ -219,6 +245,9 @@ func (v *BacktickVocab) populateCatalogAndEnvelopeIDs(eff *extpacks.EffectiveCat
 	if skillsList, err := extpacks.LoadEffectiveSkills(eff); err == nil {
 		for _, sk := range skillsList {
 			v.catalogIDs[sk.Name] = true
+			if strings.TrimSpace(sk.Metadata["authoring_reference"]) == "true" {
+				v.authoringSkills[sk.Name] = true
+			}
 		}
 	}
 	var baseVerdict map[string]any
@@ -277,11 +306,26 @@ func (v *BacktickVocab) populateCatalogAndEnvelopeIDs(eff *extpacks.EffectiveCat
 	for _, m := range hostmarker.All() {
 		v.catalogIDs[strings.TrimSpace(m.Value)] = true
 	}
+	if hrRaw, err := fs.ReadFile(config.Source(), "packs/painted-wolf/platform/host/host-resources.yaml"); err == nil {
+		if hrCat, pErr := hostresources.ParseCatalog(hrRaw, "host-resources.yaml"); pErr == nil {
+			for _, def := range hrCat.Resources {
+				v.hostResources[def.ID] = true
+				v.catalogIDs[def.ID] = true
+				for _, real := range def.Realizations {
+					collectHostResourceExecutables(real.Discover, v.hostResources)
+				}
+			}
+		}
+	}
 	for _, lit := range []string{
 		string(recall.ResolutionScopeEmpty), string(verification.SourceChanged),
 		runstate.ReviewBlockedReason, string(api.WorkerSummaryStatusNeedsDecision),
 		string(api.BackgroundProcessTerminationReasonStoppedByUser),
-		"evidence_passed:", "evidence_passed:*", "resolved_by:user",
+		"visual_artifact_ids", "superseded_by", "obligations", "scan", "scan_ids", "per_scan",
+		"initialization_required", "off_menu", "review_work_id", "promote_sequence",
+		"overlay_merge_plan", "overlay_merge_plan.promote_sequence", "source_evidence",
+		"gates_satisfied", "next_request", "record_request", "fixed_versions",
+		"evidence_passed:", "evidence_passed:*", "hitl_consulted:", "hitl_consulted:*", "resolved_by:user",
 		"invoked:false", "invoked:true", "status:rejected", "Cause:", "Fix:",
 	} {
 		v.catalogIDs[lit] = true
@@ -343,7 +387,7 @@ func (v *BacktickVocab) Classify(span string) (BacktickKind, string) {
 
 // CheckProse returns all unclassified inline backtick spans in host-authored prose.
 func (v *BacktickVocab) CheckProse(sourceID, prose string) []BacktickSpan {
-	if isAuthoringMetaSource(sourceID) {
+	if v.IsAuthoringReferenceSource(sourceID) {
 		return nil
 	}
 	var bad []BacktickSpan
@@ -378,7 +422,7 @@ func (v *BacktickVocab) classifyHandleOrRoot(s string) (BacktickKind, string, bo
 	}
 	if m := virtualRootRe.FindStringSubmatch(s); len(m) == 2 {
 		label := m[1]
-		if v.rootLabels[label] || (!strings.Contains(label, "_") && plainWordLitRe.MatchString(label)) {
+		if projectroot.IsVirtualRootLabel(label) || label == "<label>" || (!strings.Contains(label, "_") && plainWordLitRe.MatchString(label)) {
 			return BacktickHandleOrRoot, "virtual path root", true
 		}
 		return BacktickUnclassified, fmt.Sprintf("undeclared virtual path root %q", "@"+label), true
@@ -413,7 +457,7 @@ func (v *BacktickVocab) classifyToolOrCall(s string) (BacktickKind, string, bool
 }
 
 func (v *BacktickVocab) classifyCommand(s string) (BacktickKind, string, bool) {
-	if v.commands[s] || v.commandFlags[s] || v.commandSyntax[s] || commonExternalCLIs[s] {
+	if v.commands[s] || v.commandFlags[s] || v.commandSyntax[s] || v.hostResources[s] || posixShellBuiltinsAndSystemTools[s] {
 		return BacktickCommandForm, "command or flag", true
 	}
 	if strings.HasPrefix(s, "-") && len(s) >= 2 && !strings.HasPrefix(s, "- [") {
@@ -429,7 +473,7 @@ func (v *BacktickVocab) classifyCommand(s string) (BacktickKind, string, bool) {
 		if strings.Contains(head, "=") && !strings.Contains(head, ":") {
 			head = fields[1]
 		}
-		if v.commands[head] || v.commandSyntax[head] || commonExternalCLIs[head] || head == "cmd" {
+		if v.IsKnownProgramOrCLI(head) || head == "cmd" {
 			return BacktickCommandForm, "command invocation", true
 		}
 	}
@@ -494,6 +538,9 @@ func (v *BacktickVocab) classifyCodeOrID(s string) (BacktickKind, string, bool) 
 	if v.catalogIDs[s] || v.catalogIDs[trimmedStar] || v.catalogIDs[strings.TrimSuffix(s, ":")] {
 		return BacktickCodeOrCatalogID, "catalog identifier", true
 	}
+	if prefix, rest, hasColon := strings.Cut(s, ":"); hasColon && rest != "" && v.catalogIDs[prefix+":*"] {
+		return BacktickCodeOrCatalogID, "catalog scoped identifier", true
+	}
 	return "", "", false
 }
 
@@ -512,6 +559,9 @@ func (v *BacktickVocab) matchesDeclaredCode(code string) bool {
 }
 
 func isExplicitSyntaxLiteral(s string) bool {
+	if strings.HasPrefix(s, "{{paintedwolf-secret:") && strings.HasSuffix(s, "}}") {
+		return true
+	}
 	if strings.HasPrefix(s, "http://") || strings.HasPrefix(s, "https://") || strings.HasPrefix(s, "file://") ||
 		(strings.HasPrefix(s, "[") && strings.HasSuffix(s, ")") && strings.Contains(s, "](")) {
 		return true
@@ -526,6 +576,7 @@ func isExplicitSyntaxLiteral(s string) bool {
 		return false
 	}
 	if strings.HasPrefix(s, "#") || strings.HasPrefix(s, "- [") || strings.HasPrefix(s, "<") ||
+		(strings.HasPrefix(s, "**") && strings.HasSuffix(s, "**")) ||
 		strings.HasPrefix(s, "\"") || strings.HasPrefix(s, "'") || fileExtLikeRe.MatchString(s) ||
 		strings.Contains(s, "/") || strings.Contains(s, ":") && strings.Contains(s, " ") {
 		return true
@@ -640,11 +691,12 @@ func scanLineBackticks(line string, lineNum int, baseOffset int) []BacktickSpan 
 }
 
 var (
-	subClauseBreakRe = regexp.MustCompile(`(?i)(?:,\s*(?:and|but|then|so|while|yet)\b|\b(?:and|but|then)\s+(?:do\s+not|don't|never|cannot|can't|must\s+not|use|call|run|invoke|pass|set|apply|start|open|load|dispatch|execute|prefer|switch|confirm|verify|check|inspect|read|write|create|edit)\b|;\s*|\s+[—–]\s+)`)
-	negVerbPrefixRe  = regexp.MustCompile(`(?i)\b(?:do\s+not|don't|never|cannot|can't|must\s+not)\s+(?:ever\s+)?(?:call|run|use|pass|set|assign|mint|combine|invoke|include|emit|supply|offer|dispatch|execute|specify|allow|create|edit|write|apply|modify|touch|mutate|redirect)(?:\s+(?:the\s+)?(?:tool|argument|parameter|field|flag|option))?\s+(?:(?:\*\*)?` + "`[^`]+`" + `(?:\*\*)?\s*(?:,\s*|\s+or\s+|\s+and\s+|\s*/\s*))*$`)
+	subClauseBreakRe = regexp.MustCompile(`(?i)(?:,\s*(?:and|but|then|so|while|yet|or)\b|\b(?:and|but|then)\s+(?:do\s+not|don't|never|cannot|can't|must\s+not|use|call|run|invoke|pass|set|apply|start|open|load|dispatch|execute|prefer|switch|confirm|verify|check|inspect|read|write|create|edit)\b|;\s*|\s+[—–]\s+)`)
+	negVerbPrefixRe  = regexp.MustCompile(`(?i)\b(?:do\s+not|don't|never|cannot|can't|must\s+not)\s+(?:ever\s+)?(?:(?:call|run|use|pass|set|assign|add|open(?:\s+with(?:\s+unbounded)?)?|mint|combine|invoke|include|emit|supply|offer|dispatch|execute|specify|allow|create|edit|write|apply|modify|touch|mutate|redirect)(?:\s+(?:the\s+)?(?:tool|argument|parameter|field|flag|option|main-tree|host|direct|bare|raw))?\s+)?(?:(?:\*\*)?` + "`[^`]+`" + `(?:\*\*)?\s*(?:,\s*|\s+or\s+|\s+and\s+|\s*/\s*))*$`)
 	negPrepPrefixRe  = regexp.MustCompile(`(?i)\b(?:do\s+not|don't|never|cannot|can't|must\s+not)\s+(?:(?:call|run|use|pass|set|assign|mint|combine|invoke|include|emit|supply|execute)\b[^,;—–]*?\s+)?(?:on|in|to|with|via)\s+$`)
+	noSpanPrefixRe   = regexp.MustCompile(`(?i)(?:^|[—–:;,(]\s*)\bno\s+(?:(?:\*\*)?` + "`[^`]+`" + `(?:\*\*)?\s*(?:,\s*|\s+or\s+))*$`)
 	withoutObjPrefRe = regexp.MustCompile(`(?i)\bwithout\s+(?:(?:calling|using|running|passing|setting|enabling|specifying|invoking|supplying)\s+)?(?:(?:\*\*)?` + "`[^`]+`" + `(?:\*\*)?\s*(?:,\s*|\s+or\s+))*$`)
-	negPredSuffixRe  = regexp.MustCompile(`(?i)^(?:\s*(?:,\s*|\s+and\s+|\s+or\s+)(?:\*\*)?` + "`[^`]+`" + `(?:\*\*)?)*\s+(?:is|are)\s+(?:not\s+(?:available|offered|permitted|allowed|reachable|enabled|supported)|unavailable|refused|forbidden|withheld|disabled)\b`)
+	negPredSuffixRe  = regexp.MustCompile(`(?i)^(?:\s*(?:,\s*|\s+and\s+|\s+or\s+)(?:\*\*)?` + "`[^`]+`" + `(?:\*\*)?)*\s+(?:(?:is|are)\s+(?:not\s+(?:available|offered|permitted|allowed|reachable|enabled|supported)|unavailable|refused|forbidden|withheld|disabled)|will\s+not\s+stand\s+in\s+for)\b`)
 )
 
 func isClaimSpanNegated(sentence string, start, end int) bool {
@@ -663,6 +715,7 @@ func isClaimSpanNegated(sentence string, start, end int) bool {
 	suffix := sentence[e:cEnd]
 	return negVerbPrefixRe.MatchString(prefix) ||
 		negPrepPrefixRe.MatchString(prefix) ||
+		noSpanPrefixRe.MatchString(prefix) ||
 		withoutObjPrefRe.MatchString(prefix) ||
 		negPredSuffixRe.MatchString(suffix)
 }
@@ -790,12 +843,20 @@ func walkTopLevel(s string, visit func(idx int, ch byte) bool) {
 	}
 }
 
-func isAuthoringMetaSource(sourceID string) bool {
-	return strings.Contains(sourceID, "skills/write-a-skill") ||
-		strings.Contains(sourceID, "skills/write-prompt-override") ||
-		strings.Contains(sourceID, "skills/write-extension-pack") ||
-		strings.Contains(sourceID, "skills/write-workflow") ||
-		strings.Contains(sourceID, "skills/write-policy-rule")
+func collectHostResourceExecutables(expr hostresources.Expression, dst map[string]bool) {
+	if expr.Executable != nil {
+		for _, name := range expr.Executable.Names {
+			if trimmed := strings.TrimSpace(name); trimmed != "" {
+				dst[trimmed] = true
+			}
+		}
+	}
+	for _, sub := range expr.All {
+		collectHostResourceExecutables(sub, dst)
+	}
+	for _, sub := range expr.Any {
+		collectHostResourceExecutables(sub, dst)
+	}
 }
 
 func lastDotPart(p string) string {

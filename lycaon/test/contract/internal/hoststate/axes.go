@@ -45,13 +45,6 @@ type PackOverlay struct {
 	SpawnAllowlist []string
 }
 
-var singlePackRemovals = []string{
-	"implement",
-	"recon-pack",
-	"web-research",
-	"security-survey",
-}
-
 // Postures loads all session postures dynamically from session-postures.yaml
 // in deterministic ID order.
 func Postures(_ *extpacks.EffectiveCatalog) ([]sessionprofiles.PostureSpec, error) {
@@ -249,8 +242,9 @@ func DiscoverPackOverlays(_ context.Context) ([]PackOverlay, error) {
 	return slices.Clone(overlays), nil
 }
 
-// PackOverlays builds the full stock pack catalog plus single-pack removals
-// (implement, recon-pack, web-research, security-survey).
+// PackOverlays builds the full pack catalog plus single-pack removals
+// dynamically discovered from stockContent (skipping foundational dependency
+// roots and theme-only packs with zero behavioral units).
 func PackOverlays(ctx context.Context, stockContent []extpacks.PackContent) ([]PackOverlay, error) {
 	if len(stockContent) == 0 {
 		return nil, fmt.Errorf("stock content required")
@@ -259,16 +253,23 @@ func PackOverlays(ctx context.Context, stockContent []extpacks.PackContent) ([]P
 	if err != nil {
 		return nil, err
 	}
-	out := []PackOverlay{full}
-	for _, short := range singlePackRemovals {
-		packID := resolveStockPackID(stockContent, short)
-		if packID == "" {
-			return nil, fmt.Errorf("stock pack %q not found", short)
+	removable := discoverRemovablePacks(stockContent)
+	out := make([]PackOverlay, 0, 1+len(removable))
+	out = append(out, full)
+	for _, packID := range removable {
+		short := packID
+		if idx := strings.LastIndexByte(packID, '/'); idx >= 0 {
+			short = packID[idx+1:]
 		}
+		disabledIDs := transitiveReverseDependents(stockContent, packID)
 		enabled := false
+		desiredPacks := make([]extpacks.DesiredPack, 0, len(disabledIDs))
+		for _, id := range disabledIDs {
+			desiredPacks = append(desiredPacks, extpacks.DesiredPack{ID: id, Enabled: &enabled})
+		}
 		desired := extpacks.DesiredState{
 			Format: extpacks.DesiredFormat,
-			Packs:  []extpacks.DesiredPack{{ID: packID, Enabled: &enabled}},
+			Packs:  desiredPacks,
 		}
 		overlay, buildErr := buildPackOverlay(ctx, "without-"+short, packID, stockContent, desired)
 		if buildErr != nil {
@@ -279,14 +280,66 @@ func PackOverlays(ctx context.Context, stockContent []extpacks.PackContent) ([]P
 	return out, nil
 }
 
-func resolveStockPackID(stock []extpacks.PackContent, short string) string {
-	want := "painted-wolf/" + short
-	for _, item := range stock {
-		if item.Pack.ID == short || item.Pack.ID == want {
-			return item.Pack.ID
+func discoverRemovablePacks(packs []extpacks.PackContent) []string {
+	dependedOn := map[string]bool{}
+	for _, item := range packs {
+		for depID := range item.Manifest.Dependencies {
+			dependedOn[depID] = true
 		}
 	}
-	return ""
+	var ids []string
+	for _, item := range packs {
+		packID := strings.TrimSpace(item.Pack.ID)
+		if packID == "" {
+			continue
+		}
+		// Foundational base pack (zero dependencies, required by dependent packs).
+		if len(item.Manifest.Dependencies) == 0 && dependedOn[packID] {
+			continue
+		}
+		if !hasBehavioralUnits(item.Units) {
+			continue
+		}
+		ids = append(ids, packID)
+	}
+	slices.Sort(ids)
+	return ids
+}
+
+func hasBehavioralUnits(units []extpacks.InventoriedUnit) bool {
+	for _, u := range units {
+		switch u.Kind {
+		case "policy", "guidance", "workflows", "agents", "tools", "skills", "shared", extpacks.NextStepsKindRoot, "mcp_bindings":
+			return true
+		}
+	}
+	return false
+}
+
+func transitiveReverseDependents(packs []extpacks.PackContent, rootPackID string) []string {
+	disabled := map[string]bool{rootPackID: true}
+	changed := true
+	for changed {
+		changed = false
+		for _, item := range packs {
+			if disabled[item.Pack.ID] {
+				continue
+			}
+			for dep := range item.Manifest.Dependencies {
+				if disabled[dep] {
+					disabled[item.Pack.ID] = true
+					changed = true
+					break
+				}
+			}
+		}
+	}
+	out := make([]string, 0, len(disabled))
+	for id := range disabled {
+		out = append(out, id)
+	}
+	slices.Sort(out)
+	return out
 }
 
 func buildPackOverlay(
@@ -319,7 +372,9 @@ func buildPackOverlay(
 		}
 	}
 	for _, w := range workers {
-		if w.ID == "web-researcher" && !slices.Contains(allowlist, w.ID) {
+		unit, hasUnit := eff.Loaded["agents/"+w.ID]
+		isContributed := hasUnit && !eff.StockAuthority(unit.WinnerPackID)
+		if (isContributed || w.ToolProfile == "web_research") && !slices.Contains(allowlist, w.ID) {
 			allowlist = append(allowlist, w.ID)
 		}
 	}

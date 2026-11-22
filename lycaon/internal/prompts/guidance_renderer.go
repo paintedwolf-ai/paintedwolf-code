@@ -87,10 +87,26 @@ func IsStructuralGuidanceFragment(ref string) bool {
 	return structuralGuidanceSet[strings.TrimSpace(ref)]
 }
 
-var benignStructuralHasKeys = map[string]bool{
-	"has_brief":       true,
-	"has_more":        true,
-	"has_needs_reply": true,
+var declaredReachGuidanceFacts = map[string]bool{
+	"can_sed_read":              true,
+	"can_recall_history":        true,
+	"can_recall_history_record": true,
+	"can_recall_query":          true,
+	"can_preview_overlay":       true,
+	"can_promote_overlay":       true,
+	"can_instruct_worker":       true,
+}
+
+var stockDeclaredToolSetOnce = sync.OnceValue(func() map[string]bool {
+	if vocab, err := BuildReaderFactVocabulary(nil); err == nil {
+		return buildDeclaredToolAndOpSet(vocab)
+	}
+	return buildDeclaredToolAndOpSet(ReaderFactVocabulary{})
+})
+
+// DeclaredReachGuidanceFacts returns the reach-derived capability keys populated by GuidanceRenderer.RenderWithReach.
+func DeclaredReachGuidanceFacts() map[string]bool {
+	return maps.Clone(declaredReachGuidanceFacts)
 }
 
 // IsCapabilityKeyName reports whether key names a capability predicate rather than occurrence data.
@@ -103,18 +119,16 @@ func IsCapabilityKeyName(key string) bool {
 	if idx := strings.IndexByte(key, '.'); idx >= 0 {
 		root = key[:idx]
 	}
-	if IsDeclaredOrReservedReaderFact(key) || IsDeclaredOrReservedReaderFact(root) || root == "units" {
+	if IsDeclaredOrReservedReaderFact(key) || IsDeclaredOrReservedReaderFact(root) || DeclaredReachGuidanceFacts()[root] || root == "units" {
 		return true
 	}
-	if strings.HasPrefix(root, "can_") ||
-		strings.HasSuffix(root, "_available") ||
-		strings.HasSuffix(root, "_offered") ||
-		strings.HasSuffix(root, "_allowed") ||
-		strings.HasSuffix(root, "_reachable") ||
-		strings.HasSuffix(root, "_capable") {
-		return true
+	declared := stockDeclaredToolSetOnce()
+	for _, suf := range []string{"_available", "_offered", "_allowed", "_reachable"} {
+		if stem, ok := strings.CutSuffix(root, suf); ok && stem != "" && declared[stem] {
+			return true
+		}
 	}
-	return strings.HasPrefix(root, "has_") && !benignStructuralHasKeys[root]
+	return false
 }
 
 func rejectCapabilityKeysInOccurrence(kind, ref string, data map[string]any) error {

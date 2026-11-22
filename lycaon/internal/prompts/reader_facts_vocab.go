@@ -109,6 +109,8 @@ func Vars(reader Reader, occurrence map[string]any) (map[string]any, error) {
 
 // ReaderFactVocabulary holds the expanded family sets for a catalog.
 type ReaderFactVocabulary struct {
+	Scalars       map[string]ReaderFactScalarSpec
+	Families      []ReaderFactFamilySpec
 	Tools         map[string]bool
 	ReceiptTools  map[string]bool
 	EvidenceKinds map[string]bool
@@ -127,7 +129,7 @@ func BuildReaderFactVocabulary(eff *extpacks.EffectiveCatalog) (ReaderFactVocabu
 			return ReaderFactVocabulary{}, err
 		}
 	}
-	return readerFactVocabCache.get(catalogCacheKey(eff), func(string) (ReaderFactVocabulary, error) {
+	return readerFactVocabCache.get(catalogRevisionKey(eff), func(string) (ReaderFactVocabulary, error) {
 		return buildReaderFactVocabularyUncached(eff)
 	})
 }
@@ -209,6 +211,8 @@ func buildReaderFactVocabularyUncached(eff *extpacks.EffectiveCatalog) (ReaderFa
 	}
 	sort.Strings(skillKeys)
 	return ReaderFactVocabulary{
+		Scalars:       DeclaredReaderFactScalars(),
+		Families:      ReaderFactFamilies(),
 		Tools:         tools,
 		ReceiptTools:  receiptTools,
 		EvidenceKinds: kinds,
@@ -275,7 +279,18 @@ func CheckTemplateVocabulary(eff *extpacks.EffectiveCatalog) ([]string, error) {
 	return slices.Clone(notes), nil
 }
 
-func isBooleanReaderFact(ref string) bool {
+// DeclaredReaderFactScalars returns a copy of the declared reader-fact scalar specs from reader-facts.yaml.
+func DeclaredReaderFactScalars() map[string]ReaderFactScalarSpec {
+	return maps.Clone(declaredReaderFactScalars)
+}
+
+// ReaderFactFamilies returns a copy of the declared reader-fact family specs from reader-facts.yaml.
+func ReaderFactFamilies() []ReaderFactFamilySpec {
+	return slices.Clone(readerFactFamilies)
+}
+
+// IsBooleanReaderFact reports whether ref is declared as a boolean reader scalar or family in reader-facts.yaml.
+func IsBooleanReaderFact(ref string) bool {
 	if spec, ok := declaredReaderFactScalars[ref]; ok {
 		return spec.Type == "bool"
 	}
@@ -289,6 +304,14 @@ func isBooleanReaderFact(ref string) bool {
 		}
 	}
 	return false
+}
+
+// ResolveCatalogTemplateUnit resolves a prompt or partial ref to its loaded unit in eff.
+func ResolveCatalogTemplateUnit(eff *extpacks.EffectiveCatalog, templateRef string) (string, extpacks.UnitEffective, bool) {
+	if eff == nil || strings.TrimSpace(templateRef) == "" {
+		return "", extpacks.UnitEffective{}, false
+	}
+	return resolveCatalogIncludeUnit(eff, templateRef)
 }
 
 func checkSetBindings(unitID, origin, source string, vocab ReaderFactVocabulary, stock bool) ([]string, error) {
@@ -329,7 +352,7 @@ func checkSetBindings(unitID, origin, source string, vocab ReaderFactVocabulary,
 			}
 			if IsDeclaredOrReservedReaderFact(ref) || IsDeclaredOrReservedReaderFact(root) || vocab.AllowsReference(ref) {
 				refsReaderFact = true
-				if isBooleanReaderFact(ref) || isBooleanReaderFact(root) {
+				if IsBooleanReaderFact(ref) || IsBooleanReaderFact(root) {
 					refsBoolFact = true
 				}
 			}
@@ -471,7 +494,7 @@ func checkStructuralFragmentTransitive(eff *extpacks.EffectiveCatalog, unitID, o
 	walk = func(nodes []*pongoplain.TemplateNode) error {
 		for _, n := range nodes {
 			if n.Kind == pongoplain.NodeInclude {
-				incID, incUnit, ok := resolveCatalogIncludeUnit(eff, n.IncludeRef)
+				incID, incUnit, ok := ResolveCatalogTemplateUnit(eff, n.IncludeRef)
 				if ok && !seen[incID] {
 					seen[incID] = true
 					incNotes, err := checkStructuralFragmentTransitive(eff, unitID+" -> "+incID, incUnit.WinnerPackID, string(incUnit.Content), vocab, declared, stock, seen)

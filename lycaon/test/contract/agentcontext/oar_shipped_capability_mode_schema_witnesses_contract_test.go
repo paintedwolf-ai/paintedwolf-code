@@ -340,7 +340,8 @@ func TestShippedOARExtractFormatUnsupportedProducerToRuleWitnesses(t *testing.T)
 		t.Fatalf("sdk.7z producer-to-rule copy = %+v", ref7z.Copy)
 	}
 
-	// 3. Invalid explicit format on valid suffix (vendor/sdk.tar with Format="7z") -> EXTRACT_FORMAT_UNSUPPORTED rule render.
+	// 3. Invalid explicit format on valid suffix (vendor/sdk.tar with Format="7z") ->
+	// EXTRACT_FORMAT_UNSUPPORTED rule render.
 	_, errBadFmt := extractor.Extract(t.Context(), native.ExtractInput{Archive: "vendor/sdk.tar", Dest: "outfmt", Format: "7z"}, tctx)
 	var rejectFmt *toolrejection.ToolReject
 	if !errors.As(errBadFmt, &rejectFmt) || rejectFmt.Code != "EXTRACT_FORMAT_UNSUPPORTED" {
@@ -426,7 +427,8 @@ func TestShippedOARArchiveCommandFieldMissingProjectionAndOmittedFieldWitnesses(
 		t.Fatalf("loader-only missing-projection render = %q", loaderOnly)
 	}
 
-	// 3. No-route case: same archive form and read-only program mode + projection omitting the command field (no read route).
+	// 3. No-route case: same archive form and read-only program mode + projection
+	// omitting the command field (no read route).
 	for name, req := range map[string]toolreach.Request{
 		"loadable_omitted_field": loadableBase.WithSchemas(omittedCmdFieldSchema),
 		"callable_omitted_field": callableBase.WithSchemas(omittedCmdFieldSchema),

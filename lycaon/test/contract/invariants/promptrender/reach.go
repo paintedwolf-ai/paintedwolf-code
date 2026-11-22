@@ -2,31 +2,35 @@ package promptrender
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
+	"maps"
 	"regexp"
 	"slices"
 	"strings"
+	"sync"
 
-	"github.com/lycaon/lycaon/internal/agentdef"
 	"github.com/lycaon/lycaon/internal/coordinator/anchor"
 	"github.com/lycaon/lycaon/internal/coordinator/inject"
 	"github.com/lycaon/lycaon/internal/coordinator/surface"
 	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/internal/sandbox"
-	sessionprofiles "github.com/lycaon/lycaon/internal/session/profiles"
-	"github.com/lycaon/lycaon/internal/toolcontract"
+	"github.com/lycaon/lycaon/internal/skills"
+	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/toolschema"
 	"github.com/lycaon/lycaon/internal/toolvocab"
 	"github.com/lycaon/lycaon/internal/toolvocab/toolvocabtest"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 	workflowpresentation "github.com/lycaon/lycaon/internal/workflow/presentation"
+	"github.com/lycaon/lycaon/pkg/api"
+	"github.com/lycaon/lycaon/test/contract/internal/hoststate"
 	"github.com/lycaon/lycaon/test/contract/invariants"
 )
 
-// reachInvariants hold P13: rendered guidance names only the tools,
-// command programs and arguments its reader is offered. The oracle is the
-// reader's held set, which the templates do not produce.
+// reachInvariants hold P13 & I5: rendered guidance names only the tools,
+// command programs, schema fields, and subjects its reader is offered.
 var reachInvariants = []invariants.Invariant{
 	{Name: "coordinator-kicks-name-only-offered-tools", Anchors: []invariants.Anchor{kickRenderer}, Check: coordinatorKicksNameOnlyOffered},
 	{Name: "phase-kicks-name-only-their-surface-tools", Anchors: []invariants.Anchor{kickRenderer, phaseSurfaceResolver}, Check: phaseKicksNameOnlyTheirSurface},
@@ -39,34 +43,136 @@ var reachInvariants = []invariants.Invariant{
 
 var phaseSurfaceResolver = invariants.Func("internal/workflow/definition", "ResolveSurfaceBinding")
 
-// phaseKickPrefixes render only on their workflow phase, whose surface the
-// phase declares; the phase rule covers them.
 var phaseKickPrefixes = []string{
 	"coordinator-debate-", "coordinator-fanout-", "coordinator-phase-exit", "coordinator-plan-", "coordinator-recon-",
 	"coordinator-review-loop-", "coordinator-security-",
 }
 
-// reportUnoffered reports each name text uses that held does not reach, and
-// each argument text attributes to a tool, as `tool(arg=…)` or `tool.arg`,
-// that the tool's schema lacks.
-func reportUnoffered(r *invariants.Run, label, text string, held map[string]bool) {
-	s := stock(r)
-	for _, name := range toolvocab.UnreachableNames(s.Names, text, held) {
-		r.Report("%s names %s, which its reader is not offered: %s", label, name, lineNaming(text, name))
-	}
-	schema := func(tool string) (map[string]any, bool) {
-		meta, ok := s.Schemas.ToolMeta(tool)
-		if !ok {
-			return nil, false
+// evaluateAndReportClaims checks text against auth via CT03's EvaluateClaimBlock
+// and closed backtick vocabulary, reporting violations onto r.
+func evaluateAndReportClaims(
+	r *invariants.Run,
+	s *Stock,
+	label, text string,
+	auth hoststate.TurnAuthority,
+	mode api.SessionMode,
+	posture api.SessionPosture,
+	subject toolvocabtest.ClaimSubject,
+	followup *toolvocabtest.ActorAuthority,
+	nextTurn *toolvocabtest.ActorAuthority,
+	resolveNamed func(string) (toolvocabtest.ActorAuthority, error),
+	checkBackticks bool,
+) {
+	if violations, err := checkClaimsOnce(s, label, text, auth, mode, posture, subject, followup, nextTurn, resolveNamed, checkBackticks); err != nil {
+		for _, v := range violations {
+			r.Report("%s", v)
 		}
-		if tool == "command" && !held[toolcontract.ReachCommandExternalExec] {
-			return toolschema.PruneCommandReadOnlySchema(meta.ArgsSchema), true
+	}
+}
+
+type memoizedClaimResult struct {
+	viols []toolvocabtest.SubjectViolation
+	diags []toolvocabtest.BacktickSpan
+}
+
+var (
+	claimEvalMemo       sync.Map
+	claimAuthKeyMemo    sync.Map
+	workerOccByReaderFP sync.Map
+)
+
+func semanticClaimAuthorityKey(auth hoststate.TurnAuthority) string {
+	rawKey := auth.Digest + "|" + auth.Reader.Fingerprint()
+	if cached, ok := claimAuthKeyMemo.Load(rawKey); ok {
+		return cached.(string)
+	}
+	postKey := hoststate.RenderCacheKey("claim-postload", "", nil, map[string]any{
+		"post": auth.PostLoadSchemas,
+	})
+	sem := rawKey + "|" + postKey
+	claimAuthKeyMemo.Store(rawKey, sem)
+	return sem
+}
+
+func labelMemoClass(label string) string {
+	if isAuthoringMetaDoc(label) {
+		return "meta"
+	}
+	return "std"
+}
+
+func checkClaimsOnce(
+	s *Stock,
+	label, text string,
+	auth hoststate.TurnAuthority,
+	mode api.SessionMode,
+	posture api.SessionPosture,
+	subject toolvocabtest.ClaimSubject,
+	followup *toolvocabtest.ActorAuthority,
+	nextTurn *toolvocabtest.ActorAuthority,
+	resolveNamed func(string) (toolvocabtest.ActorAuthority, error),
+	checkBackticks bool,
+) ([]string, error) {
+	var memoKey string
+	if auth.Digest != "" && followup == nil && nextTurn == nil {
+		sum := sha256.Sum256([]byte(text))
+		rev := ""
+		if s.Catalog != nil {
+			rev = s.Catalog.Revision
 		}
-		return meta.ArgsSchema, true
+		memoKey = fmt.Sprintf(
+			"%s|%s|%s|%s|%s|%s|%s|%s|%s|%s|%t|%t",
+			hex.EncodeToString(sum[:]), s.Site, rev, semanticClaimAuthorityKey(auth),
+			labelMemoClass(label), mode, posture, subject.Kind, subject.Modality, subject.AgentID,
+			checkBackticks, resolveNamed != nil,
+		)
+		if cached, ok := claimEvalMemo.Load(memoKey); ok {
+			res := cached.(memoizedClaimResult)
+			return formatClaimViolations(label, text, res.viols, res.diags)
+		}
 	}
-	for _, claim := range toolvocabtest.UnacceptedArgs(s.Names, text, schema) {
-		r.Report("%s gives %s argument `%s`, which its schema lacks: %s", label, claim.Tool, claim.Arg, lineNaming(text, claim.Arg))
+	evalCtx := toolvocabtest.ClaimEvaluationContext{
+		Catalog:           s.Names,
+		Prunable:          s.Prunable,
+		Vocab:             s.Vocab,
+		Self:              auth.ActorAuthority(),
+		SessionMode:       mode,
+		Posture:           posture,
+		FollowupLeg:       followup,
+		SessionNextTurn:   nextTurn,
+		ResolveNamedAgent: resolveNamed,
 	}
+	viols := toolvocabtest.EvaluateClaimBlock(evalCtx, toolvocabtest.ClaimBlock{
+		Label:   label,
+		Subject: subject,
+		Text:    text,
+	})
+	var diags []toolvocabtest.BacktickSpan
+	if checkBackticks && s.Vocab != nil && !isAuthoringMetaDoc(label) {
+		diags = s.Vocab.CheckProse(label, text)
+	}
+	if memoKey != "" {
+		claimEvalMemo.Store(memoKey, memoizedClaimResult{viols: viols, diags: diags})
+	}
+	return formatClaimViolations(label, text, viols, diags)
+}
+
+func formatClaimViolations(
+	label, text string,
+	viols []toolvocabtest.SubjectViolation,
+	diags []toolvocabtest.BacktickSpan,
+) ([]string, error) {
+	if len(viols) == 0 && len(diags) == 0 {
+		return nil, nil
+	}
+	var msgs []string
+	for _, v := range viols {
+		msgs = append(msgs, fmt.Sprintf("%s names `%s` (%s): %s", label, v.Claim, v.Reason, lineNaming(text, v.Claim)))
+	}
+	for _, diag := range diags {
+		msgs = append(msgs, fmt.Sprintf("%s unclassified protocol backtick `%s` at line %d", label, diag.Span, diag.Line))
+	}
+	return msgs, fmt.Errorf("%d claim violations", len(msgs))
 }
 
 func lineNaming(text, name string) string {
@@ -78,15 +184,12 @@ func lineNaming(text, name string) string {
 	return "(no single line)"
 }
 
-// kickData is the full kick fixture without the host digest, which quotes
-// observations the reader already holds.
 func kickData() map[string]any {
 	data := KickFixture()
 	delete(data, "evidence_digest")
 	return data
 }
 
-// informKicks lists the inform bindings' renders that start with prefix.
 func informKicks(r *invariants.Run, prefix string) []string {
 	reg, err := anchor.LoadRegistryFromConfigRoot()
 	r.Must(err)
@@ -100,41 +203,285 @@ func informKicks(r *invariants.Run, prefix string) []string {
 	return ids
 }
 
-// A wake can reach any surface, so a coordinator kick names only what that
-// surface's plan offers.
+var (
+	cachedCoordinatorPairs = sync.OnceValues(func() ([]coordRep, error) {
+		ctx := context.Background()
+		states, err := hoststate.CoordinatorStates(ctx)
+		if err != nil {
+			return nil, err
+		}
+		out := make([]coordRep, 0, len(states))
+		for _, st := range states {
+			if st.Excluded {
+				continue
+			}
+			auth, fErr := hoststate.FreezeTurnAuthority(ctx, st)
+			if fErr != nil {
+				return nil, fErr
+			}
+			out = append(out, coordRep{state: st, auth: auth})
+		}
+		return out, nil
+	})
+	cachedCoordinatorReps = sync.OnceValues(func() ([]coordRep, error) {
+		pairs, err := cachedCoordinatorPairs()
+		if err != nil {
+			return nil, err
+		}
+		seen := map[string]bool{}
+		var out []coordRep
+		for _, p := range pairs {
+			if !seen[p.auth.Digest] {
+				seen[p.auth.Digest] = true
+				out = append(out, p)
+			}
+		}
+		return out, nil
+	})
+	cachedWorkerPairs = sync.OnceValues(func() ([]workerRep, error) {
+		ctx := context.Background()
+		workerStates, err := hoststate.WorkerStates(ctx)
+		if err != nil {
+			return nil, err
+		}
+		out := make([]workerRep, 0, len(workerStates))
+		for _, ws := range workerStates {
+			if ws.Excluded {
+				continue
+			}
+			auth, fErr := hoststate.FreezeWorkerAuthority(ctx, ws)
+			if fErr != nil {
+				return nil, fErr
+			}
+			out = append(out, workerRep{ws: ws, auth: auth})
+		}
+		return out, nil
+	})
+	cachedWorkerReps = sync.OnceValues(func() ([]workerRep, error) {
+		pairs, err := cachedWorkerPairs()
+		if err != nil {
+			return nil, err
+		}
+		seen := map[string]bool{}
+		var out []workerRep
+		for _, p := range pairs {
+			if !seen[p.auth.Digest] {
+				seen[p.auth.Digest] = true
+				out = append(out, p)
+			}
+		}
+		return out, nil
+	})
+)
+
+func alignKickOccurrenceToAuthority(kick string, data map[string]any, reader prompts.Reader, offered []string) {
+	if kick == "coordinator-progress-missing" {
+		if rawTool, ok := data["tool"].(string); ok && rawTool != "" && !slices.Contains(offered, rawTool) {
+			if len(offered) > 0 {
+				data["tool"] = offered[0]
+			} else {
+				delete(data, "tool")
+			}
+		}
+	}
+	if rawTools, ok := data["tools"].([]string); ok && len(rawTools) > 0 {
+		var kept []string
+		for _, t := range rawTools {
+			if slices.Contains(offered, t) {
+				kept = append(kept, t)
+			}
+		}
+		if len(kept) == 0 && len(offered) > 0 {
+			kept = []string{offered[0]}
+		}
+		if len(kept) > 0 {
+			data["tools"] = kept
+		} else {
+			delete(data, "tools")
+		}
+	}
+	if adv, ok := data["advance_when_gate_met"].(string); ok && adv == "coordinator" && !slices.Contains(offered, "workflow_advance") {
+		data["advance_when_gate_met"] = "host"
+	}
+	mints := reader.Mints()
+	if !mints["web"] {
+		if targets, ok := data["repair_targets"].([]map[string]any); ok {
+			cleaned := make([]map[string]any, len(targets))
+			for i, t := range targets {
+				cp := maps.Clone(t)
+				delete(cp, "candidates")
+				delete(cp, "use")
+				cleaned[i] = cp
+			}
+			data["repair_targets"] = cleaned
+		}
+	}
+	if !mints["read"] {
+		delete(data, "evidence_digest")
+		if _, hasIssues := data["document_issues"]; hasIssues {
+			data["document_issues"] = []map[string]any{{"message": "bad citation", "offenders": []string{"ungrounded-ref"}}}
+		}
+		if _, hasOff := data["offenders_sample"]; hasOff {
+			data["offenders_sample"] = []string{"ungrounded-ref"}
+		}
+	}
+}
+
+// coordinatorKicksNameOnlyOffered verifies every non-phase coordinator kick
+// across hoststate.CoordinatorStates and AnchorEnvelopes.
 func coordinatorKicksNameOnlyOffered(r *invariants.Run) {
+	ctx := context.Background()
 	s := stock(r)
-	plans, err := surface.CompileToolPlans(1)
-	r.Must(err)
 	engine := s.Engine()
+	cache := hoststate.NewRenderCache()
+	reps, err := cachedCoordinatorReps()
+	r.Must(err)
+	anchorReg, err := anchor.LoadRegistryFromConfigRoot()
+	r.Must(err)
+
 	checked := 0
-	for _, kick := range informKicks(r, "coordinator-") {
+	kicks := informKicks(r, "coordinator-")
+	for _, kick := range kicks {
 		if slices.ContainsFunc(phaseKickPrefixes, func(p string) bool { return strings.HasPrefix(kick, p) }) {
 			continue
 		}
-		for _, id := range sortedKeys(plans) {
-			reader, err := CoordinatorReader(s, id, 1)
-			r.Must(err)
-			data := kickData()
-			delete(data, "tools")
-			prompts.MergeCoordinatorKickVarsForTools(data, reader)
-			text, err := engine.RenderKick(context.Background(), reader, kick, data)
-			r.Must(err)
-			checked++
-			reportUnoffered(r, fmt.Sprintf("kick %s on %s", kick, id), text, reader.Held())
+		envelopes := kickEnvelopeVariants(anchorReg, kick)
+		for envIdx, envBase := range envelopes {
+			// Sweep canonical fixture (envIdx == 0) across all distinct authorities,
+			// and additional AnchorEnvelopes boundaries across representative authorities.
+			limit := len(reps)
+			if envIdx > 0 && limit > 8 {
+				limit = 8
+			}
+			for i := 0; i < limit; i++ {
+				sa := reps[i]
+				if kick == "coordinator-closeout" && !surface.SurfaceDeliversReport(sa.state.TurnProfile.SurfaceID) {
+					continue
+				}
+				reader := sa.auth.Reader
+				subj := toolvocabtest.SubjectSelfNow()
+				var nextTurn *toolvocabtest.ActorAuthority
+				data := maps.Clone(envBase)
+				alignKickOccurrenceToAuthority(kick, data, sa.auth.Reader, sa.auth.Offered)
+				if kick == "coordinator-turn-closeout" {
+					// Turn-closeout strips current-turn tools and advises session_next_turn.
+					closeReader, cErr := closeoutTurnReader(sa.state, false)
+					r.Must(cErr)
+					reader = closeReader
+					activeActor := sa.auth.ActorAuthority()
+					nextTurn = &activeActor
+					subj = toolvocabtest.SubjectSessionNextTurn()
+					data["session_command_mutation_capable"] = sa.state.SessionMode != api.SessionModeAsk && sa.auth.Reader.Held()["command_mutation"]
+				}
+				prompts.MergeCoordinatorKickVarsForTools(data, reader)
+				fullVars, _ := prompts.Vars(reader, stripReaderFactKeys(data))
+				rKey := renderCacheKeyForVars("kick:"+kick+":"+s.Site, s.Catalog.Revision, nil, fullVars)
+				text, _, rErr := cache.RenderOrReuse(rKey, func() (string, error) {
+					return engine.RenderKick(ctx, reader, kick, data)
+				})
+				r.Must(rErr)
+				checked++
+				label := fmt.Sprintf("kick %s on %s (%s)", kick, sa.state.TurnProfile.SurfaceID, sa.state.ID)
+				checkKey := sa.auth.Digest + "|" + string(subj.Kind)
+				if cErr := cache.CheckAuthority(rKey, checkKey, func() error {
+					targetAuth := sa.auth
+					targetAuth.Reader = reader
+					if subj.Kind == toolvocabtest.SubjectKindSessionNextTurn {
+						targetAuth.Metas = nil
+						targetAuth.Schemas = map[string]map[string]any{}
+						targetAuth.Offered = nil
+					}
+					viols, err := checkClaimsOnce(s, label, text, targetAuth, sa.state.SessionMode, sa.state.Posture, subj, nil, nextTurn, nil, true)
+					if err != nil {
+						for _, msg := range viols {
+							r.Report("%s", msg)
+						}
+					}
+					return err
+				}); cErr != nil {
+					_ = cErr
+				}
+			}
 		}
 	}
 	r.Expect(checked, "coordinator kick renders")
 }
 
-// Phase guidance opens on the surface its workflow declares for that phase.
+func kickEnvelopeVariants(reg *anchor.Registry, kick string) []map[string]any {
+	base := kickData()
+	delete(base, "tools")
+	out := []map[string]any{base}
+	if reg == nil {
+		return out
+	}
+	if aID, ok := reg.LookupRender(kick); ok {
+		if envs, err := hoststate.AnchorEnvelopes(string(aID)); err == nil {
+			for _, env := range envs {
+				clean := stripReaderFactKeys(env)
+				delete(clean, "evidence_digest")
+				delete(clean, "tools")
+				out = append(out, clean)
+			}
+		}
+	}
+	return out
+}
+
+func stripReaderFactKeys(in map[string]any) map[string]any {
+	out := make(map[string]any, len(in))
+	for k, v := range in {
+		if !prompts.IsDeclaredOrReservedReaderFact(k) {
+			out[k] = v
+		}
+	}
+	return out
+}
+
+func closeoutTurnReader(st hoststate.CoordinatorState, worker bool) (prompts.Reader, error) {
+	narrowed, err := hoststate.NarrowProfilesForPosture(st.Overlay.Profiles, st.Posture, false)
+	if err != nil {
+		return prompts.Reader{}, err
+	}
+	visible := []string{}
+	if worker {
+		visible = []string{"complete_leg"}
+	}
+	return prompts.NewReader(prompts.ReaderInput{
+		ProfileID:             prompts.CoordinatorProfileID,
+		SessionMode:           string(st.SessionMode),
+		Profiles:              narrowed,
+		Visible:               visible,
+		Schemas:               st.Overlay.Schemas,
+		RootCount:             st.RootCount,
+		HasGit:                st.HasGit,
+		HasAnyGitRoot:         st.HasAnyGitRoot,
+		WebSearch:             st.WebSearch,
+		CommandExternalHidden: st.CommandExternalHidden,
+		SessionScratchDir:     st.SessionScratchDir,
+		SharedTempLocations:   st.SharedTempLocations,
+	})
+}
+
+// phaseKicksNameOnlyTheirSurface verifies workflow phase.entered kicks across
+// postures, modes, and loading states from hoststate.CoordinatorStates.
 func phaseKicksNameOnlyTheirSurface(r *invariants.Run) {
+	ctx := context.Background()
 	s := stock(r)
-	plans, err := surface.CompileToolPlans(1)
-	r.Must(err)
 	reg, err := workflowdef.RegistryFromDirs("")
 	r.Must(err)
+	pairs, err := cachedCoordinatorPairs()
+	r.Must(err)
 	engine := s.Engine()
+	cache := hoststate.NewRenderCache()
+
+	bySurface := map[string][]coordRep{}
+	for _, cp := range pairs {
+		if cp.state.PackOverlayID != "stock" {
+			continue
+		}
+		bySurface[cp.state.TurnProfile.SurfaceID] = append(bySurface[cp.state.TurnProfile.SurfaceID], cp)
+	}
+
 	checked := 0
 	for _, key := range sortedKeys(reg.All()) {
 		m := reg.All()[key]
@@ -146,113 +493,232 @@ func phaseKicksNameOnlyTheirSurface(r *invariants.Run) {
 			if in.On != "phase.entered" || in.Selector.Phase == nil {
 				continue
 			}
-			id := surfaces[*in.Selector.Phase]
-			if _, known := plans[id]; !known {
-				continue
+			surfID := surfaces[*in.Selector.Phase]
+			for _, cp := range bySurface[surfID] {
+				st, auth := cp.state, cp.auth
+				data := kickData()
+				prompts.MergeCoordinatorKickVarsForTools(data, auth.Reader)
+				fullVars, _ := prompts.Vars(auth.Reader, stripReaderFactKeys(data))
+				rKey := renderCacheKeyForVars("phasekick:"+in.Render+":"+s.Site, s.Catalog.Revision, nil, fullVars)
+				text, _, rErr := cache.RenderOrReuse(rKey, func() (string, error) {
+					return engine.RenderKick(ctx, auth.Reader, in.Render, data)
+				})
+				r.Must(rErr)
+				checked++
+				label := fmt.Sprintf("%s phase %s kick %s on %s (%s)", key, *in.Selector.Phase, in.Render, surfID, st.ID)
+				_ = cache.CheckAuthority(rKey, auth.Digest, func() error {
+					viols, cErr := checkClaimsOnce(s, label, text, auth, st.SessionMode, st.Posture, toolvocabtest.SubjectSelfNow(), nil, nil, nil, true)
+					for _, msg := range viols {
+						r.Report("%s", msg)
+					}
+					return cErr
+				})
 			}
-			reader, err := CoordinatorReader(s, id, 1)
-			r.Must(err)
-			data := kickData()
-			prompts.MergeCoordinatorKickVarsForTools(data, reader)
-			text, err := engine.RenderKick(context.Background(), reader, in.Render, data)
-			r.Must(err)
-			checked++
-			reportUnoffered(r, fmt.Sprintf("%s phase %s kick %s on %s", key, *in.Selector.Phase, in.Render, id), text, reader.Held())
 		}
 	}
 	r.Expect(checked, "phase kick renders")
 }
 
-// postureProfiles narrows every profile the way the sandbox does for a
-// session in each posture.
-func postureProfiles(r *invariants.Run) map[string][]sandbox.ToolProfile {
-	postures, err := sessionprofiles.LoadPostureRegistry()
-	r.Must(err)
-	out := map[string][]sandbox.ToolProfile{}
-	for _, posture := range postures.List() {
-		narrowed := slices.Clone(stock(r).Profiles)
-		for i := range narrowed {
-			narrowed[i].CommandEffects &= posture.CommandEffects
-		}
-		out[string(posture.ID)] = narrowed
-	}
-	r.Expect(len(out), "session postures")
-	return out
-}
-
-// workerReader is a worker reader for one profile under one posture.
-func workerReader(r *invariants.Run, profileID string, profiles []sandbox.ToolProfile) prompts.Reader {
-	reader, err := prompts.NewReader(prompts.ReaderInput{
-		ProfileID: profileID, Profiles: profiles, RootCount: 1, HasGit: true, WebSearch: true,
-	})
-	r.Must(err)
-	return reader
-}
-
-// A worker kick reaches every worker profile under every posture, so it
-// names only what each holds.
+// workerKicksNameOnlyOffered verifies worker-* kicks across hoststate.WorkerStates
+// and AnchorEnvelopes, including SubjectFollowupLeg on worker-closeout.
 func workerKicksNameOnlyOffered(r *invariants.Run) {
+	ctx := context.Background()
 	s := stock(r)
 	engine := s.Engine()
+	cache := hoststate.NewRenderCache()
+	allReps, err := cachedWorkerReps()
+	r.Must(err)
+	anchorReg, err := anchor.LoadRegistryFromConfigRoot()
+	r.Must(err)
+
+	var reps []workerRep
+	for _, wr := range allReps {
+		if wr.auth.Reader.Held()["complete_leg"] {
+			reps = append(reps, wr)
+		}
+	}
+
 	checked := 0
-	for posture, profiles := range postureProfiles(r) {
-		for _, profile := range profiles {
-			if !profile.Tools["complete_leg"] {
-				continue
+	for _, kick := range informKicks(r, "worker-") {
+		envelopes := kickEnvelopeVariants(anchorReg, kick)
+		for envIdx, envBase := range envelopes {
+			limit := len(reps)
+			if envIdx > 0 && limit > 6 {
+				limit = 6
 			}
-			reader := workerReader(r, profile.ID, profiles)
-			for _, kick := range informKicks(r, "worker-") {
-				text, err := engine.RenderKick(context.Background(), reader, kick, kickData())
-				r.Must(err)
+			for i := 0; i < limit; i++ {
+				wa := reps[i]
+				reader := wa.auth.Reader
+				subj := toolvocabtest.SubjectSelfNow()
+				var followup *toolvocabtest.ActorAuthority
+				data := maps.Clone(envBase)
+				if kick == "worker-closeout" || kick == "worker-cancel-closeout" {
+					closeR, cErr := workerCloseoutReader(wa.ws)
+					r.Must(cErr)
+					reader = closeR
+					if kick == "worker-closeout" {
+						active := wa.auth.ActorAuthority()
+						followup = &active
+						subj = toolvocabtest.SubjectFollowupLeg()
+						data["leg_command_mutation_capable"] = wa.ws.ParentSessionMode != api.SessionModeAsk && wa.auth.Reader.Held()["command_mutation"]
+					}
+				}
+				fullVars, _ := prompts.Vars(reader, stripReaderFactKeys(data))
+				rKey := renderCacheKeyForVars("wkick:"+kick+":"+s.Site, s.Catalog.Revision, nil, fullVars)
+				text, _, rErr := cache.RenderOrReuse(rKey, func() (string, error) {
+					return engine.RenderKick(ctx, reader, kick, data)
+				})
+				r.Must(rErr)
 				checked++
-				reportUnoffered(r, fmt.Sprintf("kick %s for %s in %s", kick, profile.ID, posture), text, reader.Held())
+				label := fmt.Sprintf("kick %s for %s (%s)", kick, wa.ws.ToolProfile, wa.ws.ID)
+				checkKey := wa.auth.Digest + "|" + string(subj.Kind)
+				_ = cache.CheckAuthority(rKey, checkKey, func() error {
+					targetAuth := wa.auth
+					targetAuth.Reader = reader
+					if kick == "worker-closeout" || kick == "worker-cancel-closeout" {
+						var closeMetas []tools.ToolMeta
+						for _, m := range wa.auth.Metas {
+							if m.Name == "complete_leg" {
+								closeMetas = append(closeMetas, m)
+							}
+						}
+						targetAuth.Metas = closeMetas
+						targetAuth.Schemas = map[string]map[string]any{}
+						if len(closeMetas) > 0 {
+							targetAuth.Schemas["complete_leg"] = closeMetas[0].ArgsSchema
+						}
+						targetAuth.Offered = []string{"complete_leg"}
+					}
+					viols, cErr := checkClaimsOnce(s, label, text, targetAuth, wa.ws.ParentSessionMode, wa.ws.Posture, subj, followup, nil, nil, true)
+					for _, msg := range viols {
+						r.Report("%s", msg)
+					}
+					return cErr
+				})
 			}
 		}
 	}
 	r.Expect(checked, "worker kick renders")
 }
 
-// Every worker persona names only what its profile holds under every
-// posture.
+func workerCloseoutReader(ws hoststate.WorkerState) (prompts.Reader, error) {
+	askChild := ws.ParentSessionMode == api.SessionModeAsk
+	narrowed, err := hoststate.NarrowProfilesForPosture(ws.Overlay.Profiles, ws.Posture, askChild)
+	if err != nil {
+		return prompts.Reader{}, err
+	}
+	return prompts.NewReader(prompts.ReaderInput{
+		ProfileID:             ws.ToolProfile,
+		SessionMode:           string(ws.ParentSessionMode),
+		Profiles:              narrowed,
+		Visible:               []string{"complete_leg"},
+		Schemas:               ws.Overlay.Schemas,
+		RootCount:             ws.RootCount,
+		HasGit:                ws.HasGit,
+		HasAnyGitRoot:         ws.HasAnyGitRoot,
+		OnWorkerBranch:        ws.OnWorkerBranch,
+		WebSearch:             ws.WebSearch,
+		CommandExternalHidden: ws.CommandExternalHidden,
+	})
+}
+
+// workerPersonasNameOnlyOffered verifies every worker persona across hoststate.WorkerStates.
 func workerPersonasNameOnlyOffered(r *invariants.Run) {
+	ctx := context.Background()
 	s := stock(r)
-	agents, err := agentdef.LoadEffectiveWithCatalog(s.Catalog)
-	r.Must(err)
 	engine := s.Engine()
+	cache := hoststate.NewRenderCache()
+	workerPairs, err := cachedWorkerPairs()
+	r.Must(err)
+	skillsList, err := StockSkills(s)
+	r.Must(err)
+
 	checked := 0
-	for posture, profiles := range postureProfiles(r) {
-		for _, agent := range agents {
-			if agent.ID == "coordinator" || !slices.ContainsFunc(profiles, func(p sandbox.ToolProfile) bool { return p.ID == agent.ToolProfile }) {
+	for _, wp := range workerPairs {
+		ws, auth := wp.ws, wp.auth
+		if ws.ParentSessionMode == api.SessionModeAsk {
+			if mutCapable, ok := prompts.AgentMutationCapable(ws.AgentID); ok && mutCapable {
 				continue
 			}
-			reader := workerReader(r, agent.ToolProfile, profiles)
-			text, err := prompts.RenderPersona(context.Background(), engine, agent.ID, reader, nil)
-			r.Must(err)
-			checked++
-			reportUnoffered(r, fmt.Sprintf("persona %s in %s", agent.ID, posture), text, reader.Held())
 		}
+		occ := workerPersonaOccurrence(auth.Reader, skillsList)
+		fullVars, _ := prompts.Vars(auth.Reader, stripReaderFactKeys(occ))
+		rKey := renderCacheKeyForVars("persona:"+ws.AgentID+":"+s.Site, s.Catalog.Revision, nil, fullVars)
+		text, _, rErr := cache.RenderOrReuse(rKey, func() (string, error) {
+			return prompts.RenderPersona(ctx, engine, ws.AgentID, auth.Reader, occ)
+		})
+		r.Must(rErr)
+		checked++
+		label := fmt.Sprintf("persona %s (%s)", ws.AgentID, ws.ID)
+		_ = cache.CheckAuthority(rKey, auth.Digest, func() error {
+			viols, cErr := checkClaimsOnce(s, label, text, auth, ws.ParentSessionMode, ws.Posture, toolvocabtest.SubjectSelfNow(), nil, nil, nil, true)
+			for _, msg := range viols {
+				r.Report("%s", msg)
+			}
+			return cErr
+		})
 	}
 	r.Expect(checked, "worker persona renders")
 }
 
-// Every stock skill, rendered for every reader that can select it, names
-// only what that reader holds.
+func workerPersonaOccurrence(reader prompts.Reader, skillsList []skills.Skill) map[string]any {
+	fp := reader.Fingerprint()
+	if fp != "" {
+		if cached, ok := workerOccByReaderFP.Load(fp); ok {
+			return maps.Clone(cached.(map[string]any))
+		}
+	}
+	occ := cloneBaseSpawnVars()
+	var views []prompts.AgentSkillView
+	for _, sk := range skillsList {
+		if !sk.Project && toolvocab.SkillToolsOfferedForReader(sk, reader) {
+			views = append(views, prompts.AgentSkillView{
+				Name:        sk.Name,
+				Description: strings.TrimSpace(sk.Description),
+			})
+		}
+	}
+	maps.Copy(occ, prompts.AgentPromptSurfaceTemplateVars(prompts.AgentPromptSurface{
+		FullCatalog: true,
+		Skills:      views,
+	}))
+	if fp != "" {
+		workerOccByReaderFP.Store(fp, maps.Clone(occ))
+	}
+	return occ
+}
+
+// skillsNameOnlyOffered verifies every rendered stock skill across CoordinatorStates
+// and WorkerStates through CT03's EvaluateClaimBlock and closed backtick vocabulary.
 func skillsNameOnlyOffered(r *invariants.Run) {
+	s := stock(r)
 	renders := skillRenders(r)
 	r.Expect(len(renders), "stock skill renders")
+	cache := hoststate.NewRenderCache()
 	for _, sr := range renders {
 		texts := make([]string, len(sr.Parts))
 		for i, part := range sr.Parts {
 			texts[i] = part.Text
 		}
-		reportUnoffered(r, fmt.Sprintf("skill %s as read by %s", sr.Skill.Name, sr.Reader), strings.Join(texts, "\n"), sr.State.Held())
+		joined := strings.Join(texts, "\n")
+		label := fmt.Sprintf("skill %s as read by %s", sr.Skill.Name, sr.Reader)
+		rKey := hoststate.RenderCacheKey("skillcheck:"+sr.Skill.Name, s.Catalog.Revision, nil, map[string]any{"body": joined})
+		_ = cache.CheckAuthority(rKey, sr.Authority.Digest, func() error {
+			auth := sr.Authority
+			if !auth.Reader.Valid() {
+				auth.Reader = sr.State
+			}
+			viols, err := checkClaimsOnce(s, label, joined, auth, "", "", toolvocabtest.SubjectSelfNow(), nil, nil, nil, false)
+			for _, msg := range viols {
+				r.Report("%s", msg)
+			}
+			return err
+		})
 	}
 }
 
-// backtickedIdent matches a backticked argument name or dotted path.
 var backtickedIdent = regexp.MustCompile("`([A-Za-z_][A-Za-z0-9_]*(?:\\.[A-Za-z_][A-Za-z0-9_]*)*)`")
 
-// fieldIndex is the argument paths each tool's schema accepts.
 type fieldIndex struct {
 	byTool map[string]map[string]bool
 	union  map[string]bool
@@ -267,7 +733,6 @@ func newFieldIndex(schemas *toolschema.Config) fieldIndex {
 		}
 		fields := map[string]bool{}
 		for _, path := range toolschema.ArgFieldPaths(meta.ArgsSchema) {
-			// A dotted path also names its head.
 			head, _, _ := strings.Cut(path, ".")
 			for _, p := range []string{path, head} {
 				fields[p] = true
@@ -279,9 +744,6 @@ func newFieldIndex(schemas *toolschema.Config) fieldIndex {
 	return idx
 }
 
-// unschemaed lists the argument names text attributes to tool that neither
-// tool nor any other tool the text names accepts. A backticked word no
-// schema accepts is not read as an argument.
 func (idx fieldIndex) unschemaed(tool, text string) []string {
 	named := map[string]bool{tool: true}
 	var claims []string
@@ -303,8 +765,6 @@ func (idx fieldIndex) unschemaed(tool, text string) []string {
 	return bad
 }
 
-// Every rejection card, rendered for each tool its selector names, names
-// only arguments that tool's schema accepts.
 func rejectCopyNamesOnlySchemaFields(r *invariants.Run) {
 	idx := newFieldIndex(stock(r).Schemas)
 	cfg := invariants.HintConfig(r.Corpus)
@@ -323,7 +783,6 @@ func rejectCopyNamesOnlySchemaFields(r *invariants.Run) {
 			for _, sc := range entry.Scenarios {
 				vars := guidance.ScenarioVars(entry, sc)
 				vars["tool"] = tool
-				// The selector rules report a card that does not render.
 				if rendered, err := formatter.Format(code, vars); err == nil {
 					texts = append(texts, rendered)
 				}
@@ -336,11 +795,8 @@ func rejectCopyNamesOnlySchemaFields(r *invariants.Run) {
 	r.Expect(checked, "rejection cards with a tool selector")
 }
 
-// phaseExitCall matches a non-negated instruction to call a tool.
 var phaseExitCall = regexp.MustCompile("((?i:do not |never ))?call `([a-z_]+)`")
 
-// Every non-terminal phase's leave channels are addressable on the surface
-// it binds, and its rendered exit steps call only tools that surface offers.
 func phaseExitsAreCallable(r *invariants.Run) {
 	s := stock(r)
 	reg, err := workflowdef.RegistryFromDirs("")
@@ -396,7 +852,6 @@ func phaseExitsAreCallable(r *invariants.Run) {
 	r.Expect(checked, "workflow phases bound to a surface")
 }
 
-// exitChannel is a tool a phase's declared leave path needs.
 type exitChannel struct{ tool, why string }
 
 func phaseExitChannels(m workflowdef.Manifest, phase workflowdef.PhaseDef) []exitChannel {

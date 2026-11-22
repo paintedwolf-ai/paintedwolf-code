@@ -181,6 +181,8 @@ var factDecls = []factDecl{
 	{"profile_surveys_project_tree", oarcore.TypeBool, FactTierHost, ""},
 	{"ask_user_secret_allowed", oarcore.TypeBool, FactTierHost, ""},
 	{"ask_user_loadable_without_schema", oarcore.TypeBool, FactTierHost, ""},
+	{"task_callable", oarcore.TypeBool, FactTierHost, ""},
+	{"surface_snapshot_handles", oarcore.TypeString, FactTierHost, ""},
 	{"repo_known_empty", oarcore.TypeBool, FactTierHost, ""},
 	{"last_audit_ungrounded", oarcore.TypeBool, FactTierHost, ""},
 	{"grounding_escalated", oarcore.TypeBool, FactTierHost, ""},

@@ -10,44 +10,87 @@ import (
 	"github.com/lycaon/lycaon/internal/pongoplain"
 )
 
+// ExpectedZeroSide identifies a boolean branch outcome excluded by a structural production invariant.
+type ExpectedZeroSide string
+
+const (
+	ExpectedZeroNone  ExpectedZeroSide = ""
+	ExpectedZeroTrue  ExpectedZeroSide = "true"
+	ExpectedZeroFalse ExpectedZeroSide = "false"
+)
+
+// ExpectedZeroBranch documents one branch outcome that is structurally unreachable under production constraints.
+type ExpectedZeroBranch struct {
+	ID     string
+	Side   ExpectedZeroSide
+	Reason string
+}
+
 // TemplateBranchSummary reports static discovery and runtime hits for one template branch.
 type TemplateBranchSummary struct {
-	Template   string
-	BranchID   string
-	Index      int
-	Line       int
-	Col        int
-	Kind       pongoplain.BranchKind
-	Expression string
-	TakenTrue  int
-	TakenFalse int
+	Template           string
+	BranchID           string
+	Index              int
+	Line               int
+	Col                int
+	Kind               pongoplain.BranchKind
+	Expression         string
+	TakenTrue          int
+	TakenFalse         int
+	ExpectedZero       ExpectedZeroSide
+	ExpectedZeroReason string
 }
 
 // Dead reports whether neither outcome was ever reached.
 func (b TemplateBranchSummary) Dead() bool { return b.TakenTrue == 0 && b.TakenFalse == 0 }
 
-// Vacuous reports whether only one boolean outcome was ever reached.
+// Vacuous reports whether only one boolean outcome was ever reached without a grounded ExpectedZero exclusion.
+// Loop headers without an {% empty %} clause (BranchFor) are checked for
+// non-zero execution via Dead(); {% empty %} clauses are tracked as BranchEmpty.
 func (b TemplateBranchSummary) Vacuous() bool {
-	return !b.Dead() && (b.TakenTrue == 0 || b.TakenFalse == 0)
+	if b.Kind == pongoplain.BranchFor || b.Dead() {
+		return false
+	}
+	switch b.ExpectedZero {
+	case ExpectedZeroTrue:
+		return b.TakenTrue != 0 || b.TakenFalse == 0 || strings.TrimSpace(b.ExpectedZeroReason) == ""
+	case ExpectedZeroFalse:
+		return b.TakenFalse != 0 || b.TakenTrue == 0 || strings.TrimSpace(b.ExpectedZeroReason) == ""
+	default:
+		return b.TakenTrue == 0 || b.TakenFalse == 0
+	}
 }
 
 // RuleBranchSummary reports static discovery and witness outcomes for one OAR rule/step branch.
 type RuleBranchSummary struct {
-	RuleID        string
-	BranchID      string
-	StepIndex     int
-	TakenTrue     int
-	TakenFalse    int
-	ScenarioTrue  int
-	ScenarioFalse int
+	RuleID             string
+	BranchID           string
+	StepIndex          int
+	TakenTrue          int
+	TakenFalse         int
+	ScenarioTrue       int
+	ScenarioFalse      int
+	ExpectedZero       ExpectedZeroSide
+	ExpectedZeroReason string
 }
 
 // Dead reports whether no production GuardContext witness ever evaluated this branch.
 func (b RuleBranchSummary) Dead() bool { return b.TakenTrue == 0 && b.TakenFalse == 0 }
 
-// Vacuous reports whether production GuardContext witnesses reached only one outcome.
+// Vacuous reports whether production GuardContext witnesses reached only one
+// outcome without a grounded ExpectedZero exclusion.
 func (b RuleBranchSummary) Vacuous() bool {
-	return !b.Dead() && (b.TakenTrue == 0 || b.TakenFalse == 0)
+	if b.Dead() {
+		return false
+	}
+	switch b.ExpectedZero {
+	case ExpectedZeroTrue:
+		return b.TakenTrue != 0 || b.TakenFalse == 0 || strings.TrimSpace(b.ExpectedZeroReason) == ""
+	case ExpectedZeroFalse:
+		return b.TakenFalse != 0 || b.TakenTrue == 0 || strings.TrimSpace(b.ExpectedZeroReason) == ""
+	default:
+		return b.TakenTrue == 0 || b.TakenFalse == 0
+	}
 }
 
 // CoverageReport summarizes discovered artifacts, template and OAR branches,
@@ -57,6 +100,7 @@ type CoverageReport struct {
 	DiscoveredRules     []string
 	TemplateBranches    []TemplateBranchSummary
 	RuleBranches        []RuleBranchSummary
+	ExpectedZero        []ExpectedZeroBranch
 	ReachedCells        int
 	ExcludedCells       int
 	ExcludedByReason    map[string]int
@@ -135,27 +179,46 @@ type discoveredRuleBranch struct {
 
 // CoverageTracker coordinates opt-in pongoplain and OAR branch recording across a test run.
 type CoverageTracker struct {
-	mu            sync.Mutex
-	templateRec   *pongoplain.BranchRecorder
-	ruleRec       *oar.RuleBranchRecorder
-	templateSpecs map[string][]pongoplain.BranchSpec
-	inlineOwners  map[string]string
-	ruleSpecs     map[string][]discoveredRuleBranch
-	reachedCells  int
-	excludedCells int
-	excludedWhy   map[string]int
+	mu                sync.Mutex
+	templateRec       *pongoplain.BranchRecorder
+	ruleRec           *oar.RuleBranchRecorder
+	templateSpecs     map[string][]pongoplain.BranchSpec
+	inlineOwners      map[string]string
+	ruleSpecs         map[string][]discoveredRuleBranch
+	expectedZeroTpl   map[string]ExpectedZeroBranch
+	expectedZeroRules map[string]ExpectedZeroBranch
+	reachedCells      int
+	excludedCells     int
+	excludedWhy       map[string]int
 }
 
 // NewCoverageTracker creates a branch and cell coverage tracker ready to install.
 func NewCoverageTracker() *CoverageTracker {
 	return &CoverageTracker{
-		templateRec:   &pongoplain.BranchRecorder{Aliases: map[string]string{}, Hits: map[string]*pongoplain.BranchHit{}},
-		ruleRec:       &oar.RuleBranchRecorder{Hits: map[string]*oar.RuleBranchHit{}},
-		templateSpecs: make(map[string][]pongoplain.BranchSpec),
-		inlineOwners:  make(map[string]string),
-		ruleSpecs:     make(map[string][]discoveredRuleBranch),
-		excludedWhy:   make(map[string]int),
+		templateRec:       &pongoplain.BranchRecorder{Aliases: map[string]string{}, Hits: map[string]*pongoplain.BranchHit{}},
+		ruleRec:           &oar.RuleBranchRecorder{Hits: map[string]*oar.RuleBranchHit{}},
+		templateSpecs:     make(map[string][]pongoplain.BranchSpec),
+		inlineOwners:      make(map[string]string),
+		ruleSpecs:         make(map[string][]discoveredRuleBranch),
+		expectedZeroTpl:   make(map[string]ExpectedZeroBranch),
+		expectedZeroRules: make(map[string]ExpectedZeroBranch),
+		excludedWhy:       make(map[string]int),
 	}
+}
+
+// ExpectZeroTemplateBranch records a grounded structural constraint keeping one side of branchID at 0.
+func (t *CoverageTracker) ExpectZeroTemplateBranch(branchID string, side ExpectedZeroSide, reason string) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	t.expectedZeroTpl[branchID] = ExpectedZeroBranch{ID: branchID, Side: side, Reason: reason}
+}
+
+// ExpectZeroRuleBranch records a grounded structural constraint keeping one side of ruleID#branchID at 0.
+func (t *CoverageTracker) ExpectZeroRuleBranch(ruleID, branchID string, side ExpectedZeroSide, reason string) {
+	key := ruleID + "#" + branchID
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	t.expectedZeroRules[key] = ExpectedZeroBranch{ID: key, Side: side, Reason: reason}
 }
 
 // Install activates both pongoplain and OAR branch recorders and returns a restore func.
@@ -191,6 +254,22 @@ func (t *CoverageTracker) RegisterTemplate(unitID, source string, profile pongop
 	t.inlineOwners[unitID] = owner
 	t.mu.Unlock()
 	return nil
+}
+
+// RegisterTemplateAlias maps a composed loader ref (such as "agents/coordinator-core.md"
+// or "kicks/coordinator-closeout.md") to a registered unitID for branch attribution.
+func (t *CoverageTracker) RegisterTemplateAlias(rawFilename, unitID string) {
+	rawFilename = strings.TrimSpace(rawFilename)
+	unitID = strings.TrimSpace(unitID)
+	if rawFilename == "" || unitID == "" {
+		return
+	}
+	t.templateRec.Mu.Lock()
+	if t.templateRec.Aliases == nil {
+		t.templateRec.Aliases = make(map[string]string)
+	}
+	t.templateRec.Aliases[rawFilename] = unitID
+	t.templateRec.Mu.Unlock()
 }
 
 // RegisterRule discovers conditional when and next-steps branches on rule.
@@ -259,13 +338,30 @@ func (t *CoverageTracker) Report() CoverageReport {
 	for k, v := range t.ruleSpecs {
 		ruleSpecsCopy[k] = slices.Clone(v)
 	}
+	expTplCopy := make(map[string]ExpectedZeroBranch, len(t.expectedZeroTpl))
+	for k, v := range t.expectedZeroTpl {
+		expTplCopy[k] = v
+	}
+	expRuleCopy := make(map[string]ExpectedZeroBranch, len(t.expectedZeroRules))
+	for k, v := range t.expectedZeroRules {
+		expRuleCopy[k] = v
+	}
 	t.mu.Unlock()
+
+	var allExp []ExpectedZeroBranch
+	for _, k := range sortedMapKeys(expTplCopy) {
+		allExp = append(allExp, expTplCopy[k])
+	}
+	for _, k := range sortedMapKeys(expRuleCopy) {
+		allExp = append(allExp, expRuleCopy[k])
+	}
 
 	return CoverageReport{
 		DiscoveredTemplates: tplIDs,
 		DiscoveredRules:     ruleIDs,
-		TemplateBranches:    t.collectTemplateSummaries(tplIDs, tplSpecsCopy, inlineOwnersCopy),
-		RuleBranches:        t.collectRuleSummaries(ruleIDs, ruleSpecsCopy),
+		TemplateBranches:    t.collectTemplateSummaries(tplIDs, tplSpecsCopy, inlineOwnersCopy, expTplCopy),
+		RuleBranches:        t.collectRuleSummaries(ruleIDs, ruleSpecsCopy, expRuleCopy),
+		ExpectedZero:        allExp,
 		ReachedCells:        reached,
 		ExcludedCells:       excluded,
 		ExcludedByReason:    reasons,
@@ -276,6 +372,7 @@ func (t *CoverageTracker) collectTemplateSummaries(
 	tplIDs []string,
 	specs map[string][]pongoplain.BranchSpec,
 	inlineOwners map[string]string,
+	expZero map[string]ExpectedZeroBranch,
 ) []TemplateBranchSummary {
 	t.templateRec.Mu.Lock()
 	defer t.templateRec.Mu.Unlock()
@@ -294,16 +391,19 @@ func (t *CoverageTracker) collectTemplateSummaries(
 				takenTrue = hit.TakenTrue
 				takenFalse = hit.TakenFalse
 			}
+			ez := expZero[branchID]
 			out = append(out, TemplateBranchSummary{
-				Template:   unitID,
-				BranchID:   branchID,
-				Index:      sp.Index,
-				Line:       sp.Line,
-				Col:        sp.Col,
-				Kind:       sp.Kind,
-				Expression: sp.Expression,
-				TakenTrue:  takenTrue,
-				TakenFalse: takenFalse,
+				Template:           unitID,
+				BranchID:           branchID,
+				Index:              sp.Index,
+				Line:               sp.Line,
+				Col:                sp.Col,
+				Kind:               sp.Kind,
+				Expression:         sp.Expression,
+				TakenTrue:          takenTrue,
+				TakenFalse:         takenFalse,
+				ExpectedZero:       ez.Side,
+				ExpectedZeroReason: ez.Reason,
 			})
 		}
 	}
@@ -313,18 +413,23 @@ func (t *CoverageTracker) collectTemplateSummaries(
 func (t *CoverageTracker) collectRuleSummaries(
 	ruleIDs []string,
 	specs map[string][]discoveredRuleBranch,
+	expZero map[string]ExpectedZeroBranch,
 ) []RuleBranchSummary {
 	t.ruleRec.Mu.Lock()
 	defer t.ruleRec.Mu.Unlock()
 	var out []RuleBranchSummary
 	for _, ruleID := range ruleIDs {
 		for _, sp := range specs[ruleID] {
+			key := sp.ruleID + "#" + sp.branchID
+			ez := expZero[key]
 			row := RuleBranchSummary{
-				RuleID:    sp.ruleID,
-				BranchID:  sp.branchID,
-				StepIndex: sp.stepIndex,
+				RuleID:             sp.ruleID,
+				BranchID:           sp.branchID,
+				StepIndex:          sp.stepIndex,
+				ExpectedZero:       ez.Side,
+				ExpectedZeroReason: ez.Reason,
 			}
-			if hit := t.ruleRec.Hits[sp.ruleID+"#"+sp.branchID]; hit != nil {
+			if hit := t.ruleRec.Hits[key]; hit != nil {
 				row.TakenTrue = hit.TakenTrue
 				row.TakenFalse = hit.TakenFalse
 				row.ScenarioTrue = hit.ScenarioTrue

@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"maps"
+	"reflect"
 
 	"github.com/lycaon/lycaon/internal/coordinator/inject"
 	"github.com/lycaon/lycaon/internal/coordinator/promptloop"
@@ -33,44 +34,79 @@ func FreezeWorkerAuthority(ctx context.Context, state WorkerState) (TurnAuthorit
 		return TurnAuthority{}, err
 	}
 
-	workerSess := &api.Session{
-		ID:              "worker-fixture",
-		ParentSessionID: "coord-fixture",
-		Mode:            state.ParentSessionMode,
-		Posture:         state.Posture,
-		AgentType:       state.AgentID,
-	}
-	if state.RootCount > 0 {
-		workerSess.WorkspacePath = "/tmp/fixture-primary"
-	}
-	policy := toolpolicy.NewEngine(toolpolicy.EngineDeps{
-		ToolLister:       bundle.exec.Metadata,
-		ProjectRootCount: func(context.Context, *api.Session) int { return state.RootCount },
-	})
-	deps := promptloop.ContextDeps{
-		Tools:            bundle.reg,
-		Policy:           policy,
-		LoadedTools:      func(string) map[string]bool { return maps.Clone(state.Loaded) },
-		ProjectRootCount: func(context.Context, *api.Session) int { return state.RootCount },
-		ContextSurfaceDeps: promptloop.ContextSurfaceDeps{
-			WebSearchEnabled: func() bool { return state.WebSearch },
-		},
-	}
-	frame := inject.CoordinatorTurnFrame{
-		Machine: inject.Machine{ProfileID: state.ToolProfile},
-	}
-	offeredMetas, plan, _, err := promptloop.ProjectTurnTools(ctx, deps, workerSess, nil, frame)
-	if err != nil {
-		return TurnAuthority{}, fmt.Errorf("worker ProjectTurnTools: %w", err)
+	cacheKey := fmt.Sprintf(
+		"w|%s|%s|%s|%s|%s|%d|%t|%t|%s",
+		overlay.Catalog.Revision, state.ParentSessionMode, state.Posture,
+		state.AgentID, state.ToolProfile, state.RootCount,
+		state.WebSearch, state.CommandExternalHidden, sortedBoolKeys(state.Loaded),
+	)
+	projTurnMu.Lock()
+	proj, hit := projTurnCache[cacheKey]
+	projTurnMu.Unlock()
+	if !hit {
+		workerSess := &api.Session{
+			ID:              "worker-fixture",
+			ParentSessionID: "coord-fixture",
+			Mode:            state.ParentSessionMode,
+			Posture:         state.Posture,
+			AgentType:       state.AgentID,
+		}
+		if state.RootCount > 0 {
+			workerSess.WorkspacePath = "/tmp/fixture-primary"
+		}
+		policy := toolpolicy.NewEngine(toolpolicy.EngineDeps{
+			ToolLister:       bundle.exec.Metadata,
+			ProjectRootCount: func(context.Context, *api.Session) int { return state.RootCount },
+		})
+		deps := promptloop.ContextDeps{
+			Tools:            bundle.reg,
+			Policy:           policy,
+			LoadedTools:      func(string) map[string]bool { return maps.Clone(state.Loaded) },
+			ProjectRootCount: func(context.Context, *api.Session) int { return state.RootCount },
+			ContextSurfaceDeps: promptloop.ContextSurfaceDeps{
+				WebSearchEnabled: func() bool { return state.WebSearch },
+			},
+		}
+		frame := inject.CoordinatorTurnFrame{
+			Machine: inject.Machine{ProfileID: state.ToolProfile, SkillCount: 1},
+		}
+		offeredMetas, plan, _, pErr := promptloop.ProjectTurnTools(ctx, deps, workerSess, nil, frame)
+		if pErr != nil {
+			return TurnAuthority{}, fmt.Errorf("worker ProjectTurnTools: %w", pErr)
+		}
+		filter := platform.ToolFilter{ProfileID: state.ToolProfile, ProjectRootCount: state.RootCount}
+		progReach, rErr := bundle.programReach(ctx, filter)
+		if rErr != nil {
+			return TurnAuthority{}, fmt.Errorf("worker Metadata.ProgramReach: %w", rErr)
+		}
+		progTable, tErr := bundle.programTable(ctx, filter)
+		if tErr != nil {
+			return TurnAuthority{}, fmt.Errorf("worker Metadata.ProgramTable: %w", tErr)
+		}
+		postLoadSchemas, dErr := projectDeferredSchemas(ctx, deps, workerSess, nil, frame, plan, state.Loaded, offeredMetas)
+		if dErr != nil {
+			return TurnAuthority{}, fmt.Errorf("worker projectDeferredSchemas: %w", dErr)
+		}
+		offered := toolMetaNames(offeredMetas)
+		projectedSchemas := toolMetaSchemas(offeredMetas)
+		encSchemas, encErr := encodeAdmittedValue(reflect.ValueOf(projectedSchemas), map[ptrVisit]bool{})
+		proj = projectedTurnToolsEntry{
+			metas:            offeredMetas,
+			plan:             plan,
+			progReach:        progReach,
+			progTable:        progTable,
+			postLoadSchemas:  postLoadSchemas,
+			offered:          offered,
+			projectedSchemas: projectedSchemas,
+			encodedSchemas:   encSchemas,
+			schemasOK:        encErr == nil,
+			programs:         computeProgramsList(progReach),
+		}
+		projTurnMu.Lock()
+		projTurnCache[cacheKey] = proj
+		projTurnMu.Unlock()
 	}
 
-	filter := platform.ToolFilter{ProfileID: state.ToolProfile, ProjectRootCount: state.RootCount}
-	progReach, err := bundle.exec.Metadata.ProgramReach(ctx, filter)
-	if err != nil {
-		return TurnAuthority{}, fmt.Errorf("worker Metadata.ProgramReach: %w", err)
-	}
-	offered := toolMetaNames(offeredMetas)
-	projectedSchemas := toolMetaSchemas(offeredMetas)
 	var reviewsConfinedWrites bool
 	if state.ApprovalPosture != "" {
 		reviewsConfinedWrites = state.ApprovalPosture.ReviewsConfinedWrites()
@@ -79,11 +115,11 @@ func FreezeWorkerAuthority(ctx context.Context, state WorkerState) (TurnAuthorit
 		ProfileID:             state.ToolProfile,
 		SessionMode:           string(state.ParentSessionMode),
 		Profiles:              narrowed,
-		Plan:                  plan,
+		Plan:                  proj.plan,
 		Loaded:                state.Loaded,
-		Visible:               offered,
+		Visible:               proj.offered,
 		Schemas:               overlay.Schemas,
-		ProjectedSchemas:      projectedSchemas,
+		ProjectedSchemas:      proj.projectedSchemas,
 		RootCount:             state.RootCount,
 		HasGit:                state.HasGit,
 		HasAnyGitRoot:         state.HasAnyGitRoot,
@@ -96,7 +132,7 @@ func FreezeWorkerAuthority(ctx context.Context, state WorkerState) (TurnAuthorit
 		return TurnAuthority{}, fmt.Errorf("worker NewReader: %w", err)
 	}
 	reader = reader.WithVision(state.Vision)
-	return assembleTurnAuthority(offeredMetas, offered, plan, progReach, reader), nil
+	return assembleTurnAuthorityFromEntry(proj, reader), nil
 }
 
 // WorkerReaderForSession builds the prompt Reader for a named worker agent

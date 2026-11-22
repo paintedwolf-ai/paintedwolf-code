@@ -68,6 +68,21 @@ func (idx *PrunableSchemaIndex) PrunablePaths(tool string) []string {
 	return sortedTrueKeys(idx.prunedPathsByTool[strings.TrimSpace(tool)])
 }
 
+// AllPrunableTools returns the sorted tool names that have at least one prunable property path.
+func (idx *PrunableSchemaIndex) AllPrunableTools() []string {
+	if idx == nil {
+		return nil
+	}
+	out := make([]string, 0, len(idx.prunedPathsByTool))
+	for tool, paths := range idx.prunedPathsByTool {
+		if len(paths) > 0 {
+			out = append(out, tool)
+		}
+	}
+	sort.Strings(out)
+	return out
+}
+
 // PrunableOwners returns the sorted tools where path is pruned in at least one state.
 func (idx *PrunableSchemaIndex) PrunableOwners(path string) []string {
 	if idx == nil {

@@ -4,7 +4,9 @@ import (
 	"context"
 	"fmt"
 	"maps"
+	"reflect"
 	"slices"
+	"strings"
 	"sync"
 
 	"github.com/lycaon/lycaon/internal/coordinator/inject"
@@ -21,6 +23,7 @@ import (
 	"github.com/lycaon/lycaon/internal/toolreach"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/toolsurface"
+	"github.com/lycaon/lycaon/internal/toolvocab/toolvocabtest"
 	"github.com/lycaon/lycaon/internal/webresearch"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -28,14 +31,27 @@ import (
 // TurnAuthority freezes the exact production-projected tool schemas, native
 // program reach, and prompt Reader for one coordinator or worker turn.
 type TurnAuthority struct {
-	Metas        []tools.ToolMeta
-	Schemas      map[string]map[string]any
-	Offered      []string
-	Plan         toolsurface.Plan
-	ProgramReach toolreach.Programs
-	Reach        toolreach.Request
-	Reader       prompts.Reader
-	Digest       string
+	Metas           []tools.ToolMeta
+	Schemas         map[string]map[string]any
+	PostLoadSchemas map[string]map[string]any
+	Offered         []string
+	Plan            toolsurface.Plan
+	ProgramReach    toolreach.Programs
+	ProgramTable    *toolreach.ProgramTable
+	Reach           toolreach.Request
+	Reader          prompts.Reader
+	Digest          string
+}
+
+// ActorAuthority adapts TurnAuthority for toolvocabtest.EvaluateClaimBlock.
+func (a TurnAuthority) ActorAuthority() toolvocabtest.ActorAuthority {
+	return toolvocabtest.AuthorityFromReaderAndMetas(
+		a.Reader,
+		a.ProgramReach,
+		a.Metas,
+		toolvocabtest.WithProgramTable(a.ProgramTable),
+		toolvocabtest.WithPostLoadAuthority(a.PostLoadSchemas, a.ProgramTable),
+	)
 }
 
 type executorCacheKey struct {
@@ -47,15 +63,55 @@ type executorCacheKey struct {
 	mcpState       MCPState
 }
 
+type programTableKey struct {
+	profileID string
+	surfaceID string
+	rootCount int
+}
+
 type executorBundle struct {
-	exec *toolexecution.Executor
-	reg  *tools.DefaultRegistry
+	exec     *toolexecution.Executor
+	reg      *tools.DefaultRegistry
+	tablesMu *sync.Mutex
+	tables   map[programTableKey]*toolreach.ProgramTable
+	reaches  map[programTableKey]toolreach.Programs
+}
+
+type projectedTurnToolsEntry struct {
+	metas            []tools.ToolMeta
+	plan             toolsurface.Plan
+	resolvedSurface  string
+	progReach        toolreach.Programs
+	progTable        *toolreach.ProgramTable
+	postLoadSchemas  map[string]map[string]any
+	offered          []string
+	projectedSchemas map[string]map[string]any
+	encodedSchemas   any
+	schemasOK        bool
+	programs         []string
 }
 
 var (
-	executorCacheMu sync.Mutex
-	executorCache   = map[executorCacheKey]executorBundle{}
+	executorCacheMu   sync.Mutex
+	executorCache     = map[executorCacheKey]executorBundle{}
+	cachedSandboxConf = sync.OnceValues(sandbox.LoadConfig)
+	projTurnMu        sync.Mutex
+	projTurnCache     = map[string]projectedTurnToolsEntry{}
 )
+
+func sortedBoolKeys(m map[string]bool) string {
+	if len(m) == 0 {
+		return ""
+	}
+	keys := make([]string, 0, len(m))
+	for k, v := range m {
+		if v {
+			keys = append(keys, k)
+		}
+	}
+	slices.Sort(keys)
+	return strings.Join(keys, ",")
+}
 
 // NarrowProfilesForPosture narrows every profile's CommandEffects by posture,
 // and optionally clamps to read_only for Ask-spawned child workers.
@@ -152,7 +208,7 @@ func executorBundleForOverlay(
 	if err != nil {
 		return executorBundle{}, nil, err
 	}
-	sandboxCfg, err := sandbox.LoadConfig()
+	sandboxCfg, err := cachedSandboxConf()
 	if err != nil {
 		return executorBundle{}, nil, fmt.Errorf("load sandbox config: %w", err)
 	}
@@ -167,11 +223,53 @@ func executorBundleForOverlay(
 	exec.Metadata.SetToolSchemas(overlay.Schemas)
 	exec.Metadata.SetCommandExternalHidden(externalHidden)
 
-	bundle := executorBundle{exec: exec, reg: reg}
+	bundle := executorBundle{
+		exec:     exec,
+		reg:      reg,
+		tablesMu: &sync.Mutex{},
+		tables:   make(map[programTableKey]*toolreach.ProgramTable),
+		reaches:  make(map[programTableKey]toolreach.Programs),
+	}
 	executorCacheMu.Lock()
 	executorCache[key] = bundle
 	executorCacheMu.Unlock()
 	return bundle, narrowed, nil
+}
+
+func (b executorBundle) programReach(ctx context.Context, filter platform.ToolFilter) (toolreach.Programs, error) {
+	key := programTableKey{profileID: filter.ProfileID, surfaceID: filter.SurfaceID, rootCount: filter.ProjectRootCount}
+	b.tablesMu.Lock()
+	if cached, ok := b.reaches[key]; ok {
+		b.tablesMu.Unlock()
+		return cached, nil
+	}
+	b.tablesMu.Unlock()
+	reach, err := b.exec.Metadata.ProgramReach(ctx, filter)
+	if err != nil {
+		return nil, err
+	}
+	b.tablesMu.Lock()
+	b.reaches[key] = reach
+	b.tablesMu.Unlock()
+	return reach, nil
+}
+
+func (b executorBundle) programTable(ctx context.Context, filter platform.ToolFilter) (*toolreach.ProgramTable, error) {
+	key := programTableKey{profileID: filter.ProfileID, surfaceID: filter.SurfaceID, rootCount: filter.ProjectRootCount}
+	b.tablesMu.Lock()
+	if cached, ok := b.tables[key]; ok {
+		b.tablesMu.Unlock()
+		return cached, nil
+	}
+	b.tablesMu.Unlock()
+	table, err := b.exec.Metadata.ProgramTable(ctx, filter)
+	if err != nil {
+		return nil, err
+	}
+	b.tablesMu.Lock()
+	b.tables[key] = table
+	b.tablesMu.Unlock()
+	return table, nil
 }
 
 func buildCatalogRegistry(eff *extpacks.EffectiveCatalog, mcpState MCPState) (*tools.DefaultRegistry, error) {
@@ -232,6 +330,17 @@ func registerFixtureMCPTool(reg *tools.DefaultRegistry, mcpState MCPState) error
 // native program reach, and Reader for a CoordinatorState through the live
 // toolpolicy.Engine and promptloop.ProjectTurnTools pipeline.
 func FreezeTurnAuthority(ctx context.Context, state CoordinatorState) (TurnAuthority, error) {
+	return FreezeTurnAuthorityWithResources(ctx, state, toolcontract.ResourcePresence{})
+}
+
+// FreezeTurnAuthorityWithResources computes the production tool list, schema
+// projections, native program reach, and Reader for state under explicit live
+// resource presence (active background jobs or held calls).
+func FreezeTurnAuthorityWithResources(
+	ctx context.Context,
+	state CoordinatorState,
+	resources toolcontract.ResourcePresence,
+) (TurnAuthority, error) {
 	overlay := state.Overlay
 	if overlay.Catalog == nil {
 		overlays, err := DiscoverPackOverlays(ctx)
@@ -247,45 +356,94 @@ func FreezeTurnAuthority(ctx context.Context, state CoordinatorState) (TurnAutho
 		return TurnAuthority{}, err
 	}
 
-	deps, sess, history, frame := buildCoordinatorTurnInputs(state, bundle)
-	metas, plan, resolvedSurfaceID, err := promptloop.ProjectTurnTools(ctx, deps, sess, history, frame)
-	if err != nil {
-		return TurnAuthority{}, fmt.Errorf("ProjectTurnTools: %w", err)
-	}
-	if state.TurnProfile.SurfaceID != "" && resolvedSurfaceID != state.TurnProfile.SurfaceID {
-		return TurnAuthority{}, fmt.Errorf(
-			"resolved surface %q disagrees with state.TurnProfile.SurfaceID %q",
-			resolvedSurfaceID, state.TurnProfile.SurfaceID,
+	var proj projectedTurnToolsEntry
+	cacheKey := ""
+	if len(state.History) == 0 {
+		cacheKey = fmt.Sprintf(
+			"c|%s|%s|%s|%t|%t|%s|%d|%s|%t|%s|%s|%s|%s|%s|%t|%t|%s|%+v|%s|jobs=%t|held=%t",
+			overlay.Catalog.Revision, state.SessionMode, state.Posture,
+			state.WebSearch, state.CommandExternalHidden, state.MCPState, state.RootCount,
+			state.TurnProfile.SurfaceID, state.TurnProfile.WorkflowActive,
+			state.TurnProfile.AdvanceWhenGateMet, state.TurnProfile.PhaseCoordinatorSurface,
+			state.RunContext.RunID, state.RunContext.WorkflowID, state.RunContext.PhaseCoordinatorSurface,
+			state.RunContext.PhaseHostHeld, state.RunContext.HasComposeDraft,
+			strings.Join(state.SpawnAllowlist, ","), state.ImplementState, sortedBoolKeys(state.Loaded),
+			resources.CommandJobs, resources.HeldCalls,
 		)
+		projTurnMu.Lock()
+		cached, hit := projTurnCache[cacheKey]
+		projTurnMu.Unlock()
+		if hit {
+			proj = cached
+		}
+	}
+	if proj.offered == nil {
+		deps, sess, history, frame := buildCoordinatorTurnInputs(state, bundle, resources)
+		metas, plan, resolvedSurfaceID, pErr := promptloop.ProjectTurnTools(ctx, deps, sess, history, frame)
+		if pErr != nil {
+			return TurnAuthority{}, fmt.Errorf("ProjectTurnTools: %w", pErr)
+		}
+		if state.TurnProfile.SurfaceID != "" && resolvedSurfaceID != state.TurnProfile.SurfaceID {
+			return TurnAuthority{}, fmt.Errorf(
+				"resolved surface %q disagrees with state.TurnProfile.SurfaceID %q",
+				resolvedSurfaceID, state.TurnProfile.SurfaceID,
+			)
+		}
+		filter := platform.ToolFilter{
+			ProfileID:        prompts.CoordinatorProfileID,
+			SurfaceID:        resolvedSurfaceID,
+			ProjectRootCount: state.RootCount,
+		}
+		progReach, rErr := bundle.programReach(ctx, filter)
+		if rErr != nil {
+			return TurnAuthority{}, fmt.Errorf("Metadata.ProgramReach: %w", rErr)
+		}
+		progTable, tErr := bundle.programTable(ctx, filter)
+		if tErr != nil {
+			return TurnAuthority{}, fmt.Errorf("Metadata.ProgramTable: %w", tErr)
+		}
+		postLoadSchemas, dErr := projectDeferredSchemas(ctx, deps, sess, history, frame, plan, state.Loaded, metas)
+		if dErr != nil {
+			return TurnAuthority{}, fmt.Errorf("projectDeferredSchemas: %w", dErr)
+		}
+		offered := toolMetaNames(metas)
+		projectedSchemas := toolMetaSchemas(metas)
+		encSchemas, encErr := encodeAdmittedValue(reflect.ValueOf(projectedSchemas), map[ptrVisit]bool{})
+		proj = projectedTurnToolsEntry{
+			metas:            metas,
+			plan:             plan,
+			resolvedSurface:  resolvedSurfaceID,
+			progReach:        progReach,
+			progTable:        progTable,
+			postLoadSchemas:  postLoadSchemas,
+			offered:          offered,
+			projectedSchemas: projectedSchemas,
+			encodedSchemas:   encSchemas,
+			schemasOK:        encErr == nil,
+			programs:         computeProgramsList(progReach),
+		}
+		if cacheKey != "" {
+			projTurnMu.Lock()
+			projTurnCache[cacheKey] = proj
+			projTurnMu.Unlock()
+		}
 	}
 
-	filter := platform.ToolFilter{
-		ProfileID:        prompts.CoordinatorProfileID,
-		SurfaceID:        resolvedSurfaceID,
-		ProjectRootCount: state.RootCount,
-	}
-	progReach, err := bundle.exec.Metadata.ProgramReach(ctx, filter)
-	if err != nil {
-		return TurnAuthority{}, fmt.Errorf("Metadata.ProgramReach: %w", err)
-	}
-
-	offered := toolMetaNames(metas)
-	projectedSchemas := toolMetaSchemas(metas)
 	var reviewsConfinedWrites bool
 	if state.ApprovalPosture != "" {
 		reviewsConfinedWrites = state.ApprovalPosture.ReviewsConfinedWrites()
 	}
 	reader, err := prompts.NewReader(prompts.ReaderInput{
 		ProfileID:             prompts.CoordinatorProfileID,
-		SurfaceID:             resolvedSurfaceID,
-		Mode:                  surface.ExecutionModeFamily(resolvedSurfaceID),
+		SurfaceID:             proj.resolvedSurface,
+		Mode:                  surface.ExecutionModeFamily(proj.resolvedSurface),
 		SessionMode:           string(state.SessionMode),
 		Profiles:              narrowed,
-		Plan:                  plan,
+		Plan:                  proj.plan,
 		Loaded:                state.Loaded,
-		Visible:               offered,
+		Visible:               proj.offered,
 		Schemas:               overlay.Schemas,
-		ProjectedSchemas:      projectedSchemas,
+		ProjectedSchemas:      proj.projectedSchemas,
 		RootCount:             state.RootCount,
 		HasGit:                state.HasGit,
 		HasAnyGitRoot:         state.HasAnyGitRoot,
@@ -301,12 +459,13 @@ func FreezeTurnAuthority(ctx context.Context, state CoordinatorState) (TurnAutho
 	}
 	reader = reader.WithVision(state.Vision)
 
-	return assembleTurnAuthority(metas, offered, plan, progReach, reader), nil
+	return assembleTurnAuthorityFromEntry(proj, reader), nil
 }
 
 func buildCoordinatorTurnInputs(
 	state CoordinatorState,
 	bundle executorBundle,
+	resources toolcontract.ResourcePresence,
 ) (promptloop.ContextDeps, *api.Session, []api.Message, inject.CoordinatorTurnFrame) {
 	sess := &api.Session{
 		ID:        "coord-fixture",
@@ -325,7 +484,7 @@ func buildCoordinatorTurnInputs(
 		history = []api.Message{{Role: api.MessageRoleUser, Content: "Inspect current state"}}
 	}
 
-	runCtx := normalizeCoordinatorRunContext(state, sess, history)
+	runCtx := NormalizeCoordinatorRunContext(state, sess, history)
 	var roster *inject.AgentRoster
 	if state.SpawnAllowlist != nil {
 		roster = &inject.AgentRoster{Effective: slices.Clone(state.SpawnAllowlist)}
@@ -333,7 +492,7 @@ func buildCoordinatorTurnInputs(
 	frame := inject.CoordinatorTurnFrame{
 		RunContext: runCtx,
 		Roster:     roster,
-		Machine:    inject.Machine{ProfileID: prompts.CoordinatorProfileID},
+		Machine:    inject.Machine{ProfileID: prompts.CoordinatorProfileID, SkillCount: 1},
 	}
 
 	policy := toolpolicy.NewEngine(toolpolicy.EngineDeps{
@@ -347,6 +506,7 @@ func buildCoordinatorTurnInputs(
 			return state.ImplementState
 		},
 		LoadedTools:      func(string) map[string]bool { return maps.Clone(state.Loaded) },
+		LiveResources:    func(string) toolcontract.ResourcePresence { return resources },
 		ProjectRootCount: func(context.Context, *api.Session) int { return state.RootCount },
 		ContextSurfaceDeps: promptloop.ContextSurfaceDeps{
 			WebSearchEnabled: func() bool { return state.WebSearch },
@@ -355,7 +515,9 @@ func buildCoordinatorTurnInputs(
 	return deps, sess, history, frame
 }
 
-func normalizeCoordinatorRunContext(
+// NormalizeCoordinatorRunContext synthesizes the minimal run-context fields needed
+// so surface.ResolveTurnProfile resolves to state.TurnProfile.SurfaceID.
+func NormalizeCoordinatorRunContext(
 	state CoordinatorState,
 	sess *api.Session,
 	history []api.Message,
@@ -404,27 +566,117 @@ func toolMetaSchemas(metas []tools.ToolMeta) map[string]map[string]any {
 	return out
 }
 
+func projectDeferredSchemas(
+	ctx context.Context,
+	deps promptloop.ContextDeps,
+	sess *api.Session,
+	history []api.Message,
+	frame inject.CoordinatorTurnFrame,
+	plan toolsurface.Plan,
+	alreadyLoaded map[string]bool,
+	currentMetas []tools.ToolMeta,
+) (map[string]map[string]any, error) {
+	deferredNames := plan.DeferredNames()
+	if len(deferredNames) == 0 {
+		return nil, nil
+	}
+	allPresent := true
+	currentByTool := toolMetaSchemas(currentMetas)
+	for _, name := range deferredNames {
+		if currentByTool[name] == nil {
+			allPresent = false
+			break
+		}
+	}
+	if allPresent {
+		out := make(map[string]map[string]any, len(deferredNames))
+		for _, name := range deferredNames {
+			out[name] = currentByTool[name]
+		}
+		return out, nil
+	}
+	allLoaded := maps.Clone(alreadyLoaded)
+	if allLoaded == nil {
+		allLoaded = make(map[string]bool, len(deferredNames))
+	}
+	deferredSet := make(map[string]bool, len(deferredNames))
+	for _, name := range deferredNames {
+		allLoaded[name] = true
+		deferredSet[name] = true
+	}
+	depsLoaded := deps
+	depsLoaded.LoadedTools = func(string) map[string]bool { return maps.Clone(allLoaded) }
+	postMetas, _, _, err := promptloop.ProjectTurnTools(ctx, depsLoaded, sess, history, frame)
+	if err != nil {
+		return nil, err
+	}
+	out := make(map[string]map[string]any, len(deferredNames))
+	for _, m := range postMetas {
+		if deferredSet[m.Name] && m.ArgsSchema != nil {
+			out[m.Name] = m.ArgsSchema
+		}
+	}
+	return out, nil
+}
+
+func assembleTurnAuthorityFromEntry(proj projectedTurnToolsEntry, reader prompts.Reader) TurnAuthority {
+	mergedReachSchemas := make(map[string]map[string]any, len(proj.postLoadSchemas)+len(proj.projectedSchemas))
+	maps.Copy(mergedReachSchemas, proj.postLoadSchemas)
+	maps.Copy(mergedReachSchemas, proj.projectedSchemas)
+	effectivePlan := toolsurface.Compile(proj.offered, reader.Requestable())
+	reach := toolreach.Freeze(proj.offered, effectivePlan).WithPrograms(proj.progReach).WithSchemas(mergedReachSchemas)
+	if proj.progTable != nil {
+		reach = toolreach.Freeze(proj.offered, effectivePlan).WithProgramTable(proj.progTable).WithSchemas(mergedReachSchemas)
+	}
+	digest := ""
+	if proj.schemasOK {
+		digest = authorityDigestPrecomputed(proj.offered, proj.encodedSchemas, proj.programs, reader.Mints(), reader)
+	}
+	return TurnAuthority{
+		Metas:           proj.metas,
+		Schemas:         proj.projectedSchemas,
+		PostLoadSchemas: proj.postLoadSchemas,
+		Offered:         proj.offered,
+		Plan:            proj.plan,
+		ProgramReach:    proj.progReach,
+		ProgramTable:    proj.progTable,
+		Reach:           reach,
+		Reader:          reader,
+		Digest:          digest,
+	}
+}
+
 func assembleTurnAuthority(
 	metas []tools.ToolMeta,
 	offered []string,
 	plan toolsurface.Plan,
 	progReach toolreach.Programs,
+	progTable *toolreach.ProgramTable,
+	postLoadSchemas map[string]map[string]any,
 	reader prompts.Reader,
 ) TurnAuthority {
 	schemas := make(map[string]map[string]any, len(metas))
 	for _, m := range metas {
 		schemas[m.Name] = m.ArgsSchema
 	}
-	reach := toolreach.Freeze(offered, plan).WithPrograms(progReach)
+	mergedReachSchemas := make(map[string]map[string]any, len(postLoadSchemas)+len(schemas))
+	maps.Copy(mergedReachSchemas, postLoadSchemas)
+	maps.Copy(mergedReachSchemas, schemas)
+	reach := toolreach.Freeze(offered, plan).WithPrograms(progReach).WithSchemas(mergedReachSchemas)
+	if progTable != nil {
+		reach = toolreach.Freeze(offered, plan).WithProgramTable(progTable).WithSchemas(mergedReachSchemas)
+	}
 	digest := AuthorityDigest(offered, schemas, progReach, reader.Mints(), reader)
 	return TurnAuthority{
-		Metas:        metas,
-		Schemas:      schemas,
-		Offered:      offered,
-		Plan:         plan,
-		ProgramReach: progReach,
-		Reach:        reach,
-		Reader:       reader,
-		Digest:       digest,
+		Metas:           metas,
+		Schemas:         schemas,
+		PostLoadSchemas: postLoadSchemas,
+		Offered:         offered,
+		Plan:            plan,
+		ProgramReach:    progReach,
+		ProgramTable:    progTable,
+		Reach:           reach,
+		Reader:          reader,
+		Digest:          digest,
 	}
 }

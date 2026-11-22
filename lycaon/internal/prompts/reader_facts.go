@@ -31,7 +31,7 @@ func DeclaredReader(catalog *extpacks.EffectiveCatalog, scopeID string) (Reader,
 			return Reader{}, err
 		}
 	}
-	profiles, err := toolProfilesCache.get(catalogCacheKey(catalog), func(string) ([]sandbox.ToolProfile, error) {
+	profiles, err := toolProfilesCache.get(catalogRevisionKey(catalog), func(string) ([]sandbox.ToolProfile, error) {
 		return sandbox.LoadToolProfilesWithCatalog(catalog)
 	})
 	if err != nil {

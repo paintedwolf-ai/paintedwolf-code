@@ -270,9 +270,10 @@ func sampleListItemsForVar(name string) (string, string) {
 	case "promoted_paths", "diffs":
 		return "internal/app/a.go", "internal/app/b.go"
 	case "failed_leaves":
-		return "tests_green", "checklist_closed"
+		return "fanout_planned", "worker_cycle_ready"
 	default:
-		return name + "-1", name + "-2"
+		clean := strings.ReplaceAll(name, "_", "-")
+		return clean + "-1", clean + "-2"
 	}
 }
 
@@ -302,8 +303,16 @@ func sampleObjectForVar(name string, index int) map[string]any {
 		}
 	case "roots":
 		return map[string]any{"id": "r" + suffix, "label": "root-" + suffix, "path": "/tmp/root-" + suffix, "is_primary": index == 0}
+	case "after":
+		return map[string]any{"label": "root-" + suffix, "is_active": index == 0}
+	case "changes":
+		kinds := []string{"added", "removed", "renamed"}
+		return map[string]any{"kind": kinds[index%len(kinds)], "label": "root-" + suffix, "old_label": "prev-" + suffix}
+	case "session_folder_changed", "new_primary", "active_root":
+		return map[string]any{"label": "root-" + suffix}
 	case "gate_obligations":
-		return map[string]any{"id": "gate_" + suffix, "description": "Complete obligation " + suffix}
+		ids := []string{"fanout_planned", "worker_cycle_ready"}
+		return map[string]any{"id": ids[index%len(ids)], "description": "Complete obligation " + suffix}
 	default:
 		return map[string]any{"id": name + "-" + suffix, "summary": "item " + suffix, "status": "ok"}
 	}

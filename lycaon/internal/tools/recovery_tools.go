@@ -2,6 +2,7 @@ package tools
 
 import (
 	"context"
+	"slices"
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/curationctx"
@@ -77,6 +78,20 @@ func RegisterRecoveryFacts(ctx context.Context, gc *oar.GuardContext) {
 		target.ObservationData["ask_user_loadable_without_schema"] = !askMode && request.Status("ask_user") == toolreach.Loadable && !hasSchema
 		return nil
 	})
+	gc.RegisterProvider("paintedwolf.task_callable", func(target *oar.GuardContext) error {
+		if target.ObservationData == nil {
+			target.ObservationData = map[string]any{}
+		}
+		target.ObservationData["task_callable"] = request.Status("task") == toolreach.Callable || slices.Contains(target.Session.TurnTools, "task")
+		return nil
+	})
+	gc.RegisterProvider("paintedwolf.surface_snapshot_handles", func(target *oar.GuardContext) error {
+		if target.ObservationData == nil {
+			target.ObservationData = map[string]any{}
+		}
+		target.ObservationData["surface_snapshot_handles"] = mintableSurfaceSnapshotHandles(request)
+		return nil
+	})
 	registerCommandFormRecoveryFacts(gc, request)
 	for _, fact := range oar.CanCallFacts() {
 		tool := strings.TrimPrefix(fact, "can_")
@@ -95,5 +110,28 @@ func RegisterRecoveryFacts(ctx context.Context, gc *oar.GuardContext) {
 			target.ObservationData[fact] = callable
 			return nil
 		})
+	}
+}
+
+func mintableSurfaceSnapshotHandles(request toolreach.Request) string {
+	var handles []string
+	if request.Status("capture_page") == toolreach.Callable || request.Status("page_snapshot") == toolreach.Callable || request.Status("page_open") == toolreach.Callable {
+		handles = append(handles, "page#")
+	}
+	if request.Status("command") == toolreach.Callable && request.Known() && request.ProgramMode("external", "dispatch") {
+		handles = append(handles, "tui#")
+	}
+	if request.Status("terminal_open") == toolreach.Callable || request.Status("terminal_read") == toolreach.Callable || request.Status("terminal_snapshot") == toolreach.Callable {
+		handles = append(handles, "terminal_session#")
+	}
+	switch len(handles) {
+	case 0:
+		return ""
+	case 1:
+		return handles[0]
+	case 2:
+		return handles[0] + " or " + handles[1]
+	default:
+		return strings.Join(handles[:len(handles)-1], ", ") + " or " + handles[len(handles)-1]
 	}
 }

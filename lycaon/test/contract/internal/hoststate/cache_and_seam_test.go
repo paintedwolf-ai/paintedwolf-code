@@ -11,6 +11,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"github.com/lycaon/lycaon/internal/coordinator/inject"
@@ -38,9 +39,9 @@ func TestRenderCacheKeyDistinguishesNonReaderVars(t *testing.T) {
 		t.Fatalf("expected matching Reader.Fingerprint(), got %s vs %s", readerA.Fingerprint(), readerB.Fingerprint())
 	}
 
-	varsA, err := prompts.Vars(readerA, map[string]any{"session_scratch_dir": "/tmp/scratch-a", "reviews_confined_writes": false})
+	varsA, err := prompts.Vars(readerA, map[string]any{"verify_command": "./task test:digest", "execution_mode_entered": "investigate"})
 	contractcheck.FailErr(t, "Vars A", err)
-	varsB, err := prompts.Vars(readerB, map[string]any{"session_scratch_dir": "/tmp/scratch-b", "reviews_confined_writes": true})
+	varsB, err := prompts.Vars(readerB, map[string]any{"verify_command": "./task lint:fast", "execution_mode_entered": "orchestrate"})
 	contractcheck.FailErr(t, "Vars B", err)
 
 	keyA := hoststate.RenderCacheKey("partials/command-surface.md", "rev-1", []string{"u1"}, varsA)
@@ -174,32 +175,34 @@ func verifyCheckAuthorityRetryAndOverlap(t *testing.T, cache *hoststate.RenderCa
 		t.Fatalf("attempts=%d verified=%t, want 2 and true", attempts, cache.AuthorityVerified(k1, "auth-x"))
 	}
 
-	started := make(chan struct{})
-	release := make(chan struct{})
-	var leaderRuns atomic.Int32
-	var wg sync.WaitGroup
-	errs := make([]error, 2)
-	wg.Add(2)
-	go func() {
-		defer wg.Done()
-		errs[0] = cache.CheckAuthority(k2, "auth-overlap", func() error {
-			leaderRuns.Add(1)
-			close(started)
-			<-release
-			return sentinelErr
-		})
-	}()
-	<-started
-	go func() {
-		defer wg.Done()
-		errs[1] = cache.CheckAuthority(k2, "auth-overlap", func() error { leaderRuns.Add(1); return nil })
-	}()
-	time.Sleep(10 * time.Millisecond)
-	close(release)
-	wg.Wait()
-	if !errors.Is(errs[0], sentinelErr) || !errors.Is(errs[1], sentinelErr) || leaderRuns.Load() != 1 || cache.AuthorityVerified(k2, "auth-overlap") {
-		t.Fatalf("overlapping failure mismatch: errs=%v leaderRuns=%d", errs, leaderRuns.Load())
-	}
+	synctest.Test(t, func(t *testing.T) {
+		started := make(chan struct{})
+		release := make(chan struct{})
+		var leaderRuns atomic.Int32
+		var wg sync.WaitGroup
+		errs := make([]error, 2)
+		wg.Add(2)
+		go func() {
+			defer wg.Done()
+			errs[0] = cache.CheckAuthority(k2, "auth-overlap", func() error {
+				leaderRuns.Add(1)
+				close(started)
+				<-release
+				return sentinelErr
+			})
+		}()
+		<-started
+		go func() {
+			defer wg.Done()
+			errs[1] = cache.CheckAuthority(k2, "auth-overlap", func() error { leaderRuns.Add(1); return nil })
+		}()
+		synctest.Wait()
+		close(release)
+		wg.Wait()
+		if !errors.Is(errs[0], sentinelErr) || !errors.Is(errs[1], sentinelErr) || leaderRuns.Load() != 1 || cache.AuthorityVerified(k2, "auth-overlap") {
+			t.Fatalf("overlapping failure mismatch: errs=%v leaderRuns=%d", errs, leaderRuns.Load())
+		}
+	})
 }
 
 type recordingLLMClient struct {
@@ -306,7 +309,7 @@ func TestFreezeTurnAuthorityMatchesPromptLoopRequestSeam(t *testing.T) {
 			frame := inject.CoordinatorTurnFrame{
 				RunContext: st.RunContext,
 				Roster:     &inject.AgentRoster{Effective: slices.Clone(st.SpawnAllowlist)},
-				Machine:    inject.Machine{ProfileID: prompts.CoordinatorProfileID},
+				Machine:    inject.Machine{ProfileID: prompts.CoordinatorProfileID, SkillCount: 1},
 			}
 			policy := toolpolicy.NewEngine(toolpolicy.EngineDeps{
 				ToolLister:       exec.Metadata,

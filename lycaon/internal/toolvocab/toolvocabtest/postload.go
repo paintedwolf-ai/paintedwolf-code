@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"maps"
+	"regexp"
 	"slices"
 	"sort"
 	"strings"
@@ -228,7 +229,7 @@ func checkCommandInvocations(
 	sentence string,
 	line int,
 ) []SubjectViolation {
-	if vocab == nil {
+	if vocab == nil || vocab.IsAuthoringReferenceSource(label) {
 		return nil
 	}
 	curReach := currentCommandReach(auth, held)
@@ -296,14 +297,17 @@ func checkAllCommandSegments(vocab *BacktickVocab, reach toolreach.Request, allo
 	return true, ""
 }
 
+var anglePlaceholderRe = regexp.MustCompile(`<[A-Za-z][A-Za-z0-9_.-]*>`)
+
 func checkSingleCommandSegment(reach toolreach.Request, allowMut bool, seg string) (bool, string) {
 	if reach.Status(toolreach.ProgramTool) == toolreach.Absent {
 		return false, fmt.Sprintf("command invocation %q is uncertified or command tool is not offered", seg)
 	}
-	if hasUnquotedOutputRedirect(seg) && !allowMut {
+	cleaned := anglePlaceholderRe.ReplaceAllString(seg, "PLACEHOLDER")
+	if hasUnquotedOutputRedirect(cleaned) && !allowMut {
 		return false, fmt.Sprintf("output redirect in %q requires command mutation", seg)
 	}
-	words := normalizeProseCommandWords(splitCommandWords(strings.TrimSpace(seg)))
+	words := normalizeProseCommandWords(splitCommandWords(strings.TrimSpace(cleaned)))
 	if len(words) == 0 {
 		return true, ""
 	}
@@ -316,8 +320,16 @@ func checkSingleCommandSegment(reach toolreach.Request, allowMut bool, seg strin
 	if reach.ProgramInvocation(words...) {
 		return true, ""
 	}
-	if len(words) == 2 && strings.HasPrefix(words[1], "-") && reach.ProgramInvocation(words[0], words[1], "PATTERN") {
-		return true, ""
+	if len(words) == 2 && strings.HasPrefix(words[1], "-") {
+		if reach.ProgramInvocation(words[0], words[1], "PATTERN") ||
+			(words[0] == "sed" && words[1] == "-n" && reach.ProgramInvocation("sed", "-n", "1,2p", "FILE")) {
+			return true, ""
+		}
+	}
+	if len(words) == 3 && words[0] == "git" && words[1] == "-c" && strings.Contains(words[2], "=") {
+		if reach.Program("git status") {
+			return true, ""
+		}
 	}
 	if bound, ok := commandmode.Resolve(context.Background(), words); ok {
 		return false, fmt.Sprintf("command mode %s[%s] in %q is not admitted", bound.Command, bound.Mode, seg)

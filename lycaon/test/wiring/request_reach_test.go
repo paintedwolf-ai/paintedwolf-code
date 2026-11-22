@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"maps"
+	"reflect"
 	"regexp"
 	"slices"
 	"strings"
@@ -140,7 +141,9 @@ func (o *reachOracle) check(t *testing.T, req modelcall.CompletionRequest, profi
 		s, ok := sent[tool]
 		return s, ok
 	}
-	maps.Copy(offered, commandReach(t, profiles, req.Debug.ProfileID, req.Debug.Surface))
+	if offered["command"] {
+		maps.Copy(offered, commandReach(t, profiles, req.Debug.ProfileID, req.Debug.Surface))
+	}
 	var out []string
 	for i, m := range req.Messages {
 		for _, text := range hostText(m) {
@@ -203,6 +206,7 @@ type reachCell struct {
 // keeps deferred.
 type reachScenario struct {
 	loading  string
+	posture  api.SessionPosture
 	approval gate.Posture
 	workflow string
 	decider  decide.Decider
@@ -258,6 +262,11 @@ func TestEveryRequestNamesOnlyWhatItOffers(t *testing.T) {
 		},
 		{
 			loading: "deferred, requested, then loaded earlier", approval: gate.PostureBalanced, decider: &decidetest.Fake{},
+			prompts: []string{"what is here", "@request", "use what was loaded"},
+			cells:   []string{"implement_investigate"},
+		},
+		{
+			loading: "deferred under spec posture", posture: api.SessionPostureSpec, approval: gate.PostureBalanced, decider: &decidetest.Fake{},
 			prompts: []string{"what is here", "@request", "use what was loaded"},
 			cells:   []string{"implement_investigate"},
 		},
@@ -323,7 +332,7 @@ type loadSpan struct {
 // loading states a scenario scripts: the tool is withheld until it is
 // requested, the request that asks for it does not carry it, the turn's last
 // request carries it, and every later turn keeps it.
-func loadingTransitions(requests []modelcall.CompletionRequest, span loadSpan) []string {
+func loadingTransitions(oracle *reachOracle, requests []modelcall.CompletionRequest, span loadSpan) []string {
 	offers := func(req modelcall.CompletionRequest) bool {
 		return slices.ContainsFunc(req.Tools, func(meta tools.ToolMeta) bool { return meta.Name == span.tool })
 	}
@@ -343,6 +352,57 @@ func loadingTransitions(requests []modelcall.CompletionRequest, span loadSpan) [
 	// The requesting turn needs the asking request and one after its result.
 	if span.after-span.before < 2 || span.after >= len(requests) {
 		out = append(out, fmt.Sprintf("requests %d..%d of %d leave a loading state unrecorded", span.before, span.after, len(requests)))
+		return out
+	}
+	out = append(out, verifyPrePostLoadSchemaParity(oracle, requests[:span.after-1], requests[span.after-1], span.tool)...)
+	if postA, okA := toolMetaSchemaInRequest(requests[span.after-1], span.tool); okA {
+		if postB, okB := toolMetaSchemaInRequest(requests[span.after], span.tool); okB && !reflect.DeepEqual(postA, postB) {
+			out = append(out, fmt.Sprintf("loaded schema for %s drifted between requests %d and %d", span.tool, span.after-1, span.after))
+		}
+	}
+	return out
+}
+
+func toolMetaSchemaInRequest(req modelcall.CompletionRequest, toolName string) (map[string]any, bool) {
+	for _, meta := range req.Tools {
+		if meta.Name == toolName {
+			return meta.ArgsSchema, meta.ArgsSchema != nil
+		}
+	}
+	return nil, false
+}
+
+// verifyPrePostLoadSchemaParity checks that any argument or enum constraint
+// advertised for toolName in pre-load host messages is accepted by the actual
+// post-load CompletionRequest.Tools schema as sent (including under narrowing).
+func verifyPrePostLoadSchemaParity(
+	oracle *reachOracle,
+	preRequests []modelcall.CompletionRequest,
+	postRequest modelcall.CompletionRequest,
+	toolName string,
+) []string {
+	postSchema, ok := toolMetaSchemaInRequest(postRequest, toolName)
+	if !ok {
+		return []string{fmt.Sprintf("post-load request lacks non-nil ArgsSchema for %s", toolName)}
+	}
+	lookup := func(tool string) (map[string]any, bool) {
+		if tool == toolName {
+			return postSchema, true
+		}
+		return nil, false
+	}
+	var out []string
+	for rIdx, req := range preRequests {
+		for mIdx, m := range req.Messages {
+			for _, text := range hostText(m) {
+				for _, bad := range toolvocabtest.UnacceptedArgs(oracle.names, text, lookup) {
+					out = append(out, fmt.Sprintf(
+						"pre-load request %d message %d advertises %s argument `%s` absent from post-load schema",
+						rIdx, mIdx, bad.Tool, bad.Arg,
+					))
+				}
+			}
+		}
 	}
 	return out
 }
@@ -357,7 +417,7 @@ func runReachScenario(t *testing.T, oracle *reachOracle, sc reachScenario) reach
 	dir := t.TempDir()
 	WriteTestProjectApprovalsAllowWrite(t, dir)
 	_ = WriteImplementFixture(t, dir)
-	sess, err := h.CreateHarnessSession(t, api.CreateSessionRequest{}, dir)
+	sess, err := h.CreateHarnessSession(t, api.CreateSessionRequest{Posture: sc.posture}, dir)
 	testutil.FailErr(t, "create session", err)
 	AttachDefaultAmbient(t, h, ctx, sess.ID)
 	h.SeedProgress(t, ctx, sess.ID)
@@ -392,13 +452,31 @@ func runReachScenario(t *testing.T, oracle *reachOracle, sc reachScenario) reach
 			span.after = len(conversation())
 		}
 	}
+	testutil.WaitFor(t, "worker cycle quiescent", func() bool {
+		return workerCycleQuiescent(ctx, h, sess.ProjectID, sess.ID)
+	})
+	FailOnEndedWorker(t, h, ctx, sess.ProjectID)
+	WaitForSessionIdleGate(t, h, ctx, sess.ID)
+
 	stored, err := h.Store.Sessions.Get(ctx, sess.ID)
 	testutil.FailErr(t, "read the session", err)
 	profiles := h.Sessions.Manager.Profiles.ForSession(ctx, stored)
 	out := reachResult{counts: map[reachCell]int{}}
+	allRecorded := rec.AllRequests()
+	for uIdx, uReq := range allRecorded {
+		if uReq.Composition == modelcall.CompositionConversation {
+			continue
+		}
+		if len(uReq.Tools) > 0 {
+			out.violations = append(out.violations, fmt.Sprintf("utility request %d (%s) carries %d tools", uIdx, uReq.Composition, len(uReq.Tools)))
+		}
+		for _, v := range oracle.check(t, uReq, profiles) {
+			out.violations = append(out.violations, fmt.Sprintf("utility request %d (%s): %s", uIdx, uReq.Composition, v))
+		}
+	}
 	requests := conversation()
 	if span != nil {
-		out.violations = append(out.violations, loadingTransitions(requests, *span)...)
+		out.violations = append(out.violations, loadingTransitions(oracle, requests, *span)...)
 	}
 	for i, req := range requests {
 		where := req.Debug.Surface
@@ -464,8 +542,32 @@ func TestRequestReachFailsOnSeededRequests(t *testing.T) {
 		return api.Message{Role: api.MessageRoleSystem, Origin: api.MessageOriginHost, Authority: api.ContentAuthoritySystem, Content: text}
 	}
 	// command's schema here is the one without timeout_ms, as after the
-	// parameter is dropped.
-	offered := []tools.ToolMeta{tool("update_progress", "content", "expected_revision"), tool("ask_user", "questions"), tool("command", "command")}
+	// parameter is dropped; wait's schema allows only http_ready and port_ready.
+	waitNarrowed := tools.ToolMeta{
+		Name: "wait",
+		ArgsSchema: map[string]any{
+			"type": "object",
+			"properties": map[string]any{
+				"timeout_ms": map[string]any{"type": "integer"},
+				"conditions": map[string]any{
+					"type": "array",
+					"items": map[string]any{
+						"type": "object",
+						"properties": map[string]any{
+							"kind": map[string]any{"type": "string", "enum": []any{"http_ready", "port_ready"}},
+							"url":  map[string]any{"type": "string"},
+						},
+					},
+				},
+			},
+		},
+	}
+	offered := []tools.ToolMeta{
+		tool("update_progress", "content", "expected_revision"),
+		tool("ask_user", "questions"),
+		tool("command", "command"),
+		waitNarrowed,
+	}
 	for name, tc := range map[string]struct {
 		message api.Message
 		want    int
@@ -481,6 +583,10 @@ func TestRequestReachFailsOnSeededRequests(t *testing.T) {
 		"guide gives command an argument never schemaed": {message: system("Run it with `command(command=…, wait_ms=5)`."), want: 1},
 		"guide gives command its own argument":           {message: system("Run it with `command(command=…)`."), want: 0},
 		"guide call reworded":                            {message: system("Retry with `update_progress(content=…, expected_revision=…)`."), want: 0},
+		"cross-tool questions attributed to command":     {message: system("Run `command(command=\"ls\", questions=[\"proceed?\"])`."), want: 1},
+		"cross-tool questions reworded":                  {message: system("Run `command(command=\"ls\")` and ask via `ask_user(questions=[…])`."), want: 0},
+		"narrowed wait enum process_done":                {message: system("Await completion via `wait(timeout_ms=5000, conditions=[{\"kind\":\"process_done\"}])`."), want: 1},
+		"narrowed wait enum http_ready reworded":         {message: system("Await service via `wait(timeout_ms=5000, conditions=[{\"kind\":\"http_ready\",\"url\":\"http://127.0.0.1:8080\"}])`."), want: 0},
 	} {
 		t.Run(name, func(t *testing.T) {
 			req := modelcall.CompletionRequest{Tools: offered, Messages: []api.Message{tc.message}, Debug: modelcall.RequestDebug{ProfileID: prompts.CoordinatorProfileID, Surface: surface.SurfaceImplementPark}}
@@ -489,4 +595,22 @@ func TestRequestReachFailsOnSeededRequests(t *testing.T) {
 			}
 		})
 	}
+
+	t.Run("pre-load narrowed schema mismatch caught", func(t *testing.T) {
+		preBad := []modelcall.CompletionRequest{{
+			Tools:    []tools.ToolMeta{tool("request_tools", "need")},
+			Messages: []api.Message{system("Load `command` via `request_tools(need=\"command\")` to supply `command.verification`.")},
+		}}
+		postNarrowed := modelcall.CompletionRequest{Tools: []tools.ToolMeta{tool("command", "command")}}
+		if got := verifyPrePostLoadSchemaParity(oracle, preBad, postNarrowed, "command"); len(got) != 1 {
+			t.Fatalf("verifyPrePostLoadSchemaParity findings = %d, want 1: %v", len(got), got)
+		}
+		preClean := []modelcall.CompletionRequest{{
+			Tools:    []tools.ToolMeta{tool("request_tools", "need")},
+			Messages: []api.Message{system("Load `command` via `request_tools(need=\"command\")` to supply `command.command`.")},
+		}}
+		if got := verifyPrePostLoadSchemaParity(oracle, preClean, postNarrowed, "command"); len(got) != 0 {
+			t.Fatalf("verifyPrePostLoadSchemaParity clean findings = %v, want 0", got)
+		}
+	})
 }

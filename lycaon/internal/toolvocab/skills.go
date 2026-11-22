@@ -219,7 +219,11 @@ type skillRenderMemo struct {
 	err error
 }
 
-var skillRenderCache = scopedstore.New[skillRenderMemo](2048)
+var (
+	skillRenderCache           = scopedstore.New[skillRenderMemo](32768)
+	readerSkillVarsCache       = scopedstore.New[map[string]any](2048)
+	skillOfferedForReaderCache = scopedstore.New[bool](65536)
+)
 
 func varsDigestKey(vars map[string]any) string {
 	h := sha256.New()
@@ -562,15 +566,32 @@ func SkillToolsOfferedForReader(sk skills.Skill, reader prompts.Reader) bool {
 	if !reader.Valid() {
 		return SkillToolsOffered(sk, nil)
 	}
-	vars, err := prompts.SkillVars(reader)
+	fp := reader.Fingerprint()
+	var memoKey string
+	if fp != "" {
+		memoKey = fp + "\x00" + sk.Name + "\x00" + sk.Metadata["host_resources"] + "\x00" + sk.Metadata["any_of_tools"] + "\x00" + sk.Body
+		if cached, ok := skillOfferedForReaderCache.Load(memoKey); ok {
+			return cached
+		}
+	}
+	var (
+		vars map[string]any
+		err  error
+	)
+	if fp != "" {
+		if cachedVars, ok := readerSkillVarsCache.Load(fp); ok {
+			vars = cachedVars
+		} else {
+			vars, err = prompts.SkillVars(reader)
+			if err == nil {
+				readerSkillVarsCache.Store(fp, vars)
+			}
+		}
+	} else {
+		vars, err = prompts.SkillVars(reader)
+	}
 	if err != nil {
 		return SkillToolsOffered(sk, reader.Held())
-	}
-	if strings.TrimSpace(sk.Metadata["host_resources"]) != "" {
-		hostResTools, _ := vars["runner_host_resources_tools"].([]string)
-		if len(hostResTools) == 0 {
-			return false
-		}
 	}
 	c := StockCatalog()
 	if c == nil {
@@ -578,12 +599,41 @@ func SkillToolsOfferedForReader(sk skills.Skill, reader prompts.Reader) bool {
 	}
 	offered := reader.Held()
 	anyOf := sk.AnyOfTools()
-	cacheKey := "reader:" + reader.Fingerprint() + "\x00" + varsDigestKey(vars)
+	cacheKey := "reader:" + fp
+	if fp == "" {
+		cacheKey = "reader-nofp:" + varsDigestKey(vars)
+	}
 	rendered, renderErr := renderSkillTextCached(cacheKey, sk.Body, vars)
 	if renderErr != nil {
 		rendered = sk.Body
 	}
-	for _, name := range UnreachableNames(c, rendered, offered) {
+	res := evalSkillRenderedReach(c, sk, vars, offered, reader.Requestable(), anyOf, rendered)
+	if memoKey != "" {
+		skillOfferedForReaderCache.Store(memoKey, res)
+	}
+	return res
+}
+
+func evalSkillRenderedReach(
+	c *Catalog,
+	sk skills.Skill,
+	vars map[string]any,
+	offered map[string]bool,
+	requestable []string,
+	anyOf []string,
+	rendered string,
+) bool {
+	if strings.TrimSpace(sk.Metadata["host_resources"]) != "" {
+		hostResTools, _ := vars["runner_host_resources_tools"].([]string)
+		if len(hostResTools) == 0 {
+			return false
+		}
+	}
+	checkText := rendered
+	if offered["request_tools"] && len(requestable) > 0 {
+		checkText = maskLoaderSequencedMentions(checkText, requestable)
+	}
+	for _, name := range UnreachableNames(c, checkText, offered) {
 		if !slices.Contains(anyOf, name) {
 			return false
 		}
@@ -597,6 +647,22 @@ func SkillToolsOfferedForReader(sk skills.Skill, reader prompts.Reader) bool {
 		}
 	}
 	return false
+}
+
+var loaderSequencedMentionRE = regexp.MustCompile("(?i)\\bload\\s+`([a-z0-9_]+)`\\s+via\\s+`request_tools\\(|`([a-z0-9_]+)`\\s+after\\s+(?:loading\\s+it\\s+with\\s+)?`request_tools\\(")
+
+func maskLoaderSequencedMentions(text string, requestable []string) string {
+	return loaderSequencedMentionRE.ReplaceAllStringFunc(text, func(m string) string {
+		sub := loaderSequencedMentionRE.FindStringSubmatch(m)
+		target := sub[1]
+		if target == "" {
+			target = sub[2]
+		}
+		if slices.Contains(requestable, target) {
+			return "Load via `request_tools("
+		}
+		return m
+	})
 }
 
 // SkillToolsOffered reports whether offered covers every tool, operation, and

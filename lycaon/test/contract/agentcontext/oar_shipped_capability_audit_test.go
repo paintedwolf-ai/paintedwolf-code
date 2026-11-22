@@ -29,7 +29,7 @@ func isForbiddenCapabilityIdent(id string) bool {
 
 func auditPolicyDocument(slash string, entry guidance.HintEntry, vocab *toolvocab.Catalog, out *[]oarViolation) {
 	for _, cond := range append([]string{entry.When}, entry.Flow...) {
-		if _, err := parseOARConditionAST(cond); err != nil {
+		if _, err := parseOARConditionIdents(cond); err != nil {
 			*out = append(*out, oarViolation{
 				Source: slash, Expression: cond, Action: "condition_ast", Reason: err.Error(),
 			})
@@ -61,11 +61,11 @@ func auditNextStepsList(source string, steps []oar.NextStep, vocab *toolvocab.Ca
 		}
 		whenIdents := map[string]bool{}
 		if w := strings.TrimSpace(step.When); w != "" {
-			ast, err := parseOARConditionAST(w)
+			parsedIdents, err := parseOARConditionIdents(w)
 			if err != nil {
 				*out = append(*out, oarViolation{Source: loc, Expression: w, Action: action, Reason: err.Error()})
 			} else {
-				collectCondIdents(ast, whenIdents)
+				whenIdents = parsedIdents
 				auditNextStepWhenAST(loc, w, action, step.Tool, whenIdents, out)
 			}
 		}
@@ -183,9 +183,7 @@ func applyTemplateControlTag(
 		lhs, rhs = strings.TrimSpace(lhs), strings.TrimSpace(rhs)
 		if ok && lhs != "" {
 			aliases[lhs] = rhs
-			if ast, err := parseOARConditionAST(rhs); err == nil && ast != nil {
-				idents := map[string]bool{}
-				collectCondIdents(ast, idents)
+			if idents, err := parseCopyTemplateExprIdents(rhs); err == nil && len(idents) > 0 {
 				for id := range idents {
 					if isForbiddenCapabilityIdent(id) {
 						*out = append(*out, oarViolation{
@@ -204,7 +202,7 @@ func applyTemplateControlTag(
 	case "if", "elif":
 		condExpr, _, hasPipe := strings.Cut(arg, "|")
 		resolved := resolveAliasExpr(strings.TrimSpace(condExpr), aliases)
-		if _, err := parseOARConditionAST(resolved); err != nil {
+		if _, err := parseCopyTemplateExprIdents(resolved); err != nil {
 			*out = append(*out, oarViolation{
 				Source: source, Expression: body, Action: "condition_ast", Reason: err.Error(),
 			})

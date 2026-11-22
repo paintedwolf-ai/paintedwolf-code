@@ -11,8 +11,17 @@ import (
 func TestHostStateEnumeratesAllPosturesSurfacesAndAgents(t *testing.T) {
 	overlays, err := hoststate.DiscoverPackOverlays(t.Context())
 	contractcheck.FailErr(t, "DiscoverPackOverlays", err)
-	if len(overlays) != 5 {
-		t.Fatalf("len(overlays) = %d, want 5 (stock + 4 single-pack removals)", len(overlays))
+	if len(overlays) < 5 || overlays[0].ID != "stock" {
+		t.Fatalf("len(overlays) = %d (first=%q), want stock + dynamically discovered behavioral pack removals", len(overlays), overlays[0].ID)
+	}
+	overlayIDs := make([]string, len(overlays))
+	for i, ov := range overlays {
+		overlayIDs[i] = ov.ID
+	}
+	for _, must := range []string{"without-browser", "without-implement", "without-plan", "without-recon-pack", "without-security", "without-web-research"} {
+		if !slices.Contains(overlayIDs, must) {
+			t.Fatalf("DiscoverPackOverlays missing %q in %v", must, overlayIDs)
+		}
 	}
 
 	postures, err := hoststate.Postures(overlays[0].Catalog)

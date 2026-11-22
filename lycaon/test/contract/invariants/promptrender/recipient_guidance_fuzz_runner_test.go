@@ -1,0 +1,941 @@
+package promptrender_test
+
+import (
+	"context"
+	"encoding/hex"
+	"fmt"
+	"path/filepath"
+	"reflect"
+	"regexp"
+	"slices"
+	"strings"
+	"sync"
+	"sync/atomic"
+	"time"
+
+	"github.com/lycaon/lycaon/internal/anchorcatalog"
+	"github.com/lycaon/lycaon/internal/bgprocess"
+	"github.com/lycaon/lycaon/internal/catalogview"
+	"github.com/lycaon/lycaon/internal/configlayout"
+	"github.com/lycaon/lycaon/internal/coordinator/assembly"
+	"github.com/lycaon/lycaon/internal/coordinator/inject"
+	"github.com/lycaon/lycaon/internal/coordinator/surface"
+	"github.com/lycaon/lycaon/internal/curationctx"
+	"github.com/lycaon/lycaon/internal/extpacks"
+	"github.com/lycaon/lycaon/internal/guidance"
+	"github.com/lycaon/lycaon/internal/oar"
+	"github.com/lycaon/lycaon/internal/oarcore"
+	"github.com/lycaon/lycaon/internal/platform"
+	"github.com/lycaon/lycaon/internal/pongoplain"
+	"github.com/lycaon/lycaon/internal/prompts"
+	"github.com/lycaon/lycaon/internal/settings"
+	"github.com/lycaon/lycaon/internal/skills"
+	"github.com/lycaon/lycaon/internal/spawn"
+	"github.com/lycaon/lycaon/internal/toolcontract"
+	"github.com/lycaon/lycaon/internal/toolfeedback"
+	"github.com/lycaon/lycaon/internal/toolreach"
+	"github.com/lycaon/lycaon/internal/toolrejection"
+	"github.com/lycaon/lycaon/internal/tools"
+	"github.com/lycaon/lycaon/internal/toolvocab"
+	"github.com/lycaon/lycaon/internal/toolvocab/toolvocabtest"
+	"github.com/lycaon/lycaon/pkg/api"
+	"github.com/lycaon/lycaon/test/contract/internal/hoststate"
+	"github.com/lycaon/lycaon/test/contract/invariants/promptrender"
+)
+
+const (
+	fuzzDecoderVersion1  uint8 = 1
+	fuzzDecoderByteLimit int   = 20
+)
+
+type fuzzOverlayBundle struct {
+	overlay   hoststate.PackOverlay
+	stock     *promptrender.Stock
+	engine    *prompts.FileTemplateEngine
+	injRender *prompts.InjectRenderer
+	skills    []skills.Skill
+	oarLoader *oar.Loader
+	oarRules  *oar.RuleSet
+	rejRules  []*oar.Rule
+	oarRender *oar.Renderer
+}
+
+type fuzzWorkerEnv struct {
+	domains       *hoststate.SeedDomains
+	overlays      []fuzzOverlayBundle
+	confirmedRuns atomic.Int64
+}
+
+var loadFuzzEnvOnce = sync.OnceValues(func() (*fuzzWorkerEnv, error) {
+	ctx := context.Background()
+	domains, err := hoststate.DefaultSeedDomains()
+	if err != nil {
+		return nil, err
+	}
+	baseStock, err := promptrender.LoadStock(ctx)
+	if err != nil {
+		return nil, err
+	}
+	repoRoot := filepath.Dir(configlayout.FindModuleRoot())
+	schemaDir := filepath.Join(repoRoot, "schemas")
+	if err := anchorcatalog.InstallBundled(); err != nil {
+		return nil, err
+	}
+	if err := oar.InstallEngineDeclarationBundled(schemaDir); err != nil {
+		return nil, err
+	}
+
+	bundles := make([]fuzzOverlayBundle, 0, len(domains.Overlays))
+	for _, ov := range domains.Overlays {
+		st := *baseStock
+		st.Catalog = ov.Catalog
+		eng := st.Engine()
+		skList, _ := extpacks.LoadEffectiveSkills(ov.Catalog)
+		var eligibleSkills []skills.Skill
+		for _, sk := range skList {
+			if !sk.Project && strings.TrimSpace(sk.Metadata["authoring_reference"]) != "true" {
+				eligibleSkills = append(eligibleSkills, sk)
+			}
+		}
+		slices.SortFunc(eligibleSkills, func(a, b skills.Skill) int {
+			return strings.Compare(a.Name, b.Name)
+		})
+
+		hintCfg, err := guidance.LoadHintConfigStock()
+		if err != nil {
+			return nil, err
+		}
+		loader, err := oar.NewLoader(schemaDir)
+		if err != nil {
+			return nil, err
+		}
+		loader.SetToolSchemas(baseStock.Schemas)
+		loader.SetDetectors(oar.HostDetectors(nil))
+		rs, err := loader.LoadEffectivePolicyWithCatalog(ov.Catalog)
+		if err != nil {
+			return nil, err
+		}
+		var rejRules []*oar.Rule
+		for _, r := range rs.All() {
+			if r != nil && r.Anchor == oar.AnchorToolRejected && len(oarcore.ConjunctValues(r.When, "paintedwolf.rejection_code")) > 0 {
+				rejRules = append(rejRules, r)
+			}
+		}
+		slices.SortFunc(rejRules, func(a, b *oar.Rule) int {
+			return strings.Compare(a.Qualified(), b.Qualified())
+		})
+		bundles = append(bundles, fuzzOverlayBundle{
+			overlay:   ov,
+			stock:     &st,
+			engine:    eng,
+			injRender: prompts.NewInjectRenderer(eng),
+			skills:    eligibleSkills,
+			oarLoader: loader,
+			oarRules:  rs,
+			rejRules:  rejRules,
+			oarRender: oar.NewRenderer(guidance.NewStaticRejectFormatter(hintCfg), noopNudgeFormatter{}),
+		})
+	}
+	return &fuzzWorkerEnv{domains: domains, overlays: bundles}, nil
+})
+
+// FuzzCaseReport captures replay and audit metadata for one two-turn fuzz execution.
+type FuzzCaseReport struct {
+	CorpusHex            string `json:"corpus_hex"`
+	DecoderVersion       uint8  `json:"decoder_version"`
+	CatalogRevision      string `json:"catalog_revision"`
+	Recipient            string `json:"recipient"`
+	TurnACoords          string `json:"turn_a_coords"`
+	TurnBCoords          string `json:"turn_b_coords"`
+	SelectedContribution string `json:"selected_contribution"`
+	OmittedOutcome       bool   `json:"omitted_outcome,omitempty"`
+	Excluded             bool   `json:"excluded,omitempty"`
+	ExcludedReason       string `json:"excluded_reason,omitempty"`
+	PropertyExecuted     bool   `json:"property_executed"`
+	FailedProperty       string `json:"failed_property,omitempty"`
+}
+
+func byteAt(data []byte, idx int) uint8 {
+	if idx < 0 || idx >= fuzzDecoderByteLimit || idx >= len(data) {
+		return 0
+	}
+	return data[idx]
+}
+
+func decodeCoordinatorSeed(d *hoststate.SeedDomains, data []byte) hoststate.CoordinatorSeed {
+	ovIdx := int(byteAt(data, 2)) % len(d.Overlays)
+	posture := d.Postures[int(byteAt(data, 3))%len(d.Postures)].ID
+	mode := d.SessionModes[int(byteAt(data, 4))%len(d.SessionModes)]
+	surf := d.Surfaces[int(byteAt(data, 5))%len(d.Surfaces)].ID
+	roots := d.RootTopologies[int(byteAt(data, 6))%len(d.RootTopologies)]
+	loading := d.LoadingModes[int(byteAt(data, 7))%len(d.LoadingModes)]
+	wf := d.WorkflowStates[int(byteAt(data, 8))%len(d.WorkflowStates)]
+	app := d.ApprovalPostures[int(byteAt(data, 9))%len(d.ApprovalPostures)]
+	temp := d.TempStates[int(byteAt(data, 10))%len(d.TempStates)]
+	mcp := d.MCPStates[int(byteAt(data, 11))%len(d.MCPStates)]
+	flags := byteAt(data, 12)
+	return hoststate.CoordinatorSeed{
+		OverlayIndex:          ovIdx,
+		SessionMode:           mode,
+		Posture:               posture,
+		WorkflowState:         wf,
+		SurfaceID:             surf,
+		RootTopology:          roots,
+		Loading:               loading,
+		WebSearch:             flags&1 != 0,
+		Vision:                flags&2 != 0,
+		CommandExternalHidden: flags&4 != 0,
+		ApprovalPosture:       app,
+		TempState:             temp,
+		MCPState:              mcp,
+	}
+}
+
+func mutateCoordinatorSeed(d *hoststate.SeedDomains, s hoststate.CoordinatorSeed, axisSel, valSel uint8) hoststate.CoordinatorSeed {
+	out := s
+	switch axisSel % 9 {
+	case 0:
+		out.SessionMode = d.SessionModes[(slices.Index(d.SessionModes, s.SessionMode)+1+int(valSel))%len(d.SessionModes)]
+	case 1:
+		out.Posture = d.Postures[int(valSel)%len(d.Postures)].ID
+	case 2:
+		out.SurfaceID = d.Surfaces[int(valSel)%len(d.Surfaces)].ID
+	case 3:
+		out.RootTopology = d.RootTopologies[int(valSel)%len(d.RootTopologies)]
+	case 4:
+		out.Loading = d.LoadingModes[int(valSel)%len(d.LoadingModes)]
+	case 5:
+		out.ApprovalPosture = d.ApprovalPostures[int(valSel)%len(d.ApprovalPostures)]
+	case 6:
+		out.TempState = d.TempStates[int(valSel)%len(d.TempStates)]
+	case 7:
+		out.MCPState = d.MCPStates[int(valSel)%len(d.MCPStates)]
+	case 8:
+		out.CommandExternalHidden = !s.CommandExternalHidden
+	}
+	return out
+}
+
+func decodeWorkerSeed(d *hoststate.SeedDomains, data []byte) hoststate.WorkerSeed {
+	ovIdx := int(byteAt(data, 2)) % len(d.Overlays)
+	ov := d.Overlays[ovIdx]
+	agentID := "implementer"
+	if len(ov.WorkerAgents) > 0 {
+		agentID = ov.WorkerAgents[int(byteAt(data, 5))%len(ov.WorkerAgents)].ID
+	}
+	flags := byteAt(data, 12)
+	return hoststate.WorkerSeed{
+		OverlayIndex:             ovIdx,
+		AgentID:                  agentID,
+		Posture:                  d.Postures[int(byteAt(data, 3))%len(d.Postures)].ID,
+		BranchView:               d.WorkerBranches[int(byteAt(data, 6))%len(d.WorkerBranches)],
+		RootCount:                (int(byteAt(data, 8)) % 2) + 1,
+		Loading:                  d.WorkerLoadings[int(byteAt(data, 7))%len(d.WorkerLoadings)],
+		ParentSessionMode:        d.SessionModes[int(byteAt(data, 4))%len(d.SessionModes)],
+		ParentUpgradedAskToAgent: byteAt(data, 10)%2 == 1,
+		WebSearch:                flags&1 != 0,
+		Vision:                   flags&2 != 0,
+		CommandExternalHidden:    flags&4 != 0,
+		ApprovalPosture:          d.ApprovalPostures[int(byteAt(data, 9))%len(d.ApprovalPostures)],
+	}
+}
+
+func mutateWorkerSeed(d *hoststate.SeedDomains, s hoststate.WorkerSeed, axisSel, valSel uint8) hoststate.WorkerSeed {
+	out := s
+	ov := d.Overlays[s.OverlayIndex]
+	switch axisSel % 6 {
+	case 0:
+		if len(ov.WorkerAgents) > 0 {
+			out.AgentID = ov.WorkerAgents[int(valSel)%len(ov.WorkerAgents)].ID
+		}
+	case 1:
+		out.Posture = d.Postures[int(valSel)%len(d.Postures)].ID
+	case 2:
+		out.BranchView = d.WorkerBranches[int(valSel)%len(d.WorkerBranches)]
+	case 3:
+		out.Loading = d.WorkerLoadings[int(valSel)%len(d.WorkerLoadings)]
+	case 4:
+		out.ParentSessionMode = d.SessionModes[int(valSel)%len(d.SessionModes)]
+	case 5:
+		out.CommandExternalHidden = !s.CommandExternalHidden
+	}
+	return out
+}
+
+// executeFuzzRecipientCase runs one deterministic two-turn recipient case on env
+// (with optional overrideStock for fault-sensitivity controls).
+func executeFuzzRecipientCase(ctx context.Context, env *fuzzWorkerEnv, data []byte, wsDir string, overrideBundle *fuzzOverlayBundle) (FuzzCaseReport, error) {
+	capped := data
+	if len(capped) > fuzzDecoderByteLimit {
+		capped = capped[:fuzzDecoderByteLimit]
+	}
+	rep := FuzzCaseReport{
+		CorpusHex:      hex.EncodeToString(capped),
+		DecoderVersion: fuzzDecoderVersion1,
+	}
+	isWorker := byteAt(data, 1)%2 == 1
+	numChanges := int(byteAt(data, 15)) % 3
+	familyIdx := int(byteAt(data, 13)) % 3
+	itemSel := int(byteAt(data, 14))
+
+	if !isWorker {
+		rep.Recipient = "coordinator"
+		seedA := decodeCoordinatorSeed(env.domains, data)
+		seedB := seedA
+		if numChanges >= 1 {
+			seedB = mutateCoordinatorSeed(env.domains, seedB, byteAt(data, 16), byteAt(data, 17))
+		}
+		if numChanges >= 2 {
+			seedB = mutateCoordinatorSeed(env.domains, seedB, byteAt(data, 18), byteAt(data, 19))
+		}
+		stA, err := hoststate.ResolveCoordinatorSeed(env.domains, seedA)
+		if err != nil {
+			rep.FailedProperty = "resolve_turn_a"
+			return rep, err
+		}
+		stB, err := hoststate.ResolveCoordinatorSeed(env.domains, seedB)
+		if err != nil {
+			rep.FailedProperty = "resolve_turn_b"
+			return rep, err
+		}
+		rep.TurnACoords = stA.ID
+		rep.TurnBCoords = stB.ID
+		bundle := env.overlays[seedA.OverlayIndex]
+		if overrideBundle != nil {
+			bundle = *overrideBundle
+		}
+		rep.CatalogRevision = bundle.overlay.Catalog.Revision
+		if stA.Excluded || stB.Excluded {
+			reason := stA.ExcludedReason
+			if reason == "" {
+				reason = stB.ExcludedReason
+			}
+			if strings.TrimSpace(reason) == "" {
+				rep.FailedProperty = "excluded_without_production_reason"
+				return rep, fmt.Errorf("excluded state lacked production reason: A=%s B=%s", stA.ID, stB.ID)
+			}
+			rep.Excluded = true
+			rep.ExcludedReason = reason
+			return rep, nil
+		}
+		return runCoordinatorTwoTurnProperties(ctx, env, bundle, stA, stB, familyIdx, itemSel, wsDir, rep)
+	}
+
+	rep.Recipient = "worker"
+	seedA := decodeWorkerSeed(env.domains, data)
+	seedB := seedA
+	if numChanges >= 1 {
+		seedB = mutateWorkerSeed(env.domains, seedB, byteAt(data, 16), byteAt(data, 17))
+	}
+	if numChanges >= 2 {
+		seedB = mutateWorkerSeed(env.domains, seedB, byteAt(data, 18), byteAt(data, 19))
+	}
+	stA, err := hoststate.ResolveWorkerSeed(env.domains, seedA)
+	if err != nil {
+		rep.FailedProperty = "resolve_worker_a"
+		return rep, err
+	}
+	stB, err := hoststate.ResolveWorkerSeed(env.domains, seedB)
+	if err != nil {
+		rep.FailedProperty = "resolve_worker_b"
+		return rep, err
+	}
+	rep.TurnACoords = stA.ID
+	rep.TurnBCoords = stB.ID
+	bundle := env.overlays[seedA.OverlayIndex]
+	if overrideBundle != nil {
+		bundle = *overrideBundle
+	}
+	rep.CatalogRevision = bundle.overlay.Catalog.Revision
+	if stA.Excluded || stB.Excluded {
+		reason := stA.ExcludedReason
+		if reason == "" {
+			reason = stB.ExcludedReason
+		}
+		if strings.TrimSpace(reason) == "" {
+			rep.FailedProperty = "excluded_worker_without_reason"
+			return rep, fmt.Errorf("excluded worker state lacked production reason: A=%s B=%s", stA.ID, stB.ID)
+		}
+		rep.Excluded = true
+		rep.ExcludedReason = reason
+		return rep, nil
+	}
+	return runWorkerTwoTurnProperties(ctx, env, bundle, stA, stB, familyIdx, itemSel, rep)
+}
+
+func runCoordinatorTwoTurnProperties(
+	ctx context.Context,
+	env *fuzzWorkerEnv,
+	bundle fuzzOverlayBundle,
+	stA, stB hoststate.CoordinatorState,
+	familyIdx, itemSel int,
+	wsDir string,
+	rep FuzzCaseReport,
+) (FuzzCaseReport, error) {
+	authA, err := hoststate.FreezeTurnAuthority(ctx, stA)
+	if err != nil {
+		rep.FailedProperty = "freeze_authority_a"
+		return rep, err
+	}
+	authB, err := hoststate.FreezeTurnAuthority(ctx, stB)
+	if err != nil {
+		rep.FailedProperty = "freeze_authority_b"
+		return rep, err
+	}
+
+	switch familyIdx {
+	case 0:
+		occ := []jobOccKind{occRunning, occExitedOnly, occNoJob}[itemSel%3]
+		rep.SelectedContribution = "coordinator_assembly+command_jobs:" + string(occ)
+		fixedNow := time.Date(2026, 11, 22, 12, 0, 0, 0, time.UTC)
+		jobs := fixedJobSnapshots(occ, fixedNow)
+
+		warmEng := newMutableCoordFuzzEngine(bundle, stA, authA, jobs)
+		if _, err := assembleCoordTurn(ctx, warmEng, stA, wsDir); err != nil {
+			rep.FailedProperty = "render_turn_a_warm"
+			return rep, err
+		}
+		warmEng.retarget(stB, authB, jobs)
+		warmB, err := assembleCoordTurn(ctx, warmEng, stB, wsDir)
+		if err != nil {
+			rep.FailedProperty = "render_turn_b_warm"
+			return rep, err
+		}
+
+		freshEng := newMutableCoordFuzzEngine(bundle, stB, authB, jobs)
+		freshB, err := assembleCoordTurn(ctx, freshEng, stB, wsDir)
+		if err != nil {
+			rep.FailedProperty = "render_turn_b_fresh"
+			return rep, err
+		}
+
+		if err := compareMessagesAndProvenance(warmB, freshB); err != nil {
+			rep.FailedProperty = "warm_vs_fresh_provenance_parity"
+			return rep, err
+		}
+		evalAuthB := authB
+		if len(jobs) > 0 {
+			promotedB, pErr := hoststate.FreezeTurnAuthorityWithResources(ctx, stB, toolcontract.ResourcePresence{CommandJobs: true})
+			if pErr != nil {
+				rep.FailedProperty = "freeze_authority_b_jobs"
+				return rep, pErr
+			}
+			evalAuthB = promotedB
+		}
+
+		hostBlocksB := newlyDeliveredHostInstructions(warmB, "")
+		for _, blk := range hostBlocksB {
+			if viols := promptrender.EvaluateClaimsForTest(bundle.stock, "fuzz/coord ("+stB.ID+")", blk, evalAuthB, stB.SessionMode, stB.Posture, toolvocabtest.SubjectSelfNow(), false); len(viols) > 0 {
+				rep.FailedProperty = "turn_b_claim_authority"
+				return rep, fmt.Errorf("claim violation on %s: %v", stB.ID, viols[0])
+			}
+		}
+		if err := verifyIndependentJobWaitExpectedActions(bundle.stock.Names, hostBlocksB, jobs, evalAuthB); err != nil {
+			rep.FailedProperty = "turn_b_job_occurrence_obligation"
+			return rep, fmt.Errorf("state=%s instruction=command_output: %w", stB.ID, err)
+		}
+		if occ == occNoJob {
+			rep.OmittedOutcome = true
+		}
+
+	case 1:
+		return runSkillTwoTurnFuzzCheck(env, bundle, stA.ID, stB.ID, authA, authB, stA.SessionMode, stB.SessionMode, stA.Posture, stB.Posture, itemSel, rep)
+
+	case 2:
+		return runOARTwoTurnFuzzCheck(ctx, env, bundle, stA.ID, stB.ID, "coordinator", stA.TurnProfile.SurfaceID, stB.TurnProfile.SurfaceID, "coordinator", authA, authB, stA.SessionMode, stB.SessionMode, stA.Posture, stB.Posture, itemSel, rep)
+	}
+
+	env.confirmedRuns.Add(1)
+	rep.PropertyExecuted = true
+	return rep, nil
+}
+
+func runWorkerTwoTurnProperties(
+	ctx context.Context,
+	env *fuzzWorkerEnv,
+	bundle fuzzOverlayBundle,
+	stA, stB hoststate.WorkerState,
+	familyIdx, itemSel int,
+	rep FuzzCaseReport,
+) (FuzzCaseReport, error) {
+	authA, err := hoststate.FreezeWorkerAuthority(ctx, stA)
+	if err != nil {
+		rep.FailedProperty = "freeze_worker_authority_a"
+		return rep, err
+	}
+	authB, err := hoststate.FreezeWorkerAuthority(ctx, stB)
+	if err != nil {
+		rep.FailedProperty = "freeze_worker_authority_b"
+		return rep, err
+	}
+
+	switch familyIdx {
+	case 0:
+		occ := []jobOccKind{occRunning, occExitedOnly, occNoJob}[itemSel%3]
+		rep.SelectedContribution = "worker_persona+command_jobs:" + stB.AgentID + ":" + string(occ)
+		fixedNow := time.Date(2026, 11, 22, 12, 0, 0, 0, time.UTC)
+		jobs := fixedJobSnapshots(occ, fixedNow)
+
+		warmCache := hoststate.NewRenderCache()
+		_, err := renderWorkerPromptWithCache(bundle, warmCache, stA, authA)
+		if err != nil {
+			rep.FailedProperty = "render_worker_a_warm"
+			return rep, err
+		}
+		warmPersonaB, err := renderWorkerPromptWithCache(bundle, warmCache, stB, authB)
+		if err != nil {
+			rep.FailedProperty = "render_worker_b_warm"
+			return rep, err
+		}
+		freshCache := hoststate.NewRenderCache()
+		freshPersonaB, err := renderWorkerPromptWithCache(bundle, freshCache, stB, authB)
+		if err != nil {
+			rep.FailedProperty = "render_worker_b_fresh"
+			return rep, err
+		}
+		if warmPersonaB != freshPersonaB {
+			rep.FailedProperty = "worker_warm_vs_fresh_parity"
+			return rep, fmt.Errorf("worker persona warm vs fresh mismatch on %s", stB.ID)
+		}
+		if viols := promptrender.EvaluateClaimsForTest(bundle.stock, "fuzz/worker ("+stB.ID+")", warmPersonaB, authB, stB.ParentSessionMode, stB.Posture, toolvocabtest.SubjectSelfNow(), true); len(viols) > 0 {
+			rep.FailedProperty = "worker_turn_b_claim_authority"
+			return rep, fmt.Errorf("worker claim violation on %s: %v", stB.ID, viols[0])
+		}
+		jobBlock := inject.RenderCommandJobsBlock(ctx, bundle.injRender, authB.Reader, authB.Schemas["wait"], "sess-fuzz-w", jobs, nil, fixedNow, "worker:"+stB.AgentID)
+		var blocks []string
+		if jobBlock != "" {
+			blocks = []string{jobBlock}
+		}
+		if err := verifyIndependentJobWaitExpectedActions(bundle.stock.Names, blocks, jobs, authB); err != nil {
+			rep.FailedProperty = "worker_job_occurrence_obligation"
+			return rep, err
+		}
+		if occ == occNoJob {
+			rep.OmittedOutcome = true
+		}
+
+	case 1:
+		return runSkillTwoTurnFuzzCheck(env, bundle, stA.ID, stB.ID, authA, authB, stA.ParentSessionMode, stB.ParentSessionMode, stA.Posture, stB.Posture, itemSel, rep)
+
+	case 2:
+		return runOARTwoTurnFuzzCheck(ctx, env, bundle, stA.ID, stB.ID, "worker", "", "", stB.ToolProfile, authA, authB, stA.ParentSessionMode, stB.ParentSessionMode, stA.Posture, stB.Posture, itemSel, rep)
+	}
+
+	env.confirmedRuns.Add(1)
+	rep.PropertyExecuted = true
+	return rep, nil
+}
+
+func fixedJobSnapshots(occ jobOccKind, now time.Time) []bgprocess.JobSnapshot {
+	switch occ {
+	case occRunning:
+		return []bgprocess.JobSnapshot{{
+			Handle: "cmd-7", Mode: bgprocess.JobModeBackground, OriginTool: "command",
+			StartedAt: now.Add(-5 * time.Second),
+		}}
+	case occExitedOnly:
+		return []bgprocess.JobSnapshot{{
+			Handle: "cmd-8", Mode: bgprocess.JobModeBackground, OriginTool: "command",
+			StartedAt: now.Add(-12 * time.Second), Exited: true, ExitCode: 2, Refusals: 1,
+		}}
+	default:
+		return nil
+	}
+}
+
+type mutableCoordFuzzEngine struct {
+	mu     sync.Mutex
+	st     hoststate.CoordinatorState
+	auth   hoststate.TurnAuthority
+	jobs   []bgprocess.JobSnapshot
+	engine *assembly.AssemblyEngine
+}
+
+type dynamicSelection struct {
+	fn func() map[string]bool
+}
+
+func (d dynamicSelection) LoadedTools(string) map[string]bool {
+	src := d.fn()
+	out := make(map[string]bool, len(src))
+	for k, v := range src {
+		out[k] = v
+	}
+	return out
+}
+
+func (dynamicSelection) FullCatalog(string) bool { return false }
+
+func newMutableCoordFuzzEngine(bundle fuzzOverlayBundle, st hoststate.CoordinatorState, auth hoststate.TurnAuthority, jobs []bgprocess.JobSnapshot) *mutableCoordFuzzEngine {
+	m := &mutableCoordFuzzEngine{st: st, auth: auth, jobs: slices.Clone(jobs)}
+	eng := &assembly.AssemblyEngine{}
+	eng.SetDeps(assembly.AssemblyDeps{
+		Prompts: bundle.engine,
+		Injects: bundle.injRender,
+		Limits:  func(context.Context, *api.Session) settings.SessionLimits { return settings.DefaultSessionLimits() },
+		SessionView: func(context.Context, *api.Session) *catalogview.View {
+			m.mu.Lock()
+			cur := m.st
+			m.mu.Unlock()
+			_, narrowed, err := hoststate.ExecutorForOverlay(cur.Overlay, cur.Posture, false, cur.WebSearch, cur.CommandExternalHidden, cur.MCPState)
+			if err != nil {
+				return &catalogview.View{Catalog: bundle.overlay.Catalog, ToolProfiles: bundle.overlay.Profiles, ToolSchemas: bundle.overlay.Schemas}
+			}
+			return &catalogview.View{Catalog: bundle.overlay.Catalog, ToolProfiles: narrowed, ToolSchemas: bundle.overlay.Schemas}
+		},
+		Selection: dynamicSelection{fn: func() map[string]bool {
+			m.mu.Lock()
+			defer m.mu.Unlock()
+			return m.st.Loaded
+		}},
+		ImplementSessionState: func(context.Context, *api.Session) surface.ImplementSessionState {
+			m.mu.Lock()
+			defer m.mu.Unlock()
+			return m.st.ImplementState
+		},
+		EffectivePromptSurface: func(context.Context, *api.Session) prompts.AgentPromptSurface {
+			m.mu.Lock()
+			cur := m.st
+			m.mu.Unlock()
+			return prompts.AgentPromptSurface{
+				Posture:               cur.ApprovalPosture,
+				CommandExternalHidden: cur.CommandExternalHidden,
+				SessionScratchDir:     cur.SessionScratchDir,
+				SharedTempLocations:   cur.SharedTempLocations,
+			}
+		},
+		CoordinatorFrame: dynamicCoordFrame{fn: func(sess *api.Session) api.CoordinatorRunContext {
+			m.mu.Lock()
+			cur := m.st
+			m.mu.Unlock()
+			return hoststate.NormalizeCoordinatorRunContext(cur, sess, []api.Message{{Role: api.MessageRoleUser, Content: "Proceed with current inspection."}})
+		}},
+		PromptToolLister: func(ctx context.Context, _ *api.Session, profileID string) ([]tools.ToolMeta, error) {
+			m.mu.Lock()
+			cur := m.st
+			m.mu.Unlock()
+			exec, _, err := hoststate.ExecutorForOverlay(cur.Overlay, cur.Posture, false, cur.WebSearch, cur.CommandExternalHidden, cur.MCPState)
+			if err != nil {
+				return nil, err
+			}
+			return exec.Metadata.List(ctx, platform.ToolFilter{
+				ProfileID:        profileID,
+				ProjectRootCount: cur.RootCount,
+			})
+		},
+		WebSearchEnabled: func() bool {
+			m.mu.Lock()
+			defer m.mu.Unlock()
+			return m.st.WebSearch
+		},
+		WorkspaceRoots: func(_ context.Context, sess *api.Session) ([]map[string]any, int, string, int) {
+			m.mu.Lock()
+			cur := m.st
+			m.mu.Unlock()
+			if sess == nil || cur.RootCount == 0 || strings.TrimSpace(sess.WorkspacePath) == "" {
+				return nil, 0, "", 0
+			}
+			return ensureWorkspaceTopologyDirs(sess.WorkspacePath, cur.RootCount, cur.HasGit, cur.HasAnyGitRoot)
+		},
+		CommandJobs: func(string) []bgprocess.JobSnapshot {
+			m.mu.Lock()
+			defer m.mu.Unlock()
+			return slices.Clone(m.jobs)
+		},
+	})
+	m.engine = eng
+	return m
+}
+
+type dynamicCoordFrame struct {
+	fn func(*api.Session) api.CoordinatorRunContext
+}
+
+func (d dynamicCoordFrame) BuildCoordinatorTurnFrame(_ context.Context, _ string, sess *api.Session) (inject.CoordinatorTurnFrame, error) {
+	return inject.CoordinatorTurnFrame{RunContext: d.fn(sess)}, nil
+}
+
+func (m *mutableCoordFuzzEngine) retarget(st hoststate.CoordinatorState, auth hoststate.TurnAuthority, jobs []bgprocess.JobSnapshot) {
+	m.mu.Lock()
+	m.st = st
+	m.auth = auth
+	m.jobs = slices.Clone(jobs)
+	m.mu.Unlock()
+}
+
+func assembleCoordTurn(ctx context.Context, m *mutableCoordFuzzEngine, st hoststate.CoordinatorState, wsDir string) ([]api.Message, error) {
+	ws := wsDir
+	if st.RootCount == 0 {
+		ws = ""
+	}
+	sess := &api.Session{
+		ID: "sess-fuzz-coord", ProjectID: "proj-fuzz", WorkspacePath: ws,
+		Posture: st.Posture, Mode: st.SessionMode,
+	}
+	m.engine.BeginPromptTurn(sess.ID, "")
+	return m.engine.BuildCompletionMessages(ctx, sess, []api.Message{
+		{ID: "u1", Role: api.MessageRoleUser, Content: "Proceed with current inspection."},
+	}, nil)
+}
+
+var liveElapsedAttrRe = regexp.MustCompile(`\belapsed=[0-9a-z.<]+`)
+
+func normalizeVolatileJobElapsed(s string) string {
+	return liveElapsedAttrRe.ReplaceAllString(s, "elapsed=<live>")
+}
+
+func normalizePartsElapsed(parts []api.MessageContentPart) []api.MessageContentPart {
+	if len(parts) == 0 {
+		return parts
+	}
+	out := slices.Clone(parts)
+	for i := range out {
+		if out[i].Source == "command_jobs" {
+			out[i].Content = normalizeVolatileJobElapsed(out[i].Content)
+		}
+	}
+	return out
+}
+
+func compareMessagesAndProvenance(warm, fresh []api.Message) error {
+	if len(warm) != len(fresh) {
+		return fmt.Errorf("warm message count %d != fresh %d", len(warm), len(fresh))
+	}
+	for i := range warm {
+		w, f := warm[i], fresh[i]
+		if w.Role != f.Role || w.Origin != f.Origin || w.Authority != f.Authority || w.TrustTier != f.TrustTier {
+			return fmt.Errorf("msg[%d] provenance mismatch: warm=(%s,%s,%s,%s) fresh=(%s,%s,%s,%s)",
+				i, w.Role, w.Origin, w.Authority, w.TrustTier, f.Role, f.Origin, f.Authority, f.TrustTier)
+		}
+		wContent, fContent := w.Content, f.Content
+		if strings.Contains(wContent, "## Live handles") && strings.Contains(fContent, "## Live handles") {
+			wContent = normalizeVolatileJobElapsed(wContent)
+			fContent = normalizeVolatileJobElapsed(fContent)
+		}
+		if wContent != fContent || !reflect.DeepEqual(normalizePartsElapsed(w.ContentParts), normalizePartsElapsed(f.ContentParts)) {
+			return fmt.Errorf("msg[%d] content/parts warm vs fresh mismatch", i)
+		}
+	}
+	return nil
+}
+
+func renderWorkerPromptWithCache(bundle fuzzOverlayBundle, cache *hoststate.RenderCache, st hoststate.WorkerState, auth hoststate.TurnAuthority) (string, error) {
+	if st.ParentSessionMode == api.SessionModeAsk {
+		if mutCapable, ok := prompts.AgentMutationCapable(st.AgentID); ok && mutCapable {
+			return "", nil
+		}
+	}
+	occ := spawn.PolicyTemplateVars()
+	merged, err := prompts.Vars(auth.Reader, occ)
+	if err != nil {
+		return "", err
+	}
+	key := hoststate.RenderCacheKey("wpersona:"+st.AgentID, bundle.overlay.Catalog.Revision, nil, merged)
+	text, _, err := cache.RenderOrReuse(key, func() (string, error) {
+		return prompts.RenderPersona(context.Background(), bundle.engine, st.AgentID, auth.Reader, occ)
+	})
+	if err == nil {
+		_ = cache.CheckAuthority(key, auth.Digest, func() error { return nil })
+	}
+	return text, err
+}
+
+func runSkillTwoTurnFuzzCheck(
+	env *fuzzWorkerEnv,
+	bundle fuzzOverlayBundle,
+	idA, idB string,
+	authA, authB hoststate.TurnAuthority,
+	modeA, modeB api.SessionMode,
+	postA, postB api.SessionPosture,
+	itemSel int,
+	rep FuzzCaseReport,
+) (FuzzCaseReport, error) {
+	if len(bundle.skills) == 0 {
+		rep.SelectedContribution = "skill:<none>"
+		env.confirmedRuns.Add(1)
+		rep.PropertyExecuted = true
+		return rep, nil
+	}
+	sk := bundle.skills[itemSel%len(bundle.skills)]
+	rep.SelectedContribution = "skill:" + sk.Name
+
+	checkTurn := func(turnID string, auth hoststate.TurnAuthority, mode api.SessionMode, post api.SessionPosture, cache *hoststate.RenderCache) (string, bool, error) {
+		if !toolvocab.SkillToolsOfferedForReader(sk, auth.Reader) {
+			return "", false, nil
+		}
+		vars, err := prompts.SkillVars(auth.Reader)
+		if err != nil {
+			return "", false, err
+		}
+		vars["configuration"] = map[string]any{}
+		key := hoststate.RenderCacheKey("skill:"+sk.Name, bundle.overlay.Catalog.Revision, nil, vars)
+		rendered, _, err := cache.RenderOrReuse(key, func() (string, error) {
+			tpl, cErr := pongoplain.Compile(sk.Body)
+			if cErr != nil {
+				return "", cErr
+			}
+			return pongoplain.ExecuteDetached(tpl, vars)
+		})
+		if err != nil {
+			return "", false, err
+		}
+		_ = cache.CheckAuthority(key, auth.Digest, func() error { return nil })
+		if viols := promptrender.EvaluateClaimsForTest(bundle.stock, "fuzz/skill/"+sk.Name+" ("+turnID+")", rendered, auth, mode, post, toolvocabtest.SubjectSelfNow(), false); len(viols) > 0 {
+			return "", true, fmt.Errorf("skill %s claim violation on %s: %v", sk.Name, turnID, viols[0])
+		}
+		return rendered, true, nil
+	}
+
+	warmCache := hoststate.NewRenderCache()
+	if _, _, err := checkTurn(idA, authA, modeA, postA, warmCache); err != nil {
+		rep.FailedProperty = "skill_turn_a"
+		return rep, err
+	}
+	warmTextB, admittedWarm, err := checkTurn(idB, authB, modeB, postB, warmCache)
+	if err != nil {
+		rep.FailedProperty = "skill_turn_b_warm"
+		return rep, err
+	}
+	freshTextB, admittedFresh, err := checkTurn(idB, authB, modeB, postB, hoststate.NewRenderCache())
+	if err != nil {
+		rep.FailedProperty = "skill_turn_b_fresh"
+		return rep, err
+	}
+	if admittedWarm != admittedFresh || warmTextB != freshTextB {
+		rep.FailedProperty = "skill_warm_vs_fresh_parity"
+		return rep, fmt.Errorf("skill %s warm vs fresh mismatch on %s", sk.Name, idB)
+	}
+	if !admittedWarm {
+		rep.OmittedOutcome = true
+	}
+	env.confirmedRuns.Add(1)
+	rep.PropertyExecuted = true
+	return rep, nil
+}
+
+func runOARTwoTurnFuzzCheck(
+	ctx context.Context,
+	env *fuzzWorkerEnv,
+	bundle fuzzOverlayBundle,
+	idA, idB, role, surfA, surfB, prof string,
+	authA, authB hoststate.TurnAuthority,
+	modeA, modeB api.SessionMode,
+	postA, postB api.SessionPosture,
+	itemSel int,
+	rep FuzzCaseReport,
+) (FuzzCaseReport, error) {
+	if len(bundle.rejRules) == 0 {
+		rep.SelectedContribution = "oar:<none>"
+		env.confirmedRuns.Add(1)
+		rep.PropertyExecuted = true
+		return rep, nil
+	}
+	rule := bundle.rejRules[itemSel%len(bundle.rejRules)]
+	codes := oarcore.ConjunctValues(rule.When, "paintedwolf.rejection_code")
+	code := codes[0]
+	rep.SelectedContribution = "oar:tool.rejected:" + rule.ID
+
+	newIsolatedBlockPlane := func() *toolfeedback.BlockPlane {
+		pipe := oar.NewGuardPipeline(bundle.oarRules, bundle.oarLoader, oar.NewCounterStore())
+		pipe.SetDetectors(oar.HostDetectors(nil))
+		pipe.EnableAnchor(oar.AnchorToolRejected)
+		return &toolfeedback.BlockPlane{Pipeline: pipe, Renderer: bundle.oarRender}
+	}
+
+	evalTurn := func(bp *toolfeedback.BlockPlane, turnID, surf string, auth hoststate.TurnAuthority, mode api.SessionMode, post api.SessionPosture) (string, bool, error) {
+		invoked := "command"
+		if selTools := rule.Tools(); len(selTools) > 0 {
+			invoked = ""
+			for _, st := range selTools {
+				if slices.Contains(auth.Offered, st) {
+					invoked = st
+					break
+				}
+			}
+			if invoked == "" {
+				return "", false, nil
+			}
+		} else if len(auth.Offered) > 0 {
+			invoked = auth.Offered[0]
+		}
+		parentID := ""
+		if role == "worker" {
+			parentID = "coord-fuzz-parent"
+		}
+		cctx := curationctx.WithSession(toolreach.WithRequest(ctx, auth.Reach), curationctx.Session{
+			SessionID: "sess-oar-fuzz", ParentSessionID: parentID,
+			Posture: string(post), Mode: string(mode), Surface: surf,
+		})
+		data := map[string]any{
+			"need": "read", "command": "plain", "path": "vendor/sdk.7z", "target": "a.go",
+			"handle": "cmd-1", "handles_text": "held-1", "limit": int64(4), "worker": "impl-1",
+			"overlay_id": "ov-1", "workflow_work_id": "work-1", "state": "working", "phase": "work",
+			"url": "https://example.com", "query": "main", "symbol": "Run", "reason": "fixture",
+			"rejection_reason": "reset", "format": "toml", "kind": "comment", "line": "3",
+			"missing_paths": []string{"m.go"}, "old_string_chars": int64(10), "total_lines": int64(50),
+			"change_count": int64(1), "replacement_matches": int64(0), "replacement_line": int64(0),
+			"http_method": "GET", "http_requests_started": int64(1), "http_responses_received": int64(1),
+			"http_last_status": int64(503), "retryable": true, "code": code,
+			"extract_allowed": []string{".zip", ".tar", ".tar.gz"}, "extract_format_cause": "unsupported_suffix",
+			"extract_invalid_format": false, "extract_rejected_value": ".7z",
+		}
+		if ops := oarcore.ConjunctValues(rule.When, "paintedwolf.operation"); len(ops) > 0 {
+			data["operation"] = ops[0]
+		}
+		natOps := oarcore.ConjunctValues(rule.When, "paintedwolf.native_operation")
+		if len(natOps) > 0 {
+			natOp := natOps[0]
+			if !slices.Contains(auth.Offered, "command") {
+				return "", false, nil
+			}
+			if (natOp == "edit" || natOp == "jq_edit") && !auth.Reader.Held()[toolcontract.ReachCommandMutation] {
+				return "", false, nil
+			}
+			if natOp == "http_request" && !auth.Reader.Held()[toolcontract.ReachCommandNetworkEgress] {
+				return "", false, nil
+			}
+			data["native_operation"] = natOp
+			invoked = "command"
+		}
+		rErr := bp.RejectObservation(cctx, invoked, prof, nil, &toolrejection.ToolReject{
+			Code: code, Data: data,
+		})
+		ref, ok := guidance.RefusalFromError(rErr)
+		if !ok || ref == nil {
+			return "", false, nil
+		}
+		fix := strings.TrimSpace(ref.Copy["fix"])
+		if fix != "" {
+			if viols := promptrender.EvaluateClaimsForTest(bundle.stock, "fuzz/oar/"+rule.ID+" ("+turnID+")", fix, auth, mode, post, toolvocabtest.SubjectSelfNow(), false); len(viols) > 0 {
+				return "", true, fmt.Errorf("OAR %s claim violation on %s: %v", rule.ID, turnID, viols[0])
+			}
+		}
+		return fix, true, nil
+	}
+
+	warmBP := newIsolatedBlockPlane()
+	if _, _, err := evalTurn(warmBP, idA, surfA, authA, modeA, postA); err != nil {
+		rep.FailedProperty = "oar_turn_a"
+		return rep, err
+	}
+	warmFixB, firedWarm, err := evalTurn(warmBP, idB, surfB, authB, modeB, postB)
+	if err != nil {
+		rep.FailedProperty = "oar_turn_b_warm"
+		return rep, err
+	}
+	freshFixB, firedFresh, err := evalTurn(newIsolatedBlockPlane(), idB, surfB, authB, modeB, postB)
+	if err != nil {
+		rep.FailedProperty = "oar_turn_b_fresh"
+		return rep, err
+	}
+	if firedWarm != firedFresh || warmFixB != freshFixB {
+		rep.FailedProperty = "oar_warm_vs_fresh_parity"
+		return rep, fmt.Errorf("OAR %s warm vs fresh mismatch on %s", rule.ID, idB)
+	}
+	if !firedWarm {
+		rep.OmittedOutcome = true
+	}
+	env.confirmedRuns.Add(1)
+	rep.PropertyExecuted = true
+	return rep, nil
+}

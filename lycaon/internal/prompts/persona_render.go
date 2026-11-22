@@ -2,9 +2,6 @@ package prompts
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
-	"encoding/json"
 	"fmt"
 	"hash/fnv"
 	"strconv"
@@ -93,24 +90,32 @@ func personaVars(ctx context.Context, engine *FileTemplateEngine, agentID string
 	return engine, id, ref, data, nil
 }
 
-// pathCache memoizes one load per active path.
+// pathCache memoizes bounded loads keyed by catalog or policy fingerprint.
 type pathCache[T any] struct {
-	mu     sync.Mutex
-	key    string
-	val    T
-	err    error
-	loaded bool
+	mu      sync.Mutex
+	entries map[string]T
 }
 
 func (c *pathCache[T]) get(key string, load func(string) (T, error)) (T, error) {
 	c.mu.Lock()
-	defer c.mu.Unlock()
-	if c.loaded && c.key == key && c.err == nil {
-		return c.val, nil
+	if val, ok := c.entries[key]; ok {
+		c.mu.Unlock()
+		return val, nil
 	}
+	c.mu.Unlock()
+
 	val, err := load(key)
-	c.key, c.val, c.err, c.loaded = key, val, err, true
-	return val, err
+	if err != nil {
+		return val, err
+	}
+
+	c.mu.Lock()
+	if c.entries == nil || len(c.entries) >= 64 {
+		c.entries = make(map[string]T, 16)
+	}
+	c.entries[key] = val
+	c.mu.Unlock()
+	return val, nil
 }
 
 var (
@@ -138,8 +143,18 @@ func catalogCacheKey(eff *extpacks.EffectiveCatalog) string {
 	return strconv.FormatUint(h.Sum64(), 16)
 }
 
+func catalogRevisionKey(eff *extpacks.EffectiveCatalog) string {
+	if eff == nil {
+		return "nil"
+	}
+	if rev := strings.TrimSpace(eff.Revision); rev != "" {
+		return fmt.Sprintf("fp:%s:%d", rev, len(eff.Loaded))
+	}
+	return catalogCacheKey(eff)
+}
+
 func loadHintPolicyCached(eff *extpacks.EffectiveCatalog) ([]hintregistry.Entry, error) {
-	return hintPolicyCache.get(catalogCacheKey(eff), func(string) ([]hintregistry.Entry, error) {
+	return hintPolicyCache.get(catalogRevisionKey(eff), func(string) ([]hintregistry.Entry, error) {
 		return hintregistry.ListEffectiveWithCatalog(eff)
 	})
 }
@@ -174,12 +189,17 @@ func loadToolSchemaCached(eff *extpacks.EffectiveCatalog) (*toolschema.Config, e
 }
 
 func loadHintCodeRowsCached(revision string, entries []hintregistry.Entry) (map[string]hintCodeRow, error) {
-	raw, err := json.Marshal(entries)
-	if err != nil {
-		return nil, fmt.Errorf("hint policy cache key: %w", err)
+	h := fnv.New64a()
+	_, _ = h.Write([]byte(strings.TrimSpace(revision)))
+	for _, e := range entries {
+		_, _ = h.Write([]byte{0})
+		_, _ = h.Write([]byte(e.Code))
+		_, _ = h.Write([]byte{0})
+		_, _ = h.Write(e.Body)
+		_, _ = h.Write([]byte{0})
+		_, _ = h.Write(e.NextSteps)
 	}
-	sum := sha256.Sum256(raw)
-	key := "policy:" + strings.TrimSpace(revision) + ":" + hex.EncodeToString(sum[:])
+	key := "policy:" + strings.TrimSpace(revision) + ":" + strconv.FormatUint(h.Sum64(), 16)
 	return hintCodeRowsCache.get(key, func(string) (map[string]hintCodeRow, error) {
 		return LoadHintCodeRowsFromEntries(entries)
 	})

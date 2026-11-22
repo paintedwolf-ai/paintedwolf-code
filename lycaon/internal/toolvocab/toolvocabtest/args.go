@@ -347,7 +347,7 @@ func validateStandaloneBackticks(
 		if idx == nil {
 			continue
 		}
-		claimPath, val, hasVal, ok := parseStandaloneSchemaClaim(idx, sent, raw)
+		claimPath, val, hasVal, ok := parseStandaloneSchemaClaim(c, idx, sent, raw)
 		if !ok {
 			continue
 		}
@@ -371,104 +371,6 @@ func validateStandaloneBackticks(
 		}
 	}
 	return issues
-}
-
-func parseStandaloneSchemaClaim(idx *PrunableSchemaIndex, sent sentenceContext, raw string) (path string, val any, hasVal bool, ok bool) {
-	if strings.HasPrefix(raw, "{") && strings.HasSuffix(raw, "}") {
-		m, ell, _, parsed := parseObjectLiteral(raw)
-		if !parsed || ell {
-			return "", nil, false, false
-		}
-		if kv, exists := m["kind"]; exists && len(m) <= 2 {
-			if lit, isLit := concreteStringOrIdent(kv); isLit && slices.Contains(SchemaEnums(idx.baseSchemas["wait"])["conditions.kind"], lit) {
-				return "conditions.kind", kv, true, true
-			}
-		}
-		return "", nil, false, false
-	}
-	if k, vStr, hasSep := splitKeyValueTopLevel(raw); hasSep && identPathRe.MatchString(k) {
-		norm := normalizeSchemaPath(k)
-		if len(idx.AllOwners(norm)) == 0 {
-			return "", nil, false, false
-		}
-		parsedVal, ell, _ := parseValueExpr(vStr)
-		if ell {
-			return "", nil, false, false
-		}
-		explicitTool := explicitPrepositionTool(sent.sentence, raw)
-		if explicitTool != "" || len(idx.PrunableOwners(norm)) > 0 || isPrunableEnumValue(idx, norm, parsedVal) {
-			return norm, parsedVal, true, true
-		}
-		return "", nil, false, false
-	}
-	if !identPathRe.MatchString(raw) {
-		return "", nil, false, false
-	}
-	norm := normalizeSchemaPath(raw)
-	if len(idx.AllOwners(norm)) == 0 && explicitPrepositionTool(sent.sentence, raw) == "" {
-		return "", nil, false, false
-	}
-	explicitTool := explicitPrepositionTool(sent.sentence, raw)
-	if explicitTool != "" {
-		return norm, nil, false, true
-	}
-	if len(idx.PrunableOwners(norm)) == 0 {
-		return "", nil, false, false
-	}
-	if !strings.Contains(norm, ".") && (norm == "secret" || norm == "conditions" || norm == "verification") {
-		if len(intersectSorted(sent.sentenceTools, idx.PrunableOwners(norm))) == 0 {
-			return "", nil, false, false
-		}
-	}
-	return norm, nil, false, true
-}
-
-func resolveAttributedTools(c *toolvocab.Catalog, idx *PrunableSchemaIndex, sent sentenceContext, rawSpan, path string, hasVal bool, val any) []string {
-	if explicit := explicitPrepositionTool(sent.sentence, rawSpan); explicit != "" && c != nil && c.KnownName(explicit) {
-		return []string{explicit}
-	}
-	allOwners := idx.AllOwners(path)
-	compat := compatibleBaseOwners(idx, path, hasVal, val)
-	if inSentAll := intersectSorted(sent.sentenceTools, allOwners); len(inSentAll) > 0 {
-		if inSentCompat := intersectSorted(inSentAll, compat); len(inSentCompat) > 0 {
-			return inSentCompat
-		}
-		return inSentAll
-	}
-	if len(compat) == 0 {
-		return allOwners
-	}
-	if len(compat) == 1 {
-		return compat
-	}
-	if inSec := intersectSorted(sent.sectionTools, compat); len(inSec) > 0 {
-		return inSec
-	}
-	return compat
-}
-
-func anyAttributedToolAccepts(
-	attributed []string,
-	path string,
-	hasVal bool,
-	val any,
-	offered map[string]bool,
-	schema func(tool string) (map[string]any, bool),
-) bool {
-	for _, t := range attributed {
-		if offered != nil && !offered[t] {
-			continue
-		}
-		s, ok := schema(t)
-		if !ok || !schemaAcceptsPath(s, path) {
-			continue
-		}
-		if hasVal && len(validateValueAtPath(t, s, path, val, 0)) > 0 {
-			continue
-		}
-		return true
-	}
-	return false
 }
 
 func sortArgClaims(seen map[ArgClaim]bool) []ArgClaim {

@@ -175,3 +175,38 @@ func TestRecoveryFormFactsSupplyIdentifiersAndQuotedCallsAcrossLoadingStates(t *
 		t.Fatalf("absent-loader facts = %+v", gotAbsent)
 	}
 }
+
+func TestRegisterRecoveryFactsTaskAndSurfaceSnapshotHandles(t *testing.T) {
+	refs := []string{"paintedwolf.task_callable", "paintedwolf.surface_snapshot_handles"}
+	eval := func(req toolreach.Request, turnTools []string) map[string]any {
+		gc := oar.NewGuardContext()
+		gc.Session.TurnTools = turnTools
+		RegisterRecoveryFacts(toolreach.WithRequest(t.Context(), req), gc)
+		testutil.FailErr(t, "AssembleFacts", oar.AssembleFacts(gc, refs))
+		return gc.ObservationData
+	}
+
+	none := eval(toolreach.Offered([]string{"recall"}), nil)
+	if none["task_callable"] != false || none["surface_snapshot_handles"] != "" {
+		t.Fatalf("none = %+v", none)
+	}
+
+	one := eval(toolreach.Offered([]string{"capture_page", "task"}), nil)
+	if one["task_callable"] != true || one["surface_snapshot_handles"] != "page#" {
+		t.Fatalf("one = %+v", one)
+	}
+
+	two := eval(toolreach.Offered([]string{"capture_page", "terminal_open"}), []string{"task"})
+	if two["task_callable"] != true || two["surface_snapshot_handles"] != "page# or terminal_session#" {
+		t.Fatalf("two = %+v", two)
+	}
+
+	three := eval(
+		toolreach.Offered([]string{"capture_page", "command", "terminal_open"}).
+			WithPrograms(func(name string) bool { return name == "external" }),
+		nil,
+	)
+	if three["surface_snapshot_handles"] != "page#, tui# or terminal_session#" {
+		t.Fatalf("three = %+v", three)
+	}
+}

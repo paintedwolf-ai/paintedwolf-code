@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/toolvocab"
+	"github.com/lycaon/lycaon/internal/toolvocab/toolvocabtest"
 )
 
 type programPattern struct {
@@ -44,8 +45,29 @@ var (
 	histSuffixRE      = regexp.MustCompile(`(?i)^\s*(?:is\s+blocked|was\s+blocked|scope\.|has\s+no|was\s+called|failed|refused|returned|cannot|could\s+not|did\s+not|is\s+not\s+offered)`)
 	progNegBeforeRE   = regexp.MustCompile(`(?i)\b(?:do not|never|avoid|without|instead of|cannot|the|your|prior|called|ran)\b`)
 	progImperativeRE  = regexp.MustCompile(`(?i)\b(?:use|with|via|run|prefer|inspect|through|such as|retry)\b`)
-	prunedCmdFieldsRE = regexp.MustCompile("`?(capability_request|secret_use|snapshot_capture|socks_proxy|terminal_capture|verification)\\b")
+	prunedCmdFieldsRE = buildPrunedCmdFieldsRE()
 )
+
+func buildPrunedCmdFieldsRE() *regexp.Regexp {
+	idx, err := toolvocabtest.StockPrunableSchemaIndex()
+	if err != nil || idx == nil {
+		return regexp.MustCompile(`$^`)
+	}
+	seen := map[string]bool{}
+	var tops []string
+	for _, p := range idx.PrunablePaths("command") {
+		top, _, _ := strings.Cut(p, ".")
+		if !seen[top] {
+			seen[top] = true
+			tops = append(tops, regexp.QuoteMeta(top))
+		}
+	}
+	if len(tops) == 0 {
+		return regexp.MustCompile(`$^`)
+	}
+	slices.Sort(tops)
+	return regexp.MustCompile("`?(" + strings.Join(tops, "|") + ")\\b")
+}
 
 var programCapabilityGuards = map[string]map[string]bool{
 	"sed": {

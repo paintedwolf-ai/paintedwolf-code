@@ -6,6 +6,8 @@ import (
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/oarcopy"
+	"github.com/lycaon/lycaon/internal/toolcontract"
+	"github.com/lycaon/lycaon/internal/toolreach"
 )
 
 // activation publishes occurrence facts under their rule-visible names.
@@ -63,6 +65,7 @@ func activation(gc *GuardContext) map[string]any {
 		}
 		// Authoritative invocation and diagnostic facts overwrite any untrusted keys in ObservationData or Published.
 		oarcopy.PublishInvocationRecovery(out, gc.Invocation.Tool, gc.Invocation.ToolArgs, gc.Invocation.CapabilityContract)
+		narrowCapabilityRecoveryByProjectedSchema(out, gc.Reach, gc.Invocation.Tool)
 		oarcopy.PublishDiagnosticKnowledge(out, gc.ObservationData)
 		// A sandbox refusal names its sockets outside the observation data.
 		if len(gc.Refusals.RefusedSocketPaths) > 0 {
@@ -75,6 +78,30 @@ func activation(gc *GuardContext) map[string]any {
 		out["paintedwolf.credential_decisions"] = gc.Counters.CredentialDecisions
 	}
 	return out
+}
+
+func narrowCapabilityRecoveryByProjectedSchema(out map[string]any, reach toolreach.Request, tool string) {
+	if !reach.Known() || tool == "" || reach.Status(tool) != toolreach.Callable {
+		return
+	}
+	if _, hasSchema := reach.ToolSchema(tool); !hasSchema {
+		return
+	}
+	if cur, ok := out["paintedwolf.capability_request_fields"].([]string); ok {
+		admitted := make([]string, 0, len(cur))
+		for _, field := range cur {
+			if reach.AcceptsField(tool, "capability_request."+field) {
+				admitted = append(admitted, field)
+			}
+		}
+		out["paintedwolf.capability_request_fields"] = admitted
+	}
+	for _, field := range toolcontract.CapabilityRequestFields() {
+		if !reach.AcceptsField(tool, "capability_request."+field) {
+			out["paintedwolf.supports_"+field] = false
+			out["paintedwolf.missing_capability_"+field] = false
+		}
+	}
 }
 
 func bareActivation(gc *GuardContext) map[string]any {
@@ -204,6 +231,8 @@ func bareActivation(gc *GuardContext) map[string]any {
 		"profile_surveys_project_tree":        gc.Grounding.ProfileSurveysProjectTree,
 		"ask_user_secret_allowed":             false,
 		"ask_user_loadable_without_schema":    false,
+		"task_callable":                       false,
+		"surface_snapshot_handles":            "",
 		"repo_known_empty":                    gc.Grounding.RepoKnownEmpty,
 		"last_audit_ungrounded":               gc.Grounding.LastAuditUngrounded,
 		"grounding_escalated":                 gc.Grounding.GroundingEscalated,

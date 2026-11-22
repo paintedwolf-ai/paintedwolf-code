@@ -65,6 +65,21 @@ func RenderCacheKey(templateID, catalogRevision string, selectedUnits []string, 
 	return key
 }
 
+func computeProgramsList(programReach toolreach.Programs) []string {
+	programs := make([]string, 0)
+	if programReach != nil {
+		if lang, err := toolcontract.ReadOnlyLanguageV1(); err == nil {
+			for _, spec := range lang.Commands {
+				if programReach(spec.Name) {
+					programs = append(programs, spec.Name)
+				}
+			}
+		}
+		slices.Sort(programs)
+	}
+	return programs
+}
+
 // AuthorityDigest hashes the offered tool set, projected argument schemas,
 // native program reach vector, evidence mints, and subject reader reach.
 // Uncacheable projected schema values return "" so CheckAuthority bypasses reuse.
@@ -77,23 +92,21 @@ func AuthorityDigest(
 ) string {
 	sortedOffered := slices.Clone(offered)
 	slices.Sort(sortedOffered)
-
-	programs := make([]string, 0)
-	if programReach != nil {
-		if lang, err := toolcontract.ReadOnlyLanguageV1(); err == nil {
-			for _, spec := range lang.Commands {
-				if programReach(spec.Name) {
-					programs = append(programs, spec.Name)
-				}
-			}
-		}
-		slices.Sort(programs)
-	}
-
+	programs := computeProgramsList(programReach)
 	encodedSchemas, err := encodeAdmittedValue(reflect.ValueOf(projectedSchemas), map[ptrVisit]bool{})
 	if err != nil {
 		return ""
 	}
+	return authorityDigestPrecomputed(sortedOffered, encodedSchemas, programs, mints, subjectReader)
+}
+
+func authorityDigestPrecomputed(
+	sortedOffered []string,
+	encodedSchemas any,
+	programs []string,
+	mints map[string]bool,
+	subjectReader prompts.Reader,
+) string {
 	encodedMints, err := encodeAdmittedValue(reflect.ValueOf(mints), map[ptrVisit]bool{})
 	if err != nil {
 		return ""
