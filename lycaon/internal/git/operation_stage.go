@@ -131,7 +131,7 @@ func (p *operationPlan) writeBlob(ctx context.Context, dir string, content []byt
 // returns the merged bytes and the number of conflicts it marked. labels
 // name ours, base and theirs in the conflict markers.
 func MergeFile(ctx context.Context, ours, base, theirs []byte, labels [3]string) ([]byte, int, error) {
-	dir, err := os.MkdirTemp("", "git-merge-file-*")
+	dir, err := gitexec.MkdirTemp(ctx, "git-merge-file-*")
 	if err != nil {
 		return nil, 0, err
 	}
