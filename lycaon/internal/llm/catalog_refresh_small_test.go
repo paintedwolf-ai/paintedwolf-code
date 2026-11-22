@@ -29,6 +29,10 @@ func TestKnownModelMetadataDoesNotWaitForCatalogRefresh(t *testing.T) {
 	var once sync.Once
 	var calls atomic.Int32
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+		if req.URL.Path != "/v1/models" {
+			http.NotFound(w, req)
+			return
+		}
 		if calls.Add(1) == 1 {
 			_ = json.NewEncoder(w).Encode(map[string]any{"data": []map[string]string{{"id": "known"}}})
 			return
