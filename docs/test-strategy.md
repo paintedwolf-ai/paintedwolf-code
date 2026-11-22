@@ -45,9 +45,9 @@ Database architecture tests derive their scope from the live schema: they
 discover authored tables and foreign keys through SQLite, ask the query planner
 whether lifetime-parent lookups are indexed, and enforce strict keyed storage,
 so new tables and larger histories enter the same proof automatically.
-Behavioral stores use differential models where practical: the SQL and memory
-implementations must produce the same seek pages, and concurrency tests close
-and reopen the store before running integrity checks. The SQLite concurrency
+Behavioral stores use randomized state-machine models against SQLite: tests
+close and reopen the database file across restarts, compare every durable row to
+the model, and run integrity checks after concurrent operations. The SQLite concurrency
 suite holds a reader snapshot open while direct writes, immediate write
 transactions, and passive checkpoints overlap, proving that writes serialize
 without `BUSY_SNAPSHOT`, checkpoints report pinned frames without rejecting
@@ -863,11 +863,9 @@ Hosted Go shards partition resolved package identities in both shared admission
 and direct captured-source execution. Each direct invocation records its selected
 packages in the Actions log, so later runs can verify the actual partition.
 
-The queue coordinator recovers an active merge group whose exact ref and commit
-have no CI run by explicitly dispatching the integration profile. The dispatched
-plan validates the live queue identity and obtains its comparison base from the
-queue before running affected-scope checks. Existing runs, including failures and
-cancellations, are never replaced by recovery. Draft events skip the aggregate
+An active merge group runs the integration profile on its exact ref and commit,
+validating the live queue identity and obtaining its comparison base from the
+queue before running affected-scope checks. Draft events skip the aggregate
 check; ready-review events still require successful admission.
 
 ## Working commands
@@ -1378,11 +1376,11 @@ and races remain blocking; there is no assertion retry policy.
 ##### Admission and scale execution
 
 Ready admission runs focused Go tests and frontend seam canaries after repository
-contracts. Changed Go coverage also runs early in admission; all changed-statement
-coverage and native compilation execute at the exact landing source. In the pull
-request, frontend and script coverage stages supply the complete assertion suites,
-avoiding a second uncovered execution; the landing source runs those suites once,
-unmeasured.
+contracts, along with changed Go, frontend, and script statement coverage. In the
+pull request, frontend and script coverage stages supply the complete assertion
+suites, avoiding a second uncovered execution; the merge queue leaves lint and
+changed-statement coverage to the pull request and runs the affected integration
+suites and native compilation at the exact landing source.
 The failed/unverified/previously-passed frontier changes order, never the complete
 successful-path inventory. Unknown source scope still selects the complete recipe.
 
@@ -1413,9 +1411,9 @@ not something feature CI performs.
 
 The first integration slots run build and the Go behavior shards. Each Go shard runs repository contracts with the full integration
 recipe before its remaining affected packages. The two phases are disjoint and
-retain the same shard, worker cap, and package measurements. A failed first phase
-never starts its second phase; the matrix cancels siblings on failure. Other
-profiles keep their complete recipes.
+retain the same shard, worker cap, and package measurements. Every phase and
+lane runs to completion so one round trip reports every failure. Other profiles
+keep their complete recipes.
 
 Queue health counts actual pull requests merged to main per observation hour.
 It reports success, failure, and cancellation separately, the fraction of decided
@@ -1441,11 +1439,11 @@ exhausting the runner while leaving room for the toolchain. A package that needs
 more declares its own ceiling with a tracking issue. A race build gets
 `race_scale` times its ceiling: the detector's
 shadow memory and instrumented heap are overhead the ordinary ceiling does not
-describe, and the largest contract packages reach 1.6 times it under the detector.
+describe, and the largest contract packages reach 2.3 times it under the detector.
 Unless a run sets `GOMEMLIMIT`, the test binary gets a soft limit at 80% of its
-ceiling, so the collector reclaims garbage before the ceiling instead of letting
-the heap reach twice its live size, and the guard measures retained memory
-rather than collector slack.
+unscaled Go heap ceiling, so the collector reclaims Go garbage before the ceiling
+instead of letting the heap expand with the detector's shadow memory, and the
+guard measures retained memory rather than collector slack.
 Failure identifies the package, measured bytes, and bound. Security and wiring suites additionally
 check retained heap and goroutine growth after cleanup through
 `internal/testutil/resourceguard`. These guards detect resource regressions;
@@ -1584,13 +1582,13 @@ budgets for the whole selected matrix. Runner caps do not depend on timing data.
 | Queue batching | `queue-batching.yml` | `queue-batching` | 1 |
 | Release rehearsals | release dry runs and replays, the weekly release-system live test, a dispatched release secrets check | one group per dry run or replay; `release-system-live-test`; none for the read-only secrets check | a dry run as a release; 1 otherwise |
 | Maintenance | dispatch-only Linux desktop environment and installed rehearsals, Linux candidate requests, dependency inventory, queue health, issue staleness, the issue sweep | `maintenance`, shared | 1 |
-| Merge queue | CI of merge groups | one run per group, two groups at once | 12: two groups × the `integration` cap of six |
+| Merge queue | CI of merge groups | one group at a time | 12 (2): the `integration` cap, including `native-macos` and `confinement-macos` when selected |
 | Ready pull requests | CI of pull requests | one run per pull request; a newer push cancels it | 6 per pull request beside the static job: the `fast` cap, with a two-hour execution ceiling |
 
 Nightly replaces its pending snapshot while a started run finishes. Qualification
 retains explicit release requests; both use one executor at a time. Maintenance
 workflows share one group across workflows and stagger their schedules. Issue
-intake, an issue's lifecycle nudge, and verification recovery handle one event
+intake and an issue's lifecycle nudge handle one event
 per run instead: each run is a single job bounded to fifteen minutes.
 
 Unsigned release artifacts are prepared once per source by a reusable
@@ -1613,7 +1611,8 @@ before changing one. Caps do not establish queue latency guarantees.
 On macOS, warming holds one runner, nightly four (as does a qualification that
 runs the lane set), and a release two. Nightly is scheduled outside the hours releases and qualification
 run; when they do overlap, macOS jobs wait for one of the five runners. The
-merge queue and the admission tier run on Linux.
+admission tier runs on Linux; the merge queue runs on Linux and selects macOS
+native and confinement lanes when those areas change.
 
 ### Upgrade rehearsal preparation and startup evidence
 
