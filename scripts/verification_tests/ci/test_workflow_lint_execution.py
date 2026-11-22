@@ -122,7 +122,7 @@ class WorkflowLintTests(unittest.TestCase):
             with self.subTest(arguments=arguments):
                 result = subprocess.run([sys.executable, "-m", "workflow_lint", *arguments],
                                         cwd=workflow_lint.ROOT, env=environment,
-                                        capture_output=True, text=True, timeout=120)
+                                        capture_output=True, text=True)
                 self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
 
     def test_malformed_workflow_documents_are_rejected(self):

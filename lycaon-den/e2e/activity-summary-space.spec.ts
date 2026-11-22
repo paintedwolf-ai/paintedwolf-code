@@ -39,11 +39,13 @@ async function seedReadCard(page: Page, request: Parameters<typeof bootstrapChat
   return sessionId;
 }
 
-/** Answers the card's summary request after a delay, as a slow summarizer would. */
-async function answerSummaryAfter(page: Page, text: { purpose: string; change: string }, delayMs: number) {
+/** Holds the card's summary request until released, as a slow summarizer would. */
+async function holdSummary(page: Page, text: { purpose: string; change: string }): Promise<() => void> {
+  let release!: () => void;
+  const released = new Promise<void>((resolve) => { release = resolve; });
   await page.route("**/v1/projects/*/briefings", async (route: Route) => {
     if (route.request().method() !== "POST") return route.fallback();
-    await new Promise((resolve) => setTimeout(resolve, delayMs));
+    await released;
     const section = (section_id: string, value: string) => ({
       section_id, text: value, manifest_hash: section_id.padEnd(64, "0"), source: "summarizer", reused: false,
       provider_id: "", model: "", evidence_quality: [], created_at: "2026-07-23T20:00:03Z",
@@ -55,6 +57,7 @@ async function answerSummaryAfter(page: Page, text: { purpose: string; change: s
       result: { evidence_ref: { project_id: "p", record_id: "r".repeat(64) }, summary: [section("purpose", text.purpose), section("change", text.change)] },
     } });
   });
+  return release;
 }
 
 /** Offset of the card body below the summary from the card's top. */
@@ -84,10 +87,11 @@ async function openCard(page: Page, sessionId: string) {
 webE2e.describe("activity summary space", () => {
   for (const [name, text] of [["short", SHORT], ["long", LONG]] as const) {
     webE2e(`a ${name} summary arriving after the card opens moves nothing below it`, async ({ page, request }) => {
-      await answerSummaryAfter(page, text, 1500);
+      const release = await holdSummary(page, text);
       const sessionId = await seedReadCard(page, request);
       await openCard(page, sessionId);
       const before = await bodyOffset(page);
+      release();
       await expect(page.getByTestId("activity-summary")).toHaveAttribute("data-state", "ready", { timeout: 10_000 });
       await expect(page.getByTestId("activity-summary")).toContainText(text.purpose.slice(0, 30));
       expect(await bodyOffset(page)).toBeCloseTo(before, 0);

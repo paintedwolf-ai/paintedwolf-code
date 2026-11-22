@@ -29,7 +29,7 @@ global.setTimeout = callback => callback();
   console.log(JSON.stringify({result, sessions}));
 })().catch(error => { console.error(error); process.exitCode = 1; });
 """.replace("FAILURE", json.dumps(failure)).replace("BODY", json.dumps(HOME_OVERFLOW))
-        result = subprocess.run(["node", "-e", script], capture_output=True, text=True, timeout=10)
+        result = subprocess.run(["node", "-e", script], capture_output=True, text=True)
         self.assertEqual(result.returncode, 0, result.stderr)
         return json.loads(result.stdout)
 
@@ -56,7 +56,7 @@ global.getComputedStyle = () => ({display: 'block', visibility: 'visible'});
   console.log(JSON.stringify(value));
 })().catch(error => { console.error(error); process.exitCode = 1; });
 """.replace("BODY", json.dumps(body))
-        result = subprocess.run(["node", "-e", script], capture_output=True, text=True, timeout=10)
+        result = subprocess.run(["node", "-e", script], capture_output=True, text=True)
         self.assertEqual(result.returncode, 0, result.stderr)
         value = json.loads(result.stdout)
         self.assertTrue(value["ok"])

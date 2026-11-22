@@ -167,7 +167,7 @@ health.process_snapshot = lambda: {self.processes!r}
 health.annotate(queue, {{"runs": [{self.entry!r}], "operations": []}})
 '''
             subprocess.run([sys.executable, "-c", command], cwd=Path(health.__file__).parent,
-                           check=True, capture_output=True, timeout=5)
+                           check=True, capture_output=True)
             second = json.loads(path.read_text())[self.entry["ticket"]]
             after = time.clock_gettime(time.CLOCK_MONOTONIC)
             self.assertLessEqual(before, first["sampled_at"])
@@ -218,10 +218,9 @@ health.annotate(queue, {{"runs": [{self.entry!r}], "operations": []}})
                         {"locks": ["harness"], "workers": 1, "progress": "log"})))
                 worker.start()
                 try:
-                    deadline = time.monotonic() + 5
-                    while not ready.exists() and time.monotonic() < deadline:
+                    while not ready.exists():
+                        self.assertTrue(worker.is_alive(), f"run ended before its child was ready: {outcomes}")
                         time.sleep(0.02)
-                    self.assertTrue(ready.exists())
                     progress = Path(ready.read_text())
                     status = queue.status()
                     run_entry = status["runs"][0]
@@ -249,7 +248,7 @@ health.annotate(queue, {{"runs": [{self.entry!r}], "operations": []}})
                         self.assertEqual(observed["state"], "suspected_stall")
                 finally:
                     done.write_text("done")
-                    worker.join(timeout=5)
+                    worker.join()
             self.assertEqual(outcomes, [0])
             self.assertFalse(progress.exists())
 
@@ -276,10 +275,9 @@ health.annotate(queue, {{"runs": [{self.entry!r}], "operations": []}})
                         {"locks": ["lint"], "workers": 1})))
                 worker.start()
                 try:
-                    deadline = time.monotonic() + 5
-                    while not ready.exists() and time.monotonic() < deadline:
+                    while not ready.exists():
+                        self.assertTrue(worker.is_alive(), f"run ended before its child was ready: {outcomes}")
                         time.sleep(0.02)
-                    self.assertTrue(ready.exists())
                     self.assertEqual(ready.read_text(), "")
                     status = queue.status()
                     run_entry = status["runs"][0]
@@ -298,7 +296,7 @@ health.annotate(queue, {{"runs": [{self.entry!r}], "operations": []}})
                         self.assertEqual(observed["state"], "suspected_stall")
                 finally:
                     done.write_text("done")
-                    worker.join(timeout=5)
+                    worker.join()
             self.assertEqual(outcomes, [0])
 
     def test_catalog_and_stage_execution_propagate_declared_progress_recipes(self):

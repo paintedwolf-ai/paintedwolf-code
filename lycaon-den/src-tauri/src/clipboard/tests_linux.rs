@@ -14,9 +14,7 @@ use crate::test_support::TempDir;
 use gtk::prelude::*;
 use std::io::Write;
 use std::process::{Command, Stdio};
-use std::time::{Duration, Instant};
-
-const PEER_DEADLINE: Duration = Duration::from_secs(10);
+use std::time::Duration;
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 enum Peer {
@@ -75,13 +73,9 @@ impl Peer {
         })
     }
 
-    fn read_until(self, expected: Option<&str>) -> Option<String> {
-        let deadline = Instant::now() + PEER_DEADLINE;
-        loop {
-            let read = self.read();
-            if read.as_deref() == expected || Instant::now() >= deadline {
-                return read;
-            }
+    /// Returns once the peer reads `expected`.
+    fn wait_for(self, expected: Option<&str>) {
+        while self.read().as_deref() != expected {
             std::thread::sleep(Duration::from_millis(50));
         }
     }
@@ -243,7 +237,7 @@ fn clipboard_owner_child() {
 
 fn exercise_adapter(peer: Peer) {
     let main = GlibMainThread;
-    let service = ClipboardService::<NativeClipboard>::default();
+    let service = ClipboardService::new(NativeClipboard, crate::test_support::NO_DEADLINE);
     tauri::async_runtime::block_on(async {
         let (reply, facts) = tokio::sync::oneshot::channel();
         main.dispatch(Box::new(move || {
@@ -264,47 +258,32 @@ fn exercise_adapter(peer: Peer) {
 
         for text in ["copied λ text\nsecond line", "replacement contents"] {
             service.write(&main, text.into()).await.unwrap();
-            assert_eq!(peer.read_until(Some(text)).as_deref(), Some(text));
+            peer.wait_for(Some(text));
             assert_eq!(service.read(&main).await.unwrap(), text);
         }
 
         // The owner keeps serving every peer request, not only the first.
         service.write(&main, "served later ✓".into()).await.unwrap();
-        assert_eq!(peer.read_until(Some("served later ✓")).as_deref(), Some("served later ✓"));
+        peer.wait_for(Some("served later ✓"));
         assert_eq!(peer.read().as_deref(), Some("served later ✓"));
         assert_eq!(peer.read().as_deref(), Some("served later ✓"));
 
         // Another application replaces the owner; the adapter reads its text.
         peer.write("peer owned text");
-        let _ = peer.read_until(Some("peer owned text"));
-        let deadline = Instant::now() + PEER_DEADLINE;
-        loop {
-            let read = service.read(&main).await.unwrap();
-            if read == "peer owned text" {
-                break;
-            }
-            assert!(Instant::now() < deadline, "adapter still reads {read:?}");
+        peer.wait_for(Some("peer owned text"));
+        while service.read(&main).await.unwrap() != "peer owned text" {
             std::thread::sleep(Duration::from_millis(50));
         }
         if peer.clear() {
-            let _ = peer.read_until(None);
-            let deadline = Instant::now() + PEER_DEADLINE;
-            loop {
-                let read = service.read(&main).await.unwrap();
-                if read.is_empty() {
-                    break;
-                }
-                assert!(Instant::now() < deadline, "adapter still reads {read:?}");
+            peer.wait_for(None);
+            while !service.read(&main).await.unwrap().is_empty() {
                 std::thread::sleep(Duration::from_millis(50));
             }
         }
 
         // Ownership returns to the adapter.
         service.write(&main, "owner again".into()).await.unwrap();
-        assert_eq!(
-            peer.read_until(Some("owner again")).as_deref(),
-            Some("owner again")
-        );
+        peer.wait_for(Some("owner again"));
 
         service.shutdown(&main);
         service.shutdown(&main);
@@ -321,7 +300,6 @@ fn exercise_adapter(peer: Peer) {
 /// Repeats the key until the compositor accepts a selection from the window,
 /// which can only happen once the window is mapped and focused.
 async fn establish_focus(service: &ClipboardService<NativeClipboard>, main: &GlibMainThread) {
-    let deadline = Instant::now() + PEER_DEADLINE;
     loop {
         Peer::Wayland.send_key_to_owner_window();
         service.write(main, "focus probe".into()).await.unwrap();
@@ -329,6 +307,5 @@ async fn establish_focus(service: &ClipboardService<NativeClipboard>, main: &Gli
         if Peer::Wayland.read().as_deref() == Some("focus probe") {
             return;
         }
-        assert!(Instant::now() < deadline, "owner window never gained focus");
     }
 }

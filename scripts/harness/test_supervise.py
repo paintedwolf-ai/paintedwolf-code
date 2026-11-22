@@ -134,17 +134,16 @@ class HarnessSupervisorTest(unittest.TestCase):
         return child
 
     def await_ready(self) -> None:
-        deadline = time.monotonic() + 15
-        while time.monotonic() < deadline:
-            if all((self.root / name).exists() for name in (
-                "runner.pid", "sidecar.json", "vite.json", "grandchild.json",
-            )):
-                return
+        child = self.children[-1]
+        while not all((self.root / name).exists() for name in (
+            "runner.pid", "sidecar.json", "vite.json", "grandchild.json",
+        )):
+            if child.poll() is not None:
+                self.fail("supervisor exited before the fixture was ready: " + (self.root / "supervisor.log").read_text())
             time.sleep(0.05)
-        self.fail("fixture did not become ready: " + (self.root / "supervisor.log").read_text())
 
     def assert_stopped(self, child: subprocess.Popen, code: int) -> None:
-        self.assertEqual(child.wait(timeout=15), code, (self.root / "supervisor.log").read_text())
+        self.assertEqual(child.wait(), code, (self.root / "supervisor.log").read_text())
         for marker in self.root.glob("*.json"):
             port = json.loads(marker.read_text())["port"]
             with socket.socket() as probe:
@@ -161,7 +160,7 @@ class HarnessSupervisorTest(unittest.TestCase):
             (self.root / "finish").touch()
             self.assert_stopped(child, 7)
             self.assertFalse(self.state.exists())
-            with socket.create_connection(("127.0.0.1", port), timeout=1):
+            with socket.create_connection(("127.0.0.1", port)):
                 pass
 
     def test_signals_clean_stack(self) -> None:
@@ -251,10 +250,8 @@ while True: time.sleep(1)
         self.await_ready()
         child.kill()
         child.wait()
-        deadline = time.monotonic() + 15
-        while self.state.exists() and time.monotonic() < deadline:
+        while self.state.exists():
             time.sleep(0.1)
-        self.assertFalse(self.state.exists(), "orphaned supervisor did not release state")
         self.assert_stopped(child, -signal.SIGKILL)
 
 

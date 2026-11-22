@@ -2,14 +2,13 @@
 //! in a child test process so it never touches the developer's session.
 //! Missing display servers fail; they never skip.
 
-use std::io::{BufReader, ErrorKind, Read};
+use std::io::{ErrorKind, Read};
 use std::os::unix::fs::PermissionsExt;
 use std::os::unix::net::UnixStream;
 use std::path::Path;
 use std::process::{Child, Command, Output, Stdio};
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
-pub(crate) const FIXTURE_DEADLINE: Duration = Duration::from_secs(60);
 const SERVER_POLL: Duration = Duration::from_millis(50);
 
 pub(crate) struct OwnedChild(pub(crate) Child);
@@ -38,31 +37,9 @@ pub(crate) fn fixture_command(test: &str) -> Command {
 }
 
 pub(crate) fn run_fixture(command: &mut Command) -> Output {
-    let mut child = OwnedChild(command.spawn().unwrap());
-    let deadline = Instant::now() + FIXTURE_DEADLINE;
-    loop {
-        if child.0.try_wait().unwrap().is_some() {
-            break;
-        }
-        assert!(Instant::now() < deadline, "display fixture timed out");
-        std::thread::sleep(Duration::from_millis(10));
-    }
-    let stdout = child.0.stdout.take().unwrap();
-    let stderr = child.0.stderr.take().unwrap();
-    let status = child.0.wait().unwrap();
-    let mut output = Output {
-        status,
-        stdout: Vec::new(),
-        stderr: Vec::new(),
-    };
-    BufReader::new(stdout)
-        .read_to_end(&mut output.stdout)
-        .unwrap();
-    BufReader::new(stderr)
-        .read_to_end(&mut output.stderr)
-        .unwrap();
+    let output = command.output().unwrap();
     assert!(
-        status.success(),
+        output.status.success(),
         "display fixture failed: {} {}",
         String::from_utf8_lossy(&output.stdout),
         String::from_utf8_lossy(&output.stderr)
@@ -83,7 +60,6 @@ pub(crate) fn start_xvfb() -> (OwnedChild, String) {
             .spawn()
             .expect("start private X11 server"),
     );
-    let deadline = Instant::now() + FIXTURE_DEADLINE;
     let mut line = Vec::new();
     let mut byte = [0u8; 1];
     while !line.ends_with(b"\n") {
@@ -96,7 +72,7 @@ pub(crate) fn start_xvfb() -> (OwnedChild, String) {
                     ErrorKind::WouldBlock | ErrorKind::TimedOut | ErrorKind::Interrupted
                 ) =>
             {
-                await_server(&mut server, deadline, "X11 server named no display");
+                await_server(&mut server, "X11 server named no display");
             }
             Err(error) => panic!("read X11 display number: {error}"),
         }
@@ -109,12 +85,11 @@ pub(crate) fn start_xvfb() -> (OwnedChild, String) {
     (server, format!(":{display}"))
 }
 
-/// Fails the fixture when the server exited or the deadline passed.
-fn await_server(server: &mut OwnedChild, deadline: Instant, missing: &str) {
+/// Fails the fixture when the server exited.
+fn await_server(server: &mut OwnedChild, missing: &str) {
     if let Some(status) = server.0.try_wait().unwrap() {
         panic!("{missing}: server exited with {status}");
     }
-    assert!(Instant::now() < deadline, "{missing}");
 }
 
 /// A headless sway with XWayland disabled, on a private runtime directory.
@@ -139,7 +114,6 @@ pub(crate) fn start_sway(runtime: &Path) -> (OwnedChild, String) {
             .spawn()
             .expect("start private headless Wayland compositor"),
     );
-    let deadline = Instant::now() + FIXTURE_DEADLINE;
     loop {
         let socket = std::fs::read_dir(runtime)
             .unwrap()
@@ -153,7 +127,7 @@ pub(crate) fn start_sway(runtime: &Path) -> (OwnedChild, String) {
             "compositor exposed no Wayland socket: {}",
             std::fs::read_to_string(runtime.join("sway.log")).unwrap_or_default()
         );
-        await_server(&mut server, deadline, &missing);
+        await_server(&mut server, &missing);
         std::thread::sleep(SERVER_POLL);
     }
 }

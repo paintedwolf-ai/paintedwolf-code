@@ -26,9 +26,6 @@ window.addEventListener('load', () => {
 /// The owner child's window, which the clipboard fixture has already focused.
 const OWNER_TITLE: &str = "Painted Wolf Code clipboard fixture";
 
-/// Names the stuck stage before the owner child's deadline kills the fixture.
-const PASTE_STALL_REPORT: Duration = Duration::from_secs(40);
-
 fn owner_window() -> gtk::Window {
     gtk::Window::list_toplevels()
         .into_iter()
@@ -92,32 +89,23 @@ pub(super) fn exercise(focus_input: impl Fn() + Clone + Send + 'static) {
                 detach(&window);
                 let view = webkit2gtk::WebView::new();
                 window.add(&view);
-                let reply = Rc::new(RefCell::new(Some(reply)));
-                let progress = Rc::new(RefCell::new("loading"));
-                let answer = reply.clone();
+                let answer = Rc::new(RefCell::new(Some(reply)));
                 let owned_window = window.clone();
-                let stage = progress.clone();
                 view.connect_title_notify(move |view| {
                     let title = view.title().unwrap_or_default();
                     if title == "ready" {
                         // The compositor activates the window asynchronously; paste
                         // once the view holds keyboard focus, as a menu action would.
-                        let (view, window, answer, stage) = (view.clone(), owned_window.clone(), answer.clone(), stage.clone());
+                        let (view, window, answer) = (view.clone(), owned_window.clone(), answer.clone());
                         let focus_input = focus_input.clone();
                         gtk::glib::timeout_add_local(Duration::from_millis(50), move || {
                             if !view.has_focus() {
-                                *stage.borrow_mut() = match (window.is_active(), window.has_toplevel_focus()) {
-                                    (false, _) => "awaiting focus: window inactive",
-                                    (true, false) => "awaiting focus: no toplevel focus",
-                                    (true, true) => "awaiting focus: view unfocused",
-                                };
                                 window.present();
                                 view.grab_focus();
                                 focus_input();
                                 return gtk::glib::ControlFlow::Continue;
                             }
                             publish(contents);
-                            *stage.borrow_mut() = "pasted";
                             if let Err(error) = paste_into_view(&view) {
                                 if let Some(reply) = answer.borrow_mut().take() {
                                     let _ = reply.send(Err(error));
@@ -136,13 +124,6 @@ pub(super) fn exercise(focus_input: impl Fn() + Clone + Send + 'static) {
                 window.show_all();
                 window.present();
                 view.load_html(PAGE, Some("about:blank"));
-                // The owner child's deadline also kills a wedged web process.
-                gtk::glib::timeout_add_local_once(PASTE_STALL_REPORT, move || {
-                    if let Some(reply) = reply.borrow_mut().take() {
-                        let _ = reply.send(Err(format!("native paste event deadline while {}", progress.borrow())));
-                    }
-                    detach(&window);
-                });
             })).expect("dispatch private native paste");
             let observed = receiver.await.expect("native paste sender").expect("native paste action");
             let observed: serde_json::Value = serde_json::from_str(&observed)

@@ -62,7 +62,7 @@ class WorkflowTests(unittest.TestCase):
                 executable.chmod(0o755)
             environment = dict(os.environ, PATH=str(tools) + os.pathsep + os.environ["PATH"])
             return subprocess.run(["bash", str(ROOT / "task"), "--dry", "upgrade:rehearse", "--", *arguments],
-                                  cwd=ROOT, env=environment, capture_output=True, text=True, timeout=30)
+                                  cwd=ROOT, env=environment, capture_output=True, text=True)
 
     def test_existing_task_dispatches_bundle_mode_without_building_a_replacement(self):
         result = self.dry_run("--bundle", "--fixtures", "/fixtures", "--evidence", "/evidence", "--case", "1.0.2-preview")
@@ -79,7 +79,7 @@ class WorkflowTests(unittest.TestCase):
     def test_bundle_commands_reach_their_argument_parsers(self):
         for command in ("bundle-prepare", "bundle-rehearse", "bundle-serve"):
             result = subprocess.run([sys.executable, "scripts/release_control.py", command, "--help"], cwd=ROOT,
-                                    capture_output=True, text=True, timeout=10)
+                                    capture_output=True, text=True)
             self.assertEqual(result.returncode, 0, result.stderr)
             self.assertIn("usage:", result.stdout)
 

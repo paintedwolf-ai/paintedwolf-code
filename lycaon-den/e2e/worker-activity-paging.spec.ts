@@ -117,6 +117,10 @@ async function rowTop(page: Page, key: string): Promise<number | undefined> {
   }, key);
 }
 
+async function nextFrame(page: Page) {
+  await page.evaluate(() => new Promise<void>((resolve) => requestAnimationFrame(() => resolve())));
+}
+
 async function scrollDrawerBy(page: Page, viewports: number) {
   await drawerViewport(page).evaluate((viewport, by) => {
     viewport.scrollTop += viewport.clientHeight * by;
@@ -125,16 +129,16 @@ async function scrollDrawerBy(page: Page, viewports: number) {
 
 /** Holds the next page at `edge`, then proves the row being read stays put when it lands. */
 async function expectReadingRowHeldAcross(page: Page, gates: { hold: (edge: "before" | "after") => Promise<PageGate> }, edge: "before" | "after", step: number) {
-  const held = gates.hold(edge);
-  let gate: PageGate | undefined;
-  await expect(async () => {
+  let gate = undefined as PageGate | undefined;
+  void gates.hold(edge).then((held) => { gate = held; });
+  // Read on, a frame at a time, until the drawer asks for the held page.
+  while (!gate) {
     await scrollDrawerBy(page, step);
-    gate = await Promise.race([held, new Promise<undefined>((resolve) => setTimeout(resolve, 150))]);
-    expect(gate).toBeDefined();
-  }).toPass({ timeout: 60_000 });
+    await nextFrame(page);
+  }
   const before = await readingRow(page);
   const landed = page.waitForResponse((response) => response.url().includes(`/v1/sessions/${CHILD_SESSION_ID}/messages`) && response.url().includes(`${edge}_message_id=`));
-  gate!.release();
+  gate.release();
   await landed;
   await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
   const after = await rowTop(page, before.key);
@@ -167,10 +171,11 @@ webE2e.describe("worker activity paging", () => {
     for (let pageIndex = 0; pageIndex < 7; pageIndex++) {
       await expectReadingRowHeldAcross(page, gates, "after", 1);
     }
-    await expect(async () => {
+    const lastStep = activity.getByText(`Step ${ROWS}.`, { exact: true });
+    while (!(await lastStep.isVisible())) {
       await scrollDrawerBy(page, 3);
-      await expect(activity.getByText(`Step ${ROWS}.`, { exact: true })).toBeVisible({ timeout: 500 });
-    }).toPass({ timeout: 90_000 });
+      await nextFrame(page);
+    }
 
     // The drawer reads through to its end, each section header stacking at the top as it passes.
     await expect(async () => {

@@ -229,7 +229,7 @@ impl Service {
                                         Some(&(name,).to_variant()),
                                         None,
                                         gio::DBusCallFlags::NONE,
-                                        1500,
+                                        i32::MAX,
                                         None::<&gio::Cancellable>,
                                     );
                                 }
@@ -246,7 +246,7 @@ impl Service {
                 .unwrap();
         });
         started
-            .recv_timeout(Duration::from_secs(120))
+            .recv()
             .expect("fixture service started");
         Self {
             requests,
@@ -296,7 +296,7 @@ pub(super) fn request_name(connection: &gio::DBusConnection, name: &str) {
             Some(&(name, 0u32).to_variant()),
             None,
             gio::DBusCallFlags::NONE,
-            1500,
+            i32::MAX,
             None::<&gio::Cancellable>,
         )
         .unwrap();

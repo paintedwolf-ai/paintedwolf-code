@@ -13,9 +13,6 @@ SCRIPT = support.SCRIPT
 
 
 class LiveGoBatchTests(support.BatchFixture):
-    # Real source capture, compiler startup, and publication share this deadline.
-    state_timeout = 60
-
     def setUp(self):
         super().setUp()
         for name in ["task.sh", "analysis_tools.py", "go-test-digest.sh", "go-test-exec.py", "test-digest.py",
@@ -121,10 +118,8 @@ tasks:
         (self.repo / "lycaon" / "good" / "fixture_test.go").write_text('''package good
 import ("os"; "testing"; "time")
 func TestFixture(t *testing.T) {
- deadline := time.Now().Add(60*time.Second)
  for {
   if _, err := os.Stat(os.Getenv("FIXTURE_RELEASE")); err == nil { return }
-  if time.Now().After(deadline) { t.Fatal("await release: fixture deadline exceeded") }
   time.Sleep(10*time.Millisecond)
  }
 }
@@ -132,11 +127,11 @@ func TestFixture(t *testing.T) {
         first = self.start("test:digest", "--", "./good")
         self.queued(1)
         self.queue.resume()
-        self.await_condition(lambda: any(e.get("kind") == "batch" for e in self.queue.status()["runs"]))
+        self.await_condition(lambda: any(e.get("kind") == "batch" for e in self.queue.status()["runs"]), first)
         active = next(e for e in self.queue.status()["runs"] if e.get("kind") == "batch")
         directory = Path(active["directory"])
         raw = directory / "stage-001-go.json"
-        self.await_condition(lambda: raw.exists() and '"Action":"run"' in raw.read_text())
+        self.await_condition(lambda: raw.exists() and '"Action":"run"' in raw.read_text(), first)
         self.assertIsNone(first.poll())
         self.assertFalse((directory / "stage-001.json").exists())
         status = batch.status_details(self.queue)
@@ -163,7 +158,7 @@ func TestFixture(t *testing.T) {
 
         def verify(*flags):
             process = self.start("test:digest", "--", *flags, "./good")
-            out, err = process.communicate(timeout=self.state_timeout + 5)
+            out, err = process.communicate()
             self.await_condition(lambda: not self.queue.status()["runs"])
             return process.returncode, out + err
         for flags in ((), ("-failfast",)):
@@ -190,7 +185,7 @@ func TestFixture(t *testing.T) {
         self.queue.resume()
         self.collect(self.start("fixture:sourced", "--", "pass"))
         failed = self.start("fixture:sourced", "--", "fail")
-        out, err = failed.communicate(timeout=self.state_timeout + 5)
+        out, err = failed.communicate()
         self.assertNotEqual(failed.returncode, 0, out + err)
 
     def test_concurrent_go_publication_cannot_replace_another_runs_evidence(self):

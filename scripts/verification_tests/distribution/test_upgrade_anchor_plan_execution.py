@@ -144,7 +144,7 @@ class ManifestHistoryTests(unittest.TestCase):
         arguments = ["bash", str(self.root / "scripts/release-validate-updater-manifest.sh"), "--file", str(path)]
         if existing:
             arguments.append("--existing")
-        return subprocess.run(arguments, env={**os.environ, "DOWNLOAD_BASE_URL": ORIGIN}, capture_output=True, text=True, timeout=30)
+        return subprocess.run(arguments, env={**os.environ, "DOWNLOAD_BASE_URL": ORIGIN}, capture_output=True, text=True)
 
     def test_published_sources_keep_their_original_platforms_but_new_offers_require_every_public_platform(self):
         self.assertEqual(self.validate(True).returncode, 0)

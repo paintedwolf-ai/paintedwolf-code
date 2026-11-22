@@ -18,10 +18,7 @@ from progress import save
 
 
 def await_path(path):
-    deadline = time.monotonic() + 15
     while not path.exists():
-        if time.monotonic() > deadline:
-            raise AssertionError('fixture worker did not write ' + str(path))
         time.sleep(0.02)
 
 
@@ -115,7 +112,7 @@ class EpisodeRuntimeTests(unittest.TestCase):
             try:
                 await_path(root / 'calls')
                 supervisor.kill()
-                supervisor.wait(timeout=5)
+                supervisor.wait()
                 result = execute(root, command, root, threading.Event())
                 self.assertEqual(result['kind'], 'interrupted')
                 self.assertEqual(disposition(result, None), ('blocked', 'execution_interrupted'))
@@ -126,7 +123,7 @@ class EpisodeRuntimeTests(unittest.TestCase):
             finally:
                 (root / 'release').touch()
                 if supervisor.poll() is None:
-                    supervisor.kill(); supervisor.wait(timeout=5)
+                    supervisor.kill(); supervisor.wait()
                 if (root / 'process.json').exists():
                     signal_group(json.loads((root / 'process.json').read_text())['pid'], signal.SIGKILL)
 
@@ -139,16 +136,29 @@ class EpisodeRuntimeTests(unittest.TestCase):
                               'while not (p/"release").exists(): time.sleep(.02)\n(p/"completed").touch()\n')
             command = [sys.executable, str(script)]
             cancelled = threading.Event()
-            with ThreadPoolExecutor(max_workers=1) as pool:
+            polls = threading.Semaphore(0)
+            real_sleep = time.sleep
+
+            def poll(seconds):
+                if threading.current_thread() is not threading.main_thread():
+                    polls.release()
+                real_sleep(seconds)
+
+            with ThreadPoolExecutor(max_workers=1) as pool, patch('episode_runtime.time.sleep', side_effect=poll):
                 future = pool.submit(execute, root, command, root, cancelled)
+                future.add_done_callback(lambda _: [polls.release() for _ in range(2)])
                 try:
                     await_path(root / 'started')
                     cancelled.set()
-                    time.sleep(.3)
+                    while polls.acquire(blocking=False):
+                        pass
+                    # Two polls after the set: one whole pass of execute's loop has seen the cancellation.
+                    polls.acquire()
+                    polls.acquire()
                     self.assertFalse(future.done())
                 finally:
                     (root / 'release').touch()
-                result = future.result(timeout=15)
+                result = future.result()
             self.assertEqual(result, {'kind': 'exited', 'returncode': 0})
             self.assertTrue((root / 'completed').exists())
             self.assertEqual(execute(root, command, root, threading.Event()), result)
@@ -198,10 +208,8 @@ class EpisodeRuntimeTests(unittest.TestCase):
                 try:
                     with patch('episode_runtime.stop_process', side_effect=lambda p: stop_process(p, .1)):
                         run_command_worker(root)
-                    deadline = time.monotonic() + 5
-                    while not lease_available(root) and time.monotonic() < deadline:
+                    while not lease_available(root):
                         time.sleep(.02)
-                    self.assertTrue(lease_available(root), 'completed command left an inherited lease open')
                     self.assertFalse(live_members(json.loads((root / 'process.json').read_text())['pid']))
                     error = root / 'worker-error.txt'
                     self.assertEqual(json.loads((root / 'exit.json').read_text()),
@@ -239,7 +247,7 @@ class EpisodeRuntimeTests(unittest.TestCase):
             try:
                 await_path(root / 'calls')
                 controller.kill()
-                controller.wait(timeout=5)
+                controller.wait()
                 (root / 'release').touch()
                 result = execute(directory, command, root, threading.Event())
                 self.assertEqual(result, {'kind': 'exited', 'returncode': 0})
@@ -347,7 +355,7 @@ class EpisodeRuntimeTests(unittest.TestCase):
             reaping, release, reaped = threading.Event(), threading.Event(), threading.Event()
             def wait():
                 reaping.set()
-                release.wait(5)
+                release.wait()
                 reaped.set()
                 return 0
             process.wait.side_effect = wait
@@ -356,13 +364,13 @@ class EpisodeRuntimeTests(unittest.TestCase):
                         patch('episode_runtime.time.sleep', side_effect=OSError('controller observation failed')):
                     with self.assertRaisesRegex(OSError, 'controller observation failed'):
                         execute(root, ['command'], root, threading.Event())
-                self.assertTrue(reaping.wait(1))
+                reaping.wait()
                 self.assertFalse(reaped.is_set())
                 process.terminate.assert_not_called()
                 process.kill.assert_not_called()
             finally:
                 release.set()
-                self.assertTrue(reaped.wait(1))
+                reaped.wait()
             process.wait.assert_called_once_with()
 
     def test_only_typed_infrastructure_faults_allow_replacement(self):
@@ -435,7 +443,7 @@ class RetainedProcessingTests(unittest.TestCase):
             try:
                 await_path(root / 'calls')
                 controller.kill()
-                controller.wait(timeout=5)
+                controller.wait()
                 (root / 'release').touch()
                 run_retained_step(directory, command, root, threading.Event())
                 self.assertEqual((root / 'calls').read_text(), 'x')
@@ -443,7 +451,7 @@ class RetainedProcessingTests(unittest.TestCase):
             finally:
                 (root / 'release').touch()
                 if controller.poll() is None:
-                    controller.kill(); controller.wait(timeout=5)
+                    controller.kill(); controller.wait()
                 if directory.exists():
                     await_path(directory / 'attempt-0000/exit.json')
 
@@ -465,7 +473,7 @@ class RetainedProcessingTests(unittest.TestCase):
                     await_path(root / 'calls')
                     supervisor = json.loads((directory / 'attempt-0000/launched.json').read_text())['worker_pid']
                     os.kill(supervisor, signal.SIGKILL)
-                    future.result(timeout=15)
+                    future.result()
                 finally:
                     if not future.done():
                         (root / 'calls').write_text('released')

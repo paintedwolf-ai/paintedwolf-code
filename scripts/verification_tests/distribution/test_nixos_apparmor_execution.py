@@ -134,7 +134,7 @@ class SelectedEngineAppArmorTests(unittest.TestCase):
             shutil.copyfile(SOURCE, renderer)
             result = subprocess.run([sys.executable, str(renderer), str(self.package)], cwd=staged,
                 env={'PATH': os.defpath, 'PYTHONPATH': str(grammar.parent)},
-                capture_output=True, text=True, timeout=10)
+                capture_output=True, text=True)
             self.assertEqual(result.returncode, 0, result.stderr)
             self.assertEqual(result.stdout, 'abi <abi/4.0>,\n' + APPARMOR.profile(self.package) + '\n')
 

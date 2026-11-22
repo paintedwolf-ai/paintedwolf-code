@@ -1838,5 +1838,20 @@
         ]
       }
     ]
-  }
+  },
+  "den_shell": [
+    "den:dev",
+    "den:harness",
+    "den:harness:canary",
+    "den:harness:test",
+    "den:sidecar",
+    "den:sidecar:fresh",
+    "den:sidecar:full-debug",
+    "den:sidecar:full-debug:fresh",
+    "den:sidecar:llm-debug",
+    "den:sidecar:llm-debug:fresh",
+    "den:webkit:atspi",
+    "den:webkit:scroll",
+    "e2e:den:desktop"
+  ]
 }

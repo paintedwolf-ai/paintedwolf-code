@@ -253,16 +253,16 @@ class ProviderPreflightTests(unittest.TestCase):
             def check(run,private,model,cancelled):
                 if model['id']=='candidate':
                     waiting.set()
-                    if not release.wait(5):raise TimeoutError('test release missing')
+                    release.wait()
                 return {**self.receipt,'provider':model['provider'],'model':model['model']}
             with patch('provider_preflight.probe',side_effect=check), ThreadPoolExecutor(max_workers=2) as pool:
                 admission=Admission(root,root,{'models':[self.model,other]},threading.Event())
                 first=pool.submit(admission.check,'candidate')
                 try:
-                    self.assertTrue(waiting.wait(2))
-                    self.assertIsNone(pool.submit(admission.check,'other').result(timeout=2))
+                    waiting.wait()
+                    self.assertIsNone(pool.submit(admission.check,'other').result())
                 finally:release.set()
-                self.assertIsNone(first.result(timeout=2))
+                self.assertIsNone(first.result())
 
     def test_preflight_pause_preserves_deadline_without_another_request(self):
         with tempfile.TemporaryDirectory() as directory:

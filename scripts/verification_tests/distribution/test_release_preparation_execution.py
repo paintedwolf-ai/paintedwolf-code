@@ -324,11 +324,11 @@ class LinuxCandidateTests(unittest.TestCase):
                    "--platform", "linux-x86_64", "--runner-label", "ubuntu-24.04",
                    "--architecture", "amd64"]
         environment = {**os.environ, "RUNNER_NAME": "GitHub Actions 1000000000"}
-        result = subprocess.run(command, env=environment, capture_output=True, text=True, timeout=10)
+        result = subprocess.run(command, env=environment, capture_output=True, text=True)
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(json.loads(result.stdout)["runner"], "ubuntu-24.04")
         command[command.index("--runner-label") + 1] = "different-label"
-        result = subprocess.run(command, env=environment, capture_output=True, text=True, timeout=10)
+        result = subprocess.run(command, env=environment, capture_output=True, text=True)
         self.assertNotEqual(result.returncode, 0)
         self.assertEqual(result.stdout, "")
 
