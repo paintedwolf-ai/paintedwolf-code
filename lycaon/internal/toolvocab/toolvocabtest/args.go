@@ -177,6 +177,22 @@ func ValidateAttributedClaims(
 	return deduplicateIssues(issues)
 }
 
+// ValidateCallExample validates one parsed CallExample against a projected schema.
+func ValidateCallExample(ex CallExample, projSchema map[string]any) []AttributedClaimIssue {
+	if issues := validateCallAgainstSchema(ex, projSchema); len(issues) > 0 {
+		return issues
+	}
+	if !ex.HasEllipsis && !ex.HasPlaceholder && len(ex.BareIdents) == 0 && len(ex.Args) == 0 {
+		if err := tools.ValidateToolArgs(projSchema, map[string]any{}); err != nil {
+			return []AttributedClaimIssue{{
+				Tool: ex.Tool, AttributedTools: []string{ex.Tool}, Span: ex.Raw, Line: ex.Line,
+				Reason: fmt.Sprintf("complete call fails %s schema: %v", ex.Tool, err),
+			}}
+		}
+	}
+	return nil
+}
+
 func validateCallAgainstSchema(ex CallExample, projSchema map[string]any) []AttributedClaimIssue {
 	if len(ex.Args) == 0 && len(ex.BareIdents) == 0 {
 		return nil
@@ -766,7 +782,7 @@ func parseValueExpr(raw string) (val any, hasEllipsis bool, hasPlaceholder bool)
 		return f, false, false
 	}
 	if strings.HasPrefix(s, "[") && strings.HasSuffix(s, "]") {
-		var items []any
+		items := []any{}
 		for _, elem := range splitTopLevel(s[1:len(s)-1], ',') {
 			if elem = strings.TrimSpace(elem); elem == "" {
 				continue

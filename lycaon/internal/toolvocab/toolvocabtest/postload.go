@@ -3,17 +3,29 @@ package toolvocabtest
 import (
 	"context"
 	"fmt"
+	"maps"
 	"slices"
 	"sort"
 	"strings"
 
+	"github.com/lycaon/lycaon/internal/agentdef"
 	"github.com/lycaon/lycaon/internal/commandmode"
-	"github.com/lycaon/lycaon/internal/coordinator/surfacecatalog"
+	"github.com/lycaon/lycaon/internal/coordinator/inject"
+	"github.com/lycaon/lycaon/internal/coordinator/promptloop"
+	"github.com/lycaon/lycaon/internal/coordinator/surface"
+	"github.com/lycaon/lycaon/internal/extpacks"
+	"github.com/lycaon/lycaon/internal/platform"
 	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/internal/sandbox"
+	sessionprofiles "github.com/lycaon/lycaon/internal/session/profiles"
 	"github.com/lycaon/lycaon/internal/toolcontract"
+	"github.com/lycaon/lycaon/internal/toolexecution"
+	"github.com/lycaon/lycaon/internal/toolpolicy"
+	"github.com/lycaon/lycaon/internal/toolprofiles"
 	"github.com/lycaon/lycaon/internal/toolreach"
+	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/toolschema"
+	"github.com/lycaon/lycaon/internal/toolsurface"
 	"github.com/lycaon/lycaon/internal/toolvocab"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -23,9 +35,8 @@ func isBacktickAuthorizedByLoad(
 	idx *PrunableSchemaIndex,
 	vocab *BacktickVocab,
 	auth ActorAuthority,
-	sessionMode api.SessionMode,
 	offered map[string]bool,
-	postHeld map[string]bool,
+	postMut bool,
 	postReach toolreach.Request,
 	sentence string,
 	bs BacktickSpan,
@@ -40,17 +51,17 @@ func isBacktickAuthorizedByLoad(
 			return true, nil
 		}
 		if rest, hasDot := strings.CutPrefix(raw, b.target+"."); hasDot {
-			return validatePostLoadDottedSpan(b.target, rest, raw, bs.Line, auth, idx, postHeld, sessionMode)
+			return validatePostLoadDottedSpan(b.target, rest, raw, bs.Line, auth)
 		}
 		if strings.HasPrefix(raw, b.target+"(") {
-			return validatePostLoadCallSpan(cat, b.target, raw, bs.Line, auth, idx, vocab, postHeld, postReach, sessionMode)
+			return validatePostLoadCallSpan(cat, b.target, raw, bs.Line, auth, vocab, postMut, postReach)
 		}
 		if b.target == toolreach.ProgramTool && vocab != nil {
-			if ok, iss, matched := validatePostLoadCommandSpan(raw, bs.Line, vocab, postHeld, postReach); matched {
+			if ok, iss, matched := validatePostLoadCommandSpan(raw, bs.Line, vocab, postMut, postReach); matched {
 				return ok, iss
 			}
 		}
-		if ok, iss, matched := validatePostLoadBareFieldSpan(cat, b.target, raw, bs.Line, auth, idx, offered, postHeld, sessionMode); matched {
+		if ok, iss, matched := validatePostLoadBareFieldSpan(cat, b.target, raw, bs.Line, auth, idx, offered); matched {
 			return ok, iss
 		}
 	}
@@ -61,13 +72,10 @@ func validatePostLoadDottedSpan(
 	target, rest, raw string,
 	line int,
 	auth ActorAuthority,
-	idx *PrunableSchemaIndex,
-	postHeld map[string]bool,
-	sessionMode api.SessionMode,
 ) (bool, []AttributedClaimIssue) {
 	p, val, hasVal, ell := splitPathAndOptionalValue(rest)
 	norm := normalizeSchemaPath(p)
-	projSchema, hasSchema := resolvePostLoadSchema(target, auth, idx, postHeld, sessionMode)
+	projSchema, hasSchema := resolvePostLoadSchema(target, auth)
 	if !hasSchema {
 		return false, []AttributedClaimIssue{{
 			Tool: target, AttributedTools: []string{target}, Path: norm, Span: raw, Line: line,
@@ -94,25 +102,20 @@ func validatePostLoadCallSpan(
 	target, raw string,
 	line int,
 	auth ActorAuthority,
-	idx *PrunableSchemaIndex,
 	vocab *BacktickVocab,
-	postHeld map[string]bool,
+	postMut bool,
 	postReach toolreach.Request,
-	sessionMode api.SessionMode,
 ) (bool, []AttributedClaimIssue) {
 	calls := ParseCallExamples(cat, raw)
 	if len(calls) == 0 {
 		return false, nil
 	}
-	projSchema, hasSchema := resolvePostLoadSchema(target, auth, idx, postHeld, sessionMode)
+	projSchema, hasSchema := resolvePostLoadSchema(target, auth)
 	for _, ex := range calls {
 		if ex.Tool != target {
 			continue
 		}
 		if !hasSchema {
-			if len(ex.Args) == 0 && ex.HasEllipsis {
-				continue
-			}
 			return false, []AttributedClaimIssue{{
 				Tool: target, AttributedTools: []string{target}, Path: target, Span: raw, Line: line,
 				Reason: fmt.Sprintf("post-load schema for %q is uncertified; cannot verify call %q", target, raw),
@@ -124,7 +127,7 @@ func validatePostLoadCallSpan(
 		if target == toolreach.ProgramTool {
 			if cmdVal, hasCmd := ex.Args["command"]; hasCmd {
 				if cmdStr, isConcrete := concreteStringOrIdent(cmdVal); isConcrete && !isPlaceholderText(cmdStr) {
-					if ok, reason := checkAllCommandSegments(vocab, postReach, postHeld, cmdStr); !ok {
+					if ok, reason := checkAllCommandSegments(vocab, postReach, postMut, cmdStr); !ok {
 						return false, []AttributedClaimIssue{{
 							Tool: target, AttributedTools: []string{target}, Path: "command", Value: cmdStr, Span: raw, Line: line,
 							Reason: reason,
@@ -141,14 +144,14 @@ func validatePostLoadCommandSpan(
 	raw string,
 	line int,
 	vocab *BacktickVocab,
-	postHeld map[string]bool,
+	postMut bool,
 	postReach toolreach.Request,
 ) (bool, []AttributedClaimIssue, bool) {
 	first := firstCommandWord(raw)
 	if first == "" || !vocab.commands[first] {
 		return false, nil, false
 	}
-	if ok, reason := checkAllCommandSegments(vocab, postReach, postHeld, raw); !ok {
+	if ok, reason := checkAllCommandSegments(vocab, postReach, postMut, raw); !ok {
 		return false, []AttributedClaimIssue{{
 			Tool: toolreach.ProgramTool, AttributedTools: []string{toolreach.ProgramTool}, Path: raw, Span: raw, Line: line,
 			Reason: reason,
@@ -164,8 +167,6 @@ func validatePostLoadBareFieldSpan(
 	auth ActorAuthority,
 	idx *PrunableSchemaIndex,
 	offered map[string]bool,
-	postHeld map[string]bool,
-	sessionMode api.SessionMode,
 ) (bool, []AttributedClaimIssue, bool) {
 	if idx == nil || strings.Contains(raw, "(") || (strings.Contains(raw, " ") && !strings.ContainsAny(raw, ":=")) {
 		return false, nil, false
@@ -179,7 +180,7 @@ func validatePostLoadBareFieldSpan(
 	if !slices.Contains(owners, target) || anyOfferedOwner(owners, offered) {
 		return false, nil, false
 	}
-	projSchema, hasSchema := resolvePostLoadSchema(target, auth, idx, postHeld, sessionMode)
+	projSchema, hasSchema := resolvePostLoadSchema(target, auth)
 	if !hasSchema {
 		return false, []AttributedClaimIssue{{
 			Tool: target, AttributedTools: []string{target}, Path: norm, Span: raw, Line: line,
@@ -210,33 +211,12 @@ func anyOfferedOwner(owners []string, offered map[string]bool) bool {
 	return false
 }
 
-func resolvePostLoadSchema(
-	tool string,
-	auth ActorAuthority,
-	idx *PrunableSchemaIndex,
-	postHeld map[string]bool,
-	sessionMode api.SessionMode,
-) (map[string]any, bool) {
-	if auth.PostLoadSchemas != nil {
-		s, ok := auth.PostLoadSchemas[tool]
-		return s, ok && s != nil
-	}
-	if idx == nil {
+func resolvePostLoadSchema(tool string, auth ActorAuthority) (map[string]any, bool) {
+	if auth.PostLoadSchemas == nil {
 		return nil, false
 	}
-	base, ok := idx.BaseSchema(tool)
-	if !ok || base == nil {
-		return nil, false
-	}
-	opts := toolschema.ProjectOptions{
-		CommandReadOnly:     !postHeld[toolcontract.ReachCommandExternalExec],
-		AskMode:             sessionMode == api.SessionModeAsk || readerIsAskMode(auth.Reader),
-		PruneWaitConditions: true,
-	}
-	if auth.WaitConditionsKnown {
-		opts.WaitConditions = auth.WaitConditions
-	}
-	return toolschema.ProjectToolArgsSchema(tool, base, opts), true
+	s, ok := auth.PostLoadSchemas[tool]
+	return s, ok && s != nil
 }
 
 func checkCommandInvocations(
@@ -252,6 +232,7 @@ func checkCommandInvocations(
 		return nil
 	}
 	curReach := currentCommandReach(auth, held)
+	curMut := held[toolcontract.ReachCommandMutation]
 	var out []SubjectViolation
 	for _, bs := range ExtractInlineBackticks(sentence) {
 		raw := strings.TrimSpace(bs.Span)
@@ -263,7 +244,7 @@ func checkCommandInvocations(
 			if first == "" || !vocab.commands[first] {
 				continue
 			}
-			if ok, reason := checkSingleCommandSegment(curReach, held, seg); !ok {
+			if ok, reason := checkSingleCommandSegment(curReach, curMut, seg); !ok {
 				out = append(out, SubjectViolation{
 					Label: label, Subject: subj, Claim: raw, Line: line,
 					Reason: reason,
@@ -278,15 +259,20 @@ func currentCommandReach(auth ActorAuthority, held map[string]bool) toolreach.Re
 	if !held[toolreach.ProgramTool] {
 		return toolreach.Offered(nil)
 	}
-	table := auth.ProgramTable
-	if table == nil {
-		progReach := auth.ProgramReach
-		if progReach == nil {
-			progReach = func(name string) bool { return toolcontract.CommandLanguageReachable(name, held) }
-		}
-		table = deriveProgramTable(auth.Reader.Effects(), auth.Reader.SurfaceID(), readerExternalHidden(auth.Reader), progReach)
+	req := toolreach.Offered([]string{toolreach.ProgramTool})
+	if auth.ProgramTable != nil {
+		return req.WithProgramTable(auth.ProgramTable)
 	}
-	return toolreach.Offered([]string{toolreach.ProgramTool}).WithProgramTable(table)
+	progReach := auth.ProgramReach
+	if progReach == nil {
+		progReach = auth.Reader.CanReachProgram
+	}
+	return req.WithPrograms(progReach)
+}
+
+func effectsAllowMutation(eff toolcontract.CommandEffects) bool {
+	mut, err := toolcontract.NewCommandEffects(toolcontract.CommandMutation)
+	return err == nil && eff.Allows(mut)
 }
 
 func firstCommandWord(s string) string {
@@ -297,24 +283,24 @@ func firstCommandWord(s string) string {
 	return words[0]
 }
 
-func checkAllCommandSegments(vocab *BacktickVocab, reach toolreach.Request, held map[string]bool, cmd string) (bool, string) {
+func checkAllCommandSegments(vocab *BacktickVocab, reach toolreach.Request, allowMut bool, cmd string) (bool, string) {
 	for _, seg := range chainSplitRe.Split(cmd, -1) {
 		first := firstCommandWord(seg)
 		if first == "" || (vocab != nil && !vocab.commands[first]) {
 			continue
 		}
-		if ok, reason := checkSingleCommandSegment(reach, held, seg); !ok {
+		if ok, reason := checkSingleCommandSegment(reach, allowMut, seg); !ok {
 			return false, reason
 		}
 	}
 	return true, ""
 }
 
-func checkSingleCommandSegment(reach toolreach.Request, held map[string]bool, seg string) (bool, string) {
-	if !held[toolreach.ProgramTool] {
-		return false, fmt.Sprintf("command invocation %q requires offered command tool", seg)
+func checkSingleCommandSegment(reach toolreach.Request, allowMut bool, seg string) (bool, string) {
+	if reach.Status(toolreach.ProgramTool) == toolreach.Absent {
+		return false, fmt.Sprintf("command invocation %q is uncertified or command tool is not offered", seg)
 	}
-	if hasUnquotedOutputRedirect(seg) && !held[toolcontract.ReachCommandMutation] {
+	if hasUnquotedOutputRedirect(seg) && !allowMut {
 		return false, fmt.Sprintf("output redirect in %q requires command mutation", seg)
 	}
 	words := normalizeProseCommandWords(splitCommandWords(strings.TrimSpace(seg)))
@@ -339,119 +325,286 @@ func checkSingleCommandSegment(reach toolreach.Request, held map[string]bool, se
 	return false, fmt.Sprintf("command invocation %q does not match an admitted command form", seg)
 }
 
-func deriveProgramTable(allowed toolcontract.CommandEffects, surfaceID string, externalHidden bool, programAllowed func(string) bool) *toolreach.ProgramTable {
-	catalog, err := toolcontract.ReadOnlyLanguageV1()
+// CoordinatorTurnSpec describes inputs for resolving production coordinator turn authority.
+type CoordinatorTurnSpec struct {
+	Catalog               *extpacks.EffectiveCatalog
+	SessionMode           api.SessionMode
+	Posture               api.SessionPosture
+	SurfaceID             string
+	RootCount             int
+	HasGit                bool
+	WebSearch             bool
+	CommandExternalHidden bool
+	SpawnAllowlist        []string
+	Loaded                map[string]bool
+}
+
+// ResolveCoordinatorTurnAuthority computes production coordinator turn authority,
+// including deferred-tool schema projections and typed program admission.
+func ResolveCoordinatorTurnAuthority(ctx context.Context, spec CoordinatorTurnSpec) (ActorAuthority, error) {
+	eff := spec.Catalog
+	if eff == nil {
+		var err error
+		if eff, err = extpacks.CatalogForConsumers(); err != nil {
+			return ActorAuthority{}, err
+		}
+	}
+	mode := spec.SessionMode
+	if mode == "" {
+		mode = api.SessionModeAgent
+	}
+	posture := spec.Posture
+	if posture == "" {
+		posture = api.SessionPostureBuild
+	}
+	narrowed, schemas, reg, exec, err := buildTurnExecutor(eff, posture, false, spec.CommandExternalHidden)
 	if err != nil {
-		return nil
+		return ActorAuthority{}, err
 	}
-	surfaceTools := surfaceFormTools(surfaceID)
-	reachable := make(map[string]bool, len(catalog.Commands))
-	modeReach := make(map[string]map[string]bool, len(catalog.Commands))
-	for _, spec := range catalog.Commands {
-		permitted := programAllowed == nil || programAllowed(spec.Name)
-		if surfaceTools != nil && !surfaceAllowsSpecForm(surfaceTools, spec.Name) {
-			permitted = false
-		}
-		if externalHidden && spec.Name == "external" {
-			permitted = false
-		}
-		admittedModes := make(map[string]bool, len(spec.Effects))
-		anyAllowed := false
-		for _, req := range spec.Effects {
-			eff, effErr := req.CommandEffects(&allowed)
-			modeOK := permitted && effErr == nil && allowed.Allows(eff)
-			admittedModes[req.Mode] = modeOK
-			anyAllowed = anyAllowed || modeOK
-		}
-		modeReach[spec.Name] = admittedModes
-		reachable[spec.Name] = anyAllowed
-		for _, al := range spec.Aliases {
-			if anyAllowed {
-				reachable[al] = true
-			}
+	policy := toolpolicy.NewEngine(toolpolicy.EngineDeps{
+		ToolLister:       exec.Metadata,
+		ProjectRootCount: func(context.Context, *api.Session) int { return spec.RootCount },
+	})
+	deps := promptloop.ContextDeps{
+		Tools:              reg,
+		Policy:             policy,
+		LoadedTools:        func(string) map[string]bool { return maps.Clone(spec.Loaded) },
+		ProjectRootCount:   func(context.Context, *api.Session) int { return spec.RootCount },
+		ContextSurfaceDeps: promptloop.ContextSurfaceDeps{WebSearchEnabled: func() bool { return spec.WebSearch }},
+	}
+	sess := &api.Session{ID: "coord-check", Mode: mode, Posture: posture, AgentType: prompts.CoordinatorProfileID}
+	if spec.RootCount > 0 {
+		sess.WorkspacePath = "/tmp/proj"
+	}
+	history := []api.Message{{Role: api.MessageRoleUser, Content: "Inspect state"}}
+	runCtx := api.CoordinatorRunContext{AllowedAgents: slices.Clone(spec.SpawnAllowlist)}
+	if mode != api.SessionModeAsk && spec.SurfaceID != "" {
+		if surface.ResolveTurnProfile(runCtx, sess, history).SurfaceID != spec.SurfaceID {
+			runCtx.RunID = "coord-check-run"
+			runCtx.WorkflowID = "coord-check-wf"
+			runCtx.PhaseCoordinatorSurface = spec.SurfaceID
 		}
 	}
-	return toolreach.NewProgramTable(reachable, modeReach)
-}
-
-func surfaceFormTools(surfaceID string) map[string]bool {
-	if strings.TrimSpace(surfaceID) == "" {
-		return nil
+	var roster *inject.AgentRoster
+	if spec.SpawnAllowlist != nil {
+		roster = &inject.AgentRoster{Effective: slices.Clone(spec.SpawnAllowlist)}
 	}
-	cat, err := surfacecatalog.Load()
+	frame := inject.CoordinatorTurnFrame{
+		RunContext: runCtx,
+		Roster:     roster,
+		Machine:    inject.Machine{ProfileID: prompts.CoordinatorProfileID},
+	}
+	metas, plan, surfaceID, err := promptloop.ProjectTurnTools(ctx, deps, sess, history, frame)
 	if err != nil {
-		return nil
+		return ActorAuthority{}, err
 	}
-	row, err := cat.Surface(surfaceID)
+	deferredSchemas, err := projectDeferredViaTurnTools(ctx, deps, sess, history, frame, plan, spec.Loaded)
 	if err != nil {
-		return nil
+		return ActorAuthority{}, err
 	}
-	toolsMap := make(map[string]bool, len(row.Floor)+len(row.Loadable))
-	for _, name := range append(row.FloorTools(), row.LoadableTools()...) {
-		toolsMap[name] = true
-	}
-	return toolsMap
-}
-
-func surfaceAllowsSpecForm(surfaceTools map[string]bool, command string) bool {
-	ids, err := toolcontract.CommandPolicyIdentities(command)
+	filter := platform.ToolFilter{ProfileID: prompts.CoordinatorProfileID, SurfaceID: surfaceID, ProjectRootCount: spec.RootCount}
+	progReach, err := exec.Metadata.ProgramReach(ctx, filter)
 	if err != nil {
-		return false
+		return ActorAuthority{}, err
 	}
-	for _, id := range ids {
-		if toolcontract.CommandFormTool(id) && !surfaceTools[id] {
-			return false
-		}
+	progTable, err := exec.Metadata.ProgramTable(ctx, filter)
+	if err != nil {
+		return ActorAuthority{}, err
 	}
-	return true
-}
-
-func readerExternalHidden(r prompts.Reader) bool {
-	if vars, err := prompts.Vars(r, map[string]any{}); err == nil {
-		hidden, _ := vars["command_external_hidden"].(bool)
-		return hidden
-	}
-	return false
-}
-
-func readerIsAskMode(r prompts.Reader) bool {
-	if vars, err := prompts.Vars(r, map[string]any{}); err == nil {
-		mode, _ := vars["session_mode"].(string)
-		return mode == string(api.SessionModeAsk)
-	}
-	return false
-}
-
-func buildPostLoadHeld(r prompts.Reader) map[string]bool {
-	toolSet := map[string]bool{}
-	var visible []string
-	for _, name := range append(slices.Clone(r.Offered()), r.Requestable()...) {
-		if !toolSet[name] {
-			toolSet[name] = true
-			visible = append(visible, name)
-		}
-	}
-	sort.Strings(visible)
-	hidden := readerExternalHidden(r)
-	const pid = "post_load"
-	postReader, err := prompts.NewReader(prompts.ReaderInput{
-		ProfileID: pid,
-		Profiles: []sandbox.ToolProfile{{
-			ID:             pid,
-			Tools:          toolSet,
-			CommandEffects: r.Effects(),
-		}},
-		Visible:               visible,
-		Loaded:                toolSet,
-		RootCount:             1,
-		HasGit:                true,
-		WebSearch:             true,
-		CommandExternalHidden: hidden,
+	offered := sortedMetaNames(metas)
+	reader, err := prompts.NewReader(prompts.ReaderInput{
+		ProfileID: prompts.CoordinatorProfileID, SurfaceID: surfaceID, Mode: surface.ExecutionModeFamily(surfaceID),
+		SessionMode: string(mode), Profiles: narrowed, Plan: plan, Loaded: spec.Loaded, Visible: offered,
+		Schemas: schemas, ProjectedSchemas: metaSchemaMap(metas), RootCount: spec.RootCount,
+		HasGit: spec.HasGit, HasAnyGitRoot: spec.HasGit, WebSearch: spec.WebSearch,
+		SpawnAllowlist: spec.SpawnAllowlist, CommandExternalHidden: spec.CommandExternalHidden,
 	})
 	if err != nil {
-		return r.Held()
+		return ActorAuthority{}, err
 	}
-	return postReader.Held()
+	return AuthorityFromReaderAndMetas(reader, progReach, metas, WithProgramTable(progTable), WithPostLoadAuthority(deferredSchemas, progTable)), nil
+}
+
+// ResolveWorkerAuthorityForSession builds the production-projected ActorAuthority
+// for a worker agent under the active session mode and posture.
+func ResolveWorkerAuthorityForSession(
+	ctx context.Context,
+	eff *extpacks.EffectiveCatalog,
+	sessionMode api.SessionMode,
+	posture api.SessionPosture,
+	rootCount int,
+	hasGit, webSearch, externalHidden bool,
+	agentID string,
+) (ActorAuthority, error) {
+	if eff == nil {
+		var err error
+		if eff, err = extpacks.CatalogForConsumers(); err != nil {
+			return ActorAuthority{}, err
+		}
+	}
+	defs, err := agentdef.LoadEffectiveWithCatalog(eff)
+	if err != nil {
+		return ActorAuthority{}, err
+	}
+	var target *agentdef.Profile
+	for i := range defs {
+		if defs[i].ID == agentID {
+			target = &defs[i]
+			break
+		}
+	}
+	if target == nil {
+		return ActorAuthority{}, fmt.Errorf("worker agent %q not found", agentID)
+	}
+	askChild := sessionMode == api.SessionModeAsk
+	narrowed, schemas, reg, exec, err := buildTurnExecutor(eff, posture, askChild, externalHidden)
+	if err != nil {
+		return ActorAuthority{}, err
+	}
+	rc := max(rootCount, 1)
+	policy := toolpolicy.NewEngine(toolpolicy.EngineDeps{
+		ToolLister:       exec.Metadata,
+		ProjectRootCount: func(context.Context, *api.Session) int { return rc },
+	})
+	deps := promptloop.ContextDeps{
+		Tools:              reg,
+		Policy:             policy,
+		LoadedTools:        func(string) map[string]bool { return map[string]bool{} },
+		ProjectRootCount:   func(context.Context, *api.Session) int { return rc },
+		ContextSurfaceDeps: promptloop.ContextSurfaceDeps{WebSearchEnabled: func() bool { return webSearch }},
+	}
+	workerSess := &api.Session{ID: "worker-check", ParentSessionID: "coord-check", Mode: sessionMode, Posture: posture, AgentType: target.ID, WorkspacePath: "/tmp/proj"}
+	frame := inject.CoordinatorTurnFrame{Machine: inject.Machine{ProfileID: target.ToolProfile}}
+	metas, plan, _, err := promptloop.ProjectTurnTools(ctx, deps, workerSess, nil, frame)
+	if err != nil {
+		return ActorAuthority{}, err
+	}
+	deferredSchemas, err := projectDeferredViaTurnTools(ctx, deps, workerSess, nil, frame, plan, nil)
+	if err != nil {
+		return ActorAuthority{}, err
+	}
+	filter := platform.ToolFilter{ProfileID: target.ToolProfile, ProjectRootCount: rc}
+	progReach, err := exec.Metadata.ProgramReach(ctx, filter)
+	if err != nil {
+		return ActorAuthority{}, err
+	}
+	progTable, err := exec.Metadata.ProgramTable(ctx, filter)
+	if err != nil {
+		return ActorAuthority{}, err
+	}
+	offered := sortedMetaNames(metas)
+	mutCapable, _ := prompts.AgentMutationCapable(target.ID)
+	reader, err := prompts.NewReader(prompts.ReaderInput{
+		ProfileID: target.ToolProfile, SessionMode: string(sessionMode), Profiles: narrowed,
+		Plan: plan, Visible: offered, Schemas: schemas, ProjectedSchemas: metaSchemaMap(metas), RootCount: rc,
+		HasGit: hasGit, HasAnyGitRoot: hasGit, OnWorkerBranch: hasGit && mutCapable && !askChild,
+		WebSearch: webSearch, CommandExternalHidden: externalHidden,
+	})
+	if err != nil {
+		return ActorAuthority{}, err
+	}
+	return AuthorityFromReaderAndMetas(reader, progReach, metas, WithProgramTable(progTable), WithPostLoadAuthority(deferredSchemas, progTable)), nil
+}
+
+func projectDeferredViaTurnTools(
+	ctx context.Context,
+	deps promptloop.ContextDeps,
+	sess *api.Session,
+	history []api.Message,
+	frame inject.CoordinatorTurnFrame,
+	plan toolsurface.Plan,
+	alreadyLoaded map[string]bool,
+) (map[string]map[string]any, error) {
+	names := plan.DeferredNames()
+	if len(names) == 0 {
+		return nil, nil
+	}
+	deferred := make(map[string]bool, len(names))
+	allLoaded := maps.Clone(alreadyLoaded)
+	if allLoaded == nil {
+		allLoaded = make(map[string]bool, len(names))
+	}
+	for _, name := range names {
+		deferred[name] = true
+		allLoaded[name] = true
+	}
+	depsLoaded := deps
+	depsLoaded.LoadedTools = func(string) map[string]bool { return maps.Clone(allLoaded) }
+	postMetas, _, _, err := promptloop.ProjectTurnTools(ctx, depsLoaded, sess, history, frame)
+	if err != nil {
+		return nil, err
+	}
+	out := make(map[string]map[string]any, len(names))
+	for _, m := range postMetas {
+		if deferred[m.Name] && m.ArgsSchema != nil {
+			out[m.Name] = m.ArgsSchema
+		}
+	}
+	return out, nil
+}
+
+func buildTurnExecutor(
+	eff *extpacks.EffectiveCatalog,
+	posture api.SessionPosture,
+	clampReadOnly, externalHidden bool,
+) ([]sandbox.ToolProfile, *toolschema.Config, *tools.DefaultRegistry, *toolexecution.Executor, error) {
+	profiles, err := sandbox.LoadToolProfilesWithCatalog(eff)
+	if err != nil {
+		return nil, nil, nil, nil, err
+	}
+	postureReg, err := sessionprofiles.LoadPostureRegistry()
+	if err != nil {
+		return nil, nil, nil, nil, err
+	}
+	var allowedEffects toolcontract.CommandEffects
+	foundPosture := false
+	for _, p := range postureReg.List() {
+		if p.ID == posture {
+			allowedEffects = p.CommandEffects
+			foundPosture = true
+			break
+		}
+	}
+	if !foundPosture {
+		return nil, nil, nil, nil, fmt.Errorf("unknown session posture %q", posture)
+	}
+	narrowed, err := narrowPostureProfiles(profiles, allowedEffects, clampReadOnly)
+	if err != nil {
+		return nil, nil, nil, nil, err
+	}
+	schemas, _, err := extpacks.LoadEffectiveToolSchemas(eff)
+	if err != nil {
+		return nil, nil, nil, nil, err
+	}
+	reg, err := buildCatalogToolRegistry(eff)
+	if err != nil {
+		return nil, nil, nil, nil, err
+	}
+	sandboxCfg, err := sandbox.LoadConfig()
+	if err != nil {
+		return nil, nil, nil, nil, err
+	}
+	exec := toolexecution.NewExecutor(toolprofiles.NewProfilePolicyEngine(sandbox.NewBoundary(sandboxCfg, narrowed)), reg, toolprofiles.DefaultToolProfileID)
+	exec.Metadata.SetToolSchemas(schemas)
+	exec.Metadata.SetCommandExternalHidden(externalHidden)
+	return narrowed, schemas, reg, exec, nil
+}
+
+func sortedMetaNames(metas []tools.ToolMeta) []string {
+	out := make([]string, len(metas))
+	for i, m := range metas {
+		out[i] = m.Name
+	}
+	sort.Strings(out)
+	return out
+}
+
+func metaSchemaMap(metas []tools.ToolMeta) map[string]map[string]any {
+	out := make(map[string]map[string]any, len(metas))
+	for _, m := range metas {
+		out[m.Name] = m.ArgsSchema
+	}
+	return out
 }
 
 func splitCommandWords(seg string) []string {

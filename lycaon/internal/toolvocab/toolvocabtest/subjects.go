@@ -88,19 +88,35 @@ func SubjectHistoricalObservation(origin api.MessageOrigin) ClaimSubject {
 
 // ActorAuthority captures a resolved actor's prompt Reader, program reach, and projected schemas.
 type ActorAuthority struct {
-	Reader              prompts.Reader
-	ProgramReach        toolreach.Programs
-	ProgramTable        *toolreach.ProgramTable
-	PostLoadPrograms    *toolreach.ProgramTable
-	Metas               []tools.ToolMeta
-	Schemas             map[string]map[string]any
-	PostLoadSchemas     map[string]map[string]any
-	WaitConditionsKnown bool
-	WaitConditions      []string
+	Reader           prompts.Reader
+	ProgramReach     toolreach.Programs
+	ProgramTable     *toolreach.ProgramTable
+	PostLoadPrograms *toolreach.ProgramTable
+	Metas            []tools.ToolMeta
+	Schemas          map[string]map[string]any
+	PostLoadSchemas  map[string]map[string]any
+}
+
+// AuthorityOption configures optional production projections on ActorAuthority.
+type AuthorityOption func(*ActorAuthority)
+
+// WithProgramTable attaches a production program and effect-mode admission table.
+func WithProgramTable(table *toolreach.ProgramTable) AuthorityOption {
+	return func(a *ActorAuthority) {
+		a.ProgramTable = table
+	}
+}
+
+// WithPostLoadAuthority attaches production deferred-tool projections and post-load program admission.
+func WithPostLoadAuthority(schemas map[string]map[string]any, programs *toolreach.ProgramTable) AuthorityOption {
+	return func(a *ActorAuthority) {
+		a.PostLoadSchemas = maps.Clone(schemas)
+		a.PostLoadPrograms = programs
+	}
 }
 
 // AuthorityFromReaderAndMetas constructs an ActorAuthority from a Reader, ProgramReach, and ToolMetas.
-func AuthorityFromReaderAndMetas(reader prompts.Reader, progReach toolreach.Programs, metas []tools.ToolMeta) ActorAuthority {
+func AuthorityFromReaderAndMetas(reader prompts.Reader, progReach toolreach.Programs, metas []tools.ToolMeta, opts ...AuthorityOption) ActorAuthority {
 	schemas := make(map[string]map[string]any, len(metas))
 	for _, m := range metas {
 		schemas[m.Name] = m.ArgsSchema
@@ -108,14 +124,18 @@ func AuthorityFromReaderAndMetas(reader prompts.Reader, progReach toolreach.Prog
 	if progReach == nil {
 		progReach = reader.CanReachProgram
 	}
-	table := deriveProgramTable(reader.Effects(), reader.SurfaceID(), readerExternalHidden(reader), progReach)
-	return ActorAuthority{
+	auth := ActorAuthority{
 		Reader:       reader,
 		ProgramReach: progReach,
-		ProgramTable: table,
 		Metas:        slices.Clone(metas),
 		Schemas:      schemas,
 	}
+	for _, opt := range opts {
+		if opt != nil {
+			opt(&auth)
+		}
+	}
+	return auth
 }
 
 // ClaimEvaluationContext bundles catalogs and actor authorities for claim checking.
@@ -175,23 +195,23 @@ func EvaluateClaimBlock(evalCtx ClaimEvaluationContext, block ClaimBlock) []Subj
 	case SubjectKindHistoricalObservation:
 		return evaluateHistoricalBlock(vocab, block)
 	case SubjectKindSelfRequestable:
-		return evaluateRequestableBlock(cat, evalCtx.Prunable, vocab, evalCtx.Self, evalCtx.SessionMode, block)
+		return evaluateRequestableBlock(cat, evalCtx.Prunable, vocab, evalCtx.Self, block)
 	case SubjectKindNamedAgent:
 		return evaluateNamedAgentBlock(cat, evalCtx, vocab, block)
 	case SubjectKindFollowupLeg:
 		if evalCtx.FollowupLeg == nil {
 			return []SubjectViolation{{Label: block.Label, Subject: block.Subject, Reason: "missing FollowupLeg authority", Line: 1}}
 		}
-		return evaluateDeferredTurnBlock(cat, evalCtx.Prunable, vocab, *evalCtx.FollowupLeg, evalCtx.SessionMode, block)
+		return evaluateDeferredTurnBlock(cat, evalCtx.Prunable, vocab, *evalCtx.FollowupLeg, block)
 	case SubjectKindSessionNextTurn:
 		if evalCtx.SessionNextTurn == nil {
 			return []SubjectViolation{{Label: block.Label, Subject: block.Subject, Reason: "missing SessionNextTurn authority", Line: 1}}
 		}
-		return evaluateDeferredTurnBlock(cat, evalCtx.Prunable, vocab, *evalCtx.SessionNextTurn, evalCtx.SessionMode, block)
+		return evaluateDeferredTurnBlock(cat, evalCtx.Prunable, vocab, *evalCtx.SessionNextTurn, block)
 	case SubjectKindSelfNow:
-		return evaluateActorProse(cat, evalCtx.Prunable, vocab, evalCtx.Self, evalCtx.SessionMode, block.Label, block.Subject, block.Text, false)
+		return evaluateActorProse(cat, evalCtx.Prunable, vocab, evalCtx.Self, block.Label, block.Subject, block.Text, false)
 	default:
-		return evaluateActorProse(cat, evalCtx.Prunable, vocab, evalCtx.Self, evalCtx.SessionMode, block.Label, block.Subject, block.Text, false)
+		return evaluateActorProse(cat, evalCtx.Prunable, vocab, evalCtx.Self, block.Label, block.Subject, block.Text, false)
 	}
 }
 
@@ -252,7 +272,6 @@ func evaluateRequestableBlock(
 	idx *PrunableSchemaIndex,
 	vocab *BacktickVocab,
 	self ActorAuthority,
-	sessionMode api.SessionMode,
 	block ClaimBlock,
 ) []SubjectViolation {
 	offeredSet := stringSliceSet(self.Reader.Offered())
@@ -268,7 +287,7 @@ func evaluateRequestableBlock(
 			Reason: "requestable clause rendered with empty Requestable() set",
 		}}
 	}
-	return evaluateActorProse(cat, idx, vocab, self, sessionMode, block.Label, block.Subject, block.Text, false)
+	return evaluateActorProse(cat, idx, vocab, self, block.Label, block.Subject, block.Text, false)
 }
 
 func extractSentenceLoadBindings(
@@ -284,7 +303,6 @@ func extractSentenceLoadBindings(
 	}
 	offeredSet := stringSliceSet(auth.Reader.Offered())
 	reqSet := stringSliceSet(auth.Reader.Requestable())
-	postHeld := buildPostLoadHeld(auth.Reader)
 	var bindings []loadBinding
 	var out []SubjectViolation
 	reqSubj := SubjectSelfRequestable()
@@ -324,7 +342,7 @@ func extractSentenceLoadBindings(
 			}
 			continue
 		}
-		admittedViaCommand := reqSet[toolreach.ProgramTool] && toolcontract.CommandLanguageReachable(needStr, postHeld) && !auth.Reader.CanReachProgram(needStr)
+		admittedViaCommand := reqSet[toolreach.ProgramTool] && auth.PostLoadPrograms != nil && auth.PostLoadPrograms.Program(needStr) && !auth.Reader.CanReachProgram(needStr)
 		if !reqSet[needStr] && !admittedViaCommand {
 			out = append(out, SubjectViolation{
 				Label: label, Subject: reqSubj, Claim: ex.Raw, Line: line,
@@ -407,7 +425,7 @@ func evaluateNamedAgentBlock(cat *toolvocab.Catalog, evalCtx ClaimEvaluationCont
 			}
 		}
 	}
-	out = append(out, evaluateActorProse(cat, evalCtx.Prunable, vocab, targetAuth, evalCtx.SessionMode, block.Label, block.Subject, block.Text, true)...)
+	out = append(out, evaluateActorProse(cat, evalCtx.Prunable, vocab, targetAuth, block.Label, block.Subject, block.Text, true)...)
 	return out
 }
 
@@ -416,7 +434,6 @@ func evaluateDeferredTurnBlock(
 	idx *PrunableSchemaIndex,
 	vocab *BacktickVocab,
 	targetAuth ActorAuthority,
-	sessionMode api.SessionMode,
 	block ClaimBlock,
 ) []SubjectViolation {
 	var out []SubjectViolation
@@ -426,7 +443,7 @@ func evaluateDeferredTurnBlock(
 			Reason: fmt.Sprintf("%s promises mutating file/redirect work, which target Reader lacks", block.Subject.Kind),
 		})
 	}
-	out = append(out, evaluateActorProse(cat, idx, vocab, targetAuth, sessionMode, block.Label, block.Subject, block.Text, false)...)
+	out = append(out, evaluateActorProse(cat, idx, vocab, targetAuth, block.Label, block.Subject, block.Text, false)...)
 	return out
 }
 
@@ -435,7 +452,6 @@ func evaluateActorProse(
 	idx *PrunableSchemaIndex,
 	vocab *BacktickVocab,
 	auth ActorAuthority,
-	sessionMode api.SessionMode,
 	label string,
 	subj ClaimSubject,
 	text string,
@@ -458,18 +474,11 @@ func evaluateActorProse(
 		}
 		return nil, false
 	}
-	postHeld := buildPostLoadHeld(auth.Reader)
-	postTable := auth.PostLoadPrograms
-	if postTable == nil {
-		postTable = deriveProgramTable(auth.Reader.Effects(), auth.Reader.SurfaceID(), readerExternalHidden(auth.Reader), func(name string) bool {
-			return toolcontract.CommandLanguageReachable(name, postHeld)
-		})
+	var postReach toolreach.Request
+	if auth.PostLoadPrograms != nil && (offered[toolreach.ProgramTool] || slices.Contains(auth.Reader.Requestable(), toolreach.ProgramTool)) {
+		postReach = toolreach.Offered([]string{toolreach.ProgramTool}).WithProgramTable(auth.PostLoadPrograms)
 	}
-	var postOffered []string
-	if postHeld[toolreach.ProgramTool] {
-		postOffered = []string{toolreach.ProgramTool}
-	}
-	postReach := toolreach.Offered(postOffered).WithProgramTable(postTable)
+	postMut := effectsAllowMutation(auth.Reader.Effects())
 
 	var out []SubjectViolation
 	for _, sent := range splitActiveSentences(text) {
@@ -483,7 +492,7 @@ func evaluateActorProse(
 				continue
 			}
 			if len(bindings) > 0 {
-				authOK, schemaIss := isBacktickAuthorizedByLoad(cat, idx, vocab, auth, sessionMode, offered, postHeld, postReach, sent.sentence, bs, bindings)
+				authOK, schemaIss := isBacktickAuthorizedByLoad(cat, idx, vocab, auth, offered, postMut, postReach, sent.sentence, bs, bindings)
 				for _, iss := range schemaIss {
 					claim := iss.Path
 					if claim == "" {

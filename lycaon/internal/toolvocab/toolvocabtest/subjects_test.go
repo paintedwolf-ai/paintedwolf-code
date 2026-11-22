@@ -1,6 +1,7 @@
 package toolvocabtest_test
 
 import (
+	"reflect"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/coordinator/surface"
@@ -446,6 +447,7 @@ func TestPostLoadSchemaProjectionAndLoadingOnlyAuthority(t *testing.T) {
 	}))
 	testutil.FailErr(t, "merge edit schema", err)
 	reqMeta, _ := stockSchemas.ToolMeta("request_tools")
+	cmdMeta, _ := stockSchemas.ToolMeta("command")
 	reqOnlyMetas := []tools.ToolMeta{{Name: "request_tools", ArgsSchema: reqMeta.ArgsSchema}}
 
 	fullProfiles := []sandbox.ToolProfile{{
@@ -473,15 +475,17 @@ func TestPostLoadSchemaProjectionAndLoadingOnlyAuthority(t *testing.T) {
 	})
 	testutil.FailErr(t, "ro reader", err)
 
-	fullAuth := toolvocabtest.AuthorityFromReaderAndMetas(fullReader, nil, reqOnlyMetas)
+	fullPostSchemas := map[string]map[string]any{
+		"command": toolschema.ProjectArgsSchema(cmdMeta.ArgsSchema),
+		"edit":    toolschema.ProjectArgsSchema(editSchema),
+	}
+	fullAuth := toolvocabtest.AuthorityFromReaderAndMetas(
+		fullReader, nil, reqOnlyMetas, toolvocabtest.WithPostLoadAuthority(fullPostSchemas, nil),
+	)
 	fullCtx := toolvocabtest.ClaimEvaluationContext{
 		Catalog: catalog, Prunable: prunable, Vocab: vocab, Self: fullAuth,
 		SessionMode: api.SessionModeAgent, Posture: api.SessionPostureBuild,
 	}
-	editAuth := fullAuth
-	editAuth.PostLoadSchemas = map[string]map[string]any{"edit": editSchema}
-	editCtx := fullCtx
-	editCtx.Self = editAuth
 
 	for _, okProse := range []string{
 		`Load ` + "`edit`" + ` via ` + "`request_tools(need=\"edit\")`" + ` before setting ` + "`edit.file_path`" + `.`,
@@ -490,15 +494,19 @@ func TestPostLoadSchemaProjectionAndLoadingOnlyAuthority(t *testing.T) {
 		`Load ` + "`command`" + ` via ` + "`request_tools(need=\"command\")`" + ` before calling ` + "`command(command=\"ls\", verification=true)`" + `.`,
 	} {
 		useCtx := fullCtx
-		if slicesContains([]string{okProse[:15]}, "Load `edit` via") {
-			useCtx = editCtx
+		if okProse == `Load `+"`command`"+` via `+"`request_tools(need=\"command\")`"+` before calling `+"`command(command=\"ls\", verification=true)`"+`.` {
+			implAuth, wErr := toolvocabtest.ResolveWorkerAuthorityForSession(t.Context(), eff, api.SessionModeAgent, api.SessionPostureBuild, 1, true, true, false, "implementer")
+			testutil.FailErr(t, "implementer auth", wErr)
+			useCtx.Self = toolvocabtest.AuthorityFromReaderAndMetas(
+				fullReader, nil, reqOnlyMetas, toolvocabtest.WithPostLoadAuthority(fullPostSchemas, implAuth.PostLoadPrograms),
+			)
 		}
 		if got := toolvocabtest.EvaluateClaimBlock(useCtx, toolvocabtest.ClaimBlock{Label: "postload-admitted", Subject: toolvocabtest.SubjectSelfNow(), Text: okProse}); len(got) > 0 {
 			t.Fatalf("expected admitted post-load claim %q to pass, got %+v", okProse, got)
 		}
 	}
 
-	nonexistent := toolvocabtest.EvaluateClaimBlock(editCtx, toolvocabtest.ClaimBlock{
+	nonexistent := toolvocabtest.EvaluateClaimBlock(fullCtx, toolvocabtest.ClaimBlock{
 		Label: "postload-nonexistent-field", Subject: toolvocabtest.SubjectSelfNow(),
 		Text: `Load ` + "`edit`" + ` via ` + "`request_tools(need=\"edit\")`" + ` before setting ` + "`edit.nonexistent_field`" + `.`,
 	})
@@ -506,9 +514,14 @@ func TestPostLoadSchemaProjectionAndLoadingOnlyAuthority(t *testing.T) {
 		t.Fatalf("expected nonexistent_field violation after edit load, got %+v", nonexistent)
 	}
 
+	roPostSchemas := map[string]map[string]any{
+		"command": toolschema.PruneCommandReadOnlySchema(cmdMeta.ArgsSchema),
+	}
 	roCtx := fullCtx
 	roCtx.Posture = api.SessionPostureSpec
-	roCtx.Self = toolvocabtest.AuthorityFromReaderAndMetas(roReader, nil, reqOnlyMetas)
+	roCtx.Self = toolvocabtest.AuthorityFromReaderAndMetas(
+		roReader, nil, reqOnlyMetas, toolvocabtest.WithPostLoadAuthority(roPostSchemas, nil),
+	)
 	for _, prunedProse := range []string{
 		`Load ` + "`command`" + ` via ` + "`request_tools(need=\"command\")`" + ` before passing ` + "`command.verification`" + `.`,
 		`Load ` + "`command`" + ` via ` + "`request_tools(need=\"command\")`" + ` before calling ` + "`command(command=\"ls\", verification=true)`" + `.`,
@@ -519,10 +532,8 @@ func TestPostLoadSchemaProjectionAndLoadingOnlyAuthority(t *testing.T) {
 		}
 	}
 
-	loadOnlyAuth := fullAuth
-	loadOnlyAuth.PostLoadSchemas = map[string]map[string]any{}
 	loadOnlyCtx := fullCtx
-	loadOnlyCtx.Self = loadOnlyAuth
+	loadOnlyCtx.Self = toolvocabtest.AuthorityFromReaderAndMetas(fullReader, nil, reqOnlyMetas)
 	if got := toolvocabtest.EvaluateClaimBlock(loadOnlyCtx, toolvocabtest.ClaimBlock{
 		Label: "load-only-bare", Subject: toolvocabtest.SubjectSelfNow(),
 		Text: `Load ` + "`edit`" + ` via ` + "`request_tools(need=\"edit\")`" + `.`,
@@ -547,6 +558,11 @@ func TestPostLoadCommandModeAdmission(t *testing.T) {
 	vocab, err := toolvocabtest.NewBacktickVocab(eff)
 	testutil.FailErr(t, "vocab", err)
 
+	roWorkerAuth, err := toolvocabtest.ResolveWorkerAuthorityForSession(
+		t.Context(), eff, api.SessionModeAgent, api.SessionPostureSpec, 1, true, true, false, "path-explorer",
+	)
+	testutil.FailErr(t, "ro worker auth", err)
+
 	roEffects, err := toolcontract.NewCommandEffects(toolcontract.CommandReadOnly)
 	testutil.FailErr(t, "ro effects", err)
 	roProfiles := []sandbox.ToolProfile{{
@@ -562,11 +578,16 @@ func TestPostLoadCommandModeAdmission(t *testing.T) {
 	})
 	testutil.FailErr(t, "ro reader", err)
 	reqMeta, _ := stockSchemas.ToolMeta("request_tools")
+	cmdMeta, _ := stockSchemas.ToolMeta("command")
+	roPostSchemas := map[string]map[string]any{"command": toolschema.PruneCommandReadOnlySchema(cmdMeta.ArgsSchema)}
 	roCtx := toolvocabtest.ClaimEvaluationContext{
-		Catalog:     catalog,
-		Prunable:    prunable,
-		Vocab:       vocab,
-		Self:        toolvocabtest.AuthorityFromReaderAndMetas(roReader, nil, []tools.ToolMeta{{Name: "request_tools", ArgsSchema: reqMeta.ArgsSchema}}),
+		Catalog:  catalog,
+		Prunable: prunable,
+		Vocab:    vocab,
+		Self: toolvocabtest.AuthorityFromReaderAndMetas(
+			roReader, nil, []tools.ToolMeta{{Name: "request_tools", ArgsSchema: reqMeta.ArgsSchema}},
+			toolvocabtest.WithPostLoadAuthority(roPostSchemas, roWorkerAuth.PostLoadPrograms),
+		),
 		SessionMode: api.SessionModeAgent,
 		Posture:     api.SessionPostureSpec,
 	}
@@ -589,6 +610,94 @@ func TestPostLoadCommandModeAdmission(t *testing.T) {
 	} {
 		if got := toolvocabtest.EvaluateClaimBlock(roCtx, toolvocabtest.ClaimBlock{Label: "unavailable-mut-mode", Subject: toolvocabtest.SubjectSelfNow(), Text: unavailable}); len(got) == 0 {
 			t.Fatalf("expected unavailable mutating command mode %q to fail after read-only command load", unavailable)
+		}
+	}
+}
+
+func TestDeferredTaskSpawnAllowlistMatchesPostLoadRequestAndNoProjectionFailsClosed(t *testing.T) {
+	eff, err := extpacks.CatalogForConsumers()
+	testutil.FailErr(t, "catalog", err)
+	profiles, err := sandbox.LoadToolProfilesWithCatalog(eff)
+	testutil.FailErr(t, "profiles", err)
+	schemas, _, err := extpacks.LoadEffectiveToolSchemas(eff)
+	testutil.FailErr(t, "schemas", err)
+	catalog, err := toolvocab.NewCatalog(schemas, profiles, toolvocab.Provenance{})
+	testutil.FailErr(t, "vocab catalog", err)
+	prunable, err := toolvocabtest.DiscoverPrunableSchemaIndex(t.Context(), eff)
+	testutil.FailErr(t, "prunable", err)
+	vocab, err := toolvocabtest.NewBacktickVocab(eff)
+	testutil.FailErr(t, "vocab", err)
+
+	spec := toolvocabtest.CoordinatorTurnSpec{
+		Catalog:        eff,
+		SessionMode:    api.SessionModeAsk,
+		Posture:        api.SessionPostureBuild,
+		SurfaceID:      "observe_investigate",
+		RootCount:      1,
+		HasGit:         true,
+		WebSearch:      true,
+		SpawnAllowlist: spawn.AmbientAllowedAgents(),
+	}
+	preAuth, err := toolvocabtest.ResolveCoordinatorTurnAuthority(t.Context(), spec)
+	testutil.FailErr(t, "pre-load coordinator authority", err)
+	if slicesContains(preAuth.Reader.Offered(), "task") || !slicesContains(preAuth.Reader.Requestable(), "task") {
+		t.Fatalf("expected task deferred on pre-load observe_investigate Ask turn, offered=%v requestable=%v", preAuth.Reader.Offered(), preAuth.Reader.Requestable())
+	}
+
+	postSpec := spec
+	postSpec.Loaded = map[string]bool{"task": true}
+	postAuth, err := toolvocabtest.ResolveCoordinatorTurnAuthority(t.Context(), postSpec)
+	testutil.FailErr(t, "post-load coordinator authority", err)
+	if !slicesContains(postAuth.Reader.Offered(), "task") {
+		t.Fatalf("expected task callable on post-load request, offered=%v", postAuth.Reader.Offered())
+	}
+	postTaskSchema := postAuth.Schemas["task"]
+	if !reflect.DeepEqual(preAuth.PostLoadSchemas["task"], postTaskSchema) {
+		t.Fatalf("pre-load deferred task projection disagreed with actual post-load request schema")
+	}
+	if !toolschema.SchemaAcceptsEnumValue(postTaskSchema, "agent_type", "path-explorer") || toolschema.SchemaAcceptsEnumValue(postTaskSchema, "agent_type", "implementer") {
+		t.Fatalf("expected post-load task schema to admit path-explorer and prune implementer")
+	}
+
+	projectedCtx := toolvocabtest.ClaimEvaluationContext{
+		Catalog: catalog, Prunable: prunable, Vocab: vocab, Self: preAuth,
+		SessionMode: api.SessionModeAsk, Posture: api.SessionPostureBuild,
+	}
+	admittedProse := `Load ` + "`task`" + ` via ` + "`request_tools(need=\"task\")`" + ` before calling ` + "`task(agent_type=\"path-explorer\", …)`" + `.`
+	if got := toolvocabtest.EvaluateClaimBlock(projectedCtx, toolvocabtest.ClaimBlock{
+		Label: "deferred-task-admitted-agent", Subject: toolvocabtest.SubjectSelfNow(), Text: admittedProse,
+	}); len(got) > 0 {
+		t.Fatalf("expected admitted post-load task(agent_type=\"path-explorer\") to pass, got %+v", got)
+	}
+
+	for _, prunedTaskProse := range []string{
+		`Load ` + "`task`" + ` via ` + "`request_tools(need=\"task\")`" + ` before calling ` + "`task(agent_type=\"implementer\", …)`" + `.`,
+		`Load ` + "`task`" + ` via ` + "`request_tools(need=\"task\")`" + ` before setting ` + "`task.agent_type=\"implementer\"`" + `.`,
+	} {
+		got := toolvocabtest.EvaluateClaimBlock(projectedCtx, toolvocabtest.ClaimBlock{
+			Label: "deferred-task-pruned-implementer", Subject: toolvocabtest.SubjectSelfNow(), Text: prunedTaskProse,
+		})
+		if !hasViolationClaim(got, "agent_type") {
+			t.Fatalf("expected pruned implementer agent_type to fail for %q, got %+v", prunedTaskProse, got)
+		}
+	}
+
+	noProjCtx := projectedCtx
+	noProjCtx.Self = toolvocabtest.AuthorityFromReaderAndMetas(preAuth.Reader, preAuth.ProgramReach, preAuth.Metas)
+	if got := toolvocabtest.EvaluateClaimBlock(noProjCtx, toolvocabtest.ClaimBlock{
+		Label: "no-projection-loader-only", Subject: toolvocabtest.SubjectSelfNow(),
+		Text: `Load ` + "`task`" + ` via ` + "`request_tools(need=\"task\")`" + `.`,
+	}); len(got) > 0 {
+		t.Fatalf("expected loader-only instruction to pass without post-load projections, got %+v", got)
+	}
+	for _, uncertified := range []string{
+		admittedProse,
+		`Load ` + "`task`" + ` via ` + "`request_tools(need=\"task\")`" + ` before setting ` + "`task.agent_type`" + `.`,
+	} {
+		if got := toolvocabtest.EvaluateClaimBlock(noProjCtx, toolvocabtest.ClaimBlock{
+			Label: "no-projection-uncertified-followup", Subject: toolvocabtest.SubjectSelfNow(), Text: uncertified,
+		}); len(got) == 0 {
+			t.Fatalf("expected uncertified follow-up %q to fail without post-load projections", uncertified)
 		}
 	}
 }

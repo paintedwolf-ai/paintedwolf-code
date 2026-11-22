@@ -3,7 +3,9 @@ package toolreach
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"math"
 	"regexp"
 	"slices"
 	"sort"
@@ -198,6 +200,8 @@ func (c Call) Text() string {
 	return "`" + c.Tool + "(" + strings.Join(parts, ", ") + ")`"
 }
 
+var argKeyIdentRe = regexp.MustCompile(`^[a-z_][a-z0-9_]*$`)
+
 func flattenArgs(prefix string, args map[string]any) []string {
 	keys := make([]string, 0, len(args))
 	for key := range args {
@@ -211,19 +215,101 @@ func flattenArgs(prefix string, args map[string]any) []string {
 			path = prefix + "." + key
 		}
 		if nested, ok := args[key].(map[string]any); ok {
-			out = append(out, flattenArgs(path, nested)...)
-			continue
+			if len(nested) == 0 {
+				out = append(out, path+"={}")
+				continue
+			}
+			if argKeyIdentRe.MatchString(key) && canFlattenDottedKeys(nested) {
+				out = append(out, flattenArgs(path, nested)...)
+				continue
+			}
 		}
 		out = append(out, path+"="+argText(args[key]))
 	}
 	return out
 }
 
-func argText(value any) string {
-	if text, ok := value.(string); ok {
-		return strconv.Quote(text)
+func canFlattenDottedKeys(m map[string]any) bool {
+	for k := range m {
+		if !argKeyIdentRe.MatchString(k) {
+			return false
+		}
 	}
-	return fmt.Sprintf("%v", value)
+	return true
+}
+
+func quoteCallString(s string) string {
+	return strings.ReplaceAll(strconv.Quote(s), "`", `\u0060`)
+}
+
+func formatFloatValue(f float64) string {
+	if !math.IsNaN(f) && !math.IsInf(f, 0) && math.Trunc(f) == f && f >= -9007199254740992 && f <= 9007199254740992 {
+		return strconv.FormatInt(int64(f), 10)
+	}
+	return strconv.FormatFloat(f, 'f', -1, 64)
+}
+
+func argText(value any) string {
+	switch v := value.(type) {
+	case nil:
+		return "null"
+	case string:
+		return quoteCallString(v)
+	case bool:
+		return strconv.FormatBool(v)
+	case int:
+		return strconv.Itoa(v)
+	case int64:
+		return strconv.FormatInt(v, 10)
+	case uint64:
+		return strconv.FormatUint(v, 10)
+	case float64:
+		return formatFloatValue(v)
+	case json.Number:
+		return v.String()
+	case []any:
+		items := make([]string, len(v))
+		for i, elem := range v {
+			items[i] = argText(elem)
+		}
+		return "[" + strings.Join(items, ", ") + "]"
+	case []string:
+		items := make([]string, len(v))
+		for i, elem := range v {
+			items[i] = quoteCallString(elem)
+		}
+		return "[" + strings.Join(items, ", ") + "]"
+	case []int:
+		items := make([]string, len(v))
+		for i, elem := range v {
+			items[i] = strconv.Itoa(elem)
+		}
+		return "[" + strings.Join(items, ", ") + "]"
+	case map[string]any:
+		keys := make([]string, 0, len(v))
+		for k := range v {
+			keys = append(keys, k)
+		}
+		sort.Strings(keys)
+		entries := make([]string, len(keys))
+		for i, k := range keys {
+			entries[i] = quoteCallString(k) + ": " + argText(v[k])
+		}
+		return "{" + strings.Join(entries, ", ") + "}"
+	case map[string]string:
+		keys := make([]string, 0, len(v))
+		for k := range v {
+			keys = append(keys, k)
+		}
+		sort.Strings(keys)
+		entries := make([]string, len(keys))
+		for i, k := range keys {
+			entries[i] = quoteCallString(k) + ": " + quoteCallString(v[k])
+		}
+		return "{" + strings.Join(entries, ", ") + "}"
+	default:
+		return fmt.Sprintf("%v", value)
+	}
 }
 
 // Load builds the call that loads a deferred tool.
@@ -282,6 +368,21 @@ func callArgsAdmitted(r Request, prefix, tool string, args map[string]any) bool 
 			}
 			if !callArgsAdmitted(r, path, tool, nested) {
 				return false
+			}
+			continue
+		}
+		if list, ok := val.([]any); ok {
+			if !r.AcceptsField(tool, path) {
+				return false
+			}
+			for _, elem := range list {
+				if em, isMap := elem.(map[string]any); isMap {
+					if !callArgsAdmitted(r, path, tool, em) {
+						return false
+					}
+				} else if es, isStr := elem.(string); isStr && !r.AcceptsEnumValue(tool, path, es) {
+					return false
+				}
 			}
 			continue
 		}
