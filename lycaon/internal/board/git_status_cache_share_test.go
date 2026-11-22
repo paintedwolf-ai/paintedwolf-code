@@ -66,7 +66,7 @@ func TestColdBoardWarmsSharedGitStatusWithoutBlocking(t *testing.T) {
 		RepoSets:               git.NewRepoSetCache(time.Hour),
 		Git:                    loader.inner,
 		Repo:                   repotest.NewProvider(t),
-		DefaultExecutionTarget: api.ExecutionTargetRemote,
+		DefaultExecutionTarget: api.ExecutionTargetRunner,
 	}
 	roots := []projectroot.RootRef{{ID: "proj", Path: dir, Label: "primary", IsPrimary: true}}
 
