@@ -17,6 +17,7 @@ import (
 	"github.com/lycaon/lycaon/internal/pongoplain"
 	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/internal/sandbox"
+	sessionprofiles "github.com/lycaon/lycaon/internal/session/profiles"
 	"github.com/lycaon/lycaon/internal/skills"
 	"github.com/lycaon/lycaon/internal/toolschema"
 	"github.com/lycaon/lycaon/internal/toolvocab"
@@ -113,6 +114,20 @@ func RenderStockSkills(stock *Stock) ([]SkillRender, error) {
 		}
 		return nil
 	}
+	postures, err := sessionprofiles.LoadPostureRegistry()
+	if err != nil {
+		return nil, err
+	}
+	var readOnlyProfiles []sandbox.ToolProfile
+	for _, posture := range postures.List() {
+		if string(posture.ID) == "read_only" {
+			readOnlyProfiles = slices.Clone(stock.Profiles)
+			for i := range readOnlyProfiles {
+				readOnlyProfiles[i].CommandEffects &= posture.CommandEffects
+			}
+			break
+		}
+	}
 	for _, roots := range []int{0, 1, 2} {
 		plans, err := surface.CompileToolPlans(roots)
 		if err != nil {
@@ -127,15 +142,48 @@ func RenderStockSkills(stock *Stock) ([]SkillRender, error) {
 			for _, name := range plan.AddressableNames() {
 				loadedTools[name] = true
 			}
-			reader, err := prompts.NewReader(prompts.ReaderInput{
-				ProfileID: prompts.CoordinatorProfileID, SurfaceID: id, Profiles: stock.Profiles,
-				Plan: plan, Loaded: loadedTools, RootCount: roots, HasGit: roots > 0, WebSearch: true,
-			})
-			if err != nil {
-				return nil, fmt.Errorf("coordinator reader for %s: %w", id, err)
+			for _, loadCase := range []struct {
+				suffix string
+				loaded map[string]bool
+			}{
+				{"", loadedTools},
+				{" (floor only)", nil},
+			} {
+				reader, err := prompts.NewReader(prompts.ReaderInput{
+					ProfileID: prompts.CoordinatorProfileID, SurfaceID: id, Profiles: stock.Profiles,
+					Plan: plan, Loaded: loadCase.loaded, RootCount: roots, HasGit: roots > 0, WebSearch: true,
+				})
+				if err != nil {
+					return nil, fmt.Errorf("coordinator reader for %s: %w", id, err)
+				}
+				if err := add(fmt.Sprintf("surface %s at %d roots%s", id, roots, loadCase.suffix), reader); err != nil {
+					return nil, err
+				}
 			}
-			if err := add(fmt.Sprintf("surface %s at %d roots", id, roots), reader); err != nil {
-				return nil, err
+			if roots == 1 {
+				hiddenReader, err := prompts.NewReader(prompts.ReaderInput{
+					ProfileID: prompts.CoordinatorProfileID, SurfaceID: id, Profiles: stock.Profiles,
+					Plan: plan, Loaded: loadedTools, RootCount: 1, HasGit: true, WebSearch: true,
+					CommandExternalHidden: true,
+				})
+				if err != nil {
+					return nil, fmt.Errorf("coordinator hidden-selector reader for %s: %w", id, err)
+				}
+				if err := add(fmt.Sprintf("surface %s at 1 root (external hidden)", id), hiddenReader); err != nil {
+					return nil, err
+				}
+				if len(readOnlyProfiles) > 0 {
+					roReader, err := prompts.NewReader(prompts.ReaderInput{
+						ProfileID: prompts.CoordinatorProfileID, SurfaceID: id, Profiles: readOnlyProfiles,
+						Plan: plan, Loaded: loadedTools, RootCount: 1, HasGit: true, WebSearch: true,
+					})
+					if err != nil {
+						return nil, fmt.Errorf("coordinator read-only reader for %s: %w", id, err)
+					}
+					if err := add(fmt.Sprintf("surface %s at 1 root (read_only posture)", id), roReader); err != nil {
+						return nil, err
+					}
+				}
 			}
 		}
 	}
@@ -161,6 +209,29 @@ func RenderStockSkills(stock *Stock) ([]SkillRender, error) {
 				if err := add(fmt.Sprintf("profile %s (on branch: %t, git: %t)", agent.ToolProfile, onBranch, hasGit), reader); err != nil {
 					return nil, err
 				}
+			}
+		}
+		hiddenWorker, err := prompts.NewReader(prompts.ReaderInput{
+			ProfileID: agent.ToolProfile, Profiles: stock.Profiles,
+			OnWorkerBranch: false, HasGit: true, RootCount: 1, WebSearch: true,
+			CommandExternalHidden: true,
+		})
+		if err != nil {
+			return nil, fmt.Errorf("worker hidden-selector reader for %s: %w", agent.ToolProfile, err)
+		}
+		if err := add(fmt.Sprintf("profile %s (external hidden)", agent.ToolProfile), hiddenWorker); err != nil {
+			return nil, err
+		}
+		if len(readOnlyProfiles) > 0 {
+			roWorker, err := prompts.NewReader(prompts.ReaderInput{
+				ProfileID: agent.ToolProfile, Profiles: readOnlyProfiles,
+				OnWorkerBranch: false, HasGit: true, RootCount: 1, WebSearch: true,
+			})
+			if err != nil {
+				return nil, fmt.Errorf("worker read-only reader for %s: %w", agent.ToolProfile, err)
+			}
+			if err := add(fmt.Sprintf("profile %s (read_only posture)", agent.ToolProfile), roWorker); err != nil {
+				return nil, err
 			}
 		}
 	}

@@ -11,7 +11,7 @@ Choose the route for the protocol and declare it on the call that uses it.
 
 | You need | Carried by | What you do |
 |----------|-----------|-------------|
-| One HTTP(S) exchange — API, webhook, login, download or upload | Native `curl` in `command` | Declare URL, method, headers and body with curl flags; `-o` saves output. Use `--cacert`/`--capath` for scoped trust, `--cert`/`--key`/`--pass` for mTLS, `-T file` for upload, and `-v` for diagnostics. Loopback needs `capability_request.loopback_connect`; `--resolve host:port:127.0.0.1` or `--connect-to` retains the production name. Never `external -- curl`. |
+| One HTTP(S) exchange — API, webhook, login, download or upload | Native `curl` in `command` | Declare URL, method, headers and body with curl flags; `-o` saves output. Use `--cacert`/`--capath` for scoped trust, `--cert`/`--key`/`--pass` for mTLS, `-T file` for upload, and `-v` for diagnostics. Loopback needs `capability_request.loopback_connect`; `--resolve host:port:127.0.0.1` or `--connect-to` retains the production name.{% if can_command_external_selector %} Never `external -- curl`.{% endif %} |
 {% if profile_has_fetch_url %}| **Reading a web page or documentation** | `fetch_url` | Pass the URL. Reads extracted markdown, cached `offset`/`limit` ranges, or screened images without writing files; use `curl` for response bytes |
 {% endif %}
 | HTTP(S) from a process that must speak it itself — a package manager, a build, a test suite | Mediated HTTP proxy (`HTTP_PROXY` / `HTTPS_PROXY`) | Nothing — proxy-aware HTTP clients already work |

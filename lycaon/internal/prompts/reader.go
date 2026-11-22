@@ -21,18 +21,25 @@ import (
 
 // ReaderInput is what a render knows about who will read it.
 type ReaderInput struct {
-	ProfileID      string
-	SurfaceID      string
-	Mode           string
-	Profiles       []sandbox.ToolProfile
-	Plan           toolsurface.Plan
-	Loaded         map[string]bool
-	Visible        []string
-	Schemas        *toolschema.Config
-	RootCount      int
-	HasGit         bool
-	OnWorkerBranch bool
-	WebSearch      bool
+	ProfileID             string
+	SurfaceID             string
+	Mode                  string
+	SessionMode           string
+	Profiles              []sandbox.ToolProfile
+	Plan                  toolsurface.Plan
+	Loaded                map[string]bool
+	Visible               []string
+	Schemas               *toolschema.Config
+	RootCount             int
+	HasGit                bool
+	HasAnyGitRoot         bool
+	OnWorkerBranch        bool
+	WebSearch             bool
+	SpawnAllowlist        []string
+	ReviewsConfinedWrites bool
+	CommandExternalHidden bool
+	SessionScratchDir     string
+	SharedTempLocations   []string
 }
 
 // Reader is an immutable projection of a prompt reader's tool reach and facts.
@@ -149,7 +156,7 @@ func NewReader(in ReaderInput) (Reader, error) {
 
 	// A requestable tool is not held until it loads: copy that names it would
 	// name a tool the request does not offer.
-	held := readerProfileHeldSet(profile, toolNameSet(offered), effects)
+	held := readerProfileHeldSet(profile, toolNameSet(offered), effects, in.CommandExternalHidden)
 	mints := evidenceMints(held)
 	mode := strings.TrimSpace(in.Mode)
 	if mode == "" && surfaceID != "" {
@@ -191,11 +198,23 @@ func defaultExecutionModeForSurface(surfaceID string) string {
 	}
 }
 
-func readerHeldSet(tools map[string]bool, effects toolcontract.CommandEffects) map[string]bool {
-	return readerProfileHeldSet(sandbox.ToolProfile{}, tools, effects)
+func normalizeSessionMode(mode string) string {
+	if strings.EqualFold(strings.TrimSpace(mode), "ask") {
+		return "ask"
+	}
+	return "agent"
 }
 
-func readerProfileHeldSet(profile sandbox.ToolProfile, tools map[string]bool, effects toolcontract.CommandEffects) map[string]bool {
+func readerHeldSet(tools map[string]bool, effects toolcontract.CommandEffects, externalHidden bool) map[string]bool {
+	return readerProfileHeldSet(sandbox.ToolProfile{}, tools, effects, externalHidden)
+}
+
+func readerProfileHeldSet(
+	profile sandbox.ToolProfile,
+	tools map[string]bool,
+	effects toolcontract.CommandEffects,
+	externalHidden bool,
+) map[string]bool {
 	held := make(map[string]bool, len(tools)+4)
 	for name, ok := range tools {
 		if ok {
@@ -206,6 +225,9 @@ func readerProfileHeldSet(profile sandbox.ToolProfile, tools map[string]bool, ef
 		if ok {
 			held[mark] = true
 		}
+	}
+	if externalHidden {
+		delete(held, toolcontract.ReachCommandExternalExecSelector)
 	}
 	if len(profile.DenyTools) > 0 {
 		for mark, ok := range toolcontract.DeniedCommandMarks(held, effects, profile.ToolDenied) {
@@ -262,6 +284,11 @@ func (r Reader) Effects() toolcontract.CommandEffects { return r.effects }
 // Held returns the reach set: offered tools plus command reach marks.
 func (r Reader) Held() map[string]bool { return maps.Clone(r.held) }
 
+// CanReachProgram reports whether r can execute name as a command program.
+func (r Reader) CanReachProgram(name string) bool {
+	return toolcontract.CommandLanguageReachable(name, r.held)
+}
+
 // Mints returns the evidence-kind reach map for this reader.
 func (r Reader) Mints() map[string]bool { return maps.Clone(r.mints) }
 
@@ -289,37 +316,68 @@ func computeReaderFingerprint(
 	in ReaderInput,
 ) string {
 	payload, err := json.Marshal(struct {
-		Host           promptunit.Host
-		ProfileID      string
-		SurfaceID      string
-		Mode           string
-		Offered        []string
-		Requestable    []string
-		CommandOnFloor bool
-		Effects        uint8
-		RootCount      int
-		HasGit         bool
-		OnWorkerBranch bool
-		WebSearch      bool
+		Host                  promptunit.Host
+		ProfileID             string
+		SurfaceID             string
+		Mode                  string
+		SessionMode           string
+		Offered               []string
+		Requestable           []string
+		CommandOnFloor        bool
+		Effects               uint8
+		RootCount             int
+		HasGit                bool
+		HasAnyGitRoot         bool
+		OnWorkerBranch        bool
+		WebSearch             bool
+		SpawnAllowlist        []string
+		ReviewsConfinedWrites bool
+		CommandExternalHidden bool
+		SessionScratchDir     string
+		SharedTempLocations   []string
 	}{
-		Host:           host,
-		ProfileID:      profileID,
-		SurfaceID:      surfaceID,
-		Mode:           mode,
-		Offered:        offered,
-		Requestable:    requestable,
-		CommandOnFloor: commandOnFloor,
-		Effects:        uint8(effects),
-		RootCount:      in.RootCount,
-		HasGit:         in.HasGit,
-		OnWorkerBranch: in.OnWorkerBranch,
-		WebSearch:      in.WebSearch,
+		Host:                  host,
+		ProfileID:             profileID,
+		SurfaceID:             surfaceID,
+		Mode:                  mode,
+		SessionMode:           normalizeSessionMode(in.SessionMode),
+		Offered:               offered,
+		Requestable:           requestable,
+		CommandOnFloor:        commandOnFloor,
+		Effects:               uint8(effects),
+		RootCount:             in.RootCount,
+		HasGit:                in.HasGit,
+		HasAnyGitRoot:         in.HasGit || in.HasAnyGitRoot,
+		OnWorkerBranch:        in.OnWorkerBranch,
+		WebSearch:             in.WebSearch,
+		SpawnAllowlist:        normalizedSortedStrings(in.SpawnAllowlist),
+		ReviewsConfinedWrites: in.ReviewsConfinedWrites,
+		CommandExternalHidden: in.CommandExternalHidden,
+		SessionScratchDir:     strings.TrimSpace(in.SessionScratchDir),
+		SharedTempLocations:   slices.Clone(in.SharedTempLocations),
 	})
 	if err != nil {
 		return ""
 	}
 	sum := sha256.Sum256(payload)
 	return base64.RawURLEncoding.EncodeToString(sum[:])
+}
+
+func normalizedSortedStrings(names []string) []string {
+	if len(names) == 0 {
+		return nil
+	}
+	seen := make(map[string]bool, len(names))
+	out := make([]string, 0, len(names))
+	for _, name := range names {
+		name = strings.TrimSpace(name)
+		if name != "" && !seen[name] {
+			seen[name] = true
+			out = append(out, name)
+		}
+	}
+	sort.Strings(out)
+	return out
 }
 
 func availableToolsInPlan(names []string, plan toolsurface.Plan) []string {

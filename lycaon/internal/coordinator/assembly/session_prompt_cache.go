@@ -35,6 +35,8 @@ type TurnAssemblyScratch struct {
 	WorkspaceActivePath        string
 	WorkspaceRootsOmittedCount int
 	WorkspaceRootsLoaded       bool
+	PromptSurface              prompts.AgentPromptSurface
+	PromptSurfaceLoaded        bool
 	// SourceBriefBlocks holds each turn's rendered source-change brief, keyed
 	// by the message that opened the turn.
 	SourceBriefBlocks  map[string]string

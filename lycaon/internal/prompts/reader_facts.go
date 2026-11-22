@@ -12,6 +12,7 @@ import (
 	"github.com/lycaon/lycaon/internal/extpacks"
 	"github.com/lycaon/lycaon/internal/progress"
 	"github.com/lycaon/lycaon/internal/sandbox"
+	"github.com/lycaon/lycaon/internal/spawn"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/tools/readcaps"
 	"github.com/lycaon/lycaon/internal/toolschema"
@@ -75,16 +76,21 @@ func DeclaredReader(catalog *extpacks.EffectiveCatalog, scopeID string) (Reader,
 		}
 	}
 	schemas, _ := loadToolSchemaCached(catalog)
+	var spawnAllowlist []string
+	if surfaceID != "" || profileID == CoordinatorProfileID {
+		spawnAllowlist = spawn.AmbientAllowedAgents()
+	}
 	return NewReader(ReaderInput{
-		ProfileID: profileID,
-		SurfaceID: surfaceID,
-		Mode:      mode,
-		Profiles:  profiles,
-		Plan:      plan,
-		Schemas:   schemas,
-		RootCount: 1,
-		HasGit:    true,
-		WebSearch: true,
+		ProfileID:      profileID,
+		SurfaceID:      surfaceID,
+		Mode:           mode,
+		Profiles:       profiles,
+		Plan:           plan,
+		Schemas:        schemas,
+		RootCount:      1,
+		HasGit:         true,
+		WebSearch:      true,
+		SpawnAllowlist: spawnAllowlist,
 	})
 }
 
@@ -104,6 +110,92 @@ func hasProfileID(profiles []sandbox.ToolProfile, id string) bool {
 	return false
 }
 
+// IsProjectFileTool reports whether name is a project-file read/write/search
+// tool or command, excluding non-file tools such as secret_list, terminal_open,
+// and page_open.
+func IsProjectFileTool(name string) bool {
+	name = strings.TrimSpace(name)
+	if name == "command" {
+		return true
+	}
+	contract, ok := toolcontract.Lookup(name)
+	if !ok {
+		return false
+	}
+	switch contract.Owner {
+	case "filesystem", "source_ledger", "survey":
+		return true
+	default:
+		return false
+	}
+}
+
+func hasOfferedProjectFileTool(offeredSet map[string]bool) bool {
+	for name, ok := range offeredSet {
+		if ok && IsProjectFileTool(name) {
+			return true
+		}
+	}
+	return false
+}
+
+func deriveSpawnFactFlags(
+	in ReaderInput,
+	sessionMode string,
+	catalog *extpacks.EffectiveCatalog,
+) (canSpawnImplementer, canSpawnWebResearch, canSpawnWorkers bool) {
+	if len(in.SpawnAllowlist) == 0 {
+		return false, false, false
+	}
+	var byID map[string]agentdef.Profile
+	if catalog != nil {
+		if defs, err := agentdef.LoadEffectiveWithCatalog(catalog); err == nil {
+			byID = make(map[string]agentdef.Profile, len(defs))
+			for _, d := range defs {
+				byID[d.ID] = d
+			}
+		}
+	}
+	seen := make(map[string]bool, len(in.SpawnAllowlist))
+	kept := 0
+	for _, raw := range in.SpawnAllowlist {
+		name := strings.TrimSpace(raw)
+		if name == "" || seen[name] {
+			continue
+		}
+		seen[name] = true
+		if byID != nil {
+			if _, exists := byID[name]; !exists {
+				continue
+			}
+		}
+		isExternal := false
+		if prof, ok := byID[name]; ok {
+			isExternal = slices.Contains(prof.Capabilities, agentdef.CapabilityExternal)
+		} else {
+			isExternal = agentdef.DeclaresAny(name, agentdef.CapabilityExternal)
+		}
+		if !in.WebSearch && isExternal {
+			continue
+		}
+		mutCapable, okCap := AgentMutationCapable(name)
+		if sessionMode == "ask" && okCap && mutCapable {
+			continue
+		}
+		if in.RootCount == 0 && !AgentRunsWithoutWorkspace(name) {
+			continue
+		}
+		kept++
+		if okCap && mutCapable {
+			canSpawnImplementer = true
+		}
+		if isExternal {
+			canSpawnWebResearch = true
+		}
+	}
+	return canSpawnImplementer, canSpawnWebResearch, canSpawnImplementer || canSpawnWebResearch || kept > 0
+}
+
 func buildReaderFacts(
 	in ReaderInput,
 	profile sandbox.ToolProfile,
@@ -116,7 +208,8 @@ func buildReaderFacts(
 	isCoordinator := surfaceID != "" || profileID == CoordinatorProfileID
 	offeredSet := toolNameSet(offered)
 	command := commandEffectFlags(offeredSet["command"], effects)
-	reachHeld := readerProfileHeldSet(profile, offeredSet, effects)
+	reachHeld := readerProfileHeldSet(profile, offeredSet, effects, in.CommandExternalHidden)
+	sessionMode := normalizeSessionMode(in.SessionMode)
 
 	writeTools := orderedEnabledTools(nativeWriteTools, offeredSet)
 	if command.mutation {
@@ -124,16 +217,21 @@ func buildReaderFacts(
 	}
 	surveyTools := orderedEnabledTools(surveyToolDisplayOrder, offeredSet)
 
+	rawCanRequest := requestableToolSet(offered, requestable)
+	loadableCommand := commandEffectFlags(rawCanRequest["command"], effects)
+
 	allReachable := toolNameSet(append(slices.Clone(offered), requestable...))
-	if !command.mutation {
+	if !(command.mutation || loadableCommand.mutation) {
 		delete(allReachable, "command")
 	}
 	mutationCapable := toolSetMutationCapable(allReachable)
 
 	catalog, _ := extpacks.CatalogForConsumers()
 	schemas := in.Schemas
-	if schemas == nil && catalog != nil {
-		schemas, _ = loadToolSchemaCached(catalog)
+	if (schemas == nil || len(schemas.Tools) == 0) && catalog != nil {
+		if loadedSchemas, err := loadToolSchemaCached(catalog); err == nil && loadedSchemas != nil {
+			schemas = loadedSchemas
+		}
 	}
 
 	toolViews := make([]AgentToolArgView, 0, len(offered))
@@ -148,14 +246,45 @@ func buildReaderFacts(
 	}
 
 	connects := command.mutation && command.externalExec
+	canSpawnImpl, canSpawnWeb, canSpawnWorkers := deriveSpawnFactFlags(in, sessionMode, catalog)
+	hasAnyGit := in.HasGit || in.HasAnyGitRoot
+	canGitRead := in.HasGit && !in.OnWorkerBranch && offeredSet["command"]
+	canAnyGitRead := hasAnyGit && !in.OnWorkerBranch && offeredSet["command"]
+	canGitCommit := canGitRead && command.mutation
+	canGitBisect := canGitCommit && command.externalExec
+	canRequestGitRead := in.HasGit && !in.OnWorkerBranch && rawCanRequest["command"]
+	canRequestGitCommit := canRequestGitRead && loadableCommand.mutation
+	canRequestGitBisect := canRequestGitCommit && loadableCommand.externalExec
+	sharedTemp := slices.Clone(in.SharedTempLocations)
 
 	f := ReaderFacts{
+		CanAnyGitRead:                 canAnyGitRead,
+		CanCommandExternalSelector:    reachHeld[toolcontract.ReachCommandExternalExecSelector],
+		CanCommandVerify:              offeredSet["command"] && command.externalExec,
+		CanGitBisect:                  canGitBisect,
+		CanGitCommit:                  canGitCommit,
+		CanGitRead:                    canGitRead,
+		CanOrient:                     offeredSet["pack_board"] || offeredSet["list_dir"],
+		CanRequestCommandVerify:       loadableCommand.externalExec,
+		CanRequestGitBisect:           canRequestGitBisect,
+		CanRequestGitCommit:           canRequestGitCommit,
+		CanRequestGitRead:             canRequestGitRead,
+		CanSpawnImplementer:           canSpawnImpl,
+		CanSpawnWebResearch:           canSpawnWeb,
+		CanSpawnWorkers:               canSpawnWorkers,
 		CapsVision:                    false,
+		CommandExternalHidden:         in.CommandExternalHidden,
+		CommandExternalShown:          !in.CommandExternalHidden,
 		CommandOnFloor:                commandOnFloor,
 		CommandOutputFiles:            offeredSet["command"],
 		ExecutionMode:                 mode,
+		HasAnyGitRoot:                 hasAnyGit,
+		HasFileTools:                  in.RootCount > 0 && hasOfferedProjectFileTool(offeredSet),
 		HasGit:                        in.HasGit,
+		HasWorkspaceRoots:             in.RootCount > 0,
 		IsCoordinator:                 isCoordinator,
+		MoreToolsLoadable:             false,
+		MultiRoot:                     in.RootCount > 1,
 		NativeEditLimitMiB:            readcaps.MaxMutationBytes >> 20,
 		OnWorkerBranch:                in.OnWorkerBranch,
 		ProfileCommandMutation:        command.mutation,
@@ -174,14 +303,23 @@ func buildReaderFacts(
 		ProgressGatedTools:            progressGatedOfferedTools(offeredSet, command.mutation),
 		ProgressUngatedLifecycleTools: progress.UngatedLifecycleTools(offeredSet),
 		RecallMayWiden:                isCoordinator,
+		ReviewsConfinedWrites:         in.ReviewsConfinedWrites,
 		RootCount:                     in.RootCount,
+		RunnerCapabilityRequestTools:  projectedSchemaTools(offered, schemas, command.externalExec, "capability_request", true, command.externalExec),
 		RunnerInlineWaitSeconds:       int(toolcontract.ProgramInlineWait / time.Second),
 		RunnerParkSeconds:             int(toolcontract.ProgramParkThreshold / time.Second),
 		RunnerDirectIPTools:           runnerCapabilityTools(offered, toolcontract.CapabilityDirectIP, connects),
+		RunnerHostResourcesTools:      projectedSchemaTools(offered, schemas, command.externalExec, "capability_request.host_resources", false, command.externalExec),
 		RunnerLocalListenTools:        runnerCapabilityTools(offered, toolcontract.CapabilityLocalListen, connects),
 		RunnerLoopbackConnectTools:    runnerCapabilityTools(offered, toolcontract.CapabilityLoopbackConnect, connects),
+		RunnerSecretUseTools:          projectedSchemaTools(offered, schemas, command.externalExec, "secret_use", false, command.externalExec),
 		RunnerSocketTools:             runnerCapabilityTools(offered, toolcontract.CapabilitySocket, connects),
+		RunnerSocksProxyTools:         projectedSchemaTools(offered, schemas, command.externalExec, "socks_proxy", false, command.externalExec && command.networkEgress),
 		RunnerWriteRootTools:          runnerCapabilityTools(offered, toolcontract.CapabilityWriteRoot, command.mutation && command.externalExec),
+		SessionMode:                   sessionMode,
+		SessionScratchDir:             strings.TrimSpace(in.SessionScratchDir),
+		SharedTempLocations:           sharedTemp,
+		SharedTempWritable:            len(sharedTemp) > 0,
 		SurfaceID:                     surfaceID,
 		ToolCheckScanDrilldownTools:   scanDrilldownToolsForCheck(offeredSet),
 		ToolCheckSurveyTools:          surveyTools,
@@ -201,9 +339,21 @@ func buildReaderFacts(
 		}
 	}
 
+	if err := populateReaderFamilyMaps(in.WebSearch, offeredSet, rawCanRequest, reachHeld, catalog, &f); err != nil {
+		return nil, err
+	}
+	return f.Map(), nil
+}
+
+func populateReaderFamilyMaps(
+	webSearch bool,
+	offeredSet, rawCanRequest, reachHeld map[string]bool,
+	catalog *extpacks.EffectiveCatalog,
+	f *ReaderFacts,
+) error {
 	vocab, err := BuildReaderFactVocabulary(catalog)
 	if err != nil {
-		return nil, err
+		return err
 	}
 	f.ProfileHas = make(map[string]bool, len(vocab.Tools))
 	for name := range vocab.Tools {
@@ -219,12 +369,11 @@ func buildReaderFacts(
 			}
 		}
 	}
-	if !in.WebSearch {
+	if !webSearch {
 		f.ProfileHas["fetch_url"] = false
 		f.ProfileHas["web_search"] = false
 	}
 
-	rawCanRequest := requestableToolSet(offered, requestable)
 	f.ProfileCanRequest = make(map[string]bool, len(vocab.Tools))
 	for name := range vocab.Tools {
 		f.ProfileCanRequest[name] = rawCanRequest[name]
@@ -247,8 +396,7 @@ func buildReaderFacts(
 	for _, key := range vocab.SkillKeys {
 		f.AgentHasSkill[key] = false
 	}
-
-	return f.Map(), nil
+	return nil
 }
 
 func fillCoordinatorReaderFacts(

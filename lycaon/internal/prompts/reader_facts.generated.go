@@ -9,19 +9,39 @@ import (
 
 var declaredReaderFactScalarNames = []string{
 	"agent_tools",
+	"can_any_git_read",
+	"can_command_external_selector",
+	"can_command_verify",
+	"can_git_bisect",
+	"can_git_commit",
+	"can_git_read",
+	"can_orient",
+	"can_request_command_verify",
+	"can_request_git_bisect",
+	"can_request_git_commit",
+	"can_request_git_read",
+	"can_spawn_implementer",
+	"can_spawn_web_research",
+	"can_spawn_workers",
 	"caps.vision",
 	"card_edit_deferred",
 	"card_may_dispatch",
 	"card_may_edit",
 	"card_may_run",
 	"card_only_tools",
+	"command_external_hidden",
+	"command_external_shown",
 	"command_on_floor",
 	"command_output_files",
 	"execution_mode",
+	"has_any_git_root",
+	"has_file_tools",
 	"has_git",
+	"has_workspace_roots",
 	"is_coordinator",
 	"lane_s_sync_tools",
 	"more_tools_loadable",
+	"multi_root",
 	"native_edit_limit_mib",
 	"on_worker_branch",
 	"profile_command_external_exec",
@@ -43,14 +63,23 @@ var declaredReaderFactScalarNames = []string{
 	"recall_may_widen",
 	"reject_codes",
 	"requestable_capabilities",
+	"reviews_confined_writes",
 	"root_count",
+	"runner_capability_request_tools",
 	"runner_direct_ip_tools",
+	"runner_host_resources_tools",
 	"runner_inline_wait_seconds",
 	"runner_local_listen_tools",
 	"runner_loopback_connect_tools",
 	"runner_park_seconds",
+	"runner_secret_use_tools",
 	"runner_socket_tools",
+	"runner_socks_proxy_tools",
 	"runner_write_root_tools",
+	"session_mode",
+	"session_scratch_dir",
+	"shared_temp_locations",
+	"shared_temp_writable",
 	"surface_card_label",
 	"surface_card_rule",
 	"surface_id",
@@ -72,19 +101,39 @@ var declaredReaderFactScalarNames = []string{
 
 var declaredReaderFactScalars = map[string]ReaderFactScalarSpec{
 	"agent_tools":                        {Name: "agent_tools", Type: "[]map[string]any", States: "Offered worker tools with required argument summaries."},
+	"can_any_git_read":                   {Name: "can_any_git_read", Type: "bool", States: "At least one workspace root has Git, is not a worker branch, and offers command."},
+	"can_command_external_selector":      {Name: "can_command_external_selector", Type: "bool", States: "Command is offered with external execution and the explicit external selector is visible."},
+	"can_command_verify":                 {Name: "can_command_verify", Type: "bool", States: "Command is offered and admits external execution for verification checks."},
+	"can_git_bisect":                     {Name: "can_git_bisect", Type: "bool", States: "Primary workspace root has Git, is not a worker branch, and offers mutating external command."},
+	"can_git_commit":                     {Name: "can_git_commit", Type: "bool", States: "Primary workspace root has Git, is not a worker branch, and offers mutating command."},
+	"can_git_read":                       {Name: "can_git_read", Type: "bool", States: "Primary workspace root has Git, is not a worker branch, and offers command."},
+	"can_orient":                         {Name: "can_orient", Type: "bool", States: "An inline workspace orientation tool is offered on this turn."},
+	"can_request_command_verify":         {Name: "can_request_command_verify", Type: "bool", States: "Command is loadable via request_tools and will admit external verification checks."},
+	"can_request_git_bisect":             {Name: "can_request_git_bisect", Type: "bool", States: "Primary workspace root has Git, is not a worker branch, and mutating external command is loadable via request_tools."},
+	"can_request_git_commit":             {Name: "can_request_git_commit", Type: "bool", States: "Primary workspace root has Git, is not a worker branch, and mutating command is loadable via request_tools."},
+	"can_request_git_read":               {Name: "can_request_git_read", Type: "bool", States: "Primary workspace root has Git, is not a worker branch, and command is loadable via request_tools."},
+	"can_spawn_implementer":              {Name: "can_spawn_implementer", Type: "bool", States: "The active spawn roster includes at least one mutation-capable worker."},
+	"can_spawn_web_research":             {Name: "can_spawn_web_research", Type: "bool", States: "The active spawn roster includes at least one external web-research worker."},
+	"can_spawn_workers":                  {Name: "can_spawn_workers", Type: "bool", States: "At least one worker agent is spawnable in the active roster."},
 	"caps.vision":                        {Name: "caps.vision", Type: "bool", States: "The active model accepts image inputs."},
 	"card_edit_deferred":                 {Name: "card_edit_deferred", Type: "bool", States: "The surface card holds edit tools as loadable rather than on the floor."},
 	"card_may_dispatch":                  {Name: "card_may_dispatch", Type: "bool", States: "The surface card can dispatch worker tasks."},
 	"card_may_edit":                      {Name: "card_may_edit", Type: "bool", States: "The surface card can reach edit tools."},
 	"card_may_run":                       {Name: "card_may_run", Type: "bool", States: "The surface card can reach command mutation or terminal execution."},
 	"card_only_tools":                    {Name: "card_only_tools", Type: "[]string", States: "Surface card tool list when the surface offers a fixed read-only floor."},
+	"command_external_hidden":            {Name: "command_external_hidden", Type: "bool", States: "The explicit external selector on command is hidden for this session."},
+	"command_external_shown":             {Name: "command_external_shown", Type: "bool", States: "The explicit external selector on command is visible for this session."},
 	"command_on_floor":                   {Name: "command_on_floor", Type: "bool", States: "Command is immediately offered on the floor without request_tools."},
 	"command_output_files":               {Name: "command_output_files", Type: "bool", States: "Command is offered and can write files under @output."},
 	"execution_mode":                     {Name: "execution_mode", Type: "string", States: "Active coordinator execution mode family."},
+	"has_any_git_root":                   {Name: "has_any_git_root", Type: "bool", States: "At least one attached workspace root is a Git repository."},
+	"has_file_tools":                     {Name: "has_file_tools", Type: "bool", States: "Workspace roots are attached and at least one project-file tool or command is offered."},
 	"has_git":                            {Name: "has_git", Type: "bool", States: "The primary workspace root is a Git repository."},
+	"has_workspace_roots":                {Name: "has_workspace_roots", Type: "bool", States: "At least one workspace root is attached to the session."},
 	"is_coordinator":                     {Name: "is_coordinator", Type: "bool", States: "The reader is a coordinator surface rather than a worker."},
 	"lane_s_sync_tools":                  {Name: "lane_s_sync_tools", Type: "[]string", States: "Offered tools that synchronize on the serial lane."},
 	"more_tools_loadable":                {Name: "more_tools_loadable", Type: "bool", States: "Deferred tools remain loadable via request_tools on this turn."},
+	"multi_root":                         {Name: "multi_root", Type: "bool", States: "More than one workspace root is attached to the session."},
 	"native_edit_limit_mib":              {Name: "native_edit_limit_mib", Type: "int", States: "Maximum file size in MiB accepted by native file edit tools."},
 	"on_worker_branch":                   {Name: "on_worker_branch", Type: "bool", States: "The workspace is on an isolated worker branch."},
 	"profile_command_external_exec":      {Name: "profile_command_external_exec", Type: "bool", States: "The executor admits command programs that run external executables."},
@@ -106,14 +155,23 @@ var declaredReaderFactScalars = map[string]ReaderFactScalarSpec{
 	"recall_may_widen":                   {Name: "recall_may_widen", Type: "bool", States: "Recall supports widening beyond the current leg."},
 	"reject_codes":                       {Name: "reject_codes", Type: "[]map[string]any", States: "Recoverable rejection codes reachable by this reader's tools."},
 	"requestable_capabilities":           {Name: "requestable_capabilities", Type: "[]string", States: "Capability group labels for tools loadable via request_tools."},
+	"reviews_confined_writes":            {Name: "reviews_confined_writes", Type: "bool", States: "Declared writes outside attached workspace roots and session scratch require review."},
 	"root_count":                         {Name: "root_count", Type: "int", States: "Workspace roots attached to the session."},
+	"runner_capability_request_tools":    {Name: "runner_capability_request_tools", Type: "[]string", States: "Offered host-runner tools whose projected schema accepts capability_request."},
 	"runner_direct_ip_tools":             {Name: "runner_direct_ip_tools", Type: "[]string", States: "Offered host-runner tools that can dial direct IP literals."},
+	"runner_host_resources_tools":        {Name: "runner_host_resources_tools", Type: "[]string", States: "Offered tools whose projected schema accepts capability_request.host_resources."},
 	"runner_inline_wait_seconds":         {Name: "runner_inline_wait_seconds", Type: "int", States: "Seconds a command call waits for running work before returning its handle."},
 	"runner_local_listen_tools":          {Name: "runner_local_listen_tools", Type: "[]string", States: "Offered host-runner tools that can bind a local listener."},
 	"runner_loopback_connect_tools":      {Name: "runner_loopback_connect_tools", Type: "[]string", States: "Offered host-runner tools that can connect to loopback ports."},
 	"runner_park_seconds":                {Name: "runner_park_seconds", Type: "int", States: "Seconds a command call holds a waiting program before parking it in the background."},
+	"runner_secret_use_tools":            {Name: "runner_secret_use_tools", Type: "[]string", States: "Offered tools whose projected schema accepts secret_use."},
 	"runner_socket_tools":                {Name: "runner_socket_tools", Type: "[]string", States: "Offered host-runner tools that can connect to Unix sockets."},
+	"runner_socks_proxy_tools":           {Name: "runner_socks_proxy_tools", Type: "[]string", States: "Offered tools whose projected schema and network effects accept socks_proxy."},
 	"runner_write_root_tools":            {Name: "runner_write_root_tools", Type: "[]string", States: "Offered host-runner tools that can write inside workspace roots."},
+	"session_mode":                       {Name: "session_mode", Type: "string", States: "Active session mode (agent or ask)."},
+	"session_scratch_dir":                {Name: "session_scratch_dir", Type: "string", States: "Session-private scratch directory path when allocated."},
+	"shared_temp_locations":              {Name: "shared_temp_locations", Type: "[]string", States: "Shared temporary directory paths writable without review."},
+	"shared_temp_writable":               {Name: "shared_temp_writable", Type: "bool", States: "At least one shared temporary directory is writable without review."},
 	"surface_card_label":                 {Name: "surface_card_label", Type: "string", States: "Human-readable label for the active coordinator surface card."},
 	"surface_card_rule":                  {Name: "surface_card_rule", Type: "string", States: "Operating rule summary for the active coordinator surface card."},
 	"surface_id":                         {Name: "surface_id", Type: "string", States: "Active coordinator surface identifier."},
@@ -150,24 +208,46 @@ var reservedReaderFactPrefixes = []string{
 	"agent_has_skill_",
 	"visual_show_",
 	"caps",
+	"can_git_",
+	"can_spawn_",
 }
 
 // ReaderFacts holds the typed values produced by Reader.Facts().
 type ReaderFacts struct {
 	AgentTools                     []map[string]any
+	CanAnyGitRead                  bool
+	CanCommandExternalSelector     bool
+	CanCommandVerify               bool
+	CanGitBisect                   bool
+	CanGitCommit                   bool
+	CanGitRead                     bool
+	CanOrient                      bool
+	CanRequestCommandVerify        bool
+	CanRequestGitBisect            bool
+	CanRequestGitCommit            bool
+	CanRequestGitRead              bool
+	CanSpawnImplementer            bool
+	CanSpawnWebResearch            bool
+	CanSpawnWorkers                bool
 	CapsVision                     bool
 	CardEditDeferred               bool
 	CardMayDispatch                bool
 	CardMayEdit                    bool
 	CardMayRun                     bool
 	CardOnlyTools                  []string
+	CommandExternalHidden          bool
+	CommandExternalShown           bool
 	CommandOnFloor                 bool
 	CommandOutputFiles             bool
 	ExecutionMode                  string
+	HasAnyGitRoot                  bool
+	HasFileTools                   bool
 	HasGit                         bool
+	HasWorkspaceRoots              bool
 	IsCoordinator                  bool
 	LaneSSyncTools                 []string
 	MoreToolsLoadable              bool
+	MultiRoot                      bool
 	NativeEditLimitMiB             int
 	OnWorkerBranch                 bool
 	ProfileCommandExternalExec     bool
@@ -189,14 +269,23 @@ type ReaderFacts struct {
 	RecallMayWiden                 bool
 	RejectCodes                    []map[string]any
 	RequestableCapabilities        []string
+	ReviewsConfinedWrites          bool
 	RootCount                      int
+	RunnerCapabilityRequestTools   []string
 	RunnerDirectIPTools            []string
+	RunnerHostResourcesTools       []string
 	RunnerInlineWaitSeconds        int
 	RunnerLocalListenTools         []string
 	RunnerLoopbackConnectTools     []string
 	RunnerParkSeconds              int
+	RunnerSecretUseTools           []string
 	RunnerSocketTools              []string
+	RunnerSocksProxyTools          []string
 	RunnerWriteRootTools           []string
+	SessionMode                    string
+	SessionScratchDir              string
+	SharedTempLocations            []string
+	SharedTempWritable             bool
 	SurfaceCardLabel               string
 	SurfaceCardRule                string
 	SurfaceID                      string
@@ -223,8 +312,22 @@ type ReaderFacts struct {
 
 // Map flattens the typed reader facts and family maps into a template variable map.
 func (f ReaderFacts) Map() map[string]any {
-	out := make(map[string]any, 65+len(f.ProfileHas)+len(f.AgentHasSkill))
+	out := make(map[string]any, 94+len(f.ProfileHas)+len(f.AgentHasSkill))
 	out["agent_tools"] = f.AgentTools
+	out["can_any_git_read"] = f.CanAnyGitRead
+	out["can_command_external_selector"] = f.CanCommandExternalSelector
+	out["can_command_verify"] = f.CanCommandVerify
+	out["can_git_bisect"] = f.CanGitBisect
+	out["can_git_commit"] = f.CanGitCommit
+	out["can_git_read"] = f.CanGitRead
+	out["can_orient"] = f.CanOrient
+	out["can_request_command_verify"] = f.CanRequestCommandVerify
+	out["can_request_git_bisect"] = f.CanRequestGitBisect
+	out["can_request_git_commit"] = f.CanRequestGitCommit
+	out["can_request_git_read"] = f.CanRequestGitRead
+	out["can_spawn_implementer"] = f.CanSpawnImplementer
+	out["can_spawn_web_research"] = f.CanSpawnWebResearch
+	out["can_spawn_workers"] = f.CanSpawnWorkers
 	out["caps"] = map[string]any{"vision": f.CapsVision}
 	out["card_edit_deferred"] = f.CardEditDeferred
 	out["card_may_dispatch"] = f.CardMayDispatch
@@ -235,10 +338,15 @@ func (f ReaderFacts) Map() map[string]any {
 	} else {
 		out["card_only_tools"] = []string(nil)
 	}
+	out["command_external_hidden"] = f.CommandExternalHidden
+	out["command_external_shown"] = f.CommandExternalShown
 	out["command_on_floor"] = f.CommandOnFloor
 	out["command_output_files"] = f.CommandOutputFiles
 	out["execution_mode"] = f.ExecutionMode
+	out["has_any_git_root"] = f.HasAnyGitRoot
+	out["has_file_tools"] = f.HasFileTools
 	out["has_git"] = f.HasGit
+	out["has_workspace_roots"] = f.HasWorkspaceRoots
 	out["is_coordinator"] = f.IsCoordinator
 	if f.LaneSSyncTools != nil {
 		out["lane_s_sync_tools"] = append([]string(nil), f.LaneSSyncTools...)
@@ -246,6 +354,7 @@ func (f ReaderFacts) Map() map[string]any {
 		out["lane_s_sync_tools"] = []string(nil)
 	}
 	out["more_tools_loadable"] = f.MoreToolsLoadable
+	out["multi_root"] = f.MultiRoot
 	out["native_edit_limit_mib"] = f.NativeEditLimitMiB
 	out["on_worker_branch"] = f.OnWorkerBranch
 	out["profile_command_external_exec"] = f.ProfileCommandExternalExec
@@ -283,11 +392,22 @@ func (f ReaderFacts) Map() map[string]any {
 	} else {
 		out["requestable_capabilities"] = []string(nil)
 	}
+	out["reviews_confined_writes"] = f.ReviewsConfinedWrites
 	out["root_count"] = f.RootCount
+	if f.RunnerCapabilityRequestTools != nil {
+		out["runner_capability_request_tools"] = append([]string(nil), f.RunnerCapabilityRequestTools...)
+	} else {
+		out["runner_capability_request_tools"] = []string(nil)
+	}
 	if f.RunnerDirectIPTools != nil {
 		out["runner_direct_ip_tools"] = append([]string(nil), f.RunnerDirectIPTools...)
 	} else {
 		out["runner_direct_ip_tools"] = []string(nil)
+	}
+	if f.RunnerHostResourcesTools != nil {
+		out["runner_host_resources_tools"] = append([]string(nil), f.RunnerHostResourcesTools...)
+	} else {
+		out["runner_host_resources_tools"] = []string(nil)
 	}
 	out["runner_inline_wait_seconds"] = f.RunnerInlineWaitSeconds
 	if f.RunnerLocalListenTools != nil {
@@ -301,16 +421,34 @@ func (f ReaderFacts) Map() map[string]any {
 		out["runner_loopback_connect_tools"] = []string(nil)
 	}
 	out["runner_park_seconds"] = f.RunnerParkSeconds
+	if f.RunnerSecretUseTools != nil {
+		out["runner_secret_use_tools"] = append([]string(nil), f.RunnerSecretUseTools...)
+	} else {
+		out["runner_secret_use_tools"] = []string(nil)
+	}
 	if f.RunnerSocketTools != nil {
 		out["runner_socket_tools"] = append([]string(nil), f.RunnerSocketTools...)
 	} else {
 		out["runner_socket_tools"] = []string(nil)
+	}
+	if f.RunnerSocksProxyTools != nil {
+		out["runner_socks_proxy_tools"] = append([]string(nil), f.RunnerSocksProxyTools...)
+	} else {
+		out["runner_socks_proxy_tools"] = []string(nil)
 	}
 	if f.RunnerWriteRootTools != nil {
 		out["runner_write_root_tools"] = append([]string(nil), f.RunnerWriteRootTools...)
 	} else {
 		out["runner_write_root_tools"] = []string(nil)
 	}
+	out["session_mode"] = f.SessionMode
+	out["session_scratch_dir"] = f.SessionScratchDir
+	if f.SharedTempLocations != nil {
+		out["shared_temp_locations"] = append([]string(nil), f.SharedTempLocations...)
+	} else {
+		out["shared_temp_locations"] = []string(nil)
+	}
+	out["shared_temp_writable"] = f.SharedTempWritable
 	out["surface_card_label"] = f.SurfaceCardLabel
 	out["surface_card_rule"] = f.SurfaceCardRule
 	out["surface_id"] = f.SurfaceID

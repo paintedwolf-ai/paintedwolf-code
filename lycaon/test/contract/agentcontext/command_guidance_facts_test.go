@@ -99,10 +99,15 @@ func TestCommandGuidanceFactsMatchExecutionSurface(t *testing.T) {
 			}
 			prompts.MergeWorkspaceRootsVars(vars, tc.roots, activeRootID)
 			in := prompts.ReaderInput{
-				Profiles:  profiles,
-				RootCount: len(tc.roots),
-				HasGit:    len(tc.roots) > 0,
-				WebSearch: true,
+				Profiles:              profiles,
+				RootCount:             len(tc.roots),
+				HasGit:                len(tc.roots) > 0,
+				HasAnyGitRoot:         len(tc.roots) > 0,
+				WebSearch:             true,
+				ReviewsConfinedWrites: tc.posture.ReviewsConfinedWrites(),
+				CommandExternalHidden: tc.externalHidden,
+				SessionScratchDir:     "/scratch/sess-1",
+				SharedTempLocations:   shared,
 			}
 			if tc.isCoordinator {
 				plan, err := prompts.CompileSurfacePlan(tc.scopeID, len(tc.roots))

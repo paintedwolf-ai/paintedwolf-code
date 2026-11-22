@@ -14,6 +14,7 @@ import (
 	"github.com/lycaon/lycaon/internal/coordinator/surface"
 	"github.com/lycaon/lycaon/internal/coordinator/turnload"
 	"github.com/lycaon/lycaon/internal/evidence"
+	"github.com/lycaon/lycaon/internal/gitrepo"
 	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/internal/sandbox"
 	sessionlimits "github.com/lycaon/lycaon/internal/session/limits"
@@ -29,6 +30,7 @@ import (
 	"github.com/lycaon/lycaon/internal/session/turnguards"
 	"github.com/lycaon/lycaon/internal/session/workeroutcomes"
 	"github.com/lycaon/lycaon/internal/session/workerworkspace"
+	"github.com/lycaon/lycaon/internal/spawn"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/toolsurface"
@@ -245,20 +247,104 @@ func (m *Context) procedureReader(ctx context.Context, sess *api.Session, profil
 	if surfaceID == "" {
 		visible = append(visible, remaining...)
 	}
-	rootCount := 1
+	var (
+		rootRows   []map[string]any
+		activePath string
+	)
+	rootCount := 0
 	if m != nil && m.Workspace != nil && sess != nil {
-		_, rootCount, _, _ = m.Workspace.PromptRootRows(ctx, sess)
+		rootRows, rootCount, activePath, _ = m.Workspace.PromptRootRows(ctx, sess)
+		if rootCount < 0 {
+			rootCount = 0
+		}
+	} else if sess != nil && strings.TrimSpace(sess.WorkspacePath) != "" {
+		rootCount = 1
+	}
+	sessionMode := string(api.SessionModeAgent)
+	var fallbackPath string
+	if sess != nil {
+		if sess.Mode == api.SessionModeAsk {
+			sessionMode = string(api.SessionModeAsk)
+		}
+		fallbackPath = sess.WorkspacePath
+	}
+	var (
+		branchRoot     string
+		onWorkerBranch bool
+	)
+	if m != nil && m.Workspaces != nil {
+		branchRoot, onWorkerBranch = m.Workspaces.OnWorkerBranch(ctx, sess)
+	}
+	hasGit, hasAnyGitRoot := procedureGitFacts(rootRows, activePath, fallbackPath, branchRoot)
+	var (
+		reviewsConfinedWrites bool
+		externalHidden        bool
+		scratchDir            string
+		sharedTemp            []string
+		spawnAllowlist        []string
+	)
+	if m != nil && m.Profiles != nil {
+		externalHidden = m.Profiles.CommandExternalHidden()
+		if sess != nil {
+			reviewsConfinedWrites = m.Profiles.ProjectApprovalPosture(ctx, sess).ReviewsConfinedWrites()
+			sharedTemp = m.Profiles.WritableSharedTemp(ctx, sess)
+		}
+	}
+	if m != nil && m.ToolContext != nil && sess != nil {
+		scratchDir = m.ToolContext.ScratchDir(ctx, sess)
+	}
+	if resolvedProfileID == prompts.CoordinatorProfileID {
+		spawnAllowlist = spawn.AmbientAllowedAgents()
+		if m != nil && m.Frame != nil && sess != nil {
+			if frame, frameErr := m.Frame.BuildCoordinatorTurnFrame(ctx, sess.ID, sess); frameErr == nil && len(frame.RunContext.AllowedAgents) > 0 {
+				spawnAllowlist = frame.RunContext.AllowedAgents
+			}
+		}
 	}
 	return prompts.NewReader(prompts.ReaderInput{
-		ProfileID: resolvedProfileID,
-		SurfaceID: surfaceID,
-		Profiles:  profiles,
-		Plan:      toolsurface.Compile(offered, remaining),
-		Loaded:    offeredSet,
-		Visible:   visible,
-		RootCount: rootCount,
-		WebSearch: m.WebSearchEnabled(),
+		ProfileID:             resolvedProfileID,
+		SurfaceID:             surfaceID,
+		SessionMode:           sessionMode,
+		Profiles:              profiles,
+		Plan:                  toolsurface.Compile(offered, remaining),
+		Loaded:                offeredSet,
+		Visible:               visible,
+		RootCount:             rootCount,
+		HasGit:                hasGit,
+		HasAnyGitRoot:         hasAnyGitRoot,
+		OnWorkerBranch:        onWorkerBranch,
+		WebSearch:             m.WebSearchEnabled(),
+		SpawnAllowlist:        spawnAllowlist,
+		ReviewsConfinedWrites: reviewsConfinedWrites,
+		CommandExternalHidden: externalHidden,
+		SessionScratchDir:     scratchDir,
+		SharedTempLocations:   sharedTemp,
 	})
+}
+
+func procedureGitFacts(roots []map[string]any, activePath, fallbackWorkspacePath, workerBranchRoot string) (hasGit, hasAnyGitRoot bool) {
+	primaryPath := strings.TrimSpace(activePath)
+	if primaryPath == "" {
+		primaryPath = strings.TrimSpace(fallbackWorkspacePath)
+	}
+	if primaryPath != "" {
+		_, hasGit = gitrepo.Discover(primaryPath)
+	}
+	if !hasGit && strings.TrimSpace(workerBranchRoot) != "" {
+		_, hasGit = gitrepo.Discover(strings.TrimSpace(workerBranchRoot))
+	}
+	hasAnyGitRoot = hasGit
+	if !hasAnyGitRoot {
+		for _, row := range roots {
+			if p, _ := row["path"].(string); strings.TrimSpace(p) != "" {
+				if _, ok := gitrepo.Discover(strings.TrimSpace(p)); ok {
+					hasAnyGitRoot = true
+					break
+				}
+			}
+		}
+	}
+	return hasGit, hasAnyGitRoot
 }
 
 // PromptSurface reports the host facts that shaped a request offering these

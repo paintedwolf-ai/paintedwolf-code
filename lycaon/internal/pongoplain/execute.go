@@ -169,7 +169,11 @@ func (b *contextBudget) normalizeMap(v reflect.Value, depth int) (reflect.Value,
 	if v.Type().Key().Kind() != reflect.String {
 		return reflect.Value{}, fmt.Errorf("%w: map key type %s is not string", ErrContextLimit, v.Type().Key())
 	}
-	if v.Len() > MaxCollectionItems {
+	limit := MaxCollectionItems
+	if depth == 0 {
+		limit = MaxContextEntries
+	}
+	if v.Len() > limit {
 		return reflect.Value{}, fmt.Errorf("%w: map has %d entries", ErrContextLimit, v.Len())
 	}
 	out := make(map[string]any, v.Len())

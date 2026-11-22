@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/catalogview"
+	"github.com/lycaon/lycaon/internal/coordinator/inject"
 	"github.com/lycaon/lycaon/internal/extpacks"
 	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/internal/sandbox"
@@ -89,7 +90,15 @@ func (e *promptSurface) sessionCatalogView(ctx context.Context, sess *api.Sessio
 	}
 	return nil
 }
-func (e *promptSurface) renderSystemPromptWithEngine(ctx context.Context, pe prompts.PromptTemplateEngine, sess *api.Session, templateRef string, vars map[string]any) (string, error) {
+func (e *promptSurface) renderSystemPromptWithEngine(
+	ctx context.Context,
+	pe prompts.PromptTemplateEngine,
+	sess *api.Session,
+	frame inject.CoordinatorTurnFrame,
+	turn *TurnAssemblyScratch,
+	templateRef string,
+	vars map[string]any,
+) (string, error) {
 	if e == nil || pe == nil {
 		return "", errPromptEngineNotConfigured
 	}
@@ -98,7 +107,7 @@ func (e *promptSurface) renderSystemPromptWithEngine(ctx context.Context, pe pro
 		agentType = strings.TrimSpace(sess.AgentType)
 	}
 	if fe, ok := pe.(*prompts.FileTemplateEngine); ok && agentType != "" {
-		reader, err := e.workerReader(ctx, sess, fe, agentType, vars)
+		reader, err := e.workerReader(ctx, sess, frame, turn, fe, agentType, vars)
 		if err == nil {
 			out, renderErr := prompts.RenderPersona(ctx, fe, agentType, reader, vars)
 			if renderErr == nil {
@@ -114,7 +123,15 @@ func (e *promptSurface) renderSystemPromptWithEngine(ctx context.Context, pe pro
 	return pe.Render(ctx, templateRef, vars)
 }
 
-func (e *promptSurface) workerReader(ctx context.Context, sess *api.Session, fe *prompts.FileTemplateEngine, agentType string, vars map[string]any) (prompts.Reader, error) {
+func (e *promptSurface) workerReader(
+	ctx context.Context,
+	sess *api.Session,
+	frame inject.CoordinatorTurnFrame,
+	turn *TurnAssemblyScratch,
+	fe *prompts.FileTemplateEngine,
+	agentType string,
+	vars map[string]any,
+) (prompts.Reader, error) {
 	profileID := ""
 	if agents := e.agentsForSession(ctx, sess); agents != nil {
 		if profile, err := agents.Get(agentType); err == nil {
@@ -150,8 +167,8 @@ func (e *promptSurface) workerReader(ctx context.Context, sess *api.Session, fe 
 	}
 	var visible []string
 	var loaded map[string]bool
-	_, rootCount, _, _, ok := e.workspaceRootsForTurn(ctx, sess, nil)
-	if !ok {
+	roots, rootCount, activePath, _, ok := e.workspaceRootsForTurn(ctx, sess, turn)
+	if !ok && sess != nil && strings.TrimSpace(sess.WorkspacePath) != "" {
 		rootCount = 1
 	}
 	if vars != nil {
@@ -162,19 +179,51 @@ func (e *promptSurface) workerReader(ctx context.Context, sess *api.Session, fe 
 			loaded = raw
 		}
 	}
+	sessionMode := string(api.SessionModeAgent)
+	var fallbackPath string
+	if sess != nil {
+		if sess.Mode == api.SessionModeAsk {
+			sessionMode = string(api.SessionModeAsk)
+		}
+		fallbackPath = sess.WorkspacePath
+	}
+	branchRoot, onWorkerBranch := e.onWorkerBranch(ctx, sess)
+	hasGit, hasAnyGitRoot := readerGitFacts(roots, activePath, fallbackPath, branchRoot)
+	var (
+		reviewsConfinedWrites bool
+		externalHidden        bool
+		scratchDir            string
+		sharedTemp            []string
+	)
+	if promptSurf, hasSurf := e.effectivePromptSurface(ctx, sess, frame, turn); hasSurf {
+		if promptSurf.Posture != "" {
+			reviewsConfinedWrites = promptSurf.Posture.ReviewsConfinedWrites()
+		}
+		externalHidden = promptSurf.CommandExternalHidden
+		scratchDir = promptSurf.SessionScratchDir
+		sharedTemp = promptSurf.SharedTempLocations
+	}
 	webSearchEnabled := true
 	if fn := e.deps.WebSearchEnabled; fn != nil {
 		webSearchEnabled = fn()
 	}
 	visionEnabled := e.deps.ModelVision != nil && e.deps.ModelVision(ctx, sess)
 	reader, err := prompts.NewReader(prompts.ReaderInput{
-		ProfileID: profileID,
-		Profiles:  profiles,
-		Loaded:    loaded,
-		Visible:   visible,
-		Schemas:   schemas,
-		RootCount: rootCount,
-		WebSearch: webSearchEnabled,
+		ProfileID:             profileID,
+		SessionMode:           sessionMode,
+		Profiles:              profiles,
+		Loaded:                loaded,
+		Visible:               visible,
+		Schemas:               schemas,
+		RootCount:             rootCount,
+		HasGit:                hasGit,
+		HasAnyGitRoot:         hasAnyGitRoot,
+		OnWorkerBranch:        onWorkerBranch,
+		WebSearch:             webSearchEnabled,
+		ReviewsConfinedWrites: reviewsConfinedWrites,
+		CommandExternalHidden: externalHidden,
+		SessionScratchDir:     scratchDir,
+		SharedTempLocations:   sharedTemp,
 	})
 	if err != nil {
 		return prompts.Reader{}, err

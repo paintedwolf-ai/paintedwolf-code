@@ -8,6 +8,7 @@ import (
 	"github.com/lycaon/lycaon/internal/coordinator/inject"
 	"github.com/lycaon/lycaon/internal/coordinator/kick"
 	"github.com/lycaon/lycaon/internal/coordinator/surface"
+	"github.com/lycaon/lycaon/internal/gate"
 	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/guidance/feedback"
 	"github.com/lycaon/lycaon/internal/oar"
@@ -50,6 +51,10 @@ type Progress interface {
 type Closure interface {
 	Baseline(string) (guard.ProgressClosureBaseline, bool)
 }
+type PostureView interface {
+	ProjectApprovalPosture(context.Context, *api.Session) gate.Posture
+	CommandExternalHidden() bool
+}
 type Service struct {
 	sessionStore    Sessions
 	transcriptStore TranscriptStore
@@ -61,6 +66,7 @@ type Service struct {
 	frame           inject.CoordinatorTurnFrameSource
 	progress        Progress
 	closure         Closure
+	posture         PostureView
 	gateFeedback    *feedback.GateFeedbackCatalog
 	rejectFmt       *guidance.StaticRejectFormatter
 	renderer        *oar.Renderer
@@ -79,6 +85,7 @@ func (m *Service) SetWorkers(workers workeroutcomes.CycleLedger)     { m.workers
 func (m *Service) SetWorkflow(workflows *WorkflowDomains)            { m.workflows = workflows }
 func (m *Service) SetFrame(frame inject.CoordinatorTurnFrameSource)  { m.frame = frame }
 func (m *Service) SetProgress(progress Progress)                     { m.progress = progress }
+func (m *Service) SetPostureView(posture PostureView)                { m.posture = posture }
 func (m *Service) SetFeedback(catalog *feedback.GateFeedbackCatalog) { m.gateFeedback = catalog }
 func (m *Service) SetRejectFormatter(formatter *guidance.StaticRejectFormatter) {
 	m.rejectFmt = formatter

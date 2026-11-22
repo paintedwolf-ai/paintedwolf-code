@@ -108,3 +108,137 @@ func TestPromptRenderReachFailsOnASeededTemplate(t *testing.T) {
 		})
 	}
 }
+
+func TestCapabilityConditionsAndSourceDiscoveryFailClosed(t *testing.T) {
+	t.Parallel()
+	capRule := rule(t, promptrender.Family, "capability-conditions-use-declared-facts")
+	discRule := rule(t, promptrender.Family, "stock-sources-reconciled-and-parsed")
+
+	anchors := map[string]string{
+		"lycaon/internal/prompts/reader_facts_vocab.go": "package prompts\n\nfunc CheckTemplateVocabulary() {}\n",
+		"lycaon/internal/prompts/persona_render.go":     "package prompts\n\nfunc RenderPersona() {}\n",
+	}
+
+	const (
+		skillDir     = "lycaon/config/packs/painted-wolf/platform/skills/seeded-release/"
+		skillBodyRel = skillDir + "SKILL.md"
+		skillRefRel  = skillDir + "references/seeded-manifest.md"
+		promptRel    = "lycaon/config/packs/painted-wolf/platform/agents/prompts/seeded-agent.md"
+		partialRel   = "lycaon/config/packs/painted-wolf/platform/shared/partials/seeded-host.md"
+	)
+
+	t.Run("passing controls for valid capability guards and presentation logic", func(t *testing.T) {
+		t.Parallel()
+		files := with(anchors, map[string]string{
+			skillBodyRel: "---\nname: seeded-release\ndescription: Valid control skill.\nmetadata:\n  paintedwolf.any_of_tools: command, verify\n---\n" +
+				"{% if multi_root %}Workspace spans {{ root_count }} folders.{% endif %}\n" +
+				"{% if has_git and not on_worker_branch %}Resolve commit, tag, and version.{% else %}Take version from the brief.{% endif %}\n" +
+				"{% if can_git_read %}Inspect `git log` in `command`.{% elif can_request_git_read %}Call `request_tools(need=\"command\")`.{% endif %}\n" +
+				"{% if profile_has_verify %}Run `verify`.{% endif %}\n" +
+				"{% if can_command_external_selector %}Run `external -- lsof +L1`.{% endif %}\n",
+			partialRel: "{% if runner_host_resources_tools %}Declare id in `capability_request.host_resources`.{% endif %}\n",
+			promptRel:  "{% set finish_note = \"Report grounded results.\" %}{{ finish_note }}\n{% include \"partials/seeded-host.md\" %}\n",
+		})
+		expect(t, invariants.Evaluate(fixture(t, files), discRule), passes, 0)
+		expect(t, invariants.Evaluate(fixture(t, files), capRule), passes, 0)
+	})
+
+	for name, tc := range map[string]struct {
+		rule    invariants.Invariant
+		files   map[string]string
+		expects []string
+	}{
+		"seeded local set alias over real vocabulary promising unavailable git action": {
+			rule: capRule,
+			files: map[string]string{
+				skillBodyRel: "---\nname: seeded-release\ndescription: Seeded alias.\n---\n" +
+					"{% set git_ok = has_git and not on_worker_branch %}\n" +
+					"{% if git_ok %}Run `git log previous..release` in `command`.{% endif %}\n",
+			},
+			expects: []string{
+				"config/packs/painted-wolf/platform/skills/seeded-release/SKILL.md",
+				"has_git and not on_worker_branch",
+				"git_ok",
+			},
+		},
+		"seeded inline workspace condition promising unestablished command and verify": {
+			rule: capRule,
+			files: map[string]string{
+				skillBodyRel: "---\nname: seeded-release\ndescription: Seeded inline.\n---\n" +
+					"{% if has_git and not on_worker_branch %}Confirm `git status --short` in `command` and run `verify`.{% endif %}\n",
+			},
+			expects: []string{
+				"config/packs/painted-wolf/platform/skills/seeded-release/SKILL.md",
+				"has_git and not on_worker_branch",
+				"verify",
+			},
+		},
+		"seeded violation inside included partial": {
+			rule: capRule,
+			files: map[string]string{
+				partialRel: "{% if (profile_has_command and profile_command_external_exec != false) or profile_has_verify %}Include id in `capability_request.host_resources`.{% endif %}\n",
+				promptRel:  "## Host\n{% include \"partials/seeded-host.md\" %}\n",
+			},
+			expects: []string{
+				"config/packs/painted-wolf/platform/shared/partials/seeded-host.md",
+				"profile_has_verify",
+				"capability_request.host_resources",
+			},
+		},
+		"seeded violation inside skill reference file": {
+			rule: capRule,
+			files: map[string]string{
+				skillBodyRel: "---\nname: seeded-release\ndescription: Valid body.\nmetadata:\n  paintedwolf.any_of_tools: command, verify\n---\n{% if profile_has_verify %}Run `verify`.{% endif %}\n",
+				skillRefRel:  "{% if not on_worker_branch %}Compute `git log` in `command` and `external -- lsof +L1`.{% endif %}\n",
+			},
+			expects: []string{
+				"config/packs/painted-wolf/platform/skills/seeded-release/references/seeded-manifest.md",
+				"not on_worker_branch",
+				"can_command_external_selector",
+			},
+		},
+		"seeded static tool_profile check reconstructing capability": {
+			rule: capRule,
+			files: map[string]string{
+				partialRel: "{% if tool_profile == \"implement\" %}Request access in `capability_request`.{% endif %}\n",
+			},
+			expects: []string{
+				"config/packs/painted-wolf/platform/shared/partials/seeded-host.md",
+				`tool_profile == \"implement\"`,
+				"checks static tool_profile identity",
+			},
+		},
+		"newly added unclassified stock markdown source fails discovery": {
+			rule: discRule,
+			files: map[string]string{
+				"lycaon/config/packs/painted-wolf/platform/unreviewed/rogue-prompt.md": "Call `verify`.\n",
+			},
+			expects: []string{
+				"config/packs/painted-wolf/platform/unreviewed/rogue-prompt.md",
+				"unclassified",
+			},
+		},
+		"unhandled executable Pongo tag fails closed naming source": {
+			rule: discRule,
+			files: map[string]string{
+				partialRel: "{% custom_exec profile_has_command %}run{% endcustom_exec %}\n",
+			},
+			expects: []string{
+				"config/packs/painted-wolf/platform/shared/partials/seeded-host.md",
+				"custom_exec",
+			},
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			res := invariants.Evaluate(fixture(t, with(anchors, tc.files)), tc.rule)
+			expect(t, res, violates, 0)
+			joined := strings.Join(res.Violations, "\n")
+			for _, want := range tc.expects {
+				if !strings.Contains(joined, want) {
+					t.Errorf("violations missing %q:\n%s", want, joined)
+				}
+			}
+		})
+	}
+}

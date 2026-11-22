@@ -137,12 +137,14 @@ func kickReader(live CoordinatorKickRenderContext) (prompts.Reader, error) {
 		}
 	}
 	return prompts.NewReader(prompts.ReaderInput{
-		ProfileID: prompts.CoordinatorProfileID,
-		SurfaceID: surfaceID,
-		Profiles:  profiles,
-		Plan:      plan,
-		Loaded:    loaded,
-		RootCount: live.RootCount,
-		WebSearch: true,
+		ProfileID:             prompts.CoordinatorProfileID,
+		SurfaceID:             surfaceID,
+		Profiles:              profiles,
+		Plan:                  plan,
+		Loaded:                loaded,
+		RootCount:             live.RootCount,
+		WebSearch:             true,
+		ReviewsConfinedWrites: live.ReviewsConfinedWrites,
+		CommandExternalHidden: live.CommandExternalHidden,
 	})
 }

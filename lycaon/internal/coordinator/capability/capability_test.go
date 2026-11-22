@@ -11,7 +11,7 @@ func TestDeriveZeroRoot(t *testing.T) {
 		[]string{"task", "web_search", "fetch_url", "wait"},
 		[]string{"web-researcher"},
 	)
-	if caps.HasFileTools || caps.CanOrient || caps.CanSpawnImplementer {
+	if caps.HasWorkspaceRoots || caps.HasFileTools || caps.CanOrient || caps.CanSpawnImplementer {
 		t.Fatalf("0-root caps = %+v want web-only", caps)
 	}
 	if !caps.CanSpawnWebResearch {
@@ -27,8 +27,21 @@ func TestDeriveFolderMode(t *testing.T) {
 		[]string{"read", "grep", "pack_board", "task"},
 		[]string{"implementer", "web-researcher"},
 	)
-	if !caps.HasFileTools || !caps.CanOrient || !caps.CanSpawnImplementer || !caps.CanSpawnWebResearch || !caps.CanSpawnWorkers {
+	if !caps.HasWorkspaceRoots || !caps.HasFileTools || !caps.CanOrient || !caps.CanSpawnImplementer || !caps.CanSpawnWebResearch || !caps.CanSpawnWorkers {
 		t.Fatalf("folder caps = %+v", caps)
+	}
+}
+
+func TestDeriveDispatchSurfaceSplitsWorkspaceRootsFromFileTools(t *testing.T) {
+	caps := capability.Derive(1,
+		[]string{"promote_work", "discard_work", "task", "wait"},
+		[]string{"implementer"},
+	)
+	if !caps.HasWorkspaceRoots {
+		t.Fatalf("expected HasWorkspaceRoots at 1 root, got %+v", caps)
+	}
+	if caps.HasFileTools {
+		t.Fatalf("dispatch surface without file/shell/survey/source_ledger tools set HasFileTools: %+v", caps)
 	}
 }
 
@@ -37,7 +50,7 @@ func TestDeriveNoWorkers(t *testing.T) {
 		[]string{"read"},
 		nil,
 	)
-	if caps.CanSpawnWorkers {
-		t.Fatalf("expected no workers, got %+v", caps)
+	if caps.HasWorkspaceRoots || caps.HasFileTools || caps.CanSpawnWorkers {
+		t.Fatalf("expected 0-root no-worker caps, got %+v", caps)
 	}
 }

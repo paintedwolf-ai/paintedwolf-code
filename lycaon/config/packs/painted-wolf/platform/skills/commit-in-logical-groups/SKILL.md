@@ -5,9 +5,9 @@ description: When the user asks to commit, split the working tree into coherent 
 
 # Commit in logical groups
 
-{% set can_git_commit = has_git and not on_worker_branch and profile_has_command and profile_command_mutation != false %}{% set can_git_read = has_git and not on_worker_branch and profile_has_command %}**Entry check:** the user asked for the work to be committed; committing is never implicit.
+**Entry check:** the user asked for the work to be committed; committing is never implicit.
 
-{% if can_git_commit %}Use native Git commands through `command` for inspection, staging, and commits;{% else %}Prepare or report the planned commit groups for the coordinator to commit;{% endif %} each operation retains host review and session attribution.
+{% if can_git_commit %}Use native Git commands through `command` for inspection, staging, and commits;{% elif can_request_git_commit %}Load `command` via `request_tools(need: "stage and commit git changes")`, then use native Git commands for inspection, staging, and commits;{% else %}Prepare or report the planned commit groups for the coordinator to commit;{% endif %} each operation retains host review and session attribution.
 
 ## Mechanics
 

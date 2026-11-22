@@ -47,12 +47,13 @@ func TestI14ExcludedDisclosuresMatchPolicyProjection(t *testing.T) {
 				plan, err := prompts.CompileSurfacePlan(surfaceID, rootCount)
 				contractcheck.FailErr(t, "CompileSurfacePlan", err)
 				reader, err := prompts.NewReader(prompts.ReaderInput{
-					ProfileID: prompts.CoordinatorProfileID,
-					SurfaceID: surfaceID,
-					Plan:      plan,
-					Profiles:  profiles,
-					RootCount: rootCount,
-					WebSearch: true,
+					ProfileID:      prompts.CoordinatorProfileID,
+					SurfaceID:      surfaceID,
+					Plan:           plan,
+					Profiles:       profiles,
+					RootCount:      rootCount,
+					WebSearch:      true,
+					SpawnAllowlist: allowed,
 				})
 				contractcheck.FailErr(t, "NewReader", err)
 				block, err := inject.RenderImplementSpawnInject(

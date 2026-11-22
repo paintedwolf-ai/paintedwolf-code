@@ -135,13 +135,17 @@ func TestRenderedAskModeCoordinatorPromptsMatchOfferedTools(t *testing.T) {
 					t.Fatal("active workflow Ask mode must offer ask_user")
 				}
 				reader, err := prompts.NewReader(prompts.ReaderInput{
-					ProfileID: prompts.CoordinatorProfileID,
-					SurfaceID: profile.SurfaceID,
-					Mode:      surface.ExecutionModeFamily(profile.SurfaceID),
-					Profiles:  profiles,
-					Plan:      plan,
-					RootCount: rootCount,
-					WebSearch: true,
+					ProfileID:      prompts.CoordinatorProfileID,
+					SurfaceID:      profile.SurfaceID,
+					Mode:           surface.ExecutionModeFamily(profile.SurfaceID),
+					SessionMode:    string(api.SessionModeAsk),
+					Profiles:       profiles,
+					Plan:           plan,
+					RootCount:      rootCount,
+					HasGit:         rootCount > 0,
+					HasAnyGitRoot:  rootCount > 0,
+					WebSearch:      true,
+					SpawnAllowlist: runCtx.AllowedAgents,
 				})
 				contractcheck.FailErr(t, "new Ask reader", err)
 				vars := mergeCoordinatorSurfaceVars(t, profile.SurfaceID)

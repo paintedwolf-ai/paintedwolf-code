@@ -101,6 +101,8 @@ type WorkerRosterSource func(ctx context.Context, sessionID string) (rows []map[
 type Workers struct {
 	Leg    WorkerContextBuilder
 	Roster WorkerRosterSource
+	// Branch reports the isolated branch root for a worker child session.
+	Branch func(ctx context.Context, sess *api.Session) (string, bool)
 }
 
 type AssemblyDeps struct {

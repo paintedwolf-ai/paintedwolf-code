@@ -200,7 +200,6 @@ func BoardInjectToMap(data BoardInjectData) map[string]any {
 		"now_line":            data.NowLine,
 		"omit_delegation":     data.OmitDelegation,
 		"include_scan_legend": data.IncludeScanLegend,
-		"multi_root":          data.MultiRoot,
 		"orientation_roots":   orientationRoots,
 		"root_omitted_count":  data.RootOmittedCount,
 		"workers_omitted":     data.WorkersOmitted,
