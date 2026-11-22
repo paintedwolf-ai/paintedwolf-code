@@ -11,14 +11,22 @@ import (
 	"github.com/lycaon/lycaon/internal/settingsoverlay"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
+	workflowblueprints "github.com/lycaon/lycaon/internal/workflow/blueprints"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 	"github.com/lycaon/lycaon/internal/workflow/runstate"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
 func TestPlanStartMintsConventionPath(t *testing.T) {
-	mgr, sessionID, _, _ := testWorkflowManager(t)
+	mgr, sessionID, _, repositories := testWorkflowManager(t)
 	ctx := context.Background()
+	testutil.FailErr(t, "nil SyncBlueprintTranscript", (&workflowblueprints.Service{}).SyncBlueprintTranscript(ctx, "", "", false))
+	if _, err := mgr.Blueprints.ResolvePlanForStart(ctx, api.StartWorkflowRunRequest{}, testdbseed.DefaultProjectID, "", "plan", "", ""); err != nil {
+		t.Fatalf("ResolvePlanForStart without session: %v", err)
+	}
+	testutil.FailErr(t, "seed user intent message", repositories.Transcript.AppendMessages(ctx, sessionID, api.Message{
+		ID: "user-1", Role: api.MessageRoleUser, Content: "Design the blueprint",
+	}))
 	run, err := mgr.Starts.StartHuman(ctx, sessionID, api.StartWorkflowRunRequest{
 		WorkflowID: "plan", WorkflowVersion: "1.0.1",
 	})
@@ -84,6 +92,20 @@ func TestNotifyRetargetsProvisionalPathOnce(t *testing.T) {
 		ProjectID: testdbseed.DefaultProjectID,
 	}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "Create session", err)
+	if _, err := mgr.Blueprints.ResolvePlanForStart(ctx, api.StartWorkflowRunRequest{}, testdbseed.DefaultProjectID, settingsoverlay.Rel("blueprints/empty-session.md"), "options", "", ""); err != nil {
+		t.Fatalf("ResolvePlanForStart empty sessionID: %v", err)
+	}
+	titledSess, err := sessStore.Sessions.Create(ctx, api.CreateSessionRequest{
+		Posture:   api.SessionPostureBuild,
+		ProjectID: testdbseed.DefaultProjectID,
+	}, testdbseed.DefaultProjectID)
+	testutil.FailErr(t, "Create titled session", err)
+	testutil.FailErr(t, "seed titled session message", sessStore.Transcript.AppendMessages(ctx, titledSess.ID, api.Message{
+		ID: "u1", Role: api.MessageRoleUser, Content: "Design the blueprint",
+	}))
+	if _, err := mgr.Blueprints.ResolvePlanForStart(ctx, api.StartWorkflowRunRequest{}, testdbseed.DefaultProjectID, settingsoverlay.Rel("blueprints/titled-session.md"), "options", titledSess.ID, ""); err != nil {
+		t.Fatalf("ResolvePlanForStart titled session: %v", err)
+	}
 	run, err := mgr.Starts.StartHuman(ctx, sess.ID, api.StartWorkflowRunRequest{
 		WorkflowID: "plan", WorkflowVersion: "1.0.1",
 	})
@@ -96,6 +118,7 @@ func TestNotifyRetargetsProvisionalPathOnce(t *testing.T) {
 	run, err = completePlanResearchAtDepthNone(ctx, mgr, run)
 	testutil.FailErr(t, "complete research at depth none", err)
 	from := run.BlueprintPath
+	testutil.FailErr(t, "sync provisional transcript", mgr.Blueprints.SyncBlueprintTranscript(ctx, run.ProjectID, from, false))
 	seedValidPlanContent(t, blueprintMgr, from)
 	mgr.Blueprints.NotifyBlueprintPathWritten(ctx, sess.ID, "", from)
 	run, err = mgr.Store.Runs.Get(ctx, run.ID)
@@ -112,6 +135,8 @@ func TestNotifyRetargetsProvisionalPathOnce(t *testing.T) {
 	if _, err := blueprintMgr.Get(ctx, run.ProjectID, from); err == nil {
 		t.Fatal("old provisional path must be gone")
 	}
+	mgr.Blueprints.TranscriptStore = nil
+	testutil.FailErr(t, "rebind without transcript store", mgr.Blueprints.RebindBlueprintPath(ctx, run.ProjectID, run.BlueprintPath, settingsoverlay.Rel("blueprints/rebound.md")))
 }
 
 func TestNotifyBlueprintPathWrittenNonBoundNoop(t *testing.T) {
