@@ -2,10 +2,12 @@
 package toolreach
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
 	"math"
+	"reflect"
 	"regexp"
 	"slices"
 	"sort"
@@ -193,7 +195,7 @@ func QuoteProgram(words []string) string {
 
 // Text renders the call the way copy shows it.
 func (c Call) Text() string {
-	parts := flattenArgs("", c.Args)
+	parts := flattenArgs("", canonicalMap(c.Args))
 	if c.Partial && c.Program == "" {
 		parts = append(parts, "…")
 	}
@@ -242,47 +244,126 @@ func quoteCallString(s string) string {
 	return strings.ReplaceAll(strconv.Quote(s), "`", `\u0060`)
 }
 
-func formatFloatValue(f float64) string {
+func formatFloatValue(f float64, bits int) string {
 	if !math.IsNaN(f) && !math.IsInf(f, 0) && math.Trunc(f) == f && f >= -9007199254740992 && f <= 9007199254740992 {
 		return strconv.FormatInt(int64(f), 10)
 	}
-	return strconv.FormatFloat(f, 'f', -1, 64)
+	return strconv.FormatFloat(f, 'f', -1, bits)
+}
+
+func canonicalMap(in map[string]any) map[string]any {
+	if in == nil {
+		return nil
+	}
+	out := make(map[string]any, len(in))
+	for k, v := range in {
+		out[k] = canonicalArgValue(v)
+	}
+	return out
+}
+
+func canonicalArgValue(value any) any {
+	switch v := value.(type) {
+	case nil, string, bool, int64, uint64, float32, float64, json.Number:
+		return v
+	case int:
+		return int64(v)
+	case json.Marshaler:
+		return decodeJSONValue(v)
+	}
+	rv := reflect.ValueOf(value)
+	for rv.Kind() == reflect.Pointer || rv.Kind() == reflect.Interface {
+		if rv.IsNil() {
+			return nil
+		}
+		rv = rv.Elem()
+	}
+	return canonicalReflectValue(rv)
+}
+
+func canonicalReflectValue(rv reflect.Value) any {
+	switch rv.Kind() {
+	case reflect.String:
+		return rv.String()
+	case reflect.Bool:
+		return rv.Bool()
+	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+		return rv.Int()
+	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Uintptr:
+		return rv.Uint()
+	case reflect.Float32:
+		return float32(rv.Float())
+	case reflect.Float64:
+		return rv.Float()
+	case reflect.Slice:
+		if rv.IsNil() {
+			return nil
+		}
+		return canonicalIndexedItems(rv)
+	case reflect.Array:
+		return canonicalIndexedItems(rv)
+	case reflect.Map:
+		if rv.IsNil() {
+			return nil
+		}
+		if rv.Type().Key().Kind() == reflect.String {
+			out := make(map[string]any, rv.Len())
+			iter := rv.MapRange()
+			for iter.Next() {
+				out[iter.Key().String()] = canonicalArgValue(iter.Value().Interface())
+			}
+			return out
+		}
+		return decodeJSONValue(rv.Interface())
+	default:
+		return decodeJSONValue(rv.Interface())
+	}
+}
+
+func canonicalIndexedItems(rv reflect.Value) []any {
+	items := make([]any, rv.Len())
+	for i := range items {
+		items[i] = canonicalArgValue(rv.Index(i).Interface())
+	}
+	return items
+}
+
+func decodeJSONValue(value any) any {
+	raw, err := json.Marshal(value)
+	if err != nil {
+		return fmt.Sprint(value)
+	}
+	dec := json.NewDecoder(bytes.NewReader(raw))
+	dec.UseNumber()
+	var decoded any
+	if err := dec.Decode(&decoded); err != nil {
+		return fmt.Sprint(value)
+	}
+	return canonicalArgValue(decoded)
 }
 
 func argText(value any) string {
-	switch v := value.(type) {
+	switch v := canonicalArgValue(value).(type) {
 	case nil:
 		return "null"
 	case string:
 		return quoteCallString(v)
 	case bool:
 		return strconv.FormatBool(v)
-	case int:
-		return strconv.Itoa(v)
 	case int64:
 		return strconv.FormatInt(v, 10)
 	case uint64:
 		return strconv.FormatUint(v, 10)
+	case float32:
+		return formatFloatValue(float64(v), 32)
 	case float64:
-		return formatFloatValue(v)
+		return formatFloatValue(v, 64)
 	case json.Number:
 		return v.String()
 	case []any:
 		items := make([]string, len(v))
 		for i, elem := range v {
 			items[i] = argText(elem)
-		}
-		return "[" + strings.Join(items, ", ") + "]"
-	case []string:
-		items := make([]string, len(v))
-		for i, elem := range v {
-			items[i] = quoteCallString(elem)
-		}
-		return "[" + strings.Join(items, ", ") + "]"
-	case []int:
-		items := make([]string, len(v))
-		for i, elem := range v {
-			items[i] = strconv.Itoa(elem)
 		}
 		return "[" + strings.Join(items, ", ") + "]"
 	case map[string]any:
@@ -296,19 +377,8 @@ func argText(value any) string {
 			entries[i] = quoteCallString(k) + ": " + argText(v[k])
 		}
 		return "{" + strings.Join(entries, ", ") + "}"
-	case map[string]string:
-		keys := make([]string, 0, len(v))
-		for k := range v {
-			keys = append(keys, k)
-		}
-		sort.Strings(keys)
-		entries := make([]string, len(keys))
-		for i, k := range keys {
-			entries[i] = quoteCallString(k) + ": " + quoteCallString(v[k])
-		}
-		return "{" + strings.Join(entries, ", ") + "}"
 	default:
-		return fmt.Sprintf("%v", value)
+		return quoteCallString(fmt.Sprint(v))
 	}
 }
 
@@ -333,7 +403,7 @@ func (r Request) Sequence(call Call) ([]Call, bool) {
 	_, hasSchema := r.ToolSchema(call.Tool)
 	switch r.Status(call.Tool) {
 	case Callable:
-		if hasSchema && call.Program == "" && !callArgsAdmitted(r, "", call.Tool, call.Args) {
+		if hasSchema && call.Program == "" && !callArgsAdmitted(r, "", call.Tool, canonicalMap(call.Args)) {
 			return nil, false
 		}
 		return []Call{call}, true
@@ -342,7 +412,7 @@ func (r Request) Sequence(call Call) ([]Call, bool) {
 			return []Call{Load(call.Tool), call}, true
 		}
 		if hasSchema {
-			if !callArgsAdmitted(r, "", call.Tool, call.Args) {
+			if !callArgsAdmitted(r, "", call.Tool, canonicalMap(call.Args)) {
 				return nil, false
 			}
 			return []Call{Load(call.Tool), call}, true
