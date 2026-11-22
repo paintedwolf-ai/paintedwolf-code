@@ -9,7 +9,9 @@ import (
 	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/spawn"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/toolschema"
+	"github.com/lycaon/lycaon/internal/toolsurface"
 	"github.com/lycaon/lycaon/internal/toolvocab"
 	"github.com/lycaon/lycaon/internal/toolvocab/toolvocabtest"
 	"github.com/lycaon/lycaon/pkg/api"
@@ -267,6 +269,141 @@ func testDeferredAndHistoricalSubjects(
 			t.Fatalf("expected host historical observation with bogus receipt kind and field to fail, got %+v", got)
 		}
 	})
+}
+
+func TestClaimLevelNegationAndRequestToolsBinding(t *testing.T) {
+	eff, err := extpacks.CatalogForConsumers()
+	testutil.FailErr(t, "catalog", err)
+	stockSchemas, _, err := extpacks.LoadEffectiveToolSchemas(eff)
+	testutil.FailErr(t, "schemas", err)
+	prunable, err := toolvocabtest.DiscoverPrunableSchemaIndex(t.Context(), eff)
+	testutil.FailErr(t, "prunable", err)
+	vocab, err := toolvocabtest.NewBacktickVocab(eff)
+	testutil.FailErr(t, "vocab", err)
+
+	mergedSchemas, err := toolschema.Merge(stockSchemas, toolschema.ConfigFromEntries(map[string]toolschema.Entry{
+		"edit": {Description: "Edit file", Schema: map[string]any{"type": "object", "properties": map[string]any{"path": map[string]any{"type": "string"}}}},
+	}))
+	testutil.FailErr(t, "merge edit schema", err)
+	customProfiles := []sandbox.ToolProfile{{
+		ID:    "test_floor",
+		Tools: map[string]bool{"command": true, "request_tools": true, "edit": true, "verify": true},
+	}}
+	catalog, err := toolvocab.NewCatalog(mergedSchemas, customProfiles, toolvocab.Provenance{})
+	testutil.FailErr(t, "catalog with edit", err)
+
+	planWithEditAndVerifyDeferred := toolsurface.Compile([]string{"command", "request_tools"}, []string{"edit", "verify"})
+	readerWithEditReq, err := prompts.NewReader(prompts.ReaderInput{
+		ProfileID: "test_floor",
+		Profiles:  customProfiles,
+		Plan:      planWithEditAndVerifyDeferred,
+		Schemas:   mergedSchemas,
+		RootCount: 1,
+		HasGit:    true,
+	})
+	testutil.FailErr(t, "reader with edit requestable", err)
+
+	cmdBase, ok := stockSchemas.ToolMeta("command")
+	if !ok {
+		t.Fatal("missing stock command schema")
+	}
+	roCmdSchema := toolschema.PruneCommandReadOnlySchema(cmdBase.ArgsSchema)
+	reqMeta, _ := stockSchemas.ToolMeta("request_tools")
+	metas := []tools.ToolMeta{
+		{Name: "command", ArgsSchema: roCmdSchema},
+		{Name: "request_tools", ArgsSchema: reqMeta.ArgsSchema},
+	}
+
+	evalCtx := toolvocabtest.ClaimEvaluationContext{
+		Catalog:     catalog,
+		Prunable:    prunable,
+		Vocab:       vocab,
+		Self:        toolvocabtest.AuthorityFromReaderAndMetas(readerWithEditReq, nil, metas),
+		SessionMode: api.SessionModeAgent,
+		Posture:     api.SessionPostureBuild,
+	}
+
+	t.Run("affirmative without phrase fails and compound prohibition catches unnegated claim", func(t *testing.T) {
+		gotWithoutDelay := toolvocabtest.EvaluateClaimBlock(evalCtx, toolvocabtest.ClaimBlock{
+			Label:   "affirmative-without-delay",
+			Subject: toolvocabtest.SubjectSelfNow(),
+			Text:    "Use `edit` without delay.",
+		})
+		if !hasViolationClaim(gotWithoutDelay, "edit") {
+			t.Fatalf("expected 'Use `edit` without delay.' to fail naming edit, got %+v", gotWithoutDelay)
+		}
+
+		gotCompound := toolvocabtest.EvaluateClaimBlock(evalCtx, toolvocabtest.ClaimBlock{
+			Label:   "compound-prohibition-and-use",
+			Subject: toolvocabtest.SubjectSelfNow(),
+			Text:    "Do not call `delete_file`, and use `edit` now.",
+		})
+		if hasViolationClaim(gotCompound, "delete_file") || !hasViolationClaim(gotCompound, "edit") {
+			t.Fatalf("expected delete_file excused and edit rejected, got %+v", gotCompound)
+		}
+	})
+
+	t.Run("real prohibitions pass without excusing surrounding unoffered claims", func(t *testing.T) {
+		for _, prose := range []string{
+			"Do not call `edit` on this surface.",
+			"`edit` is not available on this turn.",
+			"Run `command` without `verification: true`.",
+		} {
+			if got := toolvocabtest.EvaluateClaimBlock(evalCtx, toolvocabtest.ClaimBlock{
+				Label:   "real-prohibition",
+				Subject: toolvocabtest.SubjectSelfNow(),
+				Text:    prose,
+			}); len(got) > 0 {
+				t.Fatalf("expected prohibition %q to pass, got %+v", prose, got)
+			}
+		}
+	})
+
+	t.Run("request_tools binds only to its requested target and rejects immediate use of another tool", func(t *testing.T) {
+		mixed := toolvocabtest.EvaluateClaimBlock(evalCtx, toolvocabtest.ClaimBlock{
+			Label:   "mixed-loader-and-immediate-verify",
+			Subject: toolvocabtest.SubjectSelfNow(),
+			Text:    "Call `request_tools(need=\"edit\")` to load editing, and run `verify` now.",
+		})
+		if !hasViolationClaim(mixed, "verify") {
+			t.Fatalf("expected unoffered verify to fail alongside request_tools(need=\"edit\"), got %+v", mixed)
+		}
+
+		validSpecific := toolvocabtest.EvaluateClaimBlock(evalCtx, toolvocabtest.ClaimBlock{
+			Label:   "valid-specific-loading-advice",
+			Subject: toolvocabtest.SubjectSelfNow(),
+			Text:    "Load `edit` via `request_tools(need=\"edit\")` before calling `edit`.",
+		})
+		if len(validSpecific) > 0 {
+			t.Fatalf("expected valid specific loading advice for edit to pass, got %+v", validSpecific)
+		}
+
+		planWithoutEdit := toolsurface.Compile([]string{"command", "request_tools"}, []string{"verify"})
+		readerWithoutEdit, rErr := prompts.NewReader(prompts.ReaderInput{
+			ProfileID: "test_floor", Profiles: customProfiles, Plan: planWithoutEdit,
+			Schemas: mergedSchemas, RootCount: 1,
+		})
+		testutil.FailErr(t, "reader without edit", rErr)
+		noEditCtx := evalCtx
+		noEditCtx.Self = toolvocabtest.AuthorityFromReaderAndMetas(readerWithoutEdit, nil, metas)
+		invalidTarget := toolvocabtest.EvaluateClaimBlock(noEditCtx, toolvocabtest.ClaimBlock{
+			Label:   "unrequestable-edit-loader",
+			Subject: toolvocabtest.SubjectSelfNow(),
+			Text:    "Load `edit` via `request_tools(need=\"edit\")` before calling `edit`.",
+		})
+		if len(invalidTarget) == 0 {
+			t.Fatal("expected loading unrequestable edit to fail")
+		}
+	})
+}
+
+func hasViolationClaim(violations []toolvocabtest.SubjectViolation, want string) bool {
+	for _, v := range violations {
+		if v.Claim == want {
+			return true
+		}
+	}
+	return false
 }
 
 func slicesContains(items []string, target string) bool {

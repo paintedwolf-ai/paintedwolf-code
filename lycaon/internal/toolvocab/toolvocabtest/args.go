@@ -24,6 +24,8 @@ type CallExample struct {
 	Tool           string
 	Raw            string
 	Line           int
+	Start          int
+	End            int
 	Args           map[string]any
 	BareIdents     []string
 	JSONObjectForm bool
@@ -73,7 +75,10 @@ func ParseCallExamples(c *toolvocab.Catalog, text string) []CallExample {
 			continue
 		}
 		line := 1 + strings.Count(text[:loc[0]], "\n")
-		if ex, valid := parseCallBody(tool, text[loc[0]:loc[1]+len(body)+1], body, line); valid {
+		callEnd := loc[1] + len(body) + 1
+		if ex, valid := parseCallBody(tool, text[loc[0]:callEnd], body, line); valid {
+			ex.Start = loc[0]
+			ex.End = callEnd
 			out = append(out, ex)
 		}
 	}
@@ -151,10 +156,10 @@ func ValidateAttributedClaims(
 ) []AttributedClaimIssue {
 	var issues []AttributedClaimIssue
 	for _, sent := range splitActiveSentences(text) {
-		if isProhibitionClause(sent.sentence) {
-			continue
-		}
 		for _, ex := range ParseCallExamples(c, sent.sentence) {
+			if isClaimSpanNegated(sent.sentence, ex.Start, ex.End) {
+				continue
+			}
 			ex.Line = sent.line
 			if offered != nil && !offered[ex.Tool] {
 				issues = append(issues, AttributedClaimIssue{
@@ -298,6 +303,9 @@ func validateStandaloneBackticks(
 ) []AttributedClaimIssue {
 	var issues []AttributedClaimIssue
 	for _, bs := range ExtractInlineBackticks(sent.sentence) {
+		if isClaimSpanNegated(sent.sentence, bs.Start, bs.End) {
+			continue
+		}
 		raw := strings.TrimSpace(bs.Span)
 		if raw == "" || strings.Contains(raw, "(") {
 			continue
@@ -557,14 +565,16 @@ func explicitPrepositionTool(sentence, rawSpan string) string {
 	if idx < 0 {
 		return ""
 	}
-	after := sentence[idx+len(rawSpan)+2:]
+	end := idx + len(rawSpan) + 2
+	cStart, cEnd := enclosingSubClause(sentence, idx, end)
+	after := sentence[end:max(end, cEnd)]
 	if len(after) > 40 {
 		after = after[:40]
 	}
 	if m := boundPrepToRe.FindStringSubmatch(after); len(m) == 2 && cat.KnownName(m[1]) {
 		return m[1]
 	}
-	if m := boundVerbWithRe.FindAllStringSubmatch(sentence[:idx], -1); len(m) > 0 {
+	if m := boundVerbWithRe.FindAllStringSubmatch(sentence[min(idx, cStart):idx], -1); len(m) > 0 {
 		if cand := m[len(m)-1][1]; cat.KnownName(cand) {
 			return cand
 		}
@@ -623,56 +633,6 @@ func deduplicateIssues(issues []AttributedClaimIssue) []AttributedClaimIssue {
 		}
 	}
 	return out
-}
-
-func walkTopLevel(s string, visit func(idx int, ch byte) bool) {
-	depthParen, depthBracket, depthBrace := 0, 0, 0
-	var quote byte
-	escaped := false
-	for i := 0; i < len(s); i++ {
-		ch := s[i]
-		if quote != 0 {
-			if escaped {
-				escaped = false
-				continue
-			}
-			if ch == '\\' {
-				escaped = true
-				continue
-			}
-			if ch == quote {
-				quote = 0
-			}
-			continue
-		}
-		if depthParen == 0 && depthBracket == 0 && depthBrace == 0 {
-			if !visit(i, ch) {
-				return
-			}
-		}
-		switch ch {
-		case '"', '\'':
-			quote = ch
-		case '(':
-			depthParen++
-		case ')':
-			if depthParen > 0 {
-				depthParen--
-			}
-		case '[':
-			depthBracket++
-		case ']':
-			if depthBracket > 0 {
-				depthBracket--
-			}
-		case '{':
-			depthBrace++
-		case '}':
-			if depthBrace > 0 {
-				depthBrace--
-			}
-		}
-	}
 }
 
 func balancedCallBody(rest string) (string, bool) {
