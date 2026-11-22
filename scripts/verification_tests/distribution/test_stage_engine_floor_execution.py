@@ -86,6 +86,32 @@ class StageEngineFloorTests(unittest.TestCase):
             self.assertTrue((fixture / "lycaon-den/src-tauri/engine-root/browser/chrome-headless-shell").is_file())
             self.assertTrue((fixture / "lycaon-den/src-tauri/engine-root/decide/models/model@rev/.complete").is_file())
 
+    def test_verify_bundle_does_not_create_release_config_dir_in_caller_home(self):
+        with tempfile.TemporaryDirectory(prefix="verify-bundle-home-") as temporary:
+            work = Path(temporary)
+            home, tools, build = work / "home", work / "tools", work / "build"
+            (home / "Library").mkdir(parents=True)
+            tools.mkdir()
+            (tools / "go").write_text(f"""#!{sys.executable}
+import os, pathlib, sys
+args = sys.argv[1:]
+output = pathlib.Path(args[args.index("-o") + 1])
+output.parent.mkdir(parents=True, exist_ok=True)
+output.write_text('''#!{sys.executable}
+import os, pathlib
+(pathlib.Path(os.environ["HOME"]) / ".config" / "paintedwolf").mkdir(parents=True, exist_ok=True)
+assert (pathlib.Path(os.environ["HOME"]) / "Library").is_dir()
+''')
+output.chmod(0o755)
+""")
+            (tools / "go").chmod(0o700)
+            env = {**os.environ, "HOME": str(home), "PW_BUILD_DIR": str(build),
+                   "PATH": str(tools) + os.pathsep + os.environ["PATH"]}
+            result = subprocess.run(["bash", str(ROOT / "scripts" / "verify-bundle.sh"), "--app", "Painted Wolf Code.app"],
+                                    env=env, capture_output=True, text=True)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertFalse((home / ".config" / "paintedwolf").exists())
+
 
 if __name__ == "__main__":
     unittest.main()
