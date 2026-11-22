@@ -11,7 +11,7 @@ import unittest
 ROOT = Path(__file__).resolve().parents[3]
 STUBBED_SCRIPTS = ["resolve-opengrep.sh", "stage-bundled-opengrep.sh", "build-document-core.sh", "build-decide.sh",
                    "stage-decide-heads.sh", "generation/run.sh", "stage-macos-host.py"]
-GO_STUB = """#!{python}
+GO_STUB = r"""#!{python}
 import json, os, pathlib, sys
 args = sys.argv[1:]
 if args[0] == "run":
@@ -20,11 +20,27 @@ if args[0] == "run":
 assert args[0] == "build", args
 output = pathlib.Path(args[args.index("-o") + 1])
 output.parent.mkdir(parents=True, exist_ok=True)
-output.write_text("binary")
+output.write_text('''#!{python}
+import os, pathlib, sys
+config = pathlib.Path(os.environ["HOME"]) / ".config" / "paintedwolf"
+if sys.argv[1:3] == ["browser", "ensure"]:
+    browser = config / "browser-cache" / "chrome-headless-shell"
+    browser.parent.mkdir(parents=True, exist_ok=True)
+    browser.write_text("#!/bin/sh\\n")
+    browser.chmod(0o755)
+    (browser.parent / ".complete").write_text("ok\\n")
+    print(f"browser ready source=managed path={{browser}}")
+elif sys.argv[1:3] == ["decide", "ensure"]:
+    model = config / "decide-models" / "model@rev"
+    model.mkdir(parents=True, exist_ok=True)
+    (model / ".complete").write_text("rev\\n")
+    print(f"decision model ready model=model revision=rev path={{model}}")
+''')
+output.chmod(0o755)
 with open(os.environ["STAGE_TEST_BUILDS"], "a") as log:
     log.write(json.dumps({{"package": args[-1], "args": args,
                           "deployment_target": os.environ.get("MACOSX_DEPLOYMENT_TARGET"),
-                          "cgo": os.environ.get("CGO_ENABLED")}}) + "\\n")
+                          "cgo": os.environ.get("CGO_ENABLED")}}) + "\n")
 """
 
 
@@ -33,9 +49,11 @@ class StageEngineFloorTests(unittest.TestCase):
         with tempfile.TemporaryDirectory(prefix="stage-engine-floor-") as temporary:
             work = Path(temporary)
             fixture, tools, builds = work / "repo", work / "tools", work / "builds.jsonl"
+            home = work / "home"
+            home.mkdir()
             (fixture / "scripts" / "generation").mkdir(parents=True)
             shutil.copy2(ROOT / "scripts" / "stage-engine.sh", fixture / "scripts" / "stage-engine.sh")
-            for name in STUBBED_SCRIPTS:
+            for name in (*STUBBED_SCRIPTS, "gitengine-fetch.sh"):
                 (fixture / "scripts" / name).write_text("")
             (fixture / "scripts" / "resolve-opengrep.sh").write_text(f"echo {work / 'opengrep'}\n")
             (fixture / "scripts" / "stage-decide-heads.sh").write_text('mkdir -p "$1/decide/heads"\n')
@@ -52,8 +70,8 @@ class StageEngineFloorTests(unittest.TestCase):
                 tool.chmod(0o700)
             env = {key: value for key, value in os.environ.items()
                    if key not in {"MACOSX_DEPLOYMENT_TARGET", "CGO_ENABLED", "LYCAON_OPENGREP_CANDIDATE"}}
-            env.update(PATH=str(tools) + os.pathsep + env["PATH"], STAGE_TEST_BUILDS=str(builds))
-            result = subprocess.run(["bash", str(fixture / "scripts" / "stage-engine.sh"), "--minimal"],
+            env.update(HOME=str(home), PATH=str(tools) + os.pathsep + env["PATH"], STAGE_TEST_BUILDS=str(builds))
+            result = subprocess.run(["bash", str(fixture / "scripts" / "stage-engine.sh"), "--release"],
                                     env=env, capture_output=True, text=True)
             self.assertEqual(result.returncode, 0, result.stderr)
             recorded = [json.loads(line) for line in builds.read_text().splitlines()]
@@ -63,6 +81,10 @@ class StageEngineFloorTests(unittest.TestCase):
                     self.assertEqual(build["deployment_target"], "13.7")
                     self.assertEqual(build["cgo"], "1")
                     self.assertIn("-trimpath", build["args"])
+            self.assertFalse((home / ".config" / "paintedwolf").exists())
+            self.assertTrue((home / ".config" / "paintedwolf-dev" / "browser-cache").is_dir())
+            self.assertTrue((fixture / "lycaon-den/src-tauri/engine-root/browser/chrome-headless-shell").is_file())
+            self.assertTrue((fixture / "lycaon-den/src-tauri/engine-root/decide/models/model@rev/.complete").is_file())
 
 
 if __name__ == "__main__":
