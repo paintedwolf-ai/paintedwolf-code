@@ -116,6 +116,89 @@ func SchemaAcceptsField(projected map[string]any, fieldPath string) bool {
 	return false
 }
 
+// SchemaAcceptsEnumValue reports whether projected declares fieldPath with an
+// enum or const constraint that admits value.
+func SchemaAcceptsEnumValue(projected map[string]any, fieldPath, value string) bool {
+	fieldPath = strings.TrimSpace(fieldPath)
+	if fieldPath == "" || value == "" || projected == nil {
+		return false
+	}
+	for _, node := range lookupSchemaFieldNodes(projected, strings.Split(fieldPath, ".")) {
+		if nodeAcceptsEnumValue(node, value) {
+			return true
+		}
+	}
+	return false
+}
+
+func lookupSchemaFieldNodes(node map[string]any, parts []string) []map[string]any {
+	if node == nil {
+		return nil
+	}
+	if len(parts) == 0 {
+		return []map[string]any{node}
+	}
+	var out []map[string]any
+	if props, ok := node["properties"].(map[string]any); ok {
+		if child, ok := props[parts[0]].(map[string]any); ok {
+			out = append(out, lookupSchemaFieldNodes(child, parts[1:])...)
+		}
+	} else if items, ok := node["items"].(map[string]any); ok {
+		out = append(out, lookupSchemaFieldNodes(items, parts)...)
+	}
+	for _, key := range []string{"oneOf", "anyOf", "allOf"} {
+		if branches, ok := node[key].([]any); ok {
+			for _, raw := range branches {
+				if branch, ok := raw.(map[string]any); ok {
+					out = append(out, lookupSchemaFieldNodes(branch, parts)...)
+				}
+			}
+		}
+	}
+	return out
+}
+
+func nodeAcceptsEnumValue(node map[string]any, value string) bool {
+	if node == nil {
+		return false
+	}
+	if rawEnum, hasEnum := node["enum"]; hasEnum {
+		values, ok := copySchemaList(rawEnum)
+		if !ok {
+			return false
+		}
+		for _, v := range values {
+			if s, isStr := v.(string); isStr && s == value {
+				return true
+			}
+		}
+		return false
+	}
+	if rawConst, hasConst := node["const"]; hasConst {
+		s, ok := rawConst.(string)
+		return ok && s == value
+	}
+	for _, key := range []string{"oneOf", "anyOf"} {
+		if branches, ok := node[key].([]any); ok {
+			for _, raw := range branches {
+				if branch, ok := raw.(map[string]any); ok && nodeAcceptsEnumValue(branch, value) {
+					return true
+				}
+			}
+		}
+	}
+	if branches, ok := node["allOf"].([]any); ok && len(branches) > 0 {
+		for _, raw := range branches {
+			branch, ok := raw.(map[string]any)
+			if !ok || !nodeAcceptsEnumValue(branch, value) {
+				return false
+			}
+		}
+		return true
+	}
+	return false
+}
+
 func cloneSchemaMap(in map[string]any) map[string]any {
 	if in == nil {
 		return nil

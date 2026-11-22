@@ -7,13 +7,17 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/lycaon/lycaon/internal/configlayout"
+	"github.com/lycaon/lycaon/internal/coordinator/anchor"
 	"github.com/lycaon/lycaon/internal/coordinator/inject"
 	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/llm/compaction"
 	"github.com/lycaon/lycaon/internal/llm/modelcall"
 	"github.com/lycaon/lycaon/internal/prompts"
+	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/tools"
+	"github.com/lycaon/lycaon/internal/toolsurface"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -223,5 +227,96 @@ func TestToolProcedureRenderFailureStopsRequest(t *testing.T) {
 	_, err := loop.Tools.appendToolProcedures(t.Context(), &api.Session{}, "coordinator", nil, []tools.ToolMeta{{Name: "command"}})
 	if !errors.Is(err, want) {
 		t.Fatalf("render failure = %v", err)
+	}
+}
+
+func TestAppendToolProceduresPassesPartialAndEmptyProjectedSchemaMaps(t *testing.T) {
+	reg, err := anchor.LoadRegistryFromConfigRoot()
+	testutil.FailErr(t, "load anchor registry", err)
+	t.Cleanup(anchor.SetAnchorsFor(func(context.Context, string) *anchor.Registry { return reg }))
+	profiles, err := sandbox.LoadToolProfiles()
+	testutil.FailErr(t, "load profiles", err)
+	renderer := prompts.NewInjectRenderer(prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{
+		ModuleRoot: configlayout.FindModuleRoot(),
+	}))
+	narrowedVerify := map[string]any{
+		"type":       "object",
+		"properties": map[string]any{"socks_proxy": map[string]any{"type": "boolean"}},
+	}
+	var (
+		gotCtxMap map[string]map[string]any
+		gotReader prompts.Reader
+	)
+	loop := NewPromptLoopForTest(PromptLoopDeps{
+		Context: ContextDeps{
+			ContextSurfaceDeps: ContextSurfaceDeps{
+				ToolProcedures: func(ctx context.Context, sess *api.Session, _ string, names []string) (string, error) {
+					gotCtxMap = prompts.ProjectedSchemasFromContext(ctx)
+					loaded := make(map[string]bool, len(names))
+					for _, n := range names {
+						loaded[n] = true
+					}
+					r, rErr := prompts.NewReader(prompts.ReaderInput{
+						ProfileID:        "implement",
+						Profiles:         profiles,
+						Plan:             toolsurface.Compile(names, nil),
+						Loaded:           loaded,
+						Visible:          names,
+						ProjectedSchemas: gotCtxMap,
+						RootCount:        1,
+						WebSearch:        true,
+					})
+					if rErr != nil {
+						return "", rErr
+					}
+					gotReader = r
+					return inject.RenderToolProceduresBlock(ctx, renderer, sess.ID, r)
+				},
+			},
+		},
+	})
+
+	out, err := loop.Tools.appendToolProcedures(
+		t.Context(),
+		&api.Session{ID: "s"},
+		"implementer",
+		[]api.Message{{Role: api.MessageRoleUser, Content: "hi"}},
+		[]tools.ToolMeta{
+			{Name: "verify", ArgsSchema: narrowedVerify},
+			{Name: "command", ArgsSchema: nil},
+		},
+	)
+	testutil.FailErr(t, "append partial schemas", err)
+	if gotCtxMap == nil || len(gotCtxMap) != 1 || gotCtxMap["verify"] == nil {
+		t.Fatalf("partial projected map = %#v, want non-nil map retaining verify only", gotCtxMap)
+	}
+	if _, hasCmd := gotCtxMap["command"]; hasCmd {
+		t.Fatalf("nil command schema populated an entry: %#v", gotCtxMap)
+	}
+	facts := gotReader.Facts()
+	if got, _ := facts["runner_socks_proxy_tools"].([]string); !slices.Equal(got, []string{"verify"}) {
+		t.Fatalf("runner_socks_proxy_tools = %v, want [verify]", got)
+	}
+	if got, _ := facts["runner_capability_request_tools"].([]string); len(got) != 0 {
+		t.Fatalf("runner_capability_request_tools = %v, want empty", got)
+	}
+	if facts["can_command_verify"] != true {
+		t.Fatalf("can_command_verify = %v, want true", facts["can_command_verify"])
+	}
+	procMsg := out[0].Content
+	if !strings.Contains(procMsg, "`socks_proxy: true` on `verify`") || strings.Contains(procMsg, "Declare access needs in `capability_request`") || !strings.Contains(procMsg, "Use `command(verification: true)`") {
+		t.Fatalf("rendered procedure block mismatch:\n%s", procMsg)
+	}
+
+	_, err = loop.Tools.appendToolProcedures(
+		t.Context(),
+		&api.Session{ID: "s"},
+		"implementer",
+		[]api.Message{{Role: api.MessageRoleUser, Content: "hi"}},
+		[]tools.ToolMeta{{Name: "command", ArgsSchema: nil}},
+	)
+	testutil.FailErr(t, "append empty schemas", err)
+	if gotCtxMap == nil || len(gotCtxMap) != 0 {
+		t.Fatalf("empty projected map = %#v, want non-nil empty map", gotCtxMap)
 	}
 }

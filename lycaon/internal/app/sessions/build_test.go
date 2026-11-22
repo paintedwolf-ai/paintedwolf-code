@@ -122,8 +122,6 @@ func TestSkillToolReaderMapsReaderFacts(t *testing.T) {
 	}
 }
 
-// primaryRootHasGit checks the active/primary root (or worker branch root),
-// while anyRootHasGit scans every attached root.
 func TestSkillReaderHasGitSplitsPrimaryFromSecondaryRoots(t *testing.T) {
 	gitDir := gitRepoDir(t)
 	plainDir := t.TempDir()
@@ -433,7 +431,6 @@ func TestSkillToolReaderDoesNotPromoteDeferredTools(t *testing.T) {
 	gitDir := gitRepoDir(t)
 	plainDir := t.TempDir()
 
-	// 1. Floor-only implement_investigate turn: deferred tools stay in Requestable(), not Offered().
 	floorOnly, err := skillToolReader(t.Context(), nil, tools.ToolContext{
 		Identity: tools.InvocationIdentity{Agent: "coordinator"},
 		Source: tools.InvocationSource{
@@ -453,7 +450,6 @@ func TestSkillToolReaderDoesNotPromoteDeferredTools(t *testing.T) {
 		t.Fatalf("floor-only reader lost deferred tools from Requestable(): %v", floorOnly.Requestable())
 	}
 
-	// 2. Zero-root turn: max(rootCount, 1) is gone, so workspace/file flags are false and command is absent.
 	zeroRoot, err := skillToolReader(t.Context(), nil, tools.ToolContext{
 		Identity: tools.InvocationIdentity{Agent: "coordinator"},
 		Turn: tools.InvocationTurn{
@@ -471,7 +467,6 @@ func TestSkillToolReaderDoesNotPromoteDeferredTools(t *testing.T) {
 		t.Fatalf("0-root reader exposed command: offered=%v requestable=%v", zeroRoot.Offered(), zeroRoot.Requestable())
 	}
 
-	// 3. Host state: WebSearch == false and CommandExternalHidden == true vs false.
 	cat := extpackstest.StockCatalog(t)
 	st := storetest.New(t, testdbseed.DefaultProjectID)
 	mgr := session.NewHost(st, session.Models{Limits: settings.DefaultSessionLimits()}, nil)
@@ -518,7 +513,6 @@ func TestSkillToolReaderDoesNotPromoteDeferredTools(t *testing.T) {
 		t.Fatalf("externalHidden=true: external=%t private-service=%t", rHidden.CanReachProgram("external"), rHidden.CanReachProgram("private-service"))
 	}
 
-	// 4. Mixed 2-root: (primary=non-git, secondary=git) vs (primary=git, secondary=non-git).
 	nonGitPrimary, err := skillToolReader(t.Context(), nil, tools.ToolContext{
 		Identity: tools.InvocationIdentity{Agent: "coordinator"},
 		Source: tools.InvocationSource{
@@ -559,5 +553,74 @@ func TestSkillToolReaderDoesNotPromoteDeferredTools(t *testing.T) {
 	if f2["has_git"] != true || f2["has_any_git_root"] != true || f2["can_git_read"] != true {
 		t.Fatalf("(primary=git, secondary=non-git) facts: has_git=%v has_any_git_root=%v can_git_read=%v",
 			f2["has_git"], f2["has_any_git_root"], f2["can_git_read"])
+	}
+}
+
+// Both projections keep the secret object; only response_type.enum narrows in the second.
+func TestSkillReadUseSecretsDistinguishesResponseTypeEnumNarrowing(t *testing.T) {
+	rt, sessionID := newWiredSkillHost(t)
+	makeAskSchema := func(responseEnum []any) map[string]any {
+		return map[string]any{
+			"type": "object",
+			"properties": map[string]any{
+				"prompt":        map[string]any{"type": "string"},
+				"response_type": map[string]any{"type": "string", "enum": responseEnum},
+				"secret": map[string]any{
+					"type": "object",
+					"properties": map[string]any{
+						"name":  map[string]any{"type": "string"},
+						"scope": map[string]any{"type": "string", "enum": []any{"chat", "project"}},
+					},
+				},
+			},
+		}
+	}
+	offered := []string{"ask_user", "command", "secret_generate", "secret_list", "secret_revoke"}
+	makeCtx := func(enumVals []any) tools.ToolContext {
+		return tools.ToolContext{
+			Identity: tools.InvocationIdentity{Agent: "coordinator", SessionID: sessionID},
+			Source: tools.InvocationSource{
+				Roots:        []projectroot.RootRef{{ID: "main", Path: gitRepoDir(t), IsPrimary: true}},
+				ActiveRootID: "main",
+			},
+			Turn: tools.InvocationTurn{
+				TurnSurfaceID:        "implement_investigate",
+				TurnOfferedToolNames: offered,
+				TurnOfferedToolSchemas: map[string]map[string]any{
+					"ask_user":        makeAskSchema(enumVals),
+					"command":         {"type": "object"},
+					"secret_generate": {"type": "object"},
+					"secret_list":     {"type": "object"},
+					"secret_revoke":   {"type": "object"},
+				},
+			},
+		}
+	}
+
+	admittedTctx := makeCtx([]any{"text", "single_choice", "multi_choice", "secret"})
+	narrowedEnumTctx := makeCtx([]any{"text", "single_choice", "multi_choice"})
+
+	admittedReader, err := skillToolReader(t.Context(), nil, admittedTctx)
+	testutil.FailErr(t, "admitted skillToolReader", err)
+	narrowedReader, err := skillToolReader(t.Context(), nil, narrowedEnumTctx)
+	testutil.FailErr(t, "narrowed skillToolReader", err)
+	if admittedReader.Facts()["can_ask_user_secret"] != true || narrowedReader.Facts()["can_ask_user_secret"] != false {
+		t.Fatalf("can_ask_user_secret = admitted:%v narrowed:%v",
+			admittedReader.Facts()["can_ask_user_secret"], narrowedReader.Facts()["can_ask_user_secret"])
+	}
+	if admittedReader.Fingerprint() == narrowedReader.Fingerprint() {
+		t.Fatalf("Reader.Fingerprint() collided across response_type enum narrowing: %s", admittedReader.Fingerprint())
+	}
+
+	admittedOut, err := rt.Registry.Run(t.Context(), "skills_read", map[string]any{"need": "use-secrets-without-reading-them"}, admittedTctx)
+	testutil.FailErr(t, "skills_read admitted", err)
+	if !strings.Contains(admittedOut, "call `ask_user` with `response_type: secret` and a `secret` object") || strings.Contains(admittedOut, "report the need upstream") {
+		t.Fatalf("admitted render lost ask_user secret call:\n%s", admittedOut)
+	}
+
+	narrowedOut, err := rt.Registry.Run(t.Context(), "skills_read", map[string]any{"need": "use-secrets-without-reading-them"}, narrowedEnumTctx)
+	testutil.FailErr(t, "skills_read narrowed enum", err)
+	if strings.Contains(narrowedOut, "response_type: secret") || !strings.Contains(narrowedOut, "— report the need upstream") {
+		t.Fatalf("narrowed-enum render leaked response_type: secret or lost upstream handoff:\n%s", narrowedOut)
 	}
 }

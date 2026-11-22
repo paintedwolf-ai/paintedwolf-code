@@ -203,7 +203,7 @@ func buildReaderFacts(
 	offered, requestable []string,
 	commandOnFloor bool,
 	effects toolcontract.CommandEffects,
-) (map[string]any, error) {
+) (map[string]any, map[string]map[string]any, error) {
 	loadNativeToolFamilies()
 	isCoordinator := surfaceID != "" || profileID == CoordinatorProfileID
 	offeredSet := toolNameSet(offered)
@@ -261,8 +261,10 @@ func buildReaderFacts(
 	sharedTemp := slices.Clone(in.SharedTempLocations)
 
 	f := ReaderFacts{
-		CanAnyGitRead:                 canAnyGitRead,
-		CanAskUserSecret:              offeredSet["ask_user"] && toolschema.SchemaAcceptsField(effectiveSchemas["ask_user"], "secret"),
+		CanAnyGitRead: canAnyGitRead,
+		CanAskUserSecret: offeredSet["ask_user"] &&
+			toolschema.SchemaAcceptsField(effectiveSchemas["ask_user"], "secret") &&
+			toolschema.SchemaAcceptsEnumValue(effectiveSchemas["ask_user"], "response_type", "secret"),
 		CanCommandExternalSelector:    reachHeld[toolcontract.ReachCommandExternalExecSelector],
 		CanCommandVerify:              offeredSet["command"] && command.externalExec,
 		CanGitBisect:                  canGitBisect,
@@ -335,18 +337,18 @@ func buildReaderFacts(
 
 	if isCoordinator {
 		if err := fillCoordinatorReaderFacts(in, surfaceID, offered, requestable, offeredSet, command.mutation, command.externalExec, schemas, &f); err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 	} else {
 		if err := fillWorkerReaderFacts(profile, offered, requestable, command.externalExec, toolViews, schemas, catalog, &f); err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 	}
 
 	if err := populateReaderFamilyMaps(in.WebSearch, offeredSet, rawCanRequest, reachHeld, catalog, &f); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-	return f.Map(), nil
+	return f.Map(), effectiveSchemas, nil
 }
 
 func populateReaderFamilyMaps(

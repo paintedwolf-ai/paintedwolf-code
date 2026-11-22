@@ -164,7 +164,7 @@ func NewReader(in ReaderInput) (Reader, error) {
 	if mode == "" && surfaceID != "" {
 		mode = defaultExecutionModeForSurface(surfaceID)
 	}
-	facts, err := buildReaderFacts(in, profile, profileID, surfaceID, mode, offered, requestable, commandOnFloor, effects)
+	facts, effectiveSchemas, err := buildReaderFacts(in, profile, profileID, surfaceID, mode, offered, requestable, commandOnFloor, effects)
 	if err != nil {
 		return Reader{}, err
 	}
@@ -183,7 +183,7 @@ func NewReader(in ReaderInput) (Reader, error) {
 			Held: held,
 		},
 		facts:       facts,
-		fingerprint: computeReaderFingerprint(host, profile, profileID, surfaceID, mode, offered, requestable, commandOnFloor, effects, in),
+		fingerprint: computeReaderFingerprint(host, profile, profileID, surfaceID, mode, offered, requestable, commandOnFloor, effects, effectiveSchemas, in),
 	}, nil
 }
 
@@ -336,56 +336,57 @@ func computeReaderFingerprint(
 	offered, requestable []string,
 	commandOnFloor bool,
 	effects toolcontract.CommandEffects,
+	effectiveSchemas map[string]map[string]any,
 	in ReaderInput,
 ) string {
 	payload, err := json.Marshal(struct {
-		Host                  promptunit.Host
-		ProfileID             string
-		SurfaceID             string
-		Mode                  string
-		SessionMode           string
-		Offered               []string
-		Requestable           []string
-		DenyTools             []string
-		WaitConditions        []string
-		ExplicitProjected     bool
-		ProjectedFieldPaths   map[string][]string
-		CommandOnFloor        bool
-		Effects               uint8
-		RootCount             int
-		HasGit                bool
-		HasAnyGitRoot         bool
-		OnWorkerBranch        bool
-		WebSearch             bool
-		SpawnAllowlist        []string
-		ReviewsConfinedWrites bool
-		CommandExternalHidden bool
-		SessionScratchDir     string
-		SharedTempLocations   []string
+		Host                   promptunit.Host
+		ProfileID              string
+		SurfaceID              string
+		Mode                   string
+		SessionMode            string
+		Offered                []string
+		Requestable            []string
+		DenyTools              []string
+		WaitConditions         []string
+		ExplicitProjected      bool
+		ProjectedSchemasDigest map[string]string
+		CommandOnFloor         bool
+		Effects                uint8
+		RootCount              int
+		HasGit                 bool
+		HasAnyGitRoot          bool
+		OnWorkerBranch         bool
+		WebSearch              bool
+		SpawnAllowlist         []string
+		ReviewsConfinedWrites  bool
+		CommandExternalHidden  bool
+		SessionScratchDir      string
+		SharedTempLocations    []string
 	}{
-		Host:                  host,
-		ProfileID:             profileID,
-		SurfaceID:             surfaceID,
-		Mode:                  mode,
-		SessionMode:           normalizeSessionMode(in.SessionMode),
-		Offered:               offered,
-		Requestable:           requestable,
-		DenyTools:             normalizedSortedStrings(profile.DenyTools),
-		WaitConditions:        normalizedSortedStrings(profile.WaitConditions),
-		ExplicitProjected:     in.ProjectedSchemas != nil,
-		ProjectedFieldPaths:   projectedFieldPathsDigest(offered, in.ProjectedSchemas),
-		CommandOnFloor:        commandOnFloor,
-		Effects:               uint8(effects),
-		RootCount:             in.RootCount,
-		HasGit:                in.HasGit,
-		HasAnyGitRoot:         in.HasGit || in.HasAnyGitRoot,
-		OnWorkerBranch:        in.OnWorkerBranch,
-		WebSearch:             in.WebSearch,
-		SpawnAllowlist:        normalizedSortedStrings(in.SpawnAllowlist),
-		ReviewsConfinedWrites: in.ReviewsConfinedWrites,
-		CommandExternalHidden: in.CommandExternalHidden,
-		SessionScratchDir:     strings.TrimSpace(in.SessionScratchDir),
-		SharedTempLocations:   slices.Clone(in.SharedTempLocations),
+		Host:                   host,
+		ProfileID:              profileID,
+		SurfaceID:              surfaceID,
+		Mode:                   mode,
+		SessionMode:            normalizeSessionMode(in.SessionMode),
+		Offered:                offered,
+		Requestable:            requestable,
+		DenyTools:              normalizedSortedStrings(profile.DenyTools),
+		WaitConditions:         normalizedSortedStrings(profile.WaitConditions),
+		ExplicitProjected:      in.ProjectedSchemas != nil,
+		ProjectedSchemasDigest: projectedSchemasDigest(offered, effectiveSchemas),
+		CommandOnFloor:         commandOnFloor,
+		Effects:                uint8(effects),
+		RootCount:              in.RootCount,
+		HasGit:                 in.HasGit,
+		HasAnyGitRoot:          in.HasGit || in.HasAnyGitRoot,
+		OnWorkerBranch:         in.OnWorkerBranch,
+		WebSearch:              in.WebSearch,
+		SpawnAllowlist:         normalizedSortedStrings(in.SpawnAllowlist),
+		ReviewsConfinedWrites:  in.ReviewsConfinedWrites,
+		CommandExternalHidden:  in.CommandExternalHidden,
+		SessionScratchDir:      strings.TrimSpace(in.SessionScratchDir),
+		SharedTempLocations:    slices.Clone(in.SharedTempLocations),
 	})
 	if err != nil {
 		return ""
@@ -394,19 +395,23 @@ func computeReaderFingerprint(
 	return base64.RawURLEncoding.EncodeToString(sum[:])
 }
 
-func projectedFieldPathsDigest(offered []string, projected map[string]map[string]any) map[string][]string {
-	if projected == nil {
+func projectedSchemasDigest(offered []string, effective map[string]map[string]any) map[string]string {
+	if len(effective) == 0 {
 		return nil
 	}
-	out := make(map[string][]string, len(offered))
+	out := make(map[string]string, len(offered))
 	for _, name := range offered {
-		if schema, ok := projected[name]; ok && schema != nil {
-			paths := toolschema.ArgFieldPaths(toolschema.ProjectArgsSchema(schema))
-			if paths == nil {
-				paths = []string{}
+		if schema, ok := effective[name]; ok && schema != nil {
+			raw, err := json.Marshal(schema)
+			if err != nil {
+				continue
 			}
-			out[name] = paths
+			sum := sha256.Sum256(raw)
+			out[name] = base64.RawURLEncoding.EncodeToString(sum[:])
 		}
+	}
+	if len(out) == 0 {
+		return nil
 	}
 	return out
 }

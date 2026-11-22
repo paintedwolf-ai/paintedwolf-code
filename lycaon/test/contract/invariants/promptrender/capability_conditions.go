@@ -703,15 +703,8 @@ func isAuthoringMetaDoc(rel string) bool {
 		strings.Contains(rel, "/skills/write-policy-rule/")
 }
 
-// buildSkillGuaranteedMap derives strictly the facts guaranteed by production
-// skill admission (toolvocab.SkillToolsOffered) and projected tool schemas:
-//   - metadata.host_resources admits only when command(external_exec),
-//     terminal_open, or verify is offered; all three projected schemas accept
-//     capability_request, capability_request.host_resources, and loopback/socket/listen/write_root/read_path.
-//   - Unconditional backticked registered non-form tool names not in any_of_tools
-//     must be held for SkillToolsOffered to admit the skill; each such tool's
-//     projected schema contributes only the fields present on its minimum offered
-//     projection (for command, PruneCommandReadOnlySchema — never pruned args or programs).
+// buildSkillGuaranteedMap derives facts guaranteed by toolvocab.SkillToolsOffered
+// and each unconditionally required tool's minimum production projected schema.
 func buildSkillGuaranteedMap(s *Stock, skillBodies map[string]*classifiedSource) map[string]map[string]bool {
 	hostResCommonFields := intersectProjectedFields(s.Schemas, []struct {
 		name     string
@@ -777,9 +770,8 @@ func intersectProjectedFields(schemas *toolschema.Config, candidates []struct {
 	return common
 }
 
-// SkillGuaranteedSchemaFieldsForText computes the retained schema_accepts:<field>
-// guarantees that buildSkillGuaranteedMap derives for a skill source, so contract
-// tests can verify every retained field holds under narrower projected schemas.
+// SkillGuaranteedSchemaFieldsForText returns the schema_accepts:<field> set
+// retained by buildSkillGuaranteedMap for rawSkillMarkdown.
 func SkillGuaranteedSchemaFieldsForText(s *Stock, rawSkillMarkdown string) ([]string, error) {
 	fmRaw, body := splitMarkdownFrontmatter(rawSkillMarkdown)
 	cs := &classifiedSource{family: "skills/SKILL.md", packKey: "test", skillName: "test", body: body}
@@ -981,7 +973,7 @@ func schemaClaimEstablished(arg string, established map[string]bool) bool {
 	case arg == "snapshot_capture":
 		return established["profile_command_external_exec"] || established["schema_accepts:snapshot_capture"]
 	case strings.HasPrefix(arg, "response_type:"):
-		return established["can_ask_user_secret"] || established["schema_accepts:secret"]
+		return established["can_ask_user_secret"]
 	case strings.HasPrefix(arg, "socks_proxy"):
 		return established["runner_socks_proxy_tools"] || established["schema_accepts:socks_proxy"]
 	case strings.HasPrefix(arg, "secret_use"):

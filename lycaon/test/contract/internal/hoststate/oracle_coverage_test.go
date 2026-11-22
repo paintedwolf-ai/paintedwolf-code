@@ -7,6 +7,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/anchorcatalog"
 	"github.com/lycaon/lycaon/internal/coordinator/surface"
+	"github.com/lycaon/lycaon/internal/extpacks"
 	"github.com/lycaon/lycaon/internal/oar"
 	"github.com/lycaon/lycaon/internal/platform"
 	"github.com/lycaon/lycaon/internal/pongoplain"
@@ -359,7 +360,9 @@ func assertReaderRunnerSchemaParity(t *testing.T, label string, reader prompts.R
 		}
 	}
 	gotAskSecret, _ := facts["can_ask_user_secret"].(bool)
-	wantAskSecret := slices.Contains(offered, "ask_user") && toolschema.SchemaAcceptsField(reqSchemas["ask_user"], "secret")
+	wantAskSecret := slices.Contains(offered, "ask_user") &&
+		toolschema.SchemaAcceptsField(reqSchemas["ask_user"], "secret") &&
+		toolschema.SchemaAcceptsEnumValue(reqSchemas["ask_user"], "response_type", "secret")
 	if gotAskSecret != wantAskSecret {
 		t.Fatalf("%s: can_ask_user_secret = %v, want %v", label, gotAskSecret, wantAskSecret)
 	}
@@ -419,7 +422,6 @@ func TestProjectedSchemaToolsParityAcrossNarrowingAndPartialAvailability(t *test
 							lbl := string(posture) + "/" + string(mode) + "/" + cc.surfID + "/" + cc.runCtx.RunID
 							assertReaderRunnerSchemaParity(t, "coord-live/"+lbl, auth.Reader, auth.Offered, auth.Schemas)
 
-							// Ordinary pre-freeze production Reader entry point (ProjectedSchemas: nil).
 							derivedReader, dErr := prompts.NewReader(prompts.ReaderInput{
 								ProfileID: prompts.CoordinatorProfileID, SurfaceID: cc.surfID, SessionMode: string(mode),
 								Profiles: narrowed, Plan: auth.Plan, Loaded: loaded, Visible: auth.Offered,
@@ -468,9 +470,6 @@ func TestProjectedSchemaToolsParityAcrossNarrowingAndPartialAvailability(t *test
 	})
 
 	t.Run("partial_availability_subset_witnesses", func(t *testing.T) {
-		// 1. Live request projection: implement worker under spec posture with terminal_send + page_open loaded.
-		// command, terminal_open, terminal_send, verify, page_open, wait all remain offered on CompletionRequest.Tools,
-		// while PruneCommandReadOnlySchema removes capability_request, secret_use, and socks_proxy from command ONLY.
 		specAuth, err := hoststate.FreezeWorkerAuthority(t.Context(), hoststate.WorkerState{
 			Overlay:           stock,
 			AgentID:           "implementer",
@@ -504,8 +503,7 @@ func TestProjectedSchemaToolsParityAcrossNarrowingAndPartialAvailability(t *test
 			t.Fatalf("runner_capability_request_tools = %v, want %v", got, wantHostAndSocks)
 		}
 
-		// 2. Asymmetric per-tool projected schema narrowing when both command (full effects) and verify are offered:
-		// command accepts capability_request.host_resources (socks_proxy stripped), while verify accepts socks_proxy (host_resources stripped).
+		// command accepts host_resources only; verify accepts socks_proxy only.
 		customProjected := map[string]map[string]any{
 			"command": {
 				"type": "object",
@@ -569,7 +567,6 @@ func TestProjectedSchemaToolsParityAcrossNarrowingAndPartialAvailability(t *test
 			RootCount:   1,
 		}
 
-		// Pre-freeze (ProjectedSchemas == nil): synthesizes from stock.Schemas.
 		preFreeze, err := prompts.NewReader(baseInput)
 		contractcheck.FailErr(t, "preFreeze NewReader", err)
 		pfFacts := preFreeze.Facts()
@@ -583,8 +580,7 @@ func TestProjectedSchemaToolsParityAcrossNarrowingAndPartialAvailability(t *test
 			t.Fatal("pre-freeze can_ask_user_secret = false, want true")
 		}
 
-		// Frozen map omitting "command" and "ask_user" while "terminal_open" is present:
-		// must NOT fall back to stock.Schemas for "command" or "ask_user".
+		// Frozen map omits command and ask_user while keeping stock.Schemas populated.
 		partialIn := baseInput
 		partialIn.ProjectedSchemas = map[string]map[string]any{
 			"terminal_open": termMeta.ArgsSchema,
@@ -616,7 +612,6 @@ func TestProjectedSchemaToolsParityAcrossNarrowingAndPartialAvailability(t *test
 			t.Fatal("missing-entry can_ask_user_secret = true, want false when ask_user has no frozen entry")
 		}
 
-		// Frozen non-nil empty map: certifies zero schema fields across all offered tools.
 		emptyIn := baseInput
 		emptyIn.ProjectedSchemas = map[string]map[string]any{}
 		emptyFrozenReader, err := prompts.NewReader(emptyIn)
@@ -645,6 +640,106 @@ func TestProjectedSchemaToolsParityAcrossNarrowingAndPartialAvailability(t *test
 			missingEntryReader.Fingerprint() == emptyFrozenReader.Fingerprint() {
 			t.Fatalf("expected distinct fingerprints for nil (%s), missing-entry (%s), and empty non-nil (%s)",
 				preFreeze.Fingerprint(), missingEntryReader.Fingerprint(), emptyFrozenReader.Fingerprint())
+		}
+	})
+
+	t.Run("ask_user_enum_narrowing_with_secret_object_present_and_render_cache_distinction", func(t *testing.T) {
+		loadedSkills, _ := extpacks.LoadEffectiveSkills(stock.Catalog)
+		var secretSkillBody string
+		for _, sk := range loadedSkills {
+			if sk.Name == "use-secrets-without-reading-them" {
+				secretSkillBody = sk.Body
+				break
+			}
+		}
+		if secretSkillBody == "" {
+			t.Fatal("use-secrets-without-reading-them missing from stock.Skills")
+		}
+		tpl, err := pongoplain.Compile(secretSkillBody)
+		contractcheck.FailErr(t, "Compile use-secrets-without-reading-them", err)
+
+		makeAskSchema := func(enumVals []any) map[string]any {
+			return map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"prompt":        map[string]any{"type": "string"},
+					"response_type": map[string]any{"type": "string", "enum": enumVals},
+					"secret": map[string]any{
+						"type":       "object",
+						"properties": map[string]any{"name": map[string]any{"type": "string"}},
+					},
+				},
+			}
+		}
+		offered := []string{"ask_user", "secret_generate", "secret_list", "secret_revoke"}
+		prof := sandbox.ToolProfile{
+			ID:    "ask_enum_probe",
+			Tools: map[string]bool{"ask_user": true, "secret_generate": true, "secret_list": true, "secret_revoke": true},
+		}
+		buildState := func(enumVals []any) (prompts.Reader, map[string]map[string]any) {
+			schemas := map[string]map[string]any{
+				"ask_user":        makeAskSchema(enumVals),
+				"secret_generate": {"type": "object"},
+				"secret_list":     {"type": "object"},
+				"secret_revoke":   {"type": "object"},
+			}
+			r, rErr := prompts.NewReader(prompts.ReaderInput{
+				ProfileID:        "ask_enum_probe",
+				Profiles:         []sandbox.ToolProfile{prof},
+				Plan:             toolsurface.Compile(offered, nil),
+				Visible:          offered,
+				Schemas:          stock.Schemas,
+				ProjectedSchemas: schemas,
+				RootCount:        1,
+			})
+			contractcheck.FailErr(t, "NewReader ask_enum_probe", rErr)
+			return r, schemas
+		}
+
+		admittedReader, admittedSchemas := buildState([]any{"text", "single_choice", "multi_choice", "secret"})
+		narrowedReader, narrowedSchemas := buildState([]any{"text", "single_choice", "multi_choice"})
+
+		if admittedReader.Fingerprint() == narrowedReader.Fingerprint() {
+			t.Fatalf("Reader.Fingerprint() collided when only response_type.enum narrowed: %s", admittedReader.Fingerprint())
+		}
+		admittedDigest := hoststate.AuthorityDigest(offered, admittedSchemas, nil, admittedReader.Mints(), admittedReader)
+		narrowedDigest := hoststate.AuthorityDigest(offered, narrowedSchemas, nil, narrowedReader.Mints(), narrowedReader)
+		if admittedDigest == "" || narrowedDigest == "" || admittedDigest == narrowedDigest {
+			t.Fatalf("AuthorityDigest collided or empty: %q vs %q", admittedDigest, narrowedDigest)
+		}
+
+		admittedVars, err := prompts.SkillVars(admittedReader)
+		contractcheck.FailErr(t, "SkillVars admitted", err)
+		admittedVars["configuration"] = map[string]any{}
+		narrowedVars, err := prompts.SkillVars(narrowedReader)
+		contractcheck.FailErr(t, "SkillVars narrowed", err)
+		narrowedVars["configuration"] = map[string]any{}
+
+		cache := hoststate.NewRenderCache()
+		keyAdmitted, err := hoststate.TryRenderCacheKey("skill:use-secrets-without-reading-them", stock.Catalog.Revision, nil, admittedVars)
+		contractcheck.FailErr(t, "TryRenderCacheKey admitted", err)
+		keyNarrowed, err := hoststate.TryRenderCacheKey("skill:use-secrets-without-reading-them", stock.Catalog.Revision, nil, narrowedVars)
+		contractcheck.FailErr(t, "TryRenderCacheKey narrowed", err)
+		if keyAdmitted == keyNarrowed {
+			t.Fatalf("RenderCacheKey collided across enum narrowing: %s", keyAdmitted)
+		}
+
+		outAdmitted, hit1, err := cache.RenderOrReuse(keyAdmitted, func() (string, error) {
+			return pongoplain.Execute(t.Context(), tpl, admittedVars)
+		})
+		contractcheck.FailErr(t, "RenderOrReuse admitted", err)
+		outNarrowed, hit2, err := cache.RenderOrReuse(keyNarrowed, func() (string, error) {
+			return pongoplain.Execute(t.Context(), tpl, narrowedVars)
+		})
+		contractcheck.FailErr(t, "RenderOrReuse narrowed", err)
+		if hit1 || hit2 {
+			t.Fatalf("unexpected cache hit across distinct enum states: hit1=%t hit2=%t", hit1, hit2)
+		}
+		if !strings.Contains(outAdmitted, "call `ask_user` with `response_type: secret` and a `secret` object") || strings.Contains(outAdmitted, "report the need upstream") {
+			t.Fatalf("admitted render mismatch:\n%s", outAdmitted)
+		}
+		if strings.Contains(outNarrowed, "response_type: secret") || !strings.Contains(outNarrowed, "— report the need upstream") {
+			t.Fatalf("narrowed render mismatch:\n%s", outNarrowed)
 		}
 	})
 }
