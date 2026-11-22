@@ -23,6 +23,7 @@ import (
 	"github.com/lycaon/lycaon/internal/settings/settingstest"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/toolhost"
+	"github.com/lycaon/lycaon/internal/toolreach"
 	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/pkg/api"
@@ -109,7 +110,7 @@ func verifyOccurrenceVsRecoveryAuthority(t *testing.T, h *hookProducerHarness, c
 		Turn: tools.InvocationTurn{
 			TurnOfferedToolNames: specCell.auth.Offered,
 			TurnToolPlan:         specCell.auth.Plan,
-			TurnPrograms:         specCell.auth.ProgramReach,
+			TurnPrograms:         toolreach.TableFromPrograms(specCell.auth.ProgramReach),
 		},
 	}
 	frozenBgReach := tools.TurnReach(bgJobToolCtx)

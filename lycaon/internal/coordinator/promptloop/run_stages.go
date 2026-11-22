@@ -79,7 +79,7 @@ type turnBatchState struct {
 	statusCursorPaths      []string
 	statusCursorGroupDepth int
 	turnToolPlan           toolsurface.Plan
-	turnPrograms           toolreach.Programs
+	turnPrograms           *toolreach.ProgramTable
 	deliveryCoverage       map[string]string
 }
 

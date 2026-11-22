@@ -188,9 +188,9 @@ func TestShippedOARProductionCommandModeAndGitConfigWitnesses(t *testing.T) {
 
 	productionReach := func(profileID, surfaceID string) toolreach.Request {
 		filter := platform.ToolFilter{ProfileID: profileID, SurfaceID: surfaceID}
-		progs, err := executor.Metadata.ProgramReach(t.Context(), filter)
-		contractcheck.FailErr(t, "ProgramReach", err)
-		return toolreach.Offered([]string{"command"}).WithPrograms(progs)
+		table, err := executor.Metadata.ProgramTable(t.Context(), filter)
+		contractcheck.FailErr(t, "ProgramTable", err)
+		return toolreach.Offered([]string{"command"}).WithProgramTable(table)
 	}
 
 	rejectRef := func(tool, code string, reach toolreach.Request, data map[string]any) *guidance.Refusal {
@@ -236,5 +236,44 @@ func TestShippedOARProductionCommandModeAndGitConfigWitnesses(t *testing.T) {
 	roRef := rejectRef("edit", "GIT_INTERNALS_WRITE_DENIED", productionReach("explore_readonly", ""), gitData)
 	if !strings.Contains(roRef.Copy["fix"], "git config --list") || !strings.Contains(roRef.Copy["instead"], "git config --get") {
 		t.Fatalf("admitted read-only git config should remain visible: %+v", roRef.Copy)
+	}
+
+	sedRule := &oar.Rule{
+		ID: "SED_WITNESS",
+		NextSteps: &oar.NextSteps{
+			Steps: []oar.NextStep{
+				{Program: []string{"sed", "p"}, Complete: true, Say: "Stream with {{ call }}.", Otherwise: "No stream."},
+				{Program: []string{"sed", "w out"}, Complete: true, Say: "Write with {{ call }}.", Otherwise: "No write."},
+			},
+		},
+	}
+	for _, tc := range []struct {
+		name, profile, surface string
+		wantWrite              bool
+	}{
+		{"readonly_worker", "explore_readonly", "", false},
+		{"readonly_coordinator", "coordinator", "observe_investigate", false},
+		{"writable_worker", "implement", "", true},
+		{"writable_coordinator", "coordinator", "implement_investigate", true},
+	} {
+		reach := productionReach(tc.profile, tc.surface)
+		if !reach.ProgramInvocation("sed", "p") {
+			t.Fatalf("%s: expected sed p admitted", tc.name)
+		}
+		if reach.ProgramInvocation("sed", "w out") != tc.wantWrite {
+			t.Fatalf("%s: sed 'w out' admitted = %v, want %v", tc.name, !tc.wantWrite, tc.wantWrite)
+		}
+		if reach.ProgramMode("sed", "unknown-mode") {
+			t.Fatalf("%s: unknown sed mode must fail closed", tc.name)
+		}
+		gc := oar.NewGuardContext()
+		gc.Reach = reach
+		resolved := oar.ResolveNextSteps(sedRule, gc)
+		if !strings.Contains(resolved.Text, "`command(command=\"sed p\")`") {
+			t.Fatalf("%s: missing sed p step: %q", tc.name, resolved.Text)
+		}
+		if strings.Contains(resolved.Text, "sed 'w out'") != tc.wantWrite {
+			t.Fatalf("%s: sed 'w out' step presence = %v, want %v: %q", tc.name, !tc.wantWrite, tc.wantWrite, resolved.Text)
+		}
 	}
 }
