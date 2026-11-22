@@ -911,18 +911,32 @@ host_facts:
    type: bool
  - name: paintedwolf.command_loader_call
    type: string
+ - name: paintedwolf.uncompressed_reader_call
+   type: string
  - name: paintedwolf.admitted_source_read_forms
    type: list<string>
+ - name: paintedwolf.source_read_forms_loadable_without_schema
+   type: bool
  - name: paintedwolf.admitted_range_read_forms
    type: list<string>
+ - name: paintedwolf.range_read_forms_loadable_without_schema
+   type: bool
  - name: paintedwolf.admitted_text_search_forms
    type: list<string>
+ - name: paintedwolf.text_search_forms_loadable_without_schema
+   type: bool
  - name: paintedwolf.admitted_file_read_forms
    type: list<string>
+ - name: paintedwolf.file_read_forms_loadable_without_schema
+   type: bool
  - name: paintedwolf.admitted_raw_read_forms
    type: list<string>
+ - name: paintedwolf.raw_read_forms_loadable_without_schema
+   type: bool
  - name: paintedwolf.admitted_large_read_forms
    type: list<string>
+ - name: paintedwolf.large_read_forms_loadable_without_schema
+   type: bool
  - name: paintedwolf.admitted_read_addressing_forms
    type: list<string>
  - name: paintedwolf.read_symbol_call
@@ -931,8 +945,12 @@ host_facts:
    type: string
  - name: paintedwolf.read_window_calls
    type: list<string>
+ - name: paintedwolf.read_addressing_forms_loadable_without_schema
+   type: bool
  - name: paintedwolf.admitted_stream_edit_forms
    type: list<string>
+ - name: paintedwolf.stream_edit_forms_loadable_without_schema
+   type: bool
  - name: paintedwolf.admitted_archive_forms
    type: list<string>
  - name: paintedwolf.archive_unzip_stream_call
@@ -941,12 +959,20 @@ host_facts:
    type: string
  - name: paintedwolf.archive_tar_extract_call
    type: string
+ - name: paintedwolf.archive_forms_loadable_without_schema
+   type: bool
  - name: paintedwolf.admitted_mutation_forms
    type: list<string>
+ - name: paintedwolf.mutation_forms_loadable_without_schema
+   type: bool
  - name: paintedwolf.admitted_secret_config_forms
    type: list<string>
  - name: paintedwolf.secret_jq_edit_call
    type: string
+ - name: paintedwolf.secret_external_command_admitted
+   type: bool
+ - name: paintedwolf.secret_forms_loadable_without_schema
+   type: bool
  - name: paintedwolf.command_jq_edit_reachable
    type: bool
  - name: paintedwolf.command_git_config_reachable

@@ -23,6 +23,15 @@ func reachWithProgramsAndSchemas(offered []string, allowedProgs []string, schema
 			return slices.Contains(allowedProgs, name)
 		})
 	}
+	if slices.Contains(offered, "command") && (schemas == nil || schemas["command"] == nil) {
+		merged := map[string]map[string]any{
+			"command": {"properties": map[string]any{"command": map[string]any{"type": "string"}}},
+		}
+		for k, v := range schemas {
+			merged[k] = v
+		}
+		schemas = merged
+	}
 	if schemas != nil {
 		req = req.WithSchemas(schemas)
 	}
@@ -147,7 +156,9 @@ func TestShippedOARProjectedSchemaAndSubsetWitnesses(t *testing.T) {
 					"unzip": {"listing-or-stream-decode": true, "create-extract-compress-decompress-to-path": true},
 					"tar":   {"listing-or-stream-decode": true, "create-extract-compress-decompress-to-path": true},
 				},
-			)), extractData)
+			)).WithSchemas(map[string]map[string]any{
+				"command": {"properties": map[string]any{"command": map[string]any{"type": "string"}}},
+			}), extractData)
 		if !strings.Contains(extractMutating, "`unzip -p ARCHIVE.zip MEMBER`") || !strings.Contains(extractMutating, "`tar -t -f ARCHIVE.tar`") ||
 			!strings.Contains(extractMutating, "`tar -x -f ARCHIVE.tar`") {
 			t.Fatalf("EXTRACT_FORMAT_UNSUPPORTED full mode reach missing unzip/tar list/extract: %q", extractMutating)
@@ -174,15 +185,22 @@ func TestShippedOARProjectedSchemaAndSubsetWitnesses(t *testing.T) {
 			t.Fatalf("READ_ARGS_CONFLICT rg+head subset render = %q", addrSubset)
 		}
 
-		loadableRead := toolreach.Freeze([]string{"request_tools"}, toolsurface.Compile([]string{"request_tools"}, []string{"command"})).
+		loadableNoSchema := toolreach.Freeze([]string{"request_tools"}, toolsurface.Compile([]string{"request_tools"}, []string{"command"})).
 			WithPrograms(func(name string) bool { return name == "rg" || name == "head" || name == "awk" })
+		loadableRead := loadableNoSchema.WithSchemas(map[string]map[string]any{
+			"command": {"properties": map[string]any{"command": map[string]any{"type": "string"}}},
+		})
 		deferredWithoutLoader := toolreach.Freeze([]string{"read"}, toolsurface.Compile([]string{"read"}, []string{"command"})).
 			WithPrograms(func(name string) bool { return true })
 		absentCmd := reachWithProgramsAndSchemas([]string{"read"}, nil, nil)
 
 		addrLoadable := rejectFix("read", "READ_ARGS_CONFLICT", loadableRead, addrData)
 		if !strings.Contains(addrLoadable, "`request_tools(need=\"command\")`") || !strings.Contains(addrLoadable, "`rg -n SYMBOL FILE`") {
-			t.Fatalf("READ_ARGS_CONFLICT loadable command missing loader or rg call: %q", addrLoadable)
+			t.Fatalf("READ_ARGS_CONFLICT loadable command with schema missing loader or rg call: %q", addrLoadable)
+		}
+		addrLoaderOnly := rejectFix("read", "READ_ARGS_CONFLICT", loadableNoSchema, addrData)
+		if !strings.Contains(addrLoaderOnly, "`request_tools(need=\"command\")`") || strings.Contains(addrLoaderOnly, "rg -n") {
+			t.Fatalf("READ_ARGS_CONFLICT loader-only missing projection must emit loader without concrete rg call: %q", addrLoaderOnly)
 		}
 		for _, unreachable := range []toolreach.Request{deferredWithoutLoader, absentCmd} {
 			got := rejectFix("read", "READ_ARGS_CONFLICT", unreachable, addrData)
