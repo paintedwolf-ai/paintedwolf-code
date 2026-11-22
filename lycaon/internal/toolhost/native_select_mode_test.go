@@ -88,10 +88,12 @@ func TestSelectModeNamesWhatPrepareSelects(t *testing.T) {
 		"sed -i s/a/b/ f":               "-i",
 		"sed -Ei s/a/b/ f":              "-i",
 		"sed -i.bak s/a/b/ f":           "-i",
+		"sed -i .bak s/a/b/ f":          "-i",
 		"sed --in-place s/a/b/ f":       "-i",
 		"sed w\tout":                    "w-command",
-		// A script read from a file cannot be classified from argv.
-		"sed -f script.sed": "",
+		// A script read from a file cannot be classified from argv unless -i fixes in-place mode.
+		"sed -f script.sed f":    "",
+		"sed -i -f script.sed f": "-i",
 
 		"find . -name x -delete": "-delete",
 	} {

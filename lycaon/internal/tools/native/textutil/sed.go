@@ -27,7 +27,7 @@ type PosixRegexEngine interface {
 type sedCompiler struct{ engine PosixRegexEngine }
 
 type preparedSed struct {
-	source       sedSource
+	source       commandmode.SedSource
 	program      *sedscript.Program
 	pins         []toolcontract.ExecutionRevision
 	pinsRecorded bool
@@ -79,10 +79,10 @@ func runSed(inv *invocation) error {
 		}
 		plan.program = program
 	}
-	if script.fromFile && len(program.WriteFiles()) > 0 && len(plan.pins) == 0 {
-		return unsupported(inv, script.word, "w files named in an inline script (-e or SCRIPT), so the write is reviewed with the command")
+	if script.FromFile && len(program.WriteFiles()) > 0 && len(plan.pins) == 0 {
+		return unsupported(inv, script.Word, "w files named in an inline script (-e or SCRIPT), so the write is reviewed with the command")
 	}
-	run := &sedRun{inv: inv, program: program, word: script.word, stages: map[string]commandprogram.StagedOutput{}}
+	run := &sedRun{inv: inv, program: program, word: script.Word, stages: map[string]commandprogram.StagedOutput{}}
 	err := run.execute(script)
 	if settled := run.settleWrites(err); settled != nil {
 		return settled
@@ -101,8 +101,8 @@ type sedRun struct {
 	stages  map[string]commandprogram.StagedOutput
 }
 
-func (r *sedRun) execute(script sedSource) error {
-	files := script.files
+func (r *sedRun) execute(script commandmode.SedSource) error {
+	files := script.Files
 	inv := r.inv
 	config, err := r.config()
 	if err != nil {
@@ -111,8 +111,8 @@ func (r *sedRun) execute(script sedSource) error {
 	if r.machine, err = sedscript.NewMachine(inv.ctx, r.program, config); err != nil {
 		return err
 	}
-	if script.inPlace {
-		return r.inPlace(files, script.suffix)
+	if script.InPlace {
+		return r.inPlace(files, script.Suffix)
 	}
 	sources, err := inv.openInputs(files)
 	if err != nil {
@@ -178,19 +178,8 @@ func (r *sedRun) failure(err error) error {
 	return err
 }
 
-type sedSource struct {
-	text     string
-	word     commandprogram.Field
-	files    commandprogram.Fields
-	fromFile bool
-	inPlace  bool
-	suffix   string
-}
-
-// prepareSed builds the single admitted prepared plan for sed. Inline scripts
-// (-e or positional SCRIPT) are parsed once here, selecting both BSD -i suffix
-// disambiguation and the catalog effect mode from that one AST. Forms with -f
-// defer file capture until the child receipt exists in runSed.
+// prepareSed builds the admitted prepared plan for sed using shared argument
+// interpretation. Forms with -f defer file capture until runSed.
 func (o *Owners) prepareSed(ctx context.Context, spec toolcontract.CommandSpecification, request commandprogram.OperationRequest, bound commandprogram.BoundArgv) (*preparedSed, string, error) {
 	if o.Regex == nil {
 		return nil, "", toolrejection.RejectInvalidArguments("COMMAND_PLATFORM_UNAVAILABLE", map[string]any{"command": "sed", "capability": "the shared POSIX regex engine"})
@@ -198,109 +187,25 @@ func (o *Owners) prepareSed(ctx context.Context, spec toolcontract.CommandSpecif
 	if o.Revisions.Memory == nil {
 		return nil, "", errors.New("text utilities require program memory admission")
 	}
-	operands := bound.Operands()
-	var out sedSource
-	for _, key := range []string{"-i", "-I"} {
-		if option, ok := bound.Last(key); ok {
-			out.inPlace = true
-			if len(option.Values) > 0 {
-				out.suffix = option.Values[0].Value
-			}
+	prepared, fail := commandmode.PrepareSedArguments(ctx, bound, request.Argv[0], o.Revisions.Memory, sedCompiler{o.Regex})
+	if fail != nil {
+		if fail.Err != nil {
+			return nil, "", sedRefusalSpec(spec, fail.Word, fail.Err)
 		}
+		return nil, "", nativeutility.Usage(spec, fail.Word, fail.Usage)
 	}
-	// BSD sed spells an empty in-place backup suffix as a separate argument.
-	// With -e/-f, that empty argument precedes the file operands and cannot be
-	// mistaken for a file name.
-	if option, ok := bound.Last("-i"); ok && len(option.Values) == 0 && len(operands) > 0 && operands[0].Value == "" && (len(bound.Options("-e")) > 0 || len(bound.Options("-f")) > 0) {
-		operands = operands[1:]
-	}
-	var parts []string
-	for _, item := range bound.Items {
-		option := item.Option
-		if option == nil || (option.Key != "-e" && option.Key != "-f") {
-			continue
-		}
-		value := option.Values[0]
-		if len(parts) == 0 && !out.fromFile {
-			out.word = value
-		}
-		if option.Key == "-e" {
-			parts = append(parts, value.Value)
-			continue
-		}
-		if value.Value == "-" {
-			return nil, "", nativeutility.Usage(spec, value, "a script file; standard input is the data")
-		}
-		out.fromFile = true
-	}
-	if out.fromFile {
-		out.files = operands
-		if out.inPlace && len(out.files) == 0 {
-			return nil, "", nativeutility.Usage(spec, request.Argv[0], "a PATH to edit in place")
-		}
+	if prepared.Source.FromFile {
 		mode := "stream-script"
-		if out.inPlace {
+		if prepared.Source.InPlace {
 			mode = "-i"
 		}
-		return &preparedSed{source: out}, mode, nil
+		return &preparedSed{source: prepared.Source}, mode, nil
 	}
-	compiler := sedCompiler{o.Regex}
-	extended := argvFlag(bound, "-E")
-	var program *sedscript.Program
-	var err error
-	if len(parts) > 0 {
-		out.text, out.files = strings.Join(parts, "\n"), operands
-		program, err = sedscript.Parse(ctx, o.Revisions.Memory, out.text, extended, compiler)
-		if err != nil {
-			return nil, "", sedRefusalSpec(spec, out.word, err)
-		}
-	} else {
-		if len(operands) == 0 {
-			return nil, "", nativeutility.Usage(spec, request.Argv[0], "a SCRIPT")
-		}
-		program, err = o.parsePositionalSed(ctx, spec, bound, operands, extended, compiler, &out)
-		if err != nil {
-			return nil, "", err
-		}
-	}
-	if out.inPlace && len(out.files) == 0 {
-		program.Close()
-		return nil, "", nativeutility.Usage(spec, request.Argv[0], "a PATH to edit in place")
-	}
-	mode := commandmode.SedCompiledMode(out.inPlace, program.WriteFiles())
-	return &preparedSed{source: out, program: program}, mode, nil
+	mode := commandmode.SedCompiledMode(prepared.Source.InPlace, prepared.Program.WriteFiles())
+	return &preparedSed{source: prepared.Source, program: prepared.Program}, mode, nil
 }
 
-// parsePositionalSed parses the positional script operand once, disambiguating
-// BSD sed -i SUFFIX SCRIPT [FILE ...] when -i took no attached value and the
-// first operand fails syntax while the second is a valid script. Resource and
-// cancellation failures propagate immediately without falling through.
-func (o *Owners) parsePositionalSed(ctx context.Context, spec toolcontract.CommandSpecification, bound commandprogram.BoundArgv, operands commandprogram.Fields, extended bool, compiler sedCompiler, out *sedSource) (*sedscript.Program, error) {
-	firstProg, firstErr := sedscript.Parse(ctx, o.Revisions.Memory, operands[0].Value, extended, compiler)
-	if firstErr == nil {
-		out.text, out.word, out.files = operands[0].Value, operands[0], operands[1:]
-		return firstProg, nil
-	}
-	if isResourceOrContextError(firstErr) {
-		return nil, sedRefusalSpec(spec, operands[0], firstErr)
-	}
-	option, hasInPlace := bound.Last("-i")
-	bsdCandidate := hasInPlace && len(option.Values) == 0 && len(operands) >= 2 && !argvFlag(bound, "-e") && !argvFlag(bound, "-f") && !argvFlag(bound, "-I")
-	if bsdCandidate {
-		secondProg, secondErr := sedscript.Parse(ctx, o.Revisions.Memory, operands[1].Value, extended, compiler)
-		if secondErr == nil {
-			out.suffix = operands[0].Value
-			out.text, out.word, out.files = operands[1].Value, operands[1], operands[2:]
-			return secondProg, nil
-		}
-		if isResourceOrContextError(secondErr) {
-			return nil, sedRefusalSpec(spec, operands[1], secondErr)
-		}
-	}
-	return nil, sedRefusalSpec(spec, operands[0], firstErr)
-}
-
-func loadSedFileScript(inv *invocation, out sedSource) (sedSource, *sedscript.Program, error) {
+func loadSedFileScript(inv *invocation, out commandmode.SedSource) (commandmode.SedSource, *sedscript.Program, error) {
 	var parts []string
 	var totalBytes int64
 	for _, item := range inv.argv.Items {
@@ -310,7 +215,7 @@ func loadSedFileScript(inv *invocation, out sedSource) (sedSource, *sedscript.Pr
 		}
 		value := option.Values[0]
 		if len(parts) == 0 {
-			out.word = value
+			out.Word = value
 		}
 		if option.Key == "-e" {
 			parts = append(parts, value.Value)
@@ -324,17 +229,17 @@ func loadSedFileScript(inv *invocation, out sedSource) (sedSource, *sedscript.Pr
 		trimmed := strings.TrimSuffix(text, "\n")
 		parts = append(parts, trimmed)
 		totalBytes += int64(len(trimmed)) + 1
-		out.fromFile = true
+		out.FromFile = true
 	}
 	if len(parts) > 1 {
 		if err := inv.reserve(totalBytes); err != nil {
 			return out, nil, err
 		}
 	}
-	out.text = strings.Join(parts, "\n")
-	program, err := sedscript.Parse(inv.ctx, inv.ports.Memory, out.text, inv.flag("-E"), sedCompiler{inv.owners.Regex})
+	out.Text = strings.Join(parts, "\n")
+	program, err := sedscript.Parse(inv.ctx, inv.ports.Memory, out.Text, inv.flag("-E"), sedCompiler{inv.owners.Regex})
 	if err != nil {
-		return out, nil, sedRefusal(inv, out.word, err)
+		return out, nil, sedRefusal(inv, out.Word, err)
 	}
 	return out, program, nil
 }
@@ -377,17 +282,6 @@ func readScriptFile(inv *invocation, word commandprogram.Field) (script string, 
 		return "", err
 	}
 	return string(captured.Bytes), nil
-}
-
-func isResourceOrContextError(err error) bool {
-	if err == nil {
-		return false
-	}
-	var memErr *toolcontract.ProgramMemoryLimitError
-	var budgetErr *textsearch.BudgetError
-	var limitErr *sedscript.LimitError
-	return errors.As(err, &memErr) || errors.As(err, &budgetErr) || errors.As(err, &limitErr) ||
-		errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded)
 }
 
 func sedRefusal(inv *invocation, word commandprogram.Field, err error) error {

@@ -118,11 +118,17 @@ func TestProgramInvocationSeparatesMultiModeAndGitSubcommands(t *testing.T) {
 	if !genericGitAndTar.ProgramInvocation("unzip", "-p", "a.zip", "entry") {
 		t.Fatal("unzip read reach must admit unzip -p stream inspection")
 	}
-	if !genericGitAndTar.ProgramInvocation("sed", "p") {
+	if !genericGitAndTar.ProgramInvocation("sed", "p", "file.txt") {
 		t.Fatal("sed read reach must admit sed p")
 	}
-	if genericGitAndTar.ProgramInvocation("sed", "w out") {
+	if genericGitAndTar.ProgramInvocation("sed", "w out", "file.txt") {
 		t.Fatal("sed read reach without w-command admission must reject sed 'w out'")
+	}
+	if genericGitAndTar.ProgramInvocation("sed", "-i", ".bak", "s/a/b/", "file.txt") {
+		t.Fatal("sed read reach must reject positional-suffix sed -i")
+	}
+	if genericGitAndTar.ProgramInvocation("sed", "-f", "rules.sed", "file.txt") {
+		t.Fatal("sed -f script-file reach must remain unknown")
 	}
 	if genericGitAndTar.ProgramMode("sed", "unknown-mode") || genericGitAndTar.ProgramMode("unknown-cmd", "always") {
 		t.Fatal("unknown modes must fail closed")
@@ -132,7 +138,7 @@ func TestProgramInvocationSeparatesMultiModeAndGitSubcommands(t *testing.T) {
 		map[string]bool{"git": true, "git config": true, "tar": true, "sed": true},
 		map[string]map[string]bool{
 			"git config": {"query": true},
-			"sed":        {"stream-script": true, "w-command": true},
+			"sed":        {"stream-script": true, "w-command": true, "-i": true},
 			"tar":        {"listing-or-stream-decode": true, "create-extract-compress-decompress-to-path": true},
 		},
 	))
@@ -142,8 +148,20 @@ func TestProgramInvocationSeparatesMultiModeAndGitSubcommands(t *testing.T) {
 	if !fullModes.ProgramInvocation("tar", "-x", "-f", "a.tar") {
 		t.Fatal("explicit tar extraction mode admission should allow tar -x -f")
 	}
-	if !fullModes.ProgramInvocation("sed", "p") || !fullModes.ProgramInvocation("sed", "w out") {
+	if !fullModes.ProgramInvocation("sed", "p", "file.txt") || !fullModes.ProgramInvocation("sed", "w out", "file.txt") {
 		t.Fatal("writable sed mode admission should allow both sed p and sed 'w out'")
+	}
+	if !fullModes.ProgramInvocation("sed", "-i", ".bak", "s/a/b/", "file.txt") {
+		t.Fatal("in-place sed mode admission should allow positional-suffix sed -i .bak")
+	}
+	if fullModes.ProgramInvocation("sed", "-i", ".bak", "s/a/b/") {
+		t.Fatal("positional-suffix sed -i without file operand must fail closed")
+	}
+	if fullModes.ProgramInvocation("sed", "-f", "rules.sed", "file.txt") {
+		t.Fatal("sed -f without -i must remain unknown where file contents determine the mode")
+	}
+	if !fullModes.ProgramInvocation("sed", "-i", "-f", "rules.sed", "file.txt") {
+		t.Fatal("sed -i -f fixes in-place mode and should be admitted when -i is admitted")
 	}
 	if fullModes.ProgramMode("sed", "unknown-mode") {
 		t.Fatal("unknown mode on full table must still fail closed")
