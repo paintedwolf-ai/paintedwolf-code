@@ -120,6 +120,11 @@ func Toolchains(ctx context.Context, languages []string) []string {
 	return sharedToolchainProbes.toolchains(ctx, languages)
 }
 
+// WaitForProbes blocks until in-flight background toolchain refreshes finish.
+func WaitForProbes() {
+	sharedToolchainProbes.wg.Wait()
+}
+
 func (p *toolchainProbes) toolchains(ctx context.Context, languages []string) []string {
 	focus := normalizeLanguages(languages)
 	pathValue := p.host.pathValue()

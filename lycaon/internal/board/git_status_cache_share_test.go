@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/lycaon/lycaon/internal/board"
 	"github.com/lycaon/lycaon/internal/git"
@@ -58,10 +59,11 @@ func TestColdBoardWarmsSharedGitStatusWithoutBlocking(t *testing.T) {
 		started: make(chan struct{}, 1),
 		release: make(chan struct{}),
 	}
-	cache := git.NewStatusCache(loader)
+	now := time.Now()
+	cache := git.NewStatusCache(loader, git.WithStatusCacheClock(func() time.Time { return now }))
 	b := &board.SnapshotBuilder{
 		StatusCache: cache,
-		RepoSets:    git.NewRepoSetCache(git.DefaultStatusCacheTTL),
+		RepoSets:    git.NewRepoSetCache(time.Hour),
 		Git:         loader.inner,
 		Repo:        repotest.NewProvider(t),
 	}
