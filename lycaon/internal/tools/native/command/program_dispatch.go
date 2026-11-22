@@ -487,7 +487,8 @@ func (d *ProgramDispatcher) invokeNative(ctx context.Context, spec toolcontract.
 	}()
 	effect := toolexecution.NativeEffect{
 		Operation: bound, Streams: runStreams, Arguments: inputs, Argv: &review, Inspection: d.run.capture,
-		Stage: toolcontract.ExecutionStage{ExecutionID: request.Invocation.Identity.ExecutionID, OperationID: operationDef.Facts().Identity, Argv: request.Argv.Values()},
+		Stage:             toolcontract.ExecutionStage{ExecutionID: request.Invocation.Identity.ExecutionID, OperationID: operationDef.Facts().Identity, Argv: request.Argv.Values()},
+		ValidateCandidate: func(ctx context.Context, argv []string) (toolcontract.BoundOperation, commandprogram.ArgvReview, bool) { return d.validateCandidateAlternative(ctx, request, argv) },
 		PrepareReviewed: func(ctx context.Context, _ map[string]any, admitted tools.ToolContext) (toolexecution.PreparedNativeEffect, error) {
 			// The program's directory frame predates this child's approval. Bind
 			// the owner again with the admitted context so exact file access is
@@ -621,6 +622,118 @@ func (d *ProgramDispatcher) invokeHosted(ctx context.Context, spec toolcontract.
 		}
 		return res, invokeErr
 	})
+}
+
+func (d *ProgramDispatcher) validateCandidateAlternative(ctx context.Context, baseReq commandprogram.OperationRequest, argv []string) (toolcontract.BoundOperation, commandprogram.ArgvReview, bool) {
+	if len(argv) == 0 || argv[0] == "" || d.paths == nil {
+		return toolcontract.BoundOperation{}, commandprogram.ArgvReview{}, false
+	}
+	spec, native := d.run.commands[argv[0]]
+	if !native || spec.Name == "external" {
+		return toolcontract.BoundOperation{}, commandprogram.ArgvReview{}, false
+	}
+	operation := d.natives[spec.Name]
+	if operation.Prepare == nil {
+		return toolcontract.BoundOperation{}, commandprogram.ArgvReview{}, false
+	}
+	fields := valueFields(argv)
+	candidateReq := baseReq
+	candidateReq.OperationID = spec.Name
+	candidateReq.Argv = fields
+	candidateReq.EffectMode = ""
+	candidateReq.StreamPreparation = nil
+	if (spec.Name == "git" || spec.Owner == "git") && len(d.run.baseEnv) > 0 && len(candidateReq.Environment) > 0 {
+		var explicit []string
+		for _, entry := range candidateReq.Environment {
+			if !slices.Contains(d.run.baseEnv, entry) {
+				explicit = append(explicit, entry)
+			}
+		}
+		candidateReq.Environment = explicit
+	}
+	prepared, err := operation.Prepare(ctx, d.paths, d, candidateReq)
+	if err != nil {
+		return toolcontract.BoundOperation{}, commandprogram.ArgvReview{}, false
+	}
+	if prepared.Release != nil {
+		defer prepared.Release()
+	}
+	if prepared.DeferredSource {
+		return toolcontract.BoundOperation{}, commandprogram.ArgvReview{}, false
+	}
+	if prepared.Command != "" {
+		resolved, ok := d.run.catalogCommand(prepared.Command)
+		if !ok {
+			return toolcontract.BoundOperation{}, commandprogram.ArgvReview{}, false
+		}
+		spec = resolved
+	}
+	mode := prepared.Mode
+	if mode == "" {
+		mode = selectEffectMode(spec, "")
+	} else {
+		mode = selectEffectMode(spec, mode)
+	}
+	for _, target := range prepared.Review.PathTargets {
+		if target.Path == "" || target.Write {
+			return toolcontract.BoundOperation{}, commandprogram.ArgvReview{}, false
+		}
+		boundPath, bindErr := d.paths.Bind(ctx, target.Path, false)
+		if bindErr != nil || boundPath.Null {
+			return toolcontract.BoundOperation{}, commandprogram.ArgvReview{}, false
+		}
+	}
+	prepared.Review.PathTargets = absolutePathTargets(d.paths.Cwd().Abs, d.run.tc.Host.SessionScratchDir, prepared.Review.PathTargets)
+	if err := d.checkPreparedPolicy(ctx, d.run.tc, spec, mode, candidateReq, d.paths.Cwd(), prepared.Review); err != nil {
+		return toolcontract.BoundOperation{}, commandprogram.ArgvReview{}, false
+	}
+	tool := prepared.Tool
+	if tool == "" {
+		tool = operation.Tool
+	}
+	var operationDef toolcontract.OperationDefinition
+	if tool == "" {
+		definitions, defErr := d.run.controlDefinitions()
+		if defErr != nil {
+			return toolcontract.BoundOperation{}, commandprogram.ArgvReview{}, false
+		}
+		var ok bool
+		operationDef, ok = definitions[spec.Name]
+		if !ok {
+			return toolcontract.BoundOperation{}, commandprogram.ArgvReview{}, false
+		}
+	} else if definition, ok := d.run.registry.Operation(tool); ok && definitionHasCommand(definition.Operation, spec.Name) {
+		operationDef = offeredProgramDefinition(tool, definition.Operation, operation.SecretSlots)
+	} else if tool == spec.Name {
+		operationDef, err = d.catalogDefinition(spec)
+		if err != nil {
+			return toolcontract.BoundOperation{}, commandprogram.ArgvReview{}, false
+		}
+	} else {
+		definitions, defErr := d.run.controlDefinitions()
+		if defErr != nil {
+			return toolcontract.BoundOperation{}, commandprogram.ArgvReview{}, false
+		}
+		var ok bool
+		operationDef, ok = definitions[spec.Name]
+		if !ok {
+			return toolcontract.BoundOperation{}, commandprogram.ArgvReview{}, false
+		}
+	}
+	bound, err := toolcontract.BindOperation(operationDef, candidateReq.Invocation, spec.Name, mode, d.childEffectSet(ctx, spec, mode, candidateReq))
+	if err != nil {
+		return toolcontract.BoundOperation{}, commandprogram.ArgvReview{}, false
+	}
+	readOnly, _ := toolcontract.NewCommandEffects(toolcontract.CommandReadOnly)
+	if !readOnly.Allows(bound.Effects()) {
+		return toolcontract.BoundOperation{}, commandprogram.ArgvReview{}, false
+	}
+	if err := d.run.surface.ValidateOperation(bound); err != nil {
+		return toolcontract.BoundOperation{}, commandprogram.ArgvReview{}, false
+	}
+	review := prepared.Review
+	review.OperationID = operationDef.Facts().Identity
+	return bound, review, true
 }
 
 func absolutePathTargets(cwd, scratch string, targets []commandprogram.PathTarget) []commandprogram.PathTarget {

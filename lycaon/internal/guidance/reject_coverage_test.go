@@ -447,7 +447,7 @@ func TestAskModeRefusalProducersRenderSpecificCausesAndConditionedRecovery(t *te
 				"class":         "mutation",
 				"expected_form": "find [default-predicates-print]",
 				"code_instead":  "find src -name '*.tmp'",
-				"next_action":   "list the paths selected for deletion and report the affected files without deleting them",
+				"next_action":   "list_delete_targets",
 				"worker_leg":    true,
 				"source_line":   1,
 				"source_column": 1,
@@ -462,7 +462,7 @@ func TestAskModeRefusalProducersRenderSpecificCausesAndConditionedRecovery(t *te
 		}
 	})
 
-	// 9. Paired COMMAND_EFFECT_NOT_ALLOWED renders: Ask with alternative, Ask without alternative, delayed after upgrade, and loadable command.
+	// 9. Paired COMMAND_EFFECT_NOT_ALLOWED renders: Ask with alternative, Ask without alternative, delayed after upgrade, loadable command, absent command, and unknown reach.
 	t.Run("paired_command_effect_not_allowed_renders", func(t *testing.T) {
 		askAltRej := &toolrejection.ToolReject{
 			Code: "COMMAND_EFFECT_NOT_ALLOWED",
@@ -472,8 +472,9 @@ func TestAskModeRefusalProducersRenderSpecificCausesAndConditionedRecovery(t *te
 				"command":       "find",
 				"mode":          "-delete",
 				"class":         "mutation",
+				"expected_form": "find [default-predicates-print]",
 				"code_instead":  "find src -name '*.tmp'",
-				"next_action":   "list the paths selected for deletion and report the affected files without deleting them",
+				"next_action":   "list_delete_targets",
 				"source_line":   1,
 				"source_column": 1,
 			},
@@ -490,6 +491,15 @@ func TestAskModeRefusalProducersRenderSpecificCausesAndConditionedRecovery(t *te
 			}
 		}
 
+		// Unknown reach (neither can_command nor tool_loadable+can_request_tools set) suppresses concrete run/load instruction.
+		rawAskUnknownReach, _ := renderToolReject(t, askAltRej, nil)
+		if strings.Contains(rawAskUnknownReach, "Run `find src -name '*.tmp'`") || strings.Contains(rawAskUnknownReach, "Load `command`") {
+			t.Fatalf("unknown reach still rendered concrete command remedy:\n%s", rawAskUnknownReach)
+		}
+		if !strings.Contains(rawAskUnknownReach, "Available read-only forms on this surface: find [default-predicates-print].") {
+			t.Fatalf("unknown reach missing fallback surface form:\n%s", rawAskUnknownReach)
+		}
+
 		askLoadableRej := &toolrejection.ToolReject{
 			Code: "COMMAND_EFFECT_NOT_ALLOWED",
 			Data: map[string]any{
@@ -499,7 +509,7 @@ func TestAskModeRefusalProducersRenderSpecificCausesAndConditionedRecovery(t *te
 				"mode":              "-i",
 				"class":             "mutation",
 				"code_instead":      "sed 's/a/b/' README.md",
-				"next_action":       "preview the transformed output on stdout without modifying the file in place",
+				"next_action":       "preview_stream",
 				"tool_loadable":     true,
 				"can_request_tools": true,
 				"source_line":       1,
@@ -543,7 +553,7 @@ func TestAskModeRefusalProducersRenderSpecificCausesAndConditionedRecovery(t *te
 				"mode":              "-i",
 				"class":             "mutation",
 				"code_instead":      "sed 's/a/b/' README.md",
-				"next_action":       "preview the transformed output on stdout without modifying the file in place",
+				"next_action":       "preview_stream",
 				"command_execution": "observed",
 				"source_line":       2,
 				"source_column":     1,

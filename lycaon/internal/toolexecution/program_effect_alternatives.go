@@ -29,15 +29,6 @@ var compiledAlternativeSpecs = sync.OnceValues(func() (map[string]toolcontract.C
 	return index, nil
 })
 
-var nextActionPurposes = map[string]string{
-	"list_delete_targets": "list the paths selected for deletion and report the affected files without deleting them",
-	"preview_stream":      "preview the transformed output on stdout without modifying the file in place",
-	"preview_query":       "evaluate the query and inspect the output on stdout without modifying the file",
-	"dry_run_preview":     "preview the matched changes in dry-run mode without modifying files",
-	"check_patch":         "check whether the patch applies cleanly without modifying the worktree",
-	"inspect_target":      "inspect the current contents of the target file so you can report the exact change needed",
-}
-
 // enrichNativeEffectRejection attaches mode attribution and a validated
 // operation-specific read-only alternative to native child-effect refusals.
 func enrichNativeEffectRejection(ctx context.Context, surface ProgramSurface, effect NativeEffect, tc tools.ToolContext, err error) {
@@ -64,38 +55,35 @@ func enrichNativeEffectRejection(ctx context.Context, surface ProgramSurface, ef
 	}
 
 	reach := tools.CallReach(ctx)
-	hasReach := reach.Known() || len(tc.Turn.TurnOfferedToolNames) > 0 || tc.Turn.TurnToolPlan.Compiled() || tc.Turn.TurnPrograms != nil
-	if !reach.Known() && hasReach {
+	if !reach.Known() && turnReachKnown(tc) {
 		reach = tools.TurnReach(tc)
 	}
-	if hasReach {
-		switch reach.Status(toolreach.ProgramTool) {
-		case toolreach.Absent:
+	if !reach.Known() {
+		return
+	}
+	switch reach.Status(toolreach.ProgramTool) {
+	case toolreach.Absent:
+		return
+	case toolreach.Loadable:
+		if reach.Status(toolreach.LoaderTool) != toolreach.Callable {
 			return
-		case toolreach.Loadable:
-			rejected.Data["tool_loadable"] = true
-			rejected.Data["can_request_tools"] = true
-		case toolreach.Callable:
-			rejected.Data["can_command"] = true
 		}
-	} else {
+		rejected.Data["tool_loadable"] = true
+		rejected.Data["can_request_tools"] = true
+	case toolreach.Callable:
 		rejected.Data["can_command"] = true
 	}
 
 	codeInstead, nextAction := buildValidatedReadOnlyAlternative(ctx, surface, effect, tc, reach)
 	if codeInstead != "" && nextAction != "" {
 		rejected.Data["code_instead"] = codeInstead
-		if purpose := nextActionPurposes[nextAction]; purpose != "" {
-			rejected.Data["next_action"] = purpose
-		} else {
-			rejected.Data["next_action"] = nextAction
-		}
+		rejected.Data["next_action"] = nextAction
 	}
 }
 
 func buildValidatedReadOnlyAlternative(ctx context.Context, surface ProgramSurface, effect NativeEffect, tc tools.ToolContext, reach toolreach.Request) (string, string) {
 	bound := effect.Operation
-	if bound.Publication() != toolcontract.NoPublication {
+	if bound.Publication() != toolcontract.NoPublication || effect.ValidateCandidate == nil {
 		return "", ""
 	}
 	for _, word := range effect.Stage.Argv {
@@ -103,11 +91,8 @@ func buildValidatedReadOnlyAlternative(ctx context.Context, surface ProgramSurfa
 			return "", ""
 		}
 	}
-	if !nativeTargetsReadable(ctx, bound.Invocation(), effect, tc) {
-		return "", ""
-	}
-	candidateCmd, candidateMode, candidateArgv, nextAction := candidateReadOnlyForm(bound, effect)
-	if candidateCmd == "" || candidateMode == "" || len(candidateArgv) == 0 || nextAction == "" {
+	candidateArgv, nextAction := candidateReadOnlyForm(bound, effect)
+	if len(candidateArgv) == 0 || nextAction == "" {
 		return "", ""
 	}
 	for _, word := range candidateArgv {
@@ -115,21 +100,39 @@ func buildValidatedReadOnlyAlternative(ctx context.Context, surface ProgramSurfa
 			return "", ""
 		}
 	}
-	if !validateCandidateReadOnlyForm(surface, bound, candidateCmd, candidateMode, candidateArgv, tc, reach) {
+	candidateBound, candidateReview, ok := effect.ValidateCandidate(ctx, candidateArgv)
+	if !ok {
+		return "", ""
+	}
+	candidateCmd := candidateBound.Command()
+	if candidateCmd == "" {
+		return "", ""
+	}
+	if reach.Known() && tc.Turn.TurnPrograms != nil && !reach.Program(candidateCmd) {
+		return "", ""
+	}
+	readOnly, _ := toolcontract.NewCommandEffects(toolcontract.CommandReadOnly)
+	if !readOnly.Allows(candidateBound.Effects()) {
+		return "", ""
+	}
+	if surface.ValidateOperation(candidateBound) != nil {
+		return "", ""
+	}
+	if !candidateTargetsReadable(ctx, candidateBound.Invocation(), candidateReview, tc) {
 		return "", ""
 	}
 	return toolreach.QuoteProgram(candidateArgv), nextAction
 }
 
-func nativeTargetsReadable(ctx context.Context, inv toolcontract.OperationInvocation, effect NativeEffect, tc tools.ToolContext) bool {
+func candidateTargetsReadable(ctx context.Context, inv toolcontract.OperationInvocation, review commandprogram.ArgvReview, tc tools.ToolContext) bool {
 	if tc.CheckScopePolicy(ctx, inv.Scope.RootID, inv.Scope.Directory, false) != nil {
 		return false
 	}
-	if effect.Argv == nil {
-		return true
+	if len(review.PathTargets) == 0 {
+		return false
 	}
-	for _, target := range effect.Argv.PathTargets {
-		if target.Path == "" {
+	for _, target := range review.PathTargets {
+		if target.Path == "" || target.Write || !filepath.IsAbs(target.Path) {
 			return false
 		}
 		if tc.CheckScopePolicy(ctx, inv.Scope.RootID, target.Path, false) != nil {
@@ -144,7 +147,7 @@ func nativeTargetsReadable(ctx context.Context, inv toolcontract.OperationInvoca
 
 func pathWithinAllowedReadRoots(path string, tc tools.ToolContext) bool {
 	if !filepath.IsAbs(path) {
-		return true
+		return false
 	}
 	for _, root := range tc.Source.Roots {
 		if root.Path != "" && withinDir(root.Path, path) {
@@ -169,83 +172,74 @@ func withinDir(root, target string) bool {
 	return err == nil && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator))
 }
 
-func candidateReadOnlyForm(bound toolcontract.BoundOperation, effect NativeEffect) (command, mode string, argv []string, nextAction string) {
+func candidateReadOnlyForm(bound toolcontract.BoundOperation, effect NativeEffect) (argv []string, nextAction string) {
 	cmd := bound.Command()
 	boundMode := bound.Mode()
 	stageArgv := effect.Stage.Argv
 	switch cmd {
 	case "find":
 		if boundMode != "-delete" || len(stageArgv) < 2 {
-			return "", "", nil, ""
+			return nil, ""
 		}
 		filtered := make([]string, 0, len(stageArgv))
 		for _, w := range stageArgv {
-			switch w {
-			case "-delete":
+			if w == "-delete" {
 				continue
-			case "-exec", "-execdir", "-ok", "-okdir":
-				return "", "", nil, ""
-			default:
-				filtered = append(filtered, w)
 			}
+			filtered = append(filtered, w)
 		}
 		if len(filtered) == len(stageArgv) {
-			return "", "", nil, ""
+			return nil, ""
 		}
-		return "find", "default-predicates-print", filtered, "list_delete_targets"
+		return filtered, "list_delete_targets"
 
 	case "sed":
 		if boundMode != "-i" || effect.Argv == nil || len(effect.Argv.PathTargets) == 0 {
-			return "", "", nil, ""
+			return nil, ""
 		}
 		stripped, ok := stripInPlaceFlag("sed", stageArgv)
 		if !ok {
-			return "", "", nil, ""
+			return nil, ""
 		}
-		return "sed", "stream-script", stripped, "preview_stream"
+		return stripped, "preview_stream"
 
 	case "yq":
 		if boundMode != "-i" || effect.Argv == nil || len(effect.Argv.PathTargets) == 0 {
-			return "", "", nil, ""
+			return nil, ""
 		}
 		stripped, ok := stripInPlaceFlag("yq", stageArgv)
 		if !ok {
-			return "", "", nil, ""
+			return nil, ""
 		}
-		return "yq", "query", stripped, "preview_query"
+		return stripped, "preview_query"
 
 	case "code-rewrite":
 		if boundMode != "mutation" || len(stageArgv) < 2 || slices.Contains(stageArgv, "--dry-run") {
-			return "", "", nil, ""
+			return nil, ""
 		}
-		return "code-rewrite", "dry-run", append(slices.Clone(stageArgv), "--dry-run"), "dry_run_preview"
+		return append(slices.Clone(stageArgv), "--dry-run"), "dry_run_preview"
 
 	case "patch":
 		if boundMode != "mutation" || len(stageArgv) < 2 || slices.Contains(stageArgv, "--dry-run") {
-			return "", "", nil, ""
+			return nil, ""
 		}
-		return "patch", "dry-run", append(slices.Clone(stageArgv), "--dry-run"), "dry_run_preview"
+		return append(slices.Clone(stageArgv), "--dry-run"), "dry_run_preview"
 
 	case "git rm", "git mv":
 		if boundMode != "mutation" || len(stageArgv) < 3 || slices.Contains(stageArgv, "-n") || slices.Contains(stageArgv, "--dry-run") {
-			return "", "", nil, ""
+			return nil, ""
 		}
-		return cmd, "dry-run", insertAfterCommandPrefix(cmd, stageArgv, "--dry-run"), "dry_run_preview"
+		return insertAfterCommandPrefix(cmd, stageArgv, "--dry-run"), "dry_run_preview"
 
 	case "git apply":
 		if boundMode != "mutation" || len(stageArgv) < 3 || slices.Contains(stageArgv, "--check") {
-			return "", "", nil, ""
+			return nil, ""
 		}
-		for _, disallowed := range []string{"--index", "--cached", "-3", "--3way"} {
-			if slices.Contains(stageArgv, disallowed) {
-				return "", "", nil, ""
-			}
-		}
-		return "git apply", "read-only", insertAfterCommandPrefix("git apply", stageArgv, "--check"), "check_patch"
+		return insertAfterCommandPrefix("git apply", stageArgv, "--check"), "check_patch"
 
 	case "rm", "rmdir":
 		if effect.Argv == nil || len(effect.Argv.Operands) == 0 {
-			return "", "", nil, ""
+			return nil, ""
 		}
 		args := []string{"ls", "-ld"}
 		needDash := false
@@ -259,21 +253,21 @@ func candidateReadOnlyForm(bound toolcontract.BoundOperation, effect NativeEffec
 			args = append(args, "--")
 		}
 		args = append(args, effect.Argv.Operands...)
-		return "ls", "list", args, "list_delete_targets"
+		return args, "list_delete_targets"
 
 	case "edit", "replace-lines", "jq-edit":
 		path := extractSingleTargetPath(effect)
 		if path == "" {
-			return "", "", nil, ""
+			return nil, ""
 		}
 		args := []string{"cat", "-n"}
 		if strings.HasPrefix(path, "-") {
 			args = append(args, "--")
 		}
 		args = append(args, path)
-		return "cat", "read", args, "inspect_target"
+		return args, "inspect_target"
 	}
-	return "", "", nil, ""
+	return nil, ""
 }
 
 func stripInPlaceFlag(command string, argv []string) ([]string, bool) {
@@ -381,58 +375,4 @@ func extractSingleTargetPath(effect NativeEffect) string {
 		return path
 	}
 	return ""
-}
-
-func validateCandidateReadOnlyForm(surface ProgramSurface, bound toolcontract.BoundOperation, candidateCmd, candidateMode string, candidateArgv []string, tc tools.ToolContext, reach toolreach.Request) bool {
-	specs, err := compiledAlternativeSpecs()
-	if err != nil {
-		return false
-	}
-	spec, ok := specs[candidateCmd]
-	if !ok {
-		return false
-	}
-	fields := make(commandprogram.Fields, len(candidateArgv))
-	for i, w := range candidateArgv {
-		fields[i] = commandprogram.Field{Value: w}
-	}
-	if _, err := (commandprogram.CatalogBinder{}).Bind(spec, fields); err != nil {
-		return false
-	}
-	if reach.Known() && tc.Turn.TurnPrograms != nil && !reach.Program(candidateCmd) {
-		return false
-	}
-	candidateDef, ok := findSurfaceOperationDefinition(surface, bound.Definition(), candidateCmd)
-	if !ok {
-		return false
-	}
-	var childEffects *toolcontract.CommandEffects
-	for _, eff := range spec.Effects {
-		if eff.Mode == candidateMode && slices.Contains(eff.Requires, "bound-child-effect-set") {
-			ro, _ := toolcontract.NewCommandEffects(toolcontract.CommandReadOnly)
-			childEffects = &ro
-			break
-		}
-	}
-	candidateBound, err := toolcontract.BindOperation(candidateDef, bound.Invocation(), candidateCmd, candidateMode, childEffects)
-	if err != nil {
-		return false
-	}
-	return surface.ValidateOperation(candidateBound) == nil
-}
-
-func findSurfaceOperationDefinition(surface ProgramSurface, current toolcontract.OperationDefinition, command string) (toolcontract.OperationDefinition, bool) {
-	for _, cmd := range current.ReadOnlyFacts().Commands {
-		if cmd.Name == command {
-			return current, true
-		}
-	}
-	for _, def := range surface.selection.Definitions() {
-		for _, cmd := range def.ReadOnlyFacts().Commands {
-			if cmd.Name == command {
-				return def, true
-			}
-		}
-	}
-	return toolcontract.OperationDefinition{}, false
 }

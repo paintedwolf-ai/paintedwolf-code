@@ -46,6 +46,7 @@ type askComposedFixture struct {
 	launchMu    sync.Mutex
 	askMode     bool
 	sessionMode api.SessionMode
+	noReach     bool
 }
 
 type askFixtureSessions struct {
@@ -104,6 +105,9 @@ func newAskComposedFixture(t *testing.T) *askComposedFixture {
 	}
 	base.Configure = func(tc *tools.ToolContext) {
 		tc.Source.AskMode, tc.Source.ReadOnly = af.askMode, af.askMode
+		if !af.noReach && len(tc.Turn.TurnOfferedToolNames) == 0 && !tc.Turn.TurnToolPlan.Compiled() && tc.Turn.TurnPrograms == nil {
+			tc.Turn.TurnOfferedToolNames = []string{"command"}
+		}
 	}
 	return af
 }
