@@ -25,7 +25,7 @@ func ToolOffered(ctx context.Context, name string) bool {
 // TurnReach freezes the request a tool context is executing under.
 func TurnReach(tc ToolContext) toolreach.Request {
 	return toolreach.Freeze(tc.Turn.TurnOfferedToolNames, tc.Turn.TurnToolPlan).
-		WithPrograms(tc.Turn.TurnPrograms).
+		WithProgramTable(tc.Turn.TurnPrograms).
 		WithSchemas(tc.Turn.TurnOfferedToolSchemas)
 }
 

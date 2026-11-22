@@ -126,8 +126,7 @@ func (m *Service) SetWorkspaceCheck(check workercompletion.WorkspaceChangeChecke
 func (m *Service) SetRepoProvider(provider repoinfo.Provider)     { m.repoProvider = provider }
 func (m *Service) SetToolMetadata(lister tools.ToolProfileLister) { m.toolLister = lister }
 
-// ProgramReach freezes a model turn's native programs. A failure reaches none,
-// because no answer is no evidence that a program can run.
+// ProgramReach freezes a model turn's native programs.
 func (m *Service) ProgramReach(ctx context.Context, profileID, surfaceID string) toolreach.Programs {
 	source, ok := m.toolLister.(interface {
 		ProgramReach(context.Context, platform.ToolFilter) (toolreach.Programs, error)
@@ -140,6 +139,21 @@ func (m *Service) ProgramReach(ctx context.Context, profileID, surfaceID string)
 		return nil
 	}
 	return programs
+}
+
+// ProgramTable freezes a model turn's native programs and effect modes.
+func (m *Service) ProgramTable(ctx context.Context, profileID, surfaceID string) *toolreach.ProgramTable {
+	source, ok := m.toolLister.(interface {
+		ProgramTable(context.Context, platform.ToolFilter) (*toolreach.ProgramTable, error)
+	})
+	if !ok {
+		return toolreach.TableFromPrograms(m.ProgramReach(ctx, profileID, surfaceID))
+	}
+	table, err := source.ProgramTable(ctx, platform.ToolFilter{ProfileID: profileID, SurfaceID: surfaceID})
+	if err != nil {
+		return nil
+	}
+	return table
 }
 
 func (m *Service) SetRules(rules toolpolicy.RuleEvaluator) { m.rules = rules }

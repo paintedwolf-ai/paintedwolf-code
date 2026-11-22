@@ -230,9 +230,9 @@ func TestProgramModeReachSeparatesReadOnlyTarListingFromExtractionAndGitConfig(t
 	executor := NewExecutor(NewApprovalPolicyEngine(toolprofiles.NewProfilePolicyEngine(boundary), nil), tools.NewDefaultRegistry(), "implement")
 
 	modeReach := func(profile, surface string) func(string, string) bool {
-		modes, err := executor.Metadata.ProgramModeReach(t.Context(), platform.ToolFilter{ProfileID: profile, SurfaceID: surface})
-		testutil.FailErr(t, "ProgramModeReach", err)
-		return modes
+		table, err := executor.Metadata.ProgramTable(t.Context(), platform.ToolFilter{ProfileID: profile, SurfaceID: surface})
+		testutil.FailErr(t, "ProgramTable", err)
+		return table.Mode
 	}
 	roModes := modeReach("explore_readonly", "")
 	if !roModes("tar", "listing-or-stream-decode") || roModes("tar", "create-extract-compress-decompress-to-path") {

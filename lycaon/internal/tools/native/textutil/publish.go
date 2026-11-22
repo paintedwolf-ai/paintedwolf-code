@@ -5,6 +5,7 @@ import (
 	"errors"
 	"io"
 
+	"github.com/lycaon/lycaon/internal/commandmode"
 	"github.com/lycaon/lycaon/internal/commandprogram"
 	"github.com/lycaon/lycaon/internal/commandsurface"
 	"github.com/lycaon/lycaon/internal/toolrejection"
@@ -81,17 +82,6 @@ func uniqOutput(inv *invocation, operands commandprogram.Fields, run func(*nativ
 // iconv -o and uniq OUTPUT write; every other form reads. sed's mode is
 // resolved by its admitted prepared plan.
 func (o *Owners) effectMode(argv commandprogram.BoundArgv) string {
-	switch argv.Command {
-	case "sort", "iconv":
-		if argvFlag(argv, "-o") {
-			return "-o"
-		}
-		return "always"
-	case "uniq":
-		if len(argv.Operands()) > 1 {
-			return "OUTPUT-supplied"
-		}
-		return "stdin-input-only"
-	}
-	return ""
+	mode, _ := commandmode.SelectMultiMode(o.specs[argv.Command], argv)
+	return mode
 }

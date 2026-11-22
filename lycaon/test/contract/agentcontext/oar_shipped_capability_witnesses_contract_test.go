@@ -140,9 +140,13 @@ func TestShippedOARProjectedSchemaAndSubsetWitnesses(t *testing.T) {
 			t.Fatalf("EXTRACT_FORMAT_UNSUPPORTED generic read reach must retain unzip -p and tar -t -f while omitting tar -x -f: %q", extractReadOnly)
 		}
 		extractMutating := rejectFix("extract_archive", "EXTRACT_FORMAT_UNSUPPORTED",
-			reachWithProgramsAndSchemas([]string{"command"}, []string{"unzip", "tar"}, nil).WithProgramModes(func(name, mode string) bool {
-				return name == "unzip" || name == "tar"
-			}), extractData)
+			toolreach.Offered([]string{"command"}).WithProgramTable(toolreach.NewProgramTable(
+				map[string]bool{"unzip": true, "tar": true},
+				map[string]map[string]bool{
+					"unzip": {"listing-or-stream-decode": true, "create-extract-compress-decompress-to-path": true},
+					"tar":   {"listing-or-stream-decode": true, "create-extract-compress-decompress-to-path": true},
+				},
+			)), extractData)
 		if !strings.Contains(extractMutating, "`unzip -p`") || !strings.Contains(extractMutating, "`tar -t -f`") ||
 			!strings.Contains(extractMutating, "`tar -x -f`") {
 			t.Fatalf("EXTRACT_FORMAT_UNSUPPORTED full mode reach missing unzip/tar list/extract: %q", extractMutating)

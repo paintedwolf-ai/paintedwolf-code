@@ -260,8 +260,8 @@ type InvocationTurn struct {
 	// TurnToolPlan freezes availability for this model turn.
 	// Zero indicates a caller without a compiled model surface.
 	TurnToolPlan toolsurface.Plan
-	// TurnPrograms freezes which native programs this model turn can run.
-	TurnPrograms toolreach.Programs
+	// TurnPrograms freezes which native programs and modes this model turn admits.
+	TurnPrograms *toolreach.ProgramTable
 	// TurnWritePinRootID and Globs constrain writes to one root.
 	TurnWritePinRootID string
 	TurnWritePinGlobs  []string

@@ -6,6 +6,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/lycaon/lycaon/internal/commandmode"
 	"github.com/lycaon/lycaon/internal/commandprogram"
 	"github.com/lycaon/lycaon/internal/textsearch"
 	"github.com/lycaon/lycaon/internal/toolcontract"
@@ -266,12 +267,7 @@ func (o *Owners) prepareSed(ctx context.Context, spec toolcontract.CommandSpecif
 		program.Close()
 		return nil, "", nativeutility.Usage(spec, request.Argv[0], "a PATH to edit in place")
 	}
-	mode := "stream-script"
-	if out.inPlace {
-		mode = "-i"
-	} else if len(program.WriteFiles()) > 0 {
-		mode = "w-command"
-	}
+	mode := commandmode.SedCompiledMode(out.inPlace, program.WriteFiles())
 	return &preparedSed{source: out, program: program}, mode, nil
 }
 
