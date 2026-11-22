@@ -48,11 +48,14 @@ func rejectWithReach(ctx context.Context, rej *toolrejection.ToolReject) *toolre
 	if clone.Data == nil {
 		clone.Data = map[string]any{}
 	}
-	for _, fact := range []string{"can_command", "can_task"} {
+	for _, fact := range []string{"can_command", "can_task", "can_request_tools"} {
 		if _, exists := clone.Data[fact]; !exists {
 			tool := fact[len("can_"):]
 			clone.Data[fact] = reach.Status(tool) == toolreach.Callable
 		}
+	}
+	if _, exists := clone.Data["tool_loadable"]; !exists {
+		clone.Data["tool_loadable"] = reach.Status(toolreach.ProgramTool) == toolreach.Loadable
 	}
 	return &clone
 }

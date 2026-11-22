@@ -451,18 +451,130 @@ func TestAskModeRefusalProducersRenderSpecificCausesAndConditionedRecovery(t *te
 			Data: map[string]any{
 				"tool":          "command",
 				"profile":       "worker_readonly",
-				"expected_form": "read_only",
+				"command":       "find",
+				"mode":          "-delete",
+				"class":         "mutation",
+				"expected_form": "find [default-predicates-print]",
+				"code_instead":  "find src -name '*.tmp'",
+				"next_action":   "list the paths selected for deletion and report the affected files without deleting them",
+				"worker_leg":    true,
 				"source_line":   1,
 				"source_column": 1,
 			},
 		}
-		rawEff, _ := renderToolReject(t, effRej, nil)
+		rawEff, _ := renderToolReject(t, effRej, map[string]any{"can_command": true})
 		if !strings.Contains(rawEff, "profile **worker_readonly**") || strings.Contains(rawEff, "Ask mode") {
 			t.Fatalf("independent profile restriction misattributed to Ask mode:\n%s", rawEff)
 		}
+		if !strings.Contains(rawEff, "Run `find src -name '*.tmp'` to list the paths selected for deletion") {
+			t.Fatalf("independent profile restriction missing validated read-only alternative:\n%s", rawEff)
+		}
 	})
 
-	// 9. Delayed Ask refusal rendered after upgrade to Agent mode uses past-tense launch-time authority and does not direct the model to ask the user to upgrade again.
+	// 9. Paired COMMAND_EFFECT_NOT_ALLOWED renders: Ask with alternative, Ask without alternative, delayed after upgrade, and loadable command.
+	t.Run("paired_command_effect_not_allowed_renders", func(t *testing.T) {
+		askAltRej := &toolrejection.ToolReject{
+			Code: "COMMAND_EFFECT_NOT_ALLOWED",
+			Data: map[string]any{
+				"tool":          "command",
+				"session_mode":  "ask",
+				"command":       "find",
+				"mode":          "-delete",
+				"class":         "mutation",
+				"code_instead":  "find src -name '*.tmp'",
+				"next_action":   "list the paths selected for deletion and report the affected files without deleting them",
+				"source_line":   1,
+				"source_column": 1,
+			},
+		}
+		rawAskAlt, _ := renderToolReject(t, askAltRej, map[string]any{"can_command": true})
+		for _, want := range []string{
+			"`find` (`-delete`) at 1:1 is unavailable in Ask mode.",
+			"Ask mode permits only read-only inspection and blocks `mutation`.",
+			"Run `find src -name '*.tmp'` to list the paths selected for deletion and report the affected files without deleting them.",
+			"explain that the user can switch to Agent mode if they want you to apply the change.",
+		} {
+			if !strings.Contains(rawAskAlt, want) {
+				t.Fatalf("Ask COMMAND_EFFECT_NOT_ALLOWED with alternative missing %q:\n%s", want, rawAskAlt)
+			}
+		}
+
+		askLoadableRej := &toolrejection.ToolReject{
+			Code: "COMMAND_EFFECT_NOT_ALLOWED",
+			Data: map[string]any{
+				"tool":              "command",
+				"session_mode":      "ask",
+				"command":           "sed",
+				"mode":              "-i",
+				"class":             "mutation",
+				"code_instead":      "sed 's/a/b/' README.md",
+				"next_action":       "preview the transformed output on stdout without modifying the file in place",
+				"tool_loadable":     true,
+				"can_request_tools": true,
+				"source_line":       1,
+				"source_column":     1,
+			},
+		}
+		rawAskLoadable, _ := renderToolReject(t, askLoadableRej, nil)
+		if !strings.Contains(rawAskLoadable, "Load `command` via `request_tools` and run `sed 's/a/b/' README.md` to preview the transformed output on stdout without modifying the file in place.") {
+			t.Fatalf("loadable Ask COMMAND_EFFECT_NOT_ALLOWED missing request_tools guidance:\n%s", rawAskLoadable)
+		}
+
+		askNoAltRej := &toolrejection.ToolReject{
+			Code: "COMMAND_EFFECT_NOT_ALLOWED",
+			Data: map[string]any{
+				"tool":          "command",
+				"session_mode":  "ask",
+				"command":       "mkdir",
+				"mode":          "create",
+				"class":         "mutation",
+				"source_line":   1,
+				"source_column": 1,
+			},
+		}
+		rawAskNoAlt, _ := renderToolReject(t, askNoAltRej, map[string]any{"can_command": true})
+		for _, want := range []string{
+			"`mkdir` (`create`) at 1:1 is unavailable in Ask mode.",
+			"This operation has no read-only form on the active surface.",
+		} {
+			if !strings.Contains(rawAskNoAlt, want) {
+				t.Fatalf("Ask COMMAND_EFFECT_NOT_ALLOWED without alternative missing %q:\n%s", want, rawAskNoAlt)
+			}
+		}
+
+		delayedEffectRej := &toolrejection.ToolReject{
+			Code: "COMMAND_EFFECT_NOT_ALLOWED",
+			Data: map[string]any{
+				"tool":              "command",
+				"session_mode":      "agent",
+				"mode_denied":       true,
+				"command":           "sed",
+				"mode":              "-i",
+				"class":             "mutation",
+				"code_instead":      "sed 's/a/b/' README.md",
+				"next_action":       "preview the transformed output on stdout without modifying the file in place",
+				"command_execution": "observed",
+				"source_line":       2,
+				"source_column":     1,
+			},
+		}
+		rawDelayedEff, _ := renderToolReject(t, delayedEffectRej, map[string]any{"can_command": true})
+		for _, want := range []string{
+			"`sed` (`-i`) at 2:1 was refused under launch-time Ask authority.",
+			"This invocation started while Ask mode was active and kept its launch-time read-only authority across the session upgrade, which blocks `mutation`.",
+			"Earlier statements in this program remain authoritative (`observed`); do not replay completed work.",
+			"Agent mode is now active for new calls; if the change is still needed, issue a fresh Agent-mode call under current permissions without replaying already completed statements.",
+		} {
+			if !strings.Contains(rawDelayedEff, want) {
+				t.Fatalf("delayed COMMAND_EFFECT_NOT_ALLOWED missing %q:\n%s", want, rawDelayedEff)
+			}
+		}
+		if strings.Contains(rawDelayedEff, "switch to Agent mode") {
+			t.Fatalf("delayed COMMAND_EFFECT_NOT_ALLOWED after upgrade still suggested switching to Agent mode:\n%s", rawDelayedEff)
+		}
+	})
+
+	// 10. Delayed Ask refusal rendered after upgrade to Agent mode uses past-tense launch-time authority and does not direct the model to ask the user to upgrade again.
 	t.Run("delayed_refusal_after_upgrade_past_tense", func(t *testing.T) {
 		delayedRej := tools.AskModeReject("command")
 		delayedRej.Data["command"] = "pytest"

@@ -138,6 +138,11 @@ func FactsFromData(data map[string]any) map[string]any {
 	if mode, ok := data["session_mode"].(string); ok && mode == "agent" {
 		out["paintedwolf.mode_denied"] = true
 	}
+	if execOutcome, ok := data["command_execution"].(string); ok && execOutcome != "" {
+		if _, exists := out["paintedwolf.execution_outcome"]; !exists {
+			out["paintedwolf.execution_outcome"] = execOutcome
+		}
+	}
 	if operation, _ := out["paintedwolf.native_operation"].(string); operation != "" {
 		if form := CommandFormOf(operation); form != "" {
 			out["paintedwolf.command_form"] = form

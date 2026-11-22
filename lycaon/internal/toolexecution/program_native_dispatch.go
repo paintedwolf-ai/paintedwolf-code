@@ -94,6 +94,7 @@ func (e *Executor) InvokeNative(ctx context.Context, frame ProgramFrame, surface
 		// Admission checks supply their own attribution, which can be shared across producers.
 		if result.Producer.Terminal == "" || (ownerStarted && result.Producer.Terminal == toolcontract.ProducerRefused) {
 			completeNativeRejection(bound, err)
+			enrichNativeEffectRejection(ctx, surface, effect, tc, err)
 		}
 		if !ownerStarted && result.Producer.Terminal == "" {
 			certainty := toolcontract.NoEffect

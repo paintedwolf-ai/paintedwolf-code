@@ -11,6 +11,7 @@ import (
 	"github.com/lycaon/lycaon/internal/capabilityrequest"
 	"github.com/lycaon/lycaon/internal/commandsurface"
 	"github.com/lycaon/lycaon/internal/confine"
+	"github.com/lycaon/lycaon/internal/hostctx"
 	"github.com/lycaon/lycaon/internal/oar"
 	"github.com/lycaon/lycaon/internal/platform"
 	"github.com/lycaon/lycaon/internal/socketref"
@@ -69,7 +70,9 @@ func (e *Executor) Invoke(ctx context.Context, qualifiedName string, args map[st
 		tc.Source.ReadOnly = true
 		definition, ok := e.definitionFor(qualifiedName)
 		if !ok || !tools.AllowedInAsk(definition.Meta) {
-			return "", e.Rejections.rejectBeforeInvoke(ctx, qualifiedName, profileID, args, tools.AskModeReject(qualifiedName))
+			reject := tools.AskModeReject(qualifiedName)
+			stampAskModeRejectState(ctx, tc, reject)
+			return "", e.Rejections.rejectBeforeInvoke(ctx, qualifiedName, profileID, args, reject)
 		}
 	}
 	if retained, entry := e.programEntries[qualifiedName]; entry && (tc.Source.AskMode || retained == nil || !retained(args)) {
@@ -165,6 +168,7 @@ func (e *Executor) validateInvocation(
 	}
 	if tc.Source.AskMode {
 		if reject := tools.AskModeCommandFieldReject(qualifiedName, args); reject != nil {
+			stampAskModeRejectState(ctx, *tc, reject)
 			return reject
 		}
 	}
@@ -206,6 +210,21 @@ func (e *Executor) validateInvocation(
 		return reject
 	}
 	return tools.ValidateCapabilityPathAuthority(args, tc.Host.SessionScratchDir, tc.Host.SessionOutputDir)
+}
+
+func stampAskModeRejectState(ctx context.Context, tc tools.ToolContext, reject *toolrejection.ToolReject) {
+	if reject == nil {
+		return
+	}
+	if reject.Data == nil {
+		reject.Data = map[string]any{}
+	}
+	chatMode, chatOK := hostctx.RoundMode(ctx, tc.ChatSessionID())
+	sessMode, sessOK := hostctx.RoundMode(ctx, tc.Identity.SessionID)
+	if (chatOK && chatMode == api.SessionModeAgent) || (sessOK && sessMode == api.SessionModeAgent) {
+		reject.Data["session_mode"] = string(api.SessionModeAgent)
+		reject.Data["mode_denied"] = true
+	}
 }
 
 func hasCommandCaptureFlag(args map[string]any, key string) bool {
@@ -289,6 +308,7 @@ func (e *Executor) invokeProgramEntry(ctx context.Context, tool, profileID strin
 	}
 	if tc.Source.AskMode {
 		if reject := tools.AskModeCommandFieldReject(tool, args); reject != nil {
+			stampAskModeRejectState(ctx, tc, reject)
 			return "", e.Rejections.rejectBeforeInvoke(ctx, tool, profileID, args, reject)
 		}
 	}
