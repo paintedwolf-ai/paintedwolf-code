@@ -881,6 +881,67 @@ host_facts:
  - name: paintedwolf.command_operation_reachable
    type: bool
    observation: True when the frozen request can run or load command and admits at least one replacement form for paintedwolf.need.
+ - name: paintedwolf.command_external_reachable
+   type: bool
+   observation: True when the frozen request can run or load command and admits external host program execution on the current turn.
+ - name: paintedwolf.can_render_view
+   type: bool
+ - name: paintedwolf.can_skills_read
+   type: bool
+ - name: paintedwolf.can_summarize
+   type: bool
+ - name: paintedwolf.can_survey_repo
+   type: bool
+ - name: paintedwolf.can_wait
+   type: bool
+ - name: paintedwolf.can_update_progress
+   type: bool
+ - name: paintedwolf.can_preview_overlay
+   type: bool
+ - name: paintedwolf.can_fetch_url
+   type: bool
+ - name: paintedwolf.can_workflow_advance
+   type: bool
+ - name: paintedwolf.admitted_process_capability_fields
+   type: string
+ - name: paintedwolf.admitted_source_read_forms
+   type: string
+ - name: paintedwolf.admitted_range_read_forms
+   type: string
+ - name: paintedwolf.admitted_text_search_forms
+   type: string
+ - name: paintedwolf.admitted_file_read_forms
+   type: string
+ - name: paintedwolf.admitted_raw_read_forms
+   type: string
+ - name: paintedwolf.admitted_large_read_forms
+   type: string
+ - name: paintedwolf.admitted_read_addressing_forms
+   type: string
+ - name: paintedwolf.admitted_stream_edit_forms
+   type: string
+ - name: paintedwolf.admitted_archive_forms
+   type: string
+ - name: paintedwolf.admitted_mutation_forms
+   type: string
+ - name: paintedwolf.admitted_secret_config_forms
+   type: string
+ - name: paintedwolf.command_jq_edit_reachable
+   type: bool
+ - name: paintedwolf.command_git_config_reachable
+   type: bool
+ - name: paintedwolf.command_wc_reachable
+   type: bool
+ - name: paintedwolf.command_tee_reachable
+   type: bool
+ - name: paintedwolf.command_sed_reachable
+   type: bool
+ - name: paintedwolf.command_find_reachable
+   type: bool
+ - name: paintedwolf.command_grep_reachable
+   type: bool
+ - name: paintedwolf.command_repo_map_reachable
+   type: bool
  - name: paintedwolf.admitted_command_forms
    type: list<string>
    observation: Replacement command forms for paintedwolf.need admitted by the frozen request; empty when none are admitted or reach is unknown.

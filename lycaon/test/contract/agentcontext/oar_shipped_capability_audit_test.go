@@ -8,7 +8,6 @@ import (
 
 	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/oar"
-	"github.com/lycaon/lycaon/internal/oarcore"
 	"github.com/lycaon/lycaon/internal/toolvocab"
 )
 
@@ -18,28 +17,17 @@ type copyGuardFrame struct {
 	negated  bool
 }
 
-// reviewedBannerResiduals lists the 5 legacy non-OAR HintEntry banners rendered
-// through GuidanceRenderer outside oar.GuardPipeline (no CallReach at render time).
-var reviewedBannerResiduals = map[string][]string{
-	"TOOL_OUTPUT_TRUNCATED":        {"command"},
-	"TOOL_OUTPUT_SPILL_CAPPED":     {"command"},
-	"OVERLAY_PROMOTE_SPILL":        {"command", "preview_overlay"},
-	"WEB_SEARCH_DUPLICATE_QUERY":   {"fetch_url"},
-	"WORKFLOW_PHASE_EXIT_REQUIRED": {"workflow_advance"},
-}
-
-var commandCapabilityGuards = map[string]bool{
-	"paintedwolf.can_command":                 true,
-	"paintedwolf.command_surface":             true,
-	"paintedwolf.native_operation":            true,
-	"paintedwolf.command_form":                true,
-	"paintedwolf.profile_mutation_capable":    true,
-	"paintedwolf.command_operation_reachable": true,
-}
-
 var templateTagRE = regexp.MustCompile(`(?s)(\{#.*?#\}|\{%.*?%\}|\{\{.*?\}\})`)
 
-func auditPolicyDocument(slash, code string, entry guidance.HintEntry, vocab *toolvocab.Catalog, out *[]oarViolation) {
+func isForbiddenCapabilityIdent(id string) bool {
+	return slices.Contains([]string{
+		"paintedwolf.session_mode", "paintedwolf.session_posture",
+		"paintedwolf.surface", "paintedwolf.session_role",
+		"paintedwolf.has_git", "paintedwolf.ask_worker_writes",
+	}, id) || strings.HasPrefix(id, "paintedwolf.profile_")
+}
+
+func auditPolicyDocument(slash string, entry guidance.HintEntry, vocab *toolvocab.Catalog, out *[]oarViolation) {
 	for _, cond := range append([]string{entry.When}, entry.Flow...) {
 		if _, err := parseOARConditionAST(cond); err != nil {
 			*out = append(*out, oarViolation{
@@ -47,79 +35,72 @@ func auditPolicyDocument(slash, code string, entry guidance.HintEntry, vocab *to
 			})
 		}
 	}
-	selected := slices.Clone(entry.Tools)
-	selected = append(selected, selectorStrings(entry.Selector, "tool")...)
-	selected = append(selected, selectorStrings(entry.Selector, "tools")...)
-	selected = append(selected, selectorStrings(entry.Selector, "paintedwolf.operation")...)
-	selected = append(selected, entry.Operations()...)
-	selected = append(selected, oarcore.ConjunctValues(entry.When, "tool")...)
-	for name, val := range map[string]string{
-		"title": entry.Title, "what": entry.What, "cause": entry.Cause, "why": entry.Why,
-	} {
-		auditCopyTemplate(slash+"#"+name, code, val, entry.IsOAR(), false, selected, vocab, out)
+	fields := []struct {
+		name string
+		val  string
+	}{
+		{"title", entry.Title},
+		{"message", entry.Message},
+		{"what", entry.What},
+		{"cause", entry.Cause},
+		{"why", entry.Why},
+		{"fix", entry.Fix},
+		{"instead", entry.Instead},
 	}
-	for name, val := range map[string]string{"fix": entry.Fix, "instead": entry.Instead} {
-		auditCopyTemplate(slash+"#"+name, code, val, entry.IsOAR(), true, selected, vocab, out)
-	}
-	auditCopyTemplate(slash+"#message", code, entry.Message, entry.IsOAR(), !entry.IsOAR(), selected, vocab, out)
-}
-
-func selectorStrings(sel map[string]any, key string) []string {
-	raw, ok := sel[key]
-	if !ok || raw == nil {
-		return nil
-	}
-	switch v := raw.(type) {
-	case string:
-		return []string{strings.TrimSpace(v)}
-	case []string:
-		return slices.Clone(v)
-	case []any:
-		var out []string
-		for _, item := range v {
-			if s, ok := item.(string); ok {
-				out = append(out, strings.TrimSpace(s))
-			}
-		}
-		return out
-	default:
-		return nil
+	for _, f := range fields {
+		auditCopyTemplate(slash+"#"+f.name, f.val, vocab, out)
 	}
 }
 
-func auditNextStepsList(source, code string, steps []oar.NextStep, vocab *toolvocab.Catalog, out *[]oarViolation) {
+func auditNextStepsList(source string, steps []oar.NextStep, vocab *toolvocab.Catalog, out *[]oarViolation) {
 	for i, step := range steps {
 		loc := fmt.Sprintf("%s#steps[%d]", source, i)
 		action := step.Tool
 		if len(step.Program) > 0 {
 			action = "command:" + step.Program[0]
 		}
+		whenIdents := map[string]bool{}
 		if w := strings.TrimSpace(step.When); w != "" {
 			ast, err := parseOARConditionAST(w)
 			if err != nil {
 				*out = append(*out, oarViolation{Source: loc, Expression: w, Action: action, Reason: err.Error()})
 			} else {
-				auditNextStepWhenAST(loc, w, action, step.Tool, ast, out)
+				collectCondIdents(ast, whenIdents)
+				auditNextStepWhenAST(loc, w, action, step.Tool, whenIdents, out)
 			}
 		}
-		auditCopyTemplate(loc+".say", code, step.Say, true, false, nil, vocab, out)
-		if oth := strings.TrimSpace(step.Otherwise); oth != "" {
-			auditOtherwiseText(loc+".otherwise", code, oth, vocab, out)
+		if step.Tool == "command" && len(step.Program) == 0 {
+			auditCommandStepSchemaClaims(loc+".say", step.When, step.Say, whenIdents, out)
 		}
-		auditNextStepsList(loc+".or", code, step.Or, vocab, out)
+		auditCopyTemplate(loc+".say", step.Say, vocab, out)
+		if oth := strings.TrimSpace(step.Otherwise); oth != "" {
+			auditOtherwiseText(loc+".otherwise", oth, vocab, out)
+		}
+		auditNextStepsList(loc+".or", step.Or, vocab, out)
 	}
 }
 
-func auditNextStepWhenAST(loc, expr, action, stepTool string, ast *condNode, out *[]oarViolation) {
-	idents := map[string]bool{}
-	collectCondIdents(ast, idents)
+func auditCommandStepSchemaClaims(loc, whenExpr, say string, whenIdents map[string]bool, out *[]oarViolation) {
+	m := prunedCmdFieldsRE.FindStringSubmatch(say)
+	if len(m) == 0 {
+		return
+	}
+	if whenIdents["paintedwolf.admitted_process_capability_fields"] || whenIdents["paintedwolf.command_external_reachable"] {
+		return
+	}
+	expr := strings.TrimSpace(whenExpr)
+	if expr == "" {
+		expr = "<unguarded>"
+	}
+	*out = append(*out, oarViolation{
+		Source: loc, Expression: expr, Action: m[1],
+		Reason: "command next-step recommends schema-pruned field " + m[1] + " without projected-schema or external-reach host fact",
+	})
+}
+
+func auditNextStepWhenAST(loc, expr, action, stepTool string, idents map[string]bool, out *[]oarViolation) {
 	for id := range idents {
-		bad := slices.Contains([]string{
-			"paintedwolf.session_mode", "paintedwolf.session_posture",
-			"paintedwolf.surface", "paintedwolf.session_role",
-			"paintedwolf.has_git", "paintedwolf.ask_worker_writes",
-		}, id) || strings.HasPrefix(id, "paintedwolf.profile_")
-		if bad {
+		if isForbiddenCapabilityIdent(id) {
 			*out = append(*out, oarViolation{
 				Source: loc, Expression: expr, Action: action,
 				Reason: "next-step predicate reconstructs capability from session/profile state " + id + "; derive a host fact instead",
@@ -140,16 +121,16 @@ func auditNextStepWhenAST(loc, expr, action, stepTool string, ast *condNode, out
 	}
 }
 
-func auditOtherwiseText(loc, code, oth string, vocab *toolvocab.Catalog, out *[]oarViolation) {
-	auditCopyTemplate(loc, code, oth, true, false, nil, vocab, out)
+func auditOtherwiseText(loc, oth string, vocab *toolvocab.Catalog, out *[]oarViolation) {
+	auditCopyTemplate(loc, oth, vocab, out)
 	if loaderPromiseRE.MatchString(oth) {
 		*out = append(*out, oarViolation{
 			Source: loc, Expression: oth, Action: "request_tools",
 			Reason: "next-step otherwise branch promises tool loading after host reach already ruled out loader recovery",
 		})
 	}
-	needsCmd, tools := promisedActionsInText(vocab, oth)
-	if needsCmd {
+	needsCmd, progs, tools := promisedActionsInText(vocab, oth)
+	if needsCmd || len(progs) > 0 {
 		*out = append(*out, oarViolation{
 			Source: loc, Expression: oth, Action: "command",
 			Reason: "next-step otherwise branch promises command when step is unreachable",
@@ -163,13 +144,7 @@ func auditOtherwiseText(loc, code, oth string, vocab *toolvocab.Catalog, out *[]
 	}
 }
 
-func auditCopyTemplate(
-	source, code, tpl string,
-	isOAR, checkActions bool,
-	selectedTools []string,
-	vocab *toolvocab.Catalog,
-	out *[]oarViolation,
-) {
+func auditCopyTemplate(source, tpl string, vocab *toolvocab.Catalog, out *[]oarViolation) {
 	if strings.TrimSpace(tpl) == "" {
 		return
 	}
@@ -177,17 +152,11 @@ func auditCopyTemplate(
 	var stack []copyGuardFrame
 	last := 0
 	for _, idx := range templateTagRE.FindAllStringIndex(tpl, -1) {
-		if checkActions && idx[0] > last {
-			checkSegmentActions(source, code, tpl[last:idx[0]], isOAR, stack, selectedTools, vocab, out)
+		if idx[0] > last {
+			checkSegmentActions(source, tpl[last:idx[0]], stack, vocab, out)
 		}
 		tok := tpl[idx[0]:idx[1]]
 		last = idx[1]
-		if strings.HasPrefix(tok, "{{") && strings.Contains(tok, "|") {
-			*out = append(*out, oarViolation{
-				Source: source, Expression: tok, Action: "filter",
-				Reason: "embedded copy uses template filter pipe; keep copy projection in host facts",
-			})
-		}
 		if !strings.HasPrefix(tok, "{%") {
 			continue
 		}
@@ -195,57 +164,73 @@ func auditCopyTemplate(
 		body = strings.TrimSpace(strings.TrimSuffix(strings.TrimPrefix(body, "-"), "-"))
 		kw, arg, _ := strings.Cut(body, " ")
 		arg = strings.TrimSpace(arg)
-		switch kw {
-		case "set":
-			lhs, rhs, ok := strings.Cut(arg, "=")
-			if ok {
-				aliases[strings.TrimSpace(lhs)] = strings.TrimSpace(rhs)
+		applyTemplateControlTag(source, body, kw, arg, aliases, &stack, out)
+	}
+	if last < len(tpl) {
+		checkSegmentActions(source, tpl[last:], stack, vocab, out)
+	}
+}
+
+func applyTemplateControlTag(
+	source, body, kw, arg string,
+	aliases map[string]string,
+	stack *[]copyGuardFrame,
+	out *[]oarViolation,
+) {
+	switch kw {
+	case "set":
+		lhs, rhs, ok := strings.Cut(arg, "=")
+		lhs, rhs = strings.TrimSpace(lhs), strings.TrimSpace(rhs)
+		if ok && lhs != "" {
+			aliases[lhs] = rhs
+			if ast, err := parseOARConditionAST(rhs); err == nil && ast != nil {
+				idents := map[string]bool{}
+				collectCondIdents(ast, idents)
+				for id := range idents {
+					if isForbiddenCapabilityIdent(id) {
+						*out = append(*out, oarViolation{
+							Source: source, Expression: body, Action: lhs,
+							Reason: "local template assignment derives capability from " + id + "; compute a host fact instead",
+						})
+					}
+				}
 			}
+		}
+	case "with", "include":
+		*out = append(*out, oarViolation{
+			Source: source, Expression: body, Action: kw,
+			Reason: "embedded template tag {%" + kw + "%} is forbidden in OAR/policy copy",
+		})
+	case "if", "elif":
+		condExpr, _, hasPipe := strings.Cut(arg, "|")
+		resolved := resolveAliasExpr(strings.TrimSpace(condExpr), aliases)
+		if _, err := parseOARConditionAST(resolved); err != nil {
 			*out = append(*out, oarViolation{
-				Source: source, Expression: body, Action: strings.TrimSpace(lhs),
-				Reason: "local template assignment {% set %} is forbidden; derive capability facts on the host",
-			})
-		case "with", "include":
-			*out = append(*out, oarViolation{
-				Source: source, Expression: body, Action: kw,
-				Reason: "embedded template tag {%" + kw + "%} is forbidden in OAR/policy copy",
-			})
-		case "if", "elif":
-			if strings.Contains(arg, "|") {
-				*out = append(*out, oarViolation{
-					Source: source, Expression: body, Action: "filter",
-					Reason: "condition uses filter pipe inside template branch",
-				})
-			}
-			resolved := resolveAliasExpr(arg, aliases)
-			if _, err := parseOARConditionAST(resolved); err != nil {
-				*out = append(*out, oarViolation{
-					Source: source, Expression: body, Action: "condition_ast", Reason: err.Error(),
-				})
-			}
-			frame := copyGuardFrame{raw: arg, resolved: resolved}
-			if kw == "if" {
-				stack = append(stack, frame)
-			} else if len(stack) > 0 {
-				stack[len(stack)-1] = frame
-			}
-		case "else":
-			if len(stack) > 0 {
-				stack[len(stack)-1].negated = true
-			}
-		case "endif":
-			if len(stack) > 0 {
-				stack = stack[:len(stack)-1]
-			}
-		default:
-			*out = append(*out, oarViolation{
-				Source: source, Expression: body, Action: kw,
-				Reason: "unhandled template control tag in OAR/policy copy",
+				Source: source, Expression: body, Action: "condition_ast", Reason: err.Error(),
 			})
 		}
-	}
-	if checkActions && last < len(tpl) {
-		checkSegmentActions(source, code, tpl[last:], isOAR, stack, selectedTools, vocab, out)
+		if hasPipe {
+			resolved = "filter(" + resolved + ")"
+		}
+		frame := copyGuardFrame{raw: arg, resolved: resolved}
+		if kw == "if" {
+			*stack = append(*stack, frame)
+		} else if len(*stack) > 0 {
+			(*stack)[len(*stack)-1] = frame
+		}
+	case "else":
+		if len(*stack) > 0 {
+			(*stack)[len(*stack)-1].negated = true
+		}
+	case "endif":
+		if len(*stack) > 0 {
+			*stack = (*stack)[:len(*stack)-1]
+		}
+	default:
+		*out = append(*out, oarViolation{
+			Source: source, Expression: body, Action: kw,
+			Reason: "unhandled template control tag in OAR/policy copy",
+		})
 	}
 }
 
@@ -263,37 +248,35 @@ func resolveAliasExpr(expr string, aliases map[string]string) string {
 }
 
 func checkSegmentActions(
-	source, code, text string,
-	isOAR bool,
+	source, text string,
 	stack []copyGuardFrame,
-	selectedTools []string,
 	vocab *toolvocab.Catalog,
 	out *[]oarViolation,
 ) {
-	needsCmd, tools := promisedActionsInText(vocab, text)
-	if !needsCmd && len(tools) == 0 {
+	needsCmd, progs, tools := promisedActionsInText(vocab, text)
+	if !needsCmd && len(progs) == 0 && len(tools) == 0 {
 		return
 	}
 	posFacts, exprSummary := positiveGuardFacts(stack)
-	residualExempt := func(action string) bool {
-		return !isOAR && !hasForbiddenBannerGuard(stack) && slices.Contains(reviewedBannerResiduals[code], action)
+	for _, prog := range progs {
+		if !hasAnyGuard(posFacts, programCapabilityGuards[prog]) {
+			*out = append(*out, oarViolation{
+				Source: source, Expression: exprSummary, Action: prog,
+				Reason: "copy recommends command program " + prog + " without a per-form host reach guard",
+			})
+		}
 	}
-	if needsCmd && !slices.Contains(selectedTools, "command") && !hasAnyGuard(posFacts, commandCapabilityGuards) && !residualExempt("command") {
+	if needsCmd && !hasAnyGuard(posFacts, genericCommandGuards) {
 		*out = append(*out, oarViolation{
 			Source: source, Expression: exprSummary, Action: "command",
-			Reason: "remedy copy promises command without a host command-reach guard or next-steps check",
+			Reason: "copy recommends command without a current-request host command-reach guard",
 		})
 	}
 	for _, tool := range tools {
-		guarded := slices.Contains(selectedTools, tool) ||
-			posFacts["paintedwolf.can_"+tool] ||
-			posFacts["paintedwolf.receiving_tool_"+tool] ||
-			posFacts["paintedwolf.text_action_callable_tools"] ||
-			residualExempt(tool)
-		if !guarded {
+		if !posFacts["paintedwolf.can_"+tool] && !posFacts["paintedwolf.receiving_tool_"+tool] {
 			*out = append(*out, oarViolation{
 				Source: source, Expression: exprSummary, Action: tool,
-				Reason: "remedy copy promises tool " + tool + " without host reach guard paintedwolf.can_" + tool + " or next-steps",
+				Reason: "copy recommends tool " + tool + " without current-request host reach guard paintedwolf.can_" + tool,
 			})
 		}
 	}
@@ -324,27 +307,6 @@ func positiveGuardFacts(stack []copyGuardFrame) (map[string]bool, string) {
 		return facts, "<unguarded>"
 	}
 	return facts, strings.Join(parts, " && ")
-}
-
-func hasForbiddenBannerGuard(stack []copyGuardFrame) bool {
-	for _, f := range stack {
-		ast, err := parseOARConditionAST(f.resolved)
-		if err != nil {
-			return true
-		}
-		idents := map[string]bool{}
-		collectCondIdents(ast, idents)
-		for id := range idents {
-			if slices.Contains([]string{
-				"paintedwolf.session_mode", "paintedwolf.session_posture",
-				"paintedwolf.surface", "paintedwolf.session_role",
-				"paintedwolf.has_git", "paintedwolf.ask_worker_writes",
-			}, id) || strings.HasPrefix(id, "paintedwolf.profile_") {
-				return true
-			}
-		}
-	}
-	return false
 }
 
 func hasAnyGuard(posFacts, allowed map[string]bool) bool {

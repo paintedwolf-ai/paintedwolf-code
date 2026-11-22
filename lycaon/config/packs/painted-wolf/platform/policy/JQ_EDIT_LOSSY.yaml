@@ -3,7 +3,7 @@ id: JQ_EDIT_LOSSY
 kind: schema
 on: tool.rejected
 selector: {}
-requires_facts: [paintedwolf.format, paintedwolf.kind, paintedwolf.line, paintedwolf.operation, paintedwolf.path, paintedwolf.profile_mutation_capable, paintedwolf.rejection_code]
+requires_facts: [paintedwolf.admitted_mutation_forms, paintedwolf.format, paintedwolf.kind, paintedwolf.line, paintedwolf.operation, paintedwolf.path, paintedwolf.rejection_code]
 when: paintedwolf.operation == "jq_edit" && paintedwolf.rejection_code == "JQ_EDIT_LOSSY"
 effect: block
 x-paintedwolf-category: recoverable
@@ -12,28 +12,28 @@ message: jq_edit rewrite would lose source syntax
 what: 'Rewriting {{ paintedwolf.path }} as {{ paintedwolf.format }} would lose a {{ paintedwolf.kind }}{% if paintedwolf.line %} at line {{ paintedwolf.line }}{% endif %}; nothing was written.'
 cause: The document holds syntax a structured rewrite cannot carry, such as TOML comments or datetimes, YAML anchors and aliases, or a YAML tag on a value the program changed.
 why: A write that silently drops comments, references, or types changes more than the program asked for.
-fix: '{% if paintedwolf.profile_mutation_capable %}Make this change with `edit --path` or `replace-lines`, which keep the surrounding text as written.{% else %}This rewrite needs a surface that can write files; the lossless structured rewrites are not offered on this read-only profile.{% endif %}'
+fix: '{% if paintedwolf.admitted_mutation_forms %}Make this change with {{ paintedwolf.admitted_mutation_forms }} in command, which keep the surrounding text as written.{% else %}This rewrite needs a surface that can write files; the lossless structured rewrites are not offered on this read-only profile.{% endif %}'
 instead: Branch on Code; edit the text directly
 x-paintedwolf-scenarios:
   - id: default
     vars:
+      admitted_mutation_forms: '`edit --path` or `replace-lines`'
       format: toml
       kind: comment
       line: '3'
       path: Cargo.toml
       profile: implement
-      profile_mutation_capable: true
       tool: jq_edit
     expect_contains:
       - '`edit --path`'
   - id: read-only
     vars:
+      admitted_mutation_forms: ""
       format: toml
       kind: comment
       line: '3'
       path: Cargo.toml
       profile: worker_readonly
-      profile_mutation_capable: false
       tool: jq_edit
     expect_contains:
       - 'read-only profile'

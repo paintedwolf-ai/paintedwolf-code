@@ -1,5 +1,6 @@
 steps:
-  - tool: "command"
+  - when: "paintedwolf.command_external_reachable"
+    tool: "command"
     args:
       command: "{{ paintedwolf.command }}"
     say: "Run the package action in a fresh boundary with {{ call }} instead of sending it into this terminal."

@@ -2,12 +2,9 @@ package contract
 
 import (
 	"fmt"
-	"regexp"
 	"slices"
 	"strconv"
 	"strings"
-
-	"github.com/lycaon/lycaon/internal/toolvocab"
 )
 
 type oarViolation struct {
@@ -37,12 +34,19 @@ type condTok struct {
 	text string
 }
 
+// allowedOARFunctions lists OAR 1.0 built-ins ([OAR-EXPR-17]) plus declared observation functions.
 var allowedOARFunctions = map[string]bool{
-	"size":        true,
-	"starts_with": true,
-	"ends_with":   true,
-	"contains":    true,
-	"matches":     true,
+	"size":             true,
+	"starts_with":      true,
+	"ends_with":        true,
+	"contains":         true,
+	"fire_count_of":    true,
+	"breaker_count_of": true,
+	"mcp_field_bool":   true,
+	"mcp_field_int":    true,
+	"tool_arg_string":  true,
+	"tool_arg_int":     true,
+	"tool_arg_bool":    true,
 }
 
 func tokenizeOARCondition(src string) ([]condTok, error) {
@@ -78,23 +82,20 @@ func tokenizeOARCondition(src string) ([]condTok, error) {
 			i += 2
 			continue
 		}
-		if strings.ContainsRune("()[]?,:!<>+-*/", rune(c)) {
+		if strings.ContainsRune("()[]?,:!<>+-*/%", rune(c)) {
 			out = append(out, condTok{kind: "punct", text: src[i : i+1]})
 			i++
 			continue
 		}
 		if c >= '0' && c <= '9' {
-			j := i
-			for j < len(src) && ((src[j] >= '0' && src[j] <= '9') || src[j] == '.') {
-				j++
-			}
+			j := scanNumberToken(src, i)
 			out = append(out, condTok{kind: "num", text: src[i:j]})
 			i = j
 			continue
 		}
-		if (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || c == '_' {
+		if isIdentStart(c) {
 			j := i
-			for j < len(src) && ((src[j] >= 'A' && src[j] <= 'Z') || (src[j] >= 'a' && src[j] <= 'z') || (src[j] >= '0' && src[j] <= '9') || src[j] == '_' || src[j] == '.') {
+			for j < len(src) && isIdentContinue(src[j]) {
 				j++
 			}
 			out = append(out, condTok{kind: "ident", text: src[i:j]})
@@ -104,6 +105,31 @@ func tokenizeOARCondition(src string) ([]condTok, error) {
 		return nil, fmt.Errorf("unhandled condition token %q at %d", src[i:i+1], i)
 	}
 	return append(out, condTok{kind: "eof"}), nil
+}
+
+func scanNumberToken(src string, start int) int {
+	j := start
+	for j < len(src) && ((src[j] >= '0' && src[j] <= '9') || src[j] == '.') {
+		j++
+	}
+	if j < len(src) && (src[j] == 'e' || src[j] == 'E') {
+		j++
+		if j < len(src) && (src[j] == '+' || src[j] == '-') {
+			j++
+		}
+		for j < len(src) && src[j] >= '0' && src[j] <= '9' {
+			j++
+		}
+	}
+	return j
+}
+
+func isIdentStart(c byte) bool {
+	return (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || c == '_'
+}
+
+func isIdentContinue(c byte) bool {
+	return isIdentStart(c) || (c >= '0' && c <= '9') || c == '.'
 }
 
 type condParser struct {
@@ -208,7 +234,7 @@ func (p *condParser) parseAdd() (*condNode, error) {
 
 func (p *condParser) parseMul() (*condNode, error) {
 	left, err := p.parseUnary()
-	for err == nil && (p.cur().text == "*" || p.cur().text == "/") {
+	for err == nil && (p.cur().text == "*" || p.cur().text == "/" || p.cur().text == "%") {
 		op := p.cur().text
 		p.pos++
 		var right *condNode
@@ -240,23 +266,7 @@ func (p *condParser) parsePrimary() (*condNode, error) {
 		p.pos++
 		return inner, nil
 	case t.text == "[":
-		p.pos++
-		var items []*condNode
-		for p.cur().text != "]" && p.cur().kind != "eof" {
-			item, err := p.parseTernary()
-			if err != nil {
-				return nil, err
-			}
-			items = append(items, item)
-			if p.cur().text == "," {
-				p.pos++
-			}
-		}
-		if p.cur().text != "]" {
-			return nil, fmt.Errorf("unclosed '[' in condition")
-		}
-		p.pos++
-		return &condNode{kind: "list", items: items}, nil
+		return p.parseListLiteral()
 	case t.kind == "str":
 		p.pos++
 		return &condNode{kind: "str", str: t.text}, nil
@@ -267,36 +277,61 @@ func (p *condParser) parsePrimary() (*condNode, error) {
 		p.pos++
 		return &condNode{kind: "num", str: t.text}, nil
 	case t.kind == "ident":
-		p.pos++
-		if t.text == "true" || t.text == "false" {
-			return &condNode{kind: "bool", str: t.text}, nil
-		}
-		if p.cur().text == "(" {
-			if !allowedOARFunctions[t.text] {
-				return nil, fmt.Errorf("unhandled function call %q", t.text)
-			}
-			p.pos++
-			var args []*condNode
-			for p.cur().text != ")" && p.cur().kind != "eof" {
-				arg, err := p.parseTernary()
-				if err != nil {
-					return nil, err
-				}
-				args = append(args, arg)
-				if p.cur().text == "," {
-					p.pos++
-				}
-			}
-			if p.cur().text != ")" {
-				return nil, fmt.Errorf("unclosed call %s", t.text)
-			}
-			p.pos++
-			return &condNode{kind: "call", ident: t.text, items: args}, nil
-		}
-		return &condNode{kind: "ident", ident: t.text}, nil
+		return p.parseIdentOrCall(t.text)
 	default:
 		return nil, fmt.Errorf("unexpected token %q", t.text)
 	}
+}
+
+func (p *condParser) parseListLiteral() (*condNode, error) {
+	p.pos++
+	var items []*condNode
+	for p.cur().text != "]" && p.cur().kind != "eof" {
+		item, err := p.parseTernary()
+		if err != nil {
+			return nil, err
+		}
+		items = append(items, item)
+		if p.cur().text == "," {
+			p.pos++
+		}
+	}
+	if p.cur().text != "]" {
+		return nil, fmt.Errorf("unclosed '[' in condition")
+	}
+	p.pos++
+	return &condNode{kind: "list", items: items}, nil
+}
+
+func (p *condParser) parseIdentOrCall(name string) (*condNode, error) {
+	p.pos++
+	if name == "true" || name == "false" {
+		return &condNode{kind: "bool", str: name}, nil
+	}
+	if p.cur().text != "(" {
+		return &condNode{kind: "ident", ident: name}, nil
+	}
+	bare := strings.TrimPrefix(name, "paintedwolf.")
+	if !allowedOARFunctions[bare] {
+		return nil, fmt.Errorf("unhandled function call %q", name)
+	}
+	p.pos++
+	var args []*condNode
+	for p.cur().text != ")" && p.cur().kind != "eof" {
+		arg, err := p.parseTernary()
+		if err != nil {
+			return nil, err
+		}
+		args = append(args, arg)
+		if p.cur().text == "," {
+			p.pos++
+		}
+	}
+	if p.cur().text != ")" {
+		return nil, fmt.Errorf("unclosed call %s", name)
+	}
+	p.pos++
+	return &condNode{kind: "call", ident: name, items: args}, nil
 }
 
 func collectCondIdents(n *condNode, out map[string]bool) {
@@ -312,50 +347,4 @@ func collectCondIdents(n *condNode, out map[string]bool) {
 	for _, it := range n.items {
 		collectCondIdents(it, out)
 	}
-}
-
-var (
-	commandPromiseRE = regexp.MustCompile("(?i)\\b(?:use command|with command|inside command|in command|via command|through command|command redirect|command redirects)\\b|`(?:edit\\s+--path|replace-lines|jq-edit|git\\s+config|sed\\s+-n|cat\\s+-n|rg\\s+-n|grep\\s+-n|wc\\s+-l|unzip\\s+-p|tar\\s+-x|tee\\s+--syntax-override-reason)|KEY='<reference>'")
-	proseToolCallRE  = regexp.MustCompile(`(?i)\b(?:call|use|send|retry|run|invoke|prefer)\s+` + "`?" + `([a-z][a-z0-9_]*)\b`)
-	backtickToolRE   = regexp.MustCompile("`([a-z][a-z0-9_]*)(?:\\(|`)")
-	loaderPromiseRE  = regexp.MustCompile(`(?i)\brequest_tools\b|\brequest it,\s*then run\b`)
-	negativeCallRE   = regexp.MustCompile(`(?i)\b(?:do not|never|avoid|without|instead of|before)\s+(?:call|calling|repeat|repeating|retry|retrying|use|using)?\s*` + "`?" + `([a-z][a-z0-9_]*)\b`)
-)
-
-func promisedActionsInText(vocab *toolvocab.Catalog, text string) (needsCommand bool, tools []string) {
-	clean := regexp.MustCompile(`\{\{.*?\}\}`).ReplaceAllString(text, " ")
-	needsCommand = commandPromiseRE.MatchString(clean)
-	negated := map[string]bool{}
-	for _, m := range negativeCallRE.FindAllStringSubmatch(clean, -1) {
-		negated[m[1]] = true
-	}
-	seen := map[string]bool{}
-	addTool := func(name string) {
-		if name == "" || name == "command" || negated[name] || seen[name] {
-			return
-		}
-		if vocab != nil && !vocab.KnownName(name) {
-			return
-		}
-		if strings.Contains(clean, "prior "+name+" result") || strings.Contains(clean, "from "+name) {
-			return
-		}
-		seen[name] = true
-		tools = append(tools, name)
-	}
-	for _, m := range backtickToolRE.FindAllStringSubmatch(clean, -1) {
-		if m[1] == "command" && (strings.Contains(clean, "`command` argument") || strings.Contains(clean, "in `command`")) {
-			continue
-		}
-		if m[1] == "command" {
-			needsCommand = true
-			continue
-		}
-		addTool(m[1])
-	}
-	for _, m := range proseToolCallRE.FindAllStringSubmatch(clean, -1) {
-		addTool(m[1])
-	}
-	slices.Sort(tools)
-	return needsCommand, tools
 }

@@ -1,7 +1,11 @@
 package contract
 
 import (
+	"bytes"
+	"context"
+	"errors"
 	"fmt"
+	"io"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -13,6 +17,7 @@ import (
 	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/hintregistry"
 	"github.com/lycaon/lycaon/internal/oar"
+	"github.com/lycaon/lycaon/internal/oarcopy"
 	"github.com/lycaon/lycaon/internal/toolvocab"
 	"gopkg.in/yaml.v3"
 )
@@ -170,10 +175,10 @@ func auditDiscoveredPolicies(
 			})
 			if dec, ok := nsDecoded[code]; ok {
 				nsUsed[code] = true
-				auditNextStepsList(dec.rel, code, dec.ns.Steps, vocab, &sum.Violations)
+				auditNextStepsList(dec.rel, dec.ns.Steps, vocab, &sum.Violations)
 			}
 		}
-		auditPolicyDocument(slash, code, entry, vocab, &sum.Violations)
+		auditPolicyDocument(slash, entry, vocab, &sum.Violations)
 	}
 	return oarEntries, nsUsed
 }
@@ -229,4 +234,113 @@ func reconcileWithEffectiveCatalog(t *testing.T, packsRoot string, policyPaths, 
 			})
 		}
 	}
+}
+
+type stubPortableDetector struct {
+	name string
+	err  error
+}
+
+func (d stubPortableDetector) Name() string { return d.name }
+func (d stubPortableDetector) Inspect(*oar.GuardContext) ([]oar.Finding, error) {
+	return nil, d.err
+}
+
+func portableDetectorRegistry() *oar.DetectorRegistry {
+	reg := oar.NewDetectorRegistry()
+	reg.Register(stubPortableDetector{name: "noop"})
+	reg.Register(stubPortableDetector{name: "fixture"})
+	reg.Register(stubPortableDetector{name: "error", err: errors.New("detector error")})
+	return reg
+}
+
+func auditShippedPortablePack(
+	t *testing.T,
+	vocab *toolvocab.Catalog,
+	moduleRoot, schemaDir string,
+) (rulesChecked, fixturesPassed int, violations []oarViolation) {
+	t.Helper()
+	dir := filepath.Join(moduleRoot, "config", "oar-portable-pack")
+	profileRaw, err := os.ReadFile(filepath.Join(dir, "profile.yaml"))
+	if err != nil {
+		t.Fatalf("read portable-pack profile.yaml: %v", err)
+	}
+	var profileMap oar.AnchorProfileMap
+	if err := yaml.Unmarshal(profileRaw, &profileMap); err != nil {
+		t.Fatalf("decode portable-pack profile.yaml: %v", err)
+	}
+	decl := &oar.EngineDeclaration{
+		Host: "example", ProfileMap: profileMap,
+		Profiles:           []string{oarcopy.ProfileFilesystem, oarcopy.ProfileContentSafety, oarcopy.ProfileMCP},
+		Window:             16,
+		ExpressionNodesMax: 256,
+		Detectors:          []string{"detector://noop", "detector://error", "detector://fixture"},
+	}
+	loader, err := oar.NewLoader(schemaDir)
+	if err != nil {
+		t.Fatalf("portable-pack NewLoader: %v", err)
+	}
+	loader.SetDeclaration(decl)
+	loader.SetDetectors(portableDetectorRegistry())
+	dirEntries, err := os.ReadDir(dir)
+	if err != nil {
+		t.Fatalf("read portable-pack dir: %v", err)
+	}
+	var entries []hintregistry.Entry
+	for _, de := range dirEntries {
+		name := de.Name()
+		if de.IsDir() || !strings.HasSuffix(name, ".yaml") || name == "profile.yaml" {
+			continue
+		}
+		full := filepath.Join(dir, name)
+		raw, rErr := os.ReadFile(full)
+		if rErr != nil {
+			t.Fatalf("read %s: %v", name, rErr)
+		}
+		dec := yaml.NewDecoder(bytes.NewReader(raw))
+		for {
+			var doc map[string]any
+			if dErr := dec.Decode(&doc); dErr != nil {
+				if errors.Is(dErr, io.EOF) {
+					break
+				}
+				t.Fatalf("decode %s: %v", name, dErr)
+			}
+			if len(doc) == 0 {
+				continue
+			}
+			docBytes, mErr := yaml.Marshal(doc)
+			if mErr != nil {
+				t.Fatalf("marshal %s doc: %v", name, mErr)
+			}
+			var entry guidance.HintEntry
+			if uErr := yaml.Unmarshal(docBytes, &entry); uErr != nil {
+				t.Fatalf("unmarshal %s HintEntry: %v", name, uErr)
+			}
+			rulesChecked++
+			entries = append(entries, hintregistry.Entry{
+				Code: entry.ID, Path: extpacks.OnDisk(full), Body: docBytes,
+			})
+			auditPolicyDocument("oar-portable-pack/"+name+"("+entry.ID+")", entry, vocab, &violations)
+		}
+	}
+	if _, lErr := loader.LoadEffectivePolicyEntries(entries); lErr != nil {
+		violations = append(violations, oarViolation{
+			Source: "config/oar-portable-pack", Action: "compile", Reason: lErr.Error(),
+		})
+	}
+	outcomes, cErr := oar.RunCorpusDir(context.Background(), filepath.Join(dir, "fixtures"))
+	if cErr != nil {
+		t.Fatalf("RunCorpusDir portable-pack/fixtures: %v", cErr)
+	}
+	for _, o := range outcomes {
+		if o.Status == "pass" {
+			fixturesPassed++
+		} else {
+			violations = append(violations, oarViolation{
+				Source: "config/oar-portable-pack/fixtures/" + o.ID, Action: o.Status, Reason: o.Reason,
+			})
+		}
+	}
+	return rulesChecked, fixturesPassed, violations
 }

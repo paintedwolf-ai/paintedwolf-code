@@ -7,7 +7,6 @@ import (
 	"github.com/lycaon/lycaon/internal/llm/responserecovery"
 	"github.com/lycaon/lycaon/internal/oar"
 	"github.com/lycaon/lycaon/internal/toolreach"
-	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -64,13 +63,13 @@ func (l *modelTurn) recoverRejectedResponse(
 // contentOutputReach binds the frozen request to an output-gate evaluation,
 // so its rules and recovery steps see what the reader can still call.
 func contentOutputReach(ctx context.Context, st *promptLoopTurnState, req modelcall.CompletionRequest) context.Context {
-	if tools.CallReach(ctx).Known() {
+	if toolreach.FromContext(ctx).Known() {
 		return ctx
 	}
 	if st != nil {
 		if reach := st.requestReach(); reach.Known() {
-			return tools.WithCallReach(ctx, reach)
+			return toolreach.WithRequest(ctx, reach)
 		}
 	}
-	return tools.WithCallReach(ctx, toolreach.Offered(offeredToolNames(req.Tools)))
+	return toolreach.WithRequest(ctx, toolreach.Offered(offeredToolNames(req.Tools)))
 }

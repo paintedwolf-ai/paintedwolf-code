@@ -1,4 +1,5 @@
 steps:
-  - tool: "command"
-    say: "Use {{ call }} with the required `capability_request.process_control` or `capability_request.host_execution` field, describing the exact intended operation."
+  - when: 'paintedwolf.admitted_process_capability_fields != ""'
+    tool: "command"
+    say: "Use {{ call }} with the required {{ paintedwolf.admitted_process_capability_fields }} field, describing the exact intended operation."
     otherwise: "This request cannot run host process commands; report the unsupported process operation."

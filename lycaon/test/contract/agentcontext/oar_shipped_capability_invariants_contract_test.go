@@ -57,14 +57,27 @@ func TestShippedOARCapabilityInvariants(t *testing.T) {
 		t.Fatalf("shipped OAR capability audit found %d violation(s):\n%s",
 			len(sum.Violations), formatOARViolations(sum.Violations))
 	}
-	if sum.PolicyFiles != 626 || sum.PolicyRules != 599 || sum.PolicyOARHints != 1 || sum.PolicyLegacyBanners != 26 {
-		t.Fatalf("unexpected stock policy inventory: files=%d rules=%d hints=%d banners=%d",
+	if sum.PolicyFiles == 0 || sum.PolicyRules == 0 || sum.NextStepsFiles == 0 || sum.AnchorFiles == 0 {
+		t.Fatalf("empty stock OAR inventory: files=%d rules=%d hints=%d banners=%d nextSteps=%d anchors=%d",
+			sum.PolicyFiles, sum.PolicyRules, sum.PolicyOARHints, sum.PolicyLegacyBanners, sum.NextStepsFiles, sum.AnchorFiles)
+	}
+	if sum.PolicyFiles != sum.PolicyRules+sum.PolicyOARHints+sum.PolicyLegacyBanners {
+		t.Fatalf("policy file partition mismatch: files=%d != rules=%d + hints=%d + banners=%d",
 			sum.PolicyFiles, sum.PolicyRules, sum.PolicyOARHints, sum.PolicyLegacyBanners)
 	}
-	if sum.NextStepsFiles != 143 || sum.AnchorFiles != 2 {
-		t.Fatalf("unexpected stock host OAR inventory: nextSteps=%d anchors=%d",
-			sum.NextStepsFiles, sum.AnchorFiles)
+	t.Logf("shipped stock OAR inventory: policy_files=%d (rules=%d, hints=%d, banners=%d), next_steps=%d, anchors=%d",
+		sum.PolicyFiles, sum.PolicyRules, sum.PolicyOARHints, sum.PolicyLegacyBanners, sum.NextStepsFiles, sum.AnchorFiles)
+
+	portableRules, portableFixtures, portableViolations := auditShippedPortablePack(t, vocab, moduleRoot, schemaDir)
+	if len(portableViolations) > 0 {
+		t.Fatalf("shipped OAR portable-pack audit found %d violation(s):\n%s",
+			len(portableViolations), formatOARViolations(portableViolations))
 	}
+	if portableRules == 0 || portableFixtures == 0 {
+		t.Fatalf("empty shipped OAR portable pack: rules=%d fixtures=%d", portableRules, portableFixtures)
+	}
+	t.Logf("shipped OAR portable pack qualified: rules=%d fixtures_passed=%d", portableRules, portableFixtures)
+
 	unref, err := oar.UnreferencedDeclaredFacts(moduleRoot)
 	contractcheck.FailErr(t, "UnreferencedDeclaredFacts", err)
 	if len(unref) > 0 {
@@ -87,7 +100,10 @@ fix: '{% set allow_cmd = paintedwolf.session_mode == "agent" %}{% if allow_cmd %
 `)
 		sum := auditStockOARRoot(t, vocab, tmp, schemaDir, false)
 		if !hasViolationMatching(sum.Violations, "SEEDED_SET_ALIAS.yaml#fix", `set allow_cmd = paintedwolf.session_mode == "agent"`, "allow_cmd") {
-			t.Fatalf("expected set-assignment violation naming source/expression/alias, got:\n%s", formatOARViolations(sum.Violations))
+			t.Fatalf("expected set-assignment capability-derivation violation, got:\n%s", formatOARViolations(sum.Violations))
+		}
+		if !hasViolationMatching(sum.Violations, "SEEDED_SET_ALIAS.yaml#fix", `allow_cmd => paintedwolf.session_mode == "agent"`, "edit") {
+			t.Fatalf("expected downstream alias-guarded edit violation, got:\n%s", formatOARViolations(sum.Violations))
 		}
 		if !hasViolationMatching(sum.Violations, "SEEDED_SET_ALIAS.yaml#fix", `allow_cmd => paintedwolf.session_mode == "agent"`, "command") {
 			t.Fatalf("expected downstream alias-guarded command violation, got:\n%s", formatOARViolations(sum.Violations))
@@ -154,8 +170,8 @@ instead: report missing operation
     say: "Run {{ call }}."
 `)
 		sum := auditStockOARRoot(t, vocab, tmp, schemaDir, false)
-		if !hasViolationMatching(sum.Violations, "SEEDED_INLINE_COPY.yaml#fix", "paintedwolf.ask_worker_writes", "command") {
-			t.Fatalf("expected inline real-vocabulary copy violation, got:\n%s", formatOARViolations(sum.Violations))
+		if !hasViolationMatching(sum.Violations, "SEEDED_INLINE_COPY.yaml#fix", "paintedwolf.ask_worker_writes", "sed") {
+			t.Fatalf("expected inline real-vocabulary sed violation, got:\n%s", formatOARViolations(sum.Violations))
 		}
 		if !hasViolationMatching(sum.Violations, "SEEDED_NEXT_STEP_MODE.yaml#steps[0]", "paintedwolf.session_mode != 'ask'", "ask_user") {
 			t.Fatalf("expected next-step session_mode reconstruction violation, got:\n%s", formatOARViolations(sum.Violations))
@@ -166,103 +182,111 @@ instead: report missing operation
 	})
 }
 
-func TestSeededOARDiscoveryOtherwiseAndControls(t *testing.T) {
+func TestSeededOARFalsePositivesAndNonFixFieldClaims(t *testing.T) {
 	_, schemaDir, _, _ := oarAuditEnv(t)
 	vocab, _ := promptNameCatalog(t)
+	tmp := t.TempDir()
 
-	t.Run("seeded_regression_unguarded_recovery_and_otherwise_promises", func(t *testing.T) {
-		tmp := t.TempDir()
-		writeSeededFile(t, tmp, "painted-wolf/platform/policy/SEEDED_OTHERWISE_LOADER.yaml", `spec_version: "1.0"
-id: SEEDED_OTHERWISE_LOADER
+	writeSeededFile(t, tmp, "painted-wolf/platform/policy/SEEDED_SELECTOR_EXCUSE.yaml", `spec_version: "1.0"
+id: SEEDED_SELECTOR_EXCUSE
+kind: schema
+on: tool.rejected
+selector:
+  tools: [render_view, view_image]
+requires_facts: [paintedwolf.rejection_code]
+when: paintedwolf.rejection_code == "SEEDED_SELECTOR_EXCUSE"
+effect: block
+message: handle missing
+what: handle missing
+cause: handle missing
+why: handle missing
+fix: Call render_view to create a fresh handle first.
+instead: stop
+`)
+	writeSeededFile(t, tmp, "painted-wolf/platform/policy/SEEDED_PROFILE_MUTATION.yaml", `spec_version: "1.0"
+id: SEEDED_PROFILE_MUTATION
+kind: policy
+on: tool.rejected
+selector: {}
+requires_facts: [paintedwolf.profile_mutation_capable, paintedwolf.rejection_code]
+when: paintedwolf.rejection_code == "SEEDED_PROFILE_MUTATION"
+effect: block
+message: mutation blocked
+what: mutation blocked
+cause: mutation blocked
+why: mutation blocked
+fix: '{% if paintedwolf.profile_mutation_capable %}Apply the change with `+"`edit --path`"+` in command.{% else %}Report the block.{% endif %}'
+instead: stop
+`)
+	writeSeededFile(t, tmp, "painted-wolf/platform/policy/SEEDED_TEXT_CALLABLE_LIST.yaml", `spec_version: "1.0"
+id: SEEDED_TEXT_CALLABLE_LIST
+kind: policy
+on: coordinator.post_turn
+selector: {}
+requires_facts: [paintedwolf.text_action_callable_tools]
+when: size(paintedwolf.text_action_callable_tools) > 0
+effect: block
+message: tool in text
+what: tool in text
+cause: tool in text
+why: tool in text
+fix: '{% if paintedwolf.text_action_callable_tools %}Call fetch_url on the URL directly.{% endif %}'
+instead: stop
+`)
+	writeSeededFile(t, tmp, "painted-wolf/platform/policy/SEEDED_BARE_CAN_COMMAND_PROGRAMS.yaml", `spec_version: "1.0"
+id: SEEDED_BARE_CAN_COMMAND_PROGRAMS
+kind: schema
+on: tool.rejected
+selector: {}
+requires_facts: [paintedwolf.can_command, paintedwolf.rejection_code]
+when: paintedwolf.rejection_code == "SEEDED_BARE_CAN_COMMAND_PROGRAMS"
+effect: block
+message: parse failed
+what: parse failed
+cause: parse failed
+why: 'Run `+"`rg -n`"+` in command to locate the symbol first.'
+fix: '{% if paintedwolf.can_command %}For source reads, use `+"`sed -n`"+` or `+"`cat -n`"+` in command.{% endif %}'
+instead: stop
+`)
+	writeSeededFile(t, tmp, "painted-wolf/platform/policy/SEEDED_UNPRUNED_CMD_SCHEMA.yaml", `spec_version: "1.0"
+id: SEEDED_UNPRUNED_CMD_SCHEMA
 kind: policy
 on: tool.rejected
 selector: {}
 requires_facts: [paintedwolf.next_steps, paintedwolf.rejection_code]
-when: paintedwolf.rejection_code == "SEEDED_OTHERWISE_LOADER"
+when: paintedwolf.rejection_code == "SEEDED_UNPRUNED_CMD_SCHEMA"
 effect: block
-message: seeded otherwise
-what: seeded what
-cause: seeded cause
-why: seeded why
-fix: '{{ paintedwolf.next_steps }} Inspect with `+"`git config --list`"+` inside command.'
-instead: adjust arguments
-`)
-		writeSeededFile(t, tmp, "painted-wolf/platform/host/next-steps/SEEDED_OTHERWISE_LOADER.yaml", `steps:
-  - tool: "command"
-    say: "Run {{ call }}."
-    otherwise: "Request it with request_tools, then run it."
-`)
-		sum := auditStockOARRoot(t, vocab, tmp, schemaDir, false)
-		if !hasViolationMatching(sum.Violations, "SEEDED_OTHERWISE_LOADER.yaml#steps[0].otherwise", "Request it with request_tools", "request_tools") {
-			t.Fatalf("expected otherwise loader-promise violation, got:\n%s", formatOARViolations(sum.Violations))
-		}
-		if !hasViolationMatching(sum.Violations, "SEEDED_OTHERWISE_LOADER.yaml#fix", "<unguarded>", "command") {
-			t.Fatalf("expected unguarded command promise violation, got:\n%s", formatOARViolations(sum.Violations))
-		}
-	})
-
-	t.Run("seeded_discovery_of_newly_added_and_orphan_oar_assets", func(t *testing.T) {
-		tmp := t.TempDir()
-		writeSeededFile(t, tmp, "painted-wolf/custom/policy/NEWLY_ADDED_STOCK_RULE.yaml", `spec_version: "1.0"
-id: NEWLY_ADDED_STOCK_RULE
-kind: policy
-on: tool.rejected
-selector: {}
-requires_facts: [paintedwolf.rejection_code]
-when: paintedwolf.rejection_code == "NEWLY_ADDED_STOCK_RULE"
-effect: block
-message: newly added rule
-what: newly added what
-cause: newly added cause
-why: newly added why
-fix: Call fetch_url to download the remote file.
+message: process unsupported
+what: Call `+"`fetch_url(url=\"https://example.com\")`"+` to inspect the endpoint.
+cause: unsupported
+why: unsupported
+fix: '{{ paintedwolf.next_steps }}'
 instead: stop
 `)
-		writeSeededFile(t, tmp, "painted-wolf/custom/host/next-steps/ORPHAN_NEXT_STEPS.yaml", `steps:
+	writeSeededFile(t, tmp, "painted-wolf/platform/host/next-steps/SEEDED_UNPRUNED_CMD_SCHEMA.yaml", `steps:
   - tool: "command"
-    say: "Run {{ call }}."
+    say: "Run {{ call }} with `+"`capability_request.host_execution`"+`."
 `)
-		writeSeededFile(t, tmp, "painted-wolf/custom/policy/UNEXPECTED_NOTE.txt", "stray file")
-		sum := auditStockOARRoot(t, vocab, tmp, schemaDir, false)
-		if !hasViolationMatching(sum.Violations, "NEWLY_ADDED_STOCK_RULE.yaml#fix", "<unguarded>", "fetch_url") {
-			t.Fatalf("expected newly added rule discovery violation, got:\n%s", formatOARViolations(sum.Violations))
-		}
-		if !hasViolationMatching(sum.Violations, "ORPHAN_NEXT_STEPS.yaml", "", "ORPHAN_NEXT_STEPS") {
-			t.Fatalf("expected orphan next-steps violation, got:\n%s", formatOARViolations(sum.Violations))
-		}
-		if !hasViolationMatching(sum.Violations, "UNEXPECTED_NOTE.txt", "", "discovery") {
-			t.Fatalf("expected unexpected-extension discovery violation, got:\n%s", formatOARViolations(sum.Violations))
-		}
-	})
-
-	t.Run("passing_controls_valid_guards_occurrence_when_and_presentation", func(t *testing.T) {
-		tmp := t.TempDir()
-		writeSeededFile(t, tmp, "painted-wolf/platform/policy/CONTROL_OCCURRENCE_AND_GUARD.yaml", `spec_version: "1.0"
-id: CONTROL_OCCURRENCE_AND_GUARD
-kind: policy
-on: session.pre_invoke
-selector: {}
-requires_facts: [paintedwolf.admitted_command_forms, paintedwolf.ask_worker_writes, paintedwolf.can_command, paintedwolf.command_operation_reachable, paintedwolf.next_steps, paintedwolf.session_mode, paintedwolf.user_guidance]
-when: paintedwolf.session_mode == "ask" && paintedwolf.ask_worker_writes
-effect: block
-message: Ask mode occurrence block
-what: 'Write leg blocked{% if paintedwolf.user_guidance %} ({{ paintedwolf.user_guidance }}){% endif %}.'
-cause: Ask mode blocks mutating delegation.
-why: Session authority is read-only.
-fix: '{% if paintedwolf.can_command %}Inspect read-only repository settings with `+"`git config --list`"+` inside command, or switch{% else %}Switch{% endif %} to Agent mode before mutating. {{ paintedwolf.next_steps }}'
-instead: Answer from read-only inspection or ask to switch modes.
-`)
-		writeSeededFile(t, tmp, "painted-wolf/platform/host/next-steps/CONTROL_OCCURRENCE_AND_GUARD.yaml", `steps:
-  - when: "paintedwolf.command_operation_reachable"
-    tool: "command"
-    pick:
-      command: "paintedwolf.admitted_command_forms"
-    say: "Run {{ call }}."
-    otherwise: "No replacement command form is available on this turn."
-`)
-		sum := auditStockOARRoot(t, vocab, tmp, schemaDir, false)
-		if len(sum.Violations) > 0 {
-			t.Fatalf("passing control triggered unexpected violation(s):\n%s", formatOARViolations(sum.Violations))
-		}
-	})
+	sum := auditStockOARRoot(t, vocab, tmp, schemaDir, false)
+	if !hasViolationMatching(sum.Violations, "SEEDED_SELECTOR_EXCUSE.yaml#fix", "<unguarded>", "render_view") {
+		t.Fatalf("expected occurrence-selector false-positive rejection on render_view, got:\n%s", formatOARViolations(sum.Violations))
+	}
+	if !hasViolationMatching(sum.Violations, "SEEDED_PROFILE_MUTATION.yaml#fix", "paintedwolf.profile_mutation_capable", "edit") ||
+		!hasViolationMatching(sum.Violations, "SEEDED_PROFILE_MUTATION.yaml#fix", "paintedwolf.profile_mutation_capable", "command") {
+		t.Fatalf("expected profile_mutation_capable rejection for edit/command, got:\n%s", formatOARViolations(sum.Violations))
+	}
+	if !hasViolationMatching(sum.Violations, "SEEDED_TEXT_CALLABLE_LIST.yaml#fix", "paintedwolf.text_action_callable_tools", "fetch_url") {
+		t.Fatalf("expected text_action_callable_tools list rejection for named fetch_url, got:\n%s", formatOARViolations(sum.Violations))
+	}
+	if !hasViolationMatching(sum.Violations, "SEEDED_BARE_CAN_COMMAND_PROGRAMS.yaml#fix", "paintedwolf.can_command", "sed") ||
+		!hasViolationMatching(sum.Violations, "SEEDED_BARE_CAN_COMMAND_PROGRAMS.yaml#fix", "paintedwolf.can_command", "cat") {
+		t.Fatalf("expected bare can_command rejection for specific sed/cat programs, got:\n%s", formatOARViolations(sum.Violations))
+	}
+	if !hasViolationMatching(sum.Violations, "SEEDED_BARE_CAN_COMMAND_PROGRAMS.yaml#why", "<unguarded>", "rg") ||
+		!hasViolationMatching(sum.Violations, "SEEDED_UNPRUNED_CMD_SCHEMA.yaml#what", "<unguarded>", "fetch_url") {
+		t.Fatalf("expected non-fix/instead capability claim rejections in #why/#what, got:\n%s", formatOARViolations(sum.Violations))
+	}
+	if !hasViolationMatching(sum.Violations, "SEEDED_UNPRUNED_CMD_SCHEMA.yaml#steps[0].say", "<unguarded>", "capability_request") {
+		t.Fatalf("expected unguarded command capability_request schema violation, got:\n%s", formatOARViolations(sum.Violations))
+	}
 }

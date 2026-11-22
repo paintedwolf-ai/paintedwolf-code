@@ -19,7 +19,7 @@ import (
 	"github.com/lycaon/lycaon/internal/session/spendguard"
 	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/session/workercontext"
-	"github.com/lycaon/lycaon/internal/tools"
+	"github.com/lycaon/lycaon/internal/toolreach"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -242,7 +242,7 @@ func (m *Service) executePromptRun(
 			return execution, err
 		}
 	}
-	if err := m.PostTurn.After(tools.WithCallReach(ctx, result.Reach), sessionID, assembly.ProfileID, result.TurnTools); err != nil {
+	if err := m.PostTurn.After(toolreach.WithRequest(ctx, result.Reach), sessionID, assembly.ProfileID, result.TurnTools); err != nil {
 		return execution, err
 	}
 	checkpointJSON, err := sessionexecution.FinalizingCheckpoint(sessionID, result.LastAssistantID, result.LastOutputID)

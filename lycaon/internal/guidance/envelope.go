@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/oarcore"
+	"github.com/lycaon/lycaon/internal/toolreach"
 )
 
 // NextStepsResolver resolves a hint code's checked next steps against the
@@ -55,6 +56,7 @@ func renderHintMessage(ctx context.Context, code string, entry HintEntry, data m
 // withHintNextSteps resolves the checked next-steps fact for copy that binds
 // it, without mutating the caller's data.
 func withHintNextSteps(ctx context.Context, code string, view RejectCodeView, data map[string]any, resolve NextStepsResolver) map[string]any {
+	data = withHintReachFacts(ctx, data)
 	if resolve == nil || !viewBindsNextSteps(view) {
 		return data
 	}
@@ -64,6 +66,25 @@ func withHintNextSteps(ctx context.Context, code string, view RejectCodeView, da
 		out = map[string]any{}
 	}
 	out[nextStepsFact] = next
+	return out
+}
+
+// withHintReachFacts binds current-turn tool and program reach onto banner copy data.
+func withHintReachFacts(ctx context.Context, data map[string]any) map[string]any {
+	reach := toolreach.FromContext(ctx)
+	if !reach.Known() {
+		return data
+	}
+	out := maps.Clone(data)
+	if out == nil {
+		out = map[string]any{}
+	}
+	for _, name := range reach.OfferedNames() {
+		out["can_"+name] = true
+	}
+	cmdCallable := reach.Status(toolreach.ProgramTool) == toolreach.Callable
+	out["can_command"] = cmdCallable
+	out["command_sed_reachable"] = cmdCallable && reach.Program("sed")
 	return out
 }
 

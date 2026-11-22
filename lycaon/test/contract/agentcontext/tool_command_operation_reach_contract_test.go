@@ -16,7 +16,6 @@ import (
 	"github.com/lycaon/lycaon/internal/toolfeedback"
 	"github.com/lycaon/lycaon/internal/toolreach"
 	"github.com/lycaon/lycaon/internal/toolrejection"
-	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/toolsurface"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 	"github.com/lycaon/lycaon/test/contract/internal/hoststate"
@@ -82,7 +81,7 @@ func renderCommandOpRefusal(t *testing.T, bp *toolfeedback.BlockPlane, reach *to
 	t.Helper()
 	ctx := t.Context()
 	if reach != nil {
-		ctx = tools.WithCallReach(ctx, *reach)
+		ctx = toolreach.WithRequest(ctx, *reach)
 	}
 	err := bp.RejectObservation(ctx, need, "coordinator", nil, &toolrejection.ToolReject{
 		Code: "TOOL_COMMAND_OPERATION",

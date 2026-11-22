@@ -5,7 +5,7 @@ on: tool.rejected
 selector:
   tools:
     - terminal_send
-requires_facts: [paintedwolf.command, paintedwolf.next_steps, paintedwolf.rejection_code]
+requires_facts: [paintedwolf.command, paintedwolf.command_external_reachable, paintedwolf.next_steps, paintedwolf.rejection_code]
 when: paintedwolf.rejection_code == "REMOTE_PACKAGE_EXECUTION_REQUIRES_FRESH_BOUNDARY"
 effect: block
 x-paintedwolf-category: recoverable

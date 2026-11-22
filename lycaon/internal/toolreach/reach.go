@@ -4,6 +4,7 @@
 package toolreach
 
 import (
+	"context"
 	"fmt"
 	"regexp"
 	"slices"
@@ -13,6 +14,25 @@ import (
 
 	"github.com/lycaon/lycaon/internal/toolsurface"
 )
+
+type requestContextKey struct{}
+
+// WithRequest attaches the frozen model request to ctx.
+func WithRequest(ctx context.Context, request Request) context.Context {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	return context.WithValue(ctx, requestContextKey{}, request)
+}
+
+// FromContext reads the frozen model request from ctx; an absent value reaches nothing.
+func FromContext(ctx context.Context) Request {
+	if ctx == nil {
+		return Request{}
+	}
+	request, _ := ctx.Value(requestContextKey{}).(Request)
+	return request
+}
 
 // LoaderTool loads a deferred schema onto the next model request.
 const LoaderTool = "request_tools"
@@ -37,6 +57,7 @@ type Request struct {
 	offered  []string
 	plan     toolsurface.Plan
 	programs Programs
+	schemas  map[string]map[string]any
 	known    bool
 }
 
@@ -57,6 +78,89 @@ func Offered(names []string) Request { return Freeze(names, toolsurface.Plan{}) 
 func (r Request) WithPrograms(programs Programs) Request {
 	r.programs = programs
 	return r
+}
+
+// WithSchemas attaches the projected argument schemas offered on this request.
+func (r Request) WithSchemas(schemas map[string]map[string]any) Request {
+	r.schemas = schemas
+	return r
+}
+
+// ToolSchema returns the projected argument schema for an offered tool when recorded.
+func (r Request) ToolSchema(tool string) (map[string]any, bool) {
+	if r.schemas == nil {
+		return nil, false
+	}
+	s, ok := r.schemas[tool]
+	return s, ok && s != nil
+}
+
+// AcceptsField reports whether the tool is reachable and its projected schema admits dottedPath.
+func (r Request) AcceptsField(tool, dottedPath string) bool {
+	status := r.Status(tool)
+	if status == Absent {
+		return false
+	}
+	if status != Callable || r.schemas == nil {
+		return true
+	}
+	prop, ok := lookupSchemaProperty(r.schemas[tool], dottedPath)
+	return ok && prop != nil
+}
+
+// AcceptsEnumValue reports whether dottedPath is admitted and allows value when constrained by enum.
+func (r Request) AcceptsEnumValue(tool, dottedPath, value string) bool {
+	status := r.Status(tool)
+	if status == Absent {
+		return false
+	}
+	if status != Callable || r.schemas == nil {
+		return true
+	}
+	prop, ok := lookupSchemaProperty(r.schemas[tool], dottedPath)
+	if !ok || prop == nil {
+		return false
+	}
+	rawEnum, hasEnum := prop["enum"]
+	if !hasEnum {
+		return true
+	}
+	switch vals := rawEnum.(type) {
+	case []string:
+		return slices.Contains(vals, value)
+	case []any:
+		for _, item := range vals {
+			if s, isStr := item.(string); isStr && s == value {
+				return true
+			}
+		}
+		return false
+	default:
+		return true
+	}
+}
+
+func lookupSchemaProperty(schema map[string]any, dottedPath string) (map[string]any, bool) {
+	if schema == nil {
+		return nil, false
+	}
+	cur := schema
+	for _, seg := range strings.Split(dottedPath, ".") {
+		seg = strings.TrimSpace(seg)
+		if seg == "" {
+			continue
+		}
+		props, ok := cur["properties"].(map[string]any)
+		if !ok {
+			return nil, false
+		}
+		next, ok := props[seg].(map[string]any)
+		if !ok {
+			return nil, false
+		}
+		cur = next
+	}
+	return cur, true
 }
 
 // Program reports whether a native program can enter the reader's next call.
@@ -169,10 +273,36 @@ func (r Request) Sequence(call Call) ([]Call, bool) {
 	}
 	switch r.Status(call.Tool) {
 	case Callable:
+		if r.schemas != nil && !r.callArgsAdmitted("", call.Tool, call.Args) {
+			return nil, false
+		}
 		return []Call{call}, true
 	case Loadable:
 		return []Call{Load(call.Tool), call}, true
 	default:
 		return nil, false
 	}
+}
+
+func (r Request) callArgsAdmitted(prefix, tool string, args map[string]any) bool {
+	for key, val := range args {
+		path := key
+		if prefix != "" {
+			path = prefix + "." + key
+		}
+		if nested, ok := val.(map[string]any); ok {
+			if !r.callArgsAdmitted(path, tool, nested) {
+				return false
+			}
+			continue
+		}
+		if s, ok := val.(string); ok {
+			if !r.AcceptsEnumValue(tool, path, s) {
+				return false
+			}
+		} else if !r.AcceptsField(tool, path) {
+			return false
+		}
+	}
+	return true
 }
