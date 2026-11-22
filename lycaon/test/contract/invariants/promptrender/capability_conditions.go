@@ -368,7 +368,7 @@ var (
 	gitCmdActionRe      = regexp.MustCompile("`git\\s+(log|status|diff|blame|show|rev-list|rev-parse|add|commit|bisect|restore|worktree)\\b")
 	externalSelectorRe  = regexp.MustCompile("`external\\s+--")
 	curlInCommandRe     = regexp.MustCompile("`curl(?:`|\\s+-)")
-	prunedSchemaClaimRe = regexp.MustCompile("`(capability_request(?:\\.[a-z_]+)?|secret_use(?:\\.[a-z_]+)?|socks_proxy(?::\\s*true)?|snapshot_capture|terminal_capture|command\\([^`]*verification:\\s*true[^`]*\\))`")
+	prunedSchemaClaimRe = regexp.MustCompile("`(capability_request(?:\\.[a-z_]+)?|secret_use(?:\\.[a-z_]+)?|socks_proxy(?::\\s*true)?|snapshot_capture|terminal_capture|response_type:\\s*secret|command\\([^`]*verification:\\s*true[^`]*\\))`")
 	negatedClauseRe     = regexp.MustCompile(`(?i)(?:\bdo\s+not\b|\bnever\b|\bno\b|\bwithout\b|\bcannot\b|\brefused\b|\bnot\s+assign\b|\bunavailable\b)[^.\n]*`)
 )
 
@@ -534,17 +534,37 @@ func exprFalsifiedBy(e *pongoplain.Expr, negatedFacts map[string]bool) bool {
 	return false
 }
 
-func markProjectedSchemaFieldsForTool(toolName string, commandReadOnly bool, schemas *toolschema.Config, out map[string]bool) {
+func minimumProductionProjectedSchema(toolName string, commandReadOnly bool, schemas *toolschema.Config) (map[string]any, bool) {
 	if schemas == nil {
-		return
+		return nil, false
 	}
 	meta, ok := schemas.ToolMeta(toolName)
 	if !ok {
-		return
+		return nil, false
+	}
+	if toolName == "submit_verdict" {
+		return map[string]any{
+			"type": "object",
+			"properties": map[string]any{
+				"verdict":        map[string]any{"type": "object"},
+				"cited_evidence": map[string]any{"type": "array"},
+			},
+		}, true
 	}
 	proj := toolschema.ProjectToolArgsSchema(toolName, meta.ArgsSchema, toolschema.ProjectOptions{
-		CommandReadOnly: commandReadOnly,
+		CommandReadOnly:     toolName == "command" && commandReadOnly,
+		PruneWaitConditions: toolName == "wait",
+		WaitConditions:      nil,
+		AskMode:             toolName == "ask_user",
 	})
+	return proj, true
+}
+
+func markProjectedSchemaFieldsForTool(toolName string, commandReadOnly bool, schemas *toolschema.Config, out map[string]bool) {
+	proj, ok := minimumProductionProjectedSchema(toolName, commandReadOnly, schemas)
+	if !ok {
+		return
+	}
 	for _, field := range toolschema.ArgFieldPaths(proj) {
 		out["schema_accepts:"+field] = true
 	}
@@ -564,6 +584,10 @@ func markImpliedCapabilities(fact string, schemas *toolschema.Config, out map[st
 		}
 	}
 	switch fact {
+	case "can_ask_user_secret":
+		out["profile_has_ask_user"] = true
+		out["schema_accepts:secret"] = true
+		out["schema_accepts:response_type"] = true
 	case "can_git_read", "can_any_git_read":
 		out["profile_has_command"] = true
 		out["git_read_reach"] = true
@@ -732,13 +756,10 @@ func intersectProjectedFields(schemas *toolschema.Config, candidates []struct {
 	}
 	var common map[string]bool
 	for i, c := range candidates {
-		meta, ok := schemas.ToolMeta(c.name)
+		proj, ok := minimumProductionProjectedSchema(c.name, c.readOnly, schemas)
 		if !ok {
 			return nil
 		}
-		proj := toolschema.ProjectToolArgsSchema(c.name, meta.ArgsSchema, toolschema.ProjectOptions{
-			CommandReadOnly: c.readOnly,
-		})
 		cur := map[string]bool{}
 		for _, p := range toolschema.ArgFieldPaths(proj) {
 			cur[p] = true
@@ -754,6 +775,42 @@ func intersectProjectedFields(schemas *toolschema.Config, candidates []struct {
 		}
 	}
 	return common
+}
+
+// SkillGuaranteedSchemaFieldsForText computes the retained schema_accepts:<field>
+// guarantees that buildSkillGuaranteedMap derives for a skill source, so contract
+// tests can verify every retained field holds under narrower projected schemas.
+func SkillGuaranteedSchemaFieldsForText(s *Stock, rawSkillMarkdown string) ([]string, error) {
+	fmRaw, body := splitMarkdownFrontmatter(rawSkillMarkdown)
+	cs := &classifiedSource{family: "skills/SKILL.md", packKey: "test", skillName: "test", body: body}
+	if fmRaw != "" {
+		var sfm skillFrontmatter
+		if err := yaml.Unmarshal([]byte(fmRaw), &sfm); err != nil {
+			return nil, err
+		}
+		if strings.TrimSpace(sfm.Metadata["host_resources"]) != "" {
+			cs.hostResource = true
+		}
+		for _, part := range strings.Split(sfm.Metadata["paintedwolf.any_of_tools"], ",") {
+			if t := strings.TrimSpace(part); t != "" {
+				cs.anyOfTools = append(cs.anyOfTools, t)
+			}
+		}
+	}
+	tree, err := pongoplain.ParseTemplateTree(cs.body)
+	if err != nil {
+		return nil, err
+	}
+	cs.tree = tree
+	gmap := buildSkillGuaranteedMap(s, map[string]*classifiedSource{"test:test": cs})["test:test"]
+	var fields []string
+	for k, ok := range gmap {
+		if ok && strings.HasPrefix(k, "schema_accepts:") {
+			fields = append(fields, strings.TrimPrefix(k, "schema_accepts:"))
+		}
+	}
+	slices.Sort(fields)
+	return fields, nil
 }
 
 func (cc *capabilityChecker) checkBinding(sourceLabel string, line int, tag string, b pongoplain.Binding, aliases map[string]localAlias) {
@@ -923,6 +980,8 @@ func schemaClaimEstablished(arg string, established map[string]bool) bool {
 		return established["profile_has_terminal_capture"] || established["profile_command_external_exec"] || established["schema_accepts:terminal_capture"]
 	case arg == "snapshot_capture":
 		return established["profile_command_external_exec"] || established["schema_accepts:snapshot_capture"]
+	case strings.HasPrefix(arg, "response_type:"):
+		return established["can_ask_user_secret"] || established["schema_accepts:secret"]
 	case strings.HasPrefix(arg, "socks_proxy"):
 		return established["runner_socks_proxy_tools"] || established["schema_accepts:socks_proxy"]
 	case strings.HasPrefix(arg, "secret_use"):

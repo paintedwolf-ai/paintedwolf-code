@@ -358,6 +358,11 @@ func assertReaderRunnerSchemaParity(t *testing.T, label string, reader prompts.R
 			t.Fatalf("%s: %s = %v, want request-schema parity %v (field %q)", label, chk.factKey, got, want, chk.fieldPath)
 		}
 	}
+	gotAskSecret, _ := facts["can_ask_user_secret"].(bool)
+	wantAskSecret := slices.Contains(offered, "ask_user") && toolschema.SchemaAcceptsField(reqSchemas["ask_user"], "secret")
+	if gotAskSecret != wantAskSecret {
+		t.Fatalf("%s: can_ask_user_secret = %v, want %v", label, gotAskSecret, wantAskSecret)
+	}
 }
 
 func TestProjectedSchemaToolsParityAcrossNarrowingAndPartialAvailability(t *testing.T) {
@@ -366,17 +371,35 @@ func TestProjectedSchemaToolsParityAcrossNarrowingAndPartialAvailability(t *test
 	stock := overlays[0]
 
 	t.Run("coordinator_and_worker_request_schema_parity_across_independent_narrowing_axes", func(t *testing.T) {
+		type coordCase struct {
+			surfID string
+			runCtx api.CoordinatorRunContext
+		}
 		for _, posture := range []api.SessionPosture{api.SessionPostureSpec, api.SessionPostureVet, api.SessionPostureBuild, api.SessionPostureOrchestrate} {
 			narrowed, nErr := hoststate.NarrowProfilesForPosture(stock.Profiles, posture, false)
 			contractcheck.FailErr(t, "NarrowProfilesForPosture", nErr)
 			for _, mode := range []api.SessionMode{api.SessionModeAgent, api.SessionModeAsk} {
 				for _, externalHidden := range []bool{false, true} {
-					surfaceIDs := []string{"implement_investigate", "implement_routing", "implement_dispatch"}
-					if mode == api.SessionModeAsk {
-						surfaceIDs = []string{"observe_investigate"}
+					cases := []coordCase{
+						{surfID: "implement_investigate"},
+						{surfID: "implement_routing"},
+						{surfID: "implement_dispatch"},
 					}
-					for _, surfID := range surfaceIDs {
-						tp := surface.ResolveTurnProfileForSurface(surfID, api.CoordinatorRunContext{}, &api.Session{Mode: mode, Posture: posture})
+					if mode == api.SessionModeAsk {
+						cases = []coordCase{
+							{surfID: "observe_investigate"},
+							{
+								surfID: "observe_investigate",
+								runCtx: api.CoordinatorRunContext{
+									RunID:                   "ask-wf-run",
+									WorkflowID:              "ask-wf",
+									PhaseCoordinatorSurface: "implement_routing",
+								},
+							},
+						}
+					}
+					for _, cc := range cases {
+						tp := surface.ResolveTurnProfileForSurface(cc.surfID, cc.runCtx, &api.Session{Mode: mode, Posture: posture})
 						pl, pErr := surface.CompileToolPlan(tp, 1)
 						contractcheck.FailErr(t, "CompileToolPlan", pErr)
 						for _, loadDeferred := range []bool{false, true} {
@@ -389,14 +412,16 @@ func TestProjectedSchemaToolsParityAcrossNarrowingAndPartialAvailability(t *test
 							auth, fErr := hoststate.FreezeTurnAuthority(t.Context(), hoststate.CoordinatorState{
 								Overlay: stock, SessionMode: mode, Posture: posture, RootCount: 1,
 								HasGit: true, WebSearch: true, CommandExternalHidden: externalHidden,
-								TurnProfile: tp, Plan: pl, Loaded: loaded, SpawnAllowlist: stock.SpawnAllowlist,
+								RunContext: cc.runCtx, TurnProfile: tp, Plan: pl, Loaded: loaded,
+								SpawnAllowlist: stock.SpawnAllowlist,
 							})
 							contractcheck.FailErr(t, "FreezeTurnAuthority", fErr)
-							lbl := string(posture) + "/" + string(mode) + "/" + surfID
+							lbl := string(posture) + "/" + string(mode) + "/" + cc.surfID + "/" + cc.runCtx.RunID
 							assertReaderRunnerSchemaParity(t, "coord-live/"+lbl, auth.Reader, auth.Offered, auth.Schemas)
 
+							// Ordinary pre-freeze production Reader entry point (ProjectedSchemas: nil).
 							derivedReader, dErr := prompts.NewReader(prompts.ReaderInput{
-								ProfileID: prompts.CoordinatorProfileID, SurfaceID: surfID, SessionMode: string(mode),
+								ProfileID: prompts.CoordinatorProfileID, SurfaceID: cc.surfID, SessionMode: string(mode),
 								Profiles: narrowed, Plan: auth.Plan, Loaded: loaded, Visible: auth.Offered,
 								Schemas: stock.Schemas, RootCount: 1, HasGit: true, WebSearch: true,
 								CommandExternalHidden: externalHidden,
@@ -520,6 +545,106 @@ func TestProjectedSchemaToolsParityAcrossNarrowingAndPartialAvailability(t *test
 		}
 		if got, _ := af["runner_socks_proxy_tools"].([]string); !slices.Equal(got, []string{"verify"}) {
 			t.Fatalf("asym runner_socks_proxy_tools = %v, want [verify]", got)
+		}
+	})
+
+	t.Run("explicit_frozen_projection_missing_entry_fails_closed", func(t *testing.T) {
+		termMeta, ok := stock.Schemas.ToolMeta("terminal_open")
+		if !ok {
+			t.Fatal("missing terminal_open catalog schema")
+		}
+		offered := []string{"ask_user", "command", "terminal_open"}
+		profile := sandbox.ToolProfile{
+			ID:             "missing_entry_probe",
+			Tools:          map[string]bool{"ask_user": true, "command": true, "terminal_open": true},
+			CommandEffects: toolcontract.AllCommandEffects(),
+		}
+		baseInput := prompts.ReaderInput{
+			ProfileID:   "missing_entry_probe",
+			SessionMode: string(api.SessionModeAgent),
+			Profiles:    []sandbox.ToolProfile{profile},
+			Plan:        toolsurface.Compile(offered, nil),
+			Visible:     offered,
+			Schemas:     stock.Schemas,
+			RootCount:   1,
+		}
+
+		// Pre-freeze (ProjectedSchemas == nil): synthesizes from stock.Schemas.
+		preFreeze, err := prompts.NewReader(baseInput)
+		contractcheck.FailErr(t, "preFreeze NewReader", err)
+		pfFacts := preFreeze.Facts()
+		if got, _ := pfFacts["runner_host_resources_tools"].([]string); !slices.Equal(got, []string{"command", "terminal_open"}) {
+			t.Fatalf("pre-freeze runner_host_resources_tools = %v, want [command terminal_open]", got)
+		}
+		if got, _ := pfFacts["runner_direct_ip_tools"].([]string); !slices.Equal(got, []string{"command"}) {
+			t.Fatalf("pre-freeze runner_direct_ip_tools = %v, want [command]", got)
+		}
+		if got, _ := pfFacts["can_ask_user_secret"].(bool); !got {
+			t.Fatal("pre-freeze can_ask_user_secret = false, want true")
+		}
+
+		// Frozen map omitting "command" and "ask_user" while "terminal_open" is present:
+		// must NOT fall back to stock.Schemas for "command" or "ask_user".
+		partialIn := baseInput
+		partialIn.ProjectedSchemas = map[string]map[string]any{
+			"terminal_open": termMeta.ArgsSchema,
+		}
+		missingEntryReader, err := prompts.NewReader(partialIn)
+		contractcheck.FailErr(t, "missingEntryReader", err)
+		if !slices.Equal(missingEntryReader.Offered(), offered) {
+			t.Fatalf("offered = %v, want %v", missingEntryReader.Offered(), offered)
+		}
+		mf := missingEntryReader.Facts()
+		for _, onlyTermKey := range []string{
+			"runner_capability_request_tools",
+			"runner_host_resources_tools",
+			"runner_secret_use_tools",
+			"runner_socks_proxy_tools",
+			"runner_local_listen_tools",
+			"runner_loopback_connect_tools",
+			"runner_socket_tools",
+			"runner_write_root_tools",
+		} {
+			if got, _ := mf[onlyTermKey].([]string); !slices.Equal(got, []string{"terminal_open"}) {
+				t.Fatalf("missing-entry %s = %v, want [terminal_open] (command must not fall back to raw catalog)", onlyTermKey, got)
+			}
+		}
+		if got, _ := mf["runner_direct_ip_tools"].([]string); len(got) != 0 {
+			t.Fatalf("missing-entry runner_direct_ip_tools = %v, want empty", got)
+		}
+		if got, _ := mf["can_ask_user_secret"].(bool); got {
+			t.Fatal("missing-entry can_ask_user_secret = true, want false when ask_user has no frozen entry")
+		}
+
+		// Frozen non-nil empty map: certifies zero schema fields across all offered tools.
+		emptyIn := baseInput
+		emptyIn.ProjectedSchemas = map[string]map[string]any{}
+		emptyFrozenReader, err := prompts.NewReader(emptyIn)
+		contractcheck.FailErr(t, "emptyFrozenReader", err)
+		ef := emptyFrozenReader.Facts()
+		for _, runnerKey := range []string{
+			"runner_capability_request_tools",
+			"runner_host_resources_tools",
+			"runner_secret_use_tools",
+			"runner_socks_proxy_tools",
+			"runner_direct_ip_tools",
+			"runner_local_listen_tools",
+			"runner_loopback_connect_tools",
+			"runner_socket_tools",
+			"runner_write_root_tools",
+		} {
+			if got, _ := ef[runnerKey].([]string); len(got) != 0 {
+				t.Fatalf("empty frozen %s = %v, want empty", runnerKey, got)
+			}
+		}
+		if got, _ := ef["can_ask_user_secret"].(bool); got {
+			t.Fatal("empty frozen can_ask_user_secret = true, want false")
+		}
+		if preFreeze.Fingerprint() == missingEntryReader.Fingerprint() ||
+			preFreeze.Fingerprint() == emptyFrozenReader.Fingerprint() ||
+			missingEntryReader.Fingerprint() == emptyFrozenReader.Fingerprint() {
+			t.Fatalf("expected distinct fingerprints for nil (%s), missing-entry (%s), and empty non-nil (%s)",
+				preFreeze.Fingerprint(), missingEntryReader.Fingerprint(), emptyFrozenReader.Fingerprint())
 		}
 	})
 }

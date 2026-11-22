@@ -107,6 +107,7 @@ func skillToolReader(ctx context.Context, mgr *session.Host, tctx tools.ToolCont
 		Loaded:                loaded,
 		Visible:               visible,
 		Schemas:               schemas,
+		ProjectedSchemas:      tctx.Turn.TurnOfferedToolSchemas,
 		RootCount:             rootCount,
 		HasGit:                primaryRootHasGit(tctx),
 		HasAnyGitRoot:         anyRootHasGit(tctx),

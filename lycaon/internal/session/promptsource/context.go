@@ -309,6 +309,7 @@ func (m *Context) procedureReader(ctx context.Context, sess *api.Session, profil
 		Plan:                  toolsurface.Compile(offered, remaining),
 		Loaded:                offeredSet,
 		Visible:               visible,
+		ProjectedSchemas:      prompts.ProjectedSchemasFromContext(ctx),
 		RootCount:             rootCount,
 		HasGit:                hasGit,
 		HasAnyGitRoot:         hasAnyGitRoot,

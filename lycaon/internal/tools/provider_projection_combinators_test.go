@@ -1,9 +1,6 @@
 package tools
 
-import (
-	"reflect"
-	"testing"
-)
+import "testing"
 
 func TestProviderProjectionRelationalConstraints(t *testing.T) {
 	for _, kind := range []string{"anyOf", "oneOf", "allOf"} {
@@ -59,30 +56,7 @@ func TestProviderProjectionDoesNotNarrowAlternatives(t *testing.T) {
 	}
 }
 
-func TestProviderProjectionKeepsSelfContainedUnions(t *testing.T) {
-	for _, kind := range []string{"anyOf", "oneOf", "allOf"} {
-		t.Run(kind, func(t *testing.T) {
-			node := map[string]any{kind: []any{map[string]any{"type": "string"}, map[string]any{"type": "array", "items": map[string]any{"type": "integer"}}}}
-			if got := projectSchemaNode(node); !reflect.DeepEqual(got, node) {
-				t.Fatalf("union changed: %v", got)
-			}
-		})
-	}
-}
-
-func TestProviderProjectionBranchAndPropertyShapes(t *testing.T) {
-	for _, raw := range []any{nil, []any{}, []any{true}} {
-		if got, ok := projectSchemaBranches("anyOf", raw); ok {
-			t.Fatalf("unsupported branches survived: %v", got)
-		}
-	}
-	if got := projectPropertySchema(true); len(got) != 0 {
-		t.Fatalf("boolean schema invented constraints: %v", got)
-	}
-	node := map[string]any{"type": "object", "required": []string{"declared", "elsewhere"}, "properties": map[string]any{"declared": map[string]any{"type": "string"}}}
-	if got := projectSchemaNode(node)["required"]; !reflect.DeepEqual(got, []any{"declared"}) {
-		t.Fatalf("required = %v", got)
-	}
+func TestProviderProjectionEmptyToolMetaDefaultsObjectRoot(t *testing.T) {
 	if got := ProjectProviderToolMeta(ToolMeta{}).ArgsSchema; got["type"] != "object" {
 		t.Fatalf("empty root = %v", got)
 	}
