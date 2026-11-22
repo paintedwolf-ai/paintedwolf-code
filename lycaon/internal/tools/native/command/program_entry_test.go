@@ -14,8 +14,8 @@ import (
 
 	"github.com/lycaon/lycaon/internal/commandprogram"
 	"github.com/lycaon/lycaon/internal/commandsurface"
-	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/programtest"
+	"github.com/lycaon/lycaon/internal/prompts/promptstest"
 	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/toolcontract"
@@ -554,13 +554,27 @@ func TestProgramRuntimeOutputWindowFollowsActorSedAdmission(t *testing.T) {
 		f.Context = func(_ string, tc *tools.ToolContext) {
 			tc.Host.ModelContextWindow = 16384
 			tc.Turn.TurnOfferedToolNames = []string{"command"}
-			tc.Turn.TurnOfferedToolSchemas = guidance.StockProjectedToolSchemas("command")
+			tc.Turn.TurnOfferedToolSchemas = promptstest.ProjectedToolSchemas(t, "command")
 		}
 		out, err := f.call(t, t.Context(), "external -- /bin/cat big.txt")
 		testutil.FailErr(t, "run cat big.txt", err)
 		res := decodeOutcome(t, out)
 		if !strings.Contains(res.Stdout, "full output: @output/") || !strings.Contains(res.Stdout, "(sed -n '") {
 			t.Fatalf("expected saved path and sed continuation when sed is admitted, got:\n%s", res.Stdout)
+		}
+	})
+
+	t.Run("unprojected turn context omits sed without stock fallback", func(t *testing.T) {
+		f := newSedFixture(t)
+		testutil.FailErr(t, "write fixture file", os.WriteFile(filepath.Join(f.Dir, "big.txt"), []byte(payload), 0o644))
+		f.Context = func(_ string, tc *tools.ToolContext) {
+			tc.Host.ModelContextWindow = 16384
+		}
+		out, err := f.call(t, t.Context(), "external -- /bin/cat big.txt")
+		testutil.FailErr(t, "run cat big.txt without turn projection", err)
+		res := decodeOutcome(t, out)
+		if !strings.Contains(res.Stdout, "full output: @output/") || strings.Contains(res.Stdout, "sed -n") {
+			t.Fatalf("unprojected turn must retain saved path and omit sed continuation:\n%s", res.Stdout)
 		}
 	})
 

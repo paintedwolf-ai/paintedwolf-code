@@ -8,6 +8,8 @@ import (
 	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/messageview"
 	"github.com/lycaon/lycaon/internal/prompts"
+	"github.com/lycaon/lycaon/internal/prompts/promptstest"
+	"github.com/lycaon/lycaon/internal/toolreach"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -76,7 +78,7 @@ func TestPromotionAndRejectionRecordHostEventsAtCurrentTurn(t *testing.T) {
 	}
 }
 
-func TestPromoteOverlayRebaseConflictBannersRespectSessionMode(t *testing.T) {
+func TestPromoteOverlayHostEventBannerRecipientAuthority(t *testing.T) {
 	guidance.SetGuidanceRenderer(prompts.NewGuidanceRenderer(prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{})))
 	t.Cleanup(func() { guidance.SetGuidanceRenderer(nil) })
 
@@ -85,25 +87,47 @@ func TestPromoteOverlayRebaseConflictBannersRespectSessionMode(t *testing.T) {
 		Status:    api.WorkerMergeStatusRebasing,
 		Conflicts: []string{"pkg/main.go"},
 	}}
-	for _, tc := range []struct {
-		mode        api.SessionMode
-		wantPromote bool
-	}{
-		{api.SessionModeAgent, true},
-		{api.SessionModeAsk, false},
-	} {
+
+	t.Run("without recipient projection retains occurrence details and omits unestablished calls", func(t *testing.T) {
 		f := &promotionFixture{rebased: rebased}
-		sessions := promotionSessions{mode: tc.mode}
-		s := New(sessions, sessions, nil, nil, f, f, f, f)
+		s := New(promotionSessions{}, promotionSessions{}, nil, nil, f, f, f, f)
 		s.SetOverlayPromoter(f)
 		if _, err := s.PromoteOverlay(t.Context(), "session", "ov-parent", api.PromoteOverlayInput{}); err != nil {
-			t.Fatalf("mode %s PromoteOverlay failed: %v", tc.mode, err)
+			t.Fatalf("PromoteOverlay failed: %v", err)
 		}
-		if len(f.rows) != 1 || !strings.Contains(f.rows[0].Content, "`preview_overlay`") {
-			t.Fatalf("mode %s missing preview_overlay banner: %+v", tc.mode, f.rows)
+		if len(f.rows) != 1 {
+			t.Fatalf("expected 1 recorded host-event message, got %d", len(f.rows))
 		}
-		if strings.Contains(f.rows[0].Content, "`promote_overlay`") != tc.wantPromote {
-			t.Fatalf("mode %s promote_overlay presence = %v, want %v:\n%s", tc.mode, !tc.wantPromote, tc.wantPromote, f.rows[0].Content)
+		delivered := f.rows[0].Content
+		for _, want := range []string{"Result ov-child (stacked on ov-parent)", "`pkg/main.go`", "The parent landing remains accepted.", "Code: OVERLAY_REBASE_CONFLICT"} {
+			if !strings.Contains(delivered, want) {
+				t.Fatalf("host-event message lost occurrence detail %q:\n%s", want, delivered)
+			}
 		}
-	}
+		for _, unestablished := range []string{"`preview_overlay`", "`promote_overlay`", "`instruct_worker`"} {
+			if strings.Contains(delivered, unestablished) {
+				t.Fatalf("host-event message without recipient projection leaked %s:\n%s", unestablished, delivered)
+			}
+		}
+	})
+
+	t.Run("admitted recipient projection delivers only projected tools", func(t *testing.T) {
+		f := &promotionFixture{rebased: rebased}
+		s := New(promotionSessions{}, promotionSessions{}, nil, nil, f, f, f, f)
+		s.SetOverlayPromoter(f)
+		ctx := toolreach.WithRequest(t.Context(), promptstest.StockToolReach(t, "preview_overlay", "instruct_worker"))
+		if _, err := s.PromoteOverlay(ctx, "session", "ov-parent", api.PromoteOverlayInput{}); err != nil {
+			t.Fatalf("PromoteOverlay with recipient reach failed: %v", err)
+		}
+		if len(f.rows) != 1 {
+			t.Fatalf("expected 1 recorded host-event message, got %d", len(f.rows))
+		}
+		delivered := f.rows[0].Content
+		if !strings.Contains(delivered, "`preview_overlay`") || !strings.Contains(delivered, "`instruct_worker`") {
+			t.Fatalf("host-event message missing admitted tool instructions:\n%s", delivered)
+		}
+		if strings.Contains(delivered, "`promote_overlay`") {
+			t.Fatalf("host-event message leaked unoffered promote_overlay:\n%s", delivered)
+		}
+	})
 }

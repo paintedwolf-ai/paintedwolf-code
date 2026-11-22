@@ -175,7 +175,7 @@ func (m *Service) ApplyView(ctx context.Context, sess *api.Session, history []ap
 		record := messageview.CloneContinuation(view.Continuation)
 		record.Window = cfg.ModelContextWindow
 		record.Receiver = sess.Model
-		recall := m.recallAvailable != nil && m.recallAvailable(ctx, sess)
+		recall := m.effectiveRecallAvailable(ctx, sess)
 		text, renderErr := compaction.RenderContinuation(ctx, record, recall, 0)
 		if renderErr != nil {
 			return history

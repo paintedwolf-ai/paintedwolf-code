@@ -12,7 +12,6 @@ import (
 	"github.com/lycaon/lycaon/internal/session/promptassembly"
 	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/toolreach"
-	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -20,9 +19,28 @@ type RequestBudgets interface {
 	RequestBudget(context.Context, string, modelcall.CompletionRequest) modelcall.RequestBudget
 }
 
+func requestReachFromCompletionRequest(req modelcall.CompletionRequest) toolreach.Request {
+	if req.ToolUse == modelcall.ToolUseForbidden || len(req.Tools) == 0 {
+		return toolreach.Offered(nil)
+	}
+	offered := make([]string, 0, len(req.Tools))
+	schemas := make(map[string]map[string]any, len(req.Tools))
+	for _, meta := range req.Tools {
+		if meta.Name == "" {
+			continue
+		}
+		offered = append(offered, meta.Name)
+		if meta.ArgsSchema != nil {
+			schemas[meta.Name] = meta.ArgsSchema
+		}
+	}
+	return toolreach.Offered(offered).WithSchemas(schemas)
+}
+
 // FitRequest reserves the live frame before allocating history and output, and
 // reports where fitted history starts so prefix reuse can be attributed.
 func (m *Service) FitRequest(ctx context.Context, sess *api.Session, history []api.Message, req modelcall.CompletionRequest, budgets RequestBudgets, policies RequestPolicies) (modelcall.CompletionRequest, error) {
+	ctx = toolreach.WithRequest(ctx, requestReachFromCompletionRequest(req))
 	history, req, err := prepareRequestHistory(ctx, m, sess, history, req)
 	if err != nil {
 		return req, err
@@ -58,15 +76,7 @@ func (m *Service) fitRequest(ctx context.Context, sess *api.Session, history []a
 			m.cutoffs.noteFit(key, sess.ID, projection.history, rows)
 		}
 	}
-	recallIdx := slices.IndexFunc(req.Tools, func(t tools.ToolMeta) bool { return t.Name == "recall" })
-	recall := req.ToolUse != modelcall.ToolUseForbidden && (recallIdx >= 0 || (m != nil && m.recallAvailable != nil && m.recallAvailable(ctx, sess)))
-	if recall && recallIdx >= 0 && !toolreach.FromContext(ctx).Known() {
-		var schemas map[string]map[string]any
-		if req.Tools[recallIdx].ArgsSchema != nil {
-			schemas = map[string]map[string]any{"recall": req.Tools[recallIdx].ArgsSchema}
-		}
-		ctx = toolreach.WithRequest(ctx, toolreach.Offered([]string{"recall"}).WithSchemas(schemas))
-	}
+	recall := toolreach.FromContext(ctx).Status("recall") == toolreach.Callable
 	projected, omission, err := m.applyFitCut(ctx, sess, recall, key, view, projected, cfg)
 	if err != nil {
 		return req, err

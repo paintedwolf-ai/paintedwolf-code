@@ -8,15 +8,13 @@ import (
 	"github.com/lycaon/lycaon/internal/llm/compaction"
 	"github.com/lycaon/lycaon/internal/llm/modelcall"
 	"github.com/lycaon/lycaon/internal/messageview"
+	"github.com/lycaon/lycaon/internal/toolreach"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
 // prepareRequestHistory restores the active instruction before reserving its tokens.
 func prepareRequestHistory(ctx context.Context, service *Service, sess *api.Session, history []api.Message, req modelcall.CompletionRequest) ([]api.Message, modelcall.CompletionRequest, error) {
-	var recall func(context.Context, *api.Session) bool
-	if service != nil {
-		recall = service.recallAvailable
-	}
+	recall := toolreach.FromContext(ctx).Status("recall") == toolreach.Callable
 	if service != nil && (service.sessionStore != nil && service.transcriptStore != nil && service.compactionStore != nil) && sess != nil {
 		var err error
 		history, err = withCurrentRequest(ctx, service.sessionStore, service.transcriptStore, sess, history)
@@ -26,7 +24,7 @@ func prepareRequestHistory(ctx context.Context, service *Service, sess *api.Sess
 	}
 	projection := projectRequest(req.Messages, history)
 	rows := messageview.PreserveRequestIntent(projection.history, history)
-	rows, err := restoreRequestOmissions(ctx, sess, history, rows, recall)
+	rows, err := restoreRequestOmissions(ctx, history, rows, recall)
 	if err != nil {
 		return nil, req, err
 	}
@@ -47,17 +45,30 @@ func validateRequestIntent(source, messages []api.Message) error {
 	return fmt.Errorf("fitted request lost active instruction %q", intent.ID)
 }
 
-func restoreRequestOmissions(ctx context.Context, sess *api.Session, source, rows []api.Message, recall func(context.Context, *api.Session) bool) ([]api.Message, error) {
-	for _, row := range rows {
-		if isCompactionSummaryOrCheckpoint(row) || row.ID == historyCoverageNoticeID {
+func restoreRequestOmissions(ctx context.Context, source, rows []api.Message, recall bool) ([]api.Message, error) {
+	for i, row := range rows {
+		if isCompactionSummaryOrCheckpoint(row) {
 			return rows, nil
+		}
+		if row.ID == historyCoverageNoticeID {
+			from, through, ok := parseOmittedOrdinalRange(row.Content)
+			if !ok {
+				return rows, nil
+			}
+			notice, err := omissionNoticeForRecall(ctx, recall, historyCoverageNoticeID, from, through)
+			if err != nil {
+				return nil, err
+			}
+			updated := slices.Clone(rows)
+			updated[i] = *notice
+			return updated, nil
 		}
 	}
 	from, through := omittedOrdinals(source, compaction.ContextMessagesFromAPI(rows))
 	if through == 0 {
 		return rows, nil
 	}
-	notice, err := omissionNotice(ctx, recall, sess, historyCoverageNoticeID, from, through)
+	notice, err := omissionNoticeForRecall(ctx, recall, historyCoverageNoticeID, from, through)
 	if err != nil {
 		return nil, err
 	}
