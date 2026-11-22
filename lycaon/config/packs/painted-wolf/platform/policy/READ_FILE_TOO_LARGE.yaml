@@ -3,7 +3,7 @@ id: READ_FILE_TOO_LARGE
 kind: schema
 on: tool.rejected
 selector: {}
-requires_facts: [paintedwolf.can_command, paintedwolf.max_file_bytes, paintedwolf.operation, paintedwolf.path, paintedwolf.rejection_code, paintedwolf.resource_limit, paintedwolf.size]
+requires_facts: [paintedwolf.admitted_large_read_forms, paintedwolf.can_command, paintedwolf.max_file_bytes, paintedwolf.operation, paintedwolf.path, paintedwolf.rejection_code, paintedwolf.resource_limit, paintedwolf.size]
 when: paintedwolf.operation in ["read", "summarize", "diff", "jq_edit"] && paintedwolf.rejection_code == "READ_FILE_TOO_LARGE"
 effect: block
 x-paintedwolf-category: recoverable
@@ -13,12 +13,13 @@ what: '{{ tool }} could not load {{ paintedwolf.path }} within the {{ paintedwol
 cause: The tool loads the complete file before selecting a region; compressed input must also fit the decoder memory budget.
 why: The input budget bounds host memory. Output pagination does not change this budget.
 fix: >-
-  {% if paintedwolf.can_command %}Use command with head, tail, sed, or grep to inspect bounded parts of the file.{% else %}Use a smaller source file, or ask its owner for a bounded excerpt.{% endif %} Preserve the original file and any completed work; different offset or limit values do not change the input budget.
+  {% if paintedwolf.admitted_large_read_forms %}Use command with {{ paintedwolf.admitted_large_read_forms }} to inspect bounded parts of the file.{% else %}Use a smaller source file, or ask its owner for a bounded excerpt.{% endif %} Preserve the original file and any completed work; different offset or limit values do not change the input budget.
 instead: >-
   {% if paintedwolf.can_command %}Inspect bounded parts of the file with command{% else %}Reduce the input before retrying; report the size dependency when no bounded source is available{% endif %}
 x-paintedwolf-scenarios:
   - id: with_command
     vars:
+      admitted_large_read_forms: head, tail, sed, or grep
       detail: bad args
       max_file_bytes: 8388608
       path: internal/foo.go

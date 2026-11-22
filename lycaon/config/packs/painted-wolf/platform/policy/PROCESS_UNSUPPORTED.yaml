@@ -3,7 +3,7 @@ id: PROCESS_UNSUPPORTED
 kind: policy
 on: tool.rejected
 selector: {}
-requires_facts: [paintedwolf.rejection_code]
+requires_facts: [paintedwolf.admitted_process_capability_fields, paintedwolf.next_steps, paintedwolf.rejection_code]
 when: paintedwolf.rejection_code == "PROCESS_UNSUPPORTED"
 effect: block
 x-paintedwolf-category: recoverable
@@ -12,8 +12,8 @@ message: This host does not support instance-bound process operations.
 what: This host does not support instance-bound process operations.
 cause: The host could not complete the structured process operation.
 why: A process reference identifies one process instance; ordinary operating-system permissions still apply.
-fix: Use command with the required process_control or host_execution capability, describing the exact intended operation.
-instead: Branch on Code; Use command with the required process_control or host_execution capability, describing the exact intended operation.
+fix: '{% if paintedwolf.next_steps %}{{ paintedwolf.next_steps }}{% else %}This request cannot run host process commands; report the unsupported process operation.{% endif %}'
+instead: Branch on Code; report the unsupported process operation if no host process capability is offered.
 x-paintedwolf-scenarios:
   - id: default
     vars: {}

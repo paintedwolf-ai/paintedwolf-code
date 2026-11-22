@@ -16,6 +16,7 @@ import (
 	"github.com/lycaon/lycaon/internal/observability"
 	"github.com/lycaon/lycaon/internal/spawn"
 	"github.com/lycaon/lycaon/internal/toolcontract"
+	"github.com/lycaon/lycaon/internal/toolreach"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/tools/native"
 	"github.com/lycaon/lycaon/pkg/api"
@@ -488,7 +489,7 @@ func (l *toolBatch) executeOneToolCall(
 	runCtx api.CoordinatorRunContext,
 	proseTurn bool,
 ) singleToolOutcome {
-	ctx = tools.WithCallReach(ctx, tools.TurnReach(toolCtx))
+	ctx = toolreach.WithRequest(ctx, tools.TurnReach(toolCtx))
 	if proseTurn && !workerProseAllowsTool(sess, tc.Name) {
 		return l.refuseToolCall(tc, assistantMessageID, l.Tools.rejectToolOccurrence(ctx, sess, tc, toolCtx, "TOOL_INVOKE_PROSE_TURN", nil))
 	}

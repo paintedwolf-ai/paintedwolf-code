@@ -40,8 +40,8 @@ func (l *toolInvocations) tryRejectNoToolTurn(
 	if l.Closeout.Deps.BeforeFinishNoToolTurn == nil && outputRejection == nil {
 		return history, nil, false, nil
 	}
-	if st != nil && !tools.CallReach(ctx).Known() {
-		ctx = tools.WithCallReach(ctx, st.requestReach())
+	if st != nil && !toolreach.FromContext(ctx).Known() {
+		ctx = toolreach.WithRequest(ctx, st.requestReach())
 	}
 	workersIdle := true
 	if l.Context.Deps.ImplementSessionState != nil {
@@ -166,7 +166,7 @@ func (l *toolInvocations) retractRejectedAssistantTurn(
 
 func withToolOccurrenceContext(ctx context.Context, sess *api.Session, toolCtx tools.ToolContext) (context.Context, toolreach.Request) {
 	reach := tools.TurnReach(toolCtx)
-	ctx = tools.WithCallReach(ctx, reach)
+	ctx = toolreach.WithRequest(ctx, reach)
 	if sess != nil {
 		ctx = curationctx.WithSession(ctx, curationctx.Session{
 			SessionID:       sess.ID,

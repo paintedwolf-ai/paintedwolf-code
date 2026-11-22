@@ -11,7 +11,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/lycaon/lycaon/internal/coordinator/guard"
 	"github.com/lycaon/lycaon/internal/guidance"
-	"github.com/lycaon/lycaon/internal/tools"
+	"github.com/lycaon/lycaon/internal/toolreach"
 	workertools "github.com/lycaon/lycaon/internal/tools/native/workercontrol"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -363,8 +363,8 @@ func (l *turnCloseout) runEarlyTurnCloseout(
 		)
 	}
 
-	if st != nil && !tools.CallReach(ctx).Known() {
-		ctx = tools.WithCallReach(ctx, st.requestReach())
+	if st != nil && !toolreach.FromContext(ctx).Known() {
+		ctx = toolreach.WithRequest(ctx, st.requestReach())
 	}
 	committed, err := l.Projection.commitGuardedAssistantTurn(ctx, sess, sessionID, history, surfaceID, assistantMsg)
 	if err != nil {

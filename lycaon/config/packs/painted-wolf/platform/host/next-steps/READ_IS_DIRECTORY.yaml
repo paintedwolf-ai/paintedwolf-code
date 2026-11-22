@@ -8,4 +8,6 @@ steps:
   - program: ["grep", "-rn", "SYMBOL", "{{ paintedwolf.path }}"]
     say: "To locate a symbol across files, use {{ call }}."
   - program: ["cat", "-n", "FILE"]
-    say: "Read a resulting concrete file with {{ call }}, or `sed -n 'A,Bp' FILE` for a bounded line range."
+    say: "Read a resulting concrete file with {{ call }}."
+  - program: ["sed", "-n", "A,Bp", "FILE"]
+    say: "Read a bounded line range with {{ call }}."

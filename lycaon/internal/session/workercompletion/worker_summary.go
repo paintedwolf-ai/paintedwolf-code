@@ -213,7 +213,7 @@ func decideWorkerSummary(
 	gc.Session.SessionID = in.ChildSessionID
 	gc.Session.Role = "worker"
 	gc.Session.WorkerLeg = true
-	tools.RegisterRecoveryFacts(tools.WithCallReach(ctx, in.Reach), gc)
+	tools.RegisterRecoveryFacts(toolreach.WithRequest(ctx, in.Reach), gc)
 	publishWorkerSummaryFacts(gc, in.AgentType, obs)
 	putWorkerRejectData(gc, obs, data)
 	var code string

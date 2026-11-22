@@ -302,6 +302,17 @@ type ResolvedSteps struct {
 	Calls []toolreach.Call
 }
 
+func assembleNextStepFacts(steps []NextStep, gc *GuardContext) {
+	for _, step := range steps {
+		if refs, err := nextStepRefs(step); err == nil && len(refs) > 0 {
+			_ = AssembleFacts(gc, refs)
+		}
+		if len(step.Or) > 0 {
+			assembleNextStepFacts(step.Or, gc)
+		}
+	}
+}
+
 // ResolveNextSteps checks a rule's steps against the occurrence's frozen request.
 // A step the request cannot reach is left out, or replaced by its Otherwise.
 func ResolveNextSteps(r *Rule, gc *GuardContext) ResolvedSteps {
@@ -309,6 +320,7 @@ func ResolveNextSteps(r *Rule, gc *GuardContext) ResolvedSteps {
 	if r == nil || r.NextSteps == nil || gc == nil {
 		return out
 	}
+	assembleNextStepFacts(r.NextSteps.Steps, gc)
 	facts := activation(gc)
 	ruleID := r.Qualified()
 	var sentences []string

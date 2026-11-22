@@ -18,6 +18,7 @@ import (
 	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/tooloutput"
 	"github.com/lycaon/lycaon/internal/toolpolicy"
+	"github.com/lycaon/lycaon/internal/toolreach"
 	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/pkg/api"
@@ -235,7 +236,7 @@ func (l *toolInvocations) executeToolCall(
 	assistantMessageID string,
 	_ api.CoordinatorRunContext,
 ) toolInvocation {
-	ctx = tools.WithCallReach(ctx, tools.TurnReach(toolCtx))
+	ctx = toolreach.WithRequest(ctx, tools.TurnReach(toolCtx))
 	// A non-nil roster constrains task spawning.
 	if taskAllowlist != nil {
 		ctx = toolpolicy.WithTaskSpawnAllowlist(ctx, taskAllowlist)

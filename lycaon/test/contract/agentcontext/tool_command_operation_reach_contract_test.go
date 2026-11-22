@@ -16,7 +16,6 @@ import (
 	"github.com/lycaon/lycaon/internal/toolfeedback"
 	"github.com/lycaon/lycaon/internal/toolreach"
 	"github.com/lycaon/lycaon/internal/toolrejection"
-	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/toolsurface"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 	"github.com/lycaon/lycaon/test/contract/internal/hoststate"
@@ -82,7 +81,7 @@ func renderCommandOpRefusal(t *testing.T, bp *toolfeedback.BlockPlane, reach *to
 	t.Helper()
 	ctx := t.Context()
 	if reach != nil {
-		ctx = tools.WithCallReach(ctx, *reach)
+		ctx = toolreach.WithRequest(ctx, *reach)
 	}
 	err := bp.RejectObservation(ctx, need, "coordinator", nil, &toolrejection.ToolReject{
 		Code: "TOOL_COMMAND_OPERATION",
@@ -253,12 +252,19 @@ func verifyPartialMultiFormAndStepFallback(
 	if !ok || rule == nil {
 		t.Fatal("TOOL_COMMAND_OPERATION missing from effective ruleset")
 	}
+	gcObserved := oar.NewGuardContext()
+	gcObserved.Reach = deferredNoLoader.Reach
+	gcObserved.ObservationData = map[string]any{"need": "edit"}
+	gcObserved.ObserveCommandOperationReach()
+	if got := oar.ResolveNextSteps(rule, gcObserved); got.Text != "" || len(got.Calls) != 0 {
+		t.Fatalf("ObserveCommandOperationReach on unreachable deferred reach = %+v, want empty steps", got)
+	}
+
 	gc := oar.NewGuardContext()
 	gc.Reach = deferredNoLoader.Reach
 	gc.ObservationData = map[string]any{
 		"need":                        "edit",
 		"command_operation_reachable": true,
-		"admitted_command_forms":      []string{"edit"},
 	}
 	resolved := oar.ResolveNextSteps(rule, gc)
 	if resolved.Text != "Use an available capability or report the missing operation." || len(resolved.Calls) != 0 {

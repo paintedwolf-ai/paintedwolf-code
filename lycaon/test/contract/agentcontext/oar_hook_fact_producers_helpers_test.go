@@ -16,7 +16,7 @@ import (
 	"github.com/lycaon/lycaon/internal/session/policyfeedback"
 	"github.com/lycaon/lycaon/internal/session/turnguards"
 	"github.com/lycaon/lycaon/internal/toolfeedback"
-	"github.com/lycaon/lycaon/internal/tools"
+	"github.com/lycaon/lycaon/internal/toolreach"
 	"github.com/lycaon/lycaon/pkg/api"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 	"github.com/lycaon/lycaon/test/contract/internal/hoststate"
@@ -245,7 +245,7 @@ func representativeCartesianCells(t *testing.T, h *hookProducerHarness) []roleCe
 }
 
 func (c roleCell) ctx(base context.Context) context.Context {
-	ctx := tools.WithCallReach(base, c.auth.Reach)
+	ctx := toolreach.WithRequest(base, c.auth.Reach)
 	return curationctx.WithSession(ctx, curationctx.Session{
 		SessionID:       c.sess.ID,
 		ParentSessionID: c.sess.ParentSessionID,

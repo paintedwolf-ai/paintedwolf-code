@@ -5,7 +5,6 @@ import (
 	"context"
 	"github.com/lycaon/lycaon/internal/toolreach"
 	"github.com/lycaon/lycaon/internal/toolrejection"
-	"github.com/lycaon/lycaon/internal/tools"
 	"path/filepath"
 	"regexp"
 	"strconv"
@@ -92,7 +91,7 @@ func TestDoomLoopWarnForCommandOutputRoutesToProcessWait(t *testing.T) {
 	args := map[string]any{"handle": "cmd-docker-1", "cursor": 15395}
 
 	out, _ := mgr.ToolPolicy.AfterTool(
-		tools.WithCallReach(context.Background(), toolreach.Offered([]string{"wait"})), sess, "command_output", args, `{"running":true,"next_cursor":15395}`,
+		toolreach.WithRequest(context.Background(), toolreach.Offered([]string{"wait"})), sess, "command_output", args, `{"running":true,"next_cursor":15395}`,
 		doomLoopWarnAfter(t, mgr), guidance.ToolResultFacts{},
 	)
 	for _, want := range []string{
@@ -112,7 +111,7 @@ func TestDoomLoopBlockForCommandOutputRoutesToProcessWait(t *testing.T) {
 	mgr := newPostToolGuidanceManager(t)
 	mgr.ToolPolicy.Pipeline.EnableAnchor(oar.AnchorToolPreInvoke)
 	reject, err := mgr.ToolPolicy.FormatDoomLoopReject(
-		tools.WithCallReach(context.Background(), toolreach.Offered([]string{"wait"})), "sess-1", "command_output",
+		toolreach.WithRequest(context.Background(), toolreach.Offered([]string{"wait"})), "sess-1", "command_output",
 		map[string]any{"handle": "cmd-docker-1", "cursor": 15395},
 		loopguard.DoomLoopMaxAttempts, "",
 	)

@@ -83,7 +83,7 @@ func testHandleCommandRefusalWakesWithDigest(t *testing.T, offered []string) {
 		[]loopwake.WaitTrigger{loopwake.WaitTriggerProcessDone}, []string{"command-1"}, loopwake.SleepMoverHost)
 	ctx := t.Context()
 	if offered != nil {
-		ctx = tools.WithCallReach(ctx, toolreach.Offered(offered))
+		ctx = toolreach.WithRequest(ctx, toolreach.Offered(offered))
 	}
 	mgr.Processes.HandleCommandRefusal(ctx, bgprocess.RefusalNotice{
 		SessionID: sess.ID, Handle: "command-1", OriginTool: "command", Mode: bgprocess.JobModeBackground,
@@ -179,7 +179,7 @@ func TestMixedPathRecoveryKeepsTerminalPathsOutsideRequestedGrants(t *testing.T)
 				if !running {
 					obs.FailedStages = []string{"fixture"}
 				}
-				ctx := tools.WithCallReach(t.Context(), toolreach.Offered(names))
+				ctx := toolreach.WithRequest(t.Context(), toolreach.Offered(names))
 				text, facts := mgr.ToolPolicy.AfterTool(ctx, &api.Session{ID: t.Name()}, "command", nil, "{}", 1, guidance.ToolResultFacts{Confine: obs})
 				if !facts.HasCode(access.code) || facts.HasCode("SANDBOX_TERMINAL_PATH_REFUSED") {
 					t.Fatalf("the requestable remedy did not decide mixed refusals: %s", text)

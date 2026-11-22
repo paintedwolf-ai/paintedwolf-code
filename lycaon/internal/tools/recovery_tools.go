@@ -4,12 +4,11 @@ import (
 	"context"
 	"strings"
 
+	"github.com/lycaon/lycaon/internal/curationctx"
 	"github.com/lycaon/lycaon/internal/oar"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/toolreach"
 )
-
-type callReachKey struct{}
 
 type recoveryContractKey struct{ tool string }
 
@@ -18,25 +17,16 @@ func WithRecoveryContract(ctx context.Context, tool string, contract toolcontrac
 	return context.WithValue(ctx, recoveryContractKey{tool}, toolcontract.ToolCapabilitySnapshot{Tool: tool, Capabilities: contract.Capabilities})
 }
 
-// WithCallReach freezes what the current model request can call.
-func WithCallReach(ctx context.Context, request toolreach.Request) context.Context {
-	return context.WithValue(ctx, callReachKey{}, request)
-}
-
-// CallReach returns the frozen request. A context without one reaches nothing.
-func CallReach(ctx context.Context) toolreach.Request {
-	request, _ := ctx.Value(callReachKey{}).(toolreach.Request)
-	return request
-}
-
 // ToolOffered reports membership in the request's frozen schema list.
 func ToolOffered(ctx context.Context, name string) bool {
-	return CallReach(ctx).Status(name) == toolreach.Callable
+	return toolreach.FromContext(ctx).Status(name) == toolreach.Callable
 }
 
 // TurnReach freezes the request a tool context is executing under.
 func TurnReach(tc ToolContext) toolreach.Request {
-	return toolreach.Freeze(tc.Turn.TurnOfferedToolNames, tc.Turn.TurnToolPlan).WithPrograms(tc.Turn.TurnPrograms)
+	return toolreach.Freeze(tc.Turn.TurnOfferedToolNames, tc.Turn.TurnToolPlan).
+		WithPrograms(tc.Turn.TurnPrograms).
+		WithSchemas(tc.Turn.TurnOfferedToolSchemas)
 }
 
 // RegisterRecoveryFacts publishes the frozen request and its tool facts lazily.
@@ -44,7 +34,7 @@ func RegisterRecoveryFacts(ctx context.Context, gc *oar.GuardContext) {
 	if snapshot, ok := ctx.Value(recoveryContractKey{gc.Invocation.Tool}).(toolcontract.ToolCapabilitySnapshot); ok {
 		gc.Invocation.CapabilityContract = &snapshot
 	}
-	request := CallReach(ctx)
+	request := toolreach.FromContext(ctx)
 	gc.Reach = request
 	if !gc.Workers.ProfileMutationCapable && (request.Program("edit") || request.Status("edit") == toolreach.Callable || request.Status("write") == toolreach.Callable || request.Status("code_rewrite") == toolreach.Callable) {
 		gc.Workers.ProfileMutationCapable = true
@@ -62,6 +52,23 @@ func RegisterRecoveryFacts(ctx context.Context, gc *oar.GuardContext) {
 	}
 	gc.RegisterProvider("paintedwolf.command_operation_reachable", observeCommandOp)
 	gc.RegisterProvider("paintedwolf.admitted_command_forms", observeCommandOp)
+	gc.RegisterProvider("paintedwolf.command_external_reachable", func(target *oar.GuardContext) error {
+		if target.ObservationData == nil {
+			target.ObservationData = map[string]any{}
+		}
+		target.ObservationData["command_external_reachable"] = request.Known() && request.Program("external")
+		return nil
+	})
+	sessCtx := curationctx.SessionFrom(ctx)
+	gc.RegisterProvider("paintedwolf.ask_user_secret_allowed", func(target *oar.GuardContext) error {
+		if target.ObservationData == nil {
+			target.ObservationData = map[string]any{}
+		}
+		askMode := target.Session.SessionMode == "ask" || sessCtx.Mode == "ask"
+		target.ObservationData["ask_user_secret_allowed"] = !askMode && request.AcceptsEnumValue("ask_user", "response_type", "secret")
+		return nil
+	})
+	registerCommandFormRecoveryFacts(gc, request)
 	for _, fact := range oar.CanCallFacts() {
 		tool := strings.TrimPrefix(fact, "can_")
 		gc.RegisterProvider("paintedwolf."+fact, func(target *oar.GuardContext) error {

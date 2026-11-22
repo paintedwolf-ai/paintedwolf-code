@@ -3,7 +3,7 @@ id: SUMMARIZE_NO_INPUT
 kind: schema
 on: tool.rejected
 selector: {}
-requires_facts: [paintedwolf.operation, paintedwolf.rejection_code]
+requires_facts: [paintedwolf.can_summarize, paintedwolf.operation, paintedwolf.rejection_code]
 when: paintedwolf.operation == "summarize" && paintedwolf.rejection_code == "SUMMARIZE_NO_INPUT"
 effect: block
 x-paintedwolf-category: recoverable
@@ -13,7 +13,7 @@ what: '`summarize` was called with no material — path, paths, and content were
 cause: Supply path, paths, or inline content; a task string alone supplies no material.
 why: The host gathers only from structured args; text inside task is never parsed for paths.
 fix: Retry with a path, e.g. {"path":"README.md"} — that is the whole call. Add task only to focus the brief, e.g. {"path":"lycaon/internal/session","task":"how does abort work?"}.
-instead: Branch on Code; call `summarize` with a path (or paths/content) and retry once
+instead: '{% if paintedwolf.can_summarize %}Branch on Code; call `summarize` with a path (or paths/content) and retry once{% else %}Branch on Code; supply path, paths, or content when summarization is offered{% endif %}'
 x-paintedwolf-scenarios:
   - id: default
     vars:
