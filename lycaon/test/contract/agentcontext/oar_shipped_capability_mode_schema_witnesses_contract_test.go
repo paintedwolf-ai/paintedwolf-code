@@ -1,6 +1,11 @@
 package contract
 
 import (
+	"archive/tar"
+	"bytes"
+	"errors"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -8,6 +13,7 @@ import (
 	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/oar"
 	"github.com/lycaon/lycaon/internal/platform"
+	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/toolexecution"
@@ -15,8 +21,10 @@ import (
 	"github.com/lycaon/lycaon/internal/toolreach"
 	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/internal/tools"
+	"github.com/lycaon/lycaon/internal/tools/native"
 	"github.com/lycaon/lycaon/internal/toolschema"
 	"github.com/lycaon/lycaon/internal/toolsurface"
+	"github.com/lycaon/lycaon/pkg/api"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 )
 
@@ -276,5 +284,85 @@ func TestShippedOARProductionCommandModeAndGitConfigWitnesses(t *testing.T) {
 		if strings.Contains(resolved.Text, "sed 'w out'") != tc.wantWrite {
 			t.Fatalf("%s: sed 'w out' step presence = %v, want %v: %q", tc.name, !tc.wantWrite, tc.wantWrite, resolved.Text)
 		}
+	}
+}
+
+func TestShippedOARExtractFormatUnsupportedProducerToRuleWitnesses(t *testing.T) {
+	_, _, _, bp := effectiveOARBlockPlane(t)
+	tmpDir := t.TempDir()
+	contractcheck.FailErr(t, "mkdir vendor", os.MkdirAll(filepath.Join(tmpDir, "vendor"), 0o755))
+	contractcheck.FailErr(t, "write sdk.7z", os.WriteFile(filepath.Join(tmpDir, "vendor", "sdk.7z"), []byte("7z"), 0o644))
+
+	var tarBuf bytes.Buffer
+	tw := tar.NewWriter(&tarBuf)
+	body := "package sdk\n"
+	contractcheck.FailErr(t, "tar header", tw.WriteHeader(&tar.Header{Name: "sdk.go", Mode: 0o644, Size: int64(len(body)), Typeflag: tar.TypeReg}))
+	_, writeErr := tw.Write([]byte(body))
+	contractcheck.FailErr(t, "tar body", writeErr)
+	contractcheck.FailErr(t, "tar close", tw.Close())
+	contractcheck.FailErr(t, "write sdk.tar", os.WriteFile(filepath.Join(tmpDir, "vendor", "sdk.tar"), tarBuf.Bytes(), 0o644))
+
+	extractor := &native.ExtractArchiveTool{Boundary: contractcheck.ProdToolBoundary(t)}
+	tctx := tools.ToolContext{
+		Identity: tools.InvocationIdentity{ProjectID: "project", SessionID: "session", Agent: toolprofiles.DefaultToolProfileID},
+		Source: tools.InvocationSource{
+			Roots:               []projectroot.RootRef{{ID: "root", Path: tmpDir, IsPrimary: true}},
+			ActiveRootID:        "root",
+			SourceWorkspaceKind: api.SourceWorkspaceKindProject,
+		},
+	}
+	reachCtx := toolreach.WithRequest(t.Context(), reachWithProgramsAndSchemas([]string{"command"}, []string{"unzip", "tar"}, nil))
+
+	// 1. Supported vendor/sdk.tar extracts without rejection.
+	res, err := extractor.Extract(t.Context(), native.ExtractInput{Archive: "vendor/sdk.tar", Dest: "extracted", Overwrite: true}, tctx)
+	contractcheck.FailErr(t, "extract vendor/sdk.tar", err)
+	if res.Entries != 1 {
+		t.Fatalf("vendor/sdk.tar entries = %d, want 1", res.Entries)
+	}
+
+	// 2. Unsupported vendor/sdk.7z producer -> EXTRACT_FORMAT_UNSUPPORTED rule render.
+	_, err7z := extractor.Run(t.Context(), map[string]any{"path": "vendor/sdk.7z", "dest": "out7z"}, tctx)
+	var reject7z *toolrejection.ToolReject
+	if !errors.As(err7z, &reject7z) || reject7z.Code != "EXTRACT_FORMAT_UNSUPPORTED" {
+		t.Fatalf("vendor/sdk.7z expected EXTRACT_FORMAT_UNSUPPORTED, got %v", err7z)
+	}
+	obs7z := bp.RejectObservation(reachCtx, "extract_archive", "implement", nil, reject7z)
+	ref7z, ok := guidance.RefusalFromError(obs7z)
+	if !ok || ref7z == nil {
+		t.Fatalf("RejectObservation(sdk.7z) = %v", obs7z)
+	}
+	wantSuffixList := ".zip, .tar, .tar.gz, .tgz, .tar.bz2, .tbz2, .tar.xz, .txz, .tar.zst, .tzst"
+	if !strings.Contains(ref7z.Copy["what"], "vendor/sdk.7z") || !strings.Contains(ref7z.Copy["what"], ".7z") ||
+		!strings.Contains(ref7z.Copy["cause"], "unsupported_suffix") || !strings.Contains(ref7z.Copy["cause"], wantSuffixList) ||
+		!strings.Contains(ref7z.Copy["fix"], wantSuffixList) {
+		t.Fatalf("sdk.7z producer-to-rule copy = %+v", ref7z.Copy)
+	}
+
+	// 3. Invalid explicit format on valid suffix (vendor/sdk.tar with Format="7z") -> EXTRACT_FORMAT_UNSUPPORTED rule render.
+	_, errBadFmt := extractor.Extract(t.Context(), native.ExtractInput{Archive: "vendor/sdk.tar", Dest: "outfmt", Format: "7z"}, tctx)
+	var rejectFmt *toolrejection.ToolReject
+	if !errors.As(errBadFmt, &rejectFmt) || rejectFmt.Code != "EXTRACT_FORMAT_UNSUPPORTED" {
+		t.Fatalf("explicit format expected EXTRACT_FORMAT_UNSUPPORTED, got %v", errBadFmt)
+	}
+	obsFmt := bp.RejectObservation(reachCtx, "extract_archive", "implement", nil, rejectFmt)
+	refFmt, ok := guidance.RefusalFromError(obsFmt)
+	if !ok || refFmt == nil {
+		t.Fatalf("RejectObservation(explicit format) = %v", obsFmt)
+	}
+	wantFormatList := "zip, tar, tar.gz, tar.bz2, tar.xz, tar.zst"
+	if !strings.Contains(refFmt.Copy["what"], "vendor/sdk.tar") || !strings.Contains(refFmt.Copy["what"], "7z") ||
+		!strings.Contains(refFmt.Copy["cause"], "invalid_format") || !strings.Contains(refFmt.Copy["cause"], wantFormatList) ||
+		!strings.Contains(refFmt.Copy["fix"], wantFormatList) {
+		t.Fatalf("explicit format producer-to-rule copy = %+v", refFmt.Copy)
+	}
+
+	// 4. Generic paintedwolf.allowed string fact remains intact for other rules (JQ_FORMAT_INVALID).
+	jqObs := bp.RejectObservation(reachCtx, "jq", "implement", nil, &toolrejection.ToolReject{
+		Code: "JQ_FORMAT_INVALID",
+		Data: map[string]any{"format": "xml", "allowed": "[auto json yaml toml]"},
+	})
+	jqRef, ok := guidance.RefusalFromError(jqObs)
+	if !ok || jqRef == nil || !strings.Contains(jqRef.Copy["what"], "[auto json yaml toml]") {
+		t.Fatalf("JQ_FORMAT_INVALID generic paintedwolf.allowed broken: %v / %+v", jqObs, jqRef)
 	}
 }

@@ -927,7 +927,7 @@
       "branch_instruction": "Branch on Code",
       "category": "recoverable",
       "emit": "guard:extract_archive",
-      "summary": "path {{ paintedwolf.path }} is not a supported archive extension."
+      "summary": "{% if paintedwolf.extract_invalid_format %}archive format {{ paintedwolf.extract_rejected_value }} is not supported for {{ paintedwolf.path }}.{% else %}path {{ paintedwolf.path }} ({{ paintedwolf.extract_rejected_value }}) does not have a supported archive suffix.{% endif %}"
     },
     "EXTRACT_IS_DIRECTORY": {
       "branch_instruction": "Branch on Code; fix args and retry once",

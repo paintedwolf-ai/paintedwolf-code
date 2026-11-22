@@ -1026,6 +1026,14 @@ host_facts:
    type: int
  - name: paintedwolf.extracted_paths_sample
    type: list<string>
+ - name: paintedwolf.extract_allowed
+   type: list<string>
+ - name: paintedwolf.extract_format_cause
+   type: string
+ - name: paintedwolf.extract_invalid_format
+   type: bool
+ - name: paintedwolf.extract_rejected_value
+   type: string
  - name: paintedwolf.extracted_paths_omitted
    type: int
  - name: paintedwolf.http_method
