@@ -57,7 +57,7 @@ func TestRecordedToolReferenceNamesRecoveryInvocation(t *testing.T) {
 	row := api.Message{ID: "original", Ord: 7, Seq: 12, Role: api.MessageRoleTool,
 		Content: body, EvidenceHandles: []string{"read#1"},
 		ToolResult: &api.ToolResult{Tool: "read", Content: body, Outcome: api.ToolResultOutcomeCompleted}}
-	projected := projectRecordedToolBodies(t.Context(), true, []api.Message{row})[0]
+	projected := projectRecordedToolBodies(recallReachCtx(t), true, []api.Message{row})[0]
 	_, invocation, found := strings.Cut(projected.Content, "recall(history=")
 	if !found || !strings.Contains(projected.Content, "read#1") {
 		t.Fatal("compacted observation omitted its recovery invocation or evidence handle")
@@ -90,7 +90,7 @@ func TestStructuredToolProjectionKeepsItsRecoveryCue(t *testing.T) {
 	testutil.FailErr(t, "encode structured observation", err)
 	row := api.Message{ID: "original", Ord: 7, Role: api.MessageRoleTool, Content: string(raw),
 		ToolResult: &api.ToolResult{Tool: "inspect", Content: string(raw), Outcome: api.ToolResultOutcomeCompleted}}
-	content := projectRecordedToolBodies(t.Context(), true, []api.Message{row})[0].Content
+	content := projectRecordedToolBodies(recallReachCtx(t), true, []api.Message{row})[0].Content
 	if len(content) > 2048 || !strings.Contains(content, "recall(history=") || !strings.Contains(content, `"wire_compacted":true`) {
 		t.Fatalf("structured projection lost its cue, residue, or byte bound: %q", content)
 	}

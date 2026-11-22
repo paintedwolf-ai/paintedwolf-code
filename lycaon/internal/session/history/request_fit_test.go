@@ -19,15 +19,30 @@ import (
 	"github.com/lycaon/lycaon/internal/llm/modelinfo"
 	"github.com/lycaon/lycaon/internal/llm/providers/ollama"
 	"github.com/lycaon/lycaon/internal/llm/providerwire"
+	"github.com/lycaon/lycaon/internal/messageview"
 	"github.com/lycaon/lycaon/internal/prompts/promptstest"
 	"github.com/lycaon/lycaon/internal/recall"
 	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/toolreach"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/pkg/api"
 )
+
+func recallToolMeta(t testing.TB) tools.ToolMeta {
+	t.Helper()
+	return tools.ToolMeta{
+		Name:       "recall",
+		ArgsSchema: promptstest.ProjectedToolSchemas(t, "recall")["recall"],
+	}
+}
+
+func recallReachCtx(t testing.TB) context.Context {
+	t.Helper()
+	return toolreach.WithRequest(t.Context(), promptstest.StockToolReach(t, "recall"))
+}
 
 type nativeRequestBudgets struct{ provider *ollama.Provider }
 
@@ -70,9 +85,11 @@ func TestCompleteRequestFitsColdOllamaWindowWithoutChangingFrame(t *testing.T) {
 	}
 	messages = append(messages, rows...)
 	messages = append(messages, volatile)
-	req := modelcall.CompletionRequest{Model: sess.Model, Messages: messages, Tools: []tools.ToolMeta{{Name: "read",
-		ArgsSchema: map[string]any{"type": "object", "properties": map[string]any{"path": map[string]any{
-			"type": "string", "description": strings.Repeat("Recorded file path. ", 700)}}}}}}
+	req := modelcall.CompletionRequest{Model: sess.Model, Messages: messages, Tools: []tools.ToolMeta{
+		{Name: "read", ArgsSchema: map[string]any{"type": "object", "properties": map[string]any{"path": map[string]any{
+			"type": "string", "description": strings.Repeat("Recorded file path. ", 650)}}}},
+		recallToolMeta(t),
+	}}
 	if _, _, err := provider.Prepare(t.Context(), req, true); !errors.Is(err, failure.ErrProviderContextTooSmall) {
 		t.Fatalf("fixture must overflow before request fitting: %v", err)
 	}
@@ -223,8 +240,8 @@ func TestActiveToolBodyCanBecomeARecoverableProjection(t *testing.T) {
 			ToolResult: &api.ToolResult{Tool: "recall", ToolCallID: "rc-1", AssistantMessageID: "recall-call", Content: recallBody, Outcome: api.ToolResultOutcomeCompleted}}))
 	rows, err := sessionStore.Transcript.GetMessages(t.Context(), sess.ID)
 	testutil.FailErr(t, "load active exchange", err)
-	standing := api.Message{ID: "standing", Role: api.MessageRoleSystem, ContextPinned: true, Content: strings.Repeat("Standing instructions. ", 1400)}
-	req := modelcall.CompletionRequest{Model: sess.Model, Messages: append([]api.Message{standing}, rows...)}
+	standing := api.Message{ID: "standing", Role: api.MessageRoleSystem, ContextPinned: true, Content: strings.Repeat("Standing instructions. ", 1200)}
+	req := modelcall.CompletionRequest{Model: sess.Model, Messages: append([]api.Message{standing}, rows...), Tools: []tools.ToolMeta{recallToolMeta(t)}}
 	history := &Service{sessionStore: sessionStore.Sessions, transcriptStore: sessionStore.Transcript, compactionStore: sessionStore.Compaction, recallAvailable: func(context.Context, *api.Session) bool { return true }}
 	fitted, err := history.FitRequest(t.Context(), sess, rows, req, nativeRequestBudgets{provider}, nil)
 	testutil.FailErr(t, "fit active observation", err)
@@ -430,7 +447,7 @@ func TestRequestFittingCanProjectRecallBelowSixteenKilobytes(t *testing.T) {
 		{ID: "result", Ord: 3, Role: api.MessageRoleTool, Content: string(raw), ToolResult: &api.ToolResult{ToolCallID: "recall-call", Tool: "recall", Content: string(raw)}},
 	}
 	frame := api.Message{ID: "frame", Role: api.MessageRoleSystem, Content: strings.Repeat("standing instruction ", 800)}
-	req := modelcall.CompletionRequest{Model: "small", MaxTokens: 512, Messages: append([]api.Message{frame}, rows...)}
+	req := modelcall.CompletionRequest{Model: "small", MaxTokens: 512, Messages: append([]api.Message{frame}, rows...), Tools: []tools.ToolMeta{recallToolMeta(t)}}
 	budgets := catalogRequestBudgets{modelcall.NewCatalog("fixture", []modelinfo.Entry{{ID: "small", ContextLength: 8192}})}
 	sessionRepositories := storetest.New(t, testdbseed.DefaultProjectID)
 	service := &Service{sessionStore: sessionRepositories.Sessions, transcriptStore: sessionRepositories.Transcript, compactionStore: sessionRepositories.Compaction, recallAvailable: func(context.Context, *api.Session) bool { return true }}
@@ -482,4 +499,171 @@ func TestRequestProjectionReplaceKeepsTrailingFrameAfterOpenerFirstAndMovedCover
 	if !reflect.DeepEqual(gotIDs, wantIDs) {
 		t.Fatalf("replaced message order = %v, want %v", gotIDs, wantIDs)
 	}
+}
+
+func TestFitRequestRecipientAuthorityOverridesCallbackAndBroadContext(t *testing.T) {
+	guidance.SetGuidanceRenderer(promptstest.GuidanceRenderer(t))
+	budgets := catalogRequestBudgets{modelcall.NewCatalog("fixture", []modelinfo.Entry{{ID: "small", ContextLength: 4096}})}
+
+	t.Run("callback true but recall absent from completion request omits recall calls", func(t *testing.T) {
+		assertFitRequestCallbackWithoutRecallTool(t, budgets)
+	})
+	t.Run("broad context reach is overridden by query-only completion request", func(t *testing.T) {
+		assertFitRequestBroadContextOverriddenByQueryOnly(t, budgets)
+	})
+}
+
+func assertFitRequestCallbackWithoutRecallTool(t *testing.T, budgets RequestBudgets) {
+	t.Helper()
+	repos := storetest.New(t, testdbseed.DefaultProjectID)
+	sess, err := repos.Sessions.Create(t.Context(), api.CreateSessionRequest{ProviderID: "fixture", Model: "small"}, testdbseed.DefaultProjectID)
+	testutil.FailErr(t, "create session", err)
+
+	var rows []api.Message
+	for i := range 10 {
+		rows = append(rows,
+			api.Message{ID: fmt.Sprintf("a-%d", i), Role: api.MessageRoleAssistant, Content: strings.Repeat("Earlier step detail. ", 80)},
+			api.Message{ID: fmt.Sprintf("u-%d", i), Role: api.MessageRoleUser, Origin: api.MessageOriginUser, Content: "Next step"},
+		)
+	}
+	rows = append(rows, api.Message{ID: "current", Role: api.MessageRoleUser, Origin: api.MessageOriginUser, ContextPinned: true, Content: "Finish verification"})
+	testutil.FailErr(t, "append rows", repos.Transcript.AppendMessages(t.Context(), sess.ID, rows...))
+	canonical, err := repos.Transcript.GetMessages(t.Context(), sess.ID)
+	testutil.FailErr(t, "get messages", err)
+
+	cont := &messageview.Continuation{
+		Format:            messageview.ContinuationFormat,
+		ThroughOrd:        canonical[3].Ord,
+		SummaryThroughOrd: canonical[3].Ord,
+		Reason:            "summarized",
+		Summary:           messageview.ContinuationSummary{Facts: []string{"service port is 8080"}},
+		Sources:           []messageview.ContinuationSource{{MessageID: canonical[0].ID, Tool: "read", Handles: []string{"read#3"}}},
+	}
+	summaryMsg := api.Message{
+		ID:           "summary-1",
+		Role:         api.MessageRoleAssistant,
+		Content:      "placeholder",
+		ContentParts: []api.MessageContentPart{{Source: "compaction_summary", Content: "placeholder"}},
+	}
+	testutil.FailErr(t, "put compaction view", repos.Compaction.PutCompactionView(t.Context(), sess.ID, store.CompactionView{
+		Generation:        1,
+		CoveredThroughOrd: canonical[3].Ord,
+		CoveredThroughID:  canonical[3].ID,
+		SourceSeq:         canonical[len(canonical)-1].Seq,
+		Continuation:      cont,
+		Messages:          []api.Message{summaryMsg},
+	}))
+
+	svc := &Service{
+		sessionStore:    repos.Sessions,
+		transcriptStore: repos.Transcript,
+		compactionStore: repos.Compaction,
+		recallAvailable: func(context.Context, *api.Session) bool { return true },
+	}
+	loaded, err := svc.Load(t.Context(), sess)
+	testutil.FailErr(t, "load session history", err)
+	req := modelcall.CompletionRequest{
+		Model:     "small",
+		MaxTokens: 256,
+		Messages:  append([]api.Message{{ID: "standing", Role: api.MessageRoleSystem, ContextPinned: true, Content: "Standing"}}, loaded...),
+		Tools:     []tools.ToolMeta{{Name: "read", ArgsSchema: map[string]any{"type": "object", "properties": map[string]any{"path": map[string]any{"type": "string"}}}}},
+	}
+	fitted, err := svc.FitRequest(t.Context(), sess, loaded, req, budgets, nil)
+	testutil.FailErr(t, "FitRequest without recall tool", err)
+
+	joined := joinMessageContents(fitted.Messages)
+	if !strings.Contains(joined, "service port is 8080") || !strings.Contains(joined, "`read#3`") || !strings.Contains(joined, "[host:omitted history ordinals ") {
+		t.Fatalf("recipient messages lost summary, source handle, or omission interval:\n%s", joined)
+	}
+	if strings.Contains(joined, "recall(") {
+		t.Fatalf("callback true leaked unoffered recall(...) into recipient messages:\n%s", joined)
+	}
+}
+
+func assertFitRequestBroadContextOverriddenByQueryOnly(t *testing.T, budgets RequestBudgets) {
+	t.Helper()
+	repos := storetest.New(t, testdbseed.DefaultProjectID)
+	sess, err := repos.Sessions.Create(t.Context(), api.CreateSessionRequest{ProviderID: "fixture", Model: "small"}, testdbseed.DefaultProjectID)
+	testutil.FailErr(t, "create session", err)
+
+	var rows []api.Message
+	for i := range 10 {
+		rows = append(rows,
+			api.Message{ID: fmt.Sprintf("qa-%d", i), Role: api.MessageRoleAssistant, Content: strings.Repeat("Earlier observation. ", 80)},
+			api.Message{ID: fmt.Sprintf("qu-%d", i), Role: api.MessageRoleUser, Origin: api.MessageOriginUser, Content: "Proceed"},
+		)
+	}
+	rows = append(rows, api.Message{ID: "current", Role: api.MessageRoleUser, Origin: api.MessageOriginUser, ContextPinned: true, Content: "Inspect handle"})
+	testutil.FailErr(t, "append rows", repos.Transcript.AppendMessages(t.Context(), sess.ID, rows...))
+	canonical, err := repos.Transcript.GetMessages(t.Context(), sess.ID)
+	testutil.FailErr(t, "get messages", err)
+
+	cont := &messageview.Continuation{
+		Format:            messageview.ContinuationFormat,
+		ThroughOrd:        canonical[3].Ord,
+		SummaryThroughOrd: canonical[3].Ord,
+		Reason:            "summarized",
+		Summary:           messageview.ContinuationSummary{Facts: []string{"config loaded"}},
+		Sources: []messageview.ContinuationSource{
+			{MessageID: canonical[0].ID, Tool: "read", Handles: []string{"read#3"}},
+			{MessageID: canonical[2].ID, Tool: "command"},
+		},
+	}
+	summaryMsg := api.Message{
+		ID:           "summary-q",
+		Role:         api.MessageRoleAssistant,
+		Content:      "placeholder",
+		ContentParts: []api.MessageContentPart{{Source: "compaction_summary", Content: "placeholder"}},
+	}
+	testutil.FailErr(t, "put compaction view", repos.Compaction.PutCompactionView(t.Context(), sess.ID, store.CompactionView{
+		Generation:        1,
+		CoveredThroughOrd: canonical[3].Ord,
+		CoveredThroughID:  canonical[3].ID,
+		SourceSeq:         canonical[len(canonical)-1].Seq,
+		Continuation:      cont,
+		Messages:          []api.Message{summaryMsg},
+	}))
+
+	svc := &Service{
+		sessionStore:    repos.Sessions,
+		transcriptStore: repos.Transcript,
+		compactionStore: repos.Compaction,
+		recallAvailable: func(context.Context, *api.Session) bool { return true },
+	}
+	broadCtx := recallReachCtx(t)
+	queryOnlyRecall := tools.ToolMeta{
+		Name: "recall",
+		ArgsSchema: map[string]any{
+			"type":       "object",
+			"properties": map[string]any{"query": map[string]any{"type": "string"}},
+		},
+	}
+	req := modelcall.CompletionRequest{
+		Model:     "small",
+		MaxTokens: 256,
+		Messages:  append([]api.Message{{ID: "standing", Role: api.MessageRoleSystem, ContextPinned: true, Content: "Standing"}}, canonical...),
+		Tools:     []tools.ToolMeta{queryOnlyRecall},
+	}
+	fitted, err := svc.FitRequest(broadCtx, sess, canonical, req, budgets, nil)
+	testutil.FailErr(t, "FitRequest with query-only recall", err)
+
+	joined := joinMessageContents(fitted.Messages)
+	if !strings.Contains(joined, `recall(query="handle:read#3")`) {
+		t.Fatalf("query-only completion request lost admitted recall(query=...) instruction:\n%s", joined)
+	}
+	if strings.Contains(joined, "recall(history=") {
+		t.Fatalf("broad context reach leaked unprojected recall(history=...) into query-only request:\n%s", joined)
+	}
+	if !strings.Contains(joined, "[host:omitted history ordinals ") {
+		t.Fatalf("query-only completion request lost omitted ordinal range:\n%s", joined)
+	}
+}
+
+func joinMessageContents(msgs []api.Message) string {
+	var b strings.Builder
+	for _, m := range msgs {
+		b.WriteString(m.Content)
+		b.WriteByte('\n')
+	}
+	return b.String()
 }

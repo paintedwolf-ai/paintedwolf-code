@@ -11,7 +11,7 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/commandsurface"
-	"github.com/lycaon/lycaon/internal/guidance"
+	"github.com/lycaon/lycaon/internal/prompts/promptstest"
 	"github.com/lycaon/lycaon/internal/scratch"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/tooloutput"
@@ -19,8 +19,9 @@ import (
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
-func sedDeliveryReach() toolreach.Request {
-	return guidance.StockToolReach(toolreach.ProgramTool).WithPrograms(func(name string) bool {
+func sedDeliveryReach(t testing.TB) toolreach.Request {
+	t.Helper()
+	return promptstest.StockToolReach(t, toolreach.ProgramTool).WithPrograms(func(name string) bool {
 		return name == "sed"
 	})
 }
@@ -63,7 +64,7 @@ func TestWindowStreamOutputSnapsToLineBoundariesAndRendersNotice(t *testing.T) {
 	}
 	data := []byte(b.String())
 	outputPath := "@output/prog-1.stdout"
-	delivered, win, ranges, err := windowStreamOutput(t.Context(), data, 12<<10, "stdout", "output:program:prog-1:stdout", outputPath)
+	delivered, win, ranges, err := windowStreamOutput(t, t.Context(), data, 12<<10, "stdout", "output:program:prog-1:stdout", outputPath)
 	testutil.FailErr(t, "windowStreamOutput", err)
 
 	if !win.Truncated || len(ranges) != 2 {
@@ -115,7 +116,7 @@ func TestWindowStreamOutputMarksIncompleteCapture(t *testing.T) {
 	outputPath := "@output/prog-1.stdout"
 	sample, err := sampleOutput(bytes.NewReader(data), 12<<10)
 	testutil.FailErr(t, "sample output", err)
-	delivered, win, parts, err := sample.window(t.Context(), sedDeliveryReach(), "stdout", "output:program:prog-1:stdout", outputPath, false)
+	delivered, win, parts, err := sample.window(t.Context(), sedDeliveryReach(t), "stdout", "output:program:prog-1:stdout", outputPath, false)
 	testutil.FailErr(t, "window incomplete capture", err)
 
 	if win.Complete || !win.Truncated {
@@ -138,7 +139,7 @@ func TestWindowStreamOutputMarksIncompleteCapture(t *testing.T) {
 	largeData := []byte(large.String())
 	sample, err = sampleOutput(bytes.NewReader(largeData), 12<<10)
 	testutil.FailErr(t, "sample large output", err)
-	delivered, win, _, err = sample.window(t.Context(), sedDeliveryReach(), "stdout", "output:program:prog-1:stdout", outputPath, false)
+	delivered, win, _, err = sample.window(t.Context(), sedDeliveryReach(t), "stdout", "output:program:prog-1:stdout", outputPath, false)
 	testutil.FailErr(t, "window large incomplete capture", err)
 	if win.Complete || !win.Truncated {
 		t.Fatalf("large window = %+v, want complete=false truncated=true", win)
@@ -169,12 +170,13 @@ func TestPublishOutputAndParseSource(t *testing.T) {
 
 }
 
-func windowStreamOutput(ctx context.Context, data []byte, budget int, streamName, ref, outputPath string) (string, api.CommandProgramOutputWindow, [][2]int64, error) {
+func windowStreamOutput(t testing.TB, ctx context.Context, data []byte, budget int, streamName, ref, outputPath string) (string, api.CommandProgramOutputWindow, [][2]int64, error) {
+	t.Helper()
 	sample, err := sampleOutput(bytes.NewReader(data), budget)
 	if err != nil {
 		return "", api.CommandProgramOutputWindow{}, nil, err
 	}
-	delivered, window, parts, err := sample.window(ctx, sedDeliveryReach(), streamName, ref, outputPath, true)
+	delivered, window, parts, err := sample.window(ctx, sedDeliveryReach(t), streamName, ref, outputPath, true)
 	var ranges [][2]int64
 	for _, part := range parts {
 		if len(part.data) > 0 {
@@ -192,10 +194,10 @@ func TestWindowStreamOutputQuotesPathAndFollowsConcreteSedReach(t *testing.T) {
 	data := []byte(b.String())
 	outputDir := filepath.FromSlash("/state/output/sess-1")
 
-	sedAdmitted := guidance.StockToolReach(toolreach.ProgramTool).WithPrograms(func(name string) bool {
+	sedAdmitted := promptstest.StockToolReach(t, toolreach.ProgramTool).WithPrograms(func(name string) bool {
 		return name == "sed"
 	})
-	sedDenied := guidance.StockToolReach(toolreach.ProgramTool).WithPrograms(func(name string) bool {
+	sedDenied := promptstest.StockToolReach(t, toolreach.ProgramTool).WithPrograms(func(name string) bool {
 		return name != "sed"
 	})
 	cmdMissingSchema := toolreach.Offered([]string{toolreach.ProgramTool}).WithPrograms(func(name string) bool {
@@ -209,7 +211,7 @@ func TestWindowStreamOutputQuotesPathAndFollowsConcreteSedReach(t *testing.T) {
 			"properties": map[string]any{"description": map[string]any{"type": "string"}},
 		},
 	})
-	cmdUnoffered := guidance.StockToolReach("recall")
+	cmdUnoffered := promptstest.StockToolReach(t, "recall")
 
 	for _, outputPath := range []string{"@output/my file's.stdout", "sub dir/it's here.stdout"} {
 		sample, err := sampleOutput(bytes.NewReader(data), 12<<10)
