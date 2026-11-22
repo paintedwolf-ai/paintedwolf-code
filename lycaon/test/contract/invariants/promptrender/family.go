@@ -28,7 +28,7 @@ var Family = invariants.Family{Name: "prompt-render", Invariants: append([]invar
 	{Name: "templates-render-no-host-paths", Anchors: []invariants.Anchor{invariants.Dir("lycaon/config/packs/painted-wolf/platform/guidance")}, Exempt: []invariants.Exemption{
 		{Key: "config/packs/painted-wolf/platform/guidance/curator/user.md: c.path", Reason: "the curator's evidence path is a display path, not a host root"},
 	}, Check: templatesRenderNoHostPaths},
-}, append(reachInvariants, capabilityConditionInvariants...)...)}
+}, append(reachInvariants, append(capabilityConditionInvariants, structuralFragmentInvariants...)...)...)}
 
 var (
 	personaRenderer = invariants.Func("internal/prompts", "RenderPersona")

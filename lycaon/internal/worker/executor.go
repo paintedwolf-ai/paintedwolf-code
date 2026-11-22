@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	awaitstore "github.com/lycaon/lycaon/internal/await"
+	"github.com/lycaon/lycaon/internal/gitrepo"
 	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/observability"
 	"github.com/lycaon/lycaon/internal/orchestration"
@@ -14,6 +15,7 @@ import (
 	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/promptresult"
 	"github.com/lycaon/lycaon/internal/prompts"
+	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/session"
 	"github.com/lycaon/lycaon/internal/session/workercloseout"
 	"github.com/lycaon/lycaon/internal/session/workercompletion"
@@ -128,7 +130,11 @@ func (e *LocalWorkerExecutor) Execute(ctx context.Context, task api.WorkerTask, 
 	if e.TouchPaths != nil {
 		touchPaths = e.TouchPaths.PhaseTouchPaths(ctx, parentID)
 	}
-	builtPrompt, err := BuildWorkerPrompt(ctx, e.Injects, parentID, run.ProjectDir, touchPaths, task.Scope, prompt)
+	preambleReader, err := workerPreambleReader(agentType, run.ProjectDir)
+	if err != nil {
+		return api.WorkerResult{}, fmt.Errorf("worker task preamble reader: %w", err)
+	}
+	builtPrompt, err := BuildWorkerPrompt(ctx, e.Injects, preambleReader, parentID, run.ProjectDir, touchPaths, task.Scope, prompt)
 	if err != nil {
 		return api.WorkerResult{}, fmt.Errorf("worker task preamble: %w", err)
 	}
@@ -371,4 +377,37 @@ func normalizeWorkerInstructions(task *api.WorkerTask) error {
 		return fmt.Errorf("worker brief required")
 	}
 	return nil
+}
+
+func workerPreambleReader(agentType, projectDir string) (prompts.Reader, error) {
+	profiles, err := sandbox.LoadToolProfiles()
+	if err != nil {
+		return prompts.Reader{}, err
+	}
+	profileID := strings.TrimSpace(agentType)
+	hasDirect := false
+	for _, p := range profiles {
+		if p.ID == profileID {
+			hasDirect = true
+			break
+		}
+	}
+	if !hasDirect {
+		profileID, err = prompts.ToolProfileForAgent(agentType)
+		if err != nil {
+			return prompts.Reader{}, err
+		}
+	}
+	rootCount := 0
+	if strings.TrimSpace(projectDir) != "" {
+		rootCount = 1
+	}
+	_, hasGit := gitrepo.Discover(strings.TrimSpace(projectDir))
+	return prompts.NewReader(prompts.ReaderInput{
+		ProfileID: profileID,
+		Profiles:  profiles,
+		RootCount: rootCount,
+		HasGit:    hasGit,
+		WebSearch: true,
+	})
 }

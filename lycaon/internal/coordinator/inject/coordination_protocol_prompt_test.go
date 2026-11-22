@@ -21,7 +21,9 @@ func testPromptEngine(t *testing.T) *prompts.FileTemplateEngine {
 }
 
 func TestCoordinationProtocolInWorkerTaskAssignment(t *testing.T) {
+	workerReader := testWorkerReader(t)
 	out, err := RenderWorkerTaskAssignment(context.Background(), testInjectRenderer(t), WorkerTaskAssignmentInput{
+		Reader:      workerReader,
 		SessionID:   "sess-inject-test",
 		ProjectDir:  t.TempDir(),
 		Charter:     testWorkerCharter("Add auth middleware"),
@@ -43,6 +45,7 @@ func TestCoordinationProtocolInWorkerTaskAssignment(t *testing.T) {
 		t.Fatalf("worker assignment still teaches pack_board findings: %s", out)
 	}
 	mounted, err := RenderWorkerTaskAssignment(context.Background(), testInjectRenderer(t), WorkerTaskAssignmentInput{
+		Reader:            workerReader,
 		SessionID:         "sess-inject-test",
 		ProjectDir:        t.TempDir(),
 		Charter:           testWorkerCharter("Add auth middleware"),

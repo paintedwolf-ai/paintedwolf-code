@@ -10,11 +10,19 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/lycaon/lycaon/internal/commandsurface"
 	"github.com/lycaon/lycaon/internal/scratch"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/tooloutput"
+	"github.com/lycaon/lycaon/internal/toolreach"
 	"github.com/lycaon/lycaon/pkg/api"
 )
+
+func sedDeliveryReach() toolreach.Request {
+	return toolreach.Offered([]string{toolreach.ProgramTool}).WithPrograms(func(name string) bool {
+		return name == "sed"
+	})
+}
 
 func TestCommandOutputBudgetAndStreamSplitting(t *testing.T) {
 	if got := CommandOutputBudget(0); got != 64<<10 {
@@ -106,7 +114,7 @@ func TestWindowStreamOutputMarksIncompleteCapture(t *testing.T) {
 	outputPath := "@output/prog-1.stdout"
 	sample, err := sampleOutput(bytes.NewReader(data), 12<<10)
 	testutil.FailErr(t, "sample output", err)
-	delivered, win, parts, err := sample.window(t.Context(), "stdout", "output:program:prog-1:stdout", outputPath, false)
+	delivered, win, parts, err := sample.window(t.Context(), sedDeliveryReach(), "stdout", "output:program:prog-1:stdout", outputPath, false)
 	testutil.FailErr(t, "window incomplete capture", err)
 
 	if win.Complete || !win.Truncated {
@@ -129,7 +137,7 @@ func TestWindowStreamOutputMarksIncompleteCapture(t *testing.T) {
 	largeData := []byte(large.String())
 	sample, err = sampleOutput(bytes.NewReader(largeData), 12<<10)
 	testutil.FailErr(t, "sample large output", err)
-	delivered, win, _, err = sample.window(t.Context(), "stdout", "output:program:prog-1:stdout", outputPath, false)
+	delivered, win, _, err = sample.window(t.Context(), sedDeliveryReach(), "stdout", "output:program:prog-1:stdout", outputPath, false)
 	testutil.FailErr(t, "window large incomplete capture", err)
 	if win.Complete || !win.Truncated {
 		t.Fatalf("large window = %+v, want complete=false truncated=true", win)
@@ -165,7 +173,7 @@ func windowStreamOutput(ctx context.Context, data []byte, budget int, streamName
 	if err != nil {
 		return "", api.CommandProgramOutputWindow{}, nil, err
 	}
-	delivered, window, parts, err := sample.window(ctx, streamName, ref, outputPath, true)
+	delivered, window, parts, err := sample.window(ctx, sedDeliveryReach(), streamName, ref, outputPath, true)
 	var ranges [][2]int64
 	for _, part := range parts {
 		if len(part.data) > 0 {
@@ -173,4 +181,70 @@ func windowStreamOutput(ctx context.Context, data []byte, budget int, streamName
 		}
 	}
 	return delivered, window, ranges, err
+}
+
+func TestWindowStreamOutputQuotesPathAndFollowsConcreteSedReach(t *testing.T) {
+	var b strings.Builder
+	for i := 1; i <= 500; i++ {
+		fmt.Fprintf(&b, "line-%04d: abcdefghijklmnopqrstuvwxyz0123456789\n", i)
+	}
+	data := []byte(b.String())
+	outputDir := filepath.FromSlash("/state/output/sess-1")
+
+	sedAdmitted := toolreach.Offered([]string{toolreach.ProgramTool}).WithPrograms(func(name string) bool {
+		return name == "sed"
+	})
+	sedDenied := toolreach.Offered([]string{toolreach.ProgramTool}).WithPrograms(func(name string) bool {
+		return name != "sed"
+	})
+	cmdUnoffered := toolreach.Offered([]string{"recall"})
+
+	for _, outputPath := range []string{"@output/my file's.stdout", "sub dir/it's here.stdout"} {
+		sample, err := sampleOutput(bytes.NewReader(data), 12<<10)
+		testutil.FailErr(t, "sample output", err)
+
+		pos, win, _, err := sample.window(t.Context(), sedAdmitted, "stdout", "output:program:p1:stdout", outputPath, true)
+		testutil.FailErr(t, "window sed admitted", err)
+		if !strings.Contains(pos, "full output: "+outputPath) {
+			t.Fatalf("sed-admitted output lost raw saved path %q:\n%s", outputPath, pos)
+		}
+		prefix := fmt.Sprintf("(sed -n '%d,%dp' ", win.HeadEndLine+1, win.HeadEndLine+150)
+		idx := strings.Index(pos, prefix)
+		if idx < 0 {
+			t.Fatalf("sed-admitted output missing %q:\n%s", prefix, pos)
+		}
+		endIdx := strings.Index(pos[idx:], ") ...")
+		if endIdx < 0 {
+			t.Fatalf("sed-admitted output missing closing paren:\n%s", pos[idx:])
+		}
+		emittedCmd := pos[idx+1 : idx+endIdx]
+		plan, err := commandsurface.ParsePlan(map[string]any{"command": emittedCmd})
+		testutil.FailErr(t, "ParsePlan "+emittedCmd, err)
+		stages, _, err := commandsurface.ResolveSessionOperands(plan.Stages, "", outputDir)
+		testutil.FailErr(t, "ResolveSessionOperands "+emittedCmd, err)
+		if len(stages) != 1 || stages[0].Name != "sed" || len(stages[0].Args) != 3 || stages[0].Args[0] != "-n" {
+			t.Fatalf("emitted command %q parsed into unexpected argv %+v", emittedCmd, stages)
+		}
+		wantArg := outputPath
+		if strings.HasPrefix(outputPath, "@output/") {
+			wantArg = filepath.Join(outputDir, strings.TrimPrefix(outputPath, "@output/"))
+		}
+		if stages[0].Args[2] != wantArg {
+			t.Fatalf("emitted command %q resolved path operand to %q, want %q", emittedCmd, stages[0].Args[2], wantArg)
+		}
+
+		for label, reach := range map[string]toolreach.Request{
+			"sed denied":        sedDenied,
+			"command unoffered": cmdUnoffered,
+		} {
+			neg, _, _, err := sample.window(t.Context(), reach, "stdout", "output:program:p1:stdout", outputPath, true)
+			testutil.FailErr(t, "window "+label, err)
+			if strings.Contains(neg, "sed -n") {
+				t.Fatalf("%s leaked sed command:\n%s", label, neg)
+			}
+			if !strings.Contains(neg, "full output: "+outputPath) {
+				t.Fatalf("%s lost raw saved path %q:\n%s", label, outputPath, neg)
+			}
+		}
+	}
 }

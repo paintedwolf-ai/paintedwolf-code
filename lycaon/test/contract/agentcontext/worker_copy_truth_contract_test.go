@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"path/filepath"
-	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -108,7 +107,7 @@ func TestWorkerCopyStateMatrixAndReachability(t *testing.T) {
 				})
 				contractcheck.FailErr(t, "new worker reader", err)
 				out, err := inject.RenderWorkerTaskAssignment(context.Background(), renderer, inject.WorkerTaskAssignmentInput{
-					SessionID: "child-matrix", ProjectDir: root, WorkerName: "alpha-worker",
+					Reader: workerReader, SessionID: "child-matrix", ProjectDir: root, WorkerName: "alpha-worker",
 					RoundInstructions: "Check edge cases.", ViewKind: viewKind, HasGit: hasGit,
 					AgentType: "implementer", WorkerJobID: "job-matrix",
 					Scope:   api.TaskScope{Mode: api.TaskScopeModeWrite, Paths: []string{"lycaon/internal/workerstate"}},
@@ -116,10 +115,7 @@ func TestWorkerCopyStateMatrixAndReachability(t *testing.T) {
 				})
 				contractcheck.FailErr(t, "render worker assignment", err)
 				if names := unreachableNames(t, catalog, out, workerReader); len(names) > 0 {
-					if !(slices.Equal(names, []string{"scan_query"}) && !profile.Tools["scan_query"]) &&
-						!(slices.Contains(names, "read_findings") && !profile.Tools["read_findings"]) {
-						t.Errorf("assignment on %s names unreachable %v", profile.ID, names)
-					}
+					t.Errorf("assignment on %s names unreachable %v", profile.ID, names)
 				}
 				checkBannedMention(t, retired, "assignment/"+profile.ID, out)
 			}

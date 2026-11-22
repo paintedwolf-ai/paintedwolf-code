@@ -5,19 +5,23 @@ import (
 	"errors"
 	"fmt"
 	"maps"
-	"slices"
+	"sort"
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/bgprocess"
 	"github.com/lycaon/lycaon/internal/catalogview"
 	"github.com/lycaon/lycaon/internal/coordinator/inject"
+	"github.com/lycaon/lycaon/internal/coordinator/promptloop"
 	"github.com/lycaon/lycaon/internal/coordinator/surface"
+	"github.com/lycaon/lycaon/internal/coordinator/surfacecatalog"
 	"github.com/lycaon/lycaon/internal/extpacks"
 	"github.com/lycaon/lycaon/internal/heldcall"
+	"github.com/lycaon/lycaon/internal/platform"
 	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/spawn"
 	"github.com/lycaon/lycaon/internal/toolcontract"
+	"github.com/lycaon/lycaon/internal/toolpolicy"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/toolschema"
 	"github.com/lycaon/lycaon/internal/toolscope"
@@ -267,22 +271,164 @@ func (e *promptSurface) workerTurnReader(
 	return e.workerReader(ctx, sess, frame, turn, fe, agentType, vars)
 }
 
-func filterImpliedJobControls(sess *api.Session, profile sandbox.ToolProfile, rootCount int, implied []string) []string {
-	ask := sess != nil && sess.Mode == api.SessionModeAsk
-	var allowed []string
-	for _, name := range implied {
-		if !profile.ToolAllowed(name) {
-			continue
+type commandJobsToolLister struct {
+	sess         *api.Session
+	promptLister PromptToolLister
+	profiles     []sandbox.ToolProfile
+	schemas      *toolschema.Config
+}
+
+func (l *commandJobsToolLister) List(ctx context.Context, filter platform.ToolFilter) ([]tools.ToolMeta, error) {
+	var prof sandbox.ToolProfile
+	for _, p := range l.profiles {
+		if p.ID == filter.ProfileID {
+			prof = p
+			break
 		}
-		if rootCount == 0 && toolscope.RequiresProjectRoots(name) {
-			continue
-		}
-		if ask && !tools.AllowedInAsk(tools.ToolMeta{Name: name}) {
-			continue
-		}
-		allowed = append(allowed, name)
 	}
-	return allowed
+	if l.promptLister != nil {
+		metas, err := l.promptLister(ctx, l.sess, filter.ProfileID)
+		if err != nil {
+			return nil, err
+		}
+		out := make([]tools.ToolMeta, 0, len(metas))
+		for _, meta := range metas {
+			if filter.ProjectRootCount == 0 && toolscope.RequiresProjectRoots(meta.Name) {
+				continue
+			}
+			if meta.Name == "wait" && meta.ArgsSchema == nil && l.schemas != nil {
+				if declared, ok := l.schemas.ToolMeta("wait"); ok {
+					meta.ArgsSchema = toolschema.PruneWaitConditionSchema(declared.ArgsSchema, prof.WaitConditions)
+				}
+			}
+			out = append(out, meta)
+		}
+		return out, nil
+	}
+	if prof.ID == "" || l.schemas == nil {
+		return nil, nil
+	}
+	effects, effErr := surfacecatalog.AdmittedCommandEffects(l.profiles, filter.ProfileID, filter.SurfaceID)
+	mutEffect, _ := toolcontract.NewCommandEffects(toolcontract.CommandMutation)
+	cmdReadOnly := effErr != nil || !effects.Allows(mutEffect)
+	names := make([]string, 0, len(l.schemas.Tools))
+	for name := range l.schemas.Tools {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	out := make([]tools.ToolMeta, 0, len(names))
+	for _, name := range names {
+		if !prof.ToolAllowed(name) {
+			continue
+		}
+		if filter.ProjectRootCount == 0 && toolscope.RequiresProjectRoots(name) {
+			continue
+		}
+		declared, ok := l.schemas.ToolMeta(name)
+		if !ok {
+			continue
+		}
+		argsSchema := toolschema.ProjectToolArgsSchema(name, declared.ArgsSchema, toolschema.ProjectOptions{
+			CommandReadOnly:     name == "command" && cmdReadOnly,
+			PruneWaitConditions: name == "wait",
+			WaitConditions:      prof.WaitConditions,
+		})
+		out = append(out, tools.ToolMeta{
+			Name:               name,
+			Description:        declared.Description,
+			DescriptionEffects: declared.DescriptionEffects,
+			Tags:               declared.Tags,
+			ArgsSchema:         argsSchema,
+			Deferred:           prof.ToolDeferred(name),
+		})
+	}
+	return out, nil
+}
+
+func (e *promptSurface) resolveCommandJobsCatalog(ctx context.Context, sess *api.Session) ([]sandbox.ToolProfile, *toolschema.Config, error) {
+	var (
+		profiles []sandbox.ToolProfile
+		schemas  *toolschema.Config
+		catalog  *extpacks.EffectiveCatalog
+	)
+	if view := e.sessionCatalogView(ctx, sess); view != nil {
+		profiles = view.ToolProfiles
+		schemas = view.ToolSchemas
+		catalog = view.Catalog
+	}
+	if catalog == nil {
+		if fe, ok := e.projectPrompts(ctx, sess).(*prompts.FileTemplateEngine); ok && fe != nil {
+			catalog = fe.Layers().Catalog
+		}
+	}
+	if len(profiles) == 0 {
+		var (
+			loaded []sandbox.ToolProfile
+			err    error
+		)
+		if catalog != nil {
+			loaded, err = sandbox.LoadToolProfilesWithCatalog(catalog)
+		} else {
+			loaded, err = sandbox.LoadToolProfiles()
+		}
+		if err != nil {
+			return nil, nil, err
+		}
+		profiles = loaded
+	}
+	if schemas == nil {
+		if catalog != nil {
+			schemas, _, _ = extpacks.LoadEffectiveToolSchemas(catalog)
+		}
+		if schemas == nil {
+			if eff, err := extpacks.CatalogForConsumers(); err == nil && eff != nil {
+				schemas, _, _ = extpacks.LoadEffectiveToolSchemas(eff)
+			}
+		}
+	}
+	return profiles, schemas, nil
+}
+
+func (e *promptSurface) resolveCommandJobsProfile(
+	ctx context.Context,
+	sess *api.Session,
+	coordinator bool,
+	frame inject.CoordinatorTurnFrame,
+	history []api.Message,
+	turn *TurnAssemblyScratch,
+) (string, inject.CoordinatorTurnFrame, error) {
+	if coordinator {
+		if frame.Roster == nil {
+			frame.Roster = e.resolveTurnRoster(ctx, sess, frame, history, turn)
+		}
+		return prompts.CoordinatorProfileID, frame, nil
+	}
+	agentType := ""
+	if sess != nil {
+		agentType = strings.TrimSpace(sess.AgentType)
+	}
+	if agentType == "" {
+		agentType = "implementer"
+	}
+	profileID := strings.TrimSpace(frame.Machine.ProfileID)
+	if profileID == "" {
+		if agents := e.agentsForSession(ctx, sess); agents != nil {
+			if prof, err := agents.Get(agentType); err == nil {
+				profileID = strings.TrimSpace(prof.ToolProfile)
+			}
+		}
+	}
+	if profileID == "" {
+		var err error
+		profileID, err = prompts.ToolProfileForAgent(agentType)
+		if err != nil {
+			return "", frame, err
+		}
+	}
+	if !frame.Machine.Compiled() {
+		frame.Machine = inject.Machine{ProfileID: profileID, SkillCount: 1}
+	}
+	return profileID, frame, nil
 }
 
 func (e *promptSurface) commandJobsReader(
@@ -294,75 +440,79 @@ func (e *promptSurface) commandJobsReader(
 	turn *TurnAssemblyScratch,
 	jobs []bgprocess.JobSnapshot,
 	held []heldcall.Running,
-) (prompts.Reader, []string, error) {
-	var (
-		profiles []sandbox.ToolProfile
-		schemas  *toolschema.Config
-	)
-	if view := e.sessionCatalogView(ctx, sess); view != nil {
-		profiles = view.ToolProfiles
-		schemas = view.ToolSchemas
-	}
-	if len(profiles) == 0 {
-		loaded, err := sandbox.LoadToolProfiles()
-		if err != nil {
-			return prompts.Reader{}, nil, err
-		}
-		profiles = loaded
-	}
-	implied := toolcontract.Implied(toolcontract.ResourcePresence{
-		CommandJobs: len(jobs) > 0,
-		HeldCalls:   len(held) > 0,
-	})
-	if coordinator {
-		return e.coordinatorCommandJobsReader(ctx, sess, frame, history, turn, profiles, schemas, implied)
-	}
-	return e.workerCommandJobsReader(ctx, sess, frame, turn, profiles, implied)
-}
-
-func (e *promptSurface) coordinatorCommandJobsReader(
-	ctx context.Context,
-	sess *api.Session,
-	frame inject.CoordinatorTurnFrame,
-	history []api.Message,
-	turn *TurnAssemblyScratch,
-	profiles []sandbox.ToolProfile,
-	schemas *toolschema.Config,
-	implied []string,
-) (prompts.Reader, []string, error) {
-	base, err := e.turnReader(ctx, sess, frame, history, turn, 0)
+) (prompts.Reader, map[string]any, error) {
+	profiles, schemas, err := e.resolveCommandJobsCatalog(ctx, sess)
 	if err != nil {
 		return prompts.Reader{}, nil, err
 	}
-	var coordProfile sandbox.ToolProfile
-	for _, p := range profiles {
-		if p.ID == prompts.CoordinatorProfileID {
-			coordProfile = p
-			break
+	roots, rootCount, activePath, _, ok := e.workspaceRootsForTurn(ctx, sess, turn)
+	if !ok {
+		switch {
+		case frame.Roster != nil && frame.Roster.Facts.RootCount > 0:
+			rootCount = frame.Roster.Facts.RootCount
+		case sess != nil && strings.TrimSpace(sess.WorkspacePath) != "":
+			rootCount = 1
 		}
 	}
-	waitConds := slices.Clone(coordProfile.WaitConditions)
-	promoted := filterImpliedJobControls(sess, coordProfile, base.RootCount(), implied)
-	needsRebuild := false
-	for _, name := range promoted {
-		if !slices.Contains(base.Offered(), name) {
-			needsRebuild = true
-			break
-		}
-	}
-	if !needsRebuild {
-		return base, waitConds, nil
-	}
-	turnProf, _ := e.resolveCoordinatorProfile(ctx, sess, frame, history, turn)
-	if base.SurfaceID() != "" {
-		turnProf.SurfaceID = base.SurfaceID()
-	}
-	plan, err := surface.CompileToolPlan(turnProf, base.RootCount())
+	profileID, frame, err := e.resolveCommandJobsProfile(ctx, sess, coordinator, frame, history, turn)
 	if err != nil {
-		return base, waitConds, nil
+		return prompts.Reader{}, nil, err
 	}
-	plan = plan.Promote(promoted...)
-	roots, _, activePath, _, _ := e.workspaceRootsForTurn(ctx, sess, turn)
+
+	webSearchEnabled := true
+	if coordinator && frame.Roster != nil {
+		webSearchEnabled = frame.Roster.Facts.WebSearchEnabled
+	} else if fn := e.deps.WebSearchEnabled; fn != nil {
+		webSearchEnabled = fn()
+	}
+
+	lister := &commandJobsToolLister{
+		sess:         sess,
+		promptLister: e.deps.PromptToolLister,
+		profiles:     profiles,
+		schemas:      schemas,
+	}
+	policy := toolpolicy.NewEngine(toolpolicy.EngineDeps{
+		ToolLister:       lister,
+		ProjectRootCount: func(context.Context, *api.Session) int { return rootCount },
+	})
+	pDeps := promptloop.ContextDeps{
+		Policy:                policy,
+		LoadedTools:           func(string) map[string]bool { return e.loadedTools(sess) },
+		ImplementSessionState: e.deps.ImplementSessionState,
+		ProjectRootCount:      func(context.Context, *api.Session) int { return rootCount },
+		LiveResources: func(string) toolcontract.ResourcePresence {
+			return toolcontract.ResourcePresence{
+				CommandJobs: len(jobs) > 0,
+				HeldCalls:   len(held) > 0,
+			}
+		},
+		ContextSurfaceDeps: promptloop.ContextSurfaceDeps{
+			WebSearchEnabled: func() bool { return webSearchEnabled },
+		},
+	}
+
+	metas, plan, resolvedSurfaceID, err := promptloop.ProjectTurnTools(ctx, pDeps, sess, history, frame)
+	if err != nil {
+		return prompts.Reader{}, nil, err
+	}
+
+	offered := make([]string, 0, len(metas))
+	projectedSchemas := make(map[string]map[string]any, len(metas))
+	loadedMap := maps.Clone(e.loadedTools(sess))
+	for _, meta := range metas {
+		offered = append(offered, meta.Name)
+		if meta.ArgsSchema != nil {
+			projectedSchemas[meta.Name] = meta.ArgsSchema
+		}
+		if resolvedSurfaceID == "" {
+			if loadedMap == nil {
+				loadedMap = map[string]bool{}
+			}
+			loadedMap[meta.Name] = true
+		}
+	}
+
 	sessionMode := string(api.SessionModeAgent)
 	var fallbackPath string
 	if sess != nil {
@@ -373,15 +523,19 @@ func (e *promptSurface) coordinatorCommandJobsReader(
 	}
 	branchRoot, onWorkerBranch := e.onWorkerBranch(ctx, sess)
 	hasGit, hasAnyGitRoot := readerGitFacts(roots, activePath, fallbackPath, branchRoot)
+
 	var spawnAllowlist []string
-	switch {
-	case frame.Roster != nil:
-		spawnAllowlist = frame.Roster.Effective
-	case len(frame.RunContext.AllowedAgents) > 0:
-		spawnAllowlist = frame.RunContext.AllowedAgents
-	default:
-		spawnAllowlist = spawn.AmbientAllowedAgents()
+	if coordinator {
+		switch {
+		case frame.Roster != nil:
+			spawnAllowlist = frame.Roster.Effective
+		case len(frame.RunContext.AllowedAgents) > 0:
+			spawnAllowlist = frame.RunContext.AllowedAgents
+		default:
+			spawnAllowlist = spawn.AmbientAllowedAgents()
+		}
 	}
+
 	var (
 		reviewsConfinedWrites bool
 		externalHidden        bool
@@ -396,20 +550,27 @@ func (e *promptSurface) coordinatorCommandJobsReader(
 		scratchDir = promptSurf.SessionScratchDir
 		sharedTemp = promptSurf.SharedTempLocations
 	}
-	rebuilt, err := prompts.NewReader(prompts.ReaderInput{
-		ProfileID:             prompts.CoordinatorProfileID,
-		SurfaceID:             turnProf.SurfaceID,
-		Mode:                  surface.ExecutionModeFamily(turnProf.SurfaceID),
+
+	mode := ""
+	if resolvedSurfaceID != "" {
+		mode = surface.ExecutionModeFamily(resolvedSurfaceID)
+	}
+	reader, err := prompts.NewReader(prompts.ReaderInput{
+		ProfileID:             profileID,
+		SurfaceID:             resolvedSurfaceID,
+		Mode:                  mode,
 		SessionMode:           sessionMode,
 		Profiles:              profiles,
 		Plan:                  plan,
-		Loaded:                e.loadedTools(sess),
+		Loaded:                loadedMap,
+		Visible:               offered,
 		Schemas:               schemas,
-		RootCount:             base.RootCount(),
+		ProjectedSchemas:      projectedSchemas,
+		RootCount:             rootCount,
 		HasGit:                hasGit,
 		HasAnyGitRoot:         hasAnyGitRoot,
 		OnWorkerBranch:        onWorkerBranch,
-		WebSearch:             base.WebSearch(),
+		WebSearch:             webSearchEnabled,
 		SpawnAllowlist:        spawnAllowlist,
 		ReviewsConfinedWrites: reviewsConfinedWrites,
 		CommandExternalHidden: externalHidden,
@@ -417,72 +578,8 @@ func (e *promptSurface) coordinatorCommandJobsReader(
 		SharedTempLocations:   sharedTemp,
 	})
 	if err != nil {
-		return base, waitConds, nil
-	}
-	visionEnabled := e.deps.ModelVision != nil && e.deps.ModelVision(ctx, sess)
-	return rebuilt.WithVision(visionEnabled), waitConds, nil
-}
-
-func (e *promptSurface) workerCommandJobsReader(
-	ctx context.Context,
-	sess *api.Session,
-	frame inject.CoordinatorTurnFrame,
-	turn *TurnAssemblyScratch,
-	profiles []sandbox.ToolProfile,
-	implied []string,
-) (prompts.Reader, []string, error) {
-	base, err := e.workerTurnReader(ctx, sess, frame, turn)
-	if err != nil {
 		return prompts.Reader{}, nil, err
 	}
-	var workerProf sandbox.ToolProfile
-	for _, p := range profiles {
-		if p.ID == base.ProfileID() {
-			workerProf = p
-			break
-		}
-	}
-	waitConds := slices.Clone(workerProf.WaitConditions)
-	promoted := filterImpliedJobControls(sess, workerProf, base.RootCount(), implied)
-	needsRebuild := false
-	for _, name := range promoted {
-		if !slices.Contains(base.Offered(), name) {
-			needsRebuild = true
-			break
-		}
-	}
-	if !needsRebuild {
-		return base, waitConds, nil
-	}
-	vars := map[string]any{}
-	e.mergeVisibleTools(ctx, sess, frame, vars)
-	loadedMap := maps.Clone(e.loadedTools(sess))
-	if loadedMap == nil {
-		loadedMap = map[string]bool{}
-	}
-	for _, name := range promoted {
-		loadedMap[name] = true
-	}
-	vars["loaded_tools"] = loadedMap
-	if vis, ok := vars["visible_tools"].([]string); ok {
-		for _, name := range promoted {
-			if !slices.Contains(vis, name) {
-				vis = append(vis, name)
-			}
-		}
-		vars["visible_tools"] = vis
-	}
-	agentType := ""
-	if sess != nil {
-		agentType = strings.TrimSpace(sess.AgentType)
-	}
-	if agentType == "" {
-		agentType = "implementer"
-	}
-	fe, _ := e.projectPrompts(ctx, sess).(*prompts.FileTemplateEngine)
-	rebuilt, err := e.workerReader(ctx, sess, frame, turn, fe, agentType, vars)
-	if err != nil {
-		return base, waitConds, nil
-	}
-	return rebuilt, waitConds, nil
+	visionEnabled := e.deps.ModelVision != nil && e.deps.ModelVision(ctx, sess)
+	return reader.WithVision(visionEnabled), projectedSchemas["wait"], nil
 }

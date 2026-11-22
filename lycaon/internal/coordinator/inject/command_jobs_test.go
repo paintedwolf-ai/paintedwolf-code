@@ -9,13 +9,31 @@ import (
 	"github.com/lycaon/lycaon/internal/bgprocess"
 	"github.com/lycaon/lycaon/internal/coordinator/inject"
 	"github.com/lycaon/lycaon/internal/coordinator/surface"
+	"github.com/lycaon/lycaon/internal/extpacks"
 	"github.com/lycaon/lycaon/internal/heldcall"
 	"github.com/lycaon/lycaon/internal/hostcmd"
 	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/internal/prompts/promptstest"
 	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/toolschema"
 )
+
+func projectedWaitSchemaForTest(t *testing.T, allowed []string) map[string]any {
+	t.Helper()
+	eff, err := extpacks.CatalogForConsumers()
+	testutil.FailErr(t, "CatalogForConsumers", err)
+	schemas, _, err := extpacks.LoadEffectiveToolSchemas(eff)
+	testutil.FailErr(t, "LoadEffectiveToolSchemas", err)
+	meta, ok := schemas.ToolMeta("wait")
+	if !ok {
+		t.Fatal("wait schema missing")
+	}
+	return toolschema.ProjectToolArgsSchema("wait", meta.ArgsSchema, toolschema.ProjectOptions{
+		PruneWaitConditions: true,
+		WaitConditions:      allowed,
+	})
+}
 
 func TestRenderCommandJobsBlockUsesSurfaceControls(t *testing.T) {
 	now := time.Now().UTC()
@@ -48,11 +66,15 @@ func TestRenderCommandJobsBlockUsesSurfaceControls(t *testing.T) {
 		Stages: []hostcmd.StageResult{{Command: "./task check-fast"}},
 	}}
 
+	processDoneWait := projectedWaitSchemaForTest(t, []string{"process_done"})
+	workerDoneOnlyWait := projectedWaitSchemaForTest(t, []string{"next_worker_done"})
+	timerOnlyWait := projectedWaitSchemaForTest(t, nil)
+
 	coordinator := inject.RenderCommandJobsBlock(
-		context.Background(), renderer, fullCoord, []string{"process_done"}, "sess-inject-test", jobs, nil, now, "coordinator",
+		context.Background(), renderer, fullCoord, processDoneWait, "sess-inject-test", jobs, nil, now, "coordinator",
 	)
 	worker := inject.RenderCommandJobsBlock(
-		context.Background(), renderer, workerReader, []string{"process_done"}, "sess-inject-test", jobs, nil, now, "worker",
+		context.Background(), renderer, workerReader, processDoneWait, "sess-inject-test", jobs, nil, now, "worker",
 	)
 	for name, block := range map[string]string{"coordinator": coordinator, "worker": worker} {
 		if !strings.Contains(block, "handle=command-1") || !strings.Contains(block, "command_output(handle=") || !strings.Contains(block, "command_stop(handle=") {
@@ -61,6 +83,13 @@ func TestRenderCommandJobsBlockUsesSurfaceControls(t *testing.T) {
 		if !strings.Contains(block, `wait(until_complete=true,conditions=[{"kind":"process_done","handles":["<handle>"]}])`) {
 			t.Fatalf("%s ledger missing exact wait control: %q", name, block)
 		}
+	}
+
+	narrowedWorker := inject.RenderCommandJobsBlock(
+		context.Background(), renderer, workerReader, timerOnlyWait, "sess-inject-test", jobs, nil, now, "worker",
+	)
+	if strings.Contains(narrowedWorker, "process_done") {
+		t.Fatalf("timer-only wait schema leaked process_done guidance:\n%s", narrowedWorker)
 	}
 
 	// Paired witness 2: deferred/loadable surface (floor-only implement_investigate) teaches request_tools(need=...).
@@ -74,7 +103,7 @@ func TestRenderCommandJobsBlockUsesSurfaceControls(t *testing.T) {
 	})
 	testutil.FailErr(t, "floorCoord reader", err)
 	deferredBlock := inject.RenderCommandJobsBlock(
-		context.Background(), renderer, floorCoord, []string{"process_done"}, "sess-inject-test", jobs, nil, now, "coordinator",
+		context.Background(), renderer, floorCoord, processDoneWait, "sess-inject-test", jobs, nil, now, "coordinator",
 	)
 	if strings.Contains(deferredBlock, "command_output(handle=") || strings.Contains(deferredBlock, "command_stop(handle=") {
 		t.Fatalf("floor-only witness leaked unoffered direct command_output/command_stop calls:\n%s", deferredBlock)
@@ -94,7 +123,7 @@ func TestRenderCommandJobsBlockUsesSurfaceControls(t *testing.T) {
 	})
 	testutil.FailErr(t, "parkCoord reader", err)
 	parkNoProcessWait := inject.RenderCommandJobsBlock(
-		context.Background(), renderer, parkCoord, []string{"worker_done"}, "sess-inject-test", jobs, nil, now, "coordinator",
+		context.Background(), renderer, parkCoord, workerDoneOnlyWait, "sess-inject-test", jobs, nil, now, "coordinator",
 	)
 	if strings.Contains(parkNoProcessWait, "command_output") || strings.Contains(parkNoProcessWait, "command_stop") || strings.Contains(parkNoProcessWait, "request_tools") || strings.Contains(parkNoProcessWait, "process_done") {
 		t.Fatalf("unoffered/no-process_done witness leaked unavailable controls:\n%s", parkNoProcessWait)
@@ -131,7 +160,8 @@ func TestRenderCommandJobsBlockListsHeldCallsWithTheirControls(t *testing.T) {
 
 	held := []heldcall.Running{{Handle: "held-1", Tool: "find", Elapsed: 14 * time.Minute}}
 
-	block := inject.RenderCommandJobsBlock(context.Background(), renderer, withHeld, []string{"process_done"}, "sess-inject-test", nil, held, now, "coordinator")
+	processDoneWait := projectedWaitSchemaForTest(t, []string{"process_done"})
+	block := inject.RenderCommandJobsBlock(context.Background(), renderer, withHeld, processDoneWait, "sess-inject-test", nil, held, now, "coordinator")
 	for _, want := range []string{"handle=held-1", "mode=held", "tool=find", "held_result", "held_stop", `"kind":"process_done"`} {
 		if !strings.Contains(block, want) {
 			t.Fatalf("held ledger missing %q: %q", want, block)
@@ -160,7 +190,7 @@ func TestCommandJobsBoundCommandPreviewWithoutDroppingHandle(t *testing.T) {
 		WebSearch: true,
 	})
 	testutil.FailErr(t, "coord reader", err)
-	block := inject.RenderCommandJobsBlock(context.Background(), promptstest.InjectRenderer(t), coordReader, []string{"process_done"}, "sess-inject-test", []bgprocess.JobSnapshot{{
+	block := inject.RenderCommandJobsBlock(context.Background(), promptstest.InjectRenderer(t), coordReader, projectedWaitSchemaForTest(t, []string{"process_done"}), "sess-inject-test", []bgprocess.JobSnapshot{{
 		Handle: "live-check", Mode: bgprocess.JobModeAwaited, OriginTool: "command", StartedAt: time.Now(),
 		Stages: []hostcmd.StageResult{{Command: strings.Repeat("long-command-", 100)}},
 	}}, nil, time.Now(), "coordinator")

@@ -72,6 +72,12 @@ func bindCoordinatorRuntime(m *Host, store *sessionstore.Repositories) {
 	m.Admission.SetLoop(runtime.CoordinatorLoop().Nudges, runtime.CoordinatorLoop().Cycles)
 	m.ProjectControl.SetAnchors(runtime.Anchors())
 	m.Coordinator.Nudges.SetSurface(runtime)
+	m.Coordinator.Nudges.SetWebSearch(m.Coordinator.Assembly.WebSearchEnabled)
+	m.Coordinator.Nudges.SetWorkerBranch(m.Workers.Workspaces.OnWorkerBranch)
+	m.Coordinator.Nudges.SetPromptSurface(m.Coordinator.Assembly.PromptSurface)
+	if store != nil && store.Transcript != nil {
+		m.Coordinator.Nudges.SetHistory(store.Transcript.GetMessages)
+	}
 	m.Coordinator.Guards.SetSurface(runtime)
 	m.Coordinator.Batch.SetLoop(runtime.CoordinatorLoop().Waits)
 	m.Runner.Settlement.SetRuntime(runtime)

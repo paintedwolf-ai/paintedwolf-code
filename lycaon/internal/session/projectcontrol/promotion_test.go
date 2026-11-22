@@ -11,6 +11,10 @@ import (
 
 type promotionSessions struct{ Sessions }
 
+func (promotionSessions) Get(_ context.Context, id string) (*api.Session, error) {
+	return &api.Session{ID: id, Mode: api.SessionModeAgent}, nil
+}
+
 func (promotionSessions) ReadSourceTurn(context.Context, string, int) (messageview.SourceTurn, error) {
 	return messageview.SourceTurn{Number: 7}, nil
 }

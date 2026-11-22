@@ -150,8 +150,8 @@ func (e *turnContextAssembler) buildTailSystemInjects(
 			if coordinator {
 				surface = "coordinator"
 			}
-			if reader, waitConds, rErr := e.surface.commandJobsReader(ctx, sess, coordinator, frame, history, turn, jobs, held); rErr == nil {
-				if block := inject.RenderCommandJobsBlock(ctx, deps.Injects, reader, waitConds, sess.ID, jobs, held, time.Now().UTC(), surface); block != "" {
+			if reader, waitSchema, rErr := e.surface.commandJobsReader(ctx, sess, coordinator, frame, history, turn, jobs, held); rErr == nil {
+				if block := inject.RenderCommandJobsBlock(ctx, deps.Injects, reader, waitSchema, sess.ID, jobs, held, time.Now().UTC(), surface); block != "" {
 					tail = append(tail, api.Message{
 						Role: api.MessageRoleSystem, Content: block,
 						Origin: api.MessageOriginHost, Authority: api.ContentAuthorityNone, TrustTier: api.ContentTrustTierTrusted,

@@ -4,6 +4,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/lycaon/lycaon/internal/coordinator/inject"
 	"github.com/lycaon/lycaon/internal/coordinator/turnload"
 	"github.com/lycaon/lycaon/internal/prompts/promptstest"
 	"github.com/lycaon/lycaon/pkg/api"
@@ -23,8 +24,11 @@ func TestSkillPreloadInjectUsesRenderedProcedureWithoutRoster(t *testing.T) {
 		}
 	}
 	selected.Resources = []string{"references/guide.md"}
-	if message, ok := testTurnContext(e).skillProcedureInject(t.Context(), &api.Session{ID: "s"}, "coordinator"); !ok || !strings.Contains(message.Content, `"need":"selected-skill"`) || !strings.Contains(message.Content, "references/guide.md") {
+	if message, ok := testTurnContext(e).skillProcedureInject(t.Context(), &api.Session{ID: "s", WorkspacePath: t.TempDir()}, "coordinator"); !ok || !strings.Contains(message.Content, `"need":"selected-skill"`) || !strings.Contains(message.Content, "references/guide.md") {
 		t.Fatalf("procedure with resources=%+v present=%v", message, ok)
+	}
+	if noRootMsg, ok := testTurnContext(e).skillProcedureInject(t.Context(), &api.Session{ID: "s-no-root"}, "coordinator"); !ok || strings.Contains(noRootMsg.Content, "skills_read") || !strings.Contains(noRootMsg.Content, "references/guide.md") {
+		t.Fatalf("zero-root procedure leaked unoffered skills_read or dropped resource list: %+v present=%v", noRootMsg, ok)
 	}
 	selected = nil
 	if _, ok := testTurnContext(e).skillProcedureInject(t.Context(), &api.Session{ID: "s"}, "coordinator"); ok {
@@ -45,14 +49,14 @@ func TestInterleaveSkillGuidanceAnchorsInHistoryPrefix(t *testing.T) {
 	t2 := api.Message{ID: "t2", Ord: 5, Role: api.MessageRoleTool, Content: "ok", ToolResult: &api.ToolResult{ToolCallID: "c2", Tool: "command", Content: "ok"}}
 
 	// Turn-open preload stays anchored immediately after u1 across iterations.
-	gotTurnOpen := testTurnContext(e).interleaveSkillGuidance(t.Context(), sess, "coordinator", []api.Message{u1, a1, t1, a2, t2})
+	gotTurnOpen := testTurnContext(e).interleaveSkillGuidance(t.Context(), sess, "coordinator", inject.CoordinatorTurnFrame{}, nil, nil, []api.Message{u1, a1, t1, a2, t2})
 	if len(gotTurnOpen) != 6 || gotTurnOpen[0].ID != "u1" || gotTurnOpen[1].ID != "host-skill-procedure" || gotTurnOpen[2].ID != "a1" {
 		t.Fatalf("turn-open preload not anchored after opener: %+v", gotTurnOpen)
 	}
 
 	// Tool-event preload anchors immediately after the triggering tool batch's results.
 	selected.Tool = "command"
-	gotToolEvent := testTurnContext(e).interleaveSkillGuidance(t.Context(), sess, "coordinator", []api.Message{u1, a1, t1, a2, t2})
+	gotToolEvent := testTurnContext(e).interleaveSkillGuidance(t.Context(), sess, "coordinator", inject.CoordinatorTurnFrame{}, nil, nil, []api.Message{u1, a1, t1, a2, t2})
 	if len(gotToolEvent) != 6 || gotToolEvent[4].ID != "t2" || gotToolEvent[5].ID != "host-skill-procedure" {
 		t.Fatalf("tool-event preload not anchored after matching tool batch: %+v", gotToolEvent)
 	}
@@ -60,7 +64,7 @@ func TestInterleaveSkillGuidanceAnchorsInHistoryPrefix(t *testing.T) {
 	// Once the turn's opening prefix is compacted or omitted after u1, turn-open preload is not re-injected.
 	selected.Tool = ""
 	omission := api.Message{ID: "host-history-coverage", Role: api.MessageRoleSystem, Origin: api.MessageOriginHost, Content: "Messages omitted"}
-	gotCompacted := testTurnContext(e).interleaveSkillGuidance(t.Context(), sess, "coordinator", []api.Message{u1, omission, a2, t2})
+	gotCompacted := testTurnContext(e).interleaveSkillGuidance(t.Context(), sess, "coordinator", inject.CoordinatorTurnFrame{}, nil, nil, []api.Message{u1, omission, a2, t2})
 	if len(gotCompacted) != 4 {
 		t.Fatalf("expected turn-open preload to omit after turn prefix compaction/omission: %+v", gotCompacted)
 	}

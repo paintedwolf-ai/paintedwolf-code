@@ -118,7 +118,9 @@ func TestWorkerPromptIncludesManifestTouchPaths(t *testing.T) {
 	if err := os.MkdirAll(filepath.Join(projectDir, "internal", "auth"), 0o755); err != nil {
 		testutil.FailErr(t, "create directory", err)
 	}
-	prompt, err := worker.BuildWorkerPrompt(ctx, renderer, "sess-inject-test", projectDir,
+	reader, err := prompts.DeclaredReader(nil, "implement")
+	testutil.FailErr(t, "DeclaredReader implement", err)
+	prompt, err := worker.BuildWorkerPrompt(ctx, renderer, reader, "sess-inject-test", projectDir,
 		[]string{"internal/**", "lycaon/**"},
 		&api.TaskScope{Mode: api.TaskScopeModeWrite, Paths: []string{"internal/auth/**"}},
 		"Implement login fix",

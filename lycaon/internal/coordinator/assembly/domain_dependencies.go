@@ -60,7 +60,7 @@ type turnContextDeps struct {
 }
 
 type promptProjection interface {
-	commandJobsReader(context.Context, *api.Session, bool, inject.CoordinatorTurnFrame, []api.Message, *TurnAssemblyScratch, []bgprocess.JobSnapshot, []heldcall.Running) (prompts.Reader, []string, error)
+	commandJobsReader(context.Context, *api.Session, bool, inject.CoordinatorTurnFrame, []api.Message, *TurnAssemblyScratch, []bgprocess.JobSnapshot, []heldcall.Running) (prompts.Reader, map[string]any, error)
 	loadExecutionModeState(string) surface.ExecutionModeState
 	loadedTools(*api.Session) map[string]bool
 	resolveCoordinatorProfile(context.Context, *api.Session, inject.CoordinatorTurnFrame, []api.Message, *TurnAssemblyScratch) (surface.TurnProfile, surface.ImplementSessionState)

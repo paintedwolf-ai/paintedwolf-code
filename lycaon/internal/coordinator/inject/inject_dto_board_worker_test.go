@@ -29,7 +29,7 @@ func TestBuildWorkerLegInjectData(t *testing.T) {
 
 func TestRenderWorkerLegInject(t *testing.T) {
 	renderer := testInjectRenderer(t)
-	block, err := RenderWorkerLegInject(context.Background(), renderer, "sess-inject-test", WorkerLegContext{
+	block, err := RenderWorkerLegInject(context.Background(), renderer, testWorkerReader(t), "sess-inject-test", WorkerLegContext{
 		LegID:     "leg-1",
 		PhaseID:   "implement",
 		LegTools:  []string{"read"},
@@ -48,7 +48,7 @@ func TestRenderWorkerLegInject(t *testing.T) {
 
 func TestRenderWorkerLegInjectSiblingNotes(t *testing.T) {
 	renderer := testInjectRenderer(t)
-	block, err := RenderWorkerLegInject(context.Background(), renderer, "sess-inject-test", WorkerLegContext{
+	block, err := RenderWorkerLegInject(context.Background(), renderer, testWorkerReader(t), "sess-inject-test", WorkerLegContext{
 		LegID:    "leg-1",
 		LegTools: []string{"read"},
 		SiblingNotes: []SiblingNote{
@@ -73,7 +73,8 @@ func TestRenderWorkerLegInjectReservedPaths(t *testing.T) {
 		t.Fatalf("reserved paths = %+v", data.ReservedPaths)
 	}
 	renderer := testInjectRenderer(t)
-	block, err := RenderWorkerLegInject(context.Background(), renderer, "sess-inject-test", legCtx)
+	reader := testWorkerReader(t)
+	block, err := RenderWorkerLegInject(context.Background(), renderer, reader, "sess-inject-test", legCtx)
 	testutil.FailErr(t, "RenderWorkerLegInject failed", err)
 	for _, want := range []string{hold.Path, hold.Worker} {
 		if !strings.Contains(block, want) {
@@ -81,7 +82,7 @@ func TestRenderWorkerLegInjectReservedPaths(t *testing.T) {
 		}
 	}
 	legCtx.ReservedPaths = nil
-	block, err = RenderWorkerLegInject(context.Background(), renderer, "sess-inject-test", legCtx)
+	block, err = RenderWorkerLegInject(context.Background(), renderer, reader, "sess-inject-test", legCtx)
 	testutil.FailErr(t, "RenderWorkerLegInject without reservations failed", err)
 	if strings.Contains(block, hold.Path) || strings.Contains(block, hold.Worker) {
 		t.Fatalf("reservation rendered with none held: %q", block)
@@ -267,7 +268,7 @@ func TestRenderWorkerLegInject_MissingSentinel(t *testing.T) {
 		testutil.FailErr(t, "engine.Register failed", err)
 	}
 	renderer := prompts.NewInjectRenderer(engine)
-	_, err := RenderWorkerLegInject(context.Background(), renderer, "sess-inject-test", WorkerLegContext{LegID: "leg-1"})
+	_, err := RenderWorkerLegInject(context.Background(), renderer, testWorkerReader(t), "sess-inject-test", WorkerLegContext{LegID: "leg-1"})
 	if err == nil || !strings.Contains(err.Error(), WorkerLegInjectSentinel) {
 		t.Fatalf("err = %v", err)
 	}

@@ -4,8 +4,16 @@ import (
 	"context"
 
 	"github.com/lycaon/lycaon/internal/guidance"
+	"github.com/lycaon/lycaon/internal/toolreach"
 	"github.com/lycaon/lycaon/pkg/api"
 )
+
+func recallReach(recallAvailable bool) toolreach.Request {
+	if recallAvailable {
+		return toolreach.Offered([]string{"recall"})
+	}
+	return toolreach.Offered(nil)
+}
 
 // tailOmissionNotice names rows between coverage and the canonical tail that hard
 // limits left out. The opener is retained separately, so it does not count.
@@ -26,9 +34,8 @@ func omissionNotice(ctx context.Context, recallAvailable func(context.Context, *
 }
 
 func omissionNoticeForRecall(ctx context.Context, recall bool, id string, from, through int64) (*api.Message, error) {
-	text, err := guidance.RenderGuidance(ctx, guidance.CompactionContinuationRecordRef, map[string]any{
+	text, err := guidance.RenderGuidanceWithReach(ctx, recallReach(recall), guidance.CompactionContinuationRecordRef, map[string]any{
 		"level": "references", "through_ord": through, "omitted_from_ord": from, "omitted_through_ord": through,
-		"recall_available": recall,
 	})
 	if err != nil {
 		return nil, err

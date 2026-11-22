@@ -15,13 +15,57 @@ import (
 
 const maxCommandLedgerLineRunes = 64
 
+// WaitSchemaAllowsProcessDone reports whether a projected wait tool schema
+// accepts until_complete with conditions[].kind == "process_done".
+func WaitSchemaAllowsProcessDone(waitSchema map[string]any) bool {
+	if waitSchema == nil {
+		return false
+	}
+	props, ok := waitSchema["properties"].(map[string]any)
+	if !ok {
+		return false
+	}
+	if _, hasUntilComplete := props["until_complete"]; !hasUntilComplete {
+		return false
+	}
+	conditions, ok := props["conditions"].(map[string]any)
+	if !ok {
+		return false
+	}
+	items, ok := conditions["items"].(map[string]any)
+	if !ok {
+		return false
+	}
+	itemProps, ok := items["properties"].(map[string]any)
+	if !ok {
+		return false
+	}
+	kind, ok := itemProps["kind"].(map[string]any)
+	if !ok {
+		return false
+	}
+	switch vals := kind["enum"].(type) {
+	case []string:
+		return slices.Contains(vals, "process_done")
+	case []any:
+		for _, elem := range vals {
+			if s, isStr := elem.(string); isStr && s == "process_done" {
+				return true
+			}
+		}
+		return false
+	default:
+		return false
+	}
+}
+
 // RenderCommandJobsBlock renders the host ledger of command jobs and held calls
 // for a turn. Each sentence renders only in the states it is true for.
 func RenderCommandJobsBlock(
 	ctx context.Context,
 	renderer *prompts.InjectRenderer,
 	reader prompts.Reader,
-	waitConditions []string,
+	projectedWaitSchema map[string]any,
 	sessionID string,
 	jobs []bgprocess.JobSnapshot,
 	held []heldcall.Running,
@@ -31,7 +75,7 @@ func RenderCommandJobsBlock(
 	if renderer == nil || !reader.Valid() || len(jobs)+len(held) == 0 {
 		return ""
 	}
-	waitProcessDoneAllowed := slices.Contains(reader.Offered(), "wait") && slices.Contains(waitConditions, "process_done")
+	waitProcessDoneAllowed := slices.Contains(reader.Offered(), "wait") && WaitSchemaAllowsProcessDone(projectedWaitSchema)
 	block, err := anchor.RenderInformWithReader(
 		ctx, anchor.InjectCommandJobs, anchor.MatchContext{Surface: surface, SessionID: sessionID},
 		renderer, reader, commandJobsVars(jobs, held, now, waitProcessDoneAllowed),

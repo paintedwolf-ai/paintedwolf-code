@@ -32,6 +32,7 @@ type RecordedVerdict struct {
 
 // WorkerTaskAssignmentInput is the host-defined charter for a worker leg.
 type WorkerTaskAssignmentInput struct {
+	Reader             prompts.Reader
 	CoverageAssignment *reviewcoverage.Binding
 	ScanInventory      string
 	SessionID          string
@@ -243,7 +244,7 @@ func RenderWorkerTaskAssignment(ctx context.Context, renderer *prompts.InjectRen
 		return "", fmt.Errorf("inject renderer not configured")
 	}
 	data := BuildWorkerTaskAssignmentData(ctx, in)
-	block, err := anchor.RenderInform(ctx, anchor.InjectWorkerTaskAssignment, anchor.MatchContext{Surface: "worker", SessionID: in.SessionID}, renderer, WorkerTaskAssignmentToMap(data))
+	block, err := anchor.RenderInformWithReader(ctx, anchor.InjectWorkerTaskAssignment, anchor.MatchContext{Surface: "worker", SessionID: in.SessionID}, renderer, in.Reader, WorkerTaskAssignmentToMap(data))
 	if err != nil {
 		return "", err
 	}

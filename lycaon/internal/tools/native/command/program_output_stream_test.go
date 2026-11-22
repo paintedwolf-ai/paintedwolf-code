@@ -12,8 +12,15 @@ import (
 	"github.com/lycaon/lycaon/internal/commandprogram"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/toolcontract"
+	"github.com/lycaon/lycaon/internal/toolreach"
 	"github.com/lycaon/lycaon/internal/toolrejection"
 )
+
+func sedStreamAdmittedReach() toolreach.Request {
+	return toolreach.Offered([]string{toolreach.ProgramTool}).WithPrograms(func(name string) bool {
+		return name == "sed"
+	})
+}
 
 type outputSpillAccount struct{ held int64 }
 
@@ -90,7 +97,7 @@ func TestOutputWindowDoesNotSplitLongLinesAndNamesIncompleteCopy(t *testing.T) {
 	data := strings.Repeat("x", 20000) + "\nsummary\n"
 	sample, err := sampleOutput(strings.NewReader(data), 12<<10)
 	testutil.FailErr(t, "sample long line", err)
-	rendered, window, parts, err := sample.window(t.Context(), "stdout", "output:fixture", "@output/fixture.stdout", false)
+	rendered, window, parts, err := sample.window(t.Context(), sedStreamAdmittedReach(), "stdout", "output:fixture", "@output/fixture.stdout", false)
 	testutil.FailErr(t, "render long line", err)
 	if window.HeadEndByte != 0 || window.TailStartLine != 2 || window.OmittedLines != 1 || window.Complete || !strings.HasSuffix(rendered, "summary\n") || strings.Contains(rendered, "full output:") {
 		t.Fatalf("window=%+v rendered=%q", window, rendered)
@@ -158,7 +165,7 @@ func TestNoticeReportsExactWindowAndContinuation(t *testing.T) {
 	for _, complete := range []bool{false, true} {
 		sample, err := sampleOutput(strings.NewReader("one\ntwo\nthree\nfour\n"), 12)
 		testutil.FailErr(t, "sample notice fixture", err)
-		rendered, window, _, err := sample.window(t.Context(), "stdout", "output:fixture", "@output/fixture.stdout", complete)
+		rendered, window, _, err := sample.window(t.Context(), sedStreamAdmittedReach(), "stdout", "output:fixture", "@output/fixture.stdout", complete)
 		testutil.FailErr(t, "render notice fixture", err)
 		label := "full output:"
 		if !complete {
