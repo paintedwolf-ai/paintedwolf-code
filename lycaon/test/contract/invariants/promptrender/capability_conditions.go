@@ -15,6 +15,8 @@ import (
 	"github.com/lycaon/lycaon/internal/pongoplain"
 	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/internal/promptunit"
+	"github.com/lycaon/lycaon/internal/toolcontract"
+	"github.com/lycaon/lycaon/internal/toolschema"
 	"github.com/lycaon/lycaon/internal/toolvocab"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 	"github.com/lycaon/lycaon/test/contract/invariants"
@@ -117,67 +119,10 @@ func classifyAndParseSources(r *invariants.Run) (
 			continue
 		}
 
-		cs := &classifiedSource{rel: srcLabel, body: raw}
-		switch {
-		case packAgentPromptRe.MatchString(rel):
-			m := packAgentPromptRe.FindStringSubmatch(rel)
-			cs.family, cs.packKey = "agents/prompts", m[1]
-			includes["agents/"+m[2]] = cs
-		case packPartialRe.MatchString(rel):
-			m := packPartialRe.FindStringSubmatch(rel)
-			cs.family, cs.packKey = "shared/partials", m[1]
-			includes["partials/"+m[2]] = cs
-		case packUnitRe.MatchString(rel):
-			m := packUnitRe.FindStringSubmatch(rel)
-			cs.family, cs.packKey = "shared/units", m[1]
-			fmRaw, _ := splitMarkdownFrontmatter(raw)
-			if fmRaw != "" {
-				var ufm unitFrontmatter
-				if err := yaml.Unmarshal([]byte(fmRaw), &ufm); err == nil {
-					cs.attaches = ufm.Attaches
-				}
-			}
-			cs.body = string(promptunit.Body([]byte(raw)))
-		case packArchetypeRe.MatchString(rel):
-			m := packArchetypeRe.FindStringSubmatch(rel)
-			cs.family, cs.packKey = "shared/archetypes", m[1]
-			includes["archetypes/"+m[2]] = cs
-		case packGuidanceRe.MatchString(rel):
-			m := packGuidanceRe.FindStringSubmatch(rel)
-			cs.family, cs.packKey = "guidance", m[1]
-		case packArchiveGuidRe.MatchString(rel):
-			m := packArchiveGuidRe.FindStringSubmatch(rel)
-			cs.family, cs.packKey = "archive/guidance", m[1]
-		case packSkillBodyRe.MatchString(rel):
-			m := packSkillBodyRe.FindStringSubmatch(rel)
-			cs.family, cs.packKey, cs.skillName = "skills/SKILL.md", m[1], m[2]
-			fmRaw, body := splitMarkdownFrontmatter(raw)
-			cs.body = body
-			if fmRaw != "" {
-				var sfm skillFrontmatter
-				if err := yaml.Unmarshal([]byte(fmRaw), &sfm); err == nil {
-					if strings.TrimSpace(sfm.Name) != "" {
-						cs.skillName = strings.TrimSpace(sfm.Name)
-					}
-					if strings.TrimSpace(sfm.Metadata["host_resources"]) != "" {
-						cs.hostResource = true
-					}
-					for _, part := range strings.Split(sfm.Metadata["paintedwolf.any_of_tools"], ",") {
-						if t := strings.TrimSpace(part); t != "" {
-							cs.anyOfTools = append(cs.anyOfTools, t)
-						}
-					}
-				}
-			}
-			skillBodies[cs.packKey+":"+m[2]] = cs
-		case packSkillRefRe.MatchString(rel):
-			m := packSkillRefRe.FindStringSubmatch(rel)
-			cs.family, cs.packKey, cs.skillName = "skills/references", m[1], m[2]
-		default:
-			r.Report("%s: unclassified markdown source outside reviewed prompt/skill families and explicit exclusions", srcLabel)
+		cs, ok := classifySingleMarkdown(r, rel, srcLabel, raw, includes, skillBodies)
+		if !ok {
 			continue
 		}
-
 		tree, err := pongoplain.ParseTemplateTree(cs.body)
 		if err != nil {
 			r.Report("%s: unhandled or invalid template expression/tag: %v", srcLabel, err)
@@ -200,6 +145,75 @@ func classifyAndParseSources(r *invariants.Run) (
 		}
 	}
 	return parsed, includes, skillBodies
+}
+
+func classifySingleMarkdown(
+	r *invariants.Run,
+	rel, srcLabel, raw string,
+	includes map[string]*classifiedSource,
+	skillBodies map[string]*classifiedSource,
+) (*classifiedSource, bool) {
+	cs := &classifiedSource{rel: srcLabel, body: raw}
+	switch {
+	case packAgentPromptRe.MatchString(rel):
+		m := packAgentPromptRe.FindStringSubmatch(rel)
+		cs.family, cs.packKey = "agents/prompts", m[1]
+		includes["agents/"+m[2]] = cs
+	case packPartialRe.MatchString(rel):
+		m := packPartialRe.FindStringSubmatch(rel)
+		cs.family, cs.packKey = "shared/partials", m[1]
+		includes["partials/"+m[2]] = cs
+	case packUnitRe.MatchString(rel):
+		m := packUnitRe.FindStringSubmatch(rel)
+		cs.family, cs.packKey = "shared/units", m[1]
+		fmRaw, _ := splitMarkdownFrontmatter(raw)
+		if fmRaw != "" {
+			var ufm unitFrontmatter
+			if err := yaml.Unmarshal([]byte(fmRaw), &ufm); err == nil {
+				cs.attaches = ufm.Attaches
+			}
+		}
+		cs.body = string(promptunit.Body([]byte(raw)))
+	case packArchetypeRe.MatchString(rel):
+		m := packArchetypeRe.FindStringSubmatch(rel)
+		cs.family, cs.packKey = "shared/archetypes", m[1]
+		includes["archetypes/"+m[2]] = cs
+	case packGuidanceRe.MatchString(rel):
+		m := packGuidanceRe.FindStringSubmatch(rel)
+		cs.family, cs.packKey = "guidance", m[1]
+	case packArchiveGuidRe.MatchString(rel):
+		m := packArchiveGuidRe.FindStringSubmatch(rel)
+		cs.family, cs.packKey = "archive/guidance", m[1]
+	case packSkillBodyRe.MatchString(rel):
+		m := packSkillBodyRe.FindStringSubmatch(rel)
+		cs.family, cs.packKey, cs.skillName = "skills/SKILL.md", m[1], m[2]
+		fmRaw, body := splitMarkdownFrontmatter(raw)
+		cs.body = body
+		if fmRaw != "" {
+			var sfm skillFrontmatter
+			if err := yaml.Unmarshal([]byte(fmRaw), &sfm); err == nil {
+				if strings.TrimSpace(sfm.Name) != "" {
+					cs.skillName = strings.TrimSpace(sfm.Name)
+				}
+				if strings.TrimSpace(sfm.Metadata["host_resources"]) != "" {
+					cs.hostResource = true
+				}
+				for _, part := range strings.Split(sfm.Metadata["paintedwolf.any_of_tools"], ",") {
+					if t := strings.TrimSpace(part); t != "" {
+						cs.anyOfTools = append(cs.anyOfTools, t)
+					}
+				}
+			}
+		}
+		skillBodies[cs.packKey+":"+m[2]] = cs
+	case packSkillRefRe.MatchString(rel):
+		m := packSkillRefRe.FindStringSubmatch(rel)
+		cs.family, cs.packKey, cs.skillName = "skills/references", m[1], m[2]
+	default:
+		r.Report("%s: unclassified markdown source outside reviewed prompt/skill families and explicit exclusions", srcLabel)
+		return nil, false
+	}
+	return cs, true
 }
 
 // Every markdown source under lycaon/config is reconciled into a reviewed
@@ -355,7 +369,7 @@ var (
 	externalSelectorRe  = regexp.MustCompile("`external\\s+--")
 	curlInCommandRe     = regexp.MustCompile("`curl(?:`|\\s+-)")
 	prunedSchemaClaimRe = regexp.MustCompile("`(capability_request(?:\\.[a-z_]+)?|secret_use(?:\\.[a-z_]+)?|socks_proxy(?::\\s*true)?|snapshot_capture|terminal_capture|command\\([^`]*verification:\\s*true[^`]*\\))`")
-	negatedClauseRe     = regexp.MustCompile(`(?i)(?:\bdo\s+not\b|\bnever\b|\bno\b|\bwithout\b|\bcannot\b|\brefused\b|\bnot\s+assign\b)[^.\n]*`)
+	negatedClauseRe     = regexp.MustCompile(`(?i)(?:\bdo\s+not\b|\bnever\b|\bno\b|\bwithout\b|\bcannot\b|\brefused\b|\bnot\s+assign\b|\bunavailable\b)[^.\n]*`)
 )
 
 type localAlias struct {
@@ -424,7 +438,6 @@ func isMultiRunnerDisjunction(e *pongoplain.Expr) bool {
 		walk(n.Right)
 	}
 	walk(e)
-	// Count distinct tool families among command, verify, and terminal_*.
 	families := map[string]bool{}
 	for id := range runners {
 		switch {
@@ -440,28 +453,35 @@ func isMultiRunnerDisjunction(e *pongoplain.Expr) bool {
 }
 
 // collectPositiveFacts extracts capability/tool facts established when g holds.
-func collectPositiveFacts(e *pongoplain.Expr, negated bool, out map[string]bool) {
+func collectPositiveFacts(e *pongoplain.Expr, negated bool, negatedFacts map[string]bool, schemas *toolschema.Config, out map[string]bool) {
 	if e == nil {
 		return
 	}
 	switch e.Kind {
 	case pongoplain.ExprNot:
-		collectPositiveFacts(e.Left, !negated, out)
+		collectPositiveFacts(e.Left, !negated, negatedFacts, schemas, out)
 	case pongoplain.ExprAnd:
 		if !negated {
-			collectPositiveFacts(e.Left, false, out)
-			collectPositiveFacts(e.Right, false, out)
+			collectPositiveFacts(e.Left, false, negatedFacts, schemas, out)
+			collectPositiveFacts(e.Right, false, negatedFacts, schemas, out)
 		}
 	case pongoplain.ExprOr:
 		if negated {
-			collectPositiveFacts(e.Left, true, out)
-			collectPositiveFacts(e.Right, true, out)
+			collectPositiveFacts(e.Left, true, negatedFacts, schemas, out)
+			collectPositiveFacts(e.Right, true, negatedFacts, schemas, out)
 		} else {
+			if exprFalsifiedBy(e.Left, negatedFacts) {
+				collectPositiveFacts(e.Right, false, negatedFacts, schemas, out)
+				return
+			}
+			if exprFalsifiedBy(e.Right, negatedFacts) {
+				collectPositiveFacts(e.Left, false, negatedFacts, schemas, out)
+				return
+			}
 			leftSet := map[string]bool{}
 			rightSet := map[string]bool{}
-			collectPositiveFacts(e.Left, false, leftSet)
-			collectPositiveFacts(e.Right, false, rightSet)
-			// Intersect common capabilities, and also mark runner/verify union when all arms establish execution.
+			collectPositiveFacts(e.Left, false, negatedFacts, schemas, leftSet)
+			collectPositiveFacts(e.Right, false, negatedFacts, schemas, rightSet)
 			for k := range leftSet {
 				if rightSet[k] {
 					out[k] = true
@@ -475,9 +495,12 @@ func collectPositiveFacts(e *pongoplain.Expr, negated bool, out map[string]bool)
 	case pongoplain.ExprIdent:
 		if !negated {
 			out[e.Ident] = true
-			markImpliedCapabilities(e.Ident, out)
-		} else if e.Ident == "command_external_hidden" {
-			out["command_external_shown"] = true
+			markImpliedCapabilities(e.Ident, schemas, out)
+		} else {
+			negatedFacts[e.Ident] = true
+			if e.Ident == "command_external_hidden" {
+				out["command_external_shown"] = true
+			}
 		}
 	case pongoplain.ExprCompare:
 		if e.Left != nil && e.Left.Kind == pongoplain.ExprIdent && e.Right != nil && e.Right.Kind == pongoplain.ExprLiteral {
@@ -488,7 +511,7 @@ func collectPositiveFacts(e *pongoplain.Expr, negated bool, out map[string]bool)
 				(negated && e.Op == "==" && (lit == "false" || lit == "False"))
 			if truthy {
 				out[id] = true
-				markImpliedCapabilities(id, out)
+				markImpliedCapabilities(id, schemas, out)
 			}
 			falsyHidden := (!negated && e.Op == "==" && id == "command_external_hidden" && (lit == "false" || lit == "False"))
 			if falsyHidden {
@@ -498,7 +521,48 @@ func collectPositiveFacts(e *pongoplain.Expr, negated bool, out map[string]bool)
 	}
 }
 
-func markImpliedCapabilities(fact string, out map[string]bool) {
+func exprFalsifiedBy(e *pongoplain.Expr, negatedFacts map[string]bool) bool {
+	if e == nil || len(negatedFacts) == 0 {
+		return false
+	}
+	if e.Kind == pongoplain.ExprIdent {
+		return negatedFacts[e.Ident]
+	}
+	if e.Kind == pongoplain.ExprAnd {
+		return exprFalsifiedBy(e.Left, negatedFacts) || exprFalsifiedBy(e.Right, negatedFacts)
+	}
+	return false
+}
+
+func markProjectedSchemaFieldsForTool(toolName string, commandReadOnly bool, schemas *toolschema.Config, out map[string]bool) {
+	if schemas == nil {
+		return
+	}
+	meta, ok := schemas.ToolMeta(toolName)
+	if !ok {
+		return
+	}
+	proj := toolschema.ProjectToolArgsSchema(toolName, meta.ArgsSchema, toolschema.ProjectOptions{
+		CommandReadOnly: commandReadOnly,
+	})
+	for _, field := range toolschema.ArgFieldPaths(proj) {
+		out["schema_accepts:"+field] = true
+	}
+}
+
+func markImpliedCapabilities(fact string, schemas *toolschema.Config, out map[string]bool) {
+	if strings.HasPrefix(fact, "profile_has_") {
+		toolName := strings.TrimPrefix(fact, "profile_has_")
+		if toolName == "command" {
+			markProjectedSchemaFieldsForTool("command", !out["profile_command_external_exec"], schemas, out)
+		} else if toolName == "terminal_capture" {
+			out["profile_has_command"] = true
+			out["profile_command_external_exec"] = true
+			markProjectedSchemaFieldsForTool("command", false, schemas, out)
+		} else {
+			markProjectedSchemaFieldsForTool(toolName, false, schemas, out)
+		}
+	}
 	switch fact {
 	case "can_git_read", "can_any_git_read":
 		out["profile_has_command"] = true
@@ -513,25 +577,52 @@ func markImpliedCapabilities(fact string, out map[string]bool) {
 		out["profile_command_mutation"] = true
 		out["profile_command_external_exec"] = true
 		out["git_read_reach"] = true
-		out["git_commit_reach"] = true
-	case "can_command_verify":
+		out["git_bisect_reach"] = true
+		markProjectedSchemaFieldsForTool("command", false, schemas, out)
+	case "can_command_verify", "profile_command_external_exec":
 		out["profile_has_command"] = true
 		out["profile_command_external_exec"] = true
+		out["profile_has_terminal_capture"] = true
+		markProjectedSchemaFieldsForTool("command", false, schemas, out)
 	case "can_command_external_selector":
 		out["profile_has_command"] = true
 		out["profile_command_external_exec"] = true
+		out["profile_has_terminal_capture"] = true
 		out["command_external_shown"] = true
-	case "profile_command_mutation":
+		markProjectedSchemaFieldsForTool("command", false, schemas, out)
+	case "profile_command_mutation", "profile_command_network_egress":
 		out["profile_has_command"] = true
-		out["git_commit_reach"] = true
-	case "profile_command_external_exec", "profile_has_terminal_capture":
-		out["profile_has_command"] = true
-		out["profile_command_external_exec"] = true
-	case "profile_command_network_egress":
-		out["profile_has_command"] = true
-	case "runner_capability_request_tools", "runner_host_resources_tools", "runner_direct_ip_tools",
-		"runner_local_listen_tools", "runner_loopback_connect_tools", "runner_socket_tools", "runner_write_root_tools":
+	case "runner_capability_request_tools":
+		out["schema_accepts:capability_request"] = true
+	case "runner_host_resources_tools":
 		out["runner_capability_request_tools"] = true
+		out["schema_accepts:capability_request"] = true
+		out["schema_accepts:capability_request.host_resources"] = true
+	case "runner_direct_ip_tools":
+		out["runner_capability_request_tools"] = true
+		out["schema_accepts:capability_request"] = true
+		out["schema_accepts:capability_request.direct_ip"] = true
+	case "runner_local_listen_tools":
+		out["runner_capability_request_tools"] = true
+		out["schema_accepts:capability_request"] = true
+		out["schema_accepts:capability_request.local_listen"] = true
+	case "runner_loopback_connect_tools":
+		out["runner_capability_request_tools"] = true
+		out["schema_accepts:capability_request"] = true
+		out["schema_accepts:capability_request.loopback_connect"] = true
+	case "runner_socket_tools":
+		out["runner_capability_request_tools"] = true
+		out["schema_accepts:capability_request"] = true
+		out["schema_accepts:capability_request.socket_paths"] = true
+	case "runner_write_root_tools":
+		out["runner_capability_request_tools"] = true
+		out["schema_accepts:capability_request"] = true
+		out["schema_accepts:capability_request.write_root"] = true
+	case "runner_secret_use_tools":
+		out["schema_accepts:secret_use"] = true
+		out["schema_accepts:secret_use.services"] = true
+	case "runner_socks_proxy_tools":
+		out["schema_accepts:socks_proxy"] = true
 	}
 }
 
@@ -549,7 +640,7 @@ func stripNegatedClauses(text string) string {
 	return negatedClauseRe.ReplaceAllString(text, " ")
 }
 
-func surfaceFloorSeed(rel string, surfacePlans map[string][]string) map[string]bool {
+func surfaceFloorSeed(rel string, surfacePlans map[string][]string, schemas *toolschema.Config) map[string]bool {
 	out := map[string]bool{}
 	const prefix = "coordinator-mode-"
 	base := path.Base(rel)
@@ -559,16 +650,18 @@ func surfaceFloorSeed(rel string, surfacePlans map[string][]string) map[string]b
 	surfaceID := strings.ReplaceAll(strings.TrimSuffix(strings.TrimPrefix(base, prefix), ".md"), "-", "_")
 	for _, t := range surfacePlans[surfaceID] {
 		out["profile_has_"+t] = true
+		markImpliedCapabilities("profile_has_"+t, schemas, out)
 	}
 	return out
 }
 
 type capabilityChecker struct {
-	run      *invariants.Run
-	stock    *Stock
-	vocab    prompts.ReaderFactVocabulary
-	includes map[string]*classifiedSource
-	reported map[string]bool
+	run             *invariants.Run
+	stock           *Stock
+	vocab           prompts.ReaderFactVocabulary
+	includes        map[string]*classifiedSource
+	includedTargets map[string]bool
+	reported        map[string]bool
 }
 
 func (cc *capabilityChecker) emit(msg string) {
@@ -586,35 +679,81 @@ func isAuthoringMetaDoc(rel string) bool {
 		strings.Contains(rel, "/skills/write-policy-rule/")
 }
 
+// buildSkillGuaranteedMap derives strictly the facts guaranteed by production
+// skill admission (toolvocab.SkillToolsOffered) and projected tool schemas:
+//   - metadata.host_resources admits only when command(external_exec),
+//     terminal_open, or verify is offered; all three projected schemas accept
+//     capability_request, capability_request.host_resources, and loopback/socket/listen/write_root/read_path.
+//   - Unconditional backticked registered non-form tool names not in any_of_tools
+//     must be held for SkillToolsOffered to admit the skill; each such tool's
+//     projected schema contributes only the fields present on its minimum offered
+//     projection (for command, PruneCommandReadOnlySchema — never pruned args or programs).
 func buildSkillGuaranteedMap(s *Stock, skillBodies map[string]*classifiedSource) map[string]map[string]bool {
+	hostResCommonFields := intersectProjectedFields(s.Schemas, []struct {
+		name     string
+		readOnly bool
+	}{
+		{"command", false},
+		{"terminal_open", false},
+		{"verify", false},
+	})
+
 	out := map[string]map[string]bool{}
 	for key, sb := range skillBodies {
 		g := map[string]bool{}
 		if sb.hostResource {
 			g["runner_capability_request_tools"] = true
 			g["runner_host_resources_tools"] = true
-			g["profile_command_external_exec"] = true
+			for f := range hostResCommonFields {
+				g["schema_accepts:"+f] = true
+			}
 		}
-		if len(sb.anyOfTools) == 0 && sb.tree != nil {
+		if sb.tree != nil {
 			topText := directTextOf(sb.tree.Nodes)
 			for _, t := range toolvocab.ToolsIn(s.Names, topText) {
+				if slices.Contains(sb.anyOfTools, t) || !s.Names.KnownName(t) || toolcontract.CommandFormTool(t) {
+					continue
+				}
 				g["profile_has_"+t] = true
-			}
-			if strings.Contains(topText, "`tui#`") || strings.Contains(topText, "`terminal_capture`") {
-				g["profile_command_external_exec"] = true
-				g["runner_capability_request_tools"] = true
-			}
-			if strings.Contains(topText, "`socks_proxy") {
-				g["runner_socks_proxy_tools"] = true
-			}
-			if strings.Contains(topText, "Native `curl` in `command`") {
-				g["profile_command_network_egress"] = true
-				g["runner_capability_request_tools"] = true
+				markImpliedCapabilities("profile_has_"+t, s.Schemas, g)
 			}
 		}
 		out[key] = g
 	}
 	return out
+}
+
+func intersectProjectedFields(schemas *toolschema.Config, candidates []struct {
+	name     string
+	readOnly bool
+}) map[string]bool {
+	if schemas == nil || len(candidates) == 0 {
+		return nil
+	}
+	var common map[string]bool
+	for i, c := range candidates {
+		meta, ok := schemas.ToolMeta(c.name)
+		if !ok {
+			return nil
+		}
+		proj := toolschema.ProjectToolArgsSchema(c.name, meta.ArgsSchema, toolschema.ProjectOptions{
+			CommandReadOnly: c.readOnly,
+		})
+		cur := map[string]bool{}
+		for _, p := range toolschema.ArgFieldPaths(proj) {
+			cur[p] = true
+		}
+		if i == 0 {
+			common = cur
+			continue
+		}
+		for k := range common {
+			if !cur[k] {
+				delete(common, k)
+			}
+		}
+	}
+	return common
 }
 
 func (cc *capabilityChecker) checkBinding(sourceLabel string, line int, tag string, b pongoplain.Binding, aliases map[string]localAlias) {
@@ -661,6 +800,7 @@ func (cc *capabilityChecker) inspectSegmentActions(
 	condExpr string,
 	ownCondExpr *pongoplain.Expr,
 	ownWorkspaceOnly bool,
+	skipStandalonePartialUnconditional bool,
 	established map[string]bool,
 	aliases map[string]localAlias,
 	segText string,
@@ -695,41 +835,36 @@ func (cc *capabilityChecker) inspectSegmentActions(
 			}
 		}
 	}
-	if authoringDoc {
+	if authoringDoc || skipStandalonePartialUnconditional {
 		return
 	}
-	if externalSelectorRe.MatchString(segText) {
+	cc.checkActionReachInSegment(sourceLabel, line, condExpr, ownWorkspaceOnly, segText, positiveText, established)
+}
+
+func (cc *capabilityChecker) checkActionReachInSegment(
+	sourceLabel string,
+	line int,
+	condExpr string,
+	ownWorkspaceOnly bool,
+	rawText string,
+	positiveText string,
+	established map[string]bool,
+) {
+	exprDesc := condExpr
+	if exprDesc == "" {
+		exprDesc = "<unguarded>"
+	}
+	if externalSelectorRe.MatchString(rawText) {
 		hasSelector := established["can_command_external_selector"] ||
 			(established["profile_command_external_exec"] && established["command_external_shown"])
 		if !hasSelector {
-			exprDesc := condExpr
-			if exprDesc == "" {
-				exprDesc = "<unguarded>"
-			}
 			cc.emit(fmt.Sprintf("%s:%d: expression %q promises action \"external --\" without selector visibility fact can_command_external_selector",
 				sourceLabel, line, exprDesc))
 		}
 	}
-	if ownCondExpr != nil && curlInCommandRe.MatchString(positiveText) && strings.Contains(positiveText, "`command`") {
-		if slices.Contains(ownCondExpr.Identifiers(), "profile_has_command") && !established["profile_command_network_egress"] {
-			cc.emit(fmt.Sprintf("%s:%d: expression %q promises action \"curl in command\" without profile_command_network_egress",
-				sourceLabel, line, condExpr))
-		}
-	}
-	if ownWorkspaceOnly {
-		cc.checkWorkspaceOnlyActions(sourceLabel, line, condExpr, established, positiveText)
-	}
-}
-
-func (cc *capabilityChecker) checkWorkspaceOnlyActions(sourceLabel string, line int, condExpr string, established map[string]bool, positiveText string) {
-	for _, tool := range toolvocab.ToolsIn(cc.stock.Names, positiveText) {
-		if established["profile_has_"+tool] ||
-			(tool == "request_tools" && (established["more_tools_loadable"] || hasPrefixFact(established, "profile_can_request.") || hasPrefixFact(established, "can_request_"))) ||
-			(tool == "command" && established["profile_has_command"]) {
-			continue
-		}
-		cc.emit(fmt.Sprintf("%s:%d: expression %q promises tool %q using only workspace/identity facts (missing profile_has_%s or declared capability fact)",
-			sourceLabel, line, condExpr, tool, tool))
+	if curlInCommandRe.MatchString(positiveText) && !established["profile_command_network_egress"] {
+		cc.emit(fmt.Sprintf("%s:%d: expression %q promises action \"curl\" without profile_command_network_egress",
+			sourceLabel, line, exprDesc))
 	}
 	for _, gm := range gitCmdActionRe.FindAllStringSubmatch(positiveText, -1) {
 		sub := gm[1]
@@ -737,26 +872,67 @@ func (cc *capabilityChecker) checkWorkspaceOnlyActions(sourceLabel string, line 
 		case "add", "commit":
 			if !established["git_commit_reach"] {
 				cc.emit(fmt.Sprintf("%s:%d: expression %q promises action \"git %s\" without declared capability fact can_git_commit",
-					sourceLabel, line, condExpr, sub))
+					sourceLabel, line, exprDesc, sub))
 			}
-		case "bisect", "worktree":
-			if !established["profile_command_external_exec"] || !established["git_commit_reach"] {
+		case "bisect":
+			// Allow prose cross-references like "Covers `git bisect` ... where Git is available".
+			if strings.Contains(positiveText, "where Git is available") {
+				continue
+			}
+			if !established["git_bisect_reach"] {
 				cc.emit(fmt.Sprintf("%s:%d: expression %q promises action \"git %s\" without declared capability fact can_git_bisect",
-					sourceLabel, line, condExpr, sub))
+					sourceLabel, line, exprDesc, sub))
+			}
+		case "worktree":
+			if !established["git_bisect_reach"] && !established["git_commit_reach"] {
+				cc.emit(fmt.Sprintf("%s:%d: expression %q promises action \"git %s\" without declared capability fact can_git_bisect",
+					sourceLabel, line, exprDesc, sub))
 			}
 		default:
-			if !established["git_read_reach"] && !established["profile_has_command"] {
+			if ownWorkspaceOnly && !established["git_read_reach"] && !established["profile_has_command"] {
 				cc.emit(fmt.Sprintf("%s:%d: expression %q promises action \"git %s\" without declared capability fact can_git_read",
-					sourceLabel, line, condExpr, sub))
+					sourceLabel, line, exprDesc, sub))
 			}
 		}
 	}
 	for _, pm := range prunedSchemaClaimRe.FindAllStringSubmatch(positiveText, -1) {
 		arg := pm[1]
-		if !established["profile_command_external_exec"] && !established["runner_capability_request_tools"] && !established["runner_secret_use_tools"] && !established["runner_socks_proxy_tools"] {
-			cc.emit(fmt.Sprintf("%s:%d: expression %q promises projected-schema argument %q without declared runner/external-exec capability fact",
-				sourceLabel, line, condExpr, arg))
+		if !schemaClaimEstablished(arg, established) {
+			cc.emit(fmt.Sprintf("%s:%d: expression %q promises projected-schema argument %q without declared runner/schema capability fact",
+				sourceLabel, line, exprDesc, arg))
 		}
+	}
+	if ownWorkspaceOnly {
+		for _, tool := range toolvocab.ToolsIn(cc.stock.Names, positiveText) {
+			if established["profile_has_"+tool] ||
+				(tool == "request_tools" && (established["more_tools_loadable"] || hasPrefixFact(established, "profile_can_request.") || hasPrefixFact(established, "can_request_"))) ||
+				(tool == "command" && established["profile_has_command"]) {
+				continue
+			}
+			cc.emit(fmt.Sprintf("%s:%d: expression %q promises tool %q using only workspace/identity facts (missing profile_has_%s or declared capability fact)",
+				sourceLabel, line, exprDesc, tool, tool))
+		}
+	}
+}
+
+func schemaClaimEstablished(arg string, established map[string]bool) bool {
+	switch {
+	case strings.HasPrefix(arg, "command(") && strings.Contains(arg, "verification:"):
+		return established["can_command_verify"] || established["profile_command_external_exec"] || established["schema_accepts:verification"]
+	case arg == "terminal_capture":
+		return established["profile_has_terminal_capture"] || established["profile_command_external_exec"] || established["schema_accepts:terminal_capture"]
+	case arg == "snapshot_capture":
+		return established["profile_command_external_exec"] || established["schema_accepts:snapshot_capture"]
+	case strings.HasPrefix(arg, "socks_proxy"):
+		return established["runner_socks_proxy_tools"] || established["schema_accepts:socks_proxy"]
+	case strings.HasPrefix(arg, "secret_use"):
+		return established["runner_secret_use_tools"] || established["schema_accepts:secret_use"]
+	case strings.HasPrefix(arg, "capability_request."):
+		return established["schema_accepts:"+arg]
+	case arg == "capability_request":
+		return established["runner_capability_request_tools"] || established["schema_accepts:capability_request"]
+	default:
+		return false
 	}
 }
 
@@ -773,8 +949,16 @@ func (cc *capabilityChecker) checkNodes(
 	authoringDoc := isAuthoringMetaDoc(cs.rel)
 
 	established := cloneBoolMap(baseFacts)
+	negatedFacts := map[string]bool{}
 	for _, g := range guards {
-		collectPositiveFacts(g.expr, g.negated, established)
+		if g.negated {
+			collectPositiveFacts(g.expr, true, negatedFacts, cc.stock.Schemas, established)
+		}
+	}
+	for _, g := range guards {
+		if !g.negated {
+			collectPositiveFacts(g.expr, false, negatedFacts, cc.stock.Schemas, established)
+		}
 	}
 
 	var topCondRaw string
@@ -793,14 +977,22 @@ func (cc *capabilityChecker) checkNodes(
 		})
 	}
 
+	// Included partials/archetypes are audited in their caller's context via NodeInclude;
+	// standalone partial pass still checks bindings, tool_profile checks, runner disjunctions,
+	// and workspace-only branches, and also audits unguarded text if no caller includes it.
+	skipStandalonePartialUnconditional := originSuffix == "" &&
+		(cs.family == "shared/partials" || cs.family == "shared/archetypes") &&
+		cc.includedTargets[cs.rel] &&
+		len(guards) == 0
+
 	for _, n := range nodes {
 		switch n.Kind {
 		case pongoplain.NodeText:
-			if len(guards) > 0 && topCondRaw != "" {
-				cc.inspectSegmentActions(sourceLabel, n.Line, topCondRaw, topCondExpr, ownWorkspaceOnly, established, aliases, n.Text, authoringDoc)
-			} else if !authoringDoc && externalSelectorRe.MatchString(n.Text) {
-				cc.inspectSegmentActions(sourceLabel, n.Line, "", nil, false, established, aliases, n.Text, false)
-			}
+			cc.inspectSegmentActions(
+				sourceLabel, n.Line, topCondRaw, topCondExpr,
+				ownWorkspaceOnly, skipStandalonePartialUnconditional,
+				established, aliases, n.Text, authoringDoc,
+			)
 		case pongoplain.NodeOutput:
 			cc.checkTernaryOutput(sourceLabel, n, established, aliases, authoringDoc)
 		case pongoplain.NodeSet:
@@ -858,21 +1050,21 @@ func (cc *capabilityChecker) checkTernaryOutput(
 	ids := n.Expr.Cond.Identifiers()
 	wsOnly := len(ids) > 0 && !slices.ContainsFunc(ids, func(id string) bool { return !workspaceIdentityOnlyFacts[id] })
 	posEst := cloneBoolMap(established)
-	collectPositiveFacts(n.Expr.Cond, false, posEst)
+	collectPositiveFacts(n.Expr.Cond, false, map[string]bool{}, cc.stock.Schemas, posEst)
 	if n.Expr.Left != nil && n.Expr.Left.Kind == pongoplain.ExprLiteral {
-		cc.inspectSegmentActions(sourceLabel, n.Line, n.RawExpr, n.Expr.Cond, wsOnly, posEst, aliases, n.Expr.Left.Literal, authoringDoc)
+		cc.inspectSegmentActions(sourceLabel, n.Line, n.RawExpr, n.Expr.Cond, wsOnly, false, posEst, aliases, n.Expr.Left.Literal, authoringDoc)
 	}
 	negEst := cloneBoolMap(established)
-	collectPositiveFacts(n.Expr.Cond, true, negEst)
+	collectPositiveFacts(n.Expr.Cond, true, map[string]bool{}, cc.stock.Schemas, negEst)
 	if n.Expr.Right != nil && n.Expr.Right.Kind == pongoplain.ExprLiteral {
-		cc.inspectSegmentActions(sourceLabel, n.Line, n.RawExpr, n.Expr.Cond, wsOnly, negEst, aliases, n.Expr.Right.Literal, authoringDoc)
+		cc.inspectSegmentActions(sourceLabel, n.Line, n.RawExpr, n.Expr.Cond, wsOnly, false, negEst, aliases, n.Expr.Right.Literal, authoringDoc)
 	}
 }
 
 // Every shipped prompt, partial, unit, guidance template, skill body, and skill
 // reference expresses action/tool/schema eligibility through declared host
 // reader facts rather than local aliases, profile-ID checks, inline runner
-// disjunctions, or workspace-metadata-only conditions.
+// disjunctions, self-justifying body mentions, or workspace-metadata-only conditions.
 func capabilityConditionsUseDeclaredFacts(r *invariants.Run) {
 	parsed, includes, skillBodies := classifyAndParseSources(r)
 	if len(parsed) == 0 {
@@ -888,42 +1080,77 @@ func capabilityConditionsUseDeclaredFacts(r *invariants.Run) {
 			surfacePlans[id] = pl.ImmediateNames()
 		}
 	}
+	includedTargets := collectIncludedTargets(parsed, includes)
 	skillGuaranteed := buildSkillGuaranteedMap(s, skillBodies)
 	cc := &capabilityChecker{
-		run:      r,
-		stock:    s,
-		vocab:    vocab,
-		includes: includes,
-		reported: map[string]bool{},
+		run:             r,
+		stock:           s,
+		vocab:           vocab,
+		includes:        includes,
+		includedTargets: includedTargets,
+		reported:        map[string]bool{},
 	}
 
 	for _, cs := range parsed {
 		if cs.tree == nil {
 			continue
 		}
-		seed := buildSourceSeed(cs, surfacePlans, skillGuaranteed)
+		seed := buildSourceSeed(cs, surfacePlans, skillGuaranteed, s.Schemas)
 		cc.checkNodes(cs, "", cs.tree.Nodes, seed, nil, map[string]localAlias{}, map[string]bool{cs.rel: true})
 	}
 }
 
-func buildSourceSeed(cs *classifiedSource, surfacePlans map[string][]string, skillGuaranteed map[string]map[string]bool) map[string]bool {
-	seed := surfaceFloorSeed(cs.rel, surfacePlans)
+func collectIncludedTargets(parsed []*classifiedSource, includes map[string]*classifiedSource) map[string]bool {
+	out := map[string]bool{}
+	var walk func([]*pongoplain.TemplateNode)
+	walk = func(nodes []*pongoplain.TemplateNode) {
+		for _, n := range nodes {
+			if n.Kind == pongoplain.NodeInclude {
+				if target, ok := includes[n.IncludeRef]; ok {
+					out[target.rel] = true
+				}
+			}
+			for _, br := range n.Branches {
+				walk(br.Body)
+			}
+			walk(n.Body)
+			walk(n.EmptyBody)
+		}
+	}
+	for _, cs := range parsed {
+		if cs.tree != nil {
+			walk(cs.tree.Nodes)
+		}
+	}
+	return out
+}
+
+func buildSourceSeed(
+	cs *classifiedSource,
+	surfacePlans map[string][]string,
+	skillGuaranteed map[string]map[string]bool,
+	schemas *toolschema.Config,
+) map[string]bool {
+	seed := surfaceFloorSeed(cs.rel, surfacePlans, schemas)
 	for _, att := range cs.attaches {
 		att = strings.TrimSpace(att)
 		switch att {
 		case "command_mutation":
 			seed["profile_has_command"] = true
 			seed["profile_command_mutation"] = true
-			seed["git_commit_reach"] = true
+			markImpliedCapabilities("profile_command_mutation", schemas, seed)
 		case "command_external_exec":
 			seed["profile_has_command"] = true
 			seed["profile_command_external_exec"] = true
+			markImpliedCapabilities("profile_command_external_exec", schemas, seed)
 		case "command_network_egress":
 			seed["profile_has_command"] = true
 			seed["profile_command_network_egress"] = true
+			markImpliedCapabilities("profile_command_network_egress", schemas, seed)
 		default:
 			if att != "" {
 				seed["profile_has_"+att] = true
+				markImpliedCapabilities("profile_has_"+att, schemas, seed)
 			}
 		}
 	}
@@ -937,9 +1164,6 @@ func buildSourceSeed(cs *classifiedSource, surfacePlans map[string][]string, ski
 				}
 			}
 		}
-	}
-	if cs.family == "shared/partials" || cs.family == "shared/archetypes" {
-		seed["standalone_partial"] = true
 	}
 	return seed
 }

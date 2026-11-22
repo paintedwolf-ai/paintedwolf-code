@@ -120,7 +120,7 @@ func RenderStockSkills(stock *Stock) ([]SkillRender, error) {
 	}
 	var readOnlyProfiles []sandbox.ToolProfile
 	for _, posture := range postures.List() {
-		if string(posture.ID) == "read_only" {
+		if string(posture.ID) == "spec" {
 			readOnlyProfiles = slices.Clone(stock.Profiles)
 			for i := range readOnlyProfiles {
 				readOnlyProfiles[i].CommandEffects &= posture.CommandEffects

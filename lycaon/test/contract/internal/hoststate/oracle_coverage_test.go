@@ -1,6 +1,7 @@
 package hoststate_test
 
 import (
+	"slices"
 	"strings"
 	"testing"
 
@@ -13,6 +14,8 @@ import (
 	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/toolreach"
+	"github.com/lycaon/lycaon/internal/toolschema"
+	"github.com/lycaon/lycaon/internal/toolsurface"
 	"github.com/lycaon/lycaon/pkg/api"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 	"github.com/lycaon/lycaon/test/contract/internal/hoststate"
@@ -318,4 +321,205 @@ func TestCoverageTrackerFlagsDeadAndVacuousBranches(t *testing.T) {
 	if err := report.Validate(); err == nil {
 		t.Fatal("expected Validate() error on dead and vacuous branches")
 	}
+}
+
+func expectedToolsAcceptingField(offered []string, schemas map[string]map[string]any, fieldPath string, runnerOnly bool) []string {
+	var out []string
+	for _, name := range offered {
+		if runnerOnly {
+			if mr, ok := toolcontract.MultiRootOf(name); !ok || mr != toolcontract.MultiRootCommand {
+				continue
+			}
+		}
+		if toolschema.SchemaAcceptsField(schemas[name], fieldPath) {
+			out = append(out, name)
+		}
+	}
+	return out
+}
+
+func assertReaderRunnerSchemaParity(t *testing.T, label string, reader prompts.Reader, offered []string, reqSchemas map[string]map[string]any) {
+	t.Helper()
+	facts := reader.Facts()
+	checks := []struct {
+		factKey    string
+		fieldPath  string
+		runnerOnly bool
+	}{
+		{"runner_capability_request_tools", "capability_request", true},
+		{"runner_host_resources_tools", "capability_request.host_resources", false},
+		{"runner_secret_use_tools", "secret_use", false},
+		{"runner_socks_proxy_tools", "socks_proxy", false},
+	}
+	for _, chk := range checks {
+		got, _ := facts[chk.factKey].([]string)
+		want := expectedToolsAcceptingField(offered, reqSchemas, chk.fieldPath, chk.runnerOnly)
+		if !slices.Equal(got, want) {
+			t.Fatalf("%s: %s = %v, want request-schema parity %v (field %q)", label, chk.factKey, got, want, chk.fieldPath)
+		}
+	}
+}
+
+func TestProjectedSchemaToolsParityAcrossNarrowingAndPartialAvailability(t *testing.T) {
+	overlays, err := hoststate.DiscoverPackOverlays(t.Context())
+	contractcheck.FailErr(t, "DiscoverPackOverlays", err)
+	stock := overlays[0]
+
+	t.Run("coordinator_and_worker_request_schema_parity_across_independent_narrowing_axes", func(t *testing.T) {
+		for _, posture := range []api.SessionPosture{api.SessionPostureSpec, api.SessionPostureVet, api.SessionPostureBuild, api.SessionPostureOrchestrate} {
+			narrowed, nErr := hoststate.NarrowProfilesForPosture(stock.Profiles, posture, false)
+			contractcheck.FailErr(t, "NarrowProfilesForPosture", nErr)
+			for _, mode := range []api.SessionMode{api.SessionModeAgent, api.SessionModeAsk} {
+				for _, externalHidden := range []bool{false, true} {
+					surfaceIDs := []string{"implement_investigate", "implement_routing", "implement_dispatch"}
+					if mode == api.SessionModeAsk {
+						surfaceIDs = []string{"observe_investigate"}
+					}
+					for _, surfID := range surfaceIDs {
+						tp := surface.ResolveTurnProfileForSurface(surfID, api.CoordinatorRunContext{}, &api.Session{Mode: mode, Posture: posture})
+						pl, pErr := surface.CompileToolPlan(tp, 1)
+						contractcheck.FailErr(t, "CompileToolPlan", pErr)
+						for _, loadDeferred := range []bool{false, true} {
+							loaded := map[string]bool{}
+							if loadDeferred {
+								for _, d := range pl.DeferredNames() {
+									loaded[d] = true
+								}
+							}
+							auth, fErr := hoststate.FreezeTurnAuthority(t.Context(), hoststate.CoordinatorState{
+								Overlay: stock, SessionMode: mode, Posture: posture, RootCount: 1,
+								HasGit: true, WebSearch: true, CommandExternalHidden: externalHidden,
+								TurnProfile: tp, Plan: pl, Loaded: loaded, SpawnAllowlist: stock.SpawnAllowlist,
+							})
+							contractcheck.FailErr(t, "FreezeTurnAuthority", fErr)
+							lbl := string(posture) + "/" + string(mode) + "/" + surfID
+							assertReaderRunnerSchemaParity(t, "coord-live/"+lbl, auth.Reader, auth.Offered, auth.Schemas)
+
+							derivedReader, dErr := prompts.NewReader(prompts.ReaderInput{
+								ProfileID: prompts.CoordinatorProfileID, SurfaceID: surfID, SessionMode: string(mode),
+								Profiles: narrowed, Plan: auth.Plan, Loaded: loaded, Visible: auth.Offered,
+								Schemas: stock.Schemas, RootCount: 1, HasGit: true, WebSearch: true,
+								CommandExternalHidden: externalHidden,
+							})
+							contractcheck.FailErr(t, "derived coordinator NewReader", dErr)
+							assertReaderRunnerSchemaParity(t, "coord-derived/"+lbl, derivedReader, auth.Offered, auth.Schemas)
+						}
+					}
+				}
+			}
+		}
+
+		for _, agent := range stock.WorkerAgents {
+			for _, posture := range []api.SessionPosture{api.SessionPostureSpec, api.SessionPostureBuild} {
+				for _, parentMode := range []api.SessionMode{api.SessionModeAgent, api.SessionModeAsk} {
+					narrowed, nErr := hoststate.NarrowProfilesForPosture(stock.Profiles, posture, parentMode == api.SessionModeAsk)
+					contractcheck.FailErr(t, "NarrowProfilesForPosture worker", nErr)
+					for _, loadExtra := range []bool{false, true} {
+						loaded := map[string]bool{}
+						if loadExtra {
+							loaded["terminal_send"] = true
+							loaded["page_open"] = true
+						}
+						auth, wErr := hoststate.FreezeWorkerAuthority(t.Context(), hoststate.WorkerState{
+							Overlay: stock, AgentID: agent.ID, ToolProfile: agent.ToolProfile,
+							Posture: posture, ParentSessionMode: parentMode, RootCount: 1,
+							HasGit: true, WebSearch: true, Loaded: loaded,
+						})
+						contractcheck.FailErr(t, "FreezeWorkerAuthority", wErr)
+						lbl := agent.ID + "/" + string(posture) + "/" + string(parentMode)
+						assertReaderRunnerSchemaParity(t, "worker-live/"+lbl, auth.Reader, auth.Offered, auth.Schemas)
+
+						derivedWorker, dErr := prompts.NewReader(prompts.ReaderInput{
+							ProfileID: agent.ToolProfile, SessionMode: string(parentMode),
+							Profiles: narrowed, Plan: auth.Plan, Loaded: loaded, Visible: auth.Offered,
+							Schemas: stock.Schemas, RootCount: 1, HasGit: true, WebSearch: true,
+						})
+						contractcheck.FailErr(t, "derived worker NewReader", dErr)
+						assertReaderRunnerSchemaParity(t, "worker-derived/"+lbl, derivedWorker, auth.Offered, auth.Schemas)
+					}
+				}
+			}
+		}
+	})
+
+	t.Run("partial_availability_subset_witnesses", func(t *testing.T) {
+		// 1. Live request projection: implement worker under spec posture with terminal_send + page_open loaded.
+		// command, terminal_open, terminal_send, verify, page_open, wait all remain offered on CompletionRequest.Tools,
+		// while PruneCommandReadOnlySchema removes capability_request, secret_use, and socks_proxy from command ONLY.
+		specAuth, err := hoststate.FreezeWorkerAuthority(t.Context(), hoststate.WorkerState{
+			Overlay:           stock,
+			AgentID:           "implementer",
+			ToolProfile:       "implement",
+			Posture:           api.SessionPostureSpec,
+			ParentSessionMode: api.SessionModeAgent,
+			RootCount:         1,
+			HasGit:            true,
+			WebSearch:         true,
+			Loaded:            map[string]bool{"terminal_send": true, "page_open": true},
+		})
+		contractcheck.FailErr(t, "FreezeWorkerAuthority spec implementer", err)
+		for _, mustOffer := range []string{"command", "terminal_open", "terminal_send", "verify", "page_open", "wait"} {
+			if !slices.Contains(specAuth.Offered, mustOffer) {
+				t.Fatalf("expected %q to remain offered in partial-availability state; offered=%v", mustOffer, specAuth.Offered)
+			}
+		}
+		facts := specAuth.Reader.Facts()
+		wantHostAndSocks := []string{"terminal_open", "verify"}
+		wantSecretUse := []string{"terminal_open", "terminal_send", "verify"}
+		if got, _ := facts["runner_host_resources_tools"].([]string); !slices.Equal(got, wantHostAndSocks) {
+			t.Fatalf("runner_host_resources_tools = %v, want %v (command pruned, page_open/wait lack host_resources)", got, wantHostAndSocks)
+		}
+		if got, _ := facts["runner_socks_proxy_tools"].([]string); !slices.Equal(got, wantHostAndSocks) {
+			t.Fatalf("runner_socks_proxy_tools = %v, want %v", got, wantHostAndSocks)
+		}
+		if got, _ := facts["runner_secret_use_tools"].([]string); !slices.Equal(got, wantSecretUse) {
+			t.Fatalf("runner_secret_use_tools = %v, want %v", got, wantSecretUse)
+		}
+		if got, _ := facts["runner_capability_request_tools"].([]string); !slices.Equal(got, wantHostAndSocks) {
+			t.Fatalf("runner_capability_request_tools = %v, want %v", got, wantHostAndSocks)
+		}
+
+		// 2. Asymmetric per-tool projected schema narrowing when both command (full effects) and verify are offered:
+		// command accepts capability_request.host_resources (socks_proxy stripped), while verify accepts socks_proxy (host_resources stripped).
+		customProjected := map[string]map[string]any{
+			"command": {
+				"type": "object",
+				"properties": map[string]any{
+					"capability_request": map[string]any{
+						"type": "object",
+						"properties": map[string]any{
+							"host_resources": map[string]any{"type": "array"},
+						},
+					},
+				},
+			},
+			"verify": {
+				"type": "object",
+				"properties": map[string]any{
+					"socks_proxy": map[string]any{"type": "boolean"},
+				},
+			},
+		}
+		asymReader, err := prompts.NewReader(prompts.ReaderInput{
+			ProfileID: "asym_runners",
+			Profiles: []sandbox.ToolProfile{{
+				ID:             "asym_runners",
+				Tools:          map[string]bool{"command": true, "verify": true},
+				CommandEffects: toolcontract.AllCommandEffects(),
+			}},
+			Plan:             toolsurface.Compile([]string{"command", "verify"}, nil),
+			Visible:          []string{"command", "verify"},
+			Schemas:          stock.Schemas,
+			ProjectedSchemas: customProjected,
+			RootCount:        1,
+		})
+		contractcheck.FailErr(t, "asymReader", err)
+		af := asymReader.Facts()
+		if got, _ := af["runner_host_resources_tools"].([]string); !slices.Equal(got, []string{"command"}) {
+			t.Fatalf("asym runner_host_resources_tools = %v, want [command]", got)
+		}
+		if got, _ := af["runner_socks_proxy_tools"].([]string); !slices.Equal(got, []string{"verify"}) {
+			t.Fatalf("asym runner_socks_proxy_tools = %v, want [verify]", got)
+		}
+	})
 }

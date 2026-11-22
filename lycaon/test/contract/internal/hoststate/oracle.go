@@ -270,6 +270,7 @@ func FreezeTurnAuthority(ctx context.Context, state CoordinatorState) (TurnAutho
 	}
 
 	offered := toolMetaNames(metas)
+	projectedSchemas := toolMetaSchemas(metas)
 	var reviewsConfinedWrites bool
 	if state.ApprovalPosture != "" {
 		reviewsConfinedWrites = state.ApprovalPosture.ReviewsConfinedWrites()
@@ -284,6 +285,7 @@ func FreezeTurnAuthority(ctx context.Context, state CoordinatorState) (TurnAutho
 		Loaded:                state.Loaded,
 		Visible:               offered,
 		Schemas:               overlay.Schemas,
+		ProjectedSchemas:      projectedSchemas,
 		RootCount:             state.RootCount,
 		HasGit:                state.HasGit,
 		HasAnyGitRoot:         state.HasAnyGitRoot,
@@ -391,6 +393,14 @@ func toolMetaNames(metas []tools.ToolMeta) []string {
 		out[i] = m.Name
 	}
 	slices.Sort(out)
+	return out
+}
+
+func toolMetaSchemas(metas []tools.ToolMeta) map[string]map[string]any {
+	out := make(map[string]map[string]any, len(metas))
+	for _, m := range metas {
+		out[m.Name] = m.ArgsSchema
+	}
 	return out
 }
 

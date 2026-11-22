@@ -4,7 +4,7 @@ facts:
     states: Offered worker tools with required argument summaries.
   - name: can_any_git_read
     type: bool
-    states: At least one workspace root has Git, is not a worker branch, and offers command.
+    states: At least one workspace root has Git, is not a worker branch, and offers Git inspection forms through command.
   - name: can_command_external_selector
     type: bool
     states: Command is offered with external execution and the explicit external selector is visible.
@@ -13,13 +13,13 @@ facts:
     states: Command is offered and admits external execution for verification checks.
   - name: can_git_bisect
     type: bool
-    states: Primary workspace root has Git, is not a worker branch, and offers mutating external command.
+    states: Primary workspace root has Git, is not a worker branch, and reaches Git bisect/worktree and external check execution through command.
   - name: can_git_commit
     type: bool
-    states: Primary workspace root has Git, is not a worker branch, and offers mutating command.
+    states: Primary workspace root has Git, is not a worker branch, and reaches Git inspection, staging, and commit forms through command.
   - name: can_git_read
     type: bool
-    states: Primary workspace root has Git, is not a worker branch, and offers command.
+    states: Primary workspace root has Git, is not a worker branch, and reaches Git inspection forms through command.
   - name: can_orient
     type: bool
     states: An inline workspace orientation tool is offered on this turn.
@@ -28,13 +28,13 @@ facts:
     states: Command is loadable via request_tools and will admit external verification checks.
   - name: can_request_git_bisect
     type: bool
-    states: Primary workspace root has Git, is not a worker branch, and mutating external command is loadable via request_tools.
+    states: Primary workspace root has Git, is not a worker branch, and Git bisect/worktree plus external check execution are loadable via request_tools.
   - name: can_request_git_commit
     type: bool
-    states: Primary workspace root has Git, is not a worker branch, and mutating command is loadable via request_tools.
+    states: Primary workspace root has Git, is not a worker branch, and Git staging and commit forms are loadable via request_tools.
   - name: can_request_git_read
     type: bool
-    states: Primary workspace root has Git, is not a worker branch, and command is loadable via request_tools.
+    states: Primary workspace root has Git, is not a worker branch, and Git inspection forms are loadable via request_tools.
   - name: can_spawn_implementer
     type: bool
     states: The active spawn roster includes at least one mutation-capable worker.
@@ -199,7 +199,7 @@ facts:
     states: Offered host-runner tools that can connect to Unix sockets.
   - name: runner_socks_proxy_tools
     type: "[]string"
-    states: Offered tools whose projected schema and network effects accept socks_proxy.
+    states: Offered tools whose projected schema accepts socks_proxy.
   - name: runner_write_root_tools
     type: "[]string"
     states: Offered host-runner tools that can write inside workspace roots.

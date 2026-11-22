@@ -223,29 +223,6 @@ func CommandReadOnlyPrunedFields() []string {
 	return append([]string(nil), commandReadOnlyPrunedFields...)
 }
 
-// ProjectedAcceptsField reports whether schema accepts fieldPath after
-// applying read-only command pruning when pruneCommandReadOnly is true.
-func ProjectedAcceptsField(schema map[string]any, fieldPath string, pruneCommandReadOnly bool) bool {
-	fieldPath = strings.TrimSpace(fieldPath)
-	if fieldPath == "" {
-		return false
-	}
-	if pruneCommandReadOnly {
-		head, _, _ := strings.Cut(fieldPath, ".")
-		for _, pruned := range commandReadOnlyPrunedFields {
-			if head == pruned {
-				return false
-			}
-		}
-	}
-	for _, path := range ArgFieldPaths(schema) {
-		if path == fieldPath {
-			return true
-		}
-	}
-	return false
-}
-
 // ArgFieldPaths returns accepted top-level and nested argument paths.
 func ArgFieldPaths(schema map[string]any) []string {
 	seen := map[string]bool{}

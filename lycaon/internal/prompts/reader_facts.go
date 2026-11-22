@@ -219,6 +219,8 @@ func buildReaderFacts(
 
 	rawCanRequest := requestableToolSet(offered, requestable)
 	loadableCommand := commandEffectFlags(rawCanRequest["command"], effects)
+	loadableToolSet := toolNameSet(append(slices.Clone(offered), requestable...))
+	loadableHeld := readerProfileHeldSet(profile, loadableToolSet, effects, in.CommandExternalHidden)
 
 	allReachable := toolNameSet(append(slices.Clone(offered), requestable...))
 	if !(command.mutation || loadableCommand.mutation) {
@@ -233,11 +235,14 @@ func buildReaderFacts(
 			schemas = loadedSchemas
 		}
 	}
+	effectiveSchemas := resolveProjectedToolSchemas(in, profile, offered, schemas, command.externalExec, sessionMode == "ask")
 
 	toolViews := make([]AgentToolArgView, 0, len(offered))
 	for _, name := range offered {
 		view := AgentToolArgView{Name: name}
-		if schemas != nil {
+		if proj, ok := effectiveSchemas[name]; ok {
+			view.RequiredArgs, _ = toolschema.ArgFieldSummary(proj)
+		} else if schemas != nil {
 			if meta, ok := schemas.ToolMeta(name); ok {
 				view.RequiredArgs, _ = toolschema.ArgFieldSummary(meta.ArgsSchema)
 			}
@@ -248,13 +253,10 @@ func buildReaderFacts(
 	connects := command.mutation && command.externalExec
 	canSpawnImpl, canSpawnWeb, canSpawnWorkers := deriveSpawnFactFlags(in, sessionMode, catalog)
 	hasAnyGit := in.HasGit || in.HasAnyGitRoot
-	canGitRead := in.HasGit && !in.OnWorkerBranch && offeredSet["command"]
-	canAnyGitRead := hasAnyGit && !in.OnWorkerBranch && offeredSet["command"]
-	canGitCommit := canGitRead && command.mutation
-	canGitBisect := canGitCommit && command.externalExec
-	canRequestGitRead := in.HasGit && !in.OnWorkerBranch && rawCanRequest["command"]
-	canRequestGitCommit := canRequestGitRead && loadableCommand.mutation
-	canRequestGitBisect := canRequestGitCommit && loadableCommand.externalExec
+	canGitRead, canAnyGitRead, canGitCommit, canGitBisect := deriveOfferedGitFacts(in, hasAnyGit, reachHeld)
+	canRequestGitRead, canRequestGitCommit, canRequestGitBisect := deriveLoadableGitFacts(
+		in, rawCanRequest["command"], canGitRead, canGitCommit, canGitBisect, loadableHeld,
+	)
 	sharedTemp := slices.Clone(in.SharedTempLocations)
 
 	f := ReaderFacts{
@@ -305,17 +307,17 @@ func buildReaderFacts(
 		RecallMayWiden:                isCoordinator,
 		ReviewsConfinedWrites:         in.ReviewsConfinedWrites,
 		RootCount:                     in.RootCount,
-		RunnerCapabilityRequestTools:  projectedSchemaTools(offered, schemas, command.externalExec, "capability_request", true, command.externalExec),
+		RunnerCapabilityRequestTools:  projectedSchemaTools(offered, effectiveSchemas, "capability_request", true),
 		RunnerInlineWaitSeconds:       int(toolcontract.ProgramInlineWait / time.Second),
 		RunnerParkSeconds:             int(toolcontract.ProgramParkThreshold / time.Second),
-		RunnerDirectIPTools:           runnerCapabilityTools(offered, toolcontract.CapabilityDirectIP, connects),
-		RunnerHostResourcesTools:      projectedSchemaTools(offered, schemas, command.externalExec, "capability_request.host_resources", false, command.externalExec),
-		RunnerLocalListenTools:        runnerCapabilityTools(offered, toolcontract.CapabilityLocalListen, connects),
-		RunnerLoopbackConnectTools:    runnerCapabilityTools(offered, toolcontract.CapabilityLoopbackConnect, connects),
-		RunnerSecretUseTools:          projectedSchemaTools(offered, schemas, command.externalExec, "secret_use", false, command.externalExec),
-		RunnerSocketTools:             runnerCapabilityTools(offered, toolcontract.CapabilitySocket, connects),
-		RunnerSocksProxyTools:         projectedSchemaTools(offered, schemas, command.externalExec, "socks_proxy", false, command.externalExec && command.networkEgress),
-		RunnerWriteRootTools:          runnerCapabilityTools(offered, toolcontract.CapabilityWriteRoot, command.mutation && command.externalExec),
+		RunnerDirectIPTools:           runnerCapabilityTools(offered, effectiveSchemas, toolcontract.CapabilityDirectIP, "capability_request.direct_ip", connects),
+		RunnerHostResourcesTools:      projectedSchemaTools(offered, effectiveSchemas, "capability_request.host_resources", false),
+		RunnerLocalListenTools:        runnerCapabilityTools(offered, effectiveSchemas, toolcontract.CapabilityLocalListen, "capability_request.local_listen", connects),
+		RunnerLoopbackConnectTools:    runnerCapabilityTools(offered, effectiveSchemas, toolcontract.CapabilityLoopbackConnect, "capability_request.loopback_connect", connects),
+		RunnerSecretUseTools:          projectedSchemaTools(offered, effectiveSchemas, "secret_use", false),
+		RunnerSocketTools:             runnerCapabilityTools(offered, effectiveSchemas, toolcontract.CapabilitySocket, "capability_request.socket_paths", connects),
+		RunnerSocksProxyTools:         projectedSchemaTools(offered, effectiveSchemas, "socks_proxy", false),
+		RunnerWriteRootTools:          runnerCapabilityTools(offered, effectiveSchemas, toolcontract.CapabilityWriteRoot, "capability_request.write_root", command.mutation && command.externalExec),
 		SessionMode:                   sessionMode,
 		SessionScratchDir:             strings.TrimSpace(in.SessionScratchDir),
 		SharedTempLocations:           sharedTemp,

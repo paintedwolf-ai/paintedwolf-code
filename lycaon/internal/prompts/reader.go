@@ -30,6 +30,7 @@ type ReaderInput struct {
 	Loaded                map[string]bool
 	Visible               []string
 	Schemas               *toolschema.Config
+	ProjectedSchemas      map[string]map[string]any
 	RootCount             int
 	HasGit                bool
 	HasAnyGitRoot         bool
@@ -181,7 +182,7 @@ func NewReader(in ReaderInput) (Reader, error) {
 			Held: held,
 		},
 		facts:       facts,
-		fingerprint: computeReaderFingerprint(host, profileID, surfaceID, mode, offered, requestable, commandOnFloor, effects, in),
+		fingerprint: computeReaderFingerprint(host, profile, profileID, surfaceID, mode, offered, requestable, commandOnFloor, effects, in),
 	}, nil
 }
 
@@ -309,6 +310,7 @@ func (r Reader) Fingerprint() string { return r.fingerprint }
 
 func computeReaderFingerprint(
 	host promptunit.Host,
+	profile sandbox.ToolProfile,
 	profileID, surfaceID, mode string,
 	offered, requestable []string,
 	commandOnFloor bool,
@@ -323,6 +325,9 @@ func computeReaderFingerprint(
 		SessionMode           string
 		Offered               []string
 		Requestable           []string
+		DenyTools             []string
+		WaitConditions        []string
+		ProjectedFieldPaths   map[string][]string
 		CommandOnFloor        bool
 		Effects               uint8
 		RootCount             int
@@ -343,6 +348,9 @@ func computeReaderFingerprint(
 		SessionMode:           normalizeSessionMode(in.SessionMode),
 		Offered:               offered,
 		Requestable:           requestable,
+		DenyTools:             normalizedSortedStrings(profile.DenyTools),
+		WaitConditions:        normalizedSortedStrings(profile.WaitConditions),
+		ProjectedFieldPaths:   projectedFieldPathsDigest(offered, in.ProjectedSchemas),
 		CommandOnFloor:        commandOnFloor,
 		Effects:               uint8(effects),
 		RootCount:             in.RootCount,
@@ -361,6 +369,22 @@ func computeReaderFingerprint(
 	}
 	sum := sha256.Sum256(payload)
 	return base64.RawURLEncoding.EncodeToString(sum[:])
+}
+
+func projectedFieldPathsDigest(offered []string, projected map[string]map[string]any) map[string][]string {
+	if len(projected) == 0 {
+		return nil
+	}
+	out := make(map[string][]string, len(offered))
+	for _, name := range offered {
+		if schema, ok := projected[name]; ok && schema != nil {
+			out[name] = toolschema.ArgFieldPaths(toolschema.ProjectArgsSchema(schema))
+		}
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
 }
 
 func normalizedSortedStrings(names []string) []string {

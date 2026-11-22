@@ -8,6 +8,10 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/protectedpath"
+	"github.com/lycaon/lycaon/internal/skills"
+	"github.com/lycaon/lycaon/internal/toolcontract"
+	"github.com/lycaon/lycaon/internal/toolschema"
+	"github.com/lycaon/lycaon/internal/toolvocab"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 
 	"github.com/lycaon/lycaon/test/contract/invariants"
@@ -208,6 +212,42 @@ func TestCapabilityConditionsAndSourceDiscoveryFailClosed(t *testing.T) {
 				"checks static tool_profile identity",
 			},
 		},
+		"seeded skill mentioning unavailable argument in own text fails even when owning tool command is offered": {
+			rule: capRule,
+			files: map[string]string{
+				skillBodyRel: "---\nname: seeded-release\ndescription: Self-justifying argument claim.\n---\n" +
+					"Pass `socks_proxy: true` and `terminal_capture` on `command`.\n",
+			},
+			expects: []string{
+				"config/packs/painted-wolf/platform/skills/seeded-release/SKILL.md",
+				"<unguarded>",
+				"socks_proxy: true",
+				"terminal_capture",
+			},
+		},
+		"seeded skill mentioning curl in command without egress fact fails": {
+			rule: capRule,
+			files: map[string]string{
+				skillBodyRel: "---\nname: seeded-release\ndescription: Self-justifying curl claim.\n---\n" +
+					"Run `curl -sS https://example.com` in `command`.\n",
+			},
+			expects: []string{
+				"config/packs/painted-wolf/platform/skills/seeded-release/SKILL.md",
+				"<unguarded>",
+				"promises action \"curl\" without profile_command_network_egress",
+			},
+		},
+		"seeded profile_command_mutation guard promising git commit fails without can_git_commit": {
+			rule: capRule,
+			files: map[string]string{
+				partialRel: "{% if profile_command_mutation %}Stage and run `git commit -m msg -- path` in `command`.{% endif %}\n",
+			},
+			expects: []string{
+				"config/packs/painted-wolf/platform/shared/partials/seeded-host.md",
+				"profile_command_mutation",
+				"can_git_commit",
+			},
+		},
 		"newly added unclassified stock markdown source fails discovery": {
 			rule: discRule,
 			files: map[string]string{
@@ -240,5 +280,61 @@ func TestCapabilityConditionsAndSourceDiscoveryFailClosed(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+// Demonstrates independently what production skill admission (toolvocab.SkillToolsOffered)
+// guarantees and does NOT guarantee: scanning unconditional non-form tool names in SKILL.md
+// guarantees only that those tools are in held (and their minimum offered projected schemas),
+// NEVER pruned command arguments or command subprograms like curl or git commit.
+func TestProductionSkillAdmissionGuaranteesAndNonGuarantees(t *testing.T) {
+	t.Parallel()
+	s, err := promptrender.LoadStock(t.Context())
+	contractcheck.FailErr(t, "LoadStock", err)
+
+	cmdArgSkill := skills.Parse("seeded-cmd-arg", []byte(
+		"---\nname: seeded-cmd-arg\ndescription: Mentions command and pruned args.\n---\n"+
+			"Run `curl -sS https://example.com` and `git commit -m x` with `socks_proxy: true` and `terminal_capture` in `command`.\n",
+	)).Skill
+
+	if toolvocab.SkillToolsOffered(cmdArgSkill, map[string]bool{"recall": true}) {
+		t.Fatal("SkillToolsOffered admitted skill naming `command` when `command` is absent")
+	}
+	readOnlyCommandHeld := map[string]bool{"command": true}
+	if !toolvocab.SkillToolsOffered(cmdArgSkill, readOnlyCommandHeld) {
+		t.Fatal("expected SkillToolsOffered to admit skill on read-only command (proving admission does NOT check curl, git commit, socks_proxy, or terminal_capture)")
+	}
+	if toolcontract.CommandLanguageReachable("curl", readOnlyCommandHeld) || toolcontract.CommandLanguageReachable("git commit", readOnlyCommandHeld) {
+		t.Fatal("read-only command held set unexpectedly reached curl or git commit")
+	}
+	cmdMeta, ok := s.Schemas.ToolMeta("command")
+	if !ok {
+		t.Fatal("missing command schema")
+	}
+	roCmdSchema := toolschema.PruneCommandReadOnlySchema(cmdMeta.ArgsSchema)
+	for _, prunedField := range []string{"capability_request", "capability_request.host_resources", "secret_use", "socks_proxy", "snapshot_capture", "terminal_capture", "verification"} {
+		if toolschema.SchemaAcceptsField(roCmdSchema, prunedField) {
+			t.Fatalf("read-only projected command schema unexpectedly accepted %q", prunedField)
+		}
+	}
+
+	verifySkill := skills.Parse("seeded-verify-runner", []byte(
+		"---\nname: seeded-verify-runner\ndescription: Mentions verify.\n---\nCall `verify`.\n",
+	)).Skill
+	if toolvocab.SkillToolsOffered(verifySkill, readOnlyCommandHeld) {
+		t.Fatal("SkillToolsOffered admitted skill naming `verify` without `verify` in held")
+	}
+	if !toolvocab.SkillToolsOffered(verifySkill, map[string]bool{"verify": true}) {
+		t.Fatal("SkillToolsOffered rejected skill naming `verify` when `verify` is held")
+	}
+	verifyMeta, ok := s.Schemas.ToolMeta("verify")
+	if !ok {
+		t.Fatal("missing verify schema")
+	}
+	projVerify := toolschema.ProjectToolArgsSchema("verify", verifyMeta.ArgsSchema, toolschema.ProjectOptions{})
+	for _, keptField := range []string{"capability_request", "capability_request.host_resources", "secret_use", "socks_proxy"} {
+		if !toolschema.SchemaAcceptsField(projVerify, keptField) {
+			t.Fatalf("projected verify schema missing %q", keptField)
+		}
 	}
 }
