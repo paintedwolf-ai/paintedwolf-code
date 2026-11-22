@@ -258,9 +258,7 @@ func nextStepRefs(step NextStep) ([]string, error) {
 	}
 	templates := append([]string{step.Say, step.Otherwise}, step.Program...)
 	for _, value := range step.Args {
-		if source, ok := value.(string); ok {
-			templates = append(templates, source)
-		}
+		templates = collectArgTemplates(templates, value)
 	}
 	for _, source := range templates {
 		bindings, err := oarcore.ParseCopy(source)
@@ -392,7 +390,7 @@ func stepCall(step NextStep, gc *GuardContext, facts map[string]any) (toolreach.
 	}
 	missing := false
 	for _, path := range sortedStepPaths(step.Args) {
-		if value := resolveStepArg(step.Args[path], facts); value != "" {
+		if value, ok := resolveStepArg(step.Args[path], facts); ok {
 			setStepArg(&call, path, value)
 		} else {
 			missing = true
@@ -414,20 +412,60 @@ func stepCall(step NextStep, gc *GuardContext, facts map[string]any) (toolreach.
 	return call, true
 }
 
-// resolveStepArg keeps a whole-value binding's type, so a list fact stays a list.
-func resolveStepArg(value any, facts map[string]any) any {
-	source, ok := value.(string)
-	if !ok {
-		return value
-	}
-	if bindings, err := oarcore.ParseCopy(source); err == nil && len(bindings) == 1 {
-		if strings.TrimSpace(source) == "{{ "+bindings[0].Name+" }}" {
-			if raw, present := facts[bindings[0].Name]; present {
-				return raw
+// resolveStepArg keeps a whole-value binding's type and interpolates nested maps and slices.
+func resolveStepArg(value any, facts map[string]any) (any, bool) {
+	switch typed := value.(type) {
+	case string:
+		if bindings, err := oarcore.ParseCopy(typed); err == nil && len(bindings) == 1 {
+			if strings.TrimSpace(typed) == "{{ "+bindings[0].Name+" }}" {
+				raw, present := facts[bindings[0].Name]
+				if !present || raw == "" {
+					return nil, false
+				}
+				return raw, true
 			}
 		}
+		rendered := oarcore.RenderCopy(typed, facts)
+		return rendered, rendered != ""
+	case []any:
+		out := make([]any, len(typed))
+		for i, item := range typed {
+			resolved, ok := resolveStepArg(item, facts)
+			if !ok {
+				return nil, false
+			}
+			out[i] = resolved
+		}
+		return out, true
+	case map[string]any:
+		out := make(map[string]any, len(typed))
+		for k, item := range typed {
+			resolved, ok := resolveStepArg(item, facts)
+			if !ok {
+				return nil, false
+			}
+			out[k] = resolved
+		}
+		return out, true
+	default:
+		return value, value != nil
 	}
-	return oarcore.RenderCopy(source, facts)
+}
+
+func collectArgTemplates(dst []string, value any) []string {
+	switch typed := value.(type) {
+	case string:
+		return append(dst, typed)
+	case []any:
+		for _, item := range typed {
+			dst = collectArgTemplates(dst, item)
+		}
+	case map[string]any:
+		for _, item := range typed {
+			dst = collectArgTemplates(dst, item)
+		}
+	}
+	return dst
 }
 
 func sortedStepPaths[V any](m map[string]V) []string {

@@ -217,3 +217,67 @@ func TestValidateNextStepsSkipsArgCheckWithoutSchemas(t *testing.T) {
 		t.Fatalf("nil schemas must skip the arg check: %v", err)
 	}
 }
+
+func TestResolveNextStepsFormatsNestedWaitConditionsAndPartialCalls(t *testing.T) {
+	waitRule := &Rule{
+		ID:            "WAIT_TEST",
+		RequiresFacts: []string{"paintedwolf.handle"},
+		NextSteps: &NextSteps{
+			Steps: []NextStep{
+				{
+					When:     "paintedwolf.handle != ''",
+					Tool:     "wait",
+					Complete: true,
+					Args: map[string]any{
+						"conditions": []any{
+							map[string]any{
+								"kind":    "process_done",
+								"handles": []any{"{{ paintedwolf.handle }}"},
+							},
+						},
+						"reason":         "waiting on \"job\"\nnext",
+						"timeout_ms":     60000,
+						"until_complete": true,
+					},
+					Say: "Call {{ call }} now.",
+				},
+				{
+					When: "paintedwolf.handle == ''",
+					Tool: "wait",
+					Args: map[string]any{"until_complete": false},
+					Say:  "Park via {{ call }}.",
+				},
+			},
+		},
+	}
+
+	loader, err := NewLoader("")
+	testutil.FailErr(t, "load OAR", err)
+	testutil.FailErr(t, "validate wait rule", loader.validateNextSteps(waitRule))
+
+	gc := reachContext(toolreach.Offered([]string{"wait"}))
+	gc.ObservationData["handle"] = "cmd-docker-1"
+	got := ResolveNextSteps(waitRule, gc)
+	want := "Call `wait(conditions=[{\"handles\": [\"cmd-docker-1\"], \"kind\": \"process_done\"}], reason=\"waiting on \\\"job\\\"\\nnext\", timeout_ms=60000, until_complete=true)` now."
+	if got.Text != want {
+		t.Fatalf("ResolveNextSteps text =\n%s\nwant:\n%s", got.Text, want)
+	}
+
+	gcMissing := reachContext(toolreach.Offered([]string{"wait"}))
+	gotPartial := ResolveNextSteps(waitRule, gcMissing)
+	if gotPartial.Text != "Park via `wait(until_complete=false, …)`." {
+		t.Fatalf("partial ResolveNextSteps text = %q", gotPartial.Text)
+	}
+
+	missingNestedRule := stepRule(NextStep{
+		Tool:     "wait",
+		Complete: true,
+		Args: map[string]any{
+			"conditions": []any{map[string]any{"kind": "process_done", "handles": []any{"{{ paintedwolf.missing_handle }}"}}},
+		},
+		Say: "Call {{ call }}.",
+	})
+	if suppressed := ResolveNextSteps(missingNestedRule, gcMissing); suppressed.Text != "" || len(suppressed.Calls) != 0 {
+		t.Fatalf("complete step with missing nested template should be suppressed, got %+v", suppressed)
+	}
+}

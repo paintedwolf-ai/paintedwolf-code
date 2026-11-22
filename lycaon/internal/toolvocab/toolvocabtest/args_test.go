@@ -217,3 +217,32 @@ func argProfiles() []sandbox.ToolProfile {
 		{ID: "acme_narrow", Tools: map[string]bool{"recall": true}},
 	}
 }
+
+func TestValidateCallExampleChecksZeroArgAndEmptyListCalls(t *testing.T) {
+	schemas := toolschema.ConfigFromEntries(map[string]toolschema.Entry{
+		"recall": {
+			Description: "Recall",
+			Schema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"query": map[string]any{"type": "string"},
+					"tags":  map[string]any{"type": "array", "items": map[string]any{"type": "string"}},
+				},
+				"required": []any{"query"},
+			},
+		},
+	})
+	proj := toolschema.ProjectArgsSchema(schemas.Tools["recall"].Schema)
+	cat, err := toolvocab.NewCatalog(schemas, argProfiles(), toolvocab.Provenance{})
+	testutil.FailErr(t, "catalog", err)
+
+	zeroArg := toolvocabtest.ParseCallExamples(cat, "`recall()`")
+	if len(zeroArg) != 1 || len(toolvocabtest.ValidateCallExample(zeroArg[0], proj)) == 0 {
+		t.Fatalf("expected zero-arg recall() to fail required query check, got %+v", zeroArg)
+	}
+
+	valid := toolvocabtest.ParseCallExamples(cat, "`recall(query=\"x\", tags=[])`")
+	if len(valid) != 1 || len(toolvocabtest.ValidateCallExample(valid[0], proj)) > 0 {
+		t.Fatalf("expected recall(query=\"x\", tags=[]) to pass, got %+v", valid)
+	}
+}
