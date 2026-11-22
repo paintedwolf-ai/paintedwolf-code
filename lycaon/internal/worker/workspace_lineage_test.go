@@ -9,6 +9,7 @@ import (
 	"github.com/lycaon/lycaon/internal/layeredfs/adapter/platform"
 	"github.com/lycaon/lycaon/internal/project"
 	sessiondecisions "github.com/lycaon/lycaon/internal/session/decisions"
+	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/workspace"
@@ -18,11 +19,12 @@ import (
 func TestDecisionBranchStaysAttachedButCannotBePromoted(t *testing.T) {
 	canonical := t.TempDir()
 	testutil.FailErr(t, "write canonical file", os.WriteFile(filepath.Join(canonical, "main.go"), []byte("package original\n"), 0o644))
-	projects := project.NewMemoryRegistry()
+	database := testdbfixture.Open(t, "workers.db")
+	projects := project.NewSQLRegistry(database)
 	p, err := projects.Create(t.Context(), project.CreateParams{Roots: []project.AttachRootParams{{Path: canonical, Label: "app"}}})
 	testutil.FailErr(t, "create project", err)
-	queue := newTestQueue(t, 1, p.ID, "parent")
-	testdbseed.InsertProjectRootWithID(t, queue.db, p.ID, p.Roots[0].ID, canonical)
+	testdbseed.InsertSession(t, database, "parent", p.ID)
+	queue := newTestQueueOnDatabase(database, 1)
 	queue.SetProjectStore(projects)
 	queue.SetWorkerWorkspaceManager(workspace.NewManager(filepath.Join(db.DataDir(queue.db), "worker-branches"), platform.NewSelector(platform.Config{})))
 	id, err := queue.Enqueue(t.Context(), api.WorkerTask{

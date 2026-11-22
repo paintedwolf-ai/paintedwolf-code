@@ -18,7 +18,7 @@ func TestScopeFromToolContextNoRootsUsesDraftScratch(t *testing.T) {
 	configDir := t.TempDir()
 	t.Setenv("LYCAON_CONFIG_DIR", configDir)
 	ctx := context.Background()
-	reg := NewMemoryRegistry()
+	reg := newProjectRegistry(t)
 	p, err := reg.Create(ctx, CreateParams{Draft: true})
 	testutil.FailErr(t, "reg.Create failed", err)
 	if p.Roots[0].Label != "Draft" {
@@ -45,7 +45,7 @@ func TestScopeFromToolContextNoRootsUsesDraftScratch(t *testing.T) {
 
 func TestScopeFromToolContextPrimaryDefault(t *testing.T) {
 	ctx := context.Background()
-	reg := NewMemoryRegistry()
+	reg := newProjectRegistry(t)
 	dir := t.TempDir()
 	p, err := reg.Create(ctx, CreateParams{Roots: []AttachRootParams{{Path: dir}}})
 	testutil.FailErr(t, "reg.Create failed", err)
@@ -64,7 +64,7 @@ func TestScopeFromToolContextPrimaryDefault(t *testing.T) {
 
 func TestScopeFromToolContextExplicitRoot(t *testing.T) {
 	ctx := context.Background()
-	reg := NewMemoryRegistry()
+	reg := newProjectRegistry(t)
 	primary := t.TempDir()
 	secondary := t.TempDir()
 	p, err := reg.Create(ctx, CreateParams{Roots: []AttachRootParams{{Path: primary}}})

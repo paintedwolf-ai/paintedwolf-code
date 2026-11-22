@@ -10,6 +10,7 @@ import (
 	"github.com/lycaon/lycaon/internal/eventoutbox"
 	"github.com/lycaon/lycaon/internal/layeredfs/adapter/platform"
 	"github.com/lycaon/lycaon/internal/project"
+
 	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -110,11 +111,12 @@ func TestPrerequisitesRejectCrossSessionAndResumedConsumers(t *testing.T) {
 
 func TestConsumerCapturesPrimaryAfterProducerPromotion(t *testing.T) {
 	canonical := t.TempDir()
-	projects := project.NewMemoryRegistry()
+	database := testdbfixture.Open(t, "workers.db")
+	projects := project.NewSQLRegistry(database)
 	p, err := projects.Create(t.Context(), project.CreateParams{Roots: []project.AttachRootParams{{Path: canonical, Label: "app"}}})
 	testutil.FailErr(t, "create project", err)
-	q := newTestQueue(t, 2, p.ID, "parent")
-	testdbseed.InsertProjectRootWithID(t, q.db, p.ID, p.Roots[0].ID, canonical)
+	testdbseed.InsertSession(t, database, "parent", p.ID)
+	q := newTestQueueOnDatabase(database, 2)
 	q.SetProjectStore(projects)
 	q.SetWorkerWorkspaceManager(workspace.NewManager(filepath.Join(db.DataDir(q.db), "worker-branches"), platform.NewSelector(platform.Config{})))
 	producer := api.WorkerTask{ProjectID: p.ID, WorkspaceRootID: p.Roots[0].ID, WorkspacePath: canonical, ParentSessionID: "parent", AgentType: "implementer", Prompt: "produce", Brief: "produce", Scope: &api.TaskScope{Mode: api.TaskScopeModeWrite}}

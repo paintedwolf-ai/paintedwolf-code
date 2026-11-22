@@ -118,7 +118,8 @@ func TestTaskToolDraftScratchSpawnsImplementerWithWorkspacePath(t *testing.T) {
 	t.Setenv("HOME", home)
 	var enqueued api.WorkerTask
 	ctx := context.Background()
-	projReg := project.NewMemoryRegistry()
+	sqlDB := testdbfixture.Open(t, "task.db")
+	projReg := project.NewSQLRegistry(sqlDB)
 	p, err := projReg.Create(ctx, project.CreateParams{Draft: true})
 	testutil.FailErr(t, "projReg.Create failed", err)
 	scratch := project.PrimaryRootPath(p)
@@ -126,8 +127,6 @@ func TestTaskToolDraftScratchSpawnsImplementerWithWorkspacePath(t *testing.T) {
 	if len(roots) != 1 {
 		t.Fatalf("len(roots) = %d want 1", len(roots))
 	}
-	sqlDB := taskStore(t, t.TempDir())
-	testdbseed.InsertProjectRootWithID(t, sqlDB, p.ID, roots[0].ID, scratch)
 	testdbseed.InsertSession(t, sqlDB, "parent-draft", p.ID)
 	reg := taskTool(t, sqlDB, capture(&enqueued), worker.TaskToolDeps{})
 	exec := toolexecution.NewExecutor(nil, reg, "coordinator")

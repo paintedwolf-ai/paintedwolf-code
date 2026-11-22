@@ -6,6 +6,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/events"
 	"github.com/lycaon/lycaon/internal/project"
+	"github.com/lycaon/lycaon/internal/project/projecttest"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -19,7 +20,7 @@ func TestPublishKeyForWithoutLookup(t *testing.T) {
 
 func TestScopeLookupProjectID(t *testing.T) {
 	ctx := context.Background()
-	reg := project.NewMemoryRegistry()
+	reg := projecttest.NewRegistry(t)
 	p, err := project.CreateWithRoot(ctx, reg, t.TempDir())
 	testutil.FailErr(t, "reg.Open failed", err)
 	lookup := project.ScopeLookup{Registry: reg}
@@ -36,7 +37,7 @@ func TestScopeLookupProjectID(t *testing.T) {
 
 func TestResolveProjectDir(t *testing.T) {
 	ctx := context.Background()
-	reg := project.NewMemoryRegistry()
+	reg := projecttest.NewRegistry(t)
 	p, err := project.CreateWithRoot(ctx, reg, t.TempDir())
 	testutil.FailErr(t, "reg.Open failed", err)
 	lookup := project.ScopeLookup{Registry: reg}
@@ -69,7 +70,7 @@ func (s *stubBoardSource) BuildView(_ context.Context, projectID, workspacePath,
 
 func TestPublishBoardUsesResolvedProjectDir(t *testing.T) {
 	ctx := context.Background()
-	reg := project.NewMemoryRegistry()
+	reg := projecttest.NewRegistry(t)
 	p, err := project.CreateWithRoot(ctx, reg, t.TempDir())
 	testutil.FailErr(t, "reg.Open failed", err)
 	hub := events.NewMemoryHub()
@@ -88,7 +89,7 @@ func TestPublishBoardUsesResolvedProjectDir(t *testing.T) {
 
 func TestPublishBoardFollowsSessionActiveRoot(t *testing.T) {
 	ctx := context.Background()
-	reg := project.NewMemoryRegistry()
+	reg := projecttest.NewRegistry(t)
 	primary := t.TempDir()
 	secondary := t.TempDir()
 	p, err := project.CreateWithRoot(ctx, reg, primary)
@@ -117,7 +118,7 @@ func TestPublishBoardFollowsSessionActiveRoot(t *testing.T) {
 
 func TestPublishBoardFallsBackWhenSessionRootsUnresolved(t *testing.T) {
 	ctx := context.Background()
-	reg := project.NewMemoryRegistry()
+	reg := projecttest.NewRegistry(t)
 	p, err := project.CreateWithRoot(ctx, reg, t.TempDir())
 	testutil.FailErr(t, "create", err)
 	hub := events.NewMemoryHub()
