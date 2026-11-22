@@ -1,7 +1,6 @@
 package toolschema
 
 import (
-	"maps"
 	"reflect"
 	"strings"
 )
@@ -74,19 +73,11 @@ func PruneWaitConditionSchema(schema map[string]any, allowed []string) map[strin
 func PruneAskUserSchema(schema map[string]any) map[string]any {
 	cloned := cloneSchemaMap(schema)
 	properties, _ := cloned["properties"].(map[string]any)
-	delete(properties, "secret")
-	if rt, ok := properties["response_type"].(map[string]any); ok {
-		if rawEnum, ok := copySchemaList(rt["enum"]); ok {
-			filtered := make([]any, 0, len(rawEnum))
-			for _, v := range rawEnum {
-				if s, isStr := v.(string); isStr && s == "secret" {
-					continue
-				}
-				filtered = append(filtered, v)
-			}
-			rt["enum"] = filtered
-		}
+	if response, ok := properties["response_type"].(map[string]any); ok {
+		response["enum"] = []any{"text", "single_choice", "multi_choice"}
+		response["description"] = "Kind of response. Defaults to text."
 	}
+	delete(properties, "secret")
 	return cloned
 }
 
@@ -131,24 +122,24 @@ func cloneSchemaMap(in map[string]any) map[string]any {
 	}
 	out := make(map[string]any, len(in))
 	for k, v := range in {
-		switch tv := v.(type) {
-		case map[string]any:
-			out[k] = cloneSchemaMap(tv)
-		case []any:
-			cp := make([]any, len(tv))
-			for i, elem := range tv {
-				if em, ok := elem.(map[string]any); ok {
-					cp[i] = cloneSchemaMap(em)
-				} else {
-					cp[i] = elem
-				}
-			}
-			out[k] = cp
-		default:
-			out[k] = v
-		}
+		out[k] = cloneSchemaValue(v)
 	}
 	return out
+}
+
+func cloneSchemaValue(v any) any {
+	switch tv := v.(type) {
+	case map[string]any:
+		return cloneSchemaMap(tv)
+	case []any:
+		cp := make([]any, len(tv))
+		for i, elem := range tv {
+			cp[i] = cloneSchemaValue(elem)
+		}
+		return cp
+	default:
+		return v
+	}
 }
 
 func projectSchemaNode(schema map[string]any) map[string]any {
@@ -268,7 +259,7 @@ func copySchemaList(raw any) ([]any, bool) {
 
 func projectRequiredProperties(schema map[string]any) []any {
 	required, _ := copySchemaList(schema["required"])
-	props, _ := maps.Clone(schema)["properties"].(map[string]any)
+	props, _ := schema["properties"].(map[string]any)
 	out := make([]any, 0, len(required))
 	for _, raw := range required {
 		if name, ok := raw.(string); ok {

@@ -10,6 +10,7 @@ import (
 var declaredReaderFactScalarNames = []string{
 	"agent_tools",
 	"can_any_git_read",
+	"can_ask_user_secret",
 	"can_command_external_selector",
 	"can_command_verify",
 	"can_git_bisect",
@@ -102,6 +103,7 @@ var declaredReaderFactScalarNames = []string{
 var declaredReaderFactScalars = map[string]ReaderFactScalarSpec{
 	"agent_tools":                        {Name: "agent_tools", Type: "[]map[string]any", States: "Offered worker tools with required argument summaries."},
 	"can_any_git_read":                   {Name: "can_any_git_read", Type: "bool", States: "At least one workspace root has Git, is not a worker branch, and offers Git inspection forms through command."},
+	"can_ask_user_secret":                {Name: "can_ask_user_secret", Type: "bool", States: "Ask-user is offered and its projected schema accepts secret-reference prompts."},
 	"can_command_external_selector":      {Name: "can_command_external_selector", Type: "bool", States: "Command is offered with external execution and the explicit external selector is visible."},
 	"can_command_verify":                 {Name: "can_command_verify", Type: "bool", States: "Command is offered and admits external execution for verification checks."},
 	"can_git_bisect":                     {Name: "can_git_bisect", Type: "bool", States: "Primary workspace root has Git, is not a worker branch, and reaches Git bisect/worktree and external check execution through command."},
@@ -216,6 +218,7 @@ var reservedReaderFactPrefixes = []string{
 type ReaderFacts struct {
 	AgentTools                     []map[string]any
 	CanAnyGitRead                  bool
+	CanAskUserSecret               bool
 	CanCommandExternalSelector     bool
 	CanCommandVerify               bool
 	CanGitBisect                   bool
@@ -312,9 +315,10 @@ type ReaderFacts struct {
 
 // Map flattens the typed reader facts and family maps into a template variable map.
 func (f ReaderFacts) Map() map[string]any {
-	out := make(map[string]any, 94+len(f.ProfileHas)+len(f.AgentHasSkill))
+	out := make(map[string]any, 95+len(f.ProfileHas)+len(f.AgentHasSkill))
 	out["agent_tools"] = f.AgentTools
 	out["can_any_git_read"] = f.CanAnyGitRead
+	out["can_ask_user_secret"] = f.CanAskUserSecret
 	out["can_command_external_selector"] = f.CanCommandExternalSelector
 	out["can_command_verify"] = f.CanCommandVerify
 	out["can_git_bisect"] = f.CanGitBisect

@@ -16,7 +16,6 @@ import (
 	"github.com/lycaon/lycaon/internal/sandbox"
 	sessionprofiles "github.com/lycaon/lycaon/internal/session/profiles"
 	"github.com/lycaon/lycaon/internal/toolcontract"
-	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/toolschema"
 	"github.com/lycaon/lycaon/internal/toolvocab"
 	"github.com/lycaon/lycaon/internal/toolvocab/toolvocabtest"
@@ -61,7 +60,7 @@ func reportUnoffered(r *invariants.Run, label, text string, held map[string]bool
 			return nil, false
 		}
 		if tool == "command" && !held[toolcontract.ReachCommandExternalExec] {
-			return tools.PruneCommandReadOnlySchema(meta.ArgsSchema), true
+			return toolschema.PruneCommandReadOnlySchema(meta.ArgsSchema), true
 		}
 		return meta.ArgsSchema, true
 	}

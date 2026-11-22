@@ -5,6 +5,9 @@ facts:
   - name: can_any_git_read
     type: bool
     states: At least one workspace root has Git, is not a worker branch, and offers Git inspection forms through command.
+  - name: can_ask_user_secret
+    type: bool
+    states: Ask-user is offered and its projected schema accepts secret-reference prompts.
   - name: can_command_external_selector
     type: bool
     states: Command is offered with external execution and the explicit external selector is visible.

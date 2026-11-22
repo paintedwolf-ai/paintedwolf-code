@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/llm/providerwire"
+	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -18,8 +19,18 @@ func (l *toolInvocations) appendToolProcedures(
 		return messages, nil
 	}
 	names := make([]string, 0, len(offered))
+	projected := make(map[string]map[string]any, len(offered))
+	allHaveSchema := true
 	for _, meta := range offered {
 		names = append(names, meta.Name)
+		if meta.ArgsSchema == nil {
+			allHaveSchema = false
+		} else {
+			projected[meta.Name] = meta.ArgsSchema
+		}
+	}
+	if allHaveSchema {
+		ctx = prompts.WithProjectedSchemas(ctx, projected)
 	}
 	block, err := l.Context.Deps.ToolProcedures(ctx, sess, profileID, names)
 	if err != nil {

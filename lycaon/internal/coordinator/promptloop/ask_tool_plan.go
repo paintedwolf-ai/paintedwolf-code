@@ -4,10 +4,10 @@ import (
 	"context"
 
 	"github.com/lycaon/lycaon/internal/coordinator/surface"
-	"github.com/lycaon/lycaon/internal/jsonvalue"
 	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/internal/spawn"
 	"github.com/lycaon/lycaon/internal/tools"
+	"github.com/lycaon/lycaon/internal/toolschema"
 	"github.com/lycaon/lycaon/internal/toolsurface"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -19,13 +19,7 @@ func ProjectAskToolMetas(metas []tools.ToolMeta) []tools.ToolMeta {
 		if meta.Name != "ask_user" {
 			continue
 		}
-		out[index].ArgsSchema = jsonvalue.CloneMap(meta.ArgsSchema)
-		properties, _ := out[index].ArgsSchema["properties"].(map[string]any)
-		if response, ok := properties["response_type"].(map[string]any); ok {
-			response["enum"] = []any{"text", "single_choice", "multi_choice"}
-			response["description"] = "Kind of response. Defaults to text."
-		}
-		delete(properties, "secret")
+		out[index].ArgsSchema = toolschema.PruneAskUserSchema(meta.ArgsSchema)
 	}
 	return out
 }

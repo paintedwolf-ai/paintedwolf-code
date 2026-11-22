@@ -1,6 +1,7 @@
 package prompts
 
 import (
+	"context"
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json"
@@ -308,6 +309,26 @@ func (r Reader) Facts() map[string]any { return maps.Clone(r.facts) }
 // Fingerprint returns a stable digest of the reader's inputs and derived reach.
 func (r Reader) Fingerprint() string { return r.fingerprint }
 
+type projectedSchemasContextKey struct{}
+
+// WithProjectedSchemas attaches materialized turn request schemas to ctx for
+// downstream Reader construction.
+func WithProjectedSchemas(ctx context.Context, schemas map[string]map[string]any) context.Context {
+	if ctx == nil || schemas == nil {
+		return ctx
+	}
+	return context.WithValue(ctx, projectedSchemasContextKey{}, schemas)
+}
+
+// ProjectedSchemasFromContext returns materialized turn request schemas carried on ctx.
+func ProjectedSchemasFromContext(ctx context.Context) map[string]map[string]any {
+	if ctx == nil {
+		return nil
+	}
+	schemas, _ := ctx.Value(projectedSchemasContextKey{}).(map[string]map[string]any)
+	return schemas
+}
+
 func computeReaderFingerprint(
 	host promptunit.Host,
 	profile sandbox.ToolProfile,
@@ -327,6 +348,7 @@ func computeReaderFingerprint(
 		Requestable           []string
 		DenyTools             []string
 		WaitConditions        []string
+		ExplicitProjected     bool
 		ProjectedFieldPaths   map[string][]string
 		CommandOnFloor        bool
 		Effects               uint8
@@ -350,6 +372,7 @@ func computeReaderFingerprint(
 		Requestable:           requestable,
 		DenyTools:             normalizedSortedStrings(profile.DenyTools),
 		WaitConditions:        normalizedSortedStrings(profile.WaitConditions),
+		ExplicitProjected:     in.ProjectedSchemas != nil,
 		ProjectedFieldPaths:   projectedFieldPathsDigest(offered, in.ProjectedSchemas),
 		CommandOnFloor:        commandOnFloor,
 		Effects:               uint8(effects),
@@ -372,17 +395,18 @@ func computeReaderFingerprint(
 }
 
 func projectedFieldPathsDigest(offered []string, projected map[string]map[string]any) map[string][]string {
-	if len(projected) == 0 {
+	if projected == nil {
 		return nil
 	}
 	out := make(map[string][]string, len(offered))
 	for _, name := range offered {
 		if schema, ok := projected[name]; ok && schema != nil {
-			out[name] = toolschema.ArgFieldPaths(toolschema.ProjectArgsSchema(schema))
+			paths := toolschema.ArgFieldPaths(toolschema.ProjectArgsSchema(schema))
+			if paths == nil {
+				paths = []string{}
+			}
+			out[name] = paths
 		}
-	}
-	if len(out) == 0 {
-		return nil
 	}
 	return out
 }

@@ -7,12 +7,18 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/lycaon/lycaon/internal/coordinator/surface"
+	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/internal/protectedpath"
+	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/skills"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/toolschema"
+	"github.com/lycaon/lycaon/internal/toolsurface"
 	"github.com/lycaon/lycaon/internal/toolvocab"
+	"github.com/lycaon/lycaon/pkg/api"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
+	"github.com/lycaon/lycaon/test/contract/internal/hoststate"
 
 	"github.com/lycaon/lycaon/test/contract/invariants"
 	"github.com/lycaon/lycaon/test/contract/invariants/promptrender"
@@ -248,6 +254,29 @@ func TestCapabilityConditionsAndSourceDiscoveryFailClosed(t *testing.T) {
 				"can_git_commit",
 			},
 		},
+		"seeded profile_has_ask_user guard promising response_type secret fails without can_ask_user_secret": {
+			rule: capRule,
+			files: map[string]string{
+				partialRel: "{% if profile_has_ask_user %}Request credentials via `ask_user` (`response_type: secret`).{% endif %}\n",
+			},
+			expects: []string{
+				"config/packs/painted-wolf/platform/shared/partials/seeded-host.md",
+				"profile_has_ask_user",
+				"response_type: secret",
+			},
+		},
+		"seeded skill naming ask_user unguardedly promising response_type secret fails under narrower projected schema": {
+			rule: capRule,
+			files: map[string]string{
+				skillBodyRel: "---\nname: seeded-release\ndescription: Mentions ask_user and secret response.\n---\n" +
+					"Obtain credentials via `ask_user` with `response_type: secret`.\n",
+			},
+			expects: []string{
+				"config/packs/painted-wolf/platform/skills/seeded-release/SKILL.md",
+				"<unguarded>",
+				"response_type: secret",
+			},
+		},
 		"newly added unclassified stock markdown source fails discovery": {
 			rule: discRule,
 			files: map[string]string{
@@ -335,6 +364,129 @@ func TestProductionSkillAdmissionGuaranteesAndNonGuarantees(t *testing.T) {
 	for _, keptField := range []string{"capability_request", "capability_request.host_resources", "secret_use", "socks_proxy"} {
 		if !toolschema.SchemaAcceptsField(projVerify, keptField) {
 			t.Fatalf("projected verify schema missing %q", keptField)
+		}
+	}
+
+	// Narrower projected schemas on ask_user (Ask mode) and wait (timer-only WaitConditions: nil):
+	// SkillToolsOffered still admits skills naming ask_user or wait, so retained skill-admission
+	// schema guarantees must NOT include pruned fields (secret, conditions).
+	askFields, err := promptrender.SkillGuaranteedSchemaFieldsForText(s,
+		"---\nname: ask-probe\ndescription: Probe.\n---\nCall `ask_user`.\n",
+	)
+	contractcheck.FailErr(t, "SkillGuaranteedSchemaFieldsForText ask_user", err)
+	if !slices.Contains(askFields, "prompt") || slices.Contains(askFields, "secret") || slices.Contains(askFields, "secret.name") {
+		t.Fatalf("ask_user retained skill schema guarantees = %v, must keep prompt and exclude Ask-pruned secret*", askFields)
+	}
+	waitFields, err := promptrender.SkillGuaranteedSchemaFieldsForText(s,
+		"---\nname: wait-probe\ndescription: Probe.\n---\nCall `wait`.\n",
+	)
+	contractcheck.FailErr(t, "SkillGuaranteedSchemaFieldsForText wait", err)
+	if !slices.Contains(waitFields, "timeout_ms") || slices.Contains(waitFields, "conditions") || slices.Contains(waitFields, "conditions.kind") {
+		t.Fatalf("wait retained skill schema guarantees = %v, must keep timeout_ms and exclude timer-only-pruned conditions*", waitFields)
+	}
+
+	// Verify every retained skill-admission schema guarantee on every stock skill holds
+	// across narrowed live TurnAuthority schemas (spec/build x agent/ask, including Ask-mode
+	// ask_user narrowing, spec read-only command narrowing, and timer-only wait narrowing).
+	overlays, err := hoststate.DiscoverPackOverlays(t.Context())
+	contractcheck.FailErr(t, "DiscoverPackOverlays", err)
+	stockOverlay := overlays[0]
+	stockSkills, err := promptrender.StockSkills(s)
+	contractcheck.FailErr(t, "StockSkills", err)
+
+	skillRetainedFields := make(map[string][]string, len(stockSkills))
+	for _, sk := range stockSkills {
+		rawBytes, rErr := os.ReadFile(filepath.Join("..", "..", "..", "config", "packs", sk.PackID, "skills", sk.Name, "SKILL.md"))
+		contractcheck.FailErr(t, "read stock skill "+sk.Name, rErr)
+		fields, fErr := promptrender.SkillGuaranteedSchemaFieldsForText(s, string(rawBytes))
+		contractcheck.FailErr(t, "SkillGuaranteedSchemaFieldsForText "+sk.Name, fErr)
+		skillRetainedFields[sk.Name] = fields
+	}
+
+	checkAuthoritySkills := func(label string, held map[string]bool, offered []string, reqSchemas map[string]map[string]any) {
+		t.Helper()
+		for _, sk := range stockSkills {
+			if !toolvocab.SkillToolsOffered(sk, held) {
+				continue
+			}
+			for _, field := range skillRetainedFields[sk.Name] {
+				accepted := false
+				for _, tName := range offered {
+					if toolschema.SchemaAcceptsField(reqSchemas[tName], field) {
+						accepted = true
+						break
+					}
+				}
+				if !accepted {
+					t.Fatalf("%s admitted stock skill %q, but retained schema guarantee %q is absent from narrowed offered schemas (offered=%v)",
+						label, sk.Name, field, offered)
+				}
+			}
+		}
+	}
+
+	for _, posture := range []api.SessionPosture{api.SessionPostureSpec, api.SessionPostureBuild} {
+		for _, mode := range []api.SessionMode{api.SessionModeAgent, api.SessionModeAsk} {
+			runCtx := api.CoordinatorRunContext{}
+			surfID := "implement_routing"
+			if mode == api.SessionModeAsk {
+				surfID = "observe_investigate"
+				runCtx = api.CoordinatorRunContext{
+					RunID: "ask-wf", WorkflowID: "wf", PhaseCoordinatorSurface: "implement_routing",
+				}
+			}
+			tp := surface.ResolveTurnProfileForSurface(surfID, runCtx, &api.Session{Mode: mode, Posture: posture})
+			pl, pErr := surface.CompileToolPlan(tp, 1)
+			contractcheck.FailErr(t, "CompileToolPlan", pErr)
+			loaded := map[string]bool{}
+			for _, d := range pl.DeferredNames() {
+				loaded[d] = true
+			}
+			auth, fErr := hoststate.FreezeTurnAuthority(t.Context(), hoststate.CoordinatorState{
+				Overlay: stockOverlay, SessionMode: mode, Posture: posture, RootCount: 1,
+				HasGit: true, WebSearch: true, RunContext: runCtx, TurnProfile: tp,
+				Plan: pl, Loaded: loaded, SpawnAllowlist: stockOverlay.SpawnAllowlist,
+			})
+			contractcheck.FailErr(t, "FreezeTurnAuthority", fErr)
+			checkAuthoritySkills("coord/"+string(posture)+"/"+string(mode), auth.Reader.Held(), auth.Offered, auth.Schemas)
+
+			wAuth, wErr := hoststate.FreezeWorkerAuthority(t.Context(), hoststate.WorkerState{
+				Overlay: stockOverlay, AgentID: "implementer", ToolProfile: "implement",
+				Posture: posture, ParentSessionMode: mode, RootCount: 1,
+				HasGit: true, WebSearch: true,
+				Loaded: map[string]bool{"terminal_send": true, "page_open": true},
+			})
+			contractcheck.FailErr(t, "FreezeWorkerAuthority", wErr)
+			checkAuthoritySkills("worker/"+string(posture)+"/"+string(mode), wAuth.Reader.Held(), wAuth.Offered, wAuth.Schemas)
+
+			// Timer-only wait narrowing (WaitConditions: nil) on the same worker offered set.
+			timerSchemas := make(map[string]map[string]any, len(wAuth.Schemas))
+			for k, v := range wAuth.Schemas {
+				timerSchemas[k] = v
+			}
+			if waitMeta, hasWait := s.Schemas.ToolMeta("wait"); hasWait {
+				timerSchemas["wait"] = toolschema.ProjectToolArgsSchema("wait", waitMeta.ArgsSchema, toolschema.ProjectOptions{
+					PruneWaitConditions: true,
+					WaitConditions:      nil,
+				})
+			}
+			timerProf := sandbox.ToolProfile{
+				ID:             "timer_only_worker",
+				Tools:          map[string]bool{"command": true, "verify": true, "terminal_open": true, "wait": true, "ask_user": true},
+				CommandEffects: wAuth.Reader.Effects(),
+			}
+			timerReader, tErr := prompts.NewReader(prompts.ReaderInput{
+				ProfileID:        "timer_only_worker",
+				SessionMode:      string(mode),
+				Profiles:         []sandbox.ToolProfile{timerProf},
+				Plan:             toolsurface.Compile(wAuth.Offered, nil),
+				Visible:          wAuth.Offered,
+				Schemas:          s.Schemas,
+				ProjectedSchemas: timerSchemas,
+				RootCount:        1,
+			})
+			contractcheck.FailErr(t, "timerReader", tErr)
+			checkAuthoritySkills("timer-only/"+string(posture)+"/"+string(mode), timerReader.Held(), timerReader.Offered(), timerSchemas)
 		}
 	}
 }

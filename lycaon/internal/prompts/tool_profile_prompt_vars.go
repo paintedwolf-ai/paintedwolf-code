@@ -195,13 +195,17 @@ func resolveProjectedToolSchemas(
 	askMode bool,
 ) map[string]map[string]any {
 	out := make(map[string]map[string]any, len(offered))
-	for _, name := range offered {
-		if len(in.ProjectedSchemas) > 0 {
+	// An explicitly supplied projection map freezes tool schemas; missing entries
+	// certify zero schema fields instead of falling back to the raw catalog.
+	if in.ProjectedSchemas != nil {
+		for _, name := range offered {
 			if explicit, ok := in.ProjectedSchemas[name]; ok && explicit != nil {
 				out[name] = toolschema.ProjectArgsSchema(explicit)
-				continue
 			}
 		}
+		return out
+	}
+	for _, name := range offered {
 		if schemas == nil {
 			continue
 		}
@@ -222,6 +226,7 @@ func resolveProjectedToolSchemas(
 func runnerCapabilityTools(
 	offered []string,
 	projectedSchemas map[string]map[string]any,
+	explicitProjected bool,
 	cap toolcontract.Capability,
 	fieldPath string,
 	commandAllowed bool,
@@ -238,9 +243,16 @@ func runnerCapabilityTools(
 		if !ok || !contract.Supports(cap) {
 			continue
 		}
-		if len(projectedSchemas) > 0 && fieldPath != "" {
-			if proj, hasProj := projectedSchemas[offeredTool]; hasProj && !toolschema.SchemaAcceptsField(proj, fieldPath) {
-				continue
+		if fieldPath != "" {
+			if explicitProjected {
+				proj, hasProj := projectedSchemas[offeredTool]
+				if !hasProj || !toolschema.SchemaAcceptsField(proj, fieldPath) {
+					continue
+				}
+			} else if len(projectedSchemas) > 0 {
+				if proj, hasProj := projectedSchemas[offeredTool]; hasProj && !toolschema.SchemaAcceptsField(proj, fieldPath) {
+					continue
+				}
 			}
 		}
 		tools = append(tools, offeredTool)

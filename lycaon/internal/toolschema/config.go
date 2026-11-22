@@ -217,12 +217,6 @@ var commandReadOnlyPrunedFields = []string{
 	"verification",
 }
 
-// CommandReadOnlyPrunedFields returns the command argument fields removed when
-// command is restricted to read-only native utilities.
-func CommandReadOnlyPrunedFields() []string {
-	return append([]string(nil), commandReadOnlyPrunedFields...)
-}
-
 // ArgFieldPaths returns accepted top-level and nested argument paths.
 func ArgFieldPaths(schema map[string]any) []string {
 	seen := map[string]bool{}
