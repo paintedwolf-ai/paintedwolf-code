@@ -10,6 +10,8 @@ import (
 
 	"github.com/lycaon/lycaon/internal/board"
 	"github.com/lycaon/lycaon/internal/git"
+	"github.com/lycaon/lycaon/internal/projectroot"
+	"github.com/lycaon/lycaon/internal/repochange"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/testutil/gittest"
 	"github.com/lycaon/lycaon/pkg/api"
@@ -48,6 +50,7 @@ func (c *countingStatusLoader) Log(ctx context.Context, projectDir string, opts 
 // same background fill instead of launching a duplicate process.
 func TestColdBoardWarmsSharedGitStatusWithoutBlocking(t *testing.T) {
 	dir := t.TempDir()
+	t.Cleanup(func() { repochange.CloseRoot(dir) })
 	testutil.FailErr(t, "write", os.WriteFile(filepath.Join(dir, "a.txt"), []byte("one\n"), 0o644))
 	gittest.InitCommit(t, dir, "init")
 	loader := &countingStatusLoader{
@@ -62,10 +65,11 @@ func TestColdBoardWarmsSharedGitStatusWithoutBlocking(t *testing.T) {
 		Git:         loader.inner,
 		Repo:        repotest.NewProvider(t),
 	}
+	roots := []projectroot.RootRef{{ID: "proj", Path: dir, Label: "primary", IsPrimary: true}}
 
 	buildDone := make(chan error, 1)
 	go func() {
-		_, err := b.Build(context.Background(), "proj", dir, "", api.BoardDetailLevelStatus, nil)
+		_, err := b.Build(context.Background(), "proj", dir, "", api.BoardDetailLevelStatus, roots)
 		buildDone <- err
 	}()
 	select {
@@ -86,4 +90,8 @@ func TestColdBoardWarmsSharedGitStatusWithoutBlocking(t *testing.T) {
 	if loader.statusN.Load() != 1 {
 		t.Fatalf("board-then-git statusN = %d want 1 (TTL bridge)", loader.statusN.Load())
 	}
+	testutil.WaitFor(t, "background repo discovery settles", func() bool {
+		snap, buildErr := b.Build(t.Context(), "proj", dir, "", api.BoardDetailLevelStatus, roots)
+		return buildErr == nil && snap.Git != nil && snap.Git.Label == "primary"
+	})
 }

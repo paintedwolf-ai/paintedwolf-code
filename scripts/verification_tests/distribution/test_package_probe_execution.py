@@ -331,7 +331,8 @@ class DiagnosticProcessTests(unittest.TestCase):
     def test_diagnostic_returns_output_and_kills_its_process_group(self):
         with tempfile.TemporaryDirectory() as temporary:
             marker = Path(temporary) / 'grandchild'
-            script = ('import subprocess, sys; child = subprocess.Popen([sys.executable, "-c", "import signal; signal.pause()"]); '
+            script = ('import subprocess, sys; child = subprocess.Popen([sys.executable, "-c", "import signal; signal.pause()"], '
+                      'stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL); '
                       f'open({str(marker)!r}, "w").write(str(child.pid)); print("owned child")')
             result = owner.diagnostic([sys.executable, '-c', script], os.environ.copy())
             grandchild = int(marker.read_text())
