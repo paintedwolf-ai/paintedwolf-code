@@ -3,7 +3,7 @@ id: MUTATION_REPAIR_NOT_IMPROVED
 kind: schema
 on: tool.rejected
 selector: {}
-requires_facts: [paintedwolf.admitted_mutation_forms, paintedwolf.command_surface, paintedwolf.operation, paintedwolf.parse_errors, paintedwolf.path, paintedwolf.python_indent_lines, paintedwolf.rejection_code, paintedwolf.syntax_diagnostics_truncated]
+requires_facts: [paintedwolf.admitted_mutation_forms, paintedwolf.command_loader_call, paintedwolf.command_surface, paintedwolf.operation, paintedwolf.parse_errors, paintedwolf.path, paintedwolf.python_indent_lines, paintedwolf.rejection_code, paintedwolf.syntax_diagnostics_truncated]
 when: paintedwolf.operation in ["write", "edit", "replace_lines", "code_rewrite"] && paintedwolf.rejection_code == "MUTATION_REPAIR_NOT_IMPROVED"
 effect: block
 x-paintedwolf-category: recoverable
@@ -13,7 +13,7 @@ what: '{{ tool }} on {{ paintedwolf.path }} was not applied because the file alr
 cause: >-
   {% if paintedwolf.parse_errors %}Syntax diagnostics: {{ paintedwolf.parse_errors }}. {% if paintedwolf.syntax_diagnostics_truncated %}Additional syntax faults were omitted.{% endif %} {% else %}The completed parser found a syntax regression.{% endif %} {% if paintedwolf.python_indent_lines %}Indentation near the edit: {{ paintedwolf.python_indent_lines }}.{% endif %}
 why: 'Unrelated edits and lateral syntax changes hide the repair target and can turn a recoverable file into an unbounded patch loop.'
-fix: 'Read the reported lines and surrounding code and make one atomic repair. {% if paintedwolf.command_surface %}{% if paintedwolf.admitted_mutation_forms %}Use one {{ paintedwolf.admitted_mutation_forms }} in command whose span covers them{% else %}Submit one atomic mutation whose span covers them{% endif %}{% else %}Submit one atomic mutation whose span covers them{% endif %} when several coupled ranges or an indentation shift must land together.'
+fix: 'Read the reported lines and surrounding code and make one atomic repair. {% if paintedwolf.command_surface %}{% if paintedwolf.admitted_mutation_forms %}Use one atomic mutation in command{% if paintedwolf.command_loader_call %} after loading it with {{ paintedwolf.command_loader_call }}{% endif %} ({{ paintedwolf.admitted_mutation_forms }}) whose span covers them{% else %}Submit one atomic mutation whose span covers them{% endif %}{% else %}Submit one atomic mutation whose span covers them{% endif %} when several coupled ranges or an indentation shift must land together.'
 instead: 'Branch on Code; reduce syntax burden with one atomic repair'
 x-paintedwolf-scenarios:
   - id: default

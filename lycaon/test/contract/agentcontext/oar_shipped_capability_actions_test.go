@@ -56,6 +56,7 @@ var programCapabilityGuards = map[string]map[string]bool{
 		"paintedwolf.admitted_raw_read_forms":        true,
 		"paintedwolf.admitted_large_read_forms":      true,
 		"paintedwolf.admitted_read_addressing_forms": true,
+		"paintedwolf.read_range_call":                true,
 		"paintedwolf.admitted_stream_edit_forms":     true,
 	},
 	"cat": {
@@ -68,10 +69,12 @@ var programCapabilityGuards = map[string]map[string]bool{
 		"paintedwolf.admitted_file_read_forms":       true,
 		"paintedwolf.admitted_large_read_forms":      true,
 		"paintedwolf.admitted_read_addressing_forms": true,
+		"paintedwolf.read_window_calls":              true,
 	},
 	"tail": {
 		"paintedwolf.admitted_large_read_forms":      true,
 		"paintedwolf.admitted_read_addressing_forms": true,
+		"paintedwolf.read_window_calls":              true,
 	},
 	"grep": {
 		"paintedwolf.command_grep_reachable":     true,
@@ -81,20 +84,25 @@ var programCapabilityGuards = map[string]map[string]bool{
 	"rg": {
 		"paintedwolf.admitted_text_search_forms":     true,
 		"paintedwolf.admitted_read_addressing_forms": true,
+		"paintedwolf.read_symbol_call":               true,
 	},
 	"wc":            {"paintedwolf.command_wc_reachable": true},
 	"awk":           {"paintedwolf.admitted_stream_edit_forms": true},
 	"jq":            {"paintedwolf.admitted_stream_edit_forms": true},
-	"jq-edit":       {"paintedwolf.command_jq_edit_reachable": true},
+	"jq-edit":       {"paintedwolf.command_jq_edit_reachable": true, "paintedwolf.secret_jq_edit_call": true},
 	"edit":          {"paintedwolf.admitted_mutation_forms": true, "paintedwolf.admitted_secret_config_forms": true},
 	"replace-lines": {"paintedwolf.admitted_mutation_forms": true, "paintedwolf.admitted_secret_config_forms": true},
 	"tee":           {"paintedwolf.command_tee_reachable": true},
-	"unzip":         {"paintedwolf.admitted_archive_forms": true},
-	"tar":           {"paintedwolf.admitted_archive_forms": true},
-	"git config":    {"paintedwolf.command_git_config_reachable": true},
-	"find":          {"paintedwolf.command_find_reachable": true},
-	"repo-map":      {"paintedwolf.command_repo_map_reachable": true},
-	"external":      {"paintedwolf.command_external_reachable": true},
+	"unzip":         {"paintedwolf.admitted_archive_forms": true, "paintedwolf.archive_unzip_stream_call": true},
+	"tar": {
+		"paintedwolf.admitted_archive_forms":   true,
+		"paintedwolf.archive_tar_list_call":    true,
+		"paintedwolf.archive_tar_extract_call": true,
+	},
+	"git config": {"paintedwolf.command_git_config_reachable": true},
+	"find":       {"paintedwolf.command_find_reachable": true},
+	"repo-map":   {"paintedwolf.command_repo_map_reachable": true},
+	"external":   {"paintedwolf.command_external_reachable": true},
 }
 
 func buildGenericCommandGuards() map[string]bool {

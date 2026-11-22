@@ -883,7 +883,7 @@
       "summary": "edit received conflicting arguments: {{ paintedwolf.detail }}."
     },
     "EDIT_FILE_TOO_LARGE": {
-      "branch_instruction": "{% if paintedwolf.can_command %}Change the file with command, or split it into smaller files{% else %}Report the size dependency, or split the file into smaller files{% endif %}",
+      "branch_instruction": "{% if paintedwolf.admitted_stream_edit_forms %}Change bounded parts with command, or split the file into smaller files{% else %}Report the size dependency, or split the file into smaller files{% endif %}",
       "category": "recoverable",
       "emit": "guard:write",
       "summary": "{{ tool }} did not change {{ paintedwolf.path }}: the file or its new content exceeds the {{ paintedwolf.max_file_bytes }}-byte whole-file mutation limit.{% if paintedwolf.size %} Measured size is at least {{ paintedwolf.size }} bytes.{% endif %}"
@@ -927,7 +927,7 @@
       "branch_instruction": "Branch on Code",
       "category": "recoverable",
       "emit": "guard:extract_archive",
-      "summary": "path {{ paintedwolf.path }} is not a supported archive extension."
+      "summary": "{% if paintedwolf.extract_invalid_format %}archive format {{ paintedwolf.extract_rejected_value }} is not supported for {{ paintedwolf.path }}.{% else %}path {{ paintedwolf.path }} ({{ paintedwolf.extract_rejected_value }}) does not have a supported archive suffix.{% endif %}"
     },
     "EXTRACT_IS_DIRECTORY": {
       "branch_instruction": "Branch on Code; fix args and retry once",
@@ -2018,7 +2018,7 @@
       "summary": "{{ tool }} could not decode {{ paintedwolf.path }}{% if paintedwolf.bytes %} ({{ paintedwolf.bytes }} input bytes){% endif %} as supported bounded text."
     },
     "READ_FILE_TOO_LARGE": {
-      "branch_instruction": "{% if paintedwolf.can_command %}Inspect bounded parts of the file with command{% else %}Reduce the input before retrying; report the size dependency when no bounded source is available{% endif %}",
+      "branch_instruction": "{% if paintedwolf.admitted_large_read_forms %}Inspect bounded parts of the file with command{% else %}Reduce the input before retrying; report the size dependency when no bounded source is available{% endif %}",
       "category": "recoverable",
       "emit": "guard:read",
       "summary": "{{ tool }} could not load {{ paintedwolf.path }} within the {{ paintedwolf.max_file_bytes }}-byte input budget.{% if paintedwolf.size %} Measured input is at least {{ paintedwolf.size }} bytes.{% endif %}"

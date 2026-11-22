@@ -86,7 +86,7 @@ func bareActivation(gc *GuardContext) map[string]any {
 		"tool_args":                           mapOrEmpty(gc.Invocation.ToolArgs),
 		"command_operation_reachable":         false,
 		"command_external_reachable":          false,
-		"admitted_process_capability_fields":  "",
+		"admitted_process_capability_fields":  []string{},
 		"command_loadable_without_schema":     false,
 		"admitted_command_forms":              []string{},
 		"unpublished_tool_text_pending":       gc.Session.UnpublishedToolTextPending,
@@ -211,17 +211,6 @@ func bareActivation(gc *GuardContext) map[string]any {
 		"jailbreak_score":                     gc.Content.JailbreakScore,
 		"pii_entities":                        mapList(gc.Content.PIIEntities),
 		"secret_matches":                      mapList(gc.Content.SecretMatches),
-		"mcp_server_id":                       gc.MCP.MCPServerID,
-		"mcp_tool_name":                       gc.MCP.MCPToolName,
-		"mcp_qualified_tool":                  gc.MCP.MCPQualifiedTool,
-		"mcp_server_configured":               gc.MCP.MCPServerConfigured,
-		"mcp_server_enabled":                  gc.MCP.MCPServerEnabled,
-		"mcp_configured_servers":              gc.MCP.configuredServers(),
-		"mcp_enabled_servers":                 gc.MCP.enabledServers(),
-		"mcp_result":                          mapOrEmpty(gc.MCP.MCPFields),
-		"mcp_call_ok":                         gc.MCP.MCPCallOK,
-		"mcp_error_code":                      gc.MCP.MCPErrorCode,
-		"mcp_schema_matched":                  gc.MCP.MCPSchemaMatched,
 		"editorconfig_mismatch":               gc.Source.EditorConfigMismatch,
 		"syntax_check_overridden":             gc.Source.SyntaxCheckOverridden,
 		"source_analysis_unavailable":         gc.Source.SourceAnalysisUnavailable,
@@ -234,10 +223,27 @@ func bareActivation(gc *GuardContext) map[string]any {
 		"reproduced_source_start_line":        gc.Source.ReproducedSourceStartLine,
 		"reproduced_source_end_line":          gc.Source.ReproducedSourceEndLine,
 	}
+	maps.Copy(out, mcpActivation(gc))
 	maps.Copy(out, rejectObservationActivation(gc))
 	maps.Copy(out, sessionActivation(gc))
 	maps.Copy(out, workflowActivation(gc))
 	return out
+}
+
+func mcpActivation(gc *GuardContext) map[string]any {
+	return map[string]any{
+		"mcp_server_id":          gc.MCP.MCPServerID,
+		"mcp_tool_name":          gc.MCP.MCPToolName,
+		"mcp_qualified_tool":     gc.MCP.MCPQualifiedTool,
+		"mcp_server_configured":  gc.MCP.MCPServerConfigured,
+		"mcp_server_enabled":     gc.MCP.MCPServerEnabled,
+		"mcp_configured_servers": gc.MCP.configuredServers(),
+		"mcp_enabled_servers":    gc.MCP.enabledServers(),
+		"mcp_result":             mapOrEmpty(gc.MCP.MCPFields),
+		"mcp_call_ok":            gc.MCP.MCPCallOK,
+		"mcp_error_code":         gc.MCP.MCPErrorCode,
+		"mcp_schema_matched":     gc.MCP.MCPSchemaMatched,
+	}
 }
 
 // rejectObservationActivation defines the structured tool-rejection vocabulary:
