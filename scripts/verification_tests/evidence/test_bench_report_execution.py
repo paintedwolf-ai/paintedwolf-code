@@ -63,7 +63,7 @@ class BenchReportTests(unittest.TestCase):
         noop = report["benchmarks"]["internal/toolhost/BenchmarkCommandProgram/noop"]
         self.assertTrue(noop["gate_passed"])
         self.assertEqual(noop["gate_bytes_per_op"], 1_100_000.0)
-        self.assertEqual(noop["gate_allocs_per_op"], 4_000.0)
+        self.assertEqual(noop["gate_allocs_per_op"], 4_500.0)
         ungated = report["benchmarks"]["internal/toolhost/BenchmarkUngatedHelper"]
         self.assertEqual(ungated["median_bytes_per_op"], 128.0)
         self.assertEqual(ungated["median_allocs_per_op"], 2.0)
@@ -74,10 +74,10 @@ class BenchReportTests(unittest.TestCase):
     def test_gated_benchmark_allocation_failure_fails_report(self):
         target = "internal/toolhost/BenchmarkCommandProgram/noop"
         result, report = self.report(
-            gated_bench_text(overrides={target: {"allocs_per_op": 4_001}})
+            gated_bench_text(overrides={target: {"allocs_per_op": 4_501}})
         )
         self.assertNotEqual(result.returncode, 0)
-        self.assertIn(f"{target}: 4001 allocs/op > 4000 allocs/op", result.stderr)
+        self.assertIn(f"{target}: 4501 allocs/op > 4500 allocs/op", result.stderr)
         self.assertFalse(report["benchmarks"][target]["gate_passed"])
 
     def test_gated_benchmark_bytes_failure_fails_report(self):
