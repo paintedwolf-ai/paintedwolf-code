@@ -53,26 +53,39 @@ func TestDiscoveryRenderingPreservesCancellation(t *testing.T) {
 func TestRecoveryFormFactsSupplyIdentifiersAndQuotedCallsAcrossLoadingStates(t *testing.T) {
 	allFactRefs := []string{
 		"paintedwolf.command_loader_call",
+		"paintedwolf.uncompressed_reader_call",
 		"paintedwolf.admitted_process_capability_fields",
 		"paintedwolf.command_loadable_without_schema",
 		"paintedwolf.admitted_stream_edit_forms",
+		"paintedwolf.stream_edit_forms_loadable_without_schema",
 		"paintedwolf.admitted_archive_forms",
 		"paintedwolf.archive_unzip_stream_call",
 		"paintedwolf.archive_tar_list_call",
 		"paintedwolf.archive_tar_extract_call",
+		"paintedwolf.archive_forms_loadable_without_schema",
 		"paintedwolf.admitted_mutation_forms",
+		"paintedwolf.mutation_forms_loadable_without_schema",
 		"paintedwolf.admitted_secret_config_forms",
 		"paintedwolf.secret_jq_edit_call",
+		"paintedwolf.secret_external_command_admitted",
+		"paintedwolf.secret_forms_loadable_without_schema",
 		"paintedwolf.admitted_source_read_forms",
+		"paintedwolf.source_read_forms_loadable_without_schema",
 		"paintedwolf.admitted_range_read_forms",
+		"paintedwolf.range_read_forms_loadable_without_schema",
 		"paintedwolf.admitted_text_search_forms",
+		"paintedwolf.text_search_forms_loadable_without_schema",
 		"paintedwolf.admitted_file_read_forms",
+		"paintedwolf.file_read_forms_loadable_without_schema",
 		"paintedwolf.admitted_raw_read_forms",
+		"paintedwolf.raw_read_forms_loadable_without_schema",
 		"paintedwolf.admitted_large_read_forms",
+		"paintedwolf.large_read_forms_loadable_without_schema",
 		"paintedwolf.admitted_read_addressing_forms",
 		"paintedwolf.read_symbol_call",
 		"paintedwolf.read_range_call",
 		"paintedwolf.read_window_calls",
+		"paintedwolf.read_addressing_forms_loadable_without_schema",
 		"paintedwolf.command_jq_edit_reachable",
 		"paintedwolf.command_git_config_reachable",
 		"paintedwolf.command_wc_reachable",
@@ -107,8 +120,8 @@ func TestRecoveryFormFactsSupplyIdentifiersAndQuotedCallsAcrossLoadingStates(t *
 			},
 		})
 	gotCallable := assemble(callableReq)
-	if gotCallable["command_loader_call"] != "" {
-		t.Fatalf("callable command_loader_call = %v", gotCallable["command_loader_call"])
+	if gotCallable["command_loader_call"] != "" || gotCallable["uncompressed_reader_call"] != "" {
+		t.Fatalf("callable loader/reader = %v / %v", gotCallable["command_loader_call"], gotCallable["uncompressed_reader_call"])
 	}
 	if !slices.Equal(gotCallable["admitted_process_capability_fields"].([]string), []string{"capability_request.process_control"}) {
 		t.Fatalf("admitted_process_capability_fields = %v", gotCallable["admitted_process_capability_fields"])
@@ -116,28 +129,49 @@ func TestRecoveryFormFactsSupplyIdentifiersAndQuotedCallsAcrossLoadingStates(t *
 	if !slices.Equal(gotCallable["admitted_stream_edit_forms"].([]string), []string{"sed", "awk"}) {
 		t.Fatalf("admitted_stream_edit_forms = %v", gotCallable["admitted_stream_edit_forms"])
 	}
-	if !slices.Equal(gotCallable["admitted_secret_config_forms"].([]string), []string{"edit --path FILE --old-string OLD --new-string 'KEY=<reference>'"}) {
-		t.Fatalf("admitted_secret_config_forms = %v", gotCallable["admitted_secret_config_forms"])
+	if !slices.Equal(gotCallable["admitted_secret_config_forms"].([]string), []string{"edit --path FILE --old-string OLD --new-string 'KEY=<reference>'"}) ||
+		gotCallable["secret_external_command_admitted"] != true {
+		t.Fatalf("secret facts = %v / %v", gotCallable["admitted_secret_config_forms"], gotCallable["secret_external_command_admitted"])
 	}
 	if gotCallable["archive_unzip_stream_call"] != "unzip -p ARCHIVE.zip MEMBER" ||
 		gotCallable["archive_tar_list_call"] != "tar -t -f ARCHIVE.tar" ||
-		gotCallable["archive_tar_extract_call"] != "" {
-		t.Fatalf("archive calls = %v / %v / %v", gotCallable["archive_unzip_stream_call"], gotCallable["archive_tar_list_call"], gotCallable["archive_tar_extract_call"])
+		gotCallable["archive_tar_extract_call"] != "" ||
+		gotCallable["archive_forms_loadable_without_schema"] != false {
+		t.Fatalf("archive calls = %v / %v / %v / %v", gotCallable["archive_unzip_stream_call"], gotCallable["archive_tar_list_call"], gotCallable["archive_tar_extract_call"], gotCallable["archive_forms_loadable_without_schema"])
 	}
 
-	loadableReq := toolreach.Freeze([]string{"request_tools"}, toolsurface.Compile([]string{"request_tools"}, []string{"command"})).
-		WithPrograms(func(name string) bool { return name == "external" || name == "rg" })
-	gotLoadable := assemble(loadableReq)
-	if gotLoadable["command_loader_call"] != "`request_tools(need=\"command\")`" ||
-		gotLoadable["command_loadable_without_schema"] != true ||
-		gotLoadable["read_symbol_call"] != "rg -n SYMBOL FILE" {
-		t.Fatalf("loadable facts = %+v", gotLoadable)
+	loadableNoSchemaReq := toolreach.Freeze([]string{"request_tools"}, toolsurface.Compile([]string{"request_tools"}, []string{"command"})).
+		WithPrograms(func(name string) bool { return name == "external" || name == "rg" || name == "unzip" })
+	gotLoaderOnly := assemble(loadableNoSchemaReq)
+	if gotLoaderOnly["command_loader_call"] != "`request_tools(need=\"command\")`" ||
+		gotLoaderOnly["command_loadable_without_schema"] != true ||
+		gotLoaderOnly["archive_forms_loadable_without_schema"] != true ||
+		gotLoaderOnly["read_addressing_forms_loadable_without_schema"] != true ||
+		gotLoaderOnly["archive_unzip_stream_call"] != "" ||
+		gotLoaderOnly["read_symbol_call"] != "" ||
+		gotLoaderOnly["secret_external_command_admitted"] != false {
+		t.Fatalf("loader-only facts leaked concrete argv or dropped loader: %+v", gotLoaderOnly)
+	}
+
+	loadableOmittedFieldReq := toolreach.Freeze([]string{"request_tools", "read"}, toolsurface.Compile([]string{"request_tools", "read"}, []string{"command"})).
+		WithPrograms(func(name string) bool { return name == "unzip" || name == "rg" }).
+		WithSchemas(map[string]map[string]any{
+			"command": {"properties": map[string]any{"cwd": map[string]any{"type": "string"}}},
+			"read":    {"properties": map[string]any{"path": map[string]any{"type": "string"}}},
+		})
+	gotOmitted := assemble(loadableOmittedFieldReq)
+	if gotOmitted["command_loader_call"] != "`request_tools(need=\"command\")`" ||
+		gotOmitted["archive_forms_loadable_without_schema"] != false ||
+		len(gotOmitted["admitted_archive_forms"].([]string)) != 0 ||
+		gotOmitted["archive_unzip_stream_call"] != "" ||
+		gotOmitted["uncompressed_reader_call"] != "`read(…)`" {
+		t.Fatalf("omitted-command-field facts = %+v", gotOmitted)
 	}
 
 	absentReq := toolreach.Freeze([]string{"read"}, toolsurface.Compile([]string{"read"}, []string{"command"})).
 		WithPrograms(func(string) bool { return true })
 	gotAbsent := assemble(absentReq)
-	if gotAbsent["command_loader_call"] != "" || len(gotAbsent["admitted_read_addressing_forms"].([]string)) != 0 || gotAbsent["read_symbol_call"] != "" {
+	if gotAbsent["command_loader_call"] != "" || len(gotAbsent["admitted_read_addressing_forms"].([]string)) != 0 || gotAbsent["read_symbol_call"] != "" || gotAbsent["uncompressed_reader_call"] != "" {
 		t.Fatalf("absent-loader facts = %+v", gotAbsent)
 	}
 }

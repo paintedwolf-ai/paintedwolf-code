@@ -102,7 +102,7 @@ var programCapabilityGuards = map[string]map[string]bool{
 	"git config": {"paintedwolf.command_git_config_reachable": true},
 	"find":       {"paintedwolf.command_find_reachable": true},
 	"repo-map":   {"paintedwolf.command_repo_map_reachable": true},
-	"external":   {"paintedwolf.command_external_reachable": true},
+	"external":   {"paintedwolf.command_external_reachable": true, "paintedwolf.secret_external_command_admitted": true},
 }
 
 func buildGenericCommandGuards() map[string]bool {

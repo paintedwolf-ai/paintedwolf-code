@@ -199,7 +199,9 @@ func TestShippedOARProductionCommandModeAndGitConfigWitnesses(t *testing.T) {
 		filter := platform.ToolFilter{ProfileID: profileID, SurfaceID: surfaceID}
 		table, err := executor.Metadata.ProgramTable(t.Context(), filter)
 		contractcheck.FailErr(t, "ProgramTable", err)
-		return toolreach.Offered([]string{"command"}).WithProgramTable(table)
+		return toolreach.Offered([]string{"command"}).WithProgramTable(table).WithSchemas(map[string]map[string]any{
+			"command": {"properties": map[string]any{"command": map[string]any{"type": "string"}}},
+		})
 	}
 
 	rejectRef := func(tool, code string, reach toolreach.Request, data map[string]any) *guidance.Refusal {
@@ -364,5 +366,96 @@ func TestShippedOARExtractFormatUnsupportedProducerToRuleWitnesses(t *testing.T)
 	jqRef, ok := guidance.RefusalFromError(jqObs)
 	if !ok || jqRef == nil || !strings.Contains(jqRef.Copy["what"], "[auto json yaml toml]") {
 		t.Fatalf("JQ_FORMAT_INVALID generic paintedwolf.allowed broken: %v / %+v", jqObs, jqRef)
+	}
+}
+
+func TestShippedOARArchiveCommandFieldMissingProjectionAndOmittedFieldWitnesses(t *testing.T) {
+	_, _, _, bp := effectiveOARBlockPlane(t)
+	executor := toolexecution.NewExecutor(
+		toolexecution.NewApprovalPolicyEngine(toolprofiles.NewProfilePolicyEngine(contractcheck.ProdToolBoundary(t)), nil),
+		tools.NewDefaultRegistry(),
+		"implement",
+	)
+	readOnlyTable, err := executor.Metadata.ProgramTable(t.Context(), platform.ToolFilter{ProfileID: "explore_readonly"})
+	contractcheck.FailErr(t, "ProgramTable explore_readonly", err)
+
+	extractData := map[string]any{"path": "vendor/sdk.7z"}
+	renderFix := func(reach toolreach.Request) string {
+		err := bp.RejectObservation(toolreach.WithRequest(t.Context(), reach), "extract_archive", "explore_readonly", nil, &toolrejection.ToolReject{
+			Code: "EXTRACT_FORMAT_UNSUPPORTED", Data: extractData,
+		})
+		ref, ok := guidance.RefusalFromError(err)
+		if !ok || ref == nil {
+			t.Fatalf("RejectObservation(EXTRACT_FORMAT_UNSUPPORTED) = %v", err)
+		}
+		return ref.Copy["fix"]
+	}
+
+	admittedCmdSchema := map[string]map[string]any{
+		"command": {"properties": map[string]any{"command": map[string]any{"type": "string"}}},
+	}
+	omittedCmdFieldSchema := map[string]map[string]any{
+		"command": {"properties": map[string]any{"cwd": map[string]any{"type": "string"}}},
+	}
+	loadableBase := toolreach.Freeze([]string{"request_tools"}, toolsurface.Compile([]string{"request_tools"}, []string{"command"})).
+		WithProgramTable(readOnlyTable)
+	callableBase := toolreach.Offered([]string{"command"}).WithProgramTable(readOnlyTable)
+
+	// 1. Concrete positive case: same archive form and read-only program mode + admitted command field.
+	positiveLoadable := renderFix(loadableBase.WithSchemas(admittedCmdSchema))
+	if !strings.Contains(positiveLoadable, "`request_tools(need=\"command\")`") ||
+		!strings.Contains(positiveLoadable, "`unzip -p ARCHIVE.zip MEMBER`") ||
+		!strings.Contains(positiveLoadable, "`tar -t -f ARCHIVE.tar`") ||
+		strings.Contains(positiveLoadable, "`tar -x -f ARCHIVE.tar`") ||
+		strings.Contains(positiveLoadable, "Inspect a single uncompressed file") {
+		t.Fatalf("concrete positive loadable render = %q", positiveLoadable)
+	}
+	positiveCallable := renderFix(callableBase.WithSchemas(admittedCmdSchema))
+	if strings.Contains(positiveCallable, "request_tools") ||
+		!strings.Contains(positiveCallable, "`unzip -p ARCHIVE.zip MEMBER`") ||
+		!strings.Contains(positiveCallable, "`tar -t -f ARCHIVE.tar`") ||
+		strings.Contains(positiveCallable, "`tar -x -f ARCHIVE.tar`") {
+		t.Fatalf("concrete positive callable render = %q", positiveCallable)
+	}
+
+	// 2. Loader-only case: same archive form and read-only program mode + missing post-load schema.
+	loaderOnly := renderFix(loadableBase)
+	if !strings.Contains(loaderOnly, "Call `request_tools(need=\"command\")` to inspect its projected schema") ||
+		strings.Contains(loaderOnly, "unzip") || strings.Contains(loaderOnly, "tar -") ||
+		strings.Contains(loaderOnly, "Inside command") || strings.Contains(loaderOnly, "Inspect a single uncompressed file") {
+		t.Fatalf("loader-only missing-projection render = %q", loaderOnly)
+	}
+
+	// 3. No-route case: same archive form and read-only program mode + projection omitting the command field (no read route).
+	for name, req := range map[string]toolreach.Request{
+		"loadable_omitted_field": loadableBase.WithSchemas(omittedCmdFieldSchema),
+		"callable_omitted_field": callableBase.WithSchemas(omittedCmdFieldSchema),
+		"callable_missing_proj":  callableBase,
+	} {
+		noRoute := renderFix(req)
+		if strings.Contains(noRoute, "unzip") || strings.Contains(noRoute, "tar -") ||
+			strings.Contains(noRoute, "request_tools") || strings.Contains(noRoute, "Inside command") ||
+			strings.Contains(noRoute, "Inspect a single uncompressed file") {
+			t.Fatalf("%s must omit concrete argv, loader advice, and uncompressed reader fallback: %q", name, noRoute)
+		}
+	}
+
+	// 4. Gated uncompressed-reader fallback: requires callable read with accepted path field.
+	withReader := toolreach.Freeze([]string{"request_tools", "read"}, toolsurface.Compile([]string{"request_tools", "read"}, []string{"command"})).
+		WithProgramTable(readOnlyTable).
+		WithSchemas(map[string]map[string]any{
+			"command": {"properties": map[string]any{"cwd": map[string]any{"type": "string"}}},
+			"read":    {"properties": map[string]any{"path": map[string]any{"type": "string"}}},
+		})
+	readerFallback := renderFix(withReader)
+	if !strings.Contains(readerFallback, "Inspect a single uncompressed file with `read(…)` when that is the intended task.") ||
+		strings.Contains(readerFallback, "unzip") || strings.Contains(readerFallback, "request_tools") {
+		t.Fatalf("gated uncompressed-reader render = %q", readerFallback)
+	}
+	prunedReader := toolreach.Offered([]string{"read"}).WithSchemas(map[string]map[string]any{
+		"read": {"properties": map[string]any{"offset": map[string]any{"type": "integer"}}},
+	})
+	if got := renderFix(prunedReader); strings.Contains(got, "Inspect a single uncompressed file") || strings.Contains(got, "`read(") {
+		t.Fatalf("read without path field must omit uncompressed-reader fallback: %q", got)
 	}
 }
