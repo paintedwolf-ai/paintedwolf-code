@@ -134,6 +134,7 @@ func TestFrontierPlateauAfterZeroGainRound(t *testing.T) {
 }
 
 func TestPickSeedsHedgeWinsBeforeSlowPrimary(t *testing.T) {
+	t.Setenv("LYCAON_CONFIG_DIR", t.TempDir())
 	synctest.Test(t, func(t *testing.T) {
 		discovery := NewDiscovery(newTestCrawler())
 
