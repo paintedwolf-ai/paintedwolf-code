@@ -4,6 +4,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/lycaon/lycaon/internal/commandmode"
 	"github.com/lycaon/lycaon/internal/commandprogram"
 	"github.com/lycaon/lycaon/internal/httpaction"
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -82,6 +83,7 @@ func TestSelectModeNamesWhatPrepareSelects(t *testing.T) {
 		"uniq in out":                   "OUTPUT-supplied",
 		"iconv -f latin1 -t utf-8 file": "always",
 		"iconv -o out file":             "-o",
+		"sed p":                         "stream-script",
 		"sed s/a/b/":                    "stream-script",
 		"sed -i s/a/b/ f":               "-i",
 		"sed -Ei s/a/b/ f":              "-i",
@@ -94,8 +96,11 @@ func TestSelectModeNamesWhatPrepareSelects(t *testing.T) {
 		"find . -name x -delete": "-delete",
 	} {
 		var argv commandprogram.Fields
+		var words []string
 		for _, word := range strings.Split(source, " ") {
-			argv = append(argv, commandprogram.Field{Value: strings.ReplaceAll(word, "\t", " ")})
+			val := strings.ReplaceAll(word, "\t", " ")
+			argv = append(argv, commandprogram.Field{Value: val})
+			words = append(words, val)
 		}
 		native := natives[argv[0].Value]
 		if native.SelectMode == nil {
@@ -105,6 +110,10 @@ func TestSelectModeNamesWhatPrepareSelects(t *testing.T) {
 		got, known := native.SelectMode(t.Context(), argv)
 		if known != (want != "") || got != want {
 			t.Errorf("%s: mode %q (known %v), want %q", source, got, known, want)
+		}
+		resolved, resolvedOK := commandmode.Resolve(t.Context(), words)
+		if resolvedOK != (want != "") || resolved.Mode != want {
+			t.Errorf("%s: commandmode.Resolve = %+v (ok %v), want %q", source, resolved, resolvedOK, want)
 		}
 	}
 }

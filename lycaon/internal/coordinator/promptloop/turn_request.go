@@ -192,15 +192,22 @@ func (l *promptContext) projectedDeferredSchemas(
 		listCtx = toolpolicy.WithCoordinatorSurface(ctx, surfaceID)
 	}
 	all := l.Deps.Policy.ListForPrompt(listCtx, sess, profileID)
+	if frame.Machine.Compiled() {
+		all = tools.HideSkillsReadWhenEmpty(all, frame.Machine.SkillCount)
+	}
 	ask := sess != nil && sess.Mode == api.SessionModeAsk
-	if ask {
+	if ask && profileID == prompts.CoordinatorProfileID {
 		all = ProjectAskToolMetas(all)
 	}
-	taskAllowlist := taskSpawnAllowlistForTurn(frame)
-	if ask {
-		taskAllowlist = readOnlySpawnAllowlist(taskAllowlist)
+	var taskAllowlist []string
+	var verdict map[string]any
+	if profileID == prompts.CoordinatorProfileID {
+		taskAllowlist = taskSpawnAllowlistForTurn(frame)
+		if ask {
+			taskAllowlist = readOnlySpawnAllowlist(taskAllowlist)
+		}
+		verdict = phaseVerdictSchema(frame)
 	}
-	verdict := phaseVerdictSchema(frame)
 	out := make(map[string]map[string]any, len(deferred))
 	for _, meta := range all {
 		if !plan.Deferred(meta.Name) {
@@ -211,8 +218,15 @@ func (l *promptContext) projectedDeferredSchemas(
 		}
 		proj := tools.ProjectProviderToolMeta(meta)
 		switch meta.Name {
-		case "task", "instruct_worker":
+		case "task":
+			if taskAllowlist != nil && len(taskAllowlist) == 0 {
+				continue
+			}
 			proj = guard.ApplySpawnAllowlistSchema(proj, taskAllowlist)
+		case "instruct_worker":
+			if profileID == prompts.CoordinatorProfileID {
+				proj = guard.ApplySpawnAllowlistSchema(proj, taskAllowlist)
+			}
 		}
 		if proj.ArgsSchema != nil {
 			out[meta.Name] = jsonvalue.CloneMap(proj.ArgsSchema)

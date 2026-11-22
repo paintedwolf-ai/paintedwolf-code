@@ -104,7 +104,7 @@ func TestAcceptsFieldAndSequenceRequireAuthoritativeSchemasAndValidateEmptyMaps(
 
 func TestProgramInvocationSeparatesMultiModeAndGitSubcommands(t *testing.T) {
 	genericGitAndTar := Offered([]string{"command"}).WithPrograms(func(name string) bool {
-		return name == "git" || name == "tar" || name == "unzip"
+		return name == "git" || name == "tar" || name == "unzip" || name == "sed"
 	})
 	if genericGitAndTar.ProgramInvocation("git", "config", "--list") {
 		t.Fatal("generic git reach must not admit git config")
@@ -118,17 +118,34 @@ func TestProgramInvocationSeparatesMultiModeAndGitSubcommands(t *testing.T) {
 	if !genericGitAndTar.ProgramInvocation("unzip", "-p", "a.zip", "entry") {
 		t.Fatal("unzip read reach must admit unzip -p stream inspection")
 	}
+	if !genericGitAndTar.ProgramInvocation("sed", "p") {
+		t.Fatal("sed read reach must admit sed p")
+	}
+	if genericGitAndTar.ProgramInvocation("sed", "w out") {
+		t.Fatal("sed read reach without w-command admission must reject sed 'w out'")
+	}
+	if genericGitAndTar.ProgramMode("sed", "unknown-mode") || genericGitAndTar.ProgramMode("unknown-cmd", "always") {
+		t.Fatal("unknown modes must fail closed")
+	}
 
-	fullModes := genericGitAndTar.WithProgramModes(func(name, mode string) bool {
-		if name == "git config" && mode == "query" {
-			return true
-		}
-		return name == "tar" && (mode == "listing-or-stream-decode" || mode == "create-extract-compress-decompress-to-path")
-	})
+	fullModes := Offered([]string{"command"}).WithProgramTable(NewProgramTable(
+		map[string]bool{"git": true, "git config": true, "tar": true, "sed": true},
+		map[string]map[string]bool{
+			"git config": {"query": true},
+			"sed":        {"stream-script": true, "w-command": true},
+			"tar":        {"listing-or-stream-decode": true, "create-extract-compress-decompress-to-path": true},
+		},
+	))
 	if !fullModes.ProgramInvocation("git", "config", "--get", "user.name") {
 		t.Fatal("explicit git config query admission should allow git config --get")
 	}
 	if !fullModes.ProgramInvocation("tar", "-x", "-f", "a.tar") {
 		t.Fatal("explicit tar extraction mode admission should allow tar -x -f")
+	}
+	if !fullModes.ProgramInvocation("sed", "p") || !fullModes.ProgramInvocation("sed", "w out") {
+		t.Fatal("writable sed mode admission should allow both sed p and sed 'w out'")
+	}
+	if fullModes.ProgramMode("sed", "unknown-mode") {
+		t.Fatal("unknown mode on full table must still fail closed")
 	}
 }

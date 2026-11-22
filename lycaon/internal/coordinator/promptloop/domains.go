@@ -79,8 +79,8 @@ type ModelDeps struct {
 }
 
 type ToolsDeps struct {
-	// ProgramReach freezes which native programs a model turn can run.
-	ProgramReach                func(ctx context.Context, profileID, surfaceID string) toolreach.Programs
+	// ProgramReach freezes which native programs and modes a model turn admits.
+	ProgramReach                func(ctx context.Context, profileID, surfaceID string) *toolreach.ProgramTable
 	Invocations                 invocation.Recorder
 	VisualStore                 visual.Store
 	AgentPresence               *agentpresence.Tracker

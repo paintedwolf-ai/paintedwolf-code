@@ -97,34 +97,22 @@ func (e *Metadata) FreezeProgramSurface(ctx context.Context, filter platform.Too
 	return ProgramSurface{selection: selection, allowed: allowed, profile: filter.ProfileID}, nil
 }
 
-// ProgramReach freezes which native programs and effect modes a profile and
-// surface can run: the catalog entry's effects fit the restriction and no
-// profile deny names it.
+// ProgramReach freezes which native programs a profile and surface admit.
 func (e *Metadata) ProgramReach(ctx context.Context, filter platform.ToolFilter) (toolreach.Programs, error) {
+	reachable, _, err := e.catalogProgramAdmission(ctx, filter)
+	if err != nil {
+		return nil, err
+	}
+	return func(name string) bool { return reachable[name] }, nil
+}
+
+// ProgramTable freezes program and effect-mode admission for one profile and surface.
+func (e *Metadata) ProgramTable(ctx context.Context, filter platform.ToolFilter) (*toolreach.ProgramTable, error) {
 	reachable, modes, err := e.catalogProgramAdmission(ctx, filter)
 	if err != nil {
 		return nil, err
 	}
-	return func(name string) bool {
-		if cmd, mode, hasSep := strings.Cut(name, "\x00"); hasSep {
-			cmdModes, known := modes[cmd]
-			if mode == "" {
-				return known
-			}
-			return cmdModes[mode]
-		}
-		return reachable[name]
-	}, nil
-}
-
-// ProgramModeReach freezes which (command, mode) pairs a profile and surface
-// admit under the effective profile boundary and command-language catalog.
-func (e *Metadata) ProgramModeReach(ctx context.Context, filter platform.ToolFilter) (toolreach.ProgramModes, error) {
-	_, modes, err := e.catalogProgramAdmission(ctx, filter)
-	if err != nil {
-		return nil, err
-	}
-	return func(name, mode string) bool { return modes[name][mode] }, nil
+	return toolreach.NewProgramTable(reachable, modes), nil
 }
 
 func (e *Metadata) catalogProgramAdmission(ctx context.Context, filter platform.ToolFilter) (map[string]bool, map[string]map[string]bool, error) {
