@@ -1379,6 +1379,18 @@ host_facts:
    type: bool
  - name: paintedwolf.replacement_args_json
    type: string
+ - name: paintedwolf.purpose_list_delete_targets
+   type: bool
+ - name: paintedwolf.purpose_preview_stream
+   type: bool
+ - name: paintedwolf.purpose_preview_query
+   type: bool
+ - name: paintedwolf.purpose_dry_run_preview
+   type: bool
+ - name: paintedwolf.purpose_check_patch
+   type: bool
+ - name: paintedwolf.purpose_inspect_target
+   type: bool
  - name: paintedwolf.missing_capability_credential_store
    type: bool
  - name: paintedwolf.missing_capability_direct_ip

@@ -22,6 +22,7 @@ import (
 	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/tools/native/command"
+	"github.com/lycaon/lycaon/internal/toolsurface"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -220,7 +221,59 @@ func TestAskAndReadOnlyProgramFeedbackAlternativesAndAttribution(t *testing.T) {
 	if !strings.Contains(outNoFindForm.Refusal.Feedback, "Cause: Ask mode permits only read-only inspection and blocks `mutation`.") {
 		t.Fatalf("missing precise cause when form removed:\n%s", outNoFindForm.Refusal.Feedback)
 	}
+
+	// 2b. Recipient reach matrix: loadable (with request_tools), absent, and unknown reach.
+	f.Context = func(_ string, tc *tools.ToolContext) {
+		tc.Turn.TurnOfferedToolNames = []string{"request_tools"}
+		tc.Turn.TurnToolPlan = toolsurface.Compile([]string{"request_tools"}, []string{"command"})
+	}
+	rawLoadable, err := f.Call(t, t.Context(), "find src -name '*.tmp' -delete")
+	testutil.FailErr(t, "find -delete with loadable command", err)
+	outLoadable := decodeOutcome(t, rawLoadable)
+	if outLoadable.Refusal == nil || !strings.Contains(outLoadable.Refusal.Feedback, "Fix: Load `command` via `request_tools` and run `find src -name '*.tmp'` to list the paths selected for deletion and report the affected files without deleting them.") {
+		t.Fatalf("loadable command feedback missing request_tools remedy:\n%+v", outLoadable.Refusal)
+	}
+
+	f.Context = func(_ string, tc *tools.ToolContext) {
+		tc.Turn.TurnOfferedToolNames = []string{"task"}
+		tc.Turn.TurnToolPlan = toolsurface.Compile([]string{"task"}, nil)
+	}
+	rawAbsent, err := f.Call(t, t.Context(), "find src -name '*.tmp' -delete")
+	testutil.FailErr(t, "find -delete with absent command", err)
+	outAbsent := decodeOutcome(t, rawAbsent)
+	if outAbsent.Refusal == nil || strings.Contains(outAbsent.Refusal.Feedback, "Run `find src -name '*.tmp'`") || strings.Contains(outAbsent.Refusal.Feedback, "Load `command`") || outAbsent.Refusal.Details["code_instead"] != nil {
+		t.Fatalf("absent command still recommended executable remedy:\n%+v", outAbsent.Refusal)
+	}
+
 	f.Context = nil
+	f.noReach = true
+	rawUnknownReach, err := f.Call(t, t.Context(), "find src -name '*.tmp' -delete")
+	testutil.FailErr(t, "find -delete with unknown reach", err)
+	outUnknownReach := decodeOutcome(t, rawUnknownReach)
+	if outUnknownReach.Refusal == nil || strings.Contains(outUnknownReach.Refusal.Feedback, "Run `find src -name '*.tmp'`") || strings.Contains(outUnknownReach.Refusal.Feedback, "Load `command`") || outUnknownReach.Refusal.Details["code_instead"] != nil || outUnknownReach.Refusal.Details["can_command"] != nil {
+		t.Fatalf("unknown reach still recommended executable remedy or invented can_command:\n%+v", outUnknownReach.Refusal)
+	}
+	if !strings.Contains(outUnknownReach.Refusal.Feedback, "Cause: Ask mode permits only read-only inspection and blocks `mutation`.") {
+		t.Fatalf("unknown reach lost precise cause:\n%s", outUnknownReach.Refusal.Feedback)
+	}
+	f.noReach = false
+
+	// 2c. Candidate with non-read or unknown nested effects (find -delete -exec rm / non-native) and unresolved relative target (../outside).
+	for _, nonReadFind := range []string{
+		`find src -name '*.tmp' -exec rm {} \; -delete`,
+		`find src -name '*.tmp' -exec unknown_external_binary {} \; -delete`,
+		`find ../outside -name '*.tmp' -delete`,
+	} {
+		rawNonRead, callErr := f.Call(t, t.Context(), nonReadFind)
+		testutil.FailErr(t, "non-read or escaping candidate: "+nonReadFind, callErr)
+		outNonRead := decodeOutcome(t, rawNonRead)
+		if outNonRead.Refusal == nil || outNonRead.Refusal.Details["code_instead"] != nil || strings.Contains(outNonRead.Refusal.Feedback, "Fix: Run `find") {
+			t.Fatalf("%q unexpectedly recommended a read alternative:\n%+v", nonReadFind, outNonRead.Refusal)
+		}
+		if !strings.Contains(outNonRead.Refusal.Feedback, "Cause: Ask mode permits only read-only inspection and blocks") {
+			t.Fatalf("%q missing precise cause:\n%s", nonReadFind, outNonRead.Refusal.Feedback)
+		}
+	}
 
 	deniedTargetCtx := tools.WithAgentPolicy(t.Context(), func(_ context.Context, targets []agentpolicy.Target) error {
 		for _, target := range targets {

@@ -62,14 +62,15 @@ type PreparedNativeEffect struct {
 // operation. It must not reuse the adapter's stale pre-review input. Streams are
 // handed to the owner only once admission has reached it.
 type NativeEffect struct {
-	Inspection      toolcontract.OperationInspectionProjector
-	Operation       toolcontract.BoundOperation
-	Stage           toolcontract.ExecutionStage
-	Arguments       map[string]any
-	Argv            *commandprogram.ArgvReview
-	Streams         commandprogram.Streams
-	CheckOutputs    func(context.Context) error
-	PrepareReviewed func(context.Context, map[string]any, tools.ToolContext) (PreparedNativeEffect, error)
+	Inspection        toolcontract.OperationInspectionProjector
+	Operation         toolcontract.BoundOperation
+	Stage             toolcontract.ExecutionStage
+	Arguments         map[string]any
+	Argv              *commandprogram.ArgvReview
+	Streams           commandprogram.Streams
+	CheckOutputs      func(context.Context) error
+	PrepareReviewed   func(context.Context, map[string]any, tools.ToolContext) (PreparedNativeEffect, error)
+	ValidateCandidate func(ctx context.Context, argv []string) (toolcontract.BoundOperation, commandprogram.ArgvReview, bool)
 }
 
 // InvokeNative is reached-effect admission, not an interpreter or JSON tool call.
