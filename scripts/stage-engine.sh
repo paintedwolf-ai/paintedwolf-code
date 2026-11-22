@@ -206,8 +206,18 @@ if [[ "${HOST_KIND}" == "darwin" && "${RELEASE_BUILD}" != "1" ]]; then
 fi
 
 if [[ "${MODE}" == "full" ]]; then
+  # Release builds ignore LYCAON_DEV and resolve ~/.config/paintedwolf under
+  # HOME; route staging downloads through the development cache so building an
+  # engine never creates or mutates a release install profile.
+  STAGE_HOME="$(mktemp -d "${TMPDIR:-/tmp}/pw-stage-home.XXXXXX")"
+  trap 'rm -rf "${STAGE_HOME}"' EXIT
+  DEV_CONFIG_DIR="${HOME:-${USERPROFILE:-}}/.config/paintedwolf-dev"
+  mkdir -p "${DEV_CONFIG_DIR}" "${STAGE_HOME}/.config"
+  if ! ln -s "${DEV_CONFIG_DIR}" "${STAGE_HOME}/.config/paintedwolf" 2>/dev/null; then
+    mkdir -p "${STAGE_HOME}/.config/paintedwolf"
+  fi
   echo "stage-engine — provisioning chrome-headless-shell into engine-root/browser" >&2
-  BROWSER_OUT="$("${SIDECAR_BIN}" browser ensure)"
+  BROWSER_OUT="$(HOME="${STAGE_HOME}" USERPROFILE="${STAGE_HOME}" "${SIDECAR_BIN}" browser ensure)"
   BROWSER_PATH="$(printf '%s\n' "${BROWSER_OUT}" | sed -n 's/^browser ready .* path=//p')"
   if [[ "${HOST_KIND}" == "windows" ]] && command -v cygpath >/dev/null 2>&1; then
     BROWSER_PATH="$(cygpath -u "${BROWSER_PATH}")"
@@ -225,7 +235,7 @@ if [[ "${MODE}" == "full" ]]; then
 
   # The host reads the completion marker, so it ships with the checkpoint.
   echo "stage-engine — provisioning the decision checkpoint into engine-root/decide/models" >&2
-  MODEL_OUT="$("${SIDECAR_BIN}" decide ensure)"
+  MODEL_OUT="$(HOME="${STAGE_HOME}" USERPROFILE="${STAGE_HOME}" "${SIDECAR_BIN}" decide ensure)"
   MODEL_PATH="$(printf '%s\n' "${MODEL_OUT}" | sed -n 's/^decision model ready .* path=//p')"
   if [[ "${HOST_KIND}" == "windows" ]] && command -v cygpath >/dev/null 2>&1; then
     MODEL_PATH="$(cygpath -u "${MODEL_PATH}")"

@@ -110,6 +110,36 @@ class HungTestBackstopTests(unittest.TestCase):
         self.assertIn("2 passed, 0 failed", digest.stdout)
         self.assertIn("0 failing tests across 1 package", digest.stdout)
 
+    def test_hung_go_process_without_a_test_binary_still_dumps_its_stacks(self):
+        holder = self.root / "holder"
+        holder.mkdir()
+        (holder / "main.go").write_text(
+            'package main\nimport (\n\t"os"\n\t"os/signal"\n)\nfunc main() {\n'
+            '\tsignal.Notify(make(chan os.Signal, 1), os.Interrupt)\n'
+            '\tif err := os.WriteFile(os.Getenv("FIXTURE_HUNG"), nil, 0o600); err != nil { panic(err) }\n'
+            '\tselect {}\n}\n'
+        )
+        binary = self.root / "go-holder"
+        subprocess.run(["go", "build", "-o", str(binary), "./holder"], cwd=self.root, check=True)
+        hung = self.root / "holder-hung"
+        raw = self.root / "holder.log"
+        with raw.open("wb") as output:
+            run = subprocess.Popen([str(binary)], cwd=self.root, stdout=output, stderr=subprocess.STDOUT,
+                                   start_new_session=True, env={**os.environ, "FIXTURE_HUNG": str(hung)})
+        self.addCleanup(self.reap, run)
+        while not hung.exists():
+            self.assertIsNone(run.poll(), raw.read_text())
+            time.sleep(.02)
+        flag = self.root / "holder-timed-out"
+        watchdog = subprocess.run([sys.executable, str(SCRIPTS / "process-group-watchdog.py"),
+                                   "0.1", str(run.pid), str(flag), "fixture"], capture_output=True, text=True)
+        self.assertEqual(watchdog.returncode, 0, watchdog.stderr)
+        self.assertTrue(flag.exists())
+        self.assertNotEqual(run.wait(), 0)
+        log = raw.read_text()
+        self.assertIn("SIGQUIT: quit", log)
+        self.assertRegex(log, r"goroutine \d+ [^\n]*\[select")
+
     def reap(self, run):
         try:
             os.killpg(run.pid, signal.SIGKILL)
