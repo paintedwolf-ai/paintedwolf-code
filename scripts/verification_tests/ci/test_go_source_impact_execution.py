@@ -193,8 +193,10 @@ class QueueScopeTests(unittest.TestCase):
 
     def test_changed_packages_are_the_edited_go_source_without_the_database_or_deleted_packages(self):
         scope = {"paths": ["lycaon/internal/confine/seatbelt_darwin.go", "lycaon/internal/confine/testdata/x.json",
+                           "lycaon/internal/archlint/analyzers/testdata/src/copies/copies.go",
                            "lycaon/internal/db/store.go", "lycaon/internal/removed/gone.go", "lycaon-den/src/a.ts",
                            "lycaon/test/wiring/main_test.go"]}
-        self.assertEqual(impact.changed_packages(scope), ["./internal/confine", "./test/wiring"])
+        self.assertEqual(impact.changed_packages(scope),
+                         ["./internal/archlint/analyzers", "./internal/confine", "./test/wiring"])
         self.assertEqual(impact.changed_packages({"paths": ["lycaon/internal/db/store.go"]}), [])
         self.assertNotIn(live(phase="changed-packages"), self.queue(["lycaon/internal/db/store.go"]))

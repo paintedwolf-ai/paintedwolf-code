@@ -207,12 +207,17 @@ def dependency_input(path):
     return Path(path).name in DEPENDENCY_NAMES or path.startswith(DEPENDENCY_INPUTS)
 
 
+def package_directory(path):
+    parts = Path(path).parts
+    return Path(*parts[:parts.index("testdata")]) if "testdata" in parts else Path(path).parent
+
+
 def changed_packages(scope):
     """The Go packages whose own source a change edits, for checks too costly for the reverse closure."""
-    directories = {Path(path).parent for path in scope["paths"] if path.endswith(".go") and module_tree(path)}
+    directories = {package_directory(path) for path in scope["paths"] if path.endswith(".go") and module_tree(path)}
     # A deleted package has nothing left to run.
     packages = {"./" + directory.relative_to("lycaon").as_posix() for directory in directories
-                if any((ROOT / directory).glob("*.go"))}
+                if directory != Path("lycaon") and any((ROOT / directory).glob("*.go"))}
     # The race recipe never runs its excluded packages, so they cannot select the lane either.
     from verification_plan import catalog
     exclude = catalog()["go"]["test:race"].get("exclude")
