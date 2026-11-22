@@ -89,7 +89,7 @@ fn a_package_manager_that_misses_the_deadline_is_unknown_until_it_answers() {
     let cache = fresh_cache();
     assert_eq!(resolve(cache, || owner(Path::new(EXE), &mut stand_ins)), Ownership::Unknown(QueryReason::TimedOut));
     std::fs::remove_file(&stalled).unwrap();
-    stand_ins.deadline = std::time::Duration::from_secs(120);
+    stand_ins.deadline = crate::test_support::NO_DEADLINE;
     let package = resolve(cache, || owner(Path::new(EXE), &mut stand_ins)).package().expect("the retry establishes the owner");
     assert_eq!((package.name.as_str(), package.version.as_str()), ("painted-wolf-code", "1.0.2"));
 }

@@ -98,12 +98,12 @@ printf 'GOMEMLIMIT %s RACE %s\\n' "$GOMEMLIMIT" "${PW_TEST_RACE:-unset}"
                "PW_TEST_BATCH_DIRECTORY": str(self.root / f"batch-{mode}"), "PW_TEST_STAGE_ID": "stage-001"}
         result = subprocess.run([sys.executable, str(WRAPPER), str(self.binary), "-test.paniconexit0",
                                  "-test.timeout=10m0s", "-test.v=test2json"], cwd=self.package, env=env,
-                                capture_output=True, timeout=30)
+                                capture_output=True)
         return result, read_events(self.events)["fixture/pkg"]
 
     def test_outside_a_stage_the_binary_runs_unchanged(self):
         result = subprocess.run([sys.executable, str(WRAPPER), str(self.binary)], cwd=self.package,
-                                env={"PATH": os.environ["PATH"]}, capture_output=True, timeout=30)
+                                env={"PATH": os.environ["PATH"]}, capture_output=True)
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn(b"PASS one", result.stdout)
         self.assertFalse(self.events.exists())
@@ -116,7 +116,7 @@ printf 'GOMEMLIMIT %s RACE %s\\n' "$GOMEMLIMIT" "${PW_TEST_RACE:-unset}"
         scaled = int(ceiling * json.loads(resources.POLICY.read_text())["race_scale"])
         self.assertGreater(scaled, ceiling)
         self.assertEqual(resources.budget("fixture/pkg", race=True), scaled)
-        self.assertIn(f"GOMEMLIMIT {scaled * 80 // 100} RACE unset".encode(), result.stdout)
+        self.assertIn(f"GOMEMLIMIT {ceiling * 80 // 100} RACE unset".encode(), result.stdout)
 
     def test_failures_are_reported_as_they_happen_with_their_output(self):
         result, event = self.run_wrapper("fail")

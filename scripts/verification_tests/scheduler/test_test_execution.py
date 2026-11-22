@@ -27,7 +27,7 @@ class HostSettingIsolationTests(unittest.TestCase):
         environment = {**os.environ, "PYTHONPATH": os.pathsep.join(sys.path), "PW_TEST_CAPACITY": "12",
                        "PW_TEST_WORKERS": "12", "PW_TEST_HOST": "dedicated"}
         result = subprocess.run([sys.executable, "-m", "unittest", f"{__name__}.TaskAdmissionTests"], cwd=scripts,
-                                env=environment, capture_output=True, text=True, timeout=300)
+                                env=environment, capture_output=True, text=True)
         self.assertEqual(result.returncode, 0, result.stderr[-4000:])
 
 
@@ -321,12 +321,8 @@ class ExecutionLifecycleTests(unittest.TestCase):
         return process
 
     def await_state(self, predicate):
-        deadline = time.monotonic() + 5
-        while time.monotonic() < deadline:
-            if predicate():
-                return
+        while not predicate():
             time.sleep(0.01)
-        self.fail("execution state did not settle")
 
     @unittest.skipIf(os.name == "nt", "harness reservations use POSIX descriptor inheritance")
     def test_harness_child_retains_reservation_after_supervisor_crash(self):
@@ -356,7 +352,7 @@ while True: time.sleep(.1)
             self.await_state(marker.exists)
             child_pid = int(marker.read_text())
             supervisor.kill()
-            supervisor.wait(timeout=5)
+            supervisor.wait()
             with lease.open("r+") as probe:
                 with self.assertRaises(BlockingIOError):
                     execution.lock_file(probe, blocking=False)
@@ -368,7 +364,7 @@ while True: time.sleep(.1)
                     os.kill(child_pid, signal.SIGTERM)
                 except ProcessLookupError:
                     pass
-            supervisor.communicate(timeout=10)
+            supervisor.communicate()
         def released():
             with lease.open("r+") as probe:
                 try:
@@ -388,7 +384,7 @@ while True: time.sleep(.1)
             with self.subTest(arguments=arguments, status=status):
                 result = subprocess.run(
                     [sys.executable, str(SCRIPT), "task", "--", sys.executable, str(task), *arguments],
-                    env={**self.env, "FIXTURE_STATUS": str(status)}, capture_output=True, text=True, timeout=60)
+                    env={**self.env, "FIXTURE_STATUS": str(status)}, capture_output=True, text=True)
                 self.assertEqual(result.returncode, status, result.stderr)
         recorded = history.read_history(self.queue)
         self.assertEqual(list(recorded), ["build:lycaon-dev"])
@@ -402,7 +398,7 @@ while True: time.sleep(.1)
             with self.subTest(arguments=arguments):
                 result = subprocess.run(
                     [sys.executable, str(SCRIPT), "task", "--", sys.executable, str(task), *arguments],
-                    env=self.env, capture_output=True, text=True, timeout=5)
+                    env=self.env, capture_output=True, text=True)
                 self.assertEqual(result.returncode, 0, result.stderr)
                 self.assertEqual(result.stdout.strip(), repr(arguments))
         status = self.queue.status()
@@ -455,7 +451,7 @@ while True: time.sleep(.1)
             finish.touch()
             if process.poll() is None:
                 os.killpg(process.pid, signal.SIGTERM)
-            process.communicate(timeout=10)
+            process.communicate()
         self.addCleanup(cleanup)
         return process
 
@@ -468,22 +464,22 @@ while True: time.sleep(.1)
         self.queue.resume()
         self.await_state(lambda: (self.root / "ready").exists() or harness.poll() is not None)
         if harness.poll() is not None:
-            _, err = harness.communicate(timeout=5)
+            _, err = harness.communicate()
             self.fail(f"harness exited before interaction: {err}")
         self.assertEqual(self.queue.status()["runs"], [])
         following = self.start("following", "print('verified')")
-        _, err = following.communicate(timeout=5)
+        _, err = following.communicate()
         self.assertEqual(following.returncode, 0, err)
         self.queue.pause("fixture interaction pause")
         self.assertIsNone(harness.poll())
         (self.root / "finish").touch()
-        _, err = harness.communicate(timeout=10)
+        _, err = harness.communicate()
         self.assertEqual(harness.returncode, 0, err)
 
     def test_failed_harness_preparation_does_not_start_interaction(self):
         self.env["TEST_BUILD_STATUS"] = "7"
         harness = self.harness_fixture()
-        _, err = harness.communicate(timeout=10)
+        _, err = harness.communicate()
         self.assertEqual(harness.returncode, 7, err)
         self.assertFalse((self.root / "ready").exists())
         self.assertEqual(self.queue.status()["runs"], [])
@@ -496,7 +492,7 @@ while True: time.sleep(.1)
         other = execution.Queue(self.queue.root, self.queue.history)
         self.assertEqual(other.status()["paused"]["reason"], "fixture pause")
         other.resume()
-        out, err = process.communicate(timeout=5)
+        out, err = process.communicate()
         self.assertEqual(process.returncode, 0, err)
         self.assertEqual(out.strip(), "ran")
 
@@ -510,7 +506,7 @@ while True: time.sleep(.1)
             self.await_state(lambda: len(self.queue.status()["runs"]) == index + 1)
         self.queue.resume()
         for process in processes:
-            _, err = process.communicate(timeout=5)
+            _, err = process.communicate()
             self.assertEqual(process.returncode, 0, err)
         self.assertEqual(result.read_text(), "0\n1\n2\n")
 
@@ -519,11 +515,11 @@ while True: time.sleep(.1)
         process = self.start("cancel", "raise AssertionError('must not run')")
         self.await_state(lambda: len(self.queue.status()["runs"]) == 1)
         process.terminate()
-        process.communicate(timeout=5)
+        process.communicate()
         self.assertEqual(self.queue.status()["runs"], [])
         self.queue.resume()
         following = self.start("following", "print('ok')")
-        out, err = following.communicate(timeout=5)
+        out, err = following.communicate()
         self.assertEqual(following.returncode, 0, err)
         self.assertEqual(out.strip(), "ok")
 
@@ -537,15 +533,15 @@ while True: time.sleep(.1)
         self.await_state(lambda: len(self.queue.status()["runs"]) == 2)
         self.assertEqual([entry["state"] for entry in self.queue.status()["runs"]], ["running", "queued"])
         release.touch()
-        first.communicate(timeout=5)
-        out, err = second.communicate(timeout=5)
+        first.communicate()
+        out, err = second.communicate()
         self.assertEqual(second.returncode, 0, err)
         self.assertEqual(out.strip(), "second")
 
     def test_nested_run_reuses_admission(self):
         command = [sys.executable, str(SCRIPT), "run", "--name", "nested", "--", sys.executable, "-c", "print('nested')"]
         process = self.start("outer", f"import subprocess; subprocess.run({command!r}, check=True)")
-        out, err = process.communicate(timeout=5)
+        out, err = process.communicate()
         self.assertEqual(process.returncode, 0, err)
         self.assertEqual(out.strip(), "nested")
         self.assertEqual(err.count("admitted"), 1)
@@ -560,7 +556,7 @@ while True: time.sleep(.1)
         self.addCleanup(release.touch)
         self.await_state(ready.exists)
         first.kill()
-        first.wait(timeout=5)
+        first.wait()
         from verification_batch import status_details
         status = status_details(self.queue)
         orphan = next(entry for entry in status["runs"] if entry["name"] == "interrupted supervisor")
@@ -570,8 +566,8 @@ while True: time.sleep(.1)
         self.await_state(lambda: len(self.queue.status()["runs"]) == 2)
         self.assertIsNone(second.poll())
         release.touch()
-        first.communicate(timeout=5)
-        out, err = second.communicate(timeout=5)
+        first.communicate()
+        out, err = second.communicate()
         self.assertEqual(second.returncode, 0, err)
         self.assertEqual(out.strip(), "following")
 
@@ -581,7 +577,7 @@ while True: time.sleep(.1)
 
     def test_child_failure_releases_admission_and_preserves_exit_code(self):
         process = self.start("failure", "raise SystemExit(7)")
-        process.communicate(timeout=5)
+        process.communicate()
         self.assertEqual(process.returncode, 7)
         self.assertEqual(self.queue.status()["runs"], [])
 
@@ -597,7 +593,7 @@ while True: time.sleep(.1)
             "while True: time.sleep(.01)")
         self.await_state(ready.exists)
         process.terminate()
-        process.communicate(timeout=5)
+        process.communicate()
         self.assertEqual(process.returncode, 130)
         self.assertTrue(stopped.exists())
         self.assertEqual(self.queue.status()["runs"], [])

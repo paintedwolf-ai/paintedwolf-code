@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"net"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -257,6 +258,12 @@ func downloadArchive(ctx context.Context, url string, file *os.File) error {
 		if err == nil {
 			return nil
 		}
+		// Name resolution fails the same way at once on every attempt, as on a host with no network.
+		var unresolved *net.DNSError
+		if errors.As(err, &unresolved) {
+			slog.WarnContext(ctx, "browser archive host cannot be resolved", "host", unresolved.Name, "err", err)
+			return fmt.Errorf("download %s: cannot resolve %s; the network or its resolver is unreachable: %w", url, unresolved.Name, err)
+		}
 		failures = append(failures, fmt.Sprintf("attempt %d: %v", attempt, err))
 		slog.WarnContext(ctx, "browser archive download failed", "url", url, "attempt", attempt, "err", err)
 		if ctx.Err() != nil {
@@ -274,13 +281,15 @@ func rewind(file *os.File) error {
 	return err
 }
 
+// downloadClient is replaceable so tests can fail a transfer before it reaches the network.
+var downloadClient = func() *http.Client { return httpclient.Download(egressclass.BrowserEngineDownload) }
+
 func downloadFile(ctx context.Context, url string, w io.Writer) error {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
 		return err
 	}
-	client := httpclient.Download(egressclass.BrowserEngineDownload)
-	resp, err := client.Do(req)
+	resp, err := downloadClient().Do(req)
 	if err != nil {
 		return err
 	}

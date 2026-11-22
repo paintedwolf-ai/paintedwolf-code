@@ -273,6 +273,7 @@ func freeLoopbackPort(t *testing.T) uint16 {
 // process tried to listen on.
 func confinedListenerReachable(t *testing.T, self string, c confine.Confinement, port uint16) bool {
 	t.Helper()
+	const banner = "CONFINED_LISTENER\n"
 	const probe = `
 import socket, sys, time
 s = socket.socket()
@@ -284,6 +285,9 @@ try:
 except OSError as e:
     print('DENIED', e, flush=True)
     sys.exit(0)
+conn, _ = s.accept()
+conn.sendall(b'CONFINED_LISTENER\n')
+conn.close()
 time.sleep(30)
 `
 	c.Roots = liveBoundaryRoots(c.Roots...)
@@ -307,8 +311,10 @@ time.sleep(30)
 	if err != nil {
 		return false
 	}
+	_ = conn.SetReadDeadline(time.Now().Add(2 * time.Second))
+	got, err := bufio.NewReader(conn).ReadString('\n')
 	_ = conn.Close()
-	return true
+	return err == nil && got == banner
 }
 
 // A listen grant serves the host on its ports only. A listener without a grant

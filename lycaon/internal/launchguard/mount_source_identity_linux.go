@@ -72,12 +72,12 @@ func verifyMountSourceRoot(fd int, expected mountEntry) error {
 	if err != nil || alias != expected.mountPoint {
 		return errors.New("mount source descriptor is not the selected root alias")
 	}
-	mountinfo, err := os.Open("/proc/thread-self/mountinfo")
+	mountinfo, err := unix.Open("/proc/thread-self/mountinfo", unix.O_RDONLY|unix.O_CLOEXEC, 0)
 	if err != nil {
 		return err
 	}
-	defer func() { _ = mountinfo.Close() }()
-	raw, err := readMountInfo(int(mountinfo.Fd()), nil)
+	defer func() { _ = unix.Close(mountinfo) }()
+	raw, err := readConsistentMountInfo(mountinfo)
 	if err != nil {
 		return err
 	}

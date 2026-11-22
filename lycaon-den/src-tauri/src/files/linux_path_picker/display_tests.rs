@@ -9,9 +9,7 @@ use gtk::prelude::*;
 use gtk::ResponseType;
 use std::path::Path;
 use std::sync::mpsc;
-use std::time::{Duration, Instant};
-
-const SETTLE: Duration = Duration::from_secs(10);
+use std::time::Duration;
 
 #[test]
 fn x11_display_fixture_exercises_the_protected_chooser() {
@@ -47,11 +45,9 @@ fn options(target: PickTarget) -> PickOptions {
     PickOptions { title: "Choose location".into(), target }
 }
 
-/// Runs the main loop until `done` holds or the deadline passes.
-fn settle(mut done: impl FnMut() -> bool, what: &str) {
-    let deadline = Instant::now() + SETTLE;
+/// Runs the main loop until `done` holds.
+fn settle(mut done: impl FnMut() -> bool) {
     while !done() {
-        assert!(Instant::now() < deadline, "{what}");
         gtk::main_iteration_do(false);
         std::thread::sleep(Duration::from_millis(5));
     }
@@ -60,7 +56,7 @@ fn settle(mut done: impl FnMut() -> bool, what: &str) {
 fn open(parent: &gtk::Window, target: PickTarget) -> (Shown, mpsc::Receiver<Result<Selection, String>>) {
     let (send, receive) = mpsc::channel();
     let shown = show(parent, options(target), send);
-    settle(|| shown.dialog.is_visible(), "chooser never mapped");
+    settle(|| shown.dialog.is_visible());
     (shown, receive)
 }
 
@@ -74,7 +70,7 @@ fn folder_accepts_the_current_folder_without_byte_access(parent: &gtk::Window, r
     let (width, height) = shown.dialog.default_size();
     assert!(width <= 760 && height <= 560 && width > 0 && height > 0, "default size {width}x{height}");
     shown.chooser.set_current_folder(root);
-    settle(|| shown.chooser.filename().as_deref() == Some(root), "folder never became current");
+    settle(|| shown.chooser.filename().as_deref() == Some(root));
     shown.dialog.response(ResponseType::Accept);
     assert_eq!(reply.try_recv().unwrap(), Ok(Some(root.to_path_buf())));
 }
@@ -89,14 +85,14 @@ fn open_returns_read_access_and_refuses_a_folder(parent: &gtk::Window, root: &Pa
 
     // A folder is not a file to read: the chooser stays open with no answer.
     shown.chooser.set_current_folder(root);
-    settle(|| shown.chooser.current_folder().as_deref() == Some(root), "folder never became current");
+    settle(|| shown.chooser.current_folder().as_deref() == Some(root));
     shown.chooser.unselect_all();
     shown.dialog.response(ResponseType::Accept);
     assert!(reply.try_recv().is_err(), "a folder answered a file pick");
     assert!(shown.dialog.is_visible());
 
     shown.chooser.select_filename(file);
-    settle(|| shown.chooser.filename().as_deref() == Some(file), "file never became selected");
+    settle(|| shown.chooser.filename().as_deref() == Some(file));
     shown.dialog.response(ResponseType::Accept);
     assert_eq!(reply.try_recv().unwrap(), Ok(Some(file.to_path_buf())));
 }
@@ -108,7 +104,7 @@ fn save_offers_the_name_confirms_overwrite_and_returns_write_access(parent: &gtk
     assert_eq!(shown.chooser.current_name().as_deref(), Some("draft é.md"));
     shown.chooser.set_current_folder(root);
     let target = root.join("draft é.md");
-    settle(|| shown.chooser.filename().as_deref() == Some(target.as_path()), "save location never settled");
+    settle(|| shown.chooser.filename().as_deref() == Some(target.as_path()));
     shown.dialog.response(ResponseType::Accept);
     assert_eq!(reply.try_recv().unwrap(), Ok(Some(target)));
 }

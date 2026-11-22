@@ -1,8 +1,6 @@
 package contract
 
 import (
-	"bytes"
-	"context"
 	"fmt"
 	"os"
 	"path"
@@ -11,12 +9,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/Masterminds/semver/v3"
-
 	"github.com/lycaon/lycaon/config"
 	"github.com/lycaon/lycaon/internal/detectionpack"
 	"github.com/lycaon/lycaon/internal/extpacks"
-	"github.com/lycaon/lycaon/internal/gitexec"
 	"github.com/lycaon/lycaon/internal/hostresources"
 	"github.com/lycaon/lycaon/internal/llm"
 	"github.com/lycaon/lycaon/internal/mcp"
@@ -248,43 +243,57 @@ func corpusOverlays(t *testing.T, moduleRoot string) []overlaySource {
 // merged into HEAD.
 func taggedOverlays(t *testing.T, root string) []overlaySource {
 	t.Helper()
-	ctx := t.Context()
-	tags := strings.Fields(string(git(ctx, t, root, "tag", "--merged", "HEAD", "--list", "v*")))
-	first := semver.MustParse("1.0.0")
-	var out []overlaySource
-	for _, tag := range tags {
-		version, err := semver.StrictNewVersion(strings.TrimPrefix(tag, "v"))
-		if err != nil || version.LessThan(first) {
-			continue
-		}
-		for _, dir := range []string{settingsoverlay.DirName(), path.Join("lycaon", settingsoverlay.DirName())} {
-			listing, code, err := gitexec.Run(ctx, root, []string{"ls-tree", "--name-only", tag + ":" + dir}, gitexec.Opts{})
-			if err != nil || code != 0 {
+	dirs := []string{settingsoverlay.DirName(), path.Join("lycaon", settingsoverlay.DirName())}
+	type pendingOverlay struct {
+		name  string
+		blobs map[string]string
+	}
+	var pending []pendingOverlay
+	seen := map[string]bool{}
+	var shas []string
+	for _, tag := range postV1Tags(t, root) {
+		listing := gitOutput(t, root, "ls-tree", "-r", tag, "--", dirs[0], dirs[1])
+		byDir := map[string]map[string]string{}
+		for _, line := range strings.Split(strings.TrimSpace(string(listing)), "\n") {
+			meta, file, ok := strings.Cut(line, "\t")
+			fields := strings.Fields(meta)
+			if !ok || len(fields) != 3 || fields[1] != "blob" || path.Ext(file) != ".yaml" {
 				continue
 			}
-			source := overlaySource{name: tag + "-" + strings.ReplaceAll(dir, "/", "-"), files: map[string][]byte{}}
-			for _, name := range strings.Fields(string(listing)) {
-				if path.Ext(name) == ".yaml" {
-					source.files[name] = git(ctx, t, root, "show", tag+":"+path.Join(dir, name))
-				}
+			dir := path.Dir(file)
+			if dir != dirs[0] && dir != dirs[1] {
+				continue
 			}
-			if len(source.files) > 0 {
-				out = append(out, source)
+			if byDir[dir] == nil {
+				byDir[dir] = map[string]string{}
+			}
+			sha := fields[2]
+			byDir[dir][path.Base(file)] = sha
+			if !seen[sha] {
+				seen[sha] = true
+				shas = append(shas, sha)
+			}
+		}
+		for _, dir := range dirs {
+			if len(byDir[dir]) > 0 {
+				pending = append(pending, pendingOverlay{
+					name:  tag + "-" + strings.ReplaceAll(dir, "/", "-"),
+					blobs: byDir[dir],
+				})
 			}
 		}
 	}
-	if len(out) == 0 {
+	if len(pending) == 0 {
 		t.Fatal("no post-v1 tag is merged into HEAD; fetch tags")
 	}
-	return out
-}
-
-func git(ctx context.Context, t *testing.T, root string, args ...string) []byte {
-	t.Helper()
-	out, code, err := gitexec.Run(ctx, root, args, gitexec.Opts{})
-	if err == nil && code != 0 {
-		err = fmt.Errorf("%s", bytes.TrimSpace(out))
+	blobs := gitCatFileBatch(t, root, shas)
+	out := make([]overlaySource, 0, len(pending))
+	for _, item := range pending {
+		source := overlaySource{name: item.name, files: make(map[string][]byte, len(item.blobs))}
+		for name, sha := range item.blobs {
+			source.files[name] = blobs[sha]
+		}
+		out = append(out, source)
 	}
-	contractcheck.FailErr(t, "git "+strings.Join(args, " "), err)
 	return out
 }

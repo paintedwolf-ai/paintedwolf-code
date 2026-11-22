@@ -95,7 +95,7 @@ func createCommit(ctx context.Context, dir string, args []string, run gitexec.Op
 // when the file remains on disk. After the commit only the selected paths of
 // the live index are updated to the committed entries.
 func commitSelected(ctx context.Context, dir string, opts GitCommitOpts, paths []string) (string, error) {
-	scratch, err := os.MkdirTemp("", "git-commit-index-*")
+	scratch, err := gitexec.MkdirTemp(ctx, "git-commit-index-*")
 	if err != nil {
 		return "", err
 	}

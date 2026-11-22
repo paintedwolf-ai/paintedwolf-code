@@ -7,9 +7,12 @@ import (
 	"path/filepath"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/lycaon/lycaon/internal/board"
 	"github.com/lycaon/lycaon/internal/git"
+	"github.com/lycaon/lycaon/internal/projectroot"
+	"github.com/lycaon/lycaon/internal/repochange"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/testutil/gittest"
 	"github.com/lycaon/lycaon/pkg/api"
@@ -48,6 +51,7 @@ func (c *countingStatusLoader) Log(ctx context.Context, projectDir string, opts 
 // same background fill instead of launching a duplicate process.
 func TestColdBoardWarmsSharedGitStatusWithoutBlocking(t *testing.T) {
 	dir := t.TempDir()
+	t.Cleanup(func() { repochange.CloseRoot(dir) })
 	testutil.FailErr(t, "write", os.WriteFile(filepath.Join(dir, "a.txt"), []byte("one\n"), 0o644))
 	gittest.InitCommit(t, dir, "init")
 	loader := &countingStatusLoader{
@@ -55,17 +59,20 @@ func TestColdBoardWarmsSharedGitStatusWithoutBlocking(t *testing.T) {
 		started: make(chan struct{}, 1),
 		release: make(chan struct{}),
 	}
-	cache := git.NewStatusCache(loader)
+	now := time.Now()
+	cache := git.NewStatusCache(loader, git.WithStatusCacheClock(func() time.Time { return now }))
 	b := &board.SnapshotBuilder{
-		StatusCache: cache,
-		RepoSets:    git.NewRepoSetCache(git.DefaultStatusCacheTTL),
-		Git:         loader.inner,
-		Repo:        repotest.NewProvider(t),
+		StatusCache:            cache,
+		RepoSets:               git.NewRepoSetCache(time.Hour),
+		Git:                    loader.inner,
+		Repo:                   repotest.NewProvider(t),
+		DefaultExecutionTarget: api.ExecutionTargetRunner,
 	}
+	roots := []projectroot.RootRef{{ID: "proj", Path: dir, Label: "primary", IsPrimary: true}}
 
 	buildDone := make(chan error, 1)
 	go func() {
-		_, err := b.Build(context.Background(), "proj", dir, "", api.BoardDetailLevelStatus, nil)
+		_, err := b.Build(context.Background(), "proj", dir, "", api.BoardDetailLevelStatus, roots)
 		buildDone <- err
 	}()
 	select {
@@ -86,4 +93,8 @@ func TestColdBoardWarmsSharedGitStatusWithoutBlocking(t *testing.T) {
 	if loader.statusN.Load() != 1 {
 		t.Fatalf("board-then-git statusN = %d want 1 (TTL bridge)", loader.statusN.Load())
 	}
+	testutil.WaitFor(t, "background repo discovery settles", func() bool {
+		snap, buildErr := b.Build(t.Context(), "proj", dir, "", api.BoardDetailLevelStatus, roots)
+		return buildErr == nil && snap.Git != nil && snap.Git.Label == "primary"
+	})
 }

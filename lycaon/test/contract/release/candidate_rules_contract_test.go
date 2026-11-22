@@ -7,6 +7,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -27,7 +28,13 @@ func TestReleasedCandidateRulesReadAsOAR10(t *testing.T) {
 	root := contractcheck.RepoRoot(t)
 	schema := compileVendoredOARSchema(t, filepath.Join(root, "schemas"))
 	seen := map[string]bool{}
-	read := 0
+	type ruleBlob struct {
+		tag  string
+		file string
+		sha  string
+	}
+	var rules []ruleBlob
+	var shas []string
 	for _, tag := range postV1Tags(t, root) {
 		listing := gitOutput(t, root, "ls-tree", "-r", tag, "--", "lycaon/config/packs")
 		for _, line := range strings.Split(strings.TrimSpace(string(listing)), "\n") {
@@ -37,23 +44,29 @@ func TestReleasedCandidateRulesReadAsOAR10(t *testing.T) {
 				continue
 			}
 			seen[fields[2]] = true
-			data := gitOutput(t, root, "cat-file", "blob", fields[2])
-			upgraded, changed, err := oardraft.Upgrade(data)
-			if err != nil {
-				t.Errorf("%s %s: %v", tag, file, err)
-				continue
-			}
-			if !changed {
-				continue
-			}
-			read++
-			var doc any
-			contractcheck.FailErr(t, "decode "+file, yaml.Unmarshal(upgraded, &doc))
-			instance, err := jsonInstance(doc)
-			contractcheck.FailErr(t, "convert "+file, err)
-			if err := schema.Validate(instance); err != nil {
-				t.Errorf("%s %s: upgraded rule does not satisfy OAR 1.0: %v", tag, file, err)
-			}
+			rules = append(rules, ruleBlob{tag: tag, file: file, sha: fields[2]})
+			shas = append(shas, fields[2])
+		}
+	}
+	blobs := gitCatFileBatch(t, root, shas)
+	read := 0
+	for _, rule := range rules {
+		data := blobs[rule.sha]
+		upgraded, changed, err := oardraft.Upgrade(data)
+		if err != nil {
+			t.Errorf("%s %s: %v", rule.tag, rule.file, err)
+			continue
+		}
+		if !changed {
+			continue
+		}
+		read++
+		var doc any
+		contractcheck.FailErr(t, "decode "+rule.file, yaml.Unmarshal(upgraded, &doc))
+		instance, err := jsonInstance(doc)
+		contractcheck.FailErr(t, "convert "+rule.file, err)
+		if err := schema.Validate(instance); err != nil {
+			t.Errorf("%s %s: upgraded rule does not satisfy OAR 1.0: %v", rule.tag, rule.file, err)
 		}
 	}
 	if read == 0 {
@@ -109,4 +122,44 @@ func gitOutput(t *testing.T, root string, args ...string) []byte {
 	}
 	contractcheck.FailErr(t, "git "+strings.Join(args, " "), err)
 	return out
+}
+
+func gitCatFileBatch(t *testing.T, root string, shas []string) map[string][]byte {
+	t.Helper()
+	if len(shas) == 0 {
+		return map[string][]byte{}
+	}
+	var input bytes.Buffer
+	for _, sha := range shas {
+		input.WriteString(sha)
+		input.WriteByte('\n')
+	}
+	out, code, err := gitexec.Run(t.Context(), root, []string{"cat-file", "--batch"}, gitexec.Opts{
+		Input:     input.Bytes(),
+		MaxOutput: 64 << 20,
+	})
+	if err == nil && code != 0 {
+		err = fmt.Errorf("%s", bytes.TrimSpace(out))
+	}
+	contractcheck.FailErr(t, "git cat-file --batch", err)
+	blobs := make(map[string][]byte, len(shas))
+	raw := out
+	for len(raw) > 0 {
+		headerEnd := bytes.IndexByte(raw, '\n')
+		if headerEnd < 0 {
+			t.Fatal("git cat-file --batch: truncated header")
+		}
+		fields := strings.Fields(string(raw[:headerEnd]))
+		raw = raw[headerEnd+1:]
+		if len(fields) != 3 {
+			t.Fatalf("git cat-file --batch: unexpected header %q", strings.Join(fields, " "))
+		}
+		size, err := strconv.Atoi(fields[2])
+		if err != nil || size < 0 || len(raw) < size+1 || raw[size] != '\n' {
+			t.Fatalf("git cat-file --batch: invalid payload for %s", fields[0])
+		}
+		blobs[fields[0]] = raw[:size:size]
+		raw = raw[size+1:]
+	}
+	return blobs
 }

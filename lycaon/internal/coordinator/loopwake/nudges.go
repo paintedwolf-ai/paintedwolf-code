@@ -350,6 +350,9 @@ func (l *Nudges) drainPending(ctx context.Context, sessionID string, postTurnDra
 		if l.Turns.hostTurnBlocked(ctx, sessionID) {
 			return
 		}
+		if _, ready := l.Deliveries.waitWinner(sessionID); ready {
+			return
+		}
 		// Worker-cycle deferrals are reconsidered only after outcome acknowledgement.
 		if l.Cycles.workerCycleIdle(ctx, sessionID, "") {
 			l.flushDeferredNudges(ctx, sessionID)

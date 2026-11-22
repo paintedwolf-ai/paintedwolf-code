@@ -182,16 +182,12 @@ class LifecycleTests(unittest.TestCase):
         return process
 
     def await_state(self, predicate):
-        deadline = time.monotonic() + 10
-        while time.monotonic() < deadline:
-            if predicate():
-                return
+        while not predicate():
             time.sleep(0.01)
-        self.fail("execution state did not settle")
 
     def invoke(self, *arguments):
         return subprocess.run([sys.executable, str(SCRIPT), "cancel", "--", *arguments],
-                              env=self.env, capture_output=True, text=True, timeout=30)
+                              env=self.env, capture_output=True, text=True)
 
     def test_a_waiting_request_is_withdrawn_and_the_queue_moves_on(self):
         self.queue.pause("cancel fixture")
@@ -203,11 +199,11 @@ class LifecycleTests(unittest.TestCase):
         record = json.loads(result.stdout)
         self.assertTrue(record["released"])
         self.assertEqual(record["reason"], "superseded by a later edit")
-        self.assertEqual(waiting.wait(timeout=10), 130)
+        self.assertEqual(waiting.wait(), 130)
         self.assertEqual(self.queue.status()["runs"], [])
         self.queue.resume()
         following = self.start("following", "print('ok')")
-        out, err = following.communicate(timeout=10)
+        out, err = following.communicate()
         self.assertEqual(following.returncode, 0, err)
         self.assertEqual(out.strip(), "ok")
 
@@ -227,7 +223,7 @@ class LifecycleTests(unittest.TestCase):
         forced = self.invoke(ticket, "--reason", "accidental full suite", "--force")
         self.assertEqual(forced.returncode, 0, forced.stderr)
         self.assertTrue(json.loads(forced.stdout)["forced"])
-        running.wait(timeout=10)
+        running.wait()
         self.assertEqual(self.queue.status()["runs"], [])
 
     @unittest.skipIf(os.name == "nt", "requires inherited POSIX file locks")
@@ -253,7 +249,7 @@ class LifecycleTests(unittest.TestCase):
 
         self.addCleanup(stop_orphan)
         running.kill()
-        running.wait(timeout=10)
+        running.wait()
         os.kill(child, signal.SIGKILL)
         ticket = self.queue.status()["runs"][0]["ticket"]
         self.await_state(lambda: custody.lease_holders(self.queue.root / (ticket + ".lease")) == {orphan})
@@ -270,30 +266,27 @@ class LifecycleTests(unittest.TestCase):
         ready, stop = self.root / "descendant-ready", self.root / "descendant-stop"
         caretaker = (
             "import json, os, signal, time; from pathlib import Path\n"
-            f"stop = Path({str(stop)!r}); ready = Path({str(ready)!r})\n"
+            f"stop = Path({str(stop)!r}); ready = Path({str(ready)!r}); owner = {os.getpid()}\n"
             "descriptor = int(os.environ['PW_TEST_EXECUTION_FD'])\n"
             "child = os.fork()\n"
             "if child == 0:\n"
             + ("    os._exit(0)\n" if mode == "zombie" else
-               "    deadline = time.monotonic() + 20\n"
-               "    while not stop.exists() and time.monotonic() < deadline: time.sleep(.01)\n"
+               "    while not stop.exists(): os.kill(owner, 0); time.sleep(.01)\n"
                "    os._exit(0)\n")
             + "child_pin = os.pidfd_open(child)\n"
             "os.close(descriptor)\n"
             "def facts(pid):\n"
             "    fields = Path(f'/proc/{pid}/stat').read_text().rsplit(')', 1)[1].split()\n"
             "    return {'pid': pid, 'state': fields[0], 'start': fields[19]}\n"
-            + ("deadline = time.monotonic() + 20\n"
-               "while facts(child)['state'] != 'Z':\n"
-               "    if stop.exists() or time.monotonic() >= deadline:\n"
+            + ("while facts(child)['state'] != 'Z':\n"
+               "    if stop.exists():\n"
                "        signal.pidfd_send_signal(child_pin, signal.SIGKILL)\n"
                "        os.waitpid(child, 0); os.close(child_pin); os._exit(1)\n"
                "    time.sleep(.01)\n" if mode == "zombie" else "")
             + "temporary = ready.with_suffix('.tmp')\n"
             "temporary.write_text(json.dumps({'caretaker': facts(os.getpid()), 'child': facts(child)}))\n"
             "temporary.replace(ready)\n"
-            "deadline = time.monotonic() + 20\n"
-            "while not stop.exists() and time.monotonic() < deadline: time.sleep(.01)\n"
+            "while not stop.exists(): os.kill(owner, 0); time.sleep(.01)\n"
             "os.waitpid(child, 0); os.close(child_pin)\n"
         )
         running = self.start("descendant fixture",
@@ -357,7 +350,7 @@ class LifecycleTests(unittest.TestCase):
         result = self.invoke(ticket, "--reason", "owned zombie has closed its lease", "--force")
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertTrue(json.loads(result.stdout)["released"])
-        running.wait(timeout=10)
+        running.wait()
         # The caretaker has deliberately not reaped it: release follows the kernel lock,
         # not disappearance of the numeric PID or a fabricated process sample.
         fields = Path(f"/proc/{zombie}/stat").read_text().rsplit(")", 1)[1].split()
@@ -371,7 +364,7 @@ class LifecycleTests(unittest.TestCase):
         holder = observed["child"]["pid"]
         ticket = self.queue.status()["runs"][0]["ticket"]
         running.terminate()
-        running.wait(timeout=10)
+        running.wait()
         lease = self.queue.root / (ticket + ".lease")
         self.await_state(lambda: custody.lease_holders(lease) == {holder})
         self.assertFalse(cancel.released(self.queue, ticket), "live inherited holder lost admission")

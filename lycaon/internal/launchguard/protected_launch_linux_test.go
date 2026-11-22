@@ -137,6 +137,7 @@ func startLaunch(t *testing.T, f launchFixture, env []string, args ...string) ru
 	t.Helper()
 	cmd := exec.Command(f.bootstrap, args...)
 	cmd.Env = env
+	cmd.WaitDelay = 5 * time.Second
 	stdin, err := cmd.StdinPipe()
 	testutil.FailErr(t, "desktop input", err)
 	stdout, err := cmd.StdoutPipe()
@@ -146,7 +147,7 @@ func startLaunch(t *testing.T, f launchFixture, env []string, args ...string) ru
 	cmd.Stderr = &stderr
 	stopProbe := make(chan struct{})
 	probeErr := make(chan error, 1)
-	var bootstrap atomic.Int32
+	var bootstrap, desktopPID atomic.Int32
 	go probeEarlyBrokerAgent(&bootstrap, stopProbe, probeErr)
 	// Registered before the wait below so it runs after the bootstrap has
 	// exited and its standard error is complete.
@@ -164,6 +165,9 @@ func startLaunch(t *testing.T, f launchFixture, env []string, args ...string) ru
 		select {
 		case <-result.done:
 		case <-time.After(10 * time.Second):
+			if pid := int(desktopPID.Load()); pid > 1 {
+				_ = syscall.Kill(pid, syscall.SIGKILL)
+			}
 			_ = cmd.Process.Kill()
 			<-result.done
 		}
@@ -188,6 +192,7 @@ func startLaunch(t *testing.T, f launchFixture, env []string, args ...string) ru
 	if err := json.Unmarshal([]byte(line), &facts); err != nil {
 		t.Fatalf("decode desktop report %q: %v; bootstrap stderr: %s", line, err, stderr.String())
 	}
+	desktopPID.Store(int32(facts.PID))
 	return runningLaunch{cmd: cmd, stdin: stdin, reader: reader, facts: facts, result: result, stderr: &stderr}
 }
 

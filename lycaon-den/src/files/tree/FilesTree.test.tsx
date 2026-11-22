@@ -222,7 +222,7 @@ describe("paged Files tree", () => {
     fixture.notify();
     await waitFor(() => expect(fixture.requests.slice(requestsBeforeUpdate).some(request => request.path.includes("/rows?"))).toBe(true));
     await findFileRow("file-1000000.ts");
-    await new Promise<void>(resolve => requestAnimationFrame(() => resolve()));
+    await elapse(16);
     const scroll = document.querySelector<HTMLElement>(".den-files-tree-scroll")!;
     fireEvent.keyDown(button("file-1000000.ts"), { key: "Home" });
     await findFileRow("file-1.ts");

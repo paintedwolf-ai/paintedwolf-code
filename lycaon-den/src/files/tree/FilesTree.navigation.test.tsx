@@ -8,7 +8,7 @@ import { resetFilesTreeViewStateForTests } from "./files-tree-view-state.ts";
 import { createNoticeStore, registerNoticePublisher } from "../../notices/notice-store.ts";
 import { selectProjectNoticeGroups } from "../../notices/notice-select.ts";
 import { flushScrollportFrameForTests } from "../../platform/scrolling/scrollport-frame.ts";
-import { useElapsableClock } from "../../test/elapse.ts";
+import { hostLatency, useElapsableClock } from "../../test/elapse.ts";
 
 const elapse = useElapsableClock();
 
@@ -79,7 +79,7 @@ async function recordReveal(view: Awaited<ReturnType<typeof mount>>, mode: Mode,
 
 it.each(["automatic", "explicit"] as const)("paints every %s reveal frame across large-tree segments in both directions", async mode => {
   const view = await mount();
-  view.fixture.read(async () => { await new Promise(resolve => setTimeout(resolve, 20)); });
+  view.fixture.read(() => hostLatency(20));
   for (const target of [170000, 50]) {
     const samples = await recordReveal(view, mode, target);
     expect(samples.filter(rows => rows.length === 0)).toEqual([]);

@@ -52,7 +52,7 @@ func CommandIdentity(line string) string {
 		prefix = "argv:"
 		syntax.Walk(tree, func(node syntax.Node) bool {
 			if word, ok := node.(*syntax.Word); ok {
-				literal, literalErr := expand.Fields(nil, word)
+				literal, literalErr := expand.Fields(&expand.Config{}, word)
 				if literalErr != nil || len(literal) != 1 {
 					static = false
 					return false

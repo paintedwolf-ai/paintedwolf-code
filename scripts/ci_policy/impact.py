@@ -154,6 +154,8 @@ def fast_lanes(scope, lanes):
 def selected_lanes(scope, lanes):
     """The merge queue's lanes for a change: those declaring an area the change touches."""
     from ci_policy.hosted_plan import lanes_of
+    if docs_only(scope.get("paths", [])):
+        return set()
     return lanes_of(lanes, change_areas(scope))
 
 

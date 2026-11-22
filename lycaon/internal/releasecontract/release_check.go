@@ -61,6 +61,18 @@ func CheckCompatibility(ctx context.Context, repoRoot, baseline string, out io.W
 	}
 	for _, tag := range releases {
 		git.tag = tag
+		git, err = git.preload(
+			"VERSION",
+			"schemas",
+			"docs/schemas",
+			packsRoot,
+			"lycaon/internal/db",
+			"lycaon/internal/extpacks/manifest.go",
+			projectRootsPath,
+		)
+		if err != nil {
+			return err
+		}
 		version, err := git.show("VERSION")
 		if err != nil {
 			return err
@@ -100,11 +112,10 @@ func CheckCompatibility(ctx context.Context, repoRoot, baseline string, out io.W
 			return err
 		}
 		fmt.Fprintf(out, "Stable baseline: %s %s\n", "v"+released.String(), bytes.TrimSpace(sha))
-		files, err := git.run("ls-tree", "-r", "--name-only", "-z", tag, "--", packsRoot+"/")
+		releasedPaths, err := git.paths(packsRoot)
 		if err != nil {
 			return err
 		}
-		releasedPaths := strings.Split(strings.TrimSuffix(string(files), "\x00"), "\x00")
 		for _, rel := range releasedPaths {
 			if strings.HasSuffix(rel, "/meta.yaml") {
 				if err := checkReleasedSuite(git, diskRelease{root: repoRoot}, rel); err != nil {
@@ -249,6 +260,17 @@ func (d diskRelease) list(dir string) ([]string, error) {
 }
 
 func (g gitRelease) paths(dir string) ([]string, error) {
+	if g.tree != nil {
+		var files []string
+		prefix := dir + "/"
+		for rel := range g.tree {
+			if strings.HasPrefix(rel, prefix) {
+				files = append(files, rel)
+			}
+		}
+		sort.Strings(files)
+		return files, nil
+	}
 	raw, err := g.run("ls-tree", "-r", "--name-only", "-z", g.tag, "--", dir+"/")
 	if err != nil {
 		return nil, err

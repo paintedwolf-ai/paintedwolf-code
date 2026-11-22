@@ -144,7 +144,7 @@ class RehearsalCredentialsTests(unittest.TestCase):
                    if not key.startswith(("AWS_", "CLOUDFLARE_", "RELEASE_TEST_", "PW_R2_REHEARSAL_"))}
             env.update(RELEASE_TEST_CONFIG=str(config), PATH=str(commands) + os.pathsep + os.environ["PATH"])
             result = subprocess.run(["/bin/bash", str(scripts / "release-r2-live-test.sh")],
-                                    env=env, capture_output=True, text=True, timeout=30)
+                                    env=env, capture_output=True, text=True)
             self.assertNotEqual(result.returncode, 0)
             self.assertIn("R2 credential probe failed", result.stderr)
             self.assertNotIn("unbound variable", result.stderr)

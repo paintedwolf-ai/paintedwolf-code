@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Resolve a pinned engine release or an explicit development candidate.
 set -euo pipefail
+export LYCAON_DEV="${LYCAON_DEV:-1}"
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 case "${1:-}" in
   --finalize-consumer|--relocate-consumer|--audit-consumer)

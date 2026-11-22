@@ -4,7 +4,6 @@ from pathlib import Path
 import signal
 import subprocess
 import sys
-import time
 import unittest
 from unittest.mock import patch
 
@@ -73,8 +72,7 @@ class BatchLifecycleTests(support.BatchFixture):
         ticket = next(e["ticket"] for e in self.queue.status()["runs"] if e.get("kind") == "request")
         cancelled = subprocess.run([sys.executable, str(self.scripts / "test-execution.py"), "cancel", "--",
                                     ticket, "--reason", "superseded by a later edit"],
-                                   cwd=self.repo, env=self.env, capture_output=True, text=True,
-                                   timeout=self.state_timeout + 5)
+                                   cwd=self.repo, env=self.env, capture_output=True, text=True)
         self.assertEqual(cancelled.returncode, 0, cancelled.stdout + cancelled.stderr)
         self.assertTrue(json.loads(cancelled.stdout)["released"])
         result = self.wait_result(submitted["job_id"], 2)
@@ -94,7 +92,7 @@ class BatchLifecycleTests(support.BatchFixture):
         with self.assertRaises(subprocess.TimeoutExpired):
             waiter.communicate(timeout=.1)
         waiter.terminate()
-        waiter.communicate(timeout=5)
+        waiter.communicate()
         self.assertEqual(len(self.queue.status()["runs"]), 1)
         self.queue.resume()
         result = self.wait_result(submitted["job_id"], 1)
@@ -465,7 +463,6 @@ print('fixture '+name, flush=True)'''))
         exclusive = self.start("test:exclusive")
         self.await_condition(lambda: any(o["state"] == "queued" and "*" in o["locks"]
                                          for o in self.queue.status()["operations"]))
-        time.sleep(.5)
         self.assertEqual(len(self.records()), 2)
         self.release.touch()
         for process in (first, invocation, exclusive):

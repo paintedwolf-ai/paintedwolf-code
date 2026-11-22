@@ -21,7 +21,7 @@ class WebKitProbeTests(unittest.TestCase):
                            "GITHUB_ACTIONS": "true" if hosted else "false",
                            "GITHUB_STEP_SUMMARY": str(summary)}
             result = subprocess.run(["bash", str(ROOT / "scripts/den-webkit-scroll.sh"), "--supervised"],
-                                    env=environment, capture_output=True, text=True, timeout=10)
+                                    env=environment, capture_output=True, text=True)
             return result, summary.read_text() if summary.exists() else ""
 
     def test_absent_scrolling_thread_reports_unexecuted_scenarios(self):

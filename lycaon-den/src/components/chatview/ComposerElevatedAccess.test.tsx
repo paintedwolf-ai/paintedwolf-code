@@ -66,14 +66,23 @@ describe("composer elevated access", () => {
   });
 
   it("returns focus to the composer when the last approval expires", async () => {
-    const expires = new Date(Date.now() + 250).toISOString();
-    let reads = 0;
-    setup(vi.fn(async () => ++reads === 1
-      ? summary({ records: [{ ...summary().records[0]!, expires_at: expires }] })
-      : summary({ total: 0, records: [] })));
-    const button = await screen.findByTestId("composer-elevated-access");
-    button.focus();
-    await waitFor(() => expect(screen.queryByTestId("composer-elevated-access")).toBeNull());
-    expect(document.activeElement).toBe(screen.getByRole("textbox"));
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] });
+    try {
+      const expires = new Date(Date.now() + 250).toISOString();
+      let reads = 0;
+      setup(vi.fn(async () => ++reads === 1
+        ? summary({ records: [{ ...summary().records[0]!, expires_at: expires }] })
+        : summary({ total: 0, records: [] })));
+      await vi.advanceTimersByTimeAsync(0);
+      const button = screen.getByTestId("composer-elevated-access");
+      button.focus();
+      await vi.advanceTimersByTimeAsync(249);
+      expect(screen.getByTestId("composer-elevated-access")).toBe(button);
+      // The refresh lands just after the expiry.
+      await vi.advanceTimersByTimeAsync(51);
+      expect(reads).toBe(2);
+      expect(screen.queryByTestId("composer-elevated-access")).toBeNull();
+      expect(document.activeElement).toBe(screen.getByRole("textbox"));
+    } finally { vi.useRealTimers(); }
   });
 });

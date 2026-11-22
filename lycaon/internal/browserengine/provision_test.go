@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -165,6 +166,34 @@ func TestDownloadArchiveRefusesAFileItCannotRewind(t *testing.T) {
 
 	if err := downloadArchive(context.Background(), srv.URL, file); !errors.Is(err, os.ErrClosed) || requests.Load() != 0 {
 		t.Fatalf("downloadArchive = %v after %d requests, want os.ErrClosed before any request", err, requests.Load())
+	}
+}
+
+type roundTripFunc func(*http.Request) (*http.Response, error)
+
+func (f roundTripFunc) RoundTrip(req *http.Request) (*http.Response, error) { return f(req) }
+
+// An unresolvable host is reported as such after one attempt.
+func TestDownloadArchiveReportsAnUnresolvableHostOnce(t *testing.T) {
+	var requests atomic.Int32
+	prev := downloadClient
+	downloadClient = func() *http.Client {
+		return &http.Client{Transport: roundTripFunc(func(*http.Request) (*http.Response, error) {
+			requests.Add(1)
+			return nil, &net.DNSError{Err: "read udp 127.0.0.1:41991->127.0.0.53:53: read: connection refused",
+				Name: "storage.googleapis.com", Server: "127.0.0.53:53"}
+		})}
+	}
+	t.Cleanup(func() { downloadClient = prev })
+	file, err := os.CreateTemp(t.TempDir(), "archive-*.zip")
+	testutil.FailErr(t, "create archive file", err)
+	t.Cleanup(func() { _ = file.Close() })
+
+	err = downloadArchive(context.Background(), "https://storage.googleapis.com/archive.zip", file)
+	var unresolved *net.DNSError
+	if !errors.As(err, &unresolved) || !strings.Contains(err.Error(), "cannot resolve storage.googleapis.com") ||
+		requests.Load() != 1 {
+		t.Fatalf("downloadArchive = %v after %d requests, want one unresolvable-host failure", err, requests.Load())
 	}
 }
 

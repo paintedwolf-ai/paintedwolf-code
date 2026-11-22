@@ -19,6 +19,11 @@ const (
 	DeliveryWithheld      = "withheld"
 	DeliveryHandedOff     = "handed_off"
 	DeliveryRedacted      = "redacted"
+
+	// secretHistoryTimeout matches the SQLite store's 10-second busy_timeout so
+	// concurrent workers queuing on the single SQLite writer connection do not
+	// cancel before the busy handler completes.
+	secretHistoryTimeout = 10 * time.Second
 )
 
 type deliveryState struct {
@@ -105,7 +110,7 @@ func (r *Resolution) recordDelivery(ctx context.Context, delivery string, includ
 	if r.delivery == nil {
 		r.delivery = map[string]deliveryState{}
 	}
-	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), time.Second)
+	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), secretHistoryTimeout)
 	defer cancel()
 	for id := range r.selectedIDs(included) {
 		state := r.delivery[id]

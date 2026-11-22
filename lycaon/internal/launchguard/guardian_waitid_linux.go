@@ -49,3 +49,17 @@ func observeGuardianExit(pidfd, pid int, uid uint32) *guardianExitFact {
 	fact.WaitStatus = encoded
 	return &fact
 }
+
+// observeHandoffExit reads how the bootstrap's handoff child ended, without
+// reaping it: the stage, its static transition or the guardian it became,
+// under whichever identity it held then.
+func observeHandoffExit(pidfd, pid int) (unix.WaitStatus, bool) {
+	var info guardianChildInfo
+	// #nosec G103 -- Compile-time amd64/arm64 size and offset checks pin this exact 128-byte Waitid output.
+	if unix.Waitid(unix.P_PIDFD, pidfd, (*unix.Siginfo)(unsafe.Pointer(&info)), unix.WEXITED|unix.WNOHANG|unix.WNOWAIT, nil) != nil ||
+		info.Signo != int32(unix.SIGCHLD) || info.Errno != 0 || int(info.PID) != pid {
+		return 0, false
+	}
+	encoded, ok := guardianExitStatus(info.Code, info.Status)
+	return unix.WaitStatus(encoded), ok
+}

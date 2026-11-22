@@ -21,7 +21,7 @@ func registerResolvableName(t *testing.T) string {
 	t.Helper()
 	label := fmt.Sprintf("pw-confine-%d-%d", os.Getpid(), time.Now().UnixNano())
 	name := label + ".local"
-	reg := exec.Command("/usr/bin/dns-sd", "-P", label, "_pwconfine._udp", "local", "9", name, resolvableNameAddr)
+	reg := exec.Command("/usr/bin/dns-sd", "-lo", "-P", label, "_pwconfine._udp", "local", "9", name, resolvableNameAddr)
 	output, err := reg.StdoutPipe()
 	testutil.FailErr(t, "open dns-sd output", err)
 	reg.Stderr = reg.Stdout
@@ -48,9 +48,11 @@ func registerResolvableName(t *testing.T) string {
 	if !strings.Contains(got.reply, "Name now registered and active") {
 		t.Fatalf("dns-sd did not register %s:\n%s", name, got.transcript)
 	}
-	out, err := exec.Command(resolveProbe[0], append(resolveProbe[1:], name)...).CombinedOutput()
-	if err != nil || strings.TrimSpace(string(out)) != resolvableNameAddr {
-		t.Fatalf("registered name %s did not resolve to %s: err=%v probe=%q", name, resolvableNameAddr, err, out)
-	}
+	var out []byte
+	var resolveErr error
+	testutil.WaitFor(t, "registered name "+name+" resolves to "+resolvableNameAddr, func() bool {
+		out, resolveErr = exec.Command(resolveProbe[0], append(resolveProbe[1:], name)...).CombinedOutput()
+		return resolveErr == nil && strings.TrimSpace(string(out)) == resolvableNameAddr
+	})
 	return name
 }

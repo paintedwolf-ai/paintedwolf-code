@@ -32,12 +32,7 @@ func TestProgramKillRightAfterBackgroundReportsItsSignal(t *testing.T) {
 				wg.Add(1)
 				go func() {
 					defer wg.Done()
-					content, err := f.Call(t, t.Context(), program)
-					if err != nil {
-						t.Errorf("program %d: %v", i, err)
-						return
-					}
-					outcomes[i] = decodeOutcome(t, content).Stdout
+					outcomes[i] = f.run(t, program).Stdout
 				}()
 			}
 			wg.Wait()

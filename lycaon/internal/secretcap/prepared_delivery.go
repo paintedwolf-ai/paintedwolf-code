@@ -6,7 +6,6 @@ import (
 	"errors"
 	"sort"
 	"sync"
-	"time"
 )
 
 // PreparedDelivery binds an outbound or local-sink effect to the capability
@@ -77,7 +76,7 @@ func (s *Service) checkCapabilityActive(ctx context.Context, id string, access R
 	if s == nil || s.repository.queries == nil {
 		return nil
 	}
-	queryCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), time.Second)
+	queryCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), secretHistoryTimeout)
 	defer cancel()
 	row, err := s.repository.queries.GetManagedSecret(queryCtx, id)
 	if errors.Is(err, sql.ErrNoRows) {

@@ -45,9 +45,9 @@ Database architecture tests derive their scope from the live schema: they
 discover authored tables and foreign keys through SQLite, ask the query planner
 whether lifetime-parent lookups are indexed, and enforce strict keyed storage,
 so new tables and larger histories enter the same proof automatically.
-Behavioral stores use differential models where practical: the SQL and memory
-implementations must produce the same seek pages, and concurrency tests close
-and reopen the store before running integrity checks. The SQLite concurrency
+Behavioral stores use randomized state-machine models against SQLite: tests
+close and reopen the database file across restarts, compare every durable row to
+the model, and run integrity checks after concurrent operations. The SQLite concurrency
 suite holds a reader snapshot open while direct writes, immediate write
 transactions, and passive checkpoints overlap, proving that writes serialize
 without `BUSY_SNAPSHOT`, checkpoints report pinned frames without rejecting
@@ -95,6 +95,7 @@ observable behavior; they do not freeze prompt wording.
 - A test must invoke the production transition it claims to prove. Test-local copies of draft settlement or retention deletion are not lifecycle coverage.
 - Use virtual clocks for in-process timers (`testing/synctest` in Go and Vitest fake timers in Den). Mutex-contention tests need real bounded deadlines: a mutex wait prevents Go virtual time from advancing. Synchronize queue tests on admission and completion; use a required barrier when the queue deliberately drops writes.
 - A Go test never sleeps a fixed span to wait for something: it waits on the event, through `testutil.WaitFor`, `Receive` or `AwaitClosed`, or runs in a `synctest` bubble where `synctest.Wait` shows every goroutine is blocked. `test:fail-messages:check` refuses a `time.Sleep` statement in a `_test.go` file outside a loop, a bubble or a helper process that its parent test starts and kills.
+- Python, TypeScript and Rust tests follow the same rule, checked by `scripts/testclock/check.py` in the same task: no fixed sleep outside a poll loop that ends on its condition, no comparison or assertion on a real-clock reading, and no wait whose timeout fails the test when it runs out (`timeout=` on `wait`, `communicate`, `join`, `result` or `subprocess.run`). Wait on the event or on the producing process's exit, pin the clock, or use fake timers (`vi.useFakeTimers`, tokio paused time); the run's backstop ends a real hang. A timeout passed to product code is an input, and a test of its expiry gives it work that never finishes on its own.
 - Den runs its complete suite whenever its inputs change: model tests, component fixtures, accessibility checks, and repository scans run in `den:test`, which `den:coverage:changes` runs with the changed-coverage floor. Browser journeys remain their own explicit tier.
 
 ## Shared test infrastructure
@@ -869,11 +870,9 @@ Hosted Go shards partition resolved package identities in both shared admission
 and direct captured-source execution. Each direct invocation records its selected
 packages in the Actions log, so later runs can verify the actual partition.
 
-The queue coordinator recovers an active merge group whose exact ref and commit
-have no CI run by explicitly dispatching the integration profile. The dispatched
-plan validates the live queue identity and obtains its comparison base from the
-queue before running affected-scope checks. Existing runs, including failures and
-cancellations, are never replaced by recovery. Draft events skip the aggregate
+An active merge group runs the integration profile on its exact ref and commit,
+validating the live queue identity and obtaining its comparison base from the
+queue before running affected-scope checks. Draft events skip the aggregate
 check; ready-review events still require successful admission.
 
 ## Working commands
@@ -1119,11 +1118,17 @@ start leaves the change unverified, never admitted.
 The `browser-smoke` lane runs `den:harness:canary`, eight browser journeys on the
 harness stack (boot, a prompt, the first run, a project switch, a tool approval,
 a busy-queue send and the sidecar's CORS), for any change under `lycaon/` or
-`lycaon-den/`. Setup installs the Playwright browsers before the lane goes
-offline. The `race-changes` lane runs `test:race` over the packages whose Go
+`lycaon-den/`. Setup installs the Playwright browsers and warms the development
+browser cache the harness sidecar resolves its browser from, before the lane goes
+offline: offline, name resolution fails and nothing can be downloaded. The `race-changes` lane runs `test:race` over the packages whose Go
 source the change edits, with the host-level journeys `test/wiring` and
 `test/security` select under the race detector; `internal/db`, whose race run
-takes about 40 minutes, stays nightly. The `dependencies` lane runs the
+takes about 40 minutes, stays nightly. The plan deals those packages into as
+many jobs as their race durations fill at `shard_seconds` each, longest first,
+up to the queue's parallel cap; each job runs exactly its share. Nightly's race
+lane measures each package's race duration, and a package it has not measured
+counts as the median measured one, or as the lane's `package_seconds` before
+any measurement. A small change stays one job. The `dependencies` lane runs the
 vulnerability scan and the third-party notices when a dependency graph, the
 vulnerability database or allowlist, the licensing catalog or their scripts
 change, and nightly. `command-scale` runs the scale tests and the allocation- and
@@ -1230,7 +1235,8 @@ runtime engines. Only
 main publishes archives, after successful installation. Package candidates still
 follow the runner's distribution repositories.
 
-A lane's setup inputs (container images, the pinned browser, the reference userlands,
+A lane's setup inputs (container images, the pinned confinement browser, the
+development browser cache, the reference userlands,
 repository tools, Nix, the protected-launch display and native libraries, notices
 tools, analysis tool sets, and whether it needs the runtime engines) are derived
 from what it runs. `provisions` in `scripts/verification-plan.json` names, once, the
@@ -1377,11 +1383,11 @@ and races remain blocking; there is no assertion retry policy.
 ##### Admission and scale execution
 
 Ready admission runs focused Go tests and frontend seam canaries after repository
-contracts. Changed Go coverage also runs early in admission; all changed-statement
-coverage and native compilation execute at the exact landing source. In the pull
-request, frontend and script coverage stages supply the complete assertion suites,
-avoiding a second uncovered execution; the landing source runs those suites once,
-unmeasured.
+contracts, along with changed Go, frontend, and script statement coverage. In the
+pull request, frontend and script coverage stages supply the complete assertion
+suites, avoiding a second uncovered execution; the merge queue leaves lint and
+changed-statement coverage to the pull request and runs the affected integration
+suites and native compilation at the exact landing source.
 The failed/unverified/previously-passed frontier changes order, never the complete
 successful-path inventory. Unknown source scope still selects the complete recipe.
 
@@ -1412,9 +1418,9 @@ not something feature CI performs.
 
 The first integration slots run build and the Go behavior shards. Each Go shard runs repository contracts with the full integration
 recipe before its remaining affected packages. The two phases are disjoint and
-retain the same shard, worker cap, and package measurements. A failed first phase
-never starts its second phase; the matrix cancels siblings on failure. Other
-profiles keep their complete recipes.
+retain the same shard, worker cap, and package measurements. Every phase and
+lane runs to completion so one round trip reports every failure. Other profiles
+keep their complete recipes.
 
 Queue health counts actual pull requests merged to main per observation hour.
 It reports success, failure, and cancellation separately, the fraction of decided
@@ -1440,11 +1446,11 @@ exhausting the runner while leaving room for the toolchain. A package that needs
 more declares its own ceiling with a tracking issue. A race build gets
 `race_scale` times its ceiling: the detector's
 shadow memory and instrumented heap are overhead the ordinary ceiling does not
-describe, and the largest contract packages reach 1.6 times it under the detector.
+describe, and the largest contract packages reach 2.3 times it under the detector.
 Unless a run sets `GOMEMLIMIT`, the test binary gets a soft limit at 80% of its
-ceiling, so the collector reclaims garbage before the ceiling instead of letting
-the heap reach twice its live size, and the guard measures retained memory
-rather than collector slack.
+unscaled Go heap ceiling, so the collector reclaims Go garbage before the ceiling
+instead of letting the heap expand with the detector's shadow memory, and the
+guard measures retained memory rather than collector slack.
 Failure identifies the package, measured bytes, and bound. Security and wiring suites additionally
 check retained heap and goroutine growth after cleanup through
 `internal/testutil/resourceguard`. These guards detect resource regressions;
@@ -1583,13 +1589,13 @@ budgets for the whole selected matrix. Runner caps do not depend on timing data.
 | Queue batching | `queue-batching.yml` | `queue-batching` | 1 |
 | Release rehearsals | release dry runs and replays, the weekly release-system live test, a dispatched release secrets check | one group per dry run or replay; `release-system-live-test`; none for the read-only secrets check | a dry run as a release; 1 otherwise |
 | Maintenance | dispatch-only Linux desktop environment and installed rehearsals, Linux candidate requests, dependency inventory, queue health, issue staleness, the issue sweep | `maintenance`, shared | 1 |
-| Merge queue | CI of merge groups | one run per group, two groups at once | 12: two groups × the `integration` cap of six |
+| Merge queue | CI of merge groups | one group at a time | 12 (2): the `integration` cap, including `native-macos` and `confinement-macos` when selected |
 | Ready pull requests | CI of pull requests | one run per pull request; a newer push cancels it | 6 per pull request beside the static job: the `fast` cap, with a two-hour execution ceiling |
 
 Nightly replaces its pending snapshot while a started run finishes. Qualification
 retains explicit release requests; both use one executor at a time. Maintenance
 workflows share one group across workflows and stagger their schedules. Issue
-intake, an issue's lifecycle nudge, and verification recovery handle one event
+intake and an issue's lifecycle nudge handle one event
 per run instead: each run is a single job bounded to fifteen minutes.
 
 Unsigned release artifacts are prepared once per source by a reusable
@@ -1612,7 +1618,8 @@ before changing one. Caps do not establish queue latency guarantees.
 On macOS, warming holds one runner, nightly four (as does a qualification that
 runs the lane set), and a release two. Nightly is scheduled outside the hours releases and qualification
 run; when they do overlap, macOS jobs wait for one of the five runners. The
-merge queue and the admission tier run on Linux.
+admission tier runs on Linux; the merge queue runs on Linux and selects macOS
+native and confinement lanes when those areas change.
 
 ### Upgrade rehearsal preparation and startup evidence
 

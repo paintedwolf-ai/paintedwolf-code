@@ -1577,7 +1577,7 @@
       "targets": [
         "test:race"
       ],
-      "minutes": 60,
+      "minutes": 90,
       "profiles": [
         "integration"
       ],
@@ -1586,7 +1586,9 @@
       "changes": [
         "go-code"
       ],
-      "phases": "changed-packages"
+      "phases": "changed-packages",
+      "shard_seconds": 1200,
+      "package_seconds": 40
     },
     "browser-smoke": {
       "targets": [
@@ -1731,10 +1733,15 @@
     },
     "browser": {
       "targets": {
-        "den:harness:canary": [],
         "test:confine:linux": [
           "browser"
         ]
+      }
+    },
+    "managed_browser": {
+      "targets": {
+        "den:harness:canary": [],
+        "den:harness:test": []
       }
     },
     "userlands": {
@@ -1831,5 +1838,20 @@
         ]
       }
     ]
-  }
+  },
+  "den_shell": [
+    "den:dev",
+    "den:harness",
+    "den:harness:canary",
+    "den:harness:test",
+    "den:sidecar",
+    "den:sidecar:fresh",
+    "den:sidecar:full-debug",
+    "den:sidecar:full-debug:fresh",
+    "den:sidecar:llm-debug",
+    "den:sidecar:llm-debug:fresh",
+    "den:webkit:atspi",
+    "den:webkit:scroll",
+    "e2e:den:desktop"
+  ]
 }

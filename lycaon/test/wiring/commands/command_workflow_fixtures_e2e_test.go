@@ -124,9 +124,9 @@ func newCommandWorkflowFixtureWithApprovalRules(t *testing.T, turns []workflowTu
 	sess, err := f.h.CreateHarnessSession(t, wire.CreateSessionRequest{}, f.dir)
 	testutil.FailErr(t, "create session", err)
 	f.session = sess.ID
+	testutil.FailErr(t, "set agent type", f.h.Sessions.Manager.Chats.SetAgentType(t.Context(), sess.ID, "implementer"))
 	wiring.AttachDefaultAmbient(t, f.h, t.Context(), sess.ID)
 	testutil.FailErr(t, "orient workflow", f.h.Workflows.Manager.Fanout.RecordBoardOrientReady(t.Context(), sess.ID, "workflow-fixture-orient"))
-	testutil.FailErr(t, "set agent type", f.h.Sessions.Manager.Chats.SetAgentType(t.Context(), sess.ID, "implementer"))
 	f.h.SeedProgress(t, t.Context(), sess.ID)
 	return f
 }
@@ -149,6 +149,7 @@ func (f *commandWorkflowFixture) run(t *testing.T) {
 	t.Helper()
 	_, err := f.h.Sessions.Manager.Submissions.Prompt(t.Context(), f.session, "execute workflow")
 	testutil.FailErr(t, "prompt workflow", err)
+	wiring.WaitForSessionIdleGate(t, f.h, t.Context(), f.session)
 }
 
 func (f *commandWorkflowFixture) outcome(t *testing.T, callID string) command.ProgramOutcome {
@@ -170,6 +171,24 @@ func (f *commandWorkflowFixture) outcome(t *testing.T, callID string) command.Pr
 		testutil.FailErr(t, "unmarshal outcome "+callID, json.Unmarshal([]byte(jsonBody), &out))
 		if out.ProgramID == "" {
 			t.Fatalf("call %s missing program_id in %s", callID, jsonBody)
+		}
+		if out.State == "parked" {
+			for _, wake := range msgs {
+				if wake.Kind != wire.MessageKindHostLoopWake {
+					continue
+				}
+				_, wakeJSON, _, ok := hostmarker.SplitToolJSONBody(wake.Content)
+				if !ok {
+					_, wakeJSON, ok = strings.Cut(wake.Content, "\n\n")
+				}
+				if !ok {
+					continue
+				}
+				var settled command.ProgramOutcome
+				if json.Unmarshal([]byte(wakeJSON), &settled) == nil && settled.ProgramID == out.ProgramID {
+					return settled
+				}
+			}
 		}
 		return out
 	}

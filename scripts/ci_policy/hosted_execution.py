@@ -2,6 +2,7 @@
 import json
 import math
 import os
+import re
 from pathlib import Path
 import shutil
 import subprocess
@@ -86,8 +87,9 @@ def lane_commands(name, lane, profile, scope, goos=None):
             packages = selected
     if phases == "changed-packages":
         from ci_policy.impact import buildable, changed_packages
+        # The plan deals the change's packages into this job's share; a run outside a plan selects them itself.
         # The planner selects this lane only for a change that edits Go source, so no scope is a fault.
-        packages = changed_packages(scope or {"paths": []})
+        packages = planned_share() or changed_packages(scope or {"paths": []})
         if packages:
             packages = buildable(packages, recipe_tags(targets[0]), goos)
         if not packages:
@@ -106,6 +108,14 @@ def lane_commands(name, lane, profile, scope, goos=None):
     return commands, packages
 
 
+def planned_share():
+    """The packages the plan gave this job, as the workflow passes its matrix row."""
+    share = json.loads(os.environ.get("PW_CI_SHARD_PACKAGES") or "null")
+    if share is not None and (not isinstance(share, list) or not all(isinstance(name, str) for name in share)):
+        raise ValueError("PW_CI_SHARD_PACKAGES must be a list of Go packages")
+    return share
+
+
 def recipe_tags(target):
     """The build tags a Go recipe compiles with."""
     from verification_plan import catalog
@@ -118,7 +128,12 @@ def run_lane(name, shard="", clock=time.monotonic, profile=hosted_plan.GATE):
     # The lane's minutes are its one time limit, counted from here across every phase.
     deadline = clock() + lane["minutes"] * 60
     count = lane.get("shards", 1)
-    if (shard == "") != (count == 1) or shard and shard not in {f"{k}/{count}" for k in range(1, count + 1)}:
+    # A lane sharded by its selection receives its share from the plan, not a fixed shard count.
+    by_selection = lane.get("phases") == "changed-packages"
+    if by_selection and shard and not re.fullmatch(r"([1-9][0-9]*)/([1-9][0-9]*)", shard):
+        raise ValueError(f"CI lane {name} shard must be k/N; got {shard!r}")
+    if not by_selection and ((shard == "") != (count == 1)
+                             or shard and shard not in {f"{k}/{count}" for k in range(1, count + 1)}):
         raise ValueError(f"CI lane {name} has {count} shard(s); got {shard!r}")
     invocations = hosted_plan.profile_invocations(lane, profile)
     targets = [invocation[0] for invocation in invocations]
@@ -149,7 +164,7 @@ def run_lane(name, shard="", clock=time.monotonic, profile=hosted_plan.GATE):
         environment["PW_TEST_WORKERS"] = str(lane["workers"])
     # Shards use the plan's shared package weights.
     measured = environment.pop("PW_CI_PACKAGE_TIMINGS", "")
-    if shard:
+    if shard and not by_selection:
         environment["PW_GO_SHARD"] = shard
         if measured:
             weights = directory / "package-weights.json"

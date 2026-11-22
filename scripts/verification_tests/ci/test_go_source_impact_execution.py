@@ -79,12 +79,12 @@ class GoSourceImpactTests(unittest.TestCase):
         for paths in (["docs/git.md"], ["README.md", "lycaon/AGENTS.md", "docs/operations/release.md"]):
             with self.subTest(paths=paths):
                 self.assertEqual(hosted_plan.matrix("fast", scope=dict(full=False, paths=paths)), {"include": []})
-                # The merge queue still runs its own lanes for the same change.
-                self.assertTrue(hosted_plan.matrix("integration", scope=dict(full=False, paths=paths))["include"])
+                self.assertEqual(hosted_plan.matrix("integration", scope=dict(full=False, paths=paths)), {"include": []})
         for paths in (["docs/git.md", "lycaon/internal/a/a.go"], ["docs/openapi/paths.yaml"], ["CHANGELOG.md"]):
             with self.subTest(paths=paths):
                 self.assertFalse(impact.docs_only(paths))
                 self.assertTrue(hosted_plan.matrix("fast", scope=dict(full=impact.broad_scope(paths)[0], paths=paths))["include"])
+                self.assertTrue(hosted_plan.matrix("integration", scope=dict(full=impact.broad_scope(paths)[0], paths=paths))["include"])
 
     def test_files_that_run_every_lane_widen(self):
         for path in [".github/workflows/ci.yml", ".github/workflows/verification.yml",

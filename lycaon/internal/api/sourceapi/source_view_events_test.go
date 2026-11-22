@@ -26,6 +26,7 @@ func TestSourceViewNotificationsAnnounceOnlyObservableChanges(t *testing.T) {
 	testutil.FailErr(t, "create project", err)
 	physical, err := server.Workspace.ProjectRegistry.Get(t.Context(), project.ID)
 	testutil.FailErr(t, "resolve workspace", err)
+	server.Watch.ensureWorkspaceWatch(t.Context(), physical)
 	stream, unsubscribe, err := hub.Subscribe(t.Context(), events.Subscription{Project: project.ID, Viewer: testutil.HostOwner()})
 	testutil.FailErr(t, "subscribe to project events", err)
 	defer unsubscribe()
