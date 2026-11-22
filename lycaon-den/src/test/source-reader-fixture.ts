@@ -7,6 +7,7 @@ import { stubClient } from "./client-fixture.ts";
 import { sourceChangeFromPresence } from "../components/source/reader/source-reader-change.ts";
 import { retainedFileEditFixtures } from "./file-edit-fixture.ts";
 import { sha256Hex } from "./sha256.ts";
+import { heldLeaseExpiry } from "./source-view-lease.ts";
 
 type Document = { summary: SourceComparisonSummary; rows: SourceReaderRow[]; before: string | null; after: string | null; details: SourceComparisonDetails };
 const views = new Map<string, { view: SourceComparisonView; document: Document }>();
@@ -58,7 +59,7 @@ export function sourceReaderFixture(resolve?: (project: string, source: SourceCo
   function create(document: Document, intent: SourceComparisonIntent): SourceComparisonView {
     const id = crypto.randomUUID();
     const view: SourceComparisonView = { kind: "comparison", id, state: "ready", intent, comparison: document.details,
-      intent_revision: "1", projection_revision: "1", expires_at: "2027-01-01T00:00:00Z", extent: { rows: projected(document, intent).length, complete: true } };
+      intent_revision: "1", projection_revision: "1", expires_at: heldLeaseExpiry(), extent: { rows: projected(document, intent).length, complete: true } };
     views.set(id, { view, document }); return view;
   }
   function held(id: string) {

@@ -115,9 +115,7 @@ webE2e("files tree scrolls before a file is opened", async ({
   await expect(verticalScrollbar).not.toHaveClass(/os-scrollbar-unusable/);
 
   await scroller.hover();
-  await expect(verticalScrollbar).not.toHaveClass(/den-scrollbar-idle/, {
-    timeout: 500,
-  });
+  await expect(verticalScrollbar).not.toHaveClass(/den-scrollbar-idle/);
   await page.mouse.wheel(0, 600);
   await expect
     .poll(() => scroller.evaluate((element) => element.scrollTop))

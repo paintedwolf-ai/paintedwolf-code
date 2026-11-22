@@ -11,7 +11,7 @@ import { reviewTurnsByAssistant } from "../../chat/transcript/presentation/revie
 import type { DisplayTranscriptItem } from "../../chat/transcript/projection/transcript-item-model.ts";
 import { WalkButton } from "../../files/walk/WalkButton.tsx";
 import { refreshWalk, resetWalkForTests, walkState } from "../../files/walk/walk-store.ts";
-import { refreshWalkPreviews, resetWalkPreviewsForTests } from "../../files/walk/walk-preview.ts";
+import { cachedWalkPreview, refreshWalkPreviews, resetWalkPreviewsForTests } from "../../files/walk/walk-preview.ts";
 import { walkClientFixture, walkEffectFixture, walkResponseFixture } from "../../files/walk/walk-fixtures.ts";
 
 const reviewTurnForAssistant = (
@@ -156,10 +156,14 @@ describe("Turn Walk cards in the live chat timeline", () => {
   });
 
   it("never substitutes another chapter when the requested turn has no retained steps", async () => {
-    const client = walkClientFixture(() => walkResponseFixture([walkEffectFixture("a", 2, 1)]));
-    render(() => <TurnWalkCard projectId="p1" sessionId="s1" messageId="s1-user-9" client={client} />);
-    await new Promise((resolve) => setTimeout(resolve, 450));
-    expect(screen.queryByTestId("turn-walk-card")).toBeNull();
+    vi.useFakeTimers();
+    try {
+      const client = walkClientFixture(() => walkResponseFixture([walkEffectFixture("a", 2, 1)]));
+      render(() => <TurnWalkCard projectId="p1" sessionId="s1" messageId="s1-user-9" client={client} />);
+      await vi.runAllTimersAsync();
+      expect(cachedWalkPreview("p1", "s1", "s1-user-9")?.steps).toBe(0);
+      expect(screen.queryByTestId("turn-walk-card")).toBeNull();
+    } finally { vi.useRealTimers(); }
   });
 });
 

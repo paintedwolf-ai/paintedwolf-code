@@ -71,6 +71,8 @@ describe("Linger", () => {
 
   it("removes every one of many values within the bound of its own end", () => {
     vi.useFakeTimers({ now: 0 });
+    let now = 0;
+    const advance = (ms: number) => { vi.advanceTimersByTime(ms); now += ms; };
     const ended = new Map<string, number>();
     const snapshots: ReadonlyMap<string, Lingered<Operation>>[] = [];
     const linger = createLinger(snapshots);
@@ -79,17 +81,17 @@ describe("Linger", () => {
       const key = `f${index}.ts`;
       linger.update(new Map([[key, op(key)]]));
       linger.update(new Map());
-      ended.set(key, Date.now());
-      vi.advanceTimersByTime(1);
+      ended.set(key, now);
+      advance(1);
     }
     expect(vi.getTimerCount()).toBe(1);
 
     for (let tick = 0; tick <= LINGER_MS; tick += 250) {
       for (const [key, entry] of latest(snapshots) ?? new Map()) {
-        expect(Date.now() - ended.get(key)!).toBeLessThan(LINGER_MS);
+        expect(now - ended.get(key)!).toBeLessThan(LINGER_MS);
         expect(entry.phase).toBe("past");
       }
-      vi.advanceTimersByTime(250);
+      advance(250);
     }
     expect(latest(snapshots)?.size).toBe(0);
     linger.dispose();

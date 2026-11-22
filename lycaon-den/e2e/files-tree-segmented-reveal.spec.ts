@@ -6,11 +6,11 @@ import { installLargeTreeFrames } from "./source-tree-frame-fixture.ts";
 
 test.use({ trace: "retain-on-failure" });
 
-async function sampleReveal(page: Page, action: () => Promise<void>) {
-  const sampling = page.getByTestId("files-tree-scroll").evaluate(async element => {
+/** Samples every frame until `target` is painted and the tree has stopped moving. */
+async function sampleReveal(page: Page, target: string, action: () => Promise<void>) {
+  const sampling = page.getByTestId("files-tree-scroll").evaluate(async (element, target) => {
     const samples: { rows: number; first: number; top: number; bottom: number }[] = [];
-    const started = performance.now();
-    while (performance.now() - started < 3000) {
+    for (let still = 0; still < 2;) {
       await new Promise<void>(resolve => requestAnimationFrame(() => resolve()));
       const bounds = element.getBoundingClientRect();
       const rows = [...element.querySelectorAll<HTMLElement>(".den-files-tree-virtual__row")].flatMap(row => {
@@ -20,13 +20,17 @@ async function sampleReveal(page: Page, action: () => Promise<void>) {
         const match = address?.match(/^folder-(\d+)(?:\/file-(\d+)\.ts)?$/);
         const rank = address === "." ? 0 : match ? 1 + Number(match[1]) * 10_000 +
           (match[2] === undefined ? 0 : Number(match[2]) + 1) : -1;
-        return [{ rank, top: rect.top, bottom: rect.bottom }];
+        return [{ rank, address, top: rect.top, bottom: rect.bottom }];
       }).sort((a, b) => a.top - b.top);
-      samples.push({ rows: rows.length, first: rows[0]?.rank ?? -1,
-        top: (rows[0]?.top ?? Infinity) - bounds.top, bottom: (rows.at(-1)?.bottom ?? -Infinity) - bounds.bottom });
+      const sample = { rows: rows.length, first: rows[0]?.rank ?? -1,
+        top: (rows[0]?.top ?? Infinity) - bounds.top, bottom: (rows.at(-1)?.bottom ?? -Infinity) - bounds.bottom };
+      const previous = samples.at(-1);
+      samples.push(sample);
+      const arrived = rows.some(row => row.address === target);
+      still = arrived && previous?.first === sample.first && previous.top === sample.top ? still + 1 : 0;
     }
     return samples;
-  });
+  }, target);
   await action();
   return sampling;
 }
@@ -35,6 +39,7 @@ test("file reveals paint continuous large-tree frames from the dropdown, tabs, a
   info.setTimeout(90_000);
   await page.emulateMedia({ reducedMotion: "no-preference" });
   let delayed = false;
+  // injected latency: frames arrive while the reveal is painting
   await installLargeTreeFrames(page, async () => { if (delayed) await new Promise(resolve => setTimeout(resolve, 35)); });
   await openProjectFilesFixture(page, request, {
     prefix: "tree-reveal", name: "Tree reveal",
@@ -60,12 +65,12 @@ test("file reveals paint continuous large-tree frames from the dropdown, tabs, a
   await page.keyboard.press("ControlOrMeta+k");
   await page.getByTestId("crossbar-input").fill("Show open files");
   await page.getByTestId("crossbar-action-painted-wolf/platform:files-open-files-list").click();
-  const dropdown = await sampleReveal(page, () => page.getByTestId("files-open-list").getByRole("button", { name: "file-0.ts", exact: true }).click());
+  const dropdown = await sampleReveal(page, "folder-000/file-0.ts", () => page.getByTestId("files-open-list").getByRole("button", { name: "file-0.ts", exact: true }).click());
   await expect(first).toBeVisible();
-  const tab = await sampleReveal(page, () => page.getByRole("tab", { name: "file-9998.ts", exact: true }).click());
+  const tab = await sampleReveal(page, "folder-099/file-9998.ts", () => page.getByRole("tab", { name: "file-9998.ts", exact: true }).click());
   await expect(last).toBeVisible();
   await page.getByRole("tab", { name: "file-0.ts", exact: true }).click({ button: "right" });
-  const explicit = await sampleReveal(page, () => page.getByTestId("files-ctx-tab-reveal-tree").click());
+  const explicit = await sampleReveal(page, "folder-000/file-0.ts", () => page.getByTestId("files-ctx-tab-reveal-tree").click());
   await expect(first).toBeFocused();
 
   writeFileSync(info.outputPath("tree-reveal-frames.json"), JSON.stringify({ dropdown, tab, explicit }, null, 2));

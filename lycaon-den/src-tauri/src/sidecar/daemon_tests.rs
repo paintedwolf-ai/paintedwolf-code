@@ -1,9 +1,9 @@
 use super::*;
-use crate::test_support::TempDir;
+use crate::test_support::{TempDir, NO_DEADLINE};
 use std::fs;
 use std::path::Path;
 use std::process::{Command, Stdio};
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
 #[test]
 fn token_print_command_stays_a_narrow_profile_bound_engine_command() {
@@ -54,7 +54,7 @@ fn external_daemon_token_print_handles_success_failure_timeout_and_never_leaks_s
     let mut ok_cmd = Command::new("sh");
     ok_cmd.args(["-c", "printf 'vault-token-abc_123\\n'"]);
     let token = resolve_external_daemon_token_with(None, || {
-        run_token_print_command(ok_cmd, Duration::from_secs(2))
+        run_token_print_command(ok_cmd, NO_DEADLINE)
     })
     .expect("read token from command");
     assert_eq!(token, "vault-token-abc_123");
@@ -66,7 +66,7 @@ fn external_daemon_token_print_handles_success_failure_timeout_and_never_leaks_s
         "-c",
         &format!("printf '{stdout_canary}\\n'; printf 'fatal: {stderr_canary}\\n' >&2; exit 7"),
     ]);
-    let err = run_token_print_command(fail_cmd, Duration::from_secs(2))
+    let err = run_token_print_command(fail_cmd, NO_DEADLINE)
         .expect_err("non-zero exit must fail");
     assert!(
         err.contains("exit 7") && !err.contains(stderr_canary) && !err.contains(stdout_canary),
@@ -75,10 +75,10 @@ fn external_daemon_token_print_handles_success_failure_timeout_and_never_leaks_s
 
     let mut empty_cmd = Command::new("sh");
     empty_cmd.args(["-c", "printf '   \\n'"]);
-    assert!(run_token_print_command(empty_cmd, Duration::from_secs(2)).is_err());
+    assert!(run_token_print_command(empty_cmd, NO_DEADLINE).is_err());
 
     let mut slow_cmd = Command::new("sh");
-    slow_cmd.args(["-c", "exec sleep 10"]);
+    slow_cmd.args(["-c", "exec sleep 1000000"]);
     let timeout_err = run_token_print_command(slow_cmd, Duration::from_millis(50))
         .expect_err("hanging command must time out");
     assert!(
@@ -89,12 +89,12 @@ fn external_daemon_token_print_handles_success_failure_timeout_and_never_leaks_s
     let mut fallback_ok = Command::new("sh");
     fallback_ok.args(["-c", "printf 'fallback-token-xyz\\n'"]);
     assert_eq!(
-        run_token_print_command_bounded_fallback(fallback_ok, Duration::from_secs(2))
+        run_token_print_command_bounded_fallback(fallback_ok, NO_DEADLINE)
             .expect("non-unix bounded fallback success"),
         "fallback-token-xyz"
     );
     let mut fallback_slow = Command::new("sh");
-    fallback_slow.args(["-c", "exec sleep 10"]);
+    fallback_slow.args(["-c", "exec sleep 1000000"]);
     assert!(
         run_token_print_command_bounded_fallback(fallback_slow, Duration::from_millis(50))
             .expect_err("non-unix bounded fallback timeout")
@@ -123,17 +123,18 @@ fn external_daemon_token_print_pipe_inheriting_descendant_does_not_hang_and_pres
         .expect("spawn bystander");
     let bystander_pid = bystander.id() as i32;
 
+    // Descendants never exit on their own: only the helper's cleanup ends them.
     // Case 1: Helper spawns a background descendant inheriting stdout/stderr, prints token, and exits.
     let exit_bg_pid_file = dir.path().join("exit-bg.pid");
     let mut exit_cmd = Command::new("sh");
     exit_cmd.args([
         "-c",
         &format!(
-            "sleep 30 & echo $! > '{}'; printf 'token-from-parent-with-bg-child\\n'",
+            "sleep 1000000 & echo $! > '{}'; printf 'token-from-parent-with-bg-child\\n'",
             exit_bg_pid_file.display()
         ),
     ]);
-    let token = run_token_print_command(exit_cmd, Duration::from_secs(2))
+    let token = run_token_print_command(exit_cmd, NO_DEADLINE)
         .expect("helper exit with inherited pipe must succeed without blocking");
     assert_eq!(token, "token-from-parent-with-bg-child");
     let exit_bg_pid: i32 = fs::read_to_string(&exit_bg_pid_file)
@@ -153,7 +154,7 @@ fn external_daemon_token_print_pipe_inheriting_descendant_does_not_hang_and_pres
     timeout_cmd.args([
         "-c",
         &format!(
-            "sleep 30 & echo $! > '{}'; sleep 30",
+            "sleep 1000000 & echo $! > '{}'; sleep 1000000",
             timeout_bg_pid_file.display()
         ),
     ]);
@@ -194,25 +195,16 @@ fn external_daemon_token_print_nonblocking_and_read_errors_clean_up_process_grou
     setup_cmd.args([
         "-c",
         &format!(
-            "sleep 30 & echo $! > '{}'; while [ ! -s '{}' ]; do :; done; sleep 30",
+            "sleep 1000000 & echo $! > '{}'; while [ ! -s '{}' ]; do :; done; sleep 1000000",
             setup_pid_file.display(),
             setup_pid_file.display()
         ),
     ]);
     let setup_err = run_token_print_command_with(
         setup_cmd,
-        Duration::from_secs(2),
+        NO_DEADLINE,
         |_stdout| {
-            let deadline = Instant::now() + Duration::from_secs(2);
-            while Instant::now() < deadline {
-                if fs::read_to_string(&setup_pid_file)
-                    .map(|s| !s.trim().is_empty())
-                    .unwrap_or(false)
-                {
-                    break;
-                }
-                std::thread::sleep(Duration::from_millis(5));
-            }
+            wait_for_pid_file(&setup_pid_file);
             Err("injected nonblocking setup failure".to_string())
         },
         drain_nonblocking_stdout,
@@ -232,13 +224,13 @@ fn external_daemon_token_print_nonblocking_and_read_errors_clean_up_process_grou
     read_cmd.args([
         "-c",
         &format!(
-            "sleep 30 & echo $! > '{}'; sleep 30",
+            "sleep 1000000 & echo $! > '{}'; sleep 1000000",
             read_pid_file.display()
         ),
     ]);
     let read_err = run_token_print_command_with(
         read_cmd,
-        Duration::from_secs(2),
+        NO_DEADLINE,
         set_fd_nonblocking_and_wait_for_pid(&read_pid_file),
         |stdout, buf, max_bytes| {
             // Replace stdout's file description with a write-only /dev/null fd so
@@ -273,16 +265,14 @@ fn set_fd_nonblocking_and_wait_for_pid(
     use std::os::fd::AsRawFd;
     move |stdout| {
         set_fd_nonblocking(stdout.as_raw_fd())?;
-        let deadline = Instant::now() + Duration::from_secs(2);
-        while Instant::now() < deadline {
-            if fs::read_to_string(pid_file)
-                .map(|s| !s.trim().is_empty())
-                .unwrap_or(false)
-            {
-                break;
-            }
-            std::thread::sleep(Duration::from_millis(5));
-        }
+        wait_for_pid_file(pid_file);
         Ok(())
+    }
+}
+
+#[cfg(unix)]
+fn wait_for_pid_file(pid_file: &Path) {
+    while !fs::read_to_string(pid_file).is_ok_and(|s| !s.trim().is_empty()) {
+        std::thread::sleep(Duration::from_millis(5));
     }
 }

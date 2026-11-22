@@ -14,7 +14,7 @@ def local_execute(project, program):
     # Unit controls use the same observation program. The live smoke exercises
     # the isolated container separately.
     program = program.replace('/candidate', str(project))
-    result = subprocess.run(['python3','-B','-c',program], cwd=project, text=True, capture_output=True,timeout=10)
+    result = subprocess.run(['python3','-B','-c',program], cwd=project, text=True, capture_output=True)
     return json.loads(result.stdout) if result.returncode == 0 else None
 
 

@@ -26,7 +26,7 @@ fn input_idle_steps_away_and_activity_confirms_again() {
             vec![(timeout, true)]
         );
         compositor(&fixture).report_idle(true);
-        h.pump_until("input idle", |h| {
+        h.pump_until(|h| {
             h.monitor.tick();
             !h.allowed()
         });
@@ -36,7 +36,7 @@ fn input_idle_steps_away_and_activity_confirms_again() {
         h.monitor.tick();
         assert_eq!(h.locks(), vec![LockReason::Away]);
         compositor(&fixture).report_idle(false);
-        h.pump_until("input resumed", |h| {
+        h.pump_until(|h| {
             h.monitor.tick();
             h.allowed()
         });
@@ -95,7 +95,7 @@ fn an_observable_locker_ends_unlocks_by_lock_and_never_by_idle() {
         assert_eq!(h.monitor.status().mode, StepAwayMode::LockObserved);
         assert!(h.allowed());
         compositor(&fixture).report_idle(true);
-        h.pump_until("the idle report", |h| {
+        h.pump_until(|h| {
             h.monitor.tick();
             h.monitor.status().idle.idle
         });
@@ -110,7 +110,7 @@ fn an_observable_locker_ends_unlocks_by_lock_and_never_by_idle() {
             "Lock",
             ().to_variant(),
         );
-        h.pump_until("the Lock signal", |h| !h.allowed());
+        h.pump_until(|h| !h.allowed());
         assert_eq!(h.locks(), vec![LockReason::ScreenLocked]);
     });
 }
@@ -129,7 +129,7 @@ fn the_first_observed_locked_hint_switches_to_lock_observation() {
             "PropertiesChanged",
             hint(true),
         );
-        h.pump_until("LockedHint", |h| !h.allowed());
+        h.pump_until(|h| !h.allowed());
         assert_eq!(h.monitor.status().mode, StepAwayMode::LockObserved);
         assert_eq!(h.locks(), vec![LockReason::ScreenLocked]);
         fixture.logind().emit(
@@ -138,9 +138,9 @@ fn the_first_observed_locked_hint_switches_to_lock_observation() {
             "PropertiesChanged",
             hint(false),
         );
-        h.pump_until("LockedHint cleared", Harness::allowed);
+        h.pump_until(Harness::allowed);
         compositor(&fixture).report_idle(true);
-        h.pump_until("the idle report", |h| {
+        h.pump_until(|h| {
             h.monitor.tick();
             h.monitor.status().idle.idle
         });
@@ -159,14 +159,14 @@ fn a_lost_compositor_locks_and_its_return_is_observed_again() {
         h.monitor.refresh();
         assert!(h.allowed());
         fixture.compositor = None;
-        h.pump_until("compositor loss", |h| {
+        h.pump_until(|h| {
             h.monitor.tick();
             h.monitor.status().idle.error == Some(idle::IdleUnavailable::Lost)
         });
         assert!(!h.allowed());
         assert!(h.locks().contains(&LockReason::ScreenLocked));
         fixture.compositor = Some(Compositor::start(&fixture.wayland, Some(2)));
-        h.pump_until("compositor return", |h| {
+        h.pump_until(|h| {
             h.monitor.tick();
             h.allowed()
         });
@@ -217,12 +217,8 @@ fn a_session_bus_idle_monitor_from_another_process_is_refused() {
         .stderr(Stdio::null())
         .spawn()
         .unwrap();
-    let deadline = Instant::now() + Duration::from_secs(120);
     while UnixStream::connect(&fixture.wayland).is_err() {
-        assert!(
-            Instant::now() < deadline,
-            "compositor process never listened"
-        );
+        assert!(child.try_wait().unwrap().is_none(), "compositor process exited before listening");
         thread::sleep(Duration::from_millis(20));
     }
     // This process owns the idle monitor; the compositor is the child.
@@ -317,7 +313,7 @@ fn an_x11_session_is_observed_through_the_screen_saver_extension() {
         );
         assert!(h.allowed());
         drop(server);
-        h.pump_until("X server loss", |h| {
+        h.pump_until(|h| {
             h.monitor.tick();
             h.monitor.status().idle.error == Some(idle::IdleUnavailable::Lost)
         });

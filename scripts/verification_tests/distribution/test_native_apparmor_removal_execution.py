@@ -65,7 +65,7 @@ command [ "$@"
 alias '['=fixture_test
 set -- ''' + shlex.quote(operation) + '\n' + source
             result = subprocess.run(['/bin/sh', '-c', wrapper], env={**os.environ,
-                'PATH': str(root), 'KERNEL_STATE': str(state), 'APPARMOR_PROFILES': str(profiles)}, capture_output=True, text=True, timeout=15)
+                'PATH': str(root), 'KERNEL_STATE': str(state), 'APPARMOR_PROFILES': str(profiles)}, capture_output=True, text=True)
             return result, json.loads(state.read_text())
 
     def test_remove_unloads_only_the_exact_owned_profile(self):

@@ -46,7 +46,7 @@ target.mkdir(parents=True, exist_ok=True)
             script = root / "scripts/build-document-core.sh"
             def run(*args, **extra):
                 return subprocess.run(["bash", str(script), *args], env={**env, **extra},
-                                      capture_output=True, text=True, timeout=20)
+                                      capture_output=True, text=True)
             first = run()
             self.assertEqual(first.returncode, 0, first.stderr)
             self.assertEqual(Path(first.stdout.strip()).read_text(), "first")

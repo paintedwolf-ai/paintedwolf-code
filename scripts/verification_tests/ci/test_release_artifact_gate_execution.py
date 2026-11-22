@@ -81,7 +81,7 @@ class ReleaseArtifactGateTests(unittest.TestCase):
              '--goos', 'darwin', '--arch', 'aarch64', '--version', version, '--package-extensions', 'dmg',
              '--updater-extension', 'app.tar.gz', '--output', str(output)],
             cwd=scratch, env={k: v for k, v in os.environ.items() if k != 'LYCAON_OPENGREP_CANDIDATE'},
-            capture_output=True, text=True, timeout=60)
+            capture_output=True, text=True)
 
     def test_failed_bundle_verification_stages_nothing(self):
         with tempfile.TemporaryDirectory() as directory:

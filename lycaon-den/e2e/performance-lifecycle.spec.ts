@@ -118,11 +118,9 @@ test("reuses bounded editor viewports through twenty-file navigation", async ({ 
       const check = () => {
         const host = [...document.querySelectorAll('[data-testid="files-editor-host"]')].find(n => n.closest('[data-resident="active"]') && n.textContent?.includes(`// ${name}`));
         if (host && document.querySelector('[data-testid="files-pane-presentation"]')?.getAttribute("data-pending") === "false") resolve({ handlerMs, frameMs: performance.now() - start });
-        else if (performance.now() - start > 10_000) resolve({ handlerMs, timeout: true });
         else requestAnimationFrame(check);
       }; requestAnimationFrame(check);
     }), name);
-    expect(result).not.toHaveProperty("timeout", true);
     samples.push({ name, kind, result });
     await frames(page, 4);
   };

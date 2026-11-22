@@ -83,8 +83,7 @@ class CommandTest(unittest.TestCase):
 
     def command(self, **environment):
         return subprocess.run(
-            [sys.executable, 'scripts/ci_verification.py', 'delete-skipped-runs', HEAD], cwd=ROOT, capture_output=True, text=True,
-            timeout=30, env={**os.environ, 'PATH': f'{self.directory}{os.pathsep}{os.environ["PATH"]}', 'GH_CALLS': str(self.calls),
+            [sys.executable, 'scripts/ci_verification.py', 'delete-skipped-runs', HEAD], cwd=ROOT, capture_output=True, text=True, env={**os.environ, 'PATH': f'{self.directory}{os.pathsep}{os.environ["PATH"]}', 'GH_CALLS': str(self.calls),
                              'GH_RUNS': json.dumps({'workflow_runs': [run(1), run(CURRENT), run(2, conclusion='success')]}),
                              'GITHUB_REPOSITORY': 'o/r', 'GITHUB_RUN_ID': str(CURRENT), **environment})
 

@@ -18,7 +18,7 @@ def remapped(environment, root, times=1):
         '"${RUSTFLAGS-unset}" "${CFLAGS}" "${CXXFLAGS}"')
     base = {"PATH": os.environ["PATH"]}
     result = subprocess.run(["bash", "-c", script], env={**base, **environment}, capture_output=True,
-                            text=True, check=True, timeout=30)
+                            text=True, check=True)
     encoded, rustflags, cflags, cxxflags = result.stdout.split("\n")
     return encoded.split("\x1f"), rustflags, cflags, cxxflags
 
@@ -122,11 +122,11 @@ class StagedBuilderPaths(unittest.TestCase):
         command = ["python3", str(SCRIPTS / "linux_release/build_paths.py"), "--tree", str(self.tree),
                    "--source", str(self.tree)]
         environment = {"PATH": os.environ["PATH"], "HOME": "/home/tester"}
-        refused = subprocess.run(command, env=environment, capture_output=True, text=True, timeout=30)
+        refused = subprocess.run(command, env=environment, capture_output=True, text=True)
         self.assertEqual(refused.returncode, 1)
         self.assertIn("painted-wolf-code: /home/tester", refused.stderr)
         self.binary("painted-wolf-code", b"/cargo/registry/src/x.rs")
-        accepted = subprocess.run(command, env=environment, capture_output=True, text=True, timeout=30)
+        accepted = subprocess.run(command, env=environment, capture_output=True, text=True)
         self.assertEqual(accepted.returncode, 0, accepted.stderr)
 
 

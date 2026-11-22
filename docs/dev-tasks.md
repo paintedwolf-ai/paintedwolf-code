@@ -301,7 +301,7 @@ Interactive startup submits its sidecar build and engine staging through
 ends before the sidecar and Vite start; the interactive session holds no queue
 slot. A queue pause delays preparation but does not stop an already running
 session. Run the interactive target separately from other targets.
-`den:harness:test` and `den:harness:canary` retain queued execution throughout.
+`den:harness:test` and `den:harness:canary` retain queued execution throughout. On Linux, `./task` refuses every target that launches the Den shell or its sidecar (the `den_shell` list in `scripts/verification-plan.json`, and any group that contains one) when the host's glibc is below the floor in `lycaon/internal/platformfloor/linux_floor.txt`, since the engine would not start and each browser test would run out its timeout.
 After preparation, `HARNESS_KEEP_STATE=1 LYCAON_E2E_STATE_DIR=DIR ./task den:harness -- --reuse-built` restarts the prepared runtime without compiling. Keep that state directory after shutdown and prepare again when its source changes. A missing executable is refused before startup. Preparation also provisions the pinned headless browser in the development cache and records its resolved path in `runtime/browser.json`. The isolated sidecar uses that artifact without copying the cache into its configuration. An explicit `LYCAON_BROWSER_BIN` takes precedence; missing browser resources require preparation again.
 
 Preparation writes into the harness's private runtime directory and uses

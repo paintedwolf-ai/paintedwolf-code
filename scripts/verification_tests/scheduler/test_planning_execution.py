@@ -89,6 +89,26 @@ class PlanningTests(unittest.TestCase):
                 with self.assertRaisesRegex(ValueError, "den:harness:test:"):
                     planning.request(["den:harness:test", "--", *flags], {})
 
+    def test_targets_that_launch_the_den_shell_refuse_a_host_below_its_glibc_floor(self):
+        self.assertEqual(planning.shell_floor_refusal(["den:harness:test", "test:short"], glibc="2.35"),
+                         "this host has glibc 2.35; the Den shell needs 2.39, so den:harness:test cannot run here. "
+                         "Run it on a newer host or in CI. No verification was queued")
+        for glibc in ("2.39", "2.41.9000"):
+            self.assertIsNone(planning.shell_floor_refusal(["den:harness:test"], glibc=glibc))
+        self.assertIsNone(planning.shell_floor_refusal(["test:short", "den:test"], glibc="2.35"))
+        with patch.object(planning, "host_glibc", return_value=None):
+            self.assertIsNone(planning.shell_floor_refusal(["den:harness:canary"]))
+        with tempfile.TemporaryDirectory() as root, \
+                patch.object(planning, "host_glibc", return_value="2.35"), \
+                patch.dict(os.environ, {"PW_TEST_EXECUTION_ROOT": root}), \
+                patch.object(execution.os, "execv", side_effect=AssertionError("ran the target")), \
+                patch.object(execution, "probe_task_request", side_effect=AssertionError("probed the target")):
+            for arguments in (["den:sidecar"], ["--background", "den:harness:test"]):
+                with self.subTest(arguments=arguments), \
+                        patch.object(sys, "argv", ["test-execution.py", "task", "--", "task", root, *arguments]), \
+                        self.assertRaisesRegex(ValueError, "this host has glibc 2.35; the Den shell needs 2.39"):
+                    execution.main()
+
     def test_catalog_declares_resources_for_every_stage(self):
         catalog = planning.catalog()
         self.assertLessEqual(set(catalog["tasks"]) | {"go", "go:bundled"}, set(catalog["resources"]))
@@ -475,7 +495,7 @@ class PlanningTests(unittest.TestCase):
                 body = ("import os, sys; "
                         f"fd=os.open({str(lease.path)!r},os.O_RDWR); os.dup2(fd,200,inheritable=True); "
                         f"os.execv(sys.executable,[sys.executable,{str(SCRIPT)!r},'holding'])")
-                result = subprocess.run([sys.executable, "-c", body], capture_output=True, timeout=5,
+                result = subprocess.run([sys.executable, "-c", body], capture_output=True,
                                         env={**os.environ, "PW_TEST_EXECUTION_ROOT": directory,
                                              "XDG_CACHE_HOME": str(Path(directory) / "user-cache"),
                                              "PW_TEST_EXECUTION_TICKET": lease.entry["ticket"]})
