@@ -257,9 +257,10 @@ func (v ReaderFactVocabulary) AllowsReference(ref string) bool {
 	return false
 }
 
-// CheckTemplateVocabulary validates reserved-prefix variable references across
-// every template and skill unit in eff. Stock units fail load on an undeclared
-// reference; third-party units record a diagnostic note.
+// CheckTemplateVocabulary validates reserved-prefix variable references and
+// forbids capability {% set %} derivations across every template and skill
+// unit in eff. Stock units fail load on a violation; third-party units record
+// a diagnostic note.
 func CheckTemplateVocabulary(eff *extpacks.EffectiveCatalog) ([]string, error) {
 	if eff == nil {
 		return nil, fmt.Errorf("nil effective catalog")
@@ -271,6 +272,104 @@ func CheckTemplateVocabulary(eff *extpacks.EffectiveCatalog) ([]string, error) {
 		return nil, err
 	}
 	return slices.Clone(notes), nil
+}
+
+func isBooleanReaderFact(ref string) bool {
+	if spec, ok := declaredReaderFactScalars[ref]; ok {
+		return spec.Type == "bool"
+	}
+	for _, fam := range readerFactFamilies {
+		if fam.Nested {
+			if ref == fam.Prefix || strings.HasPrefix(ref, fam.Prefix+".") {
+				return fam.Type == "bool"
+			}
+		} else if strings.HasPrefix(ref, fam.Prefix) {
+			return fam.Type == "bool"
+		}
+	}
+	return false
+}
+
+func checkSetBindings(unitID, origin, source string, vocab ReaderFactVocabulary, stock bool) ([]string, error) {
+	var notes []string
+	report := func(msg string) error {
+		if stock {
+			return fmt.Errorf("template %s (%s): %s", unitID, origin, msg)
+		}
+		notes = append(notes, fmt.Sprintf("%s (%s): %s", unitID, origin, msg))
+		return nil
+	}
+	tree, err := pongoplain.ParseTemplateTree(source)
+	if err != nil {
+		if rerr := report(fmt.Sprintf("template grammar error: %v", err)); rerr != nil {
+			return nil, rerr
+		}
+		return notes, nil
+	}
+	tainted := map[string]bool{}
+	taintedBool := map[string]bool{}
+	checkBinding := func(b pongoplain.Binding) error {
+		if IsDeclaredOrReservedReaderFact(b.Name) || strings.HasPrefix(b.Name, "can_") || strings.HasPrefix(b.Name, "has_") {
+			return report(fmt.Sprintf("capability binding %q is forbidden", b.Name))
+		}
+		refsReaderFact := false
+		refsBoolFact := false
+		hasOps := b.Expr.HasLogicalOrCompare()
+		for _, ref := range b.Expr.Identifiers() {
+			root := ref
+			if idx := strings.IndexByte(ref, '.'); idx >= 0 {
+				root = ref[:idx]
+			}
+			if tainted[ref] || tainted[root] {
+				refsReaderFact = true
+				if taintedBool[ref] || taintedBool[root] {
+					refsBoolFact = true
+				}
+			}
+			if IsDeclaredOrReservedReaderFact(ref) || IsDeclaredOrReservedReaderFact(root) || vocab.AllowsReference(ref) {
+				refsReaderFact = true
+				if isBooleanReaderFact(ref) || isBooleanReaderFact(root) {
+					refsBoolFact = true
+				}
+			}
+		}
+		if refsReaderFact {
+			tainted[b.Name] = true
+			if hasOps || refsBoolFact {
+				taintedBool[b.Name] = true
+			}
+		}
+		if (hasOps && refsReaderFact) || refsBoolFact {
+			return report(fmt.Sprintf("capability alias/derivation %q (%s) is forbidden", b.Name, b.RawExpr))
+		}
+		return nil
+	}
+	var walkNodes func([]*pongoplain.TemplateNode) error
+	walkNodes = func(nodes []*pongoplain.TemplateNode) error {
+		for _, n := range nodes {
+			for _, b := range n.Bindings {
+				if err := checkBinding(b); err != nil {
+					return err
+				}
+			}
+			for _, br := range n.Branches {
+				if err := walkNodes(br.Body); err != nil {
+					return err
+				}
+			}
+			if err := walkNodes(n.Body); err != nil {
+				return err
+			}
+			if err := walkNodes(n.EmptyBody); err != nil {
+				return err
+			}
+		}
+		return nil
+	}
+	if err := walkNodes(tree.Nodes); err != nil {
+		return nil, err
+	}
+	return notes, nil
 }
 
 func checkTemplateVocabularyUncached(eff *extpacks.EffectiveCatalog) ([]string, error) {
@@ -293,6 +392,11 @@ func checkTemplateVocabularyUncached(eff *extpacks.EffectiveCatalog) ([]string, 
 			}
 			notes = append(notes, fmt.Sprintf("%s (%s): undeclared reader fact %q", unitID, packID, ref))
 		}
+		setNotes, err := checkSetBindings(unitID, packID, source, vocab, stock)
+		if err != nil {
+			return err
+		}
+		notes = append(notes, setNotes...)
 		return nil
 	}
 
@@ -374,6 +478,8 @@ func checkCapturedOverlayTemplates(eff *extpacks.EffectiveCatalog, captured map[
 			}
 			notes = append(notes, fmt.Sprintf("%s (override): undeclared reader fact %q", ref, vref))
 		}
+		setNotes, _ := checkSetBindings(ref, "override", string(body), vocab, false)
+		notes = append(notes, setNotes...)
 	}
 	sort.Strings(notes)
 	return notes, nil

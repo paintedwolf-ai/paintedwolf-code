@@ -3,6 +3,8 @@ package tools
 import (
 	"reflect"
 	"strings"
+
+	"github.com/lycaon/lycaon/internal/toolschema"
 )
 
 // Scalar constraints survive projection at every depth.
@@ -26,14 +28,7 @@ func ProjectProviderToolMeta(meta ToolMeta) ToolMeta {
 func PruneCommandReadOnlySchema(schema map[string]any) map[string]any {
 	out := projectArgsSchema(schema)
 	props, _ := out["properties"].(map[string]any)
-	for _, key := range []string{
-		"capability_request",
-		"secret_use",
-		"snapshot_capture",
-		"socks_proxy",
-		"terminal_capture",
-		"verification",
-	} {
+	for _, key := range toolschema.CommandReadOnlyPrunedFields() {
 		delete(props, key)
 	}
 	return out

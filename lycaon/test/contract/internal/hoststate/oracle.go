@@ -270,18 +270,29 @@ func FreezeTurnAuthority(ctx context.Context, state CoordinatorState) (TurnAutho
 	}
 
 	offered := toolMetaNames(metas)
+	var reviewsConfinedWrites bool
+	if state.ApprovalPosture != "" {
+		reviewsConfinedWrites = state.ApprovalPosture.ReviewsConfinedWrites()
+	}
 	reader, err := prompts.NewReader(prompts.ReaderInput{
-		ProfileID: prompts.CoordinatorProfileID,
-		SurfaceID: resolvedSurfaceID,
-		Mode:      surface.ExecutionModeFamily(resolvedSurfaceID),
-		Profiles:  narrowed,
-		Plan:      plan,
-		Loaded:    state.Loaded,
-		Visible:   offered,
-		Schemas:   overlay.Schemas,
-		RootCount: state.RootCount,
-		HasGit:    state.HasGit,
-		WebSearch: state.WebSearch,
+		ProfileID:             prompts.CoordinatorProfileID,
+		SurfaceID:             resolvedSurfaceID,
+		Mode:                  surface.ExecutionModeFamily(resolvedSurfaceID),
+		SessionMode:           string(state.SessionMode),
+		Profiles:              narrowed,
+		Plan:                  plan,
+		Loaded:                state.Loaded,
+		Visible:               offered,
+		Schemas:               overlay.Schemas,
+		RootCount:             state.RootCount,
+		HasGit:                state.HasGit,
+		HasAnyGitRoot:         state.HasAnyGitRoot,
+		WebSearch:             state.WebSearch,
+		SpawnAllowlist:        state.SpawnAllowlist,
+		ReviewsConfinedWrites: reviewsConfinedWrites,
+		CommandExternalHidden: state.CommandExternalHidden,
+		SessionScratchDir:     state.SessionScratchDir,
+		SharedTempLocations:   state.SharedTempLocations,
 	})
 	if err != nil {
 		return TurnAuthority{}, fmt.Errorf("prompts.NewReader: %w", err)

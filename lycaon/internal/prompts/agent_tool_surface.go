@@ -92,12 +92,6 @@ func AgentPromptSurfaceTemplateVars(surface AgentPromptSurface) map[string]any {
 		"agent_host_resources":         groupHostResources(surface.HostResources),
 		"agent_host_resources_omitted": surface.HostResourcesOmitted,
 		"prompt_surface_fingerprint":   surface.Fingerprint,
-		"shared_temp_writable":         len(surface.SharedTempLocations) > 0,
-		"shared_temp_locations":        surface.SharedTempLocations,
-		"session_scratch_dir":          surface.SessionScratchDir,
-		"reviews_confined_writes":      surface.Posture.ReviewsConfinedWrites(),
-		"command_external_hidden":      surface.CommandExternalHidden,
-		"command_external_shown":       !surface.CommandExternalHidden,
 	}
 }
 

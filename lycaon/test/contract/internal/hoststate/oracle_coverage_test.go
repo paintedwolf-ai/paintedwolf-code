@@ -46,11 +46,8 @@ func TestReaderHeldMatchesMetadataProgramReachAcrossHostStates(t *testing.T) {
 				}
 				for _, surfaceID := range surfaceList {
 					checkedTuples++
-					reader := buildWidestTupleReader(t, narrowed, stock, profile, surfaceID)
+					reader := buildWidestTupleReader(t, narrowed, stock, profile, surfaceID, externalHidden)
 					held := reader.Held()
-					if externalHidden {
-						delete(held, toolcontract.ReachCommandExternalExecSelector)
-					}
 
 					progReach, reachErr := exec.Metadata.ProgramReach(t.Context(), platform.ToolFilter{
 						ProfileID: profile.ID,
@@ -60,11 +57,12 @@ func TestReaderHeldMatchesMetadataProgramReachAcrossHostStates(t *testing.T) {
 
 					for _, cmd := range lang.Commands {
 						got := toolcontract.CommandLanguageReachable(cmd.Name, held)
+						gotReader := reader.CanReachProgram(cmd.Name)
 						want := held["command"] && progReach(cmd.Name)
-						if got != want {
+						if got != want || gotReader != want {
 							t.Fatalf(
-								"posture=%s profile=%s surface=%q externalHidden=%t command=%q: CommandLanguageReachable=%t, Metadata.ProgramReach=%t",
-								posture.ID, profile.ID, surfaceID, externalHidden, cmd.Name, got, want,
+								"posture=%s profile=%s surface=%q externalHidden=%t command=%q: CommandLanguageReachable=%t, Reader.CanReachProgram=%t, Metadata.ProgramReach=%t",
+								posture.ID, profile.ID, surfaceID, externalHidden, cmd.Name, got, gotReader, want,
 							)
 						}
 					}
@@ -85,6 +83,7 @@ func buildWidestTupleReader(
 	stock hoststate.PackOverlay,
 	profile sandbox.ToolProfile,
 	surfaceID string,
+	externalHidden bool,
 ) prompts.Reader {
 	t.Helper()
 	loaded := map[string]bool{}
@@ -96,16 +95,19 @@ func buildWidestTupleReader(
 			loaded[name] = true
 		}
 		planInput = prompts.ReaderInput{
-			ProfileID: profile.ID,
-			SurfaceID: surfaceID,
-			Mode:      surface.ExecutionModeFamily(surfaceID),
-			Profiles:  profiles,
-			Plan:      plan,
-			Loaded:    loaded,
-			Schemas:   stock.Schemas,
-			RootCount: 1,
-			HasGit:    true,
-			WebSearch: true,
+			ProfileID:             profile.ID,
+			SurfaceID:             surfaceID,
+			Mode:                  surface.ExecutionModeFamily(surfaceID),
+			Profiles:              profiles,
+			Plan:                  plan,
+			Loaded:                loaded,
+			Schemas:               stock.Schemas,
+			RootCount:             1,
+			HasGit:                true,
+			HasAnyGitRoot:         true,
+			WebSearch:             true,
+			SpawnAllowlist:        stock.SpawnAllowlist,
+			CommandExternalHidden: externalHidden,
 		}
 	} else {
 		for name := range profile.DeferredTools {
@@ -114,18 +116,81 @@ func buildWidestTupleReader(
 			}
 		}
 		planInput = prompts.ReaderInput{
-			ProfileID: profile.ID,
-			Profiles:  profiles,
-			Loaded:    loaded,
-			Schemas:   stock.Schemas,
-			RootCount: 1,
-			HasGit:    true,
-			WebSearch: true,
+			ProfileID:             profile.ID,
+			Profiles:              profiles,
+			Loaded:                loaded,
+			Schemas:               stock.Schemas,
+			RootCount:             1,
+			HasGit:                true,
+			HasAnyGitRoot:         true,
+			WebSearch:             true,
+			CommandExternalHidden: externalHidden,
 		}
 	}
 	reader, err := prompts.NewReader(planInput)
 	contractcheck.FailErr(t, "prompts.NewReader", err)
 	return reader
+}
+
+func TestCommandExternalSelectorVisibilityWitness(t *testing.T) {
+	overlays, err := hoststate.DiscoverPackOverlays(t.Context())
+	contractcheck.FailErr(t, "DiscoverPackOverlays", err)
+	stock := overlays[0]
+
+	invProfile := surface.ResolveTurnProfileForSurface("implement_investigate", api.CoordinatorRunContext{}, &api.Session{
+		Mode: api.SessionModeAgent, Posture: api.SessionPostureBuild,
+	})
+	invPlan, err := surface.CompileToolPlan(invProfile, 1)
+	contractcheck.FailErr(t, "CompileToolPlan implement_investigate", err)
+
+	for _, externalHidden := range []bool{false, true} {
+		wantExternal := !externalHidden
+		coordAuth, err := hoststate.FreezeTurnAuthority(t.Context(), hoststate.CoordinatorState{
+			Overlay:               stock,
+			SessionMode:           api.SessionModeAgent,
+			Posture:               api.SessionPostureBuild,
+			RootCount:             1,
+			HasGit:                true,
+			HasAnyGitRoot:         true,
+			WebSearch:             true,
+			CommandExternalHidden: externalHidden,
+			TurnProfile:           invProfile,
+			Plan:                  invPlan,
+			SpawnAllowlist:        stock.SpawnAllowlist,
+		})
+		contractcheck.FailErr(t, "FreezeTurnAuthority", err)
+		if got := coordAuth.Reader.CanReachProgram("external"); got != wantExternal || coordAuth.ProgramReach("external") != wantExternal {
+			t.Fatalf("coordinator externalHidden=%t: Reader.CanReachProgram(external)=%t ProgramReach(external)=%t, want %t",
+				externalHidden, got, coordAuth.ProgramReach("external"), wantExternal)
+		}
+		if !coordAuth.Reader.CanReachProgram("private-service") || !coordAuth.ProgramReach("private-service") {
+			t.Fatalf("coordinator externalHidden=%t: private-service became unreachable (Reader=%t ProgramReach=%t)",
+				externalHidden, coordAuth.Reader.CanReachProgram("private-service"), coordAuth.ProgramReach("private-service"))
+		}
+
+		workerAuth, err := hoststate.FreezeWorkerAuthority(t.Context(), hoststate.WorkerState{
+			Overlay:               stock,
+			AgentID:               "implementer",
+			ToolProfile:           "implement",
+			Posture:               api.SessionPostureBuild,
+			ParentSessionMode:     api.SessionModeAgent,
+			RootCount:             1,
+			HasGit:                true,
+			HasAnyGitRoot:         true,
+			OnWorkerBranch:        true,
+			WebSearch:             true,
+			CommandExternalHidden: externalHidden,
+		})
+		contractcheck.FailErr(t, "FreezeWorkerAuthority", err)
+		if got := workerAuth.Reader.CanReachProgram("external"); got != wantExternal || workerAuth.ProgramReach("external") != wantExternal {
+			t.Fatalf("worker externalHidden=%t: Reader.CanReachProgram(external)=%t ProgramReach(external)=%t, want %t",
+				externalHidden, got, workerAuth.ProgramReach("external"), wantExternal)
+		}
+		if !workerAuth.Reader.CanReachProgram("private-service") || !workerAuth.ProgramReach("private-service") {
+			t.Fatalf("worker externalHidden=%t: private-service became unreachable (Reader=%t ProgramReach=%t)",
+				externalHidden, workerAuth.Reader.CanReachProgram("private-service"), workerAuth.ProgramReach("private-service"))
+		}
+	}
 }
 
 func verifyAuthorityProjections(t *testing.T, stock hoststate.PackOverlay) {

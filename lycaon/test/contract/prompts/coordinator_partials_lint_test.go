@@ -30,8 +30,15 @@ func coordinatorCoreVars(t *testing.T, surfaceID string, rootCount int) (vars ma
 	plan, err := prompts.CompileSurfacePlan(surfaceID, rootCount)
 	contractcheck.FailErr(t, "CompileSurfacePlan", err)
 	reader, err := prompts.NewReader(prompts.ReaderInput{
-		ProfileID: prompts.CoordinatorProfileID, SurfaceID: surfaceID, Plan: plan,
-		Profiles: profiles, RootCount: rootCount, WebSearch: true,
+		ProfileID:      prompts.CoordinatorProfileID,
+		SurfaceID:      surfaceID,
+		Plan:           plan,
+		Profiles:       profiles,
+		RootCount:      rootCount,
+		HasGit:         rootCount > 0,
+		HasAnyGitRoot:  rootCount > 0,
+		WebSearch:      true,
+		SpawnAllowlist: spawn.AmbientAllowedAgents(),
 	})
 	contractcheck.FailErr(t, "NewReader", err)
 	occ := spawn.PolicyTemplateVars()

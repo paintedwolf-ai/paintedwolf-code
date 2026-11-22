@@ -45,7 +45,7 @@ func TestToolProceduresRenderTheUnitsTheirOfferedToolsAttach(t *testing.T) {
 	renderer := promptstest.InjectRenderer(t)
 	catalog, err := renderer.UnitCatalog()
 	testutil.FailErr(t, "load instruction catalog", err)
-	selection := promptunit.Selection{Host: promptunit.HostCoordinator, Held: map[string]bool{"command_mutation": true, "update_progress": true}}
+	selection := promptunit.Selection{Host: promptunit.HostCoordinator, Held: map[string]bool{"command_external_exec": true, "update_progress": true}}
 	rendered := catalog.Rendered(selection)
 	for _, id := range []string{"coordinator-progress-procedure", "visual-show-the-design"} {
 		found := false

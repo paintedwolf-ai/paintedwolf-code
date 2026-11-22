@@ -218,7 +218,7 @@ func WorkerTaskAssignmentToMap(data WorkerTaskAssignmentData) map[string]any {
 		"worker_name":         data.WorkerName,
 		"round_instructions":  data.RoundInstructions,
 		"view_kind":           data.ViewKind,
-		"has_git":             data.HasGit,
+		"scope_has_git":       data.HasGit,
 		"agent_type":          data.AgentType,
 		"worker_job_id":       data.WorkerJobID,
 		"goal":                data.Goal,

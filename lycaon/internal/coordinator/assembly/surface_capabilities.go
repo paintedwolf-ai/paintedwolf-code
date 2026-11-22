@@ -4,9 +4,9 @@ import (
 	"context"
 	"strings"
 
-	"github.com/lycaon/lycaon/internal/coordinator/capability"
 	"github.com/lycaon/lycaon/internal/coordinator/inject"
 	"github.com/lycaon/lycaon/internal/coordinator/surface"
+	"github.com/lycaon/lycaon/internal/gitrepo"
 	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/spawn"
@@ -60,22 +60,50 @@ func (e *promptSurface) mergeVisibleTools(ctx context.Context, sess *api.Session
 	// A persona renders the units and loaded tools of its own session.
 	vars["loaded_tools"] = e.loadedTools(sess)
 }
-func (e *promptSurface) mergeEffectivePromptSurface(ctx context.Context, sess *api.Session, frame inject.CoordinatorTurnFrame, vars map[string]any) {
-	if e == nil || sess == nil || vars == nil {
-		return
+func (e *promptSurface) effectivePromptSurface(
+	ctx context.Context,
+	sess *api.Session,
+	frame inject.CoordinatorTurnFrame,
+	turn *TurnAssemblyScratch,
+) (prompts.AgentPromptSurface, bool) {
+	if e == nil || sess == nil {
+		return prompts.AgentPromptSurface{}, false
 	}
 	var surface prompts.AgentPromptSurface
 	switch {
 	case frame.Machine.Compiled():
 		surface = frame.Machine.Surface
+	case turn != nil && turn.PromptSurfaceLoaded:
+		surface = turn.PromptSurface
 	case e.deps.EffectivePromptSurface != nil:
 		surface = e.deps.EffectivePromptSurface(ctx, sess)
+		if turn != nil {
+			turn.PromptSurface = surface
+			turn.PromptSurfaceLoaded = true
+		}
 	default:
-		return
+		return prompts.AgentPromptSurface{}, false
 	}
 	if e.deps.Selection != nil {
 		surface.FullCatalog = e.deps.Selection.FullCatalog(sess.ID)
 		surface.Fingerprint = surface.CacheFingerprint()
+	}
+	return surface, true
+}
+
+func (e *promptSurface) mergeEffectivePromptSurfaceWithTurn(
+	ctx context.Context,
+	sess *api.Session,
+	frame inject.CoordinatorTurnFrame,
+	turn *TurnAssemblyScratch,
+	vars map[string]any,
+) {
+	if vars == nil {
+		return
+	}
+	surface, ok := e.effectivePromptSurface(ctx, sess, frame, turn)
+	if !ok {
+		return
 	}
 	for key, value := range prompts.AgentPromptSurfaceTemplateVars(surface) {
 		switch value := value.(type) {
@@ -99,23 +127,62 @@ func (e *promptSurface) mergeEffectivePromptSurface(ctx context.Context, sess *a
 		}
 	}
 }
-func (e *promptSurface) mergeVisibleToolCapabilityVars(ctx context.Context, sess *api.Session, turn *TurnAssemblyScratch, vars map[string]any) {
-	if vars == nil {
-		return
+
+func (e *promptSurface) onWorkerBranch(ctx context.Context, sess *api.Session) (string, bool) {
+	if e == nil || e.deps.OnWorkerBranch == nil || sess == nil {
+		return "", false
 	}
-	_, rootCount, _, _, _ := e.workspaceRootsForTurn(ctx, sess, turn)
-	var visible []string
-	switch v := vars["visible_tools"].(type) {
-	case []string:
-		visible = v
-	case []any:
-		for _, item := range v {
-			if s, ok := item.(string); ok && strings.TrimSpace(s) != "" {
-				visible = append(visible, s)
+	return e.deps.OnWorkerBranch(ctx, sess)
+}
+
+func readerGitFacts(roots []map[string]any, activePath, fallbackWorkspacePath, workerBranchRoot string) (hasGit, hasAnyGitRoot bool) {
+	primaryPath := strings.TrimSpace(activePath)
+	if primaryPath == "" {
+		for _, row := range roots {
+			if active, _ := row["is_active"].(bool); active {
+				if p, _ := row["path"].(string); strings.TrimSpace(p) != "" {
+					primaryPath = strings.TrimSpace(p)
+					break
+				}
 			}
 		}
 	}
-	capability.MergeVars(vars, capability.Derive(rootCount, visible, nil))
+	if primaryPath == "" {
+		for _, row := range roots {
+			if primary, _ := row["is_primary"].(bool); primary {
+				if p, _ := row["path"].(string); strings.TrimSpace(p) != "" {
+					primaryPath = strings.TrimSpace(p)
+					break
+				}
+			}
+		}
+	}
+	if primaryPath == "" && len(roots) > 0 {
+		if p, _ := roots[0]["path"].(string); strings.TrimSpace(p) != "" {
+			primaryPath = strings.TrimSpace(p)
+		}
+	}
+	if primaryPath == "" {
+		primaryPath = strings.TrimSpace(fallbackWorkspacePath)
+	}
+	if primaryPath != "" {
+		_, hasGit = gitrepo.Discover(primaryPath)
+	}
+	if !hasGit && strings.TrimSpace(workerBranchRoot) != "" {
+		_, hasGit = gitrepo.Discover(strings.TrimSpace(workerBranchRoot))
+	}
+	hasAnyGitRoot = hasGit
+	if !hasAnyGitRoot {
+		for _, row := range roots {
+			if p, _ := row["path"].(string); strings.TrimSpace(p) != "" {
+				if _, ok := gitrepo.Discover(strings.TrimSpace(p)); ok {
+					hasAnyGitRoot = true
+					break
+				}
+			}
+		}
+	}
+	return hasGit, hasAnyGitRoot
 }
 func (e *promptSurface) workspaceRootsForTurn(ctx context.Context, sess *api.Session, turn *TurnAssemblyScratch) ([]map[string]any, int, string, int, bool) {
 	if turn != nil && turn.WorkspaceRootsLoaded {
@@ -221,7 +288,7 @@ func (e *promptSurface) turnReader(
 	if turn != nil && turn.Reader.Valid() && turn.Reader.SurfaceID() == profile.SurfaceID {
 		return turn.Reader, nil
 	}
-	_, rootCount, _, _, ok := e.workspaceRootsForTurn(ctx, sess, turn)
+	roots, rootCount, activePath, _, ok := e.workspaceRootsForTurn(ctx, sess, turn)
 	if !ok {
 		switch {
 		case fallbackRootCount > 0:
@@ -257,17 +324,60 @@ func (e *promptSurface) turnReader(
 		}
 		profiles = loaded
 	}
+	sessionMode := string(api.SessionModeAgent)
+	var fallbackPath string
+	if sess != nil {
+		if sess.Mode == api.SessionModeAsk {
+			sessionMode = string(api.SessionModeAsk)
+		}
+		fallbackPath = sess.WorkspacePath
+	}
+	branchRoot, onWorkerBranch := e.onWorkerBranch(ctx, sess)
+	hasGit, hasAnyGitRoot := readerGitFacts(roots, activePath, fallbackPath, branchRoot)
+	var spawnAllowlist []string
+	if frame.Roster != nil {
+		spawnAllowlist = frame.Roster.Effective
+	} else {
+		declared := frame.RunContext.AllowedAgents
+		if len(declared) == 0 {
+			declared = spawn.AmbientAllowedAgents()
+		}
+		spawnAllowlist = declared
+	}
+	var (
+		reviewsConfinedWrites bool
+		externalHidden        bool
+		scratchDir            string
+		sharedTemp            []string
+	)
+	if promptSurf, hasSurf := e.effectivePromptSurface(ctx, sess, frame, turn); hasSurf {
+		if promptSurf.Posture != "" {
+			reviewsConfinedWrites = promptSurf.Posture.ReviewsConfinedWrites()
+		}
+		externalHidden = promptSurf.CommandExternalHidden
+		scratchDir = promptSurf.SessionScratchDir
+		sharedTemp = promptSurf.SharedTempLocations
+	}
 	visionEnabled := e.deps.ModelVision != nil && e.deps.ModelVision(ctx, sess)
 	reader, err := prompts.NewReader(prompts.ReaderInput{
-		ProfileID: prompts.CoordinatorProfileID,
-		SurfaceID: profile.SurfaceID,
-		Mode:      surface.ExecutionModeFamily(profile.SurfaceID),
-		Profiles:  profiles,
-		Plan:      plan,
-		Loaded:    e.loadedTools(sess),
-		Schemas:   schemas,
-		RootCount: rootCount,
-		WebSearch: webSearchEnabled,
+		ProfileID:             prompts.CoordinatorProfileID,
+		SurfaceID:             profile.SurfaceID,
+		Mode:                  surface.ExecutionModeFamily(profile.SurfaceID),
+		SessionMode:           sessionMode,
+		Profiles:              profiles,
+		Plan:                  plan,
+		Loaded:                e.loadedTools(sess),
+		Schemas:               schemas,
+		RootCount:             rootCount,
+		HasGit:                hasGit,
+		HasAnyGitRoot:         hasAnyGitRoot,
+		OnWorkerBranch:        onWorkerBranch,
+		WebSearch:             webSearchEnabled,
+		SpawnAllowlist:        spawnAllowlist,
+		ReviewsConfinedWrites: reviewsConfinedWrites,
+		CommandExternalHidden: externalHidden,
+		SessionScratchDir:     scratchDir,
+		SharedTempLocations:   sharedTemp,
 	})
 	if err != nil {
 		return prompts.Reader{}, err

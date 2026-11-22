@@ -160,6 +160,9 @@ func renderSkillPreview(ctx context.Context, req AuthorRenderRequest, skillName,
 	}
 	if req.Check {
 		held := reader.Held()
+		if !reader.CanReachProgram("external") {
+			delete(held, toolcontract.ReachCommandExternalExecSelector)
+		}
 		violations, err := checkSkillRender(sk, resource, source, out.Output, templated, held)
 		if err != nil {
 			return AuthorRenderResult{}, err
@@ -535,7 +538,7 @@ func mergeAuthorUnits(ctx context.Context, engine *FileTemplateEngine, vars map[
 		held["command"] = true
 	}
 	effects, _ := toolcontract.NewCommandEffects(classes...)
-	held = readerHeldSet(held, effects)
+	held = readerHeldSet(held, effects, vars["command_external_hidden"] == true)
 	mode, _ := vars["execution_mode"].(string)
 	sel := promptunit.Selection{Host: promptunit.HostCoordinator, Mode: strings.TrimSpace(mode), Held: held}
 	blocks, err := RenderUnitSlots(ctx, UnitRendererFor(engine), catalog, sel, vars)

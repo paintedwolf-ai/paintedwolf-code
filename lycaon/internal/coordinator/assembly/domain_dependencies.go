@@ -19,6 +19,7 @@ import (
 type promptSurfaceDeps struct {
 	Agents                  AgentProfileResolver
 	EffectivePromptSurface  func(ctx context.Context, sess *api.Session) prompts.AgentPromptSurface
+	OnWorkerBranch          func(ctx context.Context, sess *api.Session) (string, bool)
 	ImplementSessionState   func(ctx context.Context, sess *api.Session) surface.ImplementSessionState
 	Limits                  func(context.Context, *api.Session) settings.SessionLimits
 	ModelVision             func(context.Context, *api.Session) bool
@@ -74,6 +75,7 @@ func newAssemblyDomains(snapshot AssemblyDeps, cache *SessionPromptCache) (*prom
 	surfaceDeps := promptSurfaceDeps{
 		Agents:                  snapshot.Agents,
 		EffectivePromptSurface:  snapshot.EffectivePromptSurface,
+		OnWorkerBranch:          snapshot.Workers.Branch,
 		ImplementSessionState:   snapshot.ImplementSessionState,
 		Limits:                  snapshot.Limits,
 		ModelVision:             snapshot.ModelVision,

@@ -16,6 +16,7 @@ const (
 	MaxOutputBytes      = 1 << 20
 	MaxContextBytes     = 2 << 20
 	MaxContextNodes     = 16 << 10
+	MaxContextEntries   = 512
 	MaxCollectionItems  = 256
 	MaxContextDepth     = 32
 	MaxTemplateTags     = 4096

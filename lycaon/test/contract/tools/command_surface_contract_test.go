@@ -48,16 +48,15 @@ func TestCommandEnabledToolProfilesRenderCommandSurface(t *testing.T) {
 			data, err := prompts.LoadAgentToolSurface(profile.ID, nil, hints, prompts.ReaderInput{Schemas: schemas}, []sandbox.ToolProfile{profile})
 			contractcheck.FailErr(t, "LoadAgentToolSurface", err)
 			reader, err := prompts.NewReader(prompts.ReaderInput{
-				ProfileID: profile.ID,
-				Profiles:  []sandbox.ToolProfile{profile},
-				Schemas:   schemas,
-				RootCount: 1,
-				WebSearch: true,
+				ProfileID:         profile.ID,
+				Profiles:          []sandbox.ToolProfile{profile},
+				Schemas:           schemas,
+				RootCount:         1,
+				WebSearch:         true,
+				SessionScratchDir: filepath.Join(t.TempDir(), "session-scratch"),
 			})
 			contractcheck.FailErr(t, "NewReader", err)
-			vars, err := prompts.Vars(reader, map[string]any{
-				"session_scratch_dir": filepath.Join(t.TempDir(), "session-scratch"),
-			})
+			vars, err := prompts.Vars(reader, nil)
 			contractcheck.FailErr(t, "prompts.Vars", err)
 			out, err := engine.Render(context.Background(), prompts.AgentToolSurfacePartialRef, vars)
 			contractcheck.FailErr(t, "Render agent-tool-surface", err)

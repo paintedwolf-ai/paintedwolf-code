@@ -7,7 +7,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"hash/fnv"
-	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -16,7 +15,6 @@ import (
 	"github.com/lycaon/lycaon/internal/hintregistry"
 	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/toolschema"
-	"github.com/lycaon/lycaon/internal/toolscope"
 )
 
 // RenderPersona renders a runtime worker persona and enforces its final contract.
@@ -75,9 +73,6 @@ func personaVars(ctx context.Context, engine *FileTemplateEngine, agentID string
 	occ := PersonaDataMap(def)
 	for k, v := range occurrence {
 		occ[k] = v
-	}
-	if _, ok := occ["has_file_tools"]; !ok {
-		occ["has_file_tools"] = reader.RootCount() > 0 && slices.ContainsFunc(reader.Offered(), toolscope.RequiresProjectRoots)
 	}
 	if err := MergeWorkerPolicyTemplateVars(id, occ); err != nil {
 		return nil, "", "", nil, fmt.Errorf("agent spawn vars for %q: %w", id, err)

@@ -101,12 +101,12 @@ func TestMergeEffectivePromptSurfacePrefersMachine(t *testing.T) {
 		},
 	})
 	vars := map[string]any{}
-	testPromptSurface(engine).mergeEffectivePromptSurface(context.Background(), &api.Session{ID: "s1"}, inject.CoordinatorTurnFrame{
+	testPromptSurface(engine).mergeEffectivePromptSurfaceWithTurn(context.Background(), &api.Session{ID: "s1"}, inject.CoordinatorTurnFrame{
 		Machine: inject.Machine{
 			ProfileID: "coordinator",
 			Surface:   prompts.AgentPromptSurface{Fingerprint: "machine"},
 		},
-	}, vars)
+	}, nil, vars)
 	if called {
 		t.Fatal("compiled machine must not re-enter EffectivePromptSurface")
 	}
@@ -143,16 +143,16 @@ func TestCompiledMachineRefreshesCatalogVisibility(t *testing.T) {
 	sess := &api.Session{ID: "s"}
 	vars := map[string]any{}
 	projection := testPromptSurface(engine)
-	projection.mergeEffectivePromptSurface(t.Context(), sess, frame, vars)
+	projection.mergeEffectivePromptSurfaceWithTurn(t.Context(), sess, frame, nil, vars)
 	first := vars["prompt_surface_fingerprint"]
 	selection.full = true
-	projection.mergeEffectivePromptSurface(t.Context(), sess, frame, vars)
+	projection.mergeEffectivePromptSurfaceWithTurn(t.Context(), sess, frame, nil, vars)
 	if vars["full_skill_catalog"] != true || vars["prompt_surface_fingerprint"] == first {
 		t.Fatal("mid-turn failure did not refresh catalog projection")
 	}
 	frame.Machine.Surface.Skills[0].Description = "Review accessibility."
 	first = vars["prompt_surface_fingerprint"]
-	projection.mergeEffectivePromptSurface(t.Context(), sess, frame, vars)
+	projection.mergeEffectivePromptSurfaceWithTurn(t.Context(), sess, frame, nil, vars)
 	if vars["prompt_surface_fingerprint"] == first {
 		t.Fatal("changed catalog reused prompt identity")
 	}

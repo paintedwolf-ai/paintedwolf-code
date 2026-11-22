@@ -14,7 +14,7 @@
 
 ### Rules
 
-1. **Inline survey tools** ({% include "partials/coordinator-lane-s-sync-tools-inline.md" %}) are read/survey only{% if profile_has_task %} — use `task(agent_type="implementer", …)` for product edits{% endif %} (`Code: COORDINATOR_ORCHESTRATE_WRITE_DENIED`). Survey order matches Discovery.
+1. **Inline survey tools** ({% include "partials/coordinator-lane-s-sync-tools-inline.md" %}) are read/survey only{% if profile_has_task and can_spawn_implementer %} — use `task(agent_type="implementer", …)` for product edits{% elif profile_can_request.task and can_spawn_implementer %} — load `task` with `request_tools(need: "dispatch an implementer worker")` for product edits{% endif %} (`Code: COORDINATOR_ORCHESTRATE_WRITE_DENIED`). Survey order matches Discovery.
 2. Survey tools attach JSON `receipt` — trust for paths already surveyed.
 {% if profile_has_pack_board %}3. `pack_board` when the board is stale.
 {% endif %}

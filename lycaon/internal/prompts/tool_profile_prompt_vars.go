@@ -121,6 +121,38 @@ func runnerCapabilityTools(offered []string, cap toolcontract.Capability, comman
 	return tools
 }
 
+func projectedSchemaTools(
+	offered []string,
+	schemas *toolschema.Config,
+	commandExternalExec bool,
+	fieldPath string,
+	runnerOnly bool,
+	commandAdmitted bool,
+) []string {
+	if schemas == nil {
+		return nil
+	}
+	var out []string
+	for _, offeredTool := range offered {
+		if offeredTool == "command" && !commandAdmitted {
+			continue
+		}
+		if runnerOnly {
+			if multiRoot, ok := toolcontract.MultiRootOf(offeredTool); !ok || multiRoot != toolcontract.MultiRootCommand {
+				continue
+			}
+		}
+		meta, ok := schemas.ToolMeta(offeredTool)
+		if !ok {
+			continue
+		}
+		if toolschema.ProjectedAcceptsField(meta.ArgsSchema, fieldPath, offeredTool == "command" && !commandExternalExec) {
+			out = append(out, offeredTool)
+		}
+	}
+	return out
+}
+
 func toolViewNames(views []AgentToolArgView) []string {
 	out := make([]string, 0, len(views))
 	for _, view := range views {

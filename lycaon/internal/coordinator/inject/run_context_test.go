@@ -246,12 +246,13 @@ func testSynthesisSpawnReader(t *testing.T) prompts.Reader {
 	plan, err := prompts.CompileSurfacePlan(spawn.SurfaceImplementSynthesis, 1)
 	testutil.FailErr(t, "CompileSurfacePlan", err)
 	reader, err := prompts.NewReader(prompts.ReaderInput{
-		ProfileID: prompts.CoordinatorProfileID,
-		SurfaceID: spawn.SurfaceImplementSynthesis,
-		Profiles:  profiles,
-		Plan:      plan,
-		RootCount: 1,
-		WebSearch: true,
+		ProfileID:      prompts.CoordinatorProfileID,
+		SurfaceID:      spawn.SurfaceImplementSynthesis,
+		Profiles:       profiles,
+		Plan:           plan,
+		RootCount:      1,
+		WebSearch:      true,
+		SpawnAllowlist: spawn.AmbientAllowedAgents(),
 	})
 	testutil.FailErr(t, "NewReader", err)
 	return reader

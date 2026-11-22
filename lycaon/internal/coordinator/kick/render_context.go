@@ -21,8 +21,10 @@ type CoordinatorKickRenderContext struct {
 	FailedLeaves       []string
 	GateObligations    []GateObligation
 	// Progress fields keep guidance behind the checklist latch.
-	ProgressOpenItems    int
-	ProgressClosureArmed bool
+	ProgressOpenItems     int
+	ProgressClosureArmed  bool
+	ReviewsConfinedWrites bool
+	CommandExternalHidden bool
 }
 
 // GateObligation is a compact gate-feedback projection for kick templates.

@@ -70,17 +70,25 @@ func FreezeWorkerAuthority(ctx context.Context, state WorkerState) (TurnAuthorit
 		return TurnAuthority{}, fmt.Errorf("worker Metadata.ProgramReach: %w", err)
 	}
 	offered := toolMetaNames(offeredMetas)
+	var reviewsConfinedWrites bool
+	if state.ApprovalPosture != "" {
+		reviewsConfinedWrites = state.ApprovalPosture.ReviewsConfinedWrites()
+	}
 	reader, err := prompts.NewReader(prompts.ReaderInput{
-		ProfileID:      state.ToolProfile,
-		Profiles:       narrowed,
-		Plan:           plan,
-		Loaded:         state.Loaded,
-		Visible:        offered,
-		Schemas:        overlay.Schemas,
-		RootCount:      state.RootCount,
-		HasGit:         state.HasGit,
-		OnWorkerBranch: state.OnWorkerBranch,
-		WebSearch:      state.WebSearch,
+		ProfileID:             state.ToolProfile,
+		SessionMode:           string(state.ParentSessionMode),
+		Profiles:              narrowed,
+		Plan:                  plan,
+		Loaded:                state.Loaded,
+		Visible:               offered,
+		Schemas:               overlay.Schemas,
+		RootCount:             state.RootCount,
+		HasGit:                state.HasGit,
+		HasAnyGitRoot:         state.HasAnyGitRoot,
+		OnWorkerBranch:        state.OnWorkerBranch,
+		WebSearch:             state.WebSearch,
+		ReviewsConfinedWrites: reviewsConfinedWrites,
+		CommandExternalHidden: state.CommandExternalHidden,
 	})
 	if err != nil {
 		return TurnAuthority{}, fmt.Errorf("worker NewReader: %w", err)

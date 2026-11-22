@@ -205,11 +205,12 @@ func offeredReader(offered map[string]bool) (prompts.Reader, error) {
 			Tools:          tools,
 			CommandEffects: effects,
 		}},
-		Visible:   visible,
-		Loaded:    tools,
-		RootCount: 1,
-		HasGit:    true,
-		WebSearch: true,
+		Visible:               visible,
+		Loaded:                tools,
+		RootCount:             1,
+		HasGit:                true,
+		WebSearch:             true,
+		CommandExternalHidden: offered[toolcontract.ReachCommandExternalExec] && !offered[toolcontract.ReachCommandExternalExecSelector],
 	})
 }
 

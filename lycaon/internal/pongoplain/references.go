@@ -127,6 +127,25 @@ func VariableReferences(source string) []string {
 	return out
 }
 
+func splitSetAssignment(rest string) (name, expr string, ok bool) {
+	for _, loc := range expressionToken.FindAllStringIndex(rest, -1) {
+		tok := rest[loc[0]:loc[1]]
+		if isQuotedLiteral(tok) {
+			continue
+		}
+		ident := strings.Join(strings.Fields(tok), "")
+		if strings.Contains(ident, ".") || !followedBySingleAssign(rest, loc[0], loc[1]) {
+			continue
+		}
+		eqRel := strings.IndexByte(rest[loc[1]:], '=')
+		if eqRel < 0 {
+			return "", "", false
+		}
+		return ident, strings.TrimSpace(rest[loc[1]+eqRel+1:]), true
+	}
+	return "", "", false
+}
+
 func isOpaqueRegion(region string) bool {
 	return strings.HasPrefix(region, "{#") ||
 		strings.Contains(region, "endcomment") ||

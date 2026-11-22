@@ -80,7 +80,7 @@ func (m *Assembly) Build() assembly.AssemblyDeps {
 		Agents:                m.Profiles.Agents,
 		Workflows:             m.Workflow.Manifests,
 		CoordinatorFrame:      m.Frame,
-		Workers:               assembly.Workers{Leg: m.WorkerContext, Roster: m.WorkerRoster},
+		Workers:               assembly.Workers{Leg: m.WorkerContext, Roster: m.WorkerRoster, Branch: m.Workspaces.OnWorkerBranch},
 		Deliveries:            assembly.Deliveries{SiblingNotes: m.Notes, Messages: m.MessageDelivery},
 		PeerReservations:      m.Workspaces,
 		ImplementSessionState: m.State.ForSession,

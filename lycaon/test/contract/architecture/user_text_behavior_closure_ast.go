@@ -40,10 +40,6 @@ var coordinatorOccurrenceGates = map[string]bool{
 	"agent_skills":             true,
 	"rating_questions":         true,
 	"agent_host_resources":     true,
-	"has_file_tools":           true,
-	"can_orient":               true,
-	"can_spawn_web_research":   true,
-	"can_spawn_workers":        true,
 	// Kick counts of results awaiting landing and of partial workers.
 	"pending_overlays": true,
 	"partial_workers":  true,
@@ -98,7 +94,6 @@ var coordinatorOccurrenceGates = map[string]bool{
 	"spawnable_reviewers":          true,
 	"review_followup_attempts":     true,
 	"command_external_changed":     true,
-	"command_external_hidden":      true,
 }
 
 type coordinatorGateSite struct {
