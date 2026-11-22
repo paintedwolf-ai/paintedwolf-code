@@ -54,16 +54,21 @@ const (
 // Request is one frozen model request. The zero value reaches nothing, because a
 // missing request is no evidence that any tool is available.
 type Request struct {
-	offered  []string
-	plan     toolsurface.Plan
-	programs Programs
-	schemas  map[string]map[string]any
-	known    bool
+	offered      []string
+	plan         toolsurface.Plan
+	programs     Programs
+	programModes ProgramModes
+	schemas      map[string]map[string]any
+	known        bool
 }
 
 // Programs answers whether a request's profile and surface can run a native
 // program. Path grants and approval are still checked when the program runs.
 type Programs func(name string) bool
+
+// ProgramModes answers whether a request's profile and surface admit a specific
+// catalog command and effect mode.
+type ProgramModes func(name, mode string) bool
 
 // Freeze captures the schemas offered on a request and its compiled plan.
 func Freeze(offered []string, plan toolsurface.Plan) Request {
@@ -80,13 +85,20 @@ func (r Request) WithPrograms(programs Programs) Request {
 	return r
 }
 
-// WithSchemas attaches the projected argument schemas offered on this request.
+// WithProgramModes adds the request's frozen mode-level command admission answer.
+func (r Request) WithProgramModes(modes ProgramModes) Request {
+	r.programModes = modes
+	return r
+}
+
+// WithSchemas attaches the projected argument schemas offered on this request
+// (and, when available, post-load projected schemas for deferred tools).
 func (r Request) WithSchemas(schemas map[string]map[string]any) Request {
 	r.schemas = schemas
 	return r
 }
 
-// ToolSchema returns the projected argument schema for an offered tool when recorded.
+// ToolSchema returns the projected argument schema for a tool when recorded.
 func (r Request) ToolSchema(tool string) (map[string]any, bool) {
 	if r.schemas == nil {
 		return nil, false
@@ -95,29 +107,31 @@ func (r Request) ToolSchema(tool string) (map[string]any, bool) {
 	return s, ok && s != nil
 }
 
-// AcceptsField reports whether the tool is reachable and its projected schema admits dottedPath.
+// AcceptsField reports whether the tool is reachable and its authoritative
+// projected schema admits dottedPath. Missing schemas fail closed.
 func (r Request) AcceptsField(tool, dottedPath string) bool {
-	status := r.Status(tool)
-	if status == Absent {
+	if r.Status(tool) == Absent {
 		return false
 	}
-	if status != Callable || r.schemas == nil {
-		return true
+	schema, ok := r.ToolSchema(tool)
+	if !ok {
+		return false
 	}
-	prop, ok := lookupSchemaProperty(r.schemas[tool], dottedPath)
+	prop, ok := lookupSchemaProperty(schema, dottedPath)
 	return ok && prop != nil
 }
 
-// AcceptsEnumValue reports whether dottedPath is admitted and allows value when constrained by enum.
+// AcceptsEnumValue reports whether dottedPath is admitted by the authoritative
+// projected schema and allows value when constrained by enum. Missing schemas fail closed.
 func (r Request) AcceptsEnumValue(tool, dottedPath, value string) bool {
-	status := r.Status(tool)
-	if status == Absent {
+	if r.Status(tool) == Absent {
 		return false
 	}
-	if status != Callable || r.schemas == nil {
-		return true
+	schema, ok := r.ToolSchema(tool)
+	if !ok {
+		return false
 	}
-	prop, ok := lookupSchemaProperty(r.schemas[tool], dottedPath)
+	prop, ok := lookupSchemaProperty(schema, dottedPath)
 	if !ok || prop == nil {
 		return false
 	}
@@ -200,11 +214,17 @@ type Call struct {
 	Partial bool `json:"partial,omitempty"`
 	// Program names the native program a command call runs.
 	Program string `json:"program,omitempty"`
+	words   []string
 }
 
 // ProgramCall is the exact command call that runs one native program.
 func ProgramCall(words ...string) Call {
-	return Call{Tool: ProgramTool, Program: words[0], Args: map[string]any{ProgramTool: QuoteProgram(words)}}
+	return Call{
+		Tool:    ProgramTool,
+		Program: words[0],
+		Args:    map[string]any{ProgramTool: QuoteProgram(words)},
+		words:   slices.Clone(words),
+	}
 }
 
 var plainWord = regexp.MustCompile(`^[A-Za-z0-9_./:=@%+,-]+$`)
@@ -268,16 +288,37 @@ func Load(tool string) Call {
 // false when nothing can. A deferred target adds its loader first; loading is
 // separate from the target because the schema arrives on the next request.
 func (r Request) Sequence(call Call) ([]Call, bool) {
-	if call.Program != "" && !r.Program(call.Program) {
-		return nil, false
+	if call.Program != "" {
+		admitted := false
+		if len(call.words) > 0 {
+			admitted = r.ProgramInvocation(call.words...)
+		} else {
+			admitted = r.Program(call.Program)
+		}
+		if !admitted {
+			return nil, false
+		}
 	}
+	_, hasSchema := r.ToolSchema(call.Tool)
 	switch r.Status(call.Tool) {
 	case Callable:
-		if r.schemas != nil && !r.callArgsAdmitted("", call.Tool, call.Args) {
+		if hasSchema && call.Program == "" && !r.callArgsAdmitted("", call.Tool, call.Args) {
 			return nil, false
 		}
 		return []Call{call}, true
 	case Loadable:
+		if call.Program != "" {
+			return []Call{Load(call.Tool), call}, true
+		}
+		if hasSchema {
+			if !r.callArgsAdmitted("", call.Tool, call.Args) {
+				return nil, false
+			}
+			return []Call{Load(call.Tool), call}, true
+		}
+		if len(call.Args) > 0 {
+			return []Call{Load(call.Tool)}, true
+		}
 		return []Call{Load(call.Tool), call}, true
 	default:
 		return nil, false
@@ -291,6 +332,9 @@ func (r Request) callArgsAdmitted(prefix, tool string, args map[string]any) bool
 			path = prefix + "." + key
 		}
 		if nested, ok := val.(map[string]any); ok {
+			if !r.AcceptsField(tool, path) {
+				return false
+			}
 			if !r.callArgsAdmitted(path, tool, nested) {
 				return false
 			}

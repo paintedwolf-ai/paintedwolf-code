@@ -97,40 +97,69 @@ func (e *Metadata) FreezeProgramSurface(ctx context.Context, filter platform.Too
 	return ProgramSurface{selection: selection, allowed: allowed, profile: filter.ProfileID}, nil
 }
 
-// ProgramReach freezes which native programs a profile and surface can run: the
-// catalog entry's effects fit the restriction and no profile deny names it.
+// ProgramReach freezes which native programs and effect modes a profile and
+// surface can run: the catalog entry's effects fit the restriction and no
+// profile deny names it.
 func (e *Metadata) ProgramReach(ctx context.Context, filter platform.ToolFilter) (toolreach.Programs, error) {
+	reachable, modes, err := e.catalogProgramAdmission(ctx, filter)
+	if err != nil {
+		return nil, err
+	}
+	return func(name string) bool {
+		if cmd, mode, hasSep := strings.Cut(name, "\x00"); hasSep {
+			cmdModes, known := modes[cmd]
+			if mode == "" {
+				return known
+			}
+			return cmdModes[mode]
+		}
+		return reachable[name]
+	}, nil
+}
+
+// ProgramModeReach freezes which (command, mode) pairs a profile and surface
+// admit under the effective profile boundary and command-language catalog.
+func (e *Metadata) ProgramModeReach(ctx context.Context, filter platform.ToolFilter) (toolreach.ProgramModes, error) {
+	_, modes, err := e.catalogProgramAdmission(ctx, filter)
+	if err != nil {
+		return nil, err
+	}
+	return func(name, mode string) bool { return modes[name][mode] }, nil
+}
+
+func (e *Metadata) catalogProgramAdmission(ctx context.Context, filter platform.ToolFilter) (map[string]bool, map[string]map[string]bool, error) {
 	if e == nil {
-		return nil, fmt.Errorf("command metadata required")
+		return nil, nil, fmt.Errorf("command metadata required")
 	}
 	policy, ok := e.policy.(interface {
 		FreezeCommandProfile(context.Context, string) (context.Context, toolcontract.CommandEffects, error)
 		CommandOperationAllowed(context.Context, string, string, string) (bool, error)
 	})
 	if !ok {
-		return nil, fmt.Errorf("command profile effect boundary required")
+		return nil, nil, fmt.Errorf("command profile effect boundary required")
 	}
 	frozen, allowed, err := policy.FreezeCommandProfile(ctx, filter.ProfileID)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	allowed, err = surfacecatalog.RestrictCommandEffects(allowed, filter.SurfaceID)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	surfaceTools, err := surfaceCommandFormTools(filter.SurfaceID)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	catalog, err := toolcontract.ReadOnlyLanguageV1()
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-	reachable := map[string]bool{}
+	reachable := make(map[string]bool, len(catalog.Commands))
+	modeReach := make(map[string]map[string]bool, len(catalog.Commands))
 	for _, spec := range catalog.Commands {
 		permitted, err := policy.CommandOperationAllowed(frozen, filter.ProfileID, spec.Name, spec.Name)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		if !surfaceAllowsCommandForm(surfaceTools, spec.Name) {
 			permitted = false
@@ -138,9 +167,18 @@ func (e *Metadata) ProgramReach(ctx context.Context, filter platform.ToolFilter)
 		if e.externalHidden && spec.Name == "external" {
 			permitted = false
 		}
-		reachable[spec.Name] = permitted && anyModeAllowed(spec, allowed)
+		admittedModes := make(map[string]bool, len(spec.Effects))
+		anyAllowed := false
+		for _, requirement := range spec.Effects {
+			effects, err := requirement.CommandEffects(&allowed)
+			modeOK := permitted && err == nil && allowed.Allows(effects)
+			admittedModes[requirement.Mode] = modeOK
+			anyAllowed = anyAllowed || modeOK
+		}
+		modeReach[spec.Name] = admittedModes
+		reachable[spec.Name] = anyAllowed
 	}
-	return func(name string) bool { return reachable[name] }, nil
+	return reachable, modeReach, nil
 }
 
 func surfaceCommandFormTools(surfaceID string) (map[string]bool, error) {
@@ -179,17 +217,6 @@ func surfaceAllowsCommandForm(surfaceTools map[string]bool, command string) bool
 		}
 	}
 	return true
-}
-
-func anyModeAllowed(spec toolcontract.CommandSpecification, allowed toolcontract.CommandEffects) bool {
-	for _, requirement := range spec.Effects {
-		// A wrapper's effects depend on its child, which is checked when it runs.
-		effects, err := requirement.CommandEffects(&allowed)
-		if err == nil && allowed.Allows(effects) {
-			return true
-		}
-	}
-	return false
 }
 
 // ValidateBound checks a binder-selected exact catalog mode. The adapter must

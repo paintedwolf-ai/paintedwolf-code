@@ -413,6 +413,9 @@ host_facts:
  - name: paintedwolf.ask_user_secret_allowed
    type: bool
    observation: True when ask_user is reachable on the request and its projected schema admits secret input.
+ - name: paintedwolf.ask_user_loadable_without_schema
+   type: bool
+   observation: True when ask_user is loadable on a non-Ask request and no projected post-load schema is recorded.
  - name: paintedwolf.repo_known_empty
    type: bool
  - name: paintedwolf.last_audit_ungrounded
@@ -904,6 +907,8 @@ host_facts:
    type: bool
  - name: paintedwolf.admitted_process_capability_fields
    type: string
+ - name: paintedwolf.command_loadable_without_schema
+   type: bool
  - name: paintedwolf.admitted_source_read_forms
    type: string
  - name: paintedwolf.admitted_range_read_forms

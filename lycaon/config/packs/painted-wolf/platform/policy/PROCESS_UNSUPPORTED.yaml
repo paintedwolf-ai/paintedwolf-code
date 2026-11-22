@@ -3,7 +3,7 @@ id: PROCESS_UNSUPPORTED
 kind: policy
 on: tool.rejected
 selector: {}
-requires_facts: [paintedwolf.admitted_process_capability_fields, paintedwolf.next_steps, paintedwolf.rejection_code]
+requires_facts: [paintedwolf.admitted_process_capability_fields, paintedwolf.command_loadable_without_schema, paintedwolf.next_steps, paintedwolf.rejection_code]
 when: paintedwolf.rejection_code == "PROCESS_UNSUPPORTED"
 effect: block
 x-paintedwolf-category: recoverable

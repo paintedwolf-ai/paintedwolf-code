@@ -133,14 +133,23 @@ func TestShippedOARProjectedSchemaAndSubsetWitnesses(t *testing.T) {
 		}
 
 		extractData := map[string]any{"path": "bundle.7z", "format": "7z"}
-		extractAll := rejectFix("extract_archive", "EXTRACT_FORMAT_UNSUPPORTED",
+		extractReadOnly := rejectFix("extract_archive", "EXTRACT_FORMAT_UNSUPPORTED",
 			reachWithProgramsAndSchemas([]string{"command"}, []string{"unzip", "tar"}, nil), extractData)
-		if !strings.Contains(extractAll, "`unzip -p`") || !strings.Contains(extractAll, "`tar -x -f`") {
-			t.Fatalf("EXTRACT_FORMAT_UNSUPPORTED full reach missing unzip/tar: %q", extractAll)
+		if !strings.Contains(extractReadOnly, "`unzip -p`") || !strings.Contains(extractReadOnly, "`tar -t -f`") ||
+			strings.Contains(extractReadOnly, "`tar -x -f`") {
+			t.Fatalf("EXTRACT_FORMAT_UNSUPPORTED generic read reach must retain unzip -p and tar -t -f while omitting tar -x -f: %q", extractReadOnly)
+		}
+		extractMutating := rejectFix("extract_archive", "EXTRACT_FORMAT_UNSUPPORTED",
+			reachWithProgramsAndSchemas([]string{"command"}, []string{"unzip", "tar"}, nil).WithProgramModes(func(name, mode string) bool {
+				return name == "unzip" || name == "tar"
+			}), extractData)
+		if !strings.Contains(extractMutating, "`unzip -p`") || !strings.Contains(extractMutating, "`tar -t -f`") ||
+			!strings.Contains(extractMutating, "`tar -x -f`") {
+			t.Fatalf("EXTRACT_FORMAT_UNSUPPORTED full mode reach missing unzip/tar list/extract: %q", extractMutating)
 		}
 		extractZipOnly := rejectFix("extract_archive", "EXTRACT_FORMAT_UNSUPPORTED",
 			reachWithProgramsAndSchemas([]string{"command"}, []string{"unzip"}, nil), extractData)
-		if !strings.Contains(extractZipOnly, "`unzip -p`") || strings.Contains(extractZipOnly, "`tar -x -f`") {
+		if !strings.Contains(extractZipOnly, "`unzip -p`") || strings.Contains(extractZipOnly, "`tar -") {
 			t.Fatalf("EXTRACT_FORMAT_UNSUPPORTED unzip-only subset leaked tar: %q", extractZipOnly)
 		}
 
@@ -200,7 +209,14 @@ func TestShippedOARChangedAuthorityAndRecoveryWitnesses(t *testing.T) {
 	})
 
 	t.Run("credential_schema_enum_worker_url_command_not_argv_and_spec_posture", func(t *testing.T) {
-		fullReach := reachWithProgramsAndSchemas([]string{"command", "ask_user", "fetch_url", "secret_generate"}, []string{"external", "git config"}, nil)
+		secretAskSchema := map[string]map[string]any{
+			"ask_user": {
+				"properties": map[string]any{
+					"response_type": map[string]any{"type": "string", "enum": []string{"text", "choice", "secret"}},
+				},
+			},
+		}
+		fullReach := reachWithProgramsAndSchemas([]string{"command", "ask_user", "fetch_url", "secret_generate"}, []string{"external", "git config"}, secretAskSchema)
 		nonSecretAskSchema := map[string]map[string]any{
 			"ask_user": {
 				"properties": map[string]any{

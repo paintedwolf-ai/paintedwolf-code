@@ -295,6 +295,7 @@ var staticOccurrenceFactDecls = []factDecl{
 	{"can_fetch_url", oarcore.TypeBool, FactTierHost, ""},
 	{"can_workflow_advance", oarcore.TypeBool, FactTierHost, ""},
 	{"admitted_process_capability_fields", oarcore.TypeString, FactTierHost, ""},
+	{"command_loadable_without_schema", oarcore.TypeBool, FactTierHost, ""},
 	{"admitted_source_read_forms", oarcore.TypeString, FactTierHost, ""},
 	{"admitted_range_read_forms", oarcore.TypeString, FactTierHost, ""},
 	{"admitted_text_search_forms", oarcore.TypeString, FactTierHost, ""},

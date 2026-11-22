@@ -180,6 +180,7 @@ var factDecls = []factDecl{
 	{"agent_is_implementer", oarcore.TypeBool, FactTierHost, ""},
 	{"profile_surveys_project_tree", oarcore.TypeBool, FactTierHost, ""},
 	{"ask_user_secret_allowed", oarcore.TypeBool, FactTierHost, ""},
+	{"ask_user_loadable_without_schema", oarcore.TypeBool, FactTierHost, ""},
 	{"repo_known_empty", oarcore.TypeBool, FactTierHost, ""},
 	{"last_audit_ungrounded", oarcore.TypeBool, FactTierHost, ""},
 	{"grounding_escalated", oarcore.TypeBool, FactTierHost, ""},

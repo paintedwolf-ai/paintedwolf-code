@@ -182,7 +182,7 @@ func mutationMode(spec toolcontract.CommandSpecification, bound commandprogram.B
 		}
 		return "create-extract-compress-decompress-to-path"
 	case "zip", "unzip":
-		if hasOpt("-l") {
+		if hasOpt("-l") || (spec.Name == "unzip" && hasOpt("-p")) {
 			return "listing-or-stream-decode"
 		}
 		return "create-extract-compress-decompress-to-path"
