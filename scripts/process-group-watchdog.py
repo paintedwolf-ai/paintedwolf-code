@@ -49,27 +49,11 @@ def signal_each(pids, number):
             pass
 
 
-def group_alive(pgid):
-    try:
-        os.killpg(pgid, 0)
-        return True
-    except ProcessLookupError:
-        return False
-    except PermissionError:
-        # A denied probe still means the process group exists.
-        return True
-
-
 def report_waits(pgid):
     binaries = test_binaries(pgid)
     if not binaries:
-        try:
-            os.killpg(pgid, signal.SIGQUIT)
-        except (ProcessLookupError, PermissionError):
-            return
-        relayed = time.monotonic() + RELAY_SECONDS
-        while time.monotonic() < relayed and group_alive(pgid):
-            time.sleep(0.1)
+        signal_each([-pgid], signal.SIGQUIT)
+        time.sleep(REPORT_SECONDS)
         return
     signal_each(binaries, signal.SIGUSR1)
     time.sleep(REPORT_SECONDS)
@@ -96,8 +80,13 @@ def main() -> int:
     if os.environ.get("PW_TEST_WATCHDOG_DEADLINE"):
         deadline = min(deadline, timeout_seconds(os.environ["PW_TEST_WATCHDOG_DEADLINE"]))
     while True:
-        if not group_alive(pgid):
+        try:
+            os.killpg(pgid, 0)
+        except ProcessLookupError:
             return 0
+        except PermissionError:
+            # A denied probe still means the process group exists.
+            pass
         remaining = deadline - time.monotonic()
         if remaining <= 0:
             break
