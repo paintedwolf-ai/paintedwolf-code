@@ -204,7 +204,7 @@ func (m *Service) applyRestoredReceiverView(ctx context.Context, sess *api.Sessi
 	record.Window = cfg.ModelContextWindow
 	record.RenderTokens = 0
 	record.Receiver = sess.Model
-	recall := m.effectiveRecallAvailable(ctx, sess)
+	recall := effectiveRecallAvailable(ctx, m.recallAvailable, sess)
 	continuationText, err := compaction.RenderContinuation(ctx, record, recall, 0)
 	if err != nil {
 		return nil, false
