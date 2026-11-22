@@ -283,7 +283,7 @@ func (e *AssemblyEngine) BuildCompletionMessages(
 		messages = contextAssembler.interleaveSourceBriefs(ctx, sess, frame, history, turn, messages)
 		messages = contextAssembler.interleaveViewContexts(ctx, sess, frame, history, turn, messages)
 	}
-	messages = contextAssembler.interleaveSkillGuidance(ctx, sess, frame.Machine.ProfileID, messages)
+	messages = contextAssembler.interleaveSkillGuidance(ctx, sess, frame.Machine.ProfileID, frame, history, turn, messages)
 	if deps.ScanGuidance != nil {
 		out = append(out, deps.ScanGuidance.PrependGuidance(ctx, sess.ID, messages)...)
 	} else {

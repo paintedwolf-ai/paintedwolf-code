@@ -404,16 +404,99 @@ func checkZeroToolUtilitySource(unitID, origin, source string, vocab ReaderFactV
 		if idx := strings.IndexByte(ref, '.'); idx >= 0 {
 			root = ref[:idx]
 		}
-		if IsDeclaredOrReservedReaderFact(ref) || IsDeclaredOrReservedReaderFact(root) || vocab.AllowsReference(ref) || root == "units" {
+		if IsCapabilityKeyName(ref) || vocab.AllowsReference(ref) || root == "units" {
 			if err := report(fmt.Sprintf("zero-tool utility prompt references reader/capability fact %q", ref)); err != nil {
 				return nil, err
 			}
 		}
 	}
-	for _, tool := range skillUnreachableNames(source, declared, map[string]bool{}) {
+	for _, tool := range StructuralActionClaims(source, declared) {
 		if err := report(fmt.Sprintf("zero-tool utility prompt claims callable tool or command %q", tool)); err != nil {
 			return nil, err
 		}
+	}
+	return notes, nil
+}
+
+func resolveCatalogIncludeUnit(eff *extpacks.EffectiveCatalog, includeRef string) (string, extpacks.UnitEffective, bool) {
+	ref := strings.TrimSpace(includeRef)
+	var candidates []string
+	switch {
+	case strings.HasPrefix(ref, "partials/"):
+		rest := strings.TrimPrefix(ref, "partials/")
+		candidates = []string{"shared/partials/" + strings.TrimSuffix(rest, ".md"), "shared/partials/" + rest}
+	case strings.HasPrefix(ref, "archetypes/"):
+		rest := strings.TrimPrefix(ref, "archetypes/")
+		candidates = []string{"shared/archetypes/" + strings.TrimSuffix(rest, ".md"), "shared/archetypes/" + rest}
+	case strings.HasPrefix(ref, "agents/"):
+		rest := strings.TrimPrefix(ref, "agents/")
+		candidates = []string{"agents/prompts/" + strings.TrimSuffix(rest, ".md"), "agents/prompts/" + rest}
+	default:
+		candidates = []string{strings.TrimSuffix(ref, ".md"), ref}
+	}
+	for _, id := range candidates {
+		if u, ok := eff.Loaded[id]; ok {
+			return id, u, true
+		}
+	}
+	return "", extpacks.UnitEffective{}, false
+}
+
+func checkStructuralFragmentTransitive(eff *extpacks.EffectiveCatalog, unitID, origin, source string, vocab ReaderFactVocabulary, declared map[string]bool, stock bool, seen map[string]bool) ([]string, error) {
+	var notes []string
+	report := func(msg string) error {
+		if stock {
+			return fmt.Errorf("template %s (%s): %s", unitID, origin, msg)
+		}
+		notes = append(notes, fmt.Sprintf("%s (%s): %s", unitID, origin, msg))
+		return nil
+	}
+	for _, ref := range pongoplain.VariableReferences(source) {
+		if IsCapabilityKeyName(ref) || vocab.AllowsReference(ref) {
+			if err := report(fmt.Sprintf("structural fragment references capability fact %q", ref)); err != nil {
+				return nil, err
+			}
+		}
+	}
+	for _, action := range StructuralActionClaims(source, declared) {
+		if err := report(fmt.Sprintf("structural fragment claims callable tool or command %q", action)); err != nil {
+			return nil, err
+		}
+	}
+	tree, err := pongoplain.ParseTemplateTree(source)
+	if err != nil || eff == nil {
+		return notes, nil
+	}
+	var walk func([]*pongoplain.TemplateNode) error
+	walk = func(nodes []*pongoplain.TemplateNode) error {
+		for _, n := range nodes {
+			if n.Kind == pongoplain.NodeInclude {
+				incID, incUnit, ok := resolveCatalogIncludeUnit(eff, n.IncludeRef)
+				if ok && !seen[incID] {
+					seen[incID] = true
+					incNotes, err := checkStructuralFragmentTransitive(eff, unitID+" -> "+incID, incUnit.WinnerPackID, string(incUnit.Content), vocab, declared, stock, seen)
+					if err != nil {
+						return err
+					}
+					notes = append(notes, incNotes...)
+				}
+			}
+			for _, br := range n.Branches {
+				if err := walk(br.Body); err != nil {
+					return err
+				}
+			}
+			if err := walk(n.Body); err != nil {
+				return err
+			}
+			if err := walk(n.EmptyBody); err != nil {
+				return err
+			}
+		}
+		return nil
+	}
+	if err := walk(tree.Nodes); err != nil {
+		return nil, err
 	}
 	return notes, nil
 }
@@ -444,12 +527,21 @@ func checkTemplateVocabularyUncached(eff *extpacks.EffectiveCatalog) ([]string, 
 			return err
 		}
 		notes = append(notes, setNotes...)
-		if subRef, ok := strings.CutPrefix(strings.TrimSuffix(unitID, ".md"), "guidance/"); ok && IsZeroToolUtilityTemplate(subRef) {
-			utilNotes, err := checkZeroToolUtilitySource(unitID, packID, source, vocab, declaredTools, stock)
-			if err != nil {
-				return err
+		if subRef, ok := strings.CutPrefix(strings.TrimSuffix(unitID, ".md"), "guidance/"); ok {
+			if IsZeroToolUtilityTemplate(subRef) {
+				utilNotes, err := checkZeroToolUtilitySource(unitID, packID, source, vocab, declaredTools, stock)
+				if err != nil {
+					return err
+				}
+				notes = append(notes, utilNotes...)
 			}
-			notes = append(notes, utilNotes...)
+			if IsStructuralGuidanceFragment(subRef) || IsStructuralInjectFragment(subRef) {
+				structNotes, err := checkStructuralFragmentTransitive(eff, unitID, packID, source, vocab, declaredTools, stock, map[string]bool{unitID: true})
+				if err != nil {
+					return err
+				}
+				notes = append(notes, structNotes...)
+			}
 		}
 		return nil
 	}
@@ -487,6 +579,22 @@ func checkTemplateVocabularyUncached(eff *extpacks.EffectiveCatalog) ([]string, 
 			for _, ref := range ZeroToolUtilityTemplates() {
 				if _, exists := eff.Loaded["guidance/"+ref]; !exists {
 					return nil, fmt.Errorf("zero-tool utility allowlist ref %q missing from loaded catalog", ref)
+				}
+			}
+			for _, ref := range StructuralGuidanceFragments() {
+				if _, exists := eff.Loaded["guidance/"+ref]; !exists {
+					raw, _, bErr := (BundledLayout{}).ReadBundled("guidance/" + ref + ".md")
+					if bErr != nil {
+						return nil, fmt.Errorf("structural guidance allowlist ref %q missing from loaded catalog", ref)
+					}
+					if _, tErr := checkStructuralFragmentTransitive(eff, "guidance/"+ref, "painted-wolf/platform", string(raw), vocab, declaredTools, true, map[string]bool{"guidance/" + ref: true}); tErr != nil {
+						return nil, tErr
+					}
+				}
+			}
+			for _, ref := range StructuralInjectFragments() {
+				if _, exists := eff.Loaded["guidance/"+ref]; !exists {
+					return nil, fmt.Errorf("structural inject allowlist ref %q missing from loaded catalog", ref)
 				}
 			}
 		}
@@ -545,9 +653,15 @@ func checkCapturedOverlayTemplates(eff *extpacks.EffectiveCatalog, captured map[
 		}
 		setNotes, _ := checkSetBindings(ref, "override", string(body), vocab, false)
 		notes = append(notes, setNotes...)
-		if subRef, ok := strings.CutPrefix(strings.TrimSuffix(ref, ".md"), "guidance/"); ok && IsZeroToolUtilityTemplate(subRef) {
-			utilNotes, _ := checkZeroToolUtilitySource(ref, "override", string(body), vocab, declaredTools, false)
-			notes = append(notes, utilNotes...)
+		if subRef, ok := strings.CutPrefix(strings.TrimSuffix(ref, ".md"), "guidance/"); ok {
+			if IsZeroToolUtilityTemplate(subRef) {
+				utilNotes, _ := checkZeroToolUtilitySource(ref, "override", string(body), vocab, declaredTools, false)
+				notes = append(notes, utilNotes...)
+			}
+			if IsStructuralGuidanceFragment(subRef) || IsStructuralInjectFragment(subRef) {
+				structNotes, _ := checkStructuralFragmentTransitive(eff, ref, "override", string(body), vocab, declaredTools, false, map[string]bool{ref: true})
+				notes = append(notes, structNotes...)
+			}
 		}
 	}
 	sort.Strings(notes)

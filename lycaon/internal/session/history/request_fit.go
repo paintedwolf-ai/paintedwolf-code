@@ -11,6 +11,7 @@ import (
 	"github.com/lycaon/lycaon/internal/messageview"
 	"github.com/lycaon/lycaon/internal/session/promptassembly"
 	"github.com/lycaon/lycaon/internal/session/store"
+	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -56,7 +57,7 @@ func (m *Service) fitRequest(ctx context.Context, sess *api.Session, history []a
 			m.cutoffs.noteFit(key, sess.ID, projection.history, rows)
 		}
 	}
-	recall := req.ToolUse != modelcall.ToolUseForbidden && m != nil && m.recallAvailable != nil && m.recallAvailable(ctx, sess)
+	recall := req.ToolUse != modelcall.ToolUseForbidden && (slices.ContainsFunc(req.Tools, func(t tools.ToolMeta) bool { return t.Name == "recall" }) || (m != nil && m.recallAvailable != nil && m.recallAvailable(ctx, sess)))
 	projected, omission, err := m.applyFitCut(ctx, sess, recall, key, view, projected, cfg)
 	if err != nil {
 		return req, err

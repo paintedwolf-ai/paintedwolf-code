@@ -39,6 +39,43 @@ func (s ProgramSurface) AllowsEffects(effects toolcontract.CommandEffects) bool 
 	return s.allowed.Allows(effects)
 }
 
+// ProgramTable projects this frozen program surface into a toolreach.ProgramTable.
+func (s ProgramSurface) ProgramTable() *toolreach.ProgramTable {
+	catalog, err := toolcontract.ReadOnlyLanguageV1()
+	if err != nil {
+		return nil
+	}
+	cmdPermitted := map[string]bool{}
+	for _, def := range s.selection.definitions {
+		facts := def.ReadOnlyFacts()
+		if s.selection.identityDenied[facts.Identity] {
+			continue
+		}
+		denied := s.selection.denied[facts.Identity]
+		for _, cmd := range facts.Commands {
+			if !denied[cmd.Name] {
+				cmdPermitted[cmd.Name] = true
+			}
+		}
+	}
+	reachable := make(map[string]bool, len(catalog.Commands))
+	modeReach := make(map[string]map[string]bool, len(catalog.Commands))
+	for _, spec := range catalog.Commands {
+		permitted := cmdPermitted[spec.Name]
+		modes := make(map[string]bool, len(spec.Effects))
+		anyAllowed := false
+		for _, req := range spec.Effects {
+			eff, err := req.CommandEffects(&s.allowed)
+			ok := permitted && err == nil && s.allowed.Allows(eff)
+			modes[req.Mode] = ok
+			anyAllowed = anyAllowed || ok
+		}
+		modeReach[spec.Name] = modes
+		reachable[spec.Name] = anyAllowed
+	}
+	return toolreach.NewProgramTable(reachable, modeReach)
+}
+
 // ValidateOperation admits already compiled immutable effect metadata. It is
 // also the static-unit check; callers run it for every known prohibited effect
 // before starting any program operation. It invokes no authority or owner.

@@ -96,16 +96,29 @@ func (m *Service) closeoutReader(ctx context.Context, sess *api.Session, explici
 		return prompts.Reader{}
 	}
 	profileID := m.resolveProfileID(ctx, sess, explicitProfileID)
+	facts := m.resolveHostFacts(ctx, sess)
+	sessionMode := string(api.SessionModeAgent)
+	if sess != nil && sess.Mode == api.SessionModeAsk {
+		sessionMode = string(api.SessionModeAsk)
+	}
 	visible := []string{}
 	if worker {
 		visible = []string{"complete_leg"}
 	}
 	r, err := prompts.NewReader(prompts.ReaderInput{
-		ProfileID: profileID,
-		Profiles:  profiles,
-		Visible:   visible,
-		RootCount: m.sessionRootCount(ctx, sess),
-		WebSearch: true,
+		ProfileID:             profileID,
+		SessionMode:           sessionMode,
+		Profiles:              profiles,
+		Visible:               visible,
+		RootCount:             facts.rootCount,
+		HasGit:                facts.hasGit,
+		HasAnyGitRoot:         facts.hasAnyGitRoot,
+		OnWorkerBranch:        facts.onWorkerBranch,
+		WebSearch:             facts.webSearch,
+		ReviewsConfinedWrites: facts.reviewsConfinedWrites,
+		CommandExternalHidden: facts.externalHidden,
+		SessionScratchDir:     facts.scratchDir,
+		SharedTempLocations:   facts.sharedTemp,
 	})
 	if err != nil {
 		return prompts.Reader{}

@@ -2,18 +2,30 @@ package turnnudges
 
 import (
 	"context"
+	"reflect"
 	"regexp"
+	"sort"
 	"strings"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/configlayout"
 	"github.com/lycaon/lycaon/internal/coordinator/anchor"
+	"github.com/lycaon/lycaon/internal/coordinator/inject"
 	"github.com/lycaon/lycaon/internal/coordinator/promptloop"
+	"github.com/lycaon/lycaon/internal/coordinator/surfacecatalog"
 	"github.com/lycaon/lycaon/internal/coordinator/turnload"
+	"github.com/lycaon/lycaon/internal/extpacks"
+	"github.com/lycaon/lycaon/internal/platform"
 	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/internal/sandbox"
 	setupanchor "github.com/lycaon/lycaon/internal/testsetup/anchor"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/toolcontract"
+	"github.com/lycaon/lycaon/internal/toolpolicy"
+	"github.com/lycaon/lycaon/internal/tools"
+	"github.com/lycaon/lycaon/internal/toolschema"
+	"github.com/lycaon/lycaon/internal/toolscope"
+	"github.com/lycaon/lycaon/internal/toolsurface"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -196,4 +208,185 @@ func TestTurnNudgesStateSpecificGuidancePairedWitnesses(t *testing.T) {
 	if !strings.Contains(wRO.Content, "what earlier observations already established") {
 		t.Fatalf("read-only worker closeout witness missing read-only follow-up guidance:\n%s", wRO.Content)
 	}
+}
+
+type staticWorkspace struct{ paths []string }
+
+func (w staticWorkspace) Paths(context.Context, *api.Session) ([]string, error) {
+	return w.paths, nil
+}
+
+type testSchemaLister struct {
+	profiles []sandbox.ToolProfile
+	schemas  *toolschema.Config
+}
+
+func (l testSchemaLister) List(_ context.Context, filter platform.ToolFilter) ([]tools.ToolMeta, error) {
+	var prof sandbox.ToolProfile
+	for _, p := range l.profiles {
+		if p.ID == filter.ProfileID {
+			prof = p
+			break
+		}
+	}
+	if prof.ID == "" || l.schemas == nil {
+		return nil, nil
+	}
+	effects, effErr := surfacecatalog.AdmittedCommandEffects(l.profiles, filter.ProfileID, filter.SurfaceID)
+	mutEffect, _ := toolcontract.NewCommandEffects(toolcontract.CommandMutation)
+	cmdReadOnly := effErr != nil || !effects.Allows(mutEffect)
+	var names []string
+	for name := range l.schemas.Tools {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	var out []tools.ToolMeta
+	for _, name := range names {
+		if !prof.ToolAllowed(name) || (filter.ProjectRootCount == 0 && toolscope.RequiresProjectRoots(name)) {
+			continue
+		}
+		declared, ok := l.schemas.ToolMeta(name)
+		if !ok {
+			continue
+		}
+		out = append(out, tools.ToolMeta{
+			Name:        name,
+			Description: declared.Description,
+			ArgsSchema: toolschema.ProjectToolArgsSchema(name, declared.ArgsSchema, toolschema.ProjectOptions{
+				CommandReadOnly:     name == "command" && cmdReadOnly,
+				PruneWaitConditions: name == "wait",
+				WaitConditions:      prof.WaitConditions,
+			}),
+			Deferred: prof.ToolDeferred(name),
+		})
+	}
+	return out, nil
+}
+
+type liveTurnProjector struct {
+	deps promptloop.ContextDeps
+}
+
+func (p liveTurnProjector) PromptTurnSurfaceID(string) string { return "" }
+
+func (p liveTurnProjector) ProjectTurnTools(ctx context.Context, sess *api.Session, history []api.Message, frame inject.CoordinatorTurnFrame) ([]tools.ToolMeta, toolsurface.Plan, string, error) {
+	return promptloop.ProjectTurnTools(ctx, p.deps, sess, history, frame)
+}
+
+func TestTurnNudgesProjectionMatchesTargetRequestAcrossHostAxes(t *testing.T) {
+	setupanchor.Install()
+	profiles, err := sandbox.LoadToolProfiles()
+	testutil.FailErr(t, "LoadToolProfiles", err)
+	eff, err := extpacks.CatalogForConsumers()
+	testutil.FailErr(t, "CatalogForConsumers", err)
+	schemas, _, err := extpacks.LoadEffectiveToolSchemas(eff)
+	testutil.FailErr(t, "LoadEffectiveToolSchemas", err)
+
+	nonGitDir := t.TempDir()
+	ledger := turnload.NewLedger()
+
+	buildDeps := func(webSearch bool, commandJobs bool, customProfiles []sandbox.ToolProfile) promptloop.ContextDeps {
+		lister := testSchemaLister{profiles: customProfiles, schemas: schemas}
+		return promptloop.ContextDeps{
+			Policy: toolpolicy.NewEngine(toolpolicy.EngineDeps{
+				ToolLister:       lister,
+				ProjectRootCount: func(context.Context, *api.Session) int { return 1 },
+			}),
+			LoadedTools:      func(id string) map[string]bool { return ledger.Active(id) },
+			ProjectRootCount: func(context.Context, *api.Session) int { return 1 },
+			LiveResources: func(string) toolcontract.ResourcePresence {
+				return toolcontract.ResourcePresence{CommandJobs: commandJobs}
+			},
+			ContextSurfaceDeps: promptloop.ContextSurfaceDeps{
+				WebSearchEnabled: func() bool { return webSearch },
+			},
+		}
+	}
+
+	t.Run("non-git root and disabled web search match target request", func(t *testing.T) {
+		pDeps := buildDeps(false, false, profiles)
+		rec := &recordedKick{}
+		svc := New(ledger, fixedSpend(true))
+		svc.SetPrompts(rec)
+		svc.SetWorkspace(staticWorkspace{paths: []string{nonGitDir}})
+		svc.SetWebSearch(func() bool { return false })
+		svc.SetSurface(liveTurnProjector{deps: pDeps})
+
+		sess := &api.Session{ID: "non-git-no-web", Mode: api.SessionModeAgent, WorkspacePath: nonGitDir}
+		targetMetas, _, _, err := promptloop.ProjectTurnTools(t.Context(), pDeps, sess, nil, inject.CoordinatorTurnFrame{})
+		testutil.FailErr(t, "ProjectTurnTools", err)
+		var wantOffered []string
+		for _, meta := range targetMetas {
+			wantOffered = append(wantOffered, meta.Name)
+		}
+		sort.Strings(wantOffered)
+
+		_ = svc.IterationRunway(t.Context(), sess, "coordinator", 2)
+		if !rec.reader.Valid() {
+			t.Fatal("expected valid reader for non-Git root")
+		}
+		if !reflect.DeepEqual(rec.reader.Offered(), wantOffered) {
+			t.Fatalf("offered = %v, want target request %v", rec.reader.Offered(), wantOffered)
+		}
+		facts := rec.reader.Facts()
+		if facts["has_git"] != false || facts["has_any_git_root"] != false || facts["can_git_read"] != false || facts["can_git_commit"] != false {
+			t.Fatalf("non-Git root falsely claimed Git facts: has_git=%v has_any_git_root=%v can_git_read=%v can_git_commit=%v",
+				facts["has_git"], facts["has_any_git_root"], facts["can_git_read"], facts["can_git_commit"])
+		}
+		if facts["web_search_enabled"] != false || facts["profile_has_web_search"] == true || facts["profile_has_fetch_url"] == true {
+			t.Fatalf("disabled web search leaked research tools: web_search_enabled=%v offered=%v", facts["web_search_enabled"], rec.reader.Offered())
+		}
+
+		// Pre-closeout recovery subject preserves mutating command capability while closeout itself offers no tools.
+		_ = svc.Closeout(t.Context(), sess, "coordinator", promptloop.TurnCloseoutCause{Reason: promptloop.TurnCloseoutLLMTimeout})
+		if rec.data["session_command_mutation_capable"] != true {
+			t.Fatalf("expected pre-closeout session_command_mutation_capable=true on non-Git mutating surface, got %v", rec.data["session_command_mutation_capable"])
+		}
+		if len(rec.reader.Offered()) != 0 || rec.reader.Facts()["has_git"] != false || rec.reader.Facts()["web_search_enabled"] != false {
+			t.Fatalf("closeout reader = offered:%v has_git:%v web_search:%v", rec.reader.Offered(), rec.reader.Facts()["has_git"], rec.reader.Facts()["web_search_enabled"])
+		}
+	})
+
+	t.Run("active job promotion and narrowed wait match target request", func(t *testing.T) {
+		narrowed := make([]sandbox.ToolProfile, len(profiles))
+		copy(narrowed, profiles)
+		for i := range narrowed {
+			if narrowed[i].ID == prompts.CoordinatorProfileID {
+				narrowed[i].WaitConditions = []string{"next_worker_done"}
+			}
+		}
+		pDeps := buildDeps(true, true, narrowed)
+		rec := &recordedKick{}
+		svc := New(ledger, fixedSpend(true))
+		svc.SetPrompts(rec)
+		svc.SetProfiles(readOnlyProfiles{profiles: narrowed})
+		svc.SetWorkspace(staticWorkspace{paths: []string{nonGitDir}})
+		svc.SetSurface(liveTurnProjector{deps: pDeps})
+
+		sess := &api.Session{ID: "job-promoted", Mode: api.SessionModeAgent, WorkspacePath: nonGitDir}
+		targetMetas, _, _, err := promptloop.ProjectTurnTools(t.Context(), pDeps, sess, nil, inject.CoordinatorTurnFrame{})
+		testutil.FailErr(t, "ProjectTurnTools promoted", err)
+		var wantOffered []string
+		for _, meta := range targetMetas {
+			wantOffered = append(wantOffered, meta.Name)
+		}
+		sort.Strings(wantOffered)
+
+		_ = svc.SpendRunway(t.Context(), sess, 10.0)
+		if !reflect.DeepEqual(rec.reader.Offered(), wantOffered) {
+			t.Fatalf("SpendRunway offered = %v, want promoted target request %v", rec.reader.Offered(), wantOffered)
+		}
+		if rec.reader.Facts()["profile_has_command_output"] != true || rec.reader.Facts()["profile_has_command_stop"] != true {
+			t.Fatalf("active-job promotion missing command_output/command_stop on turnnudges reader: %v", rec.reader.Offered())
+		}
+	})
+
+	t.Run("coordinator surface compile failure fails closed without profile fallback", func(t *testing.T) {
+		svc := New(ledger, fixedSpend(true))
+		svc.SetSurface(fixedSurface("nonexistent_surface"))
+		sess := &api.Session{ID: "bad-surface", Mode: api.SessionModeAgent, WorkspacePath: nonGitDir}
+		if r := svc.activeTurnReader(t.Context(), sess, "coordinator"); r.Valid() {
+			t.Fatalf("expected invalid Reader when coordinator surface compilation fails, got offered=%v", r.Offered())
+		}
+	})
 }

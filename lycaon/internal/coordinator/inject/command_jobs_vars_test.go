@@ -6,8 +6,11 @@ import (
 	"time"
 
 	"github.com/lycaon/lycaon/internal/bgprocess"
+	"github.com/lycaon/lycaon/internal/extpacks"
 	"github.com/lycaon/lycaon/internal/heldcall"
 	"github.com/lycaon/lycaon/internal/prompts/promptstest"
+	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/toolschema"
 )
 
 // Every ledger state carries exactly the facts its sentences need, and every
@@ -53,10 +56,19 @@ func TestCommandJobsFactsFollowEachLedgerState(t *testing.T) {
 					t.Fatalf("running row %d = %+v", i, row)
 				}
 			}
-			if RenderCommandJobsBlock(context.Background(), promptstest.InjectRenderer(t), coordReader, []string{"process_done"}, "session", tc.jobs, tc.held, now, "coordinator") == "" {
+			eff, err := extpacks.CatalogForConsumers()
+			testutil.FailErr(t, "CatalogForConsumers", err)
+			schemas, _, err := extpacks.LoadEffectiveToolSchemas(eff)
+			testutil.FailErr(t, "LoadEffectiveToolSchemas", err)
+			waitMeta, _ := schemas.ToolMeta("wait")
+			waitSchema := toolschema.ProjectToolArgsSchema("wait", waitMeta.ArgsSchema, toolschema.ProjectOptions{
+				PruneWaitConditions: true,
+				WaitConditions:      []string{"process_done"},
+			})
+			if RenderCommandJobsBlock(context.Background(), promptstest.InjectRenderer(t), coordReader, waitSchema, "session", tc.jobs, tc.held, now, "coordinator") == "" {
 				t.Fatal("coordinator ledger did not render")
 			}
-			if RenderCommandJobsBlock(context.Background(), promptstest.InjectRenderer(t), workerReader, []string{"process_done"}, "session", tc.jobs, tc.held, now, "worker") == "" {
+			if RenderCommandJobsBlock(context.Background(), promptstest.InjectRenderer(t), workerReader, waitSchema, "session", tc.jobs, tc.held, now, "worker") == "" {
 				t.Fatal("worker ledger did not render")
 			}
 		})

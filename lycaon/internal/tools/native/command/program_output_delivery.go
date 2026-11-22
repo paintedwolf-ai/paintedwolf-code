@@ -12,6 +12,7 @@ import (
 	"github.com/lycaon/lycaon/internal/secretmatch"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/tooloutput"
+	"github.com/lycaon/lycaon/internal/toolreach"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -256,6 +257,24 @@ func (r *ProgramRuntime) screenProgramOutputs(ctx context.Context, run *programR
 	return outputs, nil
 }
 
+func programRunOutputReach(ctx context.Context, run *programRun) toolreach.Request {
+	if req := toolreach.FromContext(ctx); req.Known() {
+		return req
+	}
+	if run == nil {
+		return toolreach.Offered(nil)
+	}
+	offered := run.tc.Turn.TurnOfferedToolNames
+	if offered == nil && run.tool != "" {
+		offered = []string{run.tool}
+	}
+	table := run.tc.Turn.TurnPrograms
+	if table == nil {
+		table = run.surface.ProgramTable()
+	}
+	return toolreach.Freeze(offered, run.tc.Turn.TurnToolPlan).WithProgramTable(table)
+}
+
 func (r *ProgramRuntime) attachProgramStream(ctx context.Context, run *programRun, outputs *invocation.ProgramOutputRetention, output *screenedProgramOutput) error {
 	stream, spill, name, redacted := output.stream, output.spill, output.name, output.redacted
 	program := run.root.Identity.ProgramID
@@ -276,7 +295,7 @@ func (r *ProgramRuntime) attachProgramStream(ctx context.Context, run *programRu
 		return err
 	}
 	complete := !stream.truncated && spill.Complete
-	output.inline, output.window, output.ranges, err = sample.window(ctx, name, reference, outputPath, complete)
+	output.inline, output.window, output.ranges, err = sample.window(ctx, programRunOutputReach(ctx, run), name, reference, outputPath, complete)
 	if err != nil {
 		return err
 	}

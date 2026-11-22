@@ -31,10 +31,9 @@ func projectCompletedCommands(ctx context.Context, recallAvailable bool, rows []
 		request := recordedHistoryRequest(rows[i])
 		raw, _ := json.Marshal(request)     //nolint:errchkjson // History coordinates are plain values.
 		encoded, _ := json.Marshal(records) //nolint:errchkjson // Records contain typed execution facts and coordinates.
-		content, err := guidance.RenderGuidance(ctx, "compaction/command-exchange-reference", map[string]any{
-			"recall_available": recallAvailable,
-			"history_json":     string(raw),
-			"records_json":     string(encoded),
+		content, err := guidance.RenderGuidanceWithReach(ctx, recallReach(recallAvailable), "compaction/command-exchange-reference", map[string]any{
+			"history_json": string(raw),
+			"records_json": string(encoded),
 		})
 		if err != nil || content == "" || tokenest.EstimateDefault(content) >= compaction.EstimateMessagesTokens(compaction.ContextMessagesFromAPI(rows[i:end])) {
 			out = append(out, rows[i])

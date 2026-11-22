@@ -164,9 +164,16 @@ func testDeferredAndHistoricalSubjects(
 	t.Helper()
 	t.Run("SubjectFollowupLeg and SubjectSessionNextTurn evaluate non-closeout Reader", func(t *testing.T) {
 		engine := prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{Catalog: eff})
-		workerCloseout, rErr := engine.RenderKick(t.Context(), "worker-closeout", map[string]any{
-			"reason_text": "step budget reached",
-			"llm_timeout": true,
+		closeoutOnlyProfile := []sandbox.ToolProfile{{ID: "closeout_only", Tools: map[string]bool{"complete_leg": true}}}
+		closeoutSelfReader, err := prompts.NewReader(prompts.ReaderInput{
+			ProfileID: "closeout_only", Profiles: closeoutOnlyProfile, Schemas: schemas, RootCount: 1,
+		})
+		testutil.FailErr(t, "closeout self reader", err)
+
+		workerCloseout, rErr := engine.RenderKick(t.Context(), closeoutSelfReader, "worker-closeout", map[string]any{
+			"reason_text":                  "step budget reached",
+			"llm_timeout":                  true,
+			"leg_command_mutation_capable": true,
 		})
 		testutil.FailErr(t, "render worker-closeout", rErr)
 
@@ -174,12 +181,6 @@ func testDeferredAndHistoricalSubjects(
 		testutil.FailErr(t, "resolve implementer auth", err)
 		roWorkerAuth, err := toolvocabtest.ResolveWorkerAuthorityForSession(t.Context(), eff, api.SessionModeAsk, api.SessionPostureBuild, 1, true, true, false, "path-explorer")
 		testutil.FailErr(t, "resolve path-explorer auth", err)
-
-		closeoutOnlyProfile := []sandbox.ToolProfile{{ID: "closeout_only", Tools: map[string]bool{"complete_leg": true}}}
-		closeoutSelfReader, err := prompts.NewReader(prompts.ReaderInput{
-			ProfileID: "closeout_only", Profiles: closeoutOnlyProfile, Schemas: schemas, RootCount: 1,
-		})
-		testutil.FailErr(t, "closeout self reader", err)
 
 		mutLegCtx := baseCtx
 		mutLegCtx.Self = toolvocabtest.AuthorityFromReaderAndMetas(closeoutSelfReader, nil, nil)
@@ -199,17 +200,18 @@ func testDeferredAndHistoricalSubjects(
 			t.Fatal("expected mutating worker-closeout follow-up advice to fail for read-only worker leg")
 		}
 
-		coordCloseout, cErr := engine.RenderKick(t.Context(), "coordinator-turn-closeout", map[string]any{
-			"reason_text": "turn limit reached",
-			"llm_timeout": true,
-		})
-		testutil.FailErr(t, "render coordinator-turn-closeout", cErr)
-
 		zeroToolProfile := []sandbox.ToolProfile{{ID: "zero_closeout", Tools: map[string]bool{}}}
 		zeroSelfReader, err := prompts.NewReader(prompts.ReaderInput{
 			ProfileID: "zero_closeout", Profiles: zeroToolProfile, Schemas: schemas, RootCount: 1,
 		})
 		testutil.FailErr(t, "zero closeout reader", err)
+
+		coordCloseout, cErr := engine.RenderKick(t.Context(), zeroSelfReader, "coordinator-turn-closeout", map[string]any{
+			"reason_text":                      "turn limit reached",
+			"llm_timeout":                      true,
+			"session_command_mutation_capable": true,
+		})
+		testutil.FailErr(t, "render coordinator-turn-closeout", cErr)
 
 		mutCoordAuth := toolvocabtest.AuthorityFromReaderAndMetas(coordFloorReader, nil, nil)
 		askCoordAuth := toolvocabtest.AuthorityFromReaderAndMetas(coordAskReader, nil, nil)

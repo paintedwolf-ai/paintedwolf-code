@@ -3,12 +3,42 @@ package prompts
 import (
 	"context"
 	"fmt"
+	"slices"
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/extpacks"
 	"github.com/lycaon/lycaon/internal/promptunit"
 	"github.com/lycaon/lycaon/internal/sandbox"
 )
+
+var structuralInjectAllowlist = []string{
+	"agents-md",
+	"blueprint",
+	"execution-state",
+	"scan-guidance-ephemeral",
+	"synthesis-evidence",
+	"view-context",
+	"worker-messages",
+	"worker-round",
+}
+
+var structuralInjectSet = func() map[string]bool {
+	out := make(map[string]bool, len(structuralInjectAllowlist))
+	for _, ref := range structuralInjectAllowlist {
+		out[ref] = true
+	}
+	return out
+}()
+
+// StructuralInjectFragments returns the sorted allowlist of reader-free structural inject refs.
+func StructuralInjectFragments() []string {
+	return slices.Clone(structuralInjectAllowlist)
+}
+
+// IsStructuralInjectFragment reports whether ref is an allowlisted reader-free structural inject.
+func IsStructuralInjectFragment(ref string) bool {
+	return structuralInjectSet[strings.TrimSpace(ref)]
+}
 
 // InjectRenderer renders system inject partials under config/packs/painted-wolf/platform/guidance/.
 type InjectRenderer struct {
@@ -23,8 +53,7 @@ func NewInjectRenderer(engine PromptTemplateEngine) *InjectRenderer {
 	return &InjectRenderer{engine: engine}
 }
 
-// Render executes reader-free inject/{ref}.md with occurrence data.
-// Injects that carry or reference reader capability facts must use RenderWithReader.
+// Render executes an explicitly allowlisted structural inject/{ref}.md fragment.
 func (r *InjectRenderer) Render(ctx context.Context, ref string, data map[string]any) (string, error) {
 	if r == nil || r.engine == nil {
 		return "", fmt.Errorf("inject renderer not configured")
@@ -36,10 +65,13 @@ func (r *InjectRenderer) Render(ctx context.Context, ref string, data map[string
 	if sandbox.HasParentTraversal(name) || strings.HasPrefix(name, "/") {
 		return "", fmt.Errorf("invalid inject ref %q", ref)
 	}
-	if err := rejectReaderFactsInOccurrence("inject", name, data); err != nil {
+	if !IsStructuralInjectFragment(name) {
+		return "", fmt.Errorf("inject %q is not an allowlisted structural fragment; use RenderWithReader", name)
+	}
+	if err := rejectCapabilityKeysInOccurrence("inject", name, data); err != nil {
 		return "", err
 	}
-	if err := rejectReaderFactReferencesInEngineTemplate(r.engine, "inject", InjectTemplatePrefix+name+".md"); err != nil {
+	if err := rejectStructuralTemplateViolations(r.engine, "inject", InjectTemplatePrefix+name+".md"); err != nil {
 		return "", err
 	}
 	return r.engine.RenderInject(ctx, name, data)

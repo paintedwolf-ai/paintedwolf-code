@@ -11,6 +11,7 @@ import (
 	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/hostmarker"
 	"github.com/lycaon/lycaon/internal/session/projectcontrol"
+	"github.com/lycaon/lycaon/internal/toolreach"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -265,7 +266,11 @@ func intArg(raw any) int {
 }
 
 func formatOverlayPromoteHostContent(ctx context.Context, overlayID string, out api.WorkerMergeResult, runErr error) (string, error) {
-	banners, err := guidance.RenderOverlayRebaseConflictBanners(ctx, overlayID, out.Rebased)
+	reach := toolreach.FromContext(ctx)
+	if !reach.Known() {
+		reach = toolreach.Offered([]string{"preview_overlay", "promote_overlay", "instruct_worker"})
+	}
+	banners, err := guidance.RenderOverlayRebaseConflictBanners(ctx, reach, overlayID, out.Rebased)
 	if err != nil {
 		return "", err
 	}

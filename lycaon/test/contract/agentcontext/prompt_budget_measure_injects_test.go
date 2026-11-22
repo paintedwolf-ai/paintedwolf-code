@@ -12,6 +12,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/bgprocess"
 	"github.com/lycaon/lycaon/internal/coordinator/inject"
+	"github.com/lycaon/lycaon/internal/extpacks"
 	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/guidance/feedback"
 	"github.com/lycaon/lycaon/internal/hostcmd"
@@ -23,6 +24,7 @@ import (
 	scancoverage "github.com/lycaon/lycaon/internal/scan/coverage"
 	"github.com/lycaon/lycaon/internal/session/viewcontext"
 	"github.com/lycaon/lycaon/internal/spawn"
+	"github.com/lycaon/lycaon/internal/toolschema"
 	"github.com/lycaon/lycaon/internal/toolsurface"
 	"github.com/lycaon/lycaon/internal/worker"
 	workflowpresentation "github.com/lycaon/lycaon/internal/workflow/presentation"
@@ -147,14 +149,23 @@ func measureCoordinatorInjectBlock(
 			}
 			jobs = append(jobs, job)
 		}
+		eff, err := extpacks.CatalogForConsumers()
+		contractcheck.FailErr(t, "CatalogForConsumers command_jobs", err)
+		schemas, _, err := extpacks.LoadEffectiveToolSchemas(eff)
+		contractcheck.FailErr(t, "LoadEffectiveToolSchemas command_jobs", err)
+		waitMeta, _ := schemas.ToolMeta("wait")
+		waitSchema := toolschema.ProjectToolArgsSchema("wait", waitMeta.ArgsSchema, toolschema.ProjectOptions{
+			PruneWaitConditions: true,
+			WaitConditions:      []string{"process_done"},
+		})
 		if spec.ID == "worker_command_jobs" {
 			workerReader, err := prompts.DeclaredReader(nil, "implement")
 			contractcheck.FailErr(t, "DeclaredReader worker_command_jobs", err)
-			return inject.RenderCommandJobsBlock(ctx, renderer, workerReader, []string{"process_done"}, "sess-inject-test", jobs, nil, now, "worker")
+			return inject.RenderCommandJobsBlock(ctx, renderer, workerReader, waitSchema, "sess-inject-test", jobs, nil, now, "worker")
 		}
 		fullReader, err := prompts.DeclaredReader(nil, prompts.CoordinatorProfileID)
 		contractcheck.FailErr(t, "DeclaredReader command_jobs", err)
-		direct := inject.RenderCommandJobsBlock(ctx, renderer, fullReader, []string{"process_done"}, "sess-inject-test", jobs, nil, now, "coordinator")
+		direct := inject.RenderCommandJobsBlock(ctx, renderer, fullReader, waitSchema, "sess-inject-test", jobs, nil, now, "coordinator")
 		floorPlan, err := prompts.CompileSurfacePlan("implement_investigate", 1)
 		contractcheck.FailErr(t, "CompileSurfacePlan command_jobs", err)
 		profiles, err := sandbox.LoadToolProfiles()
@@ -168,7 +179,7 @@ func measureCoordinatorInjectBlock(
 			WebSearch: true,
 		})
 		contractcheck.FailErr(t, "NewReader floor command_jobs", err)
-		deferred := inject.RenderCommandJobsBlock(ctx, renderer, floorReader, []string{"process_done"}, "sess-inject-test", jobs, nil, now, "coordinator")
+		deferred := inject.RenderCommandJobsBlock(ctx, renderer, floorReader, waitSchema, "sess-inject-test", jobs, nil, now, "coordinator")
 		if len(deferred) > len(direct) {
 			return deferred
 		}
@@ -223,7 +234,10 @@ func measureCoordinatorInjectBlock(
 		contractcheck.FailErr(t, "RenderImplementSpawnInject", err)
 		return block
 	case "worker_task_assignment":
+		workerReader, err := prompts.DeclaredReader(nil, "implement")
+		contractcheck.FailErr(t, "DeclaredReader worker_task_assignment", err)
 		input := inject.WorkerTaskAssignmentInput{
+			Reader:     workerReader,
 			SessionID:  "sess-inject-test",
 			ProjectDir: t.TempDir(),
 			Charter: api.WorkerTaskCharter{
@@ -243,14 +257,18 @@ func measureCoordinatorInjectBlock(
 		}
 		return block
 	case "worker_task_preamble":
-		block, err := worker.RenderWorkerTaskPreamble(ctx, renderer, "sess-inject-test", lycaonRoot,
+		workerReader, err := prompts.DeclaredReader(nil, "implement")
+		contractcheck.FailErr(t, "DeclaredReader worker_task_preamble", err)
+		block, err := worker.RenderWorkerTaskPreamble(ctx, renderer, workerReader, "sess-inject-test", lycaonRoot,
 			[]string{"internal/**", "lycaon/**"},
 			&api.TaskScope{Mode: api.TaskScopeModeWrite, Paths: []string{"internal/auth/**"}},
 		)
 		contractcheck.FailErr(t, "RenderWorkerTaskPreamble", err)
 		return block
 	case "worker_leg":
-		block, err := inject.RenderWorkerLegInject(ctx, renderer, "sess-inject-test", promptBudgetWorkerLegFixture())
+		workerReader, err := prompts.DeclaredReader(nil, "implement")
+		contractcheck.FailErr(t, "DeclaredReader worker_leg", err)
+		block, err := inject.RenderWorkerLegInject(ctx, renderer, workerReader, "sess-inject-test", promptBudgetWorkerLegFixture())
 		contractcheck.FailErr(t, "RenderWorkerLegInject", err)
 		return block
 	case "active_workflow":

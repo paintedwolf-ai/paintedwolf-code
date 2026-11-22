@@ -2,13 +2,13 @@ package guidance
 
 import (
 	"context"
-	"slices"
 	"strings"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/toolreach"
 )
 
 func TestRenderCompactionSystemPrompts(t *testing.T) {
@@ -66,25 +66,21 @@ func TestRenderUtilityPromptsAndSurveySeparation(t *testing.T) {
 		if strings.TrimSpace(out) == "" {
 			t.Fatalf("empty render for %q", ref)
 		}
-		if _, err := RenderCatalog(context.Background(), ref, fixture); err == nil {
-			t.Fatalf("RenderCatalog accepted zero-tool utility template %q without RenderUtilityPrompt", ref)
+		if _, err := RenderGuidance(context.Background(), ref, fixture); err == nil {
+			t.Fatalf("RenderGuidance accepted zero-tool utility template %q without RenderUtilityPrompt", ref)
 		}
 	}
 
 	for _, ref := range []string{
-		SurveyGrepSpecificsRef,
-		SurveyFindSpecificsRef,
-		SurveyReadSpecificsRef,
-		SurveyJQSpecificsRef,
 		SurveyJQZoomRef,
 		SurveyGrepEmptyTextRef,
 		SurveyGrepEmptyStructuralRef,
 		SurveyGrepScopeDenseRef,
 	} {
-		out, err := RenderCatalog(context.Background(), ref, map[string]any{
+		out, err := RenderGuidance(context.Background(), ref, map[string]any{
 			"file_count": 12, "count": 8, "bytes": 4000,
 		})
-		testutil.FailErr(t, "RenderCatalog "+ref, err)
+		testutil.FailErr(t, "RenderGuidance "+ref, err)
 		if strings.TrimSpace(out) == "" {
 			t.Fatalf("empty render for %q", ref)
 		}
@@ -92,37 +88,71 @@ func TestRenderUtilityPromptsAndSurveySeparation(t *testing.T) {
 			t.Fatalf("RenderUtilityPrompt accepted non-allowlisted ref %q", ref)
 		}
 	}
-}
 
-func TestRenderCommandOutputOmittedPairedWitnesses(t *testing.T) {
-	setTestRenderer(t)
 	profiles, err := sandbox.LoadToolProfiles()
 	testutil.FailErr(t, "load tool profiles", err)
-	withCommand, err := prompts.NewReader(prompts.ReaderInput{
+	reader, err := prompts.NewReader(prompts.ReaderInput{
 		ProfileID: "implement",
 		Profiles:  profiles,
 		RootCount: 1,
 		HasGit:    true,
 		WebSearch: true,
 	})
-	testutil.FailErr(t, "build reader with command", err)
-	withoutCommand, err := prompts.NewReader(prompts.ReaderInput{
-		ProfileID: prompts.CoordinatorProfileID,
-		Profiles:  profiles,
-		Visible:   []string{"recall"},
-		RootCount: 1,
-		HasGit:    true,
-		WebSearch: true,
-	})
-	testutil.FailErr(t, "build reader without command", err)
+	testutil.FailErr(t, "build reader", err)
+	gr := prompts.NewGuidanceRenderer(prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{}))
+	for _, ref := range []string{
+		"survey/grep-specifics",
+		"survey/find-specifics",
+		"survey/read-specifics",
+		"survey/jq-specifics",
+	} {
+		if _, err := RenderGuidance(context.Background(), ref, nil); err == nil {
+			t.Fatalf("RenderGuidance accepted non-structural ref %q without Reader", ref)
+		}
+		out, err := gr.RenderWithReader(context.Background(), reader, ref, nil)
+		testutil.FailErr(t, "RenderWithReader "+ref, err)
+		if strings.TrimSpace(out) == "" {
+			t.Fatalf("empty render for %q", ref)
+		}
+	}
+}
 
-	pos, err := RenderCommandOutputOmitted(t.Context(), slices.Contains(withCommand.Offered(), "command"), "4,182", "184 KB", "@output/prog.stdout", 251, 400, 5000, 200000, true)
-	testutil.FailErr(t, "render with command", err)
+func TestRenderCommandOutputOmittedPairedWitnesses(t *testing.T) {
+	setTestRenderer(t)
+	sedAdmitted := toolreach.Offered([]string{toolreach.ProgramTool}).WithPrograms(func(name string) bool {
+		return name == "sed"
+	})
+	sedDenied := toolreach.Offered([]string{toolreach.ProgramTool}).WithPrograms(func(name string) bool {
+		return name != "sed"
+	})
+	withoutCommand := toolreach.Offered([]string{"recall"})
+
+	pos, err := RenderCommandOutputOmitted(t.Context(), sedAdmitted, "4,182", "184 KB", "@output/prog.stdout", 251, 400, 5000, 200000, true)
+	testutil.FailErr(t, "render with sed admitted", err)
 	if !strings.Contains(pos, "(sed -n '251,400p' @output/prog.stdout)") {
 		t.Fatalf("positive witness missing sed command hint: %q", pos)
 	}
 
-	neg, err := RenderCommandOutputOmitted(t.Context(), slices.Contains(withoutCommand.Offered(), "command"), "4,182", "184 KB", "@output/prog.stdout", 251, 400, 5000, 200000, true)
+	quotedPath := "@output/my file's.stdout"
+	quotedOut, err := RenderCommandOutputOmitted(t.Context(), sedAdmitted, "4,182", "184 KB", quotedPath, 251, 400, 5000, 200000, true)
+	testutil.FailErr(t, "render quoted path", err)
+	if !strings.Contains(quotedOut, "full output: @output/my file's.stdout") {
+		t.Fatalf("quoted witness lost raw saved path: %q", quotedOut)
+	}
+	if !strings.Contains(quotedOut, `(sed -n '251,400p' @output/'my file'\''s.stdout')`) {
+		t.Fatalf("quoted witness did not safely quote command operand: %q", quotedOut)
+	}
+
+	denied, err := RenderCommandOutputOmitted(t.Context(), sedDenied, "4,182", "184 KB", quotedPath, 251, 400, 5000, 200000, true)
+	testutil.FailErr(t, "render with sed denied", err)
+	if strings.Contains(denied, "sed -n") {
+		t.Fatalf("sed-denied witness leaked sed command hint: %q", denied)
+	}
+	if !strings.Contains(denied, "full output: @output/my file's.stdout") {
+		t.Fatalf("sed-denied witness lost saved output path notice: %q", denied)
+	}
+
+	neg, err := RenderCommandOutputOmitted(t.Context(), withoutCommand, "4,182", "184 KB", "@output/prog.stdout", 251, 400, 5000, 200000, true)
 	testutil.FailErr(t, "render without command", err)
 	if strings.Contains(neg, "sed -n") {
 		t.Fatalf("negative witness leaked sed command hint without command tool: %q", neg)

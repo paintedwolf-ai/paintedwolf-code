@@ -6,14 +6,26 @@ import (
 
 	"github.com/lycaon/lycaon/internal/coordinator/inject"
 	"github.com/lycaon/lycaon/internal/coordinator/turnload"
+	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/internal/prompts/promptstest"
+	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/testutil"
 )
 
 func TestRenderSkillProcedureBlockGatesResourceInstructionOnResources(t *testing.T) {
 	renderer := promptstest.InjectRenderer(t)
+	profiles, err := sandbox.LoadToolProfiles()
+	testutil.FailErr(t, "LoadToolProfiles", err)
+	coordReader, err := prompts.NewReader(prompts.ReaderInput{
+		ProfileID: prompts.CoordinatorProfileID,
+		Profiles:  profiles,
+		RootCount: 1,
+		HasGit:    true,
+		WebSearch: true,
+	})
+	testutil.FailErr(t, "NewReader coordinator", err)
 
-	resourceless, err := inject.RenderSkillProcedureBlock(t.Context(), renderer, "s1", "coordinator", turnload.SkillPreload{
+	resourceless, err := inject.RenderSkillProcedureBlock(t.Context(), renderer, coordReader, "s1", "coordinator", turnload.SkillPreload{
 		Name: "prepare-a-release",
 		Body: "Check the version file.",
 	})
@@ -25,7 +37,7 @@ func TestRenderSkillProcedureBlockGatesResourceInstructionOnResources(t *testing
 		t.Fatalf("resourceless skill procedure advertised skills_read:\n%s", resourceless)
 	}
 
-	withResources, err := inject.RenderSkillProcedureBlock(t.Context(), renderer, "s1", "coordinator", turnload.SkillPreload{
+	withResources, err := inject.RenderSkillProcedureBlock(t.Context(), renderer, coordReader, "s1", "coordinator", turnload.SkillPreload{
 		Name:      "verify-a-change",
 		Body:      "Run the checks.",
 		Tool:      "verify",
