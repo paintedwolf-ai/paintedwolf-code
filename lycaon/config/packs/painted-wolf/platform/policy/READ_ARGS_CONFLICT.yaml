@@ -3,7 +3,7 @@ id: READ_ARGS_CONFLICT
 kind: schema
 on: tool.rejected
 selector: {}
-requires_facts: [paintedwolf.admitted_read_addressing_forms, paintedwolf.conflict, paintedwolf.detail, paintedwolf.operation, paintedwolf.rejection_code]
+requires_facts: [paintedwolf.admitted_read_addressing_forms, paintedwolf.command_loader_call, paintedwolf.conflict, paintedwolf.detail, paintedwolf.operation, paintedwolf.read_range_call, paintedwolf.read_symbol_call, paintedwolf.read_window_calls, paintedwolf.rejection_code]
 when: paintedwolf.operation == "read" && paintedwolf.rejection_code == "READ_ARGS_CONFLICT"
 effect: block
 x-paintedwolf-category: recoverable
@@ -12,7 +12,7 @@ message: 'read arguments conflict: {{ paintedwolf.detail }}'
 what: 'The read operation received mutually exclusive or conflicting arguments: {{ paintedwolf.detail }}.'
 cause: One addressing shape selects the content. Symbol anchors cannot combine with line ranges or window bounds; line ranges cannot combine with window bounds.
 why: Mixed addressing leaves no single content window to deliver, so the call is refused rather than guessed.
-fix: '{% if paintedwolf.admitted_read_addressing_forms %}Keep the intended path and address it one way inside command: {{ paintedwolf.admitted_read_addressing_forms }}.{% else %}Keep the intended path and choose one addressing shape according to the schema; remove only the conflicting selectors reported above; preserve the intended coverage.{% endif %}'
+fix: '{% if paintedwolf.admitted_read_addressing_forms %}Keep the intended path and address it one way inside command{% if paintedwolf.command_loader_call %} after loading it with {{ paintedwolf.command_loader_call }}{% endif %}:{% if paintedwolf.read_symbol_call %} For a symbol, use `{{ paintedwolf.read_symbol_call }}`.{% endif %}{% if paintedwolf.read_range_call %} For a line range, use `{{ paintedwolf.read_range_call }}`.{% endif %}{% if paintedwolf.read_window_calls %} For a window, use {{ paintedwolf.read_window_calls }}.{% endif %}{% else %}Keep the intended path and choose one addressing shape according to the schema; remove only the conflicting selectors reported above; preserve the intended coverage.{% endif %}'
 instead: Branch on Code; fix args and retry once
 x-paintedwolf-scenarios:
   - id: default
@@ -23,10 +23,13 @@ x-paintedwolf-scenarios:
       tool: read
   - id: command-leg
     vars:
-      admitted_read_addressing_forms: "`rg -n` for a symbol, `sed -n 'A,Bp'` for a range, `head`/`tail` for a window"
+      admitted_read_addressing_forms: [rg -n SYMBOL FILE, 'sed -n 1,10p FILE', head FILE, tail FILE]
       detail: conflict
       path: src/main.go
       profile: coordinator
+      read_range_call: 'sed -n 1,10p FILE'
+      read_symbol_call: rg -n SYMBOL FILE
+      read_window_calls: [head FILE, tail FILE]
       tool: read
     expect_contains:
-      - '`sed -n'
+      - '`sed -n 1,10p FILE`'

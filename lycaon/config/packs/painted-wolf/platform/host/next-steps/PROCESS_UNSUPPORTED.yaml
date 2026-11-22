@@ -1,9 +1,9 @@
 steps:
-  - when: 'paintedwolf.admitted_process_capability_fields != ""'
+  - when: "size(paintedwolf.admitted_process_capability_fields) > 0"
     tool: "command"
-    say: "Use {{ call }} with the required {{ paintedwolf.admitted_process_capability_fields }} field, describing the exact intended operation."
+    say: "Use {{ call }} with the required capability field ({{ paintedwolf.admitted_process_capability_fields }}), describing the exact intended operation."
     otherwise: "This request cannot run host process commands; report the unsupported process operation."
-  - when: 'paintedwolf.admitted_process_capability_fields == "" && paintedwolf.command_loadable_without_schema'
+  - when: "size(paintedwolf.admitted_process_capability_fields) == 0 && paintedwolf.command_loadable_without_schema"
     tool: "request_tools"
     args:
       need: "command"

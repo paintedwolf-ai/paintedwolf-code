@@ -5,7 +5,7 @@ on: tool.rejected
 selector:
   tools:
     - view_image
-requires_facts: [paintedwolf.admitted_file_read_forms, paintedwolf.extension, paintedwolf.path, paintedwolf.rejection_code, paintedwolf.supported_formats]
+requires_facts: [paintedwolf.admitted_file_read_forms, paintedwolf.command_loader_call, paintedwolf.extension, paintedwolf.path, paintedwolf.rejection_code, paintedwolf.supported_formats]
 when: paintedwolf.rejection_code == "IMAGE_FORMAT_UNSUPPORTED"
 effect: block
 x-paintedwolf-category: recoverable
@@ -14,7 +14,7 @@ message: view_image format unsupported
 what: '{{ tool }} does not support the image format of {{ paintedwolf.path }}.'
 cause: 'The file extension {{ paintedwolf.extension }} is not among supported visual formats ({{ paintedwolf.supported_formats }}).'
 why: view_image inspects and perceives visual image assets (.svg, .png, .jpg, .jpeg, .webp, .gif).
-fix: '{% if paintedwolf.admitted_file_read_forms %}For text or code files, read them with {{ paintedwolf.admitted_file_read_forms }} inside command instead.{% else %}For text or code files, use an offered reader instead.{% endif %} For image files, ensure the file has a supported image extension.'
+fix: '{% if paintedwolf.admitted_file_read_forms %}For text or code files, read them inside command{% if paintedwolf.command_loader_call %} after loading it with {{ paintedwolf.command_loader_call }}{% endif %} ({{ paintedwolf.admitted_file_read_forms }}) instead.{% else %}For text or code files, use an offered reader instead.{% endif %} For image files, ensure the file has a supported image extension.'
 instead: Branch on Code IMAGE_FORMAT_UNSUPPORTED; read text files with an offered reader, or convert the asset to a supported image format
 x-paintedwolf-scenarios:
   - id: default
@@ -26,11 +26,11 @@ x-paintedwolf-scenarios:
       tool: view_image
   - id: command-leg
     vars:
-      admitted_file_read_forms: '`cat`, `head`, or `sed -n`'
+      admitted_file_read_forms: [cat FILE, head FILE, 'sed -n 1,10p FILE']
       extension: .pdf
       path: docs/spec.pdf
       profile: coordinator
       supported_formats: .svg, .png, .jpg, .jpeg, .webp, .gif
       tool: view_image
     expect_contains:
-      - '`cat`'
+      - cat FILE

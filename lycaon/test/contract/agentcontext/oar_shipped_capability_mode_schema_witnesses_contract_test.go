@@ -81,7 +81,7 @@ func TestShippedOARLoadableNarrowedAndLoaderOnlyWitnesses(t *testing.T) {
 	narrowedFix := rejectFix("process_signal", "PROCESS_UNSUPPORTED", loadableBase.WithSchemas(narrowedSchema))
 	if !strings.Contains(narrowedFix, "`command(") ||
 		!strings.Contains(narrowedFix, `request_tools(need="command")`) ||
-		!strings.Contains(narrowedFix, "`capability_request.process_control`") ||
+		!strings.Contains(narrowedFix, "capability_request.process_control") ||
 		strings.Contains(narrowedFix, "host_execution") {
 		t.Fatalf("loadable narrowed schema must advertise only process_control with loader step: %q", narrowedFix)
 	}
@@ -225,10 +225,10 @@ func TestShippedOARProductionCommandModeAndGitConfigWitnesses(t *testing.T) {
 		{"coordinator_implement_investigate", "coordinator", "implement_investigate", true},
 	} {
 		fix := rejectRef("extract_archive", "EXTRACT_FORMAT_UNSUPPORTED", productionReach(tc.profile, tc.surface), extractData).Copy["fix"]
-		if !strings.Contains(fix, "`unzip -p`") || !strings.Contains(fix, "`tar -t -f`") {
+		if !strings.Contains(fix, "`unzip -p ARCHIVE.zip MEMBER`") || !strings.Contains(fix, "`tar -t -f ARCHIVE.tar`") {
 			t.Fatalf("%s: expected admitted read archive forms unzip -p and tar -t -f, got %q", tc.name, fix)
 		}
-		if strings.Contains(fix, "`tar -x -f`") != tc.wantExtract {
+		if strings.Contains(fix, "`tar -x -f ARCHIVE.tar`") != tc.wantExtract {
 			t.Fatalf("%s: tar -x -f presence = %v, want %v: %q", tc.name, !tc.wantExtract, tc.wantExtract, fix)
 		}
 	}

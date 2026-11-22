@@ -81,15 +81,14 @@ func TestShippedOARProjectedSchemaAndSubsetWitnesses(t *testing.T) {
 		bothFix := rejectFix("process_signal", "PROCESS_UNSUPPORTED",
 			reachWithProgramsAndSchemas([]string{"command"}, []string{"external"}, fullSchema), map[string]any{})
 		if !strings.Contains(bothFix, "`command(") ||
-			!strings.Contains(bothFix, "`capability_request.process_control`") ||
-			!strings.Contains(bothFix, "`capability_request.host_execution`") {
+			!strings.Contains(bothFix, "capability_request.process_control, capability_request.host_execution") {
 			t.Fatalf("full schema should show both capability_request fields: %q", bothFix)
 		}
 
 		subsetFix := rejectFix("process_signal", "PROCESS_UNSUPPORTED",
 			reachWithProgramsAndSchemas([]string{"command"}, []string{"external"}, partialSchema), map[string]any{})
 		if !strings.Contains(subsetFix, "`command(") ||
-			!strings.Contains(subsetFix, "`capability_request.process_control`") ||
+			!strings.Contains(subsetFix, "capability_request.process_control") ||
 			strings.Contains(subsetFix, "host_execution") {
 			t.Fatalf("partial schema must keep process_control visible while omitting host_execution: %q", subsetFix)
 		}
@@ -109,12 +108,12 @@ func TestShippedOARProjectedSchemaAndSubsetWitnesses(t *testing.T) {
 			subsetReach := reachWithProgramsAndSchemas([]string{"command"}, []string{"sed", "rg"}, nil)
 
 			full := rejectFix("code_rewrite", code, allReach, parseData)
-			if !strings.Contains(full, "`sed -n` or `cat -n`") || !strings.Contains(full, "`grep -n` or `rg -n`") {
+			if !strings.Contains(full, "sed -n 1,10p FILE, cat -n FILE") || !strings.Contains(full, "grep -n PATTERN FILE, rg -n PATTERN FILE") {
 				t.Fatalf("%s with all 4 forms must list sed/cat and grep/rg: %q", code, full)
 			}
 			subset := rejectFix("code_rewrite", code, subsetReach, parseData)
-			if !strings.Contains(subset, "`sed -n`") || !strings.Contains(subset, "`rg -n`") ||
-				strings.Contains(subset, "`cat -n`") || strings.Contains(subset, "`grep -n`") {
+			if !strings.Contains(subset, "sed -n 1,10p FILE") || !strings.Contains(subset, "rg -n PATTERN FILE") ||
+				strings.Contains(subset, "cat -n FILE") || strings.Contains(subset, "grep -n PATTERN FILE") {
 				t.Fatalf("%s subset reach must keep sed+rg visible and omit cat+grep: %q", code, subset)
 			}
 		}
@@ -122,12 +121,14 @@ func TestShippedOARProjectedSchemaAndSubsetWitnesses(t *testing.T) {
 		secretData := map[string]any{"path": "cfg.json", "detail": "outside sink"}
 		secretAll := rejectFix("write", "SECRET_REFERENCE_OUTSIDE_SINK",
 			reachWithProgramsAndSchemas([]string{"command"}, []string{"edit", "replace-lines", "jq-edit"}, nil), secretData)
-		if !strings.Contains(secretAll, "`edit --path") || !strings.Contains(secretAll, "`replace-lines") || !strings.Contains(secretAll, "`jq-edit") {
+		if !strings.Contains(secretAll, "edit --path FILE --old-string OLD --new-string 'KEY=<reference>'") ||
+			!strings.Contains(secretAll, "replace-lines --path FILE --start 1 --end 1 --content 'KEY=<reference>'") ||
+			!strings.Contains(secretAll, "`jq-edit --path FILE --query '.key = $value' --arg value '<reference>'`") {
 			t.Fatalf("SECRET_REFERENCE_OUTSIDE_SINK full reach missing forms: %q", secretAll)
 		}
 		secretEditOnly := rejectFix("write", "SECRET_REFERENCE_OUTSIDE_SINK",
 			reachWithProgramsAndSchemas([]string{"command"}, []string{"edit"}, nil), secretData)
-		if !strings.Contains(secretEditOnly, "`edit --path") ||
+		if !strings.Contains(secretEditOnly, "edit --path FILE --old-string OLD --new-string 'KEY=<reference>'") ||
 			strings.Contains(secretEditOnly, "replace-lines") || strings.Contains(secretEditOnly, "jq-edit") {
 			t.Fatalf("SECRET_REFERENCE_OUTSIDE_SINK edit-only subset leaked unavailable forms: %q", secretEditOnly)
 		}
@@ -135,8 +136,8 @@ func TestShippedOARProjectedSchemaAndSubsetWitnesses(t *testing.T) {
 		extractData := map[string]any{"path": "bundle.7z", "format": "7z"}
 		extractReadOnly := rejectFix("extract_archive", "EXTRACT_FORMAT_UNSUPPORTED",
 			reachWithProgramsAndSchemas([]string{"command"}, []string{"unzip", "tar"}, nil), extractData)
-		if !strings.Contains(extractReadOnly, "`unzip -p`") || !strings.Contains(extractReadOnly, "`tar -t -f`") ||
-			strings.Contains(extractReadOnly, "`tar -x -f`") {
+		if !strings.Contains(extractReadOnly, "`unzip -p ARCHIVE.zip MEMBER`") || !strings.Contains(extractReadOnly, "`tar -t -f ARCHIVE.tar`") ||
+			strings.Contains(extractReadOnly, "`tar -x -f ARCHIVE.tar`") {
 			t.Fatalf("EXTRACT_FORMAT_UNSUPPORTED generic read reach must retain unzip -p and tar -t -f while omitting tar -x -f: %q", extractReadOnly)
 		}
 		extractMutating := rejectFix("extract_archive", "EXTRACT_FORMAT_UNSUPPORTED",
@@ -147,14 +148,60 @@ func TestShippedOARProjectedSchemaAndSubsetWitnesses(t *testing.T) {
 					"tar":   {"listing-or-stream-decode": true, "create-extract-compress-decompress-to-path": true},
 				},
 			)), extractData)
-		if !strings.Contains(extractMutating, "`unzip -p`") || !strings.Contains(extractMutating, "`tar -t -f`") ||
-			!strings.Contains(extractMutating, "`tar -x -f`") {
+		if !strings.Contains(extractMutating, "`unzip -p ARCHIVE.zip MEMBER`") || !strings.Contains(extractMutating, "`tar -t -f ARCHIVE.tar`") ||
+			!strings.Contains(extractMutating, "`tar -x -f ARCHIVE.tar`") {
 			t.Fatalf("EXTRACT_FORMAT_UNSUPPORTED full mode reach missing unzip/tar list/extract: %q", extractMutating)
 		}
 		extractZipOnly := rejectFix("extract_archive", "EXTRACT_FORMAT_UNSUPPORTED",
 			reachWithProgramsAndSchemas([]string{"command"}, []string{"unzip"}, nil), extractData)
-		if !strings.Contains(extractZipOnly, "`unzip -p`") || strings.Contains(extractZipOnly, "`tar -") {
+		if !strings.Contains(extractZipOnly, "`unzip -p ARCHIVE.zip MEMBER`") || strings.Contains(extractZipOnly, "`tar -") {
 			t.Fatalf("EXTRACT_FORMAT_UNSUPPORTED unzip-only subset leaked tar: %q", extractZipOnly)
+		}
+
+		// Pack-authored purpose labels, admitted subsets, and CT04 loading states across recovery_form_facts consumers.
+		addrData := map[string]any{"detail": "symbol and offset", "path": "src/main.go"}
+		addrFull := rejectFix("read", "READ_ARGS_CONFLICT",
+			reachWithProgramsAndSchemas([]string{"command"}, []string{"rg", "sed", "head", "tail"}, nil), addrData)
+		if !strings.Contains(addrFull, "For a symbol, use `rg -n SYMBOL FILE`.") ||
+			!strings.Contains(addrFull, "For a line range, use `sed -n 1,10p FILE`.") ||
+			!strings.Contains(addrFull, "For a window, use head FILE, tail FILE.") {
+			t.Fatalf("READ_ARGS_CONFLICT full reach render = %q", addrFull)
+		}
+		addrSubset := rejectFix("read", "READ_ARGS_CONFLICT",
+			reachWithProgramsAndSchemas([]string{"command"}, []string{"rg", "head"}, nil), addrData)
+		if !strings.Contains(addrSubset, "`rg -n SYMBOL FILE`") || !strings.Contains(addrSubset, "head FILE") ||
+			strings.Contains(addrSubset, "sed -n") || strings.Contains(addrSubset, "tail FILE") {
+			t.Fatalf("READ_ARGS_CONFLICT rg+head subset render = %q", addrSubset)
+		}
+
+		loadableRead := toolreach.Freeze([]string{"request_tools"}, toolsurface.Compile([]string{"request_tools"}, []string{"command"})).
+			WithPrograms(func(name string) bool { return name == "rg" || name == "head" || name == "awk" })
+		deferredWithoutLoader := toolreach.Freeze([]string{"read"}, toolsurface.Compile([]string{"read"}, []string{"command"})).
+			WithPrograms(func(name string) bool { return true })
+		absentCmd := reachWithProgramsAndSchemas([]string{"read"}, nil, nil)
+
+		addrLoadable := rejectFix("read", "READ_ARGS_CONFLICT", loadableRead, addrData)
+		if !strings.Contains(addrLoadable, "`request_tools(need=\"command\")`") || !strings.Contains(addrLoadable, "`rg -n SYMBOL FILE`") {
+			t.Fatalf("READ_ARGS_CONFLICT loadable command missing loader or rg call: %q", addrLoadable)
+		}
+		for _, unreachable := range []toolreach.Request{deferredWithoutLoader, absentCmd} {
+			got := rejectFix("read", "READ_ARGS_CONFLICT", unreachable, addrData)
+			if strings.Contains(got, "inside command") || strings.Contains(got, "request_tools") {
+				t.Fatalf("READ_ARGS_CONFLICT unreachable command leaked command/loader: %q", got)
+			}
+		}
+
+		largeEditData := map[string]any{"path": "big.go", "max_file_bytes": "4194304", "size": "5000000"}
+		editAwkLoadable := rejectFix("edit", "EDIT_FILE_TOO_LARGE", loadableRead, largeEditData)
+		if !strings.Contains(editAwkLoadable, "`request_tools(need=\"command\")`") || !strings.Contains(editAwkLoadable, "(awk)") ||
+			strings.Contains(editAwkLoadable, "sed") || strings.Contains(editAwkLoadable, "jq") {
+			t.Fatalf("EDIT_FILE_TOO_LARGE loadable awk-only subset render = %q", editAwkLoadable)
+		}
+		if got := rejectFix("edit", "EDIT_FILE_TOO_LARGE", deferredWithoutLoader, largeEditData); strings.Contains(got, "Use command") || strings.Contains(got, "request_tools") {
+			t.Fatalf("EDIT_FILE_TOO_LARGE deferred without loader leaked command: %q", got)
+		}
+		if got := rejectFix("jq_edit", "JQ_EDIT_LOSSY", loadableRead, map[string]any{"path": "Cargo.toml", "format": "toml", "kind": "comment"}); strings.Contains(got, "request_tools") || !strings.Contains(got, "read-only profile") {
+			t.Fatalf("JQ_EDIT_LOSSY loadable command without admitted mutation forms must report read-only limitation: %q", got)
 		}
 
 		dirData := map[string]any{"path": "plans"}

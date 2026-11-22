@@ -1,19 +1,17 @@
 package tools
 
 import (
-	"strings"
-
 	"github.com/lycaon/lycaon/internal/oar"
 	"github.com/lycaon/lycaon/internal/toolreach"
 )
 
-type invocationPhrase struct {
-	words []string
-	label string
-}
-
 func registerCommandFormRecoveryFacts(gc *oar.GuardContext, request toolreach.Request) {
-	cmdCallable := request.Status(toolreach.ProgramTool) == toolreach.Callable
+	cmdStatus := request.Status(toolreach.ProgramTool)
+	cmdCallable := cmdStatus == toolreach.Callable
+	cmdLoadable := cmdStatus == toolreach.Loadable
+	_, hasSchema := request.ToolSchema(toolreach.ProgramTool)
+	cmdReachable := cmdCallable || (cmdLoadable && (!hasSchema || request.AcceptsField(toolreach.ProgramTool, "command")))
+
 	put := func(bare string, compute func() any) {
 		gc.RegisterProvider("paintedwolf."+bare, func(target *oar.GuardContext) error {
 			if target.ObservationData == nil {
@@ -23,141 +21,137 @@ func registerCommandFormRecoveryFacts(gc *oar.GuardContext, request toolreach.Re
 			return nil
 		})
 	}
-	admitted := func(items ...invocationPhrase) string {
-		if !cmdCallable {
-			return ""
+	admittedIDs := func(invocations ...[]string) []string {
+		if !cmdReachable {
+			return []string{}
 		}
-		var out []string
-		for _, it := range items {
-			if request.ProgramInvocation(it.words...) {
-				out = append(out, it.label)
+		out := make([]string, 0, len(invocations))
+		for _, words := range invocations {
+			if len(words) > 0 && request.ProgramInvocation(words...) {
+				out = append(out, words[0])
 			}
 		}
-		return joinDisjunction(out)
+		return out
+	}
+	admittedCalls := func(invocations ...[]string) []string {
+		if !cmdReachable {
+			return []string{}
+		}
+		out := make([]string, 0, len(invocations))
+		for _, words := range invocations {
+			if len(words) > 0 && request.ProgramInvocation(words...) {
+				out = append(out, toolreach.QuoteProgram(words))
+			}
+		}
+		return out
+	}
+	admittedCall := func(words ...string) string {
+		if !cmdReachable || len(words) == 0 || !request.ProgramInvocation(words...) {
+			return ""
+		}
+		return toolreach.QuoteProgram(words)
 	}
 
-	put("admitted_process_capability_fields", func() any {
-		if !request.Known() || !request.ProgramMode("external", "dispatch") {
+	put("command_loader_call", func() any {
+		if !cmdLoadable || !cmdReachable {
 			return ""
 		}
-		var fields []string
+		return toolreach.Load(toolreach.ProgramTool).Text()
+	})
+	put("admitted_process_capability_fields", func() any {
+		if !request.Known() || !request.ProgramMode("external", "dispatch") {
+			return []string{}
+		}
+		out := make([]string, 0, 2)
 		for _, field := range []string{"capability_request.process_control", "capability_request.host_execution"} {
 			if request.AcceptsField(toolreach.ProgramTool, field) {
-				fields = append(fields, "`"+field+"`")
+				out = append(out, field)
 			}
 		}
-		return joinDisjunction(fields)
+		return out
 	})
 	put("command_loadable_without_schema", func() any {
-		_, hasSchema := request.ToolSchema(toolreach.ProgramTool)
-		return request.Known() &&
-			request.Status(toolreach.ProgramTool) == toolreach.Loadable &&
-			request.ProgramMode("external", "dispatch") &&
-			!hasSchema
+		return request.Known() && cmdLoadable && request.ProgramMode("external", "dispatch") && !hasSchema
 	})
-	registerReadFormRecoveryFacts(put, admitted, cmdCallable, request)
+
+	registerReadFormRecoveryFacts(put, admittedIDs, admittedCalls, admittedCall)
+
 	put("admitted_stream_edit_forms", func() any {
-		return admitted(
-			invocationPhrase{[]string{"sed", "s/a/b/", "FILE"}, "sed"},
-			invocationPhrase{[]string{"awk", "{print}", "FILE"}, "awk"},
-			invocationPhrase{[]string{"jq", ".", "FILE"}, "jq"},
+		return admittedIDs(
+			[]string{"sed", "s/a/b/", "FILE"},
+			[]string{"awk", "{print}", "FILE"},
+			[]string{"jq", ".", "FILE"},
 		)
 	})
-	put("admitted_archive_forms", func() any {
-		return admitted(
-			invocationPhrase{[]string{"unzip", "-p", "ARCHIVE.zip", "MEMBER"}, "inspect a single zip member with `unzip -p`"},
-			invocationPhrase{[]string{"tar", "-t", "-f", "ARCHIVE.tar"}, "list tar members with `tar -t -f`"},
-			invocationPhrase{[]string{"tar", "-x", "-f", "ARCHIVE.tar"}, "extract a tar member with `tar -x -f`"},
-		)
-	})
+
+	unzipStream := []string{"unzip", "-p", "ARCHIVE.zip", "MEMBER"}
+	tarList := []string{"tar", "-t", "-f", "ARCHIVE.tar"}
+	tarExtract := []string{"tar", "-x", "-f", "ARCHIVE.tar"}
+	put("admitted_archive_forms", func() any { return admittedCalls(unzipStream, tarList, tarExtract) })
+	put("archive_unzip_stream_call", func() any { return admittedCall(unzipStream...) })
+	put("archive_tar_list_call", func() any { return admittedCall(tarList...) })
+	put("archive_tar_extract_call", func() any { return admittedCall(tarExtract...) })
+
 	put("admitted_mutation_forms", func() any {
-		return admitted(
-			invocationPhrase{[]string{"edit", "--path", "FILE", "--old-string", "OLD", "--new-string", "NEW"}, "`edit --path`"},
-			invocationPhrase{[]string{"replace-lines", "--path", "FILE", "--start", "1", "--end", "1", "--content", "NEW"}, "`replace-lines`"},
+		return admittedCalls(
+			[]string{"edit", "--path", "FILE", "--old-string", "OLD", "--new-string", "NEW"},
+			[]string{"replace-lines", "--path", "FILE", "--start", "1", "--end", "1", "--content", "NEW"},
 		)
 	})
 	put("admitted_secret_config_forms", func() any {
-		return admitted(
-			invocationPhrase{[]string{"edit", "--path", "FILE", "--old-string", "OLD", "--new-string", "KEY=<reference>"}, "`edit --path FILE --old-string OLD --new-string 'KEY=<reference>'`"},
-			invocationPhrase{[]string{"replace-lines", "--path", "FILE", "--start", "1", "--end", "1", "--content", "NEW"}, "`replace-lines --content`"},
+		return admittedCalls(
+			[]string{"edit", "--path", "FILE", "--old-string", "OLD", "--new-string", "KEY=<reference>"},
+			[]string{"replace-lines", "--path", "FILE", "--start", "1", "--end", "1", "--content", "KEY=<reference>"},
 		)
 	})
-	registerSingleProgramReachFacts(put, cmdCallable, request)
+	put("secret_jq_edit_call", func() any {
+		return admittedCall("jq-edit", "--path", "FILE", "--query", ".key = $value", "--arg", "value", "<reference>")
+	})
+
+	registerSingleProgramReachFacts(put, cmdCallable, cmdReachable, request)
 }
 
 func registerReadFormRecoveryFacts(
 	put func(string, func() any),
-	admitted func(...invocationPhrase) string,
-	cmdCallable bool,
-	request toolreach.Request,
+	admittedIDs func(...[]string) []string,
+	admittedCalls func(...[]string) []string,
+	admittedCall func(...string) string,
 ) {
-	put("admitted_source_read_forms", func() any {
-		return admitted(
-			invocationPhrase{[]string{"sed", "-n", "1,10p", "FILE"}, "`sed -n`"},
-			invocationPhrase{[]string{"cat", "-n", "FILE"}, "`cat -n`"},
-		)
-	})
-	put("admitted_range_read_forms", func() any {
-		return admitted(
-			invocationPhrase{[]string{"sed", "-n", "1,10p", "FILE"}, "`sed -n 'A,Bp'`"},
-			invocationPhrase{[]string{"cat", "-n", "FILE"}, "`cat -n`"},
-		)
-	})
+	sedLines := []string{"sed", "-n", "1,10p", "FILE"}
+	catLines := []string{"cat", "-n", "FILE"}
+	catFile := []string{"cat", "FILE"}
+	headFile := []string{"head", "FILE"}
+	tailFile := []string{"tail", "FILE"}
+
+	put("admitted_source_read_forms", func() any { return admittedCalls(sedLines, catLines) })
+	put("admitted_range_read_forms", func() any { return admittedCalls(sedLines, catLines) })
 	put("admitted_text_search_forms", func() any {
-		return admitted(
-			invocationPhrase{[]string{"grep", "-n", "PATTERN", "FILE"}, "`grep -n`"},
-			invocationPhrase{[]string{"rg", "-n", "PATTERN", "FILE"}, "`rg -n`"},
+		return admittedCalls(
+			[]string{"grep", "-n", "PATTERN", "FILE"},
+			[]string{"rg", "-n", "PATTERN", "FILE"},
 		)
 	})
-	put("admitted_file_read_forms", func() any {
-		return admitted(
-			invocationPhrase{[]string{"cat", "FILE"}, "`cat`"},
-			invocationPhrase{[]string{"head", "FILE"}, "`head`"},
-			invocationPhrase{[]string{"sed", "-n", "1,10p", "FILE"}, "`sed -n`"},
-		)
-	})
-	put("admitted_raw_read_forms", func() any {
-		return admitted(
-			invocationPhrase{[]string{"cat", "FILE"}, "`cat`"},
-			invocationPhrase{[]string{"sed", "-n", "1,10p", "FILE"}, "`sed -n`"},
-		)
-	})
+	put("admitted_file_read_forms", func() any { return admittedCalls(catFile, headFile, sedLines) })
+	put("admitted_raw_read_forms", func() any { return admittedCalls(catFile, sedLines) })
 	put("admitted_large_read_forms", func() any {
-		return admitted(
-			invocationPhrase{[]string{"head", "FILE"}, "head"},
-			invocationPhrase{[]string{"tail", "FILE"}, "tail"},
-			invocationPhrase{[]string{"sed", "-n", "1,10p", "FILE"}, "sed"},
-			invocationPhrase{[]string{"grep", "PATTERN", "FILE"}, "grep"},
-		)
+		return admittedIDs(headFile, tailFile, sedLines, []string{"grep", "PATTERN", "FILE"})
 	})
-	put("admitted_read_addressing_forms", func() any {
-		if !cmdCallable {
-			return ""
-		}
-		var parts []string
-		if request.ProgramInvocation("rg", "-n", "SYMBOL", "FILE") {
-			parts = append(parts, "`rg -n` for a symbol")
-		}
-		if request.ProgramInvocation("sed", "-n", "1,10p", "FILE") {
-			parts = append(parts, "`sed -n 'A,Bp'` for a range")
-		}
-		headOK := request.ProgramInvocation("head", "FILE")
-		tailOK := request.ProgramInvocation("tail", "FILE")
-		switch {
-		case headOK && tailOK:
-			parts = append(parts, "`head`/`tail` for a window")
-		case headOK:
-			parts = append(parts, "`head` for a window")
-		case tailOK:
-			parts = append(parts, "`tail` for a window")
-		}
-		return strings.Join(parts, ", ")
-	})
+
+	rgSymbol := []string{"rg", "-n", "SYMBOL", "FILE"}
+	put("admitted_read_addressing_forms", func() any { return admittedCalls(rgSymbol, sedLines, headFile, tailFile) })
+	put("read_symbol_call", func() any { return admittedCall(rgSymbol...) })
+	put("read_range_call", func() any { return admittedCall(sedLines...) })
+	put("read_window_calls", func() any { return admittedCalls(headFile, tailFile) })
 }
 
-func registerSingleProgramReachFacts(put func(string, func() any), cmdCallable bool, request toolreach.Request) {
+func registerSingleProgramReachFacts(
+	put func(string, func() any),
+	cmdCallable bool,
+	cmdReachable bool,
+	request toolreach.Request,
+) {
 	put("command_jq_edit_reachable", func() any {
-		return cmdCallable && request.ProgramInvocation("jq-edit", "--path", "FILE", "--query", ".")
+		return cmdReachable && request.ProgramInvocation("jq-edit", "--path", "FILE", "--query", ".")
 	})
 	put("command_git_config_reachable", func() any {
 		return cmdCallable &&
@@ -176,17 +170,4 @@ func registerSingleProgramReachFacts(put func(string, func() any), cmdCallable b
 		return cmdCallable && request.ProgramInvocation("grep", "-n", "PATTERN", "FILE")
 	})
 	put("command_repo_map_reachable", func() any { return cmdCallable && request.ProgramInvocation("repo-map") })
-}
-
-func joinDisjunction(items []string) string {
-	switch len(items) {
-	case 0:
-		return ""
-	case 1:
-		return items[0]
-	case 2:
-		return items[0] + " or " + items[1]
-	default:
-		return strings.Join(items[:len(items)-1], ", ") + ", or " + items[len(items)-1]
-	}
 }

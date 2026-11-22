@@ -906,30 +906,46 @@ host_facts:
  - name: paintedwolf.can_workflow_advance
    type: bool
  - name: paintedwolf.admitted_process_capability_fields
-   type: string
+   type: list<string>
  - name: paintedwolf.command_loadable_without_schema
    type: bool
+ - name: paintedwolf.command_loader_call
+   type: string
  - name: paintedwolf.admitted_source_read_forms
-   type: string
+   type: list<string>
  - name: paintedwolf.admitted_range_read_forms
-   type: string
+   type: list<string>
  - name: paintedwolf.admitted_text_search_forms
-   type: string
+   type: list<string>
  - name: paintedwolf.admitted_file_read_forms
-   type: string
+   type: list<string>
  - name: paintedwolf.admitted_raw_read_forms
-   type: string
+   type: list<string>
  - name: paintedwolf.admitted_large_read_forms
-   type: string
+   type: list<string>
  - name: paintedwolf.admitted_read_addressing_forms
+   type: list<string>
+ - name: paintedwolf.read_symbol_call
    type: string
+ - name: paintedwolf.read_range_call
+   type: string
+ - name: paintedwolf.read_window_calls
+   type: list<string>
  - name: paintedwolf.admitted_stream_edit_forms
-   type: string
+   type: list<string>
  - name: paintedwolf.admitted_archive_forms
+   type: list<string>
+ - name: paintedwolf.archive_unzip_stream_call
+   type: string
+ - name: paintedwolf.archive_tar_list_call
+   type: string
+ - name: paintedwolf.archive_tar_extract_call
    type: string
  - name: paintedwolf.admitted_mutation_forms
-   type: string
+   type: list<string>
  - name: paintedwolf.admitted_secret_config_forms
+   type: list<string>
+ - name: paintedwolf.secret_jq_edit_call
    type: string
  - name: paintedwolf.command_jq_edit_reachable
    type: bool
