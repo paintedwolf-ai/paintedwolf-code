@@ -16,6 +16,7 @@ import (
 	"github.com/lycaon/lycaon/internal/spawn"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/tools"
+	"github.com/lycaon/lycaon/internal/toolschema"
 	"github.com/lycaon/lycaon/internal/toolsurface"
 	"github.com/lycaon/lycaon/internal/toolvocab"
 	"github.com/lycaon/lycaon/internal/toolvocab/toolvocabtest"
@@ -241,7 +242,7 @@ func TestAskModeCommandUtilityClaimsFollowResolvedAuthorityAcrossRevisions(t *te
 	if !ok {
 		t.Fatal("missing ask_user schema")
 	}
-	roCommandSchema := tools.PruneCommandReadOnlySchema(cmdMeta.ArgsSchema)
+	roCommandSchema := toolschema.PruneCommandReadOnlySchema(cmdMeta.ArgsSchema)
 	askMetas := promptloop.ProjectAskToolMetas([]tools.ToolMeta{
 		{Name: "ask_user", ArgsSchema: askMeta.ArgsSchema},
 		{Name: "command", ArgsSchema: roCommandSchema},

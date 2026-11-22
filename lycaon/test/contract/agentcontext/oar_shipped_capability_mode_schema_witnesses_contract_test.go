@@ -15,6 +15,7 @@ import (
 	"github.com/lycaon/lycaon/internal/toolreach"
 	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/internal/tools"
+	"github.com/lycaon/lycaon/internal/toolschema"
 	"github.com/lycaon/lycaon/internal/toolsurface"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 )
@@ -78,7 +79,7 @@ func TestShippedOARLoadableNarrowedAndLoaderOnlyWitnesses(t *testing.T) {
 	}
 
 	prunedCmdSchema := map[string]map[string]any{
-		"command": tools.PruneCommandReadOnlySchema(map[string]any{
+		"command": toolschema.PruneCommandReadOnlySchema(map[string]any{
 			"type": "object",
 			"properties": map[string]any{
 				"command": map[string]any{"type": "string"},
@@ -147,7 +148,7 @@ func TestShippedOARMissingSchemaAndDisallowedEmptyObjectWitnesses(t *testing.T) 
 	}
 
 	readOnlySchemas := map[string]map[string]any{
-		"command": tools.PruneCommandReadOnlySchema(map[string]any{
+		"command": toolschema.PruneCommandReadOnlySchema(map[string]any{
 			"type": "object",
 			"properties": map[string]any{
 				"command":            map[string]any{"type": "string"},

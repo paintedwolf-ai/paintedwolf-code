@@ -79,7 +79,7 @@ func TestAttributedCallValidationCatchesNestedEnumAndCrossToolErrors(t *testing.
 		return tools.ProjectProviderToolMeta(tools.ToolMeta{Name: name, ArgsSchema: m.ArgsSchema}).ArgsSchema
 	}
 
-	readOnlyCommand := tools.PruneCommandReadOnlySchema(baseSchema("command"))
+	readOnlyCommand := toolschema.PruneCommandReadOnlySchema(baseSchema("command"))
 	askMetas := promptloop.ProjectAskToolMetas([]tools.ToolMeta{{Name: "ask_user", ArgsSchema: baseSchema("ask_user")}})
 	askUserNarrowed := askMetas[0].ArgsSchema
 	webWait := baseSchema("wait")
