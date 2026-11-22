@@ -138,9 +138,11 @@ func renderContinuation(ctx context.Context, summary compactionSummary, sources 
 	for _, s := range sources {
 		rows = append(rows, s.templateVars())
 	}
-	reach := toolreach.Offered(nil)
-	if recallAvailable {
-		reach = toolreach.Offered([]string{"recall"})
+	reach := toolreach.FromContext(ctx)
+	if !recallAvailable {
+		reach = toolreach.Offered(nil)
+	} else if !reach.Known() {
+		reach = guidance.StockToolReach("recall")
 	}
 	out, err := guidance.RenderGuidanceWithReach(ctx, reach, guidance.CompactionContinuationRecordRef, map[string]any{
 		"level":               summary.Level,

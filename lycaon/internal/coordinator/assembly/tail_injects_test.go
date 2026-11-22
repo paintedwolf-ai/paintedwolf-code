@@ -26,6 +26,8 @@ import (
 	"github.com/lycaon/lycaon/internal/testutil/prompttest"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/toolpolicy"
+	"github.com/lycaon/lycaon/internal/tools"
+	"github.com/lycaon/lycaon/internal/toolschema"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -351,6 +353,117 @@ func assertCommandJobsInjectMatchesTarget(
 	}
 }
 
+func buildProjectedTestPromptLister(
+	profiles []sandbox.ToolProfile,
+	schemas *toolschema.Config,
+	waitSchemaMode string,
+) PromptToolLister {
+	if waitSchemaMode == "no_lister" {
+		return nil
+	}
+	return func(_ context.Context, _ *api.Session, profileID string) ([]tools.ToolMeta, error) {
+		var prof sandbox.ToolProfile
+		for _, p := range profiles {
+			if p.ID == profileID {
+				prof = p
+				break
+			}
+		}
+		if prof.ID == "" || schemas == nil {
+			return nil, nil
+		}
+		names := make([]string, 0, len(schemas.Tools))
+		for name := range schemas.Tools {
+			names = append(names, name)
+		}
+		sort.Strings(names)
+		out := make([]tools.ToolMeta, 0, len(names))
+		for _, name := range names {
+			if !prof.ToolAllowed(name) {
+				continue
+			}
+			declared, ok := schemas.ToolMeta(name)
+			if !ok {
+				continue
+			}
+			var argsSchema map[string]any
+			switch {
+			case name == "wait" && waitSchemaMode == "missing":
+				argsSchema = nil
+			case name == "wait" && waitSchemaMode == "narrowed_worker_only":
+				argsSchema = toolschema.PruneWaitConditionSchema(declared.ArgsSchema, []string{"next_worker_done"})
+			case name == "wait":
+				argsSchema = toolschema.PruneWaitConditionSchema(declared.ArgsSchema, prof.WaitConditions)
+			default:
+				argsSchema = toolschema.ProjectArgsSchema(declared.ArgsSchema)
+			}
+			out = append(out, tools.ToolMeta{
+				Name:               name,
+				Description:        declared.Description,
+				DescriptionEffects: declared.DescriptionEffects,
+				Tags:               declared.Tags,
+				ArgsSchema:         argsSchema,
+				Deferred:           prof.ToolDeferred(name),
+			})
+		}
+		return out, nil
+	}
+}
+
+func projectCommandJobsTarget(
+	t *testing.T,
+	sess *api.Session,
+	history []api.Message,
+	promptLister PromptToolLister,
+	implState func(context.Context, *api.Session) surface.ImplementSessionState,
+	webSearch bool,
+	rootCount int,
+) ([]string, map[string]any) {
+	t.Helper()
+	pDeps := promptloop.ContextDeps{
+		Policy: toolpolicy.NewEngine(toolpolicy.EngineDeps{
+			ToolLister: &commandJobsToolLister{
+				sess:         sess,
+				promptLister: promptLister,
+			},
+			ProjectRootCount: func(context.Context, *api.Session) int { return rootCount },
+		}),
+		ImplementSessionState: implState,
+		ProjectRootCount:      func(context.Context, *api.Session) int { return rootCount },
+		LiveResources: func(string) toolcontract.ResourcePresence {
+			return toolcontract.ResourcePresence{CommandJobs: true}
+		},
+		ContextSurfaceDeps: promptloop.ContextSurfaceDeps{
+			WebSearchEnabled: func() bool { return webSearch },
+		},
+	}
+	targetMetas, _, _, err := promptloop.ProjectTurnTools(t.Context(), pDeps, sess, history, inject.CoordinatorTurnFrame{})
+	testutil.FailErr(t, "ProjectTurnTools", err)
+
+	targetOffered := make([]string, 0, len(targetMetas))
+	var targetWaitSchema map[string]any
+	for _, meta := range targetMetas {
+		targetOffered = append(targetOffered, meta.Name)
+		if meta.Name == "wait" {
+			targetWaitSchema = meta.ArgsSchema
+		}
+	}
+	sort.Strings(targetOffered)
+	return targetOffered, targetWaitSchema
+}
+
+type commandJobsAxisCase struct {
+	name           string
+	webSearch      bool
+	zeroRoots      bool
+	waitConds      []string
+	waitSchemaMode string
+	workersInFl    int
+	denyJobControl bool
+	wantPromoted   bool
+	wantProcessW   bool
+}
+
 func TestCommandJobsInjectMatchesProjectedTurnRequestAcrossAxes(t *testing.T) {
 	root := prefixStabilityTestRoot(t)
 	pe := prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{ModuleRoot: root})
@@ -362,44 +475,48 @@ func TestCommandJobsInjectMatchesProjectedTurnRequestAcrossAxes(t *testing.T) {
 	testutil.FailErr(t, "LoadEffectiveToolSchemas", err)
 
 	nonGitDir := t.TempDir()
-	now := time.Now().UTC()
 	liveJobs := []bgprocess.JobSnapshot{{
 		Handle:     "job-live-1",
 		Mode:       bgprocess.JobModeBackground,
 		OriginTool: "command",
-		StartedAt:  now.Add(-5 * time.Second),
+		StartedAt:  time.Now().UTC().Add(-5 * time.Second),
 	}}
 
-	for _, tc := range []struct {
-		name           string
-		webSearch      bool
-		waitConds      []string
-		workersInFl    int
-		denyJobControl bool
-		wantPromoted   bool
-		wantProcessW   bool
-	}{
+	for _, tc := range []commandJobsAxisCase{
 		{
-			name:         "non-git root with active job promotion and process_done wait",
+			name:         "non-git root with active job promotion and admitted process_done wait",
 			webSearch:    true,
 			waitConds:    []string{"process_done", "next_worker_done"},
-			workersInFl:  0,
 			wantPromoted: true,
 			wantProcessW: true,
 		},
 		{
-			name:         "disabled web search and narrowed worker-only wait",
-			webSearch:    false,
-			waitConds:    []string{"next_worker_done"},
-			workersInFl:  0,
-			wantPromoted: true,
-			wantProcessW: false,
+			name:         "zero project roots filters root-scoped tools while preserving wait",
+			webSearch:    true,
+			zeroRoots:    true,
+			waitConds:    []string{"process_done"},
+			wantPromoted: false,
+			wantProcessW: true,
+		},
+		{
+			name:           "wait offered with missing schema while profile admits process_done",
+			webSearch:      true,
+			waitConds:      []string{"process_done", "next_worker_done"},
+			waitSchemaMode: "missing",
+			wantPromoted:   true,
+			wantProcessW:   false,
+		},
+		{
+			name:           "wait offered with narrowed worker-only schema while profile admits process_done",
+			webSearch:      false,
+			waitConds:      []string{"process_done", "next_worker_done"},
+			waitSchemaMode: "narrowed_worker_only",
+			wantPromoted:   true,
+			wantProcessW:   false,
 		},
 		{
 			name:         "timer-only wait schema omits process_done",
 			webSearch:    true,
-			waitConds:    nil,
-			workersInFl:  0,
 			wantPromoted: true,
 			wantProcessW: false,
 		},
@@ -412,100 +529,99 @@ func TestCommandJobsInjectMatchesProjectedTurnRequestAcrossAxes(t *testing.T) {
 			wantPromoted:   false,
 			wantProcessW:   false,
 		},
+		{
+			name:           "no-lister preserves absent projection even when profile admits process_done",
+			webSearch:      true,
+			waitConds:      []string{"process_done", "next_worker_done"},
+			waitSchemaMode: "no_lister",
+			wantPromoted:   false,
+			wantProcessW:   false,
+		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			profiles := configureCoordinatorTestProfiles(baseProfiles, tc.waitConds, tc.denyJobControl)
-
-			implState := func(context.Context, *api.Session) surface.ImplementSessionState {
-				if tc.workersInFl > 0 {
-					return surface.ImplementSessionState{WorkersInFlight: tc.workersInFl, BatchPhase: "running"}
-				}
-				return surface.ImplementSessionState{}
-			}
-			var history []api.Message
-			if tc.workersInFl > 0 {
-				history = []api.Message{
-					{Role: api.MessageRoleUser, Content: "implement"},
-					{Role: api.MessageRoleUser, Kind: api.MessageKindHostLoopWake, Content: surface.HostLoopWakeSentinel},
-				}
-			} else {
-				history = []api.Message{{Role: api.MessageRoleUser, Content: "inspect"}}
-			}
-
-			eng := &AssemblyEngine{}
-			eng.SetDeps(AssemblyDeps{
-				Prompts:               pe,
-				Injects:               prompts.NewInjectRenderer(pe),
-				Limits:                func(context.Context, *api.Session) settings.SessionLimits { return settings.DefaultSessionLimits() },
-				ImplementSessionState: implState,
-				WebSearchEnabled:      func() bool { return tc.webSearch },
-				CommandJobs:           func(string) []bgprocess.JobSnapshot { return liveJobs },
-				WorkspaceRoots: func(context.Context, *api.Session) ([]map[string]any, int, string, int) {
-					return []map[string]any{{"id": "r1", "label": "root", "path": nonGitDir, "is_primary": true, "is_active": true}}, 1, nonGitDir, 0
-				},
-				SessionView: func(context.Context, *api.Session) *catalogview.View {
-					return (&catalogview.View{ToolSchemas: schemas}).WithToolProfiles(profiles)
-				},
-			})
-
-			sess := &api.Session{
-				ID:            "cmd-jobs-" + strings.ReplaceAll(tc.name, " ", "-"),
-				Mode:          api.SessionModeAgent,
-				Posture:       api.SessionPostureBuild,
-				AgentType:     orchestration.ProfileCoordinator,
-				WorkspacePath: nonGitDir,
-			}
-
-			// Compute the exact target request via promptloop.ProjectTurnTools.
-			pDeps := promptloop.ContextDeps{
-				Policy: toolpolicy.NewEngine(toolpolicy.EngineDeps{
-					ToolLister: &commandJobsToolLister{
-						sess:     sess,
-						profiles: profiles,
-						schemas:  schemas,
-					},
-					ProjectRootCount: func(context.Context, *api.Session) int { return 1 },
-				}),
-				ImplementSessionState: implState,
-				ProjectRootCount:      func(context.Context, *api.Session) int { return 1 },
-				LiveResources: func(string) toolcontract.ResourcePresence {
-					return toolcontract.ResourcePresence{CommandJobs: true}
-				},
-				ContextSurfaceDeps: promptloop.ContextSurfaceDeps{
-					WebSearchEnabled: func() bool { return tc.webSearch },
-				},
-			}
-			targetMetas, _, _, err := promptloop.ProjectTurnTools(t.Context(), pDeps, sess, history, inject.CoordinatorTurnFrame{})
-			testutil.FailErr(t, "ProjectTurnTools", err)
-
-			var targetOffered []string
-			var targetWaitSchema map[string]any
-			for _, meta := range targetMetas {
-				targetOffered = append(targetOffered, meta.Name)
-				if meta.Name == "wait" {
-					targetWaitSchema = meta.ArgsSchema
-				}
-			}
-			sort.Strings(targetOffered)
-
-			gotReader, gotWaitSchema, err := testPromptSurface(eng).commandJobsReader(t.Context(), sess, true, inject.CoordinatorTurnFrame{}, history, nil, liveJobs, nil)
-			testutil.FailErr(t, "commandJobsReader", err)
-			if !reflect.DeepEqual(gotReader.Offered(), targetOffered) {
-				t.Fatalf("commandJobsReader offered = %v, want target request %v", gotReader.Offered(), targetOffered)
-			}
-			if gotReader.Facts()["has_git"] != false || gotReader.WebSearch() != tc.webSearch {
-				t.Fatalf("reader host facts mismatch: has_git=%v web_search=%v", gotReader.Facts()["has_git"], gotReader.WebSearch())
-			}
-			if inject.WaitSchemaAllowsProcessDone(gotWaitSchema) != inject.WaitSchemaAllowsProcessDone(targetWaitSchema) ||
-				inject.WaitSchemaAllowsProcessDone(gotWaitSchema) != tc.wantProcessW {
-				t.Fatalf("WaitSchemaAllowsProcessDone = %v (target %v), want %v",
-					inject.WaitSchemaAllowsProcessDone(gotWaitSchema), inject.WaitSchemaAllowsProcessDone(targetWaitSchema), tc.wantProcessW)
-			}
-
-			eng.BeginPromptTurn(sess.ID, "")
-			msgs, err := eng.BuildCompletionMessages(t.Context(), sess, history, nil)
-			testutil.FailErr(t, "BuildCompletionMessages", err)
-			assertCommandJobsInjectMatchesTarget(t, msgs, targetOffered, targetWaitSchema, tc.wantPromoted)
+			runCommandJobsAxisCase(t, pe, baseProfiles, schemas, nonGitDir, liveJobs, tc)
 		})
 	}
+}
+
+func runCommandJobsAxisCase(
+	t *testing.T,
+	pe *prompts.FileTemplateEngine,
+	baseProfiles []sandbox.ToolProfile,
+	schemas *toolschema.Config,
+	nonGitDir string,
+	liveJobs []bgprocess.JobSnapshot,
+	tc commandJobsAxisCase,
+) {
+	t.Helper()
+	profiles := configureCoordinatorTestProfiles(baseProfiles, tc.waitConds, tc.denyJobControl)
+	promptLister := buildProjectedTestPromptLister(profiles, schemas, tc.waitSchemaMode)
+
+	implState := func(context.Context, *api.Session) surface.ImplementSessionState {
+		if tc.workersInFl > 0 {
+			return surface.ImplementSessionState{WorkersInFlight: tc.workersInFl, BatchPhase: "running"}
+		}
+		return surface.ImplementSessionState{}
+	}
+	history := []api.Message{{Role: api.MessageRoleUser, Content: "inspect"}}
+	if tc.workersInFl > 0 {
+		history = []api.Message{
+			{Role: api.MessageRoleUser, Content: "implement"},
+			{Role: api.MessageRoleUser, Kind: api.MessageKindHostLoopWake, Content: surface.HostLoopWakeSentinel},
+		}
+	}
+
+	rootCount, wsPath := 1, nonGitDir
+	rootsFn := func(context.Context, *api.Session) ([]map[string]any, int, string, int) {
+		return []map[string]any{{"id": "r1", "label": "root", "path": nonGitDir, "is_primary": true, "is_active": true}}, 1, nonGitDir, 0
+	}
+	if tc.zeroRoots {
+		rootCount, wsPath = 0, ""
+		rootsFn = func(context.Context, *api.Session) ([]map[string]any, int, string, int) {
+			return nil, 0, "", 0
+		}
+	}
+
+	eng := &AssemblyEngine{}
+	eng.SetDeps(AssemblyDeps{
+		Prompts:               pe,
+		Injects:               prompts.NewInjectRenderer(pe),
+		Limits:                func(context.Context, *api.Session) settings.SessionLimits { return settings.DefaultSessionLimits() },
+		ImplementSessionState: implState,
+		WebSearchEnabled:      func() bool { return tc.webSearch },
+		CommandJobs:           func(string) []bgprocess.JobSnapshot { return liveJobs },
+		PromptToolLister:      promptLister,
+		WorkspaceRoots:        rootsFn,
+		SessionView: func(context.Context, *api.Session) *catalogview.View {
+			return (&catalogview.View{ToolSchemas: schemas}).WithToolProfiles(profiles)
+		},
+	})
+
+	sess := &api.Session{
+		ID:            "cmd-jobs-" + strings.ReplaceAll(tc.name, " ", "-"),
+		Mode:          api.SessionModeAgent,
+		Posture:       api.SessionPostureBuild,
+		AgentType:     orchestration.ProfileCoordinator,
+		WorkspacePath: wsPath,
+	}
+
+	targetOffered, targetWaitSchema := projectCommandJobsTarget(t, sess, history, promptLister, implState, tc.webSearch, rootCount)
+	gotReader, gotWaitSchema, err := testPromptSurface(eng).commandJobsReader(t.Context(), sess, true, inject.CoordinatorTurnFrame{}, history, nil, liveJobs, nil)
+	testutil.FailErr(t, "commandJobsReader", err)
+	if !reflect.DeepEqual(gotReader.Offered(), targetOffered) {
+		t.Fatalf("commandJobsReader offered = %v, want target request %v", gotReader.Offered(), targetOffered)
+	}
+	if gotReader.Facts()["has_git"] != false || gotReader.WebSearch() != tc.webSearch {
+		t.Fatalf("reader host facts mismatch: has_git=%v web_search=%v", gotReader.Facts()["has_git"], gotReader.WebSearch())
+	}
+	if inject.WaitSchemaAllowsProcessDone(gotWaitSchema) != inject.WaitSchemaAllowsProcessDone(targetWaitSchema) ||
+		inject.WaitSchemaAllowsProcessDone(gotWaitSchema) != tc.wantProcessW {
+		t.Fatalf("WaitSchemaAllowsProcessDone = %v (target %v), want %v",
+			inject.WaitSchemaAllowsProcessDone(gotWaitSchema), inject.WaitSchemaAllowsProcessDone(targetWaitSchema), tc.wantProcessW)
+	}
+
+	eng.BeginPromptTurn(sess.ID, "")
+	msgs, err := eng.BuildCompletionMessages(t.Context(), sess, history, nil)
+	testutil.FailErr(t, "BuildCompletionMessages", err)
+	assertCommandJobsInjectMatchesTarget(t, msgs, targetOffered, targetWaitSchema, tc.wantPromoted)
 }

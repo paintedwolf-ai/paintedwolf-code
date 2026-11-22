@@ -5,14 +5,23 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/messageview"
+	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
-type promotionSessions struct{ Sessions }
+type promotionSessions struct {
+	Sessions
+	mode api.SessionMode
+}
 
-func (promotionSessions) Get(_ context.Context, id string) (*api.Session, error) {
-	return &api.Session{ID: id, Mode: api.SessionModeAgent}, nil
+func (p promotionSessions) Get(_ context.Context, id string) (*api.Session, error) {
+	mode := p.mode
+	if mode == "" {
+		mode = api.SessionModeAgent
+	}
+	return &api.Session{ID: id, Mode: mode}, nil
 }
 
 func (promotionSessions) ReadSourceTurn(context.Context, string, int) (messageview.SourceTurn, error) {
@@ -22,6 +31,7 @@ func (promotionSessions) ReadSourceTurn(context.Context, string, int) (messagevi
 type promotionFixture struct {
 	input                api.PromoteOverlayInput
 	rows                 []api.Message
+	rebased              []api.OverlayRebaseOutcome
 	reconciles, promotes int
 }
 
@@ -35,7 +45,7 @@ func (f *promotionFixture) AppendPlain(_ context.Context, _ string, m ...api.Mes
 }
 func (f *promotionFixture) PromoteOverlay(_ context.Context, _, _ string, in api.PromoteOverlayInput) (api.WorkerMergeResult, error) {
 	f.input = in
-	return api.WorkerMergeResult{Status: api.WorkerMergeStatusMerged}, nil
+	return api.WorkerMergeResult{Status: api.WorkerMergeStatusMerged, Rebased: f.rebased}, nil
 }
 func (*promotionFixture) RejectOverlay(context.Context, string, string, string) (api.OverlayRejectOutcome, error) {
 	return api.OverlayRejectOutcome{}, nil
@@ -63,5 +73,37 @@ func TestPromotionAndRejectionRecordHostEventsAtCurrentTurn(t *testing.T) {
 	}
 	if !strings.Contains(f.rows[0].Content, `"merge_status":"merged"`) {
 		t.Fatalf("promotion event=%q", f.rows[0].Content)
+	}
+}
+
+func TestPromoteOverlayRebaseConflictBannersRespectSessionMode(t *testing.T) {
+	guidance.SetGuidanceRenderer(prompts.NewGuidanceRenderer(prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{})))
+	t.Cleanup(func() { guidance.SetGuidanceRenderer(nil) })
+
+	rebased := []api.OverlayRebaseOutcome{{
+		OverlayID: "ov-child",
+		Status:    api.WorkerMergeStatusRebasing,
+		Conflicts: []string{"pkg/main.go"},
+	}}
+	for _, tc := range []struct {
+		mode        api.SessionMode
+		wantPromote bool
+	}{
+		{api.SessionModeAgent, true},
+		{api.SessionModeAsk, false},
+	} {
+		f := &promotionFixture{rebased: rebased}
+		sessions := promotionSessions{mode: tc.mode}
+		s := New(sessions, sessions, nil, nil, f, f, f, f)
+		s.SetOverlayPromoter(f)
+		if _, err := s.PromoteOverlay(t.Context(), "session", "ov-parent", api.PromoteOverlayInput{}); err != nil {
+			t.Fatalf("mode %s PromoteOverlay failed: %v", tc.mode, err)
+		}
+		if len(f.rows) != 1 || !strings.Contains(f.rows[0].Content, "`preview_overlay`") {
+			t.Fatalf("mode %s missing preview_overlay banner: %+v", tc.mode, f.rows)
+		}
+		if strings.Contains(f.rows[0].Content, "`promote_overlay`") != tc.wantPromote {
+			t.Fatalf("mode %s promote_overlay presence = %v, want %v:\n%s", tc.mode, !tc.wantPromote, tc.wantPromote, f.rows[0].Content)
+		}
 	}
 }

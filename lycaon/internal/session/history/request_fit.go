@@ -11,6 +11,7 @@ import (
 	"github.com/lycaon/lycaon/internal/messageview"
 	"github.com/lycaon/lycaon/internal/session/promptassembly"
 	"github.com/lycaon/lycaon/internal/session/store"
+	"github.com/lycaon/lycaon/internal/toolreach"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -57,7 +58,15 @@ func (m *Service) fitRequest(ctx context.Context, sess *api.Session, history []a
 			m.cutoffs.noteFit(key, sess.ID, projection.history, rows)
 		}
 	}
-	recall := req.ToolUse != modelcall.ToolUseForbidden && (slices.ContainsFunc(req.Tools, func(t tools.ToolMeta) bool { return t.Name == "recall" }) || (m != nil && m.recallAvailable != nil && m.recallAvailable(ctx, sess)))
+	recallIdx := slices.IndexFunc(req.Tools, func(t tools.ToolMeta) bool { return t.Name == "recall" })
+	recall := req.ToolUse != modelcall.ToolUseForbidden && (recallIdx >= 0 || (m != nil && m.recallAvailable != nil && m.recallAvailable(ctx, sess)))
+	if recall && recallIdx >= 0 && !toolreach.FromContext(ctx).Known() {
+		var schemas map[string]map[string]any
+		if req.Tools[recallIdx].ArgsSchema != nil {
+			schemas = map[string]map[string]any{"recall": req.Tools[recallIdx].ArgsSchema}
+		}
+		ctx = toolreach.WithRequest(ctx, toolreach.Offered([]string{"recall"}).WithSchemas(schemas))
+	}
 	projected, omission, err := m.applyFitCut(ctx, sess, recall, key, view, projected, cfg)
 	if err != nil {
 		return req, err

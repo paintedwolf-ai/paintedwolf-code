@@ -8,9 +8,11 @@ import (
 	"sync"
 	"time"
 
+	"github.com/lycaon/lycaon/internal/extpacks"
 	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/internal/toolreach"
+	"github.com/lycaon/lycaon/internal/toolschema"
 )
 
 const (
@@ -40,7 +42,44 @@ var (
 	fallbackGuidanceOnce     sync.Once
 	fallbackGuidanceRenderer *prompts.GuidanceRenderer
 	plainCommandOperandRe    = regexp.MustCompile(`^[A-Za-z0-9_./:-]+$`)
+	stockProjectedSchemas    = sync.OnceValue(func() map[string]map[string]any {
+		eff, err := extpacks.CatalogForConsumers()
+		if err != nil || eff == nil {
+			return nil
+		}
+		cfg, _, err := extpacks.LoadEffectiveToolSchemas(eff)
+		if err != nil || cfg == nil {
+			return nil
+		}
+		out := make(map[string]map[string]any, len(cfg.Tools))
+		for name := range cfg.Tools {
+			if meta, ok := cfg.ToolMeta(name); ok && meta.ArgsSchema != nil {
+				out[name] = toolschema.ProjectArgsSchema(meta.ArgsSchema)
+			}
+		}
+		return out
+	})
 )
+
+// StockProjectedToolSchemas returns projected stock argument schemas for names.
+func StockProjectedToolSchemas(names ...string) map[string]map[string]any {
+	all := stockProjectedSchemas()
+	if len(all) == 0 || len(names) == 0 {
+		return nil
+	}
+	out := make(map[string]map[string]any, len(names))
+	for _, name := range names {
+		if s, ok := all[name]; ok && s != nil {
+			out[name] = s
+		}
+	}
+	return out
+}
+
+// StockToolReach constructs an offered toolreach.Request carrying stock projected schemas.
+func StockToolReach(names ...string) toolreach.Request {
+	return toolreach.Offered(names).WithSchemas(StockProjectedToolSchemas(names...))
+}
 
 // QuoteCommandPath formats path as one command-language-v1 operand while
 // keeping leading @label/ session addresses unquoted so they resolve.
