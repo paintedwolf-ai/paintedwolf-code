@@ -10,6 +10,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/lycaon/lycaon/internal/toolschema"
 	"github.com/lycaon/lycaon/internal/toolsurface"
 )
 
@@ -112,11 +113,7 @@ func (r Request) AcceptsField(tool, dottedPath string) bool {
 		return false
 	}
 	schema, ok := r.ToolSchema(tool)
-	if !ok {
-		return false
-	}
-	prop, ok := lookupSchemaProperty(schema, dottedPath)
-	return ok && prop != nil
+	return ok && toolschema.SchemaAcceptsField(schema, dottedPath)
 }
 
 // AcceptsEnumValue reports whether tool's projected schema admits dottedPath and value.
@@ -125,53 +122,7 @@ func (r Request) AcceptsEnumValue(tool, dottedPath, value string) bool {
 		return false
 	}
 	schema, ok := r.ToolSchema(tool)
-	if !ok {
-		return false
-	}
-	prop, ok := lookupSchemaProperty(schema, dottedPath)
-	if !ok || prop == nil {
-		return false
-	}
-	rawEnum, hasEnum := prop["enum"]
-	if !hasEnum {
-		return true
-	}
-	switch vals := rawEnum.(type) {
-	case []string:
-		return slices.Contains(vals, value)
-	case []any:
-		for _, item := range vals {
-			if s, isStr := item.(string); isStr && s == value {
-				return true
-			}
-		}
-		return false
-	default:
-		return true
-	}
-}
-
-func lookupSchemaProperty(schema map[string]any, dottedPath string) (map[string]any, bool) {
-	if schema == nil {
-		return nil, false
-	}
-	cur := schema
-	for _, seg := range strings.Split(dottedPath, ".") {
-		seg = strings.TrimSpace(seg)
-		if seg == "" {
-			continue
-		}
-		props, ok := cur["properties"].(map[string]any)
-		if !ok {
-			return nil, false
-		}
-		next, ok := props[seg].(map[string]any)
-		if !ok {
-			return nil, false
-		}
-		cur = next
-	}
-	return cur, true
+	return ok && toolschema.SchemaAcceptsEnumValue(schema, dottedPath, value)
 }
 
 // Program reports whether a native program can enter the reader's next call.

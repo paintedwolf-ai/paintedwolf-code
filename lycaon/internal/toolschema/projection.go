@@ -2,6 +2,7 @@ package toolschema
 
 import (
 	"reflect"
+	"slices"
 	"strings"
 )
 
@@ -108,12 +109,68 @@ func SchemaAcceptsField(projected map[string]any, fieldPath string) bool {
 	if fieldPath == "" || projected == nil {
 		return false
 	}
-	for _, path := range ArgFieldPaths(projected) {
-		if path == fieldPath {
-			return true
+	_, ok := findFieldSchema(projected, "", fieldPath, 0)
+	return ok
+}
+
+// SchemaAcceptsEnumValue reports whether projected admits fieldPath and string enum value.
+func SchemaAcceptsEnumValue(projected map[string]any, fieldPath, value string) bool {
+	fieldPath = strings.TrimSpace(fieldPath)
+	if fieldPath == "" || projected == nil {
+		return false
+	}
+	prop, ok := findFieldSchema(projected, "", fieldPath, 0)
+	if !ok {
+		return false
+	}
+	rawEnum, hasEnum := prop["enum"]
+	if !hasEnum {
+		return true
+	}
+	switch vals := rawEnum.(type) {
+	case []string:
+		return slices.Contains(vals, value)
+	case []any:
+		for _, item := range vals {
+			if s, isStr := item.(string); isStr && s == value {
+				return true
+			}
+		}
+		return false
+	default:
+		return true
+	}
+}
+
+func findFieldSchema(schema map[string]any, prefix, target string, depth int) (map[string]any, bool) {
+	if schema == nil || depth > argFieldDepthMax {
+		return nil, false
+	}
+	if items, ok := schema["items"].(map[string]any); ok {
+		if found, ok := findFieldSchema(items, prefix, target, depth+1); ok {
+			return found, true
 		}
 	}
-	return false
+	props, _ := schema["properties"].(map[string]any)
+	for name, raw := range props {
+		if strings.TrimSpace(name) == "" {
+			continue
+		}
+		path := name
+		if prefix != "" {
+			path = prefix + "." + name
+		}
+		child, ok := raw.(map[string]any)
+		if path == target {
+			return child, ok && child != nil
+		}
+		if ok && strings.HasPrefix(target, path+".") {
+			if found, ok := findFieldSchema(child, path, target, depth+1); ok {
+				return found, true
+			}
+		}
+	}
+	return nil, false
 }
 
 func cloneSchemaMap(in map[string]any) map[string]any {
