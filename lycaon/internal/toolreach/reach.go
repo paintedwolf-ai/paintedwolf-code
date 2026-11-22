@@ -6,8 +6,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"math"
-	"reflect"
 	"regexp"
 	"slices"
 	"sort"
@@ -244,120 +242,42 @@ func quoteCallString(s string) string {
 	return strings.ReplaceAll(strconv.Quote(s), "`", `\u0060`)
 }
 
-func formatFloatValue(f float64, bits int) string {
-	if !math.IsNaN(f) && !math.IsInf(f, 0) && math.Trunc(f) == f && f >= -9007199254740992 && f <= 9007199254740992 {
-		return strconv.FormatInt(int64(f), 10)
-	}
-	return strconv.FormatFloat(f, 'f', -1, bits)
-}
-
 func canonicalMap(in map[string]any) map[string]any {
-	if in == nil {
-		return nil
+	if len(in) == 0 {
+		return in
+	}
+	if raw, err := json.Marshal(in); err == nil {
+		dec := json.NewDecoder(bytes.NewReader(raw))
+		dec.UseNumber()
+		var out map[string]any
+		if dec.Decode(&out) == nil {
+			return out
+		}
 	}
 	out := make(map[string]any, len(in))
 	for k, v := range in {
-		out[k] = canonicalArgValue(v)
+		if raw, err := json.Marshal(v); err == nil {
+			dec := json.NewDecoder(bytes.NewReader(raw))
+			dec.UseNumber()
+			var decoded any
+			if dec.Decode(&decoded) == nil {
+				out[k] = decoded
+				continue
+			}
+		}
+		out[k] = fmt.Sprint(v)
 	}
 	return out
 }
 
-func canonicalArgValue(value any) any {
-	switch v := value.(type) {
-	case nil, string, bool, int64, uint64, float32, float64, json.Number:
-		return v
-	case int:
-		return int64(v)
-	case json.Marshaler:
-		return decodeJSONValue(v)
-	}
-	rv := reflect.ValueOf(value)
-	for rv.Kind() == reflect.Pointer || rv.Kind() == reflect.Interface {
-		if rv.IsNil() {
-			return nil
-		}
-		rv = rv.Elem()
-	}
-	return canonicalReflectValue(rv)
-}
-
-func canonicalReflectValue(rv reflect.Value) any {
-	switch rv.Kind() {
-	case reflect.String:
-		return rv.String()
-	case reflect.Bool:
-		return rv.Bool()
-	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
-		return rv.Int()
-	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Uintptr:
-		return rv.Uint()
-	case reflect.Float32:
-		return float32(rv.Float())
-	case reflect.Float64:
-		return rv.Float()
-	case reflect.Slice:
-		if rv.IsNil() {
-			return nil
-		}
-		return canonicalIndexedItems(rv)
-	case reflect.Array:
-		return canonicalIndexedItems(rv)
-	case reflect.Map:
-		if rv.IsNil() {
-			return nil
-		}
-		if rv.Type().Key().Kind() == reflect.String {
-			out := make(map[string]any, rv.Len())
-			iter := rv.MapRange()
-			for iter.Next() {
-				out[iter.Key().String()] = canonicalArgValue(iter.Value().Interface())
-			}
-			return out
-		}
-		return decodeJSONValue(rv.Interface())
-	default:
-		return decodeJSONValue(rv.Interface())
-	}
-}
-
-func canonicalIndexedItems(rv reflect.Value) []any {
-	items := make([]any, rv.Len())
-	for i := range items {
-		items[i] = canonicalArgValue(rv.Index(i).Interface())
-	}
-	return items
-}
-
-func decodeJSONValue(value any) any {
-	raw, err := json.Marshal(value)
-	if err != nil {
-		return fmt.Sprint(value)
-	}
-	dec := json.NewDecoder(bytes.NewReader(raw))
-	dec.UseNumber()
-	var decoded any
-	if err := dec.Decode(&decoded); err != nil {
-		return fmt.Sprint(value)
-	}
-	return canonicalArgValue(decoded)
-}
-
 func argText(value any) string {
-	switch v := canonicalArgValue(value).(type) {
+	switch v := value.(type) {
 	case nil:
 		return "null"
 	case string:
 		return quoteCallString(v)
 	case bool:
 		return strconv.FormatBool(v)
-	case int64:
-		return strconv.FormatInt(v, 10)
-	case uint64:
-		return strconv.FormatUint(v, 10)
-	case float32:
-		return formatFloatValue(float64(v), 32)
-	case float64:
-		return formatFloatValue(v, 64)
 	case json.Number:
 		return v.String()
 	case []any:

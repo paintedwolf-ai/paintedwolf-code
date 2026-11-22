@@ -2,6 +2,7 @@ package toolreach_test
 
 import (
 	"encoding/json"
+	"math"
 	"reflect"
 	"strings"
 	"testing"
@@ -299,10 +300,10 @@ func TestCallTextPreservesTypedSlicesMapsStructsAndExactInt64(t *testing.T) {
 	if issues := toolvocabtest.ValidateCallExample(parsedCmd[0], projCmd); len(issues) > 0 {
 		t.Fatalf("ValidateCallExample on bool/int call failed: %+v", issues)
 	}
-	testExtraReflectAndJSONBranches(t, cmdCat)
+	testExtraJSONAuthorityBranches(t, cmdCat)
 }
 
-func testExtraReflectAndJSONBranches(t *testing.T, cmdCat *toolvocab.Catalog) {
+func testExtraJSONAuthorityBranches(t *testing.T, cmdCat *toolvocab.Catalog) {
 	t.Helper()
 	type customKey string
 	type extraCfg struct {
@@ -335,5 +336,72 @@ func testExtraReflectAndJSONBranches(t *testing.T, cmdCat *toolvocab.Catalog) {
 	parsedExtra := toolvocabtest.ParseCallExamples(cmdCat, gotExtra)
 	if len(parsedExtra) != 1 || !parsedExtra[0].HasEllipsis {
 		t.Fatalf("expected extra partial call to remain partial, got %+v", parsedExtra)
+	}
+
+	fallbackPartial := toolreach.Call{
+		Tool:    "command",
+		Partial: true,
+		Args:    map[string]any{"command": "ls", "nan": math.NaN()},
+	}
+	if got := fallbackPartial.Text(); got != "`command(command=\"ls\", nan=\"NaN\", …)`" {
+		t.Fatalf("fallback Call.Text() = %q", got)
+	}
+}
+
+func TestCallTextByteSliceMatchesStandardJSONRepresentation(t *testing.T) {
+	customSchemas := toolschema.ConfigFromEntries(map[string]toolschema.Entry{
+		"command": {
+			Description: "Run command",
+			Schema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"command": map[string]any{"type": "string"},
+					"payload": map[string]any{"type": "string", "enum": []any{"b2s=", "bm9wZQ=="}},
+				},
+				"required": []any{"command", "payload"},
+			},
+		},
+	})
+	projSchema := toolschema.ProjectArgsSchema(customSchemas.Tools["command"].Schema)
+	cat, err := toolvocab.NewCatalog(customSchemas, []sandbox.ToolProfile{{ID: "p", Tools: map[string]bool{"command": true}}}, toolvocab.Provenance{})
+	testutil.FailErr(t, "catalog", err)
+
+	origArgs := map[string]any{
+		"command": "printf",
+		"payload": []byte("ok"),
+	}
+	rawJSON, err := json.Marshal(origArgs)
+	testutil.FailErr(t, "marshal origArgs", err)
+	var origJSONArgs map[string]any
+	testutil.FailErr(t, "unmarshal origArgs", json.Unmarshal(rawJSON, &origJSONArgs))
+
+	call := toolreach.Call{Tool: "command", Args: origArgs}
+	rendered := call.Text()
+	wantRendered := "`command(command=\"printf\", payload=\"b2s=\")`"
+	if rendered != wantRendered || strings.Contains(rendered, "[111, 107]") {
+		t.Fatalf("Call.Text() = %s, want %s", rendered, wantRendered)
+	}
+
+	parsed := toolvocabtest.ParseCallExamples(cat, rendered)
+	if len(parsed) != 1 || parsed[0].HasEllipsis || parsed[0].HasPlaceholder {
+		t.Fatalf("expected 1 complete parsed example, got %+v", parsed)
+	}
+	if !reflect.DeepEqual(parsed[0].Args, origJSONArgs) {
+		t.Fatalf("parsed args = %#v, want standard JSON representation %#v", parsed[0].Args, origJSONArgs)
+	}
+	if issues := toolvocabtest.ValidateCallExample(parsed[0], projSchema); len(issues) > 0 {
+		t.Fatalf("ValidateCallExample issues on byte-slice call: %+v", issues)
+	}
+	if err := tools.ValidateToolArgs(projSchema, parsed[0].Args); err != nil {
+		t.Fatalf("ValidateToolArgs failed on byte-slice call: %v", err)
+	}
+
+	req := toolreach.Offered([]string{"command"}).WithSchemas(map[string]map[string]any{"command": projSchema})
+	if _, ok := req.Sequence(call); !ok {
+		t.Fatal("Sequence rejected admitted []byte(\"ok\") string enum value \"b2s=\"")
+	}
+	rejected := toolreach.Call{Tool: "command", Args: map[string]any{"command": "printf", "payload": []byte("other")}}
+	if _, ok := req.Sequence(rejected); ok {
+		t.Fatal("Sequence admitted unpermitted []byte(\"other\") string enum value")
 	}
 }
