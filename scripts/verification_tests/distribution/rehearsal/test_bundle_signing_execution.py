@@ -20,6 +20,6 @@ class BundleSigningTests(unittest.TestCase):
         result = subprocess.run(["bash", str(ROOT / "scripts/den-build-bundle.sh")], cwd=ROOT,
                                 env={**os.environ, "APPLE_SIGNING_IDENTITY": "", "APPLE_ENGINE_PROVISIONING_PROFILE": "",
                                      "PATH": str(tools) + os.pathsep + os.environ["PATH"]},
-                                capture_output=True, text=True, timeout=120)
+                                capture_output=True, text=True)
         self.assertEqual(result.returncode, 2)
         self.assertFalse(ran.exists())

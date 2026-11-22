@@ -8,7 +8,6 @@ import {
 import {
   createScrollportFixture,
   extentHoldPx,
-  flushRetainedExtentReclaim,
   stubAnimationFrames,
   unbindTrackedScrollportMotion,
   wheel,
@@ -185,29 +184,33 @@ describe("ScrollportMotion press anchor", () => {
   });
 
   it("returns the held range by gliding once the click sequence can no longer continue", async () => {
-    const fixture = createScrollportFixture({ initialScrollTop: 1325 });
-    const { shell, press } = shellAt(fixture, () => 1500);
-    pointerClick(press);
-    const change = fixture.motion.declareHeightChange(shell);
-    fixture.setNaturalScrollHeight(1700, { notify: false });
-    await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
-    change.end();
-    await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
-    // A quick second press still finds the control where it was.
-    expect(fixture.viewport.scrollTop).toBe(1325);
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "performance", "requestAnimationFrame", "cancelAnimationFrame"] });
+    const nextFrame = () => vi.advanceTimersByTimeAsync(16);
+    try {
+      const fixture = createScrollportFixture({ initialScrollTop: 1325 });
+      const { shell, press } = shellAt(fixture, () => 1500);
+      pointerClick(press);
+      const change = fixture.motion.declareHeightChange(shell);
+      fixture.setNaturalScrollHeight(1700, { notify: false });
+      await nextFrame();
+      change.end();
+      await nextFrame();
+      // A quick second press still finds the control where it was.
+      expect(fixture.viewport.scrollTop).toBe(1325);
 
-    await new Promise<void>((resolve) => setTimeout(resolve, 520));
-    await flushRetainedExtentReclaim();
-    const visited = new Set<number>();
-    for (let frame = 0; frame < 60 && fixture.viewport.scrollTop > 1025; frame += 1) {
-      await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
-      visited.add(fixture.viewport.scrollTop);
-    }
-    expect(fixture.viewport.scrollTop).toBe(1025);
-    // A glide passes through intermediate offsets instead of landing in one write.
-    expect([...visited].some((offset) => offset > 1025 && offset < 1325)).toBe(true);
-    expect(extentHoldPx(fixture.viewport)).toBe(0);
-    unbindScrollportMotion(fixture.host);
+      // Past the multi-click window.
+      await vi.advanceTimersByTimeAsync(520);
+      const visited = new Set<number>();
+      for (let frame = 0; frame < 60 && fixture.viewport.scrollTop > 1025; frame += 1) {
+        await nextFrame();
+        visited.add(fixture.viewport.scrollTop);
+      }
+      expect(fixture.viewport.scrollTop).toBe(1025);
+      // A glide passes through intermediate offsets instead of landing in one write.
+      expect([...visited].some((offset) => offset > 1025 && offset < 1325)).toBe(true);
+      expect(extentHoldPx(fixture.viewport)).toBe(0);
+      unbindScrollportMotion(fixture.host);
+    } finally { vi.useRealTimers(); }
   });
 
   it("ends when the reader scrolls or the application navigates", () => {
@@ -271,16 +274,19 @@ describe("ScrollportMotion direct input past the tail", () => {
   });
 
   it("never grows range past the tail from the reader's own motion", () => {
-    const { fixture, stop } = heldPastTail();
-    const held = extentHoldPx(fixture.viewport);
-    for (const offset of [1285, 1245, 1285, 1325]) {
-      fixture.viewport.scrollTop = offset;
-      fixture.motion.input.noteNativeInput("wheel");
-      fixture.viewport.dispatchEvent(new Event("scroll"));
-      expect(extentHoldPx(fixture.viewport), `at ${offset}`).toBeLessThanOrEqual(held);
-    }
-    stop();
-    unbindScrollportMotion(fixture.host);
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "performance"] });
+    try {
+      const { fixture, stop } = heldPastTail();
+      const held = extentHoldPx(fixture.viewport);
+      for (const offset of [1285, 1245, 1285, 1325]) {
+        fixture.viewport.scrollTop = offset;
+        fixture.motion.input.noteNativeInput("wheel");
+        fixture.viewport.dispatchEvent(new Event("scroll"));
+        expect(extentHoldPx(fixture.viewport), `at ${offset}`).toBeLessThanOrEqual(held);
+      }
+      stop();
+      unbindScrollportMotion(fixture.host);
+    } finally { vi.useRealTimers(); }
   });
 
   it("keeps held range through the gesture, then releases it so the tail is a hard end again", async () => {
@@ -311,60 +317,69 @@ describe("ScrollportMotion direct input past the tail", () => {
   it("never contracts its own range under a live gesture, whatever content and offset do", async () => {
     // Range that grows and contracts at its end under WebKit's scrolling thread strands painting
     // and hit testing apart, so this scrollport's spacer only grows until input settles.
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "performance"] });
     let seed = 0x5eed;
     const random = () => (seed = (seed * 1103515245 + 12345) % 2 ** 31) / 2 ** 31;
-    for (let run = 0; run < 20; run += 1) {
-      const { fixture, stop, settleFrames } = heldPastTail();
-      let held = extentHoldPx(fixture.viewport);
-      for (let step = 0; step < 40; step += 1) {
-        // Virtual rows near the end mount at estimates and then measure, so natural height flaps.
-        fixture.setNaturalScrollHeight(1600 + Math.round(random() * 200));
-        const max = fixture.viewport.scrollHeight - 675;
-        fixture.viewport.scrollTop = Math.max(0, Math.min(max, fixture.viewport.scrollTop + Math.round((random() - 0.5) * 160)));
-        fixture.motion.input.noteNativeInput("wheel");
-        fixture.viewport.dispatchEvent(new Event("scroll"));
-        fixture.motion.notifyLayoutMutated();
-        await settleFrames();
-        const now = extentHoldPx(fixture.viewport);
-        expect(now, `run ${run} step ${step}`).toBeGreaterThanOrEqual(held);
-        held = now;
+    try {
+      for (let run = 0; run < 20; run += 1) {
+        const { fixture, stop, settleFrames } = heldPastTail();
+        let held = extentHoldPx(fixture.viewport);
+        for (let step = 0; step < 40; step += 1) {
+          // Virtual rows near the end mount at estimates and then measure, so natural height flaps.
+          fixture.setNaturalScrollHeight(1600 + Math.round(random() * 200));
+          const max = fixture.viewport.scrollHeight - 675;
+          fixture.viewport.scrollTop = Math.max(0, Math.min(max, fixture.viewport.scrollTop + Math.round((random() - 0.5) * 160)));
+          fixture.motion.input.noteNativeInput("wheel");
+          fixture.viewport.dispatchEvent(new Event("scroll"));
+          fixture.motion.notifyLayoutMutated();
+          await settleFrames();
+          const now = extentHoldPx(fixture.viewport);
+          expect(now, `run ${run} step ${step}`).toBeGreaterThanOrEqual(held);
+          held = now;
+        }
+        stop();
+        unbindScrollportMotion(fixture.host);
       }
-      stop();
-      unbindScrollportMotion(fixture.host);
-    }
+    } finally { vi.useRealTimers(); }
   });
 
   it("leaves a wheel an inner scrollport claimed to that scrollport", () => {
-    const { fixture, stop } = heldPastTail();
-    const inner = createScrollportFixture({ initialScrollTop: 0, initialScrollHeight: 2000 });
-    fixture.viewport.firstElementChild?.appendChild(inner.host);
-    const stopInner = bindScrollportNativeInput(inner.motion);
-    const down = wheel({ deltaY: 40 });
-    inner.viewport.dispatchEvent(down);
-    expect(down.defaultPrevented).toBe(false);
-    stopInner();
-    stop();
-    unbindScrollportMotion(inner.host);
-    unbindScrollportMotion(fixture.host);
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "performance"] });
+    try {
+      const { fixture, stop } = heldPastTail();
+      const inner = createScrollportFixture({ initialScrollTop: 0, initialScrollHeight: 2000 });
+      fixture.viewport.firstElementChild?.appendChild(inner.host);
+      const stopInner = bindScrollportNativeInput(inner.motion);
+      const down = wheel({ deltaY: 40 });
+      inner.viewport.dispatchEvent(down);
+      expect(down.defaultPrevented).toBe(false);
+      stopInner();
+      stop();
+      unbindScrollportMotion(inner.host);
+      unbindScrollportMotion(fixture.host);
+    } finally { vi.useRealTimers(); }
   });
 
   it("never pulls an upward wheel back toward range it held", () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "performance"] });
     stubAnimationFrames();
-    const fixture = createScrollportFixture({ initialScrollTop: 1325, initialScrollHeight: 2000 });
-    fixture.motion.input.noteNativeInput("wheel");
-    // Content contracts under the reader, and the clamp restores the held offset.
-    fixture.setNaturalScrollHeight(1700);
-    expect(fixture.viewport.scrollTop).toBe(1325);
-
-    for (let step = 1; step <= 6; step += 1) {
-      // The scrolling thread moves before the wheel and scroll events reach the page.
-      const moved = 1325 - step * 40;
-      fixture.viewport.scrollTop = moved;
+    try {
+      const fixture = createScrollportFixture({ initialScrollTop: 1325, initialScrollHeight: 2000 });
       fixture.motion.input.noteNativeInput("wheel");
-      fixture.viewport.dispatchEvent(new Event("scroll"));
-      expect(fixture.viewport.scrollTop, `step ${step}`).toBe(moved);
-    }
-    unbindScrollportMotion(fixture.host);
+      // Content contracts under the reader, and the clamp restores the held offset.
+      fixture.setNaturalScrollHeight(1700);
+      expect(fixture.viewport.scrollTop).toBe(1325);
+
+      for (let step = 1; step <= 6; step += 1) {
+        // The scrolling thread moves before the wheel and scroll events reach the page.
+        const moved = 1325 - step * 40;
+        fixture.viewport.scrollTop = moved;
+        fixture.motion.input.noteNativeInput("wheel");
+        fixture.viewport.dispatchEvent(new Event("scroll"));
+        expect(fixture.viewport.scrollTop, `step ${step}`).toBe(moved);
+      }
+      unbindScrollportMotion(fixture.host);
+    } finally { vi.useRealTimers(); }
   });
 });
 

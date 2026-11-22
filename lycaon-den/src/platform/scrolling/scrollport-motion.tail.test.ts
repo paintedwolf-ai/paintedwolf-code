@@ -537,9 +537,9 @@ describe("ScrollportMotion quick reveal", () => {
     const frames = stubAnimationFrames();
     const { motion, viewport } = createScrollportFixture({ initialScrollTop: 0 });
     void motion.revealOffset(900);
-    frames.flush(1, performance.now() + 500);
+    frames.flush(1, 500);
     expect(viewport.scrollTop).toBe(0);
-    frames.flush(1, performance.now() + 1000);
+    frames.flush(1, 1000);
     expect(viewport.scrollTop).toBeGreaterThan(0);
     expect(viewport.scrollTop).toBeLessThan(90);
   });

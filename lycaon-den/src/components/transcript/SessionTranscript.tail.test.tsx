@@ -8,6 +8,9 @@ import { render } from "@solidjs/testing-library";
 import { SessionTranscript } from "./transcript-viewport-test-harness.tsx";
 import type { TranscriptTailSlot } from "./SessionTranscript.tsx";
 import type { Message } from "../../api/types.ts";
+import { flushScrollportFrameForTests } from "../../platform/scrolling/scrollport-frame.ts";
+
+const flushMicrotasks = () => new Promise<void>((resolve) => queueMicrotask(resolve));
 
 const message = (id: string, ord: number): Message => ({
   id,
@@ -44,7 +47,10 @@ describe("SessionTranscript tail", () => {
       expect(row.hasAttribute("data-index")).toBe(false);
       row.dispatchEvent(new Event(TRANSCRIPT_DISCLOSURE_LAYOUT_EVENT, { bubbles: true }));
       row.querySelector("p")!.textContent = "Updated pending message";
-      await new Promise((resolve) => setTimeout(resolve, 40));
+      // Mutation records arrive as a microtask; measurement runs in the scroll host's frame.
+      await flushMicrotasks();
+      flushScrollportFrameForTests(container.querySelector<HTMLElement>(".den-chat-stream")!);
+      await flushMicrotasks();
       expect(warn.mock.calls.flat().map(String).join(" ")).not.toContain("Missing attribute name");
       expect(row.isConnected).toBe(true);
     } finally {

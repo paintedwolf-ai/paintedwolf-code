@@ -3,8 +3,11 @@ import { createSourceViewsClient as wireClient } from "../../api/source-views-cl
 import { LycaonApiError } from "../../api/http.ts";
 import type { SourceTreeView } from "../../api/types.ts";
 import { endSourceViewsForChat, receiveSourceViewEvent, resyncSourceViews, SourceViewSession } from "./source-view-session.ts";
+import { heldLeaseExpiry } from "../../test/source-view-lease.ts";
 
-function state(revision = "one", expiresAt = "2026-09-15T23:00:00Z"): SourceTreeView {
+const LEASE_EXPIRY = heldLeaseExpiry();
+
+function state(revision = "one", expiresAt = LEASE_EXPIRY): SourceTreeView {
   return { kind: "tree", id: "view", intent_revision: "intent", projection_revision: revision,
     state: "ready", extent: { rows: 1, complete: true }, expires_at: expiresAt,
     workspace_id: "workspace", roots: [], loading_directories: 0, intent: {} };
@@ -53,6 +56,7 @@ it("detaches viewport requests without canceling or releasing the host view", as
 });
 
 it("keeps a view healthy while the host refuses admission and asks again", async () => {
+  vi.useFakeTimers();
   let refusals = 0;
   const client = createSourceViewsClient(async <T>(_path: string, init?: RequestInit): Promise<T> => {
     if (!init?.method && refusals < 2) { refusals++; throw new LycaonApiError("Busy", 429, "rate_limited", { retryAfterMs: 1000 }); }
@@ -61,13 +65,15 @@ it("keeps a view healthy while the host refuses admission and asks again", async
   const session = new SourceViewSession(client, "project", { kind: "tree", client_id: "window:main", operation_id: "create", workspace_id: "workspace", intent: {} }, frame => ({ rows: frame.rows.length, bytes: 256 }));
   const detach = session.attach();
   try {
-    await vi.waitFor(() => expect(refusals).toBe(1));
-    await Promise.resolve();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(refusals).toBe(1);
     expect(session.error()).toBeUndefined();
-    await vi.waitFor(() => expect(refusals).toBe(2));
-    await vi.waitFor(() => expect(session.state()?.projection_revision).toBe("one"), { timeout: 3_000 });
+    await vi.advanceTimersByTimeAsync(250);
+    expect(refusals).toBe(2);
+    await vi.advanceTimersByTimeAsync(250);
+    expect(session.state()?.projection_revision).toBe("one");
     expect(session.error()).toBeUndefined();
-  } finally { detach(); await session.close(); }
+  } finally { detach(); await session.close(); vi.useRealTimers(); }
 });
 
 it("refetches host progress after returning to a detached stage", async () => {
@@ -524,6 +530,7 @@ it("a deleted chat ends only the views it addressed", async () => {
 });
 
 it("a readiness wait on a detached view makes no request while the host lease holds", async () => {
+  vi.useFakeTimers();
   const held = new Date(Date.now() + 10 * 60_000).toISOString();
   let reads = 0;
   const client = createSourceViewsClient(async <T>(_path: string, init?: RequestInit): Promise<T> => {
@@ -531,22 +538,25 @@ it("a readiness wait on a detached view makes no request while the host lease ho
     return state("one", held) as T;
   });
   const session = new SourceViewSession(client, "project", { kind: "tree", client_id: "window:main", operation_id: "create", workspace_id: "workspace", intent: {} }, frame => ({ rows: frame.rows.length, bytes: 256 }));
-  const detach = session.attach();
-  // The first attach validates the opened handle with one read.
-  await vi.waitFor(() => expect(reads).toBe(1));
-  await vi.waitFor(() => expect(session.state()?.projection_revision).toBe("one"));
-  detach();
-  await session.ready();
-  await session.ready();
-  const again = session.attach();
-  await session.open();
-  await new Promise(resolve => setTimeout(resolve, 20));
-  expect(reads).toBe(1);
-  again();
-  await session.close();
+  try {
+    const detach = session.attach();
+    // The first attach validates the opened handle with one read.
+    await vi.advanceTimersByTimeAsync(0);
+    expect(reads).toBe(1);
+    expect(session.state()?.projection_revision).toBe("one");
+    detach();
+    await session.ready();
+    await session.ready();
+    const again = session.attach();
+    await session.open();
+    await vi.runOnlyPendingTimersAsync();
+    expect(reads).toBe(1);
+    again();
+  } finally { await session.close(); vi.useRealTimers(); }
 });
 
 it("attach reads a detached view again once its host lease has lapsed", async () => {
+  vi.useFakeTimers();
   const lapsed = new Date(Date.now() + 30_000).toISOString();
   let reads = 0;
   const client = createSourceViewsClient(async <T>(_path: string, init?: RequestInit): Promise<T> => {
@@ -554,14 +564,17 @@ it("attach reads a detached view again once its host lease has lapsed", async ()
     return state("one", lapsed) as T;
   });
   const session = new SourceViewSession(client, "project", { kind: "tree", client_id: "window:main", operation_id: "create", workspace_id: "workspace", intent: {} }, frame => ({ rows: frame.rows.length, bytes: 256 }));
-  const detach = session.attach();
-  await vi.waitFor(() => expect(reads).toBe(1));
-  await vi.waitFor(() => expect(session.state()?.projection_revision).toBe("one"));
-  detach();
-  const again = session.attach();
-  await vi.waitFor(() => expect(reads).toBe(2));
-  again();
-  await session.close();
+  try {
+    const detach = session.attach();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(reads).toBe(1);
+    expect(session.state()?.projection_revision).toBe("one");
+    detach();
+    const again = session.attach();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(reads).toBe(2);
+    again();
+  } finally { await session.close(); vi.useRealTimers(); }
 });
 
 it("keeps concurrent first pages when the host captures the presentation past the view state", async () => {

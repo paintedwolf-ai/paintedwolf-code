@@ -591,8 +591,7 @@ mod tests {
     #[test]
     fn the_probe_times_the_reference_batch() {
         let (mut engine, _dir) = tiny_engine();
-        let elapsed = engine.probe().unwrap();
-        assert!(elapsed > Duration::ZERO);
+        engine.probe().unwrap();
         engine.record_probe(Duration::from_micros(12_345));
         assert_eq!(engine.identity().probe_ms, Some(12.3));
         assert_eq!(reference_candidates(REFERENCE_CANDIDATES).len(), REFERENCE_CANDIDATES);

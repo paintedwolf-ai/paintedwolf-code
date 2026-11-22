@@ -154,6 +154,13 @@ def validate_task_selection(arguments):
     validate_selection(task_names(arguments), arguments[separator + 1:])
 
 
+def refuse_below_shell_floor(arguments):
+    from verification_plan import shell_floor_refusal
+    refusal = shell_floor_refusal(task_names(arguments))
+    if refusal:
+        raise ValueError(refusal)
+
+
 ARGUMENT_PROBE = "PW_TASK_ARGUMENT_PROBE"
 
 
@@ -513,18 +520,21 @@ def main():
         binary, root, *arguments = command
         if arguments and arguments[0] in {"--background", "--wait"}:
             from verification_jobs import completion_command, submit, wait
+            if arguments[0] == "--background":
+                callback, background_arguments = completion_command(arguments[1:])
+                refuse_below_shell_floor(background_arguments)
             if queue.inherited():
                 raise ValueError("verification job controls cannot run inside an admitted check")
             if arguments[0] == "--wait":
                 if len(arguments) != 2:
                     raise ValueError("usage: ./task --wait <job-id>")
                 return wait(root, arguments[1], lock_file)
-            callback, background_arguments = completion_command(arguments[1:])
             if not scheduled_task(background_arguments):
                 raise ValueError("--background requires a queued verification command")
             validate_task_selection(background_arguments)
             probe_task_request(binary, root, background_arguments)
             return submit(root, binary, background_arguments, str(Path(__file__).resolve()), callback)
+        refuse_below_shell_floor(arguments)
         if not scheduled_task(arguments):
             os.execv(binary, [binary, "-d", root, *arguments])
         validate_task_selection(arguments)

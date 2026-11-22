@@ -2,7 +2,7 @@
 import importlib.util
 import io
 import socket
-import time
+import threading
 from pathlib import Path
 import subprocess
 import tempfile
@@ -128,8 +128,11 @@ class AptOriginsTests(unittest.TestCase):
         self.assertEqual(APT.unresolved(), [""])
 
     def test_slow_resolution_counts_as_unresolved(self):
+        unanswered = threading.Event()
+        self.addCleanup(unanswered.set)
+
         def slow(host, *_arguments, **_options):
-            time.sleep(0.5)
+            unanswered.wait()
             return []
         with patch.object(APT.socket, "getaddrinfo", slow), patch.object(APT, "RESOLVE_SECONDS", 0.05):
             self.assertEqual(APT.unresolved(), ["azure.archive.ubuntu.com", "security.ubuntu.com"])

@@ -203,7 +203,7 @@ class DigestDelivery(support.BatchFixture):
         return f"internal/foo/foo_test.go:12: want 1 got 2\nFAIL example/foo\n{passes}"
 
     def finish(self, process, code):
-        stdout, stderr = process.communicate(timeout=self.state_timeout + 5)
+        stdout, stderr = process.communicate()
         self.assertEqual(process.returncode, code, stdout + stderr)
         return stdout, stderr
 

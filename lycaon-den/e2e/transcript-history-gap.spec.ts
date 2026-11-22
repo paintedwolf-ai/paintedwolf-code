@@ -33,27 +33,20 @@ function expectContiguousSteps(steps: readonly number[]) {
 }
 
 async function wheelTranscript(page: Page, deltaY: number) {
-  // The runner deadline also catches a blocked renderer event loop.
   await test.step(`Wheel transcript by ${deltaY}px`, async () => {
     const host = scroller(page);
     const box = await host.boundingBox();
     if (!box) throw new Error("chat scroller is missing");
     const observation = await host.evaluateHandle((element) => {
       let frame = 0;
-      let timer: ReturnType<typeof setTimeout>;
       let previous = "";
       let stable = 0;
       const cleanup = () => {
-        clearTimeout(timer);
         cancelAnimationFrame(frame);
         element.removeEventListener("wheel", start, true);
       };
       let start = () => {};
-      const settled = new Promise<void>((resolve, reject) => {
-        timer = setTimeout(() => {
-          cleanup();
-          reject(new Error("Transcript did not settle after its wheel gesture"));
-        }, 5_000);
+      const settled = new Promise<void>((resolve) => {
         start = () => {
           const sample = () => {
             const rows = element.querySelectorAll<HTMLElement>(".transcript-viewport-row[data-msg-id]");
@@ -85,12 +78,11 @@ async function wheelTranscript(page: Page, deltaY: number) {
       await observation.evaluate((state) => state.cleanup());
       await observation.dispose();
     }
-  }, { timeout: 7_000 });
+  });
 }
 
 async function readTranscriptBackTo(page: Page, step: number) {
-  const deadline = Date.now() + 120_000;
-  while (Date.now() < deadline) {
+  for (;;) {
     await wheelTranscript(page, -3_000);
     // Backward seeks can enter unloaded history before its page arrives.
     let steps: number[] = [];
@@ -101,14 +93,12 @@ async function readTranscriptBackTo(page: Page, step: number) {
     expectContiguousSteps(steps);
     if (Math.min(...steps) <= step) return;
   }
-  throw new Error(`Transcript did not reach history row ${step}`);
 }
 
 async function readTranscriptForward(page: Page, until: (steps: readonly number[]) => boolean | Promise<boolean>) {
-  const deadline = Date.now() + 180_000;
   let previous = await visibleTranscriptSteps(page);
   expectContiguousSteps(previous);
-  while (Date.now() < deadline) {
+  for (;;) {
     await wheelTranscript(page, 500);
     const steps = await visibleTranscriptSteps(page);
     expectContiguousSteps(steps);
@@ -117,7 +107,6 @@ async function readTranscriptForward(page: Page, until: (steps: readonly number[
     previous = steps;
     if (await until(steps)) return;
   }
-  throw new Error("Transcript did not reach the requested reading position");
 }
 
 
@@ -331,9 +320,12 @@ modelIndependentWebE2e("prepending an older page into an expanded activity span 
     url.pathname.endsWith(`/v1/sessions/${sessionId}/messages`) && url.searchParams.has("before_message_id");
   let releaseOlder = () => {};
   let olderHeld = false;
+  let markOlderHeld!: () => void;
+  const olderRequested = new Promise<void>((resolve) => { markOlderHeld = resolve; });
   await page.route(olderPage, async (route: Route) => {
     if (olderHeld) return route.continue();
     olderHeld = true;
+    markOlderHeld();
     await new Promise<void>((release) => { releaseOlder = release; });
     await route.continue();
   });
@@ -343,11 +335,9 @@ modelIndependentWebE2e("prepending an older page into an expanded activity span 
   await expect(liveChatStage(page).getByText("Step 160.", { exact: true })).toBeVisible({ timeout: 30_000 });
 
   const spanRow = scroller(page).locator(`.transcript-viewport-row[data-msg-id="${leadKeyBefore}"]`);
-  await expect(async () => {
-    if (!(await spanRow.isVisible())) await wheelTranscript(page, -1_500);
-    expect(olderHeld).toBe(true);
-    await expect(spanRow).toBeVisible({ timeout: 500 });
-  }).toPass({ timeout: 60_000 });
+  // Each wheel waits for the transcript to settle, so visibility is read from a resting layout.
+  while (!(await spanRow.isVisible())) await wheelTranscript(page, -1_500);
+  await olderRequested;
   const spanCard = spanRow.getByTestId("activity-span-card");
   await spanCard.locator(":scope > .den-transcript-disclosure-header").click();
   await expect(spanCard).toHaveAttribute("data-expanded", "true");

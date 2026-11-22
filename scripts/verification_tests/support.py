@@ -21,8 +21,6 @@ spec.loader.exec_module(execution)
 
 @unittest.skipIf(os.name == "nt", "batch leases require inherited POSIX file locks")
 class BatchFixture(unittest.TestCase):
-    state_timeout = 15
-
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory(prefix="verification-fixture-")
         self.addCleanup(self.temp.cleanup)
@@ -40,7 +38,7 @@ class BatchFixture(unittest.TestCase):
                      "artifact-paths.sh", "artifact_paths.py", "checkout-cache-dir.sh", "sha256.sh"]:
             shutil.copy2(SCRIPT.with_name(name), self.scripts / name)
         self.catalog = {"resources": {}, "private": [], "capacity": {}, "provisions": {},
-            "not_run": {"tags": {}, "tests": []},
+            "not_run": {"tags": {}, "tests": []}, "den_shell": [],
             "fuzz": {"tags": [], "smoke_seconds": 1, "targets": {"./good": {"FuzzFixture": 1}}},
             "ci": {"fixture": {"targets": ["test:digest"], "minutes": 30}},
             "environment": {"names": ["PATH", "HOME", "TMPDIR", "USER", "LANG"],
@@ -166,26 +164,30 @@ sys.exit(code)
         self.processes.append(process)
         return process
 
-    def await_condition(self, predicate):
-        deadline = time.monotonic() + self.state_timeout
-        while time.monotonic() < deadline:
-            if predicate():
-                return
+    def await_condition(self, predicate, producer=None):
+        """Wait for queue state; a producer that exits before it holds fails the wait with its output."""
+        while not predicate():
+            if producer is not None and producer.poll() is not None and not predicate():
+                out, err = producer.communicate()
+                self.fail(f"request exited {producer.returncode} before the expected state: "
+                          + json.dumps(self.queue.status()) + "\n" + out + err)
             time.sleep(.02)
-        self.fail("batch fixture did not reach the expected state: " + json.dumps(self.queue.status()))
 
     def queued(self, count):
-        self.await_condition(lambda: len([e for e in self.queue.status()["runs"] if e.get("kind") == "request"]) == count)
+        """Wait for `count` queued requests; the newest request, while it still runs, is the one expected to queue."""
+        newest = self.processes[-1] if self.processes and self.processes[-1].poll() is None else None
+        self.await_condition(lambda: len([e for e in self.queue.status()["runs"] if e.get("kind") == "request"]) == count,
+                             newest)
 
     def collect(self, process, code=0):
-        out, err = process.communicate(timeout=self.state_timeout + 5)
+        out, err = process.communicate()
         self.assertEqual(process.returncode, code, out + err)
         return out + err
 
     def wait_result(self, job_id, code):
         """A failed wait follows its stdout JSON with a digest on stderr."""
         process = self.start("--wait", job_id)
-        out, err = process.communicate(timeout=self.state_timeout + 5)
+        out, err = process.communicate()
         self.assertEqual(process.returncode, code, out + err)
         return json.loads(out)
 
@@ -206,6 +208,5 @@ sys.exit(code)
             except subprocess.TimeoutExpired:
                 process.kill()
                 process.communicate()
-        deadline = time.monotonic() + 15
-        while self.queue.status()["runs"] and time.monotonic() < deadline:
+        while self.queue.status()["runs"]:
             time.sleep(.05)

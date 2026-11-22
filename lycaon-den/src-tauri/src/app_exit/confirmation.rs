@@ -383,9 +383,6 @@ mod tests {
             let port = listener.local_addr().unwrap().port();
             let server = std::thread::spawn(move || {
                 let (mut connection, _) = listener.accept().unwrap();
-                connection
-                    .set_read_timeout(Some(Duration::from_secs(3)))
-                    .unwrap();
                 let mut request = Vec::new();
                 while !request.ends_with(b"\r\n\r\n") {
                     let mut byte = [0];

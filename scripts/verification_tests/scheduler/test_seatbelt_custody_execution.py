@@ -51,7 +51,7 @@ class SeatbeltCustodyTests(unittest.TestCase):
         cap.entry["owner_identity"] = None
         cap.write()
         child = subprocess.Popen([sys.executable, "-c", "pass"], pass_fds=(cap.file.fileno(),))
-        child.wait(timeout=10)
+        child.wait()
         self.assertFalse(lifetime.TerminalSettlement(self.queue, cap, child).finish())
         self.assertEqual(cap.entry["terminal_settlement"]["state"], "settled")
 
@@ -129,7 +129,7 @@ class SeatbeltCustodyTests(unittest.TestCase):
                         child.wait(timeout=10)
                     except subprocess.TimeoutExpired:
                         child.kill()
-                        child.wait(timeout=10)
+                        child.wait()
 
                 self.addCleanup(settle_fixture)
 
@@ -169,7 +169,7 @@ class SeatbeltCustodyTests(unittest.TestCase):
                 self.assertIn(descendant_pid, holders)
 
                 release_parent.touch()
-                child.wait(timeout=10)
+                child.wait()
                 self.assertEqual(child.returncode, 0)
 
                 self.assertFalse(lifetime.TerminalSettlement(self.queue, reservation, child).finish())

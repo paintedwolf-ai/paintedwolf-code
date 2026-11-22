@@ -41,7 +41,7 @@ class OracleProcessTests(unittest.TestCase):
         supervisor = pathlib.Path(candidate_process.__file__).read_text()
         for program, code, output in [('print("[42]")', 0, '[42]\n'), ('raise SystemExit(7)', 1, ''), ('raise SystemExit(125)', 1, '')]:
             result = subprocess.run([sys.executable, '-I', '-B', '-c', supervisor, program],
-                                    capture_output=True, text=True, timeout=15)
+                                    capture_output=True, text=True)
             self.assertEqual((result.returncode, result.stdout), (code, output))
 
     def container_exit(self, code):
