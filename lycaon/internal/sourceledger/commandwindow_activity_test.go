@@ -137,14 +137,17 @@ func TestHoldsCountConcurrentProcesses(t *testing.T) {
 func TestHoldDuringTheGraceKeepsTheWindowActive(t *testing.T) {
 	store, ctx, root := openLedgerOnDisk(t)
 	endSettle := holdSettlePeriods(store)
+	peer := openSessionWindow(t, store, ctx, root, "peer")
+	peer.ReleaseOpener(ctx)
 	window, first := programWindow(t, store, ctx, root)
 	first()
 	second, err := window.Hold(ctx)
 	testutil.FailErr(t, "hold during the grace", err)
 	endSettle()
-	// A grace still running would idle the window now. This cannot fail correct
-	// code; no pass runs meanwhile, because one would hold that grace back.
-	time.Sleep(500 * time.Millisecond)
+	// Waiting for a peer grace released by the same settle gate proves the
+	// settle period has elapsed and completed its pass without idling window.
+	awaitIdle(t, peer)
+	closeAndSettle(t, ctx, peer)
 	window.store.windowsMu.Lock()
 	active := window.window.active
 	window.store.windowsMu.Unlock()
