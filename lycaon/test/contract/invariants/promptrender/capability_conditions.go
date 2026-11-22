@@ -30,6 +30,11 @@ var capabilityConditionInvariants = []invariants.Invariant{
 		Check:   stockSourcesReconciledAndParsed,
 	},
 	{
+		Name:    "stock-config-union-reconciled",
+		Anchors: []invariants.Anchor{invariants.Func("config", "ConsumesPackYAML")},
+		Check:   stockConfigUnionReconciled,
+	},
+	{
 		Name:    "capability-conditions-use-declared-facts",
 		Anchors: []invariants.Anchor{invariants.Func("internal/prompts", "CheckTemplateVocabulary"), personaRenderer},
 		Check:   capabilityConditionsUseDeclaredFacts,
