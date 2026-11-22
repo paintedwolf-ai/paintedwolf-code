@@ -22,6 +22,7 @@ import (
 	"github.com/lycaon/lycaon/internal/git"
 	"github.com/lycaon/lycaon/internal/llm/compaction"
 	"github.com/lycaon/lycaon/internal/project"
+	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"github.com/lycaon/lycaon/internal/testutil"
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
@@ -110,10 +111,11 @@ func TestGitCommitMessageDraftsFromUntrackedOnly(t *testing.T) {
 		t.Fatalf("write new.txt: %v", err)
 	}
 
-	reg := project.NewMemoryRegistry()
+	sessions := storetest.New(t)
+	reg := project.NewSQLRegistry(sessions.DB())
 	p, err := project.CreateWithRoot(t.Context(), reg, dir)
 	testutil.FailErr(t, "reg.Open", err)
-	srv := contractfixture.NewGitServer(t, reg, func(d *hostapi.Dependencies) {
+	srv := contractfixture.NewGitServer(t, sessions, reg, func(d *hostapi.Dependencies) {
 		d.Providers.CommitDrafter = compaction.MockSummarizer{Text: "feat: add new file"}
 	})
 
@@ -188,10 +190,11 @@ func TestGitCheckoutRequiresBranch(t *testing.T) {
 }
 
 func TestGitInitMakesRepoAvailable(t *testing.T) {
-	reg := project.NewMemoryRegistry()
+	sessions := storetest.New(t)
+	reg := project.NewSQLRegistry(sessions.DB())
 	p, err := project.CreateWithRoot(t.Context(), reg, t.TempDir())
 	testutil.FailErr(t, "reg.Open", err)
-	srv := contractfixture.NewGitServer(t, reg)
+	srv := contractfixture.NewGitServer(t, sessions, reg)
 
 	repos := contractfixture.GitReposViaAPI(t, srv, p.ID, "")
 	if len(repos.Repos) != 1 || repos.Repos[0].Available {
@@ -274,7 +277,8 @@ func TestGitInitUnknownRootID(t *testing.T) {
 func TestGitReposTwoCheckouts(t *testing.T) {
 	a := contractfixture.InitDirtyRepo(t)
 	b := contractfixture.InitDirtyRepo(t)
-	reg := project.NewMemoryRegistry()
+	sessions := storetest.New(t)
+	reg := project.NewSQLRegistry(sessions.DB())
 	p, err := project.CreateWithRoot(t.Context(), reg, a)
 	testutil.FailErr(t, "create", err)
 	_, err = reg.AttachRoot(t.Context(), p.ID, project.AttachRootParams{Path: b, Label: "beta"})
@@ -282,7 +286,7 @@ func TestGitReposTwoCheckouts(t *testing.T) {
 	p, err = reg.Get(t.Context(), p.ID)
 	testutil.FailErr(t, "get", err)
 
-	srv := contractfixture.NewGitServer(t, reg)
+	srv := contractfixture.NewGitServer(t, sessions, reg)
 
 	view := contractfixture.GitReposViaAPI(t, srv, p.ID, "")
 	if len(view.Repos) != 2 {
@@ -307,13 +311,14 @@ func TestGitReposTwoRootsOneCheckout(t *testing.T) {
 	repo := contractfixture.InitDirtyRepo(t)
 	web := filepath.Join(repo, "packages", "web")
 	testutil.FailErr(t, "mkdir", os.MkdirAll(web, 0o755))
-	reg := project.NewMemoryRegistry()
+	sessions := storetest.New(t)
+	reg := project.NewSQLRegistry(sessions.DB())
 	p, err := project.CreateWithRoot(t.Context(), reg, repo)
 	testutil.FailErr(t, "create", err)
 	_, err = reg.AttachRoot(t.Context(), p.ID, project.AttachRootParams{Path: web, Label: "web"})
 	testutil.FailErr(t, "attach", err)
 
-	srv := contractfixture.NewGitServer(t, reg)
+	srv := contractfixture.NewGitServer(t, sessions, reg)
 
 	view := contractfixture.GitReposViaAPI(t, srv, p.ID, "")
 	if len(view.Repos) != 1 {
@@ -429,13 +434,14 @@ func TestGitScopedReadsActOnNamedRepo(t *testing.T) {
 		testutil.FailErr(t, "write file", err)
 	}
 
-	reg := project.NewMemoryRegistry()
+	sessions := storetest.New(t)
+	reg := project.NewSQLRegistry(sessions.DB())
 	p, err := project.CreateWithRoot(t.Context(), reg, aDir)
 	testutil.FailErr(t, "create", err)
 	_, err = reg.AttachRoot(t.Context(), p.ID, project.AttachRootParams{Path: bDir, Label: "beta"})
 	testutil.FailErr(t, "attach", err)
 
-	srv := contractfixture.NewGitServer(t, reg)
+	srv := contractfixture.NewGitServer(t, sessions, reg)
 
 	repos := contractfixture.GitReposViaAPI(t, srv, p.ID, "")
 	if len(repos.Repos) != 2 {
@@ -470,13 +476,14 @@ func TestGitScopedReadsActOnNamedRepo(t *testing.T) {
 func TestGitScopedWriteLeavesSiblingUntouched(t *testing.T) {
 	aDir := contractfixture.InitDirtyRepo(t)
 	bDir := contractfixture.InitDirtyRepo(t)
-	reg := project.NewMemoryRegistry()
+	sessions := storetest.New(t)
+	reg := project.NewSQLRegistry(sessions.DB())
 	p, err := project.CreateWithRoot(t.Context(), reg, aDir)
 	testutil.FailErr(t, "create", err)
 	_, err = reg.AttachRoot(t.Context(), p.ID, project.AttachRootParams{Path: bDir, Label: "beta"})
 	testutil.FailErr(t, "attach", err)
 
-	srv := contractfixture.NewGitServer(t, reg)
+	srv := contractfixture.NewGitServer(t, sessions, reg)
 
 	repos := contractfixture.GitReposViaAPI(t, srv, p.ID, "")
 	if len(repos.Repos) != 2 {
@@ -502,7 +509,8 @@ func TestGitScopedWriteLeavesSiblingUntouched(t *testing.T) {
 func TestGitInitSecondaryRoot(t *testing.T) {
 	primary := contractfixture.InitDirtyRepo(t)
 	secondary := t.TempDir()
-	reg := project.NewMemoryRegistry()
+	sessions := storetest.New(t)
+	reg := project.NewSQLRegistry(sessions.DB())
 	p, err := project.CreateWithRoot(t.Context(), reg, primary)
 	testutil.FailErr(t, "create", err)
 	attached, err := reg.AttachRoot(t.Context(), p.ID, project.AttachRootParams{Path: secondary, Label: "secondary"})
@@ -517,7 +525,7 @@ func TestGitInitSecondaryRoot(t *testing.T) {
 		t.Fatal("missing secondary root")
 	}
 
-	srv := contractfixture.NewGitServer(t, reg)
+	srv := contractfixture.NewGitServer(t, sessions, reg)
 
 	w := contractfixture.PostGitJSON(t, srv, contractfixture.GitReposURL(p.ID), fmt.Sprintf(`{"root_id":%q}`, secondaryRootID))
 	if w.Code != http.StatusCreated {
@@ -552,7 +560,8 @@ func TestGitFileAttributionLongestNestedRoot(t *testing.T) {
 	run("commit", "-m", "web")
 	testutil.FailErr(t, "dirty web", os.WriteFile(filepath.Join(web, "app.ts"), []byte("web2\n"), 0o644))
 
-	reg := project.NewMemoryRegistry()
+	sessions := storetest.New(t)
+	reg := project.NewSQLRegistry(sessions.DB())
 	p, err := project.CreateWithRoot(t.Context(), reg, repo)
 	testutil.FailErr(t, "create", err)
 	_, err = reg.AttachRoot(t.Context(), p.ID, project.AttachRootParams{Path: web, Label: "web"})
@@ -571,7 +580,7 @@ func TestGitFileAttributionLongestNestedRoot(t *testing.T) {
 		t.Fatalf("missing web root: %#v", p.Roots)
 	}
 
-	srv := contractfixture.NewGitServer(t, reg)
+	srv := contractfixture.NewGitServer(t, sessions, reg)
 	view := contractfixture.GitStatusViaAPI(t, srv, p.ID, contractfixture.ActiveRepoID(t, srv, p.ID))
 	var found wire.GitFileEntry
 	for _, f := range view.Files {
@@ -601,7 +610,8 @@ func TestGitFileAttributionLongestRootAndOutside(t *testing.T) {
 	testutil.FailErr(t, "dirty api", os.WriteFile(filepath.Join(apiDir, "main.go"), []byte("api2\n"), 0o644))
 	testutil.FailErr(t, "dirty outside", os.WriteFile(filepath.Join(outside, "x.go"), []byte("x2\n"), 0o644))
 
-	reg := project.NewMemoryRegistry()
+	sessions := storetest.New(t)
+	reg := project.NewSQLRegistry(sessions.DB())
 	// Roots at packages/web and packages/api only — other/pkg is outside every root.
 	p, err := project.CreateWithRoot(t.Context(), reg, web)
 	testutil.FailErr(t, "create web root", err)
@@ -623,7 +633,7 @@ func TestGitFileAttributionLongestRootAndOutside(t *testing.T) {
 		t.Fatalf("roots: %#v", p.Roots)
 	}
 
-	srv := contractfixture.NewGitServer(t, reg)
+	srv := contractfixture.NewGitServer(t, sessions, reg)
 	repoID := contractfixture.ActiveRepoID(t, srv, p.ID)
 	view := contractfixture.GitStatusViaAPI(t, srv, p.ID, repoID)
 

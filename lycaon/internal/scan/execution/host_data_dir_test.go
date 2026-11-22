@@ -8,13 +8,14 @@ import (
 
 	"github.com/lycaon/lycaon/internal/events"
 	"github.com/lycaon/lycaon/internal/project"
+	"github.com/lycaon/lycaon/internal/project/projecttest"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
 func TestHostDataDirUsesProjectIDWhenKnown(t *testing.T) {
 	ctx := context.Background()
-	reg := project.NewMemoryRegistry()
+	reg := projecttest.NewRegistry(t)
 	p, err := project.CreateWithRoot(ctx, reg, t.TempDir())
 	testutil.FailErr(t, "create project", err)
 	rootPath := project.PrimaryRootPath(p)
@@ -37,7 +38,7 @@ func TestHostDataDirUsesProjectIDWhenKnown(t *testing.T) {
 
 func TestHostDataDirFallsBackToPathKey(t *testing.T) {
 	ctx := context.Background()
-	reg := project.NewMemoryRegistry()
+	reg := projecttest.NewRegistry(t)
 
 	dataDir := t.TempDir()
 	unowned := t.TempDir()

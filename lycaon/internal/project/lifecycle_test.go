@@ -17,6 +17,7 @@ import (
 	"github.com/lycaon/lycaon/internal/eventoutbox"
 	"github.com/lycaon/lycaon/internal/events"
 	"github.com/lycaon/lycaon/internal/project"
+	"github.com/lycaon/lycaon/internal/project/projecttest"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -36,7 +37,7 @@ func TestDetachRootBumpsGeneration(t *testing.T) {
 	if err := os.MkdirAll(second, 0o755); err != nil {
 		testutil.FailErr(t, "create directory", err)
 	}
-	reg := project.NewMemoryRegistry()
+	reg := projecttest.NewRegistry(t)
 	p, err := reg.Create(ctx, project.CreateParams{
 		Roots: []project.AttachRootParams{{Path: dir}},
 	})
@@ -63,7 +64,7 @@ func TestPatchPrimaryDemotesOthers(t *testing.T) {
 	if err := os.MkdirAll(second, 0o755); err != nil {
 		testutil.FailErr(t, "create directory", err)
 	}
-	reg := project.NewMemoryRegistry()
+	reg := projecttest.NewRegistry(t)
 	p, err := reg.Create(ctx, project.CreateParams{
 		Roots: []project.AttachRootParams{{Path: dir}, {Path: second}},
 	})
@@ -323,7 +324,7 @@ func TestSQLRootMutationRollsBackWhenEventCannotBeRecorded(t *testing.T) {
 }
 
 func TestDetachRootNotFound(t *testing.T) {
-	reg := project.NewMemoryRegistry()
+	reg := projecttest.NewRegistry(t)
 	p, err := reg.Create(context.Background(), project.CreateParams{})
 	testutil.FailErr(t, "create project", err)
 	_, err = reg.DetachRoot(context.Background(), p.ID, "missing-root")
@@ -335,7 +336,7 @@ func TestDetachRootNotFound(t *testing.T) {
 func TestDetachLastRootNoFolder(t *testing.T) {
 	ctx := context.Background()
 	dir := t.TempDir()
-	reg := project.NewMemoryRegistry()
+	reg := projecttest.NewRegistry(t)
 	p, err := reg.Create(ctx, project.CreateParams{
 		Roots: []project.AttachRootParams{{Path: dir}},
 	})
@@ -352,51 +353,38 @@ func TestDetachLastRootNoFolder(t *testing.T) {
 	}
 }
 
-func TestRegistryRootLifecycleParity(t *testing.T) {
-	for _, tc := range []struct {
-		name string
-		open func(*testing.T) project.Registry
-	}{
-		{name: "memory", open: func(*testing.T) project.Registry { return project.NewMemoryRegistry() }},
-		{name: "sqlite", open: func(t *testing.T) project.Registry {
-			sqlDB := testdbfixture.Open(t, "store.db")
-			return project.NewSQLRegistry(sqlDB)
-		}},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			ctx := t.Context()
-			reg := tc.open(t)
-			first, second := t.TempDir(), t.TempDir()
-			p, err := reg.Create(ctx, project.CreateParams{Roots: []project.AttachRootParams{
-				{Path: first, Label: "API"}, {Path: second, Label: "Web"},
-			}})
-			testutil.FailErr(t, "create project", err)
-			beforeGeneration := p.RootsGeneration
-			label := "Backend"
-			change, err := reg.PatchRoot(ctx, p.ID, p.Roots[1].ID, project.PatchRootParams{Label: &label})
-			testutil.FailErr(t, "rename root", err)
-			// A rename retires the old @label spelling, so it advances the generation.
-			if !change.Changed || !change.RootContextChanged || change.After.RootsGeneration != beforeGeneration+1 {
-				t.Fatalf("label change = %#v", change)
-			}
-			primary := true
-			change, err = reg.PatchRoot(ctx, p.ID, p.Roots[0].ID, project.PatchRootParams{IsPrimary: &primary})
-			testutil.FailErr(t, "primary no-op", err)
-			if change.Changed || change.After.RootsGeneration != beforeGeneration+1 {
-				t.Fatalf("primary no-op = %#v", change)
-			}
-			duplicate := "api"
-			_, err = reg.PatchRoot(ctx, p.ID, p.Roots[1].ID, project.PatchRootParams{Label: &duplicate})
-			if !errors.Is(err, project.ErrDuplicateRootLabel) {
-				t.Fatalf("case-insensitive duplicate = %v", err)
-			}
-		})
+func TestRegistryRootLabelAndPrimaryChanges(t *testing.T) {
+	ctx := t.Context()
+	reg := projecttest.NewRegistry(t)
+	first, second := t.TempDir(), t.TempDir()
+	p, err := reg.Create(ctx, project.CreateParams{Roots: []project.AttachRootParams{
+		{Path: first, Label: "API"}, {Path: second, Label: "Web"},
+	}})
+	testutil.FailErr(t, "create project", err)
+	beforeGeneration := p.RootsGeneration
+	label := "Backend"
+	change, err := reg.PatchRoot(ctx, p.ID, p.Roots[1].ID, project.PatchRootParams{Label: &label})
+	testutil.FailErr(t, "rename root", err)
+	// A rename retires the old @label spelling, so it advances the generation.
+	if !change.Changed || !change.RootContextChanged || change.After.RootsGeneration != beforeGeneration+1 {
+		t.Fatalf("label change = %#v", change)
+	}
+	primary := true
+	change, err = reg.PatchRoot(ctx, p.ID, p.Roots[0].ID, project.PatchRootParams{IsPrimary: &primary})
+	testutil.FailErr(t, "primary no-op", err)
+	if change.Changed || change.After.RootsGeneration != beforeGeneration+1 {
+		t.Fatalf("primary no-op = %#v", change)
+	}
+	duplicate := "api"
+	_, err = reg.PatchRoot(ctx, p.ID, p.Roots[1].ID, project.PatchRootParams{Label: &duplicate})
+	if !errors.Is(err, project.ErrDuplicateRootLabel) {
+		t.Fatalf("case-insensitive duplicate = %v", err)
 	}
 }
 
 func TestDraftRootRejectsGenericLifecycleRoutes(t *testing.T) {
 	t.Setenv("LYCAON_CONFIG_DIR", t.TempDir())
-	reg := project.NewMemoryRegistry()
+	reg := projecttest.NewRegistry(t)
 	p, err := reg.Create(t.Context(), project.CreateParams{Draft: true})
 	testutil.FailErr(t, "create draft", err)
 	_, err = reg.AttachRoot(t.Context(), p.ID, project.AttachRootParams{Path: t.TempDir()})

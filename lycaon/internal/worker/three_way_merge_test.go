@@ -13,6 +13,7 @@ import (
 	"github.com/lycaon/lycaon/internal/coordinator/promptloop"
 	"github.com/lycaon/lycaon/internal/enginepaths"
 	"github.com/lycaon/lycaon/internal/project"
+	"github.com/lycaon/lycaon/internal/project/projecttest"
 	"github.com/lycaon/lycaon/internal/settingsoverlay"
 	"github.com/lycaon/lycaon/internal/testbaseline"
 	"github.com/lycaon/lycaon/internal/testdbseed"
@@ -84,7 +85,7 @@ func writeScope() *api.TaskScope {
 
 func TestTaskRootRefsUsesBranchSnapshotAfterProjectRename(t *testing.T) {
 	ctx := t.Context()
-	reg := project.NewMemoryRegistry()
+	reg := projecttest.NewRegistry(t)
 	p, err := reg.Create(ctx, project.CreateParams{Roots: []project.AttachRootParams{
 		{Path: t.TempDir(), Label: "app"}, {Path: t.TempDir(), Label: "docs"},
 	}})

@@ -13,6 +13,7 @@ import (
 	"github.com/lycaon/lycaon/internal/extpacks"
 	"github.com/lycaon/lycaon/internal/progress"
 	"github.com/lycaon/lycaon/internal/project"
+	"github.com/lycaon/lycaon/internal/project/projecttest"
 	"github.com/lycaon/lycaon/internal/projectcontrib"
 	"github.com/lycaon/lycaon/internal/session/loopguard"
 	"github.com/lycaon/lycaon/internal/session/store/storetest"
@@ -232,7 +233,7 @@ func TestProjectSkillFixtureGateMatrix(t *testing.T) {
 			if err := surfaces.PutEnabled(map[string]bool{projectcontrib.SurfaceSkills: tc.deviceOn}); err != nil {
 				testutil.FailErr(t, "PutEnabled", err)
 			}
-			reg := project.NewMemoryRegistry()
+			reg := projecttest.NewRegistry(t)
 			p, err := project.CreateWithRoot(ctx, reg, root)
 			testutil.FailErr(t, "CreateWithRoot", err)
 			if !tc.projectOn {

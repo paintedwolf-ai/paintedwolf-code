@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/lycaon/lycaon/internal/project"
+	"github.com/lycaon/lycaon/internal/project/projecttest"
 	"github.com/lycaon/lycaon/internal/projectsource"
 	"github.com/lycaon/lycaon/internal/testutil"
 )
@@ -29,7 +30,7 @@ func symbolSearchFixture(t *testing.T, files map[string]string) *project.Project
 	t.Helper()
 	dir := t.TempDir()
 	writeSymbolFixture(t, dir, files)
-	p, err := project.CreateWithRoot(context.Background(), project.NewMemoryRegistry(), dir)
+	p, err := project.CreateWithRoot(context.Background(), projecttest.NewRegistry(t), dir)
 	testutil.FailErr(t, "create project", err)
 	return p
 }
@@ -131,7 +132,7 @@ func TestSymbolSearchSpansRootsAndHonorsRootID(t *testing.T) {
 	first, second := t.TempDir(), t.TempDir()
 	writeSymbolFixture(t, first, map[string]string{"one.go": "package one\n\nfunc SharedName() {}\n"})
 	writeSymbolFixture(t, second, map[string]string{"two.go": "package two\n\nfunc SharedName() {}\n"})
-	p, err := project.NewMemoryRegistry().Create(context.Background(), project.CreateParams{
+	p, err := projecttest.NewRegistry(t).Create(context.Background(), project.CreateParams{
 		Roots: []project.AttachRootParams{{Path: first}, {Path: second}},
 	})
 	testutil.FailErr(t, "create project", err)

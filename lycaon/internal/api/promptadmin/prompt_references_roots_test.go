@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/project"
+	"github.com/lycaon/lycaon/internal/project/projecttest"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/testutil/rootfacts"
 )
@@ -14,7 +15,7 @@ import (
 // their root-qualified spelling.
 func TestPromptReferencesNameEditorOnlyRootsByAbsolutePath(t *testing.T) {
 	facts := rootfacts.Install(t)
-	registry := project.NewMemoryRegistry()
+	registry := projecttest.NewRegistry(t)
 	primary := true
 	p, err := registry.Create(t.Context(), project.CreateParams{Roots: []project.AttachRootParams{
 		{Path: facts.Work, IsPrimary: &primary}, {Path: facts.KeyMaterial},
