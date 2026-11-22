@@ -37,7 +37,6 @@ func TestToolchainParsing(t *testing.T) {
 			t.Errorf("%s parse(%q) = %q, want %q", tc.binary, tc.input, got, tc.want)
 		}
 	}
-	WaitForProbes()
 }
 
 // fakeToolchainHost resolves only binaries listed in dirs of the given PATH value.

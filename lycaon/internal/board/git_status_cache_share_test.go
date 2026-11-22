@@ -62,10 +62,11 @@ func TestColdBoardWarmsSharedGitStatusWithoutBlocking(t *testing.T) {
 	now := time.Now()
 	cache := git.NewStatusCache(loader, git.WithStatusCacheClock(func() time.Time { return now }))
 	b := &board.SnapshotBuilder{
-		StatusCache: cache,
-		RepoSets:    git.NewRepoSetCache(time.Hour),
-		Git:         loader.inner,
-		Repo:        repotest.NewProvider(t),
+		StatusCache:            cache,
+		RepoSets:               git.NewRepoSetCache(time.Hour),
+		Git:                    loader.inner,
+		Repo:                   repotest.NewProvider(t),
+		DefaultExecutionTarget: api.ExecutionTargetRemote,
 	}
 	roots := []projectroot.RootRef{{ID: "proj", Path: dir, Label: "primary", IsPrimary: true}}
 

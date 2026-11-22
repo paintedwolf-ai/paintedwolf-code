@@ -33,7 +33,7 @@ func TestSnapshotBuilder_MultiRootOrientation(t *testing.T) {
 			testutil.FailErr(t, "await brief", err)
 		}
 	}
-	b := &board.SnapshotBuilder{Repo: p}
+	b := &board.SnapshotBuilder{Repo: p, DefaultExecutionTarget: api.ExecutionTargetRemote}
 	roots := []projectroot.RootRef{
 		{ID: "p", Path: primary, IsPrimary: true, Label: "lycaon"},
 		{ID: "s", Path: secondary, IsPrimary: false, Label: "den"},
