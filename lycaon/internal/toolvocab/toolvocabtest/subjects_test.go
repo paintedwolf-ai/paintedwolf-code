@@ -9,6 +9,7 @@ import (
 	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/spawn"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/toolschema"
 	"github.com/lycaon/lycaon/internal/toolsurface"
@@ -395,6 +396,177 @@ func TestClaimLevelNegationAndRequestToolsBinding(t *testing.T) {
 			t.Fatal("expected loading unrequestable edit to fail")
 		}
 	})
+}
+
+func TestPostLoadSchemaProjectionAndLoadingOnlyAuthority(t *testing.T) {
+	eff, err := extpacks.CatalogForConsumers()
+	testutil.FailErr(t, "catalog", err)
+	stockSchemas, _, err := extpacks.LoadEffectiveToolSchemas(eff)
+	testutil.FailErr(t, "schemas", err)
+	prunable, err := toolvocabtest.DiscoverPrunableSchemaIndex(t.Context(), eff)
+	testutil.FailErr(t, "prunable", err)
+	vocab, err := toolvocabtest.NewBacktickVocab(eff)
+	testutil.FailErr(t, "vocab", err)
+
+	editSchema := map[string]any{
+		"type": "object",
+		"properties": map[string]any{
+			"file_path":  map[string]any{"type": "string"},
+			"old_string": map[string]any{"type": "string"},
+			"new_string": map[string]any{"type": "string"},
+		},
+		"required": []any{"file_path", "old_string", "new_string"},
+	}
+	mergedSchemas, err := toolschema.Merge(stockSchemas, toolschema.ConfigFromEntries(map[string]toolschema.Entry{
+		"edit": {Description: "Edit file", Schema: editSchema},
+	}))
+	testutil.FailErr(t, "merge edit schema", err)
+	reqMeta, _ := stockSchemas.ToolMeta("request_tools")
+	reqOnlyMetas := []tools.ToolMeta{{Name: "request_tools", ArgsSchema: reqMeta.ArgsSchema}}
+
+	fullProfiles := []sandbox.ToolProfile{{
+		ID:             "postload_full",
+		Tools:          map[string]bool{"request_tools": true, "command": true, "edit": true},
+		CommandEffects: toolcontract.AllCommandEffects(),
+	}}
+	roEffects, err := toolcontract.NewCommandEffects(toolcontract.CommandReadOnly)
+	testutil.FailErr(t, "ro effects", err)
+	roProfiles := []sandbox.ToolProfile{{
+		ID:             "postload_ro",
+		Tools:          map[string]bool{"request_tools": true, "command": true, "edit": true},
+		CommandEffects: roEffects,
+	}}
+	catalog, err := toolvocab.NewCatalog(mergedSchemas, fullProfiles, toolvocab.Provenance{})
+	testutil.FailErr(t, "catalog", err)
+	plan := toolsurface.Compile([]string{"request_tools"}, []string{"command", "edit"})
+
+	fullReader, err := prompts.NewReader(prompts.ReaderInput{
+		ProfileID: "postload_full", Profiles: fullProfiles, Plan: plan, Schemas: mergedSchemas, RootCount: 1, HasGit: true,
+	})
+	testutil.FailErr(t, "full reader", err)
+	roReader, err := prompts.NewReader(prompts.ReaderInput{
+		ProfileID: "postload_ro", Profiles: roProfiles, Plan: plan, Schemas: mergedSchemas, RootCount: 1, HasGit: true,
+	})
+	testutil.FailErr(t, "ro reader", err)
+
+	fullAuth := toolvocabtest.AuthorityFromReaderAndMetas(fullReader, nil, reqOnlyMetas)
+	fullCtx := toolvocabtest.ClaimEvaluationContext{
+		Catalog: catalog, Prunable: prunable, Vocab: vocab, Self: fullAuth,
+		SessionMode: api.SessionModeAgent, Posture: api.SessionPostureBuild,
+	}
+	editAuth := fullAuth
+	editAuth.PostLoadSchemas = map[string]map[string]any{"edit": editSchema}
+	editCtx := fullCtx
+	editCtx.Self = editAuth
+
+	for _, okProse := range []string{
+		`Load ` + "`edit`" + ` via ` + "`request_tools(need=\"edit\")`" + ` before setting ` + "`edit.file_path`" + `.`,
+		`Load ` + "`edit`" + ` via ` + "`request_tools(need=\"edit\")`" + ` before calling ` + "`edit(file_path=\"a.go\", old_string=\"x\", new_string=\"y\")`" + `.`,
+		`Load ` + "`command`" + ` via ` + "`request_tools(need=\"command\")`" + ` before passing ` + "`command.verification`" + `.`,
+		`Load ` + "`command`" + ` via ` + "`request_tools(need=\"command\")`" + ` before calling ` + "`command(command=\"ls\", verification=true)`" + `.`,
+	} {
+		useCtx := fullCtx
+		if slicesContains([]string{okProse[:15]}, "Load `edit` via") {
+			useCtx = editCtx
+		}
+		if got := toolvocabtest.EvaluateClaimBlock(useCtx, toolvocabtest.ClaimBlock{Label: "postload-admitted", Subject: toolvocabtest.SubjectSelfNow(), Text: okProse}); len(got) > 0 {
+			t.Fatalf("expected admitted post-load claim %q to pass, got %+v", okProse, got)
+		}
+	}
+
+	nonexistent := toolvocabtest.EvaluateClaimBlock(editCtx, toolvocabtest.ClaimBlock{
+		Label: "postload-nonexistent-field", Subject: toolvocabtest.SubjectSelfNow(),
+		Text: `Load ` + "`edit`" + ` via ` + "`request_tools(need=\"edit\")`" + ` before setting ` + "`edit.nonexistent_field`" + `.`,
+	})
+	if !hasViolationClaim(nonexistent, "nonexistent_field") {
+		t.Fatalf("expected nonexistent_field violation after edit load, got %+v", nonexistent)
+	}
+
+	roCtx := fullCtx
+	roCtx.Posture = api.SessionPostureSpec
+	roCtx.Self = toolvocabtest.AuthorityFromReaderAndMetas(roReader, nil, reqOnlyMetas)
+	for _, prunedProse := range []string{
+		`Load ` + "`command`" + ` via ` + "`request_tools(need=\"command\")`" + ` before passing ` + "`command.verification`" + `.`,
+		`Load ` + "`command`" + ` via ` + "`request_tools(need=\"command\")`" + ` before calling ` + "`command(command=\"ls\", verification=true)`" + `.`,
+	} {
+		got := toolvocabtest.EvaluateClaimBlock(roCtx, toolvocabtest.ClaimBlock{Label: "postload-pruned", Subject: toolvocabtest.SubjectSelfNow(), Text: prunedProse})
+		if !hasViolationClaim(got, "verification") {
+			t.Fatalf("expected pruned verification violation for %q, got %+v", prunedProse, got)
+		}
+	}
+
+	loadOnlyAuth := fullAuth
+	loadOnlyAuth.PostLoadSchemas = map[string]map[string]any{}
+	loadOnlyCtx := fullCtx
+	loadOnlyCtx.Self = loadOnlyAuth
+	if got := toolvocabtest.EvaluateClaimBlock(loadOnlyCtx, toolvocabtest.ClaimBlock{
+		Label: "load-only-bare", Subject: toolvocabtest.SubjectSelfNow(),
+		Text: `Load ` + "`edit`" + ` via ` + "`request_tools(need=\"edit\")`" + `.`,
+	}); len(got) > 0 {
+		t.Fatalf("expected specific loader instruction to pass under loading-only authority, got %+v", got)
+	}
+	if got := toolvocabtest.EvaluateClaimBlock(loadOnlyCtx, toolvocabtest.ClaimBlock{
+		Label: "load-only-uncertified-field", Subject: toolvocabtest.SubjectSelfNow(),
+		Text: `Load ` + "`edit`" + ` via ` + "`request_tools(need=\"edit\")`" + ` before setting ` + "`edit.file_path`" + `.`,
+	}); len(got) == 0 {
+		t.Fatal("expected unverified post-load edit.file_path claim to fail under loading-only authority")
+	}
+}
+
+func TestPostLoadCommandModeAdmission(t *testing.T) {
+	eff, err := extpacks.CatalogForConsumers()
+	testutil.FailErr(t, "catalog", err)
+	stockSchemas, _, err := extpacks.LoadEffectiveToolSchemas(eff)
+	testutil.FailErr(t, "schemas", err)
+	prunable, err := toolvocabtest.DiscoverPrunableSchemaIndex(t.Context(), eff)
+	testutil.FailErr(t, "prunable", err)
+	vocab, err := toolvocabtest.NewBacktickVocab(eff)
+	testutil.FailErr(t, "vocab", err)
+
+	roEffects, err := toolcontract.NewCommandEffects(toolcontract.CommandReadOnly)
+	testutil.FailErr(t, "ro effects", err)
+	roProfiles := []sandbox.ToolProfile{{
+		ID:             "postload_cmd_ro",
+		Tools:          map[string]bool{"request_tools": true, "command": true},
+		CommandEffects: roEffects,
+	}}
+	catalog, err := toolvocab.NewCatalog(stockSchemas, roProfiles, toolvocab.Provenance{})
+	testutil.FailErr(t, "catalog", err)
+	plan := toolsurface.Compile([]string{"request_tools"}, []string{"command"})
+	roReader, err := prompts.NewReader(prompts.ReaderInput{
+		ProfileID: "postload_cmd_ro", Profiles: roProfiles, Plan: plan, Schemas: stockSchemas, RootCount: 1, HasGit: true,
+	})
+	testutil.FailErr(t, "ro reader", err)
+	reqMeta, _ := stockSchemas.ToolMeta("request_tools")
+	roCtx := toolvocabtest.ClaimEvaluationContext{
+		Catalog:     catalog,
+		Prunable:    prunable,
+		Vocab:       vocab,
+		Self:        toolvocabtest.AuthorityFromReaderAndMetas(roReader, nil, []tools.ToolMeta{{Name: "request_tools", ArgsSchema: reqMeta.ArgsSchema}}),
+		SessionMode: api.SessionModeAgent,
+		Posture:     api.SessionPostureSpec,
+	}
+
+	for _, admitted := range []string{
+		`Load ` + "`command`" + ` via ` + "`request_tools(need=\"command\")`" + ` before running ` + "`sed -n 1,5p README.md`" + `.`,
+		`Load ` + "`command`" + ` via ` + "`request_tools(need=\"command\")`" + ` before running ` + "`tar -t -f archive.tar`" + `.`,
+		`Load ` + "`command`" + ` via ` + "`request_tools(need=\"command\")`" + ` before running ` + "`git status`" + `.`,
+	} {
+		if got := toolvocabtest.EvaluateClaimBlock(roCtx, toolvocabtest.ClaimBlock{Label: "admitted-ro-mode", Subject: toolvocabtest.SubjectSelfNow(), Text: admitted}); len(got) > 0 {
+			t.Fatalf("expected admitted read-only command mode %q to pass, got %+v", admitted, got)
+		}
+	}
+
+	for _, unavailable := range []string{
+		`Load ` + "`command`" + ` via ` + "`request_tools(need=\"command\")`" + ` before running ` + "`sed 'w out' README.md`" + `.`,
+		`Load ` + "`command`" + ` via ` + "`request_tools(need=\"command\")`" + ` before running ` + "`tar -x -f archive.tar`" + `.`,
+		`Load ` + "`command`" + ` via ` + "`request_tools(need=\"command\")`" + ` before running ` + "`git commit -m msg`" + `.`,
+		`Load ` + "`command`" + ` via ` + "`request_tools(need=\"command\")`" + ` before calling ` + "`command(command=\"sed 'w out' README.md\")`" + `.`,
+	} {
+		if got := toolvocabtest.EvaluateClaimBlock(roCtx, toolvocabtest.ClaimBlock{Label: "unavailable-mut-mode", Subject: toolvocabtest.SubjectSelfNow(), Text: unavailable}); len(got) == 0 {
+			t.Fatalf("expected unavailable mutating command mode %q to fail after read-only command load", unavailable)
+		}
+	}
 }
 
 func hasViolationClaim(violations []toolvocabtest.SubjectViolation, want string) bool {

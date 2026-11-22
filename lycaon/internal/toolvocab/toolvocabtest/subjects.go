@@ -11,7 +11,6 @@ import (
 
 	"github.com/lycaon/lycaon/internal/evidence"
 	"github.com/lycaon/lycaon/internal/prompts"
-	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/toolreach"
 	"github.com/lycaon/lycaon/internal/tools"
@@ -89,10 +88,15 @@ func SubjectHistoricalObservation(origin api.MessageOrigin) ClaimSubject {
 
 // ActorAuthority captures a resolved actor's prompt Reader, program reach, and projected schemas.
 type ActorAuthority struct {
-	Reader       prompts.Reader
-	ProgramReach toolreach.Programs
-	Metas        []tools.ToolMeta
-	Schemas      map[string]map[string]any
+	Reader              prompts.Reader
+	ProgramReach        toolreach.Programs
+	ProgramTable        *toolreach.ProgramTable
+	PostLoadPrograms    *toolreach.ProgramTable
+	Metas               []tools.ToolMeta
+	Schemas             map[string]map[string]any
+	PostLoadSchemas     map[string]map[string]any
+	WaitConditionsKnown bool
+	WaitConditions      []string
 }
 
 // AuthorityFromReaderAndMetas constructs an ActorAuthority from a Reader, ProgramReach, and ToolMetas.
@@ -104,7 +108,14 @@ func AuthorityFromReaderAndMetas(reader prompts.Reader, progReach toolreach.Prog
 	if progReach == nil {
 		progReach = reader.CanReachProgram
 	}
-	return ActorAuthority{Reader: reader, ProgramReach: progReach, Metas: slices.Clone(metas), Schemas: schemas}
+	table := deriveProgramTable(reader.Effects(), reader.SurfaceID(), readerExternalHidden(reader), progReach)
+	return ActorAuthority{
+		Reader:       reader,
+		ProgramReach: progReach,
+		ProgramTable: table,
+		Metas:        slices.Clone(metas),
+		Schemas:      schemas,
+	}
 }
 
 // ClaimEvaluationContext bundles catalogs and actor authorities for claim checking.
@@ -146,14 +157,6 @@ var (
 	afterLoaderPrepRe   = regexp.MustCompile(`(?i)^\s+(?:after|once\s+loaded\s+via|following)\s+(?:calling\s+)?$`)
 	postLoadSeqCueRe    = regexp.MustCompile(`(?i)(?:\bbefore\b|\bthen\b|\bfirst\b|\bafter\b|\bonce\b|\bto\s+[a-z]+)`)
 	unseqConjRe         = regexp.MustCompile(`(?i),\s*and\s+(?:run|use|call|invoke|execute|apply)\b`)
-	gitMutSubcommands   = map[string]bool{
-		"add": true, "commit": true, "restore": true, "reset": true, "checkout": true,
-		"merge": true, "rebase": true, "cherry-pick": true, "tag": true, "stash": true,
-		"apply": true, "am": true, "rm": true, "mv": true,
-	}
-	gitExtSubcommands = map[string]bool{
-		"bisect": true, "worktree": true, "push": true, "pull": true, "fetch": true, "clone": true, "submodule": true,
-	}
 )
 
 // EvaluateClaimBlock evaluates a ClaimBlock against the authority of its ClaimSubject.
@@ -172,23 +175,23 @@ func EvaluateClaimBlock(evalCtx ClaimEvaluationContext, block ClaimBlock) []Subj
 	case SubjectKindHistoricalObservation:
 		return evaluateHistoricalBlock(vocab, block)
 	case SubjectKindSelfRequestable:
-		return evaluateRequestableBlock(cat, evalCtx.Prunable, vocab, evalCtx.Self, block)
+		return evaluateRequestableBlock(cat, evalCtx.Prunable, vocab, evalCtx.Self, evalCtx.SessionMode, block)
 	case SubjectKindNamedAgent:
 		return evaluateNamedAgentBlock(cat, evalCtx, vocab, block)
 	case SubjectKindFollowupLeg:
 		if evalCtx.FollowupLeg == nil {
 			return []SubjectViolation{{Label: block.Label, Subject: block.Subject, Reason: "missing FollowupLeg authority", Line: 1}}
 		}
-		return evaluateDeferredTurnBlock(cat, evalCtx.Prunable, vocab, *evalCtx.FollowupLeg, block)
+		return evaluateDeferredTurnBlock(cat, evalCtx.Prunable, vocab, *evalCtx.FollowupLeg, evalCtx.SessionMode, block)
 	case SubjectKindSessionNextTurn:
 		if evalCtx.SessionNextTurn == nil {
 			return []SubjectViolation{{Label: block.Label, Subject: block.Subject, Reason: "missing SessionNextTurn authority", Line: 1}}
 		}
-		return evaluateDeferredTurnBlock(cat, evalCtx.Prunable, vocab, *evalCtx.SessionNextTurn, block)
+		return evaluateDeferredTurnBlock(cat, evalCtx.Prunable, vocab, *evalCtx.SessionNextTurn, evalCtx.SessionMode, block)
 	case SubjectKindSelfNow:
-		return evaluateActorProse(cat, evalCtx.Prunable, vocab, evalCtx.Self, block.Label, block.Subject, block.Text, false)
+		return evaluateActorProse(cat, evalCtx.Prunable, vocab, evalCtx.Self, evalCtx.SessionMode, block.Label, block.Subject, block.Text, false)
 	default:
-		return evaluateActorProse(cat, evalCtx.Prunable, vocab, evalCtx.Self, block.Label, block.Subject, block.Text, false)
+		return evaluateActorProse(cat, evalCtx.Prunable, vocab, evalCtx.Self, evalCtx.SessionMode, block.Label, block.Subject, block.Text, false)
 	}
 }
 
@@ -249,6 +252,7 @@ func evaluateRequestableBlock(
 	idx *PrunableSchemaIndex,
 	vocab *BacktickVocab,
 	self ActorAuthority,
+	sessionMode api.SessionMode,
 	block ClaimBlock,
 ) []SubjectViolation {
 	offeredSet := stringSliceSet(self.Reader.Offered())
@@ -264,7 +268,7 @@ func evaluateRequestableBlock(
 			Reason: "requestable clause rendered with empty Requestable() set",
 		}}
 	}
-	return evaluateActorProse(cat, idx, vocab, self, block.Label, block.Subject, block.Text, false)
+	return evaluateActorProse(cat, idx, vocab, self, sessionMode, block.Label, block.Subject, block.Text, false)
 }
 
 func extractSentenceLoadBindings(
@@ -353,57 +357,6 @@ func isSpanSequencedWithLoader(sentence string, spStart, spEnd int, b loadBindin
 	return false
 }
 
-func isBacktickAuthorizedByLoad(
-	cat *toolvocab.Catalog,
-	idx *PrunableSchemaIndex,
-	vocab *BacktickVocab,
-	postHeld map[string]bool,
-	sentence string,
-	bs BacktickSpan,
-	bindings []loadBinding,
-) (authorized bool, schemaViolations []AttributedClaimIssue) {
-	raw := strings.TrimSpace(bs.Span)
-	for _, b := range bindings {
-		if !isSpanSequencedWithLoader(sentence, bs.Start, bs.End, b) {
-			continue
-		}
-		if raw == b.target || strings.HasPrefix(raw, b.target+".") {
-			return true, nil
-		}
-		if strings.HasPrefix(raw, b.target+"(") {
-			for _, ex := range ParseCallExamples(cat, raw) {
-				if ex.Tool == b.target && idx != nil {
-					if base, ok := idx.BaseSchema(b.target); ok {
-						if iss := validateCallAgainstSchema(ex, base); len(iss) > 0 {
-							return false, iss
-						}
-					}
-				}
-			}
-			return true, nil
-		}
-		if b.target == toolreach.ProgramTool && vocab != nil {
-			words := strings.Fields(raw)
-			if len(words) >= 1 && vocab.commands[words[0]] && toolcontract.CommandLanguageReachable(words[0], postHeld) {
-				if words[0] == "git" && len(words) >= 2 {
-					if gitExtSubcommands[words[1]] && !postHeld[toolcontract.ReachCommandExternalExec] {
-						continue
-					}
-					if (gitMutSubcommands[words[1]] || words[1] == "bisect" || words[1] == "worktree") && !postHeld[toolcontract.ReachCommandMutation] {
-						continue
-					}
-				}
-				return true, nil
-			}
-			norm := normalizeSchemaPath(raw)
-			if idx != nil && slices.Contains(idx.AllOwners(norm), toolreach.ProgramTool) && postHeld[toolcontract.ReachCommandExternalExec] {
-				return true, nil
-			}
-		}
-	}
-	return false, nil
-}
-
 func evaluateNamedAgentBlock(cat *toolvocab.Catalog, evalCtx ClaimEvaluationContext, vocab *BacktickVocab, block ClaimBlock) []SubjectViolation {
 	agentID := block.Subject.AgentID
 	if evalCtx.SessionMode == api.SessionModeAsk {
@@ -454,7 +407,7 @@ func evaluateNamedAgentBlock(cat *toolvocab.Catalog, evalCtx ClaimEvaluationCont
 			}
 		}
 	}
-	out = append(out, evaluateActorProse(cat, evalCtx.Prunable, vocab, targetAuth, block.Label, block.Subject, block.Text, true)...)
+	out = append(out, evaluateActorProse(cat, evalCtx.Prunable, vocab, targetAuth, evalCtx.SessionMode, block.Label, block.Subject, block.Text, true)...)
 	return out
 }
 
@@ -463,6 +416,7 @@ func evaluateDeferredTurnBlock(
 	idx *PrunableSchemaIndex,
 	vocab *BacktickVocab,
 	targetAuth ActorAuthority,
+	sessionMode api.SessionMode,
 	block ClaimBlock,
 ) []SubjectViolation {
 	var out []SubjectViolation
@@ -472,7 +426,7 @@ func evaluateDeferredTurnBlock(
 			Reason: fmt.Sprintf("%s promises mutating file/redirect work, which target Reader lacks", block.Subject.Kind),
 		})
 	}
-	out = append(out, evaluateActorProse(cat, idx, vocab, targetAuth, block.Label, block.Subject, block.Text, false)...)
+	out = append(out, evaluateActorProse(cat, idx, vocab, targetAuth, sessionMode, block.Label, block.Subject, block.Text, false)...)
 	return out
 }
 
@@ -481,6 +435,7 @@ func evaluateActorProse(
 	idx *PrunableSchemaIndex,
 	vocab *BacktickVocab,
 	auth ActorAuthority,
+	sessionMode api.SessionMode,
 	label string,
 	subj ClaimSubject,
 	text string,
@@ -504,6 +459,17 @@ func evaluateActorProse(
 		return nil, false
 	}
 	postHeld := buildPostLoadHeld(auth.Reader)
+	postTable := auth.PostLoadPrograms
+	if postTable == nil {
+		postTable = deriveProgramTable(auth.Reader.Effects(), auth.Reader.SurfaceID(), readerExternalHidden(auth.Reader), func(name string) bool {
+			return toolcontract.CommandLanguageReachable(name, postHeld)
+		})
+	}
+	var postOffered []string
+	if postHeld[toolreach.ProgramTool] {
+		postOffered = []string{toolreach.ProgramTool}
+	}
+	postReach := toolreach.Offered(postOffered).WithProgramTable(postTable)
 
 	var out []SubjectViolation
 	for _, sent := range splitActiveSentences(text) {
@@ -517,7 +483,7 @@ func evaluateActorProse(
 				continue
 			}
 			if len(bindings) > 0 {
-				authOK, schemaIss := isBacktickAuthorizedByLoad(cat, idx, vocab, postHeld, sent.sentence, bs, bindings)
+				authOK, schemaIss := isBacktickAuthorizedByLoad(cat, idx, vocab, auth, sessionMode, offered, postHeld, postReach, sent.sentence, bs, bindings)
 				for _, iss := range schemaIss {
 					claim := iss.Path
 					if claim == "" {
@@ -557,58 +523,6 @@ func evaluateActorProse(
 		}
 	}
 	return deduplicateSubjectViolations(out)
-}
-
-func checkCommandInvocations(
-	vocab *BacktickVocab,
-	auth ActorAuthority,
-	held map[string]bool,
-	label string,
-	subj ClaimSubject,
-	sentence string,
-	line int,
-) []SubjectViolation {
-	if vocab == nil {
-		return nil
-	}
-	progReach := auth.ProgramReach
-	if progReach == nil {
-		progReach = auth.Reader.CanReachProgram
-	}
-	var out []SubjectViolation
-	for _, bs := range ExtractInlineBackticks(sentence) {
-		raw := strings.TrimSpace(bs.Span)
-		if raw == "" || strings.Contains(raw, "(") || !strings.Contains(raw, " ") {
-			continue
-		}
-		for _, seg := range chainSplitRe.Split(raw, -1) {
-			words := strings.Fields(strings.TrimSpace(seg))
-			if len(words) < 2 {
-				continue
-			}
-			prog := words[0]
-			if !vocab.commands[prog] {
-				continue
-			}
-			if !held[toolreach.ProgramTool] || !progReach(prog) {
-				out = append(out, SubjectViolation{
-					Label: label, Subject: subj, Claim: raw, Line: line,
-					Reason: fmt.Sprintf("command invocation %q requires reachable program %q", raw, prog),
-				})
-				continue
-			}
-			if prog == "git" {
-				sub := words[1]
-				if gitExtSubcommands[sub] && !held[toolcontract.ReachCommandExternalExec] {
-					out = append(out, SubjectViolation{Label: label, Subject: subj, Claim: raw, Line: line, Reason: fmt.Sprintf("git %s requires external command execution", sub)})
-				}
-				if (gitMutSubcommands[sub] || sub == "bisect" || sub == "worktree") && !held[toolcontract.ReachCommandMutation] {
-					out = append(out, SubjectViolation{Label: label, Subject: subj, Claim: raw, Line: line, Reason: fmt.Sprintf("git %s requires command mutation", sub)})
-				}
-			}
-		}
-	}
-	return out
 }
 
 type sentenceContext struct {
@@ -768,41 +682,6 @@ func readerAllowsMutation(r prompts.Reader) bool {
 		}
 	}
 	return r.Held()[toolcontract.ReachCommandMutation]
-}
-
-func buildPostLoadHeld(r prompts.Reader) map[string]bool {
-	toolSet := map[string]bool{}
-	var visible []string
-	for _, name := range append(slices.Clone(r.Offered()), r.Requestable()...) {
-		if !toolSet[name] {
-			toolSet[name] = true
-			visible = append(visible, name)
-		}
-	}
-	sort.Strings(visible)
-	hidden := false
-	if vars, err := prompts.Vars(r, map[string]any{}); err == nil {
-		hidden, _ = vars["command_external_hidden"].(bool)
-	}
-	const pid = "post_load"
-	postReader, err := prompts.NewReader(prompts.ReaderInput{
-		ProfileID: pid,
-		Profiles: []sandbox.ToolProfile{{
-			ID:             pid,
-			Tools:          toolSet,
-			CommandEffects: r.Effects(),
-		}},
-		Visible:               visible,
-		Loaded:                toolSet,
-		RootCount:             1,
-		HasGit:                true,
-		WebSearch:             true,
-		CommandExternalHidden: hidden,
-	})
-	if err != nil {
-		return r.Held()
-	}
-	return postReader.Held()
 }
 
 func deduplicateSubjectViolations(in []SubjectViolation) []SubjectViolation {

@@ -16,6 +16,7 @@ import (
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/toolreach"
 	"github.com/lycaon/lycaon/internal/tools"
+	"github.com/lycaon/lycaon/internal/toolschema"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -253,7 +254,7 @@ func TestDeferredToolPreLoadSchemaMatchesPostLoadRequestUnderNarrowing(t *testin
 		Context: ContextDeps{
 			Policy: registryTestPolicy{metas: []tools.ToolMeta{
 				{Name: "request_tools", ArgsSchema: map[string]any{"type": "object", "properties": map[string]any{"need": map[string]any{"type": "string"}}}},
-				{Name: "command", Deferred: true, ArgsSchema: tools.PruneCommandReadOnlySchema(rawCommandSchema)},
+				{Name: "command", Deferred: true, ArgsSchema: toolschema.PruneCommandReadOnlySchema(rawCommandSchema)},
 				{Name: "task", Deferred: true, ArgsSchema: rawTaskSchema},
 			}},
 			LoadedTools:      func(string) map[string]bool { return active },
