@@ -20,6 +20,7 @@ func TestSnapshotBuilderIncludesHostLine(t *testing.T) {
 		Arch:            "amd64",
 		ExecutionTarget: api.ExecutionTargetLocal,
 		Shell:           true,
+		Toolchains:      []string{"go 1.26"},
 	})
 	b := &board.SnapshotBuilder{
 		Repo:                   repotest.NewProvider(t),

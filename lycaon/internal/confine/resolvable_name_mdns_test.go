@@ -21,7 +21,7 @@ func registerResolvableName(t *testing.T) string {
 	t.Helper()
 	label := fmt.Sprintf("pw-confine-%d-%d", os.Getpid(), time.Now().UnixNano())
 	name := label + ".local"
-	reg := exec.Command("/usr/bin/dns-sd", "-P", label, "_pwconfine._udp", "local", "9", name, resolvableNameAddr)
+	reg := exec.Command("/usr/bin/dns-sd", "-lo", "-P", label, "_pwconfine._udp", "local", "9", name, resolvableNameAddr)
 	output, err := reg.StdoutPipe()
 	testutil.FailErr(t, "open dns-sd output", err)
 	reg.Stderr = reg.Stdout
