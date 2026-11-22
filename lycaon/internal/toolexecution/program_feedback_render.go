@@ -60,18 +60,19 @@ func (r *Rejections) RenderProgramFailure(ctx context.Context, frame ProgramFram
 	}
 
 	ctx = invocationContext(ctx, tc)
+	renderClone := rejectWithReach(ctx, prepared.Rejection)
 	if r.blockPlane != nil {
 		var rejectErr error
 		if prepared.progress {
-			rejectErr = r.blockPlane.RejectObservation(ctx, frame.lifetime.model.ToolName, tc.Identity.Agent, submitted, prepared.Rejection)
+			rejectErr = r.blockPlane.RejectObservation(ctx, frame.lifetime.model.ToolName, tc.Identity.Agent, submitted, renderClone)
 		} else {
-			rejectErr = r.blockPlane.RejectNativeObservation(ctx, frame.lifetime.model.ToolName, tc.Identity.Agent, submitted, prepared.operation, prepared.Rejection)
+			rejectErr = r.blockPlane.RejectNativeObservation(ctx, frame.lifetime.model.ToolName, tc.Identity.Agent, submitted, prepared.operation, renderClone)
 		}
 		if rejectErr != nil {
 			return rejectErr
 		}
 	}
-	return r.renderReject(prepared.Rejection)
+	return r.renderRejectWithCause(renderClone, prepared.Rejection)
 }
 
 // Attribution is immutable feedback provenance, not a new execution attempt.

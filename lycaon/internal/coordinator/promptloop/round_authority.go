@@ -65,11 +65,25 @@ func (a RoundAuthority) toolContext(base tools.ToolContext) tools.ToolContext {
 	return base
 }
 
-func (l *PromptLoop) appendAgentEnabledNudge(ctx context.Context, sessionID string, state *promptLoopTurnState) ([]api.Message, error) {
+func (l *PromptLoop) appendAgentEnabledNudge(ctx context.Context, sess *api.Session, sessionID string, state *promptLoopTurnState) ([]api.Message, error) {
 	if l.Closeout.Deps.RenderHostKick == nil {
 		return state.history, nil
 	}
-	content, err := l.Closeout.Deps.RenderHostKick(ctx, "session-agent-enabled", nil)
+	var hasRunningJobs, hasActiveWorkers bool
+	if l.Context != nil && l.Context.Deps.LiveResources != nil {
+		res := l.Context.Deps.LiveResources(sessionID)
+		hasRunningJobs = res.CommandJobs || res.HeldCalls
+	}
+	if l.Context != nil && l.Context.Deps.ImplementSessionState != nil && sess != nil {
+		impl := l.Context.Deps.ImplementSessionState(ctx, sess)
+		hasActiveWorkers = impl.WorkersInFlight > 0 || impl.WorkersDelivered > 0
+	}
+	content, err := l.Closeout.Deps.RenderHostKick(ctx, "session-agent-enabled", map[string]any{
+		"previous_mode":      "Ask",
+		"current_mode":       "Agent",
+		"has_running_jobs":   hasRunningJobs,
+		"has_active_workers": hasActiveWorkers,
+	})
 	if err != nil {
 		return nil, err
 	}

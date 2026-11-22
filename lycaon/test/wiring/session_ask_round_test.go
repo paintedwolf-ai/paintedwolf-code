@@ -142,6 +142,27 @@ func assertAskUpgradeRounds(t *testing.T, requests []modelcall.CompletionRequest
 	if !requestHasTransitionNotice(requests[1]) {
 		t.Fatal("round 2 Agent request missing Agent mode transition notice")
 	}
+	transitionText := requestTransitionNoticeText(requests[1])
+	for _, want := range []string{
+		"switched this session from Ask mode to Agent mode",
+		"Earlier Ask-mode refusals applied only to calls evaluated while Ask mode was active.",
+		"New calls in this round use the current Agent tool offer and ordinary permissions",
+		"keeps its launch-time read-only authority",
+		"does not automatically replay earlier calls or guarantee that a previously refused operation will succeed",
+	} {
+		if !strings.Contains(transitionText, want) {
+			t.Fatalf("round 2 transition notice missing %q:\n%s", want, transitionText)
+		}
+	}
+}
+
+func requestTransitionNoticeText(req modelcall.CompletionRequest) string {
+	for _, msg := range req.Messages {
+		if msg.HostSignalID == "session.mode.agent_enabled" || strings.Contains(msg.Content, "[host:session-agent-enabled]") {
+			return msg.Content
+		}
+	}
+	return ""
 }
 
 func requestStandingText(req modelcall.CompletionRequest) string {
@@ -186,7 +207,10 @@ func TestAskContinuedTurnsAndBetweenTurnUpgradeDeliverAccurateContextAndOneTimeN
 			switch currentTurn {
 			case 1:
 				if r == 1 {
-					return askRoundToolCall("ask-read-1", "command", map[string]any{"command": "cat note.txt"})
+					return modelcall.Completion{ToolCalls: []api.ToolCall{
+						{ID: "ask-read-1", Name: "command", Args: map[string]any{"command": "cat note.txt"}},
+						{ID: "ask-refused-1", Name: "command", Args: map[string]any{"command": "sed -i 's/alpha/beta/' note.txt"}},
+					}}
 				}
 				return modelcall.Completion{Content: "Turn 1 answer from Ask mode [note.txt:1]."}
 			case 2:
@@ -233,6 +257,31 @@ func TestAskContinuedTurnsAndBetweenTurnUpgradeDeliverAccurateContextAndOneTimeN
 		if requestHasTransitionNotice(req) {
 			t.Fatalf("Turn 1 request %d unexpectedly had transition notice", i)
 		}
+	}
+	msgsTurn1, err := h.Store.GetMessages(ctx, id)
+	testutil.FailErr(t, "get Turn 1 messages", err)
+	var sawTurn1AskRefusal bool
+	for _, msg := range msgsTurn1 {
+		if msg.ToolResult != nil && msg.ToolResult.ToolCallID == "ask-refused-1" {
+			sawTurn1AskRefusal = true
+			body := msg.ToolResult.Content
+			if body == "" {
+				body = msg.Content
+			}
+			for _, want := range []string{
+				"Rejected: `sed` (`-i`) at 1:1 is unavailable in Ask mode.",
+				"Cause: Ask mode permits only read-only inspection and blocks `mutation`.",
+				"Fix: Run `sed s/alpha/beta/ note.txt` to preview the transformed output on stdout without modifying the file in place.",
+				"explain that the user can switch to Agent mode if they want you to apply the change.",
+			} {
+				if !strings.Contains(body, want) {
+					t.Fatalf("Turn 1 Ask refusal missing %q:\n%s", want, body)
+				}
+			}
+		}
+	}
+	if !sawTurn1AskRefusal {
+		t.Fatal("Turn 1 missing ask-refused-1 tool result")
 	}
 
 	// 2. Continued Ask turn: standing context still names Ask mode, no transition notice.
@@ -327,6 +376,12 @@ func verifyAskUpgradeTranscript(t *testing.T, messages []api.Message) {
 				readOK = strings.Contains(body, "source evidence")
 			case "blocked-write":
 				writeRefused = slices.Contains(res.Codes, "COMMAND_EFFECT_NOT_ALLOWED") || strings.Contains(body, "COMMAND_EFFECT_NOT_ALLOWED")
+				if !strings.Contains(body, "was refused under launch-time Ask authority") || !strings.Contains(body, "kept its launch-time read-only authority across the session upgrade") {
+					t.Fatalf("already-upgraded round-1 redirect refusal missing past-tense Ask attribution:\n%s", body)
+				}
+				if strings.Contains(body, "switch to Agent mode") {
+					t.Fatalf("already-upgraded round-1 redirect refusal still directed switching to Agent mode:\n%s", body)
+				}
 			case "blocked-external":
 				externalRefused = slices.Contains(res.Codes, tools.AskModeActiveCode) || strings.Contains(body, tools.AskModeActiveCode)
 				if strings.Contains(body, "switch to Agent mode") {

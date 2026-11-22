@@ -1,6 +1,8 @@
 package command_test
 
 import (
+	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -8,12 +10,19 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/lycaon/lycaon/internal/agentpolicy"
 	"github.com/lycaon/lycaon/internal/gitengine"
+	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/hostcmd"
+	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/toolcontract"
+	"github.com/lycaon/lycaon/internal/toolexecution"
+	"github.com/lycaon/lycaon/internal/toolprofiles"
 	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/tools/native/command"
+	"github.com/lycaon/lycaon/pkg/api"
 )
 
 func TestAskProgramEntryRejectsPrunedEnvelopeFields(t *testing.T) {
@@ -145,5 +154,169 @@ func TestAskProgramAdmitsReadPipelinesAndRefusesWritesCurlAndExternal(t *testing
 		if out.Refusal == nil || out.Refusal.Code != tools.AskModeActiveCode {
 			t.Fatalf("%s: refusal = %+v, want %s (raw=%s)", cmd, out.Refusal, tools.AskModeActiveCode, raw)
 		}
+	}
+}
+
+func TestAskAndReadOnlyProgramFeedbackAlternativesAndAttribution(t *testing.T) {
+	f := newAskComposedFixture(t)
+	testutil.FailErr(t, "mkdir src", os.MkdirAll(filepath.Join(f.Dir, "src"), 0o755))
+	testutil.FailErr(t, "write dead.tmp", os.WriteFile(filepath.Join(f.Dir, "src", "dead.tmp"), []byte("scratch\n"), 0o644))
+	testutil.FailErr(t, "write notes.txt", os.WriteFile(filepath.Join(f.Dir, "src", "notes.txt"), []byte("alpha\nbeta\ngamma\n"), 0o644))
+
+	// 1. Refused mutation paired with an admitted read-only inspection on the same target.
+	rawFindDelete, err := f.Call(t, t.Context(), "find src -name '*.tmp' -delete")
+	testutil.FailErr(t, "find -delete in Ask", err)
+	outFindDelete := decodeOutcome(t, rawFindDelete)
+	if outFindDelete.Refusal == nil || outFindDelete.Refusal.Code != "COMMAND_EFFECT_NOT_ALLOWED" {
+		t.Fatalf("find -delete refusal = %+v", outFindDelete.Refusal)
+	}
+	for _, want := range []string{
+		"Rejected: `find` (`-delete`) at 1:1 is unavailable in Ask mode.",
+		"Cause: Ask mode permits only read-only inspection and blocks `mutation`.",
+		"Fix: Run `find src -name '*.tmp'` to list the paths selected for deletion and report the affected files without deleting them.",
+		"Next: Use the read-only observation or gathered evidence to answer, and explain that the user can switch to Agent mode if they want you to apply the change.",
+	} {
+		if !strings.Contains(outFindDelete.Refusal.Feedback, want) {
+			t.Fatalf("find -delete feedback missing %q:\n%s", want, outFindDelete.Refusal.Feedback)
+		}
+	}
+	suggestedCmd, _ := outFindDelete.Refusal.Details["code_instead"].(string)
+	if suggestedCmd != "find src -name '*.tmp'" {
+		t.Fatalf("code_instead = %q, want %q", suggestedCmd, "find src -name '*.tmp'")
+	}
+	rawFindRead, err := f.Call(t, t.Context(), suggestedCmd)
+	testutil.FailErr(t, "run recommended find read in Ask", err)
+	outFindRead := decodeOutcome(t, rawFindRead)
+	if outFindRead.Status != 0 || outFindRead.Refusal != nil || !strings.Contains(outFindRead.Stdout, "src/dead.tmp\n") {
+		t.Fatalf("recommended read outcome = %+v", outFindRead)
+	}
+
+	// Also verify sed -i -> sed stream preview on the same target.
+	rawSedInPlace, err := f.Call(t, t.Context(), "sed -i 's/beta/delta/' src/notes.txt")
+	testutil.FailErr(t, "sed -i in Ask", err)
+	outSedInPlace := decodeOutcome(t, rawSedInPlace)
+	if outSedInPlace.Refusal == nil || !strings.Contains(outSedInPlace.Refusal.Feedback, "Run `sed s/beta/delta/ src/notes.txt` to preview the transformed output on stdout without modifying the file in place.") {
+		t.Fatalf("sed -i feedback = %+v", outSedInPlace.Refusal)
+	}
+	sedPreviewCmd, _ := outSedInPlace.Refusal.Details["code_instead"].(string)
+	rawSedPreview, err := f.Call(t, t.Context(), sedPreviewCmd)
+	testutil.FailErr(t, "run recommended sed preview in Ask", err)
+	outSedPreview := decodeOutcome(t, rawSedPreview)
+	if outSedPreview.Status != 0 || outSedPreview.Refusal != nil || !strings.Contains(outSedPreview.Stdout, "alpha\ndelta\ngamma\n") {
+		t.Fatalf("recommended sed preview outcome = %+v", outSedPreview)
+	}
+
+	// 2. Removing the relevant form or target access makes the recommendation disappear while the precise cause remains.
+	f.Context = func(_ string, tc *tools.ToolContext) {
+		tc.Turn.TurnOfferedToolNames = []string{"command"}
+		tc.Turn.TurnPrograms = func(name string) bool { return name != "find" }
+	}
+	rawNoFindForm, err := f.Call(t, t.Context(), "find src -name '*.tmp' -delete")
+	testutil.FailErr(t, "find -delete with find program unreachable", err)
+	outNoFindForm := decodeOutcome(t, rawNoFindForm)
+	if outNoFindForm.Refusal == nil || strings.Contains(outNoFindForm.Refusal.Feedback, "Run `find src -name '*.tmp'`") || outNoFindForm.Refusal.Details["code_instead"] != nil {
+		t.Fatalf("unreachable form still recommended in feedback:\n%s", outNoFindForm.Refusal.Feedback)
+	}
+	if !strings.Contains(outNoFindForm.Refusal.Feedback, "Cause: Ask mode permits only read-only inspection and blocks `mutation`.") {
+		t.Fatalf("missing precise cause when form removed:\n%s", outNoFindForm.Refusal.Feedback)
+	}
+	f.Context = nil
+
+	deniedTargetCtx := tools.WithAgentPolicy(t.Context(), func(_ context.Context, targets []agentpolicy.Target) error {
+		for _, target := range targets {
+			if !target.Mutation && strings.HasSuffix(target.Path, "notes.txt") {
+				return errors.New("policy denied target read")
+			}
+		}
+		return nil
+	})
+	rawDeniedTarget, err := f.Call(t, deniedTargetCtx, "sed -i 's/beta/delta/' src/notes.txt")
+	testutil.FailErr(t, "sed -i with target read denied", err)
+	outDeniedTarget := decodeOutcome(t, rawDeniedTarget)
+	if outDeniedTarget.Refusal == nil || strings.Contains(outDeniedTarget.Refusal.Feedback, "Run `sed s/beta/delta/ src/notes.txt`") || outDeniedTarget.Refusal.Details["code_instead"] != nil {
+		t.Fatalf("unreadable target still recommended in feedback:\n%s", outDeniedTarget.Refusal.Feedback)
+	}
+	if !strings.Contains(outDeniedTarget.Refusal.Feedback, "Cause: Ask mode permits only read-only inspection and blocks `mutation`.") {
+		t.Fatalf("missing precise cause when target access removed:\n%s", outDeniedTarget.Refusal.Feedback)
+	}
+
+	// 3. Operation with no useful read equivalent (mkdir).
+	rawMkdir, err := f.Call(t, t.Context(), "mkdir src/newdir")
+	testutil.FailErr(t, "mkdir in Ask", err)
+	outMkdir := decodeOutcome(t, rawMkdir)
+	if outMkdir.Refusal == nil || outMkdir.Refusal.Details["code_instead"] != nil || !strings.Contains(outMkdir.Refusal.Feedback, "Fix: This operation has no read-only form on the active surface.") {
+		t.Fatalf("mkdir feedback unexpectedly proposed a read form:\n%s", outMkdir.Refusal.Feedback)
+	}
+
+	// 4. Partially completed multi-statement program with retained results.
+	rawPartial, err := f.Call(t, t.Context(), "cat src/notes.txt && find src -name '*.tmp' -delete")
+	testutil.FailErr(t, "partial multi-statement program in Ask", err)
+	outPartial := decodeOutcome(t, rawPartial)
+	if !strings.Contains(outPartial.Stdout, "alpha\nbeta\ngamma\n") {
+		t.Fatalf("partial program lost earlier stdout: %q", outPartial.Stdout)
+	}
+	for _, want := range []string{
+		"Rejected: `find` (`-delete`) at 1:22 is unavailable in Ask mode.",
+		"State: Operations started: 1. Completed effects: 0. Uncertain effects: 0.",
+		"Why: Earlier statements in this program remain authoritative (`observed`); do not replay completed work.",
+		"Fix: Run `find src -name '*.tmp'` to list the paths selected for deletion and report the affected files without deleting them.",
+	} {
+		if outPartial.Refusal == nil || !strings.Contains(outPartial.Refusal.Feedback, want) {
+			t.Fatalf("partial program feedback missing %q:\n%+v", want, outPartial.Refusal)
+		}
+	}
+
+	// 5. Delayed refusal delivered after upgrade to Agent mode.
+	f.sessionMode = api.SessionModeAgent
+	rawDelayed, err := f.Call(t, t.Context(), "sed -i 's/beta/delta/' src/notes.txt")
+	testutil.FailErr(t, "delayed Ask refusal after upgrade", err)
+	outDelayed := decodeOutcome(t, rawDelayed)
+	for _, want := range []string{
+		"Rejected: `sed` (`-i`) at 1:1 was refused under launch-time Ask authority.",
+		"Cause: This invocation started while Ask mode was active and kept its launch-time read-only authority across the session upgrade, which blocks `mutation`.",
+		"Fix: Run `sed s/beta/delta/ src/notes.txt` to preview the transformed output on stdout without modifying the file in place.",
+		"Next: Agent mode is now active for new calls; if the change is still needed, issue a fresh Agent-mode call under current permissions without replaying already completed statements.",
+	} {
+		if outDelayed.Refusal == nil || !strings.Contains(outDelayed.Refusal.Feedback, want) {
+			t.Fatalf("delayed refusal feedback missing %q:\n%+v", want, outDelayed.Refusal)
+		}
+	}
+	if strings.Contains(outDelayed.Refusal.Feedback, "switch to Agent mode") || strings.Contains(outDelayed.Refusal.Feedback, "is unavailable in Ask mode") {
+		t.Fatalf("delayed refusal after upgrade misstated current mode:\n%s", outDelayed.Refusal.Feedback)
+	}
+
+	// 6. Independent restriction in Agent mode (worker_readonly profile) attributes denial to the profile, never Ask mode.
+	f.askMode = false
+	f.sessionMode = api.SessionModeAgent
+	readOnlyEffects, err := toolcontract.NewCommandEffects(toolcontract.CommandReadOnly)
+	testutil.FailErr(t, "read-only command effects", err)
+	allowedTools := map[string]bool{"command": true, "read": true, "find": true, "grep": true, "list_dir": true, "stat": true, "wc": true, "jq": true}
+	roBoundary := sandbox.NewBoundary(sandbox.Config{ProjectRootRequired: true, RejectSymlinkEscape: true}, []sandbox.ToolProfile{{
+		ID: "worker_readonly", Tools: allowedTools, CommandEffects: readOnlyEffects,
+	}})
+	f.Boundary, f.Runtime.Boundary = roBoundary, roBoundary
+	f.Runtime.Executor = toolexecution.NewExecutor(toolprofiles.NewProfilePolicyEngine(roBoundary), f.Runtime.Registry, "worker_readonly")
+	hints, err := guidance.LoadHintConfigStock()
+	testutil.FailErr(t, "load hint catalog", err)
+	f.Runtime.Executor.Rejections.SetRejectFormatter(guidance.NewStaticRejectFormatter(hints))
+	f.Context = func(_ string, tc *tools.ToolContext) {
+		tc.Identity.Agent = "worker_readonly"
+		tc.Identity.ParentSessionID = "root-session"
+	}
+	rawWorkerRO, err := f.Call(t, t.Context(), "find src -name '*.tmp' -delete")
+	testutil.FailErr(t, "worker_readonly refusal in Agent mode", err)
+	outWorkerRO := decodeOutcome(t, rawWorkerRO)
+	for _, want := range []string{
+		"Rejected: `find` (`-delete`) at 1:1 is outside profile **worker_readonly**.",
+		"Cause: Its bound effect set (`mutation`) is not permitted by the active command surface.",
+		"Fix: Run `find src -name '*.tmp'` to list the paths selected for deletion and report the affected files without deleting them.",
+		"report the required change to the coordinator",
+	} {
+		if outWorkerRO.Refusal == nil || !strings.Contains(outWorkerRO.Refusal.Feedback, want) {
+			t.Fatalf("worker_readonly feedback missing %q:\n%+v", want, outWorkerRO.Refusal)
+		}
+	}
+	if strings.Contains(outWorkerRO.Refusal.Feedback, "Ask") {
+		t.Fatalf("worker_readonly feedback in Agent mode mentioned Ask:\n%s", outWorkerRO.Refusal.Feedback)
 	}
 }

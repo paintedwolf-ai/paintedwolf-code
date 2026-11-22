@@ -147,7 +147,7 @@ loop:
 			}
 		}
 		if shouldDeliverAgentEnabledNudge(sess, previous, authority, st) {
-			st.history, err = l.appendAgentEnabledNudge(ctx, id, st)
+			st.history, err = l.appendAgentEnabledNudge(ctx, sess, id, st)
 			if err != nil {
 				return nil, err
 			}

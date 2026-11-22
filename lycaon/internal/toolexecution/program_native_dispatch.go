@@ -90,6 +90,7 @@ func (e *Executor) InvokeNative(ctx context.Context, frame ProgramFrame, surface
 	defer func() {
 		if !ownerStarted || result.Producer.Terminal == toolcontract.ProducerRefused {
 			completeNativeRejection(bound, err)
+			enrichNativeEffectRejection(ctx, surface, effect, tc, err)
 		}
 		if !ownerStarted {
 			certainty := toolcontract.NoEffect

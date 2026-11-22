@@ -36,14 +36,32 @@ import (
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/tools/native/command"
 	"github.com/lycaon/lycaon/internal/tools/projectpaths"
+	"github.com/lycaon/lycaon/pkg/api"
 )
 
 type askComposedFixture struct {
 	*programtest.Fixture
-	privateGit *privategit.Manager
-	launches   []lycexec.LaunchPlan
-	launchMu   sync.Mutex
-	askMode    bool
+	privateGit  *privategit.Manager
+	launches    []lycexec.LaunchPlan
+	launchMu    sync.Mutex
+	askMode     bool
+	sessionMode api.SessionMode
+}
+
+type askFixtureSessions struct {
+	fixture *askComposedFixture
+}
+
+func (s askFixtureSessions) Get(_ context.Context, id string) (*api.Session, error) {
+	mode := s.fixture.sessionMode
+	if mode == "" {
+		if s.fixture.askMode {
+			mode = api.SessionModeAsk
+		} else {
+			mode = api.SessionModeAgent
+		}
+	}
+	return &api.Session{ID: id, OwnerPersonID: "fixture-person", Mode: mode}, nil
 }
 
 func newAskComposedFixture(t *testing.T) *askComposedFixture {
@@ -70,7 +88,8 @@ func newAskComposedFixture(t *testing.T) *askComposedFixture {
 	guidance.SetGuidanceRenderer(prompts.NewGuidanceRenderer(prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{})))
 	base.Runtime.Executor.Rejections.SetRejectFormatter(guidance.NewStaticRejectFormatter(hints))
 
-	af := &askComposedFixture{Fixture: base, askMode: true}
+	af := &askComposedFixture{Fixture: base, askMode: true, sessionMode: api.SessionModeAsk}
+	base.Runtime.Sessions = askFixtureSessions{fixture: af}
 	base.Runtime.Owners = func(tc tools.ToolContext, paths *projectpaths.ProgramPaths, _ *toolcontract.ProgramMemory, _ tooloutput.SpillAdmission) (command.ProgramOwners, error) {
 		return command.ProgramOwners{
 			Natives: af.nativeOperations(),
@@ -164,7 +183,13 @@ func (f *askComposedFixture) sedOperation() command.NativeOperation {
 		}
 		mode, _ := selectMode(ctx, req.Argv)
 		operands := bound.Operands().Values()
-		return command.NativePrepared{Mode: mode, Review: bound.Review("sed"), Invoke: func(_ context.Context, _ tools.ToolContext, streams commandprogram.Streams) (toolcontract.ProducerResult, error) {
+		review := bound.Review("sed")
+		if len(operands) > 1 {
+			for _, op := range operands[1:] {
+				review.PathTargets = append(review.PathTargets, commandprogram.PathTarget{Path: op, Write: mode == "-i"})
+			}
+		}
+		return command.NativePrepared{Mode: mode, Review: review, Invoke: func(_ context.Context, _ tools.ToolContext, streams commandprogram.Streams) (toolcontract.ProducerResult, error) {
 			if mode == "-i" {
 				return toolcontract.ProducerResult{}, errors.New("sed -i must not run in Ask mode")
 			}
@@ -180,6 +205,13 @@ func (f *askComposedFixture) sedOperation() command.NativeOperation {
 			}
 			if readErr != nil {
 				return toolcontract.ProducerResult{Status: 1, Terminal: toolcontract.ProducerFailed, EffectCertainty: toolcontract.NoEffect}, readErr
+			}
+			if strings.HasPrefix(operands[0], "s/") {
+				parts := strings.Split(operands[0], "/")
+				if len(parts) >= 3 {
+					_, _ = io.WriteString(streams.Output, strings.ReplaceAll(string(data), parts[1], parts[2]))
+					return toolcontract.ProducerResult{Terminal: toolcontract.ProducerCompleted, Complete: true, PublicationEligible: true, EffectCertainty: toolcontract.NoEffect}, nil
+				}
 			}
 			startLine, endLine := parseSedRange(operands[0])
 			lines := strings.Split(strings.TrimSuffix(string(data), "\n"), "\n")
@@ -226,17 +258,35 @@ func (f *askComposedFixture) rgOperation() command.NativeOperation {
 
 func (f *askComposedFixture) findOperation() command.NativeOperation {
 	spec := catalogSpec("find")
-	return command.NativeOperation{Tool: "find", Prepare: func(_ context.Context, paths *projectpaths.ProgramPaths, _ commandprogram.Dispatch, req commandprogram.OperationRequest) (command.NativePrepared, error) {
+	selectMode := func(_ context.Context, argv commandprogram.Fields) (string, bool) {
+		for _, field := range argv[1:] {
+			switch field.Value {
+			case "-delete":
+				return "-delete", true
+			case "-exec":
+				return "-exec", true
+			}
+		}
+		return "default-predicates-print", true
+	}
+	return command.NativeOperation{Tool: "find", SelectMode: selectMode, Prepare: func(ctx context.Context, paths *projectpaths.ProgramPaths, _ commandprogram.Dispatch, req commandprogram.OperationRequest) (command.NativePrepared, error) {
 		bound, err := commandprogram.CatalogBinder{}.Bind(spec, req.Argv)
 		if err != nil {
 			return command.NativePrepared{}, err
 		}
-		return command.NativePrepared{Mode: "traverse", Review: bound.Review("find"), Invoke: func(_ context.Context, _ tools.ToolContext, streams commandprogram.Streams) (toolcontract.ProducerResult, error) {
-			operands := bound.Operands().Values()
-			rootRel, pattern := ".", "*"
-			if len(operands) > 0 {
-				rootRel = operands[0]
+		mode, _ := selectMode(ctx, req.Argv)
+		operands := bound.Operands().Values()
+		rootRel := "."
+		if len(operands) > 0 {
+			rootRel = operands[0]
+		}
+		review := bound.Review("find")
+		review.PathTargets = []commandprogram.PathTarget{{Path: rootRel, Write: mode == "-delete"}}
+		return command.NativePrepared{Mode: mode, Review: review, Invoke: func(_ context.Context, _ tools.ToolContext, streams commandprogram.Streams) (toolcontract.ProducerResult, error) {
+			if mode == "-delete" {
+				return toolcontract.ProducerResult{}, errors.New("find -delete must not run in Ask mode")
 			}
+			pattern := "*"
 			if opt, ok := bound.Last("-name"); ok && len(opt.Values) > 0 {
 				pattern = opt.Values[0].Value
 			}
@@ -288,7 +338,14 @@ func (f *askComposedFixture) mutatingOperation(cmdName, toolName, mode string) c
 		if err != nil {
 			return command.NativePrepared{}, err
 		}
-		return command.NativePrepared{Mode: mode, Review: bound.Review(toolName), Invoke: func(context.Context, tools.ToolContext, commandprogram.Streams) (toolcontract.ProducerResult, error) {
+		if mode == "" && len(spec.Effects) > 0 {
+			mode = spec.Effects[0].Mode
+		}
+		review := bound.Review(toolName)
+		for _, op := range bound.Operands().Values() {
+			review.PathTargets = append(review.PathTargets, commandprogram.PathTarget{Path: op, Write: true})
+		}
+		return command.NativePrepared{Mode: mode, Review: review, Invoke: func(context.Context, tools.ToolContext, commandprogram.Streams) (toolcontract.ProducerResult, error) {
 			return toolcontract.ProducerResult{}, fmt.Errorf("%s must not execute in Ask mode", cmdName)
 		}}, nil
 	}}
