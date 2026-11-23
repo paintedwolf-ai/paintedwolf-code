@@ -658,9 +658,6 @@ WITH RECURSIVE ancestors(id, parent_session_id) AS (
 )
 SELECT ancestors.id FROM ancestors WHERE ancestors.parent_session_id IS NULL LIMIT 1;
 
--- name: DeleteSessionProgress :exec
-DELETE FROM session_progress WHERE session_id = ?;
-
 -- name: CommitRewindOperation :execrows
 UPDATE rewind_operations SET status = 'committed', error = '', response_json = ?, updated_at = ?
 WHERE id = ? AND status = 'files_applied';

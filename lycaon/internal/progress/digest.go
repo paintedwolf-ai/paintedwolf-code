@@ -6,16 +6,16 @@ import (
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
-// BuildDigest derives the progress digest for a root session from its stored doc.
-func BuildDigest(content, sessionID string) api.ProgressDigest {
-	result := DeriveProgress(content, DefaultProgressCap)
+// BuildDigest projects a snapshot into its wire ProgressDigest using document_version.
+func BuildDigest(snapshot Snapshot) api.ProgressDigest {
+	result := snapshot.Derive(DefaultProgressCap)
 	steps := result.Items
 	if steps == nil {
 		steps = []api.ProgressStep{}
 	}
 	return api.ProgressDigest{
 		Steps:    steps,
-		Revision: CurrentRevision(sessionID),
+		Revision: snapshot.DocumentVersion(),
 	}
 }
 

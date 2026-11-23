@@ -2,28 +2,42 @@ package progress
 
 import (
 	"context"
+	"database/sql"
 	"strings"
 )
 
-// ContentMaxChars bounds the stored progress doc.
-const ContentMaxChars = 8000
+// AckOutcome reports transaction-scoped worker handle resolution and accounting.
+type AckOutcome struct {
+	AccountedJobIDs []string
+	UnknownHandles  []string
+}
 
-// Store persists the coordinator-authored progress doc keyed by root session id.
+// TxReconciler coordinates durable result accounting inside the progress transaction
+// and releases in-memory latches after commit.
+type TxReconciler interface {
+	Reconciliation(root string) *Reconciliation
+	UnaccountedResults(root string) []UnaccountedResult
+	AcknowledgeTx(ctx context.Context, tx *sql.Tx, root, principalID string, handles []string) (AckOutcome, error)
+	Release(root string, jobIDs []string)
+}
+
+// ApplyOptions carries optional host context for Store.Apply.
+type ApplyOptions struct {
+	PrincipalID string
+	RunID       string
+	Basis       PreparedProgressBasis
+	Reconciler  TxReconciler
+}
+
+// Store persists root-session progress rows and workflow run bindings.
 type Store interface {
-	Set(sessionID, content string) error
-	Get(ctx context.Context, sessionID string) string
 	Snapshot(ctx context.Context, sessionID string) (Snapshot, error)
-	Update(ctx context.Context, sessionID string, change func(Snapshot) (Document, error)) (Snapshot, error)
+	Apply(ctx context.Context, sessionID string, mutation Mutation, opts ApplyOptions) (MutationResult, error)
+	BindRun(ctx context.Context, sessionID, runID string, resetOnTerminal bool) (bool, error)
+	SeedIfMissing(ctx context.Context, sessionID, runID string, rows []RowSpec) (Snapshot, error)
+	Clear(ctx context.Context, sessionID string) error
 }
 
 func normalizeKey(sessionID string) string {
 	return strings.TrimSpace(sessionID)
-}
-
-func clampContent(content string) string {
-	content = strings.TrimSpace(content)
-	if runes := []rune(content); len(runes) > ContentMaxChars {
-		return string(runes[:ContentMaxChars])
-	}
-	return content
 }

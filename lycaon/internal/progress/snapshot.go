@@ -1,60 +1,42 @@
 package progress
 
 import (
-	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"slices"
-	"strconv"
-	"strings"
 
-	"github.com/google/uuid"
+	api "github.com/lycaon/lycaon/pkg/api"
 )
 
-// Document pairs checklist markdown with stable item identities aligned by row index.
-type Document struct {
-	RunID   string // Empty preserves the current binding.
-	Content string
-	ItemIDs []string
+// UnaccountedResult identifies a settled worker round awaiting acknowledgement.
+type UnaccountedResult struct {
+	Handle  string `json:"handle"`
+	Worker  string `json:"worker,omitempty"`
+	Summary string `json:"summary,omitempty"`
 }
 
-// Item pairs a checklist row's stable identity with its parsed label and state.
-type Item struct {
-	ID    string
-	Label string
-	State string
+// Reconciliation identifies settled worker finishes awaiting acknowledgement.
+type Reconciliation struct {
+	Jobs        []string            `json:"-"`
+	Settled     []string            `json:"settled_work"`
+	Unaccounted []UnaccountedResult `json:"unaccounted_results"`
 }
 
-// Snapshot binds the complete document to its workflow run.
+// Snapshot binds ordered progress rows to their workflow run and durable version.
 type Snapshot struct {
-	Content         string          `json:"content"`
-	ItemIDs         []string        `json:"item_ids,omitempty"`
-	Revision        string          `json:"revision"`
+	Rows            []Row           `json:"rows"`
 	RunID           string          `json:"run_id,omitempty"`
 	Reconciliation  *Reconciliation `json:"reconciliation,omitempty"`
 	version         string
 	documentVersion uint64
+	nextItemSeq     uint64
 }
 
-// Items zips parsed checklist rows with their stable item identities.
-func (s Snapshot) Items() []Item {
-	parsed := ChecklistItems(s.Content)
-	if len(parsed) == 0 {
-		return nil
+// NewSnapshot constructs an in-memory snapshot with cloned rows.
+func NewSnapshot(runID string, rows ...Row) Snapshot {
+	cloned := slices.Clone(rows)
+	if cloned == nil {
+		cloned = []Row{}
 	}
-	out := make([]Item, len(parsed))
-	for i, row := range parsed {
-		var id string
-		if i < len(s.ItemIDs) {
-			id = s.ItemIDs[i]
-		}
-		out[i] = Item{
-			ID:    id,
-			Label: row.Label,
-			State: row.State,
-		}
-	}
-	return out
+	return Snapshot{Rows: cloned, RunID: runID, nextItemSeq: uint64(len(cloned) + 1)}
 }
 
 // DocumentVersion returns the committed monotonic document version.
@@ -66,14 +48,48 @@ func (s Snapshot) WithDocumentVersion(version uint64) Snapshot {
 	return s
 }
 
-// Equal reports whether two snapshots carry identical content, item IDs, revision, run ID, and version.
+// NextItemSeq returns the next unallocated item sequence number (>= 1).
+func (s Snapshot) NextItemSeq() uint64 {
+	if s.nextItemSeq < 1 {
+		return 1
+	}
+	return s.nextItemSeq
+}
+
+// Missing reports whether the snapshot has zero rows.
+func (s Snapshot) Missing() bool { return len(s.Rows) == 0 }
+
+// OpenStepCount returns remaining pending rows.
+func (s Snapshot) OpenStepCount() int { return OpenStepCount(s.Rows) }
+
+// HasOpenSteps reports whether any pending row remains.
+func (s Snapshot) HasOpenSteps() bool { return HasOpenSteps(s.Rows) }
+
+// AllTerminal reports whether at least one row exists and none are pending.
+func (s Snapshot) AllTerminal() bool { return AllTerminal(s.Rows) }
+
+// CloseCounts returns completed, pending, and not-pursued counts.
+func (s Snapshot) CloseCounts() (done, pending, na int) { return CloseCounts(s.Rows) }
+
+// Summary tallies the snapshot's rows.
+func (s Snapshot) Summary() Summary { return Summarize(s.Rows) }
+
+// VisibleSteps returns display-clamped non-optional steps.
+func (s Snapshot) VisibleSteps() []api.ProgressStep { return VisibleSteps(s.Rows) }
+
+// Derive projects up to limit non-optional steps.
+func (s Snapshot) Derive(limit int) ProgressResult { return DeriveProgress(s.Rows, limit) }
+
+// RenderMarkdown formats the snapshot rows as checklist lines.
+func (s Snapshot) RenderMarkdown() string { return RenderMarkdown(s.Rows) }
+
+// Equal reports whether two snapshots hold identical rows, run binding, version, and reconciliation.
 func (s Snapshot) Equal(other Snapshot) bool {
-	return s.Content == other.Content &&
-		slices.Equal(s.ItemIDs, other.ItemIDs) &&
-		s.Revision == other.Revision &&
+	return slices.Equal(s.Rows, other.Rows) &&
 		s.RunID == other.RunID &&
 		s.version == other.version &&
 		s.documentVersion == other.documentVersion &&
+		s.NextItemSeq() == other.NextItemSeq() &&
 		reconciliationEqual(s.Reconciliation, other.Reconciliation)
 }
 
@@ -81,114 +97,54 @@ func reconciliationEqual(a, b *Reconciliation) bool {
 	if a == nil || b == nil {
 		return a == b
 	}
-	return a.Token == b.Token && slices.Equal(a.Jobs, b.Jobs)
+	return slices.Equal(a.Jobs, b.Jobs) &&
+		slices.Equal(a.Settled, b.Settled) &&
+		slices.Equal(a.Unaccounted, b.Unaccounted)
 }
 
-func NewSnapshot(runID, content string, itemIDs ...string) Snapshot {
-	content = strings.TrimSpace(content)
-	ids := compactItemIDs(len(ChecklistItems(content)), itemIDs)
-	sum := sha256.Sum256([]byte(runID + "\x00" + strings.Join(ids, "\x00") + "\x00" + content))
-	return Snapshot{Content: content, ItemIDs: ids, Revision: hex.EncodeToString(sum[:]), RunID: runID}
+func snapshotFromDB(runID string, rows []Row, updatedAt string, docVersion, nextSeq uint64) Snapshot {
+	if rows == nil {
+		rows = []Row{}
+	}
+	if nextSeq < 1 {
+		nextSeq = 1
+	}
+	return Snapshot{
+		Rows:            rows,
+		RunID:           runID,
+		version:         updatedAt,
+		documentVersion: docVersion,
+		nextItemSeq:     nextSeq,
+	}
 }
 
-// Transitions distinguish deliverable state changes from document edits.
+// Transitions distinguish deliverable state changes from non-state edits.
 type Transitions struct {
 	Changed       bool
 	ClosedItemIDs []string
 }
 
-// ClassifyTransitions compares items sharing the same stable identity across snapshots.
-// Reordering or relabeling existing IDs does not claim deliverable advancement.
+// ClassifyTransitions compares rows sharing the same ID across snapshots.
 func ClassifyTransitions(before, after Snapshot) Transitions {
-	prevItems := before.Items()
-	nextItems := after.Items()
-	if len(prevItems) == 0 || len(nextItems) == 0 {
+	if len(before.Rows) == 0 || len(after.Rows) == 0 {
 		return Transitions{}
 	}
-	prevByID := make(map[string]Item, len(prevItems))
-	for _, item := range prevItems {
-		if item.ID != "" {
-			prevByID[item.ID] = item
+	prevByID := make(map[string]Row, len(before.Rows))
+	for _, r := range before.Rows {
+		if r.ID != "" {
+			prevByID[r.ID] = r
 		}
 	}
-	result := Transitions{}
-	for _, next := range nextItems {
-		if next.ID == "" {
-			continue
-		}
+	var out Transitions
+	for _, next := range after.Rows {
 		prev, ok := prevByID[next.ID]
 		if !ok || prev.State == next.State {
 			continue
 		}
-		result.Changed = true
+		out.Changed = true
 		if prev.State == ProgressStatePending && (next.State == ProgressStateDone || next.State == ProgressStateNA) {
-			result.ClosedItemIDs = append(result.ClosedItemIDs, next.ID)
+			out.ClosedItemIDs = append(out.ClosedItemIDs, next.ID)
 		}
 	}
-	return result
-}
-
-// Reconciliation identifies the worker finishes awaiting acknowledgement.
-type Reconciliation struct {
-	Token string `json:"token"`
-	// Jobs are host identity behind the token; Settled names them by worker.
-	Jobs    []string `json:"-"`
-	Settled []string `json:"settled_work"`
-}
-
-func snapshotVersion(runID, content string, itemIDs []string, version string, docVersion uint64) Snapshot {
-	snapshot := NewSnapshot(runID, content, itemIDs...)
-	sum := sha256.Sum256([]byte(snapshot.Revision + "\x00" + version + "\x00" + strconv.FormatUint(docVersion, 10)))
-	snapshot.Revision = hex.EncodeToString(sum[:])
-	snapshot.version = version
-	snapshot.documentVersion = docVersion
-	return snapshot
-}
-
-func compactItemIDs(rowCount int, itemIDs []string) []string {
-	if rowCount == 0 || len(itemIDs) == 0 {
-		return nil
-	}
-	n := min(rowCount, len(itemIDs))
-	return slices.Clone(itemIDs[:n])
-}
-
-func mintItemIDs(content string) []string {
-	n := len(ChecklistItems(content))
-	if n == 0 {
-		return nil
-	}
-	ids := make([]string, n)
-	for i := range ids {
-		ids[i] = uuid.NewString()
-	}
-	return ids
-}
-
-func resolveDocumentItemIDs(current Snapshot, next Document) []string {
-	rowCount := len(ChecklistItems(next.Content))
-	if rowCount == 0 {
-		return nil
-	}
-	if len(next.ItemIDs) == rowCount {
-		ids := make([]string, rowCount)
-		for i, id := range next.ItemIDs {
-			id = strings.TrimSpace(id)
-			if id == "" {
-				id = uuid.NewString()
-			}
-			ids[i] = id
-		}
-		return ids
-	}
-	if next.Content == current.Content && len(current.ItemIDs) == rowCount {
-		return slices.Clone(current.ItemIDs)
-	}
-	return mintItemIDs(next.Content)
-}
-
-// Reconciler tracks pending worker finishes independently of the document.
-type Reconciler interface {
-	Reconciliation(string) *Reconciliation
-	Acknowledge(ctx context.Context, root, token string) bool
+	return out
 }

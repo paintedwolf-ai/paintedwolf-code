@@ -1,47 +1,19 @@
 package progress
 
-import (
-	"context"
-	"fmt"
-	"strings"
-)
+import "context"
 
-const bootstrapGoalMaxRunes = 2000
-
-// AdoptActiveRun preserves an unbound plan and resets a plan from another run.
-func AdoptActiveRun(ctx context.Context, store Store, sessionID, runID, goal string) (bool, error) {
-	return refreshRun(ctx, store, sessionID, runID, goal, false)
-}
-
-// EnsureBootstrap starts a fresh plan after completion or a run change.
-func EnsureBootstrap(ctx context.Context, store Store, sessionID, runID, goal string) (bool, error) {
-	return refreshRun(ctx, store, sessionID, runID, goal, true)
-}
-
-func refreshRun(ctx context.Context, store Store, sessionID, runID, goal string, bootstrap bool) (bool, error) {
-	if store == nil || normalizeKey(sessionID) == "" || strings.TrimSpace(runID) == "" {
+// AdoptActiveRun preserves an unbound plan and resets items from a prior workflow run.
+func AdoptActiveRun(ctx context.Context, store Store, sessionID, runID string) (bool, error) {
+	if store == nil {
 		return false, nil
 	}
-	var refreshed bool
-	_, err := store.Update(ctx, sessionID, func(before Snapshot) (Document, error) {
-		doc := Document{RunID: strings.TrimSpace(runID), Content: before.Content, ItemIDs: before.ItemIDs}
-		refreshed = before.RunID != "" && (before.RunID != doc.RunID || (bootstrap && AllTerminal(before.Content)))
-		if refreshed {
-			doc.Content = formatBootstrapContent(goal)
-			doc.ItemIDs = nil
-		}
-		return doc, nil
-	})
-	return refreshed && err == nil, err
+	return store.BindRun(ctx, sessionID, runID, false)
 }
 
-func formatBootstrapContent(goal string) string {
-	goalBody := strings.TrimSpace(goal)
-	if goalBody == "" {
-		goalBody = BootstrapPlaceholderGoal
+// EnsureBootstrap starts a fresh plan after completion or a workflow run change.
+func EnsureBootstrap(ctx context.Context, store Store, sessionID, runID string) (bool, error) {
+	if store == nil {
+		return false, nil
 	}
-	if runes := []rune(goalBody); len(runes) > bootstrapGoalMaxRunes {
-		goalBody = string(runes[:bootstrapGoalMaxRunes])
-	}
-	return fmt.Sprintf("# Goal\n\n%s\n\n## Progress\n", goalBody)
+	return store.BindRun(ctx, sessionID, runID, true)
 }

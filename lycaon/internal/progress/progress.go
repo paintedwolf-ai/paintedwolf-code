@@ -1,11 +1,10 @@
-// Package progress holds the coordinator-authored, root-session-scoped checklist
-// and its digest into ProgressStep rows.
+// Package progress manages root-session progress rows and their wire digest.
 package progress
 
 import (
-	"github.com/lycaon/lycaon/internal/runeclamp"
 	"strings"
 
+	"github.com/lycaon/lycaon/internal/runeclamp"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -14,29 +13,43 @@ const (
 	DefaultProgressCap = 48
 	// MaxProgressCap is the hard ceiling on returned steps.
 	MaxProgressCap = 48
-	// MaxDetailedProgressUpdateRows is the largest transcript update that
-	// enumerates every changed row. Larger updates carry only the plan's counts.
+	// MaxAuthorProgressRows bounds total rows per session plan.
+	MaxAuthorProgressRows = 48
+	// MaxAuthorLabelRunes bounds coordinator-authored row labels.
+	MaxAuthorLabelRunes = 240
+	// MaxDetailedProgressUpdateRows bounds enumerated changes in transcript rows.
 	MaxDetailedProgressUpdateRows = 12
-
-	// MaxLabelRunes bounds each checklist label.
+	// MaxLabelRunes bounds each projected ProgressStep label.
 	MaxLabelRunes = 60
 
-	ProgressStatePending = "pending"
-	ProgressStateDone    = "done"
-	// ProgressStateNA is terminal (`- [~]`) but not delivered work.
-	ProgressStateNA = "na"
-	// ProgressStateOptional is non-blocking (`- [>]`); DeriveProgress drops it.
+	ProgressStatePending  = "pending"
+	ProgressStateDone     = "done"
+	ProgressStateNA       = "na"
 	ProgressStateOptional = "optional"
 )
 
-// ProgressResult is the parsed checklist plus an overflow count.
+// Row is one persisted progress deliverable keyed by short session-monotonic ID.
+type Row struct {
+	ID    string `json:"id"`
+	State string `json:"state"`
+	Label string `json:"label"`
+}
+
+// ProgressResult is the projected step list plus an overflow count.
 type ProgressResult struct {
 	Items []api.ProgressStep
 	More  int
 }
 
-// SummarizeUpdate returns the plan's state after a progress_update that changed
-// changeCount rows.
+// ProgressTemplateVars returns pongo context for progress copy.
+func ProgressTemplateVars() map[string]any {
+	return map[string]any{
+		"max_author_progress_rows": MaxAuthorProgressRows,
+		"max_progress_label_chars": MaxLabelRunes,
+	}
+}
+
+// SummarizeUpdate summarizes the plan after a progress_update changing changeCount rows.
 func SummarizeUpdate(steps []api.ProgressStep, changeCount int) api.ProgressUpdateSummary {
 	summary := api.ProgressUpdateSummary{
 		ChangeCount: changeCount,
@@ -55,177 +68,94 @@ func SummarizeUpdate(steps []api.ProgressStep, changeCount int) api.ProgressUpda
 	return summary
 }
 
-// DeriveProgress parses the coordinator's markdown checklist into progress rows:
-// `- [ ] x` → pending, `- [x] x` → done, `- [~] x` → n/a, `- [>] x` → optional (non-blocking).
-// Non-checklist lines are ignored.
-func DeriveProgress(content string, cap int) ProgressResult {
-	if cap <= 0 {
-		cap = DefaultProgressCap
+// DeriveProgress projects non-optional rows into clamped ProgressStep items.
+func DeriveProgress(rows []Row, limit int) ProgressResult {
+	if limit <= 0 {
+		limit = DefaultProgressCap
 	}
-	if cap > MaxProgressCap {
-		cap = MaxProgressCap
+	if limit > MaxProgressCap {
+		limit = MaxProgressCap
 	}
-	items := visibleChecklist(content)
+	items := VisibleSteps(rows)
 	more := 0
-	if len(items) > cap {
-		more = len(items) - cap
-		items = items[:cap]
+	if len(items) > limit {
+		more = len(items) - limit
+		items = items[:limit]
 	}
 	return ProgressResult{Items: items, More: more}
 }
 
-// visibleChecklist parses the checklist and drops optional (`- [>]`) lines.
-func visibleChecklist(content string) []api.ProgressStep {
-	parsed := parseChecklist(content)
-	out := make([]api.ProgressStep, 0, len(parsed))
-	for _, it := range parsed {
-		if it.State == ProgressStateOptional {
+// VisibleSteps drops optional rows and clamps labels for display.
+func VisibleSteps(rows []Row) []api.ProgressStep {
+	if len(rows) == 0 {
+		return []api.ProgressStep{}
+	}
+	out := make([]api.ProgressStep, 0, len(rows))
+	for _, r := range rows {
+		if r.State == ProgressStateOptional {
 			continue
 		}
-		out = append(out, it)
+		out = append(out, api.ProgressStep{
+			State: r.State,
+			Label: clampLabel(r.Label),
+		})
 	}
 	return out
 }
 
-// ProgressMissing reports whether the coordinator has not yet authored any checklist step for the current request.
-func ProgressMissing(content string) bool {
-	return len(parseChecklist(content)) == 0
-}
-
-// CloseCounts tallies a checklist by state. The closure guard compares the closed count
-// (done + n/a — both terminal) against a snapshot to detect a coordinator doing work without
-// closing the steps it finishes.
-func CloseCounts(content string) (done, pending, na int) {
-	summary := Summarize(content)
-	return summary.Completed, summary.Pending, summary.NotPursued
-}
-
-// HasOpenSteps reports whether the plan has blocking `- [ ]` rows. Missing plans and
-// all-terminal checklists (including optional `- [>]` only leftovers) have none.
-func HasOpenSteps(content string) bool {
-	return OpenStepCount(content) > 0
-}
-
-// OpenStepCount returns the remaining blocking `- [ ]` rows.
-func OpenStepCount(content string) int {
-	_, pending, _ := CloseCounts(content)
-	return pending
-}
-
-// AllTerminal reports whether a checklist has at least one step and none pending.
-// Done, n/a, and optional all count as terminal.
-func AllTerminal(content string) bool {
-	return Summarize(content).AllRequiredItemsTerminal
-}
-
-func parseChecklist(content string) []api.ProgressStep {
-	items := ChecklistItems(content)
-	for i := range items {
-		items[i].Label = clampLabel(items[i].Label)
+// RenderMarkdown formats rows as checklist lines for human-readable summaries.
+func RenderMarkdown(rows []Row) string {
+	if len(rows) == 0 {
+		return ""
 	}
-	return items
-}
-
-// ChecklistItems returns raw checklist rows (uncapped labels) for obligation scanning.
-func ChecklistItems(content string) []api.ProgressStep {
-	var items []api.ProgressStep
-	for _, raw := range strings.Split(content, "\n") {
-		line := strings.TrimSpace(raw)
-		if line == "" {
-			continue
+	var b strings.Builder
+	for i, r := range rows {
+		if i > 0 {
+			b.WriteByte('\n')
 		}
-		items = append(items, parseChecklistItemsInLine(line)...)
+		switch r.State {
+		case ProgressStateDone:
+			b.WriteString("- [x] ")
+		case ProgressStateNA:
+			b.WriteString("- [~] ")
+		case ProgressStateOptional:
+			b.WriteString("- [>] ")
+		default:
+			b.WriteString("- [ ] ")
+		}
+		b.WriteString(strings.TrimSpace(r.Label))
 	}
-	return items
+	return b.String()
 }
 
-func parseChecklistItemsInLine(line string) []api.ProgressStep {
-	var items []api.ProgressStep
-	search := 0
-	for {
-		idx, ok := findNextChecklistMarker(line, search)
-		if !ok {
-			break
-		}
-		state, label, end, ok := parseChecklistItemAt(line, idx)
-		if !ok {
-			search = idx + 1
-			continue
-		}
-		items = append(items, api.ProgressStep{State: state, Label: label})
-		if end <= idx {
-			search = idx + 1
-		} else {
-			search = end
+// IsValidRowID reports whether id matches p[1-9][0-9]*.
+func IsValidRowID(id string) bool {
+	if len(id) < 2 || id[0] != 'p' || id[1] < '1' || id[1] > '9' {
+		return false
+	}
+	for i := 2; i < len(id); i++ {
+		if id[i] < '0' || id[i] > '9' {
+			return false
 		}
 	}
-	return items
+	return true
+}
+
+func isValidState(state string) bool {
+	switch state {
+	case ProgressStatePending, ProgressStateDone, ProgressStateNA, ProgressStateOptional:
+		return true
+	default:
+		return false
+	}
 }
 
 func clampLabel(label string) string {
-	return runeclamp.Clamp(label, MaxLabelRunes)
+	return runeclamp.Clamp(strings.TrimSpace(label), MaxLabelRunes)
 }
 
-// PreviewLabel shortens a label for reject copy without blowing the guidance budget.
+// PreviewLabel shortens a label for diagnostic rejection facts.
 func PreviewLabel(label string) string {
 	const previewRunes = 80
 	return runeclamp.Clamp(strings.TrimSpace(label), previewRunes)
-}
-
-func findNextChecklistMarker(line string, start int) (int, bool) {
-	for i := start; i < len(line); i++ {
-		if line[i] != '-' && line[i] != '*' {
-			continue
-		}
-		if i+2 >= len(line) || line[i+1] != ' ' || line[i+2] != '[' {
-			continue
-		}
-		return i, true
-	}
-	return 0, false
-}
-
-func parseChecklistItemAt(line string, start int) (state, label string, end int, ok bool) {
-	if start >= len(line) || (line[start] != '-' && line[start] != '*') {
-		return "", "", start, false
-	}
-	i := start + 1
-	if i < len(line) && line[i] == ' ' {
-		i++
-	}
-	if i+3 > len(line) || line[i] != '[' || line[i+2] != ']' {
-		return "", "", start, false
-	}
-	state, ok = checklistMarkerState(line[i+1])
-	if !ok {
-		return "", "", start, false
-	}
-	j := i + 3
-	if j < len(line) && line[j] == ' ' {
-		j++
-	}
-	labelEnd := len(line)
-	if next, found := findNextChecklistMarker(line, j); found {
-		labelEnd = next
-	}
-	label = strings.TrimSpace(line[j:labelEnd])
-	if label == "" {
-		return "", "", start, false
-	}
-	return state, label, labelEnd, true
-}
-
-func checklistMarkerState(marker byte) (state string, ok bool) {
-	switch marker {
-	case ' ':
-		return ProgressStatePending, true
-	case 'x', 'X':
-		return ProgressStateDone, true
-	case '~', '-':
-		return ProgressStateNA, true
-	case '>':
-		return ProgressStateOptional, true
-	default:
-		return "", false
-	}
 }

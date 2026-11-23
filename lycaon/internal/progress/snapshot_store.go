@@ -3,7 +3,6 @@ package progress
 import (
 	"context"
 	"database/sql"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"time"
@@ -12,21 +11,39 @@ import (
 )
 
 func querySnapshot(ctx context.Context, queries *db.Queries, key string) (Snapshot, error) {
-	row, err := queries.GetSessionProgressSnapshot(ctx, key)
+	header, err := queries.GetSessionProgressHeader(ctx, key)
 	if errors.Is(err, sql.ErrNoRows) {
-		return snapshotVersion("", "", nil, "", 0), nil
+		return snapshotFromDB("", nil, "", 0, 1), nil
 	}
 	if err != nil {
 		return Snapshot{}, err
 	}
-	var itemIDs []string
-	if row.ItemIdsJson != "" {
-		_ = json.Unmarshal([]byte(row.ItemIdsJson), &itemIDs)
+	items, err := queries.ListSessionProgressItems(ctx, key)
+	if err != nil {
+		return Snapshot{}, err
 	}
-	return snapshotVersion(row.WorkflowRunID, row.Content, itemIDs, row.UpdatedAt, uint64(row.DocumentVersion)), nil //nolint:gosec // G115 — document versions start at zero and only increase.
+	rows := make([]Row, len(items))
+	for i, it := range items {
+		rows[i] = Row{
+			ID:    it.ItemID,
+			State: it.State,
+			Label: it.Label,
+		}
+	}
+	return snapshotFromDB(
+		header.WorkflowRunID,
+		rows,
+		header.UpdatedAt,
+		uint64(header.DocumentVersion), //nolint:gosec // G115 — constrained >= 1 in SQLite.
+		uint64(header.NextItemSeq),     //nolint:gosec // G115 — constrained >= 1 in SQLite.
+	), nil
 }
 
+// Snapshot reads the current session progress header and ordered items.
 func (s *SQLStore) Snapshot(ctx context.Context, sessionID string) (Snapshot, error) {
+	if err := ctx.Err(); err != nil {
+		return Snapshot{}, err
+	}
 	if s == nil || s.queries == nil {
 		return Snapshot{}, fmt.Errorf("progress store not configured")
 	}

@@ -1561,10 +1561,17 @@ type SessionModelLimits struct {
 type SessionProgress struct {
 	SessionID       string `json:"session_id"`
 	WorkflowRunID   string `json:"workflow_run_id"`
-	Content         string `json:"content"`
 	UpdatedAt       string `json:"updated_at"`
-	ItemIdsJson     string `json:"item_ids_json"`
 	DocumentVersion int64  `json:"document_version"`
+	NextItemSeq     int64  `json:"next_item_seq"`
+}
+
+type SessionProgressItems struct {
+	SessionID string `json:"session_id"`
+	ItemID    string `json:"item_id"`
+	Ord       int64  `json:"ord"`
+	State     string `json:"state"`
+	Label     string `json:"label"`
 }
 
 type SessionScanBindings struct {

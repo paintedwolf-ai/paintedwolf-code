@@ -29,6 +29,7 @@ var retirements = map[string][]Retirement{
 		liveModelOutputsRetirement,
 		delegationLegRetirement,
 		delegationRetirement,
+		sessionProgressContentRetirement,
 	},
 }
 
