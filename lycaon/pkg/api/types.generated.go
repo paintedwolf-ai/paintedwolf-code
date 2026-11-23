@@ -2736,10 +2736,11 @@ type CreateSessionRequest struct {
 type CurrentComparisonSource struct {
 	Kind string `json:"kind"`
 	// The recorded outside file ID. Use without root_id or path.
-	FileID   string `json:"file_id,omitempty"`
-	RootID   string `json:"root_id,omitempty"`
-	Path     string `json:"path,omitempty"`
-	DecodeAs string `json:"decode_as,omitempty"`
+	FileID     string `json:"file_id,omitempty"`
+	RootID     string `json:"root_id,omitempty"`
+	WorktreeID string `json:"worktree_id,omitempty"`
+	Path       string `json:"path,omitempty"`
+	DecodeAs   string `json:"decode_as,omitempty"`
 }
 
 // DenPerfEvent
@@ -2881,6 +2882,8 @@ type EditorDocument struct {
 	ID                  string                `json:"id"`
 	ProjectID           string                `json:"project_id"`
 	WorkspaceID         string                `json:"workspace_id"`
+	BranchID            string                `json:"branch_id,omitempty"`
+	CheckoutUnavailable bool                  `json:"checkout_unavailable,omitempty"`
 	FileID              string                `json:"file_id"`
 	RootID              string                `json:"root_id"`
 	Path                string                `json:"path"`
@@ -2942,25 +2945,27 @@ type EditorDocumentCommandRequest struct {
 
 // EditorDocumentEvent Document invalidation and presentation metadata. Reconcile through state-vector synchronization; events never transport document text.
 type EditorDocumentEvent struct {
-	Epoch             int64               `json:"epoch,omitempty"`
-	PublishedRevision int64               `json:"published_revision,omitempty"`
-	Participants      []EditorParticipant `json:"participants,omitempty"`
-	ID                string              `json:"id"`
-	ProjectID         string              `json:"project_id"`
-	WorkspaceID       string              `json:"workspace_id"`
-	FileID            string              `json:"file_id"`
-	RootID            string              `json:"root_id"`
-	Path              string              `json:"path"`
-	BaseSHA256        string              `json:"base_sha256"`
-	Encoding          SourceEncoding      `json:"encoding"`
-	SizeBytes         int64               `json:"size_bytes"`
-	EOL               string              `json:"eol"`
-	BaseEOL           string              `json:"base_eol"`
-	MixedEOL          bool                `json:"mixed_eol"`
-	BaseMixedEOL      bool                `json:"base_mixed_eol"`
-	Revision          int64               `json:"revision"`
-	Dirty             bool                `json:"dirty"`
-	Diverged          bool                `json:"diverged"`
+	Epoch               int64               `json:"epoch,omitempty"`
+	PublishedRevision   int64               `json:"published_revision,omitempty"`
+	Participants        []EditorParticipant `json:"participants,omitempty"`
+	ID                  string              `json:"id"`
+	ProjectID           string              `json:"project_id"`
+	WorkspaceID         string              `json:"workspace_id"`
+	BranchID            string              `json:"branch_id,omitempty"`
+	CheckoutUnavailable bool                `json:"checkout_unavailable,omitempty"`
+	FileID              string              `json:"file_id"`
+	RootID              string              `json:"root_id"`
+	Path                string              `json:"path"`
+	BaseSHA256          string              `json:"base_sha256"`
+	Encoding            SourceEncoding      `json:"encoding"`
+	SizeBytes           int64               `json:"size_bytes"`
+	EOL                 string              `json:"eol"`
+	BaseEOL             string              `json:"base_eol"`
+	MixedEOL            bool                `json:"mixed_eol"`
+	BaseMixedEOL        bool                `json:"base_mixed_eol"`
+	Revision            int64               `json:"revision"`
+	Dirty               bool                `json:"dirty"`
+	Diverged            bool                `json:"diverged"`
 	// The path has no file on disk. The document keeps its draft and saved base; a save recreates the file, and a file that reappears merges in as an outside change.
 	Absent bool `json:"absent"`
 	// The retained state holding an agent edit this draft carries and disk does not. Omitted once a save settles the hold.
@@ -2973,16 +2978,17 @@ type EditorDocumentEvent struct {
 
 // EditorDocumentStatus Accepted document metadata without text, replica admission, or filesystem reconciliation.
 type EditorDocumentStatus struct {
-	ID                string `json:"id"`
-	FileID            string `json:"file_id"`
-	RootID            string `json:"root_id"`
-	Path              string `json:"path"`
-	BranchID          string `json:"branch_id"`
-	Revision          int64  `json:"revision"`
-	Epoch             int64  `json:"epoch"`
-	PublishedRevision int64  `json:"published_revision"`
-	Dirty             bool   `json:"dirty"`
-	Diverged          bool   `json:"diverged"`
+	ID                  string `json:"id"`
+	FileID              string `json:"file_id"`
+	RootID              string `json:"root_id"`
+	Path                string `json:"path"`
+	BranchID            string `json:"branch_id"`
+	CheckoutUnavailable bool   `json:"checkout_unavailable,omitempty"`
+	Revision            int64  `json:"revision"`
+	Epoch               int64  `json:"epoch"`
+	PublishedRevision   int64  `json:"published_revision"`
+	Dirty               bool   `json:"dirty"`
+	Diverged            bool   `json:"diverged"`
 	// The path has no file on disk. The document keeps its draft and saved base; a save recreates the file, and a file that reappears merges in as an outside change.
 	Absent             bool           `json:"absent"`
 	BaseSHA256         string         `json:"base_sha256"`
@@ -3036,6 +3042,8 @@ type EditorReplicaFrame struct {
 	ID                  string              `json:"id"`
 	ProjectID           string              `json:"project_id"`
 	WorkspaceID         string              `json:"workspace_id"`
+	BranchID            string              `json:"branch_id,omitempty"`
+	CheckoutUnavailable bool                `json:"checkout_unavailable,omitempty"`
 	FileID              string              `json:"file_id"`
 	RootID              string              `json:"root_id"`
 	Path                string              `json:"path"`
@@ -4994,6 +5002,8 @@ type OpenChatLocationFileRequest struct {
 
 // OpenEditorDocumentRequest Use file_id for an outside file, or root_id and path for an attached file.
 type OpenEditorDocumentRequest struct {
+	// Existing editor document UUID for reopening a retained checkout-bound draft across restarts.
+	DocumentID string `json:"document_id,omitempty"`
 	// Recorded project file identity for an outside tab.
 	FileID string `json:"file_id,omitempty"`
 	// Root-relative, slash-separated file path.
@@ -6101,9 +6111,10 @@ type RetainedComparisonSource struct {
 	ViewID     string `json:"view_id"`
 	Comparison string `json:"comparison"`
 	// The recorded outside file ID. Use without root_id or path.
-	FileID string `json:"file_id,omitempty"`
-	RootID string `json:"root_id,omitempty"`
-	Path   string `json:"path,omitempty"`
+	FileID     string `json:"file_id,omitempty"`
+	RootID     string `json:"root_id,omitempty"`
+	WorktreeID string `json:"worktree_id,omitempty"`
+	Path       string `json:"path,omitempty"`
 }
 
 // RetainedReplica State the client already holds, from a live replica or from the synchronized checkpoint it preserved. When it names the current document and epoch, crdt_update carries only the state missing from state_vector and base_content is omitted for a matching base_sha256 (a client without the saved text sends an empty hash, which never matches); otherwise the response is a full snapshot.
@@ -7610,10 +7621,11 @@ type SourceComparisonViewCreate struct {
 	Kind        string `json:"kind"`
 	OperationID string `json:"operation_id"`
 	// Stable window identity shared with editor requests; grants no authority.
-	ClientID  string                   `json:"client_id"`
-	SessionID string                   `json:"session_id,omitempty"`
-	Source    SourceComparisonSelector `json:"source"`
-	Intent    SourceComparisonIntent   `json:"intent"`
+	ClientID    string                   `json:"client_id"`
+	SessionID   string                   `json:"session_id,omitempty"`
+	WorktreeIds []string                 `json:"worktree_ids,omitempty"`
+	Source      SourceComparisonSelector `json:"source"`
+	Intent      SourceComparisonIntent   `json:"intent"`
 }
 
 // SourceComparisonViewUpdate
@@ -8477,8 +8489,10 @@ type SourceTreeViewCreate struct {
 	Kind        string `json:"kind"`
 	OperationID string `json:"operation_id"`
 	// Stable window identity shared with editor requests; grants no authority.
-	ClientID    string           `json:"client_id"`
-	SessionID   string           `json:"session_id,omitempty"`
+	ClientID  string `json:"client_id"`
+	SessionID string `json:"session_id,omitempty"`
+	// Person-selected checkout UUIDs overriding repository roots for this tree view.
+	WorktreeIds []string         `json:"worktree_ids,omitempty"`
 	WorkspaceID string           `json:"workspace_id"`
 	Intent      SourceTreeIntent `json:"intent"`
 }
@@ -8728,6 +8742,10 @@ type SourceWorkspace struct {
 type SourceWorkspaceRoot struct {
 	// Durable source branch for this root; omitted for the primary tree. Roots unaffected by a worktree binding retain their primary branch.
 	BranchID string `json:"branch_id,omitempty"`
+	// Repository identifier when this root belongs to a Git repository.
+	RepoID string `json:"repo_id,omitempty"`
+	// Verified checkout UUID supplying this root when resolved from a Git repository.
+	WorktreeID string `json:"worktree_id,omitempty"`
 	// Stable attached-root identity.
 	ID string `json:"id"`
 	// Absolute physical path for this root in the resolved workspace.

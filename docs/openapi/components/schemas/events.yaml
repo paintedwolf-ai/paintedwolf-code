@@ -1010,6 +1010,8 @@ components:
         id: {type: string, format: uuid}
         project_id: {type: string, format: uuid}
         workspace_id: {type: string, pattern: '^ws_[0-9a-f]{32}$'}
+        branch_id: {type: string, pattern: '^[a-zA-Z0-9:._-]*$'}
+        checkout_unavailable: {type: boolean}
         file_id: {type: string, format: uuid}
         root_id: {type: string, format: uuid}
         path: {type: string}
