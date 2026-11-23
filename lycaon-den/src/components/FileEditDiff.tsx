@@ -28,6 +28,7 @@ type Props = {
   chrome?: "card" | "row";
   /** Transcript identity of this file's disclosure. */
   disclosureKey?: TranscriptDisclosureKey;
+  onShowActivity?: (target: { toolCallId: string; path: string }) => void;
 };
 
 /** The writes one reply recorded, composed into the file's net change. */
@@ -46,6 +47,11 @@ export function FileEditDiff(props: Props) {
       if (edit.deleted || edit.root_id || !isAbsolutePath(edit.path)) return undefined;
       const target = (revision === null ? steps().at(-1) : steps()[revision])?.navigationTarget;
       return target && target.project_id === props.projectId ? target : null;
+    },
+    activityTarget: (revision) => {
+      const step = revision === null ? steps().at(-1) : steps()[revision];
+      const toolCallId = step?.toolCallId?.trim();
+      return toolCallId ? { toolCallId, path: step!.snapshot.path } : undefined;
     },
     get revisions() {
       const held = steps();
@@ -84,6 +90,7 @@ export function FileEditDiff(props: Props) {
       netStat={props.netStat}
       chrome={props.chrome}
       disclosureKey={props.disclosureKey}
+      onShowActivity={props.onShowActivity}
     />
   );
 }

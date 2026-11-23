@@ -38,6 +38,8 @@ export type DiffRowSource = {
   openable(revision: number | null): boolean | undefined;
   /** Null displays an outside path without a recorded target as a label. */
   navigationTarget?(revision: number | null): NavigationTarget | null | undefined;
+  /** Tool call that produced the selected revision, for navigating back to its activity row. */
+  activityTarget?(revision: number | null): { toolCallId: string; path: string } | undefined;
   change(revision: number | null): SourceReaderChange;
   /** Counts the host already supplied; null asks the comparison for them. */
   stat(revision: number | null): FileEditLineStat | null;

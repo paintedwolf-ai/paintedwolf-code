@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { createRoot, createSignal } from "solid-js";
 import { describe, expect, it } from "vitest";
+import { fileEditPreviewFixture } from "../../../test/file-edit-fixture.ts";
 import type { TranscriptItem } from "./transcript-item-model.ts";
 import {
   EMPTY_TRANSCRIPT_SPAN_STATE,
@@ -233,12 +234,15 @@ describe("regrouped activity span anchors", () => {
       headline: "editing files",
       anchorMessageId: lead,
       approvals: [{ kind: "checkpoint", key: "checkpoint:cp-1", parentMessageId: lead, meta: { checkpoint_id: "cp-1", kind: "tool_approval", status: "approved" } }],
-      folds: paths.map((path) => ({
-        path,
-        key: `activity-group:${lead}\0${path}`,
-        net: { path, before_sha256: "a", after_sha256: "b", created: false, added: 1, removed: 0 },
-        steps: [{ key: `${lead}:0`, messageId: lead, toolCallId: lead, tool: "write", snapshot: { path, before_sha256: "a", after_sha256: "b", created: false, added: 1, removed: 0 } }],
-      })),
+      folds: paths.map((path) => {
+        const snap = fileEditPreviewFixture({ path, before: "", after: "x" });
+        return {
+          path,
+          key: `activity-group:${lead}\0${path}`,
+          net: snap,
+          steps: [{ key: `${lead}:0`, messageId: lead, toolCallId: lead, tool: "write", snapshot: snap }],
+        };
+      }),
       entries: entries.map((entry) => ({ kind: "index_warming", key: entry, meta: {} as never })),
     });
 

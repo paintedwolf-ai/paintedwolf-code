@@ -75,7 +75,7 @@ function toolItemByKey(
       const part = item.parts.find((candidate) => candidate.id === key);
       if (part) return { kind: "tool", key, part };
     }
-    if (item.kind === "activity_span") {
+    if (item.kind === "activity_span" || item.kind === "activity_group") {
       for (const entry of item.entries) {
         if (entry.kind === "tool" && entry.part.id === key) {
           return { kind: "tool", key, part: entry.part };
@@ -101,7 +101,7 @@ function toolItemsByName(
           : [],
       );
     }
-    if (item.kind !== "activity_span") return [];
+    if (item.kind !== "activity_span" && item.kind !== "activity_group") return [];
     return item.entries.flatMap((entry) =>
       entry.kind === "tool" && entry.part.tool === tool
         ? [{ kind: "tool" as const, key: entry.part.id, part: entry.part }]

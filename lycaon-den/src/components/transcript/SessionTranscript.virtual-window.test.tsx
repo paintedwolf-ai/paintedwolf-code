@@ -37,7 +37,7 @@ function heightKey(presentation: string): string {
 }
 /** Content revisions of the rows the transcript projects from these messages. */
 function revisionsOf(messages: readonly Message[]): Record<string, string> {
-  const items = finalizeTranscriptItems(messagesToTranscriptItems(messages, { layout: "chat" }), { layout: "chat" });
+  const items = finalizeTranscriptItems(messagesToTranscriptItems(messages, { layout: "chat" }), { layout: "chat", messages });
   return Object.fromEntries(items.map((item) => [item.key, transcriptRowContentRevision(item)]));
 }
 function seedTranscriptRowHeightsForTests(
@@ -549,7 +549,7 @@ describe("SessionTranscript virtual window", () => {
     let expanded = false;
     // A real measurement includes the row's seam; the persisted height excludes it.
     const restoreRowHeight = mockTranscriptRowHeight((row) =>
-      (row.dataset.msgId?.startsWith("checkpoint:") && expanded ? 180 : 32) +
+      (row.dataset.msgId === "activity-group:checkpoint:allow-1" && expanded ? 180 : 32) +
       transcriptSeamPx(row.dataset.seam as TranscriptSeam | undefined),
     );
     try {
@@ -590,7 +590,7 @@ describe("SessionTranscript virtual window", () => {
       expect(chicklet).toBeTruthy();
       await waitFor(() => expect(transcriptRowHeightForScope(
         { projectId: "p-chicklet-layout", sessionId: "s-chicklet-layout" },
-        "checkpoint:allow-1", "collapsed",
+        "activity-group:checkpoint:allow-1", "collapsed",
       )).toBe(32));
       const before = Number(following!.dataset.virtualStart);
 
@@ -603,7 +603,7 @@ describe("SessionTranscript virtual window", () => {
       await waitFor(() => expect(
         transcriptRowHeightForScope(
           { projectId: "p-chicklet-layout", sessionId: "s-chicklet-layout" },
-          "checkpoint:allow-1",
+          "activity-group:checkpoint:allow-1",
           "collapsed",
         ),
       ).toBe(180));

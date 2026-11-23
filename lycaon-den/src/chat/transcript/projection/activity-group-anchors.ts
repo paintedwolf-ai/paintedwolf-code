@@ -146,13 +146,18 @@ export function transcriptToolTarget(
   for (const row of root.querySelectorAll<HTMLElement>("[data-tool-call-ids]")) {
     if (!row.dataset.toolCallIds?.split(" ").includes(toolCallId)) continue;
     if (isTranscriptDisclosureShell(row)) return row;
+    for (const inner of row.querySelectorAll<HTMLElement>("[data-tool-call-ids]")) {
+      if (inner.dataset.toolCallIds?.split(" ").includes(toolCallId) && isTranscriptDisclosureShell(inner)) {
+        return inner;
+      }
+    }
+    for (const cp of row.querySelectorAll<HTMLElement>("[data-approval-tool-call-id]")) {
+      if (cp.dataset.approvalToolCallId === toolCallId) return cp;
+    }
     const activitiesShell = row.querySelector<HTMLElement>(
       '[data-activity-group-section="activities"] [data-transcript-disclosure], .den-activity-span.den-transcript-disclosure-card',
     );
     if (activitiesShell) return activitiesShell;
-    for (const cp of row.querySelectorAll<HTMLElement>("[data-approval-tool-call-id]")) {
-      if (cp.dataset.approvalToolCallId === toolCallId) return cp;
-    }
     return row.querySelector<HTMLElement>(".den-transcript-disclosure-card") ?? row;
   }
   return null;

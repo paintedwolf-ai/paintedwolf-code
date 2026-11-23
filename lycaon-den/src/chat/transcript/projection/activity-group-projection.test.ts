@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { Message } from "../../../api/types.ts";
 import { fileEditPreviewFixture } from "../../../test/file-edit-fixture.ts";
-import { toolApprovalFixture } from "../../../test/tool-approval-fixture.ts";
+import { toolApprovalFixture } from "../../checkpoint/approval-test-fixtures.ts";
 import { buildChatTranscriptBlocks } from "../../workflow/workflow-spans.ts";
 import { createTranscriptDisplayProjector, retainTranscriptItemIdentity, transcriptItemsByKey } from "./transcript-display-projection.ts";
 import type { ActivityGroupItem, DisplayTranscriptItem } from "./transcript-item-model.ts";
@@ -130,13 +130,13 @@ describe("projectActivityGroups", () => {
         ord: 312,
         role: "system",
         kind: "progress_update",
-        origin: "system",
+        origin: "host",
         authority: "system",
         trust_tier: "trusted",
         content: "",
         progress_update: {
           initial: true,
-          steps: [{ label: "Inspect and fix", state: "in_progress" }],
+          steps: [{ label: "Inspect and fix", state: "pending" }],
           changes: [],
         },
         created_at: "2026-11-23T00:00:02Z",
@@ -182,7 +182,7 @@ describe("projectActivityGroups", () => {
         role: "user",
         visibility: "internal",
         kind: "host_loop_wake",
-        origin: "system",
+        origin: "host",
         authority: "system",
         trust_tier: "trusted",
         content: "wake",
@@ -215,11 +215,11 @@ describe("projectActivityGroups", () => {
         ord: 4,
         role: "system",
         kind: "progress_update",
-        origin: "system",
+        origin: "host",
         authority: "system",
         trust_tier: "trusted",
         content: "",
-        progress_update: { initial: false, steps: [{ label: "Step", state: "in_progress" }], changes: [] },
+        progress_update: { initial: false, steps: [{ label: "Step", state: "pending" }], changes: [] },
         created_at: "2026-11-23T00:00:04Z",
       },
       assistantCallsMsg("a5", 5, [{ id: "c2", name: "read", args: { path: "b.go" } }]),
@@ -233,7 +233,7 @@ describe("projectActivityGroups", () => {
         ord: 9,
         role: "system",
         kind: "workflow_feedback",
-        origin: "system",
+        origin: "host",
         authority: "system",
         trust_tier: "trusted",
         content: "Proceed?",

@@ -157,8 +157,13 @@ describe.each([...PROGRAM_ACTIVITY_TOOLS])("%s command program", (tool) => {
         const continuity = visibleRowContinuity(items);
         expect(withdrawnRows(previous, continuity, new Set([assistant.id]))).toEqual([]);
         previous = continuity;
-        const keys = items.flatMap((item) => item.kind === "tool" ? [item.part.id] :
-          item.kind === "activity_span" ? activitySpanToolParts(item.entries).map((part) => part.id) : []);
+        const keys = items.flatMap((item) =>
+          item.kind === "tool"
+            ? [item.part.id]
+            : item.kind === "activity_span" || item.kind === "activity_group"
+              ? activitySpanToolParts(item.entries).map((part) => part.id)
+              : [],
+        );
         expect(keys.every((key) => key === `${assistant.id}:call-${tool}`)).toBe(true);
         counts.push(keys.length);
       };
@@ -168,7 +173,11 @@ describe.each([...PROGRAM_ACTIVITY_TOOLS])("%s command program", (tool) => {
         if (progress) observeProgram(sessionId, tool, [admittedActivity]);
         const internal = { ...assistant, visibility: "internal" } as const;
         const privateRows = project([internal], undefined, options)[0]!;
-        expect(privateRows.some((item) => item.kind === "tool" || item.kind === "activity_span")).toBe(false);
+        expect(
+          privateRows.some(
+            (item) => item.kind === "tool" || item.kind === "activity_span" || item.kind === "activity_group",
+          ),
+        ).toBe(false);
         frame([assistant]);
         clearCommandActivities(sessionId);
         frame([assistant]);

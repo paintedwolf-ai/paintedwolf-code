@@ -79,7 +79,8 @@ describe("incremental transcript projection", () => {
       file_edit_previews: [fileEditPreviewFixture({ path: "a.go", before: "x\n", after: "y\n" })],
     });
     const live = message("live", "Done", 4);
-    const diffRow = (rows: readonly { kind: string }[]) => rows.find((row) => row.kind === "file_edit");
+    const diffRow = (rows: readonly { kind: string; folds?: unknown[] }[]) =>
+      rows.find((row) => row.kind === "activity_group" && (row.folds?.length ?? 0) > 0);
     const first = project([user, write, result, live], spanOf([user, write, result, live]), verbose)[0]!;
     expect(diffRow(first)).toBeDefined();
     const grown = { ...live, content: "Done." };

@@ -97,6 +97,9 @@ function collectTranscriptEntryKeys(item: TranscriptItem, keys: Set<string>): vo
       break;
     case "activity_group": {
       keys.add(activitySpanEnterFadeKey(key));
+      if (item.entries[0]) {
+        keys.add(activitySpanEnterFadeKey(item.entries[0].kind === "tool" ? item.entries[0].part.id : item.entries[0].key));
+      }
       for (const part of activitySpanToolParts(item.entries)) {
         collectToolPartEntryKeys(part, keys);
       }

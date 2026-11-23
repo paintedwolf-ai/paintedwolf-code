@@ -1,9 +1,17 @@
 import { Show, createEffect, createMemo, createSignal } from "solid-js";
-import type {
-  CheckpointDecisionMeta,
-  CheckpointStatus,
-} from "../../api/types.ts";
+import type { CheckpointDecisionMeta, CheckpointStatus } from "../../api/types.ts";
 import type { LycaonClient } from "../../api/client.ts";
+import { reviewPendingApproval } from "../../chat/checkpoint/approval-review.ts";
+import {
+  TranscriptDisclosurePanel,
+  TranscriptDisclosureShell,
+  TranscriptDisclosureSummary,
+  TranscriptDisclosureToggle,
+  useTranscriptDisclosure,
+} from "../../chat/transcript/presentation/transcript-disclosure.tsx";
+import { transcriptDisclosureKey } from "../../chat/transcript/presentation/transcript-disclosure-key.ts";
+import { useTranscriptEntry } from "../../chat/transcript/presentation/transcript-entry.ts";
+import { bindFindRevealHost } from "../../find/use-findable-view.ts";
 import { APPROVALS_COPY } from "../../settings/security/approvals-copy.ts";
 import {
   approvalGrantsError,
@@ -13,33 +21,22 @@ import {
   loadApprovalGrantsCache,
   revokeGrantsOptimistic,
 } from "../../settings/security/approval-grants-cache.ts";
-import { useTranscriptEntry } from "../../chat/transcript/presentation/transcript-entry.ts";
-import {
-  TranscriptDisclosurePanel,
-  TranscriptDisclosureShell,
-  TranscriptDisclosureSummary,
-  TranscriptDisclosureToggle,
-  useTranscriptDisclosure,
-} from "../../chat/transcript/presentation/transcript-disclosure.tsx";
-import { transcriptDisclosureKey } from "../../chat/transcript/presentation/transcript-disclosure-key.ts";
+import { DecisionRow, decisionRowLabel, type DecisionTone } from "../transcript/DecisionRow.tsx";
 import { ApprovalContentLink } from "./ApprovalContentLink.tsx";
-import { reviewPendingApproval } from "../../chat/checkpoint/approval-review.ts";
-import {
-  DecisionRow,
-  decisionRowLabel,
-  type DecisionTone,
-} from "../transcript/DecisionRow.tsx";
 
 type Props = {
   meta: CheckpointDecisionMeta;
   sessionId?: string | null;
   projectId?: string;
   entryKey?: string;
+  chrome?: "card" | "section" | "row";
+  toolCallId?: string;
+  onShowActivity?: (toolCallId: string) => void;
   client?: LycaonClient | null;
   onError?: (err: unknown) => void;
 };
 
-function decisionLabel(meta: CheckpointDecisionMeta): string {
+export function checkpointDecisionLabel(meta: CheckpointDecisionMeta): string {
   const table = APPROVALS_COPY.card.decision;
   const byKind = table[meta.kind as keyof typeof table];
   if (byKind && typeof byKind === "object" && meta.status in byKind) {
@@ -61,16 +58,12 @@ function decisionAriaLabel(meta: CheckpointDecisionMeta): string {
   const causing = meta.causing_command?.trim();
   const location = meta.location?.trim();
   const guidance = meta.guidance?.trim();
-  return decisionRowLabel(decisionLabel(meta), [
+  return decisionRowLabel(checkpointDecisionLabel(meta), [
     tool,
     subject && subject !== tool ? subject : undefined,
     location,
-    causing
-      ? `${APPROVALS_COPY.card.causedByLabel} ${causing}`
-      : undefined,
-    guidance
-      ? `${APPROVALS_COPY.card.rejectGuidance.directionLabel}: ${guidance}`
-      : undefined,
+    causing ? `${APPROVALS_COPY.card.causedByLabel} ${causing}` : undefined,
+    guidance ? `${APPROVALS_COPY.card.rejectGuidance.directionLabel}: ${guidance}` : undefined,
     grantLine(meta),
   ]);
 }
@@ -94,33 +87,17 @@ function DecisionChrome(props: {
   return (
     <DecisionRow
       tone={decisionTone(props.meta.status)}
-      label={decisionLabel(props.meta)}
+      label={checkpointDecisionLabel(props.meta)}
       details={[
         { text: props.tool ?? "", testId: "checkpoint-decision-tool" },
+        { text: props.subject ?? "", emphasis: "subject", truncate: props.truncateSubject, testId: "checkpoint-decision-subject" },
+        { text: props.location ?? "", truncate: props.truncateSubject, testId: "checkpoint-decision-location" },
         {
-          text: props.subject ?? "",
-          emphasis: "subject",
-          truncate: props.truncateSubject,
-          testId: "checkpoint-decision-subject",
-        },
-        {
-          text: props.location ?? "",
-          truncate: props.truncateSubject,
-          testId: "checkpoint-decision-location",
-        },
-        {
-          text: props.causing
-            ? `${APPROVALS_COPY.card.causedByLabel} ${props.causing}`
-            : "",
+          text: props.causing ? `${APPROVALS_COPY.card.causedByLabel} ${props.causing}` : "",
           truncate: props.truncateSubject,
           testId: "checkpoint-decision-causing",
         },
-        {
-          text: props.grant ?? "",
-          emphasis: "grant",
-          truncate: props.truncateSubject,
-          testId: "checkpoint-decision-grant",
-        },
+        { text: props.grant ?? "", emphasis: "grant", truncate: props.truncateSubject, testId: "checkpoint-decision-grant" },
       ]}
     />
   );
@@ -138,17 +115,11 @@ function RevokeButton(props: {
     if (revoking()) return;
     setRevoking(true);
     try {
-      const res = await props.client.revokeApprovalGrants({
-        ids: props.grantIds,
-      });
-      const revoked = res.results
-        .filter((result) => result.revoked)
-        .map((result) => result.id);
+      const res = await props.client.revokeApprovalGrants({ ids: props.grantIds });
+      const revoked = res.results.filter((result) => result.revoked).map((result) => result.id);
       revokeGrantsOptimistic(revoked);
       const failed = res.results.find((result) => !result.revoked);
-      if (failed) {
-        throw new Error(failed.message || failed.code || "revoke failed");
-      }
+      if (failed) throw new Error(failed.message || failed.code || "revoke failed");
     } catch (err) {
       props.onError?.(err);
     } finally {
@@ -170,14 +141,17 @@ function RevokeButton(props: {
 }
 
 export function CheckpointDecisionChicklet(props: Props) {
+  const chrome = () => props.chrome ?? "card";
+  const embedded = () => chrome() !== "card";
   const entryOpts = () =>
     props.entryKey
-      ? { sessionId: props.sessionId ?? undefined, entryKey: props.entryKey }
+      ? { sessionId: props.sessionId ?? undefined, entryKey: props.entryKey, skipFade: embedded() }
       : undefined;
   const { bindTranscriptEntry } = useTranscriptEntry(entryOpts);
   const disclosure = useTranscriptDisclosure(() =>
     props.entryKey ? transcriptDisclosureKey.checkpoint(props.entryKey) : undefined,
   );
+  const [hostEl, setHostEl] = createSignal<HTMLElement | null>(null);
 
   const status = (): CheckpointStatus => props.meta.status;
   const tool = () => props.meta.tool?.trim() || undefined;
@@ -185,21 +159,31 @@ export function CheckpointDecisionChicklet(props: Props) {
     const s = props.meta.subject?.trim();
     if (!s) return undefined;
     const t = tool();
-    if (t && s === t) return undefined;
-    return s;
+    return t && s === t ? undefined : s;
   };
   const causing = () => props.meta.causing_command?.trim() || undefined;
   const location = () => props.meta.location?.trim() || undefined;
   const guidance = () => props.meta.guidance?.trim() || undefined;
   const grant = () => grantLine(props.meta);
-  const grantIds = () =>
-    (props.meta.grant_ids ?? []).map((id) => id.trim()).filter(Boolean);
+  const toolCallId = () => props.toolCallId?.trim() || undefined;
+  const grantIds = () => (props.meta.grant_ids ?? []).map((id) => id.trim()).filter(Boolean);
+
+  bindFindRevealHost({
+    id: `checkpoint-reveal:${props.entryKey ?? props.meta.checkpoint_id}`,
+    hostEl,
+    isCollapsed: () => !disclosure.open(),
+    revealForFind: disclosure.revealTemporarily,
+    collapsedCorpus: () =>
+      [checkpointDecisionLabel(props.meta), tool(), subject(), location(), causing(), grant(), guidance()]
+        .filter(Boolean)
+        .join("\n"),
+    collapsedCorpusAnchor: hostEl,
+  });
 
   createEffect(() => {
     const client = props.client;
     const ids = grantIds();
     if (!client || ids.length === 0) return;
-    // Settings invalidation retries only an unloaded, error-free cache.
     if (isApprovalGrantsCacheLoaded() || approvalGrantsError()) return;
     void loadApprovalGrantsCache(client).catch(() => undefined);
   });
@@ -207,20 +191,30 @@ export function CheckpointDecisionChicklet(props: Props) {
   const revokeCtx = createMemo(() => {
     const ids = grantIds();
     const client = props.client;
-    if (ids.length === 0 || !client) return undefined;
-    if (!isApprovalGrantsCacheLoaded()) return undefined;
+    if (ids.length === 0 || !client || !isApprovalGrantsCacheLoaded()) return undefined;
     if (!ids.some((id) => hasGrant(id) || hasQuiet(id))) return undefined;
     return { grantIds: ids, client };
   });
   const expandable = () =>
     status() === "pending" ||
-    Boolean(subject() || location() || causing() || guidance() || grant());
+    Boolean(subject() || location() || causing() || guidance() || grant() || (toolCallId() && props.onShowActivity));
   const statusClass = () => ({
     "den-checkpoint-decision-chicklet--approved": status() === "approved",
     "den-checkpoint-decision-chicklet--rejected": status() === "rejected",
     "den-checkpoint-decision-chicklet--expired": status() === "expired",
     "den-checkpoint-decision-chicklet--pending": status() === "pending",
+    "den-checkpoint-decision-chicklet--section": chrome() === "section",
+    "den-checkpoint-decision-chicklet--row": chrome() === "row",
   });
+
+  const triggerReview = () => {
+    if (props.sessionId) {
+      reviewPendingApproval({
+        sessionId: props.sessionId,
+        checkpointId: props.meta.checkpoint_id,
+      });
+    }
+  };
 
   return (
     <Show
@@ -228,42 +222,45 @@ export function CheckpointDecisionChicklet(props: Props) {
       fallback={
         <div
           ref={bindTranscriptEntry}
-          class="den-transcript-card den-checkpoint-decision-chicklet"
+          class={embedded() ? "den-checkpoint-decision-chicklet" : "den-transcript-card den-checkpoint-decision-chicklet"}
           classList={statusClass()}
           data-testid="checkpoint-decision-chicklet"
+          data-chrome={chrome()}
           data-status={status()}
           data-kind={props.meta.kind}
           data-checkpoint-id={props.meta.checkpoint_id}
+          data-approval-tool-call-id={toolCallId()}
           role="status"
           aria-label={decisionAriaLabel(props.meta)}
         >
           <DecisionChrome meta={props.meta} tool={tool()} />
           <Show when={status() === "pending"}>
-            <span
-              data-testid="checkpoint-open-marker"
-              data-checkpoint-id={props.meta.checkpoint_id}
-              class="sr-only"
-            />
+            <span data-testid="checkpoint-open-marker" data-checkpoint-id={props.meta.checkpoint_id} class="sr-only" />
           </Show>
         </div>
       }
     >
       <TranscriptDisclosureShell
         disclosure={disclosure}
-        ref={bindTranscriptEntry}
-        class="den-checkpoint-decision-chicklet den-checkpoint-decision-chicklet--expandable den-transcript-card den-transcript-disclosure-card"
+        ref={(el) => {
+          bindTranscriptEntry(el);
+          setHostEl(el);
+        }}
+        class={
+          embedded()
+            ? "den-checkpoint-decision-chicklet den-checkpoint-decision-chicklet--expandable den-transcript-disclosure-card"
+            : "den-checkpoint-decision-chicklet den-checkpoint-decision-chicklet--expandable den-transcript-card den-transcript-disclosure-card"
+        }
         classList={statusClass()}
         data-testid="checkpoint-decision-chicklet"
+        data-chrome={chrome()}
         data-status={status()}
         data-kind={props.meta.kind}
         data-checkpoint-id={props.meta.checkpoint_id}
+        data-approval-tool-call-id={toolCallId()}
       >
         <Show when={status() === "pending"}>
-          <span
-            data-testid="checkpoint-open-marker"
-            data-checkpoint-id={props.meta.checkpoint_id}
-            class="sr-only"
-          />
+          <span data-testid="checkpoint-open-marker" data-checkpoint-id={props.meta.checkpoint_id} class="sr-only" />
         </Show>
         <TranscriptDisclosureSummary
           disclosure={disclosure}
@@ -284,14 +281,19 @@ export function CheckpointDecisionChicklet(props: Props) {
               truncateSubject
             />
           </TranscriptDisclosureToggle>
+          <Show when={embedded() && status() === "pending" && props.sessionId}>
+            <button
+              type="button"
+              class="den-checkpoint-decision-chicklet__review-btn"
+              data-testid="checkpoint-decision-review-dock-header"
+              data-disclosure-action=""
+              onClick={triggerReview}
+            >
+              Review in composer
+            </button>
+          </Show>
           <Show when={revokeCtx()} keyed>
-            {(ctx) => (
-              <RevokeButton
-                grantIds={ctx.grantIds}
-                client={ctx.client}
-                onError={props.onError}
-              />
-            )}
+            {(ctx) => <RevokeButton grantIds={ctx.grantIds} client={ctx.client} onError={props.onError} />}
           </Show>
           <span class="den-tool-chicklet-caret" aria-hidden="true" />
         </TranscriptDisclosureSummary>
@@ -304,15 +306,13 @@ export function CheckpointDecisionChicklet(props: Props) {
             <dl class="den-tool-part-card-facts">
               <div>
                 <dt>{status() === "pending" ? "Status" : "Decision"}</dt>
-                <dd data-testid="checkpoint-decision-body-status">{decisionLabel(props.meta)}</dd>
+                <dd data-testid="checkpoint-decision-body-status">{checkpointDecisionLabel(props.meta)}</dd>
               </div>
               <Show when={tool()}>
                 {(t) => (
                   <div>
                     <dt>Tool</dt>
-                    <dd data-testid="checkpoint-decision-body-tool">
-                      <code>{t()}</code>
-                    </dd>
+                    <dd data-testid="checkpoint-decision-body-tool"><code>{t()}</code></dd>
                   </div>
                 )}
               </Show>
@@ -320,9 +320,7 @@ export function CheckpointDecisionChicklet(props: Props) {
                 {(s) => (
                   <div class="den-tool-part-card-facts--wide">
                     <dt>Action</dt>
-                    <dd data-testid="checkpoint-decision-body-action">
-                      <code>{s()}</code>
-                    </dd>
+                    <dd data-testid="checkpoint-decision-body-action"><code>{s()}</code></dd>
                   </div>
                 )}
               </Show>
@@ -330,9 +328,7 @@ export function CheckpointDecisionChicklet(props: Props) {
                 {(loc) => (
                   <div class="den-tool-part-card-facts--wide">
                     <dt>Location</dt>
-                    <dd data-testid="checkpoint-decision-body-location">
-                      <code>{loc()}</code>
-                    </dd>
+                    <dd data-testid="checkpoint-decision-body-location"><code>{loc()}</code></dd>
                   </div>
                 )}
               </Show>
@@ -340,9 +336,7 @@ export function CheckpointDecisionChicklet(props: Props) {
                 {(c) => (
                   <div class="den-tool-part-card-facts--wide">
                     <dt>{APPROVALS_COPY.card.causedByLabel}</dt>
-                    <dd data-testid="checkpoint-decision-body-causing">
-                      <code>{c()}</code>
-                    </dd>
+                    <dd data-testid="checkpoint-decision-body-causing"><code>{c()}</code></dd>
                   </div>
                 )}
               </Show>
@@ -370,14 +364,7 @@ export function CheckpointDecisionChicklet(props: Props) {
                 type="button"
                 class="den-checkpoint-decision-chicklet__review-btn"
                 data-testid="checkpoint-decision-review-dock"
-                onClick={() => {
-                  if (props.sessionId) {
-                    reviewPendingApproval({
-                      sessionId: props.sessionId,
-                      checkpointId: props.meta.checkpoint_id,
-                    });
-                  }
-                }}
+                onClick={triggerReview}
               >
                 Review in composer
               </button>
@@ -392,19 +379,31 @@ export function CheckpointDecisionChicklet(props: Props) {
               }}
               text={() =>
                 [
-                  `Decision: ${decisionLabel(props.meta)}`,
+                  `Decision: ${checkpointDecisionLabel(props.meta)}`,
                   tool() && `Tool: ${tool()}`,
                   subject() && `Action: ${subject()}`,
                   location() && `Location: ${location()}`,
                   causing() && `${APPROVALS_COPY.card.causedByLabel}: ${causing()}`,
                   grant() && `Permission: ${grant()}`,
-                  guidance() &&
-                    `${APPROVALS_COPY.card.rejectGuidance.directionLabel}: ${guidance()}`,
+                  guidance() && `${APPROVALS_COPY.card.rejectGuidance.directionLabel}: ${guidance()}`,
                 ]
                   .filter(Boolean)
                   .join("\n\n")
               }
             />
+            <Show when={toolCallId() && props.onShowActivity}>
+              <button
+                type="button"
+                class="den-checkpoint-decision-chicklet__activity-btn"
+                data-testid="checkpoint-decision-show-activity"
+                onClick={() => {
+                  const id = toolCallId();
+                  if (id) props.onShowActivity?.(id);
+                }}
+              >
+                Show activity
+              </button>
+            </Show>
           </div>
         </TranscriptDisclosurePanel>
       </TranscriptDisclosureShell>

@@ -56,6 +56,16 @@ describe("transcript row content revision", () => {
       { kind: "draft", key: "d", text: "draft", draftStatus: "live", draftVersionCount: 2 },
       { kind: "tool", key: "t", part: part("t", { error: "err", fileEdits: [{ path: "a", added: 1, removed: 2 } as never] }) },
       {
+        kind: "activity_group",
+        key: "activity-group:b",
+        sectionOrder: ["activities", "files"],
+        headline: "editing files",
+        anchorMessageId: "a1",
+        approvals: [],
+        folds: [{ key: "f1", path: "a.ts", steps: [], net: { after_sha256: "h1", added: 2, removed: 1 } as never }],
+        entries: [{ kind: "tool", part: part("b") }],
+      },
+      {
         kind: "activity_span",
         key: "as",
         label: "work",
