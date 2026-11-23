@@ -45,9 +45,9 @@ func TestSubrootInvalidationMappingAndCollectionRefusal(t *testing.T) {
 	dirFile, err := os.Open(root.Path)
 	testutil.FailErr(t, "open root dir", err)
 	defer func() { _ = dirFile.Close() }()
-	_, err = c.Directories.ReadDirectory(t.Context(), "p", root, ".", DirectoryRead{
-		Admission: denyCollectionAdmission{file: dirFile},
-	})
+	reader := c.Directories.NewDirectoryReader("p", root)
+	defer func() { _ = reader.Close(t.Context()) }()
+	_, err = reader.ReadDirectory(t.Context(), ".", 64, denyCollectionAdmission{file: dirFile})
 	if !errors.Is(err, ErrDirectoryNamespace) {
 		t.Fatalf("ReadDirectory with denied collection = %v, want ErrDirectoryNamespace", err)
 	}
