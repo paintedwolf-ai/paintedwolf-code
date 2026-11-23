@@ -1,6 +1,7 @@
 package confine
 
 import (
+	"os"
 	"slices"
 	"strings"
 )
@@ -332,6 +333,83 @@ func (s SandboxRefusals) SharedTempPaths(access FilesystemAccess) []BoundaryPath
 		}
 	}
 	return out
+}
+
+// SharedTempObservation groups reviewable shared-temp read and write grants
+// observed in one confinement run, skipping speculative missing read probes.
+type SharedTempObservation struct {
+	Reads  []string
+	Writes []string
+}
+
+func (o SharedTempObservation) Empty() bool {
+	return len(o.Reads) == 0 && len(o.Writes) == 0
+}
+
+func (o SharedTempObservation) All() []string {
+	var all []string
+	for _, p := range append(slices.Clone(o.Reads), o.Writes...) {
+		if !slices.Contains(all, p) {
+			all = append(all, p)
+		}
+	}
+	slices.Sort(all)
+	return all
+}
+
+// SharedTempObservation extracts deduplicated read and write grant candidates.
+func (s SandboxRefusals) SharedTempObservation() SharedTempObservation {
+	var rawReads, readDirs []string
+	for _, p := range s.SharedTempPaths(AccessRead) {
+		info, err := os.Lstat(p.Grant)
+		if err != nil {
+			// Speculative probes for absent temp files generate no automatic card.
+			continue
+		}
+		if !slices.Contains(rawReads, p.Grant) {
+			rawReads = append(rawReads, p.Grant)
+			if info.IsDir() {
+				readDirs = append(readDirs, p.Grant)
+			}
+		}
+	}
+	slices.Sort(rawReads)
+	slices.Sort(readDirs)
+	var reads []string
+	for _, p := range rawReads {
+		covered := false
+		for _, dir := range readDirs {
+			if dir != p && PathAtOrUnder(p, dir) {
+				covered = true
+				break
+			}
+		}
+		if !covered {
+			reads = append(reads, p)
+		}
+	}
+
+	var rawWrites []string
+	for _, p := range s.SharedTempPaths(AccessWrite) {
+		if !slices.Contains(rawWrites, p.Grant) {
+			rawWrites = append(rawWrites, p.Grant)
+		}
+	}
+	slices.Sort(rawWrites)
+	var writes []string
+	for _, w := range rawWrites {
+		covered := false
+		for _, other := range rawWrites {
+			if other != w && PathAtOrUnder(w, other) {
+				covered = true
+				break
+			}
+		}
+		if !covered {
+			writes = append(writes, w)
+		}
+	}
+	return SharedTempObservation{Reads: reads, Writes: writes}
 }
 
 // SharedTempRoots lists the shared-temp targets identified by observed refusals.

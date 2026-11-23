@@ -4,13 +4,14 @@ import (
 	"context"
 
 	"github.com/lycaon/lycaon/internal/bgprocess"
+	"github.com/lycaon/lycaon/internal/confine"
 	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/tools"
 )
 
-// SharedTempReviewer settles the distinct shared locations in a foreground result.
+// SharedTempReviewer settles observed shared-temp read and write needs in a foreground result.
 type SharedTempReviewer interface {
-	ReviewSharedTemp(context.Context, SandboxWriteRootAsk, []string, bool) guidance.SharedTempSettlement
+	ReviewSharedTemp(context.Context, SandboxWriteRootAsk, confine.SharedTempObservation, bool) guidance.SharedTempSettlement
 }
 
 func (r *ProgramRuntime) reviewSharedTemp(ctx context.Context, tc tools.ToolContext, tool, source string, running bool) {
@@ -26,18 +27,22 @@ func (r *ProgramRuntime) reviewSharedTemp(ctx context.Context, tc tools.ToolCont
 	if len(roots) == 0 {
 		return
 	}
-	result := guidance.SharedTempSettlement{Refused: roots}
+	observed := obs.Refusals.SharedTempObservation()
+	result := guidance.SharedTempSettlement{Refused: roots, Reads: observed.Reads, Writes: observed.Writes}
 	switch {
 	case running || obs.Running:
 		result.Running = true
 	case obs.TerminationReason != "" && obs.TerminationReason != string(bgprocess.TerminationExited):
 		return
+	case observed.Empty():
+		return
 	case r != nil && r.SharedTemp != nil && (len(obs.FailedStages) > 0 || obs.TerminationReason == string(bgprocess.TerminationExited)):
 		result = r.SharedTemp.ReviewSharedTemp(ctx, SandboxWriteRootAsk{
 			SessionID: tc.Identity.SessionID, ParentSessionID: tc.Identity.ParentSessionID, ProjectID: tc.Identity.ProjectID,
 			ToolCallID: tc.Identity.ToolCallID, ProjectDir: tc.ActiveRootPath(), ToolName: tool, Command: source,
+			ReadDenyPaths:      tools.ActionConfineInputsForContext(tc, nil).ReadDenyPaths,
 			SessionScratchRoot: tc.Host.SessionScratchDir, SessionOutputRoot: tc.Host.SessionOutputDir,
-		}, roots, len(obs.FailedStages) > 0)
+		}, observed, len(obs.FailedStages) > 0)
 	default:
 		return
 	}

@@ -19,8 +19,10 @@ func ValidateCapabilityPathAuthority(args map[string]any, scratch, output string
 			return &toolrejection.ToolReject{Code: isolation.CodeControlPlaneDenied, Data: map[string]any{"path": path, "capability": "read_path"}}
 		}
 	}
-	if root := request.WriteRoot; root != "" && confine.ControlPlanePathDenied(root, true, scratch, output) {
-		return &toolrejection.ToolReject{Code: isolation.CodeControlPlaneDenied, Data: map[string]any{"path": root, "capability": "write_root"}}
+	for _, root := range request.WriteRoots {
+		if root != "" && confine.ControlPlanePathDenied(root, true, scratch, output) {
+			return &toolrejection.ToolReject{Code: isolation.CodeControlPlaneDenied, Data: map[string]any{"path": root, "capability": "write_root"}}
+		}
 	}
 	return nil
 }

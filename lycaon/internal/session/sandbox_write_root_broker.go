@@ -4,12 +4,15 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"os"
 	"strings"
 	"time"
 
 	"github.com/lycaon/lycaon/internal/authzledger"
 	"github.com/lycaon/lycaon/internal/confine"
+	"github.com/lycaon/lycaon/internal/fspath"
 	"github.com/lycaon/lycaon/internal/gate"
+	"github.com/lycaon/lycaon/internal/grantedpath"
 	"github.com/lycaon/lycaon/internal/hitl"
 	"github.com/lycaon/lycaon/internal/sensitivepath"
 	"github.com/lycaon/lycaon/internal/session/approvalstate"
@@ -29,8 +32,9 @@ type WriteRootCheckpointBroker struct {
 	Runtime     *approvalstate.SandboxPathGrantRuntime
 	// ReadRuntime holds chat read-path leases, a separate namespace from
 	// write roots: a grant in one never covers the other.
-	ReadRuntime *approvalstate.SandboxPathGrantRuntime
-	Consequence toolapproval.ConsequenceDeriver
+	ReadRuntime  *approvalstate.SandboxPathGrantRuntime
+	GrantedPaths *grantedpath.Runtime
+	Consequence  toolapproval.ConsequenceDeriver
 	Authority   hitl.ApprovalGate
 	// ApprovalsDisabled authorizes the request without a prompt.
 	ApprovalsDisabled func(projectDir string) bool
@@ -53,7 +57,7 @@ func (b *WriteRootCheckpointBroker) posture(projectDir string) gate.Posture {
 
 // Authorize implements command.SandboxWriteRootGate.
 func (b *WriteRootCheckpointBroker) Authorize(ctx context.Context, in command.SandboxWriteRootAsk) (command.SandboxWriteRootResult, error) {
-	if b == nil || b.Runtime == nil || !isSharedTempRoot(in.ProposedWriteRoot) {
+	if b == nil || b.Runtime == nil || !overlapsSharedTemp(in.ProposedWriteRoot) {
 		return b.authorizeWriteRoot(ctx, in, awaitSandboxAsk)
 	}
 	_, chat := askSessionIDs(ctx, b.Store, in.SessionID, in.ParentSessionID)
@@ -69,7 +73,10 @@ func (b *WriteRootCheckpointBroker) Authorize(ctx context.Context, in command.Sa
 	return b.authorizeWriteRoot(ctx, in, func(ctx context.Context, req sandboxAskRequest) (sandboxAskResolution, error) {
 		result, err := awaitSandboxAsk(ctx, req)
 		if err == nil && result.HumanDeclined {
-			history.Declined[confine.SharedTempLocation(req.Key)] = true
+			history.Declined[sharedTempWriteHistoryKey(req.Key)] = true
+			if isSharedTempRoot(req.Key) {
+				history.Declined[req.Key] = true
+			}
 		}
 		return result, err
 	})
@@ -83,15 +90,22 @@ func (b *WriteRootCheckpointBroker) authorizeWriteRoot(ctx context.Context, in c
 		return out, nil
 	}
 	proposed := confine.NormalizeWriteRootKey(in.ProposedWriteRoot)
-	if isSharedTempRoot(proposed) {
-		proposed = confine.SharedTempLocation(proposed)
-	}
 	if proposed == "" {
 		return out, nil
 	}
+	if confine.SharedTempLocation(proposed) != "" {
+		if cp := fspath.CanonicalPath(proposed); cp != "" {
+			proposed = cp
+		}
+		// External write grants apply at directory granularity; never advertise
+		// a directory mount as an exact existing file.
+		if info, err := os.Lstat(proposed); err == nil && !info.IsDir() {
+			proposed = confine.FloorSharedTemp.RecoveryFor(confine.AccessWrite).GrantPath(proposed)
+		}
+	}
 	// Control-plane writes are denied without prompting.
 	if confine.ControlPlanePathDenied(proposed, true, in.SessionScratchRoot, in.SessionOutputRoot) {
-		out.Denied = isSharedTempRoot(proposed)
+		out.Denied = confine.SharedTempLocation(proposed) != ""
 		return out, nil
 	}
 	// The invocation's own scratch is already inside its boundary.
@@ -106,7 +120,7 @@ func (b *WriteRootCheckpointBroker) authorizeWriteRoot(ctx context.Context, in c
 	if subject.Kind == confine.WriteSubjectOrdinary {
 		// A root granted here must also pass the boundary's granted lane.
 		if refused, _ := confine.GrantedWriteRootRefused(proposed); refused {
-			out.Denied = isSharedTempRoot(proposed)
+			out.Denied = confine.SharedTempLocation(proposed) != ""
 			return out, nil
 		}
 	}
@@ -117,7 +131,7 @@ func (b *WriteRootCheckpointBroker) authorizeWriteRoot(ctx context.Context, in c
 		roots = []string{projectDir}
 	}
 	shared := overlapsSharedTemp(proposed)
-	grants := b.Runtime.SessionWriteRoots(rootSessionID)
+	grants := b.effectiveWriteRoots(rootSessionID, in.ProjectID)
 	var inRoots bool
 	if shared {
 		root, err := confine.NativeFilesystemRootForPath(in.ProjectID, roots, grants, in.SessionScratchRoot, proposed, true)
@@ -134,7 +148,7 @@ func (b *WriteRootCheckpointBroker) authorizeWriteRoot(ctx context.Context, in c
 	}
 	if subject.Kind == confine.WriteSubjectOrdinary {
 		// Ordinary paths can use a covering chat grant.
-		if covering := sessionOverlayCovering(b.Runtime, rootSessionID, proposed); covering != "" {
+		if covering := b.coveringWriteGrant(rootSessionID, in.ProjectID, proposed); covering != "" {
 			return command.SandboxWriteRootResult{
 				Authorized:        true,
 				ProposedWriteRoot: covering,
@@ -232,12 +246,14 @@ func (b *WriteRootCheckpointBroker) raiseWriteRootCard(
 }
 
 type writeRootCardCopy struct {
-	targetKind, subjectTitle, impactLine, ifWrongLine, allowLine string
+	targetKind, targetLabel, subjectTitle, impactLine, ifWrongLine, allowLine string
+	sharedTemp                                                                bool
 }
 
 func writeRootCardCopyFor(subject confine.WriteSubject, proposed string, protectedWithin []string) writeRootCardCopy {
 	out := writeRootCardCopy{
 		targetKind:   "write_root",
+		targetLabel:  proposed,
 		subjectTitle: "Allow write access",
 		impactLine:   "Allow future commands in this chat to write within the listed root.",
 		ifWrongLine:  "Programs can create or modify files anywhere under this root.",
@@ -263,12 +279,19 @@ func writeRootCardCopyFor(subject confine.WriteSubject, proposed string, protect
 		out.ifWrongLine = "Keys here authenticate as you. A program that writes them can replace or add credentials that act as this machine."
 		out.allowLine = "writes to " + proposed
 	case confine.WriteSubjectOrdinary:
-		if isSharedTempRoot(proposed) {
+		if confine.SharedTempLocation(proposed) != "" {
 			out.targetKind = "shared_temp"
+			out.sharedTemp = true
+			out.targetLabel = "Create, change, and remove files in " + proposed
 			out.subjectTitle = "Allow writes to " + proposed
-			out.impactLine = "Other programs keep temporary files here."
-			out.ifWrongLine = "Programs in this chat can modify files other programs use."
-			out.allowLine = "writes within " + proposed + " for this chat"
+			if isSharedTempRoot(proposed) {
+				out.impactLine = "Other applications' temporary files in " + proposed + " are included."
+				out.ifWrongLine = "Programs in this chat can create, modify, or remove files other applications use in " + proposed + "."
+			} else {
+				out.impactLine = "Allow this chat to create, change, and remove files in " + proposed + " without granting read or listing access."
+				out.ifWrongLine = "Programs in this chat can create, modify, or remove files inside " + proposed + "."
+			}
+			out.allowLine = "creating, changing, and removing files in " + proposed + " for this chat"
 		}
 	}
 	return out
@@ -308,7 +331,7 @@ func (b *WriteRootCheckpointBroker) buildWriteRootCard(
 		},
 	}
 	var grantOffers []hitl.ApprovalGrantOffer
-	if b.Authority != nil && subject.Kind == confine.WriteSubjectOrdinary && !isSharedTempRoot(proposed) {
+	if b.Authority != nil && subject.Kind == confine.WriteSubjectOrdinary && confine.SharedTempLocation(proposed) == "" {
 		grantOffers = b.Authority.GrantOffers(grantAction, &hitl.ApprovalResult{Decision: decision})
 	}
 	protectedWithin := confine.ProtectedPathsWithin(proposed)
@@ -316,24 +339,51 @@ func (b *WriteRootCheckpointBroker) buildWriteRootCard(
 	details := map[string]any{
 		"blocked_path": proposed,
 	}
+	if card.sharedTemp {
+		details["access"] = "write"
+		details["shared_temp"] = true
+	}
 	if len(protectedWithin) > 0 {
 		details["protected_paths_within"] = protectedWithin
 	}
-	target := hitl.ApprovalTarget{Kind: card.targetKind, Label: proposed, Details: details}
+	target := hitl.ApprovalTarget{Kind: card.targetKind, Label: card.targetLabel, Details: details}
 	chatGrant := writeRootChatGrant(grantAction, proposed)
+	if card.sharedTemp {
+		chatGrant.Coverage = "creating, changing, and removing files in `" + proposed + "`"
+		if isSharedTempRoot(proposed) {
+			chatGrant.Coverage += " — other applications' temporary files in " + proposed + " are included"
+		}
+	}
 	chatDelta := hitl.ApprovalAuthorityDelta{
 		Kind: hitl.AuthorityWriteRootChat, Grant: &chatGrant,
 		ChatSessionID: rootSessionID, WriteRoots: []string{proposed},
+	}
+	authority := []hitl.ApprovalAuthorityDelta{chatDelta}
+	if card.sharedTemp {
+		woAccess := hitl.GrantedPathDelta{Path: proposed, Write: true, WriteOnly: true, Tree: true}
+		woGrant := chatGrant
+		woGrant.ID = chatGrant.ID + "_p"
+		woGrant.Predicate = hitl.ApprovalGrantPredicate{Category: "path", Pattern: proposed}
+		woGrant.GrantedPath = &woAccess
+		authority = append(authority,
+			hitl.ApprovalAuthorityDelta{
+				Kind: hitl.AuthorityGrantedPath, Grant: &woGrant,
+				ChatSessionID: rootSessionID, GrantedPath: &woAccess,
+			},
+			hitl.ApprovalAuthorityDelta{
+				Kind: hitl.AuthorityGenericGrant, Grant: &woGrant,
+			},
+		)
 	}
 	if len(grantOffers) == 0 {
 		grantOffers = []hitl.ApprovalGrantOffer{{
 			ID: chatGrant.ID, Rung: hitl.ApprovalRungChat, Scope: hitl.ApprovalGrantScopeChat,
 			Title: chatGrant.Title, Coverage: chatGrant.Coverage, ExpiresWhen: chatGrant.ExpiresWhen,
 			ReaskWhen: chatGrant.ReaskWhen, Subject: gate.ReusePredicate, Grant: chatGrant,
-			Authority: []hitl.ApprovalAuthorityDelta{chatDelta},
+			Authority: authority,
 		}}
 	}
-	options := make([]hitl.ApprovalOption, 0, len(grantOffers))
+	options := make([]hitl.ApprovalOption, 0, len(grantOffers)+1)
 	for _, offer := range grantOffers {
 		if len(offer.Authority) > 0 {
 			options = append(options, hitl.GrantOption(offer))
@@ -344,6 +394,9 @@ func (b *WriteRootCheckpointBroker) buildWriteRootCard(
 		continuing := chatDelta
 		continuing.TTLSeconds = offer.TTLSeconds
 		options = append(options, hitl.ContinuingLeaseOption(offer, continuing))
+	}
+	if card.sharedTemp {
+		options = append(options, hitl.SharedTempExchangeFolderOption(grantAction, proposed, isSharedTempRoot(proposed)))
 	}
 	options = append(options, hitl.QuietOptions(grantAction, decision, nil, func(key string) bool {
 		if b.Authority == nil {
@@ -434,7 +487,37 @@ func (b *WriteRootCheckpointBroker) SessionWriteRoots(ctx context.Context, sessi
 		return nil
 	}
 	_, rootSessionID := askSessionIDs(ctx, b.Store, sessionID, parentSessionID)
-	return b.Runtime.SessionWriteRoots(rootSessionID)
+	return b.effectiveWriteRoots(rootSessionID, "")
+}
+
+func (b *WriteRootCheckpointBroker) effectiveWriteRoots(rootSessionID, projectID string) []string {
+	if b == nil {
+		return nil
+	}
+	var out []string
+	if b.Runtime != nil {
+		out = append(out, b.Runtime.SessionWriteRoots(rootSessionID)...)
+	}
+	if b.GrantedPaths != nil {
+		for _, g := range b.GrantedPaths.ListEffective(rootSessionID, projectID) {
+			if g.Tree && g.Mode.PermitsWrite() {
+				out = append(out, g.Path)
+			}
+		}
+	}
+	return out
+}
+
+func (b *WriteRootCheckpointBroker) coveringWriteGrant(rootSessionID, projectID, blocked string) string {
+	if covering := sessionOverlayCovering(b.Runtime, rootSessionID, blocked); covering != "" {
+		return covering
+	}
+	if b != nil && b.GrantedPaths != nil {
+		if g, ok := b.GrantedPaths.Covers(rootSessionID, projectID, blocked, grantedpath.ModeWriteOnly); ok && g.Tree {
+			return g.Path
+		}
+	}
+	return ""
 }
 
 func sessionOverlayCovering(rt *approvalstate.SandboxPathGrantRuntime, chatSessionID, blocked string) string {

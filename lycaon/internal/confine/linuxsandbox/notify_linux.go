@@ -62,7 +62,13 @@ func (s *supervisor) serveNotifications(listener int) {
 			// the Go runtime's preemption signal, before it could be read;
 			// the caller retries it. Closing the listener would instead fail
 			// every later notified call with ENOSYS.
-			if errors.Is(err, unix.EINTR) || errors.Is(err, unix.ENOENT) {
+			if errors.Is(err, unix.EINTR) {
+				continue
+			}
+			if errors.Is(err, unix.ENOENT) {
+				if listenerClosed(listener) {
+					return
+				}
 				continue
 			}
 			return
@@ -605,6 +611,23 @@ func ioctlPtr(fd int, req uint, arg unsafe.Pointer) error {
 			return errno
 		}
 		return nil
+	}
+}
+
+func listenerClosed(fd int) bool {
+	if fd < 0 {
+		return true
+	}
+	pfd := []unix.PollFd{{Fd: int32(fd), Events: unix.POLLIN}}
+	for {
+		_, err := unix.Poll(pfd, 0)
+		if errors.Is(err, unix.EINTR) {
+			continue
+		}
+		if err != nil {
+			return true
+		}
+		return pfd[0].Revents&(unix.POLLHUP|unix.POLLNVAL|unix.POLLERR) != 0 && pfd[0].Revents&unix.POLLIN == 0
 	}
 }
 

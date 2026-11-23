@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"github.com/lycaon/lycaon/internal/bgprocess"
+	"github.com/lycaon/lycaon/internal/confine"
 	"github.com/lycaon/lycaon/internal/coordinator/anchor"
 	"github.com/lycaon/lycaon/internal/exec"
 	"github.com/lycaon/lycaon/internal/guidance"
@@ -19,11 +20,12 @@ import (
 )
 
 type completionFixture struct {
-	captures  []tools.SourceRunCapture
-	wakes     []anchor.ID
-	emitted   []anchor.ID
-	envelopes []anchor.Envelope
-	waiting   bool
+	captures   []tools.SourceRunCapture
+	wakes      []anchor.ID
+	emitted    []anchor.ID
+	envelopes  []anchor.Envelope
+	lastFacts  guidance.ToolResultFacts
+	waiting    bool
 }
 
 func (*completionFixture) Get(context.Context, string) (*api.Session, error) {
@@ -32,8 +34,9 @@ func (*completionFixture) Get(context.Context, string) (*api.Session, error) {
 func (f *completionFixture) RecordSourceRunTerminal(_ context.Context, _ *api.Session, _, _ string, c tools.SourceRunCapture, _ time.Time) {
 	f.captures = append(f.captures, c)
 }
-func (*completionFixture) AfterTool(_ context.Context, _ *api.Session, _ string, _ map[string]any, out string, _ int, f guidance.ToolResultFacts) (string, guidance.ToolResultFacts) {
-	return out + "\npolicy guidance", f
+func (f *completionFixture) AfterTool(_ context.Context, _ *api.Session, _ string, _ map[string]any, out string, _ int, facts guidance.ToolResultFacts) (string, guidance.ToolResultFacts) {
+	f.lastFacts = facts
+	return out + "\npolicy guidance", facts
 }
 func (f *completionFixture) Emit(_ context.Context, _ string, id anchor.ID, env anchor.Envelope) {
 	f.emitted = append(f.emitted, id)
@@ -318,5 +321,41 @@ func stopAndWait(t *testing.T, bg *bgprocess.Registry, handle string, reason bgp
 	_, _ = bg.Lifecycle.Stop("s", handle, reason)
 	if _, _, err := bg.Lifecycle.Wait(context.Background(), "s", handle); err != nil {
 		t.Errorf("wait for background command %s: %v", handle, err)
+	}
+}
+
+func TestBackgroundCommandCompletionSettlesSharedTempOnceWithHandle(t *testing.T) {
+	f := &completionFixture{}
+	guidance.SetGuidanceRenderer(promptstest.GuidanceRenderer(t))
+	service := New(f, f, f, f)
+	var calls int
+	service.SharedTemp = func(_ context.Context, sessionID, _, toolName, toolCallID, command string, obs confine.SharedTempObservation, failed bool) guidance.SharedTempSettlement {
+		calls++
+		if sessionID != "session" || toolName != "command" || toolCallID != "call-bg" || command != "build-bg" || !failed {
+			t.Fatalf("unexpected background settlement args: session=%s tool=%s call=%s cmd=%s failed=%t", sessionID, toolName, toolCallID, command, failed)
+		}
+		return guidance.SharedTempSettlement{
+			Refused: obs.Writes,
+			Allowed: obs.Writes,
+			Writes:  obs.Writes,
+		}
+	}
+	target := confine.SharedTempLocation("/tmp") + "/bg-out/result.txt"
+	now := time.Now()
+	service.HandleCommandCompletion(t.Context(), bgprocess.Completion{
+		SessionID: "session", Handle: "bg-77", OriginTool: "command", ToolCallID: "call-bg", Command: "build-bg",
+		ExitCode: 0, FinishedAt: now,
+		SandboxRefusals: confine.SandboxRefusals{Refusals: []confine.SandboxRefusal{{Operation: "file-write-create", Target: target}}},
+	})
+	if calls != 1 || f.lastFacts.SharedTemp != nil {
+		t.Fatalf("successful background run settled as failure: calls=%d facts=%+v", calls, f.lastFacts.SharedTemp)
+	}
+	service.HandleCommandCompletion(t.Context(), bgprocess.Completion{
+		SessionID: "session", Handle: "bg-77", OriginTool: "command", ToolCallID: "call-bg", Command: "build-bg",
+		ExitCode: 1, FinishedAt: now,
+		SandboxRefusals: confine.SandboxRefusals{Refusals: []confine.SandboxRefusal{{Operation: "file-write-create", Target: target}}},
+	})
+	if calls != 2 || f.lastFacts.SharedTemp == nil || f.lastFacts.SharedTemp.JobHandle != "bg-77" {
+		t.Fatalf("failed background run settlement = %+v (calls=%d)", f.lastFacts.SharedTemp, calls)
 	}
 }

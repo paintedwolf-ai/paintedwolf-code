@@ -39,6 +39,11 @@ func applyFilesystem(fs Filesystem) error {
 		return mountFailure("retain working directory", err)
 	}
 	defer func() { _ = unix.Close(cwd) }()
+	cwdName, err := os.Readlink("/proc/self/fd/" + strconv.Itoa(cwd))
+	if err != nil {
+		return mountFailure("resolve working directory", err)
+	}
+	cwdConcealed := concealedByHidden(fs, cwdName)
 	var ops []mountOp
 	defer func() {
 		for _, op := range ops {
@@ -134,6 +139,11 @@ func applyFilesystem(fs Filesystem) error {
 			return mountFailure("close private file-mask descriptor", err)
 		}
 	}
+	if cwdConcealed {
+		if err := os.MkdirAll(cwdName, 0o755); err != nil {
+			return mountFailure("prepare concealed working directory", err)
+		}
+	}
 	// Hidden directories become read-only only after anything restored beneath
 	// them has its mountpoint.
 	for _, op := range ops {
@@ -143,16 +153,12 @@ func applyFilesystem(fs Filesystem) error {
 			}
 		}
 	}
-	return restoreWorkingDirectory(cwd)
+	return restoreWorkingDirectory(cwd, cwdName, cwdConcealed)
 }
 
-// A retained cwd still names the old mount after an allow-back covers its
-// path. Re-enter the identical directory through the completed private view.
-func restoreWorkingDirectory(held int) error {
-	name, err := os.Readlink("/proc/self/fd/" + strconv.Itoa(held))
-	if err != nil {
-		return mountFailure("resolve working directory", err)
-	}
+// A retained cwd still names the old mount after an allow-back or mask covers
+// its path. Re-enter the completed private view so host mounts never linger.
+func restoreWorkingDirectory(held int, name string, concealed bool) error {
 	fd, err := unix.Open(name, unix.O_PATH|unix.O_DIRECTORY|unix.O_CLOEXEC, 0)
 	if err != nil {
 		return mountFailure("reopen working directory", err)
@@ -162,13 +168,39 @@ func restoreWorkingDirectory(held int) error {
 	if err := errors.Join(unix.Fstat(held, &before), unix.Fstat(fd, &after)); err != nil {
 		return mountFailure("inspect working directory", err)
 	}
-	if before.Dev != after.Dev || before.Ino != after.Ino {
+	sameObject := before.Dev == after.Dev && before.Ino == after.Ino
+	if concealed && sameObject {
+		return mountFailure("restore working directory", errors.New("concealed working directory remained attached"))
+	}
+	if !concealed && !sameObject {
 		return mountFailure("restore working directory", errors.New("working directory object changed"))
 	}
 	if err := unix.Fchdir(fd); err != nil {
 		return mountFailure("enter working directory", err)
 	}
 	return nil
+}
+
+// concealedByHidden reports whether path ends inside a hidden placeholder
+// rather than an unmasked or restored directory.
+func concealedByHidden(fs Filesystem, path string) bool {
+	hidden, restored := -1, -1
+	for _, p := range fs.Hidden {
+		if underAny(path, []string{p}) && len(p) > hidden {
+			hidden = len(p)
+		}
+	}
+	if hidden < 0 {
+		return false
+	}
+	for _, paths := range [][]string{fs.Restored, fs.WriteRoots} {
+		for _, p := range paths {
+			if underAny(path, []string{p}) && len(p) > restored {
+				restored = len(p)
+			}
+		}
+	}
+	return hidden > restored
 }
 
 // metadataWritable interprets the same ordered grants and masks for a restored

@@ -12,11 +12,13 @@ import (
 	"github.com/lycaon/lycaon/internal/app/security"
 	"github.com/lycaon/lycaon/internal/approvals"
 	"github.com/lycaon/lycaon/internal/authzledger"
+	"github.com/lycaon/lycaon/internal/bgprocess"
 	"github.com/lycaon/lycaon/internal/confine"
 	"github.com/lycaon/lycaon/internal/db"
 	"github.com/lycaon/lycaon/internal/eventoutbox"
 	"github.com/lycaon/lycaon/internal/events"
 	"github.com/lycaon/lycaon/internal/grantedpath"
+	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/hitl"
 	"github.com/lycaon/lycaon/internal/presence"
 	"github.com/lycaon/lycaon/internal/secretcap"
@@ -28,6 +30,8 @@ import (
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/toolhost"
+	"github.com/lycaon/lycaon/internal/tools"
+	"github.com/lycaon/lycaon/internal/tools/native/command"
 	"github.com/lycaon/lycaon/internal/tools/projectpaths"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -125,6 +129,7 @@ func (r *Runtime) WireCheckpoints(ctx context.Context, deps CheckpointDependenci
 		Store:             deps.Sessions.Sessions,
 		Runtime:           writeRootRT,
 		ReadRuntime:       readPathRT,
+		GrantedPaths:      r.GrantedPath,
 		Consequence:       deriver,
 		Authority:         deps.Execution.Host.Authority.ApprovalGate(),
 		ApprovalsDisabled: deps.Execution.Host.Authority.ApprovalsDisabled,
@@ -134,6 +139,25 @@ func (r *Runtime) WireCheckpoints(ctx context.Context, deps CheckpointDependenci
 		Authz:             authzRec,
 	}
 	deps.Execution.Host.Commands.SetSandboxWriteRootGate(writeBroker)
+	if r.Manager.Processes != nil {
+		r.Manager.Processes.SharedTemp = func(ctx context.Context, sess *api.Session, completion bgprocess.Completion, observed confine.SharedTempObservation, failed bool) guidance.SharedTempSettlement {
+			var cmdLine string
+			if len(completion.Stages) > 0 {
+				cmdLine = completion.Stages[0].Command
+			}
+			settled := writeBroker.ReviewSharedTemp(ctx, command.SandboxWriteRootAsk{
+				SessionID:       sess.ID,
+				ParentSessionID: sess.ParentSessionID,
+				ProjectID:       sess.ProjectID,
+				ToolCallID:      completion.ToolCallID,
+				ProjectDir:      completion.Cwd,
+				ToolName:        completion.OriginTool,
+				Command:         cmdLine,
+			}, observed, failed)
+			settled.ScratchAvailable = true
+			return settled
+		}
+	}
 	r.Manager.Profiles.SessionWriteRoots = writeBroker.SessionWriteRoots
 	deps.Execution.Host.Authority.SetSandboxListenGate(&session.ListenCheckpointBroker{
 		Checkpoints:       r.Checkpoints,

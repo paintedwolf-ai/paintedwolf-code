@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
 	"path/filepath"
 	"slices"
 	"testing"
@@ -13,6 +14,7 @@ import (
 	"github.com/lycaon/lycaon/internal/confine"
 	"github.com/lycaon/lycaon/internal/fspath"
 	"github.com/lycaon/lycaon/internal/gate"
+	"github.com/lycaon/lycaon/internal/grantedpath"
 	"github.com/lycaon/lycaon/internal/hitl"
 	"github.com/lycaon/lycaon/internal/sensitivepath"
 	"github.com/lycaon/lycaon/internal/session/approvalstate"
@@ -564,9 +566,11 @@ func TestWriteRootBrokerRefusesGrantedLaneRootWithoutAsking(t *testing.T) {
 
 type tempDecisionFixture struct {
 	unusedWriteRootCheckpoints
-	status  hitl.DecisionStatus
-	runtime *approvalstate.SandboxPathGrantRuntime
-	cards   []hitl.CheckpointRequest
+	status       hitl.DecisionStatus
+	runtime      *approvalstate.SandboxPathGrantRuntime
+	readRuntime  *approvalstate.SandboxPathGrantRuntime
+	grantedPaths *grantedpath.Runtime
+	cards        []hitl.CheckpointRequest
 }
 
 func (c *tempDecisionFixture) RequestCheckpoint(_ context.Context, req hitl.CheckpointRequest) (*hitl.CheckpointResponse, error) {
@@ -577,9 +581,31 @@ func (c *tempDecisionFixture) RequestCheckpoint(_ context.Context, req hitl.Chec
 				continue
 			}
 			for _, delta := range opt.Authority {
-				if delta.Kind == hitl.AuthorityWriteRootChat {
-					for _, path := range delta.WriteRoots {
-						c.runtime.GrantChat(delta.ChatSession(), path, delta.Grant.ID, "checkpoint", nil)
+				switch delta.Kind {
+				case hitl.AuthorityWriteRootChat:
+					if c.runtime != nil {
+						for _, path := range delta.WriteRoots {
+							c.runtime.GrantChat(delta.ChatSession(), path, delta.Grant.ID, "checkpoint", nil)
+						}
+					}
+				case hitl.AuthorityReadPathChat:
+					if c.readRuntime != nil {
+						for _, path := range delta.ReadPaths {
+							c.readRuntime.GrantChat(delta.ChatSession(), path, delta.Grant.ID, "checkpoint", nil)
+						}
+					}
+				case hitl.AuthorityGrantedPath:
+					if c.grantedPaths != nil && delta.GrantedPath != nil {
+						mode := grantedpath.ModeRead
+						if delta.GrantedPath.Write && delta.GrantedPath.WriteOnly {
+							mode = grantedpath.ModeWriteOnly
+						} else if delta.GrantedPath.Write {
+							mode = grantedpath.ModeWrite
+						}
+						_, _ = c.grantedPaths.Grant(delta.ChatSession(), grantedpath.Grant{
+							ID: delta.Grant.ID, SourceCheckpointID: "checkpoint",
+							Path: delta.GrantedPath.Path, Mode: mode, Tree: delta.GrantedPath.Tree,
+						})
 					}
 				}
 			}
@@ -592,19 +618,21 @@ func (c *tempDecisionFixture) RequestCheckpoint(_ context.Context, req hitl.Chec
 func TestSharedTempSettlementAndChatScope(t *testing.T) {
 	t.Setenv("LYCAON_CONFIG_DIR", "/opt/shared-temp-review-fixture/config")
 	roots := []string{confine.SharedTempLocation("/tmp"), confine.SharedTempLocation("/var/tmp")}
+	obs := confine.SharedTempObservation{Writes: roots}
 	for _, status := range []hitl.DecisionStatus{hitl.DecisionStatusApproved, hitl.DecisionStatusRejected, hitl.DecisionStatusExpired, hitl.DecisionStatusCanceled} {
 		t.Run(string(status), func(t *testing.T) {
 			runtime := approvalstate.NewSandboxPathGrantRuntime()
 			cards := &tempDecisionFixture{runtime: runtime, status: status}
 			broker := &WriteRootCheckpointBroker{Runtime: runtime, Checkpoints: cards, Posture: func(string) gate.Posture { return gate.PostureBalanced }}
 			in := command.SandboxWriteRootAsk{SessionID: "chat", ToolName: "command", ToolCallID: "first", Command: "build"}
-			result := broker.ReviewSharedTemp(t.Context(), in, roots, true)
+			result := broker.ReviewSharedTemp(t.Context(), in, obs, true)
 			if len(cards.cards) != 1 || len(cards.cards[0].ApprovalPlan.Subject.Targets) != len(roots) {
 				t.Fatalf("reviewed locations=%v result=%+v", cards.cards, result)
 			}
 			for i, target := range cards.cards[0].ApprovalPlan.Subject.Targets {
-				if target.Kind != "shared_temp" || target.Label != roots[i] {
-					t.Fatalf("target %d=%+v", i, target)
+				wantLabel := "Create, change, and remove files in " + roots[i]
+				if target.Kind != "shared_temp" || target.Label != wantLabel {
+					t.Fatalf("target %d=%+v, want label %q", i, target, wantLabel)
 				}
 			}
 			outcome := map[hitl.DecisionStatus][]string{
@@ -617,7 +645,7 @@ func TestSharedTempSettlementAndChatScope(t *testing.T) {
 				t.Fatalf("status=%s outcome=%+v", status, result)
 			}
 			in.ToolCallID = "second"
-			broker.ReviewSharedTemp(t.Context(), in, roots, true)
+			broker.ReviewSharedTemp(t.Context(), in, obs, true)
 			expected := 1
 			if status == hitl.DecisionStatusExpired || status == hitl.DecisionStatusCanceled {
 				expected = 2
@@ -635,25 +663,100 @@ func TestSharedTempSettlementAndChatScope(t *testing.T) {
 func TestSharedTempToleratedOnceAndLightAuthorization(t *testing.T) {
 	t.Setenv("LYCAON_CONFIG_DIR", "/opt/shared-temp-review-fixture/config")
 	roots := []string{confine.SharedTempLocation("/tmp"), confine.SharedTempLocation("/var/tmp")}
+	obs := confine.SharedTempObservation{Writes: roots}
 	rt := approvalstate.NewSandboxPathGrantRuntime()
 	cards := &tempDecisionFixture{runtime: rt, status: hitl.DecisionStatusApproved}
 	broker := &WriteRootCheckpointBroker{Runtime: rt, Checkpoints: cards, Posture: func(string) gate.Posture { return gate.PostureLight }, ApprovalsDisabled: func(string) bool { return true }}
 	ask := command.SandboxWriteRootAsk{SessionID: "chat", ToolName: "verify"}
 	for i := 0; i < 3; i++ {
-		result := broker.ReviewSharedTemp(t.Context(), ask, roots, false)
+		result := broker.ReviewSharedTemp(t.Context(), ask, obs, false)
 		if (len(result.Refused) > 0) != (i == 0) || result.Tolerated != (i == 0) {
 			t.Fatalf("run %d: %+v", i, result)
 		}
 	}
 	ask.SessionID = "other"
-	other := broker.ReviewSharedTemp(t.Context(), ask, roots, false)
+	other := broker.ReviewSharedTemp(t.Context(), ask, obs, false)
 	if !slices.Equal(other.Refused, roots) {
 		t.Fatalf("other chat report=%+v", other)
 	}
-	result := broker.ReviewSharedTemp(t.Context(), ask, roots, true)
+	result := broker.ReviewSharedTemp(t.Context(), ask, obs, true)
 	rt.ReleaseRun(ask.SessionID)
 	if !slices.Equal(result.Allowed, roots) || !slices.Equal(rt.SessionWriteRoots(ask.SessionID), roots) || len(cards.cards) != 1 {
 		t.Fatalf("light review=%+v cards=%d", result, len(cards.cards))
+	}
+}
+
+func TestSharedTempExchangeSettlementCombinesReadsAndWritesAndReopensOnExplicitPreflight(t *testing.T) {
+	t.Setenv("LYCAON_CONFIG_DIR", "/opt/shared-temp-review-fixture/config")
+	tempSub, err := os.MkdirTemp("/tmp", "pwc-exchange-settle-") //nolint:usetesting // Must reside in shared temp.
+	testutil.FailErr(t, "create shared temp fixture", err)
+	t.Cleanup(func() { _ = os.RemoveAll(tempSub) })
+	tempSub = grantedpath.Normalize(tempSub)
+	inputFile := filepath.Join(tempSub, "incoming.csv")
+	testutil.FailErr(t, "write input file", os.WriteFile(inputFile, []byte("id,val\n1,2\n"), 0o600))
+	exportFile := filepath.Join(tempSub, "export", "result.csv")
+	exportDir := filepath.Dir(exportFile)
+	speculativeMissing := filepath.Join(tempSub, "absent-probe.conf")
+
+	refusals := confine.SandboxRefusals{
+		Refusals: []confine.SandboxRefusal{
+			{Operation: "file-read-data", Target: inputFile},
+			{Operation: "file-read-data", Target: speculativeMissing},
+			{Operation: "file-write-create", Target: exportFile},
+		},
+	}
+	obs := refusals.SharedTempObservation()
+	if !slices.Equal(obs.Reads, []string{inputFile}) || !slices.Equal(obs.Writes, []string{exportDir}) {
+		t.Fatalf("SharedTempObservation = %+v, want reads=[%s] writes=[%s]", obs, inputFile, exportDir)
+	}
+
+	writeRT := approvalstate.NewSandboxPathGrantRuntime()
+	readRT := approvalstate.NewSandboxPathGrantRuntime()
+	gpRT := grantedpath.NewRuntime()
+	cards := &tempDecisionFixture{
+		runtime: writeRT, readRuntime: readRT, grantedPaths: gpRT,
+		status: hitl.DecisionStatusRejected,
+	}
+	broker := &WriteRootCheckpointBroker{
+		Runtime: writeRT, ReadRuntime: readRT, GrantedPaths: gpRT,
+		Checkpoints: cards, Posture: func(string) gate.Posture { return gate.PostureLight },
+		ApprovalsDisabled: func(string) bool { return true },
+	}
+	ask := command.SandboxWriteRootAsk{SessionID: "chat-ex", ToolName: "command", ToolCallID: "c1", Command: "transform"}
+	declined := broker.ReviewSharedTemp(t.Context(), ask, obs, true)
+	if len(cards.cards) != 1 {
+		t.Fatalf("cards = %d, want 1 combined exchange card", len(cards.cards))
+	}
+	plan := cards.cards[0].ApprovalPlan
+	if plan.Subject.Title != "Allow this chat to exchange files in system temp?" || len(plan.Subject.Targets) != 2 {
+		t.Fatalf("unexpected combined plan subject: %+v", plan.Subject)
+	}
+	if len(declined.Declined) != 2 {
+		t.Fatalf("declined settlement = %+v", declined)
+	}
+	ask.ToolCallID = "c2"
+	repeat := broker.ReviewSharedTemp(t.Context(), ask, obs, true)
+	if len(cards.cards) != 1 || len(repeat.Declined) != 2 {
+		t.Fatalf("declined scope raised duplicate automatic card: cards=%d repeat=%+v", len(cards.cards), repeat)
+	}
+
+	cards.status = hitl.DecisionStatusApproved
+	readRes, err := broker.AuthorizeRead(t.Context(), command.SandboxReadPathAsk{
+		SessionID: "chat-ex", ToolName: "command", ToolCallID: "c3", Command: "transform", ProposedReadPath: inputFile,
+	})
+	testutil.FailErr(t, "explicit preflight read after decline", err)
+	writeRes, err := broker.Authorize(t.Context(), command.SandboxWriteRootAsk{
+		SessionID: "chat-ex", ToolName: "command", ToolCallID: "c3", Command: "transform", ProposedWriteRoot: exportDir,
+	})
+	testutil.FailErr(t, "explicit preflight write after decline", err)
+	if !readRes.Authorized || !writeRes.Authorized || len(cards.cards) != 3 {
+		t.Fatalf("explicit preflight did not reopen review: read=%+v write=%+v cards=%d", readRes, writeRes, len(cards.cards))
+	}
+	if !gpRT.Covers("chat-ex", inputFile, false) || gpRT.Covers("chat-ex", inputFile, true) {
+		t.Fatal("input file grant was not read-only")
+	}
+	if !gpRT.Covers("chat-ex", exportFile, true) || gpRT.Covers("chat-ex", exportFile, false) {
+		t.Fatal("export directory grant did not stay write-only")
 	}
 }
 

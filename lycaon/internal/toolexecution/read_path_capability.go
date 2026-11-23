@@ -22,13 +22,14 @@ func (e *Boundary) preflightReadPath(ctx context.Context, tool string, args map[
 	if request == nil || len(request.ReadPaths) == 0 {
 		return nil
 	}
-	for _, path := range request.ReadPaths {
+	readPaths := coalesceRequestedPaths(request.ReadPaths, false)
+	for _, path := range readPaths {
 		if err := e.authorizeReadPath(ctx, tool, args, tc, path); err != nil {
 			return err
 		}
 	}
 	if tc.Files.PackageExecution != nil {
-		tc.Files.PackageExecution.ApprovedReadPaths = request.ReadPaths
+		tc.Files.PackageExecution.ApprovedReadPaths = readPaths
 	}
 	if e.sessionReadOverlay != nil {
 		tc.Files.SessionReadPaths = append([]string(nil), e.sessionReadOverlay(ctx, tc.Identity.SessionID, tc.Identity.ParentSessionID)...)

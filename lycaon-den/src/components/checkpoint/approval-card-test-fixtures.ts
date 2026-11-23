@@ -216,10 +216,57 @@ export function sharedTempCheckpoint(locations: string[]): PendingCheckpoint {
         targets: locations.map((label) => ({ kind: "shared_temp", label })),
       },
       presentation: {
-        action: "Sandbox write access",
+        action: "System temp access",
         command: "build",
         impact: "Other programs keep temporary files here.",
       },
+    }),
+  };
+}
+
+export function sharedTempExchangeCheckpoint(
+  readTarget: string,
+  writeTarget: string,
+  exchangeDir: string,
+): PendingCheckpoint {
+  return {
+    ...checkpoint(),
+    tool_approval: toolApprovalFixture({
+      tool: "command",
+      command: "transform",
+      subject: {
+        kind: "action_set",
+        title: "Allow this chat to exchange files in system temp?",
+        targets: [
+          { kind: "read_path", label: `Read ${readTarget}`, details: { blocked_path: readTarget, access: "read", shared_temp: true } },
+          { kind: "shared_temp", label: `Create, change, and remove files in ${writeTarget}`, details: { blocked_path: writeTarget, access: "write", shared_temp: true } },
+        ],
+      },
+      presentation: {
+        action: "System temp access",
+        command: "transform",
+        impact: "Allow this chat to read and write the selected system temp paths.",
+      },
+      options: [
+        approvalOptionFixture({
+          id: "allow_exchange_chat",
+          kind: "lease",
+          rung: "chat",
+          scope: "chat",
+          title: "Allow for this chat",
+          coverage: `reading ${readTarget}; creating, changing, and removing files in ${writeTarget}`,
+        }),
+        approvalOptionFixture({
+          id: "allow_exchange_rw",
+          kind: "lease",
+          group: "Also allow",
+          rung: "chat",
+          scope: "chat",
+          title: `Read and write ${exchangeDir} for this chat`,
+          coverage: `reading, listing, and writing files in ${exchangeDir}`,
+        }),
+      ],
+      recommendedOptionId: "allow_exchange_chat",
     }),
   };
 }

@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"os/user"
 	"path/filepath"
 	"reflect"
 	"testing"
@@ -160,7 +161,11 @@ func TestDirectoryCapacityFailureKeepsRejectionAvailable(t *testing.T) {
 
 func directoryAuthorityTarget(t *testing.T) gate.FileTarget {
 	t.Helper()
-	scratch := t.TempDir()
+	account, err := user.Current()
+	testutil.FailErr(t, "current user", err)
+	scratch, err := os.MkdirTemp(account.HomeDir, ".pwc-capacity-") //nolint:usetesting // Outside shared temp.
+	testutil.FailErr(t, "create outside scratch", err)
+	t.Cleanup(func() { _ = os.RemoveAll(scratch) })
 	// The ladder offers a tree only at folders that exist, so the capacity
 	// fixture creates its folder chain; the deepest realistic read stays
 	// wide enough to exercise the authority ledger.

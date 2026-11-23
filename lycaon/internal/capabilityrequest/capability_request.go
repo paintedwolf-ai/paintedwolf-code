@@ -44,6 +44,9 @@ const MaxLocalListenPorts = 8
 // MaxReadPaths bounds the exact protected paths in one capability request.
 const MaxReadPaths = 32
 
+// MaxWriteRoots bounds the write roots in one capability request.
+const MaxWriteRoots = 32
+
 // MaxLoopbackConnectPorts bounds capability_request.loopback_connect.ports.
 const MaxLoopbackConnectPorts = 8
 
@@ -60,8 +63,10 @@ type CapabilityRequest struct {
 	LocalListen *LocalListenRequest
 	// LoopbackConnect is non-nil when the model asked to connect to a local service (including {}).
 	LoopbackConnect *LoopbackConnectRequest
-	// WriteRoot is an explicit absolute root requested before the process starts.
+	// WriteRoot is the first requested write root when WriteRoots is non-empty.
 	WriteRoot string
+	// WriteRoots lists absolute write roots requested before the process starts.
+	WriteRoots []string
 	// ReadPaths lists exact protected paths this invocation must read.
 	ReadPaths []string
 }
@@ -155,11 +160,14 @@ func ParseCapabilityRequest(args map[string]any) (*CapabilityRequest, *toolrejec
 		out.LoopbackConnect = connect
 	}
 	if rootRaw, ok := obj["write_root"]; ok {
-		root, reject := parseWriteRoot(rootRaw)
+		roots, reject := parseWriteRoots(rootRaw)
 		if reject != nil {
 			return nil, reject
 		}
-		out.WriteRoot = root
+		out.WriteRoots = roots
+		if len(roots) > 0 {
+			out.WriteRoot = roots[0]
+		}
 	}
 	if pathRaw, ok := obj["read_path"]; ok {
 		paths, reject := parseReadPaths(pathRaw)
@@ -168,7 +176,7 @@ func ParseCapabilityRequest(args map[string]any) (*CapabilityRequest, *toolrejec
 		}
 		out.ReadPaths = paths
 	}
-	if !out.ProcessControl && !out.CredentialStore && !out.HostExecution && len(out.HostResources) == 0 && len(out.SocketPaths) == 0 && out.DirectIP == nil && out.LocalListen == nil && out.LoopbackConnect == nil && out.WriteRoot == "" && len(out.ReadPaths) == 0 {
+	if !out.ProcessControl && !out.CredentialStore && !out.HostExecution && len(out.HostResources) == 0 && len(out.SocketPaths) == 0 && out.DirectIP == nil && out.LocalListen == nil && out.LoopbackConnect == nil && len(out.WriteRoots) == 0 && len(out.ReadPaths) == 0 {
 		return nil, toolrejection.RejectInvalidArguments(isolation.CodeCapabilityRequestInvalid, map[string]any{
 			"reason": "capability_request requires at least one declared capability",
 		})
@@ -201,8 +209,28 @@ func CanonicalArguments(args map[string]any) map[string]any {
 	return out
 }
 
-func parseWriteRoot(raw any) (string, *toolrejection.ToolReject) {
-	return parseCapabilityPath(raw, "write_root")
+func parseWriteRoots(raw any) ([]string, *toolrejection.ToolReject) {
+	values, isList := raw.([]any)
+	if !isList {
+		values = []any{raw}
+	}
+	if len(values) == 0 || len(values) > MaxWriteRoots {
+		return nil, toolrejection.RejectInvalidArguments(isolation.CodeCapabilityRequestInvalid, map[string]any{
+			"reason": "write_root must name between one and 32 absolute paths", "capability": "write_root",
+		})
+	}
+	roots := make([]string, 0, len(values))
+	for _, value := range values {
+		root, reject := parseCapabilityPath(value, "write_root")
+		if reject != nil {
+			return nil, reject
+		}
+		if !slices.Contains(roots, root) {
+			roots = append(roots, root)
+		}
+	}
+	slices.Sort(roots)
+	return roots, nil
 }
 
 func parseReadPaths(raw any) ([]string, *toolrejection.ToolReject) {

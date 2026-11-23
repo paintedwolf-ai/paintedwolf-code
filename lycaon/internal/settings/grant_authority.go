@@ -68,7 +68,13 @@ func (g *RuleApprovalGate) offersForCard(action hitl.ProposedAction, result *hit
 		return append(offers, g.hostResourceGroupOffers(action, false)...)
 	}
 	if gate.IsFilesystem(result.Decision.Primary) {
-		target := g.declaredFileTarget(g.effectiveConfig(action), action)
+		cfg := g.effectiveConfig(action)
+		uncovered := g.uncoveredDeclaredFileTargets(cfg, action)
+		if len(uncovered) > 1 && allSharedTempCrossings(uncovered) {
+			offers := MultiSharedTempGrantedPathOffers(action, uncovered, result.Decision)
+			return append(offers, g.hostResourceGroupOffers(action, false)...)
+		}
+		target := g.declaredFileTarget(cfg, action)
 		if target == nil {
 			return g.hostResourceGroupOffers(action, false)
 		}

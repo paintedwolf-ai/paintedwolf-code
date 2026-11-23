@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/lycaon/lycaon/internal/bgprocess"
+	"github.com/lycaon/lycaon/internal/confine"
 	"github.com/lycaon/lycaon/internal/coordinator/anchor"
 	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/heldcall"
@@ -29,12 +30,16 @@ type Nudges interface {
 	NudgeProcessRefused(context.Context, string, string, anchor.Envelope)
 	NudgeProcessFinished(context.Context, string, string, anchor.Envelope)
 }
+// BackgroundSharedTempReview settles a background job's terminal shared-temp refusals once.
+type BackgroundSharedTempReview func(ctx context.Context, sess *api.Session, completion bgprocess.Completion, observed confine.SharedTempObservation, failed bool) guidance.SharedTempSettlement
+
 type Service struct {
 	Background     *bgprocess.Registry
 	Held           *heldcall.Registry
 	Verification   Verification
 	ToolPolicy     ToolPolicy
 	Guidance       Guidance
+	SharedTemp     BackgroundSharedTempReview
 	store          Sessions
 	waits          Waits
 	nudges         Nudges

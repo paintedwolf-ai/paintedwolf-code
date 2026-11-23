@@ -16,7 +16,7 @@ import (
 
 // Rendering a read directory must not conceal different durable authority.
 func TestDirectoryPlanRejectsLeaseAuthorityOutsideDisplayedScope(t *testing.T) {
-	folder := canonDir(t, t.TempDir())
+	folder := outsideScratchDir(t)
 	file := filepath.Join(folder, "file.go")
 	action := hitl.ProposedAction{
 		Invocation: hitl.ActionInvocation{Tool: "read", Files: []string{file}},

@@ -168,7 +168,10 @@ func TestObservedOpenFilterDeliversZeroNotificationsPerFDRead(t *testing.T) {
 		for {
 			var n seccompNotif
 			if err := ioctlPtr(listener, unix.SECCOMP_IOCTL_NOTIF_RECV, unsafe.Pointer(&n)); err != nil {
-				if errors.Is(err, unix.EINTR) || errors.Is(err, unix.ENOENT) {
+				if errors.Is(err, unix.EINTR) {
+					continue
+				}
+				if errors.Is(err, unix.ENOENT) && !listenerClosed(listener) {
 					continue
 				}
 				return

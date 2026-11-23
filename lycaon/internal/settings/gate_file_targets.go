@@ -18,6 +18,29 @@ func (g *RuleApprovalGate) declaredFileTarget(cfg ApprovalConfig, action hitl.Pr
 	if len(targets) == 0 {
 		return nil
 	}
+	pool := g.uncoveredDeclaredTargetsFrom(cfg, action, targets)
+	if len(pool) == 0 {
+		pool = targets
+	}
+	worst := worstFileTarget(pool)
+	if len(targets) == 1 {
+		return worst
+	}
+	// Copy the target before adding batch display metadata.
+	withCount := *worst
+	withCount.OtherTargetCount = len(targets) - 1
+	return &withCount
+}
+
+func (g *RuleApprovalGate) uncoveredDeclaredFileTargets(cfg ApprovalConfig, action hitl.ProposedAction) []*gate.FileTarget {
+	targets := g.declaredFileTargets(action)
+	if len(targets) == 0 {
+		return nil
+	}
+	return g.uncoveredDeclaredTargetsFrom(cfg, action, targets)
+}
+
+func (g *RuleApprovalGate) uncoveredDeclaredTargetsFrom(cfg ApprovalConfig, action hitl.ProposedAction, targets []*gate.FileTarget) []*gate.FileTarget {
 	// Strict reviews the write itself, so scratch authority stands for reads only.
 	if cfg.Posture.ReviewsConfinedWrites() {
 		for _, target := range targets {
@@ -32,17 +55,7 @@ func (g *RuleApprovalGate) declaredFileTarget(cfg ApprovalConfig, action hitl.Pr
 			pool = append(pool, target)
 		}
 	}
-	if len(pool) == 0 {
-		pool = targets
-	}
-	worst := worstFileTarget(pool)
-	if len(targets) == 1 {
-		return worst
-	}
-	// Copy the target before adding batch display metadata.
-	withCount := *worst
-	withCount.OtherTargetCount = len(targets) - 1
-	return &withCount
+	return pool
 }
 
 // worstFileTarget picks the highest-risk crossing among candidates.

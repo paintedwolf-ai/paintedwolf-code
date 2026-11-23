@@ -58,9 +58,18 @@ func (m *Service) HandleCommandCompletion(ctx context.Context, completion bgproc
 	}
 	digest := CommandCompletionDigest(completion)
 	if sess != nil {
-		digest = m.withPostToolGuidance(ctx, sess, completion.OriginTool, digest, guidance.ToolResultFacts{
+		facts := guidance.ToolResultFacts{
 			Confine: completion.Observation, IndexWatch: completion.IndexWatch,
-		})
+		}
+		if m.SharedTemp != nil && completion.Observation.Applied && completion.TerminationReason == bgprocess.TerminationExited {
+			if observed := completion.Observation.Refusals.SharedTempObservation(); !observed.Empty() {
+				failed := completion.ExitCode != 0 || len(completion.Observation.FailedStages) > 0
+				settled := m.SharedTemp(ctx, sess, completion, observed, failed)
+				settled.JobHandle = strings.TrimSpace(completion.Handle)
+				facts.SharedTemp = &settled
+			}
+		}
+		digest = m.withPostToolGuidance(ctx, sess, completion.OriginTool, digest, facts)
 	}
 	m.processReports.publish(completion.SessionID, completion.Handle, processReport{digest: digest, exit: completion.ExitObservation})
 	env := anchor.Envelope{

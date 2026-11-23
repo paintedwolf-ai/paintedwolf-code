@@ -478,7 +478,7 @@ func TestALeaseOnOnePathDoesNotCoverAnother(t *testing.T) {
 }
 
 func TestDirectoryHierarchyMintsDistinctOptionsAndDefaultsToContainingFolder(t *testing.T) {
-	dir := canonDir(t, t.TempDir())
+	dir := outsideScratchDir(t)
 	folder := filepath.Join(dir, "src", "pkg")
 	if err := os.MkdirAll(folder, 0o755); err != nil {
 		testutil.FailErr(t, "create directory", err)
@@ -546,7 +546,7 @@ func TestMissingTargetWithMissingFolderOffersOnlyExact(t *testing.T) {
 // A missing file inside an existing folder still grants the folder tree: the
 // root exists, so the lease covers a real folder.
 func TestMissingTargetInExistingFolderStillGrantsTheFolder(t *testing.T) {
-	folder := filepath.Join(canonDir(t, t.TempDir()), "created")
+	folder := filepath.Join(outsideScratchDir(t), "created")
 	if err := os.MkdirAll(folder, 0o755); err != nil {
 		testutil.FailErr(t, "create directory", err)
 	}
@@ -625,5 +625,79 @@ func TestMultipleReadTargetsOfferOneCrossingHierarchy(t *testing.T) {
 			t.Fatalf("unrelated crossing added to hierarchy: %q after %q", path, previous)
 		}
 		previous = path
+	}
+}
+
+func TestSharedTempNativeOffersKeepExactDirectionAndChatScope(t *testing.T) {
+	tempDir, err := os.MkdirTemp("/tmp", "pwc-native-temp-offers-") //nolint:usetesting // Shared temp fixture.
+	testutil.FailErr(t, "create shared temp dir", err)
+	t.Cleanup(func() { _ = os.RemoveAll(tempDir) })
+	tempDir = grantedpath.Normalize(tempDir)
+	inputFile := filepath.Join(tempDir, "incoming.csv")
+	testutil.FailErr(t, "write input fixture", os.WriteFile(inputFile, []byte("a,b\n"), 0o600))
+	exportDir := filepath.Join(tempDir, "export")
+	testutil.FailErr(t, "mkdir export fixture", os.MkdirAll(exportDir, 0o700))
+	outputFile := filepath.Join(exportDir, "result.csv")
+	proj := outsideScratchDir(t)
+
+	readAction := hitl.ProposedAction{
+		Invocation: hitl.ActionInvocation{Tool: "read", Files: []string{inputFile}},
+		Scope:      hitl.ActionScope{ProjectID: "proj", ProjectDir: proj, SessionID: "chat-temp"},
+	}
+	_, readOffers := filesystemCard(t, readAction)
+	if len(readOffers) != 3 {
+		t.Fatalf("read offers = %d, want exact read + folder read + exchange folder: %+v", len(readOffers), readOffers)
+	}
+	for _, offer := range readOffers {
+		if offer.Scope != hitl.ApprovalGrantScopeChat {
+			t.Fatalf("shared temp offer leaked durable scope %s: %+v", offer.Scope, offer)
+		}
+	}
+	if gp := readOffers[0].Grant.GrantedPath; gp == nil || gp.Tree || gp.Write || gp.Path != inputFile {
+		t.Fatalf("primary shared temp file read widened: %+v", gp)
+	}
+	if readOffers[1].DirectoryScope != tempDir {
+		t.Fatalf("secondary folder read scope = %q, want %q", readOffers[1].DirectoryScope, tempDir)
+	}
+	if readOffers[2].Group != hitl.GroupAlsoAllow {
+		t.Fatalf("exchange folder group = %q, want %q", readOffers[2].Group, hitl.GroupAlsoAllow)
+	}
+
+	writeAction := hitl.ProposedAction{
+		Invocation: hitl.ActionInvocation{Tool: "write", Files: []string{outputFile}},
+		Scope:      hitl.ActionScope{ProjectID: "proj", ProjectDir: proj, SessionID: "chat-temp"},
+	}
+	_, writeOffers := filesystemCard(t, writeAction)
+	if len(writeOffers) != 2 {
+		t.Fatalf("write offers = %d, want write-only exact + exchange folder: %+v", len(writeOffers), writeOffers)
+	}
+	if gp := writeOffers[0].Grant.GrantedPath; gp == nil || gp.Tree || !gp.Write || !gp.WriteOnly || gp.Path != outputFile {
+		t.Fatalf("primary shared temp file write must be exact write-only, got %+v", gp)
+	}
+
+	copyAction := hitl.ProposedAction{
+		Invocation: hitl.ActionInvocation{
+			Tool: "copy",
+			Args: map[string]any{"copies": []any{map[string]any{"from": inputFile, "to": outputFile}}},
+		},
+		Scope: hitl.ActionScope{ProjectID: "proj", ProjectDir: proj, SessionID: "chat-temp"},
+	}
+	_, copyOffers := filesystemCard(t, copyAction)
+	if len(copyOffers) != 2 {
+		t.Fatalf("multi-target copy offers = %d, want combined chat offer + exchange folder: %+v", len(copyOffers), copyOffers)
+	}
+	var gotRead, gotWriteOnly bool
+	for _, delta := range copyOffers[0].Authority {
+		if delta.Kind == hitl.AuthorityGrantedPath && delta.GrantedPath != nil {
+			if delta.GrantedPath.Path == inputFile && !delta.GrantedPath.Write && !delta.GrantedPath.Tree {
+				gotRead = true
+			}
+			if delta.GrantedPath.Path == outputFile && delta.GrantedPath.Write && delta.GrantedPath.WriteOnly && !delta.GrantedPath.Tree {
+				gotWriteOnly = true
+			}
+		}
+	}
+	if !gotRead || !gotWriteOnly {
+		t.Fatalf("multi-target copy offer missed directional deltas: %+v", copyOffers[0].Authority)
 	}
 }

@@ -135,6 +135,16 @@ func sharedTempWriteGrant(path string) string {
 	return dir
 }
 
+func attachedTempProjectRoots(c Confinement, sharedTemp []string) []string {
+	var out []string
+	for _, root := range resolveEach(c.Roots) {
+		if underAny(root, sharedTemp) {
+			out = append(out, root)
+		}
+	}
+	return out
+}
+
 // addSharedTempReadFloor denies ambient reads in shared temp, restores explicit
 // read scopes, and keeps metadata traversal on write-only temp directories.
 func (r *FilesystemRules) addSharedTempReadFloor(c Confinement) []string {
