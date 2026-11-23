@@ -205,6 +205,7 @@ type Views struct {
 type Watch struct {
 	CatalogSnapshot  CatalogSnapshotFunc
 	EditorDocuments  *editordoc.Service
+	Git              *gitadmin.Handler
 	ProjectRegistry  project.Registry
 	ScanCadence      *scancadence.Service
 	SourceInventory  InventoryService
@@ -275,7 +276,7 @@ func New(responses *httpio.Responder, background *taskgroup.Group, operations Op
 	h.Review = &Review{Git: deps.Git, ProjectRegistry: deps.ProjectRegistry, SessionQueries: deps.SessionStore.Sessions, SourceLedger: deps.SourceLedger, ArrivalAnchorTimeBound: arrivalAnchorTimeBound, responses: responses}
 	h.Trees = &Trees{ProjectRegistry: deps.ProjectRegistry, SourceLedger: deps.SourceLedger, background: background, responses: responses, sourceViews: sourceViews}
 	h.Views = &Views{Events: deps.Events, ProjectRegistry: deps.ProjectRegistry, SessionQueries: deps.SessionStore.Sessions, background: background, responses: responses, sourceReaders: sourceReaders, sourceViews: sourceViews}
-	h.Watch = &Watch{CatalogSnapshot: deps.CatalogSnapshot, EditorDocuments: deps.EditorDocuments, ProjectRegistry: deps.ProjectRegistry, ScanCadence: deps.ScanCadence, SourceInventory: deps.SourceInventory, WatchNeedsSeed: deps.WatchNeedsSeed, background: background, responses: responses, sourceWatchJobs: make(map[string]*sourceWatchJob)}
+	h.Watch = &Watch{CatalogSnapshot: deps.CatalogSnapshot, EditorDocuments: deps.EditorDocuments, Git: deps.Git, ProjectRegistry: deps.ProjectRegistry, ScanCadence: deps.ScanCadence, SourceInventory: deps.SourceInventory, WatchNeedsSeed: deps.WatchNeedsSeed, background: background, responses: responses, sourceWatchJobs: make(map[string]*sourceWatchJob)}
 	h.Workspace = &Workspace{Branches: deps.Branches, ManagedSecrets: deps.ManagedSecrets, MutationGate: deps.MutationGate, ProjectRegistry: deps.ProjectRegistry, SecretSpans: deps.SecretSpans, SessionQueries: deps.SessionStore.Sessions, SourceLedger: deps.SourceLedger, Workers: deps.Workers, responses: responses}
 	h.Analysis.Workspace = h.Workspace
 	h.ComparisonViews.Comparisons = h.Comparisons

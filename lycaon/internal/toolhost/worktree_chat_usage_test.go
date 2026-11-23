@@ -8,11 +8,11 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/lycaon/lycaon/internal/db"
 	"github.com/lycaon/lycaon/internal/git"
 	"github.com/lycaon/lycaon/internal/gitrepo"
 	"github.com/lycaon/lycaon/internal/hitl"
 	"github.com/lycaon/lycaon/internal/project/worktrees"
-	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/tools"
@@ -50,19 +50,14 @@ func TestCommandWorktreeCreationUsageAndUnauthorizedRefusal(t *testing.T) {
 		tc.Identity.WorkerJobID = activeWorker
 		tc.Files.GrantedWriteRoots = []string{allowedParent}
 		tc.Files.ApprovedFileAccess = []hitl.GrantedPathDelta{
-			{Path: allowedParent, Access: hitl.GrantedPathReadWrite},
+			{Path: allowedParent, Write: true},
 		}
 	}
 
 	// 1. Unauthorized sibling path fails before creating a registration or chat association.
-	refusedRaw, refusedErr := fixture.Runtime.Run(t.Context(), "command", map[string]any{
-		"command": "git worktree add -b feat/denied " + deniedWT,
-	}, fixture.ToolContext())
-	if refusedErr == nil {
-		outcome := settledProgramOutcome(t, fixture, refusedRaw)
-		if outcome.Status == 0 {
-			t.Fatalf("expected unauthorized git worktree add to fail, got %+v", outcome)
-		}
+	refusedOutcome := callComposedProgram(t, fixture, "git worktree add -b feat/denied "+deniedWT)
+	if refusedOutcome.Status == 0 && refusedOutcome.Refusal == nil {
+		t.Fatalf("expected unauthorized git worktree add to fail, got %+v", refusedOutcome)
 	}
 	repoID := git.DeriveRepoID(fixture.Dir)
 	usagesBefore, err := inv.SummarizeChatRepoUsages(t.Context(), testdbseed.DefaultProjectID, repoID, fixture.Session)
@@ -81,9 +76,8 @@ func TestCommandWorktreeCreationUsageAndUnauthorizedRefusal(t *testing.T) {
 		t.Fatalf("authorized git worktree add failed: %+v refusal=%+v", addOutcome, addOutcome.Refusal)
 	}
 
-	repos := store.NewSQL(fixture.Database)
-	if _, bound, bindErr := repos.Sessions.GetWorktreeBinding(t.Context(), fixture.Session); bindErr != nil || bound {
-		t.Fatalf("git worktree add mutated session_worktrees binding: bound=%v err=%v", bound, bindErr)
+	if _, bindErr := db.New(fixture.Database).GetSessionWorktree(t.Context(), fixture.Session); !db.IsNoRows(bindErr) {
+		t.Fatalf("git worktree add mutated session_worktrees binding: err=%v", bindErr)
 	}
 
 	// 3. External worktree created outside the tool host has no fabricated creator, then worker-b uses it via cd + edit.

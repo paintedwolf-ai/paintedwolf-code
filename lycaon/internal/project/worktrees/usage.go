@@ -11,7 +11,6 @@ import (
 	"github.com/lycaon/lycaon/internal/db"
 	"github.com/lycaon/lycaon/internal/git"
 	"github.com/lycaon/lycaon/internal/gitrepo"
-	"github.com/lycaon/lycaon/internal/timelayout"
 )
 
 // UsageRelation distinguishes checkout creation from later activity inside an existing checkout.
@@ -333,8 +332,8 @@ func (inv *Inventory) SummarizeChatRepoUsages(ctx context.Context, projectID, re
 	}
 	out := make(map[string]ChatCheckoutUsage, len(rows))
 	for _, row := range rows {
-		firstTS, _ := timelayout.Parse(row.FirstTs)
-		lastTS, _ := timelayout.Parse(row.LastTs)
+		firstTS, _ := db.ParseTime(row.FirstTs)
+		lastTS, _ := db.ParseTime(row.LastTs)
 		entry, exists := out[row.WorktreeID]
 		if !exists {
 			entry = ChatCheckoutUsage{
