@@ -36,13 +36,21 @@ func (w *walker) report() {
 	if w.work.reader != nil {
 		w.closeDirectoryReader()
 	}
+	var resolutions, matches int64
+	if w.worktrees != nil {
+		resolutions, matches = w.worktrees.resolutions, w.worktrees.matches
+	}
 
 	slog.InfoContext(w.inv.ctx, "command discovery completed",
 		"execution_id", w.inv.request.Invocation.Identity.ExecutionID,
 		"entries", w.visited, "entry_metadata_reads", w.work.metadata,
 		"directory_live_lists", w.work.listed, "directory_reuses", w.work.reused,
 		"directory_preparations", w.work.prepared, "shared_root_opens", w.work.roots,
-		"directory_handles", w.work.handles, "held_directory_peak", w.work.peak, "held_directory_remaining", w.held, "relative_descriptor_opens", w.work.opens, "identity_descriptor_peak", w.work.identityPeak, "identity_descriptor_remaining", w.work.identityHeld, "relative_child_stats", w.work.relative)
+		"directory_handles", w.work.handles, "held_directory_peak", w.work.peak,
+		"held_directory_remaining", w.held, "relative_descriptor_opens", w.work.opens,
+		"identity_descriptor_peak", w.work.identityPeak, "identity_descriptor_remaining", w.work.identityHeld,
+		"relative_child_stats", w.work.relative,
+		"worktree_resolutions", resolutions, "worktree_matches", matches)
 }
 
 func (w *walker) closeDirectoryReader() {
