@@ -1,13 +1,13 @@
 {
   "artifact": {
-    "id": "1e4c9dd9-dd6c-40d0-bda7-081f065b4af7",
+    "id": "2c866266-90e0-4815-bd46-3101bbbb355e",
     "mime": "image/png",
     "sha256": "cd08723e6cfd3f359d7994f4e64d439e7f75ec22080e760be1bb993b40fbe900"
   },
   "grant": {
     "category": "host",
     "expires_at": "2099-01-01T00:00:00Z",
-    "granted_at": "2026-11-21T05:24:33.701106Z",
+    "granted_at": "2026-11-23T22:09:08.698272192Z",
     "id": "grant_vZryNRplPGGrAtV-Z93HbKuK3SxTPEYb3EnTg_rEkU0",
     "pattern": "*.example.com",
     "scope": "device"
@@ -15,46 +15,46 @@
   "messages": [
     {
       "content": "corpus seed",
-      "id": "4a9566ff-daf8-4be0-b184-55a2ca858b2f",
+      "id": "1626bb33-53c1-4693-b6a2-431e9bd81c0a",
+      "role": "user"
+    },
+    {
+      "content": "",
+      "id": "1fd9a796-57e5-5fb5-9a78-c890bddb0465",
+      "role": "system"
+    },
+    {
+      "content": ">>> Tool feedback\nThe report has no citations although recorded tool observations are available.\n\n\nCause: The report cited none of the tool evidence observed this turn.\n\nWhy: Observed sample: README.md\nFix: The host preserves the report and attaches a bounded sample of observed paths, handles, or URLs when available, without requesting another model turn.\nNext: The preserved report remains untraced and marked host_assembled. Attached observations do not establish that they support its claims.\nCode: INVEST_CITATIONS_REQUIRED\n\n{\"anchor\":\"coordinator.closeout_check\",\"rule\":\"INVEST_CITATIONS_REQUIRED\",\"effect\":\"warn\",\"code\":\"INVEST_CITATIONS_REQUIRED\",\"details\":{\"document_citation_targets\":null,\"observed_handles_count\":2,\"observed_handles_omitted\":0,\"observed_handles_sample\":\"command#1, read#1\",\"observed_paths_count\":1,\"observed_paths_omitted\":0,\"observed_paths_sample\":\"README.md\",\"observed_urls_count\":0,\"observed_urls_omitted\":0,\"observed_urls_sample\":\"\",\"offender_count\":0,\"offenders_omitted\":0,\"offenders_sample\":\"\",\"profile\":\"coordinator\",\"repair_observations\":\"[]\",\"repair_targets\":null,\"retained_document\":\"\",\"worker_leg\":false},\"subject\":{\"kind\":\"session\",\"id\":\"2e7bf752-344d-4bd1-9328-f2f62df21a35\"}}",
+      "id": "534b4075-c7ec-456b-9b34-04e2c9e267a9",
       "role": "user"
     },
     {
       "content": "Corpus seed turn complete.",
-      "id": "5505d1fd-0267-4865-96cc-051b5f5b4636",
+      "id": "a6492f30-ca9f-452d-b632-84bfd1c5893c",
       "role": "assistant"
     },
     {
-      "content": "[read#1 README.md:1]\n[command#1]\n{\"program_id\":\"725f0679-5d6a-47f6-af09-ec1ea29852ab\",\"detail_ref\":\"output:program-source:725f0679-5d6a-47f6-af09-ec1ea29852ab\",\"state\":\"completed\",\"status\":0,\"stdout\":\"# corpus seed\\n\",\"stderr\":\"\",\"stdout_ref\":\"output:program:725f0679-5d6a-47f6-af09-ec1ea29852ab:stdout\",\"outputs\":[{\"stream\":\"stdout\",\"ref\":\"output:program:725f0679-5d6a-47f6-af09-ec1ea29852ab:stdout\",\"output_path\":\"@output/725f0679-5d6a-47f6-af09-ec1ea29852ab.stdout\",\"total_bytes\":14,\"total_lines\":1,\"complete\":true,\"truncated\":false,\"head_end_byte\":0,\"head_end_line\":0,\"tail_start_byte\":0,\"tail_start_line\":0,\"omitted_bytes\":0,\"omitted_lines\":0,\"inline_budget_bytes\":32768}],\"executed_children\":1,\"completed_effects\":0,\"uncertain_effects\":0,\"replay_available\":false}",
-      "id": "8f99c0a9-ea18-452a-9216-d90b506980cb",
+      "content": "",
+      "id": "cdaca134-4166-4b77-ba5f-e97f56291728",
+      "role": "assistant"
+    },
+    {
+      "content": "[read#1 README.md:1]\n[command#1]\n{\"program_id\":\"892271a3-5c6c-4c02-8e09-494033c50e6a\",\"detail_ref\":\"output:program-source:892271a3-5c6c-4c02-8e09-494033c50e6a\",\"state\":\"completed\",\"status\":0,\"stdout\":\"# corpus seed\\n\",\"stderr\":\"\",\"stdout_ref\":\"output:program:892271a3-5c6c-4c02-8e09-494033c50e6a:stdout\",\"outputs\":[{\"stream\":\"stdout\",\"ref\":\"output:program:892271a3-5c6c-4c02-8e09-494033c50e6a:stdout\",\"output_path\":\"@output/892271a3-5c6c-4c02-8e09-494033c50e6a.stdout\",\"total_bytes\":14,\"total_lines\":1,\"complete\":true,\"truncated\":false,\"head_end_byte\":0,\"head_end_line\":0,\"tail_start_byte\":0,\"tail_start_line\":0,\"omitted_bytes\":0,\"omitted_lines\":0,\"inline_budget_bytes\":32768}],\"executed_children\":1,\"completed_effects\":0,\"uncertain_effects\":0,\"replay_available\":false}",
+      "id": "d659d51d-15fe-47a5-9b91-f38643c7a8d4",
       "role": "tool"
-    },
-    {
-      "content": "",
-      "id": "9441661d-ac40-489d-884f-404f60429f2f",
-      "role": "assistant"
-    },
-    {
-      "content": ">>> Tool feedback\nThe report has no citations although recorded tool observations are available.\n\n\nCause: The report cited none of the tool evidence observed this turn.\n\nWhy: Observed sample: README.md\nFix: The host preserves the report and attaches a bounded sample of observed paths, handles, or URLs when available, without requesting another model turn.\nNext: The preserved report remains untraced and marked host_assembled. Attached observations do not establish that they support its claims.\nCode: INVEST_CITATIONS_REQUIRED\n\n{\"anchor\":\"coordinator.closeout_check\",\"rule\":\"INVEST_CITATIONS_REQUIRED\",\"effect\":\"warn\",\"code\":\"INVEST_CITATIONS_REQUIRED\",\"details\":{\"document_citation_targets\":null,\"observed_handles_count\":2,\"observed_handles_omitted\":0,\"observed_handles_sample\":\"command#1, read#1\",\"observed_paths_count\":1,\"observed_paths_omitted\":0,\"observed_paths_sample\":\"README.md\",\"observed_urls_count\":0,\"observed_urls_omitted\":0,\"observed_urls_sample\":\"\",\"offender_count\":0,\"offenders_omitted\":0,\"offenders_sample\":\"\",\"profile\":\"coordinator\",\"repair_observations\":\"[]\",\"repair_targets\":null,\"retained_document\":\"\",\"worker_leg\":false},\"subject\":{\"kind\":\"session\",\"id\":\"9efbffba-2ccb-4a59-a311-33dd0e4f1921\"}}",
-      "id": "a67cca80-948c-4dfb-91f8-63fe91ccd65d",
-      "role": "user"
-    },
-    {
-      "content": "",
-      "id": "ebd71bc1-80dd-5ed7-aef9-da3917dbab94",
-      "role": "system"
     }
   ],
-  "project_id": "9d5f33d5-b430-491d-befc-40b0f08c2862",
+  "project_id": "c92427c8-8211-4745-b35f-3af9af0efa01",
   "trust_read": {
     "review": {
       "changes": [
         {
           "after": "# Retained configuration change.\nformat: 1\ndisabled: []\n",
           "before": "format: 1\ndisabled: []\n",
-          "id": "27d0ac78-4947-5fad-b04f-30408ba0e40f",
+          "id": "cbe87cba-de07-5654-9bb3-e3ee5f4e4327",
           "kind": "modified",
           "path": ".paintedwolf/extensions.yaml",
-          "root_id": "8a7698cc-0428-4331-afd7-cb298754b9d0",
+          "root_id": "2e162e6f-4744-4062-adf8-c292138d294d",
           "root_label": "seed-project",
           "surface_ids": [
             "extension_config",
@@ -62,8 +62,8 @@
           ]
         }
       ],
-      "id": "beb3c357-c57b-5910-b7e9-d8dc432a8a47",
-      "project_id": "9d5f33d5-b430-491d-befc-40b0f08c2862"
+      "id": "46778f9a-b7c7-5dba-a9ae-2710366dcda2",
+      "project_id": "c92427c8-8211-4745-b35f-3af9af0efa01"
     },
     "surfaces": {
       "agents_md": true,
