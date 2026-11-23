@@ -222,3 +222,53 @@ func TestBranchRecorderAttributesConcurrentComposedAndInlineRenders(t *testing.T
 	assertBranchCounts("guidance/inline-a.md@L1:C4:if", 4, 12)
 	assertBranchCounts("guidance/inline-b.md@L1:C4:for", 8, 8)
 }
+
+func TestTrackedAuxiliaryTagsAndFailClosedExecutionState(t *testing.T) {
+	const auxSource = `{% set a = x %}{% with b=a c=2 %}{{ b }}{{ c }}{% endwith %}{% with a as d %}{{ d }}{% endwith %}{% ifequal a "ok" %}EQ{% else %}NE{% endifequal %}{% ifequal a "no" %}EQ{% else %}NE{% endifequal %}{% ifnotequal a "no" %}DIFF{% else %}SAME{% endifnotequal %}{% ifnotequal a "ok" %}DIFF{% else %}SAME{% endifnotequal %}{% firstof empty_val raw_html %}{% autoescape on %}{% firstof raw_html %}{% endautoescape %}{% autoescape off %}{{ raw_html }}{% endautoescape %}{% widthratio 50 100 10 %}{% widthratio 50 100 10 as ratio %}{{ ratio }}{% widthratio 50 0 10 as zero_ratio %}{{ zero_ratio }}`
+	tpl, err := Compile(auxSource)
+	testutil.FailErr(t, "Compile aux tags", err)
+
+	got, err := Execute(t.Context(), tpl, map[string]any{
+		"x":        "ok",
+		"raw_html": "<b>",
+	})
+	testutil.FailErr(t, "Execute aux tags", err)
+	want := "ok2okEQNEDIFFSAME<b>&lt;b&gt;<b>66"
+	if got != want {
+		t.Fatalf("aux render = %q, want %q", got, want)
+	}
+
+	set, err := NewSet("composed-aux", memTemplateLoader{
+		"root.md":  `{% include "missing.md" if_exists %}{% include "child.md" with v=x %}|{% include "child.md" only %}`,
+		"child.md": `{{ v }}`,
+	}, Composed)
+	testutil.FailErr(t, "NewSet", err)
+	composedTpl, err := set.FromFile("root.md")
+	testutil.FailErr(t, "FromFile", err)
+	composedOut, err := Execute(t.Context(), composedTpl, map[string]any{"x": "parent"})
+	testutil.FailErr(t, "Execute composed", err)
+	if composedOut != "parent|" {
+		t.Fatalf("composedOut = %q, want %q", composedOut, "parent|")
+	}
+
+	// Direct pongo2 execution without pongoplain.Execute must fail closed on every tracked tag.
+	for name, directTpl := range map[string]string{
+		"if":         `{% if x %}1{% endif %}`,
+		"for":        `{% for i in xs %}{{ i }}{% endfor %}`,
+		"set":        `{% set y = 1 %}`,
+		"with":       `{% with y=1 %}{{ y }}{% endwith %}`,
+		"ifequal":    `{% ifequal 1 1 %}1{% endifequal %}`,
+		"firstof":    `{% firstof x "fallback" %}`,
+		"widthratio": `{% widthratio 1 2 10 %}`,
+		"autoescape": `{% autoescape off %}x{% endautoescape %}`,
+	} {
+		parsed, cErr := Compile(directTpl)
+		testutil.FailErr(t, "Compile "+name, cErr)
+		if _, dErr := parsed.Execute(nil); dErr == nil || !strings.Contains(dErr.Error(), ErrExecutionLimit.Error()) {
+			t.Fatalf("%s executed without executionState: %v", name, dErr)
+		}
+	}
+	if _, dErr := composedTpl.Execute(nil); dErr == nil || !strings.Contains(dErr.Error(), ErrExecutionLimit.Error()) {
+		t.Fatalf("include executed without executionState: %v", dErr)
+	}
+}
