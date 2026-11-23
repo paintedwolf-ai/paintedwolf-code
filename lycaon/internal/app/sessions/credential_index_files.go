@@ -101,6 +101,7 @@ func (i *credentialIndex) scan(ctx context.Context, root *credentialRoot, path s
 			if entry.Name() == ".git" || repochange.IsPrivatePath(abs) {
 				return filepath.SkipDir
 			}
+			root.directories.Add(1)
 			seeds = append(seeds, repochange.WatchDirectory{Path: abs})
 			if len(seeds) == 128 {
 				flush()
@@ -113,6 +114,7 @@ func (i *credentialIndex) scan(ctx context.Context, root *credentialRoot, path s
 		if err := i.read(ctx, root, rel, batch); err != nil {
 			return err
 		}
+		root.credentialFiles.Add(1)
 		seen[rel], root.known[rel] = true, true
 		return nil
 	})
