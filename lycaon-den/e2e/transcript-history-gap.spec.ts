@@ -313,8 +313,9 @@ modelIndependentWebE2e("prepending an older page into an expanded activity span 
     });
   }
   const rows = transcriptMessages(base);
-  const leadKeyBefore = `${base[60]!.id}:call-boundary-2`;
-  const leadKeyAfter = `${base[56]!.id}:call-boundary-0`;
+  const leadEntryKey = `${base[60]!.id}:call-boundary-2`;
+  const leadKeyBefore = `activity-group:${leadEntryKey}`;
+  const leadKeyAfter = `activity-group:${base[56]!.id}:call-boundary-0`;
 
   const olderPage = (url: URL) =>
     url.pathname.endsWith(`/v1/sessions/${sessionId}/messages`) && url.searchParams.has("before_message_id");
@@ -342,7 +343,7 @@ modelIndependentWebE2e("prepending an older page into an expanded activity span 
   await spanCard.locator(":scope > .den-transcript-disclosure-header").click();
   await expect(spanCard).toHaveAttribute("data-expanded", "true");
   await expect(spanCard).not.toHaveAttribute("data-animating", "true");
-  const entry = scroller(page).locator(`[data-activity-entry-key="${leadKeyBefore}"]`);
+  const entry = scroller(page).locator(`[data-activity-entry-key="${leadEntryKey}"]`);
   await expect(entry).toBeVisible();
   await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
 

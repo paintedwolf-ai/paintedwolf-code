@@ -97,7 +97,8 @@ webE2e(
       .evaluate((element) => element.getBoundingClientRect().width);
     const textEdge = await prose.evaluate((element) => element.getBoundingClientRect().left);
 
-    for (const card of [stage.getByTestId("diff-group"), stage.getByTestId("citation-evidence-chicklet")]) {
+    await expect(stage.getByTestId("activity-group-card").getByTestId("diff-group")).toBeVisible({ timeout: 30_000 });
+    for (const card of [stage.getByTestId("citation-evidence-chicklet")]) {
       await expect(card).toBeVisible({ timeout: 30_000 });
       const resting = await linkGeometry(card);
       expect(resting.label.left).toBeCloseTo(textEdge, 0);

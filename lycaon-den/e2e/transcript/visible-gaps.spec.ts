@@ -73,15 +73,14 @@ for (const scale of [1, 53 / 17]) {
     const grounded = stage.getByTestId("citation-evidence-chicklet");
     const created = stage.getByTestId("progress-strip-created");
     const delta = stage.getByTestId("progress-strip-completed");
-    const diff = stage.getByTestId("diff-group");
-    const activity = diff.locator("xpath=ancestor::*[@data-index][1]/preceding-sibling::*[@data-index][1]/*[1]");
+    const group = stage.getByTestId("activity-group-card");
+    const diff = group.getByTestId("diff-group");
     const footer = stage.getByTestId("turn-tail").first();
     const label = (link: Locator) => link.locator(".den-transcript-disclosure-header > :first-child");
     const distances: [Locator, Locator, number][] = [
       [user, created, gaps.afterActions],
-      [created, activity, gaps.item],
-      [activity, label(diff), gaps.item],
-      [label(diff), delta.getByTestId("progress-strip-rest"), gaps.item],
+      [created, group, gaps.item],
+      [group, delta.getByTestId("progress-strip-rest"), gaps.item],
       [delta.getByTestId("progress-strip-rest"), prose, gaps.message],
       [label(grounded), review, gaps.afterActions],
       [review, footer, gaps.item],

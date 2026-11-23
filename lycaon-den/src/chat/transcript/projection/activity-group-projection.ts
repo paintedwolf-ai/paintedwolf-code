@@ -1,30 +1,16 @@
 import type { Message } from "../../../api/types.ts";
 import { fileEditStepsFromPart, foldIntervalFileEdits, type FileEditStep } from "../../file-edit/file-edit-fold.ts";
 import {
-  activityCandidate,
-  activityHeadline,
-  activitySpanEntryKey,
-  emitWorkerRun,
-  runHasWork,
-  type ActivityCandidate,
+  activityCandidate, activityHeadline, activitySpanEntryKey, emitWorkerRun, runHasWork, type ActivityCandidate,
 } from "../../tool/activity-span-model.ts";
 import { isTaskToolName, toolPartStableId } from "../../tool/tool-part-model.ts";
 import { toolDrawsWhileRunning } from "../../tool/tool-transcript-visibility.ts";
 import {
-  TIER,
-  UNORDERED,
-  callOrd,
-  compareTranscriptOrdSortKeys,
-  transcriptItemOrdKey,
-  type TranscriptOrdSortKey,
-  type TranscriptOrder,
+  TIER, UNORDERED, callOrd, compareTranscriptOrdSortKeys, transcriptItemOrdKey,
+  type TranscriptOrdSortKey, type TranscriptOrder,
 } from "./transcript-item-order.ts";
 import type {
-  ActivityGroupApproval,
-  ActivityGroupItem,
-  ActivityGroupSection,
-  DisplayTranscriptItem,
-  RawTranscriptItem,
+  ActivityGroupApproval, ActivityGroupItem, ActivityGroupSection, DisplayTranscriptItem, RawTranscriptItem,
 } from "./transcript-item-model.ts";
 
 export type ActivityGroupProjectionOptions = {
@@ -48,18 +34,16 @@ const emptySlice = (): IntervalSlice => ({ candidates: [], approvals: [], fileSt
 function syntheticOrder(items: readonly RawTranscriptItem[], verboseMode: boolean): TranscriptOrder {
   const ordById = new Map<string, number>();
   let nextOrd = 1;
-  const assign = (id: string | undefined) => {
-    const trimmed = id?.trim();
-    if (trimmed && !ordById.has(trimmed)) ordById.set(trimmed, nextOrd++);
+  const assign = (...ids: (string | undefined)[]) => {
+    for (const raw of ids) {
+      const id = raw?.trim();
+      if (id && !ordById.has(id)) ordById.set(id, nextOrd++);
+    }
   };
   for (const item of items) {
-    if (item.kind === "tool") {
-      assign(item.part.assistantMessageId);
-      assign(item.part.messageId);
-    } else if (item.kind === "checkpoint") {
-      assign(item.parentMessageId);
-      assign(item.call?.resultMessageId);
-    } else if (item.kind === "turn_load") assign(item.row.anchorMessageId);
+    if (item.kind === "tool") assign(item.part.assistantMessageId, item.part.messageId);
+    else if (item.kind === "checkpoint") assign(item.parentMessageId, item.call?.resultMessageId);
+    else if (item.kind === "turn_load") assign(item.row.anchorMessageId);
     else if (item.kind === "worker_file_edit") assign(item.anchorMessageId);
     else assign(item.key);
   }
@@ -158,14 +142,14 @@ function resolveAnchorMessageId(
   order: TranscriptOrder,
   fallbackKey: string,
 ): string {
-  const ids: (string | undefined)[] = [];
-  for (const { entry } of entries) {
-    if (entry.kind === "tool") ids.push(entry.part.assistantMessageId, entry.part.messageId);
-    else if (entry.kind === "index_warming") ids.push(entry.key);
-  }
-  for (const approval of approvals) ids.push(approval.parentMessageId, approval.call?.resultMessageId);
-  for (const { step } of fileSteps) ids.push(step.messageId);
-  for (const item of omitted) ids.push(item.messageId);
+  const ids = [
+    ...entries.flatMap(({ entry }) =>
+      entry.kind === "tool" ? [entry.part.assistantMessageId, entry.part.messageId] : entry.kind === "index_warming" ? [entry.key] : [],
+    ),
+    ...approvals.flatMap((a) => [a.parentMessageId, a.call?.resultMessageId]),
+    ...fileSteps.map(({ step }) => step.messageId),
+    ...omitted.map((item) => item.messageId),
+  ];
   let bestId: string | undefined;
   let bestOrd = UNORDERED;
   for (const raw of ids) {
@@ -266,14 +250,8 @@ export function projectActivityGroups(
       continue;
     }
     if (item.kind === "checkpoint") {
-      slices[slices.length - 1]!.approvals.push({
-        kind: "checkpoint",
-        key: item.key,
-        parentMessageId: item.parentMessageId,
-        call: item.call,
-        toolCallId: item.toolCallId ?? item.call?.toolCallId,
-        meta: item.meta,
-      });
+      const { kind, key, parentMessageId, call, meta } = item;
+      slices[slices.length - 1]!.approvals.push({ kind, key, parentMessageId, call, toolCallId: item.toolCallId ?? call?.toolCallId, meta });
       continue;
     }
     if (item.kind === "tool" || item.kind === "index_warming" || item.kind === "turn_load") {

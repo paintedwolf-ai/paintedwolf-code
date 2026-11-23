@@ -2,7 +2,7 @@ import { expect, type Page } from "@playwright/test";
 import { apiJson, apiPostPrompt, bootstrapChatSession, liveChatStage, settledChatSessionId, webE2e } from "../helpers.ts";
 import { manualHarnessTools } from "../manual-harness-tools.ts";
 
-const CARDS = '[data-testid="progress-strip-created"], [data-testid="activity-span-card"]';
+const CARDS = '[data-testid="progress-strip-created"], [data-testid="activity-group-card"]';
 
 type CardWidth = { card: string; width: number; row: number; cap: number };
 
@@ -22,7 +22,7 @@ async function cardWidths(page: Page): Promise<CardWidth[]> {
 }
 
 function expectBothCards(widths: CardWidth[]) {
-  expect(widths.map((entry) => entry.card).sort()).toEqual(["activity-span-card", "progress-strip-created"]);
+  expect(widths.map((entry) => entry.card).sort()).toEqual(["activity-group-card", "progress-strip-created"]);
 }
 
 webE2e("a progress box is as wide as an activity group in single and split view", async ({ page, request }) => {
@@ -56,7 +56,7 @@ webE2e("a progress box is as wide as an activity group in single and split view"
     await expect(group).toHaveAttribute("data-expanded", "true");
     const open = await cardWidths(page);
     for (const entry of open) {
-      const expected = entry.card === "activity-span-card" ? entry.row : entry.cap;
+      const expected = entry.card === "activity-group-card" ? entry.row : entry.cap;
       expect(entry.width, entry.card).toBeCloseTo(expected, 0);
     }
     await group.locator("> .den-transcript-disclosure-toggle").click();

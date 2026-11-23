@@ -635,7 +635,7 @@ Den renders option order, grouping, disabled state, coverage, and recommended fa
 
 Saved approvals list chat, project, and device authority and allow revocation. Chat approvals are grouped by chat and last until the chat is deleted. A decision chicklet and Settings operate on the same grant identity, so revoking in either place changes the next host evaluation. Above the list, Recent asks reads the local authorization ledger and shows, per reason, how many cards asked over the last week and how they were answered; where every subject in a row was one site, it offers the same durable host lease Settings can create. Counts are presentation and never change whether an ask occurs.
 
-Completed approval decisions appear in the transcript that owns the tool result: coordinator decisions in main chat, worker decisions only in that worker's drawer. Pending worker approval asks remain available in the parent chat's approval dock.
+Completed and pending coordinator approval checkpoints appear in the `Approvals` section of their interval's activity group in main chat as compact decision rows, while pending full approval cards dock above the composer; worker decisions appear only in that worker's drawer. Pending worker approval asks remain available in the parent chat's approval dock.
 
 Details: [Authorization](authorization.md).
 

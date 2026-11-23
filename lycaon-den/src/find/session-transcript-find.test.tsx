@@ -1,6 +1,9 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { fireEvent, render, screen } from "@solidjs/testing-library";
 import { ChatSpanBlocks } from "../components/transcript/transcript-viewport-test-harness.tsx";
+import { toolApprovalFixture } from "../chat/checkpoint/approval-test-fixtures.ts";
+import { foldIntervalFileEdits } from "../chat/file-edit/file-edit-fold.ts";
+import { fileEditPreviewFixture } from "../test/file-edit-fixture.ts";
 import {
   findController,
   findNext,
@@ -74,5 +77,107 @@ describe("session transcript findable adapter", () => {
 
     fireEvent.click(screen.getByTestId("find-bar-close"));
     expect(document.querySelectorAll(`span[${FIND_MARK_ATTR}="1"]`)).toHaveLength(0);
+  });
+
+  it("discovers matches inside closed Approvals and Files edited sections of an activity group and cleans up temporary disclosures", async () => {
+    const groupKey = "activity-group:a-find:call-1";
+    const folds = foldIntervalFileEdits(groupKey, [
+      {
+        key: "step-find-1",
+        partId: "part-find-1",
+        toolCallId: "call-1",
+        assistantMessageId: "a-find",
+        messageId: "r-find-1",
+        path: "src/needle_target_file.ts",
+        preview: fileEditPreviewFixture({
+          path: "src/needle_target_file.ts",
+          before: "const oldVal = 1;\n",
+          after: "const STACK_FIND_OMEGA = 2;\n",
+        }),
+      },
+    ]);
+    const blocks = [
+      {
+        kind: "run" as const,
+        runId: "ambient",
+        ambientSpan: true,
+        items: [
+          {
+            kind: "activity_group" as const,
+            key: groupKey,
+            sectionOrder: ["approvals" as const, "files" as const],
+            approvals: [
+              {
+                kind: "checkpoint" as const,
+                key: "cp-find-1",
+                parentMessageId: "a-find",
+                toolCallId: "call-1",
+                meta: {
+                  id: "cp-find-1",
+                  kind: "tool_approval" as const,
+                  state: "approved" as const,
+                  title: "Allow STACK_FIND_OMEGA primary gate",
+                  tool_approval: toolApprovalFixture({
+                    command: "run STACK_FIND_OMEGA",
+                    title: "Allow STACK_FIND_OMEGA primary gate",
+                  }),
+                },
+              },
+              {
+                kind: "checkpoint" as const,
+                key: "cp-find-2",
+                parentMessageId: "a-find",
+                toolCallId: "call-2",
+                meta: {
+                  id: "cp-find-2",
+                  kind: "tool_approval" as const,
+                  state: "denied" as const,
+                  title: "Allow secondary check",
+                  tool_approval: toolApprovalFixture({
+                    command: "check secondary",
+                    title: "Allow secondary check",
+                  }),
+                },
+              },
+            ],
+            folds,
+            headline: "activity",
+            entries: [],
+            anchorMessageId: "a-find",
+          },
+        ],
+      },
+    ];
+
+    const { container } = render(() => (
+      <>
+        <FindBar />
+        <ChatSpanBlocks
+          blocks={blocks}
+          sessionId="s-find-stack"
+          messages={[]}
+          workers={[]}
+          visibleTurnActive={false}
+        />
+      </>
+    ));
+
+    expect(await screen.findByTestId("message-stream")).toBeTruthy();
+    const approvalsToggle = container.querySelector<HTMLButtonElement>('[data-testid="activity-group-approvals-toggle"]');
+    expect(approvalsToggle?.getAttribute("aria-expanded")).toBe("false");
+
+    openFind();
+    setFindQuery("STACK_FIND_OMEGA");
+    expect(findController.matches().length).toBeGreaterThanOrEqual(2);
+    expect(approvalsToggle?.getAttribute("aria-expanded")).toBe("true");
+
+    findNext();
+    const diffToggle = container.querySelector<HTMLButtonElement>('[data-testid="diff-group"] button.den-transcript-disclosure-toggle');
+    expect(diffToggle?.getAttribute("aria-expanded")).toBe("true");
+
+    fireEvent.click(screen.getByTestId("find-bar-close"));
+    expect(document.querySelectorAll(`span[${FIND_MARK_ATTR}="1"]`)).toHaveLength(0);
+    expect(approvalsToggle?.getAttribute("aria-expanded")).toBe("false");
+    expect(diffToggle?.getAttribute("aria-expanded")).toBe("false");
   });
 });

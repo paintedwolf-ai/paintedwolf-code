@@ -100,35 +100,24 @@ const TRANSCRIPT_VIRTUAL_INITIAL_VIEWPORT_HEIGHT_PX = 900;
 
 /** Seed unmeasured rows by kind. */
 export function transcriptRowEstimatedHeight(
-  item: Pick<TranscriptItem, "kind">,
+  item: Pick<TranscriptItem, "kind"> & { sectionOrder?: readonly unknown[] },
 ): number {
   switch (item.kind) {
     case "worker_file_edit":
-    case "file_edit":
-      return 120;
-    case "activity_group":
-      return 40;
-    case "activity_span":
-      return 64;
-    case "worker_group":
-      return 136;
-    case "blueprint_card":
-      return 160;
+    case "file_edit": return 120;
+    case "activity_group": return Math.max(1, item.sectionOrder?.length ?? 1) * 31 + 9;
+    case "activity_span": return 64;
+    case "worker_group": return 136;
+    case "blueprint_card": return 160;
     case "workflow_feedback":
     case "workflow_explain":
-    case "checkpoint":
-      return 40;
+    case "checkpoint": return 40;
     case "progress_complete":
-    case "progress_update":
-      return 56;
-    case "workflow_boundary":
-      return 32;
-    case "time_marker":
-      return 24;
-    case "unread_marker":
-      return 16;
-    case "turn_tail":
-      return 20;
+    case "progress_update": return 56;
+    case "workflow_boundary": return 32;
+    case "time_marker": return 24;
+    case "unread_marker": return 16;
+    case "turn_tail": return 20;
     case "pending_user":
     case "user":
     case "assistant":
@@ -136,8 +125,7 @@ export function transcriptRowEstimatedHeight(
     case "tool":
     case "turn_load":
     case "index_warming":
-    case "fallback":
-      return 72;
+    case "fallback": return 72;
     default: {
       const _exhaustive: never = item.kind;
       return _exhaustive;
