@@ -185,12 +185,24 @@ func buildRecipientEngine(
 // and target-turn rejected tool guidance, excluding user content, assistant
 // messages, earlier historical observations, and tool schema listings.
 func newlyDeliveredHostInstructions(msgs []api.Message, targetRejectID string) []string {
+	isHost := func(origin api.MessageOrigin, authority api.ContentAuthority) bool {
+		return origin == api.MessageOriginHost || authority == api.ContentAuthoritySystem || authority == api.ContentAuthorityDeveloper
+	}
 	var out []string
 	for _, m := range msgs {
-		switch {
-		case m.Role == api.MessageRoleSystem:
+		if m.ID == targetRejectID && m.ToolResult != nil && m.ToolResult.Outcome == api.ToolResultOutcomeRejected {
 			out = append(out, m.Content)
-		case m.ID == targetRejectID && m.ToolResult != nil && m.ToolResult.Outcome == api.ToolResultOutcomeRejected:
+			continue
+		}
+		if len(m.ContentParts) > 0 {
+			for _, part := range m.ContentParts {
+				if isHost(part.Origin, part.Authority) {
+					out = append(out, part.Content)
+				}
+			}
+			continue
+		}
+		if m.Role == api.MessageRoleSystem || isHost(m.Origin, m.Authority) {
 			out = append(out, m.Content)
 		}
 	}

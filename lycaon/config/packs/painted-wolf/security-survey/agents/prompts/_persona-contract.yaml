@@ -17,6 +17,6 @@ agents:
       role_title: Security Reviewer
       focus: "Triage scanner findings and map assets, entry points, and trust boundaries. The brief says which; manual repo audit satisfies neither."
       process:
-        - "Scanner workers: scan_summary then scan_query, paginating when truncated."
-        - "Survey workers: orient with `survey_repo` or `summarize` on the declared scope."
+        - "{% if (profile_has_scan_summary or profile_can_request.scan_summary) and (profile_has_scan_query or profile_can_request.scan_query) %}Scanner workers: scan_summary then scan_query, paginating when truncated.{% else %}Scanner workers: inspect offered scan outputs, paginating when truncated.{% endif %}"
+        - "{% if (profile_has_survey_repo or profile_can_request.survey_repo) and (profile_has_summarize or profile_can_request.summarize) %}Survey workers: orient with `survey_repo` or `summarize` on the declared scope.{% elif profile_has_summarize or profile_can_request.summarize %}Survey workers: orient with `summarize` on the declared scope.{% else %}Survey workers: orient on the declared scope with offered read tools.{% endif %}"
         - "Read source only on paths a scan tool or the task named; cite path:line and put unreviewed areas in remaining_risk."

@@ -4,12 +4,14 @@ import (
 	"context"
 	"fmt"
 	"hash/fnv"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
 
 	"github.com/lycaon/lycaon/internal/extpacks"
 	"github.com/lycaon/lycaon/internal/hintregistry"
+	"github.com/lycaon/lycaon/internal/pongoplain"
 	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/toolschema"
 )
@@ -25,7 +27,7 @@ func RenderPersona(ctx context.Context, engine *FileTemplateEngine, agentID stri
 		return "", err
 	}
 	// Artifact budgets catch authoring regressions before runtime expansion.
-	violations, err := validatePersonaContractRender(id, body)
+	violations, err := validatePersonaContractRenderForReader(engine.Layers().Catalog, reader, data, id, body)
 	if err != nil {
 		return "", err
 	}
@@ -87,7 +89,74 @@ func personaVars(ctx context.Context, engine *FileTemplateEngine, agentID string
 		return nil, "", "", nil, fmt.Errorf("units for %q: %w", id, err)
 	}
 	MergeUnitVars(data, blocks)
+	if proc, _ := data["process"].(string); strings.Contains(proc, "{%") || strings.Contains(proc, "{{") {
+		tpl, cErr := pongoplain.Compile(proc)
+		if cErr != nil {
+			return nil, "", "", nil, fmt.Errorf("compile persona process for %q: %w", id, cErr)
+		}
+		renderedProc, rErr := pongoplain.Execute(ctx, tpl, data)
+		if rErr != nil {
+			return nil, "", "", nil, fmt.Errorf("render persona process for %q: %w", id, rErr)
+		}
+		data["process"] = renderedProc
+	}
 	return engine, id, ref, data, nil
+}
+
+func validatePersonaContractRenderForReader(
+	eff *extpacks.EffectiveCatalog,
+	reader Reader,
+	data map[string]any,
+	agentID, body string,
+) ([]string, error) {
+	if agentID == "" {
+		return nil, nil
+	}
+	contract, err := loadPersonaContractCached(eff)
+	if err != nil {
+		return nil, fmt.Errorf("persona contract: %w", err)
+	}
+	var violations []string
+	for _, heading := range contract.RequiredHeadingsRendered {
+		heading = strings.TrimSpace(heading)
+		if heading != "" && !strings.Contains(body, heading) {
+			violations = append(violations, "missing_heading:"+heading)
+		}
+	}
+	def, ok := contract.Agents[agentID]
+	if !ok {
+		return violations, nil
+	}
+	vocab, _ := BuildReaderFactVocabulary(eff)
+	held := reader.Held()
+	reqTools := reader.Requestable()
+	webEnabled := true
+	if ws, hasWS := data["web_search_enabled"].(bool); hasWS {
+		webEnabled = ws
+	}
+	for _, must := range def.MustSubstringsRendered {
+		must = strings.TrimSpace(must)
+		if must == "" {
+			continue
+		}
+		if must == "Stale-training check" && !webEnabled {
+			if !strings.Contains(body, "External facts:") {
+				violations = append(violations, "missing_substring:External facts:")
+			}
+			continue
+		}
+		if must == "web_search" && !webEnabled {
+			continue
+		}
+		canReach := held[must] || (held["request_tools"] && slices.Contains(reqTools, must))
+		if reader.Valid() && vocab.Tools[must] && !canReach {
+			continue
+		}
+		if !strings.Contains(body, must) {
+			violations = append(violations, "missing_substring:"+must)
+		}
+	}
+	return violations, nil
 }
 
 // pathCache memoizes bounded loads keyed by catalog or policy fingerprint.

@@ -80,6 +80,8 @@ func (c AuthCell) Session(sessionID string) *api.Session {
 		if sess.AgentType == "" {
 			sess.AgentType = "implementer"
 		}
+	} else if sess.AgentType == "" {
+		sess.AgentType = prompts.CoordinatorProfileID
 	}
 	return sess
 }

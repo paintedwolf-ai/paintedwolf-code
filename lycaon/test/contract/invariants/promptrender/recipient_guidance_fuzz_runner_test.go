@@ -670,7 +670,8 @@ func assembleCoordTurn(ctx context.Context, m *mutableCoordFuzzEngine, st hostst
 	}
 	sess := &api.Session{
 		ID: "sess-fuzz-coord", ProjectID: "proj-fuzz", WorkspacePath: ws,
-		Posture: st.Posture, Mode: st.SessionMode,
+		AgentType: prompts.CoordinatorProfileID,
+		Posture:   st.Posture, Mode: st.SessionMode,
 	}
 	m.engine.BeginPromptTurn(sess.ID, "")
 	return m.engine.BuildCompletionMessages(ctx, sess, []api.Message{

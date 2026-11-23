@@ -118,14 +118,23 @@ func renderJobGuidanceForRep(t *testing.T, s *promptrender.Stock, rep jobWaitAut
 	if err != nil {
 		t.Fatalf("ExecutorForOverlay(%s): %v", rep.label, err)
 	}
+	effCat := s.Catalog
+	effSchemas := s.Schemas
+	if overlay.Catalog != nil {
+		effCat = overlay.Catalog
+	}
+	if overlay.Schemas != nil {
+		effSchemas = overlay.Schemas
+	}
 	view := &catalogview.View{
-		Catalog:      s.Catalog,
+		Catalog:      effCat,
 		ToolProfiles: narrowed,
-		ToolSchemas:  s.Schemas,
+		ToolSchemas:  effSchemas,
 	}
 	sess := &api.Session{
 		ID: "sess-coord-3way", ProjectID: "proj-3way", WorkspacePath: wsDir,
-		Posture: cs.Posture, Mode: cs.SessionMode,
+		AgentType: prompts.CoordinatorProfileID,
+		Posture:   cs.Posture, Mode: cs.SessionMode,
 	}
 	history := []api.Message{{ID: "u1", Role: api.MessageRoleUser, Content: "Check current progress."}}
 	runCtx := hoststate.NormalizeCoordinatorRunContext(cs, sess, history)

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"sync"
 
+	"github.com/lycaon/lycaon/internal/agentdef"
 	"github.com/lycaon/lycaon/internal/coordinator/surfacecatalog"
 	"github.com/lycaon/lycaon/internal/gate"
 	"github.com/lycaon/lycaon/internal/sandbox"
@@ -191,6 +192,10 @@ func ResolveWorkerSeed(domains *SeedDomains, seed WorkerSeed) (WorkerState, erro
 	st.WebSearch = seed.WebSearch
 	st.Vision = seed.Vision
 	st.CommandExternalHidden = seed.CommandExternalHidden
+	if !st.Excluded && !seed.WebSearch && agentdef.DeclaresAny(seed.AgentID, agentdef.CapabilityExternal) {
+		st.Excluded = true
+		st.ExcludedReason = "web_search_disabled_for_external_agent"
+	}
 	if seed.ApprovalPosture != "" {
 		st.ApprovalPosture = seed.ApprovalPosture
 	}

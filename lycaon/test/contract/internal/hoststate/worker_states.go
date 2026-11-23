@@ -125,6 +125,9 @@ func buildWorkerState(
 	if onBranch && !mutCapable {
 		excluded = "read_only_agent_has_no_isolated_worker_branch"
 	}
+	if excluded == "" && parentAsk && mutCapable {
+		excluded = "ask_mode_forbids_mutating_worker"
+	}
 	if excluded == "" && parentAsk && onBranch {
 		excluded = "ask_mode_never_spawns_isolated_branch_worker"
 	}
