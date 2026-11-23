@@ -37,6 +37,21 @@ type NextStepObserver func(r *Rule, resolved ResolvedSteps)
 // displacing each other.
 var ActiveNextStepObservers sync.Map
 
+func hasActiveNextStepObserver(r *Rule, gc *GuardContext) bool {
+	if r == nil || (gc != nil && gc.FromScenario) {
+		return false
+	}
+	found := false
+	ActiveNextStepObservers.Range(func(_, v any) bool {
+		if obs, ok := v.(NextStepObserver); ok && obs != nil {
+			found = true
+			return false
+		}
+		return true
+	})
+	return found
+}
+
 func recordResolvedNextSteps(r *Rule, gc *GuardContext, resolved ResolvedSteps) {
 	if r == nil || (gc != nil && gc.FromScenario) {
 		return

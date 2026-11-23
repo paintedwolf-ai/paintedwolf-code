@@ -332,6 +332,31 @@ func TestResolveNextStepsPreservesStepIdentityAndObserverProvenance(t *testing.T
 		},
 	}
 
+	newEvalContext := func() *GuardContext {
+		gc := reachContext(toolreach.Offered([]string{"secret_generate", "view_image"}))
+		gc.Published["paintedwolf.listed"] = false
+		return gc
+	}
+	recordBranches := func(fn func()) map[string]RuleBranchHit {
+		rec := &RuleBranchRecorder{Hits: map[string]*RuleBranchHit{}}
+		prev := ActiveRuleBranchRecorder.Swap(rec)
+		defer ActiveRuleBranchRecorder.Store(prev)
+		fn()
+		out := make(map[string]RuleBranchHit, len(rec.Hits))
+		for k, v := range rec.Hits {
+			out[k] = *v
+		}
+		return out
+	}
+
+	var unobserved ResolvedSteps
+	unobservedBranches := recordBranches(func() {
+		unobserved = ResolveNextSteps(rule, newEvalContext())
+	})
+	if unobserved.Resolutions != nil || len(unobserved.Resolutions) != 0 {
+		t.Fatalf("ordinary evaluation without observer must collect 0 resolutions, got %+v", unobserved.Resolutions)
+	}
+
 	var observed []ResolvedSteps
 	key := new(int)
 	ActiveNextStepObservers.Store(key, NextStepObserver(func(gotRule *Rule, resolved ResolvedSteps) {
@@ -341,18 +366,44 @@ func TestResolveNextStepsPreservesStepIdentityAndObserverProvenance(t *testing.T
 	}))
 	defer ActiveNextStepObservers.Delete(key)
 
-	gc := reachContext(toolreach.Offered([]string{"secret_generate", "view_image"}))
-	gc.Published["paintedwolf.listed"] = false
-	got := ResolveNextSteps(rule, gc)
+	var got ResolvedSteps
+	observedBranches := recordBranches(func() {
+		got = ResolveNextSteps(rule, newEvalContext())
+	})
+	if got.Text != unobserved.Text {
+		t.Fatalf("observed vs ordinary text mismatch:\nobserved:   %q\nunobserved: %q", got.Text, unobserved.Text)
+	}
+	if len(got.Calls) != len(unobserved.Calls) {
+		t.Fatalf("observed vs ordinary calls len mismatch: %+v vs %+v", got.Calls, unobserved.Calls)
+	}
+	for i := range got.Calls {
+		if got.Calls[i].Text() != unobserved.Calls[i].Text() {
+			t.Fatalf("call[%d] mismatch: %q vs %q", i, got.Calls[i].Text(), unobserved.Calls[i].Text())
+		}
+	}
+	if len(observedBranches) != len(unobservedBranches) {
+		t.Fatalf("branch coverage mismatch: observed=%+v unobserved=%+v", observedBranches, unobservedBranches)
+	}
+	for k, hit := range observedBranches {
+		if unobservedBranches[k] != hit {
+			t.Fatalf("branch[%s] mismatch: observed=%+v unobserved=%+v", k, hit, unobservedBranches[k])
+		}
+	}
 
 	if len(observed) != 1 {
 		t.Fatalf("expected 1 observed evaluation, got %d", len(observed))
 	}
-	gcScenario := reachContext(toolreach.Offered([]string{"secret_generate"}))
+	gcScenario := newEvalContext()
 	gcScenario.FromScenario = true
-	_ = ResolveNextSteps(rule, gcScenario)
+	scenarioGot := ResolveNextSteps(rule, gcScenario)
 	if len(observed) != 1 {
 		t.Fatalf("scenario evaluation must not notify observer, got %d", len(observed))
+	}
+	if scenarioGot.Resolutions != nil || len(scenarioGot.Resolutions) != 0 {
+		t.Fatalf("scenario evaluation must collect 0 resolutions, got %+v", scenarioGot.Resolutions)
+	}
+	if scenarioGot.Text != unobserved.Text || len(scenarioGot.Calls) != len(unobserved.Calls) {
+		t.Fatalf("scenario text/calls mismatch: %+v vs %+v", scenarioGot, unobserved)
 	}
 
 	wantOutcomes := []struct {
