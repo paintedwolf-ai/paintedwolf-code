@@ -13,6 +13,7 @@ import (
 	hostapi "github.com/lycaon/lycaon/internal/api"
 	contractfixture "github.com/lycaon/lycaon/internal/api/contractfixture"
 	"github.com/lycaon/lycaon/internal/git"
+	"github.com/lycaon/lycaon/internal/gitrepo"
 	"github.com/lycaon/lycaon/internal/llm/compaction"
 	"github.com/lycaon/lycaon/internal/project"
 	"github.com/lycaon/lycaon/internal/project/worktrees"
@@ -72,7 +73,7 @@ func TestGitWorktreeTargetsStatusDiffCommitDiscardCursorAndRemoval(t *testing.T)
 	})
 	p, err := srv.Sources.Workspace.ProjectRegistry.Get(t.Context(), projectID)
 	testutil.FailErr(t, "get project", err)
-	primaryRoot := project.PrimaryRootPath(p)
+	primaryRoot := gitrepo.CanonicalDir(project.PrimaryRootPath(p))
 	rootID := p.Roots[0].ID
 	repoID := contractfixture.WorktreeRepoID(t, srv, projectID)
 
@@ -82,7 +83,7 @@ func TestGitWorktreeTargetsStatusDiffCommitDiscardCursorAndRemoval(t *testing.T)
 	contractfixture.RunGitIn(t, primaryRoot, "commit", "-m", "seed shared files")
 	primaryHead := strings.TrimSpace(gittest.Run(t, primaryRoot, "rev-parse", "HEAD"))
 
-	sibParent := t.TempDir()
+	sibParent := gitrepo.CanonicalDir(t.TempDir())
 	siblingA := filepath.Join(sibParent, "wt-a")
 	siblingB := filepath.Join(sibParent, "wt-b")
 	contractfixture.RunGitIn(t, primaryRoot, "worktree", "add", "-b", "feat/a", siblingA)
@@ -290,10 +291,10 @@ func TestGitWorktreeSharedStashRemoteRefsAndBoundBranchProtection(t *testing.T) 
 	srv, _, projectID := contractfixture.NewWorktreeTestServer(t)
 	p, err := srv.Sources.Workspace.ProjectRegistry.Get(t.Context(), projectID)
 	testutil.FailErr(t, "get project", err)
-	primaryRoot := project.PrimaryRootPath(p)
+	primaryRoot := gitrepo.CanonicalDir(project.PrimaryRootPath(p))
 	repoID := contractfixture.WorktreeRepoID(t, srv, projectID)
 
-	bareRemote := filepath.Join(t.TempDir(), "remote.git")
+	bareRemote := filepath.Join(gitrepo.CanonicalDir(t.TempDir()), "remote.git")
 	testutil.FailErr(t, "mkdir bare remote", os.MkdirAll(bareRemote, 0o755))
 	contractfixture.RunGitIn(t, bareRemote, "init", "--bare")
 	contractfixture.RunGitIn(t, primaryRoot, "remote", "add", "origin", bareRemote)
@@ -301,7 +302,7 @@ func TestGitWorktreeSharedStashRemoteRefsAndBoundBranchProtection(t *testing.T) 
 	testutil.FailErr(t, "primary branch", err)
 	contractfixture.RunGitIn(t, primaryRoot, "push", "-u", "origin", primaryBranch)
 
-	sibParent := t.TempDir()
+	sibParent := gitrepo.CanonicalDir(t.TempDir())
 	sibling := filepath.Join(sibParent, "wt-stash-remote")
 	contractfixture.RunGitIn(t, primaryRoot, "worktree", "add", "-b", "feat/shared", sibling)
 
