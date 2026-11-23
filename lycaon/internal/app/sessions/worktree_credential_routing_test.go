@@ -82,7 +82,7 @@ func TestSiblingCommandAndExternalProcessEditsPreservePrimaryCredentialsAndRefre
 		return ch
 	}})
 	_, err = f.Database.ExecContext(t.Context(), `INSERT INTO project_roots (id, project_id, path, label, is_primary, added_at, kind)
-		VALUES ('outside-r1', ?, ?, 'outside', 0, '2026-01-01T00:00:00Z', 'outside')`, testdbseed.DefaultProjectID, projectroot.OutsidePath)
+		VALUES ('outside-r1', ?, '', 'outside', 0, '2026-01-01T00:00:00Z', 'outside')`, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "insert outside root row", err)
 
 	fp, err := secretmatch.NewFingerprinter(bytes.Repeat([]byte{0x3c}, 32))
