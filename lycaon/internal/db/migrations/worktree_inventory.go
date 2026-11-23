@@ -14,10 +14,20 @@ var worktreeInventoryImplementation []byte
 //go:embed worktree_inventory.sql
 var worktreeInventorySQL []byte
 
+//go:embed worktree_inventory_publish.sql
+var worktreeInventoryPublishSQL []byte
+
+var sourceWorktreeRetirement = Retirement{
+	Table:   "source_worktrees",
+	Capture: "SELECT id, project_id, repo_id, toplevel, worktree_path, branch, base_branch, created_at FROM source_worktrees ORDER BY id",
+	Rebuild: "SELECT id, project_id, repo_id, toplevel, worktree_path, branch, base_branch, created_at FROM source_worktrees ORDER BY id",
+}
+
 // WorktreeInventory adds registration incarnation and lifecycle evidence to source_worktrees.
 func WorktreeInventory() Part {
+	source := append(append(append([]byte{}, worktreeInventoryImplementation...), worktreeInventorySQL...), worktreeInventoryPublishSQL...)
 	return Part{
-		Source:        append(append([]byte{}, worktreeInventoryImplementation...), worktreeInventorySQL...),
+		Source:        source,
 		RebuildTables: true,
 		Apply:         migrateWorktreeInventory,
 		Writes:        worktreeInventoryWrites,
@@ -34,7 +44,13 @@ func migrateWorktreeInventory(ctx context.Context, tx *sql.Tx) error {
 		return err
 	}
 	if _, err := tx.ExecContext(ctx, string(worktreeInventorySQL)); err != nil {
-		return fmt.Errorf("rebuild source_worktrees for checkout inventory: %w", err)
+		return fmt.Errorf("stage source_worktrees for checkout inventory: %w", err)
+	}
+	if err := DropReleased(ctx, tx, "source-manifests-and-command-records", sourceWorktreeRetirement); err != nil {
+		return err
+	}
+	if _, err := tx.ExecContext(ctx, string(worktreeInventoryPublishSQL)); err != nil {
+		return fmt.Errorf("publish source_worktrees for checkout inventory: %w", err)
 	}
 	return restoreSchemaObjects(ctx, tx, append(views, triggers...))
 }

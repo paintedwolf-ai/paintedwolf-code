@@ -20,9 +20,15 @@ import (
 	"github.com/lycaon/lycaon/internal/sourcebranch"
 	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/testdbseed"
+	gittestsetup "github.com/lycaon/lycaon/internal/testsetup/git"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/timelayout"
 )
+
+func TestMain(m *testing.M) {
+	gittestsetup.Enable()
+	os.Exit(m.Run())
+}
 
 func runGitCmd(t *testing.T, dir string, args ...string) {
 	t.Helper()
@@ -45,12 +51,26 @@ func initGitFixture(t *testing.T) (base, primary string) {
 	return base, primary
 }
 
-func openInventoryStore(t *testing.T, rootDir string) *db.DB {
+func openInventoryStore(t *testing.T, rootDir string) *db.Store {
 	t.Helper()
 	storeDir := t.TempDir()
 	sqlDB := testdbfixture.OpenPath(t, filepath.Join(storeDir, "store.db"))
 	testdbseed.InsertProjectRoot(t, sqlDB, testdbseed.DefaultProjectID, rootDir)
 	return sqlDB
+}
+
+func makeRegistrationRelative(t *testing.T, checkout string) {
+	t.Helper()
+	dotGit := filepath.Join(checkout, ".git")
+	raw, err := os.ReadFile(dotGit)
+	testutil.FailErr(t, "read .git", err)
+	adminDir := filepath.Clean(string(raw[len("gitdir: "):len(raw)-1]))
+	relAdmin, err := filepath.Rel(checkout, adminDir)
+	testutil.FailErr(t, "rel admin", err)
+	relBack, err := filepath.Rel(adminDir, dotGit)
+	testutil.FailErr(t, "rel back", err)
+	testutil.FailErr(t, "write relative .git", os.WriteFile(dotGit, []byte("gitdir: "+filepath.ToSlash(relAdmin)+"\n"), 0o644))
+	testutil.FailErr(t, "write relative gitdir", os.WriteFile(filepath.Join(adminDir, "gitdir"), []byte(filepath.ToSlash(relBack)+"\n"), 0o644))
 }
 
 func findCheckoutByPath(items []worktrees.Checkout, path string) (worktrees.Checkout, bool) {
@@ -82,7 +102,8 @@ func TestInventoryAcrossMovesPathReuseBranchReuseAndRestart(t *testing.T) {
 	detached := filepath.Join(base, "detached-wt")
 	runGitCmd(t, primary, "worktree", "add", "-q", "--detach", detached)
 	relative := filepath.Join(base, "relative-wt")
-	runGitCmd(t, primary, "worktree", "add", "-q", "--relative-paths", "-b", "feat/rel", relative)
+	runGitCmd(t, primary, "worktree", "add", "-q", "-b", "feat/rel", relative)
+	makeRegistrationRelative(t, relative)
 
 	inv1 := worktrees.New(sqlDB, worktrees.Options{})
 	items, err := inv1.Read(t.Context(), spec)
@@ -356,7 +377,7 @@ func TestCoalescesConcurrentConsumersAndSchedulesSingleFollowUpForUncoveredGener
 	}
 }
 
-func seedDraftForCheckout(t *testing.T, sqlDB *db.DB, rootPath, checkoutID, relPath, draft string) string {
+func seedDraftForCheckout(t *testing.T, sqlDB *db.Store, rootPath, checkoutID, relPath, draft string) string {
 	t.Helper()
 	var rootID string
 	err := sqlDB.QueryRowContext(t.Context(),

@@ -50,7 +50,8 @@ func TestVerifyRegisteredCheckoutCoversPrimaryLinkedSpacesRelativeAndRejectsForg
 	runGit(t, primary, "worktree", "add", "-q", "--detach", detached)
 
 	relativeSibling := filepath.Join(base, "relative-wt")
-	runGit(t, primary, "worktree", "add", "-q", "--relative-paths", "-b", "rel-branch", relativeSibling)
+	runGit(t, primary, "worktree", "add", "-q", "-b", "rel-branch", relativeSibling)
+	makeRegistrationRelative(t, relativeSibling)
 
 	commonDir, primaryRoot, bare, ok := gitrepo.CommonRepository(primary)
 	if !ok || bare || primaryRoot != primary {
@@ -178,4 +179,18 @@ func TestProjectSubtreeAndMatchAdmittedSiblingRespectPartialRootsAndNestedRepos(
 	if !ok || projPrimary.Checkout.Kind != gitrepo.CheckoutPrimary || projPrimary.ProjectedRoot != attachedSub {
 		t.Fatalf("linked attached root did not project onto primary checkout: %+v, %v", projPrimary, ok)
 	}
+}
+
+func makeRegistrationRelative(t *testing.T, checkout string) {
+	t.Helper()
+	dotGit := filepath.Join(checkout, ".git")
+	raw, err := os.ReadFile(dotGit)
+	testutil.FailErr(t, "read .git", err)
+	adminDir := filepath.Clean(strings.TrimSpace(strings.TrimPrefix(string(raw), "gitdir:")))
+	relAdmin, err := filepath.Rel(checkout, adminDir)
+	testutil.FailErr(t, "rel admin", err)
+	relBack, err := filepath.Rel(adminDir, dotGit)
+	testutil.FailErr(t, "rel back", err)
+	testutil.FailErr(t, "write relative .git", os.WriteFile(dotGit, []byte("gitdir: "+filepath.ToSlash(relAdmin)+"\n"), 0o644))
+	testutil.FailErr(t, "write relative gitdir", os.WriteFile(filepath.Join(adminDir, "gitdir"), []byte(filepath.ToSlash(relBack)+"\n"), 0o644))
 }

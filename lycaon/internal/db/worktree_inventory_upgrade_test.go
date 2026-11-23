@@ -15,11 +15,14 @@ import (
 	"github.com/lycaon/lycaon/internal/project/worktrees"
 	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/sourcebranch"
+	"github.com/lycaon/lycaon/internal/testdbfixture"
+	gittestsetup "github.com/lycaon/lycaon/internal/testsetup/git"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/timelayout"
 )
 
 func TestUpgradePreservesLegacyWorktreeBindingsAndAmbiguousHistory(t *testing.T) {
+	gittestsetup.Enable()
 	testutil.SkipIfRace(t, "corpus upgrade exercises full migration route")
 	raw, err := os.ReadFile("../../testdata/upgrade-corpus/1.0.2/store.db")
 	testutil.FailErr(t, "read 1.0.2 released store", err)
@@ -82,9 +85,7 @@ func TestUpgradePreservesLegacyWorktreeBindingsAndAmbiguousHistory(t *testing.T)
 
 	testutil.FailErr(t, "upgrade staged", db.UpgradeStaged(t.Context(), storePath))
 
-	upgraded, err := db.Open(storePath)
-	testutil.FailErr(t, "open upgraded store", err)
-	defer func() { _ = upgraded.Close() }()
+	upgraded := testdbfixture.OpenPath(t, storePath)
 
 	repos := store.NewSQL(upgraded)
 	binding, ok, err := repos.Sessions.GetWorktreeBinding(t.Context(), sessionID)

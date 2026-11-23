@@ -22,5 +22,5 @@ func (p Plan) reviewedRetainedRoute() bool {
 	// replacing the version reclaim trigger do not rewrite rows. Workflow
 	// manifest storage adds an empty table and a constant-default column.
 	return p.steps[0].ID == "source-manifests-and-command-records" &&
-		p.steps[0].Checksum == "cb9f078b3b78701352044c9282f6d4c0b940a7b7eacfc94fa1deb73e36401e82"
+		p.steps[0].Checksum == "d08ff76f35b22df782ea1043eeeefc5c2c21657a08626832550c0a11eb9c33dc"
 }
