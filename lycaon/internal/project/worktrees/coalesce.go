@@ -138,7 +138,8 @@ func (inv *Inventory) awaitGenerationLocked(ctx context.Context, key repoKey, sl
 	slot.mu.Unlock()
 
 	if startWorker {
-		go inv.runRefreshLoop(context.WithoutCancel(ctx), key, slot)
+		// Host inventory reconciliation must not inherit caller launch leases.
+		go inv.runRefreshLoop(context.Background(), key, slot)
 	}
 
 	select {
