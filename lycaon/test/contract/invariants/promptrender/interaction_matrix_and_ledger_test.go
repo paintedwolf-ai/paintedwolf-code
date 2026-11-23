@@ -16,7 +16,6 @@ import (
 	"github.com/lycaon/lycaon/internal/coordinator/inject"
 	"github.com/lycaon/lycaon/internal/coordinator/surface"
 	"github.com/lycaon/lycaon/internal/extpacks"
-	"github.com/lycaon/lycaon/internal/heldcall"
 	"github.com/lycaon/lycaon/internal/platform"
 	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/internal/settings"
@@ -27,7 +26,6 @@ import (
 	"github.com/lycaon/lycaon/pkg/api"
 	"github.com/lycaon/lycaon/test/contract/internal/hoststate"
 	"github.com/lycaon/lycaon/test/contract/internal/interactions"
-	"github.com/lycaon/lycaon/test/contract/internal/oarproducers"
 	"github.com/lycaon/lycaon/test/contract/invariants/promptrender"
 )
 
@@ -283,7 +281,7 @@ func extractSection(text, heading string) string {
 	return rest
 }
 
-// TestLiveJobThreeWayInteractionMatrixAndLedger executes CT05 §2c's 3-way
+// TestLiveJobThreeWayInteractionMatrixAndLedger executes the 3-way
 // (job occurrence × output-reader route × wait process_done admission) matrix,
 // verifies available read survives narrowed wait, builds the source-derived AST+SSA
 // interaction ledger, asserts 0 unexplained gaps, and writes ledger artifacts.
@@ -417,7 +415,7 @@ func TestLiveJobThreeWayInteractionMatrixAndLedger(t *testing.T) {
 		t.Fatalf("unexpected ProducerGraphStats: %+v", ledger.ProducerGraphStats)
 	}
 
-	closeExercisedEdgeScopes(t, s, ledger, reps)
+	closeExercisedEdgeScopes(t, s, ledger, reps, nil)
 
 	var jobTrace, archiveTrace interactions.CompactInstructionTrace
 	for _, ct := range ledger.CompactTraces {
@@ -488,23 +486,30 @@ func TestLiveJobThreeWayInteractionMatrixAndLedger(t *testing.T) {
 		t.Fatalf("ValidateZeroUnexplainedGaps: %v", err)
 	}
 
-	// Lost-witness negative control (CT05 §2c): removing an executed assertion
-	// OR changing its recipient must fail on that exact edge.
+	// Removing an executed assertion or changing its recipient must fail on that exact edge.
 	t.Run("lost_witness_negative_control", func(t *testing.T) {
-		if len(ledger.ExecutedEdgeAssertions) == 0 {
+		if len(ledger.RequiredEdgeScopes) == 0 || len(ledger.ExecutedEdgeAssertions) == 0 {
 			t.Fatal("expected at least 1 ExecutedEdgeAssertion closing a real unresolved edge")
 		}
-		target := ledger.ExecutedEdgeAssertions[0]
+		target := ledger.RequiredEdgeScopes[0]
+		matchesTarget := func(a interactions.ExecutedEdgeAssertion) bool {
+			return a.EdgeID == target.EdgeID && a.InstructionID == target.InstructionID &&
+				a.Recipient == target.Recipient && a.AssertedAction == target.AffectedAction
+		}
 
 		removed := ledger.Clone()
-		removed.ExecutedEdgeAssertions = slices.Clone(ledger.ExecutedEdgeAssertions[1:])
+		removed.ExecutedEdgeAssertions = slices.DeleteFunc(removed.ExecutedEdgeAssertions, matchesTarget)
 		remErr := removed.ValidateZeroUnexplainedGaps()
 		if remErr == nil || !strings.Contains(remErr.Error(), target.EdgeID) || !strings.Contains(remErr.Error(), target.InstructionID) {
-			t.Fatalf("expected removing assertion for %s to fail naming edge and instruction, got: %v", target.EdgeID, remErr)
+			t.Fatalf("expected removing assertions for %s to fail naming edge and instruction, got: %v", target.EdgeID, remErr)
 		}
 
 		retargeted := ledger.Clone()
-		retargeted.ExecutedEdgeAssertions[0].Recipient = target.Recipient + "_mismatched"
+		for i := range retargeted.ExecutedEdgeAssertions {
+			if matchesTarget(retargeted.ExecutedEdgeAssertions[i]) {
+				retargeted.ExecutedEdgeAssertions[i].Recipient = target.Recipient + "_mismatched"
+			}
+		}
 		retErr := retargeted.ValidateZeroUnexplainedGaps()
 		if retErr == nil || !strings.Contains(retErr.Error(), target.EdgeID) || !strings.Contains(retErr.Error(), "recipient="+target.Recipient) {
 			t.Fatalf("expected changing assertion recipient from %s to fail naming edge and original recipient, got: %v", target.Recipient, retErr)
@@ -574,9 +579,9 @@ func primitivesFromTraces(groups ...[]interactions.FactTrace) []string {
 	return out
 }
 
-// TestMaskedTwoAxisInteractionAndMissingGuardFaults implements CT05 §2c's
-// masked two-axis coincidence fault (Ask/Agent × primary-root Git/non-Git)
-// and the missing-guard relevance obligation variant on the same fixture.
+// TestMaskedTwoAxisInteractionAndMissingGuardFaults verifies the masked
+// two-axis coincidence fault (Ask/Agent × primary-root Git/non-Git) and the
+// missing-guard relevance obligation variant on the same fixture.
 func TestMaskedTwoAxisInteractionAndMissingGuardFaults(t *testing.T) {
 	s := mustStock(t)
 	coordStates, err := hoststate.CoordinatorStates(t.Context())
@@ -592,7 +597,7 @@ func TestMaskedTwoAxisInteractionAndMissingGuardFaults(t *testing.T) {
 		t.Fatal("missing stock guidance/command-jobs")
 	}
 
-	// Masked two-axis fault: suppress command_output(...) ONLY when BOTH changed facts coincide.
+	// Suppress command_output(...) only when both changed facts coincide.
 	maskedJobs := strings.Replace(
 		string(origRaw),
 		"{% if profile_has_command_output %}",
@@ -618,25 +623,24 @@ func TestMaskedTwoAxisInteractionAndMissingGuardFaults(t *testing.T) {
 		return nil
 	}
 
-	// 1. Baseline (Agent, Git) and both 1-axis neighbors (Ask, Git) & (Agent, non-Git) PASS under masked fault!
+	// Baseline and single-axis neighbors remain unaffected by the two-axis mask.
 	for _, name := range []string{"baseline_agent_git", "neighbor_ask_git", "neighbor_agent_nongit"} {
 		if err := checkCell(maskedStock, rect[name]); err != nil {
 			t.Fatalf("expected %s (%s) to pass under masked 2-axis fault, got: %v", name, rect[name].ID, err)
 		}
 	}
-	// 2. Combined 2-axis cell (Ask, non-Git) FAILS naming instruction and state!
+	// The combined two-axis cell fails naming instruction and state.
 	combErr := checkCell(maskedStock, rect["combined_ask_nongit"])
 	if combErr == nil || !strings.Contains(combErr.Error(), rect["combined_ask_nongit"].ID) || !strings.Contains(combErr.Error(), "command_output") {
 		t.Fatalf("expected combined 2-axis cell %s to fail naming state and command_output, got: %v", rect["combined_ask_nongit"].ID, combErr)
 	}
-	// 3. Restoring stock copy passes all 4 cells!
 	for _, name := range []string{"baseline_agent_git", "neighbor_ask_git", "neighbor_agent_nongit", "combined_ask_nongit"} {
 		if err := checkCell(s, rect[name]); err != nil {
 			t.Fatalf("expected restored stock copy to pass %s (%s), got: %v", name, rect[name].ID, err)
 		}
 	}
 
-	// 4. Missing-guard variant on same fixture: erase {% if has_running %} around schema-valid command_output(...)!
+	// Erase {% if has_running %} while keeping schema-valid command_output(...).
 	missingGuardJobs := strings.Replace(string(origRaw), "{% if has_running %}", "{% if true %}", 1)
 	mgEff := buildDisposablePackCatalog(t, "acme/missing-guard", map[string]string{
 		"guidance/command-jobs.md": missingGuardJobs,
@@ -649,8 +653,7 @@ func TestMaskedTwoAxisInteractionAndMissingGuardFaults(t *testing.T) {
 		label: baseSt.ID, coordState: baseSt, auth: baseAuth,
 	}, jobSnapshotsForOccurrence(occExitedOnly))
 
-	// Prove negative schema/offer checker passes (call is schema-valid & offered),
-	// while recipient-level relevance obligation FAILS.
+	// Negative schema/offer checks still pass, while relevance checks reject the ungrounded call.
 	for _, blk := range exitedBlocks {
 		if viols := promptrender.EvaluateClaimsForTest(s, "guidance/command-jobs ("+baseSt.ID+")", blk, baseAuth, baseSt.SessionMode, baseSt.Posture, toolvocabtest.SubjectSelfNow(), true); len(viols) != 0 {
 			t.Fatalf("expected missing-guard call to remain schema-valid, got violations: %v", viols)
@@ -806,153 +809,6 @@ func matchPairTwoAxes[T interface {
 	return hoststate.CoordinatorState{}, false
 }
 
-func closeExercisedEdgeScopes(
-	t *testing.T,
-	s *promptrender.Stock,
-	ledger *interactions.InteractionLedger,
-	reps map[string]jobWaitAuthorityRep,
-) {
-	t.Helper()
-	coordRep, hasCoord := reps["route=callable|wait_process_done=true"]
-	if !hasCoord {
-		t.Fatal("missing callable coordinator rep for edge assertions")
-	}
-	coordStates, err := hoststate.CoordinatorStates(t.Context())
-	if err != nil {
-		t.Fatalf("CoordinatorStates: %v", err)
-	}
-	workerStates, err := hoststate.WorkerStates(t.Context())
-	if err != nil {
-		t.Fatalf("WorkerStates: %v", err)
-	}
-	workerRep := pickWorkerRepForEdge(t, workerStates, "implementer", api.SessionPostureBuild)
-	readonlyWorkerRep := pickWorkerRepForEdge(t, workerStates, "plan-reviewer", api.SessionPostureSpec)
-
-	// Track actually-executed and verified (deliveryPrefix|recipient -> inputState) witnesses.
-	executedByDeliveryRecip := map[string]string{}
-
-	injR := prompts.NewInjectRenderer(s.Engine())
-	now := time.Now().UTC()
-	runJobs := jobSnapshotsForOccurrence(occRunning)
-	heldSlice := []heldcall.Running{{Handle: "held-1", Tool: "command", Elapsed: 8 * time.Second}}
-
-	for _, entry := range []struct {
-		recip string
-		rep   jobWaitAuthorityRep
-	}{
-		{"coordinator", coordRep},
-		{"worker", workerRep},
-	} {
-		runBlock := inject.RenderCommandJobsBlock(t.Context(), injR, entry.rep.auth.Reader, entry.rep.auth.Schemas["wait"], "sess-edge", runJobs, nil, now, entry.recip)
-		if err := verifyIndependentJobWaitExpectedActions(s.Names, []string{runBlock}, runJobs, entry.rep.auth); err != nil {
-			t.Fatalf("%s running job assertion failed: %v", entry.recip, err)
-		}
-		wantStop := slices.Contains(entry.rep.auth.Offered, "command_stop")
-		gotStop := len(parsedCallsForTool(s.Names, []string{runBlock}, "command_stop")) > 0
-		if gotStop != wantStop {
-			t.Fatalf("%s command_stop=%t, want %t", entry.recip, gotStop, wantStop)
-		}
-		heldBlock := inject.RenderCommandJobsBlock(t.Context(), injR, entry.rep.auth.Reader, entry.rep.auth.Schemas["wait"], "sess-held", nil, heldSlice, now, entry.recip)
-		wantHeldRes := slices.Contains(entry.rep.auth.Offered, "held_result")
-		gotHeldRes := len(parsedCallsForTool(s.Names, []string{heldBlock}, "held_result")) > 0
-		if gotHeldRes != wantHeldRes {
-			t.Fatalf("%s held_result=%t, want %t", entry.recip, gotHeldRes, wantHeldRes)
-		}
-		executedByDeliveryRecip["guidance:command-jobs|"+entry.recip] = entry.rep.label + "+running_and_held"
-	}
-
-	// Execute coordinator-worker-task-finished kick across promote_overlay +
-	// investigate surfaces and verify claim authority.
-	promoteSt := pickCoordState(t, coordStates, func(c hoststate.CoordinatorState) bool {
-		return !c.Excluded && c.PackOverlayID == "stock" && c.SessionMode == api.SessionModeAgent &&
-			c.Posture == api.SessionPostureBuild && c.TurnProfile.SurfaceID == "implement_overlay_promote" &&
-			c.Loading == hoststate.LoadingAllLoaded && c.RootCount == 1
-	})
-	promoteAuth, err := hoststate.FreezeTurnAuthority(t.Context(), promoteSt)
-	if err != nil {
-		t.Fatalf("FreezeTurnAuthority(promote): %v", err)
-	}
-	for _, changed := range []bool{true, false} {
-		wfText, rErr := injR.RenderWithReader(t.Context(), promoteAuth.Reader, "coordinator-worker-task-finished", map[string]any{
-			"worker":        "impl-1",
-			"worker_result": map[string]any{"changed": changed, "not_applied": !changed, "result_handle": "leg-1"},
-		})
-		if rErr != nil {
-			t.Fatalf("RenderWithReader coordinator-worker-task-finished: %v", rErr)
-		}
-		if viols := promptrender.EvaluateClaimsForTest(s, "guidance/coordinator-worker-task-finished ("+promoteSt.ID+")", wfText, promoteAuth, promoteSt.SessionMode, promoteSt.Posture, toolvocabtest.SubjectSelfNow(), false); len(viols) > 0 {
-			t.Fatalf("coordinator-worker-task-finished claim violation: %v", viols[0])
-		}
-	}
-	executedByDeliveryRecip["guidance:coordinator-worker-task-finished|coordinator"] = promoteSt.ID + "+worker_result"
-
-	// Execute real CT04 OAR rejection + lifecycle hook producers across
-	// coordinator & worker cells and verify claim authority.
-	synthSt := pickCoordState(t, coordStates, func(c hoststate.CoordinatorState) bool {
-		return !c.Excluded && c.PackOverlayID == "stock" && c.SessionMode == api.SessionModeAgent &&
-			c.Posture == api.SessionPostureBuild && c.TurnProfile.SurfaceID == "implement_synthesis" &&
-			c.RootCount == 1
-	})
-	synthAuth, _ := hoststate.FreezeTurnAuthority(t.Context(), synthSt)
-	investSt := pickCoordState(t, coordStates, func(c hoststate.CoordinatorState) bool {
-		return !c.Excluded && c.PackOverlayID == "stock" && c.SessionMode == api.SessionModeAgent &&
-			c.Posture == api.SessionPostureBuild && c.TurnProfile.SurfaceID == "implement_investigate" &&
-			c.Loading == hoststate.LoadingAllLoaded && c.RootCount == 1
-	})
-	investAuth, _ := hoststate.FreezeTurnAuthority(t.Context(), investSt)
-	floorInvestSt := pickCoordState(t, coordStates, func(c hoststate.CoordinatorState) bool {
-		return !c.Excluded && c.PackOverlayID == "stock" && c.SessionMode == api.SessionModeAgent &&
-			c.Posture == api.SessionPostureBuild && c.TurnProfile.SurfaceID == "implement_investigate" &&
-			c.Loading == hoststate.LoadingFloorOnly && c.RootCount == 1
-	})
-	floorInvestAuth, _ := hoststate.FreezeTurnAuthority(t.Context(), floorInvestSt)
-	specFloorInvestSt := pickCoordState(t, coordStates, func(c hoststate.CoordinatorState) bool {
-		return !c.Excluded && c.PackOverlayID == "stock" && c.SessionMode == api.SessionModeAgent &&
-			c.Posture == api.SessionPostureSpec && c.TurnProfile.SurfaceID == "implement_investigate" &&
-			c.Loading == hoststate.LoadingFloorOnly && c.RootCount == 1
-	})
-	specFloorInvestAuth, _ := hoststate.FreezeTurnAuthority(t.Context(), specFloorInvestSt)
-
-	oarH, err := oarproducers.NewHarness(s.Catalog, s.Schemas, s.Engine())
-	if err != nil {
-		t.Fatalf("oarproducers.NewHarness: %v", err)
-	}
-	oarCells := []oarproducers.AuthCell{
-		{Label: investSt.ID, Role: "coordinator", SurfaceID: investSt.TurnProfile.SurfaceID, ProfileID: "coordinator", Mode: investSt.SessionMode, Posture: investSt.Posture, Auth: investAuth, Reach: investAuth.Reach},
-		{Label: floorInvestSt.ID, Role: "coordinator", SurfaceID: floorInvestSt.TurnProfile.SurfaceID, ProfileID: "coordinator", Mode: floorInvestSt.SessionMode, Posture: floorInvestSt.Posture, Auth: floorInvestAuth, Reach: floorInvestAuth.Reach},
-		{Label: specFloorInvestSt.ID, Role: "coordinator", SurfaceID: specFloorInvestSt.TurnProfile.SurfaceID, ProfileID: "coordinator", Mode: specFloorInvestSt.SessionMode, Posture: specFloorInvestSt.Posture, Auth: specFloorInvestAuth, Reach: specFloorInvestAuth.Reach},
-		{Label: promoteSt.ID, Role: "coordinator", SurfaceID: promoteSt.TurnProfile.SurfaceID, ProfileID: "coordinator", Mode: promoteSt.SessionMode, Posture: promoteSt.Posture, Auth: promoteAuth, Reach: promoteAuth.Reach},
-		{Label: synthSt.ID, Role: "coordinator", SurfaceID: synthSt.TurnProfile.SurfaceID, ProfileID: "coordinator", Mode: synthSt.SessionMode, Posture: synthSt.Posture, Auth: synthAuth, Reach: synthAuth.Reach},
-		{Label: workerRep.label, Role: "worker", AgentType: workerRep.workerState.AgentID, ProfileID: workerRep.workerState.ToolProfile, Mode: workerRep.workerState.ParentSessionMode, Posture: workerRep.workerState.Posture, Auth: workerRep.auth, Reach: workerRep.auth.Reach},
-		{Label: readonlyWorkerRep.label, Role: "worker", AgentType: readonlyWorkerRep.workerState.AgentID, ProfileID: readonlyWorkerRep.workerState.ToolProfile, Mode: readonlyWorkerRep.workerState.ParentSessionMode, Posture: readonlyWorkerRep.workerState.Posture, Auth: readonlyWorkerRep.auth, Reach: readonlyWorkerRep.auth.Reach},
-	}
-	rejOut, err := oarH.RunToolRejectedProducers(t.Context(), oarCells)
-	if err != nil {
-		t.Fatalf("RunToolRejectedProducers: %v", err)
-	}
-	lifeOut, err := oarH.RunLifecycleHookProducers(t.Context(), oarCells)
-	if err != nil {
-		t.Fatalf("RunLifecycleHookProducers: %v", err)
-	}
-	assertOARProducerEdgeOutcomes(t, s, append(rejOut, lifeOut...), investSt.ID, floorInvestSt.ID, specFloorInvestSt.ID, workerRep.label, readonlyWorkerRep.label, executedByDeliveryRecip)
-
-	// Join RequiredEdgeScopes only when that exact (deliveryPrefix, recipient)
-	// was executed and verified above.
-	for _, sc := range ledger.RequiredEdgeScopes {
-		delivPrefix, _, _ := strings.Cut(sc.InstructionID, "|")
-		if stateWitness, ok := executedByDeliveryRecip[delivPrefix+"|"+sc.Recipient]; ok {
-			ledger.RecordExecutedEdgeAssertion(interactions.ExecutedEdgeAssertion{
-				EdgeID:         sc.EdgeID,
-				InstructionID:  sc.InstructionID,
-				Recipient:      sc.Recipient,
-				InputState:     stateWitness,
-				AssertedAction: sc.AffectedAction,
-				TestName:       t.Name(),
-			})
-		}
-	}
-}
-
 func pickWorkerRepForEdge(t *testing.T, workerStates []hoststate.WorkerState, agentID string, posture api.SessionPosture) jobWaitAuthorityRep {
 	t.Helper()
 	for _, ws := range workerStates {
@@ -965,81 +821,4 @@ func pickWorkerRepForEdge(t *testing.T, workerStates []hoststate.WorkerState, ag
 	}
 	t.Fatalf("missing %s (%s) worker rep for edge assertions", agentID, posture)
 	return jobWaitAuthorityRep{}
-}
-
-func assertOARProducerEdgeOutcomes(
-	t *testing.T,
-	s *promptrender.Stock,
-	outcomes []oarproducers.FiredOutcome,
-	taskCallableLabel, taskDeferredLabel, specFloorLabel string,
-	surfaceWorkerLabel, nonSurfaceWorkerLabel string,
-	executedByDeliveryRecip map[string]string,
-) {
-	t.Helper()
-	var sawMidTurnTaskCallable, sawMidTurnTaskDeferred bool
-	var sawSurfaceWorkerHandles, sawNonSurfaceWorkerFallback bool
-	var sawBuildSandboxCap, sawSpecSandboxOmitted bool
-	for _, o := range outcomes {
-		if o.CheckClaims && strings.TrimSpace(o.FixCopy) != "" {
-			if viols := promptrender.EvaluateClaimsForTest(s, "edge-oar/"+o.RuleID, o.FixCopy, o.Cell.Auth, o.Cell.Mode, o.Cell.Posture, toolvocabtest.SubjectSelfNow(), false); len(viols) > 0 {
-				t.Fatalf("OAR edge assertion %s failed on %s: %v", o.RuleID, o.Cell.Label, viols[0])
-			}
-		}
-		shortID := o.RuleID
-		if idx := strings.LastIndexByte(shortID, '/'); idx >= 0 {
-			shortID = shortID[idx+1:]
-		}
-		if shortID == "SANDBOX_TRY_CREDENTIAL_STORE" {
-			if o.Cell.Label == taskCallableLabel && strings.Contains(o.FixCopy, "capability_request.credential_store") {
-				sawBuildSandboxCap = true
-			}
-			if o.Cell.Label == specFloorLabel {
-				if strings.Contains(o.FixCopy, "capability_request.credential_store") {
-					t.Fatalf("expected SANDBOX_TRY_CREDENTIAL_STORE on spec %s to omit unoffered capability_request.credential_store, got %q", o.Cell.Label, o.FixCopy)
-				}
-				sawSpecSandboxOmitted = true
-			}
-		}
-		if shortID == "MID_TURN_NOTE_UNGROUNDED" {
-			if o.Cell.Label == taskCallableLabel {
-				if !strings.Contains(o.FixCopy, "[task#1]") {
-					t.Fatalf("expected MID_TURN_NOTE_UNGROUNDED on task-offering %s to cite [task#1], got %q", o.Cell.Label, o.FixCopy)
-				}
-				sawMidTurnTaskCallable = true
-			}
-			if o.Cell.Label == taskDeferredLabel {
-				if strings.Contains(o.FixCopy, "[task#1]") || !strings.Contains(o.FixCopy, "[kind#ordinal]") {
-					t.Fatalf("expected MID_TURN_NOTE_UNGROUNDED on floor-only %s to omit [task#1] and cite [kind#ordinal], got %q", o.Cell.Label, o.FixCopy)
-				}
-				sawMidTurnTaskDeferred = true
-			}
-		}
-		if shortID == "SURFACE_CLAIM_UNGROUNDED" {
-			if o.Cell.Label == surfaceWorkerLabel {
-				if !strings.Contains(o.FixCopy, "page#") || !strings.Contains(o.FixCopy, "tui#") || !strings.Contains(o.FixCopy, "terminal_session#") {
-					t.Fatalf("expected SURFACE_CLAIM_UNGROUNDED on surface-capable %s to cite page#, tui#, terminal_session#, got %q", o.Cell.Label, o.FixCopy)
-				}
-				sawSurfaceWorkerHandles = true
-			}
-			if o.Cell.Label == nonSurfaceWorkerLabel {
-				if strings.Contains(o.FixCopy, "page#") || strings.Contains(o.FixCopy, "tui#") || strings.Contains(o.FixCopy, "terminal_session#") || !strings.Contains(o.FixCopy, "[kind#ordinal]") {
-					t.Fatalf("expected SURFACE_CLAIM_UNGROUNDED on non-surface %s to omit unmintable handles and cite [kind#ordinal], got %q", o.Cell.Label, o.FixCopy)
-				}
-				sawNonSurfaceWorkerFallback = true
-			}
-		}
-		deliveryKey := fmt.Sprintf("oar:%s:%s|%s", o.Anchor, shortID, o.Cell.Role)
-		if _, seen := executedByDeliveryRecip[deliveryKey]; !seen {
-			executedByDeliveryRecip[deliveryKey] = o.Cell.Label + "+" + o.EventLabel
-		}
-	}
-	if !sawMidTurnTaskCallable || !sawMidTurnTaskDeferred {
-		t.Fatalf("missing paired MID_TURN_NOTE_UNGROUNDED witnesses: callable=%t deferred=%t", sawMidTurnTaskCallable, sawMidTurnTaskDeferred)
-	}
-	if !sawSurfaceWorkerHandles || !sawNonSurfaceWorkerFallback {
-		t.Fatalf("missing paired SURFACE_CLAIM_UNGROUNDED witnesses: surface=%t non_surface=%t", sawSurfaceWorkerHandles, sawNonSurfaceWorkerFallback)
-	}
-	if !sawBuildSandboxCap || !sawSpecSandboxOmitted {
-		t.Fatalf("missing paired SANDBOX_TRY_CREDENTIAL_STORE witnesses: build=%t spec_omitted=%t", sawBuildSandboxCap, sawSpecSandboxOmitted)
-	}
 }

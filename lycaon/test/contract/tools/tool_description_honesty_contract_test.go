@@ -149,7 +149,7 @@ func TestToolDescriptionsCiteOnlyRegisteredTools(t *testing.T) {
 		}
 	}
 
-	// 1. Static tool registry descriptions and parameter schemas.
+	// Static tool registry descriptions and parameter schemas.
 	for _, meta := range metas {
 		checkProse(meta.Name, meta.Description)
 		walkSchema(meta.Name, meta.ArgsSchema)
@@ -158,7 +158,7 @@ func TestToolDescriptionsCiteOnlyRegisteredTools(t *testing.T) {
 		t.Fatal("static registry scan matched zero backticked tokens; scanner scaffolding likely broken")
 	}
 
-	// 2. Projected surface descriptions across coordinator metadata.
+	// Projected surface descriptions across coordinator metadata.
 	executor := toolexecution.NewExecutor(
 		toolexecution.NewApprovalPolicyEngine(toolprofiles.NewProfilePolicyEngine(contractcheck.ProdToolBoundary(t)), nil),
 		reg,
@@ -192,7 +192,7 @@ func TestToolDescriptionsCiteOnlyRegisteredTools(t *testing.T) {
 		t.Fatal(b.String())
 	}
 
-	// 3. Positive registered-tool and negative misspelled-tool controls on the same scanner.
+	// Positive registered-tool and negative misspelled-tool controls on the same scanner.
 	checkProse("synthetic_registered_probe", "Load `"+metas[0].Name+"` or inspect with `"+metas[len(metas)-1].Name+"`.")
 	if resolved < 2 || len(found) != 0 {
 		t.Fatalf("expected registered tool citations to resolve cleanly (resolved=%d found=%+v)", resolved, found)

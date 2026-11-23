@@ -98,6 +98,7 @@ func TestRestoredRequestNamesOmittedHistory(t *testing.T) {
 func TestFitRequestRewordedOmissionNoticeNarrowsRecipientWithoutEnglishParsing(t *testing.T) {
 	cfg := compaction.DefaultCompactionConfig()
 	svc, sqlStore, sess := newTurnSession(t, cfg)
+	svc.SetCompactor(nil)
 	installRewordedContinuationRenderer(t)
 	svc.recallAvailable = func(context.Context, *api.Session) bool { return true }
 	canonical := seedTurn(t, sqlStore, sess.ID, 300, "recorded observation")

@@ -93,7 +93,7 @@ func DiscoverCatalogInstructionsWithGraph(
 		sites = append(sites, site)
 	}
 
-	// 1. Discover template contributions from eff.Loaded.
+	// Discover template contributions from eff.Loaded.
 	for _, unitID := range eff.LoadedUnitIDs() {
 		if _, _, archived := extpacks.SplitArchiveUnitID(unitID); archived {
 			continue
@@ -114,7 +114,7 @@ func DiscoverCatalogInstructionsWithGraph(
 		)
 	}
 
-	// 2. Discover effective skills (SKILL.md and references/*.md).
+	// Discover effective skills (SKILL.md and references/*.md).
 	skillsList, _ := extpacks.LoadEffectiveSkills(eff)
 	for _, sk := range skillsList {
 		if sk.Project || strings.TrimSpace(sk.Metadata["authoring_reference"]) == "true" {
@@ -150,7 +150,7 @@ func DiscoverCatalogInstructionsWithGraph(
 		}
 	}
 
-	// 3. Discover effective compiled OAR rules and next-steps.
+	// Discover effective compiled OAR rules and next-steps.
 	oarSites, err := discoverOARRuleInstructions(eff, schemas, names)
 	if err != nil {
 		return nil, err

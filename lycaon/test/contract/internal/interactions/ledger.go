@@ -71,13 +71,15 @@ type EdgeScope struct {
 }
 
 // ExecutedEdgeAssertion records an actually executed test assertion that checked
-// AffectedAction for InstructionID on Recipient under InputState, closing the matching EdgeScope.
+// AffectedAction or its explicit omission for InstructionID on Recipient under
+// InputState while exercising EdgeID, closing the matching EdgeScope.
 type ExecutedEdgeAssertion struct {
 	EdgeID         string `json:"edge_id"`
 	InstructionID  string `json:"instruction_id"`
 	Recipient      string `json:"recipient"`
 	InputState     string `json:"input_state"`
 	AssertedAction string `json:"asserted_action"`
+	CheckedOutcome string `json:"checked_outcome"`
 	TestName       string `json:"test_name"`
 }
 
@@ -91,9 +93,9 @@ type ApprovedEdgeExclusion struct {
 	SourceConstraint string `json:"source_constraint"`
 }
 
-// InteractionLedger is the sorted, deterministic CT05 §2c source-derived
-// interaction inventory, graph metrics, witness summary, compact traces, and
-// unresolved-edge reconciliation report.
+// InteractionLedger is the sorted, deterministic source-derived interaction
+// inventory, graph metrics, witness summary, compact traces, and unresolved-edge
+// reconciliation report.
 type InteractionLedger struct {
 	ProducerGraphStats     GraphStats                `json:"producer_graph_stats"`
 	TotalDiscoveredSites   int                       `json:"total_discovered_sites"`
@@ -117,6 +119,10 @@ func recipientsForSite(site InstructionSite) []string {
 		return []string{"coordinator"}
 	case strings.HasPrefix(site.DeliverySite, "standing_persona:"):
 		return []string{"worker"}
+	case strings.HasPrefix(site.DeliverySite, "oar:worker."):
+		return []string{"worker"}
+	case strings.HasPrefix(site.DeliverySite, "oar:credential.assignment:"):
+		return []string{"coordinator", "worker"}
 	case site.ContributionID == "guidance/command-jobs":
 		return []string{"coordinator", "worker"}
 	default:
@@ -156,7 +162,7 @@ func BuildInteractionLedger(
 		allFacts := append(slices.Clone(sites[i].CapabilityFacts), sites[i].OccurrenceFacts...)
 		recips := recipientsForSite(sites[i])
 		for _, f := range allFacts {
-			tr := pg.TraceFact(f)
+			tr := pg.TraceFactForSite(f, sites[i])
 			for _, inp := range tr.PrimitiveInputs {
 				primSet[inp] = true
 			}
@@ -273,11 +279,14 @@ func buildCompactTrace(name, contribID string, sites []InstructionSite, pg *Prod
 
 // RecordExecutedEdgeAssertion records an executed assertion closing matching EdgeScope(s).
 func (l *InteractionLedger) RecordExecutedEdgeAssertion(a ExecutedEdgeAssertion) {
+	if slices.Contains(l.ExecutedEdgeAssertions, a) {
+		return
+	}
 	l.ExecutedEdgeAssertions = append(l.ExecutedEdgeAssertions, a)
 	slices.SortFunc(l.ExecutedEdgeAssertions, func(x, y ExecutedEdgeAssertion) int {
 		return strings.Compare(
-			x.EdgeID+"|"+x.InstructionID+"|"+x.Recipient+"|"+x.AssertedAction+"|"+x.InputState,
-			y.EdgeID+"|"+y.InstructionID+"|"+y.Recipient+"|"+y.AssertedAction+"|"+y.InputState,
+			x.EdgeID+"|"+x.InstructionID+"|"+x.Recipient+"|"+x.AssertedAction+"|"+x.CheckedOutcome+"|"+x.InputState,
+			y.EdgeID+"|"+y.InstructionID+"|"+y.Recipient+"|"+y.AssertedAction+"|"+y.CheckedOutcome+"|"+y.InputState,
 		)
 	})
 	l.ReconcileUnresolvedEdges()
@@ -303,7 +312,8 @@ func (l *InteractionLedger) ReconcileUnresolvedEdges() {
 	for _, a := range l.ExecutedEdgeAssertions {
 		if strings.TrimSpace(a.EdgeID) == "" || strings.TrimSpace(a.InstructionID) == "" ||
 			strings.TrimSpace(a.Recipient) == "" || strings.TrimSpace(a.InputState) == "" ||
-			strings.TrimSpace(a.AssertedAction) == "" || strings.TrimSpace(a.TestName) == "" {
+			strings.TrimSpace(a.AssertedAction) == "" || strings.TrimSpace(a.CheckedOutcome) == "" ||
+			strings.TrimSpace(a.TestName) == "" {
 			continue
 		}
 		key := a.EdgeID + "|" + a.InstructionID + "|" + a.Recipient + "|" + a.AssertedAction
@@ -403,7 +413,7 @@ func (l *InteractionLedger) MarshalPrettyJSON() ([]byte, error) {
 func (l *InteractionLedger) RenderMarkdown() string {
 	l.ReconcileUnresolvedEdges()
 	var b strings.Builder
-	fmt.Fprintf(&b, "# CT05 Source-Derived Interaction Ledger\n\n")
+	fmt.Fprintf(&b, "# Source-Derived Interaction Ledger\n\n")
 	fmt.Fprintf(&b, "- **SSA producer graph stats**: `root_packages=%d`, `in_scope_packages=%d`, `indexed_functions=%d`, `default_graph_builds=%d`\n",
 		l.ProducerGraphStats.RootPackageCount, l.ProducerGraphStats.InScopePackageCount,
 		l.ProducerGraphStats.IndexedFunctionCount, l.ProducerGraphStats.DefaultGraphBuildCount)

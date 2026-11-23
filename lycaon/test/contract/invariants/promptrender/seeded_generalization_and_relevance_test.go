@@ -402,10 +402,10 @@ func TestSeededFaultsGeneralizeAcrossPromptsOARRulesAndSkills(t *testing.T) {
 	}
 }
 
-// TestInstructionRelevanceAcrossTriggerAndRouteMatrix implements CT05 §2a:
-// paired recipient-level verification across all 4 (Trigger x Route) outcomes
-// for active-job output guidance and EXTRACT_FORMAT_UNSUPPORTED OAR recovery,
-// plus the 2 mandatory relevance seeded-fault witnesses (Seeds 9 & 10).
+// TestInstructionRelevanceAcrossTriggerAndRouteMatrix verifies paired
+// recipient-level relevance across all 4 (Trigger x Route) outcomes for
+// active-job output guidance and EXTRACT_FORMAT_UNSUPPORTED OAR recovery,
+// plus seeded availability-only and omitted-instruction controls.
 func TestInstructionRelevanceAcrossTriggerAndRouteMatrix(t *testing.T) {
 	s := mustStock(t)
 	bp := newTestBlockPlane(t, s)
@@ -668,7 +668,7 @@ func runOARMatrixAndRelevanceSeeds(
 		t.Fatalf("(Present, Unavailable) OAR cell: %v", err)
 	}
 
-	// Seed 9: Availability-only instruction in a shared section delivered on both turns.
+	// Availability-only instruction in a shared section delivered on both turns.
 	// Call is schema/reach-valid on both turns, caught by trigger-absent check, and cleared when gated on trigger.
 	t.Run("seed_9_availability_only_instruction_in_shared_section", func(t *testing.T) {
 		seededSharedSection := "Read `command_output(handle=\"<handle>\", cursor=0)` whenever `command_output` is offered."
@@ -689,7 +689,7 @@ func runOARMatrixAndRelevanceSeeds(
 		}
 	})
 
-	// Seed 10: Deleted legitimate instruction in the trigger-present case while negative reach scans stay clean.
+	// Deleted legitimate instruction in the trigger-present case while negative reach scans stay clean.
 	t.Run("seed_10_deleted_trigger_present_instruction", func(t *testing.T) {
 		strippedJobBlocks := []string{"## Live handles\n- handle=cmd-7 mode=background tool=command elapsed=4s\nLive job output stays recorded on `<handle>`."}
 		if v := promptrender.EvaluateClaimsForTest(s, "inject/command-jobs", strippedJobBlocks[0], availAuth, availSt.SessionMode, availSt.Posture, toolvocabtest.SubjectSelfNow(), true); len(v) != 0 {
@@ -735,9 +735,9 @@ type recipientCaptureSpec struct {
 	msgs    []api.Message
 }
 
-// TestRepresentativeRecipientCompositionsDeliveryOrder implements CT05 §2b:
-// assembles and verifies complete recipient prompts in delivery order across the
-// 4 representative compositions, writing durable capture files when PW_CAPTURE_RECIPIENT_DIR is set.
+// TestRepresentativeRecipientCompositionsDeliveryOrder assembles and verifies
+// complete recipient prompts in delivery order across 4 representative
+// compositions, writing capture files when PW_CAPTURE_RECIPIENT_DIR is set.
 func TestRepresentativeRecipientCompositionsDeliveryOrder(t *testing.T) {
 	s := mustStock(t)
 	bp := newTestBlockPlane(t, s)
@@ -747,7 +747,7 @@ func TestRepresentativeRecipientCompositionsDeliveryOrder(t *testing.T) {
 	}
 	wsDir := filepath.Join(t.TempDir(), "project")
 
-	// 1. Sparse turn (await_host floor_only)
+	// Sparse turn (await_host floor_only).
 	sparseSt := pickCoordState(t, coordStates, func(c hoststate.CoordinatorState) bool {
 		return c.SessionMode == api.SessionModeAgent && c.Posture == api.SessionPostureBuild &&
 			c.TurnProfile.SurfaceID == "await_host" && c.Loading == hoststate.LoadingFloorOnly &&
@@ -765,7 +765,7 @@ func TestRepresentativeRecipientCompositionsDeliveryOrder(t *testing.T) {
 		t.Fatalf("sparse BuildCompletionMessages: %v", err)
 	}
 
-	// 2. Broad turn (implement_investigate all_loaded build with Git root + running job)
+	// Broad turn (implement_investigate all_loaded build with Git root + running job).
 	broadSt := pickCoordState(t, coordStates, func(c hoststate.CoordinatorState) bool {
 		return c.SessionMode == api.SessionModeAgent && c.Posture == api.SessionPostureBuild &&
 			c.TurnProfile.SurfaceID == "implement_investigate" && c.Loading == hoststate.LoadingAllLoaded &&

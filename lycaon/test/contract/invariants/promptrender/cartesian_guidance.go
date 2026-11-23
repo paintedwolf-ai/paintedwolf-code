@@ -27,7 +27,7 @@ func runGuidanceAndUtilityRenders(
 	ur := prompts.NewUtilityPromptRenderer(engine)
 	zeroAuth := zeroToolAuthority(cReps[0].auth)
 
-	// 1. RenderWithReach templates across Coordinator & Worker Reach projections + narrowed recall schema
+	// RenderWithReach templates across Coordinator and Worker Reach projections and narrowed recall schema.
 	reachAuths := collectDistinctReachAuthorities(s, cReps, wReps)
 	for _, ra := range reachAuths {
 		if err := renderReachBoundGuidance(ctx, s, gr, ra.label, ra.auth, sum); err != nil {
@@ -35,7 +35,7 @@ func runGuidanceAndUtilityRenders(
 		}
 	}
 
-	// 2. RenderWithReader templates: survey/*-specifics and editor/*
+	// RenderWithReader templates: survey/*-specifics and editor/*.
 	for idx, cr := range cReps {
 		if idx >= 12 && cr.auth.Reader.Held()["command"] {
 			continue
@@ -60,12 +60,12 @@ func runGuidanceAndUtilityRenders(
 		return err
 	}
 
-	// 3. Structural guidance fragments (zero-tool authority)
+	// Structural guidance fragments carry zero-tool authority.
 	if err := renderStructuralGuidanceVariants(ctx, s, gr, zeroAuth, sum); err != nil {
 		return err
 	}
 
-	// 4. Zero-tool utility prompts (UtilityPromptRenderer) — must make zero callable tool claims!
+	// Zero-tool utility prompts must make zero callable tool claims.
 	return renderZeroToolUtilityPrompts(ctx, s, ur, zeroAuth, sum)
 }
 

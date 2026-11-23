@@ -45,7 +45,7 @@ func TestEightMandatorySeededFaultsFailPinpointAndHarmlessRewordingsPass(t *test
 		t.Fatalf("StockSkills: %v", err)
 	}
 
-	// 1. Early deferred load in skill reader: skillToolReader marks a deferred tool loaded
+	// Early deferred load in skill reader: skillToolReader marks a deferred tool loaded
 	// when absent from TurnOfferedToolNames (floor_only turn).
 	t.Run("seed_1_early_deferred_load_in_skill_reader", func(t *testing.T) {
 		t.Parallel()
@@ -95,7 +95,7 @@ func TestEightMandatorySeededFaultsFailPinpointAndHarmlessRewordingsPass(t *test
 		}
 	})
 
-	// 2. Cross-tool argument misattribution: giving command an argument (prompt) accepted
+	// Cross-tool argument misattribution: giving command an argument (prompt) accepted
 	// only by ask_user on the same turn.
 	t.Run("seed_2_cross_tool_argument_misattribution", func(t *testing.T) {
 		t.Parallel()
@@ -122,7 +122,7 @@ func TestEightMandatorySeededFaultsFailPinpointAndHarmlessRewordingsPass(t *test
 		}
 	})
 
-	// 3. Narrowed wait enum mismatch: instructing wait(..., conditions=[{"kind":"process_done",...}])
+	// Narrowed wait enum mismatch: instructing wait(..., conditions=[{"kind":"process_done",...}])
 	// on a profile whose wait_conditions exclude "process_done" (stock web_research profile).
 	t.Run("seed_3_narrowed_wait_enum_mismatch", func(t *testing.T) {
 		var webWorker hoststate.WorkerState
@@ -155,7 +155,7 @@ func TestEightMandatorySeededFaultsFailPinpointAndHarmlessRewordingsPass(t *test
 		}
 	})
 
-	// 4. Secondary-root Git misattribution: claiming primary-root git commit / git status
+	// Secondary-root Git misattribution: claiming primary-root git commit / git status
 	// when (primary=non-git, secondary=git).
 	t.Run("seed_4_secondary_root_git_misattribution", func(t *testing.T) {
 		t.Parallel()
@@ -195,7 +195,7 @@ func TestEightMandatorySeededFaultsFailPinpointAndHarmlessRewordingsPass(t *test
 		}
 	})
 
-	// 5. Omitted mode transition / stale child upgrade: granting mutation to an Ask-spawned
+	// Omitted mode transition / stale child upgrade: granting mutation to an Ask-spawned
 	// read-only child worker after root upgrades Ask -> Agent, or omitting session.mode.agent_enabled.
 	t.Run("seed_5_omitted_mode_transition_or_stale_child_upgrade", func(t *testing.T) {
 		t.Parallel()
@@ -228,7 +228,7 @@ func TestEightMandatorySeededFaultsFailPinpointAndHarmlessRewordingsPass(t *test
 		}
 	})
 
-	// 6. Stale mutating recovery on read-only surface: recommending command for need="edit"
+	// Stale mutating recovery on read-only surface: recommending command for need="edit"
 	// in TOOL_COMMAND_OPERATION when CommandMutation == false (spec posture).
 	t.Run("seed_6_stale_mutating_recovery_on_readonly_surface", func(t *testing.T) {
 		t.Parallel()
@@ -255,7 +255,7 @@ func TestEightMandatorySeededFaultsFailPinpointAndHarmlessRewordingsPass(t *test
 		}
 	})
 
-	// 7. Dead conditional branch: adding an unreachable {% if %} branch (such as read_offered)
+	// Dead conditional branch: adding an unreachable {% if %} branch (such as read_offered)
 	// to a template fails CoverageTracker.Report().Validate().
 	t.Run("seed_7_dead_or_vacuous_conditional_branch", func(t *testing.T) {
 		// Do not run in parallel with other global ActiveBranchRecorder swaps in this process.
@@ -295,7 +295,7 @@ func TestEightMandatorySeededFaultsFailPinpointAndHarmlessRewordingsPass(t *test
 		}
 	})
 
-	// 8. Deleted positive guidance: deleting a required capability-specific instruction block
+	// Deleted positive guidance: deleting a required capability-specific instruction block
 	// while leaving negative scans clean is caught by the paired usefulness contract.
 	t.Run("seed_8_deleted_positive_guidance", func(t *testing.T) {
 		t.Parallel()

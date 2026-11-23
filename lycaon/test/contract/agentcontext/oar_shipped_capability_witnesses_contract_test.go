@@ -169,7 +169,7 @@ func TestShippedOARProjectedSchemaAndSubsetWitnesses(t *testing.T) {
 			t.Fatalf("EXTRACT_FORMAT_UNSUPPORTED unzip-only subset leaked tar: %q", extractZipOnly)
 		}
 
-		// Pack-authored purpose labels, admitted subsets, and CT04 loading states across recovery_form_facts consumers.
+		// Pack-authored purpose labels, admitted subsets, and loading states across recovery_form_facts consumers.
 		addrData := map[string]any{"detail": "symbol and offset", "path": "src/main.go"}
 		addrFull := rejectFix("read", "READ_ARGS_CONFLICT",
 			reachWithProgramsAndSchemas([]string{"command"}, []string{"rg", "sed", "head", "tail"}, nil), addrData)

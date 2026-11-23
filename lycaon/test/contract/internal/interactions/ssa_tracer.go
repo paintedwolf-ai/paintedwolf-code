@@ -6,6 +6,7 @@ import (
 	"go/constant"
 	"go/token"
 	"go/types"
+	"runtime"
 	"slices"
 	"strings"
 
@@ -15,8 +16,144 @@ import (
 // TraceFact traces a discovered template or OAR fact backward through SSA
 // def-use edges to primitive request, ledger, event, or catalog inputs.
 func (g *ProducerGraph) TraceFact(fact string) FactTrace {
+	return g.traceFactScoped(fact, nil)
+}
+
+// TraceFactForSite traces fact restricted to producer writes whose carrier type
+// can reach site's delivery family, OAR anchor, and rejection code.
+func (g *ProducerGraph) TraceFactForSite(fact string, site InstructionSite) FactTrace {
+	return g.traceFactScoped(fact, &site)
+}
+
+func siteScopeMemoKey(fact string, site *InstructionSite) string {
+	if site == nil {
+		return fact
+	}
+	isOAR := site.Family == "oar_next_step" || site.Family == "oar_copy_fix"
+	if !isOAR {
+		return fact + "@tpl"
+	}
+	var guardSig strings.Builder
+	for _, gc := range site.Guards {
+		guardSig.WriteString("|")
+		guardSig.WriteString(gc.Expression)
+	}
+	return fact + "@" + site.DeliverySite + guardSig.String()
+}
+
+func writeAppliesToSite(w factWrite, site *InstructionSite) bool {
+	if site == nil {
+		return true
+	}
+	isOAR := site.Family == "oar_next_step" || site.Family == "oar_copy_fix"
+	if w.onlyTemplate && isOAR {
+		return false
+	}
+	if w.onlyOARAnchor != "" {
+		if !isOAR || !strings.HasPrefix(site.DeliverySite, "oar:"+w.onlyOARAnchor+":") {
+			return false
+		}
+	}
+	if len(w.onlyRejectIDs) > 0 && isOAR {
+		parts := strings.SplitN(site.DeliverySite, ":", 3)
+		if len(parts) == 3 && slices.Contains(w.onlyRejectIDs, parts[2]) {
+			return true
+		}
+		for _, rid := range w.onlyRejectIDs {
+			for _, gc := range site.Guards {
+				if strings.Contains(gc.Expression, rid) {
+					return true
+				}
+			}
+		}
+		return false
+	}
+	return true
+}
+
+type compactWriteKey struct {
+	pos   token.Pos
+	val   ssa.Value
+	fn    *ssa.Function
+	block *ssa.BasicBlock
+}
+
+type compactWriteResult struct {
+	site       string
+	inputs     []string
+	unresolved []rawUnresolved
+}
+
+// compact pre-traces every indexed factWrite into plain string slices and clears
+// all SSA references so the SSA program can be garbage-collected immediately.
+func (g *ProducerGraph) compact() {
+	seen := map[compactWriteKey]compactWriteResult{}
+	compactSlice := func(ws []factWrite) {
+		for i := range ws {
+			k := compactWriteKey{pos: ws[i].pos, val: ws[i].val, fn: ws[i].fn, block: ws[i].block}
+			res, ok := seen[k]
+			if !ok {
+				inputs := map[string]bool{}
+				unresolvedMap := map[string]UnresolvedEdge{}
+				visitedVal := map[ssa.Value]bool{}
+				visitedFn := map[*ssa.Function]bool{}
+				const placeholderFact = "_"
+				if closure, isCl := ws[i].val.(*ssa.MakeClosure); isCl {
+					if cfn, okFn := closure.Fn.(*ssa.Function); okFn {
+						g.traceFunctionBody(placeholderFact, cfn, inputs, unresolvedMap, visitedVal, visitedFn, 0)
+					}
+					for _, b := range closure.Bindings {
+						g.traceValue(placeholderFact, b, ws[i].fn, inputs, unresolvedMap, visitedVal, visitedFn, 0)
+					}
+				} else {
+					g.traceValue(placeholderFact, ws[i].val, ws[i].fn, inputs, unresolvedMap, visitedVal, visitedFn, 0)
+				}
+				g.traceBlockConditions(placeholderFact, ws[i].block, ws[i].fn, inputs, unresolvedMap, visitedVal, visitedFn, 0)
+				rawU := make([]rawUnresolved, 0, len(unresolvedMap))
+				for _, u := range unresolvedMap {
+					rawU = append(rawU, rawUnresolved{
+						producerLocation: u.ProducerLocation,
+						reason:           u.Reason,
+					})
+				}
+				slices.SortFunc(rawU, func(a, b rawUnresolved) int {
+					return strings.Compare(a.producerLocation+"#"+a.reason, b.producerLocation+"#"+b.reason)
+				})
+				res = compactWriteResult{
+					site:       g.relPos(ws[i].pos),
+					inputs:     sortedKeysOf(inputs),
+					unresolved: rawU,
+				}
+				seen[k] = res
+			}
+			ws[i].site = res.site
+			ws[i].inputs = res.inputs
+			ws[i].unresolved = res.unresolved
+			ws[i].val = nil
+			ws[i].fn = nil
+			ws[i].block = nil
+			ws[i].pos = 0
+		}
+	}
+	for k, ws := range g.exactWrites {
+		compactSlice(ws)
+		g.exactWrites[k] = ws
+	}
+	compactSlice(g.prefixWrites)
+	g.fset = nil
+	g.callSites = nil
+	g.closureBindings = nil
+	g.fieldStores = nil
+	g.globalStores = nil
+	g.methodsByName = nil
+	g.wrapperHelpers = nil
+	runtime.GC()
+}
+
+func (g *ProducerGraph) traceFactScoped(fact string, site *InstructionSite) FactTrace {
+	memoKey := siteScopeMemoKey(fact, site)
 	g.mu.Lock()
-	if cached, ok := g.memo[fact]; ok {
+	if cached, ok := g.memo[memoKey]; ok {
 		g.mu.Unlock()
 		return cached
 	}
@@ -28,7 +165,7 @@ func (g *ProducerGraph) TraceFact(fact string) FactTrace {
 			ProducerSites:   []string{"internal/oar/guard_context.go"},
 			PrimitiveInputs: []string{"GuardContext.Tool"},
 		}
-		g.storeMemo(fact, tr)
+		g.storeMemo(memoKey, tr)
 		return tr
 	}
 	if strings.HasPrefix(fact, "reach.status:") || strings.HasPrefix(fact, "reach.program:") {
@@ -37,7 +174,7 @@ func (g *ProducerGraph) TraceFact(fact string) FactTrace {
 			ProducerSites:   []string{"internal/oar/next_steps.go"},
 			PrimitiveInputs: []string{"toolreach.Request." + strings.TrimPrefix(fact, "reach.")},
 		}
-		g.storeMemo(fact, tr)
+		g.storeMemo(memoKey, tr)
 		return tr
 	}
 
@@ -46,36 +183,43 @@ func (g *ProducerGraph) TraceFact(fact string) FactTrace {
 		root = fact[:idx]
 	}
 
-	var writes []factWrite
-	writes = append(writes, g.exactWrites[fact]...)
+	var candidates []factWrite
+	candidates = append(candidates, g.exactWrites[fact]...)
 	if root != fact {
-		writes = append(writes, g.exactWrites[root]...)
+		candidates = append(candidates, g.exactWrites[root]...)
 	}
 	for _, pw := range g.prefixWrites {
 		if strings.HasPrefix(fact, pw.fact) || strings.HasPrefix(strings.TrimPrefix(fact, "paintedwolf."), pw.fact) {
-			writes = append(writes, pw)
+			candidates = append(candidates, pw)
+		}
+	}
+	var writes []factWrite
+	for _, w := range candidates {
+		if writeAppliesToSite(w, site) {
+			writes = append(writes, w)
 		}
 	}
 
 	sites := map[string]bool{}
 	inputs := map[string]bool{}
 	unresolvedMap := map[string]UnresolvedEdge{}
-	visitedVal := map[ssa.Value]bool{}
-	visitedFn := map[*ssa.Function]bool{}
 
 	for _, w := range writes {
-		sites[g.relPos(w.pos)] = true
-		if closure, isCl := w.val.(*ssa.MakeClosure); isCl {
-			if cfn, ok := closure.Fn.(*ssa.Function); ok {
-				g.traceFunctionBody(fact, cfn, inputs, unresolvedMap, visitedVal, visitedFn, 0)
-			}
-			for _, b := range closure.Bindings {
-				g.traceValue(fact, b, w.fn, inputs, unresolvedMap, visitedVal, visitedFn, 0)
-			}
-		} else {
-			g.traceValue(fact, w.val, w.fn, inputs, unresolvedMap, visitedVal, visitedFn, 0)
+		if w.site != "" {
+			sites[w.site] = true
 		}
-		g.traceBlockConditions(fact, w.block, w.fn, inputs, unresolvedMap, visitedVal, visitedFn, 0)
+		for _, inp := range w.inputs {
+			inputs[inp] = true
+		}
+		for _, ru := range w.unresolved {
+			eid := fmt.Sprintf("%s@%s#%s", fact, ru.producerLocation, ru.reason)
+			unresolvedMap[eid] = UnresolvedEdge{
+				EdgeID:           eid,
+				Fact:             fact,
+				ProducerLocation: ru.producerLocation,
+				Reason:           ru.reason,
+			}
+		}
 	}
 
 	if len(writes) == 0 {
@@ -95,7 +239,7 @@ func (g *ProducerGraph) TraceFact(fact string) FactTrace {
 		PrimitiveInputs: sortedKeysOf(inputs),
 		Unresolved:      uList,
 	}
-	g.storeMemo(fact, tr)
+	g.storeMemo(memoKey, tr)
 	return tr
 }
 

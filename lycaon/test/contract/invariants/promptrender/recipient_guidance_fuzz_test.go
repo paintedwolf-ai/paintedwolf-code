@@ -132,8 +132,8 @@ func encodeWorkerFuzzBytes(
 	}
 }
 
-// FuzzRecipientGuidanceAcrossHostStates implements CT05 §2d nightly and smoke
-// recipient-guidance fuzzing over deterministic byte-decoded two-turn states.
+// FuzzRecipientGuidanceAcrossHostStates fuzzes recipient guidance over
+// deterministic byte-decoded two-turn coordinator and worker states.
 func FuzzRecipientGuidanceAcrossHostStates(f *testing.F) {
 	env, err := loadFuzzEnvOnce()
 	if err != nil {
@@ -141,34 +141,34 @@ func FuzzRecipientGuidanceAcrossHostStates(f *testing.F) {
 	}
 	d := env.domains
 
-	// Seed 1: Reachable coordinator standing + live-job warm-cache control (0 changes).
+	// Reachable coordinator standing + live-job warm-cache control (0 changes).
 	f.Add(encodeCoordinatorFuzzBytes(
 		d, "stock", api.SessionPostureBuild, api.SessionModeAgent, "implement_investigate",
 		hoststate.RootsSingleGit, hoststate.LoadingAllLoaded, hoststate.WorkflowActivePhase,
 		gate.PostureBalanced, hoststate.TempScratchAndShared, hoststate.MCPNone,
 		0, 0, 0, 0, 0, 0, 0,
 	))
-	// Seed 2: Reachable worker persona + live-job check.
+	// Reachable worker persona + live-job check.
 	f.Add(encodeWorkerFuzzBytes(
 		d, "stock", "implementer", api.SessionPostureBuild, api.SessionModeAgent,
 		hoststate.BranchIsolatedWorker, hoststate.WorkerLoadingAllLoaded,
 		0, 0, 0, 0, 0,
 	))
-	// Seed 3: Coordinator two-turn transition changing projected capability (Ask -> Agent, axisSel=0).
+	// Coordinator two-turn transition changing projected capability (Ask -> Agent, axisSel=0).
 	f.Add(encodeCoordinatorFuzzBytes(
 		d, "stock", api.SessionPostureBuild, api.SessionModeAsk, "implement_investigate",
 		hoststate.RootsSingleGit, hoststate.LoadingFloorOnly, hoststate.WorkflowActivePhase,
 		gate.PostureBalanced, hoststate.TempScratchOnly, hoststate.MCPNone,
 		0, 0, 1, 0, 0, 0, 0,
 	))
-	// Seed 4: Skill body render across loading transition (LoadingFloorOnly -> LoadingAllLoaded, axisSel=4, valSel=0).
+	// Skill body render across loading transition (LoadingFloorOnly -> LoadingAllLoaded, axisSel=4, valSel=0).
 	f.Add(encodeCoordinatorFuzzBytes(
 		d, "stock", api.SessionPostureBuild, api.SessionModeAgent, "implement_investigate",
 		hoststate.RootsSingleGit, hoststate.LoadingFloorOnly, hoststate.WorkflowActivePhase,
 		gate.PostureBalanced, hoststate.TempNone, hoststate.MCPNone,
 		1, 0, 1, 4, 0, 0, 0,
 	))
-	// Seed 5: OAR tool.rejected recovery across posture transition (build -> spec).
+	// OAR tool.rejected recovery across posture transition (build -> spec).
 	f.Add(encodeCoordinatorFuzzBytes(
 		d, "stock", api.SessionPostureBuild, api.SessionModeAgent, "implement_investigate",
 		hoststate.RootsSingleGit, hoststate.LoadingAllLoaded, hoststate.WorkflowActivePhase,
@@ -186,9 +186,9 @@ func FuzzRecipientGuidanceAcrossHostStates(f *testing.F) {
 	})
 }
 
-// TestRecipientGuidanceFuzzSeedsOffMatrixAndMaskedFault verifies CT05 §2d seed
+// TestRecipientGuidanceFuzzSeedsOffMatrixAndMaskedFault verifies fuzz seed
 // execution, decoder byte padding/truncation determinism, the off-matrix feasible
-// semantic witness, and §2c masked-fault sensitivity + corrected control.
+// semantic witness, and masked-fault sensitivity against corrected stock.
 func TestRecipientGuidanceFuzzSeedsOffMatrixAndMaskedFault(t *testing.T) {
 	env, err := loadFuzzEnvOnce()
 	if err != nil {
@@ -197,7 +197,7 @@ func TestRecipientGuidanceFuzzSeedsOffMatrixAndMaskedFault(t *testing.T) {
 	d := env.domains
 	wsDir := t.TempDir()
 
-	// 1. Verify required coordinator, worker, and capability-transition seeds reach intended paths and execute properties.
+	// Verify coordinator, worker, and capability-transition seeds execute properties.
 	coordSeed := encodeCoordinatorFuzzBytes(
 		d, "stock", api.SessionPostureBuild, api.SessionModeAgent, "implement_investigate",
 		hoststate.RootsSingleGit, hoststate.LoadingAllLoaded, hoststate.WorkflowActivePhase,
@@ -242,7 +242,7 @@ func TestRecipientGuidanceFuzzSeedsOffMatrixAndMaskedFault(t *testing.T) {
 		t.Fatalf("transition seed failed to change capability state and execute property: rep=%+v err=%v", repTrans, err)
 	}
 
-	// 2. Feasible off-matrix witness preserved by production identities AND byte seed!
+	// Feasible off-matrix witness preserved by production identities and byte seed.
 	matrixStates, err := hoststate.CoordinatorStates(t.Context())
 	if err != nil {
 		t.Fatalf("CoordinatorStates: %v", err)
@@ -290,7 +290,7 @@ func TestRecipientGuidanceFuzzSeedsOffMatrixAndMaskedFault(t *testing.T) {
 		t.Fatalf("off-matrix semantic regression failed: rep=%+v err=%v", repOffSemantic, err)
 	}
 
-	// 3. §2c Masked two-axis fault replay: baseline & both 1-axis neighbors pass;
+	// Masked two-axis fault replay: baseline and both single-axis neighbors pass;
 	// combined (Spec/Vet read-only posture + non-Git root) fails on fault-injected
 	// bundle and passes on corrected stock.
 	baseBytes := encodeCoordinatorFuzzBytes(

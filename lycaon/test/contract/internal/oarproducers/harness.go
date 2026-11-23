@@ -12,6 +12,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/anchorcatalog"
 	"github.com/lycaon/lycaon/internal/configlayout"
+	coordgrounding "github.com/lycaon/lycaon/internal/coordinator/grounding"
 	"github.com/lycaon/lycaon/internal/curationctx"
 	"github.com/lycaon/lycaon/internal/evidence"
 	"github.com/lycaon/lycaon/internal/extpacks"
@@ -22,6 +23,7 @@ import (
 	"github.com/lycaon/lycaon/internal/secretharvest"
 	"github.com/lycaon/lycaon/internal/secretmatch"
 	"github.com/lycaon/lycaon/internal/secretmint"
+	"github.com/lycaon/lycaon/internal/session/chats"
 	"github.com/lycaon/lycaon/internal/session/policyfacts"
 	"github.com/lycaon/lycaon/internal/session/policyfeedback"
 	"github.com/lycaon/lycaon/internal/session/turnguards"
@@ -87,14 +89,19 @@ func (c AuthCell) Session(sessionID string) *api.Session {
 }
 
 // FiredOutcome records one rendered OAR policy outcome observed from a real
-// production hook entry point.
+// production hook entry point along with its emitted next-step calls and
+// dynamically observed indirect producer edges.
 type FiredOutcome struct {
-	Anchor      string
-	RuleID      string
-	EventLabel  string
-	Cell        AuthCell
-	FixCopy     string
-	CheckClaims bool
+	Anchor         string
+	RuleID         string
+	EventLabel     string
+	Cell           AuthCell
+	FixCopy        string
+	ActionCopy     string
+	CheckClaims    bool
+	NextCalls      []toolreach.Call
+	Steps          []FiredStepOutcome
+	ExercisedEdges []string
 }
 
 type noopNudgeFormatter struct{}
@@ -146,6 +153,7 @@ func (p *profileMap) Set(sessionID, profileID string) {
 }
 
 type sessionStoreMap struct {
+	chats.Sessions
 	mu sync.Mutex
 	m  map[string]*api.Session
 }
@@ -175,10 +183,11 @@ func (evidenceStoreStub) LoadLedger(context.Context, string) (evidence.Ledger, e
 	return evidence.Ledger{}, nil
 }
 
-// Harness wires the effective catalog's OAR GuardPipeline to the real CT04
-// production hook producers (BlockPlane, policyfacts.Service, turnguards.Service,
-// secretharvest, and workercompletion).
+// Harness wires the effective catalog's OAR GuardPipeline to the production
+// hook producers (BlockPlane, policyfacts.Service, turnguards.Service,
+// secretharvest, coordgrounding.AmbientGroundingCoordinator, and workercompletion).
 type Harness struct {
+	ModuleRoot      string
 	Loader          *oar.Loader
 	Rules           *oar.RuleSet
 	Pipeline        *oar.GuardPipeline
@@ -188,7 +197,10 @@ type Harness struct {
 	Feedback        *policyfeedback.Service
 	TurnGuards      *turnguards.Service
 	Harvest         *secretharvest.Runtime
+	Ambient         *coordgrounding.AmbientGroundingCoordinator
 	Sessions        *sessionStoreMap
+	Transcripts     *transcriptStoreMap
+	WorkerQueue     *workerQueueMap
 	Surfaces        *surfaceMap
 	Profiles        *profileMap
 	FactTypes       map[string]string
@@ -196,9 +208,11 @@ type Harness struct {
 	EvalCount       int
 	advisoryMu      sync.Mutex
 	advisories      []*oar.Decision
+	edgeMu          sync.Mutex
+	exercisedEdges  []string
 }
 
-// NewHarness constructs a complete CT04 production OAR hook harness for eff and schemas.
+// NewHarness constructs a production OAR hook harness for eff and schemas.
 func NewHarness(eff *extpacks.EffectiveCatalog, schemas *toolschema.Config, engine prompts.PromptTemplateEngine) (*Harness, error) {
 	moduleRoot := configlayout.FindModuleRoot()
 	repoRoot := filepath.Dir(moduleRoot)
@@ -270,6 +284,8 @@ func NewHarness(eff *extpacks.EffectiveCatalog, schemas *toolschema.Config, engi
 	}
 	harvest := secretharvest.NewRuntime(fp)
 	sessions := &sessionStoreMap{m: map[string]*api.Session{}}
+	transcripts := &transcriptStoreMap{m: map[string][]api.Message{}}
+	workerQueue := &workerQueueMap{m: map[string][]api.WorkerTask{}}
 	surfaces := &surfaceMap{m: map[string]string{}}
 	profiles := &profileMap{m: map[string]string{}}
 	fb := policyfeedback.New()
@@ -281,11 +297,9 @@ func NewHarness(eff *extpacks.EffectiveCatalog, schemas *toolschema.Config, engi
 	policy.SetPipeline(pipeline)
 	policy.SetCredentialSlotProvider(func(context.Context, *api.Session) *secretmint.Inspector { return inspector })
 	policy.SetSecretFingerprinter(fp)
-	policy.SetHarvestedFingerprint(func(root string, sf secretmatch.SecretFingerprint) bool {
-		return harvest.Has(root, sf)
-	})
 
 	h := &Harness{
+		ModuleRoot:      moduleRoot,
 		Loader:          loader,
 		Rules:           rs,
 		Pipeline:        pipeline,
@@ -296,11 +310,22 @@ func NewHarness(eff *extpacks.EffectiveCatalog, schemas *toolschema.Config, engi
 		TurnGuards:      &turnguards.Service{ToolPolicy: policy, Feedback: fb},
 		Harvest:         harvest,
 		Sessions:        sessions,
+		Transcripts:     transcripts,
+		WorkerQueue:     workerQueue,
 		Surfaces:        surfaces,
 		Profiles:        profiles,
 		FactTypes:       factTypes,
 		CapabilityFacts: capFacts,
 	}
+	policy.SetIgnoredCredentialCandidate(func(_ context.Context, _, _ string) bool {
+		h.recordExercisedEdges(ObserveIndirectProducerCall(moduleRoot, "paintedwolf.credential_ignored")...)
+		return false
+	})
+	policy.SetHarvestedFingerprint(func(root string, sf secretmatch.SecretFingerprint) bool {
+		h.recordExercisedEdges(ObserveIndirectProducerCall(moduleRoot, "paintedwolf.credential_harvested")...)
+		return harvest.Has(root, sf)
+	})
+	h.wireAmbientGrounding()
 	pipeline.SetAdvisorySink(func(_ context.Context, _ string, _ string, d *oar.Decision) error {
 		if d != nil {
 			h.advisoryMu.Lock()
@@ -502,36 +527,17 @@ func (h *Harness) RunToolRejectedProducers(ctx context.Context, cells []AuthCell
 					data["native_operation"] = nativeOps[0]
 				}
 				_ = h.takeAdvisories()
+				h.resetExercisedEdges()
 				rErr := h.BlockPlane.RejectObservation(cctx, invokedTool, cell.ProfileID, args, &toolrejection.ToolReject{
 					Code: codes[0],
 					Data: data,
 				})
 				h.EvalCount++
+				evLabel := fmt.Sprintf("tool.rejected/%s[%d]", codes[0], vIdx)
 				if ref, ok := guidance.RefusalFromError(rErr); ok && ref != nil {
-					fix := strings.TrimSpace(ref.Copy["fix"])
-					if fix != "" {
-						outcomes = append(outcomes, FiredOutcome{
-							Anchor:      oar.AnchorToolRejected,
-							RuleID:      ref.Code(),
-							EventLabel:  fmt.Sprintf("tool.rejected/%s[%d]", codes[0], vIdx),
-							Cell:        cell,
-							FixCopy:     fix,
-							CheckClaims: admissible && !cell.IsBoundary,
-						})
-					}
+					h.recordRefusal(&outcomes, oar.AnchorToolRejected, evLabel, cell, ref, admissible)
 				}
-				for _, adv := range h.takeAdvisories() {
-					if fix := strings.TrimSpace(adv.Copy["fix"]); fix != "" {
-						outcomes = append(outcomes, FiredOutcome{
-							Anchor:      oar.AnchorToolRejected,
-							RuleID:      adv.Code,
-							EventLabel:  fmt.Sprintf("tool.rejected/%s[%d]", codes[0], vIdx),
-							Cell:        cell,
-							FixCopy:     fix,
-							CheckClaims: admissible && !cell.IsBoundary,
-						})
-					}
-				}
+				h.drainAdvisoriesTo(&outcomes, oar.AnchorToolRejected, evLabel, cell, admissible)
 			}
 		}
 	}

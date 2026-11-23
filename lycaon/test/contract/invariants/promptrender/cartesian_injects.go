@@ -480,7 +480,7 @@ func runCoordinatorInjectRenders(
 		resolveNamed := resolver.forCoordinatorState(cr.state)
 		waitSchema := cr.auth.Schemas["wait"]
 
-		// 1. command-jobs (running+exited+held and exited-only)
+		// command-jobs (running+exited+held and exited-only).
 		for _, withRunning := range []bool{true, false} {
 			jobs := jobsBoth
 			var held []heldcall.Running
@@ -499,7 +499,7 @@ func runCoordinatorInjectRenders(
 			}
 		}
 
-		// 2. turn-state (rich workers + minimal)
+		// turn-state (rich workers and minimal).
 		tsInputs := []inject.TurnStateInjectInput{
 			{
 				Reader: cr.auth.Reader, ProgressSnapshot: "- [ ] step 1", ProgressMissing: false, VerifyRequired: true,
@@ -531,7 +531,7 @@ func runCoordinatorInjectRenders(
 			}
 		}
 
-		// 3. board-orientation, source-changes, implement-spawn, transition
+		// board-orientation, source-changes, implement-spawn, transition.
 		// (across first 16 distinct authorities + all 0/2-root authorities).
 		if idx < 16 || cr.state.RootCount != 1 {
 			if err := renderRemainingCoordInjectsForRep(ctx, s, injRenderer, cr, resolveNamed, now, idx, sum); err != nil {

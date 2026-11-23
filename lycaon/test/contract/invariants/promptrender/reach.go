@@ -29,7 +29,7 @@ import (
 	"github.com/lycaon/lycaon/test/contract/invariants"
 )
 
-// reachInvariants hold P13 & I5: rendered guidance names only the tools,
+// reachInvariants verify that rendered guidance names only the tools,
 // command programs, schema fields, and subjects its reader is offered.
 var reachInvariants = []invariants.Invariant{
 	{Name: "coordinator-kicks-name-only-offered-tools", Anchors: []invariants.Anchor{kickRenderer}, Check: coordinatorKicksNameOnlyOffered},
@@ -48,7 +48,7 @@ var phaseKickPrefixes = []string{
 	"coordinator-review-loop-", "coordinator-security-",
 }
 
-// evaluateAndReportClaims checks text against auth via CT03's EvaluateClaimBlock
+// evaluateAndReportClaims checks text against auth via EvaluateClaimBlock
 // and closed backtick vocabulary, reporting violations onto r.
 func evaluateAndReportClaims(
 	r *invariants.Run,
@@ -689,7 +689,7 @@ func workerPersonaOccurrence(reader prompts.Reader, skillsList []skills.Skill) m
 }
 
 // skillsNameOnlyOffered verifies every rendered stock skill across CoordinatorStates
-// and WorkerStates through CT03's EvaluateClaimBlock and closed backtick vocabulary.
+// and WorkerStates through EvaluateClaimBlock and closed backtick vocabulary.
 func skillsNameOnlyOffered(r *invariants.Run) {
 	s := stock(r)
 	renders := skillRenders(r)

@@ -214,7 +214,7 @@ func verifyPostUpgradeChildRetentionAndRequests(
 	bgTC tools.ToolContext,
 ) {
 	t.Helper()
-	// 1. Background context started in Ask retains read-only enforcement even after root upgrade.
+	// Background context started in Ask retains read-only enforcement after root upgrade.
 	bgTC.Identity.ToolCallID = "ask-bg-read-after-upgrade"
 	if _, readErr := h.ToolRegistry.Run(ctx, "pack_board", map[string]any{"detail_level": "compact"}, bgTC); readErr != nil {
 		t.Fatalf("expected pre-upgrade read-only Ask ToolContext to retain read access: %v", readErr)
@@ -224,7 +224,7 @@ func verifyPostUpgradeChildRetentionAndRequests(
 		t.Fatal("expected pre-upgrade read-only background ToolContext to reject file mutation after root upgrade")
 	}
 
-	// 2. Ask-spawned child worker retains scope_mode=read across root upgrade and continues in read scope.
+	// Ask-spawned child worker retains scope_mode=read across root upgrade and continues in read scope.
 	var scoutName, agentType, scopeMode string
 	testutil.FailErr(t, "query Ask-spawned worker name", h.DB.QueryRowContext(ctx,
 		"SELECT name, agent_type, scope_mode FROM workers WHERE session_id = ? LIMIT 1", sess.ID).Scan(&scoutName, &agentType, &scopeMode))
@@ -396,13 +396,13 @@ func runSeededAskUpgradeFaults(t *testing.T, _ *reachOracle) {
 		t.Fatalf("valid upgrade state failed: %v", viols)
 	}
 
-	// Fault 5a: omitted session.mode.agent_enabled transition notice.
+	// Omitted session.mode.agent_enabled transition notice.
 	omittedViols := verifyAskUpgradeInvariants(nil, []modelcall.CompletionRequest{validChildReq}, orchestration.ProfileRepoResearcher)
 	if len(omittedViols) == 0 || !strings.Contains(omittedViols[0], "session.mode.agent_enabled") || !strings.Contains(omittedViols[0], "[self_now]") || !strings.Contains(omittedViols[0], "upgraded_ask_to_agent") {
 		t.Fatalf("expected omitted transition notice fault to name artifact, subject, and state; got %v", omittedViols)
 	}
 
-	// Fault 5b: Ask-spawned read-only child worker granted mutation after root upgrade.
+	// Ask-spawned read-only child worker granted mutation after root upgrade.
 	mutChildReq := modelcall.CompletionRequest{
 		Debug: modelcall.RequestDebug{AgentType: orchestration.ProfileRepoResearcher},
 		Tools: []tools.ToolMeta{

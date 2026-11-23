@@ -46,16 +46,28 @@ type FactTrace struct {
 	Unresolved      []UnresolvedEdge `json:"unresolved,omitempty"`
 }
 
+type rawUnresolved struct {
+	producerLocation string
+	reason           string
+}
+
 type factWrite struct {
-	fact     string
-	isPrefix bool
-	val      ssa.Value
-	fn       *ssa.Function
-	block    *ssa.BasicBlock
-	pos      token.Pos
+	fact          string
+	isPrefix      bool
+	onlyTemplate  bool
+	onlyOARAnchor string
+	onlyRejectIDs []string
+	site          string
+	inputs        []string
+	unresolved    []rawUnresolved
+	val           ssa.Value
+	fn            *ssa.Function
+	block         *ssa.BasicBlock
+	pos           token.Pos
 }
 
 type ssaCallSite struct {
+	instr  ssa.CallInstruction
 	common *ssa.CallCommon
 	caller *ssa.Function
 	block  *ssa.BasicBlock
@@ -258,6 +270,7 @@ func LoadProducerGraphFromDir(dir string, patterns ...string) (*ProducerGraph, e
 		memo:            map[string]FactTrace{},
 	}
 	g.indexProgram(prog)
+	g.compact()
 	return g, nil
 }
 
@@ -393,7 +406,7 @@ func (g *ProducerGraph) indexProgram(prog *ssa.Program) {
 		for _, blk := range fn.Blocks {
 			for _, instr := range blk.Instrs {
 				if call, ok := instr.(ssa.CallInstruction); ok {
-					cs := ssaCallSite{common: call.Common(), caller: fn, block: blk}
+					cs := ssaCallSite{instr: call, common: call.Common(), caller: fn, block: blk}
 					if callee := call.Common().StaticCallee(); callee != nil {
 						g.callSites[callee] = append(g.callSites[callee], cs)
 					} else {
@@ -404,6 +417,13 @@ func (g *ProducerGraph) indexProgram(prog *ssa.Program) {
 					g.indexProviderRegistration(fn, blk, call)
 					g.indexWrapperRegistration(fn, blk, call)
 				}
+			}
+		}
+	}
+
+	for _, fn := range funcs {
+		for _, blk := range fn.Blocks {
+			for _, instr := range blk.Instrs {
 				if mu, ok := instr.(*ssa.MapUpdate); ok {
 					g.indexMapUpdate(fn, blk, mu)
 				}
@@ -563,24 +583,42 @@ func (g *ProducerGraph) indexMapUpdate(fn *ssa.Function, blk *ssa.BasicBlock, mu
 	if !isStringKeyedFactMap(mu.Map.Type()) {
 		return
 	}
+	carrier := g.classifyMapCarrier(fn, mu.Map)
+	if carrier.skip {
+		return
+	}
 	if c, ok := mu.Key.(*ssa.Const); ok && c.Value != nil && c.Value.Kind() == constant.String {
 		key := constant.StringVal(c.Value)
 		if key == "" {
 			return
 		}
+		if carrier.nestedRoot != "" {
+			nested := carrier.nestedRoot + "." + key
+			g.exactWrites[nested] = append(g.exactWrites[nested], factWrite{
+				fact: nested, onlyTemplate: carrier.onlyTemplate,
+				val: mu.Value, fn: fn, block: blk, pos: mu.Pos(),
+			})
+			return
+		}
 		g.exactWrites[key] = append(g.exactWrites[key], factWrite{
-			fact: key, val: mu.Value, fn: fn, block: blk, pos: mu.Pos(),
+			fact: key, onlyTemplate: carrier.onlyTemplate,
+			onlyOARAnchor: carrier.onlyOARAnchor, onlyRejectIDs: carrier.onlyRejectIDs,
+			val: mu.Value, fn: fn, block: blk, pos: mu.Pos(),
 		})
-		if !strings.HasPrefix(key, "paintedwolf.") {
+		if !carrier.onlyTemplate && !strings.HasPrefix(key, "paintedwolf.") {
 			g.exactWrites["paintedwolf."+key] = append(g.exactWrites["paintedwolf."+key], factWrite{
-				fact: "paintedwolf." + key, val: mu.Value, fn: fn, block: blk, pos: mu.Pos(),
+				fact:          "paintedwolf." + key,
+				onlyOARAnchor: carrier.onlyOARAnchor, onlyRejectIDs: carrier.onlyRejectIDs,
+				val: mu.Value, fn: fn, block: blk, pos: mu.Pos(),
 			})
 		}
 		return
 	}
 	if prefix, ok := extractStringPrefixAdd(mu.Key); ok && prefix != "" {
 		g.prefixWrites = append(g.prefixWrites, factWrite{
-			fact: prefix, isPrefix: true, val: mu.Value, fn: fn, block: blk, pos: mu.Pos(),
+			fact: prefix, isPrefix: true, onlyTemplate: carrier.onlyTemplate,
+			onlyOARAnchor: carrier.onlyOARAnchor, onlyRejectIDs: carrier.onlyRejectIDs,
+			val: mu.Value, fn: fn, block: blk, pos: mu.Pos(),
 		})
 	}
 }

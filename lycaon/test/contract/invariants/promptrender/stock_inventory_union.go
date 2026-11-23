@@ -19,7 +19,7 @@ import (
 )
 
 // StockInventoryReport summarizes full-tree classification of lycaon/config/
-// across CT01 prompt/skill/binding families, CT04 OAR/policy/next-steps/anchors/portable-pack
+// across prompt/skill/binding families, OAR/policy/next-steps/anchors/portable-pack
 // families, and explicit closed non-prompt schema/manifest/scanner/fixture categories.
 type StockInventoryReport struct {
 	TotalFiles         int

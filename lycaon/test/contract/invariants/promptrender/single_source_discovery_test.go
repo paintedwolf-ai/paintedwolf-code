@@ -65,11 +65,10 @@ func buildDisposablePackCatalog(t *testing.T, packID string, files map[string]st
 	})
 }
 
-// TestSingleSourceDisposableCatalogAutoDiscoversNewAndChangedContributions proves
-// Single-Source Acceptance: introducing new contributions (guidance, skill, OAR
-// rule) and changing an existing guard + tool schema in a disposable catalog are
-// discovered automatically by unchanged systemic checks, catching a planted
-// invalid claim and passing the valid control.
+// TestSingleSourceDisposableCatalogAutoDiscoversNewAndChangedContributions verifies
+// that introducing new contributions (guidance, skill, OAR rule) and changing an
+// existing guard and tool schema in a disposable catalog are discovered
+// automatically by unchanged systemic checks.
 func TestSingleSourceDisposableCatalogAutoDiscoversNewAndChangedContributions(t *testing.T) {
 	s := mustStock(t)
 	packID := "acme/disposable-audit"
@@ -122,7 +121,7 @@ fix: Follow host next steps.
 		t.Fatalf("disposable valid catalog had error diagnostics: %+v", effValid.Diagnostics)
 	}
 
-	// 1. Unchanged interaction inventory discovers all 3 new contributions + updated command-jobs dependency!
+	// Unchanged interaction inventory discovers all 3 new contributions and updated command-jobs dependency.
 	baseLedger, err := interactions.BuildInteractionLedger(s.Catalog, s.Schemas, s.Names, nil)
 	if err != nil {
 		t.Fatalf("base BuildInteractionLedger: %v", err)
@@ -155,7 +154,7 @@ fix: Follow host next steps.
 		t.Fatal("unchanged BuildInteractionLedger failed to pick up changed guard has_any_git_root on guidance/command-jobs")
 	}
 
-	// 2. Unchanged OAR producer harness discovers and fires DISPOSABLE_REJECT_PROBE without rule-ID edits!
+	// Unchanged OAR producer harness discovers and fires DISPOSABLE_REJECT_PROBE without rule-ID edits.
 	coordStates, err := hoststate.CoordinatorStates(t.Context())
 	if err != nil {
 		t.Fatalf("CoordinatorStates: %v", err)
@@ -195,7 +194,7 @@ fix: Follow host next steps.
 		}
 	}
 
-	// 3. Planted invalid cases: undeclared capability fact in disposable pack + narrowed-out schema field on valid control!
+	// Planted invalid cases: undeclared capability fact in disposable pack and narrowed-out schema field.
 	validNotes, vErr := prompts.CheckTemplateVocabulary(effValid)
 	if vErr != nil || len(validNotes) != 0 {
 		t.Fatalf("valid disposable catalog failed CheckTemplateVocabulary: err=%v notes=%v", vErr, validNotes)
@@ -235,10 +234,9 @@ fix: Follow host next steps.
 	}
 }
 
-// TestSourceDerivedInteractionFixtureRegeneration proves CT05 §2c: mutating a
-// guard inside an included fragment AND mutating a helper read behind a derived
-// fact in Go producer source updates the discovered PrimitiveInputs automatically
-// without hand-editing any interaction list.
+// TestSourceDerivedInteractionFixtureRegeneration verifies that mutating a
+// guard inside an included fragment and mutating a helper read behind a derived
+// fact in Go producer source update the discovered PrimitiveInputs automatically.
 func TestSourceDerivedInteractionFixtureRegeneration(t *testing.T) {
 	s := mustStock(t)
 	goDir := filepath.Join(t.TempDir(), "goproducer")
@@ -315,10 +313,10 @@ func TestSourceDerivedInteractionFixtureRegeneration(t *testing.T) {
 	}
 }
 
-// TestNewProducerPackageAndPartialLoadFailClosed verifies CT05 §2c Producer
-// Coverage & Cost: moving a producer into a newly imported package outside the
-// explicit root pattern list is automatically discovered across package boundaries,
-// and partial/type-broken imported packages fail closed.
+// TestNewProducerPackageAndPartialLoadFailClosed verifies that moving a
+// producer into a newly imported package outside the explicit root pattern list
+// is discovered across package boundaries and that partial/type-broken imported
+// packages fail closed.
 func TestNewProducerPackageAndPartialLoadFailClosed(t *testing.T) {
 	s := mustStock(t)
 	goDir := filepath.Join(t.TempDir(), "crosspkg")

@@ -8,6 +8,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/confine"
 	"github.com/lycaon/lycaon/internal/coordinator/guard"
+	"github.com/lycaon/lycaon/internal/grounding"
 	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/llm/actionenvelope"
 	"github.com/lycaon/lycaon/internal/oar"
@@ -18,27 +19,65 @@ import (
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
+func joinActionCopy(fix, instead string) string {
+	fix = strings.TrimSpace(fix)
+	instead = strings.TrimSpace(instead)
+	switch {
+	case fix != "" && instead != "":
+		return fix + "\n" + instead
+	case fix != "":
+		return fix
+	default:
+		return instead
+	}
+}
+
 func (h *Harness) recordRefusal(out *[]FiredOutcome, anchor, evLabel string, cell AuthCell, ref *guidance.Refusal, checkClaims bool) {
 	if ref == nil {
 		return
 	}
-	if fix := strings.TrimSpace(ref.Copy["fix"]); fix != "" {
+	fix := strings.TrimSpace(ref.Copy["fix"])
+	actCopy := joinActionCopy(fix, ref.Copy["instead"])
+	calls := extractRefusalNextCalls(ref)
+	rule := h.ruleByAnchorAndCode(anchor, ref.Code())
+	if actCopy != "" || len(calls) > 0 || (rule != nil && rule.NextSteps != nil) {
 		*out = append(*out, FiredOutcome{
-			Anchor: anchor, RuleID: ref.Code(), EventLabel: evLabel,
-			Cell: cell, FixCopy: fix, CheckClaims: checkClaims && !cell.IsBoundary,
+			Anchor:         anchor,
+			RuleID:         ref.Code(),
+			EventLabel:     evLabel,
+			Cell:           cell,
+			FixCopy:        fix,
+			ActionCopy:     actCopy,
+			CheckClaims:    checkClaims && !cell.IsBoundary,
+			NextCalls:      calls,
+			Steps:          resolveRuleStepOutcomes(rule, actCopy, calls),
+			ExercisedEdges: h.snapshotExercisedEdges(),
 		})
 	}
 }
 
 func (h *Harness) drainAdvisoriesTo(out *[]FiredOutcome, anchor, evLabel string, cell AuthCell, checkClaims bool) {
+	edges := h.snapshotExercisedEdges()
 	for _, adv := range h.takeAdvisories() {
 		if adv == nil {
 			continue
 		}
-		if fix := strings.TrimSpace(adv.Copy["fix"]); fix != "" {
+		fix := strings.TrimSpace(adv.Copy["fix"])
+		actCopy := joinActionCopy(fix, adv.Copy["instead"])
+		calls := extractDecisionNextCalls(adv)
+		rule := h.ruleByAnchorAndCode(anchor, adv.Code)
+		if actCopy != "" || len(calls) > 0 || (rule != nil && rule.NextSteps != nil) {
 			*out = append(*out, FiredOutcome{
-				Anchor: anchor, RuleID: adv.Code, EventLabel: evLabel,
-				Cell: cell, FixCopy: fix, CheckClaims: checkClaims && !cell.IsBoundary,
+				Anchor:         anchor,
+				RuleID:         adv.Code,
+				EventLabel:     evLabel,
+				Cell:           cell,
+				FixCopy:        fix,
+				ActionCopy:     actCopy,
+				CheckClaims:    checkClaims && !cell.IsBoundary,
+				NextCalls:      calls,
+				Steps:          resolveRuleStepOutcomes(rule, actCopy, calls),
+				ExercisedEdges: slices.Clone(edges),
 			})
 		}
 	}
@@ -92,7 +131,7 @@ func (h *Harness) runDoomLoopRejectedProducers(ctx context.Context, cells []Auth
 	return out
 }
 
-// RunLifecycleHookProducers executes real CT04 hook producers indexed by their
+// RunLifecycleHookProducers executes production hook producers indexed by their
 // lifecycle anchor across coordinator, worker, and boundary cells.
 func (h *Harness) RunLifecycleHookProducers(ctx context.Context, cells []AuthCell) ([]FiredOutcome, error) {
 	byAnchor := map[string]func(context.Context, []AuthCell) []FiredOutcome{
@@ -374,11 +413,13 @@ func (h *Harness) runCredentialAssignmentHook(ctx context.Context, cells []AuthC
 		sess := cell.Session(sessID)
 		cctx := cell.Context(ctx, sessID)
 		_ = h.takeAdvisories()
+		h.resetExercisedEdges()
 		_, _ = h.Policy.AfterTool(cctx, sess, "write", map[string]any{"content": fmt.Sprintf("API_TOKEN=alpha_bravo_charlie_delta_%06d\n", idx)}, "ok", 1, guidance.ToolResultFacts{})
 		h.EvalCount++
 		h.drainAdvisoriesTo(&out, oar.AnchorCredentialAssignment, "credential.assignment/strong", cell, len(cell.Auth.Offered) > 0)
 
 		_ = h.takeAdvisories()
+		h.resetExercisedEdges()
 		_, _ = h.Policy.AfterTool(cctx, sess, "write", map[string]any{"content": fmt.Sprintf("MYSQL_PASSWORD=password%d\n", idx%3)}, "ok", 1, guidance.ToolResultFacts{})
 		h.EvalCount++
 		h.drainAdvisoriesTo(&out, oar.AnchorCredentialAssignment, "credential.assignment/weak", cell, len(cell.Auth.Offered) > 0)
@@ -577,21 +618,41 @@ func (h *Harness) runCoordinatorPostTurnHook(ctx context.Context, cells []AuthCe
 		sess := cell.Session(sessID)
 		cctx := cell.Context(ctx, sessID)
 		if idx == 0 {
+			h.resetExercisedEdges()
 			_, _ = h.TurnGuards.AfterTurn(cctx, sess, "Summary ready.", true)
 			h.EvalCount++
 			_ = h.takeAdvisories()
 		}
-		for _, miss := range []int64{0, 2} {
-			_ = h.takeAdvisories()
-			gc1 := oar.NewGuardContext()
-			h.Policy.FillSessionFacts(cctx, gc1, sess, "", nil)
-			gc1.Grounding.LastAuditUngrounded = true
-			gc1.ObservationData = map[string]any{"missing_summary_count": miss}
-			_, _ = h.Pipeline.EvaluateBlock(cctx, oar.AnchorCoordinatorPostTurn, gc1)
-			h.EvalCount++
-			h.drainAdvisoriesTo(&out, oar.AnchorCoordinatorPostTurn, fmt.Sprintf("post_turn/ungrounded[%d]", miss), cell, len(cell.Auth.Offered) > 0)
-		}
+
+		// AmbientGroundingCoordinator.AfterPrompt with unsummarized worker job.
+		missSessID := sessID + "-miss1"
+		h.bindSession(missSessID, cell)
+		h.WorkerQueue.SetJobs(missSessID, []api.WorkerTask{{ID: "job-1", Status: api.WorkerStatusComplete}})
+		h.Transcripts.SetMessages(missSessID, nil)
 		_ = h.takeAdvisories()
+		h.resetExercisedEdges()
+		_ = h.Ambient.AfterPrompt(cell.Context(ctx, missSessID), missSessID, nil)
+		h.EvalCount++
+		h.drainAdvisoriesTo(&out, oar.AnchorCoordinatorPostTurn, "post_turn/ungrounded[1]", cell, len(cell.Auth.Offered) > 0)
+
+		// AmbientGroundingCoordinator.AfterPrompt with ungrounded audit and 0 missing summaries.
+		auditSessID := sessID + "-miss0"
+		h.bindSession(auditSessID, cell)
+		h.WorkerQueue.SetJobs(auditSessID, nil)
+		h.Transcripts.SetMessages(auditSessID, []api.Message{{
+			ID:        "a1",
+			Role:      api.MessageRoleAssistant,
+			Content:   "Completed.",
+			Grounding: &api.CitationGrounding{Traced: false, HintCode: grounding.AmbientUngroundedCompletionCode},
+		}})
+		_ = h.takeAdvisories()
+		h.resetExercisedEdges()
+		_ = h.Ambient.AfterPrompt(cell.Context(ctx, auditSessID), auditSessID, nil)
+		h.EvalCount++
+		h.drainAdvisoriesTo(&out, oar.AnchorCoordinatorPostTurn, "post_turn/ungrounded[0]", cell, len(cell.Auth.Offered) > 0)
+
+		_ = h.takeAdvisories()
+		h.resetExercisedEdges()
 		gc2 := oar.NewGuardContext()
 		h.Policy.FillSessionFacts(cctx, gc2, sess, "", nil)
 		gc2.Grounding.GroundingEscalated = true
