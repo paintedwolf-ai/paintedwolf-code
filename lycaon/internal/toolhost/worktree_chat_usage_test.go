@@ -40,6 +40,7 @@ func TestCommandWorktreeCreationUsageAndUnauthorizedRefusal(t *testing.T) {
 	allowedParent := gitrepo.CanonicalDir(t.TempDir())
 	deniedParent := gitrepo.CanonicalDir(t.TempDir())
 	allowedWT := filepath.Join(allowedParent, "wt-allowed")
+	externalWT := filepath.Join(allowedParent, "wt-external")
 	deniedWT := filepath.Join(deniedParent, "wt-denied")
 
 	rootSession := fixture.Session
@@ -60,6 +61,8 @@ func TestCommandWorktreeCreationUsageAndUnauthorizedRefusal(t *testing.T) {
 		tc.Files.GrantedWriteRoots = []string{allowedParent}
 		tc.Files.ApprovedFileAccess = []hitl.GrantedPathDelta{
 			{Path: allowedParent, Write: true, Tree: true},
+			{Path: externalWT, Write: true},
+			{Path: filepath.Join(externalWT, "readme.txt"), Write: true},
 		}
 	}
 
@@ -91,7 +94,6 @@ func TestCommandWorktreeCreationUsageAndUnauthorizedRefusal(t *testing.T) {
 	}
 
 	// 3. External worktree created outside the tool host has no fabricated creator, then worker-b uses it via cd + edit.
-	externalWT := filepath.Join(allowedParent, "wt-external")
 	runFixtureGit(t, fixture.Dir, "worktree", "add", "-q", "-b", "feat/external", externalWT)
 	items, err := inv.Refresh(t.Context(), worktrees.RepoSpec{
 		ProjectID: testdbseed.DefaultProjectID,
