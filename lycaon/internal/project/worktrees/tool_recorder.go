@@ -35,13 +35,22 @@ func (r *ToolUsageRecorder) RecordCheckoutActivity(ctx context.Context, tc tools
 	if activityID == "" {
 		activityID = strings.TrimSpace(tc.Identity.ToolCallID)
 	}
+	workerID := strings.TrimSpace(tc.Identity.WorkerJobID)
+	rootSessionID := tc.ChatSessionID()
+	actorSessionID := strings.TrimSpace(tc.Identity.SessionID)
+	if workerID == "" && rootSessionID != "" && actorSessionID != "" && actorSessionID != rootSessionID {
+		workerID = strings.TrimSpace(tc.Identity.HandoffAgentID)
+		if workerID == "" {
+			workerID = actorSessionID
+		}
+	}
 	out, err := r.Inventory.RecordUsage(ctx, UsageInput{
 		ProjectID:        tc.Identity.ProjectID,
 		WorkerBranchRoot: tc.Source.WorkerBranchRoot,
 		TargetPath:       targetPath,
-		RootSessionID:    tc.ChatSessionID(),
-		ActorSessionID:   tc.Identity.SessionID,
-		WorkerID:         tc.Identity.WorkerJobID,
+		RootSessionID:    rootSessionID,
+		ActorSessionID:   actorSessionID,
+		WorkerID:         workerID,
 		ActivityID:       activityID,
 		Relation:         rel,
 	})

@@ -42,12 +42,23 @@ func TestCommandWorktreeCreationUsageAndUnauthorizedRefusal(t *testing.T) {
 	allowedWT := filepath.Join(allowedParent, "wt-allowed")
 	deniedWT := filepath.Join(deniedParent, "wt-denied")
 
-	var activeWorker string
+	testdbseed.InsertChildSession(t, fixture.Database, "worker-sess-a", fixture.Session)
+	testdbseed.InsertChildSession(t, fixture.Database, "worker-sess-b", fixture.Session)
+
+	var (
+		activeActorSession string
+		activeHandoffAgent string
+	)
 	baseConfigure := fixture.Configure
 	fixture.Configure = func(tc *tools.ToolContext) {
 		baseConfigure(tc)
 		tc.Source.CheckoutUsage = recorder
-		tc.Identity.WorkerJobID = activeWorker
+		if activeActorSession != "" {
+			tc.Identity.RootSessionID = fixture.Session
+			tc.Identity.ParentSessionID = fixture.Session
+			tc.Identity.SessionID = activeActorSession
+			tc.Identity.HandoffAgentID = activeHandoffAgent
+		}
 		tc.Files.GrantedWriteRoots = []string{allowedParent}
 		tc.Files.ApprovedFileAccess = []hitl.GrantedPathDelta{
 			{Path: allowedParent, Write: true},
@@ -70,7 +81,8 @@ func TestCommandWorktreeCreationUsageAndUnauthorizedRefusal(t *testing.T) {
 	}
 
 	// 2. Authorized native `git worktree add` records creation + use without binding session_worktrees.
-	activeWorker = "worker-a"
+	activeActorSession = "worker-sess-a"
+	activeHandoffAgent = "worker-a"
 	addOutcome := callComposedProgram(t, fixture, "git worktree add -b feat/allowed "+allowedWT)
 	if addOutcome.Status != 0 || addOutcome.Refusal != nil {
 		t.Fatalf("authorized git worktree add failed: %+v refusal=%+v", addOutcome, addOutcome.Refusal)
@@ -111,7 +123,8 @@ func TestCommandWorktreeCreationUsageAndUnauthorizedRefusal(t *testing.T) {
 		t.Fatalf("external checkout had fabricated chat association before use: %+v", usagesMid[externalID])
 	}
 
-	activeWorker = "worker-b"
+	activeActorSession = "worker-sess-b"
+	activeHandoffAgent = "worker-b"
 	useOutcome := callComposedProgram(t, fixture, "cd "+externalWT+" && edit --path readme.txt --old-string v1 --new-string v2")
 	if useOutcome.Status != 0 || useOutcome.Refusal != nil {
 		t.Fatalf("worker-b cd + edit in external worktree failed: %+v refusal=%+v", useOutcome, useOutcome.Refusal)
