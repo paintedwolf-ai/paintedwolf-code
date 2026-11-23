@@ -65,7 +65,7 @@ func loopbackAddressFree(endpoint netip.AddrPort) bool {
 	if err != nil {
 		return false
 	}
-	defer syscall.Close(fd)
+	defer func() { _ = syscall.Close(fd) }()
 	if family == syscall.AF_INET6 {
 		if err := syscall.SetsockoptInt(fd, syscall.IPPROTO_IPV6, syscall.IPV6_V6ONLY, 1); err != nil {
 			return false
