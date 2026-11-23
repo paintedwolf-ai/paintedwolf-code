@@ -146,6 +146,10 @@ func (s *Handler) HandleGitWorktreeBind(w http.ResponseWriter, r *http.Request) 
 		s.responses.InternalError(w, r, err)
 		return
 	}
+	if err := s.SessionStore.PutWorktreeBinding(r.Context(), row); err != nil {
+		s.responses.InternalError(w, r, err)
+		return
+	}
 	after, err := mgr.RepoConfigFingerprint(r.Context(), repo.Toplevel)
 	if err != nil || after != before {
 		if err != nil {

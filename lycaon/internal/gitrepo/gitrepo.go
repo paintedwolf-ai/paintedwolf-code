@@ -81,8 +81,7 @@ func (r Repo) LocalConfigFiles() []string {
 // CanonicalDir returns dir absolute, symlink-resolved and cleaned, or "" when it cannot be
 // made absolute. A path that does not exist yet keeps its absolute form.
 func CanonicalDir(dir string) string {
-	dir = strings.TrimSpace(dir)
-	if dir == "" {
+	if strings.TrimSpace(dir) == "" {
 		return ""
 	}
 	abs, err := filepath.Abs(dir)
@@ -134,23 +133,28 @@ func IsGitlinkFile(path string) bool {
 	return ok && strings.HasPrefix(line, gitDirPrefix)
 }
 
+const maxMetadataLineBytes = 8192
+
 func readFirstLine(path string) (string, bool) {
-	// #nosec G304 -- path is a discovered .git entry.
+	// #nosec G304 -- path is a discovered .git metadata entry.
 	f, err := os.Open(path)
 	if err != nil {
 		return "", false
 	}
 	defer func() { _ = f.Close() }()
-	var buf [1024]byte
-	n, err := f.Read(buf[:])
-	if err != nil && !errors.Is(err, io.EOF) {
+	var buf [maxMetadataLineBytes + 1]byte
+	n, err := io.ReadFull(f, buf[:])
+	if err != nil && !errors.Is(err, io.EOF) && !errors.Is(err, io.ErrUnexpectedEOF) {
 		return "", false
 	}
-	line := string(buf[:n])
-	if idx := strings.IndexByte(line, '\n'); idx >= 0 {
-		line = line[:idx]
+	raw := string(buf[:n])
+	if idx := strings.IndexByte(raw, '\n'); idx >= 0 {
+		return strings.TrimSuffix(raw[:idx], "\r"), true
 	}
-	return strings.TrimRight(line, "\r"), true
+	if n > maxMetadataLineBytes {
+		return "", false
+	}
+	return strings.TrimSuffix(raw, "\r"), true
 }
 
 // ScopeIncludesLinkedCheckout reports whether any scoped path under projectDir
@@ -295,11 +299,16 @@ func readGitDirPointer(root, dot string) string {
 // GitDirFromPointer resolves the first line of a gitfile against its worktree.
 func GitDirFromPointer(root, contents string) string {
 	line, _, _ := strings.Cut(contents, "\n")
-	path, ok := strings.CutPrefix(strings.TrimSpace(line), gitDirPrefix)
+	line = strings.TrimSuffix(line, "\r")
+	path, ok := strings.CutPrefix(line, gitDirPrefix)
 	if !ok {
 		return ""
 	}
-	return resolveAgainst(root, strings.TrimSpace(path))
+	path = strings.TrimPrefix(path, " ")
+	if strings.TrimSpace(path) == "" {
+		return ""
+	}
+	return resolveAgainst(root, path)
 }
 
 // readCommonDir resolves the shared git directory for gitDir. No commondir file means an
@@ -307,20 +316,54 @@ func GitDirFromPointer(root, contents string) string {
 // not resolve returns "" rather than gitDir, which would name a config the repository does
 // not read.
 func readCommonDir(gitDir string) string {
-	// #nosec G304 -- commondir is fixed inside the discovered git directory.
-	raw, err := os.ReadFile(filepath.Join(gitDir, "commondir"))
-	if errors.Is(err, fs.ErrNotExist) {
+	line, exists, ok := readOptionalSingleLine(filepath.Join(gitDir, "commondir"))
+	if !exists {
 		return gitDir
 	}
-	if err != nil {
+	if !ok {
 		return ""
 	}
-	return CommonDirFromPointer(gitDir, string(raw))
+	return CommonDirFromPointer(gitDir, line)
+}
+
+func readOptionalSingleLine(path string) (line string, exists, ok bool) {
+	// #nosec G304 -- path is a fixed metadata file inside a discovered git directory.
+	f, err := os.Open(path)
+	if errors.Is(err, fs.ErrNotExist) {
+		return "", false, false
+	}
+	if err != nil {
+		return "", true, false
+	}
+	defer func() { _ = f.Close() }()
+	var buf [maxMetadataLineBytes + 1]byte
+	n, err := io.ReadFull(f, buf[:])
+	if err != nil && !errors.Is(err, io.EOF) && !errors.Is(err, io.ErrUnexpectedEOF) {
+		return "", true, false
+	}
+	if n > maxMetadataLineBytes {
+		return "", true, false
+	}
+	raw := string(buf[:n])
+	first, rest, cut := strings.Cut(raw, "\n")
+	if cut && strings.Trim(rest, "\r\n") != "" {
+		return "", true, false
+	}
+	first = strings.TrimSuffix(first, "\r")
+	if strings.TrimSpace(first) == "" {
+		return "", true, false
+	}
+	return first, true, true
 }
 
 // CommonDirFromPointer resolves the contents of commondir against its Git directory.
 func CommonDirFromPointer(gitDir, contents string) string {
-	return resolveAgainst(gitDir, strings.TrimSpace(contents))
+	line, _, _ := strings.Cut(contents, "\n")
+	line = strings.TrimSuffix(line, "\r")
+	if strings.TrimSpace(line) == "" {
+		return ""
+	}
+	return resolveAgainst(gitDir, line)
 }
 
 // resolveAgainst cleans a pointer value, resolving a relative one against base.

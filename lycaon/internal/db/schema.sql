@@ -3610,9 +3610,33 @@ CREATE TABLE IF NOT EXISTS source_worktrees (
     branch TEXT NOT NULL,
     base_branch TEXT NOT NULL,
     created_at TEXT NOT NULL,
-    UNIQUE(project_id, worktree_path),
+    state TEXT NOT NULL DEFAULT 'active' CHECK (state IN ('active', 'retired')),
+    kind TEXT NOT NULL DEFAULT 'linked' CHECK (kind IN ('primary', 'linked')),
+    available INTEGER NOT NULL DEFAULT 1 CHECK (available IN (0, 1)),
+    managed INTEGER NOT NULL DEFAULT 0 CHECK (managed IN (0, 1)),
+    common_dir TEXT NOT NULL DEFAULT '',
+    admin_dir TEXT NOT NULL DEFAULT '',
+    common_identity TEXT NOT NULL DEFAULT '',
+    admin_identity TEXT NOT NULL DEFAULT '',
+    worktree_identity TEXT NOT NULL DEFAULT '',
+    head_sha TEXT NOT NULL DEFAULT '',
+    detached INTEGER NOT NULL DEFAULT 0 CHECK (detached IN (0, 1)),
+    locked INTEGER NOT NULL DEFAULT 0 CHECK (locked IN (0, 1)),
+    lock_reason TEXT NOT NULL DEFAULT '',
+    prunable INTEGER NOT NULL DEFAULT 0 CHECK (prunable IN (0, 1)),
+    prune_reason TEXT NOT NULL DEFAULT '',
+    updated_at TEXT NOT NULL DEFAULT '',
+    retired_at TEXT NOT NULL DEFAULT '',
+    superseded_by_id TEXT NOT NULL DEFAULT '',
     UNIQUE(project_id, id)
 ) STRICT;
+CREATE UNIQUE INDEX IF NOT EXISTS idx_source_worktrees_live_path
+    ON source_worktrees(project_id, repo_id, worktree_path) WHERE state = 'active';
+CREATE UNIQUE INDEX IF NOT EXISTS idx_source_worktrees_live_admin
+    ON source_worktrees(project_id, repo_id, common_dir, admin_dir)
+    WHERE state = 'active' AND common_dir != '' AND admin_dir != '';
+CREATE INDEX IF NOT EXISTS idx_source_worktrees_project_repo
+    ON source_worktrees(project_id, repo_id, state);
 
 CREATE TABLE IF NOT EXISTS session_worktrees (
     session_id TEXT PRIMARY KEY REFERENCES sessions(id) ON DELETE CASCADE,

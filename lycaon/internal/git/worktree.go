@@ -12,11 +12,17 @@ import (
 	"github.com/lycaon/lycaon/internal/gitlease"
 )
 
-// WorktreeEntry is one linked worktree as `git worktree list --porcelain` reports it.
+// WorktreeEntry is one checkout registration reported by `git worktree list --porcelain -z`.
 type WorktreeEntry struct {
-	Path   string
-	Branch string // refs/heads/... trimmed to the short name; empty when detached
-	Bare   bool
+	Path        string
+	HeadSHA     string
+	Branch      string // refs/heads/... trimmed to the short name; empty when detached
+	Bare        bool
+	Detached    bool
+	Locked      bool
+	LockReason  string
+	Prunable    bool
+	PruneReason string
 }
 
 // MergeConflictError reports an aborted conflicting merge.
@@ -118,20 +124,20 @@ func (m *gitBranchManager) RemoveWorktree(ctx context.Context, toplevel, path st
 	return nil
 }
 
-// ListWorktrees returns every linked worktree of the repository.
+// ListWorktrees returns every worktree registration of the repository.
 func (m *gitBranchManager) ListWorktrees(ctx context.Context, toplevel string) ([]WorktreeEntry, error) {
 	dir, err := absProjectDir(toplevel)
 	if err != nil {
 		return nil, err
 	}
-	out, code, err := gitexec.Run(ctx, dir, []string{"worktree", "list", "--porcelain"}, hermeticOpts(0))
+	out, code, err := gitexec.Run(ctx, dir, []string{"--no-optional-locks", "worktree", "list", "--porcelain", "-z"}, hermeticOpts(0))
 	if err != nil {
 		return nil, err
 	}
 	if code != 0 {
 		return nil, fmt.Errorf("git worktree list failed: %s", strings.TrimSpace(string(out)))
 	}
-	return parseWorktreePorcelain(string(out)), nil
+	return parseWorktreePorcelainZ(out), nil
 }
 
 // ValidateWorktree confirms a registered branch checkout.
@@ -140,7 +146,10 @@ func (m *Manager) ValidateWorktree(ctx context.Context, toplevel, path, branch s
 }
 
 func validateWorktree(ctx context.Context, m *Manager, toplevel, path, branch string) error {
-	path = filepath.Clean(strings.TrimSpace(path))
+	if strings.TrimSpace(path) == "" {
+		return fmt.Errorf("worktree path must be absolute")
+	}
+	path = filepath.Clean(path)
 	if path == "." || !filepath.IsAbs(path) {
 		return fmt.Errorf("worktree path must be absolute")
 	}
@@ -232,7 +241,7 @@ func (m *gitBranchManager) LocalBranchExists(ctx context.Context, toplevel, bran
 	}
 }
 
-func parseWorktreePorcelain(out string) []WorktreeEntry {
+func parseWorktreePorcelainZ(out []byte) []WorktreeEntry {
 	var entries []WorktreeEntry
 	var cur *WorktreeEntry
 	flush := func() {
@@ -241,16 +250,20 @@ func parseWorktreePorcelain(out string) []WorktreeEntry {
 			cur = nil
 		}
 	}
-	for _, line := range strings.Split(out, "\n") {
-		if line == "" {
+	for _, token := range strings.Split(string(out), "\x00") {
+		if token == "" {
 			flush()
 			continue
 		}
-		key, value, _ := strings.Cut(line, " ")
+		key, value, hasValue := strings.Cut(token, " ")
 		switch key {
 		case "worktree":
 			flush()
 			cur = &WorktreeEntry{Path: value}
+		case "HEAD":
+			if cur != nil {
+				cur.HeadSHA = value
+			}
 		case "branch":
 			if cur != nil {
 				cur.Branch = strings.TrimPrefix(value, "refs/heads/")
@@ -259,8 +272,24 @@ func parseWorktreePorcelain(out string) []WorktreeEntry {
 			if cur != nil {
 				cur.Bare = true
 			}
-		case "detached", "HEAD", "locked", "prunable":
-			// Detached worktrees have no branch.
+		case "detached":
+			if cur != nil {
+				cur.Detached = true
+			}
+		case "locked":
+			if cur != nil {
+				cur.Locked = true
+				if hasValue {
+					cur.LockReason = value
+				}
+			}
+		case "prunable":
+			if cur != nil {
+				cur.Prunable = true
+				if hasValue {
+					cur.PruneReason = value
+				}
+			}
 		}
 	}
 	flush()

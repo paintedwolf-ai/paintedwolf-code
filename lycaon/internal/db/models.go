@@ -2118,14 +2118,32 @@ type SourceVersions struct {
 }
 
 type SourceWorktrees struct {
-	ID           string `json:"id"`
-	ProjectID    string `json:"project_id"`
-	RepoID       string `json:"repo_id"`
-	Toplevel     string `json:"toplevel"`
-	WorktreePath string `json:"worktree_path"`
-	Branch       string `json:"branch"`
-	BaseBranch   string `json:"base_branch"`
-	CreatedAt    string `json:"created_at"`
+	ID               string `json:"id"`
+	ProjectID        string `json:"project_id"`
+	RepoID           string `json:"repo_id"`
+	Toplevel         string `json:"toplevel"`
+	WorktreePath     string `json:"worktree_path"`
+	Branch           string `json:"branch"`
+	BaseBranch       string `json:"base_branch"`
+	CreatedAt        string `json:"created_at"`
+	State            string `json:"state"`
+	Kind             string `json:"kind"`
+	Available        int64  `json:"available"`
+	Managed          int64  `json:"managed"`
+	CommonDir        string `json:"common_dir"`
+	AdminDir         string `json:"admin_dir"`
+	CommonIdentity   string `json:"common_identity"`
+	AdminIdentity    string `json:"admin_identity"`
+	WorktreeIdentity string `json:"worktree_identity"`
+	HeadSha          string `json:"head_sha"`
+	Detached         int64  `json:"detached"`
+	Locked           int64  `json:"locked"`
+	LockReason       string `json:"lock_reason"`
+	Prunable         int64  `json:"prunable"`
+	PruneReason      string `json:"prune_reason"`
+	UpdatedAt        string `json:"updated_at"`
+	RetiredAt        string `json:"retired_at"`
+	SupersededByID   string `json:"superseded_by_id"`
 }
 
 type StoreMeta struct {
